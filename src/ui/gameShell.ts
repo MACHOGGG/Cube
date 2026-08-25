@@ -18,6 +18,7 @@ export interface ShellRefs {
   boardEl: HTMLElement;
   legendEl: HTMLElement;
   hudTimeEl: HTMLElement;
+  hudPerfEl: HTMLElement;
   scoreReelEl: HTMLElement;
   gainBadgeEl: HTMLElement;
   startOverlay: HTMLElement;
@@ -66,6 +67,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
           <div class="k">得分</div>
           <div class="v"><span class="score-reel" id="scoreReel"></span></div>
         </div>
+        <div class="hud-cell perf-cell"><div class="k">状态</div><div class="v" id="hud-perf">0%</div></div>
         <div class="hud-cell"><div class="k">用时</div><div class="v" id="hud-time">0:00</div></div>
       </div>
 
@@ -119,6 +121,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     boardEl: req('board'),
     legendEl: req('legend'),
     hudTimeEl: req('hud-time'),
+    hudPerfEl: req('hud-perf'),
     scoreReelEl: req('scoreReel'),
     gainBadgeEl: req('gainBadge'),
     startOverlay: req('startOverlay'),

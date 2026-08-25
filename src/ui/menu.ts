@@ -4,7 +4,7 @@ import { loadBest } from '../engine/persistence';
 export function renderMenu(container: HTMLElement, cards: ShapeCardMeta[], onSelect: (id: ShapeCardMeta['id']) => void) {
   container.innerHTML = `
     <div class="app">
-      <h1>方糖谜题</h1>
+      <h1>Slides</h1>
       <p class="tag-line">选择一种棋盘形状开始挑战</p>
       <div class="menu-grid" id="menuGrid"></div>
       <p class="assumptions">拖动整行/整列或整条斜线，拼出同色图案得分；得分方块会翻成点状的另一面，继续参与后续联通。三种棋盘形状规则相通，几何结构不同。</p>

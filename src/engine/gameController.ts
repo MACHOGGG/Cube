@@ -3,6 +3,8 @@ import { createTimer, formatClock } from './timer';
 import { createStreakTracker, resolveCascade, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher } from './persistence';
+import { createPerformanceGauge } from './performance';
+import type { Cell } from './types';
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -14,6 +16,15 @@ export interface GameControllerHooks {
   isGameOver(): boolean;
   /** Builds the cascade config for resolving one confirmed move. */
   buildCascadeConfig(): CascadeConfig;
+  /**
+   * Called right before render() with this move's scored groups (either may
+   * be empty), so the shape can register them for its score-outline
+   * highlight. Kept as two lists, not one: a shape whose line-bonus removes
+   * cells from the board (the square grid) needs to treat lineBonusGroups
+   * differently from matchGroups, since those coordinates go stale the
+   * instant the bonus's own removal runs.
+   */
+  onScored?(matchGroups: Cell[][], lineBonusGroups: Cell[][]): void;
 }
 
 export interface GameController {
@@ -40,10 +51,19 @@ export interface GameController {
  */
 export function createGameController(refs: ShellRefs, hooks: GameControllerHooks): GameController {
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
+  const perf = createPerformanceGauge();
   const timer = createTimer((s) => {
     refs.hudTimeEl.textContent = formatClock(s);
+    updatePerfDisplay();
   });
   const streak = createStreakTracker();
+
+  const HOT_THRESHOLD = 60;
+  function updatePerfDisplay() {
+    const value = perf.valuePercent();
+    refs.hudPerfEl.textContent = value + '%';
+    refs.hudPerfEl.parentElement?.classList.toggle('hot', value >= HOT_THRESHOLD);
+  }
 
   let score = 0;
   let moves = 0;
@@ -59,6 +79,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     paused = false;
     streak.reset();
     scoreReel.reset();
+    perf.reset();
+    updatePerfDisplay();
     timer.start();
     hooks.render();
     refs.endOverlay.classList.remove('show');
@@ -80,13 +102,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   function resolveMove(mask: Set<string>) {
     if (gameOver || paused) return;
     moves++;
-    const { points } = resolveCascade(hooks.buildCascadeConfig(), mask);
+    const { points, matchGroups, lineBonusGroups } = resolveCascade(hooks.buildCascadeConfig(), mask);
     const delta = streak.apply(points);
     if (delta > 0) {
       score += delta;
       scoreReel.showGain(delta);
     }
+    perf.onMove(points > 0);
+    updatePerfDisplay();
     scoreReel.setValue(score);
+    hooks.onScored?.(matchGroups, lineBonusGroups);
     hooks.render();
     if (!gameOver && hooks.isGameOver()) endGame('全部方块已翻成点面');
   }

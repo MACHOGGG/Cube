@@ -4,23 +4,27 @@ import { cellKey } from './types';
 export interface StreakTracker {
   /** Feeds one move's raw (un-multiplied) points in; returns the score delta to add (0 if the move scored nothing, which also resets the streak). */
   apply(points: number): number;
+  /** The multiplier the *next* scoring move would receive if it scores right now. */
+  currentMultiplier(): number;
   reset(): void;
 }
 
 /**
- * N consecutive scoring moves multiply their combined raw points by N — applied
- * incrementally each move so the running total only ever grows by the marginal
- * delta, letting the caller show "+delta" immediately without a popup.
+ * Consecutive scoring moves double the multiplier each time: the 1st move in
+ * a streak keeps its own points as-is (×1), the 2nd move's own points are
+ * ×2, the 3rd's ×4, and so on without limit — each move's *own* raw points,
+ * not a running sum. Any move that scores nothing resets the streak back to
+ * ×1 for the next one.
  */
 export function createStreakTracker(): StreakTracker {
-  let streakSum = 0;
-  let streakCount = 0;
-  let streakAdded = 0;
+  let streakLevel = 0; // 0 = no active streak yet; k = the k-th consecutive scoring move just applied
 
   function reset() {
-    streakSum = 0;
-    streakCount = 0;
-    streakAdded = 0;
+    streakLevel = 0;
+  }
+
+  function currentMultiplier(): number {
+    return 2 ** streakLevel;
   }
 
   function apply(points: number): number {
@@ -28,15 +32,12 @@ export function createStreakTracker(): StreakTracker {
       reset();
       return 0;
     }
-    streakSum += points;
-    streakCount++;
-    const newTotal = streakSum * streakCount;
-    const delta = newTotal - streakAdded;
-    streakAdded = newTotal;
+    const delta = points * currentMultiplier();
+    streakLevel++;
     return delta;
   }
 
-  return { apply, reset };
+  return { apply, currentMultiplier, reset };
 }
 
 export interface CascadeConfig {
@@ -67,19 +68,25 @@ export interface CascadeConfig {
 export interface CascadeResult {
   points: number;
   scoredTiles: Set<Tile>;
+  /** Each 2x2/run-4 match's own cells, kept separate so the caller can outline each one individually — stays valid to outline for every shape, since a match never removes cells from the board. */
+  matchGroups: Cell[][];
+  /** Each whole-line bonus's own cells. For a shape whose bonus removes the line from the board (the square grid), these coordinates go stale the instant onLineBonus() runs — don't hold onto them past that. */
+  lineBonusGroups: Cell[][];
 }
 
 /**
  * Resolves one full chain reaction following a confirmed move: repeatedly
  * awards whole-line bonuses and 2x2/run-4 matches (flipping scored tiles to
  * their dot face) until nothing new triggers. Returns the raw points (no
- * streak multiplier yet) plus every tile that scored, so the caller can flash
- * them as one group.
+ * streak multiplier yet) plus every tile that scored — as both a flat set and
+ * the individual groups they scored in — so the caller can highlight them.
  */
 export function resolveCascade(cfg: CascadeConfig, initialMask: Set<string> | null): CascadeResult {
   let totalPoints = 0;
   let mask = initialMask;
   const scoredTiles = new Set<Tile>();
+  const matchGroups: Cell[][] = [];
+  const lineBonusGroups: Cell[][] = [];
   // Identifies a match by the permanent ids of its tiles, not by row/col
   // (which shift whenever a line is removed) or by face (a match can be
   // entirely already-dot). Without this, a match with nothing left to flip
@@ -94,6 +101,7 @@ export function resolveCascade(cfg: CascadeConfig, initialMask: Set<string> | nu
       totalPoints += lineBonuses.length * cfg.bonusPointsPerLine;
       for (const cells of lineBonuses) {
         for (const [r, c] of cells) scoredTiles.add(cfg.tileAt(r, c));
+        lineBonusGroups.push(cells);
       }
       cfg.onLineBonus(lineBonuses);
       changed = true;
@@ -118,6 +126,7 @@ export function resolveCascade(cfg: CascadeConfig, initialMask: Set<string> | nu
       const toFlip = new Set<string>();
       for (const m of matches) {
         totalPoints += m.points;
+        matchGroups.push(m.cells);
         for (const [r, c] of m.cells) {
           const t = cfg.tileAt(r, c);
           scoredTiles.add(t);
@@ -135,5 +144,5 @@ export function resolveCascade(cfg: CascadeConfig, initialMask: Set<string> | nu
     if (!changed) break;
   }
 
-  return { points: totalPoints, scoredTiles };
+  return { points: totalPoints, scoredTiles, matchGroups, lineBonusGroups };
 }

@@ -1,18 +1,25 @@
 import './circle.css';
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
-import { attachDrag } from '../engine/drag';
+import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import type { CascadeConfig } from '../engine/scoring';
+import { createOutlineTracker, spawnOutlineEl, type PixelRect } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import type { ShapeGame } from './types';
 
-const COLORS = ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'];
+// The colorblind set is 4 hues picked from the Okabe–Ito palette for maximum
+// separation (vermillion/yellow/bluish-green/blue) rather than just the
+// first 4 of the square board's 6 — with only 4 colors to tell apart there's
+// room to pick the most distinct ones instead of reusing a prefix.
+const PALETTES = {
+  standard: ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'],
+  colorblind: ['#D55E00', '#F0E442', '#009E73', '#0072B2'],
+} as const;
 const ROWS = 7; // row r (0..6) has r+1 balls, total 28
 const PER_COLOR = 7;
 const MIN_LINE_BONUS_LEN = 3;
-const FLASH_MS = 550;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="7" r="6" fill="#C0666B"/><circle cx="8" cy="20" r="6" fill="#DDA857"/><circle cx="24" cy="20" r="6" fill="#4F72C4"/></svg>`;
 
@@ -104,22 +111,25 @@ export function createCircleGame(): ShapeGame {
     },
     mount(container, onBack) {
       const refs = buildShell(container, {
-        title: '方糖谜题 · 圆球',
+        title: 'Slides · 圆球',
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，得分方块翻成点面。一整条线（长度 ≥3）凑齐同一种颜色额外得 6 分（不移出棋盘）。全部翻成点面时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分（不移出棋盘）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部翻成点面时结束，结算当时的分数。',
         assumptions:
           '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，本版本暂不实现。',
+        extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
+      let paletteName: keyof typeof PALETTES = 'standard';
+      let COLORS: readonly string[] = PALETTES[paletteName];
       let grid: Tile[][] = [];
       let R = 0,
         rowH = 0,
         boardTop = 0,
         boardLeft = 0;
       let nextTileId = 0;
-      const flashStarts = new Map<number, number>();
+      const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
@@ -221,14 +231,21 @@ export function createCircleGame(): ShapeGame {
         el.style.left = cx - size / 2 + 'px';
         el.style.top = cy - size / 2 + 'px';
         if (tile.face === 'dot') {
+          // A same-shape smaller circle here reads as "still the front, just
+          // resized" — nothing else on this board changes shape on flip, so
+          // a ball needs a genuinely different glyph. A drawn asterisk
+          // (three crossing strokes) rather than the "*" character keeps it
+          // perfectly centered and a consistent weight across browsers/fonts.
           el.style.background = 'transparent';
-          const dot = document.createElement('div');
-          dot.className = 'dot-circle';
-          const dsize = Math.round(size * 0.86);
-          dot.style.width = dsize + 'px';
-          dot.style.height = dsize + 'px';
-          dot.style.background = COLORS[tile.dotColor];
-          el.appendChild(dot);
+          const starSize = Math.round(size * 0.62);
+          const color = COLORS[tile.dotColor];
+          el.innerHTML =
+            `<svg viewBox="0 0 24 24" width="${starSize}" height="${starSize}">` +
+            `<g stroke="${color}" stroke-width="3.2" stroke-linecap="round">` +
+            `<line x1="12" y1="2.5" x2="12" y2="21.5"/>` +
+            `<line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
+            `<line x1="20" y1="6.75" x2="4" y2="17.25"/>` +
+            `</g></svg>`;
         } else {
           el.style.background = COLORS[tile.color];
         }
@@ -241,24 +258,27 @@ export function createCircleGame(): ShapeGame {
       function render() {
         layoutBoard();
         refs.boardEl.innerHTML = '';
-        const now = Date.now();
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c <= r; c++) {
-            const tile = grid[r][c];
-            const el = makeBallEl(tile, r, c);
-            const start = flashStarts.get(tile.id);
-            if (start !== undefined) {
-              const elapsed = now - start;
-              if (elapsed < FLASH_MS) {
-                el.classList.add('flash');
-                el.style.animationDelay = -(elapsed / 1000) + 's';
-              } else {
-                flashStarts.delete(tile.id);
-              }
-            }
-            refs.boardEl.appendChild(el);
+            refs.boardEl.appendChild(makeBallEl(grid[r][c], r, c));
           }
         }
+        for (const { cells, elapsedMs } of outlineTracker.current()) {
+          spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
+        }
+      }
+
+      function groupRect(cells: Cell[]): PixelRect {
+        const radius = (R * 1.86) / 2;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [r, c] of cells) {
+          const [cx, cy] = ballCenter(r, c);
+          minX = Math.min(minX, cx - radius);
+          maxX = Math.max(maxX, cx + radius);
+          minY = Math.min(minY, cy - radius);
+          maxY = Math.max(maxY, cy + radius);
+        }
+        return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
       }
 
       // ---------- matching engine ----------
@@ -277,12 +297,21 @@ export function createCircleGame(): ShapeGame {
         return matches;
       }
 
+      // A line only qualifies once every tile in it has flipped to its dot
+      // face *and* those dot colors all match — a mix of flavor-face and
+      // dot-face tiles no longer counts, even if their effective colors
+      // happen to agree.
+      function isFullDotMatch(cells: Cell[]): boolean {
+        if (cells.some(([r, c]) => grid[r][c].face !== 'dot')) return false;
+        const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
+        return cells.every(([r, c]) => grid[r][c].dotColor === c0);
+      }
+
       function findWholeLineBonuses(): Cell[][] {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          const c0 = effColor(grid[line.cells[0][0]][line.cells[0][1]]);
-          if (!line.cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
+          if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
             .map(([r, c]) => grid[r][c].id)
             .sort((a, b) => a - b)
@@ -308,7 +337,7 @@ export function createCircleGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          bonusPointsPerLine: 6,
+          bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
           continueAfterLineBonus: false,
@@ -322,10 +351,19 @@ export function createCircleGame(): ShapeGame {
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
-        flashStarts.clear();
+        outlineTracker.reset();
       }
 
-      const controller = createGameController(refs, { bestKey, resetBoard, render, isGameOver, buildCascadeConfig });
+      const controller = createGameController(refs, {
+        bestKey,
+        resetBoard,
+        render,
+        isGameOver,
+        buildCascadeConfig,
+        // Unlike the square grid, a whole-line bonus here never removes
+        // cells from the board, so both kinds of group stay outline-safe.
+        onScored: (matchGroups, lineBonusGroups) => outlineTracker.add([...matchGroups, ...lineBonusGroups]),
+      });
 
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
@@ -345,7 +383,7 @@ export function createCircleGame(): ShapeGame {
         const n = d.cells.length;
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
-        const rawDist = projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH);
+        const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
 
         for (let i = 0; i < n; i++) {
           const [r, c] = d.cells[i];
@@ -437,6 +475,14 @@ export function createCircleGame(): ShapeGame {
       refs.buttons.back.addEventListener('click', () => {
         destroy();
         onBack();
+      });
+
+      refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
+        paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';
+        COLORS = PALETTES[paletteName];
+        (e.currentTarget as HTMLElement).classList.toggle('active', paletteName === 'colorblind');
+        renderLegend();
+        if (controller.started) render();
       });
 
       renderLegend();

@@ -1,8 +1,8 @@
 {
-  "name": "fangtang-puzzle",
+  "name": "slides",
   "private": true,
   "version": "0.1.0",
-  "description": "方糖谜题 · Web/App",
+  "description": "Slides · Web/App",
   "type": "module",
   "scripts": {
     "dev": "vite",

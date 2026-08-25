@@ -1,20 +1,26 @@
 import './triangle.css';
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
-import { attachDrag } from '../engine/drag';
+import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import type { CascadeConfig } from '../engine/scoring';
+import { createOutlineTracker, spawnOutlineEl, type PixelRect } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import type { ShapeGame } from './types';
 
-const COLORS = ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#E8E4DC'];
+// Same Okabe–Ito colorblind-safe 6-hue set the square board offers, reused
+// as-is (see square.ts for the palette rationale) so the toggle means the
+// same thing on every board.
+const PALETTES = {
+  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#E8E4DC'],
+  colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#CC79A7'],
+} as const;
 const ROW_LENS = [7, 9, 11, 11, 9, 7];
 const LEFT_TRIM = [0, 0, 0, 1, 3, 5]; // maps local col -> global position p = c + LEFT_TRIM[r]
 const GLOBAL_ROW_OFFSET = 3; // local row r -> global big-triangle row i = r+3
 const PER_COLOR = 9;
 const MIN_LINE_BONUS_LEN = 3;
-const FLASH_MS = 550;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,3 29,25 3,25" fill="#4C68B0"/><polygon points="16,29 4,9 28,9" fill="#D89B1E" opacity="0.9"/></svg>`;
 
@@ -84,22 +90,25 @@ export function createTriangleGame(): ShapeGame {
     },
     mount(container, onBack) {
       const refs = buildShell(container, {
-        title: '方糖谜题 · 三角',
+        title: 'Slides · 三角',
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，得分方块翻成点面。一整条线（长度 ≥3）凑齐同一种颜色额外得 6 分（不移出棋盘）。全部翻成点面时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分（不移出棋盘）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部翻成点面时结束，结算当时的分数。',
         assumptions:
-          '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平（按行，6 条线）、左斜、右斜（按每行居中对齐的坐标划分，两个方向各 12 条线，长度 3–6）——判分规则完全一致。2×2 图案在此结构下没有直接对应，本版本暂不实现；拖动预览为简化版本（沿线性插值移动，不做多重环绕预览）。',
+          '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平（按行，6 条线）、左斜、右斜（按每行居中对齐的坐标划分，两个方向各 12 条线，长度 3–6）——判分规则完全一致。2×2 图案在此结构下没有直接对应，本版本暂不实现。',
+        extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
+      let paletteName: keyof typeof PALETTES = 'standard';
+      let COLORS: readonly string[] = PALETTES[paletteName];
       let grid: Tile[][] = [];
       let S = 0,
         H = 0,
         originX = 0,
         originY = 0;
       let nextTileId = 0;
-      const flashStarts = new Map<number, number>();
+      const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
@@ -214,9 +223,16 @@ export function createTriangleGame(): ShapeGame {
         return [x + originX, y + originY];
       }
 
-      function makeTriEl(tile: Tile, r: number, c: number, opacityOverride?: number): HTMLElement {
+      function makeTriEl(
+        tile: Tile,
+        r: number,
+        c: number,
+        opacityOverride?: number,
+        offset?: [number, number],
+      ): HTMLElement {
         const geo = triGeometry(r, c);
-        const pts = geo.pts.map(toScreen);
+        const [offX, offY] = offset ?? [0, 0];
+        const pts = geo.pts.map(toScreen).map(([x, y]) => [x + offX, y + offY] as [number, number]);
         const xs = pts.map((p) => p[0]),
           ys = pts.map((p) => p[1]);
         const minX = Math.min(...xs),
@@ -243,7 +259,8 @@ export function createTriangleGame(): ShapeGame {
         fill.style.setProperty('-webkit-clip-path', clip);
 
         if (tile.face === 'dot') {
-          const cen = toScreen(centroid(geo.pts));
+          const cenBase = toScreen(centroid(geo.pts));
+          const cen: [number, number] = [cenBase[0] + offX, cenBase[1] + offY];
           const dsize = S * 0.5;
           const dot = document.createElement('div');
           dot.className = 'dot-circle';
@@ -267,25 +284,27 @@ export function createTriangleGame(): ShapeGame {
       function render() {
         layoutBoard();
         refs.boardEl.innerHTML = '';
-        const now = Date.now();
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
-            const tile = grid[r][c];
-            const el = makeTriEl(tile, r, c);
-            const start = flashStarts.get(tile.id);
-            if (start !== undefined) {
-              const elapsed = now - start;
-              if (elapsed < FLASH_MS) {
-                el.classList.add('flash');
-                const fillEl = el.querySelector<HTMLElement>('.fill');
-                if (fillEl) fillEl.style.animationDelay = -(elapsed / 1000) + 's';
-              } else {
-                flashStarts.delete(tile.id);
-              }
-            }
-            refs.boardEl.appendChild(el);
+            refs.boardEl.appendChild(makeTriEl(grid[r][c], r, c));
           }
         }
+        for (const { cells, elapsedMs } of outlineTracker.current()) {
+          spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
+        }
+      }
+
+      function groupRect(cells: Cell[]): PixelRect {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [r, c] of cells) {
+          for (const p of triGeometry(r, c).pts.map(toScreen)) {
+            minX = Math.min(minX, p[0]);
+            maxX = Math.max(maxX, p[0]);
+            minY = Math.min(minY, p[1]);
+            maxY = Math.max(maxY, p[1]);
+          }
+        }
+        return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
       }
 
       // ---------- matching engine ----------
@@ -304,12 +323,21 @@ export function createTriangleGame(): ShapeGame {
         return matches;
       }
 
+      // A line only qualifies once every tile in it has flipped to its dot
+      // face *and* those dot colors all match — a mix of flavor-face and
+      // dot-face tiles no longer counts, even if their effective colors
+      // happen to agree.
+      function isFullDotMatch(cells: Cell[]): boolean {
+        if (cells.some(([r, c]) => grid[r][c].face !== 'dot')) return false;
+        const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
+        return cells.every(([r, c]) => grid[r][c].dotColor === c0);
+      }
+
       function findWholeLineBonuses(): Cell[][] {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          const c0 = effColor(grid[line.cells[0][0]][line.cells[0][1]]);
-          if (!line.cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
+          if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
             .map(([r, c]) => grid[r][c].id)
             .sort((a, b) => a - b)
@@ -335,7 +363,7 @@ export function createTriangleGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          bonusPointsPerLine: 6,
+          bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
           continueAfterLineBonus: false,
@@ -349,10 +377,19 @@ export function createTriangleGame(): ShapeGame {
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
-        flashStarts.clear();
+        outlineTracker.reset();
       }
 
-      const controller = createGameController(refs, { bestKey, resetBoard, render, isGameOver, buildCascadeConfig });
+      const controller = createGameController(refs, {
+        bestKey,
+        resetBoard,
+        render,
+        isGameOver,
+        buildCascadeConfig,
+        // Unlike the square grid, a whole-line bonus here never removes
+        // cells from the board, so both kinds of group stay outline-safe.
+        onScored: (matchGroups, lineBonusGroups) => outlineTracker.add([...matchGroups, ...lineBonusGroups]),
+      });
 
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
@@ -405,34 +442,44 @@ export function createTriangleGame(): ShapeGame {
         return proj / (ux * ux + uy * uy);
       }
 
+      // Every real tile in the line translates by the same rawDist*step
+      // vector (exact for A/B, a smooth approximation of the row's zigzag
+      // that's visually unnoticeable mid-drag and irrelevant the instant it
+      // settles, since the final render() after release always uses the
+      // real, non-approximated geometry). Wraparound ghosts one full line-
+      // length before/after each real cell keep the line reading as an
+      // unbroken loop while dragging, the same way the square and circle
+      // boards already do, instead of the old clamp-at-the-ends behavior
+      // that left overflow tiles stacked in place with nothing to show
+      // where they were headed.
       function renderDragPreview() {
         render();
         const d = drag;
         if (!d || !d.fam || !d.line) return;
         const cells = d.line.cells;
         const n = cells.length;
-        const rawDist = projectedSteps(d.fam, d.dx, d.dy);
+        const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy));
+        const [dirX, dirY] = trueStepVector(d.fam);
 
-        const centers = cells.map(([r, c]) => toScreen(centroid(triGeometry(r, c).pts)));
-        for (let i = 0; i < n; i++) {
-          const [r, c] = cells[i];
+        for (const [r, c] of cells) {
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (!el) continue;
-          let targetPos = i + rawDist;
-          targetPos = Math.max(0, Math.min(n - 1, targetPos));
-          const lo = Math.floor(targetPos),
-            hi = Math.min(n - 1, lo + 1),
-            t = targetPos - lo;
-          const cx = centers[lo][0] + (centers[hi][0] - centers[lo][0]) * t;
-          const cy = centers[lo][1] + (centers[hi][1] - centers[lo][1]) * t;
-          const dx0 = cx - centers[i][0],
-            dy0 = cy - centers[i][1];
-          const curLeft = parseFloat(el.style.left),
-            curTop = parseFloat(el.style.top);
-          el.style.left = curLeft + dx0 + 'px';
-          el.style.top = curTop + dy0 + 'px';
-          if ((rawDist > 0 && i > n - 1 - Math.ceil(rawDist)) || (rawDist < 0 && i < Math.ceil(-rawDist))) {
-            el.style.opacity = '0.42';
+          const curLeft = parseFloat(el.style.left);
+          const curTop = parseFloat(el.style.top);
+          el.style.left = curLeft + rawDist * dirX + 'px';
+          el.style.top = curTop + rawDist * dirY + 'px';
+        }
+
+        for (let k = -1; k <= 1; k++) {
+          if (k === 0) continue;
+          for (let i = 0; i < n; i++) {
+            const pos = i + rawDist + k * n;
+            if (pos < -1 || pos > n) continue;
+            const [r0, c0] = cells[i];
+            const offset: [number, number] = [(pos - i) * dirX, (pos - i) * dirY];
+            const ghost = makeTriEl(grid[r0][c0], r0, c0, 0.42, offset);
+            ghost.classList.add('ghost');
+            refs.boardEl.appendChild(ghost);
           }
         }
       }
@@ -501,6 +548,14 @@ export function createTriangleGame(): ShapeGame {
       refs.buttons.back.addEventListener('click', () => {
         destroy();
         onBack();
+      });
+
+      refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
+        paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';
+        COLORS = PALETTES[paletteName];
+        (e.currentTarget as HTMLElement).classList.toggle('active', paletteName === 'colorblind');
+        renderLegend();
+        if (controller.started) render();
       });
 
       renderLegend();

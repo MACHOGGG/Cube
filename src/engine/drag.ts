@@ -1,3 +1,19 @@
+/**
+ * Remaps a raw cell-unit drag distance so it "sticks" to each valid integer
+ * slot and needs a deliberate push past the midpoint to let go — the
+ * magnetic/detent feel every board's drag preview uses so a tile visibly
+ * seats into a position instead of drifting past it unclear which slot it's
+ * over. Never changes *where* a drag ultimately snaps (Math.round of the
+ * output always matches Math.round of the input), only how it looks getting
+ * there.
+ */
+export function magnetizeRawDist(x: number, power = 2.2): number {
+  const nearest = Math.round(x);
+  const t = (x - nearest) * 2; // distance to the nearest slot, rescaled to (-1, 1]
+  const eased = Math.sign(t) * Math.abs(t) ** power;
+  return nearest + eased / 2;
+}
+
 export interface DragCallbacks {
   isActive(): boolean;
   /** Pointer-down position in board-local pixels. */

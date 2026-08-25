@@ -1,8 +1,9 @@
 import './square.css';
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
-import { attachDrag } from '../engine/drag';
+import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import type { CascadeConfig } from '../engine/scoring';
+import { createOutlineTracker, spawnOutlineEl, type PixelRect } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -26,8 +27,7 @@ const PALETTES = {
 } as const;
 
 const BOARD_DIM = 6;
-const LINE_BONUS = 6;
-const FLASH_MS = 550;
+const LINE_BONUS = 36;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12" rx="3" fill="#C46A4E"/><rect x="18" y="2" width="12" height="12" rx="3" fill="#4A9573"/><rect x="2" y="18" width="12" height="12" rx="3" fill="#4C7EAD"/><rect x="18" y="18" width="12" height="12" rx="3" fill="#AD5C82"/></svg>`;
 
@@ -53,11 +53,11 @@ export function createSquareGame(): ShapeGame {
     },
     mount(container, onBack) {
       const refs = buildShell(container, {
-        title: '方糖谜题',
+        title: 'Slides · 方块',
         tagline: '拖动一整行或一整列 · 拼出同色图案 · 翻成点面继续联通',
         startBody: '拖动整行/整列拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分），得分方块翻成点面继续联通。整行或整列凑齐同一种颜色（不分点/面）额外得 6 分，该行/列随后移出棋盘。连续多步得分会自动叠加倍率：连续 2 步 ×2，连续 3 步 ×3，以此类推，中断则重新计数。当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。',
+          '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分），得分方块翻成点面继续联通。当整行或整列都翻成点面且点色相同时，额外得 36 分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。',
         assumptions:
           '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚，翻面点色保证与本身正面色不同。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -71,7 +71,7 @@ export function createSquareGame(): ShapeGame {
       let grid: Tile[][] = [];
       let CELL = 0;
       let nextTileId = 0;
-      const flashStarts = new Map<number, number>();
+      const outlineTracker = createOutlineTracker();
       // Stashed by findLineBonusGroups() for applyLineBonus() to consume in
       // the same cascade pass — see the comment on applyLineBonus below.
       let pendingRowClears: number[] = [];
@@ -200,30 +200,34 @@ export function createSquareGame(): ShapeGame {
         if (opacity !== undefined) el.style.opacity = String(opacity);
         el.dataset.r = String(r);
         el.dataset.c = String(c);
+        el.dataset.id = String(tile.id);
         return el;
       }
 
       function render() {
         layoutBoard();
         refs.boardEl.innerHTML = '';
-        const now = Date.now();
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            const tile = grid[r][c];
-            const el = makeTileEl(tile, r, c, CELL);
-            const start = flashStarts.get(tile.id);
-            if (start !== undefined) {
-              const elapsed = now - start;
-              if (elapsed < FLASH_MS) {
-                el.classList.add('flash');
-                el.style.animationDelay = -(elapsed / 1000) + 's';
-              } else {
-                flashStarts.delete(tile.id);
-              }
-            }
-            refs.boardEl.appendChild(el);
+            refs.boardEl.appendChild(makeTileEl(grid[r][c], r, c, CELL));
           }
         }
+        for (const { cells, elapsedMs } of outlineTracker.current()) {
+          spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
+        }
+      }
+
+      function groupRect(cells: Cell[]): PixelRect {
+        const rs = cells.map(([r]) => r);
+        const cs = cells.map(([, c]) => c);
+        const minR = Math.min(...rs), maxR = Math.max(...rs);
+        const minC = Math.min(...cs), maxC = Math.max(...cs);
+        return {
+          left: minC * CELL + 2,
+          top: minR * CELL + 2,
+          width: (maxC - minC + 1) * CELL - 4,
+          height: (maxR - minR + 1) * CELL - 4,
+        };
       }
 
       // ---------- matching engine ----------
@@ -271,22 +275,25 @@ export function createSquareGame(): ShapeGame {
         return matches;
       }
 
+      // A line only qualifies once every tile in it has flipped to its dot
+      // face *and* those dot colors all match — a mix of flavor-face and
+      // dot-face tiles no longer counts, even if their effective colors
+      // happen to agree.
+      function isFullDotMatch(tiles: Tile[]): boolean {
+        if (tiles.some((t) => t.face !== 'dot')) return false;
+        const c0 = tiles[0].dotColor;
+        return tiles.every((t) => t.dotColor === c0);
+      }
+
       function findLineBonusGroups(): Cell[][] {
         const rowClears: number[] = [];
         for (let r = 0; r < rows; r++) {
-          const c0 = effColor(grid[r][0]);
-          if (grid[r].every((t) => effColor(t) === c0)) rowClears.push(r);
+          if (isFullDotMatch(grid[r])) rowClears.push(r);
         }
         const colClears: number[] = [];
         for (let c = 0; c < cols; c++) {
-          const c0 = effColor(grid[0][c]);
-          let full = true;
-          for (let r = 0; r < rows; r++)
-            if (effColor(grid[r][c]) !== c0) {
-              full = false;
-              break;
-            }
-          if (full) colClears.push(c);
+          const column = grid.map((row) => row[c]);
+          if (isFullDotMatch(column)) colClears.push(c);
         }
         pendingRowClears = rowClears;
         pendingColClears = colClears;
@@ -358,10 +365,22 @@ export function createSquareGame(): ShapeGame {
         rows = BOARD_DIM;
         cols = BOARD_DIM;
         grid = generateCleanBoard();
-        flashStarts.clear();
+        outlineTracker.reset();
       }
 
-      const controller = createGameController(refs, { bestKey, resetBoard, render, isGameOver, buildCascadeConfig });
+      const controller = createGameController(refs, {
+        bestKey,
+        resetBoard,
+        render,
+        isGameOver,
+        buildCascadeConfig,
+        // Line-bonus cells are removed from the board a moment later (see
+        // applyLineBonus), so their coordinates aren't safe to outline —
+        // the fade+collapse transition already gives that event its own
+        // feedback. Only 2x2/straight-4 matches, which stay in place, get
+        // the outline highlight.
+        onScored: (matchGroups) => outlineTracker.add(matchGroups),
+      });
 
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
@@ -373,14 +392,20 @@ export function createSquareGame(): ShapeGame {
         if (drag.axis === 'row') {
           const r = drag.r;
           const span = cols * cell;
+          // Magnetized in cell-units then scaled back to pixels: each tile
+          // sticks near its current slot and needs a decisive push past the
+          // midpoint to let go, instead of drifting continuously with the
+          // pointer — the same "kept a slot" feel the row/col drag physically
+          // ought to have.
+          const magDx = magnetizeRawDist(drag.dx / cell) * cell;
           for (let c = 0; c < cols; c++) {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-            if (el) el.style.left = c * cell + drag.dx + 'px';
+            if (el) el.style.left = c * cell + magDx + 'px';
           }
           for (let k = -2; k <= 2; k++) {
             if (k === 0) continue;
             for (let c = 0; c < cols; c++) {
-              const x = c * cell + drag.dx + k * span;
+              const x = c * cell + magDx + k * span;
               if (x < -cell || x > span) continue;
               const ghost = makeTileEl(grid[r][c], r, c, cell, 0.42);
               ghost.classList.add('ghost');
@@ -391,14 +416,15 @@ export function createSquareGame(): ShapeGame {
         } else {
           const c = drag.c;
           const span = rows * cell;
+          const magDy = magnetizeRawDist(drag.dy / cell) * cell;
           for (let r = 0; r < rows; r++) {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-            if (el) el.style.top = r * cell + drag.dy + 'px';
+            if (el) el.style.top = r * cell + magDy + 'px';
           }
           for (let k = -2; k <= 2; k++) {
             if (k === 0) continue;
             for (let r = 0; r < rows; r++) {
-              const y = r * cell + drag.dy + k * span;
+              const y = r * cell + magDy + k * span;
               if (y < -cell || y > span) continue;
               const ghost = makeTileEl(grid[r][c], r, c, cell, 0.42);
               ghost.classList.add('ghost');
@@ -407,6 +433,93 @@ export function createSquareGame(): ShapeGame {
             }
           }
         }
+      }
+
+      // ---------- line-clear collapse transition ----------
+      // A whole-line bonus removes tiles from the board (see applyLineBonus
+      // above), which would otherwise make survivors silently teleport to
+      // their new position on the very next render(). Captured just before
+      // the move, then diffed against the post-move DOM: cleared tiles get a
+      // brief fade-out ghost at their old spot, and survivors that moved
+      // freeze at their old spot and slide into their real one right after —
+      // fade, *then* collapse, matching a real row of blocks being cleared
+      // and the remaining ones sliding together to close the gap.
+      const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const COLLAPSE_FADE_MS = 380;
+      const COLLAPSE_SLIDE_MS = 320;
+
+      interface TileSnapshot { left: number; top: number; color: string }
+
+      function captureTileSnapshots(): Map<number, TileSnapshot> {
+        const map = new Map<number, TileSnapshot>();
+        refs.boardEl.querySelectorAll<HTMLElement>('.tile[data-id]').forEach((el) => {
+          const id = Number(el.dataset.id);
+          const dot = el.querySelector<HTMLElement>('.dot-circle');
+          const color = (dot ? dot.style.background : el.style.background) || 'var(--ink-faint)';
+          map.set(id, { left: parseFloat(el.style.left), top: parseFloat(el.style.top), color });
+        });
+        return map;
+      }
+
+      function playCollapseTransition(before: Map<number, TileSnapshot>) {
+        const seenIds = new Set<number>();
+        const flipEls: HTMLElement[] = [];
+        refs.boardEl.querySelectorAll<HTMLElement>('.tile[data-id]').forEach((el) => {
+          const id = Number(el.dataset.id);
+          seenIds.add(id);
+          const prev = before.get(id);
+          if (!prev) return;
+          const dx = prev.left - parseFloat(el.style.left);
+          const dy = prev.top - parseFloat(el.style.top);
+          if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+          el.style.transition = 'none';
+          el.style.transform = `translate(${dx}px, ${dy}px)`;
+          flipEls.push(el);
+        });
+
+        const removedIds: number[] = [];
+        before.forEach((_, id) => { if (!seenIds.has(id)) removedIds.push(id); });
+
+        const slideNow = () => {
+          if (!flipEls.length) return;
+          void refs.boardEl.offsetHeight; // commit the frozen transform before transitioning away from it
+          requestAnimationFrame(() => {
+            flipEls.forEach((el) => {
+              el.style.transition = `transform ${COLLAPSE_SLIDE_MS}ms ease`;
+              el.style.transform = '';
+            });
+          });
+        };
+
+        if (!removedIds.length) {
+          slideNow();
+          return;
+        }
+        removedIds.forEach((id) => {
+          const prev = before.get(id)!;
+          const ghost = document.createElement('div');
+          ghost.className = 'tile';
+          const size = CELL - 4;
+          ghost.style.width = size + 'px';
+          ghost.style.height = size + 'px';
+          ghost.style.left = prev.left + 'px';
+          ghost.style.top = prev.top + 'px';
+          ghost.style.background = prev.color;
+          ghost.style.pointerEvents = 'none';
+          refs.boardEl.appendChild(ghost);
+          if (reduceMotion()) { ghost.remove(); return; }
+          ghost.style.transition = `opacity ${COLLAPSE_FADE_MS}ms ease`;
+          requestAnimationFrame(() => { ghost.style.opacity = '0'; });
+          setTimeout(() => ghost.remove(), COLLAPSE_FADE_MS + 40);
+        });
+        if (reduceMotion()) return; // final render() already shows the settled state
+        setTimeout(slideNow, COLLAPSE_FADE_MS);
+      }
+
+      function resolveMoveWithCollapse(mask: Set<string>) {
+        const before = captureTileSnapshots();
+        controller.resolveMove(mask);
+        playCollapseTransition(before);
       }
 
       function applyDrag() {
@@ -419,7 +532,7 @@ export function createSquareGame(): ShapeGame {
           grid[r] = grid[r].map((_, i) => grid[r][(((i - shift) % n) + n) % n]);
           const mask = new Set<string>();
           for (let c = 0; c < cols; c++) mask.add(cellKey(r, c));
-          controller.resolveMove(mask);
+          resolveMoveWithCollapse(mask);
         } else {
           const shift = Math.round(drag.dy / drag.cell);
           if (shift === 0) return;
@@ -430,7 +543,7 @@ export function createSquareGame(): ShapeGame {
           for (let r = 0; r < rows; r++) grid[r][c] = shifted[r];
           const mask = new Set<string>();
           for (let r = 0; r < rows; r++) mask.add(cellKey(r, c));
-          controller.resolveMove(mask);
+          resolveMoveWithCollapse(mask);
         }
       }
 
