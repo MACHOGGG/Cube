@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-artifact
+dist-ssr
+*.local
+.DS_Store
+*.tsbuildinfo
+
+# Capacitor / native
+android/app/build
+android/.gradle
+android/local.properties
+ios/App/Pods
+ios/App/build
