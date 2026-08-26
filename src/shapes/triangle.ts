@@ -395,7 +395,7 @@ export function createTriangleGame(): ShapeGame {
           // different color" — the dot face needs its own distinct glyph.
           // A smaller triangle (same orientation, shrunk toward the
           // centroid) reads clearly as "the back" without the clutter of a
-          // small inscribed circle, and a gray stroke marks it unambiguously
+          // small inscribed circle, and a near-black stroke marks it unambiguously
           // as the flipped face. Built as an SVG polygon (fill + stroke
           // together, exactly the technique spawnTriangleOutline already
           // uses for the score highlight) rather than a clip-path div, since
@@ -420,7 +420,7 @@ export function createTriangleGame(): ShapeGame {
             innerPts.map(([x, y]) => `${(((x - minX) / w) * 100).toFixed(2)},${(((y - minY) / h) * 100).toFixed(2)}`).join(' '),
           );
           poly.setAttribute('fill', COLORS[tile.dotColor]);
-          poly.setAttribute('stroke', '#8a8a8a');
+          poly.setAttribute('stroke', '#1A1A1A');
           poly.setAttribute('stroke-width', '3.5');
           poly.setAttribute('stroke-linejoin', 'round');
           poly.setAttribute('vector-effect', 'non-scaling-stroke');
