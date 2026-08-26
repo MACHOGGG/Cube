@@ -2,8 +2,9 @@ import './circle.css';
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -136,6 +137,7 @@ interface DragState {
   dy: number;
   R: number;
   rowH: number;
+  lastShift: number;
 }
 
 export function createCircleGame(): ShapeGame {
@@ -333,10 +335,16 @@ export function createCircleGame(): ShapeGame {
       function render() {
         layoutBoard();
         refs.boardEl.innerHTML = '';
+        const outlineEntries = outlineTracker.current();
+        const pulseMs = new Map<string, number>();
+        for (const { cells, elapsedMs } of outlineEntries) {
+          for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
+        }
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c <= r; c++) {
+            const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
-            if (flipInCells.has(cellKey(r, c))) el.classList.add('flip-in');
+            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             refs.boardEl.appendChild(el);
           }
         }
@@ -346,7 +354,7 @@ export function createCircleGame(): ShapeGame {
         // tiles, so a bounding box would highlight empty margin between
         // them instead of tracing the actual scored balls.
         const size = R * 1.86;
-        for (const { cells, elapsedMs } of outlineTracker.current()) {
+        for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) {
             const [cx, cy] = ballCenter(r, c);
             spawnOutlineEl(refs.boardEl, { left: cx - size / 2, top: cy - size / 2, width: size, height: size }, elapsedMs, 'circle');
@@ -518,6 +526,14 @@ export function createCircleGame(): ShapeGame {
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
+        // A light tick each time the drag crosses into a new whole-step
+        // shift — the discrete, physical "click" of passing a detent, felt
+        // (haptics) rather than only inferred from the drag's positional easing.
+        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
+        if (shift !== d.lastShift) {
+          vibrate(6);
+          d.lastShift = shift;
+        }
 
         // Shorter lines (near the triangle's apex) have real empty margin
         // beside them to fade a wraparound ghost into, but this board's
@@ -585,7 +601,7 @@ export function createCircleGame(): ShapeGame {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH };
+          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0 };
         },
         onDrag(dx, dy) {
           if (!drag) return;

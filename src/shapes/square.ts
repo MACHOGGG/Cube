@@ -2,8 +2,9 @@ import './square.css';
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, type PixelRect } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, type PixelRect } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -38,6 +39,7 @@ interface DragState {
   dx: number;
   dy: number;
   cell: number;
+  lastShift: number;
 }
 
 export function createSquareGame(): ShapeGame {
@@ -212,15 +214,21 @@ export function createSquareGame(): ShapeGame {
       function render() {
         layoutBoard();
         refs.boardEl.innerHTML = '';
+        const outlineEntries = outlineTracker.current();
+        const pulseMs = new Map<string, number>();
+        for (const { cells, elapsedMs } of outlineEntries) {
+          for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
+        }
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
+            const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c, CELL);
-            if (flipInCells.has(cellKey(r, c))) el.classList.add('flip-in');
+            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             refs.boardEl.appendChild(el);
           }
         }
         flipInCells = new Set();
-        for (const { cells, elapsedMs } of outlineTracker.current()) {
+        for (const { cells, elapsedMs } of outlineEntries) {
           spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
         }
       }
@@ -411,6 +419,16 @@ export function createSquareGame(): ShapeGame {
         render();
         if (!drag || !drag.axis) return;
         const cell = drag.cell;
+        // A light tick each time the drag crosses into a new whole-cell
+        // shift — the discrete, physical "click" of passing a detent, felt
+        // (haptics) rather than only inferred from the drag's positional
+        // easing.
+        const rawShift = drag.axis === 'row' ? drag.dx / cell : drag.dy / cell;
+        const shift = Math.round(rawShift);
+        if (shift !== drag.lastShift) {
+          vibrate(6);
+          drag.lastShift = shift;
+        }
         if (drag.axis === 'row') {
           const r = drag.r;
           const span = cols * cell;
@@ -597,7 +615,7 @@ export function createSquareGame(): ShapeGame {
         onStart(x, y) {
           const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
-          drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL };
+          drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0 };
         },
         onDrag(dx, dy) {
           if (!drag) return;

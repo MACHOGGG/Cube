@@ -42,6 +42,25 @@ export function createOutlineTracker(): OutlineTracker {
   };
 }
 
+/**
+ * Applies this render's one-shot flip and/or ongoing score-pulse animations
+ * to a tile/ball/tri element, combined correctly when both apply to the same
+ * cell (the CSS `animation` shorthand can't just be set twice — the second
+ * class would silently replace the first). `pulseElapsedMs` resumes the
+ * pulse in sync with its score-outline if this is a re-render mid-flash.
+ */
+export function applyScoreAnimations(el: HTMLElement, isFlip: boolean, pulseElapsedMs: number | undefined): void {
+  if (isFlip && pulseElapsedMs !== undefined) {
+    el.style.animation = 'flip-in 300ms ease-out both, score-pulse 2.5s ease-in-out 1 both';
+    el.style.animationDelay = `0s, ${-(pulseElapsedMs / 1000)}s`;
+  } else if (isFlip) {
+    el.classList.add('flip-in');
+  } else if (pulseElapsedMs !== undefined) {
+    el.classList.add('score-pulse');
+    el.style.animationDelay = -(pulseElapsedMs / 1000) + 's';
+  }
+}
+
 export interface PixelRect {
   left: number;
   top: number;

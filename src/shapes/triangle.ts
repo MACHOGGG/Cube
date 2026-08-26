@@ -2,8 +2,9 @@ import './triangle.css';
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnTriangleOutline } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -13,7 +14,7 @@ import type { ShapeGame } from './types';
 // as-is (see square.ts for the palette rationale) so the toggle means the
 // same thing on every board.
 const PALETTES = {
-  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#E8E4DC'],
+  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
   colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#CC79A7'],
 } as const;
 const ROW_LENS = [7, 9, 11, 11, 9, 7];
@@ -189,6 +190,7 @@ interface DragState {
   line: Line | null;
   dx: number;
   dy: number;
+  lastShift: number;
 }
 
 export function createTriangleGame(): ShapeGame {
@@ -438,11 +440,17 @@ export function createTriangleGame(): ShapeGame {
       function render() {
         layoutBoard();
         refs.boardEl.innerHTML = '';
+        const outlineEntries = outlineTracker.current();
+        const pulseMs = new Map<string, number>();
+        for (const { cells, elapsedMs } of outlineEntries) {
+          for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
+        }
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             if (removedCells.has(cellKey(r, c))) continue;
+            const key = cellKey(r, c);
             const el = makeTriEl(grid[r][c], r, c);
-            if (flipInCells.has(cellKey(r, c))) el.classList.add('flip-in');
+            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             refs.boardEl.appendChild(el);
           }
         }
@@ -452,7 +460,7 @@ export function createTriangleGame(): ShapeGame {
         // orientation, so their combined outline is a zigzag, not a clean
         // box, and a rectangle would highlight empty corners no tile
         // occupies.
-        for (const { cells, elapsedMs } of outlineTracker.current()) {
+        for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) {
             spawnTriangleOutline(refs.boardEl, triGeometry(r, c).pts.map(toScreen), elapsedMs);
           }
@@ -650,16 +658,26 @@ export function createTriangleGame(): ShapeGame {
         return proj / (ux * ux + uy * uy);
       }
 
-      // Every real tile in the line translates by the same rawDist*step
-      // vector (exact for A/B, a smooth approximation of the row's zigzag
-      // that's visually unnoticeable mid-drag and irrelevant the instant it
-      // settles, since the final render() after release always uses the
-      // real, non-approximated geometry). Wraparound ghosts one full line-
-      // length before/after each real cell keep the line reading as an
-      // unbroken loop while dragging, the same way the square and circle
-      // boards already do, instead of the old clamp-at-the-ends behavior
-      // that left overflow tiles stacked in place with nothing to show
-      // where they were headed.
+      // Unlike square's tiles or circle's balls, a triangle's own shape
+      // depends on which slot it's in — every line here strictly alternates
+      // up/down from one cell to the next (confirmed: no line on this board
+      // ever has two consecutive same-orientation cells). Up and down
+      // triangles are mirror images, not translations of each other, so
+      // sliding a *fixed* clip-path element sideways by raw pixels (as an
+      // earlier version of this did) puts the wrong silhouette at half the
+      // positions it passes through — it only ever looked right again once
+      // the drag settled and a real render() rebuilt every shape from
+      // scratch, which is exactly the "shape/position changes, or the move
+      // seems to snap back" effect players were seeing mid-drag.
+      //
+      // The fix: never move a shaped element. Each of the n slots in the
+      // line keeps its own fixed shape+position (from its own true
+      // geometry) always — only *which tile's color* renders in that slot
+      // changes, via the same modular remap applyDrag will commit on
+      // release (so the preview can never show a configuration release
+      // wouldn't). This also makes the line a genuine cyclic buffer: every
+      // slot is always populated by construction, so there's no "overflow"
+      // and thus no wraparound ghosts needed at all.
       function renderDragPreview() {
         render();
         const d = drag;
@@ -667,42 +685,35 @@ export function createTriangleGame(): ShapeGame {
         const cells = d.line.cells;
         const n = cells.length;
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy));
+        // Math.round(rawDist) always equals Math.round of the unmagnetized
+        // input (magnetizeRawDist's own contract), which is exactly the
+        // shift applyDrag computes on release — so the preview's discrete
+        // configuration can never disagree with what actually commits.
+        const shift = Math.round(rawDist);
+        // A light tick each time the drag crosses into a new whole-step
+        // configuration — the discrete, physical "click" of passing a
+        // detent, felt (haptics) and not just inferred from the drag's
+        // subtler positional easing.
+        if (shift !== d.lastShift) {
+          vibrate(6);
+          d.lastShift = shift;
+        }
+        // The small leftover distance from that nearest snap point: near
+        // zero almost all the time (magnetizeRawDist sticks close to
+        // integers), growing toward ±0.5 only while passing through the
+        // midpoint to the next slot — used as a tiny same-shape nudge so a
+        // slot's content still visibly "gives" a little instead of teleporting.
+        const residual = rawDist - shift;
         const [dirX, dirY] = trueStepVector(d.fam);
+        const offset: [number, number] = [residual * dirX, residual * dirY];
 
-        // Every line here — row or either diagonal — runs from one hexagon
-        // edge to the opposite edge, with no surrounding slack: unlike the
-        // square board (a rectangle clipped cleanly by its container's own
-        // overflow:hidden), there's no empty margin around a hex line for an
-        // overshooting tile to sit in without visibly poking past the
-        // hexagon's silhouette into the board element's padding. So real
-        // tiles and their wraparound ghosts get only a hairline's tolerance
-        // (float-jitter safety, not visual slack) past their line's own
-        // [0, n-1] span, rather than the half-a-slot grace that's fine on a
-        // board with room to spare.
-        const EDGE_EPS = 0.03;
         for (let idx = 0; idx < n; idx++) {
           const [r, c] = cells[idx];
+          const sourceIdx = (((idx - shift) % n) + n) % n;
+          const [sr, sc] = cells[sourceIdx];
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-          if (!el) continue;
-          const curLeft = parseFloat(el.style.left);
-          const curTop = parseFloat(el.style.top);
-          el.style.left = curLeft + rawDist * dirX + 'px';
-          el.style.top = curTop + rawDist * dirY + 'px';
-          const pos = idx + rawDist;
-          if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) el.style.opacity = '0';
-        }
-
-        for (let k = -1; k <= 1; k++) {
-          if (k === 0) continue;
-          for (let i = 0; i < n; i++) {
-            const pos = i + rawDist + k * n;
-            if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) continue;
-            const [r0, c0] = cells[i];
-            const offset: [number, number] = [(pos - i) * dirX, (pos - i) * dirY];
-            const ghost = makeTriEl(grid[r0][c0], r0, c0, 0.55, offset);
-            ghost.classList.add('ghost');
-            refs.boardEl.appendChild(ghost);
-          }
+          if (el) el.remove();
+          refs.boardEl.appendChild(makeTriEl(grid[sr][sc], r, c, undefined, offset));
         }
       }
 
@@ -741,7 +752,7 @@ export function createTriangleGame(): ShapeGame {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, line: null, dx: 0, dy: 0 };
+          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0 };
         },
         onDrag(dx, dy) {
           if (!drag) return;
