@@ -195,6 +195,26 @@ h1 {
   .score-pulse { animation: none; }
 }
 
+/* Square has no separate score-outline overlay — a hard rectangle drawn
+   around a matched group of square tiles read as a UI selection box, not
+   a natural highlight. Its tiles use this bolder variant instead: the same
+   scale pulse, plus a brightness lift and a soft glow baked into the tile's
+   own existing inset border, so the tile itself visibly lights up rather
+   than something being framed on top of it. */
+.score-pulse-glow { animation: score-pulse-glow 2.5s ease-in-out 1 both; }
+@keyframes score-pulse-glow {
+  0%, 100% { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
+  4%       { transform: scale(1.07); filter: brightness(1.22); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 16px 3px var(--score-glow); }
+  13%      { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
+  37%      { transform: scale(1.07); filter: brightness(1.22); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 16px 3px var(--score-glow); }
+  46%      { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
+  70%      { transform: scale(1.07); filter: brightness(1.22); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 16px 3px var(--score-glow); }
+  79%      { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .score-pulse-glow { animation: none; }
+}
+
 .legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .swatch { width: 20px; height: 20px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); }
 

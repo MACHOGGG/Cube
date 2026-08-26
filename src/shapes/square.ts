@@ -4,7 +4,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, type PixelRect } from '../engine/scoreOutline';
+import { createOutlineTracker, applyScoreAnimations } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -223,27 +223,11 @@ export function createSquareGame(): ShapeGame {
           for (let c = 0; c < cols; c++) {
             const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c, CELL);
-            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
+            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
             refs.boardEl.appendChild(el);
           }
         }
         flipInCells = new Set();
-        for (const { cells, elapsedMs } of outlineEntries) {
-          spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
-        }
-      }
-
-      function groupRect(cells: Cell[]): PixelRect {
-        const rs = cells.map(([r]) => r);
-        const cs = cells.map(([, c]) => c);
-        const minR = Math.min(...rs), maxR = Math.max(...rs);
-        const minC = Math.min(...cs), maxC = Math.max(...cs);
-        return {
-          left: minC * CELL + 2,
-          top: minR * CELL + 2,
-          width: (maxC - minC + 1) * CELL - 4,
-          height: (maxR - minR + 1) * CELL - 4,
-        };
       }
 
       // ---------- matching engine ----------

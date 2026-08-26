@@ -48,15 +48,23 @@ export function createOutlineTracker(): OutlineTracker {
  * cell (the CSS `animation` shorthand can't just be set twice — the second
  * class would silently replace the first). `pulseElapsedMs` resumes the
  * pulse in sync with its score-outline if this is a re-render mid-flash.
+ *
+ * `glow`: square has no separate score-outline overlay (a hard rectangle
+ * around a whole matched group read as a UI selection box, not a natural
+ * highlight) — its scored tiles get this bolder variant instead, which
+ * bakes a brightness/box-shadow glow into the same per-tile pulse so the
+ * tile itself visibly lights up. Circle and triangle keep the plain scale
+ * pulse alongside their own shape-hugging outline overlay.
  */
-export function applyScoreAnimations(el: HTMLElement, isFlip: boolean, pulseElapsedMs: number | undefined): void {
+export function applyScoreAnimations(el: HTMLElement, isFlip: boolean, pulseElapsedMs: number | undefined, glow = false): void {
+  const pulseClass = glow ? 'score-pulse-glow' : 'score-pulse';
   if (isFlip && pulseElapsedMs !== undefined) {
-    el.style.animation = 'flip-in 300ms ease-out both, score-pulse 2.5s ease-in-out 1 both';
+    el.style.animation = `flip-in 300ms ease-out both, ${pulseClass} 2.5s ease-in-out 1 both`;
     el.style.animationDelay = `0s, ${-(pulseElapsedMs / 1000)}s`;
   } else if (isFlip) {
     el.classList.add('flip-in');
   } else if (pulseElapsedMs !== undefined) {
-    el.classList.add('score-pulse');
+    el.classList.add(pulseClass);
     el.style.animationDelay = -(pulseElapsedMs / 1000) + 's';
   }
 }
