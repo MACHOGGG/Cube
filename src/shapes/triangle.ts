@@ -673,13 +673,19 @@ export function createTriangleGame(): ShapeGame {
         }
       }
 
-      function applyDrag() {
+      // Returns whether it actually resolved a move (and thus already
+      // re-rendered at least once) — the caller needs this so it doesn't
+      // blindly render() again right after, which would wipe out a cascade
+      // step's ghost/flip/highlight elements before they ever get a frame
+      // painted (resolveMove no longer settles synchronously — see
+      // gameController's stepper-driven reveal).
+      function applyDrag(): boolean {
         const d = drag;
-        if (!d || !d.fam || !d.line) return;
+        if (!d || !d.fam || !d.line) return false;
         const cells = d.line.cells;
         const n = cells.length;
         const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy));
-        if (((shift % n) + n) % n === 0) return;
+        if (((shift % n) + n) % n === 0) return false;
         const vals = cells.map(([r, c]) => grid[r][c]);
         const shifted = vals.map((_, i) => vals[(((i - shift) % n) + n) % n]);
         cells.forEach(([r, c], i) => {
@@ -687,6 +693,7 @@ export function createTriangleGame(): ShapeGame {
         });
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         controller.resolveMove(mask);
+        return true;
       }
 
       // A line with any emptied cell (from an earlier bonus — see
@@ -720,13 +727,18 @@ export function createTriangleGame(): ShapeGame {
           renderDragPreview();
         },
         onEnd(dx, dy) {
+          let moved = false;
           if (drag && drag.fam) {
             drag.dx = dx;
             drag.dy = dy;
-            applyDrag();
+            moved = applyDrag();
           }
           drag = null;
-          render();
+          // A resolved move already re-rendered on its own (and may still be
+          // mid-reveal) — rendering again here would erase that before a
+          // frame of it paints. Only a no-op drag needs this to snap the
+          // preview's manual style tweaks back to a clean rest state.
+          if (!moved) render();
         },
       });
 
