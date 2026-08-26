@@ -3,7 +3,7 @@ import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, type PixelRect } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnOutlineEl } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -263,22 +263,17 @@ export function createCircleGame(): ShapeGame {
             refs.boardEl.appendChild(makeBallEl(grid[r][c], r, c));
           }
         }
+        // One circular outline per ball, not one rectangle around the whole
+        // group — balls don't tile edge-to-edge like the square board's
+        // tiles, so a bounding box would highlight empty margin between
+        // them instead of tracing the actual scored balls.
+        const size = R * 1.86;
         for (const { cells, elapsedMs } of outlineTracker.current()) {
-          spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
+          for (const [r, c] of cells) {
+            const [cx, cy] = ballCenter(r, c);
+            spawnOutlineEl(refs.boardEl, { left: cx - size / 2, top: cy - size / 2, width: size, height: size }, elapsedMs, 'circle');
+          }
         }
-      }
-
-      function groupRect(cells: Cell[]): PixelRect {
-        const radius = (R * 1.86) / 2;
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const [r, c] of cells) {
-          const [cx, cy] = ballCenter(r, c);
-          minX = Math.min(minX, cx - radius);
-          maxX = Math.max(maxX, cx + radius);
-          minY = Math.min(minY, cy - radius);
-          maxY = Math.max(maxY, cy + radius);
-        }
-        return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
       }
 
       // ---------- matching engine ----------
@@ -385,6 +380,12 @@ export function createCircleGame(): ShapeGame {
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
 
+        // A line here is only 1-7 balls, much shorter than the board's own
+        // span, so a real ball shifted more than about half a slot past
+        // either end of its *own* short line has visually wrapped, not just
+        // moved; left visible, it drifts into the empty margin outside the
+        // triangular arrangement instead of off the board entirely. Hide it
+        // at that point and let the matching ghost (below) stand in.
         for (let i = 0; i < n; i++) {
           const [r, c] = d.cells[i];
           const [cx, cy] = ballCenter(r, c);
@@ -392,13 +393,15 @@ export function createCircleGame(): ShapeGame {
           if (el) {
             el.style.left = cx - size / 2 + rawDist * dirX + 'px';
             el.style.top = cy - size / 2 + rawDist * dirY + 'px';
+            const pos = i + rawDist;
+            el.style.opacity = pos < -0.5 || pos > n - 0.5 ? '0' : '';
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
             const pos = i + rawDist + k * n;
-            if (pos < -1 || pos > n) continue;
+            if (pos < -0.5 || pos > n - 0.5) continue;
             const [r0, c0] = d.cells[i];
             const [baseX, baseY] = ballCenter(r0, c0);
             const shiftedX = baseX + (pos - i) * dirX;

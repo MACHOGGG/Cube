@@ -131,6 +131,33 @@ h1 {
   }
 }
 
+/* Triangle tiles get an SVG polygon stroke instead of the div+border above —
+   a clip-path shape can't take a border (the clip removes it along with
+   everything else outside the path), and a bounding-box rectangle would
+   highlight the empty corners around the actual triangle. Same 5s/3-flash
+   timing, just animating `stroke` instead of `border-color`. */
+.score-outline-tri {
+  position: absolute; overflow: visible; pointer-events: none;
+}
+.score-outline-tri polygon {
+  fill: none; stroke: transparent; stroke-width: 3; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  animation: score-outline-stroke-flash 5s ease-in-out 1 both;
+}
+@keyframes score-outline-stroke-flash {
+  0%, 100% { stroke: transparent; }
+  4%, 13%  { stroke: var(--ink); }
+  37%, 46% { stroke: var(--ink); }
+  70%, 79% { stroke: var(--ink); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .score-outline-tri polygon { animation: score-outline-stroke-fade 1.1s ease-out 1 both; }
+  @keyframes score-outline-stroke-fade {
+    0% { stroke: var(--ink); }
+    100% { stroke: transparent; }
+  }
+}
+
 .legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .swatch { width: 20px; height: 20px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); }
 

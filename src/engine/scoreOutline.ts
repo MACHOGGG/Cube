@@ -49,8 +49,17 @@ export interface PixelRect {
   height: number;
 }
 
-/** Appends one outline overlay element into container, resuming its animation at elapsedMs if this is a re-render of an already-showing outline. */
-export function spawnOutlineEl(container: HTMLElement, rect: PixelRect, elapsedMs: number): void {
+/**
+ * Appends one rectangular (or, for round tiles, circular) outline overlay
+ * into container, resuming its animation at elapsedMs if this is a
+ * re-render of an already-showing outline. A plain rect border is the
+ * *correct* shape here whenever the tile itself is a square/rectangle (the
+ * square board's tiles, or a whole matched cluster of them) — border-radius
+ * 50% turns the same element into a circle for round tiles, where a
+ * bounding-box rectangle would otherwise highlight empty corners no tile
+ * actually occupies.
+ */
+export function spawnOutlineEl(container: HTMLElement, rect: PixelRect, elapsedMs: number, shape: 'rect' | 'circle' = 'rect'): void {
   const el = document.createElement('div');
   el.className = 'score-outline';
   el.style.left = rect.left + 'px';
@@ -58,5 +67,46 @@ export function spawnOutlineEl(container: HTMLElement, rect: PixelRect, elapsedM
   el.style.width = rect.width + 'px';
   el.style.height = rect.height + 'px';
   el.style.animationDelay = -(elapsedMs / 1000) + 's';
+  if (shape === 'circle') el.style.borderRadius = '50%';
   container.appendChild(el);
+}
+
+/**
+ * A triangle-shaped outline: a bounding-box rectangle can't stand in for a
+ * triangular tile the way it can for a square one (its corners would
+ * highlight empty space no tile occupies), and CSS clip-path clips away a
+ * border along with everything else outside the path, leaving no visible
+ * stroke on the cut edges. An SVG polygon stroke has neither problem — it
+ * traces exactly the tile's own three edges. `pts` are the tile's actual
+ * screen-space vertices (board-local pixels), same source as the tile's own
+ * rendering.
+ */
+export function spawnTriangleOutline(container: HTMLElement, pts: [number, number][], elapsedMs: number): void {
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const w = maxX - minX || 1;
+  const h = maxY - minY || 1;
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg') as SVGSVGElement;
+  svg.classList.add('score-outline-tri');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.left = minX + 'px';
+  svg.style.top = minY + 'px';
+  svg.style.width = w + 'px';
+  svg.style.height = h + 'px';
+
+  const poly = document.createElementNS(svgNS, 'polygon');
+  poly.setAttribute(
+    'points',
+    pts.map(([x, y]) => `${(((x - minX) / w) * 100).toFixed(2)},${(((y - minY) / h) * 100).toFixed(2)}`).join(' '),
+  );
+  poly.style.animationDelay = -(elapsedMs / 1000) + 's';
+  svg.appendChild(poly);
+  container.appendChild(svg);
 }

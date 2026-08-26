@@ -3,7 +3,7 @@ import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, type PixelRect } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnTriangleOutline } from '../engine/scoreOutline';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -289,22 +289,16 @@ export function createTriangleGame(): ShapeGame {
             refs.boardEl.appendChild(makeTriEl(grid[r][c], r, c));
           }
         }
+        // One triangle-shaped outline per tile, not a bounding rectangle
+        // around the whole group — adjacent tiles here alternate up/down
+        // orientation, so their combined outline is a zigzag, not a clean
+        // box, and a rectangle would highlight empty corners no tile
+        // occupies.
         for (const { cells, elapsedMs } of outlineTracker.current()) {
-          spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
-        }
-      }
-
-      function groupRect(cells: Cell[]): PixelRect {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const [r, c] of cells) {
-          for (const p of triGeometry(r, c).pts.map(toScreen)) {
-            minX = Math.min(minX, p[0]);
-            maxX = Math.max(maxX, p[0]);
-            minY = Math.min(minY, p[1]);
-            maxY = Math.max(maxY, p[1]);
+          for (const [r, c] of cells) {
+            spawnTriangleOutline(refs.boardEl, triGeometry(r, c).pts.map(toScreen), elapsedMs);
           }
         }
-        return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
       }
 
       // ---------- matching engine ----------
@@ -461,20 +455,30 @@ export function createTriangleGame(): ShapeGame {
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy));
         const [dirX, dirY] = trueStepVector(d.fam);
 
-        for (const [r, c] of cells) {
+        // A family-A/B/row line here is only 3-6 cells, much shorter than
+        // the board's own span, so — unlike the square board's full-width
+        // rows — a real tile shifted more than about half a slot past
+        // either end of its *own* short line has visually wrapped, not just
+        // moved; left visible, it drifts into whatever empty margin sits
+        // outside the hexagon instead of off the board entirely. Hide it at
+        // that point and let the matching ghost (below) stand in.
+        for (let idx = 0; idx < n; idx++) {
+          const [r, c] = cells[idx];
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (!el) continue;
           const curLeft = parseFloat(el.style.left);
           const curTop = parseFloat(el.style.top);
           el.style.left = curLeft + rawDist * dirX + 'px';
           el.style.top = curTop + rawDist * dirY + 'px';
+          const pos = idx + rawDist;
+          if (pos < -0.5 || pos > n - 0.5) el.style.opacity = '0';
         }
 
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
             const pos = i + rawDist + k * n;
-            if (pos < -1 || pos > n) continue;
+            if (pos < -0.5 || pos > n - 0.5) continue;
             const [r0, c0] = cells[i];
             const offset: [number, number] = [(pos - i) * dirX, (pos - i) * dirY];
             const ghost = makeTriEl(grid[r0][c0], r0, c0, 0.42, offset);
