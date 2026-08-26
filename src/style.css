@@ -14,7 +14,8 @@
   --warn-soft: #F1E1C6;
   --board-bg: #EFE6E2;
   --shadow: 0 1px 2px rgba(46,36,48,0.06), 0 8px 24px -12px rgba(46,36,48,0.16);
-  --score-glow: rgba(46,36,48,0.45);
+  --score-glow: color-mix(in srgb, var(--accent) 65%, transparent);
+  --score-wash: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -22,7 +23,6 @@
     --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E;
     --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
-    --score-glow: rgba(242,234,238,0.4);
   }
 }
 :root[data-theme="dark"] {
@@ -30,7 +30,6 @@
   --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E;
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
-  --score-glow: rgba(242,234,238,0.4);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -136,16 +135,16 @@ h1 {
   animation: score-outline-flash 2.5s ease-in-out 1 both;
 }
 @keyframes score-outline-flash {
-  0%, 100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; }
-  4%, 13%  { border-color: var(--ink); box-shadow: 0 0 10px 1px var(--score-glow); }
-  37%, 46% { border-color: var(--ink); box-shadow: 0 0 10px 1px var(--score-glow); }
-  70%, 79% { border-color: var(--ink); box-shadow: 0 0 10px 1px var(--score-glow); }
+  0%, 100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; background: transparent; }
+  4%, 13%  { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+  37%, 46% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+  70%, 79% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
 }
 @media (prefers-reduced-motion: reduce) {
   .score-outline { animation: score-outline-fade 1.1s ease-out 1 both; }
   @keyframes score-outline-fade {
-    0% { border-color: var(--ink); box-shadow: 0 0 10px 1px var(--score-glow); }
-    100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; }
+    0% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+    100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; background: transparent; }
   }
 }
 
@@ -158,21 +157,21 @@ h1 {
   position: absolute; overflow: visible; pointer-events: none;
 }
 .score-outline-tri polygon {
-  fill: none; stroke: transparent; stroke-width: 3; stroke-linejoin: round;
+  fill: transparent; stroke: transparent; stroke-width: 3; stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
   animation: score-outline-stroke-flash 2.5s ease-in-out 1 both;
 }
 @keyframes score-outline-stroke-flash {
-  0%, 100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); }
-  4%, 13%  { stroke: var(--ink); filter: drop-shadow(0 0 5px var(--score-glow)); }
-  37%, 46% { stroke: var(--ink); filter: drop-shadow(0 0 5px var(--score-glow)); }
-  70%, 79% { stroke: var(--ink); filter: drop-shadow(0 0 5px var(--score-glow)); }
+  0%, 100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); fill: transparent; }
+  4%, 13%  { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
+  37%, 46% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
+  70%, 79% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
 }
 @media (prefers-reduced-motion: reduce) {
   .score-outline-tri polygon { animation: score-outline-stroke-fade 1.1s ease-out 1 both; }
   @keyframes score-outline-stroke-fade {
-    0% { stroke: var(--ink); filter: drop-shadow(0 0 5px var(--score-glow)); }
-    100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); }
+    0% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
+    100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); fill: transparent; }
   }
 }
 

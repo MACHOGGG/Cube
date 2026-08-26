@@ -314,11 +314,11 @@ export function createCircleGame(): ShapeGame {
           // (three crossing strokes) rather than the "*" character keeps it
           // perfectly centered and a consistent weight across browsers/fonts.
           el.style.background = 'transparent';
-          const starSize = Math.round(size * 0.8);
+          const starSize = Math.round(size * 0.95);
           const color = COLORS[tile.dotColor];
           el.innerHTML =
             `<svg viewBox="0 0 24 24" width="${starSize}" height="${starSize}">` +
-            `<g stroke="${color}" stroke-width="4.4" stroke-linecap="round">` +
+            `<g stroke="${color}" stroke-width="5.5" stroke-linecap="round">` +
             `<line x1="12" y1="2.5" x2="12" y2="21.5"/>` +
             `<line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
             `<line x1="20" y1="6.75" x2="4" y2="17.25"/>` +
