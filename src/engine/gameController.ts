@@ -4,6 +4,7 @@ import { createStreakTracker, createCascadeStepper, type CascadeConfig } from '.
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher } from './persistence';
 import { createPerformanceGauge } from './performance';
+import { vibrate } from './haptics';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -39,6 +40,15 @@ export interface GameControllerHooks {
    * here, diffing against whatever it captured in onCascadeStep.
    */
   onCascadeStepRendered?(step: CascadeStepGroups): void;
+  /**
+   * Called right after a match step's commit() actually flips matchGroups'
+   * cells to their dot face, just before the render() that paints that flip
+   * — a shape uses this to mark those specific cells so their *next*
+   * render() plays a one-shot "just flipped" animation instead of silently
+   * swapping in the new face. Never called for a bonus step (nothing to
+   * flip — see CascadeStep.commit).
+   */
+  onCommit?(matchGroups: Cell[][]): void;
 }
 
 export interface GameController {
@@ -129,6 +139,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (gameOver || paused || resolving) return;
     moves++;
     resolving = true;
+    vibrate(8); // a light tick confirming the drag itself landed, win or not
 
     const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask);
     const multiplier = streak.currentMultiplier();
@@ -182,6 +193,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       const delta = s.points * multiplier * comboMult;
       comboMult *= CASCADE_COMBO_FACTOR;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
+      // A bonus (the whole-line, 36-point event) gets its own distinct
+      // double-pulse — it's the bigger moment — while an ordinary match gets
+      // one light buzz, right as its highlight appears.
+      vibrate(s.lineBonusGroups.length ? [25, 40, 25] : 15);
 
       hooks.onCascadeStep?.(groups);
       hooks.render();
@@ -189,6 +204,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
       const proceed = () => {
         s.commit();
+        if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0) {
           score += delta;
           scoreReel.showGain(delta);

@@ -231,6 +231,11 @@ export function createTriangleGame(): ShapeGame {
       // gone from rendering, matching, and every line (row or diagonal) that
       // passes through them, rather than the board itself changing shape.
       let removedCells = new Set<string>();
+      // Cells whose flip to their dot face just landed (set in onCommit,
+      // consumed and cleared by the very next render()) — those cells get a
+      // one-shot .flip-in animation class so the flip itself has motion
+      // instead of the face silently swapping.
+      let flipInCells = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -384,20 +389,42 @@ export function createTriangleGame(): ShapeGame {
         fill.style.setProperty('-webkit-clip-path', clip);
 
         if (tile.face === 'dot') {
-          const cenBase = toScreen(centroid(geo.pts));
-          const cen: [number, number] = [cenBase[0] + offX, cenBase[1] + offY];
-          // Equilateral triangle's incircle: diameter = S/√3, centered at the
-          // centroid (which for an equilateral triangle *is* the incenter).
-          const dsize = S / Math.sqrt(3);
-          const dot = document.createElement('div');
-          dot.className = 'dot-circle';
-          dot.style.width = dsize + 'px';
-          dot.style.height = dsize + 'px';
-          dot.style.left = cen[0] - minX - dsize / 2 + 'px';
-          dot.style.top = cen[1] - minY - dsize / 2 + 'px';
-          dot.style.background = COLORS[tile.dotColor];
+          // A same-size same-shape triangle read as "still the front, just a
+          // different color" — the dot face needs its own distinct glyph.
+          // A smaller triangle (same orientation, shrunk toward the
+          // centroid) reads clearly as "the back" without the clutter of a
+          // small inscribed circle, and a gray stroke marks it unambiguously
+          // as the flipped face. Built as an SVG polygon (fill + stroke
+          // together, exactly the technique spawnTriangleOutline already
+          // uses for the score highlight) rather than a clip-path div, since
+          // clip-path can't render a clean border following a triangular
+          // silhouette.
+          const cen = centroid(pts);
+          const DOT_SCALE = 0.6;
+          const innerPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * DOT_SCALE, cen[1] + (y - cen[1]) * DOT_SCALE] as [number, number]);
+          const svgNS = 'http://www.w3.org/2000/svg';
+          const svg = document.createElementNS(svgNS, 'svg');
+          svg.setAttribute('viewBox', '0 0 100 100');
+          svg.setAttribute('preserveAspectRatio', 'none');
+          svg.style.position = 'absolute';
+          svg.style.left = '0';
+          svg.style.top = '0';
+          svg.style.width = '100%';
+          svg.style.height = '100%';
+          svg.style.overflow = 'visible';
+          const poly = document.createElementNS(svgNS, 'polygon');
+          poly.setAttribute(
+            'points',
+            innerPts.map(([x, y]) => `${(((x - minX) / w) * 100).toFixed(2)},${(((y - minY) / h) * 100).toFixed(2)}`).join(' '),
+          );
+          poly.setAttribute('fill', COLORS[tile.dotColor]);
+          poly.setAttribute('stroke', '#8a8a8a');
+          poly.setAttribute('stroke-width', '3.5');
+          poly.setAttribute('stroke-linejoin', 'round');
+          poly.setAttribute('vector-effect', 'non-scaling-stroke');
+          svg.appendChild(poly);
           el.appendChild(fill);
-          el.appendChild(dot);
+          el.appendChild(svg);
         } else {
           fill.style.background = COLORS[tile.color];
           el.appendChild(fill);
@@ -414,9 +441,12 @@ export function createTriangleGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             if (removedCells.has(cellKey(r, c))) continue;
-            refs.boardEl.appendChild(makeTriEl(grid[r][c], r, c));
+            const el = makeTriEl(grid[r][c], r, c);
+            if (flipInCells.has(cellKey(r, c))) el.classList.add('flip-in');
+            refs.boardEl.appendChild(el);
           }
         }
+        flipInCells = new Set();
         // One triangle-shaped outline per tile, not a bounding rectangle
         // around the whole group — adjacent tiles here alternate up/down
         // orientation, so their combined outline is a zigzag, not a clean
@@ -540,6 +570,9 @@ export function createTriangleGame(): ShapeGame {
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
+        },
+        onCommit: (matchGroups) => {
+          for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
         },
       });
 
@@ -666,7 +699,7 @@ export function createTriangleGame(): ShapeGame {
             if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) continue;
             const [r0, c0] = cells[i];
             const offset: [number, number] = [(pos - i) * dirX, (pos - i) * dirY];
-            const ghost = makeTriEl(grid[r0][c0], r0, c0, 0.42, offset);
+            const ghost = makeTriEl(grid[r0][c0], r0, c0, 0.55, offset);
             ghost.classList.add('ghost');
             refs.boardEl.appendChild(ghost);
           }

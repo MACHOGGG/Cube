@@ -76,6 +76,11 @@ export function createSquareGame(): ShapeGame {
       // the same cascade pass — see the comment on applyLineBonus below.
       let pendingRowClears: number[] = [];
       let pendingColClears: number[] = [];
+      // Cells whose flip to their dot face just landed (set in onCommit,
+      // consumed and cleared by the very next render()) — those cells get a
+      // one-shot .flip-in animation class so the flip itself has motion
+      // instead of the face silently swapping.
+      let flipInCells = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -209,9 +214,12 @@ export function createSquareGame(): ShapeGame {
         refs.boardEl.innerHTML = '';
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            refs.boardEl.appendChild(makeTileEl(grid[r][c], r, c, CELL));
+            const el = makeTileEl(grid[r][c], r, c, CELL);
+            if (flipInCells.has(cellKey(r, c))) el.classList.add('flip-in');
+            refs.boardEl.appendChild(el);
           }
         }
+        flipInCells = new Set();
         for (const { cells, elapsedMs } of outlineTracker.current()) {
           spawnOutlineEl(refs.boardEl, groupRect(cells), elapsedMs);
         }
@@ -391,6 +399,9 @@ export function createSquareGame(): ShapeGame {
             pendingCollapseSnapshot = null;
           }
         },
+        onCommit: (matchGroups) => {
+          for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
+        },
       });
 
       // ---------- drag interaction ----------
@@ -418,7 +429,7 @@ export function createSquareGame(): ShapeGame {
             for (let c = 0; c < cols; c++) {
               const x = c * cell + magDx + k * span;
               if (x < -cell || x > span) continue;
-              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.42);
+              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55);
               ghost.classList.add('ghost');
               ghost.style.left = x + 'px';
               refs.boardEl.appendChild(ghost);
@@ -437,7 +448,7 @@ export function createSquareGame(): ShapeGame {
             for (let r = 0; r < rows; r++) {
               const y = r * cell + magDy + k * span;
               if (y < -cell || y > span) continue;
-              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.42);
+              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55);
               ghost.classList.add('ghost');
               ghost.style.top = y + 'px';
               refs.boardEl.appendChild(ghost);
@@ -519,6 +530,11 @@ export function createSquareGame(): ShapeGame {
         }
         removedIds.forEach((id) => {
           const prev = before.get(id)!;
+          // A whole-line bonus only ever fires once every cell in that line
+          // is already dot-faced (see isFullDotMatch), so what the player
+          // just saw complete — and what should visibly disappear — is the
+          // dot face: a transparent tile with an inset colored circle, not
+          // a solid-fill square (which reads as the *front* of that color).
           const ghost = document.createElement('div');
           ghost.className = 'tile';
           const size = CELL - 4;
@@ -526,8 +542,14 @@ export function createSquareGame(): ShapeGame {
           ghost.style.height = size + 'px';
           ghost.style.left = prev.left + 'px';
           ghost.style.top = prev.top + 'px';
-          ghost.style.background = prev.color;
           ghost.style.pointerEvents = 'none';
+          const dot = document.createElement('div');
+          dot.className = 'dot-circle';
+          const dsize = Math.round(size * 0.86);
+          dot.style.width = dsize + 'px';
+          dot.style.height = dsize + 'px';
+          dot.style.background = prev.color;
+          ghost.appendChild(dot);
           refs.boardEl.appendChild(ghost);
           if (reduceMotion()) { ghost.remove(); return; }
           ghost.style.transition = `opacity ${COLLAPSE_FADE_MS}ms ease`;
