@@ -385,7 +385,6 @@ export function createCircleGame(): ShapeGame {
           bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
-          continueAfterLineBonus: false,
         };
       }
 
@@ -406,8 +405,10 @@ export function createCircleGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         // Unlike the square grid, a whole-line bonus here never removes
-        // cells from the board, so both kinds of group stay outline-safe.
-        onScored: (matchGroups, lineBonusGroups) => outlineTracker.add([...matchGroups, ...lineBonusGroups]),
+        // cells from the board, so both kinds of group stay outline-safe —
+        // added to the tracker per cascade step (not once for the whole
+        // move) so a chain reaction's outlines appear one beat at a time.
+        onCascadeStep: ({ matchGroups, lineBonusGroups }) => outlineTracker.add([...matchGroups, ...lineBonusGroups]),
       });
 
       // ---------- drag interaction ----------
@@ -486,7 +487,7 @@ export function createCircleGame(): ShapeGame {
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH };

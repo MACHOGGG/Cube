@@ -48,66 +48,74 @@ export interface CascadeConfig {
   /**
    * Flips every cell in every bonused line to its dot face and, for shapes
    * where a full line leaves the board (the square grid), removes them.
-   * Called once per cascade pass with *all* of that pass's line groups
+   * Called once per cascade step with *all* of that step's line groups
    * together (not once per group) so a shape whose removal renumbers rows/
-   * columns — square clearing a row and a column in the same pass — can
+   * columns — square clearing a row and a column in the same step — can
    * batch the removal the same way the original single-shape prototype did,
    * instead of the first group's removal invalidating the second group's
-   * still-pre-removal coordinates.
+   * still-pre-removal coordinates. Every cell in every group is already
+   * dot-faced by the time this runs (see isFullDotMatch), so — unlike a
+   * regular match — there's no flip for the caller to stage; only the
+   * removal (if any) needs revealing.
    */
   onLineBonus(groups: Cell[][]): void;
   /** Square's line-clear shrinks the grid, so any in-flight cell mask goes stale and must be dropped. */
   resetMaskOnLineBonus: boolean;
-  /** Square skips match-finding entirely on a pass where a line just cleared; triangle/circle fall through to it in the same pass. */
-  continueAfterLineBonus: boolean;
   /** Square also stops the instant the board is fully cleared away. */
   isTerminalAfterLineBonus?(): boolean;
   findMatches(mask: Set<string> | null): Match[];
 }
 
-export interface CascadeResult {
+/**
+ * One "beat" of a cascade — either a wave of whole-line bonuses or a wave of
+ * 2x2/run-4/cluster matches, never both — returned *before* a match step's
+ * flip is applied so the caller can show the highlight against the tiles'
+ * still-current face first. matchGroups is empty for a bonus step and vice
+ * versa.
+ */
+export interface CascadeStep {
   points: number;
-  scoredTiles: Set<Tile>;
-  /** Each 2x2/run-4 match's own cells, kept separate so the caller can outline each one individually — stays valid to outline for every shape, since a match never removes cells from the board. */
   matchGroups: Cell[][];
-  /** Each whole-line bonus's own cells. For a shape whose bonus removes the line from the board (the square grid), these coordinates go stale the instant onLineBonus() runs — don't hold onto them past that. */
   lineBonusGroups: Cell[][];
+  /** Applies this step's mutation: flips matchGroups' cells to their dot face (a no-op for a bonus step, whose cells are already dot-faced and already removed by the time next() returns). Call once, after showing the pre-flip highlight, before requesting the next step. */
+  commit(): void;
+}
+
+export interface CascadeStepper {
+  /** Finds the next step, or null once the chain reaction has fully settled. */
+  next(): CascadeStep | null;
 }
 
 /**
- * Resolves one full chain reaction following a confirmed move: repeatedly
- * awards whole-line bonuses and 2x2/run-4 matches (flipping scored tiles to
- * their dot face) until nothing new triggers. Returns the raw points (no
- * streak multiplier yet) plus every tile that scored — as both a flat set and
- * the individual groups they scored in — so the caller can highlight them.
+ * Drives one full chain reaction following a confirmed move, one beat at a
+ * time: repeatedly finds the next whole-line bonus or match wave, applying a
+ * bonus's mutation immediately (its cells are always already dot-faced —
+ * see isFullDotMatch — so there's nothing to stage) but holding a match
+ * wave's flip back in commit() until the caller calls it. The caller is
+ * expected to call next() and commit() strictly in sequence — each commit()
+ * before the following next() — so from resolveCascade's own point of view
+ * this is exactly the same algorithm as a plain synchronous loop, just with
+ * its steps exposed one at a time instead of all resolved before returning.
  */
-export function resolveCascade(cfg: CascadeConfig, initialMask: Set<string> | null): CascadeResult {
-  let totalPoints = 0;
+export function createCascadeStepper(cfg: CascadeConfig, initialMask: Set<string> | null): CascadeStepper {
   let mask = initialMask;
-  const scoredTiles = new Set<Tile>();
-  const matchGroups: Cell[][] = [];
-  const lineBonusGroups: Cell[][] = [];
+  let terminal = false;
   // Identifies a match by the permanent ids of its tiles, not by row/col
   // (which shift whenever a line is removed) or by face (a match can be
   // entirely already-dot). Without this, a match with nothing left to flip
-  // would get "found" again on every pass forever.
+  // would get "found" again on every step forever.
   const scoredSignatures = new Set<string>();
 
-  while (true) {
-    let changed = false;
+  function next(): CascadeStep | null {
+    if (terminal) return null;
 
     const lineBonuses = cfg.findLineBonuses();
     if (lineBonuses.length) {
-      totalPoints += lineBonuses.length * cfg.bonusPointsPerLine;
-      for (const cells of lineBonuses) {
-        for (const [r, c] of cells) scoredTiles.add(cfg.tileAt(r, c));
-        lineBonusGroups.push(cells);
-      }
+      const points = lineBonuses.length * cfg.bonusPointsPerLine;
       cfg.onLineBonus(lineBonuses);
-      changed = true;
       if (cfg.resetMaskOnLineBonus) mask = null;
-      if (cfg.isTerminalAfterLineBonus?.()) break;
-      if (cfg.continueAfterLineBonus) continue;
+      if (cfg.isTerminalAfterLineBonus?.()) terminal = true;
+      return { points, matchGroups: [], lineBonusGroups: lineBonuses, commit() {} };
     }
 
     const nextMask = new Set<string>();
@@ -120,29 +128,33 @@ export function resolveCascade(cfg: CascadeConfig, initialMask: Set<string> | nu
       scoredSignatures.add(sig);
       return true;
     });
-
     if (matches.length) {
-      changed = true;
+      let points = 0;
       const toFlip = new Set<string>();
       for (const m of matches) {
-        totalPoints += m.points;
-        matchGroups.push(m.cells);
+        points += m.points;
         for (const [r, c] of m.cells) {
-          const t = cfg.tileAt(r, c);
-          scoredTiles.add(t);
-          if (t.face === 'flavor') toFlip.add(cellKey(r, c));
           nextMask.add(cellKey(r, c));
+          if (cfg.tileAt(r, c).face === 'flavor') toFlip.add(cellKey(r, c));
         }
       }
-      for (const key of toFlip) {
-        const [r, c] = key.split(',').map(Number);
-        cfg.tileAt(r, c).face = 'dot';
-      }
       mask = nextMask;
+      return {
+        points,
+        matchGroups: matches.map((m) => m.cells),
+        lineBonusGroups: [],
+        commit() {
+          for (const key of toFlip) {
+            const [r, c] = key.split(',').map(Number);
+            cfg.tileAt(r, c).face = 'dot';
+          }
+        },
+      };
     }
 
-    if (!changed) break;
+    terminal = true;
+    return null;
   }
 
-  return { points: totalPoints, scoredTiles, matchGroups, lineBonusGroups };
+  return { next };
 }

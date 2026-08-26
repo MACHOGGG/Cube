@@ -231,7 +231,6 @@ export function createTriangleGame(): ShapeGame {
       // gone from rendering, matching, and every line (row or diagonal) that
       // passes through them, rather than the board itself changing shape.
       let removedCells = new Set<string>();
-      let pendingLineBonusGroups: Cell[][] = [];
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -509,7 +508,6 @@ export function createTriangleGame(): ShapeGame {
           bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
-          continueAfterLineBonus: false,
         };
       }
 
@@ -533,14 +531,15 @@ export function createTriangleGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         // Regular matches (run-of-4 and the big-triangle cluster) stay on
-        // the board, so they get the persistent outline highlight. A
-        // whole-line bonus instead empties its cells a moment later (see
-        // applyLineBonus) — its own fade-out transition is that event's
-        // feedback, so its groups are stashed for resolveMoveWithFade to
-        // pick up right after this move finishes, not outlined.
-        onScored: (matchGroups, lineBonusGroups) => {
-          outlineTracker.add(matchGroups);
-          pendingLineBonusGroups = lineBonusGroups;
+        // the board, so they get the persistent outline highlight, added
+        // per cascade step so a chain reaction reveals one beat at a time.
+        // A whole-line bonus instead empties its cells (see applyLineBonus)
+        // — its own fade-out is that event's feedback, not outlined —
+        // played in onCascadeStepRendered since the ghost must be appended
+        // *after* this step's own render() or that render() would wipe it.
+        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
+        onCascadeStepRendered: ({ lineBonusGroups }) => {
+          if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
         },
       });
 
@@ -565,12 +564,6 @@ export function createTriangleGame(): ShapeGame {
             setTimeout(() => ghost.remove(), REMOVE_FADE_MS + 40);
           }
         }
-      }
-
-      function resolveMoveWithFade(mask: Set<string>) {
-        pendingLineBonusGroups = [];
-        controller.resolveMove(mask);
-        if (pendingLineBonusGroups.length) playRemovalFade(pendingLineBonusGroups);
       }
 
       // ---------- drag interaction ----------
@@ -693,7 +686,7 @@ export function createTriangleGame(): ShapeGame {
           grid[r][c] = shifted[i];
         });
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
-        resolveMoveWithFade(mask);
+        controller.resolveMove(mask);
       }
 
       // A line with any emptied cell (from an earlier bonus — see
@@ -705,7 +698,7 @@ export function createTriangleGame(): ShapeGame {
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0 };

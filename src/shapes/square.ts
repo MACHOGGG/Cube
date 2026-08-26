@@ -351,7 +351,6 @@ export function createSquareGame(): ShapeGame {
           bonusPointsPerLine: LINE_BONUS,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: true,
-          continueAfterLineBonus: true,
           isTerminalAfterLineBonus: () => rows === 0 || cols === 0,
         };
       }
@@ -378,8 +377,20 @@ export function createSquareGame(): ShapeGame {
         // applyLineBonus), so their coordinates aren't safe to outline —
         // the fade+collapse transition already gives that event its own
         // feedback. Only 2x2/straight-4 matches, which stay in place, get
-        // the outline highlight.
-        onScored: (matchGroups) => outlineTracker.add(matchGroups),
+        // the outline highlight. A bonus step's DOM still shows its
+        // pre-removal state when this fires (render() for this step hasn't
+        // run yet), so this is also where the "before" snapshot for that
+        // transition gets captured.
+        onCascadeStep: ({ matchGroups, lineBonusGroups }) => {
+          outlineTracker.add(matchGroups);
+          if (lineBonusGroups.length) pendingCollapseSnapshot = captureTileSnapshots();
+        },
+        onCascadeStepRendered: ({ lineBonusGroups }) => {
+          if (lineBonusGroups.length && pendingCollapseSnapshot) {
+            playCollapseTransition(pendingCollapseSnapshot);
+            pendingCollapseSnapshot = null;
+          }
+        },
       });
 
       // ---------- drag interaction ----------
@@ -466,6 +477,12 @@ export function createSquareGame(): ShapeGame {
         return map;
       }
 
+      // Snapshotted in onCascadeStep (still pre-removal DOM) and consumed by
+      // onCascadeStepRendered right after that same step's render() — one
+      // bonus step at a time, now that a chain reaction reveals its steps
+      // one beat apart instead of all landing in the same render().
+      let pendingCollapseSnapshot: Map<number, TileSnapshot> | null = null;
+
       function playCollapseTransition(before: Map<number, TileSnapshot>) {
         const seenIds = new Set<number>();
         const flipEls: HTMLElement[] = [];
@@ -521,17 +538,11 @@ export function createSquareGame(): ShapeGame {
         setTimeout(slideNow, COLLAPSE_FADE_MS);
       }
 
-      function resolveMoveWithCollapse(mask: Set<string>) {
-        const before = captureTileSnapshots();
-        controller.resolveMove(mask);
-        playCollapseTransition(before);
-      }
-
       // Returns whether it actually resolved a move (and thus already
-      // re-rendered via resolveMoveWithCollapse) — the caller needs this so
-      // it doesn't blindly render() again right after, which would wipe out
-      // the collapse transition's ghost/flip elements before they ever get a
-      // frame painted.
+      // re-rendered at least once) — the caller needs this so it doesn't
+      // blindly render() again right after, which would wipe out a cascade
+      // step's ghost/flip/highlight elements before they ever get a frame
+      // painted.
       function applyDrag(): boolean {
         if (!drag || !drag.axis) return false;
         if (drag.axis === 'row') {
@@ -542,7 +553,7 @@ export function createSquareGame(): ShapeGame {
           grid[r] = grid[r].map((_, i) => grid[r][(((i - shift) % n) + n) % n]);
           const mask = new Set<string>();
           for (let c = 0; c < cols; c++) mask.add(cellKey(r, c));
-          resolveMoveWithCollapse(mask);
+          controller.resolveMove(mask);
           return true;
         } else {
           const shift = Math.round(drag.dy / drag.cell);
@@ -554,13 +565,13 @@ export function createSquareGame(): ShapeGame {
           for (let r = 0; r < rows; r++) grid[r][c] = shifted[r];
           const mask = new Set<string>();
           for (let r = 0; r < rows; r++) mask.add(cellKey(r, c));
-          resolveMoveWithCollapse(mask);
+          controller.resolveMove(mask);
           return true;
         }
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onStart(x, y) {
           const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
