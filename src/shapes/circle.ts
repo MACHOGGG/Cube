@@ -155,7 +155,7 @@ export function createCircleGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分（不移出棋盘）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部翻成点面时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线随后淡出并永久清空（棋盘三角外形不变，但那几格从此不再参与拼图，经过的其他线也会相应变短）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
         assumptions:
           '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -171,6 +171,14 @@ export function createCircleGame(): ShapeGame {
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
+      // Cells emptied by a whole-line dot-face bonus: unlike the square
+      // grid (a rectangle, where removing a row/column still leaves a valid
+      // smaller rectangle), this triangular arrangement has no smaller
+      // version of itself to reflow into, so a cleared line's cells are
+      // left permanently empty instead — gone from rendering, matching, and
+      // every line (row or diagonal) that passes through them, rather than
+      // the board itself changing shape.
+      let removedCells = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -304,6 +312,7 @@ export function createCircleGame(): ShapeGame {
         refs.boardEl.innerHTML = '';
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c <= r; c++) {
+            if (removedCells.has(cellKey(r, c))) continue;
             refs.boardEl.appendChild(makeBallEl(grid[r][c], r, c));
           }
         }
@@ -320,6 +329,10 @@ export function createCircleGame(): ShapeGame {
         }
       }
 
+      function anyRemoved(cells: Cell[]): boolean {
+        return cells.some(([r, c]) => removedCells.has(cellKey(r, c)));
+      }
+
       // ---------- matching engine ----------
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
@@ -327,6 +340,7 @@ export function createCircleGame(): ShapeGame {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
             const windowCells = cells.slice(i, i + 4);
+            if (anyRemoved(windowCells)) continue;
             const c0 = effColor(grid[windowCells[0][0]][windowCells[0][1]]);
             if (!windowCells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
             if (mask && !windowCells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
@@ -334,6 +348,7 @@ export function createCircleGame(): ShapeGame {
           }
         }
         for (const cells of CLUSTERS) {
+          if (anyRemoved(cells)) continue;
           const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
           if (!cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
           if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
@@ -356,6 +371,9 @@ export function createCircleGame(): ShapeGame {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
+          // A line missing any of its cells to an earlier bonus can never
+          // qualify again — those cells aren't there to flip or match.
+          if (anyRemoved(line.cells)) continue;
           if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
             .map(([r, c]) => grid[r][c].id)
@@ -368,11 +386,16 @@ export function createCircleGame(): ShapeGame {
         return found;
       }
 
+      // Flips the bonused line's tiles to their dot face (matching what the
+      // player just saw complete) and then empties those cells for good —
+      // see the note on removedCells above for why a hole, not a reflowed
+      // smaller board, is this shape's version of square's line removal.
       function applyLineBonus(groups: Cell[][]) {
         for (const cells of groups) {
           for (const [r, c] of cells) {
             const t = grid[r][c];
             if (t.face === 'flavor') t.face = 'dot';
+            removedCells.add(cellKey(r, c));
           }
         }
       }
@@ -389,12 +412,15 @@ export function createCircleGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => t.face === 'dot'));
+        return grid.every((row, r) =>
+          row.every((t, c) => removedCells.has(cellKey(r, c)) || t.face === 'dot'),
+        );
       }
 
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
+        removedCells = new Set();
         outlineTracker.reset();
       }
 
@@ -404,12 +430,41 @@ export function createCircleGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        // Unlike the square grid, a whole-line bonus here never removes
-        // cells from the board, so both kinds of group stay outline-safe —
-        // added to the tracker per cascade step (not once for the whole
-        // move) so a chain reaction's outlines appear one beat at a time.
-        onCascadeStep: ({ matchGroups, lineBonusGroups }) => outlineTracker.add([...matchGroups, ...lineBonusGroups]),
+        // Regular matches (run-of-4 and the "22"/"121" clusters) stay on
+        // the board, so they get the persistent outline highlight, added
+        // per cascade step so a chain reaction reveals one beat at a time.
+        // A whole-line bonus instead empties its cells (see applyLineBonus)
+        // — its own fade-out is that event's feedback, not outlined —
+        // played in onCascadeStepRendered since the ghost must be appended
+        // *after* this step's own render() or that render() would wipe it.
+        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
+        onCascadeStepRendered: ({ lineBonusGroups }) => {
+          if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
+        },
       });
+
+      const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const REMOVE_FADE_MS = 700;
+
+      // Nothing else needs to move when a line empties (no reflow, per
+      // removedCells above), so this is just a fade: the real render() has
+      // already stopped drawing these cells by the time this runs, leaving
+      // a clean gap immediately — a translucent copy of each tile (already
+      // flipped to its dot face) fades out over that gap and removes itself.
+      function playRemovalFade(groups: Cell[][]) {
+        if (reduceMotion()) return;
+        for (const cells of groups) {
+          for (const [r, c] of cells) {
+            const ghost = makeBallEl(grid[r][c], r, c);
+            ghost.classList.add('ghost');
+            ghost.style.pointerEvents = 'none';
+            refs.boardEl.appendChild(ghost);
+            ghost.style.transition = `opacity ${REMOVE_FADE_MS}ms ease`;
+            requestAnimationFrame(() => { ghost.style.opacity = '0'; });
+            setTimeout(() => ghost.remove(), REMOVE_FADE_MS + 40);
+          }
+        }
+      }
 
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
@@ -504,15 +559,17 @@ export function createCircleGame(): ShapeGame {
           drag.dx = dx;
           drag.dy = dy;
           if (!drag.fam) {
-            const projA = scalarProjection('A', dx, dy, drag.R, drag.rowH);
-            const projB = scalarProjection('B', dx, dy, drag.R, drag.rowH);
-            const projR = scalarProjection('R', dx, dy, drag.R, drag.rowH);
-            let fam: Fam = 'A';
-            let best = Math.abs(projA);
-            if (Math.abs(projB) > best) { fam = 'B'; best = Math.abs(projB); }
-            if (Math.abs(projR) > best) { fam = 'R'; best = Math.abs(projR); }
-            drag.fam = fam;
-            drag.cells = fam === 'A' ? lineA(drag.r - drag.c) : fam === 'B' ? lineB(drag.c) : lineRow(drag.r);
+            const candidates = (['A', 'B', 'R'] as const)
+              .map((fam) => ({
+                fam,
+                cells: fam === 'A' ? lineA(drag!.r - drag!.c) : fam === 'B' ? lineB(drag!.c) : lineRow(drag!.r),
+              }))
+              .filter(({ cells }) => !anyRemoved(cells))
+              .map(({ fam, cells }) => ({ fam, cells, proj: Math.abs(scalarProjection(fam, dx, dy, drag!.R, drag!.rowH)) }));
+            if (!candidates.length) return; // started on/near a hole with no playable direction
+            candidates.sort((a, b) => b.proj - a.proj);
+            drag.fam = candidates[0].fam;
+            drag.cells = candidates[0].cells;
           }
           renderDragPreview();
         },
@@ -544,6 +601,10 @@ export function createCircleGame(): ShapeGame {
       }
 
       refs.buttons.back.addEventListener('click', () => {
+        destroy();
+        onBack();
+      });
+      refs.buttons.endBack.addEventListener('click', () => {
         destroy();
         onBack();
       });

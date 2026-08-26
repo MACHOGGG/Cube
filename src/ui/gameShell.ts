@@ -34,6 +34,7 @@ export interface ShellRefs {
     start: HTMLButtonElement;
     continueBtn: HTMLButtonElement;
     restart: HTMLButtonElement;
+    endBack: HTMLButtonElement;
     extra: Record<string, HTMLButtonElement>;
   };
 }
@@ -101,7 +102,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <h2 id="endTitle">挑战结束</h2>
         <div class="big-score" id="endScore">0</div>
         <p id="endDetail">共 0 步 · 用时 0:00 · 本机最佳 0</p>
-        <div class="btn-row"><button class="primary" id="restartBtn">再来一局</button></div>
+        <div class="btn-row">
+          <button class="secondary" id="endBackBtn">返回菜单</button>
+          <button class="primary" id="restartBtn">再来一局</button>
+        </div>
       </div>
     </div>
   `;
@@ -137,6 +141,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       start: req('startBtn'),
       continueBtn: req('continueBtn'),
       restart: req('restartBtn'),
+      endBack: req('endBackBtn'),
       extra,
     },
   };

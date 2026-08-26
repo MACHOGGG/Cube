@@ -132,6 +132,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask);
     const multiplier = streak.currentMultiplier();
+    // A chain reaction within *this* move is rewarded on top of (not instead
+    // of) the cross-move streak above: that streak's own multiplier is fixed
+    // for the whole move (captured once, just above), so without this a
+    // 3-step cascade in one move and the same 3 scores spread across 3
+    // separate moves would add up to exactly the same total — grouping
+    // wouldn't matter at all, since both would just be the same points run
+    // through the same 1×/2×/4×/... sequence. Growing *this* factor faster
+    // (×3 per step) than the cross-move streak (×2 per move) breaks that tie
+    // in favor of concentration: for a single step it's a no-op (comboMult
+    // starts at 1, so a move with only one score behaves exactly as before),
+    // but every additional step *within the same move* compounds faster than
+    // spreading the same steps across separate moves ever could.
+    let comboMult = 1;
+    const CASCADE_COMBO_FACTOR = 3;
     let totalRaw = 0;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : 550;
@@ -165,7 +179,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         return;
       }
       totalRaw += s.points;
-      const delta = s.points * multiplier;
+      const delta = s.points * multiplier * comboMult;
+      comboMult *= CASCADE_COMBO_FACTOR;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
 
       hooks.onCascadeStep?.(groups);

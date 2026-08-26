@@ -757,6 +757,10 @@ export function createTriangleGame(): ShapeGame {
         destroy();
         onBack();
       });
+      refs.buttons.endBack.addEventListener('click', () => {
+        destroy();
+        onBack();
+      });
 
       refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
         paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';

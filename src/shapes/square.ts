@@ -59,7 +59,7 @@ export function createSquareGame(): ShapeGame {
         hint:
           '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分），得分方块翻成点面继续联通。当整行或整列都翻成点面且点色相同时，额外得 36 分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。',
         assumptions:
-          '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚，翻面点色保证与本身正面色不同。',
+          '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
@@ -89,25 +89,25 @@ export function createSquareGame(): ShapeGame {
       }
 
       // Pre-assigns each tile's future dot color at generation time (like a
-      // real printed card). For every front color there are exactly 6 tiles
-      // but only 5 other colors to draw from, so within a color group we
-      // hand out a shuffled permutation of those 5 to the first 5 tiles (all
-      // different from each other and from their own front) and only the
-      // unavoidable 6th tile has to reuse one of the 5 — with only 5 valid
-      // choices for 6 tiles this one repeat is a pigeonhole-principle floor,
-      // not a bug.
+      // real printed card). Per front-color group of 6 tiles: 5 of them get
+      // the other 5 colors, one each (a clean permutation — no two tiles in
+      // the group share a dot color), and exactly 1 keeps its own color as
+      // the dot (a same-color "self" tile) — the same "some self-pairs per
+      // front-color group" pattern circle (1 self per 7) and triangle (4
+      // self per 9) use, just with square's own count (1 self per 6).
       function assignDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length);
         for (let color = 0; color < COLORS.length; color++) {
-          const others = shuffle(
-            Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== color),
-          );
+          const assignments = shuffle([
+            ...Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== color),
+            color,
+          ]);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
             if (c === color) indices.push(idx);
           });
           indices.forEach((idx, i) => {
-            dotColors[idx] = others[i % others.length];
+            dotColors[idx] = assignments[i];
           });
         }
         return dotColors;
@@ -621,6 +621,10 @@ export function createSquareGame(): ShapeGame {
       }
 
       refs.buttons.back.addEventListener('click', () => {
+        destroy();
+        onBack();
+      });
+      refs.buttons.endBack.addEventListener('click', () => {
         destroy();
         onBack();
       });
