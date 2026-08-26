@@ -1,6 +1,6 @@
 import type { Cell } from './types';
 
-export const SCORE_OUTLINE_MS = 5000;
+export const SCORE_OUTLINE_MS = 2500;
 
 export interface OutlineGroup {
   cells: Cell[];

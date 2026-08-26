@@ -445,8 +445,13 @@ export function createSquareGame(): ShapeGame {
       // fade, *then* collapse, matching a real row of blocks being cleared
       // and the remaining ones sliding together to close the gap.
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const COLLAPSE_FADE_MS = 380;
-      const COLLAPSE_SLIDE_MS = 320;
+      const COLLAPSE_FADE_MS = 700;
+      const COLLAPSE_SLIDE_MS = 480;
+      // A gentle ease-in that snaps shut with a small overshoot right at the
+      // end — survivors drift together slowly at first, then the last bit of
+      // the gap "snaps" closed like a magnet grabbing hold, instead of a flat
+      // constant-feel ease.
+      const COLLAPSE_SLIDE_EASING = 'cubic-bezier(0.5, 0, 0.18, 1.4)';
 
       interface TileSnapshot { left: number; top: number; color: string }
 
@@ -485,7 +490,7 @@ export function createSquareGame(): ShapeGame {
           void refs.boardEl.offsetHeight; // commit the frozen transform before transitioning away from it
           requestAnimationFrame(() => {
             flipEls.forEach((el) => {
-              el.style.transition = `transform ${COLLAPSE_SLIDE_MS}ms ease`;
+              el.style.transition = `transform ${COLLAPSE_SLIDE_MS}ms ${COLLAPSE_SLIDE_EASING}`;
               el.style.transform = '';
             });
           });
@@ -522,20 +527,26 @@ export function createSquareGame(): ShapeGame {
         playCollapseTransition(before);
       }
 
-      function applyDrag() {
-        if (!drag || !drag.axis) return;
+      // Returns whether it actually resolved a move (and thus already
+      // re-rendered via resolveMoveWithCollapse) — the caller needs this so
+      // it doesn't blindly render() again right after, which would wipe out
+      // the collapse transition's ghost/flip elements before they ever get a
+      // frame painted.
+      function applyDrag(): boolean {
+        if (!drag || !drag.axis) return false;
         if (drag.axis === 'row') {
           const shift = Math.round(drag.dx / drag.cell);
-          if (shift === 0) return;
+          if (shift === 0) return false;
           const r = drag.r,
             n = cols;
           grid[r] = grid[r].map((_, i) => grid[r][(((i - shift) % n) + n) % n]);
           const mask = new Set<string>();
           for (let c = 0; c < cols; c++) mask.add(cellKey(r, c));
           resolveMoveWithCollapse(mask);
+          return true;
         } else {
           const shift = Math.round(drag.dy / drag.cell);
-          if (shift === 0) return;
+          if (shift === 0) return false;
           const c = drag.c,
             n = rows;
           const colVals = grid.map((row) => row[c]);
@@ -544,6 +555,7 @@ export function createSquareGame(): ShapeGame {
           const mask = new Set<string>();
           for (let r = 0; r < rows; r++) mask.add(cellKey(r, c));
           resolveMoveWithCollapse(mask);
+          return true;
         }
       }
 
@@ -562,13 +574,19 @@ export function createSquareGame(): ShapeGame {
           renderDragPreview();
         },
         onEnd(dx, dy) {
+          let moved = false;
           if (drag) {
             drag.dx = dx;
             drag.dy = dy;
-            applyDrag();
+            moved = applyDrag();
           }
           drag = null;
-          render();
+          // A resolved move already re-rendered (and, for a line bonus, is
+          // mid-way through its own fade/collapse transition) — rendering
+          // again here would erase that before a single frame of it paints.
+          // Only a no-op drag (shift === 0) needs this to snap the preview's
+          // manual style tweaks back to a clean rest state.
+          if (!moved) render();
         },
       });
 

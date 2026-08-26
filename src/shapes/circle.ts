@@ -57,6 +57,46 @@ function allLines(): Line[] {
 }
 const LINES = allLines();
 
+function cellValid(r: number, c: number): boolean {
+  return r >= 0 && r < ROWS && c >= 0 && c <= r;
+}
+
+// The board's two non-linear bonus shapes, the closest analogue this
+// triangular packing has to the square board's 2×2 — built the same way a
+// square 2×2 is: one step along each of two of the board's directions from a
+// shared corner, rather than 4-in-a-row along just one. "22": a small
+// parallelogram, 2 balls along the row direction repeated one step along a
+// diagonal (so 2 balls in each of 2 rows) — it has two mirror-image
+// orientations (leaning the other way), both counted. "121": a small rhombus
+// one step further along each diagonal from a single corner, spanning 3 rows
+// 1/2/1 balls wide.
+function rhombus22B(r: number, c: number): Cell[] | null {
+  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+}
+function rhombus22A(r: number, c: number): Cell[] | null {
+  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
+  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+}
+function diamond121(r: number, c: number): Cell[] | null {
+  const cells: Cell[] = [[r, c], [r + 1, c], [r + 1, c + 1], [r + 2, c + 1]];
+  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+}
+function allClusters(): Cell[][] {
+  const groups: Cell[][] = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c <= r; c++) {
+      const b = rhombus22B(r, c);
+      if (b) groups.push(b);
+      const a = rhombus22A(r, c);
+      if (a) groups.push(a);
+      const d = diamond121(r, c);
+      if (d) groups.push(d);
+    }
+  return groups;
+}
+const CLUSTERS = allClusters();
+
 // The three diagonal/row directions of this triangular ball packing are
 // exactly 60° apart, and one index-step along any of them is the same
 // physical distance (2R) — a row of balls has no up/down alternation to
@@ -115,9 +155,9 @@ export function createCircleGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分（不移出棋盘）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部翻成点面时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分（不移出棋盘）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部翻成点面时结束，结算当时的分数。',
         assumptions:
-          '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，本版本暂不实现。',
+          '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
@@ -185,6 +225,10 @@ export function createCircleGame(): ShapeGame {
             if (colors[i] === colors[i + 1] && colors[i] === colors[i + 2] && colors[i] === colors[i + 3])
               return true;
           }
+        }
+        for (const cells of CLUSTERS) {
+          const c0 = g[cells[0][0]][cells[0][1]].color;
+          if (cells.every(([r, c]) => g[r][c].color === c0)) return true;
         }
         return false;
       }
@@ -289,6 +333,12 @@ export function createCircleGame(): ShapeGame {
             matches.push({ cells: windowCells, points: 4 });
           }
         }
+        for (const cells of CLUSTERS) {
+          const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
+          if (!cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
+          if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
+          matches.push({ cells, points: 4 });
+        }
         return matches;
       }
 
@@ -380,12 +430,17 @@ export function createCircleGame(): ShapeGame {
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
 
-        // A line here is only 1-7 balls, much shorter than the board's own
-        // span, so a real ball shifted more than about half a slot past
-        // either end of its *own* short line has visually wrapped, not just
-        // moved; left visible, it drifts into the empty margin outside the
-        // triangular arrangement instead of off the board entirely. Hide it
-        // at that point and let the matching ghost (below) stand in.
+        // Shorter lines (near the triangle's apex) have real empty margin
+        // beside them to fade a wraparound ghost into, but this board's
+        // *longest* lines (length ROWS, along the triangle's base or its
+        // longest diagonal) run flush with the triangular arrangement's own
+        // edge — there's no slack there, same as every line on the hex
+        // triangle board, so an overshooting real ball or ghost pokes past
+        // the triangle's silhouette into the board element's square corner
+        // padding instead of off the board entirely. A hairline's tolerance
+        // (float-jitter safety, not visual slack) keeps that from happening
+        // while still letting short-line ghosts fade in gracefully.
+        const EDGE_EPS = 0.03;
         for (let i = 0; i < n; i++) {
           const [r, c] = d.cells[i];
           const [cx, cy] = ballCenter(r, c);
@@ -394,14 +449,14 @@ export function createCircleGame(): ShapeGame {
             el.style.left = cx - size / 2 + rawDist * dirX + 'px';
             el.style.top = cy - size / 2 + rawDist * dirY + 'px';
             const pos = i + rawDist;
-            el.style.opacity = pos < -0.5 || pos > n - 0.5 ? '0' : '';
+            el.style.opacity = pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS ? '0' : '';
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
             const pos = i + rawDist + k * n;
-            if (pos < -0.5 || pos > n - 0.5) continue;
+            if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) continue;
             const [r0, c0] = d.cells[i];
             const [baseX, baseY] = ballCenter(r0, c0);
             const shiftedX = baseX + (pos - i) * dirX;

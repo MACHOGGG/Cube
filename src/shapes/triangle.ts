@@ -30,27 +30,102 @@ interface Line {
 }
 
 // ---------- diagonal line families (pure geometry, shared by every instance) ----------
-// u = column centered within its row; family A fixes d=r-u, family B fixes e=r+u.
-function uOf(r: number, c: number): number {
-  return c - (ROW_LENS[r] - 1) / 2;
+// Every triangle has exactly 3 edges: two "row" edges (same i, sharing p±1 with the
+// opposite orientation — family R, below) and one "cross" edge into the next i-band.
+// Crucially the cross edge only ever runs *forward*: up(i,p) connects to down(i+1,p+1),
+// and a down cell's only cross edge is that same one seen backward (to up(i-1,p-1)) —
+// there is no separate "down cell's forward cross edge". A straight diagonal line is
+// therefore not "same i-p" or "same i+p": it's a zigzag that alternates the cross edge
+// with ONE of the two row edges. Alternating with the row-edge whose true geometric
+// slope matches the cross edge's own +x lean gives one diagonal direction; alternating
+// with the other row edge gives the mirror direction. (An earlier version grouped cells
+// by a closed-form column formula that silently only ever picked up one triangle
+// orientation — this walks the real adjacency instead, so it can't make that mistake.)
+function globalToLocal(i: number, p: number): Cell | null {
+  const r = i - GLOBAL_ROW_OFFSET;
+  if (r < 0 || r >= ROW_LENS.length) return null;
+  const c = p - LEFT_TRIM[r];
+  if (c < 0 || c >= ROW_LENS[r]) return null;
+  return [r, c];
+}
+function crossNeighbor(i: number, p: number): Cell | null {
+  return p % 2 === 0 ? globalToLocal(i + 1, p + 1) : globalToLocal(i - 1, p - 1);
+}
+// The neighbor sharing the same slope as an up-cell's own "p+1" edge — for a down
+// cell that's its "p-1" neighbor, since a down triangle is the up triangle mirrored.
+function rowRightNeighbor(i: number, p: number): Cell | null {
+  return p % 2 === 0 ? globalToLocal(i, p + 1) : globalToLocal(i, p - 1);
+}
+function rowLeftNeighbor(i: number, p: number): Cell | null {
+  return p % 2 === 0 ? globalToLocal(i, p - 1) : globalToLocal(i, p + 1);
+}
+
+function buildDiagonalFamily(fam: 'A' | 'B'): Line[] {
+  const useRowRight = fam === 'B';
+  const parent = new Map<string, string>();
+  for (let r = 0; r < ROW_LENS.length; r++) for (let c = 0; c < ROW_LENS[r]; c++) parent.set(cellKey(r, c), cellKey(r, c));
+  function find(x: string): string {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)!)!);
+      x = parent.get(x)!;
+    }
+    return x;
+  }
+  function union(a: string, b: string) {
+    const ra = find(a),
+      rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+  const neighborsOf = new Map<string, Cell[]>();
+  for (let r = 0; r < ROW_LENS.length; r++)
+    for (let c = 0; c < ROW_LENS[r]; c++) {
+      const { i, p } = globalPosPure(r, c);
+      const nbrs: Cell[] = [];
+      const cross = crossNeighbor(i, p);
+      const along = useRowRight ? rowRightNeighbor(i, p) : rowLeftNeighbor(i, p);
+      if (cross) { nbrs.push(cross); union(cellKey(r, c), cellKey(cross[0], cross[1])); }
+      if (along) { nbrs.push(along); union(cellKey(r, c), cellKey(along[0], along[1])); }
+      neighborsOf.set(cellKey(r, c), nbrs);
+    }
+  const groups = new Map<string, Cell[]>();
+  for (let r = 0; r < ROW_LENS.length; r++)
+    for (let c = 0; c < ROW_LENS[r]; c++) {
+      const root = find(cellKey(r, c));
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root)!.push([r, c]);
+    }
+  // Walk each group end-to-end into a single physically-ordered chain (starting
+  // from an endpoint where possible) so that shifting the array by N positions
+  // means sliding N real steps along the true line, same as the row family.
+  const lines: Line[] = [];
+  for (const group of groups.values()) {
+    const setK = new Set(group.map(([r, c]) => cellKey(r, c)));
+    const within = (r: number, c: number) => neighborsOf.get(cellKey(r, c))!.filter(([rr, cc]) => setK.has(cellKey(rr, cc)));
+    const start = group.find(([r, c]) => within(r, c).length <= 1) ?? group[0];
+    const ordered: Cell[] = [start];
+    const seen = new Set([cellKey(start[0], start[1])]);
+    let cur = start;
+    for (;;) {
+      const next = within(cur[0], cur[1]).find(([r, c]) => !seen.has(cellKey(r, c)));
+      if (!next) break;
+      ordered.push(next);
+      seen.add(cellKey(next[0], next[1]));
+      cur = next;
+    }
+    lines.push({ fam, cells: ordered });
+  }
+  return lines;
+}
+
+// (globalPos, defined further below alongside the rest of the render geometry, is
+// identical to this — duplicated as a pure function here so line construction doesn't
+// depend on render-time state and can run once at module load.)
+function globalPosPure(r: number, c: number) {
+  return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
 }
 
 function allLines(): Line[] {
-  const byD = new Map<number, Cell[]>();
-  const byE = new Map<number, Cell[]>();
-  for (let r = 0; r < ROW_LENS.length; r++)
-    for (let c = 0; c < ROW_LENS[r]; c++) {
-      const u = uOf(r, c),
-        d = r - u,
-        e = r + u;
-      if (!byD.has(d)) byD.set(d, []);
-      byD.get(d)!.push([r, c]);
-      if (!byE.has(e)) byE.set(e, []);
-      byE.get(e)!.push([r, c]);
-    }
-  const lines: Line[] = [];
-  byD.forEach((cells) => lines.push({ fam: 'A', cells: cells.sort((a, b) => a[0] - b[0]) }));
-  byE.forEach((cells) => lines.push({ fam: 'B', cells: cells.sort((a, b) => a[0] - b[0]) }));
+  const lines: Line[] = [...buildDiagonalFamily('A'), ...buildDiagonalFamily('B')];
   // Third axis: a full horizontal row (up- and down-pointing triangles
   // interleaved). Adjacent triangles in a row are edge-sharing neighbors, so
   // this is a real third slide direction alongside the two diagonals, not
@@ -61,6 +136,45 @@ function allLines(): Line[] {
   return lines;
 }
 const LINES = allLines();
+
+// "31"/"13" big-triangle bonus shape: 3 small triangles of one orientation
+// plus 1 of the other tile exactly into one triangle twice the size (the
+// standard 4-way split of an equilateral triangle) — the closest analogue
+// this board has to the square board's 2×2. An up-pointing big triangle is
+// its apex cell plus the 3 consecutive same-row cells one band below,
+// centered on the apex's forward cross-neighbor (up(i,p)'s only cross edge
+// runs to down(i+1,p+1), which sits exactly at the middle of that trio); a
+// down-pointing one is the mirror image, one band above.
+function bigTriangleUp(r: number, c: number): Cell[] | null {
+  const { i, p } = globalPosPure(r, c);
+  if (p % 2 !== 0) return null;
+  const a = globalToLocal(i + 1, p);
+  const b = globalToLocal(i + 1, p + 1);
+  const cc = globalToLocal(i + 1, p + 2);
+  if (!a || !b || !cc) return null;
+  return [[r, c], a, b, cc];
+}
+function bigTriangleDown(r: number, c: number): Cell[] | null {
+  const { i, p } = globalPosPure(r, c);
+  if (p % 2 === 0) return null;
+  const a = globalToLocal(i - 1, p - 2);
+  const b = globalToLocal(i - 1, p - 1);
+  const cc = globalToLocal(i - 1, p);
+  if (!a || !b || !cc) return null;
+  return [[r, c], a, b, cc];
+}
+function allBigTriangles(): Cell[][] {
+  const groups: Cell[][] = [];
+  for (let r = 0; r < ROW_LENS.length; r++)
+    for (let c = 0; c < ROW_LENS[r]; c++) {
+      const up = bigTriangleUp(r, c);
+      if (up) groups.push(up);
+      const down = bigTriangleDown(r, c);
+      if (down) groups.push(down);
+    }
+  return groups;
+}
+const BIG_TRIANGLES = allBigTriangles();
 
 function lineFor(fam: 'A' | 'B' | 'R', r: number, c: number): Line {
   const line = LINES.find((l) => l.fam === fam && l.cells.some(([rr, cc]) => rr === r && cc === c));
@@ -94,9 +208,9 @@ export function createTriangleGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分（不移出棋盘）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部翻成点面时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线随后淡出并永久清空（棋盘六边形外形不变，但那几格从此不再参与拼图，经过的其他线也会相应变短）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
         assumptions:
-          '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平（按行，6 条线）、左斜、右斜（按每行居中对齐的坐标划分，两个方向各 12 条线，长度 3–6）——判分规则完全一致。2×2 图案在此结构下没有直接对应，本版本暂不实现。',
+          '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平、左斜、右斜——每个方向都是 6 条线，长度分别为 7/7/9/9/11/11（与横向的行长完全对应），判分规则完全一致；斜向的一条线由上下两种三角交替组成，和横向的行一样。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
@@ -110,6 +224,14 @@ export function createTriangleGame(): ShapeGame {
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
+      // Cells emptied by a whole-line dot-face bonus: unlike the square
+      // grid (a rectangle, where removing a row/column still leaves a valid
+      // smaller rectangle), this hexagon has no smaller hexagon to reflow
+      // into, so a cleared line's cells are left permanently empty instead —
+      // gone from rendering, matching, and every line (row or diagonal) that
+      // passes through them, rather than the board itself changing shape.
+      let removedCells = new Set<string>();
+      let pendingLineBonusGroups: Cell[][] = [];
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -164,6 +286,10 @@ export function createTriangleGame(): ShapeGame {
             if (colors[i] === colors[i + 1] && colors[i] === colors[i + 2] && colors[i] === colors[i + 3])
               return true;
           }
+        }
+        for (const cells of BIG_TRIANGLES) {
+          const c0 = g[cells[0][0]][cells[0][1]].color;
+          if (cells.every(([r, c]) => g[r][c].color === c0)) return true;
         }
         return false;
       }
@@ -261,7 +387,9 @@ export function createTriangleGame(): ShapeGame {
         if (tile.face === 'dot') {
           const cenBase = toScreen(centroid(geo.pts));
           const cen: [number, number] = [cenBase[0] + offX, cenBase[1] + offY];
-          const dsize = S * 0.5;
+          // Equilateral triangle's incircle: diameter = S/√3, centered at the
+          // centroid (which for an equilateral triangle *is* the incenter).
+          const dsize = S / Math.sqrt(3);
           const dot = document.createElement('div');
           dot.className = 'dot-circle';
           dot.style.width = dsize + 'px';
@@ -286,6 +414,7 @@ export function createTriangleGame(): ShapeGame {
         refs.boardEl.innerHTML = '';
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
+            if (removedCells.has(cellKey(r, c))) continue;
             refs.boardEl.appendChild(makeTriEl(grid[r][c], r, c));
           }
         }
@@ -301,6 +430,10 @@ export function createTriangleGame(): ShapeGame {
         }
       }
 
+      function anyRemoved(cells: Cell[]): boolean {
+        return cells.some(([r, c]) => removedCells.has(cellKey(r, c)));
+      }
+
       // ---------- matching engine ----------
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
@@ -308,11 +441,19 @@ export function createTriangleGame(): ShapeGame {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
             const windowCells = cells.slice(i, i + 4);
+            if (anyRemoved(windowCells)) continue;
             const c0 = effColor(grid[windowCells[0][0]][windowCells[0][1]]);
             if (!windowCells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
             if (mask && !windowCells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
             matches.push({ cells: windowCells, points: 4 });
           }
+        }
+        for (const cells of BIG_TRIANGLES) {
+          if (anyRemoved(cells)) continue;
+          const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
+          if (!cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
+          if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
+          matches.push({ cells, points: 4 });
         }
         return matches;
       }
@@ -331,6 +472,9 @@ export function createTriangleGame(): ShapeGame {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
+          // A line missing any of its cells to an earlier bonus can never
+          // qualify again — those cells aren't there to flip or match.
+          if (anyRemoved(line.cells)) continue;
           if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
             .map(([r, c]) => grid[r][c].id)
@@ -343,11 +487,16 @@ export function createTriangleGame(): ShapeGame {
         return found;
       }
 
+      // Flips the bonused line's tiles to their dot face (matching what the
+      // player just saw complete) and then empties those cells for good —
+      // see the note on removedCells above for why a hole, not a reflowed
+      // smaller board, is this shape's version of square's line removal.
       function applyLineBonus(groups: Cell[][]) {
         for (const cells of groups) {
           for (const [r, c] of cells) {
             const t = grid[r][c];
             if (t.face === 'flavor') t.face = 'dot';
+            removedCells.add(cellKey(r, c));
           }
         }
       }
@@ -365,12 +514,15 @@ export function createTriangleGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => t.face === 'dot'));
+        return grid.every((row, r) =>
+          row.every((t, c) => removedCells.has(cellKey(r, c)) || t.face === 'dot'),
+        );
       }
 
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
+        removedCells = new Set();
         outlineTracker.reset();
       }
 
@@ -380,10 +532,46 @@ export function createTriangleGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        // Unlike the square grid, a whole-line bonus here never removes
-        // cells from the board, so both kinds of group stay outline-safe.
-        onScored: (matchGroups, lineBonusGroups) => outlineTracker.add([...matchGroups, ...lineBonusGroups]),
+        // Regular matches (run-of-4 and the big-triangle cluster) stay on
+        // the board, so they get the persistent outline highlight. A
+        // whole-line bonus instead empties its cells a moment later (see
+        // applyLineBonus) — its own fade-out transition is that event's
+        // feedback, so its groups are stashed for resolveMoveWithFade to
+        // pick up right after this move finishes, not outlined.
+        onScored: (matchGroups, lineBonusGroups) => {
+          outlineTracker.add(matchGroups);
+          pendingLineBonusGroups = lineBonusGroups;
+        },
       });
+
+      const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const REMOVE_FADE_MS = 700;
+
+      // Nothing else needs to move when a line empties (no reflow, per
+      // removedCells above), so this is just a fade: the real render() has
+      // already stopped drawing these cells by the time this runs, leaving
+      // a clean gap immediately — a translucent copy of each tile (already
+      // flipped to its dot face) fades out over that gap and removes itself.
+      function playRemovalFade(groups: Cell[][]) {
+        if (reduceMotion()) return;
+        for (const cells of groups) {
+          for (const [r, c] of cells) {
+            const ghost = makeTriEl(grid[r][c], r, c);
+            ghost.classList.add('ghost');
+            ghost.style.pointerEvents = 'none';
+            refs.boardEl.appendChild(ghost);
+            ghost.style.transition = `opacity ${REMOVE_FADE_MS}ms ease`;
+            requestAnimationFrame(() => { ghost.style.opacity = '0'; });
+            setTimeout(() => ghost.remove(), REMOVE_FADE_MS + 40);
+          }
+        }
+      }
+
+      function resolveMoveWithFade(mask: Set<string>) {
+        pendingLineBonusGroups = [];
+        controller.resolveMove(mask);
+        if (pendingLineBonusGroups.length) playRemovalFade(pendingLineBonusGroups);
+      }
 
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
@@ -455,13 +643,17 @@ export function createTriangleGame(): ShapeGame {
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy));
         const [dirX, dirY] = trueStepVector(d.fam);
 
-        // A family-A/B/row line here is only 3-6 cells, much shorter than
-        // the board's own span, so — unlike the square board's full-width
-        // rows — a real tile shifted more than about half a slot past
-        // either end of its *own* short line has visually wrapped, not just
-        // moved; left visible, it drifts into whatever empty margin sits
-        // outside the hexagon instead of off the board entirely. Hide it at
-        // that point and let the matching ghost (below) stand in.
+        // Every line here — row or either diagonal — runs from one hexagon
+        // edge to the opposite edge, with no surrounding slack: unlike the
+        // square board (a rectangle clipped cleanly by its container's own
+        // overflow:hidden), there's no empty margin around a hex line for an
+        // overshooting tile to sit in without visibly poking past the
+        // hexagon's silhouette into the board element's padding. So real
+        // tiles and their wraparound ghosts get only a hairline's tolerance
+        // (float-jitter safety, not visual slack) past their line's own
+        // [0, n-1] span, rather than the half-a-slot grace that's fine on a
+        // board with room to spare.
+        const EDGE_EPS = 0.03;
         for (let idx = 0; idx < n; idx++) {
           const [r, c] = cells[idx];
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
@@ -471,14 +663,14 @@ export function createTriangleGame(): ShapeGame {
           el.style.left = curLeft + rawDist * dirX + 'px';
           el.style.top = curTop + rawDist * dirY + 'px';
           const pos = idx + rawDist;
-          if (pos < -0.5 || pos > n - 0.5) el.style.opacity = '0';
+          if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) el.style.opacity = '0';
         }
 
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
             const pos = i + rawDist + k * n;
-            if (pos < -0.5 || pos > n - 0.5) continue;
+            if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) continue;
             const [r0, c0] = cells[i];
             const offset: [number, number] = [(pos - i) * dirX, (pos - i) * dirY];
             const ghost = makeTriEl(grid[r0][c0], r0, c0, 0.42, offset);
@@ -501,7 +693,15 @@ export function createTriangleGame(): ShapeGame {
           grid[r][c] = shifted[i];
         });
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
-        controller.resolveMove(mask);
+        resolveMoveWithFade(mask);
+      }
+
+      // A line with any emptied cell (from an earlier bonus — see
+      // removedCells above) can't be dragged: there's nothing there to slide
+      // into place. Checked once per line at family-selection time so
+      // renderDragPreview/applyDrag never have to worry about holes.
+      function lineIsPlayable(line: Line): boolean {
+        return !anyRemoved(line.cells);
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
@@ -515,15 +715,14 @@ export function createTriangleGame(): ShapeGame {
           drag.dx = dx;
           drag.dy = dy;
           if (!drag.fam) {
-            const projA = scalarProjection('A', dx, dy);
-            const projB = scalarProjection('B', dx, dy);
-            const projR = scalarProjection('R', dx, dy);
-            let fam: 'A' | 'B' | 'R' = 'A';
-            let best = Math.abs(projA);
-            if (Math.abs(projB) > best) { fam = 'B'; best = Math.abs(projB); }
-            if (Math.abs(projR) > best) { fam = 'R'; best = Math.abs(projR); }
-            drag.fam = fam;
-            drag.line = lineFor(fam, drag.r, drag.c);
+            const candidates = (['A', 'B', 'R'] as const)
+              .map((fam) => ({ fam, line: lineFor(fam, drag!.r, drag!.c) }))
+              .filter(({ line }) => lineIsPlayable(line))
+              .map(({ fam, line }) => ({ fam, line, proj: Math.abs(scalarProjection(fam, dx, dy)) }));
+            if (!candidates.length) return; // started on/near a hole with no playable direction
+            candidates.sort((a, b) => b.proj - a.proj);
+            drag.fam = candidates[0].fam;
+            drag.line = candidates[0].line;
           }
           renderDragPreview();
         },

@@ -110,12 +110,12 @@ h1 {
 .dot-circle { position: absolute; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.16); }
 
 /* The "you just scored this" highlight around a matched/bonused group: three
-   quick flashes over five seconds, then gone. Sits in board-local pixel
+   quick flashes over 2.5 seconds, then gone. Sits in board-local pixel
    coordinates, sized/positioned by each shape from its own cell geometry. */
 .score-outline {
   position: absolute; box-sizing: border-box; pointer-events: none; border-radius: 8px;
   border: 3px solid transparent;
-  animation: score-outline-flash 5s ease-in-out 1 both;
+  animation: score-outline-flash 2.5s ease-in-out 1 both;
 }
 @keyframes score-outline-flash {
   0%, 100% { border-color: transparent; }
@@ -134,7 +134,7 @@ h1 {
 /* Triangle tiles get an SVG polygon stroke instead of the div+border above —
    a clip-path shape can't take a border (the clip removes it along with
    everything else outside the path), and a bounding-box rectangle would
-   highlight the empty corners around the actual triangle. Same 5s/3-flash
+   highlight the empty corners around the actual triangle. Same 2.5s/3-flash
    timing, just animating `stroke` instead of `border-color`. */
 .score-outline-tri {
   position: absolute; overflow: visible; pointer-events: none;
@@ -142,7 +142,7 @@ h1 {
 .score-outline-tri polygon {
   fill: none; stroke: transparent; stroke-width: 3; stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  animation: score-outline-stroke-flash 5s ease-in-out 1 both;
+  animation: score-outline-stroke-flash 2.5s ease-in-out 1 both;
 }
 @keyframes score-outline-stroke-flash {
   0%, 100% { stroke: transparent; }
