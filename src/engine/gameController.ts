@@ -136,6 +136,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : 550;
     const STEP_GAP_MS = reduceMotion ? 0 : 350;
+    // A bonus step's own removal/fade animation (square's collapse, or
+    // triangle's fade-to-hole) runs well past this gap on its own timeline —
+    // if a further chained step fires while it's still mid-flight, that
+    // step's own render() would cut the tail of it short (harmless to the
+    // data, since the removal itself already landed, but visibly abrupt).
+    // A longer pause specifically after a bonus step gives it room to
+    // finish before the next step's render() could touch it.
+    const BONUS_GAP_MS = reduceMotion ? 0 : 1250;
 
     const finish = () => {
       // Guarantees at least one render() even when the cascade found nothing
@@ -171,8 +179,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           scoreReel.showGain(delta);
           scoreReel.setValue(score);
         }
-        hooks.render();
-        setTimeout(step, STEP_GAP_MS);
+        // Only a match step's commit() actually changes anything (the
+        // flip) — a bonus step's commit() is a no-op (its cells were
+        // already dot-faced and, for a shape whose bonus removes cells,
+        // already gone from the grid by the time next() returned it), so
+        // re-rendering here would serve no purpose except wiping out the
+        // ghost/collapse elements onCascadeStepRendered just appended for
+        // it, before a single frame of them ever painted.
+        if (s.matchGroups.length) hooks.render();
+        setTimeout(step, s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS);
       };
       if (s.matchGroups.length) setTimeout(proceed, HIGHLIGHT_LEAD_MS);
       else proceed();
