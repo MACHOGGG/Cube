@@ -54,7 +54,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const perf = createPerformanceGauge();
   const timer = createTimer((s) => {
     refs.hudTimeEl.textContent = formatClock(s);
-    updatePerfDisplay();
   });
   const streak = createStreakTracker();
 
