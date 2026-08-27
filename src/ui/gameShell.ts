@@ -26,6 +26,7 @@ export interface ShellRefs {
   endOverlay: HTMLElement;
   endTitleEl: HTMLElement;
   endScoreEl: HTMLElement;
+  endBreakdownEl: HTMLElement;
   endDetailEl: HTMLElement;
   buttons: {
     stop: HTMLButtonElement;
@@ -100,7 +101,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     <div class="overlay" id="endOverlay">
       <div class="modal">
         <h2 id="endTitle">挑战结束</h2>
+        <div class="end-score-label">综合得分</div>
         <div class="big-score" id="endScore">0</div>
+        <div class="end-breakdown" id="endBreakdown"></div>
         <p id="endDetail">共 0 步 · 用时 0:00 · 本机最佳 0</p>
         <div class="btn-row">
           <button class="secondary" id="endBackBtn">返回菜单</button>
@@ -133,6 +136,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     endOverlay: req('endOverlay'),
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),
+    endBreakdownEl: req('endBreakdown'),
     endDetailEl: req('endDetail'),
     buttons: {
       stop: req('stopBtn'),

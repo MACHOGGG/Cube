@@ -231,7 +231,13 @@ h1 {
 .overlay.opaque .modal { box-shadow: none; background: transparent; }
 .modal h2 { font-family: 'Fraunces', Georgia, serif; margin: 0 0 8px; font-size: 1.5rem; }
 .modal p { color: var(--ink-soft); margin: 0 0 20px; font-size: 0.95rem; }
-.modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 16px; font-variant-numeric: tabular-nums; }
+.modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
+.end-score-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-faint); margin-top: 4px;
+}
+.end-breakdown { display: flex; flex-direction: column; gap: 3px; margin: 0 0 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
 .btn-row { display: flex; gap: 10px; }
 button {
   font-family: 'Karla', sans-serif; font-weight: 600; font-size: 0.95rem; border: none; border-radius: 100px;
@@ -257,6 +263,11 @@ button:hover { filter: brightness(1.05); }
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .shape-card .glyph svg { width: 32px; height: 32px; }
+.menu-section-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-faint); text-align: center; margin: 4px 0 -4px;
+}
+.more-card .glyph { color: var(--ink-soft); }
 .shape-card .info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .shape-card .info .name { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.05rem; }
 .shape-card .info .desc { color: var(--ink-soft); font-size: 0.82rem; }

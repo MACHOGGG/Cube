@@ -10,38 +10,31 @@ import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
-// Same Okabe–Ito colorblind-safe 6-hue set the square board offers, reused
-// as-is (see square.ts for the palette rationale) so the toggle means the
-// same thing on every board.
+// Same board/matching/drag engine as the base triangle game (see triangle.ts
+// for the full rationale of every piece below) — only the board's shape and
+// color-set differ: one solid 5-row equilateral triangle (1/3/5/7/9 = 25
+// cells) instead of the hex-cropped window, and 5 colors of 5 instead of 6
+// of 9. Because the whole geometry/matching/movement engine is parameterized
+// purely by ROW_LENS/LEFT_TRIM/GLOBAL_ROW_OFFSET/PER_COLOR, a solid triangle
+// is just a *different crop* of the same infinite lattice — no cropping at
+// all, actually, since GLOBAL_ROW_OFFSET=0 and LEFT_TRIM is all zeros here.
 const PALETTES = {
-  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
-  colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#CC79A7'],
+  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52'],
+  colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9'],
 } as const;
-const ROW_LENS = [7, 9, 11, 11, 9, 7];
-const LEFT_TRIM = [0, 0, 0, 1, 3, 5]; // maps local col -> global position p = c + LEFT_TRIM[r]
-const GLOBAL_ROW_OFFSET = 3; // local row r -> global big-triangle row i = r+3
-const PER_COLOR = 9;
+const ROW_LENS = [1, 3, 5, 7, 9];
+const LEFT_TRIM = [0, 0, 0, 0, 0];
+const GLOBAL_ROW_OFFSET = 0;
+const PER_COLOR = 5;
 const MIN_LINE_BONUS_LEN = 3;
 
-const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,3 29,25 3,25" fill="#4C68B0"/><polygon points="16,29 4,9 28,9" fill="#D89B1E" opacity="0.9"/></svg>`;
+const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,4 28,26 4,26" fill="none" stroke="#4C68B0" stroke-width="2.4"/><polygon points="16,13 22,24 10,24" fill="#D89B1E"/></svg>`;
 
 interface Line {
   fam: 'A' | 'B' | 'R';
   cells: Cell[];
 }
 
-// ---------- diagonal line families (pure geometry, shared by every instance) ----------
-// Every triangle has exactly 3 edges: two "row" edges (same i, sharing p±1 with the
-// opposite orientation — family R, below) and one "cross" edge into the next i-band.
-// Crucially the cross edge only ever runs *forward*: up(i,p) connects to down(i+1,p+1),
-// and a down cell's only cross edge is that same one seen backward (to up(i-1,p-1)) —
-// there is no separate "down cell's forward cross edge". A straight diagonal line is
-// therefore not "same i-p" or "same i+p": it's a zigzag that alternates the cross edge
-// with ONE of the two row edges. Alternating with the row-edge whose true geometric
-// slope matches the cross edge's own +x lean gives one diagonal direction; alternating
-// with the other row edge gives the mirror direction. (An earlier version grouped cells
-// by a closed-form column formula that silently only ever picked up one triangle
-// orientation — this walks the real adjacency instead, so it can't make that mistake.)
 function globalToLocal(i: number, p: number): Cell | null {
   const r = i - GLOBAL_ROW_OFFSET;
   if (r < 0 || r >= ROW_LENS.length) return null;
@@ -52,8 +45,6 @@ function globalToLocal(i: number, p: number): Cell | null {
 function crossNeighbor(i: number, p: number): Cell | null {
   return p % 2 === 0 ? globalToLocal(i + 1, p + 1) : globalToLocal(i - 1, p - 1);
 }
-// The neighbor sharing the same slope as an up-cell's own "p+1" edge — for a down
-// cell that's its "p-1" neighbor, since a down triangle is the up triangle mirrored.
 function rowRightNeighbor(i: number, p: number): Cell | null {
   return p % 2 === 0 ? globalToLocal(i, p + 1) : globalToLocal(i, p - 1);
 }
@@ -95,9 +86,6 @@ function buildDiagonalFamily(fam: 'A' | 'B'): Line[] {
       if (!groups.has(root)) groups.set(root, []);
       groups.get(root)!.push([r, c]);
     }
-  // Walk each group end-to-end into a single physically-ordered chain (starting
-  // from an endpoint where possible) so that shifting the array by N positions
-  // means sliding N real steps along the true line, same as the row family.
   const lines: Line[] = [];
   for (const group of groups.values()) {
     const setK = new Set(group.map(([r, c]) => cellKey(r, c)));
@@ -118,19 +106,12 @@ function buildDiagonalFamily(fam: 'A' | 'B'): Line[] {
   return lines;
 }
 
-// (globalPos, defined further below alongside the rest of the render geometry, is
-// identical to this — duplicated as a pure function here so line construction doesn't
-// depend on render-time state and can run once at module load.)
 function globalPosPure(r: number, c: number) {
   return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
 }
 
 function allLines(): Line[] {
   const lines: Line[] = [...buildDiagonalFamily('A'), ...buildDiagonalFamily('B')];
-  // Third axis: a full horizontal row (up- and down-pointing triangles
-  // interleaved). Adjacent triangles in a row are edge-sharing neighbors, so
-  // this is a real third slide direction alongside the two diagonals, not
-  // just a row/column convenience like the square board's.
   for (let r = 0; r < ROW_LENS.length; r++) {
     lines.push({ fam: 'R', cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
   }
@@ -138,14 +119,6 @@ function allLines(): Line[] {
 }
 const LINES = allLines();
 
-// "31"/"13" big-triangle bonus shape: 3 small triangles of one orientation
-// plus 1 of the other tile exactly into one triangle twice the size (the
-// standard 4-way split of an equilateral triangle) — the closest analogue
-// this board has to the square board's 2×2. An up-pointing big triangle is
-// its apex cell plus the 3 consecutive same-row cells one band below,
-// centered on the apex's forward cross-neighbor (up(i,p)'s only cross edge
-// runs to down(i+1,p+1), which sits exactly at the middle of that trio); a
-// down-pointing one is the mirror image, one band above.
 function bigTriangleUp(r: number, c: number): Cell[] | null {
   const { i, p } = globalPosPure(r, c);
   if (p % 2 !== 0) return null;
@@ -193,26 +166,26 @@ interface DragState {
   lastShift: number;
 }
 
-export function createTriangleGame(): ShapeGame {
-  const bestKey = 'sugarcube_triangles_best';
+export function createTriangleBigGame(): ShapeGame {
+  const bestKey = 'sugarcube_triangle_big_best';
 
   return {
     card: {
-      id: 'triangle',
-      name: '三角',
-      desc: '沿斜线拖动 · 六边蜂窝三角',
+      id: 'triangleBig',
+      name: '大三角',
+      desc: '整块大三角 · 5 色各 5 枚',
       bestKey,
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const refs = buildShell(container, {
-        title: 'Slides · 三角',
+        title: 'Slides · 大三角',
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线随后淡出并永久清空（棋盘六边形外形不变，但那几格从此不再参与拼图，经过的其他线也会相应变短）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线随后淡出并永久清空。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
         assumptions:
-          '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平、左斜、右斜——每个方向都是 6 条线，长度分别为 7/7/9/9/11/11（与横向的行长完全对应），判分规则完全一致；斜向的一条线由上下两种三角交替组成，和横向的行一样。',
+          '5 种口味色，每色 5 枚，共 25 枚（一整块大三角，五行 1/3/5/7/9 枚）；每种口味的点色分布为：其余 4 色各 1 枚、另有 1 色额外再来 1 枚——保证没有正反面同色的三角出现。三个滑动方向——水平、左斜、右斜——判分规则与基础三角玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
@@ -226,17 +199,7 @@ export function createTriangleGame(): ShapeGame {
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
-      // Cells emptied by a whole-line dot-face bonus: unlike the square
-      // grid (a rectangle, where removing a row/column still leaves a valid
-      // smaller rectangle), this hexagon has no smaller hexagon to reflow
-      // into, so a cleared line's cells are left permanently empty instead —
-      // gone from rendering, matching, and every line (row or diagonal) that
-      // passes through them, rather than the board itself changing shape.
       let removedCells = new Set<string>();
-      // Cells whose flip to their dot face just landed (set in onCommit,
-      // consumed and cleared by the very next render()) — those cells get a
-      // one-shot .flip-in animation class so the flip itself has motion
-      // instead of the face silently swapping.
       let flipInCells = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
@@ -249,15 +212,15 @@ export function createTriangleGame(): ShapeGame {
         return shuffle(deck);
       }
 
-      // per color group of 9: the other 5 colors get 1 each (5) + the tile's
-      // own color four times (4) = 9 — matches the physical set's back
-      // distribution.
+      // Per color group of 5: the other 4 colors get 1 each, and one of
+      // those 4 (picked round-robin below, then shuffled into a random slot)
+      // gets a 2nd copy to fill the 5th spot — this tile's own color never
+      // appears, unlike the base triangle's mostly-self-paired distribution.
       function assignDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length);
         for (let color = 0; color < COLORS.length; color++) {
           const others: number[] = [];
-          for (let k = 0; k < COLORS.length; k++) if (k !== color) others.push(k);
-          for (let i = 0; i < 4; i++) others.push(color);
+          for (let k = 0; others.length < PER_COLOR; k++) others.push((color + 1 + (k % (COLORS.length - 1))) % COLORS.length);
           shuffle(others);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
@@ -314,7 +277,6 @@ export function createTriangleGame(): ShapeGame {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
       }
 
-      // ---------- geometry: true up/down triangle vertices, from local (r,c) ----------
       function globalPos(r: number, c: number) {
         return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
       }
@@ -343,10 +305,10 @@ export function createTriangleGame(): ShapeGame {
       function layoutBoard() {
         const rect = refs.boardWrap.getBoundingClientRect();
         const boardSize = Math.min(rect.width, rect.height);
-        S = boardSize / 6.4;
+        S = boardSize / 5.2;
         H = (S * Math.sqrt(3)) / 2;
         originX = boardSize / 2;
-        originY = (boardSize - 6 * H) / 2 - GLOBAL_ROW_OFFSET * H;
+        originY = (boardSize - ROW_LENS.length * H) / 2 - GLOBAL_ROW_OFFSET * H;
         refs.boardEl.style.width = boardSize + 'px';
         refs.boardEl.style.height = boardSize + 'px';
       }
@@ -391,16 +353,6 @@ export function createTriangleGame(): ShapeGame {
         fill.style.setProperty('-webkit-clip-path', clip);
 
         if (tile.face === 'dot') {
-          // A same-size same-shape triangle read as "still the front, just a
-          // different color" — the dot face needs its own distinct glyph.
-          // A smaller triangle (same orientation, shrunk toward the
-          // centroid) reads clearly as "the back" without the clutter of a
-          // small inscribed circle, and a near-black stroke marks it unambiguously
-          // as the flipped face. Built as an SVG polygon (fill + stroke
-          // together, exactly the technique spawnTriangleOutline already
-          // uses for the score highlight) rather than a clip-path div, since
-          // clip-path can't render a clean border following a triangular
-          // silhouette.
           const cen = centroid(pts);
           const DOT_SCALE = 0.6;
           const innerPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * DOT_SCALE, cen[1] + (y - cen[1]) * DOT_SCALE] as [number, number]);
@@ -455,11 +407,6 @@ export function createTriangleGame(): ShapeGame {
           }
         }
         flipInCells = new Set();
-        // One triangle-shaped outline per tile, not a bounding rectangle
-        // around the whole group — adjacent tiles here alternate up/down
-        // orientation, so their combined outline is a zigzag, not a clean
-        // box, and a rectangle would highlight empty corners no tile
-        // occupies.
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) {
             spawnTriangleOutline(refs.boardEl, triGeometry(r, c).pts.map(toScreen), elapsedMs);
@@ -471,7 +418,6 @@ export function createTriangleGame(): ShapeGame {
         return cells.some(([r, c]) => removedCells.has(cellKey(r, c)));
       }
 
-      // ---------- matching engine ----------
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (const line of LINES) {
@@ -495,10 +441,6 @@ export function createTriangleGame(): ShapeGame {
         return matches;
       }
 
-      // A line only qualifies once every tile in it has flipped to its dot
-      // face *and* those dot colors all match — a mix of flavor-face and
-      // dot-face tiles no longer counts, even if their effective colors
-      // happen to agree.
       function isFullDotMatch(cells: Cell[]): boolean {
         if (cells.some(([r, c]) => grid[r][c].face !== 'dot')) return false;
         const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
@@ -509,8 +451,6 @@ export function createTriangleGame(): ShapeGame {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          // A line missing any of its cells to an earlier bonus can never
-          // qualify again — those cells aren't there to flip or match.
           if (anyRemoved(line.cells)) continue;
           if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
@@ -524,10 +464,6 @@ export function createTriangleGame(): ShapeGame {
         return found;
       }
 
-      // Flips the bonused line's tiles to their dot face (matching what the
-      // player just saw complete) and then empties those cells for good —
-      // see the note on removedCells above for why a hole, not a reflowed
-      // smaller board, is this shape's version of square's line removal.
       function applyLineBonus(groups: Cell[][]) {
         for (const cells of groups) {
           for (const [r, c] of cells) {
@@ -580,13 +516,6 @@ export function createTriangleGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         countUnfinished,
-        // Regular matches (run-of-4 and the big-triangle cluster) stay on
-        // the board, so they get the persistent outline highlight, added
-        // per cascade step so a chain reaction reveals one beat at a time.
-        // A whole-line bonus instead empties its cells (see applyLineBonus)
-        // — its own fade-out is that event's feedback, not outlined —
-        // played in onCascadeStepRendered since the ghost must be appended
-        // *after* this step's own render() or that render() would wipe it.
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
@@ -599,11 +528,6 @@ export function createTriangleGame(): ShapeGame {
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const REMOVE_FADE_MS = 700;
 
-      // Nothing else needs to move when a line empties (no reflow, per
-      // removedCells above), so this is just a fade: the real render() has
-      // already stopped drawing these cells by the time this runs, leaving
-      // a clean gap immediately — a translucent copy of each tile (already
-      // flipped to its dot face) fades out over that gap and removes itself.
       function playRemovalFade(groups: Cell[][]) {
         if (reduceMotion()) return;
         for (const cells of groups) {
@@ -619,7 +543,6 @@ export function createTriangleGame(): ShapeGame {
         }
       }
 
-      // ---------- drag interaction ----------
       let drag: DragState | null = null;
 
       function cellAt(x: number, y: number): Cell {
@@ -637,76 +560,23 @@ export function createTriangleGame(): ShapeGame {
         return best;
       }
 
-      // True per-index-step displacement (screen pixels) along each family's
-      // line. A/B share a uniform S-pixel step (hypot(S/2,H)=S exactly, the
-      // whole point of the u-centered coordinate system) regardless of row
-      // width. A row's x-coordinate is an *exact* linear function of the
-      // column — S/2 pixels per step — regardless of the up/down triangles'
-      // zigzag in y, so (S/2, 0) is its true step vector and the zigzag
-      // simply never enters the projection.
       function trueStepVector(fam: 'A' | 'B' | 'R'): [number, number] {
         if (fam === 'A') return [S / 2, H];
         if (fam === 'B') return [-S / 2, H];
         return [S / 2, 0];
       }
 
-      // Pixels of the drag that point along this family's direction — used
-      // only to pick the best-aligned family among the three (dividing by
-      // |v| makes the comparison fair despite A/B and the row not sharing
-      // one step magnitude).
       function scalarProjection(fam: 'A' | 'B' | 'R', dx: number, dy: number): number {
         const [ux, uy] = trueStepVector(fam);
         return (dx * ux + dy * uy) / Math.hypot(ux, uy);
       }
 
-      // How many index-steps along this family's line the drag corresponds
-      // to: the orthogonal-projection coefficient rawDist such that
-      // rawDist*v best matches the raw drag vector, i.e. (drag·v)/|v|² — NOT
-      // (drag·v)/|v|, which would leave every step read as if the player had
-      // dragged the whole line's own step-length again on top of itself.
       function projectedSteps(fam: 'A' | 'B' | 'R', dx: number, dy: number): number {
         const [ux, uy] = trueStepVector(fam);
         const proj = dx * ux + dy * uy;
         return proj / (ux * ux + uy * uy);
       }
 
-      // Unlike square's tiles or circle's balls, a triangle's own shape
-      // depends on which slot it's in — every line here strictly alternates
-      // up/down from one cell to the next (confirmed: no line on this board
-      // ever has two consecutive same-orientation cells). Up and down
-      // triangles are mirror images, not translations of each other, so
-      // sliding a *fixed* clip-path element sideways by raw pixels (as an
-      // earlier version of this did) puts the wrong silhouette at half the
-      // positions it passes through — it only ever looked right again once
-      // the drag settled and a real render() rebuilt every shape from
-      // scratch, which is exactly the "shape/position changes, or the move
-      // seems to snap back" effect players were seeing mid-drag.
-      //
-      // The fix: never move a shaped element. Each of the n slots in the
-      // line keeps its own fixed shape+position (from its own true
-      // geometry) always — only *which tile's color* renders in that slot
-      // changes, via the same modular remap applyDrag will commit on
-      // release (so the preview can never show a configuration release
-      // wouldn't). This also makes the line a genuine cyclic buffer: every
-      // slot is always populated by construction, so there's no "overflow"
-      // and thus no wraparound ghosts needed at all.
-      //
-      // A *shift* by itself still leaves a residual problem every line here
-      // shares: every line has an ODD number of cells (7/9/11 — a hexagon
-      // built from small triangles can't have an even-length row or
-      // diagonal), and an odd-length cycle can't be perfectly 2-colored —
-      // so ordinary rotation always mismatches some tiles' orientation once
-      // content wraps from one end to the other. The fix used here has two
-      // parts: (1) the "moving unit" — the tiles that stay within the
-      // line's own span, not wrapping — only ever settles on an EVEN shift,
-      // which (given strict alternation) *always* keeps every one of those
-      // tiles correctly oriented; (2) the wrapped tiles ("filler", shown
-      // dimmed as a preview of what's flowing in) always mismatch by
-      // exactly one step under an even shift, but adjacent slots always
-      // alternate orientation too — so swapping which of each ADJACENT PAIR
-      // of filler slots gets which tile's content exactly cancels that
-      // mismatch. The filler region's size always equals the (even) shift,
-      // so it always splits into whole pairs with nothing left over.
       function fillerAwareSource(idx: number, shift: number, n: number): number {
         const plain = (((idx - shift) % n) + n) % n;
         if (shift === 0) return plain;
@@ -727,33 +597,12 @@ export function createTriangleGame(): ShapeGame {
         if (!d || !d.fam || !d.line) return;
         const cells = d.line.cells;
         const n = cells.length;
-        // Magnetize toward the nearest EVEN step (halve, snap, double) so
-        // the "moving unit" only ever settles at an orientation-preserving
-        // shift — odd intermediate positions are passed through smoothly
-        // while dragging but are never a stable rest point. A gentler power
-        // than the other boards' per-step snap (each detent here is twice
-        // as far apart, so the same curve would otherwise pull noticeably
-        // harder over that longer stretch and feel forced rather than guided).
         const half = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy) / 2, 1.5);
         const shift = 2 * Math.round(half);
-        // A light tick each time the drag crosses into a new suitable
-        // (even) configuration — the discrete, physical "click" of passing
-        // a detent, felt (haptics) and not just inferred from the drag's
-        // subtler positional easing.
         if (shift !== d.lastShift) {
           vibrate(6);
           d.lastShift = shift;
         }
-        // The small leftover distance from that nearest snap point: near
-        // zero almost all the time (magnetizeRawDist sticks close to even
-        // integers), growing toward ±1 only while passing through the
-        // midpoint to the next suitable slot — used as a tiny same-shape
-        // nudge so a slot's content still visibly "gives" a little instead
-        // of teleporting.
-        // Damped a bit further than a per-step board would need: a detent
-        // spacing twice as wide means the same raw residual swings the
-        // "give" over twice the pixel distance, which read as a much
-        // bigger, harder wobble than the softened curve above alone fixed.
         const residual = (2 * half - shift) * 0.6;
         const [dirX, dirY] = trueStepVector(d.fam);
         const offset: [number, number] = [residual * dirX, residual * dirY];
@@ -770,21 +619,11 @@ export function createTriangleGame(): ShapeGame {
         }
       }
 
-      // Returns whether it actually resolved a move (and thus already
-      // re-rendered at least once) — the caller needs this so it doesn't
-      // blindly render() again right after, which would wipe out a cascade
-      // step's ghost/flip/highlight elements before they ever get a frame
-      // painted (resolveMove no longer settles synchronously — see
-      // gameController's stepper-driven reveal).
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
         const cells = d.line.cells;
         const n = cells.length;
-        // Same even-rounding as the preview (magnetizeRawDist's contract —
-        // Math.round(magnetize(x)) === Math.round(x) — holds identically
-        // when applied to x/2, so the plain, unmagnetized value already
-        // agrees with whatever the preview last displayed).
         const shift = 2 * Math.round(projectedSteps(d.fam, d.dx, d.dy) / 2);
         if (((shift % n) + n) % n === 0) return false;
         const vals = cells.map(([r, c]) => grid[r][c]);
@@ -797,10 +636,6 @@ export function createTriangleGame(): ShapeGame {
         return true;
       }
 
-      // A line with any emptied cell (from an earlier bonus — see
-      // removedCells above) can't be dragged: there's nothing there to slide
-      // into place. Checked once per line at family-selection time so
-      // renderDragPreview/applyDrag never have to worry about holes.
       function lineIsPlayable(line: Line): boolean {
         return !anyRemoved(line.cells);
       }
@@ -821,7 +656,7 @@ export function createTriangleGame(): ShapeGame {
               .map((fam) => ({ fam, line: lineFor(fam, drag!.r, drag!.c) }))
               .filter(({ line }) => lineIsPlayable(line))
               .map(({ fam, line }) => ({ fam, line, proj: Math.abs(scalarProjection(fam, dx, dy)) }));
-            if (!candidates.length) return; // started on/near a hole with no playable direction
+            if (!candidates.length) return;
             candidates.sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
@@ -836,10 +671,6 @@ export function createTriangleGame(): ShapeGame {
             moved = applyDrag();
           }
           drag = null;
-          // A resolved move already re-rendered on its own (and may still be
-          // mid-reveal) — rendering again here would erase that before a
-          // frame of it paints. Only a no-op drag needs this to snap the
-          // preview's manual style tweaks back to a clean rest state.
           if (!moved) render();
         },
       });

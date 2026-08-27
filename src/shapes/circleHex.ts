@@ -10,118 +10,126 @@ import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
-// The colorblind set is 4 hues picked from the Okabe–Ito palette for maximum
-// separation (vermillion/yellow/bluish-green/blue) rather than just the
-// first 4 of the square board's 6 — with only 4 colors to tell apart there's
-// room to pick the most distinct ones instead of reusing a prefix.
+// A hex-cropped version of the ball board (37 cells: rows of 4/5/6/7/6/5/4
+// instead of the base game's 28-cell triangle) with a permanent blank ball
+// pinned at the exact center. Internally every cell is addressed by cube
+// coordinates (x,y,z with x+y+z=0, each in [-3,3] — the standard hex-grid
+// lattice, see redblobgames' hex-grid guide for the general technique) and
+// only converted to a local (row, col) pair for storage/rendering — this is
+// the same "address the infinite lattice, then crop a window" strategy
+// triangle.ts uses for its own hex board, just applied to circle-packed
+// balls instead of alternating up/down triangles (so there's no orientation
+// concern here at all: any window of the lattice is playable as-is).
 const PALETTES = {
-  standard: ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'],
-  colorblind: ['#D55E00', '#F0E442', '#009E73', '#0072B2'],
+  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
+  colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#CC79A7'],
 } as const;
-const ROWS = 7; // row r (0..6) has r+1 balls, total 28
-const PER_COLOR = 7;
+const N = 3; // hex radius: rows of 2N+1-|z| for z=-N..N -> 4/5/6/7/6/5/4 = 37 cells
+const ROW_LENS = [4, 5, 6, 7, 6, 5, 4];
+const PER_COLOR = 6;
 const MIN_LINE_BONUS_LEN = 3;
+const CENTER_CELL: Cell = [3, 3]; // row 3 (z=0), col 3 -> cube (0,0,0), the hex's true center
 
-const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="7" r="6" fill="#C0666B"/><circle cx="8" cy="20" r="6" fill="#DDA857"/><circle cx="24" cy="20" r="6" fill="#4F72C4"/></svg>`;
+const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="6.5" r="4.5" fill="#B23A3A"/><circle cx="25" cy="11" r="4.5" fill="#D89B1E"/><circle cx="25" cy="21" r="4.5" fill="#4C68B0"/><circle cx="16" cy="25.5" r="4.5" fill="#2F9E52"/><circle cx="7" cy="21" r="4.5" fill="#9B958D"/><circle cx="7" cy="11" r="4.5" fill="#3C4452"/></svg>`;
 
-type Fam = 'A' | 'B' | 'R';
-
+type Fam = 'X' | 'Y' | 'Z';
 interface Line {
   fam: Fam;
   cells: Cell[];
 }
 
-// family A ("right-slant", visually down-right): fixed d = r - c
-// family B ("left-slant", visually down-left): fixed e = c
-// family R ("row", horizontal): fixed r, c runs 0..r
-function lineA(d: number): Cell[] {
-  const cells: Cell[] = [];
-  for (let r = d; r < ROWS; r++) cells.push([r, r - d]);
-  return cells;
+function lowerBoundForZ(z: number): number {
+  return Math.max(-N, -z - N);
 }
-function lineB(e: number): Cell[] {
-  const cells: Cell[] = [];
-  for (let r = e; r < ROWS; r++) cells.push([r, e]);
-  return cells;
+function localToCube(r: number, c: number): { x: number; y: number; z: number } {
+  const z = r - N;
+  const x = lowerBoundForZ(z) + c;
+  return { x, y: -x - z, z };
 }
-function lineRow(r: number): Cell[] {
-  const cells: Cell[] = [];
-  for (let c = 0; c <= r; c++) cells.push([r, c]);
-  return cells;
+function cubeToLocal(x: number, z: number): Cell | null {
+  const y = -x - z;
+  if (Math.abs(x) > N || Math.abs(y) > N || Math.abs(z) > N) return null;
+  const r = z + N;
+  if (r < 0 || r >= ROW_LENS.length) return null;
+  const c = x - lowerBoundForZ(z);
+  if (c < 0 || c >= ROW_LENS[r]) return null;
+  return [r, c];
 }
+
 function allLines(): Line[] {
   const lines: Line[] = [];
-  for (let d = 0; d < ROWS; d++) lines.push({ fam: 'A', cells: lineA(d) });
-  for (let e = 0; e < ROWS; e++) lines.push({ fam: 'B', cells: lineB(e) });
-  for (let r = 0; r < ROWS; r++) lines.push({ fam: 'R', cells: lineRow(r) });
+  for (let r = 0; r < ROW_LENS.length; r++) lines.push({ fam: 'Z', cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
+  for (let x = -N; x <= N; x++) {
+    const cells: Cell[] = [];
+    for (let z = -N; z <= N; z++) {
+      const cell = cubeToLocal(x, z);
+      if (cell) cells.push(cell);
+    }
+    if (cells.length) lines.push({ fam: 'X', cells });
+  }
+  for (let y = -N; y <= N; y++) {
+    const cells: Cell[] = [];
+    for (let z = -N; z <= N; z++) {
+      const cell = cubeToLocal(-y - z, z);
+      if (cell) cells.push(cell);
+    }
+    if (cells.length) lines.push({ fam: 'Y', cells });
+  }
   return lines;
 }
 const LINES = allLines();
 
-function cellValid(r: number, c: number): boolean {
-  return r >= 0 && r < ROWS && c >= 0 && c <= r;
+function lineFor(fam: Fam, r: number, c: number): Line {
+  const line = LINES.find((l) => l.fam === fam && l.cells.some(([rr, cc]) => rr === r && cc === c));
+  if (!line) throw new Error('lineFor: cell not found in any line');
+  return line;
 }
 
-// The board's two non-linear bonus shapes, the closest analogue this
-// triangular packing has to the square board's 2×2 — built the same way a
-// square 2×2 is: one step along each of two of the board's directions from a
-// shared corner, rather than 4-in-a-row along just one. "22": a small
-// parallelogram, 2 balls along the row direction repeated one step along a
-// diagonal (so 2 balls in each of 2 rows) — it has two mirror-image
-// orientations (leaning the other way), both counted. "121": a small rhombus
-// one step further along each diagonal from a single corner, spanning 3 rows
-// 1/2/1 balls wide.
-function rhombus22B(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
-  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
-}
-function rhombus22A(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
-  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
-}
-function diamond121(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r + 1, c], [r + 1, c + 1], [r + 2, c + 1]];
-  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+// The board's two non-linear bonus shapes, same rhombus/diamond patterns the
+// base ball board uses (see circle.ts) — expressed here as (Δz,Δx) offsets
+// from a cube-space anchor so the row-trimmed hex crop doesn't distort them
+// (unlike the base board, this one's rows don't all start at the same local
+// column, so a plain local (r,c) offset would silently pick the wrong real
+// cells once trimming kicks in).
+const RHOMBUS_B_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 0], [1, 1]];
+const RHOMBUS_A_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 1], [1, 2]];
+const DIAMOND_121_OFFSETS: [number, number][] = [[0, 0], [1, 0], [1, 1], [2, 1]];
+
+function clusterFromCube(x0: number, z0: number, offsets: [number, number][]): Cell[] | null {
+  const cells: Cell[] = [];
+  for (const [dz, dx] of offsets) {
+    const cell = cubeToLocal(x0 + dx, z0 + dz);
+    if (!cell) return null;
+    cells.push(cell);
+  }
+  return cells;
 }
 function allClusters(): Cell[][] {
   const groups: Cell[][] = [];
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c <= r; c++) {
-      const b = rhombus22B(r, c);
+  for (let z0 = -N - 2; z0 <= N + 2; z0++)
+    for (let x0 = -N - 2; x0 <= N + 2; x0++) {
+      const b = clusterFromCube(x0, z0, RHOMBUS_B_OFFSETS);
       if (b) groups.push(b);
-      const a = rhombus22A(r, c);
+      const a = clusterFromCube(x0, z0, RHOMBUS_A_OFFSETS);
       if (a) groups.push(a);
-      const d = diamond121(r, c);
+      const d = clusterFromCube(x0, z0, DIAMOND_121_OFFSETS);
       if (d) groups.push(d);
     }
   return groups;
 }
 const CLUSTERS = allClusters();
 
-// The three diagonal/row directions of this triangular ball packing are
-// exactly 60° apart, and one index-step along any of them is the same
-// physical distance (2R) — a row of balls has no up/down alternation to
-// zigzag around, unlike the triangle board's row direction.
 function famVector(fam: Fam, R: number, rowH: number): [number, number] {
-  if (fam === 'A') return [R, rowH];
-  if (fam === 'B') return [-R, rowH];
+  // Row family (Z fixed, x steps) is pure horizontal; the other two are the
+  // hex lattice's other two axes, each at the same 2R step magnitude.
+  if (fam === 'X') return [R, rowH];
+  if (fam === 'Y') return [-R, rowH];
   return [2 * R, 0];
 }
-
-// How many pixels of the drag point along this family's direction — used
-// only to pick the best-aligned family (compares fairly here because all
-// three vectors share the same magnitude 2R).
 function scalarProjection(fam: Fam, dx: number, dy: number, R: number, rowH: number): number {
   const [ux, uy] = famVector(fam, R, rowH);
   return (dx * ux + dy * uy) / Math.hypot(ux, uy);
 }
-
-// How many index-steps along this family's line the drag corresponds to:
-// the orthogonal-projection coefficient rawDist such that rawDist*v best
-// matches the raw drag vector, i.e. (drag·v)/|v|² — NOT (drag·v)/|v|, which
-// would leave every step this line's own magnitude (2R) too large, making a
-// drag as short as one cell-width already read as if the player had dragged
-// the full line around several times.
 function projectedSteps(fam: Fam, dx: number, dy: number, R: number, rowH: number): number {
   const [ux, uy] = famVector(fam, R, rowH);
   const proj = dx * ux + dy * uy;
@@ -132,7 +140,7 @@ interface DragState {
   r: number;
   c: number;
   fam: Fam | null;
-  cells: Cell[];
+  line: Line | null;
   dx: number;
   dy: number;
   R: number;
@@ -140,26 +148,26 @@ interface DragState {
   lastShift: number;
 }
 
-export function createCircleGame(): ShapeGame {
-  const bestKey = 'sugarcube_circles_best';
+export function createCircleHexGame(): ShapeGame {
+  const bestKey = 'sugarcube_circle_hex_best';
 
   return {
     card: {
-      id: 'circle',
-      name: '圆球',
-      desc: '沿斜线拖动 · 三角堆叠圆球',
+      id: 'circleHex',
+      name: '六边圆球',
+      desc: '37 格六边形 · 中心空白球',
       bestKey,
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const refs = buildShell(container, {
-        title: 'Slides · 圆球',
+        title: 'Slides · 六边圆球',
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形或"121"菱形同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
         assumptions:
-          '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。',
+          '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
       });
 
@@ -168,22 +176,11 @@ export function createCircleGame(): ShapeGame {
       let grid: Tile[][] = [];
       let R = 0,
         rowH = 0,
-        boardTop = 0,
-        boardLeft = 0;
+        boardLeft = 0,
+        boardTop = 0;
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
-      // A whole-line dot-face bonus doesn't remove its cells the way square
-      // or triangle do: this board's triangular packing means a removed
-      // line can split the remaining balls into pieces no longer connected
-      // by any shared line, permanently stranding them from each other. So
-      // instead the bonused cells become permanently "blank" — a distinct
-      // colorless state that stays on the board, keeps sliding with its
-      // line exactly like any other ball, but can never again take part in
-      // a match, cluster, or line bonus. BLANK is a sentinel value stored in
-      // a tile's own color/dotColor fields (rather than a separate flag) so
-      // every color-comparison call site "just works" without special-
-      // casing, as long as it also checks isBlank first.
       const BLANK = -1;
       function isBlank(t: Tile): boolean {
         return t.color === BLANK;
@@ -191,10 +188,6 @@ export function createCircleGame(): ShapeGame {
       function anyBlank(cells: Cell[]): boolean {
         return cells.some(([r, c]) => isBlank(grid[r][c]));
       }
-      // Cells whose flip to their dot face just landed (set in onCommit,
-      // consumed and cleared by the very next render()) — those cells get a
-      // one-shot .flip-in animation class so the flip itself has motion
-      // instead of the face silently swapping.
       let flipInCells = new Set<string>();
 
       function newTile(color: number, dotColor: number): Tile {
@@ -207,15 +200,15 @@ export function createCircleGame(): ShapeGame {
         return shuffle(deck);
       }
 
-      // per color group of 7: the other 3 colors get 2 each (6) + the tile's
-      // own color once (7) — matches the physical set's back-color
+      // Per color group of 6: cycle through the other 5 colors (one gets a
+      // 2nd copy to fill out the 6th slot) — this tile's own color never
+      // appears as its dot color, unlike the base ball game's "1 self-pair"
       // distribution.
       function assignDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length);
         for (let color = 0; color < COLORS.length; color++) {
           const others: number[] = [];
-          for (let k = 0; k < COLORS.length; k++) if (k !== color) others.push(k, k);
-          others.push(color);
+          for (let k = 0; others.length < PER_COLOR; k++) others.push((color + 1 + (k % (COLORS.length - 1))) % COLORS.length);
           shuffle(others);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
@@ -232,11 +225,15 @@ export function createCircleGame(): ShapeGame {
         const dots = assignDotColors(deck);
         const g: Tile[][] = [];
         let idx = 0;
-        for (let r = 0; r < ROWS; r++) {
+        for (let r = 0; r < ROW_LENS.length; r++) {
           const row: Tile[] = [];
-          for (let c = 0; c <= r; c++) {
-            row.push(newTile(deck[idx], dots[idx]));
-            idx++;
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            if (r === CENTER_CELL[0] && c === CENTER_CELL[1]) {
+              row.push(newTile(BLANK, BLANK));
+            } else {
+              row.push(newTile(deck[idx], dots[idx]));
+              idx++;
+            }
           }
           g.push(row);
         }
@@ -247,13 +244,13 @@ export function createCircleGame(): ShapeGame {
         for (const line of LINES) {
           const colors = line.cells.map(([r, c]) => g[r][c].color);
           for (let i = 0; i + 3 < colors.length; i++) {
-            if (colors[i] === colors[i + 1] && colors[i] === colors[i + 2] && colors[i] === colors[i + 3])
+            if (colors[i] !== BLANK && colors[i] === colors[i + 1] && colors[i] === colors[i + 2] && colors[i] === colors[i + 3])
               return true;
           }
         }
         for (const cells of CLUSTERS) {
           const c0 = g[cells[0][0]][cells[0][1]].color;
-          if (cells.every(([r, c]) => g[r][c].color === c0)) return true;
+          if (c0 !== BLANK && cells.every(([r, c]) => g[r][c].color === c0)) return true;
         }
         return false;
       }
@@ -272,22 +269,25 @@ export function createCircleGame(): ShapeGame {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
       }
 
+      // Screen position from cube coords (x steps 2R horizontally per unit,
+      // z steps R horizontally + rowH vertically per unit — see the module
+      // comment for how this was derived and verified against the 3 unit
+      // step directions) — already centered on (0,0) by the hex's own
+      // symmetry, so boardLeft/boardTop alone place the origin.
       function layoutBoard() {
         const rect = refs.boardWrap.getBoundingClientRect();
         const S = Math.min(rect.width, rect.height);
         R = S / 14;
         rowH = R * Math.sqrt(3);
-        const totalH = (ROWS - 1) * rowH + 2 * R;
-        boardTop = (S - totalH) / 2;
-        boardLeft = S / 2; // center x, per-row offset applied in position calc
+        boardLeft = S / 2;
+        boardTop = S / 2;
         refs.boardEl.style.width = S + 'px';
         refs.boardEl.style.height = S + 'px';
       }
 
       function ballCenter(r: number, c: number): [number, number] {
-        const cx = boardLeft + (c - r / 2) * 2 * R;
-        const cy = boardTop + R + r * rowH;
-        return [cx, cy];
+        const { x, z } = localToCube(r, c);
+        return [boardLeft + 2 * R * x + R * z, boardTop + rowH * z];
       }
 
       function makeBallEl(tile: Tile, r: number, c: number, opacity?: number): HTMLElement {
@@ -300,19 +300,9 @@ export function createCircleGame(): ShapeGame {
         el.style.left = cx - size / 2 + 'px';
         el.style.top = cy - size / 2 + 'px';
         if (isBlank(tile)) {
-          // Spent: no color on either face, just a dim neutral disc so it
-          // still reads clearly as "a ball is here" (still slides with its
-          // line) without looking like a live front or dot color. The
-          // explicit `opacity` param, applied below when the caller passes
-          // one (e.g. a drag ghost), overrides this dimming.
           el.style.background = 'var(--ink-faint)';
           el.style.opacity = '0.35';
         } else if (tile.face === 'dot') {
-          // A same-shape smaller circle here reads as "still the front, just
-          // resized" — nothing else on this board changes shape on flip, so
-          // a ball needs a genuinely different glyph. A drawn asterisk
-          // (three crossing strokes) rather than the "*" character keeps it
-          // perfectly centered and a consistent weight across browsers/fonts.
           el.style.background = 'transparent';
           const starSize = Math.round(size * 0.95);
           const color = COLORS[tile.dotColor];
@@ -340,8 +330,8 @@ export function createCircleGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c <= r; c++) {
+        for (let r = 0; r < ROW_LENS.length; r++) {
+          for (let c = 0; c < ROW_LENS[r]; c++) {
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
@@ -349,10 +339,6 @@ export function createCircleGame(): ShapeGame {
           }
         }
         flipInCells = new Set();
-        // One circular outline per ball, not one rectangle around the whole
-        // group — balls don't tile edge-to-edge like the square board's
-        // tiles, so a bounding box would highlight empty margin between
-        // them instead of tracing the actual scored balls.
         const size = R * 1.86;
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) {
@@ -362,7 +348,6 @@ export function createCircleGame(): ShapeGame {
         }
       }
 
-      // ---------- matching engine ----------
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (const line of LINES) {
@@ -386,10 +371,6 @@ export function createCircleGame(): ShapeGame {
         return matches;
       }
 
-      // A line only qualifies once every tile in it has flipped to its dot
-      // face *and* those dot colors all match — a mix of flavor-face and
-      // dot-face tiles no longer counts, even if their effective colors
-      // happen to agree.
       function isFullDotMatch(cells: Cell[]): boolean {
         if (cells.some(([r, c]) => grid[r][c].face !== 'dot')) return false;
         const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
@@ -400,8 +381,6 @@ export function createCircleGame(): ShapeGame {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          // A line with any already-blanked cell can never qualify again —
-          // a blank has no color to agree with the rest of the line.
           if (anyBlank(line.cells)) continue;
           if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
@@ -415,11 +394,6 @@ export function createCircleGame(): ShapeGame {
         return found;
       }
 
-      // Flips the bonused line's tiles to their dot face (matching what the
-      // player just saw complete), stashes that dot color for the fade
-      // transition (see pendingBlankSnapshot below — grid is about to be
-      // overwritten, so this is the last point that still has it), and then
-      // blanks the cells for good.
       function applyLineBonus(groups: Cell[][]) {
         for (const cells of groups) {
           for (const [r, c] of cells) {
@@ -467,14 +441,6 @@ export function createCircleGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         countUnfinished,
-        // Regular matches (run-of-4 and the "22"/"121" clusters) stay on
-        // the board, so they get the persistent outline highlight, added
-        // per cascade step so a chain reaction reveals one beat at a time.
-        // A whole-line bonus instead blanks its cells (see applyLineBonus)
-        // — its own fade transition is that event's feedback, not outlined
-        // — played in onCascadeStepRendered since the ghost must be
-        // appended *after* this step's own render() or that render() would
-        // wipe it.
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) {
@@ -489,11 +455,6 @@ export function createCircleGame(): ShapeGame {
 
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const REMOVE_FADE_MS = 700;
-      // Captured by applyLineBonus (the only point that still has the old
-      // dot color, right before overwriting it to BLANK) and consumed here
-      // once render() has painted the new blank state, so the fade shows
-      // the *old* dot-colored look dissolving into the *new* blank ball
-      // already sitting beneath it, rather than fading to an empty gap.
       let pendingBlankSnapshot = new Map<string, number>();
 
       function playBlankTransition(groups: Cell[][], snapshot: Map<string, number>) {
@@ -515,67 +476,60 @@ export function createCircleGame(): ShapeGame {
         }
       }
 
-      // ---------- drag interaction ----------
       let drag: DragState | null = null;
 
       function cellAt(x: number, y: number): Cell {
-        let r = Math.round((y - boardTop - R) / rowH);
-        r = Math.max(0, Math.min(ROWS - 1, r));
-        let c = Math.round((x - boardLeft) / (2 * R) + r / 2);
-        c = Math.max(0, Math.min(r, c));
-        return [r, c];
+        let best: Cell = [0, 0];
+        let bestDist = Infinity;
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            const [cx, cy] = ballCenter(r, c);
+            const dist = (cx - x) ** 2 + (cy - y) ** 2;
+            if (dist < bestDist) {
+              bestDist = dist;
+              best = [r, c];
+            }
+          }
+        return best;
       }
+
+      const FADE_RANGE = 0.4;
+      const edgeOpacity = (pos: number, n: number) => {
+        const overshoot = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
+        return Math.max(0, 1 - overshoot / FADE_RANGE);
+      };
 
       function renderDragPreview() {
         render();
         const d = drag;
-        if (!d || !d.fam) return;
-        const n = d.cells.length;
+        if (!d || !d.fam || !d.line) return;
+        const cells = d.line.cells;
+        const n = cells.length;
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
         const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        // A light tick each time the drag crosses into a new whole-step
-        // shift — the discrete, physical "click" of passing a detent, felt
-        // (haptics) rather than only inferred from the drag's positional easing.
         const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
         if (shift !== d.lastShift) {
           vibrate(6);
           d.lastShift = shift;
         }
-
-        // Shorter lines (near the triangle's apex) have real empty margin
-        // beside them to fade a wraparound ghost into, but this board's
-        // *longest* lines (length ROWS, along the triangle's base or its
-        // longest diagonal) run flush with the triangular arrangement's own
-        // edge — there's no slack there, same as every line on the hex
-        // triangle board. The board element itself clips overflow, though,
-        // so a ball fading out over a little real distance past that edge
-        // just gets cropped for the flush-edge lines instead of visually
-        // leaking — letting every line fade the same soft way rather than
-        // needing a hard, instant cutoff right at the edge.
-        const FADE_RANGE = 0.4;
-        const edgeOpacity = (pos: number) => {
-          const overshoot = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
-          return Math.max(0, 1 - overshoot / FADE_RANGE);
-        };
         for (let i = 0; i < n; i++) {
-          const [r, c] = d.cells[i];
+          const [r, c] = cells[i];
           const [cx, cy] = ballCenter(r, c);
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (el) {
             el.style.left = cx - size / 2 + rawDist * dirX + 'px';
             el.style.top = cy - size / 2 + rawDist * dirY + 'px';
-            const pos = i + rawDist;
-            el.style.opacity = String(edgeOpacity(pos));
+            el.style.opacity = String(edgeOpacity(i + rawDist, n));
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
             const pos = i + rawDist + k * n;
-            const fade = edgeOpacity(pos);
+            const fade = edgeOpacity(pos, n);
             if (fade <= 0) continue;
-            const [r0, c0] = d.cells[i];
+            const [r0, c0] = cells[i];
             const [baseX, baseY] = ballCenter(r0, c0);
             const shiftedX = baseX + (pos - i) * dirX;
             const shiftedY = baseY + (pos - i) * dirY;
@@ -588,24 +542,19 @@ export function createCircleGame(): ShapeGame {
         }
       }
 
-      // Returns whether it actually resolved a move (and thus already
-      // re-rendered at least once) — the caller needs this so it doesn't
-      // blindly render() again right after, which would wipe out a cascade
-      // step's ghost/flip/highlight elements before they ever get a frame
-      // painted (resolveMove no longer settles synchronously — see
-      // gameController's stepper-driven reveal).
       function applyDrag(): boolean {
         const d = drag;
-        if (!d || !d.fam) return false;
-        const n = d.cells.length;
+        if (!d || !d.fam || !d.line) return false;
+        const cells = d.line.cells;
+        const n = cells.length;
         const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
         if (((shift % n) + n) % n === 0) return false;
-        const vals = d.cells.map(([r, c]) => grid[r][c]);
+        const vals = cells.map(([r, c]) => grid[r][c]);
         const shifted = vals.map((_, i) => vals[(((i - shift) % n) + n) % n]);
-        d.cells.forEach(([r, c], i) => {
+        cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
-        const mask = new Set<string>(d.cells.map(([r, c]) => cellKey(r, c)));
+        const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         controller.resolveMove(mask);
         return true;
       }
@@ -615,22 +564,21 @@ export function createCircleGame(): ShapeGame {
         onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0 };
+          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, R, rowH, lastShift: 0 };
         },
         onDrag(dx, dy) {
           if (!drag) return;
           drag.dx = dx;
           drag.dy = dy;
           if (!drag.fam) {
-            const projA = scalarProjection('A', dx, dy, drag.R, drag.rowH);
-            const projB = scalarProjection('B', dx, dy, drag.R, drag.rowH);
-            const projR = scalarProjection('R', dx, dy, drag.R, drag.rowH);
-            let fam: Fam = 'A';
-            let best = Math.abs(projA);
-            if (Math.abs(projB) > best) { fam = 'B'; best = Math.abs(projB); }
-            if (Math.abs(projR) > best) { fam = 'R'; best = Math.abs(projR); }
-            drag.fam = fam;
-            drag.cells = fam === 'A' ? lineA(drag.r - drag.c) : fam === 'B' ? lineB(drag.c) : lineRow(drag.r);
+            const candidates = (['X', 'Y', 'Z'] as const).map((fam) => ({
+              fam,
+              line: lineFor(fam, drag!.r, drag!.c),
+              proj: Math.abs(scalarProjection(fam, dx, dy, drag!.R, drag!.rowH)),
+            }));
+            candidates.sort((a, b) => b.proj - a.proj);
+            drag.fam = candidates[0].fam;
+            drag.line = candidates[0].line;
           }
           renderDragPreview();
         },
@@ -642,10 +590,6 @@ export function createCircleGame(): ShapeGame {
             moved = applyDrag();
           }
           drag = null;
-          // A resolved move already re-rendered on its own (and may still be
-          // mid-reveal) — rendering again here would erase that before a
-          // frame of it paints. Only a no-op drag needs this to snap the
-          // preview's manual style tweaks back to a clean rest state.
           if (!moved) render();
         },
       });

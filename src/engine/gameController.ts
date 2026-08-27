@@ -12,8 +12,25 @@ export interface CascadeStepGroups {
   lineBonusGroups: Cell[][];
 }
 
+/**
+ * Weights turning the raw score, the leftover-tile count, the live "状态"
+ * hit-rate gauge, and the elapsed time into one final composite number
+ * (see endGame below) — the four inputs the end-of-run screen breaks out
+ * as separate line items above their sum.
+ */
+const PENALTY_PER_UNFINISHED = 3;
+const STATUS_WEIGHT = 2;
+const TIME_BONUS_BASE = 100;
+const TIME_BONUS_REFERENCE_SEC = 180;
+
 export interface GameControllerHooks {
   bestKey: string;
+  /**
+   * Timed-challenge mode: the HUD clock counts down from this many seconds
+   * instead of counting up, and the run ends on its own the instant it hits
+   * zero (in addition to, not instead of, the normal isGameOver() ending).
+   */
+  timeLimitSec?: number;
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -49,6 +66,16 @@ export interface GameControllerHooks {
    * flip — see CascadeStep.commit).
    */
   onCommit?(matchGroups: Cell[][]): void;
+  /**
+   * Count of cells still showing their flavor (un-flipped) face the instant
+   * the run ends — a tile that never got to finish its own pattern, whether
+   * because a whole-line bonus removed/blanked the neighbors it needed or
+   * simply because the run ended (time out, manual stop) before it got
+   * there. Feeds the end-of-run "未完成" penalty; a shape that has already
+   * emptied a cell (square's row/col removal, circle's blank ball) must not
+   * count it here — only live, still-flavor-faced cells.
+   */
+  countUnfinished(): number;
 }
 
 export interface GameController {
@@ -79,6 +106,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   const perf = createPerformanceGauge();
   const timer = createTimer((s) => {
+    if (hooks.timeLimitSec !== undefined) {
+      const remaining = Math.max(0, hooks.timeLimitSec - s);
+      refs.hudTimeEl.textContent = formatClock(remaining);
+      if (remaining <= 0 && !gameOver) endGame('时间到');
+      return;
+    }
     refs.hudTimeEl.textContent = formatClock(s);
   });
   const streak = createStreakTracker();
@@ -119,9 +152,28 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resolving = false;
     timer.stop();
     const elapsed = timer.elapsedSeconds();
-    const best = saveBestIfHigher(hooks.bestKey, score);
+
+    const unfinished = hooks.countUnfinished();
+    const unfinishedPenalty = unfinished * PENALTY_PER_UNFINISHED;
+    const statusPercent = perf.valuePercent();
+    const statusBonus = Math.round(statusPercent * STATUS_WEIGHT);
+    const timeRef = hooks.timeLimitSec ?? TIME_BONUS_REFERENCE_SEC;
+    const timeBonus = Math.round(Math.max(0, 1 - elapsed / timeRef) * TIME_BONUS_BASE);
+    const total = Math.max(0, score - unfinishedPenalty + statusBonus + timeBonus);
+
+    const best = saveBestIfHigher(hooks.bestKey, total);
+
+    const signed = (n: number) => (n > 0 ? '+' + n : String(n));
+    const row = (label: string, value: number) =>
+      `<div class="end-row"><span>${label}</span><span>${signed(value)}</span></div>`;
+
     refs.endTitleEl.textContent = '挑战结束';
-    refs.endScoreEl.textContent = String(score);
+    refs.endScoreEl.textContent = String(total);
+    refs.endBreakdownEl.innerHTML =
+      row('得分', score) +
+      row(`未完成 × ${unfinished}（每处 -${PENALTY_PER_UNFINISHED}）`, -unfinishedPenalty) +
+      row(`状态加成（${statusPercent}%）`, statusBonus) +
+      row('用时加成', timeBonus);
     refs.endDetailEl.textContent =
       reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
     refs.endOverlay.classList.add('show');

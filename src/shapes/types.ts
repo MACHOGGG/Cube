@@ -1,5 +1,5 @@
 export interface ShapeCardMeta {
-  id: 'square' | 'triangle' | 'circle';
+  id: string;
   name: string;
   desc: string;
   bestKey: string;
@@ -7,8 +7,13 @@ export interface ShapeCardMeta {
   glyph: string;
 }
 
+export interface ShapeGameOpts {
+  /** Timed-challenge mode: run ends automatically after this many seconds. */
+  timeLimitSec?: number;
+}
+
 export interface ShapeGame {
   card: ShapeCardMeta;
   /** Builds the game inside container and wires onBack; returns a destroy() to call when navigating away. */
-  mount(container: HTMLElement, onBack: () => void): () => void;
+  mount(container: HTMLElement, onBack: () => void, opts?: ShapeGameOpts): () => void;
 }

@@ -8,7 +8,7 @@ import { createOutlineTracker, applyScoreAnimations } from '../engine/scoreOutli
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import type { ShapeGame } from './types';
+import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Two selectable palettes, both with 6 hues spaced at least ~50-60° apart on
 // the hue wheel so no two colors (or a tile's front vs. its own dot) can be
@@ -53,7 +53,7 @@ export function createSquareGame(): ShapeGame {
       bestKey,
       glyph: GLYPH,
     },
-    mount(container, onBack) {
+    mount(container, onBack, opts?: ShapeGameOpts) {
       const refs = buildShell(container, {
         title: 'Slides · 方块',
         tagline: '拖动一整行或一整列 · 拼出同色图案 · 翻成点面继续联通',
@@ -360,6 +360,12 @@ export function createSquareGame(): ShapeGame {
         return allDot || rows === 0 || cols === 0;
       }
 
+      function countUnfinished(): number {
+        let n = 0;
+        for (const row of grid) for (const t of row) if (t.face === 'flavor') n++;
+        return n;
+      }
+
       function resetBoard() {
         rows = BOARD_DIM;
         cols = BOARD_DIM;
@@ -368,11 +374,13 @@ export function createSquareGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
-        bestKey,
+        bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,
         isGameOver,
         buildCascadeConfig,
+        countUnfinished,
         // Line-bonus cells are removed from the board a moment later (see
         // applyLineBonus), so their coordinates aren't safe to outline —
         // the fade+collapse transition already gives that event its own
