@@ -363,10 +363,15 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       }
       render();
       showCheck();
-      autoTimer = window.setTimeout(advance, 1100);
-    }, 550);
+      autoTimer = window.setTimeout(advance, 1400);
+    }, 750);
   }
 
+  // Held clearly before the fade starts (long enough to read "the whole row
+  // is now the same flipped color"), then a slow fade, then the resulting
+  // gap stays on screen for a while before moving on — a whole-line bonus is
+  // the biggest moment in the game and was reading as a blink-and-miss-it
+  // flash at the old, much shorter timings.
   function playWholeLineBonus(cells: [number, number][]) {
     solved = true;
     outlineTracker.add([cells]);
@@ -378,7 +383,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
         const r = Number(el.dataset.r);
         const c = Number(el.dataset.c);
         if (cells.some(([rr, cc]) => rr === r && cc === c)) {
-          el.style.transition = 'opacity .6s ease, transform .6s ease';
+          el.style.transition = 'opacity 1s ease, transform 1s ease';
           el.style.opacity = '0';
           el.style.transform = 'scale(0.7)';
         }
@@ -387,9 +392,9 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       setTimeout(() => {
         for (const [r, c] of cells) removedCells.add(key(r, c));
         render();
-        autoTimer = window.setTimeout(advance, 900);
-      }, 620);
-    }, 900);
+        autoTimer = window.setTimeout(advance, 1900);
+      }, 1050);
+    }, 1900);
   }
 
   // ---------- free-form drag: any row or column, like the real square game ----------

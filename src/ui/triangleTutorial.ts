@@ -293,22 +293,68 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
   function settleBeat() {
     const beat = BEATS[beatIndex];
     if (beat.goal === 'none') {
-      autoTimer = window.setTimeout(playOrientationSwap, 1200);
+      autoTimer = window.setTimeout(playOrientationSwap, 1400);
     } else if (beat.goal === 'wholeLine') {
       playWholeLineBonus(beat.targetCells);
     }
   }
 
+  // Slides the tile from orientBeforeCell to orientAfterCell along a visible
+  // path instead of teleporting, rotating it 180deg over the same span so
+  // the up-pointing triangle visibly becomes down-pointing on arrival (an
+  // up- and a down-triangle share the same S x H bounding box here, so
+  // rotating one by a half-turn produces exactly the other's silhouette) —
+  // making the "wraps to the other edge, flipped" rule something the player
+  // watches happen rather than a jump-cut they have to take on faith.
+  const ORIENT_SLIDE_MS = 1700;
   function playOrientationSwap() {
     solved = true;
     const activeColor = grid[orientBeforeCell[0]][orientBeforeCell[1]].color;
+    const beforePts = triGeometry(orientBeforeCell[0], orientBeforeCell[1]).pts.map(toScreen);
+    const afterPts = triGeometry(orientAfterCell[0], orientAfterCell[1]).pts.map(toScreen);
+    const bXs = beforePts.map((p) => p[0]), bYs = beforePts.map((p) => p[1]);
+    const aXs = afterPts.map((p) => p[0]), aYs = afterPts.map((p) => p[1]);
+    const bMinX = Math.min(...bXs), bMinY = Math.min(...bYs);
+    const bMaxX = Math.max(...bXs), bMaxY = Math.max(...bYs);
+    const aMinX = Math.min(...aXs), aMinY = Math.min(...aYs);
+    const w = bMaxX - bMinX, h = bMaxY - bMinY;
+
+    // The source cell reverts to its plain filler tile right away: the
+    // ghost element below carries the traveling color from here on.
     grid[orientBeforeCell[0]][orientBeforeCell[1]] = tf(fillerColor(orientBeforeCell[0], orientBeforeCell[1]));
-    grid[orientAfterCell[0]][orientAfterCell[1]] = tf(activeColor);
-    flipInCells.add(key(orientAfterCell[0], orientAfterCell[1]));
     render();
-    vibrate(15);
-    showCheck();
-    autoTimer = window.setTimeout(advance, 1400);
+
+    const ghost = document.createElement('div');
+    ghost.className = 'tri';
+    ghost.style.left = bMinX + 'px';
+    ghost.style.top = bMinY + 'px';
+    ghost.style.width = w + 'px';
+    ghost.style.height = h + 'px';
+    ghost.style.zIndex = '5';
+    ghost.style.transition = `transform ${ORIENT_SLIDE_MS}ms cubic-bezier(.4,0,.2,1)`;
+    ghost.style.transform = 'translate(0px,0px) rotate(0deg)';
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.style.clipPath =
+      'polygon(' + beforePts.map((p) => `${(((p[0] - bMinX) / w) * 100).toFixed(2)}% ${(((p[1] - bMinY) / h) * 100).toFixed(2)}%`).join(',') + ')';
+    fill.style.background = COLORS[activeColor];
+    ghost.appendChild(fill);
+    boardEl.appendChild(ghost);
+
+    vibrate(10);
+    requestAnimationFrame(() => {
+      ghost.style.transform = `translate(${aMinX - bMinX}px, ${aMinY - bMinY}px) rotate(180deg)`;
+    });
+
+    autoTimer = window.setTimeout(() => {
+      ghost.remove();
+      grid[orientAfterCell[0]][orientAfterCell[1]] = tf(activeColor);
+      flipInCells.add(key(orientAfterCell[0], orientAfterCell[1]));
+      render();
+      vibrate(15);
+      showCheck();
+      autoTimer = window.setTimeout(advance, 1400);
+    }, ORIENT_SLIDE_MS);
   }
 
   function playMatch(cells: Cell2[]) {
@@ -324,10 +370,15 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
       }
       render();
       showCheck();
-      autoTimer = window.setTimeout(advance, 1100);
-    }, 550);
+      autoTimer = window.setTimeout(advance, 1400);
+    }, 750);
   }
 
+  // Held long enough up front to actually register "the whole line is the
+  // same reverse-face color" before anything starts fading, then a slow
+  // fade, then the resulting gap is left on screen for a while too — this
+  // is the moment the caption's "permanent gap, can't be moved back into"
+  // point needs to land, not something to blink past.
   function playWholeLineBonus(cells: Cell2[]) {
     solved = true;
     outlineTracker.add([cells]);
@@ -339,7 +390,7 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
         const r = Number(el.dataset.r);
         const c = Number(el.dataset.c);
         if (cells.some(([rr, cc]) => rr === r && cc === c)) {
-          el.style.transition = 'opacity .6s ease, transform .6s ease';
+          el.style.transition = 'opacity 1s ease, transform 1s ease';
           el.style.opacity = '0';
           el.style.transform = 'scale(0.7)';
         }
@@ -348,9 +399,9 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
       setTimeout(() => {
         for (const [r, c] of cells) removedCells.add(key(r, c));
         render();
-        autoTimer = window.setTimeout(advance, 900);
-      }, 620);
-    }, 900);
+        autoTimer = window.setTimeout(advance, 1900);
+      }, 1050);
+    }, 1900);
   }
 
   // Any drag confirms the current beat (see module comment) — except the

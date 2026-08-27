@@ -86,13 +86,22 @@ interface Beat {
 const beat1Cells: Cell2[] = [[6, 0], [6, 1], [6, 2], [6, 3]];
 // a "22" rhombus cluster
 const beat2Cells: Cell2[] = [[1, 0], [1, 1], [2, 1], [2, 2]];
+// a "121" diamond (1/2/1 balls across 3 rows) — same shape as circle.ts's
+// own diamond121(r, c) = [[r,c],[r+1,c],[r+1,c+1],[r+2,c+1]], at r=3,c=3.
+// Verified (throwaway Node script) that with only these 4 cells overridden,
+// this is the *only* qualifying pattern anywhere on the board — some nearby
+// origins accidentally extend into a real filler cell that already shares
+// the override color, forming an unrelated second cluster right next to
+// the intended one.
+const beat3Cells: Cell2[] = [[3, 3], [4, 3], [4, 4], [5, 4]];
 // a compact whole-line (row 2, length 3) already fully dot-faced
-const beat3Cells: Cell2[] = [[2, 0], [2, 1], [2, 2]];
+const beat4Cells: Cell2[] = [[2, 0], [2, 1], [2, 2]];
 
 const BEATS: Beat[] = [
   { captionKey: 'circleSlide', grid: withActive(beat1Cells, 2), goal: 'any', targetCells: beat1Cells },
   { captionKey: 'circleCluster', grid: withActive(beat2Cells, 1), goal: 'any', targetCells: beat2Cells },
-  { captionKey: 'circleBlank', grid: withDotLine(beat3Cells, 3), goal: 'wholeLine', targetCells: beat3Cells },
+  { captionKey: 'circleCluster121', grid: withActive(beat3Cells, 2), goal: 'any', targetCells: beat3Cells },
+  { captionKey: 'circleBlank', grid: withDotLine(beat4Cells, 3), goal: 'wholeLine', targetCells: beat4Cells },
 ];
 
 function findWholeLine(grid: Grid, cells: Cell2[]): boolean {
@@ -275,8 +284,8 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
       }
       render();
       showCheck();
-      autoTimer = window.setTimeout(advance, 1100);
-    }, 550);
+      autoTimer = window.setTimeout(advance, 1400);
+    }, 750);
   }
 
   function playWholeLineBonus(cells: Cell2[]) {
@@ -288,8 +297,8 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
       for (const [r, c] of cells) grid[r][c] = tblank();
       render();
       showCheck();
-      autoTimer = window.setTimeout(advance, 1300);
-    }, 900);
+      autoTimer = window.setTimeout(advance, 1900);
+    }, 1600);
   }
 
   // Any drag confirms the current beat — see the module comment: this
