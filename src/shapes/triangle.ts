@@ -678,42 +678,76 @@ export function createTriangleGame(): ShapeGame {
       // wouldn't). This also makes the line a genuine cyclic buffer: every
       // slot is always populated by construction, so there's no "overflow"
       // and thus no wraparound ghosts needed at all.
+      //
+      // A *shift* by itself still leaves a residual problem every line here
+      // shares: every line has an ODD number of cells (7/9/11 — a hexagon
+      // built from small triangles can't have an even-length row or
+      // diagonal), and an odd-length cycle can't be perfectly 2-colored —
+      // so ordinary rotation always mismatches some tiles' orientation once
+      // content wraps from one end to the other. The fix used here has two
+      // parts: (1) the "moving unit" — the tiles that stay within the
+      // line's own span, not wrapping — only ever settles on an EVEN shift,
+      // which (given strict alternation) *always* keeps every one of those
+      // tiles correctly oriented; (2) the wrapped tiles ("filler", shown
+      // dimmed as a preview of what's flowing in) always mismatch by
+      // exactly one step under an even shift, but adjacent slots always
+      // alternate orientation too — so swapping which of each ADJACENT PAIR
+      // of filler slots gets which tile's content exactly cancels that
+      // mismatch. The filler region's size always equals the (even) shift,
+      // so it always splits into whole pairs with nothing left over.
+      function fillerAwareSource(idx: number, shift: number, n: number): number {
+        const plain = (((idx - shift) % n) + n) % n;
+        if (shift === 0) return plain;
+        const fillerSize = Math.abs(shift);
+        const regionStart = shift > 0 ? 0 : n - fillerSize;
+        const inFiller = shift > 0 ? idx < fillerSize : idx >= regionStart;
+        if (!inFiller) return plain;
+        const localIdx = idx - regionStart;
+        const partnerIdx = regionStart + (localIdx % 2 === 0 ? localIdx + 1 : localIdx - 1);
+        return (((partnerIdx - shift) % n) + n) % n;
+      }
+
+      const FILLER_OPACITY = 0.55;
+
       function renderDragPreview() {
         render();
         const d = drag;
         if (!d || !d.fam || !d.line) return;
         const cells = d.line.cells;
         const n = cells.length;
-        const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy));
-        // Math.round(rawDist) always equals Math.round of the unmagnetized
-        // input (magnetizeRawDist's own contract), which is exactly the
-        // shift applyDrag computes on release — so the preview's discrete
-        // configuration can never disagree with what actually commits.
-        const shift = Math.round(rawDist);
-        // A light tick each time the drag crosses into a new whole-step
-        // configuration — the discrete, physical "click" of passing a
-        // detent, felt (haptics) and not just inferred from the drag's
+        // Magnetize toward the nearest EVEN step (halve, snap, double) so
+        // the "moving unit" only ever settles at an orientation-preserving
+        // shift — odd intermediate positions are passed through smoothly
+        // while dragging but are never a stable rest point.
+        const half = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy) / 2);
+        const shift = 2 * Math.round(half);
+        // A light tick each time the drag crosses into a new suitable
+        // (even) configuration — the discrete, physical "click" of passing
+        // a detent, felt (haptics) and not just inferred from the drag's
         // subtler positional easing.
         if (shift !== d.lastShift) {
           vibrate(6);
           d.lastShift = shift;
         }
         // The small leftover distance from that nearest snap point: near
-        // zero almost all the time (magnetizeRawDist sticks close to
-        // integers), growing toward ±0.5 only while passing through the
-        // midpoint to the next slot — used as a tiny same-shape nudge so a
-        // slot's content still visibly "gives" a little instead of teleporting.
-        const residual = rawDist - shift;
+        // zero almost all the time (magnetizeRawDist sticks close to even
+        // integers), growing toward ±1 only while passing through the
+        // midpoint to the next suitable slot — used as a tiny same-shape
+        // nudge so a slot's content still visibly "gives" a little instead
+        // of teleporting.
+        const residual = 2 * half - shift;
         const [dirX, dirY] = trueStepVector(d.fam);
         const offset: [number, number] = [residual * dirX, residual * dirY];
+        const fillerSize = Math.abs(shift);
 
         for (let idx = 0; idx < n; idx++) {
           const [r, c] = cells[idx];
-          const sourceIdx = (((idx - shift) % n) + n) % n;
+          const sourceIdx = fillerAwareSource(idx, shift, n);
           const [sr, sc] = cells[sourceIdx];
+          const isFiller = shift > 0 ? idx < fillerSize : idx >= n - fillerSize;
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (el) el.remove();
-          refs.boardEl.appendChild(makeTriEl(grid[sr][sc], r, c, undefined, offset));
+          refs.boardEl.appendChild(makeTriEl(grid[sr][sc], r, c, isFiller ? FILLER_OPACITY : undefined, offset));
         }
       }
 
@@ -728,10 +762,14 @@ export function createTriangleGame(): ShapeGame {
         if (!d || !d.fam || !d.line) return false;
         const cells = d.line.cells;
         const n = cells.length;
-        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy));
+        // Same even-rounding as the preview (magnetizeRawDist's contract —
+        // Math.round(magnetize(x)) === Math.round(x) — holds identically
+        // when applied to x/2, so the plain, unmagnetized value already
+        // agrees with whatever the preview last displayed).
+        const shift = 2 * Math.round(projectedSteps(d.fam, d.dx, d.dy) / 2);
         if (((shift % n) + n) % n === 0) return false;
         const vals = cells.map(([r, c]) => grid[r][c]);
-        const shifted = vals.map((_, i) => vals[(((i - shift) % n) + n) % n]);
+        const shifted = vals.map((_, i) => vals[fillerAwareSource(i, shift, n)]);
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
