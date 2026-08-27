@@ -1,6 +1,9 @@
 import './style.css';
 import { renderMenu } from './ui/menu';
 import { renderMoreMenu, renderTimedPicker, renderLayoutsPicker, type MoreOptionId } from './ui/moreMenu';
+import { renderLanguageSelect } from './ui/languageSelect';
+import { renderTutorial } from './ui/tutorial';
+import { loadLang, saveLang, hasSeenTutorial, markTutorialSeen, type Lang } from './i18n';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
 import { createCircleGame } from './shapes/circle';
@@ -93,4 +96,29 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   activeDestroy = game.mount(root, onBack ?? (opts?.timeLimitSec ? showTimedPicker : showMenu), opts);
 }
 
-showMenu();
+function boot() {
+  const savedLang = loadLang();
+  if (!savedLang) {
+    teardown();
+    renderLanguageSelect(root, (lang) => {
+      saveLang(lang);
+      afterLangChosen(lang);
+    });
+    return;
+  }
+  afterLangChosen(savedLang);
+}
+
+function afterLangChosen(lang: Lang) {
+  if (!hasSeenTutorial()) {
+    teardown();
+    renderTutorial(root, lang, () => {
+      markTutorialSeen();
+      showMenu();
+    });
+    return;
+  }
+  showMenu();
+}
+
+boot();
