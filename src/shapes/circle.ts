@@ -540,12 +540,16 @@ export function createCircleGame(): ShapeGame {
         // *longest* lines (length ROWS, along the triangle's base or its
         // longest diagonal) run flush with the triangular arrangement's own
         // edge — there's no slack there, same as every line on the hex
-        // triangle board, so an overshooting real ball or ghost pokes past
-        // the triangle's silhouette into the board element's square corner
-        // padding instead of off the board entirely. A hairline's tolerance
-        // (float-jitter safety, not visual slack) keeps that from happening
-        // while still letting short-line ghosts fade in gracefully.
-        const EDGE_EPS = 0.03;
+        // triangle board. The board element itself clips overflow, though,
+        // so a ball fading out over a little real distance past that edge
+        // just gets cropped for the flush-edge lines instead of visually
+        // leaking — letting every line fade the same soft way rather than
+        // needing a hard, instant cutoff right at the edge.
+        const FADE_RANGE = 0.4;
+        const edgeOpacity = (pos: number) => {
+          const overshoot = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
+          return Math.max(0, 1 - overshoot / FADE_RANGE);
+        };
         for (let i = 0; i < n; i++) {
           const [r, c] = d.cells[i];
           const [cx, cy] = ballCenter(r, c);
@@ -554,19 +558,20 @@ export function createCircleGame(): ShapeGame {
             el.style.left = cx - size / 2 + rawDist * dirX + 'px';
             el.style.top = cy - size / 2 + rawDist * dirY + 'px';
             const pos = i + rawDist;
-            el.style.opacity = pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS ? '0' : '';
+            el.style.opacity = String(edgeOpacity(pos));
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
             const pos = i + rawDist + k * n;
-            if (pos < -EDGE_EPS || pos > n - 1 + EDGE_EPS) continue;
+            const fade = edgeOpacity(pos);
+            if (fade <= 0) continue;
             const [r0, c0] = d.cells[i];
             const [baseX, baseY] = ballCenter(r0, c0);
             const shiftedX = baseX + (pos - i) * dirX;
             const shiftedY = baseY + (pos - i) * dirY;
-            const ghost = makeBallEl(grid[r0][c0], r0, c0, 0.55);
+            const ghost = makeBallEl(grid[r0][c0], r0, c0, 0.55 * fade);
             ghost.style.left = shiftedX - size / 2 + 'px';
             ghost.style.top = shiftedY - size / 2 + 'px';
             ghost.classList.add('ghost');
@@ -599,6 +604,7 @@ export function createCircleGame(): ShapeGame {
 
       const detachDrag = attachDrag(refs.boardWrap, {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0 };

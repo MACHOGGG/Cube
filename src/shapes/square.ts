@@ -399,6 +399,16 @@ export function createSquareGame(): ShapeGame {
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
 
+      // A ghost fully outside [low, high] (the same generous one-cell
+      // margin the old hard cutoff used) is invisible; one that's just
+      // crossed into range ramps up smoothly over a short distance instead
+      // of popping in at full ghost-opacity — same idea in reverse as it
+      // exits the other side.
+      function edgeFade(x: number, low: number, high: number, range: number): number {
+        const overshoot = x < low ? low - x : x > high ? x - high : 0;
+        return Math.max(0, 1 - overshoot / range);
+      }
+
       function renderDragPreview() {
         render();
         if (!drag || !drag.axis) return;
@@ -426,12 +436,14 @@ export function createSquareGame(): ShapeGame {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
             if (el) el.style.left = c * cell + magDx + 'px';
           }
+          const fadeRange = cell * 0.4;
           for (let k = -2; k <= 2; k++) {
             if (k === 0) continue;
             for (let c = 0; c < cols; c++) {
               const x = c * cell + magDx + k * span;
-              if (x < -cell || x > span) continue;
-              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55);
+              const fade = edgeFade(x, -cell, span, fadeRange);
+              if (fade <= 0) continue;
+              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55 * fade);
               ghost.classList.add('ghost');
               ghost.style.left = x + 'px';
               refs.boardEl.appendChild(ghost);
@@ -445,12 +457,14 @@ export function createSquareGame(): ShapeGame {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
             if (el) el.style.top = r * cell + magDy + 'px';
           }
+          const fadeRange = cell * 0.4;
           for (let k = -2; k <= 2; k++) {
             if (k === 0) continue;
             for (let r = 0; r < rows; r++) {
               const y = r * cell + magDy + k * span;
-              if (y < -cell || y > span) continue;
-              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55);
+              const fade = edgeFade(y, -cell, span, fadeRange);
+              if (fade <= 0) continue;
+              const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55 * fade);
               ghost.classList.add('ghost');
               ghost.style.top = y + 'px';
               refs.boardEl.appendChild(ghost);
@@ -596,6 +610,7 @@ export function createSquareGame(): ShapeGame {
 
       const detachDrag = attachDrag(refs.boardWrap, {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        onRejected: () => vibrate(15),
         onStart(x, y) {
           const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));

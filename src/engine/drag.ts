@@ -22,6 +22,14 @@ export interface DragCallbacks {
   onDrag(dx: number, dy: number): void;
   /** Always called on release/cancel, even if the threshold was never crossed. */
   onEnd(dx: number, dy: number): void;
+  /**
+   * Optional: called instead of onStart when isActive() is false (usually
+   * because the board is still mid-cascade from the previous move). Without
+   * this, a touch during that window does nothing at all with zero
+   * indication why — easy to read as "I set up a match and nothing
+   * happened" when it was really just a move that landed a beat too early.
+   */
+  onRejected?(): void;
 }
 
 /**
@@ -37,7 +45,10 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
   let sy = 0;
 
   function down(e: PointerEvent) {
-    if (!cb.isActive()) return;
+    if (!cb.isActive()) {
+      cb.onRejected?.();
+      return;
+    }
     const rect = target.getBoundingClientRect();
     active = true;
     locked = false;

@@ -718,8 +718,11 @@ export function createTriangleGame(): ShapeGame {
         // Magnetize toward the nearest EVEN step (halve, snap, double) so
         // the "moving unit" only ever settles at an orientation-preserving
         // shift — odd intermediate positions are passed through smoothly
-        // while dragging but are never a stable rest point.
-        const half = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy) / 2);
+        // while dragging but are never a stable rest point. A gentler power
+        // than the other boards' per-step snap (each detent here is twice
+        // as far apart, so the same curve would otherwise pull noticeably
+        // harder over that longer stretch and feel forced rather than guided).
+        const half = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy) / 2, 1.5);
         const shift = 2 * Math.round(half);
         // A light tick each time the drag crosses into a new suitable
         // (even) configuration — the discrete, physical "click" of passing
@@ -735,7 +738,11 @@ export function createTriangleGame(): ShapeGame {
         // midpoint to the next suitable slot — used as a tiny same-shape
         // nudge so a slot's content still visibly "gives" a little instead
         // of teleporting.
-        const residual = 2 * half - shift;
+        // Damped a bit further than a per-step board would need: a detent
+        // spacing twice as wide means the same raw residual swings the
+        // "give" over twice the pixel distance, which read as a much
+        // bigger, harder wobble than the softened curve above alone fixed.
+        const residual = (2 * half - shift) * 0.6;
         const [dirX, dirY] = trueStepVector(d.fam);
         const offset: [number, number] = [residual * dirX, residual * dirY];
         const fillerSize = Math.abs(shift);
@@ -788,6 +795,7 @@ export function createTriangleGame(): ShapeGame {
 
       const detachDrag = attachDrag(refs.boardWrap, {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0 };
