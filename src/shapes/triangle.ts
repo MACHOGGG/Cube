@@ -4,7 +4,9 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -210,7 +212,7 @@ export function createTriangleGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线随后淡出并永久清空（棋盘六边形外形不变，但那几格从此不再参与拼图，经过的其他线也会相应变短）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色三角也会一并计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并永久清空（棋盘六边形外形不变，但那几格从此不再参与拼图，经过的其他线也会相应变短）。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
         assumptions:
           '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平、左斜、右斜——每个方向都是 6 条线，长度分别为 7/7/9/9/11/11（与横向的行长完全对应），判分规则完全一致；斜向的一条线由上下两种三角交替组成，和横向的行一样。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -238,6 +240,7 @@ export function createTriangleGame(): ShapeGame {
       // one-shot .flip-in animation class so the flip itself has motion
       // instead of the face silently swapping.
       let flipInCells = new Set<string>();
+      let stuckKeys: Set<string> | null = null;
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -451,6 +454,7 @@ export function createTriangleGame(): ShapeGame {
             const key = cellKey(r, c);
             const el = makeTriEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
+            if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             refs.boardEl.appendChild(el);
           }
         }
@@ -471,26 +475,43 @@ export function createTriangleGame(): ShapeGame {
         return cells.some(([r, c]) => removedCells.has(cellKey(r, c)));
       }
 
+      // Each triangle touches exactly 3 others edge-to-edge: the cross edge
+      // into the next i-band, and its two in-row neighbors — see the LINES
+      // family comment above for why these three (not a closed-form column
+      // rule) are the real adjacency. Used to expand a qualifying seed match
+      // (a run-4 window or a 31/13 big-triangle) into its full connected
+      // same-color region.
+      function triNeighbors(r: number, c: number): Cell[] {
+        const { i, p } = globalPosPure(r, c);
+        const out: Cell[] = [];
+        for (const cand of [crossNeighbor(i, p), rowLeftNeighbor(i, p), rowRightNeighbor(i, p)]) {
+          if (cand && !removedCells.has(cellKey(cand[0], cand[1]))) out.push(cand);
+        }
+        return out;
+      }
+      function effColorAt(r: number, c: number): number {
+        return effColor(grid[r][c]);
+      }
+      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
+        if (anyRemoved(seed)) return;
+        const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
+        const region = floodFillSameColor(seed, effColorAt, triNeighbors);
+        matches.push({ cells: region, points: Math.max(4, region.length) });
+      }
+
       // ---------- matching engine ----------
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            const windowCells = cells.slice(i, i + 4);
-            if (anyRemoved(windowCells)) continue;
-            const c0 = effColor(grid[windowCells[0][0]][windowCells[0][1]]);
-            if (!windowCells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-            if (mask && !windowCells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-            matches.push({ cells: windowCells, points: 4 });
+            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
           }
         }
         for (const cells of BIG_TRIANGLES) {
-          if (anyRemoved(cells)) continue;
-          const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
-          if (!cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-          if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-          matches.push({ cells, points: 4 });
+          pushExpandedMatch(matches, cells, mask);
         }
         return matches;
       }
@@ -543,7 +564,6 @@ export function createTriangleGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
         };
@@ -555,14 +575,18 @@ export function createTriangleGame(): ShapeGame {
         );
       }
 
-      function countUnfinished(): number {
-        let n = 0;
+      function findStuckGroups(): Cell[][] {
+        const live: LiveTile[] = [];
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             if (removedCells.has(cellKey(r, c))) continue;
-            if (grid[r][c].face === 'flavor') n++;
+            live.push({ cell: [r, c], tile: grid[r][c] });
           }
-        return n;
+        return findStuckColorGroups(live);
+      }
+
+      function highlightStuck(cells: Cell[] | null) {
+        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
 
       function resetBoard() {
@@ -570,6 +594,7 @@ export function createTriangleGame(): ShapeGame {
         bonusedSignatures = new Set();
         removedCells = new Set();
         outlineTracker.reset();
+        stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
@@ -579,7 +604,8 @@ export function createTriangleGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        countUnfinished,
+        findStuckGroups,
+        highlightStuck,
         // Regular matches (run-of-4 and the big-triangle cluster) stay on
         // the board, so they get the persistent outline highlight, added
         // per cascade step so a chain reaction reveals one beat at a time.
@@ -587,7 +613,7 @@ export function createTriangleGame(): ShapeGame {
         // — its own fade-out is that event's feedback, not outlined —
         // played in onCascadeStepRendered since the ghost must be appended
         // *after* this step's own render() or that render() would wipe it.
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
+        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
         },

@@ -88,15 +88,49 @@ h1 {
 }
 .digit-strip span { display: block; height: 1.5em; line-height: 1.5em; text-align: center; }
 
+/* Anchors a stack of independent per-action "+N" popups above the score;
+   each .gain-pop child animates and removes itself on its own, so several
+   scoring actions in quick succession show as separate call-outs instead of
+   one accumulating number. */
 .gain-badge {
   position: absolute; top: 0; left: 50%; z-index: 2;
-  transform: translate(-50%, calc(-100% - 6px)) translateY(6px);
-  background: var(--accent); color: #fff; font-family: 'JetBrains Mono', monospace;
-  font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px;
-  white-space: nowrap; pointer-events: none; opacity: 0;
-  transition: opacity .2s ease, transform .2s ease;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column-reverse; align-items: center; gap: 4px;
+  pointer-events: none;
 }
-.gain-badge.show { opacity: 1; transform: translate(-50%, calc(-100% - 6px)) translateY(0); }
+.gain-pop {
+  background: var(--accent); color: #fff; font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 100px;
+  white-space: nowrap; opacity: 0;
+  animation: gain-pop 1.4s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes gain-pop {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.85); }
+  16%  { opacity: 1; transform: translateY(-2px) scale(1.1); }
+  32%  { transform: translateY(-6px) scale(1); }
+  72%  { opacity: 1; transform: translateY(-15px) scale(1); }
+  100% { opacity: 0; transform: translateY(-24px) scale(0.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gain-pop { animation: gain-pop-fade 1.4s ease-out both; }
+  @keyframes gain-pop-fade {
+    0% { opacity: 0; }
+    16%, 72% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
+/* A brief background flash on the score HUD cell itself, on every scoring
+   event (independent of the gain popup), so the "score changed" feedback
+   reads even at a glance away from the popup itself. */
+.score-cell.score-flash { animation: score-cell-flash 0.6s ease-out; }
+@keyframes score-cell-flash {
+  0% { background: var(--accent-soft); }
+  100% { background: var(--surface); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .score-cell.score-flash { animation: none; }
+}
 
 .board-wrap {
   position: relative; width: 100%; aspect-ratio: 1 / 1;
@@ -115,12 +149,13 @@ h1 {
    to its dot face: a quick horizontal squish (the "flip" itself, edge-on at
    the midpoint) with a small pop and settle, instead of the face just
    silently swapping in place. */
-.flip-in { animation: flip-in 300ms ease-out both; }
+.flip-in { animation: flip-in 340ms ease-out both; }
 @keyframes flip-in {
-  0%   { transform: translateY(0) scaleX(1) scaleY(1); }
-  40%  { transform: translateY(-4px) scaleX(0.08) scaleY(1.1); }
-  65%  { transform: translateY(-1px) scaleX(1.08) scaleY(1.03); }
-  100% { transform: translateY(0) scaleX(1) scaleY(1); }
+  0%   { transform: perspective(300px) rotateX(0deg) scaleY(1); }
+  38%  { transform: perspective(300px) rotateX(88deg) scaleY(0.88); }
+  58%  { transform: perspective(300px) rotateX(-14deg) scaleY(1.07); }
+  78%  { transform: perspective(300px) rotateX(5deg) scaleY(0.98); }
+  100% { transform: perspective(300px) rotateX(0deg) scaleY(1); }
 }
 @media (prefers-reduced-motion: reduce) {
   .flip-in { animation: none; }
@@ -173,6 +208,19 @@ h1 {
     0% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
     100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); fill: transparent; }
   }
+}
+
+/* Red "this can never score again" glow for a permanently stuck tile —
+   a shape applies this class (or its own outline-overlay equivalent) to the
+   cells GameController names via the highlightStuck hook, cycling through
+   groups one at a time right before the run auto-ends. */
+.stuck-glow { animation: stuck-glow 1s ease-in-out infinite; }
+@keyframes stuck-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+  50%      { box-shadow: 0 0 14px 4px rgba(220,38,38,0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stuck-glow { animation: none; box-shadow: 0 0 10px 3px rgba(220,38,38,0.5); }
 }
 
 /* The light "pressing into place" pulse lives on the scored tile/ball/tri
@@ -274,6 +322,61 @@ button:hover { filter: brightness(1.05); }
 .shape-card .best { text-align: right; flex-shrink: 0; }
 .shape-card .best .k { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); }
 .shape-card .best .v { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+
+/* ---------- home page: 2-column compact grid + wide placeholder cards ---------- */
+.home-how-to {
+  display: block; margin: -4px auto 0; background: none; border: none; padding: 4px;
+  color: var(--ink-soft); font-size: 0.82rem; text-decoration: underline; cursor: pointer;
+}
+.home-how-to:hover { color: var(--accent-ink); }
+
+.menu-divider { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
+
+.menu-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.shape-card-compact {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 10px; cursor: pointer;
+  transition: transform .1s ease, border-color .15s ease;
+}
+.shape-card-compact:hover { border-color: var(--accent); }
+.shape-card-compact:active { transform: scale(0.98); }
+.shape-card-compact .glyph {
+  width: 40px; height: 40px; border-radius: 10px; background: var(--board-bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.shape-card-compact .glyph svg { width: 24px; height: 24px; }
+.shape-card-compact .name { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.92rem; }
+.shape-card-compact .best { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.shape-card-compact.placeholder { border-style: dashed; opacity: 0.65; }
+.shape-card-compact.placeholder .glyph { color: var(--ink-faint); }
+.shape-card-compact.placeholder .best { font-style: italic; }
+
+.home-wide-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: var(--surface); border: 1px dashed var(--line); border-radius: 16px;
+  padding: 22px 16px; cursor: pointer; text-align: center; min-height: 84px;
+  transition: transform .1s ease, border-color .15s ease;
+}
+.home-wide-card:hover { border-color: var(--accent); }
+.home-wide-card:active { transform: scale(0.99); }
+.home-wide-card .wide-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--ink-soft); }
+.home-wide-card .wide-card-sub { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); }
+
+.home-signin-row { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.signin-circle {
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink-soft); cursor: pointer;
+}
+.signin-circle svg { width: 20px; height: 20px; }
+.exclusive-pill {
+  flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px;
+  background: var(--accent-soft); color: var(--accent-ink); border: none; border-radius: 100px;
+  padding: 11px 18px; cursor: pointer; font-weight: 600;
+}
+.exclusive-pill .zh { font-family: 'Fraunces', Georgia, serif; font-size: 0.95rem; }
+.exclusive-pill .en { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; opacity: 0.75; }
 
 /* ---------- language picker ---------- */
 .lang-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }

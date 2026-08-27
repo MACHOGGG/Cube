@@ -4,7 +4,9 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, applyScoreAnimations } from '../engine/scoreOutline';
+import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -28,7 +30,6 @@ const PALETTES = {
 } as const;
 
 const BOARD_DIM = 6;
-const LINE_BONUS = 36;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12" rx="3" fill="#C46A4E"/><rect x="18" y="2" width="12" height="12" rx="3" fill="#4A9573"/><rect x="2" y="18" width="12" height="12" rx="3" fill="#4C7EAD"/><rect x="18" y="18" width="12" height="12" rx="3" fill="#AD5C82"/></svg>`;
 
@@ -59,7 +60,7 @@ export function createSquareGame(): ShapeGame {
         tagline: '拖动一整行或一整列 · 拼出同色图案 · 翻成点面继续联通',
         startBody: '拖动整行/整列拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分），得分方块翻成点面继续联通。当整行或整列都翻成点面且点色相同时，额外得 36 分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。',
+          '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分，超过 4 个则按实际数量得分，且与该图案相邻的同色方块也会一并计入），得分方块翻成点面继续联通。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当整行或整列都翻成点面且点色相同时，额外得该行/列长度的平方分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。',
         assumptions:
           '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -83,6 +84,9 @@ export function createSquareGame(): ShapeGame {
       // one-shot .flip-in animation class so the flip itself has motion
       // instead of the face silently swapping.
       let flipInCells = new Set<string>();
+      // Cells GameController told us (via highlightStuck) to draw the red
+      // "this can never score again" glow around, right before ending the run.
+      let stuckKeys: Set<string> | null = null;
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -224,6 +228,7 @@ export function createSquareGame(): ShapeGame {
             const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c, CELL);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
+            if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             refs.boardEl.appendChild(el);
           }
         }
@@ -240,37 +245,72 @@ export function createSquareGame(): ShapeGame {
         return cells.some(([r, c]) => mask.has(cellKey(r, c)));
       }
 
+      function squareNeighbors(r: number, c: number): Cell[] {
+        const out: Cell[] = [];
+        if (r > 0) out.push([r - 1, c]);
+        if (r < rows - 1) out.push([r + 1, c]);
+        if (c > 0) out.push([r, c - 1]);
+        if (c < cols - 1) out.push([r, c + 1]);
+        return out;
+      }
+      function effColorAt(r: number, c: number): number {
+        return effColor(grid[r][c]);
+      }
+
+      // A qualifying seed (2x2 or a straight run-of-4 window) expands via
+      // flood fill to the full connected same-color region before scoring —
+      // a longer run (5, 6, ...) or any extra same-color tile touching the
+      // seed folds into the same match, worth the region's own size (never
+      // less than the 4-cell minimum). Two overlapping seed windows inside
+      // one longer run flood-fill to the exact same final region, so the
+      // existing per-cascade-step tile-id dedup in scoring.ts collapses them
+      // into a single scored match rather than double-counting it.
+      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
+        if (!cellsSameColor(seed) || !touches(seed, mask)) return;
+        const region = floodFillSameColor(seed, effColorAt, squareNeighbors);
+        matches.push({ cells: region, points: Math.max(4, region.length) });
+      }
+
       function findMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (let r = 0; r < rows - 1; r++)
           for (let c = 0; c < cols - 1; c++) {
-            const cells: Cell[] = [
-              [r, c],
-              [r, c + 1],
-              [r + 1, c],
-              [r + 1, c + 1],
-            ];
-            if (cellsSameColor(cells) && touches(cells, mask)) matches.push({ cells, points: 4 });
+            pushExpandedMatch(
+              matches,
+              [
+                [r, c],
+                [r, c + 1],
+                [r + 1, c],
+                [r + 1, c + 1],
+              ],
+              mask,
+            );
           }
         for (let r = 0; r < rows; r++)
           for (let c = 0; c <= cols - 4; c++) {
-            const cells: Cell[] = [
-              [r, c],
-              [r, c + 1],
-              [r, c + 2],
-              [r, c + 3],
-            ];
-            if (cellsSameColor(cells) && touches(cells, mask)) matches.push({ cells, points: 4 });
+            pushExpandedMatch(
+              matches,
+              [
+                [r, c],
+                [r, c + 1],
+                [r, c + 2],
+                [r, c + 3],
+              ],
+              mask,
+            );
           }
         for (let c = 0; c < cols; c++)
           for (let r = 0; r <= rows - 4; r++) {
-            const cells: Cell[] = [
-              [r, c],
-              [r + 1, c],
-              [r + 2, c],
-              [r + 3, c],
-            ];
-            if (cellsSameColor(cells) && touches(cells, mask)) matches.push({ cells, points: 4 });
+            pushExpandedMatch(
+              matches,
+              [
+                [r, c],
+                [r + 1, c],
+                [r + 2, c],
+                [r + 3, c],
+              ],
+              mask,
+            );
           }
         return matches;
       }
@@ -348,7 +388,6 @@ export function createSquareGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches,
           findLineBonuses: findLineBonusGroups,
-          bonusPointsPerLine: LINE_BONUS,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: true,
           isTerminalAfterLineBonus: () => rows === 0 || cols === 0,
@@ -360,10 +399,14 @@ export function createSquareGame(): ShapeGame {
         return allDot || rows === 0 || cols === 0;
       }
 
-      function countUnfinished(): number {
-        let n = 0;
-        for (const row of grid) for (const t of row) if (t.face === 'flavor') n++;
-        return n;
+      function findStuckGroups(): Cell[][] {
+        const live: LiveTile[] = [];
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) live.push({ cell: [r, c], tile: grid[r][c] });
+        return findStuckColorGroups(live);
+      }
+
+      function highlightStuck(cells: Cell[] | null) {
+        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
 
       function resetBoard() {
@@ -371,6 +414,7 @@ export function createSquareGame(): ShapeGame {
         cols = BOARD_DIM;
         grid = generateCleanBoard();
         outlineTracker.reset();
+        stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
@@ -380,7 +424,8 @@ export function createSquareGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        countUnfinished,
+        findStuckGroups,
+        highlightStuck,
         // Line-bonus cells are removed from the board a moment later (see
         // applyLineBonus), so their coordinates aren't safe to outline —
         // the fade+collapse transition already gives that event its own
@@ -390,7 +435,7 @@ export function createSquareGame(): ShapeGame {
         // run yet), so this is also where the "before" snapshot for that
         // transition gets captured.
         onCascadeStep: ({ matchGroups, lineBonusGroups }) => {
-          outlineTracker.add(matchGroups);
+          outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS);
           if (lineBonusGroups.length) pendingCollapseSnapshot = captureTileSnapshots();
         },
         onCascadeStepRendered: ({ lineBonusGroups }) => {

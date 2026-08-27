@@ -4,11 +4,12 @@ export interface ScoreReel {
   reset(): void;
 }
 
-/** The slot-machine digit roll + floating "+N" gain badge shared by every board's HUD. */
+const GAIN_POP_MS = 1400;
+
+/** The slot-machine digit roll + floating "+N" gain popups shared by every board's HUD. */
 export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): ScoreReel {
   let boxes: { box: HTMLElement; strip: HTMLElement }[] = [];
-  let pendingGain = 0;
-  let gainTimer: number | undefined;
+  const scoreCell = reelEl.closest<HTMLElement>('.score-cell');
 
   function makeDigitBox() {
     const box = document.createElement('div');
@@ -39,22 +40,29 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
     });
   }
 
+  /**
+   * Every scoring action gets its own independent "+N" popup — never summed
+   * into a running total — so a fast run of separate scores reads as a
+   * sequence of distinct events instead of one merged number.
+   */
   function showGain(amount: number) {
     if (amount <= 0) return;
-    pendingGain += amount;
-    gainBadgeEl.textContent = '+' + pendingGain;
-    gainBadgeEl.classList.add('show');
-    clearTimeout(gainTimer);
-    gainTimer = window.setTimeout(() => {
-      gainBadgeEl.classList.remove('show');
-      pendingGain = 0;
-    }, 10000);
+    const pop = document.createElement('span');
+    pop.className = 'gain-pop';
+    pop.textContent = '+' + amount;
+    gainBadgeEl.appendChild(pop);
+    window.setTimeout(() => pop.remove(), GAIN_POP_MS);
+
+    if (scoreCell) {
+      scoreCell.classList.remove('score-flash');
+      void scoreCell.offsetWidth; // restart the flash even if one is already mid-flight
+      scoreCell.classList.add('score-flash');
+    }
   }
 
   function reset() {
-    clearTimeout(gainTimer);
-    pendingGain = 0;
-    gainBadgeEl.classList.remove('show');
+    gainBadgeEl.replaceChildren();
+    scoreCell?.classList.remove('score-flash');
     boxes.forEach((b) => b.box.remove());
     boxes = [];
     setValue(0);

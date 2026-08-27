@@ -8,12 +8,24 @@ export interface OutlineGroup {
 }
 
 export interface OutlineTracker {
-  /** Registers one move's worth of scored groups, all sharing the same start time so they animate in sync. */
-  add(groups: Cell[][]): void;
+  /**
+   * Registers one move's worth of scored groups. With staggerMs omitted (or
+   * zero) every group shares the same start time and animates in sync; a
+   * positive staggerMs gives each subsequent group a start time that many ms
+   * later than the previous one (an initially-negative elapsed time, which
+   * both applyScoreAnimations and the spawnOutline* helpers already read as
+   * a forward CSS animation-delay), so a single action that scores several
+   * groups at once flashes them in a quick visible sequence instead of all
+   * at once.
+   */
+  add(groups: Cell[][], staggerMs?: number): void;
   /** Still-active groups with how long each has been showing, purging any that have finished. Call once per render(). */
   current(): OutlineGroup[];
   reset(): void;
 }
+
+/** Default stagger step between simultaneously-scored groups from one action (item 6: "先后的闪烁提示"). */
+export const MULTI_GROUP_STAGGER_MS = 180;
 
 /**
  * Tracks the black-outline "you just scored this" highlight shown around
@@ -27,9 +39,9 @@ export function createOutlineTracker(): OutlineTracker {
   let active: { cells: Cell[]; startTime: number }[] = [];
 
   return {
-    add(groups) {
+    add(groups, staggerMs = 0) {
       const now = Date.now();
-      for (const cells of groups) active.push({ cells, startTime: now });
+      groups.forEach((cells, i) => active.push({ cells, startTime: now + i * staggerMs }));
     },
     current() {
       const now = Date.now();

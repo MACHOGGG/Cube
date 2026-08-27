@@ -1,5 +1,5 @@
 import type { Cell, Match, Tile } from './types';
-import { cellKey } from './types';
+import { cellKey, effColor } from './types';
 
 export interface StreakTracker {
   /** Feeds one move's raw (un-multiplied) points in; returns the score delta to add (0 if the move scored nothing, which also resets the streak). */
@@ -44,7 +44,6 @@ export interface CascadeConfig {
   tileAt(r: number, c: number): Tile;
   /** Groups of cells that now qualify for a whole-line color bonus; shape is responsible for not re-offering a line already bonused this game. */
   findLineBonuses(): Cell[][];
-  bonusPointsPerLine: number;
   /**
    * Flips every cell in every bonused line to its dot face and, for shapes
    * where a full line leaves the board (the square grid), removes them.
@@ -97,7 +96,19 @@ export interface CascadeStepper {
  * this is exactly the same algorithm as a plain synchronous loop, just with
  * its steps exposed one at a time instead of all resolved before returning.
  */
-export function createCascadeStepper(cfg: CascadeConfig, initialMask: Set<string> | null): CascadeStepper {
+export function createCascadeStepper(
+  cfg: CascadeConfig,
+  initialMask: Set<string> | null,
+  // Cross-move anti-oscillation guard (e.g. shifting a line up to score,
+  // then back down to reproduce the exact same local pattern and score it
+  // again, repeated forever): the caller owns this set for the whole game
+  // (passing the same Set back in on every move) so a (cells, color)
+  // pattern that has ever scored can never pay out again — closing the
+  // farm regardless of how many times the same shift is repeated. Left
+  // empty and un-persisted by a caller (e.g. the tutorial board) that
+  // doesn't need the guard.
+  everScoredPatterns: Set<string> = new Set(),
+): CascadeStepper {
   let mask = initialMask;
   let terminal = false;
   // Identifies a match by the permanent ids of its tiles, not by row/col
@@ -111,7 +122,10 @@ export function createCascadeStepper(cfg: CascadeConfig, initialMask: Set<string
 
     const lineBonuses = cfg.findLineBonuses();
     if (lineBonuses.length) {
-      const points = lineBonuses.length * cfg.bonusPointsPerLine;
+      // A cleared line scores the square of its own tile count, so a longer
+      // line (a new layout's diagonal, say) is worth more than a shorter one
+      // rather than every shape's line being flatly worth the same bonus.
+      const points = lineBonuses.reduce((sum, cells) => sum + cells.length ** 2, 0);
       cfg.onLineBonus(lineBonuses);
       if (cfg.resetMaskOnLineBonus) mask = null;
       if (cfg.isTerminalAfterLineBonus?.()) terminal = true;
@@ -126,6 +140,19 @@ export function createCascadeStepper(cfg: CascadeConfig, initialMask: Set<string
         .join(',');
       if (scoredSignatures.has(sig)) return false;
       scoredSignatures.add(sig);
+
+      // The local pattern this specific match represents — same cells, same
+      // effective color — regardless of which physical tiles occupy them or
+      // what changed anywhere else on the board (see the doc comment above).
+      const patternSig =
+        m.cells
+          .map(([r, c]) => cellKey(r, c))
+          .sort()
+          .join('|') +
+        '#' +
+        effColor(cfg.tileAt(m.cells[0][0], m.cells[0][1]));
+      if (everScoredPatterns.has(patternSig)) return false;
+      everScoredPatterns.add(patternSig);
       return true;
     });
     if (matches.length) {

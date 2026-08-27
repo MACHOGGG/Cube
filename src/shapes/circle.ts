@@ -4,7 +4,9 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -157,7 +159,7 @@ export function createCircleGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色方块也会一并计入；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
         assumptions:
           '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -196,6 +198,9 @@ export function createCircleGame(): ShapeGame {
       // one-shot .flip-in animation class so the flip itself has motion
       // instead of the face silently swapping.
       let flipInCells = new Set<string>();
+      // Cells GameController told us (via highlightStuck) to draw the red
+      // "this can never score again" glow around, right before ending the run.
+      let stuckKeys: Set<string> | null = null;
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -345,6 +350,7 @@ export function createCircleGame(): ShapeGame {
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
+            if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             refs.boardEl.appendChild(el);
           }
         }
@@ -363,25 +369,41 @@ export function createCircleGame(): ShapeGame {
       }
 
       // ---------- matching engine ----------
+      // The three line directions (A: r,c both +1; B: r +1 only; R: c +1
+      // only — see allLines above) are exactly this board's 6 possible
+      // neighbor steps; used to expand a qualifying seed match (a run-4
+      // window or a 22/121 cluster) into its full connected same-color
+      // region.
+      function circleNeighbors(r: number, c: number): Cell[] {
+        const candidates: Cell[] = [
+          [r + 1, c + 1], [r - 1, c - 1],
+          [r + 1, c], [r - 1, c],
+          [r, c + 1], [r, c - 1],
+        ];
+        return candidates.filter(([rr, cc]) => cellValid(rr, cc) && !isBlank(grid[rr][cc]));
+      }
+      function effColorAt(r: number, c: number): number {
+        return effColor(grid[r][c]);
+      }
+      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
+        if (anyBlank(seed)) return;
+        const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
+        const region = floodFillSameColor(seed, effColorAt, circleNeighbors);
+        matches.push({ cells: region, points: Math.max(4, region.length) });
+      }
+
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            const windowCells = cells.slice(i, i + 4);
-            if (anyBlank(windowCells)) continue;
-            const c0 = effColor(grid[windowCells[0][0]][windowCells[0][1]]);
-            if (!windowCells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-            if (mask && !windowCells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-            matches.push({ cells: windowCells, points: 4 });
+            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
           }
         }
         for (const cells of CLUSTERS) {
-          if (anyBlank(cells)) continue;
-          const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
-          if (!cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-          if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-          matches.push({ cells, points: 4 });
+          pushExpandedMatch(matches, cells, mask);
         }
         return matches;
       }
@@ -437,7 +459,6 @@ export function createCircleGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
         };
@@ -447,16 +468,25 @@ export function createCircleGame(): ShapeGame {
         return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
       }
 
-      function countUnfinished(): number {
-        let n = 0;
-        for (const row of grid) for (const t of row) if (!isBlank(t) && t.face === 'flavor') n++;
-        return n;
+      function findStuckGroups(): Cell[][] {
+        const live: LiveTile[] = [];
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c <= r; c++) {
+            const t = grid[r][c];
+            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+          }
+        return findStuckColorGroups(live);
+      }
+
+      function highlightStuck(cells: Cell[] | null) {
+        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
 
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
         outlineTracker.reset();
+        stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
@@ -466,7 +496,8 @@ export function createCircleGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        countUnfinished,
+        findStuckGroups,
+        highlightStuck,
         // Regular matches (run-of-4 and the "22"/"121" clusters) stay on
         // the board, so they get the persistent outline highlight, added
         // per cascade step so a chain reaction reveals one beat at a time.
@@ -475,7 +506,7 @@ export function createCircleGame(): ShapeGame {
         // — played in onCascadeStepRendered since the ghost must be
         // appended *after* this step's own render() or that render() would
         // wipe it.
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
+        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) {
             playBlankTransition(lineBonusGroups, pendingBlankSnapshot);

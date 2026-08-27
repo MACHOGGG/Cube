@@ -4,7 +4,9 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -165,7 +167,7 @@ export function createCircleHexGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分；同色的"22"菱形或"121"菱形同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色方块也会一并计入；同色的"22"菱形或"121"菱形同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
         assumptions:
           '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -189,6 +191,7 @@ export function createCircleHexGame(): ShapeGame {
         return cells.some(([r, c]) => isBlank(grid[r][c]));
       }
       let flipInCells = new Set<string>();
+      let stuckKeys: Set<string> | null = null;
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -300,8 +303,13 @@ export function createCircleHexGame(): ShapeGame {
         el.style.left = cx - size / 2 + 'px';
         el.style.top = cy - size / 2 + 'px';
         if (isBlank(tile)) {
-          el.style.background = 'var(--ink-faint)';
-          el.style.opacity = '0.35';
+          // A hollow ring, not a filled disc: the standard "标准" palette's
+          // own muted gray/brown flavor color (#9B958D) sits too close to a
+          // faint gray fill to read as reliably different at a glance — no
+          // solid fill at all, in any palette, reads unambiguously as "an
+          // empty slot" rather than "a dim colored ball".
+          el.style.background = 'transparent';
+          el.style.boxShadow = 'inset 0 0 0 3px var(--ink-faint)';
         } else if (tile.face === 'dot') {
           el.style.background = 'transparent';
           const starSize = Math.round(size * 0.95);
@@ -335,6 +343,7 @@ export function createCircleHexGame(): ShapeGame {
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
+            if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             refs.boardEl.appendChild(el);
           }
         }
@@ -348,25 +357,41 @@ export function createCircleHexGame(): ShapeGame {
         }
       }
 
+      // The hex lattice's 6 axial neighbor directions (see localToCube above
+      // and the redblobgames hex-grid reference it cites) — used to expand a
+      // qualifying seed match into its full connected same-color region.
+      const HEX_STEPS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [-1, 1], [1, -1]];
+      function circleHexNeighbors(r: number, c: number): Cell[] {
+        const { x, z } = localToCube(r, c);
+        const out: Cell[] = [];
+        for (const [dx, dz] of HEX_STEPS) {
+          const cell = cubeToLocal(x + dx, z + dz);
+          if (cell && !isBlank(grid[cell[0]][cell[1]])) out.push(cell);
+        }
+        return out;
+      }
+      function effColorAt(r: number, c: number): number {
+        return effColor(grid[r][c]);
+      }
+      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
+        if (anyBlank(seed)) return;
+        const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
+        const region = floodFillSameColor(seed, effColorAt, circleHexNeighbors);
+        matches.push({ cells: region, points: Math.max(4, region.length) });
+      }
+
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            const windowCells = cells.slice(i, i + 4);
-            if (anyBlank(windowCells)) continue;
-            const c0 = effColor(grid[windowCells[0][0]][windowCells[0][1]]);
-            if (!windowCells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-            if (mask && !windowCells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-            matches.push({ cells: windowCells, points: 4 });
+            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
           }
         }
         for (const cells of CLUSTERS) {
-          if (anyBlank(cells)) continue;
-          const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
-          if (!cells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-          if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-          matches.push({ cells, points: 4 });
+          pushExpandedMatch(matches, cells, mask);
         }
         return matches;
       }
@@ -411,7 +436,6 @@ export function createCircleHexGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
         };
@@ -421,16 +445,25 @@ export function createCircleHexGame(): ShapeGame {
         return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
       }
 
-      function countUnfinished(): number {
-        let n = 0;
-        for (const row of grid) for (const t of row) if (!isBlank(t) && t.face === 'flavor') n++;
-        return n;
+      function findStuckGroups(): Cell[][] {
+        const live: LiveTile[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            const t = grid[r][c];
+            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+          }
+        return findStuckColorGroups(live);
+      }
+
+      function highlightStuck(cells: Cell[] | null) {
+        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
 
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
         outlineTracker.reset();
+        stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
@@ -440,8 +473,9 @@ export function createCircleHexGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        countUnfinished,
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
+        findStuckGroups,
+        highlightStuck,
+        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) {
             playBlankTransition(lineBonusGroups, pendingBlankSnapshot);

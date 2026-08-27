@@ -13,15 +13,26 @@ export interface CascadeStepGroups {
 }
 
 /**
- * Weights turning the raw score, the leftover-tile count, the live "状态"
- * hit-rate gauge, and the elapsed time into one final composite number
- * (see endGame below) — the four inputs the end-of-run screen breaks out
- * as separate line items above their sum.
+ * The composite end-of-run score multiplies the raw score by the live
+ * "有效得分率" hit-rate gauge (as a fraction) and a time-elapsed bracket —
+ * faster clears are rewarded, slower ones tapered — then, if any tiles were
+ * left in a position that can never score again (see findStuckGroups),
+ * further multiplies by STUCK_PENALTY_FACTOR once per such tile.
  */
-const PENALTY_PER_UNFINISHED = 3;
-const STATUS_WEIGHT = 2;
-const TIME_BONUS_BASE = 100;
-const TIME_BONUS_REFERENCE_SEC = 180;
+const TIME_BRACKETS: [maxSec: number, mult: number][] = [
+  [60, 2],
+  [180, 1.5],
+  [300, 1],
+  [420, 0.8],
+  [600, 0.6],
+];
+const TIME_BRACKET_FALLBACK_MULT = 0.5;
+function timeMultiplierFor(elapsedSec: number): number {
+  for (const [maxSec, mult] of TIME_BRACKETS) if (elapsedSec <= maxSec) return mult;
+  return TIME_BRACKET_FALLBACK_MULT;
+}
+const STUCK_PENALTY_FACTOR = 0.95;
+const STUCK_CYCLE_MS = 900;
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -67,15 +78,21 @@ export interface GameControllerHooks {
    */
   onCommit?(matchGroups: Cell[][]): void;
   /**
-   * Count of cells still showing their flavor (un-flipped) face the instant
-   * the run ends — a tile that never got to finish its own pattern, whether
-   * because a whole-line bonus removed/blanked the neighbors it needed or
-   * simply because the run ended (time out, manual stop) before it got
-   * there. Feeds the end-of-run "未完成" penalty; a shape that has already
-   * emptied a cell (square's row/col removal, circle's blank ball) must not
-   * count it here — only live, still-flavor-faced cells.
+   * Checked after every move settles: groups of cells whose effective color
+   * now has too few tiles left anywhere on the board to ever complete
+   * another qualifying match (e.g. one flavor tile and one dot tile of the
+   * same color left with nothing else to combine with) — a permanent
+   * stalemate for those specific tiles. Each inner array is one such
+   * color's remaining cells. Omit, or return [], if the shape doesn't
+   * implement stalemate detection.
    */
-  countUnfinished(): number;
+  findStuckGroups?(): Cell[][];
+  /**
+   * Tells the shape which cells (if any) to draw the red "stuck" glow
+   * around on its next render(); null clears it. Only meaningful together
+   * with findStuckGroups.
+   */
+  highlightStuck?(cells: Cell[] | null): void;
 }
 
 export interface GameController {
@@ -129,6 +146,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let paused = false;
   let gameOver = false;
   let resolving = false;
+  // Every (cells, color) match pattern that has ever scored this game — see
+  // createCascadeStepper's everScoredPatterns param — persists across moves
+  // so an oscillating shift-and-unshift can't keep re-scoring the same spot.
+  let everScoredPatterns = new Set<string>();
 
   function newGame() {
     hooks.resetBoard();
@@ -140,43 +161,71 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     streak.reset();
     scoreReel.reset();
     perf.reset();
+    everScoredPatterns = new Set();
     updatePerfDisplay();
     timer.start();
     hooks.render();
+    hooks.highlightStuck?.(null);
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
   }
 
-  function endGame(reason: string) {
+  function endGame(reason: string, stuckCount = 0) {
     gameOver = true;
     resolving = false;
     timer.stop();
     const elapsed = timer.elapsedSeconds();
 
-    const unfinished = hooks.countUnfinished();
-    const unfinishedPenalty = unfinished * PENALTY_PER_UNFINISHED;
     const statusPercent = perf.valuePercent();
-    const statusBonus = Math.round(statusPercent * STATUS_WEIGHT);
-    const timeRef = hooks.timeLimitSec ?? TIME_BONUS_REFERENCE_SEC;
-    const timeBonus = Math.round(Math.max(0, 1 - elapsed / timeRef) * TIME_BONUS_BASE);
-    const total = Math.max(0, score - unfinishedPenalty + statusBonus + timeBonus);
+    const statusFrac = statusPercent / 100;
+    const timeMult = timeMultiplierFor(elapsed);
+    const stuckMult = STUCK_PENALTY_FACTOR ** stuckCount;
+    const total = Math.round(score * statusFrac * timeMult * stuckMult);
 
     const best = saveBestIfHigher(hooks.bestKey, total);
 
-    const signed = (n: number) => (n > 0 ? '+' + n : String(n));
-    const row = (label: string, value: number) =>
-      `<div class="end-row"><span>${label}</span><span>${signed(value)}</span></div>`;
+    const row = (label: string, value: string) =>
+      `<div class="end-row"><span>${label}</span><span>${value}</span></div>`;
 
     refs.endTitleEl.textContent = '挑战结束';
     refs.endScoreEl.textContent = String(total);
     refs.endBreakdownEl.innerHTML =
-      row('得分', score) +
-      row(`未完成 × ${unfinished}（每处 -${PENALTY_PER_UNFINISHED}）`, -unfinishedPenalty) +
-      row(`状态加成（${statusPercent}%）`, statusBonus) +
-      row('用时加成', timeBonus);
+      row('得分', String(score)) +
+      row(`有效得分率（${statusPercent}%）`, '×' + statusFrac.toFixed(2)) +
+      row('用时系数', '×' + timeMult) +
+      (stuckCount > 0 ? row(`卡死方块 × ${stuckCount}`, '×' + stuckMult.toFixed(2)) : '');
     refs.endDetailEl.textContent =
       reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
     refs.endOverlay.classList.add('show');
+  }
+
+  /**
+   * Cycles the red "stuck" glow through each permanently-unmatchable group
+   * one at a time (giving the player a moment to see why the run is ending),
+   * then shows the end screen with that count folded into the composite
+   * score via STUCK_PENALTY_FACTOR.
+   */
+  function beginStuckSequence(groups: Cell[][]) {
+    if (!hooks.highlightStuck) {
+      endGame('无法继续匹配', groups.length);
+      return;
+    }
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let i = 0;
+    const step = () => {
+      if (gameOver) return;
+      if (i >= groups.length) {
+        hooks.highlightStuck?.(null);
+        hooks.render();
+        endGame('无法继续匹配', groups.length);
+        return;
+      }
+      hooks.highlightStuck?.(groups[i]);
+      hooks.render();
+      i++;
+      setTimeout(step, reduceMotion ? 0 : STUCK_CYCLE_MS);
+    };
+    step();
   }
 
   // A chain reaction is revealed one beat at a time instead of jumping
@@ -193,7 +242,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resolving = true;
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
-    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask);
+    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, everScoredPatterns);
     const multiplier = streak.currentMultiplier();
     // A chain reaction within *this* move is rewarded on top of (not instead
     // of) the cross-move streak above: that streak's own multiplier is fixed
@@ -230,8 +279,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       streak.apply(totalRaw); // advances/resets the streak level; its delta was already distributed live below
       perf.onMove(totalRaw > 0);
       updatePerfDisplay();
+      if (gameOver) {
+        resolving = false;
+        return;
+      }
+      if (hooks.isGameOver()) {
+        resolving = false;
+        endGame('全部方块已翻成点面');
+        return;
+      }
+      const stuck = hooks.findStuckGroups?.() ?? [];
+      if (stuck.length) {
+        beginStuckSequence(stuck); // resolving stays true through the cycle, cleared by endGame
+        return;
+      }
       resolving = false;
-      if (!gameOver && hooks.isGameOver()) endGame('全部方块已翻成点面');
     };
 
     const step = () => {

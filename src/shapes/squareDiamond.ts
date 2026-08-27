@@ -4,7 +4,9 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, applyScoreAnimations } from '../engine/scoreOutline';
+import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -55,6 +57,45 @@ function buildLines(): Line[] {
   return lines;
 }
 const LINES = buildLines();
+
+// The board's non-linear "22"/"121" bonus shapes, matching the base circle
+// game's own patterns (see circle.ts) — expressed in the underlying square
+// grid's own (r,c) steps along the A (row) and B (column) families. Both of
+// those families render as *screen-diagonal* once the whole board is
+// rotated 45° for display (see famVector below), so a shape built purely
+// from A/B steps reads as a genuine on-screen rhombus/diamond, exactly like
+// the "菱形" name for this layout promises — no separate diagonal-family
+// math needed. "22" gets both leaning directions (mirrors of each other);
+// "121" only needs the one orientation, matching circle.ts's own choice.
+function inBounds(r: number, c: number): boolean {
+  return r >= 0 && r < BOARD_DIM && c >= 0 && c < BOARD_DIM;
+}
+function rhombus22Right(r: number, c: number): Cell[] | null {
+  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
+  return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
+}
+function rhombus22Left(r: number, c: number): Cell[] | null {
+  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c - 1], [r + 1, c]];
+  return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
+}
+function diamond121(r: number, c: number): Cell[] | null {
+  const cells: Cell[] = [[r, c], [r + 1, c], [r + 1, c + 1], [r + 2, c + 1]];
+  return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
+}
+function allClusters(): Cell[][] {
+  const groups: Cell[][] = [];
+  for (let r = 0; r < BOARD_DIM; r++)
+    for (let c = 0; c < BOARD_DIM; c++) {
+      const right = rhombus22Right(r, c);
+      if (right) groups.push(right);
+      const left = rhombus22Left(r, c);
+      if (left) groups.push(left);
+      const d = diamond121(r, c);
+      if (d) groups.push(d);
+    }
+  return groups;
+}
+const CLUSTERS = allClusters();
 
 function lineFor(fam: Fam, r: number, c: number): Line {
   const line = LINES.find((l) => l.fam === fam && l.cells.some(([rr, cc]) => rr === r && cc === c));
@@ -108,7 +149,7 @@ export function createSquareDiamondGame(): ShapeGame {
         tagline: '沿水平或两条斜线方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平或斜线方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分；2×2 的同色小方块同样得 4 分。得分方块翻成点面。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得 36 分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白时结束，结算当时的分数。',
+          '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色方块也会一并计入；2×2 的同色小方块，以及同色的"22"/"121"菱形图案，同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白时结束，结算当时的分数。',
         assumptions:
           '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -131,6 +172,7 @@ export function createSquareDiamondGame(): ShapeGame {
         return cells.some(([r, c]) => isBlank(grid[r][c]));
       }
       let flipInCells = new Set<string>();
+      let stuckKeys: Set<string> | null = null;
 
       function newTile(color: number, dotColor: number): Tile {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
@@ -269,10 +311,37 @@ export function createSquareDiamondGame(): ShapeGame {
             const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
+            if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             refs.boardEl.appendChild(el);
           }
         }
         flipInCells = new Set();
+      }
+
+      // Physical edge-adjacency of the underlying square grid (rotating the
+      // whole board 45° for display doesn't change which cells actually
+      // touch) — the same 4-orthogonal-neighbor notion the 2x2 pattern below
+      // already uses, distinct from the ROW family's diagonal *slide* line.
+      // Used to expand a qualifying seed match into its full connected
+      // same-color region.
+      function squareDiamondNeighbors(r: number, c: number): Cell[] {
+        const out: Cell[] = [];
+        const cand: Cell[] = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+        for (const [rr, cc] of cand) {
+          if (rr >= 0 && rr < BOARD_DIM && cc >= 0 && cc < BOARD_DIM && !isBlank(grid[rr][cc])) out.push([rr, cc]);
+        }
+        return out;
+      }
+      function effColorAt(r: number, c: number): number {
+        return effColor(grid[r][c]);
+      }
+      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
+        if (anyBlank(seed)) return;
+        const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
+        const region = floodFillSameColor(seed, effColorAt, squareDiamondNeighbors);
+        matches.push({ cells: region, points: Math.max(4, region.length) });
       }
 
       function findRunMatches(mask: Set<string> | null): Match[] {
@@ -280,28 +349,25 @@ export function createSquareDiamondGame(): ShapeGame {
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            const windowCells = cells.slice(i, i + 4);
-            if (anyBlank(windowCells)) continue;
-            const c0 = effColor(grid[windowCells[0][0]][windowCells[0][1]]);
-            if (!windowCells.every(([r, c]) => effColor(grid[r][c]) === c0)) continue;
-            if (mask && !windowCells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-            matches.push({ cells: windowCells, points: 4 });
+            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
           }
         }
         for (let r = 0; r < BOARD_DIM - 1; r++)
           for (let c = 0; c < BOARD_DIM - 1; c++) {
-            const cells: Cell[] = [
-              [r, c],
-              [r, c + 1],
-              [r + 1, c],
-              [r + 1, c + 1],
-            ];
-            if (anyBlank(cells)) continue;
-            const c0 = effColor(grid[r][c]);
-            if (!cells.every(([rr, cc]) => effColor(grid[rr][cc]) === c0)) continue;
-            if (mask && !cells.some(([rr, cc]) => mask.has(cellKey(rr, cc)))) continue;
-            matches.push({ cells, points: 4 });
+            pushExpandedMatch(
+              matches,
+              [
+                [r, c],
+                [r, c + 1],
+                [r + 1, c],
+                [r + 1, c + 1],
+              ],
+              mask,
+            );
           }
+        for (const cells of CLUSTERS) {
+          pushExpandedMatch(matches, cells, mask);
+        }
         return matches;
       }
 
@@ -345,7 +411,6 @@ export function createSquareDiamondGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          bonusPointsPerLine: 36,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
         };
@@ -355,16 +420,25 @@ export function createSquareDiamondGame(): ShapeGame {
         return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
       }
 
-      function countUnfinished(): number {
-        let n = 0;
-        for (const row of grid) for (const t of row) if (!isBlank(t) && t.face === 'flavor') n++;
-        return n;
+      function findStuckGroups(): Cell[][] {
+        const live: LiveTile[] = [];
+        for (let r = 0; r < BOARD_DIM; r++)
+          for (let c = 0; c < BOARD_DIM; c++) {
+            const t = grid[r][c];
+            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+          }
+        return findStuckColorGroups(live);
+      }
+
+      function highlightStuck(cells: Cell[] | null) {
+        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
 
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
         outlineTracker.reset();
+        stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
@@ -374,8 +448,9 @@ export function createSquareDiamondGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
-        countUnfinished,
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups),
+        findStuckGroups,
+        highlightStuck,
+        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
           if (lineBonusGroups.length) {
             playBlankTransition(lineBonusGroups, pendingBlankSnapshot);
