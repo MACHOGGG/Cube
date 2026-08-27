@@ -1,5 +1,5 @@
 import type { Cell, Match, Tile } from './types';
-import { cellKey, effColor } from './types';
+import { cellKey } from './types';
 
 export interface StreakTracker {
   /** Feeds one move's raw (un-multiplied) points in; returns the score delta to add (0 if the move scored nothing, which also resets the streak). */
@@ -99,23 +99,39 @@ export interface CascadeStepper {
 export function createCascadeStepper(
   cfg: CascadeConfig,
   initialMask: Set<string> | null,
-  // Cross-move anti-oscillation guard (e.g. shifting a line up to score,
-  // then back down to reproduce the exact same local pattern and score it
-  // again, repeated forever): the caller owns this set for the whole game
-  // (passing the same Set back in on every move) so a (cells, color)
-  // pattern that has ever scored can never pay out again — closing the
-  // farm regardless of how many times the same shift is repeated. Left
-  // empty and un-persisted by a caller (e.g. the tutorial board) that
-  // doesn't need the guard.
-  everScoredPatterns: Set<string> = new Set(),
+  // Anti-farming guard, both within one cascade and across the whole game:
+  // the caller owns this set for the whole game (passing the same Set back
+  // in on every move) so the exact same group of physical tiles (by
+  // permanent id, not by row/col — those shift whenever a line is removed,
+  // and a match can be entirely already-dot so face doesn't distinguish
+  // them either) can never pay out twice, no matter how many times a shift
+  // is repeated, undone, or re-applied to reach that same grouping again.
+  //
+  // This is deliberately keyed by tile identity rather than by (cells,
+  // color): keying by cell position instead would block a *different* set
+  // of tiles from ever scoring again just because some earlier, unrelated
+  // match once used that same patch of the board with the same color — a
+  // false block, not a farming guard — while simultaneously *failing* to
+  // catch a real farm where the same tiles keep re-forming a match at
+  // shifting cell coordinates (a long run oscillating past a fixed
+  // neighbour, say). Keying by tile id set fixes both: it only ever blocks
+  // literally the same tiles from re-scoring together, and it does so
+  // regardless of where on the board they happen to be sitting this time.
+  //
+  // For a run of N same-color tiles sliding past a fixed neighbour, this
+  // bounds the exploit rather than closing it outright — the row only has N
+  // distinct rotations, so at most N distinct tile-id groups can ever form
+  // there, each paying out once and then staying blocked forever — instead
+  // of the unbounded repeat-forever farm the old per-position guard allowed.
+  //
+  // Left empty and un-persisted by a caller (e.g. the tutorial board) that
+  // doesn't need the cross-move guard; even then, still used for the rest of
+  // *this* cascade so a match with nothing left to flip doesn't get "found"
+  // again on every subsequent step.
+  everScoredTileGroups: Set<string> = new Set(),
 ): CascadeStepper {
   let mask = initialMask;
   let terminal = false;
-  // Identifies a match by the permanent ids of its tiles, not by row/col
-  // (which shift whenever a line is removed) or by face (a match can be
-  // entirely already-dot). Without this, a match with nothing left to flip
-  // would get "found" again on every step forever.
-  const scoredSignatures = new Set<string>();
 
   function next(): CascadeStep | null {
     if (terminal) return null;
@@ -138,21 +154,8 @@ export function createCascadeStepper(
         .map(([r, c]) => cfg.tileAt(r, c).id)
         .sort((a, b) => a - b)
         .join(',');
-      if (scoredSignatures.has(sig)) return false;
-      scoredSignatures.add(sig);
-
-      // The local pattern this specific match represents — same cells, same
-      // effective color — regardless of which physical tiles occupy them or
-      // what changed anywhere else on the board (see the doc comment above).
-      const patternSig =
-        m.cells
-          .map(([r, c]) => cellKey(r, c))
-          .sort()
-          .join('|') +
-        '#' +
-        effColor(cfg.tileAt(m.cells[0][0], m.cells[0][1]));
-      if (everScoredPatterns.has(patternSig)) return false;
-      everScoredPatterns.add(patternSig);
+      if (everScoredTileGroups.has(sig)) return false;
+      everScoredTileGroups.add(sig);
       return true;
     });
     if (matches.length) {

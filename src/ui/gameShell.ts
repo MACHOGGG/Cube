@@ -36,6 +36,8 @@ export interface ShellRefs {
     continueBtn: HTMLButtonElement;
     restart: HTMLButtonElement;
     endBack: HTMLButtonElement;
+    /** Hidden until some tile is genuinely unable to ever flip again; the player decides when (or whether) to end the run over it, rather than the run ending on its own. */
+    stuckEnd: HTMLButtonElement;
     extra: Record<string, HTMLButtonElement>;
   };
 }
@@ -78,6 +80,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
 
       <div class="legend" id="legend"></div>
+      <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>无法全部翻面 · 点击结束本局</button>
       <p class="hint">${meta.hint}</p>
       <p class="assumptions">${meta.assumptions}</p>
     </div>
@@ -146,6 +149,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       continueBtn: req('continueBtn'),
       restart: req('restartBtn'),
       endBack: req('endBackBtn'),
+      stuckEnd: req('stuckEndBtn'),
       extra,
     },
   };

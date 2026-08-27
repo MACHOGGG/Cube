@@ -396,25 +396,39 @@ export function createCircleHexGame(): ShapeGame {
         return matches;
       }
 
+      function isCenter(r: number, c: number): boolean {
+        return r === CENTER_CELL[0] && c === CENTER_CELL[1];
+      }
+
       function isFullDotMatch(cells: Cell[]): boolean {
         if (cells.some(([r, c]) => grid[r][c].face !== 'dot')) return false;
         const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
         return cells.every(([r, c]) => grid[r][c].dotColor === c0);
       }
 
+      // The permanent center hole sits on exactly one line per family (the
+      // row/axis that passes through the board's true center) — it never
+      // holds a tile, so it must not count as "still needs a color to
+      // agree with the rest of the line" the way an ordinary blank left
+      // over from an earlier bonus does. Excluding it by its fixed
+      // coordinates (not via isBlank, which can't tell the permanent hole
+      // apart from a spent bonus cell — both just read color === BLANK)
+      // lets those 3 lines bonus on their remaining real cells instead of
+      // being permanently unscoreable.
       function findWholeLineBonuses(): Cell[][] {
         const found: Cell[][] = [];
         for (const line of LINES) {
-          if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          if (anyBlank(line.cells)) continue;
-          if (!isFullDotMatch(line.cells)) continue;
-          const sig = line.cells
+          const cells = line.cells.filter(([r, c]) => !isCenter(r, c));
+          if (cells.length < MIN_LINE_BONUS_LEN) continue;
+          if (anyBlank(cells)) continue;
+          if (!isFullDotMatch(cells)) continue;
+          const sig = cells
             .map(([r, c]) => grid[r][c].id)
             .sort((a, b) => a - b)
             .join(',');
           if (bonusedSignatures.has(sig)) continue;
           bonusedSignatures.add(sig);
-          found.push(line.cells);
+          found.push(cells);
         }
         return found;
       }

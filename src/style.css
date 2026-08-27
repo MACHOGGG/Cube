@@ -210,10 +210,12 @@ h1 {
   }
 }
 
-/* Red "this can never score again" glow for a permanently stuck tile —
-   a shape applies this class (or its own outline-overlay equivalent) to the
-   cells GameController names via the highlightStuck hook, cycling through
-   groups one at a time right before the run auto-ends. */
+/* Red "this can never score again" glow for a permanently stuck tile — a
+   shape applies this class (or its own outline-overlay equivalent) to every
+   cell GameController names via the highlightStuck hook, all at once and for
+   as long as they stay stuck (the run doesn't end on its own over this —
+   see stuckEndBtn below, which shares this same flash so the two read as
+   one signal: "these tiles, that button"). */
 .stuck-glow { animation: stuck-glow 1s ease-in-out infinite; }
 @keyframes stuck-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
@@ -222,6 +224,19 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .stuck-glow { animation: none; box-shadow: 0 0 10px 3px rgba(220,38,38,0.5); }
 }
+
+/* Only shown once findStuckGroups actually returns something — the
+   player's own way to end a run that can never fully flip, instead of it
+   ending on its own. Reuses .stuck-glow's exact animation so the flashing
+   button and the flashing tiles it refers to read as the same prompt. */
+.stuck-end-btn {
+  display: block; width: 100%; margin: 4px 0;
+  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600;
+  background: var(--surface); color: #B91C1C; border: 1px solid rgba(220,38,38,0.4);
+  border-radius: 12px; padding: 10px 16px; cursor: pointer;
+}
+.stuck-end-btn:hover { filter: brightness(0.98); border-color: #B91C1C; }
+.stuck-end-btn[hidden] { display: none; }
 
 /* The light "pressing into place" pulse lives on the scored tile/ball/tri
    *itself* (applied inline by each shape, synced to the same elapsed time as

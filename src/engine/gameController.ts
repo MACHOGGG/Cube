@@ -15,9 +15,10 @@ export interface CascadeStepGroups {
 /**
  * The composite end-of-run score multiplies the raw score by the live
  * "有效得分率" hit-rate gauge (as a fraction) and a time-elapsed bracket —
- * faster clears are rewarded, slower ones tapered — then, if any tiles were
- * left in a position that can never score again (see findStuckGroups),
- * further multiplies by STUCK_PENALTY_FACTOR once per such tile.
+ * faster clears are rewarded, slower ones tapered — then, if the run ended
+ * with one or more colors permanently unable to ever flip again (see
+ * stalemate.ts and stuckEndBtn), further multiplies by STUCK_PENALTY_FACTOR
+ * once per such stuck color/group (not per tile).
  */
 const TIME_BRACKETS: [maxSec: number, mult: number][] = [
   [60, 2],
@@ -32,7 +33,6 @@ function timeMultiplierFor(elapsedSec: number): number {
   return TIME_BRACKET_FALLBACK_MULT;
 }
 const STUCK_PENALTY_FACTOR = 0.95;
-const STUCK_CYCLE_MS = 900;
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -148,10 +148,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let paused = false;
   let gameOver = false;
   let resolving = false;
-  // Every (cells, color) match pattern that has ever scored this game — see
-  // createCascadeStepper's everScoredPatterns param — persists across moves
-  // so an oscillating shift-and-unshift can't keep re-scoring the same spot.
-  let everScoredPatterns = new Set<string>();
+  // Every group of physical tiles (by permanent id) that has ever scored
+  // together this game — see createCascadeStepper's everScoredTileGroups
+  // param — persists across moves so the same tiles can't keep re-scoring
+  // by oscillating or cycling back through earlier positions.
+  let everScoredTileGroups = new Set<string>();
+  // Every group of cells findStuckGroups has ever named this game — once a
+  // color is genuinely stuck it can only ever stay that way (see
+  // stalemate.ts: nothing can un-flip), so this only ever grows. The run
+  // does NOT end because of it; the player ends it themselves via
+  // stuckEndBtn, once they've decided nothing more is worth waiting for.
+  let stuckGroups: Cell[][] = [];
+
+  function updateStuckState(groups: Cell[][]) {
+    stuckGroups = groups;
+    hooks.highlightStuck?.(groups.length ? groups.flat() : null);
+    refs.buttons.stuckEnd.hidden = groups.length === 0;
+  }
 
   function newGame() {
     hooks.resetBoard();
@@ -163,11 +176,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     streak.reset();
     scoreReel.reset();
     perf.reset();
-    everScoredPatterns = new Set();
+    everScoredTileGroups = new Set();
     updatePerfDisplay();
     timer.start();
     hooks.render();
-    hooks.highlightStuck?.(null);
+    updateStuckState([]);
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
   }
@@ -201,35 +214,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endOverlay.classList.add('show');
   }
 
-  /**
-   * Cycles the red "stuck" glow through each permanently-unmatchable group
-   * one at a time (giving the player a moment to see why the run is ending),
-   * then shows the end screen with that count folded into the composite
-   * score via STUCK_PENALTY_FACTOR.
-   */
-  function beginStuckSequence(groups: Cell[][]) {
-    if (!hooks.highlightStuck) {
-      endGame('无法继续匹配', groups.length);
-      return;
-    }
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let i = 0;
-    const step = () => {
-      if (gameOver) return;
-      if (i >= groups.length) {
-        hooks.highlightStuck?.(null);
-        hooks.render();
-        endGame('无法继续匹配', groups.length);
-        return;
-      }
-      hooks.highlightStuck?.(groups[i]);
-      hooks.render();
-      i++;
-      setTimeout(step, reduceMotion ? 0 : STUCK_CYCLE_MS);
-    };
-    step();
-  }
-
   // A chain reaction is revealed one beat at a time instead of jumping
   // straight to its end state: each match wave is highlighted while its
   // tiles still show their pre-match face, held for HIGHLIGHT_LEAD_MS, then
@@ -244,7 +228,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resolving = true;
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
-    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, everScoredPatterns);
+    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, everScoredTileGroups);
     const multiplier = streak.currentMultiplier();
     // A chain reaction within *this* move is rewarded on top of (not instead
     // of) the cross-move streak above: that streak's own multiplier is fixed
@@ -290,11 +274,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         endGame('全部方块已翻成点面');
         return;
       }
-      const stuck = hooks.findStuckGroups?.() ?? [];
-      if (stuck.length) {
-        beginStuckSequence(stuck); // resolving stays true through the cycle, cleared by endGame
-        return;
-      }
+      updateStuckState(hooks.findStuckGroups?.() ?? []);
       resolving = false;
     };
 
@@ -358,7 +338,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   function doFinish() {
     if (!started || gameOver) return;
-    endGame('手动结束');
+    endGame('手动结束', stuckGroups.length);
+  }
+
+  function doFinishStuck() {
+    if (!started || gameOver || !stuckGroups.length) return;
+    endGame('无法继续匹配', stuckGroups.length);
   }
 
   refs.buttons.start.addEventListener('click', () => {
@@ -370,6 +355,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   refs.buttons.stop.addEventListener('click', doPause);
   refs.buttons.continueBtn.addEventListener('click', doResume);
   refs.buttons.finish.addEventListener('click', doFinish);
+  refs.buttons.stuckEnd.addEventListener('click', doFinishStuck);
 
   return {
     get score() {
