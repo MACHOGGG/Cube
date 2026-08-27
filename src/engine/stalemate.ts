@@ -8,42 +8,53 @@ export interface LiveTile {
   tile: Tile;
 }
 
+function groupBy(liveTiles: LiveTile[], key: (t: Tile) => number): LiveTile[][] {
+  const map = new Map<number, LiveTile[]>();
+  for (const lt of liveTiles) {
+    const arr = map.get(key(lt.tile));
+    if (arr) arr.push(lt);
+    else map.set(key(lt.tile), [lt]);
+  }
+  return [...map.values()];
+}
+
 /**
- * Groups every still-live tile by its permanent dotColor — the color it
- * shows once flipped, fixed at deck-build time and unaffected by which face
- * happens to be showing right now — and returns, for each dotColor with
- * fewer than MIN_MATCH_SIZE tiles left anywhere on the board, that color's
- * full remaining cell list as one stuck group.
+ * A whole-line bonus only ever fires on a line that's *already* entirely one
+ * dot color (see each shape's isFullDotMatch), so it always consumes a big
+ * slice of exactly one dotColor's total supply in a single event — and every
+ * shape keeps that color's total supply small (5-9 tiles) by design. That
+ * means a dotColor dropping below MIN_MATCH_SIZE the instant a line bonus
+ * fires is not a rare edge case, it is the *normal* outcome of the very
+ * first line bonus in a run. Ending the whole game right there — the
+ * player's first big win — would make nearly every run stop almost
+ * immediately, which is not a stalemate, just an unlucky (or even a
+ * perfectly ordinary) bit of geometry.
  *
- * This must NOT group by current effective color (flavor color if still
- * flavor-faced, dotColor if already flipped): an ordinary match flips 4+
- * tiles from their flavor color to their own individual dotColors in one
- * step, so "how many tiles currently show color X" swings wildly on every
- * single move even though nothing was removed from the board — grouping by
- * that would flag a color as stuck moments after a completely unrelated
- * match, the instant its current on-screen count happened to dip low,
- * while still-flavor-faced tiles elsewhere whose *own* preassigned dotColor
- * is that same color sit ready to join it the moment *they* flip.
+ * A dotColor going dead like that only means those specific tiles, once
+ * flipped, can never join *another* dot-match or line bonus — it does not
+ * stop anything else on the board. Flipping (flavor face -> dot face) is
+ * driven entirely by *flavor*-color matches, which have nothing to do with
+ * dotColor accounting, so every other still-flavor-faced tile keeps flipping
+ * normally regardless of which dotColors have already been exhausted.
  *
- * dotColor is assigned once per tile at creation and never changes
- * afterwards, so this grouping is provably invariant across every ordinary
- * match (flipping changes a tile's face, never its dotColor) — the only
- * thing that can ever shrink a dotColor's count is a whole-line bonus
- * actually removing or blanking tiles. That is exactly why this check only
- * ever finds something the moment after a line has been cleared, with no
- * separate gating needed: before any removal, every dotColor still has its
- * full original count (safely above the minimum by deck construction).
+ * The board can only *truly* never progress again once every remaining
+ * flavor-faced tile's own flavor color is itself down to fewer than
+ * MIN_MATCH_SIZE flavor-faced tiles — at that point nothing left can ever
+ * complete a qualifying match, so nothing can ever flip again, and the game
+ * would otherwise run forever short of that. That is the only condition
+ * allowed to end the run. When it fires, the returned groups additionally
+ * include any dotColor already reduced below MIN_MATCH_SIZE (whether or not
+ * its own remaining tiles have flipped yet) purely so the reveal-and-settle
+ * sequence can show the player every color that ended up unresolved.
  */
 export function findStuckColorGroups(liveTiles: LiveTile[]): Cell[][] {
-  const byDotColor = new Map<number, Cell[]>();
-  for (const { cell, tile } of liveTiles) {
-    const cells = byDotColor.get(tile.dotColor);
-    if (cells) cells.push(cell);
-    else byDotColor.set(tile.dotColor, [cell]);
-  }
-  const groups: Cell[][] = [];
-  for (const cells of byDotColor.values()) {
-    if (cells.length < MIN_MATCH_SIZE) groups.push(cells);
-  }
-  return groups;
+  const flavorFaced = liveTiles.filter((lt) => lt.tile.face === 'flavor');
+  if (flavorFaced.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
+
+  const flavorGroups = groupBy(flavorFaced, (t) => t.color);
+  const stillProgressPossible = flavorGroups.some((g) => g.length >= MIN_MATCH_SIZE);
+  if (stillProgressPossible) return [];
+
+  const deadDotGroups = groupBy(liveTiles, (t) => t.dotColor).filter((g) => g.length < MIN_MATCH_SIZE);
+  return [...flavorGroups, ...deadDotGroups].map((g) => g.map((lt) => lt.cell));
 }

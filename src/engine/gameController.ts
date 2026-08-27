@@ -78,13 +78,15 @@ export interface GameControllerHooks {
    */
   onCommit?(matchGroups: Cell[][]): void;
   /**
-   * Checked after every move settles: groups of cells whose effective color
-   * now has too few tiles left anywhere on the board to ever complete
-   * another qualifying match (e.g. one flavor tile and one dot tile of the
-   * same color left with nothing else to combine with) — a permanent
-   * stalemate for those specific tiles. Each inner array is one such
-   * color's remaining cells. Omit, or return [], if the shape doesn't
-   * implement stalemate detection.
+   * Checked after every move settles: [] unless the board has reached a
+   * true dead end (every remaining not-yet-flipped tile's own flavor color
+   * is too depleted to ever complete another match, so nothing can ever
+   * flip again) — see stalemate.ts for why this is deliberately much
+   * narrower than "some dot color is already exhausted" (that happens
+   * routinely, right after an ordinary whole-line bonus, without blocking
+   * the rest of the game). Each inner array is one dead color's remaining
+   * cells, shown to the player before settling. Omit, or return [], if the
+   * shape doesn't implement stalemate detection.
    */
   findStuckGroups?(): Cell[][];
   /**
