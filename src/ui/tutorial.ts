@@ -1,27 +1,32 @@
 import '../shapes/square.css';
 import { magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
-import { shuffle } from '../engine/rng';
+import { createOutlineTracker, applyScoreAnimations } from '../engine/scoreOutline';
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 
-// A single scripted walkthrough of the square game's core mechanics, told as
-// one continuous 4x4 board rather than a fresh random layout per step (the
-// whole point being that the player recognizes "the same board from a
-// moment ago", not a new flashcard each time). Every beat's starting grid
-// below is hand-authored and was verified with a throwaway simulation
-// script before being written here — see the shift math in each beat's
-// comment. Colors are indices into a small palette that gets reshuffled
-// every time the tutorial mounts (so replays don't look identical), but the
-// *structure* (which cell holds which role) never changes, which is what
-// the verified shift math depends on.
+// A scripted walkthrough of the square game's mechanics, told as one 5x5
+// board that visibly carries its story forward from step to step (never a
+// fresh random layout). Unlike the very first version of this tutorial, the
+// player isn't limited to one pre-picked row/column per step: any row or
+// column can be dragged, a persistent highlight box just marks *a* region
+// worth aiming for, and a generic scanner recognizes a match wherever one
+// actually forms — so a player who scores "the wrong way" still gets full,
+// real credit (same flip/glow animation the real square game uses) instead
+// of being told to try again.
 type Face = 'F' | 'D';
 interface TTile {
   color: number;
   face: Face;
   dotColor: number;
 }
+// Every tile's eventual back color is fixed at creation time (mirrors the
+// real game: a tile's dot color is decided when the deck is built, not when
+// it happens to flip) — 0(blue) backs to 2(magenta), 1(green) backs to
+// 3(gold), and the rest self-pair. This lets *any* match the player forms,
+// scripted or incidental, flip to a well-defined color.
+const DOT_MAP: Record<number, number> = { 0: 2, 1: 3, 2: 2, 3: 3, 4: 4, 5: 5 };
 function tf(color: number): TTile {
-  return { color, face: 'F', dotColor: -1 };
+  return { color, face: 'F', dotColor: DOT_MAP[color] };
 }
 function td(dotColor: number): TTile {
   return { color: -1, face: 'D', dotColor };
@@ -33,156 +38,164 @@ type Grid = TTile[][];
 function cloneGrid(g: Grid): Grid {
   return g.map((row) => row.map((t) => ({ ...t })));
 }
-
-const DIM = 4;
-// role indices: 0=A(blue) 1=B(green) 2=MIX(magenta, A's back and the shared
-// mixed-face color) 3=BONUS(gold, B's back) 4=filler(gray)
-const COLOR_POOL = ['#4C7EAD', '#4A9573', '#AD5C82', '#D89B1E', '#9B958D', '#C46A4E'];
-function rolledPalette(): string[] {
-  return shuffle([...COLOR_POOL]).slice(0, 5);
+function key(r: number, c: number): string {
+  return r + ',' + c;
 }
 
-interface Move {
-  axis: 'row' | 'col';
-  index: number;
-  shift: number; // the one verified shift that completes this beat
+const DIM = 5;
+// A checkerboard of two neutral fillers (4/5) so no untouched cell can ever
+// accidentally line up into a false match — every beat below only writes
+// the specific cells its own story needs, leaving the rest of this base
+// alone.
+function cb(r: number, c: number): number {
+  return (r + c) % 2 === 0 ? 4 : 5;
 }
+function baseGrid(): Grid {
+  const g: Grid = [];
+  for (let r = 0; r < DIM; r++) {
+    const row: TTile[] = [];
+    for (let c = 0; c < DIM; c++) row.push(tf(cb(r, c)));
+    g.push(row);
+  }
+  return g;
+}
+type Override = [number, number, number] | [number, number, 'D', number];
+function withOverrides(overrides: Override[]): () => Grid {
+  return () => {
+    const g = baseGrid();
+    for (const o of overrides) {
+      if (o[2] === 'D') g[o[0]][o[1]] = td(o[3]);
+      else g[o[0]][o[1]] = tf(o[2] as number);
+    }
+    return g;
+  };
+}
+
+// Each beat's starting grid was verified with a throwaway simulation script
+// (checked: no unintended match exists before the move, and the intended
+// move — one of possibly several valid ones — produces exactly the pattern
+// that beat teaches) before being written here.
+const beat1Grid = withOverrides([
+  [4, 0, 1], [4, 1, 1], [4, 2, 1], // 3 of 4 already green in row 4
+  [0, 3, 1], // the 4th green tile, elsewhere in column 3
+]);
+const beat2Grid = withOverrides([
+  [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3], // beat 1's result, carried forward
+  [1, 1, 0], [1, 2, 0], [2, 2, 0], // 3 of a 2x2 already blue
+  [2, 3, 0], // the 4th, elsewhere in row 2
+]);
+const beat3Grid = withOverrides([
+  [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3],
+  [1, 1, 'D', 2], [1, 2, 'D', 2], [2, 1, 'D', 2], [2, 2, 'D', 2], // beat 2's result, already flipped
+]);
+const beat4Grid = withOverrides([
+  [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3],
+  [1, 1, 'D', 2], [1, 2, 'D', 2], [2, 1, 'D', 2], [2, 2, 'D', 2],
+  [1, 3, 'D', 2], [1, 4, 'D', 2], // 2 more already-flipped magenta tiles
+  [0, 0, 2], [0, 1, 2], // 2 fresh magenta tiles that can slide up to join them
+]);
+const beat5Grid = withOverrides([
+  [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3], [4, 4, 'D', 3], // row 4, now entirely gold
+  [1, 1, 'D', 2], [1, 2, 'D', 2], [2, 1, 'D', 2], [2, 2, 'D', 2], [1, 3, 'D', 2], [1, 4, 'D', 2],
+  [0, 0, 'D', 2], [0, 1, 'D', 2],
+]);
+
+type Goal = 'any' | 'mixed' | 'wholeLine' | 'none';
 interface Beat {
   captionKey: keyof I18nStrings;
   grid: () => Grid;
-  move: Move | null; // null = reveal-only beat (no drag needed)
-  targetCells: [number, number][]; // cells whose shared effColor marks success
-  flipTo: number | null; // color index the target cells flip to once matched (null = already resolved, e.g. reveal beats)
-  arrow: { row?: number; col?: number; dir: 'left' | 'right' | 'up' | 'down' } | null;
-  revealDelayMs?: number; // for reveal-only beats, how long before auto-advance is offered
+  goal: Goal;
+  targetCells: [number, number][];
 }
+const BEATS: Beat[] = [
+  { captionKey: 'run4', grid: beat1Grid, goal: 'any', targetCells: [[4, 0], [4, 1], [4, 2], [4, 3]] },
+  { captionKey: 'twoByTwo', grid: beat2Grid, goal: 'any', targetCells: [[1, 1], [1, 2], [2, 1], [2, 2]] },
+  { captionKey: 'flip', grid: beat3Grid, goal: 'none', targetCells: [] },
+  { captionKey: 'mixedFace', grid: beat4Grid, goal: 'mixed', targetCells: [[0, 3], [0, 4], [1, 3], [1, 4]] },
+  { captionKey: 'wholeLine', grid: beat5Grid, goal: 'wholeLine', targetCells: [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4]] },
+];
 
-// ---------- beat 1: 2x2 ----------
-// row2 before = [3,4,0,0], shift=-1 (drag left) -> [4,0,0,3], giving
-// (1,1)(1,2)(2,1)(2,2) = 0,0,0,0. Verified.
-function beat1Grid(): Grid {
-  return [
-    [tf(4), tf(1), tf(4), tf(1)],
-    [tf(1), tf(0), tf(0), tf(4)],
-    [tf(3), tf(4), tf(0), tf(0)],
-    [tf(4), tf(1), tf(4), tf(1)],
-  ];
+interface FoundMatch {
+  cells: [number, number][];
 }
-
-// ---------- beat 2: 1x4 row, completed via a column drag ----------
-// bakes in beat 1's result (cells (1,1)(1,2)(2,1)(2,2) already flipped to
-// dotColor 2). col3 shift=+1 (drag down) -> row3 becomes [1,1,1,1]. Verified.
-function beat2Grid(): Grid {
-  return [
-    [tf(4), tf(1), tf(4), tf(4)],
-    [tf(4), td(2), td(2), tf(4)],
-    [tf(3), td(2), td(2), tf(1)],
-    [tf(1), tf(1), tf(1), tf(4)],
-  ];
+function scan2x2(grid: Grid): FoundMatch[] {
+  const found: FoundMatch[] = [];
+  for (let r = 0; r < DIM - 1; r++)
+    for (let c = 0; c < DIM - 1; c++) {
+      const cells: [number, number][] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+      const vals = cells.map(([rr, cc]) => eff(grid[rr][cc]));
+      if (vals.every((v) => v === vals[0])) found.push({ cells });
+    }
+  return found;
 }
-
-// ---------- beat 3: narrate the flip (reveal only, beat2's aftermath) ----------
-function beat3Grid(): Grid {
-  return [
-    [tf(4), tf(1), tf(4), tf(4)],
-    [tf(4), td(2), td(2), tf(4)],
-    [tf(3), td(2), td(2), tf(4)],
-    [td(3), td(3), td(3), td(3)],
-  ];
+function scanRun4(grid: Grid): FoundMatch[] {
+  const found: FoundMatch[] = [];
+  for (let r = 0; r < DIM; r++)
+    for (let start = 0; start + 3 < DIM; start++) {
+      const cells: [number, number][] = [0, 1, 2, 3].map((i) => [r, start + i] as [number, number]);
+      const vals = cells.map(([rr, cc]) => eff(grid[rr][cc]));
+      if (vals.every((v) => v === vals[0])) found.push({ cells });
+    }
+  for (let c = 0; c < DIM; c++)
+    for (let start = 0; start + 3 < DIM; start++) {
+      const cells: [number, number][] = [0, 1, 2, 3].map((i) => [start + i, c] as [number, number]);
+      const vals = cells.map(([rr, cc]) => eff(grid[rr][cc]));
+      if (vals.every((v) => v === vals[0])) found.push({ cells });
+    }
+  return found;
 }
-
-// ---------- beat 4: mixed flavor+dot match, row3 (from beat2) left untouched ----------
-// row0 shift=-1 (drag left) -> [4,4,2,2]; combined with row1's existing
-// dotColor-2 cells at c2/c3 gives (0,2)(0,3)(1,2)(1,3) all effColor 2. Verified.
-function beat4Grid(): Grid {
-  return [
-    [tf(2), tf(4), tf(4), tf(2)],
-    [tf(4), tf(4), td(2), td(2)],
-    [tf(3), td(2), td(2), tf(1)],
-    [td(3), td(3), td(3), td(3)],
-  ];
+// A match with no still-flavor cell is one that's already fully resolved
+// from an earlier beat sitting in view (e.g. beat 1's row) — not a new event.
+function hasFreshCell(grid: Grid, cells: [number, number][]): boolean {
+  return cells.some(([r, c]) => grid[r][c].face === 'F');
 }
-
-// ---------- beat 5: reveal the already-complete row3 as a whole-line bonus ----------
-function beat5Grid(): Grid {
-  return beat4Grid().map((row, r) => (r === 3 ? row.map(() => td(3)) : row));
+function hasMixedFaces(grid: Grid, cells: [number, number][]): boolean {
+  return new Set(cells.map(([r, c]) => grid[r][c].face)).size > 1;
 }
-
-function makeBeats(): Beat[] {
-  return [
-    {
-      captionKey: 'beat1',
-      grid: beat1Grid,
-      move: { axis: 'row', index: 2, shift: -1 },
-      targetCells: [
-        [1, 1],
-        [1, 2],
-        [2, 1],
-        [2, 2],
-      ],
-      flipTo: 2,
-      arrow: { row: 2, dir: 'left' },
-    },
-    {
-      captionKey: 'beat2',
-      grid: beat2Grid,
-      move: { axis: 'col', index: 3, shift: 1 },
-      targetCells: [
-        [3, 0],
-        [3, 1],
-        [3, 2],
-        [3, 3],
-      ],
-      flipTo: 3,
-      arrow: { col: 3, dir: 'down' },
-    },
-    {
-      captionKey: 'beat3',
-      grid: beat3Grid,
-      move: null,
-      targetCells: [],
-      flipTo: null,
-      arrow: null,
-      revealDelayMs: 1400,
-    },
-    {
-      captionKey: 'beat4',
-      grid: beat4Grid,
-      move: { axis: 'row', index: 0, shift: -1 },
-      targetCells: [
-        [0, 2],
-        [0, 3],
-        [1, 2],
-        [1, 3],
-      ],
-      flipTo: 2,
-      arrow: { row: 0, dir: 'left' },
-    },
-    {
-      captionKey: 'beat5',
-      grid: beat5Grid,
-      move: null,
-      targetCells: [
-        [3, 0],
-        [3, 1],
-        [3, 2],
-        [3, 3],
-      ],
-      flipTo: null,
-      arrow: null,
-      revealDelayMs: 1600,
-    },
-  ];
+function findQualifyingMatch(grid: Grid, goal: Goal): FoundMatch | null {
+  if (goal === 'none' || goal === 'wholeLine') return null;
+  const all = [...scan2x2(grid), ...scanRun4(grid)].filter((m) => hasFreshCell(grid, m.cells));
+  if (goal === 'mixed') return all.find((m) => hasMixedFaces(grid, m.cells)) ?? null;
+  return all[0] ?? null;
+}
+function findWholeLine(grid: Grid): [number, number][] | null {
+  for (let r = 0; r < DIM; r++) {
+    const cells: [number, number][] = Array.from({ length: DIM }, (_, c) => [r, c]);
+    if (cells.every(([rr, cc]) => grid[rr][cc].face === 'D')) {
+      const colors = cells.map(([rr, cc]) => grid[rr][cc].dotColor);
+      if (colors.every((v) => v === colors[0])) return cells;
+    }
+  }
+  for (let c = 0; c < DIM; c++) {
+    const cells: [number, number][] = Array.from({ length: DIM }, (_, r) => [r, c]);
+    if (cells.every(([rr, cc]) => grid[rr][cc].face === 'D')) {
+      const colors = cells.map(([rr, cc]) => grid[rr][cc].dotColor);
+      if (colors.every((v) => v === colors[0])) return cells;
+    }
+  }
+  return null;
+}
+function rowShift(grid: Grid, r: number, shift: number) {
+  const n = grid[r].length;
+  grid[r] = grid[r].map((_, i) => grid[r][(((i - shift) % n) + n) % n]);
+}
+function colShift(grid: Grid, c: number, shift: number) {
+  const n = grid.length;
+  const col = grid.map((row) => row[c]);
+  const shifted = col.map((_, i) => col[(((i - shift) % n) + n) % n]);
+  shifted.forEach((t, r) => (grid[r][c] = t));
 }
 
 export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () => void) {
   const s = STRINGS[lang];
-  const beats = makeBeats();
-  let palette = rolledPalette();
   let beatIndex = 0;
-  let grid: Grid = cloneGrid(beats[0].grid());
+  let grid: Grid = cloneGrid(BEATS[0].grid());
   let cell = 0;
-  let removedRow: number | null = null;
+  let removedCells = new Set<string>();
+  let flipInCells = new Set<string>();
+  let solved = false;
+  const outlineTracker = createOutlineTracker();
+  let autoTimer: number | undefined;
 
   container.innerHTML = `
     <div class="app">
@@ -195,6 +208,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       </div>
       <div class="tutorial-controls">
         <button class="icon-btn" id="skipBtn">${s.skip}</button>
+        <button class="icon-btn" id="prevBtn">${s.prev}</button>
         <button class="icon-btn" id="nextBtn">${s.next}</button>
       </div>
     </div>
@@ -206,12 +220,12 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
   const stepLabelEl = container.querySelector<HTMLElement>('#stepLabel')!;
   const checkEl = container.querySelector<HTMLElement>('#check')!;
   const skipBtn = container.querySelector<HTMLButtonElement>('#skipBtn')!;
+  const prevBtn = container.querySelector<HTMLButtonElement>('#prevBtn')!;
   const nextBtn = container.querySelector<HTMLButtonElement>('#nextBtn')!;
 
-  let dragOffset = 0; // live preview offset in cell-units, along the beat's axis
-  let solved = false;
-  let detachDrag: (() => void) | null = null;
-  let revealTimer: number | undefined;
+  let dragAxis: 'row' | 'col' | null = null;
+  let dragIndex = 0;
+  let dragOffset = 0;
 
   function layout() {
     const rect = boardWrap.getBoundingClientRect();
@@ -226,8 +240,12 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     const size = cell - 4;
     el.style.width = size + 'px';
     el.style.height = size + 'px';
-    el.style.left = c * cell + 2 + 'px';
-    el.style.top = r * cell + 2 + 'px';
+    let left = c * cell + 2;
+    let top = r * cell + 2;
+    if (dragAxis === 'row' && r === dragIndex) left += dragOffset * cell;
+    if (dragAxis === 'col' && c === dragIndex) top += dragOffset * cell;
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
     if (t.face === 'D') {
       el.style.background = 'transparent';
       const dot = document.createElement('div');
@@ -245,50 +263,44 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     return el;
   }
 
+  const PALETTE_POOL = ['#4C7EAD', '#4A9573', '#AD5C82', '#D89B1E', '#9B958D', '#C46A4E'];
+  const palette = PALETTE_POOL; // index-stable: 0..5 map directly, no reshuffle needed for correctness
+
   function render() {
     layout();
     boardEl.innerHTML = '';
+    const outlineEntries = outlineTracker.current();
+    const pulseMs = new Map<string, number>();
+    for (const { cells, elapsedMs } of outlineEntries) for (const [r, c] of cells) pulseMs.set(key(r, c), elapsedMs);
     for (let r = 0; r < DIM; r++) {
       for (let c = 0; c < DIM; c++) {
-        if (removedRow === r) continue;
+        if (removedCells.has(key(r, c))) continue;
         const el = makeTileEl(grid[r][c], r, c);
-        const beat = beats[beatIndex];
-        if (beat.move) {
-          const { axis, index } = beat.move;
-          if ((axis === 'row' && r === index) || (axis === 'col' && c === index)) {
-            if (axis === 'row') el.style.left = c * cell + 2 + dragOffset * cell + 'px';
-            else el.style.top = r * cell + 2 + dragOffset * cell + 'px';
-          }
-        }
+        applyScoreAnimations(el, flipInCells.has(key(r, c)), pulseMs.get(key(r, c)), true);
         boardEl.appendChild(el);
       }
     }
-    renderArrow();
+    flipInCells = new Set();
+    renderHighlightBox();
   }
 
-  function renderArrow() {
-    // Appended to boardWrap, not boardEl: the board itself clips overflow
-    // (so drag previews and the line-clear animation stay contained), but
-    // that would also clip an arrow meant to sit just outside its edge.
-    boardWrap.querySelectorAll('.tutorial-hint-arrow').forEach((el) => el.remove());
-    const beat = beats[beatIndex];
-    if (!beat.arrow) return;
-    const glyphs = { left: '‹', right: '›', up: '⌃', down: '⌄' };
-    const arrow = document.createElement('div');
-    arrow.className = 'tutorial-hint-arrow';
-    arrow.textContent = glyphs[beat.arrow.dir];
-    if (beat.arrow.row !== undefined) {
-      const r = beat.arrow.row;
-      const onLeft = beat.arrow.dir === 'left';
-      arrow.style.top = r * cell + cell / 2 - 11 + 'px';
-      arrow.style.left = onLeft ? '-26px' : cell * DIM + 6 + 'px';
-    } else if (beat.arrow.col !== undefined) {
-      const c = beat.arrow.col;
-      const onTop = beat.arrow.dir === 'up';
-      arrow.style.left = c * cell + cell / 2 - 11 + 'px';
-      arrow.style.top = onTop ? '-26px' : cell * DIM + 6 + 'px';
-    }
-    boardWrap.appendChild(arrow);
+  function renderHighlightBox() {
+    boardWrap.querySelectorAll('.tutorial-highlight-box').forEach((el) => el.remove());
+    const beat = BEATS[beatIndex];
+    if (!beat.targetCells.length || solved) return;
+    const rs = beat.targetCells.map(([r]) => r);
+    const cs = beat.targetCells.map(([, c]) => c);
+    const minR = Math.min(...rs);
+    const maxR = Math.max(...rs);
+    const minC = Math.min(...cs);
+    const maxC = Math.max(...cs);
+    const box = document.createElement('div');
+    box.className = 'tutorial-highlight-box';
+    box.style.left = minC * cell + 'px';
+    box.style.top = minR * cell + 'px';
+    box.style.width = (maxC - minC + 1) * cell + 'px';
+    box.style.height = (maxR - minR + 1) * cell + 'px';
+    boardWrap.appendChild(box);
   }
 
   function showCheck() {
@@ -296,144 +308,158 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     setTimeout(() => checkEl.classList.remove('show'), 900);
   }
 
-  function applyMoveToGrid(move: Move, shift: number) {
-    const n = DIM;
-    if (move.axis === 'row') {
-      const row = grid[move.index];
-      grid[move.index] = row.map((_, i) => row[(((i - shift) % n) + n) % n]);
-    } else {
-      const col = grid.map((row) => row[move.index]);
-      const shifted = col.map((_, i) => col[(((i - shift) % n) + n) % n]);
-      shifted.forEach((t, r) => (grid[r][move.index] = t));
-    }
-  }
-
-  function checkSolved(beat: Beat): boolean {
-    if (!beat.targetCells.length) return false;
-    const vals = beat.targetCells.map(([r, c]) => eff(grid[r][c]));
-    return vals.every((v) => v === vals[0]);
-  }
-
-  function flipTargets(beat: Beat) {
-    if (beat.flipTo === null) return;
-    for (const [r, c] of beat.targetCells) {
-      grid[r][c] = td(beat.flipTo);
-    }
-  }
-
   function goToBeat(i: number) {
-    clearTimeout(revealTimer);
-    detachDrag?.();
-    detachDrag = null;
+    clearTimeout(autoTimer);
     solved = false;
+    dragAxis = null;
     dragOffset = 0;
-    removedRow = null;
-    beatIndex = Math.max(0, Math.min(beats.length - 1, i));
-    grid = cloneGrid(beats[beatIndex].grid());
-    stepLabelEl.textContent = `${beatIndex + 1} / ${beats.length}`;
-    captionEl.textContent = s[beats[beatIndex].captionKey];
+    removedCells = new Set();
+    outlineTracker.reset();
+    beatIndex = Math.max(0, Math.min(BEATS.length - 1, i));
+    grid = cloneGrid(BEATS[beatIndex].grid());
+    stepLabelEl.textContent = `${beatIndex + 1} / ${BEATS.length}`;
+    captionEl.textContent = s[BEATS[beatIndex].captionKey];
+    prevBtn.style.visibility = beatIndex > 0 ? 'visible' : 'hidden';
     render();
-    wireBeat();
+    settleBeat();
   }
 
   function advance() {
-    if (beatIndex >= beats.length - 1) {
+    if (beatIndex >= BEATS.length - 1) {
+      cleanup();
       onDone();
       return;
     }
     goToBeat(beatIndex + 1);
   }
 
-  function wireBeat() {
-    const beat = beats[beatIndex];
-    if (!beat.move) {
-      // reveal-only beat: beat3 just narrates over the board and waits for
-      // "next"; beat5 additionally plays the whole-line bonus (glow, then
-      // the row clears) since its target cells are already matching.
-      if (beat.targetCells.length && checkSolved(beat)) {
-        revealTimer = window.setTimeout(() => {
-          const rows = new Set(beat.targetCells.map(([r]) => r));
-          const boardTiles = Array.from(boardEl.querySelectorAll<HTMLElement>('.tile'));
-          boardTiles.forEach((el) => {
-            const r = Number(el.dataset.r);
-            if (rows.has(r)) {
-              el.style.transition = 'opacity .6s ease, transform .6s ease';
-              el.style.opacity = '0';
-              el.style.transform = 'scale(0.7)';
-            }
-          });
-          vibrate([25, 40, 25]);
-          setTimeout(() => {
-            removedRow = [...rows][0];
-            render();
-          }, 620);
-        }, beat.revealDelayMs ?? 1200);
-      }
+  // Checks whether the current beat's goal is already satisfied (used right
+  // after entering a beat, and again after every drag) and plays the
+  // matching payoff if so.
+  function settleBeat() {
+    const beat = BEATS[beatIndex];
+    if (beat.goal === 'none') {
+      autoTimer = window.setTimeout(advance, 1800);
       return;
     }
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    function pos(e: PointerEvent) {
-      return beat.move!.axis === 'row' ? (e.clientX - startX) / cell : (e.clientY - startY) / cell;
+    if (beat.goal === 'wholeLine') {
+      const found = findWholeLine(grid);
+      if (found) playWholeLineBonus(found);
+      return;
     }
-    function down(e: PointerEvent) {
-      if (solved) return;
-      dragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      boardEl.setPointerCapture(e.pointerId);
-    }
-    function move(e: PointerEvent) {
-      if (!dragging) return;
-      dragOffset = magnetizeRawDist(pos(e));
-      render();
-    }
-    function up(e: PointerEvent) {
-      if (!dragging) return;
-      dragging = false;
-      const shift = Math.round(pos(e));
-      dragOffset = 0;
-      if (shift !== 0) applyMoveToGrid(beat.move!, shift);
-      render();
-      if (checkSolved(beat)) {
-        solved = true;
-        vibrate(15);
-        flipTargets(beat);
-        render();
-        showCheck();
-        setTimeout(advance, 1000);
-      }
-    }
-    boardEl.addEventListener('pointerdown', down);
-    boardEl.addEventListener('pointermove', move);
-    boardEl.addEventListener('pointerup', up);
-    boardEl.addEventListener('pointercancel', up);
-    detachDrag = () => {
-      boardEl.removeEventListener('pointerdown', down);
-      boardEl.removeEventListener('pointermove', move);
-      boardEl.removeEventListener('pointerup', up);
-      boardEl.removeEventListener('pointercancel', up);
-    };
+    const m = findQualifyingMatch(grid, beat.goal);
+    if (m) playMatch(m.cells);
   }
+
+  function playMatch(cells: [number, number][]) {
+    solved = true;
+    outlineTracker.add([cells]);
+    render();
+    vibrate(15);
+    setTimeout(() => {
+      for (const [r, c] of cells) {
+        grid[r][c] = td(grid[r][c].dotColor);
+        flipInCells.add(key(r, c));
+      }
+      render();
+      showCheck();
+      autoTimer = window.setTimeout(advance, 1100);
+    }, 550);
+  }
+
+  function playWholeLineBonus(cells: [number, number][]) {
+    solved = true;
+    outlineTracker.add([cells]);
+    render();
+    vibrate([25, 40, 25]);
+    autoTimer = window.setTimeout(() => {
+      const tiles = Array.from(boardEl.querySelectorAll<HTMLElement>('.tile'));
+      tiles.forEach((el) => {
+        const r = Number(el.dataset.r);
+        const c = Number(el.dataset.c);
+        if (cells.some(([rr, cc]) => rr === r && cc === c)) {
+          el.style.transition = 'opacity .6s ease, transform .6s ease';
+          el.style.opacity = '0';
+          el.style.transform = 'scale(0.7)';
+        }
+      });
+      showCheck();
+      setTimeout(() => {
+        for (const [r, c] of cells) removedCells.add(key(r, c));
+        render();
+        autoTimer = window.setTimeout(advance, 900);
+      }, 620);
+    }, 900);
+  }
+
+  // ---------- free-form drag: any row or column, like the real square game ----------
+  let dragging = false;
+  let sx = 0;
+  let sy = 0;
+  let startR = 0;
+  let startC = 0;
+
+  function down(e: PointerEvent) {
+    if (solved) return;
+    const rect = boardEl.getBoundingClientRect();
+    startR = Math.min(DIM - 1, Math.max(0, Math.floor((e.clientY - rect.top) / cell)));
+    startC = Math.min(DIM - 1, Math.max(0, Math.floor((e.clientX - rect.left) / cell)));
+    dragging = true;
+    sx = e.clientX;
+    sy = e.clientY;
+    boardEl.setPointerCapture(e.pointerId);
+  }
+  function move(e: PointerEvent) {
+    if (!dragging) return;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    if (!dragAxis) {
+      if (Math.hypot(dx, dy) < 8) return;
+      dragAxis = Math.abs(dx) > Math.abs(dy) ? 'row' : 'col';
+      dragIndex = dragAxis === 'row' ? startR : startC;
+    }
+    dragOffset = magnetizeRawDist((dragAxis === 'row' ? dx : dy) / cell);
+    render();
+  }
+  function up() {
+    if (!dragging) return;
+    dragging = false;
+    if (!dragAxis) return;
+    const shift = Math.round(dragOffset);
+    dragOffset = 0;
+    if (shift !== 0) {
+      if (dragAxis === 'row') rowShift(grid, dragIndex, shift);
+      else colShift(grid, dragIndex, shift);
+    }
+    dragAxis = null;
+    render();
+    settleBeat();
+  }
+  boardEl.addEventListener('pointerdown', down);
+  boardEl.addEventListener('pointermove', move);
+  boardEl.addEventListener('pointerup', up);
+  boardEl.addEventListener('pointercancel', up);
 
   const onResize = () => render();
   window.addEventListener('resize', onResize);
 
-  skipBtn.addEventListener('click', () => {
+  function cleanup() {
     window.removeEventListener('resize', onResize);
-    clearTimeout(revealTimer);
-    detachDrag?.();
+    boardEl.removeEventListener('pointerdown', down);
+    boardEl.removeEventListener('pointermove', move);
+    boardEl.removeEventListener('pointerup', up);
+    boardEl.removeEventListener('pointercancel', up);
+    clearTimeout(autoTimer);
+  }
+
+  skipBtn.addEventListener('click', () => {
+    cleanup();
     onDone();
   });
-  nextBtn.addEventListener('click', () => {
-    if (beatIndex >= beats.length - 1) {
-      window.removeEventListener('resize', onResize);
-      onDone();
-    } else {
-      goToBeat(beatIndex + 1);
-    }
+  prevBtn.addEventListener('click', () => {
+    if (beatIndex > 0) goToBeat(beatIndex - 1);
   });
+  nextBtn.addEventListener('click', advance);
 
   goToBeat(0);
 }
