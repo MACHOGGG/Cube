@@ -45,11 +45,6 @@ export function renderMenu(
       <h1>Slides</h1>
       <p class="tag-line">选择一种棋盘形状开始挑战</p>
 
-      <div class="home-wide-card" id="multiplayerCard">
-        <span class="wide-card-title">多人游玩</span>
-        <span class="wide-card-sub">敬请期待</span>
-      </div>
-
       <div class="menu-section-label">基础玩法</div>
       <div class="menu-grid-2col" id="baseGrid"></div>
       <button class="home-how-to" id="howToBtn">如何滑？· 重新观看新手教学</button>
@@ -63,6 +58,11 @@ export function renderMenu(
 
       <div class="menu-section-label">更多布局</div>
       <div class="menu-grid-2col" id="layoutsGrid"></div>
+
+      <div class="home-wide-card" id="multiplayerCard">
+        <span class="wide-card-title">多人游玩</span>
+        <span class="wide-card-sub">敬请期待</span>
+      </div>
 
       <div class="home-wide-card" id="rankingsCard">
         <span class="wide-card-title">成绩与排名</span>
