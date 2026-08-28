@@ -591,7 +591,6 @@ button:hover { filter: brightness(1.05); }
   50% { text-shadow: 0 0 22px var(--score-glow), 0 0 2px var(--accent); }
 }
 @media (prefers-reduced-motion: reduce) { .lang-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
-.lang-instructions { text-align: center; color: var(--ink-soft); font-size: 0.85rem; margin: -6px 0 4px; }
 
 /* A 9-row x 4-column letter grid styled like the game's own tiles — the
    portrait counterpart of the original 4x9 layout. Only 4 of the 9 rows are
@@ -607,22 +606,50 @@ button:hover { filter: brightness(1.05); }
 .lang-row-hit { position: absolute; touch-action: none; cursor: grab; z-index: 3; }
 .lang-row-hit--active { cursor: grabbing; }
 
-.lang-row-arrow {
-  position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 4;
-  display: flex; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
-  animation: lang-row-arrow-blink 1.4s ease-in-out infinite;
+/* Two hints per draggable row: the in-grid arrowhead sitting on the gap its
+   letter crosses, and a double chevron parked just off the board's right
+   edge marking the whole row as draggable. Both are positioned by JS against
+   --lang-cell-size (measured from a real tile), so they keep the reference
+   layout's proportions at any viewport size. */
+.lang-row-arrow, .lang-row-edge-arrow {
+  position: absolute; pointer-events: none; z-index: 4; display: flex;
 }
-.lang-row-arrow--flip svg { transform: scaleX(-1); }
-@keyframes lang-row-arrow-blink { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .lang-row-arrow { animation: none; opacity: 0.9; } }
+.lang-row-arrow { transform: translate(-50%, -50%); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+.lang-row-arrow svg { width: calc(var(--lang-cell-size, 60px) * 0.62); height: auto; display: block; }
+.lang-row-edge-arrow { transform: translateY(-50%); color: var(--ink-soft); opacity: 0.75; }
+.lang-row-edge-arrow svg { width: calc(var(--lang-cell-size, 60px) * 0.42); height: auto; display: block; }
+
+/* The "slight motion" both arrows keep: a stretch out along the direction
+   they point, a small recoil past neutral, then settle — anchored at the
+   trailing edge (transform-origin: right) so the arrowhead itself is what
+   reaches, rather than the whole glyph sliding back and forth. */
+.lang-arrow-nudge {
+  display: flex; transform-origin: 100% 50%;
+  animation: lang-arrow-nudge 1.5s ease-in-out infinite;
+}
+@keyframes lang-arrow-nudge {
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  30% { transform: translateX(-14%) scaleX(1.18); }
+  62% { transform: translateX(3%) scaleX(0.92); }
+}
+@media (prefers-reduced-motion: reduce) { .lang-arrow-nudge { animation: none; } }
 
 .lang-cell {
   aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: clamp(0.62rem, 3.4vw, 0.98rem);
+  color: #fff; font-weight: 700;
+  /* Sized off a measured tile so a letter fills the tile the way the
+     reference layout has it, instead of a viewport unit that drifts out of
+     proportion as the board scales. 0.7 puts a latin cap at roughly half the
+     tile's height and a CJK glyph at roughly two thirds, matching the
+     reference; a full em still leaves room either side of the widest glyph. */
+  font-size: calc(var(--lang-cell-size, 60px) * 0.7); line-height: 1;
   font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
   text-shadow: 0 1px 2px rgba(0,0,0,0.25); box-shadow: var(--shadow); user-select: none;
 }
-.lang-cell.ghost { pointer-events: none; }
+/* Wraparound preview tiles: absolutely placed on the board itself (not
+   inside a one-tile-wide column), so they can sit at the dragged row's own
+   vertical position and trail it in step. */
+.lang-cell.ghost { position: absolute; pointer-events: none; }
 .lang-cell--solved { box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--score-glow); }
 /* A completed word's cells pulse (scale + intensifying glow) for a couple
    of beats before the app hands off to that language — the same
