@@ -13,12 +13,17 @@ export interface CascadeStepGroups {
 }
 
 /**
- * The composite end-of-run score multiplies the raw score by the live
- * "有效得分率" hit-rate gauge (as a fraction) and a time-elapsed bracket —
- * faster clears are rewarded, slower ones tapered — then, if the run ended
- * with one or more colors permanently unable to ever flip again (see
- * stalemate.ts and stuckEndBtn), further multiplies by STUCK_PENALTY_FACTOR
- * once per such stuck color/group (not per tile).
+ * The composite end-of-run score multiplies the raw score by a time-elapsed
+ * bracket (faster clears rewarded, slower ones tapered) and by 1 + the live
+ * "有效得分率" hit-rate gauge as a bonus — a 100% gauge doubles the score, a
+ * 0% gauge leaves it unchanged, never shrinks it — then a flat (additive,
+ * not multiplicative) penalty is subtracted for whatever's left on the
+ * board: NEVER_FLIPPED_PENALTY for each tile that never got its first flip
+ * at all (the run never gave it a chance to contribute anything), the
+ * smaller REMAINING_PENALTY for each tile that flipped at some point but
+ * never got swept into a further dot-match or line bonus before the run
+ * ended (see stalemate.ts's countRemainingTiles). The total never goes
+ * below 0.
  */
 const TIME_BRACKETS: [maxSec: number, mult: number][] = [
   [60, 2],
@@ -32,7 +37,8 @@ function timeMultiplierFor(elapsedSec: number): number {
   for (const [maxSec, mult] of TIME_BRACKETS) if (elapsedSec <= maxSec) return mult;
   return TIME_BRACKET_FALLBACK_MULT;
 }
-const STUCK_PENALTY_FACTOR = 0.95;
+const NEVER_FLIPPED_PENALTY = 30;
+const REMAINING_PENALTY = 5;
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -95,6 +101,14 @@ export interface GameControllerHooks {
    * with findStuckGroups.
    */
   highlightStuck?(cells: Cell[] | null): void;
+  /**
+   * Checked once, when the run ends: how many live tiles never got their
+   * first flip at all vs. flipped at some point but never got swept into a
+   * further dot-match or line bonus before the run ended — see endGame's
+   * flat end-of-run penalty. Omit, or return zeros, if the shape doesn't
+   * implement this (the penalty is simply skipped).
+   */
+  countRemainingTiles?(): { neverFlipped: number; flippedButRemaining: number };
 }
 
 export interface GameController {
@@ -185,17 +199,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.pauseOverlay.classList.remove('show');
   }
 
-  function endGame(reason: string, stuckCount = 0) {
+  function endGame(reason: string) {
     gameOver = true;
     resolving = false;
     timer.stop();
     const elapsed = timer.elapsedSeconds();
 
     const statusPercent = perf.valuePercent();
-    const statusFrac = statusPercent / 100;
+    const bonusMult = 1 + statusPercent / 100;
     const timeMult = timeMultiplierFor(elapsed);
-    const stuckMult = STUCK_PENALTY_FACTOR ** stuckCount;
-    const total = Math.round(score * statusFrac * timeMult * stuckMult);
+    const remaining = hooks.countRemainingTiles?.() ?? { neverFlipped: 0, flippedButRemaining: 0 };
+    const neverFlippedPenalty = remaining.neverFlipped * NEVER_FLIPPED_PENALTY;
+    const remainingPenalty = remaining.flippedButRemaining * REMAINING_PENALTY;
+    const total = Math.max(0, Math.round(score * timeMult * bonusMult) - neverFlippedPenalty - remainingPenalty);
 
     const best = saveBestIfHigher(hooks.bestKey, total);
 
@@ -206,9 +222,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endScoreEl.textContent = String(total);
     refs.endBreakdownEl.innerHTML =
       row('得分', String(score)) +
-      row(`有效得分率（${statusPercent}%）`, '×' + statusFrac.toFixed(2)) +
+      row(`有效得分率加成（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
       row('用时系数', '×' + timeMult) +
-      (stuckCount > 0 ? row(`卡死方块 × ${stuckCount}`, '×' + stuckMult.toFixed(2)) : '');
+      (remaining.neverFlipped > 0 ? row(`从未翻面 × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
+      (remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '');
     refs.endDetailEl.textContent =
       reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
     refs.endOverlay.classList.add('show');
@@ -338,12 +355,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   function doFinish() {
     if (!started || gameOver) return;
-    endGame('手动结束', stuckGroups.length);
+    endGame('手动结束');
   }
 
   function doFinishStuck() {
     if (!started || gameOver || !stuckGroups.length) return;
-    endGame('无法继续匹配', stuckGroups.length);
+    endGame('无法继续匹配');
   }
 
   refs.buttons.start.addEventListener('click', () => {

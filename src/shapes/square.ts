@@ -5,7 +5,7 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
-import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
@@ -399,10 +399,18 @@ export function createSquareGame(): ShapeGame {
         return allDot || rows === 0 || cols === 0;
       }
 
-      function findStuckGroups(): Cell[][] {
+      function liveTiles(): LiveTile[] {
         const live: LiveTile[] = [];
         for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) live.push({ cell: [r, c], tile: grid[r][c] });
-        return findStuckColorGroups(live);
+        return live;
+      }
+
+      function findStuckGroups(): Cell[][] {
+        return findStuckColorGroups(liveTiles());
+      }
+
+      function countRemainingTiles() {
+        return countRemainingTilesFn(liveTiles());
       }
 
       function highlightStuck(cells: Cell[] | null) {
@@ -425,6 +433,7 @@ export function createSquareGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         findStuckGroups,
+        countRemainingTiles,
         highlightStuck,
         // Line-bonus cells are removed from the board a moment later (see
         // applyLineBonus), so their coordinates aren't safe to outline —

@@ -5,7 +5,7 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
-import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
@@ -468,14 +468,22 @@ export function createCircleGame(): ShapeGame {
         return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
       }
 
-      function findStuckGroups(): Cell[][] {
+      function liveTiles(): LiveTile[] {
         const live: LiveTile[] = [];
         for (let r = 0; r < ROWS; r++)
           for (let c = 0; c <= r; c++) {
             const t = grid[r][c];
             if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
           }
-        return findStuckColorGroups(live);
+        return live;
+      }
+
+      function findStuckGroups(): Cell[][] {
+        return findStuckColorGroups(liveTiles());
+      }
+
+      function countRemainingTiles() {
+        return countRemainingTilesFn(liveTiles());
       }
 
       function highlightStuck(cells: Cell[] | null) {
@@ -497,6 +505,7 @@ export function createCircleGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         findStuckGroups,
+        countRemainingTiles,
         highlightStuck,
         // Regular matches (run-of-4 and the "22"/"121" clusters) stay on
         // the board, so they get the persistent outline highlight, added

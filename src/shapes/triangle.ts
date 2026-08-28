@@ -5,7 +5,7 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
-import { findStuckColorGroups, type LiveTile } from '../engine/stalemate';
+import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
@@ -575,14 +575,22 @@ export function createTriangleGame(): ShapeGame {
         );
       }
 
-      function findStuckGroups(): Cell[][] {
+      function liveTiles(): LiveTile[] {
         const live: LiveTile[] = [];
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             if (removedCells.has(cellKey(r, c))) continue;
             live.push({ cell: [r, c], tile: grid[r][c] });
           }
-        return findStuckColorGroups(live);
+        return live;
+      }
+
+      function findStuckGroups(): Cell[][] {
+        return findStuckColorGroups(liveTiles());
+      }
+
+      function countRemainingTiles() {
+        return countRemainingTilesFn(liveTiles());
       }
 
       function highlightStuck(cells: Cell[] | null) {
@@ -605,6 +613,7 @@ export function createTriangleGame(): ShapeGame {
         isGameOver,
         buildCascadeConfig,
         findStuckGroups,
+        countRemainingTiles,
         highlightStuck,
         // Regular matches (run-of-4 and the big-triangle cluster) stay on
         // the board, so they get the persistent outline highlight, added

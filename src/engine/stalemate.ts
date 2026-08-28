@@ -19,42 +19,74 @@ function groupBy(liveTiles: LiveTile[], key: (t: Tile) => number): LiveTile[][] 
 }
 
 /**
- * A whole-line bonus only ever fires on a line that's *already* entirely one
- * dot color (see each shape's isFullDotMatch), so it always consumes a big
- * slice of exactly one dotColor's total supply in a single event — and every
- * shape keeps that color's total supply small (5-9 tiles) by design. That
- * means a dotColor dropping below MIN_MATCH_SIZE the instant a line bonus
- * fires is not a rare edge case, it is the *normal* outcome of the very
- * first line bonus in a run. Ending the whole game right there — the
- * player's first big win — would make nearly every run stop almost
- * immediately, which is not a stalemate, just an unlucky (or even a
- * perfectly ordinary) bit of geometry.
+ * Two entirely independent things can still keep a run going, and the board
+ * is truly stuck only once *both* are gone:
  *
- * A dotColor going dead like that only means those specific tiles, once
- * flipped, can never join *another* dot-match or line bonus — it does not
- * stop anything else on the board. Flipping (flavor face -> dot face) is
- * driven entirely by *flavor*-color matches, which have nothing to do with
- * dotColor accounting, so every other still-flavor-faced tile keeps flipping
- * normally regardless of which dotColors have already been exhausted.
+ * 1. A first-time flip: driven purely by *flavor*-color matches among
+ *    still-flavor-faced tiles. If any flavor color still has >= MIN_MATCH_SIZE
+ *    flavor-faced tiles somewhere, more flips are still possible.
+ * 2. Further scoring on tiles that already flipped: a dot-color match or a
+ *    whole-line bonus, which only need enough same-dotColor tiles to exist
+ *    *somewhere* on the board (flipped or not) — sliding rows/columns around
+ *    can still rearrange already-dot-faced tiles into a new qualifying
+ *    pattern without any of them flipping again. If any dotColor still has
+ *    >= MIN_MATCH_SIZE tiles among the live board, that path is still open.
  *
- * The board can only *truly* never progress again once every remaining
- * flavor-faced tile's own flavor color is itself down to fewer than
- * MIN_MATCH_SIZE flavor-faced tiles — at that point nothing left can ever
- * complete a qualifying match, so nothing can ever flip again, and the game
- * would otherwise run forever short of that. That is the only condition
- * allowed to end the run. When it fires, the returned groups additionally
- * include any dotColor already reduced below MIN_MATCH_SIZE (whether or not
- * its own remaining tiles have flipped yet) purely so the reveal-and-settle
- * sequence can show the player every color that ended up unresolved.
+ * Checking only #1 (as an earlier version of this function did) means the
+ * run gets called "stuck" while there's still a whole other dotColor sitting
+ * there in bulk, fully able to keep scoring by sliding alone — exactly what
+ * it looks like to a player watching several still-healthy colors get
+ * written off. Checking only #2 (the very first version) means it gets
+ * called "stuck" the moment any single dotColor dips low, which — since a
+ * whole-line bonus by definition drains a big slice of one dotColor's
+ * supply in one shot (see each shape's isFullDotMatch) — happens as the
+ * *routine* outcome of the very first line bonus, not a rare dead end.
+ * Requiring both closed off is what actually means nothing can ever happen
+ * again, by either route.
+ *
+ * The returned groups are only the stuck flavor-faced tiles (path #1) —
+ * those are the concrete, present-tense reason nothing more can happen, and
+ * the ones a player can visually confirm ("this piece, nothing else left to
+ * pair it with"). dotColor exhaustion (path #2) is checked only as a gate on
+ * *whether* to end the run at all, not surfaced as its own highlighted
+ * group: by the time it's satisfied, ordinary play has usually already left
+ * several dotColors individually below MIN_MATCH_SIZE over the course of the
+ * game, and flagging all of them would bury the one thing actually worth
+ * showing under a pile of long-since-resolved history.
  */
 export function findStuckColorGroups(liveTiles: LiveTile[]): Cell[][] {
   const flavorFaced = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   if (flavorFaced.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
 
   const flavorGroups = groupBy(flavorFaced, (t) => t.color);
-  const stillProgressPossible = flavorGroups.some((g) => g.length >= MIN_MATCH_SIZE);
-  if (stillProgressPossible) return [];
+  const canStillFlipSomething = flavorGroups.some((g) => g.length >= MIN_MATCH_SIZE);
+  if (canStillFlipSomething) return [];
 
-  const deadDotGroups = groupBy(liveTiles, (t) => t.dotColor).filter((g) => g.length < MIN_MATCH_SIZE);
-  return [...flavorGroups, ...deadDotGroups].map((g) => g.map((lt) => lt.cell));
+  const dotGroups = groupBy(liveTiles, (t) => t.dotColor);
+  const canStillScoreByRearranging = dotGroups.some((g) => g.length >= MIN_MATCH_SIZE);
+  if (canStillScoreByRearranging) return [];
+
+  return flavorGroups.map((g) => g.map((lt) => lt.cell));
+}
+
+/**
+ * Tallies what's left on the board for the end-of-run flat penalty (see
+ * gameController's endGame): a tile still showing its flavor face never
+ * contributed anything — the player never even got its first flip — so it
+ * counts separately (and costs far more) from a tile that already flipped
+ * but simply never got swept into a further dot-match or line bonus before
+ * the run ended.
+ */
+export interface RemainingTileCounts {
+  neverFlipped: number;
+  flippedButRemaining: number;
+}
+export function countRemainingTiles(liveTiles: LiveTile[]): RemainingTileCounts {
+  let neverFlipped = 0;
+  let flippedButRemaining = 0;
+  for (const { tile } of liveTiles) {
+    if (tile.face === 'flavor') neverFlipped++;
+    else flippedButRemaining++;
+  }
+  return { neverFlipped, flippedButRemaining };
 }
