@@ -184,6 +184,8 @@ export interface ShareCardInfo {
   totalScore: number;
   scoreRows: [label: string, value: string][];
   detail: string;
+  /** True when this run ended via a bomb hazard cluster — draws a large, low-opacity 💥 behind the card. */
+  hazardEnd?: boolean;
 }
 
 const CARD_W = 720;
@@ -210,6 +212,16 @@ export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | 
 
   ctx.fillStyle = '#faf9f5';
   ctx.fillRect(0, 0, CARD_W, cardH);
+
+  if (info.hazardEnd) {
+    ctx.save();
+    ctx.globalAlpha = 0.14;
+    ctx.font = `${cardH * 0.85}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💥', CARD_W / 2, cardH / 2);
+    ctx.restore();
+  }
 
   ctx.fillStyle = '#141413';
   ctx.font = '700 40px "Fraunces", serif';

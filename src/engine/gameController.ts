@@ -7,6 +7,7 @@ import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
 import { playHit, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
+import { BOMB_HAZARD_REASON } from './bomb';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -187,7 +188,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let stuckGroups: Cell[][] = [];
   let startSnapshot: BoardSnapshot | null = null;
   let endSnapshot: BoardSnapshot | null = null;
-  let lastShareInfo: { totalScore: number; scoreRows: [string, string][]; detail: string } | null = null;
+  let lastShareInfo: { totalScore: number; scoreRows: [string, string][]; detail: string; hazardEnd: boolean } | null = null;
 
   function updateStuckState(groups: Cell[][]) {
     stuckGroups = groups;
@@ -237,6 +238,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const row = (label: string, value: string) =>
       `<div class="end-row"><span>${label}</span><span>${value}</span></div>`;
 
+    const hazardEnd = reason === BOMB_HAZARD_REASON;
+    refs.endHazardBgEl.classList.toggle('show', hazardEnd);
     refs.endTitleEl.textContent = '挑战结束';
     refs.endScoreEl.textContent = String(total);
     refs.endBreakdownEl.innerHTML =
@@ -259,6 +262,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         ['用时', formatClock(elapsed)],
       ],
       detail: detailText,
+      hazardEnd,
     };
   }
 

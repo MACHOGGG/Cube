@@ -12,7 +12,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same board/matching/drag engine as the base triangle game (see triangle.ts
@@ -33,17 +33,20 @@ const GLOBAL_ROW_OFFSET = 0;
 const PER_COLOR = 5;
 const MIN_LINE_BONUS_LEN = 3;
 
-// Bomb mode drops two of the base five colors and appends red as a fixed
-// hazard color — see RED_IDX below.
+// Bomb mode reuses the exact same 5-colors × 5-each deck as the base game —
+// one existing palette index just becomes a fixed hazard color (front-only,
+// never flips) instead of dropping colors and inflating a separate red group.
+// standard's own red sits at index 1, but colorblind's naturally-reddest hue
+// sits at index 0 (see PALETTES above) — since the deck is generated once
+// using a single numeric index and the palette toggle only remaps hex-per-index
+// afterward (never regenerates the deck), RED_IDX must be the SAME fixed index
+// for both variants so a mid-game palette toggle can't decouple "which tiles
+// are logically hazards" from "which tiles render as red."
+const RED_IDX = 1;
 const BOMB_PALETTES = {
-  standard: [...PALETTES.standard.slice(0, 3), BOMB_RED_HEX],
-  colorblind: [...PALETTES.colorblind.slice(0, 3), BOMB_RED_HEX],
+  standard: PALETTES.standard.map((c, i) => (i === RED_IDX ? BOMB_RED_HEX : c)),
+  colorblind: PALETTES.colorblind.map((c, i) => (i === RED_IDX ? BOMB_RED_HEX : c)),
 } as const;
-const BOMB_NORMAL_COLORS = 3;
-const RED_IDX = BOMB_NORMAL_COLORS;
-// Same 5-per-color count as the base game; the rest of the 25-cell board
-// (25 - 3*5 = 10) is filled with red hazard tiles.
-const BOMB_GROUP_SIZE = 5;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,4 28,26 4,26" fill="none" stroke="#4C68B0" stroke-width="2.4"/><polygon points="16,13 22,24 10,24" fill="#D89B1E"/></svg>`;
 
@@ -228,7 +231,7 @@ export function createTriangleBigGame(): ShapeGame {
           '全部非红色方块都翻成点面或变为空白角时结束，结算当时的分数。'
         : BASE_HINT + '全部方块都翻成点面或变为空白角时结束，结算当时的分数。';
       const assumptions = isBomb
-        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 3 种颜色各 5 枚，点色分布为：其余 2 色中的每一色至少 1 枚，凑满 5 枚（保证没有正反面同色的三角出现）；另有 10 枚红色三角，永不显示点色。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
+        ? '颜色数量与非炸弹版完全一致：5 种颜色各 5 枚，共 25 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 5 枚全部是永不翻面的危险三角。其余 4 种正常颜色各 5 枚，点色分布为：其余 3 色中的每一色至少 1 枚，凑满 5 枚（保证没有正反面同色的三角出现，红色也不会出现在任何三角的点色/反面上）。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
         : '5 种口味色，每色 5 枚，共 25 枚（一整块大三角，五行 1/3/5/7/9 枚）；每种口味的点色分布为：其余 4 色各 1 枚、另有 1 色额外再来 1 枚——保证没有正反面同色的三角出现。三个滑动方向——水平、左斜、右斜——判分规则与基础三角玩法完全一致。';
       const refs = buildShell(container, {
         title: 'Slides · 大三角',
@@ -338,26 +341,16 @@ export function createTriangleBigGame(): ShapeGame {
       }
 
       // ---------- bomb mode: red hazard tiles ----------
-      function shuffledBombDeck(): number[] {
-        const deck: number[] = [];
-        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
-        const total = ROW_LENS.reduce((a, b) => a + b, 0);
-        const redCount = total - deck.length;
-        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
-        return shuffle(deck);
-      }
-
-      // Same "cycle through the other normal colors, never self" rule as
-      // the base game's own assignDotColors, parameterized down to
-      // BOMB_NORMAL_COLORS: cycling 3-1=2 other colors to fill 5 slots
-      // gives one of them 3 and the other 2 (no self-pair, same as base).
+      // Same "cycle through the other normal colors, never self" rule as the
+      // base game's own assignDotColors, but the "others" pool now excludes
+      // RED_IDX too — red never appears as any tile's dot color.
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
-        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
+        const normalColors = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== RED_IDX);
+        for (const color of normalColors) {
+          const otherNormals = normalColors.filter((k) => k !== color);
           const others: number[] = [];
-          for (let k = 0; others.length < BOMB_GROUP_SIZE; k++) {
-            others.push((color + 1 + (k % (BOMB_NORMAL_COLORS - 1))) % BOMB_NORMAL_COLORS);
-          }
+          for (let k = 0; others.length < PER_COLOR; k++) others.push(otherNormals[k % otherNormals.length]);
           shuffle(others);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
@@ -426,7 +419,7 @@ export function createTriangleBigGame(): ShapeGame {
         let g: Tile[][];
         let tries = 0;
         do {
-          g = boardFromBombDeck(shuffledBombDeck());
+          g = boardFromBombDeck(shuffledDeck());
           tries++;
         } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
         return g;
@@ -891,7 +884,7 @@ export function createTriangleBigGame(): ShapeGame {
       function checkBombHazard(): boolean {
         if (!isBomb || !hasRedCluster(grid)) return false;
         render();
-        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;
       }
 

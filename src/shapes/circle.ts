@@ -12,7 +12,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // The colorblind set is 4 hues picked from the Okabe–Ito palette for maximum
@@ -27,17 +27,16 @@ const ROWS = 7; // row r (0..6) has r+1 balls, total 28
 const PER_COLOR = 7;
 const MIN_LINE_BONUS_LEN = 3;
 
-// Bomb mode drops two of the base four colors and appends red as a fixed
-// hazard color — see RED_IDX below.
+// Bomb mode reuses the exact same 4-color, 7-per-color deck as the base
+// game — it doesn't drop colors or reserve extra board slots for red. It
+// just reinterprets slot 0 (each palette's own reddish hue) as the hazard
+// color: those 7 balls never flip, and no other ball is ever assigned red
+// as its dot color.
 const BOMB_PALETTES = {
-  standard: [...PALETTES.standard.slice(0, 2), BOMB_RED_HEX],
-  colorblind: [...PALETTES.colorblind.slice(0, 2), BOMB_RED_HEX],
+  standard: PALETTES.standard.map((c, i) => (i === 0 ? BOMB_RED_HEX : c)),
+  colorblind: PALETTES.colorblind.map((c, i) => (i === 0 ? BOMB_RED_HEX : c)),
 } as const;
-const BOMB_NORMAL_COLORS = 2;
-const RED_IDX = BOMB_NORMAL_COLORS;
-// Same 7-per-color count as the base game; the rest of the 28-cell board
-// (28 - 2*7 = 14) is filled with red hazard balls.
-const BOMB_GROUP_SIZE = 7;
+const RED_IDX = 0;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="7" r="6" fill="#C0666B"/><circle cx="8" cy="20" r="6" fill="#DDA857"/><circle cx="24" cy="20" r="6" fill="#4F72C4"/></svg>`;
 
@@ -209,7 +208,7 @@ export function createCircleGame(): ShapeGame {
           '全部非红色方块都翻成点面或变为空白球时结束，结算当时的分数。'
         : BASE_HINT + '全部方块都翻成点面或变为空白球时结束，结算当时的分数。';
       const assumptions = isBomb
-        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 2 种颜色各 7 枚，点色分布为：另一色 3 枚、本色 4 枚；另有 14 枚红色球，永不显示点色。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致。'
+        ? '颜色数量与非炸弹版完全一致：4 种颜色各 7 枚，共 28 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 7 枚全部是永不翻面的危险球。其余 3 种正常颜色各 7 枚，点色分布为：其余 2 色各 3 枚、本色 1 枚——红色不会出现在任何球的点色（反面）上。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致。'
         : '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。';
       const refs = buildShell(container, {
         title: 'Slides · 圆球',
@@ -331,24 +330,21 @@ export function createCircleGame(): ShapeGame {
         return g;
       }
 
-      // ---------- bomb mode: red hazard tiles ----------
-      function shuffledBombDeck(): number[] {
-        const deck: number[] = [];
-        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
-        const redCount = ROWS * (ROWS + 1) / 2 - deck.length;
-        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
-        return shuffle(deck);
-      }
+      // ---------- bomb mode: red hazard balls ----------
+      // Same deck as the base game (4 colors x 7 balls = 28) — shuffledDeck()
+      // already reads from COLORS, which is BOMB_PALETTES here, so it needs
+      // no bomb-specific variant.
 
-      // Per normal front-color group of 7: the other normal color gets 3
-      // dot-color slots, and the tile's own front color gets 4 (3 "own
-      // share" + 1 extra) — red is never assigned as a dot color since red
-      // tiles never flip and never need one.
+      // Per non-red front-color group of 7: the other 2 non-red colors get 3
+      // dot-color slots each (6), and the tile's own front color gets the
+      // 7th — red is excluded from every dot-color pool since red balls
+      // never flip and never need one.
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
-        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
-          const others = Array.from({ length: BOMB_NORMAL_COLORS }, (_, k) => k).filter((k) => k !== color);
-          const pool = shuffle([...others.flatMap((o) => [o, o, o]), color, color, color, color]);
+        for (let color = 0; color < COLORS.length; color++) {
+          if (color === RED_IDX) continue;
+          const others = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== color && k !== RED_IDX);
+          const pool = shuffle([...others.flatMap((o) => [o, o, o]), color]);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
             if (c === color) indices.push(idx);
@@ -417,7 +413,7 @@ export function createCircleGame(): ShapeGame {
         let g: Tile[][];
         let tries = 0;
         do {
-          g = boardFromBombDeck(shuffledBombDeck());
+          g = boardFromBombDeck(shuffledDeck());
           tries++;
         } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
         return g;
@@ -849,7 +845,7 @@ export function createCircleGame(): ShapeGame {
       function checkBombHazard(): boolean {
         if (!isBomb || !hasRedCluster(grid)) return false;
         render();
-        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;
       }
 

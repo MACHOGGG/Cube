@@ -11,7 +11,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Two selectable palettes, both with 6 hues spaced at least ~50-60° apart on
@@ -31,18 +31,16 @@ const PALETTES = {
   colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#CC79A7'],
 } as const;
 
-// Bomb mode drops two of the base six colors and appends red as a fixed
-// hazard color in the last slot — see RED_IDX below.
+// Bomb mode reuses the exact same 6-color deck as the base game — same
+// color count, same 6-tiles-per-color — it doesn't drop colors or reserve
+// extra board slots for red. It just reinterprets slot 0 (each palette's
+// own reddish hue) as the hazard color: those 6 tiles never flip, and no
+// other tile is ever assigned red as its dot color.
 const BOMB_PALETTES = {
-  standard: [...PALETTES.standard.slice(0, 4), BOMB_RED_HEX],
-  colorblind: [...PALETTES.colorblind.slice(0, 4), BOMB_RED_HEX],
+  standard: PALETTES.standard.map((c, i) => (i === 0 ? BOMB_RED_HEX : c)),
+  colorblind: PALETTES.colorblind.map((c, i) => (i === 0 ? BOMB_RED_HEX : c)),
 } as const;
-const BOMB_NORMAL_COLORS = 4;
-const RED_IDX = BOMB_NORMAL_COLORS; // last slot in BOMB_PALETTES
-// Tiles per normal front-color group (mirrors the base game's own 6-per-
-// color scheme); the rest of the 36-cell board is filled with red hazard
-// tiles: 36 - 4*6 = 12.
-const BOMB_GROUP_SIZE = 6;
+const RED_IDX = 0;
 
 const BOARD_DIM = 6;
 
@@ -102,7 +100,7 @@ export function createSquareGame(): ShapeGame {
           '当棋盘上所有非红色方块都翻成点面时，挑战结束，结算当时的分数。'
         : BASE_HINT + '当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。';
       const assumptions = isBomb
-        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 4 种颜色各 6 枚，点色分布为：其余 3 色各 1 枚、本色 3 枚；另有 12 枚红色方块，永不显示点色。'
+        ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险方块。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色各 1 枚、本色 2 枚——红色不会出现在任何方块的点色（反面）上。'
         : '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。';
       const refs = buildShell(container, {
         title: 'Slides · 方块',
@@ -223,25 +221,22 @@ export function createSquareGame(): ShapeGame {
       }
 
       // ---------- bomb mode: red hazard tiles ----------
-      // 4 normal colors * 6 tiles/color (same per-color count as the base
-      // game) + whatever's left of the 36-cell board filled with red.
-      function shuffledBombDeck(): number[] {
-        const deck: number[] = [];
-        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
-        const redCount = BOARD_DIM * BOARD_DIM - deck.length;
-        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
-        return shuffle(deck);
-      }
+      // Same deck as the base game (6 colors x 6 tiles = 36) — shuffledDeck()
+      // already reads from COLORS, which is BOMB_PALETTES here, so it needs
+      // no bomb-specific variant.
 
-      // Per normal front-color group of 6: the other 3 normal colors get 1
-      // dot-color slot each, and the tile's own front color gets 3 (1 "own
-      // share" + 2 extra) — red is never assigned as a dot color since red
-      // tiles never flip and never need one.
+      // Per non-red front-color group of 6: the other 4 non-red colors get 1
+      // dot-color slot each, and the tile's own front color gets 2 (1 "own
+      // share" + 1 extra) to fill out the 6th slot — red is excluded from
+      // every dot-color pool since red tiles never flip and never need one,
+      // and a normal tile flipping to a "red" back would be confusable with
+      // an actual hazard tile.
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
-        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
-          const others = Array.from({ length: BOMB_NORMAL_COLORS }, (_, k) => k).filter((k) => k !== color);
-          const pool = shuffle([...others, color, color, color]);
+        for (let color = 0; color < COLORS.length; color++) {
+          if (color === RED_IDX) continue;
+          const others = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== color && k !== RED_IDX);
+          const pool = shuffle([...others, color, color]);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
             if (c === color) indices.push(idx);
@@ -308,7 +303,7 @@ export function createSquareGame(): ShapeGame {
         let g: Tile[][];
         let tries = 0;
         do {
-          g = boardFromBombDeck(shuffledBombDeck());
+          g = boardFromBombDeck(shuffledDeck());
           tries++;
         } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
         return g;
@@ -847,7 +842,7 @@ export function createSquareGame(): ShapeGame {
       function checkBombHazard(): boolean {
         if (!isBomb || !hasRedCluster(grid)) return false;
         render();
-        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;
       }
 

@@ -12,7 +12,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same Okabe–Ito colorblind-safe 6-hue set the square board offers, reused
@@ -28,17 +28,22 @@ const GLOBAL_ROW_OFFSET = 3; // local row r -> global big-triangle row i = r+3
 const PER_COLOR = 9;
 const MIN_LINE_BONUS_LEN = 3;
 
-// Bomb mode drops two of the base six colors and appends red as a fixed
-// hazard color — see RED_IDX below.
+// Bomb mode reuses the exact same 6-color, 9-per-color deck as the base
+// game. It reinterprets one existing palette slot as the hazard color —
+// fixed at index 1 for *both* palette variants (not each one's own most-red
+// hue) on purpose: a tile's color is stored as an index, and toggling the
+// colorblind-palette button only swaps which hex values that index maps
+// to, not which tiles are hazards. If each variant used a different red
+// index, switching palettes mid-game would decouple "which tiles are
+// hazards" from "which tiles render red". Index 1 is where standard's own
+// red already sits, so this is a no-op there; colorblind's index 1 (amber)
+// gets overridden to the same fixed hazard red instead of keeping its own
+// natural vermillion at index 0.
+const RED_IDX = 1;
 const BOMB_PALETTES = {
-  standard: [...PALETTES.standard.slice(0, 4), BOMB_RED_HEX],
-  colorblind: [...PALETTES.colorblind.slice(0, 4), BOMB_RED_HEX],
+  standard: PALETTES.standard.map((c, i) => (i === RED_IDX ? BOMB_RED_HEX : c)),
+  colorblind: PALETTES.colorblind.map((c, i) => (i === RED_IDX ? BOMB_RED_HEX : c)),
 } as const;
-const BOMB_NORMAL_COLORS = 4;
-const RED_IDX = BOMB_NORMAL_COLORS;
-// Same 9-per-color count as the base game; the rest of the 54-cell board
-// (54 - 4*9 = 18) is filled with red hazard tiles.
-const BOMB_GROUP_SIZE = 9;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,3 29,25 3,25" fill="#4C68B0"/><polygon points="16,29 4,9 28,9" fill="#D89B1E" opacity="0.9"/></svg>`;
 
@@ -255,7 +260,7 @@ export function createTriangleGame(): ShapeGame {
           '全部非红色方块都翻成点面或变为空白角时结束，结算当时的分数。'
         : BASE_HINT + '全部方块都翻成点面或变为空白角时结束，结算当时的分数。';
       const assumptions = isBomb
-        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 4 种颜色各 9 枚，点色分布为：其余 3 色各 2 枚、本色 3 枚；另有 18 枚红色三角，永不显示点色。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
+        ? '颜色数量与非炸弹版完全一致：6 种颜色各 9 枚，共 54 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 9 枚全部是永不翻面的危险三角。其余 5 种正常颜色各 9 枚，点色分布为：其余 4 色各 1 枚、本色 5 枚——红色不会出现在任何三角的点色（反面）上。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
         : '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平、左斜、右斜——每个方向都是 6 条线，长度分别为 7/7/9/9/11/11（与横向的行长完全对应），判分规则完全一致；斜向的一条线由上下两种三角交替组成，和横向的行一样。';
       const refs = buildShell(container, {
         title: 'Slides · 三角',
@@ -372,24 +377,22 @@ export function createTriangleGame(): ShapeGame {
       }
 
       // ---------- bomb mode: red hazard tiles ----------
-      function shuffledBombDeck(): number[] {
-        const deck: number[] = [];
-        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
-        const total = ROW_LENS.reduce((a, b) => a + b, 0);
-        const redCount = total - deck.length;
-        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
-        return shuffle(deck);
-      }
+      // Same deck as the base game (6 colors x 9 tiles = 54) — shuffledDeck()
+      // already reads from COLORS, which is BOMB_PALETTES here, so it needs
+      // no bomb-specific variant.
 
-      // Per normal front-color group of 9: the other 3 normal colors get 2
-      // dot-color slots each, and the tile's own front color gets 3 (2 "own
-      // share" + 1 extra) — red is never assigned as a dot color since red
-      // tiles never flip and never need one.
+      // Per non-red front-color group of 9: the other 4 non-red colors get 1
+      // dot-color slot each (4), and the tile's own front color gets the
+      // remaining 5 — the same "others get 1 each, self gets what's left"
+      // shape as the base game's own 9-per-group rule, just with one fewer
+      // other color available. Red is excluded from every dot-color pool
+      // since red tiles never flip and never need one.
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
-        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
-          const others = Array.from({ length: BOMB_NORMAL_COLORS }, (_, k) => k).filter((k) => k !== color);
-          const pool = shuffle([...others.flatMap((o) => [o, o]), color, color, color]);
+        for (let color = 0; color < COLORS.length; color++) {
+          if (color === RED_IDX) continue;
+          const others = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== color && k !== RED_IDX);
+          const pool = shuffle([...others, color, color, color, color, color]);
           const indices: number[] = [];
           deck.forEach((c, idx) => {
             if (c === color) indices.push(idx);
@@ -458,7 +461,7 @@ export function createTriangleGame(): ShapeGame {
         let g: Tile[][];
         let tries = 0;
         do {
-          g = boardFromBombDeck(shuffledBombDeck());
+          g = boardFromBombDeck(shuffledDeck());
           tries++;
         } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
         return g;
@@ -1048,7 +1051,7 @@ export function createTriangleGame(): ShapeGame {
       function checkBombHazard(): boolean {
         if (!isBomb || !hasRedCluster(grid)) return false;
         render();
-        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;
       }
 

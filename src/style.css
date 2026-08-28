@@ -386,6 +386,20 @@ h1 {
 }
 .end-breakdown { display: flex; flex-direction: column; gap: 3px; margin: 0 0 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 .end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
+#endOverlay .modal { position: relative; overflow: hidden; }
+.end-hazard-bg {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 11rem;
+  line-height: 1;
+  opacity: 0.14;
+  pointer-events: none;
+  user-select: none;
+}
+.end-hazard-bg.show { display: flex; }
 .btn-row { display: flex; gap: 10px; }
 button {
   font-family: 'Karla', sans-serif; font-weight: 600; font-size: 0.95rem; border: none; border-radius: 100px;

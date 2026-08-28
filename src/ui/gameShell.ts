@@ -26,6 +26,7 @@ export interface ShellRefs {
   startOverlay: HTMLElement;
   pauseOverlay: HTMLElement;
   endOverlay: HTMLElement;
+  endHazardBgEl: HTMLElement;
   endTitleEl: HTMLElement;
   endScoreEl: HTMLElement;
   endBreakdownEl: HTMLElement;
@@ -111,6 +112,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
     <div class="overlay" id="endOverlay">
       <div class="modal">
+        <div class="end-hazard-bg" id="endHazardBg" aria-hidden="true">💥</div>
         <h2 id="endTitle">挑战结束</h2>
         <div class="end-score-label">综合得分</div>
         <div class="big-score" id="endScore">0</div>
@@ -155,6 +157,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     startOverlay: req('startOverlay'),
     pauseOverlay: req('pauseOverlay'),
     endOverlay: req('endOverlay'),
+    endHazardBgEl: req('endHazardBg'),
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),
     endBreakdownEl: req('endBreakdown'),
