@@ -71,38 +71,34 @@ export function packSnapshot(raw: RawCell[]): BoardSnapshot {
   };
 }
 
-const BLANK_COLOR = '#B9B2AE';
 const DOT_SCALE = 0.6;
 const DOT_STROKE = '#1A1A1A';
+// Several palettes include a muted gray/brown flavor color of their own
+// (e.g. #9B958D) that sits too close to any dim gray *fill* to reliably
+// tell apart at a glance — same reasoning the live circleHex board already
+// applies to its own blank balls. A hollow outline, with no fill in any
+// palette, can never coincidentally match a real color, so that's what a
+// blanked cell gets here regardless of which shape's snapshot this is.
+const RING_COLOR = '#9A8B98';
+const RING_SCALE = 0.88;
 
-// Draws one cell at an optional shrink factor around its own center — used
-// as-is (scale 1) for a live front-face or a blanked cell, and shrunk (see
-// DOT_SCALE) for a flipped dot-face cell, matching the "same silhouette,
-// smaller, plus a dark outline" language the real boards already use for
-// their own dot faces.
-function fillPrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number, scale: number, color: string, stroke: boolean) {
-  ctx.fillStyle = color;
-  if (stroke) {
-    ctx.strokeStyle = DOT_STROKE;
-    ctx.lineWidth = Math.max(1, size * 0.008);
-  }
+// Traces one cell's outline at an optional shrink factor around its own
+// center — full size (scale 1) for a live front face, shrunk (DOT_SCALE)
+// for a flipped dot face or (RING_SCALE) for a blanked cell's ring.
+function tracePrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number, scale: number) {
+  ctx.beginPath();
   if (cell.kind === 'circle') {
-    ctx.beginPath();
     ctx.arc(cell.cx * size, cell.cy * size, cell.r * size * scale, 0, Math.PI * 2);
-    ctx.fill();
-    if (stroke) ctx.stroke();
   } else if (cell.kind === 'rect') {
     ctx.save();
     ctx.translate(cell.cx * size, cell.cy * size);
     if (cell.rotateDeg) ctx.rotate((cell.rotateDeg * Math.PI) / 180);
     const h = cell.half * size * scale;
-    ctx.fillRect(-h, -h, h * 2, h * 2);
-    if (stroke) ctx.strokeRect(-h, -h, h * 2, h * 2);
+    ctx.rect(-h, -h, h * 2, h * 2);
     ctx.restore();
   } else {
     const cx = cell.points.reduce((s, p) => s + p[0], 0) / cell.points.length;
     const cy = cell.points.reduce((s, p) => s + p[1], 0) / cell.points.length;
-    ctx.beginPath();
     cell.points.forEach(([px, py], i) => {
       const X = (cx + (px - cx) * scale) * size;
       const Y = (cy + (py - cy) * scale) * size;
@@ -110,8 +106,6 @@ function fillPrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: 
       else ctx.lineTo(X, Y);
     });
     ctx.closePath();
-    ctx.fill();
-    if (stroke) ctx.stroke();
   }
 }
 
@@ -119,9 +113,23 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
   ctx.save();
   ctx.translate(x, y);
   for (const cell of snap.cells) {
-    if (cell.face === 'blank') fillPrimitive(ctx, cell, size, 1, BLANK_COLOR, false);
-    else if (cell.face === 'dot') fillPrimitive(ctx, cell, size, DOT_SCALE, cell.color, true);
-    else fillPrimitive(ctx, cell, size, 1, cell.color, false);
+    if (cell.face === 'blank') {
+      tracePrimitive(ctx, cell, size, RING_SCALE);
+      ctx.strokeStyle = RING_COLOR;
+      ctx.lineWidth = Math.max(1.5, size * 0.018);
+      ctx.stroke();
+    } else if (cell.face === 'dot') {
+      tracePrimitive(ctx, cell, size, DOT_SCALE);
+      ctx.fillStyle = cell.color;
+      ctx.fill();
+      ctx.strokeStyle = DOT_STROKE;
+      ctx.lineWidth = Math.max(1, size * 0.008);
+      ctx.stroke();
+    } else {
+      tracePrimitive(ctx, cell, size, 1);
+      ctx.fillStyle = cell.color;
+      ctx.fill();
+    }
   }
   ctx.restore();
 }
