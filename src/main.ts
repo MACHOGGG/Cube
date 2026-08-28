@@ -16,6 +16,7 @@ import { createCircleHexGame } from './shapes/circleHex';
 import { createSquareDiamondGame } from './shapes/squareDiamond';
 import { createTriangleBigGame } from './shapes/triangleBig';
 import { createCircleSevenGame } from './shapes/circleSeven';
+import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 
 const rootEl = document.getElementById('app');
@@ -27,7 +28,7 @@ const games: ShapeGame[] = [createSquareGame(), createCircleGame(), createTriang
 // kept separate from the full "更多布局" list below since 七色圆球 doesn't
 // have the red-hazard mechanic wired in.
 const bombLayoutGames: ShapeGame[] = [createCircleHexGame(), createSquareDiamondGame(), createTriangleBigGame()];
-const layoutGames: ShapeGame[] = [...bombLayoutGames, createCircleSevenGame()];
+const layoutGames: ShapeGame[] = [...bombLayoutGames, createCircleSevenGame(), createTriangleAdvancedGame()];
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
