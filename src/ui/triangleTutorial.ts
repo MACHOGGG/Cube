@@ -42,8 +42,12 @@ interface TTile {
   face: 'F' | 'D';
   dotColor: number;
 }
-function tf(color: number): TTile {
-  return { color, face: 'F', dotColor: color };
+// dotColor defaults to color (self-pair) for filler tiles and the
+// orientation beat's traveling tile, neither of which ever shows a dot
+// face — every beat that actually flips (see withActive below) passes an
+// explicit dotColor instead of relying on this default.
+function tf(color: number, dotColor: number = color): TTile {
+  return { color, face: 'F', dotColor };
 }
 function td(dotColor: number): TTile {
   return { color: -1, face: 'D', dotColor };
@@ -70,10 +74,10 @@ function baseGrid(): Grid {
   }
   return g;
 }
-function withActive(cells: Cell2[], activeColor: number): () => Grid {
+function withActive(cells: Cell2[], activeColor: number, dotColor: number = activeColor): () => Grid {
   return () => {
     const g = baseGrid();
-    for (const [r, c] of cells) g[r][c] = tf(activeColor);
+    for (const [r, c] of cells) g[r][c] = tf(activeColor, dotColor);
     return g;
   };
 }
@@ -105,9 +109,16 @@ const orientAfterCell: Cell2 = [0, 5]; // p=5, down
 // clearly as "a whole line", from the row family (row 0)
 const beat4Cells: Cell2[] = Array.from({ length: 7 }, (_, c) => [0, c] as Cell2);
 
+// Real triangle.ts's per-color-group split is much closer to even than
+// circle's (4 self-pairs + 5 other-color slots per group of 9, ~44% self)
+// — so unlike circleTutorial, showing one self-pair here isn't a
+// distortion: across these 2 flip beats, 1 self + 1 other is a fair
+// microcosm of that near-even split. The orientation beat's dotColor is
+// irrelevant (that tile never shows a dot face) and is left on its
+// self-pairing default.
 const BEATS: Beat[] = [
-  { captionKey: 'triSlide', grid: withActive(beat1Cells, 1), goal: 'any', targetCells: beat1Cells },
-  { captionKey: 'triBigTriangle', grid: withActive(beat2Cells, 2), goal: 'any', targetCells: beat2Cells },
+  { captionKey: 'triSlide', grid: withActive(beat1Cells, 1, 1), goal: 'any', targetCells: beat1Cells },
+  { captionKey: 'triBigTriangle', grid: withActive(beat2Cells, 2, 0), goal: 'any', targetCells: beat2Cells },
   { captionKey: 'triFlipOrientation', grid: withActive([orientBeforeCell], 3), goal: 'none', targetCells: [orientBeforeCell] },
   { captionKey: 'triBlank', grid: withDotLine(beat4Cells, 0), goal: 'wholeLine', targetCells: beat4Cells },
 ];
@@ -376,7 +387,10 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
     setTimeout(() => {
       for (const [r, c] of cells) {
         const t = grid[r][c];
-        grid[r][c] = td(t.color);
+        // dotColor was fixed at creation (t.dotColor), like the real
+        // triangle game — using t.color instead would force every flip to
+        // self-pair, hiding the (~56% of the time) case where it doesn't.
+        grid[r][c] = td(t.dotColor);
         flipInCells.add(key(r, c));
       }
       render();

@@ -60,10 +60,15 @@ function baseGrid(): Grid {
   return g;
 }
 type Cell2 = [number, number];
-function withActive(cells: Cell2[], activeColor: number): () => Grid {
+// dotColor defaults to activeColor only for call sites that don't care (the
+// filler base and the orientation-style "never actually shown" cases don't
+// exist here, but keeping the default self-pairing implicit would silently
+// reintroduce the very bug this was fixed for — see BEATS below, which
+// always passes an explicit dotColor for every beat that actually flips).
+function withActive(cells: Cell2[], activeColor: number, dotColor: number): () => Grid {
   return () => {
     const g = baseGrid();
-    for (const [r, c] of cells) g[r][c] = tf(activeColor, activeColor);
+    for (const [r, c] of cells) g[r][c] = tf(activeColor, dotColor);
     return g;
   };
 }
@@ -97,10 +102,18 @@ const beat3Cells: Cell2[] = [[3, 3], [4, 3], [4, 4], [5, 4]];
 // a compact whole-line (row 2, length 3) already fully dot-faced
 const beat4Cells: Cell2[] = [[2, 0], [2, 1], [2, 2]];
 
+// Real circle.ts assigns each tile's dot color at creation time, and a
+// tile's own front color is the *rare* outcome (1 self pair per 7, the
+// other 3 colors get 2 slots each) — so these 3 flips are each given an
+// explicit, distinct *other* color rather than defaulting to a self-pair;
+// showing 0 self-pairs across 3 draws is in fact the single most likely
+// outcome of the real distribution (~63% of the time), not a distortion of
+// it. Front colors (and therefore which matches exist pre-flip) are
+// unchanged from before — only which color each flip reveals underneath.
 const BEATS: Beat[] = [
-  { captionKey: 'circleSlide', grid: withActive(beat1Cells, 2), goal: 'any', targetCells: beat1Cells },
-  { captionKey: 'circleCluster', grid: withActive(beat2Cells, 1), goal: 'any', targetCells: beat2Cells },
-  { captionKey: 'circleCluster121', grid: withActive(beat3Cells, 2), goal: 'any', targetCells: beat3Cells },
+  { captionKey: 'circleSlide', grid: withActive(beat1Cells, 2, 0), goal: 'any', targetCells: beat1Cells },
+  { captionKey: 'circleCluster', grid: withActive(beat2Cells, 1, 3), goal: 'any', targetCells: beat2Cells },
+  { captionKey: 'circleCluster121', grid: withActive(beat3Cells, 2, 1), goal: 'any', targetCells: beat3Cells },
   { captionKey: 'circleBlank', grid: withDotLine(beat4Cells, 3), goal: 'wholeLine', targetCells: beat4Cells },
 ];
 
@@ -279,7 +292,11 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     setTimeout(() => {
       for (const [r, c] of cells) {
         const t = grid[r][c];
-        grid[r][c] = td(t.color);
+        // A tile's dot color was decided when it was created (t.dotColor),
+        // exactly like the real circle game — reusing t.color here would
+        // force every flip to be a same-color self-pair, which is the rare
+        // case in the real game, not the rule.
+        grid[r][c] = td(t.dotColor);
         flipInCells.add(key(r, c));
       }
       render();

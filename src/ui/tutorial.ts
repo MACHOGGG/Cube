@@ -226,6 +226,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
   let dragAxis: 'row' | 'col' | null = null;
   let dragIndex = 0;
   let dragOffset = 0;
+  let lastShift = 0;
 
   function layout() {
     const rect = boardWrap.getBoundingClientRect();
@@ -301,6 +302,58 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     box.style.width = (maxC - minC + 1) * cell + 'px';
     box.style.height = (maxR - minR + 1) * cell + 'px';
     boardWrap.appendChild(box);
+  }
+
+  // A ghost fully outside [low, high] is invisible; one that's just
+  // crossed into range ramps up smoothly instead of popping in at full
+  // ghost-opacity. Ported from square.ts's real drag preview so the
+  // tutorial's own row/col drag shows the same wraparound-filler visual
+  // the real square game does, instead of a tile just sliding off the
+  // board edge into nothing.
+  function edgeFade(x: number, low: number, high: number, range: number): number {
+    const overshoot = x < low ? low - x : x > high ? x - high : 0;
+    return Math.max(0, 1 - overshoot / range);
+  }
+
+  function renderDragGhosts() {
+    if (!dragAxis) return;
+    const span = DIM * cell;
+    const fadeRange = cell * 0.4;
+    const magPx = dragOffset * cell;
+    const fadeAt = (x: number) => edgeFade(x, -cell, span, fadeRange);
+    if (dragAxis === 'row') {
+      const r = dragIndex;
+      for (let k = -2; k <= 2; k++) {
+        if (k === 0) continue;
+        for (let c = 0; c < DIM; c++) {
+          if (removedCells.has(key(r, c))) continue;
+          const x = c * cell + magPx + k * span;
+          const fade = fadeAt(x);
+          if (fade <= 0) continue;
+          const ghost = makeTileEl(grid[r][c], r, c);
+          ghost.classList.add('ghost');
+          ghost.style.left = x + 'px';
+          ghost.style.opacity = String(0.55 * fade);
+          boardEl.appendChild(ghost);
+        }
+      }
+    } else {
+      const c = dragIndex;
+      for (let k = -2; k <= 2; k++) {
+        if (k === 0) continue;
+        for (let r = 0; r < DIM; r++) {
+          if (removedCells.has(key(r, c))) continue;
+          const y = r * cell + magPx + k * span;
+          const fade = fadeAt(y);
+          if (fade <= 0) continue;
+          const ghost = makeTileEl(grid[r][c], r, c);
+          ghost.classList.add('ghost');
+          ghost.style.top = y + 'px';
+          ghost.style.opacity = String(0.55 * fade);
+          boardEl.appendChild(ghost);
+        }
+      }
+    }
   }
 
   function showCheck() {
@@ -412,6 +465,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     dragging = true;
     sx = e.clientX;
     sy = e.clientY;
+    lastShift = 0;
     boardEl.setPointerCapture(e.pointerId);
   }
   function move(e: PointerEvent) {
@@ -424,7 +478,15 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       dragIndex = dragAxis === 'row' ? startR : startC;
     }
     dragOffset = magnetizeRawDist((dragAxis === 'row' ? dx : dy) / cell);
+    // Same per-detent tick the real square game gives on every whole-cell
+    // shift crossed, not just on the final drop.
+    const shift = Math.round(dragOffset);
+    if (shift !== lastShift) {
+      vibrate(6);
+      lastShift = shift;
+    }
     render();
+    renderDragGhosts();
   }
   function up() {
     if (!dragging) return;
