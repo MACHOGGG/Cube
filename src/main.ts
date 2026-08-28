@@ -15,6 +15,7 @@ import { createCircleGame } from './shapes/circle';
 import { createCircleHexGame } from './shapes/circleHex';
 import { createSquareDiamondGame } from './shapes/squareDiamond';
 import { createTriangleBigGame } from './shapes/triangleBig';
+import { createCircleSevenGame } from './shapes/circleSeven';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 
 const rootEl = document.getElementById('app');
@@ -22,7 +23,11 @@ if (!rootEl) throw new Error('#app not found');
 const root: HTMLElement = rootEl;
 
 const games: ShapeGame[] = [createSquareGame(), createCircleGame(), createTriangleGame()];
-const layoutGames: ShapeGame[] = [createCircleHexGame(), createSquareDiamondGame(), createTriangleBigGame()];
+// The 3 layouts bomb mode actually supports (进阶炸弹's own shape pool) —
+// kept separate from the full "更多布局" list below since 七色圆球 doesn't
+// have the red-hazard mechanic wired in.
+const bombLayoutGames: ShapeGame[] = [createCircleHexGame(), createSquareDiamondGame(), createTriangleBigGame()];
+const layoutGames: ShapeGame[] = [...bombLayoutGames, createCircleSevenGame()];
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -100,7 +105,7 @@ function showTutorialPicker() {
 }
 
 function showBombTierPicker(tier: BombTier) {
-  const pool = tier === 'advanced' ? layoutGames : games;
+  const pool = tier === 'advanced' ? bombLayoutGames : games;
   showBombPicker(tier, pool.map((g) => g.card), (id) => {
     const game = pool.find((g) => g.card.id === id);
     if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
