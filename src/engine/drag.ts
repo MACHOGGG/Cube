@@ -1,5 +1,3 @@
-import { retrigger } from './juice';
-
 /**
  * Remaps a raw cell-unit drag distance so it "sticks" to each valid integer
  * slot and needs a deliberate push past the midpoint to let go — the
@@ -56,10 +54,6 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
     locked = false;
     sx = e.clientX;
     sy = e.clientY;
-    // Anticipation: a small pre-squeeze right as the touch/drag begins, so
-    // the "wind-up" before the board actually moves is felt, not just the
-    // motion itself.
-    retrigger(target, 'juice-anticipate');
     cb.onStart(e.clientX - rect.left, e.clientY - rect.top);
     target.setPointerCapture(e.pointerId);
   }
@@ -80,9 +74,6 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
     active = false;
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
-    // Landing: only for a drag that actually crossed the lock threshold —
-    // a tap/no-op release has nothing that "landed".
-    if (locked) retrigger(target, 'juice-land');
     cb.onEnd(locked ? dx : 0, locked ? dy : 0);
     locked = false;
   }
