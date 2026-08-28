@@ -1,7 +1,8 @@
 import type { ShapeCardMeta } from '../shapes/types';
 import { loadBest } from '../engine/persistence';
-import { BOMB_TIER_META, type BombTier } from '../engine/bomb';
+import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
+import { shapeName } from './shapeLabels';
 
 export interface MenuHandlers {
   onSelectBase: (id: ShapeCardMeta['id']) => void;
@@ -36,13 +37,13 @@ export interface HomeLayout {
 const SIGNIN_GLYPH =
   '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20 C4 15.6 7.6 13 12 13 C16.4 13 20 15.6 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
-function compactCard(name: string, best: string | null, glyph: string): HTMLButtonElement {
+function compactCard(name: string, best: string | null, glyph: string, comingSoon: string): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className = 'shape-card-compact shape-card-compact--tight';
   btn.innerHTML = `
     <span class="glyph">${glyph}</span>
     <span class="name">${name}</span>
-    <span class="best">${best ?? '敬请期待'}</span>
+    <span class="best">${best ?? comingSoon}</span>
   `;
   return btn;
 }
@@ -59,12 +60,13 @@ function placeholderCard(): HTMLDivElement {
  *  player taps. `bestSuffix` picks which persisted best-score key to show
  *  under each card (see each shape's own mount() for how the suffix is
  *  derived — '_timed'/'_bomb'/none). */
-function row3(container: HTMLElement, cards: ShapeCardMeta[], bestSuffix: string, onClick: (id: string) => void): void {
+function row3(container: HTMLElement, cards: ShapeCardMeta[], bestSuffix: string, lang: Lang, onClick: (id: string) => void): void {
+  const s = STRINGS[lang];
   const grid = document.createElement('div');
   grid.className = 'menu-grid-3col';
   for (const card of cards) {
     const best = loadBest(card.bestKey + bestSuffix);
-    const btn = compactCard(card.name, String(best), card.glyph);
+    const btn = compactCard(shapeName(lang, card.id, card.name), String(best), card.glyph, s.comingSoon);
     btn.addEventListener('click', () => onClick(card.id));
     grid.appendChild(btn);
   }
@@ -85,25 +87,25 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       <h1 class="home-title-glow">Slides</h1>
       <p class="tag-line">${s.homeTagline}</p>
       <div class="menu-sections" id="menuSections"></div>
-      <button class="home-how-to" id="howToBtn">如何滑？· 重新观看新手教学</button>
+      <button class="home-how-to" id="howToBtn">${s.howToBtn}</button>
 
       <div class="home-wide-card" id="randomTargetCard">
-        <span class="wide-card-title">随机得分目标</span>
-        <span class="wide-card-sub">敬请期待</span>
+        <span class="wide-card-title">${s.randomTargetTitle}</span>
+        <span class="wide-card-sub">${s.comingSoon}</span>
       </div>
       <div class="home-wide-card" id="multiplayerCard">
-        <span class="wide-card-title">多人游玩</span>
-        <span class="wide-card-sub">敬请期待</span>
+        <span class="wide-card-title">${s.multiplayerTitle}</span>
+        <span class="wide-card-sub">${s.comingSoon}</span>
       </div>
       <div class="home-wide-card" id="rankingsCard">
-        <span class="wide-card-title">成绩与排名</span>
-        <span class="wide-card-sub">敬请期待</span>
+        <span class="wide-card-title">${s.rankingsTitle}</span>
+        <span class="wide-card-sub">${s.comingSoon}</span>
       </div>
 
       <div class="home-signin-row">
         <button class="signin-circle" id="signInBtn" aria-label="Sign In">${SIGNIN_GLYPH}</button>
         <button class="exclusive-pill" id="exclusiveBtn">
-          <span class="zh">天才入口</span>
+          <span class="zh">${s.exclusiveEntry}</span>
           <span class="en">exclusive</span>
         </button>
       </div>
@@ -118,20 +120,20 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
 
   const sections = req<HTMLElement>('menuSections');
 
-  sectionLabel(sections, '基础玩法');
-  row3(sections, layout.baseCards, '', handlers.onSelectBase);
+  sectionLabel(sections, s.sectionBase);
+  row3(sections, layout.baseCards, '', lang, handlers.onSelectBase);
 
-  sectionLabel(sections, '计时挑战');
-  row3(sections, layout.baseCards, '_timed', handlers.onTimedFor);
+  sectionLabel(sections, s.sectionTimed);
+  row3(sections, layout.baseCards, '_timed', lang, handlers.onTimedFor);
 
-  (['basic', 'timed'] as BombTier[]).forEach((tier) => {
-    sectionLabel(sections, BOMB_TIER_META[tier].title);
-    row3(sections, layout.baseCards, '_bomb', (id) => handlers.onBombFor(tier, id));
-  });
-  sectionLabel(sections, BOMB_TIER_META.advanced.title);
-  row3(sections, layout.advancedBombCards, '_bomb', (id) => handlers.onBombFor('advanced', id));
+  sectionLabel(sections, s.bombBasicTitle);
+  row3(sections, layout.baseCards, '_bomb', lang, (id) => handlers.onBombFor('basic', id));
+  sectionLabel(sections, s.bombTimedTitle);
+  row3(sections, layout.baseCards, '_bomb', lang, (id) => handlers.onBombFor('timed', id));
+  sectionLabel(sections, s.bombAdvancedTitle);
+  row3(sections, layout.advancedBombCards, '_bomb', lang, (id) => handlers.onBombFor('advanced', id));
 
-  sectionLabel(sections, '更多布局');
+  sectionLabel(sections, s.sectionMore);
   const maxLayoutRows = Math.max(...layout.layoutColumns.map((col) => col.length));
   for (let r = 0; r < maxLayoutRows; r++) {
     const grid = document.createElement('div');
@@ -143,7 +145,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         continue;
       }
       const best = loadBest(card.bestKey);
-      const btn = compactCard(card.name, String(best), card.glyph);
+      const btn = compactCard(shapeName(lang, card.id, card.name), String(best), card.glyph, s.comingSoon);
       btn.addEventListener('click', () => handlers.onSelectLayout(card.id));
       grid.appendChild(btn);
     }

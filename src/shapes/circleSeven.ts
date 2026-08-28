@@ -175,7 +175,9 @@ export function createCircleSevenGame(): ShapeGame {
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
+      const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 七色圆球',
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
@@ -525,6 +527,7 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '七色圆球',
         timeLimitSec: opts?.timeLimitSec,

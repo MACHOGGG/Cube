@@ -223,6 +223,7 @@ export function createTriangleBigGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
         '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
       const hint = isBomb
@@ -234,6 +235,7 @@ export function createTriangleBigGame(): ShapeGame {
         ? '颜色数量与非炸弹版完全一致：5 种颜色各 5 枚，共 25 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 5 枚全部是永不翻面的危险三角。其余 4 种正常颜色各 5 枚，点色分布为：其余 3 色中的每一色至少 1 枚，凑满 5 枚（保证没有正反面同色的三角出现，红色也不会出现在任何三角的点色/反面上）。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
         : '5 种口味色，每色 5 枚，共 25 枚（一整块大三角，五行 1/3/5/7/9 枚）；每种口味的点色分布为：其余 4 色各 1 枚、另有 1 色额外再来 1 枚——保证没有正反面同色的三角出现。三个滑动方向——水平、左斜、右斜——判分规则与基础三角玩法完全一致。';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 大三角',
         tagline: isBomb
           ? '沿水平、左斜或右斜方向拖动整条线 · 避免红色三角 4 连'
@@ -750,6 +752,7 @@ export function createTriangleBigGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '大三角',
         timeLimitSec: opts?.timeLimitSec,

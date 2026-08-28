@@ -29,6 +29,84 @@ export interface I18nStrings {
   navHome: string;
   navAccount: string;
   switchLanguage: string;
+  // ---- home page ----
+  howToBtn: string;
+  sectionBase: string;
+  sectionTimed: string;
+  sectionMore: string;
+  bombBasicTitle: string;
+  bombTimedTitle: string;
+  bombAdvancedTitle: string;
+  randomTargetTitle: string;
+  comingSoon: string;
+  multiplayerTitle: string;
+  rankingsTitle: string;
+  exclusiveEntry: string;
+  // ---- tutorial picker / generic back buttons ----
+  tutorialPickerTitle: string;
+  tutorialPickerTagline: string;
+  backToMenu: string;
+  back: string;
+  squareTutorialDesc: string;
+  circleTutorialDesc: string;
+  triangleTutorialDesc: string;
+  // ---- account page ----
+  accountTitle: string;
+  tabRegister: string;
+  tabLogin: string;
+  accountComingSoon: string;
+  geniusPrivilegesTitle: string;
+  privilegesSoon: string;
+  becomeGenius: string;
+  // ---- game shell (shared HUD/overlays across every shape) ----
+  pauseBtn: string;
+  finishBtn: string;
+  scoreLabel: string;
+  perfLabel: string;
+  timeLabel: string;
+  stuckEndBtn: string;
+  startBtn: string;
+  pausedTitle: string;
+  pausedBody: string;
+  endTitleDefault: string;
+  compositeScoreLabel: string;
+  shareBtn: string;
+  restartBtn: string;
+  shareCardTitle: string;
+  shareImgAlt: string;
+  shareHint: string;
+  closeBtn: string;
+  // ---- game controller (dynamic end-of-run text) ----
+  perfBonusLabel: string;
+  timeMultLabel: string;
+  neverFlippedLabel: string;
+  remainingLabel: string;
+  defaultPenaltyLabel: string;
+  bombPenaltyLabel: string;
+  timeUpReason: string;
+  noMoreMatchesReason: string;
+  allFlippedReason: string;
+  manualEndReason: string;
+  bombHazardReason: string;
+  /** Contains a literal "{n}" placeholder substituted with the move count. */
+  stepsPhrase: string;
+  /** Contains a literal "{n}" placeholder substituted with the best score. */
+  bestPhrase: string;
+  rateLabel: string;
+  // ---- share card (canvas-drawn) ----
+  shareStartLabel: string;
+  shareEndLabel: string;
+  shareFooterHint: string;
+  // ---- shared shape UI ----
+  colorblindBtn: string;
+  shapeNameSquare: string;
+  shapeNameCircle: string;
+  shapeNameTriangle: string;
+  shapeNameCircleHex: string;
+  shapeNameSquareDiamond: string;
+  shapeNameTriangleBig: string;
+  shapeNameCircleSeven: string;
+  shapeNameTriangleAdvanced: string;
 }
 
 export const LANG_ORDER: Lang[] = ['en', 'fr', 'zhHant', 'zhHans'];
@@ -60,6 +138,75 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navHome: 'Home',
     navAccount: 'Account',
     switchLanguage: 'Switch language',
+    howToBtn: 'How to slide? · Watch the tutorial again',
+    sectionBase: 'Base games',
+    sectionTimed: 'Timed challenge',
+    sectionMore: 'More layouts',
+    bombBasicTitle: 'Basic bomb',
+    bombTimedTitle: 'Timed bomb',
+    bombAdvancedTitle: 'Advanced bomb',
+    randomTargetTitle: 'Random score target',
+    comingSoon: 'Coming soon',
+    multiplayerTitle: 'Multiplayer',
+    rankingsTitle: 'Records & rankings',
+    exclusiveEntry: 'Genius',
+    tutorialPickerTitle: 'How to slide?',
+    tutorialPickerTagline: 'Pick a game to watch its tutorial again',
+    backToMenu: 'Back to menu',
+    back: 'Back',
+    squareTutorialDesc: 'Drag a whole row/column · the basics',
+    circleTutorialDesc: '3 slide directions · "22"/"121" diamonds',
+    triangleTutorialDesc: '3 slide directions · big triangle & flip',
+    accountTitle: 'Account',
+    tabRegister: 'Sign up',
+    tabLogin: 'Log in',
+    accountComingSoon: 'A full account system is coming soon',
+    geniusPrivilegesTitle: 'Slides Genius perks',
+    privilegesSoon: '…more coming soon',
+    becomeGenius: 'Become a Slides Genius',
+    pauseBtn: 'Pause',
+    finishBtn: 'Finish',
+    scoreLabel: 'Score',
+    perfLabel: 'Hit rate',
+    timeLabel: 'Time',
+    stuckEndBtn: 'No more possible flips · tap to end',
+    startBtn: 'Start',
+    pausedTitle: 'Paused',
+    pausedBody: 'The timer has stopped and the board is hidden.',
+    endTitleDefault: 'Challenge complete',
+    compositeScoreLabel: 'Composite score',
+    shareBtn: 'Share result',
+    restartBtn: 'Play again',
+    shareCardTitle: 'Share result',
+    shareImgAlt: 'Result card',
+    shareHint: 'Press and hold, or right-click the image, to save it',
+    closeBtn: 'Close',
+    perfBonusLabel: 'Hit-rate bonus',
+    timeMultLabel: 'Time multiplier',
+    neverFlippedLabel: 'Never flipped',
+    remainingLabel: 'Flipped, unfinished',
+    defaultPenaltyLabel: 'Penalty',
+    bombPenaltyLabel: 'Bomb penalty',
+    timeUpReason: "Time's up",
+    noMoreMatchesReason: 'No more matches possible',
+    allFlippedReason: 'Every tile is flipped',
+    manualEndReason: 'Ended manually',
+    bombHazardReason: 'Bomb tiles connected',
+    stepsPhrase: '{n} moves',
+    bestPhrase: 'best {n}',
+    rateLabel: 'Hit rate ',
+    shareStartLabel: 'Start',
+    shareEndLabel: 'End',
+    shareFooterHint: 'Drag a whole row, column, or diagonal to match same-color patterns',
+    colorblindBtn: 'Colorblind-friendly palette',
+    shapeNameSquare: 'Square',
+    shapeNameCircle: 'Circle',
+    shapeNameTriangle: 'Triangle',
+    shapeNameCircleHex: 'Hex Circle',
+    shapeNameSquareDiamond: 'Diamond Square',
+    shapeNameTriangleBig: 'Big Triangle',
+    shapeNameCircleSeven: 'Seven-color Circle',
+    shapeNameTriangleAdvanced: 'Advanced Triangle',
   },
   fr: {
     langName: 'Français',
@@ -87,6 +234,75 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navHome: 'Accueil',
     navAccount: 'Compte',
     switchLanguage: 'Changer de langue',
+    howToBtn: 'Comment glisser ? · Revoir le tutoriel',
+    sectionBase: 'Jeux de base',
+    sectionTimed: 'Défi chronométré',
+    sectionMore: 'Plus de plateaux',
+    bombBasicTitle: 'Bombe de base',
+    bombTimedTitle: 'Bombe chronométrée',
+    bombAdvancedTitle: 'Bombe avancée',
+    randomTargetTitle: 'Objectif de score aléatoire',
+    comingSoon: 'Bientôt disponible',
+    multiplayerTitle: 'Multijoueur',
+    rankingsTitle: 'Historique et classements',
+    exclusiveEntry: 'Génie',
+    tutorialPickerTitle: 'Comment glisser ?',
+    tutorialPickerTagline: 'Choisissez un jeu pour revoir son tutoriel',
+    backToMenu: 'Retour au menu',
+    back: 'Retour',
+    squareTutorialDesc: 'Faites glisser une ligne/colonne entière · les bases',
+    circleTutorialDesc: '3 directions · losanges "22"/"121"',
+    triangleTutorialDesc: '3 directions · grand triangle et retournement',
+    accountTitle: 'Compte',
+    tabRegister: "S'inscrire",
+    tabLogin: 'Se connecter',
+    accountComingSoon: 'Un système de compte complet arrive bientôt',
+    geniusPrivilegesTitle: 'Avantages Slides Génie',
+    privilegesSoon: '…encore plus à venir',
+    becomeGenius: 'Devenir un Slides Génie',
+    pauseBtn: 'Pause',
+    finishBtn: 'Terminer',
+    scoreLabel: 'Score',
+    perfLabel: 'Taux de réussite',
+    timeLabel: 'Temps',
+    stuckEndBtn: 'Plus aucun retournement possible · appuyez pour terminer',
+    startBtn: 'Commencer',
+    pausedTitle: 'En pause',
+    pausedBody: 'Le chronomètre est arrêté et le plateau est caché.',
+    endTitleDefault: 'Défi terminé',
+    compositeScoreLabel: 'Score composite',
+    shareBtn: 'Partager le résultat',
+    restartBtn: 'Rejouer',
+    shareCardTitle: 'Partager le résultat',
+    shareImgAlt: 'Carte de résultat',
+    shareHint: 'Appuyez longuement, ou clic droit sur l\'image, pour l\'enregistrer',
+    closeBtn: 'Fermer',
+    perfBonusLabel: 'Bonus de taux de réussite',
+    timeMultLabel: 'Multiplicateur de temps',
+    neverFlippedLabel: 'Jamais retournées',
+    remainingLabel: 'Retournées, inachevées',
+    defaultPenaltyLabel: 'Pénalité',
+    bombPenaltyLabel: 'Pénalité de bombe',
+    timeUpReason: 'Temps écoulé',
+    noMoreMatchesReason: 'Plus aucune combinaison possible',
+    allFlippedReason: 'Toutes les cases sont retournées',
+    manualEndReason: 'Terminé manuellement',
+    bombHazardReason: 'Cases-bombes connectées',
+    stepsPhrase: '{n} coups',
+    bestPhrase: 'meilleur score {n}',
+    rateLabel: 'Taux de réussite ',
+    shareStartLabel: 'Début',
+    shareEndLabel: 'Fin',
+    shareFooterHint: 'Faites glisser une ligne, colonne ou diagonale entière pour assortir les couleurs',
+    colorblindBtn: 'Palette adaptée aux daltoniens',
+    shapeNameSquare: 'Carré',
+    shapeNameCircle: 'Cercle',
+    shapeNameTriangle: 'Triangle',
+    shapeNameCircleHex: 'Cercle hexagonal',
+    shapeNameSquareDiamond: 'Carré losange',
+    shapeNameTriangleBig: 'Grand triangle',
+    shapeNameCircleSeven: 'Cercle à sept couleurs',
+    shapeNameTriangleAdvanced: 'Triangle avancé',
   },
   zhHant: {
     langName: '繁體中文',
@@ -114,6 +330,75 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navHome: '首頁',
     navAccount: '帳戶',
     switchLanguage: '切換語言',
+    howToBtn: '如何滑？· 重新觀看新手教學',
+    sectionBase: '基礎玩法',
+    sectionTimed: '計時挑戰',
+    sectionMore: '更多佈局',
+    bombBasicTitle: '基礎炸彈',
+    bombTimedTitle: '定時炸彈',
+    bombAdvancedTitle: '進階炸彈',
+    randomTargetTitle: '隨機得分目標',
+    comingSoon: '敬請期待',
+    multiplayerTitle: '多人遊玩',
+    rankingsTitle: '成績與排名',
+    exclusiveEntry: '天才入口',
+    tutorialPickerTitle: '如何滑？',
+    tutorialPickerTagline: '選擇一種玩法，重新觀看新手教學',
+    backToMenu: '返回選單',
+    back: '返回',
+    squareTutorialDesc: '拖動整行/整列 · 基礎教學',
+    circleTutorialDesc: '三向滑動 ·「22」/「121」菱形',
+    triangleTutorialDesc: '三向滑動 · 大三角與翻面',
+    accountTitle: '帳戶',
+    tabRegister: '註冊',
+    tabLogin: '登入',
+    accountComingSoon: '敬請期待完整的帳戶系統',
+    geniusPrivilegesTitle: 'Slides 天才專屬特權',
+    privilegesSoon: '……敬請期待',
+    becomeGenius: '成為 Slides 天才',
+    pauseBtn: '暫停',
+    finishBtn: '結束',
+    scoreLabel: '得分',
+    perfLabel: '有效得分率',
+    timeLabel: '用時',
+    stuckEndBtn: '無法全部翻面 · 點擊結束本局',
+    startBtn: '開始',
+    pausedTitle: '已暫停',
+    pausedBody: '計時已停止，棋盤已隱藏。',
+    endTitleDefault: '挑戰結束',
+    compositeScoreLabel: '綜合得分',
+    shareBtn: '分享戰績',
+    restartBtn: '再來一局',
+    shareCardTitle: '分享戰績',
+    shareImgAlt: '戰績卡片',
+    shareHint: '長按或右鍵圖片即可儲存',
+    closeBtn: '關閉',
+    perfBonusLabel: '有效得分率加成',
+    timeMultLabel: '用時係數',
+    neverFlippedLabel: '從未翻面',
+    remainingLabel: '翻面未收尾',
+    defaultPenaltyLabel: '懲罰',
+    bombPenaltyLabel: '炸彈懲罰',
+    timeUpReason: '時間到',
+    noMoreMatchesReason: '無法繼續配對',
+    allFlippedReason: '全部方塊已翻成點面',
+    manualEndReason: '手動結束',
+    bombHazardReason: '紅色炸彈相連',
+    stepsPhrase: '共 {n} 步',
+    bestPhrase: '本機最佳 {n}',
+    rateLabel: '得分率',
+    shareStartLabel: '開始',
+    shareEndLabel: '結束',
+    shareFooterHint: '拖動整行整列或整條斜線，拼出同色圖案',
+    colorblindBtn: '色盲友好配色',
+    shapeNameSquare: '方塊',
+    shapeNameCircle: '圓球',
+    shapeNameTriangle: '三角',
+    shapeNameCircleHex: '六邊圓球',
+    shapeNameSquareDiamond: '菱形方塊',
+    shapeNameTriangleBig: '大三角',
+    shapeNameCircleSeven: '七色圓球',
+    shapeNameTriangleAdvanced: '進階三角',
   },
   zhHans: {
     langName: '简体中文',
@@ -141,7 +426,87 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navHome: '首页',
     navAccount: '账户',
     switchLanguage: '切换语言',
+    howToBtn: '如何滑？· 重新观看新手教学',
+    sectionBase: '基础玩法',
+    sectionTimed: '计时挑战',
+    sectionMore: '更多布局',
+    bombBasicTitle: '基础炸弹',
+    bombTimedTitle: '定时炸弹',
+    bombAdvancedTitle: '进阶炸弹',
+    randomTargetTitle: '随机得分目标',
+    comingSoon: '敬请期待',
+    multiplayerTitle: '多人游玩',
+    rankingsTitle: '成绩与排名',
+    exclusiveEntry: '天才入口',
+    tutorialPickerTitle: '如何滑？',
+    tutorialPickerTagline: '选择一种玩法，重新观看新手教学',
+    backToMenu: '返回菜单',
+    back: '返回',
+    squareTutorialDesc: '拖动整行/整列 · 基础教学',
+    circleTutorialDesc: '三向滑动 ·"22"/"121"菱形',
+    triangleTutorialDesc: '三向滑动 · 大三角与翻面',
+    accountTitle: '账户',
+    tabRegister: '注册',
+    tabLogin: '登录',
+    accountComingSoon: '敬请期待完整的账户系统',
+    geniusPrivilegesTitle: 'Slides 天才专属特权',
+    privilegesSoon: '……敬请期待',
+    becomeGenius: '成为 Slides 天才',
+    pauseBtn: '暂停',
+    finishBtn: '结束',
+    scoreLabel: '得分',
+    perfLabel: '有效得分率',
+    timeLabel: '用时',
+    stuckEndBtn: '无法全部翻面 · 点击结束本局',
+    startBtn: '开始',
+    pausedTitle: '已暂停',
+    pausedBody: '计时已停止，棋盘已隐藏。',
+    endTitleDefault: '挑战结束',
+    compositeScoreLabel: '综合得分',
+    shareBtn: '分享战绩',
+    restartBtn: '再来一局',
+    shareCardTitle: '分享战绩',
+    shareImgAlt: '战绩卡片',
+    shareHint: '长按或右键图片即可保存',
+    closeBtn: '关闭',
+    perfBonusLabel: '有效得分率加成',
+    timeMultLabel: '用时系数',
+    neverFlippedLabel: '从未翻面',
+    remainingLabel: '翻面未收尾',
+    defaultPenaltyLabel: '惩罚',
+    bombPenaltyLabel: '炸弹惩罚',
+    timeUpReason: '时间到',
+    noMoreMatchesReason: '无法继续匹配',
+    allFlippedReason: '全部方块已翻成点面',
+    manualEndReason: '手动结束',
+    bombHazardReason: '红色炸弹相连',
+    stepsPhrase: '共 {n} 步',
+    bestPhrase: '本机最佳 {n}',
+    rateLabel: '得分率',
+    shareStartLabel: '开始',
+    shareEndLabel: '结束',
+    shareFooterHint: '拖动整行整列或整条斜线，拼出同色图案',
+    colorblindBtn: '色盲友好配色',
+    shapeNameSquare: '方块',
+    shapeNameCircle: '圆球',
+    shapeNameTriangle: '三角',
+    shapeNameCircleHex: '六边圆球',
+    shapeNameSquareDiamond: '菱形方块',
+    shapeNameTriangleBig: '大三角',
+    shapeNameCircleSeven: '七色圆球',
+    shapeNameTriangleAdvanced: '进阶三角',
   },
+};
+
+// Kept separate from STRINGS/I18nStrings (whose values are all plain
+// strings and get looked up generically via `keyof I18nStrings` in a few
+// places, e.g. each tutorial's captionKey) — an array-typed field there
+// would widen those lookups to `string | string[]` everywhere.
+export const PRIVILEGES: Record<Lang, string[]> = {
+  en: ['More color palettes', 'More levels', 'More score targets', 'More layouts', 'More game modes', 'More competitions', 'Global & friend rankings', 'An Apple Watch edition'],
+  fr: ['Plus de palettes de couleurs', 'Plus de niveaux', "Plus d'objectifs de score", 'Plus de plateaux', 'Plus de modes de jeu', 'Plus de compétitions', 'Classements mondiaux et entre amis', 'Une édition Apple Watch'],
+  zhHant: ['解鎖更多配色', '更多關卡', '更多得分目標', '更多佈局', '更多玩法', '更多競賽', '世界排名和好友排名', 'Apple Watch 特別版'],
+  zhHans: ['解锁更多配色', '更多关卡', '更多得分目标', '更多布局', '更多玩法', '更多竞赛', '世界排名和好友排名', 'Apple Watch 特别版'],
 };
 
 export function loadLang(): Lang | null {

@@ -218,6 +218,7 @@ export function createCircleHexGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
         '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"22"菱形沿同一菱形方向扩大同样按扩大后的数量得分，"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
       const hint = isBomb
@@ -229,6 +230,7 @@ export function createCircleHexGame(): ShapeGame {
         ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚（加正中心 1 颗永久空白球），其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险球。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色中的每一色至少 1 枚，凑满 6 枚——红色不会出现在任何球的点色（反面）上。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
         : '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 六边圆球',
         tagline: isBomb
           ? '沿水平、左斜或右斜方向拖动整条线 · 避免红色球 4 连'
@@ -703,6 +705,7 @@ export function createCircleHexGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '六边圆球',
         timeLimitSec: opts?.timeLimitSec,

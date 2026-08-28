@@ -178,6 +178,8 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
   ctx.restore();
 }
 
+import { STRINGS, type Lang } from '../i18n';
+
 export interface ShareCardInfo {
   shapeName: string;
   bestKey?: string;
@@ -186,6 +188,7 @@ export interface ShareCardInfo {
   detail: string;
   /** True when this run ended via a bomb hazard cluster — draws a large, low-opacity 💥 behind the card. */
   hazardEnd?: boolean;
+  lang: Lang;
 }
 
 const CARD_W = 720;
@@ -199,6 +202,7 @@ const EXPORT_SCALE = 3;
 
 /** Renders the composed PNG data URL: title, score summary, then the start and end board snapshots side by side, each labeled. */
 export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | null, endSnap: BoardSnapshot | null): string {
+  const s = STRINGS[info.lang];
   const boardsY = 300;
   const boardGap = 28;
   const thumb = (CARD_W - PAD * 2 - boardGap) / 2;
@@ -236,7 +240,7 @@ export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | 
   ctx.fillText(String(info.totalScore), PAD, 200);
   ctx.font = '500 15px "Karla", sans-serif';
   ctx.fillStyle = '#5b5650';
-  ctx.fillText('综合得分', PAD + 2, 222);
+  ctx.fillText(s.compositeScoreLabel, PAD + 2, 222);
 
   ctx.font = '500 15px "JetBrains Mono", monospace';
   ctx.fillStyle = '#8b8680';
@@ -264,13 +268,13 @@ export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | 
     ctx.fillStyle = '#5b5650';
     ctx.fillText(label, x, boardsY + thumb + 30);
   };
-  drawThumb(startSnap, PAD, '开始');
-  drawThumb(endSnap, PAD + thumb + boardGap, '结束');
+  drawThumb(startSnap, PAD, s.shareStartLabel);
+  drawThumb(endSnap, PAD + thumb + boardGap, s.shareEndLabel);
 
   ctx.font = '500 13px "Karla", sans-serif';
   ctx.fillStyle = '#a39e97';
   ctx.textAlign = 'center';
-  ctx.fillText('拖动整行整列或整条斜线，拼出同色图案', CARD_W / 2, cardH - 34);
+  ctx.fillText(s.shareFooterHint, CARD_W / 2, cardH - 34);
   ctx.textAlign = 'left';
 
   return canvas.toDataURL('image/png');

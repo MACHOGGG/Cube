@@ -7,7 +7,8 @@ import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
-import { loadLang, saveLang, hasSeenTutorial, markTutorialSeen, type Lang, type TutorialShape } from './i18n';
+import { loadLang, saveLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
 import { createCircleGame } from './shapes/circle';
@@ -76,9 +77,9 @@ function showMenu() {
       const game = pool.find((g) => g.card.id === id);
       if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
     },
-    onRandomTarget: () => showComingSoon('随机得分目标'),
-    onMultiplayer: () => showComingSoon('多人游玩'),
-    onRankings: () => showComingSoon('成绩与排名'),
+    onRandomTarget: () => showComingSoon(STRINGS[currentLang].randomTargetTitle),
+    onMultiplayer: () => showComingSoon(STRINGS[currentLang].multiplayerTitle),
+    onRankings: () => showComingSoon(STRINGS[currentLang].rankingsTitle),
     onSignIn: () => showAccountPage('login'),
     onExclusive: () => showAccountPage('register'),
     onHowToSlide: showTutorialPicker,
@@ -87,7 +88,7 @@ function showMenu() {
 
 function showAccountPage(tab: AuthTab) {
   teardown();
-  renderAccountPage(root, tab, showMenu);
+  renderAccountPage(root, tab, showMenu, currentLang);
 }
 
 // Which shape a card id's tutorial covers, if any — layout games (the
@@ -109,24 +110,26 @@ function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void) {
 
 function showTutorialPicker() {
   teardown();
+  const s = STRINGS[currentLang];
   root.innerHTML = `
     <div class="app">
-      <h1>如何滑？</h1>
-      <p class="tag-line">选择一种玩法，重新观看新手教学</p>
+      <h1>${s.tutorialPickerTitle}</h1>
+      <p class="tag-line">${s.tutorialPickerTagline}</p>
       <div class="menu-grid" id="tutorialGrid"></div>
-      <div class="controls"><button class="icon-btn" id="backBtn">返回菜单</button></div>
+      <div class="controls"><button class="icon-btn" id="backBtn">${s.backToMenu}</button></div>
     </div>
   `;
   const grid = root.querySelector<HTMLElement>('#tutorialGrid')!;
-  const entries: { shape: TutorialShape; name: string; desc: string }[] = [
-    { shape: 'square', name: '方块', desc: '拖动整行/整列 · 基础教学' },
-    { shape: 'circle', name: '圆球', desc: '三向滑动 · "22"/"121" 菱形' },
-    { shape: 'triangle', name: '三角', desc: '三向滑动 · 大三角与朝向切换' },
+  const entries: { shape: TutorialShape; desc: string }[] = [
+    { shape: 'square', desc: s.squareTutorialDesc },
+    { shape: 'circle', desc: s.circleTutorialDesc },
+    { shape: 'triangle', desc: s.triangleTutorialDesc },
   ];
   for (const entry of entries) {
     const btn = document.createElement('button');
     btn.className = 'shape-card';
-    btn.innerHTML = `<span class="info"><span class="name">${entry.name}</span><span class="desc">${entry.desc}</span></span>`;
+    const name = shapeName(currentLang, entry.shape, entry.shape);
+    btn.innerHTML = `<span class="info"><span class="name">${name}</span><span class="desc">${entry.desc}</span></span>`;
     btn.addEventListener('click', () => renderShapeTutorialByShape(entry.shape, showTutorialPicker));
     grid.appendChild(btn);
   }
@@ -135,12 +138,13 @@ function showTutorialPicker() {
 
 function showComingSoon(title: string) {
   teardown();
+  const s = STRINGS[currentLang];
   root.innerHTML = `
     <div class="app">
       <h1>${title}</h1>
-      <p class="tag-line">敬请期待</p>
+      <p class="tag-line">${s.comingSoon}</p>
       <div class="controls">
-        <button class="icon-btn" id="backBtn">返回</button>
+        <button class="icon-btn" id="backBtn">${s.back}</button>
       </div>
     </div>
   `;
@@ -148,9 +152,10 @@ function showComingSoon(title: string) {
 }
 
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
+  const fullOpts: ShapeGameOpts = { ...opts, lang: currentLang };
   const backFn = onBack ?? showMenu;
   const mountNow = () => {
-    activeDestroy = game.mount(root, backFn, opts);
+    activeDestroy = game.mount(root, backFn, fullOpts);
   };
   // A timed-challenge run or a replay from another shape's "更多布局" card
   // skips the tutorial gate — only the very first time a player opens this

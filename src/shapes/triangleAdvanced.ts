@@ -217,7 +217,9 @@ export function createTriangleAdvancedGame(): ShapeGame {
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
+      const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 进阶三角',
         tagline: '左斜/右斜整行滑动 · 横向仅拖动一段',
         startBody: '拖动斜线方向的整条线，或横向拖动其中一段三角，拼出同色图案。点击开始生成一局新的方糖阵势。',
@@ -623,6 +625,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '进阶三角',
         timeLimitSec: opts?.timeLimitSec,

@@ -92,6 +92,7 @@ export function createSquareGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
         '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分）。同一条线连得更长（1×5、1×6……）按实际数量得分，2×2 沿同一矩形方向扩大（如 2×3、3×3）也按扩大后的数量得分，但线外/矩形外的同色方块不会被计入；得分方块翻成点面继续联通。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当整行或整列都翻成点面且点色相同时，额外得该行/列长度的平方分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
       const hint = isBomb
@@ -103,6 +104,7 @@ export function createSquareGame(): ShapeGame {
         ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险方块。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色各 1 枚、本色 2 枚——红色不会出现在任何方块的点色（反面）上。'
         : '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 方块',
         tagline: isBomb
           ? '拖动一整行或一整列 · 避免红色方块 4 连 · 翻成点面继续联通'
@@ -616,6 +618,7 @@ export function createSquareGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '方块',
         timeLimitSec: opts?.timeLimitSec,

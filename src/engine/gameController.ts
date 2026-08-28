@@ -8,6 +8,7 @@ import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
 import { playHit, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
+import { STRINGS, type Lang } from '../i18n';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -42,13 +43,33 @@ function timeMultiplierFor(elapsedSec: number): number {
 }
 const NEVER_FLIPPED_PENALTY = 30;
 const REMAINING_PENALTY = 5;
-/** The reason string doFinish() passes for the player's own "结束" button — endGame() matches on this to skip the unflipped-tile penalties (see endGame). */
+/** The reason string doFinish() passes for the player's own "结束" button — endGame() matches on this to skip the unflipped-tile penalties (see endGame). This (and the other internal reason literals below, and BOMB_HAZARD_REASON) double as a language-invariant lookup key for displayReason() — never shown to the player directly. */
 const MANUAL_END_REASON = '手动结束';
+
+// Every reason/penalty-label string ever passed into endGame — either from
+// this module's own internal literals or, for the bomb hazard case, from
+// every bomb-capable shape file via the shared BOMB_HAZARD_REASON/label
+// constants — is authored in Chinese as a stable lookup key. displayReason()/
+// displayPenaltyLabel() translate them to the current lang only at the
+// point they're shown to the player, so no shape file needs its own lang
+// plumbing just to pass forceEnd() a reason.
+const REASON_LABEL_KEY: Partial<Record<string, keyof import('../i18n').I18nStrings>> = {
+  时间到: 'timeUpReason',
+  全部方块已翻成点面: 'allFlippedReason',
+  无法继续匹配: 'noMoreMatchesReason',
+  [MANUAL_END_REASON]: 'manualEndReason',
+  [BOMB_HAZARD_REASON]: 'bombHazardReason',
+};
+const PENALTY_LABEL_KEY: Partial<Record<string, keyof import('../i18n').I18nStrings>> = {
+  炸弹惩罚: 'bombPenaltyLabel',
+};
 
 export interface GameControllerHooks {
   bestKey: string;
   /** Human-readable name for the share card ("方块", "圆球", ...). */
   shapeName: string;
+  /** Localizes this controller's own dynamic end-of-run text (breakdown rows, detail line, share-card labels). */
+  lang: Lang;
   /**
    * Timed-challenge mode: the HUD clock counts down from this many seconds
    * instead of counting up, and the run ends on its own the instant it hits
@@ -151,16 +172,26 @@ export interface GameController {
  * and call resolveMove() once they've applied a confirmed drag to their grid.
  */
 export function createGameController(refs: ShellRefs, hooks: GameControllerHooks): GameController {
+  const s = STRINGS[hooks.lang];
+  const displayReason = (reason: string): string => {
+    const key = REASON_LABEL_KEY[reason];
+    return key ? (s[key] as string) : reason;
+  };
+  const displayPenaltyLabel = (label: string): string => {
+    const key = PENALTY_LABEL_KEY[label];
+    return key ? (s[key] as string) : label;
+  };
+
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   const perf = createPerformanceGauge();
-  const timer = createTimer((s) => {
+  const timer = createTimer((sec) => {
     if (hooks.timeLimitSec !== undefined) {
-      const remaining = Math.max(0, hooks.timeLimitSec - s);
+      const remaining = Math.max(0, hooks.timeLimitSec - sec);
       refs.hudTimeEl.textContent = formatClock(remaining);
       if (remaining <= 0 && !gameOver) endGame('时间到');
       return;
     }
-    refs.hudTimeEl.textContent = formatClock(s);
+    refs.hudTimeEl.textContent = formatClock(sec);
   });
   const streak = createStreakTracker();
 
@@ -218,7 +249,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.pauseOverlay.classList.remove('show');
   }
 
-  function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = '惩罚') {
+  function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = s.defaultPenaltyLabel) {
     gameOver = true;
     resolving = false;
     timer.stop();
@@ -253,16 +284,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     const hazardEnd = reason === BOMB_HAZARD_REASON;
     refs.endHazardBgEl.classList.toggle('show', hazardEnd);
-    refs.endTitleEl.textContent = '挑战结束';
+    refs.endTitleEl.textContent = s.endTitleDefault;
     refs.endScoreEl.textContent = String(total);
     refs.endBreakdownEl.innerHTML =
-      row('得分', String(score)) +
-      row(`有效得分率加成（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
-      row('用时系数', '×' + timeMult) +
-      (!isManualEnd && remaining.neverFlipped > 0 ? row(`从未翻面 × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
-      (!isManualEnd && remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '') +
-      (extraPenalty > 0 ? row(extraPenaltyLabel, '−' + extraPenalty) : '');
-    const detailText = reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
+      row(s.scoreLabel, String(score)) +
+      row(`${s.perfBonusLabel}（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
+      row(s.timeMultLabel, '×' + timeMult) +
+      (!isManualEnd && remaining.neverFlipped > 0 ? row(`${s.neverFlippedLabel} × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
+      (!isManualEnd && remaining.flippedButRemaining > 0 ? row(`${s.remainingLabel} × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '') +
+      (extraPenalty > 0 ? row(displayPenaltyLabel(extraPenaltyLabel), '−' + extraPenalty) : '');
+    const detailText =
+      displayReason(reason) +
+      ' · ' + s.stepsPhrase.replace('{n}', String(moves)) +
+      ' · ' + s.timeLabel + ' ' + formatClock(elapsed) +
+      ' · ' + s.bestPhrase.replace('{n}', String(best));
     refs.endDetailEl.textContent = detailText;
     refs.endOverlay.classList.add('show');
 
@@ -270,9 +305,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     lastShareInfo = {
       totalScore: total,
       scoreRows: [
-        ['得分', String(score)],
-        [`得分率${statusPercent}%`, '×' + bonusMult.toFixed(2)],
-        ['用时', formatClock(elapsed)],
+        [s.scoreLabel, String(score)],
+        [`${s.rateLabel}${statusPercent}%`, '×' + bonusMult.toFixed(2)],
+        [s.timeLabel, formatClock(elapsed)],
       ],
       detail: detailText,
       hazardEnd,
@@ -281,7 +316,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   function doShare() {
     if (!lastShareInfo) return;
-    const dataUrl = renderShareCard({ shapeName: hooks.shapeName, ...lastShareInfo }, startSnapshot, endSnapshot);
+    const dataUrl = renderShareCard({ shapeName: hooks.shapeName, lang: hooks.lang, ...lastShareInfo }, startSnapshot, endSnapshot);
     refs.shareImageEl.src = dataUrl;
     refs.shareOverlay.classList.add('show');
   }

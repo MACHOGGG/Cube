@@ -7,11 +7,15 @@ export interface ShapeCardMeta {
   glyph: string;
 }
 
+import type { Lang } from '../i18n';
+
 export interface ShapeGameOpts {
   /** Timed-challenge mode: run ends automatically after this many seconds. */
   timeLimitSec?: number;
   /** Bomb-challenge mode: red hazard tiles, instant game-over on a 4+ cluster. */
   bomb?: boolean;
+  /** Localizes the shell chrome and dynamic end-of-run text; falls back to 'zhHans' if omitted. */
+  lang?: Lang;
 }
 
 export interface ShapeGame {

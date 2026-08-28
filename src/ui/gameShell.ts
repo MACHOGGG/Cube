@@ -1,3 +1,5 @@
+import { STRINGS, type Lang } from '../i18n';
+
 export interface ExtraControl {
   id: string;
   label: string;
@@ -16,6 +18,10 @@ export interface ShellMeta {
    *  whose own layout (many cells, or a shape denser than a plain square
    *  grid) reads as cramped at the standard size — see the "app-wide" CSS. */
   wideBoard?: boolean;
+  /** Localizes the shell's own static chrome (buttons/HUD labels/overlay
+   *  copy) below — title/tagline/startBody/hint/assumptions above stay
+   *  shape-authored (still Chinese-only pending per-shape translation). */
+  lang: Lang;
 }
 
 export interface ShellRefs {
@@ -60,6 +66,7 @@ export interface ShellRefs {
  * #board.
  */
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
+  const s = STRINGS[meta.lang];
   const extraButtonsHtml = (meta.extraControls ?? [])
     .map((b) => `<button class="icon-btn" id="${b.id}">${b.label}</button>`)
     .join('');
@@ -70,20 +77,20 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <p class="tag-line">${meta.tagline}</p>
 
       <div class="controls">
-        <button class="icon-btn" id="stopBtn">暂停</button>
-        <button class="icon-btn" id="finishBtn">结束</button>
+        <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
+        <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
         ${extraButtonsHtml}
-        <button class="icon-btn" id="backBtn">返回菜单</button>
+        <button class="icon-btn" id="backBtn">${s.backToMenu}</button>
       </div>
 
       <div class="hud">
         <div class="hud-cell score-cell">
           <span class="gain-badge" id="gainBadge"></span>
-          <div class="k">得分</div>
+          <div class="k">${s.scoreLabel}</div>
           <div class="v"><span class="score-reel" id="scoreReel"></span></div>
         </div>
-        <div class="hud-cell perf-cell"><div class="k">有效得分率</div><div class="v" id="hud-perf">0%</div></div>
-        <div class="hud-cell"><div class="k">用时</div><div class="v" id="hud-time">0:00</div></div>
+        <div class="hud-cell perf-cell"><div class="k">${s.perfLabel}</div><div class="v" id="hud-perf">0%</div></div>
+        <div class="hud-cell"><div class="k">${s.timeLabel}</div><div class="v" id="hud-time">0:00</div></div>
       </div>
 
       ${meta.patternHint ? `<div class="pattern-hint">${meta.patternHint}</div>` : ''}
@@ -93,7 +100,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
 
       <div class="legend" id="legend"></div>
-      <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>无法全部翻面 · 点击结束本局</button>
+      <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
       <p class="hint">${meta.hint}</p>
       <p class="assumptions">${meta.assumptions}</p>
     </div>
@@ -102,40 +109,40 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <div class="modal">
         <h2>${meta.title}</h2>
         <p>${meta.startBody}</p>
-        <div class="btn-row"><button class="primary" id="startBtn">开始</button></div>
+        <div class="btn-row"><button class="primary" id="startBtn">${s.startBtn}</button></div>
       </div>
     </div>
 
     <div class="overlay opaque" id="pauseOverlay">
       <div class="modal">
-        <h2>已暂停</h2>
-        <p>计时已停止，棋盘已隐藏。</p>
-        <div class="btn-row"><button class="primary" id="continueBtn">继续</button></div>
+        <h2>${s.pausedTitle}</h2>
+        <p>${s.pausedBody}</p>
+        <div class="btn-row"><button class="primary" id="continueBtn">${s.resume}</button></div>
       </div>
     </div>
 
     <div class="overlay" id="endOverlay">
       <div class="modal">
         <div class="end-hazard-bg" id="endHazardBg" aria-hidden="true">💥</div>
-        <h2 id="endTitle">挑战结束</h2>
-        <div class="end-score-label">综合得分</div>
+        <h2 id="endTitle">${s.endTitleDefault}</h2>
+        <div class="end-score-label">${s.compositeScoreLabel}</div>
         <div class="big-score" id="endScore">0</div>
         <div class="end-breakdown" id="endBreakdown"></div>
-        <p id="endDetail">共 0 步 · 用时 0:00 · 本机最佳 0</p>
+        <p id="endDetail">${s.stepsPhrase.replace('{n}', '0')} · ${s.timeLabel} 0:00 · ${s.bestPhrase.replace('{n}', '0')}</p>
         <div class="btn-row">
-          <button class="secondary" id="endBackBtn">返回菜单</button>
-          <button class="secondary" id="shareBtn">分享战绩</button>
-          <button class="primary" id="restartBtn">再来一局</button>
+          <button class="secondary" id="endBackBtn">${s.backToMenu}</button>
+          <button class="secondary" id="shareBtn">${s.shareBtn}</button>
+          <button class="primary" id="restartBtn">${s.restartBtn}</button>
         </div>
       </div>
     </div>
 
     <div class="overlay" id="shareOverlay">
       <div class="modal share-modal">
-        <h2>分享战绩</h2>
-        <img id="shareImage" alt="战绩卡片" />
-        <p class="hint">长按或右键图片即可保存</p>
-        <div class="btn-row"><button class="primary" id="shareCloseBtn">关闭</button></div>
+        <h2>${s.shareCardTitle}</h2>
+        <img id="shareImage" alt="${s.shareImgAlt}" />
+        <p class="hint">${s.shareHint}</p>
+        <div class="btn-row"><button class="primary" id="shareCloseBtn">${s.closeBtn}</button></div>
       </div>
     </div>
   `;

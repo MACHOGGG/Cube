@@ -200,6 +200,7 @@ export function createCircleGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
         '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分（1×5 得 5 分，以此类推），但线外的同色方块不会被计入；同色的"22"菱形（2+2 两行）沿同一菱形方向扩大（如 33、222）同样按扩大后的数量得分，"121"菱形（1+2+1 三行）固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
       const hint = isBomb
@@ -211,6 +212,7 @@ export function createCircleGame(): ShapeGame {
         ? '颜色数量与非炸弹版完全一致：4 种颜色各 7 枚，共 28 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 7 枚全部是永不翻面的危险球。其余 3 种正常颜色各 7 枚，点色分布为：其余 2 色各 3 枚、本色 1 枚——红色不会出现在任何球的点色（反面）上。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致。'
         : '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 圆球',
         tagline: isBomb
           ? '沿水平、左斜或右斜方向拖动整条线 · 避免红色球 4 连'
@@ -700,6 +702,7 @@ export function createCircleGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '圆球',
         timeLimitSec: opts?.timeLimitSec,

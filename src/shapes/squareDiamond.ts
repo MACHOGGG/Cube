@@ -177,6 +177,7 @@ export function createSquareDiamondGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
         '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块（"22"，第一行 2 个、第二行 2 个）沿同一方向扩大，同样按扩大后的数量得分；同色的"121"菱形（比"22"更大一圈，四个角上下左右对称）固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
       const hint = isBomb
@@ -188,6 +189,7 @@ export function createSquareDiamondGame(): ShapeGame {
         ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚），其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险方块。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色各 1 枚、本色 2 枚——红色不会出现在任何方块的点色（反面）上。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。'
         : '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。';
       const refs = buildShell(container, {
+        lang,
         title: 'Slides · 菱形方块',
         tagline: isBomb
           ? '沿水平或两条斜线方向拖动整条线 · 避免红色方块 4 连'
@@ -602,6 +604,7 @@ export function createSquareDiamondGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '菱形方块',
         timeLimitSec: opts?.timeLimitSec,
