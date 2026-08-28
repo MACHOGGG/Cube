@@ -135,6 +135,8 @@ export interface GameController {
   finish(): void;
   /** Call after applying a confirmed drag with the set of cells it touched. */
   resolveMove(mask: Set<string>): void;
+  /** Ends the run immediately with a custom reason and an optional flat score penalty (e.g. a bomb-mode hazard cluster) — shown as its own breakdown row, subtracted the same way as the other end-of-run penalties. */
+  forceEnd(reason: string, penalty?: number, penaltyLabel?: string): void;
   /** Stops timers when navigating away without ending the run. */
   destroy(): void;
 }
@@ -213,7 +215,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.pauseOverlay.classList.remove('show');
   }
 
-  function endGame(reason: string) {
+  function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = '惩罚') {
     gameOver = true;
     resolving = false;
     timer.stop();
@@ -225,7 +227,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const remaining = hooks.countRemainingTiles?.() ?? { neverFlipped: 0, flippedButRemaining: 0 };
     const neverFlippedPenalty = remaining.neverFlipped * NEVER_FLIPPED_PENALTY;
     const remainingPenalty = remaining.flippedButRemaining * REMAINING_PENALTY;
-    const total = Math.max(0, Math.round(score * timeMult * bonusMult) - neverFlippedPenalty - remainingPenalty);
+    const total = Math.max(
+      0,
+      Math.round(score * timeMult * bonusMult) - neverFlippedPenalty - remainingPenalty - extraPenalty,
+    );
 
     const best = saveBestIfHigher(hooks.bestKey, total);
 
@@ -239,7 +244,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       row(`有效得分率加成（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
       row('用时系数', '×' + timeMult) +
       (remaining.neverFlipped > 0 ? row(`从未翻面 × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
-      (remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '');
+      (remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '') +
+      (extraPenalty > 0 ? row(extraPenaltyLabel, '−' + extraPenalty) : '');
     const detailText = reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
     refs.endDetailEl.textContent = detailText;
     refs.endOverlay.classList.add('show');
@@ -441,6 +447,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     endGame('无法继续匹配');
   }
 
+  function doForceEnd(reason: string, penalty = 0, penaltyLabel?: string) {
+    if (!started || gameOver) return;
+    endGame(reason, penalty, penaltyLabel);
+  }
+
   refs.buttons.start.addEventListener('click', () => {
     started = true;
     refs.startOverlay.classList.remove('show');
@@ -478,6 +489,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resume: doResume,
     finish: doFinish,
     resolveMove,
+    forceEnd: doForceEnd,
     destroy() {
       timer.stop();
     },

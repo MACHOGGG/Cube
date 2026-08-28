@@ -12,6 +12,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same Okabe–Ito colorblind-safe 6-hue set the square board offers, reused
@@ -26,6 +27,18 @@ const LEFT_TRIM = [0, 0, 0, 1, 3, 5]; // maps local col -> global position p = c
 const GLOBAL_ROW_OFFSET = 3; // local row r -> global big-triangle row i = r+3
 const PER_COLOR = 9;
 const MIN_LINE_BONUS_LEN = 3;
+
+// Bomb mode drops two of the base six colors and appends red as a fixed
+// hazard color — see RED_IDX below.
+const BOMB_PALETTES = {
+  standard: [...PALETTES.standard.slice(0, 4), BOMB_RED_HEX],
+  colorblind: [...PALETTES.colorblind.slice(0, 4), BOMB_RED_HEX],
+} as const;
+const BOMB_NORMAL_COLORS = 4;
+const RED_IDX = BOMB_NORMAL_COLORS;
+// Same 9-per-color count as the base game; the rest of the 54-cell board
+// (54 - 4*9 = 18) is filled with red hazard tiles.
+const BOMB_GROUP_SIZE = 9;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,3 29,25 3,25" fill="#4C68B0"/><polygon points="16,29 4,9 28,9" fill="#D89B1E" opacity="0.9"/></svg>`;
 
@@ -233,20 +246,31 @@ export function createTriangleGame(): ShapeGame {
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
+      const isBomb = !!opts?.bomb;
+      const BASE_HINT =
+        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+      const hint = isBomb
+        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍角。任意时刻场上 4 个及以上红色三角相互边相连，将立即结束挑战并扣 100 分。' +
+          BASE_HINT +
+          '全部非红色方块都翻成点面或变为空白角时结束，结算当时的分数。'
+        : BASE_HINT + '全部方块都翻成点面或变为空白角时结束，结算当时的分数。';
+      const assumptions = isBomb
+        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 4 种颜色各 9 枚，点色分布为：其余 3 色各 2 枚、本色 3 枚；另有 18 枚红色三角，永不显示点色。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
+        : '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平、左斜、右斜——每个方向都是 6 条线，长度分别为 7/7/9/9/11/11（与横向的行长完全对应），判分规则完全一致；斜向的一条线由上下两种三角交替组成，和横向的行一样。';
       const refs = buildShell(container, {
         title: 'Slides · 三角',
-        tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
+        tagline: isBomb
+          ? '沿水平、左斜或右斜方向拖动整条线 · 避免红色三角 4 连'
+          : '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
-        hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白角时结束，结算当时的分数。',
-        assumptions:
-          '6 种口味色，每色 9 枚，共 54 枚（六边形三角拼接，六行 7/9/11/11/9/7 枚）；每种口味的点色分布为：其余 5 色各 1 枚、本色 4 枚。三个滑动方向——水平、左斜、右斜——每个方向都是 6 条线，长度分别为 7/7/9/9/11/11（与横向的行长完全对应），判分规则完全一致；斜向的一条线由上下两种三角交替组成，和横向的行一样。',
+        hint,
+        assumptions,
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
-      let COLORS: readonly string[] = PALETTES[paletteName];
+      let COLORS: readonly string[] = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
       let grid: Tile[][] = [];
       let S = 0,
         H = 0,
@@ -344,6 +368,99 @@ export function createTriangleGame(): ShapeGame {
           g = boardFromDeck(shuffledDeck());
           tries++;
         } while (hasInitialClump(g) && tries < 500);
+        return g;
+      }
+
+      // ---------- bomb mode: red hazard tiles ----------
+      function shuffledBombDeck(): number[] {
+        const deck: number[] = [];
+        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
+        const total = ROW_LENS.reduce((a, b) => a + b, 0);
+        const redCount = total - deck.length;
+        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
+        return shuffle(deck);
+      }
+
+      // Per normal front-color group of 9: the other 3 normal colors get 2
+      // dot-color slots each, and the tile's own front color gets 3 (2 "own
+      // share" + 1 extra) — red is never assigned as a dot color since red
+      // tiles never flip and never need one.
+      function assignBombDotColors(deck: number[]): number[] {
+        const dotColors = new Array<number>(deck.length).fill(RED_IDX);
+        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
+          const others = Array.from({ length: BOMB_NORMAL_COLORS }, (_, k) => k).filter((k) => k !== color);
+          const pool = shuffle([...others.flatMap((o) => [o, o]), color, color, color]);
+          const indices: number[] = [];
+          deck.forEach((c, idx) => {
+            if (c === color) indices.push(idx);
+          });
+          indices.forEach((idx, i) => {
+            dotColors[idx] = pool[i];
+          });
+        }
+        return dotColors;
+      }
+
+      function boardFromBombDeck(deck: number[]): Tile[][] {
+        const dots = assignBombDotColors(deck);
+        const g: Tile[][] = [];
+        let idx = 0;
+        for (let r = 0; r < ROW_LENS.length; r++) {
+          const row: Tile[] = [];
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            row.push(newTile(deck[idx], dots[idx]));
+            idx++;
+          }
+          g.push(row);
+        }
+        return g;
+      }
+
+      // Each triangle touches exactly 3 others edge-to-edge — the cross edge
+      // into the next i-band, and its two in-row neighbors (same real
+      // adjacency the pre-matchGrowth flood-fill used to expand a seed with;
+      // see crossNeighbor/rowLeftNeighbor/rowRightNeighbor above).
+      function triangleAdjacency(r: number, c: number): Cell[] {
+        const { i, p } = globalPosPure(r, c);
+        const out: Cell[] = [];
+        for (const cand of [crossNeighbor(i, p), rowLeftNeighbor(i, p), rowRightNeighbor(i, p)]) {
+          if (cand) out.push(cand);
+        }
+        return out;
+      }
+
+      function hasRedCluster(g: Tile[][]): boolean {
+        const seen = new Set<string>();
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            if (g[r][c].color !== RED_IDX) continue;
+            const startKey = cellKey(r, c);
+            if (seen.has(startKey)) continue;
+            let size = 0;
+            const stack: Cell[] = [[r, c]];
+            seen.add(startKey);
+            while (stack.length) {
+              const [cr, cc] = stack.pop()!;
+              size++;
+              for (const [nr, nc] of triangleAdjacency(cr, cc)) {
+                const key = cellKey(nr, nc);
+                if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
+                seen.add(key);
+                stack.push([nr, nc]);
+              }
+            }
+            if (size >= 4) return true;
+          }
+        return false;
+      }
+
+      function generateCleanBombBoard(): Tile[][] {
+        let g: Tile[][];
+        let tries = 0;
+        do {
+          g = boardFromBombDeck(shuffledBombDeck());
+          tries++;
+        } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
         return g;
       }
 
@@ -500,6 +617,26 @@ export function createTriangleGame(): ShapeGame {
         } else {
           fill.style.background = COLORS[tile.color];
           el.appendChild(fill);
+          if (isBomb && tile.color === RED_IDX) {
+            const mark = document.createElement('div');
+            mark.className = 'hazard-mark';
+            mark.textContent = '!';
+            mark.style.position = 'absolute';
+            mark.style.left = '0';
+            mark.style.top = '0';
+            mark.style.width = '100%';
+            mark.style.height = '100%';
+            mark.style.display = 'flex';
+            mark.style.alignItems = 'center';
+            mark.style.justifyContent = 'center';
+            // Nudged down from dead-center toward the triangle's visual
+            // centroid (a third of the way from its top edge to its base),
+            // and sized off the shorter of the two axes so it never
+            // overflows a bounding box this non-square.
+            mark.style.paddingTop = Math.round(h * 0.22) + 'px';
+            mark.style.fontSize = Math.round(Math.min(w, h) * 0.4) + 'px';
+            el.appendChild(mark);
+          }
         }
         if (opacityOverride !== undefined) el.style.opacity = String(opacityOverride);
         el.dataset.r = String(r);
@@ -553,6 +690,8 @@ export function createTriangleGame(): ShapeGame {
       function qualifies(seed: Cell[], mask: Set<string> | null): boolean {
         if (anyBlank(seed)) return false;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        // Red hazard tiles are obstacles, not a matchable color.
+        if (isBomb && c0 === RED_IDX) return false;
         if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return false;
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
         return true;
@@ -633,7 +772,7 @@ export function createTriangleGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
+        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || (isBomb && t.color === RED_IDX)));
       }
 
       function liveTiles(): LiveTile[] {
@@ -641,7 +780,9 @@ export function createTriangleGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const t = grid[r][c];
-            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+            if (isBlank(t)) continue;
+            if (isBomb && t.color === RED_IDX) continue;
+            live.push({ cell: [r, c], tile: t });
           }
         return live;
       }
@@ -677,14 +818,14 @@ export function createTriangleGame(): ShapeGame {
       }
 
       function resetBoard() {
-        grid = generateCleanBoard();
+        grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
         bonusedSignatures = new Set();
         outlineTracker.reset();
         stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
-        bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '三角',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
@@ -900,6 +1041,17 @@ export function createTriangleGame(): ShapeGame {
       // step's ghost/flip/highlight elements before they ever get a frame
       // painted (resolveMove no longer settles synchronously — see
       // gameController's stepper-driven reveal).
+      // Checked right after a drag lands, before normal move resolution —
+      // red tiles are never removed or flipped (see qualifies/findWholeLineBonuses
+      // guards above), so the only way their adjacency ever changes is a
+      // line shift landing two clusters next to each other.
+      function checkBombHazard(): boolean {
+        if (!isBomb || !hasRedCluster(grid)) return false;
+        render();
+        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        return true;
+      }
+
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
@@ -916,6 +1068,7 @@ export function createTriangleGame(): ShapeGame {
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
+        if (checkBombHazard()) return true;
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         controller.resolveMove(mask);
         return true;
@@ -979,7 +1132,7 @@ export function createTriangleGame(): ShapeGame {
 
       refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
         paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';
-        COLORS = PALETTES[paletteName];
+        COLORS = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
         (e.currentTarget as HTMLElement).classList.toggle('active', paletteName === 'colorblind');
         renderLegend();
         if (controller.started) render();
