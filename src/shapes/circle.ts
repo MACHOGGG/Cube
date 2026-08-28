@@ -493,8 +493,14 @@ export function createCircleGame(): ShapeGame {
         for (let r = 0; r < ROWS; r++)
           for (let c = 0; c <= r; c++) {
             const t = grid[r][c];
-            if (isBlank(t)) continue;
-            raw.push({ kind: 'circle', cx: (c - r / 2) * 2, cy: r * rowH, r: 0.95, color: COLORS[effColor(t)] });
+            raw.push({
+              kind: 'circle',
+              cx: (c - r / 2) * 2,
+              cy: r * rowH,
+              r: 0.95,
+              face: isBlank(t) ? 'blank' : t.face,
+              color: COLORS[effColor(t)],
+            });
           }
         return packSnapshot(raw);
       }

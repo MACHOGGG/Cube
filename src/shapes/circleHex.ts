@@ -484,9 +484,15 @@ export function createCircleHexGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const t = grid[r][c];
-            if (isBlank(t)) continue;
             const { x, z } = localToCube(r, c);
-            raw.push({ kind: 'circle', cx: 2 * x + z, cy: rowH * z, r: 0.95, color: COLORS[effColor(t)] });
+            raw.push({
+              kind: 'circle',
+              cx: 2 * x + z,
+              cy: rowH * z,
+              r: 0.95,
+              face: isBlank(t) ? 'blank' : t.face,
+              color: COLORS[effColor(t)],
+            });
           }
         return packSnapshot(raw);
       }

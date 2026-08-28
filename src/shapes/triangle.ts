@@ -606,16 +606,19 @@ export function createTriangleGame(): ShapeGame {
 
       function snapshotBoard(): BoardSnapshot {
         const H = Math.sqrt(3) / 2;
-        const raw: RawCell[] = liveTiles().map(({ cell: [r, c], tile }) => {
-          const { i, p } = globalPos(r, c);
-          const up = p % 2 === 0;
-          const j = up ? p / 2 : (p - 1) / 2;
-          const xBase = -i / 2 + j;
-          const points: [number, number][] = up
-            ? [[xBase, i * H], [xBase - 0.5, (i + 1) * H], [xBase + 0.5, (i + 1) * H]]
-            : [[xBase + 0.5, (i + 1) * H], [xBase, i * H], [xBase + 1, i * H]];
-          return { kind: 'poly', points, color: COLORS[effColor(tile)] };
-        });
+        const raw: RawCell[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            const tile = grid[r][c];
+            const { i, p } = globalPos(r, c);
+            const up = p % 2 === 0;
+            const j = up ? p / 2 : (p - 1) / 2;
+            const xBase = -i / 2 + j;
+            const points: [number, number][] = up
+              ? [[xBase, i * H], [xBase - 0.5, (i + 1) * H], [xBase + 0.5, (i + 1) * H]]
+              : [[xBase + 0.5, (i + 1) * H], [xBase, i * H], [xBase + 1, i * H]];
+            raw.push({ kind: 'poly', points, face: isBlank(tile) ? 'blank' : tile.face, color: COLORS[effColor(tile)] });
+          }
         return packSnapshot(raw);
       }
 

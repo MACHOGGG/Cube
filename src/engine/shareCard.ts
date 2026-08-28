@@ -2,22 +2,28 @@
  * A shape-agnostic snapshot of a board's current appearance, in normalized
  * [0,1]x[0,1] board-space (origin top-left) so shareCard can lay it into any
  * pixel-sized thumbnail region without each shape knowing about the card
- * layout at all. Every cell is one filled primitive — a shape draws exactly
- * what its own live board would show for that cell (its current effective
- * color; blanked/removed cells are simply omitted).
+ * layout at all. Every cell is one primitive plus its face state — a shape
+ * hands over exactly what its own live board would show for that cell
+ * (front color, or flipped dot color, or a spent/blanked cell), and
+ * drawSnapshot below picks the same visual language the real board uses
+ * (full-size solid for the front face, a shrunk inset glyph for the dot
+ * face, a dim flat fill for a blanked cell) so the thumbnail is a complete,
+ * accurate picture of that moment — nothing quietly dropped.
  */
+export type CellFace = 'flavor' | 'dot' | 'blank';
+
 export type SnapshotCell =
-  | { kind: 'circle'; cx: number; cy: number; r: number; color: string }
-  | { kind: 'rect'; cx: number; cy: number; half: number; color: string; rotateDeg?: number }
-  | { kind: 'poly'; points: [number, number][]; color: string };
+  | { kind: 'circle'; cx: number; cy: number; r: number; face: CellFace; color: string }
+  | { kind: 'rect'; cx: number; cy: number; half: number; face: CellFace; color: string; rotateDeg?: number }
+  | { kind: 'poly'; points: [number, number][]; face: CellFace; color: string };
 
 export interface BoardSnapshot {
   cells: SnapshotCell[];
 }
 
 /**
- * Same 3 primitives as SnapshotCell, but in each shape's own raw geometry
- * units (e.g. ball radius 1, triangle side 1) instead of normalized [0,1]
+ * Same shape as SnapshotCell, but in each shape's own raw geometry units
+ * (e.g. ball radius 1, triangle side 1) instead of normalized [0,1]
  * board-space — a shape computes its cells' *real* relative positions (the
  * exact same math its live board uses, just with a fixed unit scale instead
  * of a live pixel size) and hands them to packSnapshot, which is the one
@@ -25,10 +31,7 @@ export interface BoardSnapshot {
  * own extent, not just its center) and rescales everything to fit — so no
  * shape has to hand-derive its own board's overall width/height.
  */
-export type RawCell =
-  | { kind: 'circle'; cx: number; cy: number; r: number; color: string }
-  | { kind: 'rect'; cx: number; cy: number; half: number; color: string; rotateDeg?: number }
-  | { kind: 'poly'; points: [number, number][]; color: string };
+export type RawCell = SnapshotCell;
 
 export function packSnapshot(raw: RawCell[]): BoardSnapshot {
   if (!raw.length) return { cells: [] };
@@ -57,44 +60,68 @@ export function packSnapshot(raw: RawCell[]): BoardSnapshot {
     cells: raw.map((c): SnapshotCell => {
       if (c.kind === 'circle') {
         const [cx, cy] = T(c.cx, c.cy);
-        return { kind: 'circle', cx, cy, r: c.r * scale, color: c.color };
+        return { kind: 'circle', cx, cy, r: c.r * scale, face: c.face, color: c.color };
       }
       if (c.kind === 'rect') {
         const [cx, cy] = T(c.cx, c.cy);
-        return { kind: 'rect', cx, cy, half: c.half * scale, color: c.color, rotateDeg: c.rotateDeg };
+        return { kind: 'rect', cx, cy, half: c.half * scale, face: c.face, color: c.color, rotateDeg: c.rotateDeg };
       }
-      return { kind: 'poly', color: c.color, points: c.points.map(([x, y]) => T(x, y)) };
+      return { kind: 'poly', face: c.face, color: c.color, points: c.points.map(([x, y]) => T(x, y)) };
     }),
   };
+}
+
+const BLANK_COLOR = '#B9B2AE';
+const DOT_SCALE = 0.6;
+const DOT_STROKE = '#1A1A1A';
+
+// Draws one cell at an optional shrink factor around its own center — used
+// as-is (scale 1) for a live front-face or a blanked cell, and shrunk (see
+// DOT_SCALE) for a flipped dot-face cell, matching the "same silhouette,
+// smaller, plus a dark outline" language the real boards already use for
+// their own dot faces.
+function fillPrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number, scale: number, color: string, stroke: boolean) {
+  ctx.fillStyle = color;
+  if (stroke) {
+    ctx.strokeStyle = DOT_STROKE;
+    ctx.lineWidth = Math.max(1, size * 0.008);
+  }
+  if (cell.kind === 'circle') {
+    ctx.beginPath();
+    ctx.arc(cell.cx * size, cell.cy * size, cell.r * size * scale, 0, Math.PI * 2);
+    ctx.fill();
+    if (stroke) ctx.stroke();
+  } else if (cell.kind === 'rect') {
+    ctx.save();
+    ctx.translate(cell.cx * size, cell.cy * size);
+    if (cell.rotateDeg) ctx.rotate((cell.rotateDeg * Math.PI) / 180);
+    const h = cell.half * size * scale;
+    ctx.fillRect(-h, -h, h * 2, h * 2);
+    if (stroke) ctx.strokeRect(-h, -h, h * 2, h * 2);
+    ctx.restore();
+  } else {
+    const cx = cell.points.reduce((s, p) => s + p[0], 0) / cell.points.length;
+    const cy = cell.points.reduce((s, p) => s + p[1], 0) / cell.points.length;
+    ctx.beginPath();
+    cell.points.forEach(([px, py], i) => {
+      const X = (cx + (px - cx) * scale) * size;
+      const Y = (cy + (py - cy) * scale) * size;
+      if (i === 0) ctx.moveTo(X, Y);
+      else ctx.lineTo(X, Y);
+    });
+    ctx.closePath();
+    ctx.fill();
+    if (stroke) ctx.stroke();
+  }
 }
 
 function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: number, y: number, size: number) {
   ctx.save();
   ctx.translate(x, y);
   for (const cell of snap.cells) {
-    ctx.fillStyle = cell.color;
-    if (cell.kind === 'circle') {
-      ctx.beginPath();
-      ctx.arc(cell.cx * size, cell.cy * size, cell.r * size, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (cell.kind === 'rect') {
-      ctx.save();
-      ctx.translate(cell.cx * size, cell.cy * size);
-      if (cell.rotateDeg) ctx.rotate((cell.rotateDeg * Math.PI) / 180);
-      const h = cell.half * size;
-      ctx.fillRect(-h, -h, h * 2, h * 2);
-      ctx.restore();
-    } else {
-      ctx.beginPath();
-      cell.points.forEach(([px, py], i) => {
-        const X = px * size;
-        const Y = py * size;
-        if (i === 0) ctx.moveTo(X, Y);
-        else ctx.lineTo(X, Y);
-      });
-      ctx.closePath();
-      ctx.fill();
-    }
+    if (cell.face === 'blank') fillPrimitive(ctx, cell, size, 1, BLANK_COLOR, false);
+    else if (cell.face === 'dot') fillPrimitive(ctx, cell, size, DOT_SCALE, cell.color, true);
+    else fillPrimitive(ctx, cell, size, 1, cell.color, false);
   }
   ctx.restore();
 }
@@ -109,6 +136,12 @@ export interface ShareCardInfo {
 
 const CARD_W = 720;
 const PAD = 80;
+// Canvases are rendered at this multiple of the card's logical CSS-pixel
+// layout (all the coordinate math below stays in logical units — only the
+// backing pixel buffer and a single ctx.scale grow) so the exported PNG is
+// crisp at typical phone/desktop pixel densities instead of blurry when
+// zoomed into or saved at native size.
+const EXPORT_SCALE = 3;
 
 /** Renders the composed PNG data URL: title, score summary, then the start and end board snapshots side by side, each labeled. */
 export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | null, endSnap: BoardSnapshot | null): string {
@@ -118,9 +151,10 @@ export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | 
   const cardH = boardsY + thumb + 120;
 
   const canvas = document.createElement('canvas');
-  canvas.width = CARD_W;
-  canvas.height = cardH;
+  canvas.width = CARD_W * EXPORT_SCALE;
+  canvas.height = cardH * EXPORT_SCALE;
   const ctx = canvas.getContext('2d')!;
+  ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
 
   ctx.fillStyle = '#faf9f5';
   ctx.fillRect(0, 0, CARD_W, cardH);

@@ -423,12 +423,14 @@ export function createSquareGame(): ShapeGame {
         const half = 0.5 / BOARD_DIM - 0.01;
         for (let r = 0; r < rows; r++)
           for (let c = 0; c < cols; c++) {
+            const t = grid[r][c];
             cells.push({
               kind: 'rect',
               cx: (c + 0.5) / BOARD_DIM,
               cy: (r + 0.5) / BOARD_DIM,
               half,
-              color: COLORS[effColor(grid[r][c])],
+              face: t.face,
+              color: COLORS[effColor(t)],
             });
           }
         return { cells };

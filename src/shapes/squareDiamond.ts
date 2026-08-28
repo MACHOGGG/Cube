@@ -441,14 +441,20 @@ export function createSquareDiamondGame(): ShapeGame {
 
       function snapshotBoard(): BoardSnapshot {
         const mid = (BOARD_DIM - 1) / 2;
-        const raw: RawCell[] = liveTiles().map(({ cell: [r, c], tile }) => ({
-          kind: 'rect',
-          cx: c - r,
-          cy: c + r - 2 * mid,
-          half: 0.47,
-          rotateDeg: 45,
-          color: COLORS[effColor(tile)],
-        }));
+        const raw: RawCell[] = [];
+        for (let r = 0; r < BOARD_DIM; r++)
+          for (let c = 0; c < BOARD_DIM; c++) {
+            const t = grid[r][c];
+            raw.push({
+              kind: 'rect',
+              cx: c - r,
+              cy: c + r - 2 * mid,
+              half: 0.47,
+              rotateDeg: 45,
+              face: isBlank(t) ? 'blank' : t.face,
+              color: COLORS[effColor(t)],
+            });
+          }
         return packSnapshot(raw);
       }
 
