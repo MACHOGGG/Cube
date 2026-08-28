@@ -229,13 +229,20 @@ export function createTriangleGame(): ShapeGame {
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
-      // Cells emptied by a whole-line dot-face bonus: unlike the square
-      // grid (a rectangle, where removing a row/column still leaves a valid
-      // smaller rectangle), this hexagon has no smaller hexagon to reflow
-      // into, so a cleared line's cells are left permanently empty instead —
-      // gone from rendering, matching, and every line (row or diagonal) that
-      // passes through them, rather than the board itself changing shape.
-      let removedCells = new Set<string>();
+      // A whole-line dot-face bonus doesn't remove its cells: same as
+      // circle's blank ball (see circle.ts), a bonused triangle just loses
+      // its color for good (the BLANK sentinel) while staying a real,
+      // slidable tile — this hexagon has no smaller hexagon to reflow into,
+      // so there's nothing to gain by punching a permanent hole, and
+      // leaving it in play means later drags can still move it out of the
+      // way of the cells around it.
+      const BLANK = -1;
+      function isBlank(t: Tile): boolean {
+        return t.color === BLANK;
+      }
+      function anyBlank(cells: Cell[]): boolean {
+        return cells.some(([r, c]) => isBlank(grid[r][c]));
+      }
       // Cells whose flip to their dot face just landed (set in onCommit,
       // consumed and cleared by the very next render()) — those cells get a
       // one-shot .flip-in animation class so the flip itself has motion
@@ -394,7 +401,14 @@ export function createTriangleGame(): ShapeGame {
         fill.style.clipPath = clip;
         fill.style.setProperty('-webkit-clip-path', clip);
 
-        if (tile.face === 'dot') {
+        if (isBlank(tile)) {
+          // Spent: no color on either face, just a dim neutral fill so it
+          // still reads clearly as "a piece is here" (still slides with its
+          // line) without looking like a live front or dot color.
+          fill.style.background = 'var(--ink-faint)';
+          fill.style.opacity = '0.35';
+          el.appendChild(fill);
+        } else if (tile.face === 'dot') {
           // A same-size same-shape triangle read as "still the front, just a
           // different color" — the dot face needs its own distinct glyph.
           // A smaller triangle (same orientation, shrunk toward the
@@ -451,7 +465,6 @@ export function createTriangleGame(): ShapeGame {
         }
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
-            if (removedCells.has(cellKey(r, c))) continue;
             const key = cellKey(r, c);
             const el = makeTriEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
@@ -472,10 +485,6 @@ export function createTriangleGame(): ShapeGame {
         }
       }
 
-      function anyRemoved(cells: Cell[]): boolean {
-        return cells.some(([r, c]) => removedCells.has(cellKey(r, c)));
-      }
-
       // Each triangle touches exactly 3 others edge-to-edge: the cross edge
       // into the next i-band, and its two in-row neighbors — see the LINES
       // family comment above for why these three (not a closed-form column
@@ -486,7 +495,7 @@ export function createTriangleGame(): ShapeGame {
         const { i, p } = globalPosPure(r, c);
         const out: Cell[] = [];
         for (const cand of [crossNeighbor(i, p), rowLeftNeighbor(i, p), rowRightNeighbor(i, p)]) {
-          if (cand && !removedCells.has(cellKey(cand[0], cand[1]))) out.push(cand);
+          if (cand && !isBlank(grid[cand[0]][cand[1]])) out.push(cand);
         }
         return out;
       }
@@ -494,7 +503,7 @@ export function createTriangleGame(): ShapeGame {
         return effColor(grid[r][c]);
       }
       function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
-        if (anyRemoved(seed)) return;
+        if (anyBlank(seed)) return;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
         if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
@@ -531,9 +540,9 @@ export function createTriangleGame(): ShapeGame {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          // A line missing any of its cells to an earlier bonus can never
-          // qualify again — those cells aren't there to flip or match.
-          if (anyRemoved(line.cells)) continue;
+          // A line with any already-blanked cell can never qualify again —
+          // a blank has no color to agree with the rest of the line.
+          if (anyBlank(line.cells)) continue;
           if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
             .map(([r, c]) => grid[r][c].id)
@@ -547,15 +556,18 @@ export function createTriangleGame(): ShapeGame {
       }
 
       // Flips the bonused line's tiles to their dot face (matching what the
-      // player just saw complete) and then empties those cells for good —
-      // see the note on removedCells above for why a hole, not a reflowed
-      // smaller board, is this shape's version of square's line removal.
+      // player just saw complete), stashes that dot color for the fade
+      // transition (see pendingBlankSnapshot below — grid is about to be
+      // overwritten, so this is the last point that still has it), and then
+      // blanks the cells for good.
       function applyLineBonus(groups: Cell[][]) {
         for (const cells of groups) {
           for (const [r, c] of cells) {
             const t = grid[r][c];
             if (t.face === 'flavor') t.face = 'dot';
-            removedCells.add(cellKey(r, c));
+            pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
+            t.color = BLANK;
+            t.dotColor = BLANK;
           }
         }
       }
@@ -571,17 +583,15 @@ export function createTriangleGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row, r) =>
-          row.every((t, c) => removedCells.has(cellKey(r, c)) || t.face === 'dot'),
-        );
+        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
       }
 
       function liveTiles(): LiveTile[] {
         const live: LiveTile[] = [];
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
-            if (removedCells.has(cellKey(r, c))) continue;
-            live.push({ cell: [r, c], tile: grid[r][c] });
+            const t = grid[r][c];
+            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
           }
         return live;
       }
@@ -616,7 +626,6 @@ export function createTriangleGame(): ShapeGame {
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
-        removedCells = new Set();
         outlineTracker.reset();
         stuckKeys = null;
       }
@@ -636,13 +645,17 @@ export function createTriangleGame(): ShapeGame {
         // Regular matches (run-of-4 and the big-triangle cluster) stay on
         // the board, so they get the persistent outline highlight, added
         // per cascade step so a chain reaction reveals one beat at a time.
-        // A whole-line bonus instead empties its cells (see applyLineBonus)
-        // — its own fade-out is that event's feedback, not outlined —
-        // played in onCascadeStepRendered since the ghost must be appended
-        // *after* this step's own render() or that render() would wipe it.
+        // A whole-line bonus instead blanks its cells (see applyLineBonus)
+        // — its own fade transition is that event's feedback, not outlined
+        // — played in onCascadeStepRendered since the ghost must be
+        // appended *after* this step's own render() or that render() would
+        // wipe it.
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
-          if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
+          if (lineBonusGroups.length) {
+            playBlankTransition(lineBonusGroups, pendingBlankSnapshot);
+            pendingBlankSnapshot = new Map();
+          }
         },
         onCommit: (matchGroups) => {
           for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
@@ -651,19 +664,24 @@ export function createTriangleGame(): ShapeGame {
 
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const REMOVE_FADE_MS = 700;
+      // Captured by applyLineBonus (the only point that still has the old
+      // dot color, right before overwriting it to BLANK) and consumed here
+      // once render() has painted the new blank state, so the fade shows
+      // the *old* dot-colored look dissolving into the *new* blank tile
+      // already sitting beneath it, rather than fading to an empty gap.
+      let pendingBlankSnapshot = new Map<string, number>();
 
-      // Nothing else needs to move when a line empties (no reflow, per
-      // removedCells above), so this is just a fade: the real render() has
-      // already stopped drawing these cells by the time this runs, leaving
-      // a clean gap immediately — a translucent copy of each tile (already
-      // flipped to its dot face) fades out over that gap and removes itself.
-      function playRemovalFade(groups: Cell[][]) {
+      function playBlankTransition(groups: Cell[][], snapshot: Map<string, number>) {
         if (reduceMotion()) return;
         for (const cells of groups) {
           for (const [r, c] of cells) {
-            const ghost = makeTriEl(grid[r][c], r, c);
+            const dotColor = snapshot.get(cellKey(r, c));
+            if (dotColor === undefined) continue;
+            const fakeTile: Tile = { id: -1, color: 0, face: 'dot', dotColor };
+            const ghost = makeTriEl(fakeTile, r, c);
             ghost.classList.add('ghost');
             ghost.style.pointerEvents = 'none';
+            ghost.style.opacity = '1';
             refs.boardEl.appendChild(ghost);
             ghost.style.transition = `opacity ${REMOVE_FADE_MS}ms ease`;
             requestAnimationFrame(() => { ghost.style.opacity = '0'; });
@@ -850,14 +868,6 @@ export function createTriangleGame(): ShapeGame {
         return true;
       }
 
-      // A line with any emptied cell (from an earlier bonus — see
-      // removedCells above) can't be dragged: there's nothing there to slide
-      // into place. Checked once per line at family-selection time so
-      // renderDragPreview/applyDrag never have to worry about holes.
-      function lineIsPlayable(line: Line): boolean {
-        return !anyRemoved(line.cells);
-      }
-
       const detachDrag = attachDrag(refs.boardWrap, {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
@@ -871,11 +881,8 @@ export function createTriangleGame(): ShapeGame {
           drag.dy = dy;
           if (!drag.fam) {
             const candidates = (['A', 'B', 'R'] as const)
-              .map((fam) => ({ fam, line: lineFor(fam, drag!.r, drag!.c) }))
-              .filter(({ line }) => lineIsPlayable(line))
-              .map(({ fam, line }) => ({ fam, line, proj: Math.abs(scalarProjection(fam, dx, dy)) }));
-            if (!candidates.length) return; // started on/near a hole with no playable direction
-            candidates.sort((a, b) => b.proj - a.proj);
+              .map((fam) => ({ fam, line: lineFor(fam, drag!.r, drag!.c), proj: Math.abs(scalarProjection(fam, dx, dy)) }))
+              .sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
           }

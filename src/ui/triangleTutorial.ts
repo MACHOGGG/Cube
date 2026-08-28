@@ -7,7 +7,8 @@ import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 // player has already seen the base square tutorial's universal concepts by
 // the time this runs) — 3 slide directions, the "31"/"13" big-triangle
 // cluster, a pushed-out triangle re-entering with the opposite orientation,
-// and a whole-line bonus leaving a permanent gap instead of a blank piece.
+// and a whole-line bonus turning its cells into blank (but still slidable)
+// pieces.
 // Like circleTutorial.ts, this doesn't reproduce triangle.ts's real per-line
 // shift-with-wrap math (the trickiest, most bug-prone part of that board's
 // whole implementation this project has had to fix repeatedly) — every beat
@@ -46,6 +47,15 @@ function tf(color: number): TTile {
 }
 function td(dotColor: number): TTile {
   return { color: -1, face: 'D', dotColor };
+}
+// A whole-line bonus's tiles: no color on either face, just a dim neutral
+// piece — matches triangle.ts's real BLANK sentinel (dotColor -1 can never
+// come from td(), which only ever gets a real 0-3 palette index).
+function blank(): TTile {
+  return { color: -1, face: 'D', dotColor: -1 };
+}
+function isBlank(t: TTile): boolean {
+  return t.dotColor === -1;
 }
 type Grid = TTile[][];
 function key(r: number, c: number): string {
@@ -99,14 +109,13 @@ const BEATS: Beat[] = [
   { captionKey: 'triSlide', grid: withActive(beat1Cells, 1), goal: 'any', targetCells: beat1Cells },
   { captionKey: 'triBigTriangle', grid: withActive(beat2Cells, 2), goal: 'any', targetCells: beat2Cells },
   { captionKey: 'triFlipOrientation', grid: withActive([orientBeforeCell], 3), goal: 'none', targetCells: [orientBeforeCell] },
-  { captionKey: 'triHole', grid: withDotLine(beat4Cells, 0), goal: 'wholeLine', targetCells: beat4Cells },
+  { captionKey: 'triBlank', grid: withDotLine(beat4Cells, 0), goal: 'wholeLine', targetCells: beat4Cells },
 ];
 
 export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDone: () => void) {
   const s = STRINGS[lang];
   let beatIndex = 0;
   let grid: Grid = BEATS[0].grid();
-  let removedCells = new Set<string>();
   let solved = false;
   let flipInCells = new Set<string>();
   const outlineTracker = createOutlineTracker();
@@ -189,7 +198,11 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
     fill.style.clipPath = clip;
     fill.style.setProperty('-webkit-clip-path', clip);
 
-    if (tile.face === 'D') {
+    if (isBlank(tile)) {
+      fill.style.background = 'var(--ink-faint)';
+      fill.style.opacity = '0.35';
+      el.appendChild(fill);
+    } else if (tile.face === 'D') {
       const cen = centroid(pts);
       const DOT_SCALE = 0.6;
       const innerPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * DOT_SCALE, cen[1] + (y - cen[1]) * DOT_SCALE] as [number, number]);
@@ -230,7 +243,6 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
     for (const { cells, elapsedMs } of outlineEntries) for (const [r, c] of cells) pulseMs.set(key(r, c), elapsedMs);
     for (let r = 0; r < ROW_LENS.length; r++) {
       for (let c = 0; c < ROW_LENS[r]; c++) {
-        if (removedCells.has(key(r, c))) continue;
         const el = makeTriEl(grid[r][c], r, c);
         applyScoreAnimations(el, flipInCells.has(key(r, c)), pulseMs.get(key(r, c)));
         boardEl.appendChild(el);
@@ -271,7 +283,6 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
   function goToBeat(i: number) {
     clearTimeout(autoTimer);
     solved = false;
-    removedCells = new Set();
     beatIndex = Math.max(0, Math.min(BEATS.length - 1, i));
     grid = BEATS[beatIndex].grid();
     stepLabelEl.textContent = `${beatIndex + 1} / ${BEATS.length}`;
@@ -376,29 +387,34 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
 
   // Held long enough up front to actually register "the whole line is the
   // same reverse-face color" before anything starts fading, then a slow
-  // fade, then the resulting gap is left on screen for a while too — this
-  // is the moment the caption's "permanent gap, can't be moved back into"
-  // point needs to land, not something to blink past.
+  // fade to the resulting blank pieces, which are left on screen for a
+  // while too — this is the moment the caption's "blank piece, still
+  // slides" point needs to land, not something to blink past.
   function playWholeLineBonus(cells: Cell2[]) {
     solved = true;
     outlineTracker.add([cells]);
     render();
     vibrate([25, 40, 25]);
     autoTimer = window.setTimeout(() => {
-      const tris = Array.from(boardEl.querySelectorAll<HTMLElement>('.tri'));
-      tris.forEach((el) => {
-        const r = Number(el.dataset.r);
-        const c = Number(el.dataset.c);
-        if (cells.some(([rr, cc]) => rr === r && cc === c)) {
-          el.style.transition = 'opacity 1s ease, transform 1s ease';
-          el.style.opacity = '0';
-          el.style.transform = 'scale(0.7)';
-        }
+      // Blank the cells and render the real (dim) result first, then lay
+      // ghost copies of the old dot-colored tiles on top and fade *those*
+      // out — reveals the blank piece already sitting beneath instead of
+      // fading to an empty gap.
+      const oldTiles = cells.map(([r, c]) => grid[r][c]);
+      for (const [r, c] of cells) grid[r][c] = blank();
+      render();
+      cells.forEach(([r, c], i) => {
+        const ghost = makeTriEl(oldTiles[i], r, c);
+        ghost.classList.add('ghost');
+        ghost.style.pointerEvents = 'none';
+        ghost.style.opacity = '1';
+        boardEl.appendChild(ghost);
+        ghost.style.transition = 'opacity 1s ease';
+        requestAnimationFrame(() => { ghost.style.opacity = '0'; });
+        setTimeout(() => ghost.remove(), 1050);
       });
       showCheck();
       setTimeout(() => {
-        for (const [r, c] of cells) removedCells.add(key(r, c));
-        render();
         autoTimer = window.setTimeout(advance, 1900);
       }, 1050);
     }, 1900);

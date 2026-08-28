@@ -202,7 +202,17 @@ export function createTriangleBigGame(): ShapeGame {
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
-      let removedCells = new Set<string>();
+      // A whole-line dot-face bonus doesn't remove its cells: same as
+      // circle's blank ball (see circle.ts / triangle.ts), a bonused
+      // triangle just loses its color for good (the BLANK sentinel) while
+      // staying a real, slidable tile.
+      const BLANK = -1;
+      function isBlank(t: Tile): boolean {
+        return t.color === BLANK;
+      }
+      function anyBlank(cells: Cell[]): boolean {
+        return cells.some(([r, c]) => isBlank(grid[r][c]));
+      }
       let flipInCells = new Set<string>();
       let stuckKeys: Set<string> | null = null;
 
@@ -356,7 +366,11 @@ export function createTriangleBigGame(): ShapeGame {
         fill.style.clipPath = clip;
         fill.style.setProperty('-webkit-clip-path', clip);
 
-        if (tile.face === 'dot') {
+        if (isBlank(tile)) {
+          fill.style.background = 'var(--ink-faint)';
+          fill.style.opacity = '0.35';
+          el.appendChild(fill);
+        } else if (tile.face === 'dot') {
           const cen = centroid(pts);
           const DOT_SCALE = 0.6;
           const innerPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * DOT_SCALE, cen[1] + (y - cen[1]) * DOT_SCALE] as [number, number]);
@@ -403,7 +417,6 @@ export function createTriangleBigGame(): ShapeGame {
         }
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
-            if (removedCells.has(cellKey(r, c))) continue;
             const key = cellKey(r, c);
             const el = makeTriEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
@@ -419,15 +432,11 @@ export function createTriangleBigGame(): ShapeGame {
         }
       }
 
-      function anyRemoved(cells: Cell[]): boolean {
-        return cells.some(([r, c]) => removedCells.has(cellKey(r, c)));
-      }
-
       function triNeighbors(r: number, c: number): Cell[] {
         const { i, p } = globalPosPure(r, c);
         const out: Cell[] = [];
         for (const cand of [crossNeighbor(i, p), rowLeftNeighbor(i, p), rowRightNeighbor(i, p)]) {
-          if (cand && !removedCells.has(cellKey(cand[0], cand[1]))) out.push(cand);
+          if (cand && !isBlank(grid[cand[0]][cand[1]])) out.push(cand);
         }
         return out;
       }
@@ -435,7 +444,7 @@ export function createTriangleBigGame(): ShapeGame {
         return effColor(grid[r][c]);
       }
       function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
-        if (anyRemoved(seed)) return;
+        if (anyBlank(seed)) return;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
         if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
@@ -467,7 +476,7 @@ export function createTriangleBigGame(): ShapeGame {
         const found: Cell[][] = [];
         for (const line of LINES) {
           if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          if (anyRemoved(line.cells)) continue;
+          if (anyBlank(line.cells)) continue;
           if (!isFullDotMatch(line.cells)) continue;
           const sig = line.cells
             .map(([r, c]) => grid[r][c].id)
@@ -485,7 +494,9 @@ export function createTriangleBigGame(): ShapeGame {
           for (const [r, c] of cells) {
             const t = grid[r][c];
             if (t.face === 'flavor') t.face = 'dot';
-            removedCells.add(cellKey(r, c));
+            pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
+            t.color = BLANK;
+            t.dotColor = BLANK;
           }
         }
       }
@@ -501,17 +512,15 @@ export function createTriangleBigGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row, r) =>
-          row.every((t, c) => removedCells.has(cellKey(r, c)) || t.face === 'dot'),
-        );
+        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
       }
 
       function liveTiles(): LiveTile[] {
         const live: LiveTile[] = [];
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
-            if (removedCells.has(cellKey(r, c))) continue;
-            live.push({ cell: [r, c], tile: grid[r][c] });
+            const t = grid[r][c];
+            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
           }
         return live;
       }
@@ -546,7 +555,6 @@ export function createTriangleBigGame(): ShapeGame {
       function resetBoard() {
         grid = generateCleanBoard();
         bonusedSignatures = new Set();
-        removedCells = new Set();
         outlineTracker.reset();
         stuckKeys = null;
       }
@@ -565,7 +573,10 @@ export function createTriangleBigGame(): ShapeGame {
         highlightStuck,
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {
-          if (lineBonusGroups.length) playRemovalFade(lineBonusGroups);
+          if (lineBonusGroups.length) {
+            playBlankTransition(lineBonusGroups, pendingBlankSnapshot);
+            pendingBlankSnapshot = new Map();
+          }
         },
         onCommit: (matchGroups) => {
           for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
@@ -574,14 +585,24 @@ export function createTriangleBigGame(): ShapeGame {
 
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const REMOVE_FADE_MS = 700;
+      // Captured by applyLineBonus (the only point that still has the old
+      // dot color, right before overwriting it to BLANK) and consumed here
+      // once render() has painted the new blank state, so the fade shows
+      // the *old* dot-colored look dissolving into the *new* blank tile
+      // already sitting beneath it, rather than fading to an empty gap.
+      let pendingBlankSnapshot = new Map<string, number>();
 
-      function playRemovalFade(groups: Cell[][]) {
+      function playBlankTransition(groups: Cell[][], snapshot: Map<string, number>) {
         if (reduceMotion()) return;
         for (const cells of groups) {
           for (const [r, c] of cells) {
-            const ghost = makeTriEl(grid[r][c], r, c);
+            const dotColor = snapshot.get(cellKey(r, c));
+            if (dotColor === undefined) continue;
+            const fakeTile: Tile = { id: -1, color: 0, face: 'dot', dotColor };
+            const ghost = makeTriEl(fakeTile, r, c);
             ghost.classList.add('ghost');
             ghost.style.pointerEvents = 'none';
+            ghost.style.opacity = '1';
             refs.boardEl.appendChild(ghost);
             ghost.style.transition = `opacity ${REMOVE_FADE_MS}ms ease`;
             requestAnimationFrame(() => { ghost.style.opacity = '0'; });
@@ -683,10 +704,6 @@ export function createTriangleBigGame(): ShapeGame {
         return true;
       }
 
-      function lineIsPlayable(line: Line): boolean {
-        return !anyRemoved(line.cells);
-      }
-
       const detachDrag = attachDrag(refs.boardWrap, {
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
@@ -700,11 +717,8 @@ export function createTriangleBigGame(): ShapeGame {
           drag.dy = dy;
           if (!drag.fam) {
             const candidates = (['A', 'B', 'R'] as const)
-              .map((fam) => ({ fam, line: lineFor(fam, drag!.r, drag!.c) }))
-              .filter(({ line }) => lineIsPlayable(line))
-              .map(({ fam, line }) => ({ fam, line, proj: Math.abs(scalarProjection(fam, dx, dy)) }));
-            if (!candidates.length) return;
-            candidates.sort((a, b) => b.proj - a.proj);
+              .map((fam) => ({ fam, line: lineFor(fam, drag!.r, drag!.c), proj: Math.abs(scalarProjection(fam, dx, dy)) }))
+              .sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
           }

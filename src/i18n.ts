@@ -21,7 +21,7 @@ export interface I18nStrings {
   triSlide: string;
   triBigTriangle: string;
   triFlipOrientation: string;
-  triHole: string;
+  triBlank: string;
 }
 
 export const LANG_ORDER: Lang[] = ['en', 'fr', 'zhHant', 'zhHans'];
@@ -45,7 +45,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triSlide: 'Drag along a horizontal, left-diagonal, or right-diagonal line to line up 4 triangles of the same color',
     triBigTriangle: '4 triangles combining into one big triangle (3 one way, 1 the other) score too',
     triFlipOrientation: 'A triangle pushed off one edge wraps back in on the other side — pointing the opposite way',
-    triHole: 'When a whole flipped line matches, it fades away for good, leaving a permanent gap that can never be filled or slid into again',
+    triBlank: 'When a whole flipped line matches, it becomes blank triangles — still slide freely, but they can never score again',
   },
   fr: {
     langName: 'Français',
@@ -65,7 +65,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triSlide: 'Faites glisser le long d\'une ligne horizontale, diagonale gauche ou diagonale droite pour aligner 4 triangles de la même couleur',
     triBigTriangle: '4 triangles formant un grand triangle (3 dans un sens, 1 dans l\'autre) rapportent aussi',
     triFlipOrientation: 'Un triangle poussé hors d\'un bord revient de l\'autre côté — pointant dans l\'autre sens',
-    triHole: 'Quand toute une ligne retournée est assortie, elle disparaît pour de bon, laissant un vide permanent qui ne pourra plus jamais être comblé ni glissé',
+    triBlank: 'Quand toute une ligne retournée est assortie, ses triangles deviennent vides — ils glissent toujours librement, mais ne peuvent plus jamais marquer',
   },
   zhHant: {
     langName: '繁體中文',
@@ -85,7 +85,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triSlide: '沿水平、左斜或右斜方向拖動一整條線，湊齊 4 個同色三角',
     triBigTriangle: '4 個三角拼成一個大三角（3 個同向 + 1 個反向）同樣得分',
     triFlipOrientation: '被推出邊緣的三角，會從另一側補回並換成相反的朝向',
-    triHole: '整條線翻面同色湊齊時，會淡出並永久清空——這個空位以後無法再被填補或滑動',
+    triBlank: '整條線翻面同色湊齊時，會變成空白角——仍可自由滑動補位，但不會再得分',
   },
   zhHans: {
     langName: '简体中文',
@@ -105,7 +105,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triSlide: '沿水平、左斜或右斜方向拖动一整条线，凑齐 4 个同色三角',
     triBigTriangle: '4 个三角拼成一个大三角（3 个同向 + 1 个反向）同样得分',
     triFlipOrientation: '被推出边缘的三角，会从另一侧补回并换成相反的朝向',
-    triHole: '整条线翻面同色凑齐时，会淡出并永久清空——这个空位以后无法再被填补或滑动',
+    triBlank: '整条线翻面同色凑齐时，会变成空白角——仍可自由滑动补位，但不会再得分',
   },
 };
 
