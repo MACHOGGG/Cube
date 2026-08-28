@@ -602,9 +602,25 @@ button:hover { filter: brightness(1.05); }
              tutorial-highlight-pulse 1.6s ease-in-out 420ms infinite;
 }
 @keyframes tutorial-highlight-pop { from { opacity: 0; transform: scale(1.35); } to { opacity: 0.9; transform: scale(1); } }
+/* A snappier double-flash for a highlight box that's confirming one of
+   several groups in turn (the circle tutorial's combined pattern-intro
+   beat) — reads as "yes, that one too" rather than the single quiet pop
+   square's tutorial uses for its one-target-per-beat highlight. */
+.tutorial-highlight-box.blink-in {
+  animation: tutorial-highlight-blink 500ms ease-in-out both,
+             tutorial-highlight-pulse 1.6s ease-in-out 500ms infinite;
+}
+@keyframes tutorial-highlight-blink {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  40% { opacity: 0.25; }
+  60% { opacity: 1; }
+  100% { opacity: 0.45; }
+}
 @media (prefers-reduced-motion: reduce) {
   .tutorial-highlight-box { animation: none; opacity: 0.7; }
   .tutorial-highlight-box.pop-in { animation: none; opacity: 0.7; }
+  .tutorial-highlight-box.blink-in { animation: none; opacity: 0.7; }
 }
 .tutorial-check {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -612,4 +628,31 @@ button:hover { filter: brightness(1.05); }
 }
 .tutorial-check svg { width: 72px; height: 72px; opacity: 0; transform: scale(0.6); transition: opacity .25s ease, transform .3s cubic-bezier(0.34,1.56,0.64,1); }
 .tutorial-check.show svg { opacity: 1; transform: scale(1); }
+/* The blink variant flashes twice before settling on-screen, distinct from
+   the plain single-pop every other confirmation uses — see the highlight
+   box's own .blink-in above for why the circle tutorial specifically needs
+   an "and that one too" signal here. */
+.tutorial-check.blink.show svg { animation: tutorial-check-blink 900ms ease-out both; }
+@keyframes tutorial-check-blink {
+  0% { opacity: 0; transform: scale(0.6); }
+  15% { opacity: 1; transform: scale(1.1); }
+  30% { opacity: 0.3; transform: scale(1); }
+  45% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .tutorial-check.blink.show svg { animation: none; opacity: 1; transform: scale(1); } }
+/* The flip-teach beat's emphasis: an expanding ring overlay, kept as its
+   own element (not a class on the ball) so it can animate independently of
+   the ball's own inline `animation` (flip-in + score-pulse, set by
+   applyScoreAnimations) instead of silently replacing it. */
+.flip-emphasis-ring {
+  position: absolute; border-radius: 50%; border: 3px solid var(--accent);
+  pointer-events: none; z-index: 4; animation: flip-emphasis-ring 900ms ease-out both;
+}
+@keyframes flip-emphasis-ring {
+  0% { transform: scale(0.7); opacity: 0; border-width: 5px; }
+  35% { opacity: 1; }
+  100% { transform: scale(1.55); opacity: 0; border-width: 1px; }
+}
+@media (prefers-reduced-motion: reduce) { .flip-emphasis-ring { animation: none; display: none; } }
 .tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }

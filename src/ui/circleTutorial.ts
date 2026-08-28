@@ -79,42 +79,87 @@ function withDotLine(cells: Cell2[], dotColor: number): () => Grid {
     return g;
   };
 }
+// The blank-move beat picks up right where the whole-line bonus beat left
+// off visually — these cells need to *already* be blank on entry, not
+// dot-faced again (this beat's grid is its own fresh snapshot, per this
+// tutorial's usual "no carry-forward" design, so it has to be told the
+// post-bonus state explicitly rather than inheriting it).
+function withBlank(cells: Cell2[]): () => Grid {
+  return () => {
+    const g = baseGrid();
+    for (const [r, c] of cells) g[r][c] = tblank();
+    return g;
+  };
+}
 
-type Goal = 'any' | 'wholeLine';
+// 'sequence': one drag steps through several pattern groups in turn (each
+// gets its own highlight-blink-check-flip beat) instead of needing a
+// separate drag per pattern. 'blankMove': a scripted swap demonstrating
+// that a blank ball still occupies a real cell and can still be dragged.
+type Goal = 'any' | 'wholeLine' | 'sequence' | 'blankMove';
 interface Beat {
   captionKey: keyof I18nStrings;
   grid: () => Grid;
   goal: Goal;
   targetCells: Cell2[];
+  sequenceGroups?: Cell2[][];
 }
 // run-4 along row 6 (the board's longest row)
-const beat1Cells: Cell2[] = [[6, 0], [6, 1], [6, 2], [6, 3]];
+const runCells: Cell2[] = [[6, 0], [6, 1], [6, 2], [6, 3]];
 // a "22" rhombus cluster
-const beat2Cells: Cell2[] = [[1, 0], [1, 1], [2, 1], [2, 2]];
+const clusterCells: Cell2[] = [[1, 0], [1, 1], [2, 1], [2, 2]];
 // a "121" diamond (1/2/1 balls across 3 rows) — same shape as circle.ts's
 // own diamond121(r, c) = [[r,c],[r+1,c],[r+1,c+1],[r+2,c+1]], at r=3,c=3.
 // Verified (throwaway Node script) that with only these 4 cells overridden,
 // this is the *only* qualifying pattern anywhere on the board — some nearby
 // origins accidentally extend into a real filler cell that already shares
 // the override color, forming an unrelated second cluster right next to
-// the intended one.
-const beat3Cells: Cell2[] = [[3, 3], [4, 3], [4, 4], [5, 4]];
+// the intended one. The three groups (runCells/clusterCells/diamondCells)
+// don't share any cell, so all three can sit on one board at once for the
+// combined intro beat below.
+const diamondCells: Cell2[] = [[3, 3], [4, 3], [4, 4], [5, 4]];
+// A 4th, independent pattern reused just for the flip-teaching beat — its
+// own beat has a fresh baseGrid() (circle tutorial beats never carry state
+// forward, see the module comment), so reusing runCells' position here
+// doesn't collide with anything from the combined intro beat.
+const flipTeachCells: Cell2[] = runCells;
 // a compact whole-line (row 2, length 3) already fully dot-faced
-const beat4Cells: Cell2[] = [[2, 0], [2, 1], [2, 2]];
+const wholeLineCells: Cell2[] = [[2, 0], [2, 1], [2, 2]];
+
+function withOverrides(entries: [Cell2[], number, number][]): () => Grid {
+  return () => {
+    const g = baseGrid();
+    for (const [cells, color, dotColor] of entries) {
+      for (const [r, c] of cells) g[r][c] = tf(color, dotColor);
+    }
+    return g;
+  };
+}
 
 // Real circle.ts assigns each tile's dot color at creation time, and a
 // tile's own front color is the *rare* outcome (1 self pair per 7, the
-// other 3 colors get 2 slots each) — so these 3 flips are each given an
+// other 3 colors get 2 slots each) — so these flips are each given an
 // explicit, distinct *other* color rather than defaulting to a self-pair;
-// showing 0 self-pairs across 3 draws is in fact the single most likely
-// outcome of the real distribution (~63% of the time), not a distortion of
-// it. Front colors (and therefore which matches exist pre-flip) are
-// unchanged from before — only which color each flip reveals underneath.
+// showing 0 self-pairs across a handful of draws is in fact the single most
+// likely outcome of the real distribution (~63% for 3 draws), not a
+// distortion of it. Front colors (and therefore which matches exist
+// pre-flip) are chosen freely — only which color each flip reveals
+// underneath follows that rule.
 const BEATS: Beat[] = [
-  { captionKey: 'circleSlide', grid: withActive(beat1Cells, 2, 0), goal: 'any', targetCells: beat1Cells },
-  { captionKey: 'circleCluster', grid: withActive(beat2Cells, 1, 3), goal: 'any', targetCells: beat2Cells },
-  { captionKey: 'circleCluster121', grid: withActive(beat3Cells, 2, 1), goal: 'any', targetCells: beat3Cells },
-  { captionKey: 'circleBlank', grid: withDotLine(beat4Cells, 3), goal: 'wholeLine', targetCells: beat4Cells },
+  {
+    captionKey: 'circleClusterIntro',
+    grid: withOverrides([
+      [runCells, 2, 0],
+      [clusterCells, 1, 3],
+      [diamondCells, 0, 1],
+    ]),
+    goal: 'sequence',
+    targetCells: [],
+    sequenceGroups: [runCells, clusterCells, diamondCells],
+  },
+  { captionKey: 'circleFlipTeach', grid: withActive(flipTeachCells, 3, 1), goal: 'any', targetCells: flipTeachCells },
+  { captionKey: 'circleBlank', grid: withDotLine(wholeLineCells, 3), goal: 'wholeLine', targetCells: wholeLineCells },
+  { captionKey: 'circleBlankMove', grid: withBlank(wholeLineCells), goal: 'blankMove', targetCells: wholeLineCells },
 ];
 
 function findWholeLine(grid: Grid, cells: Cell2[]): boolean {
@@ -131,7 +176,24 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
   let flipInCells = new Set<string>();
   const outlineTracker = createOutlineTracker();
   let autoTimer: number | undefined;
+  // Bumped on every goToBeat. playMatch/playSequence/playWholeLineBonus/
+  // playBlankMove all chain plain setTimeout calls for their own internal
+  // step timing (not the single `autoTimer` goToBeat clears) — a player
+  // clicking prev/next mid-animation doesn't cancel those, so a stale
+  // callback can fire later and mutate whatever beat is active *then*
+  // instead of the one it was scheduled for. Each such callback captures
+  // `beatGen` at schedule time and bails if it no longer matches.
+  let beatGen = 0;
   let R = 0, rowH = 0, boardTop = 0, boardLeft = 0;
+  // Overrides which cells the highlight box tracks — used only while a
+  // 'sequence' beat is stepping through its groups one at a time (null
+  // everywhere else, where beat.targetCells is the whole story).
+  let activeHighlightCells: Cell2[] | null = null;
+  let highlightBlink = false;
+  // The flip-teach beat plays a bigger, slower flip so the transformation
+  // itself is unmistakable, instead of the same quick flip every other
+  // scoring beat uses.
+  let flipEmphasisCells: Set<string> | null = null;
 
   container.innerHTML = `
     <div class="app">
@@ -229,21 +291,48 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
         spawnOutlineEl(boardEl, { left: cx - size / 2, top: cy - size / 2, width: size, height: size }, elapsedMs, 'circle');
       }
     }
+    // Flip-teach's emphasis ring is its own overlay element rather than a
+    // class on the ball itself — the ball already carries an inline
+    // `animation` (flip-in + score-pulse, set by applyScoreAnimations), and
+    // a second class-based `animation` on the same element would just
+    // silently replace it rather than play alongside it.
+    if (flipEmphasisCells) {
+      for (const k of flipEmphasisCells) {
+        const [r, c] = k.split(',').map(Number);
+        const [cx, cy] = ballCenter(r, c);
+        const ring = document.createElement('div');
+        ring.className = 'flip-emphasis-ring';
+        ring.style.left = cx - size / 2 + 'px';
+        ring.style.top = cy - size / 2 + 'px';
+        ring.style.width = size + 'px';
+        ring.style.height = size + 'px';
+        boardEl.appendChild(ring);
+      }
+    }
     renderHighlightBox();
   }
 
   function renderHighlightBox() {
     boardWrap.querySelectorAll('.tutorial-highlight-box').forEach((el) => el.remove());
     const beat = BEATS[beatIndex];
-    if (!beat.targetCells.length || solved) return;
+    const cells = activeHighlightCells ?? beat.targetCells;
+    // solved only suppresses the *normal* (beat.targetCells) highlight, once
+    // that beat's one target has been matched. During a 'sequence' beat,
+    // solved is already true for the whole sequence (it's what blocks a
+    // second drag from re-entering it) — activeHighlightCells is what
+    // actually tracks whether a group is being highlighted right now, and
+    // must keep working regardless of solved.
+    const suppressed = activeHighlightCells === null && solved;
+    if (!cells.length || suppressed) return;
     const size = R * 1.86;
-    const pts = beat.targetCells.map(([r, c]) => ballCenter(r, c));
+    const pts = cells.map(([r, c]) => ballCenter(r, c));
     const minX = Math.min(...pts.map((p) => p[0])) - size / 2;
     const maxX = Math.max(...pts.map((p) => p[0])) + size / 2;
     const minY = Math.min(...pts.map((p) => p[1])) - size / 2;
     const maxY = Math.max(...pts.map((p) => p[1])) + size / 2;
     const box = document.createElement('div');
     box.className = 'tutorial-highlight-box';
+    if (highlightBlink) box.classList.add('blink-in');
     box.style.left = minX + 'px';
     box.style.top = minY + 'px';
     box.style.width = maxX - minX + 'px';
@@ -251,14 +340,23 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     boardWrap.appendChild(box);
   }
 
-  function showCheck() {
+  // `blink` plays a snappier double-flash before settling — used when the
+  // combined pattern-intro beat confirms each of its groups in turn, so the
+  // "yes, that one too" moment reads clearly instead of blending into the
+  // single quiet pop every other beat's checkmark uses.
+  function showCheck(blink = false) {
+    checkEl.classList.toggle('blink', blink);
     checkEl.classList.add('show');
     setTimeout(() => checkEl.classList.remove('show'), 900);
   }
 
   function goToBeat(i: number) {
     clearTimeout(autoTimer);
+    beatGen++;
     solved = false;
+    activeHighlightCells = null;
+    highlightBlink = false;
+    flipEmphasisCells = null;
     beatIndex = Math.max(0, Math.min(BEATS.length - 1, i));
     grid = BEATS[beatIndex].grid();
     stepLabelEl.textContent = `${beatIndex + 1} / ${BEATS.length}`;
@@ -284,12 +382,22 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     }
   }
 
-  function playMatch(cells: Cell2[]) {
+  // `emphasis`: the flip-teach beat wants its one flip to be unmistakable —
+  // a longer pre-flip pause to build anticipation, and an expanding ring
+  // overlay (.flip-emphasis-ring, see style.css) around the cells about to
+  // flip. flipEmphasisCells must be set *before* this render() call, not
+  // after — render() is what actually reads it to spawn the ring elements.
+  // `onDone`: lets a caller (playSequence) chain its own step after this
+  // flip's payoff instead of always auto-advancing to the next beat.
+  function playMatch(cells: Cell2[], opts?: { emphasis?: boolean; onDone?: () => void }) {
     solved = true;
+    const gen = beatGen;
     outlineTracker.add([cells]);
+    if (opts?.emphasis) flipEmphasisCells = new Set(cells.map(([r, c]) => key(r, c)));
     render();
     vibrate(15);
     setTimeout(() => {
+      if (gen !== beatGen) return;
       for (const [r, c] of cells) {
         const t = grid[r][c];
         // A tile's dot color was decided when it was created (t.dotColor),
@@ -301,21 +409,118 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
       }
       render();
       showCheck();
-      autoTimer = window.setTimeout(advance, 1400);
-    }, 750);
+      flipEmphasisCells = null;
+      if (opts?.onDone) {
+        autoTimer = window.setTimeout(opts.onDone, 900);
+      } else {
+        autoTimer = window.setTimeout(advance, 1400);
+      }
+    }, opts?.emphasis ? 1300 : 750);
+  }
+
+  // The combined pattern-intro beat: reveals each group in sequenceGroups
+  // one after another (highlight blinks in, checkmark blinks, flips) inside
+  // this single beat, instead of needing a separate drag per pattern.
+  function playSequence(groups: Cell2[][], idx = 0) {
+    solved = true;
+    const gen = beatGen;
+    if (idx >= groups.length) {
+      autoTimer = window.setTimeout(advance, 900);
+      return;
+    }
+    const cells = groups[idx];
+    activeHighlightCells = cells;
+    highlightBlink = true;
+    render();
+    vibrate(10);
+    setTimeout(() => {
+      if (gen !== beatGen) return;
+      outlineTracker.add([cells]);
+      render();
+      setTimeout(() => {
+        if (gen !== beatGen) return;
+        for (const [r, c] of cells) {
+          const t = grid[r][c];
+          grid[r][c] = td(t.dotColor);
+          flipInCells.add(key(r, c));
+        }
+        activeHighlightCells = null;
+        render();
+        showCheck(true);
+        playSequence(groups, idx + 1);
+      }, 650);
+    }, 500);
   }
 
   function playWholeLineBonus(cells: Cell2[]) {
     solved = true;
+    const gen = beatGen;
     outlineTracker.add([cells]);
     render();
     vibrate([25, 40, 25]);
     autoTimer = window.setTimeout(() => {
+      if (gen !== beatGen) return;
       for (const [r, c] of cells) grid[r][c] = tblank();
       render();
       showCheck();
       autoTimer = window.setTimeout(advance, 1900);
     }, 1600);
+  }
+
+  // Scripted swap demonstrating a blank ball still occupies a real cell and
+  // still drags: slides wholeLineCells[0]'s blank ball to an adjacent cell
+  // (swapping places with whatever's already there), via the same ghost-
+  // element slide triangleTutorial.ts's orientation-swap beat uses, rather
+  // than requiring the player to land a precise real drag on a demo whose
+  // whole point is just to be watched.
+  const BLANK_MOVE_FROM: Cell2 = wholeLineCells[0];
+  const BLANK_MOVE_TO: Cell2 = [3, 0];
+  const BLANK_SLIDE_MS = 900;
+  function playBlankMove() {
+    solved = true;
+    const gen = beatGen;
+    render();
+    const [fr, fc] = BLANK_MOVE_FROM;
+    const [tr, tc] = BLANK_MOVE_TO;
+    const fromTile = grid[fr][fc];
+    const toTile = grid[tr][tc];
+    const size = R * 1.86;
+    const [fx, fy] = ballCenter(fr, fc);
+    const [tx, ty] = ballCenter(tr, tc);
+
+    function ghostFor(tile: CTile, r: number, c: number, x: number, y: number): HTMLElement {
+      const ghost = makeBallEl(tile, r, c); // r/c only for the dataset — position set explicitly below
+      ghost.style.left = x - size / 2 + 'px';
+      ghost.style.top = y - size / 2 + 'px';
+      ghost.style.transition = `left ${BLANK_SLIDE_MS}ms cubic-bezier(.4,0,.2,1), top ${BLANK_SLIDE_MS}ms cubic-bezier(.4,0,.2,1)`;
+      ghost.style.zIndex = '5';
+      return ghost;
+    }
+    const el1 = document.querySelector<HTMLElement>(`.ball[data-r="${fr}"][data-c="${fc}"]`);
+    const el2 = document.querySelector<HTMLElement>(`.ball[data-r="${tr}"][data-c="${tc}"]`);
+    el1?.remove();
+    el2?.remove();
+    const ghostBlank = ghostFor(fromTile, fr, fc, fx, fy);
+    const ghostOther = ghostFor(toTile, tr, tc, tx, ty);
+    boardEl.appendChild(ghostBlank);
+    boardEl.appendChild(ghostOther);
+    vibrate(10);
+    requestAnimationFrame(() => {
+      ghostBlank.style.left = tx - size / 2 + 'px';
+      ghostBlank.style.top = ty - size / 2 + 'px';
+      ghostOther.style.left = fx - size / 2 + 'px';
+      ghostOther.style.top = fy - size / 2 + 'px';
+    });
+    autoTimer = window.setTimeout(() => {
+      if (gen !== beatGen) return;
+      grid[fr][fc] = toTile;
+      grid[tr][tc] = fromTile;
+      ghostBlank.remove();
+      ghostOther.remove();
+      render();
+      showCheck();
+      autoTimer = window.setTimeout(advance, 1400);
+    }, BLANK_SLIDE_MS + 80);
   }
 
   // Any drag confirms the current beat — see the module comment: this
@@ -341,7 +546,9 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     const dy = e.clientY - sy;
     if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
     const beat = BEATS[beatIndex];
-    if (beat.goal === 'any') playMatch(beat.targetCells);
+    if (beat.goal === 'any') playMatch(beat.targetCells, { emphasis: beat.captionKey === 'circleFlipTeach' });
+    else if (beat.goal === 'sequence' && beat.sequenceGroups) playSequence(beat.sequenceGroups);
+    else if (beat.goal === 'blankMove') playBlankMove();
   }
   boardEl.addEventListener('pointerdown', down);
   boardEl.addEventListener('pointerup', up);

@@ -16,10 +16,10 @@ export interface I18nStrings {
   flip: string;
   mixedFace: string;
   wholeLine: string;
-  circleSlide: string;
-  circleCluster: string;
-  circleCluster121: string;
+  circleClusterIntro: string;
+  circleFlipTeach: string;
   circleBlank: string;
+  circleBlankMove: string;
   triSlide: string;
   triBigTriangle: string;
   triFlipOrientation: string;
@@ -42,10 +42,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flip: 'Scored tiles flip to a color chosen at random',
     mixedFace: 'A flipped tile can keep scoring — match its color with a front-facing tile too',
     wholeLine: 'A whole row or column of matching flipped tiles scores big and clears the board',
-    circleSlide: 'Drag along a horizontal, left-diagonal, or right-diagonal line to line up 4 balls of the same color',
-    circleCluster: 'A "22" diamond — 2 balls, then 2 more one row over — of the same color scores too',
-    circleCluster121: 'A "121" diamond — 1 ball, then 2, then 1, spanning three rows — of the same color scores too',
+    circleClusterIntro: 'Drag horizontally, or along either diagonal; same-colored balls score three ways — a run of 4, a "22" diamond, or a "121" diamond. Drag once to see all three flip in turn',
+    circleFlipTeach: "Scored balls flip to a randomly determined color — balls cleared together in one group don't always end up the same color",
     circleBlank: 'When a whole flipped line matches, it becomes blank balls — still slide freely, but they can never score again',
+    circleBlankMove: 'A blank ball still holds its place on the board and drags normally — try it and watch it slide along',
     triSlide: 'Drag along a horizontal, left-diagonal, or right-diagonal line to line up 4 triangles of the same color',
     triBigTriangle: '4 triangles combining into one big triangle (3 one way, 1 the other) score too',
     triFlipOrientation: 'A triangle pushed off one edge wraps back in on the other side — pointing the opposite way',
@@ -64,10 +64,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flip: 'Les cases marquées se retournent sur une couleur tirée au hasard',
     mixedFace: 'Une case retournée peut aussi marquer — associez-la à une case encore de face',
     wholeLine: 'Une ligne ou colonne entière retournée de la même couleur rapporte gros et vide le plateau',
-    circleSlide: 'Faites glisser le long d\'une ligne horizontale, diagonale gauche ou diagonale droite pour aligner 4 boules de la même couleur',
-    circleCluster: 'Un losange "22" — 2 boules, puis 2 autres une rangée plus loin — de la même couleur rapporte aussi',
-    circleCluster121: 'Un losange "121" — 1 boule, puis 2, puis 1, sur trois rangées — de la même couleur rapporte aussi',
+    circleClusterIntro: 'Faites glisser à l\'horizontale ou en diagonale ; des boules de la même couleur marquent de trois façons — une ligne de 4, un losange "22", ou un losange "121". Faites glisser une fois pour voir les trois se retourner tour à tour',
+    circleFlipTeach: 'Les boules marquées se retournent sur une couleur tirée au hasard — des boules effacées ensemble ne finissent pas forcément de la même couleur',
     circleBlank: 'Quand toute une ligne retournée est assortie, ses boules deviennent vides — elles glissent toujours librement, mais ne peuvent plus jamais marquer',
+    circleBlankMove: 'Une boule vide garde sa place sur le plateau et glisse normalement — essayez et regardez-la se déplacer',
     triSlide: 'Faites glisser le long d\'une ligne horizontale, diagonale gauche ou diagonale droite pour aligner 4 triangles de la même couleur',
     triBigTriangle: '4 triangles formant un grand triangle (3 dans un sens, 1 dans l\'autre) rapportent aussi',
     triFlipOrientation: 'Un triangle poussé hors d\'un bord revient de l\'autre côté — pointant dans l\'autre sens',
@@ -86,10 +86,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flip: '得分的方塊會翻面到隨機決定的顏色',
     mixedFace: '翻面後的方塊一樣能繼續得分——把它和正面的同色方塊拼在一起',
     wholeLine: '反面同色連成一整行或一整列，會獲得高分並清空棋盤',
-    circleSlide: '沿水平、左斜或右斜方向拖動一整條線，湊齊 4 顆同色圓球',
-    circleCluster: '同色的「22」菱形(2 顆接著下一行再 2 顆)同樣得分',
-    circleCluster121: '同色的「121」菱形(1 顆、2 顆、1 顆，橫跨三行)同樣得分',
+    circleClusterIntro: '圓球能沿水平、左斜、右斜拖動；同色能拼出三種得分圖案——4連線、「22」菱形、「121」菱形。拖動一下，依次看看它們翻面得分',
+    circleFlipTeach: '得分的圓球會翻面，換成隨機決定的顏色——同一組消除的圓球，翻面後的顏色不一定相同',
     circleBlank: '整條線翻面同色湊齊時，會變成空白球——仍可自由滑動補位，但不會再得分',
+    circleBlankMove: '空白球依然佔著位置，也能被正常拖動——試著拖一下，看它照樣跟著滑動',
     triSlide: '沿水平、左斜或右斜方向拖動一整條線，湊齊 4 個同色三角',
     triBigTriangle: '4 個三角拼成一個大三角（3 個同向 + 1 個反向）同樣得分',
     triFlipOrientation: '被推出邊緣的三角，會從另一側補回並換成相反的朝向',
@@ -108,10 +108,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flip: '得分的方块会翻面到随机决定的颜色',
     mixedFace: '翻面后的方块一样能继续得分——把它和正面的同色方块拼在一起',
     wholeLine: '反面同色连成一整行或一整列，会获得高分并清空棋盘',
-    circleSlide: '沿水平、左斜或右斜方向拖动一整条线，凑齐 4 颗同色圆球',
-    circleCluster: '同色的"22"菱形(2颗接着下一行再2颗)同样得分',
-    circleCluster121: '同色的"121"菱形(1颗、2颗、1颗，横跨三行)同样得分',
+    circleClusterIntro: '圆球能沿水平、左斜、右斜拖动；同色能拼出三种得分图案——4连线、"22"菱形、"121"菱形。拖动一下，依次看看它们翻面得分',
+    circleFlipTeach: '得分的圆球会翻面，换成随机决定的颜色——同一组消除的圆球，翻面后的颜色不一定相同',
     circleBlank: '整条线翻面同色凑齐时，会变成空白球——仍可自由滑动补位，但不会再得分',
+    circleBlankMove: '空白球依然占着位置，也能被正常拖动——试着拖一下，看它照样跟着滑动',
     triSlide: '沿水平、左斜或右斜方向拖动一整条线，凑齐 4 个同色三角',
     triBigTriangle: '4 个三角拼成一个大三角（3 个同向 + 1 个反向）同样得分',
     triFlipOrientation: '被推出边缘的三角，会从另一侧补回并换成相反的朝向',
