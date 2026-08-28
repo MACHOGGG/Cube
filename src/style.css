@@ -543,34 +543,32 @@ button:hover { filter: brightness(1.05); }
   50% { text-shadow: 0 0 22px var(--score-glow), 0 0 2px var(--accent); }
 }
 @media (prefers-reduced-motion: reduce) { .lang-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
+.lang-instructions { text-align: center; color: var(--ink-soft); font-size: 0.85rem; margin: -6px 0 4px; }
 
-.lang-grid { display: flex; flex-direction: column; gap: 16px; margin-top: 18px; }
-.lang-row { display: flex; align-items: center; gap: 8px; }
-/* The bar itself *is* the language — a solid color fill with just its name
-   on it, nothing in front. Dragging this whole element left/right selects
-   it (same physics as before). */
-.lang-strip {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  border-radius: 18px; padding: 20px 16px; touch-action: none; user-select: none; cursor: grab;
-  box-shadow: var(--shadow); transition: filter 0.2s ease;
+/* A 4x9 letter grid styled like the game's own tiles. Only the 4 columns
+   with an arrow above them are draggable (vertically, one column at a
+   time) — dragging one down by a step is how a language's spelling gets
+   completed; see languageSelect.ts for the full mechanic. */
+.lang-board { display: flex; gap: 4px; margin-top: 8px; }
+.lang-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
+.lang-col--drag { touch-action: none; cursor: grab; }
+.lang-col--drag:active, .lang-col--active { cursor: grabbing; }
+.lang-col-arrow-slot { height: 18px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); }
+.lang-col-arrow { color: var(--accent); animation: lang-col-arrow-bob 1.6s ease-in-out infinite; }
+@keyframes lang-col-arrow-bob {
+  0%, 100% { transform: translateY(0); opacity: 0.65; }
+  50% { transform: translateY(4px); opacity: 1; }
 }
-.lang-strip.selected { filter: brightness(1.12); }
-.lang-label {
-  font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.3rem;
-  color: #fff; letter-spacing: 0.02em; text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+@media (prefers-reduced-motion: reduce) { .lang-col-arrow { animation: none; opacity: 0.85; } }
+
+.lang-cell {
+  aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: clamp(0.62rem, 3.4vw, 0.98rem);
+  font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25); box-shadow: var(--shadow); user-select: none;
 }
-/* Dashed connector + chevron sit outside the bar, never over the text —
-   the swipe hint stays visually separate from "this is the language". */
-.lang-connector { flex: 0 0 12px; height: 0; border-top: 2px dashed currentColor; opacity: 0.55; }
-.lang-arrow {
-  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-  animation: lang-arrow-nudge 1.6s ease-in-out infinite;
-}
-@keyframes lang-arrow-nudge {
-  0%, 100% { transform: translateX(0); opacity: 0.65; }
-  50% { transform: translateX(4px); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) { .lang-arrow { animation: none; opacity: 0.85; } }
+.lang-cell.ghost { pointer-events: none; }
+.lang-cell--solved { box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--score-glow); }
 
 /* ---------- tutorial ---------- */
 .tutorial-caption {
