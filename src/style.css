@@ -468,6 +468,35 @@ button:hover { filter: brightness(1.05); }
 .exclusive-pill .zh { font-family: 'Fraunces', Georgia, serif; font-size: 0.95rem; }
 .exclusive-pill .en { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; opacity: 0.75; }
 
+/* ---------- 天才入口 privilege list ---------- */
+.privilege-list { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 20px; }
+.privilege-item {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 13px 16px; color: var(--ink);
+}
+.privilege-item .glyph {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center;
+}
+.privilege-item .glyph svg { width: 16px; height: 16px; }
+.privilege-item .label { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.95rem; }
+.privilege-item.soon {
+  justify-content: center; border-style: dashed; color: var(--ink-faint);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .04em;
+}
+
+/* ---------- 注册/登录 modal ---------- */
+.auth-modal { max-width: 320px; }
+.auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.auth-tab {
+  flex: 1; background: var(--board-bg); color: var(--ink-soft); border: 1px solid transparent;
+  border-radius: 100px; padding: 9px 12px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.9rem;
+}
+.auth-tab.active { background: var(--accent-soft); color: var(--accent-ink); }
+.auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
+.auth-body .tag-line { margin: 0; }
+
 /* ---------- language picker ---------- */
 .lang-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
 .lang-row { display: flex; align-items: center; gap: 8px; }
