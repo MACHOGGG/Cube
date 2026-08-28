@@ -8,6 +8,7 @@ import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
+import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -26,6 +27,37 @@ const PER_COLOR = 7;
 const MIN_LINE_BONUS_LEN = 3;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="7" r="6" fill="#C0666B"/><circle cx="8" cy="20" r="6" fill="#DDA857"/><circle cx="24" cy="20" r="6" fill="#4F72C4"/></svg>`;
+
+// The board's 3 seed patterns (see findMatches/CLUSTERS below), positioned
+// with the exact same (r,c) -> screen transform the live board uses, drawn
+// as blank outlines for the in-HUD pattern hint. iconPos's (r,c) offsets
+// are copied verbatim from rhombus22B/diamond121's own cell lists.
+function iconPos(r: number, c: number): [number, number] {
+  return [(c - r / 2) * 2, r * Math.sqrt(3)];
+}
+const PATTERNS: PatternDef[] = [
+  {
+    label: '1×4',
+    cells: [0, 1, 2, 3].map((c) => {
+      const [cx, cy] = iconPos(3, c);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+  {
+    label: '2+2',
+    cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([r, c]) => {
+      const [cx, cy] = iconPos(r, c);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+  {
+    label: '1-2-1',
+    cells: ([[0, 0], [1, 0], [1, 1], [2, 1]] as const).map(([r, c]) => {
+      const [cx, cy] = iconPos(r, c);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+];
 
 type Fam = 'A' | 'B' | 'R';
 
@@ -164,6 +196,7 @@ export function createCircleGame(): ShapeGame {
         assumptions:
           '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
+        patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';

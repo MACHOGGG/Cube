@@ -8,6 +8,7 @@ import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
+import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -32,6 +33,30 @@ const PER_COLOR = 5;
 const MIN_LINE_BONUS_LEN = 3;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,4 28,26 4,26" fill="none" stroke="#4C68B0" stroke-width="2.4"/><polygon points="16,13 22,24 10,24" fill="#D89B1E"/></svg>`;
+
+// The board's 2 seed patterns (see findRunMatches/BIG_TRIANGLES below),
+// built with the exact same up/down triangle geometry snapshotBoard() uses
+// (global row i, global position p), drawn as blank outlines for the
+// in-HUD pattern hint.
+const ICON_H = Math.sqrt(3) / 2;
+function iconTri(i: number, p: number): [number, number][] {
+  const up = p % 2 === 0;
+  const j = up ? p / 2 : (p - 1) / 2;
+  const xBase = -i / 2 + j;
+  return up
+    ? [[xBase, i * ICON_H], [xBase - 0.5, (i + 1) * ICON_H], [xBase + 0.5, (i + 1) * ICON_H]]
+    : [[xBase + 0.5, (i + 1) * ICON_H], [xBase, i * ICON_H], [xBase + 1, i * ICON_H]];
+}
+const PATTERNS: PatternDef[] = [
+  {
+    label: '1×4',
+    cells: [0, 1, 2, 3].map((p) => ({ kind: 'poly' as const, points: iconTri(0, p) })),
+  },
+  {
+    label: '大三角',
+    cells: [[0, 0], [1, 0], [1, 1], [1, 2]].map(([i, p]) => ({ kind: 'poly' as const, points: iconTri(i, p) })),
+  },
+];
 
 interface Line {
   fam: 'A' | 'B' | 'R';
@@ -190,6 +215,7 @@ export function createTriangleBigGame(): ShapeGame {
         assumptions:
           '5 种口味色，每色 5 枚，共 25 枚（一整块大三角，五行 1/3/5/7/9 枚）；每种口味的点色分布为：其余 4 色各 1 枚、另有 1 色额外再来 1 枚——保证没有正反面同色的三角出现。三个滑动方向——水平、左斜、右斜——判分规则与基础三角玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
+        patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';

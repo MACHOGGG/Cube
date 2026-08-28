@@ -65,6 +65,13 @@ h1 {
 .hud-cell .v { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 .score-cell { position: relative; overflow: visible; }
 
+/* Small blank-outline diagrams of this shape's own scoring patterns, shown
+   right under the HUD so a player can see what to aim for at a glance. */
+.pattern-hint { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+.pattern-icon { display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink-faint); }
+.pattern-icon svg { display: block; }
+.pattern-icon-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .02em; }
+
 /* the live performance gauge sits between score and time and is meant to
    read as "the instrument", not another plain stat — an accent-tinted
    surface with its own glow that breathes gently while a streak is hot. */

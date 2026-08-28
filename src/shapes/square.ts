@@ -8,6 +8,7 @@ import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } fr
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
+import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -33,6 +34,29 @@ const PALETTES = {
 const BOARD_DIM = 6;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12" rx="3" fill="#C46A4E"/><rect x="18" y="2" width="12" height="12" rx="3" fill="#4A9573"/><rect x="2" y="18" width="12" height="12" rx="3" fill="#4C7EAD"/><rect x="18" y="18" width="12" height="12" rx="3" fill="#AD5C82"/></svg>`;
+
+// The board's two seed patterns (see findMatches below) — a 2x2 block and a
+// straight run of 4 — drawn as blank outlines for the in-HUD pattern hint.
+const PATTERNS: PatternDef[] = [
+  {
+    label: '2×2',
+    cells: [
+      { kind: 'rect', cx: 0, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 0, cy: 1, half: 0.42 },
+      { kind: 'rect', cx: 1, cy: 1, half: 0.42 },
+    ],
+  },
+  {
+    label: '1×4',
+    cells: [
+      { kind: 'rect', cx: 0, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 2, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 3, cy: 0, half: 0.42 },
+    ],
+  },
+];
 
 interface DragState {
   r: number;
@@ -65,6 +89,7 @@ export function createSquareGame(): ShapeGame {
         assumptions:
           '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
+        patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';

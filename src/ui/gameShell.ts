@@ -10,6 +10,8 @@ export interface ShellMeta {
   hint: string;
   assumptions: string;
   extraControls?: ExtraControl[];
+  /** Pre-rendered HTML (via engine/patternIcon.ts's renderPatternHintRow) for the small blank-outline scoring-pattern icons shown under the HUD. */
+  patternHint?: string;
 }
 
 export interface ShellRefs {
@@ -78,6 +80,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <div class="hud-cell perf-cell"><div class="k">有效得分率</div><div class="v" id="hud-perf">0%</div></div>
         <div class="hud-cell"><div class="k">用时</div><div class="v" id="hud-time">0:00</div></div>
       </div>
+
+      ${meta.patternHint ? `<div class="pattern-hint">${meta.patternHint}</div>` : ''}
 
       <div class="board-wrap" id="boardWrap">
         <div class="board" id="board"></div>

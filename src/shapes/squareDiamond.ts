@@ -8,6 +8,7 @@ import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } fr
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
+import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -39,6 +40,37 @@ const MIN_LINE_BONUS_LEN = 3;
 const BLANK = -1;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><rect x="12" y="2" width="8" height="8" fill="#C46A4E" transform="rotate(45 16 6)"/><rect x="22" y="12" width="8" height="8" fill="#4A9573" transform="rotate(45 26 16)"/><rect x="12" y="22" width="8" height="8" fill="#4C7EAD" transform="rotate(45 16 26)"/><rect x="2" y="12" width="8" height="8" fill="#AD5C82" transform="rotate(45 6 16)"/></svg>`;
+
+// The board's 3 seed patterns (see findRunMatches/rhombus22Right/diamond121
+// below), positioned with the same (r,c) -> screen transform snapshotBoard()
+// uses, drawn as blank outlines for the in-HUD pattern hint. Offsets are
+// copied verbatim from rhombus22Right/diamond121's own cell lists.
+function iconPos(r: number, c: number): [number, number] {
+  return [c - r, c + r];
+}
+const PATTERNS: PatternDef[] = [
+  {
+    label: '1×4',
+    cells: [0, 1, 2, 3].map((c) => {
+      const [cx, cy] = iconPos(0, c);
+      return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
+    }),
+  },
+  {
+    label: '2+2',
+    cells: ([[0, 0], [0, 1], [1, 1], [1, 2]] as const).map(([r, c]) => {
+      const [cx, cy] = iconPos(r, c);
+      return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
+    }),
+  },
+  {
+    label: '1-2-1',
+    cells: ([[0, 0], [1, 0], [1, 1], [2, 1]] as const).map(([r, c]) => {
+      const [cx, cy] = iconPos(r, c);
+      return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
+    }),
+  },
+];
 
 type Fam = 'ROW' | 'A' | 'B';
 interface Line {
@@ -154,6 +186,7 @@ export function createSquareDiamondGame(): ShapeGame {
         assumptions:
           '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
+        patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';

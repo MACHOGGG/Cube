@@ -8,6 +8,7 @@ import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
+import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -34,6 +35,37 @@ const MIN_LINE_BONUS_LEN = 3;
 const CENTER_CELL: Cell = [3, 3]; // row 3 (z=0), col 3 -> cube (0,0,0), the hex's true center
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="6.5" r="4.5" fill="#B23A3A"/><circle cx="25" cy="11" r="4.5" fill="#D89B1E"/><circle cx="25" cy="21" r="4.5" fill="#4C68B0"/><circle cx="16" cy="25.5" r="4.5" fill="#2F9E52"/><circle cx="7" cy="21" r="4.5" fill="#9B958D"/><circle cx="7" cy="11" r="4.5" fill="#3C4452"/></svg>`;
+
+// The board's 3 seed patterns (see findRunMatches/CLUSTERS below), drawn
+// with the same cube-coordinate transform snapshotBoard() uses, as blank
+// outlines for the in-HUD pattern hint. Offsets are the same (dz,dx) pairs
+// as RHOMBUS_B_OFFSETS/RHOMBUS_A_OFFSETS/DIAMOND_121_OFFSETS above.
+function iconPos(dz: number, dx: number): [number, number] {
+  return [2 * dx + dz, dz * Math.sqrt(3)];
+}
+const PATTERNS: PatternDef[] = [
+  {
+    label: '1×4',
+    cells: [0, 1, 2, 3].map((dx) => {
+      const [cx, cy] = iconPos(0, dx);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+  {
+    label: '2+2',
+    cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([dz, dx]) => {
+      const [cx, cy] = iconPos(dz, dx);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+  {
+    label: '1-2-1',
+    cells: ([[0, 0], [1, 0], [1, 1], [2, 1]] as const).map(([dz, dx]) => {
+      const [cx, cy] = iconPos(dz, dx);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+];
 
 type Fam = 'X' | 'Y' | 'Z';
 interface Line {
@@ -172,6 +204,7 @@ export function createCircleHexGame(): ShapeGame {
         assumptions:
           '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
+        patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
