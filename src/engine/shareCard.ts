@@ -109,6 +109,55 @@ function tracePrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size:
   }
 }
 
+// The live boards use 3 genuinely different dot-face glyphs, not one
+// generic stand-in — the rect family (square/diamond) shows a small inset
+// circle, the circle family (ball/hex) shows a 3-line asterisk with no
+// fill at all, and only the poly family (triangle) actually is a shrunk
+// copy of its own silhouette with a dark outline. Routing by cell.kind
+// here reproduces each shape's own real look instead of approximating all
+// three with the one that happens to fit triangle.
+const ASTERISK_SEGS: [[number, number], [number, number]][] = [
+  [[12, 2.5], [12, 21.5]],
+  [[4, 6.75], [20, 17.25]],
+  [[20, 6.75], [4, 17.25]],
+];
+function drawAsterisk(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string) {
+  const scale = (r * 0.85) / 12;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, 5.5 * scale);
+  ctx.lineCap = 'round';
+  for (const [[x1, y1], [x2, y2]] of ASTERISK_SEGS) {
+    ctx.beginPath();
+    ctx.moveTo(cx + (x1 - 12) * scale, cy + (y1 - 12) * scale);
+    ctx.lineTo(cx + (x2 - 12) * scale, cy + (y2 - 12) * scale);
+    ctx.stroke();
+  }
+}
+
+function drawDotFace(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number) {
+  if (cell.kind === 'rect') {
+    // Matches the live board's .dot-circle: a small inset disc, not a
+    // shrunk square.
+    const r = cell.half * size * 0.8;
+    ctx.beginPath();
+    ctx.arc(cell.cx * size, cell.cy * size, r, 0, Math.PI * 2);
+    ctx.fillStyle = cell.color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+    ctx.lineWidth = Math.max(1, size * 0.004);
+    ctx.stroke();
+  } else if (cell.kind === 'circle') {
+    drawAsterisk(ctx, cell.cx * size, cell.cy * size, cell.r * size, cell.color);
+  } else {
+    tracePrimitive(ctx, cell, size, DOT_SCALE);
+    ctx.fillStyle = cell.color;
+    ctx.fill();
+    ctx.strokeStyle = DOT_STROKE;
+    ctx.lineWidth = Math.max(1, size * 0.008);
+    ctx.stroke();
+  }
+}
+
 function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: number, y: number, size: number) {
   ctx.save();
   ctx.translate(x, y);
@@ -119,12 +168,7 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
       ctx.lineWidth = Math.max(1.5, size * 0.018);
       ctx.stroke();
     } else if (cell.face === 'dot') {
-      tracePrimitive(ctx, cell, size, DOT_SCALE);
-      ctx.fillStyle = cell.color;
-      ctx.fill();
-      ctx.strokeStyle = DOT_STROKE;
-      ctx.lineWidth = Math.max(1, size * 0.008);
-      ctx.stroke();
+      drawDotFace(ctx, cell, size);
     } else {
       tracePrimitive(ctx, cell, size, 1);
       ctx.fillStyle = cell.color;
