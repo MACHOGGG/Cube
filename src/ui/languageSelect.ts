@@ -3,22 +3,23 @@ import { LANG_ORDER, STRINGS, type Lang } from '../i18n';
 
 // Each language is a small horizontal strip of tiles, styled after the
 // square board's own tiles — dragging a strip (the same gesture as sliding
-// a row in the square game) past a threshold selects that language. Small
-// chevrons at the strip's leading edge hint that it can be swiped, the same
-// discoverability problem every board's drag needs solving for a first-time
-// player, just met here before they've even reached a board.
+// a row in the square game) past a threshold selects that language. A
+// floating chevron chip hovers over the strip's trailing edge to hint that
+// it can be swiped, the same discoverability problem every board's drag
+// needs solving for a first-time player, just met here before they've even
+// reached a board. No caption spells the gesture out in words — the glow,
+// color and float are meant to carry that on their own.
 const STRIP_COLOR_SETS: string[][] = [
-  ['#C46A4E', '#4A9573', '#4C7EAD', '#AD5C82'],
-  ['#4C7EAD', '#D89B1E', '#8067A8', '#4A9573'],
-  ['#AD5C82', '#4C7EAD', '#C46A4E', '#D89B1E'],
-  ['#4A9573', '#AD5C82', '#D89B1E', '#4C7EAD'],
+  ['#E0654A', '#3F9E8C', '#4C7EAD', '#C2588F'],
+  ['#4C7EAD', '#E8A93B', '#8067A8', '#3F9E8C'],
+  ['#C2588F', '#4C7EAD', '#E0654A', '#E8A93B'],
+  ['#3F9E8C', '#C2588F', '#E8A93B', '#4C7EAD'],
 ];
 
 export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: Lang) => void) {
   container.innerHTML = `
-    <div class="app">
-      <h1>Slides</h1>
-      <p class="tag-line">Choose your language · Choisissez votre langue · 選擇語言 · 选择语言</p>
+    <div class="app lang-select-page">
+      <h1 class="lang-title">Slides</h1>
       <div class="lang-grid" id="langGrid"></div>
     </div>
   `;
@@ -28,18 +29,17 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
 
   LANG_ORDER.forEach((lang, i) => {
     const colors = STRIP_COLOR_SETS[i % STRIP_COLOR_SETS.length];
-    const row = document.createElement('div');
-    row.className = 'lang-row';
-    row.innerHTML = `
-      <div class="lang-arrows" aria-hidden="true"><span>&#8250;</span><span>&#8250;</span></div>
-      <div class="lang-strip" data-lang="${lang}">
-        <div class="lang-tiles">
-          ${colors.map((c) => `<div class="lang-tile" style="background:${c}"></div>`).join('')}
-        </div>
-        <span class="lang-label">${STRINGS[lang].langName}</span>
+    const strip = document.createElement('div');
+    strip.className = 'lang-strip';
+    strip.dataset.lang = lang;
+    strip.innerHTML = `
+      <div class="lang-tiles">
+        ${colors.map((c) => `<div class="lang-tile" style="background:${c}"></div>`).join('')}
       </div>
+      <span class="lang-label">${STRINGS[lang].langName}</span>
+      <div class="lang-arrows" aria-hidden="true"><span>&#8250;</span><span>&#8250;</span></div>
     `;
-    grid.appendChild(row);
+    grid.appendChild(strip);
   });
 
   const THRESHOLD = 64;
