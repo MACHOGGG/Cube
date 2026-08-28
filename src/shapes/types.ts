@@ -10,6 +10,8 @@ export interface ShapeCardMeta {
 export interface ShapeGameOpts {
   /** Timed-challenge mode: run ends automatically after this many seconds. */
   timeLimitSec?: number;
+  /** Bomb-challenge mode: red hazard tiles, instant game-over on a 4+ cluster. */
+  bomb?: boolean;
 }
 
 export interface ShapeGame {

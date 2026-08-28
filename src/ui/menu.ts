@@ -1,12 +1,13 @@
 import type { ShapeCardMeta } from '../shapes/types';
 import { loadBest } from '../engine/persistence';
+import { BOMB_TIER_META, type BombTier } from '../engine/bomb';
 
 export interface MenuHandlers {
   onSelectBase: (id: ShapeCardMeta['id']) => void;
   onSelectLayout: (id: ShapeCardMeta['id']) => void;
   onTimed: () => void;
   onRandomTarget: () => void;
-  onBomb: () => void;
+  onBomb: (tier: BombTier) => void;
   onMultiplayer: () => void;
   onRankings: () => void;
   onSignIn: () => void;
@@ -108,9 +109,11 @@ export function renderMenu(
   const randomBtn = compactCard('随机得分目标', null, RANDOM_TARGET_GLYPH, true);
   randomBtn.addEventListener('click', handlers.onRandomTarget);
   challengeGrid.appendChild(randomBtn);
-  const bombBtn = compactCard('炸弹挑战', null, BOMB_GLYPH, true);
-  bombBtn.addEventListener('click', handlers.onBomb);
-  challengeGrid.appendChild(bombBtn);
+  (['basic', 'timed', 'advanced'] as BombTier[]).forEach((tier) => {
+    const btn = compactCard(BOMB_TIER_META[tier].title, null, BOMB_GLYPH);
+    btn.addEventListener('click', () => handlers.onBomb(tier));
+    challengeGrid.appendChild(btn);
+  });
 
   req<HTMLElement>('multiplayerCard').addEventListener('click', handlers.onMultiplayer);
   req<HTMLElement>('rankingsCard').addEventListener('click', handlers.onRankings);

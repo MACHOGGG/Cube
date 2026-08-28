@@ -3,6 +3,8 @@ import { renderMenu } from './ui/menu';
 import { renderTimedPicker } from './ui/moreMenu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { showAuthModal } from './ui/authModal';
+import { showBombPicker } from './ui/bombPicker';
+import type { BombTier } from './engine/bomb';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
@@ -45,7 +47,7 @@ function showMenu() {
     },
     onTimed: showTimedPicker,
     onRandomTarget: () => showComingSoon('随机得分目标'),
-    onBomb: () => showComingSoon('炸弹挑战'),
+    onBomb: showBombTierPicker,
     onMultiplayer: () => showComingSoon('多人游玩'),
     onRankings: () => showComingSoon('成绩与排名'),
     onSignIn: () => showAuthModal('login'),
@@ -95,6 +97,14 @@ function showTutorialPicker() {
     grid.appendChild(btn);
   }
   root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
+}
+
+function showBombTierPicker(tier: BombTier) {
+  const pool = tier === 'advanced' ? layoutGames : games;
+  showBombPicker(tier, pool.map((g) => g.card), (id) => {
+    const game = pool.find((g) => g.card.id === id);
+    if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
+  });
 }
 
 function showTimedPicker() {
@@ -166,7 +176,7 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   // A timed-challenge run or a replay from another shape's "更多布局" card
   // skips the tutorial gate — only the very first time a player opens this
   // shape's *own* base game gets the auto-popup.
-  const tutorialShape = opts?.timeLimitSec ? null : shapeTutorialFor(game.card.id);
+  const tutorialShape = opts?.timeLimitSec || opts?.bomb ? null : shapeTutorialFor(game.card.id);
   if (tutorialShape && tutorialShape !== 'square' && !hasSeenTutorial(tutorialShape)) {
     renderShapeTutorialByShape(tutorialShape, () => {
       markTutorialSeen(tutorialShape);
