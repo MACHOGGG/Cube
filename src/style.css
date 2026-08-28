@@ -550,21 +550,28 @@ button:hover { filter: brightness(1.05); }
 @media (prefers-reduced-motion: reduce) { .lang-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
 .lang-instructions { text-align: center; color: var(--ink-soft); font-size: 0.85rem; margin: -6px 0 4px; }
 
-/* A 4x9 letter grid styled like the game's own tiles. Only the 4 columns
-   with an arrow above them are draggable (vertically, one column at a
-   time) — dragging one down by a step is how a language's spelling gets
-   completed; see languageSelect.ts for the full mechanic. */
-.lang-board { display: flex; gap: 4px; margin-top: 8px; }
-.lang-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
-.lang-col--drag { touch-action: none; cursor: grab; }
-.lang-col--drag:active, .lang-col--active { cursor: grabbing; }
-.lang-col-arrow-slot { height: 18px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); }
-.lang-col-arrow { color: var(--accent); animation: lang-col-arrow-bob 1.6s ease-in-out infinite; }
-@keyframes lang-col-arrow-bob {
-  0%, 100% { transform: translateY(0); opacity: 0.65; }
-  50% { transform: translateY(4px); opacity: 1; }
+/* A 9-row x 4-column letter grid styled like the game's own tiles — the
+   portrait counterpart of the original 4x9 layout. Only 4 of the 9 rows are
+   draggable (horizontally, one row at a time); each such row gets its own
+   invisible hit-target + a small blinking arrow marking exactly which gap
+   to watch, positioned as free-floating overlays rather than real flex
+   siblings inside the row (see languageSelect.ts's module comment for why:
+   an in-flow arrow was found to throw off the ghost-fill offset math). */
+.lang-board-wrap { position: relative; display: flex; justify-content: center; margin-top: 8px; }
+.lang-board--vertical { position: relative; display: flex; flex-direction: row; gap: 4px; height: min(76vh, 640px); aspect-ratio: 4 / 9; }
+.lang-col--vertical { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
+
+.lang-row-hit { position: absolute; touch-action: none; cursor: grab; z-index: 3; }
+.lang-row-hit--active { cursor: grabbing; }
+
+.lang-row-arrow {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 4;
+  display: flex; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+  animation: lang-row-arrow-blink 1.4s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) { .lang-col-arrow { animation: none; opacity: 0.85; } }
+.lang-row-arrow--flip svg { transform: scaleX(-1); }
+@keyframes lang-row-arrow-blink { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lang-row-arrow { animation: none; opacity: 0.9; } }
 
 .lang-cell {
   aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
@@ -574,6 +581,16 @@ button:hover { filter: brightness(1.05); }
 }
 .lang-cell.ghost { pointer-events: none; }
 .lang-cell--solved { box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--score-glow); }
+/* A completed word's cells pulse (scale + intensifying glow) for a couple
+   of beats before the app hands off to that language — the same
+   "celebrate before you go" beat the real game's own scoring gives a
+   match, rather than an instant cut. */
+.lang-cell--solving { animation: lang-cell-solve-pulse 320ms ease-in-out 2; position: relative; z-index: 2; }
+@keyframes lang-cell-solve-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 6px 1px var(--score-glow); transform: scale(1); }
+  50% { box-shadow: 0 0 0 3px #fff, 0 0 16px 6px var(--score-glow); transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) { .lang-cell--solving { animation: none; box-shadow: 0 0 0 3px #fff, 0 0 12px 3px var(--score-glow); } }
 
 /* ---------- tutorial ---------- */
 .tutorial-caption {
