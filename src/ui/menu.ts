@@ -6,9 +6,9 @@ import { STRINGS, type Lang } from '../i18n';
 export interface MenuHandlers {
   onSelectBase: (id: ShapeCardMeta['id']) => void;
   onSelectLayout: (id: ShapeCardMeta['id']) => void;
-  onTimed: () => void;
+  onTimedFor: (id: ShapeCardMeta['id']) => void;
+  onBombFor: (tier: BombTier, id: ShapeCardMeta['id']) => void;
   onRandomTarget: () => void;
-  onBomb: (tier: BombTier) => void;
   onMultiplayer: () => void;
   onRankings: () => void;
   onSignIn: () => void;
@@ -16,18 +16,29 @@ export interface MenuHandlers {
   onHowToSlide: () => void;
 }
 
-const RANDOM_TARGET_GLYPH =
-  '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="16" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="16" cy="16" r="1.6" fill="currentColor"/></svg>';
-const TIMED_GLYPH =
-  '<svg viewBox="0 0 32 32"><circle cx="16" cy="17" r="12" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 9 V17 L22 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3 H20" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
-const BOMB_GLYPH =
-  '<svg viewBox="0 0 32 32"><circle cx="15" cy="19" r="10" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M20 12 L25 7 M23 6 L27 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+/** The home page's fixed left/middle/right column order — every 3-wide row
+ *  on this page (base play, timed, each bomb tier, "更多布局") lines its
+ *  cards up against this same square/circle/triangle order, so a player's
+ *  eye can track "the square one" straight down the page. */
+export interface HomeLayout {
+  /** [square, circle, triangle] base cards. */
+  baseCards: [ShapeCardMeta, ShapeCardMeta, ShapeCardMeta];
+  /** [square, circle, triangle] cards for the "进阶炸弹" row — the 3 shapes
+   *  that tier actually supports (squareDiamond/circleHex/triangleBig),
+   *  already reordered into the square/circle/triangle column slots. */
+  advancedBombCards: [ShapeCardMeta, ShapeCardMeta, ShapeCardMeta];
+  /** "更多布局" cards bucketed into their own column — square's list may be
+   *  shorter than the other two; any column short a row gets a dashed
+   *  placeholder there instead of leaving a gap. */
+  layoutColumns: [ShapeCardMeta[], ShapeCardMeta[], ShapeCardMeta[]];
+}
+
 const SIGNIN_GLYPH =
   '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20 C4 15.6 7.6 13 12 13 C16.4 13 20 15.6 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
-function compactCard(name: string, best: string | null, glyph: string, placeholder = false): HTMLButtonElement {
+function compactCard(name: string, best: string | null, glyph: string): HTMLButtonElement {
   const btn = document.createElement('button');
-  btn.className = 'shape-card-compact' + (placeholder ? ' placeholder' : '');
+  btn.className = 'shape-card-compact shape-card-compact--tight';
   btn.innerHTML = `
     <span class="glyph">${glyph}</span>
     <span class="name">${name}</span>
@@ -36,38 +47,54 @@ function compactCard(name: string, best: string | null, glyph: string, placehold
   return btn;
 }
 
-export function renderMenu(
-  container: HTMLElement,
-  baseCards: ShapeCardMeta[],
-  layoutCards: ShapeCardMeta[],
-  handlers: MenuHandlers,
-  lang: Lang,
-) {
+function placeholderCard(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'shape-card-compact shape-card-compact--tight placeholder';
+  el.innerHTML = `<span class="glyph"></span><span class="name">·</span><span class="best"></span>`;
+  return el;
+}
+
+/** Renders one 3-wide row (square/circle/triangle) into a fresh grid div
+ *  appended to container, calling onClick(card.id) for whichever slot the
+ *  player taps. `bestSuffix` picks which persisted best-score key to show
+ *  under each card (see each shape's own mount() for how the suffix is
+ *  derived — '_timed'/'_bomb'/none). */
+function row3(container: HTMLElement, cards: ShapeCardMeta[], bestSuffix: string, onClick: (id: string) => void): void {
+  const grid = document.createElement('div');
+  grid.className = 'menu-grid-3col';
+  for (const card of cards) {
+    const best = loadBest(card.bestKey + bestSuffix);
+    const btn = compactCard(card.name, String(best), card.glyph);
+    btn.addEventListener('click', () => onClick(card.id));
+    grid.appendChild(btn);
+  }
+  container.appendChild(grid);
+}
+
+function sectionLabel(container: HTMLElement, text: string): void {
+  const el = document.createElement('div');
+  el.className = 'menu-section-label';
+  el.textContent = text;
+  container.appendChild(el);
+}
+
+export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers: MenuHandlers, lang: Lang) {
   const s = STRINGS[lang];
   container.innerHTML = `
     <div class="app">
       <h1 class="home-title-glow">Slides</h1>
       <p class="tag-line">${s.homeTagline}</p>
-
-      <div class="menu-section-label">基础玩法</div>
-      <div class="menu-grid-2col" id="baseGrid"></div>
+      <div class="menu-sections" id="menuSections"></div>
       <button class="home-how-to" id="howToBtn">如何滑？· 重新观看新手教学</button>
 
-      <hr class="menu-divider" />
-
-      <div class="menu-section-label">挑战板块</div>
-      <div class="menu-grid-2col" id="challengeGrid"></div>
-
-      <hr class="menu-divider" />
-
-      <div class="menu-section-label">更多布局</div>
-      <div class="menu-grid-2col" id="layoutsGrid"></div>
-
+      <div class="home-wide-card" id="randomTargetCard">
+        <span class="wide-card-title">随机得分目标</span>
+        <span class="wide-card-sub">敬请期待</span>
+      </div>
       <div class="home-wide-card" id="multiplayerCard">
         <span class="wide-card-title">多人游玩</span>
         <span class="wide-card-sub">敬请期待</span>
       </div>
-
       <div class="home-wide-card" id="rankingsCard">
         <span class="wide-card-title">成绩与排名</span>
         <span class="wide-card-sub">敬请期待</span>
@@ -89,35 +116,41 @@ export function renderMenu(
     return el;
   };
 
-  const baseGrid = req<HTMLElement>('baseGrid');
-  for (const card of baseCards) {
-    const best = loadBest(card.bestKey);
-    const btn = compactCard(card.name, String(best), card.glyph);
-    btn.addEventListener('click', () => handlers.onSelectBase(card.id));
-    baseGrid.appendChild(btn);
-  }
+  const sections = req<HTMLElement>('menuSections');
 
-  const layoutsGrid = req<HTMLElement>('layoutsGrid');
-  for (const card of layoutCards) {
-    const best = loadBest(card.bestKey);
-    const btn = compactCard(card.name, String(best), card.glyph);
-    btn.addEventListener('click', () => handlers.onSelectLayout(card.id));
-    layoutsGrid.appendChild(btn);
-  }
+  sectionLabel(sections, '基础玩法');
+  row3(sections, layout.baseCards, '', handlers.onSelectBase);
 
-  const challengeGrid = req<HTMLElement>('challengeGrid');
-  const timedBtn = compactCard('计时挑战', '任选形状 · 60 秒', TIMED_GLYPH);
-  timedBtn.addEventListener('click', handlers.onTimed);
-  challengeGrid.appendChild(timedBtn);
-  const randomBtn = compactCard('随机得分目标', null, RANDOM_TARGET_GLYPH, true);
-  randomBtn.addEventListener('click', handlers.onRandomTarget);
-  challengeGrid.appendChild(randomBtn);
-  (['basic', 'timed', 'advanced'] as BombTier[]).forEach((tier) => {
-    const btn = compactCard(BOMB_TIER_META[tier].title, null, BOMB_GLYPH);
-    btn.addEventListener('click', () => handlers.onBomb(tier));
-    challengeGrid.appendChild(btn);
+  sectionLabel(sections, '计时挑战');
+  row3(sections, layout.baseCards, '_timed', handlers.onTimedFor);
+
+  (['basic', 'timed'] as BombTier[]).forEach((tier) => {
+    sectionLabel(sections, BOMB_TIER_META[tier].title);
+    row3(sections, layout.baseCards, '_bomb', (id) => handlers.onBombFor(tier, id));
   });
+  sectionLabel(sections, BOMB_TIER_META.advanced.title);
+  row3(sections, layout.advancedBombCards, '_bomb', (id) => handlers.onBombFor('advanced', id));
 
+  sectionLabel(sections, '更多布局');
+  const maxLayoutRows = Math.max(...layout.layoutColumns.map((col) => col.length));
+  for (let r = 0; r < maxLayoutRows; r++) {
+    const grid = document.createElement('div');
+    grid.className = 'menu-grid-3col';
+    for (const col of layout.layoutColumns) {
+      const card = col[r];
+      if (!card) {
+        grid.appendChild(placeholderCard());
+        continue;
+      }
+      const best = loadBest(card.bestKey);
+      const btn = compactCard(card.name, String(best), card.glyph);
+      btn.addEventListener('click', () => handlers.onSelectLayout(card.id));
+      grid.appendChild(btn);
+    }
+    sections.appendChild(grid);
+  }
+
+  req<HTMLElement>('randomTargetCard').addEventListener('click', handlers.onRandomTarget);
   req<HTMLElement>('multiplayerCard').addEventListener('click', handlers.onMultiplayer);
   req<HTMLElement>('rankingsCard').addEventListener('click', handlers.onRankings);
   req<HTMLButtonElement>('signInBtn').addEventListener('click', handlers.onSignIn);

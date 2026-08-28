@@ -477,9 +477,22 @@ button:hover { filter: brightness(1.05); }
 .shape-card-compact .glyph svg { width: 24px; height: 24px; }
 .shape-card-compact .name { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.92rem; }
 .shape-card-compact .best { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.shape-card-compact.placeholder { border-style: dashed; opacity: 0.65; }
+.shape-card-compact.placeholder { border-style: dashed; opacity: 0.65; cursor: default; }
 .shape-card-compact.placeholder .glyph { color: var(--ink-faint); }
 .shape-card-compact.placeholder .best { font-style: italic; }
+
+/* ---------- home page: fixed square/circle/triangle 3-column layout ---------- */
+.menu-sections { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.menu-sections .menu-section-label:not(:first-child) { margin-top: 6px; }
+.menu-grid-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+/* A shorter, denser card for the home page — with 7+ rows now stacked
+   (base/timed/3 bomb tiers/更多布局), each row needs to stay compact
+   instead of the taller 2-column card this style is based on. */
+.shape-card-compact--tight { padding: 7px 4px; gap: 3px; border-radius: 10px; }
+.shape-card-compact--tight .glyph { width: 28px; height: 28px; border-radius: 8px; }
+.shape-card-compact--tight .glyph svg { width: 17px; height: 17px; }
+.shape-card-compact--tight .name { font-size: 0.72rem; line-height: 1.15; }
+.shape-card-compact--tight .best { font-size: 8.5px; }
 
 .home-wide-card {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;

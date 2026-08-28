@@ -1,10 +1,7 @@
 import './style.css';
-import { renderMenu } from './ui/menu';
-import { renderTimedPicker } from './ui/moreMenu';
+import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { showAuthModal } from './ui/authModal';
-import { showBombPicker } from './ui/bombPicker';
-import type { BombTier } from './engine/bomb';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
@@ -23,12 +20,29 @@ const rootEl = document.getElementById('app');
 if (!rootEl) throw new Error('#app not found');
 const root: HTMLElement = rootEl;
 
-const games: ShapeGame[] = [createSquareGame(), createCircleGame(), createTriangleGame()];
+const squareGame = createSquareGame();
+const circleGame = createCircleGame();
+const triangleGame = createTriangleGame();
+const circleHexGame = createCircleHexGame();
+const squareDiamondGame = createSquareDiamondGame();
+const triangleBigGame = createTriangleBigGame();
+const circleSevenGame = createCircleSevenGame();
+const triangleAdvancedGame = createTriangleAdvancedGame();
+
+const games: ShapeGame[] = [squareGame, circleGame, triangleGame];
 // The 3 layouts bomb mode actually supports (进阶炸弹's own shape pool) —
 // kept separate from the full "更多布局" list below since 七色圆球 doesn't
 // have the red-hazard mechanic wired in.
-const bombLayoutGames: ShapeGame[] = [createCircleHexGame(), createSquareDiamondGame(), createTriangleBigGame()];
-const layoutGames: ShapeGame[] = [...bombLayoutGames, createCircleSevenGame(), createTriangleAdvancedGame()];
+const bombLayoutGames: ShapeGame[] = [circleHexGame, squareDiamondGame, triangleBigGame];
+const layoutGames: ShapeGame[] = [...bombLayoutGames, circleSevenGame, triangleAdvancedGame];
+// The home page's fixed square/circle/triangle column order — see
+// HomeLayout in ui/menu.ts for why each of these needs its own explicit
+// per-column arrangement rather than reusing games/layoutGames as-is.
+const homeLayout: HomeLayout = {
+  baseCards: [squareGame.card, circleGame.card, triangleGame.card],
+  advancedBombCards: [squareDiamondGame.card, circleHexGame.card, triangleBigGame.card],
+  layoutColumns: [[squareDiamondGame.card], [circleHexGame.card, circleSevenGame.card], [triangleBigGame.card, triangleAdvancedGame.card]],
+};
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -42,7 +56,7 @@ function teardown() {
 
 function showMenu() {
   teardown();
-  renderMenu(root, games.map((g) => g.card), layoutGames.map((g) => g.card), {
+  renderMenu(root, homeLayout, {
     onSelectBase: (id) => {
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game);
@@ -51,9 +65,16 @@ function showMenu() {
       const game = layoutGames.find((g) => g.card.id === id);
       if (game) showGame(game);
     },
-    onTimed: showTimedPicker,
+    onTimedFor: (id) => {
+      const game = games.find((g) => g.card.id === id);
+      if (game) showGame(game, { timeLimitSec: 60 });
+    },
+    onBombFor: (tier, id) => {
+      const pool = tier === 'advanced' ? bombLayoutGames : games;
+      const game = pool.find((g) => g.card.id === id);
+      if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
+    },
     onRandomTarget: () => showComingSoon('随机得分目标'),
-    onBomb: showBombTierPicker,
     onMultiplayer: () => showComingSoon('多人游玩'),
     onRankings: () => showComingSoon('成绩与排名'),
     onSignIn: () => showAuthModal('login'),
@@ -105,27 +126,6 @@ function showTutorialPicker() {
   root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
 }
 
-function showBombTierPicker(tier: BombTier) {
-  const pool = tier === 'advanced' ? bombLayoutGames : games;
-  showBombPicker(tier, pool.map((g) => g.card), (id) => {
-    const game = pool.find((g) => g.card.id === id);
-    if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
-  });
-}
-
-function showTimedPicker() {
-  teardown();
-  renderTimedPicker(
-    root,
-    [...games, ...layoutGames].map((g) => g.card),
-    (id) => {
-      const game = [...games, ...layoutGames].find((g) => g.card.id === id);
-      if (game) showGame(game, { timeLimitSec: 60 });
-    },
-    showMenu,
-  );
-}
-
 function showComingSoon(title: string) {
   teardown();
   root.innerHTML = `
@@ -175,7 +175,7 @@ function showExclusivePage() {
 }
 
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
-  const backFn = onBack ?? (opts?.timeLimitSec ? showTimedPicker : showMenu);
+  const backFn = onBack ?? showMenu;
   const mountNow = () => {
     activeDestroy = game.mount(root, backFn, opts);
   };
