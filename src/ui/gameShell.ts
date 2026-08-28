@@ -12,6 +12,10 @@ export interface ShellMeta {
   extraControls?: ExtraControl[];
   /** Pre-rendered HTML (via engine/patternIcon.ts's renderPatternHintRow) for the small blank-outline scoring-pattern icons shown under the HUD. */
   patternHint?: string;
+  /** Widens the whole .app column beyond its normal max-width, for a board
+   *  whose own layout (many cells, or a shape denser than a plain square
+   *  grid) reads as cramped at the standard size — see the "app-wide" CSS. */
+  wideBoard?: boolean;
 }
 
 export interface ShellRefs {
@@ -61,7 +65,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     .join('');
 
   container.innerHTML = `
-    <div class="app">
+    <div class="app${meta.wideBoard ? ' app-wide' : ''}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 

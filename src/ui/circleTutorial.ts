@@ -454,6 +454,12 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
   const COIN_RIM_SLICES = 24;
   function playGiantFlipDemo(cells: Cell2[]) {
     solved = true;
+    // playGiantFlipDemo never calls the normal render() (the coin lives in
+    // its own overlay appended alongside #board, not rebuilt by it) — so
+    // without this, whatever .tutorial-cell-glow this beat's pre-drag
+    // highlight left behind (now stale, since solved just flipped true)
+    // would keep sitting there, overlapping the coin and its arrow hint.
+    renderPatternGlow();
     const gen = beatGen;
     const [r0, c0] = cells[0];
     const srcTile = grid[r0][c0];

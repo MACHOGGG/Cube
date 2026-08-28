@@ -41,6 +41,11 @@ body {
 }
 #app { width: 100%; display: flex; justify-content: center; }
 .app { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; padding: 28px 16px 60px; }
+/* A few boards (七色圆球's 49-cell diamond, the base/big triangle's denser
+   packing) read as cramped at the standard column width — widens just
+   those screens' whole .app column so the board itself renders bigger,
+   see ShellMeta.wideBoard. */
+.app.app-wide { max-width: 620px; }
 
 h1 {
   font-family: 'Fraunces', Georgia, serif; font-size: 1.7rem; font-weight: 600;

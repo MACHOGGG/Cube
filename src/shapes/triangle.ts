@@ -272,6 +272,7 @@ export function createTriangleGame(): ShapeGame {
         assumptions,
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
+        wideBoard: true,
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';

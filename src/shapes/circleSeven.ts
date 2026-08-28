@@ -185,6 +185,7 @@ export function createCircleSevenGame(): ShapeGame {
           '7 种口味色，每色 7 枚，共 49 枚（菱形棋盘，由两个三角形拼成，十三行 1/2/3/4/5/6/7/6/5/4/3/2/1 枚）；每种口味的点色分布为：其余 6 色中的每一色至少 1 枚，凑满 7 枚——保证全场没有正反面完全相同颜色的球。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
+        wideBoard: true,
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
