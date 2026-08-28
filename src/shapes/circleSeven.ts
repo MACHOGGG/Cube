@@ -137,14 +137,22 @@ function allClusters(): Cell[][] {
 }
 const CLUSTERS = allClusters();
 
-// Verified against circle.ts's own famVector: A=[R,rowH], B=[-R,rowH],
-// R(row)=[2R,0] — this board's ballCenter (cx=(c-r)*R, cy=(r+c)*rowH) has
-// the exact same per-index-step direction and magnitude (2R) for all three
-// families, so the drag projection math is identical to the base board's.
+// Each family's vector must equal the actual on-screen delta caused by
+// incrementing that line's own array index by 1 — the drag-preview fade
+// (edgeOpacity in renderDragPreview, keyed off "index position" = i +
+// rawDist) and the wraparound ghosts only land in the right place if index
+// order and famVector's sign agree. For A (lineA: c=i, r fixed) and B
+// (lineB: r=i, c fixed), ballCenter's own (c-r)*R term makes cx move by
+// +R/-R per +1 index step, matching the vectors below. For R (lineRow:
+// r=i, c=sum-r), cx = boardLeft+(sum-2r)*R moves by -2R per +1 index step
+// (increasing r shifts the row *left* on screen) — the previous [2*R, 0]
+// had the wrong sign, which decoupled each ball's "logical index position"
+// from where it actually sat on screen and made the edge-fade/ghost-fill
+// trigger at arbitrary mid-line points instead of the line's real ends.
 function famVector(fam: Fam, R: number, rowH: number): [number, number] {
   if (fam === 'A') return [R, rowH];
   if (fam === 'B') return [-R, rowH];
-  return [2 * R, 0];
+  return [-2 * R, 0];
 }
 function scalarProjection(fam: Fam, dx: number, dy: number, R: number, rowH: number): number {
   const [ux, uy] = famVector(fam, R, rowH);
