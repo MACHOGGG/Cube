@@ -6,7 +6,7 @@ import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { floodFillSameColor } from '../engine/floodfill';
+import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -115,21 +115,6 @@ function diamond121(r: number, c: number): Cell[] | null {
   const cells: Cell[] = [[r, c], [r + 1, c], [r + 1, c + 1], [r + 2, c + 1]];
   return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
 }
-function allClusters(): Cell[][] {
-  const groups: Cell[][] = [];
-  for (let r = 0; r < BOARD_DIM; r++)
-    for (let c = 0; c < BOARD_DIM; c++) {
-      const right = rhombus22Right(r, c);
-      if (right) groups.push(right);
-      const left = rhombus22Left(r, c);
-      if (left) groups.push(left);
-      const d = diamond121(r, c);
-      if (d) groups.push(d);
-    }
-  return groups;
-}
-const CLUSTERS = allClusters();
-
 function lineFor(fam: Fam, r: number, c: number): Line {
   const line = LINES.find((l) => l.fam === fam && l.cells.some(([rr, cc]) => rr === r && cc === c));
   if (!line) throw new Error('lineFor: cell not found in any line');
@@ -182,7 +167,7 @@ export function createSquareDiamondGame(): ShapeGame {
         tagline: '沿水平或两条斜线方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平或斜线方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色方块也会一并计入；2×2 的同色小方块，以及同色的"22"/"121"菱形图案，同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白时结束，结算当时的分数。',
+          '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块、同色的"22"菱形沿同一方向扩大，同样按扩大后的数量得分；"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白时结束，结算当时的分数。',
         assumptions:
           '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -352,30 +337,30 @@ export function createSquareDiamondGame(): ShapeGame {
         flipInCells = new Set();
       }
 
-      // Physical edge-adjacency of the underlying square grid (rotating the
-      // whole board 45° for display doesn't change which cells actually
-      // touch) — the same 4-orthogonal-neighbor notion the 2x2 pattern below
-      // already uses, distinct from the ROW family's diagonal *slide* line.
-      // Used to expand a qualifying seed match into its full connected
-      // same-color region.
-      function squareDiamondNeighbors(r: number, c: number): Cell[] {
-        const out: Cell[] = [];
-        const cand: Cell[] = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
-        for (const [rr, cc] of cand) {
-          if (rr >= 0 && rr < BOARD_DIM && cc >= 0 && cc < BOARD_DIM && !isBlank(grid[rr][cc])) out.push([rr, cc]);
-        }
-        return out;
-      }
+      // A match only ever grows along its *own* seed shape's regular
+      // directions (see matchGrowth.ts) — never a generic same-color flood
+      // fill. A run-4 only extends further along that same line; a 2x2 or
+      // rhombus cluster only extends by a full extra row/column of its own
+      // parallelogram; a 121 diamond doesn't extend at all — it always
+      // scores exactly its own 4 cells.
       function effColorAt(r: number, c: number): number {
         return effColor(grid[r][c]);
       }
-      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
-        if (anyBlank(seed)) return;
+      function isLiveCell(r: number, c: number): boolean {
+        return inBounds(r, c) && !isBlank(grid[r][c]);
+      }
+      function qualifies(seed: Cell[], mask: Set<string> | null): boolean {
+        if (anyBlank(seed)) return false;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
-        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
-        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
-        const region = floodFillSameColor(seed, effColorAt, squareDiamondNeighbors);
-        matches.push({ cells: region, points: Math.max(4, region.length) });
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return false;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
+        return true;
+      }
+      function boundedPositionAt(r: number, c: number, du: [number, number], dv: [number, number]) {
+        return (u: number, v: number): Cell | null => {
+          const cell: Cell = [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]];
+          return inBounds(cell[0], cell[1]) ? cell : null;
+        };
       }
 
       function findRunMatches(mask: Set<string> | null): Match[] {
@@ -383,25 +368,36 @@ export function createSquareDiamondGame(): ShapeGame {
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
+            const seed = cells.slice(i, i + 4);
+            if (!qualifies(seed, mask)) continue;
+            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: Math.max(4, region.length) });
           }
         }
-        for (let r = 0; r < BOARD_DIM - 1; r++)
-          for (let c = 0; c < BOARD_DIM - 1; c++) {
-            pushExpandedMatch(
-              matches,
-              [
-                [r, c],
-                [r, c + 1],
-                [r + 1, c],
-                [r + 1, c + 1],
-              ],
-              mask,
-            );
+        for (let r = 0; r < BOARD_DIM; r++)
+          for (let c = 0; c < BOARD_DIM; c++) {
+            if (r < BOARD_DIM - 1 && c < BOARD_DIM - 1) {
+              const seed: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+              if (qualifies(seed, mask)) {
+                const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, 0]), effColorAt, isLiveCell);
+                matches.push({ cells: region, points: Math.max(4, region.length) });
+              }
+            }
+            const right = rhombus22Right(r, c);
+            if (right && qualifies(right, mask)) {
+              const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, 1]), effColorAt, isLiveCell);
+              matches.push({ cells: region, points: Math.max(4, region.length) });
+            }
+            const left = rhombus22Left(r, c);
+            if (left && qualifies(left, mask)) {
+              const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, -1]), effColorAt, isLiveCell);
+              matches.push({ cells: region, points: Math.max(4, region.length) });
+            }
+            const d = diamond121(r, c);
+            if (d && qualifies(d, mask)) {
+              matches.push({ cells: d, points: 4 });
+            }
           }
-        for (const cells of CLUSTERS) {
-          pushExpandedMatch(matches, cells, mask);
-        }
         return matches;
       }
 

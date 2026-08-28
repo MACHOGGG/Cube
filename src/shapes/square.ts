@@ -6,7 +6,6 @@ import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { floodFillSameColor } from '../engine/floodfill';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -262,6 +261,17 @@ export function createSquareGame(): ShapeGame {
       }
 
       // ---------- matching engine ----------
+      // A match only ever grows along its *own* seed shape's regular
+      // directions — never a generic same-color flood fill. A straight
+      // run-of-4 only extends further along that same row/column (so a
+      // same-color tile hanging off the side never folds in); a 2x2 block
+      // only extends by a full extra row or column at a time (so "3 wide,
+      // 2 deep, plus one stray tile" stops at the 3x2 rectangle, not the
+      // stray tile too). Two overlapping seed windows inside one longer run
+      // (or one bigger rectangle) converge on the exact same final region,
+      // so the existing per-cascade-step tile-id dedup in scoring.ts still
+      // collapses them into a single scored match rather than double-
+      // counting it.
       function cellsSameColor(cells: Cell[]): boolean {
         const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
         return cells.every(([r, c]) => effColor(grid[r][c]) === c0);
@@ -270,73 +280,75 @@ export function createSquareGame(): ShapeGame {
         if (!mask) return true;
         return cells.some(([r, c]) => mask.has(cellKey(r, c)));
       }
-
-      function squareNeighbors(r: number, c: number): Cell[] {
-        const out: Cell[] = [];
-        if (r > 0) out.push([r - 1, c]);
-        if (r < rows - 1) out.push([r + 1, c]);
-        if (c > 0) out.push([r, c - 1]);
-        if (c < cols - 1) out.push([r, c + 1]);
-        return out;
-      }
       function effColorAt(r: number, c: number): number {
         return effColor(grid[r][c]);
       }
 
-      // A qualifying seed (2x2 or a straight run-of-4 window) expands via
-      // flood fill to the full connected same-color region before scoring —
-      // a longer run (5, 6, ...) or any extra same-color tile touching the
-      // seed folds into the same match, worth the region's own size (never
-      // less than the 4-cell minimum). Two overlapping seed windows inside
-      // one longer run flood-fill to the exact same final region, so the
-      // existing per-cascade-step tile-id dedup in scoring.ts collapses them
-      // into a single scored match rather than double-counting it.
-      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
-        if (!cellsSameColor(seed) || !touches(seed, mask)) return;
-        const region = floodFillSameColor(seed, effColorAt, squareNeighbors);
-        matches.push({ cells: region, points: Math.max(4, region.length) });
+      function extendRunHoriz(r: number, cStart: number, cEnd: number): Cell[] {
+        const color = effColorAt(r, cStart);
+        let lo = cStart;
+        let hi = cEnd;
+        while (lo - 1 >= 0 && effColorAt(r, lo - 1) === color) lo--;
+        while (hi + 1 < cols && effColorAt(r, hi + 1) === color) hi++;
+        const cells: Cell[] = [];
+        for (let c = lo; c <= hi; c++) cells.push([r, c]);
+        return cells;
+      }
+      function extendRunVert(c: number, rStart: number, rEnd: number): Cell[] {
+        const color = effColorAt(rStart, c);
+        let lo = rStart;
+        let hi = rEnd;
+        while (lo - 1 >= 0 && effColorAt(lo - 1, c) === color) lo--;
+        while (hi + 1 < rows && effColorAt(hi + 1, c) === color) hi++;
+        const cells: Cell[] = [];
+        for (let r = lo; r <= hi; r++) cells.push([r, c]);
+        return cells;
+      }
+      function rowSpanMatches(r: number, c0: number, c1: number, color: number): boolean {
+        for (let c = c0; c <= c1; c++) if (effColorAt(r, c) !== color) return false;
+        return true;
+      }
+      function colSpanMatches(c: number, r0: number, r1: number, color: number): boolean {
+        for (let r = r0; r <= r1; r++) if (effColorAt(r, c) !== color) return false;
+        return true;
+      }
+      function extendRect(r0: number, c0: number, r1: number, c1: number): Cell[] {
+        const color = effColorAt(r0, c0);
+        let grew = true;
+        while (grew) {
+          grew = false;
+          if (r0 - 1 >= 0 && rowSpanMatches(r0 - 1, c0, c1, color)) { r0--; grew = true; }
+          if (r1 + 1 < rows && rowSpanMatches(r1 + 1, c0, c1, color)) { r1++; grew = true; }
+          if (c0 - 1 >= 0 && colSpanMatches(c0 - 1, r0, r1, color)) { c0--; grew = true; }
+          if (c1 + 1 < cols && colSpanMatches(c1 + 1, r0, r1, color)) { c1++; grew = true; }
+        }
+        const cells: Cell[] = [];
+        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push([r, c]);
+        return cells;
       }
 
       function findMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
         for (let r = 0; r < rows - 1; r++)
           for (let c = 0; c < cols - 1; c++) {
-            pushExpandedMatch(
-              matches,
-              [
-                [r, c],
-                [r, c + 1],
-                [r + 1, c],
-                [r + 1, c + 1],
-              ],
-              mask,
-            );
+            const seed: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+            if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
+            const region = extendRect(r, c, r + 1, c + 1);
+            matches.push({ cells: region, points: Math.max(4, region.length) });
           }
         for (let r = 0; r < rows; r++)
           for (let c = 0; c <= cols - 4; c++) {
-            pushExpandedMatch(
-              matches,
-              [
-                [r, c],
-                [r, c + 1],
-                [r, c + 2],
-                [r, c + 3],
-              ],
-              mask,
-            );
+            const seed: Cell[] = [[r, c], [r, c + 1], [r, c + 2], [r, c + 3]];
+            if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
+            const region = extendRunHoriz(r, c, c + 3);
+            matches.push({ cells: region, points: Math.max(4, region.length) });
           }
         for (let c = 0; c < cols; c++)
           for (let r = 0; r <= rows - 4; r++) {
-            pushExpandedMatch(
-              matches,
-              [
-                [r, c],
-                [r + 1, c],
-                [r + 2, c],
-                [r + 3, c],
-              ],
-              mask,
-            );
+            const seed: Cell[] = [[r, c], [r + 1, c], [r + 2, c], [r + 3, c]];
+            if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
+            const region = extendRunVert(c, r, r + 3);
+            matches.push({ cells: region, points: Math.max(4, region.length) });
           }
         return matches;
       }

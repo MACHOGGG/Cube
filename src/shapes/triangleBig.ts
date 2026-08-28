@@ -6,7 +6,7 @@ import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { floodFillSameColor } from '../engine/floodfill';
+import { extendRunInLine } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -211,7 +211,7 @@ export function createTriangleBigGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色三角也会一并计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并永久清空。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面（清空的格子不计入）时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白角时结束，结算当时的分数。',
         assumptions:
           '5 种口味色，每色 5 枚，共 25 枚（一整块大三角，五行 1/3/5/7/9 枚）；每种口味的点色分布为：其余 4 色各 1 枚、另有 1 色额外再来 1 枚——保证没有正反面同色的三角出现。三个滑动方向——水平、左斜、右斜——判分规则与基础三角玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -485,24 +485,23 @@ export function createTriangleBigGame(): ShapeGame {
         }
       }
 
-      function triNeighbors(r: number, c: number): Cell[] {
-        const { i, p } = globalPosPure(r, c);
-        const out: Cell[] = [];
-        for (const cand of [crossNeighbor(i, p), rowLeftNeighbor(i, p), rowRightNeighbor(i, p)]) {
-          if (cand && !isBlank(grid[cand[0]][cand[1]])) out.push(cand);
-        }
-        return out;
-      }
+      // A match only ever grows along its *own* seed shape's regular
+      // directions (see matchGrowth.ts) — never a generic same-color flood
+      // fill. A run-4 only extends further along that same line; a 31/13
+      // big-triangle doesn't extend at all — it always scores exactly its
+      // own 4 cells.
       function effColorAt(r: number, c: number): number {
         return effColor(grid[r][c]);
       }
-      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
-        if (anyBlank(seed)) return;
+      function isLiveCell(r: number, c: number): boolean {
+        return !isBlank(grid[r][c]);
+      }
+      function qualifies(seed: Cell[], mask: Set<string> | null): boolean {
+        if (anyBlank(seed)) return false;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
-        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
-        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
-        const region = floodFillSameColor(seed, effColorAt, triNeighbors);
-        matches.push({ cells: region, points: Math.max(4, region.length) });
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return false;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
+        return true;
       }
 
       function findRunMatches(mask: Set<string> | null): Match[] {
@@ -510,11 +509,14 @@ export function createTriangleBigGame(): ShapeGame {
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
+            const seed = cells.slice(i, i + 4);
+            if (!qualifies(seed, mask)) continue;
+            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: Math.max(4, region.length) });
           }
         }
         for (const cells of BIG_TRIANGLES) {
-          pushExpandedMatch(matches, cells, mask);
+          if (qualifies(cells, mask)) matches.push({ cells, points: 4 });
         }
         return matches;
       }

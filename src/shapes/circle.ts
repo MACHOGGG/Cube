@@ -6,7 +6,7 @@ import { vibrate } from '../engine/haptics';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { floodFillSameColor } from '../engine/floodfill';
+import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -192,7 +192,7 @@ export function createCircleGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，超过 4 个则按实际数量得分，且与该图案相邻的同色方块也会一并计入；同色的"22"菱形（2+2 两行）或"121"菱形（1+2+1 三行）同样适用。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分（1×5 得 5 分，以此类推），但线外的同色方块不会被计入；同色的"22"菱形（2+2 两行）沿同一菱形方向扩大（如 33、222）同样按扩大后的数量得分，"121"菱形（1+2+1 三行）固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
         assumptions:
           '4 种口味色，每色 7 枚，共 28 枚；每种口味的点色分布为：其余 3 色各 2 枚、本色 1 枚。三角堆叠结构有水平、左斜、右斜三个滑动方向，判分规则完全一致；2×2 图案在此结构下没有直接对应，改用"22"/"121"两种沿斜向的小菱形代替。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -403,29 +403,26 @@ export function createCircleGame(): ShapeGame {
       }
 
       // ---------- matching engine ----------
-      // The three line directions (A: r,c both +1; B: r +1 only; R: c +1
-      // only — see allLines above) are exactly this board's 6 possible
-      // neighbor steps; used to expand a qualifying seed match (a run-4
-      // window or a 22/121 cluster) into its full connected same-color
-      // region.
-      function circleNeighbors(r: number, c: number): Cell[] {
-        const candidates: Cell[] = [
-          [r + 1, c + 1], [r - 1, c - 1],
-          [r + 1, c], [r - 1, c],
-          [r, c + 1], [r, c - 1],
-        ];
-        return candidates.filter(([rr, cc]) => cellValid(rr, cc) && !isBlank(grid[rr][cc]));
-      }
+      // A match only ever grows along its *own* seed shape's regular
+      // directions (see matchGrowth.ts) — never a generic same-color flood
+      // fill, which used to happily fold in any same-color tile touching
+      // the seed from any direction at all. A run-4 only extends further
+      // along that same line; a 22 rhombus only extends by a full extra
+      // row/column of its own parallelogram; a 121 diamond doesn't extend
+      // at all (it's a closed shape, not an open-ended one) — it always
+      // scores exactly its own 4 cells.
       function effColorAt(r: number, c: number): number {
         return effColor(grid[r][c]);
       }
-      function pushExpandedMatch(matches: Match[], seed: Cell[], mask: Set<string> | null) {
-        if (anyBlank(seed)) return;
+      function isLiveCell(r: number, c: number): boolean {
+        return cellValid(r, c) && !isBlank(grid[r][c]);
+      }
+      function qualifies(seed: Cell[], mask: Set<string> | null): boolean {
+        if (anyBlank(seed)) return false;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
-        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return;
-        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return;
-        const region = floodFillSameColor(seed, effColorAt, circleNeighbors);
-        matches.push({ cells: region, points: Math.max(4, region.length) });
+        if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return false;
+        if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
+        return true;
       }
 
       function findRunMatches(mask: Set<string> | null): Match[] {
@@ -433,12 +430,42 @@ export function createCircleGame(): ShapeGame {
         for (const line of LINES) {
           const cells = line.cells;
           for (let i = 0; i + 3 < cells.length; i++) {
-            pushExpandedMatch(matches, cells.slice(i, i + 4), mask);
+            const seed = cells.slice(i, i + 4);
+            if (!qualifies(seed, mask)) continue;
+            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: Math.max(4, region.length) });
           }
         }
-        for (const cells of CLUSTERS) {
-          pushExpandedMatch(matches, cells, mask);
-        }
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c <= r; c++) {
+            // rhombus22B's 4 offsets are (r, c) + u*(0,1) + v*(1,0) for
+            // u,v in {0,1} — a step along the row, and a step down a
+            // diagonal.
+            const b = rhombus22B(r, c);
+            if (b && qualifies(b, mask)) {
+              const positionAt = (u: number, v: number): Cell | null => {
+                const cell: Cell = [r + v, c + u];
+                return cellValid(cell[0], cell[1]) ? cell : null;
+              };
+              const region = growParallelogram(positionAt, effColorAt, isLiveCell);
+              matches.push({ cells: region, points: Math.max(4, region.length) });
+            }
+            // rhombus22A's 4 offsets are (r, c) + u*(0,1) + v*(1,1) — a step
+            // along the row, and a step along the *other* diagonal.
+            const a = rhombus22A(r, c);
+            if (a && qualifies(a, mask)) {
+              const positionAt = (u: number, v: number): Cell | null => {
+                const cell: Cell = [r + v, c + u + v];
+                return cellValid(cell[0], cell[1]) ? cell : null;
+              };
+              const region = growParallelogram(positionAt, effColorAt, isLiveCell);
+              matches.push({ cells: region, points: Math.max(4, region.length) });
+            }
+            const d = diamond121(r, c);
+            if (d && qualifies(d, mask)) {
+              matches.push({ cells: d, points: 4 });
+            }
+          }
         return matches;
       }
 
