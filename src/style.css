@@ -576,21 +576,40 @@ button:hover { filter: brightness(1.05); }
   text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 11px;
   text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint);
 }
+/* Pulls the caption up closer to its step counter so the two read as one
+   grouped header, distinct from the looser gap down to the board itself. */
+.tutorial-step-label + .tutorial-caption { margin-top: -8px; }
 .tutorial-board-wrap { position: relative; width: 100%; max-width: 320px; margin: 0 auto; aspect-ratio: 1 / 1; }
 .tutorial-board {
   position: relative; width: 100%; height: 100%; background: var(--board-bg);
   border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
 }
+/* Plays once when a beat's board first settles in — switching beats reads
+   as a soft transition instead of an instant swap. */
+.tutorial-board.beat-enter { animation: tutorial-beat-enter 380ms ease-out both; }
+@keyframes tutorial-beat-enter { from { opacity: 0.4; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .tutorial-board.beat-enter { animation: none; } }
 .tutorial-highlight-box {
   position: absolute; box-sizing: border-box; border: 2px dashed var(--accent); border-radius: 10px;
   pointer-events: none; z-index: 5; animation: tutorial-highlight-pulse 1.6s ease-in-out infinite;
 }
 @keyframes tutorial-highlight-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
-@media (prefers-reduced-motion: reduce) { .tutorial-highlight-box { animation: none; opacity: 0.7; } }
+/* A beat's first highlight box pops in to draw the eye to where to look,
+   then settles into the regular pulse — later re-renders during a live
+   drag don't get .pop-in, so they don't replay the pop on every frame. */
+.tutorial-highlight-box.pop-in {
+  animation: tutorial-highlight-pop 420ms cubic-bezier(0.34,1.56,0.64,1) both,
+             tutorial-highlight-pulse 1.6s ease-in-out 420ms infinite;
+}
+@keyframes tutorial-highlight-pop { from { opacity: 0; transform: scale(1.35); } to { opacity: 0.9; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-highlight-box { animation: none; opacity: 0.7; }
+  .tutorial-highlight-box.pop-in { animation: none; opacity: 0.7; }
+}
 .tutorial-check {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   pointer-events: none; z-index: 6;
 }
 .tutorial-check svg { width: 72px; height: 72px; opacity: 0; transform: scale(0.6); transition: opacity .25s ease, transform .3s cubic-bezier(0.34,1.56,0.64,1); }
 .tutorial-check.show svg { opacity: 1; transform: scale(1); }
-.tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; }
+.tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }

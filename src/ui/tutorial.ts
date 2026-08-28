@@ -59,12 +59,18 @@ function baseGrid(): Grid {
   }
   return g;
 }
-type Override = [number, number, number] | [number, number, 'D', number];
+// Third form [r, c, color, dotColor] is a fresh flavor tile with an
+// *explicit* dot color, bypassing DOT_MAP — used where a beat needs to show
+// a single matched group flip to visibly different colors from each other
+// (see beat2Grid below), since DOT_MAP alone can only ever give every tile
+// of a given front color the same one fixed result.
+type Override = [number, number, number] | [number, number, 'D', number] | [number, number, number, number];
 function withOverrides(overrides: Override[]): () => Grid {
   return () => {
     const g = baseGrid();
     for (const o of overrides) {
       if (o[2] === 'D') g[o[0]][o[1]] = td(o[3]);
+      else if (o.length === 4) g[o[0]][o[1]] = { color: o[2] as number, face: 'F', dotColor: o[3] as number };
       else g[o[0]][o[1]] = tf(o[2] as number);
     }
     return g;
@@ -79,24 +85,32 @@ const beat1Grid = withOverrides([
   [4, 0, 1], [4, 1, 1], [4, 2, 1], // 3 of 4 already green in row 4
   [0, 3, 1], // the 4th green tile, elsewhere in column 3
 ]);
+// Each of these 4 blue tiles is given its own explicit dot color (2 or 3,
+// alternating) instead of relying on DOT_MAP — which would give all 4 the
+// same fixed result — so the flip this beat teaches actually demonstrates
+// what its own caption claims ("flips to a color chosen at random"): one
+// matched group landing on more than one color, not a uniform repaint.
 const beat2Grid = withOverrides([
   [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3], // beat 1's result, carried forward
-  [1, 1, 0], [1, 2, 0], [2, 2, 0], // 3 of a 2x2 already blue
-  [2, 3, 0], // the 4th, elsewhere in row 2
+  [1, 1, 0, 2], [1, 2, 0, 3], [2, 2, 0, 2], // 3 of a 2x2 already blue
+  [2, 3, 0, 3], // the 4th, elsewhere in row 2 — the natural move is row 2 left by 1,
+  // which carries (2,2)'s tile into (2,1) and (2,3)'s tile into (2,2) (verified
+  // against an actual drag, not just hand-traced — a first attempt at this had
+  // the resulting (2,1)/(2,2) dot colors backwards).
 ]);
 const beat3Grid = withOverrides([
   [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3],
-  [1, 1, 'D', 2], [1, 2, 'D', 2], [2, 1, 'D', 2], [2, 2, 'D', 2], // beat 2's result, already flipped
+  [1, 1, 'D', 2], [1, 2, 'D', 3], [2, 1, 'D', 2], [2, 2, 'D', 3], // beat 2's result, already flipped
 ]);
 const beat4Grid = withOverrides([
   [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3],
-  [1, 1, 'D', 2], [1, 2, 'D', 2], [2, 1, 'D', 2], [2, 2, 'D', 2],
+  [1, 1, 'D', 2], [1, 2, 'D', 3], [2, 1, 'D', 2], [2, 2, 'D', 3],
   [1, 3, 'D', 2], [1, 4, 'D', 2], // 2 more already-flipped magenta tiles
   [0, 0, 2], [0, 1, 2], // 2 fresh magenta tiles that can slide up to join them
 ]);
 const beat5Grid = withOverrides([
   [4, 0, 'D', 3], [4, 1, 'D', 3], [4, 2, 'D', 3], [4, 3, 'D', 3], [4, 4, 'D', 3], // row 4, now entirely gold
-  [1, 1, 'D', 2], [1, 2, 'D', 2], [2, 1, 'D', 2], [2, 2, 'D', 2], [1, 3, 'D', 2], [1, 4, 'D', 2],
+  [1, 1, 'D', 2], [1, 2, 'D', 3], [2, 1, 'D', 2], [2, 2, 'D', 3], [1, 3, 'D', 2], [1, 4, 'D', 2],
   [0, 0, 'D', 2], [0, 1, 'D', 2],
 ]);
 
@@ -195,7 +209,20 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
   let flipInCells = new Set<string>();
   let solved = false;
   const outlineTracker = createOutlineTracker();
+  // autoTimer drives in-flight animation *sequencing* (e.g. the whole-line
+  // bonus's hold-then-fade delay) and is never pause-aware. advanceTimer is
+  // the separate, dedicated timer for the actual "move to the next beat"
+  // step — kept apart so pausing can safely cancel a pending advance
+  // without also cutting off a fade/reveal that's already mid-flight.
   let autoTimer: number | undefined;
+  let advanceTimer: number | undefined;
+  // Pausing only holds back the *automatic* move to the next beat — it
+  // never interrupts an in-flight flip/bonus animation, since the useful
+  // moment to pause is after a payoff has finished playing and the board
+  // is just sitting there before advancing, not mid-animation.
+  let paused = false;
+  let advancePending = false;
+  let highlightPopped = false;
 
   container.innerHTML = `
     <div class="app">
@@ -209,6 +236,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       <div class="tutorial-controls">
         <button class="icon-btn" id="skipBtn">${s.skip}</button>
         <button class="icon-btn" id="prevBtn">${s.prev}</button>
+        <button class="icon-btn" id="pauseBtn">${s.pause}</button>
         <button class="icon-btn" id="nextBtn">${s.next}</button>
       </div>
     </div>
@@ -222,6 +250,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
   const skipBtn = container.querySelector<HTMLButtonElement>('#skipBtn')!;
   const prevBtn = container.querySelector<HTMLButtonElement>('#prevBtn')!;
   const nextBtn = container.querySelector<HTMLButtonElement>('#nextBtn')!;
+  const pauseBtn = container.querySelector<HTMLButtonElement>('#pauseBtn')!;
 
   let dragAxis: 'row' | 'col' | null = null;
   let dragIndex = 0;
@@ -297,6 +326,14 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     const maxC = Math.max(...cs);
     const box = document.createElement('div');
     box.className = 'tutorial-highlight-box';
+    // Only the box's first appearance for this beat gets the zoom pop-in —
+    // renderHighlightBox reruns on every drag frame too (a fresh element
+    // each time), and popping in repeatedly mid-drag would read as jitter
+    // rather than an announcement.
+    if (!highlightPopped) {
+      box.classList.add('pop-in');
+      highlightPopped = true;
+    }
     box.style.left = minC * cell + 'px';
     box.style.top = minR * cell + 'px';
     box.style.width = (maxC - minC + 1) * cell + 'px';
@@ -363,17 +400,30 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
 
   function goToBeat(i: number) {
     clearTimeout(autoTimer);
+    clearTimeout(advanceTimer);
+    paused = false;
+    advancePending = false;
+    pauseBtn.textContent = s.pause;
+    pauseBtn.classList.remove('active');
     solved = false;
     dragAxis = null;
     dragOffset = 0;
     removedCells = new Set();
     outlineTracker.reset();
+    highlightPopped = false;
     beatIndex = Math.max(0, Math.min(BEATS.length - 1, i));
     grid = cloneGrid(BEATS[beatIndex].grid());
     stepLabelEl.textContent = `${beatIndex + 1} / ${BEATS.length}`;
     captionEl.textContent = s[BEATS[beatIndex].captionKey];
     prevBtn.style.visibility = beatIndex > 0 ? 'visible' : 'hidden';
+    // A brief whole-board fade/settle so switching beats reads as a
+    // transition rather than an instant cut — removed and re-added so the
+    // animation restarts even though #board itself is a stable element
+    // across renders (only its children get torn down and rebuilt).
+    boardEl.classList.remove('beat-enter');
     render();
+    void boardEl.offsetWidth;
+    boardEl.classList.add('beat-enter');
     settleBeat();
   }
 
@@ -386,13 +436,44 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     goToBeat(beatIndex + 1);
   }
 
+  // The only two things that should ever auto-advance past a beat once its
+  // payoff has played — routed through here so pausing can hold both back
+  // uniformly instead of each call site needing its own pause check.
+  function scheduleAutoAdvance(delay: number) {
+    if (paused) {
+      advancePending = true;
+      return;
+    }
+    advanceTimer = window.setTimeout(advance, delay);
+  }
+
+  function togglePause() {
+    paused = !paused;
+    pauseBtn.textContent = paused ? s.resume : s.pause;
+    pauseBtn.classList.toggle('active', paused);
+    if (paused) {
+      // A beat with goal 'none' (or a payoff that already finished) may
+      // already have a real timer ticking by the time the player reaches
+      // for pause — cancel it and remember to reschedule on resume,
+      // instead of only blocking *future* scheduleAutoAdvance calls.
+      if (advanceTimer !== undefined) {
+        clearTimeout(advanceTimer);
+        advanceTimer = undefined;
+        advancePending = true;
+      }
+    } else if (advancePending) {
+      advancePending = false;
+      scheduleAutoAdvance(400);
+    }
+  }
+
   // Checks whether the current beat's goal is already satisfied (used right
   // after entering a beat, and again after every drag) and plays the
   // matching payoff if so.
   function settleBeat() {
     const beat = BEATS[beatIndex];
     if (beat.goal === 'none') {
-      autoTimer = window.setTimeout(advance, 1800);
+      scheduleAutoAdvance(1800);
       return;
     }
     if (beat.goal === 'wholeLine') {
@@ -416,7 +497,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       }
       render();
       showCheck();
-      autoTimer = window.setTimeout(advance, 1400);
+      scheduleAutoAdvance(1400);
     }, 750);
   }
 
@@ -445,7 +526,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       setTimeout(() => {
         for (const [r, c] of cells) removedCells.add(key(r, c));
         render();
-        autoTimer = window.setTimeout(advance, 1900);
+        scheduleAutoAdvance(1900);
       }, 1050);
     }, 1900);
   }
@@ -517,6 +598,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     boardEl.removeEventListener('pointerup', up);
     boardEl.removeEventListener('pointercancel', up);
     clearTimeout(autoTimer);
+    clearTimeout(advanceTimer);
   }
 
   skipBtn.addEventListener('click', () => {
@@ -527,6 +609,7 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     if (beatIndex > 0) goToBeat(beatIndex - 1);
   });
   nextBtn.addEventListener('click', advance);
+  pauseBtn.addEventListener('click', togglePause);
 
   goToBeat(0);
 }

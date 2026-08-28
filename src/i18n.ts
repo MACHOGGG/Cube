@@ -9,6 +9,8 @@ export interface I18nStrings {
   skip: string;
   next: string;
   prev: string;
+  pause: string;
+  resume: string;
   run4: string;
   twoByTwo: string;
   flip: string;
@@ -30,9 +32,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   en: {
     langName: 'English',
     pickerTagline: 'Choose your language',
-    skip: 'Skip',
+    skip: 'Skip tutorial',
     next: 'Next',
     prev: 'Back',
+    pause: 'Pause',
+    resume: 'Resume',
     run4: 'Slide a row or column to line up 4 tiles of the same color',
     twoByTwo: 'A 2×2 block of the same color scores too',
     flip: 'Scored tiles flip to a color chosen at random',
@@ -50,9 +54,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   fr: {
     langName: 'Français',
     pickerTagline: 'Choisissez votre langue',
-    skip: 'Passer',
+    skip: 'Passer le tutoriel',
     next: 'Suivant',
     prev: 'Précédent',
+    pause: 'Pause',
+    resume: 'Reprendre',
     run4: 'Faites glisser une ligne ou une colonne pour aligner 4 cases de la même couleur',
     twoByTwo: 'Un carré 2×2 de la même couleur rapporte aussi',
     flip: 'Les cases marquées se retournent sur une couleur tirée au hasard',
@@ -70,9 +76,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   zhHant: {
     langName: '繁體中文',
     pickerTagline: '選擇語言',
-    skip: '跳過',
+    skip: '跳過教學',
     next: '下一條',
     prev: '上一條',
+    pause: '暫停',
+    resume: '繼續',
     run4: '滑動一整行或一整列，湊齊 4 個同色方塊',
     twoByTwo: '湊成 2×2 的同色方塊同樣得分',
     flip: '得分的方塊會翻面到隨機決定的顏色',
@@ -90,9 +98,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   zhHans: {
     langName: '简体中文',
     pickerTagline: '选择语言',
-    skip: '跳过',
+    skip: '跳过教学',
     next: '下一条',
     prev: '上一条',
+    pause: '暂停',
+    resume: '继续',
     run4: '滑动一整行或一整列，凑齐 4 个同色方块',
     twoByTwo: '凑成 2×2 的同色方块同样得分',
     flip: '得分的方块会翻面到随机决定的颜色',
