@@ -70,14 +70,14 @@ const PATTERNS: PatternDef[] = [
   },
   {
     label: '2+2',
-    cells: ([[0, 0], [0, 1], [1, 1], [1, 2]] as const).map(([r, c]) => {
+    cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([r, c]) => {
       const [cx, cy] = iconPos(r, c);
       return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
     }),
   },
   {
     label: '1-2-1',
-    cells: ([[0, 0], [1, 0], [1, 1], [2, 1]] as const).map(([r, c]) => {
+    cells: ([[0, 0], [2, 0], [0, 2], [2, 2]] as const).map(([r, c]) => {
       const [cx, cy] = iconPos(r, c);
       return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
     }),
@@ -103,28 +103,30 @@ function buildLines(): Line[] {
 }
 const LINES = buildLines();
 
-// The board's non-linear "22"/"121" bonus shapes, matching the base circle
-// game's own patterns (see circle.ts) — expressed in the underlying square
-// grid's own (r,c) steps along the A (row) and B (column) families. Both of
-// those families render as *screen-diagonal* once the whole board is
-// rotated 45° for display (see famVector below), so a shape built purely
-// from A/B steps reads as a genuine on-screen rhombus/diamond, exactly like
-// the "菱形" name for this layout promises — no separate diagonal-family
-// math needed. "22" gets both leaning directions (mirrors of each other);
-// "121" only needs the one orientation, matching circle.ts's own choice.
+// The board's "121" bonus shape. This board's screen mapping is
+// cx=c-r, cy=c+r (iconPos above) — *every* unit grid step (row or column)
+// changes cy by exactly 1, unlike circle.ts's own triangular lattice (whose
+// ballCenter only moves cy on a row step, not a column step). That extra
+// structure is what let circle.ts's 4-cell diamond121 chain
+// ([[r,c],[r+1,c],[r+1,c+1],[r+2,c+1]]) come out symmetric; copied onto
+// *this* board the same offsets drift the shape sideways as it goes down
+// (verified: screen x ends up 0,-1,0,-1 for the old chain, not the
+// symmetric 0/±1/0 a real diamond needs). Since every step here moves cy,
+// there is in fact no 4-cell *chain* of touching cells that reads as a
+// bigger symmetric diamond on this lattice — the compact one (the literal
+// 2×2 square below, in findRunMatches) is already the only symmetric
+// diamond a chain of touching cells can form here. "121" is instead built
+// from the 4 *corners* one ring further out — top (r,c), the two points 2
+// steps away along each grid axis (r+2,c) and (r,c+2), and the bottom
+// (r+2,c+2) opposite the top — which does verify as symmetric (screen x:
+// 0, ±2, 0) and reads as the bigger hollow "1-2-1" diamond, even though its
+// 4 cells don't touch each other (there's a live tile in between each pair,
+// just not required to match).
 function inBounds(r: number, c: number): boolean {
   return r >= 0 && r < BOARD_DIM && c >= 0 && c < BOARD_DIM;
 }
-function rhombus22Right(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
-  return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
-}
-function rhombus22Left(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c - 1], [r + 1, c]];
-  return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
-}
 function diamond121(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r + 1, c], [r + 1, c + 1], [r + 2, c + 1]];
+  const cells: Cell[] = [[r, c], [r + 2, c], [r, c + 2], [r + 2, c + 2]];
   return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
 }
 function lineFor(fam: Fam, r: number, c: number): Line {
@@ -176,7 +178,7 @@ export function createSquareDiamondGame(): ShapeGame {
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
       const BASE_HINT =
-        '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块、同色的"22"菱形沿同一方向扩大，同样按扩大后的数量得分；"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+        '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块（"22"，第一行 2 个、第二行 2 个）沿同一方向扩大，同样按扩大后的数量得分；同色的"121"菱形（比"22"更大一圈，四个角上下左右对称）固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
       const hint = isBomb
         ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 4 个及以上红色方块相互边相连，将立即结束挑战并扣 100 分。' +
           BASE_HINT +
@@ -491,16 +493,6 @@ export function createSquareDiamondGame(): ShapeGame {
                 const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, 0]), effColorAt, isLiveCell);
                 matches.push({ cells: region, points: Math.max(4, region.length) });
               }
-            }
-            const right = rhombus22Right(r, c);
-            if (right && qualifies(right, mask)) {
-              const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, 1]), effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length) });
-            }
-            const left = rhombus22Left(r, c);
-            if (left && qualifies(left, mask)) {
-              const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, -1]), effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length) });
             }
             const d = diamond121(r, c);
             if (d && qualifies(d, mask)) {
