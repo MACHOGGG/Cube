@@ -592,38 +592,55 @@ button:hover { filter: brightness(1.05); }
 .tutorial-board.beat-enter { animation: tutorial-beat-enter 380ms ease-out both; }
 @keyframes tutorial-beat-enter { from { opacity: 0.4; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .tutorial-board.beat-enter { animation: none; } }
-.tutorial-highlight-box {
-  position: absolute; box-sizing: border-box; border: 2px dashed var(--accent); border-radius: 10px;
-  pointer-events: none; z-index: 5; animation: tutorial-highlight-pulse 1.6s ease-in-out infinite;
+/* Every tutorial highlights a scoring pattern by making each of its own
+   tiles glow — never a single box drawn around the whole group — so the
+   *pieces that actually matter* are what draws the eye, on boards where a
+   bounding box would otherwise cover mostly empty filler tiles. One glow
+   element per cell, positioned/sized to match that cell exactly (each
+   tutorial's own geometry helper — ballCenter, cellCenter, etc. — computes
+   where), with border-radius set inline per shape (round for balls, a small
+   radius for squares/triangles). A separate overlay element rather than a
+   class on the tile itself, same reasoning as every other per-cell overlay
+   in this codebase (spawnOutlineEl, the old flip-emphasis-ring): the tile
+   already carries its own inline `animation` for flip/score-pulse, and a
+   second class-based animation on that same element would just silently
+   replace it rather than play alongside it. */
+.tutorial-cell-glow {
+  position: absolute; pointer-events: none; z-index: 5;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 14px 4px rgba(255,255,255,0.4);
+  animation: tutorial-cell-glow-breathe 1.3s ease-in-out infinite;
 }
-@keyframes tutorial-highlight-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
-/* A beat's first highlight box pops in to draw the eye to where to look,
-   then settles into the regular pulse — later re-renders during a live
-   drag don't get .pop-in, so they don't replay the pop on every frame. */
-.tutorial-highlight-box.pop-in {
-  animation: tutorial-highlight-pop 420ms cubic-bezier(0.34,1.56,0.64,1) both,
-             tutorial-highlight-pulse 1.6s ease-in-out 420ms infinite;
+@keyframes tutorial-cell-glow-breathe {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.45), 0 0 10px 2px rgba(255,255,255,0.3); transform: scale(0.94); }
+  50% { box-shadow: 0 0 0 4px rgba(255,255,255,1), 0 0 22px 8px rgba(255,255,255,0.85); transform: scale(1.1); }
 }
-@keyframes tutorial-highlight-pop { from { opacity: 0; transform: scale(1.35); } to { opacity: 0.9; transform: scale(1); } }
-/* A snappier double-flash for a highlight box that's confirming one of
-   several groups in turn (the circle tutorial's combined pattern-intro
-   beat) — reads as "yes, that one too" rather than the single quiet pop
-   square's tutorial uses for its one-target-per-beat highlight. */
-.tutorial-highlight-box.blink-in {
-  animation: tutorial-highlight-blink 500ms ease-in-out both,
-             tutorial-highlight-pulse 1.6s ease-in-out 500ms infinite;
+/* A beat's first glow pops in to draw the eye, then settles into the
+   regular breathing pulse — later re-renders during a live drag don't get
+   .pop-in, so it doesn't replay the pop on every frame. */
+.tutorial-cell-glow.pop-in {
+  animation: tutorial-cell-glow-pop 380ms cubic-bezier(0.34,1.56,0.64,1) both,
+             tutorial-cell-glow-breathe 1.3s ease-in-out 380ms infinite;
 }
-@keyframes tutorial-highlight-blink {
-  0% { opacity: 0; }
-  20% { opacity: 1; }
-  40% { opacity: 0.25; }
-  60% { opacity: 1; }
-  100% { opacity: 0.45; }
+@keyframes tutorial-cell-glow-pop { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: scale(1); } }
+/* A snappier double-flash for a glow that's confirming one of several
+   groups in turn (the circle tutorial's combined pattern-intro beat) —
+   reads as "yes, that one too" rather than the single quiet pop every
+   other beat's one-target highlight uses. */
+.tutorial-cell-glow.blink-in {
+  animation: tutorial-cell-glow-blink 500ms ease-in-out both,
+             tutorial-cell-glow-breathe 1.3s ease-in-out 500ms infinite;
+}
+@keyframes tutorial-cell-glow-blink {
+  0% { opacity: 0; transform: scale(0.85); }
+  20% { opacity: 1; transform: scale(1.15); }
+  40% { opacity: 0.3; transform: scale(0.95); }
+  60% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tutorial-highlight-box { animation: none; opacity: 0.7; }
-  .tutorial-highlight-box.pop-in { animation: none; opacity: 0.7; }
-  .tutorial-highlight-box.blink-in { animation: none; opacity: 0.7; }
+  .tutorial-cell-glow { animation: none; box-shadow: 0 0 0 3px rgba(255,255,255,0.85), 0 0 14px 4px rgba(255,255,255,0.55); }
+  .tutorial-cell-glow.pop-in { animation: none; }
+  .tutorial-cell-glow.blink-in { animation: none; }
 }
 .tutorial-check {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

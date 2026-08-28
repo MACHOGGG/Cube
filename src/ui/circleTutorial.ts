@@ -293,11 +293,14 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
         spawnOutlineEl(boardEl, { left: cx - size / 2, top: cy - size / 2, width: size, height: size }, elapsedMs, 'circle');
       }
     }
-    renderHighlightBox();
+    renderPatternGlow();
   }
 
-  function renderHighlightBox() {
-    boardWrap.querySelectorAll('.tutorial-highlight-box').forEach((el) => el.remove());
+  // Highlights a scoring pattern by making each of its own balls glow —
+  // never a box drawn around the whole group — one glow overlay per cell,
+  // exactly matching that ball's position and size.
+  function renderPatternGlow() {
+    boardWrap.querySelectorAll('.tutorial-cell-glow').forEach((el) => el.remove());
     const beat = BEATS[beatIndex];
     const cells = activeHighlightCells ?? beat.targetCells;
     // solved only suppresses the *normal* (beat.targetCells) highlight, once
@@ -309,19 +312,18 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     const suppressed = activeHighlightCells === null && solved;
     if (!cells.length || suppressed) return;
     const size = R * 1.86;
-    const pts = cells.map(([r, c]) => ballCenter(r, c));
-    const minX = Math.min(...pts.map((p) => p[0])) - size / 2;
-    const maxX = Math.max(...pts.map((p) => p[0])) + size / 2;
-    const minY = Math.min(...pts.map((p) => p[1])) - size / 2;
-    const maxY = Math.max(...pts.map((p) => p[1])) + size / 2;
-    const box = document.createElement('div');
-    box.className = 'tutorial-highlight-box';
-    if (highlightBlink) box.classList.add('blink-in');
-    box.style.left = minX + 'px';
-    box.style.top = minY + 'px';
-    box.style.width = maxX - minX + 'px';
-    box.style.height = maxY - minY + 'px';
-    boardWrap.appendChild(box);
+    for (const [r, c] of cells) {
+      const [cx, cy] = ballCenter(r, c);
+      const glow = document.createElement('div');
+      glow.className = 'tutorial-cell-glow';
+      if (highlightBlink) glow.classList.add('blink-in');
+      glow.style.left = cx - size / 2 + 'px';
+      glow.style.top = cy - size / 2 + 'px';
+      glow.style.width = size + 'px';
+      glow.style.height = size + 'px';
+      glow.style.borderRadius = '50%';
+      boardWrap.appendChild(glow);
+    }
   }
 
   // `blink` plays a snappier double-flash before settling — used when the

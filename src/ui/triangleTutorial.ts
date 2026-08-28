@@ -265,25 +265,31 @@ export function renderTriangleTutorial(container: HTMLElement, lang: Lang, onDon
         spawnTriangleOutline(boardEl, triGeometry(r, c).pts.map(toScreen), elapsedMs);
       }
     }
-    renderHighlightBox();
+    renderPatternGlow();
   }
 
-  function renderHighlightBox() {
-    boardWrap.querySelectorAll('.tutorial-highlight-box').forEach((el) => el.remove());
+  // Highlights a scoring pattern by making each of its own triangles glow —
+  // never a box drawn around the whole group — one glow overlay per cell,
+  // sized to that triangle's own bounding box.
+  function renderPatternGlow() {
+    boardWrap.querySelectorAll('.tutorial-cell-glow').forEach((el) => el.remove());
     const beat = BEATS[beatIndex];
     if (!beat.targetCells.length || solved) return;
-    const allPts = beat.targetCells.flatMap(([r, c]) => triGeometry(r, c).pts.map(toScreen));
-    const minX = Math.min(...allPts.map((p) => p[0]));
-    const maxX = Math.max(...allPts.map((p) => p[0]));
-    const minY = Math.min(...allPts.map((p) => p[1]));
-    const maxY = Math.max(...allPts.map((p) => p[1]));
-    const box = document.createElement('div');
-    box.className = 'tutorial-highlight-box';
-    box.style.left = minX + 'px';
-    box.style.top = minY + 'px';
-    box.style.width = maxX - minX + 'px';
-    box.style.height = maxY - minY + 'px';
-    boardWrap.appendChild(box);
+    for (const [r, c] of beat.targetCells) {
+      const pts = triGeometry(r, c).pts.map(toScreen);
+      const minX = Math.min(...pts.map((p) => p[0]));
+      const maxX = Math.max(...pts.map((p) => p[0]));
+      const minY = Math.min(...pts.map((p) => p[1]));
+      const maxY = Math.max(...pts.map((p) => p[1]));
+      const glow = document.createElement('div');
+      glow.className = 'tutorial-cell-glow';
+      glow.style.left = minX + 'px';
+      glow.style.top = minY + 'px';
+      glow.style.width = maxX - minX + 'px';
+      glow.style.height = maxY - minY + 'px';
+      glow.style.borderRadius = '6px';
+      boardWrap.appendChild(glow);
+    }
   }
 
   function showCheck() {

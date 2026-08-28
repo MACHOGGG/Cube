@@ -311,34 +311,32 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
       }
     }
     flipInCells = new Set();
-    renderHighlightBox();
+    renderPatternGlow();
   }
 
-  function renderHighlightBox() {
-    boardWrap.querySelectorAll('.tutorial-highlight-box').forEach((el) => el.remove());
+  // Highlights a scoring pattern by making each of its own tiles glow —
+  // never a box drawn around the whole group — one glow overlay per cell.
+  function renderPatternGlow() {
+    boardWrap.querySelectorAll('.tutorial-cell-glow').forEach((el) => el.remove());
     const beat = BEATS[beatIndex];
     if (!beat.targetCells.length || solved) return;
-    const rs = beat.targetCells.map(([r]) => r);
-    const cs = beat.targetCells.map(([, c]) => c);
-    const minR = Math.min(...rs);
-    const maxR = Math.max(...rs);
-    const minC = Math.min(...cs);
-    const maxC = Math.max(...cs);
-    const box = document.createElement('div');
-    box.className = 'tutorial-highlight-box';
-    // Only the box's first appearance for this beat gets the zoom pop-in —
-    // renderHighlightBox reruns on every drag frame too (a fresh element
-    // each time), and popping in repeatedly mid-drag would read as jitter
-    // rather than an announcement.
-    if (!highlightPopped) {
-      box.classList.add('pop-in');
-      highlightPopped = true;
+    // Only the glow's first appearance for this beat gets the zoom pop-in —
+    // renderPatternGlow reruns on every drag frame too (fresh elements each
+    // time), and popping in repeatedly mid-drag would read as jitter rather
+    // than an announcement.
+    const firstAppearance = !highlightPopped;
+    highlightPopped = true;
+    for (const [r, c] of beat.targetCells) {
+      const glow = document.createElement('div');
+      glow.className = 'tutorial-cell-glow';
+      if (firstAppearance) glow.classList.add('pop-in');
+      glow.style.left = c * cell + 'px';
+      glow.style.top = r * cell + 'px';
+      glow.style.width = cell + 'px';
+      glow.style.height = cell + 'px';
+      glow.style.borderRadius = '8px';
+      boardWrap.appendChild(glow);
     }
-    box.style.left = minC * cell + 'px';
-    box.style.top = minR * cell + 'px';
-    box.style.width = (maxC - minC + 1) * cell + 'px';
-    box.style.height = (maxR - minR + 1) * cell + 'px';
-    boardWrap.appendChild(box);
   }
 
   // A ghost fully outside [low, high] is invisible; one that's just
