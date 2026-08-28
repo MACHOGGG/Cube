@@ -530,42 +530,33 @@ button:hover { filter: brightness(1.05); }
 }
 @media (prefers-reduced-motion: reduce) { .lang-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
 
-.lang-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.lang-grid { display: flex; flex-direction: column; gap: 16px; margin-top: 18px; }
+.lang-row { display: flex; align-items: center; gap: 8px; }
+/* The bar itself *is* the language — a solid color fill with just its name
+   on it, nothing in front. Dragging this whole element left/right selects
+   it (same physics as before). */
 .lang-strip {
-  position: relative; display: flex; align-items: center; gap: 12px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
-  padding: 14px 44px 14px 18px; touch-action: none; user-select: none; cursor: grab;
-  box-shadow: var(--shadow);
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  border-radius: 18px; padding: 20px 16px; touch-action: none; user-select: none; cursor: grab;
+  box-shadow: var(--shadow); transition: filter 0.2s ease;
 }
-.lang-strip.selected { border-color: var(--accent); background: var(--accent-soft); }
-.lang-tiles { display: flex; gap: 4px; flex-shrink: 0; }
-.lang-tile { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); }
-.lang-label { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.1rem; }
-
-/* The swipe hint: a small pill that visibly hovers above the strip's
-   surface (its own shadow, floating clear of the card) and drifts, rather
-   than sitting flush as inline text — read as "this can lift and slide". */
-.lang-arrows {
-  position: absolute; right: 8px; top: 50%; display: flex; align-items: center; gap: 1px;
-  color: var(--accent-ink); font-size: 15px; line-height: 1; pointer-events: none;
-  background: var(--accent-soft); border-radius: 100px; padding: 5px 6px;
-  box-shadow: 0 4px 10px -3px rgba(46,36,48,0.35);
-  animation: lang-arrow-float 1.8s ease-in-out infinite;
+.lang-strip.selected { filter: brightness(1.12); }
+.lang-label {
+  font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.3rem;
+  color: #fff; letter-spacing: 0.02em; text-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
-@keyframes lang-arrow-float {
-  0%, 100% { transform: translate(0, -50%); }
-  50% { transform: translate(4px, calc(-50% - 2px)); }
+/* Dashed connector + chevron sit outside the bar, never over the text —
+   the swipe hint stays visually separate from "this is the language". */
+.lang-connector { flex: 0 0 12px; height: 0; border-top: 2px dashed currentColor; opacity: 0.55; }
+.lang-arrow {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  animation: lang-arrow-nudge 1.6s ease-in-out infinite;
 }
-.lang-arrows span:nth-child(2) { animation: lang-arrow-nudge 1.8s ease-in-out infinite; animation-delay: 0.15s; }
-.lang-arrows span:nth-child(1) { animation: lang-arrow-nudge 1.8s ease-in-out infinite; }
 @keyframes lang-arrow-nudge {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  0%, 100% { transform: translateX(0); opacity: 0.65; }
+  50% { transform: translateX(4px); opacity: 1; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .lang-arrows { animation: none; opacity: 0.8; }
-  .lang-arrows span { animation: none !important; }
-}
+@media (prefers-reduced-motion: reduce) { .lang-arrow { animation: none; opacity: 0.85; } }
 
 /* ---------- tutorial ---------- */
 .tutorial-caption {

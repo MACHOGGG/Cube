@@ -1,20 +1,13 @@
 import { vibrate } from '../engine/haptics';
 import { LANG_ORDER, STRINGS, type Lang } from '../i18n';
 
-// Each language is a small horizontal strip of tiles, styled after the
-// square board's own tiles — dragging a strip (the same gesture as sliding
-// a row in the square game) past a threshold selects that language. A
-// floating chevron chip hovers over the strip's trailing edge to hint that
-// it can be swiped, the same discoverability problem every board's drag
-// needs solving for a first-time player, just met here before they've even
-// reached a board. No caption spells the gesture out in words — the glow,
-// color and float are meant to carry that on their own.
-const STRIP_COLOR_SETS: string[][] = [
-  ['#E0654A', '#3F9E8C', '#4C7EAD', '#C2588F'],
-  ['#4C7EAD', '#E8A93B', '#8067A8', '#3F9E8C'],
-  ['#C2588F', '#4C7EAD', '#E0654A', '#E8A93B'],
-  ['#3F9E8C', '#C2588F', '#E8A93B', '#4C7EAD'],
-];
+// Each language is one solid-colored rounded bar with its name on it, full
+// width — no separate swatches or icons in front of the name, the bar
+// itself *is* the language. A dashed connector and a small chevron sit
+// outside the bar (never overlapping the text) as the swipe hint. Dragging
+// the whole bar left/right past a threshold selects it — same gesture and
+// physics as before, just a plainer, more unified visual.
+const LANG_COLORS: string[] = ['#2F9E52', '#AD5C82', '#4C68B0', '#6B6560'];
 
 export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: Lang) => void) {
   container.innerHTML = `
@@ -28,18 +21,19 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
   if (!grid) throw new Error('languageSelect: #langGrid not found');
 
   LANG_ORDER.forEach((lang, i) => {
-    const colors = STRIP_COLOR_SETS[i % STRIP_COLOR_SETS.length];
-    const strip = document.createElement('div');
-    strip.className = 'lang-strip';
-    strip.dataset.lang = lang;
-    strip.innerHTML = `
-      <div class="lang-tiles">
-        ${colors.map((c) => `<div class="lang-tile" style="background:${c}"></div>`).join('')}
+    const color = LANG_COLORS[i % LANG_COLORS.length];
+    const row = document.createElement('div');
+    row.className = 'lang-row';
+    row.innerHTML = `
+      <div class="lang-strip" data-lang="${lang}" style="background:${color}">
+        <span class="lang-label">${STRINGS[lang].langName}</span>
       </div>
-      <span class="lang-label">${STRINGS[lang].langName}</span>
-      <div class="lang-arrows" aria-hidden="true"><span>&#8250;</span><span>&#8250;</span></div>
+      <span class="lang-connector" style="color:${color}"></span>
+      <div class="lang-arrow" style="color:${color}" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
     `;
-    grid.appendChild(strip);
+    grid.appendChild(row);
   });
 
   const THRESHOLD = 64;
