@@ -18,6 +18,7 @@ export interface I18nStrings {
   wholeLine: string;
   circleClusterIntro: string;
   circleFlipTeach: string;
+  circleFlipDragHint: string;
   circleBlank: string;
   circleBlankMove: string;
   triSlide: string;
@@ -44,6 +45,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     wholeLine: 'A whole row or column of matching flipped tiles scores big and clears the board',
     circleClusterIntro: 'Drag horizontally, or along either diagonal; same-colored balls score three ways — a run of 4, a "22" diamond, or a "121" diamond. Drag once to see all three flip in turn',
     circleFlipTeach: "Scored balls flip to a randomly determined color — balls cleared together in one group don't always end up the same color",
+    circleFlipDragHint: 'Drag to flip it',
     circleBlank: 'When a whole flipped line matches, it becomes blank balls — still slide freely, but they can never score again',
     circleBlankMove: 'A blank ball still holds its place on the board and drags normally — try it and watch it slide along',
     triSlide: 'Drag along a horizontal, left-diagonal, or right-diagonal line to line up 4 triangles of the same color',
@@ -66,6 +68,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     wholeLine: 'Une ligne ou colonne entière retournée de la même couleur rapporte gros et vide le plateau',
     circleClusterIntro: 'Faites glisser à l\'horizontale ou en diagonale ; des boules de la même couleur marquent de trois façons — une ligne de 4, un losange "22", ou un losange "121". Faites glisser une fois pour voir les trois se retourner tour à tour',
     circleFlipTeach: 'Les boules marquées se retournent sur une couleur tirée au hasard — des boules effacées ensemble ne finissent pas forcément de la même couleur',
+    circleFlipDragHint: 'Fais-la glisser pour la retourner',
     circleBlank: 'Quand toute une ligne retournée est assortie, ses boules deviennent vides — elles glissent toujours librement, mais ne peuvent plus jamais marquer',
     circleBlankMove: 'Une boule vide garde sa place sur le plateau et glisse normalement — essayez et regardez-la se déplacer',
     triSlide: 'Faites glisser le long d\'une ligne horizontale, diagonale gauche ou diagonale droite pour aligner 4 triangles de la même couleur',
@@ -88,6 +91,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     wholeLine: '反面同色連成一整行或一整列，會獲得高分並清空棋盤',
     circleClusterIntro: '圓球能沿水平、左斜、右斜拖動；同色能拼出三種得分圖案——4連線、「22」菱形、「121」菱形。拖動一下，依次看看它們翻面得分',
     circleFlipTeach: '得分的圓球會翻面，換成隨機決定的顏色——同一組消除的圓球，翻面後的顏色不一定相同',
+    circleFlipDragHint: '拖動它試著翻面',
     circleBlank: '整條線翻面同色湊齊時，會變成空白球——仍可自由滑動補位，但不會再得分',
     circleBlankMove: '空白球依然佔著位置，也能被正常拖動——試著拖一下，看它照樣跟著滑動',
     triSlide: '沿水平、左斜或右斜方向拖動一整條線，湊齊 4 個同色三角',
@@ -110,6 +114,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     wholeLine: '反面同色连成一整行或一整列，会获得高分并清空棋盘',
     circleClusterIntro: '圆球能沿水平、左斜、右斜拖动；同色能拼出三种得分图案——4连线、"22"菱形、"121"菱形。拖动一下，依次看看它们翻面得分',
     circleFlipTeach: '得分的圆球会翻面，换成随机决定的颜色——同一组消除的圆球，翻面后的颜色不一定相同',
+    circleFlipDragHint: '拖动它试着翻面',
     circleBlank: '整条线翻面同色凑齐时，会变成空白球——仍可自由滑动补位，但不会再得分',
     circleBlankMove: '空白球依然占着位置，也能被正常拖动——试着拖一下，看它照样跟着滑动',
     triSlide: '沿水平、左斜或右斜方向拖动一整条线，凑齐 4 个同色三角',

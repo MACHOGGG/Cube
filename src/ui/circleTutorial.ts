@@ -196,10 +196,6 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
   // everywhere else, where beat.targetCells is the whole story).
   let activeHighlightCells: Cell2[] | null = null;
   let highlightBlink = false;
-  // The flip-teach beat plays a bigger, slower flip so the transformation
-  // itself is unmistakable, instead of the same quick flip every other
-  // scoring beat uses.
-  let flipEmphasisCells: Set<string> | null = null;
 
   container.innerHTML = `
     <div class="app">
@@ -297,24 +293,6 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
         spawnOutlineEl(boardEl, { left: cx - size / 2, top: cy - size / 2, width: size, height: size }, elapsedMs, 'circle');
       }
     }
-    // Flip-teach's emphasis ring is its own overlay element rather than a
-    // class on the ball itself — the ball already carries an inline
-    // `animation` (flip-in + score-pulse, set by applyScoreAnimations), and
-    // a second class-based `animation` on the same element would just
-    // silently replace it rather than play alongside it.
-    if (flipEmphasisCells) {
-      for (const k of flipEmphasisCells) {
-        const [r, c] = k.split(',').map(Number);
-        const [cx, cy] = ballCenter(r, c);
-        const ring = document.createElement('div');
-        ring.className = 'flip-emphasis-ring';
-        ring.style.left = cx - size / 2 + 'px';
-        ring.style.top = cy - size / 2 + 'px';
-        ring.style.width = size + 'px';
-        ring.style.height = size + 'px';
-        boardEl.appendChild(ring);
-      }
-    }
     renderHighlightBox();
   }
 
@@ -362,7 +340,7 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     solved = false;
     activeHighlightCells = null;
     highlightBlink = false;
-    flipEmphasisCells = null;
+    boardWrap.querySelectorAll('.flip-coin-overlay').forEach((el) => el.remove());
     beatIndex = Math.max(0, Math.min(BEATS.length - 1, i));
     grid = BEATS[beatIndex].grid();
     stepLabelEl.textContent = `${beatIndex + 1} / ${BEATS.length}`;
@@ -388,18 +366,12 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     }
   }
 
-  // `emphasis`: the flip-teach beat wants its one flip to be unmistakable —
-  // a longer pre-flip pause to build anticipation, and an expanding ring
-  // overlay (.flip-emphasis-ring, see style.css) around the cells about to
-  // flip. flipEmphasisCells must be set *before* this render() call, not
-  // after — render() is what actually reads it to spawn the ring elements.
   // `onDone`: lets a caller (playSequence) chain its own step after this
   // flip's payoff instead of always auto-advancing to the next beat.
-  function playMatch(cells: Cell2[], opts?: { emphasis?: boolean; onDone?: () => void }) {
+  function playMatch(cells: Cell2[], opts?: { onDone?: () => void }) {
     solved = true;
     const gen = beatGen;
     outlineTracker.add([cells]);
-    if (opts?.emphasis) flipEmphasisCells = new Set(cells.map(([r, c]) => key(r, c)));
     render();
     vibrate(15);
     setTimeout(() => {
@@ -415,13 +387,222 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
       }
       render();
       showCheck();
-      flipEmphasisCells = null;
       if (opts?.onDone) {
         autoTimer = window.setTimeout(opts.onDone, 900);
       } else {
         autoTimer = window.setTimeout(advance, 1400);
       }
-    }, opts?.emphasis ? 1300 : 750);
+    }, 750);
+  }
+
+  // ---------- giant interactive 3D flip-coin (the flip-teach beat) ----------
+  // A real 3D disc (CSS perspective + rotateY, with actual thickness faked
+  // by stacking many thin hollow rings between the front/back faces — a
+  // flat rotateY'd circle alone shows no edge at 90°, so the "rim" needs its
+  // own geometry) that grows from the exact spot/size of the ball that was
+  // just demonstrated up to board-filling size, then waits for the player to
+  // drag it themselves: rotateY tracks the pointer's horizontal delta live,
+  // and on release a small momentum term (from the last drag frame's
+  // velocity) can carry a fast flick the rest of the way even if released
+  // before the halfway point. Only settling on the back face (an odd
+  // multiple of 180°) commits the real board flip and advances the beat —
+  // settling back on the front just leaves it there to try again.
+  const COIN_DEG_PER_PX = 0.6;
+  const COIN_RIM_SLICES = 24;
+  function playGiantFlipDemo(cells: Cell2[]) {
+    solved = true;
+    const gen = beatGen;
+    const [r0, c0] = cells[0];
+    const srcTile = grid[r0][c0];
+    const frontColor = COLORS[srcTile.color];
+    const backColor = COLORS[srcTile.dotColor];
+    const [srcCx, srcCy] = ballCenter(r0, c0);
+    const srcSize = R * 1.86;
+
+    const wrapRect = boardWrap.getBoundingClientRect();
+    const stageSize = Math.min(wrapRect.width, wrapRect.height) * 0.6;
+    const thickness = stageSize * 0.16;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'flip-coin-overlay';
+    overlay.innerHTML =
+      '<div class="flip-coin-stage" id="flipCoinStage"><div class="flip-coin" id="flipCoin">' +
+      '<div class="flip-coin-rim" id="flipCoinRim"></div>' +
+      '<div class="flip-coin-face flip-coin-front"></div>' +
+      '<div class="flip-coin-face flip-coin-back"></div>' +
+      '</div></div>' +
+      '<div class="flip-coin-arrow-hint" id="flipCoinArrow">' +
+      '<svg viewBox="0 0 64 28" width="52" height="24"><path d="M4 6 C 20 24, 44 24, 60 6" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>' +
+      '<path d="M48 3 L60 6 L54 16" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      `<span>${s.circleFlipDragHint}</span></div>`;
+    boardWrap.appendChild(overlay);
+
+    const stage = overlay.querySelector<HTMLElement>('#flipCoinStage')!;
+    const coin = overlay.querySelector<HTMLElement>('#flipCoin')!;
+    const rim = overlay.querySelector<HTMLElement>('#flipCoinRim')!;
+    const arrow = overlay.querySelector<HTMLElement>('#flipCoinArrow')!;
+    const front = overlay.querySelector<HTMLElement>('.flip-coin-front')!;
+    const back = overlay.querySelector<HTMLElement>('.flip-coin-back')!;
+
+    stage.style.width = stageSize + 'px';
+    stage.style.height = stageSize + 'px';
+    coin.style.width = stageSize + 'px';
+    coin.style.height = stageSize + 'px';
+    front.style.background = frontColor;
+    front.style.transform = `translateZ(${thickness / 2}px)`;
+    back.style.transform = `translateZ(${-thickness / 2}px) rotateY(180deg)`;
+    const starSize = Math.round(stageSize * 0.52);
+    back.innerHTML =
+      `<svg viewBox="0 0 24 24" width="${starSize}" height="${starSize}">` +
+      `<g stroke="${backColor}" stroke-width="2.2" stroke-linecap="round">` +
+      '<line x1="12" y1="2.5" x2="12" y2="21.5"/>' +
+      '<line x1="4" y1="6.75" x2="20" y2="17.25"/>' +
+      '<line x1="20" y1="6.75" x2="4" y2="17.25"/>' +
+      '</g></svg>';
+
+    // The rim: a "barrel of staves" tracing the coin's *own face circle*
+    // (which lies in the XY plane, same as the front/back discs — the whole
+    // coin then flips via rotateY on the parent, same as any child). Each
+    // stave starts as a flat rectangle (normal along Z, width along X,
+    // height along Y). CSS transform functions compose onto a point's raw
+    // coordinates in *world* axes throughout — there's no "current local
+    // frame" a later function pushes along, so each step must be reasoned
+    // about as a plain matrix applied to whatever the previous step already
+    // produced. rotateX(90deg) then rotateZ(90deg) (innermost, applied
+    // first) is a verified 3-cycle — every point (x,y,0) on the flat
+    // rectangle maps to (0, x, y): normal(z)→x (always 0 pre-push, since a
+    // flat panel has no z-extent of its own), width(x)→y, height(y)→z. From
+    // there translateX(radius) is what pushes the panel out (not
+    // translateZ — that would add to the point's z-coordinate, which by
+    // this stage holds the thickness axis, not the outward one), landing
+    // every point at world x=radius with y/z spanning tangent/thickness.
+    // The outer rotateZ(angleDeg) then sweeps that whole positioned,
+    // oriented panel around the world Z axis to its spot on the circle. (A
+    // first attempt used rotateY+translateZ — the "carousel" recipe for a
+    // cylinder with a *vertical* axis, which is the wrong circle for a coin
+    // whose face lies in the XY plane — and a second attempt got the
+    // reorientation right but still pushed with translateZ, which just
+    // shifted every stave's thickness position instead of its radius.)
+    const radius = stageSize / 2;
+    const rimFrag = document.createDocumentFragment();
+    const segWidth = (2 * Math.PI * radius) / COIN_RIM_SLICES + 1;
+    for (let i = 0; i < COIN_RIM_SLICES; i++) {
+      const angleDeg = (360 / COIN_RIM_SLICES) * i;
+      const seg = document.createElement('div');
+      seg.className = 'flip-coin-rim-slice';
+      seg.style.width = segWidth + 'px';
+      seg.style.height = thickness + 'px';
+      seg.style.left = radius - segWidth / 2 + 'px';
+      seg.style.top = radius - thickness / 2 + 'px';
+      seg.style.transform = `rotateZ(${angleDeg}deg) translateX(${radius}px) rotateZ(90deg) rotateX(90deg)`;
+      rimFrag.appendChild(seg);
+    }
+    rim.appendChild(rimFrag);
+
+    // Entry: a FLIP-technique grow — the coin starts sized/positioned to
+    // exactly match the source ball that was just demonstrated (small, at
+    // its real board position), instantly (no transition), then transitions
+    // to the large centered resting transform on the next frame — reading as
+    // "that ball grew into this" instead of appearing out of nowhere.
+    requestAnimationFrame(() => {
+      const rect = stage.getBoundingClientRect();
+      const targetCx = rect.left + rect.width / 2;
+      const targetCy = rect.top + rect.height / 2;
+      const wrapBox = boardWrap.getBoundingClientRect();
+      const fromCx = wrapBox.left + srcCx;
+      const fromCy = wrapBox.top + srcCy;
+      const scale = srcSize / stageSize;
+      coin.style.transition = 'none';
+      coin.style.opacity = '0.85';
+      coin.style.transform = `translate(${fromCx - targetCx}px, ${fromCy - targetCy}px) scale(${scale}) rotateY(0deg)`;
+      requestAnimationFrame(() => {
+        if (gen !== beatGen) return;
+        coin.style.transition = 'transform 650ms cubic-bezier(0.22, 0.9, 0.3, 1), opacity 300ms ease';
+        coin.style.transform = 'translate(0px, 0px) scale(1) rotateY(0deg)';
+        coin.style.opacity = '1';
+        setTimeout(() => {
+          if (gen === beatGen) arrow.classList.add('show');
+        }, 650);
+      });
+    });
+    vibrate(15);
+
+    let curDeg = 0;
+    let dragging = false;
+    let lastX = 0;
+    let lastT = 0;
+    let velocity = 0;
+    let done = false;
+
+    function applyDeg(deg: number) {
+      coin.style.transform = `rotateY(${deg}deg)`;
+    }
+    function down(e: PointerEvent) {
+      if (done) return;
+      dragging = true;
+      lastX = e.clientX;
+      lastT = performance.now();
+      velocity = 0;
+      coin.style.transition = 'none';
+      arrow.classList.remove('show');
+      coin.setPointerCapture(e.pointerId);
+    }
+    function move(e: PointerEvent) {
+      if (!dragging) return;
+      const now = performance.now();
+      const dx = e.clientX - lastX;
+      const dt = Math.max(1, now - lastT);
+      velocity = (dx * COIN_DEG_PER_PX) / dt;
+      curDeg += dx * COIN_DEG_PER_PX;
+      lastX = e.clientX;
+      lastT = now;
+      applyDeg(curDeg);
+    }
+    function release() {
+      if (!dragging) return;
+      dragging = false;
+      // A fast flick's last-frame velocity carries the rotation further
+      // before snapping — lets a quick swipe complete the flip even when
+      // released before crossing the halfway point.
+      const finalDeg = curDeg + velocity * 90;
+      curDeg = Math.round(finalDeg / 180) * 180;
+      coin.style.transition = 'transform 420ms cubic-bezier(0.25, 0.8, 0.3, 1.1)';
+      applyDeg(curDeg);
+      const onBack = Math.abs(Math.round(curDeg / 180)) % 2 === 1;
+      if (onBack) {
+        done = true;
+        vibrate(24);
+        setTimeout(() => {
+          if (gen === beatGen) finishFlip();
+        }, 460);
+      } else {
+        setTimeout(() => {
+          if (gen === beatGen && !done) arrow.classList.add('show');
+        }, 460);
+      }
+    }
+    coin.addEventListener('pointerdown', down);
+    coin.addEventListener('pointermove', move);
+    coin.addEventListener('pointerup', release);
+    coin.addEventListener('pointercancel', release);
+
+    function finishFlip() {
+      outlineTracker.add([cells]);
+      overlay.style.transition = 'opacity 320ms ease';
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        if (gen !== beatGen) return;
+        overlay.remove();
+        for (const [r, c] of cells) {
+          const t = grid[r][c];
+          grid[r][c] = td(t.dotColor);
+          flipInCells.add(key(r, c));
+        }
+        render();
+        showCheck();
+        autoTimer = window.setTimeout(advance, 1400);
+      }, 320);
+    }
   }
 
   // The combined pattern-intro beat: reveals each group in sequenceGroups
@@ -552,7 +733,10 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     const dy = e.clientY - sy;
     if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
     const beat = BEATS[beatIndex];
-    if (beat.goal === 'any') playMatch(beat.targetCells, { emphasis: beat.captionKey === 'circleFlipTeach' });
+    if (beat.goal === 'any') {
+      if (beat.captionKey === 'circleFlipTeach') playGiantFlipDemo(beat.targetCells);
+      else playMatch(beat.targetCells);
+    }
     else if (beat.goal === 'sequence' && beat.sequenceGroups) playSequence(beat.sequenceGroups);
     else if (beat.goal === 'blankMove') playBlankMove();
   }

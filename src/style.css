@@ -644,18 +644,38 @@ button:hover { filter: brightness(1.05); }
   100% { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { .tutorial-check.blink.show svg { animation: none; opacity: 1; transform: scale(1); } }
-/* The flip-teach beat's emphasis: an expanding ring overlay, kept as its
-   own element (not a class on the ball) so it can animate independently of
-   the ball's own inline `animation` (flip-in + score-pulse, set by
-   applyScoreAnimations) instead of silently replacing it. */
-.flip-emphasis-ring {
-  position: absolute; border-radius: 50%; border: 3px solid var(--accent);
-  pointer-events: none; z-index: 4; animation: flip-emphasis-ring 900ms ease-out both;
+/* The flip-teach beat's giant interactive 3D flip-coin: a real disc (CSS
+   perspective + rotateY) the player drags themselves. Front/back faces use
+   backface-visibility:hidden so each only shows while facing the camera;
+   the rim is a stack of thin hollow rings between them (see
+   playGiantFlipDemo in circleTutorial.ts for why plain filled discs
+   wouldn't read as an edge). */
+.flip-coin-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 8px; z-index: 6; pointer-events: none;
 }
-@keyframes flip-emphasis-ring {
-  0% { transform: scale(0.7); opacity: 0; border-width: 5px; }
-  35% { opacity: 1; }
-  100% { transform: scale(1.55); opacity: 0; border-width: 1px; }
+.flip-coin-stage { perspective: 900px; pointer-events: none; }
+.flip-coin {
+  position: relative; transform-style: preserve-3d; touch-action: none; cursor: grab; pointer-events: auto;
 }
-@media (prefers-reduced-motion: reduce) { .flip-emphasis-ring { animation: none; display: none; } }
+.flip-coin:active { cursor: grabbing; }
+.flip-coin-face {
+  position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden;
+  display: flex; align-items: center; justify-content: center;
+  border: solid #fff; box-sizing: border-box;
+}
+.flip-coin-front { border-width: 3%; }
+.flip-coin-back { background: var(--surface); border-width: 3%; }
+.flip-coin-rim { position: absolute; inset: 0; transform-style: preserve-3d; }
+.flip-coin-rim-slice { position: absolute; background: #fff; backface-visibility: hidden; }
+.flip-coin-arrow-hint {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--accent);
+  opacity: 0; transform: translateY(-6px); transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none;
+}
+.flip-coin-arrow-hint.show { opacity: 1; transform: translateY(0); animation: flip-coin-arrow-blink 1.3s ease-in-out infinite; }
+.flip-coin-arrow-hint span { font-size: 0.85rem; font-weight: 600; }
+@keyframes flip-coin-arrow-blink { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .flip-coin-arrow-hint.show { animation: none; opacity: 0.85; }
+}
 .tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
