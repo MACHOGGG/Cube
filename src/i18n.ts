@@ -26,6 +26,9 @@ export interface I18nStrings {
   triBigTriangle: string;
   triFlipOrientation: string;
   triBlank: string;
+  navHome: string;
+  navAccount: string;
+  switchLanguage: string;
 }
 
 export const LANG_ORDER: Lang[] = ['en', 'fr', 'zhHant', 'zhHans'];
@@ -54,6 +57,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBigTriangle: '4 triangles combining into one big triangle (3 one way, 1 the other) score too',
     triFlipOrientation: 'A triangle pushed off one edge wraps back in on the other side — pointing the opposite way',
     triBlank: 'When a whole flipped line matches, it becomes blank triangles — still slide freely, but they can never score again',
+    navHome: 'Home',
+    navAccount: 'Account',
+    switchLanguage: 'Switch language',
   },
   fr: {
     langName: 'Français',
@@ -78,6 +84,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBigTriangle: '4 triangles formant un grand triangle (3 dans un sens, 1 dans l\'autre) rapportent aussi',
     triFlipOrientation: 'Un triangle poussé hors d\'un bord revient de l\'autre côté — pointant dans l\'autre sens',
     triBlank: 'Quand toute une ligne retournée est assortie, ses triangles deviennent vides — ils glissent toujours librement, mais ne peuvent plus jamais marquer',
+    navHome: 'Accueil',
+    navAccount: 'Compte',
+    switchLanguage: 'Changer de langue',
   },
   zhHant: {
     langName: '繁體中文',
@@ -102,6 +111,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBigTriangle: '4 個三角拼成一個大三角（3 個同向 + 1 個反向）同樣得分',
     triFlipOrientation: '被推出邊緣的三角，會從另一側補回並換成相反的朝向',
     triBlank: '整條線翻面同色湊齊時，會變成空白角——仍可自由滑動補位，但不會再得分',
+    navHome: '首頁',
+    navAccount: '帳戶',
+    switchLanguage: '切換語言',
   },
   zhHans: {
     langName: '简体中文',
@@ -126,6 +138,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBigTriangle: '4 个三角拼成一个大三角（3 个同向 + 1 个反向）同样得分',
     triFlipOrientation: '被推出边缘的三角，会从另一侧补回并换成相反的朝向',
     triBlank: '整条线翻面同色凑齐时，会变成空白角——仍可自由滑动补位，但不会再得分',
+    navHome: '首页',
+    navAccount: '账户',
+    switchLanguage: '切换语言',
   },
 };
 

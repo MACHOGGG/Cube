@@ -34,13 +34,33 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
+/* Reserves room below whatever the browser scrolls into view (Tab focus, a
+   mobile keyboard nudging an input, Playwright's own scrollIntoView) so the
+   fixed .bottom-nav bar never ends up sitting directly on top of it — plain
+   padding-bottom on .app doesn't help here, since "scroll target into view"
+   only guarantees the target itself is visible, not the padding after it. */
+html { scroll-padding-bottom: 76px; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
-  display: flex; justify-content: center;
+  /* justify-content here only centers the (width-capped) .app column on a
+     wide viewport — align-items:flex-start (overriding the flex default of
+     stretch) matters more: without it, #app/.app get stretched to a
+     *definite* height equal to the viewport, and on any page taller than
+     one screen the real content then overflows past that definite box in
+     `overflow:visible`, past where .app's own padding-bottom was meant to
+     land — so a page's last interactive element could butt right up
+     against (or sit under) the fixed .bottom-nav bar at max scroll,
+     regardless of how much bottom padding .app declares. flex-start makes
+     #app/.app size to their actual content instead, so the padding lands
+     where it's supposed to. */
+  display: flex; justify-content: center; align-items: flex-start;
 }
-#app { width: 100%; display: flex; justify-content: center; }
-.app { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; padding: 28px 16px 60px; }
+#app { width: 100%; display: flex; justify-content: center; align-items: flex-start; }
+/* Bottom padding leaves room for the persistent .bottom-nav bar below —
+   see that rule for why it's a fixed sibling of #app rather than part of
+   each screen's own markup. */
+.app { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; padding: 28px 16px 92px; }
 /* A few boards (七色圆球's 49-cell diamond, the base/big triangle's denser
    packing) read as cramped at the standard column width — widens just
    those screens' whole .app column so the board itself renders bigger,
@@ -741,3 +761,36 @@ button:hover { filter: brightness(1.05); }
   .flip-coin-arrow-hint.show { animation: none; opacity: 0.85; }
 }
 .tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+
+/* ---------- persistent bottom nav ---------- */
+/* A fixed sibling of #app (appended straight to <body> by bottomNav.ts),
+   not part of any one screen's own markup — every screen still fully
+   replaces #app's content on navigation, but this bar survives that,
+   which is the whole point of it being "常驻" (always present). */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; justify-content: center; gap: 4px;
+  padding: 8px max(12px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-top: 1px solid var(--line);
+}
+.bottom-nav-btn {
+  flex: 0 1 96px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: none; border: none; padding: 4px 10px; border-radius: 12px;
+  color: var(--ink-soft); cursor: pointer; transition: color .15s ease, background .15s ease;
+}
+.bottom-nav-btn:hover, .bottom-nav-btn:active { color: var(--accent-ink); background: var(--accent-soft); }
+.bottom-nav-btn svg { width: 21px; height: 21px; }
+.bottom-nav-btn span { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+
+/* ---------- language-switch popup ---------- */
+.lang-switch-modal { max-width: 300px; }
+.lang-switch-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.lang-switch-item {
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px; font-weight: 600; font-family: 'Fraunces', Georgia, serif; font-size: 1rem;
+  color: var(--ink); cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.lang-switch-item:hover { border-color: var(--accent); }
+.lang-switch-item.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }

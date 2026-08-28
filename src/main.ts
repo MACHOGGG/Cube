@@ -1,7 +1,9 @@
 import './style.css';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
-import { showAuthModal } from './ui/authModal';
+import { renderAccountPage, type AuthTab } from './ui/accountPage';
+import { mountBottomNav } from './ui/bottomNav';
+import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
@@ -77,10 +79,15 @@ function showMenu() {
     onRandomTarget: () => showComingSoon('随机得分目标'),
     onMultiplayer: () => showComingSoon('多人游玩'),
     onRankings: () => showComingSoon('成绩与排名'),
-    onSignIn: () => showAuthModal('login'),
-    onExclusive: showExclusivePage,
+    onSignIn: () => showAccountPage('login'),
+    onExclusive: () => showAccountPage('register'),
     onHowToSlide: showTutorialPicker,
   }, currentLang);
+}
+
+function showAccountPage(tab: AuthTab) {
+  teardown();
+  renderAccountPage(root, tab, showMenu);
 }
 
 // Which shape a card id's tutorial covers, if any — layout games (the
@@ -140,40 +147,6 @@ function showComingSoon(title: string) {
   root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
 }
 
-const LOCK_GLYPH =
-  '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
-
-const PRIVILEGES = [
-  '解锁更多配色',
-  '更多关卡',
-  '更多得分目标',
-  '更多布局',
-  '更多玩法',
-  '更多竞赛',
-  '世界排名和好友排名',
-  'Apple Watch 特别版',
-];
-
-function showExclusivePage() {
-  teardown();
-  root.innerHTML = `
-    <div class="app">
-      <h1>天才入口</h1>
-      <p class="tag-line">解锁 Slides 天才专属特权</p>
-      <div class="privilege-list">
-        ${PRIVILEGES.map((p) => `<div class="privilege-item"><span class="glyph">${LOCK_GLYPH}</span><span class="label">${p}</span></div>`).join('')}
-        <div class="privilege-item soon">……敬请期待</div>
-      </div>
-      <button class="home-how-to" id="becomeGeniusBtn">成为 Slides 天才</button>
-      <div class="controls">
-        <button class="icon-btn" id="backBtn">返回</button>
-      </div>
-    </div>
-  `;
-  root.querySelector<HTMLButtonElement>('#becomeGeniusBtn')?.addEventListener('click', () => showAuthModal('register'));
-  root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
-}
-
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   const backFn = onBack ?? showMenu;
   const mountNow = () => {
@@ -208,6 +181,14 @@ function boot() {
 
 function afterLangChosen(lang: Lang) {
   currentLang = lang;
+  mountBottomNav(
+    {
+      onHome: showMenu,
+      onLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
+      onAccount: () => showAccountPage('login'),
+    },
+    lang,
+  );
   if (!hasSeenTutorial()) {
     teardown();
     renderTutorial(root, lang, () => {
@@ -217,6 +198,15 @@ function afterLangChosen(lang: Lang) {
     return;
   }
   showMenu();
+}
+
+// Switching language always lands back on the (now newly localized) home
+// page rather than trying to re-render whatever screen was showing — every
+// screen builder in this file takes currentLang implicitly at render time,
+// so there's no single "redraw the current screen" hook to call generically.
+function onLanguageSwitched(lang: Lang) {
+  saveLang(lang);
+  afterLangChosen(lang);
 }
 
 boot();
