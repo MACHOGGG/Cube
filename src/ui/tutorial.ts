@@ -314,8 +314,9 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     renderPatternGlow();
   }
 
-  // Highlights a scoring pattern by making each of its own tiles glow —
-  // never a box drawn around the whole group — one glow overlay per cell.
+  // Highlights a scoring pattern with a single glow outline that hugs the
+  // whole group's bounding box — never one ring per tile — so it reads as
+  // "this pattern" rather than a pile of separately blinking squares.
   function renderPatternGlow() {
     boardWrap.querySelectorAll('.tutorial-cell-glow').forEach((el) => el.remove());
     const beat = BEATS[beatIndex];
@@ -326,17 +327,19 @@ export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () =>
     // than an announcement.
     const firstAppearance = !highlightPopped;
     highlightPopped = true;
-    for (const [r, c] of beat.targetCells) {
-      const glow = document.createElement('div');
-      glow.className = 'tutorial-cell-glow';
-      if (firstAppearance) glow.classList.add('pop-in');
-      glow.style.left = c * cell + 'px';
-      glow.style.top = r * cell + 'px';
-      glow.style.width = cell + 'px';
-      glow.style.height = cell + 'px';
-      glow.style.borderRadius = '8px';
-      boardWrap.appendChild(glow);
-    }
+    const rows = beat.targetCells.map(([r]) => r);
+    const cols = beat.targetCells.map(([, c]) => c);
+    const minR = Math.min(...rows), maxR = Math.max(...rows);
+    const minC = Math.min(...cols), maxC = Math.max(...cols);
+    const glow = document.createElement('div');
+    glow.className = 'tutorial-cell-glow';
+    if (firstAppearance) glow.classList.add('pop-in');
+    glow.style.left = minC * cell + 'px';
+    glow.style.top = minR * cell + 'px';
+    glow.style.width = (maxC - minC + 1) * cell + 'px';
+    glow.style.height = (maxR - minR + 1) * cell + 'px';
+    glow.style.borderRadius = Math.round(cell * 0.16) + 'px';
+    boardWrap.appendChild(glow);
   }
 
   // A ghost fully outside [low, high] is invisible; one that's just

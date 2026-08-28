@@ -154,12 +154,11 @@ const BEATS: Beat[] = [
       [diamondCells, 0, 1],
     ]),
     goal: 'sequence',
-    // Shown as the dashed highlight box *before* the first drag — without
-    // this, renderHighlightBox's `!cells.length` guard skipped drawing
-    // anything at all until playSequence's own per-group highlight kicked
-    // in mid-reveal, leaving the player with zero visual cue to drag in the
-    // first place. The union's bounding box spans all three patterns, which
-    // is exactly what the reveal is about to walk through.
+    // Not read for highlighting — a 'sequence' beat's glow is driven
+    // entirely by activeHighlightCells (see startHighlightCycle/
+    // playSequence), which cycles through sequenceGroups one at a time
+    // instead of ever showing this union of all three patterns at once.
+    // Still required by the Beat type; kept as the full set for that reason.
     targetCells: [...runCells, ...clusterCells, ...diamondCells],
     sequenceGroups: [runCells, clusterCells, diamondCells],
   },
@@ -196,6 +195,7 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
   // everywhere else, where beat.targetCells is the whole story).
   let activeHighlightCells: Cell2[] | null = null;
   let highlightBlink = false;
+  let highlightCycleTimer: number | undefined;
 
   container.innerHTML = `
     <div class="app">
@@ -296,13 +296,20 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     renderPatternGlow();
   }
 
-  // Highlights a scoring pattern by making each of its own balls glow —
-  // never a box drawn around the whole group — one glow overlay per cell,
-  // exactly matching that ball's position and size.
+  // Highlights a scoring pattern with a single glow outline that hugs the
+  // whole group's bounding box — never one ring per ball. A beat with just
+  // one pattern (most beats) shows beat.targetCells directly; the combined
+  // pattern-intro beat instead cycles activeHighlightCells through its
+  // several groups one at a time (see startHighlightCycle/playSequence), so
+  // this only ever draws one group's frame at once, never a union of all of
+  // them.
   function renderPatternGlow() {
     boardWrap.querySelectorAll('.tutorial-cell-glow').forEach((el) => el.remove());
     const beat = BEATS[beatIndex];
-    const cells = activeHighlightCells ?? beat.targetCells;
+    // A 'sequence' beat only ever shows a group via activeHighlightCells
+    // (driven by the idle auto-cycle before a drag, or by playSequence
+    // during the reveal) — never a fallback union of every group at once.
+    const cells = activeHighlightCells ?? (beat.goal === 'sequence' ? null : beat.targetCells);
     // solved only suppresses the *normal* (beat.targetCells) highlight, once
     // that beat's one target has been matched. During a 'sequence' beat,
     // solved is already true for the whole sequence (it's what blocks a
@@ -310,20 +317,24 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     // actually tracks whether a group is being highlighted right now, and
     // must keep working regardless of solved.
     const suppressed = activeHighlightCells === null && solved;
-    if (!cells.length || suppressed) return;
+    if (!cells || !cells.length || suppressed) return;
     const size = R * 1.86;
-    for (const [r, c] of cells) {
-      const [cx, cy] = ballCenter(r, c);
-      const glow = document.createElement('div');
-      glow.className = 'tutorial-cell-glow';
-      if (highlightBlink) glow.classList.add('blink-in');
-      glow.style.left = cx - size / 2 + 'px';
-      glow.style.top = cy - size / 2 + 'px';
-      glow.style.width = size + 'px';
-      glow.style.height = size + 'px';
-      glow.style.borderRadius = '50%';
-      boardWrap.appendChild(glow);
-    }
+    const pad = size * 0.18;
+    const xs = cells.map(([r, c]) => ballCenter(r, c)[0]);
+    const ys = cells.map(([r, c]) => ballCenter(r, c)[1]);
+    const minX = Math.min(...xs) - size / 2 - pad;
+    const maxX = Math.max(...xs) + size / 2 + pad;
+    const minY = Math.min(...ys) - size / 2 - pad;
+    const maxY = Math.max(...ys) + size / 2 + pad;
+    const glow = document.createElement('div');
+    glow.className = 'tutorial-cell-glow';
+    if (highlightBlink) glow.classList.add('blink-in');
+    glow.style.left = minX + 'px';
+    glow.style.top = minY + 'px';
+    glow.style.width = maxX - minX + 'px';
+    glow.style.height = maxY - minY + 'px';
+    glow.style.borderRadius = Math.round(size * 0.55) + 'px';
+    boardWrap.appendChild(glow);
   }
 
   // `blink` plays a snappier double-flash before settling — used when the
@@ -338,18 +349,48 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
 
   function goToBeat(i: number) {
     clearTimeout(autoTimer);
+    clearTimeout(highlightCycleTimer);
     beatGen++;
     solved = false;
     activeHighlightCells = null;
     highlightBlink = false;
     boardWrap.querySelectorAll('.flip-coin-overlay').forEach((el) => el.remove());
     beatIndex = Math.max(0, Math.min(BEATS.length - 1, i));
-    grid = BEATS[beatIndex].grid();
+    const beat = BEATS[beatIndex];
+    grid = beat.grid();
     stepLabelEl.textContent = `${beatIndex + 1} / ${BEATS.length}`;
-    captionEl.textContent = s[BEATS[beatIndex].captionKey];
+    captionEl.textContent = s[beat.captionKey];
     prevBtn.style.visibility = beatIndex > 0 ? 'visible' : 'hidden';
     render();
     settleBeat();
+    if (beat.goal === 'sequence' && beat.sequenceGroups) startHighlightCycle(beat.sequenceGroups);
+  }
+
+  // Before the player has dragged anything on the combined pattern-intro
+  // beat, there's no single group to point at — so it cycles the glow frame
+  // through each of the beat's groups in turn (2s apart, per the module's
+  // sequenceGroups), instead of showing all of them highlighted at once.
+  // Stops the moment a drag starts revealing the real sequence (solved
+  // flips true) or the player navigates to a different beat (beatGen bumps).
+  const HIGHLIGHT_CYCLE_SHOW_MS = 1800;
+  const HIGHLIGHT_CYCLE_GAP_MS = 2000;
+  function startHighlightCycle(groups: Cell2[][]) {
+    const gen = beatGen;
+    let idx = 0;
+    const showNext = () => {
+      if (gen !== beatGen || solved) return;
+      activeHighlightCells = groups[idx % groups.length];
+      highlightBlink = false;
+      render();
+      highlightCycleTimer = window.setTimeout(() => {
+        if (gen !== beatGen || solved) return;
+        activeHighlightCells = null;
+        render();
+        idx++;
+        highlightCycleTimer = window.setTimeout(showNext, HIGHLIGHT_CYCLE_GAP_MS);
+      }, HIGHLIGHT_CYCLE_SHOW_MS);
+    };
+    showNext();
   }
 
   function advance() {
@@ -754,6 +795,7 @@ export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone:
     boardEl.removeEventListener('pointerdown', down);
     boardEl.removeEventListener('pointerup', up);
     clearTimeout(autoTimer);
+    clearTimeout(highlightCycleTimer);
   }
 
   skipBtn.addEventListener('click', () => {
