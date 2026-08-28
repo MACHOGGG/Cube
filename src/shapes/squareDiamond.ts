@@ -12,6 +12,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same 6x6, 36-tile deck as the base square game (see square.ts for the
@@ -38,6 +39,17 @@ const PALETTES = {
 const BOARD_DIM = 6;
 const MIN_LINE_BONUS_LEN = 3;
 const BLANK = -1;
+
+// Bomb mode drops two of the base six colors and appends red as a fixed
+// hazard color — see RED_IDX below. Same formula as the base square game
+// (which this board's deck/dot-color rule is deliberately identical to).
+const BOMB_PALETTES = {
+  standard: [...PALETTES.standard.slice(0, 4), BOMB_RED_HEX],
+  colorblind: [...PALETTES.colorblind.slice(0, 4), BOMB_RED_HEX],
+} as const;
+const BOMB_NORMAL_COLORS = 4;
+const RED_IDX = BOMB_NORMAL_COLORS;
+const BOMB_GROUP_SIZE = 6;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><rect x="12" y="2" width="8" height="8" fill="#C46A4E" transform="rotate(45 16 6)"/><rect x="22" y="12" width="8" height="8" fill="#4A9573" transform="rotate(45 26 16)"/><rect x="12" y="22" width="8" height="8" fill="#4C7EAD" transform="rotate(45 16 26)"/><rect x="2" y="12" width="8" height="8" fill="#AD5C82" transform="rotate(45 6 16)"/></svg>`;
 
@@ -162,20 +174,31 @@ export function createSquareDiamondGame(): ShapeGame {
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
+      const isBomb = !!opts?.bomb;
+      const BASE_HINT =
+        '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块、同色的"22"菱形沿同一方向扩大，同样按扩大后的数量得分；"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+      const hint = isBomb
+        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 4 个及以上红色方块相互边相连，将立即结束挑战并扣 100 分。' +
+          BASE_HINT +
+          '全部非红色方块都翻成点面或变为空白时结束，结算当时的分数。'
+        : BASE_HINT + '全部方块都翻成点面或变为空白时结束，结算当时的分数。';
+      const assumptions = isBomb
+        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 4 种颜色各 6 枚，点色分布为：其余 3 色各 1 枚、本色 3 枚；另有 12 枚红色方块，永不显示点色。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。'
+        : '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。';
       const refs = buildShell(container, {
         title: 'Slides · 菱形方块',
-        tagline: '沿水平或两条斜线方向拖动整条线 · 拼出同色图案',
+        tagline: isBomb
+          ? '沿水平或两条斜线方向拖动整条线 · 避免红色方块 4 连'
+          : '沿水平或两条斜线方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平或斜线方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
-        hint:
-          '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块、同色的"22"菱形沿同一方向扩大，同样按扩大后的数量得分；"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白时结束，结算当时的分数。',
-        assumptions:
-          '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。',
+        hint,
+        assumptions,
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
-      let COLORS: readonly string[] = PALETTES[paletteName];
+      let COLORS: readonly string[] = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
       let grid: Tile[][] = [];
       let k = 0,
         boardLeft = 0,
@@ -264,6 +287,82 @@ export function createSquareDiamondGame(): ShapeGame {
         return g;
       }
 
+      // ---------- bomb mode: red hazard tiles ----------
+      function shuffledBombDeck(): number[] {
+        const deck: number[] = [];
+        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
+        const redCount = BOARD_DIM * BOARD_DIM - deck.length;
+        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
+        return shuffle(deck);
+      }
+
+      function assignBombDotColors(deck: number[]): number[] {
+        const dotColors = new Array<number>(deck.length).fill(RED_IDX);
+        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
+          const others = Array.from({ length: BOMB_NORMAL_COLORS }, (_, k) => k).filter((k) => k !== color);
+          const pool = shuffle([...others, color, color, color]);
+          const indices: number[] = [];
+          deck.forEach((c, idx) => {
+            if (c === color) indices.push(idx);
+          });
+          indices.forEach((idx, i) => {
+            dotColors[idx] = pool[i];
+          });
+        }
+        return dotColors;
+      }
+
+      function boardFromBombDeck(deck: number[]): Tile[][] {
+        const dots = assignBombDotColors(deck);
+        const g: Tile[][] = [];
+        for (let r = 0; r < BOARD_DIM; r++) {
+          const row: Tile[] = [];
+          for (let c = 0; c < BOARD_DIM; c++) {
+            const idx = r * BOARD_DIM + c;
+            row.push(newTile(deck[idx], dots[idx]));
+          }
+          g.push(row);
+        }
+        return g;
+      }
+
+      function hasRedCluster(g: Tile[][]): boolean {
+        const seen = new Set<string>();
+        for (let r = 0; r < BOARD_DIM; r++)
+          for (let c = 0; c < BOARD_DIM; c++) {
+            if (g[r][c].color !== RED_IDX) continue;
+            const startKey = cellKey(r, c);
+            if (seen.has(startKey)) continue;
+            let size = 0;
+            const stack: Cell[] = [[r, c]];
+            seen.add(startKey);
+            while (stack.length) {
+              const [cr, cc] = stack.pop()!;
+              size++;
+              const neighbors: Cell[] = [[cr - 1, cc], [cr + 1, cc], [cr, cc - 1], [cr, cc + 1]];
+              for (const [nr, nc] of neighbors) {
+                if (!inBounds(nr, nc)) continue;
+                const key = cellKey(nr, nc);
+                if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
+                seen.add(key);
+                stack.push([nr, nc]);
+              }
+            }
+            if (size >= 4) return true;
+          }
+        return false;
+      }
+
+      function generateCleanBombBoard(): Tile[][] {
+        let g: Tile[][];
+        let tries = 0;
+        do {
+          g = boardFromBombDeck(shuffledBombDeck());
+          tries++;
+        } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
+        return g;
+      }
+
       function renderLegend() {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
       }
@@ -310,6 +409,13 @@ export function createSquareDiamondGame(): ShapeGame {
           el.appendChild(dot);
         } else {
           el.style.background = COLORS[tile.color];
+          if (isBomb && tile.color === RED_IDX) {
+            const mark = document.createElement('div');
+            mark.className = 'hazard-mark';
+            mark.textContent = '!';
+            mark.style.fontSize = Math.round(size * 0.5) + 'px';
+            el.appendChild(mark);
+          }
         }
         if (opacity !== undefined) el.style.opacity = String(opacity);
         el.dataset.r = String(r);
@@ -352,6 +458,8 @@ export function createSquareDiamondGame(): ShapeGame {
       function qualifies(seed: Cell[], mask: Set<string> | null): boolean {
         if (anyBlank(seed)) return false;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        // Red hazard tiles are obstacles, not a matchable color.
+        if (isBomb && c0 === RED_IDX) return false;
         if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return false;
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
         return true;
@@ -447,7 +555,7 @@ export function createSquareDiamondGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
+        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || (isBomb && t.color === RED_IDX)));
       }
 
       function liveTiles(): LiveTile[] {
@@ -455,7 +563,9 @@ export function createSquareDiamondGame(): ShapeGame {
         for (let r = 0; r < BOARD_DIM; r++)
           for (let c = 0; c < BOARD_DIM; c++) {
             const t = grid[r][c];
-            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+            if (isBlank(t)) continue;
+            if (isBomb && t.color === RED_IDX) continue;
+            live.push({ cell: [r, c], tile: t });
           }
         return live;
       }
@@ -492,14 +602,14 @@ export function createSquareDiamondGame(): ShapeGame {
       }
 
       function resetBoard() {
-        grid = generateCleanBoard();
+        grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
         bonusedSignatures = new Set();
         outlineTracker.reset();
         stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
-        bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '菱形方块',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
@@ -611,6 +721,17 @@ export function createSquareDiamondGame(): ShapeGame {
         }
       }
 
+      // Checked right after a drag lands, before normal move resolution —
+      // red tiles are never removed or flipped (see qualifies/findWholeLineBonuses
+      // guards above), so the only way their adjacency ever changes is a
+      // line shift landing two clusters next to each other.
+      function checkBombHazard(): boolean {
+        if (!isBomb || !hasRedCluster(grid)) return false;
+        render();
+        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        return true;
+      }
+
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
@@ -623,6 +744,7 @@ export function createSquareDiamondGame(): ShapeGame {
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
+        if (checkBombHazard()) return true;
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         controller.resolveMove(mask);
         return true;
@@ -685,7 +807,7 @@ export function createSquareDiamondGame(): ShapeGame {
 
       refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
         paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';
-        COLORS = PALETTES[paletteName];
+        COLORS = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
         (e.currentTarget as HTMLElement).classList.toggle('active', paletteName === 'colorblind');
         renderLegend();
         if (controller.started) render();

@@ -12,6 +12,7 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY } from '../engine/bomb';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // A hex-cropped version of the ball board (37 cells: rows of 4/5/6/7/6/5/4
@@ -33,6 +34,18 @@ const ROW_LENS = [4, 5, 6, 7, 6, 5, 4];
 const PER_COLOR = 6;
 const MIN_LINE_BONUS_LEN = 3;
 const CENTER_CELL: Cell = [3, 3]; // row 3 (z=0), col 3 -> cube (0,0,0), the hex's true center
+
+// Bomb mode drops two of the base six colors and appends red as a fixed
+// hazard color — see RED_IDX below.
+const BOMB_PALETTES = {
+  standard: [...PALETTES.standard.slice(0, 4), BOMB_RED_HEX],
+  colorblind: [...PALETTES.colorblind.slice(0, 4), BOMB_RED_HEX],
+} as const;
+const BOMB_NORMAL_COLORS = 4;
+const RED_IDX = BOMB_NORMAL_COLORS;
+// Same 6-per-color count as the base game; the rest of the 36 non-center
+// cells (36 - 4*6 = 12) is filled with red hazard balls.
+const BOMB_GROUP_SIZE = 6;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="6.5" r="4.5" fill="#B23A3A"/><circle cx="25" cy="11" r="4.5" fill="#D89B1E"/><circle cx="25" cy="21" r="4.5" fill="#4C68B0"/><circle cx="16" cy="25.5" r="4.5" fill="#2F9E52"/><circle cx="7" cy="21" r="4.5" fill="#9B958D"/><circle cx="7" cy="11" r="4.5" fill="#3C4452"/></svg>`;
 
@@ -195,20 +208,31 @@ export function createCircleHexGame(): ShapeGame {
       glyph: GLYPH,
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
+      const isBomb = !!opts?.bomb;
+      const BASE_HINT =
+        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"22"菱形沿同一菱形方向扩大同样按扩大后的数量得分，"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+      const hint = isBomb
+        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍球。任意时刻场上 4 个及以上红色球相互边相连，将立即结束挑战并扣 100 分。' +
+          BASE_HINT +
+          '全部非红色方块都翻成点面或变为空白球时结束，结算当时的分数。'
+        : BASE_HINT + '全部方块都翻成点面或变为空白球时结束，结算当时的分数。';
+      const assumptions = isBomb
+        ? '红色固定为同一种危险色，不随色盲友好配色切换。其余 4 种颜色各 6 枚，点色分布为：其余 3 色中的每一色至少 1 枚，凑满 6 枚（保证没有正反面同色的球出现）；另有 12 枚红色球，永不显示点色；正中心 1 颗永久空白球保持不变。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
+        : '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。';
       const refs = buildShell(container, {
         title: 'Slides · 六边圆球',
-        tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
+        tagline: isBomb
+          ? '沿水平、左斜或右斜方向拖动整条线 · 避免红色球 4 连'
+          : '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
-        hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"22"菱形沿同一菱形方向扩大同样按扩大后的数量得分，"121"菱形固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
-        assumptions:
-          '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。',
+        hint,
+        assumptions,
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
-      let COLORS: readonly string[] = PALETTES[paletteName];
+      let COLORS: readonly string[] = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
       let grid: Tile[][] = [];
       let R = 0,
         rowH = 0,
@@ -302,6 +326,107 @@ export function createCircleHexGame(): ShapeGame {
         return g;
       }
 
+      // ---------- bomb mode: red hazard tiles ----------
+      function shuffledBombDeck(): number[] {
+        const deck: number[] = [];
+        for (let c = 0; c < BOMB_NORMAL_COLORS; c++) for (let i = 0; i < BOMB_GROUP_SIZE; i++) deck.push(c);
+        const totalCells = ROW_LENS.reduce((a, b) => a + b, 0);
+        const redCount = totalCells - 1 - deck.length; // -1 for the permanent center blank
+        for (let i = 0; i < redCount; i++) deck.push(RED_IDX);
+        return shuffle(deck);
+      }
+
+      // Same "cycle through the other normal colors, never self" rule as the
+      // base game's own assignDotColors — just parameterized down to
+      // BOMB_NORMAL_COLORS: cycling 4-1=3 other colors to fill 6 slots gives
+      // each of them exactly 2 (no remainder, unlike the base game's 5-way
+      // cycle into 6 slots which needs one color to repeat a 6th time).
+      function assignBombDotColors(deck: number[]): number[] {
+        const dotColors = new Array<number>(deck.length).fill(RED_IDX);
+        for (let color = 0; color < BOMB_NORMAL_COLORS; color++) {
+          const others: number[] = [];
+          for (let k = 0; others.length < BOMB_GROUP_SIZE; k++) {
+            others.push((color + 1 + (k % (BOMB_NORMAL_COLORS - 1))) % BOMB_NORMAL_COLORS);
+          }
+          shuffle(others);
+          const indices: number[] = [];
+          deck.forEach((c, idx) => {
+            if (c === color) indices.push(idx);
+          });
+          indices.forEach((idx, i) => {
+            dotColors[idx] = others[i];
+          });
+        }
+        return dotColors;
+      }
+
+      function boardFromBombDeck(deck: number[]): Tile[][] {
+        const dots = assignBombDotColors(deck);
+        const g: Tile[][] = [];
+        let idx = 0;
+        for (let r = 0; r < ROW_LENS.length; r++) {
+          const row: Tile[] = [];
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            if (r === CENTER_CELL[0] && c === CENTER_CELL[1]) {
+              row.push(newTile(BLANK, BLANK));
+            } else {
+              row.push(newTile(deck[idx], dots[idx]));
+              idx++;
+            }
+          }
+          g.push(row);
+        }
+        return g;
+      }
+
+      // The hex lattice's 6 unit directions in (Δx,Δz) cube-coordinate form
+      // (Δy is implied) — the real edge-adjacency of this ball packing.
+      const HEX_DELTAS: [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+      function hexNeighbors(r: number, c: number): Cell[] {
+        const { x, z } = localToCube(r, c);
+        const out: Cell[] = [];
+        for (const [dx, dz] of HEX_DELTAS) {
+          const cell = cubeToLocal(x + dx, z + dz);
+          if (cell) out.push(cell);
+        }
+        return out;
+      }
+
+      function hasRedCluster(g: Tile[][]): boolean {
+        const seen = new Set<string>();
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            if (g[r][c].color !== RED_IDX) continue;
+            const startKey = cellKey(r, c);
+            if (seen.has(startKey)) continue;
+            let size = 0;
+            const stack: Cell[] = [[r, c]];
+            seen.add(startKey);
+            while (stack.length) {
+              const [cr, cc] = stack.pop()!;
+              size++;
+              for (const [nr, nc] of hexNeighbors(cr, cc)) {
+                const key = cellKey(nr, nc);
+                if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
+                seen.add(key);
+                stack.push([nr, nc]);
+              }
+            }
+            if (size >= 4) return true;
+          }
+        return false;
+      }
+
+      function generateCleanBombBoard(): Tile[][] {
+        let g: Tile[][];
+        let tries = 0;
+        do {
+          g = boardFromBombDeck(shuffledBombDeck());
+          tries++;
+        } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
+        return g;
+      }
+
       function renderLegend() {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
       }
@@ -357,6 +482,13 @@ export function createCircleHexGame(): ShapeGame {
             `</g></svg>`;
         } else {
           el.style.background = COLORS[tile.color];
+          if (isBomb && tile.color === RED_IDX) {
+            const mark = document.createElement('div');
+            mark.className = 'hazard-mark';
+            mark.textContent = '!';
+            mark.style.fontSize = Math.round(size * 0.5) + 'px';
+            el.appendChild(mark);
+          }
         }
         if (opacity !== undefined) el.style.opacity = String(opacity);
         el.dataset.r = String(r);
@@ -408,6 +540,8 @@ export function createCircleHexGame(): ShapeGame {
       function qualifies(seed: Cell[], mask: Set<string> | null): boolean {
         if (anyBlank(seed)) return false;
         const c0 = effColor(grid[seed[0][0]][seed[0][1]]);
+        // Red hazard tiles are obstacles, not a matchable color.
+        if (isBomb && c0 === RED_IDX) return false;
         if (!seed.every(([r, c]) => effColor(grid[r][c]) === c0)) return false;
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
         return true;
@@ -509,7 +643,7 @@ export function createCircleHexGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
+        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || (isBomb && t.color === RED_IDX)));
       }
 
       function liveTiles(): LiveTile[] {
@@ -517,7 +651,9 @@ export function createCircleHexGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const t = grid[r][c];
-            if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+            if (isBlank(t)) continue;
+            if (isBomb && t.color === RED_IDX) continue;
+            live.push({ cell: [r, c], tile: t });
           }
         return live;
       }
@@ -554,14 +690,14 @@ export function createCircleHexGame(): ShapeGame {
       }
 
       function resetBoard() {
-        grid = generateCleanBoard();
+        grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
         bonusedSignatures = new Set();
         outlineTracker.reset();
         stuckKeys = null;
       }
 
       const controller = createGameController(refs, {
-        bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: '六边圆球',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
@@ -673,6 +809,17 @@ export function createCircleHexGame(): ShapeGame {
         }
       }
 
+      // Checked right after a drag lands, before normal move resolution —
+      // red tiles are never removed or flipped (see qualifies/findWholeLineBonuses
+      // guards above), so the only way their adjacency ever changes is a
+      // line shift landing two clusters next to each other.
+      function checkBombHazard(): boolean {
+        if (!isBomb || !hasRedCluster(grid)) return false;
+        render();
+        controller.forceEnd('红色炸弹相连', BOMB_HAZARD_PENALTY, '炸弹惩罚');
+        return true;
+      }
+
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
@@ -685,6 +832,7 @@ export function createCircleHexGame(): ShapeGame {
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
+        if (checkBombHazard()) return true;
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         controller.resolveMove(mask);
         return true;
@@ -747,7 +895,7 @@ export function createCircleHexGame(): ShapeGame {
 
       refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
         paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';
-        COLORS = PALETTES[paletteName];
+        COLORS = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
         (e.currentTarget as HTMLElement).classList.toggle('active', paletteName === 'colorblind');
         renderLegend();
         if (controller.started) render();
