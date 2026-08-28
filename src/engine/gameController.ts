@@ -42,6 +42,8 @@ function timeMultiplierFor(elapsedSec: number): number {
 }
 const NEVER_FLIPPED_PENALTY = 30;
 const REMAINING_PENALTY = 5;
+/** The reason string doFinish() passes for the player's own "结束" button — endGame() matches on this to skip the unflipped-tile penalties (see endGame). */
+const MANUAL_END_REASON = '手动结束';
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -225,9 +227,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const statusPercent = perf.valuePercent();
     const bonusMult = 1 + statusPercent / 100;
     const timeMult = timeMultiplierFor(elapsed);
+    // The never-flipped/flipped-but-remaining penalties exist to discourage
+    // ending the instant a board loads (banking the fast-finish time bonus
+    // for free) — they make sense for an *auto-detected* stalemate, but a
+    // player choosing to stop mid-run via the persistent "结束" button has
+    // already engaged with the board; charging them the full per-tile
+    // penalty for everything they hadn't gotten to yet can wipe out real,
+    // positive scoring (verified case: 8 raw points, 29 never-flipped tiles
+    // → −870, clamped to a flat 0) — which reads as "you scored nothing" on
+    // the results modal and, worse, on the share card meant to show off
+    // what was actually accomplished. So a manual end skips both penalties.
+    const isManualEnd = reason === MANUAL_END_REASON;
     const remaining = hooks.countRemainingTiles?.() ?? { neverFlipped: 0, flippedButRemaining: 0 };
-    const neverFlippedPenalty = remaining.neverFlipped * NEVER_FLIPPED_PENALTY;
-    const remainingPenalty = remaining.flippedButRemaining * REMAINING_PENALTY;
+    const neverFlippedPenalty = isManualEnd ? 0 : remaining.neverFlipped * NEVER_FLIPPED_PENALTY;
+    const remainingPenalty = isManualEnd ? 0 : remaining.flippedButRemaining * REMAINING_PENALTY;
     const total = Math.max(
       0,
       Math.round(score * timeMult * bonusMult) - neverFlippedPenalty - remainingPenalty - extraPenalty,
@@ -246,8 +259,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       row('得分', String(score)) +
       row(`有效得分率加成（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
       row('用时系数', '×' + timeMult) +
-      (remaining.neverFlipped > 0 ? row(`从未翻面 × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
-      (remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '') +
+      (!isManualEnd && remaining.neverFlipped > 0 ? row(`从未翻面 × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
+      (!isManualEnd && remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '') +
       (extraPenalty > 0 ? row(extraPenaltyLabel, '−' + extraPenalty) : '');
     const detailText = reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
     refs.endDetailEl.textContent = detailText;
@@ -443,7 +456,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   function doFinish() {
     if (!started || gameOver) return;
-    endGame('手动结束');
+    endGame(MANUAL_END_REASON);
   }
 
   function doFinishStuck() {
