@@ -7,6 +7,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
+import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -486,6 +487,18 @@ export function createCircleGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      function snapshotBoard(): BoardSnapshot {
+        const rowH = Math.sqrt(3);
+        const raw: RawCell[] = [];
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c <= r; c++) {
+            const t = grid[r][c];
+            if (isBlank(t)) continue;
+            raw.push({ kind: 'circle', cx: (c - r / 2) * 2, cy: r * rowH, r: 0.95, color: COLORS[effColor(t)] });
+          }
+        return packSnapshot(raw);
+      }
+
       function highlightStuck(cells: Cell[] | null) {
         stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
@@ -499,6 +512,7 @@ export function createCircleGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        shapeName: '圆球',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,
@@ -506,6 +520,7 @@ export function createCircleGame(): ShapeGame {
         buildCascadeConfig,
         findStuckGroups,
         countRemainingTiles,
+        snapshotBoard,
         highlightStuck,
         // Regular matches (run-of-4 and the "22"/"121" clusters) stay on
         // the board, so they get the persistent outline highlight, added

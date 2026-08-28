@@ -7,6 +7,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
+import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -523,6 +524,21 @@ export function createTriangleBigGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      function snapshotBoard(): BoardSnapshot {
+        const H = Math.sqrt(3) / 2;
+        const raw: RawCell[] = liveTiles().map(({ cell: [r, c], tile }) => {
+          const { i, p } = globalPos(r, c);
+          const up = p % 2 === 0;
+          const j = up ? p / 2 : (p - 1) / 2;
+          const xBase = -i / 2 + j;
+          const points: [number, number][] = up
+            ? [[xBase, i * H], [xBase - 0.5, (i + 1) * H], [xBase + 0.5, (i + 1) * H]]
+            : [[xBase + 0.5, (i + 1) * H], [xBase, i * H], [xBase + 1, i * H]];
+          return { kind: 'poly', points, color: COLORS[effColor(tile)] };
+        });
+        return packSnapshot(raw);
+      }
+
       function highlightStuck(cells: Cell[] | null) {
         stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
@@ -537,6 +553,7 @@ export function createTriangleBigGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        shapeName: '大三角',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,
@@ -544,6 +561,7 @@ export function createTriangleBigGame(): ShapeGame {
         buildCascadeConfig,
         findStuckGroups,
         countRemainingTiles,
+        snapshotBoard,
         highlightStuck,
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {

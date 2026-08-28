@@ -7,6 +7,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
+import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -417,6 +418,22 @@ export function createSquareGame(): ShapeGame {
         stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
 
+      function snapshotBoard(): BoardSnapshot {
+        const cells: SnapshotCell[] = [];
+        const half = 0.5 / BOARD_DIM - 0.01;
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < cols; c++) {
+            cells.push({
+              kind: 'rect',
+              cx: (c + 0.5) / BOARD_DIM,
+              cy: (r + 0.5) / BOARD_DIM,
+              half,
+              color: COLORS[effColor(grid[r][c])],
+            });
+          }
+        return { cells };
+      }
+
       function resetBoard() {
         rows = BOARD_DIM;
         cols = BOARD_DIM;
@@ -427,6 +444,7 @@ export function createSquareGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        shapeName: '方块',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,
@@ -434,6 +452,7 @@ export function createSquareGame(): ShapeGame {
         buildCascadeConfig,
         findStuckGroups,
         countRemainingTiles,
+        snapshotBoard,
         highlightStuck,
         // Line-bonus cells are removed from the board a moment later (see
         // applyLineBonus), so their coordinates aren't safe to outline —

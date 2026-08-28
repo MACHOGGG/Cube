@@ -28,6 +28,8 @@ export interface ShellRefs {
   endScoreEl: HTMLElement;
   endBreakdownEl: HTMLElement;
   endDetailEl: HTMLElement;
+  shareOverlay: HTMLElement;
+  shareImageEl: HTMLImageElement;
   buttons: {
     stop: HTMLButtonElement;
     finish: HTMLButtonElement;
@@ -38,6 +40,8 @@ export interface ShellRefs {
     endBack: HTMLButtonElement;
     /** Hidden until some tile is genuinely unable to ever flip again; the player decides when (or whether) to end the run over it, rather than the run ending on its own. */
     stuckEnd: HTMLButtonElement;
+    share: HTMLButtonElement;
+    shareClose: HTMLButtonElement;
     extra: Record<string, HTMLButtonElement>;
   };
 }
@@ -110,8 +114,18 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <p id="endDetail">共 0 步 · 用时 0:00 · 本机最佳 0</p>
         <div class="btn-row">
           <button class="secondary" id="endBackBtn">返回菜单</button>
+          <button class="secondary" id="shareBtn">分享战绩</button>
           <button class="primary" id="restartBtn">再来一局</button>
         </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="shareOverlay">
+      <div class="modal share-modal">
+        <h2>分享战绩</h2>
+        <img id="shareImage" alt="战绩卡片" />
+        <p class="hint">长按或右键图片即可保存</p>
+        <div class="btn-row"><button class="primary" id="shareCloseBtn">关闭</button></div>
       </div>
     </div>
   `;
@@ -141,6 +155,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     endScoreEl: req('endScore'),
     endBreakdownEl: req('endBreakdown'),
     endDetailEl: req('endDetail'),
+    shareOverlay: req('shareOverlay'),
+    shareImageEl: req('shareImage'),
     buttons: {
       stop: req('stopBtn'),
       finish: req('finishBtn'),
@@ -150,6 +166,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       restart: req('restartBtn'),
       endBack: req('endBackBtn'),
       stuckEnd: req('stuckEndBtn'),
+      share: req('shareBtn'),
+      shareClose: req('shareCloseBtn'),
       extra,
     },
   };

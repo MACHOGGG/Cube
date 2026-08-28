@@ -7,6 +7,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
+import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -477,6 +478,19 @@ export function createCircleHexGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      function snapshotBoard(): BoardSnapshot {
+        const rowH = Math.sqrt(3);
+        const raw: RawCell[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            const t = grid[r][c];
+            if (isBlank(t)) continue;
+            const { x, z } = localToCube(r, c);
+            raw.push({ kind: 'circle', cx: 2 * x + z, cy: rowH * z, r: 0.95, color: COLORS[effColor(t)] });
+          }
+        return packSnapshot(raw);
+      }
+
       function highlightStuck(cells: Cell[] | null) {
         stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
@@ -490,6 +504,7 @@ export function createCircleHexGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        shapeName: '六边圆球',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,
@@ -497,6 +512,7 @@ export function createCircleHexGame(): ShapeGame {
         buildCascadeConfig,
         findStuckGroups,
         countRemainingTiles,
+        snapshotBoard,
         highlightStuck,
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {

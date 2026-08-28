@@ -7,6 +7,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { floodFillSameColor } from '../engine/floodfill';
+import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -438,6 +439,19 @@ export function createSquareDiamondGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      function snapshotBoard(): BoardSnapshot {
+        const mid = (BOARD_DIM - 1) / 2;
+        const raw: RawCell[] = liveTiles().map(({ cell: [r, c], tile }) => ({
+          kind: 'rect',
+          cx: c - r,
+          cy: c + r - 2 * mid,
+          half: 0.47,
+          rotateDeg: 45,
+          color: COLORS[effColor(tile)],
+        }));
+        return packSnapshot(raw);
+      }
+
       function highlightStuck(cells: Cell[] | null) {
         stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
@@ -451,6 +465,7 @@ export function createSquareDiamondGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        shapeName: '菱形方块',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,
@@ -458,6 +473,7 @@ export function createSquareDiamondGame(): ShapeGame {
         buildCascadeConfig,
         findStuckGroups,
         countRemainingTiles,
+        snapshotBoard,
         highlightStuck,
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
         onCascadeStepRendered: ({ lineBonusGroups }) => {

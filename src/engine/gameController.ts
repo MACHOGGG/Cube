@@ -5,6 +5,7 @@ import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher } from './persistence';
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
+import { renderShareCard, type BoardSnapshot } from './shareCard';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -42,6 +43,8 @@ const REMAINING_PENALTY = 5;
 
 export interface GameControllerHooks {
   bestKey: string;
+  /** Human-readable name for the share card ("方块", "圆球", ...). */
+  shapeName: string;
   /**
    * Timed-challenge mode: the HUD clock counts down from this many seconds
    * instead of counting up, and the run ends on its own the instant it hits
@@ -109,6 +112,12 @@ export interface GameControllerHooks {
    * implement this (the penalty is simply skipped).
    */
   countRemainingTiles?(): { neverFlipped: number; flippedButRemaining: number };
+  /**
+   * A lightweight snapshot of the board's current appearance for the share
+   * card (see shareCard.ts) — called once right after a fresh board is dealt
+   * and once when the run ends. Omit if the shape doesn't support sharing.
+   */
+  snapshotBoard?(): BoardSnapshot;
 }
 
 export interface GameController {
@@ -173,6 +182,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // does NOT end because of it; the player ends it themselves via
   // stuckEndBtn, once they've decided nothing more is worth waiting for.
   let stuckGroups: Cell[][] = [];
+  let startSnapshot: BoardSnapshot | null = null;
+  let endSnapshot: BoardSnapshot | null = null;
+  let lastShareInfo: { totalScore: number; scoreRows: [string, string][]; detail: string } | null = null;
 
   function updateStuckState(groups: Cell[][]) {
     stuckGroups = groups;
@@ -195,6 +207,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     timer.start();
     hooks.render();
     updateStuckState([]);
+    startSnapshot = hooks.snapshotBoard?.() ?? null;
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
   }
@@ -226,9 +239,27 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       row('用时系数', '×' + timeMult) +
       (remaining.neverFlipped > 0 ? row(`从未翻面 × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
       (remaining.flippedButRemaining > 0 ? row(`翻面未收尾 × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '');
-    refs.endDetailEl.textContent =
-      reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
+    const detailText = reason + ' · 共 ' + moves + ' 步 · 用时 ' + formatClock(elapsed) + ' · 本机最佳 ' + best;
+    refs.endDetailEl.textContent = detailText;
     refs.endOverlay.classList.add('show');
+
+    endSnapshot = hooks.snapshotBoard?.() ?? null;
+    lastShareInfo = {
+      totalScore: total,
+      scoreRows: [
+        ['得分', String(score)],
+        [`得分率${statusPercent}%`, '×' + bonusMult.toFixed(2)],
+        ['用时', formatClock(elapsed)],
+      ],
+      detail: detailText,
+    };
+  }
+
+  function doShare() {
+    if (!lastShareInfo) return;
+    const dataUrl = renderShareCard({ shapeName: hooks.shapeName, ...lastShareInfo }, startSnapshot, endSnapshot);
+    refs.shareImageEl.src = dataUrl;
+    refs.shareOverlay.classList.add('show');
   }
 
   // A chain reaction is revealed one beat at a time instead of jumping
@@ -373,6 +404,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   refs.buttons.continueBtn.addEventListener('click', doResume);
   refs.buttons.finish.addEventListener('click', doFinish);
   refs.buttons.stuckEnd.addEventListener('click', doFinishStuck);
+  refs.buttons.share.addEventListener('click', doShare);
+  refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));
 
   return {
     get score() {
