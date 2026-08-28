@@ -168,6 +168,89 @@ h1 {
   .flip-in { animation: none; }
 }
 
+/* ---------- juice.ts: shared drag/score/removal game-feel ---------- */
+
+/* Drag anticipation (pointerdown) and landing (a completed drag settles) —
+   applied to the whole board-wrap by drag.ts, so every shape's board reacts
+   the same way with zero per-shape code. Landing anchors at the bottom edge
+   so the squash reads as "pressed into the surface" rather than a uniform
+   shrink. */
+.juice-anticipate { animation: juice-anticipate 120ms ease-out; }
+@keyframes juice-anticipate {
+  0%   { transform: scale(1, 1); }
+  100% { transform: scale(1.008, 0.975); }
+}
+.juice-land { animation: juice-land 260ms cubic-bezier(0.22, 1, 0.36, 1); transform-origin: 50% 100%; }
+@keyframes juice-land {
+  0%   { transform: scale(1, 1); }
+  30%  { transform: scale(1.03, 0.955); }
+  100% { transform: scale(1, 1); }
+}
+
+/* Screen shake, graded by event size — an ordinary match never shakes at
+   all (see gameController.ts), a chained step gets "light", a whole-line
+   bonus gets "heavy". Translate *and* rotate together, or it reads as a
+   display glitch instead of a force. */
+@keyframes juice-shake-light {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(-2px, 1px) rotate(-0.3deg); }
+  50% { transform: translate(2px, -1px) rotate(0.3deg); }
+  75% { transform: translate(-1px, 1px) rotate(-0.2deg); }
+}
+@keyframes juice-shake-medium {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  20% { transform: translate(-4px, 2px) rotate(-0.6deg); }
+  40% { transform: translate(4px, -2px) rotate(0.6deg); }
+  60% { transform: translate(-3px, 1px) rotate(-0.4deg); }
+  80% { transform: translate(3px, -1px) rotate(0.4deg); }
+}
+@keyframes juice-shake-heavy {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  15% { transform: translate(-7px, 3px) rotate(-1deg); }
+  30% { transform: translate(6px, -3px) rotate(1deg); }
+  45% { transform: translate(-6px, 2px) rotate(-0.8deg); }
+  60% { transform: translate(5px, -2px) rotate(0.8deg); }
+  75% { transform: translate(-3px, 1px) rotate(-0.4deg); }
+  90% { transform: translate(2px, -1px) rotate(0.3deg); }
+}
+.juice-shake-light { animation: juice-shake-light 260ms ease-out; }
+.juice-shake-medium { animation: juice-shake-medium 340ms ease-out; }
+.juice-shake-heavy { animation: juice-shake-heavy 440ms ease-out; }
+
+/* Punch/overshoot pop — the score reel and gain badge use this on every
+   scoring event, cheap and always-on (unlike shake/particles, which are
+   reserved for bigger moments so they stay special). */
+.juice-punch { animation: juice-punch 420ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes juice-punch {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.24); }
+  100% { transform: scale(1); }
+}
+
+/* Particle burst — plain divs, positioned/colored/timed inline by
+   spawnParticles(), animated purely by this one keyframe and self-removed
+   by the JS timer that spawned them. */
+.juice-particle {
+  position: absolute; width: 7px; height: 7px; border-radius: 2px;
+  transform: translate(-50%, -50%);
+  pointer-events: none; z-index: 40;
+  animation-name: juice-particle-burst;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes juice-particle-burst {
+  0%   { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3) rotate(200deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .juice-anticipate, .juice-land,
+  .juice-shake-light, .juice-shake-medium, .juice-shake-heavy,
+  .juice-punch, .juice-particle {
+    animation: none;
+  }
+}
+
 /* The "you just scored this" highlight around a matched/bonused group: three
    quick flashes over 2.5 seconds, then gone. Sits in board-local pixel
    coordinates, sized/positioned by each shape from its own cell geometry. */

@@ -6,6 +6,7 @@ import { saveBestIfHigher } from './persistence';
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
+import { playHit, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -270,6 +271,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // flip triggered another wave. A whole-line bonus's cells are already
   // dot-faced by definition (see isFullDotMatch), so it only needs the
   // shorter gap, not a highlight-then-flip beat of its own.
+  // Reads a scored cell's *actual* rendered position straight off its own
+  // DOM element (every shape already tags its tiles with data-r/data-c) —
+  // gameController has no idea how any particular shape maps (r, c) to
+  // pixels, but it doesn't need to: the element that's already on screen
+  // knows. Returns board-local center coordinates, or null if the cell
+  // isn't currently rendered (e.g. a shape that hides removed cells).
+  function cellCenterPx([r, c]: Cell): [number, number] | null {
+    const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+    if (!el) return null;
+    const board = refs.boardEl.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    return [box.left - board.left + box.width / 2, box.top - board.top + box.height / 2];
+  }
+
+  const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#BE5762';
+  const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#5C8A72';
+
   function resolveMove(mask: Set<string>) {
     if (gameOver || paused || resolving) return;
     moves++;
@@ -335,16 +353,44 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       }
       totalRaw += s.points;
       const delta = s.points * multiplier * comboMult;
+      // Captured before comboMult advances for the *next* step — this
+      // step's own tier is "how deep into this move's chain are we",
+      // which is exactly what comboMult already tracks at this point.
+      const tierComboMult = comboMult;
       comboMult *= CASCADE_COMBO_FACTOR;
+      const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
       // A bonus (the whole-line, 36-point event) gets its own distinct
       // double-pulse — it's the bigger moment — while an ordinary match gets
       // one light buzz, right as its highlight appears.
-      vibrate(s.lineBonusGroups.length ? [25, 40, 25] : 15);
+      vibrate(isBonus ? [25, 40, 25] : 15);
+      // Graded feedback: an ordinary first-in-move match only gets a tone —
+      // shake and particles are reserved for a chained step or a bonus, so
+      // they stay a "big moment" signal instead of firing on every score.
+      playHit(tierComboMult, isBonus ? 'bonus' : 'match');
+      const shakeTier: ShakeTier | null = isBonus ? 'heavy' : tierComboMult > 3 ? 'medium' : tierComboMult > 1 ? 'light' : null;
+      if (shakeTier) {
+        screenShake(refs.boardWrap, shakeTier);
+        const originCell = (isBonus ? s.lineBonusGroups[0] : s.matchGroups[0])?.[0];
+        const pos = originCell ? cellCenterPx(originCell) : null;
+        if (pos) {
+          spawnParticles(refs.boardEl, pos[0], pos[1], {
+            color: isBonus ? accent2Color() : accentColor(),
+            count: isBonus ? 16 : shakeTier === 'medium' ? 12 : 8,
+            spread: isBonus ? 64 : 44,
+          });
+        }
+      }
 
       hooks.onCascadeStep?.(groups);
       hooks.render();
       hooks.onCascadeStepRendered?.(groups);
+
+      // A brief extra hold right at the moment of impact — hit-stop — for
+      // anything above the smallest, most common case: nothing animates
+      // differently, the reveal just visibly catches for a beat before
+      // continuing, scaled with how big the moment is.
+      const hitStopMs = reduceMotion ? 0 : isBonus ? 70 : tierComboMult > 1 ? 40 : 0;
 
       const proceed = () => {
         s.commit();
@@ -353,6 +399,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           score += delta;
           scoreReel.showGain(delta);
           scoreReel.setValue(score);
+          punch(refs.scoreReelEl);
         }
         // Only a match step's commit() actually changes anything (the
         // flip) — a bonus step's commit() is a no-op (its cells were
@@ -362,9 +409,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // ghost/collapse elements onCascadeStepRendered just appended for
         // it, before a single frame of them ever painted.
         if (s.matchGroups.length) hooks.render();
-        setTimeout(step, s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS);
+        setTimeout(step, (s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS) + hitStopMs);
       };
-      if (s.matchGroups.length) setTimeout(proceed, HIGHLIGHT_LEAD_MS);
+      if (s.matchGroups.length) setTimeout(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);
       else proceed();
     };
     step();
