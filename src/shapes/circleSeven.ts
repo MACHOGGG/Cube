@@ -57,13 +57,6 @@ const PATTERNS: PatternDef[] = [
       return { kind: 'circle' as const, cx, cy, r: 0.95 };
     }),
   },
-  {
-    label: '小三角',
-    cells: ([[0, 0], [1, 0], [0, 1], [2, 0], [1, 1], [0, 2]] as const).map(([r, c]) => {
-      const [cx, cy] = iconPos(r, c);
-      return { kind: 'circle' as const, cx, cy, r: 0.95 };
-    }),
-  },
 ];
 
 type Fam = 'A' | 'B' | 'R';
@@ -118,19 +111,6 @@ function rhombus22A(r: number, c: number): Cell[] | null {
   const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
   return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
 }
-// A small "billiard rack" triangle of 6 balls: apex (r,c), then rows of 2
-// and 3 balls below it. cell(K,j) = (r+K-j, c+j) for row K=0..2, position
-// j=0..K — every cell in this formula is a real lattice neighbor of its
-// row-mate and of the cells above/below it (verified: each step is either
-// the A, B, or combined A-B lattice direction, all length 2R), and each row
-// K sits at a constant r+c (so a real *screen-horizontal* row, symmetric
-// left-right under the apex) — unlike the old 4-cell "1-2-1" zigzag, which
-// didn't read as a coherent shape on this board's ball-packing lattice.
-function smallTriangle(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [];
-  for (let k = 0; k <= 2; k++) for (let j = 0; j <= k; j++) cells.push([r + k - j, c + j]);
-  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
-}
 function allClusters(): Cell[][] {
   const groups: Cell[][] = [];
   for (let r = 0; r < DIM; r++)
@@ -139,8 +119,6 @@ function allClusters(): Cell[][] {
       if (b) groups.push(b);
       const a = rhombus22A(r, c);
       if (a) groups.push(a);
-      const t = smallTriangle(r, c);
-      if (t) groups.push(t);
     }
   return groups;
 }
@@ -202,9 +180,9 @@ export function createCircleSevenGame(): ShapeGame {
         tagline: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
         startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
         hint:
-          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"22"菱形沿同一菱形方向扩大同样按扩大后的数量得分，同色的"1-2-3"小三角（6 颗球，顶点朝向随位置自然变化）固定得 6 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
+          '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"22"菱形沿同一菱形方向扩大同样按扩大后的数量得分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白球时结束，结算当时的分数。',
         assumptions:
-          '7 种口味色，每色 7 枚，共 49 枚（菱形棋盘，由两个三角形拼成，十三行 1/2/3/4/5/6/7/6/5/4/3/2/1 枚）；每种口味的点色分布为：其余 6 色中的每一色至少 1 枚，凑满 7 枚——保证全场没有正反面完全相同颜色的球。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法基本一致，额外得分图案为"22"菱形与"1-2-3"小三角（6 球）。',
+          '7 种口味色，每色 7 枚，共 49 枚（菱形棋盘，由两个三角形拼成，十三行 1/2/3/4/5/6/7/6/5/4/3/2/1 枚）；每种口味的点色分布为：其余 6 色中的每一色至少 1 枚，凑满 7 枚——保证全场没有正反面完全相同颜色的球。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
       });
@@ -444,10 +422,6 @@ export function createCircleSevenGame(): ShapeGame {
               };
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
               matches.push({ cells: region, points: Math.max(4, region.length) });
-            }
-            const t = smallTriangle(r, c);
-            if (t && qualifies(t, mask)) {
-              matches.push({ cells: t, points: t.length });
             }
           }
         return matches;

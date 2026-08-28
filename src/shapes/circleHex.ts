@@ -75,7 +75,7 @@ const PATTERNS: PatternDef[] = [
   },
   {
     label: '1-2-1',
-    cells: ([[0, 0], [1, 0], [1, 1], [2, 1]] as const).map(([dz, dx]) => {
+    cells: ([[0, 0], [1, -1], [1, 0], [2, -1]] as const).map(([dz, dx]) => {
       const [cx, cy] = iconPos(dz, dx);
       return { kind: 'circle' as const, cx, cy, r: 0.95 };
     }),
@@ -143,7 +143,14 @@ function lineFor(fam: Fam, r: number, c: number): Line {
 // cells once trimming kicks in).
 const RHOMBUS_B_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 0], [1, 1]];
 const RHOMBUS_A_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 1], [1, 2]];
-const DIAMOND_121_OFFSETS: [number, number][] = [[0, 0], [1, 0], [1, 1], [2, 1]];
+// (dz,dx) pairs verified to actually plot as a symmetric diamond (top point,
+// two side-by-side middle points, bottom point centered under the top) under
+// this board's cube-coordinate screen mapping cx=2R·dx+R·dz — copying
+// circle.ts's own plain (r,c) offsets [[0,0],[1,0],[1,1],[2,1]] verbatim
+// doesn't work here: that board's ballCenter uses a different (r,c)->screen
+// formula, and the naive offsets drift the whole shape rightward as it goes
+// down (screen x: 0,1,3,4) instead of narrowing back to a point.
+const DIAMOND_121_OFFSETS: [number, number][] = [[0, 0], [1, -1], [1, 0], [2, -1]];
 
 function clusterFromCube(x0: number, z0: number, offsets: [number, number][]): Cell[] | null {
   const cells: Cell[] = [];
