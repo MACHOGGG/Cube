@@ -647,11 +647,22 @@ button:hover { filter: brightness(1.05); }
 /* Pulls the caption up closer to its step counter so the two read as one
    grouped header, distinct from the looser gap down to the board itself. */
 .tutorial-step-label + .tutorial-caption { margin-top: -8px; }
-.tutorial-board-wrap { position: relative; width: 100%; max-width: 320px; margin: 0 auto; aspect-ratio: 1 / 1; }
+/* overflow:hidden matters for the triangle tutorial's camera zoom/pan
+   (#board gets scaled up via CSS transform there, which would otherwise
+   spill past this wrap's edges) — harmless for the other tutorials, which
+   never transform #board past its own box. */
+.tutorial-board-wrap { position: relative; width: 100%; max-width: 320px; margin: 0 auto; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 16px; }
 .tutorial-board {
   position: relative; width: 100%; height: 100%; background: var(--board-bg);
   border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
 }
+/* The real triangle board's own .tri .fill border (triangle.css) is a
+   near-invisible 10%-opacity hairline — fine at the live game's board size,
+   but each tile shrinks a lot more inside the tutorial's zoomed-out full-
+   board view, where that same hairline reads as no border at all. Scoped
+   to .tutorial-board specifically so the live game's own boards (which
+   share the exact same .tri/.fill classes) are untouched. */
+.tutorial-board .tri .fill { box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.4); }
 /* Plays once when a beat's board first settles in — switching beats reads
    as a soft transition instead of an instant swap. */
 .tutorial-board.beat-enter { animation: tutorial-beat-enter 380ms ease-out both; }
