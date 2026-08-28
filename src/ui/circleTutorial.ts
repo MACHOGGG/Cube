@@ -154,7 +154,13 @@ const BEATS: Beat[] = [
       [diamondCells, 0, 1],
     ]),
     goal: 'sequence',
-    targetCells: [],
+    // Shown as the dashed highlight box *before* the first drag — without
+    // this, renderHighlightBox's `!cells.length` guard skipped drawing
+    // anything at all until playSequence's own per-group highlight kicked
+    // in mid-reveal, leaving the player with zero visual cue to drag in the
+    // first place. The union's bounding box spans all three patterns, which
+    // is exactly what the reveal is about to walk through.
+    targetCells: [...runCells, ...clusterCells, ...diamondCells],
     sequenceGroups: [runCells, clusterCells, diamondCells],
   },
   { captionKey: 'circleFlipTeach', grid: withActive(flipTeachCells, 3, 1), goal: 'any', targetCells: flipTeachCells },
