@@ -59,7 +59,7 @@ function showMenu() {
     onSignIn: () => showAuthModal('login'),
     onExclusive: showExclusivePage,
     onHowToSlide: showTutorialPicker,
-  });
+  }, currentLang);
 }
 
 // Which shape a card id's tutorial covers, if any — layout games (the

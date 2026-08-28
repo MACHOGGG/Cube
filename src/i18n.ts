@@ -6,6 +6,7 @@ export const TUTORIAL_SEEN_KEY = 'slides_tutorial_seen';
 export interface I18nStrings {
   langName: string;
   pickerTagline: string;
+  homeTagline: string;
   skip: string;
   next: string;
   prev: string;
@@ -33,6 +34,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   en: {
     langName: 'English',
     pickerTagline: 'Choose your language',
+    homeTagline: 'Slide · Score · Clear',
     skip: 'Skip tutorial',
     next: 'Next',
     prev: 'Back',
@@ -56,6 +58,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   fr: {
     langName: 'Français',
     pickerTagline: 'Choisissez votre langue',
+    homeTagline: 'Glisser · Marquer · Effacer',
     skip: 'Passer le tutoriel',
     next: 'Suivant',
     prev: 'Précédent',
@@ -79,6 +82,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   zhHant: {
     langName: '繁體中文',
     pickerTagline: '選擇語言',
+    homeTagline: '滑動－得分－消除',
     skip: '跳過教學',
     next: '下一條',
     prev: '上一條',
@@ -102,6 +106,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   zhHans: {
     langName: '简体中文',
     pickerTagline: '选择语言',
+    homeTagline: '滑动－得分－消除',
     skip: '跳过教学',
     next: '下一条',
     prev: '上一条',

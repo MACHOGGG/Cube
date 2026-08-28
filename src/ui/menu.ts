@@ -1,6 +1,7 @@
 import type { ShapeCardMeta } from '../shapes/types';
 import { loadBest } from '../engine/persistence';
 import { BOMB_TIER_META, type BombTier } from '../engine/bomb';
+import { STRINGS, type Lang } from '../i18n';
 
 export interface MenuHandlers {
   onSelectBase: (id: ShapeCardMeta['id']) => void;
@@ -40,11 +41,13 @@ export function renderMenu(
   baseCards: ShapeCardMeta[],
   layoutCards: ShapeCardMeta[],
   handlers: MenuHandlers,
+  lang: Lang,
 ) {
+  const s = STRINGS[lang];
   container.innerHTML = `
     <div class="app">
-      <h1>Slides</h1>
-      <p class="tag-line">选择一种棋盘形状开始挑战</p>
+      <h1 class="home-title-glow">Slides</h1>
+      <p class="tag-line">${s.homeTagline}</p>
 
       <div class="menu-section-label">基础玩法</div>
       <div class="menu-grid-2col" id="baseGrid"></div>
