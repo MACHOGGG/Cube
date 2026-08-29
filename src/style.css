@@ -725,7 +725,37 @@ button:hover { filter: brightness(1.05); }
   .home-nav { transition: none; }
 }
 
+/* ---------- 个人主页 (profile page) ---------- */
+/* The page is a stack of destinations under the Slides masthead: one wide
+   sign-in pill, the language/tutorial pair, then the perks panel. */
+.profile-page { gap: 14px; }
+.profile-pill {
+  width: 100%; flex: none; border: none; border-radius: 999px; padding: 15px 22px;
+  background: #C7A18C; color: #fff; cursor: pointer;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.18rem; letter-spacing: 0.04em;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+.profile-pill--wide { max-width: 340px; margin: 6px auto 2px; }
+.profile-pill--rose { background: #C88A92; }
+.profile-pill:hover { filter: brightness(1.04); }
+.profile-pill:active { transform: translateY(1px) scale(0.99); }
+.profile-pill-row { display: flex; gap: 12px; width: 100%; }
+.profile-pill-row .profile-pill { flex: 1; min-width: 0; }
+
+/* The perks live on their own soft panel, so the coming-soon list reads as
+   one block rather than as more page-level rows. */
+.genius-panel {
+  width: 100%; box-sizing: border-box; margin-top: 4px;
+  background: #F5F2EE; border-radius: 20px; padding: 16px 14px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.genius-panel .menu-section-label { margin: 2px 0 2px; }
+.profile-row--back { justify-content: center; margin-top: 4px; }
+.profile-row--back .profile-row-label { flex: none; text-align: center; }
+
 /* ---------- 注册/登录 tabs (profile page) ---------- */
+.auth-modal { max-width: 320px; }
 .auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
 .auth-tab {
   flex: 1; background: var(--board-bg); color: var(--ink-soft); border: 1px solid transparent;

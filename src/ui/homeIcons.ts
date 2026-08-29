@@ -28,6 +28,7 @@ export const HOME_COLORS = {
   moreCircle: '#8B5CD9',
   moreTriangle: '#4A6FC4',
   navBlue: '#2E63C4',
+  navInk: '#2A3A78',
   navGray: '#B0B0B0',
 } as const;
 
@@ -319,11 +320,11 @@ export function moreLayoutCard(shape: BaseShape): string {
 // bottom nav
 // ---------------------------------------------------------------------------
 
-/** 个人主页 — a filled blue disc with a person knocked out of it. */
+/** 个人主页 — one navy bust: an arch with a flat base, the head marked by a
+ *  white ring near its crown rather than drawn as a separate blob. */
 export const ICON_NAV_PROFILE = svg(
-  `<circle cx="50" cy="50" r="46" fill="${C.navBlue}"/>` +
-    `<circle cx="50" cy="38" r="11" fill="none" stroke="#fff" stroke-width="5"/>` +
-    `<path d="M23 88 C23 68 34 58 50 58 C66 58 77 68 77 88" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>`,
+  `<path d="M8 97 V52 A42 42 0 0 1 92 52 V97 Z" fill="${C.navInk}"/>` +
+    `<circle cx="50" cy="35" r="11.5" fill="none" stroke="#fff" stroke-width="4.5"/>`,
 );
 
 /** 记录与排名 — a gray triangle with list rules across it. */
