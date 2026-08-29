@@ -9,9 +9,14 @@
     "build": "tsc -b && vite build",
     "build:artifact": "tsc -b && vite build --mode artifact --outDir dist-artifact && node scripts/build-artifact.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios": "npm run ios:sync && cap open ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "playwright": "^1.62.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
