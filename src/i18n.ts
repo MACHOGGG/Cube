@@ -10,6 +10,8 @@ export interface I18nStrings {
   skip: string;
   next: string;
   prev: string;
+  replay: string;
+  doneBtn: string;
   pause: string;
   resume: string;
   run4: string;
@@ -123,6 +125,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     skip: 'Skip tutorial',
     next: 'Next',
     prev: 'Back',
+    replay: 'Replay',
+    doneBtn: 'Done',
     pause: 'Pause',
     resume: 'Resume',
     run4: 'Slide a row or column to line up 4 tiles of the same color',
@@ -223,6 +227,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     skip: 'Passer le tutoriel',
     next: 'Suivant',
     prev: 'Précédent',
+    replay: 'Rejouer',
+    doneBtn: 'Terminé',
     pause: 'Pause',
     resume: 'Reprendre',
     run4: 'Faites glisser une ligne ou une colonne pour aligner 4 cases de la même couleur',
@@ -323,6 +329,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     skip: '跳過教學',
     next: '下一條',
     prev: '上一條',
+    replay: '再一次',
+    doneBtn: '完成',
     pause: '暫停',
     resume: '繼續',
     run4: '滑動一整行或一整列，湊齊 4 個同色方塊',
@@ -423,6 +431,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     skip: '跳过教学',
     next: '下一条',
     prev: '上一条',
+    replay: '再一次',
+    doneBtn: '完成',
     pause: '暂停',
     resume: '继续',
     run4: '滑动一整行或一整列，凑齐 4 个同色方块',

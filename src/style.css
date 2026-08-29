@@ -713,3 +713,38 @@ button:hover { filter: brightness(1.05); }
 }
 .lang-switch-item:hover { border-color: var(--accent); }
 .lang-switch-item.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+
+/* ---------- story tutorials (watch-only keyframe playback) ---------- */
+/* The board takes no input at all — the player watches each numbered step
+   play out and steps through with the buttons below. */
+.story-tut { align-items: center; }
+.story-stage { width: 100%; display: flex; justify-content: center; overflow: hidden; margin-top: 6vh; }
+.story-board { position: relative; transform-origin: top center; pointer-events: none; flex: 0 0 auto; }
+.story-cell { position: absolute; }
+.story-cell svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.story-controls { margin-top: 18px; }
+
+/* The pre-move hint: the same stretch-out / recoil nudge the language
+   picker's arrows use, pointing along the coming slide. */
+.story-arrow { position: absolute; width: 74px; height: 40px; z-index: 4; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35)); }
+.story-arrow svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.story-arrow-nudge { display: block; width: 100%; height: 100%; transform-origin: 20% 50%; animation: story-arrow-nudge 1.1s ease-in-out infinite; }
+@keyframes story-arrow-nudge {
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  35% { transform: translateX(9%) scaleX(1.22); }
+  65% { transform: translateX(-2%) scaleX(0.94); }
+}
+
+/* The scoring cue: a checkmark that blinks in a few times, then holds. */
+.story-check { position: absolute; width: 44px; height: 44px; z-index: 5; transform: translate(-50%, -50%); animation: story-check-blink 1.9s ease-in-out both; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3)); }
+.story-check svg { width: 100%; height: 100%; display: block; }
+@keyframes story-check-blink {
+  0%, 20%, 44%, 68% { opacity: 0; }
+  10%, 32%, 56%, 100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-arrow-nudge { animation: none; }
+  .story-check { animation: none; }
+}
+
+.story-controls .icon-btn { white-space: nowrap; }
