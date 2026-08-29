@@ -188,12 +188,27 @@ h1 {
 .ghost { opacity: 0.55; pointer-events: none; }
 .dot-circle { position: absolute; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.16); }
 
+/* Three reds in a row is one drag from ending the run, so they blink. The
+   inset shadow follows border-radius, which is what a square tile or a ball
+   needs; a triangle is a clip-path over a rectangular box, so it gets a
+   stroked outline of its own silhouette instead (.hazard-ring below) and
+   this rule is turned off for it. */
 .hazard-warn { animation: hazard-warn-pulse 0.9s ease-in-out infinite; }
 @keyframes hazard-warn-pulse {
   0%, 100% { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.25); }
   50% { box-shadow: inset 0 0 0 4px rgba(255,255,255,0.95), 0 0 10px 2px rgba(198,59,59,0.75); }
 }
-@media (prefers-reduced-motion: reduce) { .hazard-warn { animation: none; box-shadow: inset 0 0 0 3px rgba(255,255,255,0.9); } }
+.tri.hazard-warn { animation: none; box-shadow: none; }
+.hazard-ring { stroke: rgba(255,255,255,0.95); animation: hazard-ring-flash 0.9s ease-in-out infinite; }
+@keyframes hazard-ring-flash {
+  0%, 100% { stroke-opacity: 0.15; }
+  50% { stroke-opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hazard-warn { animation: none; box-shadow: inset 0 0 0 3px rgba(255,255,255,0.9); }
+  .tri.hazard-warn { box-shadow: none; }
+  .hazard-ring { animation: none; stroke-opacity: 1; }
+}
 
 /* Bomb-mode hazard tile: a red tile's front face never flips, so this mark
    never needs to animate — it's a static "avoid me" glyph. Font size is set
@@ -1019,3 +1034,20 @@ html.lang-locked, html.lang-locked body {
   width: min(560px, 92vw); max-height: 76vh; overflow-y: auto; overscroll-behavior: contain;
   cursor: default;
 }
+
+/* A game screen has to fit its board, the score/rate/clock HUD and the
+   pattern hints in one viewport — having to scroll before the board is even
+   fully reachable is the worst possible first move. So the play screen runs
+   tighter than the rest of the app: smaller masthead, denser HUD, less air
+   between blocks. (The pause/finish/palette/back row is below the board;
+   see gameShell.) */
+.app--game { padding-top: 14px; gap: 9px; }
+.app--game h1 { font-size: 1.22rem; }
+.app--game .tag-line { font-size: 0.78rem; margin: -4px 0 0; }
+.app--game .hud-cell { padding: 6px 8px; }
+.app--game .hud-cell .k { font-size: 9.5px; margin-bottom: 1px; }
+.app--game .hud-cell .v { font-size: 1.08rem; }
+.app--game .pattern-hint { gap: 8px; margin-top: 0; }
+.app--game .pattern-icon svg { width: 26px; height: 26px; }
+.app--game .legend { gap: 6px; }
+.app--game .controls { margin-top: 4px; }

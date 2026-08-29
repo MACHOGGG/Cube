@@ -303,7 +303,10 @@ export function createCircleSevenGame(): ShapeGame {
         // barely half the column wide. Scale off the width instead and let
         // the wrapper take the height the diamond actually needs — the same
         // thing the V-shaped triangle board does for the opposite reason.
-        R = width / 13.86; // 12 half-steps across + one ball (1.86R) of margin
+        // 12 half-steps across + one ball (1.86R) of margin, then eased
+        // back a notch so the diamond and the HUD above it share one
+        // screen instead of the board alone filling it.
+        R = (width / 13.86) * 0.9;
         rowH = R * Math.sqrt(3);
         const height = 12 * rowH + 2 * R;
         boardLeft = width / 2;

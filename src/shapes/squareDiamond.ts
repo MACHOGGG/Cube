@@ -92,6 +92,9 @@ const PATTERNS: PatternDef[] = [
   {
     label: '1-2-1',
     extent: ICON_EXTENT,
+    // Its four tiles stand apart, so hollow outlines leave the hole in the
+    // middle looking like a fifth tile — hatching settles which is which.
+    hatched: true,
     // Drawn a touch larger and pulled in from its true 2-cell spread: at
     // icon size the real gaps read as four unrelated dots rather than one
     // diamond.

@@ -520,6 +520,7 @@ export function createTriangleGame(): ShapeGame {
         c: number,
         opacityOverride?: number,
         offset?: [number, number],
+        warn = false,
       ): HTMLElement {
         const geo = triGeometry(r, c);
         const [offX, offY] = offset ?? [0, 0];
@@ -643,6 +644,39 @@ export function createTriangleGame(): ShapeGame {
             el.appendChild(mark);
           }
         }
+        if (warn) {
+          // A triangle's element is a rectangle with a clip-path, so the
+          // shared .hazard-warn box-shadow would flash that rectangle —
+          // reading as a stray shape swelling over its neighbours. Its own
+          // silhouette, stroked as an SVG polygon (the same technique the
+          // blank and dot faces use), is what should blink.
+          const cen = centroid(pts);
+          const WARN_SCALE = 0.9;
+          const ringPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * WARN_SCALE, cen[1] + (y - cen[1]) * WARN_SCALE] as [number, number]);
+          const svgNS = 'http://www.w3.org/2000/svg';
+          const svg = document.createElementNS(svgNS, 'svg');
+          svg.setAttribute('viewBox', '0 0 100 100');
+          svg.setAttribute('preserveAspectRatio', 'none');
+          svg.style.position = 'absolute';
+          svg.style.left = '0';
+          svg.style.top = '0';
+          svg.style.width = '100%';
+          svg.style.height = '100%';
+          svg.style.overflow = 'visible';
+          svg.style.pointerEvents = 'none';
+          const poly = document.createElementNS(svgNS, 'polygon');
+          poly.setAttribute(
+            'points',
+            ringPts.map(([x, y]) => `${(((x - minX) / w) * 100).toFixed(2)},${(((y - minY) / h) * 100).toFixed(2)}`).join(' '),
+          );
+          poly.setAttribute('class', 'hazard-ring');
+          poly.setAttribute('fill', 'none');
+          poly.setAttribute('stroke-width', '4');
+          poly.setAttribute('stroke-linejoin', 'round');
+          poly.setAttribute('vector-effect', 'non-scaling-stroke');
+          svg.appendChild(poly);
+          el.appendChild(svg);
+        }
         if (opacityOverride !== undefined) el.style.opacity = String(opacityOverride);
         el.dataset.r = String(r);
         el.dataset.c = String(c);
@@ -661,10 +695,9 @@ export function createTriangleGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const key = cellKey(r, c);
-            const el = makeTriEl(grid[r][c], r, c);
+            const el = makeTriEl(grid[r][c], r, c, undefined, undefined, !!warnKeys?.has(key));
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
-            if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             refs.boardEl.appendChild(el);
           }
         }

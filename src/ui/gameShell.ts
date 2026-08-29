@@ -73,16 +73,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     .join('');
 
   container.innerHTML = `
-    <div class="app${meta.wideBoard ? ' app-wide' : ''}">
+    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
-
-      <div class="controls">
-        <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
-        <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
-        ${extraButtonsHtml}
-        <button class="icon-btn" id="backBtn">${s.backToMenu}</button>
-      </div>
 
       <div class="hud">
         <div class="hud-cell score-cell">
@@ -102,6 +95,16 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
       <div class="legend" id="legend"></div>
       <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
+
+      <!-- Below the board on purpose: these are the once-a-run controls, and
+           keeping them out of the play area is what lets the board and the
+           HUD share one screen without scrolling. -->
+      <div class="controls">
+        <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
+        <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
+        ${extraButtonsHtml}
+        <button class="icon-btn" id="backBtn">${s.backToMenu}</button>
+      </div>
     </div>
 
     <div class="overlay opaque show" id="startOverlay">

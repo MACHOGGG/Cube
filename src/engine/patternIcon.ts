@@ -29,7 +29,18 @@ export interface PatternDef {
    * it each icon is fitted individually (the original behaviour).
    */
   extent?: number;
+  /**
+   * Fill each tile with fine diagonal lines instead of leaving it hollow.
+   * For a pattern whose tiles don't touch (the diamond board's 1-2-1), an
+   * outline-only drawing lets the gap between them read as one more tile;
+   * hatching says which squares are the pattern and which is just space.
+   */
+  hatched?: boolean;
 }
+
+// Hatch fills live in <defs> and are referenced by id, so every icon on a
+// page needs its own.
+let hatchSeq = 0;
 
 function bbox(cells: IconCell[]) {
   const pts: [number, number][] = [];
@@ -48,7 +59,7 @@ function bbox(cells: IconCell[]) {
 const VIEW = 40;
 const MARGIN = 3;
 
-function renderPatternIconSvg(cells: IconCell[], extent?: number): string {
+function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: boolean): string {
   if (!cells.length) return '';
   const { minX, maxX, minY, maxY } = bbox(cells);
   const w = maxX - minX || 1;
@@ -73,7 +84,20 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number): string {
       return `<polygon points="${pts}"/>`;
     })
     .join('');
-  return `<svg viewBox="0 0 ${VIEW} ${VIEW}" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round">${shapes}</svg>`;
+  if (!hatched) {
+    return `<svg viewBox="0 0 ${VIEW} ${VIEW}" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round">${shapes}</svg>`;
+  }
+  const id = `pat-hatch-${hatchSeq++}`;
+  // Sized in viewBox units against a 26-30px render, so the strokes have
+  // to be generous or they vanish at icon size.
+  const defs =
+    `<defs><pattern id="${id}" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
+    `<line x1="0" y1="0" x2="0" y2="3.2" stroke="currentColor" stroke-width="1.5" opacity="0.8"/>` +
+    `</pattern></defs>`;
+  return (
+    `<svg viewBox="0 0 ${VIEW} ${VIEW}" width="30" height="30" fill="url(#${id})" stroke="currentColor" ` +
+    `stroke-width="2.2" stroke-linejoin="round">${defs}${shapes}</svg>`
+  );
 }
 
 /** Renders the full hint row: one small outline icon + label per pattern, for the given shape's own set of scoring patterns. */
@@ -81,7 +105,7 @@ export function renderPatternHintRow(patterns: PatternDef[], lang: Lang): string
   return patterns
     .map((p) => {
       const label = p.labelKey ? (STRINGS[lang][p.labelKey] as string) : p.label;
-      return `<span class="pattern-icon">${renderPatternIconSvg(p.cells, p.extent)}<span class="pattern-icon-label">${label}</span></span>`;
+      return `<span class="pattern-icon">${renderPatternIconSvg(p.cells, p.extent, p.hatched)}<span class="pattern-icon-label">${label}</span></span>`;
     })
     .join('');
 }
