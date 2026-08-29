@@ -508,7 +508,7 @@ button:hover { filter: brightness(1.05); }
    which is also where the timed and bomb sections stop being collapsed. */
 .home-page { gap: 0; padding-bottom: 120px; }
 /* The icon grid wants far more width than the standard reading column. */
-.app.home-page--wide { max-width: 760px; }
+.app.home-page--wide { max-width: 800px; }
 .home-head { text-align: center; margin: 4px 0 22px; }
 .home-title {
   font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600;
@@ -521,7 +521,12 @@ button:hover { filter: brightness(1.05); }
   display: grid; grid-template-columns: repeat(2, 1fr);
   gap: 26px 22px; align-items: center; justify-items: center;
 }
-.home-page--wide .home-grid { grid-template-columns: repeat(3, 1fr); gap: 30px 26px; }
+/* Wide screens lay the page out as three centred rows rather than a rigid
+   3-column grid: three base games, three clocks, then the bomb card plus the
+   three "more layouts" cards — so the last row is deliberately wider than
+   the two above it, the way the design sheet has it. */
+.home-page--wide .home-grid { display: flex; flex-direction: column; gap: 30px; }
+.home-row { display: flex; align-items: center; justify-content: center; gap: 30px; width: 100%; }
 
 /* Every tile is the same square box whatever it draws inside, so a circle, a
    triangle and a square all sit on one baseline grid. */
@@ -535,7 +540,8 @@ button:hover { filter: brightness(1.05); }
 }
 .home-icon-btn:hover { filter: none; }
 .home-icon-btn:active { transform: none; }
-.home-page--wide .home-icon-btn { max-width: 215px; }
+/* Sized so the four-card bottom row still fits the page's own width. */
+.home-page--wide .home-icon-btn { max-width: 170px; }
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
 
@@ -575,12 +581,9 @@ button:hover { filter: brightness(1.05); }
    targets, and enough room for the 90s row to open into three chips. */
 .bomb-panel--big { width: min(78vw, 360px); border-radius: 28px; }
 
-/* Desktop only: the burst card labels the section and the panel holds the
-   options, side by side under the 3-wide rows above. */
-.home-bomb-star { cursor: default; }
-.home-bomb-wrap { width: 100%; max-width: 215px; }
-.home-grid-spacer { display: none; }
-.home-page--wide .home-grid-spacer { display: block; }
+/* Desktop only: the panel is itself one card at the head of the bottom row,
+   with every tier's chips directly clickable. */
+.home-bomb-card { width: 100%; max-width: 170px; flex: none; }
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 168px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }

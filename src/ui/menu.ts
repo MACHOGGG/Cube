@@ -8,7 +8,6 @@ import {
   ICON_BASE_CIRCLE,
   ICON_BASE_TRIANGLE,
   ICON_TIMED_COMBINED,
-  ICON_BOMB_STAR,
   ICON_BOMB_90S,
   bombChip,
   moreLayoutCard,
@@ -96,12 +95,26 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
 
+  // The wide layout is three explicit centred rows — three base games, three
+  // clocks, then the bomb card beside the three "more layouts" cards — so the
+  // last row runs wider than the two above it, exactly as the sheet has it.
+  // The phone keeps its plain two-column grid, so there every card is simply
+  // appended in order.
+  const newRow = (): HTMLElement => {
+    if (!wide) return grid;
+    const row = document.createElement('div');
+    row.className = 'home-row';
+    grid.appendChild(row);
+    return row;
+  };
+
   // ---- row 1: the three base games -------------------------------------
+  const baseRow = newRow();
   for (const shape of SHAPES) {
     const card = layout.base[shape];
     const btn = iconButton(BASE_ICON[shape], shapeName(lang, card.id, card.name));
     btn.addEventListener('click', () => handlers.onSelectBase(card.id));
-    grid.appendChild(btn);
+    baseRow.appendChild(btn);
   }
 
   // ---- row 2: timed challenge ------------------------------------------
@@ -114,11 +127,12 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
 
   if (wide) {
     // Expanded: one clock per shape, each starting that game immediately.
+    const timedRow = newRow();
     for (const shape of SHAPES) {
       const card = layout.base[shape];
       const btn = iconButton(timedCard(shape), `${s.sectionTimed} · ${shapeName(lang, card.id, card.name)}`);
       btn.addEventListener('click', () => handlers.onTimedFor(card.id));
-      grid.appendChild(btn);
+      timedRow.appendChild(btn);
     }
   } else {
     // Collapsed: one clock standing in for all three, which flies to the
@@ -197,19 +211,15 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     return panel;
   }
 
+  // The last row: on a wide screen the bomb card leads the three "more
+  // layouts" cards, so all four sit on one row (the sheet's bottom row);
+  // on a phone the collapsed card just continues the two-column grid.
+  const lastRow = newRow();
   if (wide) {
-    const star = document.createElement('div');
-    star.className = 'home-icon-btn home-bomb-star';
-    star.innerHTML = ICON_BOMB_STAR;
-    grid.appendChild(star);
     const wrap = document.createElement('div');
-    wrap.className = 'home-bomb-wrap';
+    wrap.className = 'home-bomb-card';
     wrap.appendChild(buildBombPanel());
-    grid.appendChild(wrap);
-    // Keeps the pair centred under the 3-wide rows above, matching the sheet.
-    const spacer = document.createElement('div');
-    spacer.className = 'home-grid-spacer';
-    grid.appendChild(spacer);
+    lastRow.appendChild(wrap);
   } else {
     const btn = document.createElement('button');
     btn.className = 'home-icon-btn home-bomb-mini';
@@ -227,7 +237,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     grid.appendChild(btn);
   }
 
-  // ---- row 4: more layouts ---------------------------------------------
+  // ---- more layouts (finishing the last row on a wide screen) -----------
   // One card per base shape, holding that shape's own layout variants:
   // square has a single one (so it starts straight away), circle and
   // triangle have two apiece and open a picker.
@@ -254,6 +264,6 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         })),
       });
     });
-    grid.appendChild(btn);
+    lastRow.appendChild(btn);
   }
 }
