@@ -219,10 +219,19 @@ function alarmClock(shape: BaseShape, inner = ''): string {
   );
 }
 
+/** The piece each timed clock carries on its face — that game's own shape in
+ *  its own colour, so the three read apart at a glance even though they share
+ *  the clock hardware. */
+const TIMED_PIECE: Record<BaseShape, string> = {
+  square: `<rect x="28" y="29" width="44" height="44" rx="7" fill="${C.brick}"/>`,
+  circle: `<circle cx="50" cy="63" r="23" fill="${C.purple}"/>`,
+  triangle: `<path d="${roundedPolyPath([[50, 66], [67, 93], [33, 93]], 5)}" fill="${C.green}"/>`,
+};
+
 /** PC row: the clock takes the *card's own* shape, so the three timed entries
  *  read as "the square game, timed", etc. even before the inner glyph. */
 export function timedCard(shape: BaseShape): string {
-  return alarmClock(shape);
+  return alarmClock(shape, TIMED_PIECE[shape]);
 }
 
 /** Mobile home: one clock standing in for all three timed games, with a
@@ -235,7 +244,7 @@ export const ICON_TIMED_COMBINED = alarmClock(
 /** Mobile picker: one clock per timed game — the same three cards the wide
  *  layout shows in its timed row. */
 export function timedOption(shape: BaseShape): string {
-  return alarmClock(shape);
+  return alarmClock(shape, TIMED_PIECE[shape]);
 }
 
 // ---------------------------------------------------------------------------

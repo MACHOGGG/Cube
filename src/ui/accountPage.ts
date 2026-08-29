@@ -63,8 +63,13 @@ export function renderAccountPage(
           <span class="profile-row-value">${s.comingSoon}</span>
         </button>
         ${privileges.map(lockedRow).join('')}
-        <button class="profile-row profile-row--back" id="backBtn">${s.back}</button>
       </section>
+
+      <button class="profile-row" id="contactRow">
+        <span class="profile-row-label">${s.contactUs}</span>
+        <span class="profile-row-value">›</span>
+      </button>
+      <button class="profile-row profile-row--back" id="backBtn">${s.back}</button>
     </div>
   `;
 
@@ -97,6 +102,26 @@ export function renderAccountPage(
     });
   }
 
+  /** 联系我们 — the destination has nothing in it yet, so the link opens an
+   *  empty panel rather than pretending to have content. */
+  function openContact() {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>${s.contactUs}</h2>
+        <div class="contact-empty"></div>
+        <div class="btn-row"><button class="primary" id="contactClose">${s.closeBtn}</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#contactClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
   const on = (id: string, fn: () => void) =>
     container.querySelector<HTMLButtonElement>('#' + id)?.addEventListener('click', fn);
   on('loginBtn', () => openAuth(initialTab));
@@ -105,5 +130,6 @@ export function renderAccountPage(
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);
   on('becomeGeniusBtn', () => openAuth('register'));
+  on('contactRow', openContact);
   on('backBtn', handlers.onBack);
 }

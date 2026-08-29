@@ -62,6 +62,7 @@ export interface I18nStrings {
   tabLogin: string;
   accountComingSoon: string;
   loginGateway: string;
+  contactUs: string;
   tutorialShort: string;
   geniusPrivilegesTitle: string;
   privilegesSoon: string;
@@ -177,6 +178,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     tabLogin: 'Log in',
     accountComingSoon: 'A full account system is coming soon',
     loginGateway: 'Sign-in gateway',
+    contactUs: 'Contact us',
     tutorialShort: 'Tutorial',
     geniusPrivilegesTitle: 'Slides Genius perks',
     privilegesSoon: '…more coming soon',
@@ -282,6 +284,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     tabLogin: 'Se connecter',
     accountComingSoon: 'Un système de compte complet arrive bientôt',
     loginGateway: 'Accès au compte',
+    contactUs: 'Nous contacter',
     tutorialShort: 'Tutoriel',
     geniusPrivilegesTitle: 'Avantages Slides Génie',
     privilegesSoon: '…encore plus à venir',
@@ -387,6 +390,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     tabLogin: '登入',
     accountComingSoon: '敬請期待完整的帳戶系統',
     loginGateway: '登入通道',
+    contactUs: '聯絡我們',
     tutorialShort: '教學',
     geniusPrivilegesTitle: 'Slides 天才專屬特權',
     privilegesSoon: '……敬請期待',
@@ -492,6 +496,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     tabLogin: '登录',
     accountComingSoon: '敬请期待完整的账户系统',
     loginGateway: '登录通道',
+    contactUs: '联系我们',
     tutorialShort: '教学',
     geniusPrivilegesTitle: 'Slides 天才专属特权',
     privilegesSoon: '……敬请期待',
