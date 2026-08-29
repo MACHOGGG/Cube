@@ -89,11 +89,48 @@ export const ICON_BASE_CIRCLE = svg(
     miniCircle(62, 60, 11.5, C.white),
 );
 
+/** Traces a polygon whose corners are rounded off by `r`: each corner is cut
+ *  back along both of its edges and bridged by a quadratic through the
+ *  original point, so the piece keeps its exact silhouette with soft tips. */
+function roundedPolyPath(pts: [number, number][], r: number): string {
+  const n = pts.length;
+  const toward = (p: [number, number], q: [number, number]): [number, number] => {
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const k = Math.min(r, len / 2) / len;
+    return [p[0] + dx * k, p[1] + dy * k];
+  };
+  const f = (v: number) => v.toFixed(1);
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const a = toward(p, pts[(i - 1 + n) % n]);
+    const b = toward(p, pts[(i + 1) % n]);
+    d += (i === 0 ? `M${f(a[0])} ${f(a[1])}` : ` L${f(a[0])} ${f(a[1])}`);
+    d += ` Q${f(p[0])} ${f(p[1])} ${f(b[0])} ${f(b[1])}`;
+  }
+  return d + ' Z';
+}
+
+/** One of the three pieces inside the base-triangle card: a tall triangle
+ *  with softly rounded corners and the board's own white outline, anchored on
+ *  its flat edge (`edgeY`). `up=false` inverts it. */
+function tileTriangle(cx: number, edgeY: number, half: number, h: number, fill: string, up = true): string {
+  const pts: [number, number][] = up
+    ? [[cx, edgeY - h], [cx + half, edgeY], [cx - half, edgeY]]
+    : [[cx, edgeY + h], [cx + half, edgeY], [cx - half, edgeY]];
+  return `<path d="${roundedPolyPath(pts, 5.5)}" fill="${fill}" stroke="#fff" stroke-width="3.4"
+    stroke-linejoin="round"/>`;
+}
+
 export const ICON_BASE_TRIANGLE = svg(
   baseShape('triangle', C.gray) +
-    miniTriangle(31, 68, 13, C.red) +
-    miniTriangle(50, 68, 13, C.purple, false) +
-    miniTriangle(69, 68, 13, C.green),
+    // Three big interlocking pieces, the middle one inverted and riding a
+    // little higher, so the row nests the way a real board row does.
+    tileTriangle(32.5, 79, 13.5, 26, C.red) +
+    tileTriangle(50, 50, 13.5, 26, C.purple, false) +
+    tileTriangle(67.5, 79, 13.5, 26, C.green),
 );
 
 // ---------------------------------------------------------------------------
