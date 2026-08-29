@@ -6,6 +6,11 @@ export interface BottomNavHandlers {
   onRecords: () => void;
 }
 
+/** Which of the two entry points the app is currently showing, so the bar can
+ *  lift that icon and so tapping it again reads as "close this" rather than
+ *  "open the thing I'm already looking at". */
+export type NavTab = 'profile' | 'records' | null;
+
 let barEl: HTMLElement | null = null;
 let detachScroll: (() => void) | null = null;
 
@@ -81,4 +86,12 @@ export function mountBottomNav(handlers: BottomNavHandlers, lang: Lang): void {
  *  scrolls at all. */
 export function refreshBottomNav(): void {
   window.dispatchEvent(new Event('resize'));
+}
+
+/** Lifts and darkens whichever entry point is open (null puts both back
+ *  down). Purely visual — main.ts owns what the second tap actually does. */
+export function setActiveNavTab(tab: NavTab): void {
+  if (!barEl) return;
+  barEl.querySelector('#navProfile')?.classList.toggle('home-nav-btn--active', tab === 'profile');
+  barEl.querySelector('#navRecords')?.classList.toggle('home-nav-btn--active', tab === 'records');
 }

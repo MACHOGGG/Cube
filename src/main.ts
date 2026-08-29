@@ -3,7 +3,7 @@ import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
-import { mountBottomNav, refreshBottomNav } from './ui/bottomNav';
+import { mountBottomNav, refreshBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
@@ -63,6 +63,20 @@ const recordSources: RecordSource[] = [
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
+// Which bottom-nav destination is on screen, so its icon can stay lifted and
+// so tapping the same icon again closes it back to the home page instead of
+// re-opening what the player is already looking at.
+let navTab: NavTab = null;
+// Set whenever a game is started from one of the home page's pop-up pickers:
+// the key of the card that opened it, so "back" from that game can land on
+// the home page and re-open the same picker rather than just dumping the
+// player on the grid.
+let reopenPickerKey: string | null = null;
+
+function setNavTab(tab: NavTab) {
+  navTab = tab;
+  setActiveNavTab(tab);
+}
 
 function teardown() {
   if (activeDestroy) {
@@ -78,21 +92,30 @@ function showMenu() {
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game);
     },
-    onSelectLayout: (id) => {
+    onSelectLayout: (id, reopenKey) => {
       const game = layoutGames.find((g) => g.card.id === id);
-      if (game) showGame(game);
+      if (game) showGame(game, undefined, undefined, reopenKey);
     },
-    onTimedFor: (id) => {
+    onTimedFor: (id, reopenKey) => {
       const game = games.find((g) => g.card.id === id);
-      if (game) showGame(game, { timeLimitSec: 60 });
+      if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
-    onBombFor: (tier, id) => {
+    onBombFor: (tier, id, reopenKey) => {
       const pool = tier === 'advanced' ? bombLayoutGames : games;
       const game = pool.find((g) => g.card.id === id);
-      if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
+      if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, undefined, reopenKey);
     },
   }, currentLang);
+  setNavTab(null);
   refreshBottomNav();
+  // Re-opening a picker works by replaying the tap on the card that owns it:
+  // the freshly rendered card is a real, correctly positioned element, so the
+  // fly-to-centre animation has a valid origin to start from.
+  if (reopenPickerKey) {
+    const key = reopenPickerKey;
+    reopenPickerKey = null;
+    root.querySelector<HTMLElement>(`[data-reopen="${key}"]`)?.click();
+  }
 }
 
 function showAccountPage(tab: AuthTab) {
@@ -109,12 +132,14 @@ function showAccountPage(tab: AuthTab) {
     },
     currentLang,
   );
+  setNavTab('profile');
   refreshBottomNav();
 }
 
 function showRecordsPage() {
   teardown();
   renderRecordsPage(root, recordSources, showMenu, currentLang);
+  setNavTab('records');
   refreshBottomNav();
 }
 
@@ -178,9 +203,17 @@ function showComingSoon(title: string) {
   root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
 }
 
-function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
+function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, reopenKey?: string) {
   const fullOpts: ShapeGameOpts = { ...opts, lang: currentLang };
-  const backFn = onBack ?? showMenu;
+  // Going back lands on the home page and, when this game was chosen from one
+  // of its pop-up pickers, re-opens that picker — so "back" always means the
+  // screen the player actually came from.
+  const backFn =
+    onBack ??
+    (() => {
+      reopenPickerKey = reopenKey ?? null;
+      showMenu();
+    });
   const mountNow = () => {
     activeDestroy = game.mount(root, backFn, fullOpts);
   };
@@ -215,8 +248,9 @@ function afterLangChosen(lang: Lang) {
   currentLang = lang;
   mountBottomNav(
     {
-      onProfile: () => showAccountPage('login'),
-      onRecords: showRecordsPage,
+      // Tapping the icon of the page you are already on closes it.
+      onProfile: () => (navTab === 'profile' ? showMenu() : showAccountPage('login')),
+      onRecords: () => (navTab === 'records' ? showMenu() : showRecordsPage()),
     },
     lang,
   );

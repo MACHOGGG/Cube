@@ -19,9 +19,12 @@ import {
 
 export interface MenuHandlers {
   onSelectBase: (id: string) => void;
-  onSelectLayout: (id: string) => void;
-  onTimedFor: (id: string) => void;
-  onBombFor: (tier: BombTier, id: string) => void;
+  /** `reopenKey`, when present, is the `data-reopen` value of the card whose
+   *  pop-up picker launched this game — main.ts hands it back to showMenu()
+   *  so "back" from that game re-opens the same picker. */
+  onSelectLayout: (id: string, reopenKey?: string) => void;
+  onTimedFor: (id: string, reopenKey?: string) => void;
+  onBombFor: (tier: BombTier, id: string, reopenKey?: string) => void;
 }
 
 /**
@@ -106,7 +109,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     SHAPES.map((shape) => ({
       glyph: timedOption(shape),
       label: shapeName(lang, layout.base[shape].id, layout.base[shape].name),
-      onPick: () => handlers.onTimedFor(layout.base[shape].id),
+      onPick: () => handlers.onTimedFor(layout.base[shape].id, 'timed'),
     }));
 
   if (wide) {
@@ -121,6 +124,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     // Collapsed: one clock standing in for all three, which flies to the
     // middle of the screen and splits into the three as it lands.
     const btn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed');
+    btn.dataset.reopen = 'timed';
     btn.addEventListener('click', () =>
       openCenterPicker({ originEl: btn, title: s.sectionTimed, options: timedOptions(), split: true }),
     );
@@ -131,7 +135,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // The panel is the same markup wherever it appears — inline beside the
   // burst on a wide screen, blown up in the centre of a phone — so its three
   // tiers stay in the same order and only its size changes.
-  function buildBombPanel(): HTMLElement {
+  function buildBombPanel(reopenKey?: string): HTMLElement {
     const panel = document.createElement('div');
     panel.className = 'bomb-panel';
 
@@ -142,7 +146,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       const chip = iconButton(bombChip(shape, 'basic'), `${s.bombBasicTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
       chip.addEventListener('click', (e) => {
         e.stopPropagation();
-        handlers.onBombFor('basic', card.id);
+        handlers.onBombFor('basic', card.id, reopenKey);
       });
       basicRow.appendChild(chip);
     }
@@ -164,7 +168,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         const chip = iconButton(bombChip(shape, 'basic'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
         chip.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          handlers.onBombFor('timed', card.id);
+          handlers.onBombFor('timed', card.id, reopenKey);
         });
         timedRow.appendChild(chip);
       }
@@ -179,7 +183,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       const chip = iconButton(bombChip(shape, 'advanced'), `${s.bombAdvancedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
       chip.addEventListener('click', (e) => {
         e.stopPropagation();
-        handlers.onBombFor('advanced', card.id);
+        handlers.onBombFor('advanced', card.id, reopenKey);
       });
       advRow.appendChild(chip);
     }
@@ -204,10 +208,11 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     const btn = document.createElement('button');
     btn.className = 'home-icon-btn home-bomb-mini';
     btn.setAttribute('aria-label', s.bombBasicTitle);
+    btn.dataset.reopen = 'bomb';
     btn.appendChild(buildBombPanel());
     wireTapFeedback(btn);
     btn.addEventListener('click', () =>
-      openCenterPicker({ originEl: btn, title: s.bombBasicTitle, panel: buildBombPanel() }),
+      openCenterPicker({ originEl: btn, title: s.bombBasicTitle, panel: buildBombPanel('bomb') }),
     );
     grid.appendChild(btn);
   }
@@ -221,6 +226,8 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     const cards = layout.moreLayouts[shape];
     if (!cards.length) continue;
     const btn = iconButton(moreLayoutCard(shape), `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
+    const reopenKey = 'more-' + shape;
+    btn.dataset.reopen = reopenKey;
     btn.addEventListener('click', () => {
       if (cards.length === 1) {
         handlers.onSelectLayout(cards[0].id);
@@ -233,7 +240,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
           glyph: moreLayoutCard(shape),
           label: shapeName(lang, c.id, c.name),
           showLabel: true,
-          onPick: () => handlers.onSelectLayout(c.id),
+          onPick: () => handlers.onSelectLayout(c.id, reopenKey),
         })),
       });
     });

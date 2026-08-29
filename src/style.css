@@ -625,309 +625,44 @@ button:hover { filter: brightness(1.05); }
 .profile-row-label { flex: 1; font-weight: 600; font-size: 0.92rem; }
 .profile-row-value { color: var(--ink-faint); font-size: 0.82rem; }
 
-/* ---------- records list ---------- */
-.record-list { display: flex; flex-direction: column; gap: 6px; }
-.record-row {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px;
-}
-.record-row--top { border-color: var(--accent); background: var(--accent-soft); }
-.record-rank {
-  flex: 0 0 22px; text-align: center; font-family: 'JetBrains Mono', monospace;
-  font-size: 0.8rem; color: var(--ink-faint); font-variant-numeric: tabular-nums;
-}
-.record-name { flex: 1; font-weight: 600; font-size: 0.9rem; }
-.record-mode { color: var(--ink-faint); font-weight: 400; font-size: 0.78rem; }
-.record-score {
-  font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; font-variant-numeric: tabular-nums;
-  color: var(--ink-soft);
-}
+/* ---------- records & rankings ---------- */
+/* Two panels, the amber one for this device's records and the periwinkle one
+   reserved for rankings. Side by side on a desktop, stacked on a phone, and
+   the rankings half keeps its full size even though it has nothing to show
+   yet — the space is part of the design, not something to collapse away. */
+.records-page { padding-bottom: 120px; }
+.records-panels { display: grid; grid-template-columns: 1fr; gap: 22px; }
+@media (min-width: 720px) { .records-panels { grid-template-columns: 1fr 1fr; gap: 40px; } }
 
-/* ---------- 天才入口 privilege list ---------- */
-.privilege-list { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 20px; }
-.privilege-item {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-  padding: 13px 16px; color: var(--ink);
+.records-panel {
+  border-radius: 26px; padding: 30px 26px; min-height: 46vh;
+  display: flex; flex-direction: column; gap: 18px;
 }
-.privilege-item .glyph {
-  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink);
-  display: flex; align-items: center; justify-content: center;
-}
-.privilege-item .glyph svg { width: 16px; height: 16px; }
-.privilege-item .label { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.95rem; }
-.privilege-item.soon {
-  justify-content: center; border-style: dashed; color: var(--ink-faint);
-  font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .04em;
-}
+.records-panel--records { background: #F2C39B; }
+.records-panel--ranks { background: #9BA5D6; }
 
-/* ---------- 注册/登录 modal ---------- */
-.auth-modal { max-width: 320px; }
-.auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
-.auth-tab {
-  flex: 1; background: var(--board-bg); color: var(--ink-soft); border: 1px solid transparent;
-  border-radius: 100px; padding: 9px 12px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.9rem;
-}
-.auth-tab.active { background: var(--accent-soft); color: var(--accent-ink); }
-.auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
-.auth-body .tag-line { margin: 0; }
+/* The ruled lines the sheet draws: an empty slot waiting for an entry. */
+.records-rule { height: 7px; border-radius: 100px; background: rgba(255, 255, 255, 0.92); flex: 0 0 auto; }
 
-/* ---------- language picker ---------- */
-/* This screen is the very first thing a new player sees, before any board
-   — so unlike the rest of the app it gets its own soft atmospheric wash
-   instead of the plain --bg, and a title that glows on its own rather than
-   a caption spelling out "swipe a strip to choose".
-
-   It is also one locked screen: there is nothing below the grid, so there is
-   nothing to scroll to. The page is pinned to the viewport (dvh, so a mobile
-   browser's collapsing toolbar can't leave the bottom row cut off) and
-   renderLanguageSelect holds a scroll lock on <html> for as long as it is
-   mounted. Its own small top/bottom padding replaces .app's 92px bottom
-   gutter, which exists only to clear the persistent bottom nav — a bar this
-   screen never shows. */
-.lang-select-page {
-  position: relative; justify-content: flex-start; gap: 12px;
-  height: 100vh; height: 100dvh;
-  padding-top: 3vh; padding-bottom: 3vh;
+.records-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: rgba(255, 255, 255, 0.92); border: none; border-radius: 100px;
+  padding: 9px 18px; cursor: pointer; flex: 0 0 auto; color: var(--ink);
+  font-family: 'Karla', sans-serif; text-align: left;
+  transition: transform 140ms ease, background 160ms ease;
 }
-/* overscroll-behavior stops a touch device rubber-banding (or triggering
-   pull-to-refresh) on a page that has nowhere to scroll — overflow:hidden
-   alone doesn't prevent that gesture. */
-html.lang-locked, html.lang-locked body {
-  overflow: hidden; height: 100%; overscroll-behavior: none;
+.records-row:hover { background: #fff; filter: none; }
+.records-row:active { transform: scale(0.985); }
+.records-row-name { font-weight: 700; font-size: 0.92rem; }
+.records-row-mode { color: var(--ink-faint); font-weight: 400; font-size: 0.8rem; }
+.records-row-score {
+  font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 0.95rem;
 }
-.lang-select-page::before {
-  content: ''; position: absolute; inset: -28px -16px auto -16px; height: 320px; z-index: -1;
-  background: radial-gradient(ellipse at 50% 0%, var(--accent-soft) 0%, transparent 70%);
-  opacity: 0.9; pointer-events: none;
+.records-locked {
+  margin: auto 0 0; text-align: center; color: rgba(255, 255, 255, 0.9);
+  font-size: 0.82rem; letter-spacing: 0.04em;
 }
-.lang-title {
-  font-size: 2.1rem; letter-spacing: 0.01em; margin-bottom: 4px;
-  animation: lang-title-glow 3.2s ease-in-out infinite;
-}
-@keyframes lang-title-glow {
-  0%, 100% { text-shadow: 0 0 0 transparent; }
-  50% { text-shadow: 0 0 22px var(--score-glow), 0 0 2px var(--accent); }
-}
-@media (prefers-reduced-motion: reduce) { .lang-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
-
-/* A 9-row x 4-column letter grid styled like the game's own tiles — the
-   portrait counterpart of the original 4x9 layout. Only 4 of the 9 rows are
-   draggable (horizontally, one row at a time); each such row gets its own
-   invisible hit-target + a small blinking arrow marking exactly which gap
-   to watch, positioned as free-floating overlays rather than real flex
-   siblings inside the row (see languageSelect.ts's module comment for why:
-   an in-flow arrow was found to throw off the ghost-fill offset math). */
-.lang-board-wrap { position: relative; display: flex; justify-content: center; margin-top: 8px; }
-/* Sized to whichever runs out first: the height left after the title and
-   the page's own padding, a 640px cap so the tiles don't get silly on a
-   tall desktop window, or the viewport width — that last term is what keeps
-   the board narrow enough for the right-hand chevrons to still land inside
-   the column on a narrow phone, since the board's width is derived from its
-   height through the 4/9 ratio. */
-.lang-board--vertical {
-  position: relative; display: flex; flex-direction: row; gap: 4px; aspect-ratio: 4 / 9;
-  height: min(calc(92vh - 64px), 640px, calc((100vw - 116px) * 2.25));
-  height: min(calc(92dvh - 64px), 640px, calc((100vw - 116px) * 2.25));
-}
-.lang-col--vertical { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
-
-.lang-row-hit { position: absolute; touch-action: none; cursor: grab; z-index: 3; }
-.lang-row-hit--active { cursor: grabbing; }
-
-/* Two hints per draggable row: the in-grid arrowhead sitting on the gap its
-   letter crosses, and a double chevron parked just off the board's right
-   edge marking the whole row as draggable. Both are positioned by JS against
-   --lang-cell-size (measured from a real tile), so they keep the reference
-   layout's proportions at any viewport size. */
-.lang-row-arrow, .lang-row-edge-arrow {
-  position: absolute; pointer-events: none; z-index: 4; display: flex;
-}
-.lang-row-arrow { transform: translate(-50%, -50%); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
-.lang-row-arrow svg { width: calc(var(--lang-cell-size, 60px) * 0.62); height: auto; display: block; }
-.lang-row-edge-arrow { transform: translateY(-50%); color: var(--ink-soft); opacity: 0.75; }
-.lang-row-edge-arrow svg { width: calc(var(--lang-cell-size, 60px) * 0.42); height: auto; display: block; }
-
-/* The "slight motion" both arrows keep: a stretch out along the direction
-   they point, a small recoil past neutral, then settle — anchored at the
-   trailing edge (transform-origin: right) so the arrowhead itself is what
-   reaches, rather than the whole glyph sliding back and forth. */
-.lang-arrow-nudge {
-  display: flex; transform-origin: 100% 50%;
-  animation: lang-arrow-nudge 1.5s ease-in-out infinite;
-}
-@keyframes lang-arrow-nudge {
-  0%, 100% { transform: translateX(0) scaleX(1); }
-  30% { transform: translateX(-14%) scaleX(1.18); }
-  62% { transform: translateX(3%) scaleX(0.92); }
-}
-@media (prefers-reduced-motion: reduce) { .lang-arrow-nudge { animation: none; } }
-
-.lang-cell {
-  aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700;
-  /* Sized off a measured tile so a letter fills the tile the way the
-     reference layout has it, instead of a viewport unit that drifts out of
-     proportion as the board scales. 0.7 puts a latin cap at roughly half the
-     tile's height and a CJK glyph at roughly two thirds, matching the
-     reference; a full em still leaves room either side of the widest glyph. */
-  font-size: calc(var(--lang-cell-size, 60px) * 0.7); line-height: 1;
-  font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.25); box-shadow: var(--shadow); user-select: none;
-}
-/* Wraparound preview tiles: absolutely placed on the board itself (not
-   inside a one-tile-wide column), so they can sit at the dragged row's own
-   vertical position and trail it in step. */
-.lang-cell.ghost { position: absolute; pointer-events: none; }
-.lang-cell--solved { box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--score-glow); }
-/* A completed word's cells pulse (scale + intensifying glow) for a couple
-   of beats before the app hands off to that language — the same
-   "celebrate before you go" beat the real game's own scoring gives a
-   match, rather than an instant cut. */
-.lang-cell--solving { animation: lang-cell-solve-pulse 320ms ease-in-out 2; position: relative; z-index: 2; }
-@keyframes lang-cell-solve-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 6px 1px var(--score-glow); transform: scale(1); }
-  50% { box-shadow: 0 0 0 3px #fff, 0 0 16px 6px var(--score-glow); transform: scale(1.1); }
-}
-@media (prefers-reduced-motion: reduce) { .lang-cell--solving { animation: none; box-shadow: 0 0 0 3px #fff, 0 0 12px 3px var(--score-glow); } }
-
-/* ---------- tutorial ---------- */
-.tutorial-caption {
-  text-align: center; font-size: 0.95rem; color: var(--ink); min-height: 2.6em;
-  display: flex; align-items: center; justify-content: center; padding: 0 8px;
-}
-.tutorial-step-label {
-  text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint);
-}
-/* Pulls the caption up closer to its step counter so the two read as one
-   grouped header, distinct from the looser gap down to the board itself. */
-.tutorial-step-label + .tutorial-caption { margin-top: -8px; }
-/* overflow:hidden matters for the triangle tutorial's camera zoom/pan
-   (#board gets scaled up via CSS transform there, which would otherwise
-   spill past this wrap's edges) — harmless for the other tutorials, which
-   never transform #board past its own box. */
-.tutorial-board-wrap { position: relative; width: 100%; max-width: 320px; margin: 0 auto; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 16px; }
-.tutorial-board {
-  position: relative; width: 100%; height: 100%; background: var(--board-bg);
-  border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
-}
-/* The real triangle board's own .tri .fill border (triangle.css) is a
-   near-invisible 10%-opacity hairline — fine at the live game's board size,
-   but each tile shrinks a lot more inside the tutorial's zoomed-out full-
-   board view, where that same hairline reads as no border at all. Scoped
-   to .tutorial-board specifically so the live game's own boards (which
-   share the exact same .tri/.fill classes) are untouched. */
-.tutorial-board .tri .fill { box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.4); }
-/* Plays once when a beat's board first settles in — switching beats reads
-   as a soft transition instead of an instant swap. */
-.tutorial-board.beat-enter { animation: tutorial-beat-enter 380ms ease-out both; }
-@keyframes tutorial-beat-enter { from { opacity: 0.4; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) { .tutorial-board.beat-enter { animation: none; } }
-/* Every tutorial highlights a scoring pattern by making each of its own
-   tiles glow — never a single box drawn around the whole group — so the
-   *pieces that actually matter* are what draws the eye, on boards where a
-   bounding box would otherwise cover mostly empty filler tiles. One glow
-   element per cell, positioned/sized to match that cell exactly (each
-   tutorial's own geometry helper — ballCenter, cellCenter, etc. — computes
-   where), with border-radius set inline per shape (round for balls, a small
-   radius for squares/triangles). A separate overlay element rather than a
-   class on the tile itself, same reasoning as every other per-cell overlay
-   in this codebase (spawnOutlineEl, the old flip-emphasis-ring): the tile
-   already carries its own inline `animation` for flip/score-pulse, and a
-   second class-based animation on that same element would just silently
-   replace it rather than play alongside it. */
-.tutorial-cell-glow {
-  position: absolute; pointer-events: none; z-index: 5;
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 14px 4px rgba(255,255,255,0.4);
-  animation: tutorial-cell-glow-breathe 1.3s ease-in-out infinite;
-}
-@keyframes tutorial-cell-glow-breathe {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.45), 0 0 10px 2px rgba(255,255,255,0.3); transform: scale(0.985); }
-  50% { box-shadow: 0 0 0 3px rgba(255,255,255,1), 0 0 18px 6px rgba(255,255,255,0.8); transform: scale(1.035); }
-}
-/* A beat's first glow pops in to draw the eye, then settles into the
-   regular breathing pulse — later re-renders during a live drag don't get
-   .pop-in, so it doesn't replay the pop on every frame. */
-.tutorial-cell-glow.pop-in {
-  animation: tutorial-cell-glow-pop 380ms cubic-bezier(0.34,1.56,0.64,1) both,
-             tutorial-cell-glow-breathe 1.3s ease-in-out 380ms infinite;
-}
-@keyframes tutorial-cell-glow-pop { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
-/* A snappier double-flash for a glow that's confirming one of several
-   groups in turn (the circle tutorial's combined pattern-intro beat) —
-   reads as "yes, that one too" rather than the single quiet pop every
-   other beat's one-target highlight uses. */
-.tutorial-cell-glow.blink-in {
-  animation: tutorial-cell-glow-blink 500ms ease-in-out both,
-             tutorial-cell-glow-breathe 1.3s ease-in-out 500ms infinite;
-}
-@keyframes tutorial-cell-glow-blink {
-  0% { opacity: 0; transform: scale(0.9); }
-  20% { opacity: 1; transform: scale(1.08); }
-  40% { opacity: 0.3; transform: scale(0.97); }
-  60% { opacity: 1; transform: scale(1.08); }
-  100% { opacity: 1; transform: scale(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tutorial-cell-glow { animation: none; box-shadow: 0 0 0 3px rgba(255,255,255,0.85), 0 0 14px 4px rgba(255,255,255,0.55); }
-  .tutorial-cell-glow.pop-in { animation: none; }
-  .tutorial-cell-glow.blink-in { animation: none; }
-}
-.tutorial-check {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  pointer-events: none; z-index: 6;
-}
-.tutorial-check svg { width: 72px; height: 72px; opacity: 0; transform: scale(0.6); transition: opacity .25s ease, transform .3s cubic-bezier(0.34,1.56,0.64,1); }
-.tutorial-check.show svg { opacity: 1; transform: scale(1); }
-/* The blink variant flashes twice before settling on-screen, distinct from
-   the plain single-pop every other confirmation uses — see the highlight
-   box's own .blink-in above for why the circle tutorial specifically needs
-   an "and that one too" signal here. */
-.tutorial-check.blink.show svg { animation: tutorial-check-blink 900ms ease-out both; }
-@keyframes tutorial-check-blink {
-  0% { opacity: 0; transform: scale(0.6); }
-  15% { opacity: 1; transform: scale(1.1); }
-  30% { opacity: 0.3; transform: scale(1); }
-  45% { opacity: 1; transform: scale(1.05); }
-  100% { opacity: 1; transform: scale(1); }
-}
-@media (prefers-reduced-motion: reduce) { .tutorial-check.blink.show svg { animation: none; opacity: 1; transform: scale(1); } }
-/* The flip-teach beat's giant interactive 3D flip-coin: a real disc (CSS
-   perspective + rotateY) the player drags themselves. Front/back faces use
-   backface-visibility:hidden so each only shows while facing the camera;
-   the rim is a stack of thin hollow rings between them (see
-   playGiantFlipDemo in circleTutorial.ts for why plain filled discs
-   wouldn't read as an edge). */
-.flip-coin-overlay {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  flex-direction: column; gap: 8px; z-index: 6; pointer-events: none;
-}
-.flip-coin-stage { perspective: 900px; pointer-events: none; }
-.flip-coin {
-  position: relative; transform-style: preserve-3d; touch-action: none; cursor: grab; pointer-events: auto;
-}
-.flip-coin:active { cursor: grabbing; }
-.flip-coin-face {
-  position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden;
-  display: flex; align-items: center; justify-content: center;
-  border: solid #fff; box-sizing: border-box;
-}
-.flip-coin-front { border-width: 3%; }
-.flip-coin-back { background: var(--surface); border-width: 3%; }
-.flip-coin-rim { position: absolute; inset: 0; transform-style: preserve-3d; }
-.flip-coin-rim-slice { position: absolute; background: #fff; backface-visibility: hidden; }
-.flip-coin-arrow-hint {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--accent);
-  opacity: 0; transform: translateY(-6px); transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none;
-}
-.flip-coin-arrow-hint.show { opacity: 1; transform: translateY(0); animation: flip-coin-arrow-blink 1.3s ease-in-out infinite; }
-.flip-coin-arrow-hint span { font-size: 0.85rem; font-weight: 600; }
-@keyframes flip-coin-arrow-blink { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .flip-coin-arrow-hint.show { animation: none; opacity: 0.85; }
-}
-.tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 
 /* ---------- persistent bottom nav ---------- */
 /* Two round entry points — 个人主页 and 记录与排名 — pinned to the bottom of
@@ -952,6 +687,16 @@ html.lang-locked, html.lang-locked body {
 }
 .home-nav-btn:hover { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22)); }
 .home-nav-btn:active { transform: none; }
+/* Whichever destination is open rides up out of the bar and darkens a shade,
+   and settles back down when it closes — so the bar itself shows where you
+   are, and tapping the raised one reads as "put this away". */
+.home-nav-btn { transition: transform 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 220ms ease; }
+.home-nav-btn--active {
+  transform: translateY(-18px);
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24)) brightness(0.86) saturate(1.12);
+}
+.home-nav-btn--active:hover { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28)) brightness(0.86) saturate(1.12); }
+@media (prefers-reduced-motion: reduce) { .home-nav-btn { transition: none; } }
 .home-nav-btn > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) {

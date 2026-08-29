@@ -53,6 +53,8 @@ export interface ShellRefs {
     endBack: HTMLButtonElement;
     /** Hidden until some tile is genuinely unable to ever flip again; the player decides when (or whether) to end the run over it, rather than the run ending on its own. */
     stuckEnd: HTMLButtonElement;
+    /** Leaves without starting a run — same destination as `back`. */
+    startBack: HTMLButtonElement;
     share: HTMLButtonElement;
     shareClose: HTMLButtonElement;
     extra: Record<string, HTMLButtonElement>;
@@ -110,6 +112,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <h2>${meta.title}</h2>
         <p>${meta.startBody}</p>
         <div class="btn-row"><button class="primary" id="startBtn">${s.startBtn}</button></div>
+        <!-- A way out without starting a run: goes back to the home page, or
+             to the picker this game was chosen from. -->
+        <div class="btn-row"><button class="secondary" id="startBackBtn">${s.back}</button></div>
       </div>
     </div>
 
@@ -184,6 +189,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       restart: req('restartBtn'),
       endBack: req('endBackBtn'),
       stuckEnd: req('stuckEndBtn'),
+      startBack: req('startBackBtn'),
       share: req('shareBtn'),
       shareClose: req('shareCloseBtn'),
       extra,

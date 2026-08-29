@@ -843,6 +843,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
         destroy();
         onBack();
       });
+      // Leaving from the start screen goes exactly where the in-game back
+      // button goes — the home page, or the picker this game came from.
+      refs.buttons.startBack.addEventListener('click', () => {
+        destroy();
+        onBack();
+      });
       refs.buttons.endBack.addEventListener('click', () => {
         destroy();
         onBack();

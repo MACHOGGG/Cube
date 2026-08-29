@@ -125,11 +125,16 @@ function clockFrame(color: string, cx: number, cy: number, r: number): string {
  *  them. */
 export function timedCard(shape: BaseShape): string {
   const cy = shape === 'triangle' ? 62 : 50;
-  const r = shape === 'triangle' ? 21 : 26;
-  // Face and hardware are both white, so they read as one clock silhouette
-  // sitting on the card. Drawing the bells in the card's own orange instead
-  // bites four notches out of the disc and the whole thing turns into a gear.
-  return svg(baseShape(shape, C.orange) + clockFrame(C.white, 50, cy, r) + `<circle cx="50" cy="${cy}" r="${r}" fill="${C.white}"/>`);
+  const r = shape === 'triangle' ? 22 : 27;
+  // The bells and feet are drawn in the card's own orange *over* the white
+  // face, so each one bites a notch out of the disc — that is how the
+  // reference sheet draws it, and it is what tells the three timed cards
+  // apart from a plain white circle.
+  return svg(
+    baseShape(shape, C.orange) +
+      `<circle cx="50" cy="${cy}" r="${r}" fill="${C.white}"/>` +
+      clockFrame(C.orange, 50, cy, r),
+  );
 }
 
 /** Mobile home: one clock standing in for all three timed games, with a
