@@ -11,7 +11,9 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
+import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
+import { STRINGS as MATCH_LABELS } from '../i18n';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same board/matching/drag engine as the base triangle game (see triangle.ts
@@ -31,6 +33,11 @@ const LEFT_TRIM = [0, 0, 0, 0, 0];
 const GLOBAL_ROW_OFFSET = 0;
 const PER_COLOR = 5;
 const MIN_LINE_BONUS_LEN = 3;
+// Slot order is row-major over ROW_LENS, matching boardFromDeck's own walk —
+// so this indexes the deck directly. A slot points up when its global
+// position p is even (see triGeom).
+const SLOT_IS_UP: boolean[] = ROW_LENS.flatMap((len, r) =>
+  Array.from({ length: len }, (_, c) => (c + LEFT_TRIM[r]) % 2 === 0));
 
 // Bomb mode reuses the exact same 5-colors × 5-each deck as the base game —
 // one existing palette index just becomes a fixed hazard color (front-only,
@@ -224,9 +231,9 @@ export function createTriangleBigGame(): ShapeGame {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
-        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。得分图案必须至少含 1 个仍是正面的三角——全部都已经是点面的图案不再得分，所以把同一组已翻面的三角反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的三角，综合得分再 ×95%。';
       const hint = isBomb
-        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍角。任意时刻场上 4 个及以上红色三角相互边相连，将立即结束挑战并扣 100 分。' +
+        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍角。任意时刻场上 3 个红色三角相互边相连时，这几个三角会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
           BASE_HINT +
           '全部非红色方块都翻成点面或变为空白角时结束，结算当时的分数。'
         : BASE_HINT + '全部方块都翻成点面或变为空白角时结束，结算当时的分数。';
@@ -274,10 +281,10 @@ export function createTriangleBigGame(): ShapeGame {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
       }
 
+      // Balanced across up/down slots rather than plain-shuffled — see
+      // orientationDeal.ts for why a triangle board needs that.
       function shuffledDeck(): number[] {
-        const deck: number[] = [];
-        for (let c = 0; c < COLORS.length; c++) for (let i = 0; i < PER_COLOR; i++) deck.push(c);
-        return shuffle(deck);
+        return dealBalancedDeck(SLOT_IS_UP, COLORS.length, PER_COLOR);
       }
 
       // Per color group of 5: the other 4 colors get 1 each, and one of
@@ -286,19 +293,18 @@ export function createTriangleBigGame(): ShapeGame {
       // appears, unlike the base triangle's mostly-self-paired distribution.
       function assignDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length);
+        const groups: { slots: number[]; pool: number[] }[] = [];
         for (let color = 0; color < COLORS.length; color++) {
           const others: number[] = [];
           for (let k = 0; others.length < PER_COLOR; k++) others.push((color + 1 + (k % (COLORS.length - 1))) % COLORS.length);
           shuffle(others);
-          const indices: number[] = [];
+          const slots: number[] = [];
           deck.forEach((c, idx) => {
-            if (c === color) indices.push(idx);
+            if (c === color) slots.push(idx);
           });
-          indices.forEach((idx, i) => {
-            dotColors[idx] = others[i];
-          });
+          groups.push({ slots, pool: others });
         }
-        return dotColors;
+        return spreadDotColors(groups, (slot) => SLOT_IS_UP[slot], dotColors);
       }
 
       function boardFromDeck(deck: number[]): Tile[][] {
@@ -347,21 +353,20 @@ export function createTriangleBigGame(): ShapeGame {
       // RED_IDX too — red never appears as any tile's dot color.
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
+        const groups: { slots: number[]; pool: number[] }[] = [];
         const normalColors = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== RED_IDX);
         for (const color of normalColors) {
           const otherNormals = normalColors.filter((k) => k !== color);
           const others: number[] = [];
           for (let k = 0; others.length < PER_COLOR; k++) others.push(otherNormals[k % otherNormals.length]);
           shuffle(others);
-          const indices: number[] = [];
+          const slots: number[] = [];
           deck.forEach((c, idx) => {
-            if (c === color) indices.push(idx);
+            if (c === color) slots.push(idx);
           });
-          indices.forEach((idx, i) => {
-            dotColors[idx] = others[i];
-          });
+          groups.push({ slots, pool: others });
         }
-        return dotColors;
+        return spreadDotColors(groups, (slot) => SLOT_IS_UP[slot], dotColors);
       }
 
       function boardFromBombDeck(deck: number[]): Tile[][] {
@@ -391,19 +396,20 @@ export function createTriangleBigGame(): ShapeGame {
         return out;
       }
 
-      function hasRedCluster(g: Tile[][]): boolean {
+      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
+        const found = new Set<string>();
         const seen = new Set<string>();
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             if (g[r][c].color !== RED_IDX) continue;
             const startKey = cellKey(r, c);
             if (seen.has(startKey)) continue;
-            let size = 0;
+            const comp: string[] = [];
             const stack: Cell[] = [[r, c]];
             seen.add(startKey);
             while (stack.length) {
               const [cr, cc] = stack.pop()!;
-              size++;
+              comp.push(cellKey(cr, cc));
               for (const [nr, nc] of triangleAdjacency(cr, cc)) {
                 const key = cellKey(nr, nc);
                 if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
@@ -411,9 +417,15 @@ export function createTriangleBigGame(): ShapeGame {
                 stack.push([nr, nc]);
               }
             }
-            if (size >= 4) return true;
+            if (comp.length >= minSize) for (const k of comp) found.add(k);
           }
-        return false;
+        return found;
+      }
+
+      // A 4-cluster ends the run outright; a 3-cluster is one drag away
+      // from it, so render() pulses those tiles as an early warning.
+      function hasRedCluster(g: Tile[][]): boolean {
+        return redClusterKeys(g, 4).size > 0;
       }
 
       function generateCleanBombBoard(): Tile[][] {
@@ -597,12 +609,14 @@ export function createTriangleBigGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
+        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const key = cellKey(r, c);
             const el = makeTriEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
+            if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             refs.boardEl.appendChild(el);
           }
         }
@@ -643,11 +657,11 @@ export function createTriangleBigGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (const cells of BIG_TRIANGLES) {
-          if (qualifies(cells, mask)) matches.push({ cells, points: 4 });
+          if (qualifies(cells, mask)) matches.push({ cells, points: 4, label: MATCH_LABELS[lang].labelBigTriangle });
         }
         return matches;
       }
@@ -713,8 +727,8 @@ export function createTriangleBigGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(): Cell[][] {
-        return findStuckColorGroups(liveTiles());
+      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+        return findStuckColorGroups(liveTiles(), clearedDotColors);
       }
 
       function countRemainingTiles() {

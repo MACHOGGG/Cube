@@ -1,6 +1,7 @@
 export interface ScoreReel {
   setValue(value: number): void;
-  showGain(amount: number): void;
+  /** `source` names what paid out ('4连 ×1.5', '整线'…), shown under the number. */
+  showGain(amount: number, source?: string): void;
   reset(): void;
 }
 
@@ -45,11 +46,17 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
    * into a running total — so a fast run of separate scores reads as a
    * sequence of distinct events instead of one merged number.
    */
-  function showGain(amount: number) {
+  function showGain(amount: number, source?: string) {
     if (amount <= 0) return;
     const pop = document.createElement('span');
     pop.className = 'gain-pop';
     pop.textContent = '+' + amount;
+    if (source) {
+      const tag = document.createElement('span');
+      tag.className = 'gain-pop-src';
+      tag.textContent = source;
+      pop.appendChild(tag);
+    }
     gainBadgeEl.appendChild(pop);
     window.setTimeout(() => pop.remove(), GAIN_POP_MS);
 

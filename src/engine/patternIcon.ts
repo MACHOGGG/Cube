@@ -15,6 +15,15 @@ export type IconCell =
 export interface PatternDef {
   label: string;
   cells: IconCell[];
+  /**
+   * Draw at a fixed scale instead of fitting this icon's own bounding box:
+   * the pattern is centred in a square viewport this many pattern-units
+   * wide. Give every icon in one shape's row the same value and their tiles
+   * all come out the same size, so a pattern spread over a wider area reads
+   * as *spread out* rather than as "the same shape, drawn smaller". Without
+   * it each icon is fitted individually (the original behaviour).
+   */
+  extent?: number;
 }
 
 function bbox(cells: IconCell[]) {
@@ -34,12 +43,12 @@ function bbox(cells: IconCell[]) {
 const VIEW = 40;
 const MARGIN = 3;
 
-function renderPatternIconSvg(cells: IconCell[]): string {
+function renderPatternIconSvg(cells: IconCell[], extent?: number): string {
   if (!cells.length) return '';
   const { minX, maxX, minY, maxY } = bbox(cells);
   const w = maxX - minX || 1;
   const h = maxY - minY || 1;
-  const scale = (VIEW - MARGIN * 2) / Math.max(w, h);
+  const scale = (VIEW - MARGIN * 2) / (extent ?? Math.max(w, h));
   const offX = (VIEW - w * scale) / 2 - minX * scale;
   const offY = (VIEW - h * scale) / 2 - minY * scale;
   const T = (x: number, y: number): [number, number] => [x * scale + offX, y * scale + offY];
@@ -65,6 +74,6 @@ function renderPatternIconSvg(cells: IconCell[]): string {
 /** Renders the full hint row: one small outline icon + label per pattern, for the given shape's own set of scoring patterns. */
 export function renderPatternHintRow(patterns: PatternDef[]): string {
   return patterns
-    .map((p) => `<span class="pattern-icon">${renderPatternIconSvg(p.cells)}<span class="pattern-icon-label">${p.label}</span></span>`)
+    .map((p) => `<span class="pattern-icon">${renderPatternIconSvg(p.cells, p.extent)}<span class="pattern-icon-label">${p.label}</span></span>`)
     .join('');
 }

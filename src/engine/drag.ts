@@ -78,15 +78,27 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
     locked = false;
   }
 
+  // Pointer capture keeps the *drag* alive but does nothing to stop the page
+  // scrolling underneath a finger. `touch-action: none` on the board covers
+  // that in most browsers; this covers the rest, and iOS's rubber-band
+  // overscroll, which touch-action does not suppress. Non-passive, or
+  // preventDefault would be ignored. Only touchmove is cancelled — cancelling
+  // touchstart would also suppress the pointer events this drag runs on.
+  function blockScroll(e: TouchEvent) {
+    if (active) e.preventDefault();
+  }
+
   target.addEventListener('pointerdown', down);
   target.addEventListener('pointermove', move);
   target.addEventListener('pointerup', up);
   target.addEventListener('pointercancel', up);
+  target.addEventListener('touchmove', blockScroll, { passive: false });
 
   return () => {
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
     target.removeEventListener('pointercancel', up);
+    target.removeEventListener('touchmove', blockScroll);
   };
 }

@@ -11,6 +11,7 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
+import { STRINGS as MATCH_LABELS } from '../i18n';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Two selectable palettes, both with 6 hues spaced at least ~50-60° apart on
@@ -93,9 +94,9 @@ export function createSquareGame(): ShapeGame {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
-        '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分）。同一条线连得更长（1×5、1×6……）按实际数量得分，2×2 沿同一矩形方向扩大（如 2×3、3×3）也按扩大后的数量得分，但线外/矩形外的同色方块不会被计入；得分方块翻成点面继续联通。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当整行或整列都翻成点面且点色相同时，额外得该行/列长度的平方分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+        '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分）。同一条线连得更长（1×5、1×6……）按实际数量得分，2×2 沿同一矩形方向扩大（如 2×3、3×3）也按扩大后的数量得分，但线外/矩形外的同色方块不会被计入；得分方块翻成点面继续联通。得分图案必须至少含 1 个仍是正面的方块——全部都已经是点面的图案不再得分，所以把同一组已翻面的方块反复滑回原样是刷不到分的。当整行或整列都翻成点面且点色相同时，额外得该行/列长度的平方分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的方块，综合得分再 ×95%。';
       const hint = isBomb
-        ? '红色为危险色：正面中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 4 个及以上红色方块相互边相连，将立即结束挑战并扣 100 分。' +
+        ? '红色为危险色：正面中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 3 个红色方块相互边相连时，这几个方块会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
           BASE_HINT +
           '当棋盘上所有非红色方块都翻成点面时，挑战结束，结算当时的分数。'
         : BASE_HINT + '当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。';
@@ -266,7 +267,8 @@ export function createSquareGame(): ShapeGame {
       // General 4-directional connected-component check for red tiles —
       // used both to reject an initial deal that already starts lost and to
       // watch for the same condition forming live as the player drags.
-      function hasRedCluster(g: Tile[][]): boolean {
+      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
+        const found = new Set<string>();
         const R = g.length,
           C = g[0].length;
         const seen = new Set<string>();
@@ -275,12 +277,12 @@ export function createSquareGame(): ShapeGame {
             if (g[r][c].color !== RED_IDX) continue;
             const startKey = cellKey(r, c);
             if (seen.has(startKey)) continue;
-            let size = 0;
+            const comp: string[] = [];
             const stack: Cell[] = [[r, c]];
             seen.add(startKey);
             while (stack.length) {
               const [cr, cc] = stack.pop()!;
-              size++;
+              comp.push(cellKey(cr, cc));
               const neighbors: Cell[] = [
                 [cr - 1, cc],
                 [cr + 1, cc],
@@ -295,9 +297,15 @@ export function createSquareGame(): ShapeGame {
                 stack.push([nr, nc]);
               }
             }
-            if (size >= 4) return true;
+            if (comp.length >= minSize) for (const k of comp) found.add(k);
           }
-        return false;
+        return found;
+      }
+
+      // A 4-cluster ends the run outright; a 3-cluster is one drag away
+      // from it, so render() pulses those tiles as an early warning.
+      function hasRedCluster(g: Tile[][]): boolean {
+        return redClusterKeys(g, 4).size > 0;
       }
 
       function generateCleanBombBoard(): Tile[][] {
@@ -368,12 +376,14 @@ export function createSquareGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
+        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c, CELL);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
+            if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             refs.boardEl.appendChild(el);
           }
         }
@@ -457,21 +467,21 @@ export function createSquareGame(): ShapeGame {
             const seed: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
             const region = extendRect(r, c, r + 1, c + 1);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
           }
         for (let r = 0; r < rows; r++)
           for (let c = 0; c <= cols - 4; c++) {
             const seed: Cell[] = [[r, c], [r, c + 1], [r, c + 2], [r, c + 3]];
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
             const region = extendRunHoriz(r, c, c + 3);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
           }
         for (let c = 0; c < cols; c++)
           for (let r = 0; r <= rows - 4; r++) {
             const seed: Cell[] = [[r, c], [r + 1, c], [r + 2, c], [r + 3, c]];
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
             const region = extendRunVert(c, r, r + 3);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
           }
         return matches;
       }
@@ -578,8 +588,8 @@ export function createSquareGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(): Cell[][] {
-        return findStuckColorGroups(liveTiles());
+      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+        return findStuckColorGroups(liveTiles(), clearedDotColors);
       }
 
       function countRemainingTiles() {

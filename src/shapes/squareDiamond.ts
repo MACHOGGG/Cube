@@ -12,6 +12,7 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
+import { STRINGS as MATCH_LABELS } from '../i18n';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same 6x6, 36-tile deck as the base square game (see square.ts for the
@@ -59,26 +60,43 @@ const GLYPH = `<svg viewBox="0 0 32 32"><rect x="12" y="2" width="8" height="8" 
 function iconPos(r: number, c: number): [number, number] {
   return [c - r, c + r];
 }
+// All three icons share one scale (ICON_EXTENT) so their tiles come out the
+// same size and the 1-2-1 reads as *spread out* rather than as a shrunken
+// 2+2. Tiles are drawn upright, not on a 45deg rotation: this board arranges
+// *upright* rounded squares in a diamond lattice (every other screen row
+// offset by half a pitch), so a rotated icon tile wouldn't look like
+// anything actually on the board. half = 0.5 makes neighbouring tiles meet
+// corner to corner, which is the clearest way to show that offset lattice at
+// icon size.
+const ICON_HALF = 0.5;
+const ICON_EXTENT = 5; // the widest pattern (1-2-1) spans 4 units plus a tile
+const iconTile = (r: number, c: number) => {
+  const [cx, cy] = iconPos(r, c);
+  return { kind: 'rect' as const, cx, cy, half: ICON_HALF };
+};
 const PATTERNS: PatternDef[] = [
   {
     label: '1×4',
-    cells: [0, 1, 2, 3].map((c) => {
-      const [cx, cy] = iconPos(0, c);
-      return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
-    }),
+    extent: ICON_EXTENT,
+    cells: [0, 1, 2, 3].map((c) => iconTile(0, c)),
   },
   {
     label: '2+2',
-    cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([r, c]) => {
-      const [cx, cy] = iconPos(r, c);
-      return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
-    }),
+    extent: ICON_EXTENT,
+    // The right-hand parallelogram of TWO_PLUS_TWO_BASES, cell for cell:
+    // two neighbours on one screen row, two more half a tile to the right
+    // on the next.
+    cells: ([[0, 1], [0, 2], [1, 0], [1, 1]] as const).map(([r, c]) => iconTile(r, c)),
   },
   {
     label: '1-2-1',
+    extent: ICON_EXTENT,
+    // Drawn a touch larger and pulled in from its true 2-cell spread: at
+    // icon size the real gaps read as four unrelated dots rather than one
+    // diamond.
     cells: ([[0, 0], [2, 0], [0, 2], [2, 2]] as const).map(([r, c]) => {
       const [cx, cy] = iconPos(r, c);
-      return { kind: 'rect' as const, cx, cy, half: 0.47, rotateDeg: 45 };
+      return { kind: 'rect' as const, cx: cx * 0.72, cy: cy * 0.72, half: ICON_HALF * 1.3 };
     }),
   },
 ];
@@ -101,6 +119,12 @@ function buildLines(): Line[] {
   return lines;
 }
 const LINES = buildLines();
+
+// The two mirrored "2+2" parallelograms — see findRunMatches.
+const TWO_PLUS_TWO_BASES: readonly [[number, number], [number, number]][] = [
+  [[0, 1], [1, -1]],
+  [[1, -1], [1, 0]],
+];
 
 // The board's "121" bonus shape. This board's screen mapping is
 // cx=c-r, cy=c+r (iconPos above) — *every* unit grid step (row or column)
@@ -178,9 +202,9 @@ export function createSquareDiamondGame(): ShapeGame {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
-        '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；2×2 的同色小方块（"22"，第一行 2 个、第二行 2 个）沿同一方向扩大，同样按扩大后的数量得分；同色的"121"菱形（比"22"更大一圈，四个角上下左右对称）固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+        '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"2+2"（同一横排相邻 2 个，加上下一排错开半格的 2 个，左右两种错法都算）沿同一方向扩大，同样按扩大后的数量得分；同色的"121"菱形（比"22"更大一圈，四个角上下左右对称）固定得 4 分。得分方块翻成点面。得分图案必须至少含 1 个仍是正面的方块——全部都已经是点面的图案不再得分，所以把同一组已翻面的方块反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的方块，综合得分再 ×95%。';
       const hint = isBomb
-        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 4 个及以上红色方块相互边相连，将立即结束挑战并扣 100 分。' +
+        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 3 个红色方块相互边相连时，这几个方块会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
           BASE_HINT +
           '全部非红色方块都翻成点面或变为空白时结束，结算当时的分数。'
         : BASE_HINT + '全部方块都翻成点面或变为空白时结束，结算当时的分数。';
@@ -330,19 +354,20 @@ export function createSquareDiamondGame(): ShapeGame {
         return g;
       }
 
-      function hasRedCluster(g: Tile[][]): boolean {
+      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
+        const found = new Set<string>();
         const seen = new Set<string>();
         for (let r = 0; r < BOARD_DIM; r++)
           for (let c = 0; c < BOARD_DIM; c++) {
             if (g[r][c].color !== RED_IDX) continue;
             const startKey = cellKey(r, c);
             if (seen.has(startKey)) continue;
-            let size = 0;
+            const comp: string[] = [];
             const stack: Cell[] = [[r, c]];
             seen.add(startKey);
             while (stack.length) {
               const [cr, cc] = stack.pop()!;
-              size++;
+              comp.push(cellKey(cr, cc));
               const neighbors: Cell[] = [[cr - 1, cc], [cr + 1, cc], [cr, cc - 1], [cr, cc + 1]];
               for (const [nr, nc] of neighbors) {
                 if (!inBounds(nr, nc)) continue;
@@ -352,9 +377,15 @@ export function createSquareDiamondGame(): ShapeGame {
                 stack.push([nr, nc]);
               }
             }
-            if (size >= 4) return true;
+            if (comp.length >= minSize) for (const k of comp) found.add(k);
           }
-        return false;
+        return found;
+      }
+
+      // A 4-cluster ends the run outright; a 3-cluster is one drag away
+      // from it, so render() pulses those tiles as an early warning.
+      function hasRedCluster(g: Tile[][]): boolean {
+        return redClusterKeys(g, 4).size > 0;
       }
 
       function generateCleanBombBoard(): Tile[][] {
@@ -435,12 +466,14 @@ export function createSquareDiamondGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
+        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
         for (let r = 0; r < BOARD_DIM; r++) {
           for (let c = 0; c < BOARD_DIM; c++) {
             const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
+            if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             refs.boardEl.appendChild(el);
           }
         }
@@ -468,6 +501,13 @@ export function createSquareDiamondGame(): ShapeGame {
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
         return true;
       }
+      // The 4 cells of the unit parallelogram at (r,c) spanned by du/dv.
+      function parallelogramCells(r: number, c: number, du: [number, number], dv: [number, number]): Cell[] {
+        return ([[0, 0], [1, 0], [0, 1], [1, 1]] as const).map(
+          ([u, v]) => [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]] as Cell,
+        );
+      }
+
       function boundedPositionAt(r: number, c: number, du: [number, number], dv: [number, number]) {
         return (u: number, v: number): Cell | null => {
           const cell: Cell = [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]];
@@ -483,21 +523,28 @@ export function createSquareDiamondGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (let r = 0; r < BOARD_DIM; r++)
           for (let c = 0; c < BOARD_DIM; c++) {
-            if (r < BOARD_DIM - 1 && c < BOARD_DIM - 1) {
-              const seed: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
-              if (qualifies(seed, mask)) {
-                const region = growParallelogram(boundedPositionAt(r, c, [0, 1], [1, 0]), effColorAt, isLiveCell);
-                matches.push({ cells: region, points: Math.max(4, region.length) });
+            // "2+2": two neighbours in one screen row, plus two more in the
+            // next row offset half a tile — mirrored left and right. Both
+            // are parallelograms on this lattice (basis [0,1]/[1,-1] and
+            // [1,-1]/[1,0]), so they grow the same way a run or a block
+            // does. Note this is *not* the compact grid 2x2, which this
+            // board's 45deg mapping draws as a 1-2-1 diamond rather than
+            // anything a player would read as "two rows of two".
+            for (const [du, dv] of TWO_PLUS_TWO_BASES) {
+              const seed = parallelogramCells(r, c, du, dv);
+              if (seed.every(([rr, cc]) => inBounds(rr, cc)) && qualifies(seed, mask)) {
+                const region = growParallelogram(boundedPositionAt(r, c, du, dv), effColorAt, isLiveCell);
+                matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
               }
             }
             const d = diamond121(r, c);
             if (d && qualifies(d, mask)) {
-              matches.push({ cells: d, points: 4 });
+              matches.push({ cells: d, points: 4, label: MATCH_LABELS[lang].label121 });
             }
           }
         return matches;
@@ -564,8 +611,8 @@ export function createSquareDiamondGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(): Cell[][] {
-        return findStuckColorGroups(liveTiles());
+      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+        return findStuckColorGroups(liveTiles(), clearedDotColors);
       }
 
       function countRemainingTiles() {

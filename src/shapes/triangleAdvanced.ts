@@ -11,6 +11,8 @@ import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
+import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
+import { STRINGS as MATCH_LABELS } from '../i18n';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // The V-shaped advanced triangle board: 49 triangles in two arms that meet
@@ -38,19 +40,23 @@ const PALETTES = {
  * Every row is drawn half a cell further left than the one above it (the
  * shared triangle-grid shear), so the *slots* that keep an edge running
  * straight differ per side: the left arm steps 2 slots right each row, while
- * the right arm keeps the very same slots — which is what makes both outer
- * edges slant inward at the tiling's own 60°, closing the notch by exactly
- * one cell per side per row (6 slots wide at the top, then 4, then 2, then
- * gone where the bottom row joins the arms).
+ * the right arm keeps the very same slots. Under that shear the mirror of a
+ * cell (i, p) sits at (i, 20 + 2i − p), which is exactly why the right arm
+ * is [14, 19] and not [13, 18] — that offset is what makes it a true mirror
+ * of the left arm, orientation included (it opens on an up-triangle and ends
+ * on a down-triangle, the reverse of the left arm), instead of a copy of it
+ * shifted sideways. The notch narrows one cell per side per row — 7 slots
+ * across the top, then 5, then 3 — and the bottom row runs straight through
+ * what is left of it.
  *
  * Because a row's cells are grouped into *runs*, the two arms are simply two
  * different horizontal lines: sliding the left arm's top row can't touch the
  * right arm's, while the bottom row — a single run — slides as one.
  */
 const ROW_RUNS: readonly (readonly [start: number, end: number])[][] = [
-  [[1, 6], [13, 18]],
-  [[3, 8], [13, 18]],
-  [[5, 10], [13, 18]],
+  [[1, 6], [14, 19]],
+  [[3, 8], [14, 19]],
+  [[5, 10], [14, 19]],
   [[7, 19]],
 ];
 /** Global slot of each row's local column c. */
@@ -61,6 +67,10 @@ const ROW_LENS = SLOTS.map((row) => row.length);
 const GLOBAL_ROW_OFFSET = 0;
 const PER_COLOR = 7;
 const MIN_LINE_BONUS_LEN = 3;
+// Slot order is row-major over SLOTS, matching boardFromDeck's own walk — so
+// this indexes the deck directly. A slot points up when its global position
+// p is even (see triGeom).
+const SLOT_IS_UP: boolean[] = SLOTS.flatMap((row) => row.map((p) => p % 2 === 0));
 
 const GLYPH = `<svg viewBox="0 0 32 32"><path d="M3 7 H11 L16 21 L21 7 H29 L20 27 H12 Z" fill="none" stroke="#4C68B0" stroke-width="2.4" stroke-linejoin="round"/><polygon points="8,11 11,17 5,17" fill="#D89B1E"/><polygon points="24,11 27,17 21,17" fill="#B23A3A"/></svg>`;
 
@@ -250,7 +260,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         tagline: 'V 形棋盘 · 左右两臂横向互不相连',
         startBody: '这是一块 V 形棋盘：左右两臂各自独立，只有最下面一行横贯整块。拖动整条线拼出同色图案。点击开始生成一局新的方糖阵势。',
         hint:
-          'V 形棋盘由左右两臂和一条横贯底部的长行组成。左斜、右斜两个方向的拖动和其他三角玩法完全一样，整条线一起循环滑动，超出的部分会以低透明度从另一端补回来。水平方向的不同之处只有一点：除最下面一行外，左臂和右臂是两条互不相连的线——拖动左臂最上面一行，右臂最上面一行完全不动，第二、第三行同理；最下面一行横贯整块棋盘，仍然作为一整行循环滑动。连续 4 个同色（不分点/面）得 4 分，连得更长按实际数量得分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分的三角翻成点面。同一局中，同一组三角不会重复得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，随后淡出并变为空白角——留在原位可以继续参与拖动和补位，但不再贡献任何得分。连续多步得分会自动加倍：第 2 步 ×2，第 3 步 ×4，以此类推。全部三角都翻成点面或变为空白角时结束。',
+          'V 形棋盘由左右两臂和一条横贯底部的长行组成。左斜、右斜两个方向的拖动和其他三角玩法完全一样，整条线一起循环滑动，超出的部分会以低透明度从另一端补回来。水平方向的不同之处只有一点：除最下面一行外，左臂和右臂是两条互不相连的线——拖动左臂最上面一行，右臂最上面一行完全不动，第二、第三行同理；最下面一行横贯整块棋盘，仍然作为一整行循环滑动。连续 4 个同色（不分点/面）得 4 分，连得更长按实际数量得分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分的三角翻成点面。得分图案必须至少含 1 个仍是正面的三角——全部都已经是点面的图案不再得分，所以把同一组已翻面的三角反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，随后淡出并变为空白角——留在原位可以继续参与拖动和补位，但不再贡献任何得分。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的三角，综合得分再 ×95%。全部三角都翻成点面或变为空白角时结束。',
         assumptions:
           '7 种口味色，每色 7 枚，共 49 枚：左右两臂各 3 行 × 6 枚，最下面一行 13 枚横贯整块。每种口味的点色分布为：其余 6 色各 1 枚、另有 1 色额外再来 1 枚——因此 49 枚里没有任何一枚的正反面是同一种颜色。得分、翻面、消除、补位动画与其他三角玩法完全一致；唯一的差别是左右两臂的横向拖动互不相连（最下面一行除外）。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
@@ -284,10 +294,10 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return { id: nextTileId++, color, face: 'flavor', dotColor };
       }
 
+      // Balanced across up/down slots rather than plain-shuffled — see
+      // orientationDeal.ts for why a triangle board needs that.
       function shuffledDeck(): number[] {
-        const deck: number[] = [];
-        for (let c = 0; c < COLORS.length; c++) for (let i = 0; i < PER_COLOR; i++) deck.push(c);
-        return shuffle(deck);
+        return dealBalancedDeck(SLOT_IS_UP, COLORS.length, PER_COLOR);
       }
 
       // Per color group of 5: the other 4 colors get 1 each, and one of
@@ -296,19 +306,18 @@ export function createTriangleAdvancedGame(): ShapeGame {
       // appears as its dot color.
       function assignDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length);
+        const groups: { slots: number[]; pool: number[] }[] = [];
         for (let color = 0; color < COLORS.length; color++) {
           const others: number[] = [];
           for (let k = 0; others.length < PER_COLOR; k++) others.push((color + 1 + (k % (COLORS.length - 1))) % COLORS.length);
           shuffle(others);
-          const indices: number[] = [];
+          const slots: number[] = [];
           deck.forEach((c, idx) => {
-            if (c === color) indices.push(idx);
+            if (c === color) slots.push(idx);
           });
-          indices.forEach((idx, i) => {
-            dotColors[idx] = others[i];
-          });
+          groups.push({ slots, pool: others });
         }
-        return dotColors;
+        return spreadDotColors(groups, (slot) => SLOT_IS_UP[slot], dotColors);
       }
 
       function boardFromDeck(deck: number[]): Tile[][] {
@@ -571,11 +580,11 @@ export function createTriangleAdvancedGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (const cells of BIG_TRIANGLES) {
-          if (qualifies(cells, mask)) matches.push({ cells, points: 4 });
+          if (qualifies(cells, mask)) matches.push({ cells, points: 4, label: MATCH_LABELS[lang].labelBigTriangle });
         }
         return matches;
       }
@@ -639,8 +648,8 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(): Cell[][] {
-        return findStuckColorGroups(liveTiles());
+      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+        return findStuckColorGroups(liveTiles(), clearedDotColors);
       }
 
       function countRemainingTiles() {

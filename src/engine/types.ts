@@ -12,6 +12,8 @@ export interface Tile {
 export interface Match {
   cells: Cell[];
   points: number;
+  /** Which pattern paid out, for the gain bubble ("4连", "2×2", "大三角"…). */
+  label?: string;
 }
 
 export function effColor(t: Tile): number {

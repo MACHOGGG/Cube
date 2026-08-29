@@ -12,6 +12,7 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
+import { STRINGS as MATCH_LABELS } from '../i18n';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // The colorblind set is 4 hues picked from the Okabe–Ito palette for maximum
@@ -201,9 +202,9 @@ export function createCircleGame(): ShapeGame {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
       const BASE_HINT =
-        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分（1×5 得 5 分，以此类推），但线外的同色方块不会被计入；同色的"22"菱形（2+2 两行）沿同一菱形方向扩大（如 33、222）同样按扩大后的数量得分，"121"菱形（1+2+1 三行）固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。';
+        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分（1×5 得 5 分，以此类推），但线外的同色方块不会被计入；同色的"22"菱形（2+2 两行）沿同一菱形方向扩大（如 33、222）同样按扩大后的数量得分，"121"菱形（1+2+1 三行）固定得 4 分。得分方块翻成点面。得分图案必须至少含 1 个仍是正面的球——全部都已经是点面的图案不再得分，所以把同一组已翻面的球反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续像之前一样正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的球，综合得分再 ×95%。';
       const hint = isBomb
-        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍球。任意时刻场上 4 个及以上红色球相互边相连，将立即结束挑战并扣 100 分。' +
+        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍球。任意时刻场上 3 个红色球相互边相连时，这几个球会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
           BASE_HINT +
           '全部非红色方块都翻成点面或变为空白球时结束，结算当时的分数。'
         : BASE_HINT + '全部方块都翻成点面或变为空白球时结束，结算当时的分数。';
@@ -385,19 +386,20 @@ export function createCircleGame(): ShapeGame {
         return cands.filter(([rr, cc]) => cellValid(rr, cc));
       }
 
-      function hasRedCluster(g: Tile[][]): boolean {
+      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
+        const found = new Set<string>();
         const seen = new Set<string>();
         for (let r = 0; r < ROWS; r++)
           for (let c = 0; c <= r; c++) {
             if (g[r][c].color !== RED_IDX) continue;
             const startKey = cellKey(r, c);
             if (seen.has(startKey)) continue;
-            let size = 0;
+            const comp: string[] = [];
             const stack: Cell[] = [[r, c]];
             seen.add(startKey);
             while (stack.length) {
               const [cr, cc] = stack.pop()!;
-              size++;
+              comp.push(cellKey(cr, cc));
               for (const [nr, nc] of circleNeighbors(cr, cc)) {
                 const key = cellKey(nr, nc);
                 if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
@@ -405,9 +407,15 @@ export function createCircleGame(): ShapeGame {
                 stack.push([nr, nc]);
               }
             }
-            if (size >= 4) return true;
+            if (comp.length >= minSize) for (const k of comp) found.add(k);
           }
-        return false;
+        return found;
+      }
+
+      // A 4-cluster ends the run outright; a 3-cluster is one drag away
+      // from it, so render() pulses those tiles as an early warning.
+      function hasRedCluster(g: Tile[][]): boolean {
+        return redClusterKeys(g, 4).size > 0;
       }
 
       function generateCleanBombBoard(): Tile[][] {
@@ -499,12 +507,14 @@ export function createCircleGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
+        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c <= r; c++) {
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
+            if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             refs.boardEl.appendChild(el);
           }
         }
@@ -555,7 +565,7 @@ export function createCircleGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length) });
+            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (let r = 0; r < ROWS; r++)
@@ -570,7 +580,7 @@ export function createCircleGame(): ShapeGame {
                 return cellValid(cell[0], cell[1]) ? cell : null;
               };
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length) });
+              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
             }
             // rhombus22A's 4 offsets are (r, c) + u*(0,1) + v*(1,1) — a step
             // along the row, and a step along the *other* diagonal.
@@ -581,11 +591,11 @@ export function createCircleGame(): ShapeGame {
                 return cellValid(cell[0], cell[1]) ? cell : null;
               };
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length) });
+              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
             }
             const d = diamond121(r, c);
             if (d && qualifies(d, mask)) {
-              matches.push({ cells: d, points: 4 });
+              matches.push({ cells: d, points: 4, label: MATCH_LABELS[lang].label121 });
             }
           }
         return matches;
@@ -663,8 +673,8 @@ export function createCircleGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(): Cell[][] {
-        return findStuckColorGroups(liveTiles());
+      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+        return findStuckColorGroups(liveTiles(), clearedDotColors);
       }
 
       function countRemainingTiles() {

@@ -17,33 +17,27 @@ export interface CascadeStepGroups {
 }
 
 /**
- * The composite end-of-run score multiplies the raw score by a time-elapsed
- * bracket (faster clears rewarded, slower ones tapered) and by 1 + the live
- * "有效得分率" hit-rate gauge as a bonus — a 100% gauge doubles the score, a
- * 0% gauge leaves it unchanged, never shrinks it — then a flat (additive,
- * not multiplicative) penalty is subtracted for whatever's left on the
- * board: NEVER_FLIPPED_PENALTY for each tile that never got its first flip
- * at all (the run never gave it a chance to contribute anything), the
- * smaller REMAINING_PENALTY for each tile that flipped at some point but
- * never got swept into a further dot-match or line bonus before the run
- * ended (see stalemate.ts's countRemainingTiles). The total never goes
- * below 0.
+ * The composite end-of-run score: the raw score times a continuous
+ * time-elapsed coefficient, times 1 + the 有效得分率 hit rate (a 100% rate
+ * doubles it, a 0% rate leaves it alone), and finally scaled down by 0.95
+ * for every tile still showing its front face when the run ended — whether
+ * it was provably impossible to flip or simply never got there. Multiplying
+ * rather than subtracting keeps a big score from being wiped out by a board
+ * the player never had time to finish, while still making "leave nothing
+ * unflipped" the way to a top score.
  */
-const TIME_BRACKETS: [maxSec: number, mult: number][] = [
-  [60, 2],
-  [180, 1.5],
-  [300, 1],
-  [420, 0.8],
-  [600, 0.6],
-];
-const TIME_BRACKET_FALLBACK_MULT = 0.5;
-function timeMultiplierFor(elapsedSec: number): number {
-  for (const [maxSec, mult] of TIME_BRACKETS) if (elapsedSec <= maxSec) return mult;
-  return TIME_BRACKET_FALLBACK_MULT;
+/**
+ * A continuous time coefficient rather than the old brackets: 2× at the
+ * first move, sliding down to a 0.5× floor over ten minutes. A bracket
+ * boundary used to make one extra second cost a quarter of the score, which
+ * rewarded quitting at 59s over playing on.
+ */
+export function timeMultiplierFor(elapsedSec: number): number {
+  return Math.max(0.5, Math.min(2, 2 - elapsedSec / 300));
 }
-const NEVER_FLIPPED_PENALTY = 30;
-const REMAINING_PENALTY = 5;
-/** The reason string doFinish() passes for the player's own "结束" button — endGame() matches on this to skip the unflipped-tile penalties (see endGame). This (and the other internal reason literals below, and BOMB_HAZARD_REASON) double as a language-invariant lookup key for displayReason() — never shown to the player directly. */
+/** Each tile left un-flipped when the run ends scales the composite by this. */
+const UNFLIPPED_SCALE = 0.95;
+/** The reason string doFinish() passes for the player's own "结束" button. This (and the other internal reason literals below, and BOMB_HAZARD_REASON) doubles as a language-invariant lookup key for displayReason() — never shown to the player directly. */
 const MANUAL_END_REASON = '手动结束';
 
 // Every reason/penalty-label string ever passed into endGame — either from
@@ -122,7 +116,7 @@ export interface GameControllerHooks {
    * cells, shown to the player before settling. Omit, or return [], if the
    * shape doesn't implement stalemate detection.
    */
-  findStuckGroups?(): Cell[][];
+  findStuckGroups?(clearedDotColors: ReadonlySet<number>): Cell[][];
   /**
    * Tells the shape which cells (if any) to draw the red "stuck" glow
    * around on its next render(); null clears it. Only meaningful together
@@ -208,11 +202,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let paused = false;
   let gameOver = false;
   let resolving = false;
-  // Every group of physical tiles (by permanent id) that has ever scored
-  // together this game — see createCascadeStepper's everScoredTileGroups
-  // param — persists across moves so the same tiles can't keep re-scoring
-  // by oscillating or cycling back through earlier positions.
-  let everScoredTileGroups = new Set<string>();
+  // Every dot colour a whole-line clear has drained this run — the first of
+  // the two stalemate conditions (see stalemate.ts).
+  let clearedDotColors = new Set<number>();
+  // Running split of where the score came from, for the end-of-run breakdown.
+  let patternPoints = 0;
+  let linePoints = 0;
+  let comboBonusPoints = 0;
   // Every group of cells findStuckGroups has ever named this game — once a
   // color is genuinely stuck it can only ever stay that way (see
   // stalemate.ts: nothing can un-flip), so this only ever grows. The run
@@ -239,7 +235,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     streak.reset();
     scoreReel.reset();
     perf.reset();
-    everScoredTileGroups = new Set();
+    clearedDotColors = new Set();
+    patternPoints = 0;
+    linePoints = 0;
+    comboBonusPoints = 0;
     updatePerfDisplay();
     timer.start();
     hooks.render();
@@ -258,23 +257,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const statusPercent = perf.valuePercent();
     const bonusMult = 1 + statusPercent / 100;
     const timeMult = timeMultiplierFor(elapsed);
-    // The never-flipped/flipped-but-remaining penalties exist to discourage
-    // ending the instant a board loads (banking the fast-finish time bonus
-    // for free) — they make sense for an *auto-detected* stalemate, but a
-    // player choosing to stop mid-run via the persistent "结束" button has
-    // already engaged with the board; charging them the full per-tile
-    // penalty for everything they hadn't gotten to yet can wipe out real,
-    // positive scoring (verified case: 8 raw points, 29 never-flipped tiles
-    // → −870, clamped to a flat 0) — which reads as "you scored nothing" on
-    // the results modal and, worse, on the share card meant to show off
-    // what was actually accomplished. So a manual end skips both penalties.
-    const isManualEnd = reason === MANUAL_END_REASON;
+    // Leaving tiles face-up costs the same either way — walking away early
+    // and running the board into a genuine dead end are charged alike, so
+    // "stop now" is never a way to dodge the cost of an unfinished board.
+    // It is a *scale*, not a flat subtraction: an earlier flat per-tile
+    // penalty could wipe out real scoring outright (verified case: 8 raw
+    // points against 29 never-flipped tiles → −870, clamped to a flat 0),
+    // which read as "you scored nothing" on the results modal and on the
+    // share card. Scaling always leaves a good run's score visible.
     const remaining = hooks.countRemainingTiles?.() ?? { neverFlipped: 0, flippedButRemaining: 0 };
-    const neverFlippedPenalty = isManualEnd ? 0 : remaining.neverFlipped * NEVER_FLIPPED_PENALTY;
-    const remainingPenalty = isManualEnd ? 0 : remaining.flippedButRemaining * REMAINING_PENALTY;
+    const unflippedScale = UNFLIPPED_SCALE ** remaining.neverFlipped;
     const total = Math.max(
       0,
-      Math.round(score * timeMult * bonusMult) - neverFlippedPenalty - remainingPenalty - extraPenalty,
+      Math.round(score * timeMult * bonusMult * unflippedScale) - extraPenalty,
     );
 
     const best = saveBestIfHigher(hooks.bestKey, total);
@@ -288,12 +283,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endHazardBgEl.classList.toggle('show', hazardEnd);
     refs.endTitleEl.textContent = s.endTitleDefault;
     refs.endScoreEl.textContent = String(total);
+    const pct = (v: number) => Math.round(v * 100) + '%';
     refs.endBreakdownEl.innerHTML =
+      row(s.patternPointsLabel, String(Math.round(patternPoints))) +
+      (comboBonusPoints > 0 ? row(s.comboBonusLabel, '+' + Math.round(comboBonusPoints)) : '') +
+      (linePoints > 0 ? row(s.linePointsLabel, '+' + Math.round(linePoints)) : '') +
       row(s.scoreLabel, String(score)) +
       row(`${s.perfBonusLabel}（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
-      row(s.timeMultLabel, '×' + timeMult) +
-      (!isManualEnd && remaining.neverFlipped > 0 ? row(`${s.neverFlippedLabel} × ${remaining.neverFlipped}`, '−' + neverFlippedPenalty) : '') +
-      (!isManualEnd && remaining.flippedButRemaining > 0 ? row(`${s.remainingLabel} × ${remaining.flippedButRemaining}`, '−' + remainingPenalty) : '') +
+      row(s.timeMultLabel, '×' + timeMult.toFixed(2)) +
+      (remaining.neverFlipped > 0
+        ? row(`${s.neverFlippedLabel} × ${remaining.neverFlipped}`, pct(unflippedScale))
+        : '') +
       (extraPenalty > 0 ? row(displayPenaltyLabel(extraPenaltyLabel), '−' + extraPenalty) : '');
     const detailText =
       displayReason(reason) +
@@ -362,7 +362,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resolving = true;
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
-    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, everScoredTileGroups);
+    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, {
+      pattern: s.labelPattern,
+      line: s.labelWholeLine,
+    });
     const multiplier = streak.currentMultiplier();
     // A chain reaction within *this* move is rewarded on top of (not instead
     // of) the cross-move streak above: that streak's own multiplier is fixed
@@ -379,6 +382,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     let comboMult = 1;
     const CASCADE_COMBO_FACTOR = 3;
     let totalRaw = 0;
+    let moveWeight = 0;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : 550;
     const STEP_GAP_MS = reduceMotion ? 0 : 350;
@@ -397,7 +401,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // out of step() already rendered at least once on its own.
       if (!totalRaw) hooks.render();
       streak.apply(totalRaw); // advances/resets the streak level; its delta was already distributed live below
-      perf.onMove(totalRaw > 0);
+      perf.onMove(moveWeight);
       updatePerfDisplay();
       if (gameOver) {
         resolving = false;
@@ -408,7 +412,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         endGame('全部方块已翻成点面');
         return;
       }
-      updateStuckState(hooks.findStuckGroups?.() ?? []);
+      updateStuckState(hooks.findStuckGroups?.(clearedDotColors) ?? []);
       resolving = false;
     };
 
@@ -420,7 +424,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         return;
       }
       totalRaw += s.points;
+      moveWeight += s.weight;
+      for (const dot of s.clearedDotColors) clearedDotColors.add(dot);
       const delta = s.points * multiplier * comboMult;
+      // Split for the end-of-run breakdown: the pattern's own points, the
+      // whole-line bonus, and everything the streak/chain multipliers added.
+      if (s.lineBonusGroups.length) linePoints += s.points;
+      else patternPoints += s.points;
+      comboBonusPoints += delta - s.points;
       // Captured before comboMult advances for the *next* step — this
       // step's own tier is "how deep into this move's chain are we",
       // which is exactly what comboMult already tracks at this point.
@@ -465,7 +476,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0) {
           score += delta;
-          scoreReel.showGain(delta);
+          const mult = multiplier * tierComboMult;
+          scoreReel.showGain(delta, mult > 1 ? `${s.label} ×${mult % 1 ? mult.toFixed(1) : mult}` : s.label);
           scoreReel.setValue(score);
           punch(refs.scoreReelEl);
         }

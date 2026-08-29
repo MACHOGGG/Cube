@@ -88,7 +88,17 @@ export interface I18nStrings {
   shareImgAlt: string;
   shareHint: string;
   closeBtn: string;
+  // ---- gain-bubble source labels (which pattern just paid out) ----
+  labelRun4: string;
+  labelBlock22: string;
+  label121: string;
+  labelBigTriangle: string;
+  labelPattern: string;
+  labelWholeLine: string;
   // ---- game controller (dynamic end-of-run text) ----
+  patternPointsLabel: string;
+  comboBonusLabel: string;
+  linePointsLabel: string;
   perfBonusLabel: string;
   timeMultLabel: string;
   neverFlippedLabel: string;
@@ -205,6 +215,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: 'Result card',
     shareHint: 'Press and hold, or right-click the image, to save it',
     closeBtn: 'Close',
+    labelRun4: 'Run of 4',
+    labelBlock22: '2x2',
+    label121: '1-2-1',
+    labelBigTriangle: 'Big triangle',
+    labelPattern: 'Pattern',
+    labelWholeLine: 'Full line',
+    patternPointsLabel: 'Pattern points',
+    comboBonusLabel: 'Streak & chain bonus',
+    linePointsLabel: 'Whole-line bonus',
     perfBonusLabel: 'Hit-rate bonus',
     timeMultLabel: 'Time multiplier',
     neverFlippedLabel: 'Never flipped',
@@ -313,6 +332,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: 'Carte de résultat',
     shareHint: 'Appuyez longuement, ou clic droit sur l\'image, pour l\'enregistrer',
     closeBtn: 'Fermer',
+    labelRun4: 'Suite de 4',
+    labelBlock22: '2x2',
+    label121: '1-2-1',
+    labelBigTriangle: 'Grand triangle',
+    labelPattern: 'Motif',
+    labelWholeLine: 'Ligne entière',
+    patternPointsLabel: 'Points de motifs',
+    comboBonusLabel: 'Bonus de série',
+    linePointsLabel: 'Bonus de ligne',
     perfBonusLabel: 'Bonus de taux de réussite',
     timeMultLabel: 'Multiplicateur de temps',
     neverFlippedLabel: 'Jamais retournées',
@@ -421,6 +449,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: '戰績卡片',
     shareHint: '長按或右鍵圖片即可儲存',
     closeBtn: '關閉',
+    labelRun4: '4連',
+    labelBlock22: '2×2',
+    label121: '121',
+    labelBigTriangle: '大三角',
+    labelPattern: '圖案',
+    labelWholeLine: '整線',
+    patternPointsLabel: '圖案分',
+    comboBonusLabel: '連擊加成',
+    linePointsLabel: '整線獎勵',
     perfBonusLabel: '有效得分率加成',
     timeMultLabel: '用時係數',
     neverFlippedLabel: '從未翻面',
@@ -529,6 +566,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: '战绩卡片',
     shareHint: '长按或右键图片即可保存',
     closeBtn: '关闭',
+    labelRun4: '4连',
+    labelBlock22: '2×2',
+    label121: '121',
+    labelBigTriangle: '大三角',
+    labelPattern: '图案',
+    labelWholeLine: '整线',
+    patternPointsLabel: '图案分',
+    comboBonusLabel: '连击加成',
+    linePointsLabel: '整线奖励',
     perfBonusLabel: '有效得分率加成',
     timeMultLabel: '用时系数',
     neverFlippedLabel: '从未翻面',
