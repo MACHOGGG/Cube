@@ -1,0 +1,57 @@
+/*
+ * The app's three typefaces, served from our own bundle.
+ *
+ * These used to come from fonts.googleapis.com via a <link> in index.html.
+ * That link is render-blocking, and Google's domains are unreachable from
+ * mainland China — so the page there sat on a white screen until the request
+ * timed out, whatever host the site itself was on. Bundling the files means
+ * the page has no external dependency at all: it either loads, or it
+ * doesn't, in one piece.
+ *
+ * All three are variable fonts, so one file per family covers every weight
+ * the app uses (Fraunces 500-700, Karla 400-700, JetBrains Mono 500-600)
+ * instead of a separate download each. Only the `latin` subset ships: it
+ * spans Latin-1, which is everything English and French need, and the two
+ * Chinese locales fall through to PingFang/system fonts exactly as before.
+ *
+ * Fraunces gets the `standard` cut (optical size + weight) rather than the
+ * smaller weight-only one, because `font-optical-sizing: auto` is on by
+ * default — dropping the opsz axis would quietly change how the headings
+ * render at large sizes.
+ *
+ * All three are SIL Open Font License 1.1; see LICENSE-*.txt beside the
+ * files in src/assets/fonts.
+ *
+ * To refresh them, take the latin variable cut out of the @fontsource
+ * packages and drop it in beside this file:
+ *   npm i -D @fontsource-variable/{fraunces,karla,jetbrains-mono}
+ *   fraunces        files/fraunces-latin-standard-normal.woff2
+ *   karla           files/karla-latin-wght-normal.woff2
+ *   jetbrains-mono  files/jetbrains-mono-latin-wght-normal.woff2
+ * The packages are not a build dependency — only the copied files are — so
+ * uninstall them again afterwards.
+ */
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/fraunces-latin-var.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Karla';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('./assets/fonts/karla-latin-var.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono-latin-var.woff2') format('woff2-variations');
+}
