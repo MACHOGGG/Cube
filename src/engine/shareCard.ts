@@ -55,16 +55,19 @@ export function packSnapshot(raw: RawCell[]): BoardSnapshot {
   const scale = 1 / Math.max(maxX - minX, maxY - minY, 1e-6);
   const offX = (1 - (maxX - minX) * scale) / 2;
   const offY = (1 - (maxY - minY) * scale) / 2;
-  const T = (x: number, y: number): [number, number] => [(x - minX) * scale + offX, (y - minY) * scale + offY];
+  // 4 decimals of board-space (≤0.1px on any real thumbnail): snapshots are
+  // archived to localStorage per finished run, so their JSON stays compact.
+  const R4 = (v: number) => Math.round(v * 1e4) / 1e4;
+  const T = (x: number, y: number): [number, number] => [R4((x - minX) * scale + offX), R4((y - minY) * scale + offY)];
   return {
     cells: raw.map((c): SnapshotCell => {
       if (c.kind === 'circle') {
         const [cx, cy] = T(c.cx, c.cy);
-        return { kind: 'circle', cx, cy, r: c.r * scale, face: c.face, color: c.color };
+        return { kind: 'circle', cx, cy, r: R4(c.r * scale), face: c.face, color: c.color };
       }
       if (c.kind === 'rect') {
         const [cx, cy] = T(c.cx, c.cy);
-        return { kind: 'rect', cx, cy, half: c.half * scale, face: c.face, color: c.color, rotateDeg: c.rotateDeg };
+        return { kind: 'rect', cx, cy, half: R4(c.half * scale), face: c.face, color: c.color, rotateDeg: c.rotateDeg };
       }
       return { kind: 'poly', face: c.face, color: c.color, points: c.points.map(([x, y]) => T(x, y)) };
     }),
@@ -200,13 +203,14 @@ const PAD = 80;
 // zoomed into or saved at native size.
 const EXPORT_SCALE = 3;
 
-/** Renders the composed PNG data URL: title, score summary, then the start and end board snapshots side by side, each labeled. */
-export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | null, endSnap: BoardSnapshot | null): string {
+/** Renders the composed PNG data URL: title and score summary up top, then
+ *  the final layout as one large snapshot centred in its own space. */
+export function renderShareCard(info: ShareCardInfo, endSnap: BoardSnapshot | null): string {
   const s = STRINGS[info.lang];
-  const boardsY = 300;
-  const boardGap = 28;
-  const thumb = (CARD_W - PAD * 2 - boardGap) / 2;
-  const cardH = boardsY + thumb + 120;
+  const boardY = 300;
+  const hero = 380;
+  const heroX = (CARD_W - hero) / 2;
+  const cardH = boardY + hero + 110;
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W * EXPORT_SCALE;
@@ -256,20 +260,20 @@ export function renderShareCard(info: ShareCardInfo, startSnap: BoardSnapshot | 
   ctx.fillStyle = '#8b8680';
   ctx.fillText(info.detail, PAD, 258);
 
-  const drawThumb = (snap: BoardSnapshot | null, x: number, label: string) => {
-    ctx.fillStyle = '#f0ece4';
-    roundRect(ctx, x, boardsY, thumb, thumb, 20);
-    ctx.fill();
-    if (snap) {
-      const inset = thumb * 0.08;
-      drawSnapshot(ctx, snap, x + inset, boardsY + inset, thumb - inset * 2);
-    }
-    ctx.font = '600 15px "Karla", sans-serif';
-    ctx.fillStyle = '#5b5650';
-    ctx.fillText(label, x, boardsY + thumb + 30);
-  };
-  drawThumb(startSnap, PAD, s.shareStartLabel);
-  drawThumb(endSnap, PAD + thumb + boardGap, s.shareEndLabel);
+  // The final layout, centred large in its own backing space — the card's
+  // one picture, rather than the twin start/end thumbnails it used to copy.
+  ctx.fillStyle = '#f0ece4';
+  roundRect(ctx, heroX, boardY, hero, hero, 24);
+  ctx.fill();
+  if (endSnap) {
+    const inset = hero * 0.08;
+    drawSnapshot(ctx, endSnap, heroX + inset, boardY + inset, hero - inset * 2);
+  }
+  ctx.font = '600 15px "Karla", sans-serif';
+  ctx.fillStyle = '#5b5650';
+  ctx.textAlign = 'center';
+  ctx.fillText(s.shareEndLabel, CARD_W / 2, boardY + hero + 32);
+  ctx.textAlign = 'left';
 
   ctx.font = '500 13px "Karla", sans-serif';
   ctx.fillStyle = '#a39e97';

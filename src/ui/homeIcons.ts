@@ -184,9 +184,10 @@ function burstStar(cx: number, cy: number, R: number, fill: string): string {
 export const ICON_BOMB_STAR = svg(baseShape('square', C.brickSoft) + burstStar(50, 50, 42, C.white));
 
 /** A single option chip inside the bomb panel: an orange piece for the basic
- *  tier, a purple "+" piece for the advanced (more-layouts) tier. */
-export function bombChip(shape: BaseShape, tier: 'basic' | 'advanced'): string {
-  const fill = tier === 'basic' ? C.amber : C.purple;
+ *  tier, a green piece (the base-square icon's green) for the 90s timed tier,
+ *  a purple "+" piece for the advanced (more-layouts) tier. */
+export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced'): string {
+  const fill = tier === 'basic' ? C.amber : tier === 'timed' ? C.green : C.purple;
   const body =
     shape === 'square'
       ? `<rect x="22" y="22" width="56" height="56" rx="12" fill="${fill}"/>`

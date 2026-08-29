@@ -624,6 +624,25 @@ button:hover { filter: brightness(1.05); }
 .profile-row-glyph svg { width: 100%; height: 100%; }
 .profile-row-label { flex: 1; font-weight: 600; font-size: 0.92rem; }
 .profile-row-value { color: var(--ink-faint); font-size: 0.82rem; }
+/* Coming-soon perks: same window as the rows above, but inert, with a small
+   lock leading the label instead of the oversized list glyph they had. */
+.profile-row--locked { cursor: default; }
+.profile-row--locked:hover { border-color: var(--line); }
+.profile-row-glyph--lock { width: 13px; height: 13px; }
+
+/* 《成为Slides天才》 — the one rounded, centred, soft-but-vivid orange
+   window under the 《Slides 天才特供》 heading; every other copy of the
+   call-to-action is gone. */
+.genius-cta {
+  display: block; flex: none; width: fit-content; margin: 2px auto 10px;
+  padding: 12px 26px; border: none; border-radius: 16px;
+  background: #F5A93F; color: #FFFFFF;
+  font-family: inherit; font-weight: 700; font-size: 16px; letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px rgba(233, 148, 40, 0.35); cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.genius-cta:hover { box-shadow: 0 6px 18px rgba(233, 148, 40, 0.48); }
+.genius-cta:active { transform: translateY(1px) scale(0.99); }
 
 /* ---------- records & rankings ---------- */
 /* Two panels, the amber one for this device's records and the periwinkle one
@@ -703,6 +722,135 @@ button:hover { filter: brightness(1.05); }
   .home-nav { transition: none; }
 }
 
+/* ---------- 注册/登录 tabs (profile page) ---------- */
+.auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.auth-tab {
+  flex: 1; background: var(--board-bg); color: var(--ink-soft); border: 1px solid transparent;
+  border-radius: 100px; padding: 9px 12px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.9rem;
+}
+.auth-tab.active { background: var(--accent-soft); color: var(--accent-ink); }
+.auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
+.auth-body .tag-line { margin: 0; }
+
+/* ---------- language picker ---------- */
+/* This screen is the very first thing a new player sees, before any board
+   — so unlike the rest of the app it gets its own soft atmospheric wash
+   instead of the plain --bg, and a title that glows on its own rather than
+   a caption spelling out "swipe a strip to choose".
+
+   It is also one locked screen: there is nothing below the grid, so there is
+   nothing to scroll to. The page is pinned to the viewport (dvh, so a mobile
+   browser's collapsing toolbar can't leave the bottom row cut off) and
+   renderLanguageSelect holds a scroll lock on <html> for as long as it is
+   mounted. Its own small top/bottom padding replaces .app's 92px bottom
+   gutter, which exists only to clear the persistent bottom nav — a bar this
+   screen never shows. */
+.lang-select-page {
+  position: relative; justify-content: flex-start; gap: 12px;
+  height: 100vh; height: 100dvh;
+  padding-top: 3vh; padding-bottom: 3vh;
+}
+/* overscroll-behavior stops a touch device rubber-banding (or triggering
+   pull-to-refresh) on a page that has nowhere to scroll — overflow:hidden
+   alone doesn't prevent that gesture. */
+html.lang-locked, html.lang-locked body {
+  overflow: hidden; height: 100%; overscroll-behavior: none;
+}
+.lang-select-page::before {
+  content: ''; position: absolute; inset: -28px -16px auto -16px; height: 320px; z-index: -1;
+  background: radial-gradient(ellipse at 50% 0%, var(--accent-soft) 0%, transparent 70%);
+  opacity: 0.9; pointer-events: none;
+}
+.lang-title {
+  font-size: 2.1rem; letter-spacing: 0.01em; margin-bottom: 4px;
+  animation: lang-title-glow 3.2s ease-in-out infinite;
+}
+@keyframes lang-title-glow {
+  0%, 100% { text-shadow: 0 0 0 transparent; }
+  50% { text-shadow: 0 0 22px var(--score-glow), 0 0 2px var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) { .lang-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
+
+/* A 9-row x 4-column letter grid styled like the game's own tiles — the
+   portrait counterpart of the original 4x9 layout. Only 4 of the 9 rows are
+   draggable (horizontally, one row at a time); each such row gets its own
+   invisible hit-target + a small blinking arrow marking exactly which gap
+   to watch, positioned as free-floating overlays rather than real flex
+   siblings inside the row (see languageSelect.ts's module comment for why:
+   an in-flow arrow was found to throw off the ghost-fill offset math). */
+.lang-board-wrap { position: relative; display: flex; justify-content: center; margin-top: 8px; }
+/* Sized to whichever runs out first: the height left after the title and
+   the page's own padding, a 640px cap so the tiles don't get silly on a
+   tall desktop window, or the viewport width — that last term is what keeps
+   the board narrow enough for the right-hand chevrons to still land inside
+   the column on a narrow phone, since the board's width is derived from its
+   height through the 4/9 ratio. */
+.lang-board--vertical {
+  position: relative; display: flex; flex-direction: row; gap: 4px; aspect-ratio: 4 / 9;
+  height: min(calc(92vh - 64px), 640px, calc((100vw - 116px) * 2.25));
+  height: min(calc(92dvh - 64px), 640px, calc((100vw - 116px) * 2.25));
+}
+.lang-col--vertical { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
+
+.lang-row-hit { position: absolute; touch-action: none; cursor: grab; z-index: 3; }
+.lang-row-hit--active { cursor: grabbing; }
+
+/* Two hints per draggable row: the in-grid arrowhead sitting on the gap its
+   letter crosses, and a double chevron parked just off the board's right
+   edge marking the whole row as draggable. Both are positioned by JS against
+   --lang-cell-size (measured from a real tile), so they keep the reference
+   layout's proportions at any viewport size. */
+.lang-row-arrow, .lang-row-edge-arrow {
+  position: absolute; pointer-events: none; z-index: 4; display: flex;
+}
+.lang-row-arrow { transform: translate(-50%, -50%); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+.lang-row-arrow svg { width: calc(var(--lang-cell-size, 60px) * 0.62); height: auto; display: block; }
+.lang-row-edge-arrow { transform: translateY(-50%); color: var(--ink-soft); opacity: 0.75; }
+.lang-row-edge-arrow svg { width: calc(var(--lang-cell-size, 60px) * 0.42); height: auto; display: block; }
+
+/* The "slight motion" both arrows keep: a stretch out along the direction
+   they point, a small recoil past neutral, then settle — anchored at the
+   trailing edge (transform-origin: right) so the arrowhead itself is what
+   reaches, rather than the whole glyph sliding back and forth. */
+.lang-arrow-nudge {
+  display: flex; transform-origin: 100% 50%;
+  animation: lang-arrow-nudge 1.5s ease-in-out infinite;
+}
+@keyframes lang-arrow-nudge {
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  30% { transform: translateX(-14%) scaleX(1.18); }
+  62% { transform: translateX(3%) scaleX(0.92); }
+}
+@media (prefers-reduced-motion: reduce) { .lang-arrow-nudge { animation: none; } }
+
+.lang-cell {
+  aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700;
+  /* Sized off a measured tile so a letter fills the tile the way the
+     reference layout has it, instead of a viewport unit that drifts out of
+     proportion as the board scales. 0.7 puts a latin cap at roughly half the
+     tile's height and a CJK glyph at roughly two thirds, matching the
+     reference; a full em still leaves room either side of the widest glyph. */
+  font-size: calc(var(--lang-cell-size, 60px) * 0.7); line-height: 1;
+  font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25); box-shadow: var(--shadow); user-select: none;
+}
+/* Wraparound preview tiles: absolutely placed on the board itself (not
+   inside a one-tile-wide column), so they can sit at the dragged row's own
+   vertical position and trail it in step. */
+.lang-cell.ghost { position: absolute; pointer-events: none; }
+.lang-cell--solved { box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--score-glow); }
+/* A completed word's cells pulse (scale + intensifying glow) for a couple
+   of beats before the app hands off to that language — the same
+   "celebrate before you go" beat the real game's own scoring gives a
+   match, rather than an instant cut. */
+.lang-cell--solving { animation: lang-cell-solve-pulse 320ms ease-in-out 2; position: relative; z-index: 2; }
+@keyframes lang-cell-solve-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 6px 1px var(--score-glow); transform: scale(1); }
+  50% { box-shadow: 0 0 0 3px #fff, 0 0 16px 6px var(--score-glow); transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) { .lang-cell--solving { animation: none; box-shadow: 0 0 0 3px #fff, 0 0 12px 3px var(--score-glow); } }
+
 /* ---------- language-switch popup ---------- */
 .lang-switch-modal { max-width: 300px; }
 .lang-switch-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
@@ -743,9 +891,17 @@ button:hover { filter: brightness(1.05); }
   0%, 20%, 44%, 68% { opacity: 0; }
   10%, 32%, 56%, 100% { opacity: 1; }
 }
+/* The flip: a plank with real thickness, not a flat card. The cell supplies
+   perspective; the plank half-turns with the printed faces front and back,
+   while two darkened 4px strips (rotated onto the sides) close the edges. */
+.story-plank { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform 880ms cubic-bezier(0.5, 0.08, 0.32, 1); }
+.story-plank-face { position: absolute; inset: 0; backface-visibility: hidden; }
+.story-plank-edge { position: absolute; top: 3px; bottom: 3px; width: 4px; transform: rotateY(90deg); filter: brightness(0.62); border-radius: 2px; }
+
 @media (prefers-reduced-motion: reduce) {
   .story-arrow-nudge { animation: none; }
   .story-check { animation: none; }
+  .story-plank { transition: none; }
 }
 
 .story-controls .icon-btn { white-space: nowrap; }

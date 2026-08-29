@@ -29,7 +29,7 @@ export interface StoryCell {
 
 export type StoryStep =
   | { t: 'show'; f: number }
-  | { t: 'arrow'; x: number; y: number; ang: number; color: string }
+  | { t: 'arrow'; x: number; y: number; ang: number; color: string; mode?: 'static' }
   | { t: 'slide'; f: number; idx: number[]; dx: number; dy: number; wx: number; wy: number; snap: number }
   | { t: 'checks'; pts: { x: number; y: number }[]; color: string }
   | { t: 'flip'; f: number; idx: number[]; snap: number }
@@ -112,8 +112,14 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   window.addEventListener('resize', layout);
 
   let els: HTMLElement[] = [];
-  function renderFrame(f: number) {
+  let curFrame = -1;
+  function renderFrame(f: number, keepArrows = false) {
+    // Mid-beat frame swaps keep the arrow hints standing (re-appended last,
+    // so they stay on top): one line can slide while the hints for the moves
+    // still to come hold their places, exactly like the printed sheet.
+    const arrows = keepArrows ? Array.from(board.querySelectorAll<HTMLElement>('.story-arrow')) : [];
     board.innerHTML = '';
+    curFrame = f;
     els = spec.frames[f].map((c) => {
       const el = document.createElement('div');
       el.className = 'story-cell';
@@ -125,6 +131,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       board.appendChild(el);
       return el;
     });
+    for (const a of arrows) board.appendChild(a);
   }
 
   let gen = 0;
@@ -137,16 +144,31 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
     } else if (st.t === 'pause') {
       await sleep(st.ms);
     } else if (st.t === 'arrow') {
+      // A hint already standing at this spot (shown statically when the beat
+      // opened) is replaced in place, so the same arrow appears to wake up
+      // and start stretching when its turn comes.
+      const key = `${st.x},${st.y}`;
+      for (const old of Array.from(board.querySelectorAll<HTMLElement>('.story-arrow'))) {
+        if (old.dataset.k === key) old.remove();
+      }
       const a = document.createElement('div');
       a.className = 'story-arrow';
+      a.dataset.k = key;
       a.style.left = st.x + 'px';
       a.style.top = st.y + 'px';
       a.style.transform = `translate(-50%,-50%) rotate(${st.ang}deg)`;
-      a.innerHTML = `<span class="story-arrow-nudge">${ARROW_SVG(st.color)}</span>`;
-      board.appendChild(a);
-      // Exactly two stretch cycles (see the CSS iteration count), then the
-      // move starts on its own; the arrow stays put, static, while it runs.
-      await sleep(1500);
+      if (st.mode === 'static') {
+        a.innerHTML = ARROW_SVG(st.color);
+        board.appendChild(a);
+        await sleep(180);
+      } else {
+        // Armed: exactly two stretch cycles (the CSS iteration count), then
+        // the move starts on its own; the slide that follows retires it.
+        a.classList.add('story-arrow--armed');
+        a.innerHTML = `<span class="story-arrow-nudge">${ARROW_SVG(st.color)}</span>`;
+        board.appendChild(a);
+        await sleep(1500);
+      }
     } else if (st.t === 'checks') {
       for (const p of st.pts) {
         const c = document.createElement('div');
@@ -158,21 +180,33 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       }
       await sleep(2100);
     } else if (st.t === 'flip') {
-      renderFrame(st.f);
+      if (curFrame !== st.f) renderFrame(st.f, true);
+      // Each flipping tile becomes a plank with real thickness (≈0.1cm at
+      // CSS scale, 4px): the old print on the front, the new print on the
+      // back, and two darkened edge strips closing the sides — so the
+      // half-turn reads as a little wooden piece, not a flat card.
       for (const i of st.idx) {
-        els[i].style.transition = 'transform 380ms ease-in';
-        els[i].style.transform = 'scaleX(0.02)';
+        const oldC = spec.frames[st.f][i];
+        const newC = spec.frames[st.snap][i];
+        const el = els[i];
+        el.style.perspective = '440px';
+        el.innerHTML =
+          `<div class="story-plank">` +
+          `<div class="story-plank-face" style="transform:translateZ(2px)">${cellSvg(oldC)}</div>` +
+          `<div class="story-plank-face" style="transform:rotateY(180deg) translateZ(2px)">${cellSvg(newC)}</div>` +
+          `<div class="story-plank-edge" style="left:-2px;background:${oldC.fill}"></div>` +
+          `<div class="story-plank-edge" style="right:-2px;background:${newC.fill}"></div>` +
+          `</div>`;
       }
-      await sleep(400);
-      if (gen !== my) return;
-      renderFrame(st.snap);
-      for (const i of st.idx) els[i].style.transform = 'scaleX(0.02)';
       void board.offsetWidth;
       for (const i of st.idx) {
-        els[i].style.transition = 'transform 380ms ease-out';
-        els[i].style.transform = '';
+        const plank = els[i].querySelector<HTMLElement>('.story-plank');
+        if (plank) plank.style.transform = 'rotateY(180deg)';
       }
-      await sleep(430);
+      await sleep(960);
+      if (gen !== my) return;
+      renderFrame(st.snap, true);
+      await sleep(300);
     } else if (st.t === 'fade') {
       board.style.transition = 'opacity 300ms ease';
       board.style.opacity = '0.25';
@@ -182,7 +216,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       board.style.opacity = '1';
       await sleep(340);
     } else if (st.t === 'slide') {
-      renderFrame(st.f);
+      if (curFrame !== st.f) renderFrame(st.f, true);
       await sleep(250);
       if (gen !== my) return;
       const movers = st.idx.map((i) => els[i]);
@@ -217,7 +251,10 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       if (gen !== my) return;
       await sleep(260); // the "release" beat before the pieces seat
       if (gen !== my) return;
-      renderFrame(st.snap);
+      renderFrame(st.snap, true);
+      // This line has moved: its own stretched arrow retires, while hints
+      // for the moves still to come keep standing.
+      for (const a of Array.from(board.querySelectorAll<HTMLElement>('.story-arrow--armed'))) a.remove();
       await sleep(300);
     }
   }

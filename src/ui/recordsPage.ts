@@ -1,4 +1,4 @@
-import { loadBest } from '../engine/persistence';
+import { loadBest, findRun } from '../engine/persistence';
 import { renderShareCard } from '../engine/shareCard';
 import { STRINGS, type Lang } from '../i18n';
 import { shapeName } from './shapeLabels';
@@ -38,6 +38,7 @@ export function renderRecordsPage(
     .map((src) => ({
       card: src.card,
       suffix: src.suffix,
+      key: src.card.bestKey + src.suffix,
       name: shapeName(lang, src.card.id, src.card.name),
       mode: src.mode,
       best: loadBest(src.card.bestKey + src.suffix),
@@ -74,7 +75,7 @@ export function renderRecordsPage(
       row.innerHTML =
         `<span class="records-row-name">${r.name}<span class="records-row-mode">${r.mode}</span></span>` +
         `<span class="records-row-score">${r.best}</span>`;
-      row.addEventListener('click', () => openRecordDetail(r.name + r.mode, r.best, lang));
+      row.addEventListener('click', () => openRecordDetail(r.name + r.mode, r.best, r.key, lang));
       panel.appendChild(row);
     }
     // Keep the ruled look when there are only a handful of entries.
@@ -92,13 +93,15 @@ export function renderRecordsPage(
  * Tapping a record re-opens the same result modal the run itself ended on —
  * same composite-score layout, same 分享战绩 button and share-card popup.
  *
- * Only the score survives in storage (runs aren't recorded move by move yet,
- * see the records/rankings task), so the breakdown rows a live result shows
- * are left out and the share card is drawn without its board thumbnails
- * rather than with invented ones.
+ * Every finished run archives its share card verbatim (see saveRun in
+ * persistence.ts), so the popup shows the very photo that run produced —
+ * board snapshot, breakdown rows, and the language it was played in. Only a
+ * record set before archiving existed falls back to a card rebuilt from the
+ * bare score, with an empty board space.
  */
-function openRecordDetail(title: string, score: number, lang: Lang): void {
+function openRecordDetail(title: string, score: number, bestKey: string, lang: Lang): void {
   const s = STRINGS[lang];
+  const run = findRun(bestKey, score);
   const overlay = document.createElement('div');
   overlay.className = 'overlay show';
   overlay.innerHTML = `
@@ -106,13 +109,16 @@ function openRecordDetail(title: string, score: number, lang: Lang): void {
       <h2>${title}</h2>
       <div class="end-score-label">${s.compositeScoreLabel}</div>
       <div class="big-score">${score}</div>
-      <p class="hint">${s.bestPhrase.replace('{n}', String(score))}</p>
+      <p class="hint"></p>
       <div class="btn-row">
         <button class="secondary" id="recShareBtn">${s.shareBtn}</button>
         <button class="primary" id="recCloseBtn">${s.closeBtn}</button>
       </div>
     </div>
   `;
+  overlay.querySelector<HTMLElement>('.hint')!.textContent = run
+    ? run.info.detail
+    : s.bestPhrase.replace('{n}', String(score));
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
@@ -121,17 +127,18 @@ function openRecordDetail(title: string, score: number, lang: Lang): void {
   });
   overlay.querySelector<HTMLButtonElement>('#recCloseBtn')!.addEventListener('click', close);
   overlay.querySelector<HTMLButtonElement>('#recShareBtn')!.addEventListener('click', () => {
-    const dataUrl = renderShareCard(
-      {
-        shapeName: title,
-        lang,
-        totalScore: score,
-        scoreRows: [[s.scoreLabel, String(score)]],
-        detail: s.bestPhrase.replace('{n}', String(score)),
-      },
-      null,
-      null,
-    );
+    const dataUrl = run
+      ? renderShareCard(run.info, run.end ?? null)
+      : renderShareCard(
+          {
+            shapeName: title,
+            lang,
+            totalScore: score,
+            scoreRows: [[s.scoreLabel, String(score)]],
+            detail: s.bestPhrase.replace('{n}', String(score)),
+          },
+          null,
+        );
     const share = document.createElement('div');
     share.className = 'overlay show';
     share.innerHTML = `

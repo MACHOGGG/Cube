@@ -135,7 +135,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // The panel is the same markup wherever it appears — inline beside the
   // burst on a wide screen, blown up in the centre of a phone — so its three
   // tiers stay in the same order and only its size changes.
-  function buildBombPanel(reopenKey?: string): HTMLElement {
+  // `onLaunch` runs just before a chip starts its game — the mobile centre
+  // picker passes its own close() here, so the blown-up bomb window retires
+  // the moment a challenge is picked, exactly like the timed picker does.
+  function buildBombPanel(reopenKey?: string, onLaunch?: () => void): HTMLElement {
     const panel = document.createElement('div');
     panel.className = 'bomb-panel';
 
@@ -146,6 +149,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       const chip = iconButton(bombChip(shape, 'basic'), `${s.bombBasicTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
       chip.addEventListener('click', (e) => {
         e.stopPropagation();
+        onLaunch?.();
         handlers.onBombFor('basic', card.id, reopenKey);
       });
       basicRow.appendChild(chip);
@@ -165,9 +169,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       timedRow.classList.add('bomb-row--open');
       for (const shape of BOMB_SHAPES) {
         const card = layout.base[shape];
-        const chip = iconButton(bombChip(shape, 'basic'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
+        const chip = iconButton(bombChip(shape, 'timed'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
         chip.addEventListener('click', (ev) => {
           ev.stopPropagation();
+          onLaunch?.();
           handlers.onBombFor('timed', card.id, reopenKey);
         });
         timedRow.appendChild(chip);
@@ -183,6 +188,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       const chip = iconButton(bombChip(shape, 'advanced'), `${s.bombAdvancedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
       chip.addEventListener('click', (e) => {
         e.stopPropagation();
+        onLaunch?.();
         handlers.onBombFor('advanced', card.id, reopenKey);
       });
       advRow.appendChild(chip);
@@ -211,9 +217,13 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     btn.dataset.reopen = 'bomb';
     btn.appendChild(buildBombPanel());
     wireTapFeedback(btn);
-    btn.addEventListener('click', () =>
-      openCenterPicker({ originEl: btn, title: s.bombBasicTitle, panel: buildBombPanel('bomb') }),
-    );
+    btn.addEventListener('click', () => {
+      // The close handle only exists once the picker is open, but the panel
+      // has to be built first — so the chips call it through this box.
+      let close: (() => void) | undefined;
+      const panel = buildBombPanel('bomb', () => close?.());
+      close = openCenterPicker({ originEl: btn, title: s.bombBasicTitle, panel });
+    });
     grid.appendChild(btn);
   }
 

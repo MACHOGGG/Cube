@@ -2,12 +2,14 @@ import type { Lang } from '../i18n';
 import { renderStoryTutorial, type StoryCell, type StoryStep } from './storyTutorial';
 
 /**
- * The circle basic tutorial — the storyboard's 5 numbered frames on a 6-row
+ * The circle basic tutorial — the storyboard's 6 numbered frames on a 6-row
  * pyramid of 21 balls. Solid coloured balls are front faces, dark gray are
  * unflipped, white balls with a coloured asterisk are dot faces, and dashed
- * light balls are blanks. Between frames 3 and 4 three diagonal lines slide
- * (down-right, down-right, up-left — the storyboard's three blue arrows),
- * which lines four orange dots up along one left diagonal.
+ * light balls are blanks. Between frames 3 and 4 the sheet's three blue
+ * arrows all come up, then each pulls in turn and its diagonal slides
+ * (down-right, down-right, up-left), which lines four orange dots up along
+ * one left diagonal; frame 6 ends by sliding the bottom row right through
+ * the blanks.
  */
 
 const D = 54; // ball diameter
@@ -36,7 +38,8 @@ function frame(rows: string[]): StoryCell[] {
 
 // 0-3 = storyboard frames 1, 2, 4, 5; 4-5 are the computed boards after the
 // first and second of frame 3's three slides (the sheet draws only the
-// arrows, but the animation passes through these states).
+// arrows, but the animation passes through these states); 6 = storyboard
+// frame 6, the bottom row slid right one ball through the blank.
 const FRAMES: StoryCell[][] = [
   frame(['R', 'RR', '-R-', '--OO', '---OO', 'GGGG--']),
   frame(['g', 'go', '-o-', '--rg', '---gr', 'rroo--']),
@@ -44,6 +47,7 @@ const FRAMES: StoryCell[][] = [
   frame(['-', '-g', '-gx', '--x-', '--xrg', 'rrx-gr']),
   frame(['-', 'gg', '-oo', '--r-', '---gg', 'rroo-r']),
   frame(['-', '-g', '-go', '--o-', '---rg', 'rroogr']),
+  frame(['-', '-g', '-gx', '--x-', '--xrg', 'rrrx-g']),
 ];
 
 const BLUE = '#4A6FC4';
@@ -55,14 +59,14 @@ const D2 = [3, 7, 12, 18];
 const VX = D / 2; // one diagonal step
 const VY = RH;
 
-function mid(a: { x: number; y: number }, b: { x: number; y: number }, ang: number): StoryStep {
-  return { t: 'arrow', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ang, color: BLUE };
+function mid(a: { x: number; y: number }, b: { x: number; y: number }, ang: number, mode?: 'static'): StoryStep {
+  return { t: 'arrow', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ang, color: BLUE, mode };
 }
-const ARROWS: StoryStep[] = [
-  mid(ctr(1, 1), ctr(2, 2), 60),
-  mid(ctr(2, 1), ctr(3, 2), 60),
-  mid(ctr(5, 3), ctr(4, 2), 240),
-];
+// Same anchor for the static and the armed version of each arrow, so the
+// engine swaps them in place and the hint appears to wake up on its turn.
+const arrow1 = (m?: 'static') => mid(ctr(1, 1), ctr(2, 2), 60, m);
+const arrow2 = (m?: 'static') => mid(ctr(2, 1), ctr(3, 2), 60, m);
+const arrow3 = (m?: 'static') => mid(ctr(5, 3), ctr(4, 2), 240, m);
 
 const avg = (pts: { x: number; y: number }[]) => ({
   x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
@@ -86,22 +90,31 @@ const BEATS: StoryStep[][] = [
   ],
   // 2 — the board mid-game: scored balls sit flipped to their dot faces.
   [{ t: 'show', f: 1 }],
-  // 3 — the three moves about to happen, marked exactly as on the sheet.
-  [{ t: 'show', f: 1 }, ...ARROWS],
-  // 4 — the three diagonal slides, one at a time, each announced by its
-  // arrow; four orange dots line up down the middle-left diagonal.
+  // 3 — the sheet's three arrows all come up first; then each pulls in turn
+  // and its diagonal slides, which lines four orange dots up along the
+  // middle-left diagonal.
   [
     { t: 'show', f: 1 },
-    ARROWS[0],
+    arrow1('static'),
+    arrow2('static'),
+    arrow3('static'),
+    arrow1(),
     { t: 'slide', f: 1, idx: D0, dx: VX, dy: VY, wx: VX * 6, wy: VY * 6, snap: 4 },
-    ARROWS[1],
+    arrow2(),
     { t: 'slide', f: 4, idx: D1, dx: VX, dy: VY, wx: VX * 5, wy: VY * 5, snap: 5 },
-    ARROWS[2],
+    arrow3(),
     { t: 'slide', f: 5, idx: D2, dx: -VX, dy: -VY, wx: -VX * 4, wy: -VY * 4, snap: 2 },
     { t: 'checks', color: BLUE, pts: [ctr(2, 2), ctr(3, 2), ctr(4, 2), ctr(5, 2)] },
   ],
-  // 5 — the completed line turns into blank balls: still slide, never score.
+  // 4 — the completed line turns into blank balls: still slide, never score.
   [{ t: 'show', f: 2 }, { t: 'fade', snap: 3 }],
+  // 5 — the sheet's frame 6 ending: the bottom row slides right one ball,
+  // straight through the blank — blanked balls still ride every move.
+  [
+    { t: 'show', f: 3 },
+    mid(ctr(5, 2), ctr(5, 3), 0),
+    { t: 'slide', f: 3, idx: [15, 16, 17, 18, 19, 20], dx: D, dy: 0, wx: D * 6, wy: 0, snap: 6 },
+  ],
 ];
 
 export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone: () => void): void {

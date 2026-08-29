@@ -77,7 +77,10 @@ const BEATS: StoryStep[][] = [
   [
     { t: 'show', f: 1 },
     { t: 'arrow', x: ctr(2, 2).x + 40, y: ctr(2, 2).y, ang: 0, color: MAG },
-    { t: 'slide', f: 1, idx: R2, dx: S, dy: 0, wx: (5 * S) / 2, wy: 0, snap: 2 },
+    // Ghost wrap offsets round the line's period UP to an even slot count,
+    // so the low-opacity refill keeps every orientation and never overlaps
+    // the leading cells (row 2 is 5 slots long → ghosts trail 6).
+    { t: 'slide', f: 1, idx: R2, dx: S, dy: 0, wx: 3 * S, wy: 0, snap: 2 },
     { t: 'arrow', x: diagArrowAt.x, y: diagArrowAt.y, ang: 240, color: MAG },
   ],
   // 4 — the right-slant diagonal slides up one pair; its two wrapped cells
@@ -85,7 +88,9 @@ const BEATS: StoryStep[][] = [
   [
     { t: 'show', f: 2 },
     { t: 'arrow', x: diagArrowAt.x, y: diagArrowAt.y, ang: 240, color: MAG },
-    { t: 'slide', f: 2, idx: DIAG, dx: -S / 2, dy: -H, wx: (-3.5 * S) / 2, wy: -3.5 * H, snap: 3 },
+    // 7 cells along the diagonal → ghosts trail 8 (4 pair-steps), keeping
+    // the refill's orientations aligned and clear of the leading cells.
+    { t: 'slide', f: 2, idx: DIAG, dx: -S / 2, dy: -H, wx: -2 * S, wy: -4 * H, snap: 3 },
   ],
   // 5 — the slide has lined five orange up along a left diagonal: it scores
   // and the whole line turns into blank triangles.
@@ -99,7 +104,8 @@ const BEATS: StoryStep[][] = [
   [
     { t: 'show', f: 4 },
     { t: 'arrow', x: ctr(3, 3).x + 40, y: ctr(3, 3).y, ang: 0, color: BLUE },
-    { t: 'slide', f: 4, idx: R3, dx: S, dy: 0, wx: (7 * S) / 2, wy: 0, snap: 5 },
+    // Bottom row is 7 slots long → ghosts trail 8, for the same reason.
+    { t: 'slide', f: 4, idx: R3, dx: S, dy: 0, wx: 4 * S, wy: 0, snap: 5 },
   ],
 ];
 

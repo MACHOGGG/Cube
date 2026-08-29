@@ -36,9 +36,9 @@ function frame(rows: string[]): StoryCell[] {
 // the computed midpoints inside storyboard step 9's three consecutive
 // slides, which the sheet doesn't draw but the animation passes through.
 const FRAMES: StoryCell[][] = [
-  frame(['bbyyR', 'bbbmm', 'bbyom', 'ooobb', 'bbbbR']),
-  frame(['bbybR', 'bbbym', 'bbymm', 'oooob', 'bbbbR']),
-  frame(['bbybR', 'bbbym', 'bbymm', 'RGYMb', 'bbbbR']),
+  frame(['bbyyR', 'bbbmm', 'bbyom', 'ooobR', 'bbbbb']),
+  frame(['bbybR', 'bbbym', 'bbymm', 'ooooR', 'bbbbb']),
+  frame(['bbybR', 'bbbym', 'bbymm', 'RGYMR', 'bbbbb']),
   frame(['bbybb', 'bbbyR', 'bbymm', 'RGYMm', 'bbbbR']),
   frame(['bbybb', 'bbbyR', 'bbyGR', 'RGYMO', 'bbbbR']),
   frame(['bbybb', 'bbyRb', 'bbyGR', 'RGYMO', 'bbbbR']),
@@ -55,11 +55,11 @@ const row = (r: number) => [r * 5, r * 5 + 1, r * 5 + 2, r * 5 + 3, r * 5 + 4];
 const W = '#FFFFFF';
 const SPAN = 5 * P;
 
-function arrow(r: number, c: number, ang: number): StoryStep {
+function arrow(r: number, c: number, ang: number, mode?: 'static'): StoryStep {
   // Anchored just past the named cell's centre, in the pointing direction.
   const p = ctr(r, c);
   const rad = (ang * Math.PI) / 180;
-  return { t: 'arrow', x: p.x + Math.cos(rad) * 34, y: p.y + Math.sin(rad) * 34, ang, color: W };
+  return { t: 'arrow', x: p.x + Math.cos(rad) * 34, y: p.y + Math.sin(rad) * 34, ang, color: W, mode };
 }
 
 const BEATS: StoryStep[][] = [
@@ -93,18 +93,22 @@ const BEATS: StoryStep[][] = [
     { t: 'slide', f: 4, idx: row(1), dx: -P, dy: 0, wx: -SPAN, wy: 0, snap: 5 },
     { t: 'checks', pts: [0, 1, 2, 3].map((r) => ctr(r, 2)), color: W },
   ],
-  // 8 — the grays flip; three slides are queued up at once.
+  // 8 — the grays flip; the three coming slides are all marked at once.
   [
     { t: 'show', f: 5 },
     { t: 'flip', f: 5, idx: [2, 7, 12], snap: 6 },
-    arrow(0, 3, 0),
-    arrow(1, 3, 0),
-    arrow(3, 0, 180),
+    arrow(0, 3, 0, 'static'),
+    arrow(1, 3, 0, 'static'),
+    arrow(3, 0, 180, 'static'),
   ],
-  // 9 — row 0 right two, row 1 right one, row 3 left one: the whole right
-  // column collects five brick dots — a full-column dot match.
+  // 9 — all three arrows come up first, then each pulls in turn and its row
+  // slides: row 0 right two, row 1 right one, row 3 left one — the whole
+  // right column collects five brick dots, a full-column dot match.
   [
     { t: 'show', f: 6 },
+    arrow(0, 2, 0, 'static'),
+    arrow(1, 3, 0, 'static'),
+    arrow(3, 0, 180, 'static'),
     arrow(0, 2, 0),
     { t: 'slide', f: 6, idx: row(0), dx: P * 2, dy: 0, wx: SPAN, wy: 0, snap: 9 },
     arrow(1, 3, 0),

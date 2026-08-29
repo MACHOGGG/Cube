@@ -2,7 +2,7 @@ import type { ShellRefs } from '../ui/gameShell';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
-import { saveBestIfHigher } from './persistence';
+import { saveBestIfHigher, saveRun } from './persistence';
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
@@ -312,11 +312,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       detail: detailText,
       hazardEnd,
     };
+    // Archive this run's share card verbatim — the 记录 panel re-opens
+    // exactly this photo later, not a reconstruction from the bare score.
+    saveRun(hooks.bestKey, {
+      at: Date.now(),
+      info: { shapeName: hooks.shapeName, lang: hooks.lang, ...lastShareInfo },
+      start: startSnapshot,
+      end: endSnapshot,
+    });
   }
 
   function doShare() {
     if (!lastShareInfo) return;
-    const dataUrl = renderShareCard({ shapeName: hooks.shapeName, lang: hooks.lang, ...lastShareInfo }, startSnapshot, endSnapshot);
+    const dataUrl = renderShareCard({ shapeName: hooks.shapeName, lang: hooks.lang, ...lastShareInfo }, endSnapshot);
     refs.shareImageEl.src = dataUrl;
     refs.shareOverlay.classList.add('show');
   }

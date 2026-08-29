@@ -55,7 +55,8 @@ export function renderAccountPage(
 
       <hr class="menu-divider" />
 
-      <div class="menu-section-label">${s.moreModesTitle}</div>
+      <div class="menu-section-label">${s.geniusSpecialTitle}</div>
+      <button class="genius-cta" id="becomeGeniusBtn">${s.becomeGenius}</button>
       <button class="profile-row" id="randomRow">
         <span class="profile-row-label">${s.randomTargetTitle}</span>
         <span class="profile-row-value">${s.comingSoon}</span>
@@ -64,15 +65,15 @@ export function renderAccountPage(
         <span class="profile-row-label">${s.multiplayerTitle}</span>
         <span class="profile-row-value">${s.comingSoon}</span>
       </button>
-
-      <hr class="menu-divider" />
-
-      <div class="menu-section-label">${s.geniusPrivilegesTitle}</div>
-      <div class="privilege-list">
-        ${privileges.map((p) => `<div class="privilege-item"><span class="glyph">${LOCK_GLYPH}</span><span class="label">${p}</span></div>`).join('')}
-        <div class="privilege-item soon">${s.privilegesSoon}</div>
-      </div>
-      <button class="home-how-to" id="becomeGeniusBtn">${s.becomeGenius}</button>
+      ${privileges
+        .map(
+          (p) =>
+            `<div class="profile-row profile-row--locked">` +
+            `<span class="profile-row-glyph profile-row-glyph--lock">${LOCK_GLYPH}</span>` +
+            `<span class="profile-row-label">${p}</span>` +
+            `<span class="profile-row-value">${s.comingSoon}</span></div>`,
+        )
+        .join('')}
 
       <div class="controls">
         <button class="icon-btn" id="backBtn">${s.back}</button>

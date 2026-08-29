@@ -1,4 +1,4 @@
-import './style.css';
+import { injectStyles } from './injectStyles';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
@@ -19,6 +19,8 @@ import { createTriangleBigGame } from './shapes/triangleBig';
 import { createCircleSevenGame } from './shapes/circleSeven';
 import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
+
+injectStyles();
 
 const rootEl = document.getElementById('app');
 if (!rootEl) throw new Error('#app not found');

@@ -64,6 +64,7 @@ export interface I18nStrings {
   geniusPrivilegesTitle: string;
   privilegesSoon: string;
   becomeGenius: string;
+  geniusSpecialTitle: string;
   // ---- game shell (shared HUD/overlays across every shape) ----
   pauseBtn: string;
   finishBtn: string;
@@ -176,6 +177,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusPrivilegesTitle: 'Slides Genius perks',
     privilegesSoon: '…more coming soon',
     becomeGenius: 'Become a Slides Genius',
+    geniusSpecialTitle: 'Slides Genius Exclusives',
     pauseBtn: 'Pause',
     finishBtn: 'Finish',
     scoreLabel: 'Score',
@@ -278,6 +280,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusPrivilegesTitle: 'Avantages Slides Génie',
     privilegesSoon: '…encore plus à venir',
     becomeGenius: 'Devenir un Slides Génie',
+    geniusSpecialTitle: 'Exclusivités Slides Génie',
     pauseBtn: 'Pause',
     finishBtn: 'Terminer',
     scoreLabel: 'Score',
@@ -380,6 +383,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusPrivilegesTitle: 'Slides 天才專屬特權',
     privilegesSoon: '……敬請期待',
     becomeGenius: '成為 Slides 天才',
+    geniusSpecialTitle: 'Slides 天才特供',
     pauseBtn: '暫停',
     finishBtn: '結束',
     scoreLabel: '得分',
@@ -482,6 +486,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusPrivilegesTitle: 'Slides 天才专属特权',
     privilegesSoon: '……敬请期待',
     becomeGenius: '成为 Slides 天才',
+    geniusSpecialTitle: 'Slides 天才特供',
     pauseBtn: '暂停',
     finishBtn: '结束',
     scoreLabel: '得分',

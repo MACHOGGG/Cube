@@ -72,7 +72,9 @@ const DRAG_ROW_ARROW_GAP: Record<number, number> = { 1: 0, 2: 2, 7: 1, 8: -1 };
 // keeps it off the lighter grays.
 const GAP_ARROW_SVG =
   '<svg viewBox="0 0 34 14" aria-hidden="true">' +
-  '<path d="M1 7 L11.5 1.2 L11.5 12.8 Z" fill="#FFFFFF"/>' +
+  // Stroked with a round join over its own fill: rounded corners at the
+  // same overall size (the path is inset by the stroke's reach).
+  '<path d="M2.4 7 L10.6 2.5 L10.6 11.5 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2.4" stroke-linejoin="round"/>' +
   '<path d="M15 7 H21.5" stroke="#E9A53C" stroke-width="3" stroke-linecap="round"/>' +
   '<path d="M26.5 7 H32.8" stroke="#E9A53C" stroke-width="3" stroke-linecap="round"/>' +
   '</svg>';
