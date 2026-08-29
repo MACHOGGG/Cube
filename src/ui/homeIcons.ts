@@ -28,7 +28,7 @@ export const HOME_COLORS = {
   moreCircle: '#8B5CD9',
   moreTriangle: '#4A6FC4',
   navBlue: '#2E63C4',
-  navInk: '#2A3A78',
+  navAvatar: '#4A60B4',
   navGray: '#B0B0B0',
 } as const;
 
@@ -320,11 +320,16 @@ export function moreLayoutCard(shape: BaseShape): string {
 // bottom nav
 // ---------------------------------------------------------------------------
 
-/** 个人主页 — one navy bust: an arch with a flat base, the head marked by a
- *  white ring near its crown rather than drawn as a separate blob. */
+/** 个人主页 — a blue-violet disc holding one white avatar: a ringed head over
+ *  a rounded bust whose shoulders run off the bottom of the disc, which the
+ *  disc's own edge crops. */
 export const ICON_NAV_PROFILE = svg(
-  `<path d="M8 97 V52 A42 42 0 0 1 92 52 V97 Z" fill="${C.navInk}"/>` +
-    `<circle cx="50" cy="35" r="11.5" fill="none" stroke="#fff" stroke-width="4.5"/>`,
+  `<defs><clipPath id="navAvatarClip"><circle cx="50" cy="50" r="46"/></clipPath></defs>` +
+    `<circle cx="50" cy="50" r="46" fill="${C.navAvatar}"/>` +
+    `<g clip-path="url(#navAvatarClip)">` +
+    `<path d="M25 104 C25 71 34 55 50 55 C66 55 75 71 75 104 Z" fill="#fff"/>` +
+    `</g>` +
+    `<circle cx="50" cy="33" r="12" fill="none" stroke="#fff" stroke-width="5"/>`,
 );
 
 /** 记录与排名 — a gray triangle with list rules across it. */
