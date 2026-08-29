@@ -59,6 +59,41 @@ const sleep = (ms: number) => sleepRaw(ms / SPEED);
  *  own. Deliberately NOT scaled by SPEED: it is a beat of reading time, not
  *  part of the animation. */
 const AUTO_ADVANCE_MS = 1500;
+
+/**
+ * Every wait in the playback, at its authored pace (SPEED divides them at
+ * the point of use). They live here as named constants rather than inline
+ * numbers because the progress bar times its segments by summing exactly
+ * these: if the two lists could drift apart, retiming a step would silently
+ * desync the bar from the animation it is supposed to be tracking.
+ */
+const WAIT = {
+  show: 350,
+  arrowStatic: 180,
+  arrowArmed: 1500,
+  checks: 2100,
+  flip: 960,
+  flipSettle: 300,
+  fadeOut: 320,
+  fadeIn: 340,
+  slideLead: 250,
+  slide: 2600,
+  slideRelease: 260,
+  slideSettle: 300,
+} as const;
+
+/** How long one step occupies, in authored ms — the mirror of runStep. */
+function stepMs(st: StoryStep): number {
+  switch (st.t) {
+    case 'show': return WAIT.show;
+    case 'pause': return st.ms;
+    case 'arrow': return st.mode === 'static' ? WAIT.arrowStatic : WAIT.arrowArmed;
+    case 'checks': return WAIT.checks;
+    case 'flip': return WAIT.flip + WAIT.flipSettle;
+    case 'fade': return WAIT.fadeOut + WAIT.fadeIn;
+    case 'slide': return WAIT.slideLead + WAIT.slide + WAIT.slideRelease + WAIT.slideSettle;
+  }
+}
 const ease = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 /** The drag profile: ease out to just past half way, hesitate like a real
  *  finger deciding, then commit the rest — never one instant jump. */
@@ -101,6 +136,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   const s = STRINGS[lang];
   container.innerHTML = `
     <div class="app story-tut">
+      <div class="story-prog" id="stProg"></div>
       <div class="story-stage" id="stStage"><div class="story-board" id="stBoard"></div></div>
       <div class="controls story-controls">
         <button class="icon-btn" id="stPrev">${s.prev}</button>
@@ -117,6 +153,41 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   const bReplay = container.querySelector<HTMLButtonElement>('#stReplay')!;
   const bNext = container.querySelector<HTMLButtonElement>('#stNext')!;
   const bFinish = container.querySelector<HTMLButtonElement>('#stFinish')!;
+
+  // Playback progress, Instagram-story style: one equal-width segment per
+  // beat, the active one's dark fill sweeping left to right.
+  const prog = container.querySelector<HTMLElement>('#stProg')!;
+  const progFills = spec.beats.map(() => {
+    const seg = document.createElement('div');
+    seg.className = 'story-prog-seg';
+    const fill = document.createElement('i');
+    fill.className = 'story-prog-fill';
+    seg.appendChild(fill);
+    prog.appendChild(seg);
+    return fill;
+  });
+
+  /**
+   * Points the bar at beat i: the beats behind it read full, the ones ahead
+   * empty, and this one sweeps over its own running time.
+   *
+   * That time is the sum of the beat's steps *plus* the hand-off pause, so
+   * the segment tops out at the moment the next beat starts rather than
+   * sitting full through the reading gap — filling up IS the cue that the
+   * next animation is starting.
+   */
+  function runProgress(i: number) {
+    for (let k = 0; k < progFills.length; k++) {
+      const f = progFills[k];
+      f.style.transition = 'none';
+      f.style.width = k < i ? '100%' : '0';
+    }
+    void prog.offsetWidth; // flush the reset, or a replay never restarts
+    const own = spec.beats[i].reduce((a, st) => a + stepMs(st), 0) / SPEED;
+    const total = own + (i >= spec.beats.length - 1 ? 0 : AUTO_ADVANCE_MS);
+    progFills[i].style.transition = `width ${Math.round(total)}ms linear`;
+    progFills[i].style.width = '100%';
+  }
 
   board.style.width = spec.w + 'px';
   board.style.height = spec.h + 'px';
@@ -156,7 +227,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   async function runStep(st: StoryStep, my: number): Promise<void> {
     if (st.t === 'show') {
       renderFrame(st.f);
-      await sleep(350);
+      await sleep(WAIT.show);
     } else if (st.t === 'pause') {
       await sleep(st.ms);
     } else if (st.t === 'arrow') {
@@ -176,14 +247,14 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       if (st.mode === 'static') {
         a.innerHTML = ARROW_SVG(st.color);
         board.appendChild(a);
-        await sleep(180);
+        await sleep(WAIT.arrowStatic);
       } else {
         // Armed: exactly two stretch cycles (the CSS iteration count), then
         // the move starts on its own; the slide that follows retires it.
         a.classList.add('story-arrow--armed');
         a.innerHTML = `<span class="story-arrow-nudge">${ARROW_SVG(st.color)}</span>`;
         board.appendChild(a);
-        await sleep(1500);
+        await sleep(WAIT.arrowArmed);
       }
     } else if (st.t === 'checks') {
       for (const p of st.pts) {
@@ -194,7 +265,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         c.innerHTML = CHECK_SVG(st.color);
         board.appendChild(c);
       }
-      await sleep(2100);
+      await sleep(WAIT.checks);
     } else if (st.t === 'flip') {
       if (curFrame !== st.f) renderFrame(st.f, true);
       // Each flipping tile becomes a plank with real thickness (≈0.1cm at
@@ -219,21 +290,21 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         const plank = els[i].querySelector<HTMLElement>('.story-plank');
         if (plank) plank.style.transform = 'rotateY(180deg)';
       }
-      await sleep(960);
+      await sleep(WAIT.flip);
       if (gen !== my) return;
       renderFrame(st.snap, true);
-      await sleep(300);
+      await sleep(WAIT.flipSettle);
     } else if (st.t === 'fade') {
       board.style.transition = 'opacity 300ms ease';
       board.style.opacity = '0.25';
-      await sleep(320);
+      await sleep(WAIT.fadeOut);
       if (gen !== my) return;
       renderFrame(st.snap);
       board.style.opacity = '1';
-      await sleep(340);
+      await sleep(WAIT.fadeIn);
     } else if (st.t === 'slide') {
       if (curFrame !== st.f) renderFrame(st.f, true);
-      await sleep(250);
+      await sleep(WAIT.slideLead);
       if (gen !== my) return;
       const movers = st.idx.map((i) => els[i]);
       // Wraparound refill, exactly like the live game's drag preview: a
@@ -248,7 +319,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         board.appendChild(g);
         return g;
       });
-      const DUR = 2600 / SPEED; // authored pace, scaled by the global rate
+      const DUR = WAIT.slide / SPEED; // authored pace, scaled by the global rate
       const { dx, dy } = st; // narrowed copy — the closure below can't re-narrow st
       const t0 = performance.now();
       await new Promise<void>((resolve) => {
@@ -265,13 +336,13 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         requestAnimationFrame(tick);
       });
       if (gen !== my) return;
-      await sleep(260); // the "release" beat before the pieces seat
+      await sleep(WAIT.slideRelease); // the "release" beat before the pieces seat
       if (gen !== my) return;
       renderFrame(st.snap, true);
       // This line has moved: its own stretched arrow retires, while hints
       // for the moves still to come keep standing.
       for (const a of Array.from(board.querySelectorAll<HTMLElement>('.story-arrow--armed'))) a.remove();
-      await sleep(300);
+      await sleep(WAIT.slideSettle);
     }
   }
 
@@ -279,6 +350,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
     const my = ++gen;
     beat = i;
     sync();
+    runProgress(i);
     board.style.opacity = '1';
     for (const st of spec.beats[i]) {
       if (gen !== my) return;

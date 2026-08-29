@@ -976,6 +976,16 @@ html.lang-locked, html.lang-locked body {
 /* The board takes no input at all — the player watches each numbered step
    play out and steps through with the buttons below. */
 .story-tut { align-items: center; }
+
+/* Playback progress, Instagram-story style: one equal-width rounded segment
+   per beat, slightly separated, the active one's dark fill sweeping left to
+   right. Width (not scaleX) so the fill keeps its own round leading cap
+   instead of being squashed or clipped square. The sweep is timed from JS
+   against the beat's real running time — see runProgress. */
+.story-prog { display: flex; gap: 4px; width: 100%; }
+.story-prog-seg { flex: 1 1 0; height: 5px; border-radius: 999px; background: var(--line); }
+.story-prog-fill { display: block; width: 0; height: 100%; border-radius: 999px; background: var(--ink-soft); }
+
 .story-stage { width: 100%; display: flex; justify-content: center; overflow: hidden; margin-top: 6vh; }
 .story-board { position: relative; transform-origin: top center; pointer-events: none; flex: 0 0 auto; }
 .story-cell { position: absolute; }
