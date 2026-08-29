@@ -12,7 +12,8 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS } from '../i18n';
+import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // A hex-cropped version of the ball board (37 cells: rows of 4/5/6/7/6/5/4
@@ -219,27 +220,13 @@ export function createCircleHexGame(): ShapeGame {
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
-      const BASE_HINT =
-        '沿任意一条水平、左斜或右斜方向的线拖动，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"22"菱形沿同一菱形方向扩大同样按扩大后的数量得分，"121"菱形固定得 4 分。得分方块翻成点面。得分图案必须至少含 1 个仍是正面的球——全部都已经是点面的图案不再得分，所以把同一组已翻面的球反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线的球随后变为空白球——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。棋盘正中心从一开始就是一颗空白球。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的球，综合得分再 ×95%。';
-      const hint = isBomb
-        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍球。任意时刻场上 3 个红色球相互边相连时，这几个球会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
-          BASE_HINT +
-          '全部非红色方块都翻成点面或变为空白球时结束，结算当时的分数。'
-        : BASE_HINT + '全部方块都翻成点面或变为空白球时结束，结算当时的分数。';
-      const assumptions = isBomb
-        ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚（加正中心 1 颗永久空白球），其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险球。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色中的每一色至少 1 枚，凑满 6 枚——红色不会出现在任何球的点色（反面）上。三个滑动方向——水平、左斜、右斜——判分规则完全一致。'
-        : '6 种口味色，每色 6 枚，共 36 枚，加正中心 1 颗永久空白球，共 37 格（六边形，七行 4/5/6/7/6/5/4 枚）；每种口味的点色分布为：其余 5 色中的每一色至少 1 枚，凑满 6 枚——保证没有正反面同色的球出现。三个滑动方向——水平、左斜、右斜——判分规则与基础圆球玩法完全一致。';
       const refs = buildShell(container, {
         lang,
-        title: 'Slides · 六边圆球',
-        tagline: isBomb
-          ? '沿水平、左斜或右斜方向拖动整条线 · 避免红色球 4 连'
-          : '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
-        startBody: '拖动水平、左斜或右斜方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
-        hint,
-        assumptions,
-        extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
-        patternHint: renderPatternHintRow(PATTERNS),
+        title: `Slides · ${shapeName(lang, 'circleHex', '六边圆球')}`,
+        tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
+        startBody: SHELL[lang].shellStartBody,
+        extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
+        patternHint: renderPatternHintRow(PATTERNS, lang),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
@@ -716,7 +703,7 @@ export function createCircleHexGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
-        shapeName: '六边圆球',
+        shapeName: shapeName(lang, 'circleHex', '六边圆球'),
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

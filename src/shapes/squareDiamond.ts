@@ -12,7 +12,8 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS } from '../i18n';
+import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Same 6x6, 36-tile deck as the base square game (see square.ts for the
@@ -201,27 +202,13 @@ export function createSquareDiamondGame(): ShapeGame {
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
-      const BASE_HINT =
-        '沿水平方向或两条斜线方向拖动整条线，一条线上连续 4 个同色（不分点/面）得 4 分，同一条线上连得更长则按实际数量得分，但线外的同色方块不会被计入；同色的"2+2"（同一横排相邻 2 个，加上下一排错开半格的 2 个，左右两种错法都算）沿同一方向扩大，同样按扩大后的数量得分；同色的"121"菱形（比"22"更大一圈，四个角上下左右对称）固定得 4 分。得分方块翻成点面。得分图案必须至少含 1 个仍是正面的方块——全部都已经是点面的图案不再得分，所以把同一组已翻面的方块反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，该线随后变为空白——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的方块，综合得分再 ×95%。';
-      const hint = isBomb
-        ? '红色为危险色：中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 3 个红色方块相互边相连时，这几个方块会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
-          BASE_HINT +
-          '全部非红色方块都翻成点面或变为空白时结束，结算当时的分数。'
-        : BASE_HINT + '全部方块都翻成点面或变为空白时结束，结算当时的分数。';
-      const assumptions = isBomb
-        ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚），其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险方块。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色各 1 枚、本色 2 枚——红色不会出现在任何方块的点色（反面）上。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。'
-        : '6 种颜色各 6 枚，共 36 枚（菱形棋盘，十一行 1/2/3/4/5/6/5/4/3/2/1 枚）；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。三个滑动方向——水平、以及棋盘原本的两条斜线——判分规则完全一致。';
       const refs = buildShell(container, {
         lang,
-        title: 'Slides · 菱形方块',
-        tagline: isBomb
-          ? '沿水平或两条斜线方向拖动整条线 · 避免红色方块 4 连'
-          : '沿水平或两条斜线方向拖动整条线 · 拼出同色图案',
-        startBody: '拖动水平或斜线方向的整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
-        hint,
-        assumptions,
-        extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
-        patternHint: renderPatternHintRow(PATTERNS),
+        title: `Slides · ${shapeName(lang, 'squareDiamond', '菱形方块')}`,
+        tagline: isBomb ? SHELL[lang].taglineDiagonal + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineDiagonal,
+        startBody: SHELL[lang].shellStartBody,
+        extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
+        patternHint: renderPatternHintRow(PATTERNS, lang),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
@@ -652,7 +639,7 @@ export function createSquareDiamondGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
-        shapeName: '菱形方块',
+        shapeName: shapeName(lang, 'squareDiamond', '菱形方块'),
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

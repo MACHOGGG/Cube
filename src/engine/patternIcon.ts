@@ -1,3 +1,4 @@
+import { STRINGS, type Lang, type I18nStrings } from '../i18n';
 /**
  * Tiny blank/outline diagrams of a shape's own scoring patterns, shown in a
  * hint row under the HUD so a player can see what to aim for without having
@@ -13,7 +14,11 @@ export type IconCell =
   | { kind: 'poly'; points: [number, number][] };
 
 export interface PatternDef {
+  /** Used as-is when there's no labelKey — for the script-neutral names
+   *  ('1x4', '2+2', '1-2-1') that read the same in every language. */
   label: string;
+  /** Set for a label that is a real word, so it follows the UI language. */
+  labelKey?: keyof I18nStrings;
   cells: IconCell[];
   /**
    * Draw at a fixed scale instead of fitting this icon's own bounding box:
@@ -72,8 +77,11 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number): string {
 }
 
 /** Renders the full hint row: one small outline icon + label per pattern, for the given shape's own set of scoring patterns. */
-export function renderPatternHintRow(patterns: PatternDef[]): string {
+export function renderPatternHintRow(patterns: PatternDef[], lang: Lang): string {
   return patterns
-    .map((p) => `<span class="pattern-icon">${renderPatternIconSvg(p.cells, p.extent)}<span class="pattern-icon-label">${p.label}</span></span>`)
+    .map((p) => {
+      const label = p.labelKey ? (STRINGS[lang][p.labelKey] as string) : p.label;
+      return `<span class="pattern-icon">${renderPatternIconSvg(p.cells, p.extent)}<span class="pattern-icon-label">${label}</span></span>`;
+    })
     .join('');
 }

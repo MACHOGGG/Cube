@@ -12,7 +12,8 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
-import { STRINGS as MATCH_LABELS } from '../i18n';
+import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // The V-shaped advanced triangle board: 49 triangles in two arms that meet
@@ -94,6 +95,7 @@ const PATTERNS: PatternDef[] = [
   },
   {
     label: '大三角',
+    labelKey: 'labelBigTriangle',
     cells: [[0, 0], [1, 0], [1, 1], [1, 2]].map(([i, p]) => ({ kind: 'poly' as const, points: iconTri(i, p) })),
   },
 ];
@@ -255,16 +257,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
-        title: 'Slides · 进阶三角',
+        title: `Slides · ${shapeName(lang, 'triangleAdvanced', '进阶三角')}`,
         wideBoard: true,
-        tagline: 'V 形棋盘 · 左右两臂横向互不相连',
-        startBody: '这是一块 V 形棋盘：左右两臂各自独立，只有最下面一行横贯整块。拖动整条线拼出同色图案。点击开始生成一局新的方糖阵势。',
-        hint:
-          'V 形棋盘由左右两臂和一条横贯底部的长行组成。左斜、右斜两个方向的拖动和其他三角玩法完全一样，整条线一起循环滑动，超出的部分会以低透明度从另一端补回来。水平方向的不同之处只有一点：除最下面一行外，左臂和右臂是两条互不相连的线——拖动左臂最上面一行，右臂最上面一行完全不动，第二、第三行同理；最下面一行横贯整块棋盘，仍然作为一整行循环滑动。连续 4 个同色（不分点/面）得 4 分，连得更长按实际数量得分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分的三角翻成点面。得分图案必须至少含 1 个仍是正面的三角——全部都已经是点面的图案不再得分，所以把同一组已翻面的三角反复滑回原样是刷不到分的。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，随后淡出并变为空白角——留在原位可以继续参与拖动和补位，但不再贡献任何得分。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的三角，综合得分再 ×95%。全部三角都翻成点面或变为空白角时结束。',
-        assumptions:
-          '7 种口味色，每色 7 枚，共 49 枚：左右两臂各 3 行 × 6 枚，最下面一行 13 枚横贯整块。每种口味的点色分布为：其余 6 色各 1 枚、另有 1 色额外再来 1 枚——因此 49 枚里没有任何一枚的正反面是同一种颜色。得分、翻面、消除、补位动画与其他三角玩法完全一致；唯一的差别是左右两臂的横向拖动互不相连（最下面一行除外）。',
-        extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
-        patternHint: renderPatternHintRow(PATTERNS),
+        tagline: SHELL[lang].taglineVBoard,
+        startBody: SHELL[lang].shellStartBody,
+        extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
+        patternHint: renderPatternHintRow(PATTERNS, lang),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
@@ -688,7 +686,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
-        shapeName: '进阶三角',
+        shapeName: shapeName(lang, 'triangleAdvanced', '进阶三角'),
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

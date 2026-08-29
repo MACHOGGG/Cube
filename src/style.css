@@ -985,3 +985,20 @@ html.lang-locked, html.lang-locked body {
 }
 
 .story-controls .icon-btn { white-space: nowrap; }
+
+/* 游戏规则 — a long, scrollable read rather than a short prompt, so the panel
+   takes most of the viewport and scrolls inside itself instead of pushing the
+   modal past the screen edges. */
+.rules-modal { max-width: 520px; width: 100%; }
+.rules-body {
+  max-height: 62vh; overflow-y: auto; overscroll-behavior: contain;
+  text-align: left; margin: 4px 0 12px; padding-right: 4px;
+}
+.rules-body .menu-section-label { margin: 14px 0 8px; }
+.rules-body .menu-section-label:first-child { margin-top: 2px; }
+.rule-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 0; border-top: 1px solid var(--hairline, rgba(0,0,0,0.07));
+}
+.rule-item b { font-size: 0.92rem; color: var(--ink); }
+.rule-item span { font-size: 0.85rem; line-height: 1.55; color: var(--ink-soft); }

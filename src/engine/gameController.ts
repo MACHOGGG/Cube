@@ -289,7 +289,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       (comboBonusPoints > 0 ? row(s.comboBonusLabel, '+' + Math.round(comboBonusPoints)) : '') +
       (linePoints > 0 ? row(s.linePointsLabel, '+' + Math.round(linePoints)) : '') +
       row(s.scoreLabel, String(score)) +
-      row(`${s.perfBonusLabel}（${statusPercent}%）`, '×' + bonusMult.toFixed(2)) +
+      row(`${s.perfBonusLabel} (${statusPercent}%)`, '×' + bonusMult.toFixed(2)) +
       row(s.timeMultLabel, '×' + timeMult.toFixed(2)) +
       (remaining.neverFlipped > 0
         ? row(`${s.neverFlippedLabel} × ${remaining.neverFlipped}`, pct(unflippedScale))

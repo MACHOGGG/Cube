@@ -88,6 +88,14 @@ export interface I18nStrings {
   shareImgAlt: string;
   shareHint: string;
   closeBtn: string;
+  // ---- game-screen chrome, once written per shape in Chinese only ----
+  shellStartBody: string;
+  taglineRowCol: string;
+  taglineThreeWay: string;
+  taglineDiagonal: string;
+  taglineVBoard: string;
+  taglineBomb: string;
+  rulesPill: string;
   // ---- gain-bubble source labels (which pattern just paid out) ----
   labelRun4: string;
   labelBlock22: string;
@@ -215,6 +223,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: 'Result card',
     shareHint: 'Press and hold, or right-click the image, to save it',
     closeBtn: 'Close',
+    shellStartBody: 'Drag a whole line to build same-colour patterns. Tap Start for a fresh board.',
+    taglineRowCol: 'Drag a whole row or column · build same-colour patterns',
+    taglineThreeWay: 'Drag a whole line — across, or either diagonal · build same-colour patterns',
+    taglineDiagonal: 'Drag a whole line — across or diagonally · build same-colour patterns',
+    taglineVBoard: 'A V-shaped board · the two arms slide independently',
+    taglineBomb: 'Keep 4 red tiles from ever connecting',
+    rulesPill: 'How to play',
     labelRun4: 'Run of 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -332,6 +347,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: 'Carte de résultat',
     shareHint: 'Appuyez longuement, ou clic droit sur l\'image, pour l\'enregistrer',
     closeBtn: 'Fermer',
+    shellStartBody: 'Faites glisser une ligne entière pour former des motifs d\'une même couleur. Touchez Commencer pour un nouveau plateau.',
+    taglineRowCol: 'Faites glisser une rangée ou une colonne · formez des motifs d\'une même couleur',
+    taglineThreeWay: 'Faites glisser une ligne — horizontale ou diagonale · formez des motifs d\'une même couleur',
+    taglineDiagonal: 'Faites glisser une ligne — horizontale ou diagonale · formez des motifs d\'une même couleur',
+    taglineVBoard: 'Un plateau en V · les deux bras glissent indépendamment',
+    taglineBomb: 'Empêchez 4 pièces rouges de se rejoindre',
+    rulesPill: 'Règles du jeu',
     labelRun4: 'Suite de 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -449,6 +471,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: '戰績卡片',
     shareHint: '長按或右鍵圖片即可儲存',
     closeBtn: '關閉',
+    shellStartBody: '拖動整條線拼出同色圖案，點擊開始生成一局新的方糖陣勢。',
+    taglineRowCol: '拖動一整行或一整列 · 拼出同色圖案',
+    taglineThreeWay: '沿水平、左斜或右斜方向拖動整條線 · 拼出同色圖案',
+    taglineDiagonal: '拖動水平或斜線方向的整條線 · 拼出同色圖案',
+    taglineVBoard: 'V 形棋盤 · 左右兩臂橫向互不相連',
+    taglineBomb: '避免紅色 4 連',
+    rulesPill: '遊戲規則',
     labelRun4: '4連',
     labelBlock22: '2×2',
     label121: '121',
@@ -566,6 +595,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: '战绩卡片',
     shareHint: '长按或右键图片即可保存',
     closeBtn: '关闭',
+    shellStartBody: '拖动整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
+    taglineRowCol: '拖动一整行或一整列 · 拼出同色图案',
+    taglineThreeWay: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
+    taglineDiagonal: '拖动水平或斜线方向的整条线 · 拼出同色图案',
+    taglineVBoard: 'V 形棋盘 · 左右两臂横向互不相连',
+    taglineBomb: '避免红色 4 连',
+    rulesPill: '游戏规则',
     labelRun4: '4连',
     labelBlock22: '2×2',
     label121: '121',

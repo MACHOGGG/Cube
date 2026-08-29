@@ -1,4 +1,5 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
+import { RULES } from '../rules';
 
 export type AuthTab = 'register' | 'login';
 
@@ -50,6 +51,7 @@ export function renderAccountPage(
         <button class="profile-pill" id="langRow">${s.switchLanguage}</button>
         <button class="profile-pill profile-pill--rose" id="howToRow">${s.tutorialShort}</button>
       </div>
+      <button class="profile-pill profile-pill--wide" id="rulesRow">${s.rulesPill}</button>
 
       <section class="genius-panel">
         <div class="menu-section-label">${s.geniusSpecialTitle}</div>
@@ -102,6 +104,37 @@ export function renderAccountPage(
     });
   }
 
+  /** 游戏规则 — the whole rulebook, in the player's own language. It used to
+   *  be two long Chinese paragraphs pinned under every board; here it is one
+   *  scrollable panel a player opens when they actually want it. */
+  function openRules() {
+    const book = RULES[lang];
+    const list = (items: typeof book.general) =>
+      items
+        .map((r) => `<div class="rule-item"><b>${r.term}</b><span>${r.body}</span></div>`)
+        .join('');
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    overlay.innerHTML = `
+      <div class="modal rules-modal">
+        <h2>${book.title}</h2>
+        <div class="rules-body">
+          <div class="menu-section-label">${book.generalHeading}</div>
+          ${list(book.general)}
+          <div class="menu-section-label">${book.modesHeading}</div>
+          ${list(book.modes)}
+        </div>
+        <div class="btn-row"><button class="primary" id="rulesClose">${s.closeBtn}</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#rulesClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
   /** 联系我们 — the destination has nothing in it yet, so the link opens an
    *  empty panel rather than pretending to have content. */
   function openContact() {
@@ -126,6 +159,7 @@ export function renderAccountPage(
     container.querySelector<HTMLButtonElement>('#' + id)?.addEventListener('click', fn);
   on('loginBtn', () => openAuth(initialTab));
   on('langRow', handlers.onSwitchLanguage);
+  on('rulesRow', openRules);
   on('howToRow', handlers.onHowToSlide);
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);

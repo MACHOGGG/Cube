@@ -11,7 +11,8 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS } from '../i18n';
+import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // Two selectable palettes, both with 6 hues spaced at least ~50-60° apart on
@@ -93,27 +94,13 @@ export function createSquareGame(): ShapeGame {
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
-      const BASE_HINT =
-        '只有 2×2 或一整条 1×4 / 4×1 的同色图案才能得分（4分）。同一条线连得更长（1×5、1×6……）按实际数量得分，2×2 沿同一矩形方向扩大（如 2×3、3×3）也按扩大后的数量得分，但线外/矩形外的同色方块不会被计入；得分方块翻成点面继续联通。得分图案必须至少含 1 个仍是正面的方块——全部都已经是点面的图案不再得分，所以把同一组已翻面的方块反复滑回原样是刷不到分的。当整行或整列都翻成点面且点色相同时，额外得该行/列长度的平方分，该行/列随后淡出消失，两侧方块滑动收拢补位。连续多步得分会逐步加成：第 1 步 ×1，第 2 步 ×1.5，第 3 步 ×2，第 4 步 ×2.5，以此类推每多连一步就多 0.5 倍，一旦某步没得分就重新从 ×1 计数。结束时棋盘上每留下 1 个仍是正面的方块，综合得分再 ×95%。';
-      const hint = isBomb
-        ? '红色为危险色：正面中央带白色"!"标记，永不翻面，不参与配对计分——只是需要避开聚集的障碍块。任意时刻场上 3 个红色方块相互边相连时，这几个方块会闪烁描边预警；一旦达到 4 个及以上相互边相连，将立即结束挑战并扣 100 分。' +
-          BASE_HINT +
-          '当棋盘上所有非红色方块都翻成点面时，挑战结束，结算当时的分数。'
-        : BASE_HINT + '当棋盘上所有方块都翻成点面时，挑战结束，结算当时的分数。';
-      const assumptions = isBomb
-        ? '颜色数量与非炸弹版完全一致：6 种颜色各 6 枚，共 36 枚，其中一种颜色固定替换为危险红色（不随色盲友好配色切换），该颜色的 6 枚全部是永不翻面的危险方块。其余 5 种正常颜色各 6 枚，点色分布为：其余 4 色各 1 枚、本色 2 枚——红色不会出现在任何方块的点色（反面）上。'
-        : '默认为降饱和的柔和配色；点击"色盲友好配色"可切换为 Okabe–Ito 标准色盲友好色系。6 种颜色各 6 枚，共 36 枚；每种颜色的点色分布为：其余 5 色各 1 枚、本色 1 枚。';
       const refs = buildShell(container, {
         lang,
-        title: 'Slides · 方块',
-        tagline: isBomb
-          ? '拖动一整行或一整列 · 避免红色方块 4 连 · 翻成点面继续联通'
-          : '拖动一整行或一整列 · 拼出同色图案 · 翻成点面继续联通',
-        startBody: '拖动整行/整列拼出同色图案，点击开始生成一局新的方糖阵势。',
-        hint,
-        assumptions,
-        extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
-        patternHint: renderPatternHintRow(PATTERNS),
+        title: `Slides · ${shapeName(lang, 'square', '方块')}`,
+        tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
+        startBody: SHELL[lang].shellStartBody,
+        extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
+        patternHint: renderPatternHintRow(PATTERNS, lang),
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
@@ -629,7 +616,7 @@ export function createSquareGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
-        shapeName: '方块',
+        shapeName: shapeName(lang, 'square', '方块'),
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

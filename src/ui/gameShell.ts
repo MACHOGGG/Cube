@@ -9,8 +9,6 @@ export interface ShellMeta {
   title: string;
   tagline: string;
   startBody: string;
-  hint: string;
-  assumptions: string;
   extraControls?: ExtraControl[];
   /** Pre-rendered HTML (via engine/patternIcon.ts's renderPatternHintRow) for the small blank-outline scoring-pattern icons shown under the HUD. */
   patternHint?: string;
@@ -18,9 +16,10 @@ export interface ShellMeta {
    *  whose own layout (many cells, or a shape denser than a plain square
    *  grid) reads as cramped at the standard size — see the "app-wide" CSS. */
   wideBoard?: boolean;
-  /** Localizes the shell's own static chrome (buttons/HUD labels/overlay
-   *  copy) below — title/tagline/startBody/hint/assumptions above stay
-   *  shape-authored (still Chinese-only pending per-shape translation). */
+  /** Every string on this screen is localized through STRINGS[lang]; the
+   *  shapes pass in already-translated title/tagline/startBody. The long
+   *  rules that used to sit under each board now live in one translated
+   *  rulebook (rules.ts), opened from 个人主页 → 游戏规则. */
   lang: Lang;
 }
 
@@ -63,7 +62,7 @@ export interface ShellRefs {
 
 /**
  * Builds the HUD/board/legend/overlay DOM every shape shares — the only
- * things that differ between shapes are copy (title/hint/assumptions), any
+ * things that differ between shapes are copy (title/tagline), any
  * extra control buttons, and the board contents the shape renders inside
  * #board.
  */
@@ -103,8 +102,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
       <div class="legend" id="legend"></div>
       <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
-      <p class="hint">${meta.hint}</p>
-      <p class="assumptions">${meta.assumptions}</p>
     </div>
 
     <div class="overlay opaque show" id="startOverlay">

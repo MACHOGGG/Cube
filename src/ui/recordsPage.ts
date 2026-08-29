@@ -144,7 +144,7 @@ export function renderRecordsPage(
     big.innerHTML =
       `<span class="total-card-title">${s.totalScoreTitle}</span>` +
       `<span class="total-card-value" style="font-size:${scoreFontSize(full, true)}">${full}</span>` +
-      `<span class="total-card-sub">（${s.totalScoreSync}）</span>`;
+      `<span class="total-card-sub">${s.totalScoreSync}</span>`;
     openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big' });
   });
 
