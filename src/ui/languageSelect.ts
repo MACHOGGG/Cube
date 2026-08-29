@@ -207,11 +207,13 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
   function layoutOverlays() {
     const boardRect = board.getBoundingClientRect();
     const wrapRect = boardWrap.getBoundingClientRect();
-    // Everything sized off a tile (the letter, both arrow glyphs) reads this
-    // one measured value, so the whole grid keeps the reference image's
-    // proportions at any viewport size instead of drifting as a viewport
-    // unit would.
-    boardWrap.style.setProperty('--lang-cell-size', cellEls[0][0].getBoundingClientRect().width + 'px');
+    // Note --lang-cell-size is NOT set here. Everything sized off a tile (the
+    // letter, both arrow glyphs) reads it, and it used to be measured off a
+    // rendered tile at construction time — one measurement taken before the
+    // layout had settled locked in a huge value for the whole screen, with
+    // nothing to correct it short of a resize. It is pure arithmetic on the
+    // board's own height now, so CSS derives it and this function only
+    // positions the overlays.
 
     for (const dr of DRAG_ROWS) {
       const cellRect = cellEls[dr][0].getBoundingClientRect();
@@ -409,6 +411,14 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
   layoutOverlays();
   const onResize = () => layoutOverlays();
   window.addEventListener('resize', onResize);
+  // Arrow positions are measured, and a web font swapping in after first
+  // paint shifts what they were measured against — so take them again once
+  // the fonts have settled. Sizes no longer depend on this (see above), so a
+  // late or failed font load can only ever nudge an arrow, never break the
+  // layout.
+  document.fonts?.ready.then(() => {
+    if (boardWrap.isConnected) layoutOverlays();
+  });
 
   // This screen is replaced wholesale by whatever comes next (main.ts swaps
   // #app's innerHTML), so it has to give back the two things that outlive

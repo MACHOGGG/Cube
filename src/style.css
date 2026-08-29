@@ -873,17 +873,28 @@ html.lang-locked, html.lang-locked body {
    to watch, positioned as free-floating overlays rather than real flex
    siblings inside the row (see languageSelect.ts's module comment for why:
    an in-flow arrow was found to throw off the ghost-fill offset math). */
-.lang-board-wrap { position: relative; display: flex; justify-content: center; margin-top: 8px; }
-/* Sized to whichever runs out first: the height left after the title and
-   the page's own padding, a 640px cap so the tiles don't get silly on a
-   tall desktop window, or the viewport width — that last term is what keeps
-   the board narrow enough for the right-hand chevrons to still land inside
-   the column on a narrow phone, since the board's width is derived from its
-   height through the 4/9 ratio. */
+/* The board's height is whichever runs out first: the height left after the
+   title and the page's own padding, a 640px cap so the tiles don't get silly
+   on a tall desktop window, or the viewport width — that last term is what
+   keeps the board narrow enough for the right-hand chevrons to still land
+   inside the column on a narrow phone, since the board's width is derived
+   from its height through the 4/9 ratio.
+
+   A tile's size follows from that height and nothing else: the board is
+   4 columns wide (3 gaps) at 4/9 of its height, so a column — and therefore
+   a square tile — is height/9 - 3px. Deriving it here rather than measuring
+   a rendered tile from JS is what keeps this screen from ever coming up
+   gigantic: a measurement taken a moment too early used to feed the tile's
+   own font-size and the arrow glyphs, which had no way to recover. */
+.lang-board-wrap {
+  position: relative; display: flex; justify-content: center; margin-top: 8px;
+  --lang-board-h: min(calc(92vh - 64px), 640px, calc((100vw - 116px) * 2.25));
+  --lang-board-h: min(calc(92dvh - 64px), 640px, calc((100vw - 116px) * 2.25));
+  --lang-cell-size: calc(var(--lang-board-h) / 9 - 3px);
+}
 .lang-board--vertical {
   position: relative; display: flex; flex-direction: row; gap: 4px; aspect-ratio: 4 / 9;
-  height: min(calc(92vh - 64px), 640px, calc((100vw - 116px) * 2.25));
-  height: min(calc(92dvh - 64px), 640px, calc((100vw - 116px) * 2.25));
+  height: var(--lang-board-h);
 }
 .lang-col--vertical { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
 
@@ -893,7 +904,7 @@ html.lang-locked, html.lang-locked body {
 /* Two hints per draggable row: the in-grid arrowhead sitting on the gap its
    letter crosses, and a double chevron parked just off the board's right
    edge marking the whole row as draggable. Both are positioned by JS against
-   --lang-cell-size (measured from a real tile), so they keep the reference
+   --lang-cell-size (derived from the board's height in CSS), so they keep the reference
    layout's proportions at any viewport size. */
 .lang-row-arrow, .lang-row-edge-arrow {
   position: absolute; pointer-events: none; z-index: 4; display: flex;
@@ -921,6 +932,10 @@ html.lang-locked, html.lang-locked body {
 .lang-cell {
   aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 700;
+  /* A flex item's automatic minimum size is its content, so without these a
+     glyph wider or taller than its tile would stretch the tile instead of
+     being clipped — and the row of tiles would blow past the board. */
+  min-width: 0; min-height: 0; overflow: hidden;
   /* Sized off a measured tile so a letter fills the tile the way the
      reference layout has it, instead of a viewport unit that drifts out of
      proportion as the board scales. 0.7 puts a latin cap at roughly half the
