@@ -43,7 +43,22 @@ export interface StorySpec {
   beats: StoryStep[][];
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const sleepRaw = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Global playback rate. Every duration below — the JS waits, the slide's own
+ * tween, and (through the --story-speed custom property) the CSS animations
+ * for the arrow, the checkmarks and the flip — is written at its original
+ * pace and divided by this, so the whole sequence stays in proportion when
+ * the speed changes.
+ */
+const SPEED = 1.5;
+const sleep = (ms: number) => sleepRaw(ms / SPEED);
+
+/** The hand-off gap between one beat finishing and the next starting on its
+ *  own. Deliberately NOT scaled by SPEED: it is a beat of reading time, not
+ *  part of the animation. */
+const AUTO_ADVANCE_MS = 1500;
 const ease = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 /** The drag profile: ease out to just past half way, hesitate like a real
  *  finger deciding, then commit the rest — never one instant jump. */
@@ -95,6 +110,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       </div>
     </div>
   `;
+  container.querySelector<HTMLElement>('.story-tut')!.style.setProperty('--story-speed', String(SPEED));
   const stage = container.querySelector<HTMLElement>('#stStage')!;
   const board = container.querySelector<HTMLElement>('#stBoard')!;
   const bPrev = container.querySelector<HTMLButtonElement>('#stPrev')!;
@@ -232,7 +248,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         board.appendChild(g);
         return g;
       });
-      const DUR = 1730; // the original 2600ms pace sped up 1.5×
+      const DUR = 2600 / SPEED; // authored pace, scaled by the global rate
       const { dx, dy } = st; // narrowed copy — the closure below can't re-narrow st
       const t0 = performance.now();
       await new Promise<void>((resolve) => {
@@ -268,6 +284,13 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       if (gen !== my) return;
       await runStep(st, my);
     }
+    // The tutorial runs itself: watching it through shouldn't need a tap
+    // between every card. The buttons stay for going back or replaying, and
+    // any of them bumps `gen`, which cancels this hand-off.
+    if (i >= spec.beats.length - 1) return;
+    await sleepRaw(AUTO_ADVANCE_MS);
+    if (gen !== my) return;
+    void play(i + 1);
   }
 
   function sync() {
