@@ -501,44 +501,147 @@ button:hover { filter: brightness(1.05); }
 .shape-card-compact.placeholder .glyph { color: var(--ink-faint); }
 .shape-card-compact.placeholder .best { font-style: italic; }
 
-/* ---------- home page: fixed square/circle/triangle 3-column layout ---------- */
-.menu-sections { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
-.menu-sections .menu-section-label:not(:first-child) { margin-top: 6px; }
-.menu-grid-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-/* A shorter, denser card for the home page — with 7+ rows now stacked
-   (base/timed/3 bomb tiers/更多布局), each row needs to stay compact
-   instead of the taller 2-column card this style is based on. */
-.shape-card-compact--tight { padding: 7px 4px; gap: 3px; border-radius: 10px; }
-.shape-card-compact--tight .glyph { width: 28px; height: 28px; border-radius: 8px; }
-.shape-card-compact--tight .glyph svg { width: 17px; height: 17px; }
-.shape-card-compact--tight .name { font-size: 0.72rem; line-height: 1.15; }
-.shape-card-compact--tight .best { font-size: 8.5px; }
+/* ---------- home page: the icon grid ---------- */
+/* The whole page is one grid of shape icons — no card chrome, no labels: the
+   silhouette and colour carry the meaning, so the tiles can be big enough to
+   hit comfortably with a thumb. Two columns on a phone, three on a desktop,
+   which is also where the timed and bomb sections stop being collapsed. */
+.home-page { gap: 0; padding-bottom: 120px; }
+/* The icon grid wants far more width than the standard reading column. */
+.app.home-page--wide { max-width: 760px; }
+.home-head { text-align: center; margin: 4px 0 22px; }
+.home-title {
+  font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600;
+  margin: 0 0 2px; letter-spacing: 0.01em;
+  display: inline-block; border-bottom: 3px solid var(--accent-soft); padding: 0 10px 4px;
+}
+.home-sub { margin: 6px 0 0; color: var(--ink-soft); font-size: 0.82rem; letter-spacing: 0.08em; }
 
-.home-wide-card {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  background: var(--surface); border: 1px dashed var(--line); border-radius: 16px;
-  padding: 22px 16px; cursor: pointer; text-align: center; min-height: 84px;
-  transition: transform .1s ease, border-color .15s ease;
+.home-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 26px 22px; align-items: center; justify-items: center;
 }
-.home-wide-card:hover { border-color: var(--accent); }
-.home-wide-card:active { transform: scale(0.99); }
-.home-wide-card .wide-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--ink-soft); }
-.home-wide-card .wide-card-sub { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); }
+.home-page--wide .home-grid { grid-template-columns: repeat(3, 1fr); gap: 30px 26px; }
 
-.home-signin-row { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
-.signin-circle {
-  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface); border: 1px solid var(--line); color: var(--ink-soft); cursor: pointer;
+/* Every tile is the same square box whatever it draws inside, so a circle, a
+   triangle and a square all sit on one baseline grid. */
+/* `flex: none` opts out of the global `button { flex: 1 }` — without it a
+   button inside any flex row (the nav, a bomb tier) stretches to fill it and
+   ignores its own width. */
+.home-icon-btn {
+  width: 100%; max-width: 168px; aspect-ratio: 1; padding: 0; flex: none;
+  background: none; border: none; border-radius: 0; cursor: pointer; display: block;
+  -webkit-tap-highlight-color: transparent;
 }
-.signin-circle svg { width: 20px; height: 20px; }
-.exclusive-pill {
-  flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px;
-  background: var(--accent-soft); color: var(--accent-ink); border: none; border-radius: 100px;
-  padding: 11px 18px; cursor: pointer; font-weight: 600;
+.home-icon-btn:hover { filter: none; }
+.home-icon-btn:active { transform: none; }
+.home-page--wide .home-icon-btn { max-width: 215px; }
+.home-icon-btn > svg { width: 100%; height: 100%; display: block; }
+.home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
+
+/* The press cue: a quick squash and tilt, fired from pointerdown so it plays
+   through even when the same tap opens a modal on top of it. */
+@keyframes home-tap-wobble {
+  0% { transform: scale(1) rotate(0deg); }
+  22% { transform: scale(0.92) rotate(-2.4deg); }
+  52% { transform: scale(1.04) rotate(1.8deg); }
+  78% { transform: scale(0.985) rotate(-0.7deg); }
+  100% { transform: scale(1) rotate(0deg); }
 }
-.exclusive-pill .zh { font-family: 'Fraunces', Georgia, serif; font-size: 0.95rem; }
-.exclusive-pill .en { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; opacity: 0.75; }
+.home-tap { animation: home-tap-wobble 340ms cubic-bezier(0.3, 1.2, 0.4, 1); }
+@media (prefers-reduced-motion: reduce) { .home-tap { animation: none; } }
+
+/* ---------- bomb panel (its three tiers) ---------- */
+/* Same markup inline on the home grid, blown up in the centre of a phone, or
+   sitting beside the burst on a desktop — only the surrounding size changes. */
+.bomb-panel {
+  width: 100%; aspect-ratio: 1; box-sizing: border-box;
+  background: #A5412C; border-radius: 22px; padding: 7%;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 6%;
+}
+.bomb-row {
+  flex: 1; display: flex; align-items: center; justify-content: space-evenly; gap: 4%;
+  background: rgba(255, 255, 255, 0.14); border-radius: 12px; padding: 4% 5%;
+}
+.bomb-chip { max-width: none; width: 27%; flex: none; }
+/* The 90s burst is wider than its bar and deliberately spills into the tiers
+   above and below, the way the sheet draws it. */
+.bomb-90s { width: 82%; max-width: none; aspect-ratio: 2.6; flex: none; overflow: visible; }
+.bomb-90s > svg { overflow: visible; }
+.bomb-row--90s { overflow: visible; }
+.bomb-row--open .bomb-chip { width: 27%; }
+
+/* The blown-up copy in the centre picker: same proportions, bigger hit
+   targets, and enough room for the 90s row to open into three chips. */
+.bomb-panel--big { width: min(78vw, 360px); border-radius: 28px; }
+
+/* Desktop only: the burst card labels the section and the panel holds the
+   options, side by side under the 3-wide rows above. */
+.home-bomb-star { cursor: default; }
+.home-bomb-wrap { width: 100%; max-width: 215px; }
+.home-grid-spacer { display: none; }
+.home-page--wide .home-grid-spacer { display: block; }
+/* Phone only: the collapsed panel is itself the button that opens the big one. */
+.home-bomb-mini { max-width: 168px; }
+.home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
+
+/* ---------- centre picker ---------- */
+/* The page behind is faded, not covered — the reference design washes the
+   grid out to half strength so it still reads as context behind the choice. */
+.home-dimmed { opacity: 0.5; transition: opacity 220ms ease; pointer-events: none; }
+.center-pick {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  padding: 24px; opacity: 0; transition: opacity 200ms ease;
+}
+.center-pick--in { opacity: 1; }
+.center-pick-body { display: flex; align-items: center; justify-content: center; }
+.center-pick-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
+/* The three clocks land as two over one, the arrangement the sheet shows,
+   rather than in a flat row. */
+.center-pick-row--split {
+  display: grid; grid-template-columns: repeat(2, auto); gap: 14px; justify-items: center;
+}
+.center-pick-row--split > :nth-child(3) { grid-column: 1 / -1; }
+.center-pick-opt {
+  width: min(36vw, 158px); padding: 0; background: none; border: none; border-radius: 0;
+  cursor: pointer; flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.center-pick-opt:hover { filter: none; }
+.center-pick-opt:active { transform: none; }
+.center-pick-opt > svg { width: 100%; aspect-ratio: 1; display: block; }
+.center-pick-label { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+
+/* ---------- profile page rows ---------- */
+.profile-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 13px 16px; cursor: pointer; color: inherit; font: inherit;
+}
+.profile-row:hover { border-color: var(--accent); }
+.profile-row-glyph { width: 20px; height: 20px; color: var(--ink-soft); flex: 0 0 auto; }
+.profile-row-glyph svg { width: 100%; height: 100%; }
+.profile-row-label { flex: 1; font-weight: 600; font-size: 0.92rem; }
+.profile-row-value { color: var(--ink-faint); font-size: 0.82rem; }
+
+/* ---------- records list ---------- */
+.record-list { display: flex; flex-direction: column; gap: 6px; }
+.record-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px;
+}
+.record-row--top { border-color: var(--accent); background: var(--accent-soft); }
+.record-rank {
+  flex: 0 0 22px; text-align: center; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem; color: var(--ink-faint); font-variant-numeric: tabular-nums;
+}
+.record-name { flex: 1; font-weight: 600; font-size: 0.9rem; }
+.record-mode { color: var(--ink-faint); font-weight: 400; font-size: 0.78rem; }
+.record-score {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
 
 /* ---------- 天才入口 privilege list ---------- */
 .privilege-list { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 20px; }
@@ -827,26 +930,33 @@ html.lang-locked, html.lang-locked body {
 .tutorial-controls { display: flex; justify-content: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 
 /* ---------- persistent bottom nav ---------- */
-/* A fixed sibling of #app (appended straight to <body> by bottomNav.ts),
-   not part of any one screen's own markup — every screen still fully
-   replaces #app's content on navigation, but this bar survives that,
-   which is the whole point of it being "常驻" (always present). */
-.bottom-nav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: flex; justify-content: center; gap: 4px;
-  padding: 8px max(12px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
-  backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  border-top: 1px solid var(--line);
+/* Two round entry points — 个人主页 and 记录与排名 — pinned to the bottom of
+   the viewport. It is a sibling of #app rather than part of any screen, so it
+   survives every screen swap; see mountBottomNav for why. On a phone it stays
+   out of the way until the player scrolls, on a desktop it is simply always
+   there, matching the two reference sheets. */
+.home-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  display: flex; justify-content: center; align-items: flex-end; gap: 20px;
+  padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  transform: translateY(120%); opacity: 0;
+  transition: transform 280ms cubic-bezier(0.2, 0.9, 0.3, 1.05), opacity 220ms ease;
 }
-.bottom-nav-btn {
-  flex: 0 1 96px; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  background: none; border: none; padding: 4px 10px; border-radius: 12px;
-  color: var(--ink-soft); cursor: pointer; transition: color .15s ease, background .15s ease;
+.home-nav--shown { transform: none; opacity: 1; }
+.home-nav-btn {
+  pointer-events: auto; width: 58px; height: 58px; padding: 0; flex: none;
+  background: none; border: none; border-radius: 0; cursor: pointer; display: block;
+  -webkit-tap-highlight-color: transparent;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.16));
 }
-.bottom-nav-btn:hover, .bottom-nav-btn:active { color: var(--accent-ink); background: var(--accent-soft); }
-.bottom-nav-btn svg { width: 21px; height: 21px; }
-.bottom-nav-btn span { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.home-nav-btn:hover { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22)); }
+.home-nav-btn:active { transform: none; }
+.home-nav-btn > svg { width: 100%; height: 100%; display: block; }
+.home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .home-nav { transition: none; }
+}
 
 /* ---------- language-switch popup ---------- */
 .lang-switch-modal { max-width: 300px; }

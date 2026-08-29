@@ -1,41 +1,84 @@
 import { STRINGS, type Lang } from '../i18n';
+import { ICON_NAV_PROFILE, ICON_NAV_RECORDS } from './homeIcons';
 
 export interface BottomNavHandlers {
-  onHome: () => void;
-  onLanguage: () => void;
-  onAccount: () => void;
+  onProfile: () => void;
+  onRecords: () => void;
 }
 
-const HOME_GLYPH =
-  '<svg viewBox="0 0 24 24"><path d="M4 11 L12 4 L20 11 V20 H14 V14 H10 V20 H4 Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-const LANG_GLYPH =
-  '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12 H21 M12 3 C15 6.5 15 17.5 12 21 M12 3 C9 6.5 9 17.5 12 21" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
-const ACCOUNT_GLYPH =
-  '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20 C4 15.6 7.6 13 12 13 C16.4 13 20 15.6 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
-
 let barEl: HTMLElement | null = null;
+let detachScroll: (() => void) | null = null;
+
+/** Wider than this and the bar is simply always there, the way the desktop
+ *  reference sheet has it pinned under the grid. Narrower and it stays out of
+ *  the way until the player scrolls. */
+const WIDE_QUERY = '(min-width: 720px)';
 
 /**
- * A persistent frosted-glass tab bar fixed to the viewport bottom, built
- * once and never torn down by the per-screen `root.innerHTML = ...`
- * navigation main.ts otherwise uses — it lives as a sibling of #app,
- * appended straight to <body>, so it survives every screen change. Calling
- * this again (e.g. after switching language, to refresh the language
- * label) just replaces the previous bar in place rather than stacking a
+ * The two round entry points that sit under every screen: 个人主页 on the
+ * left, 记录与排名 on the right.
+ *
+ * It is appended straight to <body>, a sibling of #app rather than a child,
+ * so it survives every `root.innerHTML = ...` screen swap main.ts does — the
+ * app has no partial-redraw hook, so anything meant to outlive a screen has
+ * to live outside the screen's own container. Calling this again (after a
+ * language switch, say) replaces the previous bar rather than stacking a
  * second one.
  */
 export function mountBottomNav(handlers: BottomNavHandlers, lang: Lang): void {
   barEl?.remove();
+  detachScroll?.();
+  detachScroll = null;
+
+  const s = STRINGS[lang];
   const el = document.createElement('nav');
-  el.className = 'bottom-nav';
+  el.className = 'home-nav';
   el.innerHTML = `
-    <button class="bottom-nav-btn" id="bnHome">${HOME_GLYPH}<span>${STRINGS[lang].navHome}</span></button>
-    <button class="bottom-nav-btn" id="bnLang">${LANG_GLYPH}<span>${STRINGS[lang].langName}</span></button>
-    <button class="bottom-nav-btn" id="bnAccount">${ACCOUNT_GLYPH}<span>${STRINGS[lang].navAccount}</span></button>
+    <button class="home-nav-btn" id="navProfile" aria-label="${s.navProfile}">${ICON_NAV_PROFILE}</button>
+    <button class="home-nav-btn" id="navRecords" aria-label="${s.navRecords}">${ICON_NAV_RECORDS}</button>
   `;
   document.body.appendChild(el);
-  el.querySelector<HTMLButtonElement>('#bnHome')!.addEventListener('click', handlers.onHome);
-  el.querySelector<HTMLButtonElement>('#bnLang')!.addEventListener('click', handlers.onLanguage);
-  el.querySelector<HTMLButtonElement>('#bnAccount')!.addEventListener('click', handlers.onAccount);
+  el.querySelector<HTMLButtonElement>('#navProfile')!.addEventListener('click', handlers.onProfile);
+  el.querySelector<HTMLButtonElement>('#navRecords')!.addEventListener('click', handlers.onRecords);
+  for (const btn of el.querySelectorAll<HTMLElement>('.home-nav-btn')) {
+    btn.addEventListener('pointerdown', () => {
+      btn.classList.remove('home-tap');
+      void btn.offsetWidth;
+      btn.classList.add('home-tap');
+    });
+    btn.addEventListener('animationend', () => btn.classList.remove('home-tap'));
+  }
   barEl = el;
+
+  const wideMq = window.matchMedia(WIDE_QUERY);
+  // On a phone the bar is hidden while the page is sitting at the very top
+  // and slides in as soon as the player scrolls — matching the reference
+  // sheet, where the resting home screen has no bar and the scrolled one
+  // does. A short screen with nothing to scroll would otherwise never be able
+  // to reach it, so it is also revealed whenever the page can't scroll at all.
+  const sync = () => {
+    if (wideMq.matches) {
+      el.classList.add('home-nav--shown');
+      return;
+    }
+    const de = document.documentElement;
+    const scrollable = de.scrollHeight > de.clientHeight + 8;
+    el.classList.toggle('home-nav--shown', !scrollable || window.scrollY > 12);
+  };
+  sync();
+  window.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync);
+  wideMq.addEventListener('change', sync);
+  detachScroll = () => {
+    window.removeEventListener('scroll', sync);
+    window.removeEventListener('resize', sync);
+    wideMq.removeEventListener('change', sync);
+  };
+}
+
+/** Re-checks whether the bar should be showing — call after swapping in a
+ *  screen of a different height, since that can change whether the page
+ *  scrolls at all. */
+export function refreshBottomNav(): void {
+  window.dispatchEvent(new Event('resize'));
 }

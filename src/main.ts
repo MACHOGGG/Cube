@@ -2,7 +2,8 @@ import './style.css';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
-import { mountBottomNav } from './ui/bottomNav';
+import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
+import { mountBottomNav, refreshBottomNav } from './ui/bottomNav';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
@@ -38,14 +39,27 @@ const games: ShapeGame[] = [squareGame, circleGame, triangleGame];
 // have the red-hazard mechanic wired in.
 const bombLayoutGames: ShapeGame[] = [circleHexGame, squareDiamondGame, triangleBigGame];
 const layoutGames: ShapeGame[] = [...bombLayoutGames, circleSevenGame, triangleAdvancedGame];
-// The home page's fixed square/circle/triangle column order — see
-// HomeLayout in ui/menu.ts for why each of these needs its own explicit
-// per-column arrangement rather than reusing games/layoutGames as-is.
+// Everything on the home page, bucketed by the three base shapes the design
+// is organised around — see HomeLayout in ui/menu.ts.
 const homeLayout: HomeLayout = {
-  baseCards: [squareGame.card, circleGame.card, triangleGame.card],
-  advancedBombCards: [squareDiamondGame.card, circleHexGame.card, triangleBigGame.card],
-  layoutColumns: [[squareDiamondGame.card], [circleHexGame.card, circleSevenGame.card], [triangleBigGame.card, triangleAdvancedGame.card]],
+  base: { square: squareGame.card, circle: circleGame.card, triangle: triangleGame.card },
+  advancedBomb: { square: squareDiamondGame.card, circle: circleHexGame.card, triangle: triangleBigGame.card },
+  moreLayouts: {
+    square: [squareDiamondGame.card],
+    circle: [circleHexGame.card, circleSevenGame.card],
+    triangle: [triangleBigGame.card, triangleAdvancedGame.card],
+  },
 };
+
+// Every game/mode pairing the records page can show a stored best score for,
+// keyed the same way each shape's own mount() saves it.
+const recordSources: RecordSource[] = [
+  ...games.map((g) => ({ card: g.card, suffix: '', mode: '' })),
+  ...games.map((g) => ({ card: g.card, suffix: '_timed', mode: ' · 60s' })),
+  ...games.map((g) => ({ card: g.card, suffix: '_bomb', mode: ' · 💥' })),
+  ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
+  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb', mode: ' · + 💥' })),
+];
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -77,18 +91,31 @@ function showMenu() {
       const game = pool.find((g) => g.card.id === id);
       if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, showMenu);
     },
-    onRandomTarget: () => showComingSoon(STRINGS[currentLang].randomTargetTitle),
-    onMultiplayer: () => showComingSoon(STRINGS[currentLang].multiplayerTitle),
-    onRankings: () => showComingSoon(STRINGS[currentLang].rankingsTitle),
-    onSignIn: () => showAccountPage('login'),
-    onExclusive: () => showAccountPage('register'),
-    onHowToSlide: showTutorialPicker,
   }, currentLang);
+  refreshBottomNav();
 }
 
 function showAccountPage(tab: AuthTab) {
   teardown();
-  renderAccountPage(root, tab, showMenu, currentLang);
+  renderAccountPage(
+    root,
+    tab,
+    {
+      onBack: showMenu,
+      onSwitchLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
+      onHowToSlide: showTutorialPicker,
+      onRandomTarget: () => showComingSoon(STRINGS[currentLang].randomTargetTitle),
+      onMultiplayer: () => showComingSoon(STRINGS[currentLang].multiplayerTitle),
+    },
+    currentLang,
+  );
+  refreshBottomNav();
+}
+
+function showRecordsPage() {
+  teardown();
+  renderRecordsPage(root, recordSources, showMenu, currentLang);
+  refreshBottomNav();
 }
 
 // Which shape a card id's tutorial covers, if any — layout games (the
@@ -188,9 +215,8 @@ function afterLangChosen(lang: Lang) {
   currentLang = lang;
   mountBottomNav(
     {
-      onHome: showMenu,
-      onLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
-      onAccount: () => showAccountPage('login'),
+      onProfile: () => showAccountPage('login'),
+      onRecords: showRecordsPage,
     },
     lang,
   );

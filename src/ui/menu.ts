@@ -1,161 +1,242 @@
 import type { ShapeCardMeta } from '../shapes/types';
-import { loadBest } from '../engine/persistence';
 import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
 import { shapeName } from './shapeLabels';
+import { openCenterPicker, type PickerOption } from './centerPicker';
+import {
+  ICON_BASE_SQUARE,
+  ICON_BASE_CIRCLE,
+  ICON_BASE_TRIANGLE,
+  ICON_TIMED_COMBINED,
+  ICON_BOMB_STAR,
+  ICON_BOMB_90S,
+  bombChip,
+  moreLayoutCard,
+  timedCard,
+  timedOption,
+  type BaseShape,
+} from './homeIcons';
 
 export interface MenuHandlers {
-  onSelectBase: (id: ShapeCardMeta['id']) => void;
-  onSelectLayout: (id: ShapeCardMeta['id']) => void;
-  onTimedFor: (id: ShapeCardMeta['id']) => void;
-  onBombFor: (tier: BombTier, id: ShapeCardMeta['id']) => void;
-  onRandomTarget: () => void;
-  onMultiplayer: () => void;
-  onRankings: () => void;
-  onSignIn: () => void;
-  onExclusive: () => void;
-  onHowToSlide: () => void;
+  onSelectBase: (id: string) => void;
+  onSelectLayout: (id: string) => void;
+  onTimedFor: (id: string) => void;
+  onBombFor: (tier: BombTier, id: string) => void;
 }
 
-/** The home page's fixed left/middle/right column order — every 3-wide row
- *  on this page (base play, timed, each bomb tier, "更多布局") lines its
- *  cards up against this same square/circle/triangle order, so a player's
- *  eye can track "the square one" straight down the page. */
+/**
+ * Everything the home page needs, already bucketed by the three base shapes
+ * the whole design is organised around — every row on the page (base play,
+ * timed, each bomb tier, "more layouts") is the same square/circle/triangle
+ * trio, so a player can track one shape straight down the page.
+ */
 export interface HomeLayout {
-  /** [square, circle, triangle] base cards. */
-  baseCards: [ShapeCardMeta, ShapeCardMeta, ShapeCardMeta];
-  /** [square, circle, triangle] cards for the "进阶炸弹" row — the 3 shapes
-   *  that tier actually supports (squareDiamond/circleHex/triangleBig),
-   *  already reordered into the square/circle/triangle column slots. */
-  advancedBombCards: [ShapeCardMeta, ShapeCardMeta, ShapeCardMeta];
-  /** "更多布局" cards bucketed into their own column — square's list may be
-   *  shorter than the other two; any column short a row gets a dashed
-   *  placeholder there instead of leaving a gap. */
-  layoutColumns: [ShapeCardMeta[], ShapeCardMeta[], ShapeCardMeta[]];
+  /** The three base games. */
+  base: Record<BaseShape, ShapeCardMeta>;
+  /** The 3 layouts the advanced bomb tier supports, in base-shape slots. */
+  advancedBomb: Record<BaseShape, ShapeCardMeta>;
+  /** "More layouts" grouped under the base shape each one is a variant of —
+   *  square has one, circle and triangle have two apiece. */
+  moreLayouts: Record<BaseShape, ShapeCardMeta[]>;
 }
 
-const SIGNIN_GLYPH =
-  '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20 C4 15.6 7.6 13 12 13 C16.4 13 20 15.6 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
+/** The bomb panel's own order — the reference sheet lines its chips up
+ *  square/triangle/circle rather than the square/circle/triangle the full-
+ *  width rows above it use. */
+const BOMB_SHAPES: BaseShape[] = ['square', 'triangle', 'circle'];
+const BASE_ICON: Record<BaseShape, string> = {
+  square: ICON_BASE_SQUARE,
+  circle: ICON_BASE_CIRCLE,
+  triangle: ICON_BASE_TRIANGLE,
+};
 
-function compactCard(name: string, best: string | null, glyph: string, comingSoon: string): HTMLButtonElement {
+/** Below this width the timed and bomb sections collapse into a single card
+ *  each, which opens a centred picker on tap; above it they sit expanded on
+ *  the page and every option is one tap away. */
+const WIDE_QUERY = '(min-width: 720px)';
+
+/** A short squash-and-tilt the instant a card is pressed — the "it felt the
+ *  tap" cue every icon on this page shares. Driven from pointerdown rather
+ *  than :active so it still plays out in full when the tap opens a modal. */
+function wireTapFeedback(el: HTMLElement): void {
+  el.addEventListener('pointerdown', () => {
+    el.classList.remove('home-tap');
+    void el.offsetWidth; // restart the animation even on a rapid re-tap
+    el.classList.add('home-tap');
+  });
+  el.addEventListener('animationend', () => el.classList.remove('home-tap'));
+}
+
+function iconButton(glyph: string, label: string, extraClass = ''): HTMLButtonElement {
   const btn = document.createElement('button');
-  btn.className = 'shape-card-compact shape-card-compact--tight';
-  btn.innerHTML = `
-    <span class="glyph">${glyph}</span>
-    <span class="name">${name}</span>
-    <span class="best">${best ?? comingSoon}</span>
-  `;
+  btn.className = 'home-icon-btn' + (extraClass ? ' ' + extraClass : '');
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = glyph;
+  wireTapFeedback(btn);
   return btn;
-}
-
-function placeholderCard(): HTMLDivElement {
-  const el = document.createElement('div');
-  el.className = 'shape-card-compact shape-card-compact--tight placeholder';
-  el.innerHTML = `<span class="glyph"></span><span class="name">·</span><span class="best"></span>`;
-  return el;
-}
-
-/** Renders one 3-wide row (square/circle/triangle) into a fresh grid div
- *  appended to container, calling onClick(card.id) for whichever slot the
- *  player taps. `bestSuffix` picks which persisted best-score key to show
- *  under each card (see each shape's own mount() for how the suffix is
- *  derived — '_timed'/'_bomb'/none). */
-function row3(container: HTMLElement, cards: ShapeCardMeta[], bestSuffix: string, lang: Lang, onClick: (id: string) => void): void {
-  const s = STRINGS[lang];
-  const grid = document.createElement('div');
-  grid.className = 'menu-grid-3col';
-  for (const card of cards) {
-    const best = loadBest(card.bestKey + bestSuffix);
-    const btn = compactCard(shapeName(lang, card.id, card.name), String(best), card.glyph, s.comingSoon);
-    btn.addEventListener('click', () => onClick(card.id));
-    grid.appendChild(btn);
-  }
-  container.appendChild(grid);
-}
-
-function sectionLabel(container: HTMLElement, text: string): void {
-  const el = document.createElement('div');
-  el.className = 'menu-section-label';
-  el.textContent = text;
-  container.appendChild(el);
 }
 
 export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers: MenuHandlers, lang: Lang) {
   const s = STRINGS[lang];
+  const wide = window.matchMedia(WIDE_QUERY).matches;
+
   container.innerHTML = `
-    <div class="app">
-      <h1 class="home-title-glow">Slides</h1>
-      <p class="tag-line">${s.homeTagline}</p>
-      <div class="menu-sections" id="menuSections"></div>
-      <button class="home-how-to" id="howToBtn">${s.howToBtn}</button>
-
-      <div class="home-wide-card" id="randomTargetCard">
-        <span class="wide-card-title">${s.randomTargetTitle}</span>
-        <span class="wide-card-sub">${s.comingSoon}</span>
-      </div>
-      <div class="home-wide-card" id="multiplayerCard">
-        <span class="wide-card-title">${s.multiplayerTitle}</span>
-        <span class="wide-card-sub">${s.comingSoon}</span>
-      </div>
-      <div class="home-wide-card" id="rankingsCard">
-        <span class="wide-card-title">${s.rankingsTitle}</span>
-        <span class="wide-card-sub">${s.comingSoon}</span>
-      </div>
-
-      <div class="home-signin-row">
-        <button class="signin-circle" id="signInBtn" aria-label="Sign In">${SIGNIN_GLYPH}</button>
-        <button class="exclusive-pill" id="exclusiveBtn">
-          <span class="zh">${s.exclusiveEntry}</span>
-          <span class="en">exclusive</span>
-        </button>
-      </div>
+    <div class="app home-page${wide ? ' home-page--wide' : ''}">
+      <header class="home-head">
+        <h1 class="home-title">Slides</h1>
+        <p class="home-sub">${s.homeTagline}</p>
+      </header>
+      <div class="home-grid" id="homeGrid"></div>
     </div>
   `;
+  const grid = container.querySelector<HTMLElement>('#homeGrid');
+  if (!grid) throw new Error('menu: missing #homeGrid');
 
-  const req = <T extends HTMLElement>(id: string) => {
-    const el = container.querySelector<T>('#' + id);
-    if (!el) throw new Error(`menu: missing #${id}`);
-    return el;
-  };
-
-  const sections = req<HTMLElement>('menuSections');
-
-  sectionLabel(sections, s.sectionBase);
-  row3(sections, layout.baseCards, '', lang, handlers.onSelectBase);
-
-  sectionLabel(sections, s.sectionTimed);
-  row3(sections, layout.baseCards, '_timed', lang, handlers.onTimedFor);
-
-  sectionLabel(sections, s.bombBasicTitle);
-  row3(sections, layout.baseCards, '_bomb', lang, (id) => handlers.onBombFor('basic', id));
-  sectionLabel(sections, s.bombTimedTitle);
-  row3(sections, layout.baseCards, '_bomb', lang, (id) => handlers.onBombFor('timed', id));
-  sectionLabel(sections, s.bombAdvancedTitle);
-  row3(sections, layout.advancedBombCards, '_bomb', lang, (id) => handlers.onBombFor('advanced', id));
-
-  sectionLabel(sections, s.sectionMore);
-  const maxLayoutRows = Math.max(...layout.layoutColumns.map((col) => col.length));
-  for (let r = 0; r < maxLayoutRows; r++) {
-    const grid = document.createElement('div');
-    grid.className = 'menu-grid-3col';
-    for (const col of layout.layoutColumns) {
-      const card = col[r];
-      if (!card) {
-        grid.appendChild(placeholderCard());
-        continue;
-      }
-      const best = loadBest(card.bestKey);
-      const btn = compactCard(shapeName(lang, card.id, card.name), String(best), card.glyph, s.comingSoon);
-      btn.addEventListener('click', () => handlers.onSelectLayout(card.id));
-      grid.appendChild(btn);
-    }
-    sections.appendChild(grid);
+  // ---- row 1: the three base games -------------------------------------
+  for (const shape of SHAPES) {
+    const card = layout.base[shape];
+    const btn = iconButton(BASE_ICON[shape], shapeName(lang, card.id, card.name));
+    btn.addEventListener('click', () => handlers.onSelectBase(card.id));
+    grid.appendChild(btn);
   }
 
-  req<HTMLElement>('randomTargetCard').addEventListener('click', handlers.onRandomTarget);
-  req<HTMLElement>('multiplayerCard').addEventListener('click', handlers.onMultiplayer);
-  req<HTMLElement>('rankingsCard').addEventListener('click', handlers.onRankings);
-  req<HTMLButtonElement>('signInBtn').addEventListener('click', handlers.onSignIn);
-  req<HTMLButtonElement>('exclusiveBtn').addEventListener('click', handlers.onExclusive);
-  req<HTMLButtonElement>('howToBtn').addEventListener('click', handlers.onHowToSlide);
+  // ---- row 2: timed challenge ------------------------------------------
+  const timedOptions = (): PickerOption[] =>
+    SHAPES.map((shape) => ({
+      glyph: timedOption(shape),
+      label: shapeName(lang, layout.base[shape].id, layout.base[shape].name),
+      onPick: () => handlers.onTimedFor(layout.base[shape].id),
+    }));
+
+  if (wide) {
+    // Expanded: one clock per shape, each starting that game immediately.
+    for (const shape of SHAPES) {
+      const card = layout.base[shape];
+      const btn = iconButton(timedCard(shape), `${s.sectionTimed} · ${shapeName(lang, card.id, card.name)}`);
+      btn.addEventListener('click', () => handlers.onTimedFor(card.id));
+      grid.appendChild(btn);
+    }
+  } else {
+    // Collapsed: one clock standing in for all three, which flies to the
+    // middle of the screen and splits into the three as it lands.
+    const btn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed');
+    btn.addEventListener('click', () =>
+      openCenterPicker({ originEl: btn, title: s.sectionTimed, options: timedOptions(), split: true }),
+    );
+    grid.appendChild(btn);
+  }
+
+  // ---- row 3: bomb challenge -------------------------------------------
+  // The panel is the same markup wherever it appears — inline beside the
+  // burst on a wide screen, blown up in the centre of a phone — so its three
+  // tiers stay in the same order and only its size changes.
+  function buildBombPanel(): HTMLElement {
+    const panel = document.createElement('div');
+    panel.className = 'bomb-panel';
+
+    const basicRow = document.createElement('div');
+    basicRow.className = 'bomb-row';
+    for (const shape of BOMB_SHAPES) {
+      const card = layout.base[shape];
+      const chip = iconButton(bombChip(shape, 'basic'), `${s.bombBasicTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.onBombFor('basic', card.id);
+      });
+      basicRow.appendChild(chip);
+    }
+    panel.appendChild(basicRow);
+
+    // The 90s tier has no shape of its own on the reference sheet — it is one
+    // wide bar between the other two rows. Tapping it swaps that bar for its
+    // own three shapes in place, so the tier stays reachable without adding a
+    // row the design doesn't have.
+    const timedRow = document.createElement('div');
+    timedRow.className = 'bomb-row bomb-row--90s';
+    const badge = iconButton(ICON_BOMB_90S, s.bombTimedTitle, 'bomb-90s');
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      timedRow.innerHTML = '';
+      timedRow.classList.add('bomb-row--open');
+      for (const shape of BOMB_SHAPES) {
+        const card = layout.base[shape];
+        const chip = iconButton(bombChip(shape, 'basic'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
+        chip.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          handlers.onBombFor('timed', card.id);
+        });
+        timedRow.appendChild(chip);
+      }
+    });
+    timedRow.appendChild(badge);
+    panel.appendChild(timedRow);
+
+    const advRow = document.createElement('div');
+    advRow.className = 'bomb-row';
+    for (const shape of BOMB_SHAPES) {
+      const card = layout.advancedBomb[shape];
+      const chip = iconButton(bombChip(shape, 'advanced'), `${s.bombAdvancedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.onBombFor('advanced', card.id);
+      });
+      advRow.appendChild(chip);
+    }
+    panel.appendChild(advRow);
+    return panel;
+  }
+
+  if (wide) {
+    const star = document.createElement('div');
+    star.className = 'home-icon-btn home-bomb-star';
+    star.innerHTML = ICON_BOMB_STAR;
+    grid.appendChild(star);
+    const wrap = document.createElement('div');
+    wrap.className = 'home-bomb-wrap';
+    wrap.appendChild(buildBombPanel());
+    grid.appendChild(wrap);
+    // Keeps the pair centred under the 3-wide rows above, matching the sheet.
+    const spacer = document.createElement('div');
+    spacer.className = 'home-grid-spacer';
+    grid.appendChild(spacer);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'home-icon-btn home-bomb-mini';
+    btn.setAttribute('aria-label', s.bombBasicTitle);
+    btn.appendChild(buildBombPanel());
+    wireTapFeedback(btn);
+    btn.addEventListener('click', () =>
+      openCenterPicker({ originEl: btn, title: s.bombBasicTitle, panel: buildBombPanel() }),
+    );
+    grid.appendChild(btn);
+  }
+
+  // ---- row 4: more layouts ---------------------------------------------
+  // One card per base shape, holding that shape's own layout variants:
+  // square has a single one (so it starts straight away), circle and
+  // triangle have two apiece and open a picker.
+  const moreOrder: BaseShape[] = wide ? ['square', 'circle', 'triangle'] : ['square', 'triangle', 'circle'];
+  for (const shape of moreOrder) {
+    const cards = layout.moreLayouts[shape];
+    if (!cards.length) continue;
+    const btn = iconButton(moreLayoutCard(shape), `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
+    btn.addEventListener('click', () => {
+      if (cards.length === 1) {
+        handlers.onSelectLayout(cards[0].id);
+        return;
+      }
+      openCenterPicker({
+        originEl: btn,
+        title: s.sectionMore,
+        options: cards.map((c) => ({
+          glyph: moreLayoutCard(shape),
+          label: shapeName(lang, c.id, c.name),
+          showLabel: true,
+          onPick: () => handlers.onSelectLayout(c.id),
+        })),
+      });
+    });
+    grid.appendChild(btn);
+  }
 }

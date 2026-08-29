@@ -28,6 +28,10 @@ export interface I18nStrings {
   triBlank: string;
   navHome: string;
   navAccount: string;
+  navProfile: string;
+  navRecords: string;
+  noRecordsYet: string;
+  moreModesTitle: string;
   switchLanguage: string;
   // ---- home page ----
   howToBtn: string;
@@ -137,6 +141,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBlank: 'When a whole flipped line matches, it becomes blank triangles — still slide freely, but they can never score again',
     navHome: 'Home',
     navAccount: 'Account',
+    navProfile: 'Profile',
+    navRecords: 'Records & rankings',
+    noRecordsYet: 'No score yet',
+    moreModesTitle: 'More modes',
     switchLanguage: 'Switch language',
     howToBtn: 'How to slide? · Watch the tutorial again',
     sectionBase: 'Base games',
@@ -233,6 +241,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBlank: 'Quand toute une ligne retournée est assortie, ses triangles deviennent vides — ils glissent toujours librement, mais ne peuvent plus jamais marquer',
     navHome: 'Accueil',
     navAccount: 'Compte',
+    navProfile: 'Profil',
+    navRecords: 'Historique et classements',
+    noRecordsYet: 'Pas encore de score',
+    moreModesTitle: 'Autres modes',
     switchLanguage: 'Changer de langue',
     howToBtn: 'Comment glisser ? · Revoir le tutoriel',
     sectionBase: 'Jeux de base',
@@ -329,6 +341,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBlank: '整條線翻面同色湊齊時，會變成空白角——仍可自由滑動補位，但不會再得分',
     navHome: '首頁',
     navAccount: '帳戶',
+    navProfile: '個人主頁',
+    navRecords: '記錄與排名',
+    noRecordsYet: '尚無成績',
+    moreModesTitle: '更多玩法',
     switchLanguage: '切換語言',
     howToBtn: '如何滑？· 重新觀看新手教學',
     sectionBase: '基礎玩法',
@@ -425,6 +441,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     triBlank: '整条线翻面同色凑齐时，会变成空白角——仍可自由滑动补位，但不会再得分',
     navHome: '首页',
     navAccount: '账户',
+    navProfile: '个人主页',
+    navRecords: '记录与排名',
+    noRecordsYet: '尚无成绩',
+    moreModesTitle: '更多玩法',
     switchLanguage: '切换语言',
     howToBtn: '如何滑？· 重新观看新手教学',
     sectionBase: '基础玩法',
