@@ -13,28 +13,48 @@ import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
-// Same solid 5-row big-triangle board as triangleBig.ts (see that file for
-// the full geometry/matching rationale — reused verbatim here, including
-// its 5-color no-self-pair back-face rule, since the user only asked for a
-// different *horizontal move*, not a different board or color scheme).
-// What's different: dragging the horizontal ("row") direction on any row
-// except the bottom one no longer cycles the whole row — only the segment
-// from the touch point to the edge on the drag's own side cycles; the rest
-// of that row is left completely untouched (not moved, not re-checked for
-// matches). The two diagonal directions, and horizontal drags on the
-// bottom row, are unchanged from triangleBig's whole-line behavior.
+// The V-shaped advanced triangle board: 49 triangles in two arms that meet
+// along one continuous bottom row, 7 colors x 7 tiles, and the same back-face
+// rule as the other advanced layouts (a tile's dot face is never its own
+// color). Scoring, sliding, the low-opacity wraparound refill, flipping and
+// clearing all behave exactly as in the other triangle games.
+//
+// What the V changes is reach, not rules: the notch splits every row above
+// the bottom into two independent lines, so sliding the left arm's top row
+// leaves the right arm's top row untouched — while the bottom row, being one
+// unbroken run, still slides as a single line across the whole board.
 const PALETTES = {
-  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52'],
-  colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9'],
+  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#8A5A44', '#EDEDED'],
+  colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#8A5A44', '#EDEDED'],
 } as const;
-const ROW_LENS = [1, 3, 5, 7, 9];
-const LEFT_TRIM = [0, 0, 0, 0, 0];
-const GLOBAL_ROW_OFFSET = 0;
-const PER_COLOR = 5;
-const MIN_LINE_BONUS_LEN = 3;
-const BOTTOM_ROW = ROW_LENS.length - 1;
 
-const GLYPH = `<svg viewBox="0 0 32 32"><polygon points="16,4 28,26 4,26" fill="none" stroke="#4C68B0" stroke-width="2.4"/><polygon points="16,13 22,24 10,24" fill="#D89B1E"/><line x1="4" y1="26" x2="28" y2="26" stroke="#B23A3A" stroke-width="2.4"/></svg>`;
+/**
+ * The V board, written as each row's cells in *global slot* numbers (slot
+ * parity decides orientation: even = up, odd = down). The top three rows are
+ * the V's two separate arms with the notch between them; the bottom row is
+ * one continuous run joining them. 6+6 per arm row and 13 along the bottom
+ * makes 49 cells — 7 colors, 7 tiles each.
+ *
+ * Because a row's cells are grouped into *runs*, the two arms are simply two
+ * different horizontal lines: sliding the left arm's top row can't touch the
+ * right arm's, while the bottom row — a single run — slides as one.
+ */
+const ROW_RUNS: readonly (readonly [start: number, end: number])[][] = [
+  [[1, 6], [20, 25]],
+  [[3, 8], [18, 23]],
+  [[5, 10], [16, 21]],
+  [[7, 19]],
+];
+/** Global slot of each row's local column c. */
+const SLOTS: number[][] = ROW_RUNS.map((runs) =>
+  runs.flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, k) => a + k)),
+);
+const ROW_LENS = SLOTS.map((row) => row.length);
+const GLOBAL_ROW_OFFSET = 0;
+const PER_COLOR = 7;
+const MIN_LINE_BONUS_LEN = 3;
+
+const GLYPH = `<svg viewBox="0 0 32 32"><path d="M3 7 H11 L16 21 L21 7 H29 L20 27 H12 Z" fill="none" stroke="#4C68B0" stroke-width="2.4" stroke-linejoin="round"/><polygon points="8,11 11,17 5,17" fill="#D89B1E"/><polygon points="24,11 27,17 21,17" fill="#B23A3A"/></svg>`;
 
 // The board's 2 seed patterns (see findRunMatches/BIG_TRIANGLES below),
 // built with the exact same up/down triangle geometry snapshotBoard() uses
@@ -67,10 +87,9 @@ interface Line {
 
 function globalToLocal(i: number, p: number): Cell | null {
   const r = i - GLOBAL_ROW_OFFSET;
-  if (r < 0 || r >= ROW_LENS.length) return null;
-  const c = p - LEFT_TRIM[r];
-  if (c < 0 || c >= ROW_LENS[r]) return null;
-  return [r, c];
+  if (r < 0 || r >= SLOTS.length) return null;
+  const c = SLOTS[r].indexOf(p);
+  return c < 0 ? null : [r, c];
 }
 function crossNeighbor(i: number, p: number): Cell | null {
   return p % 2 === 0 ? globalToLocal(i + 1, p + 1) : globalToLocal(i - 1, p - 1);
@@ -137,16 +156,20 @@ function buildDiagonalFamily(fam: 'A' | 'B'): Line[] {
 }
 
 function globalPosPure(r: number, c: number) {
-  return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
+  return { i: r + GLOBAL_ROW_OFFSET, p: SLOTS[r][c] };
 }
 
 function allLines(): Line[] {
   const lines: Line[] = [...buildDiagonalFamily('A'), ...buildDiagonalFamily('B')];
-  // Row family cells are ordered left-to-right by increasing local column —
-  // index i in this array IS local column i, which the horizontal
-  // partial-segment drag below relies on directly.
-  for (let r = 0; r < ROW_LENS.length; r++) {
-    lines.push({ fam: 'R', cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
+  // One horizontal line per *run* — so each arm of the V is its own line and
+  // slides on its own, while the bottom row (a single run) slides whole.
+  for (let r = 0; r < ROW_RUNS.length; r++) {
+    let c = 0;
+    for (const [a, b] of ROW_RUNS[r]) {
+      const len = b - a + 1;
+      lines.push({ fam: 'R', cells: Array.from({ length: len }, (_, k) => [r, c + k] as Cell) });
+      c += len;
+    }
   }
   return lines;
 }
@@ -194,11 +217,6 @@ interface DragState {
   c: number;
   fam: 'A' | 'B' | 'R' | null;
   line: Line | null;
-  // Set only for a horizontal (R) drag on a non-bottom row: the cells from
-  // the touch point to the edge on the drag's own side. null means "use the
-  // whole line" (every other case — both diagonals, and horizontal drags on
-  // the bottom row — keep triangleBig's original whole-line behavior).
-  segment: Cell[] | null;
   dx: number;
   dy: number;
   lastShift: number;
@@ -211,7 +229,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
     card: {
       id: 'triangleAdvanced',
       name: '进阶三角',
-      desc: '整块大三角 · 横向分段滑动',
+      desc: 'V 形 49 块 · 左右两臂各自滑动',
       bestKey,
       glyph: GLYPH,
     },
@@ -220,12 +238,13 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const refs = buildShell(container, {
         lang,
         title: 'Slides · 进阶三角',
-        tagline: '左斜/右斜整行滑动 · 横向仅拖动一段',
-        startBody: '拖动斜线方向的整条线，或横向拖动其中一段三角，拼出同色图案。点击开始生成一局新的方糖阵势。',
+        wideBoard: true,
+        tagline: 'V 形棋盘 · 左右两臂横向互不相连',
+        startBody: '这是一块 V 形棋盘：左右两臂各自独立，只有最下面一行横贯整块。拖动整条线拼出同色图案。点击开始生成一局新的方糖阵势。',
         hint:
-          '左斜、右斜两个方向拖动时，和大三角一样是整条线一起循环滑动；水平方向拖动时，最下面一行仍是整行循环，但其余每一行只有从你手指落点到拖动方向那一侧边缘的那一段会自己循环滑动，另一侧的三角完全不受影响、不会跟着移动。不论整行还是分段，连续 4 个同色（不分点/面）得 4 分，连得更长按实际数量得分，但线外/段外的同色三角不会被计入；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分方块翻成点面。同一局中，与刚得分的同一局部图案完全相同（同样的位置与颜色）不会连续再次得分。当一整条线（或分段后的一段，长度 ≥3）都翻成点面且点色相同时，额外得该段长度的平方分，随后淡出并变为空白角——保留在棋盘原位，可以继续正常参与拖动和补位，但不会再对任何得分产生贡献。连续多步得分会自动加倍：第 2 步该步得分 ×2，第 3 步 ×4，以此类推无止境翻倍，一旦某步没得分就重新计数。全部方块都翻成点面或变为空白角时结束，结算当时的分数。',
+          'V 形棋盘由左右两臂和一条横贯底部的长行组成。左斜、右斜两个方向的拖动和其他三角玩法完全一样，整条线一起循环滑动，超出的部分会以低透明度从另一端补回来。水平方向的不同之处只有一点：除最下面一行外，左臂和右臂是两条互不相连的线——拖动左臂最上面一行，右臂最上面一行完全不动，第二、第三行同理；最下面一行横贯整块棋盘，仍然作为一整行循环滑动。连续 4 个同色（不分点/面）得 4 分，连得更长按实际数量得分；4 个三角拼成一个大三角（3 个同朝向 + 1 个反朝向，"31"/"13"）同色时固定得 4 分。得分的三角翻成点面。同一局中，同一组三角不会重复得分。当一整条线（长度 ≥3）都翻成点面且点色相同时，额外得该线长度的平方分，随后淡出并变为空白角——留在原位可以继续参与拖动和补位，但不再贡献任何得分。连续多步得分会自动加倍：第 2 步 ×2，第 3 步 ×4，以此类推。全部三角都翻成点面或变为空白角时结束。',
         assumptions:
-          '5 种口味色，每色 5 枚，共 25 枚（一整块大三角，五行 1/3/5/7/9 枚）；每种口味的点色分布为：其余 4 色各 1 枚、另有 1 色额外再来 1 枚——保证没有正反面同色的三角出现，与七色圆球"反面绝不与正面同色"的原则一致。左斜、右斜两个方向，以及最下面一行的横向拖动，判分与移动规则和大三角完全一致；除最下面一行外，其余每一行的横向拖动只影响从落点到拖动方向那一侧边缘的一段。',
+          '7 种口味色，每色 7 枚，共 49 枚：左右两臂各 3 行 × 6 枚，最下面一行 13 枚横贯整块。每种口味的点色分布为：其余 6 色各 1 枚、另有 1 色额外再来 1 枚——因此 49 枚里没有任何一枚的正反面是同一种颜色。得分、翻面、消除、补位动画与其他三角玩法完全一致；唯一的差别是左右两臂的横向拖动互不相连（最下面一行除外）。',
         extraControls: [{ id: 'paletteBtn', label: '色盲友好配色' }],
         patternHint: renderPatternHintRow(PATTERNS),
       });
@@ -329,7 +348,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       }
 
       function globalPos(r: number, c: number) {
-        return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
+        return globalPosPure(r, c);
       }
 
       function triGeometry(r: number, c: number): { up: boolean; pts: [number, number][] } {
@@ -353,15 +372,41 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return [(pts[0][0] + pts[1][0] + pts[2][0]) / 3, (pts[0][1] + pts[1][1] + pts[2][1]) / 3];
       }
 
+      // The V is much wider than it is tall, so its box is measured from the
+      // cells themselves (in S units) and scaled to whatever room the column
+      // gives — rather than assuming a square pyramid the way the other
+      // triangle boards can.
+      const UNIT_EXTENT = (() => {
+        let minX = Infinity;
+        let maxX = -Infinity;
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            const { i, p } = globalPosPure(r, c);
+            const up = p % 2 === 0;
+            const j = up ? p / 2 : (p - 1) / 2;
+            const xBase = -i / 2 + j;
+            const xs = up ? [xBase - 0.5, xBase + 0.5] : [xBase, xBase + 1];
+            minX = Math.min(minX, ...xs);
+            maxX = Math.max(maxX, ...xs);
+          }
+        return { minX, maxX, w: maxX - minX };
+      })();
+
       function layoutBoard() {
         const rect = refs.boardWrap.getBoundingClientRect();
-        const boardSize = Math.min(rect.width, rect.height);
-        S = boardSize / 5.2;
+        const width = rect.width || 320;
+        S = width / (UNIT_EXTENT.w + 0.3);
         H = (S * Math.sqrt(3)) / 2;
-        originX = boardSize / 2;
-        originY = (boardSize - ROW_LENS.length * H) / 2 - GLOBAL_ROW_OFFSET * H;
-        refs.boardEl.style.width = boardSize + 'px';
-        refs.boardEl.style.height = boardSize + 'px';
+        const height = ROW_LENS.length * H;
+        originX = -UNIT_EXTENT.minX * S + (width - UNIT_EXTENT.w * S) / 2;
+        originY = 0;
+        refs.boardEl.style.width = width + 'px';
+        refs.boardEl.style.height = height + 'px';
+        // The shared wrapper is square by default, which would leave this
+        // short, wide board floating in a tall empty box — it takes exactly
+        // the height the V needs instead.
+        refs.boardWrap.style.aspectRatio = 'auto';
+        refs.boardWrap.style.height = height + 'px';
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {
@@ -719,25 +764,10 @@ export function createTriangleAdvancedGame(): ShapeGame {
 
       const FILLER_OPACITY = 0.55;
 
-      // The active set of cells this drag actually moves: the touch-to-edge
-      // segment for a non-bottom-row horizontal drag, or the whole line for
-      // every other case (both diagonals; horizontal on the bottom row).
+      // Every drag moves one whole line — for a horizontal drag that line is
+      // the arm's own run, which is what keeps the two arms independent.
       function activeCells(d: DragState): Cell[] {
-        return d.segment ?? d.line!.cells;
-      }
-
-      // fillerAwareSource's wraparound-pairing logic assumes the filler
-      // region (|shift| cells) never exceeds the line's own length n — true
-      // by construction for a full row/diagonal (dragging further than the
-      // line's own span is a very long drag), but a touch-to-edge segment
-      // can be as short as 1-2 cells, where even a modest drag easily
-      // produces |shift| > n and corrupts the pairing (verified against a
-      // real repro: a 3-cell segment ended up with a color that was never
-      // in it). Clamping the segment's own shift to its own length keeps
-      // fillerAwareSource's assumption true without touching the whole-line
-      // path at all, which never needed this and stays exactly as before.
-      function boundedShift(shift: number, n: number, isSegment: boolean): number {
-        return isSegment ? Math.max(-n, Math.min(n, shift)) : shift;
+        return d.line!.cells;
       }
 
       function renderDragPreview() {
@@ -747,7 +777,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         const cells = activeCells(d);
         const n = cells.length;
         const half = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy) / 2, 1.5);
-        const shift = boundedShift(2 * Math.round(half), n, d.segment !== null);
+        const shift = 2 * Math.round(half);
         if (shift !== d.lastShift) {
           vibrate(6);
           d.lastShift = shift;
@@ -773,7 +803,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         if (!d || !d.fam) return false;
         const cells = activeCells(d);
         const n = cells.length;
-        const shift = boundedShift(2 * Math.round(projectedSteps(d.fam, d.dx, d.dy) / 2), n, d.segment !== null);
+        const shift = 2 * Math.round(projectedSteps(d.fam, d.dx, d.dy) / 2);
         if (((shift % n) + n) % n === 0) return false;
         const vals = cells.map(([r, c]) => grid[r][c]);
         const shifted = vals.map((_, i) => vals[fillerAwareSource(i, shift, n)]);
@@ -790,7 +820,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, line: null, segment: null, dx: 0, dy: 0, lastShift: 0 };
+          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0 };
         },
         onDrag(dx, dy) {
           if (!drag) return;
@@ -802,16 +832,6 @@ export function createTriangleAdvancedGame(): ShapeGame {
               .sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
-            if (drag.fam === 'R' && drag.r !== BOTTOM_ROW) {
-              // Row cells are ordered left-to-right by local column, and
-              // drag.c IS that local column (LEFT_TRIM is all zero here),
-              // so it indexes straight into the row's own cells array.
-              const rowCells = drag.line.cells;
-              const touchIdx = drag.c;
-              drag.segment = dx >= 0 ? rowCells.slice(touchIdx) : rowCells.slice(0, touchIdx + 1);
-            } else {
-              drag.segment = null;
-            }
           }
           renderDragPreview();
         },
