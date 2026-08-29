@@ -35,14 +35,22 @@ const PALETTES = {
  * one continuous run joining them. 6+6 per arm row and 13 along the bottom
  * makes 49 cells — 7 colors, 7 tiles each.
  *
+ * Every row is drawn half a cell further left than the one above it (the
+ * shared triangle-grid shear), so the *slots* that keep an edge running
+ * straight differ per side: the left arm steps 2 slots right each row, while
+ * the right arm keeps the very same slots — which is what makes both outer
+ * edges slant inward at the tiling's own 60°, closing the notch by exactly
+ * one cell per side per row (6 slots wide at the top, then 4, then 2, then
+ * gone where the bottom row joins the arms).
+ *
  * Because a row's cells are grouped into *runs*, the two arms are simply two
  * different horizontal lines: sliding the left arm's top row can't touch the
  * right arm's, while the bottom row — a single run — slides as one.
  */
 const ROW_RUNS: readonly (readonly [start: number, end: number])[][] = [
-  [[1, 6], [20, 25]],
-  [[3, 8], [18, 23]],
-  [[5, 10], [16, 21]],
+  [[1, 6], [13, 18]],
+  [[3, 8], [13, 18]],
+  [[5, 10], [13, 18]],
   [[7, 19]],
 ];
 /** Global slot of each row's local column c. */
