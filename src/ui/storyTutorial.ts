@@ -73,7 +73,10 @@ function cellSvg(c: StoryCell): string {
 
 const ARROW_SVG = (color: string) =>
   `<svg viewBox="-34 -16 62 32"><line x1="-28" y1="0" x2="0" y2="0" stroke="${color}" stroke-width="7"` +
-  ` stroke-linecap="round" stroke-dasharray="9 8"/><path d="M2 -11 L24 0 L2 11 Z" fill="${color}"/></svg>`;
+  ` stroke-linecap="round" stroke-dasharray="9 8"/>` +
+  // The head is stroked with a round join over its own fill, which rounds
+  // all three corners without changing its overall size.
+  `<path d="M4 -8.5 L21 0 L4 8.5 Z" fill="${color}" stroke="${color}" stroke-width="6" stroke-linejoin="round"/></svg>`;
 
 const CHECK_SVG = (color: string) =>
   `<svg viewBox="0 0 60 60"><path d="M12 32 L26 47 L50 12" fill="none" stroke="${color}"` +
@@ -141,7 +144,9 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       a.style.transform = `translate(-50%,-50%) rotate(${st.ang}deg)`;
       a.innerHTML = `<span class="story-arrow-nudge">${ARROW_SVG(st.color)}</span>`;
       board.appendChild(a);
-      await sleep(1350);
+      // Exactly two stretch cycles (see the CSS iteration count), then the
+      // move starts on its own; the arrow stays put, static, while it runs.
+      await sleep(1500);
     } else if (st.t === 'checks') {
       for (const p of st.pts) {
         const c = document.createElement('div');
@@ -178,7 +183,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       await sleep(340);
     } else if (st.t === 'slide') {
       renderFrame(st.f);
-      await sleep(380);
+      await sleep(250);
       if (gen !== my) return;
       const movers = st.idx.map((i) => els[i]);
       // Wraparound refill, exactly like the live game's drag preview: a
@@ -193,7 +198,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         board.appendChild(g);
         return g;
       });
-      const DUR = 2600;
+      const DUR = 1730; // the original 2600ms pace sped up 1.5×
       const { dx, dy } = st; // narrowed copy — the closure below can't re-narrow st
       const t0 = performance.now();
       await new Promise<void>((resolve) => {

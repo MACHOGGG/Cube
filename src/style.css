@@ -728,7 +728,8 @@ button:hover { filter: brightness(1.05); }
    picker's arrows use, pointing along the coming slide. */
 .story-arrow { position: absolute; width: 74px; height: 40px; z-index: 4; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35)); }
 .story-arrow svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.story-arrow-nudge { display: block; width: 100%; height: 100%; transform-origin: 20% 50%; animation: story-arrow-nudge 1.1s ease-in-out infinite; }
+/* Two stretch cycles, then the arrow holds still while the line moves. */
+.story-arrow-nudge { display: block; width: 100%; height: 100%; transform-origin: 20% 50%; animation: story-arrow-nudge 0.72s ease-in-out 2; }
 @keyframes story-arrow-nudge {
   0%, 100% { transform: translateX(0) scaleX(1); }
   35% { transform: translateX(9%) scaleX(1.22); }
