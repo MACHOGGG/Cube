@@ -663,7 +663,7 @@ export function createCircleHexGame(): ShapeGame {
       }
 
       function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
-        return findStuckColorGroups(liveTiles(), clearedDotColors, isBomb ? RED_IDX : undefined);
+        return findStuckColorGroups(liveTiles(), clearedDotColors);
       }
 
       function countRemainingTiles() {

@@ -29,8 +29,12 @@ function groupBy(liveTiles: LiveTile[], key: (t: Tile) => number): LiveTile[][] 
  *    before one happens no colour can be written off.)
  * 2. Counting what is left: the tiles currently *showing* this colour
  *    (front-facing, or flipped to it) plus every other colour's tile that
- *    has not been flipped yet come to 4 or fewer — too little material left
- *    for this colour to ever complete another pattern.
+ *    has not been flipped yet come to fewer than 4 — too little material
+ *    left for this colour to ever complete another pattern.
+ *
+ * Bomb modes need no special case here: their shapes already leave the
+ * hazard colour out of the liveTiles they pass in, so red tiles are counted
+ * neither as this colour's material nor as anyone else's.
  *
  * The returned groups are those colours' still-unflipped tiles: the concrete
  * pieces a player can look at and confirm nothing will ever pair with. The
@@ -39,14 +43,6 @@ function groupBy(liveTiles: LiveTile[], key: (t: Tile) => number): LiveTile[][] 
 export function findStuckColorGroups(
   liveTiles: LiveTile[],
   clearedDotColors: ReadonlySet<number>,
-  /**
-   * Bomb modes: the hazard colour. Red tiles never flip and never match, so
-   * they are not material this rule can count on — leaving them in condition
-   * 2's tally would keep the board looking playable long after it isn't, and
-   * a colour of pure obstacles is never itself "stuck". Omitted outside bomb
-   * modes, where there is no such colour.
-   */
-  hazardColor?: number,
 ): Cell[][] {
   const flavorFaced = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   if (flavorFaced.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
@@ -54,17 +50,22 @@ export function findStuckColorGroups(
   const stuck: Cell[][] = [];
   for (const group of groupBy(flavorFaced, (t) => t.color)) {
     const color = group[0].tile.color;
-    if (color === hazardColor) continue;
     // 1 — has a line clear already eaten what these tiles would flip into?
     if (!group.some((lt) => clearedDotColors.has(lt.tile.dotColor))) continue;
     // 2 — is there still enough material for this colour to pair up?
+    //
+    // The sum is an *upper bound* on how many tiles could ever show this
+    // colour at once: the ones showing it now, plus every other still-
+    // unflipped tile, any of which might have this colour on its back. A
+    // pattern needs MIN_MATCH_SIZE of them, so the colour is only provably
+    // dead when that bound falls short — strictly fewer than 4. At exactly
+    // 4 a pattern is still reachable (all four would have to line up, but
+    // nothing rules it out), and calling that stuck ended runs a move early.
     const showingThisColor = liveTiles.filter(
       (lt) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color) === color,
     ).length;
-    const otherUnflipped = flavorFaced.filter(
-      (lt) => lt.tile.color !== color && lt.tile.color !== hazardColor,
-    ).length;
-    if (showingThisColor + otherUnflipped > MIN_MATCH_SIZE) continue;
+    const otherUnflipped = flavorFaced.filter((lt) => lt.tile.color !== color).length;
+    if (showingThisColor + otherUnflipped >= MIN_MATCH_SIZE) continue;
     stuck.push(group.map((lt) => lt.cell));
   }
   return stuck;
