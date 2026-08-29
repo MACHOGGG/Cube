@@ -1,4 +1,5 @@
 import { injectStyles } from './injectStyles';
+import { unlockAudio, audioRunning } from './engine/juice';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
@@ -21,6 +22,19 @@ import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 
 injectStyles();
+
+// Audio has to be opened from a real gesture (see unlockAudio); the game's
+// own sounds all fire later, from animation timers, so nothing else in the
+// app is in a position to do it. Keep trying on each gesture until the
+// context actually starts, then stop listening.
+function tryUnlockAudio() {
+  unlockAudio();
+  if (!audioRunning()) return;
+  window.removeEventListener('pointerdown', tryUnlockAudio);
+  window.removeEventListener('keydown', tryUnlockAudio);
+}
+window.addEventListener('pointerdown', tryUnlockAudio);
+window.addEventListener('keydown', tryUnlockAudio);
 
 const rootEl = document.getElementById('app');
 if (!rootEl) throw new Error('#app not found');

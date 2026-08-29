@@ -106,6 +106,40 @@ function audioCtx(): AudioContext | null {
 }
 
 /**
+ * Opens the audio context from a real user gesture.
+ *
+ * Browsers only let audio start in response to a tap or key press, and every
+ * sound this game plays happens later — playHit runs from inside the cascade
+ * animation's timers, never from a gesture handler. So the context was always
+ * first constructed in a task the browser considers untrusted: it comes up
+ * suspended, and a resume() from that same task does not satisfy Safari,
+ * which wants the context opened inside the gesture itself. The result is a
+ * game that is silent for the entire session.
+ *
+ * Calling this from the first pointerdown fixes that: the context is created
+ * and resumed inside the gesture, and a one-sample silent buffer is actually
+ * played through it — Safari wants a sound *started* in the gesture, not just
+ * a resume. Every later blip from a timer then goes through.
+ */
+export function unlockAudio(): void {
+  const c = audioCtx();
+  if (!c) return;
+  try {
+    const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, 22050);
+    src.connect(c.destination);
+    src.start(0);
+  } catch {
+    // An unlock that fails costs nothing — the next gesture tries again.
+  }
+}
+
+/** Whether audio has actually started, so the caller can stop retrying. */
+export function audioRunning(): boolean {
+  return sharedCtx?.state === 'running';
+}
+
+/**
  * A short "hit" blip: one oscillator through a fast-attack/exponential-decay
  * gain envelope. comboTier raises the base pitch a little each step (a
  * rising scale gives an "accumulating" feel across a chain) and every hit
