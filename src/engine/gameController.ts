@@ -406,7 +406,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       totalRaw += s.points;
       moveWeight += s.weight;
       for (const dot of s.clearedDotColors) clearedDotColors.add(dot);
-      const delta = s.points * multiplier * comboMult;
+      // Rounded, so the score stays a whole number. The streak multipliers
+      // are ×1/×1.5/×2/×2.5 and the cascade factor compounds on top, so the
+      // raw product lands on halves — and a fractional score is wrong twice
+      // over: "184.5" is not a score a player should see, and the digit reel
+      // has no way to draw a decimal point (see scoreReel.setValue).
+      const delta = Math.round(s.points * multiplier * comboMult);
       // Split for the end-of-run breakdown: the pattern's own points, the
       // whole-line bonus, and everything the streak/chain multipliers added.
       if (s.lineBonusGroups.length) linePoints += s.points;

@@ -27,7 +27,14 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
   }
 
   function setValue(value: number) {
-    const digits = String(value).split('').reverse().map(Number);
+    // Every character here becomes one digit strip, so the string must hold
+    // nothing but digits. A fractional value used to slip through as "184.5":
+    // the "." mapped to NaN, `translateY(-NaNem)` is invalid CSS and so was
+    // silently dropped, and that column kept whatever digit it last showed —
+    // the score read as 18445. Callers keep the score whole; this makes the
+    // reel unable to misdraw even if one ever doesn't.
+    const safe = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+    const digits = String(safe).split('').reverse().map(Number);
     while (boxes.length < digits.length) {
       const box = makeDigitBox();
       boxes.push(box);

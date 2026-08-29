@@ -36,20 +36,34 @@ function groupBy(liveTiles: LiveTile[], key: (t: Tile) => number): LiveTile[][] 
  * pieces a player can look at and confirm nothing will ever pair with. The
  * run is not ended automatically — this only lights up 自行结束.
  */
-export function findStuckColorGroups(liveTiles: LiveTile[], clearedDotColors: ReadonlySet<number>): Cell[][] {
+export function findStuckColorGroups(
+  liveTiles: LiveTile[],
+  clearedDotColors: ReadonlySet<number>,
+  /**
+   * Bomb modes: the hazard colour. Red tiles never flip and never match, so
+   * they are not material this rule can count on — leaving them in condition
+   * 2's tally would keep the board looking playable long after it isn't, and
+   * a colour of pure obstacles is never itself "stuck". Omitted outside bomb
+   * modes, where there is no such colour.
+   */
+  hazardColor?: number,
+): Cell[][] {
   const flavorFaced = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   if (flavorFaced.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
 
   const stuck: Cell[][] = [];
   for (const group of groupBy(flavorFaced, (t) => t.color)) {
     const color = group[0].tile.color;
+    if (color === hazardColor) continue;
     // 1 — has a line clear already eaten what these tiles would flip into?
     if (!group.some((lt) => clearedDotColors.has(lt.tile.dotColor))) continue;
     // 2 — is there still enough material for this colour to pair up?
     const showingThisColor = liveTiles.filter(
       (lt) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color) === color,
     ).length;
-    const otherUnflipped = flavorFaced.filter((lt) => lt.tile.color !== color).length;
+    const otherUnflipped = flavorFaced.filter(
+      (lt) => lt.tile.color !== color && lt.tile.color !== hazardColor,
+    ).length;
     if (showingThisColor + otherUnflipped > MIN_MATCH_SIZE) continue;
     stuck.push(group.map((lt) => lt.cell));
   }
