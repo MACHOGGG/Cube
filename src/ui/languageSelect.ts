@@ -118,6 +118,9 @@ function buildGrid(): Cell[][] {
 }
 
 export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: Lang) => void) {
+  // Held only while this screen is mounted; teardown() below drops it again
+  // before handing off, so every later screen scrolls normally.
+  document.documentElement.classList.add('lang-locked');
   container.innerHTML = `
     <div class="app lang-select-page lang-select-page--vertical">
       <h1 class="lang-title">Slides</h1>
@@ -393,7 +396,10 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
           el.classList.add('lang-cell--solved');
         }
       }, 640);
-      setTimeout(() => onSelect(COL_LANG[c]), 900);
+      setTimeout(() => {
+        teardown();
+        onSelect(COL_LANG[c]);
+      }, 900);
       return;
     }
   }
@@ -401,4 +407,13 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
   layoutOverlays();
   const onResize = () => layoutOverlays();
   window.addEventListener('resize', onResize);
+
+  // This screen is replaced wholesale by whatever comes next (main.ts swaps
+  // #app's innerHTML), so it has to give back the two things that outlive
+  // its own DOM: the scroll lock on <html>, and the resize listener that
+  // would otherwise keep firing against detached cells forever.
+  function teardown() {
+    document.documentElement.classList.remove('lang-locked');
+    window.removeEventListener('resize', onResize);
+  }
 }

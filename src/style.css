@@ -573,9 +573,25 @@ button:hover { filter: brightness(1.05); }
 /* This screen is the very first thing a new player sees, before any board
    — so unlike the rest of the app it gets its own soft atmospheric wash
    instead of the plain --bg, and a title that glows on its own rather than
-   a caption spelling out "swipe a strip to choose". */
+   a caption spelling out "swipe a strip to choose".
+
+   It is also one locked screen: there is nothing below the grid, so there is
+   nothing to scroll to. The page is pinned to the viewport (dvh, so a mobile
+   browser's collapsing toolbar can't leave the bottom row cut off) and
+   renderLanguageSelect holds a scroll lock on <html> for as long as it is
+   mounted. Its own small top/bottom padding replaces .app's 92px bottom
+   gutter, which exists only to clear the persistent bottom nav — a bar this
+   screen never shows. */
 .lang-select-page {
-  position: relative; padding-top: 15vh; min-height: min(72vh, 560px); justify-content: flex-start;
+  position: relative; justify-content: flex-start; gap: 12px;
+  height: 100vh; height: 100dvh;
+  padding-top: 3vh; padding-bottom: 3vh;
+}
+/* overscroll-behavior stops a touch device rubber-banding (or triggering
+   pull-to-refresh) on a page that has nowhere to scroll — overflow:hidden
+   alone doesn't prevent that gesture. */
+html.lang-locked, html.lang-locked body {
+  overflow: hidden; height: 100%; overscroll-behavior: none;
 }
 .lang-select-page::before {
   content: ''; position: absolute; inset: -28px -16px auto -16px; height: 320px; z-index: -1;
@@ -600,7 +616,17 @@ button:hover { filter: brightness(1.05); }
    siblings inside the row (see languageSelect.ts's module comment for why:
    an in-flow arrow was found to throw off the ghost-fill offset math). */
 .lang-board-wrap { position: relative; display: flex; justify-content: center; margin-top: 8px; }
-.lang-board--vertical { position: relative; display: flex; flex-direction: row; gap: 4px; height: min(76vh, 640px); aspect-ratio: 4 / 9; }
+/* Sized to whichever runs out first: the height left after the title and
+   the page's own padding, a 640px cap so the tiles don't get silly on a
+   tall desktop window, or the viewport width — that last term is what keeps
+   the board narrow enough for the right-hand chevrons to still land inside
+   the column on a narrow phone, since the board's width is derived from its
+   height through the 4/9 ratio. */
+.lang-board--vertical {
+  position: relative; display: flex; flex-direction: row; gap: 4px; aspect-ratio: 4 / 9;
+  height: min(calc(92vh - 64px), 640px, calc((100vw - 116px) * 2.25));
+  height: min(calc(92dvh - 64px), 640px, calc((100vw - 116px) * 2.25));
+}
 .lang-col--vertical { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
 
 .lang-row-hit { position: absolute; touch-action: none; cursor: grab; z-index: 3; }
