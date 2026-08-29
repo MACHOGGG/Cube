@@ -18,6 +18,8 @@ export interface CenterPickerOpts {
   options?: PickerOption[];
   /** Or a whole pre-built panel (the bomb tiers), blown up as one piece. */
   panel?: HTMLElement;
+  /** Class the blown-up panel gets — defaults to the bomb panel's own. */
+  panelClass?: string;
   /** Start the options stacked on top of each other and let them fan apart
    *  as the modal lands — the "one clock splits into three" beat. */
   split?: boolean;
@@ -53,7 +55,7 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
 
   const optionEls: HTMLElement[] = [];
   if (opts.panel) {
-    opts.panel.classList.add('bomb-panel--big');
+    opts.panel.classList.add(opts.panelClass ?? 'bomb-panel--big');
     body.appendChild(opts.panel);
   } else {
     const row = document.createElement('div');

@@ -2,7 +2,7 @@ import type { ShellRefs } from '../ui/gameShell';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
-import { saveBestIfHigher, saveRun } from './persistence';
+import { saveBestIfHigher, saveRun, addTotalScore } from './persistence';
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
@@ -278,6 +278,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     );
 
     const best = saveBestIfHigher(hooks.bestKey, total);
+    // Every run's composite score also feeds the device-wide 累计得分.
+    addTotalScore(total);
 
     const row = (label: string, value: string) =>
       `<div class="end-row"><span>${label}</span><span>${value}</span></div>`;

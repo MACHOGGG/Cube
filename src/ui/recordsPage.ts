@@ -1,7 +1,8 @@
-import { loadBest, findRun } from '../engine/persistence';
+import { loadBest, findRun, loadTotalScore } from '../engine/persistence';
 import { renderShareCard } from '../engine/shareCard';
 import { STRINGS, type Lang } from '../i18n';
 import { shapeName } from './shapeLabels';
+import { openCenterPicker } from './centerPicker';
 import type { ShapeCardMeta } from '../shapes/types';
 
 /** One line of the records list: which game, which mode, and the best score
@@ -19,6 +20,43 @@ export interface RecordSource {
 const PLACEHOLDER_ROWS = 5;
 
 /**
+ * 累计得分 has no upper bound, but its card is a fixed slot on the page — so
+ * the number is shortened (万/亿 in Chinese, K/M/B elsewhere) once it grows
+ * past what fits comfortably, and the blown-up view then shows every digit.
+ */
+function compactScore(n: number, lang: Lang): string {
+  const zh = lang === 'zhHans' || lang === 'zhHant';
+  const cut = (v: number, unit: string) => {
+    const t = (n / v).toFixed(n / v >= 100 ? 0 : 1);
+    return (t.endsWith('.0') ? t.slice(0, -2) : t) + unit;
+  };
+  if (zh) {
+    if (n >= 1e8) return cut(1e8, '亿');
+    if (n >= 1e5) return cut(1e4, '万');
+    return String(n);
+  }
+  if (n >= 1e9) return cut(1e9, 'B');
+  if (n >= 1e6) return cut(1e6, 'M');
+  if (n >= 1e5) return cut(1e3, 'K');
+  return String(n);
+}
+
+/** The full number, grouped, for the blown-up view. */
+function fullScore(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
+/** Shrinks the type as the number lengthens, so however long it runs it
+ *  still lands inside one screen rather than overflowing or wrapping into a
+ *  wall; a short number keeps the ordinary large size. */
+function scoreFontSize(text: string, big: boolean): string {
+  const n = text.length;
+  const scale = big ? 1 : 0.72;
+  const rem = n <= 7 ? 3.2 : n <= 10 ? 2.6 : n <= 13 ? 2.1 : n <= 17 ? 1.7 : 1.35;
+  return (rem * scale).toFixed(2) + 'rem';
+}
+
+/**
  * 记录与排名, laid out as the two panels the design sheet specifies: the
  * amber one on the left/top holds this device's records, the periwinkle one
  * on the right/bottom is reserved for rankings.
@@ -34,6 +72,7 @@ export function renderRecordsPage(
   lang: Lang,
 ): void {
   const s = STRINGS[lang];
+  const total = loadTotalScore();
   const rows = sources
     .map((src) => ({
       card: src.card,
@@ -52,6 +91,11 @@ export function renderRecordsPage(
         <h1 class="home-title">Slides</h1>
         <p class="home-sub">${s.homeTagline}</p>
       </header>
+      <button class="total-card" id="totalCard">
+        <span class="total-card-title">${s.totalScoreTitle}</span>
+        <span class="total-card-value" id="totalValue">${compactScore(total, lang)}</span>
+        <span class="total-card-sub">（${s.totalScoreSync}）</span>
+      </button>
       <div class="records-panels">
         <section class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></section>
         <section class="records-panel records-panel--ranks" aria-label="${s.rankingsTitle}">
@@ -85,6 +129,24 @@ export function renderRecordsPage(
       panel.appendChild(rule);
     }
   }
+
+  const valueEl = container.querySelector<HTMLElement>('#totalValue');
+  if (valueEl) valueEl.style.fontSize = scoreFontSize(valueEl.textContent ?? '', false);
+
+  // Tapping the card blows it up into the middle of a dimmed page — the same
+  // flight the home page's bomb card takes — where every digit is shown in
+  // full at whatever size keeps it on one screen.
+  const totalCard = container.querySelector<HTMLButtonElement>('#totalCard');
+  totalCard?.addEventListener('click', () => {
+    const big = document.createElement('div');
+    big.className = 'total-card total-card--big';
+    const full = fullScore(total);
+    big.innerHTML =
+      `<span class="total-card-title">${s.totalScoreTitle}</span>` +
+      `<span class="total-card-value" style="font-size:${scoreFontSize(full, true)}">${full}</span>` +
+      `<span class="total-card-sub">（${s.totalScoreSync}）</span>`;
+    openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big' });
+  });
 
   container.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', onBack);
 }

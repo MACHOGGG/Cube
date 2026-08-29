@@ -47,6 +47,8 @@ export interface I18nStrings {
   comingSoon: string;
   multiplayerTitle: string;
   rankingsTitle: string;
+  totalScoreTitle: string;
+  totalScoreSync: string;
   exclusiveEntry: string;
   // ---- tutorial picker / generic back buttons ----
   tutorialPickerTitle: string;
@@ -165,6 +167,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: 'Coming soon',
     multiplayerTitle: 'Multiplayer',
     rankingsTitle: 'Records & rankings',
+    totalScoreTitle: 'Total score',
+    totalScoreSync: 'sign in to unlock + sync',
     exclusiveEntry: 'Genius',
     tutorialPickerTitle: 'How to slide?',
     tutorialPickerTagline: 'Pick a game to watch its tutorial again',
@@ -271,6 +275,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: 'Bientôt disponible',
     multiplayerTitle: 'Multijoueur',
     rankingsTitle: 'Historique et classements',
+    totalScoreTitle: 'Score cumulé',
+    totalScoreSync: 'connexion : débloquer + synchroniser',
     exclusiveEntry: 'Génie',
     tutorialPickerTitle: 'Comment glisser ?',
     tutorialPickerTagline: 'Choisissez un jeu pour revoir son tutoriel',
@@ -377,6 +383,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: '敬請期待',
     multiplayerTitle: '多人遊玩',
     rankingsTitle: '成績與排名',
+    totalScoreTitle: '累計得分',
+    totalScoreSync: '登入解鎖＋同步',
     exclusiveEntry: '天才入口',
     tutorialPickerTitle: '如何滑？',
     tutorialPickerTagline: '選擇一種玩法，重新觀看新手教學',
@@ -483,6 +491,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: '敬请期待',
     multiplayerTitle: '多人游玩',
     rankingsTitle: '成绩与排名',
+    totalScoreTitle: '累计得分',
+    totalScoreSync: '登录解锁＋同步',
     exclusiveEntry: '天才入口',
     tutorialPickerTitle: '如何滑？',
     tutorialPickerTagline: '选择一种玩法，重新观看新手教学',

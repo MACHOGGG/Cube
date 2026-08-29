@@ -660,6 +660,31 @@ button:hover { filter: brightness(1.05); }
 .genius-cta:hover { box-shadow: 0 6px 18px rgba(233, 148, 40, 0.48); }
 .genius-cta:active { transform: translateY(1px) scale(0.99); }
 
+/* 累计得分 — one fixed-size card above the two panels. However long the
+   number gets the card stays this size (the value is shortened to fit);
+   tapping it flies the whole card to the middle of a dimmed page, where the
+   number is shown in full, sized down as needed to stay on one screen. */
+.total-card {
+  width: 100%; flex: none; border: none; border-radius: 22px; padding: 18px 20px 16px;
+  background: #C4838D; color: #fff; cursor: pointer; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+.total-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.15rem; letter-spacing: 0.04em; }
+.total-card-value {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; line-height: 1.15;
+  font-variant-numeric: tabular-nums; max-width: 100%;
+  overflow-wrap: anywhere; word-break: break-word;
+}
+.total-card-sub { font-size: 0.78rem; opacity: 0.85; }
+/* The blown-up copy: wider, roomier, and free to use the full screen width. */
+.total-card--big {
+  width: min(92vw, 560px); border-radius: 30px; padding: 30px 26px 24px; cursor: default;
+  gap: 6px;
+}
+.total-card--big .total-card-title { font-size: 1.4rem; }
+.total-card--big .total-card-sub { font-size: 0.9rem; }
+
 /* ---------- records & rankings ---------- */
 /* Two panels, the amber one for this device's records and the periwinkle one
    reserved for rankings. Side by side on a desktop, stacked on a phone, and

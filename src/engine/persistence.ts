@@ -12,6 +12,28 @@ export function saveBestIfHigher(key: string, score: number): number {
 }
 
 /**
+ * 累计得分 — every finished run's composite score added up across the whole
+ * device. Signing in is meant to unlock syncing this total across devices;
+ * until an account system exists it lives here, in this browser only.
+ */
+const TOTAL_SCORE_KEY = 'slides_total_score';
+
+export function loadTotalScore(): number {
+  return parseInt(localStorage.getItem(TOTAL_SCORE_KEY) || '0', 10) || 0;
+}
+
+export function addTotalScore(delta: number): number {
+  if (!(delta > 0)) return loadTotalScore();
+  const next = loadTotalScore() + Math.round(delta);
+  try {
+    localStorage.setItem(TOTAL_SCORE_KEY, String(next));
+  } catch {
+    // Storage full or unavailable — the total simply doesn't advance.
+  }
+  return next;
+}
+
+/**
  * One finished run, archived verbatim: exactly what its share card showed
  * (in the language it was played in) plus the two board snapshots — so the
  * 记录 panel can later re-open the very photo that run produced, not a
