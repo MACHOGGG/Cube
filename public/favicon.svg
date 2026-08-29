@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Slides">
+  <!-- The app mark: four tiles on the brand red, with the top-right one slid
+       clear of the block — the game's one move, drawn once. -->
+  <rect width="512" height="512" rx="112" fill="#BE5762"/>
+  <g fill="#FAF9F5">
+    <rect x="112" y="112" width="128" height="128" rx="30"/>
+    <rect x="112" y="272" width="128" height="128" rx="30"/>
+    <rect x="272" y="272" width="128" height="128" rx="30"/>
+  </g>
+  <!-- The slid tile, half off the block and half-faded, the way a dragged
+       line trails its wraparound ghost. -->
+  <rect x="304" y="112" width="128" height="128" rx="30" fill="#FAF9F5" opacity="0.55"/>
+</svg>
