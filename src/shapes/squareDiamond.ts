@@ -640,6 +640,8 @@ export function createSquareDiamondGame(): ShapeGame {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'squareDiamond', '菱形方块'),
+        shapeId: 'squareDiamond',
+        modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

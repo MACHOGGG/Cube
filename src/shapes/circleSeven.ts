@@ -536,6 +536,8 @@ export function createCircleSevenGame(): ShapeGame {
         lang,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circleSeven', '七色圆球'),
+        shapeId: 'circleSeven',
+        modeKey: opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

@@ -687,6 +687,8 @@ export function createTriangleAdvancedGame(): ShapeGame {
         lang,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangleAdvanced', '进阶三角'),
+        shapeId: 'triangleAdvanced',
+        modeKey: opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

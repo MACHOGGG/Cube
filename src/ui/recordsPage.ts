@@ -1,12 +1,13 @@
-import { loadBest, findRun, loadTotalScore } from '../engine/persistence';
+import { loadAllRuns, totalScoreOf, type StoredRun } from '../engine/persistence';
 import { renderShareCard } from '../engine/shareCard';
+import { buildShareInfo, formatRunTime, modeLabel } from '../engine/runRecord';
 import { STRINGS, type Lang } from '../i18n';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker } from './centerPicker';
 import type { ShapeCardMeta } from '../shapes/types';
 
-/** One line of the records list: which game, which mode, and the best score
- *  this device has stored for that exact combination. */
+/** One playable game+mode combination, so the page knows which archives to
+ *  read and which glyph belongs to a stored run's shape id. */
 export interface RecordSource {
   card: ShapeCardMeta;
   /** Suffix on the persisted best-score key — '' base, '_timed', '_bomb'. */
@@ -57,13 +58,15 @@ function scoreFontSize(text: string, big: boolean): string {
 }
 
 /**
- * 记录与排名, laid out as the two panels the design sheet specifies: the
- * amber one on the left/top holds this device's records, the periwinkle one
- * on the right/bottom is reserved for rankings.
+ * 记录与排名 — 累计得分 on top, then the two panels the design sheet
+ * specifies: the amber one holds this device's records, the periwinkle one is
+ * reserved for rankings.
  *
+ * All three are the same kind of object: a card you can tap to fly it into
+ * the middle of a dimmed page, where it is free to run as long as it needs.
  * Rankings have no data source yet — there is no account or server — so that
- * panel keeps its full half of the screen and shows its ruled lines empty,
- * rather than being hidden until the feature lands.
+ * panel keeps its half of the screen and shows its ruled lines empty rather
+ * than being hidden until the feature lands.
  */
 export function renderRecordsPage(
   container: HTMLElement,
@@ -72,18 +75,11 @@ export function renderRecordsPage(
   lang: Lang,
 ): void {
   const s = STRINGS[lang];
-  const total = loadTotalScore();
-  const rows = sources
-    .map((src) => ({
-      card: src.card,
-      suffix: src.suffix,
-      key: src.card.bestKey + src.suffix,
-      name: shapeName(lang, src.card.id, src.card.name),
-      mode: src.mode,
-      best: loadBest(src.card.bestKey + src.suffix),
-    }))
-    .filter((r) => r.best > 0)
-    .sort((a, b) => b.best - a.best);
+  // One archive per game+mode; the page reads them all so 记录 is a single
+  // chronological list and 累计得分 is literally its sum.
+  const runs = loadAllRuns(sources.map((src) => src.card.bestKey + src.suffix));
+  const total = totalScoreOf(runs);
+  const glyphOf = new Map(sources.map((src) => [src.card.id, src.card.glyph]));
 
   container.innerHTML = `
     <div class="app records-page">
@@ -94,48 +90,84 @@ export function renderRecordsPage(
       <button class="total-card" id="totalCard">
         <span class="total-card-title">${s.totalScoreTitle}</span>
         <span class="total-card-value" id="totalValue">${compactScore(total, lang)}</span>
-        <span class="total-card-sub">（${s.totalScoreSync}）</span>
+        <span class="total-card-sub">${s.totalScoreSync}</span>
       </button>
       <div class="records-panels">
-        <section class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></section>
-        <section class="records-panel records-panel--ranks" aria-label="${s.rankingsTitle}">
+        <button class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></button>
+        <button class="records-panel records-panel--ranks" id="ranksPanel" aria-label="${s.rankingsTitle}">
           ${Array.from({ length: PLACEHOLDER_ROWS }, () => '<div class="records-rule"></div>').join('')}
           <p class="records-locked">${s.rankingsTitle} · ${s.comingSoon}</p>
-        </section>
+        </button>
       </div>
       <div class="controls"><button class="icon-btn" id="backBtn">${s.back}</button></div>
     </div>
   `;
 
-  const panel = container.querySelector<HTMLElement>('#recordsPanel')!;
-  if (!rows.length) {
-    panel.innerHTML =
-      Array.from({ length: PLACEHOLDER_ROWS }, () => '<div class="records-rule"></div>').join('') +
-      `<p class="records-locked">${s.noRecordsYet}</p>`;
-  } else {
-    for (const r of rows) {
-      const row = document.createElement('button');
-      row.className = 'records-row';
-      row.innerHTML =
-        `<span class="records-row-name">${r.name}<span class="records-row-mode">${r.mode}</span></span>` +
-        `<span class="records-row-score">${r.best}</span>`;
-      row.addEventListener('click', () => openRecordDetail(r.name + r.mode, r.best, r.key, lang));
-      panel.appendChild(row);
+  /** One record line: which shape, which mode, when it finished, what it
+   *  scored. Tapping it goes straight to that run's share card. */
+  function recordRow(run: StoredRun): HTMLElement {
+    const d = run.data;
+    const name = shapeName(lang, d.shapeId, d.shapeFallback);
+    const mode = modeLabel(d.modeKey, lang);
+    const row = document.createElement('button');
+    row.className = 'records-row';
+    row.innerHTML =
+      `<span class="records-row-glyph">${glyphOf.get(d.shapeId) ?? ''}</span>` +
+      `<span class="records-row-name">${name}${mode ? `<span class="records-row-mode">${mode}</span>` : ''}` +
+      `<span class="records-row-time">${formatRunTime(d.at)}</span></span>` +
+      `<span class="records-row-score">${d.totalScore}</span>`;
+    row.addEventListener('click', (e) => {
+      // The panel itself is clickable (to blow it up); a row click is about
+      // that one run, so it must not also trigger the panel.
+      e.stopPropagation();
+      openShareCard(run, lang);
+    });
+    return row;
+  }
+
+  /** Fills a container with record rows, padded out with ruled lines so a
+   *  short list still reads as the design's ruled sheet. */
+  function fillRecords(host: HTMLElement, limit: number | null) {
+    host.innerHTML = '';
+    const shown = limit === null ? runs : runs.slice(0, limit);
+    if (!shown.length) {
+      host.innerHTML =
+        Array.from({ length: PLACEHOLDER_ROWS }, () => '<div class="records-rule"></div>').join('') +
+        `<p class="records-locked">${s.noRecordsYet}</p>`;
+      return;
     }
-    // Keep the ruled look when there are only a handful of entries.
-    for (let i = rows.length; i < PLACEHOLDER_ROWS; i++) {
+    for (const run of shown) host.appendChild(recordRow(run));
+    for (let i = shown.length; i < PLACEHOLDER_ROWS; i++) {
       const rule = document.createElement('div');
       rule.className = 'records-rule';
-      panel.appendChild(rule);
+      host.appendChild(rule);
     }
   }
+
+  const panel = container.querySelector<HTMLButtonElement>('#recordsPanel')!;
+  fillRecords(panel, PLACEHOLDER_ROWS);
+  panel.addEventListener('click', () => {
+    // Blown up, the list keeps its type size and simply runs as long as it
+    // needs to — scrolling inside the panel rather than shrinking to fit.
+    const big = document.createElement('div');
+    big.className = 'records-panel records-panel--records records-panel--big';
+    fillRecords(big, null);
+    openCenterPicker({ originEl: panel, title: s.navRecords, panel: big, panelClass: 'records-panel--big' });
+  });
+
+  const ranks = container.querySelector<HTMLButtonElement>('#ranksPanel')!;
+  ranks.addEventListener('click', () => {
+    const big = document.createElement('div');
+    big.className = 'records-panel records-panel--ranks records-panel--big';
+    big.innerHTML =
+      Array.from({ length: PLACEHOLDER_ROWS * 2 }, () => '<div class="records-rule"></div>').join('') +
+      `<p class="records-locked">${s.rankingsTitle} · ${s.comingSoon}</p>`;
+    openCenterPicker({ originEl: ranks, title: s.rankingsTitle, panel: big, panelClass: 'records-panel--big' });
+  });
 
   const valueEl = container.querySelector<HTMLElement>('#totalValue');
   if (valueEl) valueEl.style.fontSize = scoreFontSize(valueEl.textContent ?? '', false);
 
-  // Tapping the card blows it up into the middle of a dimmed page — the same
-  // flight the home page's bomb card takes — where every digit is shown in
-  // full at whatever size keeps it on one screen.
   const totalCard = container.querySelector<HTMLButtonElement>('#totalCard');
   totalCard?.addEventListener('click', () => {
     const big = document.createElement('div');
@@ -152,70 +184,32 @@ export function renderRecordsPage(
 }
 
 /**
- * Tapping a record re-opens the same result modal the run itself ended on —
- * same composite-score layout, same 分享战绩 button and share-card popup.
+ * Tapping a record opens that run's share card directly — the photo is the
+ * record, so there is no summary screen in between.
  *
- * Every finished run archives its share card verbatim (see saveRun in
- * persistence.ts), so the popup shows the very photo that run produced —
- * board snapshot, breakdown rows, and the language it was played in. Only a
- * record set before archiving existed falls back to a card rebuilt from the
- * bare score, with an empty board space.
+ * The card is rebuilt from the run's stored numbers rather than replayed
+ * from saved text, so it comes out in whatever language is being read now,
+ * with the run's own start and end boards side by side.
  */
-function openRecordDetail(title: string, score: number, bestKey: string, lang: Lang): void {
+function openShareCard(run: StoredRun, lang: Lang): void {
   const s = STRINGS[lang];
-  const run = findRun(bestKey, score);
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay show';
-  overlay.innerHTML = `
-    <div class="modal">
-      <h2>${title}</h2>
-      <div class="end-score-label">${s.compositeScoreLabel}</div>
-      <div class="big-score">${score}</div>
-      <p class="hint"></p>
-      <div class="btn-row">
-        <button class="secondary" id="recShareBtn">${s.shareBtn}</button>
-        <button class="primary" id="recCloseBtn">${s.closeBtn}</button>
-      </div>
+  const d = run.data;
+  const info = buildShareInfo(d, shapeName(lang, d.shapeId, d.shapeFallback), lang);
+  const dataUrl = renderShareCard(info, run.end ?? null, run.start ?? null);
+  const share = document.createElement('div');
+  share.className = 'overlay show';
+  share.innerHTML = `
+    <div class="modal share-modal">
+      <h2>${s.shareCardTitle}</h2>
+      <img src="${dataUrl}" alt="${s.shareImgAlt}" />
+      <p class="hint">${s.shareHint}</p>
+      <div class="btn-row"><button class="primary" id="recShareClose">${s.closeBtn}</button></div>
     </div>
   `;
-  overlay.querySelector<HTMLElement>('.hint')!.textContent = run
-    ? run.info.detail
-    : s.bestPhrase.replace('{n}', String(score));
-  document.body.appendChild(overlay);
-
-  const close = () => overlay.remove();
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
-  overlay.querySelector<HTMLButtonElement>('#recCloseBtn')!.addEventListener('click', close);
-  overlay.querySelector<HTMLButtonElement>('#recShareBtn')!.addEventListener('click', () => {
-    const dataUrl = run
-      ? renderShareCard(run.info, run.end ?? null)
-      : renderShareCard(
-          {
-            shapeName: title,
-            lang,
-            totalScore: score,
-            scoreRows: [[s.scoreLabel, String(score)]],
-            detail: s.bestPhrase.replace('{n}', String(score)),
-          },
-          null,
-        );
-    const share = document.createElement('div');
-    share.className = 'overlay show';
-    share.innerHTML = `
-      <div class="modal share-modal">
-        <h2>${s.shareCardTitle}</h2>
-        <img src="${dataUrl}" alt="${s.shareImgAlt}" />
-        <p class="hint">${s.shareHint}</p>
-        <div class="btn-row"><button class="primary" id="recShareClose">${s.closeBtn}</button></div>
-      </div>
-    `;
-    document.body.appendChild(share);
-    const closeShare = () => share.remove();
-    share.querySelector<HTMLButtonElement>('#recShareClose')!.addEventListener('click', closeShare);
-    share.addEventListener('click', (e) => {
-      if (e.target === share) closeShare();
-    });
+  document.body.appendChild(share);
+  const close = () => share.remove();
+  share.querySelector<HTMLButtonElement>('#recShareClose')!.addEventListener('click', close);
+  share.addEventListener('click', (e) => {
+    if (e.target === share) close();
   });
 }

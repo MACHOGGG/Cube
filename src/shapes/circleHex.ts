@@ -704,6 +704,8 @@ export function createCircleHexGame(): ShapeGame {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circleHex', '六边圆球'),
+        shapeId: 'circleHex',
+        modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

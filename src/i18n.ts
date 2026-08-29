@@ -127,6 +127,7 @@ export interface I18nStrings {
   shareStartLabel: string;
   shareEndLabel: string;
   shareFooterHint: string;
+  shareQrCaption: string;
   // ---- shared shape UI ----
   colorblindBtn: string;
   shapeNameSquare: string;
@@ -253,6 +254,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} moves',
     bestPhrase: 'best {n}',
     rateLabel: 'Hit rate ',
+    shareQrCaption: 'Scan to play Slides',
     shareStartLabel: 'Start',
     shareEndLabel: 'End',
     shareFooterHint: 'Drag a whole row, column, or diagonal to match same-color patterns',
@@ -377,6 +379,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} coups',
     bestPhrase: 'meilleur score {n}',
     rateLabel: 'Taux de réussite ',
+    shareQrCaption: 'Scannez pour jouer à Slides',
     shareStartLabel: 'Début',
     shareEndLabel: 'Fin',
     shareFooterHint: 'Faites glisser une ligne, colonne ou diagonale entière pour assortir les couleurs',
@@ -501,6 +504,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本機最佳 {n}',
     rateLabel: '得分率',
+    shareQrCaption: '掃碼來 Slides～',
     shareStartLabel: '開始',
     shareEndLabel: '結束',
     shareFooterHint: '拖動整行整列或整條斜線，拼出同色圖案',
@@ -625,6 +629,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本机最佳 {n}',
     rateLabel: '得分率',
+    shareQrCaption: '扫码来 Slides～',
     shareStartLabel: '开始',
     shareEndLabel: '结束',
     shareFooterHint: '拖动整行整列或整条斜线，拼出同色图案',

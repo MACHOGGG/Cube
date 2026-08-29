@@ -182,6 +182,7 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
 }
 
 import { STRINGS, type Lang } from '../i18n';
+import { QR_MATRIX, QR_QUIET_MODULES } from './qrSlides';
 
 export interface ShareCardInfo {
   shapeName: string;
@@ -203,14 +204,46 @@ const PAD = 80;
 // zoomed into or saved at native size.
 const EXPORT_SCALE = 3;
 
-/** Renders the composed PNG data URL: title and score summary up top, then
- *  the final layout as one large snapshot centred in its own space. */
-export function renderShareCard(info: ShareCardInfo, endSnap: BoardSnapshot | null): string {
+/** Draws the pre-encoded Slides QR (see qrSlides.ts) into a square box. */
+function drawQr(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  const modules = QR_MATRIX.length + QR_QUIET_MODULES * 2;
+  const m = size / modules;
+  ctx.fillStyle = '#ffffff';
+  roundRect(ctx, x, y, size, size, 8);
+  ctx.fill();
+  ctx.fillStyle = '#141413';
+  for (let r = 0; r < QR_MATRIX.length; r++) {
+    const row = QR_MATRIX[r];
+    for (let c = 0; c < row.length; c++) {
+      if (row[c] !== '1') continue;
+      // Cells are drawn a hair oversized so neighbouring dark modules meet
+      // cleanly instead of showing seams from fractional-pixel rounding.
+      ctx.fillRect(
+        x + (c + QR_QUIET_MODULES) * m,
+        y + (r + QR_QUIET_MODULES) * m,
+        m + 0.5,
+        m + 0.5,
+      );
+    }
+  }
+}
+
+/**
+ * Renders the composed PNG data URL: the run's headline score and breakdown
+ * up top, then the board as it started and as it finished, side by side, so
+ * the picture shows what the run actually did rather than just where it
+ * landed. A QR to the Slides page sits in the top corner.
+ */
+export function renderShareCard(
+  info: ShareCardInfo,
+  endSnap: BoardSnapshot | null,
+  startSnap: BoardSnapshot | null = null,
+): string {
   const s = STRINGS[info.lang];
   const boardY = 300;
-  const hero = 380;
-  const heroX = (CARD_W - hero) / 2;
-  const cardH = boardY + hero + 110;
+  const gap = 28;
+  const panel = (CARD_W - PAD * 2 - gap) / 2;
+  const cardH = boardY + panel + 110;
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W * EXPORT_SCALE;
@@ -239,16 +272,27 @@ export function renderShareCard(info: ShareCardInfo, endSnap: BoardSnapshot | nu
   ctx.fillStyle = '#5b5650';
   ctx.fillText(info.shapeName, PAD, 108);
 
+  // The QR and its caption own the top-right corner; the breakdown rows sit
+  // below them rather than beside, so neither has to shrink.
+  const qrSize = 96;
+  const qrX = CARD_W - PAD - qrSize;
+  drawQr(ctx, qrX, 40, qrSize);
+  ctx.font = '500 13px "Karla", sans-serif';
+  ctx.fillStyle = '#5b5650';
+  ctx.textAlign = 'center';
+  ctx.fillText(s.shareQrCaption, qrX + qrSize / 2, 40 + qrSize + 18);
+  ctx.textAlign = 'left';
+
   ctx.font = '700 88px "JetBrains Mono", monospace';
   ctx.fillStyle = '#BE5762';
-  ctx.fillText(String(info.totalScore), PAD, 200);
+  ctx.fillText(String(info.totalScore), PAD, 210);
   ctx.font = '500 15px "Karla", sans-serif';
   ctx.fillStyle = '#5b5650';
-  ctx.fillText(s.compositeScoreLabel, PAD + 2, 222);
+  ctx.fillText(s.compositeScoreLabel, PAD + 2, 232);
 
   ctx.font = '500 15px "JetBrains Mono", monospace';
   ctx.fillStyle = '#8b8680';
-  let rowY = 168;
+  let rowY = 186;
   const rowX = CARD_W - PAD;
   for (const [label, value] of info.scoreRows) {
     ctx.textAlign = 'right';
@@ -258,27 +302,32 @@ export function renderShareCard(info: ShareCardInfo, endSnap: BoardSnapshot | nu
   ctx.textAlign = 'left';
   ctx.font = '500 13px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
-  ctx.fillText(info.detail, PAD, 258);
+  ctx.fillText(info.detail, PAD, 268);
 
-  // The final layout, centred large in its own backing space — the card's
-  // one picture, rather than the twin start/end thumbnails it used to copy.
-  ctx.fillStyle = '#f0ece4';
-  roundRect(ctx, heroX, boardY, hero, hero, 24);
-  ctx.fill();
-  if (endSnap) {
-    const inset = hero * 0.08;
-    drawSnapshot(ctx, endSnap, heroX + inset, boardY + inset, hero - inset * 2);
+  // Start on the left, end on the right, each centred in its own panel.
+  const panels: [number, BoardSnapshot | null, string][] = [
+    [PAD, startSnap, s.shareStartLabel],
+    [PAD + panel + gap, endSnap, s.shareEndLabel],
+  ];
+  for (const [x, snap, label] of panels) {
+    ctx.fillStyle = '#f0ece4';
+    roundRect(ctx, x, boardY, panel, panel, 20);
+    ctx.fill();
+    if (snap) {
+      const inset = panel * 0.08;
+      drawSnapshot(ctx, snap, x + inset, boardY + inset, panel - inset * 2);
+    }
+    ctx.font = '600 15px "Karla", sans-serif';
+    ctx.fillStyle = '#5b5650';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + panel / 2, boardY + panel + 30);
+    ctx.textAlign = 'left';
   }
-  ctx.font = '600 15px "Karla", sans-serif';
-  ctx.fillStyle = '#5b5650';
-  ctx.textAlign = 'center';
-  ctx.fillText(s.shareEndLabel, CARD_W / 2, boardY + hero + 32);
-  ctx.textAlign = 'left';
 
   ctx.font = '500 13px "Karla", sans-serif';
   ctx.fillStyle = '#a39e97';
   ctx.textAlign = 'center';
-  ctx.fillText(s.shareFooterHint, CARD_W / 2, cardH - 34);
+  ctx.fillText(s.shareFooterHint, CARD_W / 2, cardH - 30);
   ctx.textAlign = 'left';
 
   return canvas.toDataURL('image/png');

@@ -1,4 +1,5 @@
-import type { BoardSnapshot, ShareCardInfo } from './shareCard';
+import type { BoardSnapshot } from './shareCard';
+import type { RunData } from './runRecord';
 
 export function loadBest(key: string): number {
   return parseInt(localStorage.getItem(key) || '0', 10) || 0;
@@ -12,36 +13,13 @@ export function saveBestIfHigher(key: string, score: number): number {
 }
 
 /**
- * 累计得分 — every finished run's composite score added up across the whole
- * device. Signing in is meant to unlock syncing this total across devices;
- * until an account system exists it lives here, in this browser only.
- */
-const TOTAL_SCORE_KEY = 'slides_total_score';
-
-export function loadTotalScore(): number {
-  return parseInt(localStorage.getItem(TOTAL_SCORE_KEY) || '0', 10) || 0;
-}
-
-export function addTotalScore(delta: number): number {
-  if (!(delta > 0)) return loadTotalScore();
-  const next = loadTotalScore() + Math.round(delta);
-  try {
-    localStorage.setItem(TOTAL_SCORE_KEY, String(next));
-  } catch {
-    // Storage full or unavailable — the total simply doesn't advance.
-  }
-  return next;
-}
-
-/**
- * One finished run, archived verbatim: exactly what its share card showed
- * (in the language it was played in) plus the two board snapshots — so the
- * 记录 panel can later re-open the very photo that run produced, not a
- * reconstruction from the score alone.
+ * One finished run, archived as raw data plus the two board snapshots — so
+ * the 记录 panel can re-open the very photo that run produced, described in
+ * whatever language the player is reading now (see runRecord.ts).
  */
 export interface StoredRun {
   at: number;
-  info: ShareCardInfo;
+  data: RunData;
   start: BoardSnapshot | null;
   end: BoardSnapshot | null;
 }
@@ -71,8 +49,26 @@ export function saveRun(bestKey: string, run: StoredRun): void {
   }
 }
 
-/** The newest archived run that produced this exact total — i.e. the run a
- *  best-score row in the records panel is actually about. */
-export function findRun(bestKey: string, score: number): StoredRun | null {
-  return loadRuns(bestKey).find((r) => r.info && r.info.totalScore === score) ?? null;
+
+/**
+ * Every archived run on this device, newest first. The records panel lists
+ * these directly and 累计得分 is their sum — one source of truth, so the
+ * total can never drift from the list under it.
+ */
+export function loadAllRuns(bestKeys: readonly string[]): StoredRun[] {
+  const seen = new Set<string>();
+  const all: StoredRun[] = [];
+  for (const key of bestKeys) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const run of loadRuns(key)) {
+      // Entries archived before runs held raw data can't be re-described.
+      if (run && run.data) all.push(run);
+    }
+  }
+  return all.sort((a, b) => b.at - a.at);
+}
+
+export function totalScoreOf(runs: readonly StoredRun[]): number {
+  return runs.reduce((sum, r) => sum + (r.data.totalScore || 0), 0);
 }

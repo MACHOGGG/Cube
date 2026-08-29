@@ -1002,3 +1002,20 @@ html.lang-locked, html.lang-locked body {
 }
 .rule-item b { font-size: 0.92rem; color: var(--ink); }
 .rule-item span { font-size: 0.85rem; line-height: 1.55; color: var(--ink-soft); }
+
+/* A record line: shape glyph, then name + mode + when it finished, then the
+   composite score. The three panels on this page are all tappable cards that
+   fly into the middle — blown up, a list keeps its type size and scrolls
+   instead of shrinking to fit. */
+.records-panel { cursor: pointer; text-align: left; font: inherit; color: inherit; border: none; }
+.records-row-glyph {
+  flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center;
+  color: var(--ink-soft);
+}
+.records-row-glyph svg { width: 100%; height: 100%; }
+.records-row-name { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.records-row-time { color: var(--ink-faint); font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.records-panel--big {
+  width: min(560px, 92vw); max-height: 76vh; overflow-y: auto; overscroll-behavior: contain;
+  cursor: default;
+}

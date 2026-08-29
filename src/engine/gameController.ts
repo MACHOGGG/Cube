@@ -2,7 +2,15 @@ import type { ShellRefs } from '../ui/gameShell';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
-import { saveBestIfHigher, saveRun, addTotalScore } from './persistence';
+import { saveBestIfHigher, saveRun } from './persistence';
+import {
+  MANUAL_END_REASON,
+  buildShareInfo,
+  runBreakdown,
+  runDetailLine,
+  type ModeKey,
+  type RunData,
+} from './runRecord';
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
@@ -37,31 +45,14 @@ export function timeMultiplierFor(elapsedSec: number): number {
 }
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
-/** The reason string doFinish() passes for the player's own "结束" button. This (and the other internal reason literals below, and BOMB_HAZARD_REASON) doubles as a language-invariant lookup key for displayReason() — never shown to the player directly. */
-const MANUAL_END_REASON = '手动结束';
-
-// Every reason/penalty-label string ever passed into endGame — either from
-// this module's own internal literals or, for the bomb hazard case, from
-// every bomb-capable shape file via the shared BOMB_HAZARD_REASON/label
-// constants — is authored in Chinese as a stable lookup key. displayReason()/
-// displayPenaltyLabel() translate them to the current lang only at the
-// point they're shown to the player, so no shape file needs its own lang
-// plumbing just to pass forceEnd() a reason.
-const REASON_LABEL_KEY: Partial<Record<string, keyof import('../i18n').I18nStrings>> = {
-  时间到: 'timeUpReason',
-  全部方块已翻成点面: 'allFlippedReason',
-  无法继续匹配: 'noMoreMatchesReason',
-  [MANUAL_END_REASON]: 'manualEndReason',
-  [BOMB_HAZARD_REASON]: 'bombHazardReason',
-};
-const PENALTY_LABEL_KEY: Partial<Record<string, keyof import('../i18n').I18nStrings>> = {
-  炸弹惩罚: 'bombPenaltyLabel',
-};
-
 export interface GameControllerHooks {
   bestKey: string;
-  /** Human-readable name for the share card ("方块", "圆球", ...). */
+  /** Human-readable name for the share card, already localized. */
   shapeName: string;
+  /** Shape card id + challenge wrapper, so an archived run can be
+   *  re-described later in whatever language it is reopened in. */
+  shapeId: string;
+  modeKey: ModeKey;
   /** Localizes this controller's own dynamic end-of-run text (breakdown rows, detail line, share-card labels). */
   lang: Lang;
   /**
@@ -167,14 +158,6 @@ export interface GameController {
  */
 export function createGameController(refs: ShellRefs, hooks: GameControllerHooks): GameController {
   const s = STRINGS[hooks.lang];
-  const displayReason = (reason: string): string => {
-    const key = REASON_LABEL_KEY[reason];
-    return key ? (s[key] as string) : reason;
-  };
-  const displayPenaltyLabel = (label: string): string => {
-    const key = PENALTY_LABEL_KEY[label];
-    return key ? (s[key] as string) : label;
-  };
 
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   const perf = createPerformanceGauge();
@@ -217,7 +200,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let stuckGroups: Cell[][] = [];
   let startSnapshot: BoardSnapshot | null = null;
   let endSnapshot: BoardSnapshot | null = null;
-  let lastShareInfo: { totalScore: number; scoreRows: [string, string][]; detail: string; hazardEnd: boolean } | null = null;
+  let lastRun: RunData | null = null;
 
   function updateStuckState(groups: Cell[][]) {
     stuckGroups = groups;
@@ -273,60 +256,57 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     );
 
     const best = saveBestIfHigher(hooks.bestKey, total);
-    // Every run's composite score also feeds the device-wide 累计得分.
-    addTotalScore(total);
 
-    const row = (label: string, value: string) =>
-      `<div class="end-row"><span>${label}</span><span>${value}</span></div>`;
-
+    // One record of the run, as data rather than as finished sentences — the
+    // end modal, the share card and the 记录 panel all render from this, so
+    // reopening an old run in another language re-describes it properly
+    // instead of replaying the wording it happened to end on.
     const hazardEnd = reason === BOMB_HAZARD_REASON;
+    lastRun = {
+      shapeId: hooks.shapeId,
+      shapeFallback: hooks.shapeName,
+      modeKey: hooks.modeKey,
+      totalScore: total,
+      score,
+      ratePercent: statusPercent,
+      bonusMult,
+      elapsedSec: elapsed,
+      moves,
+      best,
+      reason,
+      neverFlipped: remaining.neverFlipped,
+      unflippedScale,
+      timeMult,
+      patternPoints,
+      comboBonusPoints,
+      linePoints,
+      extraPenalty,
+      extraPenaltyReason: extraPenaltyLabel,
+      hazardEnd,
+      at: Date.now(),
+    };
+
     refs.endHazardBgEl.classList.toggle('show', hazardEnd);
     refs.endTitleEl.textContent = s.endTitleDefault;
     refs.endScoreEl.textContent = String(total);
-    const pct = (v: number) => Math.round(v * 100) + '%';
-    refs.endBreakdownEl.innerHTML =
-      row(s.patternPointsLabel, String(Math.round(patternPoints))) +
-      (comboBonusPoints > 0 ? row(s.comboBonusLabel, '+' + Math.round(comboBonusPoints)) : '') +
-      (linePoints > 0 ? row(s.linePointsLabel, '+' + Math.round(linePoints)) : '') +
-      row(s.scoreLabel, String(score)) +
-      row(`${s.perfBonusLabel} (${statusPercent}%)`, '×' + bonusMult.toFixed(2)) +
-      row(s.timeMultLabel, '×' + timeMult.toFixed(2)) +
-      (remaining.neverFlipped > 0
-        ? row(`${s.neverFlippedLabel} × ${remaining.neverFlipped}`, pct(unflippedScale))
-        : '') +
-      (extraPenalty > 0 ? row(displayPenaltyLabel(extraPenaltyLabel), '−' + extraPenalty) : '');
-    const detailText =
-      displayReason(reason) +
-      ' · ' + s.stepsPhrase.replace('{n}', String(moves)) +
-      ' · ' + s.timeLabel + ' ' + formatClock(elapsed) +
-      ' · ' + s.bestPhrase.replace('{n}', String(best));
-    refs.endDetailEl.textContent = detailText;
+    refs.endBreakdownEl.innerHTML = runBreakdown(lastRun, hooks.lang)
+      .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
+      .join('');
+    refs.endDetailEl.textContent = runDetailLine(lastRun, hooks.lang);
     refs.endOverlay.classList.add('show');
 
     endSnapshot = hooks.snapshotBoard?.() ?? null;
-    lastShareInfo = {
-      totalScore: total,
-      scoreRows: [
-        [s.scoreLabel, String(score)],
-        [`${s.rateLabel}${statusPercent}%`, '×' + bonusMult.toFixed(2)],
-        [s.timeLabel, formatClock(elapsed)],
-      ],
-      detail: detailText,
-      hazardEnd,
-    };
-    // Archive this run's share card verbatim — the 记录 panel re-opens
-    // exactly this photo later, not a reconstruction from the bare score.
-    saveRun(hooks.bestKey, {
-      at: Date.now(),
-      info: { shapeName: hooks.shapeName, lang: hooks.lang, ...lastShareInfo },
-      start: startSnapshot,
-      end: endSnapshot,
-    });
+    // Archive the run so the 记录 panel can re-open the very same card.
+    saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
   }
 
   function doShare() {
-    if (!lastShareInfo) return;
-    const dataUrl = renderShareCard({ shapeName: hooks.shapeName, lang: hooks.lang, ...lastShareInfo }, endSnapshot);
+    if (!lastRun) return;
+    const dataUrl = renderShareCard(
+      buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
+      endSnapshot,
+      startSnapshot,
+    );
     refs.shareImageEl.src = dataUrl;
     refs.shareOverlay.classList.add('show');
   }
