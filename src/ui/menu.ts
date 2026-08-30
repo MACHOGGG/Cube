@@ -11,6 +11,7 @@ import {
   ICON_BOMB_90S,
   bombChip,
   moreLayoutCard,
+  layoutIcon,
   timedCard,
   timedOption,
   type BaseShape,
@@ -250,7 +251,11 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   for (const shape of moreOrder) {
     const cards = layout.moreLayouts[shape];
     if (!cards.length) continue;
-    const btn = iconButton(moreLayoutCard(shape), `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
+    // A shape with a single variant IS that variant, so the card wears its
+    // board rather than the generic plus; one with a choice keeps the plus
+    // and hands out the real boards inside the picker.
+    const cardGlyph = cards.length === 1 ? layoutIcon(cards[0].id, shape) : moreLayoutCard(shape);
+    const btn = iconButton(cardGlyph, `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
     const reopenKey = 'more-' + shape;
     btn.dataset.reopen = reopenKey;
     btn.addEventListener('click', () => {
@@ -262,7 +267,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         originEl: btn,
         title: s.sectionMore,
         options: cards.map((c) => ({
-          glyph: moreLayoutCard(shape),
+          glyph: layoutIcon(c.id, shape),
           label: shapeName(lang, c.id, c.name),
           showLabel: true,
           onPick: () => handlers.onSelectLayout(c.id, reopenKey),

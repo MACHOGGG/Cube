@@ -848,18 +848,21 @@ button:hover { filter: brightness(1.05); }
 /* The page is a stack of destinations under the Slides masthead: one wide
    sign-in pill, the language/tutorial pair, then the perks panel. */
 .profile-page { gap: 14px; }
+/* The block above 天才特供 is a list of shortcuts, not the page's headline
+   act — it sits smaller than the section it introduces so the eye goes past
+   it to the panel below. */
 .profile-pill {
-  width: 100%; flex: none; border: none; border-radius: 999px; padding: 15px 22px;
+  width: 100%; flex: none; border: none; border-radius: 999px; padding: 10px 18px;
   background: #C7A18C; color: #fff; cursor: pointer;
-  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.18rem; letter-spacing: 0.04em;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.98rem; letter-spacing: 0.03em;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   transition: transform 120ms ease, filter 120ms ease;
 }
-.profile-pill--wide { max-width: 340px; margin: 6px auto 2px; }
+.profile-pill--wide { max-width: 268px; margin: 4px auto 0; }
 .profile-pill--rose { background: #C88A92; }
 .profile-pill:hover { filter: brightness(1.04); }
 .profile-pill:active { transform: translateY(1px) scale(0.99); }
-.profile-pill-row { display: flex; gap: 12px; width: 100%; }
+.profile-pill-row { display: flex; gap: 10px; width: 100%; max-width: 268px; margin: 0 auto; }
 .profile-pill-row .profile-pill { flex: 1; min-width: 0; }
 
 /* The perks live on their own soft panel, so the coming-soon list reads as
@@ -1204,3 +1207,104 @@ html.lang-locked, html.lang-locked body {
   .overlay--end, .overlay--end .modal { transition: none; }
   .overlay--end .modal { opacity: 1; transform: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   The turn-your-phone prompt (wide boards only, on their start card)
+   --------------------------------------------------------------------------- */
+.rotate-hint {
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px auto 10px; padding: 10px 16px 10px 10px;
+  max-width: 300px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.rotate-hint-phone { width: 62px; height: 62px; flex: none; color: var(--accent-ink); }
+.rotate-hint-copy { margin: 0; font-size: 0.86rem; line-height: 1.35; text-align: left; }
+/* The phone tips a quarter turn, holds there long enough to read as "this way
+   up", and comes back — the whole loop paced like a gesture, not a spinner. */
+.rotate-hint-turn { transform-origin: 60px 60px; animation: rotate-hint-turn 3s ease-in-out infinite; }
+@keyframes rotate-hint-turn {
+  0%, 12% { transform: rotate(0deg); }
+  38%, 72% { transform: rotate(-90deg); }
+  92%, 100% { transform: rotate(0deg); }
+}
+.rotate-hint-arc { opacity: 0; animation: rotate-hint-arc 3s ease-in-out infinite; }
+@keyframes rotate-hint-arc {
+  0%, 8% { opacity: 0; }
+  20%, 34% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-hint-turn { animation: none; transform: rotate(-90deg); }
+  .rotate-hint-arc { animation: none; opacity: 1; }
+}
+/* Already sideways: the prompt has nothing left to ask for. */
+@media (orientation: landscape) { .rotate-hint { display: none; } }
+
+/* ---------------------------------------------------------------------------
+   Landscape play, for the boards that need the width
+   --------------------------------------------------------------------------- */
+/* One grid: readouts down the left, board filling the middle, the once-a-run
+   buttons down the right — the three things a player needs while sliding,
+   none of them ever pushing the board off screen. Applied only when the
+   device really is sideways and short enough to be a phone, so a desktop
+   window keeps the portrait column it was designed for. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .app.app--land-capable {
+    max-width: none;
+    width: 100vw;
+    height: 100dvh;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+    gap: 0;
+    display: grid;
+    grid-template-columns: minmax(88px, 15%) 1fr minmax(88px, 15%);
+    grid-template-rows: 1fr;
+    /* stretch, not center: the board column has to *be* the row's height for
+       layoutBoard to read it and scale the board to fit. The two side
+       columns centre themselves individually below. */
+    align-items: stretch;
+  }
+  /* The title, tagline, pattern hints and colour key are the parts a player
+     can do without while actually playing — they are all one tap away on the
+     start card and in 游戏规则. */
+  .app.app--land-capable > h1,
+  .app.app--land-capable > .tag-line,
+  .app.app--land-capable > .pattern-hint,
+  .app.app--land-capable > .legend { display: none; }
+
+  .app.app--land-capable > .hud {
+    grid-column: 1; grid-row: 1;
+    display: flex; flex-direction: column; gap: 8px;
+    align-self: center; margin: 0;
+  }
+  .app.app--land-capable > .hud .hud-cell { padding: 6px 8px; }
+  .app.app--land-capable > .hud .k { font-size: 0.62rem; }
+  .app.app--land-capable > .hud .v { font-size: 1.05rem; }
+
+  .app.app--land-capable > .board-wrap {
+    grid-column: 2; grid-row: 1;
+    height: auto; min-height: 0; margin: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .app.app--land-capable > .controls {
+    grid-column: 3; grid-row: 1;
+    display: flex; flex-direction: column; gap: 8px;
+    align-self: center; margin: 0;
+  }
+  .app.app--land-capable > .controls .icon-btn {
+    width: 100%; padding: 8px 6px; font-size: 0.74rem; line-height: 1.15;
+  }
+  .app.app--land-capable > .stuck-end-btn {
+    grid-column: 2; grid-row: 1; align-self: end; justify-self: center; margin: 0 0 4px;
+  }
+  /* The bottom dock would sit on top of the right-hand buttons. */
+  body:has(.app--land-capable) .home-nav { display: none; }
+}
+
+/* A game screen never scrolls, in either orientation: a board that slides
+   under the finger and a page that slides under it at the same time is the
+   worst of both. The column is sized to the viewport instead. */
+.app--game { max-height: 100dvh; overflow: hidden; }
+html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavior: none; }

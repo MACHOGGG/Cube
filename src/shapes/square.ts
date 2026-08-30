@@ -1,7 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
+import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -684,7 +684,7 @@ export function createSquareGame(): ShapeGame {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
             if (el) {
               el.style.left = c * cell + chain.at(c) * cell + 'px';
-              el.style.scale = pressScale(chain.press(c), 1, 0);
+              el.style.scale = pressScale(chain.press(c), 1, 0, BOARD_FORCE);
             }
           }
           for (let k = -2; k <= 2; k++) {
@@ -716,7 +716,7 @@ export function createSquareGame(): ShapeGame {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
             if (el) {
               el.style.top = r * cell + chain.at(r) * cell + 'px';
-              el.style.scale = pressScale(chain.press(r), 0, 1);
+              el.style.scale = pressScale(chain.press(r), 0, 1, BOARD_FORCE);
             }
           }
           for (let k = -2; k <= 2; k++) {
@@ -893,14 +893,18 @@ export function createSquareGame(): ShapeGame {
         }
       }
 
-      // True from release until the chain has carried the line into its slot
-      // and the move has resolved — blocks a new drag from starting on top.
-      let settling = false;
-
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
+          // A touch arriving while the previous line is still swinging ends
+          // that settle right now instead of being swallowed — fast play was
+          // losing whole moves to a wave that had not finished dying down.
+          drag?.chain?.flush();
+          if (controller.resolving) {
+            drag = null;
+            return;
+          }
           // x/y arrive relative to boardWrap, but the board is only flush
           // with it while the grid is still square. .board-wrap centres its
           // child, computeCell() sizes the board at CELL x cols/rows, and
@@ -929,6 +933,7 @@ export function createSquareGame(): ShapeGame {
             drag.chain = createDragChain({
               n: drag.axis === 'row' ? cols : rows,
               grabbed: drag.axis === 'row' ? drag.c : drag.r,
+              force: BOARD_FORCE,
               onFrame: renderDragPreview,
             });
           }
@@ -947,7 +952,7 @@ export function createSquareGame(): ShapeGame {
           const d = drag;
           if (!d || !d.axis || !d.chain) {
             drag = null;
-            render();
+            if (!controller.resolving) render();
             return;
           }
           d.dx = dx;
@@ -955,9 +960,7 @@ export function createSquareGame(): ShapeGame {
           // The chain carries the line the rest of the way into its slot —
           // the tail keeps swinging for a beat, exactly like the splash —
           // and only then does the move resolve.
-          settling = true;
           d.chain.settle(Math.round((d.axis === 'row' ? dx : dy) / d.cell), () => {
-            settling = false;
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;
@@ -985,13 +988,12 @@ export function createSquareGame(): ShapeGame {
       function destroy() {
         drag?.chain?.stop();
         drag = null;
-        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);
       }
 
-      refs.buttons.back.addEventListener('click', () => {
+      refs.buttons.back?.addEventListener('click', () => {
         destroy();
         onBack();
       });

@@ -1,7 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
+import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -798,7 +798,7 @@ export function createCircleHexGame(): ShapeGame {
             el.style.left = cx - size / 2 + off * dirX + 'px';
             el.style.top = cy - size / 2 + off * dirY + 'px';
             el.style.opacity = String(edgeOpacity(i + off, n));
-            el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen);
+            el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen, BOARD_FORCE);
           }
         }
         for (let k = -1; k <= 1; k++) {
@@ -871,14 +871,18 @@ export function createCircleHexGame(): ShapeGame {
         return true;
       }
 
-      // True from release until the chain has carried the line into its slot
-      // and the move has resolved — blocks a new drag from starting on top.
-      let settling = false;
-
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
+          // A touch arriving while the previous line is still swinging ends
+          // that settle right now instead of being swallowed — fast play was
+          // losing whole moves to a wave that had not finished dying down.
+          drag?.chain?.flush();
+          if (controller.resolving) {
+            drag = null;
+            return;
+          }
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
         },
@@ -899,6 +903,7 @@ export function createCircleHexGame(): ShapeGame {
             drag.chain = createDragChain({
               n: drag.line.cells.length,
               grabbed: Math.max(0, grabbed),
+              force: BOARD_FORCE,
               onFrame: renderDragPreview,
             });
           }
@@ -917,14 +922,12 @@ export function createCircleHexGame(): ShapeGame {
           const d = drag;
           if (!d || !d.fam || !d.chain) {
             drag = null;
-            render();
+            if (!controller.resolving) render();
             return;
           }
           d.dx = dx;
           d.dy = dy;
-          settling = true;
           d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
-            settling = false;
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;
@@ -941,13 +944,12 @@ export function createCircleHexGame(): ShapeGame {
       function destroy() {
         drag?.chain?.stop();
         drag = null;
-        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);
       }
 
-      refs.buttons.back.addEventListener('click', () => {
+      refs.buttons.back?.addEventListener('click', () => {
         destroy();
         onBack();
       });

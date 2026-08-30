@@ -1,7 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
+import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -265,6 +265,10 @@ export function createTriangleAdvancedGame(): ShapeGame {
         lang,
         title: `Slides · ${shapeName(lang, 'triangleAdvanced', '进阶三角')}`,
         wideBoard: true,
+        // 进阶三角's two-armed V is far wider than tall — unplayable in a phone's
+        // portrait column, so this screen asks for landscape and lays
+        // itself out for it.
+        landscape: true,
         tagline: SHELL[lang].taglineVBoard,
         startBody: SHELL[lang].shellStartBody,
         extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
@@ -413,10 +417,31 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return { minX, maxX, w: maxX - minX };
       })();
 
+      /** True when the shell has switched this screen to its landscape grid
+       *  (see ".app--land-capable" in style.css) — there the board sits in a
+       *  row of fixed height and has to fit that as well as the width. */
+      function landscapeNow(): boolean {
+        try {
+          return window.matchMedia('(orientation: landscape) and (max-height: 560px)').matches;
+        } catch {
+          return false;
+        }
+      }
+
       function layoutBoard() {
+        const land = landscapeNow();
+        // In landscape the grid row owns the wrapper's height; drop any
+        // inline height from a previous portrait layout so the measurement
+        // below reads the row, not our own last answer.
+        if (land) refs.boardWrap.style.height = '';
         const rect = refs.boardWrap.getBoundingClientRect();
         const width = rect.width || 320;
-        S = width / (UNIT_EXTENT.w + 0.3);
+        const byWidth = width / (UNIT_EXTENT.w + 0.3);
+        // Sideways there is a hard ceiling — the row the board sits in — so
+        // the smaller of the two constraints wins and the whole V is on
+        // screen either way.
+        const byHeight = land ? (rect.height || 320) / (ROW_LENS.length * (Math.sqrt(3) / 2)) : Infinity;
+        S = Math.min(byWidth, byHeight);
         H = (S * Math.sqrt(3)) / 2;
         const height = ROW_LENS.length * H;
         originX = -UNIT_EXTENT.minX * S + (width - UNIT_EXTENT.w * S) / 2;
@@ -427,7 +452,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         // short, wide board floating in a tall empty box — it takes exactly
         // the height the V needs instead.
         refs.boardWrap.style.aspectRatio = 'auto';
-        refs.boardWrap.style.height = height + 'px';
+        if (!land) refs.boardWrap.style.height = height + 'px';
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {
@@ -828,7 +853,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
           if (el) el.remove();
           const give = giveAt(idx);
           const fresh = makeTriEl(grid[sr][sc], r, c, isFiller ? FILLER_OPACITY : undefined, [give * dirX, give * dirY]);
-          if (chain) fresh.style.scale = pressScale(chain.press(Math.floor(idx / 2)), dirX / stepLen, dirY / stepLen);
+          if (chain) fresh.style.scale = pressScale(chain.press(Math.floor(idx / 2)), dirX / stepLen, dirY / stepLen, BOARD_FORCE);
           refs.boardEl.appendChild(fresh);
         }
         // The bands above and below get carried a little and sprung home.
@@ -866,14 +891,18 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return true;
       }
 
-      // True from release until the give has rippled back to rest and the
-      // move has resolved — blocks a new drag from starting on top.
-      let settling = false;
-
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
+          // A touch arriving while the previous line is still swinging ends
+          // that settle right now instead of being swallowed — fast play was
+          // losing whole moves to a wave that had not finished dying down.
+          drag?.chain?.flush();
+          if (controller.resolving) {
+            drag = null;
+            return;
+          }
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0, chain: null };
         },
@@ -892,6 +921,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
             drag.chain = createDragChain({
               n: Math.max(1, Math.ceil(cells.length / 2)),
               grabbed: Math.max(0, Math.floor(Math.max(0, grabbed) / 2)),
+              force: BOARD_FORCE,
               onFrame: renderDragPreview,
             });
           }
@@ -903,14 +933,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
           const d = drag;
           if (!d || !d.fam || !d.chain) {
             drag = null;
-            render();
+            if (!controller.resolving) render();
             return;
           }
           d.dx = dx;
           d.dy = dy;
-          settling = true;
           d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy) / 2), () => {
-            settling = false;
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;
@@ -927,13 +955,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
       function destroy() {
         drag?.chain?.stop();
         drag = null;
-        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);
       }
 
-      refs.buttons.back.addEventListener('click', () => {
+      refs.buttons.back?.addEventListener('click', () => {
         destroy();
         onBack();
       });

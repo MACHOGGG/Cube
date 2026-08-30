@@ -1,7 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
+import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -1093,7 +1093,7 @@ export function createTriangleGame(): ShapeGame {
           if (el) el.remove();
           const give = giveAt(idx);
           const fresh = makeTriEl(grid[sr][sc], r, c, isFiller ? FILLER_OPACITY : undefined, [give * dirX, give * dirY]);
-          if (chain) fresh.style.scale = pressScale(chain.press(Math.floor(idx / 2)), dirX / stepLen, dirY / stepLen);
+          if (chain) fresh.style.scale = pressScale(chain.press(Math.floor(idx / 2)), dirX / stepLen, dirY / stepLen, BOARD_FORCE);
           refs.boardEl.appendChild(fresh);
         }
         // The bands above and below get carried a little and sprung home.
@@ -1153,14 +1153,18 @@ export function createTriangleGame(): ShapeGame {
         return true;
       }
 
-      // True from release until the give has rippled back to rest and the
-      // move has resolved — blocks a new drag from starting on top.
-      let settling = false;
-
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
+          // A touch arriving while the previous line is still swinging ends
+          // that settle right now instead of being swallowed — fast play was
+          // losing whole moves to a wave that had not finished dying down.
+          drag?.chain?.flush();
+          if (controller.resolving) {
+            drag = null;
+            return;
+          }
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0, chain: null };
         },
@@ -1178,6 +1182,7 @@ export function createTriangleGame(): ShapeGame {
             drag.chain = createDragChain({
               n: Math.max(1, Math.ceil(drag.line.cells.length / 2)),
               grabbed: Math.max(0, Math.floor(Math.max(0, grabbed) / 2)),
+              force: BOARD_FORCE,
               onFrame: renderDragPreview,
             });
           }
@@ -1189,14 +1194,12 @@ export function createTriangleGame(): ShapeGame {
           const d = drag;
           if (!d || !d.fam || !d.chain) {
             drag = null;
-            render();
+            if (!controller.resolving) render();
             return;
           }
           d.dx = dx;
           d.dy = dy;
-          settling = true;
           d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy) / 2), () => {
-            settling = false;
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;
@@ -1214,13 +1217,12 @@ export function createTriangleGame(): ShapeGame {
       function destroy() {
         drag?.chain?.stop();
         drag = null;
-        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);
       }
 
-      refs.buttons.back.addEventListener('click', () => {
+      refs.buttons.back?.addEventListener('click', () => {
         destroy();
         onBack();
       });

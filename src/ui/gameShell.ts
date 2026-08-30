@@ -16,6 +16,13 @@ export interface ShellMeta {
    *  whose own layout (many cells, or a shape denser than a plain square
    *  grid) reads as cramped at the standard size — see the "app-wide" CSS. */
   wideBoard?: boolean;
+  /** This board is far wider than it is tall (七色圆球's diamond, 进阶三角's
+   *  V) and is unplayably small in a phone's portrait column. Adds the
+   *  turn-your-phone prompt on the start card, and switches the whole screen
+   *  to the landscape layout — readouts down the left, buttons down the
+   *  right, board filling the middle — the moment the device is held
+   *  sideways. See the ".app--land" CSS. */
+  landscape?: boolean;
   /** Every string on this screen is localized through STRINGS[lang]; the
    *  shapes pass in already-translated title/tagline/startBody. The long
    *  rules that used to sit under each board now live in one translated
@@ -45,7 +52,10 @@ export interface ShellRefs {
   buttons: {
     stop: HTMLButtonElement;
     finish: HTMLButtonElement;
-    back: HTMLButtonElement;
+    /** Absent in-game (the row has no way-out button any more — leaving a
+     *  run goes through the title or the bottom nav, which ask first); the
+     *  shape modules still wire it when it exists. */
+    back?: HTMLButtonElement;
     start: HTMLButtonElement;
     continueBtn: HTMLButtonElement;
     restart: HTMLButtonElement;
@@ -66,14 +76,44 @@ export interface ShellRefs {
  * extra control buttons, and the board contents the shape renders inside
  * #board.
  */
+/**
+ * The turn-your-phone prompt on a wide board's start card: a phone outline
+ * that tips a quarter turn and settles, over one line of copy. It is drawn
+ * from the same parts as the rest of the app — a rounded rectangle with the
+ * board's own piece colours inside — rather than a stock rotate glyph, and
+ * it only ever appears where turning really helps.
+ */
+const ROTATE_HINT = (copy: string) => `
+  <div class="rotate-hint">
+    <svg class="rotate-hint-phone" viewBox="0 0 120 120" aria-hidden="true">
+      <g class="rotate-hint-turn">
+        <rect x="41" y="16" width="38" height="88" rx="9"
+              fill="none" stroke="currentColor" stroke-width="4"/>
+        <rect x="47" y="27" width="26" height="66" rx="4" fill="currentColor" opacity="0.14"/>
+        <circle cx="53" cy="47" r="5.5" fill="var(--accent)"/>
+        <circle cx="67" cy="47" r="5.5" fill="var(--accent-2)"/>
+        <circle cx="53" cy="61" r="5.5" fill="var(--warn)"/>
+        <circle cx="67" cy="61" r="5.5" fill="var(--accent)"/>
+      </g>
+      <path class="rotate-hint-arc" d="M22 74 A42 42 0 0 1 30 40"
+            fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+      <path class="rotate-hint-arc" d="M30 40 l-9 2 l5 -8 Z" fill="currentColor" stroke="none"/>
+    </svg>
+    <p class="rotate-hint-copy">${copy}</p>
+  </div>`;
+
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const s = STRINGS[meta.lang];
   const extraButtonsHtml = (meta.extraControls ?? [])
     .map((b) => `<button class="icon-btn" id="${b.id}">${b.label}</button>`)
     .join('');
 
+  // The landscape layout is one grid — readouts | board | buttons — and the
+  // portrait one is the column it has always been. Both are the same DOM in
+  // the same order; only .app--land's grid areas move the pieces, so nothing
+  // re-renders when the phone turns.
   container.innerHTML = `
-    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}">
+    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-capable' : ''}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 
@@ -103,7 +143,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
         <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
         ${extraButtonsHtml}
-        <button class="icon-btn" id="backBtn">${s.backToMenu}</button>
       </div>
     </div>
 
@@ -111,6 +150,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <div class="modal">
         <h2>${meta.title}</h2>
         <p>${meta.startBody}</p>
+        ${meta.landscape ? ROTATE_HINT(s.rotateHint) : ''}
         <div class="btn-row"><button class="primary" id="startBtn">${s.startBtn}</button></div>
         <!-- A way out without starting a run: goes back to the home page, or
              to the picker this game was chosen from. -->
@@ -135,7 +175,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <div class="end-breakdown" id="endBreakdown"></div>
         <p id="endDetail">${s.stepsPhrase.replace('{n}', '0')} · ${s.timeLabel} 0:00 · ${s.bestPhrase.replace('{n}', '0')}</p>
         <div class="btn-row">
-          <button class="secondary" id="endBackBtn">${s.backToMenu}</button>
+          <button class="secondary" id="endBackBtn">${s.homeBtn}</button>
           <button class="secondary" id="shareBtn">${s.shareBtn}</button>
           <button class="primary" id="restartBtn">${s.restartBtn}</button>
         </div>
@@ -183,7 +223,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     buttons: {
       stop: req('stopBtn'),
       finish: req('finishBtn'),
-      back: req('backBtn'),
+      back: undefined,
       start: req('startBtn'),
       continueBtn: req('continueBtn'),
       restart: req('restartBtn'),

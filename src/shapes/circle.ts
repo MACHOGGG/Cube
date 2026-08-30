@@ -1,7 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
+import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -816,7 +816,7 @@ export function createCircleGame(): ShapeGame {
             el.style.top = cy - size / 2 + off * dirY + 'px';
             const pos = i + off;
             el.style.opacity = String(edgeOpacity(pos));
-            el.style.scale = pressScale(chain.press(i), ux, uy);
+            el.style.scale = pressScale(chain.press(i), ux, uy, BOARD_FORCE);
           }
         }
         for (let k = -1; k <= 1; k++) {
@@ -892,14 +892,18 @@ export function createCircleGame(): ShapeGame {
         return true;
       }
 
-      // True from release until the chain has carried the line into its slot
-      // and the move has resolved — blocks a new drag from starting on top.
-      let settling = false;
-
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
+          // A touch arriving while the previous line is still swinging ends
+          // that settle right now instead of being swallowed — fast play was
+          // losing whole moves to a wave that had not finished dying down.
+          drag?.chain?.flush();
+          if (controller.resolving) {
+            drag = null;
+            return;
+          }
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
         },
@@ -921,6 +925,7 @@ export function createCircleGame(): ShapeGame {
             drag.chain = createDragChain({
               n: drag.cells.length,
               grabbed: Math.max(0, grabbed),
+              force: BOARD_FORCE,
               onFrame: renderDragPreview,
             });
           }
@@ -941,7 +946,7 @@ export function createCircleGame(): ShapeGame {
           const d = drag;
           if (!d || !d.fam || !d.chain) {
             drag = null;
-            render();
+            if (!controller.resolving) render();
             return;
           }
           d.dx = dx;
@@ -950,9 +955,7 @@ export function createCircleGame(): ShapeGame {
           // the line the rest of the way into its slot — the tail keeps
           // swinging for a beat, exactly like the splash — and only then
           // does the move resolve.
-          settling = true;
           d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
-            settling = false;
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;
@@ -972,13 +975,12 @@ export function createCircleGame(): ShapeGame {
       function destroy() {
         drag?.chain?.stop();
         drag = null;
-        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);
       }
 
-      refs.buttons.back.addEventListener('click', () => {
+      refs.buttons.back?.addEventListener('click', () => {
         destroy();
         onBack();
       });

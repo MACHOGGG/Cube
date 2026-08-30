@@ -25,6 +25,12 @@ export const HOME_COLORS = {
   amber: '#E9A53C',
   white: '#FFFFFF',
   moreSquare: '#3AA45C',
+  /* the "more layouts" boards, tinted per the design sheet */
+  layoutGreen: '#66B379',
+  layoutPurple: '#584B8F',
+  layoutPeri: '#8B9BD4',
+  tan: '#C6A088',
+  rose: '#A3696E',
   moreCircle: '#8B5CD9',
   moreTriangle: '#4A6FC4',
   navBlue: '#2E63C4',
@@ -327,6 +333,118 @@ export function moreLayoutCard(shape: BaseShape): string {
   const fill = shape === 'square' ? C.moreSquare : shape === 'circle' ? C.moreCircle : C.moreTriangle;
   const lift = shape === 'triangle' ? '<g transform="translate(0,8) scale(0.86) translate(8,0)">' : '<g>';
   return svg(baseShape(shape, fill) + lift + BRUSH_PLUS + BRUSH_FLECKS + '</g>');
+}
+
+// ---------------------------------------------------------------------------
+// the five "more layouts" variants — each drawn as its own board, so the
+// picker shows five different shapes instead of five copies of the plus card
+// ---------------------------------------------------------------------------
+
+/** 菱形方块 — the board's own rotated square, holding four tiles at the
+ *  compass points with the middle left open. */
+const ICON_SQUARE_DIAMOND = svg(
+  `<path d="${roundedPolyPath([[50, 3], [97, 50], [50, 97], [3, 50]], 15)}" fill="${C.layoutGreen}"/>` +
+    miniSquare(50, 27, 12, C.green) +
+    miniSquare(27, 50, 12, C.blue) +
+    miniSquare(73, 50, 12, C.white) +
+    miniSquare(50, 73, 12, C.amber),
+);
+
+/** 六边圆球 — the hexagon, packed with its own rows of balls (3-4-5-4-3). */
+const HEX_PTS: [number, number][] = [[50, 4], [90, 27], [90, 73], [50, 96], [10, 73], [10, 27]];
+const HEX_ROWS: { n: number; y: number }[] = [
+  { n: 3, y: 24 }, { n: 4, y: 37 }, { n: 5, y: 50 }, { n: 4, y: 63 }, { n: 3, y: 76 },
+];
+const HEX_FILLS = [
+  C.green, C.white, C.green,
+  C.blue, C.blue, C.red, C.amber,
+  C.red, C.amber, C.blue, C.red, C.blue,
+  C.amber, C.white, C.amber, C.green,
+  C.blue, C.red, C.blue,
+];
+const ICON_CIRCLE_HEX = svg(
+  `<path d="${roundedPolyPath(HEX_PTS, 6)}" fill="${C.layoutPurple}"/>` +
+    HEX_ROWS.flatMap((row, r) =>
+      Array.from({ length: row.n }, (_, i) => {
+        const step = 13;
+        const cx = 50 + (i - (row.n - 1) / 2) * step;
+        const n = HEX_ROWS.slice(0, r).reduce((a, x) => a + x.n, 0) + i;
+        return miniCircle(cx, row.y, 5.9, HEX_FILLS[n] ?? C.blue);
+      }),
+    ).join(''),
+);
+
+/** 七色圆球 — the wide diamond the 7x7 board really is, with a rosette of
+ *  balls round an open middle. */
+const ICON_CIRCLE_SEVEN = svg(
+  `<path d="${roundedPolyPath([[50, 18], [98, 50], [50, 82], [2, 50]], 9)}" fill="${C.blue}"/>` +
+    miniCircle(50, 50, 11, C.white) +
+    miniCircle(50, 30, 11, C.red) +
+    miniCircle(50, 70, 11, C.green) +
+    miniCircle(31, 39, 11, C.green) +
+    miniCircle(31, 61, 11, C.red) +
+    miniCircle(69, 39, 11, C.amber) +
+    miniCircle(69, 61, 11, C.blue) +
+    miniCircle(12, 50, 11, C.amber) +
+    miniCircle(88, 50, 11, C.green),
+);
+
+/** Rows of alternating up/down tile triangles filling a triangular field —
+ *  the lattice both triangle layouts are built on. */
+function triRows(
+  apexX: number, apexY: number, half: number, rows: number, fills: string[],
+): string {
+  const h = ((half * 2) / rows) * 0.866;
+  const w = (half * 2) / rows;
+  let out = '';
+  let n = 0;
+  for (let r = 0; r < rows; r++) {
+    const edgeY = apexY + (r + 1) * h;
+    const count = 2 * r + 1;
+    const left = apexX - ((r + 1) * w) / 2;
+    for (let i = 0; i < count; i++) {
+      const up = i % 2 === 0;
+      const cx = left + (i / 2 + 0.5) * w;
+      out += tileTriangle(cx, up ? edgeY : edgeY - h, w / 2, h, fills[n % fills.length], up);
+      n++;
+    }
+  }
+  return out;
+}
+const TRI_FILLS = [C.green, C.blue, C.tan, C.blue, C.tan, C.rose, C.blue, C.tan, C.rose];
+
+/** 大三角 — one big triangle of the same tiles. */
+const ICON_TRIANGLE_BIG = svg(
+  `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
+    `<g transform="translate(0,2)">${triRows(50, 12, 40, 3, TRI_FILLS)}</g>`,
+);
+
+/** 进阶三角 — the V board's two independent arms, drawn as the two triangles
+ *  they are, meeting at the bottom. */
+const ICON_TRIANGLE_ADVANCED = svg(
+  `<g transform="translate(-24,10) scale(0.62)">` +
+    `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
+    triRows(50, 14, 40, 3, TRI_FILLS) +
+    `</g>` +
+    `<g transform="translate(38,10) scale(0.62)">` +
+    `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
+    triRows(50, 14, 40, 3, [...TRI_FILLS].reverse()) +
+    `</g>`,
+);
+
+/** One icon per "more layouts" variant, by its game id. */
+const LAYOUT_ICONS: Record<string, string> = {
+  squareDiamond: ICON_SQUARE_DIAMOND,
+  circleHex: ICON_CIRCLE_HEX,
+  circleSeven: ICON_CIRCLE_SEVEN,
+  triangleBig: ICON_TRIANGLE_BIG,
+  triangleAdvanced: ICON_TRIANGLE_ADVANCED,
+};
+
+/** The icon for one layout variant, falling back to its family's plus-card
+ *  if a new variant ever arrives without artwork of its own. */
+export function layoutIcon(id: string, shape: BaseShape): string {
+  return LAYOUT_ICONS[id] ?? moreLayoutCard(shape);
 }
 
 // ---------------------------------------------------------------------------

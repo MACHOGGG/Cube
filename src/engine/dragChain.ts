@@ -24,6 +24,15 @@
  */
 import { reducedMotion } from './juice';
 
+/**
+ * How far the pieces may depart from moving as one rigid line. 1 is the
+ * splash's own strength, which is what the played-back animations (the
+ * splash itself, the tutorials) keep — nothing there is under a finger, so
+ * the full wave only reads as character. A live board passes 0.6: the wave
+ * still shows, but the line stays tight enough under the finger to feel like
+ * one object being pushed.
+ */
+export const BOARD_FORCE = 0.6;
 const COUPLE = 0.55; // how much of a follower's target is the piece ahead
 const K = 260; // spring on the followers
 const C = 26; // damping on the followers
@@ -35,7 +44,7 @@ const REACH = [0, 1, 0.45, 0.18]; // entrainment by line distance
 /** The spring that carries the drive to its final slot after release. */
 const K_SETTLE = 430;
 const C_SETTLE = 42;
-const SETTLE_CAP_MS = 320;
+const SETTLE_CAP_MS = 260;
 
 export interface DragChainOpts {
   /** Pieces in the moving line, in line order. */
@@ -44,6 +53,9 @@ export interface DragChainOpts {
   grabbed: number;
   /** Free gap between adjacent pieces, in slots (0.07 = the ball boards'). */
   clearance?: number;
+  /** Strength of the effect, 0..1 — BOARD_FORCE for a live board, 1 (the
+   *  default) for a played-back animation. */
+  force?: number;
   /** Repaint using at()/press()/side() — the board's drag-preview renderer. */
   onFrame(): void;
 }
@@ -60,6 +72,10 @@ export interface DragChain {
   /** Carries the drive to its final slot, lets the wave die down (capped at
    *  a beat), then calls `done` exactly once. */
   settle(finalSlots: number, done: () => void): void;
+  /** Ends a settle immediately, firing its `done` — what a fresh touch does
+   *  while the previous line is still swinging, so fast play never has an
+   *  input swallowed waiting for a wave to die. No-op if not settling. */
+  flush(): boolean;
   stop(): void;
 }
 
@@ -79,12 +95,16 @@ export function createDragChain(opts: DragChainOpts): DragChain {
         opts.onFrame();
         done();
       },
+      flush: () => false,
       stop: () => {},
     };
   }
 
   const { n, grabbed } = opts;
   const clearance = opts.clearance ?? 0.07;
+  const force = opts.force ?? 1;
+  const couple = COUPLE * force;
+  const entrain = ENTRAIN * force;
   const p = new Array<number>(n).fill(0);
   const v = new Array<number>(n).fill(0);
   const press = new Array<number>(n).fill(0);
@@ -99,7 +119,7 @@ export function createDragChain(opts: DragChainOpts): DragChain {
 
   /** One side of the chain, walking outward from the grabbed piece. */
   function relax(i: number, ahead: number, dt: number) {
-    const target = s * (1 - COUPLE) + p[ahead] * COUPLE;
+    const target = s * (1 - couple) + p[ahead] * couple;
     v[i] += (K * (target - p[i]) - C * v[i]) * dt;
     p[i] += v[i] * dt;
     // Contact with the piece ahead, from either side: never closer than the
@@ -142,7 +162,7 @@ export function createDragChain(opts: DragChainOpts): DragChain {
     for (let i = 0; i < n; i++) mean += v[i];
     mean /= n;
     for (let d = 1; d < REACH.length; d++) {
-      nv[d] += (ENTRAIN * REACH[d] * mean * K_N - K_N * nudge[d] - C_N * nv[d]) * dt;
+      nv[d] += (entrain * REACH[d] * mean * K_N - K_N * nudge[d] - C_N * nv[d]) * dt;
       nudge[d] += nv[d] * dt;
     }
 
@@ -184,6 +204,20 @@ export function createDragChain(opts: DragChainOpts): DragChain {
       if (settling) return;
       settling = { final: finalSlots, sv: 0, start: performance.now(), done };
     },
+    flush: () => {
+      if (!settling) return false;
+      const { final, done } = settling;
+      s = final;
+      p.fill(final);
+      v.fill(0);
+      press.fill(0);
+      settling = null;
+      stopped = true;
+      cancelAnimationFrame(raf);
+      opts.onFrame();
+      done();
+      return true;
+    },
     stop: () => {
       stopped = true;
       cancelAnimationFrame(raf);
@@ -193,9 +227,10 @@ export function createDragChain(opts: DragChainOpts): DragChain {
 
 /** The squash a pressed piece shows, as a `scale` string along the drag
  *  axis (ux, uy is the axis unit vector). Component-wise, since the CSS
- *  `scale` property has no rotation of its own. */
-export function pressScale(press: number, ux: number, uy: number): string {
+ *  `scale` property has no rotation of its own. Boards pass BOARD_FORCE so
+ *  the squash is dialled back with the rest of the effect. */
+export function pressScale(press: number, ux: number, uy: number, force = 1): string {
   if (press <= 0.01) return '';
-  const k = press * SQUASH;
+  const k = press * SQUASH * force;
   return `${(1 - k * Math.abs(ux)).toFixed(3)} ${(1 - k * Math.abs(uy)).toFixed(3)}`;
 }

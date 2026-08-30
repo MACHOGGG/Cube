@@ -212,13 +212,14 @@ function showRecordsPage() {
   toTop();
 }
 
-// Which shape a card id's tutorial covers, if any — layout games (the
-// "更多布局" cards) don't get their own tutorial, since they teach nothing
-// beyond what their base shape's tutorial already covers.
+// Which shape's tutorial a card belongs to. A layout variant has no lesson
+// of its own — it teaches nothing beyond its family's — but it still counts
+// as that family: a newcomer who opens 七色圆球 first should meet the ball
+// tutorial there, not only if they happen to start from the base game.
 function shapeTutorialFor(id: string): TutorialShape | null {
-  if (id === 'square') return 'square';
-  if (id === 'circle') return 'circle';
-  if (id === 'triangle') return 'triangle';
+  if (id.startsWith('square')) return 'square';
+  if (id.startsWith('circle')) return 'circle';
+  if (id.startsWith('triangle')) return 'triangle';
   return null;
 }
 
@@ -294,10 +295,11 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
   // shape's *own* base game gets the auto-popup.
   const tutorialShape = opts?.timeLimitSec || opts?.bomb ? null : shapeTutorialFor(game.card.id);
   if (tutorialShape && tutorialShape !== 'square' && !hasSeenTutorial(tutorialShape)) {
-    renderShapeTutorialByShape(tutorialShape, () => {
-      markTutorialSeen(tutorialShape);
-      mountNow();
-    });
+    // Marked the moment it is shown, not when it finishes: it is offered
+    // exactly once per family, and a player who skips out of it has still
+    // been offered it.
+    markTutorialSeen(tutorialShape);
+    renderShapeTutorialByShape(tutorialShape, mountNow);
     return;
   }
   mountNow();
@@ -333,11 +335,12 @@ function afterLangChosen(lang: Lang) {
     lang,
   );
   if (!hasSeenTutorial()) {
+    // Only ever on a first visit, and marked as soon as it appears — leaving
+    // it half-watched still counts, so it never greets a returning player
+    // again on the way to the menu.
+    markTutorialSeen();
     teardown();
-    renderTutorial(root, lang, () => {
-      markTutorialSeen();
-      showMenu();
-    });
+    renderTutorial(root, lang, showMenu);
     return;
   }
   showMenu();

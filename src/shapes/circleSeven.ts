@@ -1,7 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
+import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -189,6 +189,10 @@ export function createCircleSevenGame(): ShapeGame {
         extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
         patternHint: renderPatternHintRow(PATTERNS, lang),
         wideBoard: true,
+        // 七色圆球's 7x7 diamond is far wider than tall — unplayable in a phone's
+        // portrait column, so this screen asks for landscape and lays
+        // itself out for it.
+        landscape: true,
       });
 
       let paletteName: keyof typeof PALETTES = 'standard';
@@ -298,7 +302,23 @@ export function createCircleSevenGame(): ShapeGame {
       // B-step counts, so the 7x7 window comes out as a symmetric diamond
       // centered on cx=0, spanning cy=0 (top point) to cy=12*rowH (bottom
       // point) — no per-row trimming needed, unlike a hex or triangle crop.
+      /** True when the shell has switched this screen to its landscape grid
+       *  (see ".app--land-capable" in style.css) — there the board sits in a
+       *  row of fixed height and has to fit that as well as the width. */
+      function landscapeNow(): boolean {
+        try {
+          return window.matchMedia('(orientation: landscape) and (max-height: 560px)').matches;
+        } catch {
+          return false;
+        }
+      }
+
       function layoutBoard() {
+        const land = landscapeNow();
+        // In landscape the grid row owns the wrapper's height; drop any
+        // inline height from a previous portrait layout so the measurement
+        // below reads the row, not our own last answer.
+        if (land) refs.boardWrap.style.height = '';
         const rect = refs.boardWrap.getBoundingClientRect();
         const width = rect.width || 320;
         // The diamond is much taller than it is wide (12 row-steps down but
@@ -310,7 +330,13 @@ export function createCircleSevenGame(): ShapeGame {
         // 12 half-steps across + one ball (1.86R) of margin, then eased
         // back a notch so the diamond and the HUD above it share one
         // screen instead of the board alone filling it.
-        R = (width / 13.86) * 0.9;
+        const byWidth = (width / 13.86) * 0.9;
+        // Sideways there is a hard ceiling — the row the board sits in — so
+        // the smaller of the two constraints wins and the whole diamond is
+        // on screen either way. Portrait keeps letting the page take
+        // whatever height the diamond needs.
+        const byHeight = land ? (rect.height || 320) / (12 * Math.sqrt(3) + 2) : Infinity;
+        R = Math.min(byWidth, byHeight);
         rowH = R * Math.sqrt(3);
         const height = 12 * rowH + 2 * R;
         boardLeft = width / 2;
@@ -318,7 +344,7 @@ export function createCircleSevenGame(): ShapeGame {
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
         refs.boardWrap.style.aspectRatio = 'auto';
-        refs.boardWrap.style.height = height + 'px';
+        if (!land) refs.boardWrap.style.height = height + 'px';
       }
 
       function ballCenter(r: number, c: number): [number, number] {
@@ -632,7 +658,7 @@ export function createCircleSevenGame(): ShapeGame {
             el.style.left = cx - size / 2 + off * dirX + 'px';
             el.style.top = cy - size / 2 + off * dirY + 'px';
             el.style.opacity = String(edgeOpacity(i + off));
-            el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen);
+            el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen, BOARD_FORCE);
           }
         }
         for (let k = -1; k <= 1; k++) {
@@ -688,14 +714,18 @@ export function createCircleSevenGame(): ShapeGame {
         return true;
       }
 
-      // True from release until the chain has carried the line into its slot
-      // and the move has resolved — blocks a new drag from starting on top.
-      let settling = false;
-
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
+          // A touch arriving while the previous line is still swinging ends
+          // that settle right now instead of being swallowed — fast play was
+          // losing whole moves to a wave that had not finished dying down.
+          drag?.chain?.flush();
+          if (controller.resolving) {
+            drag = null;
+            return;
+          }
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
         },
@@ -717,6 +747,7 @@ export function createCircleSevenGame(): ShapeGame {
             drag.chain = createDragChain({
               n: drag.cells.length,
               grabbed: Math.max(0, grabbed),
+              force: BOARD_FORCE,
               onFrame: renderDragPreview,
             });
           }
@@ -735,14 +766,12 @@ export function createCircleSevenGame(): ShapeGame {
           const d = drag;
           if (!d || !d.fam || !d.chain) {
             drag = null;
-            render();
+            if (!controller.resolving) render();
             return;
           }
           d.dx = dx;
           d.dy = dy;
-          settling = true;
           d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
-            settling = false;
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;
@@ -759,13 +788,12 @@ export function createCircleSevenGame(): ShapeGame {
       function destroy() {
         drag?.chain?.stop();
         drag = null;
-        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);
       }
 
-      refs.buttons.back.addEventListener('click', () => {
+      refs.buttons.back?.addEventListener('click', () => {
         destroy();
         onBack();
       });
