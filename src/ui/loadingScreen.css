@@ -36,32 +36,44 @@
   will-change: transform, opacity;
 }
 
-/* One circular outline per scored ball — the board's own highlight, at two
-   flashes instead of three because the splash only has 0.9s to spend. */
+/* One circular outline per scored ball. The boards in-game blink a thin dark
+   ring three times; here it is a white ring at twice the weight that simply
+   comes up, holds, and goes — one rise and one fall, no blinking, so the eye
+   has somewhere steady to rest before the pieces start turning. */
 .splash-outline {
   position: absolute;
   box-sizing: border-box;
   pointer-events: none;
   border-radius: 50%;
-  border: 3px solid transparent;
+  border: 6px solid transparent;
   animation: splash-score 900ms ease-in-out 1 both;
 }
 @keyframes splash-score {
-  0%, 100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; background: transparent; }
-  10%, 30% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
-  55%, 75% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+  0% { border-color: rgba(255, 255, 255, 0); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+  18%, 68% {
+    border-color: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 0 14px 4px rgba(255, 255, 255, 0.6),
+                inset 0 0 10px 1px rgba(255, 255, 255, 0.45);
+  }
+  100% { border-color: rgba(255, 255, 255, 0); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .splash-outline { animation: none; border-color: var(--ink); }
+  .splash-outline {
+    animation: none;
+    border-color: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 0 14px 4px rgba(255, 255, 255, 0.6),
+                inset 0 0 10px 1px rgba(255, 255, 255, 0.45);
+  }
 }
 
-/* The flip, as a plank with real thickness rather than a turning sheet.
-   Same construction as the tutorial's .story-plank, transposed to the X
-   axis: two printed faces held apart in Z, and two rim strips standing on
-   edge to close the sides. Every dimension is set from JS as a fraction of
-   the piece, because a fixed pixel thickness reads as a slab on a big piece
-   and as nothing at all on a small one. */
+/* The flip, as a two-faced plank rather than a turning sheet: a printed
+   front and a printed back held a hair apart in Z. There is deliberately no
+   strip closing the sides — however short and however faded, a surface stood
+   on edge is still antialiased into a dark hairline as it comes flat, and a
+   dark rule sitting where a piece's edge should be is worse than no edge at
+   all. The separation is set from JS as a fraction of the piece, so it reads
+   the same at any size. */
 .splash-plank {
   position: absolute;
   inset: 0;
@@ -77,27 +89,6 @@
   align-items: center;
   justify-content: center;
 }
-/* The rim: `thickness` wide, stood up at 90 degrees about Y so it is edge-on
-   at rest and sweeps into view as the piece turns. It always sits on the
-   left and right because the plank always turns about Y — the direction of
-   travel is applied outside it, by a Z rotation that carries the rims round
-   with it. Inset vertically so it stays inside a round piece's silhouette
-   instead of poking past the curve, which is what made the tutorial's
-   version read as a separate black bar beside the tile. */
-.splash-rim {
-  position: absolute;
-  /* Short, and centred on the piece's equator. A round piece's silhouette
-     pulls away from its bounding box everywhere except the middle, so a
-     full-height straight strip spends most of itself outside the curve —
-     which is what makes it read as a separate bar standing beside the piece
-     rather than as its edge. Rounded, so the sliver curves with the disc. */
-  top: 27%;
-  bottom: 27%;
-  border-radius: 999px;
-  transform: rotateY(90deg);
-  filter: brightness(var(--rim-dark, 0.5));
-}
-
 /* The cast shadow. Not inside the plank, so it stays flat on the board while
    the piece above it turns: it only widens and softens as the piece lifts. */
 .splash-shadow {

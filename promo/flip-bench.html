@@ -90,16 +90,19 @@ h1 {
 .pieces { display: grid; grid-template-columns: repeat(2, auto); gap: 6px; }
 
 /* Same construction as src/ui/loadingScreen.ts, so what you judge here is
-   what ships: two printed faces held apart in Z with rim strips closing the
-   sides, and the whole turn conjugated by a Z rotation of the travel angle. */
+   what ships: two printed faces held a hair apart in Z — no strip closing the
+   sides, because a surface stood on edge is antialiased into a dark hairline
+   as it comes flat — and the whole turn conjugated by a Z rotation of the
+   travel angle. */
 .piece { position: relative; }
 .plank { position: absolute; inset: 0; transform-style: preserve-3d; }
+/* No border-radius here: every shape declares its own, and a shared 50% was
+   clipping the triangles to an ellipse — they came out as cones. */
 .face {
-  position: absolute; inset: 0; border-radius: 50%;
+  position: absolute; inset: 0;
   backface-visibility: hidden;
   display: flex; align-items: center; justify-content: center;
 }
-.rim { position: absolute; top: 27%; bottom: 27%; border-radius: 999px; transform: rotateY(90deg); }
 .cast {
   position: absolute; left: 7%; right: 7%; top: 12%; bottom: 12%;
   border-radius: 50%; background: rgba(46, 36, 48, 0.34); opacity: 0;
@@ -198,12 +201,14 @@ pre b { color: var(--rose); font-weight: 500; }
 .piece { position: absolute; }
 .plank { position: absolute; inset: 0; transform-style: preserve-3d; }
 .face { position: absolute; inset: 0; backface-visibility: hidden; }
-.rim { position: absolute; transform: rotateY(90deg); }
 .cast { position: absolute; border-radius: 50%; background: rgba(46,36,48,0.34); opacity: 0; }
+/* The score ring: white, at twice the old weight, with a soft glow — and it
+   comes up and goes once rather than blinking. */
 .halo {
   position: absolute; box-sizing: border-box; pointer-events: none;
-  border: 3px solid var(--ink); opacity: 0;
-  box-shadow: 0 0 18px 4px rgba(190,87,98,0.55); background: rgba(190,87,98,0.22);
+  border: 6px solid rgba(255,255,255,0.96); opacity: 0;
+  box-shadow: 0 0 14px 4px rgba(255,255,255,0.6), inset 0 0 10px 1px rgba(255,255,255,0.45);
+  transition: opacity 160ms ease-in-out;
 }
 
 /* the comparison grid: five thicknesses across, three shapes down */
@@ -300,10 +305,20 @@ const FREEZE_ROT = 75;
 const GROUND = '#FFFFFF';
 
 const S = {
-  flipMs: 510, thick: 0.055, persp: 3.5, lift: 0.07,
-  overshoot: 9, shadow: 0.34, rimFade: 0.14, rimDark: 0.5,
+  flipMs: 530, thick: 0.020, persp: 3.3, lift: 0.050,
+  overshoot: 26, shadow: 0.46,
   stagger: 90, dir: 0,
 };
+
+/* The finished turn about the current roll axis.
+   A half-turn about any in-plane axis is, seen flat on, a mirror across that
+   axis — so rolling downwards lands a piece upside down, and rolling on a
+   diagonal lands it cocked over a quarter turn. A round piece hides that; a
+   triangle does not. The direction is meant to be a flourish in the air only,
+   so the back face is built already carrying this same half-turn: the plank
+   then turns through it, the two cancel exactly, and the piece settles in its
+   rest pose with nothing changed but its face. */
+const halfTurn = () => `rotateZ(${S.dir}deg) rotateY(180deg) rotateZ(${-S.dir}deg)`;
 
 /* ── the three shapes, drawn the way their own modules draw them ───────── */
 const star = (size, color) => {
@@ -327,13 +342,9 @@ const SHAPES = {
     pitch: 1.12, aspect: 1,
     front: (z, f) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
       `border-radius:${(0.11 * 100).toFixed(0)}%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08)"></div>`,
-    back: (z, b) => `<div class="face" style="transform:rotateY(180deg) translateZ(${z}px);background:${GROUND};` +
+    back: (z, b) => `<div class="face" style="transform:${halfTurn()} translateZ(${z}px);background:${GROUND};` +
       `border-radius:11%;display:flex;align-items:center;justify-content:center">` +
       `<div style="width:86%;height:86%;border-radius:50%;background:${b}"></div></div>`,
-    rims: (t, f, b) => `<div class="rim" style="left:${-t / 2}px;width:${t}px;top:6%;bottom:6%;background:${f};` +
-      `filter:brightness(var(--rd))"></div>` +
-      `<div class="rim" style="right:${-t / 2}px;width:${t}px;top:6%;bottom:6%;background:${b};` +
-      `filter:brightness(var(--rd))"></div>`,
     cast: 'left:6%;right:6%;top:10%;bottom:10%',
   },
   // src/shapes/circle.ts — PALETTES.standard; the dot face is a transparent
@@ -344,12 +355,8 @@ const SHAPES = {
     pitch: 1.075, aspect: 1,
     front: (z, f) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
       `border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1)"></div>`,
-    back: (z, b, size) => `<div class="face" style="transform:rotateY(180deg) translateZ(${z}px);background:${GROUND};` +
+    back: (z, b, size) => `<div class="face" style="transform:${halfTurn()} translateZ(${z}px);background:${GROUND};` +
       `border-radius:50%;display:flex;align-items:center;justify-content:center">${star(size, b)}</div>`,
-    rims: (t, f, b) => `<div class="rim" style="left:${-t / 2}px;width:${t}px;top:27%;bottom:27%;border-radius:999px;` +
-      `background:${f};filter:brightness(var(--rd))"></div>` +
-      `<div class="rim" style="right:${-t / 2}px;width:${t}px;top:27%;bottom:27%;border-radius:999px;` +
-      `background:${b};filter:brightness(var(--rd))"></div>`,
     cast: 'left:7%;right:7%;top:12%;bottom:12%',
   },
   // src/shapes/triangle.ts — PALETTES.standard; a clip-path silhouette, and
@@ -360,20 +367,11 @@ const SHAPES = {
     pitch: 1.06, aspect: 0.866, alternates: true,
     front: (z, f, size, up) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
       `clip-path:${up ? TRI_UP : TRI_DN};-webkit-clip-path:${up ? TRI_UP : TRI_DN}"></div>`,
-    back: (z, b, size, up) => `<div class="face" style="transform:rotateY(180deg) translateZ(${z}px)">` +
+    back: (z, b, size, up) => `<div class="face" style="transform:${halfTurn()} translateZ(${z}px)">` +
       `<div style="position:absolute;inset:0;background:${GROUND};clip-path:${up ? TRI_UP : TRI_DN};` +
       `-webkit-clip-path:${up ? TRI_UP : TRI_DN}"></div>` +
       `<div style="position:absolute;inset:0;background:${b};clip-path:${up ? TRI_UP_IN : TRI_DN_IN};` +
       `-webkit-clip-path:${up ? TRI_UP_IN : TRI_DN_IN}"></div></div>`,
-    // A triangle is widest along its base, so its edge lives down there for an
-    // up-pointing piece and up top for a down-pointing one.
-    rims: (t, f, b, up) => {
-      const band = up ? 'top:56%;bottom:3%' : 'top:3%;bottom:56%';
-      return `<div class="rim" style="left:${-t / 2}px;width:${t}px;${band};background:${f};` +
-        `filter:brightness(var(--rd))"></div>` +
-        `<div class="rim" style="right:${-t / 2}px;width:${t}px;${band};background:${b};` +
-        `filter:brightness(var(--rd))"></div>`;
-    },
     cast: 'left:14%;right:14%;top:34%;bottom:8%',
   },
 };
@@ -394,16 +392,13 @@ function buildPiece(host, size, shape, front, back, thickRatio, up) {
   host.style.width = size + 'px';
   host.style.height = h + 'px';
   host.style.perspective = size * S.persp + 'px';
-  host.style.setProperty('--rd', S.rimDark);
   host.innerHTML =
     `<div class="cast" style="${sp.cast};filter:blur(${(size * 0.06).toFixed(1)}px)"></div>` +
-    `<div class="plank">${sp.front(t / 2, front, size, up)}${sp.back(t / 2, back, size, up)}` +
-    `${sp.rims(t, front, back, up)}</div>`;
+    `<div class="plank">${sp.front(t / 2, front, size, up)}${sp.back(t / 2, back, size, up)}</div>`;
   return {
     host,
     plank: host.querySelector('.plank'),
     cast: host.querySelector('.cast'),
-    rims: [...host.querySelectorAll('.rim')],
   };
 }
 
@@ -424,9 +419,6 @@ function poseFlip(parts, size, ms) {
   const f = S.dir;
   parts.plank.style.transform =
     `translateZ(${z}px) rotateZ(${f}deg) rotateY(${rot}deg) rotateZ(${-f}deg)`;
-  const face = Math.abs(Math.sin((rot * Math.PI) / 180));
-  const show = Math.max(0, face - S.rimFade) / (1 - S.rimFade);
-  for (const r of parts.rims) r.style.opacity = show;
   const up = peak > 0 ? z / peak : 0;
   parts.cast.style.opacity = S.shadow * up;
   parts.cast.style.scale = 1 + 0.16 * up;
@@ -486,9 +478,12 @@ function layout() {
       st.pieces.push(parts);
       const halo = document.createElement('div');
       halo.className = 'halo';
-      halo.style.top = top - 3 + 'px';
-      halo.style.width = st.size + 6 + 'px';
-      halo.style.height = h + 6 + 'px';
+      // Exactly the piece's own box, so the 6px border is drawn inside the
+      // silhouette the way .splash-outline is. Sat half outside, a white ring
+      // loses that half to the white table.
+      halo.style.top = top + 'px';
+      halo.style.width = st.size + 'px';
+      halo.style.height = h + 'px';
       if (st.shape === 'circle') halo.style.borderRadius = '50%';
       else if (st.shape === 'triangle') {
         // A box around a triangle highlights its two empty corners; clip the
@@ -497,7 +492,7 @@ function layout() {
         halo.style.border = '0';
         halo.style.clipPath = clip;
         halo.style.setProperty('-webkit-clip-path', clip);
-        halo.style.background = 'rgba(190,87,98,0.34)';
+        halo.style.background = 'rgba(255,255,255,0.5)';
         halo.style.boxShadow = 'none';
       } else halo.style.borderRadius = '10px';
       st.strip.appendChild(halo);
@@ -534,8 +529,7 @@ function frame(st, at) {
     if (scoring && flipAt >= 0) poseFlip(parts, st.size, flipAt);
     else {
       parts.plank.style.transform = 'rotateY(0deg)';
-      for (const r of parts.rims) r.style.opacity = 0;
-      parts.cast.style.opacity = 0;
+        parts.cast.style.opacity = 0;
     }
 
     // 4. and then they go
@@ -546,14 +540,13 @@ function frame(st, at) {
       parts.host.style.scale = seat * (1 - 0.34 * easeOut(p, 2));
     } else parts.host.style.opacity = 1;
 
-    // the score halo, two flashes over its 900ms
+    // the score ring: one rise, one hold, one fall across its 900ms
     const halo = st.halos[i];
-    halo.style.left = parts.baseX + drive * st.step - 3 + 'px';
+    halo.style.left = parts.baseX + drive * st.step + 'px';
     const sAt = at - tScore;
     if (scoring && sAt >= 0 && sAt < SCORE_MS && clearAt < 0) {
       const q = sAt / SCORE_MS;
-      const on = (q > 0.1 && q < 0.3) || (q > 0.55 && q < 0.75);
-      halo.style.opacity = on ? 1 : 0;
+      halo.style.opacity = q < 0.18 ? q / 0.18 : q > 0.68 ? (1 - q) / 0.32 : 1;
     } else halo.style.opacity = 0;
   });
 }
@@ -596,14 +589,12 @@ function drawGrid() {
 
 /* ── controls ────────────────────────────────────────────────────────── */
 const CONTROLS = [
-  ['thick', '厚度', 0.02, 0.2, 0.005, (v) => v.toFixed(3), '侧边条的宽度，按图形直径的比例。'],
-  ['rimDark', '侧面明暗', 0.25, 1, 0.02, (v) => v.toFixed(2), '越小越暗。1 就是和正面同色。'],
-  ['flipMs', '时长', 200, 900, 10, (v) => v + 'ms', '线上现在 510ms，是游戏原本 340ms 的 1.5 倍。'],
+  ['thick', '厚度', 0, 0.2, 0.005, (v) => v.toFixed(3), '两个面在 Z 轴上分开多远，按直径的比例。侧边那根线段已经取消了。'],
+  ['flipMs', '时长', 200, 900, 10, (v) => v + 'ms', '现在 530ms，是游戏原本 340ms 的 1.5 倍出头。'],
   ['overshoot', '过冲', 0, 26, 1, (v) => v + '°', '转过半圈多走这么多度，再摆回来。'],
   ['lift', '抬起', 0, 0.2, 0.005, (v) => v.toFixed(3), '朝观众抬起多高，只占前 30% 的时长。'],
   ['shadow', '落影', 0, 0.7, 0.02, (v) => v.toFixed(2), '抬到最高时影子的浓度。0 就是不要影子。'],
   ['persp', '透视', 2, 8, 0.1, (v) => v.toFixed(1) + '×', '视点距离，按直径的倍数。越小越夸张。'],
-  ['rimFade', '侧边隐去', 0, 0.4, 0.01, (v) => v.toFixed(2), '快平躺时提前把侧边条藏掉，避免那条发丝线。'],
 ];
 const panel = document.getElementById('panel');
 CONTROLS.forEach(([key, label, min, max, step, fmt, hint]) => {
@@ -678,9 +669,7 @@ function sync() {
     `const PERSPECTIVE = <b>${S.persp.toFixed(1)}</b>;\n` +
     `const LIFT = <b>${S.lift.toFixed(3)}</b>;\n` +
     `const OVERSHOOT = <b>${S.overshoot}</b>;\n` +
-    `const SHADOW = <b>${S.shadow.toFixed(2)}</b>;\n` +
-    `const RIM_FADE = <b>${S.rimFade.toFixed(2)}</b>;\n` +
-    `--rim-dark: <b>${S.rimDark.toFixed(2)}</b>;`;
+    `const SHADOW = <b>${S.shadow.toFixed(2)}</b>;`;
   layout();
   drawGrid();
   if (!playing) showScrub();
