@@ -43,6 +43,61 @@ export function hitStop(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * The landing, for a line that has just been released.
+ *
+ * Until now a released drag went straight from the preview to a re-render —
+ * a hard cut with no animation at all, so a whole row of pieces arrived
+ * without ever seeming to arrive. This gives them a weight: a quick
+ * compression as they take the slot, a small overshoot, then rest, running
+ * as a wave down the line rather than all at once.
+ *
+ * Two deliberate details:
+ *  - It animates the independent `scale` property, not `transform`, so it
+ *    composes with whatever transform a board already puts on a cell instead
+ *    of replacing it.
+ *  - A cell that scored on this move is skipped: it is already mid-flip, and
+ *    the flip both owns that moment and matters more than the landing.
+ */
+const SEAT_MS = 210;
+const SEAT_STAGGER_MS = 14;
+
+/** Seats a set of elements directly — for boards that don't key cells by (r,c). */
+export function seatEls(els: readonly (HTMLElement | null | undefined)[]): void {
+  if (reducedMotion()) return;
+  els.forEach((el, i) => {
+    if (!el) return;
+    if (getComputedStyle(el).animationName !== 'none') return;
+    el.animate(
+      [
+        { scale: '1' },
+        { scale: '0.93', offset: 0.28 },
+        { scale: '1.035', offset: 0.62 },
+        { scale: '1' },
+      ],
+      { duration: SEAT_MS, delay: i * SEAT_STAGGER_MS, easing: EASE_GROUNDED },
+    );
+  });
+}
+
+export function seatLine(boardEl: HTMLElement, cells: Iterable<string>): void {
+  if (reducedMotion()) return;
+  const keys = Array.from(cells);
+  // One frame later, so whatever re-render this move triggered has already
+  // replaced the elements — these have to be the cells that actually landed.
+  requestAnimationFrame(() => {
+    seatEls(
+      keys.map((key) => {
+        const comma = key.indexOf(',');
+        if (comma < 0) return null;
+        return boardEl.querySelector<HTMLElement>(
+          `[data-r="${key.slice(0, comma)}"][data-c="${key.slice(comma + 1)}"]`,
+        );
+      }),
+    );
+  });
+}
+
 export type ShakeTier = 'light' | 'medium' | 'heavy';
 const SHAKE_CLASS: Record<ShakeTier, string> = {
   light: 'juice-shake-light',

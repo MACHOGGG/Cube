@@ -2,7 +2,7 @@ import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
-import { playMove } from '../engine/juice';
+import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
@@ -865,6 +865,7 @@ export function createCircleGame(): ShapeGame {
         });
         if (checkBombHazard()) return true;
         const mask = new Set<string>(d.cells.map(([r, c]) => cellKey(r, c)));
+        seatLine(refs.boardEl, mask);
         controller.resolveMove(mask);
         return true;
       }

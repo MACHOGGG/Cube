@@ -32,7 +32,17 @@ const D_SLIDE = 1500;    // …and takes this long
 const T_SCORE = 2000;    // outlines flash
 const T_FLIP = 2600;     // faces turn over
 const FLIP_STAGGER = 90;
+const FLIP_MS = 340;
 const T_OUT = 3240;      // splash fades
+
+// The flip's feel, all as fractions of the piece so it reads the same at any
+// size. The old code inherited perspective(300px) from the CSS keyframes,
+// which is 5.7x a 53px game ball but only 3.3x a 91px splash ball — the same
+// animation looked flat in game and solid here purely because of the piece's
+// size. These are ratios, so it cannot drift again.
+const THICK = 0.075;        // plank thickness, x piece diameter
+const PERSPECTIVE = 3.5;    // viewing distance, x piece diameter
+const LIFT = 0.09;          // how far it rises toward the viewer mid-turn
 
 // Physics. COUPLE is how much of each ball's target comes from the ball ahead
 // of it rather than from the authored drive: 0 is a rigid block, 1 is a pure
@@ -104,8 +114,6 @@ interface Ball {
   el: HTMLElement;
   ghost: HTMLElement;
   flipped: boolean;
-  /** Written by the flip; when set it overrides the normal transform. */
-  flipT: string | null;
 }
 
 /**
@@ -152,7 +160,7 @@ export function showLoadingScreen(): Promise<void> {
       // the other rather than blinking across.
       const ghost = el.cloneNode(false) as HTMLElement;
       board.appendChild(ghost);
-      balls.push({ r, c, el, ghost, flipped: false, flipT: null });
+      balls.push({ r, c, el, ghost, flipped: false });
     }
   }
 
@@ -201,11 +209,6 @@ export function showLoadingScreen(): Promise<void> {
   function paint() {
     for (let i = 0; i < balls.length; i++) {
       const b = balls[i];
-      if (b.flipT) {
-        b.el.style.transform = b.flipT;
-        b.ghost.style.opacity = '0';
-        continue;
-      }
       const pos = b.c + p[i] + nudge[b.r];
       place(b.el, b.r, pos, edge(pos), press[i]);
       const alt = pos > (COLS - 1) / 2 ? pos - COLS : pos + COLS;
@@ -213,14 +216,32 @@ export function showLoadingScreen(): Promise<void> {
     }
   }
 
-  function setDot(b: Ball) {
+  const t = d * THICK;
+
+  /** Turns a flat disc into a two-faced plank, ready to be rotated. */
+  function makePlank(b: Ball): HTMLElement {
+    const front = COLORS[FRONT[b.r][b.c]];
+    const back = COLORS[DOT[b.r][b.c]];
+    b.el.style.background = 'transparent';
+    b.el.style.boxShadow = 'none';
+    b.el.style.perspective = d * PERSPECTIVE + 'px';
+    b.el.innerHTML =
+      `<div class="splash-plank">` +
+      `<div class="splash-face" style="transform:translateZ(${t / 2}px);background:${front};` +
+      `box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1)"></div>` +
+      `<div class="splash-face" style="transform:rotateX(180deg) translateZ(${t / 2}px)">` +
+      `${starSVG(d, back)}</div>` +
+      `<div class="splash-rim" style="top:${-t / 2}px;height:${t}px;background:${front}"></div>` +
+      `<div class="splash-rim" style="bottom:${-t / 2}px;height:${t}px;background:${back}"></div>` +
+      `</div>`;
+    b.ghost.style.opacity = '0';
     b.flipped = true;
-    const color = COLORS[DOT[b.r][b.c]];
-    for (const el of [b.el, b.ghost]) {
-      el.style.background = 'transparent';
-      el.style.boxShadow = 'none';
-      el.innerHTML = starSVG(d, color);
-    }
+    return b.el.querySelector<HTMLElement>('.splash-plank')!;
+  }
+
+  /** The settled result, for the reduced-motion path — no turn, just the back. */
+  function setDot(b: Ball) {
+    makePlank(b).style.transform = 'rotateX(180deg)';
   }
 
   // --- the integrator ----------------------------------------------------
@@ -293,37 +314,40 @@ export function showLoadingScreen(): Promise<void> {
     }
   }
 
-  /** src/style.css @keyframes flip-in, so the face turns the same way it does in game. */
+  /**
+   * A half-turn about X, overshooting past 180 and rocking back — the way a
+   * chip dropped face-down on a table settles. It also rises toward the
+   * viewer through the middle of the turn and comes back down on landing,
+   * which is what makes it read as picked up rather than pivoted in place.
+   */
   function flip() {
     TARGET.forEach(([r, c], n) => {
       const b = ballAt(r, c);
       later(n * FLIP_STAGGER, () => {
-        const k = { rx: 0, sy: 1 };
-        let swapped = false;
-        // Pinned to the grid slot the outline is drawn around, not to the
-        // ball's own offset — by now they are the same place, and this way
-        // they cannot drift apart.
-        const x = boardLeft + (c - r / 2) * 2 * R - d / 2;
-        const y = cy(r) - d / 2;
+        const plank = makePlank(b);
+        const k = { rx: 0, z: 0 };
+        const write = () => {
+          plank.style.transform = `translateZ(${k.z}px) rotateX(${k.rx}deg)`;
+        };
+        write();
         animate(k, {
           rx: [
-            { to: 88, duration: 129 },
-            { to: -14, duration: 68 },
-            { to: 5, duration: 68 },
-            { to: 0, duration: 75 },
+            { to: 196, duration: FLIP_MS * 0.62, ease: 'out(2)' },
+            { to: 172, duration: FLIP_MS * 0.2 },
+            { to: 182, duration: FLIP_MS * 0.1 },
+            { to: 180, duration: FLIP_MS * 0.08 },
           ],
-          sy: [
-            { to: 0.88, duration: 129 },
-            { to: 1.07, duration: 68 },
-            { to: 0.98, duration: 68 },
-            { to: 1, duration: 75 },
+          z: [
+            { to: d * LIFT, duration: FLIP_MS * 0.4, ease: 'out(2)' },
+            { to: 0, duration: FLIP_MS * 0.6, ease: 'in(2)' },
           ],
-          onUpdate: () => {
-            if (!swapped && k.rx > 70) {
-              swapped = true;
-              setDot(b);
-            }
-            b.flipT = `translate(${x}px, ${y}px) perspective(300px) rotateX(${k.rx}deg) scaleY(${k.sy})`;
+          onUpdate: write,
+          // A piece lying flat shows no side from straight above. Left in,
+          // the rims sit exactly edge-on and every browser still paints them
+          // as a hairline — a stray rule across the board once the turn is
+          // over. They have done their job by then.
+          onComplete: () => {
+            for (const rim of Array.from(plank.querySelectorAll('.splash-rim'))) rim.remove();
           },
         });
       });

@@ -1,6 +1,6 @@
 import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
-import { playMove, playScore, playFlip, playClear } from '../engine/juice';
+import { playMove, playScore, playFlip, playClear, seatEls } from '../engine/juice';
 
 /**
  * The keyframe-playback engine behind all three basic tutorials.
@@ -347,6 +347,9 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       await sleep(WAIT.slideRelease); // the "release" beat before the pieces seat
       if (gen !== my) return;
       renderFrame(st.snap, true);
+      // The same landing the live boards now give a released line, so the
+      // lesson teaches the feel it will actually meet in the game.
+      seatEls(st.idx.map((i) => els[i]));
       // This line has moved: its own stretched arrow retires, while hints
       // for the moves still to come keep standing.
       for (const a of Array.from(board.querySelectorAll<HTMLElement>('.story-arrow--armed'))) a.remove();

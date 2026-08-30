@@ -55,3 +55,36 @@
 @media (prefers-reduced-motion: reduce) {
   .splash-outline { animation: none; border-color: var(--ink); }
 }
+
+/* The flip, as a plank with real thickness rather than a turning sheet.
+   Same construction as the tutorial's .story-plank, transposed to the X
+   axis: two printed faces held apart in Z, and two rim strips standing on
+   edge to close the sides. Every dimension is set from JS as a fraction of
+   the piece, because a fixed pixel thickness reads as a slab on a big piece
+   and as nothing at all on a small one. */
+.splash-plank {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.splash-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The rim: full width, `thickness` tall, stood up at 90° so it is edge-on at
+   rest and sweeps into view as the piece turns. Inset horizontally so it
+   stays inside a round piece's silhouette instead of poking past the curve. */
+.splash-rim {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  transform: rotateX(90deg);
+  filter: brightness(var(--rim-dark, 0.62));
+  border-radius: 2px;
+}
