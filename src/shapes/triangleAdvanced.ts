@@ -2,6 +2,7 @@ import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
+import { playMove } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
@@ -797,6 +798,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         const shift = 2 * Math.round(half);
         if (shift !== d.lastShift) {
           vibrate(6);
+          playMove(); // ...and a tick, so a long slide reads as a run of detents
           d.lastShift = shift;
         }
         const residual = (2 * half - shift) * 0.6;

@@ -1,11 +1,12 @@
 /**
  * Shared "game feel" toolkit — hit-stop, screen shake, particle bursts, a
- * punch/overshoot pop, and a tiny synthesized hit sound — built once here
+ * punch/overshoot pop, and the interaction sounds — built once here
  * and driven from gameController.ts's cascade stepper (the one path every
  * shape's scoring/removal already funnels through) instead of six separate
  * per-shape implementations. Every visual effect checks prefers-reduced-
  * motion itself, so callers never have to remember to.
  */
+import { play } from 'cuelume';
 
 export function reducedMotion(): boolean {
   try {
@@ -94,75 +95,133 @@ export function punch(el: HTMLElement): void {
   retrigger(el, 'juice-punch');
 }
 
-// ---------- synthesized audio (no audio files) ----------
-let sharedCtx: AudioContext | null = null;
-function audioCtx(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AC) return null;
-  if (!sharedCtx) sharedCtx = new AC();
-  if (sharedCtx.state === 'suspended') sharedCtx.resume().catch(() => {});
-  return sharedCtx;
+// ---------- interaction sounds ----------
+/*
+ * Sound comes from cuelume (MIT): a curated palette of interaction cues,
+ * each synthesized live through the Web Audio API. Nothing is downloaded and
+ * no audio files ship — so the whole soundtrack costs a couple of kilobytes
+ * and works offline, exactly like the fonts and icons do.
+ *
+ * The design work here is only picking which of its seventeen cues belongs
+ * to which moment; the envelopes, the shimmer tails and the limiter are the
+ * library's. Every cue is deliberately quiet: this is a puzzle game someone
+ * may play for twenty minutes, so feedback has to stay under the threshold
+ * of "musical menu that gets annoying very quickly".
+ */
+
+/** Which cue each event gets, and how loud. */
+const CUE = {
+  /** A dry detent click. Fires once per slot the drag crosses, not once per
+   *  drop, so pulling a whole row reads as a run of ticks under the finger —
+   *  the same notched feel the haptic buzz beside it already gives. */
+  move: { name: 'tick', vol: 0.35 },
+  /** A soft two-note bell: the reward beat. */
+  score: { name: 'chime', vol: 0.6 },
+  /** A mechanical click-clack: a tile turning over to its dot face. */
+  flip: { name: 'toggle', vol: 0.4 },
+  /** A note gliding downward: a whole line draining off the board. */
+  clear: { name: 'droplet', vol: 0.8 },
+  /** A warm swell as a window opens. */
+  open: { name: 'bloom', vol: 0.55 },
+  /** A soft hush as it goes. */
+  close: { name: 'whisper', vol: 0.5 },
+} as const;
+
+/** One detent crossed mid-drag. Called from every shape's drag preview. */
+export function playMove(): void {
+  play(CUE.move.name, { volume: CUE.move.vol });
 }
 
 /**
- * Opens the audio context from a real user gesture.
+ * A scoring step. The palette has fixed pitches, so escalation through a
+ * chain reaction is carried by volume rather than by the rising scale the
+ * old hand-rolled oscillator used.
+ */
+export function playScore(comboTier: number): void {
+  play(CUE.score.name, { volume: Math.min(1, CUE.score.vol + (comboTier - 1) * 0.12) });
+}
+
+/** Matched pieces turning over. */
+export function playFlip(): void {
+  play(CUE.flip.name, { volume: CUE.flip.vol });
+}
+
+/** A whole line clearing — the bigger, rarer moment. */
+export function playClear(): void {
+  play(CUE.clear.name, { volume: CUE.clear.vol });
+}
+
+/** A window, panel or overlay coming up. */
+export function playOpen(): void {
+  play(CUE.open.name, { volume: CUE.open.vol });
+}
+
+/** ...and going away again. */
+export function playClose(): void {
+  play(CUE.close.name, { volume: CUE.close.vol });
+}
+
+/**
+ * Opens the audio context from inside a real user gesture.
  *
- * Browsers only let audio start in response to a tap or key press, and every
- * sound this game plays happens later — playHit runs from inside the cascade
- * animation's timers, never from a gesture handler. So the context was always
- * first constructed in a task the browser considers untrusted: it comes up
- * suspended, and a resume() from that same task does not satisfy Safari,
- * which wants the context opened inside the gesture itself. The result is a
- * game that is silent for the entire session.
+ * Safari wants the AudioContext *created* during a gesture, not merely
+ * resumed from one — and cuelume builds its context lazily on the first
+ * play(), which in this game is always inside an animation timer or a
+ * cascade callback. Left alone, that means a session with no sound at all.
  *
- * Calling this from the first pointerdown fixes that: the context is created
- * and resumed inside the gesture, and a one-sample silent buffer is actually
- * played through it — Safari wants a sound *started* in the gesture, not just
- * a resume. Every later blip from a timer then goes through.
+ * So the first pointerdown plays a real cue at an inaudible volume, purely
+ * to get the context constructed while the gesture is still on the stack.
+ * (A volume of exactly 0 would be short-circuited before the context is
+ * touched, which is why this is a very small number rather than zero.)
  */
 export function unlockAudio(): void {
-  const c = audioCtx();
-  if (!c) return;
-  try {
-    const src = c.createBufferSource();
-    src.buffer = c.createBuffer(1, 1, 22050);
-    src.connect(c.destination);
-    src.start(0);
-  } catch {
-    // An unlock that fails costs nothing — the next gesture tries again.
-  }
-}
-
-/** Whether audio has actually started, so the caller can stop retrying. */
-export function audioRunning(): boolean {
-  return sharedCtx?.state === 'running';
+  play('tick', { volume: 0.0002 });
 }
 
 /**
- * A short "hit" blip: one oscillator through a fast-attack/exponential-decay
- * gain envelope. comboTier raises the base pitch a little each step (a
- * rising scale gives an "accumulating" feel across a chain) and every hit
- * gets a small random pitch jitter so a fast run of them doesn't sound like
- * the exact same sample replayed.
+ * Gives every click in the app its own cue.
+ *
+ * Rather than sprinkling playOpen/playClose through twenty call sites (and
+ * missing the twenty-first), one delegated listener classifies each click by
+ * direction: anything that dismisses, closes or goes back gets the closing
+ * hush, and everything else — starting a game, opening a panel, picking a
+ * mode, moving to a page — gets the opening swell.
+ *
+ * The selectors are ids and classes, never button text, so the rule holds in
+ * all four languages. Board tiles are plain <div>s and match nothing here, so
+ * dragging a line stays on its own move cue instead of also clicking.
+ *
+ * Listening on the capture phase matters: several handlers in the app call
+ * stopPropagation(), and a cue that only fires on the ones that don't would
+ * be worse than no cue at all.
  */
-export function playHit(comboTier: number, kind: 'match' | 'bonus' | 'explode' = 'match'): void {
-  const c = audioCtx();
-  if (!c) return;
-  const osc = c.createOscillator();
-  const gain = c.createGain();
-  osc.connect(gain);
-  gain.connect(c.destination);
-  const base = kind === 'bonus' ? 320 : kind === 'explode' ? 140 : 480;
-  const jitter = 1 + (Math.random() - 0.5) * 0.07;
-  osc.type = kind === 'explode' ? 'sawtooth' : 'sine';
-  osc.frequency.value = (base + comboTier * 17) * jitter;
-  const now = c.currentTime;
-  const peak = kind === 'explode' ? 0.22 : 0.14;
-  const decay = kind === 'explode' ? 0.32 : 0.18;
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(peak, now + 0.008);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-  osc.start(now);
-  osc.stop(now + decay + 0.02);
+const CUE_CLICKABLE = 'button, [role="button"], a[href]';
+/** Anything that takes the player back out of where they are. */
+const CUE_CLOSING = [
+  '[data-cue="close"]',
+  '[id$="Close"]',
+  '[id$="CloseBtn"]',
+  '[id$="BackBtn"]',
+  '#backBtn',
+  '#continueBtn',
+  '#stFinish',
+  '.profile-row--back',
+  // Tapping the tab you are already on returns to the menu.
+  '.home-nav-btn--active',
+].join(',');
+
+export function wireClickCues(): void {
+  if (typeof document === 'undefined') return;
+  document.addEventListener(
+    'click',
+    (e) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      const hit = target.closest(CUE_CLICKABLE);
+      if (!hit || hit.closest('[data-cue="none"]')) return;
+      if (hit.closest(CUE_CLOSING)) playClose();
+      else playOpen();
+    },
+    true,
+  );
 }

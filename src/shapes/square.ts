@@ -2,6 +2,7 @@ import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { vibrate } from '../engine/haptics';
+import { playMove } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
@@ -676,6 +677,7 @@ export function createSquareGame(): ShapeGame {
         const shift = Math.round(rawShift);
         if (shift !== drag.lastShift) {
           vibrate(6);
+          playMove(); // ...and a tick, so a long slide reads as a run of detents
           drag.lastShift = shift;
         }
         if (drag.axis === 'row') {

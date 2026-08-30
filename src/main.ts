@@ -1,5 +1,5 @@
 import { injectStyles } from './injectStyles';
-import { unlockAudio, audioRunning } from './engine/juice';
+import { unlockAudio, wireClickCues } from './engine/juice';
 import { applyAppIcon } from './ui/appIcons';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
@@ -28,18 +28,17 @@ injectStyles();
 // draws. Falls back to the default when nothing is stored.
 applyAppIcon();
 
-// Audio has to be opened from a real gesture (see unlockAudio); the game's
-// own sounds all fire later, from animation timers, so nothing else in the
-// app is in a position to do it. Keep trying on each gesture until the
-// context actually starts, then stop listening.
-function tryUnlockAudio() {
+// Every click in the app gets its own cue (see wireClickCues), and the very
+// first gesture also opens the audio context — cuelume builds it lazily on
+// first play, which otherwise happens inside a timer, too late for Safari.
+wireClickCues();
+function warmAudio() {
   unlockAudio();
-  if (!audioRunning()) return;
-  window.removeEventListener('pointerdown', tryUnlockAudio);
-  window.removeEventListener('keydown', tryUnlockAudio);
+  window.removeEventListener('pointerdown', warmAudio);
+  window.removeEventListener('keydown', warmAudio);
 }
-window.addEventListener('pointerdown', tryUnlockAudio);
-window.addEventListener('keydown', tryUnlockAudio);
+window.addEventListener('pointerdown', warmAudio);
+window.addEventListener('keydown', warmAudio);
 
 const rootEl = document.getElementById('app');
 if (!rootEl) throw new Error('#app not found');

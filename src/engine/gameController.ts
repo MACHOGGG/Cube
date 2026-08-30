@@ -14,7 +14,7 @@ import {
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
-import { playHit, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
+import { playScore, playFlip, playClear, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
 import { STRINGS, type Lang } from '../i18n';
 import type { Cell } from './types';
@@ -431,7 +431,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // Graded feedback: an ordinary first-in-move match only gets a tone —
       // shake and particles are reserved for a chained step or a bonus, so
       // they stay a "big moment" signal instead of firing on every score.
-      playHit(tierComboMult, isBonus ? 'bonus' : 'match');
+      // A whole-line clear is its own event, not a louder score: the line is
+      // draining off the board, so it gets the falling droplet rather than
+      // the scoring bell.
+      if (isBonus) playClear();
+      else playScore(tierComboMult);
       const shakeTier: ShakeTier | null = isBonus ? 'heavy' : tierComboMult > 3 ? 'medium' : tierComboMult > 1 ? 'light' : null;
       if (shakeTier) {
         screenShake(refs.boardWrap, shakeTier);
@@ -458,6 +462,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
       const proceed = () => {
         s.commit();
+        // commit() is what actually turns the matched pieces over — a bonus
+        // step's commit is a no-op, so this is exactly the flip moment.
+        if (s.matchGroups.length) playFlip();
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0) {
           score += delta;

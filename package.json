@@ -22,5 +22,8 @@
     "vite": "^6.0.7",
     "vite-plugin-pwa": "^0.21.1",
     "vite-plugin-singlefile": "^2.3.3"
+  },
+  "dependencies": {
+    "cuelume": "^0.2.2"
   }
 }
