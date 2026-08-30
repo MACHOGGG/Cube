@@ -96,6 +96,9 @@ export interface I18nStrings {
   taglineVBoard: string;
   taglineBomb: string;
   rulesPill: string;
+  iconPill: string;
+  iconTitle: string;
+  iconHint: string;
   // ---- gain-bubble source labels (which pattern just paid out) ----
   labelRun4: string;
   labelBlock22: string;
@@ -231,6 +234,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'A V-shaped board · the two arms slide independently',
     taglineBomb: 'Keep 4 red tiles from ever connecting',
     rulesPill: 'How to play',
+    iconPill: 'App icon',
+    iconTitle: 'App icon',
+    iconHint: 'Pick the icon that shows on the browser tab.',
     labelRun4: 'Run of 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -356,6 +362,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'Un plateau en V · les deux bras glissent indépendamment',
     taglineBomb: 'Empêchez 4 pièces rouges de se rejoindre',
     rulesPill: 'Règles du jeu',
+    iconPill: 'Icône',
+    iconTitle: 'Icône de l’app',
+    iconHint: 'Choisissez l’icône affichée sur l’onglet du navigateur.',
     labelRun4: 'Suite de 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -481,6 +490,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'V 形棋盤 · 左右兩臂橫向互不相連',
     taglineBomb: '避免紅色 4 連',
     rulesPill: '遊戲規則',
+    iconPill: '更換圖示',
+    iconTitle: '更換圖示',
+    iconHint: '選擇顯示在瀏覽器分頁上的圖示。',
     labelRun4: '4連',
     labelBlock22: '2×2',
     label121: '121',
@@ -606,6 +618,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'V 形棋盘 · 左右两臂横向互不相连',
     taglineBomb: '避免红色 4 连',
     rulesPill: '游戏规则',
+    iconPill: '更换图标',
+    iconTitle: '更换图标',
+    iconHint: '选择显示在浏览器标签页上的图标。',
     labelRun4: '4连',
     labelBlock22: '2×2',
     label121: '121',

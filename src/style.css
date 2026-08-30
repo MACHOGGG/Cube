@@ -1029,6 +1029,25 @@ html.lang-locked, html.lang-locked body {
 /* 游戏规则 — a long, scrollable read rather than a short prompt, so the panel
    takes most of the viewport and scrolls inside itself instead of pushing the
    modal past the screen edges. */
+/* 更换图标 — the tab-icon picker. Same panel as 游戏规则, but its body is a
+   grid of the icons themselves: the artwork is the label, so there is nothing
+   to translate inside it. */
+.icon-modal { max-width: 460px; width: 100%; }
+.icon-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  max-height: 52vh; overflow-y: auto; overscroll-behavior: contain;
+  margin: 4px 0 16px; padding: 3px;
+}
+.icon-opt {
+  padding: 0; aspect-ratio: 1; flex: none; cursor: pointer; overflow: hidden;
+  border: 2px solid var(--line); border-radius: 14px; background: none;
+  transition: transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1.1), border-color 160ms ease;
+}
+.icon-opt > svg { width: 100%; height: 100%; display: block; }
+.icon-opt--on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+@media (hover: hover) and (pointer: fine) { .icon-opt:hover { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .icon-opt { transition: none; } }
+
 .rules-modal { max-width: 520px; width: 100%; }
 .rules-body {
   max-height: 62vh; overflow-y: auto; overscroll-behavior: contain;

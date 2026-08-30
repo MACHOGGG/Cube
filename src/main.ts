@@ -1,5 +1,6 @@
 import { injectStyles } from './injectStyles';
 import { unlockAudio, audioRunning } from './engine/juice';
+import { applyAppIcon } from './ui/appIcons';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
@@ -22,6 +23,10 @@ import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 
 injectStyles();
+
+// The tab icon the player last chose, back on the tab before anything else
+// draws. Falls back to the default when nothing is stored.
+applyAppIcon();
 
 // Audio has to be opened from a real gesture (see unlockAudio); the game's
 // own sounds all fire later, from animation timers, so nothing else in the

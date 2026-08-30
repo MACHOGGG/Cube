@@ -93,7 +93,7 @@ export const ICON_BASE_CIRCLE = svg(
 /** Traces a polygon whose corners are rounded off by `r`: each corner is cut
  *  back along both of its edges and bridged by a quadratic through the
  *  original point, so the piece keeps its exact silhouette with soft tips. */
-function roundedPolyPath(pts: [number, number][], r: number | number[]): string {
+export function roundedPolyPath(pts: [number, number][], r: number | number[]): string {
   const n = pts.length;
   const radius = (i: number) => (typeof r === 'number' ? r : r[i]);
   const toward = (p: [number, number], q: [number, number], rr: number): [number, number] => {

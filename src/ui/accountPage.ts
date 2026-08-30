@@ -1,5 +1,6 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
+import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 
 export type AuthTab = 'register' | 'login';
 
@@ -52,6 +53,7 @@ export function renderAccountPage(
         <button class="profile-pill profile-pill--rose" id="howToRow">${s.tutorialShort}</button>
       </div>
       <button class="profile-pill profile-pill--wide" id="rulesRow">${s.rulesPill}</button>
+      <button class="profile-pill profile-pill--wide" id="iconRow">${s.iconPill}</button>
 
       <section class="genius-panel">
         <div class="menu-section-label">${s.geniusSpecialTitle}</div>
@@ -135,6 +137,45 @@ export function renderAccountPage(
     });
   }
 
+  /** 更换图标 — the icon on the browser tab. Picking one swaps it there and
+   *  then, and the choice is remembered, so a player sees their own tab icon
+   *  on every later visit. */
+  function openIconPicker() {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    overlay.innerHTML = `
+      <div class="modal icon-modal">
+        <h2>${s.iconTitle}</h2>
+        <p>${s.iconHint}</p>
+        <div class="icon-grid">
+          ${APP_ICONS.map(
+            (i) => `<button class="icon-opt" data-icon="${i.id}">${i.svg}</button>`,
+          ).join('')}
+        </div>
+        <div class="btn-row"><button class="primary" id="iconClose">${s.closeBtn}</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.icon-opt'));
+    const mark = (id: string) => {
+      for (const el of opts) el.classList.toggle('icon-opt--on', el.dataset.icon === id);
+    };
+    mark(loadAppIcon());
+    for (const el of opts) {
+      el.addEventListener('click', () => {
+        const id = el.dataset.icon!;
+        saveAppIcon(id);
+        applyAppIcon(id);
+        mark(id);
+      });
+    }
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#iconClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
   /** 联系我们 — the destination has nothing in it yet, so the link opens an
    *  empty panel rather than pretending to have content. */
   function openContact() {
@@ -160,6 +201,7 @@ export function renderAccountPage(
   on('loginBtn', () => openAuth(initialTab));
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
+  on('iconRow', openIconPicker);
   on('howToRow', handlers.onHowToSlide);
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);

@@ -21,10 +21,18 @@ const body = extract('body');
 
 // Icon/manifest links aren't meaningful inside the Artifact preview frame —
 // the Artifact tool's own `favicon` param covers the tab icon there.
-const cleanedHead = head
-  .split('\n')
-  .filter((line) => !/rel="(icon|apple-touch-icon|manifest)"/.test(line))
-  .join('\n');
+//
+// This strips the <link> ELEMENTS, not whole lines. It used to drop any line
+// matching rel="icon", which is fine while that string only ever appears in
+// markup — but the bundle is inlined into this same <head> as a handful of
+// enormous lines, so the day app code set `link.rel = 'icon'` (the tab-icon
+// picker), the minifier put rel="icon" inside a 26KB line of real JavaScript
+// and the filter deleted the lot. The page then died on a syntax error at the
+// truncation point, with a green build.
+const cleanedHead = head.replace(
+  /<link\b[^>]*\brel="(?:icon|apple-touch-icon|manifest)"[^>]*>/g,
+  '',
+);
 
 writeFileSync(outPath, cleanedHead + '\n' + body + '\n');
 console.log(`build-artifact: wrote ${outPath}`);
