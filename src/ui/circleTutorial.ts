@@ -118,5 +118,5 @@ const BEATS: StoryStep[][] = [
 ];
 
 export function renderCircleTutorial(container: HTMLElement, lang: Lang, onDone: () => void): void {
-  renderStoryTutorial(container, lang, { w: W, h: 305, frames: FRAMES, beats: BEATS }, onDone);
+  renderStoryTutorial(container, lang, { id: 'circle', w: W, h: 305, frames: FRAMES, beats: BEATS }, onDone);
 }

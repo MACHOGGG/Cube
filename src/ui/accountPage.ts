@@ -1,6 +1,7 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
+import { trackIconChange } from '../engine/analytics';
 
 export type AuthTab = 'register' | 'login';
 
@@ -166,6 +167,7 @@ export function renderAccountPage(
         const id = el.dataset.icon!;
         saveAppIcon(id);
         applyAppIcon(id);
+        trackIconChange(id);
         mark(id);
       });
     }

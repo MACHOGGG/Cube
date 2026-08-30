@@ -1,3 +1,4 @@
+import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
 import { playMove, playScore, playFlip, playClear } from '../engine/juice';
 
@@ -38,6 +39,8 @@ export type StoryStep =
   | { t: 'pause'; ms: number };
 
 export interface StorySpec {
+  /** Which tutorial this is, for analytics — 'square' | 'circle' | 'triangle'. */
+  id: string;
   w: number;
   h: number;
   frames: StoryCell[][];
@@ -382,9 +385,13 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   bFinish.addEventListener('click', () => {
     gen++;
     window.removeEventListener('resize', layout);
+    // The button is the only way out, and it reads 完成 only on the last beat
+    // — so "was the player on the last beat" is exactly "did they finish".
+    trackTutorialEnd(spec.id, beat === spec.beats.length - 1, beat + 1, spec.beats.length);
     onDone();
   });
 
   layout();
+  trackTutorialStart(spec.id);
   play(0);
 }

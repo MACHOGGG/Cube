@@ -3,6 +3,7 @@ import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher, saveRun } from './persistence';
+import { trackGameStart, trackGameEnd, trackShare } from './analytics';
 import {
   MANUAL_END_REASON,
   buildShareInfo,
@@ -303,10 +304,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     endSnapshot = hooks.snapshotBoard?.() ?? null;
     // Archive the run so the 记录 panel can re-open the very same card.
     saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
+    // The reason key is one of our own fixed strings, never player text.
+    trackGameEnd({
+      shape: hooks.shapeId,
+      mode: hooks.modeKey,
+      score: total,
+      moves,
+      seconds: elapsed,
+      reason,
+      hazard: hazardEnd,
+    });
   }
 
   function doShare() {
     if (!lastRun) return;
+    trackShare('end_modal');
     const dataUrl = renderShareCard(
       buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
       endSnapshot,
@@ -525,6 +537,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   refs.buttons.start.addEventListener('click', () => {
     started = true;
+    trackGameStart(hooks.shapeId, hooks.modeKey);
     refs.startOverlay.classList.remove('show');
     newGame();
   });

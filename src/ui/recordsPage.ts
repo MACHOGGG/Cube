@@ -5,6 +5,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker } from './centerPicker';
 import type { ShapeCardMeta } from '../shapes/types';
+import { trackShare } from '../engine/analytics';
 
 /** One playable game+mode combination, so the page knows which archives to
  *  read and which glyph belongs to a stored run's shape id. */
@@ -192,6 +193,7 @@ export function renderRecordsPage(
  * with the run's own start and end boards side by side.
  */
 function openShareCard(run: StoredRun, lang: Lang): void {
+  trackShare('records');
   const s = STRINGS[lang];
   const d = run.data;
   const info = buildShareInfo(d, shapeName(lang, d.shapeId, d.shapeFallback), lang);

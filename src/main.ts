@@ -1,6 +1,7 @@
 import { injectStyles } from './injectStyles';
 import { unlockAudio, wireClickCues } from './engine/juice';
 import { applyAppIcon } from './ui/appIcons';
+import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
@@ -107,6 +108,7 @@ function teardown() {
 
 function showMenu() {
   teardown();
+  trackScreen('menu');
   renderMenu(root, homeLayout, {
     onSelectBase: (id) => {
       const game = games.find((g) => g.card.id === id);
@@ -140,6 +142,7 @@ function showMenu() {
 
 function showAccountPage(tab: AuthTab) {
   teardown();
+  trackScreen('profile');
   renderAccountPage(
     root,
     tab,
@@ -158,6 +161,7 @@ function showAccountPage(tab: AuthTab) {
 
 function showRecordsPage() {
   teardown();
+  trackScreen('records');
   renderRecordsPage(root, recordSources, showMenu, currentLang);
   setNavTab('records');
   refreshBottomNav();
@@ -175,6 +179,7 @@ function shapeTutorialFor(id: string): TutorialShape | null {
 
 function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void) {
   teardown();
+  trackScreen('tutorial');
   if (shape === 'square') renderTutorial(root, currentLang, onDone);
   else if (shape === 'circle') renderCircleTutorial(root, currentLang, onDone);
   else renderTriangleTutorial(root, currentLang, onDone);
@@ -182,6 +187,7 @@ function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void) {
 
 function showTutorialPicker() {
   teardown();
+  trackScreen('tutorial_picker');
   const s = STRINGS[currentLang];
   root.innerHTML = `
     <div class="app">
@@ -253,10 +259,16 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
 
 function boot() {
   const savedLang = loadLang();
+  // Analytics starts before the first screen so the visit is counted even if
+  // the player closes the tab on the language page. It is given the saved
+  // language, or 'none' when this is a first run and nothing is chosen yet.
+  initAnalytics(savedLang || 'none');
   if (!savedLang) {
     teardown();
+    trackScreen('language_select');
     renderLanguageSelect(root, (lang) => {
       saveLang(lang);
+      trackLanguage(lang, 'first_run');
       afterLangChosen(lang);
     });
     return;
@@ -291,6 +303,7 @@ function afterLangChosen(lang: Lang) {
 // so there's no single "redraw the current screen" hook to call generically.
 function onLanguageSwitched(lang: Lang) {
   saveLang(lang);
+  trackLanguage(lang, 'switch');
   afterLangChosen(lang);
 }
 

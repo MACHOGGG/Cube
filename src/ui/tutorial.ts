@@ -122,5 +122,5 @@ const BEATS: StoryStep[][] = [
 ];
 
 export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () => void): void {
-  renderStoryTutorial(container, lang, { w: 320, h: 320, frames: FRAMES, beats: BEATS }, onDone);
+  renderStoryTutorial(container, lang, { id: 'square', w: 320, h: 320, frames: FRAMES, beats: BEATS }, onDone);
 }

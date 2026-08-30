@@ -24,6 +24,7 @@
     "vite-plugin-singlefile": "^2.3.3"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "cuelume": "^0.2.2"
   }
 }
