@@ -77,14 +77,37 @@
   align-items: center;
   justify-content: center;
 }
-/* The rim: full width, `thickness` tall, stood up at 90° so it is edge-on at
-   rest and sweeps into view as the piece turns. Inset horizontally so it
-   stays inside a round piece's silhouette instead of poking past the curve. */
+/* The rim: `thickness` wide, stood up at 90 degrees about Y so it is edge-on
+   at rest and sweeps into view as the piece turns. It always sits on the
+   left and right because the plank always turns about Y — the direction of
+   travel is applied outside it, by a Z rotation that carries the rims round
+   with it. Inset vertically so it stays inside a round piece's silhouette
+   instead of poking past the curve, which is what made the tutorial's
+   version read as a separate black bar beside the tile. */
 .splash-rim {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  transform: rotateX(90deg);
-  filter: brightness(var(--rim-dark, 0.62));
-  border-radius: 2px;
+  /* Short, and centred on the piece's equator. A round piece's silhouette
+     pulls away from its bounding box everywhere except the middle, so a
+     full-height straight strip spends most of itself outside the curve —
+     which is what makes it read as a separate bar standing beside the piece
+     rather than as its edge. Rounded, so the sliver curves with the disc. */
+  top: 27%;
+  bottom: 27%;
+  border-radius: 999px;
+  transform: rotateY(90deg);
+  filter: brightness(var(--rim-dark, 0.5));
+}
+
+/* The cast shadow. Not inside the plank, so it stays flat on the board while
+   the piece above it turns: it only widens and softens as the piece lifts. */
+.splash-shadow {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 12%;
+  bottom: 12%;
+  border-radius: 50%;
+  background: rgba(46, 36, 48, 0.34);
+  opacity: 0;
+  will-change: opacity, scale;
 }

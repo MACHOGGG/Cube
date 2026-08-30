@@ -18,6 +18,7 @@
  * scalars (the travel, the flip's keyframes) and the physics reads them.
  */
 import { animate } from 'animejs';
+import { playMove, playScore, playFlip } from '../engine/juice';
 
 // ---------------------------------------------------------------------------
 // Tunables. The frame side is expressed in ball diameters because that is the
@@ -32,7 +33,7 @@ const D_SLIDE = 1500;    // …and takes this long
 const T_SCORE = 2000;    // outlines flash
 const T_FLIP = 2600;     // faces turn over
 const FLIP_STAGGER = 90;
-const FLIP_MS = 340;
+const FLIP_MS = 510;   // 1.5x the game's 340ms — heavier, still brisk
 const T_OUT = 3240;      // splash fades
 
 // The flip's feel, all as fractions of the piece so it reads the same at any
@@ -40,9 +41,29 @@ const T_OUT = 3240;      // splash fades
 // which is 5.7x a 53px game ball but only 3.3x a 91px splash ball — the same
 // animation looked flat in game and solid here purely because of the piece's
 // size. These are ratios, so it cannot drift again.
-const THICK = 0.075;        // plank thickness, x piece diameter
+const THICK = 0.055;        // plank thickness, x piece diameter — thin, but there
 const PERSPECTIVE = 3.5;    // viewing distance, x piece diameter
-const LIFT = 0.09;          // how far it rises toward the viewer mid-turn
+const LIFT = 0.07;          // how far it rises toward the viewer mid-turn
+const OVERSHOOT = 9;        // degrees past the half-turn before it rocks back
+const SHADOW = 0.34;        // peak opacity of the cast shadow
+const RIM_FADE = 0.14;      // below this much edge-on-ness the rim is hidden
+const GROUND = '#FFFFFF';   // the frame's own surface, so a back face reads as flat
+
+/**
+ * A piece rolls about the axis perpendicular to the way its line travelled,
+ * so its leading edge dives away from the viewer. Rather than build that axis
+ * per case, the plank always turns about its own Y and the whole turn is
+ * conjugated by a Z rotation of the travel angle:
+ *   rotateZ(f) rotateY(t) rotateZ(-f)
+ * which is exactly a turn about the axis at f + 90 degrees. It also carries
+ * the left/right rims round with it, so one construction covers horizontal,
+ * vertical and diagonal moves alike.
+ */
+function rollAngleDeg(dx: number, dy: number): number {
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+/** This board slides along +x, so that is the direction the pieces roll. */
+const ROLL_DEG = rollAngleDeg(1, 0);
 
 // Physics. COUPLE is how much of each ball's target comes from the ball ahead
 // of it rather than from the authored drive: 0 is a rigid block, 1 is a pure
@@ -175,6 +196,7 @@ export function showLoadingScreen(): Promise<void> {
   const drive = { x: 0 };
   let prevDrive = 0;
   let driveV = 0;
+  let lastDetent = 0;
 
   const idx = (r: number, c: number) => r * COLS + c;
   /**
@@ -226,13 +248,18 @@ export function showLoadingScreen(): Promise<void> {
     b.el.style.boxShadow = 'none';
     b.el.style.perspective = d * PERSPECTIVE + 'px';
     b.el.innerHTML =
+      `<div class="splash-shadow" style="filter:blur(${(d * 0.06).toFixed(1)}px)"></div>` +
       `<div class="splash-plank">` +
       `<div class="splash-face" style="transform:translateZ(${t / 2}px);background:${front};` +
       `box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1)"></div>` +
-      `<div class="splash-face" style="transform:rotateX(180deg) translateZ(${t / 2}px)">` +
-      `${starSVG(d, back)}</div>` +
-      `<div class="splash-rim" style="top:${-t / 2}px;height:${t}px;background:${front}"></div>` +
-      `<div class="splash-rim" style="bottom:${-t / 2}px;height:${t}px;background:${back}"></div>` +
+      // The back gets a body in the board's own paper colour. At rest that is
+      // invisible — paper on paper, exactly the flat dot face the game draws —
+      // but through the turn it means the plank has two real surfaces instead
+      // of a printed front and a hole, so the rims have something to close.
+      `<div class="splash-face" style="transform:rotateY(180deg) translateZ(${t / 2}px);` +
+      `background:${GROUND}">${starSVG(d, back)}</div>` +
+      `<div class="splash-rim" style="left:${-t / 2}px;width:${t}px;background:${front}"></div>` +
+      `<div class="splash-rim" style="right:${-t / 2}px;width:${t}px;background:${back}"></div>` +
       `</div>`;
     b.ghost.style.opacity = '0';
     b.flipped = true;
@@ -241,7 +268,7 @@ export function showLoadingScreen(): Promise<void> {
 
   /** The settled result, for the reduced-motion path — no turn, just the back. */
   function setDot(b: Ball) {
-    makePlank(b).style.transform = 'rotateX(180deg)';
+    makePlank(b).style.transform = `rotateZ(${ROLL_DEG}deg) rotateY(180deg) rotateZ(${-ROLL_DEG}deg)`;
   }
 
   // --- the integrator ----------------------------------------------------
@@ -255,6 +282,15 @@ export function showLoadingScreen(): Promise<void> {
 
     driveV = (drive.x - prevDrive) / Math.max(dt, 1e-4);
     prevDrive = drive.x;
+    // The same detent tick a real drag gives, one per slot crossed. Whether
+    // it is audible depends on the browser: a page that has had no gesture
+    // yet is not allowed to start audio, so on a first-ever visit the splash
+    // is silent and the game's first sound arrives on the first tap.
+    const detent = Math.round(drive.x);
+    if (detent !== lastDetent) {
+      lastDetent = detent;
+      playMove();
+    }
 
     // 1. the driven line: head pinned to the authored travel, everyone
     //    behind it pulled partly by that same travel and partly by the ball
@@ -312,42 +348,64 @@ export function showLoadingScreen(): Promise<void> {
       o.style.top = cy(r) - d / 2 + 'px';
       board.appendChild(o);
     }
+    playScore(1);
   }
 
   /**
-   * A half-turn about X, overshooting past 180 and rocking back — the way a
-   * chip dropped face-down on a table settles. It also rises toward the
-   * viewer through the middle of the turn and comes back down on landing,
-   * which is what makes it read as picked up rather than pivoted in place.
+   * The turn: a half-rotation about the axis the line travelled across, going
+   * a little past the half-turn and rocking back, with a quick lift toward the
+   * viewer and a shadow that opens under the piece while it is off the board.
+   * The lift is short on purpose — it should read as "picked up and turned",
+   * not slow the turn down.
    */
   function flip() {
     TARGET.forEach(([r, c], n) => {
       const b = ballAt(r, c);
       later(n * FLIP_STAGGER, () => {
         const plank = makePlank(b);
-        const k = { rx: 0, z: 0 };
+        const shadow = b.el.querySelector<HTMLElement>('.splash-shadow')!;
+        const rims = Array.from(plank.querySelectorAll<HTMLElement>('.splash-rim'));
+        const peak = d * LIFT;
+        const k = { rot: 0, z: 0 };
         const write = () => {
-          plank.style.transform = `translateZ(${k.z}px) rotateX(${k.rx}deg)`;
+          plank.style.transform =
+            `translateZ(${k.z}px) rotateZ(${ROLL_DEG}deg) rotateY(${k.rot}deg) rotateZ(${-ROLL_DEG}deg)`;
+          // The edge is only there to be seen while the piece is at an angle.
+          // Its projected width already goes to zero as the face comes flat,
+          // but a zero-width surface is still antialiased into a hairline —
+          // and a dark hairline standing where a piece's edge would be reads
+          // as a stray rule. Fade it out before it gets there.
+          const face = Math.abs(Math.sin((k.rot * Math.PI) / 180));
+          const rimShow = Math.max(0, face - RIM_FADE) / (1 - RIM_FADE);
+          for (const rim of rims) rim.style.opacity = String(rimShow);
+          // A piece resting on the board casts nothing; the shadow only opens
+          // as it comes up, spreading and fading the higher it gets.
+          const up = peak > 0 ? k.z / peak : 0;
+          shadow.style.opacity = String(SHADOW * up);
+          shadow.style.scale = String(1 + 0.16 * up);
         };
         write();
+        playFlip();
         animate(k, {
-          rx: [
-            { to: 196, duration: FLIP_MS * 0.62, ease: 'out(2)' },
-            { to: 172, duration: FLIP_MS * 0.2 },
-            { to: 182, duration: FLIP_MS * 0.1 },
+          rot: [
+            { to: 180 + OVERSHOOT, duration: FLIP_MS * 0.62, ease: 'out(2)' },
+            { to: 180 - OVERSHOOT * 0.4, duration: FLIP_MS * 0.2 },
+            { to: 180 + OVERSHOOT * 0.15, duration: FLIP_MS * 0.1 },
             { to: 180, duration: FLIP_MS * 0.08 },
           ],
           z: [
-            { to: d * LIFT, duration: FLIP_MS * 0.4, ease: 'out(2)' },
-            { to: 0, duration: FLIP_MS * 0.6, ease: 'in(2)' },
+            { to: peak, duration: FLIP_MS * 0.3, ease: 'out(3)' },
+            { to: 0, duration: FLIP_MS * 0.45, ease: 'in(2)' },
           ],
           onUpdate: write,
-          // A piece lying flat shows no side from straight above. Left in,
-          // the rims sit exactly edge-on and every browser still paints them
-          // as a hairline — a stray rule across the board once the turn is
-          // over. They have done their job by then.
+          // A piece lying flat shows no side from straight above, and casts no
+          // gap-shadow. Left in, the rims sit exactly edge-on and every browser
+          // still paints them as a hairline — a stray rule across the board
+          // once the turn is over, which is exactly what the tutorial's version
+          // does today.
           onComplete: () => {
             for (const rim of Array.from(plank.querySelectorAll('.splash-rim'))) rim.remove();
+            shadow.remove();
           },
         });
       });
