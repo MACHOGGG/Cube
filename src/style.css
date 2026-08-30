@@ -1249,64 +1249,97 @@ html.lang-locked, html.lang-locked body {
 @media (orientation: landscape) { .rotate-hint { display: none; } }
 
 /* ---------------------------------------------------------------------------
-   Landscape play, for the boards that need the width
+   Landscape play — every board, one layout
    --------------------------------------------------------------------------- */
 /* One grid: readouts down the left, board filling the middle, the once-a-run
-   buttons down the right — the three things a player needs while sliding,
-   none of them ever pushing the board off screen. Applied only when the
-   device really is sideways and short enough to be a phone, so a desktop
-   window keeps the portrait column it was designed for. */
+   buttons down the right. The two side columns are deliberately generous and
+   their contents stretch to fill them top to bottom — a phone held sideways
+   has width to spare beside a board that is limited by its height, and empty
+   gutters read as an unfinished screen rather than a cockpit.
+
+   Applied to every game (not just the wide ones): the portrait column simply
+   does not fit in a short viewport, and each board already sizes itself to
+   min(width, height) of whatever box it is handed, so they all land whole. */
 @media (orientation: landscape) and (max-height: 560px) {
-  .app.app--land-capable {
+  .app.app--game {
     max-width: none;
     width: 100vw;
     height: 100dvh;
-    padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
-    gap: 0;
+    padding: 8px clamp(8px, 2vw, 20px) calc(8px + env(safe-area-inset-bottom, 0px));
+    gap: clamp(8px, 1.6vw, 18px);
     display: grid;
-    grid-template-columns: minmax(88px, 15%) 1fr minmax(88px, 15%);
     grid-template-rows: 1fr;
-    /* stretch, not center: the board column has to *be* the row's height for
-       layoutBoard to read it and scale the board to fit. The two side
-       columns centre themselves individually below. */
     align-items: stretch;
+    /* Most boards are square-ish and limited by the row's height, so the
+       middle column is given exactly that and the two side columns split
+       everything left over — which is what fills the gutters instead of
+       leaving the board floating in a wide empty middle. */
+    grid-template-columns: 1fr minmax(0, calc(100dvh - 16px)) 1fr;
+  }
+  /* The two boards that really are wider than they are tall want the width
+     instead, so their side columns take only what they need. */
+  .app.app--game.app--land-wide {
+    grid-template-columns: minmax(120px, 16%) 1fr minmax(120px, 16%);
   }
   /* The title, tagline, pattern hints and colour key are the parts a player
      can do without while actually playing — they are all one tap away on the
      start card and in 游戏规则. */
-  .app.app--land-capable > h1,
-  .app.app--land-capable > .tag-line,
-  .app.app--land-capable > .pattern-hint,
-  .app.app--land-capable > .legend { display: none; }
+  .app.app--game > h1,
+  .app.app--game > .tag-line,
+  .app.app--game > .pattern-hint,
+  .app.app--game > .legend { display: none; }
 
-  .app.app--land-capable > .hud {
+  /* The three readouts become one instrument panel standing the full height
+     of the column — the portrait strip turned on its side, hairline dividers
+     and all, rather than three cards floating in a tall empty gutter. */
+  .app.app--game > .hud {
     grid-column: 1; grid-row: 1;
-    display: flex; flex-direction: column; gap: 8px;
-    align-self: center; margin: 0;
+    display: flex; flex-direction: column; gap: 1px;
+    margin: 0; height: 100%;
   }
-  .app.app--land-capable > .hud .hud-cell { padding: 6px 8px; }
-  .app.app--land-capable > .hud .k { font-size: 0.62rem; }
-  .app.app--land-capable > .hud .v { font-size: 1.05rem; }
+  .app.app--game > .hud .hud-cell {
+    flex: 1; min-height: 0; padding: 4px clamp(6px, 1.2vw, 14px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(2px, 0.8vh, 8px);
+    border-radius: 0;
+  }
+  .app.app--game > .hud .hud-cell:first-child { border-radius: 11px 11px 0 0; }
+  .app.app--game > .hud .hud-cell:last-child { border-radius: 0 0 11px 11px; }
+  .app.app--game > .hud .k { font-size: clamp(0.7rem, 2.4vh, 1.05rem); letter-spacing: 0.06em; margin: 0; }
+  .app.app--game > .hud .v { font-size: clamp(1.5rem, 7vh, 3rem); line-height: 1.02; }
 
-  .app.app--land-capable > .board-wrap {
+  .app.app--game > .board-wrap {
     grid-column: 2; grid-row: 1;
-    height: auto; min-height: 0; margin: 0;
+    /* Drop the square aspect: the row's height is the real constraint, and
+       every board reads min(width, height) off this box. */
+    aspect-ratio: auto; height: auto; min-height: 0; min-width: 0; margin: 0;
     display: flex; align-items: center; justify-content: center;
   }
 
-  .app.app--land-capable > .controls {
+  .app.app--game > .controls {
     grid-column: 3; grid-row: 1;
-    display: flex; flex-direction: column; gap: 8px;
-    align-self: center; margin: 0;
+    display: flex; flex-direction: column; gap: clamp(6px, 1.4vh, 14px);
+    margin: 0; height: 100%;
   }
-  .app.app--land-capable > .controls .icon-btn {
-    width: 100%; padding: 8px 6px; font-size: 0.74rem; line-height: 1.15;
+  /* Full-height panels rather than pills: a 100px radius on a button this
+     tall turns it into an ellipse, which reads as a balloon sitting in the
+     gutter instead of a control filling it. */
+  .app.app--game > .controls .icon-btn {
+    flex: 1; min-height: 0; width: 100%; padding: 4px clamp(6px, 1.2vw, 14px);
+    border-radius: clamp(14px, 3.4vh, 26px);
+    font-size: clamp(0.85rem, 3vh, 1.4rem); line-height: 1.25;
+    display: flex; align-items: center; justify-content: center; text-align: center;
   }
-  .app.app--land-capable > .stuck-end-btn {
+  /* The two wide boards leave a narrower gutter, so their labels — 色盲友好配色
+     is the longest — step back down enough to stay on one or two lines. */
+  .app.app--game.app--land-wide > .controls .icon-btn { font-size: clamp(0.72rem, 2.2vh, 1rem); }
+  .app.app--game.app--land-wide > .hud .k { font-size: clamp(0.62rem, 1.8vh, 0.85rem); }
+  .app.app--game.app--land-wide > .hud .v { font-size: clamp(1.15rem, 5vh, 2.1rem); }
+  .app.app--game > .stuck-end-btn {
     grid-column: 2; grid-row: 1; align-self: end; justify-self: center; margin: 0 0 4px;
   }
   /* The bottom dock would sit on top of the right-hand buttons. */
-  body:has(.app--land-capable) .home-nav { display: none; }
+  body:has(.app--game) .home-nav { display: none; }
 }
 
 /* A game screen never scrolls, in either orientation: a board that slides

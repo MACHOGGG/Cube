@@ -16,12 +16,11 @@ export interface ShellMeta {
    *  whose own layout (many cells, or a shape denser than a plain square
    *  grid) reads as cramped at the standard size — see the "app-wide" CSS. */
   wideBoard?: boolean;
-  /** This board is far wider than it is tall (七色圆球's diamond, 进阶三角's
-   *  V) and is unplayably small in a phone's portrait column. Adds the
-   *  turn-your-phone prompt on the start card, and switches the whole screen
-   *  to the landscape layout — readouts down the left, buttons down the
-   *  right, board filling the middle — the moment the device is held
-   *  sideways. See the ".app--land" CSS. */
+  /** This board gains the most from a phone held sideways (七色圆球's
+   *  diamond, which turns a quarter turn to lie across the screen, and
+   *  进阶三角's V), so its start card carries the turn-your-phone prompt.
+   *  The landscape layout itself is not gated on this — every game switches
+   *  to it in a short, wide viewport; see the ".app--game" landscape CSS. */
   landscape?: boolean;
   /** Every string on this screen is localized through STRINGS[lang]; the
    *  shapes pass in already-translated title/tagline/startBody. The long
@@ -110,10 +109,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
   // The landscape layout is one grid — readouts | board | buttons — and the
   // portrait one is the column it has always been. Both are the same DOM in
-  // the same order; only .app--land's grid areas move the pieces, so nothing
-  // re-renders when the phone turns.
+  // the same order; only the landscape media query's grid areas move the
+  // pieces, so nothing re-renders when the phone turns.
   container.innerHTML = `
-    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-capable' : ''}">
+    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 

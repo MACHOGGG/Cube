@@ -15,6 +15,18 @@ export function magnetizeRawDist(x: number, power = 2.2): number {
 }
 
 export interface DragCallbacks {
+  /**
+   * The element `onStart`'s coordinates are measured from. Defaults to the
+   * element the listeners are on, which is *not* the same thing: every board
+   * listens on .board-wrap, so a touch that lands a little off the board
+   * still counts, but .board-wrap centres its child and the board is only
+   * flush with it when it happens to fill the wrapper exactly. Sizing the
+   * board to the short side of a landscape row, or dropping a cleared column
+   * from a square grid, leaves it inset — and a start point measured from
+   * the wrapper then picks a cell one row or column off. Pass the board
+   * element and the inset is measured, once per drag.
+   */
+  origin?: HTMLElement;
   isActive(): boolean;
   /** Pointer-down position in board-local pixels. */
   onStart(x: number, y: number): void;
@@ -49,7 +61,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
       cb.onRejected?.();
       return;
     }
-    const rect = target.getBoundingClientRect();
+    const rect = (cb.origin ?? target).getBoundingClientRect();
     active = true;
     locked = false;
     sx = e.clientX;

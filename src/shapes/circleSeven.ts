@@ -139,17 +139,28 @@ const CLUSTERS = allClusters();
 // had the wrong sign, which decoupled each ball's "logical index position"
 // from where it actually sat on screen and made the edge-fade/ghost-fill
 // trigger at arbitrary mid-line points instead of the line's real ends.
-function famVector(fam: Fam, R: number, rowH: number): [number, number] {
-  if (fam === 'A') return [R, rowH];
-  if (fam === 'B') return [-R, rowH];
-  return [-2 * R, 0];
+/**
+ * This diamond is much taller than it is wide, which is the wrong way round
+ * for a phone held sideways. In landscape the whole lattice is turned a
+ * quarter turn so its long axis runs across the screen — and because every
+ * screen vector on this board (a ball's centre, a family's slide direction)
+ * goes through this one rotation, a drag along a family still means that
+ * same family whichever way the phone is held. Nothing about the grid, the
+ * scoring or the wraparound changes; only where it is painted.
+ */
+function rotXY(x: number, y: number, land: boolean): [number, number] {
+  return land ? [-y, x] : [x, y];
 }
-function scalarProjection(fam: Fam, dx: number, dy: number, R: number, rowH: number): number {
-  const [ux, uy] = famVector(fam, R, rowH);
+function famVector(fam: Fam, R: number, rowH: number, land: boolean): [number, number] {
+  const v: [number, number] = fam === 'A' ? [R, rowH] : fam === 'B' ? [-R, rowH] : [-2 * R, 0];
+  return rotXY(v[0], v[1], land);
+}
+function scalarProjection(fam: Fam, dx: number, dy: number, R: number, rowH: number, land: boolean): number {
+  const [ux, uy] = famVector(fam, R, rowH, land);
   return (dx * ux + dy * uy) / Math.hypot(ux, uy);
 }
-function projectedSteps(fam: Fam, dx: number, dy: number, R: number, rowH: number): number {
-  const [ux, uy] = famVector(fam, R, rowH);
+function projectedSteps(fam: Fam, dx: number, dy: number, R: number, rowH: number, land: boolean): number {
+  const [ux, uy] = famVector(fam, R, rowH, land);
   const proj = dx * ux + dy * uy;
   return proj / (ux * ux + uy * uy);
 }
@@ -164,6 +175,8 @@ interface DragState {
   R: number;
   rowH: number;
   lastShift: number;
+  /** Which way the board was painted when this drag began — see rotXY. */
+  land: boolean;
   /** The splash's inter-piece physics, driving every frame of the preview. */
   chain: DragChain | null;
 }
@@ -303,8 +316,9 @@ export function createCircleSevenGame(): ShapeGame {
       // centered on cx=0, spanning cy=0 (top point) to cy=12*rowH (bottom
       // point) — no per-row trimming needed, unlike a hex or triangle crop.
       /** True when the shell has switched this screen to its landscape grid
-       *  (see ".app--land-capable" in style.css) — there the board sits in a
-       *  row of fixed height and has to fit that as well as the width. */
+       *  (see ".app.app--game" in style.css) — there the board sits in a
+       *  row of fixed height and has to fit that as well as the width, and
+       *  the diamond lies on its side to use the width it has just gained. */
       function landscapeNow(): boolean {
         try {
           return window.matchMedia('(orientation: landscape) and (max-height: 560px)').matches;
@@ -321,22 +335,32 @@ export function createCircleSevenGame(): ShapeGame {
         if (land) refs.boardWrap.style.height = '';
         const rect = refs.boardWrap.getBoundingClientRect();
         const width = rect.width || 320;
-        // The diamond is much taller than it is wide (12 row-steps down but
-        // only 12 half-steps across), so fitting it into the shared square
-        // wrapper meant the *height* set the scale and the balls came out
-        // barely half the column wide. Scale off the width instead and let
-        // the wrapper take the height the diamond actually needs — the same
-        // thing the V-shaped triangle board does for the opposite reason.
-        // 12 half-steps across + one ball (1.86R) of margin, then eased
-        // back a notch so the diamond and the HUD above it share one
-        // screen instead of the board alone filling it.
-        const byWidth = (width / 13.86) * 0.9;
-        // Sideways there is a hard ceiling — the row the board sits in — so
-        // the smaller of the two constraints wins and the whole diamond is
-        // on screen either way. Portrait keeps letting the page take
-        // whatever height the diamond needs.
-        const byHeight = land ? (rect.height || 320) / (12 * Math.sqrt(3) + 2) : Infinity;
-        R = Math.min(byWidth, byHeight);
+        // The diamond spans 12 lattice steps along its long axis and 12
+        // along its short one, plus one ball (1.86R) of margin on each — so
+        // it is much taller than it is wide, and the shared square wrapper
+        // would let the height set the scale and leave the balls barely half
+        // the column across. Portrait therefore scales off the width and
+        // lets the wrapper take whatever height the diamond needs; landscape
+        // lays the diamond on its side, which swaps the two constraints, so
+        // each orientation gets its own pair and the whole board is on
+        // screen either way.
+        const LONG = 12 * Math.sqrt(3) + 1.86; // 22.64 R
+        const SHORT = 12 + 1.86; //               13.86 R
+        if (land) {
+          const availH = rect.height || 320;
+          R = Math.min(width / LONG, availH / SHORT);
+          rowH = R * Math.sqrt(3);
+          const height = SHORT * R;
+          // The long axis now runs left-to-right: x = boardLeft - (r+c)*rowH,
+          // so boardLeft sits at the diamond's right-hand point.
+          boardLeft = (width + 12 * rowH) / 2;
+          boardTop = height / 2;
+          refs.boardEl.style.width = width + 'px';
+          refs.boardEl.style.height = height + 'px';
+          refs.boardWrap.style.aspectRatio = 'auto';
+          return;
+        }
+        R = (width / 13.86) * 0.9;
         rowH = R * Math.sqrt(3);
         const height = 12 * rowH + 2 * R;
         boardLeft = width / 2;
@@ -344,12 +368,13 @@ export function createCircleSevenGame(): ShapeGame {
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
         refs.boardWrap.style.aspectRatio = 'auto';
-        if (!land) refs.boardWrap.style.height = height + 'px';
+        refs.boardWrap.style.height = height + 'px';
       }
 
       function ballCenter(r: number, c: number): [number, number] {
-        const cx = boardLeft + (c - r) * R;
-        const cy = boardTop + (r + c) * rowH;
+        const [ox, oy] = rotXY((c - r) * R, (r + c) * rowH, landscapeNow());
+        const cx = boardLeft + ox;
+        const cy = boardTop + oy;
         return [cx, cy];
       }
 
@@ -638,7 +663,7 @@ export function createCircleSevenGame(): ShapeGame {
         if (!d || !d.fam || !d.chain) return;
         const n = d.cells.length;
         const size = d.R * 1.86;
-        const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
+        const [dirX, dirY] = famVector(d.fam, d.R, d.rowH, d.land);
         const stepLen = Math.hypot(dirX, dirY);
         const chain = d.chain;
 
@@ -699,7 +724,7 @@ export function createCircleSevenGame(): ShapeGame {
         const d = drag;
         if (!d || !d.fam) return false;
         const n = d.cells.length;
-        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
+        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH, d.land));
         if (((shift % n) + n) % n === 0) return false;
         const vals = d.cells.map(([r, c]) => grid[r][c]);
         const shifted = vals.map((_, i) => vals[(((i - shift) % n) + n) % n]);
@@ -708,13 +733,14 @@ export function createCircleSevenGame(): ShapeGame {
         });
         const mask = new Set<string>(d.cells.map(([r, c]) => cellKey(r, c)));
         seatLine(refs.boardEl, mask);
-        const [vx, vy] = famVector(d.fam, d.R, d.rowH);
+        const [vx, vy] = famVector(d.fam, d.R, d.rowH, d.land);
         const sign = Math.sign(shift) || 1;
         controller.resolveMove(mask, (Math.atan2(vy * sign, vx * sign) * 180) / Math.PI);
         return true;
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
+        origin: refs.boardEl,
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
@@ -727,16 +753,16 @@ export function createCircleSevenGame(): ShapeGame {
             return;
           }
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
+          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, land: landscapeNow(), chain: null };
         },
         onDrag(dx, dy) {
           if (!drag) return;
           drag.dx = dx;
           drag.dy = dy;
           if (!drag.fam) {
-            const projA = scalarProjection('A', dx, dy, drag.R, drag.rowH);
-            const projB = scalarProjection('B', dx, dy, drag.R, drag.rowH);
-            const projR = scalarProjection('R', dx, dy, drag.R, drag.rowH);
+            const projA = scalarProjection('A', dx, dy, drag.R, drag.rowH, drag.land);
+            const projB = scalarProjection('B', dx, dy, drag.R, drag.rowH, drag.land);
+            const projR = scalarProjection('R', dx, dy, drag.R, drag.rowH, drag.land);
             let fam: Fam = 'A';
             let best = Math.abs(projA);
             if (Math.abs(projB) > best) { fam = 'B'; best = Math.abs(projB); }
@@ -753,7 +779,7 @@ export function createCircleSevenGame(): ShapeGame {
           }
           const d = drag;
           if (!d.fam || !d.chain) return;
-          const raw = projectedSteps(d.fam, dx, dy, d.R, d.rowH);
+          const raw = projectedSteps(d.fam, dx, dy, d.R, d.rowH, d.land);
           const shift = Math.round(raw);
           if (shift !== d.lastShift) {
             vibrate(6);
@@ -771,7 +797,7 @@ export function createCircleSevenGame(): ShapeGame {
           }
           d.dx = dx;
           d.dy = dy;
-          d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
+          d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH, d.land)), () => {
             d.chain?.stop();
             const moved = applyDrag();
             drag = null;

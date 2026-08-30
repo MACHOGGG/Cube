@@ -894,6 +894,7 @@ export function createSquareGame(): ShapeGame {
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
+        origin: refs.boardEl,
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
@@ -905,23 +906,13 @@ export function createSquareGame(): ShapeGame {
             drag = null;
             return;
           }
-          // x/y arrive relative to boardWrap, but the board is only flush
-          // with it while the grid is still square. .board-wrap centres its
-          // child, computeCell() sizes the board at CELL x cols/rows, and
-          // removeLines() really does drop a column from the array — so from
-          // the first whole-line bonus onward the board sits inset, half a
-          // cell further right per cleared column and per cleared row.
-          //
-          // Assuming a zero origin meant the grabbed column drifted with it:
-          // one column cleared and the right half of every cell already
-          // picked its neighbour, two and every press did. Measure the real
-          // inset instead — it costs one rect per drag, not per frame.
-          const wrap = refs.boardWrap.getBoundingClientRect();
-          const board = refs.boardEl.getBoundingClientRect();
-          const bx = x - (board.left - wrap.left);
-          const by = y - (board.top - wrap.top);
-          const c = Math.min(cols - 1, Math.max(0, Math.floor(bx / CELL)));
-          const r = Math.min(rows - 1, Math.max(0, Math.floor(by / CELL)));
+          // x/y are board-local (see DragCallbacks.origin): removeLines()
+          // really does drop a column from the array, so from the first
+          // whole-line bonus onward the board sits inset inside its wrapper
+          // and a wrapper-relative start point would grab the neighbouring
+          // column.
+          const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
+          const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
           drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0, chain: null };
         },
         onDrag(dx, dy) {

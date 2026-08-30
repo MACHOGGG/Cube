@@ -893,6 +893,7 @@ export function createCircleGame(): ShapeGame {
       }
 
       const detachDrag = attachDrag(refs.boardWrap, {
+        origin: refs.boardEl,
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
