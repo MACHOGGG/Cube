@@ -6,7 +6,8 @@ import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
 import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
-import { mountBottomNav, refreshBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
+import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
+import { confirmEndRun } from './ui/confirmModal';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
@@ -99,11 +100,53 @@ function setNavTab(tab: NavTab) {
   setActiveNavTab(tab);
 }
 
+/**
+ * True while a run is on the board. Anything that would abandon it — the
+ * title, either bottom-nav entry, the game page's own 结束 button, and a
+ * browser reload — has to ask first.
+ */
+let gameInProgress = false;
+
+/** Wires the header's title on whichever screen was just rendered: it goes
+ *  back to the top of the home page, asking first if a run is open. */
+function wireHomeTitle() {
+  const title = root.querySelector<HTMLElement>('.home-title');
+  if (!title) return;
+  title.tabIndex = 0;
+  title.setAttribute('role', 'button');
+  const go = () => leaveGame(() => { showMenu(); toTop(); });
+  title.addEventListener('click', go);
+  title.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+  });
+}
+
+const toTop = () => window.scrollTo(0, 0);
+
+// A reload cannot be intercepted with our own dialog — browsers deliberately
+// allow only their own, with wording we don't get to choose — so all a page
+// can do is ask for it. Registering the handler only while a run is open
+// keeps the prompt off every other screen.
+addEventListener('beforeunload', (e) => {
+  if (!gameInProgress) return;
+  e.preventDefault();
+  // Some engines still read the legacy return value; the text is ignored.
+  e.returnValue = '';
+});
+
+/** Runs `go` straight away when nothing is at stake, and behind the yes/no
+ *  gate when a run would be thrown away. */
+function leaveGame(go: () => void) {
+  if (!gameInProgress) { go(); return; }
+  confirmEndRun(currentLang, () => { gameInProgress = false; go(); });
+}
+
 function teardown() {
   if (activeDestroy) {
     activeDestroy();
     activeDestroy = null;
   }
+  gameInProgress = false;
 }
 
 function showMenu() {
@@ -129,7 +172,7 @@ function showMenu() {
     },
   }, currentLang);
   setNavTab(null);
-  refreshBottomNav();
+  wireHomeTitle();
   // Re-opening a picker works by replaying the tap on the card that owns it:
   // the freshly rendered card is a real, correctly positioned element, so the
   // fly-to-centre animation has a valid origin to start from.
@@ -156,7 +199,8 @@ function showAccountPage(tab: AuthTab) {
     currentLang,
   );
   setNavTab('profile');
-  refreshBottomNav();
+  wireHomeTitle();
+  toTop();
 }
 
 function showRecordsPage() {
@@ -164,7 +208,8 @@ function showRecordsPage() {
   trackScreen('records');
   renderRecordsPage(root, recordSources, showMenu, currentLang);
   setNavTab('records');
-  refreshBottomNav();
+  wireHomeTitle();
+  toTop();
 }
 
 // Which shape a card id's tutorial covers, if any — layout games (the
@@ -242,6 +287,7 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
     });
   const mountNow = () => {
     activeDestroy = game.mount(root, backFn, fullOpts);
+    gameInProgress = true;
   };
   // A timed-challenge run or a replay from another shape's "更多布局" card
   // skips the tutorial gate — only the very first time a player opens this
@@ -281,8 +327,8 @@ function afterLangChosen(lang: Lang) {
   mountBottomNav(
     {
       // Tapping the icon of the page you are already on closes it.
-      onProfile: () => (navTab === 'profile' ? showMenu() : showAccountPage('login')),
-      onRecords: () => (navTab === 'records' ? showMenu() : showRecordsPage()),
+      onProfile: () => leaveGame(() => (navTab === 'profile' ? showMenu() : showAccountPage('login'))),
+      onRecords: () => leaveGame(() => (navTab === 'records' ? showMenu() : showRecordsPage())),
     },
     lang,
   );

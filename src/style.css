@@ -1,5 +1,9 @@
 :root {
   --bg: #FAF8F6;
+  /* The bottom dock sits directly on the page, so it needs to be a clear
+     step darker than it — content scrolls underneath and the dock has to
+     stay legible over whatever passes below. */
+  --nav-dock: #EAE3DB;
   --surface: #FFFFFF;
   --ink: #2E2430;
   --ink-soft: #6E5F6D;
@@ -19,14 +23,14 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1E1820; --surface: #2B222D; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
+    --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
     --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E;
     --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #1E1820; --surface: #2B222D; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
+  --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
   --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E;
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
@@ -540,7 +544,20 @@ button:hover { filter: brightness(1.05); }
 .home-page { gap: 0; padding-bottom: 120px; }
 /* The icon grid wants far more width than the standard reading column. */
 .app.home-page--wide { max-width: 800px; }
-.home-head { text-align: center; margin: 4px 0 22px; }
+/* The title, its rule and the tagline stay put however far the page is
+   scrolled. The negative side margins (undone by the matching padding) let
+   the header's own background reach the full width of the column, so cards
+   pass behind it instead of appearing beside it at the edges. */
+.home-head {
+  position: sticky; top: 0; z-index: 60;
+  text-align: center;
+  margin: 0 -16px 22px; padding: 8px 16px 10px;
+  background: var(--bg);
+  box-shadow: 0 10px 12px -12px rgba(46, 36, 48, 0.35);
+}
+/* Tapping it goes home, so it has to look tappable. */
+.home-title { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-title:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .home-title {
   font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600;
   margin: 0 0 2px; letter-spacing: 0.01em;
@@ -614,7 +631,14 @@ button:hover { filter: brightness(1.05); }
 
 /* Desktop only: the panel is itself one card at the head of the bottom row,
    with every tier's chips directly clickable. */
-.home-bomb-card { width: 100%; max-width: 170px; flex: none; }
+/* Now a button, so it has to shed the global button chrome the same way
+   .home-icon-btn does. */
+.home-bomb-card {
+  width: 100%; max-width: 170px; flex: none;
+  padding: 0; background: none; border: none; border-radius: 0;
+  cursor: pointer; display: block;
+  -webkit-tap-highlight-color: transparent;
+}
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 168px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
@@ -629,7 +653,7 @@ button:hover { filter: brightness(1.05); }
   }
   .home-icon-btn:hover, .center-pick-opt:hover { transform: scale(1.06); }
   .home-nav-btn:hover { transform: scale(1.08); }
-  .home-nav-btn--active:hover { transform: translateY(-18px) scale(1.08); }
+  .home-nav-btn--active:hover { transform: translateY(-10px) scale(1.08); }
 }
 
 /* ---------- centre picker ---------- */
@@ -762,14 +786,20 @@ button:hover { filter: brightness(1.05); }
    out of the way until the player scrolls, on a desktop it is simply always
    there, matching the two reference sheets. */
 .home-nav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-  display: flex; justify-content: center; align-items: flex-end; gap: 20px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; justify-content: center; align-items: flex-end;
   padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
-  transform: translateY(120%); opacity: 0;
-  transition: transform 280ms cubic-bezier(0.2, 0.9, 0.3, 1.05), opacity 220ms ease;
 }
-.home-nav--shown { transform: none; opacity: 1; }
+/* The two entries sit on a small rounded panel of their own rather than
+   floating loose over the page, so they read as one control. */
+.home-nav-dock {
+  display: flex; align-items: flex-end; gap: 20px;
+  padding: 8px 20px;
+  border-radius: 22px;
+  background: var(--nav-dock);
+  box-shadow: 0 6px 20px -8px rgba(46, 36, 48, 0.32), 0 0 0 1px rgba(46, 36, 48, 0.06);
+}
 .home-nav-btn {
   pointer-events: auto; width: 58px; height: 58px; padding: 0; flex: none;
   background: none; border: none; border-radius: 0; cursor: pointer; display: block;
@@ -783,7 +813,7 @@ button:hover { filter: brightness(1.05); }
    are, and tapping the raised one reads as "put this away". */
 .home-nav-btn { transition: transform 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 220ms ease; }
 .home-nav-btn--active {
-  transform: translateY(-18px);
+  transform: translateY(-10px);
   filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24)) brightness(0.86) saturate(1.12);
 }
 .home-nav-btn--active:hover { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28)) brightness(0.86) saturate(1.12); }
@@ -791,7 +821,6 @@ button:hover { filter: brightness(1.05); }
 .home-nav-btn > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) {
-  .home-nav { transition: none; }
 }
 
 /* ---------- 个人主页 (profile page) ---------- */
@@ -1004,8 +1033,11 @@ html.lang-locked, html.lang-locked body {
    picker's arrows use, pointing along the coming slide. */
 .story-arrow { position: absolute; width: 74px; height: 40px; z-index: 4; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35)); }
 .story-arrow svg { width: 100%; height: 100%; display: block; overflow: visible; }
-/* Two stretch cycles, then the arrow holds still while the line moves. */
-.story-arrow-nudge { display: block; width: 100%; height: 100%; transform-origin: 20% 50%; animation: story-arrow-nudge calc(0.72s / var(--story-speed, 1)) ease-in-out 2; }
+/* One stretch cycle, at the same speed, then the arrow holds still while the
+   line moves. WAIT.arrowArmed in storyTutorial.ts is the matching hold: it is
+   this duration plus a short tail, so the beat ends just after the recoil
+   instead of standing on a dead arrow. */
+.story-arrow-nudge { display: block; width: 100%; height: 100%; transform-origin: 20% 50%; animation: story-arrow-nudge calc(0.72s / var(--story-speed, 1)) ease-in-out 1; }
 @keyframes story-arrow-nudge {
   0%, 100% { transform: translateX(0) scaleX(1); }
   35% { transform: translateX(9%) scaleX(1.22); }
@@ -1024,7 +1056,6 @@ html.lang-locked, html.lang-locked body {
    while two darkened 4px strips (rotated onto the sides) close the edges. */
 .story-plank { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform calc(880ms / var(--story-speed, 1)) cubic-bezier(0.5, 0.08, 0.32, 1); }
 .story-plank-face { position: absolute; inset: 0; backface-visibility: hidden; }
-.story-plank-edge { position: absolute; top: 3px; bottom: 3px; width: 4px; transform: rotateY(90deg); filter: brightness(0.62); border-radius: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .story-arrow-nudge { animation: none; }
@@ -1103,3 +1134,28 @@ html.lang-locked, html.lang-locked body {
 .app--game .pattern-icon svg { width: 26px; height: 26px; }
 .app--game .legend { gap: 6px; }
 .app--game .controls { margin-top: 4px; }
+
+/* The yes/no gate in front of anything that would throw a run away. */
+.confirm-scrim {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(46, 36, 48, 0.42);
+  opacity: 0; transition: opacity 160ms ease;
+}
+.confirm-scrim--in { opacity: 1; }
+.confirm-box {
+  width: 100%; max-width: 320px;
+  background: var(--card, #FFFFFF);
+  border-radius: 20px; padding: 24px 22px 18px;
+  box-shadow: 0 26px 60px -26px rgba(46, 36, 48, 0.55);
+  text-align: center;
+  transform: scale(0.94); transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1.05);
+}
+.confirm-scrim--in .confirm-box { transform: none; }
+.confirm-q { margin: 0 0 18px; font-size: 1.05rem; font-weight: 600; color: var(--ink); }
+.confirm-row { display: flex; gap: 12px; }
+.confirm-row .icon-btn { flex: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .confirm-scrim, .confirm-box { transition: none; }
+}

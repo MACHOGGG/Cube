@@ -23,6 +23,11 @@ export interface StoryCell {
   fill: string;
   /** Dot-face marker: draws the 6-ray asterisk in this colour. */
   star?: string;
+  /** Triangle dot face: the same triangle shrunk toward its own centroid and
+   *  drawn in this colour with a dark outline, exactly as src/shapes puts a
+   *  turned-over triangle on the board. Set `fill` to the board's paper so
+   *  the surround reads as the white margin the small triangle sits in. */
+  inner?: string;
   /** Blanked cell: light fill + dashed outline. */
   dashed?: boolean;
   /** Thin gray outline (the white dot-face balls). */
@@ -74,7 +79,7 @@ const AUTO_ADVANCE_MS = 1500;
 const WAIT = {
   show: 350,
   arrowStatic: 180,
-  arrowArmed: 1500,
+  arrowArmed: 780,   // one 720ms stretch cycle, plus a short tail
   checks: 2100,
   flip: 960,
   flipSettle: 300,
@@ -107,6 +112,10 @@ function humanP(t: number): number {
   return 0.58 + ease((t - 0.56) / 0.44) * 0.42;
 }
 
+/** How far a turned-over triangle's printed face is shrunk inside its own
+ *  silhouette. */
+export const TRI_DOT_SCALE = 0.46;
+
 function cellSvg(c: StoryCell): string {
   const dash = c.dashed ? ' stroke="#6F6F6F" stroke-width="4" stroke-dasharray="12 9"' : '';
   const ring = c.ring && !c.dashed ? ' stroke="#9A9A9A" stroke-width="3.5"' : '';
@@ -114,8 +123,22 @@ function cellSvg(c: StoryCell): string {
   if (c.shape === 'ci') shape = `<circle cx="50" cy="50" r="45" fill="${c.fill}"${ring}${dash}/>`;
   else if (c.shape === 'sq') shape = `<rect x="4" y="4" width="92" height="92" rx="20" fill="${c.fill}"${dash}/>`;
   else {
-    const pts = c.shape === 'up' ? '50,3 97,93 3,93' : '3,7 97,7 50,97';
-    shape = `<polygon points="${pts}" fill="${c.fill}"${dash} stroke-linejoin="round"/>`;
+    const pts: [number, number][] =
+      c.shape === 'up' ? [[50, 3], [97, 93], [3, 93]] : [[3, 7], [97, 7], [50, 97]];
+    const str = (p: [number, number][]) => p.map(([x, y]) => `${x},${y}`).join(' ');
+    shape = `<polygon points="${str(pts)}" fill="${c.fill}"${dash} stroke-linejoin="round"/>`;
+    if (c.inner) {
+      // Well under the 0.6 the boards themselves use: at this size the two
+      // triangles have to be tellable apart at a glance, and the margin
+      // around the small one is what does that.
+      const k = TRI_DOT_SCALE;
+      const cx = (pts[0][0] + pts[1][0] + pts[2][0]) / 3;
+      const cy = (pts[0][1] + pts[1][1] + pts[2][1]) / 3;
+      const inner = pts.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k] as [number, number]);
+      shape +=
+        `<polygon points="${str(inner)}" fill="${c.inner}" stroke="#1A1A1A"` +
+        ` stroke-width="3.5" stroke-linejoin="round"/>`;
+    }
   }
   const star = c.star
     ? `<g stroke="${c.star}" stroke-width="10" stroke-linecap="round">` +
@@ -273,10 +296,12 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       await sleep(WAIT.checks);
     } else if (st.t === 'flip') {
       if (curFrame !== st.f) renderFrame(st.f, true);
-      // Each flipping tile becomes a plank with real thickness (≈0.1cm at
-      // CSS scale, 4px): the old print on the front, the new print on the
-      // back, and two darkened edge strips closing the sides — so the
-      // half-turn reads as a little wooden piece, not a flat card.
+      // Each flipping tile becomes a two-faced plank: the old print on the
+      // front, the new print on the back, held a hair apart in Z. There are
+      // deliberately no strips closing the sides — a surface stood on edge is
+      // antialiased into a dark hairline as it comes flat, which on a round
+      // or triangular piece reads as a stray rule beside it rather than as
+      // its edge. Same construction as the splash's flip.
       for (const i of st.idx) {
         const oldC = spec.frames[st.f][i];
         const newC = spec.frames[st.snap][i];
@@ -284,10 +309,8 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         el.style.perspective = '440px';
         el.innerHTML =
           `<div class="story-plank">` +
-          `<div class="story-plank-face" style="transform:translateZ(2px)">${cellSvg(oldC)}</div>` +
-          `<div class="story-plank-face" style="transform:rotateY(180deg) translateZ(2px)">${cellSvg(newC)}</div>` +
-          `<div class="story-plank-edge" style="left:-2px;background:${oldC.fill}"></div>` +
-          `<div class="story-plank-edge" style="right:-2px;background:${newC.fill}"></div>` +
+          `<div class="story-plank-face" style="transform:translateZ(1px)">${cellSvg(oldC)}</div>` +
+          `<div class="story-plank-face" style="transform:rotateY(180deg) translateZ(1px)">${cellSvg(newC)}</div>` +
           `</div>`;
       }
       void board.offsetWidth;

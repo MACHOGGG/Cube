@@ -1,4 +1,5 @@
 import type { ShellRefs } from '../ui/gameShell';
+import { confirmEndRun } from '../ui/confirmModal';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
@@ -544,7 +545,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   refs.buttons.restart.addEventListener('click', newGame);
   refs.buttons.stop.addEventListener('click', doPause);
   refs.buttons.continueBtn.addEventListener('click', doResume);
-  refs.buttons.finish.addEventListener('click', doFinish);
+  // 结束 throws the run away, so it asks first — the same gate the title and
+  // the two bottom-nav entries go through.
+  refs.buttons.finish.addEventListener('click', () => {
+    if (!started || gameOver) return;
+    confirmEndRun(hooks.lang, doFinish);
+  });
   refs.buttons.stuckEnd.addEventListener('click', doFinishStuck);
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));

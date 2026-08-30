@@ -214,28 +214,31 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // The last row: on a wide screen the bomb card leads the three "more
   // layouts" cards, so all four sit on one row (the sheet's bottom row);
   // on a phone the collapsed card just continues the two-column grid.
+  // Either way the section is a button that flies to the centre, grows and
+  // dims the page behind it before the player picks a tier — the desktop
+  // card used to be live in place, which meant the same section behaved one
+  // way on a laptop and another on a phone.
   const lastRow = newRow();
-  if (wide) {
-    const wrap = document.createElement('div');
-    wrap.className = 'home-bomb-card';
-    wrap.appendChild(buildBombPanel());
-    lastRow.appendChild(wrap);
-  } else {
-    const btn = document.createElement('button');
-    btn.className = 'home-icon-btn home-bomb-mini';
-    btn.setAttribute('aria-label', s.bombBasicTitle);
-    btn.dataset.reopen = 'bomb';
-    btn.appendChild(buildBombPanel());
-    wireTapFeedback(btn);
-    btn.addEventListener('click', () => {
-      // The close handle only exists once the picker is open, but the panel
-      // has to be built first — so the chips call it through this box.
-      let close: (() => void) | undefined;
-      const panel = buildBombPanel('bomb', () => close?.());
-      close = openCenterPicker({ originEl: btn, title: s.bombBasicTitle, panel });
-    });
-    grid.appendChild(btn);
-  }
+  const bombBtn = document.createElement('button');
+  bombBtn.className = wide ? 'home-bomb-card' : 'home-icon-btn home-bomb-mini';
+  bombBtn.setAttribute('aria-label', s.bombBasicTitle);
+  bombBtn.dataset.reopen = 'bomb';
+  // The panel inside the button is a picture of the section, not a control:
+  // its chips would otherwise swallow the tap (they stopPropagation so they
+  // can launch a game from inside the *picker*) and the section would never
+  // open. Only the copy built for the picker below is live.
+  const preview = buildBombPanel();
+  preview.style.pointerEvents = 'none';
+  bombBtn.appendChild(preview);
+  wireTapFeedback(bombBtn);
+  bombBtn.addEventListener('click', () => {
+    // The close handle only exists once the picker is open, but the panel
+    // has to be built first — so the chips call it through this box.
+    let close: (() => void) | undefined;
+    const panel = buildBombPanel('bomb', () => close?.());
+    close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
+  });
+  (wide ? lastRow : grid).appendChild(bombBtn);
 
   // ---- more layouts (finishing the last row on a wide screen) -----------
   // One card per base shape, holding that shape's own layout variants:

@@ -48,7 +48,16 @@ const FRAMES: StoryCell[][] = [
   frame(['-', 'gg', '-oo', '--r-', '---gg', 'rroo-r']),
   frame(['-', '-g', '-go', '--o-', '---rg', 'rroogr']),
   frame(['-', '-g', '-gx', '--x-', '--xrg', 'rrrx-g']),
+  // 7-8 — beat 2 turns the three scoring groups over one group at a time;
+  // these are the two states in between.
+  frame(['g', 'go', '-o-', '--OO', '---OO', 'GGGG--']),
+  frame(['g', 'go', '-o-', '--rg', '---gr', 'GGGG--']),
 ];
+
+/** The three groups beat 1 marks, in the order they turn over. */
+const BRICK_121 = [0, 1, 2, 4];
+const DIAMOND_22 = [8, 9, 13, 14];
+const RUN_4 = [15, 16, 17, 18];
 
 const BLUE = '#4A6FC4';
 // The three sliding lines are all right-slant diagonals (d = r − c): d0 and
@@ -88,8 +97,16 @@ const BEATS: StoryStep[][] = [
       ],
     },
   ],
-  // 2 — the board mid-game: scored balls sit flipped to their dot faces.
-  [{ t: 'show', f: 1 }],
+  // 2 — those same three groups turn over to their dot faces, one group at a
+  // time so it is clear which balls each pattern claimed. Frame 1 used to
+  // simply appear here, which read as a cut: the board came back already
+  // flipped with nothing shown in between.
+  [
+    { t: 'show', f: 0 },
+    { t: 'flip', f: 0, idx: BRICK_121, snap: 7 },
+    { t: 'flip', f: 7, idx: DIAMOND_22, snap: 8 },
+    { t: 'flip', f: 8, idx: RUN_4, snap: 1 },
+  ],
   // 3 — the sheet's three arrows all come up first; then each pulls in turn
   // and its diagonal slides, which lines four orange dots up along the
   // middle-left diagonal.

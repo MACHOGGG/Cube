@@ -6,7 +6,7 @@ import { renderStoryTutorial, type StoryCell, type StoryStep } from './storyTuto
  * storyboard's 10 numbered frames (5×5 board), transcribed cell-for-cell.
  * Rounded squares are front faces, circles are tiles already flipped to
  * their dot face, and the final frame is the board after its brick column
- * cleared (4 columns left).
+ * cleared — the five emptied slots left standing as dashed holes.
  */
 
 const P = 62; // cell pitch
@@ -23,7 +23,12 @@ function frame(rows: string[]): StoryCell[] {
   rows.forEach((row, r) => {
     [...row].forEach((ch, c) => {
       const base = { x: ORIGIN + c * P, y: ORIGIN + r * P, w: CELL, h: CELL };
-      if (SQ[ch]) cells.push({ ...base, shape: 'sq', fill: SQ[ch] });
+      // 'x' — a slot the clear emptied: a hollow dashed circle, nothing in
+      // it. Unlike the circle and triangle boards, a completed dot line on
+      // the square board is gone for good rather than left as a blank piece,
+      // so it is drawn as a hole and not as a spent tile.
+      if (ch === 'x') cells.push({ ...base, shape: 'ci', fill: '#FFFFFF', dashed: true });
+      else if (SQ[ch]) cells.push({ ...base, shape: 'sq', fill: SQ[ch] });
       else cells.push({ ...base, shape: 'ci', fill: CI[ch] });
     });
   });
@@ -32,7 +37,10 @@ function frame(rows: string[]): StoryCell[] {
 
 // Frames 0-7 = storyboard 1-5 and 7-9 (frame 6 of the storyboard is frame 4
 // plus an arrow, drawn by the beat script instead of a separate grid);
-// frame 8 = storyboard 10 (the collapsed 4-column board); frames 9-10 are
+// frame 8 = the board after the clear — the four surviving columns stay put
+// and the emptied column is left standing as five dashed holes, so the last
+// beat reads as "those pieces are gone" instead of the board silently
+// becoming narrower; frames 9-10 are
 // the computed midpoints inside storyboard step 9's three consecutive
 // slides, which the sheet doesn't draw but the animation passes through.
 const FRAMES: StoryCell[][] = [
@@ -44,7 +52,7 @@ const FRAMES: StoryCell[][] = [
   frame(['bbybb', 'bbyRb', 'bbyGR', 'RGYMO', 'bbbbR']),
   frame(['bbRbb', 'bbORb', 'bbMGR', 'RGYMO', 'bbbbR']),
   frame(['bbbbR', 'bbbOR', 'bbMGR', 'GYMOR', 'bbbbR']),
-  frame(['bbbb', 'bbbO', 'bbMG', 'GYMO', 'bbbb']),
+  frame(['bbbbx', 'bbbOx', 'bbMGx', 'GYMOx', 'bbbbx']),
   frame(['bbbbR', 'bbORb', 'bbMGR', 'RGYMO', 'bbbbR']),
   frame(['bbbbR', 'bbbOR', 'bbMGR', 'RGYMO', 'bbbbR']),
 ];
@@ -117,7 +125,8 @@ const BEATS: StoryStep[][] = [
     { t: 'slide', f: 10, idx: row(3), dx: -P, dy: 0, wx: -SPAN, wy: 0, snap: 7 },
     { t: 'checks', pts: [0, 1, 2, 3, 4].map((r) => ctr(r, 4)), color: W },
   ],
-  // 10 — the completed column clears and the board closes up to 4 columns.
+  // 10 — the completed column clears: those five pieces vanish and their
+  // slots are left empty.
   [{ t: 'show', f: 7 }, { t: 'fade', snap: 8 }],
 ];
 

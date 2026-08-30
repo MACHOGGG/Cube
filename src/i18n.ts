@@ -73,6 +73,10 @@ export interface I18nStrings {
   // ---- game shell (shared HUD/overlays across every shape) ----
   pauseBtn: string;
   finishBtn: string;
+  /** The "are you sure" a player gets before a run is thrown away. */
+  endRunTitle: string;
+  endRunYes: string;
+  endRunNo: string;
   scoreLabel: string;
   perfLabel: string;
   timeLabel: string;
@@ -212,6 +216,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides Genius Exclusives',
     pauseBtn: 'Pause',
     finishBtn: 'Finish',
+    endRunTitle: 'End this game?',
+    endRunYes: 'Yes',
+    endRunNo: 'No',
     scoreLabel: 'Score',
     perfLabel: 'Hit rate',
     timeLabel: 'Time',
@@ -340,6 +347,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Exclusivités Slides Génie',
     pauseBtn: 'Pause',
     finishBtn: 'Terminer',
+    endRunTitle: 'Terminer la partie ?',
+    endRunYes: 'Oui',
+    endRunNo: 'Non',
     scoreLabel: 'Score',
     perfLabel: 'Taux de réussite',
     timeLabel: 'Temps',
@@ -468,6 +478,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides 天才特供',
     pauseBtn: '暫停',
     finishBtn: '結束',
+    endRunTitle: '是否結束遊戲？',
+    endRunYes: '是',
+    endRunNo: '否',
     scoreLabel: '得分',
     perfLabel: '有效得分率',
     timeLabel: '用時',
@@ -596,6 +609,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides 天才特供',
     pauseBtn: '暂停',
     finishBtn: '结束',
+    endRunTitle: '是否结束游戏？',
+    endRunYes: '是',
+    endRunNo: '否',
     scoreLabel: '得分',
     perfLabel: '有效得分率',
     timeLabel: '用时',

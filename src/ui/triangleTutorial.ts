@@ -20,31 +20,60 @@ const ctr = (r: number, i: number) => ({ x: left(r, i) + S / 2, y: top(r) + H / 
 
 const FILL: Record<string, string> = { b: '#4A67C0', r: '#B34D2B', o: '#EE8A2E', g: '#1E8B31', '-': '#8C8C8C' };
 
-function frame(rows: string[]): StoryCell[] {
+/**
+ * `dots` names the cells that are showing their back at this keyframe. A
+ * turned-over triangle is drawn the way the board draws one — a small
+ * triangle of the same orientation sitting in a white margin — so the two
+ * faces are tellable apart at a glance rather than differing only in colour.
+ *
+ * The lists are propagated by hand through the script's own moves: nothing
+ * turns over except at beat 2, and after that a piece only changes index by
+ * riding a slide (row 2 at beat 3, the right-slant diagonal at beat 4, the
+ * bottom row at beat 6 — each with the wrapped pair re-entering swapped, as
+ * the real board does), or by being blanked when the orange line clears.
+ */
+function frame(rows: string[], dots: readonly number[] = []): StoryCell[] {
+  const back = new Set(dots);
   const cells: StoryCell[] = [];
+  let n = 0;
   rows.forEach((row, r) => {
     [...row].forEach((ch, i) => {
+      const blank = ch === 'x';
+      const isDot = back.has(n++) && !blank;
       cells.push({
         x: left(r, i),
         y: top(r),
         w: S,
         h: H,
         shape: i % 2 === 0 ? 'up' : 'dn',
-        fill: ch === 'x' ? '#D2D2D2' : FILL[ch],
-        dashed: ch === 'x',
+        fill: blank ? '#D2D2D2' : isDot ? '#FFFFFF' : FILL[ch],
+        dashed: blank,
+        ...(isDot ? { inner: FILL[ch] } : {}),
       });
     });
   });
   return cells;
 }
 
+/** The two groups that score in beat 1 and turn over in beat 2. */
+const BIG_TRI = [0, 1, 2, 3];      // the orange big triangle at the apex
+const RUN4 = [9, 10, 11, 12];      // the green run of 4 along the bottom
+const TURNED = [...BIG_TRI, ...RUN4];
+
 const FRAMES: StoryCell[][] = [
   frame(['o', 'ooo', 'o-o--', 'gggg-o-']),
-  frame(['b', 'rog', 'o-o--', 'broo-o-']),
-  frame(['r', 'rbg', '--o-o', 'broo-o-']),
-  frame(['g', 'r-o', '--oo-', 'broo-br']),
-  frame(['g', 'r-x', '--xx-', 'brxx-br']),
-  frame(['g', 'r-x', '--xx-', 'rbbrxx-']),
+  frame(['b', 'rog', 'o-o--', 'broo-o-'], TURNED),
+  frame(['r', 'rbg', '--o-o', 'broo-o-'], TURNED),
+  // The diagonal carried three of the turned pieces round: 0 keeps one, and
+  // the two that wrapped re-enter at 14 and 15.
+  frame(['g', 'r-o', '--oo-', 'broo-br'], [0, 1, 9, 10, 11, 12, 14, 15]),
+  // 11 and 12 are part of the orange line that just blanked out.
+  frame(['g', 'r-x', '--xx-', 'brxx-br'], [0, 1, 9, 10, 14, 15]),
+  // The bottom row slid one pair right, wrapped pair swapped.
+  frame(['g', 'r-x', '--xx-', 'rbbrxx-'], [0, 1, 9, 10, 11, 12]),
+  // 6 — the halfway state of beat 2's turn: the big triangle is over, the
+  // green run has not gone yet.
+  frame(['b', 'rog', 'o-o--', 'gggg-o-'], BIG_TRI),
 ];
 
 const MAG = '#B5499B';
@@ -69,8 +98,16 @@ const BEATS: StoryStep[][] = [
     { t: 'checks', color: BLUE, pts: [avg([ctr(0, 0), ctr(1, 0), ctr(1, 1), ctr(1, 2)])] },
     { t: 'checks', color: '#FFFFFF', pts: [avg([ctr(3, 0), ctr(3, 1), ctr(3, 2), ctr(3, 3)])] },
   ],
-  // 2 — a fresh board; the middle row is about to slide right.
-  [{ t: 'show', f: 1 }, { t: 'arrow', x: ctr(2, 2).x + 40, y: ctr(2, 2).y, ang: 0, color: MAG }],
+  // 2 — the two groups that just scored turn over, one group at a time, and
+  // then the middle row is marked to slide right. Frame 1 used to simply
+  // appear here, which read as a cut: the board came back already flipped
+  // with nothing shown in between.
+  [
+    { t: 'show', f: 0 },
+    { t: 'flip', f: 0, idx: BIG_TRI, snap: 6 },
+    { t: 'flip', f: 6, idx: RUN4, snap: 1 },
+    { t: 'arrow', x: ctr(2, 2).x + 40, y: ctr(2, 2).y, ang: 0, color: MAG },
+  ],
   // 3 — the middle row slides right one pair (triangles move two slots at a
   // time, so every cell lands in its own orientation); then the diagonal
   // move is marked.

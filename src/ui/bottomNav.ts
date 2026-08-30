@@ -12,16 +12,15 @@ export interface BottomNavHandlers {
 export type NavTab = 'profile' | 'records' | null;
 
 let barEl: HTMLElement | null = null;
-let detachScroll: (() => void) | null = null;
-
-/** Wider than this and the bar is simply always there, the way the desktop
- *  reference sheet has it pinned under the grid. Narrower and it stays out of
- *  the way until the player scrolls. */
-const WIDE_QUERY = '(min-width: 720px)';
 
 /**
  * The two round entry points that sit under every screen: 个人主页 on the
  * left, 记录与排名 on the right.
+ *
+ * They sit on a small rounded dock of their own and stay on screen at all
+ * times — the bar used to slide away whenever a phone was scrolled to the
+ * top, which meant the two entry points were missing exactly when a player
+ * first landed on the page.
  *
  * It is appended straight to <body>, a sibling of #app rather than a child,
  * so it survives every `root.innerHTML = ...` screen swap main.ts does — the
@@ -32,15 +31,15 @@ const WIDE_QUERY = '(min-width: 720px)';
  */
 export function mountBottomNav(handlers: BottomNavHandlers, lang: Lang): void {
   barEl?.remove();
-  detachScroll?.();
-  detachScroll = null;
 
   const s = STRINGS[lang];
   const el = document.createElement('nav');
   el.className = 'home-nav';
   el.innerHTML = `
-    <button class="home-nav-btn" id="navProfile" aria-label="${s.navProfile}">${ICON_NAV_PROFILE}</button>
-    <button class="home-nav-btn" id="navRecords" aria-label="${s.navRecords}">${ICON_NAV_RECORDS}</button>
+    <div class="home-nav-dock">
+      <button class="home-nav-btn" id="navProfile" aria-label="${s.navProfile}">${ICON_NAV_PROFILE}</button>
+      <button class="home-nav-btn" id="navRecords" aria-label="${s.navRecords}">${ICON_NAV_RECORDS}</button>
+    </div>
   `;
   document.body.appendChild(el);
   el.querySelector<HTMLButtonElement>('#navProfile')!.addEventListener('click', handlers.onProfile);
@@ -54,39 +53,12 @@ export function mountBottomNav(handlers: BottomNavHandlers, lang: Lang): void {
     btn.addEventListener('animationend', () => btn.classList.remove('home-tap'));
   }
   barEl = el;
-
-  const wideMq = window.matchMedia(WIDE_QUERY);
-  // On a phone the bar is hidden while the page is sitting at the very top
-  // and slides in as soon as the player scrolls — matching the reference
-  // sheet, where the resting home screen has no bar and the scrolled one
-  // does. A short screen with nothing to scroll would otherwise never be able
-  // to reach it, so it is also revealed whenever the page can't scroll at all.
-  const sync = () => {
-    if (wideMq.matches) {
-      el.classList.add('home-nav--shown');
-      return;
-    }
-    const de = document.documentElement;
-    const scrollable = de.scrollHeight > de.clientHeight + 8;
-    el.classList.toggle('home-nav--shown', !scrollable || window.scrollY > 12);
-  };
-  sync();
-  window.addEventListener('scroll', sync, { passive: true });
-  window.addEventListener('resize', sync);
-  wideMq.addEventListener('change', sync);
-  detachScroll = () => {
-    window.removeEventListener('scroll', sync);
-    window.removeEventListener('resize', sync);
-    wideMq.removeEventListener('change', sync);
-  };
 }
 
-/** Re-checks whether the bar should be showing — call after swapping in a
- *  screen of a different height, since that can change whether the page
- *  scrolls at all. */
-export function refreshBottomNav(): void {
-  window.dispatchEvent(new Event('resize'));
-}
+/** Kept as a no-op so the screens can keep calling it: the bar used to hide
+ *  itself at the top of a phone screen and had to be re-checked after every
+ *  screen swap. It is simply always there now. */
+export function refreshBottomNav(): void {}
 
 /** Lifts and darkens whichever entry point is open (null puts both back
  *  down). Purely visual — main.ts owns what the second tap actually does. */
