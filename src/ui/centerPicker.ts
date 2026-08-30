@@ -26,6 +26,12 @@ export interface CenterPickerOpts {
 }
 
 const FLIGHT_MS = 380;
+/** The fan-out after the flight — longer than the flight, and overshooting. */
+const SPLIT_MS = 460;
+/** How far apart the three are rotated while still stacked. */
+const FAN_DEG = 11;
+/** How small they start, before springing to full size. */
+const STACK_SCALE = 0.62;
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
@@ -94,7 +100,7 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
     overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
     // Belt and braces: a display change or a reduced-motion setting can mean
     // no transition ever runs, and the overlay must not be left behind.
-    setTimeout(() => overlay.remove(), FLIGHT_MS + 120);
+    setTimeout(() => overlay.remove(), FLIGHT_MS + SPLIT_MS + 120);
     window.removeEventListener('keydown', onKey);
   }
 
@@ -126,19 +132,27 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
   body.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
   body.style.opacity = '0.55';
 
-  const spreads: number[] = [];
-  if (opts.split && optionEls.length) {
-    const rowCenter = optionEls.reduce((sum, el) => {
+  // The split used to collapse the three onto the row's horizontal centre and
+  // then slide them apart sideways, which reads as one blob tearing in two
+  // rather than three pieces being dealt out. Instead each one starts stacked
+  // on the body's centre — small, and fanned by a few degrees like cards held
+  // in a hand — and springs out to its own place. Rotation is what sells them
+  // as separate objects while they are still on top of each other.
+  const split = opts.split && optionEls.length > 0;
+  if (split) {
+    const bodyRect = body.getBoundingClientRect();
+    const cx = bodyRect.left + bodyRect.width / 2;
+    const cy = bodyRect.top + bodyRect.height / 2;
+    const last = optionEls.length - 1;
+    optionEls.forEach((el, i) => {
       const r = el.getBoundingClientRect();
-      return sum + r.left + r.width / 2;
-    }, 0) / optionEls.length;
-    for (const el of optionEls) {
-      const r = el.getBoundingClientRect();
-      const offset = rowCenter - (r.left + r.width / 2);
-      spreads.push(offset);
+      const ox = cx - (r.left + r.width / 2);
+      const oy = cy - (r.top + r.height / 2);
+      const fan = (i - last / 2) * FAN_DEG;
       el.style.transition = 'none';
-      el.style.transform = `translateX(${offset}px)`;
-    }
+      el.style.transformOrigin = '50% 85%'; // pivot low, so they fan like cards
+      el.style.transform = `translate(${ox}px, ${oy}px) rotate(${fan}deg) scale(${STACK_SCALE})`;
+    });
   }
 
   void body.offsetWidth; // commit the rewound state before releasing it
@@ -149,11 +163,22 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
     body.style.transform = '';
     body.style.opacity = '';
     optionEls.forEach((el, i) => {
-      if (!spreads.length) return;
-      // A touch behind the flight itself, so the split reads as a second beat
-      // rather than happening on the way over.
-      el.style.transition = `transform ${FLIGHT_MS}ms cubic-bezier(0.2, 0.9, 0.25, 1.12) ${90 + i * 45}ms`;
+      if (!split) return;
+      // Dealt out one after another, each on an overshooting curve so it
+      // arrives with a little bounce instead of gliding to a stop. The
+      // stagger is short — the three should feel flicked out, not queued.
+      el.style.transition = `transform ${SPLIT_MS}ms cubic-bezier(0.18, 1.28, 0.32, 1.04) ${70 + i * 60}ms`;
       el.style.transform = '';
+      // Hand the element back to CSS once it lands, or the hover lift would
+      // inherit this long springy curve.
+      el.addEventListener(
+        'transitionend',
+        () => {
+          el.style.transition = '';
+          el.style.transformOrigin = '';
+        },
+        { once: true },
+      );
     });
   });
 

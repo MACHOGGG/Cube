@@ -4,7 +4,7 @@
  * The whole page is built out of four families, each with its own colour so a
  * player can tell a mode apart before reading a word:
  *   gray    — the three base games (square / circle / triangle)
- *   orange  — the timed challenge, drawn as an alarm clock
+ *   orange  — the timed challenge, drawn as a stopwatch
  *   brick   — the bomb challenge, drawn as a burst star
  *   pastel  — "more layouts", drawn as a brush-stroke plus
  * Every icon draws on the same 100x100 viewBox and is sized entirely by CSS,
@@ -136,89 +136,8 @@ export const ICON_BASE_TRIANGLE = svg(
 );
 
 // ---------------------------------------------------------------------------
-// timed challenge — an alarm clock
+// timed challenge — a stopwatch
 // ---------------------------------------------------------------------------
-
-/** One alarm bell: two round-ended bars crossed into an X, the long one
- *  lying along `ang` (the outward direction, away from the face centre). */
-function bell(cx: number, cy: number, ang: number): string {
-  const a = (ang * Math.PI) / 180;
-  const bar = (len: number, turn: number) => {
-    const t = a + turn;
-    const dx = Math.cos(t) * len;
-    const dy = Math.sin(t) * len;
-    return `<line x1="${(cx - dx).toFixed(1)}" y1="${(cy - dy).toFixed(1)}"
-      x2="${(cx + dx).toFixed(1)}" y2="${(cy + dy).toFixed(1)}"
-      stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>`;
-  };
-  return bar(13, 0) + bar(8.5, Math.PI / 2);
-}
-
-/** One clock foot: a single thin bar reaching down and out from the face. */
-function foot(cx: number, cy: number, r: number, ang: number): string {
-  const a = (ang * Math.PI) / 180;
-  const x0 = cx + Math.cos(a) * (r + 3);
-  const y0 = cy + Math.sin(a) * (r + 3);
-  const x1 = cx + Math.cos(a) * (r + 15);
-  const y1 = cy + Math.sin(a) * (r + 15);
-  return `<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}"
-    stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>`;
-}
-
-/**
- * The alarm clock as the reference art draws it: a big white face, two
- * X-shaped bells crossed over its top corners, and (on the square) two thin
- * feet below — every piece of hardware kept apart from the face by a
- * hairline of the card's own orange.
- *
- * On the round and triangular cards the face is deliberately bigger than the
- * card can hold, so the card's own silhouette crops it; that is what gives
- * those two their bottom-heavy look, with only slivers of orange left at the
- * corners. Everything after the card is drawn inside a clip of that
- * silhouette, so nothing spills outside the shape.
- */
-interface ClockCfg {
-  /** The white face. */
-  cx: number;
-  cy: number;
-  r: number;
-  /** Bell centres, and the angle their long bar points along. */
-  bells: [x: number, y: number, ang: number][];
-  /** Foot directions, in degrees from the face centre. */
-  feet: number[];
-}
-
-const CLOCK: Record<BaseShape, ClockCfg> = {
-  square: { cx: 50, cy: 51, r: 33.5, bells: [[24, 21, 225], [76, 21, 315]], feet: [135, 45] },
-  circle: { cx: 50, cy: 63, r: 35, bells: [[20, 32, 225], [80, 32, 315]], feet: [] },
-  triangle: { cx: 50, cy: 85, r: 32, bells: [[29, 60, 228], [71, 60, 312]], feet: [] },
-};
-
-/** Gap of card colour left between the face and every piece of hardware. */
-const CLOCK_GAP = 4.5;
-
-let clipSeq = 0;
-
-function alarmClock(shape: BaseShape, inner = ''): string {
-  const k = CLOCK[shape];
-  const id = 'clockClip' + ++clipSeq;
-  const hardware =
-    k.bells.map(([x, y, ang]) => bell(x, y, ang)).join('') +
-    k.feet.map((ang) => foot(k.cx, k.cy, k.r, ang)).join('');
-  return svg(
-    `<defs><clipPath id="${id}">${baseShape(shape, '#000')}</clipPath></defs>` +
-      baseShape(shape, C.orange) +
-      `<g clip-path="url(#${id})">` +
-      hardware +
-      // Drawn over the hardware, this ring is the orange hairline that keeps
-      // the bells and feet from merging into the face.
-      `<circle cx="${k.cx}" cy="${k.cy}" r="${k.r + CLOCK_GAP / 2}" fill="none"
-         stroke="${C.orange}" stroke-width="${CLOCK_GAP}"/>` +
-      `<circle cx="${k.cx}" cy="${k.cy}" r="${k.r}" fill="${C.white}"/>` +
-      inner +
-      `</g>`,
-  );
-}
 
 /**
  * The stopwatch the reference sheet draws for the timed games: an orange body
@@ -293,13 +212,13 @@ const WATCH_FACE_FILL: Record<BaseShape, string> = {
   triangle: C.gray,
 };
 
-function stopwatch(shape: BaseShape): string {
+function stopwatch(shape: BaseShape, face?: string): string {
   return svg(
     WATCH_CROWN +
       (shape === 'circle' ? WATCH_PUSHERS : '') +
       WATCH_BODY[shape] +
       watchFace(shape, C.white, WATCH_RING) +
-      watchFace(shape, WATCH_FACE_FILL[shape]),
+      (face ?? watchFace(shape, WATCH_FACE_FILL[shape])),
   );
 }
 
@@ -309,11 +228,20 @@ export function timedCard(shape: BaseShape): string {
   return stopwatch(shape);
 }
 
-/** Mobile home: one clock standing in for all three timed games, with a
- *  miniature of each game's piece lined up inside its face. */
-export const ICON_TIMED_COMBINED = alarmClock(
+/**
+ * Mobile home: one watch standing in for all three timed games, its face a
+ * white plate carrying a miniature of each game's piece.
+ *
+ * It has to be the *same* watch the picker fans out, or tapping it reads as
+ * one object turning into three different ones — which is exactly how the
+ * old alarm clock looked once the three became stopwatches.
+ */
+export const ICON_TIMED_COMBINED = stopwatch(
   'square',
-  miniSquare(33, 51, 8, C.purple) + miniTriangle(50, 51, 9.5, C.blue) + miniCircle(67, 51, 8, C.green),
+  watchFace('square', C.white) +
+    miniSquare(38, 63.5, 7, C.purple) +
+    miniTriangle(50, 63.5, 7.6, C.blue) +
+    miniCircle(62, 63.5, 7, C.green),
 );
 
 /** Mobile picker: one watch per timed game — the same three cards the wide
