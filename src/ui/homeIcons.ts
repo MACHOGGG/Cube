@@ -93,21 +93,22 @@ export const ICON_BASE_CIRCLE = svg(
 /** Traces a polygon whose corners are rounded off by `r`: each corner is cut
  *  back along both of its edges and bridged by a quadratic through the
  *  original point, so the piece keeps its exact silhouette with soft tips. */
-function roundedPolyPath(pts: [number, number][], r: number): string {
+function roundedPolyPath(pts: [number, number][], r: number | number[]): string {
   const n = pts.length;
-  const toward = (p: [number, number], q: [number, number]): [number, number] => {
+  const radius = (i: number) => (typeof r === 'number' ? r : r[i]);
+  const toward = (p: [number, number], q: [number, number], rr: number): [number, number] => {
     const dx = q[0] - p[0];
     const dy = q[1] - p[1];
     const len = Math.hypot(dx, dy) || 1;
-    const k = Math.min(r, len / 2) / len;
+    const k = Math.min(rr, len / 2) / len;
     return [p[0] + dx * k, p[1] + dy * k];
   };
   const f = (v: number) => v.toFixed(1);
   let d = '';
   for (let i = 0; i < n; i++) {
     const p = pts[i];
-    const a = toward(p, pts[(i - 1 + n) % n]);
-    const b = toward(p, pts[(i + 1) % n]);
+    const a = toward(p, pts[(i - 1 + n) % n], radius(i));
+    const b = toward(p, pts[(i + 1) % n], radius(i));
     d += (i === 0 ? `M${f(a[0])} ${f(a[1])}` : ` L${f(a[0])} ${f(a[1])}`);
     d += ` Q${f(p[0])} ${f(p[1])} ${f(b[0])} ${f(b[1])}`;
   }
@@ -219,19 +220,85 @@ function alarmClock(shape: BaseShape, inner = ''): string {
   );
 }
 
-/** The piece each timed clock carries on its face — that game's own shape in
- *  its own colour, so the three read apart at a glance even though they share
- *  the clock hardware. */
-const TIMED_PIECE: Record<BaseShape, string> = {
-  square: `<rect x="28" y="29" width="44" height="44" rx="7" fill="${C.brick}"/>`,
-  circle: `<circle cx="50" cy="63" r="23" fill="${C.purple}"/>`,
-  triangle: `<path d="${roundedPolyPath([[50, 66], [67, 93], [33, 93]], 5)}" fill="${C.green}"/>`,
+/**
+ * The stopwatch the reference sheet draws for the timed games: an orange body
+ * in the card's own shape, a crown (a rounded pill on a short stem) standing
+ * on top of it, and — on the round one only — two pushers angled off its
+ * shoulders. The face is that game's own shape again, in its own colour,
+ * ringed by a white band so it reads off the orange.
+ *
+ * Everything sits on the shared 100x100 grid. The body hangs low because the
+ * crown claims the top fifth, which is why these read a little narrower than
+ * the base-game cards beside them — that difference is in the artwork, not in
+ * the CSS, so the row keeps one box size throughout.
+ */
+const WATCH_CY = 63.5;
+const WATCH_HALF = 34.5;
+/** White band between the body and the face. */
+const WATCH_RING = 3.8;
+
+/** The crown: a stem bridging up out of the body into a rounded pill. Drawn
+ *  before the body so the stem's lower end disappears underneath it. */
+const WATCH_CROWN =
+  `<rect x="46" y="10" width="8" height="26" rx="4" fill="${C.orange}"/>` +
+  `<rect x="34" y="2.5" width="32" height="15.5" rx="7.75" fill="${C.orange}"/>`;
+
+/** The round watch's two side pushers, angled off its upper shoulders. */
+const WATCH_PUSHERS = [225, 315]
+  .map((deg) => {
+    const a = (deg * Math.PI) / 180;
+    const x = (r: number) => (50 + Math.cos(a) * r).toFixed(1);
+    const y = (r: number) => (WATCH_CY + Math.sin(a) * r).toFixed(1);
+    const [x0, y0, x1, y1] = [x(31), y(31), x(46), y(46)];
+    return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}"
+      stroke="${C.orange}" stroke-width="12" stroke-linecap="round"/>`;
+  })
+  .join('');
+
+const WATCH_BODY: Record<BaseShape, string> = {
+  square: `<rect x="${50 - WATCH_HALF}" y="${WATCH_CY - WATCH_HALF}" width="${WATCH_HALF * 2}"
+    height="${WATCH_HALF * 2}" rx="15" fill="${C.orange}"/>`,
+  circle: `<circle cx="50" cy="${WATCH_CY}" r="36" fill="${C.orange}"/>`,
+  // The apex control sits well above the artwork with a huge radius, so the
+  // curve lands as a broad dome rather than a spike — the sheet's bell shape.
+  triangle: `<path d="${roundedPolyPath([[50, 11], [90, 98], [10, 98]], [36, 23, 23])}" fill="${C.orange}"/>`,
 };
 
-/** PC row: the clock takes the *card's own* shape, so the three timed entries
- *  read as "the square game, timed", etc. even before the inner glyph. */
+/** The face, drawn twice: once grown by the ring width in white, then again
+ *  at size in its own colour. `grow` is what separates the two passes. */
+function watchFace(shape: BaseShape, fill: string, grow = 0): string {
+  if (shape === 'square') {
+    const h = 20 + grow;
+    return `<rect x="${50 - h}" y="${WATCH_CY - h}" width="${h * 2}" height="${h * 2}"
+      rx="${(h * 0.45).toFixed(1)}" fill="${fill}"/>`;
+  }
+  if (shape === 'circle') return `<circle cx="50" cy="${WATCH_CY}" r="${15 + grow}" fill="${fill}"/>`;
+  const g = grow * 1.4;
+  return `<path d="${roundedPolyPath([[50, 50 - g], [75 + g, 89 + g * 0.55], [25 - g, 89 + g * 0.55]], 7.5)}"
+    fill="${fill}"/>`;
+}
+
+/** Face colours, straight off the reference sheet. */
+const WATCH_FACE_FILL: Record<BaseShape, string> = {
+  square: C.green,
+  circle: C.brick,
+  triangle: C.gray,
+};
+
+function stopwatch(shape: BaseShape): string {
+  return svg(
+    WATCH_CROWN +
+      (shape === 'circle' ? WATCH_PUSHERS : '') +
+      WATCH_BODY[shape] +
+      watchFace(shape, C.white, WATCH_RING) +
+      watchFace(shape, WATCH_FACE_FILL[shape]),
+  );
+}
+
+/** PC row: the watch takes the *card's own* shape, so the three timed entries
+ *  read as "the square game, timed", etc. even before the face. */
 export function timedCard(shape: BaseShape): string {
-  return alarmClock(shape, TIMED_PIECE[shape]);
+  return stopwatch(shape);
 }
 
 /** Mobile home: one clock standing in for all three timed games, with a
@@ -241,10 +308,10 @@ export const ICON_TIMED_COMBINED = alarmClock(
   miniSquare(33, 51, 8, C.purple) + miniTriangle(50, 51, 9.5, C.blue) + miniCircle(67, 51, 8, C.green),
 );
 
-/** Mobile picker: one clock per timed game — the same three cards the wide
+/** Mobile picker: one watch per timed game — the same three cards the wide
  *  layout shows in its timed row. */
 export function timedOption(shape: BaseShape): string {
-  return alarmClock(shape, TIMED_PIECE[shape]);
+  return stopwatch(shape);
 }
 
 // ---------------------------------------------------------------------------
