@@ -62,7 +62,7 @@ const TURNED = [...BIG_TRI, ...RUN4];
 
 const FRAMES: StoryCell[][] = [
   frame(['o', 'ooo', 'o-o--', 'gggg-o-']),
-  frame(['b', 'rog', 'o-o--', 'broo-o-'], TURNED),
+  frame(['r', 'rbg', 'o-o--', 'broo-o-'], TURNED),
   frame(['r', 'rbg', '--o-o', 'broo-o-'], TURNED),
   // The diagonal carried three of the turned pieces round: 0 keeps one, and
   // the two that wrapped re-enter at 14 and 15.
@@ -72,8 +72,10 @@ const FRAMES: StoryCell[][] = [
   // The bottom row slid one pair right, wrapped pair swapped.
   frame(['g', 'r-x', '--xx-', 'rbbrxx-'], [0, 1, 9, 10, 11, 12]),
   // 6 — the halfway state of beat 2's turn: the big triangle is over, the
-  // green run has not gone yet.
-  frame(['b', 'rog', 'o-o--', 'gggg-o-'], BIG_TRI),
+  // green run has not gone yet. Rows 0-1 carry frame 1's exact values, so
+  // nothing but the flipped groups ever changes between frames (the two
+  // stray cells the user's revised storyboard corrected).
+  frame(['r', 'rbg', 'o-o--', 'gggg-o-'], BIG_TRI),
 ];
 
 const MAG = '#B5499B';

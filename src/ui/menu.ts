@@ -86,8 +86,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   container.innerHTML = `
     <div class="app home-page${wide ? ' home-page--wide' : ''}">
       <header class="home-head">
-        <h1 class="home-title">Slides</h1>
-        <p class="home-sub">${s.homeTagline}</p>
+        <div class="home-head-glass">
+          <h1 class="home-title">Slides</h1>
+          <p class="home-sub">${s.homeTagline}</p>
+        </div>
       </header>
       <div class="home-grid" id="homeGrid"></div>
     </div>

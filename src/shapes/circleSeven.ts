@@ -1,6 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -163,6 +164,8 @@ interface DragState {
   R: number;
   rowH: number;
   lastShift: number;
+  /** The splash's inter-piece physics, driving every frame of the preview. */
+  chain: DragChain | null;
 }
 
 export function createCircleSevenGame(): ShapeGame {
@@ -606,38 +609,37 @@ export function createCircleSevenGame(): ShapeGame {
       function renderDragPreview() {
         render();
         const d = drag;
-        if (!d || !d.fam) return;
+        if (!d || !d.fam || !d.chain) return;
         const n = d.cells.length;
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
-        const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        if (shift !== d.lastShift) {
-          vibrate(6);
-          playMove(); // ...and a tick, so a long slide reads as a run of detents
-          d.lastShift = shift;
-        }
+        const stepLen = Math.hypot(dirX, dirY);
+        const chain = d.chain;
 
         const FADE_RANGE = 0.4;
         const edgeOpacity = (pos: number) => {
           const overshoot = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
           return Math.max(0, 1 - overshoot / FADE_RANGE);
         };
+        // Each ball rides its own lagged travel from the chain (the splash's
+        // integrator) — the wave, the contact squash, the entrained sides.
         for (let i = 0; i < n; i++) {
+          const off = chain.at(i);
           const [r, c] = d.cells[i];
           const [cx, cy] = ballCenter(r, c);
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (el) {
-            el.style.left = cx - size / 2 + rawDist * dirX + 'px';
-            el.style.top = cy - size / 2 + rawDist * dirY + 'px';
-            const pos = i + rawDist;
-            el.style.opacity = String(edgeOpacity(pos));
+            el.style.left = cx - size / 2 + off * dirX + 'px';
+            el.style.top = cy - size / 2 + off * dirY + 'px';
+            el.style.opacity = String(edgeOpacity(i + off));
+            el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen);
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
-            const pos = i + rawDist + k * n;
+            const off = chain.at(i);
+            const pos = i + off + k * n;
             const fade = edgeOpacity(pos);
             if (fade <= 0) continue;
             const [r0, c0] = d.cells[i];
@@ -649,6 +651,20 @@ export function createCircleSevenGame(): ShapeGame {
             ghost.style.top = shiftedY - size / 2 + 'px';
             ghost.classList.add('ghost');
             refs.boardEl.appendChild(ghost);
+          }
+        }
+        // The parallel lines either side, carried a little and sprung home.
+        const inLine = new Set(d.cells.map(([r, c]) => cellKey(r, c)));
+        const lineCoord = (r: number, c: number) =>
+          d.fam === 'A' ? r : d.fam === 'B' ? c : r + c;
+        const own = lineCoord(d.r, d.c);
+        for (let r = 0; r < DIM; r++) {
+          for (let c = 0; c < DIM; c++) {
+            if (inLine.has(cellKey(r, c))) continue;
+            const nudge = chain.side(Math.abs(lineCoord(r, c) - own));
+            if (!nudge) continue;
+            const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+            if (el) el.style.translate = `${nudge * dirX}px ${nudge * dirY}px`;
           }
         }
       }
@@ -666,16 +682,22 @@ export function createCircleSevenGame(): ShapeGame {
         });
         const mask = new Set<string>(d.cells.map(([r, c]) => cellKey(r, c)));
         seatLine(refs.boardEl, mask);
-        controller.resolveMove(mask);
+        const [vx, vy] = famVector(d.fam, d.R, d.rowH);
+        const sign = Math.sign(shift) || 1;
+        controller.resolveMove(mask, (Math.atan2(vy * sign, vx * sign) * 180) / Math.PI);
         return true;
       }
 
+      // True from release until the chain has carried the line into its slot
+      // and the move has resolved — blocks a new drag from starting on top.
+      let settling = false;
+
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
         onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0 };
+          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
         },
         onDrag(dx, dy) {
           if (!drag) return;
@@ -691,18 +713,41 @@ export function createCircleSevenGame(): ShapeGame {
             if (Math.abs(projR) > best) { fam = 'R'; best = Math.abs(projR); }
             drag.fam = fam;
             drag.cells = fam === 'A' ? lineA(drag.r) : fam === 'B' ? lineB(drag.c) : lineRow(drag.r + drag.c);
+            const grabbed = drag.cells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
+            drag.chain = createDragChain({
+              n: drag.cells.length,
+              grabbed: Math.max(0, grabbed),
+              onFrame: renderDragPreview,
+            });
           }
-          renderDragPreview();
+          const d = drag;
+          if (!d.fam || !d.chain) return;
+          const raw = projectedSteps(d.fam, dx, dy, d.R, d.rowH);
+          const shift = Math.round(raw);
+          if (shift !== d.lastShift) {
+            vibrate(6);
+            playMove();
+            d.lastShift = shift;
+          }
+          d.chain.drive(magnetizeRawDist(raw));
         },
         onEnd(dx, dy) {
-          let moved = false;
-          if (drag && drag.fam) {
-            drag.dx = dx;
-            drag.dy = dy;
-            moved = applyDrag();
+          const d = drag;
+          if (!d || !d.fam || !d.chain) {
+            drag = null;
+            render();
+            return;
           }
-          drag = null;
-          if (!moved) render();
+          d.dx = dx;
+          d.dy = dy;
+          settling = true;
+          d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
+            settling = false;
+            d.chain?.stop();
+            const moved = applyDrag();
+            drag = null;
+            if (!moved) render();
+          });
         },
       });
 
@@ -712,6 +757,9 @@ export function createCircleSevenGame(): ShapeGame {
       window.addEventListener('resize', onResize);
 
       function destroy() {
+        drag?.chain?.stop();
+        drag = null;
+        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);

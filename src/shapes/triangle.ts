@@ -1,6 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -246,6 +247,10 @@ interface DragState {
   dx: number;
   dy: number;
   lastShift: number;
+  /** The splash's inter-piece physics. Triangles interlock and swap by
+   *  pairs rather than sliding, so the chain runs in pair units and drives
+   *  each pair's "give" nudge — the ripple — instead of real travel. */
+  chain: DragChain | null;
 }
 
 export function createTriangleGame(): ShapeGame {
@@ -1064,9 +1069,19 @@ export function createTriangleGame(): ShapeGame {
         // spacing twice as wide means the same raw residual swings the
         // "give" over twice the pixel distance, which read as a much
         // bigger, harder wobble than the softened curve above alone fixed.
-        const residual = (2 * half - shift) * 0.6;
+        // The give is no longer one rigid nudge for the whole line: each
+        // pair rides its own lagged value from the chain (the splash's
+        // integrator, in pair units), so the give ripples down the line and
+        // the far end keeps swinging for a beat — the closest this
+        // interlocked, pair-swapping board can come to the splash's slide.
         const [dirX, dirY] = trueStepVector(d.fam);
-        const offset: [number, number] = [residual * dirX, residual * dirY];
+        const stepLen = Math.hypot(dirX, dirY);
+        const chain = d.chain;
+        const giveAt = (idx: number) => {
+          const pairHalf = chain ? chain.at(Math.floor(idx / 2)) : half;
+          const residual = (2 * pairHalf - shift) * 0.6;
+          return Math.max(-0.85, Math.min(0.85, residual));
+        };
         const fillerSize = Math.abs(shift);
 
         for (let idx = 0; idx < n; idx++) {
@@ -1076,7 +1091,23 @@ export function createTriangleGame(): ShapeGame {
           const isFiller = shift > 0 ? idx < fillerSize : idx >= n - fillerSize;
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (el) el.remove();
-          refs.boardEl.appendChild(makeTriEl(grid[sr][sc], r, c, isFiller ? FILLER_OPACITY : undefined, offset));
+          const give = giveAt(idx);
+          const fresh = makeTriEl(grid[sr][sc], r, c, isFiller ? FILLER_OPACITY : undefined, [give * dirX, give * dirY]);
+          if (chain) fresh.style.scale = pressScale(chain.press(Math.floor(idx / 2)), dirX / stepLen, dirY / stepLen);
+          refs.boardEl.appendChild(fresh);
+        }
+        // The bands above and below get carried a little and sprung home.
+        if (chain) {
+          const inLine = new Set(cells.map(([r, c]) => cellKey(r, c)));
+          for (let r = 0; r < ROW_LENS.length; r++) {
+            const nudge = chain.side(Math.abs(r - d.r));
+            if (!nudge) continue;
+            for (let c = 0; c < ROW_LENS[r]; c++) {
+              if (inLine.has(cellKey(r, c))) continue;
+              const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+              if (el) el.style.translate = `${nudge * dirX}px ${nudge * dirY}px`;
+            }
+          }
         }
       }
 
@@ -1116,16 +1147,22 @@ export function createTriangleGame(): ShapeGame {
         if (checkBombHazard()) return true;
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         seatLine(refs.boardEl, mask);
-        controller.resolveMove(mask);
+        const [vx, vy] = trueStepVector(d.fam);
+        const sign = Math.sign(shift) || 1;
+        controller.resolveMove(mask, (Math.atan2(vy * sign, vx * sign) * 180) / Math.PI);
         return true;
       }
 
+      // True from release until the give has rippled back to rest and the
+      // move has resolved — blocks a new drag from starting on top.
+      let settling = false;
+
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
         onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0 };
+          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0, chain: null };
         },
         onDrag(dx, dy) {
           if (!drag) return;
@@ -1137,22 +1174,35 @@ export function createTriangleGame(): ShapeGame {
               .sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
+            const grabbed = drag.line.cells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
+            drag.chain = createDragChain({
+              n: Math.max(1, Math.ceil(drag.line.cells.length / 2)),
+              grabbed: Math.max(0, Math.floor(Math.max(0, grabbed) / 2)),
+              onFrame: renderDragPreview,
+            });
           }
-          renderDragPreview();
+          const d = drag;
+          if (!d.fam || !d.chain) return;
+          d.chain.drive(magnetizeRawDist(projectedSteps(d.fam, dx, dy) / 2, 1.5));
         },
         onEnd(dx, dy) {
-          let moved = false;
-          if (drag && drag.fam) {
-            drag.dx = dx;
-            drag.dy = dy;
-            moved = applyDrag();
+          const d = drag;
+          if (!d || !d.fam || !d.chain) {
+            drag = null;
+            render();
+            return;
           }
-          drag = null;
-          // A resolved move already re-rendered on its own (and may still be
-          // mid-reveal) — rendering again here would erase that before a
-          // frame of it paints. Only a no-op drag needs this to snap the
-          // preview's manual style tweaks back to a clean rest state.
-          if (!moved) render();
+          d.dx = dx;
+          d.dy = dy;
+          settling = true;
+          d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy) / 2), () => {
+            settling = false;
+            d.chain?.stop();
+            const moved = applyDrag();
+            drag = null;
+            // Only a no-op drag needs this render to snap the preview clean.
+            if (!moved) render();
+          });
         },
       });
 
@@ -1162,6 +1212,9 @@ export function createTriangleGame(): ShapeGame {
       window.addEventListener('resize', onResize);
 
       function destroy() {
+        drag?.chain?.stop();
+        drag = null;
+        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);

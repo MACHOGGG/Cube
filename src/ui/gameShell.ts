@@ -126,7 +126,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
     </div>
 
-    <div class="overlay" id="endOverlay">
+    <div class="overlay overlay--end" id="endOverlay">
       <div class="modal">
         <div class="end-hazard-bg" id="endHazardBg" aria-hidden="true">💥</div>
         <h2 id="endTitle">${s.endTitleDefault}</h2>

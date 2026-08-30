@@ -85,8 +85,10 @@ export function renderRecordsPage(
   container.innerHTML = `
     <div class="app records-page">
       <header class="home-head">
-        <h1 class="home-title">Slides</h1>
-        <p class="home-sub">${s.homeTagline}</p>
+        <div class="home-head-glass">
+          <h1 class="home-title">Slides</h1>
+          <p class="home-sub">${s.homeTagline}</p>
+        </div>
       </header>
       <button class="total-card" id="totalCard">
         <span class="total-card-title">${s.totalScoreTitle}</span>

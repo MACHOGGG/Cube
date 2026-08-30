@@ -44,8 +44,10 @@ export function renderAccountPage(
   container.innerHTML = `
     <div class="app profile-page">
       <header class="home-head">
-        <h1 class="home-title">Slides</h1>
-        <p class="home-sub">${s.homeTagline}</p>
+        <div class="home-head-glass">
+          <h1 class="home-title">Slides</h1>
+          <p class="home-sub">${s.homeTagline}</p>
+        </div>
       </header>
 
       <button class="profile-pill profile-pill--wide" id="loginBtn">${s.loginGateway}</button>

@@ -1,6 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -187,6 +188,8 @@ interface DragState {
   R: number;
   rowH: number;
   lastShift: number;
+  /** The splash's inter-piece physics, driving every frame of the preview. */
+  chain: DragChain | null;
 }
 
 export function createCircleGame(): ShapeGame {
@@ -775,20 +778,14 @@ export function createCircleGame(): ShapeGame {
       function renderDragPreview() {
         render();
         const d = drag;
-        if (!d || !d.fam) return;
+        if (!d || !d.fam || !d.chain) return;
         const n = d.cells.length;
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
-        const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        // A light tick each time the drag crosses into a new whole-step
-        // shift — the discrete, physical "click" of passing a detent, felt
-        // (haptics) rather than only inferred from the drag's positional easing.
-        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        if (shift !== d.lastShift) {
-          vibrate(6);
-          playMove(); // ...and a tick, so a long slide reads as a run of detents
-          d.lastShift = shift;
-        }
+        const stepLen = Math.hypot(dirX, dirY);
+        const ux = dirX / stepLen;
+        const uy = dirY / stepLen;
+        const chain = d.chain;
 
         // Shorter lines (near the triangle's apex) have real empty margin
         // beside them to fade a wraparound ghost into, but this board's
@@ -805,21 +802,28 @@ export function createCircleGame(): ShapeGame {
           const overshoot = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
           return Math.max(0, 1 - overshoot / FADE_RANGE);
         };
+        // Each ball rides its own lagged travel from the chain, not one rigid
+        // shift for the whole line — the wave, the contact squash and the
+        // entrained neighbours all come from engine/dragChain.ts, the same
+        // integrator the splash runs.
         for (let i = 0; i < n; i++) {
+          const off = chain.at(i);
           const [r, c] = d.cells[i];
           const [cx, cy] = ballCenter(r, c);
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (el) {
-            el.style.left = cx - size / 2 + rawDist * dirX + 'px';
-            el.style.top = cy - size / 2 + rawDist * dirY + 'px';
-            const pos = i + rawDist;
+            el.style.left = cx - size / 2 + off * dirX + 'px';
+            el.style.top = cy - size / 2 + off * dirY + 'px';
+            const pos = i + off;
             el.style.opacity = String(edgeOpacity(pos));
+            el.style.scale = pressScale(chain.press(i), ux, uy);
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
-            const pos = i + rawDist + k * n;
+            const off = chain.at(i);
+            const pos = i + off + k * n;
             const fade = edgeOpacity(pos);
             if (fade <= 0) continue;
             const [r0, c0] = d.cells[i];
@@ -831,6 +835,22 @@ export function createCircleGame(): ShapeGame {
             ghost.style.top = shiftedY - size / 2 + 'px';
             ghost.classList.add('ghost');
             refs.boardEl.appendChild(ghost);
+          }
+        }
+        // The lines either side get carried a little along the slide axis in
+        // proportion to the moving line's velocity, then sprung home.
+        const inLine = new Set(d.cells.map(([r, c]) => cellKey(r, c)));
+        const lineCoord = (r: number, c: number) =>
+          d.fam === 'A' ? r - c : d.fam === 'B' ? c : r;
+        const own = lineCoord(d.r, d.c);
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c <= r; c++) {
+            if (inLine.has(cellKey(r, c))) continue;
+            const dist = Math.abs(lineCoord(r, c) - own);
+            const nudge = chain.side(dist);
+            if (!nudge) continue;
+            const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+            if (el) el.style.translate = `${nudge * dirX}px ${nudge * dirY}px`;
           }
         }
       }
@@ -866,16 +886,22 @@ export function createCircleGame(): ShapeGame {
         if (checkBombHazard()) return true;
         const mask = new Set<string>(d.cells.map(([r, c]) => cellKey(r, c)));
         seatLine(refs.boardEl, mask);
-        controller.resolveMove(mask);
+        const [vx, vy] = famVector(d.fam, d.R, d.rowH);
+        const sign = Math.sign(shift) || 1;
+        controller.resolveMove(mask, (Math.atan2(vy * sign, vx * sign) * 180) / Math.PI);
         return true;
       }
 
+      // True from release until the chain has carried the line into its slot
+      // and the move has resolved — blocks a new drag from starting on top.
+      let settling = false;
+
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
         onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0 };
+          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
         },
         onDrag(dx, dy) {
           if (!drag) return;
@@ -891,22 +917,50 @@ export function createCircleGame(): ShapeGame {
             if (Math.abs(projR) > best) { fam = 'R'; best = Math.abs(projR); }
             drag.fam = fam;
             drag.cells = fam === 'A' ? lineA(drag.r - drag.c) : fam === 'B' ? lineB(drag.c) : lineRow(drag.r);
+            const grabbed = drag.cells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
+            drag.chain = createDragChain({
+              n: drag.cells.length,
+              grabbed: Math.max(0, grabbed),
+              onFrame: renderDragPreview,
+            });
           }
-          renderDragPreview();
+          const d = drag;
+          if (!d.fam || !d.chain) return;
+          const raw = projectedSteps(d.fam, dx, dy, d.R, d.rowH);
+          // A light tick each time the drag crosses into a new whole-step
+          // shift — the discrete, physical "click" of passing a detent.
+          const shift = Math.round(raw);
+          if (shift !== d.lastShift) {
+            vibrate(6);
+            playMove();
+            d.lastShift = shift;
+          }
+          d.chain.drive(magnetizeRawDist(raw));
         },
         onEnd(dx, dy) {
-          let moved = false;
-          if (drag && drag.fam) {
-            drag.dx = dx;
-            drag.dy = dy;
-            moved = applyDrag();
+          const d = drag;
+          if (!d || !d.fam || !d.chain) {
+            drag = null;
+            render();
+            return;
           }
-          drag = null;
-          // A resolved move already re-rendered on its own (and may still be
-          // mid-reveal) — rendering again here would erase that before a
-          // frame of it paints. Only a no-op drag needs this to snap the
-          // preview's manual style tweaks back to a clean rest state.
-          if (!moved) render();
+          d.dx = dx;
+          d.dy = dy;
+          // Instead of a hard cut to the resolved board, the chain carries
+          // the line the rest of the way into its slot — the tail keeps
+          // swinging for a beat, exactly like the splash — and only then
+          // does the move resolve.
+          settling = true;
+          d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
+            settling = false;
+            d.chain?.stop();
+            const moved = applyDrag();
+            drag = null;
+            // A resolved move already re-rendered on its own (and may still
+            // be mid-reveal). Only a no-op drag needs this render to snap
+            // the preview's manual style tweaks back to a clean rest state.
+            if (!moved) render();
+          });
         },
       });
 
@@ -916,6 +970,9 @@ export function createCircleGame(): ShapeGame {
       window.addEventListener('resize', onResize);
 
       function destroy() {
+        drag?.chain?.stop();
+        drag = null;
+        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);

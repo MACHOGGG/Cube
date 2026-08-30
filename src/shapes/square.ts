@@ -1,6 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -79,6 +80,8 @@ interface DragState {
   dy: number;
   cell: number;
   lastShift: number;
+  /** The splash's inter-piece physics, driving every frame of the preview. */
+  chain: DragChain | null;
 }
 
 export function createSquareGame(): ShapeGame {
@@ -667,37 +670,27 @@ export function createSquareGame(): ShapeGame {
 
       function renderDragPreview() {
         render();
-        if (!drag || !drag.axis) return;
+        if (!drag || !drag.axis || !drag.chain) return;
         const cell = drag.cell;
-        // A light tick each time the drag crosses into a new whole-cell
-        // shift — the discrete, physical "click" of passing a detent, felt
-        // (haptics) rather than only inferred from the drag's positional
-        // easing.
-        const rawShift = drag.axis === 'row' ? drag.dx / cell : drag.dy / cell;
-        const shift = Math.round(rawShift);
-        if (shift !== drag.lastShift) {
-          vibrate(6);
-          playMove(); // ...and a tick, so a long slide reads as a run of detents
-          drag.lastShift = shift;
-        }
+        const chain = drag.chain;
+        // Each tile rides its own lagged travel from the chain (the splash's
+        // integrator, engine/dragChain.ts): a wave down the line, contact
+        // squash, and the neighbouring lines carried a little and sprung home.
         if (drag.axis === 'row') {
           const r = drag.r;
           const span = cols * cell;
-          // Magnetized in cell-units then scaled back to pixels: each tile
-          // sticks near its current slot and needs a decisive push past the
-          // midpoint to let go, instead of drifting continuously with the
-          // pointer — the same "kept a slot" feel the row/col drag physically
-          // ought to have.
-          const magDx = magnetizeRawDist(drag.dx / cell) * cell;
+          const fadeRange = cell * 0.4;
           for (let c = 0; c < cols; c++) {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-            if (el) el.style.left = c * cell + magDx + 'px';
+            if (el) {
+              el.style.left = c * cell + chain.at(c) * cell + 'px';
+              el.style.scale = pressScale(chain.press(c), 1, 0);
+            }
           }
-          const fadeRange = cell * 0.4;
           for (let k = -2; k <= 2; k++) {
             if (k === 0) continue;
             for (let c = 0; c < cols; c++) {
-              const x = c * cell + magDx + k * span;
+              const x = c * cell + chain.at(c) * cell + k * span;
               const fade = edgeFade(x, -cell, span, fadeRange);
               if (fade <= 0) continue;
               const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55 * fade);
@@ -706,25 +699,45 @@ export function createSquareGame(): ShapeGame {
               refs.boardEl.appendChild(ghost);
             }
           }
+          for (let r2 = 0; r2 < rows; r2++) {
+            if (r2 === r) continue;
+            const nudge = chain.side(Math.abs(r2 - r));
+            if (!nudge) continue;
+            for (let c = 0; c < cols; c++) {
+              const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r2}"][data-c="${c}"]`);
+              if (el) el.style.translate = `${nudge * cell}px 0`;
+            }
+          }
         } else {
           const c = drag.c;
           const span = rows * cell;
-          const magDy = magnetizeRawDist(drag.dy / cell) * cell;
+          const fadeRange = cell * 0.4;
           for (let r = 0; r < rows; r++) {
             const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-            if (el) el.style.top = r * cell + magDy + 'px';
+            if (el) {
+              el.style.top = r * cell + chain.at(r) * cell + 'px';
+              el.style.scale = pressScale(chain.press(r), 0, 1);
+            }
           }
-          const fadeRange = cell * 0.4;
           for (let k = -2; k <= 2; k++) {
             if (k === 0) continue;
             for (let r = 0; r < rows; r++) {
-              const y = r * cell + magDy + k * span;
+              const y = r * cell + chain.at(r) * cell + k * span;
               const fade = edgeFade(y, -cell, span, fadeRange);
               if (fade <= 0) continue;
               const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55 * fade);
               ghost.classList.add('ghost');
               ghost.style.top = y + 'px';
               refs.boardEl.appendChild(ghost);
+            }
+          }
+          for (let c2 = 0; c2 < cols; c2++) {
+            if (c2 === c) continue;
+            const nudge = chain.side(Math.abs(c2 - c));
+            if (!nudge) continue;
+            for (let r = 0; r < rows; r++) {
+              const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c2}"]`);
+              if (el) el.style.translate = `0 ${nudge * cell}px`;
             }
           }
         }
@@ -861,7 +874,7 @@ export function createSquareGame(): ShapeGame {
           const mask = new Set<string>();
           for (let c = 0; c < cols; c++) mask.add(cellKey(r, c));
           seatLine(refs.boardEl, mask);
-          controller.resolveMove(mask);
+          controller.resolveMove(mask, shift > 0 ? 0 : 180);
           return true;
         } else {
           const shift = Math.round(drag.dy / drag.cell);
@@ -875,13 +888,17 @@ export function createSquareGame(): ShapeGame {
           const mask = new Set<string>();
           for (let r = 0; r < rows; r++) mask.add(cellKey(r, c));
           seatLine(refs.boardEl, mask);
-          controller.resolveMove(mask);
+          controller.resolveMove(mask, shift > 0 ? 90 : -90);
           return true;
         }
       }
 
+      // True from release until the chain has carried the line into its slot
+      // and the move has resolved — blocks a new drag from starting on top.
+      let settling = false;
+
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
         onRejected: () => vibrate(15),
         onStart(x, y) {
           // x/y arrive relative to boardWrap, but the board is only flush
@@ -901,29 +918,54 @@ export function createSquareGame(): ShapeGame {
           const by = y - (board.top - wrap.top);
           const c = Math.min(cols - 1, Math.max(0, Math.floor(bx / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(by / CELL)));
-          drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0 };
+          drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0, chain: null };
         },
         onDrag(dx, dy) {
           if (!drag) return;
           drag.dx = dx;
           drag.dy = dy;
-          if (!drag.axis) drag.axis = Math.abs(dx) > Math.abs(dy) ? 'row' : 'col';
-          renderDragPreview();
+          if (!drag.axis) {
+            drag.axis = Math.abs(dx) > Math.abs(dy) ? 'row' : 'col';
+            drag.chain = createDragChain({
+              n: drag.axis === 'row' ? cols : rows,
+              grabbed: drag.axis === 'row' ? drag.c : drag.r,
+              onFrame: renderDragPreview,
+            });
+          }
+          const raw = drag.axis === 'row' ? dx / drag.cell : dy / drag.cell;
+          // A light tick each time the drag crosses into a new whole-cell
+          // shift — the discrete, physical "click" of passing a detent.
+          const shift = Math.round(raw);
+          if (shift !== drag.lastShift) {
+            vibrate(6);
+            playMove();
+            drag.lastShift = shift;
+          }
+          drag.chain?.drive(magnetizeRawDist(raw));
         },
         onEnd(dx, dy) {
-          let moved = false;
-          if (drag) {
-            drag.dx = dx;
-            drag.dy = dy;
-            moved = applyDrag();
+          const d = drag;
+          if (!d || !d.axis || !d.chain) {
+            drag = null;
+            render();
+            return;
           }
-          drag = null;
-          // A resolved move already re-rendered (and, for a line bonus, is
-          // mid-way through its own fade/collapse transition) — rendering
-          // again here would erase that before a single frame of it paints.
-          // Only a no-op drag (shift === 0) needs this to snap the preview's
-          // manual style tweaks back to a clean rest state.
-          if (!moved) render();
+          d.dx = dx;
+          d.dy = dy;
+          // The chain carries the line the rest of the way into its slot —
+          // the tail keeps swinging for a beat, exactly like the splash —
+          // and only then does the move resolve.
+          settling = true;
+          d.chain.settle(Math.round((d.axis === 'row' ? dx : dy) / d.cell), () => {
+            settling = false;
+            d.chain?.stop();
+            const moved = applyDrag();
+            drag = null;
+            // A resolved move already re-rendered (and, for a line bonus, is
+            // mid-way through its own fade/collapse transition). Only a
+            // no-op drag needs this render to snap the preview clean.
+            if (!moved) render();
+          });
         },
       });
 
@@ -941,6 +983,9 @@ export function createSquareGame(): ShapeGame {
       });
 
       function destroy() {
+        drag?.chain?.stop();
+        drag = null;
+        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);

@@ -1,5 +1,6 @@
 import type { ShellRefs } from '../ui/gameShell';
 import { confirmEndRun } from '../ui/confirmModal';
+import { snapFlipFaces, plankFlipCells, FLIP_MS, FLIP_STAGGER_MS } from './plankFlip';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
@@ -145,7 +146,7 @@ export interface GameController {
   resume(): void;
   finish(): void;
   /** Call after applying a confirmed drag with the set of cells it touched. */
-  resolveMove(mask: Set<string>): void;
+  resolveMove(mask: Set<string>, moveDirDeg?: number): void;
   /** Ends the run immediately with a custom reason and an optional flat score penalty (e.g. a bomb-mode hazard cluster) — shown as its own breakdown row, subtracted the same way as the other end-of-run penalties. */
   forceEnd(reason: string, penalty?: number, penaltyLabel?: string): void;
   /** Stops timers when navigating away without ending the run. */
@@ -199,15 +200,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // stalemate.ts: nothing can un-flip), so this only ever grows. The run
   // does NOT end because of it; the player ends it themselves via
   // stuckEndBtn, once they've decided nothing more is worth waiting for.
-  let stuckGroups: Cell[][] = [];
   let startSnapshot: BoardSnapshot | null = null;
   let endSnapshot: BoardSnapshot | null = null;
   let lastRun: RunData | null = null;
 
   function updateStuckState(groups: Cell[][]) {
-    stuckGroups = groups;
     hooks.highlightStuck?.(groups.length ? groups.flat() : null);
-    refs.buttons.stuckEnd.hidden = groups.length === 0;
+    // findStuckGroups now only ever reports a *total* dead end — no front
+    // colour on the board can ever score again — so instead of arming a
+    // "自行结束" button the run ends on its own: the stuck tiles get a beat
+    // of red highlight so the player can see what died, then the summary.
+    refs.buttons.stuckEnd.hidden = true;
+    if (groups.length && !gameOver) {
+      hooks.render();
+      window.setTimeout(() => {
+        if (!gameOver) endGame('无法继续匹配');
+      }, 1400);
+    }
   }
 
   function newGame() {
@@ -354,7 +363,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#BE5762';
   const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#5C8A72';
 
-  function resolveMove(mask: Set<string>) {
+  function resolveMove(mask: Set<string>, moveDirDeg = 0) {
     if (gameOver || paused || resolving) return;
     moves++;
     resolving = true;
@@ -479,6 +488,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       const hitStopMs = reduceMotion ? 0 : isBonus ? 70 : tierComboMult > 1 ? 40 : 0;
 
       const proceed = () => {
+        // The flip is the splash's plank turn, driven from here for every
+        // shape: snapshot the old faces while they are still on screen,
+        // let commit + render swap the data and paint the new ones, then
+        // turn old into new piece by piece. The roll axis follows the move
+        // that caused this score — a flourish in the air only; the landing
+        // pose never depends on it (see plankFlip.ts).
+        const flipCells = s.matchGroups.flat();
+        const faceSnaps = flipCells.length ? snapFlipFaces(refs.boardEl, flipCells) : null;
         s.commit();
         // commit() is what actually turns the matched pieces over — a bonus
         // step's commit is a no-op, so this is exactly the flip moment.
@@ -499,7 +516,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // ghost/collapse elements onCascadeStepRendered just appended for
         // it, before a single frame of them ever painted.
         if (s.matchGroups.length) hooks.render();
-        setTimeout(step, (s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS) + hitStopMs);
+        if (faceSnaps?.size) plankFlipCells(refs.boardEl, flipCells, faceSnaps, moveDirDeg);
+        // A chained step's own render() would tear the planks down mid-turn,
+        // so the gap after a flip stretches to let the last piece finish —
+        // the splash holds for its flips the same way.
+        const flipRoomMs = faceSnaps?.size ? (flipCells.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 80 : 0;
+        setTimeout(step, Math.max(s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS, flipRoomMs) + hitStopMs);
       };
       if (s.matchGroups.length) setTimeout(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);
       else proceed();
@@ -526,11 +548,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     endGame(MANUAL_END_REASON);
   }
 
-  function doFinishStuck() {
-    if (!started || gameOver || !stuckGroups.length) return;
-    endGame('无法继续匹配');
-  }
-
   function doForceEnd(reason: string, penalty = 0, penaltyLabel?: string) {
     if (!started || gameOver) return;
     endGame(reason, penalty, penaltyLabel);
@@ -551,7 +568,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!started || gameOver) return;
     confirmEndRun(hooks.lang, doFinish);
   });
-  refs.buttons.stuckEnd.addEventListener('click', doFinishStuck);
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));
 

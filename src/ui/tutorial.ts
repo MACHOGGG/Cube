@@ -81,7 +81,7 @@ const BEATS: StoryStep[][] = [
     { t: 'checks', pts: [0, 1, 2, 3].map((c) => ctr(3, c)), color: W },
   ],
   // 3 — the scored oranges flip to their dot faces; column 4 is next.
-  [{ t: 'show', f: 1 }, { t: 'flip', f: 1, idx: [15, 16, 17, 18], snap: 2 }, arrow(2, 4, 90)],
+  [{ t: 'show', f: 1 }, { t: 'flip', f: 1, idx: [15, 16, 17, 18], snap: 2, dir: 90 }, arrow(2, 4, 90)],
   // 4 — column 4 slides down one: a 2×2 magenta forms across BOTH faces
   // (three fronts + one already-flipped dot) and still scores.
   [
@@ -91,7 +91,7 @@ const BEATS: StoryStep[][] = [
     { t: 'checks', pts: [ctr(2, 3), ctr(2, 4), ctr(3, 3), ctr(3, 4)], color: W },
   ],
   // 5 — the magentas flip, each to its own randomly-printed dot colour.
-  [{ t: 'show', f: 3 }, { t: 'flip', f: 3, idx: [13, 14, 19], snap: 4 }],
+  [{ t: 'show', f: 3 }, { t: 'flip', f: 3, idx: [13, 14, 19], snap: 4, dir: 90 }],
   // 6 — row 1 is about to slide left.
   [{ t: 'show', f: 4 }, arrow(1, 3, 180)],
   // 7 — row 1 slides left one: a vertical gray 4 forms (again mixed faces).
@@ -104,7 +104,7 @@ const BEATS: StoryStep[][] = [
   // 8 — the grays flip; the three coming slides are all marked at once.
   [
     { t: 'show', f: 5 },
-    { t: 'flip', f: 5, idx: [2, 7, 12], snap: 6 },
+    { t: 'flip', f: 5, idx: [2, 7, 12], snap: 6, dir: 180 },
     arrow(0, 3, 0, 'static'),
     arrow(1, 3, 0, 'static'),
     arrow(3, 0, 180, 'static'),

@@ -8,69 +8,79 @@ export interface LiveTile {
   tile: Tile;
 }
 
-function groupBy(liveTiles: LiveTile[], key: (t: Tile) => number): LiveTile[][] {
-  const map = new Map<number, LiveTile[]>();
-  for (const lt of liveTiles) {
-    const arr = map.get(key(lt.tile));
-    if (arr) arr.push(lt);
-    else map.set(key(lt.tile), [lt]);
-  }
-  return [...map.values()];
-}
-
 /**
- * "This colour can never be turned over again", as two conditions that must
- * both hold — checked in order, and only ever reported once the first one is
- * already true:
+ * "The run is over", from the player's own point of view — using only what
+ * is visible on the board, never a tile's hidden back colour.
  *
- * 1. The back colour that a still-unflipped tile of this colour would show
- *    has already been drained by a whole-line clear. (Whole-line clears are
- *    the only thing that permanently removes a dot colour's supply, so
- *    before one happens no colour can be written off.)
- * 2. Counting what is left: the tiles currently *showing* this colour
- *    (front-facing, or flipped to it) plus every other colour's tile that
- *    has not been flipped yet come to fewer than 4 — too little material
- *    left for this colour to ever complete another pattern.
+ * A colour is *reachable* when it could still complete a pattern:
+ *
+ *   1. Seed: any colour already showing on ≥ MIN_MATCH_SIZE tiles (front
+ *      faces and dot faces both count — patterns match across faces).
+ *   2. Grow: a front tile of a reachable colour can still be flipped some
+ *      day, and what it flips to is unknown from the outside — so every
+ *      such tile is potential material for any other colour. A colour
+ *      whose visible count plus that pool reaches MIN_MATCH_SIZE joins
+ *      the reachable set, which may unlock further colours; repeat until
+ *      nothing changes.
+ *
+ * Step 2 is what closes the mutual-deadlock hole the old per-colour count
+ * had: two colours, each short of 4 on its own, could still both count the
+ * *other's* front tiles as potential backup — even though neither could
+ * ever actually flip one. Walking the closure from provably-clearable
+ * colours only ever credits flips that can really happen.
+ *
+ * The whole board is stuck exactly when NO front colour is reachable: not
+ * one remaining front tile can ever be part of a score, so nothing can
+ * ever flip again. If even one front colour is still reachable, the run is
+ * alive and nothing is reported — a single dead colour is the player's
+ * problem to route around, not the game's to end.
  *
  * Bomb modes need no special case here: their shapes already leave the
- * hazard colour out of the liveTiles they pass in, so red tiles are counted
- * neither as this colour's material nor as anyone else's.
+ * hazard colour out of the liveTiles they pass in.
  *
- * The returned groups are those colours' still-unflipped tiles: the concrete
- * pieces a player can look at and confirm nothing will ever pair with. The
- * run is not ended automatically — this only lights up 自行结束.
+ * Returns [] while the run is alive; when stuck, every remaining front
+ * tile, grouped by colour — the pieces the player can look at and confirm
+ * none of them will ever pair up. gameController ends the run over it.
  */
 export function findStuckColorGroups(
   liveTiles: LiveTile[],
-  clearedDotColors: ReadonlySet<number>,
+  _clearedDotColors: ReadonlySet<number>,
 ): Cell[][] {
-  const flavorFaced = liveTiles.filter((lt) => lt.tile.face === 'flavor');
-  if (flavorFaced.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
+  const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
+  if (fronts.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
 
-  const stuck: Cell[][] = [];
-  for (const group of groupBy(flavorFaced, (t) => t.color)) {
-    const color = group[0].tile.color;
-    // 1 — has a line clear already eaten what these tiles would flip into?
-    if (!group.some((lt) => clearedDotColors.has(lt.tile.dotColor))) continue;
-    // 2 — is there still enough material for this colour to pair up?
-    //
-    // The sum is an *upper bound* on how many tiles could ever show this
-    // colour at once: the ones showing it now, plus every other still-
-    // unflipped tile, any of which might have this colour on its back. A
-    // pattern needs MIN_MATCH_SIZE of them, so the colour is only provably
-    // dead when that bound falls short — strictly fewer than 4. At exactly
-    // 4 a pattern is still reachable (all four would have to line up, but
-    // nothing rules it out), and calling that stuck ended runs a move early.
-    const showingThisColor = liveTiles.filter(
-      (lt) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color) === color,
-    ).length;
-    const otherUnflipped = flavorFaced.filter((lt) => lt.tile.color !== color).length;
-    if (showingThisColor + otherUnflipped >= MIN_MATCH_SIZE) continue;
-    stuck.push(group.map((lt) => lt.cell));
+  const shownColor = (lt: LiveTile) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color);
+  const up = new Map<number, number>();
+  for (const lt of liveTiles) up.set(shownColor(lt), (up.get(shownColor(lt)) ?? 0) + 1);
+  const frontCount = new Map<number, number>();
+  for (const lt of fronts) frontCount.set(lt.tile.color, (frontCount.get(lt.tile.color) ?? 0) + 1);
+
+  const reachable = new Set<number>();
+  for (const [color, count] of up) if (count >= MIN_MATCH_SIZE) reachable.add(color);
+  for (;;) {
+    let pool = 0;
+    for (const [color, count] of frontCount) if (reachable.has(color)) pool += count;
+    let grew = false;
+    for (const [color, count] of up) {
+      if (reachable.has(color)) continue;
+      if (count + pool >= MIN_MATCH_SIZE) {
+        reachable.add(color);
+        grew = true;
+      }
+    }
+    if (!grew) break;
   }
-  return stuck;
-}
 
+  for (const color of frontCount.keys()) if (reachable.has(color)) return [];
+
+  const byColor = new Map<number, Cell[]>();
+  for (const lt of fronts) {
+    const arr = byColor.get(lt.tile.color);
+    if (arr) arr.push(lt.cell);
+    else byColor.set(lt.tile.color, [lt.cell]);
+  }
+  return [...byColor.values()];
+}
 /**
  * Tallies what's left on the board when the run ends (see gameController's
  * endGame): a tile still showing its flavor face never contributed anything

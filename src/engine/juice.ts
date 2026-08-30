@@ -67,6 +67,7 @@ export function seatEls(els: readonly (HTMLElement | null | undefined)[]): void 
   if (reducedMotion()) return;
   els.forEach((el, i) => {
     if (!el) return;
+    if (el.dataset.flipping) return; // the plank flip owns this piece right now
     if (getComputedStyle(el).animationName !== 'none') return;
     el.animate(
       [

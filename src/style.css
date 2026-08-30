@@ -11,6 +11,9 @@
   --line: #E5DAD8;
   --accent: #BE5762;
   --accent-ink: #7A2E37;
+  /* Text sitting ON the accent fill (buttons): white over the light theme's
+     deep rose, near-black over the dark theme's light pink. */
+  --on-accent: #FFFFFF;
   --accent-soft: #F3DBDC;
   --accent-2: #5C8A72;
   --accent-2-soft: #DBEADF;
@@ -23,15 +26,15 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
-    --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E;
+    --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
+    --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --on-accent: #3B1B21;
     --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
 :root[data-theme="dark"] {
   --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
-  --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E;
+  --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21;
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
 }
@@ -476,7 +479,10 @@ button {
   padding: 11px 18px; cursor: pointer; flex: 1; transition: transform .1s ease, filter .15s ease;
 }
 button:active { transform: scale(0.97); }
-button.primary { background: var(--accent); color: white; }
+/* Text via a token, not hardcoded white: dark mode's accent is a light
+   pink, and white-on-light-pink measured 2.4:1 — the same class of trap as
+   token ink on a hardcoded ground. */
+button.primary { background: var(--accent); color: var(--on-accent); }
 button.secondary { background: var(--accent-2-soft); color: var(--accent-2); }
 button:hover { filter: brightness(1.05); }
 
@@ -545,15 +551,32 @@ button:hover { filter: brightness(1.05); }
 /* The icon grid wants far more width than the standard reading column. */
 .app.home-page--wide { max-width: 800px; }
 /* The title, its rule and the tagline stay put however far the page is
-   scrolled. The negative side margins (undone by the matching padding) let
-   the header's own background reach the full width of the column, so cards
-   pass behind it instead of appearing beside it at the edges. */
+   scrolled — but not as a full-width bar: only a centred frosted-glass
+   panel sits under them, iOS-style, its sides left open so cards scroll
+   past visibly at the edges (and stay tappable there: the sticky strip
+   itself ignores the pointer, only the panel takes it). Content sliding
+   underneath stays faintly readable through the blur. */
 .home-head {
   position: sticky; top: 0; z-index: 60;
   text-align: center;
-  margin: 0 -16px 22px; padding: 8px 16px 10px;
-  background: var(--bg);
-  box-shadow: 0 10px 12px -12px rgba(46, 36, 48, 0.35);
+  margin: 0 0 22px; padding: 6px 0 0;
+  pointer-events: none;
+}
+.home-head-glass {
+  display: inline-block;
+  pointer-events: auto;
+  padding: 4px 26px 10px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 6px 20px -14px rgba(46, 36, 48, 0.4),
+              inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+/* Without backdrop-filter the panel would be a wash of half-transparent
+   text over content — fall back to a nearly solid ground instead. */
+@supports not (backdrop-filter: blur(1px)) {
+  .home-head-glass { background: color-mix(in srgb, var(--bg) 92%, transparent); }
 }
 /* Tapping it goes home, so it has to look tappable. */
 .home-title { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -820,8 +843,6 @@ button:hover { filter: brightness(1.05); }
 @media (prefers-reduced-motion: reduce) { .home-nav-btn { transition: none; } }
 .home-nav-btn > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
-@media (prefers-reduced-motion: reduce) {
-}
 
 /* ---------- 个人主页 (profile page) ---------- */
 /* The page is a stack of destinations under the Slides masthead: one wide
@@ -1051,16 +1072,9 @@ html.lang-locked, html.lang-locked body {
   0%, 20%, 44%, 68% { opacity: 0; }
   10%, 32%, 56%, 100% { opacity: 1; }
 }
-/* The flip: a plank with real thickness, not a flat card. The cell supplies
-   perspective; the plank half-turns with the printed faces front and back,
-   while two darkened 4px strips (rotated onto the sides) close the edges. */
-.story-plank { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform calc(880ms / var(--story-speed, 1)) cubic-bezier(0.5, 0.08, 0.32, 1); }
-.story-plank-face { position: absolute; inset: 0; backface-visibility: hidden; }
-
 @media (prefers-reduced-motion: reduce) {
   .story-arrow-nudge { animation: none; }
   .story-check { animation: none; }
-  .story-plank { transition: none; }
 }
 
 .story-controls .icon-btn { white-space: nowrap; }
@@ -1146,7 +1160,9 @@ html.lang-locked, html.lang-locked body {
 .confirm-scrim--in { opacity: 1; }
 .confirm-box {
   width: 100%; max-width: 320px;
-  background: var(--card, #FFFFFF);
+  /* var(--surface), never a hardcoded white: with token ink colours on a
+     hardcoded ground, dark mode puts near-white text on a white box. */
+  background: var(--surface);
   border-radius: 20px; padding: 24px 22px 18px;
   box-shadow: 0 26px 60px -26px rgba(46, 36, 48, 0.55);
   text-align: center;
@@ -1158,4 +1174,33 @@ html.lang-locked, html.lang-locked body {
 .confirm-row .icon-btn { flex: 1; }
 @media (prefers-reduced-motion: reduce) {
   .confirm-scrim, .confirm-box { transition: none; }
+}
+
+/* The shared plank flip (engine/plankFlip.ts): the same two-faced turn the
+   splash performs, run on any board's tile. The faces are live clones of the
+   tile before and after its commit; there is deliberately no strip closing
+   the sides — a surface stood on edge antialiases into a dark hairline as it
+   comes flat, which reads as a stray rule beside a round or triangular
+   piece. */
+.plank-turn { position: absolute; inset: 0; transform-style: preserve-3d; will-change: transform; }
+.plank-turn-face { position: absolute; inset: 0; backface-visibility: hidden; }
+.plank-cast {
+  position: absolute; left: 8%; right: 8%; top: 12%; bottom: 12%;
+  background: rgba(46, 36, 48, 0.5);
+  opacity: 0; will-change: opacity, scale;
+}
+
+/* The end-of-run summary eases in rather than popping: the run just ended,
+   and a beat of arrival gives that moment its weight — every board shares
+   this overlay, so every mode gets the same landing. */
+.overlay--end { transition: opacity 420ms ease 80ms; }
+.overlay--end .modal {
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1) 80ms, opacity 400ms ease 80ms;
+}
+.overlay--end.show .modal { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .overlay--end, .overlay--end .modal { transition: none; }
+  .overlay--end .modal { opacity: 1; transform: none; }
 }

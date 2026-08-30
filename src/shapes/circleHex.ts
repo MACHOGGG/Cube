@@ -1,6 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { createDragChain, pressScale, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -205,6 +206,8 @@ interface DragState {
   R: number;
   rowH: number;
   lastShift: number;
+  /** The splash's inter-piece physics, driving every frame of the preview. */
+  chain: DragChain | null;
 }
 
 export function createCircleHexGame(): ShapeGame {
@@ -777,32 +780,32 @@ export function createCircleHexGame(): ShapeGame {
       function renderDragPreview() {
         render();
         const d = drag;
-        if (!d || !d.fam || !d.line) return;
+        if (!d || !d.fam || !d.line || !d.chain) return;
         const cells = d.line.cells;
         const n = cells.length;
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
-        const rawDist = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
-        if (shift !== d.lastShift) {
-          vibrate(6);
-          playMove(); // ...and a tick, so a long slide reads as a run of detents
-          d.lastShift = shift;
-        }
+        const stepLen = Math.hypot(dirX, dirY);
+        const chain = d.chain;
+        // Each ball rides its own lagged travel from the chain (the splash's
+        // integrator) — the wave, the contact squash, the entrained sides.
         for (let i = 0; i < n; i++) {
+          const off = chain.at(i);
           const [r, c] = cells[i];
           const [cx, cy] = ballCenter(r, c);
           const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
           if (el) {
-            el.style.left = cx - size / 2 + rawDist * dirX + 'px';
-            el.style.top = cy - size / 2 + rawDist * dirY + 'px';
-            el.style.opacity = String(edgeOpacity(i + rawDist, n));
+            el.style.left = cx - size / 2 + off * dirX + 'px';
+            el.style.top = cy - size / 2 + off * dirY + 'px';
+            el.style.opacity = String(edgeOpacity(i + off, n));
+            el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen);
           }
         }
         for (let k = -1; k <= 1; k++) {
           if (k === 0) continue;
           for (let i = 0; i < n; i++) {
-            const pos = i + rawDist + k * n;
+            const off = chain.at(i);
+            const pos = i + off + k * n;
             const fade = edgeOpacity(pos, n);
             if (fade <= 0) continue;
             const [r0, c0] = cells[i];
@@ -814,6 +817,24 @@ export function createCircleHexGame(): ShapeGame {
             ghost.style.top = shiftedY - size / 2 + 'px';
             ghost.classList.add('ghost');
             refs.boardEl.appendChild(ghost);
+          }
+        }
+        // The parallel lines either side, carried a little and sprung home.
+        // Line coordinates come from the cube axes the lines were built on.
+        const inLine = new Set(cells.map(([r, c]) => cellKey(r, c)));
+        const lineCoord = (r: number, c: number) => {
+          const z = r - N;
+          const x = c + lowerBoundForZ(z);
+          return d.fam === 'Z' ? z : d.fam === 'X' ? x : -x - z;
+        };
+        const own = lineCoord(d.r, d.c);
+        for (let r = 0; r < ROW_LENS.length; r++) {
+          for (let c = 0; c < ROW_LENS[r]; c++) {
+            if (inLine.has(cellKey(r, c))) continue;
+            const nudge = chain.side(Math.abs(lineCoord(r, c) - own));
+            if (!nudge) continue;
+            const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+            if (el) el.style.translate = `${nudge * dirX}px ${nudge * dirY}px`;
           }
         }
       }
@@ -844,16 +865,22 @@ export function createCircleHexGame(): ShapeGame {
         if (checkBombHazard()) return true;
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         seatLine(refs.boardEl, mask);
-        controller.resolveMove(mask);
+        const [vx, vy] = famVector(d.fam, d.R, d.rowH);
+        const sign = Math.sign(shift) || 1;
+        controller.resolveMove(mask, (Math.atan2(vy * sign, vx * sign) * 180) / Math.PI);
         return true;
       }
 
+      // True from release until the chain has carried the line into its slot
+      // and the move has resolved — blocks a new drag from starting on top.
+      let settling = false;
+
       const detachDrag = attachDrag(refs.boardWrap, {
-        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
+        isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving && !settling,
         onRejected: () => vibrate(15),
         onStart(x, y) {
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, R, rowH, lastShift: 0 };
+          drag = { r, c, fam: null, line: null, dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
         },
         onDrag(dx, dy) {
           if (!drag) return;
@@ -868,18 +895,41 @@ export function createCircleHexGame(): ShapeGame {
             candidates.sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
+            const grabbed = drag.line.cells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
+            drag.chain = createDragChain({
+              n: drag.line.cells.length,
+              grabbed: Math.max(0, grabbed),
+              onFrame: renderDragPreview,
+            });
           }
-          renderDragPreview();
+          const d = drag;
+          if (!d.fam || !d.chain) return;
+          const raw = projectedSteps(d.fam, dx, dy, d.R, d.rowH);
+          const shift = Math.round(raw);
+          if (shift !== d.lastShift) {
+            vibrate(6);
+            playMove();
+            d.lastShift = shift;
+          }
+          d.chain.drive(magnetizeRawDist(raw));
         },
         onEnd(dx, dy) {
-          let moved = false;
-          if (drag && drag.fam) {
-            drag.dx = dx;
-            drag.dy = dy;
-            moved = applyDrag();
+          const d = drag;
+          if (!d || !d.fam || !d.chain) {
+            drag = null;
+            render();
+            return;
           }
-          drag = null;
-          if (!moved) render();
+          d.dx = dx;
+          d.dy = dy;
+          settling = true;
+          d.chain.settle(Math.round(projectedSteps(d.fam, dx, dy, d.R, d.rowH)), () => {
+            settling = false;
+            d.chain?.stop();
+            const moved = applyDrag();
+            drag = null;
+            if (!moved) render();
+          });
         },
       });
 
@@ -889,6 +939,9 @@ export function createCircleHexGame(): ShapeGame {
       window.addEventListener('resize', onResize);
 
       function destroy() {
+        drag?.chain?.stop();
+        drag = null;
+        settling = false;
         controller.destroy();
         detachDrag();
         window.removeEventListener('resize', onResize);

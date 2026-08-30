@@ -1,6 +1,8 @@
 import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
 import { playMove, playScore, playFlip, playClear, seatEls } from '../engine/juice';
+import { createDragChain } from '../engine/dragChain';
+import { plankFlipEl, FLIP_MS, FLIP_STAGGER_MS } from '../engine/plankFlip';
 
 /**
  * The keyframe-playback engine behind all three basic tutorials.
@@ -39,7 +41,15 @@ export type StoryStep =
   | { t: 'arrow'; x: number; y: number; ang: number; color: string; mode?: 'static' }
   | { t: 'slide'; f: number; idx: number[]; dx: number; dy: number; wx: number; wy: number; snap: number }
   | { t: 'checks'; pts: { x: number; y: number }[]; color: string }
-  | { t: 'flip'; f: number; idx: number[]; snap: number }
+  | {
+      t: 'flip';
+      f: number;
+      idx: number[];
+      snap: number;
+      /** Roll direction in screen degrees (+x = 0, +y = 90) — the direction
+       *  of the move that caused this score, a flourish in the air only. */
+      dir?: number;
+    }
   | { t: 'fade'; snap: number }
   | { t: 'pause'; ms: number };
 
@@ -98,9 +108,14 @@ function stepMs(st: StoryStep): number {
     case 'pause': return st.ms;
     case 'arrow': return st.mode === 'static' ? WAIT.arrowStatic : WAIT.arrowArmed;
     case 'checks': return WAIT.checks;
-    case 'flip': return WAIT.flip + WAIT.flipSettle;
+    // The plank flips run at their own real-world pace (they are the game's
+    // shipped feel, not a slowed-down lesson) — expressed here in authored
+    // ms so the progress bar's SPEED division lands back on the real time.
+    case 'flip': return ((st.idx.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 140) * SPEED + WAIT.flipSettle;
     case 'fade': return WAIT.fadeOut + WAIT.fadeIn;
-    case 'slide': return WAIT.slideLead + WAIT.slide + WAIT.slideRelease + WAIT.slideSettle;
+    // +420 authored ≈ the chain's post-travel settle wave (capped ~300ms
+    // real), so the progress bar keeps tracking the step it is timing.
+    case 'slide': return WAIT.slideLead + WAIT.slide + 420 + WAIT.slideRelease + WAIT.slideSettle;
   }
 }
 const ease = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
@@ -296,30 +311,27 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       await sleep(WAIT.checks);
     } else if (st.t === 'flip') {
       if (curFrame !== st.f) renderFrame(st.f, true);
-      // Each flipping tile becomes a two-faced plank: the old print on the
-      // front, the new print on the back, held a hair apart in Z. There are
-      // deliberately no strips closing the sides — a surface stood on edge is
-      // antialiased into a dark hairline as it comes flat, which on a round
-      // or triangular piece reads as a stray rule beside it rather than as
-      // its edge. Same construction as the splash's flip.
-      for (const i of st.idx) {
-        const oldC = spec.frames[st.f][i];
-        const newC = spec.frames[st.snap][i];
-        const el = els[i];
-        el.style.perspective = '440px';
-        el.innerHTML =
-          `<div class="story-plank">` +
-          `<div class="story-plank-face" style="transform:translateZ(1px)">${cellSvg(oldC)}</div>` +
-          `<div class="story-plank-face" style="transform:rotateY(180deg) translateZ(1px)">${cellSvg(newC)}</div>` +
-          `</div>`;
-      }
-      void board.offsetWidth;
+      // The splash's own plank turn (engine/plankFlip.ts), piece by piece:
+      // lift, roll about the scoring move's axis, overshoot, seat — landing
+      // in the rest pose with nothing changed but the face. It runs at the
+      // game's real pace, not the lesson's slowed one: this is exactly the
+      // motion the player will meet on the boards.
+      const dir = st.dir ?? 0;
       playFlip();
-      for (const i of st.idx) {
-        const plank = els[i].querySelector<HTMLElement>('.story-plank');
-        if (plank) plank.style.transform = 'rotateY(180deg)';
-      }
-      await sleep(WAIT.flip);
+      st.idx.forEach((i, n) => {
+        window.setTimeout(() => {
+          if (gen !== my) return;
+          const el = els[i];
+          if (!el?.isConnected) return;
+          const front = document.createElement('div');
+          front.style.position = 'absolute';
+          front.style.inset = '0';
+          front.innerHTML = cellSvg(spec.frames[st.f][i]);
+          el.innerHTML = cellSvg(spec.frames[st.snap][i]);
+          plankFlipEl(el, front, dir);
+        }, n * FLIP_STAGGER_MS);
+      });
+      await sleepRaw((st.idx.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 140);
       if (gen !== my) return;
       renderFrame(st.snap, true);
       await sleep(WAIT.flipSettle);
@@ -350,23 +362,52 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         return g;
       });
       const DUR = WAIT.slide / SPEED; // authored pace, scaled by the global rate
-      const { dx, dy } = st; // narrowed copy — the closure below can't re-narrow st
+      const { dx, dy, wx, wy } = st; // narrowed copies for the closures below
+      // The authored travel still follows the human drag profile, but the
+      // pieces no longer ride it as one rigid block: each one is sprung to
+      // the piece ahead of it through the splash's own integrator
+      // (engine/dragChain.ts), so a wave runs down the line and the tail
+      // keeps swinging for a beat after the head has seated.
+      const n = movers.length;
+      // One chain slot = one authored step (dx,dy); the wrap distance is a
+      // whole period of them, which recovers the per-slot step vector even
+      // when a single move covers two slots (dx = 2 steps).
+      const stepX = wx / n;
+      const stepY = wy / n;
+      const slots = stepX || stepY ? Math.round(Math.hypot(dx, dy) / Math.hypot(stepX, stepY)) || 1 : 1;
+      const chain = createDragChain({ n, grabbed: 0, onFrame: paintChain });
+      function paintChain() {
+        for (let i = 0; i < n; i++) {
+          const off = chain.at(i);
+          const tx = off * stepX;
+          const ty = off * stepY;
+          movers[i].style.transform = `translate(${tx}px, ${ty}px)`;
+          const g = ghosts[i];
+          if (g) g.style.transform = `translate(${tx}px, ${ty}px)`;
+        }
+      }
       const t0 = performance.now();
       await new Promise<void>((resolve) => {
         function tick(now: number) {
           if (gen !== my) return resolve();
           const p = humanP(Math.min(1, (now - t0) / DUR));
-          const tx = dx * p;
-          const ty = dy * p;
-          for (const el of movers) el.style.transform = `translate(${tx}px, ${ty}px)`;
-          for (const g of ghosts) g.style.transform = `translate(${tx}px, ${ty}px)`;
+          chain.drive(slots * p * Math.sign((dx || dy) * (stepX || stepY) || 1));
           if (p >= 1) resolve();
           else requestAnimationFrame(tick);
         }
         requestAnimationFrame(tick);
       });
-      if (gen !== my) return;
+      if (gen !== my) {
+        chain.stop();
+        return;
+      }
       playMove(); // the line reaching its detent, same tick the real board gives
+      // Let the wave die into the slot before the pieces seat.
+      await new Promise<void>((resolve) => {
+        chain.settle(slots * Math.sign((dx || dy) * (stepX || stepY) || 1), resolve);
+      });
+      chain.stop();
+      if (gen !== my) return;
       await sleep(WAIT.slideRelease); // the "release" beat before the pieces seat
       if (gen !== my) return;
       renderFrame(st.snap, true);
