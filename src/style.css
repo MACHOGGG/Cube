@@ -73,15 +73,18 @@ h1 {
 }
 .tag-line { text-align: center; color: var(--ink-soft); font-size: 0.9rem; margin: -8px 0 4px; }
 
-/* The home page's own title gets a permanent, subtle breathing glow — a
-   quiet "this is alive" touch on the one screen a player sits on longest,
-   distinct from the language-picker's louder .lang-title-glow. */
-.home-title-glow { animation: home-title-breathe 3.6s ease-in-out infinite; }
+/* Every Slides masthead breathes, everywhere it appears — the same pulse the
+   opening language page uses, so the wordmark reads as one living thing across
+   the app rather than only being alive on the first screen.
+   This lives on .home-title itself, not on an opt-in .home-title-glow: that
+   modifier existed but no page ever added it, so all three mastheads (menu,
+   记录与排名, 个人主页) sat static while the opening page pulsed. */
+.home-title { animation: home-title-breathe 3.2s ease-in-out infinite; }
 @keyframes home-title-breathe {
   0%, 100% { text-shadow: 0 0 0 transparent; }
-  50% { text-shadow: 0 0 14px var(--score-glow), 0 0 1px var(--accent); }
+  50% { text-shadow: 0 0 22px var(--score-glow), 0 0 2px var(--accent); }
 }
-@media (prefers-reduced-motion: reduce) { .home-title-glow { animation: none; text-shadow: 0 0 10px var(--score-glow); } }
+@media (prefers-reduced-motion: reduce) { .home-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
 
 .controls { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .icon-btn {

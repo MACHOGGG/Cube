@@ -259,13 +259,14 @@ const WATCH_BODY: Record<BaseShape, string> = {
   square: `<rect x="${50 - WATCH_HALF}" y="${WATCH_CY - WATCH_HALF}" width="${WATCH_HALF * 2}"
     height="${WATCH_HALF * 2}" rx="15" fill="${C.orange}"/>`,
   circle: `<circle cx="50" cy="${WATCH_CY}" r="36" fill="${C.orange}"/>`,
-  // Traced off the reference drawing rather than eyeballed: straight sides,
-  // a narrow domed nub (0.22 of the base width) and bottom corners rounded
-  // so hard that only the middle 42% of the base stays flat. The apex point
-  // is virtual — it sits at y=12, above the artwork, and the 20.8 radius
-  // cuts it back to a top edge at y=21.5, which is what leaves a length of
-  // stem showing under the crown.
-  triangle: `<path d="${roundedPolyPath([[50, 12], [89, 98], [11, 98]], [20.8, 22.6, 22.6])}" fill="${C.orange}"/>`,
+  // Fitted to what actually gets DRAWN, not to the polygon fed in. Those are
+  // not the same shape: a 25-unit corner radius pulls the bottom corners far
+  // inside the base points, so the previous [11..89] base rendered only 64.8
+  // wide against 76.5 tall — a 0.847 silhouette where the reference drawing
+  // is 0.928, which is exactly the "too thin" it looked. These numbers were
+  // solved against the rendered bounding box instead: 72.4 x 78.0, ratio
+  // 0.928, top edge at y=20 so a length of stem still shows under the crown.
+  triangle: `<path d="${roundedPolyPath([[50, 12], [94, 98], [6, 98]], [18, 25, 25])}" fill="${C.orange}"/>`,
 };
 
 /** The face, drawn twice: once grown by the ring width in white, then again
@@ -277,10 +278,11 @@ function watchFace(shape: BaseShape, fill: string, grow = 0): string {
       rx="${(h * 0.45).toFixed(1)}" fill="${fill}"/>`;
   }
   if (shape === 'circle') return `<circle cx="50" cy="${WATCH_CY}" r="${15 + grow}" fill="${fill}"/>`;
-  // Same tracing: apex 24% and base 70% down the body, base 0.47 of the
-  // body's own — so a band of orange stays under it, as the drawing has it.
+  // Same tracing, against the body's real bounds: apex 24% and base 70% down
+  // it, base 0.478 of its width — so a band of orange stays underneath, as
+  // the drawing has it.
   const g = grow * 1.5;
-  return `<path d="${roundedPolyPath([[50, 39.9 - g], [68.3 + g, 75.1 + g * 0.6], [31.7 - g, 75.1 + g * 0.6]], 6)}"
+  return `<path d="${roundedPolyPath([[50, 38.9 - g], [67.3 + g, 74.4 + g * 0.6], [32.7 - g, 74.4 + g * 0.6]], 6)}"
     fill="${fill}"/>`;
 }
 
