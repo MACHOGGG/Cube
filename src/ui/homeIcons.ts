@@ -63,16 +63,6 @@ function miniSquare(cx: number, cy: number, half: number, fill: string): string 
 function miniCircle(cx: number, cy: number, r: number, fill: string): string {
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#fff" stroke-width="2.4"/>`;
 }
-/** A small triangle; `up=false` draws it inverted, the way the real triangle
- *  board alternates orientations along a row. */
-function miniTriangle(cx: number, cy: number, half: number, fill: string, up = true): string {
-  const h = half * 1.5;
-  const pts = up
-    ? `${cx},${cy - h / 2} ${cx + half},${cy + h / 2} ${cx - half},${cy + h / 2}`
-    : `${cx},${cy + h / 2} ${cx + half},${cy - h / 2} ${cx - half},${cy - h / 2}`;
-  return `<polygon points="${pts}" fill="${fill}" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>`;
-}
-
 const C = HOME_COLORS;
 
 export const ICON_BASE_SQUARE = svg(
@@ -236,13 +226,24 @@ export function timedCard(shape: BaseShape): string {
  * one object turning into three different ones — which is exactly how the
  * old alarm clock looked once the three became stopwatches.
  */
-export const ICON_TIMED_COMBINED = stopwatch(
-  'square',
-  watchFace('square', C.white) +
-    miniSquare(38, 63.5, 7, C.purple) +
-    miniTriangle(50, 63.5, 7.6, C.blue) +
-    miniCircle(62, 63.5, 7, C.green),
-);
+export const ICON_TIMED_COMBINED = (() => {
+  const cy = WATCH_CY;
+  // No white outlines here. The base-game cards draw their pieces outlined
+  // because they sit on grey, but this face is already white — the outlines
+  // only made the three collide, the triangle's stroke overlapping the
+  // square beside it. And the triangle is rounded the way the bomb chips'
+  // triangle is, rather than left sharp among two soft neighbours.
+  const sq = (cx: number, h: number, fill: string) =>
+    `<rect x="${cx - h}" y="${cy - h}" width="${h * 2}" height="${h * 2}" rx="${(h * 0.34).toFixed(1)}" fill="${fill}"/>`;
+  const tri = (cx: number, h: number, fill: string) =>
+    `<path d="${roundedPolyPath([[cx, cy - h], [cx + h * 1.04, cy + h * 0.82], [cx - h * 1.04, cy + h * 0.82]], h * 0.21)}"
+      fill="${fill}"/>`;
+  const ci = (cx: number, r: number, fill: string) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"/>`;
+  return stopwatch(
+    'square',
+    watchFace('square', C.white) + sq(37.5, 5, C.purple) + tri(50, 5.6, C.blue) + ci(62.5, 5.2, C.green),
+  );
+})();
 
 /** Mobile picker: one watch per timed game — the same three cards the wide
  *  layout shows in its timed row. */
