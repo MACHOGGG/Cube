@@ -14,7 +14,7 @@ import {
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot } from './shareCard';
-import { playScore, playFlip, playClear, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
+import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
 import { STRINGS, type Lang } from '../i18n';
 import type { Cell } from './types';
@@ -294,6 +294,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       .join('');
     refs.endDetailEl.textContent = runDetailLine(lastRun, hooks.lang);
     refs.endOverlay.classList.add('show');
+    // One cue per ending, told apart by cause: a bomb gets the refusal, every
+    // other way of finishing gets the settle. Reached the same way whether the
+    // player pressed 结束, ran the clock out, or hit a dead end.
+    if (hazardEnd) playError();
+    else playSettle();
 
     endSnapshot = hooks.snapshotBoard?.() ?? null;
     // Archive the run so the 记录 panel can re-open the very same card.

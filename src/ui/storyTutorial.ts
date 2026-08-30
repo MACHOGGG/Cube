@@ -1,4 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
+import { playMove, playScore, playFlip, playClear } from '../engine/juice';
 
 /**
  * The keyframe-playback engine behind all three basic tutorials.
@@ -265,6 +266,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         c.innerHTML = CHECK_SVG(st.color);
         board.appendChild(c);
       }
+      playScore(1);
       await sleep(WAIT.checks);
     } else if (st.t === 'flip') {
       if (curFrame !== st.f) renderFrame(st.f, true);
@@ -286,6 +288,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
           `</div>`;
       }
       void board.offsetWidth;
+      playFlip();
       for (const i of st.idx) {
         const plank = els[i].querySelector<HTMLElement>('.story-plank');
         if (plank) plank.style.transform = 'rotateY(180deg)';
@@ -297,6 +300,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
     } else if (st.t === 'fade') {
       board.style.transition = 'opacity 300ms ease';
       board.style.opacity = '0.25';
+      playClear();
       await sleep(WAIT.fadeOut);
       if (gen !== my) return;
       renderFrame(st.snap);
@@ -336,6 +340,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         requestAnimationFrame(tick);
       });
       if (gen !== my) return;
+      playMove(); // the line reaching its detent, same tick the real board gives
       await sleep(WAIT.slideRelease); // the "release" beat before the pieces seat
       if (gen !== my) return;
       renderFrame(st.snap, true);

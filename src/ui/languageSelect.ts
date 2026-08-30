@@ -1,4 +1,5 @@
 import { vibrate } from '../engine/haptics';
+import { playMove, playScore } from '../engine/juice';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import type { Lang } from '../i18n';
 
@@ -347,6 +348,7 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
         paintCell(cellEls[r][c], grid[r][c]);
       }
       vibrate(10);
+      playMove(); // the same detent tick the game boards give a slid line
       checkCompletion();
     }
 
@@ -385,6 +387,7 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
       if (!ok) continue;
       settled = true;
       vibrate(24);
+      playScore(1); // a word just locked into place — the board's own scoring bell
       const solvedEls: HTMLElement[] = [];
       for (let i = 0; i < word.length; i++) {
         const el = cellEls[start + i][c];

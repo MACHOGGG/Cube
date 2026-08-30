@@ -125,6 +125,18 @@ const CUE = {
   open: { name: 'bloom', vol: 0.55 },
   /** A soft hush as it goes. */
   close: { name: 'whisper', vol: 0.5 },
+  /** 完成 / 结束 — a short warm three-note "done", not a fanfare. */
+  finish: { name: 'success', vol: 0.6 },
+  /** Caught by a bomb: a calm, recoverable refusal rather than a buzzer. */
+  error: { name: 'error', vol: 0.6 },
+  /** 开始游戏 — a lock-on sweep resolving to a clear tone. */
+  ready: { name: 'ready', vol: 0.6 },
+  /** 暂停 — a three-step locator, so pausing sounds like stepping aside. */
+  pause: { name: 'scan', vol: 0.5 },
+  /** Arriving at 个人主页 / 记录与排名 — a rising harmonic portal. */
+  arrive: { name: 'arrival', vol: 0.55 },
+  /** The run settling into its final score. */
+  settle: { name: 'release', vol: 0.6 },
 } as const;
 
 /** One detent crossed mid-drag. Called from every shape's drag preview. */
@@ -149,6 +161,36 @@ export function playFlip(): void {
 /** A whole line clearing — the bigger, rarer moment. */
 export function playClear(): void {
   play(CUE.clear.name, { volume: CUE.clear.vol });
+}
+
+/** 完成 / 结束 — every button that closes something out for good. */
+export function playFinish(): void {
+  play(CUE.finish.name, { volume: CUE.finish.vol });
+}
+
+/** The run ended on a bomb. */
+export function playError(): void {
+  play(CUE.error.name, { volume: CUE.error.vol });
+}
+
+/** 开始游戏. */
+export function playReady(): void {
+  play(CUE.ready.name, { volume: CUE.ready.vol });
+}
+
+/** 暂停. */
+export function playPause(): void {
+  play(CUE.pause.name, { volume: CUE.pause.vol });
+}
+
+/** Landing on 个人主页 or 记录与排名. */
+export function playArrive(): void {
+  play(CUE.arrive.name, { volume: CUE.arrive.vol });
+}
+
+/** The end-of-run settlement panel. */
+export function playSettle(): void {
+  play(CUE.settle.name, { volume: CUE.settle.vol });
 }
 
 /** A window, panel or overlay coming up. */
@@ -210,6 +252,21 @@ const CUE_CLOSING = [
   '.home-nav-btn--active',
 ].join(',');
 
+/**
+ * Buttons that mean something more specific than "forward" or "back", and so
+ * get their own cue ahead of the open/close default. Checked in order.
+ *
+ * The nav pair is matched only while it is NOT the active tab: tapping the
+ * tab you are already on takes you back to the menu, which is a closing move,
+ * not an arrival.
+ */
+const CUE_OVERRIDES: [selector: string, cue: () => void][] = [
+  ['#startBtn', playReady],
+  ['#stopBtn', playPause],
+  ['#navProfile:not(.home-nav-btn--active), #navRecords:not(.home-nav-btn--active)', playArrive],
+  ['#stFinish, #finishBtn, #stuckEndBtn, [data-cue="finish"]', playFinish],
+];
+
 export function wireClickCues(): void {
   if (typeof document === 'undefined') return;
   document.addEventListener(
@@ -219,6 +276,12 @@ export function wireClickCues(): void {
       if (!(target instanceof Element)) return;
       const hit = target.closest(CUE_CLICKABLE);
       if (!hit || hit.closest('[data-cue="none"]')) return;
+      for (const [selector, cue] of CUE_OVERRIDES) {
+        if (hit.closest(selector)) {
+          cue();
+          return;
+        }
+      }
       if (hit.closest(CUE_CLOSING)) playClose();
       else playOpen();
     },
