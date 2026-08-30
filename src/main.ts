@@ -1,9 +1,9 @@
 import { injectStyles } from './injectStyles';
 import { unlockAudio, wireClickCues } from './engine/juice';
 import { applyAppIcon } from './ui/appIcons';
+import { showLoadingScreen } from './ui/loadingScreen';
 import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
 import { renderMenu, type HomeLayout } from './ui/menu';
-import { renderLanguageSelect } from './ui/languageSelect';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { mountBottomNav, refreshBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
@@ -11,7 +11,7 @@ import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
-import { loadLang, saveLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -264,13 +264,13 @@ function boot() {
   // language, or 'none' when this is a first run and nothing is chosen yet.
   initAnalytics(savedLang || 'none');
   if (!savedLang) {
-    teardown();
-    trackScreen('language_select');
-    renderLanguageSelect(root, (lang) => {
-      saveLang(lang);
-      trackLanguage(lang, 'first_run');
-      afterLangChosen(lang);
-    });
+    // No opening language picker any more: read the browser's own preference
+    // and get straight into the game. It is only a default — 个人主页 has the
+    // switcher, and the moment the player uses it that choice is what sticks.
+    const guess = detectLang();
+    saveLang(guess);
+    trackLanguage(guess, 'auto');
+    afterLangChosen(guess);
     return;
   }
   afterLangChosen(savedLang);
@@ -307,4 +307,6 @@ function onLanguageSwitched(lang: Lang) {
   afterLangChosen(lang);
 }
 
-boot();
+// The splash owns the first 3.5 seconds, and hands over only once the web
+// fonts have landed too — so the screen behind it never reflows on arrival.
+showLoadingScreen().then(boot);

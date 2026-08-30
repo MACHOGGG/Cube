@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
+    "animejs": "^4.5.0",
     "cuelume": "^0.2.2"
   }
 }

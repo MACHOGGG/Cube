@@ -281,7 +281,7 @@ export function trackTutorialEnd(
   });
 }
 
-export function trackLanguage(lang: string, source: 'first_run' | 'switch'): void {
+export function trackLanguage(lang: string, source: 'auto' | 'switch'): void {
   report('language_set', { lang, source });
 }
 

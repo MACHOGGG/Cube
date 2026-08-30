@@ -680,6 +680,41 @@ export function saveLang(lang: Lang): void {
   localStorage.setItem(LANG_STORAGE_KEY, lang);
 }
 
+/**
+ * The language to open in when this browser has never chosen one.
+ *
+ * Read from the browser's own accept-language list rather than from the
+ * visitor's IP: the list is a preference the person actually set, while an
+ * IP is only a guess at where they are — a Chinese speaker in Paris wants
+ * Chinese, not French. It also costs nothing, needs no server, and is right
+ * offline. Whatever it picks is only a default; 个人主页 can change it, and
+ * that choice is what gets stored.
+ *
+ * `navigator.languages` is ordered by preference, so the first tag we
+ * recognise wins. Script subtags decide Chinese where they are given
+ * (zh-Hans / zh-Hant); otherwise the region does, with Taiwan, Hong Kong and
+ * Macau traditional and everything else simplified.
+ */
+export function detectLang(): Lang {
+  let tags: readonly string[] = [];
+  try {
+    tags = navigator.languages?.length ? navigator.languages : [navigator.language];
+  } catch {
+    return 'en';
+  }
+  for (const raw of tags) {
+    const tag = (raw || '').toLowerCase();
+    if (tag.startsWith('zh')) {
+      if (tag.includes('hant')) return 'zhHant';
+      if (tag.includes('hans')) return 'zhHans';
+      return /-(tw|hk|mo)\b/.test(tag) ? 'zhHant' : 'zhHans';
+    }
+    if (tag.startsWith('fr')) return 'fr';
+    if (tag.startsWith('en')) return 'en';
+  }
+  return 'en';
+}
+
 export type TutorialShape = 'square' | 'circle' | 'triangle';
 const TUTORIAL_SEEN_KEYS: Record<TutorialShape, string> = {
   square: TUTORIAL_SEEN_KEY,

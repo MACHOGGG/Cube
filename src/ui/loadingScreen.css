@@ -1,0 +1,57 @@
+/* The splash: a rounded square window onto a ball board that is much
+   larger than the window. Nothing outside the frame is ever visible. */
+.splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+.splash.show { opacity: 1; }
+.splash.out { opacity: 0; transition: opacity 260ms ease-in; }
+
+.splash-frame {
+  position: relative;
+  /* Side is set from JS: SIDE_IN_BALLS ball-diameters, so the scoring
+     pattern is guaranteed to fit whatever the viewport does. */
+  border-radius: 22%;
+  background: #FFFFFF;
+  overflow: hidden;
+  box-shadow: 0 18px 46px -22px rgba(46, 36, 48, 0.4);
+}
+.splash-board { position: absolute; inset: 0; }
+
+/* Same disc as the real board (src/shapes/circle.css), just bigger. */
+.splash-ball {
+  position: absolute;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  will-change: transform, opacity;
+}
+
+/* One circular outline per scored ball — the board's own highlight, at two
+   flashes instead of three because the splash only has 0.9s to spend. */
+.splash-outline {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  animation: splash-score 900ms ease-in-out 1 both;
+}
+@keyframes splash-score {
+  0%, 100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; background: transparent; }
+  10%, 30% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+  55%, 75% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-outline { animation: none; border-color: var(--ink); }
+}

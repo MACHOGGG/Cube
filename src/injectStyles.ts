@@ -11,11 +11,12 @@ import baseCss from './style.css?inline';
 import squareCss from './shapes/square.css?inline';
 import circleCss from './shapes/circle.css?inline';
 import triangleCss from './shapes/triangle.css?inline';
+import splashCss from './ui/loadingScreen.css?inline';
 
 export function injectStyles(): void {
   if (document.getElementById('slides-styles')) return;
   const tag = document.createElement('style');
   tag.id = 'slides-styles';
-  tag.textContent = [fontsCss, baseCss, squareCss, circleCss, triangleCss].join('\n');
+  tag.textContent = [fontsCss, baseCss, squareCss, circleCss, triangleCss, splashCss].join('\n');
   document.head.appendChild(tag);
 }
