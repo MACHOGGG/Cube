@@ -235,7 +235,7 @@ function alarmClock(shape: BaseShape, inner = ''): string {
 const WATCH_CY = 63.5;
 const WATCH_HALF = 34.5;
 /** White band between the body and the face. */
-const WATCH_RING = 3.8;
+const WATCH_RING = 3.4;
 
 /** The crown: a stem bridging up out of the body into a rounded pill. Drawn
  *  before the body so the stem's lower end disappears underneath it. */
@@ -259,9 +259,13 @@ const WATCH_BODY: Record<BaseShape, string> = {
   square: `<rect x="${50 - WATCH_HALF}" y="${WATCH_CY - WATCH_HALF}" width="${WATCH_HALF * 2}"
     height="${WATCH_HALF * 2}" rx="15" fill="${C.orange}"/>`,
   circle: `<circle cx="50" cy="${WATCH_CY}" r="36" fill="${C.orange}"/>`,
-  // The apex control sits well above the artwork with a huge radius, so the
-  // curve lands as a broad dome rather than a spike — the sheet's bell shape.
-  triangle: `<path d="${roundedPolyPath([[50, 11], [90, 98], [10, 98]], [36, 23, 23])}" fill="${C.orange}"/>`,
+  // Traced off the reference drawing rather than eyeballed: straight sides,
+  // a narrow domed nub (0.22 of the base width) and bottom corners rounded
+  // so hard that only the middle 42% of the base stays flat. The apex point
+  // is virtual — it sits at y=12, above the artwork, and the 20.8 radius
+  // cuts it back to a top edge at y=21.5, which is what leaves a length of
+  // stem showing under the crown.
+  triangle: `<path d="${roundedPolyPath([[50, 12], [89, 98], [11, 98]], [20.8, 22.6, 22.6])}" fill="${C.orange}"/>`,
 };
 
 /** The face, drawn twice: once grown by the ring width in white, then again
@@ -273,8 +277,10 @@ function watchFace(shape: BaseShape, fill: string, grow = 0): string {
       rx="${(h * 0.45).toFixed(1)}" fill="${fill}"/>`;
   }
   if (shape === 'circle') return `<circle cx="50" cy="${WATCH_CY}" r="${15 + grow}" fill="${fill}"/>`;
-  const g = grow * 1.4;
-  return `<path d="${roundedPolyPath([[50, 50 - g], [75 + g, 89 + g * 0.55], [25 - g, 89 + g * 0.55]], 7.5)}"
+  // Same tracing: apex 24% and base 70% down the body, base 0.47 of the
+  // body's own — so a band of orange stays under it, as the drawing has it.
+  const g = grow * 1.5;
+  return `<path d="${roundedPolyPath([[50, 39.9 - g], [68.3 + g, 75.1 + g * 0.6], [31.7 - g, 75.1 + g * 0.6]], 6)}"
     fill="${fill}"/>`;
 }
 
