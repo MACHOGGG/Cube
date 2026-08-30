@@ -299,11 +299,20 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
   for (const r of DRAG_ROWS) {
     const hit = rowHitEls[r];
     let dx = 0;
+    let lastShift = 0;
     let geom: RowGeom | null = null;
 
     function renderDragPreview() {
       if (!geom) return;
       const g = geom;
+      // A tick each time the drag crosses into a new whole-cell shift — the
+      // same detent every game board clicks through. Sliding a row four
+      // letters across should be heard as four beats, not one on release.
+      const shift = Math.round(dx / g.step);
+      if (shift !== lastShift) {
+        playMove();
+        lastShift = shift;
+      }
       const magDx = magnetizeRawDist(dx / g.step) * g.step;
       for (let c = 0; c < COLS; c++) cellEls[r][c].style.transform = `translateX(${magDx}px)`;
 
@@ -348,7 +357,8 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
         paintCell(cellEls[r][c], grid[r][c]);
       }
       vibrate(10);
-      playMove(); // the same detent tick the game boards give a slid line
+      // No tick here: crossing into this shift already played one mid-drag,
+      // and the released position is that same detent.
       checkCompletion();
     }
 
@@ -356,6 +366,7 @@ export function renderLanguageSelect(container: HTMLElement, onSelect: (lang: La
       isActive: () => !settled,
       onStart() {
         dx = 0;
+        lastShift = 0;
         for (let c = 0; c < COLS; c++) cellEls[r][c].style.transform = '';
         geom = measureRow(r);
         hit.classList.add('lang-row-hit--active');
