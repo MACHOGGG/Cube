@@ -1,0 +1,632 @@
+<title>Slides Motion Study</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ---------------------------------------------------------------
+   Tokens. Light is the bare :root; dark is redefined twice so both
+   the OS setting and an explicit toggle win in their own direction.
+   The stage itself stays white in both — it is the clip, not chrome.
+   --------------------------------------------------------------- */
+:root {
+  --paper: #EFEAE4;
+  --panel: #F7F4F0;
+  --edge: #DED5CB;
+  --ink: #2E2430;
+  --ink-soft: #6F6270;
+  --ink-faint: #9A8B98;
+  --rose: #BE5762;
+  --rose-soft: #F3DBDC;
+  --stage: #FFFFFF;
+  --stage-edge: #E4DCD3;
+  --shadow: 0 24px 60px -28px rgba(46, 36, 48, 0.45);
+
+  /* Verbatim from src/shapes/circle.ts — PALETTES.standard */
+  --ball-0: #C0666B;
+  --ball-1: #DDA857;
+  --ball-2: #7A9C4A;
+  --ball-3: #4F72C4;
+
+  /* Verbatim from src/style.css */
+  --score-glow: color-mix(in srgb, var(--rose) 65%, transparent);
+  --score-wash: color-mix(in srgb, var(--rose) 26%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1A151C;
+    --panel: #241D27;
+    --edge: #3A3040;
+    --ink: #F0E9EE;
+    --ink-soft: #B3A5B4;
+    --ink-faint: #7C6E80;
+    --rose: #E08A93;
+    --rose-soft: #4A2B31;
+    --stage-edge: #3A3040;
+    --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.8);
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1A151C;
+  --panel: #241D27;
+  --edge: #3A3040;
+  --ink: #F0E9EE;
+  --ink-soft: #B3A5B4;
+  --ink-faint: #7C6E80;
+  --rose: #E08A93;
+  --rose-soft: #4A2B31;
+  --stage-edge: #3A3040;
+  --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.8);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 16px/1.65 Karla, "Helvetica Neue", Arial, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 32px) 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* ---------- masthead ---------- */
+.mast { display: flex; flex-direction: column; gap: 8px; }
+.eyebrow {
+  font: 500 11px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+h1 {
+  margin: 0;
+  font: 600 clamp(30px, 5.2vw, 44px)/1.1 Fraunces, Georgia, "Times New Roman", serif;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--ink-soft);
+  font-size: 16.5px;
+}
+
+/* ---------- the camera ---------- */
+.stage-shell { display: flex; flex-direction: column; gap: 14px; }
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--stage);
+  border: 1px solid var(--stage-edge);
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.board { position: absolute; inset: 0; }
+
+/* Verbatim from src/shapes/circle.css */
+.ball {
+  position: absolute;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  will-change: transform, opacity;
+}
+
+/* Verbatim from src/style.css — one circular outline per scored ball,
+   not one rectangle around the group. 2.5s in game, 1.8s here so the
+   three flashes fit the ten-second cut. */
+.score-outline {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  animation: score-outline-flash 1.8s ease-in-out 1 both;
+}
+@keyframes score-outline-flash {
+  0%, 100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; background: transparent; }
+  4%, 13%  { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+  37%, 46% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+  70%, 79% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
+}
+
+/* The clip's scrubber is the game's own segmented tutorial bar. */
+.beats { display: flex; gap: 4px; height: 5px; }
+.beat { flex: 1; background: var(--edge); border-radius: 3px; overflow: hidden; }
+.beat i { display: block; width: 0; height: 100%; background: var(--ink); border-radius: 3px; }
+
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+button {
+  font: 500 14px/1 Karla, sans-serif;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+button:hover { border-color: var(--ink-faint); }
+button:active { transform: translateY(1px); }
+button:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; }
+button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.clock {
+  margin-left: auto;
+  font: 400 13px/1 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+/* ---------- beat legend + provenance ---------- */
+h2 {
+  margin: 0 0 2px;
+  font: 600 20px/1.25 Fraunces, Georgia, serif;
+  letter-spacing: -0.01em;
+}
+.section { display: flex; flex-direction: column; gap: 12px; }
+.grid { display: grid; gap: 1px; background: var(--edge); border: 1px solid var(--edge); border-radius: 12px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 92px 1fr; gap: 0; background: var(--panel); }
+.row > * { padding: 12px 14px; }
+.row .t {
+  font: 400 12.5px/1.5 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  border-right: 1px solid var(--edge);
+}
+.row .d { font-size: 14.5px; }
+.row.on .t { color: var(--rose); }
+.row.on { background: var(--rose-soft); }
+.row .d b { font-weight: 700; }
+code {
+  font: 400 12.5px/1.4 "JetBrains Mono", ui-monospace, monospace;
+  background: var(--paper);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.note { color: var(--ink-soft); font-size: 14px; margin: 0; max-width: 66ch; }
+.warn {
+  border-left: 3px solid var(--rose);
+  padding: 2px 0 2px 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <span class="eyebrow">Slides · 运动研究 001</span>
+    <h1>四颗红球，两次滑动</h1>
+    <p class="lede">
+      基础小球玩法的十秒特写。几何、配色、球体画法、边缘补位和三个音效全部取自
+      <code>src/shapes/circle.ts</code> 与 <code>src/style.css</code>，
+      只有一处是新的：<b>松手落位</b>。游戏现在松手是硬切，这里给了它重量。
+    </p>
+  </header>
+
+  <div class="stage-shell">
+    <div class="stage" id="stage"><div class="board" id="board"></div></div>
+    <div class="beats" id="beats"></div>
+    <div class="transport">
+      <button class="primary" id="play">▶ 播放（带声音）</button>
+      <button id="mute">静音重播</button>
+      <span class="clock" id="clock">0.0 / 10.0s</span>
+    </div>
+  </div>
+
+  <section class="section">
+    <h2>分镜</h2>
+    <div class="grid" id="legend"></div>
+    <p class="warn">
+      浏览器规定声音必须由一次点击开启，所以第一次请用「播放（带声音）」那个按钮。
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>取材对照</h2>
+    <div class="grid">
+      <div class="row"><div class="t">几何</div><div class="d">
+        <code>ballCenter(r,c) = (c − r/2)·2R, R + r·√3R</code>，球径 <code>R×1.86</code>——与棋盘同一套三角密排
+      </div></div>
+      <div class="row"><div class="t">配色</div><div class="d">
+        <code>PALETTES.standard</code> 四色原样：红 #C0666B、黄 #DDA857、绿 #7A9C4A、蓝 #4F72C4
+      </div></div>
+      <div class="row"><div class="t">磁吸</div><div class="d">
+        <code>magnetizeRawDist(x, 2.2)</code> 原样——所以球会在每个卡位"粘"一下再走
+      </div></div>
+      <div class="row"><div class="t">补位</div><div class="d">
+        环绕补位与 <code>FADE_RANGE = 0.4</code> 的边缘淡出原样——滑出画面的球从另一头淡入
+      </div></div>
+      <div class="row"><div class="t">得分</div><div class="d">
+        图案是真实的 <code>rhombus22B(4,1)</code>；高亮是每球一个圆形描边闪三次，不是整组一个方框
+      </div></div>
+      <div class="row"><div class="t">翻面</div><div class="d">
+        <code>@keyframes flip-in</code> 原样：<code>rotateX</code> 0→88°→−14°→5°→0 配 <code>scaleY</code> 挤压
+      </div></div>
+      <div class="row"><div class="t">反面</div><div class="d">
+        三笔交叉的星号 SVG，<code>stroke-width 5.5</code>，尺寸 <code>0.95×</code> 球径——与游戏同一段标记
+      </div></div>
+      <div class="row"><div class="t">音效</div><div class="d">
+        cuelume 的 <code>tick</code> 0.35 / <code>chime</code> 0.6 / <code>toggle</code> 0.4——与 <code>juice.ts</code> 的音量表一致
+      </div></div>
+      <div class="row"><div class="t">新的</div><div class="d">
+        <b>落位</b>：整行到位时一次 140ms 的 1→1.05→1 挤压，取代现在的硬切
+      </div></div>
+    </div>
+    <p class="note">
+      两次滑动的中间态都验算过：滑动 ① 之后棋盘上不存在任何成立的得分图案，
+      所以四颗红球是在滑动 ② 落位的那一刻才第一次凑齐的。
+    </p>
+  </section>
+</div>
+
+<script type="module">
+import { animate, utils } from 'https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.esm.min.js';
+import { play } from 'https://cdn.jsdelivr.net/npm/cuelume@0.2.2/dist/index.js';
+
+/* ===================================================================
+   Everything above the divider is lifted from the game so the clip is
+   the game, not a lookalike. Below it is only the camera and the cut.
+   =================================================================== */
+
+const COLORS = ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'];
+
+// src/engine/drag.ts
+function magnetizeRawDist(x, power = 2.2) {
+  const nearest = Math.round(x);
+  const t = (x - nearest) * 2;
+  const eased = Math.sign(t) * Math.abs(t) ** power;
+  return nearest + eased / 2;
+}
+
+// src/shapes/circle.ts — renderDragPreview
+const FADE_RANGE = 0.4;
+function edgeOpacity(pos, n) {
+  const overshoot = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
+  return Math.max(0, 1 - overshoot / FADE_RANGE);
+}
+
+// src/shapes/circle.ts — makeBallEl, the dot face
+function starSVG(size, color) {
+  const s = Math.round(size * 0.95);
+  return `<svg viewBox="0 0 24 24" width="${s}" height="${s}">` +
+    `<g stroke="${color}" stroke-width="5.5" stroke-linecap="round">` +
+    `<line x1="12" y1="2.5" x2="12" y2="21.5"/>` +
+    `<line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
+    `<line x1="20" y1="6.75" x2="4" y2="17.25"/>` +
+    `</g></svg>`;
+}
+
+/* ------------------------- the scene ------------------------- */
+// Rows 3/4/5 of the real 28-ball triangle (4, 5 and 6 balls wide).
+// Colour indices chosen so that slide ① leaves the board with no
+// scoring shape anywhere, and slide ② completes rhombus22B(4,1).
+const ROWS = { 3: [3, 2, 1, 3], 4: [0, 0, 2, 3, 1], 5: [2, 1, 3, 0, 0, 2], 6: [1, 3, 1, 2, 3, 1, 2] };
+const DOTS = { 3: [1, 0, 3, 2], 4: [2, 3, 0, 1, 3], 5: [0, 2, 1, 3, 1, 0], 6: [2, 0, 3, 1, 0, 2, 1] };
+const TARGET = [[4, 1], [4, 2], [5, 1], [5, 2]];
+
+const SLIDE_A = { row: 4, steps: +1 };  // right one
+const SLIDE_B = { row: 5, steps: -2 };  // left two
+
+const BEATS = [
+  { at: 0.00, dur: 0.90, label: '0.0s', text: '入场：棋盘依次落定，白底、圆角取景，上下各切掉半颗球' },
+  { at: 0.90, dur: 1.60, label: '0.9s', text: '滑动 ①：<b>第 4 行右移一格</b>，一次 tick' },
+  { at: 2.50, dur: 0.60, label: '2.5s', text: '停顿——图案还差一半' },
+  { at: 3.10, dur: 2.20, label: '3.1s', text: '滑动 ②：<b>第 5 行左移两格</b>，两次 tick，红球到位' },
+  { at: 5.30, dur: 0.40, label: '5.3s', text: '落位挤压——这一下是新加的' },
+  { at: 5.70, dur: 1.80, label: '5.7s', text: '得分：<b>2+2</b> 四球圆描边闪三次，chime' },
+  { at: 7.50, dur: 1.10, label: '7.5s', text: '翻面：错峰 110ms 翻到星号反面，toggle' },
+  { at: 8.60, dur: 1.40, label: '8.6s', text: '收尾静止' },
+];
+const TOTAL = 10.0;
+
+/* ------------------------- geometry ------------------------- */
+const stage = document.getElementById('stage');
+const board = document.getElementById('board');
+let R = 0, rowH = 0, boardLeft = 0, boardTop = 0, size = 0;
+
+function layout() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  // 4.5 ball-spacings across: rows 4 and 5 — the two the pattern lands in —
+  // sit whole and centred, while rows 3 and 6 are cut roughly in half at the
+  // top and bottom edges. That bite is what makes it read as a close-up of a
+  // 28-ball board rather than the whole of a small one.
+  R = w / 9;
+  rowH = R * Math.sqrt(3);
+  size = R * 1.86;
+  // Centre the camera on the 2+2 target: cx ≈ −1.5R, cy ≈ R + 4.5·rowH.
+  boardLeft = w / 2 + 1.5 * R;
+  boardTop = h / 2 - (R + 4.5 * rowH);
+}
+const ballCenter = (r, c) => [boardLeft + (c - r / 2) * 2 * R, boardTop + R + r * rowH];
+
+/* ------------------------- rendering ------------------------- */
+// One element per ball, kept alive for the whole clip so anime.js has a
+// stable target — positions are written as transforms, never as layout.
+let balls = [];   // { r, c, colorIdx, dotIdx, el, offset (in steps), face }
+let outlines = [];
+
+function build() {
+  layout();
+  board.innerHTML = '';
+  balls = [];
+  outlines = [];
+  for (const rk of Object.keys(ROWS)) {
+    const r = +rk;
+    ROWS[r].forEach((colorIdx, c) => {
+      const el = document.createElement('div');
+      el.className = 'ball';
+      el.style.width = size + 'px';
+      el.style.height = size + 'px';
+      el.style.left = '0px';
+      el.style.top = '0px';
+      el.style.background = COLORS[colorIdx];
+      el.style.opacity = '0';
+      board.appendChild(el);
+      // Each ball also owns one ghost: the copy that has already come back
+      // round the other side. The game draws both at once and cross-fades
+      // them over FADE_RANGE, so a slide never looks like a jump cut.
+      const ghost = el.cloneNode(false);
+      board.appendChild(ghost);
+      balls.push({ r, c, colorIdx, dotIdx: DOTS[r][c], el, ghost, offset: 0, face: 'front', scale: 1, alpha: 0 });
+    });
+  }
+  paint();
+}
+
+function place(el, r, drawPos, scale, opacity) {
+  const y = boardTop + R + r * rowH - size / 2;
+  const x = boardLeft + (drawPos - r / 2) * 2 * R - size / 2;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+  el.style.opacity = String(opacity);
+}
+
+function paint() {
+  for (const b of balls) {
+    const n = ROWS[b.r].length;
+    const pos = b.c + b.offset;
+    place(b.el, b.r, pos, b.scale, edgeOpacity(pos, n) * b.alpha);
+    // The wrapped copy, drawn at the same time so the two cross-fade past
+    // the line's ends rather than one blinking out and the other in.
+    const alt = pos > (n - 1) / 2 ? pos - n : pos + n;
+    place(b.ghost, b.r, alt, b.scale, edgeOpacity(alt, n) * b.alpha);
+  }
+}
+
+function setFace(b, face) {
+  b.face = face;
+  for (const el of [b.el, b.ghost]) {
+    if (face === 'dot') {
+      el.style.background = 'transparent';
+      el.style.boxShadow = 'none';
+      el.innerHTML = starSVG(size, COLORS[b.dotIdx]);
+    } else {
+      el.style.background = COLORS[b.colorIdx];
+      el.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.1)';
+      el.innerHTML = '';
+    }
+  }
+}
+
+/* ------------------------- sound ------------------------- */
+// The same three cues, at the same volumes, as src/engine/juice.ts.
+let audioOn = false;
+const cue = (name, volume) => { if (audioOn) { try { play(name, { volume }); } catch (e) { /* no audio device */ } } };
+const tick = () => cue('tick', 0.35);
+const chime = () => cue('chime', 0.6);
+const toggle = () => cue('toggle', 0.4);
+
+/* ------------------------- the cut ------------------------- */
+const beatsEl = document.getElementById('beats');
+const legendEl = document.getElementById('legend');
+const clockEl = document.getElementById('clock');
+const fills = [];
+const legendRows = [];
+
+BEATS.forEach((b) => {
+  const seg = document.createElement('div');
+  seg.className = 'beat';
+  seg.style.flexGrow = String(b.dur);
+  const fill = document.createElement('i');
+  seg.appendChild(fill);
+  beatsEl.appendChild(seg);
+  fills.push(fill);
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="t">${b.label}</div><div class="d">${b.text}</div>`;
+  legendEl.appendChild(row);
+  legendRows.push(row);
+});
+
+let running = null;
+
+function reset() {
+  if (running) {
+    running.cancelled = true;
+    for (const t of running.timers) clearTimeout(t);
+    running = null;
+  }
+  utils.remove(balls.map((b) => b.el));
+  build();
+  for (const b of balls) { b.alpha = 0; b.offset = 0; b.scale = 1; setFace(b, 'front'); }
+  for (const o of outlines) o.remove();
+  outlines = [];
+  paint();
+  fills.forEach((f) => { f.style.width = '0%'; });
+  legendRows.forEach((r) => r.classList.remove('on'));
+  clockEl.textContent = '0.0 / ' + TOTAL.toFixed(1) + 's';
+}
+
+const wait = (ms, run) => new Promise((res) => {
+  const t = setTimeout(res, ms);
+  run.timers.push(t);
+});
+
+// A slide: raw step count travels 0 → steps, positions run through the
+// game's own magnetize curve, and a tick fires on every detent crossed.
+function slide(run, { row, steps }, durMs) {
+  return new Promise((resolve) => {
+    const members = balls.filter((b) => b.r === row);
+    let last = 0;
+    const scalar = { v: 0 };
+    animate(scalar, {
+      v: steps,
+      duration: durMs,
+      ease: 'inOut(2.2)',
+      onUpdate: () => {
+        if (run.cancelled) return;
+        const d = magnetizeRawDist(scalar.v);
+        for (const b of members) b.offset = d;
+        const crossed = Math.round(scalar.v);
+        if (crossed !== last) { last = crossed; tick(); }
+        paint();
+      },
+      onComplete: () => {
+        if (run.cancelled) return resolve();
+        // Seat: the whole line settles into its slot. This is the one
+        // beat the game does not have today.
+        const sq = { s: 1 };
+        animate(sq, {
+          s: [{ to: 1.05, duration: 60, ease: 'out(2)' }, { to: 1, duration: 80, ease: 'out(3)' }],
+          onUpdate: () => { for (const b of members) b.scale = sq.s; paint(); },
+          onComplete: () => {
+            for (const b of members) { b.offset = Math.round(b.offset); b.scale = 1; }
+            // Commit the shift into the model so later beats read true.
+            const n = ROWS[row].length;
+            for (const b of members) { b.c = ((b.c + steps) % n + n) % n; b.offset = 0; }
+            paint();
+            resolve();
+          },
+        });
+      },
+    });
+  });
+}
+
+function flash(run) {
+  for (const [r, c] of TARGET) {
+    const b = balls.find((x) => x.r === r && x.c === c);
+    if (!b) continue;
+    const [cx, cy] = ballCenter(r, c);
+    const o = document.createElement('div');
+    o.className = 'score-outline';
+    o.style.width = size + 'px';
+    o.style.height = size + 'px';
+    o.style.left = cx - size / 2 + 'px';
+    o.style.top = cy - size / 2 + 'px';
+    board.appendChild(o);
+    outlines.push(o);
+  }
+  chime();
+}
+
+// src/style.css @keyframes flip-in, driven through anime so the face can
+// be swapped at the exact frame the ball is edge-on.
+function flip(run) {
+  TARGET.forEach(([r, c], i) => {
+    const b = balls.find((x) => x.r === r && x.c === c);
+    if (!b) return;
+    const t = setTimeout(() => {
+      if (run.cancelled) return;
+      toggle();
+      const k = { rx: 0, sy: 1 };
+      let swapped = false;
+      animate(k, {
+        rx: [
+          { to: 88, duration: 129, ease: 'out(2)' },
+          { to: -14, duration: 68 },
+          { to: 5, duration: 68 },
+          { to: 0, duration: 75 },
+        ],
+        sy: [
+          { to: 0.88, duration: 129 },
+          { to: 1.07, duration: 68 },
+          { to: 0.98, duration: 68 },
+          { to: 1, duration: 75 },
+        ],
+        onUpdate: () => {
+          if (!swapped && k.rx > 70) { swapped = true; setFace(b, 'dot'); }
+          const [ccx, ccy] = ballCenter(b.r, b.c);
+          b.el.style.transform =
+            `translate(${ccx - size / 2}px, ${ccy - size / 2}px) ` +
+            `perspective(300px) rotateX(${k.rx}deg) scaleY(${k.sy})`;
+          b.ghost.style.opacity = '0';
+        },
+        onComplete: () => { b.scale = 1; paint(); },
+      });
+    }, i * 110);
+    run.timers.push(t);
+  });
+}
+
+async function playClip(withSound) {
+  reset();
+  audioOn = withSound;
+  const run = { cancelled: false, timers: [] };
+  running = run;
+  const t0 = performance.now();
+
+  // Scrubber + legend follow one clock, so what you read is what you saw.
+  const clockLoop = () => {
+    if (run.cancelled) return;
+    const t = Math.min(TOTAL, (performance.now() - t0) / 1000);
+    clockEl.textContent = t.toFixed(1) + ' / ' + TOTAL.toFixed(1) + 's';
+    BEATS.forEach((b, i) => {
+      const p = Math.max(0, Math.min(1, (t - b.at) / b.dur));
+      fills[i].style.width = p * 100 + '%';
+      legendRows[i].classList.toggle('on', t >= b.at && t < b.at + b.dur);
+    });
+    if (t < TOTAL) requestAnimationFrame(clockLoop);
+    else legendRows.forEach((r) => r.classList.remove('on'));
+  };
+  requestAnimationFrame(clockLoop);
+
+  // 0.0 — entrance, one ball at a time
+  balls.forEach((b, i) => {
+    const t = setTimeout(() => {
+      if (run.cancelled) return;
+      const k = { a: 0, s: 0.72 };
+      animate(k, {
+        a: 1, s: 1, duration: 420, ease: 'out(3)',
+        onUpdate: () => { b.alpha = k.a; b.scale = k.s; paint(); },
+      });
+    }, i * 24);
+    run.timers.push(t);
+  });
+
+  await wait(900, run); if (run.cancelled) return;
+  await slide(run, SLIDE_A, 1450); if (run.cancelled) return;
+  await wait(650, run); if (run.cancelled) return;
+  await slide(run, SLIDE_B, 2050); if (run.cancelled) return;
+  await wait(260, run); if (run.cancelled) return;
+  flash(run);
+  await wait(1800, run); if (run.cancelled) return;
+  flip(run);
+}
+
+document.getElementById('play').addEventListener('click', () => playClip(true));
+document.getElementById('mute').addEventListener('click', () => playClip(false));
+window.addEventListener('resize', () => { if (!running) { reset(); } });
+
+build();
+for (const b of balls) b.alpha = 0;
+paint();
+
+const stillPreferred = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (stillPreferred) {
+  // Show the finished frame rather than an empty stage, and wait to be asked.
+  for (const b of balls) b.alpha = 1;
+  paint();
+  document.getElementById('play').textContent = '▶ 播放（带声音）';
+} else {
+  playClip(false);
+}
+</script>
