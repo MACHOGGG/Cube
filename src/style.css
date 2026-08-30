@@ -429,6 +429,11 @@ h1 {
   padding: 20px; opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 10;
 }
 .overlay.opaque { background: var(--bg); }
+/* A share card opened from inside the blown-up 记录 panel has to sit ON TOP
+   of that panel. The panel is a centre picker (z-index 60), so a plain
+   overlay (10) came up behind it — visible only as a sliver, and impossible
+   to read or close. */
+.overlay--top { z-index: 80; }
 .overlay.show { opacity: 1; pointer-events: auto; }
 .modal { background: var(--surface); border-radius: 16px; padding: 28px 24px; width: 100%; max-width: 340px; box-shadow: var(--shadow); text-align: center; }
 .overlay.opaque .modal { box-shadow: none; background: transparent; }

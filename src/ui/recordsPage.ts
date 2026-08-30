@@ -196,8 +196,13 @@ function openShareCard(run: StoredRun, lang: Lang): void {
   const d = run.data;
   const info = buildShareInfo(d, shapeName(lang, d.shapeId, d.shapeFallback), lang);
   const dataUrl = renderShareCard(info, run.end ?? null, run.start ?? null);
+  // One card at a time: tapping a second record replaces the one already up
+  // rather than stacking another overlay behind it.
+  for (const old of Array.from(document.querySelectorAll('.overlay--top'))) old.remove();
   const share = document.createElement('div');
-  share.className = 'overlay show';
+  // --top puts it above the blown-up 记录 panel it was opened from; closing
+  // it just removes this layer, so that panel is still there underneath.
+  share.className = 'overlay overlay--top show';
   share.innerHTML = `
     <div class="modal share-modal">
       <h2>${s.shareCardTitle}</h2>
@@ -207,7 +212,20 @@ function openShareCard(run: StoredRun, lang: Lang): void {
     </div>
   `;
   document.body.appendChild(share);
-  const close = () => share.remove();
+  const close = () => {
+    share.remove();
+    window.removeEventListener('keydown', onKey, true);
+  };
+  // Escape belongs to the card while it is up. The panel behind has its own
+  // window-level Escape handler; this one is registered on the capture phase,
+  // so it runs first and stops the key reaching that handler — otherwise
+  // Escape would shut the panel and leave the card floating over nothing.
+  function onKey(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    close();
+  }
+  window.addEventListener('keydown', onKey, true);
   share.querySelector<HTMLButtonElement>('#recShareClose')!.addEventListener('click', close);
   share.addEventListener('click', (e) => {
     if (e.target === share) close();
