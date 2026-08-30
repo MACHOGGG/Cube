@@ -57,6 +57,12 @@ function svg(inner: string): string {
   return `<svg viewBox="0 0 100 100" aria-hidden="true">${inner}</svg>`;
 }
 
+/** For a glyph that isn't square — the V board's two arms need a 2:1 box so
+ *  each arm can be drawn at the same size as 大三角's single triangle. */
+function svgWide(w: number, inner: string): string {
+  return `<svg viewBox="0 0 ${w} 100" aria-hidden="true">${inner}</svg>`;
+}
+
 // ---------------------------------------------------------------------------
 // base games — a gray silhouette holding a miniature of that game's own board
 // ---------------------------------------------------------------------------
@@ -413,24 +419,32 @@ function triRows(
 }
 const TRI_FILLS = [C.green, C.blue, C.tan, C.blue, C.tan, C.rose, C.blue, C.tan, C.rose];
 
-/** 大三角 — one big triangle of the same tiles. */
-const ICON_TRIANGLE_BIG = svg(
+/** One arm: the periwinkle triangle with its rows of tiles. Both triangle
+ *  layouts are built from this, at exactly the same size — 进阶三角 is two
+ *  of these, so its icon is a 2:1 box rather than a shrunk-down pair. */
+const TRI_ARM = (fills: string[]) =>
   `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
-    `<g transform="translate(0,2)">${triRows(50, 12, 40, 3, TRI_FILLS)}</g>`,
+  `<g transform="translate(0,2)">${triRows(50, 12, 40, 3, fills)}</g>`;
+
+/** 大三角 — one big triangle of tiles. */
+const ICON_TRIANGLE_BIG = svg(TRI_ARM(TRI_FILLS));
+
+/** 进阶三角 — the V board's two independent arms, each the full size of
+ *  大三角's, side by side on a box twice as wide. */
+const ICON_TRIANGLE_ADVANCED = svgWide(
+  204,
+  TRI_ARM(TRI_FILLS) + `<g transform="translate(104,0)">${TRI_ARM([...TRI_FILLS].reverse())}</g>`,
 );
 
-/** 进阶三角 — the V board's two independent arms, drawn as the two triangles
- *  they are, meeting at the bottom. */
-const ICON_TRIANGLE_ADVANCED = svg(
-  `<g transform="translate(-24,10) scale(0.62)">` +
-    `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
-    triRows(50, 14, 40, 3, TRI_FILLS) +
-    `</g>` +
-    `<g transform="translate(38,10) scale(0.62)">` +
-    `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
-    triRows(50, 14, 40, 3, [...TRI_FILLS].reverse()) +
-    `</g>`,
-);
+/** Glyphs that need a 2:1 box rather than the usual square one. */
+const WIDE_LAYOUT_ICONS = new Set(['triangleAdvanced']);
+
+/** Whether this variant's icon is the wide (2:1) kind — the picker gives it
+ *  a double-width slot, and wraps to a second line when that no longer fits
+ *  beside its sibling. */
+export function layoutIconIsWide(id: string): boolean {
+  return WIDE_LAYOUT_ICONS.has(id);
+}
 
 /** One icon per "more layouts" variant, by its game id. */
 const LAYOUT_ICONS: Record<string, string> = {

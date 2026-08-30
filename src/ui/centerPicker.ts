@@ -7,6 +7,9 @@ export interface PickerOption {
   /** Draws the label under the icon; off by default, since most options are
    *  told apart by the piece drawn inside them rather than by words. */
   showLabel?: boolean;
+  /** This glyph is a 2:1 box, not a square one (进阶三角's two arms) — it
+   *  takes a double-width slot, and the row wraps rather than squeezing it. */
+  wide?: boolean;
   onPick: () => void;
 }
 
@@ -68,7 +71,7 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
     row.className = 'center-pick-row' + (opts.split ? ' center-pick-row--split' : '');
     for (const opt of opts.options ?? []) {
       const btn = document.createElement('button');
-      btn.className = 'center-pick-opt';
+      btn.className = 'center-pick-opt' + (opt.wide ? ' center-pick-opt--wide' : '');
       btn.setAttribute('aria-label', opt.label);
       btn.innerHTML = opt.glyph + (opt.showLabel ? `<span class="center-pick-label">${opt.label}</span>` : '');
       btn.addEventListener('pointerdown', () => {

@@ -139,10 +139,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <!-- Below the board on purpose: these are the once-a-run controls, and
            keeping them out of the play area is what lets the board and the
            HUD share one screen without scrolling. -->
+      <!-- 结束 sits last — bottom-right in portrait, bottom of the column in
+           landscape. It is the one irreversible button on the screen, so it
+           gets the corner furthest from where a thumb rests mid-drag. -->
       <div class="controls">
         <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
-        <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
         ${extraButtonsHtml}
+        <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
       </div>
     </div>
 

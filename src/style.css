@@ -689,7 +689,9 @@ button:hover { filter: brightness(1.05); }
 }
 .center-pick--in { opacity: 1; }
 .center-pick-body { display: flex; align-items: center; justify-content: center; }
-.center-pick-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
+/* Wraps, so a wide option (进阶三角's two arms) that no longer fits beside
+   its sibling drops onto its own line rather than being squeezed. */
+.center-pick-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 18px; }
 /* The three clocks land as two over one, the arrangement the sheet shows,
    rather than in a flat row. */
 .center-pick-row--split {
@@ -705,6 +707,10 @@ button:hover { filter: brightness(1.05); }
 .center-pick-opt:hover { filter: none; }
 .center-pick-opt:active { transform: none; }
 .center-pick-opt > svg { width: 100%; aspect-ratio: 1; display: block; }
+/* Twice the width, twice the box: each of the V board's arms is then drawn
+   at exactly the size 大三角's single triangle gets. */
+.center-pick-opt--wide { width: min(74vw, 318px); }
+.center-pick-opt--wide > svg { aspect-ratio: 2.04; }
 .center-pick-label { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
 
 /* ---------- profile page rows ---------- */

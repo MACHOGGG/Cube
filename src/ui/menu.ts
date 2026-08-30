@@ -12,6 +12,7 @@ import {
   bombChip,
   moreLayoutCard,
   layoutIcon,
+  layoutIconIsWide,
   timedCard,
   timedOption,
   type BaseShape,
@@ -270,6 +271,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
           glyph: layoutIcon(c.id, shape),
           label: shapeName(lang, c.id, c.name),
           showLabel: true,
+          wide: layoutIconIsWide(c.id),
           onPick: () => handlers.onSelectLayout(c.id, reopenKey),
         })),
       });
