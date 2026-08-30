@@ -1,0 +1,693 @@
+<title>Flip Bench</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #FAF8F6;
+  --bench: #EBE5DE;
+  --edge: #DCD3C9;
+  --table: #FFFFFF;
+  --ink: #2E2430;
+  --ink-soft: #6F6270;
+  --ink-faint: #9A8B98;
+  --rose: #BE5762;
+  --rose-soft: #F3DBDC;
+  --shadow: 0 20px 48px -26px rgba(46, 36, 48, 0.42);
+
+  /* PALETTES.standard, verbatim from src/shapes/circle.ts */
+  --p0: #C0666B;
+  --p1: #DDA857;
+  --p2: #7A9C4A;
+  --p3: #4F72C4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #17131A;
+    --bench: #221C26;
+    --edge: #382E3D;
+    --ink: #F0E9EE;
+    --ink-soft: #B3A5B4;
+    --ink-faint: #7C6E80;
+    --rose: #E08A93;
+    --rose-soft: #46292F;
+    --shadow: 0 20px 48px -26px rgba(0, 0, 0, 0.8);
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #17131A;
+  --bench: #221C26;
+  --edge: #382E3D;
+  --ink: #F0E9EE;
+  --ink-soft: #B3A5B4;
+  --ink-faint: #7C6E80;
+  --rose: #E08A93;
+  --rose-soft: #46292F;
+  --shadow: 0 20px 48px -26px rgba(0, 0, 0, 0.8);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 16px/1.6 Karla, "Helvetica Neue", Arial, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: clamp(26px, 5vw, 56px) clamp(16px, 4vw, 30px) 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.eyebrow {
+  font: 500 11px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+h1 {
+  margin: 6px 0 0;
+  font: 600 clamp(28px, 5vw, 40px)/1.12 Fraunces, Georgia, "Times New Roman", serif;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.lede { margin: 8px 0 0; max-width: 60ch; color: var(--ink-soft); }
+
+/* ---- the table the pieces turn on ---- */
+.table {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--table);
+  border: 1px solid var(--edge);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.pieces { display: grid; grid-template-columns: repeat(2, auto); gap: 6px; }
+
+/* Same construction as src/ui/loadingScreen.ts, so what you judge here is
+   what ships: two printed faces held apart in Z with rim strips closing the
+   sides, and the whole turn conjugated by a Z rotation of the travel angle. */
+.piece { position: relative; }
+.plank { position: absolute; inset: 0; transform-style: preserve-3d; }
+.face {
+  position: absolute; inset: 0; border-radius: 50%;
+  backface-visibility: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.rim { position: absolute; top: 27%; bottom: 27%; border-radius: 999px; transform: rotateY(90deg); }
+.cast {
+  position: absolute; left: 7%; right: 7%; top: 12%; bottom: 12%;
+  border-radius: 50%; background: rgba(46, 36, 48, 0.34); opacity: 0;
+}
+
+/* ---- the frozen comparison rail ---- */
+.rail-wrap { display: flex; flex-direction: column; gap: 10px; }
+.rail {
+  display: flex; gap: 4px; padding: 20px 12px;
+  background: var(--table); border: 1px solid var(--edge); border-radius: 18px;
+  overflow-x: auto;
+}
+.slot { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; gap: 9px; min-width: 96px; }
+.slot .n {
+  font: 500 12px/1 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; color: var(--ink-faint);
+  padding: 3px 8px; border-radius: 999px;
+}
+.slot.pick .n { background: var(--rose-soft); color: var(--rose); }
+.slot button {
+  border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%;
+}
+.slot button:focus-visible { outline: 2px solid var(--rose); outline-offset: 4px; }
+
+/* ---- controls ---- */
+h2 { margin: 0; font: 600 19px/1.3 Fraunces, Georgia, serif; letter-spacing: -0.01em; }
+.panel {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 2px;
+  background: var(--edge); border: 1px solid var(--edge); border-radius: 14px; overflow: hidden;
+}
+.ctl { background: var(--bench); padding: 13px 16px 15px; display: flex; flex-direction: column; gap: 7px; }
+.ctl .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ctl .lbl { font-size: 14px; font-weight: 500; }
+.ctl .val {
+  font: 500 13px/1 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; color: var(--rose);
+}
+.ctl .hint { font-size: 12.5px; color: var(--ink-faint); line-height: 1.45; }
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 22px;
+  background: none; cursor: pointer; margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--edge); }
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--edge); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--rose); border: 2px solid var(--bench); margin-top: -6px;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; background: var(--rose); border: 2px solid var(--bench);
+}
+input[type="range"]:focus-visible { outline: 2px solid var(--rose); outline-offset: 3px; border-radius: 4px; }
+
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.transport { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.scrub { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.scrub .lbl { font-size: 13.5px; color: var(--ink-soft); white-space: nowrap; }
+.scrub input { flex: 1; min-width: 0; }
+.scrub input:disabled { opacity: 0.4; cursor: default; }
+.scrub .val {
+  font: 500 13px/1 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; color: var(--rose); min-width: 5ch; text-align: right;
+}
+button.chip {
+  font: 500 13px/1 Karla, sans-serif; padding: 9px 14px; border-radius: 999px;
+  border: 1px solid var(--edge); background: var(--bench); color: var(--ink); cursor: pointer;
+}
+button.chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+button.chip:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; }
+
+pre {
+  margin: 0; padding: 16px 18px; overflow-x: auto;
+  background: var(--bench); border: 1px solid var(--edge); border-radius: 14px;
+  font: 400 13px/1.75 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+pre b { color: var(--rose); font-weight: 500; }
+.note { margin: 0; font-size: 14px; color: var(--ink-soft); max-width: 64ch; }
+</style>
+
+<style>
+/* three stages, one per shape, running the same cycle in lockstep */
+.stages { display: flex; flex-direction: column; gap: 14px; }
+.stage { display: flex; flex-direction: column; gap: 7px; }
+.stage .cap {
+  display: flex; align-items: baseline; gap: 9px;
+  font: 500 12px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+}
+.stage .cap em { font-style: normal; font-family: Karla, sans-serif; letter-spacing: 0; text-transform: none; font-size: 13px; }
+.strip {
+  position: relative; width: 100%; height: 132px;
+  background: var(--table); border: 1px solid var(--edge); border-radius: 18px;
+  overflow: hidden;
+}
+.piece { position: absolute; }
+.plank { position: absolute; inset: 0; transform-style: preserve-3d; }
+.face { position: absolute; inset: 0; backface-visibility: hidden; }
+.rim { position: absolute; transform: rotateY(90deg); }
+.cast { position: absolute; border-radius: 50%; background: rgba(46,36,48,0.34); opacity: 0; }
+.halo {
+  position: absolute; box-sizing: border-box; pointer-events: none;
+  border: 3px solid var(--ink); opacity: 0;
+  box-shadow: 0 0 18px 4px rgba(190,87,98,0.55); background: rgba(190,87,98,0.22);
+}
+
+/* the comparison grid: five thicknesses across, three shapes down */
+.grid-wrap { background: var(--table); border: 1px solid var(--edge); border-radius: 18px; padding: 16px 12px 12px; overflow-x: auto; }
+.cmp { display: grid; grid-template-columns: 54px repeat(5, minmax(84px, 1fr)); gap: 6px 4px; align-items: center; min-width: 480px; }
+.cmp .rowlab { font: 500 12px/1 Karla, sans-serif; color: var(--ink-soft); }
+.cmp .cell { display: flex; justify-content: center; }
+.cmp .head {
+  text-align: center; font: 500 12px/1 "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; color: var(--ink-faint); padding: 3px 0; border-radius: 999px; cursor: pointer;
+  border: 0; background: none; width: 100%;
+}
+.cmp .head.pick { background: var(--rose-soft); color: var(--rose); }
+.cmp .head:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Slides · 翻面调参</span>
+    <h1>木片有多厚</h1>
+    <p class="lede">
+      三种图形跑同一套循环——滑动一行、落位、得分、翻面、消失——用的是线上开屏那份构造和那条曲线，
+      连 anime.js 的默认缓动 <code>out(2)</code> 都对着实测复刻过。调好了把最后那段数字发我。
+    </p>
+  </header>
+
+  <div class="stages" id="stages"></div>
+
+  <div class="transport">
+    <button class="chip" type="button" id="playBtn" aria-pressed="true">⏸ 暂停</button>
+    <label class="scrub">
+      <span class="lbl">手动转到</span>
+      <input type="range" min="0" max="1" step="0.002" value="0.138" id="scrub" disabled>
+      <span class="val" id="scrubVal">—</span>
+    </label>
+  </div>
+
+  <section class="rail-wrap">
+    <h2>五种厚度 × 三种图形</h2>
+    <p class="note">
+      全部冻结在转过 <b>75°</b> 的位置：侧边宽度已是最大值的 96.5%（峰值在 90°），正面还看得清。
+      三种图形并排，就能看出同一个数字在方角、圆边和斜边上是不是同样成立。点表头换厚度。
+    </p>
+    <div class="grid-wrap"><div class="cmp" id="cmp"></div></div>
+  </section>
+
+  <section class="rail-wrap">
+    <h2>滚动方向</h2>
+    <p class="note">木片绕的是垂直于移动方向的那根轴——导致得分的那次移动往哪走，它就往哪滚。</p>
+    <div class="row" id="dirs"></div>
+  </section>
+
+  <section class="rail-wrap">
+    <h2>手感</h2>
+    <div class="panel" id="panel"></div>
+  </section>
+
+  <section class="rail-wrap">
+    <h2>把这段发我</h2>
+    <pre id="out"></pre>
+    <p class="note">
+      这就是 <code>src/ui/loadingScreen.ts</code> 顶部那几行的真实写法。除时长外全是"图形直径的比例"，
+      所以换到任何大小的棋子上厚度观感都一样。三种图形要是需要各自的数字，告诉我哪个要偏离多少就行。
+    </p>
+  </section>
+</div>
+
+<script>
+/* ── anime.js's real curve ───────────────────────────────────────────────
+   Its default easing was measured against the library rather than assumed:
+   out(2) fits 240 samples with a mean deviation of 0.0099, against 0.0766
+   for out(3) and 0.1831 for linear. These three lines are what ships. */
+const easeOut = (t, n) => 1 - Math.pow(1 - t, n);
+const easeIn = (t, n) => Math.pow(t, n);
+const cl = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+function track(legs, from, at) {
+  let t0 = 0, prev = from;
+  for (const [to, dur, ease] of legs) {
+    if (at < t0 + dur) return prev + (to - prev) * ease(cl((at - t0) / dur));
+    t0 += dur; prev = to;
+  }
+  return prev;
+}
+/** src/engine/drag.ts — the detent curve every board slides through. */
+const magnetize = (x, p = 2.2) => {
+  const n = Math.round(x), t = (x - n) * 2;
+  return n + (Math.sign(t) * Math.pow(Math.abs(t), p)) / 2;
+};
+
+// Held at 75 degrees: the edge is at 96.5% of its widest (which is 90) while
+// the printed face is still readable, so the thickness can be judged on a
+// piece you can still recognise.
+const FREEZE_ROT = 75;
+const GROUND = '#FFFFFF';
+
+const S = {
+  flipMs: 510, thick: 0.055, persp: 3.5, lift: 0.07,
+  overshoot: 9, shadow: 0.34, rimFade: 0.14, rimDark: 0.5,
+  stagger: 90, dir: 0,
+};
+
+/* ── the three shapes, drawn the way their own modules draw them ───────── */
+const star = (size, color) => {
+  const s = Math.round(size * 0.95);
+  return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true">` +
+    `<g stroke="${color}" stroke-width="5.5" stroke-linecap="round">` +
+    `<line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
+    `<line x1="20" y1="6.75" x2="4" y2="17.25"/></g></svg>`;
+};
+const TRI_UP = 'polygon(50% 0%, 100% 100%, 0% 100%)';
+const TRI_DN = 'polygon(0% 0%, 100% 0%, 50% 100%)';
+const TRI_UP_IN = 'polygon(50% 26.7%, 80% 86.7%, 20% 86.7%)';
+const TRI_DN_IN = 'polygon(20% 13.3%, 80% 13.3%, 50% 73.3%)';
+
+const SHAPES = {
+  // src/shapes/square.ts — PALETTES.standard; .tile is an 8px-radius box and
+  // the dot face is a transparent box holding an 86% disc.
+  square: {
+    label: '方块', note: '方角 · 8px 圆角 · 反面是内嵌圆点',
+    palette: ['#C46A4E', '#9C8A3D', '#4A9573', '#4C7EAD', '#8067A8', '#AD5C82'],
+    pitch: 1.12, aspect: 1,
+    front: (z, f) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
+      `border-radius:${(0.11 * 100).toFixed(0)}%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08)"></div>`,
+    back: (z, b) => `<div class="face" style="transform:rotateY(180deg) translateZ(${z}px);background:${GROUND};` +
+      `border-radius:11%;display:flex;align-items:center;justify-content:center">` +
+      `<div style="width:86%;height:86%;border-radius:50%;background:${b}"></div></div>`,
+    rims: (t, f, b) => `<div class="rim" style="left:${-t / 2}px;width:${t}px;top:6%;bottom:6%;background:${f};` +
+      `filter:brightness(var(--rd))"></div>` +
+      `<div class="rim" style="right:${-t / 2}px;width:${t}px;top:6%;bottom:6%;background:${b};` +
+      `filter:brightness(var(--rd))"></div>`,
+    cast: 'left:6%;right:6%;top:10%;bottom:10%',
+  },
+  // src/shapes/circle.ts — PALETTES.standard; the dot face is a transparent
+  // disc carrying three crossing strokes.
+  circle: {
+    label: '圆球', note: '圆边 · 反面是三笔交叉的星号',
+    palette: ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'],
+    pitch: 1.075, aspect: 1,
+    front: (z, f) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
+      `border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1)"></div>`,
+    back: (z, b, size) => `<div class="face" style="transform:rotateY(180deg) translateZ(${z}px);background:${GROUND};` +
+      `border-radius:50%;display:flex;align-items:center;justify-content:center">${star(size, b)}</div>`,
+    rims: (t, f, b) => `<div class="rim" style="left:${-t / 2}px;width:${t}px;top:27%;bottom:27%;border-radius:999px;` +
+      `background:${f};filter:brightness(var(--rd))"></div>` +
+      `<div class="rim" style="right:${-t / 2}px;width:${t}px;top:27%;bottom:27%;border-radius:999px;` +
+      `background:${b};filter:brightness(var(--rd))"></div>`,
+    cast: 'left:7%;right:7%;top:12%;bottom:12%',
+  },
+  // src/shapes/triangle.ts — PALETTES.standard; a clip-path silhouette, and
+  // the dot face is the same triangle shrunk to 0.6 with a dark stroke.
+  triangle: {
+    label: '三角', note: '斜边 · 上下交替 · 反面是缩小的同向三角',
+    palette: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
+    pitch: 1.06, aspect: 0.866, alternates: true,
+    front: (z, f, size, up) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
+      `clip-path:${up ? TRI_UP : TRI_DN};-webkit-clip-path:${up ? TRI_UP : TRI_DN}"></div>`,
+    back: (z, b, size, up) => `<div class="face" style="transform:rotateY(180deg) translateZ(${z}px)">` +
+      `<div style="position:absolute;inset:0;background:${GROUND};clip-path:${up ? TRI_UP : TRI_DN};` +
+      `-webkit-clip-path:${up ? TRI_UP : TRI_DN}"></div>` +
+      `<div style="position:absolute;inset:0;background:${b};clip-path:${up ? TRI_UP_IN : TRI_DN_IN};` +
+      `-webkit-clip-path:${up ? TRI_UP_IN : TRI_DN_IN}"></div></div>`,
+    // A triangle is widest along its base, so its edge lives down there for an
+    // up-pointing piece and up top for a down-pointing one.
+    rims: (t, f, b, up) => {
+      const band = up ? 'top:56%;bottom:3%' : 'top:3%;bottom:56%';
+      return `<div class="rim" style="left:${-t / 2}px;width:${t}px;${band};background:${f};` +
+        `filter:brightness(var(--rd))"></div>` +
+        `<div class="rim" style="right:${-t / 2}px;width:${t}px;${band};background:${b};` +
+        `filter:brightness(var(--rd))"></div>`;
+    },
+    cast: 'left:14%;right:14%;top:34%;bottom:8%',
+  },
+};
+const ORDER = ['square', 'circle', 'triangle'];
+
+/* ── the cycle ───────────────────────────────────────────────────────────
+   slide a row one slot -> it seats -> the middle three score -> they turn
+   over -> they fade away. Five pieces per strip is a rig, not a copy of any
+   one board's real scoring shape; what it is for is judging the turn. */
+const SLIDE_MS = 620, SETTLE_MS = 210, HOLD_MS = 260, SCORE_MS = 900, CLEAR_MS = 420, REST_MS = 620;
+const SCORING = [1, 2, 3];
+const cycleMs = () => SLIDE_MS + SETTLE_MS + HOLD_MS + SCORE_MS + S.stagger * 2 + S.flipMs + 200 + CLEAR_MS + REST_MS;
+
+function buildPiece(host, size, shape, front, back, thickRatio, up) {
+  const sp = SHAPES[shape];
+  const t = size * thickRatio;
+  const h = size * sp.aspect;
+  host.style.width = size + 'px';
+  host.style.height = h + 'px';
+  host.style.perspective = size * S.persp + 'px';
+  host.style.setProperty('--rd', S.rimDark);
+  host.innerHTML =
+    `<div class="cast" style="${sp.cast};filter:blur(${(size * 0.06).toFixed(1)}px)"></div>` +
+    `<div class="plank">${sp.front(t / 2, front, size, up)}${sp.back(t / 2, back, size, up)}` +
+    `${sp.rims(t, front, back, up)}</div>`;
+  return {
+    host,
+    plank: host.querySelector('.plank'),
+    cast: host.querySelector('.cast'),
+    rims: [...host.querySelectorAll('.rim')],
+  };
+}
+
+/** One frame of the turn. Returns the angle, so the scrubber can show it. */
+function poseFlip(parts, size, ms) {
+  const D = S.flipMs, O = S.overshoot;
+  const rot = track([
+    [180 + O, D * 0.62, (t) => easeOut(t, 2)],
+    [180 - O * 0.4, D * 0.2, (t) => easeOut(t, 2)],
+    [180 + O * 0.15, D * 0.1, (t) => easeOut(t, 2)],
+    [180, D * 0.08, (t) => easeOut(t, 2)],
+  ], 0, ms);
+  const peak = size * S.lift;
+  const z = track([
+    [peak, D * 0.3, (t) => easeOut(t, 3)],
+    [0, D * 0.45, (t) => easeIn(t, 2)],
+  ], 0, ms);
+  const f = S.dir;
+  parts.plank.style.transform =
+    `translateZ(${z}px) rotateZ(${f}deg) rotateY(${rot}deg) rotateZ(${-f}deg)`;
+  const face = Math.abs(Math.sin((rot * Math.PI) / 180));
+  const show = Math.max(0, face - S.rimFade) / (1 - S.rimFade);
+  for (const r of parts.rims) r.style.opacity = show;
+  const up = peak > 0 ? z / peak : 0;
+  parts.cast.style.opacity = S.shadow * up;
+  parts.cast.style.scale = 1 + 0.16 * up;
+  return rot;
+}
+/** The angle used to solve for a scrub position, so 75 degrees really is 75. */
+function msForRot(target) {
+  const D = S.flipMs;
+  let lo = 0, hi = D * 0.62;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const r = (180 + S.overshoot) * easeOut(cl(mid / (D * 0.62)), 2);
+    if (r < target) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/* ── stages ──────────────────────────────────────────────────────────── */
+const N = 5;
+const stagesEl = document.getElementById('stages');
+const stages = [];
+
+ORDER.forEach((shape) => {
+  const sp = SHAPES[shape];
+  const wrap = document.createElement('div');
+  wrap.className = 'stage';
+  wrap.innerHTML = `<div class="cap">${sp.label}<em>${sp.note}</em></div><div class="strip"></div>`;
+  stagesEl.appendChild(wrap);
+  stages.push({ shape, strip: wrap.querySelector('.strip'), pieces: [], halos: [], size: 0, step: 0 });
+});
+
+function layout() {
+  for (const st of stages) {
+    const sp = SHAPES[st.shape];
+    const box = st.strip.getBoundingClientRect();
+    if (!box.width) continue;
+    // Five pieces across with a slot of headroom either side, so a slide has
+    // somewhere to come from and go to.
+    st.step = box.width / (N + 1.6);
+    st.size = st.step / sp.pitch;
+    const h = st.size * sp.aspect;
+    const top = (box.height - h) / 2;
+    st.strip.innerHTML = '';
+    st.pieces = [];
+    st.halos = [];
+    for (let i = 0; i < N; i++) {
+      const host = document.createElement('div');
+      host.className = 'piece';
+      host.style.left = '0px';
+      host.style.top = top + 'px';
+      st.strip.appendChild(host);
+      const up = sp.alternates ? i % 2 === 0 : true;
+      const front = sp.palette[SCORING.includes(i) ? 1 : (i * 2 + 3) % sp.palette.length];
+      const back = sp.palette[(i * 3 + 2) % sp.palette.length];
+      const parts = buildPiece(host, st.size, st.shape, front, back, S.thick, up);
+      parts.baseX = (i + 0.8) * st.step - st.size / 2;
+      st.pieces.push(parts);
+      const halo = document.createElement('div');
+      halo.className = 'halo';
+      halo.style.top = top - 3 + 'px';
+      halo.style.width = st.size + 6 + 'px';
+      halo.style.height = h + 6 + 'px';
+      if (st.shape === 'circle') halo.style.borderRadius = '50%';
+      else if (st.shape === 'triangle') {
+        // A box around a triangle highlights its two empty corners; clip the
+        // glow to the silhouette instead, the way spawnTriangleOutline does.
+        const clip = up ? TRI_UP : TRI_DN;
+        halo.style.border = '0';
+        halo.style.clipPath = clip;
+        halo.style.setProperty('-webkit-clip-path', clip);
+        halo.style.background = 'rgba(190,87,98,0.34)';
+        halo.style.boxShadow = 'none';
+      } else halo.style.borderRadius = '10px';
+      st.strip.appendChild(halo);
+      st.halos.push(halo);
+    }
+  }
+}
+
+/** Paints one stage at `at` ms into the cycle. */
+function frame(st, at) {
+  const sp = SHAPES[st.shape];
+  const tScore = SLIDE_MS + SETTLE_MS + HOLD_MS;
+  const tFlip = tScore + SCORE_MS * 0.62;
+  const tClear = tFlip + S.stagger * 2 + S.flipMs + 200;
+
+  // 1. the slide, through the board's own detent curve
+  const slideP = cl(at / SLIDE_MS);
+  const drive = magnetize(easeOut(slideP, 2));
+  // 2. the landing squash, once the line is home
+  const seatAt = at - SLIDE_MS;
+  const seat = seatAt < 0 || seatAt > SETTLE_MS ? 1 : track([
+    [0.93, SETTLE_MS * 0.28, (t) => easeOut(t, 2)],
+    [1.035, SETTLE_MS * 0.34, (t) => easeOut(t, 2)],
+    [1, SETTLE_MS * 0.38, (t) => easeOut(t, 2)],
+  ], 1, seatAt);
+
+  st.pieces.forEach((parts, i) => {
+    const scoring = SCORING.includes(i);
+    parts.host.style.left = parts.baseX + drive * st.step + 'px';
+    parts.host.style.scale = seat;
+
+    // 3. the turn
+    const flipAt = at - tFlip - SCORING.indexOf(i) * S.stagger;
+    if (scoring && flipAt >= 0) poseFlip(parts, st.size, flipAt);
+    else {
+      parts.plank.style.transform = 'rotateY(0deg)';
+      for (const r of parts.rims) r.style.opacity = 0;
+      parts.cast.style.opacity = 0;
+    }
+
+    // 4. and then they go
+    const clearAt = at - tClear - SCORING.indexOf(i) * 60;
+    if (scoring && clearAt >= 0) {
+      const p = cl(clearAt / CLEAR_MS);
+      parts.host.style.opacity = 1 - easeOut(p, 2);
+      parts.host.style.scale = seat * (1 - 0.34 * easeOut(p, 2));
+    } else parts.host.style.opacity = 1;
+
+    // the score halo, two flashes over its 900ms
+    const halo = st.halos[i];
+    halo.style.left = parts.baseX + drive * st.step - 3 + 'px';
+    const sAt = at - tScore;
+    if (scoring && sAt >= 0 && sAt < SCORE_MS && clearAt < 0) {
+      const q = sAt / SCORE_MS;
+      const on = (q > 0.1 && q < 0.3) || (q > 0.55 && q < 0.75);
+      halo.style.opacity = on ? 1 : 0;
+    } else halo.style.opacity = 0;
+  });
+}
+
+/* ── the comparison grid ─────────────────────────────────────────────── */
+const THICKNESSES = [0.04, 0.055, 0.08, 0.11, 0.15];
+const cmpEl = document.getElementById('cmp');
+function drawGrid() {
+  cmpEl.innerHTML = '';
+  cmpEl.appendChild(document.createElement('div'));
+  THICKNESSES.forEach((th) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'head' + (Math.abs(th - S.thick) < 0.0005 ? ' pick' : '');
+    b.textContent = th.toFixed(3);
+    b.addEventListener('click', () => { S.thick = th; sync(); });
+    cmpEl.appendChild(b);
+  });
+  const at = msForRot(FREEZE_ROT);
+  ORDER.forEach((shape) => {
+    const sp = SHAPES[shape];
+    const lab = document.createElement('div');
+    lab.className = 'rowlab';
+    lab.textContent = sp.label;
+    cmpEl.appendChild(lab);
+    THICKNESSES.forEach((th) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const host = document.createElement('div');
+      host.className = 'piece';
+      host.style.position = 'relative';
+      cell.appendChild(host);
+      cmpEl.appendChild(cell);
+      const size = 62;
+      const parts = buildPiece(host, size, shape, sp.palette[1], sp.palette[3], th, true);
+      poseFlip(parts, size, at);
+    });
+  });
+}
+
+/* ── controls ────────────────────────────────────────────────────────── */
+const CONTROLS = [
+  ['thick', '厚度', 0.02, 0.2, 0.005, (v) => v.toFixed(3), '侧边条的宽度，按图形直径的比例。'],
+  ['rimDark', '侧面明暗', 0.25, 1, 0.02, (v) => v.toFixed(2), '越小越暗。1 就是和正面同色。'],
+  ['flipMs', '时长', 200, 900, 10, (v) => v + 'ms', '线上现在 510ms，是游戏原本 340ms 的 1.5 倍。'],
+  ['overshoot', '过冲', 0, 26, 1, (v) => v + '°', '转过半圈多走这么多度，再摆回来。'],
+  ['lift', '抬起', 0, 0.2, 0.005, (v) => v.toFixed(3), '朝观众抬起多高，只占前 30% 的时长。'],
+  ['shadow', '落影', 0, 0.7, 0.02, (v) => v.toFixed(2), '抬到最高时影子的浓度。0 就是不要影子。'],
+  ['persp', '透视', 2, 8, 0.1, (v) => v.toFixed(1) + '×', '视点距离，按直径的倍数。越小越夸张。'],
+  ['rimFade', '侧边隐去', 0, 0.4, 0.01, (v) => v.toFixed(2), '快平躺时提前把侧边条藏掉，避免那条发丝线。'],
+];
+const panel = document.getElementById('panel');
+CONTROLS.forEach(([key, label, min, max, step, fmt, hint]) => {
+  const el = document.createElement('label');
+  el.className = 'ctl';
+  el.innerHTML =
+    `<span class="top"><span class="lbl">${label}</span><span class="val" data-v="${key}"></span></span>` +
+    `<input type="range" min="${min}" max="${max}" step="${step}" data-k="${key}">` +
+    `<span class="hint">${hint}</span>`;
+  panel.appendChild(el);
+  el.querySelector('input').addEventListener('input', (e) => { S[key] = +e.target.value; sync(); });
+  el._fmt = fmt;
+});
+
+const DIRS = [['→ 向右', 0], ['↓ 向下', 90], ['↘ 右下', 45], ['↗ 右上', -45]];
+const dirsEl = document.getElementById('dirs');
+DIRS.forEach(([label, deg]) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chip'; b.textContent = label; b.dataset.deg = deg;
+  b.addEventListener('click', () => { S.dir = deg; sync(); });
+  dirsEl.appendChild(b);
+});
+
+/* ── transport ───────────────────────────────────────────────────────── */
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let playing = false, t0 = performance.now();
+const playBtn = document.getElementById('playBtn');
+const scrub = document.getElementById('scrub');
+const scrubVal = document.getElementById('scrubVal');
+
+function showScrub() {
+  const at = S.flipMs * +scrub.value;
+  let rot = 0;
+  for (const st of stages) {
+    const tFlip = SLIDE_MS + SETTLE_MS + HOLD_MS + SCORE_MS * 0.62;
+    frame(st, tFlip + at);
+    st.pieces.forEach((p, i) => { if (SCORING.includes(i)) rot = poseFlip(p, st.size, at); });
+  }
+  scrubVal.textContent = rot.toFixed(0) + '°';
+}
+function setPlaying(on) {
+  playing = on;
+  playBtn.textContent = on ? '⏸ 暂停' : '▶ 播放';
+  playBtn.setAttribute('aria-pressed', String(on));
+  scrub.disabled = on;
+  if (on) t0 = performance.now(); else showScrub();
+}
+playBtn.addEventListener('click', () => setPlaying(!playing));
+scrub.addEventListener('input', showScrub);
+
+function loop(now) {
+  if (playing) {
+    const at = (now - t0) % cycleMs();
+    for (const st of stages) frame(st, at);
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ── wiring ──────────────────────────────────────────────────────────── */
+const outEl = document.getElementById('out');
+function sync() {
+  for (const el of panel.children) {
+    const input = el.querySelector('input');
+    const key = input.dataset.k;
+    input.value = S[key];
+    el.querySelector(`[data-v="${key}"]`).textContent = el._fmt(S[key]);
+  }
+  for (const b of dirsEl.children) b.setAttribute('aria-pressed', String(+b.dataset.deg === S.dir));
+  outEl.innerHTML =
+    `const FLIP_MS = <b>${S.flipMs}</b>;\n` +
+    `const THICK = <b>${S.thick.toFixed(3)}</b>;\n` +
+    `const PERSPECTIVE = <b>${S.persp.toFixed(1)}</b>;\n` +
+    `const LIFT = <b>${S.lift.toFixed(3)}</b>;\n` +
+    `const OVERSHOOT = <b>${S.overshoot}</b>;\n` +
+    `const SHADOW = <b>${S.shadow.toFixed(2)}</b>;\n` +
+    `const RIM_FADE = <b>${S.rimFade.toFixed(2)}</b>;\n` +
+    `--rim-dark: <b>${S.rimDark.toFixed(2)}</b>;`;
+  layout();
+  drawGrid();
+  if (!playing) showScrub();
+}
+
+addEventListener('resize', () => { layout(); if (!playing) showScrub(); });
+sync();
+setPlaying(!still);
+requestAnimationFrame((n) => { t0 = n; loop(n); });
+</script>
