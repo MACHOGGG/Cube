@@ -12,3 +12,8 @@ android/.gradle
 android/local.properties
 ios/App/Pods
 ios/App/build
+
+# Secrets — API keys live here and never in the repo
+.env
+.env.*
+!.env.example

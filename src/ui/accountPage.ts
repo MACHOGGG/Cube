@@ -5,6 +5,7 @@ import { ICON_SOUND_ON, ICON_SOUND_OFF } from './homeIcons';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { LEGAL, LEGAL_ORDER, type LegalKey } from '../legal';
 
 export type AuthTab = 'register' | 'login';
 
@@ -92,10 +93,18 @@ export function renderAccountPage(
         ${privileges.map(lockedRow).join('')}
       </section>
 
-      <button class="profile-row" id="contactRow">
-        <span class="profile-row-label">${s.contactUs}</span>
-        <span class="profile-row-value">›</span>
-      </button>
+      <!-- Tarifs, terms, refunds, privacy, contact — the five documents a
+           paid service has to publish. Plain rows in the same style as the
+           two above them, so they sit at the foot of the page without
+           changing anything about it. -->
+      <section class="legal-rows">
+        ${LEGAL_ORDER.map(
+          (k) => `<button class="profile-row" data-legal="${k}">
+            <span class="profile-row-label">${LEGAL[lang][k].title}</span>
+            <span class="profile-row-value">›</span>
+          </button>`,
+        ).join('')}
+      </section>
       <button class="profile-row profile-row--back" id="backBtn">${s.back}</button>
     </div>
   `;
@@ -160,6 +169,32 @@ export function renderAccountPage(
     });
   }
 
+  /** One of the five published documents, in the same window 游戏规则 uses —
+   *  a title, a line of lead-in, then term/body pairs. */
+  function openLegal(key: LegalKey) {
+    const doc = LEGAL[lang][key];
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    overlay.innerHTML = `
+      <div class="modal rules-modal">
+        <h2>${doc.title}</h2>
+        <div class="rules-body">
+          <p class="legal-intro">${doc.intro}</p>
+          ${doc.items
+            .map((r) => `<div class="rule-item"><b>${r.term}</b><span>${r.body}</span></div>`)
+            .join('')}
+        </div>
+        <div class="btn-row"><button class="primary" id="legalClose">${s.closeBtn}</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#legalClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
   /** 更换图标 — the icon on the browser tab. Picking one swaps it there and
    *  then, and the choice is remembered, so a player sees their own tab icon
    *  on every later visit. */
@@ -202,24 +237,6 @@ export function renderAccountPage(
 
   /** 联系我们 — the destination has nothing in it yet, so the link opens an
    *  empty panel rather than pretending to have content. */
-  function openContact() {
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay show';
-    overlay.innerHTML = `
-      <div class="modal">
-        <h2>${s.contactUs}</h2>
-        <div class="contact-empty"></div>
-        <div class="btn-row"><button class="primary" id="contactClose">${s.closeBtn}</button></div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const close = () => overlay.remove();
-    overlay.querySelector<HTMLButtonElement>('#contactClose')!.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
-  }
-
   const on = (id: string, fn: () => void) =>
     container.querySelector<HTMLButtonElement>('#' + id)?.addEventListener('click', fn);
   on('loginBtn', () => openAuth(initialTab));
@@ -248,6 +265,8 @@ export function renderAccountPage(
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);
   on('becomeGeniusBtn', () => openAuth('register'));
-  on('contactRow', openContact);
+  for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {
+    btn.addEventListener('click', () => openLegal(btn.dataset.legal as LegalKey));
+  }
   on('backBtn', handlers.onBack);
 }

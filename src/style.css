@@ -1132,7 +1132,14 @@ button:hover { filter: brightness(1.05); }
 }
 .genius-panel .menu-section-label { margin: 2px 0 2px; }
 .profile-row--back { justify-content: center; margin-top: 4px; }
-.contact-empty { min-height: 96px; }
+/* The five published documents sit at the foot of 个人主页 as ordinary rows,
+   so they add a block without changing anything above them. */
+.legal-rows { display: flex; flex-direction: column; width: 100%; }
+/* The lead-in above a document's clauses: same voice as the rows below it,
+   just not one of them. */
+.legal-intro {
+  margin: 2px 0 10px; font-size: 0.85rem; line-height: 1.55; color: var(--ink-soft);
+}
 .profile-row--back .profile-row-label { flex: none; text-align: center; }
 
 /* ---------- 注册/登录 tabs (profile page) ---------- */
