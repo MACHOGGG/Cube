@@ -25,15 +25,22 @@
 import { reducedMotion } from './juice';
 
 /**
- * How far the pieces may depart from moving as one rigid line. 1 is the
- * splash's own strength, which is what the played-back animations (the
- * splash itself, the tutorials) keep — nothing there is under a finger, so
- * the full wave only reads as character. A live board passes 0.3: the wave
- * is still there to see, but the line stays tight enough under the finger
- * that it reads as one object being pushed rather than a row of pieces
- * shoving each other.
+ * How far the pieces may depart from moving as one rigid line.
+ *
+ * 1 is the splash's own strength, and it is what the played-back animations
+ * keep — the opening sequence and the three tutorials pass no force at all,
+ * so they stay at the default. Nothing there is under a finger, so the full
+ * wave only reads as character.
+ *
+ * A live board passes 0.06, which is deliberately below the threshold of
+ * noticing: the coupling between neighbours, the pull on the lines either
+ * side and the contact squash all scale with this, so at this value a line
+ * under the finger tracks it as one rigid object. The simulation is still
+ * running — it is what keeps the seat and the release feeling sprung rather
+ * than snapped — it just no longer shows up as pieces shoving each other,
+ * which is what was getting in the way of aiming a move.
  */
-export const BOARD_FORCE = 0.3;
+export const BOARD_FORCE = 0.06;
 const COUPLE = 0.55; // how much of a follower's target is the piece ahead
 const K = 260; // spring on the followers
 const C = 26; // damping on the followers
@@ -198,7 +205,25 @@ export function createDragChain(opts: DragChainOpts): DragChain {
     drive: (x) => {
       s = x;
     },
-    at: (i) => p[i] ?? s,
+    /**
+     * Slot i's travel, with the simulation's departure from the rigid line
+     * scaled by `force`.
+     *
+     * The scaling has to happen here rather than inside the integrator. The
+     * grabbed piece is pinned exactly to the finger while every follower only
+     * springs toward its target, so a follower trails by a fixed fraction of
+     * a cell that comes from the spring itself, not from the coupling — which
+     * meant that turning `force` all the way down still left the line
+     * visibly stretching under the finger (measured: 21% of a cell at every
+     * value of force, 1 through 0). Blending the read value back toward the
+     * drive makes `force` mean what it says: 0 is a rigid line, 1 is the full
+     * wave, and the physics underneath — contact, squash, the sprung settle —
+     * is untouched, so the release still eases rather than snapping.
+     */
+    at: (i) => {
+      const at = p[i];
+      return at === undefined ? s : s + (at - s) * force;
+    },
     press: (i) => press[i] ?? 0,
     side: (dist) => nudge[dist] ?? 0,
     settle: (finalSlots, done) => {
