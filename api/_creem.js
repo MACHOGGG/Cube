@@ -91,12 +91,21 @@ export function emailOf(entity) {
   return typeof customer === 'string' ? undefined : customer?.email;
 }
 
-/** What the browser is told about a subscription — no more than it needs. */
-export const answer = (sub, email) => ({
+/**
+ * What the browser is told about a subscription — no more than it needs.
+ *
+ * The token, when there is one, is what lets the app re-ask later without
+ * the password: it is typed once on a device and then never again, while a
+ * lapsed or cancelled subscription still stops at Creem's answer, which is
+ * re-read on every call. Rotating it on each password sign-in is what makes
+ * signing in again elsewhere end the old device's silent access.
+ */
+export const answer = (sub, email, token) => ({
   active: true,
   period: periodOf(sub),
   until: untilOf(sub),
   email,
+  ...(token ? { token } : {}),
 });
 
 export const NOBODY = { active: false };

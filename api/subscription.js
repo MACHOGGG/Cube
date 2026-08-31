@@ -1,4 +1,14 @@
 import { answer, configured, creem, emailOf, entitled, NOBODY, readBody, send } from './_creem.js';
+import {
+  SECRET_RE,
+  checkPin,
+  entitlementOf,
+  loadAccount,
+  normalizeEmail,
+  rotateToken,
+  saveAccount,
+} from './_accounts.js';
+import { storeConfigured } from './_store.js';
 
 /**
  * Is this player subscribed? Asked in two situations, and Creem is the only
@@ -8,24 +18,31 @@ import { answer, configured, creem, emailOf, entitled, NOBODY, readBody, send } 
  *                 confirmed with Creem rather than believed from the query
  *                 string, which anyone can type.
  *   email       — they are signing in on another device, or reinstalling.
- *                 The address is the whole identity a web subscription has;
- *                 there is no password of ours to check, and none to lose.
+ *                 The address plus the password set on the way back from
+ *                 the checkout (api/passcode.js). The address alone was
+ *                 never proof of anything: it is printed on the receipt and
+ *                 known to everyone the player has written to, so answering
+ *                 it handed the subscription to whoever typed it.
  *
- * Note for whoever runs this: the email branch will confirm or deny that an
- * address has a subscription, which is the same thing every "forgot your
- * password" form in the world discloses. If that ever matters more than the
- * convenience does, the fix is to mail a one-time link to the address rather
- * than answering the browser directly — the client already treats this as a
- * single "did it work" call, so nothing above it would have to change.
+ * What the password does NOT do is decide whether the subscription is paid
+ * up — Creem still answers that, every time, and an account here with a
+ * lapsed subscription behind it gets nothing. It only decides who may ask.
+ *
+ * An address that has a live subscription but no password yet is answered
+ * with `needsPasscode`, so the app can walk that player through setting one
+ * instead of leaving them locked out of what they paid for. That does
+ * disclose that the address is a subscriber — the same thing every "forgot
+ * your password" form discloses — which is a fair trade for not stranding
+ * someone whose tab closed before the password window appeared.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!configured()) return send(res, 200, NOBODY);
 
-  const { checkoutId, email } = readBody(req);
+  const { checkoutId, email, password, token } = readBody(req);
   try {
     if (checkoutId) return send(res, 200, await fromCheckout(checkoutId));
-    if (email) return send(res, 200, await fromEmail(String(email).trim()));
+    if (email) return await fromEmail(res, String(email), password, token);
     return send(res, 400, { error: 'missing' });
   } catch (err) {
     // A customer Creem has never heard of is a 404, and the honest answer to
@@ -49,14 +66,66 @@ async function fromCheckout(checkoutId) {
   return answer(sub, emailOf(checkout) ?? emailOf(sub));
 }
 
-/** Sign in / restore: the address, then that customer's subscriptions. */
-async function fromEmail(email) {
-  const customer = await creem('/v1/customers', { query: { email } });
-  if (!customer?.id) return NOBODY;
+/**
+ * Sign in / restore: the password first, then Creem.
+ *
+ * The order matters. Asking Creem first and the password second would answer
+ * "is this address a subscriber" to anyone who asked, before any proof at
+ * all; checking the password first means a stranger's guess costs them a
+ * scrypt round and a place in the lockout counter, and tells them nothing.
+ */
+async function fromEmail(res, rawEmail, password, token) {
+  // Without the store there are no accounts to check against, and a check
+  // that cannot run must not be treated as a check that passed.
+  if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
+  const address = normalizeEmail(rawEmail);
+  const account = await loadAccount(address);
+
+  // A token stands in for the password on a device that has already used
+  // it once. It is checked against the account rather than trusted, it is
+  // not rotated here (that would sign the other devices out on every launch),
+  // and it grants nothing on its own — Creem is still asked below.
+  let issued;
+  if (account) {
+    if (token) {
+      if (!account.token || String(token) !== account.token) {
+        return send(res, 401, { error: 'wrong' });
+      }
+    } else {
+      if (!SECRET_RE.test(String(password || ''))) return send(res, 401, { error: 'wrong' });
+      const verdict = await checkPin(address, String(password), account);
+      if (verdict === 'blocked') return send(res, 423, { error: 'blocked' });
+      if (verdict === 'locked') return send(res, 423, { error: 'locked' });
+      if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
+      // A password sign-in issues a fresh token, which retires the one any
+      // other device was holding.
+      issued = rotateToken(account);
+      await saveAccount(address, account);
+    }
+  }
+
+  // A redeemed code's entitlement is ours, not Creem's — Creem has never
+  // heard of this person. Answering from the account is not a shortcut here,
+  // it is the only correct source. Doing it after the credential check means
+  // one endpoint serves both kinds and the browser never has to guess which
+  // it is holding — which it could not do anyway, since a card password of
+  // six digits and a code's six-digit passcode look identical.
+  if (account?.kind === 'code') {
+    return send(res, 200, { ...entitlementOf(account, address), kind: 'code' });
+  }
+
+  const customer = await creem('/v1/customers', { query: { email: address } });
+  if (!customer?.id) return send(res, 200, NOBODY);
   const list = await creem(`/v1/customers/${encodeURIComponent(customer.id)}/subscriptions`, {
     query: { page_size: 50 },
   });
   const sub = (list?.items || []).find(entitled);
-  if (!sub) return NOBODY;
-  return answer(sub, customer.email || email);
+  if (!sub) return send(res, 200, NOBODY);
+
+  // Subscribed, but no password was ever set — the tab closed before the
+  // window appeared, or the subscription predates passwords existing. Say so
+  // rather than handing the subscription over: the app sends them to set one.
+  if (!account) return send(res, 200, { ...NOBODY, needsPasscode: true });
+
+  return send(res, 200, answer(sub, customer.email || address, issued || account.token));
 }

@@ -10,11 +10,12 @@ import {
   purchase,
   restore,
   setEntitlement,
+  setPasscode,
   signedInEmail,
+  takePendingCheckout,
   type PurchaseFailure,
 } from '../engine/subscription';
 import {
-  accountLogin,
   confirmUnlock,
   redeemCode,
   requestUnlock,
@@ -119,6 +120,162 @@ function field(id: string, label: string, attrs: string): string {
       <span>${label}</span>
       <input id="${id}" ${attrs} />
     </label>`;
+}
+
+/**
+ * The password, asked once more before the billing page opens.
+ *
+ * `current-password` rather than `new-password` here, so a manager offers to
+ * fill the one it already has rather than to invent another.
+ */
+export function openPortalWindow(lang: Lang, email: string): void {
+  const s = STRINGS[lang];
+  const { overlay, close } = openModal(
+    'auth-modal',
+    `
+    <h2>${s.manageSubscription}</h2>
+    <form id="portalForm" class="auth-body" autocomplete="on">
+      ${field('portalUser', s.emailLabel,
+        `type="email" name="username" autocomplete="username" readonly value="${esc(email)}"`)}
+      ${field('portalPw', s.passwordAny,
+        `type="password" name="password" autocomplete="current-password"`)}
+      <button type="submit" hidden></button>
+    </form>
+    <p class="auth-msg" id="portalMsg" role="status"></p>
+    <div class="btn-row">
+      <button class="icon-btn" id="portalGo">${s.manageSubscription}</button>
+      <button class="primary" id="portalClose">${s.closeBtn}</button>
+    </div>
+  `,
+  );
+  const form = overlay.querySelector<HTMLFormElement>('#portalForm')!;
+  const pw = overlay.querySelector<HTMLInputElement>('#portalPw')!;
+  const msg = overlay.querySelector<HTMLElement>('#portalMsg')!;
+  const go = overlay.querySelector<HTMLButtonElement>('#portalGo')!;
+
+  const submit = async () => {
+    if (!pw.value) return void (msg.textContent = s.pwWrong);
+    go.disabled = true;
+    msg.textContent = s.workingLabel;
+    const { webPortal } = await import('../engine/creem');
+    const opened = await webPortal(email, pw.value);
+    go.disabled = false;
+    if (opened) return close();
+    msg.textContent = s.pwWrong;
+  };
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void submit();
+  });
+  go.addEventListener('click', () => form.requestSubmit());
+  overlay.querySelector<HTMLButtonElement>('#portalClose')!.addEventListener('click', close);
+  pw.focus();
+}
+
+/**
+ * A form that a phone's password manager will recognise.
+ *
+ * Both platforms decide whether to offer "save this password?" by looking at
+ * the shape of the markup, not by being asked, and both want the same three
+ * things: a real <form>, an identifying field marked `username`, and the
+ * password field marked `new-password` when one is being chosen. The username
+ * here is the address the player already paid with, so it is shown read-only
+ * rather than asked for again — visible, because a hidden field is exactly
+ * what a manager is trained to distrust.
+ */
+function credentialForm(email: string, label: string, placeholder: string): string {
+  return `<form id="pwForm" class="auth-body" autocomplete="on">
+      ${field('pwUser', 'Email',
+        `type="email" name="username" autocomplete="username" readonly value="${esc(email)}"`)}
+      ${field('pwNew', label,
+        `type="password" name="password" autocomplete="new-password" minlength="6" placeholder="${esc(placeholder)}"`)}
+      <button type="submit" hidden></button>
+    </form>`;
+}
+
+/** Chromium can be told outright; Safari only ever infers it from the form. */
+async function offerToSave(email: string, password: string): Promise<void> {
+  try {
+    const w = window as unknown as {
+      PasswordCredential?: new (data: { id: string; password: string }) => Credential;
+    };
+    if (!w.PasswordCredential || !navigator.credentials?.store) return;
+    await navigator.credentials.store(new w.PasswordCredential({ id: email, password }));
+  } catch {
+    // A manager that declines, or a browser without one, is not a failure:
+    // the password is already saved on the server either way.
+  }
+}
+
+/**
+ * Choosing the password, the moment the player lands back from Creem.
+ *
+ * They are already a subscriber when this opens — the boards are unlocked
+ * behind it — so nothing here is a gate. It is the one step that makes the
+ * subscription theirs rather than this browser's: without it, the only way
+ * back in on another phone would be to name an address anyone could guess.
+ */
+export function openSetPasswordWindow(
+  lang: Lang,
+  checkoutId: string,
+  email: string,
+  onChanged: () => void,
+): void {
+  const s = STRINGS[lang];
+  const { overlay, close } = openModal(
+    'auth-modal',
+    `
+    <h2>${s.setPwTitle}</h2>
+    <p class="auth-hint">${s.setPwHint}</p>
+    ${credentialForm(email, s.setPwLabel, s.setPwPlaceholder)}
+    <p class="auth-msg" id="pwMsg" role="status"></p>
+    <div class="btn-row">
+      <button class="icon-btn" id="pwGo">${s.setPwTitle}</button>
+      <button class="primary" id="pwLater">${s.setPwLater}</button>
+    </div>
+  `,
+  );
+
+  const form = overlay.querySelector<HTMLFormElement>('#pwForm')!;
+  const input = overlay.querySelector<HTMLInputElement>('#pwNew')!;
+  const msg = overlay.querySelector<HTMLElement>('#pwMsg')!;
+  const go = overlay.querySelector<HTMLButtonElement>('#pwGo')!;
+
+  const submit = async () => {
+    const password = input.value;
+    if (password.length < 6) return void (msg.textContent = s.setPwShort);
+    go.disabled = true;
+    msg.textContent = s.workingLabel;
+    const done = await setPasscode(checkoutId, password);
+    go.disabled = false;
+    // Nowhere to keep an account yet: nothing the player can act on, and the
+    // subscription they just bought works regardless on this device.
+    if (done === 'unavailable') return close();
+    if (done === 'failed') return void (msg.textContent = s.purchaseNetwork);
+    // Saved on the server; now let the phone keep a copy too.
+    await offerToSave(email, password);
+    close();
+    onChanged();
+  };
+
+  // A real submit is what the password manager watches for, so let the form
+  // fire one and stop only the navigation.
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void submit();
+  });
+  go.addEventListener('click', () => form.requestSubmit());
+  overlay.querySelector<HTMLButtonElement>('#pwLater')!.addEventListener('click', close);
+  input.focus();
+}
+
+/**
+ * Called once at boot, after the return from Creem has been settled: if this
+ * launch was one, the password window is the first thing the player sees.
+ */
+export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
+  const checkoutId = takePendingCheckout();
+  if (checkoutId) openSetPasswordWindow(lang, checkoutId, signedInEmail() ?? '', onChanged);
 }
 
 /**
@@ -247,12 +404,12 @@ export function openStatusWindow(lang: Lang, onChanged: () => void): void {
 
   // Cancelling a web subscription happens on Creem's own portal page — they
   // hold the billing record, so it is never something this app pretends to do.
-  overlay.querySelector<HTMLButtonElement>('#statusManage')?.addEventListener('click', async () => {
-    const msg = overlay.querySelector<HTMLElement>('#statusMsg')!;
-    msg.textContent = s.workingLabel;
-    const { webPortal } = await import('../engine/creem');
-    const opened = await webPortal(signedInEmail() ?? '');
-    msg.textContent = opened ? '' : s.purchaseNetwork;
+  overlay.querySelector<HTMLButtonElement>('#statusManage')?.addEventListener('click', () => {
+    // Behind this link are the card's last four digits, the payment history
+    // and the cancel button, so it asks for the password again even though
+    // this device is signed in — the same re-check a bank does.
+    close();
+    openPortalWindow(lang, signedInEmail() ?? '');
   });
   // Signing out only forgets the address on this device: it cancels nothing,
   // and naming the address again brings the subscription straight back.
@@ -281,12 +438,15 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     </div>
     <div class="auth-body">
       <p class="auth-hint" id="authHint"></p>
-      <div id="authFields">
-        ${field('authEmail', s.emailLabel,
-          `type="email" autocomplete="email" inputmode="email" placeholder="${s.emailPlaceholder}"`)}
-        ${field('authPw', s.passwordOptional,
-          `type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="${s.passwordPlaceholder}"`)}
-      </div>
+      <form id="authForm" autocomplete="on">
+        <div id="authFields">
+          ${field('authEmail', s.emailLabel,
+            `type="email" name="username" autocomplete="username" inputmode="email" placeholder="${s.emailPlaceholder}"`)}
+          ${field('authPw', s.passwordAny,
+            `type="password" name="password" autocomplete="current-password"`)}
+        </div>
+        <button type="submit" hidden></button>
+      </form>
       <p class="auth-msg" id="authMsg" role="status"></p>
       <button class="link-btn" id="authRedeem">${s.haveCode}</button>
     </div>
@@ -328,38 +488,32 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
       msg.textContent = s.emailInvalid;
       return;
     }
-    const pin = pwInput.value.trim();
+    const password = pwInput.value;
+    if (!password) return void (msg.textContent = s.pwWrong);
     go.disabled = true;
     msg.textContent = s.workingLabel;
 
-    // Two kinds of subscriber sign in here, and the passcode is what tells
-    // them apart. Someone who paid by card has none — Creem is asked about
-    // the address instead. Someone who redeemed a code set one, and it is
-    // the only thing that proves the account is theirs.
-    if (pin) {
-      const result = await accountLogin(email, pin);
-      go.disabled = false;
-      if (result.ok) {
-        setEntitlement(result.entitlement);
-        close();
-        onChanged();
-        openStatusWindow(lang, onChanged);
-        return;
-      }
-      msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
-      if (result.reason === 'blocked') {
-        close();
-        openUnlockWindow(lang, email, onChanged);
-      }
-      return;
-    }
-
-    const outcome = await restore(email);
+    // One call for both kinds of subscriber. Which one this address is, the
+    // server knows and the browser cannot: a card password of six digits and
+    // a redeemed code's six-digit passcode are the same string.
+    const outcome = await restore(email, password);
     go.disabled = false;
     if (outcome.ok === true) {
       close();
       onChanged();
       openStatusWindow(lang, onChanged);
+      return;
+    }
+    if (outcome.ok === false && outcome.reason === 'needsPasscode') {
+      msg.textContent = s.needsPwHint;
+      return;
+    }
+    if (outcome.ok === false && outcome.reason === 'wrong') {
+      msg.textContent = s.pwWrong;
+      return;
+    }
+    if (outcome.ok === false && outcome.reason === 'locked') {
+      msg.textContent = s.pwBlocked;
       return;
     }
     msg.textContent =
@@ -369,12 +523,14 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
   };
 
   for (const el of tabs) el.addEventListener('click', () => setTab(el.dataset.tab as AuthTab));
-  go.addEventListener('click', submit);
-  for (const box of [input, pwInput]) {
-    box.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-    });
-  }
+  // Going through the form's own submit is what lets a phone's password
+  // manager recognise this as a sign-in and offer to fill or update it.
+  const form = overlay.querySelector<HTMLFormElement>('#authForm')!;
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void submit();
+  });
+  go.addEventListener('click', () => (current === 'register' ? submit() : form.requestSubmit()));
   overlay.querySelector<HTMLButtonElement>('#authRedeem')!.addEventListener('click', () => {
     close();
     openRedeemWindow(lang, onChanged);

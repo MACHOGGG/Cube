@@ -117,7 +117,16 @@ export interface I18nStrings {
   passwordLabel: string;
   passwordPlaceholder: string;
   /** On the log-in tab, where a passcode is only for code-made accounts. */
-  passwordOptional: string;
+  passwordAny: string;
+  /** 付款回来后立刻弹出的设密码窗口。 */
+  setPwTitle: string;
+  setPwHint: string;
+  setPwLabel: string;
+  setPwPlaceholder: string;
+  setPwShort: string;
+  setPwLater: string;
+  /** 已订阅但从没设过密码的人，在登录时看到的指引。 */
+  needsPwHint: string;
   redeemBadCode: string;
   pwWrong: string;
   /** Carries {hours}. */
@@ -335,7 +344,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailPlaceholder: 'you@example.com',
     emailInvalid: 'That does not look like an email address.',
     registerHint: 'Paying by card needs only an email address — no password to set.',
-    signInHint: 'Log in with the address you paid with.',
+    signInHint: 'Your email address and the password you set.',
     storeNoAccountHint: 'Bought with your {store} account — no sign-up, and you never leave the app.',
     subscribedTitle: 'You are a Slides Genius',
     subscribedUntil: 'Runs until',
@@ -350,7 +359,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     redeemBtn: 'Redeem',
     passwordLabel: 'Passcode (4–6 digits)',
     passwordPlaceholder: '4–6 digits',
-    passwordOptional: 'Passcode (only if you started with a code)',
+    passwordAny: 'Password',
+    setPwTitle: 'Choose a password',
+    setPwHint: 'You are a Slides Genius. Set a password so this subscription comes back on your other devices — your email address and this password are all it takes.',
+    setPwLabel: 'Password (6 characters or more)',
+    setPwPlaceholder: '6 characters or more',
+    setPwShort: 'Use six characters or more.',
+    setPwLater: 'Later',
+    needsPwHint: 'This subscription has no password yet. Open it from the device you paid on to set one.',
     redeemBadCode: 'That code is not valid, or it has already been used.',
     pwWrong: 'That passcode is not right.',
     pwLocked: 'Too many wrong tries. Try again in about {hours} h.',
@@ -550,7 +566,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailPlaceholder: 'vous@exemple.com',
     emailInvalid: 'Cette adresse ne semble pas valide.',
     registerHint: 'Le paiement par carte ne demande qu’une adresse courriel — aucun mot de passe à créer.',
-    signInHint: 'Connectez-vous avec l’adresse utilisée pour le paiement.',
+    signInHint: 'Votre adresse et le mot de passe que vous avez défini.',
     storeNoAccountHint: 'Acheté avec votre compte {store} — sans inscription, sans quitter l’application.',
     subscribedTitle: 'Vous êtes un Slides Génie',
     subscribedUntil: 'Valable jusqu’au',
@@ -565,7 +581,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     redeemBtn: 'Valider',
     passwordLabel: 'Code secret (4 à 6 chiffres)',
     passwordPlaceholder: '4 à 6 chiffres',
-    passwordOptional: 'Code secret (seulement si vous avez commencé par un code)',
+    passwordAny: 'Mot de passe',
+    setPwTitle: 'Choisissez un mot de passe',
+    setPwHint: 'Vous êtes un Slides Génie. Définissez un mot de passe pour retrouver cet abonnement sur vos autres appareils — votre adresse et ce mot de passe suffisent.',
+    setPwLabel: 'Mot de passe (6 caractères minimum)',
+    setPwPlaceholder: '6 caractères minimum',
+    setPwShort: 'Six caractères minimum.',
+    setPwLater: 'Plus tard',
+    needsPwHint: 'Cet abonnement n’a pas encore de mot de passe. Ouvrez-le depuis l’appareil du paiement pour en définir un.',
     redeemBadCode: 'Ce code n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
     pwLocked: 'Trop d’essais. Réessayez dans environ {hours} h.',
@@ -765,7 +788,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailPlaceholder: 'you@example.com',
     emailInvalid: '這個郵件地址看起來不太對。',
     registerHint: '刷卡訂閱只需要電子郵件，不用設密碼。',
-    signInHint: '用付款時填的那個郵件地址登入。',
+    signInHint: '你的電子郵件，加上你設的密碼。',
     storeNoAccountHint: '用你的 {store} 帳號購買，不必註冊，也不用離開 App。',
     subscribedTitle: '你已經是 Slides 天才',
     subscribedUntil: '有效期至',
@@ -780,7 +803,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     redeemBtn: '兌換',
     passwordLabel: '密碼（4～6 位數字）',
     passwordPlaceholder: '4～6 位數字',
-    passwordOptional: '密碼（用兌換碼開通的才需要填）',
+    passwordAny: '密碼',
+    setPwTitle: '設定密碼',
+    setPwHint: '你已經是 Slides 天才了。設一組密碼，換手機或換電腦時就能把訂閱取回來——只要電子郵件加這組密碼。',
+    setPwLabel: '密碼（至少 6 位）',
+    setPwPlaceholder: '至少 6 位',
+    setPwShort: '密碼至少要 6 位。',
+    setPwLater: '稍後再說',
+    needsPwHint: '這個訂閱還沒設密碼。請在付款的那台裝置上打開，設一組。',
     redeemBadCode: '這個兌換碼無效，或已經被使用過了。',
     pwWrong: '密碼不對。',
     pwLocked: '錯誤次數太多，請約 {hours} 小時後再試。',
@@ -980,7 +1010,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailPlaceholder: 'you@example.com',
     emailInvalid: '这个邮箱地址看起来不太对。',
     registerHint: '刷卡订阅只需要邮箱，不用设密码。',
-    signInHint: '用付款时填的那个邮箱登录。',
+    signInHint: '你的邮箱，加上你设的密码。',
     storeNoAccountHint: '用你的 {store} 账号购买，不用注册，也不用离开 App。',
     subscribedTitle: '你已经是 Slides 天才',
     subscribedUntil: '有效期至',
@@ -995,7 +1025,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     redeemBtn: '兑换',
     passwordLabel: '密码（4～6 位数字）',
     passwordPlaceholder: '4～6 位数字',
-    passwordOptional: '密码（用兑换码开通的才需要填）',
+    passwordAny: '密码',
+    setPwTitle: '设置密码',
+    setPwHint: '你已经是 Slides 天才了。设一组密码，换手机或换电脑时就能把订阅取回来——只要邮箱加这组密码。',
+    setPwLabel: '密码（至少 6 位）',
+    setPwPlaceholder: '至少 6 位',
+    setPwShort: '密码至少要 6 位。',
+    setPwLater: '稍后再说',
+    needsPwHint: '这个订阅还没设密码。请在付款的那台设备上打开，设一组。',
     redeemBadCode: '这个兑换码无效，或者已经被用过了。',
     pwWrong: '密码不对。',
     pwLocked: '错误次数太多，请约 {hours} 小时后再试。',

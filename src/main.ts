@@ -14,7 +14,7 @@ import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { onGeniusChange, refreshEntitlement } from './engine/subscription';
-import { openGeniusWindow } from './ui/subscribe';
+import { openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { forgetRoom } from './engine/room';
@@ -468,4 +468,9 @@ showLoadingScreen().then(boot);
 // is waiting through. It settles a checkout the player has just come back
 // from, re-reads the store receipt, and otherwise leaves the cached answer
 // exactly as it was — offline, this does nothing at all.
-void refreshEntitlement();
+//
+// If this launch *was* a return from paying, choosing a password is the first
+// thing that happens after the splash: the boards are already unlocked behind
+// the window, and this is the step that makes the subscription belong to the
+// player rather than to this one browser.
+void refreshEntitlement().then(() => promptPasswordIfJustPaid(currentLang, showMenu));

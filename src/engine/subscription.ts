@@ -62,9 +62,50 @@ export type PurchaseFailure =
   | 'notConfigured'
   | 'network'
   /** 恢复购买 / signing back in found nothing to restore. */
-  | 'none';
+  | 'none'
+  /** The password did not match — or the address has no account, which is
+   *  answered identically so that this cannot be used to find subscribers. */
+  | 'wrong'
+  /** Too many wrong guesses; the account has stopped answering for a while. */
+  | 'locked'
+  /** Subscribed, but no password was ever set on the way back from the
+   *  checkout. Not a failure to apologise for — a step still to finish. */
+  | 'needsPasscode';
 
 const KEY = 'slides_genius';
+
+/**
+ * The checkout a return was just settled from, held for the password window
+ * that opens straight after it. Read once and cleared — it is a one-time
+ * proof, not state, and leaving it lying about would be a second copy of the
+ * only thing that can claim this address.
+ */
+let pendingCheckoutId: string | null = null;
+export function takePendingCheckout(): string | null {
+  const id = pendingCheckoutId;
+  pendingCheckoutId = null;
+  return id;
+}
+
+/**
+ * Choosing the password on a subscription just paid for. On success the
+ * token that comes back is folded into the entitlement already on this
+ * device, so the act of choosing it is also the sign-in.
+ */
+export async function setPasscode(
+  checkoutId: string,
+  password: string,
+): Promise<'ok' | 'unavailable' | 'failed'> {
+  const result = await (await import('./creem')).setWebPasscode(checkoutId, password);
+  if (result === 'unavailable') return 'unavailable';
+  if (!result) return 'failed';
+  setEntitlement({
+    ...entitlement(),
+    email: result.email || entitlement().email,
+    token: result.token,
+  });
+  return 'ok';
+}
 
 const NOBODY: Entitlement = { active: false, channel: salesChannel() };
 
@@ -162,11 +203,11 @@ export async function purchase(period: PlanPeriod, email?: string): Promise<Purc
  * naming the address it was bought with. Apple requires the app to offer
  * this, and a player who reinstalls has every right to expect it.
  */
-export async function restore(email?: string): Promise<PurchaseOutcome> {
+export async function restore(email?: string, password?: string): Promise<PurchaseOutcome> {
   const channel = salesChannel();
   const outcome =
     channel === 'web'
-      ? await (await import('./creem')).webRestore(email ?? '')
+      ? await (await import('./creem')).webRestore(email ?? '', password ?? '')
       : await (await import('./iap')).storeRestore();
   if (outcome.ok === true) setEntitlement(outcome.entitlement);
   report('subscribe_restore', {
@@ -190,17 +231,22 @@ export async function refreshEntitlement(): Promise<void> {
       // fresh purchase to record, and it takes precedence over the cache.
       const settled = await creem.settleReturn();
       if (settled) {
-        setEntitlement(settled);
+        setEntitlement(settled.entitlement);
+        pendingCheckoutId = settled.checkoutId;
         return;
       }
       // A redeemed code carries its own end date and cannot be extended
       // without another code, so there is nothing to re-ask anyone about.
       if (entitlement().channel === 'code') return;
+      // Re-asking needs a credential now, and the password is deliberately
+      // not kept on the device — the token issued at sign-in is. Without one
+      // (a subscription that predates passwords) the cache simply stands and
+      // lapses on its own at `until`, which is what it is for.
       const email = signedInEmail();
-      if (!email) return;
-      const current = await creem.webRestore(email);
-      if (current.ok === true) setEntitlement(current.entitlement);
-      else if (current.ok === false && current.reason === 'none') clearEntitlement();
+      const token = entitlement().token;
+      if (!email || !token) return;
+      const current = await creem.webRefresh(email, token);
+      if (current) setEntitlement(current);
       return;
     }
     if (entitlement().channel === 'code') return;

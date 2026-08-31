@@ -31,8 +31,31 @@ import { get, set } from './_store.js';
  * cost and by lockout rather than by length — a reasonable one to offer.
  */
 
-/** 4 to 6 digits, as chosen. */
+/** A redeemed code's passcode: 4 to 6 digits, as chosen. */
 export const PIN_RE = /^\d{4,6}$/;
+
+/**
+ * A card subscriber's password.
+ *
+ * Six characters is the floor because that is what a person picks and types.
+ * There is deliberately no low ceiling: a phone's password manager offers to
+ * generate one, and what it generates is twenty-odd mixed characters — a rule
+ * of "exactly six digits" would reject the strong password the platform just
+ * made, which is the opposite of the point. Anything goes above six.
+ *
+ * The two credentials are hashed and rate-limited identically; only the shape
+ * accepted at the door differs, because the two doors were opened for
+ * different reasons.
+ */
+export const PASS_RE = /^.{6,128}$/;
+
+/**
+ * What an endpoint accepts before it knows which kind of account it is
+ * looking at. Deliberately loose: the stored hash is what actually decides,
+ * and rejecting a shape here early would tell a stranger which kind of
+ * account an address has.
+ */
+export const SECRET_RE = /^.{4,128}$/;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
@@ -61,11 +84,14 @@ function hash(pin, saltHex) {
   return scryptSync(String(pin), Buffer.from(saltHex, 'hex'), 32).toString('hex');
 }
 
-export function newAccount(pin) {
+export function newAccount(secret, kind = 'code') {
   const salt = randomBytes(16).toString('hex');
   return {
+    /** 'card' — Creem holds the entitlement, this only proves identity.
+     *  'code' — a redeemed code, whose entitlement lives in `until` below. */
+    kind,
     salt,
-    hash: hash(pin, salt),
+    hash: hash(secret, salt),
     until: 0,
     fails: 0,
     lockUntil: 0,
