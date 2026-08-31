@@ -75,6 +75,12 @@ export interface I18nStrings {
   privilegesSoon: string;
   becomeGenius: string;
   geniusSpecialTitle: string;
+  /** 付费墙上「订阅后立刻拿到」那一段的小标题。 */
+  geniusNowTitle: string;
+  /** 付费墙上「还没做、做完自动包含」那一段的小标题。 */
+  geniusSoonTitle: string;
+  /** 开多人房间——GENIUS_LAYOUTS 之外唯一一件订阅立刻拿到的东西。 */
+  geniusHostRooms: string;
   // ---- subscription: the paywall, and the web's e-mail sign-in ----
   /** Title of the window the 成为 Slides 天才 button opens. */
   subscribeTitle: string;
@@ -314,8 +320,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     privilegesSoon: '…more coming soon',
     becomeGenius: 'Become a Slides Genius',
     geniusSpecialTitle: 'Slides Genius Exclusives',
+    geniusNowTitle: 'Unlocked the moment you subscribe',
+    geniusSoonTitle: 'Not built yet — included the day it lands',
+    geniusHostRooms: 'Host multiplayer rooms for up to four players',
     subscribeTitle: 'Become a Slides Genius',
-    subscribeIntro: 'Everything below, unlocked. Cancel whenever you like.',
+    subscribeIntro: 'More boards unlocked right away, with more on the way. Cancel whenever you like.',
     planMonthly: 'per month',
     planYearly: 'per year',
     subscribeBtn: 'Subscribe',
@@ -526,8 +535,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     privilegesSoon: '…encore plus à venir',
     becomeGenius: 'Devenir un Slides Génie',
     geniusSpecialTitle: 'Exclusivités Slides Génie',
+    geniusNowTitle: 'Débloqué dès votre abonnement',
+    geniusSoonTitle: 'Pas encore réalisé — inclus dès sa sortie',
+    geniusHostRooms: 'Héberger des salons multijoueurs jusqu’à quatre joueurs',
     subscribeTitle: 'Devenir un Slides Génie',
-    subscribeIntro: 'Tout ce qui suit, débloqué. Résiliable à tout moment.',
+    subscribeIntro: 'D’autres plateaux débloqués immédiatement, et d’autres à venir. Résiliable à tout moment.',
     planMonthly: 'par mois',
     planYearly: 'par an',
     subscribeBtn: 'S’abonner',
@@ -739,7 +751,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     becomeGenius: '成為 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '成為 Slides 天才',
-    subscribeIntro: '下面這些全部解鎖。隨時可以取消。',
+    geniusNowTitle: '訂閱後立刻解鎖',
+    geniusSoonTitle: '還沒做完——上線當天自動包含',
+    geniusHostRooms: '開多人房間，最多四人同一副棋盤',
+    subscribeIntro: '立刻解鎖更多玩法，隨後會盡快更新。隨時可以取消。',
     planMonthly: '每月',
     planYearly: '每年',
     subscribeBtn: '訂閱',
@@ -951,7 +966,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     becomeGenius: '成为 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '成为 Slides 天才',
-    subscribeIntro: '下面这些全部解锁。随时可以取消。',
+    geniusNowTitle: '订阅后立刻解锁',
+    geniusSoonTitle: '还没做完——上线当天自动包含',
+    geniusHostRooms: '开多人房间，最多四人同一副棋盘',
+    subscribeIntro: '立刻解锁更多玩法，随后会尽快更新。随时可以取消。',
     planMonthly: '每月',
     planYearly: '每年',
     subscribeBtn: '订阅',

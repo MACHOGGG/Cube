@@ -1210,6 +1210,10 @@ button:hover { filter: brightness(1.05); }
 .genius-perks { text-align: left; margin: 0 0 16px; }
 .genius-perk { position: relative; color: var(--ink-soft); font-size: 0.85rem; padding: 3px 0 3px 16px; }
 .genius-perk::before { content: '·'; position: absolute; left: 4px; color: var(--accent); }
+/* The not-yet-built half of the paywall list: same rows, visibly quieter,
+   so a buyer can tell at a glance which half they get today. */
+.genius-perk--soon { opacity: 0.58; }
+.genius-perk--soon::before { color: var(--ink-soft); }
 .auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
 .auth-body .tag-line { margin: 0; }
 

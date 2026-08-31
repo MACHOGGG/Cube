@@ -1,4 +1,6 @@
 import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
+import { GENIUS_LAYOUTS } from '../engine/geniusContent';
+import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
 import { formatPrice, plans, type PlanPeriod } from '../engine/pricing';
 import {
@@ -128,6 +130,14 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
 
   const s = STRINGS[lang];
   const store = payeeName();
+  // What the subscription actually hands over the moment it is bought. The
+  // board names are read from GENIUS_LAYOUTS rather than written out again,
+  // so adding a board to the subscription adds it here too and this list can
+  // never drift into promising something the code does not lock.
+  const nowList = [
+    ...GENIUS_LAYOUTS.map((id) => shapeName(lang, id, id)),
+    s.geniusHostRooms,
+  ];
   const priceRows = plans()
     .map(
       (plan) => `
@@ -150,8 +160,10 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     <button class="link-btn" id="geniusRedeem">${s.haveCode}</button>
     <p class="auth-msg" id="geniusMsg" role="status"></p>
     <div class="genius-perks">
-      <div class="menu-section-label">${s.geniusSpecialTitle}</div>
-      ${PRIVILEGES[lang].map((p) => `<div class="genius-perk">${p}</div>`).join('')}
+      <div class="menu-section-label">${s.geniusNowTitle}</div>
+      ${nowList.map((p) => `<div class="genius-perk">${esc(p)}</div>`).join('')}
+      <div class="menu-section-label">${s.geniusSoonTitle}</div>
+      ${PRIVILEGES[lang].map((p) => `<div class="genius-perk genius-perk--soon">${p}</div>`).join('')}
     </div>
     <div class="btn-row">
       <button class="icon-btn" id="geniusRestore">${
