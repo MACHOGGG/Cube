@@ -76,7 +76,13 @@ export type PurchaseOutcome =
   | { ok: true; entitlement: Entitlement }
   /** The site hands off to Creem's page; the tab is on its way out. */
   | { ok: 'redirecting' }
-  | { ok: false; reason: PurchaseFailure; detail?: string };
+  | {
+      ok: false;
+      reason: PurchaseFailure;
+      detail?: string;
+      /** 'locked' 才有：这把锁还剩多久自己开。 */
+      retryInMs?: number;
+    };
 
 export type PurchaseFailure =
   /** The player backed out of the store sheet or the checkout page. */
@@ -91,8 +97,10 @@ export type PurchaseFailure =
   /** The password did not match — or the address has no account, which is
    *  answered identically so that this cannot be used to find subscribers. */
   | 'wrong'
-  /** Too many wrong guesses; the account has stopped answering for a while. */
+  /** Four wrong guesses: shut for a few hours, then it opens by itself. */
   | 'locked'
+  /** Six: shut until the address behind it vouches for whoever is trying. */
+  | 'blocked'
   /** Subscribed, but no password was ever set on the way back from the
    *  checkout. Not a failure to apologise for — a step still to finish. */
   | 'needsPasscode'

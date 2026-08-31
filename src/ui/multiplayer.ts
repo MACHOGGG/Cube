@@ -66,11 +66,18 @@ const NAME_KEY = 'slides_mp_name';
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** Seats open today, as the server last said. Only the wording needs it. */
+/**
+ * Seats open today, as the server last said.
+ *
+ * Only the wording needs it, and the 4 is a first guess for the one moment
+ * before any answer has arrived — every reply that mentions seats, including
+ * the refusal that says a room is full, replaces it.
+ */
 let openSeats = 4;
 
-function errorText(reason: RoomError, lang: Lang): string {
+function errorText(reason: RoomError, lang: Lang, seats?: number): string {
   const s = STRINGS[lang];
+  if (typeof seats === 'number' && seats > 0) openSeats = seats;
   switch (reason) {
     case 'geniusOnly':
       return s.mpNeedGenius;
@@ -209,7 +216,7 @@ export function renderMultiplayerPage(
       msg.textContent = s.workingLabel;
       const made = await createRoom(myName(), avatar);
       if (dead) return;
-      if (!made.ok) return void (msg.textContent = errorText(made.reason, lang));
+      if (!made.ok) return void (msg.textContent = errorText(made.reason, lang, made.seats));
       renderLobby(made.value);
     });
 
@@ -220,7 +227,7 @@ export function renderMultiplayerPage(
       msg.textContent = s.workingLabel;
       const joined = await joinRoom(code, myName(), avatar);
       if (dead) return;
-      if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang));
+      if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang, joined.seats));
       renderLobby(joined.value);
     });
 
@@ -268,10 +275,19 @@ export function renderMultiplayerPage(
         <button class="profile-row profile-row--back" id="mpLeave">${s.mpLeave}</button>
       </div>
     `;
-    container.querySelector<HTMLButtonElement>('#mpLeave')!.addEventListener('click', async () => {
+    const quit = async () => {
       stopAll();
       await leaveRoom();
       if (!dead) renderHome();
+    };
+    container.querySelector<HTMLButtonElement>('#mpLeave')!.addEventListener('click', () => {
+      // Only the host is warned, because only the host's leaving costs the
+      // others anything: the server writes 房主 once when the room opens and
+      // has no way to hand it on, so a room whose host has gone can still be
+      // sat in and can never start another round. Everyone else may go
+      // without ceremony.
+      if (!iAmHost) return void quit();
+      confirmLeave(quit);
     });
 
     paint(state, iAmHost);
@@ -291,10 +307,44 @@ export function renderMultiplayerPage(
         }
       },
       (reason) => {
+        // 轮询本来就会偶尔掉一次。房间还在屏幕上，比分也还在，所以这里
+        // 只说一句话，不重画、更不清身份。
         const msg = container.querySelector<HTMLElement>('#mpMsg');
-        if (msg) msg.textContent = errorText(reason, lang);
+        if (!msg) return;
+        msg.textContent =
+          reason === 'noRoom' || reason === 'ended'
+            ? errorText(reason, lang)
+            : s.mpReconnecting;
       },
     );
+  }
+
+  /**
+   * 房主要走。One sentence about what it costs the table, and two buttons —
+   * the quiet one is the one that leaves.
+   */
+  function confirmLeave(onLeave: () => void) {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    overlay.innerHTML = `
+      <div class="modal">
+        <p class="tag-line">${s.mpHostLeaveWarn}</p>
+        <div class="btn-row">
+          <button class="secondary" id="mpLeaveYes">${s.mpLeaveAnyway}</button>
+          <button class="primary" id="mpLeaveNo">${s.mpStay}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const shut = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#mpLeaveNo')!.addEventListener('click', shut);
+    overlay.querySelector<HTMLButtonElement>('#mpLeaveYes')!.addEventListener('click', () => {
+      shut();
+      onLeave();
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) shut();
+    });
   }
 
   function paint(state: RoomState, iAmHost: boolean) {
@@ -365,11 +415,50 @@ export function renderMultiplayerPage(
       if (dead) return;
       if (!closed.ok) {
         const msg = container.querySelector<HTMLElement>('#mpMsg');
-        if (msg) msg.textContent = errorText(closed.reason, lang);
+        if (msg) msg.textContent = errorText(closed.reason, lang, closed.seats);
         return renderLobby(state);
       }
       handlers.onRoomEnded(closed.value);
     });
+  }
+
+  /**
+   * 连不上，但座位还在。
+   *
+   * 这一屏没有「返回」——按下去就等于放弃座位，而这恰恰是它要避免的事。
+   * 它自己每三秒再试一次，通了就直接进房间；真的不想等了，关掉页面就行。
+   */
+  function renderReconnecting() {
+    stopAll();
+    container.innerHTML = `
+      <div class="app mp-page mp-countdown-page">
+        <p class="tag-line">${s.mpReconnecting}</p>
+        <p class="auth-hint" id="mpReconnectHint"></p>
+      </div>
+    `;
+    const hint = container.querySelector<HTMLElement>('#mpReconnectHint')!;
+    let tries = 0;
+    const again = async () => {
+      if (dead) return;
+      tries++;
+      hint.textContent = `${tries}`;
+      const now = await fetchState();
+      if (dead) return;
+      if (now.ok) {
+        if (now.value.ended) {
+          forgetRoom();
+          return renderHome(s.mpRoomEnded);
+        }
+        playedRound = now.value.roundOver ? now.value.round : playedRound;
+        return renderLobby(now.value);
+      }
+      if (now.reason === 'noRoom' || now.reason === 'ended') {
+        forgetRoom();
+        return renderHome(s.mpErrNoRoom);
+      }
+      countdownTimer = window.setTimeout(again, 3000) as unknown as number;
+    };
+    void again();
   }
 
   // ---- screen 3: 3, 2, 1 -----------------------------------------------
@@ -420,8 +509,13 @@ export function renderMultiplayerPage(
     const existing = await fetchState();
     if (dead) return;
     if (!existing.ok) {
+      // 「房间没了」和「这次请求没打通」是两件事，以前一律按前者处理：
+      // 地铁里晃一下、后台被回收一次，人就被请出房间而且回不去。
+      // 只有服务器亲口说没有这间房，才放弃这个座位。
+      const gone = existing.reason === 'noRoom' || existing.reason === 'ended';
+      if (!gone && currentRoom()) return renderReconnecting();
       forgetRoom();
-      return renderHome();
+      return renderHome(gone ? s.mpErrNoRoom : '');
     }
     if (existing.value.ended) {
       forgetRoom();

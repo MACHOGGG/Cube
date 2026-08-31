@@ -174,6 +174,8 @@ export interface I18nStrings {
   pwLocked: string;
   pwBlocked: string;
   unlockTitle: string;
+  /** 锁死之后那个真的能按的按钮。 */
+  unlockNow: string;
   unlockIntro: string;
   unlockSendBtn: string;
   unlockSent: string;
@@ -227,6 +229,12 @@ export interface I18nStrings {
   mpFastest: string;
   mpRoundsPlayed: string;
   mpErrEnded: string;
+  /** 网络断了一下，但座位还留着——不是把人踢出房间的理由。 */
+  mpReconnecting: string;
+  /** 房主要走之前得知道：他一走，就没人能开下一局了。 */
+  mpHostLeaveWarn: string;
+  mpLeaveAnyway: string;
+  mpStay: string;
   mpErrNoRoom: string;
   mpErrFull: string;
   mpErrStarted: string;
@@ -453,9 +461,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     needsPwHint: 'This subscription has no password yet. Open it from the device you paid on to set one.',
     redeemBadCode: 'That insider code is not valid, or it has already been used.',
     pwWrong: 'That passcode is not right.',
-    pwLocked: 'Too many wrong tries. Try again in about {hours} h.',
-    pwBlocked: 'Too many wrong tries — this account is locked. Verify by email to open it again.',
+    pwLocked: 'Too many wrong tries. Opens again in about {hours} h.',
+    pwBlocked: 'Locked after too many wrong tries. Open it by email.',
     unlockTitle: 'Unlock by email',
+    unlockNow: 'Unlock',
     unlockIntro: 'We will send a six-digit code to your address. It lets you set a new passcode.',
     unlockSendBtn: 'Send the code',
     unlockSent: 'Sent. The code is good for 30 minutes.',
@@ -504,6 +513,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: 'Quickest board',
     mpRoundsPlayed: '{n} rounds',
     mpErrEnded: 'That room has been closed.',
+    mpReconnecting: 'Connection lost — getting you back in…',
+    mpHostLeaveWarn: 'You opened this room. If you leave, nobody can start another round — the others will have to open a new room.',
+    mpLeaveAnyway: 'Leave anyway',
+    mpStay: 'Stay',
     mpErrNoRoom: 'No room with that code.',
     mpErrFull: 'That room is full — {n} players is the most.',
     mpErrStarted: 'That game has already started.',
@@ -713,9 +726,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     needsPwHint: 'Cet abonnement n’a pas encore de mot de passe. Ouvrez-le depuis l’appareil du paiement pour en définir un.',
     redeemBadCode: 'Ce code Génie n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
-    pwLocked: 'Trop d’essais. Réessayez dans environ {hours} h.',
-    pwBlocked: 'Trop d’essais — ce compte est verrouillé. Vérifiez par courriel pour le rouvrir.',
+    pwLocked: 'Trop d’essais. Se rouvre dans environ {hours} h.',
+    pwBlocked: 'Verrouillé après trop d’essais. Rouvrez-le par courriel.',
     unlockTitle: 'Déverrouiller par courriel',
+    unlockNow: 'Déverrouiller',
     unlockIntro: 'Nous envoyons un code à six chiffres à votre adresse. Il permet de définir un nouveau code secret.',
     unlockSendBtn: 'Envoyer le code',
     unlockSent: 'Envoyé. Le code est valable 30 minutes.',
@@ -764,6 +778,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: 'Plateau le plus rapide',
     mpRoundsPlayed: '{n} manches',
     mpErrEnded: 'Cette salle a été fermée.',
+    mpReconnecting: 'Connexion perdue — on vous y ramène…',
+    mpHostLeaveWarn: 'Vous avez ouvert cette salle. Si vous partez, personne ne pourra lancer de manche — les autres devront ouvrir une nouvelle salle.',
+    mpLeaveAnyway: 'Partir quand même',
+    mpStay: 'Rester',
     mpErrNoRoom: 'Aucune salle avec ce code.',
     mpErrFull: 'Cette salle est pleine — {n} joueurs au maximum.',
     mpErrStarted: 'Cette partie a déjà commencé.',
@@ -973,9 +991,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     needsPwHint: '這個訂閱還沒設密碼。請在付款的那台裝置上打開，設一組。',
     redeemBadCode: '這個內部碼無效，或已經被使用過了。',
     pwWrong: '密碼不對。',
-    pwLocked: '錯誤次數太多，請約 {hours} 小時後再試。',
-    pwBlocked: '錯誤次數太多，這個帳號已被鎖住。請用電子郵件驗證重新開啟。',
+    pwLocked: '錯太多次了，約 {hours} 小時後自動解開。',
+    pwBlocked: '錯太多次，已鎖住。用電子郵件解開。',
     unlockTitle: '電子郵件驗證解鎖',
+    unlockNow: '解鎖',
     unlockIntro: '我們會寄一組六位數驗證碼到你的信箱，用它可以設定新密碼。',
     unlockSendBtn: '寄出驗證碼',
     unlockSent: '已寄出，驗證碼 30 分鐘內有效。',
@@ -1024,6 +1043,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: '最快玩家',
     mpRoundsPlayed: '共 {n} 局',
     mpErrEnded: '這個房間已經結束了。',
+    mpReconnecting: '網路斷了一下，正在把你接回房間…',
+    mpHostLeaveWarn: '這間房是你開的。你一走，就沒有人能再開下一局了——其他人得重新開一間房。',
+    mpLeaveAnyway: '還是離開',
+    mpStay: '留下',
     mpErrNoRoom: '沒有這個房間號。',
     mpErrFull: '房間滿了——最多 {n} 個人。',
     mpErrStarted: '這一局已經開始了。',
@@ -1233,9 +1256,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     needsPwHint: '这个订阅还没设密码。请在付款的那台设备上打开，设一组。',
     redeemBadCode: '这个内部码无效，或者已经被用过了。',
     pwWrong: '密码不对。',
-    pwLocked: '错误次数太多，请约 {hours} 小时后再试。',
-    pwBlocked: '错误次数太多，这个账号已经锁住了。请用邮箱验证重新开启。',
+    pwLocked: '错太多次了，约 {hours} 小时后自动解开。',
+    pwBlocked: '错太多次，已锁住。用邮箱解开。',
     unlockTitle: '邮箱验证解锁',
+    unlockNow: '解锁',
     unlockIntro: '我们会发一组六位数验证码到你的邮箱，用它可以设置新密码。',
     unlockSendBtn: '发送验证码',
     unlockSent: '已发送，验证码 30 分钟内有效。',
@@ -1284,6 +1308,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: '最快玩家',
     mpRoundsPlayed: '共 {n} 局',
     mpErrEnded: '这个房间已经结束了。',
+    mpReconnecting: '网络断了一下，正在把你接回房间…',
+    mpHostLeaveWarn: '这间房是你开的。你一走，就没有人能再开下一局了——其他人得重新开一间房。',
+    mpLeaveAnyway: '还是离开',
+    mpStay: '留下',
     mpErrNoRoom: '没有这个房间号。',
     mpErrFull: '房间满了——最多 {n} 个人。',
     mpErrStarted: '这一局已经开始了。',

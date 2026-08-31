@@ -637,6 +637,7 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
         <button type="submit" hidden></button>
       </form>
       <p class="auth-msg" id="authMsg" role="status"></p>
+      <div id="authUnlock"></div>
       <button class="link-btn" id="authRedeem">${s.haveCode}</button>
     </div>
     <div class="btn-row">
@@ -653,12 +654,23 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
   const msg = overlay.querySelector<HTMLElement>('#authMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#authGo')!;
   const tabs = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.auth-tab'));
+  const unlockSlot = overlay.querySelector<HTMLElement>('#authUnlock')!;
   let current: AuthTab = tab;
+
+  /** The way out of a blocked account, offered only once there is one. */
+  const showUnlock = (address: string) => {
+    unlockSlot.innerHTML = `<button class="link-btn" id="authUnlockGo">${s.unlockNow}</button>`;
+    unlockSlot.querySelector<HTMLButtonElement>('#authUnlockGo')!.addEventListener('click', () => {
+      close();
+      openUnlockWindow(lang, address, onChanged);
+    });
+  };
 
   const setTab = (next: AuthTab) => {
     current = next;
     for (const el of tabs) el.classList.toggle('active', el.dataset.tab === next);
     msg.textContent = '';
+    unlockSlot.innerHTML = '';
     hint.textContent = next === 'register' ? s.registerIsSubscribe : s.signInHint;
     // Registering asks for nothing: Creem's checkout collects the address
     // itself, and one form is better than two asking for the same thing.
@@ -701,8 +713,25 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
       msg.textContent = s.pwWrong;
       return;
     }
+    // Two different locks, two different things to say — and only one of
+    // them has anything the player can press.
+    //
+    //   locked  — four wrong tries; it opens by itself, and the server has
+    //             already worked out when. Saying "check your email" here
+    //             sent people looking for a message that is never sent.
+    //   blocked — six; the address itself has to vouch for them, which is
+    //             exactly what openUnlockWindow does. That window has been
+    //             finished for a while and nothing ever opened it.
     if (outcome.ok === false && outcome.reason === 'locked') {
+      msg.textContent = s.pwLocked.replace(
+        '{hours}',
+        String(Math.max(1, Math.ceil((outcome.retryInMs ?? 0) / 3600e3))),
+      );
+      return;
+    }
+    if (outcome.ok === false && outcome.reason === 'blocked') {
       msg.textContent = s.pwBlocked;
+      showUnlock(email);
       return;
     }
     msg.textContent =

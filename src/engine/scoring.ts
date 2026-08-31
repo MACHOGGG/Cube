@@ -110,6 +110,39 @@ export interface CascadeStepper {
 }
 
 /**
+ * One region, one payout.
+ *
+ * Every shape's findMatches probes each possible starting cell separately and
+ * grows whatever it finds outwards into a whole region — so a run of five
+ * seeds at two places and a 3x3 block at four, and each of those seeds hands
+ * back the *same* final region as its own Match. Summing them straight
+ * doubled a five-run to ten points and quadrupled a 3x3.
+ *
+ * The old comment in square.ts promised that scoring.ts already collapsed
+ * these "by tile id". It did not — the mechanism was never written. This is
+ * it, in the one place all eight shapes pass through, rather than eight
+ * near-identical guards that would have to be kept in step.
+ *
+ * Identical regions only. Two regions that merely *overlap* are two different
+ * patterns the player really did complete — a run of four sharing its last
+ * tile with a column of four is two payouts, and collapsing those would take
+ * away a score that was honestly earned.
+ */
+function dedupe(matches: Match[]): Match[] {
+  const seen = new Set<string>();
+  const kept: Match[] = [];
+  for (const m of matches) {
+    // Sorted, so the same region found from two different seeds — which may
+    // walk its cells in a different order — signs identically.
+    const signature = m.cells.map(([r, c]) => cellKey(r, c)).sort().join('|');
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    kept.push(m);
+  }
+  return kept;
+}
+
+/**
  * Drives one full chain reaction following a confirmed move, one beat at a
  * time: repeatedly finds the next whole-line bonus or match wave, applying a
  * bonus's mutation immediately (its cells are always already dot-faced —
@@ -159,9 +192,11 @@ export function createCascadeStepper(
     }
 
     const nextMask = new Set<string>();
-    const matches = cfg
-      .findMatches(mask)
-      .filter((m) => m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor'));
+    const matches = dedupe(
+      cfg
+        .findMatches(mask)
+        .filter((m) => m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor')),
+    );
     if (matches.length) {
       let points = 0;
       const toFlip = new Set<string>();

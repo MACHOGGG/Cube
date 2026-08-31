@@ -40,13 +40,34 @@ interface SubscriptionReply {
   gifts?: GiftCode[];
 }
 
+/**
+ * A failed request, with what the server actually said still attached.
+ *
+ * Throwing a bare status code threw away the two things that decide what the
+ * player is told: whether this is the four-hour lock or the permanent one,
+ * and how long the four hours have left to run. Both are in the body; only
+ * the status was surviving the trip.
+ */
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code?: string,
+    readonly retryInMs?: number,
+  ) {
+    super(String(status));
+  }
+}
+
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(String(res.status));
+  if (!res.ok) {
+    const said = (await res.json().catch(() => ({}))) as { error?: string; retryInMs?: number };
+    throw new HttpError(res.status, said.error, said.retryInMs);
+  }
   return (await res.json()) as T;
 }
 
@@ -94,7 +115,8 @@ export async function webRestore(email: string, password: string): Promise<Purch
     if (!reply.active) return { ok: false, reason: 'none' };
     return { ok: true, entitlement: toEntitlement(reply, address) };
   } catch (err) {
-    return { ok: false, reason: failureFor(err) };
+    const { reason, retryInMs } = failureFor(err);
+    return { ok: false, reason, retryInMs };
   }
 }
 
@@ -157,13 +179,28 @@ export async function bindCode(
  * 401 and 423 are answers about the password. A 5xx is the server admitting
  * it could not answer at all — which is emphatically not the same thing as
  * the phone being offline, and saying so cost an afternoon once.
+ *
+ * 423 covers two different situations and they need different words. Four
+ * wrong tries shuts the account for four hours and then it opens by itself;
+ * six shuts it until the address vouches for whoever is trying. Collapsing
+ * both into 'locked' told everyone in the first group to go and check their
+ * email for a message that only the second group ever gets — and threw away
+ * the hours the server had already worked out.
  */
-function failureFor(err: unknown): 'wrong' | 'locked' | 'server' | 'network' {
-  const code = String(err).replace('Error: ', '');
-  if (code === '401') return 'wrong';
-  if (code === '423') return 'locked';
-  const status = Number(code);
-  return status >= 500 && status < 600 ? 'server' : 'network';
+function failureFor(err: unknown): {
+  reason: 'wrong' | 'locked' | 'blocked' | 'server' | 'network';
+  retryInMs?: number;
+} {
+  if (err instanceof HttpError) {
+    if (err.status === 401) return { reason: 'wrong' };
+    if (err.status === 423) {
+      return err.code === 'blocked'
+        ? { reason: 'blocked' }
+        : { reason: 'locked', retryInMs: err.retryInMs };
+    }
+    return { reason: err.status >= 500 && err.status < 600 ? 'server' : 'network' };
+  }
+  return { reason: 'network' };
 }
 
 /**

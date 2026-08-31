@@ -391,10 +391,10 @@ export function createSquareGame(): ShapeGame {
       // only extends by a full extra row or column at a time (so "3 wide,
       // 2 deep, plus one stray tile" stops at the 3x2 rectangle, not the
       // stray tile too). Two overlapping seed windows inside one longer run
-      // (or one bigger rectangle) converge on the exact same final region,
-      // so the existing per-cascade-step tile-id dedup in scoring.ts still
-      // collapses them into a single scored match rather than double-
-      // counting it.
+      // (or one bigger rectangle) converge on the exact same final region;
+      // scoring.ts's dedupe() collapses those identical regions into a single
+      // payout (an earlier version of this comment claimed that already
+      // happened when in fact nothing did it, and a five-run scored double).
       function cellsSameColor(cells: Cell[]): boolean {
         const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
         // Red hazard tiles are obstacles, not a matchable color — never a

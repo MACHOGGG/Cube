@@ -74,7 +74,22 @@ function iconPos(r: number, c: number): [number, number] {
 // corner to corner, which is the clearest way to show that offset lattice at
 // icon size.
 const ICON_HALF = 0.5;
-const ICON_EXTENT = 5; // the widest pattern (1-2-1) spans 4 units plus a tile
+const ICON_EXTENT = 4; // the widest pattern (1x4) spans 3 units plus a tile
+
+/**
+ * 1-2-1, as one list of offsets that both the scoring rule and its hint icon
+ * read from.
+ *
+ * They used to be written out twice. When the rule was tightened to this
+ * compact 2x2 the icon kept the old, looser shape — so the HUD spent three
+ * days showing players a pattern that no longer scored. One definition is
+ * the only way that stays fixed.
+ *
+ * In (r, c) it is a 2x2 block; on screen, where this board is the same
+ * lattice turned 45 degrees (iconPos below), it comes out as the diamond the
+ * name describes: one tile, then two, then one.
+ */
+const DIAMOND_121: readonly (readonly [number, number])[] = [[0, 0], [0, 1], [1, 0], [1, 1]];
 const iconTile = (r: number, c: number) => {
   const [cx, cy] = iconPos(r, c);
   return { kind: 'rect' as const, cx, cy, half: ICON_HALF };
@@ -96,13 +111,8 @@ const PATTERNS: PatternDef[] = [
   {
     label: '1-2-1',
     extent: ICON_EXTENT,
-    // Drawn a touch larger and pulled in from its true 2-cell spread: at
-    // icon size the real gaps read as four unrelated dots rather than one
-    // diamond.
-    cells: ([[0, 0], [2, 0], [0, 2], [2, 2]] as const).map(([r, c]) => {
-      const [cx, cy] = iconPos(r, c);
-      return { kind: 'rect' as const, cx: cx * 0.72, cy: cy * 0.72, half: ICON_HALF * 1.3 };
-    }),
+    // Straight from DIAMOND_121, so the hint is the rule.
+    cells: DIAMOND_121.map(([r, c]) => iconTile(r, c)),
   },
 ];
 
@@ -150,7 +160,7 @@ function inBounds(r: number, c: number): boolean {
   return r >= 0 && r < BOARD_DIM && c >= 0 && c < BOARD_DIM;
 }
 function diamond121(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+  const cells: Cell[] = DIAMOND_121.map(([dr, dc]) => [r + dr, c + dc] as Cell);
   return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
 }
 function lineFor(fam: Fam, r: number, c: number): Line {

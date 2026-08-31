@@ -288,7 +288,13 @@ async function join(res, body) {
   if (hash.meta.endedAt) return send(res, 409, { error: 'ended' });
   // Between rounds is a fine moment to walk in; the middle of one is not.
   if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
-  if (seatCount(hash) >= MAX_PLAYERS) return send(res, 409, { error: 'full' });
+  // The seat count travels with the refusal, not just with a room you are
+  // already inside. Joining from the home page is where "满了" is actually
+  // read, and until now that path had nothing to go on but a number written
+  // into the app — right today only because OPEN_SEATS happens to be 4.
+  if (seatCount(hash) >= MAX_PLAYERS) {
+    return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
+  }
 
   const playerId = id(8);
   const token = id(16);

@@ -10,6 +10,7 @@ import {
   saveAccount,
   unblock,
 } from './_accounts.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import { del, get, set, storeConfigured } from './_store.js';
 import { mailConfigured, sendMail } from './_mail.js';
 
@@ -42,13 +43,31 @@ export default async function handler(req, res) {
 
   return body.action === 'confirm'
     ? confirm(res, address, body)
-    : request(res, address);
+    : request(res, req, address);
 }
 
-async function request(res, address) {
+async function request(res, req, address) {
   // No provider, no code. Saying so lets the app point at the support
   // address instead of leaving the player waiting for mail that never sends.
   if (!mailConfigured()) return send(res, 503, { error: 'noMail' });
+
+  // Two limits, because there are two different things worth stopping.
+  //
+  //   by address — anyone who knows where a blocked account lives could
+  //     otherwise point this endpoint at it and post them an unlock code
+  //     every few seconds. Three an hour is more than a person who has
+  //     genuinely lost the mail ever needs.
+  //   by caller  — and one machine cannot work through a list of addresses
+  //     either, whoever they belong to.
+  //
+  // Both answer 429 rather than pretending to have sent it: a player who is
+  // really waiting deserves to know why nothing arrived.
+  if (await tooMany('unlock:to', address, 3, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+  if (await tooMany('unlock:from', callerId(req), 10, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
 
   const account = await loadAccount(address);
   // Only a blocked account gets a code — but an address with no account, or

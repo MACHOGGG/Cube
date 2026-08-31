@@ -81,7 +81,10 @@ export type RoomError =
   | 'notConfigured'
   | 'network';
 
-export type RoomResult<T> = { ok: true; value: T } | { ok: false; reason: RoomError };
+export type RoomResult<T> =
+  | { ok: true; value: T }
+  /** `seats` comes back with 'full': how many the room really holds. */
+  | { ok: false; reason: RoomError; seats?: number };
 
 interface Session {
   code: string;
@@ -89,7 +92,38 @@ interface Session {
   playerToken: string;
 }
 
-let session: Session | null = null;
+/**
+ * 座位记在 sessionStorage 里，不只是一个变量。
+ *
+ * playerId 和 playerToken 是这台设备在房间里的身份，服务器只认这两样。
+ * 它们本来只活在一个 JS 变量里——手机切到后台被系统回收、顺手刷新一下、
+ * 甚至只是一次请求超时，身份就没了，人也就回不去了。
+ *
+ * 用 sessionStorage 而不是 localStorage：一个房间属于这一次游玩，标签页
+ * 关了它就该结束，不该在两周后打开网站时还试图挤回一间早就散了的房间。
+ */
+const SEAT_KEY = 'slides_mp_seat';
+
+function loadSeat(): Session | null {
+  try {
+    const raw = sessionStorage.getItem(SEAT_KEY);
+    const seat = raw ? (JSON.parse(raw) as Session) : null;
+    return seat?.code && seat.playerId && seat.playerToken ? seat : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberSeat(seat: Session | null): void {
+  try {
+    if (seat) sessionStorage.setItem(SEAT_KEY, JSON.stringify(seat));
+    else sessionStorage.removeItem(SEAT_KEY);
+  } catch {
+    // 私密模式：这一次还能玩，只是刷新之后回不去了。
+  }
+}
+
+let session: Session | null = loadSeat();
 /** serverNow minus our own clock, so we can count down to the right instant. */
 let clockOffset = 0;
 /**
@@ -130,6 +164,7 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
     });
     const reply = (await res.json().catch(() => ({}))) as Record<string, unknown> & {
       error?: string;
+      seats?: number;
       serverNow?: number;
       state?: { serverNow?: number };
     };
@@ -141,7 +176,13 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
     const described = (reply.state ?? reply) as unknown as RoomState;
     if (res.ok && Array.isArray(described?.players)) lastState = described;
     if (!res.ok) {
-      return { ok: false, reason: KNOWN.find((k) => k === reply.error) ?? 'network' };
+      return {
+        ok: false,
+        reason: KNOWN.find((k) => k === reply.error) ?? 'network',
+        // A refusal can carry facts too — "full" says how many seats there
+        // actually are, which is the number the message needs.
+        ...(typeof reply.seats === 'number' ? { seats: reply.seats } : {}),
+      };
     }
     return { ok: true, value: reply as T };
   } catch {
@@ -180,6 +221,7 @@ export async function createRoom(name: string, avatar: Avatar): Promise<RoomResu
     playerId: made.value.playerId,
     playerToken: made.value.playerToken,
   };
+  rememberSeat(session);
   return { ok: true, value: made.value.state };
 }
 
@@ -196,6 +238,7 @@ export async function joinRoom(
   });
   if (!joined.ok) return joined;
   session = { code: code.trim(), playerId: joined.value.playerId, playerToken: joined.value.playerToken };
+  rememberSeat(session);
   return { ok: true, value: joined.value.state };
 }
 
@@ -230,6 +273,7 @@ export async function leaveRoom(): Promise<void> {
   const leaving = session;
   session = null;
   lastState = null;
+  rememberSeat(null);
   await post({ action: 'leave', ...leaving });
 }
 
@@ -237,6 +281,7 @@ export async function leaveRoom(): Promise<void> {
 export const forgetRoom = (): void => {
   session = null;
   lastState = null;
+  rememberSeat(null);
 };
 
 /**
