@@ -1,4 +1,5 @@
 import type { Lang } from '../i18n';
+import { cvdHex } from '../engine/palettePref';
 import { renderStoryTutorial, type StoryCell, type StoryStep } from './storyTutorial';
 
 /**
@@ -31,8 +32,8 @@ function frame(rows: string[]): StoryCell[] {
       // the square board is gone for good rather than left as a blank piece,
       // so it is drawn as a hole and not as a spent tile.
       if (ch === 'x') cells.push({ ...base, shape: 'ci', fill: '#FFFFFF', dashed: true });
-      else if (SQ[ch]) cells.push({ ...base, shape: 'sq', fill: SQ[ch] });
-      else cells.push({ ...base, shape: 'ci', fill: CI[ch] });
+      else if (SQ[ch]) cells.push({ ...base, shape: 'sq', fill: cvdHex(SQ[ch]) });
+      else cells.push({ ...base, shape: 'ci', fill: cvdHex(CI[ch]) });
     });
   });
   return cells;

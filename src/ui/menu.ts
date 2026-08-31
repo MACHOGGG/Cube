@@ -58,7 +58,7 @@ const BASE_ICON: Record<BaseShape, string> = {
 /** Below this width the timed and bomb sections collapse into a single card
  *  each, which opens a centred picker on tap; above it they sit expanded on
  *  the page and every option is one tap away. */
-const WIDE_QUERY = '(min-width: 720px)';
+export const WIDE_QUERY = '(min-width: 720px)';
 
 /** A short squash-and-tilt the instant a card is pressed — the "it felt the
  *  tap" cue every icon on this page shares. Driven from pointerdown rather

@@ -27,6 +27,15 @@ export interface DragCallbacks {
    * element and the inset is measured, once per drag.
    */
   origin?: HTMLElement;
+  /**
+   * Optional: runs on pointer-down *before* isActive() is consulted, so a
+   * board can make itself ready to be grabbed rather than turning the touch
+   * away. Every board uses it to fast-forward a reveal still playing from
+   * the previous move: a player who slides one line and immediately reaches
+   * for the next was losing that second move to an animation, which reads
+   * as the board ignoring them.
+   */
+  onBeforeStart?(): void;
   isActive(): boolean;
   /** Pointer-down position in board-local pixels. */
   onStart(x: number, y: number): void;
@@ -57,6 +66,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
   let sy = 0;
 
   function down(e: PointerEvent) {
+    cb.onBeforeStart?.();
     if (!cb.isActive()) {
       cb.onRejected?.();
       return;

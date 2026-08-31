@@ -3,10 +3,11 @@ import { unlockAudio, wireClickCues } from './engine/juice';
 import { applyAppIcon } from './ui/appIcons';
 import { showLoadingScreen } from './ui/loadingScreen';
 import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
-import { renderMenu, type HomeLayout } from './ui/menu';
+import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
+import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
@@ -120,6 +121,15 @@ function wireHomeTitle() {
 
 const toTop = () => window.scrollTo(0, 0);
 
+/** Re-paints the inline SVG glyphs of whatever was just rendered for the
+ *  colourblind setting. The stylesheet covers everything drawn from a custom
+ *  property; the page's own icons are literal SVG and need this. */
+const repaintIcons = () => applyPaletteToTree(document);
+// Flipping the setting re-paints what is already on screen — each glyph
+// remembers the colour it was drawn with, so this works in both directions
+// and no screen has to be rebuilt.
+onColorblindChange(repaintIcons);
+
 // A reload cannot be intercepted with our own dialog — browsers deliberately
 // allow only their own, with wording we don't get to choose — so all a page
 // can do is ask for it. Registering the handler only while a run is open
@@ -172,6 +182,7 @@ function showMenu() {
   }, currentLang);
   setNavTab(null);
   wireHomeTitle();
+  repaintIcons();
   // Re-opening a picker works by replaying the tap on the card that owns it:
   // the freshly rendered card is a real, correctly positioned element, so the
   // fly-to-centre animation has a valid origin to start from.
@@ -181,6 +192,17 @@ function showMenu() {
     root.querySelector<HTMLElement>(`[data-reopen="${key}"]`)?.click();
   }
 }
+
+// The home page is built in one of two shapes — two columns on a phone,
+// three centred rows on a wide screen — and which one is decided once, when
+// it renders. Turning a phone sideways and back crosses that line without
+// re-rendering, so a page built in landscape (four cards across one row)
+// stayed that way upright, with its right-hand icons off the edge of the
+// screen. Rebuild it whenever the breakpoint actually flips, and only while
+// the home page is the thing on screen.
+window.matchMedia(WIDE_QUERY).addEventListener('change', () => {
+  if (root.querySelector('.home-page')) showMenu();
+});
 
 function showAccountPage(tab: AuthTab) {
   teardown();
@@ -199,6 +221,7 @@ function showAccountPage(tab: AuthTab) {
   );
   setNavTab('profile');
   wireHomeTitle();
+  repaintIcons();
   toTop();
 }
 
@@ -208,6 +231,7 @@ function showRecordsPage() {
   renderRecordsPage(root, recordSources, showMenu, currentLang);
   setNavTab('records');
   wireHomeTitle();
+  repaintIcons();
   toTop();
 }
 
@@ -333,6 +357,7 @@ function afterLangChosen(lang: Lang) {
     },
     lang,
   );
+  repaintIcons();
   if (!hasSeenTutorial()) {
     // Only ever on a first visit, and marked as soon as it appears — leaving
     // it half-watched still counts, so it never greets a returning player

@@ -28,11 +28,12 @@ import { reducedMotion } from './juice';
  * How far the pieces may depart from moving as one rigid line. 1 is the
  * splash's own strength, which is what the played-back animations (the
  * splash itself, the tutorials) keep — nothing there is under a finger, so
- * the full wave only reads as character. A live board passes 0.6: the wave
- * still shows, but the line stays tight enough under the finger to feel like
- * one object being pushed.
+ * the full wave only reads as character. A live board passes 0.3: the wave
+ * is still there to see, but the line stays tight enough under the finger
+ * that it reads as one object being pushed rather than a row of pieces
+ * shoving each other.
  */
-export const BOARD_FORCE = 0.6;
+export const BOARD_FORCE = 0.3;
 const COUPLE = 0.55; // how much of a follower's target is the piece ahead
 const K = 260; // spring on the followers
 const C = 26; // damping on the followers

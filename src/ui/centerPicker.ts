@@ -1,4 +1,5 @@
 import { vibrate } from '../engine/haptics';
+import { applyPaletteToTree } from '../engine/palettePref';
 
 export interface PickerOption {
   /** Inline SVG for this option's icon. */
@@ -93,6 +94,9 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
 
   overlay.appendChild(body);
   document.body.appendChild(overlay);
+  // The picker draws the same glyphs the home page does, from the same
+  // literal SVG — so it needs the same colourblind pass over it.
+  applyPaletteToTree(overlay);
 
   let closed = false;
   function close() {

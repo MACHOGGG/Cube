@@ -3,7 +3,7 @@ import { snapFlipFaces, plankFlipCells, FLIP_MS, FLIP_STAGGER_MS } from './plank
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
-import { saveBestIfHigher, saveRun } from './persistence';
+import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
 import { trackGameStart, trackGameEnd, trackShare } from './analytics';
 import {
   MANUAL_END_REASON,
@@ -140,6 +140,9 @@ export interface GameController {
   readonly gameOver: boolean;
   /** True from the moment a move is confirmed until its whole chain reaction has finished revealing — a shape's drag should stay locked out until this clears, since resolveMove no longer settles synchronously. */
   readonly resolving: boolean;
+  /** Runs the rest of the current reveal now, so a fresh touch is not
+   *  turned away while the previous move is still being played out. */
+  hurry(): void;
   restart(): void;
   pause(): void;
   resume(): void;
@@ -187,6 +190,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let paused = false;
   let gameOver = false;
   let resolving = false;
+  // The one timer the reveal is waiting on, so a fresh touch can run the
+  // rest of it now instead of waiting it out — see hurry().
+  let pendingBeat: { id: number; run: () => void } | null = null;
   // Every dot colour a whole-line clear has drained this run — the first of
   // the two stalemate conditions (see stalemate.ts).
   let clearedDotColors = new Set<number>();
@@ -299,6 +305,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endHazardBgEl.classList.toggle('show', hazardEnd);
     refs.endTitleEl.textContent = s.endTitleDefault;
     refs.endScoreEl.textContent = String(total);
+    // This run measured against this player's own history in this exact mode.
+    // Read before the archive is written just below, so this run is counted
+    // once — by hand — rather than twice.
+    const past = loadRuns(hooks.bestKey);
+    const avg = Math.round(
+      (past.reduce((sum, r) => sum + (r.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
+    );
+    refs.endAvgEl.textContent = `${s.avgScoreLabel} = ${avg}`;
     refs.endBreakdownEl.innerHTML = runBreakdown(lastRun, hooks.lang)
       .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
       .join('');
@@ -362,10 +376,44 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#BE5762';
   const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#5C8A72';
 
+  /**
+   * Plays out whatever is left of the current reveal immediately.
+   *
+   * The reveal is a chain of timed beats — hold the highlight, turn the
+   * planks, pause, look for the next step — and the board refuses input for
+   * all of it, which for a scoring move is well over a second. A player who
+   * slides one line and reaches straight for the next was losing that second
+   * move to an animation. So a fresh touch runs the remaining beats now
+   * rather than turning the touch away: every step still happens, in order,
+   * with the same scores and the same end state — it just doesn't wait. The
+   * planks still in the air are torn down by the renders that follow, which
+   * is what a chained step already did to them.
+   */
+  function hurry(): void {
+    // The loop is bounded because each beat either schedules exactly one
+    // more or finishes the cascade; the cap is only a guard against a beat
+    // that somehow re-arms itself forever.
+    for (let guard = 0; resolving && pendingBeat && guard < 400; guard++) {
+      const beat = pendingBeat;
+      pendingBeat = null;
+      window.clearTimeout(beat.id);
+      beat.run();
+    }
+  }
+
   function resolveMove(mask: Set<string>, moveDirDeg = 0) {
     if (gameOver || paused || resolving) return;
     moves++;
     resolving = true;
+    pendingBeat = null;
+    /** The next beat of the reveal, held so hurry() can bring it forward. */
+    const beat = (run: () => void, ms: number) => {
+      const id = window.setTimeout(() => {
+        if (pendingBeat?.id === id) pendingBeat = null;
+        run();
+      }, ms);
+      pendingBeat = { id, run };
+    };
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
     const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, {
@@ -520,9 +568,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // so the gap after a flip stretches to let the last piece finish —
         // the splash holds for its flips the same way.
         const flipRoomMs = faceSnaps?.size ? (flipCells.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 80 : 0;
-        setTimeout(step, Math.max(s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS, flipRoomMs) + hitStopMs);
+        beat(step, Math.max(s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS, flipRoomMs) + hitStopMs);
       };
-      if (s.matchGroups.length) setTimeout(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);
+      if (s.matchGroups.length) beat(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);
       else proceed();
     };
     step();
@@ -589,6 +637,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     get gameOver() {
       return gameOver;
     },
+    hurry,
     get resolving() {
       return resolving;
     },

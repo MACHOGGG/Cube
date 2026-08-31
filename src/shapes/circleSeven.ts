@@ -756,6 +756,9 @@ export function createCircleSevenGame(): ShapeGame {
 
       const detachDrag = attachDrag(refs.boardWrap, {
         origin: refs.boardEl,
+        // A touch arriving mid-reveal runs the rest of it now rather than
+        // being turned away — see GameController.hurry().
+        onBeforeStart: () => controller.hurry(),
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {

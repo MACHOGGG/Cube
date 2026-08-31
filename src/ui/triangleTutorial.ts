@@ -1,4 +1,5 @@
 import type { Lang } from '../i18n';
+import { cvdHex } from '../engine/palettePref';
 import { renderStoryTutorial, type StoryCell, type StoryStep } from './storyTutorial';
 
 /**
@@ -46,9 +47,9 @@ function frame(rows: string[], dots: readonly number[] = []): StoryCell[] {
         w: S,
         h: H,
         shape: i % 2 === 0 ? 'up' : 'dn',
-        fill: blank ? '#D2D2D2' : isDot ? '#FFFFFF' : FILL[ch],
+        fill: blank ? '#D2D2D2' : isDot ? '#FFFFFF' : cvdHex(FILL[ch]),
         dashed: blank,
-        ...(isDot ? { inner: FILL[ch] } : {}),
+        ...(isDot ? { inner: cvdHex(FILL[ch]) } : {}),
       });
     });
   });

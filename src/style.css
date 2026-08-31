@@ -31,7 +31,9 @@
      ground, the chips are their ochre warmed and greyed a shade, the press
      colour their terracotta, the pattern marks their blue. */
   --play-bg: #3A3145;
-  --play-panel: #19503D;
+  /* The board's field: cream, at 60% — the play background reads through it,
+     so the panel sits on the page rather than being pasted onto it. */
+  --play-panel: rgba(246, 241, 228, 0.6);
   --play-chip: #D2952F;
   /* Dark ink on the amber rather than the sheet's white: white on this
      yellow is 2.4:1, which is below the floor for text of any size, and the
@@ -42,20 +44,13 @@
   --play-chip-press: #8E5138;
   --play-chip-press-ink: #FFF1E4;
   --play-mark: #4C7EAD;
-}
-/* With the colourblind palette on, the play screen's own surfaces step out
-   of the way of it: the pieces become the Okabe–Ito set, whose hues are
-   chosen to stay apart under every kind of colour vision, so the ground
-   they sit on goes neutral rather than competing green, and the chips and
-   marks take their orange and blue from that same set. */
-:root[data-cvd='1'] {
-  --play-bg: #22252A;
-  --play-panel: #3B4046;
-  --play-chip: #E69F00;
-  --play-chip-ink: #2B1F00;
-  --play-chip-press: #8F3F00;
-  --play-chip-press-ink: #FFF4E4;
-  --play-mark: #0072B2;
+  /* The disc the two controls' signs are cut out of: the chips' own
+     terracotta, one step deeper so it reads against the amber. */
+  --play-btn-disc: #B0454A;
+  /* The score highlight's wash and glow. They live here, in the base
+     :root — every board's outline overlay reads them, and an undefined
+     var() in an SVG `fill` computes to the initial value (opaque black),
+     which paints a scored triangle solid black instead of washing it. */
   --score-glow: color-mix(in srgb, var(--accent) 65%, transparent);
   --score-wash: color-mix(in srgb, var(--accent) 26%, transparent);
 }
@@ -73,6 +68,76 @@
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
 }
+
+/* ---------- colourblind-friendly palette (the whole site) ----------
+   Switched on from 个人主页 or the pause panel; it stamps data-cvd="1" on
+   <html> (see engine/palettePref.ts) and every colour the site uses is
+   redefined here, not just the pieces on the board. It comes after the two
+   theme blocks so it wins in either theme, and re-states its own dark
+   variant for the same reason.
+
+   The hues are the Okabe–Ito set — blue #0072B2, vermillion #D55E00, orange
+   #E69F00, sky #56B4E9, reddish purple #CC79A7 — chosen so no two carry
+   meaning that collapses under protanopia, deuteranopia or tritanopia. The
+   site's own rose/green accent pair is exactly the pair that does collapse,
+   so it becomes blue/vermillion; everything neutral loses its warm tint as
+   well, so hue is only ever doing work where it is safe to. */
+:root[data-cvd='1'] {
+  --bg: #F4F4F4; --surface: #FFFFFF; --nav-dock: #E2E2E2;
+  --ink: #1A1A1A; --ink-soft: #565656; --ink-faint: #8A8A8A; --line: #D8D8D8;
+  --accent: #0072B2; --nav-glow: 0, 114, 178;
+  --accent-ink: #00496F; --accent-soft: #D5E8F5; --on-accent: #FFFFFF;
+  --accent-2: #D55E00; --accent-2-soft: #FADFCC;
+  --warn: #9A6000; --warn-soft: #F7E7C8;
+  --board-bg: #EAEAEA;
+  --shadow: 0 1px 2px rgba(20,20,20,0.06), 0 8px 24px -12px rgba(20,20,20,0.18);
+  --play-bg: #22252A;
+  --play-panel: rgba(246, 241, 228, 0.6);
+  --play-chip: #E69F00;
+  --play-chip-ink: #2B1F00;
+  --play-chip-press: #8F3F00;
+  --play-chip-press-ink: #FFF4E4;
+  --play-mark: #0072B2;
+  --play-btn-disc: #8A3D00;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-cvd='1']:not([data-theme="light"]) {
+    --bg: #17191C; --surface: #24272B; --nav-dock: #2C3035;
+    --ink: #F0F0F0; --ink-soft: #BDBDBD; --ink-faint: #8A8A8A; --line: #3A3E43;
+    --accent: #56B4E9; --nav-glow: 86, 180, 233;
+    --accent-ink: #D6ECFA; --accent-soft: #17323F; --on-accent: #06202B;
+    --accent-2: #E69F00; --accent-2-soft: #33280D;
+    --warn: #E69F00; --warn-soft: #33280D;
+    --board-bg: #1D2023;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+:root[data-cvd='1'][data-theme="dark"] {
+  --bg: #17191C; --surface: #24272B; --nav-dock: #2C3035;
+  --ink: #F0F0F0; --ink-soft: #BDBDBD; --ink-faint: #8A8A8A; --line: #3A3E43;
+  --accent: #56B4E9; --nav-glow: 86, 180, 233;
+  --accent-ink: #D6ECFA; --accent-soft: #17323F; --on-accent: #06202B;
+  --accent-2: #E69F00; --accent-2-soft: #33280D;
+  --warn: #E69F00; --warn-soft: #33280D;
+  --board-bg: #1D2023;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+}
+
+/* The handful of surfaces painted with a literal colour rather than a
+   custom property — the bomb panel, the profile pills, the two record
+   panels. Under the colourblind palette they take their hue from the same
+   Okabe–Ito set as everything else, and the two that sit side by side (the
+   记录 and 排名 panels, the two profile pills) are given the orange/blue
+   pair rather than the peach/periwinkle one, which is the pair that
+   collapses. */
+:root[data-cvd='1'] .bomb-panel { background: #8A3D00; }
+:root[data-cvd='1'] .genius-cta { background: #B26A00; }
+:root[data-cvd='1'] .total-card { background: #0072B2; }
+:root[data-cvd='1'] .records-panel--records { background: #F2D6A8; }
+:root[data-cvd='1'] .records-panel--ranks { background: #BBD9EE; }
+:root[data-cvd='1'] .profile-pill { background: #0072B2; }
+:root[data-cvd='1'] .profile-pill--rose { background: #D55E00; }
+:root[data-cvd='1'] .genius-panel { background: #F1F1F1; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -528,6 +593,20 @@ h1 {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
   color: var(--ink-faint); margin-top: 4px;
 }
+/* Between the composite score above it and the itemised breakdown below:
+   bigger than the rows, smaller than the number it comments on. */
+.end-avg {
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.05rem;
+  color: var(--ink-soft); font-variant-numeric: tabular-nums;
+  margin: 0 0 12px;
+}
+/* The line that says "the run is above, the arithmetic is below" — centred
+   and short of the modal's own edges, so it reads as a divider inside the
+   card rather than as the card being cut in two. */
+.end-rule {
+  width: min(62%, 190px); height: 3px; border-radius: 999px;
+  background: var(--line); margin: 0 auto 14px;
+}
 .end-breakdown { display: flex; flex-direction: column; gap: 3px; margin: 0 0 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 .end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
 #endOverlay .modal { position: relative; overflow: hidden; }
@@ -746,8 +825,10 @@ button:hover { filter: brightness(1.05); }
     transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1), filter 220ms ease;
   }
   .home-icon-btn:hover, .center-pick-opt:hover { transform: scale(1.06); }
+  .home-nav-btn { transition: translate 260ms cubic-bezier(0.24, 1.2, 0.36, 1), transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1), filter 260ms ease; }
+  /* The lift rides on `translate`, so hover only has to say how much bigger
+     — it applies to the raised icon and the resting one alike. */
   .home-nav-btn:hover { transform: scale(1.08); }
-  .home-nav-btn--active:hover { transform: translateY(calc(-1 * (var(--nav-pad) + var(--nav-btn) / 2))) scale(1.08); }
 }
 
 /* ---------- centre picker ---------- */
@@ -925,9 +1006,18 @@ button:hover { filter: brightness(1.05); }
    darkens a shade and picks up a small red halo; closing it settles it back
    down and lets the halo fade. So the dock shows where you are, and tapping
    the raised one reads as "put this away". */
-.home-nav-btn { transition: transform 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 260ms ease; }
+.home-nav-btn { transition: translate 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 260ms ease; }
 .home-nav-btn--active {
-  transform: translateY(calc(-1 * (var(--nav-pad) + var(--nav-btn) / 2)));
+  /* The lift is `translate`, not a `transform` — the press wobble every
+     button on this page shares animates `transform`, and an animation beats
+     a normal declaration outright. Written as a transform, the lift was
+     therefore *replaced* the instant a finger went down: the raised icon
+     dropped 37px back into the dock, out from under the finger, so the
+     release landed on the page and the tap that was meant to close the
+     screen did nothing at all. The individual properties apply before
+     `transform`, so this way the two compose and the wobble plays on a
+     button that stays where it is. */
+  translate: 0 calc(-1 * (var(--nav-pad) + var(--nav-btn) / 2));
   filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24))
           drop-shadow(0 0 6px rgba(var(--nav-glow), 0.8))
           drop-shadow(0 0 18px rgba(var(--nav-glow), 0.5))
@@ -1337,7 +1427,16 @@ body:has(.app--game) { background: var(--play-bg); }
   font-size: clamp(1.15rem, 3.6vh, 2rem); line-height: 1.1;
   text-align: center; white-space: nowrap; overflow: hidden;
 }
-.app--game .controls .icon-btn { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.app--game .controls .icon-btn {
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  /* Sized by its glyph rather than by type: the SVG letterboxes itself into
+     whatever box the chip gives it, so one rule serves the wide upright chip
+     and the tall sideways one without either being told a size. */
+  padding: 4px;
+  --ctl-disc: var(--play-btn-disc);
+  --ctl-mark: #FFFFFF;
+}
+.app--game .controls .icon-btn .ctl-glyph { width: 100%; height: 100%; display: block; }
 /* The pressed flip: ground to the same family's terracotta, type from the
    chip's near-white to its near-black. Deliberately small — this is the
    feel of a key going down, not a state change. */
@@ -1346,6 +1445,11 @@ body:has(.app--game) { background: var(--play-bg); }
 .app--game .controls .icon-btn.chip--press,
 .app--game .controls .icon-btn:active {
   background: var(--play-chip-press); color: var(--play-chip-press-ink);
+  /* The mark inverts with the chip: the disc takes the chip's near-white and
+     the sign the ground it just left, so the press reads on the glyph as
+     well as on the chip behind it. */
+  --ctl-disc: var(--play-chip-press-ink);
+  --ctl-mark: var(--play-chip-press);
 }
 .app--game .controls .icon-btn:hover { filter: none; }
 /* The score chip takes the same colour, for exactly as long as the number
@@ -1509,7 +1613,22 @@ body:has(.app--game) { background: var(--play-bg); }
       max(env(safe-area-inset-left, 0px), clamp(12px, 3.4vw, 34px));
     gap: clamp(8px, 1.6vw, 18px);
     display: grid;
-    grid-template-columns: minmax(66px, 8.4%) minmax(0, 1fr) minmax(66px, 8.4%);
+    /* The side columns keep the width the sheet draws — 8.4%, floored at
+       66px — and grow past it only for a language that cannot physically
+       fit. min-content is what makes that distinction: for 完成/暂停 it is
+       one character, far under the floor, so the track stays at the drawn
+       width and the two characters stack exactly as designed; for
+       "Terminer" it is the whole unbreakable word, so the track widens to
+       hold it. A plain percentage could do neither — a grid item's
+       automatic minimum size is its content, so the French chip simply grew
+       past its 66px track and off the right-hand edge of the screen.
+       Sideways the board is limited by the viewport's height and leaves a
+       few hundred pixels of slack across, so a wider gutter costs it
+       nothing. */
+    grid-template-columns:
+      minmax(max(66px, 8.4%), min-content)
+      minmax(0, 1fr)
+      minmax(max(66px, 8.4%), min-content);
     grid-template-rows: auto minmax(0, 1fr);
     align-items: stretch;
   }
@@ -1523,10 +1642,10 @@ body:has(.app--game) { background: var(--play-bg); }
     grid-column: 1; grid-row: 1 / -1;
     flex-direction: column; gap: clamp(8px, 2.6vh, 22px);
     height: 100%;
-    /* The chips are sized against this column, not the viewport: the same
-       phone hands a normal board a wide gutter and a wide board a narrow
-       one, and a size that reads in the first spills out of the second. */
-    container-type: inline-size;
+    /* min-width: 0 because a grid item's automatic minimum is its content,
+       which is what pushed these columns past their track; max-width so the
+       min-content track above stays a gutter and never becomes the page. */
+    min-width: 0; max-width: 22vw;
   }
   /* 暂停 above, 完成 below — the sheet's own order, and the reverse of the
      upright row, where 完成 sits on the left. */
@@ -1534,7 +1653,7 @@ body:has(.app--game) { background: var(--play-bg); }
     grid-column: 3; grid-row: 1 / -1;
     flex-direction: column-reverse; gap: clamp(8px, 2.6vh, 22px);
     height: 100%;
-    container-type: inline-size;
+    min-width: 0; max-width: 22vw;
   }
   /* Sideways the chips fill their column top to bottom rather than standing
      at a fixed height — the gutter beside a board that is limited by the
@@ -1545,12 +1664,13 @@ body:has(.app--game) { background: var(--play-bg); }
     padding: 4px 4px;
     white-space: normal;
   }
-  /* A readout has to hold "0:00" on one line — there is nowhere in it to
-     break — so it is sized against the column it sits in. */
-  .app.app--game > .hud .hud-cell { font-size: min(30cqw, 6vh); }
-  /* A control is two characters and may take two lines, so it can run
-     bigger; at this size it wraps, which is how the sheet draws it. */
-  .app.app--game > .controls .icon-btn { font-size: min(56cqw, 7.5vh); line-height: 1.1; }
+  /* Sized against the page rather than against the column: the column now
+     sizes itself to what is written in it, so reading its width back to set
+     the type would be circular (and a query container reports no intrinsic
+     width at all, which would collapse the track). These are the same two
+     sizes as before, re-expressed against the viewport. */
+  .app.app--game > .hud .hud-cell { font-size: min(2.35vw, 6vh); }
+  .app.app--game > .controls .icon-btn { font-size: min(4.38vw, 7.5vh); line-height: 1.1; }
 
   .app.app--game > .board-wrap {
     grid-column: 2; grid-row: 2;

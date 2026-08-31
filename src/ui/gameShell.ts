@@ -45,6 +45,7 @@ export interface ShellRefs {
   endHazardBgEl: HTMLElement;
   endTitleEl: HTMLElement;
   endScoreEl: HTMLElement;
+  endAvgEl: HTMLElement;
   endBreakdownEl: HTMLElement;
   endDetailEl: HTMLElement;
   shareOverlay: HTMLElement;
@@ -102,6 +103,28 @@ const ROTATE_HINT = (copy: string) => `
     <p class="rotate-hint-copy">${copy}</p>
   </div>`;
 
+/**
+ * The two controls' marks: a disc with the sign cut into it, drawn rather
+ * than written.
+ *
+ * They replace the words 完成/暂停, which had to be translated and then made
+ * to fit — "Terminer" is four times the width of 完成 — and which a player
+ * mid-run reads as shapes anyway. The disc takes `--ctl-disc` and the sign
+ * `--ctl-mark`, so the pressed state swaps the two and the mark inverts with
+ * the chip under it (see .app--game .controls .icon-btn in style.css).
+ */
+const ctlGlyph = (inner: string) =>
+  `<svg class="ctl-glyph" viewBox="0 0 100 100" aria-hidden="true" focusable="false">` +
+  `<circle cx="50" cy="50" r="46" fill="var(--ctl-disc)"/>${inner}</svg>`;
+const CTL_PAUSE = ctlGlyph(
+  '<rect x="35" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>' +
+    '<rect x="54" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>',
+);
+const CTL_FINISH = ctlGlyph(
+  '<path d="M29 51.5 L44 66 L72 35" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);
+
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const s = STRINGS[meta.lang];
   const extraButtonsHtml = (meta.extraControls ?? [])
@@ -141,8 +164,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
            pause panel instead, so the play screen stays the board plus the
            three readings plus the two things you can do to a run. -->
       <div class="controls">
-        <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
-        <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
+        <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
+        <button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
       </div>
     </div>
 
@@ -182,6 +205,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <h2 id="endTitle">${s.endTitleDefault}</h2>
         <div class="end-score-label">${s.compositeScoreLabel}</div>
         <div class="big-score" id="endScore">0</div>
+        <!-- What this run was worth, set against what this mode is usually
+             worth to this player — the one number that says whether it was a
+             good run, without them having to remember their own history. -->
+        <div class="end-avg" id="endAvg"></div>
+        <div class="end-rule" aria-hidden="true"></div>
         <div class="end-breakdown" id="endBreakdown"></div>
         <p id="endDetail">${s.stepsPhrase.replace('{n}', '0')} · ${s.timeLabel} 0:00 · ${s.bestPhrase.replace('{n}', '0')}</p>
         <div class="btn-row">
@@ -291,6 +319,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     startOverlay: req('startOverlay'),
     pauseOverlay: req('pauseOverlay'),
     endOverlay: req('endOverlay'),
+    endAvgEl: req('endAvg'),
     endHazardBgEl: req('endHazardBg'),
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),

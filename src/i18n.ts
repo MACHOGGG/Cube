@@ -91,6 +91,8 @@ export interface I18nStrings {
   pausedBody: string;
   endTitleDefault: string;
   compositeScoreLabel: string;
+  /** "Your average in this mode" on the end-of-run summary. */
+  avgScoreLabel: string;
   shareBtn: string;
   restartBtn: string;
   shareCardTitle: string;
@@ -235,6 +237,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pausedBody: 'The timer has stopped and the board is hidden.',
     endTitleDefault: 'Challenge complete',
     compositeScoreLabel: 'Composite score',
+    avgScoreLabel: 'Your average in this mode',
     shareBtn: 'Share',
     restartBtn: 'Again',
     shareCardTitle: 'Share result',
@@ -368,6 +371,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pausedBody: 'Le chronomètre est arrêté et le plateau est caché.',
     endTitleDefault: 'Défi terminé',
     compositeScoreLabel: 'Score composite',
+    avgScoreLabel: 'Votre moyenne dans ce mode',
     shareBtn: 'Partager',
     restartBtn: 'Rejouer',
     shareCardTitle: 'Partager le résultat',
@@ -501,6 +505,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pausedBody: '計時已停止，棋盤已隱藏。',
     endTitleDefault: '挑戰結束',
     compositeScoreLabel: '綜合得分',
+    avgScoreLabel: '該玩法您的均分',
     shareBtn: '分享',
     restartBtn: '再來',
     shareCardTitle: '分享戰績',
@@ -634,6 +639,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pausedBody: '计时已停止，棋盘已隐藏。',
     endTitleDefault: '挑战结束',
     compositeScoreLabel: '综合得分',
+    avgScoreLabel: '该玩法您的均分',
     shareBtn: '分享',
     restartBtn: '再来',
     shareCardTitle: '分享战绩',

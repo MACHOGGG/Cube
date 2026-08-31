@@ -131,30 +131,26 @@ const TWO_PLUS_TWO_BASES: readonly [[number, number], [number, number]][] = [
   [[1, -1], [1, 0]],
 ];
 
-// The board's "121" bonus shape. This board's screen mapping is
-// cx=c-r, cy=c+r (iconPos above) — *every* unit grid step (row or column)
-// changes cy by exactly 1, unlike circle.ts's own triangular lattice (whose
-// ballCenter only moves cy on a row step, not a column step). That extra
-// structure is what let circle.ts's 4-cell diamond121 chain
-// ([[r,c],[r+1,c],[r+1,c+1],[r+2,c+1]]) come out symmetric; copied onto
-// *this* board the same offsets drift the shape sideways as it goes down
-// (verified: screen x ends up 0,-1,0,-1 for the old chain, not the
-// symmetric 0/±1/0 a real diamond needs). Since every step here moves cy,
-// there is in fact no 4-cell *chain* of touching cells that reads as a
-// bigger symmetric diamond on this lattice — the compact one (the literal
-// 2×2 square below, in findRunMatches) is already the only symmetric
-// diamond a chain of touching cells can form here. "121" is instead built
-// from the 4 *corners* one ring further out — top (r,c), the two points 2
-// steps away along each grid axis (r+2,c) and (r,c+2), and the bottom
-// (r+2,c+2) opposite the top — which does verify as symmetric (screen x:
-// 0, ±2, 0) and reads as the bigger hollow "1-2-1" diamond, even though its
-// 4 cells don't touch each other (there's a live tile in between each pair,
-// just not required to match).
+// The board's "121" bonus shape: one tile, then two on the row below it,
+// then one on the row below that — three *touching* screen rows, symmetric
+// about the middle pair. This board's screen mapping is cx=c-r, cy=c+r
+// (iconPos above), so a step down one screen row is a single grid step in
+// either axis, and the four cells come out as the compact 2x2 block in grid
+// space: (r,c) at the top, (r,c+1) and (r+1,c) flanking it half a pitch
+// left and right on the next row, (r+1,c+1) closing it below. Screen x runs
+// 0, +1/-1, 0 — symmetric — and screen y runs 0, 1, 1, 2, which is the
+// "adjacent rows" part.
+//
+// It is deliberately *not* the same block spread one ring further out
+// ((r,c), (r+2,c), (r,c+2), (r+2,c+2)): that is symmetric too, but it lands
+// on screen rows 0, 2, 2, 4 — every other row, with a live tile in the gaps
+// — which is not the shape the hint draws and not what a player reads as
+// "1-2-1".
 function inBounds(r: number, c: number): boolean {
   return r >= 0 && r < BOARD_DIM && c >= 0 && c < BOARD_DIM;
 }
 function diamond121(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r + 2, c], [r, c + 2], [r + 2, c + 2]];
+  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
   return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
 }
 function lineFor(fam: Fam, r: number, c: number): Line {
@@ -808,6 +804,9 @@ export function createSquareDiamondGame(): ShapeGame {
 
       const detachDrag = attachDrag(refs.boardWrap, {
         origin: refs.boardEl,
+        // A touch arriving mid-reveal runs the rest of it now rather than
+        // being turned away — see GameController.hurry().
+        onBeforeStart: () => controller.hurry(),
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {

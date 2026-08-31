@@ -1,4 +1,5 @@
 import type { Lang } from '../i18n';
+import { cvdHex } from '../engine/palettePref';
 import { renderStoryTutorial, type StoryCell, type StoryStep } from './storyTutorial';
 
 /**
@@ -29,8 +30,8 @@ function frame(rows: string[]): StoryCell[] {
       const base = { x: left(r, c), y: top(r), w: D, h: D, shape: 'ci' as const };
       if (ch === '-') cells.push({ ...base, fill: '#8A8A8A' });
       else if (ch === 'x') cells.push({ ...base, fill: '#D4D4D4', dashed: true });
-      else if (FRONT[ch]) cells.push({ ...base, fill: FRONT[ch] });
-      else cells.push({ ...base, fill: '#FFFFFF', star: STAR[ch], ring: true });
+      else if (FRONT[ch]) cells.push({ ...base, fill: cvdHex(FRONT[ch]) });
+      else cells.push({ ...base, fill: '#FFFFFF', star: cvdHex(STAR[ch]), ring: true });
     });
   });
   return cells;

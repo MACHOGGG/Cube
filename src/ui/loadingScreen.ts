@@ -19,6 +19,7 @@
  */
 import { animate } from 'animejs';
 import { playMove, playScore, playFlip } from '../engine/juice';
+import { colorblindOn } from '../engine/palettePref';
 
 // ---------------------------------------------------------------------------
 // Tunables. The frame side is expressed in ball diameters because that is the
@@ -101,8 +102,15 @@ const K_N = 190;
 const C_N = 17;
 const REACH = [0, 1, 0.45, 0.18];
 
-// Verbatim from src/shapes/circle.ts — PALETTES.standard.
-const COLORS = ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'];
+// Verbatim from src/shapes/circle.ts — PALETTES.standard, with the four
+// Okabe–Ito hues the boards themselves switch to beside it: the opening
+// animation is the first thing anyone sees, so it follows the colourblind
+// setting like every other screen.
+const COLOR_SETS = {
+  standard: ['#C0666B', '#DDA857', '#7A9C4A', '#4F72C4'],
+  colorblind: ['#D55E00', '#E69F00', '#009E73', '#0072B2'],
+} as const;
+const COLORS: readonly string[] = COLOR_SETS[colorblindOn() ? 'colorblind' : 'standard'];
 const COLS = 6;
 // Rows 1 and 2 carry the four reds; rows 0 and 3 are dressing, and crop in
 // half at the frame's top and bottom edges. Checked with the board's own

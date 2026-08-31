@@ -77,8 +77,15 @@ function muteSquish(el: HTMLElement): void {
   const delays = (el.style.animationDelay || '').split(',').map((d) => d.trim());
   const keep: string[] = [];
   const keepDelays: string[] = [];
+  // The shorthand does not read back the way it was written: browsers
+  // serialise each component with its *name last* — "300ms ease-out 0s 1
+  // normal both running flip-in" — so a component is recognised by the
+  // token it contains, never by the one it starts with. Matching on the
+  // start silently kept every component, which is how the squish survived
+  // this and played a second flip under the plank.
+  const isSquish = (part: string) => part.trim().split(/\s+/).includes('flip-in');
   anim.split(',').forEach((part, i) => {
-    if (part.trim().startsWith('flip-in')) return;
+    if (isSquish(part)) return;
     keep.push(part.trim());
     keepDelays.push(delays[i] ?? '0s');
   });

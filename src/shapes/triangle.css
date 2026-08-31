@@ -1,10 +1,8 @@
-/* The white edge every piece wears (see circle.css). A triangle is a
-   clipped box, so an inset shadow would only draw along whichever of the
-   box's own edges happen to fall inside the clip — the parent takes the
-   same silhouette in white instead, and the coloured fill sits a couple of
-   pixels inside it. */
-.tri { position: absolute; background: #FFFFFF; }
+/* No ground of its own: the coloured fill takes the whole silhouette. The
+   parent still carries the clip path so anything the flip puts inside it
+   (the plank's cast shadow) is cut to the triangle too. */
+.tri { position: absolute; }
 .tri .fill {
-  position: absolute; inset: 2px;
+  position: absolute; inset: 0;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
 }
