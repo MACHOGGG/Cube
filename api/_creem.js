@@ -44,7 +44,14 @@ export async function creem(path, { method = 'GET', query, body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const err = new Error(`creem ${res.status}`);
+    // Creem's own error body says which of the several possible things went
+    // wrong — a key it does not recognise, a product id from the other
+    // catalogue, a field it wanted differently. Losing it and reporting only
+    // "upstream" turns a two-minute fix into guesswork, so it rides along on
+    // the error and is logged by whoever catches it. The key is sent as a
+    // header and never appears in the URL, so neither is logged here.
+    const detail = await res.text().catch(() => '');
+    const err = new Error(`creem ${res.status} ${method} ${url.pathname} ${detail}`.trim());
     err.status = res.status;
     throw err;
   }

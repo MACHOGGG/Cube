@@ -30,6 +30,7 @@ export default async function handler(req, res) {
     return send(res, 200, { url: links.customer_portal_link });
   } catch (err) {
     if (err?.status === 404) return send(res, 404, { error: 'none' });
+    console.error('portal failed:', err?.message || err);
     return send(res, 502, { error: 'upstream' });
   }
 }

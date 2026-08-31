@@ -30,7 +30,10 @@ export default async function handler(req, res) {
     });
     if (!checkout?.checkout_url) return send(res, 502, { error: 'upstream' });
     return send(res, 200, { url: checkout.checkout_url });
-  } catch {
+  } catch (err) {
+    // Vercel's runtime log is the only place this is visible; without it a
+    // 502 here is indistinguishable from every other 502.
+    console.error('checkout failed:', err?.message || err);
     return send(res, 502, { error: 'upstream' });
   }
 }

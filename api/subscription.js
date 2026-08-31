@@ -31,6 +31,7 @@ export default async function handler(req, res) {
     // A customer Creem has never heard of is a 404, and the honest answer to
     // "is this address subscribed" is simply no.
     if (err?.status === 404) return send(res, 200, NOBODY);
+    console.error('subscription lookup failed:', err?.message || err);
     return send(res, 502, { error: 'upstream' });
   }
 }
