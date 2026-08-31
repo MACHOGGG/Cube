@@ -77,6 +77,8 @@ function failureText(reason: PurchaseFailure, lang: Lang): string {
       return s.notOnSaleYet;
     case 'none':
       return s.restoreNothing;
+    case 'server':
+      return s.serverBusy;
     default:
       return s.purchaseNetwork;
   }
@@ -248,10 +250,15 @@ export function openSetPasswordWindow(
     msg.textContent = s.workingLabel;
     const done = await setPasscode(checkoutId, password);
     go.disabled = false;
-    // Nowhere to keep an account yet: nothing the player can act on, and the
-    // subscription they just bought works regardless on this device.
-    if (done === 'unavailable') return close();
-    if (done === 'failed') return void (msg.textContent = s.purchaseNetwork);
+    // Both failures say so and leave the window open. Closing quietly on the
+    // server's 503 was worse than useless: the player typed a password, the
+    // window vanished, and nothing had been saved — a failure wearing the
+    // exact face of success. Whatever they do next, they should know this
+    // step did not take.
+    if (done !== 'ok') {
+      msg.textContent = done === 'unavailable' ? s.serverBusy : s.purchaseNetwork;
+      return;
+    }
     // Saved on the server; now let the phone keep a copy too.
     await offerToSave(email, password);
     close();

@@ -70,7 +70,11 @@ export type PurchaseFailure =
   | 'locked'
   /** Subscribed, but no password was ever set on the way back from the
    *  checkout. Not a failure to apologise for — a step still to finish. */
-  | 'needsPasscode';
+  | 'needsPasscode'
+  /** The request reached the server and the server could not answer. Kept
+   *  apart from 'network' because telling someone whose connection is fine
+   *  to check their connection sends them looking in the wrong place. */
+  | 'server';
 
 const KEY = 'slides_genius';
 

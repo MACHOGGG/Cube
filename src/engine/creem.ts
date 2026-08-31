@@ -121,12 +121,17 @@ export async function setWebPasscode(
   }
 }
 
-/** 401/423 are answers about the password; anything else is a failed call. */
-function failureFor(err: unknown): 'wrong' | 'locked' | 'network' {
-  const code = String(err);
-  if (code === 'Error: 401') return 'wrong';
-  if (code === 'Error: 423') return 'locked';
-  return 'network';
+/**
+ * 401 and 423 are answers about the password. A 5xx is the server admitting
+ * it could not answer at all — which is emphatically not the same thing as
+ * the phone being offline, and saying so cost an afternoon once.
+ */
+function failureFor(err: unknown): 'wrong' | 'locked' | 'server' | 'network' {
+  const code = String(err).replace('Error: ', '');
+  if (code === '401') return 'wrong';
+  if (code === '423') return 'locked';
+  const status = Number(code);
+  return status >= 500 && status < 600 ? 'server' : 'network';
 }
 
 /**

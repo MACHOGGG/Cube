@@ -176,6 +176,9 @@ export interface I18nStrings {
   purchaseUnavailable: string;
   purchaseCancelled: string;
   purchaseNetwork: string;
+  /** 请求到达了服务器、服务器答不上来。跟 purchaseNetwork 分开，因为让
+   *  一个网络正常的人去查网络，只会让他白折腾。 */
+  serverBusy: string;
   restoreNothing: string;
   signInNotFound: string;
   workingLabel: string;
@@ -413,6 +416,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseUnavailable: 'This device cannot complete the purchase yet.',
     purchaseCancelled: 'Cancelled — you have not been charged.',
     purchaseNetwork: 'No connection. Please try again in a moment.',
+    serverBusy: 'Something went wrong on our side. Please try again in a moment.',
     restoreNothing: 'No subscription found to restore.',
     signInNotFound: 'No active subscription under that address.',
     workingLabel: 'Working…',
@@ -635,6 +639,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
     purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
     purchaseNetwork: 'Pas de connexion. Réessayez dans un instant.',
+    serverBusy: 'Un problème de notre côté. Réessayez dans un instant.',
     restoreNothing: 'Aucun abonnement à restaurer.',
     signInNotFound: 'Aucun abonnement actif à cette adresse.',
     workingLabel: 'En cours…',
@@ -857,6 +862,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseUnavailable: '這台裝置目前還無法完成購買。',
     purchaseCancelled: '已取消，沒有扣款。',
     purchaseNetwork: '連不上網路，請稍後再試。',
+    serverBusy: '伺服器暫時出錯，請稍後再試。這不是你的網路問題。',
     restoreNothing: '沒有找到可以恢復的訂閱。',
     signInNotFound: '這個郵件地址名下沒有有效的訂閱。',
     workingLabel: '處理中…',
@@ -1079,6 +1085,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseUnavailable: '这台设备暂时还无法完成购买。',
     purchaseCancelled: '已取消，没有扣款。',
     purchaseNetwork: '连不上网络，请稍后再试。',
+    serverBusy: '服务器暂时出错，请稍后再试。这不是你的网络问题。',
     restoreNothing: '没有找到可以恢复的订阅。',
     signInNotFound: '这个邮箱名下没有有效的订阅。',
     workingLabel: '处理中…',
