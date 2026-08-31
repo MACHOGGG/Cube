@@ -76,7 +76,7 @@ const granted = await A.page.evaluate(async () => {
   );
   return r;
 });
-check('房主用兑换码开通天才', granted.active === true, granted.period || JSON.stringify(granted));
+check('房主用内部码开通天才', granted.active === true, granted.period || JSON.stringify(granted));
 await A.page.reload({ waitUntil: 'load' });
 await A.page.waitForSelector('#navProfile');
 

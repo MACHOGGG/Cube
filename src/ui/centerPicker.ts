@@ -1,6 +1,7 @@
 import { vibrate } from '../engine/haptics';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { ICON_LOCK } from './homeIcons';
+import { geniusLogoTag } from './geniusLogo';
 
 export interface PickerOption {
   /** Inline SVG for this option's icon. */
@@ -84,7 +85,10 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
       btn.setAttribute('aria-label', opt.label);
       btn.innerHTML =
         opt.glyph +
-        (opt.locked ? `<span class="center-pick-lock">${ICON_LOCK}</span>` : '') +
+        (opt.locked
+          ? `<span class="center-pick-lock">${ICON_LOCK}</span>` +
+            `<span class="center-pick-genius">${geniusLogoTag(16)}</span>`
+          : '') +
         (opt.showLabel ? `<span class="center-pick-label">${opt.label}</span>` : '');
       btn.addEventListener('pointerdown', () => {
         btn.classList.remove('home-tap');

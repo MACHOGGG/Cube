@@ -2,6 +2,7 @@ import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
+import { geniusLogoTag } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
@@ -99,12 +100,12 @@ export function renderAccountPage(
       </button>
 
       <section class="genius-panel">
-        <div class="menu-section-label">${s.geniusSpecialTitle}</div>
+        <div class="menu-section-label">${geniusLogoTag(18, 'genius-logo--inline')}${s.geniusSpecialTitle}</div>
         <button class="genius-cta" id="becomeGeniusBtn">${
           subscribed ? s.subscribedTitle : s.becomeGenius
         }</button>
         <!-- A code is its own way in, not a footnote to the paywall: it was
-             buried behind 「有兑换码？」 inside the subscribe window, which is
+             buried behind 「有内部码？」 inside the subscribe window, which is
              the one place someone holding a code has no reason to open. -->
         <button class="profile-row" id="insiderRow">
           <span class="profile-row-label">${s.insiderCode}</span>

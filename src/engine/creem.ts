@@ -1,5 +1,5 @@
 import type { PlanPeriod } from './pricing';
-import type { Entitlement, PurchaseOutcome } from './subscription';
+import type { Entitlement, GiftCode, PurchaseOutcome } from './subscription';
 
 /**
  * The web counter: Creem, in US dollars, one price for the whole world.
@@ -36,6 +36,8 @@ interface SubscriptionReply {
   email?: string;
   /** Paid up, but no password set yet — see api/subscription.js. */
   needsPasscode?: boolean;
+  /** 年付赠码 — the two one-month codes a yearly subscriber may pass on. */
+  gifts?: GiftCode[];
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -234,6 +236,7 @@ function toEntitlement(reply: SubscriptionReply, email: string): Entitlement {
     channel: reply.kind === 'code' ? 'code' : 'web',
     email: reply.email ?? email,
     ...(reply.token ? { token: reply.token } : {}),
+    ...(reply.gifts?.length ? { gifts: reply.gifts } : {}),
   };
 }
 

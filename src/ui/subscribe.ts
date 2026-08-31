@@ -14,6 +14,8 @@ import {
   restore,
   setEntitlement,
   signedInEmail,
+  type Entitlement,
+  type GiftCode,
   type PendingAccount,
   type PurchaseFailure,
 } from '../engine/subscription';
@@ -24,6 +26,22 @@ import {
   type AccountFailure,
 } from '../engine/account';
 import { CONTACT_EMAIL } from '../legal';
+
+/**
+ * How the paywall describes each board the subscription unlocks.
+ *
+ * Longer than the board's own name, and it should be: on the home page the
+ * label sits under an icon and only has to be recognised, while here it has
+ * to tell someone who has not paid what they would be getting. Keyed by the
+ * same ids as GENIUS_LAYOUTS, so a board added to the subscription without
+ * a blurb falls back to its name rather than vanishing from the list.
+ */
+function geniusBoardBlurb(id: string, lang: Lang): string {
+  const s = STRINGS[lang];
+  if (id === 'circleSeven') return s.geniusNowCircleSeven;
+  if (id === 'triangleAdvanced') return s.geniusNowTriangleAdvanced;
+  return shapeName(lang, id, id);
+}
 
 /**
  * 「Slides 天才」 as a player meets it: the window that sells it, and the one
@@ -52,17 +70,28 @@ const LOCALES: Record<Lang, string> = {
 };
 
 /** The same overlay the rules and icon windows use. */
-function openModal(className: string, html: string) {
+function openModal(className: string, html: string, dismissable = true) {
   const overlay = document.createElement('div');
   overlay.className = 'overlay show';
   overlay.innerHTML = `<div class="modal ${className}">${html}</div>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
+  // Every window here can be tapped away except the one that decides whether
+  // this player can ever use their subscription on a second device.
+  if (dismissable) {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
   return { overlay, close };
 }
+
+/**
+ * "Forever", as the server writes it (api/_accounts.js LIFETIME_UNTIL). A
+ * lifetime is stored as a date a thousand years out so every 到期 check
+ * downstream stays one comparison; here it has to be read back as a word.
+ */
+const LIFETIME_UNTIL = Date.UTC(2999, 0, 1);
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -200,10 +229,28 @@ function credentialForm(
   placeholder: string,
   readOnly: boolean,
 ): string {
-  return `<form id="pwForm" class="auth-body" autocomplete="on">
-      ${field('pwUser', emailLabel,
-        `type="email" name="username" autocomplete="username" inputmode="email"` +
-        `${readOnly ? ' readonly' : ''} value="${esc(email)}"`)}
+  // An address we already know is shown, not put in a box. A readonly input
+  // is one line wide and quietly cuts a long address off at the edge — and
+  // this is the address the whole subscription will hang on, so it is worth
+  // being able to read all of it before choosing the password underneath.
+  // The input stays, hidden, because a password manager will not offer to
+  // save anything unless the form carries an autocomplete="username" field.
+  const known = readOnly
+    ? `<div class="auth-account">
+         <span class="auth-account-label">${esc(emailLabel)}</span>
+         <span class="auth-account-value">${esc(email)}</span>
+       </div>
+       <input id="pwUser" type="email" name="username" autocomplete="username"
+              value="${esc(email)}" hidden readonly />`
+    : field('pwUser', emailLabel,
+        `type="email" name="username" autocomplete="username" inputmode="email" value="${esc(email)}"`);
+  // Its own class, not .auth-body: that one is a centring flex *row*, built
+  // to hold a single child, and it laid the address and the password box
+  // side by side — half a window each, and the address cut off. Here they
+  // are stacked, which is also what the window is meant to say: this is your
+  // account, and this is the password you are choosing for it.
+  return `<form id="pwForm" class="pw-form" autocomplete="on">
+      ${known}
       ${field('pwNew', label,
         `type="password" name="password" autocomplete="new-password" minlength="6" placeholder="${esc(placeholder)}"`)}
       <button type="submit" hidden></button>
@@ -254,6 +301,10 @@ export function openSetPasswordWindow(
       <button class="primary" id="pwGo">${fromCode ? s.bindTitle : s.setPwTitle}</button>
     </div>
   `,
+    // Not dismissable. Someone who has just paid and has no password owns a
+    // subscription that lives in one browser and can never be moved; every
+    // way out of this window that is not "set one" leads there.
+    false,
   );
 
   const form = overlay.querySelector<HTMLFormElement>('#pwForm')!;
@@ -300,11 +351,10 @@ export function openSetPasswordWindow(
     void submit();
   });
   go.addEventListener('click', () => form.requestSubmit());
-  // No opt-out button: this is one field and it is the whole of what makes
-  // the subscription theirs. Dismissing by tapping outside still works —
-  // trapping someone in a modal that a failing server will not let them out
-  // of would be worse — and it costs nothing now, because the checkout is
-  // remembered and the window comes back on the next launch.
+  // No opt-out button and no way to tap it away: one field, and it is the
+  // whole of what makes this subscription theirs rather than this browser's.
+  // Force-quitting is not an escape either — the checkout is remembered, so
+  // the window is the first thing the next launch puts up.
   input.focus();
 }
 
@@ -334,7 +384,7 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
   // so adding a board to the subscription adds it here too and this list can
   // never drift into promising something the code does not lock.
   const nowList = [
-    ...GENIUS_LAYOUTS.map((id) => shapeName(lang, id, id)),
+    ...GENIUS_LAYOUTS.map((id) => geniusBoardBlurb(id, lang)),
     s.geniusHostRooms,
   ];
   const priceRows = plans()
@@ -353,9 +403,14 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     <h2>${s.subscribeTitle}</h2>
     <p class="tag-line">${s.subscribeIntro}</p>
     <div class="plan-list">${priceRows}</div>
-    <p class="auth-hint">${
-      isStoreChannel() ? s.storeNoAccountHint.replace('{store}', store) : s.registerHint
-    }</p>
+    ${
+      // The store has something worth saying here — no sign-up, never leaves
+      // the app. Paying by card no longer does: what used to sit here said
+      // there was no password to set, which the very next window disproves.
+      isStoreChannel()
+        ? `<p class="auth-hint">${s.storeNoAccountHint.replace('{store}', store)}</p>`
+        : ''
+    }
     <button class="link-btn" id="geniusRedeem">${s.haveCode}</button>
     <p class="auth-msg" id="geniusMsg" role="status"></p>
     <div class="genius-perks">
@@ -365,10 +420,13 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
       ${PRIVILEGES[lang].map((p) => `<div class="genius-perk genius-perk--soon">${p}</div>`).join('')}
     </div>
     <div class="btn-row">
-      <button class="icon-btn" id="geniusRestore">${
+      <!-- 登录 is the accented one. Someone who already subscribed and is
+           looking at the paywall got here by accident, and the way out of
+           that is signing in, not closing the window. -->
+      <button class="secondary" id="geniusClose">${s.closeBtn}</button>
+      <button class="primary" id="geniusRestore">${
         isStoreChannel() ? s.restoreBtn : s.signInBtn
       }</button>
-      <button class="primary" id="geniusClose">${s.closeBtn}</button>
     </div>
   `,
   );
@@ -413,19 +471,12 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
 export function openStatusWindow(lang: Lang, onChanged: () => void): void {
   const s = STRINGS[lang];
   const current = entitlement();
-  const until = current.until
-    ? `<p class="tag-line">${s.subscribedUntil} ${new Date(current.until).toLocaleDateString(
-        LOCALES[lang],
-      )}</p>`
-    : '';
-  const email = current.email ? `<p class="auth-hint">${esc(current.email)}</p>` : '';
-
   const { overlay, close } = openModal(
     'genius-modal',
     `
     <h2>${s.subscribedTitle}</h2>
-    ${until}
-    ${email}
+    ${orderBlock(current, lang)}
+    ${giftBlock(current.gifts ?? [], lang)}
     <p class="auth-hint">${
       isStoreChannel()
         ? s.manageOnStore.replace('{store}', payeeName())
@@ -461,6 +512,102 @@ export function openStatusWindow(lang: Lang, onChanged: () => void): void {
     onChanged();
   });
   overlay.querySelector<HTMLButtonElement>('#statusClose')!.addEventListener('click', close);
+  wireCopyButtons(overlay, lang);
+}
+
+/**
+ * 订单情况 — the three facts a signed-in player came here to check: which
+ * address this is, what they bought, and how long it is paid up for.
+ *
+ * Set out as labelled rows rather than a sentence, because it is looked at
+ * rather than read: someone opening this window already knows they
+ * subscribed and is checking one line of it.
+ */
+function orderBlock(current: Entitlement, lang: Lang): string {
+  const s = STRINGS[lang];
+  const lifetime = Boolean(current.until && current.until >= LIFETIME_UNTIL);
+  const rows: [string, string][] = [];
+  if (current.email) rows.push([s.emailLabel, current.email]);
+  if (current.period) {
+    rows.push([s.orderPlanLabel, current.period === 'monthly' ? s.planMonthly : s.planYearly]);
+  }
+  if (lifetime) rows.push([s.orderUntilLabel, s.orderLifetime]);
+  else if (current.until) {
+    rows.push([s.orderUntilLabel, new Date(current.until).toLocaleDateString(LOCALES[lang])]);
+  }
+  if (!rows.length) return `<p class="auth-hint">${s.orderLapsed}</p>`;
+  return `<div class="order-block">
+    <div class="menu-section-label">${s.orderTitle}</div>
+    ${rows
+      .map(
+        ([label, value]) => `<div class="order-row">
+          <span class="order-label">${esc(label)}</span>
+          <span class="order-value">${esc(value)}</span>
+        </div>`,
+      )
+      .join('')}
+  </div>`;
+}
+
+/**
+ * 年付赠码. Each code gets its own copy button, because what a player does
+ * with these is paste one into a message to one particular person — and a
+ * six-character code read off a screen and typed back in is exactly the
+ * errand a copy button exists to remove.
+ *
+ * A spent one stays on the list, struck through: a code that quietly
+ * vanished the day a friend used it would read as one we took back.
+ */
+function giftBlock(gifts: GiftCode[], lang: Lang): string {
+  const s = STRINGS[lang];
+  if (!gifts.length) return '';
+  return `<div class="gift-block">
+    <div class="menu-section-label">${s.giftTitle}</div>
+    <p class="auth-hint">${s.giftHint}</p>
+    ${gifts
+      .map((gift) => {
+        const by = gift.expiresAt
+          ? s.giftExpires.replace('{date}', new Date(gift.expiresAt).toLocaleDateString(LOCALES[lang]))
+          : '';
+        return `<div class="gift-row${gift.spent ? ' gift-row--spent' : ''}">
+          <span class="gift-code">${esc(gift.code)}</span>
+          <span class="gift-note">${gift.spent ? esc(s.giftUsed) : esc(by)}</span>
+          ${
+            gift.spent
+              ? ''
+              : `<button class="gift-copy" data-copy="${esc(gift.code)}">${esc(s.copyBtn)}</button>`
+          }
+        </div>`;
+      })
+      .join('')}
+  </div>`;
+}
+
+/** Copy, with the button saying so for a moment — the whole feedback. */
+function wireCopyButtons(overlay: HTMLElement, lang: Lang): void {
+  const s = STRINGS[lang];
+  for (const btn of Array.from(overlay.querySelectorAll<HTMLButtonElement>('.gift-copy'))) {
+    btn.addEventListener('click', async () => {
+      const code = btn.dataset.copy ?? '';
+      const was = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(code);
+        btn.textContent = s.copiedLabel;
+      } catch {
+        // No clipboard permission: select it instead, so it can still be
+        // copied by hand rather than the button doing nothing at all.
+        const node = btn.previousElementSibling?.previousElementSibling;
+        if (node) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      }
+      window.setTimeout(() => (btn.textContent = was), 1400);
+    });
+  }
 }
 
 /**
@@ -512,7 +659,7 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     current = next;
     for (const el of tabs) el.classList.toggle('active', el.dataset.tab === next);
     msg.textContent = '';
-    hint.textContent = next === 'register' ? s.registerHint : s.signInHint;
+    hint.textContent = next === 'register' ? s.registerIsSubscribe : s.signInHint;
     // Registering asks for nothing: Creem's checkout collects the address
     // itself, and one form is better than two asking for the same thing.
     fields.hidden = next === 'register';

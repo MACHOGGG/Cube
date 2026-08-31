@@ -79,6 +79,14 @@ export interface I18nStrings {
   geniusNowTitle: string;
   /** 付费墙上「还没做、做完自动包含」那一段的小标题。 */
   geniusSoonTitle: string;
+  /**
+   * 付费墙上「订阅后立刻解锁」那三条的说法。
+   *
+   * 比棋盘本身的名字长，也应该更长：主菜单上的图标旁边只要认得出是哪个
+   * 就够了，这里是要让一个还没付钱的人看懂他买到的是什么。
+   */
+  geniusNowCircleSeven: string;
+  geniusNowTriangleAdvanced: string;
   /** 开多人房间——GENIUS_LAYOUTS 之外唯一一件订阅立刻拿到的东西。 */
   geniusHostRooms: string;
   // ---- subscription: the paywall, and the web's e-mail sign-in ----
@@ -96,7 +104,14 @@ export interface I18nStrings {
   emailPlaceholder: string;
   emailInvalid: string;
   /** Why the site asks for an address and the app never does. */
-  registerHint: string;
+  /**
+   * 注册这一栏说的是什么。
+   *
+   * 取代了原来那句「刷卡订阅只需要电子邮件，不用设密码」——在「注册即
+   * 订阅、邮箱 + 六位密码」之后它就不成立了，而且会和玩家付完款紧接着
+   * 看到的设密码窗口正面打架。
+   */
+  registerIsSubscribe: string;
   signInHint: string;
   /** Carries {store} — "App Store" or "Google Play", per platform. */
   storeNoAccountHint: string;
@@ -125,19 +140,32 @@ export interface I18nStrings {
   setPwPlaceholder: string;
   setPwShort: string;
   setPwLater: string;
-  /** 兑换码换来的东西，绑到一个邮箱上，好换设备时取回。 */
+  /** 内部码换来的东西，绑到一个邮箱上，好换设备时取回。 */
   bindTitle: string;
   bindHint: string;
   bindTaken: string;
   redeemCodePlaceholder: string;
-  /** 兑换码本身过了使用期限。 */
+  /** 内部码本身过了使用期限。 */
   codeExpired: string;
-  /** 短时间内试得太多——防止有人枚举兑换码。 */
+  /** 短时间内试得太多——防止有人枚举内部码。 */
   tooManyTries: string;
   /** 还在订阅期内，这张码留着更值。 */
   alreadyActive: string;
-  /** 个人主页上的兑换码入口。 */
+  /** 个人主页上的内部码入口。 */
   insiderCode: string;
+  /** 订单情况 — what a signed-in player is shown about what they bought. */
+  orderTitle: string;
+  orderPlanLabel: string;
+  orderUntilLabel: string;
+  orderLifetime: string;
+  orderLapsed: string;
+  /** 年付赠码 — the two months a yearly subscriber has to give away. */
+  giftTitle: string;
+  giftHint: string;
+  giftUsed: string;
+  giftExpires: string;
+  copyBtn: string;
+  copiedLabel: string;
   /** 已订阅但从没设过密码的人，在登录时看到的指引。 */
   needsPwHint: string;
   redeemBadCode: string;
@@ -365,8 +393,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     becomeGenius: 'Become a Slides Genius',
     geniusSpecialTitle: 'Slides Genius Exclusives',
     geniusNowTitle: 'Unlocked the moment you subscribe',
-    geniusSoonTitle: 'Not built yet — included the day it lands',
-    geniusHostRooms: 'Host multiplayer rooms for up to four players',
+    geniusNowCircleSeven: 'Seven-colour diamond ball board',
+    geniusNowTriangleAdvanced: 'Advanced V-shaped triangle board',
+    geniusSoonTitle: 'In the works — coming soon',
+    geniusHostRooms: 'Online races for 2–4 players at once',
     subscribeTitle: 'Become a Slides Genius',
     subscribeIntro: 'More boards unlocked right away, with more on the way. Cancel whenever you like.',
     planMonthly: 'per month',
@@ -378,7 +408,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: 'Email',
     emailPlaceholder: 'you@example.com',
     emailInvalid: 'That does not look like an email address.',
-    registerHint: 'Paying by card needs only an email address — no password to set.',
+    registerIsSubscribe: 'Registering is subscribing. Pay first, then set a six-digit password for this address — the two of them bring your subscription back on any device.',
     signInHint: 'Your email address and the password you set.',
     storeNoAccountHint: 'Bought with your {store} account — no sign-up, and you never leave the app.',
     subscribedTitle: 'You are a Slides Genius',
@@ -387,11 +417,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: 'Cancel or change it in your {store} account settings.',
     geniusStatus: 'Subscription',
     geniusOnly: 'Genius only',
-    haveCode: 'Have a code?',
-    redeemTitle: 'Redeem a code',
-    redeemHint: 'Type your code. It unlocks straight away.',
-    redeemCodeLabel: 'Code',
-    redeemBtn: 'Redeem',
+    haveCode: 'Have an insider code?',
+    redeemTitle: 'Slides Genius insider code',
+    redeemHint: 'Type your insider code. It unlocks straight away.',
+    redeemCodeLabel: 'Insider code',
+    redeemBtn: 'Unlock',
     passwordLabel: 'Passcode (4–6 digits)',
     passwordPlaceholder: '4–6 digits',
     passwordAny: 'Password',
@@ -402,15 +432,26 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: 'Use six characters or more.',
     setPwLater: 'Later',
     bindTitle: 'Save it to an address',
-    bindHint: 'Your code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
+    bindHint: 'Your insider code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
     bindTaken: 'That address already has an account. Use another one, or write to us.',
     redeemCodePlaceholder: 'e.g. K7M2QD',
-    codeExpired: 'That code has passed its use-by date.',
+    codeExpired: 'That insider code has passed its use-by date.',
     tooManyTries: 'Too many tries from here. Try again later.',
-    alreadyActive: 'Your subscription is still running. Keep this code for later, or pass it on — it is only spent once.',
+    alreadyActive: 'Your subscription is still running. Keep this insider code for later, or pass it on — it is only spent once.',
     insiderCode: 'Slides Genius insider code',
+    orderTitle: 'Your subscription',
+    orderPlanLabel: 'Plan',
+    orderUntilLabel: 'Paid up to',
+    orderLifetime: 'Lifetime',
+    orderLapsed: 'This account has no running subscription.',
+    giftTitle: 'Two months to give away',
+    giftHint: 'Yours for subscribing by the year. Send one to a friend — each unlocks one month, once.',
+    giftUsed: 'used',
+    giftExpires: 'use by {date}',
+    copyBtn: 'Copy',
+    copiedLabel: 'Copied',
     needsPwHint: 'This subscription has no password yet. Open it from the device you paid on to set one.',
-    redeemBadCode: 'That code is not valid, or it has already been used.',
+    redeemBadCode: 'That insider code is not valid, or it has already been used.',
     pwWrong: 'That passcode is not right.',
     pwLocked: 'Too many wrong tries. Try again in about {hours} h.',
     pwBlocked: 'Too many wrong tries — this account is locked. Verify by email to open it again.',
@@ -435,7 +476,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpCodeLabel: 'Room code',
     mpCodePlaceholder: 'four digits',
     mpRoomCode: 'Room',
-    mpShareHint: 'Give these four digits to your friends — up to four players.',
+    mpShareHint: 'Give these four digits to your friends — up to {n} players.',
     mpPlayers: 'Players',
     mpHostBadge: 'host',
     mpPickMode: 'Pick a board',
@@ -464,7 +505,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '{n} rounds',
     mpErrEnded: 'That room has been closed.',
     mpErrNoRoom: 'No room with that code.',
-    mpErrFull: 'That room is full — four players is the most.',
+    mpErrFull: 'That room is full — {n} players is the most.',
     mpErrStarted: 'That game has already started.',
     mpErrTooFew: 'Two players at least.',
     mpErrNotOpen: 'Multiplayer is not open yet.',
@@ -612,8 +653,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     becomeGenius: 'Devenir un Slides Génie',
     geniusSpecialTitle: 'Exclusivités Slides Génie',
     geniusNowTitle: 'Débloqué dès votre abonnement',
-    geniusSoonTitle: 'Pas encore réalisé — inclus dès sa sortie',
-    geniusHostRooms: 'Héberger des salons multijoueurs jusqu’à quatre joueurs',
+    geniusNowCircleSeven: 'Plateau losange à sept couleurs',
+    geniusNowTriangleAdvanced: 'Plateau triangle avancé en V',
+    geniusSoonTitle: 'En cours de réalisation — bientôt disponible',
+    geniusHostRooms: 'Courses en ligne à 2–4 joueurs simultanés',
     subscribeTitle: 'Devenir un Slides Génie',
     subscribeIntro: 'D’autres plateaux débloqués immédiatement, et d’autres à venir. Résiliable à tout moment.',
     planMonthly: 'par mois',
@@ -625,7 +668,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: 'Courriel',
     emailPlaceholder: 'vous@exemple.com',
     emailInvalid: 'Cette adresse ne semble pas valide.',
-    registerHint: 'Le paiement par carte ne demande qu’une adresse courriel — aucun mot de passe à créer.',
+    registerIsSubscribe: 'S’inscrire, c’est s’abonner. Payez d’abord, puis choisissez un mot de passe à six chiffres pour cette adresse — à eux deux, ils rouvrent votre abonnement sur n’importe quel appareil.',
     signInHint: 'Votre adresse et le mot de passe que vous avez défini.',
     storeNoAccountHint: 'Acheté avec votre compte {store} — sans inscription, sans quitter l’application.',
     subscribedTitle: 'Vous êtes un Slides Génie',
@@ -634,11 +677,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: 'Résiliez ou modifiez dans les réglages de votre compte {store}.',
     geniusStatus: 'Abonnement',
     geniusOnly: 'Réservé aux Génies',
-    haveCode: 'Vous avez un code ?',
-    redeemTitle: 'Utiliser un code',
-    redeemHint: 'Saisissez votre code. Il débloque tout de suite.',
-    redeemCodeLabel: 'Code',
-    redeemBtn: 'Valider',
+    haveCode: 'Vous avez un code Génie ?',
+    redeemTitle: 'Code Slides Génie',
+    redeemHint: 'Saisissez votre code Génie. Il débloque tout de suite.',
+    redeemCodeLabel: 'Code Génie',
+    redeemBtn: 'Débloquer',
     passwordLabel: 'Code secret (4 à 6 chiffres)',
     passwordPlaceholder: '4 à 6 chiffres',
     passwordAny: 'Mot de passe',
@@ -649,15 +692,26 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: 'Six caractères minimum.',
     setPwLater: 'Plus tard',
     bindTitle: 'Rattachez-le à une adresse',
-    bindHint: 'Votre code est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
+    bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
     bindTaken: 'Cette adresse a déjà un compte. Utilisez-en une autre, ou écrivez-nous.',
     redeemCodePlaceholder: 'ex. K7M2QD',
-    codeExpired: 'Ce code a dépassé sa date limite.',
+    codeExpired: 'Ce code Génie a dépassé sa date limite.',
     tooManyTries: 'Trop de tentatives depuis cet appareil. Réessayez plus tard.',
-    alreadyActive: 'Votre abonnement court toujours. Gardez ce code pour plus tard, ou offrez-le — il ne sert qu’une fois.',
+    alreadyActive: 'Votre abonnement court toujours. Gardez ce code Génie pour plus tard, ou offrez-le — il ne sert qu’une fois.',
     insiderCode: 'Code Slides Génie',
+    orderTitle: 'Votre abonnement',
+    orderPlanLabel: 'Formule',
+    orderUntilLabel: 'Payé jusqu’au',
+    orderLifetime: 'À vie',
+    orderLapsed: 'Ce compte n’a pas d’abonnement en cours.',
+    giftTitle: 'Deux mois à offrir',
+    giftHint: 'Pour votre abonnement à l’année. Offrez-en un — chacun débloque un mois, une seule fois.',
+    giftUsed: 'utilisé',
+    giftExpires: 'à utiliser avant le {date}',
+    copyBtn: 'Copier',
+    copiedLabel: 'Copié',
     needsPwHint: 'Cet abonnement n’a pas encore de mot de passe. Ouvrez-le depuis l’appareil du paiement pour en définir un.',
-    redeemBadCode: 'Ce code n’est pas valide, ou il a déjà été utilisé.',
+    redeemBadCode: 'Ce code Génie n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
     pwLocked: 'Trop d’essais. Réessayez dans environ {hours} h.',
     pwBlocked: 'Trop d’essais — ce compte est verrouillé. Vérifiez par courriel pour le rouvrir.',
@@ -682,7 +736,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpCodeLabel: 'Code de la salle',
     mpCodePlaceholder: 'quatre chiffres',
     mpRoomCode: 'Salle',
-    mpShareHint: 'Donnez ces quatre chiffres à vos amis — quatre joueurs au maximum.',
+    mpShareHint: 'Donnez ces quatre chiffres à vos amis — {n} joueurs au maximum.',
     mpPlayers: 'Joueurs',
     mpHostBadge: 'hôte',
     mpPickMode: 'Choisissez un plateau',
@@ -711,7 +765,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '{n} manches',
     mpErrEnded: 'Cette salle a été fermée.',
     mpErrNoRoom: 'Aucune salle avec ce code.',
-    mpErrFull: 'Cette salle est pleine — quatre joueurs au maximum.',
+    mpErrFull: 'Cette salle est pleine — {n} joueurs au maximum.',
     mpErrStarted: 'Cette partie a déjà commencé.',
     mpErrTooFew: 'Il faut au moins deux joueurs.',
     mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
@@ -860,8 +914,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '成為 Slides 天才',
     geniusNowTitle: '訂閱後立刻解鎖',
-    geniusSoonTitle: '還沒做完——上線當天自動包含',
-    geniusHostRooms: '開多人房間，最多四人同一副棋盤',
+    geniusNowCircleSeven: '七色菱形小球棋盤',
+    geniusNowTriangleAdvanced: '進階V型三角棋盤',
+    geniusSoonTitle: '正在製作　敬請期待',
+    geniusHostRooms: '2-4 人同時線上競賽',
     subscribeIntro: '立刻解鎖更多玩法，隨後會盡快更新。隨時可以取消。',
     planMonthly: '每月',
     planYearly: '每年',
@@ -872,7 +928,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: '電子郵件',
     emailPlaceholder: 'you@example.com',
     emailInvalid: '這個郵件地址看起來不太對。',
-    registerHint: '刷卡訂閱只需要電子郵件，不用設密碼。',
+    registerIsSubscribe: '註冊就是訂閱。先付款，再為這個電子郵件設一個 6 位密碼——之後在任何裝置上，用這兩樣就能找回你的訂閱。',
     signInHint: '你的電子郵件，加上你設的密碼。',
     storeNoAccountHint: '用你的 {store} 帳號購買，不必註冊，也不用離開 App。',
     subscribedTitle: '你已經是 Slides 天才',
@@ -881,11 +937,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: '到 {store} 的帳號設定裡取消或更改。',
     geniusStatus: '訂閱狀態',
     geniusOnly: '天才特供',
-    haveCode: '有兌換碼？',
-    redeemTitle: '兌換碼',
-    redeemHint: '輸入你的兌換碼，馬上生效。',
-    redeemCodeLabel: '兌換碼',
-    redeemBtn: '兌換',
+    haveCode: '有內部碼？',
+    redeemTitle: 'Slides 天才內部碼',
+    redeemHint: '輸入你的內部碼，馬上生效。',
+    redeemCodeLabel: '內部碼',
+    redeemBtn: '解鎖',
     passwordLabel: '密碼（4～6 位數字）',
     passwordPlaceholder: '4～6 位數字',
     passwordAny: '密碼',
@@ -896,15 +952,26 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: '密碼至少要 6 位。',
     setPwLater: '稍後再說',
     bindTitle: '綁定到一個信箱',
-    bindHint: '兌換碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
+    bindHint: '內部碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
     bindTaken: '這個信箱已經有帳號了。換一個，或者寫信給我們。',
     redeemCodePlaceholder: '例如 K7M2QD',
-    codeExpired: '這個兌換碼已經過了使用期限。',
+    codeExpired: '這個內部碼已經過了使用期限。',
     tooManyTries: '這裡試得太多了，請稍後再試。',
     alreadyActive: '你的訂閱還在有效期內。這張碼留著以後用，或者送人——它只能用一次。',
     insiderCode: 'Slides 天才內部碼',
+    orderTitle: '你的訂閱',
+    orderPlanLabel: '方案',
+    orderUntilLabel: '已付到',
+    orderLifetime: '終身',
+    orderLapsed: '這個帳號目前沒有進行中的訂閱。',
+    giftTitle: '兩個月，送給朋友',
+    giftHint: '訂了一年才有的。發一張給朋友——每張解鎖一個月，只能用一次。',
+    giftUsed: '已使用',
+    giftExpires: '{date} 前有效',
+    copyBtn: '複製',
+    copiedLabel: '已複製',
     needsPwHint: '這個訂閱還沒設密碼。請在付款的那台裝置上打開，設一組。',
-    redeemBadCode: '這個兌換碼無效，或已經被使用過了。',
+    redeemBadCode: '這個內部碼無效，或已經被使用過了。',
     pwWrong: '密碼不對。',
     pwLocked: '錯誤次數太多，請約 {hours} 小時後再試。',
     pwBlocked: '錯誤次數太多，這個帳號已被鎖住。請用電子郵件驗證重新開啟。',
@@ -929,7 +996,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpCodeLabel: '房間號',
     mpCodePlaceholder: '四位數字',
     mpRoomCode: '房間號',
-    mpShareHint: '把這四位數字給朋友——最多四個人。',
+    mpShareHint: '把這四位數字給朋友——最多 {n} 個人。',
     mpPlayers: '玩家',
     mpHostBadge: '房主',
     mpPickMode: '選一個玩法',
@@ -958,7 +1025,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '共 {n} 局',
     mpErrEnded: '這個房間已經結束了。',
     mpErrNoRoom: '沒有這個房間號。',
-    mpErrFull: '房間滿了——最多四個人。',
+    mpErrFull: '房間滿了——最多 {n} 個人。',
     mpErrStarted: '這一局已經開始了。',
     mpErrTooFew: '至少要兩個人。',
     mpErrNotOpen: '多人遊玩尚未開放。',
@@ -1107,8 +1174,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '成为 Slides 天才',
     geniusNowTitle: '订阅后立刻解锁',
-    geniusSoonTitle: '还没做完——上线当天自动包含',
-    geniusHostRooms: '开多人房间，最多四人同一副棋盘',
+    geniusNowCircleSeven: '七色菱形小球棋盘',
+    geniusNowTriangleAdvanced: '进阶V型三角棋盘',
+    geniusSoonTitle: '正在制作　敬请期待',
+    geniusHostRooms: '2-4 人同时线上竞赛',
     subscribeIntro: '立刻解锁更多玩法，随后会尽快更新。随时可以取消。',
     planMonthly: '每月',
     planYearly: '每年',
@@ -1119,7 +1188,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: '邮箱',
     emailPlaceholder: 'you@example.com',
     emailInvalid: '这个邮箱地址看起来不太对。',
-    registerHint: '刷卡订阅只需要邮箱，不用设密码。',
+    registerIsSubscribe: '注册就是订阅。先付款，再为这个邮箱设一个 6 位密码——之后在任何设备上，用这两样就能找回你的订阅。',
     signInHint: '你的邮箱，加上你设的密码。',
     storeNoAccountHint: '用你的 {store} 账号购买，不用注册，也不用离开 App。',
     subscribedTitle: '你已经是 Slides 天才',
@@ -1128,11 +1197,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: '到 {store} 的账号设置里取消或更改。',
     geniusStatus: '订阅状态',
     geniusOnly: '天才特供',
-    haveCode: '有兑换码？',
-    redeemTitle: '兑换码',
-    redeemHint: '输入你的兑换码，马上生效。',
-    redeemCodeLabel: '兑换码',
-    redeemBtn: '兑换',
+    haveCode: '有内部码？',
+    redeemTitle: 'Slides 天才内部码',
+    redeemHint: '输入你的内部码，马上生效。',
+    redeemCodeLabel: '内部码',
+    redeemBtn: '解锁',
     passwordLabel: '密码（4～6 位数字）',
     passwordPlaceholder: '4～6 位数字',
     passwordAny: '密码',
@@ -1143,15 +1212,26 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: '密码至少要 6 位。',
     setPwLater: '稍后再说',
     bindTitle: '绑定到一个邮箱',
-    bindHint: '兑换码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
+    bindHint: '内部码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
     bindTaken: '这个邮箱已经有账号了。换一个，或者写信给我们。',
     redeemCodePlaceholder: '例如 K7M2QD',
-    codeExpired: '这个兑换码已经过了使用期限。',
+    codeExpired: '这个内部码已经过了使用期限。',
     tooManyTries: '这里试得太多了，请稍后再试。',
     alreadyActive: '你的订阅还在有效期内。这张码留着以后用，或者送人——它只能用一次。',
     insiderCode: 'Slides 天才内部码',
+    orderTitle: '你的订阅',
+    orderPlanLabel: '方案',
+    orderUntilLabel: '已付到',
+    orderLifetime: '终身',
+    orderLapsed: '这个账号目前没有进行中的订阅。',
+    giftTitle: '两个月，送给朋友',
+    giftHint: '订了一年才有的。发一张给朋友——每张解锁一个月，只能用一次。',
+    giftUsed: '已使用',
+    giftExpires: '{date} 前有效',
+    copyBtn: '复制',
+    copiedLabel: '已复制',
     needsPwHint: '这个订阅还没设密码。请在付款的那台设备上打开，设一组。',
-    redeemBadCode: '这个兑换码无效，或者已经被用过了。',
+    redeemBadCode: '这个内部码无效，或者已经被用过了。',
     pwWrong: '密码不对。',
     pwLocked: '错误次数太多，请约 {hours} 小时后再试。',
     pwBlocked: '错误次数太多，这个账号已经锁住了。请用邮箱验证重新开启。',
@@ -1176,7 +1256,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpCodeLabel: '房间号',
     mpCodePlaceholder: '四位数字',
     mpRoomCode: '房间号',
-    mpShareHint: '把这四位数字给朋友——最多四个人。',
+    mpShareHint: '把这四位数字给朋友——最多 {n} 个人。',
     mpPlayers: '玩家',
     mpHostBadge: '房主',
     mpPickMode: '选一个玩法',
@@ -1205,7 +1285,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '共 {n} 局',
     mpErrEnded: '这个房间已经结束了。',
     mpErrNoRoom: '没有这个房间号。',
-    mpErrFull: '房间满了——最多四个人。',
+    mpErrFull: '房间满了——最多 {n} 个人。',
     mpErrStarted: '这一局已经开始了。',
     mpErrTooFew: '至少要两个人。',
     mpErrNotOpen: '多人游玩尚未开放。',

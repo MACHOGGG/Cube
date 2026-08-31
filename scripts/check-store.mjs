@@ -58,7 +58,7 @@ if (!policy) {
   console.log(`\n淘汰策略: ${policy} ✅ 安全`);
   console.log(policy === 'noeviction'
     ? '          满了就拒绝写入，任何数据都不会被自动删掉。'
-    : '          只会淘汰设了过期时间的 key —— 也就是房间和验证码，账号和兑换码碰不到。');
+    : '          只会淘汰设了过期时间的 key —— 也就是房间和验证码，账号和内部码碰不到。');
 } else {
   console.log(`\n淘汰策略: ${policy} ⚠️ 危险`);
   console.log('          allkeys-* 表示内存满了会删任意 key，包括玩家账号。请到 Upstash');
@@ -74,7 +74,7 @@ console.log(`\n探针: 不带过期时间写入的 key，TTL = ${probeTtl}（-1 
 
 const GROUPS = [
   ['acct:*', '玩家账号', false],
-  ['code:*', '未使用的兑换码', false],
+  ['code:*', '未使用的内部码', false],
   ['codeused:*', '已兑换记录', false],
   ['room:*', '多人房间', true],
   ['unlock:*', '解锁验证码', true],

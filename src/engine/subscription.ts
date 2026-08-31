@@ -25,6 +25,15 @@ import type { PlanPeriod } from './pricing';
  * and both are re-checked on the next launch that has a network.
  */
 
+/** One 内部码 a yearly subscriber may pass on. */
+export interface GiftCode {
+  code: string;
+  /** Epoch ms. After this the code is refused, and says why. */
+  expiresAt?: number;
+  /** Somebody has redeemed it — shown struck through, not hidden. */
+  spent?: boolean;
+}
+
 export interface Entitlement {
   active: boolean;
   period?: PlanPeriod;
@@ -39,6 +48,15 @@ export interface Entitlement {
   channel: SalesChannel | 'code';
   /** The address a web subscription is attached to. Unused in the app. */
   email?: string;
+  /**
+   * 年付赠码 — two one-month codes a yearly subscriber can hand to friends.
+   *
+   * Minted and remembered by the server, so this is a copy for showing, not
+   * the record: signing in on a second device brings back the same two, and
+   * one already spent comes back marked as spent rather than disappearing —
+   * a code that quietly vanished would read as one we took away.
+   */
+  gifts?: GiftCode[];
   /**
    * The redeem code this is still held under, when no address is attached
    * yet. It is half of the pair — with `token` — that names the account on

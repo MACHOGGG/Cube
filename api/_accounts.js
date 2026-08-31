@@ -1,4 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { mintCodes } from './_codes.js';
 import { del, get, set } from './_store.js';
 
 /**
@@ -211,6 +212,48 @@ export function extend(account, plan) {
   account.until = from + (PLAN_MS[plan] ?? PLAN_MS.month);
   account.plan = plan;
   return account.until;
+}
+
+/**
+ * 年付赠码 — two one-month codes a yearly subscriber can pass to friends.
+ *
+ * A year is a long thing to ask someone to buy on their own recommendation,
+ * so a yearly subscriber gets two months to hand out. They carry a use-by
+ * date because a gift with no deadline is one that sits in a drawer: the
+ * point of it is that someone plays this month.
+ *
+ * Issued once and remembered on the account, so this can be called on every
+ * sign-in without a subscriber quietly accumulating codes — which is also
+ * what makes it work for people who subscribed before the gift existed.
+ */
+export const GIFT_PLAN = 'month';
+export const GIFT_COUNT = 2;
+export const GIFT_DAYS = 30;
+
+export async function ensureGiftCodes(email, account, period) {
+  if (Array.isArray(account.gifts)) return account.gifts;
+  if (period !== 'yearly') return null;
+  const expiresAt = Date.now() + GIFT_DAYS * 24 * 3600e3;
+  const codes = await mintCodes(GIFT_PLAN, GIFT_COUNT, expiresAt, { source: 'gift' });
+  // An empty mint means the store refused; leaving `gifts` unset lets the
+  // next sign-in try again rather than recording that they got nothing.
+  if (!codes.length) return null;
+  account.gifts = codes.map((code) => ({ code, expiresAt }));
+  await saveAccount(email, account);
+  return account.gifts;
+}
+
+/** The gifts as the browser should see them, minus any already spent. */
+export async function liveGifts(account) {
+  if (!Array.isArray(account?.gifts)) return [];
+  const alive = [];
+  for (const gift of account.gifts) {
+    // A code that is no longer in the store has been redeemed by somebody;
+    // showing it would have the subscriber hand out a code that is dead.
+    const doc = await get('code:' + String(gift.code).toUpperCase());
+    alive.push({ ...gift, spent: !doc });
+  }
+  return alive;
 }
 
 /** What the browser is told. Never the hash, the salt or the attempt count. */

@@ -49,6 +49,8 @@ export type AccountResult =
 interface Reply {
   /** Echoed by /api/redeem: the code just spent, needed to attach an address. */
   code?: string;
+  /** 年付赠码, when the account has any. */
+  gifts?: { code: string; expiresAt?: number; spent?: boolean }[];
   active?: boolean;
   period?: 'monthly' | 'yearly';
   until?: number;
@@ -81,6 +83,7 @@ function toResult(status: number, reply: Reply): AccountResult {
         email: reply.email,
         token: reply.token,
         code: reply.code,
+        gifts: reply.gifts,
       },
     };
   }

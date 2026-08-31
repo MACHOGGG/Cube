@@ -19,7 +19,9 @@ import { avatarSvg, currentRoom, type RoomPlayer, type RoomState } from '../engi
 
 const CARD_W = 720;
 const PAD = 72;
+/** Roomy for four, still on one page at twelve. */
 const ROW_H = 46;
+const rowHeightFor = (count: number) => (count <= 6 ? ROW_H : Math.max(30, ROW_H - (count - 6) * 2));
 const EXPORT_SCALE = 3;
 
 const esc = (v: string) =>
@@ -75,8 +77,9 @@ export function renderRoomCard(state: RoomState, lang: Lang): string {
     me: Boolean(seat && p.id === seat.playerId),
   }));
 
+  const rowH = rowHeightFor(rows.length);
   const listY = 232;
-  const notesY = listY + 20 + rows.length * ROW_H + 34;
+  const notesY = listY + 20 + rows.length * rowH + 34;
   const cardH = notesY + 96;
 
   const canvas = document.createElement('canvas');
@@ -111,7 +114,7 @@ export function renderRoomCard(state: RoomState, lang: Lang): string {
     202,
   );
 
-  drawStandings(ctx, rows, PAD, listY, CARD_W - PAD * 2, s.mpTotalLabel, ROW_H);
+  drawStandings(ctx, rows, PAD, listY, CARD_W - PAD * 2, s.mpTotalLabel, rowH);
 
   // The two side notes, quiet and on one line each.
   const best = bestRoundOf(state.players);

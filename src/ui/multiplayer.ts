@@ -66,6 +66,9 @@ const NAME_KEY = 'slides_mp_name';
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** Seats open today, as the server last said. Only the wording needs it. */
+let openSeats = 4;
+
 function errorText(reason: RoomError, lang: Lang): string {
   const s = STRINGS[lang];
   switch (reason) {
@@ -74,7 +77,7 @@ function errorText(reason: RoomError, lang: Lang): string {
     case 'noRoom':
       return s.mpErrNoRoom;
     case 'full':
-      return s.mpErrFull;
+      return s.mpErrFull.replace('{n}', String(openSeats));
     case 'started':
       return s.mpErrStarted;
     case 'tooFew':
@@ -237,6 +240,7 @@ export function renderMultiplayerPage(
 
   function renderLobby(state: RoomState) {
     stopAll();
+    if (state.seats) openSeats = state.seats;
     // Whether *we* host it, not merely whether the room has a host.
     const iAmHost = Boolean(state.host) && currentRoom()?.playerId === state.host;
     container.innerHTML = `
@@ -251,7 +255,7 @@ export function renderMultiplayerPage(
         <div class="mp-code-card">
           <div class="menu-section-label">${s.mpRoomCode}</div>
           <div class="mp-code">${state.code}</div>
-          <p class="auth-hint">${s.mpShareHint}</p>
+          <p class="auth-hint">${s.mpShareHint.replace('{n}', String(state.seats || openSeats))}</p>
         </div>
 
         <div class="menu-section-label" id="mpPlayersLabel">${s.mpPlayers}</div>

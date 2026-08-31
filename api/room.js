@@ -28,7 +28,22 @@ import { expire, hdel, hgetall, hset, hsetnx, storeConfigured } from './_store.j
  * read-modify-write of one blob would quietly drop most of those writes.
  */
 
-const MAX_PLAYERS = 4;
+/**
+ * Two numbers, not one, because they answer different questions.
+ *
+ * ROOM_CAPACITY is what the machinery can carry: a room is a Redis hash with
+ * one field per player and every write touches only that player's own field,
+ * so nothing here gets harder as the table grows — twelve is simply the size
+ * the standings panel, the closing card and a four-digit room code space all
+ * still read well at.
+ *
+ * MAX_PLAYERS is what is open today. Raising it is one number, and nothing
+ * else has to move.
+ */
+const ROOM_CAPACITY = 12;
+/** How many seats are open to players today. Raise this, not the line above. */
+const OPEN_SEATS = 4;
+const MAX_PLAYERS = Math.min(OPEN_SEATS, ROOM_CAPACITY);
 const MIN_PLAYERS = 2;
 const ROOM_TTL_S = 2 * 3600;
 /** Long enough to read "3, 2, 1" without anyone feeling held up. */
@@ -184,6 +199,9 @@ function publicState(code, hash) {
     roundOver: roundOver(hash),
     /** The host has closed the room. What is left is the closing card. */
     ended: Boolean(meta.endedAt),
+    /** Seats open today, so what the app says about a full room is one
+     *  number rather than the word "four" written into four languages. */
+    seats: MAX_PLAYERS,
     players,
     // Lets a device with a wrong clock still count down to the same instant.
     serverNow: Date.now(),

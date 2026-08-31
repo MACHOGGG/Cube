@@ -389,16 +389,15 @@ export function renderShareCard(
     ctx.textAlign = 'left';
   }
 
-  // The places, in the column the shrunken boards left free.
+  // The places, in the column the shrunken boards left free. The rows are
+  // sized to that column rather than being a fixed height: four players get
+  // a comfortable list, and twelve still end inside the card instead of
+  // running off the bottom of it.
   if (standings.length) {
-    drawStandings(
-      ctx,
-      standings,
-      PAD + panel * 2 + gap + 26,
-      boardY,
-      CARD_W - PAD - (PAD + panel * 2 + gap + 26),
-      s.mpRoundResult,
-    );
+    const listX = PAD + panel * 2 + gap + 26;
+    const listRoom = panel + 30;
+    const rowH = Math.min(38, Math.max(18, (listRoom - 20) / standings.length));
+    drawStandings(ctx, standings, listX, boardY, CARD_W - PAD - listX, s.mpRoundResult, rowH);
   }
 
   ctx.font = '500 13px "Karla", sans-serif';

@@ -1,4 +1,4 @@
-import { configured, creem, emailOf, entitled, readBody, send } from './_creem.js';
+import { configured, creem, emailOf, entitled, periodOf, readBody, send } from './_creem.js';
 import {
   EMAIL_RE,
   PASS_RE,
@@ -6,6 +6,7 @@ import {
   checkPin,
   codeHolder,
   deleteAccount,
+  ensureGiftCodes,
   loadAccount,
   newAccount,
   normalizeEmail,
@@ -98,6 +99,7 @@ async function create(res, checkoutId, password) {
   if (!configured()) return send(res, 503, { error: 'notConfigured' });
 
   let address;
+  let period;
   try {
     const checkout = await creem('/v1/checkouts', { query: { checkout_id: checkoutId } });
     if (checkout?.status !== 'completed') return send(res, 403, { error: 'unpaid' });
@@ -107,6 +109,9 @@ async function create(res, checkoutId, password) {
         : checkout.subscription;
     if (!entitled(sub)) return send(res, 403, { error: 'unpaid' });
     address = normalizeEmail(emailOf(checkout) ?? emailOf(sub) ?? '');
+    // Which product they bought, so the two gift codes a yearly subscriber
+    // gets can be minted the moment the account exists.
+    period = periodOf(sub);
   } catch (err) {
     console.error('passcode create failed:', err?.message || err);
     return send(res, 502, { error: 'upstream' });
@@ -118,10 +123,20 @@ async function create(res, checkoutId, password) {
   if (await loadAccount(address)) return send(res, 409, { error: 'exists' });
 
   const account = newAccount(String(password), 'card');
+  account.period = period;
   await saveAccount(address, account);
+  // A year is a long thing to buy on your own recommendation, so a yearly
+  // subscriber gets two months to hand out. Minted here, where the account
+  // first exists, and remembered on it so they are never minted twice.
+  const gifts = await ensureGiftCodes(address, account, period);
   // Hand back the token with it, so the device that just chose the password
   // is signed in by that act and never asked for it again.
-  return send(res, 200, { ok: true, email: address, token: account.token });
+  return send(res, 200, {
+    ok: true,
+    email: address,
+    token: account.token,
+    ...(gifts?.length ? { gifts } : {}),
+  });
 }
 
 /** Changing a password, proven by the one it replaces. */

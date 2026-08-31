@@ -1199,7 +1199,7 @@ button:hover { filter: brightness(1.05); }
 }
 .auth-field input:focus { outline: none; border-color: var(--accent); }
 /* A quiet way out of a window that is mostly about something else —
-   「有兑换码？」 under the plans, and under the log-in form. */
+   「有内部码？」 under the plans, and under the log-in form. */
 .modal .link-btn {
   background: none; border: none; cursor: pointer; padding: 2px 4px; margin: 0 0 12px;
   color: var(--accent-ink); font: inherit; font-size: 0.82rem;
@@ -1207,6 +1207,78 @@ button:hover { filter: brightness(1.05); }
 }
 .modal .link-btn:hover { filter: brightness(1.15); }
 .auth-field input[readonly] { color: var(--ink-faint); }
+/* The address a subscription will hang on, shown whole. A one-line readonly
+   input cuts a long address off at its right edge, and this is the one thing
+   on the window that has to be checked before the password below it is set. */
+.auth-account {
+  text-align: left; margin: 0 0 14px; padding: 10px 14px;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: 12px;
+}
+.auth-account-label {
+  display: block; font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 3px;
+}
+.auth-account-value {
+  display: block; font-size: 0.95rem; font-weight: 600; color: var(--ink);
+  overflow-wrap: anywhere; line-height: 1.35;
+}
+/* 订单情况 — labelled rows, because this window is checked rather than read:
+   whoever opens it already knows they subscribed and wants one line of it. */
+.order-block, .gift-block { text-align: left; margin: 0 0 16px; }
+/* The shared label is tuned for the home grid — centred, and pulled 4px down
+   onto the cards under it. Both are wrong over a left-aligned list, where
+   that negative margin puts the first row on top of the heading. */
+.order-block .menu-section-label,
+.gift-block .menu-section-label,
+.genius-perks .menu-section-label { text-align: left; margin: 12px 0 6px; }
+.genius-perks .menu-section-label:first-child { margin-top: 0; }
+.gift-block .auth-hint { margin: 0 0 10px; }
+.order-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.order-row:last-child { border-bottom: none; }
+.order-label { font-size: 0.82rem; color: var(--ink-faint); flex: 0 0 auto; }
+.order-value {
+  font-size: 0.92rem; font-weight: 600; color: var(--ink);
+  text-align: right; overflow-wrap: anywhere;
+}
+
+/* 年付赠码. Each gets its own copy button: what a player does with these is
+   paste one into a message to one particular person. */
+.gift-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
+  background: var(--board-bg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px 10px 8px 12px;
+}
+.gift-code {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1rem;
+  letter-spacing: 0.14em; color: var(--accent-ink);
+}
+.gift-note { flex: 1; font-size: 0.76rem; color: var(--ink-faint); }
+.gift-copy {
+  flex: 0 0 auto; border: none; border-radius: 999px; cursor: pointer;
+  background: var(--accent-soft); color: var(--accent-ink);
+  font: inherit; font-size: 0.78rem; font-weight: 600; padding: 5px 12px;
+}
+/* Spent, not gone: a code that vanished the day a friend used it would read
+   as one we took back. */
+.gift-row--spent { opacity: 0.5; }
+.gift-row--spent .gift-code { text-decoration: line-through; }
+
+/* 「Slides 天才」的标志，在它出现的三个地方。空的时候（还没放进 SVG）
+   geniusLogoTag 什么都不输出，所以这些规则也就没有东西可作用。 */
+.genius-logo {
+  display: inline-block; vertical-align: middle; flex: 0 0 auto;
+  line-height: 0; color: var(--accent-ink);
+}
+.genius-logo svg { width: 100%; height: 100%; display: block; }
+.genius-logo--inline { margin-right: 6px; }
+.genius-logo--title { margin-right: 8px; }
+/* 被锁的玩法：小标志贴在锁的旁边，说明这把锁是哪一家的。 */
+.center-pick-genius {
+  position: absolute; right: 6px; bottom: 6px; line-height: 0;
+}
+
 .genius-perks { text-align: left; margin: 0 0 16px; }
 .genius-perk { position: relative; color: var(--ink-soft); font-size: 0.85rem; padding: 3px 0 3px 16px; }
 .genius-perk::before { content: '·'; position: absolute; left: 4px; color: var(--accent); }
@@ -1215,6 +1287,8 @@ button:hover { filter: brightness(1.05); }
 .genius-perk--soon { opacity: 0.58; }
 .genius-perk--soon::before { color: var(--ink-soft); }
 .auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
+/* 设置密码: the account above, the empty password box below it. */
+.pw-form { display: flex; flex-direction: column; align-items: stretch; text-align: left; }
 .auth-body .tag-line { margin: 0; }
 
 /* ---------- language picker ---------- */
@@ -1839,7 +1913,10 @@ html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavi
   font-variant-numeric: tabular-nums; line-height: 1.15;
 }
 
-.mp-players { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; margin: 0 auto; }
+.mp-players {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; max-width: 320px; margin: 0 auto;
+}
 .mp-player {
   display: flex; align-items: center; gap: 10px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px;
@@ -1933,7 +2010,15 @@ body.is-room-host::after {
   font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px;
 }
-.mp-board-rows { display: flex; flex-direction: column; gap: 4px; }
+/* Four rows fit anywhere; twelve would climb over the board, so past that
+   the panel keeps its height and scrolls inside itself instead. */
+.mp-board-rows {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 40vh; overflow-y: auto; overscroll-behavior: contain;
+  /* The panel itself stays click-through so the board under it is still
+     draggable; the list gets its pointer back because it has to scroll. */
+  pointer-events: auto;
+}
 .mp-board-row { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; }
 .mp-board-row--me .mp-board-name, .mp-board-row--me .mp-board-score { color: var(--accent-ink); font-weight: 700; }
 .mp-board-rank { width: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }

@@ -1,8 +1,12 @@
-import { answer, configured, creem, emailOf, entitled, NOBODY, readBody, send } from './_creem.js';
+import {
+  answer, configured, creem, emailOf, entitled, NOBODY, periodOf, readBody, send,
+} from './_creem.js';
 import {
   SECRET_RE,
   checkPin,
+  ensureGiftCodes,
   entitlementOf,
+  liveGifts,
   loadAccount,
   normalizeEmail,
   rotateToken,
@@ -111,7 +115,11 @@ async function fromEmail(res, rawEmail, password, token) {
   // it is holding — which it could not do anyway, since a card password of
   // six digits and a code's six-digit passcode look identical.
   if (account?.kind === 'code') {
-    return send(res, 200, { ...entitlementOf(account, address), kind: 'code' });
+    return send(res, 200, {
+      ...entitlementOf(account, address),
+      kind: 'code',
+      gifts: await liveGifts(account),
+    });
   }
 
   const customer = await creem('/v1/customers', { query: { email: address } });
@@ -127,5 +135,13 @@ async function fromEmail(res, rawEmail, password, token) {
   // rather than handing the subscription over: the app sends them to set one.
   if (!account) return send(res, 200, { ...NOBODY, needsPasscode: true });
 
-  return send(res, 200, answer(sub, customer.email || address, issued || account.token));
+  // Minted on the first sign-in that sees a yearly subscription, which is
+  // what gets them to someone who subscribed before the gift existed. The
+  // account remembers them, so signing in again hands back the same two
+  // rather than printing a fresh pair every launch.
+  await ensureGiftCodes(address, account, periodOf(sub));
+  return send(res, 200, {
+    ...answer(sub, customer.email || address, issued || account.token),
+    gifts: await liveGifts(account),
+  });
 }

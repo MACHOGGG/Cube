@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
-import { randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { isPlan } from './_accounts.js';
-import { get, set, storeConfigured } from './_store.js';
+import { mintCodes } from './_codes.js';
+import { storeConfigured } from './_store.js';
 
 /**
  * Minting codes, for whoever runs this game and nobody else.
@@ -26,8 +26,6 @@ import { get, set, storeConfigured } from './_store.js';
  * it never existed — the difference between an answerable support question
  * and an argument.
  */
-const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-const LENGTH = 6;
 const MAX_PER_CALL = 200;
 
 /** Compared in constant time: a token check that leaks its own progress is
@@ -37,9 +35,6 @@ function tokenOk(given) {
   if (!want || typeof given !== 'string' || given.length !== want.length) return false;
   return timingSafeEqual(Buffer.from(given), Buffer.from(want));
 }
-
-const mintOne = () =>
-  Array.from({ length: LENGTH }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
@@ -55,16 +50,7 @@ export default async function handler(req, res) {
   const days = Number(expiresInDays) || 0;
   const expiresAt = days > 0 ? Date.now() + days * 24 * 3600e3 : undefined;
 
-  const minted = [];
-  // 6 characters of a 32-letter alphabet is 1.07 billion, so a collision is
-  // not a thing that happens — but a code silently overwriting another
-  // person's unused one would be, so it is checked rather than assumed.
-  for (let guard = 0; minted.length < wanted && guard < wanted * 4; guard++) {
-    const code = mintOne();
-    if (await get('code:' + code)) continue;
-    await set('code:' + code, { plan, mintedAt: Date.now(), ...(expiresAt ? { expiresAt } : {}) });
-    minted.push(code);
-  }
+  const minted = await mintCodes(plan, wanted, expiresAt, { source: 'mint' });
 
   return send(res, 200, {
     plan,

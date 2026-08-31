@@ -59,6 +59,8 @@ export interface RoomState {
   roundOver: boolean;
   /** The host has closed it. What is left is the closing card. */
   ended: boolean;
+  /** Seats open today. The room machinery carries more; this is what is on. */
+  seats: number;
   players: RoomPlayer[];
   serverNow: number;
 }
