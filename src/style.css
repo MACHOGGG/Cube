@@ -1799,3 +1799,79 @@ body:has(.app--game) { background: var(--play-bg); }
    through 结束 or by finishing it, so there is nothing for it to do here. */
 body:has(.app--game) .home-nav { display: none; }
 html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavior: none; }
+
+/* ---------- 多人游玩：大厅、倒计时、对局中的排名 ---------- */
+.mp-page { gap: 14px; }
+.mp-me { display: flex; align-items: flex-end; gap: 10px; width: 100%; max-width: 320px; margin: 0 auto; }
+.mp-me .mp-name-field { flex: 1; margin: 0; }
+.mp-avatar { display: block; width: 44px; height: 44px; flex: 0 0 auto; }
+.mp-avatar svg { width: 100%; height: 100%; display: block; }
+.mp-me .profile-pill--square { align-self: flex-end; height: 44px; width: 44px; font-size: 1.2rem; padding: 0; }
+
+.mp-join-row { display: flex; align-items: flex-end; gap: 10px; width: 100%; max-width: 320px; margin: 0 auto; }
+.mp-join-row .mp-code-field { flex: 1; margin: 0; }
+.mp-join-row .profile-pill { flex: 0 0 auto; height: 44px; }
+.mp-code-field input { font-variant-numeric: tabular-nums; letter-spacing: 0.18em; text-align: center; }
+
+/* The four digits are the whole point of the room, so they are the biggest
+   thing on the page — a number to read out loud across a table. */
+.mp-code-card { text-align: center; width: 100%; max-width: 320px; margin: 0 auto; }
+.mp-code {
+  font-family: 'Fraunces', Georgia, serif; font-size: 3rem; font-weight: 600;
+  letter-spacing: 0.22em; text-indent: 0.22em; color: var(--accent-ink);
+  font-variant-numeric: tabular-nums; line-height: 1.15;
+}
+
+.mp-players { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; margin: 0 auto; }
+.mp-player {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px;
+}
+.mp-player-name { flex: 1; font-weight: 600; font-size: 0.92rem; }
+.mp-badge {
+  font-size: 0.7rem; color: var(--accent-ink); background: var(--accent-soft);
+  border-radius: 100px; padding: 2px 8px;
+}
+
+.mp-modes {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  width: 100%; max-width: 320px; margin: 0 auto 4px;
+}
+.mp-mode {
+  background: var(--board-bg); color: var(--ink-soft); border: 1px solid var(--line);
+  border-radius: 100px; padding: 8px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.mp-mode--on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+.mp-page .genius-cta[disabled] { opacity: 0.5; cursor: default; }
+
+.mp-countdown-page { justify-content: center; min-height: 70vh; }
+.mp-countdown {
+  font-family: 'Fraunces', Georgia, serif; font-size: 6rem; font-weight: 600;
+  color: var(--accent-ink); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.mp-countdown--beat { animation: mp-beat 420ms cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes mp-beat { 0% { transform: scale(0.55); opacity: 0.2; } 100% { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .mp-countdown--beat { animation: none; } }
+
+/* The standings ride in the bottom-left corner during a run: clear of the
+   HUD along the top and of the board in the middle, and small enough that
+   the puzzle is still the thing being looked at. */
+.mp-board {
+  position: fixed; z-index: 40; left: 10px; pointer-events: none;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  width: 152px; padding: 8px 10px 9px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+}
+.mp-board-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px;
+}
+.mp-board-rows { display: flex; flex-direction: column; gap: 4px; }
+.mp-board-row { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; }
+.mp-board-row--me .mp-board-name, .mp-board-row--me .mp-board-score { color: var(--accent-ink); font-weight: 700; }
+.mp-board-rank { width: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.mp-avatar--small { width: 16px; height: 16px; }
+.mp-board-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mp-board .mp-badge { font-size: 0.6rem; padding: 1px 5px; }

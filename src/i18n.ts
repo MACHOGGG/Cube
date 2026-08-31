@@ -128,6 +128,35 @@ export interface I18nStrings {
   unlockExpired: string;
   /** Carries {email} — the support address, when no mail can be sent. */
   unlockNoMail: string;
+  // ---- multiplayer: the room, the countdown, the live standings ----
+  mpTitle: string;
+  mpIntro: string;
+  mpCreate: string;
+  mpJoin: string;
+  mpNameLabel: string;
+  mpNamePlaceholder: string;
+  mpAvatarLabel: string;
+  mpShuffle: string;
+  mpCodeLabel: string;
+  mpCodePlaceholder: string;
+  mpRoomCode: string;
+  mpShareHint: string;
+  mpPlayers: string;
+  mpHostBadge: string;
+  mpPickMode: string;
+  mpStartBtn: string;
+  mpWaitingHost: string;
+  mpLeave: string;
+  mpNeedGenius: string;
+  mpSameBoard: string;
+  mpGo: string;
+  mpStandings: string;
+  mpFinished: string;
+  mpErrNoRoom: string;
+  mpErrFull: string;
+  mpErrStarted: string;
+  mpErrTooFew: string;
+  mpErrNotOpen: string;
   notOnSaleYet: string;
   purchaseUnavailable: string;
   purchaseCancelled: string;
@@ -327,6 +356,34 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
     unlockNoMail: 'We cannot send mail automatically yet. Write to {email} and we will open it for you.',
+    mpTitle: 'Multiplayer',
+    mpIntro: 'Open a room, share the four digits, and everyone plays the very same board.',
+    mpCreate: 'Open a room',
+    mpJoin: 'Join a room',
+    mpNameLabel: 'Your name',
+    mpNamePlaceholder: 'Pick a name',
+    mpAvatarLabel: 'Your mark',
+    mpShuffle: 'Another',
+    mpCodeLabel: 'Room code',
+    mpCodePlaceholder: 'four digits',
+    mpRoomCode: 'Room',
+    mpShareHint: 'Give these four digits to your friends — up to four players.',
+    mpPlayers: 'Players',
+    mpHostBadge: 'host',
+    mpPickMode: 'Pick a board',
+    mpStartBtn: 'Start',
+    mpWaitingHost: 'Waiting for the host to pick a board.',
+    mpLeave: 'Leave the room',
+    mpNeedGenius: 'Opening a room is for Slides Genius. Joining someone else’s is free.',
+    mpSameBoard: 'Everyone gets exactly the same board.',
+    mpGo: 'Go!',
+    mpStandings: 'Standings',
+    mpFinished: 'done',
+    mpErrNoRoom: 'No room with that code.',
+    mpErrFull: 'That room is full — four players is the most.',
+    mpErrStarted: 'That game has already started.',
+    mpErrTooFew: 'Two players at least.',
+    mpErrNotOpen: 'Multiplayer is not open yet.',
     notOnSaleYet: 'The subscription is not open yet.',
     purchaseUnavailable: 'This device cannot complete the purchase yet.',
     purchaseCancelled: 'Cancelled — you have not been charged.',
@@ -511,6 +568,34 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
     unlockNoMail: 'Nous ne pouvons pas encore envoyer de courriel automatiquement. Écrivez à {email} et nous le rouvrirons.',
+    mpTitle: 'Multijoueur',
+    mpIntro: 'Ouvrez une salle, partagez les quatre chiffres, et tout le monde joue exactement le même plateau.',
+    mpCreate: 'Ouvrir une salle',
+    mpJoin: 'Rejoindre une salle',
+    mpNameLabel: 'Votre nom',
+    mpNamePlaceholder: 'Choisissez un nom',
+    mpAvatarLabel: 'Votre signe',
+    mpShuffle: 'Un autre',
+    mpCodeLabel: 'Code de la salle',
+    mpCodePlaceholder: 'quatre chiffres',
+    mpRoomCode: 'Salle',
+    mpShareHint: 'Donnez ces quatre chiffres à vos amis — quatre joueurs au maximum.',
+    mpPlayers: 'Joueurs',
+    mpHostBadge: 'hôte',
+    mpPickMode: 'Choisissez un plateau',
+    mpStartBtn: 'Commencer',
+    mpWaitingHost: 'En attente du plateau choisi par l’hôte.',
+    mpLeave: 'Quitter la salle',
+    mpNeedGenius: 'Ouvrir une salle est réservé aux Slides Génies. Rejoindre celle d’un autre est gratuit.',
+    mpSameBoard: 'Tout le monde reçoit exactement le même plateau.',
+    mpGo: 'Partez !',
+    mpStandings: 'Classement',
+    mpFinished: 'terminé',
+    mpErrNoRoom: 'Aucune salle avec ce code.',
+    mpErrFull: 'Cette salle est pleine — quatre joueurs au maximum.',
+    mpErrStarted: 'Cette partie a déjà commencé.',
+    mpErrTooFew: 'Il faut au moins deux joueurs.',
+    mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
     purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
     purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
@@ -695,6 +780,34 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
     unlockNoMail: '目前還無法自動寄信。請寫信到 {email}，我們幫你開啟。',
+    mpTitle: '多人遊玩',
+    mpIntro: '開一個房間，把四位數字給朋友，所有人拿到完全一樣的棋盤。',
+    mpCreate: '開房間',
+    mpJoin: '加入房間',
+    mpNameLabel: '你的名字',
+    mpNamePlaceholder: '起個名字',
+    mpAvatarLabel: '你的圖形',
+    mpShuffle: '換一個',
+    mpCodeLabel: '房間號',
+    mpCodePlaceholder: '四位數字',
+    mpRoomCode: '房間號',
+    mpShareHint: '把這四位數字給朋友——最多四個人。',
+    mpPlayers: '玩家',
+    mpHostBadge: '房主',
+    mpPickMode: '選一個玩法',
+    mpStartBtn: '開始',
+    mpWaitingHost: '等房主選玩法。',
+    mpLeave: '離開房間',
+    mpNeedGenius: '開房間需要 Slides 天才；加入別人的房間不需要。',
+    mpSameBoard: '所有人拿到完全一樣的棋盤。',
+    mpGo: '開始！',
+    mpStandings: '排名',
+    mpFinished: '已完成',
+    mpErrNoRoom: '沒有這個房間號。',
+    mpErrFull: '房間滿了——最多四個人。',
+    mpErrStarted: '這一局已經開始了。',
+    mpErrTooFew: '至少要兩個人。',
+    mpErrNotOpen: '多人遊玩尚未開放。',
     notOnSaleYet: '訂閱尚未開放。',
     purchaseUnavailable: '這台裝置目前還無法完成購買。',
     purchaseCancelled: '已取消，沒有扣款。',
@@ -879,6 +992,34 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',
     unlockNoMail: '目前还无法自动发信。请写信到 {email}，我们帮你开启。',
+    mpTitle: '多人游玩',
+    mpIntro: '开一个房间，把四位数字给朋友，所有人拿到完全一样的棋盘。',
+    mpCreate: '开房间',
+    mpJoin: '加入房间',
+    mpNameLabel: '你的名字',
+    mpNamePlaceholder: '起个名字',
+    mpAvatarLabel: '你的图形',
+    mpShuffle: '换一个',
+    mpCodeLabel: '房间号',
+    mpCodePlaceholder: '四位数字',
+    mpRoomCode: '房间号',
+    mpShareHint: '把这四位数字给朋友——最多四个人。',
+    mpPlayers: '玩家',
+    mpHostBadge: '房主',
+    mpPickMode: '选一个玩法',
+    mpStartBtn: '开始',
+    mpWaitingHost: '等房主选玩法。',
+    mpLeave: '离开房间',
+    mpNeedGenius: '开房间需要 Slides 天才；加入别人的房间不需要。',
+    mpSameBoard: '所有人拿到完全一样的棋盘。',
+    mpGo: '开始！',
+    mpStandings: '排名',
+    mpFinished: '已完成',
+    mpErrNoRoom: '没有这个房间号。',
+    mpErrFull: '房间满了——最多四个人。',
+    mpErrStarted: '这一局已经开始了。',
+    mpErrTooFew: '至少要两个人。',
+    mpErrNotOpen: '多人游玩尚未开放。',
     notOnSaleYet: '订阅尚未开放。',
     purchaseUnavailable: '这台设备暂时还无法完成购买。',
     purchaseCancelled: '已取消，没有扣款。',

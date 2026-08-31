@@ -34,6 +34,11 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
     // the score read as 18445. Callers keep the score whole; this makes the
     // reel unable to misdraw even if one ever doesn't.
     const safe = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+    // The reel draws digits as CSS transforms over ten-digit strips, so its
+    // text says nothing about the score. This is the readable copy, and the
+    // multiplayer scoreboard reads the local player's score from it — the
+    // settled number rather than whatever the animation is mid-way through.
+    reelEl.dataset.score = String(safe);
     const digits = String(safe).split('').reverse().map(Number);
     while (boxes.length < digits.length) {
       const box = makeDigitBox();

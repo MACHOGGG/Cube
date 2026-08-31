@@ -15,6 +15,10 @@ import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openGeniusWindow } from './ui/subscribe';
+import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
+import { mountScoreboard } from './ui/scoreboard';
+import { forgetRoom } from './engine/room';
+import { clearSeed, seedRandom } from './engine/rng';
 import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -63,6 +67,9 @@ const games: ShapeGame[] = [squareGame, circleGame, triangleGame];
 // have the red-hazard mechanic wired in.
 const bombLayoutGames: ShapeGame[] = [circleHexGame, squareDiamondGame, triangleBigGame];
 const layoutGames: ShapeGame[] = [...bombLayoutGames, circleSevenGame, triangleAdvancedGame];
+// Every board a multiplayer host can put in front of the room — the same
+// eight ids api/room.js will accept.
+const everyGame: ShapeGame[] = [...games, ...layoutGames];
 // Everything on the home page, bucketed by the three base shapes the design
 // is organised around — see HomeLayout in ui/menu.ts.
 const homeLayout: HomeLayout = {
@@ -218,7 +225,7 @@ function showAccountPage(tab: AuthTab) {
       onSwitchLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
       onHowToSlide: showTutorialPicker,
       onRandomTarget: () => showComingSoon(STRINGS[currentLang].randomTargetTitle),
-      onMultiplayer: () => showComingSoon(STRINGS[currentLang].multiplayerTitle),
+      onMultiplayer: showMultiplayer,
     },
     currentLang,
   );
@@ -226,6 +233,64 @@ function showAccountPage(tab: AuthTab) {
   wireHomeTitle();
   repaintIcons();
   toTop();
+}
+
+/**
+ * 多人游玩. The page owns its own polling, so what it hands back is the
+ * teardown, and that becomes this screen's destroy like any game's.
+ */
+function showMultiplayer() {
+  teardown();
+  trackScreen('multiplayer');
+  activeDestroy = renderMultiplayerPage(
+    root,
+    {
+      onBack: showMenu,
+      onMatchStart: startMultiplayerRun,
+      // Opening a room is the subscriber's; buying it lands back here.
+      onNeedGenius: () => openGeniusWindow(currentLang, showMultiplayer),
+    },
+    currentLang,
+  );
+  setNavTab(null);
+  wireHomeTitle();
+  repaintIcons();
+  toTop();
+}
+
+/**
+ * The countdown has run out. Seeding the shared generator *before* the board
+ * is built is the whole trick: the shape deals itself exactly the same cards
+ * as everyone else's copy, with no board sent and nothing to keep in sync.
+ *
+ * The tutorial gate is deliberately skipped. Three other people are counting
+ * down to this instant, and a lesson popping up in front of one of them
+ * would leave that player behind for a race they have already started.
+ */
+function startMultiplayerRun(match: MatchStart) {
+  const game = everyGame.find((g) => g.card.id === match.mode);
+  if (!game) return showMenu();
+  teardown();
+  trackScreen('multiplayer_run');
+  seedRandom(match.seed);
+  const back = () => {
+    forgetRoom();
+    showMenu();
+  };
+  const destroyGame = game.mount(root, back, { lang: currentLang });
+  // The countdown was the "get ready", and it ended for everyone at the same
+  // instant. Leaving the start card up would undo exactly that: four players
+  // would each press it a moment apart and the race would begin four times.
+  requestAnimationFrame(() => root.querySelector<HTMLButtonElement>('#startBtn')?.click());
+  const stopBoard = mountScoreboard(currentLang);
+  activeDestroy = () => {
+    stopBoard();
+    // Back to a different board every time, for whatever is played next.
+    clearSeed();
+    destroyGame();
+  };
+  gameInProgress = true;
+  repaintIcons();
 }
 
 function showRecordsPage() {

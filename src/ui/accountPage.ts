@@ -106,9 +106,11 @@ export function renderAccountPage(
           <span class="profile-row-label">${s.randomTargetTitle}</span>
           <span class="profile-row-value">${s.comingSoon}</span>
         </button>
+        <!-- 多人游玩 is built; it opens its own page rather than saying
+             「敬请期待」 like the perks below it still honestly do. -->
         <button class="profile-row" id="multiRow">
           <span class="profile-row-label">${s.multiplayerTitle}</span>
-          <span class="profile-row-value">${s.comingSoon}</span>
+          <span class="profile-row-value">&rsaquo;</span>
         </button>
         ${privileges.map(lockedRow).join('')}
       </section>
