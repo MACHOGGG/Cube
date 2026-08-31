@@ -369,8 +369,9 @@ export function createCircleSevenGame(): ShapeGame {
         // screen either way.
         const LONG = 12 * Math.sqrt(3) + 1.86; // 22.64 R
         const SHORT = 12 + 1.86; //               13.86 R
+        const availH = rect.height || 320;
+        refs.boardWrap.style.aspectRatio = 'auto';
         if (land) {
-          const availH = rect.height || 320;
           R = Math.min(width / LONG, availH / SHORT);
           rowH = R * Math.sqrt(3);
           const height = SHORT * R;
@@ -380,18 +381,16 @@ export function createCircleSevenGame(): ShapeGame {
           boardTop = height / 2;
           refs.boardEl.style.width = width + 'px';
           refs.boardEl.style.height = height + 'px';
-          refs.boardWrap.style.aspectRatio = 'auto';
           return;
         }
-        R = (width / 13.86) * 0.9;
+        R = Math.min(width / SHORT, availH / LONG);
         rowH = R * Math.sqrt(3);
-        const height = 12 * rowH + 2 * R;
+        const height = LONG * R;
         boardLeft = width / 2;
-        boardTop = R; // top point of the diamond sits one ball-radius from the edge
+        // The diamond's top point, with its ball-radius margin above it.
+        boardTop = (height - 12 * rowH) / 2;
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
-        refs.boardWrap.style.aspectRatio = 'auto';
-        refs.boardWrap.style.height = height + 'px';
       }
 
       function ballCenter(r: number, c: number): [number, number] {

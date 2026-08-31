@@ -135,16 +135,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <div class="legend" id="legend"></div>
       <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
 
-      <!-- Below the board on purpose: these are the once-a-run controls, and
-           keeping them out of the play area is what lets the board and the
-           HUD share one screen without scrolling. -->
-      <!-- 结束 sits last — bottom-right in portrait, bottom of the column in
-           landscape. It is the one irreversible button on the screen, so it
-           gets the corner furthest from where a thumb rests mid-drag. -->
+      <!-- Two controls, and only two: 完成 and 暂停. Anything a player
+           changes rather than does — the colourblind palette — lives in the
+           pause panel instead, so the play screen stays the board plus the
+           three readings plus the two things you can do to a run. -->
       <div class="controls">
-        <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
-        ${extraButtonsHtml}
         <button class="icon-btn" id="finishBtn">${s.finishBtn}</button>
+        <button class="icon-btn" id="stopBtn">${s.pauseBtn}</button>
       </div>
     </div>
 
@@ -164,6 +161,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <div class="modal">
         <h2>${s.pausedTitle}</h2>
         <p>${s.pausedBody}</p>
+        ${extraButtonsHtml ? `<div class="btn-row pause-extras">${extraButtonsHtml}</div>` : ''}
         <div class="btn-row"><button class="primary" id="continueBtn">${s.resume}</button></div>
       </div>
     </div>
@@ -202,6 +200,20 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
   const extra: Record<string, HTMLButtonElement> = {};
   for (const b of meta.extraControls ?? []) extra[b.id] = req<HTMLButtonElement>(b.id);
+
+  // The press flip on 完成/暂停 is driven from pointer events rather than
+  // :active — a finger that presses and then slides a little (which is most
+  // of them) drops :active on iOS while the button is still held, so the
+  // colour would snap back under a thumb that had not lifted.
+  for (const btn of Array.from(container.querySelectorAll<HTMLElement>('.controls .icon-btn'))) {
+    const down = () => btn.classList.add('chip--press');
+    const up = () => btn.classList.remove('chip--press');
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('pointerleave', up);
+    btn.addEventListener('blur', up);
+  }
 
   return {
     root: container,

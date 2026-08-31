@@ -24,6 +24,24 @@
   --warn-soft: #F1E1C6;
   --board-bg: #EFE6E2;
   --shadow: 0 1px 2px rgba(46,36,48,0.06), 0 8px 24px -12px rgba(46,36,48,0.16);
+  /* The play screen has its own scheme, the same in either theme: a board
+     under a finger should look the same at 9am and at midnight, and it is
+     the one screen with no reading on it. Every colour is taken from the
+     boards' own pigments — the panel is the tiles' green taken down to a
+     ground, the chips are their ochre warmed and greyed a shade, the press
+     colour their terracotta, the pattern marks their blue. */
+  --play-bg: #3A3145;
+  --play-panel: #19503D;
+  --play-chip: #D2952F;
+  /* Dark ink on the amber rather than the sheet's white: white on this
+     yellow is 2.4:1, which is below the floor for text of any size, and the
+     score is the one number a player looks at mid-drag. Reading it the
+     other way round keeps the chip its full brightness and makes the press
+     a true inversion — dark on bright becomes light on muted. */
+  --play-chip-ink: #3B2508;
+  --play-chip-press: #8E5138;
+  --play-chip-press-ink: #FFF1E4;
+  --play-mark: #4C7EAD;
   --score-glow: color-mix(in srgb, var(--accent) 65%, transparent);
   --score-wash: color-mix(in srgb, var(--accent) 26%, transparent);
 }
@@ -153,11 +171,14 @@ h1 {
   display: flex; flex-direction: column-reverse; align-items: center; gap: 4px;
   pointer-events: none;
 }
-.gain-pop-src { display: block; font-size: 9.5px; font-weight: 600; opacity: 0.85; letter-spacing: .02em; }
+.gain-pop-src { display: block; font-size: 11px; font-weight: 600; opacity: 0.85; letter-spacing: .02em; }
+/* Bigger than a HUD number rather than smaller than one: this is the thing
+   a player is actually playing for, and it only shows for a beat. */
 .gain-pop {
   background: var(--accent); color: #fff; font-family: 'JetBrains Mono', monospace;
-  font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 100px;
+  font-size: 17px; font-weight: 800; padding: 4px 13px; border-radius: 100px;
   white-space: nowrap; opacity: 0;
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.45);
   animation: gain-pop 1.4s cubic-bezier(.22,1,.36,1) both;
 }
 @keyframes gain-pop {
@@ -175,6 +196,10 @@ h1 {
     100% { opacity: 0; }
   }
 }
+
+/* The gain call-out sits over the score chip, which on the play screen is
+   the top-right one — it lifts out of the chip rather than out of the page. */
+.app--game .gain-badge { top: -6px; }
 
 /* A brief background flash on the score HUD cell itself, on every scoring
    event (independent of the gain popup), so the "score changed" feedback
@@ -1172,16 +1197,97 @@ html.lang-locked, html.lang-locked body {
    tighter than the rest of the app: smaller masthead, denser HUD, less air
    between blocks. (The pause/finish/palette/back row is below the board;
    see gameShell.) */
-.app--game { padding-top: 14px; gap: 9px; }
-.app--game h1 { font-size: 1.22rem; }
-.app--game .tag-line { font-size: 0.78rem; margin: -4px 0 0; }
-.app--game .hud-cell { padding: 6px 8px; }
-.app--game .hud-cell .k { font-size: 9.5px; margin-bottom: 1px; }
-.app--game .hud-cell .v { font-size: 1.08rem; }
-.app--game .pattern-hint { gap: 8px; margin-top: 0; }
-.app--game .pattern-icon svg { width: 26px; height: 26px; }
-.app--game .legend { gap: 6px; }
-.app--game .controls { margin-top: 4px; }
+/* ---------------------------------------------------------------------------
+   The play screen
+   ---------------------------------------------------------------------------
+   Upright: three readings across the top, the scoring patterns under them,
+   the board panel taking everything left over, 完成 and 暂停 along the
+   bottom. Sideways: the readings down the left, the buttons down the right,
+   the patterns in the strip above the board. Same DOM either way — only the
+   flow direction changes — so nothing re-renders when the phone turns.
+
+   It is the one screen that drops the masthead, the tagline and the colour
+   key: mid-run the only things worth the space are the board, what you have
+   scored, and the two things you can do about it. */
+.app--game {
+  background: var(--play-bg);
+  min-height: 100dvh;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  gap: clamp(8px, 1.6vh, 16px);
+}
+body:has(.app--game) { background: var(--play-bg); }
+.app--game > h1,
+.app--game > .tag-line,
+.app--game > .legend { display: none; }
+
+/* One chip: a readout or a control. They are the same object — same ground,
+   same corner, same weight of type — so the row across the top and the row
+   along the bottom read as one family with one thing separating them, which
+   is that you can press half of them. */
+.app--game .hud,
+.app--game .controls {
+  display: flex; gap: clamp(8px, 2.4vw, 18px);
+  background: none; border: none; border-radius: 0; margin: 0; padding: 0;
+  flex: none;
+}
+/* Time on the left, score on the right, reading toward the number that
+   matters most — the printed sheet's own order. */
+.app--game .hud { flex-direction: row-reverse; }
+.app--game .hud-cell,
+.app--game .controls .icon-btn {
+  flex: 1; min-width: 0;
+  height: clamp(50px, 8.2vh, 78px);
+  display: flex; align-items: center; justify-content: center; gap: 0;
+  background: var(--play-chip); color: var(--play-chip-ink);
+  border: none; border-radius: clamp(11px, 1.9vh, 17px); padding: 4px 8px;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600;
+  font-size: clamp(1.15rem, 3.6vh, 2rem); line-height: 1.1;
+  text-align: center; white-space: nowrap; overflow: hidden;
+}
+.app--game .controls .icon-btn { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* The pressed flip: ground to the same family's terracotta, type from the
+   chip's near-white to its near-black. Deliberately small — this is the
+   feel of a key going down, not a state change. */
+.app--game .hud-cell,
+.app--game .controls .icon-btn { transition: background-color 120ms ease, color 120ms ease; }
+.app--game .controls .icon-btn.chip--press,
+.app--game .controls .icon-btn:active,
+.app--game .hud-cell.score-flash {
+  background: var(--play-chip-press); color: var(--play-chip-press-ink);
+}
+.app--game .controls .icon-btn:hover { filter: none; }
+.app--game .hud-cell.score-flash { animation: none; transition: background-color 90ms ease, color 90ms ease; }
+/* The label is for a screen reader; on the sheet a chip is its number. */
+.app--game .hud-cell .k {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.app--game .hud-cell .v { font: inherit; color: inherit; font-variant-numeric: tabular-nums; }
+.app--game .perf-cell .k, .app--game .perf-cell .v { color: inherit; opacity: 1; }
+.app--game .score-cell { position: relative; overflow: visible; }
+
+/* The scoring patterns, drawn small in the tiles' own blue with the panel
+   showing between them. */
+.app--game .pattern-hint {
+  flex: none; margin: 0; gap: clamp(14px, 5vw, 40px); justify-content: center;
+  color: var(--play-mark); --mark-edge: #FFFFFF;
+}
+.app--game .pattern-icon { gap: 0; color: inherit; }
+/* One piece is 1em, so this is the only size the row needs. */
+.app--game .pattern-hint { font-size: clamp(12px, 2.3vh, 22px); }
+.app--game .pattern-icon svg { width: auto; height: auto; display: block; }
+
+/* The board's panel — the green field the pieces sit on — takes whatever is
+   left, and each board scales itself inside it. */
+.app--game .board-wrap {
+  flex: 1; min-height: 0; aspect-ratio: auto; height: auto;
+  background: var(--play-panel); border-radius: clamp(14px, 3vh, 26px);
+  /* No padding or border here on purpose: every board measures this box
+     with getBoundingClientRect() and lays itself out edge to edge inside
+     it, so anything added to the box would be counted as usable space and
+     then overflowed. The pieces bring their own margins. */
+}
+.app--game .board { background: none; box-shadow: none; }
 
 /* The yes/no gate in front of anything that would throw a run away. */
 .confirm-scrim {
@@ -1286,99 +1392,67 @@ html.lang-locked, html.lang-locked body {
    does not fit in a short viewport, and each board already sizes itself to
    min(width, height) of whatever box it is handed, so they all land whole. */
 @media (orientation: landscape) and (max-height: 560px) {
+  /* The same three parts, turned a quarter: readings down the left, board
+     in the middle, the two controls down the right. The patterns move into
+     the strip above the board, which is why the side columns start higher
+     than the panel does — they span both rows. */
   .app.app--game {
     max-width: none;
     width: 100vw;
     height: 100dvh;
-    padding: 8px clamp(8px, 2vw, 20px) calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: calc(8px + env(safe-area-inset-top, 0px)) clamp(10px, 2vw, 22px)
+             calc(10px + env(safe-area-inset-bottom, 0px));
     gap: clamp(8px, 1.6vw, 18px);
     display: grid;
-    grid-template-rows: 1fr;
+    grid-template-columns: minmax(66px, 8.4%) minmax(0, 1fr) minmax(66px, 8.4%);
+    grid-template-rows: auto minmax(0, 1fr);
     align-items: stretch;
-    /* Most boards are square-ish and limited by the row's height, so the
-       middle column is given exactly that and the two side columns split
-       everything left over — which is what fills the gutters instead of
-       leaving the board floating in a wide empty middle. */
-    grid-template-columns: 1fr minmax(0, calc(100dvh - 16px)) 1fr;
   }
-  /* The two boards that really are wider than they are tall want the width
-     instead, so their side columns take only what they need. */
-  .app.app--game.app--land-wide {
-    grid-template-columns: minmax(120px, 16%) 1fr minmax(120px, 16%);
+  .app.app--game > .pattern-hint {
+    grid-column: 2; grid-row: 1;
+    gap: clamp(18px, 6vw, 64px);
   }
-  /* The title, tagline, pattern hints and colour key are the parts a player
-     can do without while actually playing — they are all one tap away on the
-     start card and in 游戏规则. */
-  .app.app--game > h1,
-  .app.app--game > .tag-line,
-  .app.app--game > .pattern-hint,
-  .app.app--game > .legend { display: none; }
+  .app.app--game > .pattern-hint { font-size: clamp(11px, 3.4vh, 20px); }
 
-  /* The three readouts become one instrument panel standing the full height
-     of the column — the portrait strip turned on its side, hairline dividers
-     and all, rather than three cards floating in a tall empty gutter. */
   .app.app--game > .hud {
-    grid-column: 1; grid-row: 1;
-    display: flex; flex-direction: column; gap: 1px;
-    margin: 0; height: 100%;
-    /* The type below is sized against this column, not just the viewport:
-       the same 844x390 phone gives a normal board a 200px gutter and one of
-       the two wide boards only 130px, and a size that reads well in one
-       spills out of the other. */
+    grid-column: 1; grid-row: 1 / -1;
+    flex-direction: column; gap: clamp(8px, 2.6vh, 22px);
+    height: 100%;
+    /* The chips are sized against this column, not the viewport: the same
+       phone hands a normal board a wide gutter and a wide board a narrow
+       one, and a size that reads in the first spills out of the second. */
     container-type: inline-size;
   }
-  .app.app--game > .hud .hud-cell {
-    flex: 1; min-height: 0; padding: 4px clamp(6px, 1.2vw, 14px);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: clamp(2px, 0.8vh, 8px);
-    border-radius: 0;
+  /* 暂停 above, 完成 below — the sheet's own order, and the reverse of the
+     upright row, where 完成 sits on the left. */
+  .app.app--game > .controls {
+    grid-column: 3; grid-row: 1 / -1;
+    flex-direction: column-reverse; gap: clamp(8px, 2.6vh, 22px);
+    height: 100%;
+    container-type: inline-size;
   }
-  .app.app--game > .hud .hud-cell:first-child { border-radius: 11px 11px 0 0; }
-  .app.app--game > .hud .hud-cell:last-child { border-radius: 0 0 11px 11px; }
-  /* Bounded by the column's width *and* the row's height: whichever runs
-     out first is what a readout has to live inside. The floors are what
-     make even the narrowest gutter's type twice its old size — a label that
-     wraps onto two lines at 22px reads better than one line at 14px. */
-  .app.app--game > .hud .k {
-    font-size: clamp(1.4rem, min(13cqw, 5.6vh), 2.2rem);
-    letter-spacing: 0; line-height: 1.15; margin: 0;
+  /* Sideways the chips fill their column top to bottom rather than standing
+     at a fixed height — the gutter beside a board that is limited by the
+     row's height is otherwise mostly empty. */
+  .app.app--game > .hud .hud-cell,
+  .app.app--game > .controls .icon-btn {
+    flex: 1; height: auto; min-height: 0;
+    padding: 4px 4px;
+    white-space: normal;
   }
-  .app.app--game > .hud .v {
-    font-size: clamp(2.2rem, min(30cqw, 14vh), 5rem);
-    /* Fraunces' figures stand taller than a 1.0 line box, which the cell
-       then reports as overflow — a hair of leading keeps them inside it. */
-    line-height: 1.15;
-  }
+  /* A readout has to hold "0:00" on one line — there is nowhere in it to
+     break — so it is sized against the column it sits in. */
+  .app.app--game > .hud .hud-cell { font-size: min(30cqw, 6vh); }
+  /* A control is two characters and may take two lines, so it can run
+     bigger; at this size it wraps, which is how the sheet draws it. */
+  .app.app--game > .controls .icon-btn { font-size: min(56cqw, 7.5vh); line-height: 1.1; }
 
   .app.app--game > .board-wrap {
-    grid-column: 2; grid-row: 1;
-    /* Drop the square aspect: the row's height is the real constraint, and
-       every board reads min(width, height) off this box. */
-    aspect-ratio: auto; height: auto; min-height: 0; min-width: 0; margin: 0;
-    display: flex; align-items: center; justify-content: center;
-  }
-
-  .app.app--game > .controls {
-    grid-column: 3; grid-row: 1;
-    display: flex; flex-direction: column; gap: clamp(6px, 1.4vh, 14px);
-    margin: 0; height: 100%;
-    container-type: inline-size;
-  }
-  /* Full-height panels rather than pills: a 100px radius on a button this
-     tall turns it into an ellipse, which reads as a balloon sitting in the
-     gutter instead of a control filling it. The type inside is set at
-     roughly twice a phone's usual UI size — at arm's length, mid-slide, a
-     label you have to look for is a label you stop reading — and because
-     every panel here is `flex: 1` inside a grid column, growing the type
-     does not grow the panel. */
-  .app.app--game > .controls .icon-btn {
-    flex: 1; min-height: 0; width: 100%; padding: 4px clamp(6px, 1.2vw, 14px);
-    border-radius: clamp(14px, 3.4vh, 26px);
-    font-size: clamp(1.45rem, min(15cqw, 7vh), 2.6rem); line-height: 1.15;
-    display: flex; align-items: center; justify-content: center; text-align: center;
+    grid-column: 2; grid-row: 2;
+    min-width: 0; min-height: 0;
   }
   .app.app--game > .stuck-end-btn {
-    grid-column: 2; grid-row: 1; align-self: end; justify-self: center; margin: 0 0 4px;
+    grid-column: 2; grid-row: 2; align-self: end; justify-self: center; margin: 0 0 4px;
   }
 }
 

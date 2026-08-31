@@ -54,6 +54,39 @@ function faceClone(el: HTMLElement): HTMLElement {
 const key = (r: number, c: number) => `${r},${c}`;
 
 /**
+ * Takes the boards' own one-shot `.flip-in` squish off a tile the plank is
+ * about to turn.
+ *
+ * Every board applies that squish on the render right after a commit, which
+ * is correct when nothing else is animating the tile — but when the plank
+ * is coming, the player sees the squish play and *then* the plank turn, so
+ * the piece flips twice. plankFlipEl already cancels it, but only when that
+ * tile's own turn comes up in the stagger, which is up to a few hundred
+ * milliseconds later — long enough for the squish to have played out. So it
+ * is stripped from the whole group at once, before the first plank starts.
+ *
+ * The squish sometimes arrives as a class and sometimes as one component of
+ * an `animation` shorthand shared with the ongoing score pulse (see
+ * applyScoreAnimations), which is why this cannot simply clear the
+ * property: the pulse has to survive.
+ */
+function muteSquish(el: HTMLElement): void {
+  el.classList.remove('flip-in');
+  const anim = el.style.animation;
+  if (!anim.includes('flip-in')) return;
+  const delays = (el.style.animationDelay || '').split(',').map((d) => d.trim());
+  const keep: string[] = [];
+  const keepDelays: string[] = [];
+  anim.split(',').forEach((part, i) => {
+    if (part.trim().startsWith('flip-in')) return;
+    keep.push(part.trim());
+    keepDelays.push(delays[i] ?? '0s');
+  });
+  el.style.animation = keep.join(', ');
+  el.style.animationDelay = keepDelays.join(', ');
+}
+
+/**
  * Called just before a commit turns cells over, while their elements still
  * show the old face: snapshots each one for use as the plank's front.
  */
@@ -81,6 +114,12 @@ export function plankFlipCells(
   dirDeg: number,
 ): void {
   if (reducedMotion()) return;
+  // First, across the whole group: the plank owns this flip, so nothing
+  // else may animate the turn while these tiles wait their stagger.
+  for (const [r, c] of cells) {
+    const el = boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+    if (el) muteSquish(el);
+  }
   cells.forEach(([r, c], n) => {
     const el = boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
     const front = snaps.get(key(r, c));
@@ -100,7 +139,7 @@ export function plankFlipEl(el: HTMLElement, front: HTMLElement, dirDeg: number)
   if (!d) return;
   // The boards' own one-shot flip class (and any seat squash mid-flight)
   // would fight the plank for the same element — the plank owns this moment.
-  el.classList.remove('flip-in');
+  muteSquish(el);
   for (const a of el.getAnimations()) a.cancel();
   el.dataset.flipping = '1';
 

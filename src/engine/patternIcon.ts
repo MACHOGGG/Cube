@@ -56,18 +56,53 @@ function bbox(cells: IconCell[]) {
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
-const VIEW = 40;
-const MARGIN = 3;
+/**
+ * One piece is drawn this many viewBox units across, whatever board it
+ * belongs to and whatever the pattern's own extent is — and the <svg> is
+ * then sized in `em`, so a piece comes out the same size in every icon of
+ * the row and the whole row scales from one CSS font-size. Fitting each
+ * icon into a shared square box instead (the old behaviour) made a run of
+ * four draw its pieces at a quarter the size of a 2+2's, which read as two
+ * different games rather than two patterns of one.
+ */
+const MARK = 10;
+const PER_EM = 10;
+const MARGIN = 1.6;
+
+/** Half the size of the largest piece in the icon, in the pattern's own
+ *  units — the scale every icon of one shape shares. */
+function unitHalf(cells: IconCell[]): number {
+  let u = 0;
+  for (const c of cells) {
+    if (c.kind === 'circle') u = Math.max(u, c.r);
+    else if (c.kind === 'rect') u = Math.max(u, c.rotateDeg ? c.half * Math.SQRT2 : c.half);
+    else {
+      const xs = c.points.map((p) => p[0]);
+      const ys = c.points.map((p) => p[1]);
+      u = Math.max(u, (Math.max(...xs) - Math.min(...xs)) / 2, (Math.max(...ys) - Math.min(...ys)) / 2);
+    }
+  }
+  return u || 0.5;
+}
 
 function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: boolean): string {
   if (!cells.length) return '';
   const { minX, maxX, minY, maxY } = bbox(cells);
-  const w = maxX - minX || 1;
-  const h = maxY - minY || 1;
-  const scale = (VIEW - MARGIN * 2) / (extent ?? Math.max(w, h));
-  const offX = (VIEW - w * scale) / 2 - minX * scale;
-  const offY = (VIEW - h * scale) / 2 - minY * scale;
-  const T = (x: number, y: number): [number, number] => [x * scale + offX, y * scale + offY];
+  // `extent` still holds one shape's icons to a common span where a board
+  // wants it (the diamond's spread-out 1-2-1); the piece size below is the
+  // same either way.
+  const scale = MARK / (2 * unitHalf(cells));
+  const pad = MARGIN;
+  const w = (maxX - minX) * scale + pad * 2;
+  const h = (maxY - minY) * scale + pad * 2;
+  const extraX = extent ? Math.max(0, (extent * scale - (maxX - minX) * scale) / 2) : 0;
+  const extraY = extent ? Math.max(0, (extent * scale - (maxY - minY) * scale) / 2) : 0;
+  const W = w + extraX * 2;
+  const H = h + extraY * 2;
+  const T = (x: number, y: number): [number, number] => [
+    (x - minX) * scale + pad + extraX,
+    (y - minY) * scale + pad + extraY,
+  ];
   const shapes = cells
     .map((c) => {
       if (c.kind === 'circle') {
@@ -78,34 +113,40 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: bool
         const [cx, cy] = T(c.cx, c.cy);
         const h2 = c.half * scale;
         const rot = c.rotateDeg ? ` transform="rotate(${c.rotateDeg} ${cx.toFixed(1)} ${cy.toFixed(1)})"` : '';
-        return `<rect x="${(cx - h2).toFixed(1)}" y="${(cy - h2).toFixed(1)}" width="${(h2 * 2).toFixed(1)}" height="${(h2 * 2).toFixed(1)}"${rot}/>`;
+        return `<rect x="${(cx - h2).toFixed(1)}" y="${(cy - h2).toFixed(1)}" width="${(h2 * 2).toFixed(1)}" height="${(h2 * 2).toFixed(1)}" rx="${(h2 * 0.3).toFixed(1)}"${rot}/>`;
       }
       const pts = c.points.map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
       return `<polygon points="${pts}"/>`;
     })
     .join('');
+  const box = `viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}" width="${(W / PER_EM).toFixed(3)}em" height="${(H / PER_EM).toFixed(3)}em"`;
   if (!hatched) {
-    return `<svg viewBox="0 0 ${VIEW} ${VIEW}" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round">${shapes}</svg>`;
+    // Filled pieces with a light rule around each, not hollow outlines: on
+    // the play screen this row sits on a dark ground where an outline
+    // drawing all but disappears, and a filled mark reads at a glance as
+    // "four of these, like so".
+    return `<svg ${box} fill="currentColor" stroke="var(--mark-edge, #fff)" stroke-width="2" stroke-linejoin="round">${shapes}</svg>`;
   }
   const id = `pat-hatch-${hatchSeq++}`;
-  // Sized in viewBox units against a 26-30px render, so the strokes have
-  // to be generous or they vanish at icon size.
   const defs =
     `<defs><pattern id="${id}" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
     `<line x1="0" y1="0" x2="0" y2="3.2" stroke="currentColor" stroke-width="1.5" opacity="0.8"/>` +
     `</pattern></defs>`;
-  return (
-    `<svg viewBox="0 0 ${VIEW} ${VIEW}" width="30" height="30" fill="url(#${id})" stroke="currentColor" ` +
-    `stroke-width="2.2" stroke-linejoin="round">${defs}${shapes}</svg>`
-  );
+  return `<svg ${box} fill="url(#${id})" stroke="var(--mark-edge, #fff)" stroke-width="2" stroke-linejoin="round">${defs}${shapes}</svg>`;
 }
 
-/** Renders the full hint row: one small outline icon + label per pattern, for the given shape's own set of scoring patterns. */
+/**
+ * The scoring-pattern row: one small diagram per pattern, for this shape's
+ * own set. The name goes on the icon as its accessible label rather than
+ * under it in print — the row sits in the play screen's top margin, where a
+ * line of type would compete with the readouts either side of it, and the
+ * diagrams say what they are without being named.
+ */
 export function renderPatternHintRow(patterns: PatternDef[], lang: Lang): string {
   return patterns
     .map((p) => {
       const label = p.labelKey ? (STRINGS[lang][p.labelKey] as string) : p.label;
-      return `<span class="pattern-icon">${renderPatternIconSvg(p.cells, p.extent, p.hatched)}<span class="pattern-icon-label">${label}</span></span>`;
+      return `<span class="pattern-icon" role="img" aria-label="${label}">${renderPatternIconSvg(p.cells, p.extent, p.hatched)}</span>`;
     })
     .join('');
 }

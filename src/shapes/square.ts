@@ -53,21 +53,21 @@ const GLYPH = `<svg viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12"
 // straight run of 4 — drawn as blank outlines for the in-HUD pattern hint.
 const PATTERNS: PatternDef[] = [
   {
-    label: '2×2',
-    cells: [
-      { kind: 'rect', cx: 0, cy: 0, half: 0.42 },
-      { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
-      { kind: 'rect', cx: 0, cy: 1, half: 0.42 },
-      { kind: 'rect', cx: 1, cy: 1, half: 0.42 },
-    ],
-  },
-  {
     label: '1×4',
     cells: [
       { kind: 'rect', cx: 0, cy: 0, half: 0.42 },
       { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
       { kind: 'rect', cx: 2, cy: 0, half: 0.42 },
       { kind: 'rect', cx: 3, cy: 0, half: 0.42 },
+    ],
+  },
+  {
+    label: '2×2',
+    cells: [
+      { kind: 'rect', cx: 0, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
+      { kind: 'rect', cx: 0, cy: 1, half: 0.42 },
+      { kind: 'rect', cx: 1, cy: 1, half: 0.42 },
     ],
   },
 ];

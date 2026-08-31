@@ -417,30 +417,14 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return { minX, maxX, w: maxX - minX };
       })();
 
-      /** True when the shell has switched this screen to its landscape grid
-       *  (see ".app--land-capable" in style.css) — there the board sits in a
-       *  row of fixed height and has to fit that as well as the width. */
-      function landscapeNow(): boolean {
-        try {
-          return window.matchMedia('(orientation: landscape) and (max-height: 560px)').matches;
-        } catch {
-          return false;
-        }
-      }
-
       function layoutBoard() {
-        const land = landscapeNow();
-        // In landscape the grid row owns the wrapper's height; drop any
-        // inline height from a previous portrait layout so the measurement
-        // below reads the row, not our own last answer.
-        if (land) refs.boardWrap.style.height = '';
         const rect = refs.boardWrap.getBoundingClientRect();
         const width = rect.width || 320;
         const byWidth = width / (UNIT_EXTENT.w + 0.3);
-        // Sideways there is a hard ceiling — the row the board sits in — so
-        // the smaller of the two constraints wins and the whole V is on
-        // screen either way.
-        const byHeight = land ? (rect.height || 320) / (ROW_LENS.length * (Math.sqrt(3) / 2)) : Infinity;
+        // The panel is a hard ceiling in both orientations now, so the
+        // smaller of the two constraints wins and the whole V is on screen
+        // either way.
+        const byHeight = (rect.height || 320) / (ROW_LENS.length * (Math.sqrt(3) / 2));
         S = Math.min(byWidth, byHeight);
         H = (S * Math.sqrt(3)) / 2;
         const height = ROW_LENS.length * H;
@@ -448,11 +432,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         originY = 0;
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
-        // The shared wrapper is square by default, which would leave this
-        // short, wide board floating in a tall empty box — it takes exactly
-        // the height the V needs instead.
         refs.boardWrap.style.aspectRatio = 'auto';
-        if (!land) refs.boardWrap.style.height = height + 'px';
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {
