@@ -130,6 +130,14 @@ export interface I18nStrings {
   bindHint: string;
   bindTaken: string;
   redeemCodePlaceholder: string;
+  /** 兑换码本身过了使用期限。 */
+  codeExpired: string;
+  /** 短时间内试得太多——防止有人枚举兑换码。 */
+  tooManyTries: string;
+  /** 还在订阅期内，这张码留着更值。 */
+  alreadyActive: string;
+  /** 个人主页上的兑换码入口。 */
+  insiderCode: string;
   /** 已订阅但从没设过密码的人，在登录时看到的指引。 */
   needsPwHint: string;
   redeemBadCode: string;
@@ -378,6 +386,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindHint: 'Your code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
     bindTaken: 'That address already has an account. Use another one, or write to us.',
     redeemCodePlaceholder: 'e.g. K7M2QD',
+    codeExpired: 'That code has passed its use-by date.',
+    tooManyTries: 'Too many tries from here. Try again later.',
+    alreadyActive: 'Your subscription is still running. Keep this code for later, or pass it on — it is only spent once.',
+    insiderCode: 'Slides Genius insider code',
     needsPwHint: 'This subscription has no password yet. Open it from the device you paid on to set one.',
     redeemBadCode: 'That code is not valid, or it has already been used.',
     pwWrong: 'That passcode is not right.',
@@ -605,6 +617,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindHint: 'Votre code est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
     bindTaken: 'Cette adresse a déjà un compte. Utilisez-en une autre, ou écrivez-nous.',
     redeemCodePlaceholder: 'ex. K7M2QD',
+    codeExpired: 'Ce code a dépassé sa date limite.',
+    tooManyTries: 'Trop de tentatives depuis cet appareil. Réessayez plus tard.',
+    alreadyActive: 'Votre abonnement court toujours. Gardez ce code pour plus tard, ou offrez-le — il ne sert qu’une fois.',
+    insiderCode: 'Code Slides Génie',
     needsPwHint: 'Cet abonnement n’a pas encore de mot de passe. Ouvrez-le depuis l’appareil du paiement pour en définir un.',
     redeemBadCode: 'Ce code n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
@@ -832,6 +848,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindHint: '兌換碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
     bindTaken: '這個信箱已經有帳號了。換一個，或者寫信給我們。',
     redeemCodePlaceholder: '例如 K7M2QD',
+    codeExpired: '這個兌換碼已經過了使用期限。',
+    tooManyTries: '這裡試得太多了，請稍後再試。',
+    alreadyActive: '你的訂閱還在有效期內。這張碼留著以後用，或者送人——它只能用一次。',
+    insiderCode: 'Slides 天才內部碼',
     needsPwHint: '這個訂閱還沒設密碼。請在付款的那台裝置上打開，設一組。',
     redeemBadCode: '這個兌換碼無效，或已經被使用過了。',
     pwWrong: '密碼不對。',
@@ -1059,6 +1079,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindHint: '兑换码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
     bindTaken: '这个邮箱已经有账号了。换一个，或者写信给我们。',
     redeemCodePlaceholder: '例如 K7M2QD',
+    codeExpired: '这个兑换码已经过了使用期限。',
+    tooManyTries: '这里试得太多了，请稍后再试。',
+    alreadyActive: '你的订阅还在有效期内。这张码留着以后用，或者送人——它只能用一次。',
+    insiderCode: 'Slides 天才内部码',
     needsPwHint: '这个订阅还没设密码。请在付款的那台设备上打开，设一组。',
     redeemBadCode: '这个兑换码无效，或者已经被用过了。',
     pwWrong: '密码不对。',

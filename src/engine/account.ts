@@ -27,6 +27,12 @@ export type AccountFailure =
   /** The verification code was wrong, or has expired. */
   | 'wrongCode'
   | 'expired'
+  /** The code was real but its use-by window has passed. */
+  | 'codeExpired'
+  /** Too many tries from here for now — the guard against guessing codes. */
+  | 'tooMany'
+  /** Already subscribed: the code is worth more kept than spent today. */
+  | 'active'
   /** Codes and accounts are not switched on for this deployment yet. */
   | 'notConfigured'
   /** Nowhere to send the unlock mail from — the app points at support. */
@@ -34,7 +40,10 @@ export type AccountFailure =
   | 'network';
 
 export type AccountResult =
-  | { ok: true; entitlement: Entitlement }
+  /** `code` comes back from a redemption that is still held by the code —
+   *  absent when the server attached it straight onto a signed-in account,
+   *  which is exactly how the caller tells those two apart. */
+  | { ok: true; entitlement: Entitlement; code?: string }
   | { ok: false; reason: AccountFailure; retryInMs?: number };
 
 interface Reply {
@@ -63,6 +72,7 @@ function toResult(status: number, reply: Reply): AccountResult {
   if (status === 200 && reply.active) {
     return {
       ok: true,
+      ...(reply.code ? { code: reply.code } : {}),
       entitlement: {
         active: true,
         period: reply.period,
@@ -75,8 +85,11 @@ function toResult(status: number, reply: Reply): AccountResult {
   }
   const known: AccountFailure[] = [
     'wrong', 'locked', 'blocked', 'code', 'email', 'password',
-    'wrongCode', 'expired', 'notConfigured', 'noMail',
+    'wrongCode', 'expired', 'notConfigured', 'noMail', 'tooMany',
   ];
+  // The server calls it 'expired' on its own endpoint; here it has to be
+  // told apart from the unlock mail's expiry, which shares the word.
+  if (status === 410) return { ok: false, reason: 'codeExpired' };
   const reason = known.find((k) => k === reply.error) ?? 'network';
   return { ok: false, reason, retryInMs: reply.retryInMs };
 }
@@ -97,9 +110,15 @@ const guard = async (run: () => Promise<AccountResult>): Promise<AccountResult> 
  * The reply carries the code and the token that claim what it granted, so the
  * caller can remember them until an address is attached.
  */
-export function redeemCode(code: string): Promise<AccountResult> {
+export function redeemCode(
+  code: string,
+  email?: string,
+  token?: string,
+): Promise<AccountResult> {
   return guard(async () => {
-    const { status, reply } = await post('/api/redeem', { code });
+    // Signed in on this device: the month goes straight onto that account
+    // rather than being held under the code and asked about afterwards.
+    const { status, reply } = await post('/api/redeem', { code, email, token });
     return toResult(status, reply);
   });
 }

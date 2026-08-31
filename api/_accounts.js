@@ -171,11 +171,28 @@ export function rotateToken(account) {
   return account.token;
 }
 
-/** How long a redeemed code is worth. */
+/** How long a redeemed code is worth. 'life' is handled separately below. */
 export const PLAN_MS = {
   month: 31 * 24 * 3600e3,
+  half: 184 * 24 * 3600e3,
   year: 366 * 24 * 3600e3,
 };
+
+/** The four tiers a code can carry, in the order they are worth. */
+export const PLANS = ['month', 'half', 'year', 'life'];
+export const isPlan = (plan) => PLANS.includes(plan);
+
+/**
+ * "Forever", as a date.
+ *
+ * Everything downstream — isGenius on the device, entitlementOf here — asks
+ * the same question of every entitlement: has `until` passed yet. Giving
+ * lifetime a date a thousand years out lets it answer that question the same
+ * way as every other tier, instead of every one of those places growing a
+ * second branch it would eventually get wrong.
+ */
+export const LIFETIME_UNTIL = Date.UTC(2999, 0, 1);
+export const isLifetime = (account) => (account?.until || 0) >= LIFETIME_UNTIL;
 
 /**
  * Adds a plan to whatever the account already has. Redeeming a second code
@@ -183,6 +200,13 @@ export const PLAN_MS = {
  * paid for is thrown away by using a gift code early.
  */
 export function extend(account, plan) {
+  // Adding time to forever is not an error, it is simply nothing.
+  if (isLifetime(account)) return account.until;
+  if (plan === 'life') {
+    account.until = LIFETIME_UNTIL;
+    account.plan = 'life';
+    return account.until;
+  }
   const from = Math.max(Date.now(), account.until || 0);
   account.until = from + (PLAN_MS[plan] ?? PLAN_MS.month);
   account.plan = plan;
@@ -192,7 +216,10 @@ export function extend(account, plan) {
 /** What the browser is told. Never the hash, the salt or the attempt count. */
 export const entitlementOf = (account, email) => ({
   active: (account.until || 0) > Date.now(),
-  period: account.plan === 'year' ? 'yearly' : 'monthly',
+  // The app only draws two words, and `until` carries the real answer — a
+  // half-year and a lifetime both read as the longer of the two.
+  period: account.plan === 'month' ? 'monthly' : 'yearly',
+  plan: account.plan,
   until: account.until || undefined,
   email,
   token: account.token,

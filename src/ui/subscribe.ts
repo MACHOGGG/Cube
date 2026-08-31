@@ -108,6 +108,12 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
       return s.unlockExpired;
     case 'noMail':
       return s.unlockNoMail.replace('{email}', CONTACT_EMAIL);
+    case 'codeExpired':
+      return s.codeExpired;
+    case 'tooMany':
+      return s.tooManyTries;
+    case 'active':
+      return s.alreadyActive;
     case 'notConfigured':
       return s.notOnSaleYet;
     default:
@@ -635,9 +641,15 @@ export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
   const submit = async () => {
     const ticket = code.value.trim();
     if (!ticket) return void (msg.textContent = s.redeemBadCode);
+    // Spending a code on top of a subscription that is still running throws
+    // most of it away. The check is here rather than on the server because
+    // this is where the answer is known, and because the only person a
+    // bypass costs is the one who burned their own gift early.
+    if (isGenius()) return void (msg.textContent = s.alreadyActive);
     go.disabled = true;
     msg.textContent = s.workingLabel;
-    const result = await redeemCode(ticket);
+    const held = entitlement();
+    const result = await redeemCode(ticket, signedInEmail() ?? undefined, held.token);
     go.disabled = false;
     if (!result.ok) {
       msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
@@ -648,7 +660,9 @@ export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
     // window or a reload — otherwise one dismissal would strand a gift in
     // this browser forever.
     setEntitlement(result.entitlement);
-    if (result.entitlement.token) {
+    // The server attached it to a signed-in account, so there is nobody left
+    // to ask about: `code` comes back only when it is still held by the code.
+    if (result.entitlement.token && result.code) {
       rememberPending({
         kind: 'code',
         code: ticket.toUpperCase().replace(/[^0-9A-Z]/g, ''),

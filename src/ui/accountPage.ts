@@ -12,6 +12,7 @@ import { isGenius } from '../engine/subscription';
 import {
   openAuthWindow,
   openGeniusWindow,
+  openRedeemWindow,
   openStatusWindow,
   runStoreRestore,
 } from './subscribe';
@@ -102,6 +103,13 @@ export function renderAccountPage(
         <button class="genius-cta" id="becomeGeniusBtn">${
           subscribed ? s.subscribedTitle : s.becomeGenius
         }</button>
+        <!-- A code is its own way in, not a footnote to the paywall: it was
+             buried behind 「有兑换码？」 inside the subscribe window, which is
+             the one place someone holding a code has no reason to open. -->
+        <button class="profile-row" id="insiderRow">
+          <span class="profile-row-label">${s.insiderCode}</span>
+          <span class="profile-row-value">›</span>
+        </button>
         <button class="profile-row" id="randomRow">
           <span class="profile-row-label">${s.randomTargetTitle}</span>
           <span class="profile-row-value">${s.comingSoon}</span>
@@ -274,6 +282,7 @@ export function renderAccountPage(
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);
   on('becomeGeniusBtn', () => openGeniusWindow(lang, refresh));
+  on('insiderRow', () => openRedeemWindow(lang, refresh));
   for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {
     btn.addEventListener('click', () => openLegal(btn.dataset.legal as LegalKey));
   }

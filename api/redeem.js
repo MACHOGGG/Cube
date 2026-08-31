@@ -1,5 +1,15 @@
 import { send, readBody } from './_creem.js';
-import { codeHolder, entitlementOf, extend, newAccount, saveAccount } from './_accounts.js';
+import {
+  EMAIL_RE,
+  codeHolder,
+  entitlementOf,
+  extend,
+  loadAccount,
+  newAccount,
+  normalizeEmail,
+  saveAccount,
+} from './_accounts.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import { set, storeConfigured, takeOnce } from './_store.js';
 
 /** Uppercase, and dashes or spaces the player typed are not part of it. */
@@ -8,41 +18,72 @@ const normalizeCode = (code) => String(code || '').toUpperCase().replace(/[^0-9A
 /**
  * Spending a code. One field, and it is the code.
  *
- * A code is a thing that unlocks, and it should unlock the moment it is
- * typed. It used to ask for an address and a passcode in the same window,
- * which turned a gift into a registration form and buried the one field that
- * mattered among two that did not. Attaching an address is worth doing — it
- * is what carries the month onto a new phone — but it is a separate question,
- * asked separately, right after this one succeeds.
+ * Where the month lands depends on what the browser already has:
  *
- * Until it is asked, the entitlement lives under the code itself, and the
- * token returned here is what proves the holder is the one who redeemed it.
- * Guessing a code buys nothing: it is deleted the moment it is spent, and
- * attaching an address to what it became needs this token too.
+ *   signed in       — it is added to that account, so it is waiting on every
+ *                     device the moment they next sign in there.
+ *   not signed in   — it is held under the code itself, and the app asks for
+ *                     an address next. Declining is allowed: the entitlement
+ *                     works on this device either way, and the question comes
+ *                     back until it is answered.
  *
- * GETDEL reads and deletes in one step, so two people racing to redeem the
- * same code cannot both win, however close together they press the button.
+ * A player who is *currently* subscribed is told to keep the code rather than
+ * spend it — that check is on the device, where the answer is known, and it
+ * is a courtesy rather than a defence: the only person a bypass costs is the
+ * one who burned their own gift early.
+ *
+ * GETDEL takes the code in one step, so two people racing for the same code
+ * cannot both win. An expired code is taken too and then refused: it was
+ * never going to be worth anything again, and saying "expired" rather than
+ * "no such code" is the difference between an answerable support question
+ * and an argument.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
-  const ticket = normalizeCode(readBody(req).code);
-  if (ticket.length < 6) return send(res, 400, { error: 'code' });
+  // Twenty tries an hour. A person typing a code off a card needs two or
+  // three; a script walking the keyspace needs rather more than twenty.
+  if (await tooMany('redeem', callerId(req), 20, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+
+  const { code, email, token } = readBody(req);
+  const ticket = normalizeCode(code);
+  if (ticket.length < 3) return send(res, 400, { error: 'code' });
+
+  // An address and a token that check out mean the month goes to that
+  // account. Anything short of that is treated as not signed in at all,
+  // never as a reason to refuse — the code is still theirs to spend.
+  const address = normalizeEmail(email);
+  let account = null;
+  if (EMAIL_RE.test(address) && token) {
+    const found = await loadAccount(address);
+    if (found && found.token && String(token) === found.token) account = found;
+  }
 
   const ticketDoc = await takeOnce('code:' + ticket);
   if (!ticketDoc) return send(res, 404, { error: 'code' });
+  if (ticketDoc.expiresAt && Date.now() > ticketDoc.expiresAt) {
+    return send(res, 410, { error: 'expired' });
+  }
 
-  // No password yet — there is nobody to check one against. The account is
-  // created unlocked, keyed by the code, and the token below is the only
-  // thing that can claim it.
+  const plan = ticketDoc.plan;
+  if (account) {
+    extend(account, plan);
+    await saveAccount(address, account);
+    await set('codeused:' + ticket, { at: Date.now(), plan, email: address });
+    return send(res, 200, { ...entitlementOf(account, address), kind: 'code' });
+  }
+
+  // Nobody to attach it to yet. It lives under the code, and the token below
+  // is the only thing that can claim what it became.
   const holder = codeHolder(ticket);
-  const account = newAccount('', 'code');
-  extend(account, ticketDoc.plan === 'year' ? 'year' : 'month');
-  account.unbound = true;
-  await saveAccount(holder, account);
-  // Kept only so a support question about a code has an answer.
-  await set('codeused:' + ticket, { at: Date.now(), plan: ticketDoc.plan });
+  const fresh = newAccount('', 'code');
+  extend(fresh, plan);
+  fresh.unbound = true;
+  await saveAccount(holder, fresh);
+  await set('codeused:' + ticket, { at: Date.now(), plan });
 
-  return send(res, 200, { ...entitlementOf(account, ''), kind: 'code', code: ticket });
+  return send(res, 200, { ...entitlementOf(fresh, ''), kind: 'code', code: ticket });
 }
