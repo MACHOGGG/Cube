@@ -55,9 +55,17 @@
   .msg { margin-top:12px; font-size:0.9rem; min-height:1.3em; }
   .msg.bad { color: var(--accent); }
   .msg.good { color: var(--ok); }
-  .codes { font-family: var(--mono); font-size: 1.02rem; letter-spacing:.06em;
-           white-space:pre-wrap; word-break:break-all; background:var(--bg);
-           border:1px solid var(--line); border-radius:11px; padding:14px; margin-top:14px; }
+  .codes { background:var(--bg); border:1px solid var(--line); border-radius:11px;
+           margin-top:14px; overflow:hidden; }
+  .code-row { display:flex; align-items:center; gap:10px; padding:9px 10px 9px 14px; }
+  .code-row + .code-row { border-top:1px solid var(--line); }
+  .code-text { flex:1; font-family: var(--mono); font-size:1.05rem; letter-spacing:.09em;
+               user-select:all; }
+  .mini { flex:none; padding:6px 12px; border:1px solid var(--line); border-radius:9px;
+          background:var(--card); color:var(--soft); font:inherit; font-size:0.82rem;
+          cursor:pointer; min-width:64px; }
+  .mini:hover { color:var(--ink); border-color:var(--soft); }
+  .mini.done { color:var(--ok); border-color:var(--ok); }
   .copy { margin-top:10px; padding:10px 14px; border:1px solid var(--line); border-radius:11px;
           background:transparent; color:var(--ink); font:inherit; cursor:pointer; }
   .warn { border-color: var(--accent); }
@@ -157,7 +165,7 @@
       $('go').disabled = false;
       if (!res.ok) return say(ERRORS[reply.error] || ('出错了：HTTP ' + res.status), 'bad');
 
-      $('codes').textContent = reply.codes.join('\n');
+      renderCodes(reply.codes);
       const until = reply.expiresAt
         ? '，' + new Date(reply.expiresAt).toLocaleString() + ' 前有效'
         : '，永不过期';
@@ -170,22 +178,53 @@
     }
   });
 
-  $('copy').addEventListener('click', async () => {
-    const text = $('codes').textContent;
+  /**
+   * Copying, and what to do when the browser will not.
+   *
+   * The clipboard API refuses on an insecure origin and in a few browsers
+   * that want a real selection first. Selecting the text is not the same as
+   * copying it, but it is one keystroke away and it is honest — far better
+   * than a button that says 已复制 over an empty clipboard.
+   */
+  async function copyText(text, node, btn, restore) {
     try {
       await navigator.clipboard.writeText(text);
-      $('copy').textContent = '已复制';
+      btn.textContent = '已复制';
     } catch {
-      // Clipboard refused (an insecure origin, or a browser that wants a
-      // selection instead). Selecting it is still a copy the player can make.
       const r = document.createRange();
-      r.selectNodeContents($('codes'));
+      r.selectNodeContents(node);
       getSelection().removeAllRanges();
       getSelection().addRange(r);
-      $('copy').textContent = '已选中，请按复制键';
+      btn.textContent = '已选中';
     }
-    setTimeout(() => ($('copy').textContent = '复制全部'), 2200);
-  });
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = restore; btn.classList.remove('done'); }, 2200);
+  }
+
+  // One row per code, each with its own button: handing out four codes to
+  // four people means copying them one at a time, and picking a single line
+  // out of a block by hand is exactly where a character goes missing.
+  let lastCodes = [];
+  function renderCodes(codes) {
+    lastCodes = codes;
+    $('codes').replaceChildren(...codes.map((code) => {
+      const row = document.createElement('div');
+      row.className = 'code-row';
+      const text = document.createElement('span');
+      text.className = 'code-text';
+      text.textContent = code;
+      const btn = document.createElement('button');
+      btn.className = 'mini';
+      btn.textContent = '复制';
+      btn.addEventListener('click', () => copyText(code, text, btn, '复制'));
+      row.append(text, btn);
+      return row;
+    }));
+  }
+
+  $('copy').addEventListener('click', () =>
+    copyText(lastCodes.join('\n'), $('codes'), $('copy'), '复制全部'),
+  );
 })();
 </script>
 </body>
