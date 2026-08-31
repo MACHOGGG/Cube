@@ -1,4 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
+import { colorblindOn, setColorblind } from '../engine/palettePref';
 
 export interface ExtraControl {
   id: string;
@@ -161,6 +162,15 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <div class="modal">
         <h2>${s.pausedTitle}</h2>
         <p>${s.pausedBody}</p>
+        <!-- Reachable from a run as well as from 个人主页: someone who needs
+             the colourblind palette should not have to leave the board to
+             turn it on. Same setting, same switch, either way in. -->
+        <div class="btn-row">
+          <button class="icon-btn pause-switch" id="cvdBtn" role="switch" aria-checked="false">
+            <span>${s.colorblindBtn}</span>
+            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+          </button>
+        </div>
         ${extraButtonsHtml ? `<div class="btn-row pause-extras">${extraButtonsHtml}</div>` : ''}
         <div class="btn-row"><button class="primary" id="continueBtn">${s.resume}</button></div>
       </div>
@@ -200,6 +210,60 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
   const extra: Record<string, HTMLButtonElement> = {};
   for (const b of meta.extraControls ?? []) extra[b.id] = req<HTMLButtonElement>(b.id);
+
+  /**
+   * Shrinks a chip's type until its content fits.
+   *
+   * The chips are a fixed size, and what goes in them is not: 用时 is
+   * "Temps" in French and "0:00" either way, 色盲友好配色 is
+   * "Couleurs daltoniennes", and a score that reaches four digits is wider
+   * than one that reaches two. A clamp() alone cannot know any of that — it
+   * only knows the viewport — so anything that would spill gets stepped
+   * down from whatever the stylesheet asked for until it doesn't.
+   */
+  const chips = () =>
+    Array.from(container.querySelectorAll<HTMLElement>('.app--game .hud-cell, .app--game .controls .icon-btn'));
+  const fitsIn = (el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+  let fitQueued = 0;
+  function fitChips(): void {
+    for (const el of chips()) {
+      el.style.fontSize = '';
+      const max = parseFloat(getComputedStyle(el).fontSize) || 16;
+      if (fitsIn(el)) continue;
+      // Binary search rather than a step-down loop: eight layout reads is
+      // the whole cost, however far the type has to come down.
+      let lo = 7;
+      let hi = max;
+      for (let i = 0; i < 8; i++) {
+        const mid = (lo + hi) / 2;
+        el.style.fontSize = mid.toFixed(2) + 'px';
+        if (fitsIn(el)) lo = mid;
+        else hi = mid;
+      }
+      el.style.fontSize = lo.toFixed(2) + 'px';
+    }
+  }
+  const scheduleFit = () => {
+    if (fitQueued) return;
+    fitQueued = requestAnimationFrame(() => {
+      fitQueued = 0;
+      fitChips();
+    });
+  };
+  scheduleFit();
+  // The readouts change under their own steam — the clock every second, the
+  // score whenever it goes up — so the fit follows the content, not just the
+  // window.
+  const hudEl = container.querySelector<HTMLElement>('.app--game .hud');
+  if (hudEl) new MutationObserver(scheduleFit).observe(hudEl, { subtree: true, childList: true, characterData: true });
+  for (const ev of ['resize', 'orientationchange']) window.addEventListener(ev, scheduleFit);
+
+  const cvdBtn = container.querySelector<HTMLButtonElement>('#cvdBtn');
+  cvdBtn?.setAttribute('aria-checked', String(colorblindOn()));
+  cvdBtn?.addEventListener('click', () => {
+    setColorblind(!colorblindOn());
+    cvdBtn.setAttribute('aria-checked', String(colorblindOn()));
+  });
 
   // The press flip on 完成/暂停 is driven from pointer events rather than
   // :active — a finger that presses and then slides a little (which is most

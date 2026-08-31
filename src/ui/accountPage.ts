@@ -2,6 +2,7 @@ import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { trackIconChange } from '../engine/analytics';
+import { colorblindOn, setColorblind } from '../engine/palettePref';
 
 export type AuthTab = 'register' | 'login';
 
@@ -57,6 +58,14 @@ export function renderAccountPage(
       </div>
       <button class="profile-pill profile-pill--wide" id="rulesRow">${s.rulesPill}</button>
       <button class="profile-pill profile-pill--wide" id="iconRow">${s.iconPill}</button>
+      <!-- The colourblind palette: one setting for the whole app, with a
+           switch that says on/off by its own colour and position rather
+           than by a word — it has to read the same in four languages. -->
+      <button class="profile-pill profile-pill--wide profile-pill--switch" id="cvdRow"
+              role="switch" aria-checked="${colorblindOn()}">
+        <span>${s.colorblindBtn}</span>
+        <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+      </button>
 
       <section class="genius-panel">
         <div class="menu-section-label">${s.geniusSpecialTitle}</div>
@@ -206,6 +215,11 @@ export function renderAccountPage(
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
   on('iconRow', openIconPicker);
+  on('cvdRow', () => {
+    setColorblind(!colorblindOn());
+    const row = container.querySelector<HTMLButtonElement>('#cvdRow');
+    row?.setAttribute('aria-checked', String(colorblindOn()));
+  });
   on('howToRow', handlers.onHowToSlide);
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);

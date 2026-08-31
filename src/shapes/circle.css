@@ -1,4 +1,7 @@
 .ball {
   position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+  /* The same white edge the scoring-pattern marks wear: on the play
+     screen's dark panel a piece needs its own rule to sit inside, or the
+     colours run together where two of a kind touch. */
+  box-shadow: inset 0 0 0 2px #FFFFFF, inset 0 0 0 3px rgba(0, 0, 0, 0.10);
 }

@@ -42,6 +42,20 @@
   --play-chip-press: #8E5138;
   --play-chip-press-ink: #FFF1E4;
   --play-mark: #4C7EAD;
+}
+/* With the colourblind palette on, the play screen's own surfaces step out
+   of the way of it: the pieces become the Okabe–Ito set, whose hues are
+   chosen to stay apart under every kind of colour vision, so the ground
+   they sit on goes neutral rather than competing green, and the chips and
+   marks take their orange and blue from that same set. */
+:root[data-cvd='1'] {
+  --play-bg: #22252A;
+  --play-panel: #3B4046;
+  --play-chip: #E69F00;
+  --play-chip-ink: #2B1F00;
+  --play-chip-press: #8F3F00;
+  --play-chip-press-ink: #FFF4E4;
+  --play-mark: #0072B2;
   --score-glow: color-mix(in srgb, var(--accent) 65%, transparent);
   --score-wash: color-mix(in srgb, var(--accent) 26%, transparent);
 }
@@ -197,9 +211,38 @@ h1 {
   }
 }
 
-/* The gain call-out sits over the score chip, which on the play screen is
-   the top-right one — it lifts out of the chip rather than out of the page. */
-.app--game .gain-badge { top: -6px; }
+/* The gain call-out lands *inside* the score chip rather than lifting out
+   of it: floating above the top row it ran straight off the top of an
+   upright screen, where there is nothing above the chips but the notch. It
+   rises within the chip and fades, and the chip itself carries the colour
+   change for exactly as long as the score is going up. */
+.app--game .score-cell { overflow: hidden; }
+.app--game .gain-badge {
+  inset: 0; top: 0; left: 0; transform: none;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+}
+.app--game .gain-pop {
+  background: none; color: inherit; box-shadow: none;
+  font-family: inherit; font-weight: 700;
+  font-size: 0.86em; padding: 0;
+  animation: gain-pop-inside 900ms cubic-bezier(.22,1,.36,1) both;
+}
+.app--game .gain-pop-src { display: none; }
+/* The chip is one small box, so the total steps aside while the gain is in
+   it rather than the two printing on top of each other — the number you see
+   next is the new one. */
+.app--game .score-cell .v { transition: opacity 140ms ease; }
+.app--game .score-cell:has(.gain-pop) .v { opacity: 0; }
+@keyframes gain-pop-inside {
+  0%   { opacity: 0; transform: translateY(40%) scale(0.8); }
+  22%  { opacity: 1; transform: translateY(0) scale(1.08); }
+  60%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-38%) scale(0.94); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app--game .gain-pop { animation: gain-pop-fade 900ms ease-out both; }
+}
 
 /* A brief background flash on the score HUD cell itself, on every scoring
    event (independent of the gain popup), so the "score changed" feedback
@@ -901,6 +944,35 @@ button:hover { filter: brightness(1.05); }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
 
 /* ---------- 个人主页 (profile page) ---------- */
+/* A setting rather than a destination: the pill carries its own switch, and
+   the switch says on or off by where the knob sits and what colour it is —
+   the two words for it are different in each of the four languages, and a
+   switch that has to be read is a switch that gets read wrong. */
+/* The same switch on the pause panel, so it is reachable from a run too. */
+.pause-switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%;
+}
+.profile-pill--switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.pill-switch {
+  flex: none; width: 46px; height: 27px; border-radius: 999px;
+  background: var(--line); position: relative;
+  transition: background-color 200ms ease;
+}
+.pill-switch-knob {
+  position: absolute; top: 3px; left: 3px; width: 21px; height: 21px;
+  border-radius: 50%; background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  transition: translate 200ms cubic-bezier(0.24, 1.2, 0.36, 1);
+}
+[aria-checked='true'] .pill-switch { background: var(--accent-2); }
+[aria-checked='true'] .pill-switch-knob { translate: 19px 0; }
+@media (prefers-reduced-motion: reduce) {
+  .pill-switch, .pill-switch-knob { transition: none; }
+}
+
 /* The page is a stack of destinations under the Slides masthead: one wide
    sign-in pill, the language/tutorial pair, then the perks panel. */
 .profile-page { gap: 14px; }
@@ -1104,6 +1176,16 @@ html.lang-locked, html.lang-locked body {
 .story-prog-fill { display: block; width: 0; height: 100%; border-radius: 999px; background: var(--ink-soft); }
 
 .story-stage { width: 100%; display: flex; justify-content: center; overflow: hidden; margin-top: 6vh; }
+/* The tutorial is a screen you watch, not one you browse: the dock has
+   nothing to do here, and the room it reserves is room the example could be
+   using. */
+body:has(.story-tut) .home-nav { display: none; }
+.story-tut { padding-bottom: 20px; }
+@media (orientation: landscape) and (max-height: 560px) {
+  .story-tut { padding-top: 10px; padding-bottom: 10px; gap: 8px; }
+  .story-stage { margin-top: 0; }
+  .story-controls { margin-top: 6px; }
+}
 .story-board { position: relative; transform-origin: top center; pointer-events: none; flex: 0 0 auto; }
 .story-cell { position: absolute; }
 .story-cell svg { width: 100%; height: 100%; display: block; overflow: visible; }
@@ -1212,7 +1294,18 @@ html.lang-locked, html.lang-locked body {
 .app--game {
   background: var(--play-bg);
   min-height: 100dvh;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  /* Clear of the hardware. A notch or a Dynamic Island cuts into the top of
+     the screen, and the browser does not always report an inset for it — so
+     the top margin is the larger of the reported inset and a floor big
+     enough to sit under the island on the phones that have one, rather than
+     the inset alone. The sides get the same treatment for a phone held
+     sideways, where the island is on one edge and the home indicator on the
+     other. */
+  padding:
+    calc(max(env(safe-area-inset-top, 0px), 14px) + 6px)
+    max(env(safe-area-inset-right, 0px), 14px)
+    calc(max(env(safe-area-inset-bottom, 0px), 10px) + 6px)
+    max(env(safe-area-inset-left, 0px), 14px);
   gap: clamp(8px, 1.6vh, 16px);
 }
 body:has(.app--game) { background: var(--play-bg); }
@@ -1251,12 +1344,18 @@ body:has(.app--game) { background: var(--play-bg); }
 .app--game .hud-cell,
 .app--game .controls .icon-btn { transition: background-color 120ms ease, color 120ms ease; }
 .app--game .controls .icon-btn.chip--press,
-.app--game .controls .icon-btn:active,
-.app--game .hud-cell.score-flash {
+.app--game .controls .icon-btn:active {
   background: var(--play-chip-press); color: var(--play-chip-press-ink);
 }
 .app--game .controls .icon-btn:hover { filter: none; }
-.app--game .hud-cell.score-flash { animation: none; transition: background-color 90ms ease, color 90ms ease; }
+/* The score chip takes the same colour, for exactly as long as the number
+   is going up — an animation rather than a held class, so it puts itself
+   back without anything having to remember to. */
+.app--game .hud-cell.score-flash { animation: play-score-flash 900ms ease-out both; }
+@keyframes play-score-flash {
+  0%, 62% { background-color: var(--play-chip-press); color: var(--play-chip-press-ink); }
+  100% { background-color: var(--play-chip); color: var(--play-chip-ink); }
+}
 /* The label is for a screen reader; on the sheet a chip is its number. */
 .app--game .hud-cell .k {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
@@ -1400,8 +1499,14 @@ body:has(.app--game) { background: var(--play-bg); }
     max-width: none;
     width: 100vw;
     height: 100dvh;
-    padding: calc(8px + env(safe-area-inset-top, 0px)) clamp(10px, 2vw, 22px)
-             calc(10px + env(safe-area-inset-bottom, 0px));
+    /* Sideways the island is on one of the long edges, so the generous
+       margin goes on the sides; the strip above the board keeps a little
+       air so the pattern row is never under it either. */
+    padding:
+      calc(max(env(safe-area-inset-top, 0px), 8px) + 2px)
+      max(env(safe-area-inset-right, 0px), clamp(12px, 3.4vw, 34px))
+      calc(max(env(safe-area-inset-bottom, 0px), 8px) + 2px)
+      max(env(safe-area-inset-left, 0px), clamp(12px, 3.4vw, 34px));
     gap: clamp(8px, 1.6vw, 18px);
     display: grid;
     grid-template-columns: minmax(66px, 8.4%) minmax(0, 1fr) minmax(66px, 8.4%);

@@ -3,6 +3,8 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
+import { observeBoardSize } from '../engine/boardResize';
+import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
@@ -211,12 +213,12 @@ export function createCircleGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'circle', '圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
-        extraControls: [{ id: 'paletteBtn', label: SHELL[lang].colorblindBtn }],
         patternHint: renderPatternHintRow(PATTERNS, lang),
       });
 
-      let paletteName: keyof typeof PALETTES = 'standard';
-      let COLORS: readonly string[] = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
+      const pickPalette = (): readonly string[] =>
+        (isBomb ? BOMB_PALETTES : PALETTES)[colorblindOn() ? 'colorblind' : 'standard'];
+      let COLORS: readonly string[] = pickPalette();
       let grid: Tile[][] = [];
       let R = 0,
         rowH = 0,
@@ -969,17 +971,17 @@ export function createCircleGame(): ShapeGame {
         },
       });
 
-      const onResize = () => {
+      const stopResize = observeBoardSize(refs.boardWrap, () => {
         if (!drag && controller.started) render();
-      };
-      window.addEventListener('resize', onResize);
+      });
 
       function destroy() {
         drag?.chain?.stop();
         drag = null;
         controller.destroy();
+        stopColorblind();
         detachDrag();
-        window.removeEventListener('resize', onResize);
+        stopResize();
       }
 
       refs.buttons.back?.addEventListener('click', () => {
@@ -997,10 +999,11 @@ export function createCircleGame(): ShapeGame {
         onBack();
       });
 
-      refs.buttons.extra['paletteBtn'].addEventListener('click', (e) => {
-        paletteName = paletteName === 'standard' ? 'colorblind' : 'standard';
-        COLORS = isBomb ? BOMB_PALETTES[paletteName] : PALETTES[paletteName];
-        (e.currentTarget as HTMLElement).classList.toggle('active', paletteName === 'colorblind');
+      // Follows the app-wide setting (个人主页), so switching it mid-run
+      // recolours the board under the player's finger rather than waiting
+      // for the next game.
+      const stopColorblind = onColorblindChange(() => {
+        COLORS = pickPalette();
         renderLegend();
         if (controller.started) render();
       });

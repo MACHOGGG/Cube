@@ -242,12 +242,43 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
 
   board.style.width = spec.w + 'px';
   board.style.height = spec.h + 'px';
+  const app = container.querySelector<HTMLElement>('.story-tut')!;
+  /**
+   * Fits the example to whatever room is left, in both directions.
+   *
+   * Scaling off the width alone is fine upright and wrong sideways: a phone
+   * turned over has plenty of width and almost no height, so the example
+   * came out full size and pushed the progress bar and the buttons off the
+   * screen. The height left over is the viewport minus everything on the
+   * page that isn't the stage, measured rather than assumed.
+   */
   function layout() {
-    const scale = Math.min(1, (stage.clientWidth || spec.w) / spec.w);
+    const cs = getComputedStyle(app);
+    const gap = parseFloat(cs.rowGap) || 0;
+    const padV = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const stageTop = parseFloat(getComputedStyle(stage).marginTop) || 0;
+    const kids = Array.from(app.children) as HTMLElement[];
+    const others = kids.reduce((n, c) => (c === stage ? n : n + c.getBoundingClientRect().height), 0);
+    const roomH = window.innerHeight - padV - others - gap * Math.max(0, kids.length - 1) - stageTop - 8;
+    const scale = Math.max(0.3, Math.min(1, (stage.clientWidth || spec.w) / spec.w, roomH / spec.h));
     board.style.transform = `scale(${scale})`;
     stage.style.height = spec.h * scale + 'px';
+    // Then check the answer against the page itself: margins, a control row
+    // that wrapped, a browser's own rounding — the arithmetic above cannot
+    // see all of it, so whatever is still hanging past the bottom comes off
+    // the stage directly.
+    const over = document.documentElement.scrollHeight - window.innerHeight;
+    if (over > 1) {
+      const h = Math.max(spec.h * 0.3, spec.h * scale - over);
+      board.style.transform = `scale(${h / spec.h})`;
+      stage.style.height = h + 'px';
+    }
   }
   window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', layout);
+  // Rotating a phone settles its viewport over several frames; a plain
+  // resize listener measures the first of them.
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(layout).observe(app);
 
   let els: HTMLElement[] = [];
   let curFrame = -1;
