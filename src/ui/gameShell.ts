@@ -164,8 +164,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
            pause panel instead, so the play screen stays the board plus the
            three readings plus the two things you can do to a run. -->
       <div class="controls">
-        <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
         <button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
+        <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
       </div>
     </div>
 

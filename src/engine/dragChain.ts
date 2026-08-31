@@ -32,15 +32,16 @@ import { reducedMotion } from './juice';
  * so they stay at the default. Nothing there is under a finger, so the full
  * wave only reads as character.
  *
- * A live board passes 0.06, which is deliberately below the threshold of
- * noticing: the coupling between neighbours, the pull on the lines either
- * side and the contact squash all scale with this, so at this value a line
- * under the finger tracks it as one rigid object. The simulation is still
- * running — it is what keeps the seat and the release feeling sprung rather
- * than snapped — it just no longer shows up as pieces shoving each other,
- * which is what was getting in the way of aiming a move.
+ * A live board passes 0.03, which is the edge of noticing rather than the
+ * absence of it: the coupling between neighbours, the pull on the lines
+ * either side and the contact squash all scale with this, and at this value
+ * the worst piece in a line trails the finger by about 0.4px on a 60px
+ * tile — enough that the line reads as matter rather than as a rigid
+ * sprite, not enough to get in the way of aiming a move. The simulation
+ * itself is untouched (it is what keeps the seat and the release sprung
+ * rather than snapped); only how much of it shows is turned down.
  */
-export const BOARD_FORCE = 0.06;
+export const BOARD_FORCE = 0.03;
 const COUPLE = 0.55; // how much of a follower's target is the piece ahead
 const K = 260; // spring on the followers
 const C = 26; // damping on the followers

@@ -1667,8 +1667,9 @@ body:has(.app--game) { background: var(--play-bg); }
        min-content track above stays a gutter and never becomes the page. */
     min-width: 0; max-width: 22vw;
   }
-  /* 暂停 above, 完成 below — the sheet's own order, and the reverse of the
-     upright row, where 完成 sits on the left. */
+  /* 完成 above, 暂停 below — and upright, 暂停 on the left and 完成 on the
+     right. The two are the reverse of each other because the column is
+     read from the far edge inward, so one DOM order gives both. */
   .app.app--game > .controls {
     grid-column: 3; grid-row: 1 / -1;
     flex-direction: column-reverse; gap: clamp(8px, 2.6vh, 22px);
