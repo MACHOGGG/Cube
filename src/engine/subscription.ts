@@ -30,10 +30,21 @@ export interface Entitlement {
   period?: PlanPeriod;
   /** Epoch ms at which the paid period runs out, when the seller says. */
   until?: number;
-  /** Which counter sold it — a store purchase is never resolved by Creem. */
-  channel: SalesChannel;
+  /**
+   * Which counter it came from — a store purchase is never resolved by
+   * Creem, and vice versa. `'code'` is the exception: a redeemed code is
+   * granted by us rather than sold by anyone, so it belongs to the address
+   * it was redeemed with and travels with the player across every build.
+   */
+  channel: SalesChannel | 'code';
   /** The address a web subscription is attached to. Unused in the app. */
   email?: string;
+  /**
+   * Rotated on every sign-in to a code-granted account, and the only proof
+   * of it we hold: the passcode is never kept on the device. It is what the
+   * server checks before letting this player open a multiplayer room.
+   */
+  token?: string;
 }
 
 export type PurchaseOutcome =
@@ -67,8 +78,9 @@ function read(): Entitlement {
     const saved = JSON.parse(raw) as Entitlement;
     // A subscription bought in one channel proves nothing in the other: the
     // same phone can run the app and the site, and the app must not inherit
-    // a web entitlement it has no way to renew or refund.
-    if (saved.channel !== salesChannel()) return NOBODY;
+    // a web entitlement it has no way to renew or refund. A redeemed code is
+    // the exception — nobody sold it, so no channel owns it.
+    if (saved.channel !== 'code' && saved.channel !== salesChannel()) return NOBODY;
     return saved;
   } catch {
     // Private mode, a cleared profile, or something else's key on ours.
@@ -181,6 +193,9 @@ export async function refreshEntitlement(): Promise<void> {
         setEntitlement(settled);
         return;
       }
+      // A redeemed code carries its own end date and cannot be extended
+      // without another code, so there is nothing to re-ask anyone about.
+      if (entitlement().channel === 'code') return;
       const email = signedInEmail();
       if (!email) return;
       const current = await creem.webRestore(email);
@@ -188,6 +203,7 @@ export async function refreshEntitlement(): Promise<void> {
       else if (current.ok === false && current.reason === 'none') clearEntitlement();
       return;
     }
+    if (entitlement().channel === 'code') return;
     const iap = await import('./iap');
     // Loading the store's own price list is part of the same round trip, so
     // the paywall shows Apple's or Google's figure rather than our fallback.

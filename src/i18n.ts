@@ -102,6 +102,32 @@ export interface I18nStrings {
   geniusStatus: string;
   /** Badge on a 「+」 board that the subscription unlocks. */
   geniusOnly: string;
+  // ---- redeem codes, and the account one creates ----
+  haveCode: string;
+  redeemTitle: string;
+  redeemHint: string;
+  redeemCodeLabel: string;
+  redeemBtn: string;
+  passwordLabel: string;
+  passwordPlaceholder: string;
+  /** On the log-in tab, where a passcode is only for code-made accounts. */
+  passwordOptional: string;
+  redeemBadCode: string;
+  pwWrong: string;
+  /** Carries {hours}. */
+  pwLocked: string;
+  pwBlocked: string;
+  unlockTitle: string;
+  unlockIntro: string;
+  unlockSendBtn: string;
+  unlockSent: string;
+  unlockCodeLabel: string;
+  unlockNewPw: string;
+  unlockConfirmBtn: string;
+  unlockBadCode: string;
+  unlockExpired: string;
+  /** Carries {email} — the support address, when no mail can be sent. */
+  unlockNoMail: string;
   notOnSaleYet: string;
   purchaseUnavailable: string;
   purchaseCancelled: string;
@@ -279,6 +305,28 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: 'Cancel or change it in your {store} account settings.',
     geniusStatus: 'Subscription',
     geniusOnly: 'Genius only',
+    haveCode: 'Have a code?',
+    redeemTitle: 'Redeem a code',
+    redeemHint: 'Enter your code with an email address and a 4–6 digit passcode. Those two are how you get the subscription back on another device.',
+    redeemCodeLabel: 'Code',
+    redeemBtn: 'Redeem',
+    passwordLabel: 'Passcode (4–6 digits)',
+    passwordPlaceholder: '4–6 digits',
+    passwordOptional: 'Passcode (only if you started with a code)',
+    redeemBadCode: 'That code is not valid, or it has already been used.',
+    pwWrong: 'That passcode is not right.',
+    pwLocked: 'Too many wrong tries. Try again in about {hours} h.',
+    pwBlocked: 'Too many wrong tries — this account is locked. Verify by email to open it again.',
+    unlockTitle: 'Unlock by email',
+    unlockIntro: 'We will send a six-digit code to your address. It lets you set a new passcode.',
+    unlockSendBtn: 'Send the code',
+    unlockSent: 'Sent. The code is good for 30 minutes.',
+    unlockCodeLabel: 'The 6-digit code from the email',
+    unlockNewPw: 'New passcode (4–6 digits)',
+    unlockConfirmBtn: 'Unlock and set passcode',
+    unlockBadCode: 'That code is not right.',
+    unlockExpired: 'That code has expired. Send a new one.',
+    unlockNoMail: 'We cannot send mail automatically yet. Write to {email} and we will open it for you.',
     notOnSaleYet: 'The subscription is not open yet.',
     purchaseUnavailable: 'This device cannot complete the purchase yet.',
     purchaseCancelled: 'Cancelled — you have not been charged.',
@@ -441,6 +489,28 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: 'Résiliez ou modifiez dans les réglages de votre compte {store}.',
     geniusStatus: 'Abonnement',
     geniusOnly: 'Réservé aux Génies',
+    haveCode: 'Vous avez un code ?',
+    redeemTitle: 'Utiliser un code',
+    redeemHint: 'Saisissez le code, une adresse courriel et un code secret de 4 à 6 chiffres. Ces deux-là vous rendront l’abonnement sur un autre appareil.',
+    redeemCodeLabel: 'Code',
+    redeemBtn: 'Valider',
+    passwordLabel: 'Code secret (4 à 6 chiffres)',
+    passwordPlaceholder: '4 à 6 chiffres',
+    passwordOptional: 'Code secret (seulement si vous avez commencé par un code)',
+    redeemBadCode: 'Ce code n’est pas valide, ou il a déjà été utilisé.',
+    pwWrong: 'Ce code secret n’est pas le bon.',
+    pwLocked: 'Trop d’essais. Réessayez dans environ {hours} h.',
+    pwBlocked: 'Trop d’essais — ce compte est verrouillé. Vérifiez par courriel pour le rouvrir.',
+    unlockTitle: 'Déverrouiller par courriel',
+    unlockIntro: 'Nous envoyons un code à six chiffres à votre adresse. Il permet de définir un nouveau code secret.',
+    unlockSendBtn: 'Envoyer le code',
+    unlockSent: 'Envoyé. Le code est valable 30 minutes.',
+    unlockCodeLabel: 'Le code à 6 chiffres reçu par courriel',
+    unlockNewPw: 'Nouveau code secret (4 à 6 chiffres)',
+    unlockConfirmBtn: 'Déverrouiller et enregistrer',
+    unlockBadCode: 'Ce code n’est pas le bon.',
+    unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
+    unlockNoMail: 'Nous ne pouvons pas encore envoyer de courriel automatiquement. Écrivez à {email} et nous le rouvrirons.',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
     purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
     purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
@@ -603,6 +673,28 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: '到 {store} 的帳號設定裡取消或更改。',
     geniusStatus: '訂閱狀態',
     geniusOnly: '天才特供',
+    haveCode: '有兌換碼？',
+    redeemTitle: '兌換碼',
+    redeemHint: '輸入兌換碼，並留下電子郵件和一組 4～6 位數字密碼——換台裝置時就靠這兩樣取回。',
+    redeemCodeLabel: '兌換碼',
+    redeemBtn: '兌換',
+    passwordLabel: '密碼（4～6 位數字）',
+    passwordPlaceholder: '4～6 位數字',
+    passwordOptional: '密碼（用兌換碼開通的才需要填）',
+    redeemBadCode: '這個兌換碼無效，或已經被使用過了。',
+    pwWrong: '密碼不對。',
+    pwLocked: '錯誤次數太多，請約 {hours} 小時後再試。',
+    pwBlocked: '錯誤次數太多，這個帳號已被鎖住。請用電子郵件驗證重新開啟。',
+    unlockTitle: '電子郵件驗證解鎖',
+    unlockIntro: '我們會寄一組六位數驗證碼到你的信箱，用它可以設定新密碼。',
+    unlockSendBtn: '寄出驗證碼',
+    unlockSent: '已寄出，驗證碼 30 分鐘內有效。',
+    unlockCodeLabel: '信件裡的 6 位數驗證碼',
+    unlockNewPw: '新密碼（4～6 位數字）',
+    unlockConfirmBtn: '解鎖並設定新密碼',
+    unlockBadCode: '驗證碼不對。',
+    unlockExpired: '驗證碼已過期，請重新寄一次。',
+    unlockNoMail: '目前還無法自動寄信。請寫信到 {email}，我們幫你開啟。',
     notOnSaleYet: '訂閱尚未開放。',
     purchaseUnavailable: '這台裝置目前還無法完成購買。',
     purchaseCancelled: '已取消，沒有扣款。',
@@ -765,6 +857,28 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageOnStore: '到 {store} 的账号设置里取消或更改。',
     geniusStatus: '订阅状态',
     geniusOnly: '天才特供',
+    haveCode: '有兑换码？',
+    redeemTitle: '兑换码',
+    redeemHint: '输入兑换码，并留下邮箱和一组 4～6 位数字密码——换台设备时就靠这两样取回。',
+    redeemCodeLabel: '兑换码',
+    redeemBtn: '兑换',
+    passwordLabel: '密码（4～6 位数字）',
+    passwordPlaceholder: '4～6 位数字',
+    passwordOptional: '密码（用兑换码开通的才需要填）',
+    redeemBadCode: '这个兑换码无效，或者已经被用过了。',
+    pwWrong: '密码不对。',
+    pwLocked: '错误次数太多，请约 {hours} 小时后再试。',
+    pwBlocked: '错误次数太多，这个账号已经锁住了。请用邮箱验证重新开启。',
+    unlockTitle: '邮箱验证解锁',
+    unlockIntro: '我们会发一组六位数验证码到你的邮箱，用它可以设置新密码。',
+    unlockSendBtn: '发送验证码',
+    unlockSent: '已发送，验证码 30 分钟内有效。',
+    unlockCodeLabel: '邮件里的 6 位验证码',
+    unlockNewPw: '新密码（4～6 位数字）',
+    unlockConfirmBtn: '解锁并设置新密码',
+    unlockBadCode: '验证码不对。',
+    unlockExpired: '验证码已过期，请重新发送。',
+    unlockNoMail: '目前还无法自动发信。请写信到 {email}，我们帮你开启。',
     notOnSaleYet: '订阅尚未开放。',
     purchaseUnavailable: '这台设备暂时还无法完成购买。',
     purchaseCancelled: '已取消，没有扣款。',

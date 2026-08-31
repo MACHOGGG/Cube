@@ -1198,6 +1198,15 @@ button:hover { filter: brightness(1.05); }
   background: var(--board-bg); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px;
 }
 .auth-field input:focus { outline: none; border-color: var(--accent); }
+/* A quiet way out of a window that is mostly about something else —
+   「有兑换码？」 under the plans, and under the log-in form. */
+.modal .link-btn {
+  background: none; border: none; cursor: pointer; padding: 2px 4px; margin: 0 0 12px;
+  color: var(--accent-ink); font: inherit; font-size: 0.82rem;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.modal .link-btn:hover { filter: brightness(1.15); }
+.auth-field input[readonly] { color: var(--ink-faint); }
 .genius-perks { text-align: left; margin: 0 0 16px; }
 .genius-perk { position: relative; color: var(--ink-soft); font-size: 0.85rem; padding: 3px 0 3px 16px; }
 .genius-perk::before { content: '·'; position: absolute; left: 4px; color: var(--accent); }
