@@ -15,7 +15,8 @@ import {
 } from './runRecord';
 import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
-import { renderShareCard, type BoardSnapshot } from './shareCard';
+import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
+import { currentRoom, latestRoomState } from './room';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
 import { STRINGS, type Lang } from '../i18n';
@@ -317,6 +318,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
       .join('');
     refs.endDetailEl.textContent = runDetailLine(lastRun, hooks.lang);
+    // 最快玩家 on a room's closing card is read from here, the same way the
+    // live standings read the score off the HUD's reel: the scoreboard takes
+    // what is already on screen, and none of the eight boards has to know
+    // that multiplayer exists.
+    refs.endOverlay.dataset.seconds = String(Math.round(elapsed));
     refs.endOverlay.classList.add('show');
     // One cue per ending, told apart by cause: a bomb gets the refusal, every
     // other way of finishing gets the settle. Reached the same way whether the
@@ -343,7 +349,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!lastRun) return;
     trackShare('end_modal');
     const dataUrl = renderShareCard(
-      buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
+      { ...buildShareInfo(lastRun, hooks.shapeName, hooks.lang), standings: roundStandings() },
       endSnapshot,
       startSnapshot,
     );
@@ -371,6 +377,22 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const board = refs.boardEl.getBoundingClientRect();
     const box = el.getBoundingClientRect();
     return [box.left - board.left + box.width / 2, box.top - board.top + box.height / 2];
+  }
+
+  /**
+   * The room this run belonged to, as of the last poll — empty for a solo
+   * run, which is what leaves the card exactly as it was.
+   *
+   * The scores come from the standings the player was already watching in
+   * the corner, so the card cannot disagree with the panel it replaces.
+   */
+  function roundStandings(): Standing[] | undefined {
+    const state = latestRoomState();
+    const seat = currentRoom();
+    if (!state || !seat || state.players.length < 2) return undefined;
+    return [...state.players]
+      .sort((a, b) => b.score - a.score)
+      .map((p) => ({ name: p.name, score: p.score, me: p.id === seat.playerId }));
   }
 
   const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#BE5762';

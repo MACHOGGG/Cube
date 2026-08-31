@@ -5,13 +5,13 @@ import {
   avatarSvg,
   createRoom,
   currentRoom,
+  endRoom,
   fetchState,
   forgetRoom,
   joinRoom,
   leaveRoom,
   randomAvatar,
   serverTime,
-  startMatch,
   watchRoom,
   type Avatar,
   type RoomError,
@@ -26,6 +26,17 @@ import {
  * what moves between them is the room's own state arriving from the server:
  * a player joins and the list grows; the host picks a board and `startAt`
  * appears; the countdown reaches zero and the run begins.
+ *
+ * A room is an evening rather than a single game. When a round ends everyone
+ * comes back here with the scores still up, and the host either puts another
+ * board in front of the table or closes the room, which is when the closing
+ * card is drawn.
+ *
+ * The host picks that board on the home page, not here: all eight of them
+ * live there already, with their icons, at the size a thumb wants. While
+ * they are away choosing, the whole screen wears a faint pink frame — it is
+ * the only thing on the home page that says this tap is for four people
+ * rather than for you.
  *
  * Nothing here waits for a message at the moment it matters. The server
  * names an instant and each device counts down to it against the server's
@@ -44,13 +55,11 @@ export interface MultiplayerHandlers {
   onMatchStart: (match: MatchStart) => void;
   /** Opening a room is the subscriber's — this shows them what that is. */
   onNeedGenius: () => void;
+  /** The host is off to the home page to choose what everyone plays. */
+  onPickMode: (code: string) => void;
+  /** The room is closed: hand over the standings for the closing card. */
+  onRoomEnded: (state: RoomState) => void;
 }
-
-/** The eight boards a host can put in front of everyone. */
-const MODES = [
-  'square', 'circle', 'triangle',
-  'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced',
-];
 
 const NAME_KEY = 'slides_mp_name';
 
@@ -70,6 +79,8 @@ function errorText(reason: RoomError, lang: Lang): string {
       return s.mpErrStarted;
     case 'tooFew':
       return s.mpErrTooFew;
+    case 'ended':
+      return s.mpErrEnded;
     case 'notConfigured':
     case 'busy':
       return s.mpErrNotOpen;
@@ -92,6 +103,14 @@ export function renderMultiplayerPage(
   let avatar: Avatar = randomAvatar();
   let stopWatching: (() => void) | null = null;
   let countdownTimer = 0;
+  /**
+   * The last round this device actually played.
+   *
+   * `startAt` stays set after a round finishes — it is what that round
+   * began at — so it cannot be what decides whether to count down. The
+   * round number can: a round we have already played never starts again.
+   */
+  let playedRound = 0;
   let launched = false;
   let dead = false;
 
@@ -144,11 +163,14 @@ export function renderMultiplayerPage(
         <button class="genius-cta" id="mpCreate">${s.mpCreate}</button>
         <p class="auth-hint">${s.mpNeedGenius}</p>
 
-        <div class="mp-join-row">
+        <!-- Four digits read off someone else's screen deserve the room the
+             room code itself gets: its own line, at a size that can be
+             checked at a glance against the phone being read from. -->
+        <div class="mp-join-block">
           <label class="auth-field mp-code-field">
             <span>${s.mpCodeLabel}</span>
             <input id="mpCode" type="text" inputmode="numeric" maxlength="4"
-                   placeholder="${s.mpCodePlaceholder}" />
+                   autocomplete="off" placeholder="${s.mpCodePlaceholder}" />
           </label>
           <button class="profile-pill" id="mpJoin">${s.mpJoin}</button>
         </div>
@@ -199,6 +221,12 @@ export function renderMultiplayerPage(
       renderLobby(joined.value);
     });
 
+    // Digits only, so a stray letter never sits in the box looking like a
+    // room that does not exist.
+    codeBox.addEventListener('input', () => {
+      const digits = codeBox.value.replace(/\D/g, '').slice(0, 4);
+      if (digits !== codeBox.value) codeBox.value = digits;
+    });
     codeBox.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') container.querySelector<HTMLButtonElement>('#mpJoin')?.click();
     });
@@ -226,7 +254,7 @@ export function renderMultiplayerPage(
           <p class="auth-hint">${s.mpShareHint}</p>
         </div>
 
-        <div class="menu-section-label">${s.mpPlayers}</div>
+        <div class="menu-section-label" id="mpPlayersLabel">${s.mpPlayers}</div>
         <div class="mp-players" id="mpPlayers"></div>
 
         <div id="mpHostArea"></div>
@@ -242,16 +270,21 @@ export function renderMultiplayerPage(
       if (!dead) renderHome();
     });
 
-    paintPlayers(state);
-    paintHostArea(state, iAmHost);
+    paint(state, iAmHost);
 
     stopWatching = watchRoom(
       (next) => {
         if (dead) return;
-        paintPlayers(next);
-        paintHostArea(next, iAmHost);
+        // The host closed up while we were sitting here.
+        if (next.ended) {
+          stopAll();
+          return handlers.onRoomEnded(next);
+        }
+        paint(next, iAmHost);
         // The host has chosen: everyone counts down to the same instant.
-        if (next.startAt && next.seed && next.mode) beginCountdown(next);
+        if (next.startAt && next.seed && next.mode && next.round > playedRound) {
+          beginCountdown(next);
+        }
       },
       (reason) => {
         const msg = container.querySelector<HTMLElement>('#mpMsg');
@@ -260,61 +293,78 @@ export function renderMultiplayerPage(
     );
   }
 
+  function paint(state: RoomState, iAmHost: boolean) {
+    paintPlayers(state);
+    paintHostArea(state, iAmHost);
+  }
+
+  /**
+   * The table. Between rounds this is also the scoreboard, so it carries the
+   * running total as well as the round just played — that is what everyone
+   * looks at while the host decides what is next.
+   */
   function paintPlayers(state: RoomState) {
+    const label = container.querySelector<HTMLElement>('#mpPlayersLabel');
+    if (label) {
+      label.textContent = state.round
+        ? `${s.mpPlayers} · ${s.mpRoundLabel.replace('{n}', String(state.round))}`
+        : s.mpPlayers;
+    }
     const list = container.querySelector<HTMLElement>('#mpPlayers');
     if (!list) return;
+    const played = state.round > 0;
     list.innerHTML = state.players
       .map(
         (p) => `<div class="mp-player">
           <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
           <span class="mp-player-name">${esc(p.name)}</span>
           ${p.isHost ? `<span class="mp-badge">${s.mpHostBadge}</span>` : ''}
+          ${played ? `<span class="mp-player-total">${p.total + p.score}</span>` : ''}
         </div>`,
       )
       .join('');
   }
 
+  /**
+   * What the room is waiting on. For everyone but the host that is a line of
+   * text; for the host it is the trip to the home page and, once a round has
+   * been played, the way to close the room.
+   */
   function paintHostArea(state: RoomState, iAmHost: boolean) {
     const area = container.querySelector<HTMLElement>('#mpHostArea');
-    if (!area || state.startAt) return;
+    if (!area) return;
+    // Mid-round — nothing to decide until everyone is back.
+    if (state.round > 0 && !state.roundOver) {
+      area.innerHTML = `<p class="tag-line">${s.mpWaitingHost}</p>`;
+      return;
+    }
     if (!iAmHost) {
       area.innerHTML = `<p class="tag-line">${s.mpWaitingHost}</p>`;
       return;
     }
-    // Rebuilt only when it has nothing in it, so the poll does not wipe out
-    // the choice the host is in the middle of making.
-    if (area.querySelector('.mp-mode')) return;
+    const pickLabel = state.round ? s.mpNextRound : s.mpGoPick;
+    // Rebuilt only when what it says has changed, so the poll cannot swallow
+    // a tap that has already landed.
+    if (area.dataset.shape === pickLabel) return;
+    area.dataset.shape = pickLabel;
     area.innerHTML = `
-      <div class="menu-section-label">${s.mpPickMode}</div>
-      <div class="mp-modes">
-        ${MODES.map(
-          (id) => `<button class="mp-mode" data-mode="${id}">${shapeName(lang, id, id)}</button>`,
-        ).join('')}
-      </div>
-      <button class="genius-cta" id="mpStart" disabled>${s.mpStartBtn}</button>
+      <button class="genius-cta" id="mpPick">${pickLabel}</button>
+      ${state.round ? `<button class="profile-row" id="mpEnd">${s.mpEndRoom}</button>` : ''}
     `;
-    let picked = '';
-    const startBtn = area.querySelector<HTMLButtonElement>('#mpStart')!;
-    for (const btn of Array.from(area.querySelectorAll<HTMLButtonElement>('.mp-mode'))) {
-      btn.addEventListener('click', () => {
-        picked = btn.dataset.mode!;
-        for (const other of Array.from(area.querySelectorAll('.mp-mode'))) {
-          other.classList.toggle('mp-mode--on', other === btn);
-        }
-        startBtn.disabled = false;
-      });
-    }
-    startBtn.addEventListener('click', async () => {
-      startBtn.disabled = true;
-      const begun = await startMatch(picked);
+    area.querySelector<HTMLButtonElement>('#mpPick')!.addEventListener('click', () => {
+      stopAll();
+      handlers.onPickMode(state.code);
+    });
+    area.querySelector<HTMLButtonElement>('#mpEnd')?.addEventListener('click', async () => {
+      stopAll();
+      const closed = await endRoom();
       if (dead) return;
-      if (!begun.ok) {
-        startBtn.disabled = false;
+      if (!closed.ok) {
         const msg = container.querySelector<HTMLElement>('#mpMsg');
-        if (msg) msg.textContent = errorText(begun.reason, lang);
-        return;
+        if (msg) msg.textContent = errorText(closed.reason, lang);
+        return renderLobby(state);
       }
-      beginCountdown(begun.value);
+      handlers.onRoomEnded(closed.value);
     });
   }
 
@@ -323,6 +373,7 @@ export function renderMultiplayerPage(
   function beginCountdown(state: RoomState) {
     if (launched || !state.startAt || !state.seed || !state.mode) return;
     launched = true;
+    playedRound = state.round;
     stopAll();
     const { startAt, seed, mode } = state;
 
@@ -335,7 +386,7 @@ export function renderMultiplayerPage(
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
 
-    const paint = () => {
+    const paintTick = () => {
       // Against the server's clock, not this device's — that is what puts
       // four phones on the same instant.
       const left = startAt - serverTime();
@@ -354,20 +405,28 @@ export function renderMultiplayerPage(
         tickEl.classList.add('mp-countdown--beat');
       }
     };
-    paint();
-    countdownTimer = window.setInterval(paint, 80);
+    paintTick();
+    countdownTimer = window.setInterval(paintTick, 80);
   }
 
-  // A room already in progress on this device (a reload mid-lobby) is simply
-  // rejoined; otherwise this starts at the front.
+  // A room this device is already in is rejoined wherever it has got to: a
+  // reload mid-lobby, and just as importantly the walk back from a finished
+  // round, which lands here with the scores still on the server.
   void (async () => {
     const existing = await fetchState();
     if (dead) return;
-    if (existing.ok && !existing.value.startAt) renderLobby(existing.value);
-    else {
+    if (!existing.ok) {
       forgetRoom();
-      renderHome();
+      return renderHome();
     }
+    if (existing.value.ended) {
+      forgetRoom();
+      return renderHome(s.mpRoomEnded);
+    }
+    // A round that began while this device was away is still worth joining
+    // late; one it has already played is not.
+    playedRound = existing.value.roundOver ? existing.value.round : playedRound;
+    renderLobby(existing.value);
   })();
 
   return teardown;

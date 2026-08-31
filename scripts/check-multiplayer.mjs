@@ -102,6 +102,16 @@ check('房主开出房间，拿到四位房号', /^\d{4}$/.test(code), code);
 // ---- the guest joins ----------------------------------------------------
 await B.page.fill('#mpName', '乙');
 await B.page.fill('#mpCode', code);
+// The box has to be big enough to read four digits back off, and they have
+// to actually be in it — the old row gave the button width:100% and left
+// the input 30px, so what you typed was there and invisible.
+const codeBox = await B.page.$eval('#mpCode', (e) => ({
+  w: Math.round(e.getBoundingClientRect().width),
+  size: Math.round(parseFloat(getComputedStyle(e).fontSize)),
+  value: e.value,
+}));
+check('房号输入框够大且显示已输入的四位', codeBox.w >= 200 && codeBox.size >= 20 && codeBox.value === code,
+  `宽 ${codeBox.w}px · 字号 ${codeBox.size}px · 内容「${codeBox.value}」`);
 await B.page.click('#mpJoin');
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 check('客人凭房号进来了', (await B.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
@@ -111,11 +121,18 @@ const roster = await A.page.$$eval('.mp-player', (els) => els.map((e) => e.textC
 check('房主那边看到两个人', roster.length === 2, roster.join(' / '));
 check('房主有房主标记，客人没有',
   (await A.page.$$eval('.mp-badge', (e) => e.length)) === 1);
-check('只有房主看得到玩法选择', (await B.page.$('.mp-mode')) === null && (await A.page.$('.mp-mode')) !== null);
+check('只有房主看得到开局入口', (await B.page.$('#mpPick')) === null && (await A.page.$('#mpPick')) !== null);
 
-// ---- the host picks a board and starts ----------------------------------
-await A.page.click('.mp-mode[data-mode="circle"]');
-await A.page.click('#mpStart');
+// ---- the host goes to the home page and picks a board there -------------
+await A.page.click('#mpPick');
+await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
+check('房主到了主菜单，顶上有「为整房选玩法」的横幅', true,
+  (await A.page.$eval('.room-pick-title', (e) => e.textContent.trim())));
+check('屏幕外框亮起房主提示',
+  await A.page.evaluate(() => document.body.classList.contains('is-room-host')));
+// The second base card is the circle — the same board the old .mp-mode
+// button chose, so the seeding check below is comparing the same thing.
+await A.page.$$eval('.home-icon-btn', (els) => els[1].click());
 
 await Promise.all([
   A.page.waitForSelector('.mp-countdown', { timeout: 8000 }),
@@ -167,6 +184,41 @@ await B.page.waitForFunction(
 const bView = await B.page.$$eval('.mp-board-row', (els) =>
   els.map((e) => e.querySelector('.mp-board-name').textContent.trim() + ':' + e.querySelector('.mp-board-score').textContent.trim()));
 check('甲得分后，乙那边实时看到并升到第一', bView[0] === '甲:250', bView.join(' '));
+
+// ---- the round ends: back to the room, not out of it --------------------
+// Both finish, which is what tells the server the round is over.
+for (const P of [A, B]) {
+  await P.page.click('#finishBtn');
+  await P.page.waitForSelector('#endOverlay.show', { timeout: 8000 });
+}
+
+// The multiplayer card carries the places; a solo one has no room to.
+await A.page.click('#shareBtn');
+await A.page.waitForSelector('#shareOverlay.show', { timeout: 8000 });
+const cardW = await A.page.$eval('#shareImage', (e) => e.naturalWidth);
+check('多人局的战绩图画出来了', cardW > 0, `${cardW}px 宽`);
+await A.page.click('#shareCloseBtn');
+
+await A.page.click('#endBackBtn');
+await A.page.waitForSelector('.mp-code', { timeout: 12000 });
+check('一局打完回到房间，房间没散', (await A.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
+check('房间里看得到累计总分', (await A.page.$$eval('.mp-player-total', (e) => e.length)) === 2);
+await A.page.waitForSelector('#mpPick', { timeout: 12000 });
+check('房主可以再开一局', (await A.page.$eval('#mpPick', (e) => e.textContent.trim())).length > 0);
+check('房主也可以结束房间', (await A.page.$('#mpEnd')) !== null);
+
+// ---- closing the room draws the evening's card --------------------------
+await B.page.click('#endBackBtn').catch(() => {});
+await A.page.click('#mpEnd');
+await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 });
+check('散场时出总战绩', (await A.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) === 2);
+const finalCard = await A.page.waitForFunction(
+  () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
+).then(() => true).catch(() => false);
+check('总战绩图渲染出来了', finalCard);
+// The other player is told, without having to press anything.
+const bEnded = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 }).then(() => true).catch(() => false);
+check('客人那边也自动看到总战绩', bEnded);
 
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

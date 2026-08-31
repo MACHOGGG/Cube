@@ -237,6 +237,22 @@ export interface ShareCardInfo {
   /** True when this run ended via a bomb hazard cluster — draws a large, low-opacity 💥 behind the card. */
   hazardEnd?: boolean;
   lang: Lang;
+  /**
+   * The room, when this run was one board out of four people's evening.
+   *
+   * A solo card is about a board; a room's is about the people around it,
+   * so the two panels give up some of their size and the places go in the
+   * room they free. Absent for a solo run, which is then exactly what it was.
+   */
+  standings?: Standing[];
+}
+
+/** One player's line on a room card: who, where they came, what they scored. */
+export interface Standing {
+  name: string;
+  score: number;
+  /** Their own row is the one the person holding the card looks for. */
+  me?: boolean;
 }
 
 const CARD_W = 720;
@@ -286,8 +302,13 @@ export function renderShareCard(
   const s = STRINGS[info.lang];
   const boardY = 300;
   const gap = 28;
-  const panel = (CARD_W - PAD * 2 - gap) / 2;
-  const cardH = boardY + panel + 110;
+  // A room card gives the two boards a little over half the width they get
+  // on their own, and spends what it saves on the places — on a shared card
+  // 谁赢了 is the part everyone reads first.
+  const standings = info.standings ?? [];
+  const full = (CARD_W - PAD * 2 - gap) / 2;
+  const panel = standings.length ? full * 0.62 : full;
+  const cardH = boardY + panel + (standings.length ? 132 : 110);
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W * EXPORT_SCALE;
@@ -368,6 +389,18 @@ export function renderShareCard(
     ctx.textAlign = 'left';
   }
 
+  // The places, in the column the shrunken boards left free.
+  if (standings.length) {
+    drawStandings(
+      ctx,
+      standings,
+      PAD + panel * 2 + gap + 26,
+      boardY,
+      CARD_W - PAD - (PAD + panel * 2 + gap + 26),
+      s.mpRoundResult,
+    );
+  }
+
   ctx.font = '500 13px "Karla", sans-serif';
   ctx.fillStyle = '#a39e97';
   ctx.textAlign = 'center';
@@ -375,6 +408,59 @@ export function renderShareCard(
   ctx.textAlign = 'left';
 
   return canvas.toDataURL('image/png');
+}
+
+/**
+ * A ranked column: place, name, score. Used by the per-round card beside the
+ * boards, and by the room's closing card as the whole of its middle.
+ */
+export function drawStandings(
+  ctx: CanvasRenderingContext2D,
+  rows: Standing[],
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  rowH = 38,
+) {
+  ctx.font = '600 14px "Karla", sans-serif';
+  ctx.fillStyle = '#8b8680';
+  ctx.textAlign = 'left';
+  ctx.fillText(title, x, y + 4);
+
+  rows.forEach((row, i) => {
+    const top = y + 20 + i * rowH;
+    if (row.me) {
+      ctx.fillStyle = '#f2e6e6';
+      roundRect(ctx, x - 8, top, width + 8, rowH - 6, 9);
+      ctx.fill();
+    }
+    const mid = top + (rowH - 6) / 2 + 5;
+    // First place is the accent; everyone else is ordinary ink, so the
+    // winner is findable without reading a single name.
+    ctx.fillStyle = i === 0 ? '#BE5762' : '#8b8680';
+    ctx.font = '700 15px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(i + 1), x, mid);
+
+    ctx.fillStyle = row.me ? '#BE5762' : '#141413';
+    ctx.font = `${row.me ? 700 : 500} 15px "Karla", sans-serif`;
+    ctx.fillText(clipTo(ctx, row.name, width - 76), x + 20, mid);
+
+    ctx.fillStyle = i === 0 ? '#BE5762' : '#5b5650';
+    ctx.font = '600 15px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(row.score), x + width - 6, mid);
+    ctx.textAlign = 'left';
+  });
+}
+
+/** A name that would run past its column, cut and given an ellipsis. */
+function clipTo(ctx: CanvasRenderingContext2D, text: string, max: number): string {
+  if (ctx.measureText(text).width <= max) return text;
+  let cut = text;
+  while (cut.length > 1 && ctx.measureText(cut + '…').width > max) cut = cut.slice(0, -1);
+  return cut + '…';
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

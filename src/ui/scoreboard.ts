@@ -46,6 +46,13 @@ function localScore(): number | null {
 const runFinished = (): boolean =>
   document.getElementById(END_OVERLAY_ID)?.classList.contains('show') ?? false;
 
+/** How long the run took, as the end panel recorded it. */
+function runSeconds(): number | undefined {
+  const raw = document.getElementById(END_OVERLAY_ID)?.dataset.seconds;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 /**
  * Puts the standings on screen and keeps them there until the returned
  * teardown is called. Does nothing at all outside a room, so a solo run is
@@ -103,7 +110,7 @@ export function mountScoreboard(lang: Lang): () => void {
     if (score === lastSent && over === sentFinished) return;
     lastSent = score;
     sentFinished = over;
-    void reportScore(score, over);
+    void reportScore(score, over, runSeconds());
   }, LOCAL_MS);
 
   return () => {
@@ -113,7 +120,7 @@ export function mountScoreboard(lang: Lang): () => void {
     // One last report, so a player who leaves mid-run does not sit at a
     // stale number on everybody else's screen.
     const score = localScore();
-    if (score !== null) void reportScore(score, true);
+    if (score !== null) void reportScore(score, true, runSeconds());
     panel.remove();
   };
 }

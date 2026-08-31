@@ -1812,10 +1812,23 @@ html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavi
 .mp-avatar svg { width: 100%; height: 100%; display: block; }
 .mp-me .profile-pill--square { align-self: flex-end; height: 44px; width: 44px; font-size: 1.2rem; padding: 0; }
 
-.mp-join-row { display: flex; align-items: flex-end; gap: 10px; width: 100%; max-width: 320px; margin: 0 auto; }
-.mp-join-row .mp-code-field { flex: 1; margin: 0; }
-.mp-join-row .profile-pill { flex: 0 0 auto; height: 44px; }
-.mp-code-field input { font-variant-numeric: tabular-nums; letter-spacing: 0.18em; text-align: center; }
+/* The four digits get their own line, at the size they are read at. Sharing
+   a row with the button never worked: .profile-pill is width:100%, so its
+   flex basis took the whole 320px and left the input 30px — wide enough for
+   most of one digit, which is why what you typed seemed not to arrive. */
+.mp-join-block { width: 100%; max-width: 320px; margin: 0 auto; }
+.mp-join-block .mp-code-field { margin: 0 0 10px; }
+.mp-join-block .mp-code-field span { text-align: center; }
+.mp-code-field input {
+  font-family: 'Fraunces', Georgia, serif;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.5em; text-indent: 0.5em;
+  text-align: center; font-size: 2rem; font-weight: 600; padding: 12px 10px;
+  color: var(--accent-ink);
+}
+.mp-code-field input::placeholder {
+  font-family: 'Karla', system-ui, sans-serif;
+  font-size: 0.9rem; font-weight: 500; letter-spacing: 0.04em; color: var(--ink-faint);
+}
 
 /* The four digits are the whole point of the room, so they are the biggest
    thing on the page — a number to read out loud across a table. */
@@ -1832,21 +1845,70 @@ html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavi
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px;
 }
 .mp-player-name { flex: 1; font-weight: 600; font-size: 0.92rem; }
+/* Between rounds the room list is also the scoreboard. */
+.mp-player-total {
+  font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 0.95rem; color: var(--accent-ink);
+}
+.mp-player--me { border-color: var(--accent); background: var(--accent-soft); }
+.mp-final-rank {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.95rem;
+  color: var(--ink-faint); width: 14px; text-align: center;
+}
+.mp-notes { width: 100%; max-width: 320px; margin: 0 auto; text-align: center; }
+.mp-notes .auth-hint { margin: 0 0 4px; }
+.mp-final-card {
+  display: block; width: 100%; max-width: 320px; margin: 4px auto 0;
+  border-radius: 16px; box-shadow: var(--shadow);
+}
 .mp-badge {
   font-size: 0.7rem; color: var(--accent-ink); background: var(--accent-soft);
   border-radius: 100px; padding: 2px 8px;
 }
 
-.mp-modes {
-  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-  width: 100%; max-width: 320px; margin: 0 auto 4px;
-}
-.mp-mode {
-  background: var(--board-bg); color: var(--ink-soft); border: 1px solid var(--line);
-  border-radius: 100px; padding: 8px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
-}
-.mp-mode--on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
 .mp-page .genius-cta[disabled] { opacity: 0.5; cursor: default; }
+#mpHostArea { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; margin: 0 auto; }
+
+/* ---------- the host, choosing a board for everyone ---------- */
+/* The home page looks exactly as it always does, and every board on it is
+   about to start a game for four people rather than for one. The banner says
+   so in words; this says it in the corner of an eye, which is where a tap
+   that fast is actually decided. High-grey pink: present all the way round
+   the screen, and never loud enough to compete with the boards. */
+body.is-room-host::after {
+  content: ''; position: fixed; inset: 0; z-index: 60; pointer-events: none;
+  border-radius: 18px;
+  /* Mostly the glow, barely the line: a haze at the edge of the screen that
+     is noticed rather than read, which is the whole job. */
+  box-shadow:
+    inset 0 0 0 1.5px rgba(190, 143, 156, 0.34),
+    inset 0 0 34px 8px rgba(190, 143, 156, 0.26);
+  animation: room-host-breathe 3200ms ease-in-out infinite;
+}
+@keyframes room-host-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    body.is-room-host::after { animation: none; opacity: 0.8; }
+}
+
+.room-pick-bar {
+  width: 100%; max-width: 520px; margin: 0 auto 10px; text-align: center;
+  background: rgba(196, 141, 156, 0.14); border: 1px solid rgba(196, 141, 156, 0.5);
+  border-radius: 16px; padding: 12px 14px;
+}
+.room-pick-title {
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1rem;
+  color: var(--accent-ink); margin-bottom: 3px;
+}
+.room-pick-hint { font-size: 0.84rem; color: var(--ink-soft); }
+.room-pick-msg { font-size: 0.84rem; color: var(--accent-ink); min-height: 1.2em; }
+.room-pick-back {
+  background: none; border: none; cursor: pointer; font: inherit; font-size: 0.84rem;
+  color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px;
+  padding: 4px 6px; margin-top: 2px;
+}
 
 .mp-countdown-page { justify-content: center; min-height: 70vh; }
 .mp-countdown {

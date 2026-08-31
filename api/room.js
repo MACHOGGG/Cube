@@ -33,6 +33,17 @@ const MIN_PLAYERS = 2;
 const ROOM_TTL_S = 2 * 3600;
 /** Long enough to read "3, 2, 1" without anyone feeling held up. */
 const COUNTDOWN_MS = 3500;
+/**
+ * How long a player who has stopped reporting holds the round open.
+ *
+ * A round is over when everyone says they are done. Someone who closes the
+ * tab mid-run never says it, and without this the host could never start
+ * another round — one person walking away would end the evening for the rest
+ * of the table. Ninety seconds is far longer than the gap between two
+ * reports from a device that is still playing, so this can only catch a
+ * device that has genuinely gone.
+ */
+const ABSENT_MS = 90_000;
 
 /** The boards a host may choose. Anything else is not a mode we ship. */
 const MODES = new Set([
@@ -59,6 +70,7 @@ export default async function handler(req, res) {
       case 'start': return await start(res, body);
       case 'score': return await score(res, body);
       case 'leave': return await leave(res, body);
+      case 'end': return await end(res, body);
       default: return send(res, 400, { error: 'action' });
     }
   } catch {
@@ -149,6 +161,14 @@ function publicState(code, hash) {
       score: value.score || 0,
       finished: Boolean(value.finished),
       isHost: field.slice(2) === meta.host,
+      // What the evening adds up to, rather than this one round: the total
+      // across every round banked so far, the best single round, and the
+      // quickest one. The room's closing card is drawn from these.
+      total: value.total || 0,
+      best: value.best || 0,
+      bestTime: value.bestTime ?? null,
+      seconds: value.seconds ?? null,
+      rounds: value.rounds || 0,
     });
   }
   players.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
@@ -158,10 +178,37 @@ function publicState(code, hash) {
     mode: meta.mode ?? null,
     seed: meta.seed ?? null,
     startAt: meta.startAt ?? null,
+    /** 0 before the first match; every 开始 raises it by one. */
+    round: meta.round || 0,
+    /** Everyone is done: the host may pick the next board, or close up. */
+    roundOver: roundOver(hash),
+    /** The host has closed the room. What is left is the closing card. */
+    ended: Boolean(meta.endedAt),
     players,
     // Lets a device with a wrong clock still count down to the same instant.
     serverNow: Date.now(),
   };
+}
+
+/** Every seat that is still reporting has finished this round. */
+function roundOver(hash) {
+  const meta = hash.meta || {};
+  if (!meta.round || !meta.startAt || Date.now() < meta.startAt) return false;
+  const seats = Object.entries(hash)
+    .filter(([field, value]) => field.startsWith('p:') && value)
+    .map(([, value]) => value);
+  if (!seats.length) return false;
+  return seats.every((seat) => {
+    // Walked in after this round began: they were never in it, so they
+    // cannot be what it is waiting on.
+    if ((seat.joinedAt || 0) > meta.startAt) return true;
+    if (seat.finished) return true;
+    // Counting from the start of the round, not from this seat's last report:
+    // at the moment a round begins nobody has reported yet, and reading that
+    // as "absent" would declare the round over before it had been played.
+    const seen = Math.max(seat.lastSeen || 0, meta.startAt);
+    return Date.now() - seen > ABSENT_MS;
+  });
 }
 
 const readRoom = async (code) => {
@@ -184,7 +231,12 @@ async function create(res, body) {
 
   const playerId = id(8);
   const token = id(16);
-  const meta = { host: playerId, createdAt: Date.now(), mode: null, seed: null, startAt: null };
+  const meta = {
+    host: playerId, createdAt: Date.now(),
+    mode: null, seed: null, startAt: null,
+    /** Rounds played. The host may put up one board after another. */
+    round: 0,
+  };
 
   // Four digits is 10 000 rooms; at any plausible number of games running at
   // once a handful of tries finds a free one. HSETNX makes the claim atomic,
@@ -215,7 +267,9 @@ async function join(res, body) {
   const code = String(body.code ?? '').trim();
   const hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
-  if (hash.meta.startAt) return send(res, 409, { error: 'started' });
+  if (hash.meta.endedAt) return send(res, 409, { error: 'ended' });
+  // Between rounds is a fine moment to walk in; the middle of one is not.
+  if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
   if (seatCount(hash) >= MAX_PLAYERS) return send(res, 409, { error: 'full' });
 
   const playerId = id(8);
@@ -250,20 +304,62 @@ async function start(res, body) {
   if (hash.meta.host !== body.playerId || !seatOf(hash, body.playerId, body.playerToken)) {
     return send(res, 403, { error: 'notHost' });
   }
-  if (hash.meta.startAt) return send(res, 409, { error: 'started' });
+  if (hash.meta.endedAt) return send(res, 409, { error: 'ended' });
+  // A room is an evening, not a single game: the host may put up board after
+  // board. What may not happen is a new one landing on players who are still
+  // working through the last, so the only bar is that the round in progress
+  // has finished.
+  if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
   if (!MODES.has(body.mode)) return send(res, 400, { error: 'mode' });
   if (seatCount(hash) < MIN_PLAYERS) return send(res, 409, { error: 'tooFew' });
+
+  // The round that just ended is banked before the next one wipes the board,
+  // because the closing card is the sum of all of them and a score only
+  // exists on the server between one round and the next.
+  const banked = {};
+  for (const [field, seat] of Object.entries(hash)) {
+    if (!field.startsWith('p:') || !seat) continue;
+    const next = bankRound(seat, hash.meta.round, hash.meta.startAt || 0);
+    banked[field] = next;
+    await hset(roomKey(code), field, next);
+  }
 
   const meta = {
     ...hash.meta,
     mode: body.mode,
+    round: (hash.meta.round || 0) + 1,
     // The one string from which every player builds the identical board.
     seed: id(8),
     startAt: Date.now() + COUNTDOWN_MS,
   };
   await hset(roomKey(code), 'meta', meta);
   await expire(roomKey(code), ROOM_TTL_S);
-  return send(res, 200, publicState(code, { ...hash, meta }));
+  return send(res, 200, publicState(code, { ...hash, ...banked, meta }));
+}
+
+/**
+ * Folds a finished round into a seat's running totals and clears the board
+ * for the next one. Called with `round` 0 - before anyone has played - it
+ * only clears, so opening the first board never banks a phantom zero.
+ *
+ * 最快玩家 is the quickest single round anyone put together, not the sum of
+ * their times: a player who sat out one board should not win it by having
+ * spent less of the evening playing.
+ */
+function bankRound(seat, round, startAt = 0) {
+  const next = { ...seat, score: 0, finished: false, seconds: null };
+  // Nothing to bank: no round has been played, or this seat arrived after
+  // the last one had begun and sat it out.
+  if (!round || (seat.joinedAt || 0) > startAt) return next;
+  const scored = Math.max(0, Math.floor(Number(seat.score) || 0));
+  next.total = (seat.total || 0) + scored;
+  next.best = Math.max(seat.best || 0, scored);
+  next.rounds = (seat.rounds || 0) + 1;
+  const took = Number(seat.seconds);
+  if (Number.isFinite(took) && took > 0) {
+    next.bestTime = seat.bestTime ? Math.min(seat.bestTime, took) : took;
+  }
+  return next;
 }
 
 async function score(res, body) {
@@ -275,11 +371,51 @@ async function score(res, body) {
 
   seat.score = Math.max(0, Math.floor(Number(body.score) || 0));
   seat.finished = Boolean(body.finished);
+  // Only read off the HUD once the run is over, so 最快玩家 is a finishing
+  // time rather than however far into the board someone happened to be.
+  const took = Math.round(Number(body.seconds));
+  if (seat.finished && Number.isFinite(took) && took > 0) seat.seconds = took;
   seat.lastSeen = Date.now();
   // Only this player's own field is written, so four reports arriving at
   // once cannot overwrite one another.
   await hset(roomKey(code), 'p:' + body.playerId, seat);
   return send(res, 200, publicState(code, { ...hash, ['p:' + body.playerId]: seat }));
+}
+
+/**
+ * 结束房间. The room is marked closed rather than deleted: everyone else is
+ * still polling, and the closing card - who won the evening - is the last
+ * thing any of them will see. Deleting it here would replace that with a
+ * 「房间不存在」 for every player but the host.
+ *
+ * The final round is banked on the way out, so the card counts the board
+ * they have only just finished.
+ */
+async function end(res, body) {
+  const code = String(body.code ?? '').trim();
+  const hash = await readRoom(code);
+  if (!hash) return send(res, 404, { error: 'noRoom' });
+  if (hash.meta.host !== body.playerId || !seatOf(hash, body.playerId, body.playerToken)) {
+    return send(res, 403, { error: 'notHost' });
+  }
+  if (hash.meta.endedAt) return send(res, 200, publicState(code, hash));
+
+  const banked = {};
+  for (const [field, seat] of Object.entries(hash)) {
+    if (!field.startsWith('p:') || !seat) continue;
+    const next = bankRound(seat, hash.meta.round, hash.meta.startAt || 0);
+    // The round just played is what the card is about, so it stays readable
+    // rather than being zeroed for a next round that will never come.
+    next.score = Math.max(0, Math.floor(Number(seat.score) || 0));
+    next.finished = true;
+    next.seconds = seat.seconds ?? null;
+    banked[field] = next;
+    await hset(roomKey(code), field, next);
+  }
+  const meta = { ...hash.meta, endedAt: Date.now() };
+  await hset(roomKey(code), 'meta', meta);
+  await expire(roomKey(code), ROOM_TTL_S);
+  return send(res, 200, publicState(code, { ...hash, ...banked, meta }));
 }
 
 async function leave(res, body) {

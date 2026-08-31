@@ -17,7 +17,8 @@ import { onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
-import { forgetRoom } from './engine/room';
+import { showRoomCard } from './ui/roomCard';
+import { currentRoom, forgetRoom, startMatch, type RoomState } from './engine/room';
 import { clearSeed, seedRandom } from './engine/rng';
 import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
@@ -159,6 +160,80 @@ function leaveGame(go: () => void) {
   go();
 }
 
+/**
+ * The room the host is choosing a board for, or null.
+ *
+ * While this is set the home page is not the player's own: every board on it
+ * puts four people on the same countdown. That is a big enough difference to
+ * be worth saying twice — the banner across the top says it in words, and
+ * the pink frame around the whole screen says it out of the corner of an eye
+ * for the taps that happen faster than reading.
+ */
+let pickingForRoom: string | null = null;
+
+function setPickingForRoom(code: string | null) {
+  pickingForRoom = code;
+  document.body.classList.toggle('is-room-host', Boolean(code));
+}
+
+/**
+ * The host taps a board on the home page. Instead of opening it for them, it
+ * goes to the room, and this device joins the countdown with everyone else.
+ */
+async function startRoundFor(mode: string) {
+  const code = pickingForRoom;
+  if (!code) return false;
+  const banner = document.getElementById('roomPickMsg');
+  if (banner) banner.textContent = STRINGS[currentLang].workingLabel;
+  const begun = await startMatch(mode);
+  if (begun.ok) {
+    setPickingForRoom(null);
+    showMultiplayer();
+    return true;
+  }
+  // Still the host's page, still their room: say what went wrong and leave
+  // them where they are to try another board (or wait for a fourth friend).
+  if (banner) {
+    banner.textContent =
+      begun.reason === 'tooFew'
+        ? STRINGS[currentLang].mpErrTooFew
+        : STRINGS[currentLang].mpErrNotOpen;
+  }
+  return true;
+}
+
+function notAMultiplayerBoard() {
+  const banner = document.getElementById('roomPickMsg');
+  if (banner) banner.textContent = STRINGS[currentLang].mpNotAMode;
+}
+
+/**
+ * The strip across the top of the home page while the host is choosing.
+ *
+ * It is drawn into the page rather than fixed over it so that it scrolls
+ * away with the boards it is talking about; the frame is what stays.
+ */
+function paintRoomHostBanner() {
+  document.getElementById('roomPickBar')?.remove();
+  if (!pickingForRoom) return;
+  const s = STRINGS[currentLang];
+  const bar = document.createElement('div');
+  bar.id = 'roomPickBar';
+  bar.className = 'room-pick-bar';
+  bar.innerHTML = `
+    <div class="room-pick-title">${s.mpPickingTitle}</div>
+    <div class="room-pick-hint">${s.mpPickingHint.replace('{code}', pickingForRoom)}</div>
+    <div class="room-pick-msg" id="roomPickMsg" role="status"></div>
+    <button class="room-pick-back" id="roomPickBack">${s.mpBackToRoom}</button>
+  `;
+  const page = root.querySelector('.home-page') ?? root.firstElementChild;
+  page?.insertBefore(bar, page.firstChild);
+  bar.querySelector<HTMLButtonElement>('#roomPickBack')!.addEventListener('click', () => {
+    setPickingForRoom(null);
+    showMultiplayer();
+  });
+}
+
 function teardown() {
   if (activeDestroy) {
     activeDestroy();
@@ -172,25 +247,33 @@ function showMenu() {
   trackScreen('menu');
   renderMenu(root, homeLayout, {
     onSelectBase: (id) => {
+      if (pickingForRoom) return void startRoundFor(id);
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game);
     },
     onSelectLayout: (id, reopenKey) => {
+      if (pickingForRoom) return void startRoundFor(id);
       const game = layoutGames.find((g) => g.card.id === id);
       if (game) showGame(game, undefined, undefined, reopenKey);
     },
     onTimedFor: (id, reopenKey) => {
+      // Rooms deal one plain board from one seed. A clock or a bomb layer on
+      // top of that is a different game and is not one of the eight the
+      // server will accept, so the host is told rather than left guessing.
+      if (pickingForRoom) return void notAMultiplayerBoard();
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onBombFor: (tier, id, reopenKey) => {
+      if (pickingForRoom) return void notAMultiplayerBoard();
       const pool = tier === 'advanced' ? bombLayoutGames : games;
       const game = pool.find((g) => g.card.id === id);
       if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, undefined, reopenKey);
     },
   }, currentLang);
   setNavTab(null);
+  paintRoomHostBanner();
   wireHomeTitle();
   repaintIcons();
   // Re-opening a picker works by replaying the tap on the card that owns it:
@@ -241,6 +324,7 @@ function showAccountPage(tab: AuthTab) {
  */
 function showMultiplayer() {
   teardown();
+  setPickingForRoom(null);
   trackScreen('multiplayer');
   activeDestroy = renderMultiplayerPage(
     root,
@@ -249,6 +333,12 @@ function showMultiplayer() {
       onMatchStart: startMultiplayerRun,
       // Opening a room is the subscriber's; buying it lands back here.
       onNeedGenius: () => openGeniusWindow(currentLang, showMultiplayer),
+      // Off to the home page, where all eight boards live with their icons.
+      onPickMode: (code) => {
+        setPickingForRoom(code);
+        showMenu();
+      },
+      onRoomEnded: showRoomFinal,
     },
     currentLang,
   );
@@ -273,10 +363,10 @@ function startMultiplayerRun(match: MatchStart) {
   teardown();
   trackScreen('multiplayer_run');
   seedRandom(match.seed);
-  const back = () => {
-    forgetRoom();
-    showMenu();
-  };
+  // A finished round goes back to the room, not to the home page: the scores
+  // are still up there and the host has another board to pick. Only a device
+  // that has somehow lost its seat falls through to the home page.
+  const back = () => (currentRoom() ? showMultiplayer() : showMenu());
   const destroyGame = game.mount(root, back, { lang: currentLang });
   // The countdown was the "get ready", and it ended for everyone at the same
   // instant. Leaving the start card up would undo exactly that: four players
@@ -291,6 +381,19 @@ function startMultiplayerRun(match: MatchStart) {
   };
   gameInProgress = true;
   repaintIcons();
+}
+
+/**
+ * 结束房间. The evening's card, and then out — the seat is given up here
+ * rather than in the room page, so the card is the last thing that needed it.
+ */
+function showRoomFinal(state: RoomState) {
+  teardown();
+  setPickingForRoom(null);
+  showRoomCard(root, state, currentLang, () => {
+    forgetRoom();
+    showMenu();
+  });
 }
 
 function showRecordsPage() {

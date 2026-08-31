@@ -180,6 +180,25 @@ export interface I18nStrings {
   mpGo: string;
   mpStandings: string;
   mpFinished: string;
+  /** The host picks the board from the home page, where all eight of them
+   *  live with their icons — these are the trip there and back. */
+  mpGoPick: string;
+  mpPickingTitle: string;
+  mpPickingHint: string;
+  mpBackToRoom: string;
+  mpNotAMode: string;
+  /** A room is an evening: round after round, then a closing card. */
+  mpRoundLabel: string;
+  mpNextRound: string;
+  mpEndRoom: string;
+  mpRoomEnded: string;
+  mpTotalLabel: string;
+  mpRoundResult: string;
+  mpFinalTitle: string;
+  mpBestRound: string;
+  mpFastest: string;
+  mpRoundsPlayed: string;
+  mpErrEnded: string;
   mpErrNoRoom: string;
   mpErrFull: string;
   mpErrStarted: string;
@@ -428,6 +447,22 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGo: 'Go!',
     mpStandings: 'Standings',
     mpFinished: 'done',
+    mpGoPick: 'Pick a board on the home page',
+    mpPickingTitle: 'You are picking for the room',
+    mpPickingHint: 'Tap any board and everyone in room {code} plays it.',
+    mpBackToRoom: 'Back to the room',
+    mpNotAMode: 'Rooms play the eight plain boards — not timed runs or bombs.',
+    mpRoundLabel: 'Round {n}',
+    mpNextRound: 'Pick the next board',
+    mpEndRoom: 'Close the room',
+    mpRoomEnded: 'The host closed the room.',
+    mpTotalLabel: 'total',
+    mpRoundResult: 'This round',
+    mpFinalTitle: 'How the room finished',
+    mpBestRound: 'Best single round',
+    mpFastest: 'Quickest board',
+    mpRoundsPlayed: '{n} rounds',
+    mpErrEnded: 'That room has been closed.',
     mpErrNoRoom: 'No room with that code.',
     mpErrFull: 'That room is full — four players is the most.',
     mpErrStarted: 'That game has already started.',
@@ -659,6 +694,22 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGo: 'Partez !',
     mpStandings: 'Classement',
     mpFinished: 'terminé',
+    mpGoPick: 'Choisir un plateau sur l’accueil',
+    mpPickingTitle: 'Vous choisissez pour la salle',
+    mpPickingHint: 'Touchez un plateau : toute la salle {code} y joue.',
+    mpBackToRoom: 'Retour à la salle',
+    mpNotAMode: 'Les salles jouent les huit plateaux simples — ni chrono ni bombes.',
+    mpRoundLabel: 'Manche {n}',
+    mpNextRound: 'Choisir le plateau suivant',
+    mpEndRoom: 'Fermer la salle',
+    mpRoomEnded: 'L’hôte a fermé la salle.',
+    mpTotalLabel: 'total',
+    mpRoundResult: 'Cette manche',
+    mpFinalTitle: 'Bilan de la salle',
+    mpBestRound: 'Meilleure manche',
+    mpFastest: 'Plateau le plus rapide',
+    mpRoundsPlayed: '{n} manches',
+    mpErrEnded: 'Cette salle a été fermée.',
     mpErrNoRoom: 'Aucune salle avec ce code.',
     mpErrFull: 'Cette salle est pleine — quatre joueurs au maximum.',
     mpErrStarted: 'Cette partie a déjà commencé.',
@@ -890,6 +941,22 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGo: '開始！',
     mpStandings: '排名',
     mpFinished: '已完成',
+    mpGoPick: '去主選單選玩法',
+    mpPickingTitle: '你正在為整個房間選玩法',
+    mpPickingHint: '點任何一個玩法，{code} 號房的所有人就一起玩它。',
+    mpBackToRoom: '回到房間',
+    mpNotAMode: '房間只玩八種基本玩法，計時與炸彈暫時不行。',
+    mpRoundLabel: '第 {n} 局',
+    mpNextRound: '選下一個玩法',
+    mpEndRoom: '結束房間',
+    mpRoomEnded: '房主結束了房間。',
+    mpTotalLabel: '總分',
+    mpRoundResult: '本局',
+    mpFinalTitle: '本房戰績',
+    mpBestRound: '單局最高',
+    mpFastest: '最快玩家',
+    mpRoundsPlayed: '共 {n} 局',
+    mpErrEnded: '這個房間已經結束了。',
     mpErrNoRoom: '沒有這個房間號。',
     mpErrFull: '房間滿了——最多四個人。',
     mpErrStarted: '這一局已經開始了。',
@@ -1121,6 +1188,22 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGo: '开始！',
     mpStandings: '排名',
     mpFinished: '已完成',
+    mpGoPick: '去主菜单选玩法',
+    mpPickingTitle: '你正在为整个房间选玩法',
+    mpPickingHint: '点任何一个玩法，{code} 号房的所有人就一起玩它。',
+    mpBackToRoom: '回到房间',
+    mpNotAMode: '房间只玩八种基本玩法，计时和炸弹暂时不行。',
+    mpRoundLabel: '第 {n} 局',
+    mpNextRound: '选下一个玩法',
+    mpEndRoom: '结束房间',
+    mpRoomEnded: '房主结束了房间。',
+    mpTotalLabel: '总分',
+    mpRoundResult: '本局',
+    mpFinalTitle: '本房战绩',
+    mpBestRound: '单局最高',
+    mpFastest: '最快玩家',
+    mpRoundsPlayed: '共 {n} 局',
+    mpErrEnded: '这个房间已经结束了。',
     mpErrNoRoom: '没有这个房间号。',
     mpErrFull: '房间满了——最多四个人。',
     mpErrStarted: '这一局已经开始了。',

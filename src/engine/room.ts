@@ -30,9 +30,18 @@ export interface RoomPlayer {
   id: string;
   name: string;
   avatar: Avatar;
+  /** This round only. Zeroed when the host puts up the next board. */
   score: number;
   finished: boolean;
   isHost: boolean;
+  /** Every round banked so far — what the closing card ranks people by. */
+  total: number;
+  /** The best single round, and the quickest one, over the whole room. */
+  best: number;
+  bestTime: number | null;
+  /** How long this round took them, once they are done with it. */
+  seconds: number | null;
+  rounds: number;
 }
 
 export interface RoomState {
@@ -44,6 +53,12 @@ export interface RoomState {
   seed: string | null;
   /** The agreed instant, on the server's clock. */
   startAt: number | null;
+  /** Rounds played. 0 before the host has put up anything. */
+  round: number;
+  /** Everyone is done: the host picks the next board, or closes the room. */
+  roundOver: boolean;
+  /** The host has closed it. What is left is the closing card. */
+  ended: boolean;
   players: RoomPlayer[];
   serverNow: number;
 }
@@ -57,6 +72,8 @@ export type RoomError =
   | 'notHost'
   | 'tooFew'
   | 'mode'
+  /** The host has closed the room; nothing more happens in it. */
+  | 'ended'
   | 'busy'
   /** Rooms are not switched on for this deployment yet. */
   | 'notConfigured'
@@ -73,15 +90,33 @@ interface Session {
 let session: Session | null = null;
 /** serverNow minus our own clock, so we can count down to the right instant. */
 let clockOffset = 0;
+/**
+ * The room as of the last reply that described one.
+ *
+ * The standings on the share card are the standings at the moment the run
+ * ended, and by then the page that was polling for them is gone. Keeping the
+ * last one here means the card can be drawn from the same numbers the player
+ * was watching, without the poll having to be threaded through the game.
+ */
+let lastState: RoomState | null = null;
 
 export const currentRoom = (): Session | null => session;
+
+/** The room as last seen, or null outside one. */
+export const latestRoomState = (): RoomState | null => lastState;
+
+/** Whether this device is the one that opened the room. */
+export function iAmHost(state: RoomState | null = lastState): boolean {
+  const seat = session;
+  return Boolean(seat && state?.host && state.host === seat.playerId);
+}
 
 /** The server's clock, as best we can tell it from here. */
 export const serverTime = (): number => Date.now() + clockOffset;
 
 const KNOWN: RoomError[] = [
   'geniusOnly', 'noRoom', 'started', 'full', 'notHost',
-  'tooFew', 'mode', 'busy', 'notConfigured',
+  'tooFew', 'mode', 'ended', 'busy', 'notConfigured',
 ];
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
@@ -99,6 +134,10 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
     // Every reply is a chance to re-measure the gap between the clocks.
     const stamp = reply.serverNow ?? reply.state?.serverNow;
     if (typeof stamp === 'number') clockOffset = stamp - Date.now();
+    // …and to remember the room, whether it came back on its own or wrapped
+    // in the reply to create/join.
+    const described = (reply.state ?? reply) as unknown as RoomState;
+    if (res.ok && Array.isArray(described?.players)) lastState = described;
     if (!res.ok) {
       return { ok: false, reason: KNOWN.find((k) => k === reply.error) ?? 'network' };
     }
@@ -169,20 +208,34 @@ export function startMatch(mode: string): Promise<RoomResult<RoomState>> {
   return post<RoomState>({ action: 'start', mode, ...session });
 }
 
-export function reportScore(score: number, finished: boolean): Promise<RoomResult<RoomState>> {
+export function reportScore(
+  score: number,
+  finished: boolean,
+  seconds?: number,
+): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
-  return post<RoomState>({ action: 'score', score, finished, ...session });
+  return post<RoomState>({ action: 'score', score, finished, seconds, ...session });
+}
+
+/** Host only: 结束房间. Everyone still polling sees the closing card. */
+export function endRoom(): Promise<RoomResult<RoomState>> {
+  if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
+  return post<RoomState>({ action: 'end', ...session });
 }
 
 export async function leaveRoom(): Promise<void> {
   if (!session) return;
   const leaving = session;
   session = null;
+  lastState = null;
   await post({ action: 'leave', ...leaving });
 }
 
 /** Forget the room without telling the server — for a run that has ended. */
-export const forgetRoom = (): void => void (session = null);
+export const forgetRoom = (): void => {
+  session = null;
+  lastState = null;
+};
 
 /**
  * Poll the room. Returns the stop function; every caller must keep it and
