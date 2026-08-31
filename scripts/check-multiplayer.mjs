@@ -57,9 +57,11 @@ const granted = await A.page.evaluate(async () => {
   const r = await fetch('/api/redeem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: 'TESTMONTH', email: 'roomhost@test.com', password: '4821' }),
+    body: JSON.stringify({ code: 'TESTMONTH' }),
   }).then((x) => x.json());
   if (!r.active) return r;
+  // Exactly what src/engine/account.ts writes after a redemption, including
+  // the code — an unbound holder has no address, so the code is its name.
   localStorage.setItem(
     'slides_genius',
     JSON.stringify({
@@ -69,6 +71,7 @@ const granted = await A.page.evaluate(async () => {
       channel: 'code',
       email: r.email,
       token: r.token,
+      code: r.code,
     }),
   );
   return r;

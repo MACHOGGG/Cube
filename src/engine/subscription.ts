@@ -40,6 +40,13 @@ export interface Entitlement {
   /** The address a web subscription is attached to. Unused in the app. */
   email?: string;
   /**
+   * The redeem code this is still held under, when no address is attached
+   * yet. It is half of the pair — with `token` — that names the account on
+   * the server, because an unbound code account has no address to name it
+   * by. Set when a code is spent, and gone the moment one is attached.
+   */
+  code?: string;
+  /**
    * Rotated on every sign-in to a code-granted account, and the only proof
    * of it we hold: the passcode is never kept on the device. It is what the
    * server checks before letting this player open a multiplayer room.
@@ -119,21 +126,35 @@ export function rememberPending(pending: PendingAccount): void {
 }
 
 export function pendingAccount(): PendingAccount | null {
-  // A token on this device means an address is already attached and working.
-  // There is nothing left to ask for, whatever is still sitting in storage.
-  if (entitlement().token) {
-    clearPendingAccount();
-    return null;
-  }
+  let saved: PendingAccount | null = null;
   try {
     const raw = localStorage.getItem(PENDING_KEY);
-    const saved = raw ? (JSON.parse(raw) as PendingAccount) : null;
-    if (saved?.kind === 'checkout' && saved.id) return saved;
-    if (saved?.kind === 'code' && saved.code && saved.token) return saved;
-    return null;
+    const parsed = raw ? (JSON.parse(raw) as PendingAccount) : null;
+    if (parsed?.kind === 'checkout' && parsed.id) saved = parsed;
+    if (parsed?.kind === 'code' && parsed.code && parsed.token) saved = parsed;
   } catch {
     return null;
   }
+  if (!saved) return null;
+
+  // What "finished" means is not the same on both sides, and reading it wrong
+  // is worse than not reading it at all.
+  //
+  //   checkout — the address came from Creem and was always known; what was
+  //     missing is the password, and setting one is what issues a token.
+  //   code — the token exists from the moment the code is spent, because the
+  //     entitlement lives under the code and something has to claim it. What
+  //     is missing is the address, so an email is what says this is done.
+  //
+  // Treating a token as the answer for both quietly threw away the claim on
+  // every redeemed code the instant it was redeemed.
+  const mine = entitlement();
+  const done = saved.kind === 'checkout' ? Boolean(mine.token) : Boolean(mine.email);
+  if (done) {
+    clearPendingAccount();
+    return null;
+  }
+  return saved;
 }
 
 export function clearPendingAccount(): void {
@@ -177,6 +198,9 @@ export async function attachAccount(
     ...entitlement(),
     email: result.email || entitlement().email,
     token: result.token,
+    // The holder under the code is deleted as part of binding, so the code
+    // no longer names anything. The address does that now.
+    code: undefined,
   });
   return 'ok';
 }

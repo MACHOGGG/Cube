@@ -1,6 +1,6 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody, creem, configured as creemConfigured, entitled } from './_creem.js';
-import { loadAccount, normalizeEmail } from './_accounts.js';
+import { codeHolder, loadAccount, normalizeEmail } from './_accounts.js';
 import { expire, hdel, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
 
 /**
@@ -82,8 +82,19 @@ export default async function handler(req, res) {
  * somebody opening a game room without paying, which is worth stating
  * plainly and is not worth shutting out every honest store subscriber over.
  */
-async function hostMayOpen({ email, accountToken, storeClaim }) {
+async function hostMayOpen({ email, accountToken, holderCode, storeClaim }) {
   const address = normalizeEmail(email);
+
+  // A code redeemed but not yet attached to an address. What it granted lives
+  // under the code, so that is where to look — asking for an email here would
+  // turn "I have not finished signing up" into "you did not pay", which is
+  // both wrong and the exact moment a player is least willing to hear it.
+  if (holderCode && accountToken) {
+    const held = await loadAccount(codeHolder(holderCode));
+    if (held?.token && held.token === accountToken && (held.until || 0) > Date.now()) {
+      return true;
+    }
+  }
 
   if (address && accountToken) {
     const account = await loadAccount(address);

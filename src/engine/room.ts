@@ -119,6 +119,9 @@ function hostProof() {
   return {
     email: mine.email,
     accountToken: mine.channel === 'code' ? mine.token : undefined,
+    // Redeemed but not yet attached to an address: the code is the only name
+    // this entitlement has, so it has to travel with the token that claims it.
+    holderCode: mine.channel === 'code' ? mine.code : undefined,
     storeClaim: isStoreChannel() && isGenius(),
   };
 }

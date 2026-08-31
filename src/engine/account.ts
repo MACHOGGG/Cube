@@ -80,6 +80,7 @@ function toResult(status: number, reply: Reply): AccountResult {
         channel: 'code',
         email: reply.email,
         token: reply.token,
+        code: reply.code,
       },
     };
   }
