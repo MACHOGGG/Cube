@@ -1,5 +1,4 @@
 import type { ShellRefs } from '../ui/gameShell';
-import { confirmEndRun } from '../ui/confirmModal';
 import { snapFlipFaces, plankFlipCells, FLIP_MS, FLIP_STAGGER_MS } from './plankFlip';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
@@ -562,11 +561,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   refs.buttons.restart.addEventListener('click', newGame);
   refs.buttons.stop.addEventListener('click', doPause);
   refs.buttons.continueBtn.addEventListener('click', doResume);
-  // 结束 throws the run away, so it asks first — the same gate the title and
-  // the two bottom-nav entries go through.
+  // A run now ends in exactly two ways, and both are unambiguous: the player
+  // presses 结束, or the board itself runs out (every tile turned, or no
+  // face-up tile can ever be flipped). Nothing else can navigate away from a
+  // game any more — the bottom dock is hidden while one is open — so there
+  // is nothing left for a yes/no gate to protect against.
   refs.buttons.finish.addEventListener('click', () => {
     if (!started || gameOver) return;
-    confirmEndRun(hooks.lang, doFinish);
+    doFinish();
   });
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));

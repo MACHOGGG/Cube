@@ -12,10 +12,17 @@
  */
 export type CellFace = 'flavor' | 'dot' | 'blank';
 
+/** Set on a live bomb still showing its front face, so the thumbnail marks
+ *  it with the same "!" the board does — without it a bomb run's picture is
+ *  just a board with some red pieces in it, and the one thing that made the
+ *  run a bomb run is the thing the picture leaves out. A bomb that has been
+ *  turned is no longer a hazard, so it is never flagged on a dot face. */
+type Hazard = { hazard?: boolean };
+
 export type SnapshotCell =
-  | { kind: 'circle'; cx: number; cy: number; r: number; face: CellFace; color: string }
-  | { kind: 'rect'; cx: number; cy: number; half: number; face: CellFace; color: string; rotateDeg?: number }
-  | { kind: 'poly'; points: [number, number][]; face: CellFace; color: string };
+  | ({ kind: 'circle'; cx: number; cy: number; r: number; face: CellFace; color: string } & Hazard)
+  | ({ kind: 'rect'; cx: number; cy: number; half: number; face: CellFace; color: string; rotateDeg?: number } & Hazard)
+  | ({ kind: 'poly'; points: [number, number][]; face: CellFace; color: string } & Hazard);
 
 export interface BoardSnapshot {
   cells: SnapshotCell[];
@@ -63,13 +70,13 @@ export function packSnapshot(raw: RawCell[]): BoardSnapshot {
     cells: raw.map((c): SnapshotCell => {
       if (c.kind === 'circle') {
         const [cx, cy] = T(c.cx, c.cy);
-        return { kind: 'circle', cx, cy, r: R4(c.r * scale), face: c.face, color: c.color };
+        return { kind: 'circle', cx, cy, r: R4(c.r * scale), face: c.face, color: c.color, hazard: c.hazard };
       }
       if (c.kind === 'rect') {
         const [cx, cy] = T(c.cx, c.cy);
-        return { kind: 'rect', cx, cy, half: R4(c.half * scale), face: c.face, color: c.color, rotateDeg: c.rotateDeg };
+        return { kind: 'rect', cx, cy, half: R4(c.half * scale), face: c.face, color: c.color, rotateDeg: c.rotateDeg, hazard: c.hazard };
       }
-      return { kind: 'poly', face: c.face, color: c.color, points: c.points.map(([x, y]) => T(x, y)) };
+      return { kind: 'poly', face: c.face, color: c.color, hazard: c.hazard, points: c.points.map(([x, y]) => T(x, y)) };
     }),
   };
 }
@@ -161,6 +168,42 @@ function drawDotFace(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: nu
   }
 }
 
+/** The board's own "!", in the card's own units: white Fraunces over the
+ *  piece, sunk a little toward a triangle's centroid the way the live board
+ *  sinks it, and sized off the piece's shorter axis so it never spills out
+ *  of one. */
+function drawHazardMark(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number) {
+  let cx: number, cy: number, em: number;
+  if (cell.kind === 'circle') {
+    cx = cell.cx * size;
+    cy = cell.cy * size;
+    em = cell.r * size * 1.1;
+  } else if (cell.kind === 'rect') {
+    cx = cell.cx * size;
+    cy = cell.cy * size;
+    em = cell.half * size * 1.05;
+  } else {
+    const xs = cell.points.map((p) => p[0] * size);
+    const ys = cell.points.map((p) => p[1] * size);
+    cx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    // A triangle's centroid is a third of the way up from its base, which is
+    // where the eye reads its middle — not the bounding box's centre.
+    cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+    em = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * 0.55;
+  }
+  if (em < 2) return;
+  ctx.save();
+  ctx.font = `700 ${em.toFixed(1)}px Fraunces, Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  ctx.shadowOffsetY = Math.max(1, em * 0.06);
+  ctx.shadowBlur = Math.max(1, em * 0.12);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText('!', cx, cy);
+  ctx.restore();
+}
+
 function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: number, y: number, size: number) {
   ctx.save();
   ctx.translate(x, y);
@@ -176,6 +219,7 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
       tracePrimitive(ctx, cell, size, 1);
       ctx.fillStyle = cell.color;
       ctx.fill();
+      if (cell.hazard) drawHazardMark(ctx, cell, size);
     }
   }
   ctx.restore();

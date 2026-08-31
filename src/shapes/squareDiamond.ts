@@ -627,6 +627,7 @@ export function createSquareDiamondGame(): ShapeGame {
               rotateDeg: 45,
               face: isBlank(t) ? 'blank' : t.face,
               color: COLORS[effColor(t)],
+              hazard: isBomb && !isBlank(t) && t.face === 'flavor' && t.color === RED_IDX,
             });
           }
         return packSnapshot(raw);

@@ -7,7 +7,6 @@ import { renderMenu, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
-import { confirmEndRun } from './ui/confirmModal';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
@@ -100,15 +99,13 @@ function setNavTab(tab: NavTab) {
   setActiveNavTab(tab);
 }
 
-/**
- * True while a run is on the board. Anything that would abandon it — the
- * title, either bottom-nav entry, the game page's own 结束 button, and a
- * browser reload — has to ask first.
- */
+/** True while a run is on the board — a browser reload is the one way out
+ *  of a game we can still warn about, so the beforeunload prompt below is
+ *  registered only for as long as this is set. */
 let gameInProgress = false;
 
 /** Wires the header's title on whichever screen was just rendered: it goes
- *  back to the top of the home page, asking first if a run is open. */
+ *  back to the top of the home page. */
 function wireHomeTitle() {
   const title = root.querySelector<HTMLElement>('.home-title');
   if (!title) return;
@@ -134,11 +131,13 @@ addEventListener('beforeunload', (e) => {
   e.returnValue = '';
 });
 
-/** Runs `go` straight away when nothing is at stake, and behind the yes/no
- *  gate when a run would be thrown away. */
+/** Leaves whatever screen is up. While a run is open the bottom dock is
+ *  hidden and the game page carries no home title, so in practice this is
+ *  only ever reached from a non-game screen — it still closes out the run
+ *  rather than leaving it half-alive if some future entry point does. */
 function leaveGame(go: () => void) {
-  if (!gameInProgress) { go(); return; }
-  confirmEndRun(currentLang, () => { gameInProgress = false; go(); });
+  gameInProgress = false;
+  go();
 }
 
 function teardown() {

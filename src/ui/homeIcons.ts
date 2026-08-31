@@ -419,21 +419,40 @@ function triRows(
 }
 const TRI_FILLS = [C.green, C.blue, C.tan, C.blue, C.tan, C.rose, C.blue, C.tan, C.rose];
 
-/** One arm: the periwinkle triangle with its rows of tiles. Both triangle
- *  layouts are built from this, at exactly the same size — 进阶三角 is two
- *  of these, so its icon is a 2:1 box rather than a shrunk-down pair. */
-const TRI_ARM = (fills: string[]) =>
-  `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>` +
-  `<g transform="translate(0,2)">${triRows(50, 12, 40, 3, fills)}</g>`;
+/** One arm, in two layers: the periwinkle silhouette, and the rows of tiles
+ *  that sit on it. Both triangle layouts are built from these, at exactly
+ *  the same size — 进阶三角 is two of them. Keeping the two layers separate
+ *  is what lets that icon interleave them (see below). */
+const TRI_BODY = `<path d="${TRIANGLE_PATH}" fill="${C.layoutPeri}"/>`;
+const TRI_TILES = (fills: string[]) => `<g transform="translate(0,2)">${triRows(50, 12, 40, 3, fills)}</g>`;
+const TRI_ARM = (fills: string[]) => TRI_BODY + TRI_TILES(fills);
 
 /** 大三角 — one big triangle of tiles. */
 const ICON_TRIANGLE_BIG = svg(TRI_ARM(TRI_FILLS));
 
 /** 进阶三角 — the V board's two independent arms, each the full size of
- *  大三角's, side by side on a box twice as wide. */
+ *  大三角's. They are not two triangles set side by side: on the real board
+ *  the arms share their innermost bottom tile, which is exactly why its
+ *  bottom row has one cell more than the rows above it. So the right arm is
+ *  slid left by one tile of triRows' own lattice, and its bottom-left tile
+ *  lands on top of the left arm's bottom-right one — the V's joint, drawn
+ *  rather than implied.
+ *
+ *  Both silhouettes go down before either arm's tiles, so the overlap is
+ *  the one shared tile and nothing else: drawn arm-by-arm, the right arm's
+ *  periwinkle body would paint over the left arm's whole lower corner and
+ *  leave a sliver of tile sticking out from under it. */
+const TILE = (2 * 40) / 3; // one small triangle of triRows(50, 12, 40, 3)
+const TRI_TILE_SPAN = 2 * 40; // the tiles' own span, x = 10..90
+const TRI_ARM_STEP = TRI_TILE_SPAN - TILE; // 53.33 — overlapping by one tile
+const TRI_ADVANCED_W = Math.round(90 + TRI_ARM_STEP + 10); // both silhouettes, plus their margins
+const SHIFT_RIGHT = `translate(${TRI_ARM_STEP.toFixed(2)},0)`;
 const ICON_TRIANGLE_ADVANCED = svgWide(
-  204,
-  TRI_ARM(TRI_FILLS) + `<g transform="translate(104,0)">${TRI_ARM([...TRI_FILLS].reverse())}</g>`,
+  TRI_ADVANCED_W,
+  TRI_BODY +
+    `<g transform="${SHIFT_RIGHT}">${TRI_BODY}</g>` +
+    TRI_TILES(TRI_FILLS) +
+    `<g transform="${SHIFT_RIGHT}">${TRI_TILES([...TRI_FILLS].reverse())}</g>`,
 );
 
 /** Glyphs that need a 2:1 box rather than the usual square one. */

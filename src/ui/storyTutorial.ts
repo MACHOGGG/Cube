@@ -51,6 +51,11 @@ export type StoryStep =
       dir?: number;
     }
   | { t: 'fade'; snap: number }
+  /** Blinks a set of cells on and off `times` over, then lands on `snap`.
+   *  Written for the square tutorial's last beat: the emptied slots stand
+   *  there as dashed holes, blink twice to say "these are the ones that
+   *  went", and are gone by the time the board settles. */
+  | { t: 'blink'; idx: number[]; times: number; snap: number }
   | { t: 'pause'; ms: number };
 
 export interface StorySpec {
@@ -95,6 +100,9 @@ const WAIT = {
   flipSettle: 300,
   fadeOut: 320,
   fadeIn: 340,
+  blinkOff: 300,
+  blinkOn: 300,
+  blinkHold: 420,
   slideLead: 250,
   slide: 2600,
   slideRelease: 260,
@@ -113,6 +121,7 @@ function stepMs(st: StoryStep): number {
     // ms so the progress bar's SPEED division lands back on the real time.
     case 'flip': return ((st.idx.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 140) * SPEED + WAIT.flipSettle;
     case 'fade': return WAIT.fadeOut + WAIT.fadeIn;
+    case 'blink': return st.times * (WAIT.blinkOff + WAIT.blinkOn) + WAIT.blinkHold;
     // +420 authored ≈ the chain's post-travel settle wave (capped ~300ms
     // real), so the progress bar keeps tracking the step it is timing.
     case 'slide': return WAIT.slideLead + WAIT.slide + 420 + WAIT.slideRelease + WAIT.slideSettle;
@@ -344,6 +353,19 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
       renderFrame(st.snap);
       board.style.opacity = '1';
       await sleep(WAIT.fadeIn);
+    } else if (st.t === 'blink') {
+      const marks = st.idx.map((i) => els[i]).filter(Boolean);
+      for (const el of marks) el.style.transition = 'opacity 200ms ease';
+      for (let n = 0; n < st.times; n++) {
+        for (const el of marks) el.style.opacity = '0';
+        await sleep(WAIT.blinkOff);
+        if (gen !== my) return;
+        for (const el of marks) el.style.opacity = '1';
+        await sleep(WAIT.blinkOn);
+        if (gen !== my) return;
+      }
+      renderFrame(st.snap);
+      await sleep(WAIT.blinkHold);
     } else if (st.t === 'slide') {
       if (curFrame !== st.f) renderFrame(st.f, true);
       await sleep(WAIT.slideLead);

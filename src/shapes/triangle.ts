@@ -854,7 +854,13 @@ export function createTriangleGame(): ShapeGame {
             const points: [number, number][] = up
               ? [[xBase, i * H], [xBase - 0.5, (i + 1) * H], [xBase + 0.5, (i + 1) * H]]
               : [[xBase + 0.5, (i + 1) * H], [xBase, i * H], [xBase + 1, i * H]];
-            raw.push({ kind: 'poly', points, face: isBlank(tile) ? 'blank' : tile.face, color: COLORS[effColor(tile)] });
+            raw.push({
+              kind: 'poly',
+              points,
+              face: isBlank(tile) ? 'blank' : tile.face,
+              color: COLORS[effColor(tile)],
+              hazard: isBomb && !isBlank(tile) && tile.face === 'flavor' && tile.color === RED_IDX,
+            });
           }
         return packSnapshot(raw);
       }

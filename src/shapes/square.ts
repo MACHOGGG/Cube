@@ -604,6 +604,7 @@ export function createSquareGame(): ShapeGame {
               half,
               face: t.face,
               color: COLORS[effColor(t)],
+              hazard: isBomb && t.face === 'flavor' && t.color === RED_IDX,
             });
           }
         return { cells };

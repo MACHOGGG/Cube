@@ -23,6 +23,9 @@ function frame(rows: string[]): StoryCell[] {
   rows.forEach((row, r) => {
     [...row].forEach((ch, c) => {
       const base = { x: ORIGIN + c * P, y: ORIGIN + r * P, w: CELL, h: CELL };
+      // '.' — nothing at all, for the very last frame: once the holes have
+      // blinked their goodbye the column is simply not there any more.
+      if (ch === '.') return;
       // 'x' — a slot the clear emptied: a hollow dashed circle, nothing in
       // it. Unlike the circle and triangle boards, a completed dot line on
       // the square board is gone for good rather than left as a blank piece,
@@ -55,6 +58,9 @@ const FRAMES: StoryCell[][] = [
   frame(['bbbbx', 'bbbOx', 'bbMGx', 'GYMOx', 'bbbbx']),
   frame(['bbbbR', 'bbORb', 'bbMGR', 'RGYMO', 'bbbbR']),
   frame(['bbbbR', 'bbbOR', 'bbMGR', 'RGYMO', 'bbbbR']),
+  // frame 11 — the board the tutorial ends on: the cleared column is gone,
+  // not even a hole left where it was.
+  frame(['bbbb.', 'bbbO.', 'bbMG.', 'GYMO.', 'bbbb.']),
 ];
 
 const ctr = (r: number, c: number) => ({ x: ORIGIN + c * P + CELL / 2, y: ORIGIN + r * P + CELL / 2 });
@@ -125,9 +131,10 @@ const BEATS: StoryStep[][] = [
     { t: 'slide', f: 10, idx: row(3), dx: -P, dy: 0, wx: -SPAN, wy: 0, snap: 7 },
     { t: 'checks', pts: [0, 1, 2, 3, 4].map((r) => ctr(r, 4)), color: W },
   ],
-  // 10 — the completed column clears: those five pieces vanish and their
-  // slots are left empty.
-  [{ t: 'show', f: 7 }, { t: 'fade', snap: 8 }],
+  // 10 — the completed column clears: the five pieces vanish, their slots
+  // stand for a moment as dashed holes, blink twice to say that is what
+  // just went, and then the column is gone for good.
+  [{ t: 'show', f: 7 }, { t: 'fade', snap: 8 }, { t: 'blink', idx: col(4), times: 2, snap: 11 }],
 ];
 
 export function renderTutorial(container: HTMLElement, lang: Lang, onDone: () => void): void {

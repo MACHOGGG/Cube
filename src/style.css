@@ -10,6 +10,9 @@
   --ink-faint: #9A8B98;
   --line: #E5DAD8;
   --accent: #BE5762;
+  --nav-glow: 190, 87, 98;
+  --nav-btn: 58px;   /* the dock's icon size */
+  --nav-pad: 8px;    /* and its padding, so the active lift can be derived */
   --accent-ink: #7A2E37;
   /* Text sitting ON the accent fill (buttons): white over the light theme's
      deep rose, near-black over the dark theme's light pink. */
@@ -27,14 +30,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
-    --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --on-accent: #3B1B21;
+    --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --nav-glow: 230, 143, 152;
     --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
 :root[data-theme="dark"] {
   --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
-  --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21;
+  --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --nav-glow: 230, 143, 152;
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
 }
@@ -676,7 +679,7 @@ button:hover { filter: brightness(1.05); }
   }
   .home-icon-btn:hover, .center-pick-opt:hover { transform: scale(1.06); }
   .home-nav-btn:hover { transform: scale(1.08); }
-  .home-nav-btn--active:hover { transform: translateY(-10px) scale(1.08); }
+  .home-nav-btn--active:hover { transform: translateY(calc(-1 * (var(--nav-pad) + var(--nav-btn) / 2))) scale(1.08); }
 }
 
 /* ---------- centre picker ---------- */
@@ -710,7 +713,7 @@ button:hover { filter: brightness(1.05); }
 /* Twice the width, twice the box: each of the V board's arms is then drawn
    at exactly the size 大三角's single triangle gets. */
 .center-pick-opt--wide { width: min(74vw, 318px); }
-.center-pick-opt--wide > svg { aspect-ratio: 2.04; }
+.center-pick-opt--wide > svg { aspect-ratio: 1.53; }
 .center-pick-label { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
 
 /* ---------- profile page rows ---------- */
@@ -824,28 +827,50 @@ button:hover { filter: brightness(1.05); }
    floating loose over the page, so they read as one control. */
 .home-nav-dock {
   display: flex; align-items: flex-end; gap: 20px;
-  padding: 8px 20px;
+  padding: var(--nav-pad) 20px;
   border-radius: 22px;
   background: var(--nav-dock);
   box-shadow: 0 6px 20px -8px rgba(46, 36, 48, 0.32), 0 0 0 1px rgba(46, 36, 48, 0.06);
 }
 .home-nav-btn {
-  pointer-events: auto; width: 58px; height: 58px; padding: 0; flex: none;
+  pointer-events: auto; width: var(--nav-btn); height: var(--nav-btn); padding: 0; flex: none;
   background: none; border: none; border-radius: 0; cursor: pointer; display: block;
   -webkit-tap-highlight-color: transparent;
-  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.16));
+  /* The glow lives in this list at zero alpha even at rest: a filter only
+     animates between lists of the same functions in the same order, so a
+     resting state with fewer of them would make the glow snap on and off
+     instead of coming up and fading away. */
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.16))
+          drop-shadow(0 0 6px rgba(var(--nav-glow), 0))
+          drop-shadow(0 0 18px rgba(var(--nav-glow), 0))
+          brightness(1) saturate(1);
 }
-.home-nav-btn:hover { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22)); }
+.home-nav-btn:hover {
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22))
+          drop-shadow(0 0 6px rgba(var(--nav-glow), 0))
+          drop-shadow(0 0 18px rgba(var(--nav-glow), 0))
+          brightness(1) saturate(1);
+}
 .home-nav-btn:active { transform: none; }
-/* Whichever destination is open rides up out of the bar and darkens a shade,
-   and settles back down when it closes — so the bar itself shows where you
-   are, and tapping the raised one reads as "put this away". */
-.home-nav-btn { transition: transform 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 220ms ease; }
+/* Whichever destination is open rides right up out of the dock — far enough
+   that its own middle sits on the dock's top edge, half in and half out —
+   darkens a shade and picks up a small red halo; closing it settles it back
+   down and lets the halo fade. So the dock shows where you are, and tapping
+   the raised one reads as "put this away". */
+.home-nav-btn { transition: transform 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 260ms ease; }
 .home-nav-btn--active {
-  transform: translateY(-10px);
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24)) brightness(0.86) saturate(1.12);
+  transform: translateY(calc(-1 * (var(--nav-pad) + var(--nav-btn) / 2)));
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24))
+          drop-shadow(0 0 6px rgba(var(--nav-glow), 0.8))
+          drop-shadow(0 0 18px rgba(var(--nav-glow), 0.5))
+          brightness(0.86) saturate(1.12);
 }
-.home-nav-btn--active:hover { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28)) brightness(0.86) saturate(1.12); }
+.home-nav-btn--active:hover {
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28))
+          drop-shadow(0 0 6px rgba(var(--nav-glow), 0.85))
+          drop-shadow(0 0 20px rgba(var(--nav-glow), 0.55))
+          brightness(0.86) saturate(1.12);
+}
 @media (prefers-reduced-motion: reduce) { .home-nav-btn { transition: none; } }
 .home-nav-btn > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
@@ -1296,6 +1321,11 @@ html.lang-locked, html.lang-locked body {
     grid-column: 1; grid-row: 1;
     display: flex; flex-direction: column; gap: 1px;
     margin: 0; height: 100%;
+    /* The type below is sized against this column, not just the viewport:
+       the same 844x390 phone gives a normal board a 200px gutter and one of
+       the two wide boards only 130px, and a size that reads well in one
+       spills out of the other. */
+    container-type: inline-size;
   }
   .app.app--game > .hud .hud-cell {
     flex: 1; min-height: 0; padding: 4px clamp(6px, 1.2vw, 14px);
@@ -1305,8 +1335,20 @@ html.lang-locked, html.lang-locked body {
   }
   .app.app--game > .hud .hud-cell:first-child { border-radius: 11px 11px 0 0; }
   .app.app--game > .hud .hud-cell:last-child { border-radius: 0 0 11px 11px; }
-  .app.app--game > .hud .k { font-size: clamp(0.7rem, 2.4vh, 1.05rem); letter-spacing: 0.06em; margin: 0; }
-  .app.app--game > .hud .v { font-size: clamp(1.5rem, 7vh, 3rem); line-height: 1.02; }
+  /* Bounded by the column's width *and* the row's height: whichever runs
+     out first is what a readout has to live inside. The floors are what
+     make even the narrowest gutter's type twice its old size — a label that
+     wraps onto two lines at 22px reads better than one line at 14px. */
+  .app.app--game > .hud .k {
+    font-size: clamp(1.4rem, min(13cqw, 5.6vh), 2.2rem);
+    letter-spacing: 0; line-height: 1.15; margin: 0;
+  }
+  .app.app--game > .hud .v {
+    font-size: clamp(2.2rem, min(30cqw, 14vh), 5rem);
+    /* Fraunces' figures stand taller than a 1.0 line box, which the cell
+       then reports as overflow — a hair of leading keeps them inside it. */
+    line-height: 1.15;
+  }
 
   .app.app--game > .board-wrap {
     grid-column: 2; grid-row: 1;
@@ -1320,30 +1362,33 @@ html.lang-locked, html.lang-locked body {
     grid-column: 3; grid-row: 1;
     display: flex; flex-direction: column; gap: clamp(6px, 1.4vh, 14px);
     margin: 0; height: 100%;
+    container-type: inline-size;
   }
   /* Full-height panels rather than pills: a 100px radius on a button this
      tall turns it into an ellipse, which reads as a balloon sitting in the
-     gutter instead of a control filling it. */
+     gutter instead of a control filling it. The type inside is set at
+     roughly twice a phone's usual UI size — at arm's length, mid-slide, a
+     label you have to look for is a label you stop reading — and because
+     every panel here is `flex: 1` inside a grid column, growing the type
+     does not grow the panel. */
   .app.app--game > .controls .icon-btn {
     flex: 1; min-height: 0; width: 100%; padding: 4px clamp(6px, 1.2vw, 14px);
     border-radius: clamp(14px, 3.4vh, 26px);
-    font-size: clamp(0.85rem, 3vh, 1.4rem); line-height: 1.25;
+    font-size: clamp(1.45rem, min(15cqw, 7vh), 2.6rem); line-height: 1.15;
     display: flex; align-items: center; justify-content: center; text-align: center;
   }
-  /* The two wide boards leave a narrower gutter, so their labels — 色盲友好配色
-     is the longest — step back down enough to stay on one or two lines. */
-  .app.app--game.app--land-wide > .controls .icon-btn { font-size: clamp(0.72rem, 2.2vh, 1rem); }
-  .app.app--game.app--land-wide > .hud .k { font-size: clamp(0.62rem, 1.8vh, 0.85rem); }
-  .app.app--game.app--land-wide > .hud .v { font-size: clamp(1.15rem, 5vh, 2.1rem); }
   .app.app--game > .stuck-end-btn {
     grid-column: 2; grid-row: 1; align-self: end; justify-self: center; margin: 0 0 4px;
   }
-  /* The bottom dock would sit on top of the right-hand buttons. */
-  body:has(.app--game) .home-nav { display: none; }
 }
 
 /* A game screen never scrolls, in either orientation: a board that slides
    under the finger and a page that slides under it at the same time is the
    worst of both. The column is sized to the viewport instead. */
 .app--game { max-height: 100dvh; overflow: hidden; }
+/* The bottom dock belongs to the pages you browse, not to a run in
+   progress: sideways it would sit on top of the right-hand buttons, and
+   upright it covers the controls row on the taller boards. A game is left
+   through 结束 or by finishing it, so there is nothing for it to do here. */
+body:has(.app--game) .home-nav { display: none; }
 html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavior: none; }

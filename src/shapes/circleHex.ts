@@ -145,7 +145,13 @@ function lineFor(fam: Fam, r: number, c: number): Line {
 // column, so a plain local (r,c) offset would silently pick the wrong real
 // cells once trimming kicks in).
 const RHOMBUS_B_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 0], [1, 1]];
-const RHOMBUS_A_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 1], [1, 2]];
+// The second leaning rhombus: (dz,dx) spanned by (0,+1) and (+1,-1). The
+// offsets that used to sit here were circle.ts's own, copied verbatim — but
+// that board's (r,c) are a different pair of screen vectors, and under
+// cx=2R*dx+R*dz they replay as a zig-zag chain of four rather than a
+// rhombus, so this orientation of the 2+2 never scored and a shape no hint
+// shows scored in its place.
+const RHOMBUS_A_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, -1], [1, 0]];
 // (dz,dx) pairs verified to actually plot as a symmetric diamond (top point,
 // two side-by-side middle points, bottom point centered under the top) under
 // this board's cube-coordinate screen mapping cx=2R·dx+R·dz — copying
@@ -578,8 +584,8 @@ export function createCircleHexGame(): ShapeGame {
             }
             const a = clusterFromCube(x0, z0, RHOMBUS_A_OFFSETS);
             if (a && qualifies(a, mask)) {
-              // RHOMBUS_A_OFFSETS's (dz, dx) pairs are u*(dz=0,dx=1) + v*(dz=1,dx=1).
-              const positionAt = (u: number, v: number): Cell | null => cubeToLocal(x0 + u + v, z0 + v);
+              // RHOMBUS_A_OFFSETS's (dz, dx) pairs are u*(dz=0,dx=1) + v*(dz=1,dx=-1).
+              const positionAt = (u: number, v: number): Cell | null => cubeToLocal(x0 + u - v, z0 + v);
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
               matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
             }
@@ -688,6 +694,7 @@ export function createCircleHexGame(): ShapeGame {
               r: 0.95,
               face: isBlank(t) ? 'blank' : t.face,
               color: COLORS[effColor(t)],
+              hazard: isBomb && !isBlank(t) && t.face === 'flavor' && t.color === RED_IDX,
             });
           }
         return packSnapshot(raw);

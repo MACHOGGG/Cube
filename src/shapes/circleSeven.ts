@@ -55,6 +55,13 @@ const PATTERNS: PatternDef[] = [
   },
   {
     label: '2+2',
+    cells: ([[0, 0], [0, 1], [1, -1], [1, 0]] as const).map(([r, c]) => {
+      const [cx, cy] = iconPos(r, c);
+      return { kind: 'circle' as const, cx, cy, r: 0.95 };
+    }),
+  },
+  {
+    label: '1-2-1',
     cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([r, c]) => {
       const [cx, cy] = iconPos(r, c);
       return { kind: 'circle' as const, cx, cy, r: 0.95 };
@@ -101,28 +108,44 @@ function cellValid(r: number, c: number): boolean {
   return r >= 0 && r < DIM && c >= 0 && c < DIM;
 }
 
-// The board's "22" rhombus bonus shapes, identical relative offsets to the
-// base circle board's own "22" (see circle.ts) — they transfer unchanged
-// because they're expressed purely in local (r,c) steps, and this board's
-// (r,c) space is a plain full rectangle (no triangular trimming to worry
-// about), just with a different cellValid bound.
-function rhombus22B(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
-  return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
-}
-function rhombus22A(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
+/**
+ * The "two adjacent pairs" bonus, as (dr, dc) basis pairs.
+ *
+ * This lattice has three step directions — (0,+1), (+1,0) and (+1,-1), each
+ * exactly one ball apart on screen — and a rhombus of four is any two of
+ * them spanned together, so there are exactly three orientations: the
+ * upright diamond, and one leaning each way. All three are the same shape
+ * turned, so all three score.
+ *
+ * The old pair of shapes copied circle.ts's offsets verbatim, on the
+ * assumption that a shape written in (r,c) steps carries over between
+ * boards. It does not: circle.ts's (r,c) are a *different* pair of screen
+ * vectors, and its second rhombus replays here as a zig-zag chain of four
+ * rather than a rhombus at all. So two of the three real orientations
+ * scored nothing — a player who assembled a 2+2 the "wrong" way round got
+ * no points — while a shape no pattern hint has ever shown scored instead.
+ */
+const RHOMBI: [[number, number], [number, number]][] = [
+  [[0, 1], [1, 0]], //  upright diamond   (the "1-2-1" hint)
+  [[0, 1], [1, -1]], // leaning one way  } together, the "2+2" hint
+  [[1, 0], [1, -1]], // leaning the other }
+];
+/** The rhombus's four cells: the corners of the unit parallelogram spanned
+ *  by du and dv, in the same (u,v) order growParallelogram walks. */
+function rhombusCells(r: number, c: number, du: [number, number], dv: [number, number]): Cell[] | null {
+  const cells = ([[0, 0], [1, 0], [0, 1], [1, 1]] as const).map(
+    ([u, v]) => [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]] as Cell,
+  );
   return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
 }
 function allClusters(): Cell[][] {
   const groups: Cell[][] = [];
   for (let r = 0; r < DIM; r++)
-    for (let c = 0; c < DIM; c++) {
-      const b = rhombus22B(r, c);
-      if (b) groups.push(b);
-      const a = rhombus22A(r, c);
-      if (a) groups.push(a);
-    }
+    for (let c = 0; c < DIM; c++)
+      for (const [du, dv] of RHOMBI) {
+        const g = rhombusCells(r, c, du, dv);
+        if (g) groups.push(g);
+      }
   return groups;
 }
 const CLUSTERS = allClusters();
@@ -471,26 +494,17 @@ export function createCircleSevenGame(): ShapeGame {
           }
         }
         for (let r = 0; r < DIM; r++)
-          for (let c = 0; c < DIM; c++) {
-            const b = rhombus22B(r, c);
-            if (b && qualifies(b, mask)) {
+          for (let c = 0; c < DIM; c++)
+            for (const [du, dv] of RHOMBI) {
+              const seed = rhombusCells(r, c, du, dv);
+              if (!seed || !qualifies(seed, mask)) continue;
               const positionAt = (u: number, v: number): Cell | null => {
-                const cell: Cell = [r + v, c + u];
+                const cell: Cell = [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]];
                 return cellValid(cell[0], cell[1]) ? cell : null;
               };
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
               matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
             }
-            const a = rhombus22A(r, c);
-            if (a && qualifies(a, mask)) {
-              const positionAt = (u: number, v: number): Cell | null => {
-                const cell: Cell = [r + v, c + u + v];
-                return cellValid(cell[0], cell[1]) ? cell : null;
-              };
-              const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
-            }
-          }
         return matches;
       }
 

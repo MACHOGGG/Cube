@@ -21,7 +21,7 @@
 import { animate } from 'animejs';
 import { reducedMotion } from './juice';
 
-export const FLIP_MS = 530;
+export const FLIP_MS = 350;
 export const FLIP_STAGGER_MS = 90;
 const THICK = 0.020; // face separation in Z, x piece diameter
 const PERSPECTIVE = 3.3; // viewing distance, x piece diameter

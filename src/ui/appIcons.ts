@@ -167,20 +167,38 @@ export function saveAppIcon(id: string): void {
 }
 
 /**
- * Puts the chosen icon on the browser tab.
+ * Puts the chosen icon everywhere an icon of this site can appear: the
+ * browser tab, the iOS home screen, and the Android install.
  *
- * Every existing icon link is removed first: browsers keep using whichever
- * one they picked at parse time, so editing a single href is not reliably
- * enough — replacing the lot is. The SVG goes in as a data URI, so no extra
- * request and no file to ship per icon.
+ * Every existing link is removed first: browsers keep using whichever one
+ * they picked at parse time, so editing a single href is not reliably
+ * enough — replacing the lot is.
+ *
+ * The tab takes the SVG inline as a data URI, so there is no extra request
+ * and no file to ship. The other two cannot: iOS reads apple-touch-icon and
+ * installs a real PNG from a real URL, and Android installs whatever icons
+ * the linked manifest names — which is why picking an icon used to change
+ * the tab and leave the home screen showing the shipped default. Those two
+ * point at the files scripts/gen-app-icons.mjs writes, one set per icon.
  */
 export function applyAppIcon(id: string = loadAppIcon()): void {
   if (typeof document === 'undefined') return;
   const chosen = APP_ICONS.find((i) => i.id === id) ?? APP_ICONS[0];
-  for (const old of Array.from(document.querySelectorAll('link[rel~="icon"]'))) old.remove();
-  const link = document.createElement('link');
-  link.rel = 'icon';
-  link.type = 'image/svg+xml';
-  link.href = 'data:image/svg+xml,' + encodeURIComponent(chosen.svg);
-  document.head.appendChild(link);
+  const drop = (sel: string) => {
+    for (const old of Array.from(document.querySelectorAll(sel))) old.remove();
+  };
+  const add = (attrs: Record<string, string>) => {
+    const link = document.createElement('link');
+    for (const [k, v] of Object.entries(attrs)) link.setAttribute(k, v);
+    document.head.appendChild(link);
+  };
+
+  drop('link[rel~="icon"]');
+  add({ rel: 'icon', type: 'image/svg+xml', href: 'data:image/svg+xml,' + encodeURIComponent(chosen.svg) });
+
+  drop('link[rel="apple-touch-icon"], link[rel="apple-touch-icon-precomposed"]');
+  add({ rel: 'apple-touch-icon', sizes: '180x180', href: `/icons/app/${chosen.id}-180.png` });
+
+  drop('link[rel="manifest"]');
+  add({ rel: 'manifest', href: `/icons/app/${chosen.id}.webmanifest` });
 }

@@ -252,18 +252,14 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   for (const shape of moreOrder) {
     const cards = layout.moreLayouts[shape];
     if (!cards.length) continue;
-    // A shape with a single variant IS that variant, so the card wears its
-    // board rather than the generic plus; one with a choice keeps the plus
-    // and hands out the real boards inside the picker.
-    const cardGlyph = cards.length === 1 ? layoutIcon(cards[0].id, shape) : moreLayoutCard(shape);
-    const btn = iconButton(cardGlyph, `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
+    // Every shape wears the same generic plus card and hands out its real
+    // boards inside the picker — including a shape that has only one variant
+    // today, so that the way in doesn't change shape the day it gains a
+    // second.
+    const btn = iconButton(moreLayoutCard(shape), `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
     const reopenKey = 'more-' + shape;
     btn.dataset.reopen = reopenKey;
     btn.addEventListener('click', () => {
-      if (cards.length === 1) {
-        handlers.onSelectLayout(cards[0].id);
-        return;
-      }
       openCenterPicker({
         originEl: btn,
         title: s.sectionMore,
