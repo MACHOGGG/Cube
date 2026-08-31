@@ -82,7 +82,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: 'Slides 的全部玩法都免费。「Slides 天才」是可选订阅，用来解锁额外内容。订阅尚未开放，以下是开放后的条款。',
       items: [
         { term: '免费的部分', body: '方块、圆球、三角三种基础玩法，以及计时挑战、炸弹挑战和更多布局，全部免费，无广告，不需要注册。' },
-        { term: '价格', body: '0.99 美元／月，或 4.99 美元／年，全球统一价。最终金额以结账页为准，可能因当地税费不同。', only: 'web' },
+        { term: '价格', body: '1.99 美元／月，或 4.99 美元／年，全球统一价。最终金额以结账页为准，可能因当地税费不同。', only: 'web' },
         { term: '价格', body: '由 {store} 按你所在地区的价目档显示并收取，确认付款那一页上的金额就是最终金额。在亚洲、非洲、南美洲等欧美以外的地区，定价相当于 2 元／月、9.9 元／年，并按同等价值折算成当地货币。', only: 'store' },
         { term: '订阅周期', body: '按你选的周期计费：月订阅每 1 个月一期，年订阅每 12 个月一期，都从付款当天起算。' },
         { term: '自动续费', body: '每期结束时会自动续期并按当时的价格扣款，直到你取消为止。续期前会有邮件提醒。', only: 'web' },
@@ -166,7 +166,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: 'Slides 的全部玩法都免費。「Slides 天才」是選配訂閱，用來解鎖額外內容。訂閱尚未開放，以下是開放後的條款。',
       items: [
         { term: '免費的部分', body: '方塊、圓球、三角三種基礎玩法，以及計時挑戰、炸彈挑戰和更多版面，全部免費，無廣告，不需要註冊。' },
-        { term: '價格', body: '0.99 美元／月，或 4.99 美元／年，全球統一價。最終金額以結帳頁為準，可能因當地稅費不同。', only: 'web' },
+        { term: '價格', body: '1.99 美元／月，或 4.99 美元／年，全球統一價。最終金額以結帳頁為準，可能因當地稅費不同。', only: 'web' },
         { term: '價格', body: '由 {store} 按你所在地區的價目檔顯示並收取，確認付款那一頁上的金額就是最終金額。在亞洲、非洲、南美洲等歐美以外的地區，定價相當於 2 元／月、9.9 元／年，並按同等價值折算成當地貨幣。', only: 'store' },
         { term: '訂閱週期', body: '按你選的週期計費：月訂閱每 1 個月一期，年訂閱每 12 個月一期，都從付款當天起算。' },
         { term: '自動續費', body: '每期結束時會自動續期並按當時的價格扣款，直到你取消為止。續期前會有郵件提醒。', only: 'web' },
@@ -250,7 +250,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: 'Every game mode in Slides is free. "Slides Genius" is an optional subscription that unlocks extra content. It is not on sale yet; these are the terms it will be sold on.',
       items: [
         { term: "What's free", body: 'All three base games — squares, balls, triangles — plus the timed challenge, the bomb challenge and the extra layouts. No ads, no account needed.' },
-        { term: 'Price', body: 'US$0.99 per month, or US$4.99 per year, the same the world over. The final amount is the one shown at checkout and may differ with local tax.', only: 'web' },
+        { term: 'Price', body: 'US$1.99 per month, or US$4.99 per year, the same the world over. The final amount is the one shown at checkout and may differ with local tax.', only: 'web' },
         { term: 'Price', body: 'Shown and charged by {store} at the price tier for your region; the amount on the confirmation sheet is the final one. Across Asia, Africa, South America and other regions outside Europe and the Americas the tier is the equivalent of ¥2 per month and ¥9.9 per year, converted to the local currency at comparable value.', only: 'store' },
         { term: 'Billing period', body: 'You are billed for the period you pick: a monthly subscription renews every 1 month, a yearly one every 12 months, counted from the day you pay.' },
         { term: 'Automatic renewal', body: 'The subscription renews automatically at the end of each period and is charged at the price current at that time, until you cancel. We email you before each renewal.', only: 'web' },
@@ -334,7 +334,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est un abonnement facultatif qui débloque du contenu supplémentaire. Il n’est pas encore en vente ; voici les conditions qui s’appliqueront.',
       items: [
         { term: 'Ce qui est gratuit', body: 'Les trois jeux de base — carrés, billes, triangles — ainsi que le défi chronométré, le défi bombe et les dispositions supplémentaires. Sans publicité et sans compte.' },
-        { term: 'Prix', body: '0,99 $US par mois, ou 4,99 $US par an, partout dans le monde. Le montant final est celui affiché au paiement et peut varier selon la taxe locale.', only: 'web' },
+        { term: 'Prix', body: '1,99 $US par mois, ou 4,99 $US par an, partout dans le monde. Le montant final est celui affiché au paiement et peut varier selon la taxe locale.', only: 'web' },
         { term: 'Prix', body: 'Affiché et prélevé par {store} au palier tarifaire de votre région ; le montant de l’écran de confirmation est le montant final. En Asie, en Afrique, en Amérique du Sud et dans les autres régions hors Europe et Amériques, le palier équivaut à 2 ¥ par mois et 9,9 ¥ par an, converti en monnaie locale à valeur comparable.', only: 'store' },
         { term: 'Période de facturation', body: 'Vous êtes facturé pour la période choisie : un abonnement mensuel se renouvelle tous les mois, un abonnement annuel tous les 12 mois, à compter du jour du paiement.' },
         { term: 'Renouvellement automatique', body: 'L’abonnement se renouvelle automatiquement à la fin de chaque période, au tarif alors en vigueur, jusqu’à ce que vous résiliiez. Un courriel vous prévient avant chaque renouvellement.', only: 'web' },

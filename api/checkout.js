@@ -2,7 +2,7 @@ import { configured, creem, products, readBody, send } from './_creem.js';
 
 /**
  * Open a Creem checkout for 「Slides 天才」 and hand back the URL to send the
- * player to. US$0.99 a month or US$4.99 a year, one price worldwide.
+ * player to. US$1.99 a month or US$4.99 a year, one price worldwide.
  *
  * The browser names a period, never a product: the ids live in this
  * function's environment, so the live and test catalogues are a Vercel

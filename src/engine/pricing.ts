@@ -8,7 +8,7 @@ import { salesChannel, type SalesChannel } from './channel';
  * The site and the app builds are priced separately, in their own currency,
  * because they are billed by different companies:
  *
- *   web    US$0.99 / month, US$4.99 / year — one price for the whole world,
+ *   web    US$1.99 / month, US$4.99 / year — one price for the whole world,
  *          charged by Creem.
  *   store  ¥2 / month, ¥9.9 / year — the mainland-China tier of the App
  *          Store / Google Play price the product is configured at.
@@ -60,7 +60,7 @@ const STORE_MONTHLY = 'com.slides.game.genius.monthly';
 const STORE_YEARLY = 'com.slides.game.genius.yearly';
 
 const WEB_PLANS: Plan[] = [
-  { period: 'monthly', currency: 'USD', minor: 99 },
+  { period: 'monthly', currency: 'USD', minor: 199 },
   { period: 'yearly', currency: 'USD', minor: 499 },
 ];
 
@@ -95,7 +95,7 @@ export function applyStorePrices(prices: Record<string, string>): void {
   }
 }
 
-/** "0.99" · "4.99" · "2" · "9.9" — the minimum number of digits that is
+/** "1.99" · "4.99" · "2" · "9.9" — the minimum number of digits that is
  *  still the exact amount, since ¥2.00 reads as fussy where ¥9.90 does not. */
 function decimals(minor: number): string {
   return (minor / 100).toFixed(2).replace(/\.?0+$/, '');

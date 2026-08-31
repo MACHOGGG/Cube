@@ -28,7 +28,7 @@ import { CONTACT_EMAIL } from '../legal';
  * Play builds this window offers ¥2 and ¥9.9, buys through the store sheet,
  * and has no notion of an account — 恢复购买 is the whole of "log in", since
  * the store already knows who is holding the phone. On the site it offers
- * US$0.99 and US$4.99, hands off to Creem's checkout, and finds a
+ * US$1.99 and US$4.99, hands off to Creem's checkout, and finds a
  * subscription again by the address it was bought with.
  *
  * Neither price list is reachable from the other build. That is not enforced
