@@ -35,6 +35,15 @@ export interface LiveTile {
  * alive and nothing is reported — a single dead colour is the player's
  * problem to route around, not the game's to end.
  *
+ * On top of that, four dot faces of one colour keep the run alive on their
+ * own. Those pieces already show the colour they will always show and they
+ * still slide, so they can be walked together into a pattern however dead
+ * every front colour is — and a dot-face match scores like any other. That
+ * has to be counted on the dot faces alone: the reachability walk above
+ * mixes fronts into its per-colour totals, and four *front* tiles of a
+ * colour prove nothing here, because a front tile has to be flipped before
+ * it can score and being unable to flip it is the whole premise.
+ *
  * Bomb modes need no special case here: their shapes already leave the
  * hazard colour out of the liveTiles they pass in.
  *
@@ -48,6 +57,15 @@ export function findStuckColorGroups(
 ): Cell[][] {
   const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   if (fronts.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
+
+  // Four already-flipped tiles of one colour are a score the player can
+  // still go and take, whatever the front faces are doing.
+  const dotCount = new Map<number, number>();
+  for (const lt of liveTiles) {
+    if (lt.tile.face !== 'dot') continue;
+    dotCount.set(lt.tile.dotColor, (dotCount.get(lt.tile.dotColor) ?? 0) + 1);
+  }
+  for (const n of dotCount.values()) if (n >= MIN_MATCH_SIZE) return [];
 
   const shownColor = (lt: LiveTile) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color);
   const up = new Map<number, number>();

@@ -698,6 +698,26 @@ button:hover { filter: brightness(1.05); }
    hit comfortably with a thumb. Two columns on a phone, three on a desktop,
    which is also where the timed and bomb sections stop being collapsed. */
 .home-page { gap: 0; padding-bottom: 120px; }
+/* Upright on a phone the whole menu should stand in one screen — nobody
+   should have to scroll to reach the last two cards. So the cards are capped
+   by the height that is actually left over as well as by the column they sit
+   in: everything above and below the grid (the page's own top padding, the
+   masthead and its margin, and the room kept clear for the dock) comes to
+   about 300px, and what is left is shared by the four rows and the three
+   gaps between them. On a screen tall enough for it the 150px cap wins and
+   the grid simply sits with air under it, exactly as the sheet draws it. */
+@media (max-width: 719px) {
+  /* Two-class selectors on purpose: the base rules for these live further
+     down the file, so a bare .home-grid here would lose on order. */
+  .home-page { padding-top: 16px; padding-bottom: 100px; }
+  .home-page .home-head { margin-bottom: 12px; }
+  .home-page .home-grid { gap: 14px 20px; }
+  .home-page .home-icon-btn,
+  .home-page .home-bomb-card {
+    max-width: 150px;                       /* the plain cap, if dvh is unknown */
+    max-width: min(150px, (100dvh - 300px) / 4);
+  }
+}
 /* The icon grid wants far more width than the standard reading column. */
 .app.home-page--wide { max-width: 800px; }
 /* The title, its rule and the tagline stay put however far the page is
