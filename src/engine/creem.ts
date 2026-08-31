@@ -125,6 +125,33 @@ export async function setWebPasscode(
 }
 
 /**
+ * Attaching an address to what a code granted. Same window and same shape of
+ * answer as setWebPasscode — only the proof differs, and 'exists' here means
+ * the address is already taken rather than the job already done.
+ */
+export async function bindCode(
+  code: string,
+  token: string,
+  email: string,
+  password: string,
+): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | null> {
+  try {
+    const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
+      code,
+      token,
+      email,
+      password,
+    });
+    return reply.token ? { email: reply.email ?? email, token: reply.token } : null;
+  } catch (err) {
+    const status = String(err).replace('Error: ', '');
+    if (status === '503') return 'unavailable';
+    if (status === '409') return 'exists';
+    return null;
+  }
+}
+
+/**
  * 401 and 423 are answers about the password. A 5xx is the server admitting
  * it could not answer at all — which is emphatically not the same thing as
  * the phone being offline, and saying so cost an afternoon once.

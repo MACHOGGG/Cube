@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { get, set } from './_store.js';
+import { del, get, set } from './_store.js';
 
 /**
  * The accounts a redeemed code creates — the only accounts this app has.
@@ -75,9 +75,26 @@ const BLOCK_AFTER = 6;
 const LOCK_MS = 4 * 3600e3;
 
 export const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+/**
+ * The identifier a redeemed code lives under before any address is attached.
+ *
+ * A code grants its month or year the instant it is typed — that is the whole
+ * point of a code, and asking for an address and a password first turned a
+ * gift into a form to fill in. But the entitlement still has to live
+ * somewhere the server can find again, or clearing the browser would take
+ * away something that was given. So it lives here, under the code itself,
+ * until the player attaches an address to it — which is what api/passcode.js
+ * does, and what the app asks for right after the code goes in.
+ *
+ * Shaped so it can never collide with a real address: an email cannot
+ * contain a colon before its @, and this has no @ at all.
+ */
+export const codeHolder = (ticket) => 'code:' + String(ticket || '').toUpperCase();
 const accountKey = (email) => 'acct:' + normalizeEmail(email);
 
 export const loadAccount = (email) => get(accountKey(email));
+export const deleteAccount = (email) => del(accountKey(email));
 export const saveAccount = (email, account) => set(accountKey(email), account);
 
 function hash(pin, saltHex) {

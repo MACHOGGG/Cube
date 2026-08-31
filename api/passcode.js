@@ -4,6 +4,8 @@ import {
   PASS_RE,
   SECRET_RE,
   checkPin,
+  codeHolder,
+  deleteAccount,
   loadAccount,
   newAccount,
   normalizeEmail,
@@ -27,6 +29,11 @@ import { storeConfigured } from './_store.js';
  *     is the evidence that the address is theirs to claim. This is the one
  *     the app uses, the moment the player lands back from Creem.
  *
+ *   { code, token, email, password }    — the token a redeemed code
+ *     returned. It attaches an address to what the code granted, so the
+ *     month or year travels to the player's next phone instead of living
+ *     and dying in one browser.
+ *
  *   { email, password, newPassword }    — the current password.
  *     Changing one already set. Nothing else can authorise this; a fresh
  *     checkout id will not overwrite an account that already has a password,
@@ -41,10 +48,48 @@ export default async function handler(req, res) {
   // would evaporate and lock the player out of what they just bought.
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
-  const { checkoutId, email, password, newPassword } = readBody(req);
-  return checkoutId
-    ? create(res, String(checkoutId), password)
-    : change(res, email, password, newPassword);
+  const { checkoutId, code, token, email, password, newPassword } = readBody(req);
+  if (checkoutId) return create(res, String(checkoutId), password);
+  if (code) return bind(res, String(code), String(token || ''), email, password);
+  return change(res, email, password, newPassword);
+}
+
+/**
+ * Attaching an address to what a code granted.
+ *
+ * The proof is the token the redemption returned, held only by the browser
+ * that spent the code — guessing the code itself buys nothing, since the code
+ * is deleted the moment it is spent and this needs the token as well.
+ *
+ * An address that already has an account is refused rather than merged: the
+ * only honest way to add time to an existing account is to prove that account
+ * is yours first, and this request carries no such proof. Nothing is lost by
+ * refusing — the code's month is still there under its own key, and still
+ * works on this device, so the player can attach it to another address or
+ * write in.
+ */
+async function bind(res, rawCode, token, email, password) {
+  const address = normalizeEmail(email);
+  if (!EMAIL_RE.test(address)) return send(res, 400, { error: 'invalid' });
+  if (!PASS_RE.test(String(password || ''))) return send(res, 400, { error: 'weak' });
+
+  const holder = codeHolder(rawCode);
+  const granted = await loadAccount(holder);
+  if (!granted || !granted.token || token !== granted.token) {
+    return send(res, 401, { error: 'wrong' });
+  }
+  if (await loadAccount(address)) return send(res, 409, { error: 'exists' });
+
+  // Everything the code was worth moves across; only the secret is new.
+  const account = newAccount(String(password), 'code');
+  account.until = granted.until;
+  account.plan = granted.plan;
+  await saveAccount(address, account);
+  // The code's own key goes last: if this call dies between the two writes,
+  // the player still holds a working entitlement and can attach it again.
+  await deleteAccount(holder);
+
+  return send(res, 200, { ok: true, email: address, token: account.token });
 }
 
 /** First password, proven by the checkout the player has just come back from. */

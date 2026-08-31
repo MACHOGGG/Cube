@@ -125,6 +125,11 @@ export interface I18nStrings {
   setPwPlaceholder: string;
   setPwShort: string;
   setPwLater: string;
+  /** 兑换码换来的东西，绑到一个邮箱上，好换设备时取回。 */
+  bindTitle: string;
+  bindHint: string;
+  bindTaken: string;
+  redeemCodePlaceholder: string;
   /** 已订阅但从没设过密码的人，在登录时看到的指引。 */
   needsPwHint: string;
   redeemBadCode: string;
@@ -357,7 +362,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: 'Genius only',
     haveCode: 'Have a code?',
     redeemTitle: 'Redeem a code',
-    redeemHint: 'Enter your code with an email address and a 4–6 digit passcode. Those two are how you get the subscription back on another device.',
+    redeemHint: 'Type your code. It unlocks straight away.',
     redeemCodeLabel: 'Code',
     redeemBtn: 'Redeem',
     passwordLabel: 'Passcode (4–6 digits)',
@@ -369,6 +374,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '6 characters or more',
     setPwShort: 'Use six characters or more.',
     setPwLater: 'Later',
+    bindTitle: 'Save it to an address',
+    bindHint: 'Your code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
+    bindTaken: 'That address already has an account. Use another one, or write to us.',
+    redeemCodePlaceholder: 'e.g. K7M2QD',
     needsPwHint: 'This subscription has no password yet. Open it from the device you paid on to set one.',
     redeemBadCode: 'That code is not valid, or it has already been used.',
     pwWrong: 'That passcode is not right.',
@@ -580,7 +589,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: 'Réservé aux Génies',
     haveCode: 'Vous avez un code ?',
     redeemTitle: 'Utiliser un code',
-    redeemHint: 'Saisissez le code, une adresse courriel et un code secret de 4 à 6 chiffres. Ces deux-là vous rendront l’abonnement sur un autre appareil.',
+    redeemHint: 'Saisissez votre code. Il débloque tout de suite.',
     redeemCodeLabel: 'Code',
     redeemBtn: 'Valider',
     passwordLabel: 'Code secret (4 à 6 chiffres)',
@@ -592,6 +601,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '6 caractères minimum',
     setPwShort: 'Six caractères minimum.',
     setPwLater: 'Plus tard',
+    bindTitle: 'Rattachez-le à une adresse',
+    bindHint: 'Votre code est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
+    bindTaken: 'Cette adresse a déjà un compte. Utilisez-en une autre, ou écrivez-nous.',
+    redeemCodePlaceholder: 'ex. K7M2QD',
     needsPwHint: 'Cet abonnement n’a pas encore de mot de passe. Ouvrez-le depuis l’appareil du paiement pour en définir un.',
     redeemBadCode: 'Ce code n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
@@ -803,7 +816,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: '天才特供',
     haveCode: '有兌換碼？',
     redeemTitle: '兌換碼',
-    redeemHint: '輸入兌換碼，並留下電子郵件和一組 4～6 位數字密碼——換台裝置時就靠這兩樣取回。',
+    redeemHint: '輸入你的兌換碼，馬上生效。',
     redeemCodeLabel: '兌換碼',
     redeemBtn: '兌換',
     passwordLabel: '密碼（4～6 位數字）',
@@ -815,6 +828,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '至少 6 位',
     setPwShort: '密碼至少要 6 位。',
     setPwLater: '稍後再說',
+    bindTitle: '綁定到一個信箱',
+    bindHint: '兌換碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
+    bindTaken: '這個信箱已經有帳號了。換一個，或者寫信給我們。',
+    redeemCodePlaceholder: '例如 K7M2QD',
     needsPwHint: '這個訂閱還沒設密碼。請在付款的那台裝置上打開，設一組。',
     redeemBadCode: '這個兌換碼無效，或已經被使用過了。',
     pwWrong: '密碼不對。',
@@ -1026,7 +1043,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: '天才特供',
     haveCode: '有兑换码？',
     redeemTitle: '兑换码',
-    redeemHint: '输入兑换码，并留下邮箱和一组 4～6 位数字密码——换台设备时就靠这两样取回。',
+    redeemHint: '输入你的兑换码，马上生效。',
     redeemCodeLabel: '兑换码',
     redeemBtn: '兑换',
     passwordLabel: '密码（4～6 位数字）',
@@ -1038,6 +1055,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '至少 6 位',
     setPwShort: '密码至少要 6 位。',
     setPwLater: '稍后再说',
+    bindTitle: '绑定到一个邮箱',
+    bindHint: '兑换码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
+    bindTaken: '这个邮箱已经有账号了。换一个，或者写信给我们。',
+    redeemCodePlaceholder: '例如 K7M2QD',
     needsPwHint: '这个订阅还没设密码。请在付款的那台设备上打开，设一组。',
     redeemBadCode: '这个兑换码无效，或者已经被用过了。',
     pwWrong: '密码不对。',

@@ -78,7 +78,22 @@ export type PurchaseFailure =
 
 const KEY = 'slides_genius';
 
-const PENDING_KEY = 'slides_pending_checkout';
+const PENDING_KEY = 'slides_pending_account';
+
+/**
+ * An entitlement this device holds that no address can reach yet, and the
+ * proof needed to attach one.
+ *
+ * Two ways to arrive here and they are genuinely different: a card payment
+ * knows the address already (Creem collected it) and only needs a password,
+ * while a redeemed code knows neither — it was typed by someone who may
+ * never have told us anything about themselves. What they share is the part
+ * that matters: until an address is attached, what the player has lives in
+ * this browser alone.
+ */
+export type PendingAccount =
+  | { kind: 'checkout'; id: string }
+  | { kind: 'code'; code: string; token: string };
 
 /**
  * The checkout a return was settled from, kept until a password is actually
@@ -95,29 +110,33 @@ const PENDING_KEY = 'slides_pending_checkout';
  * this browser has just completed, and the server only ever accepts it for
  * an address with no password yet.
  */
-function rememberPendingCheckout(id: string): void {
+export function rememberPending(pending: PendingAccount): void {
   try {
-    localStorage.setItem(PENDING_KEY, id);
+    localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   } catch {
     // Private mode. The window still opens this launch; only the retry is lost.
   }
 }
 
-export function pendingCheckout(): string | null {
-  // A token on this device means a password was already set and used. There
-  // is nothing left to ask for, whatever is still sitting in storage.
+export function pendingAccount(): PendingAccount | null {
+  // A token on this device means an address is already attached and working.
+  // There is nothing left to ask for, whatever is still sitting in storage.
   if (entitlement().token) {
-    clearPendingCheckout();
+    clearPendingAccount();
     return null;
   }
   try {
-    return localStorage.getItem(PENDING_KEY);
+    const raw = localStorage.getItem(PENDING_KEY);
+    const saved = raw ? (JSON.parse(raw) as PendingAccount) : null;
+    if (saved?.kind === 'checkout' && saved.id) return saved;
+    if (saved?.kind === 'code' && saved.code && saved.token) return saved;
+    return null;
   } catch {
     return null;
   }
 }
 
-export function clearPendingCheckout(): void {
+export function clearPendingAccount(): void {
   try {
     localStorage.removeItem(PENDING_KEY);
   } catch {
@@ -130,21 +149,30 @@ export function clearPendingCheckout(): void {
  * token that comes back is folded into the entitlement already on this
  * device, so the act of choosing it is also the sign-in.
  */
-export async function setPasscode(
-  checkoutId: string,
+export async function attachAccount(
+  pending: PendingAccount,
   password: string,
+  email?: string,
 ): Promise<'ok' | 'exists' | 'unavailable' | 'failed'> {
-  const result = await (await import('./creem')).setWebPasscode(checkoutId, password);
+  const creem = await import('./creem');
+  const result =
+    pending.kind === 'checkout'
+      ? await creem.setWebPasscode(pending.id, password)
+      : await creem.bindCode(pending.code, pending.token, email ?? '', password);
   if (result === 'unavailable') return 'unavailable';
   // 'exists' is the server refusing to overwrite a password this address
   // already has. Nothing is wrong and nothing is left to do here, so the
   // pending checkout goes too — asking again every launch would be a bug.
   if (result === 'exists') {
-    clearPendingCheckout();
+    // A card checkout whose address already has a password is finished. A
+    // code being bound to an address that already has an account is not:
+    // that address is simply the wrong one to attach it to, and the code is
+    // still worth what it was worth, so the pending entry stays.
+    if (pending.kind === 'checkout') clearPendingAccount();
     return 'exists';
   }
   if (!result) return 'failed';
-  clearPendingCheckout();
+  clearPendingAccount();
   setEntitlement({
     ...entitlement(),
     email: result.email || entitlement().email,
@@ -278,7 +306,7 @@ export async function refreshEntitlement(): Promise<void> {
       const settled = await creem.settleReturn();
       if (settled) {
         setEntitlement(settled.entitlement);
-        rememberPendingCheckout(settled.checkoutId);
+        rememberPending({ kind: 'checkout', id: settled.checkoutId });
         return;
       }
       // A redeemed code carries its own end date and cannot be extended

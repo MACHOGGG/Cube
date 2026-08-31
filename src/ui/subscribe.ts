@@ -4,15 +4,17 @@ import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
 import { formatPrice, plans, type PlanPeriod } from '../engine/pricing';
 import {
+  attachAccount,
   clearEntitlement,
   entitlement,
   isGenius,
+  pendingAccount,
   purchase,
+  rememberPending,
   restore,
   setEntitlement,
-  setPasscode,
   signedInEmail,
-  pendingCheckout,
+  type PendingAccount,
   type PurchaseFailure,
 } from '../engine/subscription';
 import {
@@ -190,10 +192,12 @@ function credentialForm(
   emailLabel: string,
   label: string,
   placeholder: string,
+  readOnly: boolean,
 ): string {
   return `<form id="pwForm" class="auth-body" autocomplete="on">
       ${field('pwUser', emailLabel,
-        `type="email" name="username" autocomplete="username" readonly value="${esc(email)}"`)}
+        `type="email" name="username" autocomplete="username" inputmode="email"` +
+        `${readOnly ? ' readonly' : ''} value="${esc(email)}"`)}
       ${field('pwNew', label,
         `type="password" name="password" autocomplete="new-password" minlength="6" placeholder="${esc(placeholder)}"`)}
       <button type="submit" hidden></button>
@@ -224,20 +228,24 @@ async function offerToSave(email: string, password: string): Promise<void> {
  */
 export function openSetPasswordWindow(
   lang: Lang,
-  checkoutId: string,
+  pending: PendingAccount,
   email: string,
   onChanged: () => void,
 ): void {
   const s = STRINGS[lang];
+  // A card checkout already knows the address — Creem collected it, and it is
+  // shown rather than asked for. A code knows nothing about who typed it, so
+  // here the field is theirs to fill in.
+  const fromCode = pending.kind === 'code';
   const { overlay, close } = openModal(
     'auth-modal',
     `
-    <h2>${s.setPwTitle}</h2>
-    <p class="auth-hint">${s.setPwHint}</p>
-    ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder)}
+    <h2>${fromCode ? s.bindTitle : s.setPwTitle}</h2>
+    <p class="auth-hint">${fromCode ? s.bindHint : s.setPwHint}</p>
+    ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder, !fromCode)}
     <p class="auth-msg" id="pwMsg" role="status"></p>
     <div class="btn-row">
-      <button class="primary" id="pwGo">${s.setPwTitle}</button>
+      <button class="primary" id="pwGo">${fromCode ? s.bindTitle : s.setPwTitle}</button>
     </div>
   `,
   );
@@ -247,27 +255,34 @@ export function openSetPasswordWindow(
   const msg = overlay.querySelector<HTMLElement>('#pwMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#pwGo')!;
 
+  const user = overlay.querySelector<HTMLInputElement>('#pwUser')!;
   const submit = async () => {
+    const address = user.value.trim();
+    if (fromCode && !isEmail(address)) return void (msg.textContent = s.emailInvalid);
     const password = input.value;
     if (password.length < 6) return void (msg.textContent = s.setPwShort);
     go.disabled = true;
     msg.textContent = s.workingLabel;
-    const done = await setPasscode(checkoutId, password);
+    const done = await attachAccount(pending, password, address);
     go.disabled = false;
-    // Both failures say so and leave the window open. Closing quietly on the
-    // server's 503 was worse than useless: the player typed a password, the
-    // window vanished, and nothing had been saved — a failure wearing the
-    // exact face of success. Whatever they do next, they should know this
-    // step did not take.
-    // 'exists' — this address already had a password. Not a failure, nothing
-    // left to set, and the pending checkout is already cleared.
-    if (done === 'exists') return close();
+    // For a checkout, 'exists' means the address already had a password and
+    // there is nothing left to do. For a code it is the opposite: this is the
+    // wrong address to attach it to, and another one will work.
+    if (done === 'exists') {
+      if (!fromCode) return close();
+      msg.textContent = s.bindTaken;
+      return;
+    }
+    // Both remaining failures say so and leave the window open. Closing
+    // quietly on the server's 503 was worse than useless: the player typed a
+    // password, the window vanished, and nothing had been saved — a failure
+    // wearing the exact face of success.
     if (done !== 'ok') {
       msg.textContent = done === 'unavailable' ? s.serverBusy : s.purchaseNetwork;
       return;
     }
     // Saved on the server; now let the phone keep a copy too.
-    await offerToSave(email, password);
+    await offerToSave(address || email, password);
     close();
     onChanged();
   };
@@ -295,8 +310,8 @@ export function openSetPasswordWindow(
  * device is ever reachable from another.
  */
 export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
-  const checkoutId = pendingCheckout();
-  if (checkoutId) openSetPasswordWindow(lang, checkoutId, signedInEmail() ?? '', onChanged);
+  const pending = pendingAccount();
+  if (pending) openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
 }
 
 /**
@@ -588,15 +603,13 @@ export async function runStoreRestore(lang: Lang, onChanged: () => void): Promis
 }
 
 /**
- * Spending a code. Three fields, and the last two are the point: a code is
- * worth a month or a year, and without an address and a passcode to attach
- * it to it would be worth that on one device only, until the day the browser
- * data is cleared.
+ * Spending a code. One field, and it is the code.
  *
- * The passcode is four to six digits because it has to be remembered rather
- * than stored, and what makes that safe enough is on the server: every guess
- * costs scrypt time, four wrong ones shut the account for hours, and six
- * shut it until the address itself vouches for whoever is trying.
+ * It used to ask for an address and a passcode in the same window, which
+ * turned a gift into a registration form and buried the one field that
+ * mattered between two that did not. A code is a thing that unlocks, so it
+ * unlocks the moment it is typed; attaching an address so it survives a new
+ * phone is worth doing and is the very next question, asked on its own.
  */
 export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
   const s = STRINGS[lang];
@@ -605,57 +618,53 @@ export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
     `
     <h2>${s.redeemTitle}</h2>
     <p class="auth-hint">${s.redeemHint}</p>
-    ${field('redeemCode', s.redeemCodeLabel, 'type="text" autocomplete="off" placeholder="XXXX-XXXX"')}
-    ${field('redeemEmail', s.emailLabel,
-      `type="email" autocomplete="email" inputmode="email" placeholder="${s.emailPlaceholder}"`)}
-    ${field('redeemPw', s.passwordLabel,
-      `type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="${s.passwordPlaceholder}"`)}
+    ${field('redeemCode', s.redeemCodeLabel,
+      `type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(s.redeemCodePlaceholder)}"`)}
     <p class="auth-msg" id="redeemMsg" role="status"></p>
     <div class="btn-row">
-      <button class="icon-btn" id="redeemGo">${s.redeemBtn}</button>
-      <button class="primary" id="redeemClose">${s.closeBtn}</button>
+      <button class="primary" id="redeemGo">${s.redeemBtn}</button>
+      <button class="icon-btn" id="redeemClose">${s.closeBtn}</button>
     </div>
   `,
   );
 
   const code = overlay.querySelector<HTMLInputElement>('#redeemCode')!;
-  const email = overlay.querySelector<HTMLInputElement>('#redeemEmail')!;
-  const pw = overlay.querySelector<HTMLInputElement>('#redeemPw')!;
   const msg = overlay.querySelector<HTMLElement>('#redeemMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#redeemGo')!;
 
   const submit = async () => {
-    const address = email.value.trim();
-    const pin = pw.value.trim();
-    if (!code.value.trim()) return void (msg.textContent = s.redeemBadCode);
-    if (!isEmail(address)) return void (msg.textContent = s.emailInvalid);
-    if (!isPin(pin)) return void (msg.textContent = s.passwordLabel);
-
+    const ticket = code.value.trim();
+    if (!ticket) return void (msg.textContent = s.redeemBadCode);
     go.disabled = true;
     msg.textContent = s.workingLabel;
-    const result = await redeemCode(code.value, address, pin);
+    const result = await redeemCode(ticket);
     go.disabled = false;
-    if (result.ok) {
-      setEntitlement(result.entitlement);
-      close();
-      onChanged();
-      openStatusWindow(lang, onChanged);
+    if (!result.ok) {
+      msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
       return;
     }
-    msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
-    // A blocked account cannot redeem either — the same door has to be
-    // opened first, so go straight there rather than leaving them stuck.
-    if (result.reason === 'blocked') {
-      close();
-      openUnlockWindow(lang, address, onChanged);
+    // Unlocked. What it granted lives under the code until an address is
+    // attached, and that is remembered so the question survives a closed
+    // window or a reload — otherwise one dismissal would strand a gift in
+    // this browser forever.
+    setEntitlement(result.entitlement);
+    if (result.entitlement.token) {
+      rememberPending({
+        kind: 'code',
+        code: ticket.toUpperCase().replace(/[^0-9A-Z]/g, ''),
+        token: result.entitlement.token,
+      });
     }
+    close();
+    onChanged();
+    const pending = pendingAccount();
+    if (pending) openSetPasswordWindow(lang, pending, '', onChanged);
+    else openStatusWindow(lang, onChanged);
   };
 
-  for (const box of [code, email, pw]) {
-    box.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-    });
-  }
+  code.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submit();
+  });
   go.addEventListener('click', submit);
   overlay.querySelector<HTMLButtonElement>('#redeemClose')!.addEventListener('click', close);
 }

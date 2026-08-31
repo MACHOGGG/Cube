@@ -38,6 +38,8 @@ export type AccountResult =
   | { ok: false; reason: AccountFailure; retryInMs?: number };
 
 interface Reply {
+  /** Echoed by /api/redeem: the code just spent, needed to attach an address. */
+  code?: string;
   active?: boolean;
   period?: 'monthly' | 'yearly';
   until?: number;
@@ -87,10 +89,17 @@ const guard = async (run: () => Promise<AccountResult>): Promise<AccountResult> 
   }
 };
 
-/** Spend a code: a month or a year, attached to this address and passcode. */
-export function redeemCode(code: string, email: string, password: string): Promise<AccountResult> {
+/**
+ * Spend a code. One field, and it is the code — a code is a thing that
+ * unlocks, and it unlocks the moment it is typed. Attaching an address so it
+ * survives a new phone is worth doing and is asked separately, right after.
+ *
+ * The reply carries the code and the token that claim what it granted, so the
+ * caller can remember them until an address is attached.
+ */
+export function redeemCode(code: string): Promise<AccountResult> {
   return guard(async () => {
-    const { status, reply } = await post('/api/redeem', { code, email, password });
+    const { status, reply } = await post('/api/redeem', { code });
     return toResult(status, reply);
   });
 }
