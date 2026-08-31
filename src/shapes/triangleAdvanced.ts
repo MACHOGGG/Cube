@@ -826,8 +826,19 @@ export function createTriangleAdvancedGame(): ShapeGame {
         const chain = d.chain;
         const giveAt = (idx: number) => {
           const pairHalf = chain ? chain.at(Math.floor(idx / 2)) : half;
-          const residual = (2 * pairHalf - shift) * 0.6;
-          return Math.max(-0.85, Math.min(0.85, residual));
+          // Undamped: the give is what the line does between detents, so
+          // anything less than 1:1 is the board lagging the finger. It used
+          // to be scaled to 0.6 to tame a wobble that came from the
+          // inter-piece simulation, and with that turned down to near
+          // nothing (see BOARD_FORCE) the damping was only costing
+          // responsiveness — measured, a triangle followed a 29px drag by
+          // 17px where the square followed it by 23px and the ball by 30px,
+          // which is exactly the "not very sensitive" the boards felt. The
+          // clamp is one whole step, which is the midpoint to the next
+          // even configuration, so the preview still cannot run past what
+          // release would commit.
+          const residual = 2 * pairHalf - shift;
+          return Math.max(-1, Math.min(1, residual));
         };
         const fillerSize = Math.abs(shift);
 
