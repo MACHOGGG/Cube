@@ -462,15 +462,24 @@ onGeniusChange(() => {
 
 // The splash owns the first 3.5 seconds, and hands over only once the web
 // fonts have landed too — so the screen behind it never reflows on arrival.
-showLoadingScreen().then(boot);
+const splash = showLoadingScreen();
+void splash.then(boot);
 
 // Asked during the splash, so the network round trip is spent on time nobody
 // is waiting through. It settles a checkout the player has just come back
 // from, re-reads the store receipt, and otherwise leaves the cached answer
 // exactly as it was — offline, this does nothing at all.
+const settled = refreshEntitlement();
+
+// If a checkout is still waiting for a password, that window is the first
+// thing the player sees — the boards are already unlocked behind it, and this
+// is the step that makes the subscription theirs rather than this browser's.
 //
-// If this launch *was* a return from paying, choosing a password is the first
-// thing that happens after the splash: the boards are already unlocked behind
-// the window, and this is the step that makes the subscription belong to the
-// player rather than to this one browser.
-void refreshEntitlement().then(() => promptPasswordIfJustPaid(currentLang, showMenu));
+// It waits on both promises, and the splash is the one that matters here:
+// `currentLang` starts as the module's default and only becomes the player's
+// own inside boot(). Opening as soon as the network answered — which is often
+// well before the splash ends — asked a French player for a password in
+// Chinese, at the one moment they are least inclined to forgive it.
+void Promise.all([splash, settled]).then(() =>
+  promptPasswordIfJustPaid(currentLang, showMenu),
+);

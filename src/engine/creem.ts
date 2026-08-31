@@ -106,7 +106,7 @@ export async function webRestore(email: string, password: string): Promise<Purch
 export async function setWebPasscode(
   checkoutId: string,
   password: string,
-): Promise<{ email: string; token: string } | 'unavailable' | null> {
+): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | null> {
   try {
     const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
       checkoutId,
@@ -114,10 +114,13 @@ export async function setWebPasscode(
     });
     return reply.token ? { email: reply.email ?? '', token: reply.token } : null;
   } catch (err) {
-    // 503 is the server saying it has nowhere to keep an account yet. That is
-    // not the player's problem and there is nothing they can do about it, so
-    // the window closes quietly rather than accusing them of a network fault.
-    return String(err) === 'Error: 503' ? 'unavailable' : null;
+    // 503: nowhere to keep an account yet — the player can do nothing about
+    // it, so say so plainly rather than blaming their connection.
+    // 409: this address already has a password, which is not a failure at all.
+    const code = String(err).replace('Error: ', '');
+    if (code === '503') return 'unavailable';
+    if (code === '409') return 'exists';
+    return null;
   }
 }
 

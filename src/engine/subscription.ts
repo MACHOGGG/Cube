@@ -78,17 +78,51 @@ export type PurchaseFailure =
 
 const KEY = 'slides_genius';
 
+const PENDING_KEY = 'slides_pending_checkout';
+
 /**
- * The checkout a return was just settled from, held for the password window
- * that opens straight after it. Read once and cleared — it is a one-time
- * proof, not state, and leaving it lying about would be a second copy of the
- * only thing that can claim this address.
+ * The checkout a return was settled from, kept until a password is actually
+ * set from it.
+ *
+ * It used to live in a variable and be read once, which meant a single
+ * failure — the server briefly unable to answer, a closed window, a reload
+ * at the wrong moment — took away the only proof this player had, and the
+ * subscription they had paid for became one they could never claim on
+ * another device. Surviving in localStorage costs nothing and turns that
+ * into "we will ask again next time".
+ *
+ * It is not a secret worth guarding on this device: it names a checkout that
+ * this browser has just completed, and the server only ever accepts it for
+ * an address with no password yet.
  */
-let pendingCheckoutId: string | null = null;
-export function takePendingCheckout(): string | null {
-  const id = pendingCheckoutId;
-  pendingCheckoutId = null;
-  return id;
+function rememberPendingCheckout(id: string): void {
+  try {
+    localStorage.setItem(PENDING_KEY, id);
+  } catch {
+    // Private mode. The window still opens this launch; only the retry is lost.
+  }
+}
+
+export function pendingCheckout(): string | null {
+  // A token on this device means a password was already set and used. There
+  // is nothing left to ask for, whatever is still sitting in storage.
+  if (entitlement().token) {
+    clearPendingCheckout();
+    return null;
+  }
+  try {
+    return localStorage.getItem(PENDING_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingCheckout(): void {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // Nothing to do: an unreadable store is also an unwritable one.
+  }
 }
 
 /**
@@ -99,10 +133,18 @@ export function takePendingCheckout(): string | null {
 export async function setPasscode(
   checkoutId: string,
   password: string,
-): Promise<'ok' | 'unavailable' | 'failed'> {
+): Promise<'ok' | 'exists' | 'unavailable' | 'failed'> {
   const result = await (await import('./creem')).setWebPasscode(checkoutId, password);
   if (result === 'unavailable') return 'unavailable';
+  // 'exists' is the server refusing to overwrite a password this address
+  // already has. Nothing is wrong and nothing is left to do here, so the
+  // pending checkout goes too — asking again every launch would be a bug.
+  if (result === 'exists') {
+    clearPendingCheckout();
+    return 'exists';
+  }
   if (!result) return 'failed';
+  clearPendingCheckout();
   setEntitlement({
     ...entitlement(),
     email: result.email || entitlement().email,
@@ -236,7 +278,7 @@ export async function refreshEntitlement(): Promise<void> {
       const settled = await creem.settleReturn();
       if (settled) {
         setEntitlement(settled.entitlement);
-        pendingCheckoutId = settled.checkoutId;
+        rememberPendingCheckout(settled.checkoutId);
         return;
       }
       // A redeemed code carries its own end date and cannot be extended

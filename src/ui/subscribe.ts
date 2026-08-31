@@ -12,7 +12,7 @@ import {
   setEntitlement,
   setPasscode,
   signedInEmail,
-  takePendingCheckout,
+  pendingCheckout,
   type PurchaseFailure,
 } from '../engine/subscription';
 import {
@@ -185,9 +185,14 @@ export function openPortalWindow(lang: Lang, email: string): void {
  * rather than asked for again — visible, because a hidden field is exactly
  * what a manager is trained to distrust.
  */
-function credentialForm(email: string, label: string, placeholder: string): string {
+function credentialForm(
+  email: string,
+  emailLabel: string,
+  label: string,
+  placeholder: string,
+): string {
   return `<form id="pwForm" class="auth-body" autocomplete="on">
-      ${field('pwUser', 'Email',
+      ${field('pwUser', emailLabel,
         `type="email" name="username" autocomplete="username" readonly value="${esc(email)}"`)}
       ${field('pwNew', label,
         `type="password" name="password" autocomplete="new-password" minlength="6" placeholder="${esc(placeholder)}"`)}
@@ -229,11 +234,10 @@ export function openSetPasswordWindow(
     `
     <h2>${s.setPwTitle}</h2>
     <p class="auth-hint">${s.setPwHint}</p>
-    ${credentialForm(email, s.setPwLabel, s.setPwPlaceholder)}
+    ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder)}
     <p class="auth-msg" id="pwMsg" role="status"></p>
     <div class="btn-row">
-      <button class="icon-btn" id="pwGo">${s.setPwTitle}</button>
-      <button class="primary" id="pwLater">${s.setPwLater}</button>
+      <button class="primary" id="pwGo">${s.setPwTitle}</button>
     </div>
   `,
   );
@@ -255,6 +259,9 @@ export function openSetPasswordWindow(
     // window vanished, and nothing had been saved — a failure wearing the
     // exact face of success. Whatever they do next, they should know this
     // step did not take.
+    // 'exists' — this address already had a password. Not a failure, nothing
+    // left to set, and the pending checkout is already cleared.
+    if (done === 'exists') return close();
     if (done !== 'ok') {
       msg.textContent = done === 'unavailable' ? s.serverBusy : s.purchaseNetwork;
       return;
@@ -272,16 +279,23 @@ export function openSetPasswordWindow(
     void submit();
   });
   go.addEventListener('click', () => form.requestSubmit());
-  overlay.querySelector<HTMLButtonElement>('#pwLater')!.addEventListener('click', close);
+  // No opt-out button: this is one field and it is the whole of what makes
+  // the subscription theirs. Dismissing by tapping outside still works —
+  // trapping someone in a modal that a failing server will not let them out
+  // of would be worse — and it costs nothing now, because the checkout is
+  // remembered and the window comes back on the next launch.
   input.focus();
 }
 
 /**
- * Called once at boot, after the return from Creem has been settled: if this
- * launch was one, the password window is the first thing the player sees.
+ * Called once at boot: if a checkout is still waiting for a password — this
+ * launch's, or one from a launch where it never got set — that window is the
+ * first thing the player sees. It keeps coming back until the password
+ * exists, because that password is the only way a subscription bought on one
+ * device is ever reachable from another.
  */
 export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
-  const checkoutId = takePendingCheckout();
+  const checkoutId = pendingCheckout();
   if (checkoutId) openSetPasswordWindow(lang, checkoutId, signedInEmail() ?? '', onChanged);
 }
 
