@@ -501,3 +501,26 @@ export const ICON_NAV_RECORDS = svg(
   `<path d="${TRIANGLE_PATH}" fill="${C.navGray}"/>` +
     `<path d="M32 60 H68 M28 71 H72 M36 49 H64" stroke="#fff" stroke-width="5" stroke-linecap="round"/>`,
 );
+
+/**
+ * The sound switch's two faces, from the reference sheet: a filled speaker
+ * with three widening arcs, and the same speaker with a stroke laid across
+ * the arcs. Drawn in currentColor so the pill's own ink carries them.
+ */
+const SPEAKER_BODY =
+  '<path d="M8 38 H22 L40 20 A5 5 0 0 1 48 24 V76 A5 5 0 0 1 40 80 L22 62 H8 ' +
+  'A5 5 0 0 1 3 57 V43 A5 5 0 0 1 8 38 Z" fill="currentColor"/>';
+const SPEAKER_ARCS =
+  '<g fill="none" stroke="currentColor" stroke-width="8.5" stroke-linecap="round">' +
+  '<path d="M60 38 A18 18 0 0 1 60 62"/>' +
+  '<path d="M72 27 A31 31 0 0 1 72 73"/>' +
+  '<path d="M84 17 A44 44 0 0 1 84 83"/></g>';
+export const ICON_SOUND_ON = svg(SPEAKER_BODY + SPEAKER_ARCS);
+export const ICON_SOUND_OFF = svg(
+  SPEAKER_BODY +
+    SPEAKER_ARCS +
+    // The bar, cut clear of the arcs it crosses so it reads as one stroke
+    // laid over them rather than as a fourth arc.
+    '<path d="M56 14 L98 92" fill="none" stroke="var(--pill-ink, #FFFFFF)" stroke-width="17" stroke-linecap="round"/>' +
+    '<path d="M56 14 L98 92" fill="none" stroke="currentColor" stroke-width="8.5" stroke-linecap="round"/>',
+);

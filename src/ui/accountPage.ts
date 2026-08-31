@@ -1,6 +1,8 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
+import { ICON_SOUND_ON, ICON_SOUND_OFF } from './homeIcons';
+import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 
@@ -57,7 +59,16 @@ export function renderAccountPage(
         <button class="profile-pill profile-pill--rose" id="howToRow">${s.tutorialShort}</button>
       </div>
       <button class="profile-pill profile-pill--wide" id="rulesRow">${s.rulesPill}</button>
-      <button class="profile-pill profile-pill--wide" id="iconRow">${s.iconPill}</button>
+      <!-- 更换图标 keeps the row; the sound switch rides beside it as a
+           square of the same pill, so the setting sits where the other
+           look-and-feel settings are without adding a row of its own. -->
+      <div class="profile-pill-row profile-pill-row--icon">
+        <button class="profile-pill" id="iconRow">${s.iconPill}</button>
+        <button class="profile-pill profile-pill--square" id="soundRow"
+                role="switch" aria-checked="${soundOn()}" aria-label="${s.soundBtn}">
+          <span class="sound-glyph" aria-hidden="true">${soundOn() ? ICON_SOUND_ON : ICON_SOUND_OFF}</span>
+        </button>
+      </div>
       <!-- The colourblind palette: one setting for the whole app, with a
            switch that says on/off by its own colour and position rather
            than by a word — it has to read the same in four languages. -->
@@ -219,6 +230,19 @@ export function renderAccountPage(
     setColorblind(!colorblindOn());
     const row = container.querySelector<HTMLButtonElement>('#cvdRow');
     row?.setAttribute('aria-checked', String(colorblindOn()));
+  });
+  // Sound on/off. The glyph is the whole state — a speaker, or the same
+  // speaker with a bar across it — so it needs no word in any language.
+  // The app's shared click cue fires on this button like any other, which
+  // means switching the sound back on is confirmed by a sound and switching
+  // it off is confirmed by silence; nothing extra is played here.
+  on('soundRow', () => {
+    const next = !soundOn();
+    setSoundOn(next);
+    const row = container.querySelector<HTMLButtonElement>('#soundRow');
+    const glyph = row?.querySelector('.sound-glyph');
+    if (glyph) glyph.innerHTML = next ? ICON_SOUND_ON : ICON_SOUND_OFF;
+    row?.setAttribute('aria-checked', String(next));
   });
   on('howToRow', handlers.onHowToSlide);
   on('randomRow', handlers.onRandomTarget);

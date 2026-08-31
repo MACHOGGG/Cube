@@ -93,6 +93,8 @@ export interface I18nStrings {
   compositeScoreLabel: string;
   /** "Your average in this mode" on the end-of-run summary. */
   avgScoreLabel: string;
+  /** Accessible name for the sound on/off button in 个人主页. */
+  soundBtn: string;
   shareBtn: string;
   restartBtn: string;
   shareCardTitle: string;
@@ -238,6 +240,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endTitleDefault: 'Challenge complete',
     compositeScoreLabel: 'Composite score',
     avgScoreLabel: 'Your average in this mode',
+    soundBtn: 'Sound',
     shareBtn: 'Share',
     restartBtn: 'Again',
     shareCardTitle: 'Share result',
@@ -372,6 +375,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endTitleDefault: 'Défi terminé',
     compositeScoreLabel: 'Score composite',
     avgScoreLabel: 'Votre moyenne dans ce mode',
+    soundBtn: 'Son',
     shareBtn: 'Partager',
     restartBtn: 'Rejouer',
     shareCardTitle: 'Partager le résultat',
@@ -506,6 +510,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endTitleDefault: '挑戰結束',
     compositeScoreLabel: '綜合得分',
     avgScoreLabel: '該玩法您的均分',
+    soundBtn: '聲音',
     shareBtn: '分享',
     restartBtn: '再來',
     shareCardTitle: '分享戰績',
@@ -640,6 +645,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endTitleDefault: '挑战结束',
     compositeScoreLabel: '综合得分',
     avgScoreLabel: '该玩法您的均分',
+    soundBtn: '声音',
     shareBtn: '分享',
     restartBtn: '再来',
     shareCardTitle: '分享战绩',

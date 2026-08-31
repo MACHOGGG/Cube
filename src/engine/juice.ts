@@ -195,9 +195,58 @@ const CUE = {
   settle: { name: 'release', vol: 0.6 },
 } as const;
 
+/**
+ * Sound on/off, as one remembered setting (个人主页 carries the switch).
+ *
+ * It gates the cues themselves rather than the audio context: unlockAudio
+ * below still runs on the first gesture even while muted, because Safari
+ * wants the context *built* inside a real gesture and there may not be
+ * another one after the player turns the sound back on.
+ */
+const SOUND_KEY = 'slides_sound';
+type SoundListener = () => void;
+const soundListeners = new Set<SoundListener>();
+let sound = readSound();
+
+function readSound(): boolean {
+  try {
+    // Absent means on: sound is the default, muting is the choice.
+    return localStorage.getItem(SOUND_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+export function soundOn(): boolean {
+  return sound;
+}
+
+export function setSoundOn(next: boolean): void {
+  if (next === sound) return;
+  sound = next;
+  try {
+    localStorage.setItem(SOUND_KEY, sound ? '1' : '0');
+  } catch {
+    /* private mode: the choice just won't outlive the session */
+  }
+  for (const fn of Array.from(soundListeners)) fn();
+}
+
+/** Subscribes to changes; call the returned function to stop listening. */
+export function onSoundChange(fn: SoundListener): () => void {
+  soundListeners.add(fn);
+  return () => soundListeners.delete(fn);
+}
+
+/** Every cue goes through here, so muting is one check in one place. */
+function cue(name: Parameters<typeof play>[0], volume: number): void {
+  if (!sound) return;
+  play(name, { volume });
+}
+
 /** One detent crossed mid-drag. Called from every shape's drag preview. */
 export function playMove(): void {
-  play(CUE.move.name, { volume: CUE.move.vol });
+  cue(CUE.move.name, CUE.move.vol);
 }
 
 /**
@@ -206,57 +255,57 @@ export function playMove(): void {
  * old hand-rolled oscillator used.
  */
 export function playScore(comboTier: number): void {
-  play(CUE.score.name, { volume: Math.min(1, CUE.score.vol + (comboTier - 1) * 0.12) });
+  cue(CUE.score.name, Math.min(1, CUE.score.vol + (comboTier - 1) * 0.12));
 }
 
 /** Matched pieces turning over. */
 export function playFlip(): void {
-  play(CUE.flip.name, { volume: CUE.flip.vol });
+  cue(CUE.flip.name, CUE.flip.vol);
 }
 
 /** A whole line clearing — the bigger, rarer moment. */
 export function playClear(): void {
-  play(CUE.clear.name, { volume: CUE.clear.vol });
+  cue(CUE.clear.name, CUE.clear.vol);
 }
 
 /** 完成 / 结束 — every button that closes something out for good. */
 export function playFinish(): void {
-  play(CUE.finish.name, { volume: CUE.finish.vol });
+  cue(CUE.finish.name, CUE.finish.vol);
 }
 
 /** The run ended on a bomb. */
 export function playError(): void {
-  play(CUE.error.name, { volume: CUE.error.vol });
+  cue(CUE.error.name, CUE.error.vol);
 }
 
 /** 开始游戏. */
 export function playReady(): void {
-  play(CUE.ready.name, { volume: CUE.ready.vol });
+  cue(CUE.ready.name, CUE.ready.vol);
 }
 
 /** 暂停. */
 export function playPause(): void {
-  play(CUE.pause.name, { volume: CUE.pause.vol });
+  cue(CUE.pause.name, CUE.pause.vol);
 }
 
 /** Landing on 个人主页 or 记录与排名. */
 export function playArrive(): void {
-  play(CUE.arrive.name, { volume: CUE.arrive.vol });
+  cue(CUE.arrive.name, CUE.arrive.vol);
 }
 
 /** The end-of-run settlement panel. */
 export function playSettle(): void {
-  play(CUE.settle.name, { volume: CUE.settle.vol });
+  cue(CUE.settle.name, CUE.settle.vol);
 }
 
 /** A window, panel or overlay coming up. */
 export function playOpen(): void {
-  play(CUE.open.name, { volume: CUE.open.vol });
+  cue(CUE.open.name, CUE.open.vol);
 }
 
 /** ...and going away again. */
 export function playClose(): void {
-  play(CUE.close.name, { volume: CUE.close.vol });
+  cue(CUE.close.name, CUE.close.vol);
 }
 
 /**

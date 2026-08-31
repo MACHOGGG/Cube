@@ -1077,6 +1077,26 @@ button:hover { filter: brightness(1.05); }
   transition: transform 120ms ease, filter 120ms ease;
 }
 .profile-pill--wide { max-width: 268px; margin: 4px auto 0; }
+/* 更换图标 and the sound switch share one row: the pill keeps the width it
+   would have had on its own, and the switch is a square of the same pill
+   beside it, so the pair reads as one control block rather than as a new
+   kind of thing. */
+.profile-pill-row--icon { align-items: stretch; }
+.profile-pill-row--icon #iconRow { flex: 1; }
+/* By id, because `.profile-pill-row .profile-pill { flex: 1 }` further down
+   has the same specificity and would win on order, giving the switch half
+   the row. */
+.profile-pill-row #soundRow,
+.profile-pill-row .profile-pill--square {
+  flex: none; width: 46px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.sound-glyph { display: block; width: 22px; height: 22px; color: currentColor; }
+.sound-glyph svg { width: 100%; height: 100%; display: block; }
+/* The bar's own halo is cut in the pill's colour, so it reads as lying over
+   the arcs rather than joining them. */
+.profile-pill--square { --pill-ink: #C7A18C; }
+:root[data-cvd='1'] .profile-pill--square { --pill-ink: #0072B2; }
 .profile-pill--rose { background: #C88A92; }
 .profile-pill:hover { filter: brightness(1.04); }
 .profile-pill:active { transform: translateY(1px) scale(0.99); }
