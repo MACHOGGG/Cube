@@ -183,7 +183,6 @@ function showMenu() {
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
-    onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onBombFor: (tier, id, reopenKey) => {
       const pool = tier === 'advanced' ? bombLayoutGames : games;
       const game = pool.find((g) => g.card.id === id);

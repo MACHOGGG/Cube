@@ -1,6 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { shapeName } from './shapeLabels';
+import { geniusMark } from './geniusMark';
 import {
   avatarSvg,
   createRoom,
@@ -142,7 +143,7 @@ export function renderMultiplayerPage(
         <p class="auth-msg" id="mpMsg" role="status">${message}</p>
 
         <button class="genius-cta" id="mpCreate">${s.mpCreate}</button>
-        <p class="auth-hint">${s.mpNeedGenius}</p>
+        <p class="auth-hint">${geniusMark()}${s.mpNeedGenius}</p>
 
         <div class="mp-join-row">
           <label class="auth-field mp-code-field">

@@ -7,6 +7,7 @@ import { trackIconChange } from '../engine/analytics';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
+import { geniusMark } from './geniusMark';
 import { isStoreChannel } from '../engine/channel';
 import { isGenius } from '../engine/subscription';
 import {
@@ -98,8 +99,8 @@ export function renderAccountPage(
       </button>
 
       <section class="genius-panel">
-        <div class="menu-section-label">${s.geniusSpecialTitle}</div>
-        <button class="genius-cta" id="becomeGeniusBtn">${
+        <div class="menu-section-label">${geniusMark()}${s.geniusSpecialTitle}</div>
+        <button class="genius-cta" id="becomeGeniusBtn">${geniusMark()}${
           subscribed ? s.subscribedTitle : s.becomeGenius
         }</button>
         <button class="profile-row" id="randomRow">

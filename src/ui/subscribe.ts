@@ -19,6 +19,7 @@ import {
   type AccountFailure,
 } from '../engine/account';
 import { CONTACT_EMAIL } from '../legal';
+import { geniusMark } from './geniusMark';
 
 /**
  * 「Slides 天才」 as a player meets it: the window that sells it, and the one
@@ -141,7 +142,7 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
   const { overlay, close } = openModal(
     'genius-modal',
     `
-    <h2>${s.subscribeTitle}</h2>
+    <h2>${geniusMark('genius-mark--title')}${s.subscribeTitle}</h2>
     <p class="tag-line">${s.subscribeIntro}</p>
     <div class="plan-list">${priceRows}</div>
     <p class="auth-hint">${
@@ -150,7 +151,7 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     <button class="link-btn" id="geniusRedeem">${s.haveCode}</button>
     <p class="auth-msg" id="geniusMsg" role="status"></p>
     <div class="genius-perks">
-      <div class="menu-section-label">${s.geniusSpecialTitle}</div>
+      <div class="menu-section-label">${geniusMark()}${s.geniusSpecialTitle}</div>
       ${PRIVILEGES[lang].map((p) => `<div class="genius-perk">${p}</div>`).join('')}
     </div>
     <div class="btn-row">
@@ -212,7 +213,7 @@ export function openStatusWindow(lang: Lang, onChanged: () => void): void {
   const { overlay, close } = openModal(
     'genius-modal',
     `
-    <h2>${s.subscribedTitle}</h2>
+    <h2>${geniusMark('genius-mark--title')}${s.subscribedTitle}</h2>
     ${until}
     ${email}
     <p class="auth-hint">${

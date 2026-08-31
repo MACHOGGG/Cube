@@ -11,13 +11,14 @@ import {
   ICON_TIMED_COMBINED,
   ICON_BOMB_90S,
   bombChip,
-  moreLayoutCard,
   layoutIcon,
   layoutIconIsWide,
   timedCard,
   timedOption,
+  ICON_LOCK,
   type BaseShape,
 } from './homeIcons';
+import { geniusMark } from './geniusMark';
 
 export interface MenuHandlers {
   onSelectBase: (id: string) => void;
@@ -25,9 +26,6 @@ export interface MenuHandlers {
    *  pop-up picker launched this game — main.ts hands it back to showMenu()
    *  so "back" from that game re-opens the same picker. */
   onSelectLayout: (id: string, reopenKey?: string) => void;
-  /** A 「+」 board that 「Slides 天才」 unlocks, tapped by someone who has not
-   *  bought it — the picker shows what it is, and this opens the paywall. */
-  onLockedLayout: () => void;
   onTimedFor: (id: string, reopenKey?: string) => void;
   onBombFor: (tier: BombTier, id: string, reopenKey?: string) => void;
 }
@@ -76,12 +74,26 @@ function wireTapFeedback(el: HTMLElement): void {
   el.addEventListener('animationend', () => el.classList.remove('home-tap'));
 }
 
-function iconButton(glyph: string, label: string, extraClass = ''): HTMLButtonElement {
+/**
+ * The shake a locked board gives when it is tapped: one small refusal and
+ * nothing else — no window, no trip to the paywall. It is the same gesture a
+ * locked door gives, and it leaves the player where they were.
+ */
+function wireLockedShake(el: HTMLElement): void {
+  el.addEventListener('click', () => {
+    el.classList.remove('home-shake');
+    void el.offsetWidth; // so a second tap shakes again rather than doing nothing
+    el.classList.add('home-shake');
+  });
+  el.addEventListener('animationend', () => el.classList.remove('home-shake'));
+}
+
+function iconButton(glyph: string, label: string, extraClass = '', tapFeedback = true): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className = 'home-icon-btn' + (extraClass ? ' ' + extraClass : '');
   btn.setAttribute('aria-label', label);
   btn.innerHTML = glyph;
-  wireTapFeedback(btn);
+  if (tapFeedback) wireTapFeedback(btn);
   return btn;
 }
 
@@ -248,43 +260,62 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   });
   (wide ? lastRow : grid).appendChild(bombBtn);
 
-  // ---- more layouts (finishing the last row on a wide screen) -----------
-  // One card per base shape, holding that shape's own layout variants:
-  // square has a single one (so it starts straight away), circle and
-  // triangle have two apiece and open a picker.
+  // ---- every layout board, straight onto the grid -----------------------
+  // The three 「+」 cards are gone. They stood for a shelf a player had to
+  // open before they could see what was on it — five boards, hidden behind
+  // three taps that each showed one or two. Now the boards are simply on the
+  // page in the order those cards handed them out, and the page scrolls,
+  // which is what a shelf is for anyway.
+  //
+  // The two 「Slides 天才」 boards go last, after everything that can be
+  // played. They are still drawn, because the board is the argument for
+  // buying it, but nothing that is free sits below a locked door.
   const moreOrder: BaseShape[] = wide ? ['square', 'circle', 'triangle'] : ['square', 'triangle', 'circle'];
-  for (const shape of moreOrder) {
-    const cards = layout.moreLayouts[shape];
-    if (!cards.length) continue;
-    // Every shape wears the same generic plus card and hands out its real
-    // boards inside the picker — including a shape that has only one variant
-    // today, so that the way in doesn't change shape the day it gains a
-    // second.
-    const btn = iconButton(moreLayoutCard(shape), `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
-    const reopenKey = 'more-' + shape;
-    btn.dataset.reopen = reopenKey;
-    btn.addEventListener('click', () => {
-      openCenterPicker({
-        originEl: btn,
-        title: s.sectionMore,
-        options: cards.map((c) => {
-          // Locked boards stay on the shelf rather than disappearing from
-          // it: a player can see the board they would get, which is the
-          // whole argument for buying it.
-          const locked = isLayoutLocked(c.id);
-          const name = shapeName(lang, c.id, c.name);
-          return {
-            glyph: layoutIcon(c.id, shape),
-            label: locked ? `${name} · ${s.geniusOnly}` : name,
-            showLabel: true,
-            wide: layoutIconIsWide(c.id),
-            locked,
-            onPick: () =>
-              locked ? handlers.onLockedLayout() : handlers.onSelectLayout(c.id, reopenKey),
-          };
-        }),
-      });
-    });
-    lastRow.appendChild(btn);
+  const boards = moreOrder.flatMap((shape) =>
+    layout.moreLayouts[shape].map((card) => ({ card, shape })),
+  );
+  const free = boards.filter((b) => !isLayoutLocked(b.card.id));
+  // Within the locked pair, a 2:1 board goes last so it gets the full-width
+  // row to itself rather than leaving a hole beside it.
+  const held = boards
+    .filter((b) => isLayoutLocked(b.card.id))
+    .sort((a, b) => Number(layoutIconIsWide(a.card.id)) - Number(layoutIconIsWide(b.card.id)));
+
+  // The phone's grid wraps by itself. A wide screen's rows are flex lines
+  // that do not, so they are filled by hand, three slots to a row — the bomb
+  // card already occupies one of the first row's — and a 2:1 board takes two
+  // of them. Without this the last row simply ran off the side of the page.
+  const SLOTS_PER_ROW = 3;
+  let row = lastRow;
+  let filled = 1;
+
+  for (const { card, shape } of [...free, ...held]) {
+    const slots = layoutIconIsWide(card.id) ? 2 : 1;
+    if (wide && filled + slots > SLOTS_PER_ROW) {
+      row = newRow();
+      filled = 0;
+    }
+    filled += slots;
+    const name = shapeName(lang, card.id, card.name);
+    const locked = isLayoutLocked(card.id);
+    const btn = iconButton(
+      layoutIcon(card.id, shape),
+      locked ? `${name} · ${s.geniusOnly}` : name,
+      layoutIconIsWide(card.id) ? 'home-icon-btn--wide' : '',
+      !locked,
+    );
+    if (locked) {
+      btn.classList.add('home-icon-btn--locked');
+      // The padlock says it is shut; the mark says what would open it.
+      btn.insertAdjacentHTML(
+        'beforeend',
+        `<span class="home-lock">${ICON_LOCK}</span>` +
+          `<span class="home-lock-mark">${geniusMark()}</span>`,
+      );
+      wireLockedShake(btn);
+    } else {
+      btn.addEventListener('click', () => handlers.onSelectLayout(card.id));
+    }
+    (wide ? row : grid).appendChild(btn);
   }
 }

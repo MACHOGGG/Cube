@@ -698,14 +698,13 @@ button:hover { filter: brightness(1.05); }
    hit comfortably with a thumb. Two columns on a phone, three on a desktop,
    which is also where the timed and bomb sections stop being collapsed. */
 .home-page { gap: 0; padding-bottom: 120px; }
-/* Upright on a phone the whole menu should stand in one screen — nobody
-   should have to scroll to reach the last two cards. So the cards are capped
-   by the height that is actually left over as well as by the column they sit
-   in: everything above and below the grid (the page's own top padding, the
-   masthead and its margin, and the room kept clear for the dock) comes to
-   about 300px, and what is left is shared by the four rows and the three
-   gaps between them. On a screen tall enough for it the 150px cap wins and
-   the grid simply sits with air under it, exactly as the sheet draws it. */
+/* The menu used to be capped to whatever height was left over, so that it
+   would stand in one screen and nobody had to scroll. With every layout
+   board now on the page rather than hidden behind three 「+」 cards there is
+   simply more here than a phone screen holds, so that cap is gone and the
+   page scrolls — which is also what lets the next board be added without
+   shrinking every icon on the page to make room for it.
+   The cards are 1.2x what they were: 150 -> 180 here, 168 -> 202 below. */
 @media (max-width: 719px) {
   /* Two-class selectors on purpose: the base rules for these live further
      down the file, so a bare .home-grid here would lose on order. */
@@ -713,10 +712,7 @@ button:hover { filter: brightness(1.05); }
   .home-page .home-head { margin-bottom: 12px; }
   .home-page .home-grid { gap: 14px 20px; }
   .home-page .home-icon-btn,
-  .home-page .home-bomb-card {
-    max-width: 150px;                       /* the plain cap, if dvh is unknown */
-    max-width: min(150px, (100dvh - 300px) / 4);
-  }
+  .home-page .home-bomb-card { max-width: 180px; }
 }
 /* The icon grid wants far more width than the standard reading column. */
 .app.home-page--wide { max-width: 800px; }
@@ -775,16 +771,54 @@ button:hover { filter: brightness(1.05); }
    button inside any flex row (the nav, a bomb tier) stretches to fill it and
    ignores its own width. */
 .home-icon-btn {
-  width: 100%; max-width: 168px; aspect-ratio: 1; padding: 0; flex: none;
+  width: 100%; max-width: 202px; aspect-ratio: 1; padding: 0; flex: none;
   background: none; border: none; border-radius: 0; cursor: pointer; display: block;
   -webkit-tap-highlight-color: transparent;
 }
 .home-icon-btn:hover { filter: none; }
 .home-icon-btn:active { transform: none; }
 /* Sized so the four-card bottom row still fits the page's own width. */
-.home-page--wide .home-icon-btn { max-width: 170px; }
+.home-page--wide .home-icon-btn { max-width: 204px; }
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
+
+/* 进阶三角's icon is a 2:1 box rather than a square one, so on the phone's
+   two-column grid it takes the whole row instead of being squeezed into one
+   column at half the size of everything beside it. */
+.home-icon-btn--wide { grid-column: 1 / -1; aspect-ratio: 1.53; max-width: min(100%, 404px); }
+.home-page .home-icon-btn--wide, .home-page--wide .home-icon-btn--wide { max-width: min(100%, 404px); }
+
+/* A board behind 「Slides 天才」. It is still drawn — the board is the whole
+   argument for buying it — under a veil, with a padlock and the mark of what
+   would open it. */
+.home-icon-btn--locked { position: relative; cursor: default; }
+.home-icon-btn--locked > svg { opacity: 0.34; }
+.home-lock {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -58%);
+  width: 30%; max-width: 42px; color: var(--accent-ink); pointer-events: none;
+}
+.home-lock svg { width: 100%; height: 100%; display: block; }
+.home-lock-mark {
+  position: absolute; right: 6%; bottom: 4%; width: 26%; max-width: 38px; pointer-events: none;
+}
+
+/* Tapping a locked board does one thing and stops: a small shake. No window
+   opens and nothing is sold — it is the answer a locked door gives, and it
+   leaves the player exactly where they were. */
+.home-shake { animation: home-shake 380ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes home-shake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-4px) rotate(-1.1deg); }
+  42% { transform: translateX(3px) rotate(0.8deg); }
+  66% { transform: translateX(-2px) rotate(-0.5deg); }
+  86% { transform: translateX(1px); }
+}
+@media (prefers-reduced-motion: reduce) { .home-shake { animation: none; } }
+
+/* The 「Slides 天才」 mark, wherever the subscription is named. Small by
+   default; the places that want it larger say so themselves. */
+.genius-mark { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.22em; flex: 0 0 auto; }
+.home-lock-mark .genius-mark { width: 100%; height: auto; vertical-align: baseline; }
 
 /* The press cue: a quick squash and tilt, fired from pointerdown so it plays
    through even when the same tap opens a modal on top of it. */
@@ -827,13 +861,13 @@ button:hover { filter: brightness(1.05); }
 /* Now a button, so it has to shed the global button chrome the same way
    .home-icon-btn does. */
 .home-bomb-card {
-  width: 100%; max-width: 170px; flex: none;
+  width: 100%; max-width: 204px; flex: none;
   padding: 0; background: none; border: none; border-radius: 0;
   cursor: pointer; display: block;
   -webkit-tap-highlight-color: transparent;
 }
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
-.home-bomb-mini { max-width: 168px; }
+.home-bomb-mini { max-width: 202px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
 
 /* Desktop only: every icon lifts a touch under the pointer, so a mouse gets
@@ -1875,3 +1909,10 @@ html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavi
 .mp-board-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
 .mp-board .mp-badge { font-size: 0.6rem; padding: 1px 5px; }
+/* The mark leads the line it belongs to rather than sitting in it, so a
+   heading reads as one thing with a badge and not as a word with a picture
+   dropped into the middle of it. */
+.modal h2 .genius-mark--title { width: 1.05em; height: 1.05em; margin-right: 7px; vertical-align: -0.14em; }
+.menu-section-label .genius-mark { width: 1.35em; height: 1.35em; margin-right: 5px; vertical-align: -0.35em; }
+.genius-cta .genius-mark { width: 1.25em; height: 1.25em; margin-right: 7px; vertical-align: -0.3em; }
+.auth-hint .genius-mark { width: 1.2em; height: 1.2em; margin-right: 5px; vertical-align: -0.28em; }
