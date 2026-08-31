@@ -1,5 +1,6 @@
 import { vibrate } from '../engine/haptics';
 import { applyPaletteToTree } from '../engine/palettePref';
+import { ICON_LOCK } from './homeIcons';
 
 export interface PickerOption {
   /** Inline SVG for this option's icon. */
@@ -11,6 +12,10 @@ export interface PickerOption {
   /** This glyph is a 2:1 box, not a square one (进阶三角's two arms) — it
    *  takes a double-width slot, and the row wraps rather than squeezing it. */
   wide?: boolean;
+  /** Behind 「Slides 天才」 and not yet paid for: the board is still drawn,
+   *  because what is being sold should be visible, but it wears a padlock
+   *  and its onPick opens the paywall instead of dealing a game. */
+  locked?: boolean;
   onPick: () => void;
 }
 
@@ -72,9 +77,15 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
     row.className = 'center-pick-row' + (opts.split ? ' center-pick-row--split' : '');
     for (const opt of opts.options ?? []) {
       const btn = document.createElement('button');
-      btn.className = 'center-pick-opt' + (opt.wide ? ' center-pick-opt--wide' : '');
+      btn.className =
+        'center-pick-opt' +
+        (opt.wide ? ' center-pick-opt--wide' : '') +
+        (opt.locked ? ' center-pick-opt--locked' : '');
       btn.setAttribute('aria-label', opt.label);
-      btn.innerHTML = opt.glyph + (opt.showLabel ? `<span class="center-pick-label">${opt.label}</span>` : '');
+      btn.innerHTML =
+        opt.glyph +
+        (opt.locked ? `<span class="center-pick-lock">${ICON_LOCK}</span>` : '') +
+        (opt.showLabel ? `<span class="center-pick-label">${opt.label}</span>` : '');
       btn.addEventListener('pointerdown', () => {
         btn.classList.remove('home-tap');
         void btn.offsetWidth;

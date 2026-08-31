@@ -1,6 +1,7 @@
 import type { ShapeCardMeta } from '../shapes/types';
 import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
+import { isLayoutLocked } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import {
@@ -24,6 +25,9 @@ export interface MenuHandlers {
    *  pop-up picker launched this game — main.ts hands it back to showMenu()
    *  so "back" from that game re-opens the same picker. */
   onSelectLayout: (id: string, reopenKey?: string) => void;
+  /** A 「+」 board that 「Slides 天才」 unlocks, tapped by someone who has not
+   *  bought it — the picker shows what it is, and this opens the paywall. */
+  onLockedLayout: () => void;
   onTimedFor: (id: string, reopenKey?: string) => void;
   onBombFor: (tier: BombTier, id: string, reopenKey?: string) => void;
 }
@@ -263,13 +267,22 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       openCenterPicker({
         originEl: btn,
         title: s.sectionMore,
-        options: cards.map((c) => ({
-          glyph: layoutIcon(c.id, shape),
-          label: shapeName(lang, c.id, c.name),
-          showLabel: true,
-          wide: layoutIconIsWide(c.id),
-          onPick: () => handlers.onSelectLayout(c.id, reopenKey),
-        })),
+        options: cards.map((c) => {
+          // Locked boards stay on the shelf rather than disappearing from
+          // it: a player can see the board they would get, which is the
+          // whole argument for buying it.
+          const locked = isLayoutLocked(c.id);
+          const name = shapeName(lang, c.id, c.name);
+          return {
+            glyph: layoutIcon(c.id, shape),
+            label: locked ? `${name} · ${s.geniusOnly}` : name,
+            showLabel: true,
+            wide: layoutIconIsWide(c.id),
+            locked,
+            onPick: () =>
+              locked ? handlers.onLockedLayout() : handlers.onSelectLayout(c.id, reopenKey),
+          };
+        }),
       });
     });
     lastRow.appendChild(btn);

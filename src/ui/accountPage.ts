@@ -1,7 +1,7 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
-import { ICON_SOUND_ON, ICON_SOUND_OFF } from './homeIcons';
+import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
@@ -27,9 +27,6 @@ export interface ProfileHandlers {
   onRandomTarget: () => void;
   onMultiplayer: () => void;
 }
-
-const LOCK_GLYPH =
-  '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
 /**
  * 个人主页 — one destination for everything that isn't a game, laid out the
@@ -62,7 +59,7 @@ export function renderAccountPage(
       : s.loginGateway;
   const lockedRow = (label: string) =>
     `<div class="profile-row profile-row--locked">` +
-    `<span class="profile-row-glyph profile-row-glyph--lock">${LOCK_GLYPH}</span>` +
+    `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>` +
     `<span class="profile-row-label">${label}</span>` +
     `<span class="profile-row-value">${s.comingSoon}</span></div>`;
 

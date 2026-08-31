@@ -884,6 +884,18 @@ button:hover { filter: brightness(1.05); }
 .center-pick-opt--wide { width: min(74vw, 318px); }
 .center-pick-opt--wide > svg { aspect-ratio: 1.53; }
 .center-pick-label { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+/* A 「+」 board behind 「Slides 天才」: still drawn, because the board is the
+   argument for buying it, but veiled and wearing a padlock. The veil is a
+   pseudo-element over the icon rather than opacity on the button, so the
+   lock itself stays at full strength on top of it. */
+.center-pick-opt--locked { position: relative; }
+.center-pick-opt--locked > svg { opacity: 0.38; }
+.center-pick-opt--locked .center-pick-label { color: var(--ink-faint); }
+.center-pick-lock {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -60%);
+  width: 34px; height: 34px; color: var(--accent-ink); pointer-events: none;
+}
+.center-pick-lock svg { width: 100%; height: 100%; display: block; }
 
 /* ---------- profile page rows ---------- */
 .profile-row {

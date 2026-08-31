@@ -14,6 +14,7 @@ import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { onGeniusChange, refreshEntitlement } from './engine/subscription';
+import { openGeniusWindow } from './ui/subscribe';
 import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -175,6 +176,7 @@ function showMenu() {
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
+    onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onBombFor: (tier, id, reopenKey) => {
       const pool = tier === 'advanced' ? bombLayoutGames : games;
       const game = pool.find((g) => g.card.id === id);
@@ -386,7 +388,11 @@ function onLanguageSwitched(lang: Lang) {
 // receipt read at launch — has to redraw it. Nothing else on screen depends
 // on it, which is why only this one page listens.
 onGeniusChange(() => {
+  // Both pages say something different once the subscription is live: 个人
+  // 主页 changes what its pill and 天才 button offer, and the home page drops
+  // the padlocks from the two 「+」 boards that just became playable.
   if (navTab === 'profile') showAccountPage('login');
+  else if (root.querySelector('.home-page')) showMenu();
 });
 
 // The splash owns the first 3.5 seconds, and hands over only once the web

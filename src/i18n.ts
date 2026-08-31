@@ -100,6 +100,8 @@ export interface I18nStrings {
   /** Also carries {store}: where a store subscription is cancelled. */
   manageOnStore: string;
   geniusStatus: string;
+  /** Badge on a 「+」 board that the subscription unlocks. */
+  geniusOnly: string;
   notOnSaleYet: string;
   purchaseUnavailable: string;
   purchaseCancelled: string;
@@ -276,6 +278,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageSubscription: 'Manage subscription',
     manageOnStore: 'Cancel or change it in your {store} account settings.',
     geniusStatus: 'Subscription',
+    geniusOnly: 'Genius only',
     notOnSaleYet: 'The subscription is not open yet.',
     purchaseUnavailable: 'This device cannot complete the purchase yet.',
     purchaseCancelled: 'Cancelled — you have not been charged.',
@@ -437,6 +440,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageSubscription: 'Gérer l’abonnement',
     manageOnStore: 'Résiliez ou modifiez dans les réglages de votre compte {store}.',
     geniusStatus: 'Abonnement',
+    geniusOnly: 'Réservé aux Génies',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
     purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
     purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
@@ -598,6 +602,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageSubscription: '管理訂閱',
     manageOnStore: '到 {store} 的帳號設定裡取消或更改。',
     geniusStatus: '訂閱狀態',
+    geniusOnly: '天才特供',
     notOnSaleYet: '訂閱尚未開放。',
     purchaseUnavailable: '這台裝置目前還無法完成購買。',
     purchaseCancelled: '已取消，沒有扣款。',
@@ -759,6 +764,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     manageSubscription: '管理订阅',
     manageOnStore: '到 {store} 的账号设置里取消或更改。',
     geniusStatus: '订阅状态',
+    geniusOnly: '天才特供',
     notOnSaleYet: '订阅尚未开放。',
     purchaseUnavailable: '这台设备暂时还无法完成购买。',
     purchaseCancelled: '已取消，没有扣款。',
