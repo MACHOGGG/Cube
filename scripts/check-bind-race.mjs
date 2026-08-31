@@ -65,5 +65,47 @@ if (won.length === 1) {
     `${winner} → ${back.status}`);
 }
 
+// ---- 抢不到的时候，码不能被弄丢 ----------------------------------------
+// 认领是 GETDEL，一步就把持有凭证拿走了。所以每一条不成功的出口都必须把它
+// 放回去，否则一次「这个邮箱已经有账号了」就等于没收了玩家的码。
+{
+  const fresh = await post('/api/redeem', { code: 'TESTLIFE' });
+  if (!fresh.body.code) {
+    console.log('\n（TESTLIFE 已被用掉，跳过「令牌猜错」这一项）');
+  } else {
+    const { code: c2, token: t2 } = fresh.body;
+
+    // 令牌不对：不该碰这张码。
+    const badToken = await post('/api/passcode', {
+      action: 'bind', code: c2, token: 'not-the-right-token', email: 'x@test.com', password: '123456',
+    });
+    const afterBad = await post('/api/passcode', {
+      action: 'bind', code: c2, token: t2, email: 'still-works@test.com', password: '123456',
+    });
+    check('令牌猜错之后，这张码还能正常绑定',
+      badToken.status === 401 && afterBad.status === 200,
+      `猜错 ${badToken.status} · 之后 ${afterBad.status}`);
+  }
+}
+
+{
+  const fresh = await post('/api/redeem', { code: 'TESTHALF' });
+  if (!fresh.body.code) {
+    console.log('（没有 TESTHALF，跳过「邮箱被占用」那一项）');
+  } else {
+    const { code: c3, token: t3 } = fresh.body;
+    // 绑到一个已经有账号的邮箱上：应该被拒，而且码要还回来。
+    const taken = await post('/api/passcode', {
+      action: 'bind', code: c3, token: t3, email: 'race-a@test.com', password: '123456',
+    });
+    const retry = await post('/api/passcode', {
+      action: 'bind', code: c3, token: t3, email: 'another@test.com', password: '123456',
+    });
+    check('邮箱被占用被拒之后，这张码还能换个邮箱绑',
+      taken.status === 409 && retry.status === 200,
+      `被拒 ${taken.status} · 改绑 ${retry.status}`);
+  }
+}
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

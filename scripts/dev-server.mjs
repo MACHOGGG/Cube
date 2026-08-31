@@ -66,7 +66,11 @@ const readBody = (req) =>
 const { set } = await import('../api/_store.js');
 await set('code:TESTMONTH', { plan: 'month' });
 await set('code:TESTYEAR', { plan: 'year' });
-console.log('test redeem codes: TESTMONTH (1 month), TESTYEAR (1 year)');
+// check-bind-race 每跑一轮要花掉三张码，而每张码都是一次性的。给它自己的
+// 三张，check-multiplayer 的 TESTMONTH 就不会被它吃掉。
+await set('code:TESTHALF', { plan: 'half' });
+await set('code:TESTLIFE', { plan: 'life' });
+console.log('test redeem codes: TESTMONTH, TESTYEAR, TESTHALF, TESTLIFE');
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');

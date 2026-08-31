@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
-import { del, get, set } from './_store.js';
+import { del, get, set, takeOnce } from './_store.js';
 
 /**
  * The accounts a redeemed code creates — the only accounts this app has.
@@ -97,6 +97,18 @@ const accountKey = (email) => 'acct:' + normalizeEmail(email);
 export const loadAccount = (email) => get(accountKey(email));
 export const deleteAccount = (email) => del(accountKey(email));
 export const saveAccount = (email, account) => set(accountKey(email), account);
+
+/**
+ * Read an account and delete it in one step — the atomic claim.
+ *
+ * Only one caller can win a GETDEL, which is what makes it safe for two
+ * requests to reach for the same code-held entitlement at the same instant:
+ * the loser gets null rather than a second copy of the same month.
+ *
+ * Whoever takes it now owns putting it back if they cannot finish. See
+ * api/passcode.js bind().
+ */
+export const takeAccount = (email) => takeOnce(accountKey(email));
 
 function hash(pin, saltHex) {
   return scryptSync(String(pin), Buffer.from(saltHex, 'hex'), 32).toString('hex');

@@ -5,12 +5,12 @@ import {
   SECRET_RE,
   checkPin,
   codeHolder,
-  deleteAccount,
   ensureGiftCodes,
   loadAccount,
   newAccount,
   normalizeEmail,
   saveAccount,
+  takeAccount,
 } from './_accounts.js';
 import { storeConfigured } from './_store.js';
 
@@ -75,20 +75,53 @@ async function bind(res, rawCode, token, email, password) {
   if (!PASS_RE.test(String(password || ''))) return send(res, 400, { error: 'weak' });
 
   const holder = codeHolder(rawCode);
-  const granted = await loadAccount(holder);
-  if (!granted || !granted.token || token !== granted.token) {
+
+  // Look before claiming. A wrong token must not so much as touch the
+  // entitlement — otherwise anyone who guessed a code could take it out of
+  // its owner's hands for as long as it takes to put it back.
+  const seen = await loadAccount(holder);
+  if (!seen || !seen.token || token !== seen.token) {
     return send(res, 401, { error: 'wrong' });
   }
-  if (await loadAccount(address)) return send(res, 409, { error: 'exists' });
+
+  // Now claim it, in one step that only one caller can win.
+  //
+  // This used to be four separate steps — read the holder, check the
+  // address, write the account, delete the holder — with nothing stopping a
+  // second request from starting its own read while the first was still
+  // between them. On Upstash every one of those steps is an HTTP round trip,
+  // so "between them" is a long time, and two requests could each have come
+  // away with the same month under a different address. GETDEL closes it:
+  // the loser gets null.
+  const granted = await takeAccount(holder);
+  // Gone between the look and the claim: another request won it and has
+  // already bound it to an address. From here that is indistinguishable
+  // from — and means the same thing as — a code that has been used.
+  if (!granted) return send(res, 409, { error: 'code' });
+
+  // Taken. From here every way out that is not success has to put it back,
+  // or the player loses what the code gave them to a refusal.
+  const giveBack = () => saveAccount(holder, granted);
+
+  if (!granted.token || token !== granted.token) {
+    await giveBack();
+    return send(res, 401, { error: 'wrong' });
+  }
+  if (await loadAccount(address)) {
+    await giveBack();
+    return send(res, 409, { error: 'exists' });
+  }
 
   // Everything the code was worth moves across; only the secret is new.
   const account = newAccount(String(password), 'code');
   account.until = granted.until;
   account.plan = granted.plan;
-  await saveAccount(address, account);
-  // The code's own key goes last: if this call dies between the two writes,
-  // the player still holds a working entitlement and can attach it again.
-  await deleteAccount(holder);
+  try {
+    await saveAccount(address, account);
+  } catch (err) {
+    await giveBack();
+    throw err;
+  }
 
   return send(res, 200, { ok: true, email: address, token: account.token });
 }
