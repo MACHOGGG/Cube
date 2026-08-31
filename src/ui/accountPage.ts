@@ -5,9 +5,19 @@ import { ICON_SOUND_ON, ICON_SOUND_OFF } from './homeIcons';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
-import { LEGAL, LEGAL_ORDER, type LegalKey } from '../legal';
+import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
+import { applyPaletteToTree } from '../engine/palettePref';
+import { isStoreChannel } from '../engine/channel';
+import { isGenius } from '../engine/subscription';
+import {
+  openAuthWindow,
+  openGeniusWindow,
+  openStatusWindow,
+  runStoreRestore,
+} from './subscribe';
 
-export type AuthTab = 'register' | 'login';
+export type { AuthTab } from './subscribe';
+import type { AuthTab } from './subscribe';
 
 export interface ProfileHandlers {
   onBack: () => void;
@@ -39,6 +49,17 @@ export function renderAccountPage(
 ) {
   const s = STRINGS[lang];
   const privileges = PRIVILEGES[lang];
+  // Where the wide pill leads, and what it is called, is decided by which
+  // counter can charge this build. The site has accounts because an address
+  // is the only identity it has; the store builds have none, because Apple
+  // and Google already know who is holding the phone — so what would have
+  // been 登录通道 there is 恢复购买, the only "sign in" they need.
+  const subscribed = isGenius();
+  const gatewayLabel = subscribed
+    ? s.geniusStatus
+    : isStoreChannel()
+      ? s.restoreBtn
+      : s.loginGateway;
   const lockedRow = (label: string) =>
     `<div class="profile-row profile-row--locked">` +
     `<span class="profile-row-glyph profile-row-glyph--lock">${LOCK_GLYPH}</span>` +
@@ -54,7 +75,7 @@ export function renderAccountPage(
         </div>
       </header>
 
-      <button class="profile-pill profile-pill--wide" id="loginBtn">${s.loginGateway}</button>
+      <button class="profile-pill profile-pill--wide" id="loginBtn">${gatewayLabel}</button>
       <div class="profile-pill-row">
         <button class="profile-pill" id="langRow">${s.switchLanguage}</button>
         <button class="profile-pill profile-pill--rose" id="howToRow">${s.tutorialShort}</button>
@@ -81,7 +102,9 @@ export function renderAccountPage(
 
       <section class="genius-panel">
         <div class="menu-section-label">${s.geniusSpecialTitle}</div>
-        <button class="genius-cta" id="becomeGeniusBtn">${s.becomeGenius}</button>
+        <button class="genius-cta" id="becomeGeniusBtn">${
+          subscribed ? s.subscribedTitle : s.becomeGenius
+        }</button>
         <button class="profile-row" id="randomRow">
           <span class="profile-row-label">${s.randomTargetTitle}</span>
           <span class="profile-row-value">${s.comingSoon}</span>
@@ -109,34 +132,14 @@ export function renderAccountPage(
     </div>
   `;
 
-  /** The sign-up / log-in popup: the same two tabs as before, now opened from
-   *  the 登录通道 pill (and from 成为 Slides 天才, on its sign-up tab). */
-  function openAuth(tab: AuthTab) {
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay show';
-    overlay.innerHTML = `
-      <div class="modal auth-modal">
-        <div class="auth-tabs">
-          <button class="auth-tab" data-tab="register">${s.tabRegister}</button>
-          <button class="auth-tab" data-tab="login">${s.tabLogin}</button>
-        </div>
-        <div class="auth-body"><p class="tag-line">${s.accountComingSoon}</p></div>
-        <div class="btn-row"><button class="primary" id="authClose">${s.closeBtn}</button></div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const tabs = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.auth-tab'));
-    const setTab = (t: AuthTab) => {
-      for (const el of tabs) el.classList.toggle('active', el.dataset.tab === t);
-    };
-    for (const el of tabs) el.addEventListener('click', () => setTab(el.dataset.tab as AuthTab));
-    setTab(tab);
-    const close = () => overlay.remove();
-    overlay.querySelector<HTMLButtonElement>('#authClose')!.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
-  }
+  /** Buying, restoring or signing out all change what this page should say,
+   *  so each of them re-draws it. The palette is re-applied by hand because
+   *  the page's glyphs are literal SVG, and only a repaint carries the
+   *  colourblind setting into freshly written markup. */
+  const refresh = () => {
+    renderAccountPage(container, initialTab, handlers, lang);
+    applyPaletteToTree(container);
+  };
 
   /** 游戏规则 — the whole rulebook, in the player's own language. It used to
    *  be two long Chinese paragraphs pinned under every board; here it is one
@@ -172,7 +175,10 @@ export function renderAccountPage(
   /** One of the five published documents, in the same window 游戏规则 uses —
    *  a title, a line of lead-in, then term/body pairs. */
   function openLegal(key: LegalKey) {
-    const doc = LEGAL[lang][key];
+    // Channel-aware: the clauses that belong to the other counter — its
+    // prices, its cancellation route, the company that takes its money —
+    // are not in this copy at all.
+    const doc = legalDoc(lang, key);
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
     overlay.innerHTML = `
@@ -239,7 +245,11 @@ export function renderAccountPage(
    *  empty panel rather than pretending to have content. */
   const on = (id: string, fn: () => void) =>
     container.querySelector<HTMLButtonElement>('#' + id)?.addEventListener('click', fn);
-  on('loginBtn', () => openAuth(initialTab));
+  on('loginBtn', () => {
+    if (isGenius()) openStatusWindow(lang, refresh);
+    else if (isStoreChannel()) runStoreRestore(lang, refresh);
+    else openAuthWindow(lang, initialTab, refresh);
+  });
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
   on('iconRow', openIconPicker);
@@ -264,7 +274,7 @@ export function renderAccountPage(
   on('howToRow', handlers.onHowToSlide);
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);
-  on('becomeGeniusBtn', () => openAuth('register'));
+  on('becomeGeniusBtn', () => openGeniusWindow(lang, refresh));
   for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {
     btn.addEventListener('click', () => openLegal(btn.dataset.legal as LegalKey));
   }

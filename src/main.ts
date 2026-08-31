@@ -13,6 +13,7 @@ import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -380,6 +381,20 @@ function onLanguageSwitched(lang: Lang) {
   afterLangChosen(lang);
 }
 
+// 个人主页 is written from the subscription as it stood when it rendered, so
+// an answer that arrives later — a checkout just returned from, or a store
+// receipt read at launch — has to redraw it. Nothing else on screen depends
+// on it, which is why only this one page listens.
+onGeniusChange(() => {
+  if (navTab === 'profile') showAccountPage('login');
+});
+
 // The splash owns the first 3.5 seconds, and hands over only once the web
 // fonts have landed too — so the screen behind it never reflows on arrival.
 showLoadingScreen().then(boot);
+
+// Asked during the splash, so the network round trip is spent on time nobody
+// is waiting through. It settles a checkout the player has just come back
+// from, re-reads the store receipt, and otherwise leaves the cached answer
+// exactly as it was — offline, this does nothing at all.
+void refreshEntitlement();

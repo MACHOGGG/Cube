@@ -75,6 +75,38 @@ export interface I18nStrings {
   privilegesSoon: string;
   becomeGenius: string;
   geniusSpecialTitle: string;
+  // ---- subscription: the paywall, and the web's e-mail sign-in ----
+  /** Title of the window the 成为 Slides 天才 button opens. */
+  subscribeTitle: string;
+  subscribeIntro: string;
+  /** The two billing periods, as a price is labelled: "每月" / "每年". */
+  planMonthly: string;
+  planYearly: string;
+  subscribeBtn: string;
+  restoreBtn: string;
+  signInBtn: string;
+  signOutBtn: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  emailInvalid: string;
+  /** Why the site asks for an address and the app never does. */
+  registerHint: string;
+  signInHint: string;
+  /** Carries {store} — "App Store" or "Google Play", per platform. */
+  storeNoAccountHint: string;
+  subscribedTitle: string;
+  subscribedUntil: string;
+  manageSubscription: string;
+  /** Also carries {store}: where a store subscription is cancelled. */
+  manageOnStore: string;
+  geniusStatus: string;
+  notOnSaleYet: string;
+  purchaseUnavailable: string;
+  purchaseCancelled: string;
+  purchaseNetwork: string;
+  restoreNothing: string;
+  signInNotFound: string;
+  workingLabel: string;
   // ---- game shell (shared HUD/overlays across every shape) ----
   pauseBtn: string;
   finishBtn: string;
@@ -225,6 +257,32 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     privilegesSoon: '…more coming soon',
     becomeGenius: 'Become a Slides Genius',
     geniusSpecialTitle: 'Slides Genius Exclusives',
+    subscribeTitle: 'Become a Slides Genius',
+    subscribeIntro: 'Everything below, unlocked. Cancel whenever you like.',
+    planMonthly: 'per month',
+    planYearly: 'per year',
+    subscribeBtn: 'Subscribe',
+    restoreBtn: 'Restore purchase',
+    signInBtn: 'Log in',
+    signOutBtn: 'Log out',
+    emailLabel: 'Email',
+    emailPlaceholder: 'you@example.com',
+    emailInvalid: 'That does not look like an email address.',
+    registerHint: 'Subscribe with an email address. There is no password to set.',
+    signInHint: 'Log in with the address you paid with.',
+    storeNoAccountHint: 'Bought with your {store} account — no sign-up, and you never leave the app.',
+    subscribedTitle: 'You are a Slides Genius',
+    subscribedUntil: 'Runs until',
+    manageSubscription: 'Manage subscription',
+    manageOnStore: 'Cancel or change it in your {store} account settings.',
+    geniusStatus: 'Subscription',
+    notOnSaleYet: 'The subscription is not open yet.',
+    purchaseUnavailable: 'This device cannot complete the purchase yet.',
+    purchaseCancelled: 'Cancelled — you have not been charged.',
+    purchaseNetwork: 'No connection. Please try again in a moment.',
+    restoreNothing: 'No subscription found to restore.',
+    signInNotFound: 'No active subscription under that address.',
+    workingLabel: 'Working…',
     pauseBtn: 'Pause',
     finishBtn: 'Finish',
     endRunTitle: 'End this game?',
@@ -360,6 +418,32 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     privilegesSoon: '…encore plus à venir',
     becomeGenius: 'Devenir un Slides Génie',
     geniusSpecialTitle: 'Exclusivités Slides Génie',
+    subscribeTitle: 'Devenir un Slides Génie',
+    subscribeIntro: 'Tout ce qui suit, débloqué. Résiliable à tout moment.',
+    planMonthly: 'par mois',
+    planYearly: 'par an',
+    subscribeBtn: 'S’abonner',
+    restoreBtn: 'Restaurer l’achat',
+    signInBtn: 'Se connecter',
+    signOutBtn: 'Se déconnecter',
+    emailLabel: 'Courriel',
+    emailPlaceholder: 'vous@exemple.com',
+    emailInvalid: 'Cette adresse ne semble pas valide.',
+    registerHint: 'Abonnez-vous avec une adresse courriel. Aucun mot de passe à créer.',
+    signInHint: 'Connectez-vous avec l’adresse utilisée pour le paiement.',
+    storeNoAccountHint: 'Acheté avec votre compte {store} — sans inscription, sans quitter l’application.',
+    subscribedTitle: 'Vous êtes un Slides Génie',
+    subscribedUntil: 'Valable jusqu’au',
+    manageSubscription: 'Gérer l’abonnement',
+    manageOnStore: 'Résiliez ou modifiez dans les réglages de votre compte {store}.',
+    geniusStatus: 'Abonnement',
+    notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
+    purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
+    purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
+    purchaseNetwork: 'Pas de connexion. Réessayez dans un instant.',
+    restoreNothing: 'Aucun abonnement à restaurer.',
+    signInNotFound: 'Aucun abonnement actif à cette adresse.',
+    workingLabel: 'En cours…',
     pauseBtn: 'Pause',
     finishBtn: 'Terminer',
     endRunTitle: 'Terminer la partie ?',
@@ -495,6 +579,32 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     privilegesSoon: '……敬請期待',
     becomeGenius: '成為 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
+    subscribeTitle: '成為 Slides 天才',
+    subscribeIntro: '下面這些全部解鎖。隨時可以取消。',
+    planMonthly: '每月',
+    planYearly: '每年',
+    subscribeBtn: '訂閱',
+    restoreBtn: '恢復購買',
+    signInBtn: '登入',
+    signOutBtn: '登出',
+    emailLabel: '電子郵件',
+    emailPlaceholder: 'you@example.com',
+    emailInvalid: '這個郵件地址看起來不太對。',
+    registerHint: '用電子郵件訂閱，不需要設密碼。',
+    signInHint: '用付款時填的那個郵件地址登入。',
+    storeNoAccountHint: '用你的 {store} 帳號購買，不必註冊，也不用離開 App。',
+    subscribedTitle: '你已經是 Slides 天才',
+    subscribedUntil: '有效期至',
+    manageSubscription: '管理訂閱',
+    manageOnStore: '到 {store} 的帳號設定裡取消或更改。',
+    geniusStatus: '訂閱狀態',
+    notOnSaleYet: '訂閱尚未開放。',
+    purchaseUnavailable: '這台裝置目前還無法完成購買。',
+    purchaseCancelled: '已取消，沒有扣款。',
+    purchaseNetwork: '連不上網路，請稍後再試。',
+    restoreNothing: '沒有找到可以恢復的訂閱。',
+    signInNotFound: '這個郵件地址名下沒有有效的訂閱。',
+    workingLabel: '處理中…',
     pauseBtn: '暫停',
     finishBtn: '完成',
     endRunTitle: '是否結束遊戲？',
@@ -623,13 +733,39 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     tabRegister: '注册',
     tabLogin: '登录',
     accountComingSoon: '敬请期待完整的账户系统',
-    loginGateway: '登入',
+    loginGateway: '登录',
     contactUs: '联系我们',
     tutorialShort: '教学',
     geniusPrivilegesTitle: 'Slides 天才专属特权',
     privilegesSoon: '……敬请期待',
     becomeGenius: '成为 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
+    subscribeTitle: '成为 Slides 天才',
+    subscribeIntro: '下面这些全部解锁。随时可以取消。',
+    planMonthly: '每月',
+    planYearly: '每年',
+    subscribeBtn: '订阅',
+    restoreBtn: '恢复购买',
+    signInBtn: '登录',
+    signOutBtn: '退出登录',
+    emailLabel: '邮箱',
+    emailPlaceholder: 'you@example.com',
+    emailInvalid: '这个邮箱地址看起来不太对。',
+    registerHint: '用邮箱订阅，不需要设密码。',
+    signInHint: '用付款时填的那个邮箱登录。',
+    storeNoAccountHint: '用你的 {store} 账号购买，不用注册，也不用离开 App。',
+    subscribedTitle: '你已经是 Slides 天才',
+    subscribedUntil: '有效期至',
+    manageSubscription: '管理订阅',
+    manageOnStore: '到 {store} 的账号设置里取消或更改。',
+    geniusStatus: '订阅状态',
+    notOnSaleYet: '订阅尚未开放。',
+    purchaseUnavailable: '这台设备暂时还无法完成购买。',
+    purchaseCancelled: '已取消，没有扣款。',
+    purchaseNetwork: '连不上网络，请稍后再试。',
+    restoreNothing: '没有找到可以恢复的订阅。',
+    signInNotFound: '这个邮箱名下没有有效的订阅。',
+    workingLabel: '处理中…',
     pauseBtn: '暂停',
     finishBtn: '完成',
     endRunTitle: '是否结束游戏？',
