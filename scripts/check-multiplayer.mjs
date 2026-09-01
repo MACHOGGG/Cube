@@ -84,15 +84,30 @@ await A.page.waitForSelector('#navProfile');
 await B.page.click('#navProfile');
 await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCreate', { timeout: 10000 });
+// 按下去才知道按不动，是白按一次。所以这颗键自己要说清楚：一把小锁，加一块
+// 半尺寸（主菜单上锁着的玩法是 80px，这里 40px）的天才招牌。
+const gate = await B.page.$eval('#mpCreate', (el) => {
+  const size = (sel) => {
+    const e = el.querySelector(sel);
+    return e ? Math.round(e.getBoundingClientRect().height) : 0;
+  };
+  return { locked: el.classList.contains('genius-cta--locked'), lock: size('.cta-lock'), crest: size('.genius-logo') };
+});
+check('没订阅的人，《开房间》上挂着锁和天才招牌', gate.locked && gate.lock > 0 && gate.crest > 0,
+  JSON.stringify(gate));
+check('招牌是主菜单那块的一半（40px 上下）', Math.abs(gate.crest - 40) <= 2, `${gate.crest}px`);
 await B.page.click('#mpCreate');
 const paywall = await B.page.waitForSelector('.genius-modal', { timeout: 5000 }).catch(() => null);
 check('非天才点开房间，看到的是付费墙而不是报错', !!paywall);
+check('而且没有真的开出房间来', (await B.page.$('.mp-code')) === null);
 if (paywall) await B.page.click('#geniusClose');
 
 // ---- the host opens a room ---------------------------------------------
 await A.page.click('#navProfile');
 await A.page.click('#multiRow');
 await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
+check('开通了的人，那颗键上什么都不挂',
+  (await A.page.$eval('#mpCreate', (el) => el.classList.contains('genius-cta--locked'))) === false);
 await A.page.fill('#mpName', '甲');
 await A.page.click('#mpCreate');
 await A.page.waitForSelector('.mp-code', { timeout: 10000 });

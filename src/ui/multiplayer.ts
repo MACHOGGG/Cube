@@ -1,6 +1,8 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { pushDigit, startStageHtml } from './startStage';
+import { ICON_LOCK } from './homeIcons';
+import { geniusLogoTag } from './geniusLogo';
 import {
   avatarSvg,
   createRoom,
@@ -154,6 +156,11 @@ export function renderMultiplayerPage(
 
   function renderHome(message = '') {
     stopAll();
+    // 开房间是订阅（或内部码）才有的事。原来这颗键长得和能按的一模一样，要
+    // 按下去才知道按不动——所以在它自己身上说清楚：一把小锁，加半个尺寸的
+    // 天才招牌（主菜单上锁着的玩法用 80px，这里 40px）。按下去还是弹订阅那
+    // 一页，行为一个字没改，只是不再让人白按一次。
+    const needsGenius = !isGenius();
     container.innerHTML = `
       <div class="app mp-page">
         <header class="home-head">
@@ -180,7 +187,11 @@ export function renderMultiplayerPage(
 
         <p class="auth-msg" id="mpMsg" role="status">${message}</p>
 
-        <button class="genius-cta" id="mpCreate">${s.mpCreate}</button>
+        <button class="genius-cta${needsGenius ? ' genius-cta--locked' : ''}" id="mpCreate">
+          ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
+          <span>${s.mpCreate}</span>
+          ${needsGenius ? geniusLogoTag(40, 'genius-logo--cta') : ''}
+        </button>
         <p class="auth-hint">${s.mpNeedGenius}</p>
 
         <!-- Four digits read off someone else's screen deserve the room the

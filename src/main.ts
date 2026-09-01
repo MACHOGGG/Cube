@@ -630,6 +630,10 @@ onGeniusChange(() => {
   // the padlocks from the two 「+」 boards that just became playable.
   if (navTab === 'profile') showAccountPage('login');
   else if (root.querySelector('.home-page')) showMenu();
+  // 多人那一页的《开房间》上挂着锁和天才招牌，那是照 isGenius() 画的。只在
+  // 它自己那一屏上重画：房间里、倒数中的时候重画等于把轮询打断一次，而那两
+  // 屏上本来也没有这颗键。
+  else if (root.querySelector('#mpCreate')) showMultiplayer();
 });
 
 // The splash owns the first 3.5 seconds, and hands over only once the web

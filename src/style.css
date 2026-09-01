@@ -943,6 +943,21 @@ button:hover { filter: brightness(1.05); }
 }
 .genius-cta:hover { box-shadow: 0 6px 18px rgba(233, 148, 40, 0.48); }
 .genius-cta:active { transform: translateY(1px) scale(0.99); }
+/* 还没订阅的人看到的《开房间》：一把小锁在前，半个尺寸的天才招牌在后（主菜单
+   上锁着的玩法用 80px，这里 40px）。按下去照样弹订阅那一页——锁不是把路堵死，
+   是把「这条路要先买票」写在票口上，省得白按一次才知道。
+   flex + auto 外边距：宽度还是随内容，整颗仍然居中。 */
+.genius-cta--locked {
+  display: flex; align-items: center; gap: 10px; padding-right: 14px;
+}
+.cta-lock { width: 18px; height: 18px; flex: none; color: currentColor; }
+.cta-lock svg { width: 100%; height: 100%; display: block; }
+/* 招牌本身是橙底的，压在同样橙色的按钮上几乎看不见——给它一圈白描边把边界
+   拉出来，和主菜单上锁着的玩法那块用的是同一手。 */
+.genius-logo--cta {
+  flex: none;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.18));
+}
 
 /* 累计得分 — one fixed-size card above the two panels. However long the
    number gets the card stays this size (the value is shortened to fit);
