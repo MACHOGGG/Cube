@@ -1,6 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { pushDigit, startStageHtml } from './startStage';
+import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
 import {
@@ -307,8 +308,8 @@ export function renderMultiplayerPage(
       // has no way to hand it on, so a room whose host has gone can still be
       // sat in and can never start another round. Everyone else may go
       // without ceremony.
-      if (!iAmHost) return void leave();
-      confirmLeave(leave);
+      // 客人和房主都要问一句，只是问的话不一样（见 confirmLeaveRoom）。
+      confirmLeaveRoom(lang, leave);
     });
 
     paint(state, iAmHost);
@@ -338,34 +339,6 @@ export function renderMultiplayerPage(
             : s.mpReconnecting;
       },
     );
-  }
-
-  /**
-   * 房主要走。One sentence about what it costs the table, and two buttons —
-   * the quiet one is the one that leaves.
-   */
-  function confirmLeave(onLeave: () => void) {
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay show';
-    overlay.innerHTML = `
-      <div class="modal">
-        <p class="tag-line">${s.mpHostLeaveWarn}</p>
-        <div class="btn-row">
-          <button class="secondary" id="mpLeaveYes">${s.mpLeaveAnyway}</button>
-          <button class="primary" id="mpLeaveNo">${s.mpStay}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const shut = () => overlay.remove();
-    overlay.querySelector<HTMLButtonElement>('#mpLeaveNo')!.addEventListener('click', shut);
-    overlay.querySelector<HTMLButtonElement>('#mpLeaveYes')!.addEventListener('click', () => {
-      shut();
-      onLeave();
-    });
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) shut();
-    });
   }
 
   function paint(state: RoomState, iAmHost: boolean) {

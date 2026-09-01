@@ -149,6 +149,9 @@ check('房主到了主菜单，顶上有「为整房选玩法」的横幅', true
   (await A.page.$eval('.room-pick-title', (e) => e.textContent.trim())));
 check('屏幕外框亮起房主提示',
   await A.page.evaluate(() => document.body.classList.contains('is-room-host')));
+// 一局刚打完、房主被送回来挑下一个玩法的时候，走人的路原来只剩「先回房间页
+// 再点离开」。横幅上这颗小键把那一步省了。
+check('房主的横幅上有一颗《离开房间》', (await A.page.$('#roomPickLeave')) !== null);
 // The second base card is the circle — the same board the old .mp-mode
 // button chose, so the seeding check below is comparing the same thing.
 await A.page.$$eval('.home-icon-btn', (els) => els[1].click());
@@ -171,6 +174,23 @@ const sigA = await boardSignature(A.page);
 const sigB = await boardSignature(B.page);
 check('两端棋盘逐格完全一致', sigA === sigB && sigA.length > 0,
   `${sigA.split(',').length} 格`);
+
+// 一场同步竞赛暂停不了——别人的钟不会跟着停。所以那个位置让给了真正走得掉的
+// 出口，而且按下去要先问一句。
+const inRun = await A.page.evaluate(() => ({
+  pause: !!document.querySelector('#stopBtn'),
+  leave: !!document.querySelector('#leaveRoomBtn'),
+}));
+check('多人局进行中没有《暂停》，改成《离开房间》', inRun.pause === false && inRun.leave === true,
+  JSON.stringify(inRun));
+await A.page.click('#leaveRoomBtn');
+await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
+check('打到一半按离开，也先问一句', true);
+// 这一局还要接着打下去，所以选「留下」。
+await A.page.click('#mpLeaveNo');
+await A.page.waitForTimeout(200);
+check('选留下就什么都没发生，牌还在手里',
+  (await A.page.$('#leaveRoomConfirm')) === null && (await A.page.$('#boardWrap')) !== null);
 if (sigA !== sigB) {
   const a = sigA.split(','), b = sigB.split(',');
   console.log('   首个不同处:', a.findIndex((v, i) => v !== b[i]));
@@ -284,6 +304,10 @@ for (const P of [A, B]) {
 
 // 《离开房间》：交座位，出一张截止此刻的竞赛排名。
 await B.page.click('#endLeaveRoomBtn');
+// 交座位之前先问一句——四个出口都问，这里也不例外。
+await B.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
+check('离开之前先问一句', true);
+await B.page.click('#mpLeaveYes');
 const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 })
   .then(() => true).catch(() => false);
 check('离开房间后出竞赛排名', rankPage);

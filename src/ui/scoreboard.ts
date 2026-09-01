@@ -1,4 +1,5 @@
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
+import { confirmLeaveRoom } from './confirmLeaveRoom';
 import {
   avatarSvg,
   currentRoom,
@@ -84,7 +85,13 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   const seat = currentRoom();
   if (!seat) return () => {};
   const s = STRINGS[lang];
-  const restoreEndPanel = wireEndPanel(s, handlers);
+  const restoreEndPanel = wireEndPanel(s, lang, handlers);
+
+  // 打到一半也走得掉。这颗键占的是单人局里《暂停》的位置——一场同步竞赛暂停
+  // 不了，别人的钟不会跟着停——所以那个位置本来就该让给真正的出口。
+  // 走之前问一句：这一步是把座位交回去，不是回上一页。
+  const midRunLeave = document.querySelector<HTMLButtonElement>('#leaveRoomBtn');
+  midRunLeave?.addEventListener('click', () => confirmLeaveRoom(lang, handlers.onLeave));
   /**
    * 这一局是第几局——在开局的这一刻记下来，之后不再改。
    *
@@ -101,6 +108,21 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   panel.innerHTML = `<div class="mp-board-title">${s.mpStandings}</div><div class="mp-board-rows"></div>`;
   document.body.appendChild(panel);
   const rows = panel.querySelector<HTMLElement>('.mp-board-rows')!;
+
+  // 把比分板抬到那一排按钮上面去。
+  //
+  // 它本来贴着屏幕底，而那一排按钮也贴着屏幕底——两个都在左下角，于是名单正
+  // 好压在《离开房间》身上。指针能穿过去（见下面那句 pointerEvents），但眼睛
+  // 穿不过去：那颗键看上去是被埋住的，没人会去按一个看不见的东西。
+  // 所以量一次按钮排的位置，把面板停在它上沿之上；转屏、改窗口都重量一次。
+  const liftPanel = () => {
+    const row = document.querySelector('.app--game .controls');
+    if (!row) return;
+    const gap = Math.round(window.innerHeight - row.getBoundingClientRect().top) + 10;
+    panel.style.bottom = `calc(${Math.max(12, gap)}px + env(safe-area-inset-bottom, 0px))`;
+  };
+  requestAnimationFrame(liftPanel);
+  for (const ev of ['resize', 'orientationchange']) window.addEventListener(ev, liftPanel);
 
   let lastSent = -1;
   let sentFinished = false;
@@ -119,6 +141,9 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
         </div>`;
       })
       .join('');
+    // 名单只有在真的装不下、需要自己滚的时候才把指针要回来。四个人的名单没得
+    // 滚，却会盖住底下的东西——《离开房间》正好在它底下，按不动。
+    rows.style.pointerEvents = rows.scrollHeight > rows.clientHeight + 1 ? 'auto' : 'none';
   };
 
   // Everyone else's scores.
@@ -159,6 +184,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   return () => {
     dead = true;
     restoreEndPanel();
+    for (const ev of ['resize', 'orientationchange']) window.removeEventListener(ev, liftPanel);
     stopWatching();
     window.clearInterval(localTimer);
     // One last report, so a player who leaves mid-run does not sit at a
@@ -180,7 +206,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
  * 自己挂在上面的那一份（本地重开、回上一页）就断了，再挂我们要的。这样八个
  * 玩法文件和 gameShell 都不用动——它们本来就不知道多人房间这回事，也不该知道。
  */
-function wireEndPanel(s: I18nStrings, handlers: RoomRunHandlers): () => void {
+function wireEndPanel(s: I18nStrings, lang: Lang, handlers: RoomRunHandlers): () => void {
   const row = document.querySelector<HTMLElement>(`#${END_OVERLAY_ID} .btn-row`);
   if (!row) return () => {};
 
@@ -218,7 +244,8 @@ function wireEndPanel(s: I18nStrings, handlers: RoomRunHandlers): () => void {
   leave.className = 'secondary';
   leave.id = 'endLeaveRoomBtn';
   leave.textContent = s.mpLeave;
-  leave.addEventListener('click', handlers.onLeave);
+  // 结算页上这一颗也要问一句：四个出口问的是同一件事，不该有的问、有的不问。
+  leave.addEventListener('click', () => confirmLeaveRoom(lang, handlers.onLeave));
   row.appendChild(leave);
 
   return () => {

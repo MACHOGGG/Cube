@@ -62,7 +62,10 @@ export interface ShellRefs {
   shareOverlay: HTMLElement;
   shareImageEl: HTMLImageElement;
   buttons: {
-    stop: HTMLButtonElement;
+    /** 多人局里没有这颗——同步竞赛暂停不了，那个位置让给了《离开房间》。 */
+    stop?: HTMLButtonElement;
+    /** 只有多人局才有：进行到一半也走得掉。由 scoreboard.ts 接上。 */
+    leaveRoom?: HTMLButtonElement;
     finish: HTMLButtonElement;
     /** Absent in-game (the row has no way-out button any more — leaving a
      *  run goes through the title or the bottom nav, which ask first); the
@@ -140,6 +143,14 @@ export const CTL_FINISH = custom('ctl-finish') ?? ctlGlyph(
   '<path d="M29 51.5 L44 66 L72 35" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ' +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
+/** 多人局那颗《离开房间》：一扇开着的门，一支箭走出去。换成自己的：ctl-leave.svg。 */
+export const CTL_LEAVE = custom('ctl-leave') ?? ctlGlyph(
+  '<path d="M56 26 H30 V74 H56" fill="none" stroke="var(--ctl-mark)" stroke-width="9" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M48 50 H74 M63 39 L74 50 L63 61" fill="none" stroke="var(--ctl-mark)" ' +
+    'stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>',
+);
+
 /** 开局页那颗《返回》：同一副圆盘，里面是一支向左的箭。换成自己的：ctl-back.svg。 */
 export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
   '<path d="M60 30 L40 50 L60 70" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +
@@ -148,6 +159,9 @@ export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
 
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const s = STRINGS[meta.lang];
+  // 问一次，下面画按钮和取按钮都用这一个答案——中途房间没了的话，两处各问
+  // 各的就会一个画了、另一个取不到。
+  const inRoom = !!currentRoom();
   const extraButtonsHtml = (meta.extraControls ?? [])
     .map((b) => `<button class="icon-btn" id="${b.id}">${b.label}</button>`)
     .join('');
@@ -183,9 +197,14 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <!-- Two controls, and only two: 完成 and 暂停. Anything a player
            changes rather than does — the colourblind palette — lives in the
            pause panel instead, so the play screen stays the board plus the
-           three readings plus the two things you can do to a run. -->
+           three readings plus the two things you can do to a run.
+           多人局里换掉左边那颗：一场同步竞赛暂停不了——别人的钟不会跟着停，
+           按下去只是把自己关在外面。那个位置改放《离开房间》，那才是这一局
+           进行到一半时真正走得掉的出口。 -->
       <div class="controls">
-        <button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
+        ${inRoom
+          ? `<button class="icon-btn" id="leaveRoomBtn" aria-label="${s.mpLeave}">${CTL_LEAVE}</button>`
+          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`}
         <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
       </div>
     </div>
@@ -398,7 +417,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     shareOverlay: req('shareOverlay'),
     shareImageEl: req('shareImage'),
     buttons: {
-      stop: req('stopBtn'),
+      stop: inRoom ? undefined : req<HTMLButtonElement>('stopBtn'),
+      leaveRoom: inRoom ? req<HTMLButtonElement>('leaveRoomBtn') : undefined,
       finish: req('finishBtn'),
       back: undefined,
       start: req('startBtn'),

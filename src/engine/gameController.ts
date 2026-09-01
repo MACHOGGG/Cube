@@ -636,7 +636,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     newGame();
   });
   refs.buttons.restart.addEventListener('click', newGame);
-  refs.buttons.stop.addEventListener('click', doPause);
+  // 多人局里没有这颗键——一场同步竞赛暂停不了，那个位置让给了《离开房间》。
+  refs.buttons.stop?.addEventListener('click', doPause);
   refs.buttons.continueBtn.addEventListener('click', doResume);
   // A run now ends in exactly two ways, and both are unambiguous: the player
   // presses 结束, or the board itself runs out (every tile turned, or no

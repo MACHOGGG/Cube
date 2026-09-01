@@ -18,6 +18,7 @@ import { openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
+import { confirmLeaveRoom } from './ui/confirmLeaveRoom';
 import {
   currentRoom,
   forgetRoom,
@@ -259,13 +260,21 @@ function paintRoomHostBanner() {
     <div class="room-pick-title">${s.mpPickingTitle}</div>
     <div class="room-pick-hint">${s.mpPickingHint.replace('{code}', pickingForRoom)}</div>
     <div class="room-pick-msg" id="roomPickMsg" role="status"></div>
-    <button class="room-pick-back" id="roomPickBack">${s.mpBackToRoom}</button>
+    <div class="room-pick-acts">
+      <button class="room-pick-back" id="roomPickBack">${s.mpBackToRoom}</button>
+      <!-- 一局刚打完、房主被送回来挑下一个玩法的时候，走人的路只剩「先回房间
+           页再点离开」。这颗小键把那一步省了：在这儿就能交座位。 -->
+      <button class="room-pick-back room-pick-leave" id="roomPickLeave">${s.mpLeave}</button>
+    </div>
   `;
   const page = root.querySelector('.home-page') ?? root.firstElementChild;
   page?.insertBefore(bar, page.firstChild);
   bar.querySelector<HTMLButtonElement>('#roomPickBack')!.addEventListener('click', () => {
     setPickingForRoom(null);
     showMultiplayer();
+  });
+  bar.querySelector<HTMLButtonElement>('#roomPickLeave')!.addEventListener('click', () => {
+    confirmLeaveRoom(currentLang, leaveRoomWithCard);
   });
 }
 

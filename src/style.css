@@ -2061,6 +2061,10 @@ body.is-room-host::after {
   color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px;
   padding: 4px 6px; margin-top: 2px;
 }
+/* 横幅底下两颗小键并排：回房间，和交座位走人。 */
+.room-pick-acts { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+/* 走人那颗压一档：这一排里它是后果最重的一个，不该长得最抢眼。 */
+.room-pick-leave { color: var(--ink-soft); }
 
 /* 多人开赛前那一幕，和单人开局页共用 .start-stage 的一整套（见文件末尾）：这
    里只负责把它撑满一屏。数字由服务器时钟推，不是本地三秒。 */
@@ -2093,9 +2097,11 @@ body.is-room-host::after {
 .mp-board-rows {
   display: flex; flex-direction: column; gap: 4px;
   max-height: 40vh; overflow-y: auto; overscroll-behavior: contain;
-  /* The panel itself stays click-through so the board under it is still
-     draggable; the list gets its pointer back because it has to scroll. */
-  pointer-events: auto;
+  /* 整块面板是穿透的，底下的棋盘照样能拖。这份名单原来无条件把指针要了回去
+     ——理由是「它要能滚」，可四个人的名单根本没得滚，于是它只是白白盖住了下
+     面的东西（《离开房间》正好在它底下，按不动）。改成由 scoreboard.ts 量过
+     之后再定：真的溢出了才要指针。 */
+  pointer-events: none;
 }
 .mp-board-row { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; }
 .mp-board-row--me .mp-board-name, .mp-board-row--me .mp-board-score { color: var(--accent-ink); font-weight: 700; }
