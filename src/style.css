@@ -570,16 +570,20 @@ h1 {
 .hint { text-align: center; font-size: 12.5px; color: var(--ink-faint); }
 .assumptions { font-size: 11.5px; color: var(--ink-faint); text-align: center; line-height: 1.6; }
 
+/* 弹窗要盖在页面的固定家具上面。
+   顶上那块 Slides 招牌和底下那排图标都是 z-index 60 的常驻件，而弹窗原来只
+   有 10——于是在电脑上打开《成为 Slides 天才》，招牌压着窗口的上沿、底下那
+   排图标压着《关闭》和《登录》：一个弹窗被页面背景挡住，是没道理的。 */
 .overlay {
   position: fixed; inset: 0; background: rgba(30,24,32,0.5); display: flex; align-items: center; justify-content: center;
-  padding: 20px; opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 10;
+  padding: 20px; opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 90;
 }
 .overlay.opaque { background: var(--bg); }
 /* A share card opened from inside the blown-up 记录 panel has to sit ON TOP
    of that panel. The panel is a centre picker (z-index 60), so a plain
    overlay (10) came up behind it — visible only as a sliver, and impossible
    to read or close. */
-.overlay--top { z-index: 80; }
+.overlay--top { z-index: 120; }
 .overlay.show { opacity: 1; pointer-events: auto; }
 .modal { background: var(--surface); border-radius: 16px; padding: 28px 24px; width: 100%; max-width: 340px; box-shadow: var(--shadow); text-align: center; }
 .overlay.opaque .modal { box-shadow: none; background: transparent; }
@@ -720,8 +724,10 @@ button:hover { filter: brightness(1.05); }
     max-width: min(225px, (100dvh - 300px) / 4 * 1.5);
   }
 }
-/* The icon grid wants far more width than the standard reading column. */
-.app.home-page--wide { max-width: 800px; }
+/* The icon grid wants far more width than the standard reading column.
+   宽到能让最后一排的五张并排站下——前两排各三张，于是它们自然比最后一排
+   窄，设计稿上就是这个关系。 */
+.app.home-page--wide { max-width: 1360px; }
 /* The title, its rule and the tagline stay put however far the page is
    scrolled — but not as a full-width bar: only a centred frosted-glass
    panel sits under them, iOS-style, its sides left open so cards scroll
@@ -764,12 +770,17 @@ button:hover { filter: brightness(1.05); }
   display: grid; grid-template-columns: repeat(2, 1fr);
   gap: 26px 22px; align-items: center; justify-items: center;
 }
-/* Wide screens lay the page out as three centred rows rather than a rigid
-   3-column grid: three base games, three clocks, then the bomb card plus the
-   three "more layouts" cards — so the last row is deliberately wider than
-   the two above it, the way the design sheet has it. */
-.home-page--wide .home-grid { display: flex; flex-direction: column; gap: 30px; }
-.home-row { display: flex; align-items: center; justify-content: center; gap: 30px; width: 100%; }
+/* 宽屏是几排居中的东西，不是一张死板的三列网格：三个基础玩法、计时 / 炸弹
+   / 多人、再是五个布局。三张的那两排自然比五张的那一排窄，稿子上就是这个
+   关系——每张卡片一样大，一排几张决定这排有多宽。 */
+.home-page--wide .home-grid { display: flex; flex-direction: column; gap: 34px; }
+.home-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: clamp(18px, 2.4vw, 34px); width: 100%;
+}
+/* 每张按自己那一份平分整排，再各自被 max-width 收住：三张的排收成三张的宽
+   度，五张的排铺满。so 一排里几张，就决定这排有多宽。 */
+.home-page--wide .home-row > * { flex: 1 1 0; min-width: 0; }
 
 /* Every tile is the same square box whatever it draws inside, so a circle, a
    triangle and a square all sit on one baseline grid. */
@@ -784,7 +795,16 @@ button:hover { filter: brightness(1.05); }
 .home-icon-btn:hover { filter: none; }
 .home-icon-btn:active { transform: none; }
 /* Sized so the four-card bottom row still fits the page's own width. */
-.home-page--wide .home-icon-btn { max-width: 255px; }
+/* 三排要站在一屏里，不用滚。所以卡片除了被那一列的宽度收住，也被「屏幕还
+   剩多高」收住：上面的标题、页边、给底部那排图标留的位置加起来约 320px，
+   剩下的高度三排平分。笔记本上是这条在起作用，大屏上仍旧是 255。 */
+.home-page--wide .home-icon-btn,
+.home-page--wide .home-bomb-card {
+  max-width: 255px;
+  /* 3.2 而不是 3：中间那排的炸弹卡片比它左右两张高出约两成（里面是三层
+     叠起来的），三排的总高按它算才留得住底下那排图标的位置。 */
+  max-width: min(255px, (100dvh - 320px) / 3.2);
+}
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
    空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：
@@ -840,6 +860,9 @@ button:hover { filter: brightness(1.05); }
   cursor: pointer; display: block;
   -webkit-tap-highlight-color: transparent;
 }
+/* 宽屏上炸弹和它左右两边一样大：这一排是「计时 · 炸弹 · 多人」三张并排，
+   谁也不比谁矮一截。 */
+.home-page--wide .home-bomb-card { max-width: 255px; }
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 252px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
@@ -856,7 +879,7 @@ button:hover { filter: brightness(1.05); }
   .home-nav-btn { transition: translate 260ms cubic-bezier(0.24, 1.2, 0.36, 1), transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1), filter 260ms ease; }
   /* The lift rides on `translate`, so hover only has to say how much bigger
      — it applies to the raised icon and the resting one alike. */
-  .home-nav-btn:hover { transform: scale(1.08); }
+  .home-nav-btn:hover .home-nav-art { transform: scale(1.08); }
 }
 
 /* 手指按住、还没开始拖的那一颗。
@@ -1055,16 +1078,28 @@ button:hover { filter: brightness(1.05); }
 /* The two entries sit on a small rounded panel of their own rather than
    floating loose over the page, so they read as one control. */
 .home-nav-dock {
-  display: flex; align-items: flex-end; gap: 20px;
-  padding: var(--nav-pad) 20px;
+  display: flex; align-items: stretch; gap: 0;
+  padding: 0;
   border-radius: 22px;
   background: var(--nav-dock);
   box-shadow: 0 6px 20px -8px rgba(46, 36, 48, 0.32), 0 0 0 1px rgba(46, 36, 48, 0.06);
 }
+/* 整块圆角矩形都能点：左半边是个人主页，右半边是记录与排名。
+   从前能点的只有那两个图形本身，指头稍微偏一点就穿过去落在底下的排行榜
+   上——想收起这一页，反而点开了别的东西。两颗键各占一半，中间不留缝，圆角
+   矩形有多大，点得到的地方就有多大。 */
 .home-nav-btn {
-  pointer-events: auto; width: var(--nav-btn); height: var(--nav-btn); padding: 0; flex: none;
-  background: none; border: none; border-radius: 0; cursor: pointer; display: block;
+  pointer-events: auto;
+  flex: 1 1 0; min-width: calc(var(--nav-btn) + 20px);
+  padding: var(--nav-pad) 10px; border-radius: 22px;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: none; border: none; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+/* 抬起来的是图形，不是那块点击区——点击区得一直待在圆角矩形里，不然「再点
+   一下收起来」那一下就落到了图形挪走之后的空处。 */
+.home-nav-art {
+  display: block; width: var(--nav-btn); height: var(--nav-btn); flex: none;
   /* The glow lives in this list at zero alpha even at rest: a filter only
      animates between lists of the same functions in the same order, so a
      resting state with fewer of them would make the glow snap on and off
@@ -1074,7 +1109,7 @@ button:hover { filter: brightness(1.05); }
           drop-shadow(0 0 18px rgba(var(--nav-glow), 0))
           brightness(1) saturate(1);
 }
-.home-nav-btn:hover {
+.home-nav-btn:hover .home-nav-art {
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22))
           drop-shadow(0 0 6px rgba(var(--nav-glow), 0))
           drop-shadow(0 0 18px rgba(var(--nav-glow), 0))
@@ -1086,8 +1121,8 @@ button:hover { filter: brightness(1.05); }
    darkens a shade and picks up a small red halo; closing it settles it back
    down and lets the halo fade. So the dock shows where you are, and tapping
    the raised one reads as "put this away". */
-.home-nav-btn { transition: translate 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 260ms ease; }
-.home-nav-btn--active {
+.home-nav-art { transition: translate 260ms cubic-bezier(0.24, 1.2, 0.36, 1), filter 260ms ease; }
+.home-nav-btn--active .home-nav-art {
   /* The lift is `translate`, not a `transform` — the press wobble every
      button on this page shares animates `transform`, and an animation beats
      a normal declaration outright. Written as a transform, the lift was
@@ -1103,14 +1138,14 @@ button:hover { filter: brightness(1.05); }
           drop-shadow(0 0 18px rgba(var(--nav-glow), 0.5))
           brightness(0.86) saturate(1.12);
 }
-.home-nav-btn--active:hover {
+.home-nav-btn--active:hover .home-nav-art {
   filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28))
           drop-shadow(0 0 6px rgba(var(--nav-glow), 0.85))
           drop-shadow(0 0 20px rgba(var(--nav-glow), 0.55))
           brightness(0.86) saturate(1.12);
 }
-@media (prefers-reduced-motion: reduce) { .home-nav-btn { transition: none; } }
-.home-nav-btn > svg { width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: reduce) { .home-nav-art { transition: none; } }
+.home-nav-art > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
 
 /* ---------- 个人主页 (profile page) ---------- */
@@ -1239,6 +1274,21 @@ button:hover { filter: brightness(1.05); }
    that could put a dollar price in front of a player buying through a store,
    or the reverse. */
 .genius-modal { max-width: 340px; }
+/* 横过来、屏幕又不高的时候（笔记本就是这样），这一窗的空白收一收：条目之间
+   挤一点、上下的留白薄一点，让整窗站得进一屏，不必靠滚。字号一个都没动，
+   压掉的全是空处。 */
+@media (min-width: 720px) and (max-height: 940px) {
+  .genius-modal { padding: 18px 22px 16px; }
+  .genius-modal h2 { margin-bottom: 4px; font-size: 1.32rem; }
+  .genius-modal > p { margin-bottom: 12px; }
+  .genius-modal .plan-list { gap: 6px; margin: 2px 0 8px; }
+  .genius-modal .plan-row { padding: 9px 16px; }
+  .genius-modal .genius-perks { margin-top: 10px; }
+  .genius-modal .genius-perk { padding: 1px 0; }
+  .genius-modal .genius-perks .menu-section-label { margin: 8px 0 3px; }
+  .genius-modal .link-btn { margin: 2px 0; }
+  .genius-modal .btn-row { margin-top: 12px; }
+}
 .plan-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
 .plan-row {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
@@ -2179,7 +2229,8 @@ body.is-room-host::after {
    和开局那一幕同一张脸：上半屏这一局的玩法图，旁边挂着那扇小门。区别只在下
    半屏——开局时那里是 3、2、1，这时候是一份还在动的名单。交了卷不是结束，
    是开始等别人，所以这一页得让人看得见「还差谁」。 */
-.overlay--wait { z-index: 60; }
+/* 交卷之后那一层要盖住底下的结算页，所以比普通弹窗再高一档。 */
+.overlay--wait { z-index: 100; }
 .mp-wait-stage { width: 100%; max-width: 380px; }
 .mp-wait-stage .start-emblem { flex: 0 0 auto; padding: 0 0 clamp(14px, 3vh, 30px); }
 .mp-wait-rows {

@@ -16,7 +16,6 @@ import {
   ICON_MULTIPLAYER,
   layoutIcon,
   layoutIconIsWide,
-  timedCard,
   timedOption,
   type BaseShape,
 } from './homeIcons';
@@ -107,11 +106,9 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
 
-  // The wide layout is three explicit centred rows — three base games, three
-  // clocks, then the bomb card beside the three "more layouts" cards — so the
-  // last row runs wider than the two above it, exactly as the sheet has it.
-  // The phone keeps its plain two-column grid, so there every card is simply
-  // appended in order.
+  // 宽屏是三排，照设计稿：三个基础玩法、计时 / 炸弹 / 多人、再是五个布局。
+  // 前两排各三张、最后一排五张，所以最后一排自然比上面两排宽——稿子上就是
+  // 这个样子。手机仍旧是两列的网格，一张一张按顺序往下排。
   const newRow = (): HTMLElement => {
     if (!wide) return grid;
     const row = document.createElement('div');
@@ -144,25 +141,16 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       onPick: () => handlers.onTimedFor(layout.base[shape].id, 'timed'),
     }));
 
-  if (wide) {
-    // Expanded: one clock per shape, each starting that game immediately.
-    const timedRow = newRow();
-    for (const shape of SHAPES) {
-      const card = layout.base[shape];
-      const btn = iconButton(timedCard(shape), `${s.sectionTimed} · ${shapeName(lang, card.id, card.name)}`);
-      btn.addEventListener('click', () => handlers.onTimedFor(card.id));
-      timedRow.appendChild(btn);
-    }
-  } else {
-    // Collapsed: one clock standing in for all three, which flies to the
-    // middle of the screen and splits into the three as it lands.
-    const btn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed');
-    btn.dataset.reopen = 'timed';
-    btn.addEventListener('click', () =>
-      openCenterPicker({ originEl: btn, title: s.sectionTimed, options: timedOptions(), split: true }),
-    );
-    grid.appendChild(btn);
-  }
+  // 一只沙漏代表三个，点下去飞到屏幕中间、落定时裂成三只。宽屏窄屏同一颗：
+  // 稿子上第二排是「计时 · 炸弹 · 多人」三张，计时占的是一张的位置，不是
+  // 三张——同一个板块在笔记本上和在手机上不该长成两个样子。
+  const timedRow = newRow();
+  const timedBtn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed');
+  timedBtn.dataset.reopen = 'timed';
+  timedBtn.addEventListener('click', () =>
+    openCenterPicker({ originEl: timedBtn, title: s.sectionTimed, options: timedOptions(), split: true }),
+  );
+  timedRow.appendChild(timedBtn);
 
 
   // ---- row 3: bomb challenge -------------------------------------------
@@ -231,14 +219,9 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     return panel;
   }
 
-  // The last row: on a wide screen the bomb card leads the three "more
-  // layouts" cards, so all four sit on one row (the sheet's bottom row);
-  // on a phone the collapsed card just continues the two-column grid.
-  // Either way the section is a button that flies to the centre, grows and
-  // dims the page behind it before the player picks a tier — the desktop
-  // card used to be live in place, which meant the same section behaved one
-  // way on a laptop and another on a phone.
-  const lastRow = newRow();
+  // 炸弹接在计时后面，同一排。不论宽窄，这个板块都是一颗会飞到屏幕中间、
+  // 放大、把背后压暗的按钮，然后才让人挑档位——从前笔记本上它是就地能点的，
+  // 于是同一个板块在两种屏幕上是两套规矩。
   const bombBtn = document.createElement('button');
   bombBtn.className = wide ? 'home-bomb-card' : 'home-icon-btn home-bomb-mini';
   bombBtn.setAttribute('aria-label', s.bombBasicTitle);
@@ -258,29 +241,32 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     const panel = buildBombPanel('bomb', () => close?.());
     close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
   });
-  (wide ? lastRow : grid).appendChild(bombBtn);
-  if (wide) lastRow.appendChild(mpBtn);
+  (wide ? timedRow : grid).appendChild(bombBtn);
+  // 那扇小门排在这一排最后。手机上它早在基础三个后面就摆过了。
+  if (wide) timedRow.appendChild(mpBtn);
 
   // ---- 每个布局玩法自己露脸，不再藏在「+」后面 -------------------------
   // 从前这里是三张通用的「+」卡，点开才看得到里面有什么。现在直接摆出来：
   // 玩家一眼就知道有哪些棋盘，少一层点击。
   //
-  // 顺序有两条规矩：
-  //   · 按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起；
-  //   · 没订阅解锁不了的排在最后——它们点下去只会弹付费墙，摆在中间会把
-  //     一串能玩的东西截断。
-  const openable: { card: ShapeCardMeta; shape: BaseShape }[] = [];
-  const locked: { card: ShapeCardMeta; shape: BaseShape }[] = [];
+  // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起。
+  //
+  // 宽屏五张一排，就照这个顺序摆完——稿子上是菱形方块、六边圆球、七色圆球、
+  // 大三角、进阶三角。手机上两列，得把解锁不了的两张挪到最后：它们点下去只
+  // 会弹付费墙，夹在中间会把一串能玩的东西从中截断；一排摆得下的时候没有这
+  // 个问题，也就不必打乱形状的顺序。
+  const inOrder: { card: ShapeCardMeta; shape: BaseShape }[] = [];
   for (const shape of SHAPES) {
-    for (const card of layout.moreLayouts[shape]) {
-      (isLayoutLocked(card.id) ? locked : openable).push({ card, shape });
-    }
+    for (const card of layout.moreLayouts[shape]) inOrder.push({ card, shape });
   }
+  const ordered = wide
+    ? inOrder
+    : [...inOrder.filter((e) => !isLayoutLocked(e.card.id)), ...inOrder.filter((e) => isLayoutLocked(e.card.id))];
 
   let row = wide ? newRow() : grid;
   let inRow = 0;
-  for (const { card, shape } of [...openable, ...locked]) {
-    if (wide && inRow >= 3) { row = newRow(); inRow = 0; }
+  for (const { card, shape } of ordered) {
+    if (wide && inRow >= 5) { row = newRow(); inRow = 0; }
     const isLocked = isLayoutLocked(card.id);
     const name = shapeName(lang, card.id, card.name);
     const btn = iconButton(

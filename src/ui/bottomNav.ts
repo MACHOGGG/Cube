@@ -37,8 +37,8 @@ export function mountBottomNav(handlers: BottomNavHandlers, lang: Lang): void {
   el.className = 'home-nav';
   el.innerHTML = `
     <div class="home-nav-dock">
-      <button class="home-nav-btn" id="navProfile" aria-label="${s.navProfile}">${ICON_NAV_PROFILE}</button>
-      <button class="home-nav-btn" id="navRecords" aria-label="${s.navRecords}">${ICON_NAV_RECORDS}</button>
+      <button class="home-nav-btn" id="navProfile" aria-label="${s.navProfile}"><span class="home-nav-art">${ICON_NAV_PROFILE}</span></button>
+      <button class="home-nav-btn" id="navRecords" aria-label="${s.navRecords}"><span class="home-nav-art">${ICON_NAV_RECORDS}</span></button>
     </div>
   `;
   document.body.appendChild(el);

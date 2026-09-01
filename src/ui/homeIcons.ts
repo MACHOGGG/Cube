@@ -229,12 +229,6 @@ function stopwatch(shape: BaseShape, face?: string): string {
   );
 }
 
-/** PC row: the watch takes the *card's own* shape, so the three timed entries
- *  read as "the square game, timed", etc. even before the face. */
-export function timedCard(shape: BaseShape): string {
-  // timed-square.svg 只换方块那一支；timed.svg 三支一起换。
-  return customAny(`timed-${shape}`, 'timed') ?? stopwatch(shape);
-}
 
 /**
  * Mobile home: one watch standing in for all three timed games, its face a
