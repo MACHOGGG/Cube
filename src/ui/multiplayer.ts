@@ -475,7 +475,7 @@ export function renderMultiplayerPage(
     void again();
   }
 
-  // ---- screen 3: 3, 2, 1 -----------------------------------------------
+  // ---- screen 3: 4, 3, 2, 1 --------------------------------------------
 
   function beginCountdown(state: RoomState) {
     if (launched || !state.startAt || !state.seed || !state.mode) return;
@@ -485,8 +485,8 @@ export function renderMultiplayerPage(
     const { startAt, seed, mode } = state;
 
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
-    // 一场竞赛），下半屏 3、2、1。区别只在谁在数——这里数的是服务器给的开赛
-    // 时刻，不是本地的秒表，所有人的数字才会同时跳。
+    // 一场竞赛），下半屏 4、3、2、1。区别只在谁在数——这里数的是服务器给的开
+    // 赛时刻，不是本地的秒表，所有人的数字才会同时跳。
     container.innerHTML = `
       <div class="app mp-page mp-countdown-page">
         ${startStageHtml({ shapeId: mode, room: true, countId: 'mpTick' })}
@@ -508,7 +508,7 @@ export function renderMultiplayerPage(
         if (!dead) handlers.onMatchStart({ mode, seed });
         return;
       }
-      // 服务器留的是三秒半（建议横着玩的玩法四秒半），多出来的半秒都算在第一
+      // 服务器留的是四秒半（建议横着玩的玩法五秒半），多出来的半秒都算在第一
       // 个数字上——看起来和单人那一幕一模一样：几个数字就几秒，只有头一个站
       // 得久一点。
       const n = Math.min(first, Math.ceil(left / 1000));

@@ -31,9 +31,11 @@
      ground, the chips are their ochre warmed and greyed a shade, the press
      colour their terracotta, the pattern marks their blue. */
   --play-bg: #3A3145;
-  /* The board's field: cream, at 60% — the play background reads through it,
-     so the panel sits on the page rather than being pasted onto it. */
-  --play-panel: rgba(246, 241, 228, 0.6);
+  /* 棋盘那块底板。原先是米白压到 60%，让底下的紫灰透上来——透出来的是一片
+     不冷不暖的灰（#ABA4A4），偏偏棋子里也有一颗灰（#9B958D），两者贴在一起
+     很难分开。换成实心的暖褐：它比任何一颗棋子都暗，色相又落在所有棋子的
+     圈子之外，棋子浮在上面而不是陷进去。 */
+  --play-panel: #3D3128;
   --play-chip: #D2952F;
   /* Dark ink on the amber rather than the sheet's white: white on this
      yellow is 2.4:1, which is below the floor for text of any size, and the
@@ -92,7 +94,7 @@
   --board-bg: #EAEAEA;
   --shadow: 0 1px 2px rgba(20,20,20,0.06), 0 8px 24px -12px rgba(20,20,20,0.18);
   --play-bg: #22252A;
-  --play-panel: rgba(246, 241, 228, 0.6);
+  --play-panel: #3D3128;
   --play-chip: #E69F00;
   --play-chip-ink: #2B1F00;
   --play-chip-press: #8F3F00;
@@ -1070,17 +1072,24 @@ button:hover { filter: brightness(1.05); }
 /* The ruled lines the sheet draws: an empty slot waiting for an entry. */
 .records-rule { height: 7px; border-radius: 100px; background: rgba(255, 255, 255, 0.92); flex: 0 0 auto; }
 
+/* 记录行的字是写死的深褐，不跟主题走——因为它底下那颗药丸也是写死的
+   （白色压到 92%，落在桃色面板上，两种主题里都是近乎纯白）。字要是用
+   var(--ink)，浅色主题下是深紫、看得清，深色主题下 --ink 翻成近白，于是
+   白字落在白底上：玩法名和分数整行消失，只剩中间那行日期还看得见——因为
+   日期用的 --ink-faint 碰巧在深色主题里是中灰。
+   底是固定的，字就也得是固定的。 */
 .records-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: rgba(255, 255, 255, 0.92); border: none; border-radius: 100px;
-  padding: 9px 18px; cursor: pointer; flex: 0 0 auto; color: var(--ink);
+  padding: 9px 18px; cursor: pointer; flex: 0 0 auto; color: #453023;
   font-family: 'Karla', sans-serif; text-align: left;
   transition: transform 140ms ease, background 160ms ease;
 }
 .records-row:hover { background: #fff; filter: none; }
 .records-row:active { transform: scale(0.985); }
 .records-row-name { font-weight: 700; font-size: 0.92rem; }
-.records-row-mode { color: var(--ink-faint); font-weight: 400; font-size: 0.8rem; }
+/* 玩法后面那点小字和日期：同一支褐色淡一档，主次分得开，也一样不跟主题走。 */
+.records-row-mode { color: #7A5C48; font-weight: 400; font-size: 0.8rem; }
 .records-row-score {
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
   font-weight: 700; font-size: 0.95rem;
@@ -1706,7 +1715,7 @@ body:has(.story-tut) .home-nav { display: none; }
 }
 .records-row-glyph svg { width: 100%; height: 100%; }
 .records-row-name { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
-.records-row-time { color: var(--ink-faint); font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.records-row-time { color: #7A5C48; font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 .records-panel--big {
   width: min(560px, 92vw); max-height: 76vh; overflow-y: auto; overscroll-behavior: contain;
   cursor: default;
@@ -2362,7 +2371,9 @@ body.is-room-host::after {
 /* 两颗按钮并排在屏幕靠下方，和游戏里那一排是同一副圆盘。 */
 .start-actions { flex: none; display: flex; gap: 22px; justify-content: center; padding-top: 6px; }
 .start-actions .icon-btn.start-act {
-  width: clamp(56px, 15vw, 76px); height: clamp(56px, 15vw, 76px);
+  /* 比游戏里那一排大 1.3 倍：56/15/76 各乘 1.3。开局页上除了这两颗就没有别的
+     可按，它们不必迁就一排按钮的尺寸。 */
+  width: clamp(73px, 19.5vw, 99px); height: clamp(73px, 19.5vw, 99px);
   padding: 0; border: none; background: none; border-radius: 50%;
   --ctl-disc: var(--surface); --ctl-mark: var(--accent-ink);
   cursor: pointer;

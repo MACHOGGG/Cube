@@ -74,13 +74,14 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
   check('普通一局只摆一张图，没有别的标志', shape.marks === 1, `摆了 ${shape.marks} 张`);
 
   const first = await page.$eval('#startCount .cd-digit', (el) => el.textContent);
-  check('倒数从 3 开始', first === '3', `看到 ${first}`);
+  check('倒数从 4 开始', first === '4', `看到 ${first}`);
 
   await page.waitForTimeout(1100);
   const second = await page.$eval('#startCount .cd-digit', (el) => el.textContent).catch(() => null);
-  check('一秒之后是 2', second === '2', `看到 ${second}`);
+  check('一秒之后是 3', second === '3', `看到 ${second}`);
 
-  await page.waitForTimeout(2300);
+  // 四个数字一秒一个，等过第四秒。
+  await page.waitForTimeout(3300);
   const after = await page.evaluate((sel) => ({
     overlay: document.querySelector('#startOverlay')?.classList.contains('show'),
     n: document.querySelectorAll(sel).length,
@@ -89,12 +90,12 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
   await ctx.close();
 }
 
-// ---- 2. 暂停会把倒数按住，回来重新从 3 数 ---------------------------------
+// ---- 2. 暂停会把倒数按住，回来重新从 4 数 ---------------------------------
 {
   const { ctx, page } = await open();
   await page.$$eval('.home-icon-btn', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
-  await page.waitForTimeout(1200); // 数到 2 了
+  await page.waitForTimeout(1200); // 数到 3 了
   await page.click('#startPauseBtn');
   await page.waitForTimeout(1800); // 比剩下的倒数还久
 
@@ -111,7 +112,7 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
   await page.click('#continueBtn');
   await page.waitForTimeout(250);
   const back = await page.$eval('#startCount .cd-digit', (el) => el.textContent).catch(() => null);
-  check('继续之后从 3 重新数', back === '3', `看到 ${back}`);
+  check('继续之后从 4 重新数', back === '4', `看到 ${back}`);
   await ctx.close();
 }
 
@@ -177,11 +178,11 @@ let bombShare = null;
   await ctx.close();
 }
 
-// ---- 建议横着玩的玩法：倒数从 4 数起，多出来的一秒是给转手机的 ----------
+// ---- 建议横着玩的玩法：倒数从 5 数起，多出来的一秒是给转手机的 ----------
 //
 // 七色圆球的菱形要转四分之一圈才躺得下，进阶三角是个横着张开的 V——这两个的
-// 开局页底下都写着「把手机转过来」。三秒里既要看清这是哪副棋盘、又要把手机
-// 转过来，那句话就等于白写；多给一秒，它才是一句能照做的话。
+// 开局页底下都写着「把手机转过来」。跟别人一样长的时间里既要看清这是哪副棋
+// 盘、又要把手机转过来，那句话就等于白写；多给一秒，它才是一句能照做的话。
 {
   const { ctx, page } = await open({ genius: true });
   // 主菜单最后两张就是这两个玩法（都挂着天才特供的锁）。
@@ -195,23 +196,23 @@ let bombShare = null;
     await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
     await page.waitForTimeout(250);
     const first = await page.$eval('#startCount .cd-digit', (el) => el.textContent);
-    check(`${label.split(' ')[0]}：倒数从 4 数起`, first === '4', `看到 ${first}`);
+    check(`${label.split(' ')[0]}：倒数从 5 数起`, first === '5', `看到 ${first}`);
     check(`${label.split(' ')[0]}：底下挂着「把手机转过来」`,
       !!(await page.$('#startOverlay .rotate-hint')));
-    // 3.4 秒：三秒的局这时早开了，四秒的还在数最后一个 1。
-    await page.waitForTimeout(3150);
+    // 4.4 秒：四个数字的局这时早开了，五个数字的还在数最后一个 1。
+    await page.waitForTimeout(4150);
     const late = await page.evaluate(() => ({
       overlay: document.querySelector('#startOverlay')?.classList.contains('show'),
       digit: document.querySelector('#startCount .cd-digit')?.textContent ?? null,
     }));
-    check(`${label.split(' ')[0]}：3.4 秒时还在数最后一个 1`,
+    check(`${label.split(' ')[0]}：4.4 秒时还在数最后一个 1`,
       late.overlay === true && late.digit === '1', JSON.stringify(late));
     await page.waitForTimeout(1200);
     const started = await page.evaluate((sel) => ({
       overlay: document.querySelector('#startOverlay')?.classList.contains('show'),
       n: document.querySelectorAll(sel).length,
     }), PIECES);
-    check(`${label.split(' ')[0]}：四秒数完自己开局`,
+    check(`${label.split(' ')[0]}：五秒数完自己开局`,
       started.overlay === false && started.n > 0, JSON.stringify(started));
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForSelector('.home-icon-btn', { timeout: 20000 });

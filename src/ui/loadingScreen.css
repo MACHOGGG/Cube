@@ -1,11 +1,21 @@
 /* The splash: a rounded square window onto a ball board that is much
    larger than the window. Nothing outside the frame is ever visible. */
+/* 竖着不放在正中间，放在黄金分割点上：那扇窗的中心落在从上往下 0.382 的
+   位置，不是 0.5。正中间是量出来的中，看起来总是偏低——眼睛判断「中」的
+   时候会把上半部算重一点。左右仍旧是正中。
+
+   做法是给容器留一块下边距，再照旧居中：内容盒子只剩 (1 - 0.236) 那么高，
+   居中之后中心自然落在 0.382。不动那扇窗自己的 transform——窗里的球和木片
+   全靠 transform 摆位置，那条路不能占。
+     下边距 = (0.5 - 0.382) × 2 = 0.236 屏高 */
 .splash {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-bottom: 23.6dvh;
+  box-sizing: border-box;
   background: var(--bg);
   z-index: 200;
   opacity: 0;

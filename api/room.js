@@ -46,11 +46,13 @@ const OPEN_SEATS = 4;
 const MAX_PLAYERS = Math.min(OPEN_SEATS, ROOM_CAPACITY);
 const MIN_PLAYERS = 2;
 const ROOM_TTL_S = 2 * 3600;
-/** Long enough to read "3, 2, 1" without anyone feeling held up. */
-const COUNTDOWN_MS = 3500;
+/** Long enough to read "4, 3, 2, 1" without anyone feeling held up.
+    四个数字一秒一个，再加半秒的余量；客户端从几数起见 startStage.ts 的
+    countFrom，两边必须是同一个长度，不然屏幕上的 1 落下去了棋盘还没来。 */
+const COUNTDOWN_MS = 4500;
 /**
  * 建议横着玩的两个玩法——开局页会请人把手机转过来，而转手机这件事本身就要
- * 一秒。所以这两个的提前量多给一秒，倒数也就从 4 数起。
+ * 一秒。所以这两个的提前量多给一秒，倒数也就比别人多数一个（5 而不是 4）。
  *
  * 这份名单要和客户端 src/ui/startStage.ts 里的 LANDSCAPE_MODES 对得上：那边
  * 决定屏幕上从几数起，这边决定服务器留多长，两个数字必须是同一个。

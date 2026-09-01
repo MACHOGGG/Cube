@@ -414,10 +414,10 @@ await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 await A.page.waitForSelector('#mpPick', { timeout: 12000 });
 check('一局都还没打，房间页上就还没有《散场》', (await A.page.$('#mpEnd')) === null);
 
-// ---- 建议横着玩的玩法：房间里也是从 4 数起 -------------------------------
+// ---- 建议横着玩的玩法：房间里也是从 5 数起 -------------------------------
 //
-// 单人那边是本地数四秒，这边数的是服务器给的开赛时刻——所以服务器留的提前量
-// 也得跟着多一秒，否则屏幕上那个「4」只站得住半秒就跳走了。两边的名单必须是
+// 单人那边是本地数五秒，这边数的是服务器给的开赛时刻——所以服务器留的提前量
+// 也得跟着多一秒，否则屏幕上那个「5」只站得住半秒就跳走了。两边的名单必须是
 // 同一份：客户端在 startStage.ts 的 LANDSCAPE_MODES，服务器在 room.js 的
 // WIDE_MODES。
 await A.page.click('#mpPick');
@@ -435,15 +435,15 @@ const firstDigit = (P) => P.page.waitForFunction(
   { timeout: 12000 },
 ).then((h) => h.jsonValue());
 const firstDigits = await Promise.all([A, B].map(firstDigit));
-check('房间里的七色圆球，两端都从 4 数起', firstDigits.every((d) => d === '4'),
+check('房间里的七色圆球，两端都从 5 数起', firstDigits.every((d) => d === '5'),
   firstDigits.join(' / '));
-// 光看见一个 4 还不够：三秒半的提前量第一帧也会算出 4，只是它半秒就跳走。
-// 真正能分辨的是整段等待有多长——从按下玩法到棋盘起来，普通玩法三秒半上下，
-// 这两个玩法要四秒半。
+// 光看见一个 5 还不够：四秒半的提前量第一帧也会算出 5，只是它半秒就跳走。
+// 真正能分辨的是整段等待有多长——从按下玩法到棋盘起来，普通玩法四秒半上下，
+// 这两个玩法要五秒半。
 await Promise.all([A, B].map((P) => P.page.waitForFunction(
   () => document.querySelectorAll('#boardWrap .ball').length > 0, { timeout: 20000 })));
 const waited = Date.now() - pickedAt;
-check('开赛的提前量给到了四秒半（普通玩法是三秒半）', waited >= 4200 && waited < 7000,
+check('开赛的提前量给到了五秒半（普通玩法是四秒半）', waited >= 5200 && waited < 8000,
   `${waited}ms`);
 
 // 客人从局中走人：交座位，出一张截止此刻的竞赛排名。
