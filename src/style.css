@@ -2012,6 +2012,15 @@ html.is-playing body { background: var(--play-bg); }
      then overflowed. The pieces bring their own margins. */
 }
 .app--game .board { background: none; box-shadow: none; }
+/* 建议横着玩的那两个玩法（七色圆球的菱形、进阶三角的 V），竖屏时地板贴着
+   棋盘，不再撑满整列。
+   它们的图案永远横躺（见 circleSeven.ts 的 landscapeNow），所以竖屏时是宽
+   度先到顶——棋盘只有两百来像素高，而地板照旧五百多，中间空出一大片褐色。
+   那不是「地板」，那是一个空房间。让它收到棋盘那么高，再在剩下的空间里居中。
+   横屏不受这条影响：那边地板是个正方形（见底下的横屏栅格），本来就贴身。 */
+@media not all and (orientation: landscape) and (max-height: 560px) {
+  .app--game.app--land-wide .board-wrap { flex: 0 0 auto; align-self: center; }
+}
 
 /* The yes/no gate in front of anything that would throw a run away. */
 .confirm-scrim {
@@ -2217,6 +2226,24 @@ html.is-playing body { background: var(--play-bg); }
   .app.app--game > .board-wrap {
     grid-column: 2; grid-row: 2;
     min-width: 0; min-height: 0;
+  }
+  /* 横屏的地板是一个圆角正方形，不是跟着栏宽拉长的长方形。
+     高度由这一行给（align-self 默认 stretch），宽度交给 aspect-ratio 去等于
+     它——所以 justify-self 必须是 center：拉伸的话两边都定死了，aspect-ratio
+     无从生效。基础样式里还写着 width: 100%，那也是一个「定死的」宽度，不放开
+     的话上面两行一点作用都没有（量出来 628×318，照旧是长方形）。
+     !important 是有意的，不是偷懒：每个玩法排版时都会往 boardWrap 上写一句
+     行内的 aspect-ratio: auto（竖屏要它随棋盘长高），行内样式压得过普通的
+     样式表声明，压不过 important。
+
+     两个建议横着玩的玩法（七色圆球的菱形、进阶三角的 V）不在此列：它们的图案
+     本来就是横躺的，塞进正方形地板里等于自己把自己腰斩——实测菱形从 609px 宽
+     缩到 303px。那两个的地板贴着棋盘自己的形状走。 */
+  .app.app--game:not(.app--land-wide) > .board-wrap {
+    aspect-ratio: 1 !important;
+    justify-self: center;
+    width: auto;
+    max-width: 100%;
   }
   .app.app--game > .stuck-end-btn {
     grid-column: 2; grid-row: 2; align-self: end; justify-self: center; margin: 0 0 4px;

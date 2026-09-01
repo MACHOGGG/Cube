@@ -342,16 +342,25 @@ export function createCircleSevenGame(): ShapeGame {
       // B-step counts, so the 7x7 window comes out as a symmetric diamond
       // centered on cx=0, spanning cy=0 (top point) to cy=12*rowH (bottom
       // point) — no per-row trimming needed, unlike a hex or triangle crop.
-      /** True when the shell has switched this screen to its landscape grid
-       *  (see ".app.app--game" in style.css) — there the board sits in a
-       *  row of fixed height and has to fit that as well as the width, and
-       *  the diamond lies on its side to use the width it has just gained. */
+      /**
+       * 菱形永远横躺着。
+       *
+       * 从前这里问的是屏幕横竖：竖着拿的时候菱形立起来，横过来才躺下。可那
+       * 是同一副棋盘的两张脸——刚学会「宽的那条对角线是 A 向」的人，把手机转
+       * 一下，方向全反了。棋盘的样子不该跟着手怎么拿而变，会变的只是它周围
+       * 那几个读数和按钮的排布（那部分仍然是响应式的，见 style.css 里
+       * .app--game 的横屏栅格）。
+       *
+       * 代价说明白：竖着拿的时候躺着的菱形只用得上屏幕的宽，所以球比从前小
+       * 一圈。这个玩法本来就在开局页请人把手机转过来（landscape: true），
+       * 竖屏不是它设计给的姿势。
+       *
+       * 留成一个函数而不是直接删掉：底下有三处在用它（排版、算球心、拖拽的
+       * 方向基），改成常量的话那三处的意思就散了；这里一处写着「永远躺着」，
+       * 那三处读起来仍然是同一句话。
+       */
       function landscapeNow(): boolean {
-        try {
-          return window.matchMedia('(orientation: landscape) and (max-height: 560px)').matches;
-        } catch {
-          return false;
-        }
+        return true;
       }
 
       function layoutBoard() {
