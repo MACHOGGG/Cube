@@ -167,7 +167,14 @@ body {
 /* Bottom padding leaves room for the persistent .bottom-nav bar below —
    see that rule for why it's a fixed sibling of #app rather than part of
    each screen's own markup. */
-.app { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; padding: 28px 16px 92px; }
+/* 底下那一排图标是浮在页面上的，所以每一页都得先把它那块地方让出来，
+   不然最后一颗键（多半是《返回》）就压在它下面，看得见按不着。
+   让多少：那一排自己上下的内边距 10 + 14，加上圆角矩形 74，再加手机底部
+   那道横条的安全区。原来只让了 92，正好差着最后那几像素。 */
+.app {
+  width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px;
+  padding: 28px 16px calc(106px + env(safe-area-inset-bottom, 0px));
+}
 /* A few boards (七色圆球's 49-cell diamond, the base/big triangle's denser
    packing) read as cramped at the standard column width — widens just
    those screens' whole .app column so the board itself renders bigger,
@@ -2028,7 +2035,12 @@ body:has(.app--game) .home-nav { display: none; }
 html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavior: none; }
 
 /* ---------- 多人游玩：大厅、倒计时、对局中的排名 ---------- */
-.mp-page { gap: 14px; }
+/* 这一页要在一屏里说完三件事：开房间、输房号、返回。所以行距收一点，
+   说明文字也压到贴着它说明的那颗键。 */
+.mp-page { gap: 10px; }
+.mp-page .tag-line { margin: 0 0 2px; line-height: 1.45; }
+.mp-page .auth-hint { margin: 2px 0; }
+.mp-page .menu-section-label { margin-bottom: 2px; }
 .mp-me { display: flex; align-items: flex-end; gap: 10px; width: 100%; max-width: 320px; margin: 0 auto; }
 .mp-me .mp-name-field { flex: 1; margin: 0; }
 .mp-avatar { display: block; width: 44px; height: 44px; flex: 0 0 auto; }
