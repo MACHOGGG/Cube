@@ -62,10 +62,19 @@ const BASE_ICON: Record<BaseShape, string> = {
   triangle: ICON_BASE_TRIANGLE,
 };
 
-/** Below this width the timed and bomb sections collapse into a single card
- *  each, which opens a centred picker on tap; above it they sit expanded on
- *  the page and every option is one tap away. */
-export const WIDE_QUERY = '(min-width: 720px)';
+/** Below this the timed and bomb sections collapse into a single card each,
+ *  which opens a centred picker on tap; above it they sit expanded on the
+ *  page and every option is one tap away.
+ *
+ *  两个条件，任满足一个就用宽版：屏幕本来就宽（电脑、平板），或者手机横过来
+ *  了。从前只有前一条，于是横屏窄一点的手机（667×375 这类）落在竖版那一边
+ *  ——竖版是两列八张、按「屏幕还剩多高」定卡片大小，横过来只剩三百多像素
+ *  高，算出来一张卡片才二十几个像素。屏幕明明变宽了，东西反而更小更挤，正
+ *  是那种「横屏塞着竖屏的内容」的样子。
+ *
+ *  560px 这条线是给横屏留的下限：比这更窄的横屏（老式小屏）宽版三张并排也
+ *  站不开，还是竖版两列更合适。 */
+export const WIDE_QUERY = '(min-width: 720px), (orientation: landscape) and (min-width: 560px)';
 
 /** A short squash-and-tilt the instant a card is pressed — the "it felt the
  *  tap" cue every icon on this page shares. Driven from pointerdown rather

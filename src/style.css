@@ -719,19 +719,22 @@ button:hover { filter: brightness(1.05); }
    about 300px, and what is left is shared by the four rows and the three
    gaps between them. On a screen tall enough for it the 150px cap wins and
    the grid simply sits with air under it, exactly as the sheet draws it. */
-@media (max-width: 719px) {
-  /* Two-class selectors on purpose: the base rules for these live further
-     down the file, so a bare .home-grid here would lose on order. */
-  .home-page { padding-top: 12px; padding-bottom: 96px; padding-left: 8px; padding-right: 8px; }
-  .home-page .home-head { margin-bottom: 10px; }
-  /* 间距和页边一起收窄：手机上两列，图标能有多大是被「屏宽减掉留白再对半」
-     卡住的，不把这两处让出来，抬高下面那个上限也不会变大一分。 */
-  .home-page .home-grid { gap: 12px 12px; }
-  .home-page .home-icon-btn,
-  .home-page .home-bomb-card {
-    max-width: 225px;                       /* the plain cap, if dvh is unknown */
-    max-width: min(225px, (100dvh - 300px) / 4 * 1.5);
-  }
+/* 竖版（两列）那一套。
+   条件不写成 @media (max-width: 719px)，而是「没有 home-page--wide 这个类」
+   ——版式是宽是窄由 JS 那一句 matchMedia(WIDE_QUERY) 说了算（见 menu.ts），
+   它现在把「手机横过来」也算宽版。CSS 要是另立一条自己的屏宽标准，横屏手机
+   就会出现「HTML 按宽版排、样式按竖版给」的错位。一个判断，两处引用。 */
+.home-page:not(.home-page--wide) {
+  padding-top: 12px; padding-bottom: 96px; padding-left: 8px; padding-right: 8px;
+}
+.home-page:not(.home-page--wide) .home-head { margin-bottom: 10px; }
+/* 间距和页边一起收窄：手机上两列，图标能有多大是被「屏宽减掉留白再对半」
+   卡住的，不把这两处让出来，抬高下面那个上限也不会变大一分。 */
+.home-page:not(.home-page--wide) .home-grid { gap: 12px 12px; }
+.home-page:not(.home-page--wide) .home-icon-btn,
+.home-page:not(.home-page--wide) .home-bomb-card {
+  max-width: 225px;                       /* the plain cap, if dvh is unknown */
+  max-width: min(225px, (100dvh - 300px) / 4 * 1.5);
 }
 /* The icon grid wants far more width than the standard reading column.
    宽到能让最后一排的五张并排站下——前两排各三张，于是它们自然比最后一排
@@ -821,7 +824,11 @@ button:hover { filter: brightness(1.05); }
    减去那 309，剩下的高度三排照 3.11 分。笔记本上是这条在起作用；屏幕够高
    时 255 那条重新接手，跟从前一样。 */
 .home-page--wide {
-  --home-card-cap: min(255px, (100dvh - 309px) / 3.11);
+  /* max(96px, …)：这是个下限，不是目标。屏幕够高时永远轮不到它——一屏装得
+     下才是常态。轮到它的是横过来的手机：三百多像素高，按上面那道算式分下来
+     一张卡片只有二十几个像素，那不叫「装进一屏」，那叫看不见也点不着。宁可
+     让这一页往下滚一段，也要让每张图标大到能看清、能点中。 */
+  --home-card-cap: min(255px, max(96px, (100dvh - 309px) / 3.11));
 }
 /* 一个变量、两处引用：从前炸弹卡片的宽度在文件后面又被写了一遍 255，同样
    的选择器权重、位置更靠后，于是把上面这条高度上限整条盖掉了——中间那排
@@ -834,6 +841,20 @@ button:hover { filter: brightness(1.05); }
    变成卡片能长到多大。 */
 .app.home-page--wide { padding-bottom: 108px; }
 .home-page--wide .home-head { margin-bottom: 14px; }
+
+/* 手机横过来：版式和电脑同一套（三排），但屏幕只剩三百多像素高，那块招牌
+   按原来的尺寸要吃掉四成。电脑上它只占一小条，比例本来就该是这样——所以
+   横屏时把它连同上下页边一起收一收，省下来的都还给图标。
+   收完仍然要往下滑一段：十一个图标排成三排，在 375px 高的屏幕里，除非把
+   图标压到点不中，否则装不下。这一段滑动是应该有的。 */
+@media (orientation: landscape) and (max-height: 480px) {
+  .app.home-page--wide { padding-top: 10px; padding-bottom: 96px; }
+  .home-page--wide .home-head { margin-bottom: 8px; padding-top: 2px; }
+  .home-page--wide .home-head-glass { padding: 2px 18px 6px; }
+  .home-page--wide .home-title { font-size: 1.5rem; padding-bottom: 2px; border-bottom-width: 2px; }
+  .home-page--wide .home-sub { margin-top: 3px; font-size: 0.68rem; }
+  .home-page--wide .home-grid { gap: 18px; }
+}
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
    空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：

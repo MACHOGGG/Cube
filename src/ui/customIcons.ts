@@ -68,6 +68,51 @@ function unsize(svg: string): string {
   return svg.slice(0, end).replace(/\s(?:width|height)="[^"]*"/g, '') + svg.slice(end);
 }
 
+/**
+ * 把 color(display-p3 r g b) 换成普通的 #rrggbb。
+ *
+ * 这不是为了好看，是为了图标能显示出来。设计软件（Sketch 尤其）导出时会把
+ * 颜色写成 `fill="color(display-p3 0.29 0.376 0.698)"`，那是 CSS Color 4 的
+ * 写法，Chrome 111 / Safari 15 以后才认。旧一点的安卓 WebView 和旧 Safari
+ * 读不懂它——而 SVG 的 fill 是个「表现属性」，值非法时不是退回默认色，是
+ * 整条属性作废，于是这个 rect 去继承父层的 fill。导出的文件父层恰恰写着
+ * fill="none"。结果：整个图标一片空白，刷新多少次都一样，因为它根本不是
+ * 没加载，是加载了却画不出来。（基础方块那颗图标就是这么消失的。）
+ *
+ * 换算走公开的两段矩阵——P3 线性 → XYZ(D65) → sRGB 线性——不是把三个数字
+ * 直接当 sRGB 用：P3 的色域更宽，同样的数值在 sRGB 里要更饱和才等价。
+ * 自检：白 → #ffffff，黑 → #000000，中灰 0.5 → #808080，都对得上。
+ * 超出 sRGB 能表达的部分只能截断，那是换色域本身的代价，不是算错。
+ */
+const P3_TO_SRGB = [
+  [1.2249401763, -0.2249401763, 0.0],
+  [-0.0420569547, 1.0420569547, 0.0],
+  [-0.0196375546, -0.0786360456, 1.0982736001],
+];
+function p3ToHex(r: number, g: number, b: number): string {
+  const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const toGam = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+  const lin = [toLin(r), toLin(g), toLin(b)];
+  const hex = P3_TO_SRGB.map((row) => {
+    const v = toGam(row[0] * lin[0] + row[1] * lin[1] + row[2] * lin[2]);
+    return Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0');
+  });
+  return '#' + hex.join('');
+}
+/** 文件里所有 color(display-p3 …) 就地换成十六进制；带透明度的换成 rgba()。 */
+function sRGBOnly(svg: string): string {
+  return svg.replace(
+    /color\(\s*display-p3\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+%?)\s*)?\)/g,
+    (_m, r: string, g: string, b: string, a?: string) => {
+      const hex = p3ToHex(parseFloat(r), parseFloat(g), parseFloat(b));
+      if (a === undefined) return hex;
+      const alpha = a.endsWith('%') ? parseFloat(a) / 100 : parseFloat(a);
+      const [rr, gg, bb] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      return `rgba(${rr}, ${gg}, ${bb}, ${alpha})`;
+    },
+  );
+}
+
 const CACHE = new Map<string, string | null>();
 
 /**
@@ -84,7 +129,7 @@ export function custom(name: string): string | null {
     CACHE.set(name, null);
     return null;
   }
-  let out = unsize(trim(raw));
+  let out = sRGBOnly(unsize(trim(raw)));
   out = uniqueIds(out, name);
   // 屏幕阅读器不该念图标：它旁边的按钮已经有 aria-label 了。
   if (!/aria-hidden=/.test(out)) out = out.replace(/<svg\b/, '<svg aria-hidden="true"');

@@ -46,6 +46,31 @@ const sized = await page.$$eval(SIZED_BY_CSS, (els) =>
 );
 check('图标的尺寸交给 CSS，SVG 自己不带 width/height', sized.length === 0, sized.join(', '));
 
+// ---- 1b. 每颗图标都得真的画出东西来 ---------------------------------------
+//
+// 「图标一片空白」是不会报错的：文件在、元素在、尺寸也对，就是什么都没画。
+// 基础方块那颗就这么消失过——设计软件把颜色导成了 color(display-p3 …)，旧
+// 浏览器不认这个函数，而 SVG 的 fill 是表现属性，值非法时整条作废、去继承
+// 父层，导出的文件父层恰好写着 fill="none"。刷新也没用，因为不是没加载。
+//
+// 所以不查「文件在不在」，查「有没有一块地方真的上了色」：每颗图标里至少要
+// 有一个既不是 none 也不是全透明的填充或描边。顺带禁掉 color(…) 本身——
+// customIcons.ts 会把 display-p3 换成十六进制，这条就是那道换算的哨兵。
+const blank = await page.$$eval('.home-icon-btn', (btns) =>
+  btns
+    .map((btn) => {
+      const painted = [...btn.querySelectorAll('rect, circle, path, polygon, ellipse, line')].some((el) => {
+        const cs = getComputedStyle(el);
+        const has = (v) => v && v !== 'none' && !/rgba\(0,\s*0,\s*0,\s*0\)/.test(v);
+        return has(cs.fill) || has(cs.stroke);
+      });
+      const raw = /color\(/.test(btn.innerHTML);
+      return painted && !raw ? null : `${btn.getAttribute('aria-label')}${raw ? '(还有 color() 没换)' : '(全空)'}`;
+    })
+    .filter(Boolean),
+);
+check('主菜单每颗图标都真的画出了东西', blank.length === 0, blank.join(' / '));
+
 // ---- 2. 计时那三只秒表：一样大，挨在一起 ----------------------------------
 await page.$$eval('.home-icon-btn--timed', (els) => els[0].click());
 await page.waitForSelector('.center-pick-opt', { timeout: 8000 });
