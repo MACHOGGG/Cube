@@ -9,6 +9,7 @@ import {
   loadAccount,
   newAccount,
   normalizeEmail,
+  setNews,
   saveAccount,
   takeAccount,
 } from './_accounts.js';
@@ -49,9 +50,11 @@ export default async function handler(req, res) {
   // would evaporate and lock the player out of what they just bought.
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
-  const { checkoutId, code, token, email, password, newPassword } = readBody(req);
-  if (checkoutId) return create(res, String(checkoutId), password);
-  if (code) return bind(res, String(code), String(token || ''), email, password);
+  const { checkoutId, code, token, email, password, newPassword, news } = readBody(req);
+  // 建账号的两条路都顺手带着「愿不愿意收信」。改密码那条不带——那不是回答这
+  // 个问题的地方，顺手改掉别人的订阅偏好是不对的。
+  if (checkoutId) return create(res, String(checkoutId), password, news === true);
+  if (code) return bind(res, String(code), String(token || ''), email, password, news === true);
   return change(res, email, password, newPassword);
 }
 
@@ -69,7 +72,7 @@ export default async function handler(req, res) {
  * works on this device, so the player can attach it to another address or
  * write in.
  */
-async function bind(res, rawCode, token, email, password) {
+async function bind(res, rawCode, token, email, password, news) {
   const address = normalizeEmail(email);
   if (!EMAIL_RE.test(address)) return send(res, 400, { error: 'invalid' });
   if (!PASS_RE.test(String(password || ''))) return send(res, 400, { error: 'weak' });
@@ -116,6 +119,7 @@ async function bind(res, rawCode, token, email, password) {
   const account = newAccount(String(password), 'code');
   account.until = granted.until;
   account.plan = granted.plan;
+  setNews(account, news);
   try {
     await saveAccount(address, account);
   } catch (err) {
@@ -127,7 +131,7 @@ async function bind(res, rawCode, token, email, password) {
 }
 
 /** First password, proven by the checkout the player has just come back from. */
-async function create(res, checkoutId, password) {
+async function create(res, checkoutId, password, news) {
   if (!PASS_RE.test(String(password || ''))) return send(res, 400, { error: 'weak' });
   if (!configured()) return send(res, 503, { error: 'notConfigured' });
 
@@ -157,6 +161,7 @@ async function create(res, checkoutId, password) {
 
   const account = newAccount(String(password), 'card');
   account.period = period;
+  setNews(account, news);
   await saveAccount(address, account);
   // A year is a long thing to buy on your own recommendation, so a yearly
   // subscriber gets two months to hand out. Minted here, where the account

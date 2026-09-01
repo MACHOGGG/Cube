@@ -130,11 +130,13 @@ export async function webRestore(email: string, password: string): Promise<Purch
 export async function setWebPasscode(
   checkoutId: string,
   password: string,
+  news = false,
 ): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | null> {
   try {
     const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
       checkoutId,
       password,
+      news,
     });
     return reply.token ? { email: reply.email ?? '', token: reply.token } : null;
   } catch (err) {
@@ -158,6 +160,7 @@ export async function bindCode(
   token: string,
   email: string,
   password: string,
+  news = false,
 ): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | null> {
   try {
     const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
@@ -165,6 +168,7 @@ export async function bindCode(
       token,
       email,
       password,
+      news,
     });
     return reply.token ? { email: reply.email ?? email, token: reply.token } : null;
   } catch (err) {

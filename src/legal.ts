@@ -18,7 +18,7 @@ import { isStoreChannel, payeeName } from './engine/channel';
  *  address a payment processor's review expects to find on the site itself,
  *  so it lives in one place and is quoted from there. */
 export const CONTACT_EMAIL = 'ogmach0000@gmail.com';
-export const LEGAL_UPDATED = '2026-08-31';
+export const LEGAL_UPDATED = '2026-09-01';
 
 export interface LegalItem {
   term: string;
@@ -138,6 +138,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: '使用统计', body: '我们用 Vercel Analytics，以及（在配置了的情况下）Google Analytics 4，统计访问量、看了哪些页面、开始和结束了哪种玩法、用时与得分区间。这些是汇总数据，不用来识别你本人。Google Analytics 会使用 Cookie。' },
         { term: '订阅与邮箱', body: '用银行卡在网页版订阅时，Creem 会记下你的下单邮箱。这一份我们不保存——判断你是不是订阅用户，每次都是拿这个邮箱去问 Creem。', only: 'web' },
         { term: '内部码开通的账号', body: '这是我们唯一自建的账号数据：你的邮箱、密码经 scrypt 加盐后的哈希值（不是密码本身，我们无法还原出你的密码）、到期时间，以及一个登录令牌。因为这份权益是我们发的，只能由我们记住。' },
+        { term: '邮件', body: '建账号时有一个勾选框：要不要收 Slides 的邮件。不勾就不会收到，功能上没有任何区别；勾了我们只用这个邮箱发新玩法、新版本和偶尔的优惠，不会把它给任何广告商或者第三方。每封信底部都有退订链接，点一下就不再发，也可以来信让我们改。你什么时候做的这个选择我们一并记下来，因为需要能说清楚同意是哪一刻给的。跟服务本身有关的信（收据、到期提醒、账号安全）不算营销邮件，不勾也会发。' },
         { term: '订阅', body: 'App 内订阅不需要注册，我们也拿不到你 {store} 账号的任何信息。订阅状态由设备上的商店收据证明，不经过我们的服务器。', only: 'store' },
         { term: '支付信息', body: '由 Creem 处理。我们收到的只有订单状态和你的下单邮箱，永远看不到、也不保存你的卡号。', only: 'web' },
         { term: '支付信息', body: '由 {store} 处理。我们看不到你用什么付的款，也不保存任何支付信息。', only: 'store' },
@@ -222,6 +223,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: '使用統計', body: '我們用 Vercel Analytics，以及（在有設定的情況下）Google Analytics 4，統計造訪量、看了哪些頁面、開始和結束了哪種玩法、用時與分數區間。這些是彙總資料，不用來識別你本人。Google Analytics 會使用 Cookie。' },
         { term: '訂閱與信箱', body: '用信用卡在網頁版訂閱時，Creem 會記下你的下單信箱。這一份我們不保存——判斷你是不是訂閱使用者，每次都是拿這個信箱去問 Creem。', only: 'web' },
         { term: '內部碼開通的帳號', body: '這是我們唯一自建的帳號資料：你的信箱、密碼經 scrypt 加鹽後的雜湊值（不是密碼本身，我們無法還原出你的密碼）、到期時間，以及一個登入權杖。因為這份權益是我們發的，只能由我們記住。' },
+        { term: '郵件', body: '建帳號時有一個勾選框：要不要收 Slides 的郵件。不勾就不會收到，功能上沒有任何差別；勾了我們只用這個信箱寄新玩法、新版本和偶爾的優惠，不會把它交給任何廣告商或第三方。每封信底部都有退訂連結，點一下就不再寄，也可以來信要我們改。你是什麼時候做這個選擇的我們一併記下，因為需要說得清楚同意是哪一刻給的。跟服務本身有關的信（收據、到期提醒、帳號安全）不算行銷郵件，沒勾也會寄。' },
         { term: '訂閱', body: 'App 內訂閱不需要註冊，我們也拿不到你 {store} 帳號的任何資訊。訂閱狀態由裝置上的商店收據證明，不經過我們的伺服器。', only: 'store' },
         { term: '付款資訊', body: '由 Creem 處理。我們收到的只有訂單狀態和你的下單信箱，永遠看不到、也不保存你的卡號。', only: 'web' },
         { term: '付款資訊', body: '由 {store} 處理。我們看不到你用什麼付的款，也不保存任何付款資訊。', only: 'store' },
@@ -306,6 +308,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: 'Usage statistics', body: 'We use Vercel Analytics and, where it is configured, Google Analytics 4 to count visits, which screens are opened, which mode was started and finished, and the range of times and scores. This is aggregate data and is not used to identify you. Google Analytics sets cookies.' },
         { term: 'Subscription and email', body: 'Paying by card on the site records your address with Creem. We do not keep that copy — establishing whether you are a subscriber means asking Creem about the address, every time.', only: 'web' },
         { term: 'Accounts made by a code', body: 'This is the one account record we hold ourselves: your email address, a salted scrypt hash of your passcode (never the passcode, and it cannot be turned back into one), the date it runs to, and a sign-in token. The entitlement was granted by us, so only we can remember it.' },
+        { term: 'Email from us', body: 'Creating an account puts one tick box in front of you: whether you want email from Slides. Leave it unticked and none is sent — nothing about the app works differently either way. Tick it and we use the address only for new boards, new versions and the occasional offer; we never hand it to an advertiser or anyone else. Every message carries an unsubscribe link that stops them at once, and you can write to us instead. We also record when you made that choice, because consent has to be traceable to a moment. Messages about the service itself — receipts, renewal reminders, account security — are not marketing and are sent either way.' },
         { term: 'Subscription', body: 'Subscribing in the app needs no sign-up, and we receive nothing at all about your {store} account. The store receipt held on the device is what proves the subscription; it never passes through a server of ours.', only: 'store' },
         { term: 'Payment details', body: 'Handled by Creem. All we receive is the order status and the email you ordered with. We never see or store your card number.', only: 'web' },
         { term: 'Payment details', body: 'Handled by {store}. We never see how you paid and store nothing about it.', only: 'store' },
@@ -390,6 +393,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: 'Statistiques d’usage', body: 'Nous utilisons Vercel Analytics et, lorsqu’il est configuré, Google Analytics 4 pour compter les visites, les écrans ouverts, le mode commencé et terminé, et les plages de durée et de score. Ce sont des données agrégées, qui ne servent pas à vous identifier. Google Analytics dépose des cookies.' },
         { term: 'Abonnement et courriel', body: 'Payer par carte sur le site enregistre votre adresse chez Creem. Nous n’en gardons pas de copie : savoir si vous êtes abonné, c’est interroger Creem sur cette adresse, à chaque fois.', only: 'web' },
         { term: 'Comptes créés par un code', body: 'C’est le seul compte que nous conservions nous-mêmes : votre adresse, une empreinte scrypt salée de votre code secret (jamais le code, et l’empreinte ne permet pas de le retrouver), la date de fin, et un jeton de connexion. C’est nous qui avons accordé ce droit, nous seuls pouvons donc nous en souvenir.' },
+        { term: 'Nos courriels', body: 'La création d’un compte pose une seule case à cocher : voulez-vous recevoir les courriels de Slides ? Laissée vide, nous n’écrivons jamais — rien ne fonctionne différemment pour autant. Cochée, l’adresse ne sert qu’aux nouveaux plateaux, aux nouvelles versions et à une offre de temps en temps ; elle n’est remise à aucun annonceur ni à personne d’autre. Chaque message porte un lien de désinscription qui les arrête aussitôt, et vous pouvez aussi simplement nous écrire. Nous notons également le moment de ce choix, un consentement devant pouvoir être rattaché à un instant précis. Les messages liés au service lui-même — reçus, rappels d’échéance, sécurité du compte — ne sont pas de la publicité et partent dans tous les cas.' },
         { term: 'Abonnement', body: 'S’abonner dans l’application ne demande aucune inscription, et nous ne recevons rien de votre compte {store}. C’est le reçu du magasin, conservé sur l’appareil, qui atteste l’abonnement ; il ne passe par aucun serveur à nous.', only: 'store' },
         { term: 'Données de paiement', body: 'Traitées par Creem. Nous ne recevons que l’état de la commande et l’adresse utilisée. Nous ne voyons ni ne conservons jamais votre numéro de carte.', only: 'web' },
         { term: 'Données de paiement', body: 'Traitées par {store}. Nous ne voyons pas comment vous avez payé et n’en conservons rien.', only: 'store' },

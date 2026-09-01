@@ -139,6 +139,8 @@ export interface I18nStrings {
   setPwLabel: string;
   setPwPlaceholder: string;
   setPwShort: string;
+  /** 注册时那一行勾选：要不要收 Slides 的邮件。默认不勾——同意得是主动给的。 */
+  newsOptIn: string;
   setPwLater: string;
   /** 内部码换来的东西，绑到一个邮箱上，好换设备时取回。 */
   bindTitle: string;
@@ -442,6 +444,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLabel: 'Password (6 characters or more)',
     setPwPlaceholder: '6 characters or more',
     setPwShort: 'Use six characters or more.',
+    newsOptIn: 'Email me about new Slides boards and updates. Unsubscribe anytime.',
     setPwLater: 'Later',
     bindTitle: 'Save it to an address',
     bindHint: 'Your insider code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
@@ -709,6 +712,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLabel: 'Mot de passe (6 caractères minimum)',
     setPwPlaceholder: '6 caractères minimum',
     setPwShort: 'Six caractères minimum.',
+    newsOptIn: 'M’envoyer les nouveautés Slides par e-mail. Désinscription à tout moment.',
     setPwLater: 'Plus tard',
     bindTitle: 'Rattachez-le à une adresse',
     bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
@@ -976,6 +980,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLabel: '密碼（至少 6 位）',
     setPwPlaceholder: '至少 6 位',
     setPwShort: '密碼至少要 6 位。',
+    newsOptIn: '想收到 Slides 的新玩法與更新郵件。可隨時退訂。',
     setPwLater: '稍後再說',
     bindTitle: '綁定到一個信箱',
     bindHint: '內部碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
@@ -1243,6 +1248,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLabel: '密码（至少 6 位）',
     setPwPlaceholder: '至少 6 位',
     setPwShort: '密码至少要 6 位。',
+    newsOptIn: '想收到 Slides 的新玩法与更新邮件。可随时退订。',
     setPwLater: '稍后再说',
     bindTitle: '绑定到一个邮箱',
     bindHint: '内部码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',

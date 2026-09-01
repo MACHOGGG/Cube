@@ -200,12 +200,15 @@ export async function attachAccount(
   pending: PendingAccount,
   password: string,
   email?: string,
+  /** 他们在建账号那一刻勾没勾「愿意收 Slides 的邮件」。这个答案随账号一起
+   *  存下来（连同时间），因为「能证明当初确实同意过」本身就是要求之一。 */
+  news = false,
 ): Promise<'ok' | 'exists' | 'unavailable' | 'failed'> {
   const creem = await import('./creem');
   const result =
     pending.kind === 'checkout'
-      ? await creem.setWebPasscode(pending.id, password)
-      : await creem.bindCode(pending.code, pending.token, email ?? '', password);
+      ? await creem.setWebPasscode(pending.id, password, news)
+      : await creem.bindCode(pending.code, pending.token, email ?? '', password, news);
   if (result === 'unavailable') return 'unavailable';
   // 'exists' is the server refusing to overwrite a password this address
   // already has. Nothing is wrong and nothing is left to do here, so the

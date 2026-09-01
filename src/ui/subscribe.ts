@@ -228,6 +228,7 @@ function credentialForm(
   label: string,
   placeholder: string,
   readOnly: boolean,
+  newsLabel: string,
 ): string {
   // An address we already know is shown, not put in a box. A readonly input
   // is one line wide and quietly cuts a long address off at the edge — and
@@ -253,6 +254,13 @@ function credentialForm(
       ${known}
       ${field('pwNew', label,
         `type="password" name="password" autocomplete="new-password" minlength="6" placeholder="${esc(placeholder)}"`)}
+      <!-- 这是账号建起来的那一刻，也是唯一一次能在给出邮箱的当下问一句「要不要
+           收信」的机会。默认不勾：同意得是主动给的，预先替人勾上的不算同意
+           （GDPR 明确不认），所以这个框出厂就是空的。 -->
+      <label class="auth-optin">
+        <input type="checkbox" id="pwNews" />
+        <span>${esc(newsLabel)}</span>
+      </label>
       <button type="submit" hidden></button>
     </form>`;
 }
@@ -295,7 +303,7 @@ export function openSetPasswordWindow(
     `
     <h2>${fromCode ? s.bindTitle : s.setPwTitle}</h2>
     <p class="auth-hint">${fromCode ? s.bindHint : s.setPwHint}</p>
-    ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder, !fromCode)}
+    ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder, !fromCode, s.newsOptIn)}
     <p class="auth-msg" id="pwMsg" role="status"></p>
     <div class="btn-row">
       <button class="primary" id="pwGo">${fromCode ? s.bindTitle : s.setPwTitle}</button>
@@ -313,6 +321,7 @@ export function openSetPasswordWindow(
   const go = overlay.querySelector<HTMLButtonElement>('#pwGo')!;
 
   const user = overlay.querySelector<HTMLInputElement>('#pwUser')!;
+  const news = overlay.querySelector<HTMLInputElement>('#pwNews')!;
   const submit = async () => {
     const address = user.value.trim();
     if (fromCode && !isEmail(address)) return void (msg.textContent = s.emailInvalid);
@@ -320,7 +329,7 @@ export function openSetPasswordWindow(
     if (password.length < 6) return void (msg.textContent = s.setPwShort);
     go.disabled = true;
     msg.textContent = s.workingLabel;
-    const done = await attachAccount(pending, password, address);
+    const done = await attachAccount(pending, password, address, news.checked);
     go.disabled = false;
     // For a checkout, 'exists' means the address already had a password and
     // there is nothing left to do. For a code it is the opposite: this is the

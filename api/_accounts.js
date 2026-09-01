@@ -129,7 +129,25 @@ export function newAccount(secret, kind = 'code') {
     blocked: false,
     token: randomBytes(24).toString('hex'),
     createdAt: Date.now(),
+    /** 他们愿不愿意收我们的邮件，以及是什么时候说的。
+     *
+     *  存两个字段而不是一个，是因为「同意」不只是一个是非题：真被问起来，要
+     *  拿得出「谁、什么时候、对什么说的同意」。默认 false——出厂就勾上的框
+     *  不算同意，写死在这里比写在页面上更保险。
+     *
+     *  这只是一个偏好，不是权限：改它、清它都不影响账号本身能不能登录。 */
+    news: false,
+    newsAt: 0,
   };
+}
+
+/** 记下这次「愿意/不愿意收信」，连同说这话的时刻。 */
+export function setNews(account, wanted) {
+  const yes = wanted === true;
+  if (account.news === yes) return account;
+  account.news = yes;
+  account.newsAt = Date.now();
+  return account;
 }
 
 /**

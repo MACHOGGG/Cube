@@ -905,6 +905,14 @@ button:hover { filter: brightness(1.05); }
 }
 .center-pick-lock svg { width: 100%; height: 100%; display: block; }
 
+/* 主菜单上锁着的那两个玩法，跟居中弹窗里是同一副打扮：图案压暗，中间一把锁，
+   右下角压着天才招牌。它们现在直接摆在主菜单上，不打扮就跟能玩的没有区别。 */
+.home-icon-btn--locked { position: relative; }
+.home-icon-btn--locked > svg { opacity: 0.38; }
+/* 弹窗里那块招牌是探出框外一点的——那儿四周都是空的。主菜单上旁边就是另一
+   张卡，探出去会压到人家身上，所以收回自己框里。 */
+.home-icon-btn--locked .center-pick-genius { right: 2px; bottom: 2px; }
+
 /* ---------- profile page rows ---------- */
 .profile-row {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
@@ -1321,6 +1329,14 @@ button:hover { filter: brightness(1.05); }
 .auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
 /* 设置密码: the account above, the empty password box below it. */
 .pw-form { display: flex; flex-direction: column; align-items: stretch; text-align: left; }
+/* 建账号时那一行「要不要收信」。刻意做得轻：它不是一道关卡，只是一句顺便问的
+   话，所以字小、颜色淡，整行都能点（勾选框只有十几个像素宽，指头够不着）。 */
+.auth-optin {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin: 10px 2px 2px; cursor: pointer;
+  color: var(--ink-soft); font-size: 0.8rem; line-height: 1.4;
+}
+.auth-optin input { flex: 0 0 auto; width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--accent); }
 .auth-body .tag-line { margin: 0; }
 
 /* ---------- language picker ---------- */

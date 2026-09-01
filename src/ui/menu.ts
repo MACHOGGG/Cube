@@ -4,6 +4,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { isLayoutLocked } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker, type PickerOption } from './centerPicker';
+import { geniusLogoTag } from './geniusLogo';
 import {
   ICON_BASE_SQUARE,
   ICON_BASE_CIRCLE,
@@ -11,6 +12,7 @@ import {
   ICON_TIMED_COMBINED,
   ICON_BOMB_90S,
   bombChip,
+  ICON_LOCK,
   ICON_MULTIPLAYER,
   layoutIcon,
   layoutIconIsWide,
@@ -289,7 +291,17 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       // 不是按方框算。
       layoutIconIsWide(card.id) ? 'home-icon-btn--wide-art' : '',
     );
-    if (isLocked) btn.classList.add('home-icon-btn--locked');
+    if (isLocked) {
+      // 锁着的玩法现在直接摆在主菜单上，得一眼看出来是锁着的：图案压暗，中间
+      // 一把锁，右下角压着那块天才招牌——说明这把锁是哪一家的。和居中弹窗里
+      // 那两张是同一副打扮。
+      btn.classList.add('home-icon-btn--locked');
+      btn.insertAdjacentHTML(
+        'beforeend',
+        `<span class="center-pick-lock">${ICON_LOCK}</span>` +
+          `<span class="center-pick-genius">${geniusLogoTag(80)}</span>`,
+      );
+    }
     btn.addEventListener('click', () =>
       isLocked ? handlers.onLockedLayout() : handlers.onSelectLayout(card.id),
     );
