@@ -1106,8 +1106,34 @@ button:hover { filter: brightness(1.05); }
    the rankings half keeps its full size even though it has nothing to show
    yet — the space is part of the design, not something to collapse away. */
 .records-page { padding-bottom: 120px; }
-.records-panels { display: grid; grid-template-columns: 1fr; gap: 22px; }
-@media (min-width: 720px) { .records-panels { grid-template-columns: 1fr 1fr; gap: 40px; } }
+/* 手机上也左右各一半。竖着叠的时候一屏只装得下《记录》那一块，《排行榜》
+   得往下滑才露头；并排之后两块一眼都在。窄了就装不下整行字，所以面板里
+   只留缩略的内容——图形加分数——玩法小字和日期交给点开后的整页。 */
+.records-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (min-width: 720px) { .records-panels { gap: 40px; } }
+
+/* 缩略版。每条规则都挂在 .records-panels 底下是有意的：点开的放大版
+   (.records-panel--big) 是挂到 body 上的另一个元素，不在这个容器里，
+   所以它一个字都不会被这里缩掉，照旧是完整的那一份。 */
+@media (max-width: 719px) {
+  /* 46vh 是给整幅宽的面板定的；缩到半幅之后同样的高度只剩一大片空底色，
+     所以这里按缩略版自己的内容给高度：五行 + 底下那句话，正好 260。 */
+  .records-panels .records-panel { padding: 18px 12px; gap: 10px; border-radius: 20px; min-height: 260px; }
+  .records-panels .records-row { padding: 7px 10px; gap: 6px; }
+  .records-panels .records-row-glyph { width: 18px; height: 18px; }
+  /* 基础样式里这行是竖排的 flex（名字/玩法/日期三层）。缩略版只剩名字一层，
+     改回 block 才能让 text-overflow 的省略号生效——flex 容器里的裸文本是
+     匿名子项，省略号管不到它。 */
+  .records-panels .records-row-name {
+    display: block; font-size: 0.76rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .records-panels .records-row-mode,
+  .records-panels .records-row-time { display: none; }
+  .records-panels .records-row-score { font-size: 0.78rem; }
+  .records-panels .records-rule { height: 6px; }
+  .records-panels .records-locked { font-size: 0.7rem; letter-spacing: 0.02em; }
+}
 
 .records-panel {
   border-radius: 26px; padding: 30px 26px; min-height: 46vh;
