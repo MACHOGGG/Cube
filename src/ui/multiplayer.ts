@@ -6,6 +6,9 @@ import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { mountTitleRain, type TitleRain } from './titleRain';
+import { custom } from './customIcons';
+import { shapeName } from './shapeLabels';
+import { hasSeenTutorial, type TutorialShape } from '../i18n';
 import {
   avatarSvg,
   createRoom,
@@ -24,6 +27,7 @@ import {
   lastPlayedRound,
   markRoundPlayed,
   nudgeHost,
+  setLearning,
 } from '../engine/room';
 
 /**
@@ -67,7 +71,25 @@ export interface MultiplayerHandlers {
   onPickMode: (code: string) => void;
   /** The room is closed: hand over the standings for the closing card. */
   onRoomEnded: (state: RoomState) => void;
+  /**
+   * 这个人说他不会规则：放这一族的教学给他看，看完了回小屋。
+   *
+   * 教学会把整页占掉，所以这一页（连同它的轮询）就此拆掉——回来走的是
+   * showMultiplayer 那条「已经在屋里就接着往下走」的路。
+   */
+  onLearnTutorial: (shape: TutorialShape) => void;
 }
+
+/** 一个玩法归哪一族的教学。布局变体没有自己的课，跟着它那一族走。 */
+function tutorialFamilyOf(mode: string): TutorialShape | null {
+  if (mode.startsWith('square')) return 'square';
+  if (mode.startsWith('circle')) return 'circle';
+  if (mode.startsWith('triangle')) return 'triangle';
+  return null;
+}
+
+/** 问「会不会规则」给多久。到点没人按，就当他会。 */
+const KNOW_ASK_MS = 4000;
 
 const NAME_KEY = 'slides_mp_name';
 
@@ -149,6 +171,10 @@ export function renderMultiplayerPage(
    * 满整个框——那不是「有人在催」，那是一堵墙。
    */
   let seenNudges = -1;
+  /** 这一局的「会不会规则」已经问过了——每局只问一次，问完不再挡路。 */
+  let askedRound = -1;
+  /** 「有人在学，稍等」那一屏已经画上了，别每次轮询都重画一遍。 */
+  let waitingOnLearner = false;
   const stopAll = () => {
     stopWatching?.();
     stopWatching = null;
@@ -159,6 +185,7 @@ export function renderMultiplayerPage(
     rain?.stop();
     rain = null;
     seenNudges = -1;
+    waitingOnLearner = false;
   };
   const teardown = () => {
     dead = true;
@@ -366,6 +393,18 @@ export function renderMultiplayerPage(
         soakNudges(next, iAmHost);
         // The host has chosen: everyone counts down to the same instant.
         if (next.startAt && next.seed && next.mode && next.round > playedRound) {
+          // 三道关，顺序是有讲究的：
+          // 1. 我自己会不会这个玩法——不会就去看教学，别人等我；
+          // 2. 屋里还有没有别人在学——有就一起等；
+          // 3. 都齐了，才数 4-3-2-1。
+          if (askKnowsRules(next)) return;
+          if (next.players.some((p) => p.learning)) {
+            // 数到一半有人说他不会：把数字收起来，换成「稍等」。倒数不是
+            // 承诺，是一段可以退回去的路。
+            cancelCountdown();
+            return showLearningWait();
+          }
+          waitingOnLearner = false;
           beginCountdown(next);
         }
       },
@@ -564,11 +603,124 @@ export function renderMultiplayerPage(
       <div class="mp-cd-title">${s.mpRoomTotal}</div>${rows}</div>`;
   }
 
+  /**
+   * 开局前那一句：「会 XXX 的规则吗？」
+   *
+   * 只问没看过这一族教学的人，而且一局只问一次。四秒内不按就当他会——问题
+   * 本身不该变成一道卡住整屋的门；真不会的人会去按那颗，而按不下去的原因
+   * 通常是他正好没在看屏幕，那按「会」是对的。
+   *
+   * 回 true 表示「这一关我接管了」：调用处就此打住，不去数数。
+   */
+  function askKnowsRules(state: RoomState): boolean {
+    if (askedRound === state.round) return false;
+    const family = state.mode ? tutorialFamilyOf(state.mode) : null;
+    if (!family || hasSeenTutorial(family)) {
+      askedRound = state.round;
+      return false;
+    }
+    askedRound = state.round;
+
+    const name = shapeName(lang, state.mode ?? '', family);
+    const box = document.createElement('div');
+    box.className = 'overlay opaque show';
+    box.id = 'mpKnowAsk';
+    box.innerHTML = `
+      <div class="start-stage">
+        <p class="tag-line">${s.mpKnowRules.replace('{name}', name)}</p>
+        <div class="start-actions">
+          <button class="icon-btn start-act" id="mpKnowNo">${s.mpKnowNo}</button>
+          <button class="icon-btn start-act" id="mpKnowYes">${s.mpKnowYes}</button>
+        </div>
+        <p class="auth-hint" id="mpKnowTick"></p>
+      </div>
+    `;
+    document.body.appendChild(box);
+
+    let timer = 0;
+    const close = () => {
+      window.clearInterval(timer);
+      box.remove();
+    };
+    // 说「会」什么都不用做：底下那一层还在轮询，下一次进来就直接数数了。
+    box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', close);
+    box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
+      close();
+      void goLearn(family);
+    });
+
+    const until = Date.now() + KNOW_ASK_MS;
+    const tick = box.querySelector<HTMLElement>('#mpKnowTick')!;
+    const paint = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      tick.textContent = left > 0 ? String(left) : '';
+      if (left <= 0) close();
+    };
+    paint();
+    timer = window.setInterval(paint, 200);
+    return true;
+  }
+
+  /**
+   * 去看教学。先告诉服务器「我在学」——别人那边立刻看到「有人在学习，稍等」，
+   * 开赛时刻等我学完再重新盖一遍。
+   */
+  async function goLearn(family: TutorialShape) {
+    await setLearning(true);
+    if (dead) return;
+    stopAll();
+    handlers.onLearnTutorial(family);
+  }
+
+  /**
+   * 屋里有人在学，其他人看到的那一屏。
+   *
+   * 和开局那一幕同一个身架：上半屏这一局的玩法图，中间原本放 4-3-2-1 的位置
+   * 换成一句话，底下是那只转圈的标识。轮询不停——它就是这一屏等的东西。
+   */
+  function showLearningWait() {
+    if (waitingOnLearner) return;
+    waitingOnLearner = true;
+    rain?.stop();
+    rain = null;
+    const spinner = custom('mp-loading') ?? '';
+    container.innerHTML = `
+      <div class="app mp-page mp-countdown-page">
+        <div class="start-stage mp-learn-stage">
+          <p class="tag-line mp-learn-line">${s.mpLearningWait}</p>
+          <div class="mp-learn-spin">${spinner}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  /** 把倒数收回去（有人临时说他不会规则）。轮询不动——它正是等的那件事。 */
+  function cancelCountdown() {
+    window.clearInterval(countdownTimer);
+    countdownTimer = 0;
+    launched = false;
+  }
+
   function beginCountdown(state: RoomState) {
     if (launched || !state.startAt || !state.seed || !state.mode) return;
     launched = true;
-    playedRound = state.round;
-    stopAll();
+    // playedRound 要等真开局那一刻才记，不能在这儿记。
+    //
+    // 上面那道关卡看的是 next.round > playedRound；在这里就把它记上，等于
+    // 一开始数数就把自己关在门外——数到一半有人说他不会规则，轮询照样收得
+    // 到，却再也走不进那道关，于是数到 0 照常开局，把还在看教学的人一个人
+    // 留在后面。
+    const round = state.round;
+    // 只收自己的东西，不停轮询。
+    //
+    // 从前这里是 stopAll()：数字一开始跳，这台设备就不再问服务器了。于是
+    // 「屋里有人临时说他不会规则」这件事根本传不进来——房主那边照样数到 0
+    // 就开局，把还在看教学的人一个人留在后面。倒数这几秒恰恰是最需要听着的
+    // 几秒。
+    window.clearInterval(countdownTimer);
+    countdownTimer = 0;
+    rain?.stop();
+    rain = null;
     const { startAt, seed, mode } = state;
 
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
@@ -597,6 +749,7 @@ export function renderMultiplayerPage(
       if (left <= 0) {
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
+        playedRound = round;
         if (!dead) handlers.onMatchStart({ mode, seed });
         return;
       }

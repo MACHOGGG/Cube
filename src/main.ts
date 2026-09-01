@@ -24,6 +24,7 @@ import {
   forgetRoom,
   latestRoomState,
   leaveRoom,
+  setLearning,
   startMatch,
   type RoomState,
 } from './engine/room';
@@ -414,6 +415,16 @@ function showMultiplayer() {
         showMenu();
       },
       onRoomEnded: showRoomFinal,
+      // 他说他不会这个玩法：放这一族的教学给他看。教学会把整页占掉（连同
+      // 小屋页的轮询），所以看完之后走 showMultiplayer 那条「已经在屋里就
+      // 接着往下走」的路回来——那一刻服务器已经把开赛时刻重新盖过了，
+      // 于是全屋一起从 4 数起。
+      onLearnTutorial: (shape) => {
+        markTutorialSeen(shape);
+        renderShapeTutorialByShape(shape, () => {
+          void setLearning(false).then(showMultiplayer);
+        });
+      },
     },
     currentLang,
   );

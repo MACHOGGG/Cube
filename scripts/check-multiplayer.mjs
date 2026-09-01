@@ -22,13 +22,21 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-async function newPlayer(label) {
+async function newPlayer(label, unseen = []) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
-  await ctx.addInitScript(() => {
-    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
-      localStorage.setItem(k, '1');
+  // unseen 里写的那几族，这台设备当作「没看过教学」——开局前那一句
+  //《会……的规则吗？》就是照这个判断要不要问的。
+  await ctx.addInitScript((skip) => {
+    const keys = {
+      square: 'slides_tutorial_seen',
+      circle: 'slides_tutorial_seen_circle',
+      triangle: 'slides_tutorial_seen_triangle',
+    };
+    for (const [fam, k] of Object.entries(keys)) {
+      if (!skip.includes(fam)) localStorage.setItem(k, '1');
+    }
     localStorage.setItem('slides_lang', 'zhHans');
-  });
+  }, unseen);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`  [${label} page error] ${e.message}`));
   await page.goto(BASE, { waitUntil: 'load' });
@@ -50,7 +58,8 @@ const boardSignature = (page) =>
       .join(','));
 
 const A = await newPlayer('host');
-const B = await newPlayer('guest');
+// 客人没看过圆球那一族的教学：留给底下那一段验「开局前问一句」。
+const B = await newPlayer('guest', ['circle']);
 
 // ---- the host becomes a subscriber the server can actually verify -------
 const granted = await A.page.evaluate(async () => {
@@ -365,15 +374,83 @@ check('客人一催，房主的标题框里掉下东西', rained);
 // 房主挑下一场：回主菜单选一个玩法，整屋跟着开。
 await A.page.click('#mpPick');
 await A.page.waitForSelector('.home-icon-btn', { timeout: 15000 });
-await A.page.click('.home-icon-btn');
+// 挑圆球——客人这台设备没看过圆球那一族的教学（见 newPlayer 的 unseen），
+// 所以下面这一整段才有东西可验。
+const circleIdx = await A.page.$$eval('.home-icon-btn', (els) =>
+  els.findIndex((e) => (e.getAttribute('aria-label') || '') === '圆球'));
+await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), circleIdx);
+
+// ---- 开局前问一句：会不会这个玩法的规则 --------------------------------
+const rulesAsked = await B.page.waitForSelector('#mpKnowAsk', { timeout: 15000 })
+  .then(() => true).catch(() => false);
+check('没看过教学的人，开局前被问一句', rulesAsked);
+if (rulesAsked) {
+  check('问的是这个玩法的名字',
+    (await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim())) === '会圆球的规则吗？',
+    await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim()));
+  check('两颗键：会 / 不会，教我',
+    (await B.page.$$eval('#mpKnowAsk .start-act', (els) => els.map((e) => e.textContent.trim())))
+      .join('|') === '不会，教我|会');
+  // 说「不会」：自己去看教学，屋里其他人等着。
+  await B.page.click('#mpKnowNo');
+  const learningPage = await A.page.waitForSelector('.mp-learn-spin', { timeout: 20000 })
+    .then(() => true).catch(() => false);
+  check('有人去学，别人看到「稍等」那一屏', learningPage);
+  if (learningPage) {
+    check('那句话就是《小屋里有人在学习，稍等》',
+      (await A.page.$eval('.mp-learn-line', (e) => e.textContent.trim())) === '小屋里有人在学习，稍等',
+      await A.page.$eval('.mp-learn-line', (e) => e.textContent.trim()));
+    // 那只转圈的标识是真的画出来了（不是一个空盒子），而且真的在转。
+    const spin = await A.page.evaluate(() => {
+      const box = document.querySelector('.mp-learn-spin');
+      const svg = box?.querySelector('svg');
+      return {
+        paths: svg ? svg.querySelectorAll('path').length : 0,
+        turning: box ? getComputedStyle(box).animationName : '',
+        p3: /color\(/.test(box?.innerHTML || ''),
+      };
+    });
+    check('底下是那只加载标识，画得出来', spin.paths > 30, `${spin.paths} 条路径`);
+    check('它绕着自己的中心在转', spin.turning === 'mp-learn-turn', spin.turning);
+    // 旧安卓不认 color(display-p3 …)，认不得的话整条 fill 作废、图变空白。
+    check('标识里没有留下 display-p3 的颜色', !spin.p3);
+  }
+  check('学的人这会儿在教学里', await B.page.$('.story-tut, .tut-stage, .app') !== null);
+
+  // 学完了：服务器把开赛时刻重新盖一遍，全屋一起从 4 数起。
+  // 这里直接替这台设备说一声「学完了」，省掉真把整段教学放完的两分钟——
+  // 走的是和教学结束时同一个接口、同一份身份。
+  await B.page.evaluate(async () => {
+    const seat = JSON.parse(sessionStorage.getItem('slides_mp_seat'));
+    await fetch('/api/room', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'learn', learning: false, ...seat }),
+    });
+  });
+  const resumed = await A.page.waitForFunction(
+    () => !!document.querySelector('.mp-countdown-page .cd-window') && !document.querySelector('.mp-learn-spin'),
+    { timeout: 20000 },
+  ).then(() => true).catch(() => false);
+  check('学完了，等的人回到 4-3-2-1', resumed);
+}
+
 const intoNextRound = (p) =>
   p.waitForFunction(() => {
     const tiles = document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length;
     return tiles > 0;
   }, { timeout: 40000 }).then(() => true).catch(() => false);
-const [hostIn, guestIn] = await Promise.all([intoNextRound(A.page), intoNextRound(B.page)]);
-check('房主挑完下一场，自己进了局', hostIn);
-check('客人也被带进这一局', guestIn);
+check('房主挑完下一场，自己进了局', await intoNextRound(A.page));
+
+// 客人这会儿还停在教学页上——这一段没有真把整段教学放完，而是替他按了
+// 「学完了」。真的看完教学的人会被 onLearnTutorial 的收尾直接送回小屋；
+// 这里手动走一遍那条路（刷新 → 多人游玩 → 凭 sessionStorage 里的座位回屋），
+// 好接上后面「房主走了」的剧情。
+await B.page.goto(BASE, { waitUntil: 'load' });
+await B.page.waitForSelector('#navProfile', { timeout: 20000 });
+await B.page.click('#navProfile');
+await B.page.click('#multiRow');
+check('客人回到小屋后被带进这一局', await intoNextRound(B.page));
 
 // ---- 房主走了：其他人得到一句话和一颗《ok》 -----------------------------
 await A.page.click('#leaveRoomBtn');

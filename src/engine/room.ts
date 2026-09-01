@@ -46,6 +46,8 @@ export interface RoomPlayer {
   rounds: number;
   /** 中途走了。人留在名单和排名里，只是不再报到，也不占座位。 */
   left: boolean;
+  /** 正在看这个玩法的教学。全屋等他学完，再一起数 4-3-2-1。 */
+  learning: boolean;
 }
 
 export interface RoomState {
@@ -326,6 +328,17 @@ export async function leaveRoom(): Promise<void> {
   rememberSeat(null);
   forgetPlayed();
   await post({ action: 'leave', ...leaving });
+}
+
+/**
+ * 「我去看教学了」／「我看完了」。
+ *
+ * 看完的那一下是有后果的：服务器发现全屋都不学了，会把开赛时刻重新盖一遍，
+ * 于是所有人一起从 4 数起。所以这个调用要等它回来再往下走。
+ */
+export async function setLearning(learning: boolean): Promise<void> {
+  if (!session) return;
+  await post({ action: 'learn', learning, ...session });
 }
 
 /**

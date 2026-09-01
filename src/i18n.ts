@@ -237,6 +237,12 @@ export interface I18nStrings {
   mpNudge: string;
   /** 名单上给中途走掉的人挂的那个小标。 */
   mpLeftTag: string;
+  /** 开局前问一句：这个玩法的规则你会吗？{name} 是玩法名。 */
+  mpKnowRules: string;
+  mpKnowYes: string;
+  mpKnowNo: string;
+  /** 有人在看教学时，其他人那一屏上写的话。 */
+  mpLearningWait: string;
   mpRoundResult: string;
   mpFinalTitle: string;
   mpBestRound: string;
@@ -536,6 +542,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: 'Room total',
     mpNudge: 'Nudge the host',
     mpLeftTag: 'left',
+    mpKnowRules: 'Do you know how {name} works?',
+    mpKnowYes: 'I do',
+    mpKnowNo: 'Teach me',
+    mpLearningWait: 'Someone in the cabin is learning — hold on',
     mpRoundResult: 'This round',
     mpFinalTitle: 'How the room finished',
     mpBestRound: 'Best single round',
@@ -810,6 +820,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: 'Total de la salle',
     mpNudge: 'Presser l’hôte',
     mpLeftTag: 'parti',
+    mpKnowRules: 'Tu connais les règles de {name} ?',
+    mpKnowYes: 'Oui',
+    mpKnowNo: 'Explique-moi',
+    mpLearningWait: 'Quelqu’un apprend encore — un instant',
     mpRoundResult: 'Cette manche',
     mpFinalTitle: 'Bilan de la salle',
     mpBestRound: 'Meilleure manche',
@@ -1084,6 +1098,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: '全屋總分',
     mpNudge: '催房主',
     mpLeftTag: '已離開',
+    mpKnowRules: '會{name}的規則嗎？',
+    mpKnowYes: '會',
+    mpKnowNo: '不會，教我',
+    mpLearningWait: '小屋裡有人在學習，稍等',
     mpRoundResult: '本局',
     mpFinalTitle: '小屋戰績',
     mpBestRound: '單局最高',
@@ -1358,6 +1376,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: '全屋总分',
     mpNudge: '催房主',
     mpLeftTag: '已离开',
+    mpKnowRules: '会{name}的规则吗？',
+    mpKnowYes: '会',
+    mpKnowNo: '不会，教我',
+    mpLearningWait: '小屋里有人在学习，稍等',
     mpRoundResult: '本局',
     mpFinalTitle: '小屋战绩',
     mpBestRound: '单局最高',

@@ -91,6 +91,16 @@ const AVATAR_SHAPES = new Set(['circle', 'triangle', 'square']);
 /** Control characters, which a player's name has no business containing. */
 const CTRL_RE = /[\u0000-\u001F\u007F]/g;
 
+/**
+ * 一次教学最多把整屋拖多久。看教学的设备不轮询，所以这个上限就是「他再也
+ * 不回来」时整屋的等待上限。教学本身一两分钟，五分钟留得很宽。
+ */
+const LEARN_MAX_MS = 5 * 60_000;
+const seatLearning = (seat) =>
+  Boolean(seat.learningAt) && Date.now() - seat.learningAt < LEARN_MAX_MS;
+const anyoneLearning = (hash) =>
+  Object.entries(hash).some(([k, v]) => k.startsWith('p:') && v && !v.left && seatLearning(v));
+
 const roomKey = (code) => 'room:' + code;
 const id = (bytes) => randomBytes(bytes).toString('hex');
 
@@ -109,6 +119,7 @@ export default async function handler(req, res) {
       case 'leave': return await leave(res, body);
       case 'end': return await end(res, body);
       case 'nudge': return await nudge(res, body);
+      case 'learn': return await learn(res, body);
       default: return send(res, 400, { error: 'action' });
     }
   } catch {
@@ -250,6 +261,8 @@ function publicState(code, hash) {
       rounds: value.rounds || 0,
       /** 中途走了。人还在名单和排名里，只是不再报到，也不占座位。 */
       left: Boolean(value.left),
+      /** 正在看这个玩法的教学——全屋等他学完再一起数 4-3-2-1。 */
+      learning: seatLearning(value),
     });
   }
   players.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
@@ -536,6 +549,38 @@ async function leave(res, body) {
     });
   }
   return send(res, 200, { ok: true });
+}
+
+/**
+ * 有人说自己不会这个玩法的规则，去看教学了；看完了再说一声。
+ *
+ * 记的是时刻不是布尔值，因为看教学的那台设备整页被教学占着，不再轮询——
+ * 一个「正在学」的布尔值要是没人来清（关掉网页、切走再也不回来），整间小屋
+ * 就永远开不了局。存时刻，超过 LEARN_MAX_MS 就当他不学了：这比心跳简单，
+ * 而且断在哪一步都收得回来。
+ */
+async function learn(res, body) {
+  const code = String(body.code ?? '').trim();
+  const hash = await readRoom(code);
+  if (!hash) return send(res, 404, { error: 'noRoom' });
+  const seat = seatOf(hash, body.playerId, body.playerToken);
+  if (!seat) return send(res, 403, { error: 'seat' });
+  const learning = Boolean(body.learning);
+  await hset(roomKey(code), 'p:' + body.playerId, {
+    ...seat,
+    learningAt: learning ? Date.now() : 0,
+    lastSeen: Date.now(),
+  });
+  let fresh = await hgetall(roomKey(code));
+  const meta = fresh.meta || {};
+  // 最后一个学完的人：把开赛时刻重新盖一遍，全屋一起从 4 数起。等的人看的
+  // 是「还有谁在学」，学完这一刻他们的倒数才开始走。
+  if (!learning && meta.round && !anyoneLearning(fresh)) {
+    await hset(roomKey(code), 'meta', { ...meta, startAt: Date.now() + countdownMsFor(meta.mode) });
+    fresh = await hgetall(roomKey(code));
+  }
+  await expire(roomKey(code), ROOM_TTL_S);
+  return send(res, 200, { ok: true, state: publicState(code, fresh) });
 }
 
 /**

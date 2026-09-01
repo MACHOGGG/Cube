@@ -1220,6 +1220,22 @@ button:hover { filter: brightness(1.05); }
 .mp-cd-row--me .mp-cd-rank { color: var(--accent-ink); }
 .mp-cd-row--left { opacity: 0.6; }
 
+/* 屋里有人在看教学时，其他人那一屏：一句话，加一只慢慢转的标识。
+   转的是它自己的中心，所以 transform-origin 必须是 50% 50%（默认就是，
+   写出来是因为这一条一旦被别处覆盖，图会绕着一个偏心点甩起来）。 */
+/* 这一幕只有一句话和一只转圈的标识，没有开局那一幕的「上半屏图、下半屏
+   数字」两段结构，所以整块居中就好，不然它会缩在屏幕最上面。 */
+.mp-learn-stage { justify-content: center; }
+.mp-learn-line { font-size: 1.05rem; margin: 0 0 22px; }
+.mp-learn-spin {
+  width: min(46vw, 190px); aspect-ratio: 1; margin: 0 auto;
+  animation: mp-learn-turn 3.6s linear infinite;
+  transform-origin: 50% 50%;
+}
+.mp-learn-spin svg { width: 100%; height: 100%; display: block; }
+@keyframes mp-learn-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mp-learn-spin { animation-duration: 9s; } }
+
 /* 催房主的那场雨。铺满标题玻璃，压在字上面，但不吃任何点击——标题本身是
    一颗能按的键（点它回主菜单）。 */
 .title-rain {
