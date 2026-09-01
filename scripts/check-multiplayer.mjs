@@ -106,8 +106,14 @@ if (paywall) await B.page.click('#geniusClose');
 await A.page.click('#navProfile');
 await A.page.click('#multiRow');
 await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
-check('开通了的人，那颗键上什么都不挂',
-  (await A.page.$eval('#mpCreate', (el) => el.classList.contains('genius-cta--locked'))) === false);
+// 招牌对开通了的人同样成立：那是他才有的权利。变的只有那把锁。
+const opened = await A.page.$eval('#mpCreate', (el) => ({
+  locked: el.classList.contains('genius-cta--locked'),
+  lock: !!el.querySelector('.cta-lock'),
+  crest: !!el.querySelector('.genius-logo'),
+}));
+check('开通了的人，锁没了，招牌还在', opened.locked === false && opened.lock === false && opened.crest === true,
+  JSON.stringify(opened));
 await A.page.fill('#mpName', '甲');
 await A.page.click('#mpCreate');
 await A.page.waitForSelector('.mp-code', { timeout: 10000 });

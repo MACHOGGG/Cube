@@ -37,8 +37,23 @@ export interface DragCallbacks {
    */
   onBeforeStart?(): void;
   isActive(): boolean;
-  /** Pointer-down position in board-local pixels. */
-  onStart(x: number, y: number): void;
+  /**
+   * Pointer-down position in board-local pixels.
+   *
+   * 返回抓到的那一颗的行列，拖拽层就会在它身上做个记号——手指落下的那一刻
+   * 先告诉玩家「你抓的是这一颗」，而不是等牌动起来才知道抓错了。不返回也行，
+   * 那就没有记号，行为和以前一样。
+   */
+  onStart(x: number, y: number): Grab | void;
+  /**
+   * 还在死区里的时候，手指挪到哪就改抓哪。
+   *
+   * 抓哪一行原本是在手指落下的那一瞬间定死的，落点差两三个像素跨过格子边界
+   * 就抓错了隔壁，而且要等牌动起来才发现。死区这几个像素里本来什么都还没发
+   * 生，正是可以反悔的窗口：手指往正确的那一颗蹭一下，抓的就改过来了，记号
+   * 也跟着走。返回新的行列，没抓到就 null。
+   */
+  onRegrab?(x: number, y: number): Grab | null;
   /** Called on every move once the drag has traveled past the lock threshold. */
   onDrag(dx: number, dy: number): void;
   /** Always called on release/cancel, even if the threshold was never crossed. */
@@ -53,17 +68,41 @@ export interface DragCallbacks {
   onRejected?(): void;
 }
 
+/** 抓到的那一颗在棋盘上的行列。八个玩法的棋子都带着 data-r / data-c，所以
+ *  这一对数字足够在任何一副棋盘上把它找出来，不必知道那副棋盘长什么样。 */
+export interface Grab {
+  r: number;
+  c: number;
+}
+
+/** 手指落下之后、拖拽真正开始之前，那一颗身上挂的记号。 */
+const GRAB_CLASS = 'piece-grabbed';
+
 /**
  * Wires the pointerdown/move/up/cancel lifecycle every board shares: capture
  * the pointer, hold off on committing to an axis/line until the drag clears a
  * small dead zone, then hand raw deltas to the shape so it can do its own
  * (very different) row/column or diagonal-line projection math.
  */
-export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8): () => void {
+export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 11): () => void {
   let active = false;
   let locked = false;
   let sx = 0;
   let sy = 0;
+  /** 现在挂着记号的那一颗，松开或者拖起来之后要摘掉。 */
+  let marked: HTMLElement | null = null;
+
+  /** 把记号挪到 g 那一颗身上。g 为空就只是摘掉。 */
+  function mark(g: Grab | null | void) {
+    const board = cb.origin ?? target;
+    const next = g
+      ? board.querySelector<HTMLElement>(`[data-r="${g.r}"][data-c="${g.c}"]`)
+      : null;
+    if (next === marked) return;
+    marked?.classList.remove(GRAB_CLASS);
+    next?.classList.add(GRAB_CLASS);
+    marked = next;
+  }
 
   function down(e: PointerEvent) {
     cb.onBeforeStart?.();
@@ -76,7 +115,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
     locked = false;
     sx = e.clientX;
     sy = e.clientY;
-    cb.onStart(e.clientX - rect.left, e.clientY - rect.top);
+    mark(cb.onStart(e.clientX - rect.left, e.clientY - rect.top));
     target.setPointerCapture(e.pointerId);
   }
 
@@ -85,8 +124,19 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
     if (!locked) {
-      if (Math.hypot(dx, dy) < threshold) return;
+      // 还在死区里：什么都还没发生，所以这几个像素是可以反悔的。手指蹭到隔壁
+      // 那一颗，抓的就跟着改，记号也跟着走——落点差两三个像素抓错了行，不必
+      // 等牌动起来才发现。
+      if (Math.hypot(dx, dy) < threshold) {
+        if (cb.onRegrab) {
+          const rect = (cb.origin ?? target).getBoundingClientRect();
+          mark(cb.onRegrab(e.clientX - rect.left, e.clientY - rect.top));
+        }
+        return;
+      }
       locked = true;
+      // 从这里开始整条线都在动，哪一颗被抓着已经看得一清二楚，记号该退场了。
+      mark(null);
     }
     cb.onDrag(dx, dy);
   }
@@ -94,6 +144,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
   function up(e: PointerEvent) {
     if (!active) return;
     active = false;
+    mark(null);
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
     cb.onEnd(locked ? dx : 0, locked ? dy : 0);
@@ -117,6 +168,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 8
   target.addEventListener('touchmove', blockScroll, { passive: false });
 
   return () => {
+    mark(null);
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);

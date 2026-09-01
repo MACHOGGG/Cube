@@ -859,6 +859,21 @@ button:hover { filter: brightness(1.05); }
   .home-nav-btn:hover { transform: scale(1.08); }
 }
 
+/* 手指按住、还没开始拖的那一颗。
+   用 drop-shadow 而不是描边或 transform：八个玩法的棋子有方有圆有三角，
+   drop-shadow 贴着实际的轮廓走，一套写法全都对；而 transform 是棋子自己
+   用来定位的，动了它棋子就跑位了。 */
+.piece-grabbed {
+  /* 先一圈贴着轮廓的白，把这一颗从旁边同样鲜艳的邻居里割出来，再一层强调色
+     的光晕往外散。零模糊的那一层起的是描边的作用，只是它描的是真实形状。 */
+  filter:
+    drop-shadow(0 0 1px #fff) drop-shadow(0 0 2px #fff)
+    drop-shadow(0 0 9px var(--accent)) drop-shadow(0 0 4px var(--accent));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .piece-grabbed { transition: filter 90ms ease; }
+}
+
 /* ---------- centre picker ---------- */
 /* The page behind is faded, not covered — the reference design washes the
    grid out to half strength so it still reads as context behind the choice. */
@@ -947,7 +962,9 @@ button:hover { filter: brightness(1.05); }
    上锁着的玩法用 80px，这里 40px）。按下去照样弹订阅那一页——锁不是把路堵死，
    是把「这条路要先买票」写在票口上，省得白按一次才知道。
    flex + auto 外边距：宽度还是随内容，整颗仍然居中。 */
-.genius-cta--locked {
+/* 挂着天才招牌的那一颗（多人页的《开房间》）：招牌一直在，锁只在还没开通的
+   时候才有，所以排版归 --crest 管，锁归 --locked 管。 */
+.genius-cta--crest {
   display: flex; align-items: center; gap: 10px; padding-right: 14px;
 }
 .cta-lock { width: 18px; height: 18px; flex: none; color: currentColor; }

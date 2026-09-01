@@ -923,6 +923,20 @@ export function createSquareGame(): ShapeGame {
           const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
           drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0, chain: null };
+          return { r: drag.r, c: drag.c };
+        },
+        /**
+         * 还在死区里，手指挪到哪就改抓哪。
+         *
+         * 抓哪一颗原本是手指落下那一瞬间定死的，落点差两三个像素跨过边界就
+         * 抓了隔壁，而且要等牌动起来才发现。死区这几个像素里什么都还没发生，
+         * 正好是可以反悔的窗口。
+         */
+        onRegrab(x, y) {
+          if (!drag) return null;
+          drag.c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
+          drag.r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
+          return { r: drag.r, c: drag.c };
         },
         onDrag(dx, dy) {
           if (!drag) return;

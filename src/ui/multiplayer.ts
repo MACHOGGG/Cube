@@ -157,10 +157,10 @@ export function renderMultiplayerPage(
 
   function renderHome(message = '') {
     stopAll();
-    // 开房间是订阅（或内部码）才有的事。原来这颗键长得和能按的一模一样，要
-    // 按下去才知道按不动——所以在它自己身上说清楚：一把小锁，加半个尺寸的
-    // 天才招牌（主菜单上锁着的玩法用 80px，这里 40px）。按下去还是弹订阅那
-    // 一页，行为一个字没改，只是不再让人白按一次。
+    // 开房间是订阅（或内部码）才有的事，所以那块天才招牌一直挂着——它说的是
+    // 「这件事属于天才」，对已经开通的人同样成立：那是他才有的权利。
+    // 变的只有那把锁：还没开通的人才看得到它，按下去弹订阅那一页；开通了的
+    // 人只剩招牌，按下去直接开房。
     const needsGenius = !isGenius();
     container.innerHTML = `
       <div class="app mp-page">
@@ -188,10 +188,10 @@ export function renderMultiplayerPage(
 
         <p class="auth-msg" id="mpMsg" role="status">${message}</p>
 
-        <button class="genius-cta${needsGenius ? ' genius-cta--locked' : ''}" id="mpCreate">
+        <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpCreate">
           ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
           <span>${s.mpCreate}</span>
-          ${needsGenius ? geniusLogoTag(40, 'genius-logo--cta') : ''}
+          ${geniusLogoTag(40, 'genius-logo--cta')}
         </button>
         <p class="auth-hint">${s.mpNeedGenius}</p>
 

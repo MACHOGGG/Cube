@@ -901,6 +901,21 @@ export function createCircleHexGame(): ShapeGame {
           }
           const [r, c] = cellAt(x, y);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
+          return { r: drag.r, c: drag.c };
+        },
+        /**
+         * 还在死区里，手指挪到哪就改抓哪。
+         *
+         * 抓哪一颗原本是手指落下那一瞬间定死的，落点差两三个像素跨过边界就
+         * 抓了隔壁，而且要等牌动起来才发现。死区这几个像素里什么都还没发生，
+         * 正好是可以反悔的窗口。
+         */
+        onRegrab(x, y) {
+          if (!drag) return null;
+          const [r, c] = cellAt(x, y);
+          drag.r = r;
+          drag.c = c;
+          return { r, c };
         },
         onDrag(dx, dy) {
           if (!drag) return;
