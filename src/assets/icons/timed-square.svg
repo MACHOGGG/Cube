@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="558px" height="529px" viewBox="0 0 558 529" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组 2</title>
+    <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="画框-5" transform="translate(-6137, -6934)">
+            <g id="编组" transform="translate(6161.9909, 6959)">
+                <line x1="208.509145" y1="0.5" x2="296.009145" y2="0" id="线条-2" stroke="#F7821B" stroke-width="50" fill="#989898" stroke-linecap="round" stroke-linejoin="round"></line>
+                <line x1="445.646447" y1="27.490855" x2="507.871843" y2="89.009145" id="线条-2" stroke="#F7821B" stroke-width="50" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round"></line>
+                <line x1="0" y1="89.3626984" x2="61.51829" y2="27.1373016" id="线条-2" stroke="#F7821B" stroke-width="50" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round"></line>
+                <line x1="38.3838344" y1="87.1062899" x2="82.2237391" y2="86.8557762" id="线条-2" stroke="#F7821B" stroke-width="80" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round" transform="translate(60.4265, 86.6443) rotate(45.3274) translate(-60.4265, -86.6443)"></line>
+                <line x1="420.376923" y1="87.7531985" x2="464.216828" y2="87.5026848" id="线条-2" stroke="#F7821B" stroke-width="80" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round" transform="translate(442.4195, 87.2912) scale(-1, 1) rotate(45.3274) translate(-442.4195, -87.2912)"></line>
+                <line x1="229.502895" y1="50.5384924" x2="273.3428" y2="50.2879786" id="线条-2" stroke="#F7821B" stroke-width="80" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round" transform="translate(251.5455, 50.0765) rotate(90.3274) translate(-251.5455, -50.0765)"></line>
+                <rect id="矩形" fill="#F7821B" x="30.009145" y="58" width="446" height="446" rx="114"></rect>
+                <rect id="矩形" stroke="#FFFFFF" stroke-width="12" fill="#008802" x="129.009145" y="157" width="248" height="248" rx="73"></rect>
+            </g>
+        </g>
+    </g>
+</svg>

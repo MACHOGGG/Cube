@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="533px" height="583px" viewBox="0 0 533 583" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组</title>
+    <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="画框-5" transform="translate(-5403, -6907)">
+            <g id="编组" transform="translate(5403, 6932)">
+                <circle id="椭圆形" fill="#F7821B" cx="254" cy="304" r="254"></circle>
+                <ellipse id="椭圆形" stroke="#FFFFFF" stroke-width="12" fill="#4461B8" cx="253" cy="304" rx="141" ry="142"></ellipse>
+                <line x1="210" y1="0.5" x2="297.5" y2="0" id="线条-2" stroke="#F7821B" stroke-width="50" fill="#989898" stroke-linecap="round" stroke-linejoin="round"></line>
+                <line x1="445.637302" y1="71.490855" x2="507.862698" y2="133.009145" id="线条-2" stroke="#F7821B" stroke-width="50" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round"></line>
+                <line x1="421.723326" y1="133.10629" x2="465.563231" y2="132.855776" id="线条-2" stroke="#F7821B" stroke-width="80" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round" transform="translate(443.7659, 132.6443) scale(-1, 1) rotate(45.3274) translate(-443.7659, -132.6443)"></line>
+                <line x1="231.286312" y1="49.9989369" x2="275.126217" y2="49.7484231" id="线条-2" stroke="#F7821B" stroke-width="80" fill="#F7821B" stroke-linecap="round" stroke-linejoin="round" transform="translate(253.3289, 49.537) rotate(90.3274) translate(-253.3289, -49.537)"></line>
+            </g>
+        </g>
+    </g>
+</svg>

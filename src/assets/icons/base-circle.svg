@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="167px" height="167px" viewBox="0 0 167 167" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组</title>
+    <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="画框-5" transform="translate(-5851, -7952)">
+            <g id="编组" transform="translate(5851, 7952)">
+                <circle id="椭圆形" fill="#A7A7A7" cx="83.5" cy="83.5" r="83.5"></circle>
+                <g transform="translate(18, 14)" id="椭圆形-2" stroke="#FFFFFF" stroke-width="3">
+                    <ellipse fill="#F9980C" cx="66.4666667" cy="22.0253165" rx="20.5" ry="20.5253165"></ellipse>
+                    <ellipse fill="#FFFFFF" cx="22" cy="97.9746835" rx="20.5" ry="20.5253165"></ellipse>
+                    <ellipse fill="#BE411A" cx="66" cy="97.9746835" rx="20.5" ry="20.5253165"></ellipse>
+                    <ellipse fill="#4461B8" cx="110" cy="97.9746835" rx="20.5" ry="20.5253165"></ellipse>
+                    <ellipse fill="#6749B8" cx="88" cy="59.7341772" rx="20.5" ry="20.5253165"></ellipse>
+                    <ellipse fill="#008802" cx="44.4666667" cy="59.7341772" rx="20.5" ry="20.5253165"></ellipse>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

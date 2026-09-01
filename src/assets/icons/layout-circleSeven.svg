@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="139px" height="87px" viewBox="0 0 139 87" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组</title>
+    <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="画框-5" transform="translate(-7709, -8084)">
+            <g id="编组" transform="translate(7709.9188, 8084.9188)">
+                <polygon id="三角形-2" fill="#848484" points="69 0 138 43 0 43"></polygon>
+                <polygon id="三角形-2" fill="#848484" transform="translate(69, 64.5) rotate(180) translate(-69, -64.5)" points="69 43 138 86 0 86"></polygon>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#F9980C" cx="123" cy="42.8582303" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#F9980C" cx="41" cy="58.7142597" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#BE411A" cx="15" cy="42.786245" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#4461B8" cx="99" cy="24.786245" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#BE411A" cx="69" cy="17.8582303" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#008802" cx="97" cy="58.786245" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#008802" cx="39" cy="24.8582303" rx="13.5" ry="13.45847"></ellipse>
+                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#4461B8" cx="69" cy="69.7142597" rx="13.5" ry="13.45847"></ellipse>
+            </g>
+        </g>
+    </g>
+</svg>
