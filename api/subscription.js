@@ -38,14 +38,28 @@ import { storeConfigured } from './_store.js';
  * disclose that the address is a subscriber — the same thing every "forgot
  * your password" form discloses — which is a fair trade for not stranding
  * someone whose tab closed before the password window appeared.
+ *
+ * Note where the `configured()` check is, and where it is not. It used to be
+ * the first line of the handler, which meant a deployment missing its Creem
+ * key answered every sign-in with a flat "not subscribed" — including the
+ * 内部码 accounts, whose entitlement lives in our own store and has nothing to
+ * do with Creem. A 200 saying "you are not a subscriber" is not a degraded
+ * answer, it is a wrong one: the player reads it as their code having died
+ * and writes in about it, while the logs stay clean. So the check now sits on
+ * each branch that actually needs Creem, and says 503 — "we could not answer"
+ * — which the app shows as try again later.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
-  if (!configured()) return send(res, 200, NOBODY);
 
   const { checkoutId, email, password, token } = readBody(req);
   try {
-    if (checkoutId) return send(res, 200, await fromCheckout(checkoutId));
+    if (checkoutId) {
+      // Settling an order is Creem's answer by definition — there is nobody
+      // else to ask, so without the key this branch cannot run at all.
+      if (!configured()) return send(res, 503, { error: 'notConfigured' });
+      return send(res, 200, await fromCheckout(checkoutId));
+    }
     if (email) return await fromEmail(res, String(email), password, token);
     return send(res, 400, { error: 'missing' });
   } catch (err) {
@@ -121,6 +135,12 @@ async function fromEmail(res, rawEmail, password, token) {
       gifts: await liveGifts(account),
     });
   }
+
+  // Here, and not a line earlier: everything above answers from our own
+  // store, so a code account signs in normally whatever state Creem's key is
+  // in. From this point on Creem is the only one who knows, and not being
+  // able to ask is a server fault rather than a verdict about this player.
+  if (!configured()) return send(res, 503, { error: 'notConfigured' });
 
   const customer = await creem('/v1/customers', { query: { email: address } });
   if (!customer?.id) return send(res, 200, NOBODY);
