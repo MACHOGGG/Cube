@@ -18,6 +18,8 @@ ios/App/build
 .env.*
 !.env.example
 
-# 设计画布：由 scripts/ui-snapshot.mjs 从跑起来的页面抓出来，随时可重生成。
+# 设计画布与图标清单：由 scripts/ui-snapshot.mjs 和 scripts/icon-sheet.mjs
+# 从代码里重新生成，不是源文件。
 design/
 slides-interface.html
+slides-icons.zip
