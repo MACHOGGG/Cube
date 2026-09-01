@@ -494,6 +494,34 @@ export function layoutIcon(id: string, shape: BaseShape): string {
 }
 
 // ---------------------------------------------------------------------------
+// 多人游玩
+// ---------------------------------------------------------------------------
+
+/**
+ * 主菜单上那颗多人游玩。
+ *
+ * 兜底画的是三块层层叠起来的牌——三个人各拿一副同样的棋盘，正是这个玩法的
+ * 意思。换成你自己的：放一个 multiplayer.svg 进 src/assets/icons/。
+ */
+export const ICON_MULTIPLAYER =
+  custom('multiplayer') ??
+  svg(
+    `<path d="M30 18 L74 34 V78 L30 62 Z" fill="${C.orange}"/>` +
+      `<path d="M22 30 L66 46 V90 L22 74 Z" fill="${C.blue}"/>` +
+      `<path d="M14 42 L58 58 V96 L14 80 Z" fill="${C.green}"/>`,
+  );
+
+/**
+ * 炸弹局的标志：一颗白底红星，摆在开局页和战绩图上。
+ *
+ * 和主菜单那张炸弹卡不是一回事——那张是入口，这个是「你正在打的这一局是炸弹
+ * 局」。所以它小、独立、能贴在别的东西旁边。换成你自己的：bomb-badge.svg。
+ */
+export const ICON_BOMB_BADGE =
+  custom('bomb-badge') ??
+  svg(`<circle cx="50" cy="50" r="46" fill="#fff"/>` + burstStar(50, 50, 34, C.brick));
+
+// ---------------------------------------------------------------------------
 // bottom nav
 // ---------------------------------------------------------------------------
 
@@ -546,3 +574,32 @@ export const ICON_SOUND_OFF = custom('sound-off') ?? svg(
 export const ICON_LOCK =
   custom('lock') ??
   '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+
+// ---------------------------------------------------------------------------
+// 开局页用的「这是哪一个玩法」
+// ---------------------------------------------------------------------------
+
+const BASE_GAME_ICONS: Record<string, string> = {
+  square: ICON_BASE_SQUARE,
+  circle: ICON_BASE_CIRCLE,
+  triangle: ICON_BASE_TRIANGLE,
+};
+
+/**
+ * 一个玩法在主菜单上的那张脸，按它的 id 取。
+ *
+ * 开局页要摆的就是这一张——玩家在主菜单上按下的是哪个图形，倒数三秒时看见的
+ * 就该是同一个，中间不换脸。三个基础玩法用自己的底图，其余变体走
+ * layoutIcon()；家族按 id 前缀认（circleHex 是圆球家的），所以以后新加一个
+ * 变体，只要名字跟着家族起，这里不用动。
+ */
+export function gameIcon(id: string): string {
+  const base = BASE_GAME_ICONS[id];
+  if (base) return base;
+  const family: BaseShape = id.startsWith('circle')
+    ? 'circle'
+    : id.startsWith('triangle')
+      ? 'triangle'
+      : 'square';
+  return layoutIcon(id, family);
+}

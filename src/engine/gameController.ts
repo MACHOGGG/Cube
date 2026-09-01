@@ -349,7 +349,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!lastRun) return;
     trackShare('end_modal');
     const dataUrl = renderShareCard(
-      { ...buildShareInfo(lastRun, hooks.shapeName, hooks.lang), standings: roundStandings() },
+      {
+        ...buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
+        standings: roundStandings(),
+        room: !!currentRoom(),
+      },
       endSnapshot,
       startSnapshot,
     );
@@ -623,6 +627,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   refs.buttons.start.addEventListener('click', () => {
+    // 开局这颗键现在有两个人会按：开局页倒数完自己按下去，多人局则由房间那边
+    // 统一按。按第二下就是把已经在打的这一局重发一次，所以只认第一下。
+    if (started) return;
     started = true;
     trackGameStart(hooks.shapeId, hooks.modeKey);
     refs.startOverlay.classList.remove('show');

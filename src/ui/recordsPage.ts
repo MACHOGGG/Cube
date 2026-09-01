@@ -6,6 +6,7 @@ import { shapeName } from './shapeLabels';
 import { openCenterPicker } from './centerPicker';
 import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
+import { isGenius } from '../engine/subscription';
 
 /** One playable game+mode combination, so the page knows which archives to
  *  read and which glyph belongs to a stored run's shape id. */
@@ -82,6 +83,11 @@ export function renderRecordsPage(
   const total = totalScoreOf(runs);
   const glyphOf = new Map(sources.map((src) => [src.card.id, src.card.glyph]));
 
+  // 一句只对还没订阅的人有意义的话：成绩留在这台手机里，除非你是 Slides 天才。
+  // 已经是天才的人，这句话没有任何东西可以告诉他——所以整句消失，只剩
+  //《累计得分》和那个数。
+  const syncNote = isGenius() ? '' : `<span class="total-card-sub">${s.totalScoreSync}</span>`;
+
   container.innerHTML = `
     <div class="app records-page">
       <header class="home-head">
@@ -93,7 +99,7 @@ export function renderRecordsPage(
       <button class="total-card" id="totalCard">
         <span class="total-card-title">${s.totalScoreTitle}</span>
         <span class="total-card-value" id="totalValue">${compactScore(total, lang)}</span>
-        <span class="total-card-sub">${s.totalScoreSync}</span>
+        ${syncNote}
       </button>
       <div class="records-panels">
         <button class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></button>
@@ -179,7 +185,7 @@ export function renderRecordsPage(
     big.innerHTML =
       `<span class="total-card-title">${s.totalScoreTitle}</span>` +
       `<span class="total-card-value" style="font-size:${scoreFontSize(full, true)}">${full}</span>` +
-      `<span class="total-card-sub">${s.totalScoreSync}</span>`;
+      syncNote;
     openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big' });
   });
 

@@ -1,6 +1,6 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
-import { shapeName } from './shapeLabels';
+import { pushDigit, startStageHtml } from './startStage';
 import {
   avatarSvg,
   createRoom,
@@ -164,15 +164,18 @@ export function renderMultiplayerPage(
         </header>
         <p class="tag-line">${s.mpIntro}</p>
 
+        <!-- 换一个图形的按钮，就贴着那个图形——它换的是它，摆在名字另一头
+             的时候没人看得出这两样东西是一回事。 -->
         <div class="mp-me">
-          <span class="mp-avatar" id="mpAvatar">${avatarSvg(avatar)}</span>
+          <div class="mp-mark">
+            <span class="mp-avatar" id="mpAvatar">${avatarSvg(avatar)}</span>
+            <button class="mp-shuffle" id="mpShuffle" aria-label="${s.mpShuffle}">&#8635;</button>
+          </div>
           <label class="auth-field mp-name-field">
             <span>${s.mpNameLabel}</span>
             <input id="mpName" type="text" maxlength="12" autocomplete="nickname"
                    placeholder="${s.mpNamePlaceholder}" value="${esc(savedName)}" />
           </label>
-          <button class="profile-pill profile-pill--square" id="mpShuffle"
-                  aria-label="${s.mpShuffle}">&#8635;</button>
         </div>
 
         <p class="auth-msg" id="mpMsg" role="status">${message}</p>
@@ -438,7 +441,7 @@ export function renderMultiplayerPage(
   function renderReconnecting() {
     stopAll();
     container.innerHTML = `
-      <div class="app mp-page mp-countdown-page">
+      <div class="app mp-page mp-wait-page">
         <p class="tag-line">${s.mpReconnecting}</p>
         <p class="auth-hint" id="mpReconnectHint"></p>
       </div>
@@ -478,14 +481,16 @@ export function renderMultiplayerPage(
     stopAll();
     const { startAt, seed, mode } = state;
 
+    // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
+    // 一场竞赛），下半屏 3、2、1。区别只在谁在数——这里数的是服务器给的开赛
+    // 时刻，不是本地的三秒，所有人的数字才会同时跳。
     container.innerHTML = `
       <div class="app mp-page mp-countdown-page">
-        <div class="mp-countdown" id="mpTick">3</div>
-        <p class="tag-line">${shapeName(lang, mode, mode)}</p>
-        <p class="auth-hint">${s.mpSameBoard}</p>
+        ${startStageHtml({ shapeId: mode, room: true, countId: 'mpTick' })}
       </div>
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
+    let shown = 0;
 
     const paintTick = () => {
       // Against the server's clock, not this device's — that is what puts
@@ -494,16 +499,15 @@ export function renderMultiplayerPage(
       if (left <= 0) {
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
-        tickEl.textContent = s.mpGo;
         if (!dead) handlers.onMatchStart({ mode, seed });
         return;
       }
-      const n = Math.ceil(left / 1000);
-      if (tickEl.textContent !== String(n)) {
-        tickEl.textContent = String(n);
-        tickEl.classList.remove('mp-countdown--beat');
-        void tickEl.offsetWidth;
-        tickEl.classList.add('mp-countdown--beat');
+      // 服务器留的是三秒半，多出来的半秒都算在第一个「3」上——数字只有三个，
+      // 和单人那一幕看起来一模一样。
+      const n = Math.min(3, Math.ceil(left / 1000));
+      if (n !== shown) {
+        shown = n;
+        pushDigit(tickEl, n);
       }
     };
     paintTick();
@@ -514,6 +518,10 @@ export function renderMultiplayerPage(
   // reload mid-lobby, and just as importantly the walk back from a finished
   // round, which lands here with the scores still on the server.
   void (async () => {
+    // 根本没有座位，就是「还没进过任何房间」——直接摆出这一页，不要报错。
+    // 以前它和「你那间房没了」走同一条路，于是每个第一次点进来的人都被
+    // 告知「没有这个房间号」，而他压根还没输过房间号。
+    if (!currentRoom()) return renderHome();
     const existing = await fetchState();
     if (dead) return;
     if (!existing.ok) {

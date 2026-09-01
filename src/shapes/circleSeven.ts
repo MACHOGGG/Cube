@@ -221,6 +221,7 @@ export function createCircleSevenGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        shapeId: 'circleSeven',
         title: `Slides · ${shapeName(lang, 'circleSeven', '七色圆球')}`,
         tagline: SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,

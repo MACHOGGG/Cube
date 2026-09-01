@@ -1,5 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { custom } from './customIcons';
+import { currentRoom } from '../engine/room';
+import { playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 
 export interface ExtraControl {
@@ -29,6 +31,12 @@ export interface ShellMeta {
    *  rules that used to sit under each board now live in one translated
    *  rulebook (rules.ts), opened from 个人主页 → 游戏规则. */
   lang: Lang;
+  /** 炸弹局。开局页和战绩图上都会挂一个炸弹标志，让人一眼认出这是哪一种局
+   *  ——同一副棋盘，有没有炸弹是两回事。 */
+  bomb?: boolean;
+  /** 这个玩法在主菜单上的 id（square / circleHex / …）。开局页摆的就是它在
+   *  主菜单上的那张图——按下去的是哪个图形，倒数时看见的就是同一个。 */
+  shapeId: string;
 }
 
 export interface ShellRefs {
@@ -130,6 +138,11 @@ export const CTL_FINISH = custom('ctl-finish') ?? ctlGlyph(
   '<path d="M29 51.5 L44 66 L72 35" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ' +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
+/** 开局页那颗《返回》：同一副圆盘，里面是一支向左的箭。换成自己的：ctl-back.svg。 */
+export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
+  '<path d="M60 30 L40 50 L60 70" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);
 
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const s = STRINGS[meta.lang];
@@ -175,16 +188,22 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
     </div>
 
-    <div class="overlay opaque show" id="startOverlay">
-      <div class="modal">
-        <h2>${meta.title}</h2>
-        <p>${meta.startBody}</p>
-        ${meta.landscape ? ROTATE_HINT(s.rotateHint) : ''}
-        <div class="btn-row"><button class="primary" id="startBtn">${s.startBtn}</button></div>
-        <!-- A way out without starting a run: goes back to the home page, or
-             to the picker this game was chosen from. -->
-        <div class="btn-row"><button class="secondary" id="startBackBtn">${s.back}</button></div>
-      </div>
+    <!-- 开局页。没有标题也没有说明——上半屏那张图就是「你选的是这个玩法」，
+         下半屏 3、2、1 数完直接开打。真正把一局叫起来的仍然是 #startBtn，只是
+         现在它藏起来，由倒数替玩家按下去：这样游戏本身的开始/暂停/结束那套状
+         态机一个字都不用改。 -->
+    <div class="overlay opaque show overlay--start" id="startOverlay">
+      ${startStageHtml({
+        shapeId: meta.shapeId,
+        bomb: meta.bomb,
+        room: !!currentRoom(),
+        countId: 'startCount',
+        extra: meta.landscape ? ROTATE_HINT(s.rotateHint) : '',
+        actions:
+          `<button class="icon-btn start-act" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` +
+          `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`,
+      })}
+      <button id="startBtn" class="start-hidden-go" hidden aria-hidden="true" tabindex="-1">${s.startBtn}</button>
     </div>
 
     <div class="overlay opaque" id="pauseOverlay">
@@ -311,6 +330,48 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     btn.addEventListener('pointercancel', up);
     btn.addEventListener('pointerleave', up);
     btn.addEventListener('blur', up);
+  }
+
+  // ---- 开局倒数 ---------------------------------------------------------
+  //
+  // 3、2、1 数完，替玩家按下那颗藏起来的 #startBtn——一局就这样开始，中间不
+  // 需要谁再点一下。数到一半按《暂停》，倒数整个停住并弹出暂停面板；从暂停里
+  // 回来时不是接着数，而是从 3 重新数：被打断之后剩下的那半秒不足以让人重新
+  // 准备好。
+  const countWin = container.querySelector<HTMLElement>('#startCount');
+  const startBtnEl = container.querySelector<HTMLButtonElement>('#startBtn');
+  const pauseOv = container.querySelector<HTMLElement>('#pauseOverlay');
+  if (countWin && startBtnEl) {
+    let cancelCount: (() => void) | null = null;
+    const runCount = () => {
+      cancelCount?.();
+      cancelCount = playCountdown(countWin, () => {
+        cancelCount = null;
+        // 多人局是由房间那边数完之后直接开赛的（main.ts 会替所有人按下同一
+        // 颗键），这一页从没露过面。倒数还在后台跑完就再按一次，等于开局三秒
+        // 后把牌重发一遍——所以只有这一页还挂着的时候才算数。
+        if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+        startBtnEl.click();
+      });
+    };
+    container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
+      cancelCount?.();
+      cancelCount = null;
+      pauseOv?.classList.add('show');
+    });
+    // 游戏本身的《继续》也挂在这颗键上，但那一路在没开局时会自己空转，所以两
+    // 边可以共用，互不干扰。
+    container.querySelector<HTMLButtonElement>('#continueBtn')?.addEventListener('click', () => {
+      if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+      pauseOv?.classList.remove('show');
+      runCount();
+    });
+    // 离开这一页（返回、或者整块 DOM 被换掉）时别再让计时器把人拽进游戏里。
+    container.querySelector<HTMLButtonElement>('#startBackBtn')?.addEventListener('click', () => {
+      cancelCount?.();
+      cancelCount = null;
+    });
+    runCount();
   }
 
   return {

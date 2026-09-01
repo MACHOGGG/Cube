@@ -25,11 +25,13 @@ const FONTS = [
   ['JetBrains Mono', '100 800', 'src/assets/fonts/jetbrains-mono-latin-var.woff2'],
 ];
 
-/** 开一局：从主菜单点第 n 个基础玩法，等棋盘出来。 */
+/** 开一局：从主菜单点第 n 个基础玩法，等棋盘出来。
+ *  开局页现在是 3、2、1 数完自己开局的，那颗 #startBtn 藏在后面不给点——抓图
+ *  不必陪着等三秒，直接替它按下去。 */
 const play = (n) => async (page) => {
   await page.$$eval('.home-icon-btn', (els, i) => els[i].click(), n);
-  await page.waitForSelector('#startBtn', { timeout: 15000 });
-  await page.click('#startBtn');
+  await page.waitForSelector('#startBtn', { timeout: 15000, state: 'attached' });
+  await page.$eval('#startBtn', (el) => el.click());
   await page.waitForFunction(
     () => document.querySelectorAll('#boardWrap .ball, #boardWrap .tile, #boardWrap .tri').length > 0,
     { timeout: 20000 },

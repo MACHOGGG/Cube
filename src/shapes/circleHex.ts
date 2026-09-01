@@ -234,6 +234,8 @@ export function createCircleHexGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        shapeId: 'circleHex',
+        bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'circleHex', '六边圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,

@@ -135,8 +135,8 @@ check('屏幕外框亮起房主提示',
 await A.page.$$eval('.home-icon-btn', (els) => els[1].click());
 
 await Promise.all([
-  A.page.waitForSelector('.mp-countdown', { timeout: 8000 }),
-  B.page.waitForSelector('.mp-countdown', { timeout: 8000 }),
+  A.page.waitForSelector('.mp-countdown-page .cd-window', { timeout: 8000 }),
+  B.page.waitForSelector('.mp-countdown-page .cd-window', { timeout: 8000 }),
 ]);
 check('两端都进入倒计时', true);
 
@@ -161,8 +161,10 @@ check('开局不需要再按「开始」', (await A.page.$eval('#startOverlay', 
 // ---- a third, unseeded run must NOT match -------------------------------
 const C = await newPlayer('solo');
 await C.page.$$eval('.home-icon-btn', (els) => els[1].click());
-await C.page.waitForSelector('#startBtn', { timeout: 10000 });
-await C.page.click('#startBtn');
+// 单人开局页是 3、2、1 数完自己开局的，那颗键藏在后面不给点；测试不必陪着
+// 等三秒，直接替它按下去，验的是「按下去之后棋盘真的起来了」。
+await C.page.waitForSelector('#startBtn', { timeout: 10000, state: 'attached' });
+await C.page.$eval('#startBtn', (el) => el.click());
 await C.page.waitForTimeout(700);
 const sigSolo = await boardSignature(C.page);
 check('单人局是另一副牌（说明不是写死的棋盘）', sigSolo !== sigA, `${sigSolo.split(',').length} 格`);

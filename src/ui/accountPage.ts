@@ -100,10 +100,14 @@ export function renderAccountPage(
       </button>
 
       <section class="genius-panel">
-        <div class="menu-section-label">${geniusLogoTag(18, 'genius-logo--inline')}${s.geniusSpecialTitle}</div>
+        <!-- 这一块的主角是那个牌子，不是那行小字。所以顺序是：正中一个大
+             logo，下面一句「成为 / 你已经是 Slides 天才」，再下面才是那行
+             《Slides 天才特供》的小标签。 -->
+        <div class="genius-crest">${geniusLogoTag(90, 'genius-logo--crest')}</div>
         <button class="genius-cta" id="becomeGeniusBtn">${
           subscribed ? s.subscribedTitle : s.becomeGenius
         }</button>
+        <div class="menu-section-label">${s.geniusSpecialTitle}</div>
         <!-- A code is its own way in, not a footnote to the paywall: it was
              buried behind 「有内部码？」 inside the subscribe window, which is
              the one place someone holding a code has no reason to open. -->

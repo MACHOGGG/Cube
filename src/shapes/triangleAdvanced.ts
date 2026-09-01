@@ -265,6 +265,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        shapeId: 'triangleAdvanced',
         title: `Slides · ${shapeName(lang, 'triangleAdvanced', '进阶三角')}`,
         wideBoard: true,
         // 进阶三角's two-armed V is far wider than tall — unplayable in a phone's

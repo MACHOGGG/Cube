@@ -136,5 +136,8 @@ export function buildShareInfo(d: RunData, shapeDisplayName: string, lang: Lang)
     scoreRows: runBreakdown(d, lang),
     detail: runDetailLine(d, lang),
     hazardEnd: d.hazardEnd,
+    // 炸弹局的标志跟着这一局的模式走，不跟着结局走：安然打完的炸弹局也是炸弹
+    // 局，翻回记录里的那张图上照样挂着它。
+    bomb: d.modeKey === 'bomb' || d.modeKey === 'bombTimed',
   };
 }

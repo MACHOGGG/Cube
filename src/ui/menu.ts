@@ -11,7 +11,7 @@ import {
   ICON_TIMED_COMBINED,
   ICON_BOMB_90S,
   bombChip,
-  moreLayoutCard,
+  ICON_MULTIPLAYER,
   layoutIcon,
   layoutIconIsWide,
   timedCard,
@@ -30,6 +30,8 @@ export interface MenuHandlers {
   onLockedLayout: () => void;
   onTimedFor: (id: string, reopenKey?: string) => void;
   onBombFor: (tier: BombTier, id: string, reopenKey?: string) => void;
+  /** 多人游玩，从主菜单直接进——进去就是房间设置那一页。 */
+  onMultiplayer: () => void;
 }
 
 /**
@@ -125,6 +127,13 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     baseRow.appendChild(btn);
   }
 
+  // ---- 多人游玩 ---------------------------------------------------------
+  // 手机上两列，基础三个之后紧挨着的那一格就是第二行右边——这一颗落在那里。
+  // 点进去直接是房间那一页，不再绕个人主页。宽屏上它和炸弹卡片同一行。
+  const mpBtn = iconButton(ICON_MULTIPLAYER, s.mpTitle);
+  mpBtn.addEventListener('click', handlers.onMultiplayer);
+  if (!wide) grid.appendChild(mpBtn);
+
   // ---- row 2: timed challenge ------------------------------------------
   const timedOptions = (): PickerOption[] =>
     SHAPES.map((shape) => ({
@@ -152,6 +161,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     );
     grid.appendChild(btn);
   }
+
 
   // ---- row 3: bomb challenge -------------------------------------------
   // The panel is the same markup wherever it appears — inline beside the
@@ -247,44 +257,43 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
   });
   (wide ? lastRow : grid).appendChild(bombBtn);
+  if (wide) lastRow.appendChild(mpBtn);
 
-  // ---- more layouts (finishing the last row on a wide screen) -----------
-  // One card per base shape, holding that shape's own layout variants:
-  // square has a single one (so it starts straight away), circle and
-  // triangle have two apiece and open a picker.
-  const moreOrder: BaseShape[] = wide ? ['square', 'circle', 'triangle'] : ['square', 'triangle', 'circle'];
-  for (const shape of moreOrder) {
-    const cards = layout.moreLayouts[shape];
-    if (!cards.length) continue;
-    // Every shape wears the same generic plus card and hands out its real
-    // boards inside the picker — including a shape that has only one variant
-    // today, so that the way in doesn't change shape the day it gains a
-    // second.
-    const btn = iconButton(moreLayoutCard(shape), `${s.sectionMore} · ${shapeName(lang, layout.base[shape].id, layout.base[shape].name)}`);
-    const reopenKey = 'more-' + shape;
-    btn.dataset.reopen = reopenKey;
-    btn.addEventListener('click', () => {
-      openCenterPicker({
-        originEl: btn,
-        title: s.sectionMore,
-        options: cards.map((c) => {
-          // Locked boards stay on the shelf rather than disappearing from
-          // it: a player can see the board they would get, which is the
-          // whole argument for buying it.
-          const locked = isLayoutLocked(c.id);
-          const name = shapeName(lang, c.id, c.name);
-          return {
-            glyph: layoutIcon(c.id, shape),
-            label: locked ? `${name} · ${s.geniusOnly}` : name,
-            showLabel: true,
-            wide: layoutIconIsWide(c.id),
-            locked,
-            onPick: () =>
-              locked ? handlers.onLockedLayout() : handlers.onSelectLayout(c.id, reopenKey),
-          };
-        }),
-      });
-    });
-    lastRow.appendChild(btn);
+  // ---- 每个布局玩法自己露脸，不再藏在「+」后面 -------------------------
+  // 从前这里是三张通用的「+」卡，点开才看得到里面有什么。现在直接摆出来：
+  // 玩家一眼就知道有哪些棋盘，少一层点击。
+  //
+  // 顺序有两条规矩：
+  //   · 按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起；
+  //   · 没订阅解锁不了的排在最后——它们点下去只会弹付费墙，摆在中间会把
+  //     一串能玩的东西截断。
+  const openable: { card: ShapeCardMeta; shape: BaseShape }[] = [];
+  const locked: { card: ShapeCardMeta; shape: BaseShape }[] = [];
+  for (const shape of SHAPES) {
+    for (const card of layout.moreLayouts[shape]) {
+      (isLayoutLocked(card.id) ? locked : openable).push({ card, shape });
+    }
+  }
+
+  let row = wide ? newRow() : grid;
+  let inRow = 0;
+  for (const { card, shape } of [...openable, ...locked]) {
+    if (wide && inRow >= 3) { row = newRow(); inRow = 0; }
+    const isLocked = isLayoutLocked(card.id);
+    const name = shapeName(lang, card.id, card.name);
+    const btn = iconButton(
+      layoutIcon(card.id, shape),
+      isLocked ? `${name} · ${s.geniusOnly}` : name,
+      // 进阶三角那张图是 2:1 的宽画布，摆进方框里会比别人矮一半。给它一个
+      // 自己的类，把它缩到和其它图标看着一样大——按「图形本身占多大」算，
+      // 不是按方框算。
+      layoutIconIsWide(card.id) ? 'home-icon-btn--wide-art' : '',
+    );
+    if (isLocked) btn.classList.add('home-icon-btn--locked');
+    btn.addEventListener('click', () =>
+      isLocked ? handlers.onLockedLayout() : handlers.onSelectLayout(card.id),
+    );
+    (wide ? row : grid).appendChild(btn);
+    inRow++;
   }
 }

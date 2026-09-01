@@ -216,6 +216,8 @@ export function createSquareDiamondGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        shapeId: 'squareDiamond',
+        bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'squareDiamond', '菱形方块')}`,
         tagline: isBomb ? SHELL[lang].taglineDiagonal + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineDiagonal,
         startBody: SHELL[lang].shellStartBody,

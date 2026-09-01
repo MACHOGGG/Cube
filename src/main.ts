@@ -272,6 +272,8 @@ function showMenu() {
       if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
+    // 主菜单上的多人游玩：直接进房间那一页。
+    onMultiplayer: showMultiplayer,
     onBombFor: (tier, id, reopenKey) => {
       if (pickingForRoom) return void notAMultiplayerBoard();
       const pool = tier === 'advanced' ? bombLayoutGames : games;

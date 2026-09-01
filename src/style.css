@@ -709,13 +709,15 @@ button:hover { filter: brightness(1.05); }
 @media (max-width: 719px) {
   /* Two-class selectors on purpose: the base rules for these live further
      down the file, so a bare .home-grid here would lose on order. */
-  .home-page { padding-top: 16px; padding-bottom: 100px; }
-  .home-page .home-head { margin-bottom: 12px; }
-  .home-page .home-grid { gap: 14px 20px; }
+  .home-page { padding-top: 12px; padding-bottom: 96px; padding-left: 8px; padding-right: 8px; }
+  .home-page .home-head { margin-bottom: 10px; }
+  /* 间距和页边一起收窄：手机上两列，图标能有多大是被「屏宽减掉留白再对半」
+     卡住的，不把这两处让出来，抬高下面那个上限也不会变大一分。 */
+  .home-page .home-grid { gap: 12px 12px; }
   .home-page .home-icon-btn,
   .home-page .home-bomb-card {
-    max-width: 150px;                       /* the plain cap, if dvh is unknown */
-    max-width: min(150px, (100dvh - 300px) / 4);
+    max-width: 225px;                       /* the plain cap, if dvh is unknown */
+    max-width: min(225px, (100dvh - 300px) / 4 * 1.5);
   }
 }
 /* The icon grid wants far more width than the standard reading column. */
@@ -775,15 +777,21 @@ button:hover { filter: brightness(1.05); }
    button inside any flex row (the nav, a bomb tier) stretches to fill it and
    ignores its own width. */
 .home-icon-btn {
-  width: 100%; max-width: 168px; aspect-ratio: 1; padding: 0; flex: none;
+  width: 100%; max-width: 252px; aspect-ratio: 1; padding: 0; flex: none;
   background: none; border: none; border-radius: 0; cursor: pointer; display: block;
   -webkit-tap-highlight-color: transparent;
 }
 .home-icon-btn:hover { filter: none; }
 .home-icon-btn:active { transform: none; }
 /* Sized so the four-card bottom row still fits the page's own width. */
-.home-page--wide .home-icon-btn { max-width: 170px; }
+.home-page--wide .home-icon-btn { max-width: 255px; }
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
+/* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
+   空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：
+   框有多大，图形就有多大，点得到的地方就是看得见的地方。
+   一个 2:1 的图形没法和正方形图标严丝合缝地一样大，这里取「占满这一列」，
+   是不越界的前提下能给到的最大。 */
+.home-icon-btn--wide-art { aspect-ratio: 194 / 100; align-self: center; }
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
 
 /* The press cue: a quick squash and tilt, fired from pointerdown so it plays
@@ -833,7 +841,7 @@ button:hover { filter: brightness(1.05); }
   -webkit-tap-highlight-color: transparent;
 }
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
-.home-bomb-mini { max-width: 168px; }
+.home-bomb-mini { max-width: 252px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
 
 /* Desktop only: every icon lifts a touch under the pointer, so a mouse gets
@@ -1097,7 +1105,12 @@ button:hover { filter: brightness(1.05); }
 
 /* The page is a stack of destinations under the Slides masthead: one wide
    sign-in pill, the language/tutorial pair, then the perks panel. */
-.profile-page { gap: 14px; }
+/* 上半部是一排排快捷入口，不是这一页的主角——收紧它们，天才那一块就整体
+   往上走，一进页面就看得到。 */
+.profile-page { gap: 8px; padding-top: 16px; }
+.profile-page .home-head { margin-bottom: 6px; }
+.profile-page .profile-pill { padding: 8px 18px; }
+.profile-page .profile-pill-row { gap: 8px; }
 /* The block above 天才特供 is a list of shortcuts, not the page's headline
    act — it sits smaller than the section it introduces so the eye goes past
    it to the panel below. */
@@ -1155,6 +1168,10 @@ button:hover { filter: brightness(1.05); }
   display: flex; flex-direction: column; gap: 10px;
 }
 .genius-panel .menu-section-label { margin: 2px 0 2px; }
+/* 这一块的招牌。大到一眼就知道这一整块讲的是什么，所以它在最上面、居中，
+   底下才是那句话和那行小字。 */
+.genius-crest { display: flex; justify-content: center; margin: 2px 0 6px; }
+.genius-logo--crest { filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.14)); }
 .profile-row--back { justify-content: center; margin-top: 4px; }
 /* The five published documents sit at the foot of 个人主页 as ordinary rows,
    so they add a block without changing anything above them. */
@@ -1287,8 +1304,11 @@ button:hover { filter: brightness(1.05); }
 .genius-logo--inline { margin-right: 6px; }
 .genius-logo--title { margin-right: 8px; }
 /* 被锁的玩法：小标志贴在锁的旁边，说明这把锁是哪一家的。 */
+/* 放大之后它不再是个角标，而是「这一块属于天才」的招牌，所以压在图案右下角、
+   带一点白描边，免得和底下的图形糊在一起。 */
 .center-pick-genius {
-  position: absolute; right: 6px; bottom: 6px; line-height: 0;
+  position: absolute; right: -6px; bottom: -6px; line-height: 0;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
 }
 
 .genius-perks { text-align: left; margin: 0 0 16px; }
@@ -1896,7 +1916,19 @@ html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavi
 .mp-me .mp-name-field { flex: 1; margin: 0; }
 .mp-avatar { display: block; width: 44px; height: 44px; flex: 0 0 auto; }
 .mp-avatar svg { width: 100%; height: 100%; display: block; }
-.mp-me .profile-pill--square { align-self: flex-end; height: 44px; width: 44px; font-size: 1.2rem; padding: 0; }
+/* 图形和「换一个」贴在一块，中间不留缝——它们是一件事。 */
+.mp-mark {
+  display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  background: var(--surface); border-radius: 999px; padding: 4px 6px 4px 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.mp-shuffle {
+  flex: none; width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%;
+  background: var(--line); color: var(--ink-soft); font-size: 1.05rem; line-height: 1;
+  cursor: pointer;
+}
+.mp-shuffle:hover { filter: brightness(0.96); }
+.mp-shuffle:active { transform: scale(0.94); }
 
 /* The four digits get their own line, at the size they are read at. Sharing
    a row with the button never worked: .profile-pill is width:100%, so its
@@ -1999,14 +2031,17 @@ body.is-room-host::after {
   padding: 4px 6px; margin-top: 2px;
 }
 
-.mp-countdown-page { justify-content: center; min-height: 70vh; }
-.mp-countdown {
-  font-family: 'Fraunces', Georgia, serif; font-size: 6rem; font-weight: 600;
-  color: var(--accent-ink); line-height: 1; font-variant-numeric: tabular-nums;
+/* 多人开赛前那一幕，和单人开局页共用 .start-stage 的一整套（见文件末尾）：这
+   里只负责把它撑满一屏。数字由服务器时钟推，不是本地三秒。 */
+.mp-countdown-page {
+  justify-content: stretch; min-height: 100dvh; padding: 0;
+  display: flex; flex-direction: column;
 }
-.mp-countdown--beat { animation: mp-beat 420ms cubic-bezier(0.2, 1.4, 0.4, 1); }
-@keyframes mp-beat { 0% { transform: scale(0.55); opacity: 0.2; } 100% { transform: scale(1); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .mp-countdown--beat { animation: none; } }
+/* 多人这一页底下常驻着导航栏，倒数的窗口得给它让开一截，不然贴在一起。 */
+.mp-countdown-page .start-stage { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); }
+
+/* 「正在重连」那一页：只有两行字，居中就够了。 */
+.mp-wait-page { justify-content: center; min-height: 70vh; }
 
 /* The standings ride in the bottom-left corner during a run: clear of the
    HUD along the top and of the board in the middle, and small enough that
@@ -2038,3 +2073,94 @@ body.is-room-host::after {
 .mp-board-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
 .mp-board .mp-badge { font-size: 0.6rem; padding: 1px 5px; }
+
+/* ===========================================================================
+   开局页：玩法图 + 3-2-1 + 两颗按钮
+   ===========================================================================
+   一局开始之前只有三样东西：上半屏这个玩法在主菜单上的那张图，下半屏一个圆角
+   小窗里荡过去的 3、2、1，底下并排的《返回》和《暂停》。没有标题也没有说明——
+   那张图已经说完了「你选的是这个玩法」，剩下的一秒一个数字自己会走完。
+
+   多人局用的是同一套类名（房间页那边把倒数换成服务器时钟驱动），所以两边长得
+   一模一样，改一处两边都跟着改。 */
+.overlay--start { align-items: stretch; justify-content: stretch; padding: 0; }
+
+.start-stage {
+  flex: 1; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px calc(env(safe-area-inset-bottom, 0px) + 22px);
+}
+/* 上下两半各占一半，按钮吃剩下的那点。图和数字因此永远一个在上半屏中间、一个
+   在下半屏中间，不管这块屏幕是高是矮。 */
+.start-emblem, .start-count {
+  flex: 1 1 0; min-height: 0; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.start-mark { position: relative; width: min(52vw, 46vh, 260px); aspect-ratio: 1; }
+.start-mark--wide { width: min(80vw, 74vh, 400px); aspect-ratio: 194 / 100; }
+.start-mark-art { display: block; width: 100%; height: 100%; }
+.start-mark-art > svg { width: 100%; height: 100%; display: block; }
+
+/* 炸弹/多人的小标志挂在图的右上角外侧：图本身还是正正居中的，标志不去挤它。 */
+.mode-badges {
+  position: absolute; top: -4%; right: -8%;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.mode-badge { display: block; width: clamp(30px, 8.5vw, 52px); }
+.mode-badge > svg { width: 100%; height: 100%; display: block; }
+
+/* 倒数的窗口：一个圆角矩形，数字从上面荡进来、停一下、再荡出去，越界的部分被
+   窗口自己裁掉——像开场动画那样。 */
+.cd-window {
+  position: relative; overflow: hidden;
+  width: min(38vw, 26vh, 190px); aspect-ratio: 4 / 5;
+  border-radius: clamp(16px, 4vw, 28px);
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.cd-digit {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; line-height: 1;
+  font-size: min(26vw, 18vh, 132px); color: var(--accent-ink);
+  font-variant-numeric: tabular-nums;
+  animation: cd-swing 1000ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+@keyframes cd-swing {
+  0%   { transform: translateY(-118%) rotate(-15deg); opacity: 0; }
+  16%  { transform: translateY(7%)    rotate(8deg);   opacity: 1; }
+  27%  { transform: translateY(0)     rotate(-5deg); }
+  38%  { transform: translateY(0)     rotate(3deg); }
+  50%  { transform: translateY(0)     rotate(0deg); }
+  74%  { transform: translateY(0)     rotate(0deg);  opacity: 1; }
+  100% { transform: translateY(118%)  rotate(13deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cd-digit { animation: cd-fade 1000ms linear both; }
+  @keyframes cd-fade { 0% { opacity: 0; } 12% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* 两颗按钮并排在屏幕靠下方，和游戏里那一排是同一副圆盘。 */
+.start-actions { flex: none; display: flex; gap: 22px; justify-content: center; padding-top: 6px; }
+.start-actions .icon-btn.start-act {
+  width: clamp(56px, 15vw, 76px); height: clamp(56px, 15vw, 76px);
+  padding: 0; border: none; background: none; border-radius: 50%;
+  --ctl-disc: var(--surface); --ctl-mark: var(--accent-ink);
+  cursor: pointer;
+}
+.start-actions .icon-btn.start-act > svg { width: 100%; height: 100%; display: block; }
+.start-actions .icon-btn.start-act:active { transform: scale(0.94); }
+/* 真正开局的那颗键。倒数替玩家按它，所以它从不需要被看见，但仍然要在 DOM 里
+   ——整套开始/暂停/结束的状态机都挂在它身上。 */
+.start-hidden-go { display: none !important; }
+
+/* 横屏时上下两半会挤成一条缝：图和数字改成并排，按钮跟在右边。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .start-stage { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4vw; }
+  .start-emblem, .start-count { flex: 0 0 auto; width: auto; }
+  .start-mark { width: min(30vw, 60vh, 220px); }
+  .start-mark--wide { width: min(46vw, 92vh, 340px); }
+  .cd-window { width: min(20vw, 46vh, 150px); }
+  .cd-digit { font-size: min(14vw, 32vh, 108px); }
+  .start-actions { flex: 0 0 auto; flex-direction: column; gap: 14px; padding-top: 0; }
+}

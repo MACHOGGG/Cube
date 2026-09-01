@@ -227,6 +227,56 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
 
 import { STRINGS, type Lang } from '../i18n';
 import { QR_MATRIX, QR_QUIET_MODULES } from './qrSlides';
+import { ICON_BOMB_BADGE, ICON_MULTIPLAYER } from '../ui/homeIcons';
+
+/**
+ * 战绩图上那两个小标志（炸弹局、多人竞赛）。
+ *
+ * 它们和主菜单、开局页用的是同一份 SVG——玩家换过的那份也算——所以只能把 SVG
+ * 画进画布，不能在这里另画一个。canvas 画 SVG 要先解码成图片，而解码是异步
+ * 的；战绩图这一支是同步出图的，所以在模块加载时就把两张解好放着，等到有人打
+ * 完一局要图的时候早就好了。真要是没好（第一局结束得比解码还快），那就少这一
+ * 个标志，别为它把整张图拖成异步。
+ */
+function badgeImage(svg: string): HTMLImageElement | null {
+  if (typeof Image === 'undefined') return null;
+  const tagEnd = svg.indexOf('>');
+  if (!svg.startsWith('<svg') || tagEnd < 0) return null;
+  let tag = svg.slice(0, tagEnd);
+  // 补在根标签上，缺一样这张图就加载不出来——而且是静悄悄地加载不出来：
+  //   xmlns —— 内嵌在网页里的 <svg> 不需要它（HTML 解析器自己会给命名空间），
+  //            当成一张图片加载时没有它就不是合法 SVG。
+  //   宽高 —— 只有 viewBox 的 SVG 画进画布时各家浏览器取的固有尺寸不一样。
+  // 三样都只在「原本没有」时才补：SVG 走的是 XML 解析，同一个属性写两遍是致命
+  // 错误，整张图直接不解析。你自己画的图标文件多半已经带着 width/height 了。
+  const box = /viewBox="([\d.\s-]+)"/.exec(tag);
+  const nums = (box?.[1] ?? '0 0 100 100').trim().split(/\s+/).map(Number);
+  if (!/\swidth=/.test(tag)) tag += ` width="${nums[2] || 100}"`;
+  if (!/\sheight=/.test(tag)) tag += ` height="${nums[3] || 100}"`;
+  if (!/\sxmlns=/.test(tag)) tag += ' xmlns="http://www.w3.org/2000/svg"';
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(tag + svg.slice(tagEnd));
+  return img;
+}
+const BADGE_BOMB = badgeImage(ICON_BOMB_BADGE);
+const BADGE_ROOM = badgeImage(ICON_MULTIPLAYER);
+
+/** 画在标题右边的一排小标志。画不出来的那张就跳过，其余照排。 */
+function drawModeBadges(
+  ctx: CanvasRenderingContext2D,
+  marks: (HTMLImageElement | null)[],
+  x: number,
+  y: number,
+  size: number,
+): void {
+  let at = x;
+  for (const img of marks) {
+    if (!img?.complete || !img.naturalWidth) continue;
+    const w = size * (img.naturalWidth / img.naturalHeight);
+    ctx.drawImage(img, at, y, w, size);
+    at += w + 8;
+  }
+}
 
 export interface ShareCardInfo {
   shapeName: string;
@@ -236,6 +286,11 @@ export interface ShareCardInfo {
   detail: string;
   /** True when this run ended via a bomb hazard cluster — draws a large, low-opacity 💥 behind the card. */
   hazardEnd?: boolean;
+  /** 炸弹局。和 hazardEnd 不是一回事——那个说的是「这一局是被炸掉的」，这个说
+   *  的是「这一局本来就有炸弹」，一局炸弹局安然打完，标志照挂。 */
+  bomb?: boolean;
+  /** 多人竞赛的一局。不写就看有没有名次表。 */
+  room?: boolean;
   lang: Lang;
   /**
    * The room, when this run was one board out of four people's evening.
@@ -336,6 +391,15 @@ export function renderShareCard(
   ctx.font = '600 22px "Karla", sans-serif';
   ctx.fillStyle = '#5b5650';
   ctx.fillText(info.shapeName, PAD, 108);
+  // 这一局是哪一种局，挂在玩法名右边：炸弹局一颗炸弹，多人竞赛一扇门。开局页
+  // 上挂的是同样这两个，同一局的两张画面因此对得上。
+  drawModeBadges(
+    ctx,
+    [info.bomb ? BADGE_BOMB : null, (info.room ?? standings.length > 0) ? BADGE_ROOM : null],
+    PAD + ctx.measureText(info.shapeName).width + 14,
+    84,
+    32,
+  );
 
   // The QR and its caption own the top-right corner; the breakdown rows sit
   // below them rather than beside, so neither has to shrink.

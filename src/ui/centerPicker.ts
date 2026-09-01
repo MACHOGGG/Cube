@@ -87,7 +87,7 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
         opt.glyph +
         (opt.locked
           ? `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-            `<span class="center-pick-genius">${geniusLogoTag(16)}</span>`
+            `<span class="center-pick-genius">${geniusLogoTag(80)}</span>`
           : '') +
         (opt.showLabel ? `<span class="center-pick-label">${opt.label}</span>` : '');
       btn.addEventListener('pointerdown', () => {

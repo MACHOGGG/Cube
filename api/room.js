@@ -163,6 +163,45 @@ function cleanAvatar(value) {
   return { shape, hue: Math.round(hue) };
 }
 
+/**
+ * 让新来的这个人的图形和屋里已有的都不一样。
+ *
+ * 图形是各自的设备随机出来的，谁也不知道别人抽到了什么，所以四个人里撞上
+ * 两个同色同形是常事——而这个图形正是比分板上认人的唯一标志，撞了就分不清
+ * 谁是谁。只有服务器同时看得见所有人，所以在这里让一让：形状先换，形状换
+ * 完还撞就把色相挪开一段。
+ *
+ * 「一样」按形状加色相段算，不按精确色值：两个只差三度的蓝，屏幕上就是同
+ * 一个蓝。
+ */
+const HUE_STEP = 40;
+const avatarKey = (a) => `${a.shape}:${Math.round(a.hue / HUE_STEP)}`;
+
+function distinctAvatar(wanted, hash) {
+  const taken = new Set(
+    Object.entries(hash || {})
+      .filter(([field, value]) => field.startsWith('p:') && value?.avatar)
+      .map(([, value]) => avatarKey(cleanAvatar(value.avatar))),
+  );
+  if (!taken.has(avatarKey(wanted))) return wanted;
+
+  const shapes = [...AVATAR_SHAPES];
+  for (const shape of shapes) {
+    const tryIt = { shape, hue: wanted.hue };
+    if (!taken.has(avatarKey(tryIt))) return tryIt;
+  }
+  // 三个形状都被占了，就沿着色环挪，一圈之内一定有空位——房间最多 12 个人，
+  // 而形状乘上色相段有 27 个格子。
+  const buckets = Math.round(360 / HUE_STEP);
+  for (let step = 1; step <= buckets; step++) {
+    for (const shape of shapes) {
+      const tryIt = { shape, hue: (wanted.hue + step * HUE_STEP) % 360 };
+      if (!taken.has(avatarKey(tryIt))) return tryIt;
+    }
+  }
+  return wanted; // 挤不下了也不拦人进来，重一个图形总比进不来强。
+}
+
 /** Everything the room looks like - minus every player's private token. */
 function publicState(code, hash) {
   const meta = hash.meta || {};
@@ -301,7 +340,7 @@ async function join(res, body) {
   await hset(roomKey(code), 'p:' + playerId, {
     token,
     name: cleanName(body.name) || 'Player',
-    avatar: cleanAvatar(body.avatar),
+    avatar: distinctAvatar(cleanAvatar(body.avatar), hash),
     score: 0,
     finished: false,
     joinedAt: Date.now(),
