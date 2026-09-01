@@ -1116,6 +1116,13 @@ button:hover { filter: brightness(1.05); }
           drop-shadow(0 0 18px rgba(var(--nav-glow), 0))
           brightness(1) saturate(1);
 }
+/* 这两颗键不吃全站那条 button:hover { filter: brightness(1.05) }。
+   不是为了好看——是因为祖先身上只要有一个 filter，后代画出去的东西就被裁
+   到那个祖先的方框里。红光是画在里面那个图形上的 drop-shadow，本该往四周
+   自然散开，结果被按钮那块 78×74 的方框齐齐切断，露出一圈硬边。
+   手机上尤其明显：点一下之后 :hover 会一直挂着，直到你点别处。
+   它们本来就有自己的一套 hover（下面这条），并不需要那点提亮。 */
+.home-nav-btn:hover { filter: none; }
 .home-nav-btn:hover .home-nav-art {
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22))
           drop-shadow(0 0 6px rgba(var(--nav-glow), 0))
