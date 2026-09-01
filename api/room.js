@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody, creem, configured as creemConfigured, entitled } from './_creem.js';
 import { codeHolder, loadAccount, normalizeEmail } from './_accounts.js';
-import { expire, hdel, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
+import { expire, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
 
 /**
  * Multiplayer rooms: a four-digit code, two to four players, one board.
@@ -108,6 +108,7 @@ export default async function handler(req, res) {
       case 'score': return await score(res, body);
       case 'leave': return await leave(res, body);
       case 'end': return await end(res, body);
+      case 'nudge': return await nudge(res, body);
       default: return send(res, 400, { error: 'action' });
     }
   } catch {
@@ -247,6 +248,8 @@ function publicState(code, hash) {
       bestTime: value.bestTime ?? null,
       seconds: value.seconds ?? null,
       rounds: value.rounds || 0,
+      /** 中途走了。人还在名单和排名里，只是不再报到，也不占座位。 */
+      left: Boolean(value.left),
     });
   }
   players.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
@@ -266,6 +269,8 @@ function publicState(code, hash) {
      *  number rather than the word "four" written into four languages. */
     seats: MAX_PLAYERS,
     players,
+    /** 被催了多少下。房主那边看它变大就往标题里掉图形。 */
+    nudges: meta.nudges || 0,
     // Lets a device with a wrong clock still count down to the same instant.
     serverNow: Date.now(),
   };
@@ -280,6 +285,9 @@ function roundOver(hash) {
     .map(([, value]) => value);
   if (!seats.length) return false;
   return seats.every((seat) => {
+    // 走掉的人不是这一局在等的人。leave 已经把他标成 finished 了，这一行
+    // 是把意图写明白：名单上留着他，不代表整局要等他。
+    if (seat.left) return true;
     // Walked in after this round began: they were never in it, so they
     // cannot be what it is waiting on.
     if ((seat.joinedAt || 0) > meta.startAt) return true;
@@ -303,7 +311,9 @@ function seatOf(hash, playerId, token) {
   return seat && seat.token && seat.token === token ? seat : null;
 }
 
-const seatCount = (hash) => Object.keys(hash).filter((k) => k.startsWith('p:')).length;
+/** 还坐着的人。走掉的座位留在表里（见 leave），但它不占位子。 */
+const seatCount = (hash) =>
+  Object.entries(hash).filter(([k, v]) => k.startsWith('p:') && v && !v.left).length;
 
 // ---- the six things a room can be asked ---------------------------------
 
@@ -509,8 +519,42 @@ async function leave(res, body) {
   const code = String(body.code ?? '').trim();
   const hash = await readRoom(code);
   if (!hash) return send(res, 200, { ok: true });
-  if (seatOf(hash, body.playerId, body.playerToken)) {
-    await hdel(roomKey(code), 'p:' + body.playerId);
+  const seat = seatOf(hash, body.playerId, body.playerToken);
+  if (seat) {
+    // 走的人不从名单里删掉，只是标一下走了。
+    //
+    // 原先这里是 hdel：座位一删，这个人连同他打出来的分数就从所有人的屏幕上
+    // 消失了，最后那张竞赛排名图上也没有他——三个人打了一晚上，图上只剩两个。
+    // 「他中途走了」是这场比赛的一部分，不是一件要抹掉的事。
+    //
+    // 标成 finished 是必须的：roundOver 等的是「每个还在的人都交卷了」，
+    // 一个永远不会再报到的座位会把整局吊在那里。
+    await hset(roomKey(code), 'p:' + body.playerId, {
+      ...seat,
+      left: Date.now(),
+      finished: true,
+    });
   }
   return send(res, 200, { ok: true });
+}
+
+/**
+ * 催房主。
+ *
+ * 客人按一下，房间的计数加一；房主那边轮询到数字变大，就往标题框里掉几个
+ * 图形（见 src/ui/titleRain.ts）。只存一个数，不存谁按的——要的是「有人在
+ * 催了」这件事本身，按了几下就掉几个，多按就多掉。
+ */
+async function nudge(res, body) {
+  const code = String(body.code ?? '').trim();
+  const hash = await readRoom(code);
+  if (!hash) return send(res, 404, { error: 'noRoom' });
+  if (!seatOf(hash, body.playerId, body.playerToken)) return send(res, 403, { error: 'seat' });
+  const meta = hash.meta || {};
+  // 上限是防一个按住不放的人把数字撑到没边；掉落那头本来也会在拥挤时加快
+  // 消失，所以这里只要保证数字本身不失控就够。
+  const next = Math.min((meta.nudges || 0) + 1, 9_000_000);
+  await hset(roomKey(code), 'meta', { ...meta, nudges: next });
+  await expire(roomKey(code), ROOM_TTL_S);
+  return send(res, 200, { ok: true, nudges: next });
 }

@@ -5,6 +5,7 @@ import { hostNotice, hostTroubleIn, tickFor, type HostNotice } from './roomNotic
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
+import { mountTitleRain, type TitleRain } from './titleRain';
 import {
   avatarSvg,
   createRoom,
@@ -22,6 +23,7 @@ import {
   type RoomState,
   lastPlayedRound,
   markRoundPlayed,
+  nudgeHost,
 } from '../engine/room';
 
 /**
@@ -137,6 +139,16 @@ export function renderMultiplayerPage(
 
   /** 房主出状况时盖上去的那一层，见 roomNotices.ts。 */
   let notice: HostNotice | null = null;
+  /** 被催的时候往标题框里掉东西的那块画布（只有房主挂）。 */
+  let rain: TitleRain | null = null;
+  /**
+   * 上一次看到的催促计数。
+   *
+   * 初值是 -1「还没看过」：进小屋页的第一次轮询只是把数字记下来，不掉东西。
+   * 否则房主去主菜单挑玩法、回来的时候，这段时间里攒下的每一下会一次性砸
+   * 满整个框——那不是「有人在催」，那是一堵墙。
+   */
+  let seenNudges = -1;
   const stopAll = () => {
     stopWatching?.();
     stopWatching = null;
@@ -144,6 +156,9 @@ export function renderMultiplayerPage(
     countdownTimer = 0;
     notice?.remove();
     notice = null;
+    rain?.stop();
+    rain = null;
+    seenNudges = -1;
   };
   const teardown = () => {
     dead = true;
@@ -317,7 +332,14 @@ export function renderMultiplayerPage(
       confirmLeaveRoom(lang, leave);
     });
 
+    // 只有房主的标题框会下雨——催的就是他。
+    if (iAmHost) {
+      const glass = container.querySelector<HTMLElement>('.home-head-glass');
+      if (glass) rain = mountTitleRain(glass);
+    }
+
     paint(state, iAmHost);
+    soakNudges(state, iAmHost);
 
     // 房主走了、还是房主卡住了。这一页上也要分得清：坐在房间里等下一局的
     // 人，和正在打的人一样有权知道自己在等的是什么。
@@ -341,6 +363,7 @@ export function renderMultiplayerPage(
         }
         notice?.set(hostTroubleIn(next, iAmHost));
         paint(next, iAmHost);
+        soakNudges(next, iAmHost);
         // The host has chosen: everyone counts down to the same instant.
         if (next.startAt && next.seed && next.mode && next.round > playedRound) {
           beginCountdown(next);
@@ -365,6 +388,28 @@ export function renderMultiplayerPage(
   }
 
   /**
+   * 有人催了几下，就往标题框里掉几个。
+   *
+   * 只看差值，不看绝对值：服务器上那个数只增不减，它记的是「这间小屋一共被
+   * 催了多少下」，而这里要的是「刚刚又被催了几下」。
+   */
+  function soakNudges(state: RoomState, iAmHost: boolean) {
+    const now = state.nudges || 0;
+    if (!iAmHost || !rain) {
+      seenNudges = now;
+      return;
+    }
+    if (seenNudges < 0) {
+      seenNudges = now;   // 第一次看见，只记不掉
+      return;
+    }
+    const fresh = now - seenNudges;
+    seenNudges = now;
+    // 一轮里最多掉六个：轮询间隔里按了二十下的话，一次全倒出来只会糊成一团。
+    if (fresh > 0) rain.drop(Math.min(6, fresh));
+  }
+
+  /**
    * The table. Between rounds this is also the scoreboard, so it carries the
    * running total as well as the round just played — that is what everyone
    * looks at while the host decides what is next.
@@ -381,11 +426,11 @@ export function renderMultiplayerPage(
     const played = state.round > 0;
     list.innerHTML = state.players
       .map(
-        (p) => `<div class="mp-player">
+        (p) => `<div class="mp-player${p.left ? ' mp-player--left' : ''}">
           <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
           <span class="mp-player-name">${esc(p.name)}</span>
           ${p.isHost ? `<span class="mp-badge">${s.mpHostBadge}</span>` : ''}
-          ${tickFor(p.finished, s.mpFinished)}
+          ${p.left ? `<span class="mp-badge mp-badge--left">${s.mpLeftTag}</span>` : tickFor(p.finished, s.mpFinished)}
           ${played ? `<span class="mp-player-total">${p.total + p.score}</span>` : ''}
         </div>`,
       )
@@ -402,11 +447,22 @@ export function renderMultiplayerPage(
     if (!area) return;
     // Mid-round — nothing to decide until everyone is back.
     if (state.round > 0 && !state.roundOver) {
+      if (area.dataset.shape === 'mid') return;
+      area.dataset.shape = 'mid';
       area.innerHTML = `<p class="tag-line">${s.mpWaitingHost}</p>`;
       return;
     }
     if (!iAmHost) {
-      area.innerHTML = `<p class="tag-line">${s.mpWaitingHost}</p>`;
+      // 客人在小屋里能做的只有两件事：催，或者走。所以这一块就只有这一颗键，
+      // 底下那颗《离开小屋》是另一件。原先这里是一行「等房主挑玩法」的字——
+      // 说的是实话，但等的人手上一件事都没有。
+      if (area.dataset.shape === 'nudge') return;
+      area.dataset.shape = 'nudge';
+      area.innerHTML = `<button class="genius-cta" id="mpNudge">${s.mpNudge}</button>`;
+      area.querySelector<HTMLButtonElement>('#mpNudge')!.addEventListener('click', () => {
+        // 不等回包、不改按钮状态：催是一件可以连着按的事，按下去就该像按下去。
+        void nudgeHost();
+      });
       return;
     }
     const pickLabel = state.round ? s.mpNextRound : s.mpGoPick;
@@ -477,6 +533,37 @@ export function renderMultiplayerPage(
 
   // ---- screen 3: 4, 3, 2, 1 --------------------------------------------
 
+  /**
+   * 开局倒数那几秒里，屏幕下半截放着现在的排名和每个人的总分，自己那一行
+   * 标出来。
+   *
+   * 只在打过至少一局、并且真有人得过分之后才出现：第一局开赛前所有人都是
+   * 0，一张全零的表说不出任何事情，只会把倒数那一幕挤窄。
+   *
+   * 它是一张定格，不跟着刷新——倒数这几秒里 stopAll() 已经把轮询停了，而且
+   * 这段时间谁的分也不会变。
+   */
+  function standingsStrip(state: RoomState): string {
+    const ranked = [...state.players].sort(
+      (a, b) => b.total + b.score - (a.total + a.score) || b.best - a.best,
+    );
+    if (state.round < 1 || !ranked.some((p) => p.total + p.score > 0)) return '';
+    const meId = currentRoom()?.playerId;
+    const rows = ranked
+      .map(
+        (p, i) => `<div class="mp-cd-row${meId && p.id === meId ? ' mp-cd-row--me' : ''}${
+          p.left ? ' mp-cd-row--left' : ''
+        }">
+          <span class="mp-cd-rank">${i + 1}</span>
+          <span class="mp-cd-name">${esc(p.name)}</span>
+          <span class="mp-cd-score">${p.total + p.score}</span>
+        </div>`,
+      )
+      .join('');
+    return `<div class="mp-cd-board" aria-label="${s.mpStandings}">
+      <div class="mp-cd-title">${s.mpRoomTotal}</div>${rows}</div>`;
+  }
+
   function beginCountdown(state: RoomState) {
     if (launched || !state.startAt || !state.seed || !state.mode) return;
     launched = true;
@@ -489,7 +576,12 @@ export function renderMultiplayerPage(
     // 赛时刻，不是本地的秒表，所有人的数字才会同时跳。
     container.innerHTML = `
       <div class="app mp-page mp-countdown-page">
-        ${startStageHtml({ shapeId: mode, room: true, countId: 'mpTick' })}
+        ${startStageHtml({
+          shapeId: mode,
+          room: true,
+          countId: 'mpTick',
+          extra: standingsStrip(state),
+        })}
       </div>
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;

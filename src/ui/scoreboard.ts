@@ -150,11 +150,11 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     rows.innerHTML = state.players
       .map((p, rank) => {
         const me = p.id === seat.playerId;
-        return `<div class="mp-board-row${me ? ' mp-board-row--me' : ''}">
+        return `<div class="mp-board-row${me ? ' mp-board-row--me' : ''}${p.left ? ' mp-board-row--left' : ''}">
           <span class="mp-board-rank">${rank + 1}</span>
           <span class="mp-avatar mp-avatar--small">${avatarSvg(p.avatar)}</span>
           <span class="mp-board-name">${esc(p.name)}</span>
-          ${tickFor(p.finished, s.mpFinished)}
+          ${p.left ? '' : tickFor(p.finished, s.mpFinished)}
           <span class="mp-board-score">${p.score}</span>
         </div>`;
       })
@@ -183,10 +183,23 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       paint(state);
       // 房主走了、还是房主卡住了——两件事说两句不同的话，见 roomNotices.ts。
       notice.set(hostTroubleIn(state, iAmHost()));
+      // 这一局所有人都交卷了 —— 直接回小屋，不出结算页。
+      //
+      // 小屋里的一局不是一个完整的故事，它是一晚上里的一段：结算页问的
+      //《再来一局？》《回主页？》都不是这里该问的问题，真正在等的事只有一件
+      // ——房主挑下一场。所以这里不再「撤掉等待页、露出底下的结算页」，而是
+      // 直接把人送回小屋，比分和名次就在那一页上。
+      // 单人局一个字都没动：mountScoreboard 在没有座位的时候第一行就返回了。
+      if (runFinished() && state.roundOver) {
+        wait?.remove();
+        wait = null;
+        dead = true;
+        markPlayed();
+        return handlers.onRoom();
+      }
       // 自己交了卷、别人还在打：盖上一层等待页，上面是这一局的标志，下面是
-      // 还在动的名单。等到服务器说这一局所有人都交了，这一层撤掉，底下的结
-      // 算页就露出来了。
-      if (runFinished() && !state.roundOver) {
+      // 还在动的名单。
+      if (runFinished()) {
         wait ??= showWaitPanel(lang, {
           shapeId,
           meId: seat.playerId,

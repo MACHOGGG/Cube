@@ -72,12 +72,18 @@ export function confirmFinish(
 }
 
 /** 等待页上的一行：名次、图形、名字、分数，交了卷的后面一个勾。 */
-function waitRow(p: RoomPlayer, rank: number, meId: string | undefined, doneLabel: string): string {
-  return `<div class="mp-player${meId && p.id === meId ? ' mp-player--me' : ''}">
+function waitRow(
+  p: RoomPlayer,
+  rank: number,
+  meId: string | undefined,
+  doneLabel: string,
+  leftLabel: string,
+): string {
+  return `<div class="mp-player${meId && p.id === meId ? ' mp-player--me' : ''}${p.left ? ' mp-player--left' : ''}">
     <span class="mp-final-rank">${rank}</span>
     <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
     <span class="mp-player-name">${esc(p.name)}</span>
-    ${tickFor(p.finished, doneLabel)}
+    ${p.left ? `<span class="mp-badge mp-badge--left">${leftLabel}</span>` : tickFor(p.finished, doneLabel)}
     <span class="mp-player-total">${p.total + p.score}</span>
   </div>`;
 }
@@ -123,7 +129,7 @@ export function showWaitPanel(
   return {
     update(state) {
       rows.innerHTML = state.players
-        .map((p, i) => waitRow(p, i + 1, opts.meId, s.mpFinished))
+        .map((p, i) => waitRow(p, i + 1, opts.meId, s.mpFinished, s.mpLeftTag))
         .join('');
     },
     remove() {
@@ -202,6 +208,9 @@ export function hostNotice(
 export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): HostTrouble | null {
   if (!state || state.ended || iAmTheHost || !state.host) return null;
   const host = state.players.find((p) => p.id === state.host);
-  if (!host) return 'gone';
+  // 座位不在了，或者座位还在但人已经交回去了（left）——对屋里其他人来说
+  // 是同一件事：这间小屋再也开不出下一局。名单上留着走掉的人是为了排名
+  // （见 api/room.js 的 leave），不是为了假装他还在。
+  if (!host || host.left) return 'gone';
   return host.away ? 'away' : null;
 }

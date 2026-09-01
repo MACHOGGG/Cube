@@ -44,6 +44,8 @@ export interface RoomPlayer {
   /** How long this round took them, once they are done with it. */
   seconds: number | null;
   rounds: number;
+  /** 中途走了。人留在名单和排名里，只是不再报到，也不占座位。 */
+  left: boolean;
 }
 
 export interface RoomState {
@@ -64,6 +66,8 @@ export interface RoomState {
   /** Seats open today. The room machinery carries more; this is what is on. */
   seats: number;
   players: RoomPlayer[];
+  /** 这间小屋被催了多少下。房主那边看它变大就往标题里掉图形。 */
+  nudges: number;
   serverNow: number;
 }
 
@@ -322,6 +326,17 @@ export async function leaveRoom(): Promise<void> {
   rememberSeat(null);
   forgetPlayed();
   await post({ action: 'leave', ...leaving });
+}
+
+/**
+ * 催一下房主。
+ *
+ * 服务器只记一个数，不记谁按的：要的是「有人在催了」这件事，按几下就掉几个
+ * 图形。失败了一声不吭——催不到是件小事，为它弹个错误反而更吵。
+ */
+export async function nudgeHost(): Promise<void> {
+  if (!session) return;
+  await post({ action: 'nudge', ...session });
 }
 
 /** Forget the room without telling the server — for a run that has ended. */

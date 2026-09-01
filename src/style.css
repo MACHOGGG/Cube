@@ -783,6 +783,11 @@ button:hover { filter: brightness(1.05); }
   pointer-events: auto;
   padding: 4px 26px 10px;
   border-radius: 22px;
+  /* 《催房主》掉进来的图形画在这块玻璃里（见 titleRain.ts）：position 给
+     画布一个定位的参照，overflow 把弹跳裁在框内——弹到框外去的话，那就不是
+     「掉进标题里」而是「有东西飞过屏幕」了。 */
+  position: relative;
+  overflow: hidden;
   /* 不认 color-mix 就用不透明的底色：招牌下面看不见内容透上来，但字是清楚
      的——总好过整条 background 作废、招牌变成透明一片压在内容上。 */
   background: var(--bg);
@@ -1177,6 +1182,49 @@ button:hover { filter: brightness(1.05); }
 .records-locked {
   margin: auto 0 0; text-align: center; color: rgba(255, 255, 255, 0.9);
   font-size: 0.82rem; letter-spacing: 0.04em;
+}
+
+/* 中途走掉的人。名单上留着他和他截止到走的那一刻的分——那是这场比赛的一
+   部分——但他不再是「还在打的人」，所以整行压暗一档，旁边挂一个小标。 */
+.mp-player--left { opacity: 0.62; }
+.mp-badge--left { background: var(--line); color: var(--ink-soft); }
+.mp-board-row--left { opacity: 0.6; }
+
+/* 开局倒数那几秒里，下半截的排名表。数字用等宽，四个人的名次不会因为
+   分数位数不同而左右跳。 */
+.mp-cd-board {
+  width: min(320px, 84vw); margin: 10px auto 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.mp-cd-title {
+  font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-faint); text-align: center; margin-bottom: 2px;
+}
+.mp-cd-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 12px; border-radius: 100px;
+  background: var(--surface); color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+.mp-cd-rank {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700;
+  font-size: 0.8rem; color: var(--ink-faint); flex: none; width: 1.1em;
+}
+.mp-cd-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-cd-score {
+  font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+  font-weight: 700; flex: none;
+}
+/* 自己那一行：强调色的底和字，一眼能从四行里挑出来。 */
+.mp-cd-row--me { background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
+.mp-cd-row--me .mp-cd-rank { color: var(--accent-ink); }
+.mp-cd-row--left { opacity: 0.6; }
+
+/* 催房主的那场雨。铺满标题玻璃，压在字上面，但不吃任何点击——标题本身是
+   一颗能按的键（点它回主菜单）。 */
+.title-rain {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 1;
 }
 
 /* ---------- persistent bottom nav ---------- */
