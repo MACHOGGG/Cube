@@ -64,7 +64,7 @@ function runSeconds(): number | undefined {
  * 单人局的结算页上，《主页》和《再来》的意思是清楚的。房间里不是：主页不该
  * 把人丢出房间（比分还在那儿，房主还要开下一局），而《再来》如果只是本地重
  * 开一副牌，那就是在一场已经结束的比赛里自己跟自己再玩一遍。所以在房间里这
- * 两颗要换去处，另外补一颗真正能走的《退出房间》。
+ * 两颗要换去处，另外补一颗真正能走的《离开房间》。
  */
 export interface RoomRunHandlers {
   /** 回房间页——比分和下一局都在那里。 */
@@ -72,7 +72,7 @@ export interface RoomRunHandlers {
   /** 房主专用：回主菜单，继续为整房挑下一个玩法。 */
   onPickNext: () => void;
   /** 交出座位，并出一张截止此刻的竞赛排名。 */
-  onQuit: () => void;
+  onLeave: () => void;
 }
 
 /**
@@ -214,15 +214,15 @@ function wireEndPanel(s: I18nStrings, handlers: RoomRunHandlers): () => void {
   }
 
   // 新的一颗：真正走得掉的出口。放在这一排最后，和《分享》并排。
-  const quit = document.createElement('button');
-  quit.className = 'secondary';
-  quit.id = 'endQuitRoomBtn';
-  quit.textContent = s.mpQuitRoom;
-  quit.addEventListener('click', handlers.onQuit);
-  row.appendChild(quit);
+  const leave = document.createElement('button');
+  leave.className = 'secondary';
+  leave.id = 'endLeaveRoomBtn';
+  leave.textContent = s.mpLeave;
+  leave.addEventListener('click', handlers.onLeave);
+  row.appendChild(leave);
 
   return () => {
-    quit.remove();
+    leave.remove();
     if (again) again.hidden = false;
   };
 }

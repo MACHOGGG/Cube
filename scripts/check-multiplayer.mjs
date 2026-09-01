@@ -116,6 +116,10 @@ await B.page.click('#mpJoin');
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 check('客人凭房号进来了', (await B.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
 
+// 交座位这件事，房间页和结算页上是同一颗键，就该是同一个说法——两个名字会让
+// 人以为是两回事，于是谁也不敢按。这里记下房间页上的写法，等结算页出来再比。
+const roomLeaveLabel = await A.page.$eval('#mpLeave', (e) => e.textContent.trim());
+
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 const roster = await A.page.$$eval('.mp-player', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
 check('房主那边看到两个人', roster.length === 2, roster.join(' / '));
@@ -208,12 +212,16 @@ const endButtons = (p) =>
     els.filter((e) => e.offsetParent !== null).map((e) => e.id));
 const hostBtns = await endButtons(A.page);
 const guestBtns = await endButtons(B.page);
-check('房主的结算页有：主页、再来、退出房间',
-  ['endBackBtn', 'restartBtn', 'endQuitRoomBtn'].every((id) => hostBtns.includes(id)),
+check('房主的结算页有：主页、再来、离开房间',
+  ['endBackBtn', 'restartBtn', 'endLeaveRoomBtn'].every((id) => hostBtns.includes(id)),
   hostBtns.join(' '));
-check('客人的结算页有退出房间，没有开不了的《再来》',
-  guestBtns.includes('endQuitRoomBtn') && !guestBtns.includes('restartBtn'),
+check('客人的结算页有离开房间，没有开不了的《再来》',
+  guestBtns.includes('endLeaveRoomBtn') && !guestBtns.includes('restartBtn'),
   guestBtns.join(' '));
+
+const endLeaveLabel = await A.page.$eval('#endLeaveRoomBtn', (e) => e.textContent.trim());
+check('房间页和结算页上那颗键是同一个说法', endLeaveLabel === roomLeaveLabel,
+  `房间页「${roomLeaveLabel}」· 结算页「${endLeaveLabel}」`);
 
 // 客人的《主页》：回房间等下一局。
 await B.page.click('#endBackBtn');
@@ -259,11 +267,11 @@ for (const P of [A, B]) {
   await P.page.waitForSelector('#endOverlay.show', { timeout: 8000 });
 }
 
-// 《退出房间》：交座位，出一张截止此刻的竞赛排名。
-await B.page.click('#endQuitRoomBtn');
+// 《离开房间》：交座位，出一张截止此刻的竞赛排名。
+await B.page.click('#endLeaveRoomBtn');
 const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 })
   .then(() => true).catch(() => false);
-check('退出房间后出竞赛排名', rankPage);
+check('离开房间后出竞赛排名', rankPage);
 if (rankPage) {
   check('排名页的标题是《竞赛排名》',
     (await B.page.$eval('.home-sub', (e) => e.textContent.trim())) === '竞赛排名',

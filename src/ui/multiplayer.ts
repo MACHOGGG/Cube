@@ -285,7 +285,7 @@ export function renderMultiplayerPage(
         <button class="profile-row profile-row--back" id="mpLeave">${s.mpLeave}</button>
       </div>
     `;
-    const quit = async () => {
+    const leave = async () => {
       stopAll();
       await leaveRoom();
       if (!dead) renderHome();
@@ -296,8 +296,8 @@ export function renderMultiplayerPage(
       // has no way to hand it on, so a room whose host has gone can still be
       // sat in and can never start another round. Everyone else may go
       // without ceremony.
-      if (!iAmHost) return void quit();
-      confirmLeave(quit);
+      if (!iAmHost) return void leave();
+      confirmLeave(leave);
     });
 
     paint(state, iAmHost);

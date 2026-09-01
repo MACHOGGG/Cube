@@ -420,7 +420,7 @@ function startMultiplayerRun(match: MatchStart) {
       setPickingForRoom(code);
       showMenu();
     },
-    onQuit: quitRoomWithCard,
+    onLeave: leaveRoomWithCard,
   });
   activeDestroy = () => {
     stopBoard();
@@ -433,13 +433,13 @@ function startMultiplayerRun(match: MatchStart) {
 }
 
 /**
- * 退出房间：交出座位，然后把截止此刻的竞赛排名摆出来。
+ * 离开房间：交出座位，然后把截止此刻的竞赛排名摆出来。
  *
  * 排名要在交座位之前先抓下来——leaveRoom() 会把最后一次看到的房间状态一起
  * 清掉，晚一步就什么都画不出来了。玩家自己那一行也一样：座位没了之后就认不
  * 出「我是谁」，所以 id 也先留一份。
  */
-function quitRoomWithCard() {
+function leaveRoomWithCard() {
   const state = latestRoomState();
   const meId = currentRoom()?.playerId;
   void leaveRoom();
