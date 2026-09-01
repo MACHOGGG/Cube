@@ -593,7 +593,19 @@ h1 {
 .overlay {
   position: fixed; inset: 0; background: rgba(30,24,32,0.5); display: flex; align-items: center; justify-content: center;
   padding: 20px; opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 90;
+  /* 窗比屏幕高的时候要能滚。没有这一条时，弹性盒的居中会把上下同时切掉，
+     而且切掉的部分没有任何办法够到——《成为 Slides 天才》那一窗高约 700px，
+     手机上算掉浏览器自己的地址栏工具栏，可视高度常常只剩六百出头，于是最
+     底下的《登录》就落在屏幕外，滚也滚不到。 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
+/* 配合上面那条：居中改由 auto 外边距来做。
+   align-items: center 在空间不够时是把两头都切掉；auto 外边距不一样——有空
+   就居中，没空就老老实实从顶上开始排，多出来的部分留给上面那条 overflow 去
+   滚。效果上「够得着」和「居中好看」两件事都保住了。 */
+.overlay > .modal { margin: auto; }
 .overlay.opaque { background: var(--bg); }
 /* A share card opened from inside the blown-up 记录 panel has to sit ON TOP
    of that panel. The panel is a centre picker (z-index 60), so a plain
@@ -1663,6 +1675,7 @@ html.lang-locked, html.lang-locked body {
    nothing to do here, and the room it reserves is room the example could be
    using. */
 body:has(.story-tut) .home-nav { display: none; }
+html.is-tutorial .home-nav { display: none; }
 .story-tut { padding-bottom: 20px; }
 @media (orientation: landscape) and (max-height: 560px) {
   .story-tut { padding-top: 10px; padding-bottom: 10px; gap: 8px; }
@@ -1799,7 +1812,14 @@ body:has(.story-tut) .home-nav { display: none; }
     max(env(safe-area-inset-left, 0px), 14px);
   gap: clamp(8px, 1.6vh, 16px);
 }
+/* 两条各写各的，不要用逗号并成一条。
+   CSS 的规矩：选择器列表里只要有一个是浏览器不认识的，整条规则连同其余选择
+   器一起作废。:has() 正是旧浏览器不认识的那个——写成一条的话，后面这条按类
+   的也会跟着一起没了，等于白加。（这条是拿模拟旧浏览器的产物量出来的：类明
+   明盖上了，样式却还是不生效。）
+   类由 main.ts 的 syncScreenClass 盖在 <html> 上。 */
 body:has(.app--game) { background: var(--play-bg); }
+html.is-playing body { background: var(--play-bg); }
 .app--game > h1,
 .app--game > .tag-line,
 .app--game > .legend { display: none; }
@@ -2112,7 +2132,9 @@ body:has(.app--game) { background: var(--play-bg); }
    upright it covers the controls row on the taller boards. A game is left
    through 结束 or by finishing it, so there is nothing for it to do here. */
 body:has(.app--game) .home-nav { display: none; }
+html.is-playing .home-nav { display: none; }
 html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavior: none; }
+html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: none; }
 
 /* ---------- 多人游玩：大厅、倒计时、对局中的排名 ---------- */
 /* 这一页要在一屏里说完三件事：开房间、输房号、返回。所以行距收一点，

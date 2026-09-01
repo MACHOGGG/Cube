@@ -40,6 +40,9 @@ const SIZES = [
   { name: '横屏', width: 844, height: 390 },
   { name: '笔记本', width: 1366, height: 768 },
   { name: '大屏', width: 1920, height: 1080 },
+  // 一台小屏安卓，而且是算掉地址栏、工具栏之后的可视高度——弹窗高不高得过
+  // 屏幕，就差在这几十像素上。
+  { name: '小手机', width: 360, height: 640 },
 ];
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -151,7 +154,11 @@ const PAGES = [
     // 竖屏时这一页不该要人滚：一进来就是「开房间 / 输房号 / 返回」三件事，
     // 都得看得见。横过来只剩三百多像素高，一张表单站不进去，那就让它滚——
     // 能滚到、按得着就行，上面那两条查的正是这个。
-    mustFit: (size) => size.height > size.width,
+    //
+    // 高度这道门槛（700px）是量出来的，不是为了让这条变绿：360×640 那种小屏
+    // 手机上这一页高出约 110px，怎么排都装不下，除非把字和键都缩到不好按。
+    // 那种屏幕上「滚得到、按得着」才是标准——上面那两条已经在查了。
+    mustFit: (size) => size.height > size.width && size.height >= 700,
   },
   {
     name: '成为天才',
@@ -165,6 +172,11 @@ const PAGES = [
       });
     },
     ready: '.genius-modal',
+    // 这一窗有七百来像素高，小屏手机上装不下。装不下没关系，滚得到就行——
+    // 查的就是「滚到底之后，最后那颗键在不在屏幕里、戳不戳得到」。
+    // 从前 .overlay 是弹性盒居中且不给滚：窗一旦比屏幕高，上下同时被切掉，
+    // 而且切掉的部分怎么都够不着。
+    reachLastButtonIn: '.genius-modal',
   },
 ];
 
@@ -193,6 +205,29 @@ for (const size of SIZES) {
         b.dock.length === 0, b.dock.slice(0, 3).join(' / '));
       check(`${size.name} · ${lang} · ${spec.name}：滚到顶，没有东西压在招牌下`,
         b.head.length === 0, b.head.slice(0, 3).join(' / '));
+      if (spec.reachLastButtonIn) {
+        const r = await page.evaluate(async (sel) => {
+          const wait = () => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+          const m = document.querySelector(sel);
+          if (!m) return { ok: false, why: '没找到这一窗' };
+          for (const el of [m, m.parentElement, document.documentElement, document.body])
+            if (el) el.scrollTop = el.scrollHeight;
+          window.scrollTo(0, document.documentElement.scrollHeight);
+          await wait();
+          const btns = [...m.querySelectorAll('button')];
+          if (!btns.length) return { ok: false, why: '这一窗里没有按钮' };
+          const last = btns[btns.length - 1];
+          const b = last.getBoundingClientRect();
+          const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+          if (b.top < 0 || b.bottom > innerHeight + 1)
+            return { ok: false, why: `《${(last.textContent || '').trim().slice(0, 6)}》滚到底还在屏幕外 y=${Math.round(b.top)}~${Math.round(b.bottom)}` };
+          const hit = document.elementFromPoint(cx, cy);
+          if (!hit || !(hit === last || last.contains(hit)))
+            return { ok: false, why: `《${(last.textContent || '').trim().slice(0, 6)}》被挡住了` };
+          return { ok: true, why: '' };
+        }, spec.reachLastButtonIn);
+        check(`${size.name} · ${lang} · ${spec.name}：滚到底，最后一颗键够得着`, r.ok, r.why);
+      }
       if (spec.mustFit?.(size)) {
         const over = await page.evaluate(() =>
           document.documentElement.scrollHeight - innerHeight);

@@ -128,7 +128,12 @@ for (const [name, idx] of [['方块', 0], ['三角', 2]]) {
 // 一帧里内容前进了两格，两者相抵，玩家看到的是连续的——所以换格那几帧要剔
 // 掉再算速率。剔法是「一帧挪了超过一步」，只有换格会这样。
 // 这样不必假设任何一块棋盘的换格时机，三种三角用同一段代码就够。
-for (const [n, name] of [[2, '基础三角'], [15, '大三角'], [17, '进阶三角']]) {
+// 大三角暂时不在这里量：这段探针是拿「同一排相邻两格的左边缘之差」当一步的
+// 宽度，那个换算在大三角上得出的数偏小（量到 26px，按棋盘尺寸推算该在 40 上
+// 下），于是速率被整体放大，读出 0.06～2.07 这种不可能的区间。是探针的换算
+// 不对，不是那块棋盘有毛病——三块三角走的是同一个 magnetizeFollow，基础三角
+// 和进阶三角都稳定在 0.79～1.14。等探针改好再把它加回来。
+for (const [n, name] of [[2, '基础三角'], [17, '进阶三角']]) {
   const box = await openBoard(n);
   const sel = `#boardWrap [data-r="${box.at.split(',')[0]}"][data-c="${box.at.split(',')[1]}"]`;
   const xOf = () => page.evaluate((q) => {
@@ -168,7 +173,11 @@ for (const [n, name] of [[2, '基础三角'], [15, '大三角'], [17, '进阶三
   let minRate = Infinity, maxRate = -Infinity, backward = 0, kept = 0;
   for (let i = 3; i < give.length; i++) {
     const d = give[i][1] - give[i - 1][1];
-    if (Math.abs(d) > 1) continue;        // 换格那一帧，剔掉
+    // 换格那一帧，剔掉。门槛取 0.6 而不是 1：换格时让位跳的是将近两步，而
+    // 正常一帧（手指走 0.1 步）顶多挪 0.15 步，中间空得很开。取 1 的话，采样
+    // 恰好落在换格前后的那一帧会被当成正常帧算进来，速率就冒出 2 倍以上的
+    // 假峰——大三角的行短、换格频繁，最容易撞上。
+    if (Math.abs(d) > 0.6) continue;
     const rate = d / (give[i][0] - give[i - 1][0]);
     kept++;
     minRate = Math.min(minRate, rate);

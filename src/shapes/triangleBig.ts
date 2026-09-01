@@ -36,7 +36,7 @@ const MAGNET_POWER = 1.5;
 const MAGNET_BLEND = 0.3;
 
 const PALETTES = {
-  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52'],
+  standard: ['#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52'],
   colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9'],
 } as const;
 const ROW_LENS = [1, 3, 5, 7, 9];

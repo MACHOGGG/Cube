@@ -37,6 +37,9 @@ const REEL_ID = 'scoreReel';
 const END_OVERLAY_ID = 'endOverlay';
 /** Often enough to feel live, rarely enough to be nothing on a battery. */
 const LOCAL_MS = 500;
+/** 分数没动也要隔多久报一次到。服务器那边 12 秒不见人就算掉线（api/room.js
+ *  的 AWAY_MS），4 秒一次留出三次的余量：掉一两个包不至于被判出局。 */
+const HEARTBEAT_MS = 4000;
 const REMOTE_MS = 1000;
 
 const esc = (v: string) =>
@@ -211,15 +214,28 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     REMOTE_MS,
   );
 
-  // Our own, off the HUD, and only when it has actually moved.
+  // Our own, off the HUD, and only when it has actually moved —— 外加一条
+  // 保命的心跳。
+  //
+  // 从前这里是「分数没变就不发」。可服务器判断一个人还在不在，看的正是最后
+  // 一次报到的时间（api/room.js 的 seat.lastSeen，超过 AWAY_MS 就算掉线）。
+  // 于是出现了这样一件事：一个人正常打牌，想了十几秒没得分，服务器就当他走
+  // 了——他要是房主，满房间的人都会看到《房主修理电缆中，稍等》。网络一点
+  // 问题都没有，安卓 iOS 一样中招。
+  //
+  // 所以分数没变也要按时报到，只是慢一点：至多每 HEARTBEAT_MS 一次。分数变
+  // 了仍然立刻发，那一条不受影响。
+  let lastSentAt = 0;
   const localTimer = window.setInterval(() => {
     if (dead) return;
     const over = runFinished();
     const score = submittedScore(over);
     if (score === null) return;
-    if (score === lastSent && over === sentFinished) return;
+    const changed = score !== lastSent || over !== sentFinished;
+    if (!changed && Date.now() - lastSentAt < HEARTBEAT_MS) return;
     lastSent = score;
     sentFinished = over;
+    lastSentAt = Date.now();
     if (over) markPlayed();
     void reportScore(score, over, runSeconds());
   }, LOCAL_MS);

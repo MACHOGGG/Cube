@@ -343,6 +343,29 @@ window.matchMedia(WIDE_QUERY).addEventListener('change', () => {
   if (root.querySelector('.home-page')) showMenu();
 });
 
+/**
+ * 给 :has() 备一份替身。
+ *
+ * 有四条样式靠 body:has(.app--game) 认出「现在正在打一局」——底下那排图标要
+ * 藏起来、背景换成牌桌色、整页不许滚。:has() 是 2022 年下半年的东西
+ * （Chrome 105 / Safari 15.4），和 dvh 同一辈分。旧一点的安卓浏览器不认它，
+ * 整条规则连同选择器一起被丢掉：于是打着牌，底下那排「个人主页 / 记录与排名」
+ * 还浮在屏幕下方，正好压住《暂停》和《完成》。
+ *
+ * 所以不再只靠选择器认，改由这里在 <html> 上盖一个类，样式两种写法都留着：
+ * 认得 :has() 的浏览器用它，不认的用这个类，两边看到的是同一个画面。
+ *
+ * 只盯 root 的直接子节点（不看子树）：换页就是换掉这一层，而棋盘在拖动时每
+ * 一帧都在重建 DOM——盯子树等于每帧都被叫醒一次。
+ */
+function syncScreenClass() {
+  const cl = document.documentElement.classList;
+  cl.toggle('is-playing', !!root.querySelector('.app--game'));
+  cl.toggle('is-tutorial', !!root.querySelector('.story-tut'));
+}
+new MutationObserver(syncScreenClass).observe(root, { childList: true });
+syncScreenClass();
+
 function showAccountPage(tab: AuthTab) {
   teardown();
   trackScreen('profile');

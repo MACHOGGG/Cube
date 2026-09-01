@@ -31,7 +31,7 @@ import type { ShapeGame, ShapeGameOpts } from './types';
 // balls instead of alternating up/down triangles (so there's no orientation
 // concern here at all: any window of the lattice is playable as-is).
 const PALETTES = {
-  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
+  standard: ['#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
   colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#CC79A7'],
 } as const;
 const N = 3; // hex radius: rows of 2N+1-|z| for z=-N..N -> 4/5/6/7/6/5/4 = 37 cells
@@ -54,7 +54,7 @@ const BOMB_PALETTES = {
   colorblind: PALETTES.colorblind.map((c, i) => (i === RED_IDX ? BOMB_RED_HEX : c)),
 } as const;
 
-const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="6.5" r="4.5" fill="#B23A3A"/><circle cx="25" cy="11" r="4.5" fill="#D89B1E"/><circle cx="25" cy="21" r="4.5" fill="#4C68B0"/><circle cx="16" cy="25.5" r="4.5" fill="#2F9E52"/><circle cx="7" cy="21" r="4.5" fill="#9B958D"/><circle cx="7" cy="11" r="4.5" fill="#3C4452"/></svg>`;
+const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="6.5" r="4.5" fill="#B23A3A"/><circle cx="25" cy="11" r="4.5" fill="#D89B1E"/><circle cx="25" cy="21" r="4.5" fill="#4C68B0"/><circle cx="16" cy="25.5" r="4.5" fill="#2F9E52"/><circle cx="7" cy="21" r="4.5" fill="#9B958D"/><circle cx="7" cy="11" r="4.5" fill="#2F8A96"/></svg>`;
 
 // The board's 3 seed patterns (see findRunMatches/CLUSTERS below), drawn
 // with the same cube-coordinate transform snapshotBoard() uses, as blank

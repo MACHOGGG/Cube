@@ -33,13 +33,13 @@ import type { ShapeGame, ShapeGameOpts } from './types';
 // x-coordinate, so the shape is mirror-symmetric left-right by construction.
 const DIM = 7;
 const PALETTES = {
-  standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D', '#8067A8'],
+  standard: ['#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D', '#8067A8'],
   colorblind: ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7'],
 } as const;
 const PER_COLOR = 7;
 const MIN_LINE_BONUS_LEN = 3;
 
-const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="4" r="4" fill="#B23A3A"/><circle cx="8" cy="12" r="4" fill="#D89B1E"/><circle cx="24" cy="12" r="4" fill="#4C68B0"/><circle cx="16" cy="20" r="4" fill="#2F9E52"/><circle cx="8" cy="28" r="4" fill="#8067A8"/><circle cx="24" cy="28" r="4" fill="#3C4452"/></svg>`;
+const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="4" r="4" fill="#B23A3A"/><circle cx="8" cy="12" r="4" fill="#D89B1E"/><circle cx="24" cy="12" r="4" fill="#4C68B0"/><circle cx="16" cy="20" r="4" fill="#2F9E52"/><circle cx="8" cy="28" r="4" fill="#8067A8"/><circle cx="24" cy="28" r="4" fill="#2F8A96"/></svg>`;
 
 // The board's 3 seed patterns (see findRunMatches/CLUSTERS below), positioned
 // with the exact same (r,c) -> screen transform the live board uses, drawn
