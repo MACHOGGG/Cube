@@ -1,5 +1,8 @@
 :root {
-  --bg: #FAF8F6;
+  /* 米白往米黄挪了一点点（#FAF8F6 → #FAF6EC）。这一支同时也是游戏页的
+     底色（见 --play-bg），所以它得是一个「久看不累、又压得住棋盘」的颜色，
+     不只是首页好看就行。 */
+  --bg: #FAF6EC;
   /* The bottom dock sits directly on the page, so it needs to be a clear
      step darker than it — content scrolls underneath and the dock has to
      stay legible over whatever passes below. */
@@ -30,7 +33,12 @@
      boards' own pigments — the panel is the tiles' green taken down to a
      ground, the chips are their ochre warmed and greyed a shade, the press
      colour their terracotta, the pattern marks their blue. */
-  --play-bg: #3A3145;
+  /* 开局不再换底色。原先这里写死一支深紫，于是从主菜单点进游戏的瞬间整块
+     屏幕从米白翻成深紫——那一下比游戏本身还抢眼。改成跟着页面走：自定义
+     属性是在声明它的这个元素（:root）上取值的，而每套主题（深色、色盲、
+     两者都开）都是在 :root 上重新定义 --bg 的，所以这一行一句话就覆盖了
+     全部主题，不用每套各写一遍。 */
+  --play-bg: var(--bg);
   /* 棋盘那块底板。原先是米白压到 60%，让底下的紫灰透上来——透出来的是一片
      不冷不暖的灰（#ABA4A4），偏偏棋子里也有一颗灰（#9B958D），两者贴在一起
      很难分开。换成实心的暖褐：它比任何一颗棋子都暗，色相又落在所有棋子的
@@ -100,7 +108,6 @@
   --warn: #9A6000; --warn-soft: #F7E7C8;
   --board-bg: #EAEAEA;
   --shadow: 0 1px 2px rgba(20,20,20,0.06), 0 8px 24px -12px rgba(20,20,20,0.18);
-  --play-bg: #22252A;
   --play-panel: #3D3128;
   --play-chip: #E69F00;
   --play-chip-ink: #2B1F00;
@@ -1920,7 +1927,10 @@ html.is-playing body { background: var(--play-bg); }
    showing between them. */
 .app--game .pattern-hint {
   flex: none; margin: 0; gap: clamp(14px, 5vw, 40px); justify-content: center;
-  color: var(--play-mark); --mark-edge: #FFFFFF;
+  /* 描边不是装饰，是让并排的两个图示不糊在一起——所以它必须是底色本身。
+     写死白色只在深紫底上碰巧成立；底色一跟着页面走，白描边在米白底上
+     就等于没有。 */
+  color: var(--play-mark); --mark-edge: var(--play-bg);
 }
 .app--game .pattern-icon { gap: 0; color: inherit; }
 /* One piece is 1em, so this is the only size the row needs. */
@@ -2246,6 +2256,12 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
   display: block; width: 100%; max-width: 320px; margin: 4px auto 0;
   border-radius: 16px; box-shadow: var(--shadow);
 }
+/* 《长按或右键图片即可存储》。它说的是上面那张居中的图，所以它也居中，
+   而不是像页面上别的小字一样贴着左边。 */
+.mp-page .auth-hint--center { text-align: center; }
+/* 冠亚军的小王冠。它是名字的兄弟而不是名字的一部分：名字那一格带着一层
+   右端渐隐的遮罩（长名字用的），王冠放进去会跟着一起淡掉。 */
+.mp-crown { flex: none; width: 15px; height: 15px; display: block; }
 .mp-badge {
   font-size: 0.7rem; color: var(--accent-ink); background: var(--accent-soft);
   border-radius: 100px; padding: 2px 8px;

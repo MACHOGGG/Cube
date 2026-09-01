@@ -63,10 +63,16 @@ const root: HTMLElement = rootEl;
 
 const squareGame = createSquareGame();
 const circleGame = createCircleGame();
-const triangleGame = createTriangleGame();
+// 变量按「身份」命名，不按文件命名——这两行是有意交叉的。
+// 2026-09 把两个三角的棋盘对调了：主菜单上的《三角》后面装整块大三角
+// （triangleBig.ts 画的那块，上手容易得多），《更多布局》里的《大三角》
+// 后面装六边蜂窝（triangle.ts 画的那块）。身份本身在各自文件里已经换过，
+// 所以这里只要按新身份接上，main.ts 底下所有排布、记录、多人白名单都不
+// 用动，图标也照旧（图标是按 id 查的）。
+const triangleGame = createTriangleBigGame();
 const circleHexGame = createCircleHexGame();
 const squareDiamondGame = createSquareDiamondGame();
-const triangleBigGame = createTriangleBigGame();
+const triangleBigGame = createTriangleGame();
 const circleSevenGame = createCircleSevenGame();
 const triangleAdvancedGame = createTriangleAdvancedGame();
 

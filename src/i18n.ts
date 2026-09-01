@@ -231,6 +231,8 @@ export interface I18nStrings {
   mpEndRoom: string;
   mpRoomEnded: string;
   mpTotalLabel: string;
+  /** 竞赛排名图上那个大数字底下的一行小字。 */
+  mpRoomTotal: string;
   mpRoundResult: string;
   mpFinalTitle: string;
   mpBestRound: string;
@@ -527,6 +529,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpEndRoom: 'Close the room',
     mpRoomEnded: 'The host closed the room.',
     mpTotalLabel: 'total',
+    mpRoomTotal: 'Room total',
     mpRoundResult: 'This round',
     mpFinalTitle: 'How the room finished',
     mpBestRound: 'Best single round',
@@ -798,6 +801,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpEndRoom: 'Fermer la salle',
     mpRoomEnded: 'L’hôte a fermé la salle.',
     mpTotalLabel: 'total',
+    mpRoomTotal: 'Total de la salle',
     mpRoundResult: 'Cette manche',
     mpFinalTitle: 'Bilan de la salle',
     mpBestRound: 'Meilleure manche',
@@ -1069,6 +1073,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpEndRoom: '結束房間',
     mpRoomEnded: '房主結束了房間。',
     mpTotalLabel: '總分',
+    mpRoomTotal: '全屋總分',
     mpRoundResult: '本局',
     mpFinalTitle: '本房戰績',
     mpBestRound: '單局最高',
@@ -1340,6 +1345,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpEndRoom: '结束房间',
     mpRoomEnded: '房主结束了房间。',
     mpTotalLabel: '总分',
+    mpRoomTotal: '全屋总分',
     mpRoundResult: '本局',
     mpFinalTitle: '本房战绩',
     mpBestRound: '单局最高',

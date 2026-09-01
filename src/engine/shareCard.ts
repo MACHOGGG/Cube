@@ -492,6 +492,48 @@ export function renderShareCard(
  * A ranked column: place, name, score. Used by the per-round card beside the
  * boards, and by the room's closing card as the whole of its middle.
  */
+/**
+ * 小王冠。金的给第一，银的给第二。
+ *
+ * 画成路径而不是用 🏆/👑 那种字符：同一个码位在 iOS、安卓、Windows 上是三
+ * 张完全不同的图，而且不少安卓机的系统字体里根本没有这一个，落到战绩图上
+ * 就是一个豆腐块。路径到哪都一样。
+ */
+function drawCrown(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, fill: string) {
+  const u = size / 24;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(u, u);
+  ctx.beginPath();
+  ctx.moveTo(2, 8);
+  ctx.lineTo(7, 13.5);
+  ctx.lineTo(12, 3.5);
+  ctx.lineTo(17, 13.5);
+  ctx.lineTo(22, 8);
+  ctx.lineTo(20, 20.5);
+  ctx.lineTo(4, 20.5);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.restore();
+}
+
+/** 冠军的金、亚军的银。两支都调得比正文暗一点，压在米白纸上不发飘。 */
+export const CROWN_GOLD = '#D2A017';
+export const CROWN_SILVER = '#9FA6AE';
+
+/**
+ * 这一排该不该有王冠、什么颜色。
+ *
+ * 规矩是玩家定的：两个人的时候只有冠军戴，三个人往上亚军也戴一顶银的。
+ * 两个人的第二名就是「输的那个」，给他一顶冠冕是在开玩笑。
+ */
+function crownFor(place: number, total: number): string | null {
+  if (place === 0) return CROWN_GOLD;
+  if (place === 1 && total >= 3) return CROWN_SILVER;
+  return null;
+}
+
 export function drawStandings(
   ctx: CanvasRenderingContext2D,
   rows: Standing[],
@@ -500,6 +542,8 @@ export function drawStandings(
   width: number,
   title: string,
   rowH = 38,
+  /** 名次旁边加王冠——整房的排名图要，单局那一列不要。 */
+  crowns = false,
 ) {
   ctx.font = '600 14px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
@@ -523,7 +567,13 @@ export function drawStandings(
 
     ctx.fillStyle = row.me ? '#BE5762' : '#141413';
     ctx.font = `${row.me ? 700 : 500} 15px "Karla", sans-serif`;
-    ctx.fillText(clipTo(ctx, row.name, width - 76), x + 20, mid);
+    const crown = crowns ? crownFor(i, rows.length) : null;
+    // 王冠占的位置要先从名字能用的宽度里扣掉，否则一个长名字会把冠推到
+    // 分数上面去。
+    const crownRoom = crown ? 22 : 0;
+    const name = clipTo(ctx, row.name, width - 76 - crownRoom);
+    ctx.fillText(name, x + 20, mid);
+    if (crown) drawCrown(ctx, x + 20 + ctx.measureText(name).width + 5, mid - 13, 15, crown);
 
     ctx.fillStyle = i === 0 ? '#BE5762' : '#5b5650';
     ctx.font = '600 15px "JetBrains Mono", monospace';

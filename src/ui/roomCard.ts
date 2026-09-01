@@ -23,6 +23,20 @@ const ROW_H = 46;
 const rowHeightFor = (count: number) => (count <= 6 ? ROW_H : Math.max(30, ROW_H - (count - 6) * 2));
 const EXPORT_SCALE = 3;
 
+/**
+ * 排名旁边那顶小王冠，HTML 版——和战绩图上画的是同一个形状、同两支颜色
+ * （见 shareCard.ts 的 drawCrown）。规矩也一样：冠军戴金的，三个人往上
+ * 亚军戴银的；两个人的时候第二名就是输的那个，不给。
+ */
+function crownHtml(place: number, total: number): string {
+  const fill = place === 0 ? '#D2A017' : place === 1 && total >= 3 ? '#9FA6AE' : null;
+  if (!fill) return '';
+  return (
+    `<svg class="mp-crown" viewBox="0 0 24 24" aria-hidden="true">` +
+    `<path d="M2 8 L7 13.5 L12 3.5 L17 13.5 L22 8 L20 20.5 L4 20.5 Z" fill="${fill}"/></svg>`
+  );
+}
+
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -115,19 +129,22 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   const qrSize = 88;
   drawQr(ctx, CARD_W - PAD - qrSize, 40, qrSize, s.shareQrCaption);
 
-  // The room, and how much of an evening it was.
+  // 最大的那个数字是全屋总分——这一整晚，所有人、所有局，加起来打了多少。
+  // 原先这里印的是小屋号码：那是一串只在当晚有效、发出去之后对谁都没有意义
+  // 的数字，却占着整张图上最大的字号。房号留在小屋页面里够用了。
+  const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
   ctx.font = '700 56px "Fraunces", serif';
   ctx.fillStyle = '#BE5762';
-  ctx.fillText(state.code, PAD, 178);
+  ctx.fillText(String(roomTotal), PAD, 178);
   ctx.font = '500 15px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
   ctx.fillText(
-    `${s.mpRoomCode} · ${s.mpRoundsPlayed.replace('{n}', String(state.round))}`,
+    `${s.mpRoomTotal} · ${s.mpRoundsPlayed.replace('{n}', String(state.round))}`,
     PAD + 2,
     202,
   );
 
-  drawStandings(ctx, rows, PAD, listY, CARD_W - PAD * 2, s.mpTotalLabel, rowH);
+  drawStandings(ctx, rows, PAD, listY, CARD_W - PAD * 2, s.mpTotalLabel, rowH, true);
 
   // The two side notes, quiet and on one line each.
   const best = bestRoundOf(state.players);
@@ -168,6 +185,7 @@ export function showRoomCard(
   const ranked = rankRoom(state.players);
   const best = bestRoundOf(state.players);
   const fastest = fastestOf(state.players);
+  const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
 
   container.innerHTML = `
     <div class="app mp-page">
@@ -179,8 +197,8 @@ export function showRoomCard(
       </header>
 
       <div class="mp-code-card">
-        <div class="menu-section-label">${s.mpRoomCode}</div>
-        <div class="mp-code">${state.code}</div>
+        <div class="menu-section-label">${s.mpRoomTotal}</div>
+        <div class="mp-code">${roomTotal}</div>
         <p class="auth-hint">${s.mpRoundsPlayed.replace('{n}', String(state.round))}</p>
       </div>
 
@@ -191,6 +209,7 @@ export function showRoomCard(
               <span class="mp-final-rank">${i + 1}</span>
               <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
               <span class="mp-player-name">${esc(p.name)}</span>
+              ${crownHtml(i, ranked.length)}
               <span class="mp-player-total">${liveTotal(p)}</span>
             </div>`,
           )
@@ -207,7 +226,7 @@ export function showRoomCard(
       </div>
 
       <img class="mp-final-card" id="mpFinalCard" alt="${s.shareImgAlt}" />
-      <p class="auth-hint">${s.shareHint}</p>
+      <p class="auth-hint auth-hint--center">${s.shareHint}</p>
 
       <button class="genius-cta" id="mpFinalDone">${s.homeBtn}</button>
     </div>

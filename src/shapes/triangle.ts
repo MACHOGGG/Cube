@@ -261,13 +261,24 @@ interface DragState {
   chain: DragChain | null;
 }
 
+/*
+ * 这个文件画的是六边蜂窝那块三角棋盘。它挂在《大三角》那个入口后面——
+ * 名字和文件名对不上是有意的：2026-09 把两个三角的棋盘对调了，因为整块
+ * 大三角上手容易得多，该由它站在主菜单上当《三角》，蜂窝这块难一些，退到
+ * 《更多布局》里当《大三角》。
+ *
+ * 对调的做法是只换身份（id / 名字 / 存档键 / shapeId），不搬棋盘代码：
+ * 图标是按 id 查的（homeIcons.ts），所以两个入口的图标原地不动，正是
+ * 「icon 先不换」要的结果。要换回去，把这里和 triangleBig.ts 的这几行
+ * 再对调一次即可，别去动棋盘本身。
+ */
 export function createTriangleGame(): ShapeGame {
-  const bestKey = 'sugarcube_triangles_best';
+  const bestKey = 'sugarcube_triangle_big_best';
 
   return {
     card: {
-      id: 'triangle',
-      name: '三角',
+      id: 'triangleBig',
+      name: '大三角',
       desc: '沿斜线拖动 · 六边蜂窝三角',
       bestKey,
       glyph: GLYPH,
@@ -277,10 +288,10 @@ export function createTriangleGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
-        shapeId: 'triangle',
+        shapeId: 'triangleBig',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
-        title: `Slides · ${shapeName(lang, 'triangle', '三角')}`,
+        title: `Slides · ${shapeName(lang, 'triangleBig', '大三角')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
         patternHint: renderPatternHintRow(PATTERNS, lang),
@@ -895,8 +906,8 @@ export function createTriangleGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
-        shapeName: shapeName(lang, 'triangle', '三角'),
-        shapeId: 'triangle',
+        shapeName: shapeName(lang, 'triangleBig', '大三角'),
+        shapeId: 'triangleBig',
         modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,

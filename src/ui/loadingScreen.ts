@@ -27,15 +27,22 @@ import { colorblindOn } from '../engine/palettePref';
 // a ball is 1.86R, so anything under 2.61 diameters cannot contain it.
 // ---------------------------------------------------------------------------
 const SIDE_IN_BALLS = 2.75;
-const TOTAL_MS = 3500;
 
-const T_SLIDE = 250;     // travel starts
-const D_SLIDE = 1500;    // …and takes this long
-const T_SCORE = 2000;    // outlines flash
-const T_FLIP = 2600;     // faces turn over
-const FLIP_STAGGER = 90;
-const FLIP_MS = 530;   // ~1.5x the game's 340ms — heavier, still brisk
-const T_OUT = 3240;      // splash fades
+/** 整段开场放多快。1 是原速，1.25 是现在——每一个时刻和每一段时长都
+ *  一起除以它，所以节奏的比例分毫不变，只是整段跑得快了四分之一。
+ *  要调回去改这一个数就够，底下那串数字是「原速下的毫秒」，不用动。 */
+const SPEED = 1.25;
+const fast = (ms: number) => Math.round(ms / SPEED);
+
+const TOTAL_MS = fast(3500);
+
+const T_SLIDE = fast(250);     // travel starts
+const D_SLIDE = fast(1500);    // …and takes this long
+const T_SCORE = fast(2000);    // outlines flash
+const T_FLIP = fast(2600);     // faces turn over
+const FLIP_STAGGER = fast(90);
+const FLIP_MS = fast(530);   // ~1.5x the game's 340ms — heavier, still brisk
+const T_OUT = fast(3240);      // splash fades
 
 // The flip's feel, all as fractions of the piece so it reads the same at any
 // size. The old code inherited perspective(300px) from the CSS keyframes,

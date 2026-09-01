@@ -232,13 +232,17 @@ interface DragState {
   chain: DragChain | null;
 }
 
+/*
+ * 这个文件画的是整块大三角那块棋盘。它挂在主菜单的《三角》后面——
+ * 见 triangle.ts 顶上那段：两个三角的棋盘是对调过的，身份换了，棋盘没搬。
+ */
 export function createTriangleBigGame(): ShapeGame {
-  const bestKey = 'sugarcube_triangle_big_best';
+  const bestKey = 'sugarcube_triangles_best';
 
   return {
     card: {
-      id: 'triangleBig',
-      name: '大三角',
+      id: 'triangle',
+      name: '三角',
       desc: '整块大三角 · 5 色各 5 枚',
       bestKey,
       glyph: GLYPH,
@@ -248,10 +252,10 @@ export function createTriangleBigGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
-        shapeId: 'triangleBig',
+        shapeId: 'triangle',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
-        title: `Slides · ${shapeName(lang, 'triangleBig', '大三角')}`,
+        title: `Slides · ${shapeName(lang, 'triangle', '三角')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
         patternHint: renderPatternHintRow(PATTERNS, lang),
@@ -816,8 +820,8 @@ export function createTriangleBigGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
-        shapeName: shapeName(lang, 'triangleBig', '大三角'),
-        shapeId: 'triangleBig',
+        shapeName: shapeName(lang, 'triangle', '三角'),
+        shapeId: 'triangle',
         modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
