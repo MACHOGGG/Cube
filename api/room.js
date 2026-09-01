@@ -49,6 +49,15 @@ const ROOM_TTL_S = 2 * 3600;
 /** Long enough to read "3, 2, 1" without anyone feeling held up. */
 const COUNTDOWN_MS = 3500;
 /**
+ * 建议横着玩的两个玩法——开局页会请人把手机转过来，而转手机这件事本身就要
+ * 一秒。所以这两个的提前量多给一秒，倒数也就从 4 数起。
+ *
+ * 这份名单要和客户端 src/ui/startStage.ts 里的 LANDSCAPE_MODES 对得上：那边
+ * 决定屏幕上从几数起，这边决定服务器留多长，两个数字必须是同一个。
+ */
+const WIDE_MODES = new Set(['circleSeven', 'triangleAdvanced']);
+const countdownMsFor = (mode) => (WIDE_MODES.has(mode) ? COUNTDOWN_MS + 1000 : COUNTDOWN_MS);
+/**
  * How long a player who has stopped reporting holds the round open.
  *
  * A round is over when everyone says they are done. Someone who closes the
@@ -393,7 +402,7 @@ async function start(res, body) {
     round: (hash.meta.round || 0) + 1,
     // The one string from which every player builds the identical board.
     seed: id(8),
-    startAt: Date.now() + COUNTDOWN_MS,
+    startAt: Date.now() + countdownMsFor(body.mode),
   };
   await hset(roomKey(code), 'meta', meta);
   await expire(roomKey(code), ROOM_TTL_S);

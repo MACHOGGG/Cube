@@ -1938,6 +1938,25 @@ body:has(.app--game) { background: var(--play-bg); }
   .app.app--game > .hud .hud-cell { font-size: min(2.35vw, 6vh); }
   .app.app--game > .controls .icon-btn { font-size: min(4.38vw, 7.5vh); line-height: 1.1; }
 
+  /* 横过来之后，那一排变成右边一条竖的：《离开房间》站在最上面（column-reverse
+     把 DOM 里在后的那个放到顶上），名单接在它下面，把这条竖槽剩下的都占满。
+     名字在这儿要藏起来——这条槽的宽度是按「里面最宽的东西」算出来的，留着
+     名字，一个十二个字的名字就能把整条槽撑开，棋盘跟着缩。认人靠头像和自己
+     那一行的加粗，够了。 */
+  .app.app--game > .controls .mp-rank {
+    flex: 1; width: 100%; height: auto; min-height: 0;
+    padding: clamp(5px, 1.4vh, 10px) clamp(4px, 1vw, 9px);
+  }
+  .app.app--game > .controls .icon-btn--exit {
+    flex: 0 0 auto; width: 100%; height: auto; aspect-ratio: 1;
+  }
+  .app.app--game > .controls .mp-rank .mp-board-name { display: none; }
+  .app.app--game > .controls .mp-rank .mp-board-row {
+    justify-content: center;
+    font-size: min(3.4vw, 6vh, 18px);
+  }
+  .app.app--game > .controls .mp-rank .mp-board-score { margin-left: auto; }
+
   .app.app--game > .board-wrap {
     grid-column: 2; grid-row: 2;
     min-width: 0; min-height: 0;
@@ -2097,35 +2116,57 @@ body.is-room-host::after {
 /* The standings ride in the bottom-left corner during a run: clear of the
    HUD along the top and of the board in the middle, and small enough that
    the puzzle is still the thing being looked at. */
-.mp-board {
-  position: fixed; z-index: 40; left: 10px; pointer-events: none;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  width: 152px; padding: 8px 10px 9px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+/* ---------------------------------------------------------------------------
+   房间局的实时排名，画在底下那一排里
+   ---------------------------------------------------------------------------
+   房间局的那一排只有两块：左边一整条名单，右边一颗《离开房间》。名单和右边
+   那颗键、和顶上那三个读数是同一种东西——同样的底、同样的圆角——因为它就是
+   一个读数：这一局你现在排第几。
+
+   行高按人数算（--rank-rows 由 scoreboard.ts 写进来），所以两个人的时候字大、
+   四个人的时候字小，而整块的高度自始至终不变：一场比赛中途有人走掉，底下这
+   一排不该跟着抖一下。 */
+.mp-rank {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center;
+  overflow: hidden;
+  /* 这一块有多高、里面站几个人，行高就是这两个数除出来的。写成长度而不是
+     百分比：font-size 里的百分比算的是父级的字号，不是高度——那样每一行都会
+     缩成看不见的两个像素。 */
+  --rank-h: clamp(66px, 11.4vh, 104px);
+  --rank-rows: 4;
+  --rank-line: calc((var(--rank-h) - 15px) / var(--rank-rows));
 }
-.mp-board-title {
-  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px;
+.app--game .mp-rank {
+  height: var(--rank-h);
+  background: var(--play-chip); color: var(--play-chip-ink);
+  border-radius: clamp(11px, 1.9vh, 17px);
+  padding: 5px clamp(7px, 2vw, 13px);
 }
-/* Four rows fit anywhere; twelve would climb over the board, so past that
-   the panel keeps its height and scrolls inside itself instead. */
-.mp-board-rows {
-  display: flex; flex-direction: column; gap: 4px;
-  max-height: 40vh; overflow-y: auto; overscroll-behavior: contain;
-  /* 整块面板是穿透的，底下的棋盘照样能拖。这份名单原来无条件把指针要了回去
-     ——理由是「它要能滚」，可四个人的名单根本没得滚，于是它只是白白盖住了下
-     面的东西（《离开房间》正好在它底下，按不动）。改成由 scoreboard.ts 量过
-     之后再定：真的溢出了才要指针。 */
-  pointer-events: none;
+/* 右边那颗键站成一个正方，把整条左边让给名单——这一排里唯一能按的东西只有
+   它，不需要占半条街来说明自己是重要的。 */
+.app--game .controls .icon-btn--exit {
+  flex: 0 0 auto;
+  width: clamp(66px, 11.4vh, 104px);
+  height: clamp(66px, 11.4vh, 104px);
 }
-.mp-board-row { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; }
-.mp-board-row--me .mp-board-name, .mp-board-row--me .mp-board-score { color: var(--accent-ink); font-weight: 700; }
-.mp-board-rank { width: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.mp-avatar--small { width: 16px; height: 16px; }
+.mp-board-row {
+  display: flex; align-items: center; gap: clamp(4px, 1.4vw, 8px);
+  /* 人少的时候行不跟着抻长——两个人的名单是两行正常大小的字浮在中间，
+     不是两条撑满整块的横杠。 */
+  height: min(var(--rank-line), 26px); min-height: 0;
+  font-size: min(calc(var(--rank-line) * 0.62), 15px);
+  line-height: 1;
+}
+.mp-board-row--me { font-weight: 700; }
+.mp-board-rank { width: 1.1em; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.mp-avatar--small { width: 1.15em; height: 1.15em; flex: none; }
 .mp-board-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
-.mp-board .mp-badge { font-size: 0.6rem; padding: 1px 5px; }
+.mp-rank .mp-badge {
+  font-size: 0.72em; padding: 0 4px; line-height: 1.5;
+  background: none; color: inherit; opacity: 0.6; border: none;
+}
 
 /* ===========================================================================
    开局页：玩法图 + 3-2-1 + 两颗按钮

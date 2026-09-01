@@ -26,8 +26,9 @@ import {
  * a compromise anyone can see: a row that changes places a second after the
  * points were scored reads exactly like one that changed places instantly.
  *
- * The panel is deliberately small and out of the way. What is being played
- * is still a puzzle, and the board has to stay the thing you are looking at.
+ * 它不再是浮在角上的小面板，而是底下那一排里的一块——房间局那一排只剩右边
+ * 一颗《离开房间》，左边整条就是这份名单。既然是一场比赛，「我现在第几」本
+ * 来就该和分数、时间一样，是一直看得见的读数之一。
  */
 
 const REEL_ID = 'scoreReel';
@@ -103,32 +104,24 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   /** 这一局在本机算打完了：回到房间时才不会把它当新的一局重开。 */
   const markPlayed = () => markRoundPlayed(myRound);
 
-  const panel = document.createElement('aside');
-  panel.className = 'mp-board';
-  panel.innerHTML = `<div class="mp-board-title">${s.mpStandings}</div><div class="mp-board-rows"></div>`;
-  document.body.appendChild(panel);
-  const rows = panel.querySelector<HTMLElement>('.mp-board-rows')!;
-
-  // 把比分板抬到那一排按钮上面去。
+  // 名单就画在底下那一排里，《离开房间》左边那一整条。
   //
-  // 它本来贴着屏幕底，而那一排按钮也贴着屏幕底——两个都在左下角，于是名单正
-  // 好压在《离开房间》身上。指针能穿过去（见下面那句 pointerEvents），但眼睛
-  // 穿不过去：那颗键看上去是被埋住的，没人会去按一个看不见的东西。
-  // 所以量一次按钮排的位置，把面板停在它上沿之上；转屏、改窗口都重量一次。
-  const liftPanel = () => {
-    const row = document.querySelector('.app--game .controls');
-    if (!row) return;
-    const gap = Math.round(window.innerHeight - row.getBoundingClientRect().top) + 10;
-    panel.style.bottom = `calc(${Math.max(12, gap)}px + env(safe-area-inset-bottom, 0px))`;
-  };
-  requestAnimationFrame(liftPanel);
-  for (const ev of ['resize', 'orientationchange']) window.addEventListener(ev, liftPanel);
+  // 它原来是一块浮在屏幕左下角的小面板，压在按钮上——指针能穿过去，眼睛穿不
+  // 过去，那颗键看上去是被埋住的。现在房间局的那一排本来就空出了半条（《完
+  // 成》和《暂停》都撤了），名单直接站进去：不再盖住任何东西，也不用再去量
+  // 按钮在哪儿、转屏之后重量一次。
+  const rows = document.getElementById('mpRank');
+  if (!rows) return restoreEndPanel;
+  rows.setAttribute('aria-label', s.mpStandings);
 
   let lastSent = -1;
   let sentFinished = false;
   let dead = false;
 
   const paint = (state: RoomState) => {
+    // 名单按人数分行高：两个人就两行大字，四个人就四行小字，整块的高度不
+    // 变——它是那一排里的一块，和右边那颗键一样高，不能随人数长个儿。
+    rows.style.setProperty('--rank-rows', String(Math.max(2, state.players.length)));
     rows.innerHTML = state.players
       .map((p, rank) => {
         const me = p.id === seat.playerId;
@@ -141,9 +134,6 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
         </div>`;
       })
       .join('');
-    // 名单只有在真的装不下、需要自己滚的时候才把指针要回来。四个人的名单没得
-    // 滚，却会盖住底下的东西——《离开房间》正好在它底下，按不动。
-    rows.style.pointerEvents = rows.scrollHeight > rows.clientHeight + 1 ? 'auto' : 'none';
   };
 
   // Everyone else's scores.
@@ -184,7 +174,6 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   return () => {
     dead = true;
     restoreEndPanel();
-    for (const ev of ['resize', 'orientationchange']) window.removeEventListener(ev, liftPanel);
     stopWatching();
     window.clearInterval(localTimer);
     // One last report, so a player who leaves mid-run does not sit at a
@@ -194,7 +183,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       markPlayed();
       void reportScore(score, true, runSeconds());
     }
-    panel.remove();
+    rows.innerHTML = '';
   };
 }
 

@@ -1,6 +1,6 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
-import { pushDigit, startStageHtml } from './startStage';
+import { countFrom, pushDigit, startStageHtml } from './startStage';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
@@ -467,13 +467,16 @@ export function renderMultiplayerPage(
 
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
     // 一场竞赛），下半屏 3、2、1。区别只在谁在数——这里数的是服务器给的开赛
-    // 时刻，不是本地的三秒，所有人的数字才会同时跳。
+    // 时刻，不是本地的秒表，所有人的数字才会同时跳。
     container.innerHTML = `
       <div class="app mp-page mp-countdown-page">
         ${startStageHtml({ shapeId: mode, room: true, countId: 'mpTick' })}
       </div>
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
+    // 从几数起。这一局是哪个玩法，服务器那边给的提前量就按同一份名单多留一秒
+    // （api/room.js 的 WIDE_MODES），所以两边数出来的秒数对得上。
+    const first = countFrom(mode);
     let shown = 0;
 
     const paintTick = () => {
@@ -486,9 +489,10 @@ export function renderMultiplayerPage(
         if (!dead) handlers.onMatchStart({ mode, seed });
         return;
       }
-      // 服务器留的是三秒半，多出来的半秒都算在第一个「3」上——数字只有三个，
-      // 和单人那一幕看起来一模一样。
-      const n = Math.min(3, Math.ceil(left / 1000));
+      // 服务器留的是三秒半（建议横着玩的玩法四秒半），多出来的半秒都算在第一
+      // 个数字上——看起来和单人那一幕一模一样：几个数字就几秒，只有头一个站
+      // 得久一点。
+      const n = Math.min(first, Math.ceil(left / 1000));
       if (n !== shown) {
         shown = n;
         pushDigit(tickEl, n);

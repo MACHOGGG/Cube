@@ -42,10 +42,28 @@ export interface CascadeStepGroups {
  * first move, sliding down to a 0.5× floor over ten minutes. A bracket
  * boundary used to make one extra second cost a quarter of the score, which
  * rewarded quitting at 59s over playing on.
+ *
+ * `gain` 是这根杠杆的长度：1 就是上面这条曲线本身，房间局传 ROOM_TIME_GAIN。
+ * 放大在夹紧之后做，所以无论多大的 gain，曲线都还是单调的一条——用时多一秒
+ * 绝不会反而变得更划算。
  */
-export function timeMultiplierFor(elapsedSec: number): number {
-  return Math.max(0.5, Math.min(2, 2 - elapsedSec / 300));
+export function timeMultiplierFor(elapsedSec: number, gain = 1): number {
+  const base = Math.max(0.5, Math.min(2, 2 - elapsedSec / 300));
+  return 1 + gain * (base - 1);
 }
+/**
+ * 房间里，时间说话的分量放大到一倍半。
+ *
+ * 单人局是一个人跟自己的棋盘过不去，慢一点想清楚是正当的打法；一场同步竞赛
+ * 不是——四个人拿的是同一副牌，谁先走完就是这场比的全部意思。原来的系数在
+ * 五分钟处才落到 1，快慢之间只差得开两倍，对一场比赛来说太平了。
+ *
+ * 放大的是「离 1 有多远」，不是整条曲线：五分钟那个中点仍旧是 1 倍，快的那
+ * 头顶到 2.5，慢的那头掉到 0.25。所以这不是给房间局普涨或普降，而是把同一
+ * 根杠杆加长——打得快的赚得更多，拖着不走的赔得更狠。
+ */
+export const ROOM_TIME_GAIN = 1.5;
+
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
 export interface GameControllerHooks {
@@ -256,7 +274,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     const statusPercent = perf.valuePercent();
     const bonusMult = 1 + statusPercent / 100;
-    const timeMult = timeMultiplierFor(elapsed);
+    // 房间里这根杠杆更长——见 ROOM_TIME_GAIN。房间的实时排名比的仍然是原始
+    // 得分（那时这一局还没走完，综合得分还不存在），这里放大的是走完之后算
+    // 出来的综合得分。
+    const timeMult = timeMultiplierFor(elapsed, currentRoom() ? ROOM_TIME_GAIN : 1);
     // Leaving tiles face-up costs the same either way — walking away early
     // and running the board into a genuine dead end are charged alike, so
     // "stop now" is never a way to dodge the cost of an unfinished board.
@@ -644,7 +665,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // face-up tile can ever be flipped). Nothing else can navigate away from a
   // game any more — the bottom dock is hidden while one is open — so there
   // is nothing left for a yes/no gate to protect against.
-  refs.buttons.finish.addEventListener('click', () => {
+  refs.buttons.finish?.addEventListener('click', () => {
     if (!started || gameOver) return;
     doFinish();
   });

@@ -37,7 +37,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: '整线奖励', body: '一整条线（长度 ≥3）全部翻成点面且点色相同时，额外得「线长 × 线长」分，该线随后消除或变成空白。' },
       { term: '连击', body: '连续多步得分依次 ×1、×1.5、×2、×2.5……每多连一步就多 0.5 倍；某一步没得分就从 ×1 重新开始。' },
       { term: '结束', body: '所有块都翻成点面或变空白时自动结束，也可以随时点《结束》。当某个颜色确定再也翻不了面时，《自行结束》会亮起提醒你。' },
-      { term: '综合得分', body: '得分 × 时间系数 × (1 + 有效得分率) × 0.95^未翻面块数。时间系数 = 2 − 用时秒数 ÷ 300，限制在 0.5～2 之间；有效得分率 = 整局累计的得分行动 ÷ 总行动（普通图案算 1 个行动、超过 4 枚的图案算 2 个、整线消除算 3 个）。' },
+      { term: '综合得分', body: '得分 × 时间系数 × (1 + 有效得分率) × 0.95^未翻面块数。时间系数 = 2 − 用时秒数 ÷ 300，限制在 0.5～2 之间（多人房间里这一项的作用放大 1.5 倍，也就是 0.25～2.5——同一副牌四个人一起打，快慢本身就是比的东西）；有效得分率 = 整局累计的得分行动 ÷ 总行动（普通图案算 1 个行动、超过 4 枚的图案算 2 个、整线消除算 3 个）。' },
     ],
     modes: [
       { term: '方块', body: '6×6 共 36 枚，拖动整行或整列。图案：1×4 / 4×1、2×2。整行或整列消除后，两侧的方块滑动收拢补位。' },
@@ -64,7 +64,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: '整線獎勵', body: '一整條線（長度 ≥3）全部翻成點面且點色相同時，額外得「線長 × 線長」分，該線隨後消除或變成空白。' },
       { term: '連擊', body: '連續多步得分依次 ×1、×1.5、×2、×2.5……每多連一步就多 0.5 倍；某一步沒得分就從 ×1 重新開始。' },
       { term: '結束', body: '所有塊都翻成點面或變空白時自動結束，也可以隨時點《結束》。當某個顏色確定再也翻不了面時，《自行結束》會亮起提醒你。' },
-      { term: '綜合得分', body: '得分 × 時間係數 × (1 + 有效得分率) × 0.95^未翻面塊數。時間係數 = 2 − 用時秒數 ÷ 300，限制在 0.5～2 之間；有效得分率 = 整局累計的得分行動 ÷ 總行動（普通圖案算 1 個行動、超過 4 枚的圖案算 2 個、整線消除算 3 個）。' },
+      { term: '綜合得分', body: '得分 × 時間係數 × (1 + 有效得分率) × 0.95^未翻面塊數。時間係數 = 2 − 用時秒數 ÷ 300，限制在 0.5～2 之間（多人房間裡這一項的作用放大 1.5 倍，也就是 0.25～2.5——同一副牌四個人一起打，快慢本身就是比的東西）；有效得分率 = 整局累計的得分行動 ÷ 總行動（普通圖案算 1 個行動、超過 4 枚的圖案算 2 個、整線消除算 3 個）。' },
     ],
     modes: [
       { term: '方塊', body: '6×6 共 36 枚，拖動整行或整列。圖案：1×4 / 4×1、2×2。整行或整列消除後，兩側的方塊滑動收攏補位。' },
@@ -91,7 +91,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: 'Full-line bonus', body: 'When a whole line (3 or longer) is all dot-faced in one dot colour, it pays its length squared, then clears or turns blank.' },
       { term: 'Streak', body: 'Consecutive scoring moves pay ×1, ×1.5, ×2, ×2.5 and so on — half a multiplier more each time. One move without a score resets it to ×1.' },
       { term: 'Ending', body: 'The run ends when every tile is dot-faced or blank; you can also stop any time with End. When a colour provably can never flip again, the "Stop here" button lights up to tell you.' },
-      { term: 'Final score', body: 'points × time factor × (1 + hit rate) × 0.95 per never-flipped tile. Time factor = 2 − seconds ÷ 300, clamped to 0.5–2. Hit rate = scoring actions ÷ total actions over the whole run (an ordinary pattern counts 1, one grown past 4 tiles counts 2, a full-line clear counts 3).' },
+      { term: 'Final score', body: 'points × time factor × (1 + hit rate) × 0.95 per never-flipped tile. Time factor = 2 − seconds ÷ 300, clamped to 0.5–2 — in a multiplayer room its pull is 1.5× as strong (0.25–2.5), because when four people share one board, speed is the thing being raced. Hit rate = scoring actions ÷ total actions over the whole run (an ordinary pattern counts 1, one grown past 4 tiles counts 2, a full-line clear counts 3).' },
     ],
     modes: [
       { term: 'Squares', body: '36 tiles in a 6×6 grid; drag a whole row or column. Patterns: 1×4 / 4×1 and 2×2. A cleared row or column disappears and the tiles on both sides slide in to close the gap.' },
@@ -118,7 +118,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: 'Bonus de ligne', body: 'Quand une ligne entière (3 ou plus) est retournée dans une seule couleur de point, elle rapporte sa longueur au carré, puis disparaît ou devient vierge.' },
       { term: 'Série', body: 'Les coups gagnants consécutifs valent ×1, ×1,5, ×2, ×2,5… soit un demi-multiplicateur de plus à chaque fois. Un coup sans point remet la série à ×1.' },
       { term: 'Fin de partie', body: 'La partie se termine quand toutes les pièces sont retournées ou vierges ; vous pouvez aussi arrêter à tout moment. Quand une couleur ne peut plus jamais être retournée, le bouton « Arrêter ici » s\'allume pour vous prévenir.' },
-      { term: 'Score final', body: 'points × facteur temps × (1 + taux de réussite) × 0,95 par pièce jamais retournée. Facteur temps = 2 − secondes ÷ 300, borné entre 0,5 et 2. Taux de réussite = actions payantes ÷ actions totales sur toute la partie (un motif ordinaire compte 1, un motif étendu au-delà de 4 pièces compte 2, une ligne entière compte 3).' },
+      { term: 'Score final', body: 'points × facteur temps × (1 + taux de réussite) × 0,95 par pièce jamais retournée. Facteur temps = 2 − secondes ÷ 300, borné entre 0,5 et 2 — en salle multijoueur son effet est 1,5× plus fort (0,25 à 2,5) : à quatre sur le même plateau, la vitesse est précisément ce qui se joue. Taux de réussite = actions payantes ÷ actions totales sur toute la partie (un motif ordinaire compte 1, un motif étendu au-delà de 4 pièces compte 2, une ligne entière compte 3).' },
     ],
     modes: [
       { term: 'Carrés', body: '36 pièces en grille 6×6 ; on fait glisser une rangée ou une colonne entière. Motifs : 1×4 / 4×1 et 2×2. Une rangée ou colonne éliminée disparaît et les pièces des deux côtés se resserrent.' },

@@ -24,8 +24,18 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-async function open() {
+async function open({ genius = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  if (genius) {
+    // 七色圆球和进阶三角是天才特供，主菜单上锁着。这里只要本地那份凭据——
+    // 开房间才需要服务器认，点开一个玩法不需要。
+    await ctx.addInitScript(() => {
+      localStorage.setItem('slides_genius', JSON.stringify({
+        active: true, period: 'yearly', until: Date.now() + 30 * 864e5, channel: 'code',
+        email: '', token: 'x'.repeat(48), code: 'LOCALONLY',
+      }));
+    });
+  }
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');
@@ -164,6 +174,48 @@ let bombShare = null;
     return { red, sampled: (w * h) | 0 };
   });
   check('战绩图上真的画出了炸弹标志', bombShare.red > 200, JSON.stringify(bombShare));
+  await ctx.close();
+}
+
+// ---- 建议横着玩的玩法：倒数从 4 数起，多出来的一秒是给转手机的 ----------
+//
+// 七色圆球的菱形要转四分之一圈才躺得下，进阶三角是个横着张开的 V——这两个的
+// 开局页底下都写着「把手机转过来」。三秒里既要看清这是哪副棋盘、又要把手机
+// 转过来，那句话就等于白写；多给一秒，它才是一句能照做的话。
+{
+  const { ctx, page } = await open({ genius: true });
+  // 主菜单最后两张就是这两个玩法（都挂着天才特供的锁）。
+  const wide = await page.$$eval('.home-icon-btn', (els) =>
+    els.map((e, i) => [i, (e.getAttribute('aria-label') || '')])
+      .filter(([, l]) => /七色圆球|进阶三角/.test(l)));
+  check('主菜单上找得到那两个建议横着玩的玩法', wide.length === 2, JSON.stringify(wide));
+
+  for (const [idx, label] of wide) {
+    await page.$$eval('.home-icon-btn', (els, i) => els[i].click(), idx);
+    await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
+    await page.waitForTimeout(250);
+    const first = await page.$eval('#startCount .cd-digit', (el) => el.textContent);
+    check(`${label.split(' ')[0]}：倒数从 4 数起`, first === '4', `看到 ${first}`);
+    check(`${label.split(' ')[0]}：底下挂着「把手机转过来」`,
+      !!(await page.$('#startOverlay .rotate-hint')));
+    // 3.4 秒：三秒的局这时早开了，四秒的还在数最后一个 1。
+    await page.waitForTimeout(3150);
+    const late = await page.evaluate(() => ({
+      overlay: document.querySelector('#startOverlay')?.classList.contains('show'),
+      digit: document.querySelector('#startCount .cd-digit')?.textContent ?? null,
+    }));
+    check(`${label.split(' ')[0]}：3.4 秒时还在数最后一个 1`,
+      late.overlay === true && late.digit === '1', JSON.stringify(late));
+    await page.waitForTimeout(1200);
+    const started = await page.evaluate((sel) => ({
+      overlay: document.querySelector('#startOverlay')?.classList.contains('show'),
+      n: document.querySelectorAll(sel).length,
+    }), PIECES);
+    check(`${label.split(' ')[0]}：四秒数完自己开局`,
+      started.overlay === false && started.n > 0, JSON.stringify(started));
+    await page.goto(BASE, { waitUntil: 'load' });
+    await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+  }
   await ctx.close();
 }
 

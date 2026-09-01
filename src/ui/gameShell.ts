@@ -1,7 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { custom } from './customIcons';
 import { currentRoom } from '../engine/room';
-import { playCountdown, startStageHtml } from './startStage';
+import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 
 export interface ExtraControl {
@@ -66,7 +66,9 @@ export interface ShellRefs {
     stop?: HTMLButtonElement;
     /** 只有多人局才有：进行到一半也走得掉。由 scoreboard.ts 接上。 */
     leaveRoom?: HTMLButtonElement;
-    finish: HTMLButtonElement;
+    /** 多人局里也没有这颗：一局什么时候算完不由自己说了算，走人走的是
+     *  《离开房间》。 */
+    finish?: HTMLButtonElement;
     /** Absent in-game (the row has no way-out button any more — leaving a
      *  run goes through the title or the bottom nav, which ask first); the
      *  shape modules still wire it when it exists. */
@@ -198,14 +200,18 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
            changes rather than does — the colourblind palette — lives in the
            pause panel instead, so the play screen stays the board plus the
            three readings plus the two things you can do to a run.
-           多人局里换掉左边那颗：一场同步竞赛暂停不了——别人的钟不会跟着停，
-           按下去只是把自己关在外面。那个位置改放《离开房间》，那才是这一局
-           进行到一半时真正走得掉的出口。 -->
+
+           房间局的这一排是另一套。《暂停》没有意义——一场同步竞赛停不下来，
+           别人的钟不会跟着停；《完成》也没有——一局什么时候算完由棋盘和别人
+           的进度说了算，自己按一下就交卷，等于把「我不打了」写成「我打完
+           了」。两颗都撤掉，右边只留一个真正的出口《离开房间》，空出来的左
+           边整条给实时排名：一场比赛里最该一直看得见的，是自己此刻排第几。 -->
       <div class="controls">
         ${inRoom
-          ? `<button class="icon-btn" id="leaveRoomBtn" aria-label="${s.mpLeave}">${CTL_LEAVE}</button>`
-          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`}
-        <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
+          ? `<div class="mp-rank" id="mpRank" aria-live="polite"></div>
+             <button class="icon-btn icon-btn--exit" id="leaveRoomBtn" aria-label="${s.mpLeave}">${CTL_LEAVE}</button>`
+          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
+             <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`}
       </div>
     </div>
 
@@ -358,8 +364,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   //
   // 3、2、1 数完，替玩家按下那颗藏起来的 #startBtn——一局就这样开始，中间不
   // 需要谁再点一下。数到一半按《暂停》，倒数整个停住并弹出暂停面板；从暂停里
-  // 回来时不是接着数，而是从 3 重新数：被打断之后剩下的那半秒不足以让人重新
-  // 准备好。
+  // 回来时不是接着数，而是从头重新数：被打断之后剩下的那半秒不足以让人重新
+  // 准备好。建议横着玩的那两个玩法从 4 数起——底下那句「把手机转过来」得有
+  // 时间照做才算数（见 startStage.ts 的 countFrom）。
   const countWin = container.querySelector<HTMLElement>('#startCount');
   const startBtnEl = container.querySelector<HTMLButtonElement>('#startBtn');
   const pauseOv = container.querySelector<HTMLElement>('#pauseOverlay');
@@ -374,7 +381,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 后把牌重发一遍——所以只有这一页还挂着的时候才算数。
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
         startBtnEl.click();
-      });
+      }, countFrom(meta.shapeId));
     };
     container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
       cancelCount?.();
@@ -419,7 +426,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     buttons: {
       stop: inRoom ? undefined : req<HTMLButtonElement>('stopBtn'),
       leaveRoom: inRoom ? req<HTMLButtonElement>('leaveRoomBtn') : undefined,
-      finish: req('finishBtn'),
+      finish: inRoom ? undefined : req<HTMLButtonElement>('finishBtn'),
       back: undefined,
       start: req('startBtn'),
       continueBtn: req('continueBtn'),
