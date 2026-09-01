@@ -55,13 +55,13 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
     back: !!document.querySelector('#startOverlay #startBackBtn'),
     pause: !!document.querySelector('#startOverlay #startPauseBtn'),
     headings: document.querySelectorAll('#startOverlay h2, #startOverlay p:not(.rotate-hint-copy)').length,
-    badges: document.querySelectorAll('#startOverlay .mode-badge').length,
+    marks: document.querySelectorAll('#startOverlay .start-mark').length,
   }));
   check('开局页摆着这个玩法的图', shape.art);
   check('开局页有倒数窗口', shape.window);
   check('开局页有《返回》和《暂停》两颗键', shape.back && shape.pause);
   check('开局页不再有标题和说明文字', shape.headings === 0, `找到 ${shape.headings} 段`);
-  check('普通一局不挂任何模式标志', shape.badges === 0, `挂了 ${shape.badges} 个`);
+  check('普通一局只摆一张图，没有别的标志', shape.marks === 1, `摆了 ${shape.marks} 张`);
 
   const first = await page.$eval('#startCount .cd-digit', (el) => el.textContent);
   check('倒数从 3 开始', first === '3', `看到 ${first}`);
@@ -114,12 +114,23 @@ let bombShare = null;
   await page.$$eval('.center-pick .bomb-chip', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
   await page.waitForTimeout(250);
-  const marks = await page.evaluate(() => ({
-    bomb: !!document.querySelector('#startOverlay .mode-badge--bomb svg'),
-    room: !!document.querySelector('#startOverlay .mode-badge--room'),
-  }));
+  const marks = await page.evaluate(() => {
+    const all = Array.from(document.querySelectorAll('#startOverlay .start-mark'));
+    const w = all.map((e) => Math.round(e.getBoundingClientRect().width));
+    return {
+      bomb: !!document.querySelector('#startOverlay .mode-badge--bomb svg'),
+      room: !!document.querySelector('#startOverlay .mode-badge--room'),
+      n: all.length,
+      widths: w,
+      sameRow: all.length > 1 && new Set(all.map((e) => Math.round(e.getBoundingClientRect().top))).size === 1,
+    };
+  });
   check('炸弹局的开局页挂着炸弹标志', marks.bomb);
   check('单人炸弹局不挂那扇多人的门', marks.room === false);
+  // 这一页只有三秒，角标那么小的东西来不及被看见——所以要求它和玩法图一样
+  // 大、并排站着，不是挂在角上。
+  check('炸弹标志和玩法图一样大，并排一行', marks.n === 2 && marks.sameRow &&
+    new Set(marks.widths).size === 1, JSON.stringify(marks));
 
   // 打完一局，把战绩图取回来
   await page.waitForSelector('#startBtn', { timeout: 15000, state: 'attached' });

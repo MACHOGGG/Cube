@@ -593,13 +593,14 @@ const BASE_GAME_ICONS: Record<string, string> = {
  * layoutIcon()；家族按 id 前缀认（circleHex 是圆球家的），所以以后新加一个
  * 变体，只要名字跟着家族起，这里不用动。
  */
-export function gameIcon(id: string): string {
-  const base = BASE_GAME_ICONS[id];
-  if (base) return base;
+export function gameIcon(id: string, timed = false): string {
   const family: BaseShape = id.startsWith('circle')
     ? 'circle'
     : id.startsWith('triangle')
       ? 'triangle'
       : 'square';
-  return layoutIcon(id, family);
+  // 计时局摆的是主菜单上那只橙色秒表——玩家刚刚按下去的就是它。摆回灰色的
+  // 底图，等于中途换了一张脸。
+  if (timed) return timedOption(family);
+  return BASE_GAME_ICONS[id] ?? layoutIcon(id, family);
 }

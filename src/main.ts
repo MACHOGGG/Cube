@@ -138,6 +138,34 @@ function wireHomeTitle() {
 
 const toTop = () => window.scrollTo(0, 0);
 
+/**
+ * 主菜单滚到哪儿了。
+ *
+ * 换页是把 #app 的内容整个换掉，那一瞬间文档变矮，浏览器就把滚动位置压回 0
+ * ——不是谁调用了「回到顶部」，是页面自己塌了。结果是从游戏里退出来，永远
+ * 落在最上面，刚刚翻到下面看的那几个玩法又得再翻一次。所以离开时记住位置，
+ * 画完再放回去。
+ */
+let menuScrollY = 0;
+const onMenuPage = () => !!root.querySelector('.home-page');
+window.addEventListener(
+  'scroll',
+  () => {
+    if (onMenuPage()) menuScrollY = window.scrollY;
+  },
+  { passive: true },
+);
+/** 放回刚才那个位置。同步做一次，是因为紧接着可能要重开某个弹窗，而那个飞入
+ *  动画要量卡片此刻在屏幕上的真实位置；下一帧再放一次，挡住字体或图片加载
+ *  完之后高度变化把它又冲掉。 */
+function restoreMenuScroll() {
+  if (!menuScrollY) return;
+  window.scrollTo(0, menuScrollY);
+  requestAnimationFrame(() => {
+    if (onMenuPage()) window.scrollTo(0, menuScrollY);
+  });
+}
+
 /** Re-paints the inline SVG glyphs of whatever was just rendered for the
  *  colourblind setting. The stylesheet covers everything drawn from a custom
  *  property; the page's own icons are literal SVG and need this. */
@@ -285,6 +313,7 @@ function showMenu() {
   paintRoomHostBanner();
   wireHomeTitle();
   repaintIcons();
+  restoreMenuScroll();
   // Re-opening a picker works by replaying the tap on the card that owns it:
   // the freshly rendered card is a real, correctly positioned element, so the
   // fly-to-centre animation has a valid origin to start from.

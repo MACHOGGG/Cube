@@ -51,6 +51,23 @@ function trim(svg: string): string {
     .trim();
 }
 
+/**
+ * 去掉根标签上的 width / height。
+ *
+ * 设计软件导出的 SVG 根标签长这样：<svg width="533px" height="583px" viewBox=…>。
+ * 这两个是 presentation attribute——优先级低于任何 CSS 声明，但只要它们在，
+ * 「高度」这条属性就有值了，于是 CSS 的 aspect-ratio 无从生效（aspect-ratio
+ * 只在宽高有一边是 auto 时才算数）。表现是：某个只写了 width 的地方，图标被
+ * 拉成原始比例的竖长条——居中弹窗里三只秒表因此散得满屏都是。
+ *
+ * 尺寸一律交给 CSS，文件只管画什么。viewBox 留着，比例照样是对的。
+ */
+function unsize(svg: string): string {
+  const end = svg.indexOf('>');
+  if (end < 0) return svg;
+  return svg.slice(0, end).replace(/\s(?:width|height)="[^"]*"/g, '') + svg.slice(end);
+}
+
 const CACHE = new Map<string, string | null>();
 
 /**
@@ -67,7 +84,7 @@ export function custom(name: string): string | null {
     CACHE.set(name, null);
     return null;
   }
-  let out = trim(raw);
+  let out = unsize(trim(raw));
   out = uniqueIds(out, name);
   // 屏幕阅读器不该念图标：它旁边的按钮已经有 aria-label 了。
   if (!/aria-hidden=/.test(out)) out = out.replace(/<svg\b/, '<svg aria-hidden="true"');

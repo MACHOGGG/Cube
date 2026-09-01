@@ -19,6 +19,8 @@ export interface StartStageOpts {
   bomb?: boolean;
   /** 多人局：图旁边挂那扇小门。 */
   room?: boolean;
+  /** 计时局：这一局的图直接换成主菜单上那只橙色秒表。 */
+  timed?: boolean;
   /** 倒数窗口的 id，交给驱动它的人去拿。 */
   countId: string;
   /** 底下那一排按钮的 HTML；不给就不摆。 */
@@ -28,27 +30,33 @@ export interface StartStageOpts {
 }
 
 /**
- * 这一局是哪一种局，画成标志挂在玩法图旁边。
+ * 这一局是哪一种局，画成标志摆在玩法图旁边。
  *
  * 同一副棋盘可以是普通局、炸弹局、或者一场多人竞赛，三者的规则差得很远。
  * 光看棋盘看不出来，一行字又容易被跳过——一个图形能。
+ *
+ * 它们和玩法图一样大、并排站着，不是挂在角上的小角标：这一页只有三秒，角标
+ * 那么小的东西根本来不及被看见。
  */
-export function modeBadges(bomb?: boolean, room?: boolean): string {
+export function modeBadges(bomb?: boolean, room?: boolean): string[] {
   const marks: string[] = [];
-  if (bomb) marks.push(`<span class="mode-badge mode-badge--bomb">${ICON_BOMB_BADGE}</span>`);
-  if (room) marks.push(`<span class="mode-badge mode-badge--room">${ICON_MULTIPLAYER}</span>`);
-  return marks.length ? `<div class="mode-badges">${marks.join('')}</div>` : '';
+  if (bomb) marks.push(`<span class="start-mark mode-badge--bomb">${ICON_BOMB_BADGE}</span>`);
+  if (room) marks.push(`<span class="start-mark mode-badge--room">${ICON_MULTIPLAYER}</span>`);
+  return marks;
 }
 
 export function startStageHtml(o: StartStageOpts): string {
-  const wide = layoutIconIsWide(o.shapeId) ? ' start-mark--wide' : '';
+  const wide = layoutIconIsWide(o.shapeId) && !o.timed ? ' start-mark--wide' : '';
+  const marks = [
+    `<span class="start-mark${wide}"><span class="start-mark-art">${gameIcon(o.shapeId, o.timed)}</span></span>`,
+    ...modeBadges(o.bomb, o.room),
+  ];
   return `
     <div class="start-stage">
       <div class="start-emblem">
-        <div class="start-mark${wide}">
-          <span class="start-mark-art">${gameIcon(o.shapeId)}</span>
-          ${modeBadges(o.bomb, o.room)}
-        </div>
+        <!-- 一排等大的图：这一局的玩法，加上它是哪一种局。几个就写几个，
+             宽度按个数分，所以两个和三个都刚好铺满一行。 -->
+        <div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>
       </div>
       <div class="start-count">
         <div class="cd-window" id="${o.countId}" aria-hidden="true"></div>

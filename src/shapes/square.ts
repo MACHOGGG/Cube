@@ -103,6 +103,7 @@ export function createSquareGame(): ShapeGame {
       const refs = buildShell(container, {
         lang,
         shapeId: 'square',
+        timed: !!opts?.timeLimitSec,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'square', '方块')}`,
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,

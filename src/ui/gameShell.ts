@@ -37,6 +37,8 @@ export interface ShellMeta {
   /** 这个玩法在主菜单上的 id（square / circleHex / …）。开局页摆的就是它在
    *  主菜单上的那张图——按下去的是哪个图形，倒数时看见的就是同一个。 */
   shapeId: string;
+  /** 计时局。开局页摆的换成主菜单上那只橙色秒表，也就是玩家刚刚按下的那张。 */
+  timed?: boolean;
 }
 
 export interface ShellRefs {
@@ -196,6 +198,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       ${startStageHtml({
         shapeId: meta.shapeId,
         bomb: meta.bomb,
+        timed: meta.timed,
         room: !!currentRoom(),
         countId: 'startCount',
         extra: meta.landscape ? ROTATE_HINT(s.rotateHint) : '',

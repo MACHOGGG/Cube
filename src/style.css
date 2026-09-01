@@ -2113,18 +2113,23 @@ body.is-room-host::after {
   display: flex; align-items: center; justify-content: center;
 }
 
-.start-mark { position: relative; width: min(52vw, 46vh, 260px); aspect-ratio: 1; }
-.start-mark--wide { width: min(80vw, 74vh, 400px); aspect-ratio: 194 / 100; }
-.start-mark-art { display: block; width: 100%; height: 100%; }
-.start-mark-art > svg { width: 100%; height: 100%; display: block; }
-
-/* 炸弹/多人的小标志挂在图的右上角外侧：图本身还是正正居中的，标志不去挤它。 */
-.mode-badges {
-  position: absolute; top: -4%; right: -8%;
-  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+/* 一排等大的图。宽度按这一排有几个来分（--marks 由 startStage.ts 写上），
+   所以一个、两个、三个都恰好铺满同一条横向空间，谁也不比谁小。 */
+.start-marks {
+  --mark-gap: 14px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: var(--mark-gap); width: 100%;
 }
-.mode-badge { display: block; width: clamp(30px, 8.5vw, 52px); }
-.mode-badge > svg { width: 100%; height: 100%; display: block; }
+/* 宽度按「这一行有几个」去分这一行本身的宽度——不是按屏幕宽，屏幕宽度里还
+   扣着两边的留白，照它算出来的两个加起来就比行还宽，于是换行叠成一列。 */
+.start-mark {
+  position: relative; aspect-ratio: 1; flex: 0 0 auto;
+  width: min(calc((100% - (var(--marks, 1) - 1) * var(--mark-gap)) / var(--marks, 1)), 46vh, 260px);
+}
+/* V 形那张图是 2:1 的宽画布，单独占一行才不至于把旁边的挤扁。 */
+.start-mark--wide { flex-basis: 100%; width: min(80vw, 74vh, 400px); aspect-ratio: 194 / 100; margin: 0 auto; }
+.start-mark-art { display: block; width: 100%; height: 100%; }
+.start-mark > svg, .start-mark-art > svg { width: 100%; height: 100%; display: block; }
 
 /* 倒数的窗口：一个圆角矩形，数字从上面荡进来、停一下、再荡出去，越界的部分被
    窗口自己裁掉——像开场动画那样。 */
@@ -2174,7 +2179,8 @@ body.is-room-host::after {
 @media (orientation: landscape) and (max-height: 560px) {
   .start-stage { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4vw; }
   .start-emblem, .start-count { flex: 0 0 auto; width: auto; }
-  .start-mark { width: min(30vw, 60vh, 220px); }
+  .start-marks { --mark-gap: 10px; width: auto; max-width: 62vw; }
+  .start-mark { width: min(calc((62vw - (var(--marks, 1) - 1) * var(--mark-gap)) / var(--marks, 1)), 60vh, 220px); }
   .start-mark--wide { width: min(46vw, 92vh, 340px); }
   .cd-window { width: min(20vw, 46vh, 150px); }
   .cd-digit { font-size: min(14vw, 32vh, 108px); }

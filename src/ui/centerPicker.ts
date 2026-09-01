@@ -130,8 +130,15 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
     if (e.key === 'Escape') close();
   };
   window.addEventListener('keydown', onKey);
+  // 点在任何不是选项的地方——四周的空白、选项之间的缝、炸弹面板自己的底色
+  // ——都算「我不选了」，退回主菜单。
+  //
+  // 原来只认「正好点在最外层那一层」，中间隔着 body 和 row 两层容器，它们又
+  // 铺满了整块屏幕，所以真正能关掉窗口的地方少得可怜；手一歪落在某个选项上，
+  // 一局就直接开起来了。现在反过来判断：不是按钮，就关。
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
+    const hit = e.target instanceof Element ? e.target.closest('button') : null;
+    if (!hit || !overlay.contains(hit)) close();
   });
 
   if (reduceMotion()) {

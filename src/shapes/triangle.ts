@@ -272,6 +272,7 @@ export function createTriangleGame(): ShapeGame {
       const refs = buildShell(container, {
         lang,
         shapeId: 'triangle',
+        timed: !!opts?.timeLimitSec,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'triangle', '三角')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,

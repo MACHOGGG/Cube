@@ -211,6 +211,7 @@ export function createCircleGame(): ShapeGame {
       const refs = buildShell(container, {
         lang,
         shapeId: 'circle',
+        timed: !!opts?.timeLimitSec,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'circle', '圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
