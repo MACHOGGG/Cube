@@ -23,3 +23,6 @@ ios/App/build
 design/
 slides-interface.html
 slides-icons.zip
+
+# 界面模拟器：由 scripts/ui-screens.mjs + build-simulator.mjs 生成，不是源文件。
+slides-simulator.html

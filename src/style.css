@@ -1131,6 +1131,18 @@ button:hover { filter: brightness(1.05); }
 :root[data-cvd='1'] .profile-pill--square { --pill-ink: #0072B2; }
 .profile-pill--rose { background: #C88A92; }
 .profile-pill:hover { filter: brightness(1.04); }
+
+/* 个人主页那几颗按钮各自的颜色，取自界面稿上手调的那一版。写成按 id 的规则
+   而不是改 .profile-pill 的底色：这几颗是被单独挑出来上色的，剩下的仍然共用
+   那一个底色，以后加新按钮不会莫名其妙跟着变。 */
+#loginBtn { background: #E25000; }
+#langRow { background: #B07853; }
+#howToRow { background: #B76F43; }
+#cvdRow { background: #3070AD; }
+/* 开关没打开时的轨道色——界面稿上调它的时候开关正是关着的。必须写死在
+   [aria-checked='false'] 上：不限定的话这条规则的权重压过上面那条打开时的
+   规则，开关拨过去也不变色，那这颗开关就白做了。 */
+#cvdRow[aria-checked='false'] .pill-switch { background: #C66526; }
 .profile-pill:active { transform: translateY(1px) scale(0.99); }
 .profile-pill-row { display: flex; gap: 10px; width: 100%; max-width: 268px; margin: 0 auto; }
 .profile-pill-row .profile-pill { flex: 1; min-width: 0; }
