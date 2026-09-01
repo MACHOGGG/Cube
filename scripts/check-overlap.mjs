@@ -32,9 +32,14 @@ const check = (n, ok, extra = '') => {
 };
 
 const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
+// 手机两种拿法，加两台真实的电脑。电脑那两台不是凑数：主菜单的卡片有多大
+// 是按「屏幕还剩多高」算出来的，只有把真实的高度放进来，算错才会露馅。
+// 1366×768 是最挤的那类笔记本，1920×1080 是最常见的那块外接屏。
 const SIZES = [
   { name: '竖屏', width: 390, height: 844 },
   { name: '横屏', width: 844, height: 390 },
+  { name: '笔记本', width: 1366, height: 768 },
+  { name: '大屏', width: 1920, height: 1080 },
 ];
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -112,7 +117,15 @@ const blocked = (page) => page.evaluate(async () => {
 
 /** 一页：怎么走到它，以及走到之后等什么。 */
 const PAGES = [
-  { name: '主菜单', go: async () => {}, ready: '.home-icon-btn' },
+  {
+    name: '主菜单',
+    go: async () => {},
+    ready: '.home-icon-btn',
+    // 电脑上这一页必须站在一屏里。它是三排图标，一排也不能掉到屏幕外——
+    // 掉出去的那一排正好落在底排图标底下，看得见、按不着。手机上是另一回
+    // 事：竖着是两列八张，本来就要往下滑，所以只在宽版布局上要求。
+    mustFit: (size) => size.width >= 720,
+  },
   {
     name: '个人主页',
     go: async (p) => p.click('#navProfile'),
@@ -134,7 +147,7 @@ const PAGES = [
     // 竖屏时这一页不该要人滚：一进来就是「开房间 / 输房号 / 返回」三件事，
     // 都得看得见。横过来只剩三百多像素高，一张表单站不进去，那就让它滚——
     // 能滚到、按得着就行，上面那两条查的正是这个。
-    mustFitUpright: true,
+    mustFit: (size) => size.height > size.width,
   },
   {
     name: '成为天才',
@@ -176,7 +189,7 @@ for (const size of SIZES) {
         b.dock.length === 0, b.dock.slice(0, 3).join(' / '));
       check(`${size.name} · ${lang} · ${spec.name}：滚到顶，没有东西压在招牌下`,
         b.head.length === 0, b.head.slice(0, 3).join(' / '));
-      if (spec.mustFitUpright && size.height > size.width) {
+      if (spec.mustFit?.(size)) {
         const over = await page.evaluate(() =>
           document.documentElement.scrollHeight - innerHeight);
         check(`${size.name} · ${lang} · ${spec.name}：一屏装得下，不用滚`,

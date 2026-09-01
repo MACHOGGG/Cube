@@ -780,7 +780,7 @@ button:hover { filter: brightness(1.05); }
 /* 宽屏是几排居中的东西，不是一张死板的三列网格：三个基础玩法、计时 / 炸弹
    / 多人、再是五个布局。三张的那两排自然比五张的那一排窄，稿子上就是这个
    关系——每张卡片一样大，一排几张决定这排有多宽。 */
-.home-page--wide .home-grid { display: flex; flex-direction: column; gap: 34px; }
+.home-page--wide .home-grid { display: flex; flex-direction: column; gap: 26px; }
 .home-row {
   display: flex; align-items: center; justify-content: center;
   gap: clamp(18px, 2.4vw, 34px); width: 100%;
@@ -802,16 +802,36 @@ button:hover { filter: brightness(1.05); }
 .home-icon-btn:hover { filter: none; }
 .home-icon-btn:active { transform: none; }
 /* Sized so the four-card bottom row still fits the page's own width. */
-/* 三排要站在一屏里，不用滚。所以卡片除了被那一列的宽度收住，也被「屏幕还
-   剩多高」收住：上面的标题、页边、给底部那排图标留的位置加起来约 320px，
-   剩下的高度三排平分。笔记本上是这条在起作用，大屏上仍旧是 255。 */
+/* 三排要站在一屏里，不用滚，也不能钻到底下那排图标底下去。所以卡片除了被
+   自己那一列的宽度收住，还被「屏幕还剩多高」收住。
+
+   这个上限只要算错一点，页面就会长出滚动条，末排正好落在底排图标下面——
+   看得见，按不着。所以两个数都是量出来的，不是估的：
+
+     309px = 页面上边距 28 + 招牌上边距 6 + 招牌本身 101（四种语言里最高
+             的那个）+ 招牌下边距 14 + 两道行间距 26×2 + 页面下边距 108
+             （底排图标从屏幕底算起占 88，留 20 的余地）
+
+     3.11  = 上下两排各一张卡片的高，加中间那排。中间那排是炸弹卡片，它比
+             一张方卡片高 11.15%——里面三层叠着，最中间那颗 90s 的星芒还
+             特意溢出到上下两层去。量出来是 255 宽 283 高，1.1115。
+
+   减去那 309，剩下的高度三排照 3.11 分。笔记本上是这条在起作用；屏幕够高
+   时 255 那条重新接手，跟从前一样。 */
+.home-page--wide {
+  --home-card-cap: min(255px, (100dvh - 309px) / 3.11);
+}
+/* 一个变量、两处引用：从前炸弹卡片的宽度在文件后面又被写了一遍 255，同样
+   的选择器权重、位置更靠后，于是把上面这条高度上限整条盖掉了——中间那排
+   永远是 255 高，屏幕再矮也不缩。三排里有一排不听话，整页就站不进一屏。 */
 .home-page--wide .home-icon-btn,
 .home-page--wide .home-bomb-card {
-  max-width: 255px;
-  /* 3.2 而不是 3：中间那排的炸弹卡片比它左右两张高出约两成（里面是三层
-     叠起来的），三排的总高按它算才留得住底下那排图标的位置。 */
-  max-width: min(255px, (100dvh - 320px) / 3.2);
+  max-width: var(--home-card-cap);
 }
+/* 招牌和底排图标之间要让出的那两处，宽屏上也各收一点：省下来的高度直接
+   变成卡片能长到多大。 */
+.app.home-page--wide { padding-bottom: 108px; }
+.home-page--wide .home-head { margin-bottom: 14px; }
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
    空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：
@@ -868,8 +888,8 @@ button:hover { filter: brightness(1.05); }
   -webkit-tap-highlight-color: transparent;
 }
 /* 宽屏上炸弹和它左右两边一样大：这一排是「计时 · 炸弹 · 多人」三张并排，
-   谁也不比谁矮一截。 */
-.home-page--wide .home-bomb-card { max-width: 255px; }
+   谁也不比谁矮一截——上面那条 --home-card-cap 同时管着这三张，所以这里不
+   必（也不能）再写一遍宽度。 */
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 252px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
