@@ -296,7 +296,13 @@ export async function joinRoom(
 
 export function fetchState(): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
-  return post<RoomState>({ action: 'state', code: session.code });
+  // 带上自己的身份，不只是房号。
+  //
+  // 服务器靠 playerId/playerToken 认出是谁在问，然后顺手把「他还在」记一笔
+  // （api/room.js 的 state）。只发房号的话，这台设备每秒都在说话，服务器却
+  // 一句也没听出是谁——于是坐在小屋里不动的人过一会儿全成了「不在」，屋里
+  // 挂出一句《房主正在修电缆》。
+  return post<RoomState>({ action: 'state', ...session });
 }
 
 /** Host only: pick the board, and put everyone on the same countdown. */
@@ -351,6 +357,30 @@ export async function nudgeHost(): Promise<void> {
   if (!session) return;
   await post({ action: 'nudge', ...session });
 }
+
+/**
+ * 网页被关掉的那一下，替这台设备说一声。
+ *
+ * 用 sendBeacon 而不是 fetch：页面正在被卸载，普通请求会被浏览器一并取消，
+ * beacon 是唯一能保证发出去的那种。它不等回包，也不该等。
+ *
+ * pagehide 里带 persisted 的那一次不算：那是 iOS 把页面收进 bfcache（切到
+ * 别的应用、锁屏），人一回来页面原样醒过来。把那当成「走了」，就等于每次
+ * 切个应用都告诉全屋「他不在了」——那正是要修的毛病，不是要加的功能。
+ */
+function wireLeaveBeacon(): void {
+  const bye = (e: PageTransitionEvent) => {
+    if (e.persisted || !session) return;
+    try {
+      const body = JSON.stringify({ action: 'bye', ...session });
+      navigator.sendBeacon?.('/api/room', new Blob([body], { type: 'application/json' }));
+    } catch {
+      // 发不出去也就算了：超时那条路还在，只是慢一点。
+    }
+  };
+  window.addEventListener('pagehide', bye);
+}
+if (typeof window !== 'undefined') wireLeaveBeacon();
 
 /** Forget the room without telling the server — for a run that has ended. */
 export const forgetRoom = (): void => {

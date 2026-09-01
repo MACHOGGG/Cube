@@ -344,6 +344,21 @@ check('客人的小屋里只有《催房主》和《离开小屋》',
 check('房主的小屋里是《挑下一个玩法》和《结束小屋》',
   await A.page.evaluate(() => !!document.querySelector('#mpPick') && !!document.querySelector('#mpEnd')));
 
+// 坐在小屋里什么都不做，也不该被判成掉线。
+//
+// 这一条守的是一个真出现过的毛病：从前只有交分数那条路会告诉服务器「我还
+// 在」，而两局之间的小屋页根本不交分数——所有人坐着不动，十二秒之后每个人
+// 都成了「不在」，屋里挂出一句《房主正在修电缆》，网络一点问题都没有。
+// 等 34 秒，比现在的 AWAY_MS（30 秒）还长一点：短于它的话，这条自检就只是
+// 在证明「没到上限」，把心跳整个删掉也照样绿。慢半分钟换一条真的守得住东西
+// 的自检，值。
+await B.page.waitForTimeout(34000);
+const quiet = await B.page.evaluate(() => ({
+  away: !!document.querySelector('#hostAway'),
+  gone: !!document.querySelector('#roomCancelled'),
+}));
+check('在小屋里坐半分多钟，没有人被当成掉线', !quiet.away && !quiet.gone, JSON.stringify(quiet));
+
 // 催房主：房主那块标题玻璃上会多出一张画布，里面掉着图形。
 // 验的是「画布上真的画了东西」——不是「画布挂上去了」：一张空画布也能挂住，
 // 那样这条自检就永远是绿的，什么也没证明。

@@ -75,10 +75,21 @@ const ABSENT_MS = 90_000;
  *
  * 比 ABSENT_MS 短得多，因为它们答的是两个问题：那个决定「这一局还等不等
  * 他」，错判的代价是整桌卡住，所以要宽；这个只决定屏幕上要不要说一句「稍
- * 等」，错判的代价是白说一句话，所以可以紧。每台设备大约一秒报一次，十二秒
- * 没消息就不是一次网络抖动了。
+ * 等」，错判的代价是白说一句话，所以可以紧。
+ *
+ * 从十二秒放宽到三十秒，是因为玩家要的是「网络完全断了、或者人把网页关
+ * 了」才算走，不是「这一下慢了」。每台设备四秒记一次到（见 SEEN_WRITE_MS），
+ * 三十秒里丢掉六次还判不出「不在」；而真的关掉网页那一下有 beacon 直接说
+ * 一声（见 bye），不用等这个上限。
  */
-const AWAY_MS = 12_000;
+const AWAY_MS = 30_000;
+/**
+ * 轮询多久才顺手把「我还在」记一次。
+ *
+ * 每台设备一秒问一次房间状态，但没必要一秒写一次库——那是每人每秒一次写。
+ * 四秒记一次，AWAY_MS 里能记七次，掉几次也判不出「不在」。
+ */
+const SEEN_WRITE_MS = 4000;
 const seatAway = (seat, meta) =>
   Date.now() - Math.max(seat.lastSeen || 0, seat.joinedAt || 0, meta.startAt || 0) > AWAY_MS;
 
@@ -120,6 +131,7 @@ export default async function handler(req, res) {
       case 'end': return await end(res, body);
       case 'nudge': return await nudge(res, body);
       case 'learn': return await learn(res, body);
+      case 'bye': return await bye(res, body);
       default: return send(res, 400, { error: 'action' });
     }
   } catch {
@@ -404,7 +416,39 @@ async function state(res, body) {
   const code = String(body.code ?? '').trim();
   const hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
+  // 问一次状态，也就是报一次到。
+  //
+  // 从前只有交分数那条路会写 lastSeen，可小屋页（两局之间）根本不交分数：
+  // 所有人坐在那儿，谁也没动，十二秒之后每个人都成了「不在」，屋里于是挂出
+  // 一句《房主正在修电缆》——网络一点问题都没有。轮询本身就是最诚实的心跳，
+  // 它每秒都在发生；这里只是把它记下来。
+  const seat = seatOf(hash, body.playerId, body.playerToken);
+  if (seat && Date.now() - (seat.lastSeen || 0) > SEEN_WRITE_MS && !seat.left) {
+    await hset(roomKey(code), 'p:' + body.playerId, { ...seat, lastSeen: Date.now() });
+    return send(res, 200, publicState(code, await hgetall(roomKey(code))));
+  }
   return send(res, 200, publicState(code, hash));
+}
+
+/**
+ * 关掉网页的那一下。
+ *
+ * 「他走了」这件事，光靠等超时要等 AWAY_MS 那么久。网页被关掉的时候浏览器
+ * 允许发最后一个 beacon，这里就把 lastSeen 抹掉——屋里其他人下一次轮询就
+ * 知道了，不用干等半分钟。
+ *
+ * 不做的事：不把座位标成 left。关掉标签页和「按下离开」是两回事，前者常常
+ * 是手滑或者手机切了应用，人马上就回来了——座位得留着。
+ */
+async function bye(res, body) {
+  const code = String(body.code ?? '').trim();
+  const hash = await readRoom(code);
+  if (!hash) return send(res, 200, { ok: true });
+  const seat = seatOf(hash, body.playerId, body.playerToken);
+  if (seat && !seat.left) {
+    await hset(roomKey(code), 'p:' + body.playerId, { ...seat, lastSeen: 0 });
+  }
+  return send(res, 200, { ok: true });
 }
 
 async function start(res, body) {
