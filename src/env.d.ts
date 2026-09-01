@@ -16,4 +16,15 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+  /**
+   * Vite's build-time folder read, used by ui/customIcons.ts to slurp
+   * src/assets/icons/*.svg. Declared here rather than by referencing
+   * vite/client, to keep this file the single place that says what the
+   * bundler hands the app — the same reason ImportMetaEnv is spelled out
+   * above instead of inherited.
+   */
+  glob(
+    pattern: string,
+    options: { query: '?raw'; import: 'default'; eager: true },
+  ): Record<string, string>;
 }

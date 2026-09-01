@@ -9,7 +9,12 @@
  *   pastel  — "more layouts", drawn as a brush-stroke plus
  * Every icon draws on the same 100x100 viewBox and is sized entirely by CSS,
  * so a card can grow or shrink without any of this changing.
+ *
+ * 想换掉其中任何一个：把你自己的 SVG 放进 src/assets/icons/，文件名见那里的
+ * README。下面每一处都是「先找你的文件，没有才用这里画的」，所以放一个文件
+ * 换一个图标，删掉文件就变回来，代码不用动。
  */
+import { custom, customAny } from './customIcons';
 
 export const HOME_COLORS = {
   gray: '#A8A8A8',
@@ -77,7 +82,7 @@ function miniCircle(cx: number, cy: number, r: number, fill: string): string {
 }
 const C = HOME_COLORS;
 
-export const ICON_BASE_SQUARE = svg(
+export const ICON_BASE_SQUARE = custom('base-square') ?? svg(
   baseShape('square', C.gray) +
     miniSquare(39, 39, 11, C.blue) +
     miniSquare(63, 39, 11, C.amber) +
@@ -85,7 +90,7 @@ export const ICON_BASE_SQUARE = svg(
     miniSquare(63, 63, 11, C.green),
 );
 
-export const ICON_BASE_CIRCLE = svg(
+export const ICON_BASE_CIRCLE = custom('base-circle') ?? svg(
   baseShape('circle', C.gray) +
     miniCircle(50, 38, 11.5, C.amber) +
     miniCircle(38, 60, 11.5, C.purple) +
@@ -128,7 +133,7 @@ function tileTriangle(cx: number, edgeY: number, half: number, h: number, fill: 
     stroke-linejoin="round"/>`;
 }
 
-export const ICON_BASE_TRIANGLE = svg(
+export const ICON_BASE_TRIANGLE = custom('base-triangle') ?? svg(
   baseShape('triangle', C.gray) +
     // Three big interlocking pieces, the middle one inverted and riding a
     // little higher, so the row nests the way a real board row does.
@@ -227,7 +232,8 @@ function stopwatch(shape: BaseShape, face?: string): string {
 /** PC row: the watch takes the *card's own* shape, so the three timed entries
  *  read as "the square game, timed", etc. even before the face. */
 export function timedCard(shape: BaseShape): string {
-  return stopwatch(shape);
+  // timed-square.svg 只换方块那一支；timed.svg 三支一起换。
+  return customAny(`timed-${shape}`, 'timed') ?? stopwatch(shape);
 }
 
 /**
@@ -238,7 +244,7 @@ export function timedCard(shape: BaseShape): string {
  * one object turning into three different ones — which is exactly how the
  * old alarm clock looked once the three became stopwatches.
  */
-export const ICON_TIMED_COMBINED = (() => {
+export const ICON_TIMED_COMBINED = custom('timed-combined') ?? (() => {
   const cy = WATCH_CY;
   // No white outlines here. The base-game cards draw their pieces outlined
   // because they sit on grey, but this face is already white — the outlines
@@ -260,7 +266,7 @@ export const ICON_TIMED_COMBINED = (() => {
 /** Mobile picker: one watch per timed game — the same three cards the wide
  *  layout shows in its timed row. */
 export function timedOption(shape: BaseShape): string {
-  return stopwatch(shape);
+  return customAny(`timed-${shape}`, 'timed') ?? stopwatch(shape);
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +295,10 @@ function burstStar(cx: number, cy: number, R: number, fill: string): string {
  *  tier, a green piece (the base-square icon's green) for the 90s timed tier,
  *  a purple "+" piece for the advanced (more-layouts) tier. */
 export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced'): string {
+  // 三档各画一套就放 bomb-basic-square.svg 这样的九个；三档共用一套形状就
+  // 只放 bomb-square.svg 三个。两个都放时，带档次的那个赢。
+  const drawn = customAny(`bomb-${tier}-${shape}`, `bomb-${shape}`);
+  if (drawn) return drawn;
   const fill = tier === 'basic' ? C.amber : tier === 'timed' ? C.green : C.purple;
   const body =
     shape === 'square'
@@ -309,6 +319,7 @@ export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced')
  *  so the star spills into the tiers above and below exactly as the sheet
  *  has it, instead of being boxed inside the middle bar. */
 export const ICON_BOMB_90S =
+  custom('bomb-90s') ??
   '<svg viewBox="0 0 260 100" overflow="visible" aria-hidden="true">' +
   burstStar(130, 50, 88, C.white) +
   `<text x="130" y="64" text-anchor="middle" font-family="Karla, sans-serif" font-size="40"
@@ -336,6 +347,8 @@ const BRUSH_FLECKS =
   '<circle cx="47" cy="66" r="1.3" fill="rgba(255,255,255,0)"/>';
 
 export function moreLayoutCard(shape: BaseShape): string {
+  const drawn = customAny(`more-${shape}`, 'more');
+  if (drawn) return drawn;
   const fill = shape === 'square' ? C.moreSquare : shape === 'circle' ? C.moreCircle : C.moreTriangle;
   const lift = shape === 'triangle' ? '<g transform="translate(0,8) scale(0.86) translate(8,0)">' : '<g>';
   return svg(baseShape(shape, fill) + lift + BRUSH_PLUS + BRUSH_FLECKS + '</g>');
@@ -477,7 +490,7 @@ const LAYOUT_ICONS: Record<string, string> = {
 /** The icon for one layout variant, falling back to its family's plus-card
  *  if a new variant ever arrives without artwork of its own. */
 export function layoutIcon(id: string, shape: BaseShape): string {
-  return LAYOUT_ICONS[id] ?? moreLayoutCard(shape);
+  return custom(`layout-${id}`) ?? LAYOUT_ICONS[id] ?? moreLayoutCard(shape);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +500,7 @@ export function layoutIcon(id: string, shape: BaseShape): string {
 /** 个人主页 — a blue-violet disc holding one white avatar: a ringed head over
  *  a rounded bust whose shoulders run off the bottom of the disc, which the
  *  disc's own edge crops. */
-export const ICON_NAV_PROFILE = svg(
+export const ICON_NAV_PROFILE = custom('nav-profile') ?? svg(
   `<defs><clipPath id="navAvatarClip"><circle cx="50" cy="50" r="46"/></clipPath></defs>` +
     `<circle cx="50" cy="50" r="46" fill="${C.navAvatar}"/>` +
     `<g clip-path="url(#navAvatarClip)">` +
@@ -497,7 +510,7 @@ export const ICON_NAV_PROFILE = svg(
 );
 
 /** 记录与排名 — a gray triangle with list rules across it. */
-export const ICON_NAV_RECORDS = svg(
+export const ICON_NAV_RECORDS = custom('nav-records') ?? svg(
   `<path d="${TRIANGLE_PATH}" fill="${C.navGray}"/>` +
     `<path d="M32 60 H68 M28 71 H72 M36 49 H64" stroke="#fff" stroke-width="5" stroke-linecap="round"/>`,
 );
@@ -515,8 +528,10 @@ const SPEAKER_ARCS =
   '<path d="M60 38 A18 18 0 0 1 60 62"/>' +
   '<path d="M72 27 A31 31 0 0 1 72 73"/>' +
   '<path d="M84 17 A44 44 0 0 1 84 83"/></g>';
-export const ICON_SOUND_ON = svg(SPEAKER_BODY + SPEAKER_ARCS);
-export const ICON_SOUND_OFF = svg(
+// 这两个和下面的锁是用 currentColor 画的：颜色跟着它所在那颗按钮走，深色
+// 模式下会自己变。换成写死颜色的文件之后就不跟了——这是取舍，不是 bug。
+export const ICON_SOUND_ON = custom('sound-on') ?? svg(SPEAKER_BODY + SPEAKER_ARCS);
+export const ICON_SOUND_OFF = custom('sound-off') ?? svg(
   SPEAKER_BODY +
     SPEAKER_ARCS +
     // The bar, cut clear of the arcs it crosses so it reads as one stroke
@@ -529,4 +544,5 @@ export const ICON_SOUND_OFF = svg(
  *  locked boards and the not-yet-built perks listed in 个人主页. Drawn in
  *  currentColor so each place it appears takes its own ink. */
 export const ICON_LOCK =
+  custom('lock') ??
   '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';

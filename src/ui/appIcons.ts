@@ -1,4 +1,5 @@
 import { roundedPolyPath } from './homeIcons';
+import { custom } from './customIcons';
 
 /**
  * The icon set a player can put on the browser tab, drawn as vectors rather
@@ -123,8 +124,14 @@ export interface AppIcon {
   svg: string;
 }
 
-/** Every icon on offer, in the order the picker lays them out. */
-export const APP_ICONS: AppIcon[] = [
+/**
+ * Every icon on offer, in the order the picker lays them out.
+ *
+ * 想换掉其中一个：放一个 app-<id>.svg 进 src/assets/icons/，比如
+ * app-tower-rgb.svg。手机主屏幕的 PNG 是 scripts/gen-app-icons.mjs 从这个
+ * 数组烤出来的，所以换了文件之后重跑一次那个脚本，主屏幕图标一起跟着换。
+ */
+const DRAWN: AppIcon[] = [
   { id: 'tower-rgb', svg: stack(P.rose, P.green, P.blue) },
   { id: 'tower-bor', svg: stack(P.blue, P.ochre, P.rose) },
   { id: 'scatter', svg: scatter() },
@@ -137,6 +144,11 @@ export const APP_ICONS: AppIcon[] = [
   { id: 'tri-rose', svg: triTile(P.rose) },
   { id: 'tri-blue', svg: triTile(P.blue) },
 ];
+
+export const APP_ICONS: AppIcon[] = DRAWN.map(({ id, svg }) => ({
+  id,
+  svg: custom(`app-${id}`) ?? svg,
+}));
 
 export const DEFAULT_APP_ICON = 'tower-rgb';
 

@@ -1,4 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
+import { custom } from './customIcons';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 
 export interface ExtraControl {
@@ -116,11 +117,16 @@ const ROTATE_HINT = (copy: string) => `
 const ctlGlyph = (inner: string) =>
   `<svg class="ctl-glyph" viewBox="0 0 100 100" aria-hidden="true" focusable="false">` +
   `<circle cx="50" cy="50" r="46" fill="var(--ctl-disc)"/>${inner}</svg>`;
-const CTL_PAUSE = ctlGlyph(
+// 导出是给 scripts/icon-sheet.mjs 用的——图标清单要把它们和别的图标一起画
+// 出来，否则这两颗就成了唯一没在清单上、又能换的图标。
+// 换成自己画的：ctl-pause.svg / ctl-finish.svg。注意这两个现在是用
+// var(--ctl-disc) / var(--ctl-mark) 画的，按下去会两色对调；换成写死颜色
+// 的文件之后按下的反色就没有了。
+export const CTL_PAUSE = custom('ctl-pause') ?? ctlGlyph(
   '<rect x="35" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>' +
     '<rect x="54" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>',
 );
-const CTL_FINISH = ctlGlyph(
+export const CTL_FINISH = custom('ctl-finish') ?? ctlGlyph(
   '<path d="M29 51.5 L44 66 L72 35" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ' +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
