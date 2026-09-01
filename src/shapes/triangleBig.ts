@@ -3,7 +3,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { observeBoardSize } from '../engine/boardResize';
+import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -477,7 +477,7 @@ export function createTriangleBigGame(): ShapeGame {
       }
 
       function layoutBoard() {
-        const rect = refs.boardWrap.getBoundingClientRect();
+        const rect = floorBox(refs.boardWrap);
         const boardSize = Math.min(rect.width, rect.height);
         S = boardSize / 5.2;
         H = (S * Math.sqrt(3)) / 2;
@@ -485,6 +485,8 @@ export function createTriangleBigGame(): ShapeGame {
         originY = (boardSize - ROW_LENS.length * H) / 2 - GLOBAL_ROW_OFFSET * H;
         refs.boardEl.style.width = boardSize + 'px';
         refs.boardEl.style.height = boardSize + 'px';
+             // 图形已经按整格算满了，地板收成正方形不会动到它。
+        squareFloor(refs.boardWrap, boardSize, boardSize);
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {

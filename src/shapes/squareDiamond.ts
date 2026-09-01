@@ -3,7 +3,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { observeBoardSize } from '../engine/boardResize';
+import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -408,7 +408,7 @@ export function createSquareDiamondGame(): ShapeGame {
       // the module comment for the derivation (r+c fixed reads as pure
       // horizontal, r or c fixed reads as one of the two diagonals).
       function layoutBoard() {
-        const rect = refs.boardWrap.getBoundingClientRect();
+        const rect = floorBox(refs.boardWrap);
         const S = Math.min(rect.width, rect.height);
         cellSize = S / 8.2;
         k = cellSize / Math.SQRT2;
@@ -416,6 +416,8 @@ export function createSquareDiamondGame(): ShapeGame {
         boardTop = S / 2;
         refs.boardEl.style.width = S + 'px';
         refs.boardEl.style.height = S + 'px';
+             // 图形已经按整格算满了，地板收成正方形不会动到它。
+        squareFloor(refs.boardWrap, S, S);
       }
 
       function cellCenter(r: number, c: number): [number, number] {

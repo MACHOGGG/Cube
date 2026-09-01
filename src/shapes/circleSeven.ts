@@ -3,7 +3,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { observeBoardSize } from '../engine/boardResize';
+import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -343,33 +343,33 @@ export function createCircleSevenGame(): ShapeGame {
       // centered on cx=0, spanning cy=0 (top point) to cy=12*rowH (bottom
       // point) — no per-row trimming needed, unlike a hex or triangle crop.
       /**
-       * 菱形永远横躺着。
+       * 菱形最长的那两个角，永远指着屏幕最长的那条边。
        *
-       * 从前这里问的是屏幕横竖：竖着拿的时候菱形立起来，横过来才躺下。可那
-       * 是同一副棋盘的两张脸——刚学会「宽的那条对角线是 A 向」的人，把手机转
-       * 一下，方向全反了。棋盘的样子不该跟着手怎么拿而变，会变的只是它周围
-       * 那几个读数和按钮的排布（那部分仍然是响应式的，见 style.css 里
-       * .app--game 的横屏栅格）。
+       * 横屏就躺下，竖屏就立起来——因为菱形的长对角线比短的长六成，它顺着长
+       * 边摆才拿得到最多的地方。玩家定的第一条就是这个：最大化最重要，转屏幕
+       * 时图案跟着换向是可以接受的代价。
        *
-       * 代价说明白：竖着拿的时候躺着的菱形只用得上屏幕的宽，所以球比从前小
-       * 一圈。这个玩法本来就在开局页请人把手机转过来（landscape: true），
-       * 竖屏不是它设计给的姿势。
+       * 量的是「这块视口是宽还是高」，不是那条横屏媒体查询。从前用的是
+       * (orientation: landscape) and (max-height: 560px)——电脑上 1366×768
+       * 是宽的，可它高过 560，那条查询会说「不是横屏」，于是菱形在一块宽屏上
+       * 立着，左右各空一大截。
        *
-       * 留成一个函数而不是直接删掉：底下有三处在用它（排版、算球心、拖拽的
-       * 方向基），改成常量的话那三处的意思就散了；这里一处写着「永远躺着」，
-       * 那三处读起来仍然是同一句话。
+       * 留成一个函数是因为底下有三处在用它（排版、算球心、拖拽的方向基），
+       * 它们说的是同一句话。
        */
       function landscapeNow(): boolean {
-        return true;
+        try {
+          return window.innerWidth >= window.innerHeight;
+        } catch {
+          return false;
+        }
       }
 
       function layoutBoard() {
         const land = landscapeNow();
-        // In landscape the grid row owns the wrapper's height; drop any
-        // inline height from a previous portrait layout so the measurement
-        // below reads the row, not our own last answer.
-        if (land) refs.boardWrap.style.height = '';
-        const rect = refs.boardWrap.getBoundingClientRect();
+        // floorBox 会把上一轮压在地板上的尺寸全摘掉再量，所以量到的是这一格
+        // 本来有多大，不是我们自己上一轮收出来的那个方框。
+        const rect = floorBox(refs.boardWrap);
         const width = rect.width || 320;
         // The diamond spans 12 lattice steps along its long axis and 12
         // along its short one, plus one ball (1.86R) of margin on each — so
@@ -394,6 +394,10 @@ export function createCircleSevenGame(): ShapeGame {
           boardTop = height / 2;
           refs.boardEl.style.width = width + 'px';
           refs.boardEl.style.height = height + 'px';
+          // 传的是棋盘元素自己的框（width × height），不是菱形画出来的那块。
+          // 地板收到比棋盘元素还小的话，元素会顶出去——躺着的菱形横屏时正是
+          // 这样，所以那时候这一句什么都不做。
+          squareFloor(refs.boardWrap, width, height);
           return;
         }
         R = Math.min(width / SHORT, availH / LONG);
@@ -404,6 +408,7 @@ export function createCircleSevenGame(): ShapeGame {
         boardTop = (height - 12 * rowH) / 2;
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
+        squareFloor(refs.boardWrap, width, height);
       }
 
       function ballCenter(r: number, c: number): [number, number] {

@@ -3,7 +3,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { observeBoardSize } from '../engine/boardResize';
+import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -429,7 +429,7 @@ export function createCircleGame(): ShapeGame {
       }
 
       function layoutBoard() {
-        const rect = refs.boardWrap.getBoundingClientRect();
+        const rect = floorBox(refs.boardWrap);
         const S = Math.min(rect.width, rect.height);
         R = S / 14;
         rowH = R * Math.sqrt(3);
@@ -438,6 +438,8 @@ export function createCircleGame(): ShapeGame {
         boardLeft = S / 2; // center x, per-row offset applied in position calc
         refs.boardEl.style.width = S + 'px';
         refs.boardEl.style.height = S + 'px';
+             // 图形已经按整格算满了，地板收成正方形不会动到它。
+        squareFloor(refs.boardWrap, S, S);
       }
 
       function ballCenter(r: number, c: number): [number, number] {

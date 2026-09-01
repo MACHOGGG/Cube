@@ -3,7 +3,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { observeBoardSize } from '../engine/boardResize';
+import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -428,7 +428,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       })();
 
       function layoutBoard() {
-        const rect = refs.boardWrap.getBoundingClientRect();
+        const rect = floorBox(refs.boardWrap);
         const width = rect.width || 320;
         const byWidth = width / (UNIT_EXTENT.w + 0.3);
         // The panel is a hard ceiling in both orientations now, so the
@@ -443,6 +443,9 @@ export function createTriangleAdvancedGame(): ShapeGame {
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
         refs.boardWrap.style.aspectRatio = 'auto';
+        // 传棋盘元素自己的框，不是 V 画出来的那块：地板收得比元素还小的话，
+        // 元素会顶出地板。横屏时 V 撑满整格的宽，收不成正方形；竖屏时收得成。
+        squareFloor(refs.boardWrap, width, height);
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {

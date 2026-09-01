@@ -36,3 +36,60 @@ export function observeBoardSize(el: HTMLElement, redraw: () => void): () => voi
     window.removeEventListener('orientationchange', tick);
   };
 }
+
+/**
+ * 地板（棋盘底下那块圆角面板）该多大。
+ *
+ * 玩家定的顺序，照这个顺序读这两个函数：
+ *   1. 棋盘最大——它拿到那一格能给的全部空间；
+ *   2. 图形在棋盘里最大；
+ *   3. 图形已经最大之后，地板再大也不会让图形更大了，那就把地板尽量收成一个
+ *      圆角正方形。
+ *
+ * 关键是第三条只在「不要钱」的时候才做。从前我把顺序弄反了：先把地板定成正
+ * 方形，再让棋盘去将就它——七色圆球的菱形因此从 609px 宽缩到 303px，整整一
+ * 半。现在是反过来的：棋盘先按整格算满，算完了才问一句「收成正方形装得下
+ * 吗」，装得下就收，装不下就不收。
+ */
+
+/**
+ * 量这一格本来有多大——先把我们自己上一轮压上去的尺寸摘掉。
+ *
+ * 不摘的话量到的是上一轮收出来的那个正方形，窗口变大也长不回去：地板会一轮
+ * 比一轮小，直到看不见。每个玩法排版的第一句都该是这一句，而不是直接
+ * getBoundingClientRect()。
+ */
+export function floorBox(wrap: HTMLElement): DOMRect {
+  wrap.style.width = '';
+  wrap.style.height = '';
+  wrap.style.flex = '';
+  wrap.style.margin = '';
+  return wrap.getBoundingClientRect();
+}
+
+/**
+ * 排完版之后叫一声：把地板收成正方形，前提是这不会动到棋盘。
+ *
+ * boardW / boardH 是棋盘那个元素自己的框（不是格子的尺寸，也不是图形画出来
+ * 的那一块——地板收得比元素还小的话，元素会顶出地板）。边长取两
+ * 者的大者，所以正方形一定装得下棋盘；而棋盘的尺寸本来就是照着整格算满的，
+ * 收到这个边长之后再算一遍，得到的比例分毫不变——数学上是这样：棋盘的两边是
+ * K₁·R 和 K₂·R，边长 = R·max(K₁,K₂)，再算一次得到的
+ * R' = 边长 / max(K₁,K₂) = R。
+ *
+ * 装不下（比如躺着的菱形比这一格的高度还宽）就什么都不做，地板保持整格——那
+ * 时候「方」已经要拿棋盘的大小去换了，而那是第一条。
+ *
+ * 居中用 margin: auto，不用 align-self：竖屏那一列的交叉轴是横的，一句
+ * align-self: center 会让地板在没被钉住尺寸的那一瞬间横向塌成内容宽，
+ * 下一次量格子就量错了。
+ */
+export function squareFloor(wrap: HTMLElement, boardW: number, boardH: number): void {
+  const rect = wrap.getBoundingClientRect();
+  const side = Math.max(boardW, boardH);
+  if (!(side > 0) || side > rect.width + 0.5 || side > rect.height + 0.5) return;
+  wrap.style.width = side + 'px';
+  wrap.style.height = side + 'px';
+  wrap.style.flex = '0 0 auto';
+  wrap.style.margin = 'auto';
+}

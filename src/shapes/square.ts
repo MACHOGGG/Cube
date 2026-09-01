@@ -3,7 +3,7 @@ import { createGameController } from '../engine/gameController';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { observeBoardSize } from '../engine/boardResize';
+import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -319,7 +319,7 @@ export function createSquareGame(): ShapeGame {
       }
 
       function computeCell(): number {
-        const rect = refs.boardWrap.getBoundingClientRect();
+        const rect = floorBox(refs.boardWrap);
         const avail = Math.min(rect.width, rect.height);
         return Math.floor(Math.min(avail / cols, avail / rows));
       }
@@ -328,6 +328,7 @@ export function createSquareGame(): ShapeGame {
         CELL = computeCell();
         refs.boardEl.style.width = CELL * cols + 'px';
         refs.boardEl.style.height = CELL * rows + 'px';
+        squareFloor(refs.boardWrap, CELL * cols, CELL * rows);
       }
 
       function makeTileEl(tile: Tile, r: number, c: number, cell: number, opacity?: number): HTMLElement {
