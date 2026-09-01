@@ -219,8 +219,10 @@ export interface I18nStrings {
   /** The host picks the board from the home page, where all eight of them
    *  live with their icons — these are the trip there and back. */
   mpGoPick: string;
+  /** 房主被送回主菜单挑下一个玩法时，顶上那条横幅。{code} 换成房号。
+   *  横幅上只留这一行——挑一个玩法全房间就一起玩，这件事横幅一亮就说完了，
+   *  底下再写一句解释是同一件事说两遍。 */
   mpPickingTitle: string;
-  mpPickingHint: string;
   mpBackToRoom: string;
   mpNotAMode: string;
   /** A room is an evening: round after round, then a closing card. */
@@ -509,8 +511,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStandings: 'Standings',
     mpFinished: 'done',
     mpGoPick: 'Pick a board on the home page',
-    mpPickingTitle: 'You are picking for the room',
-    mpPickingHint: 'Tap any board and everyone in room {code} plays it.',
+    mpPickingTitle: 'You are picking for room {code}',
     mpBackToRoom: 'Back to the room',
     mpNotAMode: 'Rooms play the eight plain boards — not timed runs or bombs.',
     mpRoundLabel: 'Round {n}',
@@ -525,7 +526,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '{n} rounds',
     mpErrEnded: 'That room has been closed.',
     mpReconnecting: 'Connection lost — getting you back in…',
-    mpHostLeaveWarn: 'You opened this room. If you leave, nobody can start another round — the others will have to open a new room.',
+    mpHostLeaveWarn: 'Close the room?',
     mpGuestLeaveWarn: 'Leave the room? Your seat goes back and the others play on without you.',
     mpLeaveAnyway: 'Leave anyway',
     mpStay: 'Stay',
@@ -777,8 +778,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStandings: 'Classement',
     mpFinished: 'terminé',
     mpGoPick: 'Choisir un plateau sur l’accueil',
-    mpPickingTitle: 'Vous choisissez pour la salle',
-    mpPickingHint: 'Touchez un plateau : toute la salle {code} y joue.',
+    mpPickingTitle: 'Vous choisissez pour la salle {code}',
     mpBackToRoom: 'Retour à la salle',
     mpNotAMode: 'Les salles jouent les huit plateaux simples — ni chrono ni bombes.',
     mpRoundLabel: 'Manche {n}',
@@ -793,7 +793,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '{n} manches',
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
-    mpHostLeaveWarn: 'Vous avez ouvert cette salle. Si vous partez, personne ne pourra lancer de manche — les autres devront ouvrir une nouvelle salle.',
+    mpHostLeaveWarn: 'Dissoudre la salle ?',
     mpGuestLeaveWarn: 'Quitter la salle ? Vous rendez votre place et les autres continuent sans vous.',
     mpLeaveAnyway: 'Partir quand même',
     mpStay: 'Rester',
@@ -1045,8 +1045,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStandings: '排名',
     mpFinished: '已完成',
     mpGoPick: '去主選單選玩法',
-    mpPickingTitle: '你正在為整個房間選玩法',
-    mpPickingHint: '點任何一個玩法，{code} 號房的所有人就一起玩它。',
+    mpPickingTitle: '你為 {code} 房間選擇',
     mpBackToRoom: '回到房間',
     mpNotAMode: '房間只玩八種基本玩法，計時與炸彈暫時不行。',
     mpRoundLabel: '第 {n} 局',
@@ -1061,7 +1060,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '共 {n} 局',
     mpErrEnded: '這個房間已經結束了。',
     mpReconnecting: '網路斷了一下，正在把你接回房間…',
-    mpHostLeaveWarn: '這間房是你開的。你一走，就沒有人能再開下一局了——其他人得重新開一間房。',
+    mpHostLeaveWarn: '解散房間？',
     mpGuestLeaveWarn: '要離開這間房嗎？座位會交回去，其他人會接著玩。',
     mpLeaveAnyway: '還是離開',
     mpStay: '留下',
@@ -1313,8 +1312,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStandings: '排名',
     mpFinished: '已完成',
     mpGoPick: '去主菜单选玩法',
-    mpPickingTitle: '你正在为整个房间选玩法',
-    mpPickingHint: '点任何一个玩法，{code} 号房的所有人就一起玩它。',
+    mpPickingTitle: '你为 {code} 房间选择',
     mpBackToRoom: '回到房间',
     mpNotAMode: '房间只玩八种基本玩法，计时和炸弹暂时不行。',
     mpRoundLabel: '第 {n} 局',
@@ -1329,7 +1327,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundsPlayed: '共 {n} 局',
     mpErrEnded: '这个房间已经结束了。',
     mpReconnecting: '网络断了一下，正在把你接回房间…',
-    mpHostLeaveWarn: '这间房是你开的。你一走，就没有人能再开下一局了——其他人得重新开一间房。',
+    mpHostLeaveWarn: '解散房间？',
     mpGuestLeaveWarn: '要离开这间房吗？座位会交回去，其他人会接着玩。',
     mpLeaveAnyway: '还是离开',
     mpStay: '留下',

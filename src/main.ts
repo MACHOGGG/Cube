@@ -257,8 +257,7 @@ function paintRoomHostBanner() {
   bar.id = 'roomPickBar';
   bar.className = 'room-pick-bar';
   bar.innerHTML = `
-    <div class="room-pick-title">${s.mpPickingTitle}</div>
-    <div class="room-pick-hint">${s.mpPickingHint.replace('{code}', pickingForRoom)}</div>
+    <div class="room-pick-title">${s.mpPickingTitle.replace('{code}', pickingForRoom)}</div>
     <div class="room-pick-msg" id="roomPickMsg" role="status"></div>
     <div class="room-pick-acts">
       <button class="room-pick-back" id="roomPickBack">${s.mpBackToRoom}</button>

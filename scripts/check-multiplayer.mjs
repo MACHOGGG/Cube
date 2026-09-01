@@ -151,8 +151,12 @@ check('只有房主看得到开局入口', (await B.page.$('#mpPick')) === null 
 // ---- the host goes to the home page and picks a board there -------------
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
-check('房主到了主菜单，顶上有「为整房选玩法」的横幅', true,
-  (await A.page.$eval('.room-pick-title', (e) => e.textContent.trim())));
+const pickBanner = await A.page.$eval('.room-pick-title', (e) => e.textContent.trim());
+check('房主到了主菜单，横幅上写着「你为 <房号> 房间选择」',
+  pickBanner.includes(code) && pickBanner.startsWith('你为'), pickBanner);
+// 横幅从两行减成一行：那句「点哪个玩法全房间就跟着玩」的说明去掉了，红色
+// 的大字自己就说清楚了这件事。
+check('横幅只剩这一行，说明那行没了', (await A.page.$('.room-pick-hint')) === null);
 check('屏幕外框亮起房主提示',
   await A.page.evaluate(() => document.body.classList.contains('is-room-host')));
 // 一局刚打完、房主被送回来挑下一个玩法的时候，走人的路原来只剩「先回房间页
