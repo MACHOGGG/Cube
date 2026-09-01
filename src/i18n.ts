@@ -246,6 +246,14 @@ export interface I18nStrings {
   mpGuestLeaveWarn: string;
   mpLeaveAnyway: string;
   mpStay: string;
+  /** 房间局里按下《完成》时问的那一句。问的这段时间钟停着、牌也盖上。 */
+  mpFinishConfirm: string;
+  /** 房主把座位交回去了，这间房再也开不了下一局。 */
+  mpRoomCancelled: string;
+  /** 知道了。 */
+  mpOk: string;
+  /** 房主还在，只是这会儿听不见他——网络卡了，不是走了。 */
+  mpHostFixing: string;
   mpErrNoRoom: string;
   mpErrFull: string;
   mpErrStarted: string;
@@ -530,6 +538,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGuestLeaveWarn: 'Leave?',
     mpLeaveAnyway: 'Leave anyway',
     mpStay: 'Stay',
+    mpFinishConfirm: 'Done?',
+    mpRoomCancelled: 'Oh no — the room is gone',
+    mpOk: 'ok',
+    mpHostFixing: 'The host is fixing the cables — hang on',
     mpErrNoRoom: 'No room with that code.',
     mpErrFull: 'That room is full — {n} players is the most.',
     mpErrStarted: 'That game has already started.',
@@ -797,6 +809,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGuestLeaveWarn: 'Partir ?',
     mpLeaveAnyway: 'Partir quand même',
     mpStay: 'Rester',
+    mpFinishConfirm: 'Terminé ?',
+    mpRoomCancelled: 'Oh non — la salle a disparu',
+    mpOk: 'ok',
+    mpHostFixing: 'L’hôte répare les câbles, un instant',
     mpErrNoRoom: 'Aucune salle avec ce code.',
     mpErrFull: 'Cette salle est pleine — {n} joueurs au maximum.',
     mpErrStarted: 'Cette partie a déjà commencé.',
@@ -1064,6 +1080,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGuestLeaveWarn: '是否離開？',
     mpLeaveAnyway: '還是離開',
     mpStay: '留下',
+    mpFinishConfirm: '完成了嗎？',
+    mpRoomCancelled: 'Ohno！房間被取消',
+    mpOk: 'ok',
+    mpHostFixing: '房主修理電纜中，稍等',
     mpErrNoRoom: '沒有這個房間號。',
     mpErrFull: '房間滿了——最多 {n} 個人。',
     mpErrStarted: '這一局已經開始了。',
@@ -1331,6 +1351,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpGuestLeaveWarn: '是否离开？',
     mpLeaveAnyway: '还是离开',
     mpStay: '留下',
+    mpFinishConfirm: '完成了吗？',
+    mpRoomCancelled: 'Ohno！房间被取消',
+    mpOk: 'ok',
+    mpHostFixing: '房主修理电缆中，稍等',
     mpErrNoRoom: '没有这个房间号。',
     mpErrFull: '房间满了——最多 {n} 个人。',
     mpErrStarted: '这一局已经开始了。',

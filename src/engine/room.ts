@@ -34,6 +34,8 @@ export interface RoomPlayer {
   score: number;
   finished: boolean;
   isHost: boolean;
+  /** 服务器有一阵子没听见这台设备了。房主 away 就是「房主在修电缆」。 */
+  away: boolean;
   /** Every round banked so far — what the closing card ranks people by. */
   total: number;
   /** The best single round, and the quickest one, over the whole room. */

@@ -17,6 +17,7 @@ import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
+import { confirmFinish } from '../ui/roomNotices';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
 import { STRINGS, type Lang } from '../i18n';
@@ -344,6 +345,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // what is already on screen, and none of the eight boards has to know
     // that multiplayer exists.
     refs.endOverlay.dataset.seconds = String(Math.round(elapsed));
+    // 交卷时报给房间的那个数。
+    //
+    // 打的过程中，比分板报的是 HUD 上的原始得分——那会儿这一局还没走完，综合
+    // 得分并不存在。可一局结束之后再按原始得分排名次，就等于说「谁滑得多谁
+    // 赢」：同一副牌上多花五分钟总能多滑出几分来。名次要认的是综合得分——里
+    // 面有时间系数（房间里还放大了一倍半），也有有效得分率和没翻完的那些块。
+    // 和上面那行秒数一样，放在这里是为了让 scoreboard 自己来取：八个玩法谁也
+    // 不用知道房间这回事。
+    refs.endOverlay.dataset.total = String(total);
     refs.endOverlay.classList.add('show');
     // One cue per ending, told apart by cause: a bomb gets the refusal, every
     // other way of finishing gets the settle. Reached the same way whether the
@@ -665,9 +675,28 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // face-up tile can ever be flipped). Nothing else can navigate away from a
   // game any more — the bottom dock is hidden while one is open — so there
   // is nothing left for a yes/no gate to protect against.
-  refs.buttons.finish?.addEventListener('click', () => {
+  refs.buttons.finish.addEventListener('click', () => {
     if (!started || gameOver) return;
-    doFinish();
+    // 单人局按下去就是结束——这一局是自己的，没有别人在等。
+    if (!currentRoom()) return doFinish();
+    // 房间局先问一句：交出去的分数就是名次，按错一下没得反悔。问的这几秒钟
+    // 停着、牌也盖上（那一层是 opaque 的），所以犹豫既不吃时间系数，也不能
+    // 顺便多看几眼盘面。
+    confirmFinish(hooks.lang, {
+      onHold: () => {
+        paused = true;
+        timer.pause();
+      },
+      onResume: () => {
+        paused = false;
+        timer.resume();
+      },
+      onFinish: () => {
+        paused = false;
+        timer.resume();
+        doFinish();
+      },
+    });
   });
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));

@@ -66,9 +66,7 @@ export interface ShellRefs {
     stop?: HTMLButtonElement;
     /** 只有多人局才有：进行到一半也走得掉。由 scoreboard.ts 接上。 */
     leaveRoom?: HTMLButtonElement;
-    /** 多人局里也没有这颗：一局什么时候算完不由自己说了算，走人走的是
-     *  《离开房间》。 */
-    finish?: HTMLButtonElement;
+    finish: HTMLButtonElement;
     /** Absent in-game (the row has no way-out button any more — leaving a
      *  run goes through the title or the bottom nav, which ask first); the
      *  shape modules still wire it when it exists. */
@@ -173,7 +171,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // the same order; only the landscape media query's grid areas move the
   // pieces, so nothing re-renders when the phone turns.
   container.innerHTML = `
-    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}">
+    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}"
+         data-shape="${meta.shapeId}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 
@@ -201,15 +200,15 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
            pause panel instead, so the play screen stays the board plus the
            three readings plus the two things you can do to a run.
 
-           房间局的这一排是另一套。《暂停》没有意义——一场同步竞赛停不下来，
-           别人的钟不会跟着停；《完成》也没有——一局什么时候算完由棋盘和别人
-           的进度说了算，自己按一下就交卷，等于把「我不打了」写成「我打完
-           了」。两颗都撤掉，右边只留一个真正的出口《离开房间》，空出来的左
-           边整条给实时排名：一场比赛里最该一直看得见的，是自己此刻排第几。 -->
+           房间局的这一排是另一套：左边一半是实时排名，右边一半分给两颗键，
+           《离开房间》和《完成》。《暂停》没有意义——一场同步竞赛停不下来，
+           别人的钟不会跟着停，按下去只是把自己关在外面。而一场比赛里最该一
+           直看得见的，是自己此刻排第几，所以那半条屏幕给了名单。 -->
       <div class="controls">
         ${inRoom
           ? `<div class="mp-rank" id="mpRank" aria-live="polite"></div>
-             <button class="icon-btn icon-btn--exit" id="leaveRoomBtn" aria-label="${s.mpLeave}">${CTL_LEAVE}</button>`
+             <button class="icon-btn icon-btn--half" id="leaveRoomBtn" aria-label="${s.mpLeave}">${CTL_LEAVE}</button>
+             <button class="icon-btn icon-btn--half" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`
           : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
              <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`}
       </div>
@@ -426,7 +425,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     buttons: {
       stop: inRoom ? undefined : req<HTMLButtonElement>('stopBtn'),
       leaveRoom: inRoom ? req<HTMLButtonElement>('leaveRoomBtn') : undefined,
-      finish: inRoom ? undefined : req<HTMLButtonElement>('finishBtn'),
+      finish: req('finishBtn'),
       back: undefined,
       start: req('startBtn'),
       continueBtn: req('continueBtn'),

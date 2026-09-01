@@ -1947,7 +1947,7 @@ body:has(.app--game) { background: var(--play-bg); }
     flex: 1; width: 100%; height: auto; min-height: 0;
     padding: clamp(5px, 1.4vh, 10px) clamp(4px, 1vw, 9px);
   }
-  .app.app--game > .controls .icon-btn--exit {
+  .app.app--game > .controls .icon-btn--half {
     flex: 0 0 auto; width: 100%; height: auto; aspect-ratio: 1;
   }
   .app.app--game > .controls .mp-rank .mp-board-name { display: none; }
@@ -2032,7 +2032,14 @@ html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavi
   display: flex; align-items: center; gap: 10px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px;
 }
-.mp-player-name { flex: 1; font-weight: 600; font-size: 0.92rem; }
+/* 和局中那份名单同一个收尾：名字长了就淡出去，不打省略号（见 .mp-board-name）。
+   认人靠的是前面那个图形，不是把十二个字读全。 */
+.mp-player-name {
+  flex: 1; min-width: 0; font-weight: 600; font-size: 0.92rem;
+  overflow: hidden; white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.6em), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.6em), transparent);
+}
 /* Between rounds the room list is also the scoreboard. */
 .mp-player-total {
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
@@ -2127,7 +2134,9 @@ body.is-room-host::after {
    四个人的时候字小，而整块的高度自始至终不变：一场比赛中途有人走掉，底下这
    一排不该跟着抖一下。 */
 .mp-rank {
-  flex: 1; min-width: 0;
+  /* 左边一半是名单，右边一半分给两颗键：名单占两份、每颗键各一份。排第几
+     是要一直看的，按键是偶尔按一下的。 */
+  flex: 2; min-width: 0;
   display: flex; flex-direction: column; justify-content: center;
   overflow: hidden;
   /* 这一块有多高、里面站几个人，行高就是这两个数除出来的。写成长度而不是
@@ -2143,13 +2152,7 @@ body.is-room-host::after {
   border-radius: clamp(11px, 1.9vh, 17px);
   padding: 5px clamp(7px, 2vw, 13px);
 }
-/* 右边那颗键站成一个正方，把整条左边让给名单——这一排里唯一能按的东西只有
-   它，不需要占半条街来说明自己是重要的。 */
-.app--game .controls .icon-btn--exit {
-  flex: 0 0 auto;
-  width: clamp(66px, 11.4vh, 104px);
-  height: clamp(66px, 11.4vh, 104px);
-}
+.app--game .controls .icon-btn--half { flex: 1; height: clamp(66px, 11.4vh, 104px); }
 .mp-board-row {
   display: flex; align-items: center; gap: clamp(4px, 1.4vw, 8px);
   /* 人少的时候行不跟着抻长——两个人的名单是两行正常大小的字浮在中间，
@@ -2161,12 +2164,39 @@ body.is-room-host::after {
 .mp-board-row--me { font-weight: 700; }
 .mp-board-rank { width: 1.1em; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .mp-avatar--small { width: 1.15em; height: 1.15em; flex: none; }
-.mp-board-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
-.mp-rank .mp-badge {
-  font-size: 0.72em; padding: 0 4px; line-height: 1.5;
-  background: none; color: inherit; opacity: 0.6; border: none;
+/* 名字长了不打点，直接淡出去。省略号是「这里被截断了」的说明，可这一行
+   本来就不是让人读全名的地方——认人靠前面那个图形；一个渐隐的收尾比三个
+   点安静，也不会在四行小字里多出三个墨点。 */
+.mp-board-name {
+  flex: 1; overflow: hidden; white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.6em), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.6em), transparent);
 }
+.mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* ---------------------------------------------------------------------------
+   交卷之后那一页
+   ---------------------------------------------------------------------------
+   和开局那一幕同一张脸：上半屏这一局的玩法图，旁边挂着那扇小门。区别只在下
+   半屏——开局时那里是 3、2、1，这时候是一份还在动的名单。交了卷不是结束，
+   是开始等别人，所以这一页得让人看得见「还差谁」。 */
+.overlay--wait { z-index: 60; }
+.mp-wait-stage { width: 100%; max-width: 380px; }
+.mp-wait-stage .start-emblem { flex: 0 0 auto; padding: 0 0 clamp(14px, 3vh, 30px); }
+.mp-wait-rows {
+  flex: 1; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto; overscroll-behavior: contain;
+  align-content: flex-start;
+}
+.mp-wait-rows .mp-player { flex: 0 0 auto; }
+.overlay--wait .start-actions { flex: 0 0 auto; }
+.overlay--wait .start-act { width: auto; padding: 10px 22px; }
+
+/* 交了卷的人，名字后面一个小勾。房间页、局中的名单、交卷之后的等待页，
+   三处是同一个记号——「他已经交了」这件事在哪儿看都该长一个样。 */
+.mp-tick { flex: none; display: inline-flex; align-items: center; opacity: 0.75; }
+.mp-tick svg { width: 1em; height: 1em; display: block; }
+.mp-player .mp-tick { opacity: 0.85; color: var(--accent-ink); }
 
 /* ===========================================================================
    开局页：玩法图 + 3-2-1 + 两颗按钮

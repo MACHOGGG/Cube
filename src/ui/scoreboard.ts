@@ -1,8 +1,10 @@
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
+import { hostNotice, hostTroubleIn, showWaitPanel, tickFor } from './roomNotices';
 import {
   avatarSvg,
   currentRoom,
+  forgetRoom,
   iAmHost,
   lastPlayedRound,
   latestRoomState,
@@ -61,6 +63,23 @@ function runSeconds(): number | undefined {
 }
 
 /**
+ * 交上去的那个数：打的过程中是 HUD 上的原始得分，走完之后换成综合得分。
+ *
+ * 两个数各管一段，因为它们各自只在那一段里成立。正打着的时候综合得分不存在
+ * ——时间还在走，没翻完的块还可能翻——所以实时名单只能比原始得分。而一局
+ * 结束之后再比原始得分就不对了：同一副牌，多磨五分钟总能多滑出几分，名次会
+ * 变成「谁耗得久谁赢」。综合得分里有时间系数（房间里还放大了一倍半），那才
+ * 是这场比赛想比的东西。
+ */
+function submittedScore(over: boolean): number | null {
+  const live = localScore();
+  if (!over) return live;
+  const raw = document.getElementById(END_OVERLAY_ID)?.dataset.total;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : live;
+}
+
+/**
  * 一局打完之后，这三颗按钮各自去哪。
  *
  * 单人局的结算页上，《主页》和《再来》的意思是清楚的。房间里不是：主页不该
@@ -75,6 +94,8 @@ export interface RoomRunHandlers {
   onPickNext: () => void;
   /** 交出座位，并出一张截止此刻的竞赛排名。 */
   onLeave: () => void;
+  /** 房间没了，人得回到主菜单——不出卡片，因为没什么可结算的。 */
+  onHome: () => void;
 }
 
 /**
@@ -86,6 +107,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   const seat = currentRoom();
   if (!seat) return () => {};
   const s = STRINGS[lang];
+  const shapeId = document.querySelector<HTMLElement>('.app--game')?.dataset.shape ?? 'square';
   const restoreEndPanel = wireEndPanel(s, lang, handlers);
 
   // 打到一半也走得掉。这颗键占的是单人局里《暂停》的位置——一场同步竞赛暂停
@@ -129,18 +151,49 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
           <span class="mp-board-rank">${rank + 1}</span>
           <span class="mp-avatar mp-avatar--small">${avatarSvg(p.avatar)}</span>
           <span class="mp-board-name">${esc(p.name)}</span>
+          ${tickFor(p.finished, s.mpFinished)}
           <span class="mp-board-score">${p.score}</span>
-          ${p.finished ? `<span class="mp-badge">${s.mpFinished}</span>` : ''}
         </div>`;
       })
       .join('');
   };
+
+  // 交了卷之后盖在结算页上的那一层，和房主出了状况时的那一层。两个都按需
+  // 造出来：一整局什么事都没有的时候，它们一个字节都不占。
+  let wait: ReturnType<typeof showWaitPanel> | null = null;
+  const notice = hostNotice(lang, {
+    onDismiss: () => {
+      dead = true;
+      forgetRoom();
+      handlers.onHome();
+    },
+    onLeave: () => {
+      dead = true;
+      handlers.onLeave();
+    },
+  });
 
   // Everyone else's scores.
   const stopWatching = watchRoom(
     (state) => {
       if (dead) return;
       paint(state);
+      // 房主走了、还是房主卡住了——两件事说两句不同的话，见 roomNotices.ts。
+      notice.set(hostTroubleIn(state, iAmHost()));
+      // 自己交了卷、别人还在打：盖上一层等待页，上面是这一局的标志，下面是
+      // 还在动的名单。等到服务器说这一局所有人都交了，这一层撤掉，底下的结
+      // 算页就露出来了。
+      if (runFinished() && !state.roundOver) {
+        wait ??= showWaitPanel(lang, {
+          shapeId,
+          meId: seat.playerId,
+          onLeave: () => confirmLeaveRoom(lang, handlers.onLeave),
+        });
+        wait.update(state);
+      } else if (wait) {
+        wait.remove();
+        wait = null;
+      }
       // 房主已经开了下一局，而这台设备还停在上一局的结算页上。谁也不会来叫
       // 他——开局的倒计时是房间页在听的，而这台设备现在不在房间页上。所以
       // 由这里把人送回去，房间页一进去就接上倒计时。
@@ -161,9 +214,9 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   // Our own, off the HUD, and only when it has actually moved.
   const localTimer = window.setInterval(() => {
     if (dead) return;
-    const score = localScore();
-    if (score === null) return;
     const over = runFinished();
+    const score = submittedScore(over);
+    if (score === null) return;
     if (score === lastSent && over === sentFinished) return;
     lastSent = score;
     sentFinished = over;
@@ -173,12 +226,14 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
 
   return () => {
     dead = true;
+    wait?.remove();
+    notice.remove();
     restoreEndPanel();
     stopWatching();
     window.clearInterval(localTimer);
     // One last report, so a player who leaves mid-run does not sit at a
     // stale number on everybody else's screen.
-    const score = localScore();
+    const score = submittedScore(runFinished());
     if (score !== null) {
       markPlayed();
       void reportScore(score, true, runSeconds());

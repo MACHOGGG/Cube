@@ -429,6 +429,13 @@ function startMultiplayerRun(match: MatchStart) {
       showMenu();
     },
     onLeave: leaveRoomWithCard,
+    // 房间被取消：座位早就不存在了，没什么可结算的，也就不出卡片——按一下
+    // 《ok》直接回主菜单。
+    onHome: () => {
+      teardown();
+      setPickingForRoom(null);
+      showMenu();
+    },
   });
   activeDestroy = () => {
     stopBoard();

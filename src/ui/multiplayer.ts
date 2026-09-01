@@ -1,6 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { countFrom, pushDigit, startStageHtml } from './startStage';
+import { hostNotice, hostTroubleIn, tickFor, type HostNotice } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
@@ -134,11 +135,15 @@ export function renderMultiplayerPage(
   let launched = false;
   let dead = false;
 
+  /** 房主出状况时盖上去的那一层，见 roomNotices.ts。 */
+  let notice: HostNotice | null = null;
   const stopAll = () => {
     stopWatching?.();
     stopWatching = null;
     window.clearInterval(countdownTimer);
     countdownTimer = 0;
+    notice?.remove();
+    notice = null;
   };
   const teardown = () => {
     dead = true;
@@ -314,6 +319,18 @@ export function renderMultiplayerPage(
 
     paint(state, iAmHost);
 
+    // 房主走了、还是房主卡住了。这一页上也要分得清：坐在房间里等下一局的
+    // 人，和正在打的人一样有权知道自己在等的是什么。
+    notice?.remove();
+    notice = hostNotice(lang, {
+      onDismiss: () => {
+        stopAll();
+        forgetRoom();
+        if (!dead) renderHome();
+      },
+      onLeave: () => confirmLeaveRoom(lang, leave),
+    });
+
     stopWatching = watchRoom(
       (next) => {
         if (dead) return;
@@ -322,6 +339,7 @@ export function renderMultiplayerPage(
           stopAll();
           return handlers.onRoomEnded(next);
         }
+        notice?.set(hostTroubleIn(next, iAmHost));
         paint(next, iAmHost);
         // The host has chosen: everyone counts down to the same instant.
         if (next.startAt && next.seed && next.mode && next.round > playedRound) {
@@ -367,6 +385,7 @@ export function renderMultiplayerPage(
           <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
           <span class="mp-player-name">${esc(p.name)}</span>
           ${p.isHost ? `<span class="mp-badge">${s.mpHostBadge}</span>` : ''}
+          ${tickFor(p.finished, s.mpFinished)}
           ${played ? `<span class="mp-player-total">${p.total + p.score}</span>` : ''}
         </div>`,
       )

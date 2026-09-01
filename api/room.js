@@ -68,6 +68,17 @@ const countdownMsFor = (mode) => (WIDE_MODES.has(mode) ? COUNTDOWN_MS + 1000 : C
  * device that has genuinely gone.
  */
 const ABSENT_MS = 90_000;
+/**
+ * 多久没听见一个人的动静，就当他此刻不在。
+ *
+ * 比 ABSENT_MS 短得多，因为它们答的是两个问题：那个决定「这一局还等不等
+ * 他」，错判的代价是整桌卡住，所以要宽；这个只决定屏幕上要不要说一句「稍
+ * 等」，错判的代价是白说一句话，所以可以紧。每台设备大约一秒报一次，十二秒
+ * 没消息就不是一次网络抖动了。
+ */
+const AWAY_MS = 12_000;
+const seatAway = (seat, meta) =>
+  Date.now() - Math.max(seat.lastSeen || 0, seat.joinedAt || 0, meta.startAt || 0) > AWAY_MS;
 
 /** The boards a host may choose. Anything else is not a mode we ship. */
 const MODES = new Set([
@@ -224,6 +235,8 @@ function publicState(code, hash) {
       score: value.score || 0,
       finished: Boolean(value.finished),
       isHost: field.slice(2) === meta.host,
+      /** 这会儿听不见他。房主 away 的时候，别人那边会显示「稍等」。 */
+      away: seatAway(value, meta),
       // What the evening adds up to, rather than this one round: the total
       // across every round banked so far, the best single round, and the
       // quickest one. The room's closing card is drawn from these.

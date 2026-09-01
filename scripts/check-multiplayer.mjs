@@ -196,16 +196,20 @@ const inRun = await A.page.evaluate(() => {
   };
   return {
     pause: !!document.querySelector('#stopBtn'),
-    finish: !!document.querySelector('#finishBtn'),
     rank: box('.mp-rank'),
     leave: box('#leaveRoomBtn'),
+    finish: box('#finishBtn'),
   };
 });
-check('多人局进行中没有《暂停》，也没有《完成》',
-  inRun.pause === false && inRun.finish === false, JSON.stringify({ pause: inRun.pause, finish: inRun.finish }));
-check('左边是排名，右边是《离开房间》',
-  !!inRun.rank && !!inRun.leave && inRun.rank.x < inRun.leave.x && inRun.rank.w > inRun.leave.w,
-  `排名 x=${inRun.rank?.x} 宽 ${inRun.rank?.w} · 离开 x=${inRun.leave?.x} 宽 ${inRun.leave?.w}`);
+check('多人局进行中没有《暂停》', inRun.pause === false);
+// 左边一半是名单，右边一半分给《离开房间》和《完成》——所以名单差不多是
+// 两颗键加起来那么宽。
+check('左边一半是排名，右边一半是两颗键',
+  !!inRun.rank && !!inRun.leave && !!inRun.finish &&
+    inRun.rank.x < inRun.leave.x && inRun.leave.x < inRun.finish.x &&
+    Math.abs(inRun.rank.w - (inRun.leave.w + inRun.finish.w)) <= 24,
+  `排名 ${inRun.rank?.w}px · 离开 ${inRun.leave?.w}px · 完成 ${inRun.finish?.w}px`);
+check('两颗键一样宽', Math.abs((inRun.leave?.w ?? 0) - (inRun.finish?.w ?? -1)) <= 1);
 // 名单要和右边那颗键一样高——它们是同一排里的两块，不是一块压着另一块。
 check('排名和《离开房间》一样高，站在同一排',
   Math.abs((inRun.rank?.h ?? 0) - (inRun.leave?.h ?? -1)) <= 1,
@@ -253,50 +257,120 @@ const bView = await B.page.$$eval('.mp-board-row', (els) =>
   els.map((e) => e.querySelector('.mp-board-name').textContent.trim() + ':' + e.querySelector('.mp-board-score').textContent.trim()));
 check('甲得分后，乙那边实时看到并升到第一', bView[0] === '甲:250', bView.join(' '));
 
-// ---- 打到一半走人：房间局里唯一走得掉的出口 -----------------------------
+// ---- 交卷：先问一句，再等别人 -------------------------------------------
 //
-// 这里原来是「两边各按一下《完成》→ 结算页 → 主页 / 再来 / 离开房间」那一整
-// 段。《完成》从房间局的那一排撤掉之后，那条路没有入口了：一局要么打到棋盘
-// 自己走完，要么就是从这颗《离开房间》出去。结算页那几颗键的代码还在（棋盘
-// 真打完时照样是它们），只是没法在测试里把一局提前结束，所以那几条改在这里
-// 用真正走得通的路重验。
+// 房间局的《完成》不是「结束」那么简单：交出去的分数就是名次，所以先问；问
+// 的这几秒钟要停着、牌要盖上，不然犹豫就成了「多看几眼盘面还不吃时间」。
 const inRunLeaveLabel = await A.page.$eval('#leaveRoomBtn', (e) => e.getAttribute('aria-label').trim());
 check('房间页和局中那颗键是同一个说法', inRunLeaveLabel === roomLeaveLabel,
   `房间页「${roomLeaveLabel}」· 局中「${inRunLeaveLabel}」`);
 
-// 客人从局中走人：交座位，出一张截止此刻的竞赛排名。
-await B.page.click('#leaveRoomBtn');
-await B.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
-check('客人打到一半按离开，也先问一句', true);
-await B.page.click('#mpLeaveYes');
-const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 })
+await A.page.click('#finishBtn');
+await A.page.waitForSelector('#finishConfirm', { timeout: 6000 });
+const asked = await A.page.evaluate(() => ({
+  q: document.querySelector('#finishConfirm .tag-line')?.textContent.trim(),
+  opaque: document.querySelector('#finishConfirm')?.classList.contains('opaque'),
+  clock: document.getElementById('hud-time')?.textContent,
+}));
+check('按《完成》先问一句《完成了吗？》', asked.q === '完成了吗？', asked.q);
+check('问的时候牌是盖上的（这一层不透明）', asked.opaque === true);
+await A.page.waitForTimeout(2200);
+const stillHeld = await A.page.evaluate(() => document.getElementById('hud-time')?.textContent);
+check('犹豫的这段时间不计入用时', stillHeld === asked.clock, `${asked.clock} → ${stillHeld}`);
+await A.page.click('#mpFinishNo');
+await A.page.waitForFunction(() => !document.getElementById('finishConfirm'), { timeout: 5000 });
+check('选《否》回到牌局，什么都没交出去',
+  (await A.page.$('#boardWrap .ball, #boardWrap .tile')) !== null &&
+    (await A.page.evaluate(() => !document.getElementById('endOverlay')?.classList.contains('show'))));
+
+// 选《是》：交卷，然后是一页「等别人」——和开局那一幕同一张脸，只是下半屏
+// 换成了还在动的名单。
+await A.page.click('#finishBtn');
+await A.page.waitForSelector('#finishConfirm', { timeout: 6000 });
+await A.page.click('#mpFinishYes');
+const waitUp = await A.page.waitForSelector('#mpWait', { timeout: 12000 })
   .then(() => true).catch(() => false);
-check('离开房间后出竞赛排名', rankPage);
-if (rankPage) {
-  check('排名页的标题是《竞赛排名》',
-    (await B.page.$eval('.home-sub', (e) => e.textContent.trim())) === '竞赛排名',
-    await B.page.$eval('.home-sub', (e) => e.textContent.trim()));
-  check('排名里有两个人，自己那一行被标出来',
-    (await B.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) === 2 &&
-      (await B.page.$$eval('#mpFinalRows .mp-player--me', (e) => e.length)) === 1);
-  const drawn = await B.page.waitForFunction(
-    () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
-  ).then(() => true).catch(() => false);
-  check('竞赛排名图渲染出来了', drawn);
-  await B.page.click('#mpFinalDone');
-  check('看完排名回到主菜单',
-    await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
+check('交卷之后进入等待页', waitUp);
+if (waitUp) {
+  await A.page.waitForTimeout(1500);
+  const wait = await A.page.evaluate(() => ({
+    marks: document.querySelectorAll('#mpWait .start-mark').length,
+    rows: document.querySelectorAll('#mpWaitRows .mp-player').length,
+    ticks: document.querySelectorAll('#mpWaitRows .mp-tick').length,
+    leave: !!document.querySelector('#mpWaitLeave'),
+  }));
+  check('等待页上方是玩法图 + 那扇多人的门', wait.marks === 2, `${wait.marks} 张`);
+  check('等待页下方是全房的实时名单', wait.rows === 2, `${wait.rows} 行`);
+  check('交了卷的人有一个勾，还在打的没有', wait.ticks === 1, `${wait.ticks} 个勾`);
+  check('等待页上留了一条走得掉的路', wait.leave);
+  // 局中那份名单也认这个勾——「他交了」这件事在哪儿看都该长一个样。
+  check('局中的名单上也给交了卷的人挂勾',
+    (await B.page.$$eval('.mp-rank .mp-tick', (e) => e.length)) === 1);
 }
 
-// 有人走掉，还在打的那一边的名单要跟着少一行——它是一份实时的名单，不是开局
-// 时拍的一张照片。
-const shrank = await A.page.waitForFunction(
-  () => document.querySelectorAll('.mp-board-row').length === 1, { timeout: 8000 },
-).then(() => true).catch(() => false);
-check('客人走了，房主局中的名单实时少一行', shrank,
-  `还剩 ${await A.page.$$eval('.mp-board-row', (e) => e.length)} 行`);
+// 另一个人也交卷：等待页撤掉，底下的结算页露出来。
+await B.page.click('#finishBtn');
+await B.page.waitForSelector('#finishConfirm', { timeout: 6000 });
+await B.page.click('#mpFinishYes');
+// 两边各自撤掉自己那一层——各自的下一次轮询到了才撤，所以要分别等。
+const waitGone = (await Promise.all([A, B].map((P) =>
+  P.page.waitForFunction(() => !document.getElementById('mpWait'), { timeout: 20000 })
+    .then(() => true).catch(() => false)))).every(Boolean);
+check('所有人都交了，等待页撤掉', waitGone);
+check('底下就是结算页',
+  await A.page.evaluate(() => document.getElementById('endOverlay')?.classList.contains('show')));
 
-// 房主从局中走人：问的是「解散房间？」——他一走就没人能再开下一局了。
+// The multiplayer card carries the places; a solo one has no room to.
+await A.page.click('#shareBtn');
+await A.page.waitForSelector('#shareOverlay.show', { timeout: 8000 });
+const cardW = await A.page.$eval('#shareImage', (e) => e.naturalWidth);
+check('多人局的战绩图画出来了', cardW > 0, `${cardW}px 宽`);
+await A.page.click('#shareCloseBtn');
+
+const endButtons = (p) =>
+  p.$$eval('#endOverlay button', (els) =>
+    els.filter((e) => e.offsetParent !== null).map((e) => e.id));
+const hostBtns = await endButtons(A.page);
+const guestBtns = await endButtons(B.page);
+check('房主的结算页有：主页、再来、离开房间',
+  ['endBackBtn', 'restartBtn', 'endLeaveRoomBtn'].every((id) => hostBtns.includes(id)),
+  hostBtns.join(' '));
+check('客人的结算页有离开房间，没有开不了的《再来》',
+  guestBtns.includes('endLeaveRoomBtn') && !guestBtns.includes('restartBtn'),
+  guestBtns.join(' '));
+
+// 客人的《主页》：回房间等下一局。这里守的是一个真出现过的死局——回房间时
+// 房间页是新建的，闭包里「打过第几局」归零，刚打完的那一局会被当成新的一局
+// 重开，人被扔回一块死棋盘。
+await B.page.click('#endBackBtn');
+const guestBack = await B.page.waitForSelector('.mp-code', { timeout: 12000 })
+  .then(() => true).catch(() => false);
+check('客人点主页回到房间，没有被重开的那一局卡住', guestBack);
+if (guestBack) {
+  check('房间没散，房号还是那个', (await B.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
+  check('房间里看得到累计总分', (await B.page.$$eval('.mp-player-total', (e) => e.length)) === 2);
+  check('房间页上也给交了卷的人挂勾',
+    (await B.page.$$eval('#mpPlayers .mp-tick', (e) => e.length)) >= 1);
+}
+
+// 《再来》：房主用同一个玩法立刻再开一局，客人也得被带进去——他自己开不了
+// 局，而倒计时是房间页在听的，他这会儿不在房间页上。
+//
+// 这一颗以前会偶发地按不动：服务器要等所有人都报了「打完了」才让开下一局，
+// 而上报是每半秒一次，结算页一出来就点，那半秒里点下去只会拿到 409，代码又
+// 把结果丢了，屏幕上什么都不会发生。现在结算页本身就是等到服务器说这一局结
+// 束了才露出来的（上面那段等待页），所以按到的时候一定已经可以开局。
+await A.page.click('#restartBtn');
+const intoNextRound = (p) =>
+  p.waitForFunction(() => {
+    const tiles = document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length;
+    return tiles > 0 && !document.getElementById('endOverlay')?.classList.contains('show');
+  }, { timeout: 30000 }).then(() => true).catch(() => false);
+const [hostIn, guestIn] = await Promise.all([intoNextRound(A.page), intoNextRound(B.page)]);
+check('房主点《再来》直接开出下一局', hostIn);
+check('客人也被带进这一局（没留在上一局的结算页）', guestIn);
+
+// ---- 房主走了：其他人得到一句话和一颗《ok》 -----------------------------
 await A.page.click('#leaveRoomBtn');
 await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
 check('房主打到一半按离开，问的是《解散房间？》',
@@ -305,15 +379,25 @@ check('房主打到一半按离开，问的是《解散房间？》',
 await A.page.click('#mpLeaveYes');
 check('房主离开也出一张竞赛排名',
   await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 }).then(() => true).catch(() => false));
+
+const cancelled = await B.page.waitForSelector('#roomCancelled', { timeout: 20000 })
+  .then(() => true).catch(() => false);
+check('房主一走，还在打的人收到《房间被取消》', cancelled);
+if (cancelled) {
+  check('那句话就是《Ohno！房间被取消》',
+    (await B.page.$eval('#roomCancelled .tag-line', (e) => e.textContent.trim())) === 'Ohno！房间被取消',
+    await B.page.$eval('#roomCancelled .tag-line', (e) => e.textContent.trim()));
+  check('底下只有一颗《ok》',
+    (await B.page.$$eval('#roomCancelled button', (els) => els.map((e) => e.id))).join() === 'roomCancelledOk');
+  await B.page.click('#roomCancelledOk');
+  check('按下《ok》回到主菜单',
+    await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
+}
+
+// ---- 客人自己走：一张截止此刻的竞赛排名 ---------------------------------
+// 上面那一间已经散了，另开一间来验客人这条路。
 await A.page.click('#mpFinalDone');
 await A.page.waitForSelector('.home-page', { timeout: 8000 });
-
-// ---- 再开一间房：房主的座位没被上一间带走 -------------------------------
-//
-// 《散场》那一颗（和它出的那张总战绩）在房间页上，而且要打过至少一局才出现。
-// 房主要回到房间页，得先从结算页的《主页》走一趟——那需要把整副棋盘打完，
-// 测试里做不到。所以这里只验到「上一间房走空之后，房主还能干干净净地再开一
-// 间」，以及「一局都没打的房间不该有《散场》」。
 await A.page.click('#navProfile');
 await A.page.click('#multiRow');
 await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
@@ -361,6 +445,37 @@ await Promise.all([A, B].map((P) => P.page.waitForFunction(
 const waited = Date.now() - pickedAt;
 check('开赛的提前量给到了四秒半（普通玩法是三秒半）', waited >= 4200 && waited < 7000,
   `${waited}ms`);
+
+// 客人从局中走人：交座位，出一张截止此刻的竞赛排名。
+await B.page.click('#leaveRoomBtn');
+await B.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
+check('客人打到一半按离开，问的是《是否离开？》',
+  (await B.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim())) === '是否离开？',
+  await B.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim()));
+await B.page.click('#mpLeaveYes');
+const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 })
+  .then(() => true).catch(() => false);
+check('离开房间后出竞赛排名', rankPage);
+if (rankPage) {
+  check('排名页的标题是《竞赛排名》',
+    (await B.page.$eval('.home-sub', (e) => e.textContent.trim())) === '竞赛排名',
+    await B.page.$eval('.home-sub', (e) => e.textContent.trim()));
+  check('排名里有两个人，自己那一行被标出来',
+    (await B.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) === 2 &&
+      (await B.page.$$eval('#mpFinalRows .mp-player--me', (e) => e.length)) === 1);
+  const drawn = await B.page.waitForFunction(
+    () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
+  ).then(() => true).catch(() => false);
+  check('竞赛排名图渲染出来了', drawn);
+}
+
+// 有人走掉，还在打的那一边的名单要跟着少一行——它是一份实时的名单，不是开局
+// 时拍的一张照片。
+const shrank = await A.page.waitForFunction(
+  () => document.querySelectorAll('.mp-board-row').length === 1, { timeout: 10000 },
+).then(() => true).catch(() => false);
+check('客人走了，房主局中的名单实时少一行', shrank,
+  `还剩 ${await A.page.$$eval('.mp-board-row', (e) => e.length)} 行`);
 
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
