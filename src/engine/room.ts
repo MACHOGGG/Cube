@@ -123,6 +123,50 @@ function rememberSeat(seat: Session | null): void {
   }
 }
 
+/**
+ * 这台设备已经打完的回合号，按房号记。
+ *
+ * 和座位一样，它必须活过「页面被重建」这件事。多人页面每次回来都是新的一份
+ * 闭包，如果这个数字只存在那份闭包里，回到房间的一瞬间它就归零——服务器说
+ * 「第 1 局，开始时间是刚才」，页面拿 1 去比 0，于是把刚刚打完的那一局当成
+ * 新的一局重新开起来，人被扔回一块已经结束的棋盘，出不去。这就是「一局结束
+ * 后回主页卡住」的真正原因。
+ *
+ * 按房号存，所以换一个房间是干净的开始，不会被上一间的进度挡住。
+ */
+const PLAYED_KEY = 'slides_mp_played';
+
+/** 这一间房里，本机已经打完的最大回合号；不是这一间就当没打过。 */
+export function lastPlayedRound(code = session?.code): number {
+  if (!code) return 0;
+  try {
+    const raw = sessionStorage.getItem(PLAYED_KEY);
+    const saved = raw ? (JSON.parse(raw) as { code?: string; round?: number }) : null;
+    return saved?.code === code && Number.isFinite(saved.round) ? Number(saved.round) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** 记下「这一局我打过了」。只进不退，晚到的旧消息不会把它推回去。 */
+export function markRoundPlayed(round: number, code = session?.code): void {
+  if (!code || !Number.isFinite(round) || round <= 0) return;
+  if (round <= lastPlayedRound(code)) return;
+  try {
+    sessionStorage.setItem(PLAYED_KEY, JSON.stringify({ code, round }));
+  } catch {
+    // 私密模式：这一次还能玩，只是这一台设备回房间时可能重开已打完的一局。
+  }
+}
+
+const forgetPlayed = (): void => {
+  try {
+    sessionStorage.removeItem(PLAYED_KEY);
+  } catch {
+    /* 同上 */
+  }
+};
+
 let session: Session | null = loadSeat();
 /** serverNow minus our own clock, so we can count down to the right instant. */
 let clockOffset = 0;
@@ -274,6 +318,7 @@ export async function leaveRoom(): Promise<void> {
   session = null;
   lastState = null;
   rememberSeat(null);
+  forgetPlayed();
   await post({ action: 'leave', ...leaving });
 }
 
@@ -282,6 +327,7 @@ export const forgetRoom = (): void => {
   session = null;
   lastState = null;
   rememberSeat(null);
+  forgetPlayed();
 };
 
 /**

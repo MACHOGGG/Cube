@@ -185,8 +185,10 @@ const bView = await B.page.$$eval('.mp-board-row', (els) =>
   els.map((e) => e.querySelector('.mp-board-name').textContent.trim() + ':' + e.querySelector('.mp-board-score').textContent.trim()));
 check('甲得分后，乙那边实时看到并升到第一', bView[0] === '甲:250', bView.join(' '));
 
-// ---- the round ends: back to the room, not out of it --------------------
-// Both finish, which is what tells the server the round is over.
+// ---- 一局打完：结算页上三条路，每一条都得走得通 -------------------------
+// 这里守的是一个真出现过的死局：一局结束后回房间，房间页是新建的，它闭包里
+// 「已经打过第几局」归零，于是刚打完的那一局被当成新的一局重开，人被扔回一
+// 块死棋盘，再点主页又来一次，出不去。
 for (const P of [A, B]) {
   await P.page.click('#finishBtn');
   await P.page.waitForSelector('#endOverlay.show', { timeout: 8000 });
@@ -199,26 +201,96 @@ const cardW = await A.page.$eval('#shareImage', (e) => e.naturalWidth);
 check('多人局的战绩图画出来了', cardW > 0, `${cardW}px 宽`);
 await A.page.click('#shareCloseBtn');
 
-await A.page.click('#endBackBtn');
-await A.page.waitForSelector('.mp-code', { timeout: 12000 });
-check('一局打完回到房间，房间没散', (await A.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
-check('房间里看得到累计总分', (await A.page.$$eval('.mp-player-total', (e) => e.length)) === 2);
-await A.page.waitForSelector('#mpPick', { timeout: 12000 });
-check('房主可以再开一局', (await A.page.$eval('#mpPick', (e) => e.textContent.trim())).length > 0);
-check('房主也可以结束房间', (await A.page.$('#mpEnd')) !== null);
+const endButtons = (p) =>
+  p.$$eval('#endOverlay button', (els) =>
+    els.filter((e) => e.offsetParent !== null).map((e) => e.id));
+const hostBtns = await endButtons(A.page);
+const guestBtns = await endButtons(B.page);
+check('房主的结算页有：主页、再来、退出房间',
+  ['endBackBtn', 'restartBtn', 'endQuitRoomBtn'].every((id) => hostBtns.includes(id)),
+  hostBtns.join(' '));
+check('客人的结算页有退出房间，没有开不了的《再来》',
+  guestBtns.includes('endQuitRoomBtn') && !guestBtns.includes('restartBtn'),
+  guestBtns.join(' '));
 
-// ---- closing the room draws the evening's card --------------------------
-await B.page.click('#endBackBtn').catch(() => {});
+// 客人的《主页》：回房间等下一局。
+await B.page.click('#endBackBtn');
+const guestBack = await B.page.waitForSelector('.mp-code', { timeout: 12000 })
+  .then(() => true).catch(() => false);
+check('客人点主页回到房间，没有被重开的那一局卡住', guestBack);
+if (guestBack) {
+  check('房间没散，房号还是那个', (await B.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
+  check('房间里看得到累计总分', (await B.page.$$eval('.mp-player-total', (e) => e.length)) === 2);
+}
+
+// 房主的《主页》：回主菜单，横幅还挂着——那就是「回主页继续玩」。
+await A.page.click('#endBackBtn');
+await A.page.waitForSelector('#roomPickBar', { timeout: 12000 });
+check('房主点主页回到主菜单，还能为整房挑下一个玩法',
+  await A.page.evaluate(() => document.body.classList.contains('is-room-host')));
+
+// 第二局，用来验《再来》。
+await A.page.$$eval('.home-icon-btn', (els) => els[0].click());
+await Promise.all([
+  A.page.waitForFunction(() => document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length > 0, { timeout: 20000 }),
+  B.page.waitForFunction(() => document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length > 0, { timeout: 20000 }),
+]);
+for (const P of [A, B]) {
+  await P.page.click('#finishBtn');
+  await P.page.waitForSelector('#endOverlay.show', { timeout: 8000 });
+}
+
+// 《再来》：房主用同一个玩法立刻再开一局，客人也得被带进去——他自己是没法
+// 开局的，而倒计时是房间页在听的，他这会儿不在房间页上。
+await A.page.click('#restartBtn');
+const intoNextRound = (p) =>
+  p.waitForFunction(() => {
+    const tiles = document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length;
+    return tiles > 0 && !document.getElementById('endOverlay')?.classList.contains('show');
+  }, { timeout: 30000 }).then(() => true).catch(() => false);
+const [hostIn, guestIn] = await Promise.all([intoNextRound(A.page), intoNextRound(B.page)]);
+check('房主点《再来》直接开出下一局', hostIn);
+check('客人也被带进这一局（没留在上一局的结算页）', guestIn);
+
+for (const P of [A, B]) {
+  await P.page.click('#finishBtn');
+  await P.page.waitForSelector('#endOverlay.show', { timeout: 8000 });
+}
+
+// 《退出房间》：交座位，出一张截止此刻的竞赛排名。
+await B.page.click('#endQuitRoomBtn');
+const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 })
+  .then(() => true).catch(() => false);
+check('退出房间后出竞赛排名', rankPage);
+if (rankPage) {
+  check('排名页的标题是《竞赛排名》',
+    (await B.page.$eval('.home-sub', (e) => e.textContent.trim())) === '竞赛排名',
+    await B.page.$eval('.home-sub', (e) => e.textContent.trim()));
+  check('排名里有两个人，自己那一行被标出来',
+    (await B.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) === 2 &&
+      (await B.page.$$eval('#mpFinalRows .mp-player--me', (e) => e.length)) === 1);
+  const drawn = await B.page.waitForFunction(
+    () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
+  ).then(() => true).catch(() => false);
+  check('竞赛排名图渲染出来了', drawn);
+  await B.page.click('#mpFinalDone');
+  check('看完排名回到主菜单',
+    await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
+}
+
+// ---- 房主散场：整间房的总战绩 -------------------------------------------
+await A.page.click('#endBackBtn');
+await A.page.waitForSelector('#roomPickBar', { timeout: 12000 });
+await A.page.click('#navProfile');
+await A.page.click('#multiRow');
+await A.page.waitForSelector('#mpEnd', { timeout: 12000 });
 await A.page.click('#mpEnd');
 await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 });
-check('散场时出总战绩', (await A.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) === 2);
+check('散场时出总战绩', (await A.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) >= 1);
 const finalCard = await A.page.waitForFunction(
   () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
 ).then(() => true).catch(() => false);
 check('总战绩图渲染出来了', finalCard);
-// The other player is told, without having to press anything.
-const bEnded = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 }).then(() => true).catch(() => false);
-check('客人那边也自动看到总战绩', bEnded);
 
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

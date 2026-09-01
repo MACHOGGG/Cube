@@ -143,14 +143,27 @@ export function renderRoomCard(state: RoomState, lang: Lang): string {
  * The page everyone lands on when the host closes up: the standings as HTML
  * so they can be read at a glance, and the card itself to keep or send on.
  */
+/**
+ * `title` 换掉页头那一行字，`meId` 指定「我是哪一行」。
+ *
+ * 两个都是给「退出房间」那条路准备的：那张卡叫《竞赛排名》而不是《本房战绩》，
+ * 而且画它的时候座位已经交回去了，currentRoom() 是空的——不把 id 提前留下来，
+ * 玩家就在自己的排名表里找不到自己。
+ */
+export interface RoomCardOpts {
+  title?: string;
+  meId?: string;
+}
+
 export function showRoomCard(
   container: HTMLElement,
   state: RoomState,
   lang: Lang,
   onDone: () => void,
+  opts: RoomCardOpts = {},
 ): void {
   const s = STRINGS[lang];
-  const seat = currentRoom();
+  const meId = opts.meId ?? currentRoom()?.playerId;
   const ranked = rankRoom(state.players);
   const best = bestRoundOf(state.players);
   const fastest = fastestOf(state.players);
@@ -160,7 +173,7 @@ export function showRoomCard(
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
-          <p class="home-sub">${s.mpFinalTitle}</p>
+          <p class="home-sub">${opts.title ?? s.mpFinalTitle}</p>
         </div>
       </header>
 
@@ -173,7 +186,7 @@ export function showRoomCard(
       <div class="mp-players" id="mpFinalRows">
         ${ranked
           .map(
-            (p, i) => `<div class="mp-player${seat && p.id === seat.playerId ? ' mp-player--me' : ''}">
+            (p, i) => `<div class="mp-player${meId && p.id === meId ? ' mp-player--me' : ''}">
               <span class="mp-final-rank">${i + 1}</span>
               <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
               <span class="mp-player-name">${esc(p.name)}</span>

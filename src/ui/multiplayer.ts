@@ -16,6 +16,8 @@ import {
   type Avatar,
   type RoomError,
   type RoomState,
+  lastPlayedRound,
+  markRoundPlayed,
 } from '../engine/room';
 
 /**
@@ -119,8 +121,13 @@ export function renderMultiplayerPage(
    * `startAt` stays set after a round finishes — it is what that round
    * began at — so it cannot be what decides whether to count down. The
    * round number can: a round we have already played never starts again.
+   *
+   * 它存在 sessionStorage 里，不在这个闭包里：每次回到房间页，这个函数都是
+   * 新跑一遍，闭包里的数字会归零。归零之后服务器说的「第 1 局」大于 0，刚打
+   * 完的那一局就会被当成新的一局重开——人回到一块已经结束的棋盘上，再点主页
+   * 又重来一次，出不去。座位当初也是栽在同一件事上。
    */
-  let playedRound = 0;
+  let playedRound = lastPlayedRound();
   let launched = false;
   let dead = false;
 
@@ -449,7 +456,8 @@ export function renderMultiplayerPage(
           forgetRoom();
           return renderHome(s.mpRoomEnded);
         }
-        playedRound = now.value.roundOver ? now.value.round : playedRound;
+        if (now.value.roundOver) markRoundPlayed(now.value.round);
+        playedRound = Math.max(playedRound, lastPlayedRound());
         return renderLobby(now.value);
       }
       if (now.reason === 'noRoom' || now.reason === 'ended') {
@@ -523,7 +531,8 @@ export function renderMultiplayerPage(
     }
     // A round that began while this device was away is still worth joining
     // late; one it has already played is not.
-    playedRound = existing.value.roundOver ? existing.value.round : playedRound;
+    if (existing.value.roundOver) markRoundPlayed(existing.value.round);
+    playedRound = Math.max(playedRound, lastPlayedRound());
     renderLobby(existing.value);
   })();
 

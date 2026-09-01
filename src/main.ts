@@ -18,7 +18,14 @@ import { openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
-import { currentRoom, forgetRoom, startMatch, type RoomState } from './engine/room';
+import {
+  currentRoom,
+  forgetRoom,
+  latestRoomState,
+  leaveRoom,
+  startMatch,
+  type RoomState,
+} from './engine/room';
 import { clearSeed, seedRandom } from './engine/rng';
 import { shapeName } from './ui/shapeLabels';
 import { createSquareGame } from './shapes/square';
@@ -372,7 +379,18 @@ function startMultiplayerRun(match: MatchStart) {
   // instant. Leaving the start card up would undo exactly that: four players
   // would each press it a moment apart and the race would begin four times.
   requestAnimationFrame(() => root.querySelector<HTMLButtonElement>('#startBtn')?.click());
-  const stopBoard = mountScoreboard(currentLang);
+  const stopBoard = mountScoreboard(currentLang, {
+    // 回房间页：比分和下一局都在那里。
+    onRoom: showMultiplayer,
+    // 房主的「回主页继续玩」——回主菜单，横幅还挂着，挑的仍然是整房的下一局。
+    onPickNext: () => {
+      const code = currentRoom()?.code ?? null;
+      teardown();
+      setPickingForRoom(code);
+      showMenu();
+    },
+    onQuit: quitRoomWithCard,
+  });
   activeDestroy = () => {
     stopBoard();
     // Back to a different board every time, for whatever is played next.
@@ -381,6 +399,26 @@ function startMultiplayerRun(match: MatchStart) {
   };
   gameInProgress = true;
   repaintIcons();
+}
+
+/**
+ * 退出房间：交出座位，然后把截止此刻的竞赛排名摆出来。
+ *
+ * 排名要在交座位之前先抓下来——leaveRoom() 会把最后一次看到的房间状态一起
+ * 清掉，晚一步就什么都画不出来了。玩家自己那一行也一样：座位没了之后就认不
+ * 出「我是谁」，所以 id 也先留一份。
+ */
+function quitRoomWithCard() {
+  const state = latestRoomState();
+  const meId = currentRoom()?.playerId;
+  void leaveRoom();
+  teardown();
+  setPickingForRoom(null);
+  if (!state) return showMenu();
+  showRoomCard(root, state, currentLang, showMenu, {
+    title: STRINGS[currentLang].mpRankTitle,
+    meId,
+  });
 }
 
 /**

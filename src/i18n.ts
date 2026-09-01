@@ -205,6 +205,10 @@ export interface I18nStrings {
   mpStartBtn: string;
   mpWaitingHost: string;
   mpLeave: string;
+  /** 结算页上的那颗：交出座位，出竞赛排名 */
+  mpQuitRoom: string;
+  /** 退出房间后那张总排名的标题 */
+  mpRankTitle: string;
   mpNeedGenius: string;
   mpSameBoard: string;
   mpGo: string;
@@ -492,6 +496,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStartBtn: 'Start',
     mpWaitingHost: 'Waiting for the host to pick a board.',
     mpLeave: 'Leave the room',
+    mpQuitRoom: 'Leave room',
+    mpRankTitle: 'Competition ranking',
     mpNeedGenius: 'Opening a room is for Slides Genius. Joining someone else’s is free.',
     mpSameBoard: 'Everyone gets exactly the same board.',
     mpGo: 'Go!',
@@ -757,6 +763,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStartBtn: 'Commencer',
     mpWaitingHost: 'En attente du plateau choisi par l’hôte.',
     mpLeave: 'Quitter la salle',
+    mpQuitRoom: 'Quitter la salle',
+    mpRankTitle: 'Classement du tournoi',
     mpNeedGenius: 'Ouvrir une salle est réservé aux Slides Génies. Rejoindre celle d’un autre est gratuit.',
     mpSameBoard: 'Tout le monde reçoit exactement le même plateau.',
     mpGo: 'Partez !',
@@ -1022,6 +1030,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStartBtn: '開始',
     mpWaitingHost: '等房主選玩法。',
     mpLeave: '離開房間',
+    mpQuitRoom: '退出房間',
+    mpRankTitle: '競賽排名',
     mpNeedGenius: '開房間需要 Slides 天才；加入別人的房間不需要。',
     mpSameBoard: '所有人拿到完全一樣的棋盤。',
     mpGo: '開始！',
@@ -1287,6 +1297,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStartBtn: '开始',
     mpWaitingHost: '等房主选玩法。',
     mpLeave: '离开房间',
+    mpQuitRoom: '退出房间',
+    mpRankTitle: '竞赛排名',
     mpNeedGenius: '开房间需要 Slides 天才；加入别人的房间不需要。',
     mpSameBoard: '所有人拿到完全一样的棋盘。',
     mpGo: '开始！',

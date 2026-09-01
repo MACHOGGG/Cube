@@ -1,8 +1,13 @@
-import { STRINGS, type Lang } from '../i18n';
+import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 import {
   avatarSvg,
   currentRoom,
+  iAmHost,
+  lastPlayedRound,
+  latestRoomState,
+  markRoundPlayed,
   reportScore,
+  startMatch,
   watchRoom,
   type RoomState,
 } from '../engine/room';
@@ -54,14 +59,42 @@ function runSeconds(): number | undefined {
 }
 
 /**
+ * 一局打完之后，这三颗按钮各自去哪。
+ *
+ * 单人局的结算页上，《主页》和《再来》的意思是清楚的。房间里不是：主页不该
+ * 把人丢出房间（比分还在那儿，房主还要开下一局），而《再来》如果只是本地重
+ * 开一副牌，那就是在一场已经结束的比赛里自己跟自己再玩一遍。所以在房间里这
+ * 两颗要换去处，另外补一颗真正能走的《退出房间》。
+ */
+export interface RoomRunHandlers {
+  /** 回房间页——比分和下一局都在那里。 */
+  onRoom: () => void;
+  /** 房主专用：回主菜单，继续为整房挑下一个玩法。 */
+  onPickNext: () => void;
+  /** 交出座位，并出一张截止此刻的竞赛排名。 */
+  onQuit: () => void;
+}
+
+/**
  * Puts the standings on screen and keeps them there until the returned
  * teardown is called. Does nothing at all outside a room, so a solo run is
  * exactly what it was.
  */
-export function mountScoreboard(lang: Lang): () => void {
+export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => void {
   const seat = currentRoom();
   if (!seat) return () => {};
   const s = STRINGS[lang];
+  const restoreEndPanel = wireEndPanel(s, handlers);
+  /**
+   * 这一局是第几局——在开局的这一刻记下来，之后不再改。
+   *
+   * 不能等到交卷时再去问「现在是第几局」：房主可能已经开了下一局，那时问到
+   * 的是新的回合号，于是一局都没打的新回合被记成「打过了」，人回到房间也不
+   * 会再倒计时。这个数字属于这一局，就该在这一局开始时定下来。
+   */
+  const myRound = latestRoomState()?.round ?? 0;
+  /** 这一局在本机算打完了：回到房间时才不会把它当新的一局重开。 */
+  const markPlayed = () => markRoundPlayed(myRound);
 
   const panel = document.createElement('aside');
   panel.className = 'mp-board';
@@ -91,7 +124,16 @@ export function mountScoreboard(lang: Lang): () => void {
   // Everyone else's scores.
   const stopWatching = watchRoom(
     (state) => {
-      if (!dead) paint(state);
+      if (dead) return;
+      paint(state);
+      // 房主已经开了下一局，而这台设备还停在上一局的结算页上。谁也不会来叫
+      // 他——开局的倒计时是房间页在听的，而这台设备现在不在房间页上。所以
+      // 由这里把人送回去，房间页一进去就接上倒计时。
+      // 只在本局已经打完之后才动：正打着的人不该被拽走。
+      if (runFinished() && state.startAt && state.round > lastPlayedRound()) {
+        dead = true;
+        return handlers.onRoom();
+      }
     },
     () => {
       // A poll that fails changes nothing on screen: the last standings
@@ -110,17 +152,77 @@ export function mountScoreboard(lang: Lang): () => void {
     if (score === lastSent && over === sentFinished) return;
     lastSent = score;
     sentFinished = over;
+    if (over) markPlayed();
     void reportScore(score, over, runSeconds());
   }, LOCAL_MS);
 
   return () => {
     dead = true;
+    restoreEndPanel();
     stopWatching();
     window.clearInterval(localTimer);
     // One last report, so a player who leaves mid-run does not sit at a
     // stale number on everybody else's screen.
     const score = localScore();
-    if (score !== null) void reportScore(score, true, runSeconds());
+    if (score !== null) {
+      markPlayed();
+      void reportScore(score, true, runSeconds());
+    }
     panel.remove();
+  };
+}
+
+
+/**
+ * 把结算页那一排按钮改成房间里的样子，返回还原用的函数。
+ *
+ * 换按钮的手法是「把节点整个换成它的克隆」：克隆不带任何监听器，于是各个玩法
+ * 自己挂在上面的那一份（本地重开、回上一页）就断了，再挂我们要的。这样八个
+ * 玩法文件和 gameShell 都不用动——它们本来就不知道多人房间这回事，也不该知道。
+ */
+function wireEndPanel(s: I18nStrings, handlers: RoomRunHandlers): () => void {
+  const row = document.querySelector<HTMLElement>(`#${END_OVERLAY_ID} .btn-row`);
+  if (!row) return () => {};
+
+  const swap = (id: string, label: string, onClick: () => void): HTMLElement | null => {
+    const old = row.querySelector<HTMLButtonElement>(`#${id}`);
+    if (!old) return null;
+    const fresh = old.cloneNode(true) as HTMLButtonElement;
+    fresh.textContent = label;
+    old.replaceWith(fresh);
+    fresh.addEventListener('click', onClick);
+    return fresh;
+  };
+
+  const host = iAmHost();
+
+  // 《主页》：房主回主菜单挑下一个玩法（那就是「回主页继续玩」）；客人回房间页，
+  // 因为开局的权限不在他手上，主菜单对他没有可按的东西。
+  swap('endBackBtn', s.homeBtn, host ? handlers.onPickNext : handlers.onRoom);
+
+  // 《再来》：房主用同一个玩法立刻再开一局。客人开不了局，这颗对他没有意义，
+  // 与其让它跳到别的地方假装能用，不如收起来。
+  const again = row.querySelector<HTMLButtonElement>('#restartBtn');
+  if (host) {
+    swap('restartBtn', s.restartBtn, () => {
+      const mode = latestRoomState()?.mode;
+      handlers.onRoom();
+      if (mode) void startMatch(mode);
+    });
+  } else if (again) {
+    again.hidden = true;
+  }
+
+  // 新的一颗：真正走得掉的出口。放在这一排最后，和《分享》并排。
+  const quit = document.createElement('button');
+  quit.className = 'secondary';
+  quit.id = 'endQuitRoomBtn';
+  quit.textContent = s.mpQuitRoom;
+  quit.addEventListener('click', handlers.onQuit);
+  row.appendChild(quit);
+
+  return () => {
+    quit.remove();
+    if (again) again.hidden = false;
   };
 }
