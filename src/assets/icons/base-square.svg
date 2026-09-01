@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="167px" height="167px" viewBox="0 0 167 167" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组</title>
+    <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="画框-5" transform="translate(-5618, -7952)">
+            <g id="编组" transform="translate(5618, 7952)">
+                <rect id="矩形" fill="color(display-p3 0.656 0.656 0.656)" x="0" y="0" width="167" height="167" rx="22"></rect>
+                <rect id="矩形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="6" fill="color(display-p3 0.290 0.376 0.698)" x="35" y="35" width="48.5" height="48.5" rx="6"></rect>
+                <rect id="矩形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="6" fill="color(display-p3 0.922 0.612 0.227)" x="83.5" y="35" width="48.5" height="48.5" rx="6"></rect>
+                <rect id="矩形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="6" fill="color(display-p3 0.690 0.290 0.161)" x="35" y="83.5" width="48.5" height="48.5" rx="6"></rect>
+                <rect id="矩形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="6" fill="color(display-p3 0.082 0.522 0.141)" x="83.5" y="83.5" width="48.5" height="48.5" rx="6"></rect>
+            </g>
+        </g>
+    </g>
+</svg>

@@ -319,13 +319,27 @@ const PAD = 80;
 // zoomed into or saved at native size.
 const EXPORT_SCALE = 3;
 
-/** Draws the pre-encoded Slides QR (see qrSlides.ts) into a square box. */
-function drawQr(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+/**
+ * Draws the pre-encoded Slides QR (see qrSlides.ts) into a square box, with
+ * the invitation under it.
+ *
+ * 码子直接落在卡片的米色底上，底下不再垫一块白方块。那块白的本来是想「保证
+ * 扫得动」，可扫码要的是深浅分得开，不是非白不可：这张卡的底是 #faf9f5，和
+ * 码子的 #141413 差着二十多倍的亮度，任何一台手机都读得出来。去掉它，右上角
+ * 就不再是贴上去的一张贴纸，而是印在同一张纸上的东西。
+ *
+ * 两种卡（一局的战绩、整房的排名）共用这一个函数，「所有分享图里的码子长得
+ * 一样」这件事才不用靠两处各自记得。
+ */
+export function drawQr(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  caption?: string,
+) {
   const modules = QR_MATRIX.length + QR_QUIET_MODULES * 2;
   const m = size / modules;
-  ctx.fillStyle = '#ffffff';
-  roundRect(ctx, x, y, size, size, 8);
-  ctx.fill();
   ctx.fillStyle = '#141413';
   for (let r = 0; r < QR_MATRIX.length; r++) {
     const row = QR_MATRIX[r];
@@ -340,6 +354,13 @@ function drawQr(ctx: CanvasRenderingContext2D, x: number, y: number, size: numbe
         m + 0.5,
       );
     }
+  }
+  if (caption) {
+    ctx.font = '500 13px "Karla", sans-serif';
+    ctx.fillStyle = '#5b5650';
+    ctx.textAlign = 'center';
+    ctx.fillText(caption, x + size / 2, y + size + 18);
+    ctx.textAlign = 'left';
   }
 }
 
@@ -404,13 +425,7 @@ export function renderShareCard(
   // The QR and its caption own the top-right corner; the breakdown rows sit
   // below them rather than beside, so neither has to shrink.
   const qrSize = 96;
-  const qrX = CARD_W - PAD - qrSize;
-  drawQr(ctx, qrX, 40, qrSize);
-  ctx.font = '500 13px "Karla", sans-serif';
-  ctx.fillStyle = '#5b5650';
-  ctx.textAlign = 'center';
-  ctx.fillText(s.shareQrCaption, qrX + qrSize / 2, 40 + qrSize + 18);
-  ctx.textAlign = 'left';
+  drawQr(ctx, CARD_W - PAD - qrSize, 40, qrSize, s.shareQrCaption);
 
   ctx.font = '700 88px "JetBrains Mono", monospace';
   ctx.fillStyle = '#BE5762';

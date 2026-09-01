@@ -1,6 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
-import { drawStandings, type Standing } from '../engine/shareCard';
-import { QR_MATRIX, QR_QUIET_MODULES } from '../engine/qrSlides';
+import { drawQr, drawStandings, type Standing } from '../engine/shareCard';
 import { avatarSvg, currentRoom, type RoomPlayer, type RoomState } from '../engine/room';
 
 /**
@@ -33,9 +32,18 @@ export function shortTime(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
 
+/**
+ * 一个人到这一刻打了多少：结算过的几局，加上手上这一局。
+ *
+ * 服务器只在开下一局时才把上一局折进 total 里，所以中途要卡的时候，正在打的
+ * 那一局还挂在 score 上。只看 total 的后果是：第一局打到一半有人按了《离开
+ * 房间》，他拿到的排行榜上所有人都是 0 分——一张说不出任何事情的表。
+ */
+export const liveTotal = (p: RoomPlayer): number => p.total + p.score;
+
 /** Highest total first; a tie is broken by the better single round. */
 export const rankRoom = (players: RoomPlayer[]): RoomPlayer[] =>
-  [...players].sort((a, b) => b.total - a.total || b.best - a.best);
+  [...players].sort((a, b) => liveTotal(b) - liveTotal(a) || b.best - a.best);
 
 /** Whoever put together the single best board, when anyone did. */
 function bestRoundOf(players: RoomPlayer[]): RoomPlayer | null {
@@ -51,30 +59,33 @@ function fastestOf(players: RoomPlayer[]): RoomPlayer | null {
   return timed.reduce((top, p) => ((p.bestTime ?? 0) < (top.bestTime ?? 0) ? p : top));
 }
 
-function drawQr(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
-  const modules = QR_MATRIX.length + QR_QUIET_MODULES * 2;
-  const m = size / modules;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x, y, size, size);
-  ctx.fillStyle = '#141413';
-  for (let r = 0; r < QR_MATRIX.length; r++) {
-    const row = QR_MATRIX[r];
-    for (let c = 0; c < row.length; c++) {
-      if (row[c] !== '1') continue;
-      ctx.fillRect(x + (c + QR_QUIET_MODULES) * m, y + (r + QR_QUIET_MODULES) * m, m + 0.5, m + 0.5);
-    }
-  }
+/**
+ * `title` 换掉页头那一行字，`meId` 指定「我是哪一行」。
+ *
+ * 两个都是给「离开房间」那条路准备的：那张卡叫《竞赛排名》而不是《本房战绩》，
+ * 而且画它的时候座位已经交回去了，currentRoom() 是空的——不把 id 提前留下来，
+ * 玩家就在自己的排名表里找不到自己。
+ */
+export interface RoomCardOpts {
+  title?: string;
+  meId?: string;
 }
 
-/** The closing card as a PNG data URL. */
-export function renderRoomCard(state: RoomState, lang: Lang): string {
+/**
+ * The closing card as a PNG data URL.
+ *
+ * `title` 是卡片上那一行小字，默认《本房战绩》。中途走人的那条路要传《竞赛
+ * 排名》进来：页头写着一个名字、图里印着另一个，是同一张纸上自己跟自己打架。
+ * `meId` 同理——画这张图的时候座位可能已经交回去了。
+ */
+export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts = {}): string {
   const s = STRINGS[lang];
-  const seat = currentRoom();
+  const meId = opts.meId ?? currentRoom()?.playerId;
   const ranked = rankRoom(state.players);
   const rows: Standing[] = ranked.map((p) => ({
     name: p.name,
-    score: p.total,
-    me: Boolean(seat && p.id === seat.playerId),
+    score: liveTotal(p),
+    me: Boolean(meId && p.id === meId),
   }));
 
   const rowH = rowHeightFor(rows.length);
@@ -97,10 +108,12 @@ export function renderRoomCard(state: RoomState, lang: Lang): string {
   ctx.fillText('Slides', PAD, 74);
   ctx.font = '600 22px "Karla", sans-serif';
   ctx.fillStyle = '#5b5650';
-  ctx.fillText(s.mpFinalTitle, PAD, 106);
+  ctx.fillText(opts.title ?? s.mpFinalTitle, PAD, 106);
 
+  // 和一局的战绩图同一个码子、同一句邀请——两张图都是给别人看的，右上角
+  // 不该一张有话说、另一张只有个方块。
   const qrSize = 88;
-  drawQr(ctx, CARD_W - PAD - qrSize, 40, qrSize);
+  drawQr(ctx, CARD_W - PAD - qrSize, 40, qrSize, s.shareQrCaption);
 
   // The room, and how much of an evening it was.
   ctx.font = '700 56px "Fraunces", serif';
@@ -143,18 +156,6 @@ export function renderRoomCard(state: RoomState, lang: Lang): string {
  * The page everyone lands on when the host closes up: the standings as HTML
  * so they can be read at a glance, and the card itself to keep or send on.
  */
-/**
- * `title` 换掉页头那一行字，`meId` 指定「我是哪一行」。
- *
- * 两个都是给「离开房间」那条路准备的：那张卡叫《竞赛排名》而不是《本房战绩》，
- * 而且画它的时候座位已经交回去了，currentRoom() 是空的——不把 id 提前留下来，
- * 玩家就在自己的排名表里找不到自己。
- */
-export interface RoomCardOpts {
-  title?: string;
-  meId?: string;
-}
-
 export function showRoomCard(
   container: HTMLElement,
   state: RoomState,
@@ -190,7 +191,7 @@ export function showRoomCard(
               <span class="mp-final-rank">${i + 1}</span>
               <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
               <span class="mp-player-name">${esc(p.name)}</span>
-              <span class="mp-player-total">${p.total}</span>
+              <span class="mp-player-total">${liveTotal(p)}</span>
             </div>`,
           )
           .join('')}
@@ -217,7 +218,7 @@ export function showRoomCard(
   // canvas asked for them before anything has been laid out gets fallbacks.
   requestAnimationFrame(() => {
     try {
-      img.src = renderRoomCard(state, lang);
+      img.src = renderRoomCard(state, lang, opts);
     } catch {
       // A canvas this device would not give us costs the picture, not the
       // standings — those are the rows above, in plain HTML.

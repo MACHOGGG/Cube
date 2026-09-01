@@ -242,7 +242,7 @@ export interface I18nStrings {
   /** 房主要走之前得知道：他一走，就没人能开下一局了。 */
   mpHostLeaveWarn: string;
   /** 客人要走时问的那一句。房主那句说的是「你走了整桌就散」，对客人不成立，
-   *  照搬过去是吓唬人。 */
+   *  照搬过去是吓唬人——他走了别人接着玩，所以只问要不要走。 */
   mpGuestLeaveWarn: string;
   mpLeaveAnyway: string;
   mpStay: string;
@@ -527,7 +527,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrEnded: 'That room has been closed.',
     mpReconnecting: 'Connection lost — getting you back in…',
     mpHostLeaveWarn: 'Close the room?',
-    mpGuestLeaveWarn: 'Leave the room? Your seat goes back and the others play on without you.',
+    mpGuestLeaveWarn: 'Leave?',
     mpLeaveAnyway: 'Leave anyway',
     mpStay: 'Stay',
     mpErrNoRoom: 'No room with that code.',
@@ -794,7 +794,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
     mpHostLeaveWarn: 'Dissoudre la salle ?',
-    mpGuestLeaveWarn: 'Quitter la salle ? Vous rendez votre place et les autres continuent sans vous.',
+    mpGuestLeaveWarn: 'Partir ?',
     mpLeaveAnyway: 'Partir quand même',
     mpStay: 'Rester',
     mpErrNoRoom: 'Aucune salle avec ce code.',
@@ -1061,7 +1061,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrEnded: '這個房間已經結束了。',
     mpReconnecting: '網路斷了一下，正在把你接回房間…',
     mpHostLeaveWarn: '解散房間？',
-    mpGuestLeaveWarn: '要離開這間房嗎？座位會交回去，其他人會接著玩。',
+    mpGuestLeaveWarn: '是否離開？',
     mpLeaveAnyway: '還是離開',
     mpStay: '留下',
     mpErrNoRoom: '沒有這個房間號。',
@@ -1328,7 +1328,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrEnded: '这个房间已经结束了。',
     mpReconnecting: '网络断了一下，正在把你接回房间…',
     mpHostLeaveWarn: '解散房间？',
-    mpGuestLeaveWarn: '要离开这间房吗？座位会交回去，其他人会接着玩。',
+    mpGuestLeaveWarn: '是否离开？',
     mpLeaveAnyway: '还是离开',
     mpStay: '留下',
     mpErrNoRoom: '没有这个房间号。',
