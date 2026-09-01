@@ -14,6 +14,33 @@ export function magnetizeRawDist(x: number, power = 2.2): number {
   return nearest + eased / 2;
 }
 
+/**
+ * 三角棋盘的跟手曲线：磁吸和「照直跟」按比例掺在一起。
+ *
+ * 为什么单靠 magnetizeRawDist 不够——它的速率是 power·|t|^(power−1)，在每个
+ * 卡点上恰好等于 0。也就是说手指刚离开卡点的那一小段，牌是不动的；到两个卡
+ * 点正中间又冲到最快。方块和圆球的卡点隔一格，这条「先粘住、再窜一下」的
+ * 曲线在一格之内走完，读起来就是清脆的一声「咔」。
+ *
+ * 三角不一样：它的卡点隔着两格（一格的位移会把朝上的三角摆进朝下的槽里，
+ * 所以只能偶数步落位）。同一条曲线摊在两格上，粘住的那段有两倍宽——量出来
+ * 手指走过一个偶数步附近时，牌只跟着走 0.31 倍，到奇数步附近又变成 1.45
+ * 倍。四倍半的速率起伏，就是「卡卡的、不丝滑」。
+ *
+ * 掺一点直线进去：速率从 (1−blend)·1 起步，最高 (1−blend) + blend·power。
+ * blend = 0.3、power = 1.5 时是 0.70 ～ 1.15——始终跟着手指走，卡点的手感
+ * 还在，只是不再有「停住」和「窜一下」。
+ *
+ * 关键是落位一步没变：掺出来的偏移量仍在 ±0.5 之内，所以 Math.round(结果)
+ * 和 Math.round(原值) 永远相同，松手时提交的还是同一格。改的只是拖动过程中
+ * 眼睛看到的位置。
+ */
+export function magnetizeFollow(x: number, power: number, blend: number): number {
+  const nearest = Math.round(x);
+  const eased = magnetizeRawDist(x, power) - nearest;
+  return nearest + (1 - blend) * (x - nearest) + blend * eased;
+}
+
 export interface DragCallbacks {
   /**
    * The element `onStart`'s coordinates are measured from. Defaults to the

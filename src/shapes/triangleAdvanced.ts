@@ -1,6 +1,6 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
-import { attachDrag, magnetizeRawDist } from '../engine/drag';
+import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { observeBoardSize } from '../engine/boardResize';
@@ -30,6 +30,12 @@ import type { ShapeGame, ShapeGameOpts } from './types';
 // the bottom into two independent lines, so sliding the left arm's top row
 // leaves the right arm's top row untouched — while the bottom row, being one
 // unbroken run, still slides as a single line across the whole board.
+/** 拖动时预览跟手的曲线，见 drag.ts 的 magnetizeFollow。
+ *  三角只能偶数步落位，卡点隔着两格，纯磁吸会在卡点附近把牌粘住不动——
+ *  掺三成直线进去，速率就稳在 0.70～1.15 之间。落位一步没变。 */
+const MAGNET_POWER = 1.5;
+const MAGNET_BLEND = 0.3;
+
 const PALETTES = {
   standard: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#8A5A44', '#EDEDED'],
   colorblind: ['#D55E00', '#E69F00', '#F0E442', '#009E73', '#56B4E9', '#8A5A44', '#EDEDED'],
@@ -813,7 +819,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         if (!d || !d.fam) return;
         const cells = activeCells(d);
         const n = cells.length;
-        const half = magnetizeRawDist(projectedSteps(d.fam, d.dx, d.dy) / 2, 1.5);
+        const half = magnetizeFollow(projectedSteps(d.fam, d.dx, d.dy) / 2, MAGNET_POWER, MAGNET_BLEND);
         const shift = 2 * Math.round(half);
         if (shift !== d.lastShift) {
           vibrate(6);
@@ -946,7 +952,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
           }
           const d = drag;
           if (!d.fam || !d.chain) return;
-          d.chain.drive(magnetizeRawDist(projectedSteps(d.fam, dx, dy) / 2, 1.5));
+          d.chain.drive(magnetizeFollow(projectedSteps(d.fam, dx, dy) / 2, MAGNET_POWER, MAGNET_BLEND));
         },
         onEnd(dx, dy) {
           const d = drag;

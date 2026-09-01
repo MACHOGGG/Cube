@@ -29,6 +29,12 @@ await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
     localStorage.setItem(k, '1');
   localStorage.setItem('slides_lang', 'zhHans');
+  // 进阶三角是天才特供，主菜单上锁着。这里只要本地那份凭据——点开一个玩法
+  // 不需要服务器认（开房间才需要）。
+  localStorage.setItem('slides_genius', JSON.stringify({
+    active: true, period: 'yearly', until: Date.now() + 30 * 864e5, channel: 'code',
+    email: '', token: 'x'.repeat(48), code: 'LOCALONLY',
+  }));
 });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));
@@ -107,6 +113,74 @@ for (const [name, idx] of [['方块', 0], ['三角', 2]]) {
   check(`${name}：从正中按下、死区里走 10px，抓的不变`,
     String(at0) === String(at10) && at0.length === 1,
     `格宽 ${Math.round(box.w)}px · ${at0} → ${at10}`);
+}
+
+// ---- 4. 三个三角棋盘：牌得一直跟着手指走，不许粘住也不许窜 ---------------
+//
+// 三角只能偶数步落位（挪一格会把朝上的三角摆进朝下的槽），所以卡点隔着两格。
+// 从前用的是和方块圆球同一条磁吸曲线，它的速率在卡点上恰好是 0——摊在两格
+// 宽的间距上，就成了「手指走过偶数步附近，牌几乎不动，到中间又窜一下」。
+// 量出来是 0.31 ～ 1.46 倍，四倍半的起伏，正是那种「卡卡的」。
+// 现在掺了三成直线进去（drag.ts 的 magnetizeFollow）。
+//
+// 量法：盯住一个固定的槽，看它被推开多远（那就是「让位」，单位是一步）。
+// 让位是把锯齿：涨到接近 ±1 就换一次格，那一帧它会从 +1 跳到 −1。可就在同
+// 一帧里内容前进了两格，两者相抵，玩家看到的是连续的——所以换格那几帧要剔
+// 掉再算速率。剔法是「一帧挪了超过一步」，只有换格会这样。
+// 这样不必假设任何一块棋盘的换格时机，三种三角用同一段代码就够。
+for (const [n, name] of [[2, '基础三角'], [15, '大三角'], [17, '进阶三角']]) {
+  const box = await openBoard(n);
+  const sel = `#boardWrap [data-r="${box.at.split(',')[0]}"][data-c="${box.at.split(',')[1]}"]`;
+  const xOf = () => page.evaluate((q) => {
+    const e = document.querySelector(q);
+    return e ? e.getBoundingClientRect().x : null;
+  }, sel);
+
+  // 一步有多宽，量出来而不是按三角的宽度猜：同一排里相邻两个槽的左边缘之差
+  // 就是一步。三种三角的棋盘大小、缩放各不相同，猜一个值会把速率整体算歪。
+  const step = await page.evaluate((r) => {
+    const xs = [...document.querySelectorAll(`#boardWrap [data-r="${r}"]`)]
+      .map((e) => e.getBoundingClientRect().x)
+      .sort((a, b) => a - b);
+    const gaps = xs.slice(1).map((x, i) => x - xs[i]).filter((g) => g > 1).sort((a, b) => a - b);
+    return gaps.length ? gaps[Math.floor(gaps.length / 2)] : null;   // 取中位数，绕开缺口
+  }, box.at.split(',')[0]);
+  check(`${name}：量得到一步有多宽`, step !== null && step > 4, `${step === null ? '—' : step.toFixed(1)}px`);
+  if (!step) continue;
+  const rest = await xOf();
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 3, box.y, { steps: 3 });   // 越过死区，定下方向
+  await page.waitForTimeout(60);
+
+  const give = [];
+  for (let k = 5; k <= 40; k++) {
+    const s = k * 0.1;
+    await page.mouse.move(box.x + s * step, box.y, { steps: 2 });
+    await page.waitForTimeout(35);
+    const x = await xOf();
+    if (x !== null && rest !== null) give.push([s, (x - rest) / step]);
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+
+  // 从第三个样本起算：头两个还夹着死区释放的那一下追赶。
+  let minRate = Infinity, maxRate = -Infinity, backward = 0, kept = 0;
+  for (let i = 3; i < give.length; i++) {
+    const d = give[i][1] - give[i - 1][1];
+    if (Math.abs(d) > 1) continue;        // 换格那一帧，剔掉
+    const rate = d / (give[i][0] - give[i - 1][0]);
+    kept++;
+    minRate = Math.min(minRate, rate);
+    maxRate = Math.max(maxRate, rate);
+    if (rate < -0.02) backward++;
+  }
+  check(`${name}：量到了足够多的样本`, kept >= 20, `${kept} 段`);
+  check(`${name}：拖动全程一步不倒退`, backward === 0, `倒退 ${backward} 段`);
+  check(`${name}：最慢的一段也跟着手指走（≥0.5 倍）`, minRate >= 0.5,
+    `${minRate.toFixed(2)} ～ ${maxRate.toFixed(2)} 倍`);
+  check(`${name}：也不会窜出去（≤1.6 倍）`, maxRate <= 1.6,
+    `${minRate.toFixed(2)} ～ ${maxRate.toFixed(2)} 倍`);
 }
 
 await browser.close();

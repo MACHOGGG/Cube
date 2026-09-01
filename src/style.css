@@ -53,7 +53,14 @@
      :root — every board's outline overlay reads them, and an undefined
      var() in an SVG `fill` computes to the initial value (opaque black),
      which paints a scored triangle solid black instead of washing it. */
+  /* 同样是两行。color-mix 更晚（2023 年），不认它的浏览器这两个自定义属性
+     会算不出来——而它们是画在 SVG 的 fill 上的，fill 拿到一个算不出来的
+     var() 会退回初始值，也就是不透明的纯黑：得分的那一圈光变成一块黑斑。
+     兜底用 --nav-glow，那是同一支强调色的 RGB 三元组，每套主题里都重新定
+     义过，所以深色、浅色、色盲三套都跟得上。 */
+  --score-glow: rgba(var(--nav-glow), 0.65);
   --score-glow: color-mix(in srgb, var(--accent) 65%, transparent);
+  --score-wash: rgba(var(--nav-glow), 0.26);
   --score-wash: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 @media (prefers-color-scheme: dark) {
@@ -757,16 +764,20 @@ button:hover { filter: brightness(1.05); }
   pointer-events: auto;
   padding: 4px 26px 10px;
   border-radius: 22px;
+  /* 不认 color-mix 就用不透明的底色：招牌下面看不见内容透上来，但字是清楚
+     的——总好过整条 background 作废、招牌变成透明一片压在内容上。 */
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 55%, transparent);
   -webkit-backdrop-filter: blur(16px) saturate(1.5);
   backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 6px 20px -14px rgba(46, 36, 48, 0.4);
   box-shadow: 0 6px 20px -14px rgba(46, 36, 48, 0.4),
               inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 /* Without backdrop-filter the panel would be a wash of half-transparent
    text over content — fall back to a nearly solid ground instead. */
 @supports not (backdrop-filter: blur(1px)) {
-  .home-head-glass { background: color-mix(in srgb, var(--bg) 92%, transparent); }
+  .home-head-glass { background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); }
 }
 /* Tapping it goes home, so it has to look tappable. */
 .home-title { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -824,10 +835,13 @@ button:hover { filter: brightness(1.05); }
    减去那 309，剩下的高度三排照 3.11 分。笔记本上是这条在起作用；屏幕够高
    时 255 那条重新接手，跟从前一样。 */
 .home-page--wide {
-  /* max(96px, …)：这是个下限，不是目标。屏幕够高时永远轮不到它——一屏装得
+  /* 第一行是给不认 dvh 的浏览器兜底的固定值——没有它，整个 --home-card-cap
+     会算不出来，max-width 变成 none，图标撑满一列。
+     max(96px, …)：这是个下限，不是目标。屏幕够高时永远轮不到它——一屏装得
      下才是常态。轮到它的是横过来的手机：三百多像素高，按上面那道算式分下来
      一张卡片只有二十几个像素，那不叫「装进一屏」，那叫看不见也点不着。宁可
      让这一页往下滚一段，也要让每张图标大到能看清、能点中。 */
+  --home-card-cap: 255px;
   --home-card-cap: min(255px, max(96px, (100dvh - 309px) / 3.11));
 }
 /* 一个变量、两处引用：从前炸弹卡片的宽度在文件后面又被写了一遍 255，同样
@@ -1762,6 +1776,14 @@ body:has(.story-tut) .home-nav { display: none; }
    scored, and the two things you can do about it. */
 .app--game {
   background: var(--play-bg);
+  /* 两行是有意的，不是重复。dvh 是 2022 年才有的单位，旧一点的安卓浏览器
+     不认——不认的时候整条声明作废，min-height 退回 auto。而这一页是竖着的
+     弹性盒，棋盘那一格写着 flex:1，父层没有高度可分，它就得到 0 高。棋盘
+     是照着自己这一格的实际尺寸画的，量到 0 就一笔也不画：屏幕上只剩顶上
+     那排读数，底下一片空白。
+     先写 vh 兜底，再写 dvh 覆盖；认得 dvh 的浏览器用第二行，不认的用第一
+     行。全文件每一处 dvh 都照这个来。 */
+  min-height: 100vh;
   min-height: 100dvh;
   /* Clear of the hardware. A notch or a Dynamic Island cuts into the top of
      the screen, and the browser does not always report an inset for it — so
@@ -1981,6 +2003,7 @@ body:has(.app--game) { background: var(--play-bg); }
   .app.app--game {
     max-width: none;
     width: 100vw;
+    height: 100vh;
     height: 100dvh;
     /* Sideways the island is on one of the long edges, so the generous
        margin goes on the sides; the strip above the board keeps a little
@@ -2083,7 +2106,7 @@ body:has(.app--game) { background: var(--play-bg); }
 /* A game screen never scrolls, in either orientation: a board that slides
    under the finger and a page that slides under it at the same time is the
    worst of both. The column is sized to the viewport instead. */
-.app--game { max-height: 100dvh; overflow: hidden; }
+.app--game { max-height: 100vh; max-height: 100dvh; overflow: hidden; }
 /* The bottom dock belongs to the pages you browse, not to a run in
    progress: sideways it would sit on top of the right-hand buttons, and
    upright it covers the controls row on the taller boards. A game is left
@@ -2230,7 +2253,7 @@ body.is-room-host::after {
 /* 多人开赛前那一幕，和单人开局页共用 .start-stage 的一整套（见文件末尾）：这
    里只负责把它撑满一屏。数字由服务器时钟推，不是本地三秒。 */
 .mp-countdown-page {
-  justify-content: stretch; min-height: 100dvh; padding: 0;
+  justify-content: stretch; min-height: 100vh; min-height: 100dvh; padding: 0;
   display: flex; flex-direction: column;
 }
 /* 多人这一页底下常驻着导航栏，倒数的窗口得给它让开一截，不然贴在一起。 */
