@@ -85,7 +85,7 @@ const granted = await A.page.evaluate(async () => {
   );
   return r;
 });
-check('房主用内部码开通天才', granted.active === true, granted.period || JSON.stringify(granted));
+check('屋主用内部码开通天才', granted.active === true, granted.period || JSON.stringify(granted));
 await A.page.reload({ waitUntil: 'load' });
 await A.page.waitForSelector('#navProfile');
 
@@ -127,7 +127,7 @@ await A.page.fill('#mpName', '甲');
 await A.page.click('#mpCreate');
 await A.page.waitForSelector('.mp-code', { timeout: 10000 });
 const code = (await A.page.$eval('.mp-code', (e) => e.textContent.trim()));
-check('房主开出房间，拿到四位房号', /^\d{4}$/.test(code), code);
+check('屋主开出房间，拿到四位房号', /^\d{4}$/.test(code), code);
 
 // ---- the guest joins ----------------------------------------------------
 await B.page.fill('#mpName', '乙');
@@ -152,25 +152,25 @@ const roomLeaveLabel = await A.page.$eval('#mpLeave', (e) => e.textContent.trim(
 
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 const roster = await A.page.$$eval('.mp-player', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
-check('房主那边看到两个人', roster.length === 2, roster.join(' / '));
-check('房主有房主标记，客人没有',
+check('屋主那边看到两个人', roster.length === 2, roster.join(' / '));
+check('屋主有屋主标记，客人没有',
   (await A.page.$$eval('.mp-badge', (e) => e.length)) === 1);
-check('只有房主看得到开局入口', (await B.page.$('#mpPick')) === null && (await A.page.$('#mpPick')) !== null);
+check('只有屋主看得到开局入口', (await B.page.$('#mpPick')) === null && (await A.page.$('#mpPick')) !== null);
 
 // ---- the host goes to the home page and picks a board there -------------
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
 const pickBanner = await A.page.$eval('.room-pick-title', (e) => e.textContent.trim());
-check('房主到了主菜单，横幅上写着「你为 <房号> 房间选择」',
+check('屋主到了主菜单，横幅上写着「你为 <房号> 房间选择」',
   pickBanner.includes(code) && pickBanner.startsWith('你为'), pickBanner);
 // 横幅从两行减成一行：那句「点哪个玩法全房间就跟着玩」的说明去掉了，红色
 // 的大字自己就说清楚了这件事。
 check('横幅只剩这一行，说明那行没了', (await A.page.$('.room-pick-hint')) === null);
-check('屏幕外框亮起房主提示',
+check('屏幕外框亮起屋主提示',
   await A.page.evaluate(() => document.body.classList.contains('is-room-host')));
-// 一局刚打完、房主被送回来挑下一个玩法的时候，走人的路原来只剩「先回房间页
+// 一局刚打完、屋主被送回来挑下一个玩法的时候，走人的路原来只剩「先回房间页
 // 再点离开」。横幅上这颗小键把那一步省了。
-check('房主的横幅上有一颗《离开房间》', (await A.page.$('#roomPickLeave')) !== null);
+check('屋主的横幅上有一颗《离开房间》', (await A.page.$('#roomPickLeave')) !== null);
 // The second base card is the circle — the same board the old .mp-mode
 // button chose, so the seeding check below is comparing the same thing.
 await A.page.$$eval('.home-icon-btn', (els) => els[1].click());
@@ -320,7 +320,7 @@ if (waitUp) {
 // 另一个人也交卷：这一局结束，两边都直接回小屋——不出结算页。
 //
 // 小屋里的一局是一晚上里的一段，不是一个完整的故事：结算页问的《再来一局？》
-// 《回主页？》都不是这里该问的问题，真正在等的只有房主挑下一场。
+// 《回主页？》都不是这里该问的问题，真正在等的只有屋主挑下一场。
 await B.page.click('#finishBtn');
 await B.page.waitForSelector('#finishConfirm', { timeout: 6000 });
 await B.page.click('#mpFinishYes');
@@ -339,16 +339,16 @@ const guestArea = await B.page.evaluate(() => ({
   leave: !!document.querySelector('#mpLeave'),
   pick: !!document.querySelector('#mpPick'),
 }));
-check('客人的小屋里只有《催房主》和《离开小屋》',
+check('客人的小屋里只有《催屋主》和《离开小屋》',
   guestArea.nudge && guestArea.leave && !guestArea.pick, JSON.stringify(guestArea));
-check('房主的小屋里是《挑下一个玩法》和《结束小屋》',
+check('屋主的小屋里是《挑下一个玩法》和《结束小屋》',
   await A.page.evaluate(() => !!document.querySelector('#mpPick') && !!document.querySelector('#mpEnd')));
 
 // 坐在小屋里什么都不做，也不该被判成掉线。
 //
 // 这一条守的是一个真出现过的毛病：从前只有交分数那条路会告诉服务器「我还
 // 在」，而两局之间的小屋页根本不交分数——所有人坐着不动，十二秒之后每个人
-// 都成了「不在」，屋里挂出一句《房主正在修电缆》，网络一点问题都没有。
+// 都成了「不在」，屋里挂出一句《屋主正在修电缆》，网络一点问题都没有。
 // 等 34 秒，比现在的 AWAY_MS（30 秒）还长一点：短于它的话，这条自检就只是
 // 在证明「没到上限」，把心跳整个删掉也照样绿。慢半分钟换一条真的守得住东西
 // 的自检，值。
@@ -359,7 +359,7 @@ const quiet = await B.page.evaluate(() => ({
 }));
 check('在小屋里坐半分多钟，没有人被当成掉线', !quiet.away && !quiet.gone, JSON.stringify(quiet));
 
-// 催房主：房主那块标题玻璃上会多出一张画布，里面掉着图形。
+// 催屋主：屋主那块标题玻璃上会多出一张画布，里面掉着图形。
 // 验的是「画布上真的画了东西」——不是「画布挂上去了」：一张空画布也能挂住，
 // 那样这条自检就永远是绿的，什么也没证明。
 // 画布是进小屋就挂上的（空的），所以这里量的是「上面还没画东西」，
@@ -384,9 +384,9 @@ const rained = await A.page.waitForFunction(() => {
   for (let i = 3; i < d.length; i += 4) if (d[i] > 0) return true;
   return false;
 }, { timeout: 15000 }).then(() => true).catch(() => false);
-check('客人一催，房主的标题框里掉下东西', rained);
+check('客人一催，屋主的标题框里掉下东西', rained);
 
-// 房主挑下一场：回主菜单选一个玩法，整屋跟着开。
+// 屋主挑下一场：回主菜单选一个玩法，整屋跟着开。
 await A.page.click('#mpPick');
 await A.page.waitForSelector('.home-icon-btn', { timeout: 15000 });
 // 挑圆球——客人这台设备没看过圆球那一族的教学（见 newPlayer 的 unseen），
@@ -436,7 +436,11 @@ if (rulesAsked) {
   // 这里直接替这台设备说一声「学完了」，省掉真把整段教学放完的两分钟——
   // 走的是和教学结束时同一个接口、同一份身份。
   await B.page.evaluate(async () => {
-    const seat = JSON.parse(sessionStorage.getItem('slides_mp_seat'));
+    // 座位存在 localStorage 里（见 src/engine/room.ts 的 loadSeat：装成 App
+    // 之后 sessionStorage 一关就空，屋主回来会变成自己小屋里的客人）。
+    const seat = JSON.parse(
+      localStorage.getItem('slides_mp_seat') ?? sessionStorage.getItem('slides_mp_seat'),
+    );
     await fetch('/api/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -455,31 +459,31 @@ const intoNextRound = (p) =>
     const tiles = document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length;
     return tiles > 0;
   }, { timeout: 40000 }).then(() => true).catch(() => false);
-check('房主挑完下一场，自己进了局', await intoNextRound(A.page));
+check('屋主挑完下一场，自己进了局', await intoNextRound(A.page));
 
 // 客人这会儿还停在教学页上——这一段没有真把整段教学放完，而是替他按了
 // 「学完了」。真的看完教学的人会被 onLearnTutorial 的收尾直接送回小屋；
-// 这里手动走一遍那条路（刷新 → 多人游玩 → 凭 sessionStorage 里的座位回屋），
-// 好接上后面「房主走了」的剧情。
+// 这里手动走一遍那条路（刷新 → 多人游玩 → 凭存下来的座位回屋），
+// 好接上后面「屋主走了」的剧情。
 await B.page.goto(BASE, { waitUntil: 'load' });
 await B.page.waitForSelector('#navProfile', { timeout: 20000 });
 await B.page.click('#navProfile');
 await B.page.click('#multiRow');
 check('客人回到小屋后被带进这一局', await intoNextRound(B.page));
 
-// ---- 房主走了：其他人得到一句话和一颗《ok》 -----------------------------
+// ---- 屋主走了：其他人得到一句话和一颗《ok》 -----------------------------
 await A.page.click('#leaveRoomBtn');
 await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
-check('房主打到一半按离开，问的是《解散小屋？》',
+check('屋主打到一半按离开，问的是《解散小屋？》',
   (await A.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim())) === '解散小屋？',
   await A.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim()));
 await A.page.click('#mpLeaveYes');
-check('房主离开也出一张竞赛排名',
+check('屋主离开也出一张竞赛排名',
   await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 }).then(() => true).catch(() => false));
 
 const cancelled = await B.page.waitForSelector('#roomCancelled', { timeout: 20000 })
   .then(() => true).catch(() => false);
-check('房主一走，还在打的人收到《小屋被取消》', cancelled);
+check('屋主一走，还在打的人收到《小屋被取消》', cancelled);
 if (cancelled) {
   check('那句话就是《Ohno！小屋被取消》',
     (await B.page.$eval('#roomCancelled .tag-line', (e) => e.textContent.trim())) === 'Ohno！小屋被取消',
@@ -501,7 +505,7 @@ await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
 await A.page.click('#mpCreate');
 await A.page.waitForSelector('.mp-code', { timeout: 10000 });
 const code2 = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
-check('房主还能再开一间房', /^\d{4}$/.test(code2) && code2 !== code, code2);
+check('屋主还能再开一间房', /^\d{4}$/.test(code2) && code2 !== code, code2);
 await B.page.click('#navProfile');
 await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCode', { timeout: 10000 });
@@ -521,7 +525,7 @@ await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
 const wideIdx = await A.page.$$eval('.home-icon-btn', (els) =>
   els.findIndex((e) => /七色圆球/.test(e.getAttribute('aria-label') || '')));
-check('房主的主菜单上有七色圆球（天才特供，他开着）', wideIdx >= 0, `第 ${wideIdx} 张`);
+check('屋主的主菜单上有七色圆球（天才特供，他开着）', wideIdx >= 0, `第 ${wideIdx} 张`);
 const pickedAt = Date.now();
 await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), wideIdx);
 // 数字在窗口里只待一秒出头就被清掉，两次之间还有一小段空当，所以不能「等它

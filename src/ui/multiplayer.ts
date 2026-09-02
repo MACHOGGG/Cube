@@ -159,15 +159,15 @@ export function renderMultiplayerPage(
   let launched = false;
   let dead = false;
 
-  /** 房主出状况时盖上去的那一层，见 roomNotices.ts。 */
+  /** 屋主出状况时盖上去的那一层，见 roomNotices.ts。 */
   let notice: HostNotice | null = null;
-  /** 被催的时候往标题框里掉东西的那块画布（只有房主挂）。 */
+  /** 被催的时候往标题框里掉东西的那块画布（只有屋主挂）。 */
   let rain: TitleRain | null = null;
   /**
    * 上一次看到的催促计数。
    *
    * 初值是 -1「还没看过」：进小屋页的第一次轮询只是把数字记下来，不掉东西。
-   * 否则房主去主菜单挑玩法、回来的时候，这段时间里攒下的每一下会一次性砸
+   * 否则屋主去主菜单挑玩法、回来的时候，这段时间里攒下的每一下会一次性砸
    * 满整个框——那不是「有人在催」，那是一堵墙。
    */
   let seenNudges = -1;
@@ -351,15 +351,15 @@ export function renderMultiplayerPage(
     };
     container.querySelector<HTMLButtonElement>('#mpLeave')!.addEventListener('click', () => {
       // Only the host is warned, because only the host's leaving costs the
-      // others anything: the server writes 房主 once when the room opens and
+      // others anything: the server writes 屋主 once when the room opens and
       // has no way to hand it on, so a room whose host has gone can still be
       // sat in and can never start another round. Everyone else may go
       // without ceremony.
-      // 客人和房主都要问一句，只是问的话不一样（见 confirmLeaveRoom）。
+      // 客人和屋主都要问一句，只是问的话不一样（见 confirmLeaveRoom）。
       confirmLeaveRoom(lang, leave);
     });
 
-    // 只有房主的标题框会下雨——催的就是他。
+    // 只有屋主的标题框会下雨——催的就是他。
     if (iAmHost) {
       const glass = container.querySelector<HTMLElement>('.home-head-glass');
       if (glass) rain = mountTitleRain(glass);
@@ -368,7 +368,7 @@ export function renderMultiplayerPage(
     paint(state, iAmHost);
     soakNudges(state, iAmHost);
 
-    // 房主走了、还是房主卡住了。这一页上也要分得清：坐在房间里等下一局的
+    // 屋主走了、还是屋主卡住了。这一页上也要分得清：坐在房间里等下一局的
     // 人，和正在打的人一样有权知道自己在等的是什么。
     notice?.remove();
     notice = hostNotice(lang, {
@@ -493,7 +493,7 @@ export function renderMultiplayerPage(
     }
     if (!iAmHost) {
       // 客人在小屋里能做的只有两件事：催，或者走。所以这一块就只有这一颗键，
-      // 底下那颗《离开小屋》是另一件。原先这里是一行「等房主挑玩法」的字——
+      // 底下那颗《离开小屋》是另一件。原先这里是一行「等屋主挑玩法」的字——
       // 说的是实话，但等的人手上一件事都没有。
       if (area.dataset.shape === 'nudge') return;
       area.dataset.shape = 'nudge';
@@ -714,7 +714,7 @@ export function renderMultiplayerPage(
     // 只收自己的东西，不停轮询。
     //
     // 从前这里是 stopAll()：数字一开始跳，这台设备就不再问服务器了。于是
-    // 「屋里有人临时说他不会规则」这件事根本传不进来——房主那边照样数到 0
+    // 「屋里有人临时说他不会规则」这件事根本传不进来——屋主那边照样数到 0
     // 就开局，把还在看教学的人一个人留在后面。倒数这几秒恰恰是最需要听着的
     // 几秒。
     window.clearInterval(countdownTimer);

@@ -268,7 +268,7 @@ function paintRoomHostBanner() {
     <div class="room-pick-msg" id="roomPickMsg" role="status"></div>
     <div class="room-pick-acts">
       <button class="room-pick-back" id="roomPickBack">${s.mpBackToRoom}</button>
-      <!-- 一局刚打完、房主被送回来挑下一个玩法的时候，走人的路只剩「先回房间
+      <!-- 一局刚打完、屋主被送回来挑下一个玩法的时候，走人的路只剩「先回房间
            页再点离开」。这颗小键把那一步省了：在这儿就能交座位。 -->
       <button class="room-pick-back room-pick-leave" id="roomPickLeave">${s.mpLeave}</button>
     </div>
@@ -461,7 +461,7 @@ function startMultiplayerRun(match: MatchStart) {
   const stopBoard = mountScoreboard(currentLang, {
     // 回房间页：比分和下一局都在那里。
     onRoom: showMultiplayer,
-    // 房主的「回主页继续玩」——回主菜单，横幅还挂着，挑的仍然是整房的下一局。
+    // 屋主的「回主页继续玩」——回主菜单，横幅还挂着，挑的仍然是整房的下一局。
     onPickNext: () => {
       const code = currentRoom()?.code ?? null;
       teardown();

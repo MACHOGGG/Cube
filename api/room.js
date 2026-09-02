@@ -261,7 +261,7 @@ function publicState(code, hash) {
       score: value.score || 0,
       finished: Boolean(value.finished),
       isHost: field.slice(2) === meta.host,
-      /** 这会儿听不见他。房主 away 的时候，别人那边会显示「稍等」。 */
+      /** 这会儿听不见他。屋主 away 的时候，别人那边会显示「稍等」。 */
       away: seatAway(value, meta),
       // What the evening adds up to, rather than this one round: the total
       // across every round banked so far, the best single round, and the
@@ -294,7 +294,7 @@ function publicState(code, hash) {
      *  number rather than the word "four" written into four languages. */
     seats: MAX_PLAYERS,
     players,
-    /** 被催了多少下。房主那边看它变大就往标题里掉图形。 */
+    /** 被催了多少下。屋主那边看它变大就往标题里掉图形。 */
     nudges: meta.nudges || 0,
     // Lets a device with a wrong clock still count down to the same instant.
     serverNow: Date.now(),
@@ -420,7 +420,7 @@ async function state(res, body) {
   //
   // 从前只有交分数那条路会写 lastSeen，可小屋页（两局之间）根本不交分数：
   // 所有人坐在那儿，谁也没动，十二秒之后每个人都成了「不在」，屋里于是挂出
-  // 一句《房主正在修电缆》——网络一点问题都没有。轮询本身就是最诚实的心跳，
+  // 一句《屋主正在修电缆》——网络一点问题都没有。轮询本身就是最诚实的心跳，
   // 它每秒都在发生；这里只是把它记下来。
   const seat = seatOf(hash, body.playerId, body.playerToken);
   if (seat && Date.now() - (seat.lastSeen || 0) > SEEN_WRITE_MS && !seat.left) {
@@ -628,9 +628,9 @@ async function learn(res, body) {
 }
 
 /**
- * 催房主。
+ * 催屋主。
  *
- * 客人按一下，房间的计数加一；房主那边轮询到数字变大，就往标题框里掉几个
+ * 客人按一下，房间的计数加一；屋主那边轮询到数字变大，就往标题框里掉几个
  * 图形（见 src/ui/titleRain.ts）。只存一个数，不存谁按的——要的是「有人在
  * 催了」这件事本身，按了几下就掉几个，多按就多掉。
  */

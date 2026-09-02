@@ -219,7 +219,7 @@ export interface I18nStrings {
   /** The host picks the board from the home page, where all eight of them
    *  live with their icons — these are the trip there and back. */
   mpGoPick: string;
-  /** 房主被送回主菜单挑下一个玩法时，顶上那条横幅。{code} 换成房号。
+  /** 屋主被送回主菜单挑下一个玩法时，顶上那条横幅。{code} 换成房号。
    *  横幅上只留这一行——挑一个玩法全房间就一起玩，这件事横幅一亮就说完了，
    *  底下再写一句解释是同一件事说两遍。 */
   mpPickingTitle: string;
@@ -233,7 +233,7 @@ export interface I18nStrings {
   mpTotalLabel: string;
   /** 竞赛排名图上那个大数字底下的一行小字。 */
   mpRoomTotal: string;
-  /** 客人催房主开下一局的那颗键。 */
+  /** 客人催屋主开下一局的那颗键。 */
   mpNudge: string;
   /** 名单上给中途走掉的人挂的那个小标。 */
   mpLeftTag: string;
@@ -257,20 +257,20 @@ export interface I18nStrings {
   mpErrEnded: string;
   /** 网络断了一下，但座位还留着——不是把人踢出房间的理由。 */
   mpReconnecting: string;
-  /** 房主要走之前得知道：他一走，就没人能开下一局了。 */
+  /** 屋主要走之前得知道：他一走，就没人能开下一局了。 */
   mpHostLeaveWarn: string;
-  /** 客人要走时问的那一句。房主那句说的是「你走了整桌就散」，对客人不成立，
+  /** 客人要走时问的那一句。屋主那句说的是「你走了整桌就散」，对客人不成立，
    *  照搬过去是吓唬人——他走了别人接着玩，所以只问要不要走。 */
   mpGuestLeaveWarn: string;
   mpLeaveAnyway: string;
   mpStay: string;
   /** 房间局里按下《完成》时问的那一句。问的这段时间钟停着、牌也盖上。 */
   mpFinishConfirm: string;
-  /** 房主把座位交回去了，这间房再也开不了下一局。 */
+  /** 屋主把座位交回去了，这间房再也开不了下一局。 */
   mpRoomCancelled: string;
   /** 知道了。 */
   mpOk: string;
-  /** 房主还在，只是这会儿听不见他——网络卡了，不是走了。 */
+  /** 屋主还在，只是这会儿听不见他——网络卡了，不是走了。 */
   mpHostFixing: string;
   mpErrNoRoom: string;
   mpErrFull: string;
@@ -1091,10 +1091,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCode: '小屋號碼',
     mpShareHint: '把這四位數字給朋友——最多 {n} 個人。',
     mpPlayers: '玩家',
-    mpHostBadge: '房主',
+    mpHostBadge: '屋主',
     mpPickMode: '選一個玩法',
     mpStartBtn: '開始',
-    mpWaitingHost: '等房主選玩法。',
+    mpWaitingHost: '等屋主選玩法。',
     mpLeave: '離開小屋',
     mpRankTitle: '競賽排名',
     mpNeedGenius: '加入 Slides 天才搭建的小屋',
@@ -1109,10 +1109,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundLabel: '第 {n} 局',
     mpNextRound: '選下一個玩法',
     mpEndRoom: '結束小屋',
-    mpRoomEnded: '房主結束了小屋。',
+    mpRoomEnded: '屋主結束了小屋。',
     mpTotalLabel: '總分',
     mpRoomTotal: '全屋總分',
-    mpNudge: '催房主',
+    mpNudge: '催屋主',
     mpLeftTag: '已離開',
     paletteTitle: '棋子配色',
     paletteHint: '換的是每個玩法裡棋子的顏色。開著色盲配色時這裡不生效。',
@@ -1137,7 +1137,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinishConfirm: '完成了嗎？',
     mpRoomCancelled: 'Ohno！小屋被取消',
     mpOk: 'ok',
-    mpHostFixing: '房主修理電纜中，稍等',
+    mpHostFixing: '屋主修理電纜中，稍等',
     mpErrNoRoom: '沒有這個小屋號碼。',
     mpErrFull: '小屋滿了——最多 {n} 個人。',
     mpErrStarted: '這一局已經開始了。',
@@ -1374,10 +1374,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCode: '小屋号码',
     mpShareHint: '把这四位数字给朋友——最多 {n} 个人。',
     mpPlayers: '玩家',
-    mpHostBadge: '房主',
+    mpHostBadge: '屋主',
     mpPickMode: '选一个玩法',
     mpStartBtn: '开始',
-    mpWaitingHost: '等房主选玩法。',
+    mpWaitingHost: '等屋主选玩法。',
     mpLeave: '离开小屋',
     mpRankTitle: '竞赛排名',
     mpNeedGenius: '加入 Slides 天才搭建的小屋',
@@ -1392,10 +1392,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundLabel: '第 {n} 局',
     mpNextRound: '选下一个玩法',
     mpEndRoom: '结束小屋',
-    mpRoomEnded: '房主结束了小屋。',
+    mpRoomEnded: '屋主结束了小屋。',
     mpTotalLabel: '总分',
     mpRoomTotal: '全屋总分',
-    mpNudge: '催房主',
+    mpNudge: '催屋主',
     mpLeftTag: '已离开',
     paletteTitle: '棋子配色',
     paletteHint: '换的是每个玩法里棋子的颜色。开着色盲配色时这里不生效。',
@@ -1420,7 +1420,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinishConfirm: '完成了吗？',
     mpRoomCancelled: 'Ohno！小屋被取消',
     mpOk: 'ok',
-    mpHostFixing: '房主修理电缆中，稍等',
+    mpHostFixing: '屋主修理电缆中，稍等',
     mpErrNoRoom: '没有这个小屋号码。',
     mpErrFull: '小屋满了——最多 {n} 个人。',
     mpErrStarted: '这一局已经开始了。',

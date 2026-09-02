@@ -34,7 +34,7 @@ export interface RoomPlayer {
   score: number;
   finished: boolean;
   isHost: boolean;
-  /** 服务器有一阵子没听见这台设备了。房主 away 就是「房主在修电缆」。 */
+  /** 服务器有一阵子没听见这台设备了。屋主 away 就是「屋主在修电缆」。 */
   away: boolean;
   /** Every round banked so far — what the closing card ranks people by. */
   total: number;
@@ -68,7 +68,7 @@ export interface RoomState {
   /** Seats open today. The room machinery carries more; this is what is on. */
   seats: number;
   players: RoomPlayer[];
-  /** 这间小屋被催了多少下。房主那边看它变大就往标题里掉图形。 */
+  /** 这间小屋被催了多少下。屋主那边看它变大就往标题里掉图形。 */
   nudges: number;
   serverNow: number;
 }
@@ -101,22 +101,44 @@ interface Session {
 }
 
 /**
- * 座位记在 sessionStorage 里，不只是一个变量。
+ * 座位记在硬盘上，不只是一个变量。
  *
- * playerId 和 playerToken 是这台设备在房间里的身份，服务器只认这两样。
+ * playerId 和 playerToken 是这台设备在小屋里的身份，服务器只认这两样。
  * 它们本来只活在一个 JS 变量里——手机切到后台被系统回收、顺手刷新一下、
  * 甚至只是一次请求超时，身份就没了，人也就回不去了。
  *
- * 用 sessionStorage 而不是 localStorage：一个房间属于这一次游玩，标签页
- * 关了它就该结束，不该在两周后打开网站时还试图挤回一间早就散了的房间。
+ * 从前存在 sessionStorage 里，理由是「一间小屋属于这一次游玩，标签页关了就
+ * 该结束」。装成 App 之后这个理由站不住了：把 App 划掉再打开是很平常的一件
+ * 事，而 sessionStorage 一关就空。屋主回来时身份没了，看到的是「输小屋号码」
+ * 那一页，他输自己的号码进去——服务器给他一个全新的 playerId，可小屋记着的
+ * 屋主还是旧的那个。于是他在自己的小屋里成了客人：没有《为大家选择游戏》，
+ * 只有《催屋主》，而那个唯一能开局的人已经不存在了。整间屋子就这么卡死。
+ *
+ * 所以改存 localStorage，但带一个时间戳。两个小时——服务器那边小屋的 TTL
+ * 就是两个小时（api/room.js 的 ROOM_TTL_S）。过了这个点，座位指着的小屋本来
+ * 也没了，再留着只会让人往一间早就散掉的屋子里挤。
  */
 const SEAT_KEY = 'slides_mp_seat';
+/** 座位能活多久。和服务器的 ROOM_TTL_S 对齐：小屋没了，座位就该没。 */
+const SEAT_TTL_MS = 2 * 3600_000;
+/** 隔多久把时间戳往前挪一次。人还在屋里，座位就不该到期。 */
+const SEAT_TOUCH_MS = 5 * 60_000;
+
+interface StoredSeat extends Session {
+  /** 上一次确认「人还在这间屋里」的时刻。 */
+  at?: number;
+}
 
 function loadSeat(): Session | null {
   try {
-    const raw = sessionStorage.getItem(SEAT_KEY);
-    const seat = raw ? (JSON.parse(raw) as Session) : null;
-    return seat?.code && seat.playerId && seat.playerToken ? seat : null;
+    // 老版本存在 sessionStorage 里。发版的那一刻正坐在屋里的人不该被踢出去，
+    // 所以两个地方都读，localStorage 优先。
+    const raw = localStorage.getItem(SEAT_KEY) ?? sessionStorage.getItem(SEAT_KEY);
+    const seat = raw ? (JSON.parse(raw) as StoredSeat) : null;
+    if (!seat?.code || !seat.playerId || !seat.playerToken) return null;
+    // 没有时间戳的是老版本留下的，当作刚存的——它本来就活不过这一次会话。
+    if (seat.at && Date.now() - seat.at > SEAT_TTL_MS) return null;
+    return { code: seat.code, playerId: seat.playerId, playerToken: seat.playerToken };
   } catch {
     return null;
   }
@@ -124,10 +146,30 @@ function loadSeat(): Session | null {
 
 function rememberSeat(seat: Session | null): void {
   try {
-    if (seat) sessionStorage.setItem(SEAT_KEY, JSON.stringify(seat));
-    else sessionStorage.removeItem(SEAT_KEY);
+    if (seat) localStorage.setItem(SEAT_KEY, JSON.stringify({ ...seat, at: Date.now() }));
+    else localStorage.removeItem(SEAT_KEY);
+    // 老键不再用了，顺手清掉，免得两边不一致。
+    sessionStorage.removeItem(SEAT_KEY);
   } catch {
-    // 私密模式：这一次还能玩，只是刷新之后回不去了。
+    // 私密模式：这一次还能玩，只是关掉 App 之后回不去了。
+  }
+}
+
+/**
+ * 「我还在这间屋里」——把座位的时间戳往前挪。
+ *
+ * 每次轮询都写一遍硬盘太吵，所以隔五分钟才写一次：一场多人的晚上可以打好几
+ * 个小时，而座位只认两小时，不往前挪的话打到一半身份就过期了。
+ */
+function touchSeat(): void {
+  try {
+    const raw = localStorage.getItem(SEAT_KEY);
+    const seat = raw ? (JSON.parse(raw) as StoredSeat) : null;
+    if (!seat?.code) return;
+    if (seat.at && Date.now() - seat.at < SEAT_TOUCH_MS) return;
+    localStorage.setItem(SEAT_KEY, JSON.stringify({ ...seat, at: Date.now() }));
+  } catch {
+    /* 同上 */
   }
 }
 
@@ -144,11 +186,17 @@ function rememberSeat(seat: Session | null): void {
  */
 const PLAYED_KEY = 'slides_mp_played';
 
-/** 这一间房里，本机已经打完的最大回合号；不是这一间就当没打过。 */
+/**
+ * 和座位一起搬到 localStorage。
+ *
+ * 座位现在能活过「把 App 划掉再打开」，这个数字就必须一起活过去——不然人回
+ * 到小屋，身份还在（服务器说这是第 3 局），这台设备却以为自己一局都没打过，
+ * 于是把刚打完的那一局又重开一遍。两个数字要么一起记住，要么一起忘掉。
+ */
 export function lastPlayedRound(code = session?.code): number {
   if (!code) return 0;
   try {
-    const raw = sessionStorage.getItem(PLAYED_KEY);
+    const raw = localStorage.getItem(PLAYED_KEY) ?? sessionStorage.getItem(PLAYED_KEY);
     const saved = raw ? (JSON.parse(raw) as { code?: string; round?: number }) : null;
     return saved?.code === code && Number.isFinite(saved.round) ? Number(saved.round) : 0;
   } catch {
@@ -161,14 +209,16 @@ export function markRoundPlayed(round: number, code = session?.code): void {
   if (!code || !Number.isFinite(round) || round <= 0) return;
   if (round <= lastPlayedRound(code)) return;
   try {
-    sessionStorage.setItem(PLAYED_KEY, JSON.stringify({ code, round }));
+    localStorage.setItem(PLAYED_KEY, JSON.stringify({ code, round }));
+    sessionStorage.removeItem(PLAYED_KEY);
   } catch {
-    // 私密模式：这一次还能玩，只是这一台设备回房间时可能重开已打完的一局。
+    // 私密模式：这一次还能玩，只是这一台设备回小屋时可能重开已打完的一局。
   }
 }
 
 const forgetPlayed = (): void => {
   try {
+    localStorage.removeItem(PLAYED_KEY);
     sessionStorage.removeItem(PLAYED_KEY);
   } catch {
     /* 同上 */
@@ -301,7 +351,9 @@ export function fetchState(): Promise<RoomResult<RoomState>> {
   // 服务器靠 playerId/playerToken 认出是谁在问，然后顺手把「他还在」记一笔
   // （api/room.js 的 state）。只发房号的话，这台设备每秒都在说话，服务器却
   // 一句也没听出是谁——于是坐在小屋里不动的人过一会儿全成了「不在」，屋里
-  // 挂出一句《房主正在修电缆》。
+  // 挂出一句《屋主正在修电缆》。
+  // 人还在屋里，座位就不该到期（见 touchSeat）。
+  touchSeat();
   return post<RoomState>({ action: 'state', ...session });
 }
 
@@ -348,7 +400,7 @@ export async function setLearning(learning: boolean): Promise<void> {
 }
 
 /**
- * 催一下房主。
+ * 催一下屋主。
  *
  * 服务器只记一个数，不记谁按的：要的是「有人在催了」这件事，按几下就掉几个
  * 图形。失败了一声不吭——催不到是件小事，为它弹个错误反而更吵。
