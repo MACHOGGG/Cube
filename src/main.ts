@@ -21,7 +21,9 @@ import { showRoomCard } from './ui/roomCard';
 import { confirmLeaveRoom } from './ui/confirmLeaveRoom';
 import {
   currentRoom,
+  endRoom,
   forgetRoom,
+  iAmHost,
   latestRoomState,
   leaveRoom,
   setLearning,
@@ -498,10 +500,24 @@ function startMultiplayerRun(match: MatchStart) {
  * 清掉，晚一步就什么都画不出来了。玩家自己那一行也一样：座位没了之后就认不
  * 出「我是谁」，所以 id 也先留一份。
  */
-function leaveRoomWithCard() {
+async function leaveRoomWithCard() {
   const state = latestRoomState();
   const meId = currentRoom()?.playerId;
-  void leaveRoom();
+  const host = iAmHost();
+  if (host) {
+    // 屋主按的是《解散小屋》，不管从哪一处按的：小屋页、局中那一排、还是他
+    // 回主菜单挑玩法时顶上那条横幅。三处问的都是《解散小屋？》，做的也该是
+    // 同一件事——先把屋子关掉，屋里其他人手上才会亮起「小屋散了」，正打着的
+    // 人就地转成单人（见 scoreboard.ts 的 goSolo）。
+    //
+    // 从前这里只是自己走人：屋子还开着，剩下的人干坐在一间永远开不出下一局
+    // 的屋里，等一个已经不在的人。
+    await endRoom();
+    // 关了就不必再发 leave——那只会在别人那张总战绩图上把屋主标成中途离席。
+    forgetRoom();
+  } else {
+    void leaveRoom();
+  }
   teardown();
   setPickingForRoom(null);
   if (!state) return showMenu();

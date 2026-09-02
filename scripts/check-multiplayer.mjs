@@ -204,13 +204,15 @@ const inRun = await A.page.evaluate(() => {
     return { x: Math.round(r.x), w: Math.round(r.width), h: Math.round(r.height) };
   };
   return {
-    pause: !!document.querySelector('#stopBtn'),
+    // 它在，但藏着：屋主散场、这一局转成单人的时候才顶上来。造在这儿是因
+    // 为它的监听器是开局那一刻接上的（见 gameShell.ts 里那段注释）。
+    pauseShown: document.getElementById('stopBtn')?.hidden === false,
     rank: box('.mp-rank'),
     leave: box('#leaveRoomBtn'),
     finish: box('#finishBtn'),
   };
 });
-check('多人局进行中没有《暂停》', inRun.pause === false);
+check('多人局进行中看不见《暂停》（它藏着，散场转单人才露面）', inRun.pauseShown === false);
 // 左边一半是名单，右边一半分给《离开房间》和《完成》——所以名单差不多是
 // 两颗键加起来那么宽。
 check('左边一半是排名，右边一半是两颗键',
@@ -276,7 +278,9 @@ const inRunLeaveLabel = await A.page.$eval('#leaveRoomBtn', (e) => e.getAttribut
 // 是把这一局交出去，不是把屋子拆了。所以这里查的不再是「两处一模一样」，
 // 而是「两处各自说对了自己那件事」。
 check('屋主的小屋页上那颗键写《解散小屋》', roomLeaveLabel === '解散小屋', roomLeaveLabel);
-check('局中那颗仍写《离开小屋》', inRunLeaveLabel === '离开小屋', inRunLeaveLabel);
+// 局中那一颗对屋主说的是同一件事——按下去屋子就散了，所以写的也是同一句。
+// 客人那边它仍写《离开小屋》（下面第二间小屋里验）。
+check('屋主局中那颗键也写《解散小屋》', inRunLeaveLabel === '解散小屋', inRunLeaveLabel);
 
 await A.page.click('#finishBtn');
 await A.page.waitForSelector('#finishConfirm', { timeout: 6000 });
@@ -501,19 +505,42 @@ await A.page.click('#mpLeaveYes');
 check('屋主离开也出一张竞赛排名',
   await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 }).then(() => true).catch(() => false));
 
-const cancelled = await B.page.waitForSelector('#roomCancelled', { timeout: 20000 })
-  .then(() => true).catch(() => false);
-check('屋主一走，还在打的人收到《小屋被取消》', cancelled);
-if (cancelled) {
-  check('那句话就是《Ohno！小屋被取消》',
-    (await B.page.$eval('#roomCancelled .tag-line', (e) => e.textContent.trim())) === 'Ohno！小屋被取消',
-    await B.page.$eval('#roomCancelled .tag-line', (e) => e.textContent.trim()));
-  check('底下只有一颗《ok》',
-    (await B.page.$$eval('#roomCancelled button', (els) => els.map((e) => e.id))).join() === 'roomCancelledOk');
-  await B.page.click('#roomCancelledOk');
-  check('按下《ok》回到主菜单',
-    await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
-}
+// 这一局打的是圆球——免费玩法，客人自己也玩得了。所以屋主一散场，他手上
+// 这盘棋不该被没收：就地转成一局单人，底下那条实时排名和《离开小屋》撤掉，
+// 藏着的《暂停》顶上来。
+const soloed = await B.page.waitForFunction(
+  () => {
+    const pause = document.getElementById('stopBtn');
+    return !!document.querySelector('#boardWrap .ball') &&
+           !document.getElementById('mpRank') &&
+           !document.getElementById('leaveRoomBtn') &&
+           !!pause && !pause.hidden;
+  },
+  { timeout: 20000 },
+).then(() => true).catch(() => false);
+check('屋主散场，正打着免费玩法的人就地转成单人', soloed,
+  JSON.stringify(await B.page.evaluate(() => ({
+    board: document.querySelectorAll('#boardWrap .ball').length,
+    rank: !!document.getElementById('mpRank'),
+    leave: !!document.getElementById('leaveRoomBtn'),
+    pause: document.getElementById('stopBtn')?.hidden === false,
+  }))));
+check('没有《小屋被取消》那一层糊在盘面上', (await B.page.$('#roomCancelled')) === null);
+check('《完成》从半条变回整条', (await B.page.$('#finishBtn.icon-btn--half')) === null);
+// 暂停真的能按——那颗键的监听器是开局那一刻接上的，不是事后新建的。
+await B.page.click('#stopBtn');
+check('转单人之后《暂停》真的停得下来',
+  await B.page.waitForSelector('#pauseOverlay.show', { timeout: 6000 })
+    .then(() => true).catch(() => false));
+await B.page.click('#continueBtn');
+// 这一局已经不属于任何小屋了，自己结束它，好接下面的剧情。
+await B.page.click('#finishBtn');
+check('转单人之后《完成》直接结算，不再问「交卷吗」',
+  await B.page.waitForSelector('#endOverlay.show', { timeout: 8000 })
+    .then(() => true).catch(() => false));
+await B.page.click('#endBackBtn');
+check('结算完回到主菜单',
+  await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
 
 // ---- 客人自己走：一张截止此刻的竞赛排名 ---------------------------------
 // 上面那一间已经散了，另开一间来验客人这条路。
@@ -603,6 +630,57 @@ const marked = await A.page.waitForFunction(
 check('客人走了，人还在名单上，只是标成走了', marked,
   `${await A.page.$$eval('.mp-board-row', (e) => e.length)} 行，` +
   `${await A.page.$$eval('.mp-board-row--left', (e) => e.length)} 个标记`);
+
+// ---- 屋主散场，而客人玩的是天才特供的棋盘 ------------------------------
+//
+// 上面那一局是圆球，客人自己也玩得了，所以就地转单人。这一局是七色圆球——
+// 他是跟着屋主才进得来的，屋子散了他就接不下去。那就到此为止：把结算摆出
+// 来，最上面写清楚为什么。
+//
+// A 这会儿还坐在第二间的局里（客人刚走，他没走），先让他散场。
+await A.page.click('#leaveRoomBtn');
+await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
+await A.page.click('#mpLeaveYes');
+await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 });
+await A.page.click('#mpFinalDone');
+await A.page.waitForSelector('.home-page', { timeout: 8000 });
+await A.page.click('#navProfile');
+await A.page.click('#multiRow');
+await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
+await A.page.click('#mpCreate');
+await A.page.waitForSelector('.mp-code', { timeout: 10000 });
+const code3 = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
+// B 上一段离开后停在那张战绩页上，先按《主页》回主菜单。
+await B.page.click('#mpFinalDone').catch(() => {});
+await B.page.waitForSelector('#navProfile', { timeout: 10000 });
+await B.page.click('#navProfile');
+await B.page.click('#multiRow');
+await B.page.waitForSelector('#mpCode', { timeout: 10000 });
+await B.page.fill('#mpCode', code3);
+await B.page.click('#mpJoin');
+await B.page.waitForSelector('.mp-code', { timeout: 10000 });
+await A.page.waitForSelector('#mpPick', { timeout: 12000 });
+await A.page.click('#mpPick');
+await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
+const wideIdx3 = await A.page.$$eval('.home-icon-btn', (els) =>
+  els.findIndex((e) => /七色圆球/.test(e.getAttribute('aria-label') || '')));
+await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), wideIdx3);
+await Promise.all([A, B].map((P) => P.page.waitForFunction(
+  () => document.querySelectorAll('#boardWrap .ball').length > 0, { timeout: 25000 })));
+await A.page.click('#leaveRoomBtn');
+await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
+await A.page.click('#mpLeaveYes');
+const locked = await B.page.waitForSelector('#endOverlay.show', { timeout: 20000 })
+  .then(() => true).catch(() => false);
+check('屋主散场，玩不了这块棋盘的人直接结算', locked);
+if (locked) {
+  check('结算页最上面写着《屋主临时有事，小屋暂时解散》',
+    (await B.page.$eval('#endHostGone', (e) => e.textContent.trim())) === '屋主临时有事，小屋暂时解散',
+    await B.page.$eval('#endHostGone', (e) => e.textContent.trim()).catch(() => '（没有这一句）'));
+  check('那句话排在标题前面',
+    await B.page.evaluate(() =>
+      document.getElementById('endHostGone')?.nextElementSibling?.id === 'endTitle'));
+}
 
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

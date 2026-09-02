@@ -568,6 +568,10 @@ h1 {
 }
 .stuck-end-btn:hover { filter: brightness(0.98); border-color: #B91C1C; }
 .stuck-end-btn[hidden] { display: none; }
+/* 房间局里《暂停》先藏着，等屋主散场、这一局转成单人时才顶上来。写死它，
+   因为 .app--game .controls .icon-btn 给了 display:flex——UA 的 [hidden]
+   拦不住一条更具体的规则。 */
+.controls .icon-btn[hidden] { display: none !important; }
 
 /* The light "pressing into place" pulse lives on the scored tile/ball/tri
    *itself* (applied inline by each shape, synced to the same elapsed time as
@@ -664,6 +668,14 @@ h1 {
 /* 装战绩图的那层遮罩自己也让开一点：一般的弹窗四周留 20px 是舒服的，
    一张要看清的图留 20px 就是白白削掉 40px 的宽度。 */
 .overlay--wide { padding: 10px; }
+/* 屋主散场，而这一局这个人自己接不下去（天才特供的棋盘）——结算页最上面
+   先说一句为什么，再说分数。它在 h2 之前，因为「这局为什么停在这儿」比
+   「这局打了多少」更急着回答。 */
+.end-gone-note {
+  margin: 0 0 12px; padding: 8px 12px;
+  background: var(--score-wash); border-radius: var(--r-sm);
+  color: var(--ink-soft); font-size: 0.88rem; line-height: 1.45;
+}
 .end-score-label {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
   color: var(--ink-faint); margin-top: 4px;

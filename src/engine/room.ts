@@ -46,6 +46,12 @@ export interface RoomPlayer {
   rounds: number;
   /** 中途走了。人留在名单和排名里，只是不再报到，也不占座位。 */
   left: boolean;
+  /**
+   * 他的网页被关掉了（不是网差，是真的关了——见 api/room.js 的 closed）。
+   *
+   * 老一点的服务器不会带这个字段，所以它是可选的：读不到就当没关。
+   */
+  closed?: boolean;
   /** 正在看这个玩法的教学。全屋等他学完，再一起数 4-3-2-1。 */
   learning: boolean;
 }
@@ -119,7 +125,15 @@ interface Session {
  * 也没了，再留着只会让人往一间早就散掉的屋子里挤。
  */
 const SEAT_KEY = 'slides_mp_seat';
-/** 座位能活多久。和服务器的 ROOM_TTL_S 对齐：小屋没了，座位就该没。 */
+/**
+ * 座位能活多久。
+ *
+ * 比服务器那边的 ROOM_TTL_S（二十分钟）长得多，而且是故意的：小屋的二十分钟
+ * 是「屋里所有人都不再点它」之后才开始算的，别人还在打，屋子就一直活着。要
+ * 是这边也只留二十分钟，一个人切出去半小时再回来，屋子明明还在，他的身份却
+ * 已经被自己删了。所以这一头留得宽，让服务器去判——屋子真没了，下一次问就
+ * 是 noRoom，那时候再忘掉也不迟。
+ */
 const SEAT_TTL_MS = 2 * 3600_000;
 /** 隔多久把时间戳往前挪一次。人还在屋里，座位就不该到期。 */
 const SEAT_TOUCH_MS = 5 * 60_000;
@@ -344,6 +358,25 @@ export async function joinRoom(
   return { ok: true, value: joined.value.state };
 }
 
+/**
+ * 「这台设备上有人动过」。
+ *
+ * 服务器那边小屋只留二十分钟，从最后一次有人碰它算起（api/room.js 的
+ * ROOM_TTL_S）。「碰」不限于走棋：屋里任何一个人在自己的网页上点一下都算，
+ * 所以这里听的是整页的 pointerdown 和键盘，而不是棋盘上的某个动作。
+ *
+ * 只记一个布尔值，下一次轮询顺手带出去然后清零。不为它单发请求，也不让轮询
+ * 本身冒充点击——轮询每秒都在，那等于永不过期，一分钱也省不下来。
+ */
+let touched = false;
+if (typeof window !== 'undefined') {
+  const note = () => { touched = true; };
+  // capture：有些地方会把事件拦下来（棋盘拖动就 preventDefault），冒泡阶段
+  // 等不到，抓在最外面这一层才是「这个人确实动了」。
+  window.addEventListener('pointerdown', note, { capture: true, passive: true });
+  window.addEventListener('keydown', note, { capture: true, passive: true });
+}
+
 export function fetchState(): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
   // 带上自己的身份，不只是房号。
@@ -354,7 +387,9 @@ export function fetchState(): Promise<RoomResult<RoomState>> {
   // 挂出一句《屋主正在修电缆》。
   // 人还在屋里，座位就不该到期（见 touchSeat）。
   touchSeat();
-  return post<RoomState>({ action: 'state', ...session });
+  const moved = touched;
+  touched = false;
+  return post<RoomState>({ action: 'state', touched: moved, ...session });
 }
 
 /** Host only: pick the board, and put everyone on the same countdown. */

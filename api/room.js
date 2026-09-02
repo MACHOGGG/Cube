@@ -45,7 +45,15 @@ const ROOM_CAPACITY = 12;
 const OPEN_SEATS = 4;
 const MAX_PLAYERS = Math.min(OPEN_SEATS, ROOM_CAPACITY);
 const MIN_PLAYERS = 2;
-const ROOM_TTL_S = 2 * 3600;
+/**
+ * 一间小屋在「没人动它」之后还留多久。
+ *
+ * Redis 那头是按存量和命令数计费的，一间打完就没人再回来的屋子留两个小时，
+ * 留的全是空钱。二十分钟：屋里任何一个人在自己的网页上点一下，这个数就从头
+ * 开始算——不只是走棋，任何点击都算（见下面 touched 的说明）。所以只有整间
+ * 屋子真的都散了，它才会在二十分钟后自己消失。
+ */
+const ROOM_TTL_S = 20 * 60;
 /** Long enough to read "4, 3, 2, 1" without anyone feeling held up.
     四个数字一秒一个，再加半秒的余量；客户端从几数起见 startStage.ts 的
     countFrom，两边必须是同一个长度，不然屏幕上的 1 落下去了棋盘还没来。 */
@@ -273,6 +281,15 @@ function publicState(code, hash) {
       rounds: value.rounds || 0,
       /** 中途走了。人还在名单和排名里，只是不再报到，也不占座位。 */
       left: Boolean(value.left),
+      /**
+       * 这个人的网页真的被关掉了。
+       *
+       * 只有 bye 那条路会把 lastSeen 写成 0（见下面的注释），而 bye 只在
+       * pagehide 且不进 bfcache 的时候发——切个应用、锁个屏都不算。所以这个
+       * 布尔值说的是「终端关了」，和 away（听不见他，可能只是网差）是两件事：
+       * 屋主终端关了，这间小屋就散了；屋主网差，大家等他。
+       */
+      closed: value.lastSeen === 0,
       /** 正在看这个玩法的教学——全屋等他学完再一起数 4-3-2-1。 */
       learning: seatLearning(value),
     });
@@ -423,6 +440,17 @@ async function state(res, body) {
   // 一句《屋主正在修电缆》——网络一点问题都没有。轮询本身就是最诚实的心跳，
   // 它每秒都在发生；这里只是把它记下来。
   const seat = seatOf(hash, body.playerId, body.playerToken);
+  // 屋里有人动了一下，这间屋子就该继续活着。
+  //
+  // TTL 只有二十分钟，而真正会延命的动作（开局、催、看教学）之间可以隔很久：
+  // 四个人埋头打一局二十五分钟的棋，中间一次 start 都没有，屋子会在他们眼皮
+  // 底下过期。所以把「动了一下」也算进来。
+  //
+  // 不拿轮询本身当心跳：轮询每秒都在发生，那等于永不过期，省不下任何东西。
+  // 客户端只在自己页面上真的被点过之后，才在下一次轮询里带上 touched（见
+  // engine/room.ts 的 noteTouch）——于是这条 EXPIRE 一分钟最多跑几次，而
+  // 一间没人碰的屋子是真的没人碰。
+  if (seat && body.touched) await expire(roomKey(code), ROOM_TTL_S);
   if (seat && Date.now() - (seat.lastSeen || 0) > SEEN_WRITE_MS && !seat.left) {
     await hset(roomKey(code), 'p:' + body.playerId, { ...seat, lastSeen: Date.now() });
     return send(res, 200, publicState(code, await hgetall(roomKey(code))));

@@ -1,6 +1,6 @@
 import { STRINGS, type Lang } from '../i18n';
 import { custom } from './customIcons';
-import { currentRoom } from '../engine/room';
+import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 
@@ -62,8 +62,9 @@ export interface ShellRefs {
   shareOverlay: HTMLElement;
   shareImageEl: HTMLImageElement;
   buttons: {
-    /** 多人局里没有这颗——同步竞赛暂停不了，那个位置让给了《离开房间》。 */
-    stop?: HTMLButtonElement;
+    /** 多人局里它藏着——同步竞赛暂停不了，那个位置让给了《离开小屋》。
+     *  屋主散场、这一局转成单人之后它才露面。 */
+    stop: HTMLButtonElement;
     /** 只有多人局才有：进行到一半也走得掉。由 scoreboard.ts 接上。 */
     leaveRoom?: HTMLButtonElement;
     finish: HTMLButtonElement;
@@ -207,7 +208,15 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <div class="controls">
         ${inRoom
           ? `<div class="mp-rank" id="mpRank" aria-live="polite"></div>
-             <button class="icon-btn icon-btn--half" id="leaveRoomBtn" aria-label="${s.mpLeave}">${CTL_LEAVE}</button>
+             <!-- 房间局里《暂停》先藏着。屋主散场之后这一局原地转成单人，那
+                  时候名单和《离开小屋》一起撤掉，它顶上来（见 scoreboard.ts
+                  的 goSolo）。先造出来而不是事后插一颗：它的监听器是开局那一
+                  刻接上的（gameController 的 refs.buttons.stop），事后新建的
+                  按钮长得一样，却谁也不听。 -->
+             <button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}" hidden>${CTL_PAUSE}</button>
+             <button class="icon-btn icon-btn--half" id="leaveRoomBtn" aria-label="${
+               iAmHost() ? s.mpDisbandRoom : s.mpLeave
+             }">${CTL_LEAVE}</button>
              <button class="icon-btn icon-btn--half" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`
           : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
              <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`}
@@ -423,7 +432,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     shareOverlay: req('shareOverlay'),
     shareImageEl: req('shareImage'),
     buttons: {
-      stop: inRoom ? undefined : req<HTMLButtonElement>('stopBtn'),
+      // 房间局里它也在，只是藏着——散场转单人的时候才露面，所以监听器必须
+      // 在开局那一刻就接上（见上面控制条里的注释）。
+      stop: req<HTMLButtonElement>('stopBtn'),
       leaveRoom: inRoom ? req<HTMLButtonElement>('leaveRoomBtn') : undefined,
       finish: req('finishBtn'),
       back: undefined,

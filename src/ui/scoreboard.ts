@@ -1,5 +1,6 @@
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
+import { isLayoutLocked } from '../engine/geniusContent';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor } from './roomNotices';
 import {
   avatarSvg,
@@ -161,6 +162,63 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       .join('');
   };
 
+  /**
+   * 屋主散场了，而这一局还在打——把它原地变成一局单人。
+   *
+   * 不把人赶回主菜单：他手上这盘棋是真的，走到一半被没收，比小屋散了本身更
+   * 难受。小屋没了，比赛没了，但这一局还可以打完，只是从此只关他自己。
+   *
+   * 做三件事，都很小：
+   *   · 忘掉座位（本机忘就够了，屋子已经不在），于是《完成》不再问「交卷
+   *     吗」、也不再上报分数，结算页回到单人那一套；
+   *   · 底下那条实时排名和《离开小屋》撤掉，藏着的《暂停》顶上来——一局单
+   *     人棋本来就该能停；
+   *   · 停掉轮询和上报。
+   *
+   * 有一件事跟着变，说清楚：时间系数从小屋的那一档（1.5 倍）回到单人的那
+   * 一档。这是对的——已经没有人和他比快慢了。
+   */
+  const goSolo = () => {
+    dead = true;
+    stopWatching?.();
+    window.clearInterval(localTimer);
+    wait?.remove();
+    wait = null;
+    notice.remove();
+    restoreEndPanel();
+    forgetRoom();
+    rows.remove();
+    document.getElementById('leaveRoomBtn')?.remove();
+    const pause = document.getElementById('stopBtn');
+    if (pause) pause.hidden = false;
+    // 房间局里《完成》占半条，单人局占整条——名单和《离开小屋》走了，它就
+    // 不再是「半」。
+    document.getElementById('finishBtn')?.classList.remove('icon-btn--half');
+  };
+
+  /**
+   * 屋主散场，而这一局这个人自己打不了（天才特供的棋盘，他没订阅也没有生效
+   * 的内部码）——那就到此为止，把结算摆出来，顶上写清楚为什么。
+   *
+   * 借《完成》那颗键走完整套结算：先忘掉座位，于是它不再问「交卷吗」而是直
+   * 接结算，这一局的分数、用时、战绩图一样不少。
+   */
+  const settleLocked = () => {
+    goSolo();
+    const banner = document.createElement('p');
+    banner.className = 'end-gone-note';
+    banner.id = 'endHostGone';
+    banner.textContent = s.mpHostGoneMidRun;
+    // 插在标题前面，而不是整块的最前面——那一格是 .end-hazard-bg（炸弹玩法
+    // 那个 💥 的底衬），它是装饰，这句话该紧挨着它说明的那个标题。
+    document.querySelector(`#${END_OVERLAY_ID} #endTitle`)?.before(banner);
+    document.querySelector<HTMLButtonElement>('#finishBtn')?.click();
+  };
+
+  /** 这间小屋结束了：屋主按了《解散小屋》，或者他的终端没了。 */
+  const roomOver = (state: RoomState) =>
+    state.ended || hostTroubleIn(state, iAmHost()) === 'gone';
+
   // 交了卷之后盖在结算页上的那一层，和屋主出了状况时的那一层。两个都按需
   // 造出来：一整局什么事都没有的时候，它们一个字节都不占。
   let wait: ReturnType<typeof showWaitPanel> | null = null;
@@ -181,6 +239,13 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     (state) => {
       if (dead) return;
       paint(state);
+      // 小屋散了，而这一局还在打：不把人赶走，就地转成一局单人。
+      //
+      // 这一条要排在 notice 前面：《Ohno！小屋被取消》那一层是给「已经没在
+      // 打」的人看的，正打着的人不该被一张遮罩糊住盘面。
+      if (roomOver(state) && !runFinished()) {
+        return isLayoutLocked(shapeId) ? settleLocked() : goSolo();
+      }
       // 屋主走了、还是屋主卡住了——两件事说两句不同的话，见 roomNotices.ts。
       notice.set(hostTroubleIn(state, iAmHost()));
       // 这一局所有人都交卷了 —— 直接回小屋，不出结算页。
@@ -283,13 +348,24 @@ function wireEndPanel(s: I18nStrings, lang: Lang, handlers: RoomRunHandlers): ()
   const row = document.querySelector<HTMLElement>(`#${END_OVERLAY_ID} .btn-row`);
   if (!row) return () => {};
 
+  /**
+   * 换掉的那些键，连同它们本来的样子。
+   *
+   * 「换成克隆」这一手是单向的：克隆不带监听器，而原来那一颗被摘下去之后，
+   * 它自己的监听器还好好地挂着（replaceWith 只是把它从文档里拿走）。所以把
+   * 原件留一份，还原的时候原样放回去——不然屋主一散场、这一局转成单人，
+   * 《主页》那颗键在结算页上就成了一颗按不动的死键。
+   */
+  const swapped: { fresh: HTMLElement; original: HTMLElement }[] = [];
+
   const swap = (id: string, label: string, onClick: () => void): HTMLElement | null => {
-    const old = row.querySelector<HTMLButtonElement>(`#${id}`);
-    if (!old) return null;
-    const fresh = old.cloneNode(true) as HTMLButtonElement;
+    const original = row.querySelector<HTMLButtonElement>(`#${id}`);
+    if (!original) return null;
+    const fresh = original.cloneNode(true) as HTMLButtonElement;
     fresh.textContent = label;
-    old.replaceWith(fresh);
+    original.replaceWith(fresh);
     fresh.addEventListener('click', onClick);
+    swapped.push({ fresh, original });
     return fresh;
   };
 
@@ -324,5 +400,8 @@ function wireEndPanel(s: I18nStrings, lang: Lang, handlers: RoomRunHandlers): ()
   return () => {
     leave.remove();
     if (again) again.hidden = false;
+    // 原件放回去，它们本来的监听器也就跟着回来了。
+    for (const { fresh, original } of swapped) fresh.replaceWith(original);
+    swapped.length = 0;
   };
 }

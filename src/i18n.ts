@@ -275,6 +275,8 @@ export interface I18nStrings {
   mpFinishConfirm: string;
   /** 屋主把座位交回去了，这间房再也开不了下一局。 */
   mpRoomCancelled: string;
+  /** 屋主散场时，还在打的人看到的那句话。 */
+  mpHostGoneMidRun: string;
   /** 知道了。 */
   mpOk: string;
   /** 屋主还在，只是这会儿听不见他——网络卡了，不是走了。 */
@@ -581,6 +583,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStay: 'Stay',
     mpFinishConfirm: 'Done?',
     mpRoomCancelled: 'Oh no — the room is gone',
+    mpHostGoneMidRun: 'Something came up for the host; the room has broken up for now',
     mpOk: 'ok',
     mpHostFixing: 'The host is fixing the cables — hang on',
     mpErrNoRoom: 'No room with that code.',
@@ -868,6 +871,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStay: 'Rester',
     mpFinishConfirm: 'Terminé ?',
     mpRoomCancelled: 'Oh non — la salle a disparu',
+    mpHostGoneMidRun: 'L’hôte a eu un imprévu ; la salle se dissout pour cette fois',
     mpOk: 'ok',
     mpHostFixing: 'L’hôte répare les câbles, un instant',
     mpErrNoRoom: 'Aucune salle avec ce code.',
@@ -1155,6 +1159,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStay: '留下',
     mpFinishConfirm: '完成了嗎？',
     mpRoomCancelled: 'Ohno！小屋被取消',
+    mpHostGoneMidRun: '屋主臨時有事，小屋暫時解散',
     mpOk: 'ok',
     mpHostFixing: '屋主修理電纜中，稍等',
     mpErrNoRoom: '沒有這個小屋號碼。',
@@ -1442,6 +1447,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpStay: '留下',
     mpFinishConfirm: '完成了吗？',
     mpRoomCancelled: 'Ohno！小屋被取消',
+    mpHostGoneMidRun: '屋主临时有事，小屋暂时解散',
     mpOk: 'ok',
     mpHostFixing: '屋主修理电缆中，稍等',
     mpErrNoRoom: '没有这个小屋号码。',

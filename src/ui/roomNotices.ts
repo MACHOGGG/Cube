@@ -211,6 +211,9 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
   // 座位不在了，或者座位还在但人已经交回去了（left）——对屋里其他人来说
   // 是同一件事：这间小屋再也开不出下一局。名单上留着走掉的人是为了排名
   // （见 api/room.js 的 leave），不是为了假装他还在。
-  if (!host || host.left) return 'gone';
+  // 屋主把网页关掉了，也是同一件事：他的终端没了，这间屋子开不出下一局。
+  // closed 只有 bye 那条路会置上（pagehide 且不进 bfcache），切应用、锁屏都
+  // 不算——那些仍然走下面的 away，屋里等他回来。
+  if (!host || host.left || host.closed) return 'gone';
   return host.away ? 'away' : null;
 }
