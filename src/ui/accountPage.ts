@@ -4,7 +4,7 @@ import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
-import { faceClone, plankFlipEl } from '../engine/plankFlip';
+import { faceClone, flipStaggerMs, plankFlipEl } from '../engine/plankFlip';
 import {
   FLIP_STEPS,
   flipStep,
@@ -38,6 +38,10 @@ import {
   openStatusWindow,
   runStoreRestore,
 } from './subscribe';
+
+/** 《图形翻面速度》那扇窗里排几颗球。六颗是棋盘上连成一条得分的常见样子，
+ *  一颗看不出「一批一起翻」是什么节奏，而节奏也归这根拉杆管。 */
+const DEMO_BALLS = 6;
 
 /** 「原本」那一套的代表色——就是三角/六边圆球在用的那六支的前五支。 */
 
@@ -398,7 +402,9 @@ export function renderAccountPage(
       <div class="modal flip-modal">
         <h2>${s.flipSpeedTitle}</h2>
         <p class="hint">${locked ? s.flipSpeedLocked : s.flipSpeedHint}</p>
-        <div class="flip-demo"><div class="flip-demo-piece" id="flipDemo"></div></div>
+        <div class="flip-demo" id="flipDemo">${
+          Array.from({ length: DEMO_BALLS }, () => '<div class="flip-demo-ball"></div>').join('')
+        }</div>
         <div class="flip-slider${locked ? ' flip-slider--locked' : ''}">
           ${locked ? `<span class="flip-lock">${ICON_LOCK}</span>` : ''}
           <div class="flip-rail-box">
@@ -417,42 +423,54 @@ export function renderAccountPage(
     `;
     document.body.appendChild(overlay);
 
-    const demo = overlay.querySelector<HTMLElement>('#flipDemo')!;
-    // 演示棋子现在是哪一面。翻面动画要的是「旧面的样子」和「新面的样子」两
-    // 份，所以这里先照旧面拍一张，改成新面，再让 plankFlipEl 把前者转成后者
-    // ——和棋盘上那一下走的是同一条路。
-    let dotFace = false;
-    const paintDemo = () => {
-      demo.innerHTML = '';
+    const balls = Array.from(overlay.querySelectorAll<HTMLElement>('.flip-demo-ball'));
+    // 一颗球现在是哪一面。正面是一支实色，反面是那个星标——和圆球玩法上画的
+    // 是同一份（见 circle.ts 里的 makeBallEl），所以这里演的就是他等一下真会
+    // 看到的那一下，不是另做的示意。
+    const paintBall = (el: HTMLElement, dotFace: boolean) => {
       if (!dotFace) {
-        demo.style.background = faceA;
+        el.style.background = faceA;
+        el.innerHTML = '';
         return;
       }
-      demo.style.background = 'transparent';
-      const dot = document.createElement('div');
-      dot.className = 'dot-circle';
-      const d = Math.round(demo.offsetWidth * 0.86);
-      dot.style.width = d + 'px';
-      dot.style.height = d + 'px';
-      dot.style.background = faceB;
-      demo.appendChild(dot);
+      el.style.background = 'transparent';
+      const d = Math.round(el.offsetWidth * 0.95);
+      el.innerHTML =
+        `<svg viewBox="0 0 24 24" width="${d}" height="${d}">` +
+        `<g stroke="${faceB}" stroke-width="5.5" stroke-linecap="round">` +
+        `<line x1="12" y1="2.5" x2="12" y2="21.5"/>` +
+        `<line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
+        `<line x1="20" y1="6.75" x2="4" y2="17.25"/>` +
+        `</g></svg>`;
     };
-    paintDemo();
+    let dotFace = false;
+    for (const el of balls) paintBall(el, dotFace);
 
     // 拉的时候一格一个事件，翻面却要好几百毫秒。所以不是每一格都翻——停手
-    // 一下下才翻，而且上一次没翻完就再等等：翻到一半重进一次，plankFlipEl
+    // 一下下才翻，而且上一批没翻完就再等等：翻到一半重进一次，plankFlipEl
     // 会把正在转的那块木片当成「旧面」拍进去，翻出来就是一团糊的。
     let timer = 0;
     const flipDemo = () => {
-      if (!demo.isConnected) return;
-      if (demo.dataset.flipping) {
+      if (!balls[0]?.isConnected) return;
+      if (balls.some((el) => el.dataset.flipping)) {
         timer = window.setTimeout(flipDemo, 90);
         return;
       }
-      const front = faceClone(demo);
+      // 六颗依次错开，和棋盘上连成一条得分时一模一样——那个间隔也归这根拉杆
+      // 管（flipStaggerMs），所以拉慢了是整排一起变慢，队形不变。
       dotFace = !dotFace;
-      paintDemo();
-      plankFlipEl(demo, front, 0);
+      const next = dotFace;
+      const stagger = flipStaggerMs();
+      balls.forEach((el, n) => {
+        // 旧面现在就拍下来，新面等轮到它自己才画：一次画完的话，还没轮到的
+        // 那几颗会先亮出新面、过半秒再翻，看着像是翻晚了。
+        const front = faceClone(el);
+        window.setTimeout(() => {
+          if (!el.isConnected) return;
+          paintBall(el, next);
+          plankFlipEl(el, front, 0);
+        }, n * stagger);
+      });
     };
     const nudgeDemo = () => {
       window.clearTimeout(timer);

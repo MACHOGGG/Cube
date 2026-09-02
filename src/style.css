@@ -1405,15 +1405,18 @@ button:hover { filter: brightness(1.05); }
    棋盘那块褐色，因为它演的就是棋盘上那一下。 */
 .flip-modal { text-align: left; }
 .flip-demo {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
   background: var(--play-panel); border-radius: var(--r-md);
-  padding: 18px; margin: 14px 0 18px;
+  padding: 16px 14px; margin: 14px 0 18px;
 }
-.flip-demo-piece {
-  position: relative; width: 76px; height: 76px; border-radius: 12px;
+/* 六颗球平分这一条，窄屏上一起缩，宽屏上到 44px 就不再长——再大就只是占地
+   方了，要看的是它们怎么翻，不是它们多大。 */
+.flip-demo-ball {
+  flex: 1 1 0; min-width: 0; max-width: 44px; aspect-ratio: 1; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
 }
+.flip-demo-ball svg { display: block; }
 /* 圆钮多宽是刻度对得上的唯一依据，所以只写这一处，滑杆和刻度条都读它：
    钮心从「半个钮」处走到「宽度减半个钮」处，刻度条也就左右各让出半个钮，
    再按百分比摆——第 i 格的刻度和第 i 档的钮心于是是同一个点，不是看着差

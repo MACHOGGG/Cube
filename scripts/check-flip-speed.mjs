@@ -58,9 +58,11 @@ async function openPicker(page) {
   await page.waitForSelector('.flip-modal', { timeout: 5000 });
 }
 
-/** 演示棋子安静下来（没有正在翻的）。 */
+/** 六颗演示球都安静下来（没有正在翻的）。 */
 const settled = (page) =>
-  page.waitForFunction(() => !document.getElementById('flipDemo')?.dataset.flipping, { timeout: 8000 });
+  page.waitForFunction(
+    () => ![...document.querySelectorAll('.flip-demo-ball')].some((el) => el.dataset.flipping),
+    { timeout: 8000 });
 
 /** 拉杆的几何：圆钮的心从「左边 + 半个钮」走到「右边 − 半个钮」。 */
 const railGeo = (page) =>
@@ -89,7 +91,8 @@ async function timeFlip(page, step) {
   await settled(page);
   await clickStep(page, step);
   await page.waitForFunction(
-    () => document.getElementById('flipDemo')?.dataset.flipping === '1', { timeout: 8000 });
+    () => [...document.querySelectorAll('.flip-demo-ball')].some((el) => el.dataset.flipping),
+    { timeout: 8000 });
   const t0 = Date.now();
   await settled(page);
   return Date.now() - t0;
@@ -104,6 +107,8 @@ async function timeFlip(page, step) {
 
   const enabled = await page.$eval('#flipRange', (el) => !el.disabled);
   check('天才：拉杆拉得动', enabled);
+  const nBalls = await page.$$eval('.flip-demo-ball', (els) => els.length);
+  check('演示是六颗球', nBalls === 6, `${nBalls} 颗`);
 
   // 刻度和圆钮对得上：第一格该压在「左边 + 半个钮」上，最后一格压在
   // 「右边 − 半个钮」上。这是刻度条唯一的对齐依据，差 1px 都不该有。
@@ -125,10 +130,12 @@ async function timeFlip(page, step) {
 
   const slow = await timeFlip(page, 0);
   const fast = await timeFlip(page, 9);
-  // 设计值 350ms：最慢档 700ms，最快档 175ms。留足余量——测的是真实动画，
-  // 掉几帧是常事；要看住的是「差了四倍」，不是「正好 700」。
-  check('最慢那一档真的慢下来了', slow >= 520 && slow <= 950, `${slow}ms（该 ~700）`);
-  check('最快那一档真的快起来了', fast >= 110 && fast <= 300, `${fast}ms（该 ~175）`);
+  // 量的是整排六颗：第一颗起手到最后一颗落定 = 5 × 错开 + 一次翻面。
+  // 设计值是 90ms 错开 + 350ms 翻面，所以最慢档 5×180+700 = 1600ms，最快档
+  // 5×45+175 = 400ms。留足余量——测的是真实动画，掉几帧是常事；要看住的是
+  // 「差了四倍」，不是「正好 1600」。
+  check('最慢那一档真的慢下来了', slow >= 1250 && slow <= 2100, `${slow}ms（该 ~1600）`);
+  check('最快那一档真的快起来了', fast >= 280 && fast <= 620, `${fast}ms（该 ~400）`);
   check('两头差出四倍来', slow / fast >= 2.5, `${(slow / fast).toFixed(2)} 倍`);
 
   const stored = await page.evaluate(() => localStorage.getItem('slides_flip_speed'));
@@ -163,16 +170,17 @@ async function timeFlip(page, step) {
     lock: Boolean(document.querySelector('.flip-slider--locked .flip-lock')),
     cta: Boolean(document.getElementById('flipGo')),
     ticks: document.querySelectorAll('.flip-tick').length,
-    demo: Boolean(document.getElementById('flipDemo')),
+    demo: document.querySelectorAll('.flip-demo-ball').length,
   }));
-  check('没开通：窗口照样打得开', shape.ticks === 10 && shape.demo);
+  check('没开通：窗口照样打得开', shape.ticks === 10 && shape.demo === 6, `${shape.demo} 颗球`);
   check('没开通：拉杆拉不动', shape.disabled);
   check('没开通：挂着锁', shape.lock);
   check('没开通：给得出去开通的路', shape.cta);
 
   // 演示照样翻——「看得见但拿不到」的重点在看得见。
   await page.waitForFunction(
-    () => document.getElementById('flipDemo')?.dataset.flipping === '1', { timeout: 8000 })
+    () => [...document.querySelectorAll('.flip-demo-ball')].some((el) => el.dataset.flipping),
+    { timeout: 8000 })
     .then(() => check('没开通：演示照样翻给他看', true))
     .catch(() => check('没开通：演示照样翻给他看', false, '一直没翻'));
 
