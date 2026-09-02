@@ -37,6 +37,8 @@ export interface ProfileHandlers {
   /** Opens the quick language-switch popup. */
   onSwitchLanguage: () => void;
   onHowToSlide: () => void;
+  /** 《随机得分目标》。那一行现在锁着（见下面的 lockedRow），所以这条线暂时
+   *  没有元素可挂——留着是因为它有内容了就要接回去。 */
   onRandomTarget: () => void;
   onMultiplayer: () => void;
 }
@@ -150,10 +152,10 @@ export function renderAccountPage(
             subscribed ? `${VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;` : '&rsaquo;'
           }</span>
         </button>
-        <button class="profile-row" id="randomRow">
-          <span class="profile-row-label">${s.randomTargetTitle}</span>
-          <span class="profile-row-value">${s.comingSoon}</span>
-        </button>
+        <!-- 《随机得分目标》里面还没有东西，所以和其它没做完的一样挂着锁：
+             一行点得开、进去却什么都没有的按钮，比一把锁更让人扫兴。等它有
+             内容了再把锁去掉。 -->
+        ${lockedRow(s.randomTargetTitle)}
         ${privileges.slice(1).map(lockedRow).join('')}
       </section>
 
