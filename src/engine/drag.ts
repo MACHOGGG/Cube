@@ -184,8 +184,27 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
   // overscroll, which touch-action does not suppress. Non-passive, or
   // preventDefault would be ignored. Only touchmove is cancelled — cancelling
   // touchstart would also suppress the pointer events this drag runs on.
+  //
+  // 一律拦，不看这一刻棋盘收不收拖动。
+  //
+  // 触摸事件只会送到手指落下的那个元素，整串都是——所以能走到这个监听器的
+  // touchmove，起点必定在棋盘里。「棋盘里的移动」和「该拦的移动」是同一件事，
+  // 不需要再加条件去分辨。
+  //
+  // 从前这里写的是 if (active)，而 active 只有 cb.isActive() 点头才会立起来。
+  // 于是 4-3-2-1 数着的时候、上一步的连锁还在演的时候、暂停的时候、这一局已
+  // 经结束的时候，棋盘里横着一划，浏览器完全接管——安卓上那就是「返回上一
+  // 页」。玩家说「好像也会」，正是因为它挑时候：手快一点，在棋盘不收拖动的
+  // 那一小段里划，就退出去了。
+  //
+  // 尾巴上还有同一个洞：真在拖的时候安卓的手势识别器一旦把指针抢走，发来
+  // pointercancel，active 就落回 false，后面几帧的 touchmove 又不拦了，那一
+  // 划照样走完。一律拦之后，前面的 touchmove 已经被吃掉，手势根本立不起来。
+  //
+  // 拦掉不会顺手拿走别的：游戏页是 overflow: hidden（html.is-playing），语言
+  // 选择页也锁在一屏，两个用到这套拖拽的地方本来都没有可滚的东西。
   function blockScroll(e: TouchEvent) {
-    if (active) e.preventDefault();
+    e.preventDefault();
   }
 
   target.addEventListener('pointerdown', down);
