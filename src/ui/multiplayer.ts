@@ -3,6 +3,7 @@ import { isGenius } from '../engine/subscription';
 import { countFrom, pushDigit, startStageHtml } from './startStage';
 import { hostNotice, hostTroubleIn, tickFor, type HostNotice } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
+import { PLAYER_NAME_KEY } from '../engine/cloudScores';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { mountTitleRain, type TitleRain } from './titleRain';
@@ -91,7 +92,7 @@ function tutorialFamilyOf(mode: string): TutorialShape | null {
 /** 问「会不会规则」给多久。到点没人按，就当他会。 */
 const KNOW_ASK_MS = 4000;
 
-const NAME_KEY = 'slides_mp_name';
+const NAME_KEY = PLAYER_NAME_KEY;
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

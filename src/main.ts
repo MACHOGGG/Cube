@@ -542,7 +542,10 @@ function showRoomFinal(state: RoomState) {
 function showRecordsPage() {
   teardown();
   trackScreen('records');
-  renderRecordsPage(root, recordSources, showMenu, currentLang);
+  // 锁着的排行榜上那颗《成为 Slides 天才》：开订阅那一窗，关掉之后回到这一页。
+  renderRecordsPage(root, recordSources, showMenu, currentLang, () =>
+    openGeniusWindow(currentLang, showRecordsPage),
+  );
   setNavTab('records');
   wireHomeTitle();
   repaintIcons();

@@ -47,6 +47,17 @@ export interface I18nStrings {
   comingSoon: string;
   multiplayerTitle: string;
   rankingsTitle: string;
+  /** 排行榜那一块。 */
+  rankTotalBoard: string;
+  rankBestBoard: string;
+  rankLocked: string;
+  rankLockedCta: string;
+  rankSignedOut: string;
+  rankEmpty: string;
+  rankLoading: string;
+  rankPlayers: string;
+  rankMyPlace: string;
+  rankNotPlayed: string;
   totalScoreTitle: string;
   totalScoreSync: string;
   exclusiveEntry: string;
@@ -423,6 +434,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: 'Coming soon',
     multiplayerTitle: 'Multiplayer',
     rankingsTitle: 'Records & rankings',
+    rankTotalBoard: 'Overall',
+    rankBestBoard: 'Best single run',
+    rankLocked: 'The global leaderboard is a Slides Genius perk',
+    rankLockedCta: 'Become a Slides Genius',
+    rankSignedOut: 'Sign in and your runs go on the board',
+    rankEmpty: 'Nobody on this board yet',
+    rankLoading: 'Fetching…',
+    rankPlayers: '{n} on this board',
+    rankMyPlace: 'You are #{n}',
+    rankNotPlayed: 'You have not played this one yet',
     totalScoreTitle: 'Total score',
     totalScoreSync: 'Slides Genius keeps every run forever',
     exclusiveEntry: 'Genius',
@@ -711,6 +732,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: 'Bientôt disponible',
     multiplayerTitle: 'Multijoueur',
     rankingsTitle: 'Historique et classements',
+    rankTotalBoard: 'Général',
+    rankBestBoard: 'Meilleure partie',
+    rankLocked: 'Le classement mondial est réservé aux Slides Genius',
+    rankLockedCta: 'Devenir Slides Genius',
+    rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
+    rankEmpty: 'Personne à ce classement pour l’instant',
+    rankLoading: 'Chargement…',
+    rankPlayers: '{n} joueurs classés',
+    rankMyPlace: 'Vous êtes {n}ᵉ',
+    rankNotPlayed: 'Vous n’avez pas encore joué celui-ci',
     totalScoreTitle: 'Score cumulé',
     totalScoreSync: 'Slides Génie garde chaque partie pour toujours',
     exclusiveEntry: 'Génie',
@@ -999,6 +1030,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: '敬請期待',
     multiplayerTitle: '多人遊玩',
     rankingsTitle: '成績與排名',
+    rankTotalBoard: '總榜',
+    rankBestBoard: '單局最佳',
+    rankLocked: '全球排行榜是 Slides 天才的特權',
+    rankLockedCta: '成為 Slides 天才',
+    rankSignedOut: '登入之後，你的成績才會上榜',
+    rankEmpty: '這張榜上還沒有人',
+    rankLoading: '正在取…',
+    rankPlayers: '{n} 人在榜',
+    rankMyPlace: '你排第 {n}',
+    rankNotPlayed: '這個玩法你還沒打過',
     totalScoreTitle: '累計得分',
     totalScoreSync: 'Slides 天才可永久記憶所有成績',
     exclusiveEntry: '天才入口',
@@ -1287,6 +1328,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: '敬请期待',
     multiplayerTitle: '多人游玩',
     rankingsTitle: '成绩与排名',
+    rankTotalBoard: '总榜',
+    rankBestBoard: '单局最佳',
+    rankLocked: '全球排行榜是 Slides 天才的特权',
+    rankLockedCta: '成为 Slides 天才',
+    rankSignedOut: '登录之后，你的成绩才会上榜',
+    rankEmpty: '这张榜上还没有人',
+    rankLoading: '正在取…',
+    rankPlayers: '{n} 人在榜',
+    rankMyPlace: '你排第 {n}',
+    rankNotPlayed: '这个玩法你还没打过',
     totalScoreTitle: '累计得分',
     totalScoreSync: 'Slides 天才可永久记忆所有成绩',
     exclusiveEntry: '天才入口',

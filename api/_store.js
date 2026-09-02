@@ -121,6 +121,56 @@ function memory(args) {
     case 'EXPIRE':
       expiries.set(key, Date.now() + Number(rest[0]) * 1000);
       return 1;
+    // 排行榜就是一个有序集合。用 Map 冒充：成员 → 分数，读的时候再排。真的
+    // Redis 那头是 O(log n) 的跳表，这里是 O(n log n) 的一次排序——本地跑
+    // 测试够用，也只在这里用。
+    case 'ZADD': {
+      const z = mem.get(key) instanceof Map ? mem.get(key) : new Map();
+      // 只认 GT（比原来高才写）这一个修饰符，因为只用得上它。
+      const gt = String(rest[0]).toUpperCase() === 'GT';
+      const pairs = gt ? rest.slice(1) : rest;
+      let changed = 0;
+      for (let i = 0; i < pairs.length; i += 2) {
+        const score = Number(pairs[i]);
+        const member = String(pairs[i + 1]);
+        if (gt && z.has(member) && z.get(member) >= score) continue;
+        z.set(member, score);
+        changed++;
+      }
+      mem.set(key, z);
+      return changed;
+    }
+    case 'ZSCORE': {
+      const z = mem.get(key);
+      if (!(z instanceof Map)) return null;
+      const v = z.get(String(rest[0]));
+      return v === undefined ? null : String(v);
+    }
+    case 'ZREVRANK': {
+      const z = mem.get(key);
+      if (!(z instanceof Map)) return null;
+      const member = String(rest[0]);
+      if (!z.has(member)) return null;
+      const order = [...z.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+      return order.findIndex(([m]) => m === member);
+    }
+    case 'ZCARD': {
+      const z = mem.get(key);
+      return z instanceof Map ? z.size : 0;
+    }
+    case 'ZRANGE': {
+      const z = mem.get(key);
+      if (!(z instanceof Map)) return [];
+      const flags = rest.slice(2).map((v) => String(v).toUpperCase());
+      const rev = flags.includes('REV');
+      const scores = flags.includes('WITHSCORES');
+      let order = [...z.entries()].sort((a, b) => a[1] - b[1] || String(a[0]).localeCompare(String(b[0])));
+      if (rev) order = [...z.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+      const start = Number(rest[0]);
+      const stop = Number(rest[1]);
+      const slice = order.slice(start, stop < 0 ? order.length + stop + 1 : stop + 1);
+      return scores ? slice.flatMap(([m, sc]) => [m, String(sc)]) : slice.map(([m]) => m);
+    }
     default:
       throw new Error('unsupported command in the in-memory store: ' + cmd);
   }
@@ -150,6 +200,47 @@ export const hsetnx = async (key, field, value) =>
   (await command(['HSETNX', key, field, encode(value)])) === 1;
 export const hdel = (key, field) => command(['HDEL', key, field]);
 export const expire = (key, ttl) => command(['EXPIRE', key, ttl]);
+
+/**
+ * 排行榜：一个有序集合，成员是玩家，分数是他的成绩。
+ *
+ * 用 Redis 自己的这套结构，而不是读一整张表回来在函数里排：一张榜将来有多
+ * 少人是不知道的，而「取前五十名」和「我排第几」在有序集合里都是一步就出
+ * 来的事。
+ */
+/** GT：只有比榜上原来的成绩高才写进去。名次只上不下，除非真的打得更好。 */
+export const zaddIfHigher = (key, score, member) =>
+  command(['ZADD', key, 'GT', String(Math.round(score)), member]);
+/** 覆盖式写入——累计分这种「重算之后就是它」的数用这个。 */
+export const zadd = (key, score, member) =>
+  command(['ZADD', key, String(Math.round(score)), member]);
+export const zscore = async (key, member) => {
+  const raw = await command(['ZSCORE', key, member]);
+  return raw === null || raw === undefined ? null : Number(raw);
+};
+/** 从高到低数，第几名（0 起）。不在榜上就是 null。 */
+export const zrevrank = async (key, member) => {
+  const raw = await command(['ZREVRANK', key, member]);
+  return raw === null || raw === undefined ? null : Number(raw);
+};
+export const zcard = async (key) => Number(await command(['ZCARD', key])) || 0;
+
+/** 前 n 名，从高到低，[{ member, score }]。 */
+export async function zTop(key, n) {
+  const flat = await command(['ZRANGE', key, '0', String(Math.max(0, n - 1)), 'REV', 'WITHSCORES']);
+  const out = [];
+  if (Array.isArray(flat)) {
+    // Upstash 有时给 [m, s, m, s]，有时给 [[m, s], …]——两种都收。
+    if (flat.length && Array.isArray(flat[0])) {
+      for (const [m, sc] of flat) out.push({ member: String(m), score: Number(sc) });
+    } else {
+      for (let i = 0; i < flat.length; i += 2) {
+        out.push({ member: String(flat[i]), score: Number(flat[i + 1]) });
+      }
+    }
+  }
+  return out;
+}
 
 /** The whole hash, as a plain object with every value already parsed. */
 export async function hgetall(key) {

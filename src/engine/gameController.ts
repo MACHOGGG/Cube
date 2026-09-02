@@ -17,6 +17,7 @@ import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
+import { leaderboardName, pushRun } from './cloudScores';
 import { confirmFinish } from '../ui/roomNotices';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
@@ -364,6 +365,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     endSnapshot = hooks.snapshotBoard?.() ?? null;
     // Archive the run so the 记录 panel can re-open the very same card.
     saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
+    // 登录了就顺手往云上报一份：换台设备记录跟着回来，成绩也进全球榜。
+    // 不 await——结算页已经在屏幕上了，没有理由让刚打完的人等一个请求；
+    // 报不上去最多是这一局没上榜，本机那份存档一个字都不受影响。
+    pushRun(lastRun, leaderboardName());
     // The reason key is one of our own fixed strings, never player text.
     trackGameEnd({
       shape: hooks.shapeId,

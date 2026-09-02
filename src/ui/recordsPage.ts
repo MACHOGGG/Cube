@@ -7,6 +7,7 @@ import { openCenterPicker } from './centerPicker';
 import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
 import { isGenius } from '../engine/subscription';
+import { mountBoardThumb, mountBoardView } from './leaderboard';
 
 /** One playable game+mode combination, so the page knows which archives to
  *  read and which glyph belongs to a stored run's shape id. */
@@ -75,6 +76,8 @@ export function renderRecordsPage(
   sources: RecordSource[],
   onBack: () => void,
   lang: Lang,
+  /** 锁着的排行榜上那颗《成为 Slides 天才》按下去以后去哪儿。 */
+  onWantGenius: () => void = () => {},
 ): void {
   const s = STRINGS[lang];
   // One archive per game+mode; the page reads them all so 记录 is a single
@@ -103,10 +106,7 @@ export function renderRecordsPage(
       </button>
       <div class="records-panels">
         <button class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></button>
-        <button class="records-panel records-panel--ranks" id="ranksPanel" aria-label="${s.rankingsTitle}">
-          ${Array.from({ length: PLACEHOLDER_ROWS }, () => '<div class="records-rule"></div>').join('')}
-          <p class="records-locked">${s.rankingsTitle} · ${s.comingSoon}</p>
-        </button>
+        <button class="records-panel records-panel--ranks" id="ranksPanel" aria-label="${s.rankingsTitle}"></button>
       </div>
       <div class="controls"><button class="icon-btn" id="backBtn">${s.back}</button></div>
     </div>
@@ -165,12 +165,18 @@ export function renderRecordsPage(
   });
 
   const ranks = container.querySelector<HTMLButtonElement>('#ranksPanel')!;
+  // 缩略图上只有总榜的前三名和「我排第几」——那半块屏幕装不下九个切页，而
+  // 站在这儿的人想知道的也就这一件事。点开才是完整的九张榜。
+  mountBoardThumb(ranks, lang);
+  // 排行榜是活的：每次点开都重新去问，而不是把上一次的结果留在手上。
   ranks.addEventListener('click', () => {
     const big = document.createElement('div');
     big.className = 'records-panel records-panel--ranks records-panel--big';
-    big.innerHTML =
-      Array.from({ length: PLACEHOLDER_ROWS * 2 }, () => '<div class="records-rule"></div>').join('') +
-      `<p class="records-locked">${s.rankingsTitle} · ${s.comingSoon}</p>`;
+    mountBoardView(big, {
+      lang,
+      shapeIds: [...new Set(sources.map((src) => src.card.id))],
+      onWantGenius,
+    });
     openCenterPicker({ originEl: ranks, title: s.rankingsTitle, panel: big, panelClass: 'records-panel--big' });
   });
 

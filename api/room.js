@@ -1,6 +1,6 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { send, readBody, creem, configured as creemConfigured, entitled } from './_creem.js';
-import { codeHolder, loadAccount, normalizeEmail } from './_accounts.js';
+import { send, readBody } from './_creem.js';
+import { isGenius as isGeniusClaim } from './_entitlement.js';
 import { expire, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
 
 /**
@@ -150,57 +150,14 @@ export default async function handler(req, res) {
 // ---- who may open a room ------------------------------------------------
 
 /**
- * Opening a room is the subscriber's; joining one is free, so that a
- * subscriber can actually play with their friends rather than needing all of
- * them to buy a subscription before anyone has a game.
+ * 开小屋是订阅者的事；进别人的小屋不是——不然一个订阅者想找朋友打一局，
+ * 得先让朋友们都去订阅，那他就永远打不成。
  *
- * Two of the three ways of being a subscriber can be checked here, and are:
- * a card subscription is confirmed with Creem, and a redeemed code against
- * the account's own sign-in token. The third - bought through the App Store
- * or Google Play - cannot be, because verifying those receipts needs Apple's
- * and Google's server APIs and the credentials that go with them. Until that
- * is wired up a store build's claim is taken at its word. What that risks is
- * somebody opening a game room without paying, which is worth stating
- * plainly and is not worth shutting out every honest store subscriber over.
+ * 「他是不是天才」这道题现在只在一个地方回答（api/_entitlement.js），排行
+ * 榜问的是同一句。三处各写一份的下场是可以预见的：有一天其中一份放行了另
+ * 外两份挡住的人，而两边都觉得自己是对的。
  */
-async function hostMayOpen({ email, accountToken, holderCode, storeClaim }) {
-  const address = normalizeEmail(email);
-
-  // A code redeemed but not yet attached to an address. What it granted lives
-  // under the code, so that is where to look — asking for an email here would
-  // turn "I have not finished signing up" into "you did not pay", which is
-  // both wrong and the exact moment a player is least willing to hear it.
-  if (holderCode && accountToken) {
-    const held = await loadAccount(codeHolder(holderCode));
-    if (held?.token && held.token === accountToken && (held.until || 0) > Date.now()) {
-      return true;
-    }
-  }
-
-  if (address && accountToken) {
-    const account = await loadAccount(address);
-    if (account?.token && account.token === accountToken && (account.until || 0) > Date.now()) {
-      return true;
-    }
-  }
-
-  if (address && creemConfigured()) {
-    try {
-      const customer = await creem('/v1/customers', { query: { email: address } });
-      if (customer?.id) {
-        const list = await creem(`/v1/customers/${encodeURIComponent(customer.id)}/subscriptions`, {
-          query: { page_size: 50 },
-        });
-        if ((list?.items || []).some(entitled)) return true;
-      }
-    } catch {
-      // A Creem outage should not stop a paid-up player opening a room.
-      if (storeClaim) return true;
-    }
-  }
-
-  return Boolean(storeClaim);
-}
+const hostMayOpen = (claim) => isGeniusClaim(claim);
 
 // ---- shaping what a player is told --------------------------------------
 

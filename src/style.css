@@ -1245,6 +1245,73 @@ button:hover { filter: brightness(1.05); }
   font-size: 0.82rem; letter-spacing: 0.04em;
 }
 
+/* ---------- 全球排行榜 ---------- */
+/* 它站在那块蓝紫色的板子上，所以和记录那半边一样，字色是写死的深褐配
+   写死的近白药丸——底是固定的，字就也得是固定的（理由见上面那段）。 */
+/* 不写 min-height:0——这个类挂在 .records-panel--big 自己身上（同一个元素，
+   不是它的孩子），写了就会盖掉 .records-panel 那条 46vh，于是一张只有一行
+   字的榜缩成一小条，看着像出了错而不像一张暂时空着的榜。需要 min-height:0
+   的是底下那个能滚的 .rank-body。 */
+.rank-view { display: flex; flex-direction: column; gap: 12px; }
+/* 缩略图那半块里字要放得下：一句「登录之后，你的成绩才会上榜」在 390 宽的
+   屏幕上是两行，压死高度就会被切掉半行。 */
+.records-panels .rank-foot, .records-panels .rank-empty { font-size: 0.72rem; line-height: 1.5; }
+.records-panels .rank-row { padding: 6px 9px; gap: 6px; }
+.records-panels .rank-place { min-width: 1.6em; font-size: 0.72rem; }
+.records-panels .rank-name, .records-panels .rank-score { font-size: 0.78rem; }
+/* 九个切页：一张总榜加八个玩法。横着滚，不换行——换行会让这一排在中文和
+   法文里各有各的高度，底下的榜跟着上下跳。 */
+.rank-tabs {
+  display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden;
+  padding-bottom: 2px; scrollbar-width: none; flex: 0 0 auto;
+}
+.rank-tabs::-webkit-scrollbar { display: none; }
+.rank-tab {
+  flex: 0 0 auto; cursor: pointer; white-space: nowrap;
+  font-family: 'Karla', sans-serif; font-size: 0.78rem; font-weight: 600;
+  color: #453023; background: rgba(255, 255, 255, 0.55); border: none;
+  border-radius: var(--r-full); padding: 6px 13px;
+  transition: background 140ms ease;
+}
+.rank-tab--on { background: rgba(255, 255, 255, 0.96); }
+.rank-body { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; min-height: 0; }
+.rank-row {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255, 255, 255, 0.92); border-radius: var(--r-full);
+  padding: 7px 15px; color: #453023; font-family: 'Karla', sans-serif;
+  flex: 0 0 auto;
+}
+/* 自己那一行：底色实一档，字加粗。榜再长，玩家找的都是这一行。 */
+.rank-row--me { background: #fff; font-weight: 700; box-shadow: 0 0 0 2px rgba(69, 48, 35, 0.28) inset; }
+.rank-place {
+  font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+  font-size: 0.8rem; color: #7A5C48; min-width: 2.2em;
+}
+.rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+.rank-score {
+  font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 0.9rem;
+}
+.rank-foot, .rank-empty {
+  margin: 6px 0 0; text-align: center; color: rgba(255, 255, 255, 0.92);
+  font-size: 0.78rem; letter-spacing: 0.03em;
+}
+/* 锁着的那一屏：榜的样子照旧摆出来，只是名次是灰条——写上具体的名字和分数
+   就是在骗人，空着又什么都没说明。灰条正好说清「这里是一张榜」。 */
+.rank-locked-wrap { position: relative; display: flex; flex-direction: column; gap: 5px; }
+.rank-row--ghost { background: rgba(255, 255, 255, 0.42); }
+.rank-ghost-bar { height: 9px; border-radius: var(--r-full); background: rgba(255, 255, 255, 0.75); }
+.rank-lock {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; padding: 0 14px;
+  background: rgba(155, 165, 214, 0.72);
+  border-radius: var(--r-lg);
+}
+.rank-lock-line {
+  margin: 0; text-align: center; color: #fff; font-size: 0.86rem; line-height: 1.5;
+  text-shadow: 0 1px 3px rgba(40, 30, 50, 0.35);
+}
+
 /* 中途走掉的人。名单上留着他和他截止到走的那一刻的分——那是这场比赛的一
    部分——但他不再是「还在打的人」，所以整行压暗一档，旁边挂一个小标。 */
 .mp-player--left { opacity: 0.62; }
