@@ -11,7 +11,7 @@ import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
-import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
+import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -294,7 +294,7 @@ export function createTriangleGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'triangleBig', '大三角')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
-        patternHint: renderPatternHintRow(PATTERNS, lang),
+        patternIcons: renderPatternHintIcons(PATTERNS, lang),
         wideBoard: true,
       });
 

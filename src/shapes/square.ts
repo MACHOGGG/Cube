@@ -10,7 +10,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
-import { renderPatternHintRow, type PatternDef } from '../engine/patternIcon';
+import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -108,7 +108,7 @@ export function createSquareGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'square', '方块')}`,
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
         startBody: SHELL[lang].shellStartBody,
-        patternHint: renderPatternHintRow(PATTERNS, lang),
+        patternIcons: renderPatternHintIcons(PATTERNS, lang),
       });
 
       const pickPalette = (): readonly string[] =>

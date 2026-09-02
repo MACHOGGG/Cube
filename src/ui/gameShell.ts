@@ -9,13 +9,19 @@ export interface ExtraControl {
   label: string;
 }
 
+/** 横屏里得分图示留在棋盘上方那一条的两个玩法：它们横过来是宽度吃满的，
+ *  两边没有空当可用（菱形躺着的七色圆球、张开的 V 形进阶三角）。 */
+const PATTERNS_ON_TOP = new Set(['circleSeven', 'triangleAdvanced']);
+
 export interface ShellMeta {
   title: string;
   tagline: string;
   startBody: string;
   extraControls?: ExtraControl[];
-  /** Pre-rendered HTML (via engine/patternIcon.ts's renderPatternHintRow) for the small blank-outline scoring-pattern icons shown under the HUD. */
-  patternHint?: string;
+  /** 这个玩法的得分图示，一枚一枚（engine/patternIcon.ts 的
+   *  renderPatternHintIcons 画好的小图）。横屏时这一批会劈成两半贴到棋盘两
+   *  边去，所以给的是一个数组而不是一整条 HTML。 */
+  patternIcons?: string[];
   /** Widens the whole .app column beyond its normal max-width, for a board
    *  whose own layout (many cells, or a shape denser than a plain square
    *  grid) reads as cramped at the standard size — see the "app-wide" CSS. */
@@ -167,13 +173,41 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     .map((b) => `<button class="icon-btn" id="${b.id}">${b.label}</button>`)
     .join('');
 
+  /**
+   * 得分图示摆在哪儿。
+   *
+   * 竖屏：一条，在读数和棋盘中间，上下居中在那段空当里。
+   * 横屏：劈成两半贴到棋盘左右两边，竖着排、上下居中——横屏里棋盘是被高度
+   *   卡住的，图示占着上面那条就等于把棋盘压小一圈，而两边的空当反正也没
+   *   人用。玩家自己定的：「这样游戏版图和游戏内的布局都可以放更大」。
+   *
+   * 两个例外，七色圆球和进阶三角：它们横过来是宽度吃满的（菱形躺着、V 形
+   * 张开），两边根本没有空当，图示还得留在上面那条。
+   *
+   * 劈法是「前一半 + 后一半」，而且后一半在 DOM 里出现两次：一次在左边那
+   * 条里（竖屏时它是完整的一条），一次单独作为右边那一条。谁露谁藏由 CSS
+   * 决定——用 display:none 藏，所以读屏软件在任何一种排布下都只会念到一遍，
+   * 不会重。这样劈的位置不用给 CSS，也就不用管每个玩法有几枚。
+   */
+  const icons = meta.patternIcons ?? [];
+  const half = Math.ceil(icons.length / 2);
+  const sides = icons.length > 1 && !PATTERNS_ON_TOP.has(meta.shapeId);
+  const patternHtml = icons.length
+    ? `<div class="pattern-hint pattern-hint--a">` +
+      `<span class="ph-part">${icons.slice(0, half).join('')}</span>` +
+      `<span class="ph-part ph-part--tail">${icons.slice(half).join('')}</span>` +
+      `</div>` +
+      (sides ? `<div class="pattern-hint pattern-hint--b">${icons.slice(half).join('')}</div>` : '')
+    : '';
+
   // The landscape layout is one grid — readouts | board | buttons — and the
   // portrait one is the column it has always been. Both are the same DOM in
   // the same order; only the landscape media query's grid areas move the
   // pieces, so nothing re-renders when the phone turns.
   container.innerHTML = `
-    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}"
-         data-shape="${meta.shapeId}">
+    <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}${
+      sides ? ' pattern-sides' : ''
+    }" data-shape="${meta.shapeId}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 
@@ -187,7 +221,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <div class="hud-cell"><div class="k">${s.timeLabel}</div><div class="v" id="hud-time">0:00</div></div>
       </div>
 
-      ${meta.patternHint ? `<div class="pattern-hint">${meta.patternHint}</div>` : ''}
+      ${patternHtml}
 
       <div class="board-wrap" id="boardWrap">
         <div class="board" id="board"></div>

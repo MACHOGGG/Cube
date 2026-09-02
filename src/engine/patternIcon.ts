@@ -136,17 +136,19 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: bool
 }
 
 /**
- * The scoring-pattern row: one small diagram per pattern, for this shape's
- * own set. The name goes on the icon as its accessible label rather than
- * under it in print — the row sits in the play screen's top margin, where a
- * line of type would compete with the readouts either side of it, and the
- * diagrams say what they are without being named.
+ * The scoring patterns: one small diagram per pattern, for this shape's own
+ * set. The name goes on the icon as its accessible label rather than under
+ * it in print — a line of type would compete with the readouts beside it,
+ * and the diagrams say what they are without being named.
+ *
+ * 一枚一枚地返回，不是连成一条字符串：横屏里这一批要劈成两半，一半贴棋盘
+ * 左边、一半贴右边（见 gameShell），劈的时候要按「第几枚」来数，而不是去
+ * 切一段 HTML。
  */
-export function renderPatternHintRow(patterns: PatternDef[], lang: Lang): string {
-  return patterns
-    .map((p) => {
-      const label = p.labelKey ? (STRINGS[lang][p.labelKey] as string) : p.label;
-      return `<span class="pattern-icon" role="img" aria-label="${label}">${renderPatternIconSvg(p.cells, p.extent, p.hatched)}</span>`;
-    })
-    .join('');
+export function renderPatternHintIcons(patterns: PatternDef[], lang: Lang): string[] {
+  return patterns.map((p) => {
+    const label = p.labelKey ? (STRINGS[lang][p.labelKey] as string) : p.label;
+    return `<span class="pattern-icon" role="img" aria-label="${label}">${renderPatternIconSvg(p.cells, p.extent, p.hatched)}</span>`;
+  });
 }
+

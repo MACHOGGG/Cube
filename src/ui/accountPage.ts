@@ -165,6 +165,10 @@ export function renderAccountPage(
           <span class="profile-row-label">${s.multiplayerTitle}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
+        <!-- 这条线底下是「设置」：调完了合上窗，游戏就照你调的来。上面两条
+             不是设置，是两个去处（一个是兑码，一个是开小屋）。以后再有可调
+             的东西也排进这一段，玩家不用满页找。 -->
+        <hr class="genius-rule" />
         <!-- 《解锁更多配色》两种人都点得开。
              天才点开是挑颜色；没开通的点开是看看有什么——三套配色照样画出来，
              只是每一行挂着锁、点不动。「敬请期待」那四个字对一件已经做好的
@@ -328,7 +332,7 @@ export function renderAccountPage(
         <div class="pal-list">${ids.map(row).join('')}</div>
         <div class="btn-row">
           ${locked ? `<button class="genius-cta" id="palGo">${s.becomeGenius}</button>` : ''}
-          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="palClose">${s.closeBtn}</button>
+          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="palClose">${s.doneBtn}</button>
         </div>
       </div>
     `;
@@ -417,7 +421,7 @@ export function renderAccountPage(
         </div>
         <div class="btn-row">
           ${locked ? `<button class="genius-cta" id="flipGo">${s.becomeGenius}</button>` : ''}
-          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="flipClose">${s.closeBtn}</button>
+          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="flipClose">${s.doneBtn}</button>
         </div>
       </div>
     `;

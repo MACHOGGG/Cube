@@ -2227,6 +2227,24 @@ html.is-playing body { background: var(--play-bg); }
 /* One piece is 1em, so this is the only size the row needs. */
 .app--game .pattern-hint { font-size: clamp(12px, 2.3vh, 22px); }
 .app--game .pattern-icon svg { width: auto; height: auto; display: block; }
+/* 这一条其实是两段：前一半和后一半（横屏要把它们分到棋盘两边去，见下面的
+   .pattern-sides）。竖屏两段都在这一条里，段内和段间用同一个间距，看不出
+   是分开写的。 */
+.app--game .ph-part {
+  display: flex; align-items: center; justify-content: center; gap: inherit;
+}
+/* 只有一枚图示的时候后一半是空的——空的弹性子元素照样会多占一个间距。 */
+.app--game .ph-part:empty { display: none; }
+/* 右边那一条只在横屏出现。 */
+.app--game .pattern-hint--b { display: none; }
+/* 上下居中在读数和棋盘中间那段空当里。
+   靠的是 auto 外边距，不是某个算出来的数：地板排完版之后被 squareFloor 钉成
+   一个固定的正方形（见 boardResize），竖着这一列就多出一段空白，而空白会平
+   均分给所有写着 auto 的外边距——这里三个，图示的上边一个、地板的上下各一
+   个。三份一样大，于是「读数到图示」和「图示到棋盘」正好相等。
+   地板没被钉住的时候（七色圆球竖屏，菱形立着占满整列）没有空白可分，auto
+   得到 0，图示照旧贴在读数下面——那时候本来也没有空当可居中。 */
+.app--game > .pattern-hint--a { margin-top: auto; }
 
 /* The board's panel — the green field the pieces sit on — takes whatever is
    left, and each board scales itself inside it. */
@@ -2455,6 +2473,83 @@ html.is-playing body { background: var(--play-bg); }
   }
 }
 
+/* 横屏，除了七色圆球和进阶三角：得分图示不占上面那一条，劈成两半竖着贴在
+   棋盘左右两边，上下居中。
+   横过来之后棋盘是被高度卡住的（宽的方向还剩好几百像素没人用），所以上面
+   那一条每高一分，棋盘就小一圈；挪到两边去，那一行的高度就还给棋盘了。这
+   是玩家自己定的：「这样游戏版图和游戏内的布局都可以放更大」。
+   两个例外在 gameShell 的 PATTERNS_ON_TOP 里：七色圆球的菱形躺下来、进阶三
+   角的 V 张开，两个都是宽度吃满的，两边根本没有空当。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .app.app--game.pattern-sides {
+    /* 读数 | 图示 | 棋盘 | 图示 | 按钮。两条图示按自己的宽度取，剩下的全归
+       棋盘。只有一行了，上面那条不再存在。 */
+    grid-template-columns:
+      minmax(max(66px, 8.4%), min-content)
+      auto
+      minmax(0, 1fr)
+      auto
+      minmax(max(66px, 8.4%), min-content);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .app.app--game.pattern-sides > .hud { grid-column: 1; grid-row: 1; }
+  .app.app--game.pattern-sides > .pattern-hint--a { grid-column: 2; grid-row: 1; }
+  .app.app--game.pattern-sides > .board-wrap { grid-column: 3; grid-row: 1; }
+  .app.app--game.pattern-sides > .pattern-hint--b { grid-column: 4; grid-row: 1; display: flex; }
+  .app.app--game.pattern-sides > .controls { grid-column: 5; grid-row: 1; }
+  .app.app--game.pattern-sides > .stuck-end-btn { grid-column: 3; grid-row: 1; }
+  .app.app--game.pattern-sides > .pattern-hint,
+  .app.app--game.pattern-sides > .pattern-hint .ph-part {
+    flex-direction: column; flex-wrap: nowrap;
+    align-items: center; justify-content: center;
+    gap: clamp(12px, 4vh, 34px);
+  }
+  .app.app--game.pattern-sides > .pattern-hint { height: 100%; margin: 0; }
+  /* 左边那一条里的后一半是竖屏用的，横屏由右边那一条来出。用 display:none
+     藏，所以读屏软件两种排布下都只念得到一遍，不会重。 */
+  .app.app--game.pattern-sides > .pattern-hint--a .ph-part--tail { display: none; }
+}
+
+/* 横屏的结算页：一屏之内看完，不用先往下滑一下才按得到键。
+   横过来只剩三百多像素高，而这一窗是照竖屏的疏密排的——363px 的内容装进
+   390px 的屏幕，最下面那排《主页 / 分享 / 再来》正好掉到看不见的地方。所以
+   横屏把纵向的留白整体收一档：内边距、行间距、几处字号都往下压，横向不动
+   （那个方向本来就有的是地方）。分数还是这一页的主角，收得最少。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .overlay--end .modal { padding: 12px 22px; }
+  .overlay--end .modal h2 { font-size: 1.22rem; margin: 0 0 2px; }
+  .overlay--end .end-score-label { margin-top: 0; }
+  .overlay--end .modal .big-score { font-size: 2rem; margin: 0 0 2px; }
+  .overlay--end .end-avg { font-size: 0.92rem; margin: 0 0 6px; }
+  .overlay--end .end-rule { margin: 0 auto 7px; }
+  .overlay--end .end-breakdown { gap: 1px; margin: 0 0 7px; }
+  .overlay--end .modal p { margin: 0 0 9px; font-size: 0.85rem; }
+  .overlay--end .end-gone-note { margin: 0 0 7px; padding: 6px 10px; font-size: 0.8rem; }
+}
+
+/* 横屏的分享窗：图靠左占满高度，标题、说明和《完成》挪到它右边那一列。
+   竖着排的时候《关闭》在图的下面——横屏里图一高，那颗键就被顶出屏幕，而
+   把图缩到能容下它，图上棋盘的点面又看不清了。摆到侧边两件事都成立：图能
+   吃满这一屏的高度，键始终在。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .overlay--wide { padding: 8px; }
+  .share-modal {
+    display: grid; grid-template-columns: auto minmax(120px, auto);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    align-items: start; gap: 6px 16px;
+    padding: 10px 12px; text-align: left;
+    /* 宽度按内容收，不吃满这一窗：图只有那么宽，撑开的部分全是白的。 */
+    width: auto; max-width: min(760px, 100%);
+  }
+  .share-modal h2 { grid-column: 2; grid-row: 1; margin: 0; font-size: 1.1rem; }
+  .share-modal img {
+    grid-column: 1; grid-row: 1 / -1; align-self: center;
+    margin: 0; max-height: calc(100dvh - 36px);
+  }
+  .share-modal .hint { grid-column: 2; grid-row: 2; margin: 0; font-size: 0.8rem; }
+  .share-modal .btn-row { grid-column: 2; grid-row: 3; margin: 0; align-self: end; }
+}
+
 /* A game screen never scrolls, in either orientation: a board that slides
    under the finger and a page that slides under it at the same time is the
    worst of both. The column is sized to the viewport instead. */
@@ -2610,7 +2705,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-page .auth-hint--center { text-align: center; }
 /* 开小屋和进别人的小屋，中间那条线。用整块的浅色而不是 border——1px 的
    border 在高密度屏上会被抹成半透明的一道灰，看着像没画干净。 */
-.mp-rule {
+.mp-rule, .genius-rule {
   border: none; height: 2px; flex: 0 0 auto;
   width: 100%; max-width: 320px; margin: 10px auto 8px;
   background: var(--line); border-radius: var(--r-full);
