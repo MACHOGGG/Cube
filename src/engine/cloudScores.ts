@@ -53,6 +53,25 @@ function auth(): { email?: string; code?: string; token: string } | null {
 /** 登录了没有——记录页拿它决定要不要去云上取。 */
 export const signedIn = (): boolean => auth() !== null;
 
+/**
+ * 服务器认不出这台设备了。
+ *
+ * 令牌每次登录都会换一发，服务器只认最新的那一发。换过设备、或者在别处重新
+ * 登录过，这台设备手里那份就成了旧的——服务器回 401。
+ *
+ * 这件事必须留下痕迹。上线之后榜一直空着，查出来正是这个：八次上报，八次
+ * 401，一条都没写进去；而小屋照开照玩（开小屋问的是「是不是天才」，去 Creem
+ * 一查就过，根本不看令牌）。玩家那头看到的只有一张永远空着的榜，没有任何一
+ * 句话告诉他「你的成绩其实没上传」。
+ *
+ * 所以这里记一笔，让界面能说出来。别的失败（断网、超时）不记——那些下一次
+ * 就好了，不该也去催人重新登录。
+ */
+let tokenStale = false;
+
+/** 服务器认不出这台设备了吗——《记录与排名》拿它决定要不要提示重新登录。 */
+export const sessionExpired = (): boolean => tokenStale;
+
 async function post<T>(body: Record<string, unknown>): Promise<T | null> {
   const who = auth();
   if (!who) return null;
@@ -62,7 +81,12 @@ async function post<T>(body: Record<string, unknown>): Promise<T | null> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...who, storeClaim: isStoreChannel(), ...body }),
     });
+    if (res.status === 401) {
+      tokenStale = true;
+      return null;
+    }
     if (!res.ok) return null;
+    tokenStale = false;
     return (await res.json()) as T;
   } catch {
     // 断网、超时、服务器抽风——这一局照样算完，只是没上传。
@@ -127,12 +151,13 @@ export const fetchMine = (): Promise<CloudMine | null> => post<CloudMine>({ acti
 /**
  * 一张榜。mode 给了是那个玩法的单局榜，不给是累计总榜。
  *
- * 三种结果分得清清楚楚：拿到了、没权限看、别的原因没拿到。中间那种要单独
- * 说，因为它是唯一一种「你去订阅就看得到」的失败。
+ * 四种结果分得清清楚楚：拿到了、没权限看、登录过期了、别的原因没拿到。中间
+ * 那两种各要单独说，因为它们各有各的出路——一个去订阅，一个去重新登录；混
+ * 成一句「取不到」，玩家就只能一直等下去。
  */
 export type BoardResult =
   | { ok: true; page: BoardPage }
-  | { ok: false; reason: 'geniusOnly' | 'signedOut' | 'network' };
+  | { ok: false; reason: 'geniusOnly' | 'signedOut' | 'expired' | 'network' };
 
 export async function fetchBoard(mode?: string): Promise<BoardResult> {
   const who = auth();
@@ -149,7 +174,14 @@ export async function fetchBoard(mode?: string): Promise<BoardResult> {
       }),
     });
     if (res.status === 403) return { ok: false, reason: 'geniusOnly' };
+    // 令牌过期和「没订阅」是两件完全不同的事，给的出路也不同：一个是重新
+    // 登录，一个是去订阅。混成一句「取不到」，玩家只会一直等下去。
+    if (res.status === 401) {
+      tokenStale = true;
+      return { ok: false, reason: 'expired' };
+    }
     if (!res.ok) return { ok: false, reason: 'network' };
+    tokenStale = false;
     return { ok: true, page: (await res.json()) as BoardPage };
   } catch {
     return { ok: false, reason: 'network' };

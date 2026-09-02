@@ -78,6 +78,8 @@ export function renderRecordsPage(
   lang: Lang,
   /** 锁着的排行榜上那颗《成为 Slides 天才》按下去以后去哪儿。 */
   onWantGenius: () => void = () => {},
+  /** 登录过期那一屏上那颗《重新登录》按下去以后去哪儿——个人主页。 */
+  onReLogin: () => void = () => {},
 ): void {
   const s = STRINGS[lang];
   // One archive per game+mode; the page reads them all so 记录 is a single
@@ -176,6 +178,7 @@ export function renderRecordsPage(
       lang,
       shapeIds: [...new Set(sources.map((src) => src.card.id))],
       onWantGenius,
+      onReLogin,
     });
     openCenterPicker({ originEl: ranks, title: s.rankingsTitle, panel: big, panelClass: 'records-panel--big' });
   });

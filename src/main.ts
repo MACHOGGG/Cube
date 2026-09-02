@@ -14,7 +14,7 @@ import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { onGeniusChange, refreshEntitlement } from './engine/subscription';
-import { openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
+import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
@@ -543,8 +543,18 @@ function showRecordsPage() {
   teardown();
   trackScreen('records');
   // 锁着的排行榜上那颗《成为 Slides 天才》：开订阅那一窗，关掉之后回到这一页。
-  renderRecordsPage(root, recordSources, showMenu, currentLang, () =>
-    openGeniusWindow(currentLang, showRecordsPage),
+  //
+  // 《重新登录》直接开登录那一窗，不绕个人主页。绕不通：这台设备本地还以为
+  // 自己是订阅着的，个人主页上那颗宽键这时写的是《订阅状态》，点开是看订单
+  // 的，根本没有重新输邮箱密码的地方。而这个人恰恰需要的就是重新输一次——
+  // 令牌每次登录换一发，服务器只认最新那一发。
+  renderRecordsPage(
+    root,
+    recordSources,
+    showMenu,
+    currentLang,
+    () => openGeniusWindow(currentLang, showRecordsPage),
+    () => openAuthWindow(currentLang, 'login', showRecordsPage),
   );
   setNavTab('records');
   wireHomeTitle();

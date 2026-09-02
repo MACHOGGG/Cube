@@ -85,11 +85,44 @@ function lockedHtml(lang: Lang): string {
   </div>`;
 }
 
+/**
+ * 登录旧了的那一屏。
+ *
+ * 和锁着那一屏长得像，说的却是另一件事，所以话和按钮都得换：这个人已经付过
+ * 钱了，缺的只是在这台设备上重新登录一次。上线之后榜一直空着就是栽在这儿
+ * ——服务器一路回 401，界面一句话都没说。
+ */
+function expiredHtml(lang: Lang): string {
+  const s = STRINGS[lang];
+  const ghosts = Array.from(
+    { length: GHOST_ROWS },
+    (_, i) => `<div class="rank-row rank-row--ghost">
+      <span class="rank-place">${i + 1}</span>
+      <span class="rank-ghost-bar" style="width:${40 + ((i * 37) % 45)}%"></span>
+    </div>`,
+  ).join('');
+  return `<div class="rank-locked-wrap">
+    ${ghosts}
+    <div class="rank-lock">
+      <p class="rank-lock-line">${s.rankExpired}</p>
+      <button class="genius-cta" id="rankReLoginCta">${s.rankReLogin}</button>
+    </div>
+  </div>`;
+}
+
 export interface BoardViewOpts {
   lang: Lang;
   shapeIds: readonly string[];
   /** 点《成为 Slides 天才》时去哪儿。 */
   onWantGenius: () => void;
+  /**
+   * 点《重新登录》时去哪儿——个人主页上那颗《恢复购买》。
+   *
+   * 令牌过期的人和没订阅的人看到的是两屏不同的东西，因为他们要做的事不同：
+   * 一个已经付过钱了，只是这台设备的登录旧了；另一个是真的还没订阅。给错
+   * 出路比不给还糟。
+   */
+  onReLogin: () => void;
 }
 
 /**
@@ -128,6 +161,13 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
       body
         .querySelector<HTMLButtonElement>('#rankGeniusCta')
         ?.addEventListener('click', opts.onWantGenius);
+      return;
+    }
+    if (result.reason === 'expired') {
+      body.innerHTML = expiredHtml(opts.lang);
+      body
+        .querySelector<HTMLButtonElement>('#rankReLoginCta')
+        ?.addEventListener('click', opts.onReLogin);
       return;
     }
     body.innerHTML = `<p class="rank-empty">${
@@ -176,8 +216,14 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
           ).join('') + `<p class="rank-foot">${s.rankLocked}</p>`;
         return;
       }
+      // 缩略图上没地方放按钮，但话还是要说到——不然点开全页之前，这半块
+      // 屏幕看上去和「这张榜还没有人」一模一样。
       host.innerHTML = `<p class="rank-empty">${
-        result.reason === 'signedOut' ? s.rankSignedOut : s.rankEmpty
+        result.reason === 'signedOut'
+          ? s.rankSignedOut
+          : result.reason === 'expired'
+            ? s.rankExpired
+            : s.rankEmpty
       }</p>`;
       return;
     }

@@ -55,6 +55,8 @@ export interface I18nStrings {
   rankSignedOut: string;
   rankEmpty: string;
   rankLoading: string;
+  rankExpired: string;
+  rankReLogin: string;
   rankPlayers: string;
   rankMyPlace: string;
   rankNotPlayed: string;
@@ -441,6 +443,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Sign in and your runs go on the board',
     rankEmpty: 'Nobody on this board yet',
     rankLoading: 'Fetching…',
+    rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
+    rankReLogin: 'Sign in again',
     rankPlayers: '{n} on this board',
     rankMyPlace: 'You are #{n}',
     rankNotPlayed: 'You have not played this one yet',
@@ -739,6 +743,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
     rankEmpty: 'Personne à ce classement pour l’instant',
     rankLoading: 'Chargement…',
+    rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
+    rankReLogin: 'Se reconnecter',
     rankPlayers: '{n} joueurs classés',
     rankMyPlace: 'Vous êtes {n}ᵉ',
     rankNotPlayed: 'Vous n’avez pas encore joué celui-ci',
@@ -1037,6 +1043,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登入之後，你的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
     rankLoading: '正在取…',
+    rankExpired: '登入已過期，重新登入後成績才會上榜',
+    rankReLogin: '重新登入',
     rankPlayers: '{n} 人在榜',
     rankMyPlace: '你排第 {n}',
     rankNotPlayed: '這個玩法你還沒打過',
@@ -1335,6 +1343,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登录之后，你的成绩才会上榜',
     rankEmpty: '这张榜上还没有人',
     rankLoading: '正在取…',
+    rankExpired: '登录已过期，重新登录后成绩才会上榜',
+    rankReLogin: '重新登录',
     rankPlayers: '{n} 人在榜',
     rankMyPlace: '你排第 {n}',
     rankNotPlayed: '这个玩法你还没打过',
