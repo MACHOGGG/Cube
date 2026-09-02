@@ -237,6 +237,12 @@ export interface I18nStrings {
   mpNudge: string;
   /** 名单上给中途走掉的人挂的那个小标。 */
   mpLeftTag: string;
+  /** 《解锁更多配色》那扇窗：标题、一句说明、三套的名字。 */
+  paletteTitle: string;
+  paletteHint: string;
+  paletteNow: string;
+  paletteJia: string;
+  paletteBing: string;
   /** 开局前问一句：这个玩法的规则你会吗？{name} 是玩法名。 */
   mpKnowRules: string;
   mpKnowYes: string;
@@ -542,6 +548,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: 'Room total',
     mpNudge: 'Nudge the host',
     mpLeftTag: 'left',
+    paletteTitle: 'Piece colours',
+    paletteHint: 'Changes the pieces in every board. Off while the colourblind palette is on.',
+    paletteNow: 'Original',
+    paletteJia: 'Deep',
+    paletteBing: 'Soft',
     mpKnowRules: 'Do you know how {name} works?',
     mpKnowYes: 'I do',
     mpKnowNo: 'Teach me',
@@ -820,6 +831,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: 'Total de la salle',
     mpNudge: 'Presser l’hôte',
     mpLeftTag: 'parti',
+    paletteTitle: 'Couleurs des pièces',
+    paletteHint: 'S’applique à tous les plateaux. Inactif quand la palette daltonienne est active.',
+    paletteNow: 'D’origine',
+    paletteJia: 'Profonde',
+    paletteBing: 'Douce',
     mpKnowRules: 'Tu connais les règles de {name} ?',
     mpKnowYes: 'Oui',
     mpKnowNo: 'Explique-moi',
@@ -1098,6 +1114,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: '全屋總分',
     mpNudge: '催房主',
     mpLeftTag: '已離開',
+    paletteTitle: '棋子配色',
+    paletteHint: '換的是每個玩法裡棋子的顏色。開著色盲配色時這裡不生效。',
+    paletteNow: '原本',
+    paletteJia: '沉穩',
+    paletteBing: '柔和',
     mpKnowRules: '會{name}的規則嗎？',
     mpKnowYes: '會',
     mpKnowNo: '不會，教我',
@@ -1376,6 +1397,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: '全屋总分',
     mpNudge: '催房主',
     mpLeftTag: '已离开',
+    paletteTitle: '棋子配色',
+    paletteHint: '换的是每个玩法里棋子的颜色。开着色盲配色时这里不生效。',
+    paletteNow: '原本',
+    paletteJia: '沉稳',
+    paletteBing: '柔和',
     mpKnowRules: '会{name}的规则吗？',
     mpKnowYes: '会',
     mpKnowNo: '不会，教我',

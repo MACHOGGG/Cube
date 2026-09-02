@@ -5,7 +5,15 @@ import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
-import { colorblindOn, setColorblind } from '../engine/palettePref';
+import {
+  PIECE_VARIANTS,
+  colorblindOn,
+  pieceVariant,
+  setColorblind,
+  setPieceVariant,
+  variantSwatch,
+  type PieceVariant,
+} from '../engine/palettePref';
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
@@ -17,6 +25,9 @@ import {
   openStatusWindow,
   runStoreRestore,
 } from './subscribe';
+
+/** 「原本」那一套的代表色——就是三角/六边圆球在用的那六支的前五支。 */
+const BASE_SWATCH = ['#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52'] as const;
 
 export type { AuthTab } from './subscribe';
 import type { AuthTab } from './subscribe';
@@ -48,6 +59,11 @@ export function renderAccountPage(
 ) {
   const s = STRINGS[lang];
   const privileges = PRIVILEGES[lang];
+  const VARIANT_NAME: Record<PieceVariant, string> = {
+    now: s.paletteNow,
+    jia: s.paletteJia,
+    bing: s.paletteBing,
+  };
   // Where the wide pill leads, and what it is called, is decided by which
   // counter can charge this build. The site has accounts because an address
   // is the only identity it has; the store builds have none, because Apple
@@ -125,7 +141,18 @@ export function renderAccountPage(
           <span class="profile-row-label">${s.multiplayerTitle}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
-        ${privileges.map(lockedRow).join('')}
+        <!-- 《解锁更多配色》不再是一行「敬请期待」了：天才点开能挑棋子的
+             配色，没开通的人看到的还是原来那把锁。它是 PRIVILEGES 的第一
+             条，所以从第二条起才继续挂锁。 -->
+        ${
+          subscribed
+            ? `<button class="profile-row" id="paletteRow">
+                 <span class="profile-row-label">${privileges[0]}</span>
+                 <span class="profile-row-value">${VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;</span>
+               </button>`
+            : lockedRow(privileges[0])
+        }
+        ${privileges.slice(1).map(lockedRow).join('')}
       </section>
 
       <!-- Tarifs, terms, refunds, privacy, contact — the five documents a
@@ -216,6 +243,53 @@ export function renderAccountPage(
   /** 更换图标 — the icon on the browser tab. Picking one swaps it there and
    *  then, and the choice is remembered, so a player sees their own tab icon
    *  on every later visit. */
+  /**
+   * 棋子配色那扇窗。
+   *
+   * 每一套用一条真的色带来说明自己——名字（「沉稳」「柔和」）只是标签，
+   * 真正要看的是那几支颜色摆在一起是什么样。色带画的是这套配色的前五支，
+   * 底下垫着棋盘那块褐色，因为那才是它们实际待的地方。
+   */
+  function openPalettePicker() {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    const row = (v: PieceVariant) =>
+      `<button class="pal-opt" data-pal="${v}">
+         <span class="pal-name">${VARIANT_NAME[v]}</span>
+         <span class="pal-strip">${variantSwatch(v, BASE_SWATCH)
+           .map((c) => `<span style="background:${c}"></span>`)
+           .join('')}</span>
+       </button>`;
+    overlay.innerHTML = `
+      <div class="modal pal-modal">
+        <h2>${s.paletteTitle}</h2>
+        <p class="hint">${s.paletteHint}</p>
+        <div class="pal-list">${PIECE_VARIANTS.map(row).join('')}</div>
+        <div class="btn-row"><button class="primary" id="palClose">${s.closeBtn}</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.pal-opt'));
+    const mark = (v: PieceVariant) => {
+      for (const el of opts) el.classList.toggle('pal-opt--on', el.dataset.pal === v);
+      const value = container.querySelector<HTMLElement>('#paletteRow .profile-row-value');
+      if (value) value.innerHTML = `${VARIANT_NAME[v]}&nbsp;&rsaquo;`;
+    };
+    mark(pieceVariant());
+    for (const el of opts) {
+      el.addEventListener('click', () => {
+        const v = el.dataset.pal as PieceVariant;
+        setPieceVariant(v);
+        mark(v);
+      });
+    }
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#palClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
   function openIconPicker() {
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
@@ -265,6 +339,7 @@ export function renderAccountPage(
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
   on('iconRow', openIconPicker);
+  on('paletteRow', openPalettePicker);
   on('cvdRow', () => {
     setColorblind(!colorblindOn());
     const row = container.querySelector<HTMLButtonElement>('#cvdRow');

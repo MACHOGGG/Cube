@@ -4,7 +4,7 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
-import { colorblindOn, onColorblindChange } from '../engine/palettePref';
+import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
@@ -112,7 +112,10 @@ export function createSquareGame(): ShapeGame {
       });
 
       const pickPalette = (): readonly string[] =>
-        (isBomb ? BOMB_PALETTES : PALETTES)[colorblindOn() ? 'colorblind' : 'standard'];
+        themedPalette(
+          (isBomb ? BOMB_PALETTES : PALETTES)[colorblindOn() ? 'colorblind' : 'standard'],
+          isBomb ? RED_IDX : -1,
+        );
       let COLORS: readonly string[] = pickPalette();
 
       let rows = BOARD_DIM;

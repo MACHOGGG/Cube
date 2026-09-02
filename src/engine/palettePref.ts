@@ -52,6 +52,85 @@ export function onColorblindChange(fn: Listener): () => void {
   return () => listeners.delete(fn);
 }
 
+
+// ---------------------------------------------------------------------------
+// 棋子配色 —— Slides 天才的《解锁更多配色》
+// ---------------------------------------------------------------------------
+
+/**
+ * 换的是棋子那几支颜色，不是整站的主题。
+ *
+ * 三套：'now' 是一直用着的那一套，'jia' 沉稳（明暗和它接近，气质不变），
+ * 'bing' 柔和（整体提亮一档，棋子从底板上跳出来）。两套新的都是照着三个门槛
+ * 优化出来的：棋子彼此 ≥20、离底板 ≥28 且亮度对比 ≥2.2、离「空球」那个空心圈
+ * ≥18（现在这套在最后一项只有 12.7，就是「灰球和空球分不清」那件事）。
+ *
+ * 每套里的七支是按「贪心最远点」排过序的：任取前 N 支，它们彼此都还分得开。
+ * 各个玩法用几支颜色不一样（圆球 4 支、大三角 5 支、方块和三角 6 支、七色圆球
+ * 和进阶三角 7 支），排过序之后直接切前 N 支就行，不用为每个玩法各写一套。
+ * 实测最差的一档（丙的前 7 支）彼此最近 24.5，离底板 40.8。
+ */
+export type PieceVariant = 'now' | 'jia' | 'bing';
+export const PIECE_VARIANTS: readonly PieceVariant[] = ['now', 'jia', 'bing'];
+const VARIANT_KEY = 'slides_piece_palette';
+const VARIANT_COLORS: Record<'jia' | 'bing', readonly string[]> = {
+  jia: ['#26aac0', '#df4b65', '#90a43e', '#9c5ac0', '#c89057', '#2b78d7', '#078664'],
+  bing: ['#56dcbd', '#d97d64', '#afc6ff', '#edbf75', '#feacec', '#849f54', '#02a4be'],
+};
+
+function readVariant(): PieceVariant {
+  try {
+    const v = localStorage.getItem(VARIANT_KEY);
+    return v === 'jia' || v === 'bing' ? v : 'now';
+  } catch {
+    return 'now';
+  }
+}
+let variant: PieceVariant = readVariant();
+
+export function pieceVariant(): PieceVariant {
+  return variant;
+}
+
+/** 几支代表色，给设置页面画小圆点用。 */
+export function variantSwatch(v: PieceVariant, base: readonly string[]): readonly string[] {
+  return v === 'now' ? base.slice(0, 5) : VARIANT_COLORS[v].slice(0, 5);
+}
+
+/**
+ * 换一套。走的是色盲开关那同一组监听器——每个玩法本来就订着它，换完立刻
+ * 重画，不用再各自接一根线。
+ */
+export function setPieceVariant(next: PieceVariant): void {
+  if (next === variant) return;
+  variant = next;
+  try {
+    localStorage.setItem(VARIANT_KEY, next);
+  } catch {
+    /* 私密模式：这一次还能用，只是关掉标签页就忘了 */
+  }
+  for (const fn of Array.from(listeners)) fn();
+}
+
+/**
+ * 把一个玩法的标准配色换成玩家选的那一套。
+ *
+ * 两种情况原样返回：选的是 'now'，或者色盲模式开着——色盲那一套是给看不清
+ * 的人用的，是需求不是喜好，不该被一个「换个好看的」的设置覆盖掉。
+ *
+ * keepIdx 是炸弹模式里那一支危险色的位置。炸弹配色是「拿标准配色、把某一格
+ * 换成固定的红」算出来的，直接整套替换会把那支红也换掉——红是规则的一部分，
+ * 不是配色的一部分。
+ */
+export function themedPalette(cols: readonly string[], keepIdx = -1): readonly string[] {
+  if (on || variant === 'now') return cols;
+  const v = VARIANT_COLORS[variant];
+  if (!v || cols.length > v.length) return cols;
+  const out = v.slice(0, cols.length);
+  if (keepIdx >= 0 && keepIdx < out.length) out[keepIdx] = cols[keepIdx];
+  return out;
+}
+
 /**
  * The inline-SVG colours the page's own glyphs are drawn with, mapped onto
  * the Okabe–Ito set.

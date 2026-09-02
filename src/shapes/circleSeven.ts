@@ -4,7 +4,7 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
-import { colorblindOn, onColorblindChange } from '../engine/palettePref';
+import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
@@ -235,7 +235,7 @@ export function createCircleSevenGame(): ShapeGame {
       });
 
       const pickPalette = (): readonly string[] =>
-        PALETTES[colorblindOn() ? 'colorblind' : 'standard'];
+        themedPalette(PALETTES[colorblindOn() ? 'colorblind' : 'standard']);
       let COLORS: readonly string[] = pickPalette();
       let grid: Tile[][] = [];
       let R = 0,

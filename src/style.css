@@ -14,6 +14,26 @@
   --line: #E5DAD8;
   --accent: #BE5762;
   --nav-glow: 190, 87, 98;
+  /* ---- 圆角的档位 ----------------------------------------------------
+     全站原本散着十六个写死的圆角值（2 / 6 / 8 / 10 / 11 / 12 / 14 / 16 /
+     18 / 20 / 22 / 26 / 28 / 30 / 100 / 999），每加一个新页面就多一次
+     「这里该用几像素」的猜测。收成下面这几档，以后调一处全站跟着走。
+
+     档位是照现有的值归的，不是另起一套：每个元件挪动都不超过 2px，所以这
+     一次改动几乎看不出来——它买的是以后，不是现在。
+     故意留在档位之外的几个，都各有各的道理，见用到它们的地方：
+       2px  火花粒子（7×7，套上 12px 就成圆点了）
+       6px  颜色小方片（20×20）
+       8px  得分描边框、字母格
+       10px 小卡片里的图钉、色带
+       11px 读数条最左最右那两格（跟着 12px 的外框减去 1px 边）
+       50%  真正的圆
+       clamp(...) 游戏页那两处，跟着屏幕缩放，本来就不是固定值 */
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-full: 999px;
   --nav-btn: 58px;   /* the dock's icon size */
   --nav-pad: 8px;    /* and its padding, so the active lift can be derived */
   --accent-ink: #7A2E37;
@@ -220,12 +240,12 @@ h1 {
 .icon-btn {
   font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
   background: var(--surface); color: var(--ink-soft); border: 1px solid var(--line);
-  border-radius: 100px; padding: 6px 16px; cursor: pointer;
+  border-radius: var(--r-full); padding: 6px 16px; cursor: pointer;
 }
 .icon-btn:hover { filter: brightness(0.98); border-color: var(--ink-faint); }
 .icon-btn.active { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
 
-.hud { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-radius: 12px; border: 1px solid var(--line); }
+.hud { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-radius: var(--r-sm); border: 1px solid var(--line); }
 .hud-cell:first-child { border-radius: 11px 0 0 11px; }
 .hud-cell:last-child { border-radius: 0 11px 11px 0; }
 .hud-cell { background: var(--surface); padding: 10px 8px; text-align: center; }
@@ -278,7 +298,7 @@ h1 {
    a player is actually playing for, and it only shows for a beat. */
 .gain-pop {
   background: var(--accent); color: #fff; font-family: 'JetBrains Mono', monospace;
-  font-size: 17px; font-weight: 800; padding: 4px 13px; border-radius: 100px;
+  font-size: 17px; font-weight: 800; padding: 4px 13px; border-radius: var(--r-full);
   white-space: nowrap; opacity: 0;
   box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.45);
   animation: gain-pop 1.4s cubic-bezier(.22,1,.36,1) both;
@@ -350,7 +370,7 @@ h1 {
   touch-action: none; user-select: none;
 }
 .board {
-  position: relative; background: var(--board-bg); border-radius: 16px;
+  position: relative; background: var(--board-bg); border-radius: var(--r-md);
   box-shadow: var(--shadow); overflow: hidden;
 }
 
@@ -542,7 +562,7 @@ h1 {
   display: block; width: 100%; margin: 4px 0;
   font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600;
   background: var(--surface); color: #B91C1C; border: 1px solid rgba(220,38,38,0.4);
-  border-radius: 12px; padding: 10px 16px; cursor: pointer;
+  border-radius: var(--r-sm); padding: 10px 16px; cursor: pointer;
 }
 .stuck-end-btn:hover { filter: brightness(0.98); border-color: #B91C1C; }
 .stuck-end-btn[hidden] { display: none; }
@@ -620,13 +640,13 @@ h1 {
    to read or close. */
 .overlay--top { z-index: 120; }
 .overlay.show { opacity: 1; pointer-events: auto; }
-.modal { background: var(--surface); border-radius: 16px; padding: 28px 24px; width: 100%; max-width: 340px; box-shadow: var(--shadow); text-align: center; }
+.modal { background: var(--surface); border-radius: var(--r-md); padding: 28px 24px; width: 100%; max-width: 340px; box-shadow: var(--shadow); text-align: center; }
 .overlay.opaque .modal { box-shadow: none; background: transparent; }
 .modal h2 { font-family: 'Fraunces', Georgia, serif; margin: 0 0 8px; font-size: 1.5rem; }
 .modal p { color: var(--ink-soft); margin: 0 0 20px; font-size: 0.95rem; }
 .modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
 .share-modal { max-width: 420px; }
-.share-modal img { width: 100%; border-radius: 12px; display: block; margin: 4px 0 12px; box-shadow: var(--shadow); }
+.share-modal img { width: 100%; border-radius: var(--r-sm); display: block; margin: 4px 0 12px; box-shadow: var(--shadow); }
 .share-modal .hint { margin: 0 0 16px; }
 .end-score-label {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
@@ -643,7 +663,7 @@ h1 {
    and short of the modal's own edges, so it reads as a divider inside the
    card rather than as the card being cut in two. */
 .end-rule {
-  width: min(62%, 190px); height: 3px; border-radius: 999px;
+  width: min(62%, 190px); height: 3px; border-radius: var(--r-full);
   background: var(--line); margin: 0 auto 14px;
 }
 .end-breakdown { display: flex; flex-direction: column; gap: 3px; margin: 0 0 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
@@ -664,7 +684,7 @@ h1 {
 .end-hazard-bg.show { display: flex; }
 .btn-row { display: flex; gap: 10px; }
 button {
-  font-family: 'Karla', sans-serif; font-weight: 600; font-size: 0.95rem; border: none; border-radius: 100px;
+  font-family: 'Karla', sans-serif; font-weight: 600; font-size: 0.95rem; border: none; border-radius: var(--r-full);
   padding: 11px 18px; cursor: pointer; flex: 1; transition: transform .1s ease, filter .15s ease;
 }
 button:active { transform: scale(0.97); }
@@ -679,14 +699,14 @@ button:hover { filter: brightness(1.05); }
 .menu-grid { display: flex; flex-direction: column; gap: 12px; }
 .shape-card {
   display: flex; align-items: center; gap: 14px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
   padding: 14px 16px; cursor: pointer; text-align: left; width: 100%;
   transition: transform .1s ease, border-color .15s ease;
 }
 .shape-card:hover { border-color: var(--accent); }
 .shape-card:active { transform: scale(0.98); }
 .shape-card .glyph {
-  width: 52px; height: 52px; border-radius: 12px; background: var(--board-bg);
+  width: 52px; height: 52px; border-radius: var(--r-sm); background: var(--board-bg);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .shape-card .glyph svg { width: 32px; height: 32px; }
@@ -714,7 +734,7 @@ button:hover { filter: brightness(1.05); }
 .menu-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .shape-card-compact {
   display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
   padding: 14px 10px; cursor: pointer;
   transition: transform .1s ease, border-color .15s ease;
 }
@@ -782,7 +802,7 @@ button:hover { filter: brightness(1.05); }
   display: inline-block;
   pointer-events: auto;
   padding: 4px 26px 10px;
-  border-radius: 22px;
+  border-radius: var(--r-lg);
   /* 《催房主》掉进来的图形画在这块玻璃里（见 titleRain.ts）：position 给
      画布一个定位的参照，overflow 把弹跳裁在框内——弹到框外去的话，那就不是
      「掉进标题里」而是「有东西飞过屏幕」了。 */
@@ -900,7 +920,7 @@ button:hover { filter: brightness(1.05); }
    一个 2:1 的图形没法和正方形图标严丝合缝地一样大，这里取「占满这一列」，
    是不越界的前提下能给到的最大。 */
 .home-icon-btn--wide-art { aspect-ratio: 194 / 100; align-self: center; }
-.home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
+.home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--r-sm); }
 
 /* The press cue: a quick squash and tilt, fired from pointerdown so it plays
    through even when the same tap opens a modal on top of it. */
@@ -919,12 +939,12 @@ button:hover { filter: brightness(1.05); }
    sitting beside the burst on a desktop — only the surrounding size changes. */
 .bomb-panel {
   width: 100%; aspect-ratio: 1; box-sizing: border-box;
-  background: #A5412C; border-radius: 22px; padding: 7%;
+  background: #A5412C; border-radius: var(--r-lg); padding: 7%;
   display: flex; flex-direction: column; justify-content: space-between; gap: 6%;
 }
 .bomb-row {
   flex: 1; display: flex; align-items: center; justify-content: space-evenly; gap: 4%;
-  background: rgba(255, 255, 255, 0.14); border-radius: 12px; padding: 4% 5%;
+  background: rgba(255, 255, 255, 0.14); border-radius: var(--r-sm); padding: 4% 5%;
 }
 .bomb-chip { max-width: none; width: 27%; flex: none; }
 /* The 90s burst is wider than its bar and deliberately spills into the tiers
@@ -936,7 +956,7 @@ button:hover { filter: brightness(1.05); }
 
 /* The blown-up copy in the centre picker: same proportions, bigger hit
    targets, and enough room for the 90s row to open into three chips. */
-.bomb-panel--big { width: min(78vw, 360px); border-radius: 28px; }
+.bomb-panel--big { width: min(78vw, 360px); border-radius: var(--r-xl); }
 
 /* Desktop only: the panel is itself one card at the head of the bottom row,
    with every tier's chips directly clickable. */
@@ -1042,7 +1062,7 @@ button:hover { filter: brightness(1.05); }
 /* ---------- profile page rows ---------- */
 .profile-row {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
   padding: 13px 16px; cursor: pointer; color: inherit; font: inherit;
 }
 .profile-row:hover { border-color: var(--accent); }
@@ -1061,7 +1081,7 @@ button:hover { filter: brightness(1.05); }
    call-to-action is gone. */
 .genius-cta {
   display: block; flex: none; width: fit-content; margin: 2px auto 10px;
-  padding: 12px 26px; border: none; border-radius: 16px;
+  padding: 12px 26px; border: none; border-radius: var(--r-md);
   background: #F5A93F; color: #FFFFFF;
   font-family: inherit; font-weight: 700; font-size: 16px; letter-spacing: 0.02em;
   box-shadow: 0 4px 14px rgba(233, 148, 40, 0.35); cursor: pointer;
@@ -1092,7 +1112,7 @@ button:hover { filter: brightness(1.05); }
    tapping it flies the whole card to the middle of a dimmed page, where the
    number is shown in full, sized down as needed to stay on one screen. */
 .total-card {
-  width: 100%; flex: none; border: none; border-radius: 22px; padding: 18px 20px 16px;
+  width: 100%; flex: none; border: none; border-radius: var(--r-lg); padding: 18px 20px 16px;
   background: #C4838D; color: #fff; cursor: pointer; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
@@ -1106,7 +1126,7 @@ button:hover { filter: brightness(1.05); }
 .total-card-sub { font-size: 0.78rem; opacity: 0.85; }
 /* The blown-up copy: wider, roomier, and free to use the full screen width. */
 .total-card--big {
-  width: min(92vw, 560px); border-radius: 30px; padding: 30px 26px 24px; cursor: default;
+  width: min(92vw, 560px); border-radius: var(--r-xl); padding: 30px 26px 24px; cursor: default;
   gap: 6px;
 }
 .total-card--big .total-card-title { font-size: 1.4rem; }
@@ -1130,7 +1150,7 @@ button:hover { filter: brightness(1.05); }
 @media (max-width: 719px) {
   /* 46vh 是给整幅宽的面板定的；缩到半幅之后同样的高度只剩一大片空底色，
      所以这里按缩略版自己的内容给高度：五行 + 底下那句话，正好 260。 */
-  .records-panels .records-panel { padding: 18px 12px; gap: 10px; border-radius: 20px; min-height: 260px; }
+  .records-panels .records-panel { padding: 18px 12px; gap: 10px; border-radius: var(--r-lg); min-height: 260px; }
   .records-panels .records-row { padding: 7px 10px; gap: 6px; }
   .records-panels .records-row-glyph { width: 18px; height: 18px; }
   /* 基础样式里这行是竖排的 flex（名字/玩法/日期三层）。缩略版只剩名字一层，
@@ -1148,14 +1168,14 @@ button:hover { filter: brightness(1.05); }
 }
 
 .records-panel {
-  border-radius: 26px; padding: 30px 26px; min-height: 46vh;
+  border-radius: var(--r-xl); padding: 30px 26px; min-height: 46vh;
   display: flex; flex-direction: column; gap: 18px;
 }
 .records-panel--records { background: #F2C39B; }
 .records-panel--ranks { background: #9BA5D6; }
 
 /* The ruled lines the sheet draws: an empty slot waiting for an entry. */
-.records-rule { height: 7px; border-radius: 100px; background: rgba(255, 255, 255, 0.92); flex: 0 0 auto; }
+.records-rule { height: 7px; border-radius: var(--r-full); background: rgba(255, 255, 255, 0.92); flex: 0 0 auto; }
 
 /* 记录行的字是写死的深褐，不跟主题走——因为它底下那颗药丸也是写死的
    （白色压到 92%，落在桃色面板上，两种主题里都是近乎纯白）。字要是用
@@ -1165,7 +1185,7 @@ button:hover { filter: brightness(1.05); }
    底是固定的，字就也得是固定的。 */
 .records-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  background: rgba(255, 255, 255, 0.92); border: none; border-radius: 100px;
+  background: rgba(255, 255, 255, 0.92); border: none; border-radius: var(--r-full);
   padding: 9px 18px; cursor: pointer; flex: 0 0 auto; color: #453023;
   font-family: 'Karla', sans-serif; text-align: left;
   transition: transform 140ms ease, background 160ms ease;
@@ -1202,7 +1222,7 @@ button:hover { filter: brightness(1.05); }
 }
 .mp-cd-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 5px 12px; border-radius: 100px;
+  padding: 5px 12px; border-radius: var(--r-full);
   background: var(--surface); color: var(--ink-soft);
   font-size: 0.86rem;
 }
@@ -1243,6 +1263,28 @@ button:hover { filter: brightness(1.05); }
   pointer-events: none; z-index: 1;
 }
 
+/* 棋子配色那扇窗。每一套用一条真的色带说明自己——名字只是标签，要看的是
+   那几支颜色摆在一起是什么样，所以色带底下垫着棋盘那块褐色，那才是它们
+   实际待的地方。 */
+.pal-modal { text-align: left; }
+.pal-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 4px; }
+.pal-opt {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--surface); border: 2px solid var(--line);
+  font: inherit; color: var(--ink); cursor: pointer; text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.pal-opt:hover { border-color: var(--ink-faint); }
+.pal-opt--on { border-color: var(--accent); background: var(--accent-soft); }
+.pal-opt:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pal-name { flex: 0 0 auto; min-width: 3.4em; font-weight: 700; font-size: 0.95rem; }
+.pal-strip {
+  flex: 1 1 auto; display: flex; gap: 5px;
+  background: var(--play-panel); border-radius: 10px; padding: 6px 8px;
+}
+.pal-strip span { flex: 1 1 0; aspect-ratio: 1; border-radius: 50%; }
+
 /* ---------- persistent bottom nav ---------- */
 /* Two round entry points — 个人主页 and 记录与排名 — pinned to the bottom of
    the viewport. It is a sibling of #app rather than part of any screen, so it
@@ -1260,7 +1302,7 @@ button:hover { filter: brightness(1.05); }
 .home-nav-dock {
   display: flex; align-items: stretch; gap: 0;
   padding: 0;
-  border-radius: 22px;
+  border-radius: var(--r-lg);
   background: var(--nav-dock);
   box-shadow: 0 6px 20px -8px rgba(46, 36, 48, 0.32), 0 0 0 1px rgba(46, 36, 48, 0.06);
 }
@@ -1271,7 +1313,7 @@ button:hover { filter: brightness(1.05); }
 .home-nav-btn {
   pointer-events: auto;
   flex: 1 1 0; min-width: calc(var(--nav-btn) + 20px);
-  padding: var(--nav-pad) 10px; border-radius: 22px;
+  padding: var(--nav-pad) 10px; border-radius: var(--r-lg);
   display: flex; align-items: flex-end; justify-content: center;
   background: none; border: none; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -1349,7 +1391,7 @@ button:hover { filter: brightness(1.05); }
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .pill-switch {
-  flex: none; width: 46px; height: 27px; border-radius: 999px;
+  flex: none; width: 46px; height: 27px; border-radius: var(--r-full);
   background: var(--line); position: relative;
   transition: background-color 200ms ease;
 }
@@ -1377,7 +1419,7 @@ button:hover { filter: brightness(1.05); }
    act — it sits smaller than the section it introduces so the eye goes past
    it to the panel below. */
 .profile-pill {
-  width: 100%; flex: none; border: none; border-radius: 999px; padding: 10px 18px;
+  width: 100%; flex: none; border: none; border-radius: var(--r-full); padding: 10px 18px;
   background: #C7A18C; color: #fff; cursor: pointer;
   font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.98rem; letter-spacing: 0.03em;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
@@ -1426,7 +1468,7 @@ button:hover { filter: brightness(1.05); }
    one block rather than as more page-level rows. */
 .genius-panel {
   width: 100%; box-sizing: border-box; margin-top: 4px;
-  background: #F5F2EE; border-radius: 20px; padding: 16px 14px 18px;
+  background: #F5F2EE; border-radius: var(--r-lg); padding: 16px 14px 18px;
   display: flex; flex-direction: column; gap: 10px;
 }
 .genius-panel .menu-section-label { margin: 2px 0 2px; }
@@ -1450,7 +1492,7 @@ button:hover { filter: brightness(1.05); }
 .auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
 .auth-tab {
   flex: 1; background: var(--board-bg); color: var(--ink-soft); border: 1px solid transparent;
-  border-radius: 100px; padding: 9px 12px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.9rem;
+  border-radius: var(--r-full); padding: 9px 12px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.9rem;
 }
 .auth-tab.active { background: var(--accent-soft); color: var(--accent-ink); }
 
@@ -1480,7 +1522,7 @@ button:hover { filter: brightness(1.05); }
 .plan-row {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   width: 100%; text-align: left; color: var(--ink);
-  background: var(--board-bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 16px;
 }
 .plan-row:hover { border-color: var(--accent); }
 .plan-row:active { transform: translateY(1px) scale(0.995); }
@@ -1501,7 +1543,7 @@ button:hover { filter: brightness(1.05); }
 .auth-field span { display: block; font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 5px; }
 .auth-field input {
   width: 100%; box-sizing: border-box; color: var(--ink); font-size: 0.95rem;
-  background: var(--board-bg); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 14px;
 }
 .auth-field input:focus { outline: none; border-color: var(--accent); }
 /* A quiet way out of a window that is mostly about something else —
@@ -1518,7 +1560,7 @@ button:hover { filter: brightness(1.05); }
    on the window that has to be checked before the password below it is set. */
 .auth-account {
   text-align: left; margin: 0 0 14px; padding: 10px 14px;
-  background: var(--board-bg); border: 1px solid var(--line); border-radius: 12px;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm);
 }
 .auth-account-label {
   display: block; font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 3px;
@@ -1554,7 +1596,7 @@ button:hover { filter: brightness(1.05); }
 .gift-row {
   display: flex; align-items: center; gap: 10px; margin-top: 8px;
   background: var(--board-bg); border: 1px solid var(--line);
-  border-radius: 12px; padding: 8px 10px 8px 12px;
+  border-radius: var(--r-sm); padding: 8px 10px 8px 12px;
 }
 .gift-code {
   font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1rem;
@@ -1562,7 +1604,7 @@ button:hover { filter: brightness(1.05); }
 }
 .gift-note { flex: 1; font-size: 0.76rem; color: var(--ink-faint); }
 .gift-copy {
-  flex: 0 0 auto; border: none; border-radius: 999px; cursor: pointer;
+  flex: 0 0 auto; border: none; border-radius: var(--r-full); cursor: pointer;
   background: var(--accent-soft); color: var(--accent-ink);
   font: inherit; font-size: 0.78rem; font-weight: 600; padding: 5px 12px;
 }
@@ -1746,7 +1788,7 @@ html.lang-locked, html.lang-locked body {
 .lang-switch-modal { max-width: 300px; }
 .lang-switch-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .lang-switch-item {
-  background: var(--board-bg); border: 1px solid var(--line); border-radius: 12px;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm);
   padding: 12px; font-weight: 600; font-family: 'Fraunces', Georgia, serif; font-size: 1rem;
   color: var(--ink); cursor: pointer; transition: border-color .15s ease, background .15s ease;
 }
@@ -1764,8 +1806,8 @@ html.lang-locked, html.lang-locked body {
    instead of being squashed or clipped square. The sweep is timed from JS
    against the beat's real running time — see runProgress. */
 .story-prog { display: flex; gap: 4px; width: 100%; }
-.story-prog-seg { flex: 1 1 0; height: 5px; border-radius: 999px; background: var(--line); }
-.story-prog-fill { display: block; width: 0; height: 100%; border-radius: 999px; background: var(--ink-soft); }
+.story-prog-seg { flex: 1 1 0; height: 5px; border-radius: var(--r-full); background: var(--line); }
+.story-prog-fill { display: block; width: 0; height: 100%; border-radius: var(--r-full); background: var(--ink-soft); }
 
 .story-stage { width: 100%; display: flex; justify-content: center; overflow: hidden; margin-top: 6vh; }
 /* The tutorial is a screen you watch, not one you browse: the dock has
@@ -1827,7 +1869,7 @@ html.is-tutorial .home-nav { display: none; }
 }
 .icon-opt {
   padding: 0; aspect-ratio: 1; flex: none; cursor: pointer; overflow: hidden;
-  border: 2px solid var(--line); border-radius: 14px; background: none;
+  border: 2px solid var(--line); border-radius: var(--r-md); background: none;
   transition: transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1.1), border-color 160ms ease;
 }
 .icon-opt > svg { width: 100%; height: 100%; display: block; }
@@ -1991,10 +2033,13 @@ html.is-playing body { background: var(--play-bg); }
    showing between them. */
 .app--game .pattern-hint {
   flex: none; margin: 0; gap: clamp(14px, 5vw, 40px); justify-content: center;
-  /* 描边不是装饰，是让并排的两个图示不糊在一起——所以它必须是底色本身。
-     写死白色只在深紫底上碰巧成立；底色一跟着页面走，白描边在米白底上
-     就等于没有。 */
-  color: var(--play-mark); --mark-edge: var(--play-bg);
+  /* 得分图示那圈白边。
+     它有两个活：把并排的两个图示分开，以及给蓝色的图形一道亮边，让它在
+     任何底色上都「浮」着。上一版我把它改成了 var(--play-bg)（跟着底色走），
+     想的是「描边就该是底色」——可底色跟着页面变成米白之后，米白描在米白上
+     等于没画，图示看起来就秃了。第一个活底色也能干，第二个活只有白色能干，
+     所以写回白色。 */
+  color: var(--play-mark); --mark-edge: #FFFFFF;
 }
 .app--game .pattern-icon { gap: 0; color: inherit; }
 /* One piece is 1em, so this is the only size the row needs. */
@@ -2032,7 +2077,7 @@ html.is-playing body { background: var(--play-bg); }
   /* var(--surface), never a hardcoded white: with token ink colours on a
      hardcoded ground, dark mode puts near-white text on a white box. */
   background: var(--surface);
-  border-radius: 20px; padding: 24px 22px 18px;
+  border-radius: var(--r-lg); padding: 24px 22px 18px;
   box-shadow: 0 26px 60px -26px rgba(46, 36, 48, 0.55);
   text-align: center;
   transform: scale(0.94); transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1.05);
@@ -2081,7 +2126,7 @@ html.is-playing body { background: var(--play-bg); }
   display: flex; align-items: center; gap: 12px;
   margin: 4px auto 10px; padding: 10px 16px 10px 10px;
   max-width: 300px;
-  border-radius: 18px;
+  border-radius: var(--r-md);
   background: var(--accent-soft);
   color: var(--accent-ink);
 }
@@ -2255,7 +2300,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 /* 图形和「换一个」贴在一块，中间不留缝——它们是一件事。 */
 .mp-mark {
   display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
-  background: var(--surface); border-radius: 999px; padding: 4px 6px 4px 4px;
+  background: var(--surface); border-radius: var(--r-full); padding: 4px 6px 4px 4px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 .mp-shuffle {
@@ -2299,7 +2344,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 }
 .mp-player {
   display: flex; align-items: center; gap: 10px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px 12px;
 }
 /* 和局中那份名单同一个收尾：名字长了就淡出去，不打省略号（见 .mp-board-name）。
    认人靠的是前面那个图形，不是把十二个字读全。 */
@@ -2323,7 +2368,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-notes .auth-hint { margin: 0 0 4px; }
 .mp-final-card {
   display: block; width: 100%; max-width: 320px; margin: 4px auto 0;
-  border-radius: 16px; box-shadow: var(--shadow);
+  border-radius: var(--r-md); box-shadow: var(--shadow);
 }
 /* 《长按或右键图片即可存储》。它说的是上面那张居中的图，所以它也居中，
    而不是像页面上别的小字一样贴着左边。 */
@@ -2333,7 +2378,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-crown { flex: none; width: 15px; height: 15px; display: block; }
 .mp-badge {
   font-size: 0.7rem; color: var(--accent-ink); background: var(--accent-soft);
-  border-radius: 100px; padding: 2px 8px;
+  border-radius: var(--r-full); padding: 2px 8px;
 }
 
 .mp-page .genius-cta[disabled] { opacity: 0.5; cursor: default; }
@@ -2347,7 +2392,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    the screen, and never loud enough to compete with the boards. */
 body.is-room-host::after {
   content: ''; position: fixed; inset: 0; z-index: 60; pointer-events: none;
-  border-radius: 18px;
+  border-radius: var(--r-md);
   /* Mostly the glow, barely the line: a haze at the edge of the screen that
      is noticed rather than read, which is the whole job. */
   box-shadow:
@@ -2366,7 +2411,7 @@ body.is-room-host::after {
 .room-pick-bar {
   width: 100%; max-width: 520px; margin: 0 auto 10px; text-align: center;
   background: rgba(196, 141, 156, 0.14); border: 1px solid rgba(196, 141, 156, 0.5);
-  border-radius: 16px; padding: 12px 14px;
+  border-radius: var(--r-md); padding: 12px 14px;
 }
 .room-pick-title {
   font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1rem;

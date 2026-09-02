@@ -4,7 +4,7 @@ import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
-import { colorblindOn, onColorblindChange } from '../engine/palettePref';
+import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
@@ -285,7 +285,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       });
 
       const pickPalette = (): readonly string[] =>
-        PALETTES[colorblindOn() ? 'colorblind' : 'standard'];
+        themedPalette(PALETTES[colorblindOn() ? 'colorblind' : 'standard']);
       let COLORS: readonly string[] = pickPalette();
       let grid: Tile[][] = [];
       let S = 0,
