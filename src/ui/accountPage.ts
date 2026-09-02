@@ -6,13 +6,18 @@ import { geniusLogoTag } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { trackIconChange } from '../engine/analytics';
 import {
+  CVD_VARIANTS,
   PIECE_VARIANTS,
   colorblindOn,
+  cvdSwatch,
+  cvdVariant,
   pieceVariant,
   setColorblind,
+  setCvdVariant,
   setPieceVariant,
-  variantSwatch,
+  type CvdVariant,
   type PieceVariant,
+  variantSwatch,
 } from '../engine/palettePref';
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
@@ -27,7 +32,6 @@ import {
 } from './subscribe';
 
 /** 「原本」那一套的代表色——就是三角/六边圆球在用的那六支的前五支。 */
-const BASE_SWATCH = ['#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52'] as const;
 
 export type { AuthTab } from './subscribe';
 import type { AuthTab } from './subscribe';
@@ -61,6 +65,11 @@ export function renderAccountPage(
 ) {
   const s = STRINGS[lang];
   const privileges = PRIVILEGES[lang];
+  const CVD_NAME: Record<CvdVariant, string> = {
+    std: s.cvdStd,
+    warm: s.cvdWarm,
+    cool: s.cvdCool,
+  };
   const VARIANT_NAME: Record<PieceVariant, string> = {
     now: s.paletteNow,
     jia: s.paletteJia,
@@ -149,7 +158,9 @@ export function renderAccountPage(
           ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
           <span class="profile-row-label">${privileges[0]}</span>
           <span class="profile-row-value">${
-            subscribed ? `${VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;` : '&rsaquo;'
+            subscribed
+              ? `${colorblindOn() ? CVD_NAME[cvdVariant()] : VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;`
+              : '&rsaquo;'
           }</span>
         </button>
         <!-- 《随机得分目标》里面还没有东西，所以和其它没做完的一样挂着锁：
@@ -263,23 +274,32 @@ export function renderAccountPage(
    */
   function openPalettePicker() {
     const locked = !isGenius();
+    // 色盲友好开着的时候，这里挑的是色盲那三套；关着的时候，挑的是棋子那三
+    // 套。两组互斥（见 themedPalette），所以同一个窗口按开关切内容，而不是并
+    // 排列出一堆对他不生效的选项。
+    const cvd = colorblindOn();
+    const ids: readonly string[] = cvd ? CVD_VARIANTS : PIECE_VARIANTS;
+    const nameOf = (v: string) => (cvd ? CVD_NAME[v as CvdVariant] : VARIANT_NAME[v as PieceVariant]);
+    const colorsOf = (v: string) =>
+      cvd ? cvdSwatch(v as CvdVariant) : variantSwatch(v as PieceVariant);
+    const currentOf = () => (cvd ? cvdVariant() : pieceVariant()) as string;
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
-    const row = (v: PieceVariant) =>
+    const row = (v: string) =>
       `<button class="pal-opt${locked ? ' pal-opt--locked' : ''}" data-pal="${v}"${
         locked ? ' disabled aria-disabled="true"' : ''
       }>
          ${locked ? `<span class="pal-lock">${ICON_LOCK}</span>` : ''}
-         <span class="pal-name">${VARIANT_NAME[v]}</span>
-         <span class="pal-strip">${variantSwatch(v, BASE_SWATCH)
+         <span class="pal-name">${nameOf(v)}</span>
+         <span class="pal-strip">${colorsOf(v)
            .map((c) => `<span style="background:${c}"></span>`)
            .join('')}</span>
        </button>`;
     overlay.innerHTML = `
       <div class="modal pal-modal">
-        <h2>${s.paletteTitle}</h2>
-        <p class="hint">${locked ? s.paletteLocked : s.paletteHint}</p>
-        <div class="pal-list">${PIECE_VARIANTS.map(row).join('')}</div>
+        <h2>${cvd ? s.paletteCvdTitle : s.paletteTitle}</h2>
+        <p class="hint">${locked ? s.paletteLocked : cvd ? s.paletteCvdHint : s.paletteHint}</p>
+        <div class="pal-list">${ids.map(row).join('')}</div>
         <div class="btn-row">
           ${locked ? `<button class="genius-cta" id="palGo">${s.becomeGenius}</button>` : ''}
           <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="palClose">${s.closeBtn}</button>
@@ -293,19 +313,20 @@ export function renderAccountPage(
       openGeniusWindow(lang, refresh);
     });
     const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.pal-opt'));
-    const mark = (v: PieceVariant) => {
+    const mark = (v: string) => {
       for (const el of opts) el.classList.toggle('pal-opt--on', el.dataset.pal === v);
       // 锁着的时候不去改外面那一行：写上「原本」会让人以为他已经挑了一套，
       // 而他根本挑不了。那一行对他只是一个「›」。
       if (locked) return;
       const value = container.querySelector<HTMLElement>('#paletteRow .profile-row-value');
-      if (value) value.innerHTML = `${VARIANT_NAME[v]}&nbsp;&rsaquo;`;
+      if (value) value.innerHTML = `${nameOf(v)}&nbsp;&rsaquo;`;
     };
-    mark(pieceVariant());
+    mark(currentOf());
     for (const el of opts) {
       el.addEventListener('click', () => {
-        const v = el.dataset.pal as PieceVariant;
-        setPieceVariant(v);
+        const v = el.dataset.pal!;
+        if (cvd) setCvdVariant(v as CvdVariant);
+        else setPieceVariant(v as PieceVariant);
         mark(v);
       });
     }

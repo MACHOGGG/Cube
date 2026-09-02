@@ -93,8 +93,76 @@ export function pieceVariant(): PieceVariant {
 }
 
 /** 几支代表色，给设置页面画小圆点用。 */
-export function variantSwatch(v: PieceVariant, base: readonly string[]): readonly string[] {
-  return v === 'now' ? base.slice(0, 5) : VARIANT_COLORS[v].slice(0, 5);
+/**
+ * 挑配色那个窗口里，每一行下面排的那串小球。
+ *
+ * 列的是「游戏里真的会出现的颜色」，不是挑几个代表——玩家要照着它决定换不
+ * 换，看半套等于没看。七个，因为最多的那个玩法（七色圆球）就是七个；用得少
+ * 的玩法取前几个。
+ */
+export function variantSwatch(v: PieceVariant): readonly string[] {
+  return v === 'now' ? PIECE_NOW : VARIANT_COLORS[v];
+}
+
+/** 「原本」那一套：七色圆球的标准配色，也就是七个玩法里颜色最全的那一份。 */
+const PIECE_NOW: readonly string[] = [
+  '#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D', '#8067A8',
+];
+
+/** 色盲那三套里，某一套完整的七个颜色。 */
+export const cvdSwatch = (v: CvdVariant): readonly string[] => CVD_COLORS[v];
+
+// ---------------------------------------------------------------------------
+// 色盲配色也分三套
+// ---------------------------------------------------------------------------
+
+/**
+ * 色盲友好开着的时候，用哪一套。
+ *
+ * 「安全」不是一个选项，是这三套的共同前提：每一套都先被模拟成红色盲、绿色盲、
+ * 蓝黄色盲看到的样子，再在那四张表里用 CIEDE2000 量两两距离，取最差的那一对
+ * 当分数。三套都过线之后，剩下的自由度才拿去做风格——所以玩家在这里挑的是好
+ * 不好看，不是安不安全。
+ *
+ *   std   Okabe-Ito 那八色里的七色，色觉通用设计的标准套装。最差 8.0。
+ *   warm  红、橙、黄、玫瑰那一带。最差 10.8。
+ *   cool  蓝、青、绿、紫那一带。最差 12.3。
+ *
+ * 七个一套，因为最多的那个玩法（七色圆球）要七个。各玩法按自己要的个数取前
+ * N 个——顺序是用贪心最远点排的，所以任何前缀（4/5/6/7 色）都一样分得开。
+ */
+export type CvdVariant = 'std' | 'warm' | 'cool';
+export const CVD_VARIANTS: readonly CvdVariant[] = ['std', 'warm', 'cool'];
+const CVD_KEY = 'slides_cvd_palette';
+
+export const CVD_COLORS: Record<CvdVariant, readonly string[]> = {
+  std: ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7'],
+  warm: ['#DD344F', '#E9CF99', '#EA732F', '#C181A1', '#FEB449', '#B2A972', '#A66378'],
+  cool: ['#8767B7', '#A0DCB5', '#1F8985', '#37E6FA', '#5E8052', '#9199CE', '#43B196'],
+};
+
+const readCvd = (): CvdVariant => {
+  try {
+    const raw = localStorage.getItem(CVD_KEY);
+    return raw === 'warm' || raw === 'cool' ? raw : 'std';
+  } catch {
+    return 'std';
+  }
+};
+let cvd: CvdVariant = readCvd();
+
+export const cvdVariant = (): CvdVariant => cvd;
+
+export function setCvdVariant(next: CvdVariant): void {
+  if (next === cvd) return;
+  cvd = next;
+  try {
+    localStorage.setItem(CVD_KEY, next);
+  } catch {
+    /* 私密模式：这一次还能用，只是下次打开回到 std */
+  }
+  // 和色盲开关共用一套监听：每块棋盘立刻重画，不用重开。
+  for (const fn of Array.from(listeners)) fn();
 }
 
 /**
@@ -123,10 +191,21 @@ export function setPieceVariant(next: PieceVariant): void {
  * 不是配色的一部分。
  */
 export function themedPalette(cols: readonly string[], keepIdx = -1): readonly string[] {
-  if (on || variant === 'now') return cols;
-  const v = VARIANT_COLORS[variant];
-  if (!v || cols.length > v.length) return cols;
-  const out = v.slice(0, cols.length);
+  // 色盲友好开着的时候，挑的是色盲那三套；关着的时候，挑的是棋子那三套。
+  // 两组互斥——一个人不会同时既要「看得清」又要「换个风格」，他要的是「在
+  // 看得清的前提下换个风格」，而那正是色盲那三套本身。
+  // std 和 now 都是「原样」：一个字都不换。
+  //
+  // 这里不能顺手把 std 也走一遍替换——各玩法的色盲配色个数和顺序本来就不一
+  // 样（六边圆球是六个、七色圆球是七个，排的次序也不同），拿一份七色的表按位
+  // 置盖上去，选着 std 的人会看到和今天不一样的棋盘。std 的意思就是「今天这
+  // 样」。
+  const from = on
+    ? (cvd === 'std' ? null : CVD_COLORS[cvd])
+    : (variant === 'now' ? null : VARIANT_COLORS[variant]);
+  if (!from || cols.length > from.length) return cols;
+  const out = from.slice(0, cols.length);
+  // 炸弹那颗红钉住不换：它不是一种颜色，是「这颗会炸」。
   if (keepIdx >= 0 && keepIdx < out.length) out[keepIdx] = cols[keepIdx];
   return out;
 }
