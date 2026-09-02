@@ -242,6 +242,9 @@ export function createCircleSevenGame(): ShapeGame {
         rowH = 0,
         boardLeft = 0,
         boardTop = 0;
+      // 菱形这一轮是躺着还是立着。由 layoutBoard() 一处算出来，画球和拖拽都
+      // 读它——三处各问各的，就会出现「按立着算的坐标，照躺着的方向去转」。
+      let lying = false;
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
@@ -343,48 +346,53 @@ export function createCircleSevenGame(): ShapeGame {
       // centered on cx=0, spanning cy=0 (top point) to cy=12*rowH (bottom
       // point) — no per-row trimming needed, unlike a hex or triangle crop.
       /**
-       * 菱形最长的那两个角，永远指着屏幕最长的那条边。
+       * 菱形最长的那两个角，永远指着地板最长的那条边。
        *
-       * 横屏就躺下，竖屏就立起来——因为菱形的长对角线比短的长六成，它顺着长
-       * 边摆才拿得到最多的地方。玩家定的第一条就是这个：最大化最重要，转屏幕
-       * 时图案跟着换向是可以接受的代价。
+       * 因为菱形的长对角线比短的长六成，顺着长边摆才拿得到最多的地方。玩家定
+       * 的第一条就是这个：最大化最重要，转屏幕时图案跟着换向是可以接受的代价。
        *
-       * 量的是「这块视口是宽还是高」，不是那条横屏媒体查询。从前用的是
-       * (orientation: landscape) and (max-height: 560px)——电脑上 1366×768
-       * 是宽的，可它高过 560，那条查询会说「不是横屏」，于是菱形在一块宽屏上
-       * 立着，左右各空一大截。
+       * 所以这里不去问「屏幕是横的还是竖的」，直接把两种摆法各算一遍球半径，
+       * 谁大用谁——「最大化」本来就是那条规矩本身，问屏幕只是它的一个代理。
        *
-       * 留成一个函数是因为底下有三处在用它（排版、算球心、拖拽的方向基），
-       * 它们说的是同一句话。
+       * 从前问的是 window.innerWidth >= window.innerHeight，那是这个 bug 的
+       * 出处。转屏的那一下，这两个数和页面的重排不是同一时刻更新的（iOS 尤其
+       * 明显：外面那圈浏览器边框还在动画里，innerHeight 报的还是旧的）。于是
+       * ResizeObserver 拿着**新**的地板尺寸叫醒排版，排版却问到一个**旧**的方
+       * 向，菱形就照上一个方向摆了下去——而等那两个数追上来，没有任何事件会
+       * 再触发一次重排，所以它一直歪到玩家伸手碰一下棋盘为止。「刚转过来还没
+       * 操作的时候有问题，碰一下就好了」说的就是这段时间。
+       *
+       * 现在只有一个数据源：地板自己的那个框。它就是我们要往里排的东西，和它
+       * 自己永远不会不同步；而地板一变，ResizeObserver 一定会响——触发和判断
+       * 从此说的是同一件事。
        */
-      function landscapeNow(): boolean {
-        try {
-          return window.innerWidth >= window.innerHeight;
-        } catch {
-          return false;
-        }
+      // 菱形沿长轴跨 12 格、沿短轴也跨 12 格，两头各留一颗球（1.86R）的边。
+      // 长的那条比短的长六成——这就是它值得挑个方向摆的原因。
+      const LONG = 12 * Math.sqrt(3) + 1.86; // 22.64 R
+      const SHORT = 12 + 1.86; //               13.86 R
+
+      /** 这块地板上，躺着摆和立着摆哪个球更大。 */
+      function lyingFits(w: number, h: number): boolean {
+        const standing = Math.min(w / SHORT, h / LONG);
+        const lyingR = Math.min(w / LONG, h / SHORT);
+        return lyingR > standing;
       }
 
       function layoutBoard() {
-        const land = landscapeNow();
         // floorBox 会把上一轮压在地板上的尺寸全摘掉再量，所以量到的是这一格
         // 本来有多大，不是我们自己上一轮收出来的那个方框。
         const rect = floorBox(refs.boardWrap);
         const width = rect.width || 320;
-        // The diamond spans 12 lattice steps along its long axis and 12
-        // along its short one, plus one ball (1.86R) of margin on each — so
-        // it is much taller than it is wide, and the shared square wrapper
-        // would let the height set the scale and leave the balls barely half
-        // the column across. Portrait therefore scales off the width and
-        // lets the wrapper take whatever height the diamond needs; landscape
-        // lays the diamond on its side, which swaps the two constraints, so
-        // each orientation gets its own pair and the whole board is on
-        // screen either way.
-        const LONG = 12 * Math.sqrt(3) + 1.86; // 22.64 R
-        const SHORT = 12 + 1.86; //               13.86 R
         const availH = rect.height || 320;
+        // 立着摆的时候菱形比它自己宽得多，共用那个正方形外框会让高度定下比例，
+        // 球就只剩这一列的半个宽。所以立着按宽算、让外框去迁就菱形要的高度；
+        // 躺着把这两个约束对调。两种摆法各有自己的一对约束，整块棋盘怎么摆都
+        // 在屏幕里。
+        // 方向就在这一句定下来，用的正是刚量到的这个框——底下画球和拖拽都读
+        // 这个 lying，不再各问各的。
+        lying = lyingFits(width, availH);
         refs.boardWrap.style.aspectRatio = 'auto';
-        if (land) {
+        if (lying) {
           R = Math.min(width / LONG, availH / SHORT);
           rowH = R * Math.sqrt(3);
           const height = SHORT * R;
@@ -412,7 +420,7 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       function ballCenter(r: number, c: number): [number, number] {
-        const [ox, oy] = rotXY((c - r) * R, (r + c) * rowH, landscapeNow());
+        const [ox, oy] = rotXY((c - r) * R, (r + c) * rowH, lying);
         const cx = boardLeft + ox;
         const cy = boardTop + oy;
         return [cx, cy];
@@ -787,7 +795,7 @@ export function createCircleSevenGame(): ShapeGame {
             return;
           }
           const [r, c] = cellAt(x, y);
-          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, land: landscapeNow(), chain: null };
+          drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, land: lying, chain: null };
           return { r: drag.r, c: drag.c };
         },
         /**
