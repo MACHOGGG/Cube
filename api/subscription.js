@@ -7,6 +7,7 @@ import {
   ensureGiftCodes,
   entitlementOf,
   liveGifts,
+  liveInbox,
   loadAccount,
   normalizeEmail,
   rotateToken,
@@ -52,8 +53,25 @@ import { storeConfigured } from './_store.js';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
 
-  const { checkoutId, email, password, token } = readBody(req);
+  const { checkoutId, email, password, token, action } = readBody(req);
   try {
+    // 「我看过了」——玩家点开内部码弹窗时说一声，主菜单那块提示就该收起来。
+    //
+    // 只清计数，一张码都不动：看过不等于用过。身份还是拿 token 认，和别处
+    // 一样——没有它，任何人报一个邮箱就能把别人的提示按掉。
+    if (action === 'seenInbox') {
+      if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
+      const who = normalizeEmail(email);
+      const acct = who ? await loadAccount(who) : null;
+      if (!acct || !acct.token || String(token || '') !== acct.token) {
+        return send(res, 401, { error: 'wrong' });
+      }
+      if (acct.inboxUnseen) {
+        acct.inboxUnseen = 0;
+        await saveAccount(who, acct);
+      }
+      return send(res, 200, { ok: true });
+    }
     if (checkoutId) {
       // Settling an order is Creem's answer by definition — there is nobody
       // else to ask, so without the key this branch cannot run at all.
@@ -133,6 +151,8 @@ async function fromEmail(res, rawEmail, password, token) {
       ...entitlementOf(account, address),
       kind: 'code',
       gifts: await liveGifts(account),
+      inbox: await liveInbox(account),
+      inboxUnseen: account.inboxUnseen || 0,
     });
   }
 
@@ -163,5 +183,7 @@ async function fromEmail(res, rawEmail, password, token) {
   return send(res, 200, {
     ...answer(sub, customer.email || address, issued || account.token),
     gifts: await liveGifts(account),
+    inbox: await liveInbox(account),
+    inboxUnseen: account.inboxUnseen || 0,
   });
 }

@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
-import { del, get, set, takeOnce } from './_store.js';
+import { del, get, hdel, hgetall, hset, set, takeOnce } from './_store.js';
 
 /**
  * The accounts a redeemed code creates — the only accounts this app has.
@@ -94,9 +94,62 @@ export const normalizeEmail = (email) => String(email || '').trim().toLowerCase(
 export const codeHolder = (ticket) => 'code:' + String(ticket || '').toUpperCase();
 const accountKey = (email) => 'acct:' + normalizeEmail(email);
 
+/**
+ * 所有账户的名单。
+ *
+ * 账户是一个邮箱一把钥匙（acct:<邮箱>）分开存的，彼此之间没有任何联系——
+ * 「列出所有玩家」在数据库里因此不是一件慢的事，而是一件做不到的事，而发码
+ * 后台的第一步就是把人列出来。所以每次存账户时顺手往这个哈希里记一笔。
+ *
+ * 记的是筛选和显示要用的那几样，一样秘密都不带：没有 hash、没有 salt、没有
+ * token。管理页一次 HGETALL 就够，不用挨个去查账户本体。
+ */
+const INDEX_KEY = 'accounts';
+
+const indexRow = (account) => ({
+  kind: account.kind,
+  plan: account.plan || null,
+  until: account.until || 0,
+  createdAt: account.createdAt || 0,
+  blocked: Boolean(account.blocked),
+  news: Boolean(account.news),
+  /** 后台发给他、他还没看的码有几张。主菜单那块提示读的就是它。 */
+  inbox: Array.isArray(account.inbox) ? account.inbox.length : 0,
+});
+
 export const loadAccount = (email) => get(accountKey(email));
-export const deleteAccount = (email) => del(accountKey(email));
-export const saveAccount = (email, account) => set(accountKey(email), account);
+
+export async function deleteAccount(email) {
+  await del(accountKey(email));
+  try {
+    await hdel(INDEX_KEY, normalizeEmail(email));
+  } catch (err) {
+    console.error('名单没删掉', email, err);
+  }
+}
+
+export async function saveAccount(email, account) {
+  await set(accountKey(email), account);
+  // 名单只收真正的邮箱。
+  //
+  // 一张还没绑邮箱的码，它的权益暂存在一个叫 code:XXXXXX 的「账户」下（见
+  // codeHolder）。那不是一个人，是一张码的寄存处——把它列进玩家名单，后台会
+  // 看到一堆 code:seed01 这样的「玩家」，还能勾中给它发码。实测过，第一版就
+  // 是这样。
+  //
+  // 名单写在账户之后，而且它自己摔了不算这次保存失败：账户本体存住了才是要紧
+  // 的，名单只是一份为了能列出来而维护的副本，下一次保存就会把它补上。
+  const address = normalizeEmail(email);
+  if (!EMAIL_RE.test(address)) return;
+  try {
+    await hset(INDEX_KEY, address, indexRow(account));
+  } catch (err) {
+    console.error('名单没记上', address, err);
+  }
+}
+
+/** 名单全文：{ 邮箱: indexRow }。只有带 ADMIN_TOKEN 的后台读得到。 */
+export const listAccounts = () => hgetall(INDEX_KEY);
 
 /**
  * Read an account and delete it in one step — the atomic claim.
@@ -108,7 +161,15 @@ export const saveAccount = (email, account) => set(accountKey(email), account);
  * Whoever takes it now owns putting it back if they cannot finish. See
  * api/passcode.js bind().
  */
-export const takeAccount = (email) => takeOnce(accountKey(email));
+export async function takeAccount(email) {
+  const gone = await takeOnce(accountKey(email));
+  try {
+    await hdel(INDEX_KEY, normalizeEmail(email));
+  } catch (err) {
+    console.error('名单没删掉', email, err);
+  }
+  return gone;
+}
 
 function hash(pin, saltHex) {
   return scryptSync(String(pin), Buffer.from(saltHex, 'hex'), 32).toString('hex');
@@ -284,6 +345,37 @@ export async function liveGifts(account) {
     alive.push({ ...gift, spent: !doc });
   }
   return alive;
+}
+
+/**
+ * 后台发给这个玩家的码，以及还剩几张没看。
+ *
+ * 存在账户上（account.inbox）而不是另开一个键：它跟着账户走，删账户就跟着
+ * 没，不会留下一堆指向不存在的人的孤儿数据。每一条记的是发的时候就定下来的
+ * 事实——哪张码、什么等级、什么时候发的、什么时候过期——而「用没用过」是现
+ * 场去库里问的，因为码可能被这个人以外的任何人兑掉。
+ */
+export async function liveInbox(account) {
+  if (!Array.isArray(account?.inbox)) return [];
+  const out = [];
+  for (const item of account.inbox) {
+    const doc = await get('code:' + String(item.code).toUpperCase());
+    out.push({ ...item, spent: !doc });
+  }
+  // 新发的排前面——玩家打开弹窗最想看的是刚收到的那几张。
+  return out.sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
+}
+
+/** 把一批码记到这个账户名下，并标上「有新的没看」。 */
+export function addToInbox(account, codes, plan, expiresAt) {
+  if (!Array.isArray(account.inbox)) account.inbox = [];
+  const sentAt = Date.now();
+  for (const code of codes) {
+    account.inbox.push({ code, plan, sentAt, ...(expiresAt ? { expiresAt } : {}) });
+  }
+  // 主菜单那块《收到了内部码！去查看》读的就是它。玩家点开弹窗时清零。
+  account.inboxUnseen = (account.inboxUnseen || 0) + codes.length;
+  return account;
 }
 
 /** What the browser is told. Never the hash, the salt or the attempt count. */
