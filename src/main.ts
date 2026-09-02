@@ -369,6 +369,10 @@ function syncScreenClass() {
   const cl = document.documentElement.classList;
   cl.toggle('is-playing', !!root.querySelector('.app--game'));
   cl.toggle('is-tutorial', !!root.querySelector('.story-tut'));
+  // 屋里有人在看教学，其他人停在那一屏干等。这时底下那排「个人主页 / 记录与
+  // 排名」没有用处——按下去就从小屋里走出来了，而人家学完这一屏随时会自己
+  // 翻页。跟打一局时同样处理：藏起来。
+  cl.toggle('is-waiting-learner', !!root.querySelector('.mp-learn-page'));
 }
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
@@ -501,10 +505,9 @@ function leaveRoomWithCard() {
   teardown();
   setPickingForRoom(null);
   if (!state) return showMenu();
-  showRoomCard(root, state, currentLang, showMenu, {
-    title: STRINGS[currentLang].mpRankTitle,
-    meId,
-  });
+  // 标题不另起一个：中途走的人和散场时看到的是同一间小屋的同一份战绩，
+  // 一张写《小屋战绩》、另一张写《竞赛排名》，看图的人会以为是两件事。
+  showRoomCard(root, state, currentLang, showMenu, { meId });
 }
 
 /**

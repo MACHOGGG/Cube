@@ -271,8 +271,12 @@ check('甲得分后，乙那边实时看到并升到第一', bView[0] === '甲:2
 // 房间局的《完成》不是「结束」那么简单：交出去的分数就是名次，所以先问；问
 // 的这几秒钟要停着、牌要盖上，不然犹豫就成了「多看几眼盘面还不吃时间」。
 const inRunLeaveLabel = await A.page.$eval('#leaveRoomBtn', (e) => e.getAttribute('aria-label').trim());
-check('房间页和局中那颗键是同一个说法', inRunLeaveLabel === roomLeaveLabel,
-  `房间页「${roomLeaveLabel}」· 局中「${inRunLeaveLabel}」`);
+// 屋主的小屋页上只剩一颗《解散小屋》——对屋主来说「走」和「散」本来就是同
+// 一件事，两颗键说的是同一个后果。局中那颗仍写《离开小屋》：那一刻按下去
+// 是把这一局交出去，不是把屋子拆了。所以这里查的不再是「两处一模一样」，
+// 而是「两处各自说对了自己那件事」。
+check('屋主的小屋页上那颗键写《解散小屋》', roomLeaveLabel === '解散小屋', roomLeaveLabel);
+check('局中那颗仍写《离开小屋》', inRunLeaveLabel === '离开小屋', inRunLeaveLabel);
 
 await A.page.click('#finishBtn');
 await A.page.waitForSelector('#finishConfirm', { timeout: 6000 });
@@ -341,8 +345,14 @@ const guestArea = await B.page.evaluate(() => ({
 }));
 check('客人的小屋里只有《催屋主》和《离开小屋》',
   guestArea.nudge && guestArea.leave && !guestArea.pick, JSON.stringify(guestArea));
-check('屋主的小屋里是《挑下一个玩法》和《结束小屋》',
-  await A.page.evaluate(() => !!document.querySelector('#mpPick') && !!document.querySelector('#mpEnd')));
+check('屋主的小屋里只剩《挑下一个玩法》，散场并进了底下那颗《解散小屋》',
+  await A.page.evaluate(() => !!document.querySelector('#mpPick') && !document.querySelector('#mpEnd')));
+// 两句被拿掉的话：小屋页不再解释棋盘，也不再报人数上限。
+const roomWords = await A.page.evaluate(() => document.querySelector('.mp-page')?.textContent || '');
+check('小屋页上没有《所有人拿到完全一样的棋盘》', !roomWords.includes('完全一样的棋盘'));
+check('小屋页上没有「最多 N 个人」', !/最多\s*\d+\s*个人/.test(roomWords));
+check('分享那一句写的是《把这四位数字给朋友，邀请加入小屋》',
+  roomWords.includes('把这四位数字给朋友，邀请加入小屋'));
 
 // 坐在小屋里什么都不做，也不该被判成掉线。
 //
@@ -429,6 +439,16 @@ if (rulesAsked) {
     check('它绕着自己的中心在转', spin.turning === 'mp-learn-turn', spin.turning);
     // 旧安卓不认 color(display-p3 …)，认不得的话整条 fill 作废、图变空白。
     check('标识里没有留下 display-p3 的颜色', !spin.p3);
+    // 干等的这一屏底下不该还挂着《个人主页 / 记录与排名》：按下去就等于走出
+    // 小屋，而人家学完这一屏随时会自己翻页。两种写法（:has() 和根上那个类）
+    // 都要真的生效，所以量的是它到底看不看得见。
+    const navGone = await A.page.evaluate(() => {
+      const nav = document.querySelector('.home-nav');
+      if (!nav) return true;
+      const r = nav.getBoundingClientRect();
+      return getComputedStyle(nav).display === 'none' || r.width === 0 || r.height === 0;
+    });
+    check('等人学教学的那一屏，底下那排图标收起来了', navGone);
   }
   check('学的人这会儿在教学里', await B.page.$('.story-tut, .tut-stage, .app') !== null);
 
@@ -558,8 +578,8 @@ const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 }
   .then(() => true).catch(() => false);
 check('离开房间后出竞赛排名', rankPage);
 if (rankPage) {
-  check('排名页的标题是《竞赛排名》',
-    (await B.page.$eval('.home-sub', (e) => e.textContent.trim())) === '竞赛排名',
+  check('排名页的标题是《小屋战绩》（和散场那张同一句）',
+    (await B.page.$eval('.home-sub', (e) => e.textContent.trim())) === '小屋战绩',
     await B.page.$eval('.home-sub', (e) => e.textContent.trim()));
   check('排名里有两个人，自己那一行被标出来',
     (await B.page.$$eval('#mpFinalRows .mp-player', (e) => e.length)) === 2 &&

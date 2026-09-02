@@ -96,25 +96,15 @@ const NAME_KEY = 'slides_mp_name';
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/**
- * Seats open today, as the server last said.
- *
- * Only the wording needs it, and the 4 is a first guess for the one moment
- * before any answer has arrived — every reply that mentions seats, including
- * the refusal that says a room is full, replaces it.
- */
-let openSeats = 4;
-
-function errorText(reason: RoomError, lang: Lang, seats?: number): string {
+function errorText(reason: RoomError, lang: Lang): string {
   const s = STRINGS[lang];
-  if (typeof seats === 'number' && seats > 0) openSeats = seats;
   switch (reason) {
     case 'geniusOnly':
       return s.mpNeedGenius;
     case 'noRoom':
       return s.mpErrNoRoom;
     case 'full':
-      return s.mpErrFull.replace('{n}', String(openSeats));
+      return s.mpErrFull;
     case 'started':
       return s.mpErrStarted;
     case 'tooFew':
@@ -289,7 +279,7 @@ export function renderMultiplayerPage(
       msg.textContent = s.workingLabel;
       const made = await createRoom(myName(), avatar);
       if (dead) return;
-      if (!made.ok) return void (msg.textContent = errorText(made.reason, lang, made.seats));
+      if (!made.ok) return void (msg.textContent = errorText(made.reason, lang));
       renderLobby(made.value);
     });
 
@@ -300,7 +290,7 @@ export function renderMultiplayerPage(
       msg.textContent = s.workingLabel;
       const joined = await joinRoom(code, myName(), avatar);
       if (dead) return;
-      if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang, joined.seats));
+      if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang));
       renderLobby(joined.value);
     });
 
@@ -320,7 +310,6 @@ export function renderMultiplayerPage(
 
   function renderLobby(state: RoomState) {
     stopAll();
-    if (state.seats) openSeats = state.seats;
     // Whether *we* host it, not merely whether the room has a host.
     const iAmHost = Boolean(state.host) && currentRoom()?.playerId === state.host;
     container.innerHTML = `
@@ -335,7 +324,7 @@ export function renderMultiplayerPage(
         <div class="mp-code-card">
           <div class="menu-section-label">${s.mpRoomCode}</div>
           <div class="mp-code">${state.code}</div>
-          <p class="auth-hint">${s.mpShareHint.replace('{n}', String(state.seats || openSeats))}</p>
+          <p class="auth-hint">${s.mpShareHint}</p>
         </div>
 
         <div class="menu-section-label" id="mpPlayersLabel">${s.mpPlayers}</div>
@@ -343,15 +332,34 @@ export function renderMultiplayerPage(
 
         <div id="mpHostArea"></div>
         <p class="auth-msg" id="mpMsg" role="status"></p>
-        <p class="auth-hint">${s.mpSameBoard}</p>
 
-        <button class="profile-row profile-row--back" id="mpLeave">${s.mpLeave}</button>
+        <button class="profile-row profile-row--back" id="mpLeave">${
+          iAmHost ? s.mpDisbandRoom : s.mpLeave
+        }</button>
       </div>
     `;
+    // 屋主按的是《解散小屋》：先把屋子关掉（屋里其他人手上会亮起那张总战绩
+    // 图），再把自己的座位交回去。分成两颗键的时候，屋主按了《离开小屋》就
+    // 只是自己走人，剩下的人干坐在一间永远开不了下一局的屋里——对他来说这
+    // 两件事从来就是一件。
+    //
+    // 打过局的，屋主自己也看那张总战绩图（这原是《结束小屋》做的事）；一局
+    // 都没打就散场的，图上全是 0，不如直接退回多人设置页。
     const leave = async () => {
       stopAll();
-      await leaveRoom();
-      if (!dead) renderHome();
+      if (!iAmHost) {
+        await leaveRoom();
+        if (!dead) renderHome();
+        return;
+      }
+      const closed = await endRoom();
+      const card = closed.ok && closed.value.round ? closed.value : null;
+      // 屋主不发 leave：屋子已经关了，再补一条「他走了」只会在别人手上那张
+      // 总战绩图里，把屋主自己标成中途离席的人。座位在本机上忘掉就够了。
+      forgetRoom();
+      if (dead) return;
+      if (card) return handlers.onRoomEnded(card);
+      renderHome();
     };
     container.querySelector<HTMLButtonElement>('#mpLeave')!.addEventListener('click', () => {
       // Only the host is warned, because only the host's leaving costs the
@@ -515,22 +523,10 @@ export function renderMultiplayerPage(
     area.dataset.shape = pickLabel;
     area.innerHTML = `
       <button class="genius-cta" id="mpPick">${pickLabel}</button>
-      ${state.round ? `<button class="profile-row" id="mpEnd">${s.mpEndRoom}</button>` : ''}
     `;
     area.querySelector<HTMLButtonElement>('#mpPick')!.addEventListener('click', () => {
       stopAll();
       handlers.onPickMode(state.code);
-    });
-    area.querySelector<HTMLButtonElement>('#mpEnd')?.addEventListener('click', async () => {
-      stopAll();
-      const closed = await endRoom();
-      if (dead) return;
-      if (!closed.ok) {
-        const msg = container.querySelector<HTMLElement>('#mpMsg');
-        if (msg) msg.textContent = errorText(closed.reason, lang, closed.seats);
-        return renderLobby(state);
-      }
-      handlers.onRoomEnded(closed.value);
     });
   }
 
@@ -689,7 +685,7 @@ export function renderMultiplayerPage(
     rain = null;
     const spinner = custom('mp-loading') ?? '';
     container.innerHTML = `
-      <div class="app mp-page mp-countdown-page">
+      <div class="app mp-page mp-countdown-page mp-learn-page">
         <div class="start-stage mp-learn-stage">
           <p class="tag-line mp-learn-line">${s.mpLearningWait}</p>
           <div class="mp-learn-spin">${spinner}</div>

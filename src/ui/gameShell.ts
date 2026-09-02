@@ -272,7 +272,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
     </div>
 
-    <div class="overlay" id="shareOverlay">
+    <div class="overlay overlay--wide" id="shareOverlay">
       <div class="modal share-modal">
         <h2>${s.shareCardTitle}</h2>
         <img id="shareImage" alt="${s.shareImgAlt}" />

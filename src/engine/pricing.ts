@@ -8,8 +8,10 @@ import { salesChannel, type SalesChannel } from './channel';
  * The site and the app builds are priced separately, in their own currency,
  * because they are billed by different companies:
  *
- *   web    US$1.99 / month, US$4.99 / year — one price for the whole world,
- *          charged by Creem.
+ *   web    US$1.99 / month, US$4.99 / year — the list price, charged by
+ *          Creem. What is actually billed is whatever the checkout page
+ *          shows: it moves with the region Creem prices in, and with
+ *          local tax.
  *   store  ¥2 / month, ¥9.9 / year — the mainland-China tier of the App
  *          Store / Google Play price the product is configured at.
  *

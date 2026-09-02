@@ -647,9 +647,23 @@ h1 {
 .modal h2 { font-family: 'Fraunces', Georgia, serif; margin: 0 0 8px; font-size: 1.5rem; }
 .modal p { color: var(--ink-soft); margin: 0 0 20px; font-size: 0.95rem; }
 .modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
-.share-modal { max-width: 420px; }
-.share-modal img { width: 100%; border-radius: var(--r-sm); display: block; margin: 4px 0 12px; box-shadow: var(--shadow); }
+/* 战绩图是这一窗唯一的内容，其他都是它的说明文字。所以这一窗按图的尺寸来定：
+   比一般的弹窗宽得多，左右的留白也收窄——420px 的窗减去 24px 的内边距，图只
+   剩 372px 宽，一张 720 宽的图缩到这个份上，棋盘上的点面基本看不清了。
+   min() 保证在窄屏上它退回整屏宽，不会横着溢出去。 */
+.share-modal { max-width: min(620px, 100%); padding: 22px 14px; }
+/* 宽度吃满这一窗，但高度不许超过屏幕的七成——窗变宽之后，一张竖长的战绩图
+   在矮屏幕上会把《关闭》顶到看不见的地方。两个上限都给，宽高都写 auto，浏览
+   器自己按原比例取小的那一边，不会压扁。 */
+.share-modal img {
+  display: block; margin: 4px auto 12px;
+  width: auto; height: auto; max-width: 100%; max-height: 70vh;
+  border-radius: var(--r-sm); box-shadow: var(--shadow);
+}
 .share-modal .hint { margin: 0 0 16px; }
+/* 装战绩图的那层遮罩自己也让开一点：一般的弹窗四周留 20px 是舒服的，
+   一张要看清的图留 20px 就是白白削掉 40px 的宽度。 */
+.overlay--wide { padding: 10px; }
 .end-score-label {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
   color: var(--ink-faint); margin-top: 4px;
@@ -2305,6 +2319,10 @@ html.is-playing body { background: var(--play-bg); }
    through 结束 or by finishing it, so there is nothing for it to do here. */
 body:has(.app--game) .home-nav { display: none; }
 html.is-playing .home-nav { display: none; }
+/* 同样的道理，屋里有人在看教学、其他人停在等他那一屏的时候：那一排按钮按下
+   去就等于走出小屋，而这一屏随时会自己翻页。两种写法都留着，理由同上。 */
+body:has(.mp-learn-page) .home-nav { display: none; }
+html.is-waiting-learner .home-nav { display: none; }
 html:has(.app--game), body:has(.app--game) { overflow: hidden; overscroll-behavior: none; }
 html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: none; }
 
@@ -2434,8 +2452,11 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 }
 .mp-notes { width: 100%; max-width: 320px; margin: 0 auto; text-align: center; }
 .mp-notes .auth-hint { margin: 0 0 4px; }
+/* 散场那张总战绩图。原来限死 320px，比它所在的这一栏（.app 去掉内边距还有
+   428px）窄了整整四分之一——白留着两边不用，图上的名次和分数却小得要凑近
+   看。让它占满这一栏。 */
 .mp-final-card {
-  display: block; width: 100%; max-width: 320px; margin: 4px auto 0;
+  display: block; width: 100%; margin: 4px auto 0;
   border-radius: var(--r-md); box-shadow: var(--shadow);
 }
 /* 《长按或右键图片即可存储》。它说的是上面那张居中的图，所以它也居中，
@@ -2511,6 +2532,9 @@ body.is-room-host::after {
 }
 /* 多人这一页底下常驻着导航栏，倒数的窗口得给它让开一截，不然贴在一起。 */
 .mp-countdown-page .start-stage { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); }
+/* 等人学教学的那一屏没有底排，那 96px 就不用让了，那句话落在整屏正中间。
+   写在上面那条之后：两条权重一样，靠先后决胜负。 */
+.mp-learn-page .start-stage { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
 /* 「正在重连」那一页：只有两行字，居中就够了。 */
 .mp-wait-page { justify-content: center; min-height: 70vh; }

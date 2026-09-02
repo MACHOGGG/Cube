@@ -212,7 +212,7 @@ function openShareCard(run: StoredRun, lang: Lang): void {
   const share = document.createElement('div');
   // --top puts it above the blown-up 记录 panel it was opened from; closing
   // it just removes this layer, so that panel is still there underneath.
-  share.className = 'overlay overlay--top show';
+  share.className = 'overlay overlay--top overlay--wide show';
   share.innerHTML = `
     <div class="modal share-modal">
       <h2>${s.shareCardTitle}</h2>
