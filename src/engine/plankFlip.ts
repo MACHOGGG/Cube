@@ -20,9 +20,20 @@
  */
 import { animate } from 'animejs';
 import { reducedMotion } from './juice';
+import { flipRate } from './flipSpeed';
 
+/**
+ * 设计时长。真正用的是底下那两个函数——玩家在天才特供里那根拉杆能把它整体
+ * 调快调慢（一半到两倍），所以任何地方都不该直接拿这两个常数去排时间，
+ * 否则动画和等它的那段代码会各走各的，慢的那一档会被切掉半个翻面。
+ */
 export const FLIP_MS = 350;
 export const FLIP_STAGGER_MS = 90;
+
+/** 这一刻一次翻面要多久。 */
+export const flipMs = (): number => FLIP_MS / flipRate();
+/** 这一刻同一批里两枚之间错开多久。跟着一起缩放，队形才不变。 */
+export const flipStaggerMs = (): number => FLIP_STAGGER_MS / flipRate();
 const THICK = 0.020; // face separation in Z, x piece diameter
 const PERSPECTIVE = 3.3; // viewing distance, x piece diameter
 const LIFT = 0.05; // rise toward the viewer mid-turn, x piece diameter
@@ -32,7 +43,7 @@ const SHADOW = 0.46; // peak opacity of the cast shadow
 /** A clone of `el` as it looks right now, restyled to fill whatever box it
  *  is later placed into — the inline left/top/size the boards put on their
  *  tiles would otherwise displace it inside the plank. */
-function faceClone(el: HTMLElement): HTMLElement {
+export function faceClone(el: HTMLElement): HTMLElement {
   const c = el.cloneNode(true) as HTMLElement;
   c.style.position = 'absolute';
   c.style.left = '0';
@@ -134,7 +145,7 @@ export function plankFlipCells(
     window.setTimeout(() => {
       if (!el.isConnected) return;
       plankFlipEl(el, front, dirDeg);
-    }, n * FLIP_STAGGER_MS);
+    }, n * flipStaggerMs());
   });
 }
 
@@ -158,6 +169,9 @@ export function plankFlipEl(el: HTMLElement, front: HTMLElement, dirDeg: number)
     perspective: el.style.perspective,
   };
   const t = d * THICK;
+  // 这一次翻面多久——玩家那根拉杆定的。整段动画的每一小节都按这个数分，
+  // 所以快慢变的是速度，节奏的比例不变。
+  const ms = flipMs();
   const halfTurn = `rotateZ(${dirDeg}deg) rotateY(180deg) rotateZ(${-dirDeg}deg)`;
   const radius = getComputedStyle(el).borderRadius || '30%';
 
@@ -196,14 +210,14 @@ export function plankFlipEl(el: HTMLElement, front: HTMLElement, dirDeg: number)
   write();
   animate(k, {
     rot: [
-      { to: 180 + OVERSHOOT, duration: FLIP_MS * 0.62, ease: 'out(2)' },
-      { to: 180 - OVERSHOOT * 0.4, duration: FLIP_MS * 0.2 },
-      { to: 180 + OVERSHOOT * 0.15, duration: FLIP_MS * 0.1 },
-      { to: 180, duration: FLIP_MS * 0.08 },
+      { to: 180 + OVERSHOOT, duration: ms * 0.62, ease: 'out(2)' },
+      { to: 180 - OVERSHOOT * 0.4, duration: ms * 0.2 },
+      { to: 180 + OVERSHOOT * 0.15, duration: ms * 0.1 },
+      { to: 180, duration: ms * 0.08 },
     ],
     z: [
-      { to: peak, duration: FLIP_MS * 0.3, ease: 'out(3)' },
-      { to: 0, duration: FLIP_MS * 0.45, ease: 'in(2)' },
+      { to: peak, duration: ms * 0.3, ease: 'out(3)' },
+      { to: 0, duration: ms * 0.45, ease: 'in(2)' },
     ],
     onUpdate: write,
     onComplete: () => {

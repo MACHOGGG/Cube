@@ -1,5 +1,5 @@
 import type { ShellRefs } from '../ui/gameShell';
-import { snapFlipFaces, plankFlipCells, FLIP_MS, FLIP_STAGGER_MS } from './plankFlip';
+import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
@@ -629,7 +629,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // A chained step's own render() would tear the planks down mid-turn,
         // so the gap after a flip stretches to let the last piece finish —
         // the splash holds for its flips the same way.
-        const flipRoomMs = faceSnaps?.size ? (flipCells.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 80 : 0;
+        // 让位给翻面的那一段，和动画本身走同一个时长——玩家把翻面调慢之后，
+        // 这里要是还按设计时长等，下一拍就会把翻到一半的牌拆掉。
+        const flipRoomMs = faceSnaps?.size
+          ? (flipCells.length - 1) * flipStaggerMs() + flipMs() + 80
+          : 0;
         beat(step, Math.max(s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS, flipRoomMs) + hitStopMs);
       };
       if (s.matchGroups.length) beat(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);

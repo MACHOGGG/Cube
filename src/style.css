@@ -1400,6 +1400,70 @@ button:hover { filter: brightness(1.05); }
 .pal-lock { flex: 0 0 auto; width: 16px; height: 16px; display: block; opacity: 0.8; }
 .pal-lock svg { width: 100%; height: 100%; display: block; }
 
+/* 《图形翻面速度》那扇窗。一根十档的拉杆，上面摆一枚照当前这一档翻给你看
+   的棋子——「1.4×」谁也感觉不出来是多少，翻一次就知道了。棋子底下垫的还是
+   棋盘那块褐色，因为它演的就是棋盘上那一下。 */
+.flip-modal { text-align: left; }
+.flip-demo {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--play-panel); border-radius: var(--r-md);
+  padding: 18px; margin: 14px 0 18px;
+}
+.flip-demo-piece {
+  position: relative; width: 76px; height: 76px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+}
+/* 圆钮多宽是刻度对得上的唯一依据，所以只写这一处，滑杆和刻度条都读它：
+   钮心从「半个钮」处走到「宽度减半个钮」处，刻度条也就左右各让出半个钮，
+   再按百分比摆——第 i 格的刻度和第 i 档的钮心于是是同一个点，不是看着差
+   不多。 */
+.flip-slider { --flip-thumb: 26px; display: flex; align-items: flex-start; gap: 10px; }
+.flip-rail-box { position: relative; flex: 1 1 auto; min-width: 0; }
+.flip-range {
+  -webkit-appearance: none; appearance: none;
+  display: block; width: 100%; height: var(--flip-thumb);
+  margin: 0; padding: 0; background: transparent; cursor: pointer;
+}
+.flip-range::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 4px; background: var(--line);
+  margin-top: calc((var(--flip-thumb) - 8px) / 2);
+}
+.flip-range::-webkit-slider-thumb {
+  -webkit-appearance: none; box-sizing: border-box;
+  width: var(--flip-thumb); height: var(--flip-thumb); border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--shadow);
+  margin-top: calc((8px - var(--flip-thumb)) / 2);
+}
+.flip-range::-moz-range-track { height: 8px; border-radius: 4px; background: var(--line); }
+.flip-range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--flip-thumb); height: var(--flip-thumb); border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface);
+}
+.flip-range:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+.flip-ticks { position: relative; height: 30px; margin: 4px calc(var(--flip-thumb) / 2) 0; }
+.flip-tick {
+  position: absolute; top: 0; width: 2px; height: 7px; border-radius: 1px;
+  background: var(--ink-faint); transform: translateX(-50%);
+}
+.flip-tick--pick { width: 3px; height: 12px; background: var(--accent); }
+.flip-pick {
+  position: absolute; top: 14px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 0.74rem; font-weight: 700; color: var(--accent);
+}
+.flip-ends {
+  display: flex; justify-content: space-between;
+  margin: 0 calc(var(--flip-thumb) / 2);
+  font-size: 0.82rem; color: var(--ink-soft);
+}
+/* 没开通的那一份：拉杆照画、棋子照翻，只是拉不动——和配色那一扇窗同一个
+   道理，「看得见但拿不到」比「敬请期待」诚实。 */
+.flip-slider--locked { opacity: 0.62; }
+.flip-slider--locked .flip-range { cursor: default; }
+.flip-lock { flex: 0 0 auto; width: 16px; height: 16px; display: block; margin-top: 5px; opacity: 0.8; }
+.flip-lock svg { width: 100%; height: 100%; display: block; }
+
 /* ---------- persistent bottom nav ---------- */
 /* Two round entry points — 个人主页 and 记录与排名 — pinned to the bottom of
    the viewport. It is a sibling of #app rather than part of any screen, so it

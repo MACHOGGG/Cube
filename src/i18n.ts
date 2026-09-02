@@ -57,6 +57,12 @@ export interface I18nStrings {
   rankLoading: string;
   rankExpired: string;
   rankReLogin: string;
+  flipSpeedTitle: string;
+  flipSpeedHint: string;
+  flipSpeedLocked: string;
+  flipSpeedSlow: string;
+  flipSpeedFast: string;
+  flipSpeedPick: string;
   rankPlayers: string;
   rankMyPlace: string;
   rankNotPlayed: string;
@@ -445,6 +451,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Fetching…',
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
     rankReLogin: 'Sign in again',
+    flipSpeedTitle: 'Flip speed',
+    flipSpeedHint: 'How fast a piece turns over. Everything else stays the same.',
+    flipSpeedLocked: 'Slides Genius sets this. Here is what it does.',
+    flipSpeedSlow: 'Slower',
+    flipSpeedFast: 'Faster',
+    flipSpeedPick: 'Recommended',
     rankPlayers: '{n} on this board',
     rankMyPlace: 'You are #{n}',
     rankNotPlayed: 'You have not played this one yet',
@@ -745,6 +757,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
+    flipSpeedTitle: 'Vitesse de retournement',
+    flipSpeedHint: 'À quelle vitesse une pièce se retourne. Le reste ne change pas.',
+    flipSpeedLocked: 'Réglage Slides Genius. Voici ce qu\u2019il fait.',
+    flipSpeedSlow: 'Plus lent',
+    flipSpeedFast: 'Plus rapide',
+    flipSpeedPick: 'Recommandé',
     rankPlayers: '{n} joueurs classés',
     rankMyPlace: 'Vous êtes {n}ᵉ',
     rankNotPlayed: 'Vous n’avez pas encore joué celui-ci',
@@ -1045,6 +1063,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: '正在取…',
     rankExpired: '登入已過期，重新登入後成績才會上榜',
     rankReLogin: '重新登入',
+    flipSpeedTitle: '圖形翻面速度',
+    flipSpeedHint: '一枚棋子翻過來要多快。其他的都不變。',
+    flipSpeedLocked: '這是 Slides 天才的設定。先看看它是做什麼的。',
+    flipSpeedSlow: '慢一點',
+    flipSpeedFast: '快一點',
+    flipSpeedPick: '推薦',
     rankPlayers: '{n} 人在榜',
     rankMyPlace: '你排第 {n}',
     rankNotPlayed: '這個玩法你還沒打過',
@@ -1345,6 +1369,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: '正在取…',
     rankExpired: '登录已过期，重新登录后成绩才会上榜',
     rankReLogin: '重新登录',
+    flipSpeedTitle: '图形翻面速度',
+    flipSpeedHint: '一枚棋子翻过来要多快。其他的都不变。',
+    flipSpeedLocked: '这是 Slides 天才的设定。先看看它是做什么的。',
+    flipSpeedSlow: '慢一点',
+    flipSpeedFast: '快一点',
+    flipSpeedPick: '推荐',
     rankPlayers: '{n} 人在榜',
     rankMyPlace: '你排第 {n}',
     rankNotPlayed: '这个玩法你还没打过',

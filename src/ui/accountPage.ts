@@ -4,6 +4,14 @@ import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
+import { faceClone, plankFlipEl } from '../engine/plankFlip';
+import {
+  FLIP_STEPS,
+  flipStep,
+  isRecommendedStep,
+  rateOfStep,
+  setFlipStep,
+} from '../engine/flipSpeed';
 import { trackIconChange } from '../engine/analytics';
 import {
   CVD_VARIANTS,
@@ -75,6 +83,10 @@ export function renderAccountPage(
     jia: s.paletteJia,
     bing: s.paletteBing,
   };
+  /** 《图形翻面速度》那一行右边写什么：推荐档就写「推荐」，其余写倍率。
+   *  写倍率而不是毫秒——毫秒要跟设计时长走，倍率是玩家自己拉出来的那个数。 */
+  const flipLabel = (i: number) =>
+    isRecommendedStep(i) ? s.flipSpeedPick : `${rateOfStep(i).toFixed(1)}\u00d7`;
   // Where the wide pill leads, and what it is called, is decided by which
   // counter can charge this build. The site has accounts because an address
   // is the only identity it has; the store builds have none, because Apple
@@ -161,6 +173,16 @@ export function renderAccountPage(
             subscribed
               ? `${colorblindOn() ? CVD_NAME[cvdVariant()] : VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;`
               : '&rsaquo;'
+          }</span>
+        </button>
+        <!-- 《图形翻面速度》跟上面那一行同一个规矩：做好了，所以两种人都点
+             得开。没开通的人进去看得见那根拉杆、也看得见它在做什么（窗口里
+             那枚棋子会照当前这一档翻给他看），只是拉不动。 -->
+        <button class="profile-row" id="flipRow">
+          ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
+          <span class="profile-row-label">${s.flipSpeedTitle}</span>
+          <span class="profile-row-value">${
+            subscribed ? `${flipLabel(flipStep())}&nbsp;&rsaquo;` : '&rsaquo;'
           }</span>
         </button>
         <!-- 《随机得分目标》里面还没有东西，所以和其它没做完的一样挂着锁：
@@ -336,6 +358,135 @@ export function renderAccountPage(
     });
   }
 
+  /**
+   * 《图形翻面速度》——一根十档的拉杆。
+   *
+   * 从设计速度的一半到两倍，正中那一档标《推荐》。这件事没有一个对所有人
+   * 都对的值：想看清楚每一次翻面的人要慢，打熟了嫌拖沓的人要快，所以交给
+   * 玩家自己拉。倍率按几何级数分档（见 flipSpeed.ts），拉起来每一格的差别
+   * 才是一样大的。
+   *
+   * 窗口里那枚棋子是这根拉杆的说明书：拉到哪一档，它就照那一档翻一次给你
+   * 看。写「1.4×」谁也感觉不出那是多少，翻一次就知道了——而它翻的正是棋盘
+   * 上那一下（同一段动画、同一套配色），不是一个另做的示意。
+   *
+   * 和《解锁更多配色》一样，没开通的人也进得来：拉杆看得见、演示照样翻，
+   * 只是拉不动。
+   */
+  function openFlipSpeedPicker() {
+    const locked = !isGenius();
+    // 演示那枚棋子用玩家自己这套配色里的两支：正面一支实色，反面一颗点。
+    // 跟着色盲开关走，因为棋盘也跟着它走。
+    const swatch = colorblindOn() ? cvdSwatch(cvdVariant()) : variantSwatch(pieceVariant());
+    const faceA = swatch[0];
+    const faceB = swatch[3];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    // 刻度和滑块的圆钮要对得上，所以两边都从 --flip-thumb 算：滑块的钮从
+    // 「半个钮」处走到「宽度减半个钮」处，刻度条也就左右各让出半个钮，再按
+    // 百分比摆——这样第 i 格的刻度和第 i 档的钮心是同一个点，不是看着差不多。
+    const ticks = Array.from({ length: FLIP_STEPS }, (_, i) => {
+      const at = `${(i / (FLIP_STEPS - 1)) * 100}%`;
+      const pick = isRecommendedStep(i);
+      return (
+        `<span class="flip-tick${pick ? ' flip-tick--pick' : ''}" style="left:${at}"></span>` +
+        (pick ? `<span class="flip-pick" style="left:${at}">${s.flipSpeedPick}</span>` : '')
+      );
+    }).join('');
+    overlay.innerHTML = `
+      <div class="modal flip-modal">
+        <h2>${s.flipSpeedTitle}</h2>
+        <p class="hint">${locked ? s.flipSpeedLocked : s.flipSpeedHint}</p>
+        <div class="flip-demo"><div class="flip-demo-piece" id="flipDemo"></div></div>
+        <div class="flip-slider${locked ? ' flip-slider--locked' : ''}">
+          ${locked ? `<span class="flip-lock">${ICON_LOCK}</span>` : ''}
+          <div class="flip-rail-box">
+            <input class="flip-range" id="flipRange" type="range"
+                   min="0" max="${FLIP_STEPS - 1}" step="1" value="${flipStep()}"
+                   aria-label="${s.flipSpeedTitle}"${locked ? ' disabled aria-disabled="true"' : ''}>
+            <div class="flip-ticks">${ticks}</div>
+            <div class="flip-ends"><span>${s.flipSpeedSlow}</span><span>${s.flipSpeedFast}</span></div>
+          </div>
+        </div>
+        <div class="btn-row">
+          ${locked ? `<button class="genius-cta" id="flipGo">${s.becomeGenius}</button>` : ''}
+          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="flipClose">${s.closeBtn}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const demo = overlay.querySelector<HTMLElement>('#flipDemo')!;
+    // 演示棋子现在是哪一面。翻面动画要的是「旧面的样子」和「新面的样子」两
+    // 份，所以这里先照旧面拍一张，改成新面，再让 plankFlipEl 把前者转成后者
+    // ——和棋盘上那一下走的是同一条路。
+    let dotFace = false;
+    const paintDemo = () => {
+      demo.innerHTML = '';
+      if (!dotFace) {
+        demo.style.background = faceA;
+        return;
+      }
+      demo.style.background = 'transparent';
+      const dot = document.createElement('div');
+      dot.className = 'dot-circle';
+      const d = Math.round(demo.offsetWidth * 0.86);
+      dot.style.width = d + 'px';
+      dot.style.height = d + 'px';
+      dot.style.background = faceB;
+      demo.appendChild(dot);
+    };
+    paintDemo();
+
+    // 拉的时候一格一个事件，翻面却要好几百毫秒。所以不是每一格都翻——停手
+    // 一下下才翻，而且上一次没翻完就再等等：翻到一半重进一次，plankFlipEl
+    // 会把正在转的那块木片当成「旧面」拍进去，翻出来就是一团糊的。
+    let timer = 0;
+    const flipDemo = () => {
+      if (!demo.isConnected) return;
+      if (demo.dataset.flipping) {
+        timer = window.setTimeout(flipDemo, 90);
+        return;
+      }
+      const front = faceClone(demo);
+      dotFace = !dotFace;
+      paintDemo();
+      plankFlipEl(demo, front, 0);
+    };
+    const nudgeDemo = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(flipDemo, 110);
+    };
+    // 一进来就翻一次，不用等他先去拉：这个窗口是来看它怎么翻的。
+    timer = window.setTimeout(flipDemo, 260);
+
+    const range = overlay.querySelector<HTMLInputElement>('#flipRange')!;
+    range.addEventListener('input', () => {
+      // disabled 已经拦住了手，这一句拦的是别的：以后谁为了样式把 disabled
+      // 换成一个 class，这把锁不会跟着悄悄开了。
+      if (locked) return;
+      const i = Number(range.value);
+      setFlipStep(i);
+      nudgeDemo();
+      const value = container.querySelector<HTMLElement>('#flipRow .profile-row-value');
+      if (value) value.innerHTML = `${flipLabel(flipStep())}&nbsp;&rsaquo;`;
+    });
+
+    const close = () => {
+      window.clearTimeout(timer);
+      overlay.remove();
+    };
+    overlay.querySelector<HTMLButtonElement>('#flipGo')?.addEventListener('click', () => {
+      close();
+      openGeniusWindow(lang, refresh);
+    });
+    overlay.querySelector<HTMLButtonElement>('#flipClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
   function openIconPicker() {
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
@@ -386,6 +537,7 @@ export function renderAccountPage(
   on('rulesRow', openRules);
   on('iconRow', openIconPicker);
   on('paletteRow', openPalettePicker);
+  on('flipRow', openFlipSpeedPicker);
   on('cvdRow', () => {
     setColorblind(!colorblindOn());
     const row = container.querySelector<HTMLButtonElement>('#cvdRow');

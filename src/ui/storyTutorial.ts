@@ -2,7 +2,7 @@ import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
 import { playMove, playScore, playFlip, playClear, seatEls } from '../engine/juice';
 import { createDragChain } from '../engine/dragChain';
-import { plankFlipEl, FLIP_MS, FLIP_STAGGER_MS } from '../engine/plankFlip';
+import { plankFlipEl, flipMs, flipStaggerMs } from '../engine/plankFlip';
 
 /**
  * The keyframe-playback engine behind all three basic tutorials.
@@ -119,7 +119,7 @@ function stepMs(st: StoryStep): number {
     // The plank flips run at their own real-world pace (they are the game's
     // shipped feel, not a slowed-down lesson) — expressed here in authored
     // ms so the progress bar's SPEED division lands back on the real time.
-    case 'flip': return ((st.idx.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 140) * SPEED + WAIT.flipSettle;
+    case 'flip': return ((st.idx.length - 1) * flipStaggerMs() + flipMs() + 140) * SPEED + WAIT.flipSettle;
     case 'fade': return WAIT.fadeOut + WAIT.fadeIn;
     case 'blink': return st.times * (WAIT.blinkOff + WAIT.blinkOn) + WAIT.blinkHold;
     // +420 authored ≈ the chain's post-travel settle wave (capped ~300ms
@@ -369,9 +369,9 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
           front.innerHTML = cellSvg(spec.frames[st.f][i]);
           el.innerHTML = cellSvg(spec.frames[st.snap][i]);
           plankFlipEl(el, front, dir);
-        }, n * FLIP_STAGGER_MS);
+        }, n * flipStaggerMs());
       });
-      await sleepRaw((st.idx.length - 1) * FLIP_STAGGER_MS + FLIP_MS + 140);
+      await sleepRaw((st.idx.length - 1) * flipStaggerMs() + flipMs() + 140);
       if (gen !== my) return;
       renderFrame(st.snap, true);
       await sleep(WAIT.flipSettle);
