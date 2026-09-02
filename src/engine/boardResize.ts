@@ -15,19 +15,60 @@
  * for changes that don't resize the panel at all.
  */
 export function observeBoardSize(el: HTMLElement, redraw: () => void): () => void {
+  // 装地板的那一格。它的高宽是屏幕定的（.app--game 是 min-height 和
+  // max-height 都写死 100dvh 的一整屏），所以它变了就是屏幕变了，而且它不会
+  // 被下面 squareFloor 钉住的地板反过来推着走——不然这里就成了一个来回缩的
+  // 死循环。
+  const cell = el.parentElement;
   let w = -1;
   let h = -1;
+  let cw = -1;
+  let ch = -1;
+  let vw = -1;
+  let vh = -1;
   const tick = () => {
     const r = el.getBoundingClientRect();
+    const c = cell?.getBoundingClientRect();
+    const ncw = c ? c.width : -1;
+    const nch = c ? c.height : -1;
+    const nvw = window.innerWidth;
+    const nvh = window.innerHeight;
     // Nothing moved: skip, so a redraw that itself touches layout can never
     // feed back into another one.
-    if (Math.abs(r.width - w) < 0.5 && Math.abs(r.height - h) < 0.5) return;
-    w = r.width;
-    h = r.height;
+    //
+    // 「地板的框」一个人说了不算，屏幕的尺寸也要算一票。原因是排完版之后
+    // squareFloor 会把地板钉成一个固定像素的正方形（见下面）——钉住之后它
+    // 就不再跟着屏幕走了：手机一转，屏幕从 390×844 变成 844×390，地板还是
+    // 362×362，这一句于是说「什么都没动」，直接跳过，整局就停在竖屏那一版
+    // 排版上，直到玩家去碰一下棋盘（拖一次会触发 render）才回过神来。玩家
+    // 看到的就是「转屏之后棋盘没显示全」——横屏里方块要溢出底边 30px。
+    if (
+      Math.abs(r.width - w) < 0.5 &&
+      Math.abs(r.height - h) < 0.5 &&
+      Math.abs(ncw - cw) < 0.5 &&
+      Math.abs(nch - ch) < 0.5 &&
+      nvw === vw &&
+      nvh === vh
+    ) {
+      return;
+    }
+    cw = ncw;
+    ch = nch;
+    vw = nvw;
+    vh = nvh;
     redraw();
+    // 记排完版之后的尺寸，不是排版之前的。排版自己会把地板换成另一个大小，
+    // 记之前那个的话，ResizeObserver 下一帧必定再叫一次、再白排一遍。
+    const done = el.getBoundingClientRect();
+    w = done.width;
+    h = done.height;
   };
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(tick) : null;
   ro?.observe(el);
+  // 连那一格一起看着，上面的判断里也带上它。地板被钉死之后自己不会再变，
+  // 而那一格会——iOS 上 Safari 收起地址栏、100dvh 慢慢落定的那几帧不发
+  // resize 事件，innerWidth 也一个数都不动，只有这一条线接得住。
+  if (cell) ro?.observe(cell);
   window.addEventListener('resize', tick);
   window.addEventListener('orientationchange', tick);
   return () => {
