@@ -241,9 +241,28 @@ export function squareFloor(wrap: HTMLElement, boardW: number, boardH: number): 
 
   const rect = wrap.getBoundingClientRect();
   const side = Math.max(boardW, boardH);
-  if (!(side > 0) || side > rect.width + 0.5 || side > rect.height + 0.5) return;
+  if (!(side > 0) || side > rect.width + 0.5 || side > rect.height + 0.5) {
+    slack(wrap, 0);
+    return;
+  }
   wrap.style.width = side + 'px';
   wrap.style.height = side + 'px';
   wrap.style.flex = '0 0 auto';
   wrap.style.margin = 'auto';
+  // 收成正方形之后，这一格左右各空出来多少。横屏里得分图示贴在棋盘两边，
+  // 而玩家要的是「图示落在棋盘和按键之间那段空当的正中」——这段空当有一半
+  // 就是这里空出来的，所以把它告诉样式表（见 style.css 里 .pattern-sides
+  // 那一段：两边各朝棋盘挪半个 slack，正好落在正中）。
+  //
+  // 用的是 transform 挪，不是外边距：transform 不进排版，所以这个数不会反
+  // 过来影响下一轮量出来的格子大小。
+  slack(wrap, (rect.width - side) / 2);
+}
+
+/** 把「地板两侧各空出多少」写到父层上，让兄弟节点也读得到。 */
+function slack(wrap: HTMLElement, px: number): void {
+  const host = wrap.parentElement;
+  if (!host) return;
+  if (px > 0.5) host.style.setProperty('--board-slack-x', px.toFixed(1) + 'px');
+  else host.style.removeProperty('--board-slack-x');
 }

@@ -46,10 +46,13 @@ export function packSnapshot(raw: RawCell[]): BoardSnapshot {
   for (const c of raw) {
     if (c.kind === 'circle') pts.push([c.cx - c.r, c.cy - c.r], [c.cx + c.r, c.cy + c.r]);
     else if (c.kind === 'rect') {
-      // A rotated square's corners can reach sqrt(2) times further than its
-      // half-width — using that worst case keeps the bbox correct at any
-      // rotateDeg without needing the actual rotated corner math.
-      const d = c.half * Math.SQRT2;
+      // 转过的方块，四个角最远能伸到半宽的 √2 倍——取这个最坏值，任何角度都
+      // 包得住，不用真去算转过之后的角坐标。
+      //
+      // 没转过的就按半宽算，别也乘上 √2：那会把包围盒白白撑大 41%，整副棋盘
+      // 因此缩着画。平时看不太出来，「消到只剩一枚」那种结局里就很明显了——
+      // 一枚方块本该占满那一格，实际只占了七成。
+      const d = c.rotateDeg ? c.half * Math.SQRT2 : c.half;
       pts.push([c.cx - d, c.cy - d], [c.cx + d, c.cy + d]);
     } else pts.push(...c.points);
   }
@@ -202,6 +205,25 @@ function drawHazardMark(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size:
   ctx.fillStyle = '#FFFFFF';
   ctx.fillText('!', cx, cy);
   ctx.restore();
+}
+
+/**
+ * 只留还在盘上的那些，按它们自己的范围重新铺满。
+ *
+ * packSnapshot 本来就会「按包围盒缩放并居中」，只是存下来的那一份包含了消
+ * 掉的格子（face 是 blank，画出来是一圈淡淡的空框），于是包围盒永远是整副
+ * 棋盘。把它们滤掉再打一次包，包围盒就收到真正剩下的那几枚上——剩一枚就占
+ * 满整格，剩横着三枚就是横着三枚。
+ *
+ * 一枚不剩时返回一个空的 snapshot（不是 null），让上面那一层知道是「打完了」
+ * 而不是「没这张图」。
+ */
+function livingOnly(snap: BoardSnapshot | null): BoardSnapshot | null {
+  if (!snap) return null;
+  const alive = snap.cells.filter((c) => c.face !== 'blank');
+  if (!alive.length) return { cells: [] };
+  if (alive.length === snap.cells.length) return snap;
+  return packSnapshot(alive);
 }
 
 function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: number, y: number, size: number) {
@@ -449,17 +471,38 @@ export function renderShareCard(
   ctx.fillText(info.detail, PAD, 268);
 
   // Start on the left, end on the right, each centred in its own panel.
+  //
+  // 「结束」那一格画的是真正剩下的东西，不是「整副棋盘，消掉的那些画成空
+  // 圈」。方块那一档最明显：一局打得好可以消到只剩一枚，而原来那张图里这一
+  // 枚还缩在左上角自己那格里，看着像是没打完。现在把消掉的整个去掉，剩下的
+  // 按它们自己的范围重新铺满这一格——剩一枚就是一枚占满，剩横着三枚就是横着
+  // 三枚，一枚不剩就空着写一句《全部消除》。
+  //
+  // 只对单人的卡这么做。小屋那张卡上两块棋盘本来就缩得小、是拿来互相比的，
+  // 各人剩多少各自铺满反而没法比——玩家点的也是「非多人游玩中的」。
+  const endShown = standings.length ? endSnap : livingOnly(endSnap);
   const panels: [number, BoardSnapshot | null, string][] = [
     [PAD, startSnap, s.shareStartLabel],
-    [PAD + panel + gap, endSnap, s.shareEndLabel],
+    [PAD + panel + gap, endShown, s.shareEndLabel],
   ];
   for (const [x, snap, label] of panels) {
     ctx.fillStyle = '#f0ece4';
     roundRect(ctx, x, boardY, panel, panel, 20);
     ctx.fill();
-    if (snap) {
+    if (snap && snap.cells.length) {
       const inset = panel * 0.08;
       drawSnapshot(ctx, snap, x + inset, boardY + inset, panel - inset * 2);
+    } else if (snap) {
+      // 一枚不剩。空着不写字的话，这一格看着像是没画出来。
+      ctx.save();
+      ctx.font = '700 22px Fraunces, Georgia, serif';
+      ctx.fillStyle = '#8b8680';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(s.shareAllCleared, x + panel / 2, boardY + panel / 2);
+      ctx.restore();
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
     }
     ctx.font = '600 15px "Karla", sans-serif';
     ctx.fillStyle = '#5b5650';

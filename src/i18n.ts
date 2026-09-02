@@ -387,6 +387,7 @@ export interface I18nStrings {
   // ---- share card (canvas-drawn) ----
   shareStartLabel: string;
   shareEndLabel: string;
+  shareAllCleared: string;
   shareFooterHint: string;
   shareQrCaption: string;
   // ---- shared shape UI ----
@@ -704,6 +705,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareQrCaption: 'Scan to play Slides',
     shareStartLabel: 'Start',
     shareEndLabel: 'End',
+    shareAllCleared: 'Board cleared',
     shareFooterHint: 'Drag a whole row, column, or diagonal to match same-color patterns',
     colorblindBtn: 'Colorblind-friendly palette',
     shapeNameSquare: 'Square',
@@ -1015,6 +1017,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareQrCaption: 'Scannez pour jouer à Slides',
     shareStartLabel: 'Début',
     shareEndLabel: 'Fin',
+    shareAllCleared: 'Plateau vidé',
     shareFooterHint: 'Faites glisser une ligne, colonne ou diagonale entière pour assortir les couleurs',
     colorblindBtn: 'Palette adaptée aux daltoniens',
     shapeNameSquare: 'Carré',
@@ -1326,6 +1329,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareQrCaption: '掃碼來 Slides～',
     shareStartLabel: '開始',
     shareEndLabel: '結束',
+    shareAllCleared: '全部消除',
     shareFooterHint: '拖動整行整列或整條斜線，拼出同色圖案',
     colorblindBtn: '色盲友好配色',
     shapeNameSquare: '方塊',
@@ -1637,6 +1641,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareQrCaption: '扫码来 Slides～',
     shareStartLabel: '开始',
     shareEndLabel: '结束',
+    shareAllCleared: '全部消除',
     shareFooterHint: '拖动整行整列或整条斜线，拼出同色图案',
     colorblindBtn: '色盲友好配色',
     shapeNameSquare: '方块',

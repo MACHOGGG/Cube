@@ -74,6 +74,14 @@
   --play-chip-press: #8E5138;
   --play-chip-press-ink: #FFF1E4;
   --play-mark: #4C7EAD;
+  /* 得分图示那圈描边。
+     它有两个活：把并排的两枚图示分开，以及给蓝色的图形一道边，让它在底色
+     上「浮」着。以前写死白色——在深色底上两个活都干得漂亮，可这一页的底色
+     是跟着主题走的（--play-bg 就是 --bg），米白 #FAF6EC 上白描白等于没画，
+     色盲那套的近白 #F4F4F4 更是一点都看不见（白对白的对比度 1.05）。所以
+     它跟着主题走：浅底描深，深底描白。转角本来就是圆的（图示的 svg 写着
+     stroke-linejoin="round"）。 */
+  --mark-edge: #2E2430;
   /* The disc the two controls' signs are cut out of: the chips' own
      terracotta, one step deeper so it reads against the amber. */
   --play-btn-disc: #B0454A;
@@ -99,6 +107,7 @@
     --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --nav-glow: 230, 143, 152;
     --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    --mark-edge: #FFFFFF;
   }
 }
 :root[data-theme="dark"] {
@@ -106,6 +115,7 @@
   --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --nav-glow: 230, 143, 152;
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  --mark-edge: #FFFFFF;
 }
 
 /* ---------- colourblind-friendly palette (the whole site) ----------
@@ -137,6 +147,7 @@
   --play-chip-press-ink: #FFF4E4;
   --play-mark: #0072B2;
   --play-btn-disc: #8A3D00;
+  --mark-edge: #1A1A1A;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-cvd='1']:not([data-theme="light"]) {
@@ -147,6 +158,7 @@
     --accent-2: #E69F00; --accent-2-soft: #33280D;
     --warn: #E69F00; --warn-soft: #33280D;
     --board-bg: #1D2023;
+    --mark-edge: #FFFFFF;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
@@ -2275,17 +2287,22 @@ html.is-playing body { background: var(--play-bg); }
    showing between them. */
 .app--game .pattern-hint {
   flex: none; margin: 0; gap: clamp(14px, 5vw, 40px); justify-content: center;
-  /* 得分图示那圈白边。
-     它有两个活：把并排的两个图示分开，以及给蓝色的图形一道亮边，让它在
-     任何底色上都「浮」着。上一版我把它改成了 var(--play-bg)（跟着底色走），
-     想的是「描边就该是底色」——可底色跟着页面变成米白之后，米白描在米白上
-     等于没画，图示看起来就秃了。第一个活底色也能干，第二个活只有白色能干，
-     所以写回白色。 */
-  color: var(--play-mark); --mark-edge: #FFFFFF;
+  /* 描边色不在这儿定，在 :root 上按主题定（见那边的注释）：浅底描深、深底
+     描白。这里写死过白色，那在米白和近白的底色上等于没画。 */
+  color: var(--play-mark);
 }
 .app--game .pattern-icon { gap: 0; color: inherit; }
-/* One piece is 1em, so this is the only size the row needs. */
-.app--game .pattern-hint { font-size: clamp(12px, 2.3vh, 22px); }
+/* 一枚图形就是 1em，所以整排的大小只由这一句定。
+   用 vmin 不用 vh：vmin 取宽高里小的那个，同一台手机横过来和竖着算出来是
+   同一个数，所以「横屏和竖屏一样大」这件事不用两处各写一遍——玩家点名要的
+   就是这个。数值比原来大了一圈（竖屏 19px → 23px），图示是这一页除了棋盘
+   之外最该看清的东西。 */
+.app--game .pattern-hint { font-size: clamp(16px, 6vmin, 28px); }
+/* 七色圆球和进阶三角是另一档：它们的图示留在棋盘上方（横过来那两块版图是
+   宽度吃满的，两边没有空当），所以图示每高一分，棋盘就矮一分。这两个玩法
+   也放大了，只是收着放——放到「和别的玩法竖屏时一样大」为止，再大就是拿棋
+   盘去换了，而版图最大化是第一原则。 */
+.app--game:not(.pattern-sides) .pattern-hint { font-size: clamp(13px, 4.4vmin, 21px); }
 .app--game .pattern-icon svg { width: auto; height: auto; display: block; }
 /* 这一条其实是两段：前一半和后一半（横屏要把它们分到棋盘两边去，见下面的
    .pattern-sides）。竖屏两段都在这一条里，段内和段间用同一个间距，看不出
@@ -2468,7 +2485,6 @@ html.is-playing body { background: var(--play-bg); }
     grid-column: 2; grid-row: 1;
     gap: clamp(18px, 6vw, 64px);
   }
-  .app.app--game > .pattern-hint { font-size: clamp(11px, 3.4vh, 20px); }
 
   .app.app--game > .hud {
     grid-column: 1; grid-row: 1 / -1;
@@ -2568,6 +2584,20 @@ html.is-playing body { background: var(--play-bg); }
   /* 左边那一条里的后一半是竖屏用的，横屏由右边那一条来出。用 display:none
      藏，所以读屏软件两种排布下都只念得到一遍，不会重。 */
   .app.app--game.pattern-sides > .pattern-hint--a .ph-part--tail { display: none; }
+  /* 落在「棋盘边到按键那一列」之间的正中。
+     这一段空当由两截拼成：图示自己那一格两边的间距，和棋盘收成正方形之后
+     在它那一格里空出来的那一截（--board-slack-x，squareFloor 写的）。图示
+     原来紧贴着读数那一侧，朝棋盘挪半个 slack 就正好居中——推导：空当
+     G = 间距 + 图示 + 间距 + slack，居中要求左边留 (G − 图示)/2，减去原来
+     的那一个间距，差正好是 slack/2。
+     用 transform 挪而不是外边距：transform 不进排版，挪了也不会反过来把格
+     子的宽度改掉，下一轮量出来的还是同一个数。 */
+  .app.app--game.pattern-sides > .pattern-hint--a {
+    transform: translateX(calc(var(--board-slack-x, 0px) / 2));
+  }
+  .app.app--game.pattern-sides > .pattern-hint--b {
+    transform: translateX(calc(var(--board-slack-x, 0px) / -2));
+  }
 }
 
 /* 横屏的结算页：一屏之内看完，不用先往下滑一下才按得到键。
