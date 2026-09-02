@@ -151,7 +151,15 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
 }
 
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-const isPin = (value: string) => /^\d{4,6}$/.test(value);
+/**
+ * 密码够不够格。和服务器的 PASS_RE、以及设置密码那一页用的是同一条规矩：
+ * 6 到 128 位任意字符。
+ *
+ * 这里原来是 /^\d{4,6}$/——4 到 6 位纯数字。于是走一趟「忘了密码，用邮箱解
+ * 锁」，密码就被悄悄降级成一个四位数字，比正门弱得多。一条通往重设密码的路，
+ * 不该比正门更宽。
+ */
+const isPin = (value: string) => value.length >= 6 && value.length <= 128;
 
 /** One labelled input, in the shape the auth windows all use. */
 function field(id: string, label: string, attrs: string): string {
@@ -887,7 +895,7 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
     <div id="unlockStep2" hidden>
       ${field('unlockCode', s.unlockCodeLabel, 'type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"')}
       ${field('unlockPw', s.unlockNewPw,
-        `type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="${s.passwordPlaceholder}"`)}
+        `type="password" minlength="6" maxlength="128" autocomplete="new-password" placeholder="${s.passwordPlaceholder}"`)}
     </div>
     <p class="auth-msg" id="unlockMsg" role="status"></p>
     <div class="btn-row">

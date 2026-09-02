@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import {
   EMAIL_RE,
-  PIN_RE,
+  PASS_RE,
   entitlementOf,
   loadAccount,
   normalizeEmail,
@@ -89,8 +89,16 @@ async function request(res, req, address) {
 }
 
 async function confirm(res, address, { code, password }) {
+  // 和注册、改密码同一条规则（PASS_RE，6 到 128 位任意字符）。
+  //
+  // 这里原来用的是 PIN_RE——4 到 6 位纯数字。于是走一趟「忘了密码，用邮箱
+  // 解锁」，密码就被强制降级成一个四位数字，而且不分账户类型：花钱订阅的账户
+  // 和内部码账户一视同仁。文案上也早就自相矛盾了，设置密码时写的是「密码
+  // （6 位以上字符）」，解锁时却写「新密码（4～6 位数字）」。
+  //
+  // 一条通往「重设密码」的路，不该比正门更宽。
   const pin = String(password || '');
-  if (!PIN_RE.test(pin)) return send(res, 400, { error: 'password' });
+  if (!PASS_RE.test(pin)) return send(res, 400, { error: 'password' });
 
   const pending = await get(key(address));
   if (!pending) return send(res, 400, { error: 'expired' });

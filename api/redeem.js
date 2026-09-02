@@ -69,9 +69,36 @@ export default async function handler(req, res) {
   }
 
   const plan = ticketDoc.plan;
+
+  /**
+   * 码已经被拿走了，但这几行还没写进账户——中间任何一步摔了，就得把码放回去。
+   *
+   * takeOnce 是 GETDEL：读和删是同一步，这样同一张码不会被两个人同时抢到。代
+   * 价是从这一刻起码就不在库里了，而「加到账户上」是另外一次写。这两次写之间
+   * 要是数据库抖一下、超时一次，玩家看到的是一句笼统的失败，可他那张码已经从
+   * 系统里消失了——不能再兑，账户上也什么都没多，只能来找人工，而人工这边连
+   * 查都查不到（库里已经没有这张码了）。
+   *
+   * 所以照 passcode.js 的 bind() 那个样子来：失败就把整份 ticketDoc 原样写
+   * 回去。放回去这一步自己也可能失败，那就真没办法了——但它把「一定丢」变成
+   * 了「两次都刚好摔了才丢」，而且日志里留得下痕迹。
+   */
+  const giveBack = async () => {
+    try {
+      await set('code:' + ticket, ticketDoc);
+    } catch (err) {
+      console.error('兑换码放不回去了', ticket, err);
+    }
+  };
+
   if (account) {
     extend(account, plan);
-    await saveAccount(address, account);
+    try {
+      await saveAccount(address, account);
+    } catch (err) {
+      await giveBack();
+      throw err;
+    }
     await set('codeused:' + ticket, { at: Date.now(), plan, email: address });
     return send(res, 200, { ...entitlementOf(account, address), kind: 'code' });
   }
@@ -82,7 +109,12 @@ export default async function handler(req, res) {
   const fresh = newAccount('', 'code');
   extend(fresh, plan);
   fresh.unbound = true;
-  await saveAccount(holder, fresh);
+  try {
+    await saveAccount(holder, fresh);
+  } catch (err) {
+    await giveBack();
+    throw err;
+  }
   await set('codeused:' + ticket, { at: Date.now(), plan });
 
   return send(res, 200, { ...entitlementOf(fresh, ''), kind: 'code', code: ticket });
