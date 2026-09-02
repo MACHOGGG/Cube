@@ -131,27 +131,29 @@ export function renderAccountPage(
           <span class="profile-row-label">${s.insiderCode}</span>
           <span class="profile-row-value">›</span>
         </button>
-        <button class="profile-row" id="randomRow">
-          <span class="profile-row-label">${s.randomTargetTitle}</span>
-          <span class="profile-row-value">${s.comingSoon}</span>
-        </button>
-        <!-- 多人游玩 is built; it opens its own page rather than saying
-             「敬请期待」 like the perks below it still honestly do. -->
+        <!-- 做好的排在上面，没做的排在下面。做好的三条是：内部码、多人游玩、
+             解锁更多配色；《随机得分目标》还只是一行「敬请期待」，所以跟着
+             其它敬请期待的一起排到下面去。 -->
         <button class="profile-row" id="multiRow">
           <span class="profile-row-label">${s.multiplayerTitle}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
-        <!-- 《解锁更多配色》不再是一行「敬请期待」了：天才点开能挑棋子的
-             配色，没开通的人看到的还是原来那把锁。它是 PRIVILEGES 的第一
-             条，所以从第二条起才继续挂锁。 -->
-        ${
-          subscribed
-            ? `<button class="profile-row" id="paletteRow">
-                 <span class="profile-row-label">${privileges[0]}</span>
-                 <span class="profile-row-value">${VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;</span>
-               </button>`
-            : lockedRow(privileges[0])
-        }
+        <!-- 《解锁更多配色》两种人都点得开。
+             天才点开是挑颜色；没开通的点开是看看有什么——三套配色照样画出来，
+             只是每一行挂着锁、点不动。「敬请期待」那四个字对一件已经做好的
+             东西是假话，而一行按不动的灰字既不告诉他有什么，也不给他理由去
+             开通。 -->
+        <button class="profile-row" id="paletteRow">
+          ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
+          <span class="profile-row-label">${privileges[0]}</span>
+          <span class="profile-row-value">${
+            subscribed ? `${VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;` : '&rsaquo;'
+          }</span>
+        </button>
+        <button class="profile-row" id="randomRow">
+          <span class="profile-row-label">${s.randomTargetTitle}</span>
+          <span class="profile-row-value">${s.comingSoon}</span>
+        </button>
         ${privileges.slice(1).map(lockedRow).join('')}
       </section>
 
@@ -250,11 +252,22 @@ export function renderAccountPage(
    * 真正要看的是那几支颜色摆在一起是什么样。色带画的是这套配色的前五支，
    * 底下垫着棋盘那块褐色，因为那才是它们实际待的地方。
    */
+  /**
+   * 挑棋子的配色。
+   *
+   * 没开通的人也进得来，只是每一行挂着锁、按不动——颜色照样画出来。
+   * 「看得见但拿不到」比「敬请期待」诚实：那四个字对一件已经做好的东西是假
+   * 话，而且它既没告诉人有什么，也没给人任何想开通的理由。
+   */
   function openPalettePicker() {
+    const locked = !isGenius();
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
     const row = (v: PieceVariant) =>
-      `<button class="pal-opt" data-pal="${v}">
+      `<button class="pal-opt${locked ? ' pal-opt--locked' : ''}" data-pal="${v}"${
+        locked ? ' disabled aria-disabled="true"' : ''
+      }>
+         ${locked ? `<span class="pal-lock">${ICON_LOCK}</span>` : ''}
          <span class="pal-name">${VARIANT_NAME[v]}</span>
          <span class="pal-strip">${variantSwatch(v, BASE_SWATCH)
            .map((c) => `<span style="background:${c}"></span>`)
@@ -263,15 +276,26 @@ export function renderAccountPage(
     overlay.innerHTML = `
       <div class="modal pal-modal">
         <h2>${s.paletteTitle}</h2>
-        <p class="hint">${s.paletteHint}</p>
+        <p class="hint">${locked ? s.paletteLocked : s.paletteHint}</p>
         <div class="pal-list">${PIECE_VARIANTS.map(row).join('')}</div>
-        <div class="btn-row"><button class="primary" id="palClose">${s.closeBtn}</button></div>
+        <div class="btn-row">
+          ${locked ? `<button class="genius-cta" id="palGo">${s.becomeGenius}</button>` : ''}
+          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="palClose">${s.closeBtn}</button>
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#palGo')?.addEventListener('click', () => {
+      close();
+      openGeniusWindow(lang, refresh);
+    });
     const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.pal-opt'));
     const mark = (v: PieceVariant) => {
       for (const el of opts) el.classList.toggle('pal-opt--on', el.dataset.pal === v);
+      // 锁着的时候不去改外面那一行：写上「原本」会让人以为他已经挑了一套，
+      // 而他根本挑不了。那一行对他只是一个「›」。
+      if (locked) return;
       const value = container.querySelector<HTMLElement>('#paletteRow .profile-row-value');
       if (value) value.innerHTML = `${VARIANT_NAME[v]}&nbsp;&rsaquo;`;
     };
@@ -283,7 +307,6 @@ export function renderAccountPage(
         mark(v);
       });
     }
-    const close = () => overlay.remove();
     overlay.querySelector<HTMLButtonElement>('#palClose')!.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();

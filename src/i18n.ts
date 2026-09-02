@@ -240,6 +240,8 @@ export interface I18nStrings {
   /** 《解锁更多配色》那扇窗：标题、一句说明、三套的名字。 */
   paletteTitle: string;
   paletteHint: string;
+  /** 没开通的人点开配色窗口时，顶上那句——看得见，但要开通才挑得动。 */
+  paletteLocked: string;
   paletteNow: string;
   paletteJia: string;
   paletteBing: string;
@@ -550,6 +552,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeftTag: 'left',
     paletteTitle: 'Piece colours',
     paletteHint: 'Changes the pieces in every board. Off while the colourblind palette is on.',
+    paletteLocked: 'Here is what a Slides Genius gets to pick from.',
     paletteNow: 'Original',
     paletteJia: 'Deep',
     paletteBing: 'Soft',
@@ -833,6 +836,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeftTag: 'parti',
     paletteTitle: 'Couleurs des pièces',
     paletteHint: 'S’applique à tous les plateaux. Inactif quand la palette daltonienne est active.',
+    paletteLocked: 'Voici ce dans quoi un Slides Génie peut choisir.',
     paletteNow: 'D’origine',
     paletteJia: 'Profonde',
     paletteBing: 'Douce',
@@ -1116,6 +1120,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeftTag: '已離開',
     paletteTitle: '棋子配色',
     paletteHint: '換的是每個玩法裡棋子的顏色。開著色盲配色時這裡不生效。',
+    paletteLocked: '這就是 Slides 天才能挑的幾套。',
     paletteNow: '原本',
     paletteJia: '沉穩',
     paletteBing: '柔和',
@@ -1399,6 +1404,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeftTag: '已离开',
     paletteTitle: '棋子配色',
     paletteHint: '换的是每个玩法里棋子的颜色。开着色盲配色时这里不生效。',
+    paletteLocked: '这就是 Slides 天才能挑的几套。',
     paletteNow: '原本',
     paletteJia: '沉稳',
     paletteBing: '柔和',

@@ -1299,6 +1299,13 @@ button:hover { filter: brightness(1.05); }
   background: var(--play-panel); border-radius: 10px; padding: 6px 8px;
 }
 .pal-strip span { flex: 1 1 0; aspect-ratio: 1; border-radius: 50%; }
+/* 没开通的人看到的那一份：颜色照画，只是按不动。
+   压暗到 0.62 而不是更低——再暗就看不清颜色了，而「让他看清有什么」正是这
+   一版存在的理由。 */
+.pal-opt--locked { opacity: 0.62; cursor: default; }
+.pal-opt--locked:active { transform: none; }
+.pal-lock { flex: 0 0 auto; width: 16px; height: 16px; display: block; opacity: 0.8; }
+.pal-lock svg { width: 100%; height: 100%; display: block; }
 
 /* ---------- persistent bottom nav ---------- */
 /* Two round entry points — 个人主页 and 记录与排名 — pinned to the bottom of
