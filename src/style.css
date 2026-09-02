@@ -1478,6 +1478,55 @@ button:hover { filter: brightness(1.05); }
 .flip-lock { flex: 0 0 auto; width: 16px; height: 16px; display: block; margin-top: 5px; opacity: 0.8; }
 .flip-lock svg { width: 100%; height: 100%; display: block; }
 
+/* 《随机得分目标》那一页：老虎机的牌子和那句话在最上面，底下三个图形，
+   挑完就在下面两个格子里转。 */
+.slot-page .slot-crest {
+  display: flex; align-items: center; gap: 14px;
+  margin: 4px 0 2px;
+}
+.slot-crest-art { flex: 0 0 auto; width: min(23vw, 96px); line-height: 0; }
+.slot-crest-art svg { width: 100%; height: auto; display: block; }
+.slot-tagline {
+  margin: 0; flex: 1 1 auto; min-width: 0;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600;
+  font-size: clamp(0.98rem, 4vw, 1.2rem); line-height: 1.35; color: var(--ink);
+}
+.slot-shapes { display: flex; gap: 10px; }
+.slot-shape {
+  position: relative; flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 6px 8px; border-radius: var(--r-md);
+  background: var(--surface); border: 2px solid var(--line);
+  font: inherit; color: inherit; cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.slot-shape > svg { width: 100%; height: auto; aspect-ratio: 1; display: block; }
+.slot-shape-name { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); }
+.slot-shape:hover { border-color: var(--ink-faint); }
+.slot-shape--on { border-color: var(--accent); background: var(--accent-soft); }
+/* 没开通的那一份：图形照画，只是按不动——和配色、翻面速度那两扇窗同一个
+   道理，做好了的东西谁都看得见。 */
+.slot-shapes--locked .slot-shape { opacity: 0.62; cursor: default; }
+.slot-lock {
+  position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%);
+  width: 26px; height: 26px; color: var(--accent-ink); pointer-events: none;
+}
+.slot-lock svg { width: 100%; height: 100%; display: block; }
+/* 两个轮子。停下来之前一直在换，停下来那一格才是这一局要拼的。 */
+.slot-reels { display: flex; gap: 12px; }
+.slot-reel {
+  flex: 1 1 0; min-width: 0; min-height: 88px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--play-panel); border-radius: var(--r-md);
+  color: var(--play-mark); --mark-edge: #FFFFFF;
+  font-size: clamp(15px, 5vw, 26px);
+}
+.slot-reel svg { width: auto; height: auto; display: block; }
+.slot-reel--set { box-shadow: inset 0 0 0 3px var(--accent); }
+.slot-note { margin: 0; color: var(--ink-soft); font-size: 0.9rem; text-align: center; }
+.slot-go { margin-top: 2px; }
+.slot-cta { align-self: center; }
+
 /* ---------- persistent bottom nav ---------- */
 /* Two round entry points — 个人主页 and 记录与排名 — pinned to the bottom of
    the viewport. It is a sibling of #app rather than part of any screen, so it

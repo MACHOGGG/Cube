@@ -11,6 +11,9 @@ import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } fr
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
+import { scoreOf } from '../engine/targets';
+import { findTargets, type BoardView } from '../engine/targetMatch';
+import { targetPatternDefs } from '../engine/targetIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -100,6 +103,8 @@ export function createSquareGame(): ShapeGame {
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
+      // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那两个。
+      const targets = opts?.targets?.length ? opts.targets : null;
       const refs = buildShell(container, {
         lang,
         shapeId: 'square',
@@ -108,7 +113,7 @@ export function createSquareGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'square', '方块')}`,
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
         startBody: SHELL[lang].shellStartBody,
-        patternIcons: renderPatternHintIcons(PATTERNS, lang),
+        patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
       });
 
       const pickPalette = (): readonly string[] =>
@@ -460,7 +465,35 @@ export function createSquareGame(): ShapeGame {
         return cells;
       }
 
+      /**
+       * 随机得分目标那一局，判定要问棋盘的那几件事。
+       *
+       * 棋盘、滑法、整行奖励一概不动——变的只有「拼成什么算分」，所以这里
+       * 只是把 grid 包一层给 targetMatch 用，别的地方一个字都不用改。
+       */
+      const targetView: BoardView = {
+        has: (r, c) => r >= 0 && r < rows && c >= 0 && c < cols,
+        tileAt: (r, c) => (r >= 0 && r < rows && c >= 0 && c < cols ? grid[r][c] : null),
+        cells: () => {
+          const out: Cell[] = [];
+          for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) out.push([r, c]);
+          return out;
+        },
+      };
+
+      function findTargetMatches(mask: Set<string> | null): Match[] {
+        const out: Match[] = [];
+        for (const p of targets!) {
+          for (const cells of findTargets(targetView, p)) {
+            if (!touches(cells, mask)) continue;
+            out.push({ cells, points: scoreOf(p), label: p.id });
+          }
+        }
+        return out;
+      }
+
       function findMatches(mask: Set<string> | null): Match[] {
+        if (targets) return findTargetMatches(mask);
         const matches: Match[] = [];
         for (let r = 0; r < rows - 1; r++)
           for (let c = 0; c < cols - 1; c++) {

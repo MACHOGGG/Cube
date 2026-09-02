@@ -12,6 +12,9 @@ import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, typ
 import { extendRunInLine } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
+import { scoreOf } from '../engine/targets';
+import { findTargets, type BoardView } from '../engine/targetMatch';
+import { targetPatternDefs } from '../engine/targetIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -250,6 +253,8 @@ export function createTriangleBigGame(): ShapeGame {
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
       const lang = opts?.lang ?? 'zhHans';
+      // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那几个。
+      const targets = opts?.targets?.length ? opts.targets : null;
       const refs = buildShell(container, {
         lang,
         shapeId: 'triangle',
@@ -258,7 +263,7 @@ export function createTriangleBigGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'triangle', '三角')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
-        patternIcons: renderPatternHintIcons(PATTERNS, lang),
+        patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
       });
 
       const pickPalette = (): readonly string[] =>
@@ -701,7 +706,42 @@ export function createTriangleBigGame(): ShapeGame {
         return true;
       }
 
+      /**
+       * 随机得分目标那一局，判定要问棋盘的那几件事。
+       *
+       * 这块整三角的 LEFT_TRIM 全是 0、GLOBAL_ROW_OFFSET 是 0，所以本地的
+       * (r, c) 就是全局的 (i, p)——targetMatch 的 place() 按 p = p0 + dg + dr
+       * 算，直接用得上。（六边蜂窝那块每行的 LEFT_TRIM 不一样，本地列不等于
+       * p，那一块要接的话得先换算，这里没有这个问题。）
+       */
+      const targetView: BoardView = {
+        has: (r, c) =>
+          r >= 0 && r < ROW_LENS.length && c >= 0 && c < ROW_LENS[r] && !isBlank(grid[r][c]),
+        tileAt: (r, c) =>
+          r >= 0 && r < ROW_LENS.length && c >= 0 && c < ROW_LENS[r] && !isBlank(grid[r][c])
+            ? grid[r][c]
+            : null,
+        cells: () => {
+          const out: Cell[] = [];
+          for (let r = 0; r < ROW_LENS.length; r++)
+            for (let c = 0; c < ROW_LENS[r]; c++) out.push([r, c]);
+          return out;
+        },
+      };
+
+      function findTargetMatches(mask: Set<string> | null): Match[] {
+        const out: Match[] = [];
+        for (const p of targets!) {
+          for (const cells of findTargets(targetView, p)) {
+            if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
+            out.push({ cells, points: scoreOf(p), label: p.id });
+          }
+        }
+        return out;
+      }
+
       function findRunMatches(mask: Set<string> | null): Match[] {
+        if (targets) return findTargetMatches(mask);
         const matches: Match[] = [];
         for (const line of LINES) {
           const cells = line.cells;

@@ -13,7 +13,7 @@ import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
-import { onGeniusChange, refreshEntitlement } from './engine/subscription';
+import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
@@ -32,6 +32,8 @@ import {
 } from './engine/room';
 import { clearSeed, seedRandom } from './engine/rng';
 import { shapeName } from './ui/shapeLabels';
+import { renderRandomTargetPage } from './ui/slotMachine';
+import type { Family, TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
 import { createCircleGame } from './shapes/circle';
@@ -317,6 +319,7 @@ function showMenu() {
       if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
+    onRandomTarget: showRandomTarget,
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: showMultiplayer,
     onBombFor: (tier, id, reopenKey) => {
@@ -389,7 +392,7 @@ function showAccountPage(tab: AuthTab) {
       onBack: showMenu,
       onSwitchLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
       onHowToSlide: showTutorialPicker,
-      onRandomTarget: () => showComingSoon(STRINGS[currentLang].randomTargetTitle),
+      onRandomTarget: showRandomTarget,
       onMultiplayer: showMultiplayer,
     },
     currentLang,
@@ -610,20 +613,41 @@ function showTutorialPicker() {
   root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
 }
 
-function showComingSoon(title: string) {
+/**
+ * 《随机得分目标》：先挑图形、再转出这一局认哪两个得分图案，然后就是那个
+ * 基础玩法本身。
+ *
+ * 它是天才特供的一档，所以没开通的人点到这儿是那扇订阅窗——和主菜单上那两
+ * 张锁着的棋盘同一个去处。
+ */
+function showRandomTarget() {
   teardown();
-  const s = STRINGS[currentLang];
-  root.innerHTML = `
-    <div class="app">
-      <h1>${title}</h1>
-      <p class="tag-line">${s.comingSoon}</p>
-      <div class="controls">
-        <button class="icon-btn" id="backBtn">${s.back}</button>
-      </div>
-    </div>
-  `;
-  root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
+  trackScreen('random-target');
+  renderRandomTargetPage(
+    root,
+    currentLang,
+    {
+      onBack: showMenu,
+      onStart: (family: Family, targets: TargetPattern[]) => {
+        const game = randomTargetGame(family);
+        showGame(game, { targets }, showRandomTarget);
+      },
+      onGenius: () => openGeniusWindow(currentLang, showRandomTarget),
+    },
+    !isGenius(),
+  );
+  wireHomeTitle();
+  repaintIcons();
+  toTop();
 }
+
+/** 这一族对应的基础玩法。三角那一档是主菜单上《三角》后面那块整三角。 */
+function randomTargetGame(family: Family): ShapeGame {
+  if (family === 'square') return squareGame;
+  if (family === 'circle') return circleGame;
+  return triangleGame;
+}
+
 
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, reopenKey?: string) {
   const fullOpts: ShapeGameOpts = { ...opts, lang: currentLang };
@@ -643,7 +667,10 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
   // A timed-challenge run or a replay from another shape's "更多布局" card
   // skips the tutorial gate — only the very first time a player opens this
   // shape's *own* base game gets the auto-popup.
-  const tutorialShape = opts?.timeLimitSec || opts?.bomb ? null : shapeTutorialFor(game.card.id);
+  // 随机得分目标那一局也跳过教学：玩家刚从老虎机那一页挑完图形转完图案，
+  // 中间再插一段「这个形状怎么玩」是把他从自己的节奏里拽出来。
+  const tutorialShape =
+    opts?.timeLimitSec || opts?.bomb || opts?.targets ? null : shapeTutorialFor(game.card.id);
   if (tutorialShape && tutorialShape !== 'square' && !hasSeenTutorial(tutorialShape)) {
     // Marked the moment it is shown, not when it finishes: it is offered
     // exactly once per family, and a player who skips out of it has still

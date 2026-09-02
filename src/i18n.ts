@@ -44,6 +44,11 @@ export interface I18nStrings {
   bombTimedTitle: string;
   bombAdvancedTitle: string;
   randomTargetTitle: string;
+  randomTargetTagline: string;
+  randomTargetPick: string;
+  randomTargetSpinning: string;
+  randomTargetOnly: string;
+  randomTargetPoints: string;
   comingSoon: string;
   multiplayerTitle: string;
   rankingsTitle: string;
@@ -439,6 +444,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
     randomTargetTitle: 'Random score target',
+    randomTargetTagline: 'Pick a shape, spin for targets, 4-3-2-1 go!',
+    randomTargetPick: 'Pick a shape',
+    randomTargetSpinning: 'Spinning\u2026',
+    randomTargetOnly: 'Only these two score this run.',
+    randomTargetPoints: '{n} pts',
     comingSoon: 'Coming soon',
     multiplayerTitle: 'Multiplayer',
     rankingsTitle: 'Records & rankings',
@@ -745,6 +755,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
     randomTargetTitle: 'Objectif de score aléatoire',
+    randomTargetTagline: 'Choisis une forme, tire les objectifs, 4-3-2-1 c\u2019est parti !',
+    randomTargetPick: 'Choisis une forme',
+    randomTargetSpinning: 'Tirage\u2026',
+    randomTargetOnly: 'Seuls ces deux-là comptent cette partie.',
+    randomTargetPoints: '{n} pts',
     comingSoon: 'Bientôt disponible',
     multiplayerTitle: 'Multijoueur',
     rankingsTitle: 'Historique et classements',
@@ -1051,6 +1066,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
     randomTargetTitle: '隨機得分目標',
+    randomTargetTagline: '選擇圖形，隨機得分目標，4-3-2-1 開始！',
+    randomTargetPick: '先挑一個圖形',
+    randomTargetSpinning: '轉著呢\u2026',
+    randomTargetOnly: '這一局只有這兩個算分。',
+    randomTargetPoints: '{n} 分',
     comingSoon: '敬請期待',
     multiplayerTitle: '多人遊玩',
     rankingsTitle: '成績與排名',
@@ -1357,6 +1377,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
     randomTargetTitle: '随机得分目标',
+    randomTargetTagline: '选择图形，随机得分目标，4-3-2-1 开始！',
+    randomTargetPick: '先挑一个图形',
+    randomTargetSpinning: '转着呢\u2026',
+    randomTargetOnly: '这一局只有这两个算分。',
+    randomTargetPoints: '{n} 分',
     comingSoon: '敬请期待',
     multiplayerTitle: '多人游玩',
     rankingsTitle: '成绩与排名',

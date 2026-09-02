@@ -2,9 +2,14 @@ import type { ShapeCardMeta } from '../shapes/types';
 import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
 import { isLayoutLocked } from '../engine/geniusContent';
+import { isGenius } from '../engine/subscription';
+import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoTag } from './geniusLogo';
+
+/** 《随机得分目标》在主菜单上的那块牌子——玩家给的老虎机图。 */
+const ICON_SLOT_MACHINE = custom('slot-machine') ?? '';
 import {
   ICON_BASE_SQUARE,
   ICON_BASE_CIRCLE,
@@ -33,6 +38,8 @@ export interface MenuHandlers {
   onBombFor: (tier: BombTier, id: string, reopenKey?: string) => void;
   /** 多人游玩，从主菜单直接进——进去就是房间设置那一页。 */
   onMultiplayer: () => void;
+  /** 《随机得分目标》：挑图形、转出这一局的得分图案，然后开局。 */
+  onRandomTarget: () => void;
 }
 
 /**
@@ -274,8 +281,44 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
 
   let row = wide ? newRow() : grid;
   let inRow = 0;
+  /**
+   * 锁区第一张：《随机得分目标》。
+   *
+   * 它不是一副新棋盘（挑完图形玩的就是那三个基础玩法），所以不在
+   * moreLayouts 里；但它和那两副锁着的棋盘是同一档东西——天才特供，没开通
+   * 就是一把锁。玩家点名要它排在锁区的第一个，所以这里在「第一张锁着的卡」
+   * 之前把它插进去；手机上锁着的几张本来就被挪到了最后，插的位置正好是那一
+   * 串的头上。
+   */
+  let slotDone = false;
+  const dropSlotCard = () => {
+    if (slotDone) return;
+    slotDone = true;
+    const locked = !isGenius();
+    const btn = iconButton(
+      ICON_SLOT_MACHINE,
+      locked ? `${s.randomTargetTitle} · ${s.geniusOnly}` : s.randomTargetTitle,
+    );
+    if (locked) {
+      btn.classList.add('home-icon-btn--locked');
+      btn.insertAdjacentHTML(
+        'beforeend',
+        `<span class="center-pick-lock">${ICON_LOCK}</span>` +
+          `<span class="center-pick-genius">${geniusLogoTag(80)}</span>`,
+      );
+    }
+    btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : handlers.onRandomTarget()));
+    (wide ? row : grid).appendChild(btn);
+    if (wide) inRow++;
+  };
+
+  // 宽屏一排六张：稿子上这一排是五张棋盘，现在多了一张老虎机。让它换行的话
+  // 整页就高出一行（一百多像素），而这一页的规矩是「一屏装得下，不用滚」
+  // （见 check-overlap）。六张挤一排不会横着溢出——每张按 flex 平分，各自还
+  // 有 max-width 收着，多一张只是每张窄一点、跟着矮一点，整页反而更矮。
   for (const { card, shape } of ordered) {
-    if (wide && inRow >= 5) { row = newRow(); inRow = 0; }
+    if (wide && inRow >= 6) { row = newRow(); inRow = 0; }
+    if (isLayoutLocked(card.id)) dropSlotCard();
     const isLocked = isLayoutLocked(card.id);
     const name = shapeName(lang, card.id, card.name);
     const btn = iconButton(
@@ -303,4 +346,6 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     (wide ? row : grid).appendChild(btn);
     inRow++;
   }
+  // 锁区可能一张都没有（比如以后那两副棋盘也解锁了），那就摆在这一串的最后。
+  dropSlotCard();
 }

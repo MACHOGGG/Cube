@@ -53,8 +53,7 @@ export interface ProfileHandlers {
   /** Opens the quick language-switch popup. */
   onSwitchLanguage: () => void;
   onHowToSlide: () => void;
-  /** 《随机得分目标》。那一行现在锁着（见下面的 lockedRow），所以这条线暂时
-   *  没有元素可挂——留着是因为它有内容了就要接回去。 */
+  /** 《随机得分目标》——挑图形、转出这一局的得分图案，然后开局。 */
   onRandomTarget: () => void;
   onMultiplayer: () => void;
 }
@@ -193,10 +192,14 @@ export function renderAccountPage(
             subscribed ? `${flipLabel(flipStep())}&nbsp;&rsaquo;` : '&rsaquo;'
           }</span>
         </button>
-        <!-- 《随机得分目标》里面还没有东西，所以和其它没做完的一样挂着锁：
-             一行点得开、进去却什么都没有的按钮，比一把锁更让人扫兴。等它有
-             内容了再把锁去掉。 -->
-        ${lockedRow(s.randomTargetTitle)}
+        <!-- 《随机得分目标》做好了，所以和上面几条一样：两种人都点得开。
+             没开通的人进去看得见这个玩法的标志、那句《选择图形，随机得分目
+             标，4-3-2-1 开始！》和三个图形，只是图形挂着锁按不动。 -->
+        <button class="profile-row" id="randomRow">
+          ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
+          <span class="profile-row-label">${s.randomTargetTitle}</span>
+          <span class="profile-row-value">&rsaquo;</span>
+        </button>
         ${privileges.slice(1).map(lockedRow).join('')}
       </section>
 
