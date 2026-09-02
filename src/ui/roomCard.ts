@@ -183,8 +183,7 @@ export function showRoomCard(
   const s = STRINGS[lang];
   const meId = opts.meId ?? currentRoom()?.playerId;
   const ranked = rankRoom(state.players);
-  const best = bestRoundOf(state.players);
-  const fastest = fastestOf(state.players);
+  // 单局最高和最快玩家这一页上不再用文字说——它们写在战绩图里（drawCard）。
   const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
 
   container.innerHTML = `
@@ -216,14 +215,9 @@ export function showRoomCard(
           .join('')}
       </div>
 
-      <div class="mp-notes">
-        ${best ? `<p class="auth-hint">${s.mpBestRound} · ${esc(best.name)} ${best.best}</p>` : ''}
-        ${
-          fastest?.bestTime
-            ? `<p class="auth-hint">${s.mpFastest} · ${esc(fastest.name)} ${shortTime(fastest.bestTime)}</p>`
-            : ''
-        }
-      </div>
+      <!-- 单局最高和最快玩家不在这儿用文字再说一遍：底下那张战绩图上已经写着
+           它们了（见上面 drawCard 的 fillText）。同一件事说两遍，一遍在页面上、
+           一遍在图里，读起来是重复的，而图才是要发出去的那一份。 -->
 
       <img class="mp-final-card" id="mpFinalCard" alt="${s.shareImgAlt}" />
       <p class="auth-hint auth-hint--center">${s.shareHint}</p>

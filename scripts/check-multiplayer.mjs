@@ -642,6 +642,16 @@ if (rankPage) {
     () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
   ).then(() => true).catch(() => false);
   check('竞赛排名图渲染出来了', drawn);
+  // 单局最高和最快玩家只在图里写，页面上不再用文字说一遍。
+  // 这一页在客人那边（他刚离开小屋），所以问的是 B 不是 A。
+  const notes = await B.page.evaluate(() => ({
+    text: document.querySelector('.mp-page')?.textContent || '',
+    img: !!document.querySelector('#mpFinalCard'),
+  }));
+  const leftover = ['单局最高', '最快玩家'].filter((w) => notes.text.includes(w));
+  check('小屋战绩页面上没有《单局最高》《最快玩家》的文字行',
+    leftover.length === 0, leftover.join('、'));
+  check('那两项仍然画在战绩图里（图还在）', notes.img);
 }
 
 // 有人走掉：名单上留着他，只是标成「走了」。
