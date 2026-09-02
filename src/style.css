@@ -1099,6 +1099,17 @@ button:hover { filter: brightness(1.05); }
   top: 50%; bottom: auto;
   transform: translateY(-50%);
 }
+/* 那把锁往左让开，让整把都露出来。
+   居中弹窗里锁在正当中是对的，那儿四周是空的；主菜单上右边那块天才招牌
+   （88px 宽，钉在右边缘）正好压住锁的右半边，只剩半把锁露在外面。所以这
+   里改成从右边量：招牌 88px，再让开 8px，锁的右缘就落在招牌左缘外面。
+   min() 是给窄卡片兜底——再窄也不会把锁推出左边缘。 */
+.home-icon-btn--locked .center-pick-lock {
+  left: auto;
+  right: min(96px, calc(100% - 42px));
+  top: 50%;
+  transform: translateY(-50%);
+}
 
 /* ---------- profile page rows ---------- */
 .profile-row {
