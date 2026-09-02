@@ -48,7 +48,7 @@ export const PIN_RE = /^\d{4,6}$/;
  * accepted at the door differs, because the two doors were opened for
  * different reasons.
  */
-export const PASS_RE = /^.{6,128}$/;
+export const PASS_RE = /^.{6}$/;
 
 /**
  * What an endpoint accepts before it knows which kind of account it is

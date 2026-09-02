@@ -240,6 +240,10 @@ export function renderMultiplayerPage(
           <span>${s.mpCreate}</span>
           ${geniusLogoTag(40, 'genius-logo--cta')}
         </button>
+        <!-- 上面是「自己开一间」，下面是「进别人开的」。这条线把两件事分开——
+             底下那句《加入 Slides 天才搭建的小屋》说的其实是下半段的事，
+             所以线画在按钮和它中间，而不是画在它下面。 -->
+        <hr class="mp-rule" />
         <p class="auth-hint auth-hint--center">${s.mpNeedGenius}</p>
 
         <!-- Four digits read off someone else's screen deserve the room the

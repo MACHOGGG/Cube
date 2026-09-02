@@ -159,7 +159,7 @@ const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
  * 锁」，密码就被悄悄降级成一个四位数字，比正门弱得多。一条通往重设密码的路，
  * 不该比正门更宽。
  */
-const isPin = (value: string) => value.length >= 6 && value.length <= 128;
+const isPin = (value: string) => value.length === 6;
 
 /** One labelled input, in the shape the auth windows all use. */
 function field(id: string, label: string, attrs: string): string {
@@ -261,7 +261,7 @@ function credentialForm(
   return `<form id="pwForm" class="pw-form" autocomplete="on">
       ${known}
       ${field('pwNew', label,
-        `type="password" name="password" autocomplete="new-password" minlength="6" placeholder="${esc(placeholder)}"`)}
+        `type="password" name="password" autocomplete="new-password" minlength="6" maxlength="6" placeholder="${esc(placeholder)}"`)}
       <!-- 这是账号建起来的那一刻，也是唯一一次能在给出邮箱的当下问一句「要不要
            收信」的机会。默认不勾：同意得是主动给的，预先替人勾上的不算同意
            （GDPR 明确不认），所以这个框出厂就是空的。 -->
@@ -334,7 +334,7 @@ export function openSetPasswordWindow(
     const address = user.value.trim();
     if (fromCode && !isEmail(address)) return void (msg.textContent = s.emailInvalid);
     const password = input.value;
-    if (password.length < 6) return void (msg.textContent = s.setPwShort);
+    if (password.length !== 6) return void (msg.textContent = s.setPwShort);
     go.disabled = true;
     msg.textContent = s.workingLabel;
     const done = await attachAccount(pending, password, address, news.checked);
@@ -895,7 +895,7 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
     <div id="unlockStep2" hidden>
       ${field('unlockCode', s.unlockCodeLabel, 'type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"')}
       ${field('unlockPw', s.unlockNewPw,
-        `type="password" minlength="6" maxlength="128" autocomplete="new-password" placeholder="${s.passwordPlaceholder}"`)}
+        `type="password" minlength="6" maxlength="6" autocomplete="new-password" placeholder="${s.passwordPlaceholder}"`)}
     </div>
     <p class="auth-msg" id="unlockMsg" role="status"></p>
     <div class="btn-row">

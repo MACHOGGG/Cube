@@ -1059,7 +1059,20 @@ button:hover { filter: brightness(1.05); }
 .home-icon-btn--locked > svg { opacity: 0.38; }
 /* 弹窗里那块招牌是探出框外一点的——那儿四周都是空的。主菜单上旁边就是另一
    张卡，探出去会压到人家身上，所以收回自己框里。 */
-.home-icon-btn--locked .center-pick-genius { right: 2px; bottom: 2px; }
+/* 锁着的玩法，右下角那块天才招牌。
+ *
+ * 原来是钉在按钮底边上（bottom），而每个玩法的图形高矮不一样：菱形那张按钮
+ * 201×201、图形中线在 101，招牌中线落在 159——低了 58px；进阶三角那张按钮
+ * 201×104、图形中线 52，招牌中线 62——只低 10px。两张摆在一起，招牌就不在
+ * 同一条水平线上。
+ *
+ * 改成钉在中线上：招牌的中线对齐图形的中线，右边缘贴图形的右边缘。大小一点
+ * 没动，只是上下挪了。 */
+.home-icon-btn--locked .center-pick-genius {
+  right: 0; left: auto;
+  top: 50%; bottom: auto;
+  transform: translateY(-50%);
+}
 
 /* ---------- profile page rows ---------- */
 .profile-row {
@@ -2421,6 +2434,13 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 /* 《长按或右键图片即可存储》。它说的是上面那张居中的图，所以它也居中，
    而不是像页面上别的小字一样贴着左边。 */
 .mp-page .auth-hint--center { text-align: center; }
+/* 开小屋和进别人的小屋，中间那条线。用整块的浅色而不是 border——1px 的
+   border 在高密度屏上会被抹成半透明的一道灰，看着像没画干净。 */
+.mp-rule {
+  border: none; height: 2px; flex: 0 0 auto;
+  width: 100%; max-width: 320px; margin: 10px auto 8px;
+  background: var(--line); border-radius: var(--r-full);
+}
 /* 冠亚军的小王冠。它是名字的兄弟而不是名字的一部分：名字那一格带着一层
    右端渐隐的遮罩（长名字用的），王冠放进去会跟着一起淡掉。 */
 .mp-crown { flex: none; width: 15px; height: 15px; display: block; }
