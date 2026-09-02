@@ -24,6 +24,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { avatarSvg, type RoomPlayer, type RoomState } from '../engine/room';
 import { modeBadges } from './startStage';
 import { gameIcon } from './homeIcons';
+import { custom } from './customIcons';
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -102,21 +103,26 @@ export interface WaitPanel {
  */
 export function showWaitPanel(
   lang: Lang,
-  opts: { shapeId: string; meId?: string; onLeave: () => void },
+  opts: { shapeId: string; meId?: string; code?: string; onLeave: () => void },
 ): WaitPanel {
   const s = STRINGS[lang];
   const marks = [
     `<span class="start-mark"><span class="start-mark-art">${gameIcon(opts.shapeId)}</span></span>`,
     ...modeBadges(false, true),
   ];
+  // 和教学等待页同一个转圈的小人（ui/multiplayer.ts 的 showLearningWait 用的
+  // 也是它）。两处等的是同一件事——等屋里别的人——所以该长同一张脸。
+  const spinner = custom('mp-loading') ?? '';
   const overlay = document.createElement('div');
   overlay.className = 'overlay opaque show overlay--wait';
   overlay.id = 'mpWait';
   overlay.innerHTML = `
     <div class="start-stage mp-wait-stage">
+      ${opts.code ? `<p class="mp-wait-code">${s.mpRoomCode} ${esc(opts.code)}</p>` : ''}
       <div class="start-emblem">
         <div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>
       </div>
+      ${spinner ? `<div class="mp-wait-spin">${spinner}</div>` : ''}
       <div class="mp-wait-rows mp-players" id="mpWaitRows"></div>
       <div class="start-actions">
         <button class="icon-btn start-act" id="mpWaitLeave">${s.mpLeave}</button>

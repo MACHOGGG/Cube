@@ -291,6 +291,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
         wait ??= showWaitPanel(lang, {
           shapeId,
           meId: seat.playerId,
+          code: seat.code,
           onLeave: () => confirmLeaveRoom(lang, handlers.onLeave),
         });
         wait.update(state);

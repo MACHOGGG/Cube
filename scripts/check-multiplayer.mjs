@@ -320,6 +320,33 @@ if (waitUp) {
   check('等待页下方是全房的实时名单', wait.rows === 2, `${wait.rows} 行`);
   check('交了卷的人有一个勾，还在打的没有', wait.ticks === 1, `${wait.ticks} 个勾`);
   check('等待页上留了一条走得掉的路', wait.leave);
+  check('等待页最上面写着小屋号', (await A.page.$eval('#mpWait .mp-wait-code', (e) => e.textContent))
+    .includes(code), code);
+  check('等待页上有那个转圈的小人（和教学等待页同一个）',
+    (await A.page.$$eval('#mpWait .mp-wait-spin svg', (e) => e.length)) === 1);
+
+  // 按下去要真的看得见，不是「建出来了但压在底下」。
+  //
+  // 从前这一框是光秃秃的 .overlay（z-index 90），而等待页是 .overlay--wait
+  // （100）而且不透明——框确实建出来了、也在监听，就是整个盖住了。玩家看到
+  // 的是「按了没反应」，等所有人打完、等待页一撤，它才忽然冒出来。
+  // 所以这里不能只问「在不在 DOM 里」，要问「那个位置上最上面的是不是它」。
+  await A.page.click('#mpWaitLeave');
+  await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 6000 });
+  await A.page.waitForTimeout(300);
+  const onTop = await A.page.evaluate(() => {
+    const box = document.querySelector('#leaveRoomConfirm .modal')?.getBoundingClientRect();
+    if (!box) return { ok: false, hit: 'no modal' };
+    const el = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    // className 在 SVG 元素上是个对象，直接拼会变成 [object Object]。
+    const name = el?.id || (typeof el?.className === 'string' ? el.className : '') || el?.tagName;
+    return { ok: !!el?.closest('#leaveRoomConfirm'), hit: name || '?' };
+  });
+  check('在等待页上按《离开小屋》，问句真的盖在最上面（不是压在等待页底下）',
+    onTop.ok, String(onTop.hit));
+  await A.page.click('#mpLeaveNo');
+  await A.page.waitForFunction(() => !document.getElementById('leaveRoomConfirm'), { timeout: 5000 });
+  check('选《留下》回到等待页，座位没交出去', (await A.page.$('#mpWait')) !== null);
   // 局中那份名单也认这个勾——「他交了」这件事在哪儿看都该长一个样。
   check('局中的名单上也给交了卷的人挂勾',
     (await B.page.$$eval('.mp-rank .mp-tick', (e) => e.length)) === 1);

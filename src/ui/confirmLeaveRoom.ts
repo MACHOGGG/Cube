@@ -15,7 +15,16 @@ import { iAmHost } from '../engine/room';
 export function confirmLeaveRoom(lang: Lang, onLeave: () => void): void {
   const s = STRINGS[lang];
   const overlay = document.createElement('div');
-  overlay.className = 'overlay show';
+  // overlay--top（z-index 120）不是装饰，是这颗问句能不能被看见的全部。
+  //
+  // 光写 .overlay 是 z-index 90，而交卷之后那张等待页是 .overlay--wait，
+  // 100，还是不透明的。于是在等待页上按《离开小屋》，这一框确确实实建出来
+  // 了、也确确实实在监听，只是整个压在那层不透明的底下——玩家看到的是「按
+  // 了没反应」。等所有人都打完、等待页撤掉，它才忽然冒出来。
+  //
+  // 这句问话能从四个地方问出来（小屋页、结算页、局中那一排、屋主那条横幅），
+  // 所以它不该去猜自己盖在谁上面，直接钉在最上层。
+  overlay.className = 'overlay show overlay--top';
   overlay.id = 'leaveRoomConfirm';
   overlay.innerHTML = `
     <div class="modal">

@@ -2679,6 +2679,23 @@ body.is-room-host::after {
    是开始等别人，所以这一页得让人看得见「还差谁」。 */
 /* 交卷之后那一层要盖住底下的结算页，所以比普通弹窗再高一档。 */
 .overlay--wait { z-index: 100; }
+
+/* 交卷之后那一页上的两件东西。
+   小屋号放最上面：这一页要停留好几分钟（在等别人），而屋号正是这时候最可能
+   被人问起的那一个数——「你们几号房来着」。
+   转圈的小人和教学等待页是同一个（.mp-learn-spin），只是这一页底下还压着实
+   时名单和一颗键，所以收小一半，不然名单要被挤到屏幕外面去。 */
+.mp-wait-code {
+  margin: 0 0 6px; text-align: center; letter-spacing: .12em;
+  font-size: clamp(13px, 3.4vw, 17px); opacity: .72;
+}
+.mp-wait-spin {
+  width: min(22vw, 92px); aspect-ratio: 1; margin: 2px auto 6px;
+  animation: mp-learn-turn 3.6s linear infinite;
+  transform-origin: 50% 50%;
+}
+.mp-wait-spin svg { width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: reduce) { .mp-wait-spin { animation-duration: 9s; } }
 .mp-wait-stage { width: 100%; max-width: 380px; }
 .mp-wait-stage .start-emblem { flex: 0 0 auto; padding: 0 0 clamp(14px, 3vh, 30px); }
 .mp-wait-rows {
