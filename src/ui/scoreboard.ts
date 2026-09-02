@@ -74,13 +74,36 @@ function runSeconds(): number | undefined {
  * 结束之后再比原始得分就不对了：同一副牌，多磨五分钟总能多滑出几分，名次会
  * 变成「谁耗得久谁赢」。综合得分里有时间系数（房间里还放大了一倍半），那才
  * 是这场比赛想比的东西。
+ *
+ * ── 为什么这两个数必须「只算一次」 ──────────────────────────────────
+ *
+ * 从前判断走到哪一段，看的是结算页有没有 .show；每一秒的心跳都重新看一次、
+ * 重新取一次数。屋里两个人于是可能各走各的分支：一个人那一拍结算页在，报的
+ * 是综合得分；另一个人那一拍结算页不在（小屋里那一层本来就只闪一下），报的
+ * 是原始得分。同一张名单上并排放着两把不同的尺子，看上去就是「分数错乱」。
+ *
+ * 更狠的是最后一下：棋盘拆掉之后，HUD 上那颗计分轮回到 0，而心跳还在跑——
+ * 于是这个人的成绩被一条 score: 0 盖掉，整个人的分数完全不对。
+ *
+ * 所以改成：一局走完的那个数，第一次算出来就钉死，之后再也不从页面上重读。
+ * 认的也不再是 .show（它会撤），而是 dataset.total 在不在——那一项只在
+ * endGame() 里写一次（见 gameController.ts），写下了就说明这一局确实走完了，
+ * 而且元素还在的时候它一直都在。
  */
-function submittedScore(over: boolean): number | null {
-  const live = localScore();
-  if (!over) return live;
-  const raw = document.getElementById(END_OVERLAY_ID)?.dataset.total;
+export interface Settled {
+  score: number;
+  seconds: number | undefined;
+}
+
+/** 钉死这一局的成绩；还没走完就返回 null。 */
+function settleOnce(held: Settled | null): Settled | null {
+  if (held) return held;
+  const el = document.getElementById(END_OVERLAY_ID);
+  const raw = el?.dataset.total;
+  if (raw === undefined) return null;
   const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : live;
+  if (!Number.isFinite(n) || n < 0) return null;
+  return { score: Math.round(n), seconds: runSeconds() };
 }
 
 /**
@@ -304,10 +327,13 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   // 所以分数没变也要按时报到，只是慢一点：至多每 HEARTBEAT_MS 一次。分数变
   // 了仍然立刻发，那一条不受影响。
   let lastSentAt = 0;
+  /** 这一局走完之后的成绩，算出来就钉在这儿，不再重读。 */
+  let settled: Settled | null = null;
   const localTimer = window.setInterval(() => {
     if (dead) return;
-    const over = runFinished();
-    const score = submittedScore(over);
+    settled = settleOnce(settled);
+    const over = settled !== null;
+    const score = settled ? settled.score : localScore();
     if (score === null) return;
     const changed = score !== lastSent || over !== sentFinished;
     if (!changed && Date.now() - lastSentAt < HEARTBEAT_MS) return;
@@ -315,7 +341,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     sentFinished = over;
     lastSentAt = Date.now();
     if (over) markPlayed();
-    void reportScore(score, over, runSeconds());
+    void reportScore(score, over, settled ? settled.seconds : runSeconds());
   }, LOCAL_MS);
 
   return () => {
@@ -327,10 +353,14 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     window.clearInterval(localTimer);
     // One last report, so a player who leaves mid-run does not sit at a
     // stale number on everybody else's screen.
-    const score = submittedScore(runFinished());
+    //
+    // 走完了就报那个钉死的数。这一下最容易出事：拆到这里棋盘往往已经没了，
+    // 计分轮回到 0，再去读 HUD 就是拿一个 0 盖掉人家一局的成绩。
+    settled = settleOnce(settled);
+    const score = settled ? settled.score : localScore();
     if (score !== null) {
       markPlayed();
-      void reportScore(score, true, runSeconds());
+      void reportScore(score, true, settled ? settled.seconds : runSeconds());
     }
     rows.innerHTML = '';
   };
