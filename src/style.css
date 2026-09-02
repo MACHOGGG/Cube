@@ -2295,6 +2295,52 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-page .tag-line { margin: 0 0 2px; line-height: 1.45; }
 .mp-page .auth-hint { margin: 2px 0; }
 .mp-page .menu-section-label { margin-bottom: 2px; }
+
+/* 小屋这一页要在一屏里装得下。
+ *
+ * 安卓那台 360×640 上量到的：内容 682px、屏幕 640px，要滚 42px；而且最后那
+ * 颗《离开小屋》的底边在 576px，底排图标的顶边在 542px——它有 34px 藏在底排
+ * 底下，永远按不到。玩家看到的就是「东西没显示全」。
+ *
+ * 先修那条白拿的：状态行是空的时候不该占地方。它平时一个字都没有，却上下各
+ * 留 16px，白白吃掉 32px——这一条不分屏幕大小，都该改。 */
+.mp-page .auth-msg:empty { margin: 0; min-height: 0; }
+
+/* 剩下的按屏幕收。第一档是「手机」——不是「矮屏幕」：一开始我按高度写成
+ * 780px，结果 390×844 的 iPhone 坐满 4 个人一样装不下（量到 860px，最后那颗
+ * 键有 8px 压在底排底下）。这从来就不是安卓独有的毛病，是四个人的名单太高，
+ * 只是先在安卓上被看见而已。所以条件改成宽度：只要是手机，就按这一档排。
+ *
+ * 收的全是白——招牌下面的空、小屋号码的字号、每行的高度、块与块之间的缝，
+ * 没有一样内容被拿掉。 */
+@media (max-width: 719px) {
+  .mp-page { gap: 6px; }
+  .mp-page .home-head { margin-bottom: 10px; }
+  .mp-page .mp-code { font-size: 2.4rem; }
+  .mp-page .mp-code-card .menu-section-label { margin-bottom: 0; }
+  .mp-page .mp-players { gap: 6px; }
+  .mp-page .mp-player { padding: 6px 12px; }
+  .mp-page .auth-hint { margin: 0; }
+  .mp-page #mpLeave { margin-top: 2px; }
+  /* 名单是这一页最占地方的一块：坐满 4 个人就是 242px，比小屋号码那张卡还
+     高两倍。一行的高度是被里面那颗 44px 的图形撑起来的，收它一档，四行一起
+     省下来的比别处加起来还多。图形还是认得出是谁，名字也没动。 */
+  .mp-page .mp-player .mp-avatar { width: 30px; height: 30px; }
+}
+/* 再矮一档（360×640 那类小安卓，或者装了大字体的机器）：招牌和图形再收一档。
+   量过：坐满 4 个人时，这一档要再挤出 100px 才够——所以这里动的是最大的那
+   两块，而不是把哪一行藏起来。 */
+@media (max-height: 680px) {
+  .mp-page { gap: 4px; }
+  .mp-page .home-head { margin-bottom: 4px; padding-top: 0; }
+  .mp-page .mp-code-card .auth-hint { margin: 0; line-height: 1.3; }
+  .mp-page .home-title { font-size: 2rem; }
+  .mp-page .home-sub { font-size: 0.78rem; }
+  .mp-page .mp-code { font-size: 2rem; }
+  .mp-page .mp-player { padding: 4px 10px; }
+  .mp-page .mp-player .mp-avatar { width: 26px; height: 26px; }
+  .mp-page .mp-players { gap: 5px; }
+}
 .mp-me { display: flex; align-items: flex-end; gap: 10px; width: 100%; max-width: 320px; margin: 0 auto; }
 .mp-me .mp-name-field { flex: 1; margin: 0; }
 .mp-avatar { display: block; width: 44px; height: 44px; flex: 0 0 auto; }

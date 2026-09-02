@@ -240,7 +240,7 @@ export function renderMultiplayerPage(
           <span>${s.mpCreate}</span>
           ${geniusLogoTag(40, 'genius-logo--cta')}
         </button>
-        <p class="auth-hint">${s.mpNeedGenius}</p>
+        <p class="auth-hint auth-hint--center">${s.mpNeedGenius}</p>
 
         <!-- Four digits read off someone else's screen deserve the room the
              room code itself gets: its own line, at a size that can be
