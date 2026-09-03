@@ -103,9 +103,12 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   }));
 
   const rowH = rowHeightFor(rows.length);
-  const listY = 232;
-  const notesY = listY + 20 + rows.length * rowH + 34;
-  const cardH = notesY + 96;
+  // 《单局最高》和《最快完成》搬到大数字底下并排放，不再吊在名单后面：这三样
+  // 说的是同一件事——这一晚打成什么样——摆在一起才读得出「总分这么多，是靠
+  // 谁的那一局、谁的那个速度」。名单跟着往下让一行。
+  const notesY = 236;
+  const listY = notesY + 30;
+  const cardH = listY + 20 + rows.length * rowH + 78;
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W * EXPORT_SCALE;
@@ -144,21 +147,18 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
     202,
   );
 
-  drawStandings(ctx, rows, PAD, listY, CARD_W - PAD * 2, s.mpTotalLabel, rowH, true);
-
-  // The two side notes, quiet and on one line each.
+  // 两条并排在大数字下面，各占半边——左边《单局最高》，右边《最快完成》。
   const best = bestRoundOf(state.players);
   const fastest = fastestOf(state.players);
+  const half = (CARD_W - PAD * 2) / 2;
   ctx.font = '500 14px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
-  let noteY = notesY;
-  if (best) {
-    ctx.fillText(`${s.mpBestRound} · ${best.name} ${best.best}`, PAD, noteY);
-    noteY += 24;
-  }
+  if (best) ctx.fillText(`${s.mpBestRound} · ${best.name} ${best.best}`, PAD, notesY);
   if (fastest?.bestTime) {
-    ctx.fillText(`${s.mpFastest} · ${fastest.name} ${shortTime(fastest.bestTime)}`, PAD, noteY);
+    ctx.fillText(`${s.mpFastest} · ${fastest.name} ${shortTime(fastest.bestTime)}`, PAD + half, notesY);
   }
+
+  drawStandings(ctx, rows, PAD, listY, CARD_W - PAD * 2, s.mpTotalLabel, rowH, true);
 
   ctx.font = '500 13px "Karla", sans-serif';
   ctx.fillStyle = '#a39e97';

@@ -89,7 +89,7 @@ async function request(res, req, address) {
 }
 
 async function confirm(res, address, { code, password }) {
-  // 和注册、改密码同一条规则（PASS_RE，6 到 128 位任意字符）。
+  // 和注册、改密码同一条规则（PASS_RE，正好 6 位，数字或字母）。
   //
   // 这里原来用的是 PIN_RE——4 到 6 位纯数字。于是走一趟「忘了密码，用邮箱
   // 解锁」，密码就被强制降级成一个四位数字，而且不分账户类型：花钱订阅的账户

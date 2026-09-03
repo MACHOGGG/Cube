@@ -3,6 +3,7 @@ import {
   EMAIL_RE,
   PASS_RE,
   SECRET_RE,
+  burnGuess,
   checkPin,
   codeHolder,
   ensureGiftCodes,
@@ -187,8 +188,12 @@ async function change(res, email, password, newPassword) {
 
   const account = await loadAccount(address);
   // Same answer for "no such account" as for "wrong password", so this
-  // cannot be used to find out who has one.
-  if (!account) return send(res, 401, { error: 'wrong' });
+  // cannot be used to find out who has one. 时间也一样：有账号的那一路会真
+  // 算一次 scrypt，这一路也烧同一份。
+  if (!account) {
+    burnGuess(password);
+    return send(res, 401, { error: 'wrong' });
+  }
 
   const verdict = await checkPin(address, String(password), account);
   if (verdict === 'blocked') return send(res, 423, { error: 'blocked' });

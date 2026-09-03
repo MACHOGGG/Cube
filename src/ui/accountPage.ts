@@ -31,7 +31,7 @@ import {
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
-import { isGenius } from '../engine/subscription';
+import { entitlement, isGenius } from '../engine/subscription';
 import {
   openAuthWindow,
   openGeniusWindow,
@@ -97,6 +97,8 @@ export function renderAccountPage(
   // and Google already know who is holding the phone — so what would have
   // been 登录通道 there is 恢复购买, the only "sign in" they need.
   const subscribed = isGenius();
+  /** 权益是内部码换来的（不是刷卡、也不是商店）——那一行右边挂个对勾。 */
+  const byCode = subscribed && entitlement().channel === 'code';
   const gatewayLabel = subscribed
     ? s.geniusStatus
     : isStoreChannel()
@@ -154,9 +156,15 @@ export function renderAccountPage(
         <!-- A code is its own way in, not a footnote to the paywall: it was
              buried behind 「有内部码？」 inside the subscribe window, which is
              the one place someone holding a code has no reason to open. -->
+        <!-- 兑上了就在这一行右边挂一个对勾。兑换那一刻只有一闪而过的窗口，
+             之后再想确认「我到底兑上没有」就没有地方看了——尤其是记账那一笔
+             万一没写上、玩家收到过一句「网络错误」的时候（见 api/redeem.js
+             的 noteUsed）。 -->
         <button class="profile-row" id="insiderRow">
           <span class="profile-row-label">${s.insiderCode}</span>
-          <span class="profile-row-value">›</span>
+          <span class="profile-row-value">${
+            byCode ? `<span class="profile-row-tick" role="img" aria-label="${s.insiderRedeemed}">✓</span> ›` : '›'
+          }</span>
         </button>
         <!-- 做好的排在上面，没做的排在下面。做好的三条是：内部码、多人游玩、
              解锁更多配色；《随机得分目标》还只是一行「敬请期待」，所以跟着

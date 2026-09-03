@@ -12,7 +12,7 @@ import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, typ
 import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
-import { scoreOf } from '../engine/targets';
+import { scoreOf, sizeOf } from '../engine/targets';
 import { findTargets, type BoardView } from '../engine/targetMatch';
 import { targetPatternDefs } from '../engine/targetIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -213,6 +213,8 @@ export function createCircleGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那几个。
       const targets = opts?.targets?.length ? opts.targets : null;
+      /** 这一局最少几枚才可能算分——死局判定拿它当门槛。 */
+      const minMatchSize = targets ? Math.min(...targets.map(sizeOf)) : undefined;
       const refs = buildShell(container, {
         lang,
         shapeId: 'circle',
@@ -711,7 +713,10 @@ export function createCircleGame(): ShapeGame {
       }
 
       function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
-        return findStuckColorGroups(liveTiles(), clearedDotColors);
+        // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
+        // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
+        // 能拦的——1.4 秒后直接结算（见 gameController）。
+        return findStuckColorGroups(liveTiles(), clearedDotColors, minMatchSize);
       }
 
       function countRemainingTiles() {

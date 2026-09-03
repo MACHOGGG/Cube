@@ -485,6 +485,9 @@ function startMultiplayerRun(match: MatchStart) {
       setPickingForRoom(null);
       showMenu();
     },
+    // 交完卷正等着别人的时候小屋散了：和站在小屋列表页时同一个去处——那张
+    // 小屋战绩卡。
+    onRoomEnded: showRoomFinal,
   });
   activeDestroy = () => {
     stopBoard();

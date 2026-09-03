@@ -152,14 +152,14 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
 
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 /**
- * 密码够不够格。和服务器的 PASS_RE、以及设置密码那一页用的是同一条规矩：
- * 6 到 128 位任意字符。
+ * 密码够不够格。和服务器的 PASS_RE 是同一条规矩：正好 6 位，数字或字母。
  *
- * 这里原来是 /^\d{4,6}$/——4 到 6 位纯数字。于是走一趟「忘了密码，用邮箱解
- * 锁」，密码就被悄悄降级成一个四位数字，比正门弱得多。一条通往重设密码的路，
- * 不该比正门更宽。
+ * 这里原来只数长度，不看是什么字符，而标签和输入框的提示又写着「至少 6 位」
+ * ——同一扇窗里三种说法打架：玩家看到「至少 6 位」，打不进第 7 个字符，提交
+ * 之后被告知「必须正好 6 位」。四种语言都是这样。现在四处（标签、提示、报错、
+ * 这条校验）说的是同一句话，服务器那头也是同一条正则。
  */
-const isPin = (value: string) => value.length === 6;
+const isPin = (value: string) => /^[A-Za-z0-9]{6}$/.test(value);
 
 /** One labelled input, in the shape the auth windows all use. */
 function field(id: string, label: string, attrs: string): string {

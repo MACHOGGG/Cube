@@ -91,6 +91,23 @@ export default async function handler(req, res) {
     }
   };
 
+  /**
+   * 留个痕：这张码什么时候、被谁用掉的。
+   *
+   * 单独包一层，失败只记日志——权益在上一步就已经写进账户了，这一笔纯粹是
+   * 留痕（眼下没有任何地方读它）。让它把异常抛出去的话，玩家会收到一句「网
+   * 络错误，请重试」，而他的码其实已经兑成功了；再输一次，码已经从库里拿走
+   * 了，于是又被告知「这张码不存在或已经用过」——两句话都对，合起来只会让人
+   * confused 到写信来问「我到底兑上没有」。
+   */
+  const noteUsed = async (extra) => {
+    try {
+      await set('codeused:' + ticket, { at: Date.now(), plan, ...extra });
+    } catch (err) {
+      console.error('兑换记录没写上（权益已经到账，不影响玩家）', ticket, err);
+    }
+  };
+
   if (account) {
     extend(account, plan);
     try {
@@ -99,7 +116,7 @@ export default async function handler(req, res) {
       await giveBack();
       throw err;
     }
-    await set('codeused:' + ticket, { at: Date.now(), plan, email: address });
+    await noteUsed({ email: address });
     return send(res, 200, { ...entitlementOf(account, address), kind: 'code' });
   }
 
@@ -115,7 +132,7 @@ export default async function handler(req, res) {
     await giveBack();
     throw err;
   }
-  await set('codeused:' + ticket, { at: Date.now(), plan });
+  await noteUsed();
 
   return send(res, 200, { ...entitlementOf(fresh, ''), kind: 'code', code: ticket });
 }

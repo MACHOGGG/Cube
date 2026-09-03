@@ -123,6 +123,16 @@ export interface RoomRunHandlers {
   onLeave: () => void;
   /** 房间没了，人得回到主菜单——不出卡片，因为没什么可结算的。 */
   onHome: () => void;
+  /**
+   * 小屋正式散场了，而我已经交了卷、正等着别人。
+   *
+   * 这时候该出的是那张小屋战绩：截止此刻的总分、名次、单局最高、最快完成，
+   * 一样不少——数据全都在手上的这份 state 里。原来这条路走的是「屋主出状
+   * 况」那一层提示：一句话，然后弹回主菜单，一整晚的东西全扔了；而同样一
+   * 个解散动作，人要是恰好站在小屋列表页，却能看到完整的卡。同一件事，不
+   * 该因为当时站在哪一屏就是两种结果。
+   */
+  onRoomEnded: (state: RoomState) => void;
 }
 
 /**
@@ -268,6 +278,16 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       // 打」的人看的，正打着的人不该被一张遮罩糊住盘面。
       if (roomOver(state) && !runFinished()) {
         return isLayoutLocked(shapeId) ? settleLocked() : goSolo();
+      }
+      // 我已经交了卷、正等着别人，这时候小屋散了：当下的分数立刻算数，直接
+      // 出那张战绩卡。要排在 notice 前面——那一层是「还没有结果」时的提示，
+      // 而这里结果已经有了。
+      if (runFinished() && roomOver(state)) {
+        wait?.remove();
+        wait = null;
+        dead = true;
+        markPlayed();
+        return handlers.onRoomEnded(state);
       }
       // 屋主走了、还是屋主卡住了——两件事说两句不同的话，见 roomNotices.ts。
       notice.set(hostTroubleIn(state, iAmHost()));

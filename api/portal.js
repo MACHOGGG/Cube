@@ -1,5 +1,5 @@
 import { configured, creem, readBody, send } from './_creem.js';
-import { SECRET_RE, checkPin, loadAccount, normalizeEmail } from './_accounts.js';
+import { SECRET_RE, burnGuess, checkPin, loadAccount, normalizeEmail } from './_accounts.js';
 import { storeConfigured } from './_store.js';
 
 /**
@@ -33,6 +33,8 @@ export default async function handler(req, res) {
   // password get the same answer, so this cannot be used to find subscribers.
   const account = await loadAccount(address);
   if (!account || !SECRET_RE.test(String(password || ''))) {
+    // 连花掉的时间也对齐，别让快慢把「这个地址有没有账号」说出去。
+    burnGuess(password);
     return send(res, 401, { error: 'wrong' });
   }
   const verdict = await checkPin(address, String(password), account);

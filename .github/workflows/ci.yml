@@ -1,0 +1,65 @@
+# 每次推到这个分支，机器先替我们跑一遍。
+#
+# 只收「不用起浏览器、几十秒就跑完」的那几个：类型、构建，加上一批纯逻辑的
+# 检查。要开真浏览器的那些（check-board-fit、check-multiplayer 之类）留在本
+# 地手跑——它们要装 Chromium、要起服务器，放进来会让每一次推送都等上好几
+# 分钟，而等得久的检查最后一定会被人跳过。
+#
+# 这件事的由来：在这之前一次自动化都没有，tsc 和这一批 check-*.mjs 全靠
+# 「某次会话里有没有想起来跑一遍」。像「两个函数各自都对、放在一起却矛盾」
+# 那种（死局判定按 4 枚算，而随机目标的图案只要 2 枚），人工巡检不一定看得
+# 见，机器每次都看得见。
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+
+      # 类型和构建。build 自己就跑 tsc -b，所以这两步合起来既验类型也验产物。
+      - name: 类型与构建
+        run: npm run build
+
+      # 纯逻辑，不碰 DOM：得分连锁、图案表与判定、死局门槛。
+      - name: 计分连锁
+        run: |
+          npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
+          node scripts/check-scoring.mjs /tmp/scoring.mjs
+      - name: 随机得分目标的图案与判定
+        run: |
+          npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
+          npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
+          node scripts/check-targets.mjs /tmp/targets.mjs /tmp/match.mjs
+      - name: 死局门槛
+        run: |
+          npx esbuild src/engine/stalemate.ts --bundle --format=esm --outfile=/tmp/stalemate.mjs
+          node scripts/check-stalemate.mjs /tmp/stalemate.mjs
+
+      # 服务端：权限、战绩与排行榜、兑换码的竞态。都用内存里的 Redis 替身，
+      # 不连任何外部服务。
+      - name: 谁算天才（权限）
+        run: node scripts/check-entitlement.mjs
+      - name: 战绩与排行榜
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
+      - name: 内部码信箱
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-inbox.mjs
+      - name: Creem 那道门开在哪儿
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-creem-gate.mjs
+      # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
+      # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
+      # check-store 要一份真的 Redis 凭证。两个都得本地跑。
+
+      # 产物里的 CSS：自定义属性里不许写「新函数」（安卓上会整块不显示）。
+      - name: CSS 兜底
+        run: node scripts/check-css-fallbacks.mjs

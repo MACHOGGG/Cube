@@ -23,32 +23,39 @@ import { del, get, hdel, hgetall, hset, set, takeOnce } from './_store.js';
  *   attacker who somehow walked off with the whole store still cannot run
  *   ten thousand guesses per account for free.
  *
- *   A hard lockout. Five wrong tries and the account stops answering, for
- *   fifteen minutes, then thirty, then an hour, up to a day. Ten thousand
- *   guesses at five per lockout is not an attack anyone finishes.
+ *   A hard lockout. Four wrong tries and the account stops answering for
+ *   four hours; six and it stops answering at all until the address proves
+ *   itself by email (LOCK_AFTER / BLOCK_AFTER / LOCK_MS below — this used
+ *   to describe a five-try, fifteen-minutes-to-a-day ladder that the code
+ *   never had). Ten thousand guesses at four per lockout is not an attack
+ *   anyone finishes.
  *
  * What is behind the account is a game subscription, which is what makes
  * that trade — a passcode short enough to actually remember, defended by
  * cost and by lockout rather than by length — a reasonable one to offer.
  */
 
-/** A redeemed code's passcode: 4 to 6 digits, as chosen. */
+/**
+ * 只剩下认「老的那种」用的：早期内部码账号设的是 4 到 6 位纯数字。新设的
+ * 密码一律走 PASS_RE（正好 6 位，数字或字母），任何一个入口都不再拿这一条
+ * 挡人——挡了就等于把当年那批账号锁在门外，而且还挡在计数之前，连「错太多
+ * 次去邮箱找回」那条路都走不到。
+ */
 export const PIN_RE = /^\d{4,6}$/;
 
 /**
- * A card subscriber's password.
+ * 密码：正好 6 位，数字或字母。
  *
- * Six characters is the floor because that is what a person picks and types.
- * There is deliberately no low ceiling: a phone's password manager offers to
- * generate one, and what it generates is twenty-odd mixed characters — a rule
- * of "exactly six digits" would reject the strong password the platform just
- * made, which is the opposite of the point. Anything goes above six.
+ * 全站只有这一条规矩——注册、绑码、改密码、忘了密码用邮箱找回、换设备登录，
+ * 都走它。原来是三条：这里写「6 位以上都行」（注释这么写，正则却是恰好 6
+ * 位），登录那个接口要「4 到 6 位纯数字」，界面上的提示又是第三种说法。三条
+ * 规矩打架的结果是玩家看到「至少 6 位」、却打不进第 7 个字符，提交了又被告
+ * 知「必须正好 6 位」。
  *
- * The two credentials are hashed and rate-limited identically; only the shape
- * accepted at the door differs, because the two doors were opened for
- * different reasons.
+ * 长度短不是靠长度防的，靠的是另外两件事：每一次猜都要真花一次 scrypt 的
+ * CPU；以及错四次锁四小时、错六次彻底封（见下面的 LOCK_AFTER / BLOCK_AFTER）。
  */
-export const PASS_RE = /^.{6}$/;
+export const PASS_RE = /^[A-Za-z0-9]{6}$/;
 
 /**
  * What an endpoint accepts before it knows which kind of account it is
@@ -173,6 +180,25 @@ export async function takeAccount(email) {
 
 function hash(pin, saltHex) {
   return scryptSync(String(pin), Buffer.from(saltHex, 'hex'), 32).toString('hex');
+}
+
+/** 只为了花掉一次 scrypt 的时间，结果扔掉。见 burnGuess。 */
+const DECOY_SALT = randomBytes(16).toString('hex');
+
+/**
+ * 这个地址根本没有账号——但还是花一次算哈希的时间再回答。
+ *
+ * 「地址不存在」和「密码不对」故意回同一句话，为的是不让人拿这个接口打听某
+ * 个邮箱有没有注册过。可是有账号的那一路真的算了一次 scrypt（那是故意慢的），
+ * 没账号的那一路直接就返回了——两句话一样，回答的快慢却不一样，够细心的人
+ * 还是分得出来。所以没账号的时候也照样烧掉同一份 CPU。
+ *
+ * 这是把差距压下去，不是把它证明为零：网络抖动本来就比这点毫秒大得多，而
+ * 存储那一次读也只在有账号时才有回包。真要彻底消掉，得让两条路读一样多的
+ * 东西——那是另一件事，不值得为它把每个接口都改成假读一次。
+ */
+export function burnGuess(secret) {
+  hash(String(secret ?? ''), DECOY_SALT);
 }
 
 export function newAccount(secret, kind = 'code') {

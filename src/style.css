@@ -1781,6 +1781,11 @@ body:has(.slot-page) .home-nav { display: none; }
 .page-back.icon-btn > svg { width: 100%; height: 100%; display: block; }
 .page-back.icon-btn:active { transform: scale(0.94); }
 
+/* 「这张码已经兑上了」——个人主页那一行右边的对勾。绿色，因为它说的是一件
+   已经成了的事，不是一个能点的去处。 */
+.profile-row-tick { color: #2E8B32; font-weight: 700; margin-right: 2px; }
+:root[data-cvd='1'] .profile-row-tick { color: #0072B2; }
+
 .profile-row--back { justify-content: center; margin-top: 4px; }
 /* The five published documents sit at the foot of 个人主页 as ordinary rows,
    so they add a block without changing anything above them. */

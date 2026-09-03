@@ -1,6 +1,14 @@
 import type { Cell, Tile } from './types';
 
-/** Every scoring pattern in the game (run-4, 2x2, 22/121, 31/13, ...) needs at least this many same-effective-color tiles. */
+/**
+ * Every scoring pattern in the game (run-4, 2x2, 22/121, 31/13, ...) needs at
+ * least this many same-effective-color tiles.
+ *
+ * 这是各个玩法自己那套图案的门槛。《随机得分目标》里门槛是这一局转出来的
+ * 两个图案中较小的那个——小到 2 枚（三角的「两块拼一个菱形」）——所以那一
+ * 局要把真正的门槛传进来。写死 4 的后果不是判得松，是判得太狠：还能拼出那
+ * 个小图案的残局被当成死局，1.4 秒后没有任何按钮拦得住结算。
+ */
 export const MIN_MATCH_SIZE = 4;
 
 export interface LiveTile {
@@ -54,7 +62,10 @@ export interface LiveTile {
 export function findStuckColorGroups(
   liveTiles: LiveTile[],
   _clearedDotColors: ReadonlySet<number>,
+  /** 这一局最少几枚才可能算分。不给就是各玩法自己那套图案的门槛（4 枚）。 */
+  minMatch: number = MIN_MATCH_SIZE,
 ): Cell[][] {
+  const need = Math.max(1, Math.round(minMatch));
   const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   if (fronts.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
 
@@ -65,7 +76,7 @@ export function findStuckColorGroups(
     if (lt.tile.face !== 'dot') continue;
     dotCount.set(lt.tile.dotColor, (dotCount.get(lt.tile.dotColor) ?? 0) + 1);
   }
-  for (const n of dotCount.values()) if (n >= MIN_MATCH_SIZE) return [];
+  for (const n of dotCount.values()) if (n >= need) return [];
 
   const shownColor = (lt: LiveTile) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color);
   const up = new Map<number, number>();
@@ -74,14 +85,14 @@ export function findStuckColorGroups(
   for (const lt of fronts) frontCount.set(lt.tile.color, (frontCount.get(lt.tile.color) ?? 0) + 1);
 
   const reachable = new Set<number>();
-  for (const [color, count] of up) if (count >= MIN_MATCH_SIZE) reachable.add(color);
+  for (const [color, count] of up) if (count >= need) reachable.add(color);
   for (;;) {
     let pool = 0;
     for (const [color, count] of frontCount) if (reachable.has(color)) pool += count;
     let grew = false;
     for (const [color, count] of up) {
       if (reachable.has(color)) continue;
-      if (count + pool >= MIN_MATCH_SIZE) {
+      if (count + pool >= need) {
         reachable.add(color);
         grew = true;
       }
