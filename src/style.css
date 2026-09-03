@@ -3335,24 +3335,27 @@ body.is-room-host::after {
 }
 
 /* ---- 规则配图（ruleArt.ts）：借基础教学分镜的画法 ---- */
-/* 4×2 的小棋盘：暗底、圆角，和游戏里的版图一个样子。整幅图在周期末尾淡出，
-   回到开头再来一遍（ra-still 的那幅不用，它本来就是来回的）。 */
+/* 4×2 的小棋盘：浅底、圆角（玩家的原话：「把配图/动画的底色改浅一点现在太
+   深了」——所以不用游戏版图那块深褐，用的是页面里放图形的那种浅底，描一圈
+   细线好和纸面分开）。整幅图在周期末尾淡出，回到开头再来一遍（ra-still 的
+   那幅不用，它本来就是来回的）。 */
 .ra-board {
   --pad: 0.16em; --gap: 0.16em;
   position: relative; display: grid; grid-template-columns: repeat(4, 1em); grid-auto-rows: 1em;
-  gap: var(--gap); padding: var(--pad); border-radius: 0.34em; background: var(--play-panel, #3D3128);
+  gap: var(--gap); padding: var(--pad); border-radius: 0.34em;
+  background: var(--board-bg, #EFE6E2); box-shadow: inset 0 0 0 1px var(--line, #E5DAD8);
   animation: ra-cycle var(--T) linear infinite;
 }
 .ra-board.ra-still { animation: none; }
 @keyframes ra-cycle { 0%, 94% { opacity: 1; } 97%, 100% { opacity: 0; } }
-/* 一枚棋子：正面一块实色（--f），反面是比版图略深的一块、中间一颗点（--d）
-   ——和棋盘上翻过去的棋子一个样子。 */
+/* 一枚棋子：正面一块实色（--f），反面是深褐的一块、中间一颗点（--d）——和
+   棋盘上翻过去的棋子一个样子；底浅了，深块反而更显眼，正反一眼分得开。 */
 .ra-tile { position: relative; width: 1em; height: 1em; transform-style: preserve-3d; }
 .ra-tile.ra-blank { visibility: hidden; }
 .ra-f, .ra-b { position: absolute; inset: 0; border-radius: 22%; backface-visibility: hidden; }
 .ra-f { background: var(--f); }
 .ra-b {
-  background: #2A231C; transform: rotateY(180deg); box-shadow: inset 0 0 0 0.06em rgba(255, 255, 255, 0.16);
+  background: var(--play-panel, #3D3128); transform: rotateY(180deg); box-shadow: inset 0 0 0 0.06em rgba(255, 255, 255, 0.14);
   display: flex; align-items: center; justify-content: center;
 }
 .ra-b > span { width: 46%; height: 46%; border-radius: 50%; background: var(--d); }
@@ -3401,7 +3404,7 @@ body.is-room-host::after {
 @keyframes ra-clear { 0%, 70% { opacity: 1; scale: 1; } 76%, 100% { opacity: 0; scale: 0.5; } }
 .ra-hole {
   position: absolute; width: 1em; height: 1em; box-sizing: border-box; border-radius: 50%; opacity: 0;
-  border: 0.09em dashed #9A9A9A;
+  border: 0.09em dashed var(--ink-faint, #9A8B98);
   left: calc(var(--pad) + var(--c) * (1em + var(--gap))); top: calc(var(--pad) + var(--r) * (1em + var(--gap)));
   animation: ra-hole var(--T) linear infinite;
 }
