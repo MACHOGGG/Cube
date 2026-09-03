@@ -400,10 +400,21 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
   // board names are read from GENIUS_LAYOUTS rather than written out again,
   // so adding a board to the subscription adds it here too and this list can
   // never drift into promising something the code does not lock.
+  // 「订阅后立刻解锁」跟个人主页那一段走：两副棋盘、小屋，再加做好了的几样——
+  // 配色、翻面速度、老虎机模式、更多得分目标、更多布局、世界排名。个人主页上
+  // 还在「敬请期待」的才留在下面那一段（玩家的原话：「一些已经上的内容还没有
+  // 被更新进来」）。
   const nowList = [
     ...GENIUS_LAYOUTS.map((id) => geniusBoardBlurb(id, lang)),
     s.geniusHostRooms,
+    PRIVILEGES[lang][0],
+    s.flipSpeedTitle,
+    s.randomTargetTitle,
+    PRIVILEGES[lang][2],
+    PRIVILEGES[lang][3],
+    PRIVILEGES[lang][6],
   ];
+  const soonList = [1, 4, 5, 7].map((i) => PRIVILEGES[lang][i]);
   const priceRows = plans()
     .map(
       (plan) => `
@@ -434,7 +445,7 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
       <div class="menu-section-label">${s.geniusNowTitle}</div>
       ${nowList.map((p) => `<div class="genius-perk">${esc(p)}</div>`).join('')}
       <div class="menu-section-label">${s.geniusSoonTitle}</div>
-      ${PRIVILEGES[lang].map((p) => `<div class="genius-perk genius-perk--soon">${p}</div>`).join('')}
+      ${soonList.map((p) => `<div class="genius-perk genius-perk--soon">${p}</div>`).join('')}
     </div>
     <div class="btn-row">
       <!-- 登录 is the accented one. Someone who already subscribed and is

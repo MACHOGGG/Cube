@@ -259,6 +259,7 @@ export function createTriangleBigGame(): ShapeGame {
       const minMatchSize = targets ? Math.min(...targets.map(sizeOf)) : undefined;
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'triangle',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
@@ -871,6 +872,7 @@ export function createTriangleBigGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangle', '三角'),
         shapeId: 'triangle',

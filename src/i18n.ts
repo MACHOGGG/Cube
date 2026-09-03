@@ -290,6 +290,8 @@ export interface I18nStrings {
   mpKnowNo: string;
   /** 有人在看教学时，其他人那一屏上写的话。 */
   mpLearningWait: string;
+  /** 等人学教学那一屏底下的练习盘上面那一句。 */
+  mpPracticeHint: string;
   mpRoundResult: string;
   mpFinalTitle: string;
   mpBestRound: string;
@@ -634,6 +636,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpKnowYes: 'I do',
     mpKnowNo: 'Teach me',
     mpLearningWait: 'Someone in the cabin is learning — hold on',
+    mpPracticeHint: 'Warm up while you wait — this board does not count',
     mpRoundResult: 'This round',
     mpFinalTitle: 'How the room finished',
     mpBestRound: 'Best single round',
@@ -952,6 +955,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpKnowYes: 'Oui',
     mpKnowNo: 'Explique-moi',
     mpLearningWait: 'Quelqu’un apprend encore — un instant',
+    mpPracticeHint: 'Échauffe-toi en attendant — ce plateau ne compte pas',
     mpRoundResult: 'Cette manche',
     mpFinalTitle: 'Bilan de la salle',
     mpBestRound: 'Meilleure manche',
@@ -1270,6 +1274,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpKnowYes: '會',
     mpKnowNo: '不會，教我',
     mpLearningWait: '小屋裡有人在學習，稍等',
+    mpPracticeHint: '等的時候先練一練——這一盤不算分',
     mpRoundResult: '本局',
     mpFinalTitle: '小屋戰績',
     mpBestRound: '單局最高',
@@ -1588,6 +1593,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpKnowYes: '会',
     mpKnowNo: '不会，教我',
     mpLearningWait: '小屋里有人在学习，稍等',
+    mpPracticeHint: '等的时候先练一练——这一盘不算分',
     mpRoundResult: '本局',
     mpFinalTitle: '小屋战绩',
     mpBestRound: '单局最高',
@@ -1700,6 +1706,45 @@ export const PRIVILEGES: Record<Lang, string[]> = {
   zhHans: ['解锁更多配色', '更多关卡', '更多得分目标', '更多布局', '更多玩法', '更多竞赛', '世界排名', 'Apple Watch 特别版'],
 };
 
+/**
+ * 教学挑选页底下那六条规则。和 PRIVILEGES 一样单放（值是数组，不进 I18nStrings）。
+ * 中文是玩家自己写的原话。
+ */
+export const TUTORIAL_RULES: Record<Lang, string[]> = {
+  en: [
+    'Every piece has a front and a back; a classic game starts with all fronts up.',
+    'Same-colour pieces forming a scoring pattern score and flip; the back is a different colour, each equally likely.',
+    'A back and fronts of the same colour can form a scoring pattern again.',
+    'Backs of one colour filling a row or column score and clear (balls and triangles need at least 3 in the line).',
+    'In classic rules the game ends when every front has flipped, or when the rest can no longer flip.',
+    'The shortest time, fewer moves and more points give the highest total score.',
+  ],
+  fr: [
+    'Chaque pièce a un recto et un verso ; une partie classique commence tous rectos visibles.',
+    'Des pièces de même couleur formant un motif marquent et se retournent ; le verso est d’une autre couleur, tirée au sort.',
+    'Un verso et des rectos de la même couleur peuvent reformer un motif et marquer.',
+    'Une ligne ou colonne entière de versos de même couleur marque et disparaît (billes et triangles : au moins 3).',
+    'En règles classiques la partie s’arrête quand tous les rectos sont retournés, ou quand le reste ne peut plus l’être.',
+    'Le temps le plus court, moins de coups et plus de points donnent le meilleur score total.',
+  ],
+  zhHant: [
+    '圖形分正反兩面，經典開局為全部正面朝上。',
+    '同色圖形湊成得分圖案可以得分並翻面，翻面會是同機率的不同顏色的反面。',
+    '翻面和正面同顏色可以再次湊成得分圖案得分。',
+    '翻面圖案同色連成一行／列會得分並消除（小球、三角消除的行／列最少為 3 個圖形）。',
+    '經典規則中遊戲在全部正面翻至反面時結束，或在剩下的無法翻至反面時結束。',
+    '用最短的時間、較少的行動、較多的得分得到最高的綜合得分。',
+  ],
+  zhHans: [
+    '图形分正反两面，经典开局为全部正面朝上。',
+    '同色图形凑成得分图案可以得分并翻面，翻面会是同概率的不同颜色的反面。',
+    '翻面和正面同颜色可以再次凑成得分图案得分。',
+    '翻面图案同色连成一行/列会得分并消除（小球、三角消除的行/列最少为 3 个图形）。',
+    '经典规则中游戏在全部正面翻至反面时结束，或在剩下的无法翻至反面时结束。',
+    '用最短的时间、较少的行动、较多的得分得到最高的综合得分。',
+  ],
+};
+
 export function loadLang(): Lang | null {
   const v = localStorage.getItem(LANG_STORAGE_KEY);
   return v && LANG_ORDER.includes(v as Lang) ? (v as Lang) : null;
@@ -1757,4 +1802,15 @@ export function hasSeenTutorial(shape: TutorialShape = 'square'): boolean {
 
 export function markTutorialSeen(shape: TutorialShape = 'square'): void {
   localStorage.setItem(TUTORIAL_SEEN_KEYS[shape], '1');
+}
+
+/** 这台设备看过哪几族的教学。进小屋时报给服务器，开局前它据此判「可不可能有新手」。 */
+export function seenTutorials(): TutorialShape[] {
+  return (['square', 'circle', 'triangle'] as TutorialShape[]).filter((s) => {
+    try {
+      return hasSeenTutorial(s);
+    } catch {
+      return false;
+    }
+  });
 }

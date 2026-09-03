@@ -271,6 +271,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'triangleAdvanced',
         timed: !!opts?.timeLimitSec,
         title: `Slides · ${shapeName(lang, 'triangleAdvanced', '进阶三角')}`,
@@ -714,6 +715,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangleAdvanced', '进阶三角'),
         shapeId: 'triangleAdvanced',

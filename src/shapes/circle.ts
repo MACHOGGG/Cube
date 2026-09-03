@@ -217,6 +217,7 @@ export function createCircleGame(): ShapeGame {
       const minMatchSize = targets ? Math.min(...targets.map(sizeOf)) : undefined;
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'circle',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
@@ -755,6 +756,7 @@ export function createCircleGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circle', '圆球'),
         shapeId: 'circle',

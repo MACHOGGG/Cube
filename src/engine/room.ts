@@ -1,5 +1,6 @@
 import { entitlement, isGenius } from './subscription';
 import { isStoreChannel } from './channel';
+import { seenTutorials } from '../i18n';
 
 /**
  * The client half of a multiplayer room.
@@ -78,6 +79,10 @@ export interface RoomState {
   players: RoomPlayer[];
   /** 这间小屋被催了多少下。屋主那边看它变大就往标题里掉图形。 */
   nudges: number;
+  /** 最近几十下催促各是什么时刻（服务器的钟）。屋主按这个节奏一颗一颗掉。 */
+  nudgeAt: number[];
+  /** 这一局的倒数从几数起。可能有新手的局多四秒：8（横屏玩法 9）。 */
+  countFrom: number | null;
   serverNow: number;
 }
 
@@ -337,6 +342,8 @@ export async function createRoom(name: string, avatar: Avatar): Promise<RoomResu
     action: 'create',
     name,
     avatar,
+    // 看过哪几族的教学：开局前服务器据此判这一局可不可能有新手。
+    seen: seenTutorials(),
     ...hostProof(),
   });
   if (!made.ok) return made;
@@ -359,6 +366,7 @@ export async function joinRoom(
     code: code.trim(),
     name,
     avatar,
+    seen: seenTutorials(),
   });
   if (!joined.ok) return joined;
   session = { code: code.trim(), playerId: joined.value.playerId, playerToken: joined.value.playerToken };
@@ -437,9 +445,22 @@ export async function leaveRoom(): Promise<void> {
  * 看完的那一下是有后果的：服务器发现全屋都不学了，会把开赛时刻重新盖一遍，
  * 于是所有人一起从 4 数起。所以这个调用要等它回来再往下走。
  */
-export async function setLearning(learning: boolean): Promise<void> {
-  if (!session) return;
-  await post({ action: 'learn', learning, ...session });
+/**
+ * 「我在学」/「我学完了」。
+ *
+ * 回来的是这一刻的房间状态——学完那一下要看它：开赛时刻是不是已经过去了
+ * （小屋没等他，这一局不是他的了）。学的过程中每点一下也走这里（见 main.ts
+ * 的 learnHeartbeat），二十秒不来一声，服务器就不再等。
+ */
+export async function setLearning(learning: boolean, seen?: readonly string[]): Promise<RoomState | null> {
+  if (!session) return null;
+  const r = await post<{ ok: boolean; state: RoomState }>({
+    action: 'learn',
+    learning,
+    ...(seen ? { seen } : {}),
+    ...session,
+  });
+  return r.ok ? r.value.state : null;
 }
 
 /**

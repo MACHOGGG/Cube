@@ -12,7 +12,7 @@ import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
-import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
@@ -26,15 +26,16 @@ import {
   iAmHost,
   latestRoomState,
   leaveRoom,
+  markRoundPlayed,
   setLearning,
   startMatch,
   type RoomState,
 } from './engine/room';
 import { clearSeed, random as seededRandom, seedRandom } from './engine/rng';
-import { shapeName } from './ui/shapeLabels';
 import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
+import { renderTutorialPicker } from './ui/tutorialPicker';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -409,6 +410,9 @@ function syncScreenClass() {
   // 排名」没有用处——按下去就从小屋里走出来了，而人家学完这一屏随时会自己
   // 翻页。跟打一局时同样处理：藏起来。
   cl.toggle('is-waiting-learner', !!root.querySelector('.mp-learn-page'));
+  // 小屋的 4-3-2-1 那一幕也不留底排——玩家的原话：「4-3-2-1 的画面下方去除掉
+  // 个人主页和成绩的选择」。
+  cl.toggle('is-counting', !!root.querySelector('.mp-countdown-page'));
 }
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
@@ -506,6 +510,29 @@ function showWorldRankPage() {
 }
 
 /**
+ * 看教学的时候，每点一下就向小屋报一声「我还在学」。
+ *
+ * 教学页整页被教学占着、不轮询，服务器只能靠这一声知道人还在。五秒最多报
+ * 一次——报得再密也没有意义，服务器那头二十秒不来一声才不等（api/room.js
+ * 的 LEARN_IDLE_MS）。回来的是拆监听的函数。
+ */
+function learnHeartbeat(): () => void {
+  let last = 0;
+  const beat = () => {
+    const now = Date.now();
+    if (now - last < 5000) return;
+    last = now;
+    void setLearning(true);
+  };
+  window.addEventListener('pointerdown', beat, { capture: true, passive: true });
+  window.addEventListener('keydown', beat, { capture: true, passive: true });
+  return () => {
+    window.removeEventListener('pointerdown', beat, { capture: true });
+    window.removeEventListener('keydown', beat, { capture: true });
+  };
+}
+
+/**
  * 多人游玩. The page owns its own polling, so what it hands back is the
  * teardown, and that becomes this screen's destroy like any game's.
  */
@@ -533,9 +560,33 @@ function showMultiplayer() {
       // 于是全屋一起从 4 数起。
       onLearnTutorial: (shape) => {
         markTutorialSeen(shape);
+        // 看教学的这几分钟里，每点一下都向小屋报一声「我还在学」；二十秒一下
+        // 都没点，小屋那边就不再等他（api/room.js 的 LEARN_IDLE_MS）。
+        const stopBeat = learnHeartbeat();
         renderShapeTutorialByShape(shape, () => {
-          void setLearning(false).then(showMultiplayer);
+          stopBeat();
+          void setLearning(false, seenTutorials()).then((st) => {
+            // 学完的时候这一局已经开了（小屋没等他——他走神太久，或者早就
+            // 放行了）：这一局不是他的了，坐等待页看排行，下一局再入。开赛
+            // 时刻还在前面的，才是「大家等到了他」，一起从 4 数起。
+            if (st && st.round && !st.roundOver && st.startAt && st.startAt <= st.serverNow) {
+              markRoundPlayed(st.round);
+            }
+            showMultiplayer();
+          });
         });
+      },
+      // 等人学教学那一屏底下的练习盘：这一局的玩法，练习模式（不结算）。
+      onPractice: (host, mode) => {
+        const game = everyGame.find((g) => g.card.id === mode);
+        if (!game) return null;
+        // 练习盘不能是真局那副：这时候真局的种子还没种下（下一次开局才种），
+        // 这里只是把上一局残留的种子清掉，保险。
+        clearSeed();
+        const destroy = game.mount(host, () => {}, { lang: currentLang, practice: true });
+        // 开局页那一幕不要：直接开打（和小屋开局那一下同一个按钮）。
+        requestAnimationFrame(() => host.querySelector<HTMLButtonElement>('#startBtn')?.click());
+        return destroy;
       },
     },
     currentLang,
@@ -705,30 +756,13 @@ function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void) {
 function showTutorialPicker() {
   teardown();
   trackScreen('tutorial_picker');
-  const s = STRINGS[currentLang];
-  root.innerHTML = `
-    <div class="app">
-      <h1>${s.tutorialPickerTitle}</h1>
-      <p class="tag-line">${s.tutorialPickerTagline}</p>
-      <div class="menu-grid" id="tutorialGrid"></div>
-      <div class="controls"><button class="icon-btn" id="backBtn">${s.backToMenu}</button></div>
-    </div>
-  `;
-  const grid = root.querySelector<HTMLElement>('#tutorialGrid')!;
-  const entries: { shape: TutorialShape; desc: string }[] = [
-    { shape: 'square', desc: s.squareTutorialDesc },
-    { shape: 'circle', desc: s.circleTutorialDesc },
-    { shape: 'triangle', desc: s.triangleTutorialDesc },
-  ];
-  for (const entry of entries) {
-    const btn = document.createElement('button');
-    btn.className = 'shape-card';
-    const name = shapeName(currentLang, entry.shape, entry.shape);
-    btn.innerHTML = `<span class="info"><span class="name">${name}</span><span class="desc">${entry.desc}</span></span>`;
-    btn.addEventListener('click', () => renderShapeTutorialByShape(entry.shape, showTutorialPicker));
-    grid.appendChild(btn);
-  }
-  root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', showMenu);
+  // 三个图形、六条规则、一颗《返回》，一屏装下——见 ui/tutorialPicker.ts。
+  renderTutorialPicker(root, currentLang, {
+    onPick: (shape) => renderShapeTutorialByShape(shape, showTutorialPicker),
+    onBack: showMenu,
+  });
+  repaintIcons();
+  toTop();
 }
 
 /**

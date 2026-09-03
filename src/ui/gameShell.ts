@@ -46,6 +46,8 @@ export interface ShellMeta {
   /** 这个玩法在主菜单上的 id（square / circleHex / …）。开局页摆的就是它在
    *  主菜单上的那张图——按下去的是哪个图形，倒数时看见的就是同一个。 */
   shapeId: string;
+  /** 练习盘（见 ShapeGameOpts.practice）：外壳只剩棋盘，读数、按键、图示都不画。 */
+  practice?: boolean;
   /** 计时局。开局页摆的换成主菜单上那只橙色秒表，也就是玩家刚刚按下的那张。 */
   timed?: boolean;
   /**
@@ -192,7 +194,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   container.innerHTML = `
     <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}${
       sides ? ' pattern-sides' : ''
-    }" data-shape="${meta.shapeId}">
+    }${meta.practice ? ' app--practice' : ''}" data-shape="${meta.shapeId}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 

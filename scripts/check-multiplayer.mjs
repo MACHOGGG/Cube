@@ -435,6 +435,12 @@ await A.page.waitForSelector('.home-icon-btn', { timeout: 15000 });
 const circleIdx = await A.page.$$eval('.home-icon-btn', (els) =>
   els.findIndex((e) => (e.getAttribute('aria-label') || '') === '圆球'));
 await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), circleIdx);
+// 客人没看过圆球那一族的教学（进屋时报过），服务器就给这一局多留四秒：屋主的
+// 倒数从 8 数起（第一次轮询晚了半拍看到的可能已经是 7）。
+const eightish = await A.page.waitForFunction(
+  () => document.querySelector('.mp-countdown-page .cd-digit')?.textContent || null, { timeout: 12000 },
+).then((h) => h.jsonValue()).catch(() => null);
+check('屋里可能有新手：其他人的倒数从 8 数起', eightish === '8' || eightish === '7', String(eightish));
 
 // ---- 开局前问一句：会不会这个玩法的规则 --------------------------------
 const rulesAsked = await B.page.waitForSelector('#mpKnowAsk', { timeout: 15000 })
@@ -480,6 +486,17 @@ if (rulesAsked) {
       return getComputedStyle(nav).display === 'none' || r.width === 0 || r.height === 0;
     });
     check('等人学教学的那一屏，底下那排图标收起来了', navGone);
+    // 底下摆着一块练习盘：这一局的玩法（圆球）、真的棋盘，等的人先练着。
+    const practice = await A.page.waitForFunction(
+      () => document.querySelectorAll('.mp-practice #boardWrap .ball').length > 0, { timeout: 15000 },
+    ).then(() => true).catch(() => false);
+    check('等人学的那一屏底下摆着一块练习盘（这一局的玩法）', practice);
+    // 练习盘是练习盘：这一屏的读数、按键、开局页那一层都不露面。
+    const bare = await A.page.evaluate(() => {
+      const vis = (sel) => { const e = document.querySelector(sel); return e ? getComputedStyle(e).display !== 'none' : false; };
+      return { hud: vis('.mp-practice .hud'), controls: vis('.mp-practice .controls'), overlay: vis('.mp-practice #startOverlay') };
+    });
+    check('练习盘上没有读数、按键和开局页', !bare.hud && !bare.controls && !bare.overlay, JSON.stringify(bare));
   }
   check('学的人这会儿在教学里', await B.page.$('.story-tut, .tut-stage, .app') !== null);
 
@@ -495,7 +512,8 @@ if (rulesAsked) {
     await fetch('/api/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'learn', learning: false, ...seat }),
+      // 学完了顺手带上「看过哪几族」——客户端就是这么发的，下一局不再多留四秒。
+      body: JSON.stringify({ action: 'learn', learning: false, seen: ['square', 'circle', 'triangle'], ...seat }),
     });
   });
   const resumed = await A.page.waitForFunction(

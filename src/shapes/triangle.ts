@@ -288,6 +288,7 @@ export function createTriangleGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'triangleBig',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
@@ -910,6 +911,7 @@ export function createTriangleGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangleBig', '大三角'),
         shapeId: 'triangleBig',

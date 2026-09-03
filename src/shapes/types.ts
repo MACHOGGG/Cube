@@ -26,6 +26,12 @@ export interface ShapeGameOpts {
    * 得分的图形不同而已」。
    */
   targets?: readonly TargetPattern[];
+  /**
+   * 练习盘：小屋里等人看教学的那一屏底下摆的那块棋盘。真的棋盘、真的规
+   * 则，只是不结算——打完了（翻完、死局）就静静再来一盘，不存档、不上榜、
+   * 不报统计；读数和按键也都不画。
+   */
+  practice?: boolean;
 }
 
 export interface ShapeGame {

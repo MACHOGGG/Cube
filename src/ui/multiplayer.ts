@@ -82,6 +82,11 @@ export interface MultiplayerHandlers {
    * showMultiplayer 那条「已经在屋里就接着往下走」的路。
    */
   onLearnTutorial: (shape: TutorialShape) => void;
+  /**
+   * 等人学教学那一屏底下的练习盘：把这个玩法的棋盘（练习模式）挂到 host
+   * 里，回来的是拆它的函数。玩法都长在 main.ts 里，所以由它来挂。
+   */
+  onPractice?: (host: HTMLElement, mode: string) => (() => void) | null;
 }
 
 /** 一个玩法归哪一族的教学。布局变体没有自己的课，跟着它那一族走。 */
@@ -165,6 +170,10 @@ export function renderMultiplayerPage(
    * 满整个框——那不是「有人在催」，那是一堵墙。
    */
   let seenNudges = -1;
+  /** 上一次已经掉过的那一下催促是什么时刻（服务器的钟）。 */
+  let seenNudgeAt = -1;
+  /** 等人学教学那一屏底下的练习盘，拆它用的。 */
+  let practiceStop: (() => void) | null = null;
   /** 这一局的「会不会规则」已经问过了——每局只问一次，问完不再挡路。 */
   let askedRound = -1;
   /** 《会不会规则》那一问正挂着。 */
@@ -179,6 +188,8 @@ export function renderMultiplayerPage(
   const stopAll = () => {
     sideWait?.remove();
     sideWait = null;
+    practiceStop?.();
+    practiceStop = null;
     stopWatching?.();
     stopWatching = null;
     window.clearInterval(countdownTimer);
@@ -188,6 +199,7 @@ export function renderMultiplayerPage(
     rain?.stop();
     rain = null;
     seenNudges = -1;
+    seenNudgeAt = -1;
     waitingOnLearner = false;
   };
   const teardown = () => {
@@ -463,7 +475,7 @@ export function renderMultiplayerPage(
             // 数到一半有人说他不会：把数字收起来，换成「稍等」。倒数不是
             // 承诺，是一段可以退回去的路。
             cancelCountdown();
-            return showLearningWait();
+            return showLearningWait(next);
           }
           waitingOnLearner = false;
           beginCountdown(next);
@@ -488,33 +500,44 @@ export function renderMultiplayerPage(
   }
 
   /**
-   * 有人催了几下，就往标题框里掉几个。
+   * 有人催了，就往标题框里掉——按他按的节奏掉。
    *
-   * 只看差值，不看绝对值：服务器上那个数只增不减，它记的是「这间小屋一共被
-   * 催了多少下」，而这里要的是「刚刚又被催了几下」。
+   * 服务器记着最近四十下催促各是什么时刻（nudgeAt）。这一轮轮询新看到的那
+   * 几下，按它们之间原本的间隔一颗一颗放出来：按得越密掉得越密，按一下掉一
+   * 颗——不是一秒一批（玩家的原话：「不要分批掉落，而是根据点击的速度掉
+   * 落」）。这一串最多摊在九百五十毫秒里，赶在下一轮轮询之前放完。
+   *
+   * 只看新的：服务器上那些时刻只增不减，记的是「这间小屋一共被催过哪几下」，
+   * 而这里要的是「刚刚又被催了哪几下」。
    */
   function soakNudges(state: RoomState, iAmHost: boolean) {
     const now = state.nudges || 0;
+    const stamps = state.nudgeAt ?? [];
+    const newest = stamps.length ? stamps[stamps.length - 1] : 0;
     if (!iAmHost || !rain) {
       seenNudges = now;
+      seenNudgeAt = Math.max(seenNudgeAt, newest);
       return;
     }
     if (seenNudges < 0) {
       seenNudges = now;   // 第一次看见，只记不掉
+      seenNudgeAt = newest;
       return;
     }
-    const fresh = now - seenNudges;
+    const fresh = stamps.filter((t) => t > seenNudgeAt);
+    // 老服务器没有时间戳：退回按数量匀开。
+    const count = fresh.length ? fresh.length : Math.max(0, now - seenNudges);
     seenNudges = now;
-    if (fresh <= 0) return;
-    // 一颗一颗掉，摊在这一轮轮询的间隔里：按得越密掉得越密，而不是一次倒出
-    // 一批（玩家的原话：「按点击频率逐个掉，不按批次」）。一轮最多十二颗——
-    // 再多就是在刷屏，看不出频率了。
-    const count = Math.min(12, fresh);
-    const gap = 1000 / count;
-    for (let k = 0; k < count; k++) {
+    seenNudgeAt = Math.max(seenNudgeAt, newest);
+    if (count <= 0) return;
+    const span = fresh.length > 1 ? fresh[fresh.length - 1] - fresh[0] : 0;
+    const scale = span > 950 ? 950 / span : 1;
+    const shown = Math.min(40, count);
+    for (let k = 0; k < shown; k++) {
+      const at = fresh.length ? (fresh[k] - fresh[0]) * scale : (k * 1000) / shown;
       window.setTimeout(() => {
         if (!dead && rain) rain.drop(1);
-      }, Math.round(k * gap));
+      }, Math.round(at));
     }
   }
 
@@ -683,8 +706,10 @@ export function renderMultiplayerPage(
     // 「我在学」，别人那边立刻变成「稍等」，开赛时刻等我答完再重新盖一遍。
     // 原来这一问只是本机上盖了一层，服务器那头的开赛时刻照走、下一次轮询就
     // 在这层底下把倒数数起来了；答得慢一点，牌已经在底下开了。
+    // 问的这四秒是服务器开局时就替他留好的（可能有新手的局倒数从 8 数起，
+    // 见 api/room.js 的 ASK_MS）：这里不必再向服务器报「我在学」，别人的倒
+    // 数照走；他答「会」就接着数，答「不会」才走 goLearn 那条路让整屋等。
     asking = true;
-    void setLearning(true);
     const name = shapeName(lang, state.mode ?? '', family);
     const box = document.createElement('div');
     box.className = 'overlay opaque show';
@@ -710,10 +735,9 @@ export function renderMultiplayerPage(
     // 说「会」（或者没答，时间到了）：向服务器销掉「我在学」。最后一个销掉
     // 的人会让服务器把开赛时刻重新盖一遍，全屋一起从头数——见 api/room.js
     // 的 learn。
-    const knows = () => {
-      close();
-      void setLearning(false);
-    };
+    // 说「会」（或者没答，时间到了）：什么都不用告诉服务器，倒数本来就在走，
+    // 收起这一问，下一次轮询接着数。
+    const knows = () => close();
     box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
     box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
       close();
@@ -749,20 +773,29 @@ export function renderMultiplayerPage(
    * 和开局那一幕同一个身架：上半屏这一局的玩法图，中间原本放 4-3-2-1 的位置
    * 换成一句话，底下是那只转圈的标识。轮询不停——它就是这一屏等的东西。
    */
-  function showLearningWait() {
+  function showLearningWait(state: RoomState) {
     if (waitingOnLearner) return;
     waitingOnLearner = true;
     rain?.stop();
     rain = null;
     const spinner = custom('mp-loading') ?? '';
+    // 那句话和转圈的小人往上挪，底下是一块练习盘：这一局的玩法、真的规则，
+    // 只是不结算——等的人先练一练（玩家的原话：「加入一个模拟玩的小区域在屏
+    // 幕下方（把现在已有文字和转动动画向上移动）」）。
     container.innerHTML = `
       <div class="app mp-page mp-countdown-page mp-learn-page">
         <div class="start-stage mp-learn-stage">
           <p class="tag-line mp-learn-line">${s.mpLearningWait}</p>
           <div class="mp-learn-spin">${spinner}</div>
+          <p class="auth-hint mp-practice-hint">${s.mpPracticeHint}</p>
+          <div class="mp-practice" id="mpPractice"></div>
         </div>
       </div>
     `;
+    practiceStop?.();
+    practiceStop = null;
+    const host = container.querySelector<HTMLElement>('#mpPractice');
+    if (host && state.mode && handlers.onPractice) practiceStop = handlers.onPractice(host, state.mode);
   }
 
   /** 把倒数收回去（有人临时说他不会规则）。轮询不动——它正是等的那件事。 */
@@ -793,6 +826,9 @@ export function renderMultiplayerPage(
     rain?.stop();
     rain = null;
     const { startAt, seed, mode } = state;
+    // 等人学教学那一屏底下的练习盘，这一幕不要了。
+    practiceStop?.();
+    practiceStop = null;
 
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
     // 一场竞赛），下半屏 4、3、2、1。区别只在谁在数——这里数的是服务器给的开
@@ -810,7 +846,8 @@ export function renderMultiplayerPage(
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
     // 从几数起。这一局是哪个玩法，服务器那边给的提前量就按同一份名单多留一秒
     // （api/room.js 的 WIDE_MODES），所以两边数出来的秒数对得上。
-    const first = countFrom(mode);
+    // 可能有新手的局多四秒：服务器说从几数起就从几数起（8 / 9），普通局照旧。
+    const first = state.countFrom ?? countFrom(mode);
     let shown = 0;
 
     const paintTick = () => {

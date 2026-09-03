@@ -221,6 +221,7 @@ export function createCircleSevenGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'circleSeven',
         timed: !!opts?.timeLimitSec,
         title: `Slides · ${shapeName(lang, 'circleSeven', '七色圆球')}`,
@@ -631,6 +632,7 @@ export function createCircleSevenGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circleSeven', '七色圆球'),
         shapeId: 'circleSeven',

@@ -1,5 +1,6 @@
 import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
+import { CTL_FINISH, CTL_NEXT, CTL_PREV, CTL_REPLAY } from './ctlIcons';
 import { playMove, playScore, playFlip, playClear, seatEls } from '../engine/juice';
 import { createDragChain } from '../engine/dragChain';
 import { plankFlipEl, flipMs, flipStaggerMs } from '../engine/plankFlip';
@@ -189,11 +190,13 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
     <div class="app story-tut">
       <div class="story-prog" id="stProg"></div>
       <div class="story-stage" id="stStage"><div class="story-board" id="stBoard"></div></div>
+      <!-- 四颗都是图示，不写字（玩家的原话：⬅️ ➡️ 🔄 ✅ 那样的图示）。
+           名字留在 aria-label 里给读屏软件。 -->
       <div class="controls story-controls">
-        <button class="icon-btn" id="stPrev">${s.prev}</button>
-        <button class="icon-btn" id="stReplay">${s.replay}</button>
-        <button class="icon-btn" id="stNext">${s.next}</button>
-        <button class="icon-btn" id="stFinish">${s.finishBtn}</button>
+        <button class="icon-btn story-ctl" id="stPrev" aria-label="${s.prev}">${CTL_PREV}</button>
+        <button class="icon-btn story-ctl" id="stReplay" aria-label="${s.replay}">${CTL_REPLAY}</button>
+        <button class="icon-btn story-ctl" id="stNext" aria-label="${s.next}">${CTL_NEXT}</button>
+        <button class="icon-btn story-ctl" id="stFinish" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
       </div>
     </div>
   `;
@@ -496,7 +499,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   function sync() {
     bPrev.disabled = beat === 0;
     bNext.disabled = beat === spec.beats.length - 1;
-    bFinish.textContent = beat === spec.beats.length - 1 ? s.doneBtn : s.finishBtn;
+    bFinish.setAttribute('aria-label', beat === spec.beats.length - 1 ? s.doneBtn : s.finishBtn);
   }
 
   bPrev.addEventListener('click', () => beat > 0 && play(beat - 1));

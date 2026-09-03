@@ -88,6 +88,8 @@ export interface GameControllerHooks {
    * zero (in addition to, not instead of, the normal isGameOver() ending).
    */
   timeLimitSec?: number;
+  /** 练习盘：打完了就再来一盘，不结算、不存档、不上榜、不报统计。见 ShapeGameOpts.practice。 */
+  practice?: boolean;
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -273,6 +275,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = s.defaultPenaltyLabel) {
+    if (hooks.practice) {
+      // 练习盘没有「结束」这回事：翻完了、死局了，就静静再发一盘接着玩。
+      gameOver = false;
+      resolving = false;
+      newGame();
+      return;
+    }
     gameOver = true;
     resolving = false;
     timer.stop();
@@ -678,7 +687,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 统一按。按第二下就是把已经在打的这一局重发一次，所以只认第一下。
     if (started) return;
     started = true;
-    trackGameStart(hooks.shapeId, hooks.modeKey);
+    if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
     refs.startOverlay.classList.remove('show');
     newGame();
   });

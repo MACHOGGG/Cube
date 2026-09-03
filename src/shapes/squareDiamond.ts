@@ -216,6 +216,7 @@ export function createSquareDiamondGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'squareDiamond',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
@@ -659,6 +660,7 @@ export function createSquareDiamondGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'squareDiamond', '菱形方块'),
         shapeId: 'squareDiamond',

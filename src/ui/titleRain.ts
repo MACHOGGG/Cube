@@ -1,9 +1,14 @@
 /**
  * 催屋主时，往 Slides 标题那个框里掉的图形。
  *
- * 客人在小屋里按一下《催屋主》，屋主的标题框里就掉进来几个随机颜色、随机
- * 形状的小东西：方块、圆球、三角——就是这个游戏本来的三种。它们在框子里
- * 互相撞、也和框子的圆角边撞，一边弹一边淡，淡完就没了。一直按就一直掉。
+ * 客人在小屋里按一下《催屋主》，屋主的标题框里就掉进来一个随机颜色、随机形
+ * 状的小东西：方块、圆球、三角——就是这个游戏本来的三种。按一下掉一个，按得
+ * 越密掉得越密（节奏由 multiplayer.ts 按服务器记下的每一下的时刻来放）。
+ *
+ * 掉进来之后它不沉底：在整个圆角矩形里四处弹——撞四面墙（连圆角也照着圆弧
+ * 弹）、互相撞也弹（等质量的完全弹性碰撞），速度不衰减，一直弹到自己淡掉为
+ * 止。玩家的原话：「掉落后在整个 title 的圆角矩形内部四处弹跳，小图形之间碰
+ * 撞也会反弹」。
  *
  * 为什么是画在 canvas 上而不是一堆 div：
  * 十几个东西同时在弹，每一帧都要改它们的位置。用 div 的话每帧就是十几次
@@ -12,8 +17,8 @@
  *
  * 「太多了就淡得快」是有意的设计，不是省事：一个人按住不放的时候，如果每个
  * 都活满一样久，框子会被塞满，标题就看不见了——而那是屋主要用来认路的东西。
- * 现在的做法是数量一超过 SOFT_CAP，剩下的寿命就整体按比例缩短，于是掉得越
- * 猛、清得越快，框子永远留得出缝。
+ * 数量一超过 SOFT_CAP，剩下的寿命就整体按比例缩短，于是掉得越猛、清得越快，
+ * 框子永远留得出缝。
  */
 
 /** 三种图形，和棋盘上的一样。 */
@@ -23,12 +28,12 @@ const KINDS: Kind[] = ['square', 'circle', 'triangle'];
 /** 棋子的那套标准色。掉进来的东西属于这个游戏，不该是另一套颜色。 */
 const COLORS = ['#2F8A96', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'];
 
-const GRAVITY = 1500;      // px/s²
-const BOUNCE = 0.62;       // 撞墙之后还剩多少速度
-const FLOOR_DRAG = 0.86;   // 贴着底走的时候的横向摩擦
-const LIFE_MS = 2600;      // 一个图形能活多久（不拥挤的时候）
-const FADE_FROM = 0.55;    // 活过这么大比例之后开始淡
-const SOFT_CAP = 8;        // 超过这么多个，寿命开始整体缩短
+/** 每个图形自己的速度（px/s），一进来就定，此后撞什么都不变。 */
+const SPEED_MIN = 120;
+const SPEED_MAX = 200;
+const LIFE_MS = 5600;      // 一个图形能活多久（不拥挤的时候）
+const FADE_FROM = 0.72;    // 活过这么大比例之后开始淡
+const SOFT_CAP = 10;       // 超过这么多个，寿命开始整体缩短
 const HARD_CAP = 40;       // 再多就不收了——最老的那个直接让位
 const R_MIN = 7;
 const R_MAX = 12;
@@ -36,12 +41,16 @@ const R_MAX = 12;
 interface Piece {
   x: number; y: number;
   vx: number; vy: number;
+  /** 自己的速度大小；每一帧撞完之后都按它把速度矫回来，弹多久都不慢。 */
+  speed: number;
   r: number;
   kind: Kind;
   color: string;
   rot: number; vrot: number;
   /** 已经活了多久，毫秒。 */
   age: number;
+  /** 从上面掉进来的那一下还没完全进框——进了框顶上那面墙才算数。 */
+  inside: boolean;
 }
 
 export interface TitleRain {
@@ -77,12 +86,19 @@ export function mountTitleRain(host: HTMLElement): TitleRain {
   let last = 0;
   let w = 0;
   let h = 0;
+  /** 框子的圆角半径——从它的样式里读，框子怎么画的，弹就怎么弹。 */
+  let corner = 0;
   let dead = false;
 
   function resize() {
     const rect = host.getBoundingClientRect();
     w = Math.max(1, rect.width);
     h = Math.max(1, rect.height);
+    corner = Math.min(
+      parseFloat(getComputedStyle(host).borderTopLeftRadius) || 0,
+      w / 2,
+      h / 2,
+    );
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
@@ -130,6 +146,46 @@ export function mountTitleRain(host: HTMLElement): TitleRain {
     return Math.max(0, 1 - (t - FADE_FROM) / (1 - FADE_FROM));
   };
 
+  /**
+   * 四面墙，连圆角一起。
+   *
+   * 直边照直边弹；到了四个角上，框子的边是一段圆弧——圆心在 (corner, corner)
+   * 那几个点，半径 corner。图形的圆心离那个圆心不能超过 corner − r，超了就
+   * 沿着连心线（也就是圆弧的法线）弹回来。顶上那面墙只对已经完全进了框的图
+   * 形算数：新的是从上面掉进来的，一进来就撞天花板会很怪。
+   */
+  function walls(p: Piece) {
+    if (p.x < p.r) { p.x = p.r; p.vx = Math.abs(p.vx); }
+    if (p.x > w - p.r) { p.x = w - p.r; p.vx = -Math.abs(p.vx); }
+    if (p.y > h - p.r) { p.y = h - p.r; p.vy = -Math.abs(p.vy); }
+    if (p.inside && p.y < p.r) { p.y = p.r; p.vy = Math.abs(p.vy); }
+    if (corner <= p.r) return;
+    const limit = corner - p.r;
+    const arcs: [number, number][] = [
+      [w - corner, h - corner],
+      [corner, h - corner],
+      ...(p.inside ? ([[corner, corner], [w - corner, corner]] as [number, number][]) : []),
+    ];
+    for (const [cx, cy] of arcs) {
+      // 只管自己那一角的扇形：圆心到图形的方向得指向角落。
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const toward = (cx < w / 2 ? dx < 0 : dx > 0) && (cy < h / 2 ? dy < 0 : dy > 0);
+      if (!toward) continue;
+      const d = Math.hypot(dx, dy);
+      if (d <= limit || d === 0) continue;
+      const nx = dx / d;
+      const ny = dy / d;
+      p.x = cx + nx * limit;
+      p.y = cy + ny * limit;
+      const along = p.vx * nx + p.vy * ny;
+      if (along > 0) {
+        p.vx -= 2 * along * nx;
+        p.vy -= 2 * along * ny;
+      }
+    }
+  }
+
   function step(now: number) {
     if (dead) return;
     const dt = Math.min(0.032, (now - last) / 1000);
@@ -137,26 +193,14 @@ export function mountTitleRain(host: HTMLElement): TitleRain {
 
     for (const p of pieces) {
       p.age += dt * 1000;
-      p.vy += GRAVITY * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.rot += p.vrot * dt;
-
-      // 四面墙。框子是圆角的，但在这个尺度上按直边处理看不出来，而且直边
-      // 撞出来的方向是对的——圆角那一点点差别没人会注意到，代码复杂度倒是
-      // 差很多。
-      if (p.x < p.r) { p.x = p.r; p.vx = Math.abs(p.vx) * BOUNCE; }
-      if (p.x > w - p.r) { p.x = w - p.r; p.vx = -Math.abs(p.vx) * BOUNCE; }
-      if (p.y > h - p.r) {
-        p.y = h - p.r;
-        p.vy = -Math.abs(p.vy) * BOUNCE;
-        p.vx *= FLOOR_DRAG;
-        p.vrot *= FLOOR_DRAG;
-      }
-      // 顶上不挡：新的从上面掉进来，撞到看不见的天花板会很怪。
+      if (!p.inside && p.y - p.r >= 0) p.inside = true;
+      walls(p);
     }
 
-    // 互相撞。等质量的完全弹性碰撞，只沿连心线交换那一份速度。
+    // 互相撞。等质量的完全弹性碰撞：沿连心线那一份速度整个交换，切向的各留各的。
     for (let i = 0; i < pieces.length; i++) {
       for (let j = i + 1; j < pieces.length; j++) {
         const a = pieces[i];
@@ -175,9 +219,20 @@ export function mountTitleRain(host: HTMLElement): TitleRain {
         b.x += nx * push; b.y += ny * push;
         const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
         if (rel > 0) continue;             // 已经在分开了
-        const imp = -(1 + BOUNCE) * rel / 2;
-        a.vx -= imp * nx; a.vy -= imp * ny;
-        b.vx += imp * nx; b.vy += imp * ny;
+        a.vx += rel * nx; a.vy += rel * ny;
+        b.vx -= rel * nx; b.vy -= rel * ny;
+      }
+    }
+
+    // 撞来撞去速度大小会有零碎的漂移，每一帧按各自的 speed 矫回来：弹多久都不慢、也不越弹越快。
+    for (const p of pieces) {
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > 1e-6) {
+        const k = p.speed / sp;
+        p.vx *= k;
+        p.vy *= k;
+      } else {
+        p.vx = p.speed;
       }
     }
 
@@ -199,17 +254,22 @@ export function mountTitleRain(host: HTMLElement): TitleRain {
     for (let k = 0; k < n; k++) {
       if (pieces.length >= HARD_CAP) pieces.shift();
       const r = rand(R_MIN, R_MAX);
+      const speed = rand(SPEED_MIN, SPEED_MAX);
+      // 从上面掉进来：朝下、带一点左右。
+      const angle = rand(Math.PI * 0.22, Math.PI * 0.78);
       pieces.push({
         x: rand(r + 6, Math.max(r + 7, w - r - 6)),
-        y: -rand(4, 26),
-        vx: rand(-70, 70),
-        vy: rand(0, 90),
+        y: -r - rand(2, 14),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        speed,
         r,
         kind: pick(KINDS),
         color: pick(COLORS),
         rot: rand(0, Math.PI * 2),
         vrot: rand(-6, 6),
         age: 0,
+        inside: false,
       });
     }
     if (!raf) {

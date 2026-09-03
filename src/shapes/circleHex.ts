@@ -234,6 +234,7 @@ export function createCircleHexGame(): ShapeGame {
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'circleHex',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
@@ -723,6 +724,7 @@ export function createCircleHexGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circleHex', '六边圆球'),
         shapeId: 'circleHex',

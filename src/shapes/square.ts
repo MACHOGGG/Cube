@@ -109,6 +109,7 @@ export function createSquareGame(): ShapeGame {
       const minMatchSize = targets ? Math.min(...targets.map(sizeOf)) : undefined;
       const refs = buildShell(container, {
         lang,
+        practice: !!opts?.practice,
         shapeId: 'square',
         timed: !!opts?.timeLimitSec,
         bomb: isBomb,
@@ -669,6 +670,7 @@ export function createSquareGame(): ShapeGame {
 
       const controller = createGameController(refs, {
         lang,
+        practice: !!opts?.practice,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'square', '方块'),
         shapeId: 'square',

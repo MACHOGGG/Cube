@@ -48,3 +48,24 @@ export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
   '<path d="M60 30 L40 50 L60 70" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
+
+/**
+ * 教学那一排：上一条、下一条、再一次。同一副圆盘，里面分别是向左的箭、向右的
+ * 箭、绕一圈的箭——玩家的原话：「上一条改为 ⬅️ 标识，下一条改为 ➡️，再一次改为
+ * 🔄，完成改为 ✅（不是这个 emoji 但就是这个图示）」；《完成》用的就是 CTL_FINISH
+ * 那个对勾。换成自己的：ctl-prev.svg / ctl-next.svg / ctl-replay.svg。
+ */
+export const CTL_PREV = custom('ctl-prev') ?? ctlGlyph(
+  '<path d="M70 50 H32 M47 34 L30 50 L47 66" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);
+export const CTL_NEXT = custom('ctl-next') ?? ctlGlyph(
+  '<path d="M30 50 H68 M53 34 L70 50 L53 66" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);
+export const CTL_REPLAY = custom('ctl-replay') ?? ctlGlyph(
+  '<path d="M69 43 A21 21 0 1 0 71 57" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
+    'stroke-linecap="round"/>' +
+    '<path d="M69 27 V43 H53" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);

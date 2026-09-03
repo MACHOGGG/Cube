@@ -163,7 +163,78 @@ check('没开通：颜色不压暗（整行不透明度 1）', pal.every((p) => 
 check('没开通：锁着的行字色不是浏览器的灰', pal.every((p) => !/rgba\(16, 16, 16/.test(p.ink)), pal[0]?.ink);
 await page.click('#palClose');
 
-// ---- 4. 主菜单那张卡也改名了 ---------------------------------------------
+// ---- 4. 教学挑选页：三个图形、六条规则、一颗《返回》，一屏装下 --------------
+async function pickerAt(width, height) {
+  const c = await browser.newContext({ viewport: { width, height } });
+  await c.addInitScript(() => {
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+      localStorage.setItem(k, '1');
+    localStorage.setItem('slides_lang', 'zhHans');
+  });
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForSelector('#navProfile', { timeout: 20000 });
+  await p.click('#navProfile');
+  await p.waitForSelector('#howToRow', { timeout: 10000 });
+  await p.click('#howToRow');
+  await p.waitForSelector('.tut-pick', { timeout: 10000 });
+  await p.waitForTimeout(400);
+  const m = await p.evaluate(() => {
+    const nav = document.querySelector('.home-nav');
+    const navTop = nav ? nav.getBoundingClientRect().top : window.innerHeight;
+    const back = document.getElementById('backBtn')?.getBoundingClientRect();
+    const rules = [...document.querySelectorAll('.tut-rule')];
+    return {
+      shapes: [...document.querySelectorAll('.tut-shape-btn')].map((b) => b.dataset.shape),
+      stacked: (() => {
+        const xs = [...document.querySelectorAll('.tut-shape-btn')].map((b) => { const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top)]; });
+        return xs.length === 3 && xs.every((x) => x[0] === xs[0][0]) && xs[0][1] < xs[1][1] && xs[1][1] < xs[2][1];
+      })(),
+      rules: rules.length,
+      arts: rules.filter((r) => r.querySelector('.tut-rule-art .rl-tile, .tut-rule-art svg')).length,
+      texts: rules.map((r) => r.querySelector('.tut-rule-text')?.textContent.trim().length || 0),
+      oldTitle: /如何滑|重新观看/.test(document.body.textContent),
+      backGlyph: Boolean(document.querySelector('#backBtn svg')),
+      backText: (document.getElementById('backBtn')?.textContent || '').trim(),
+      backBottomOk: back ? back.bottom <= navTop + 1 && back.bottom <= window.innerHeight : false,
+      backIsLast: (() => {
+        const els = [...document.querySelectorAll('.tut-pick *')].filter((e) => e.getBoundingClientRect().height > 0);
+        const maxBottom = Math.max(...els.map((e) => e.getBoundingClientRect().bottom));
+        return back ? Math.abs(back.bottom - maxBottom) <= 1 : false;
+      })(),
+      scrolls: document.documentElement.scrollHeight > window.innerHeight + 1,
+    };
+  });
+  await c.close();
+  return m;
+}
+for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
+  const m = await pickerAt(w, h);
+  check(`${label} · 教学挑选页：三个图形上下排着（方块、小球、三角）`, m.shapes.join(',') === 'square,circle,triangle' && m.stacked, m.shapes.join(','));
+  check(`${label} · 六条规则，每条配图`, m.rules === 6 && m.arts === 6 && m.texts.every((n) => n > 8), `${m.rules} 条 · ${m.arts} 幅`);
+  check(`${label} · 没有《如何滑……重新观看》那两行字`, !m.oldTitle);
+  check(`${label} · 《返回》是「<」的图示，在最下面，不压底排`, m.backGlyph && m.backText === '' && m.backIsLast && m.backBottomOk);
+  check(`${label} · 整页一屏装下，不用滚`, !m.scrolls);
+}
+// 教学里的四颗键：全是图示，不写字。
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c.addInitScript(() => { localStorage.setItem('slides_lang', 'zhHans'); localStorage.setItem('slides_tutorial_seen', '1'); localStorage.setItem('slides_tutorial_seen_circle', '1'); localStorage.setItem('slides_tutorial_seen_triangle', '1'); });
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForSelector('#navProfile', { timeout: 20000 });
+  await p.click('#navProfile'); await p.click('#howToRow');
+  await p.waitForSelector('.tut-shape-btn', { timeout: 10000 });
+  await p.click('.tut-shape-btn[data-shape="square"]');
+  await p.waitForSelector('.story-controls', { timeout: 10000 });
+  const keys = await p.$$eval('.story-controls .icon-btn', (els) => els.map((e) => ({ id: e.id, svg: Boolean(e.querySelector('svg')), text: e.textContent.trim(), label: e.getAttribute('aria-label') })));
+  check('教学四颗键都是图示（上一条 / 再一次 / 下一条 / 完成）',
+    keys.length === 4 && keys.every((k) => k.svg && k.text === '' && k.label) && keys.map((k) => k.id).join(',') === 'stPrev,stReplay,stNext,stFinish',
+    JSON.stringify(keys));
+  await c.close();
+}
+
+// ---- 5. 主菜单那张卡也改名了 ---------------------------------------------
 await page.click('#navProfile');
 await page.waitForSelector('.home-page', { timeout: 10000 });
 const card = await page.$$eval('.home-icon-btn', (els) =>

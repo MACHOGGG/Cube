@@ -113,12 +113,30 @@ const SLOT_MODES = new Set(['square', 'circle', 'triangle']);
 const CTRL_RE = /[\u0000-\u001F\u007F]/g;
 
 /**
- * 一次教学最多把整屋拖多久。看教学的设备不轮询，所以这个上限就是「他再也
- * 不回来」时整屋的等待上限。教学本身一两分钟，五分钟留得很宽。
+ * 学的人多久没动静，整屋就不再等他。
+ *
+ * 看教学的那台设备每点一下就报一声「我还在学」（learningAt 往前挪，见
+ * ui 那边的 learnHeartbeat）；二十秒一下都没点，就当他走神了——大家继续，他
+ * 看完教学之后坐等待页，下一局再入。玩家的原话：「太久（20s）没有响应（没有
+ * 点击任何地方）那么大家继续」。
  */
-const LEARN_MAX_MS = 5 * 60_000;
+const LEARN_IDLE_MS = 20_000;
 const seatLearning = (seat) =>
-  Boolean(seat.learningAt) && Date.now() - seat.learningAt < LEARN_MAX_MS;
+  Boolean(seat.learningAt) && Date.now() - seat.learningAt < LEARN_IDLE_MS;
+/**
+ * 可能有新手的那一局，开赛前多留的四秒：没看过这个玩法教学的人在这四秒里
+ * 回答「会 / 不会」，其他人的倒数则从 8（横屏玩法 9）数起。客户端那一问的
+ * 时限是同一个数（ui/multiplayer.ts 的 KNOW_ASK_MS）。
+ */
+const ASK_MS = 4000;
+const FAMILIES = new Set(['square', 'circle', 'triangle']);
+/** 一个玩法属于哪一族——按 id 前缀认，和教学的族是同一份。 */
+const familyOf = (mode) =>
+  String(mode).startsWith('square') ? 'square' : String(mode).startsWith('circle') ? 'circle' : 'triangle';
+/** 这个玩法的倒数从几数起（客户端 startStage.ts 的 countFrom 是同一份）。 */
+const countFromFor = (mode) => (WIDE_MODES.has(mode) ? 5 : 4);
+/** 这台设备看过哪几族的教学——只认那三个名字。 */
+const cleanSeen = (v) => (Array.isArray(v) ? [...new Set(v.filter((x) => FAMILIES.has(x)))] : []);
 const anyoneLearning = (hash) =>
   Object.entries(hash).some(([k, v]) => k.startsWith('p:') && v && !v.left && seatLearning(v));
 
@@ -277,6 +295,10 @@ function publicState(code, hash) {
     players,
     /** 被催了多少下。屋主那边看它变大就往标题里掉图形。 */
     nudges: meta.nudges || 0,
+    /** 最近几十下催促各是什么时刻——屋主按这个节奏一颗一颗掉。 */
+    nudgeAt: Array.isArray(meta.nudgeAt) ? meta.nudgeAt : [],
+    /** 这一局的倒数从几数起（可能有新手的局是 8 / 9）。 */
+    countFrom: meta.countFrom ?? null,
     // Lets a device with a wrong clock still count down to the same instant.
     serverNow: Date.now(),
   };
@@ -361,6 +383,7 @@ async function create(res, body) {
       score: 0,
       finished: false,
       joinedAt: Date.now(),
+      seen: cleanSeen(body.seen),
     });
     await expire(roomKey(code), ROOM_TTL_S);
     return send(res, 200, {
@@ -399,7 +422,7 @@ async function join(res, body) {
   if (back) {
     const [field, seat] = back;
     const token = id(16);
-    const next = { ...seat, token, lastSeen: Date.now(), learningAt: 0 };
+    const next = { ...seat, token, lastSeen: Date.now(), learningAt: 0, seen: cleanSeen(body.seen) };
     delete next.left;
     // 这一局已经开了：他手上的棋盘早没了，这一局不等他，下一局再入。走之前
     // 打出来的那点分留着，下一次 start 时 bankRound 照常记账。
@@ -431,6 +454,8 @@ async function join(res, body) {
     score: 0,
     finished: false,
     joinedAt: Date.now(),
+    /** 看过哪几族的教学。开局时用来判「这一局可不可能有新手」（见 start）。 */
+    seen: cleanSeen(body.seen),
   });
   await expire(roomKey(code), ROOM_TTL_S);
   return send(res, 200, {
@@ -441,10 +466,31 @@ async function join(res, body) {
   });
 }
 
+/**
+ * 「有人在学」的挂起到此为止：开赛时刻重新盖一遍，大家一起从头数。
+ * 学完了、走了、二十秒没动静，走到这儿的是同一件事。
+ */
+async function releaseHold(code, meta) {
+  const released = {
+    ...meta,
+    learnHold: false,
+    startAt: Date.now() + countdownMsFor(meta.mode),
+    countFrom: countFromFor(meta.mode),
+  };
+  await hset(roomKey(code), 'meta', released);
+  return released;
+}
+
 async function state(res, body) {
   const code = String(body.code ?? '').trim();
-  const hash = await readRoom(code);
+  let hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
+  // 学的人二十秒没动静了（或者早走了）：不再等他。轮询是唯一稳定会跑到这
+  // 儿的路，所以这一步放在这里而不是等谁来「说一声」。
+  if (hash.meta.learnHold && !anyoneLearning(hash)) {
+    await releaseHold(code, hash.meta);
+    hash = await hgetall(roomKey(code));
+  }
   // 问一次状态，也就是报一次到。
   //
   // 从前只有交分数那条路会写 lastSeen，可小屋页（两局之间）根本不交分数：
@@ -521,6 +567,13 @@ async function start(res, body) {
     await hset(roomKey(code), field, next);
   }
 
+  // 可能有新手：屋里有人没看过这一族的教学。那就多留四秒——那个人的设备会
+  // 问他「会不会」，其他人的倒数从 8 数起（横屏玩法 9）。他答「会」什么都不
+  // 变，大家一起数到 0；答「不会」走 learn 那条路，整屋等他。
+  const family = familyOf(body.mode);
+  const novice = Object.entries(hash).some(
+    ([f, seat]) => f.startsWith('p:') && seat && !seat.left && !(seat.seen || []).includes(family),
+  );
   const meta = {
     ...hash.meta,
     mode: body.mode,
@@ -528,7 +581,11 @@ async function start(res, body) {
     round: (hash.meta.round || 0) + 1,
     // The one string from which every player builds the identical board.
     seed: id(8),
-    startAt: Date.now() + countdownMsFor(body.mode),
+    startAt: Date.now() + countdownMsFor(body.mode) + (novice ? ASK_MS : 0),
+    /** 屏幕上从几数起。多留的四秒也数出来：8-7-6-5-4-3-2-1。 */
+    countFrom: countFromFor(body.mode) + (novice ? ASK_MS / 1000 : 0),
+    /** 这一局有没有被「有人在学」挂起。 */
+    learnHold: false,
   };
   await hset(roomKey(code), 'meta', meta);
   await expire(roomKey(code), ROOM_TTL_S);
@@ -635,6 +692,11 @@ async function leave(res, body) {
       left: Date.now(),
       finished: true,
     });
+    // 走的正是大家在等的那个学生：不等了，大家继续。
+    if (seatLearning(seat)) {
+      const fresh = await hgetall(roomKey(code));
+      if (fresh?.meta?.learnHold && !anyoneLearning(fresh)) await releaseHold(code, fresh.meta);
+    }
   }
   return send(res, 200, { ok: true });
 }
@@ -654,17 +716,27 @@ async function learn(res, body) {
   const seat = seatOf(hash, body.playerId, body.playerToken);
   if (!seat) return send(res, 403, { error: 'seat' });
   const learning = Boolean(body.learning);
+  // 看完教学的人顺手把「看过了」带来——下一局就不用再为他多留四秒。
+  const seen = Array.isArray(body.seen) ? cleanSeen(body.seen) : null;
   await hset(roomKey(code), 'p:' + body.playerId, {
     ...seat,
     learningAt: learning ? Date.now() : 0,
     lastSeen: Date.now(),
+    ...(seen ? { seen } : {}),
   });
   let fresh = await hgetall(roomKey(code));
   const meta = fresh.meta || {};
-  // 最后一个学完的人：把开赛时刻重新盖一遍，全屋一起从 4 数起。等的人看的
-  // 是「还有谁在学」，学完这一刻他们的倒数才开始走。
-  if (!learning && meta.round && !anyoneLearning(fresh)) {
-    await hset(roomKey(code), 'meta', { ...meta, startAt: Date.now() + countdownMsFor(meta.mode) });
+  if (learning) {
+    // 这一局第一次有人去学：把开赛挂起。同一局只挂一次——被放行之后（学完、
+    // 走了、二十秒没动静）再来的「我在学」不再把大家拦住：他们已经在打了。
+    if (meta.round && meta.heldRound !== meta.round) {
+      await hset(roomKey(code), 'meta', { ...meta, learnHold: true, heldRound: meta.round });
+      fresh = await hgetall(roomKey(code));
+    }
+  } else if (meta.learnHold && !anyoneLearning(fresh)) {
+    // 最后一个学完的人：把开赛时刻重新盖一遍，全屋一起从 4 数起。等的人看的
+    // 是「还有谁在学」，学完这一刻他们的倒数才开始走。
+    await releaseHold(code, meta);
     fresh = await hgetall(roomKey(code));
   }
   await expire(roomKey(code), ROOM_TTL_S);
@@ -687,7 +759,10 @@ async function nudge(res, body) {
   // 上限是防一个按住不放的人把数字撑到没边；掉落那头本来也会在拥挤时加快
   // 消失，所以这里只要保证数字本身不失控就够。
   const next = Math.min((meta.nudges || 0) + 1, 9_000_000);
-  await hset(roomKey(code), 'meta', { ...meta, nudges: next });
+  // 顺手记下这一下是什么时刻（只留最近四十下）：屋主那边按这些时刻之间的
+  // 间隔一颗一颗掉，按得多快掉得多快，而不是一秒一批。
+  const nudgeAt = [...(Array.isArray(meta.nudgeAt) ? meta.nudgeAt : []), Date.now()].slice(-40);
+  await hset(roomKey(code), 'meta', { ...meta, nudges: next, nudgeAt });
   await expire(roomKey(code), ROOM_TTL_S);
   return send(res, 200, { ok: true, nudges: next });
 }
