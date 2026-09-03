@@ -114,6 +114,8 @@ export function createSquareGame(): ShapeGame {
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
         startBody: SHELL[lang].shellStartBody,
         patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
+        // 随机得分目标：开局页换成那台老虎机，当场把这两个转出来。
+        slotTargets: targets ?? undefined,
       });
 
       const pickPalette = (): readonly string[] =>

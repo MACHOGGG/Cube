@@ -1,8 +1,11 @@
 import { STRINGS, type Lang } from '../i18n';
-import { custom } from './customIcons';
+import { CTL_BACK, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
+import { planFor, slotMachineHtml, spinSlot } from './slotReels';
+import type { Family, TargetPattern } from '../engine/targets';
 
 export interface ExtraControl {
   id: string;
@@ -45,6 +48,15 @@ export interface ShellMeta {
   shapeId: string;
   /** 计时局。开局页摆的换成主菜单上那只橙色秒表，也就是玩家刚刚按下的那张。 */
   timed?: boolean;
+  /**
+   * 随机得分目标那一局转出来的两个图案。
+   *
+   * 给了它，开局页就换一副样子：上半屏是那台老虎机，三个滚筒当场从左到右
+   * 转出这两个图案（外加最右边那个转出你挑的图形）；倒数从 5 数起，多出来
+   * 的那一秒就是让轮子停完；底下只留《退出》——一场正在开的老虎机没有「暂
+   * 停」这回事。见 ui/slotReels.ts。
+   */
+  slotTargets?: readonly TargetPattern[];
 }
 
 export interface ShellRefs {
@@ -105,8 +117,8 @@ export interface ShellRefs {
  * board's own piece colours inside — rather than a stock rotate glyph, and
  * it only ever appears where turning really helps.
  */
-const ROTATE_HINT = (copy: string) => `
-  <div class="rotate-hint">
+const ROTATE_HINT = (copy: string | null) => `
+  <div class="rotate-hint${copy ? '' : ' rotate-hint--bare'}">
     <svg class="rotate-hint-phone" viewBox="0 0 120 120" aria-hidden="true">
       <g class="rotate-hint-turn">
         <rect x="41" y="16" width="38" height="88" rx="9"
@@ -121,48 +133,21 @@ const ROTATE_HINT = (copy: string) => `
             fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
       <path class="rotate-hint-arc" d="M30 40 l-9 2 l5 -8 Z" fill="currentColor" stroke="none"/>
     </svg>
-    <p class="rotate-hint-copy">${copy}</p>
+    ${copy ? `<p class="rotate-hint-copy">${copy}</p>` : ''}
   </div>`;
 
-/**
- * The two controls' marks: a disc with the sign cut into it, drawn rather
- * than written.
- *
- * They replace the words 完成/暂停, which had to be translated and then made
- * to fit — "Terminer" is four times the width of 完成 — and which a player
- * mid-run reads as shapes anyway. The disc takes `--ctl-disc` and the sign
- * `--ctl-mark`, so the pressed state swaps the two and the mark inverts with
- * the chip under it (see .app--game .controls .icon-btn in style.css).
- */
-const ctlGlyph = (inner: string) =>
-  `<svg class="ctl-glyph" viewBox="0 0 100 100" aria-hidden="true" focusable="false">` +
-  `<circle cx="50" cy="50" r="46" fill="var(--ctl-disc)"/>${inner}</svg>`;
-// 导出是给 scripts/icon-sheet.mjs 用的——图标清单要把它们和别的图标一起画
-// 出来，否则这两颗就成了唯一没在清单上、又能换的图标。
-// 换成自己画的：ctl-pause.svg / ctl-finish.svg。注意这两个现在是用
-// var(--ctl-disc) / var(--ctl-mark) 画的，按下去会两色对调；换成写死颜色
-// 的文件之后按下的反色就没有了。
-export const CTL_PAUSE = custom('ctl-pause') ?? ctlGlyph(
-  '<rect x="35" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>' +
-    '<rect x="54" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>',
-);
-export const CTL_FINISH = custom('ctl-finish') ?? ctlGlyph(
-  '<path d="M29 51.5 L44 66 L72 35" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ' +
-    'stroke-linecap="round" stroke-linejoin="round"/>',
-);
-/** 多人局那颗《离开房间》：一扇开着的门，一支箭走出去。换成自己的：ctl-leave.svg。 */
-export const CTL_LEAVE = custom('ctl-leave') ?? ctlGlyph(
-  '<path d="M56 26 H30 V74 H56" fill="none" stroke="var(--ctl-mark)" stroke-width="9" ' +
-    'stroke-linecap="round" stroke-linejoin="round"/>' +
-    '<path d="M48 50 H74 M63 39 L74 50 L63 61" fill="none" stroke="var(--ctl-mark)" ' +
-    'stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>',
-);
+// 那四颗圆盘搬去了 ctlIcons.ts——全站的《返回》现在也用同一颗，而那几页不
+// 该为了一个图标把整个游戏外壳拖进来。这里再导出一遍，老的引用照旧
+// （scripts/icon-sheet.mjs 从这个模块拿 CTL_PAUSE / CTL_FINISH）。
+export { CTL_PAUSE, CTL_FINISH, CTL_LEAVE, CTL_BACK } from './ctlIcons';
 
-/** 开局页那颗《返回》：同一副圆盘，里面是一支向左的箭。换成自己的：ctl-back.svg。 */
-export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
-  '<path d="M60 30 L40 50 L60 70" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +
-    'stroke-linecap="round" stroke-linejoin="round"/>',
-);
+/**
+ * 随机得分目标只开在三个基础玩法上，玩法 id 就是族名——唯一要小心的是三角：
+ * 主菜单上《三角》后面装的是 triangleBig.ts（它自己的 id 叫 'triangle'），
+ * 两个三角 2026-09 对调过。所以这里认的是 id，不是文件名。
+ */
+const familyOf = (shapeId: string): Family =>
+  shapeId === 'square' ? 'square' : shapeId === 'circle' ? 'circle' : 'triangle';
 
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const s = STRINGS[meta.lang];
@@ -268,10 +253,15 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         timed: meta.timed,
         room: !!currentRoom(),
         countId: 'startCount',
-        extra: meta.landscape ? ROTATE_HINT(s.rotateHint) : '',
+        emblem: meta.slotTargets ? slotMachineHtml() : undefined,
+        extra: meta.landscape ? ROTATE_HINT(landscapePlayed() ? null : s.rotateHint) : '',
+        // 老虎机那一局底下只留《退出》：轮子已经在转了，「暂停」停不住它，
+        // 而这一幕本来就只有五秒。玩家的原话：「下面还是只有那个《退出》」。
         actions:
           `<button class="icon-btn start-act" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` +
-          `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`,
+          (meta.slotTargets
+            ? ''
+            : `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`),
       })}
       <button id="startBtn" class="start-hidden-go" hidden aria-hidden="true" tabindex="-1">${s.startBtn}</button>
     </div>
@@ -423,7 +413,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 后把牌重发一遍——所以只有这一页还挂着的时候才算数。
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
         startBtnEl.click();
-      }, countFrom(meta.shapeId));
+        // 老虎机那一局多数一个：多出来的那一秒就是让三个轮子停完。
+      }, countFrom(meta.shapeId) + (meta.slotTargets ? 1 : 0));
     };
     container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
       cancelCount?.();
@@ -443,6 +434,40 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       cancelCount = null;
     });
     runCount();
+  }
+
+  // ---- 老虎机：开局页那台机器真的在转 -----------------------------------
+  //
+  // 结果在进这一页之前就抽好了（slotMachine.ts 的 drawPair），这里转的是给
+  // 人看的那几秒：三个轮子从左到右先后停住，最后一个停完时倒数还剩一秒多，
+  // 刚好够看清转出了什么。按《退出》就别转了——这块 DOM 马上要被换掉。
+  if (meta.slotTargets?.length) {
+    const stage = container.querySelector<HTMLElement>('#startOverlay');
+    if (stage) {
+      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTargets));
+      container.querySelector<HTMLButtonElement>('#startBackBtn')?.addEventListener('click', stopSpin);
+    }
+  }
+
+  // ---- 「这个人已经横着玩过了」-----------------------------------------
+  //
+  // 记的是真的横着玩过一局，不是见过开局页那句提示——开局页还挂着的时候不
+  // 算数，那会儿人只是在看提示，手机还没转。所以两个时刻各打一次点：一局
+  // 开起来时屏幕已经是横的，或者局中把手机转横了。之后那句话就不再出现，
+  // 只留下转手机的动画（见 engine/landscapeSeen.ts）。
+  if (meta.landscape) {
+    const land = window.matchMedia('(orientation: landscape)');
+    const noteLandscape = () => {
+      // 这块 DOM 已经被换掉了（离开了这一局）——顺手把自己摘掉，免得每进一
+      // 局就多挂一个监听器。
+      if (!document.contains(container)) return land.removeEventListener('change', noteLandscape);
+      if (!land.matches) return;
+      if (container.querySelector('#startOverlay')?.classList.contains('show')) return;
+      markLandscapePlayed();
+    };
+    land.addEventListener('change', noteLandscape);
+    // 开局那一下：#startBtn 按下之后开局页才收起来，所以等下一帧再看。
+    startBtnEl?.addEventListener('click', () => requestAnimationFrame(noteLandscape));
   }
 
   return {

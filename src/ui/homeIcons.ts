@@ -506,6 +506,29 @@ export const ICON_MULTIPLAYER =
   );
 
 /**
+ * 同一扇门的纯白版：《加入小屋》那颗键上的标识。
+ *
+ * 门还是主菜单上那一扇——同一个文件、同一套几何，只是三块门板全刷成白的。
+ * 刷白之后三块会连成一整片，看不出是门了，所以每一块再描一圈 `--door-gap`：
+ * 那圈不是画上去的线，是底色透过来的缝，门板的层次靠它留住。门把手同理，
+ * 白门上的白把手是看不见的，所以它也留成底色。
+ *
+ * `--door-gap` 由用它的那颗键给（见 style.css 的 .mp-join-door）；没人给就
+ * 是透明的，退回一个纯白的剪影，不会画出一圈莫名其妙的黑边。
+ */
+export const ICON_DOOR_WHITE = whiteDoor(ICON_MULTIPLAYER);
+
+function whiteDoor(markup: string): string {
+  return markup
+    .replace(
+      /<path /g,
+      '<path stroke="var(--door-gap, transparent)" stroke-width="9" stroke-linejoin="round" ',
+    )
+    .replace(/<ellipse ([^>]*?)fill="#FFFFFF"/gi, '<ellipse $1fill="var(--door-gap, transparent)"')
+    .replace(/fill="#(?!FFFFFF\b)[0-9A-Fa-f]{3,8}"/g, 'fill="#FFFFFF"');
+}
+
+/**
  * 炸弹局的标志：一颗白底红星，摆在开局页和战绩图上。
  *
  * 和主菜单那张炸弹卡不是一回事——那张是入口，这个是「你正在打的这一局是炸弹

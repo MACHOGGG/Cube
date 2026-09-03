@@ -2,6 +2,7 @@ import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
+import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { faceClone, flipStaggerMs, plankFlipEl } from '../engine/plankFlip';
@@ -215,7 +216,7 @@ export function renderAccountPage(
           </button>`,
         ).join('')}
       </section>
-      <button class="profile-row profile-row--back" id="backBtn">${s.back}</button>
+      <div class="page-back-row"><button class="icon-btn page-back" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button></div>
     </div>
   `;
 

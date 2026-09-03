@@ -28,6 +28,14 @@ export interface StartStageOpts {
   actions?: string;
   /** 需要额外塞在倒数下面的东西（横屏提示）。 */
   extra?: string;
+  /**
+   * 换掉上半屏那一排玩法图。
+   *
+   * 随机得分目标那一局用它摆那台老虎机——那一局的「你要玩的是这个」不是一
+   * 张静止的图，是三个正在转的滚筒（见 ui/slotReels.ts）。给了它，玩法图
+   * 和局种标志都不画：一屏上摆两套身份，两套都读不清。
+   */
+  emblem?: string;
 }
 
 /**
@@ -57,7 +65,7 @@ export function startStageHtml(o: StartStageOpts): string {
       <div class="start-emblem">
         <!-- 一排等大的图：这一局的玩法，加上它是哪一种局。几个就写几个，
              宽度按个数分，所以两个和三个都刚好铺满一行。 -->
-        <div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>
+        ${o.emblem ?? `<div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>`}
       </div>
       <div class="start-count">
         <div class="cd-window" id="${o.countId}" aria-hidden="true"></div>

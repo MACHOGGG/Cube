@@ -8,6 +8,7 @@ import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
 import { isGenius } from '../engine/subscription';
 import { mountBoardThumb, mountBoardView } from './leaderboard';
+import { CTL_BACK } from './ctlIcons';
 
 /** One playable game+mode combination, so the page knows which archives to
  *  read and which glyph belongs to a stored run's shape id. */
@@ -110,7 +111,7 @@ export function renderRecordsPage(
         <button class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></button>
         <button class="records-panel records-panel--ranks" id="ranksPanel" aria-label="${s.rankingsTitle}"></button>
       </div>
-      <div class="controls"><button class="icon-btn" id="backBtn">${s.back}</button></div>
+      <div class="page-back-row"><button class="icon-btn page-back" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button></div>
     </div>
   `;
 

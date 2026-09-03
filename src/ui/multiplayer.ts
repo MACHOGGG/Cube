@@ -4,7 +4,8 @@ import { countFrom, pushDigit, startStageHtml } from './startStage';
 import { hostNotice, hostTroubleIn, tickFor, type HostNotice } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { PLAYER_NAME_KEY } from '../engine/cloudScores';
-import { ICON_LOCK } from './homeIcons';
+import { ICON_DOOR_WHITE, ICON_LOCK } from './homeIcons';
+import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { mountTitleRain, type TitleRain } from './titleRain';
 import { custom } from './customIcons';
@@ -246,10 +247,14 @@ export function renderMultiplayerPage(
             <input id="mpCode" type="text" inputmode="numeric" maxlength="4"
                    autocomplete="off" placeholder="${s.mpCodePlaceholder}" />
           </label>
-          <button class="profile-pill" id="mpJoin">${s.mpJoin}</button>
+          <!-- 《加入小屋》不写字了，就摆主菜单上那扇门的纯白版——玩家的
+               原话：「《加入小屋》改称一个白色小门的标识」。名字留在
+               aria-label 里给读屏软件。 -->
+          <button class="profile-pill mp-join-door" id="mpJoin" aria-label="${s.mpJoin}">${ICON_DOOR_WHITE}</button>
         </div>
 
-        <button class="profile-row profile-row--back" id="mpBack">${s.back}</button>
+        <!-- 全站的《返回》都是同一颗圆盘（见 ui/ctlIcons.ts）。 -->
+        <div class="page-back-row"><button class="icon-btn page-back" id="mpBack" aria-label="${s.back}">${CTL_BACK}</button></div>
       </div>
     `;
 
