@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "ios:sync": "npm run build && cap sync ios",
-    "ios": "npm run ios:sync && cap open ios"
+    "ios": "npm run ios:sync && cap open ios",
+    "build:wxgame": "node scripts/build-wxgame.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
