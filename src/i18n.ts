@@ -49,6 +49,10 @@ export interface I18nStrings {
   slotSameLabel: string;
   slotOwnLabel: string;
   randomTargetTagline: string;
+  /** 《老虎机模式》介绍页：三台机器底下那颗键的两种字（红 STOP / 绿 开始），
+   *  和右下角那颗《开始 〉》。 */
+  slotDemoStop: string;
+  slotStartLabel: string;
   randomTargetPick: string;
   randomTargetSpinning: string;
   randomTargetOnly: string;
@@ -450,11 +454,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
-    randomTargetTitle: 'Random score target',
+    randomTargetTitle: 'Slot machine mode',
     slotShareCaption: 'Patterns for the room',
     slotSameLabel: 'Same',
     slotOwnLabel: 'Different',
     randomTargetTagline: 'Pick a shape, spin for targets, 4-3-2-1 go!',
+    slotDemoStop: 'STOP',
+    slotStartLabel: 'Start',
     randomTargetPick: 'Pick a shape',
     randomTargetSpinning: 'Spinning\u2026',
     randomTargetOnly: 'Only these two score this run.',
@@ -766,11 +772,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
-    randomTargetTitle: 'Objectif de score aléatoire',
+    randomTargetTitle: 'Mode machine à sous',
     slotShareCaption: 'Motifs pour la salle',
     slotSameLabel: 'Identiques',
     slotOwnLabel: 'Différents',
     randomTargetTagline: 'Choisis une forme, tire les objectifs, 4-3-2-1 c\u2019est parti !',
+    slotDemoStop: 'STOP',
+    slotStartLabel: 'Démarrer',
     randomTargetPick: 'Choisis une forme',
     randomTargetSpinning: 'Tirage\u2026',
     randomTargetOnly: 'Seuls ces deux-là comptent cette partie.',
@@ -1082,11 +1090,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
-    randomTargetTitle: '隨機得分目標',
+    randomTargetTitle: '老虎機模式',
     slotShareCaption: '全屋的得分圖案',
     slotSameLabel: '相同',
     slotOwnLabel: '不同',
     randomTargetTagline: '選擇圖形，隨機得分目標，4-3-2-1 開始！',
+    slotDemoStop: 'STOP',
+    slotStartLabel: '開始',
     randomTargetPick: '先挑一個圖形',
     randomTargetSpinning: '轉著呢\u2026',
     randomTargetOnly: '這一局只有這兩個算分。',
@@ -1398,11 +1408,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
-    randomTargetTitle: '随机得分目标',
+    randomTargetTitle: '老虎机模式',
     slotShareCaption: '全屋的得分图案',
     slotSameLabel: '相同',
     slotOwnLabel: '不同',
     randomTargetTagline: '选择图形，随机得分目标，4-3-2-1 开始！',
+    slotDemoStop: 'STOP',
+    slotStartLabel: '开始',
     randomTargetPick: '先挑一个图形',
     randomTargetSpinning: '转着呢\u2026',
     randomTargetOnly: '这一局只有这两个算分。',
@@ -1682,10 +1694,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
 // places, e.g. each tutorial's captionKey) — an array-typed field there
 // would widen those lookups to `string | string[]` everywhere.
 export const PRIVILEGES: Record<Lang, string[]> = {
-  en: ['More color palettes', 'More levels', 'More score targets', 'More layouts', 'More game modes', 'More competitions', 'Global & friend rankings', 'An Apple Watch edition'],
-  fr: ['Plus de palettes de couleurs', 'Plus de niveaux', "Plus d'objectifs de score", 'Plus de plateaux', 'Plus de modes de jeu', 'Plus de compétitions', 'Classements mondiaux et entre amis', 'Une édition Apple Watch'],
-  zhHant: ['解鎖更多配色', '更多關卡', '更多得分目標', '更多佈局', '更多玩法', '更多競賽', '世界排名和好友排名', 'Apple Watch 特別版'],
-  zhHans: ['解锁更多配色', '更多关卡', '更多得分目标', '更多布局', '更多玩法', '更多竞赛', '世界排名和好友排名', 'Apple Watch 特别版'],
+  en: ['More color palettes', 'More levels', 'More score targets', 'More layouts', 'More game modes', 'More competitions', 'Global rankings', 'An Apple Watch edition'],
+  fr: ['Plus de palettes de couleurs', 'Plus de niveaux', "Plus d'objectifs de score", 'Plus de plateaux', 'Plus de modes de jeu', 'Plus de compétitions', 'Classement mondial', 'Une édition Apple Watch'],
+  zhHant: ['解鎖更多配色', '更多關卡', '更多得分目標', '更多佈局', '更多玩法', '更多競賽', '世界排名', 'Apple Watch 特別版'],
+  zhHans: ['解锁更多配色', '更多关卡', '更多得分目标', '更多布局', '更多玩法', '更多竞赛', '世界排名', 'Apple Watch 特别版'],
 };
 
 export function loadLang(): Lang | null {

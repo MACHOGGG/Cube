@@ -33,6 +33,8 @@ import {
 import { clearSeed, random as seededRandom, seedRandom } from './engine/rng';
 import { shapeName } from './ui/shapeLabels';
 import { renderRandomTargetPage } from './ui/slotMachine';
+import { renderSlotIntroPage } from './ui/slotIntro';
+import { renderLayoutsShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -160,13 +162,39 @@ const toTop = () => window.scrollTo(0, 0);
  */
 let menuScrollY = 0;
 const onMenuPage = () => !!root.querySelector('.home-page');
+/**
+ * 个人主页滚到哪儿了——和主菜单同一个道理。
+ *
+ * 天才特供那几行点进去的页（多人游玩、老虎机模式、更多得分目标、更多布局、
+ * 世界排名）按《退出》回来的时候，落回刚才看的那个位置，不是页面顶上、更不
+ * 是主菜单（玩家的原话：「退回个人主页前面浏览的位置而不是主菜单」）。
+ */
+let profileScrollY = 0;
+const onProfilePage = () => !!root.querySelector('.profile-page');
 window.addEventListener(
   'scroll',
   () => {
     if (onMenuPage()) menuScrollY = window.scrollY;
+    else if (onProfilePage()) profileScrollY = window.scrollY;
   },
   { passive: true },
 );
+function restoreProfileScroll() {
+  if (!profileScrollY) return;
+  window.scrollTo(0, profileScrollY);
+  requestAnimationFrame(() => {
+    if (onProfilePage()) window.scrollTo(0, profileScrollY);
+  });
+}
+/** 从个人主页点进去的那些页，按《退出》回来走的这条。 */
+const backToProfile = () => showAccountPage('login', true);
+/**
+ * 多人游玩和老虎机模式各有两个入口——主菜单上的那张卡，和个人主页里的那一
+ * 行——《退出》要回到进来的那一边。记的是最近一次从哪儿进来的：一局打完回到
+ * 多人页、从挑图形那屏退回来，都还算这一趟。
+ */
+let mpOrigin: 'menu' | 'profile' = 'menu';
+let slotOrigin: 'menu' | 'intro' = 'menu';
 /** 放回刚才那个位置。同步做一次，是因为紧接着可能要重开某个弹窗，而那个飞入
  *  动画要量卡片此刻在屏幕上的真实位置；下一帧再放一次，挡住字体或图片加载
  *  完之后高度变化把它又冲掉。 */
@@ -319,9 +347,12 @@ function showMenu() {
       if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
-    onRandomTarget: showRandomTarget,
+    onRandomTarget: () => showRandomTarget('menu'),
     // 主菜单上的多人游玩：直接进房间那一页。
-    onMultiplayer: showMultiplayer,
+    onMultiplayer: () => {
+      mpOrigin = 'menu';
+      showMultiplayer();
+    },
     onBombFor: (tier, id, reopenKey) => {
       if (pickingForRoom) return void notAMultiplayerBoard();
       const pool = tier === 'advanced' ? bombLayoutGames : games;
@@ -382,7 +413,11 @@ function syncScreenClass() {
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
 
-function showAccountPage(tab: AuthTab) {
+/**
+ * @param restore 从它自己的某一页《退出》回来：落回刚才看的位置。从底排导航
+ *   点开的，照旧从最上面开始。
+ */
+function showAccountPage(tab: AuthTab, restore = false) {
   teardown();
   trackScreen('profile');
   renderAccountPage(
@@ -392,12 +427,79 @@ function showAccountPage(tab: AuthTab) {
       onBack: showMenu,
       onSwitchLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
       onHowToSlide: showTutorialPicker,
-      onRandomTarget: showRandomTarget,
-      onMultiplayer: showMultiplayer,
+      onRandomTarget: showSlotIntro,
+      onMultiplayer: () => {
+        mpOrigin = 'profile';
+        showMultiplayer();
+      },
+      onMoreTargets: showTargetsShowcase,
+      onMoreLayouts: showLayoutsShowcase,
+      onWorldRank: showWorldRankPage,
     },
     currentLang,
   );
   setNavTab('profile');
+  wireHomeTitle();
+  repaintIcons();
+  if (restore) restoreProfileScroll();
+  else toTop();
+}
+
+/**
+ * 《老虎机模式》从个人主页点进来的那一页：三台机器转着，底下一颗 STOP。
+ * 开通了的人右下角多一颗《开始 〉》，去挑图形那一屏。
+ */
+function showSlotIntro() {
+  teardown();
+  trackScreen('slot-intro');
+  activeDestroy = renderSlotIntroPage(
+    root,
+    currentLang,
+    { onBack: backToProfile, onGo: () => showRandomTarget('intro') },
+    !isGenius(),
+  );
+  wireHomeTitle();
+  repaintIcons();
+  toTop();
+}
+
+/** 《更多得分目标》：二十个得分图案，三列。 */
+function showTargetsShowcase() {
+  teardown();
+  trackScreen('more-targets');
+  renderTargetsShowcase(root, currentLang, backToProfile);
+  setNavTab(null);
+  wireHomeTitle();
+  repaintIcons();
+  toTop();
+}
+
+/** 《更多布局》：两副布局的缩图。 */
+function showLayoutsShowcase() {
+  teardown();
+  trackScreen('more-layouts');
+  renderLayoutsShowcase(root, currentLang, backToProfile, [
+    { id: circleSevenGame.card.id, shape: 'circle' },
+    { id: triangleAdvancedGame.card.id, shape: 'triangle' },
+  ]);
+  setNavTab(null);
+  wireHomeTitle();
+  repaintIcons();
+  toTop();
+}
+
+/** 《世界排名》：整页就是那张榜。 */
+function showWorldRankPage() {
+  teardown();
+  trackScreen('world-rank');
+  renderWorldRankPage(root, {
+    lang: currentLang,
+    shapeIds: [...new Set(recordSources.map((src) => src.card.id))],
+    onBack: backToProfile,
+    onWantGenius: () => openGeniusWindow(currentLang, showWorldRankPage),
+    onReLogin: () => openAuthWindow(currentLang, 'login', showWorldRankPage),
+  });
+  setNavTab(null);
   wireHomeTitle();
   repaintIcons();
   toTop();
@@ -414,7 +516,8 @@ function showMultiplayer() {
   activeDestroy = renderMultiplayerPage(
     root,
     {
-      onBack: showMenu,
+      // 从哪儿进来的就回哪儿：主菜单，或者个人主页刚才看的位置。
+      onBack: () => (mpOrigin === 'profile' ? backToProfile() : showMenu()),
       onMatchStart: startMultiplayerRun,
       // Opening a room is the subscriber's; buying it lands back here.
       onNeedGenius: () => openGeniusWindow(currentLang, showMultiplayer),
@@ -629,20 +732,25 @@ function showTutorialPicker() {
 }
 
 /**
- * 《随机得分目标》：先挑图形、再转出这一局认哪两个得分图案，然后就是那个
+ * 《老虎机模式》挑图形那一屏：挑完转出这一局认哪两个得分图案，然后就是那个
  * 基础玩法本身。
  *
  * 它是天才特供的一档，所以没开通的人点到这儿是那扇订阅窗——和主菜单上那两
  * 张锁着的棋盘同一个去处。
+ *
+ * @param origin 从哪儿进来的：主菜单那张卡，还是个人主页那页介绍（三台机器
+ *   右下角的《开始 〉》）。《退出》回的是进来的那一边。不给就沿用上一次的——
+ *   一局打完退回这一屏、从订阅窗回来，都还算同一趟。
  */
-function showRandomTarget() {
+function showRandomTarget(origin?: 'menu' | 'intro') {
+  if (origin) slotOrigin = origin;
   teardown();
   trackScreen('random-target');
   renderRandomTargetPage(
     root,
     currentLang,
     {
-      onBack: showMenu,
+      onBack: () => (slotOrigin === 'intro' ? showSlotIntro() : showMenu()),
       onStart: (family: Family, targets: TargetPattern[]) => {
         const game = randomTargetGame(family);
         showGame(game, { targets }, showRandomTarget);

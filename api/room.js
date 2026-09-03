@@ -321,6 +321,17 @@ function seatOf(hash, playerId, token) {
 const seatCount = (hash) =>
   Object.entries(hash).filter(([k, v]) => k.startsWith('p:') && v && !v.left).length;
 
+/** 同一个昵称——不分大小写，两头的空白不算。 */
+const sameName = (a, b) =>
+  String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+/**
+ * 这把椅子现在没人坐：按过《离开》（left）、网页关掉了（bye 把 lastSeen 抹
+ * 成 0）、或者早就没动静了（away）。正在看教学的不算——那台设备整页被教学
+ * 占着、不轮询，看着像没人，人其实在。
+ */
+const seatReclaimable = (seat, meta) =>
+  Boolean(seat.left) || seat.lastSeen === 0 || (seatAway(seat, meta) && !seatLearning(seat));
+
 // ---- the six things a room can be asked ---------------------------------
 
 async function create(res, body) {
@@ -367,8 +378,42 @@ async function join(res, body) {
   const hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
   if (hash.meta.endedAt) return send(res, 409, { error: 'ended' });
-  // Between rounds is a fine moment to walk in; the middle of one is not.
-  if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
+  const name = cleanName(body.name) || 'Player';
+  // 一局正打到一半也进得来（从前这里回 409 started）。这一局不算他的：新座位
+  // 的 joinedAt 在 startAt 之后，roundOver 不等他、bankRound 不记他；他在等待
+  // 页看着实时排行，下一局开始时才入局——见 ui/multiplayer.ts 的 sideline。
+  const midRound = Boolean(hash.meta.round) && !roundOver(hash);
+
+  // 走了的人回来。
+  //
+  // 同一个昵称、椅子还在表里（leave 只标不删），就把那把椅子还给他：昵称、
+  // 打过的几局、累计的分数、连 playerId 都还是原来的（屋主回来还是屋主），
+  // 只换一把新钥匙——旧那把留在他走掉的那台设备上，不该再开得了这个座位。
+  // 关掉网页的、早就没动静的座位也认：掉线的人多半连 localStorage 里的座位
+  // 一起丢了（换了浏览器、清了数据），只剩名字能证明他是谁。正在报到的座位
+  // 不认，那是另一个恰好同名的人（seatReclaimable）。
+  const back = Object.entries(hash).find(
+    ([field, seat]) =>
+      field.startsWith('p:') && seat && sameName(seat.name, name) && seatReclaimable(seat, hash.meta),
+  );
+  if (back) {
+    const [field, seat] = back;
+    const token = id(16);
+    const next = { ...seat, token, lastSeen: Date.now(), learningAt: 0 };
+    delete next.left;
+    // 这一局已经开了：他手上的棋盘早没了，这一局不等他，下一局再入。走之前
+    // 打出来的那点分留着，下一次 start 时 bankRound 照常记账。
+    if (midRound) next.finished = true;
+    await hset(roomKey(code), field, next);
+    await expire(roomKey(code), ROOM_TTL_S);
+    return send(res, 200, {
+      playerId: field.slice(2),
+      playerToken: token,
+      rejoined: true,
+      state: publicState(code, await hgetall(roomKey(code))),
+    });
+  }
+
   // The seat count travels with the refusal, not just with a room you are
   // already inside. Joining from the home page is where "满了" is actually
   // read, and until now that path had nothing to go on but a number written
@@ -381,7 +426,7 @@ async function join(res, body) {
   const token = id(16);
   await hset(roomKey(code), 'p:' + playerId, {
     token,
-    name: cleanName(body.name) || 'Player',
+    name,
     avatar: distinctAvatar(cleanAvatar(body.avatar), hash),
     score: 0,
     finished: false,
@@ -391,6 +436,7 @@ async function join(res, body) {
   return send(res, 200, {
     playerId,
     playerToken: token,
+    rejoined: false,
     state: publicState(code, await hgetall(roomKey(code))),
   });
 }

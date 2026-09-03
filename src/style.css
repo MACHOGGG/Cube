@@ -1414,10 +1414,11 @@ button:hover { filter: brightness(1.05); }
   background: var(--play-panel); border-radius: 10px; padding: 6px 8px;
 }
 .pal-strip span { flex: 1 1 0; aspect-ratio: 1; border-radius: 50%; }
-/* 没开通的人看到的那一份：颜色照画，只是按不动。
-   压暗到 0.62 而不是更低——再暗就看不清颜色了，而「让他看清有什么」正是这
-   一版存在的理由。 */
-.pal-opt--locked { opacity: 0.62; cursor: default; }
+/* 没开通的人看到的那一份：颜色照画、一点不压暗，只是按不动（玩家的原话：
+   「颜色不要加灰度，就正常的显示」）。disabled 的按钮浏览器会自己把字调灰，
+   这里把字色和不透明度都按回去。 */
+.pal-opt--locked { cursor: default; }
+.pal-opt--locked:disabled { color: var(--ink); opacity: 1; }
 .pal-opt--locked:active { transform: none; }
 .pal-lock { flex: 0 0 auto; width: 16px; height: 16px; display: block; opacity: 0.8; }
 .pal-lock svg { width: 100%; height: 100%; display: block; }
@@ -3148,3 +3149,78 @@ body.is-room-host::after {
   .cd-digit { font-size: min(14vw, 32vh, 108px); }
   .start-actions { flex: 0 0 auto; flex-direction: column; gap: 14px; padding-top: 0; }
 }
+
+/* ---------- 《老虎机模式》介绍页：三台机器 + STOP / 开始 ---------- */
+.slot-intro-stage { justify-content: center; position: relative; }
+.slot-intro-stack {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(10px, 2.2vh, 22px); width: 100%;
+}
+.slot-intro-item { width: min(70vw, 300px, 40vh); }
+.slot-intro-item .slot-machine { width: 100%; }
+.slot-intro-actions { display: flex; justify-content: center; padding: clamp(12px, 2.4vh, 24px) 0 6px; }
+.slot-demo-btn {
+  min-width: 136px; padding: 12px 30px; border: none; border-radius: var(--r-full);
+  font: inherit; font-weight: 800; font-size: 17px; letter-spacing: 0.08em;
+  color: #FFFFFF; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: transform 120ms ease, background 160ms ease;
+}
+.slot-demo-btn:active { transform: scale(0.96); }
+.slot-demo-btn--stop { background: #C8402F; }
+.slot-demo-btn--start { background: #3E9A5A; }
+/* 开通了的人右下角那颗《开始 〉》：去挑图形那一屏。 */
+.slot-go {
+  position: absolute; right: clamp(14px, 4vw, 28px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 14px 10px 20px; border: none; border-radius: var(--r-full);
+  background: var(--accent); color: #FFFFFF; font: inherit; font-weight: 700; font-size: 16px;
+  cursor: pointer; box-shadow: var(--shadow);
+}
+.slot-go:active { transform: scale(0.96); }
+.slot-go-chev { font-size: 18px; line-height: 1; }
+
+/* ---------- 个人主页里点进去的三页：更多得分目标 / 更多布局 / 世界排名 ---------- */
+.perk-page { gap: 12px; padding-bottom: 120px; }
+.perk-page .home-head { margin-bottom: 6px; }
+/* 二十个得分图案，三列：每列先是这一族的图形，底下一格一个图案。图案的画法
+   和棋盘上方那一排是同一套（1em 一枚），这里按页面的宽度给个中等的号。 */
+.tgt-columns {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  width: 100%; max-width: 560px; margin: 0 auto;
+}
+.tgt-col {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 12px 6px 14px;
+}
+.tgt-col-head { width: 46px; height: 46px; }
+.tgt-col-head svg { width: 100%; height: 100%; display: block; }
+.tgt-cell {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 3.4em; font-size: clamp(13px, 4.2vmin, 22px);
+  color: var(--play-mark);
+}
+.tgt-cell .pattern-icon { gap: 0; color: inherit; }
+.tgt-cell .pattern-icon svg { width: auto; height: auto; display: block; }
+/* 两副布局的缩图，各装在一个圆角矩形的框里。 */
+.lay-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; width: 100%; }
+.lay-card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: min(44vw, 200px); padding: 16px 12px;
+  background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-lg);
+}
+.lay-thumb { width: 104px; }
+.lay-thumb--wide { width: 152px; }
+.lay-thumb svg { width: 100%; height: auto; display: block; }
+.lay-name { font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); text-align: center; }
+/* 整页的世界排名：一块面板装那张榜（切页 + 榜），榜有多长页就多长。
+   底色和《记录与排名》里那半块一样是那个长春花蓝——榜上的字（rank-foot /
+   rank-empty 是白的）和灰条都是按这个底色画的，换成白底就什么都看不见了。 */
+.rank-page-panel {
+  width: 100%; max-width: 560px; margin: 0 auto; box-sizing: border-box;
+  background: #9BA5D6; border-radius: var(--r-xl);
+  padding: 26px 22px; min-height: 46vh;
+}
+.rank-page-panel .rank-body { overflow: visible; }

@@ -56,45 +56,94 @@ const REELS = () =>
     };
   });
 
-async function openPage(page) {
+/** 个人主页 → 《老虎机模式》那一行 → 介绍页（三台转着的机器）。 */
+async function openIntro(page) {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('#navProfile', { timeout: 20000 });
   await page.click('#navProfile');
   await page.waitForSelector('#randomRow', { timeout: 10000 });
   await page.click('#randomRow');
-  await page.waitForSelector('.slot-page', { timeout: 8000 });
+  await page.waitForSelector('.slot-intro-page', { timeout: 8000 });
   await page.waitForTimeout(300);
 }
 
 // ---- 没开通：看得见，但开不了局 ------------------------------------------
+//
+// 介绍页：三台机器上下排着、都在转，底下一颗红色 STOP；按下去三台从上到下一
+// 台一台停稳，键变成绿色的《开始》，再按又转起来。没开通的人没有右下角那颗
+// 《开始 〉》——看得见这一幕，开不了局。
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(seed, false);
   const page = await ctx.newPage();
-  await openPage(page);
+  await openIntro(page);
   const m = await page.evaluate(() => ({
-    opts: document.querySelectorAll('.slot-pick-opt').length,
-    locks: document.querySelectorAll('.slot-pick-lock').length,
-    // 这一屏上没有机器——三张图上下居中占整屏，机器只在下一幕转起来时出现。
-    machine: Boolean(document.querySelector('.slot-page .slot-machine')),
-    // 这一屏只该有一颗键（挑图形那三张不算「额外的按钮」）。
-    extras: [...document.querySelectorAll('.slot-page button')]
-      .filter((b) => !b.classList.contains('slot-pick-opt')).length,
+    machines: document.querySelectorAll('.slot-intro-item .slot-machine').length,
+    reels: document.querySelectorAll('.slot-intro-item .slot-reel').length,
+    spinning: [...document.querySelectorAll('.slot-intro-item .slot-strip')].every((s) => s.children.length > 0),
+    set: document.querySelectorAll('.slot-intro-item .slot-reel--set').length,
+    btn: document.getElementById('slotDemoBtn')?.textContent.trim(),
+    red: Boolean(document.getElementById('slotDemoBtn')?.classList.contains('slot-demo-btn--stop')),
+    go: Boolean(document.getElementById('slotGo')),
+    icons: document.querySelectorAll('.slot-pick-opt').length,
     nav: getComputedStyle(document.querySelector('.home-nav')).display,
+    // 三台一样宽、上下等距、左右居中。
+    boxes: [...document.querySelectorAll('.slot-intro-item')].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), w: Math.round(r.width), t: Math.round(r.top), b: Math.round(r.bottom) };
+    }),
+    mid: Math.round(document.documentElement.clientWidth / 2),
   }));
-  check('没开通：三个图形照样画出来', m.opts === 3, `${m.opts} 个`);
-  check('没开通：三个都挂着锁', m.locks === 3, `${m.locks} 把`);
-  check('挑图形那一屏上没有老虎机（三张图上下居中占整屏）', !m.machine);
-  check('底下只有一颗《退出》', m.extras === 1, `${m.extras} 颗`);
+  check('没开通：三台机器、六个轮子', m.machines === 3 && m.reels === 6, `${m.machines} 台 · ${m.reels} 个轮子`);
+  check('没开通：进来就都在转', m.spinning && m.set === 0, `停稳 ${m.set} 个`);
+  check('没开通：三台一样宽、左右居中',
+    m.boxes.every((b) => b.w === m.boxes[0].w && Math.abs(b.x - m.mid) <= 1), JSON.stringify(m.boxes));
+  check('没开通：上下等距',
+    m.boxes.length === 3 && Math.abs((m.boxes[1].t - m.boxes[0].b) - (m.boxes[2].t - m.boxes[1].b)) <= 1,
+    `${m.boxes[1]?.t - m.boxes[0]?.b} / ${m.boxes[2]?.t - m.boxes[1]?.b}`);
+  check('没开通：底下一颗红色 STOP', m.btn === 'STOP' && m.red, `${m.btn} · ${m.red ? '红' : '不红'}`);
+  check('没开通：没有右下角那颗《开始 〉》', !m.go);
+  check('这一屏上没有三张图（那是下一屏的事）', m.icons === 0, `${m.icons} 张`);
   check('这一屏不留底排导航', m.nav === 'none', m.nav);
 
-  await page.click('.slot-pick-opt[data-family="square"]');
-  await page.waitForTimeout(700);
-  const after = await page.evaluate(() => ({
-    board: document.querySelectorAll('#boardWrap .tile').length,
-    paywall: Boolean(document.querySelector('.auth-modal, .subscribe, .genius-window, .overlay .modal')),
+  // 按 STOP：三台从上到下一台一台停。记下每台「两个轮子都停稳」的先后。
+  await page.evaluate(() => {
+    const w = window;
+    w.__order = [];
+    const obs = new MutationObserver(() => {
+      document.querySelectorAll('.slot-intro-item').forEach((it, k) => {
+        const done = [...it.querySelectorAll('.slot-reel')].every((r) => r.classList.contains('slot-reel--set'));
+        if (done && !w.__order.includes(k)) w.__order.push(k);
+      });
+    });
+    obs.observe(document.getElementById('slotIntroStack'), { attributes: true, subtree: true, attributeFilter: ['class'] });
+  });
+  await page.click('#slotDemoBtn');
+  await page.waitForTimeout(400);
+  const mid = await page.evaluate(() => ({
+    set: document.querySelectorAll('.slot-intro-item .slot-reel--set').length,
+    red: Boolean(document.getElementById('slotDemoBtn')?.classList.contains('slot-demo-btn--stop')),
   }));
-  check('没开通：点了不会开局', after.board === 0, `${after.board} 块`);
+  check('按下 STOP 的头半秒：还没有一个停稳，键还是 STOP', mid.set === 0 && mid.red, `停稳 ${mid.set} 个`);
+  await page.waitForFunction(() => document.querySelectorAll('.slot-intro-item .slot-reel--set').length === 6, { timeout: 9000 });
+  const after = await page.evaluate(() => ({
+    order: window.__order,
+    btn: document.getElementById('slotDemoBtn')?.textContent.trim(),
+    green: Boolean(document.getElementById('slotDemoBtn')?.classList.contains('slot-demo-btn--start')),
+  }));
+  check('三台从上到下一台一台停', JSON.stringify(after.order) === '[0,1,2]', JSON.stringify(after.order));
+  check('全停稳了，STOP 变成绿色的《开始》', after.btn === '开始' && after.green, `${after.btn} · ${after.green ? '绿' : '不绿'}`);
+  await page.click('#slotDemoBtn');
+  await page.waitForTimeout(400);
+  const again = await page.evaluate(() => ({
+    set: document.querySelectorAll('.slot-intro-item .slot-reel--set').length,
+    red: Boolean(document.getElementById('slotDemoBtn')?.classList.contains('slot-demo-btn--stop')),
+    spinning: [...document.querySelectorAll('.slot-intro-item .slot-strip')].every((s) => s.children.length > 0),
+  }));
+  check('按《开始》又转起来，键变回红色 STOP', again.set === 0 && again.red && again.spinning, `停稳 ${again.set} 个`);
+  // 《退出》回个人主页，不是主菜单。
+  await page.click('#slotBack');
+  check('没开通：《退出》回到个人主页', await page.waitForSelector('.profile-page', { timeout: 8000 }).then(() => true).catch(() => false));
   await ctx.close();
 }
 
@@ -122,8 +171,11 @@ for (const fam of FAMILIES) {
   await page.waitForTimeout(700);
   const plain = await page.evaluate(LEGEND);
 
-  // 乙、走一遍老虎机。
-  await openPage(page);
+  // 乙、走一遍老虎机：介绍页右下角的《开始 〉》→ 挑图形 → 转。
+  await openIntro(page);
+  check(`${fam.name}：开通了：介绍页右下角有《开始 〉》`, Boolean(await page.$('#slotGo')));
+  await page.click('#slotGo');
+  await page.waitForSelector('.slot-pick-opt', { timeout: 8000 });
   await page.click(`.slot-pick-opt[data-family="${fam.key}"]`);
   await page.waitForSelector('#startOverlay .slot-machine', { timeout: 8000 });
   // 记下每个轮子停稳的时刻（用 MutationObserver 盯 class），不靠「恰好在两次

@@ -1,7 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { countFrom, pushDigit, startStageHtml } from './startStage';
-import { hostNotice, hostTroubleIn, tickFor, type HostNotice } from './roomNotices';
+import { hostNotice, hostTroubleIn, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { PLAYER_NAME_KEY } from '../engine/cloudScores';
 import { ICON_DOOR_WHITE, ICON_LOCK } from './homeIcons';
@@ -171,7 +171,14 @@ export function renderMultiplayerPage(
   let asking = false;
   /** 「有人在学，稍等」那一屏已经画上了，别每次轮询都重画一遍。 */
   let waitingOnLearner = false;
+  /**
+   * 一局正在打、而我不在局里的时候盖在小屋页上的那张等待页（见 sideline）。
+   * 中途进来的人、走了又回来的人都坐在这儿看实时排行，下一局开始才入局。
+   */
+  let sideWait: WaitPanel | null = null;
   const stopAll = () => {
+    sideWait?.remove();
+    sideWait = null;
     stopWatching?.();
     stopWatching = null;
     window.clearInterval(countdownTimer);
@@ -301,6 +308,11 @@ export function renderMultiplayerPage(
       const joined = await joinRoom(code, myName(), avatar);
       if (dead) return;
       if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang));
+      // 一局正打到一半进来的（服务器现在放人进来了）：这一局不是我的，先记
+      // 成「打过了」，免得轮询把我扔进一块别人打了一半的棋盘；下一局开始时
+      // 才入局。这之前坐在等待页看实时排行——见 renderLobby 里的 sideline。
+      if (joined.value.round && !joined.value.roundOver) markRoundPlayed(joined.value.round);
+      playedRound = Math.max(playedRound, lastPlayedRound());
       renderLobby(joined.value);
     });
 
@@ -387,8 +399,32 @@ export function renderMultiplayerPage(
       if (glass) rain = mountTitleRain(glass);
     }
 
+    /**
+     * 一局正在打、而我不在局里（中途进来的、走了又回来的、或者打完了先回
+     * 来的）：盖上等待页看实时排行，别人打完了再放下来。等的是同一件事，所
+     * 以和交卷之后那一页是同一张脸（roomNotices.showWaitPanel）。
+     */
+    const sideline = (st: RoomState) => {
+      const benched = st.round > 0 && !st.roundOver && st.round <= playedRound;
+      if (!benched) {
+        sideWait?.remove();
+        sideWait = null;
+        return;
+      }
+      if (!sideWait) {
+        sideWait = showWaitPanel(lang, {
+          shapeId: st.mode ?? 'square',
+          meId: currentRoom()?.playerId,
+          code: st.code,
+          onLeave: () => confirmLeaveRoom(lang, leave),
+        });
+      }
+      sideWait.update(st);
+    };
+
     paint(state, iAmHost);
     soakNudges(state, iAmHost);
+    sideline(state);
 
     // 屋主走了、还是屋主卡住了。这一页上也要分得清：坐在房间里等下一局的
     // 人，和正在打的人一样有权知道自己在等的是什么。
@@ -413,6 +449,7 @@ export function renderMultiplayerPage(
         notice?.set(hostTroubleIn(next, iAmHost));
         paint(next, iAmHost);
         soakNudges(next, iAmHost);
+        sideline(next);
         // The host has chosen: everyone counts down to the same instant.
         if (next.startAt && next.seed && next.mode && next.round > playedRound) {
           // 三道关，顺序是有讲究的：

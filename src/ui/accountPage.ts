@@ -54,9 +54,15 @@ export interface ProfileHandlers {
   /** Opens the quick language-switch popup. */
   onSwitchLanguage: () => void;
   onHowToSlide: () => void;
-  /** 《随机得分目标》——挑图形、转出这一局的得分图案，然后开局。 */
+  /** 《老虎机模式》——先是三台转着的机器那一页，开通了的人从那儿去挑图形。 */
   onRandomTarget: () => void;
   onMultiplayer: () => void;
+  /** 《更多得分目标》——二十个得分图案，按方块 / 小球 / 三角三列摆出来。 */
+  onMoreTargets: () => void;
+  /** 《更多布局》——菱形七色小球和 V 形三角两副布局的缩图。 */
+  onMoreLayouts: () => void;
+  /** 《世界排名》——整页只有那张榜。 */
+  onWorldRank: () => void;
 }
 
 /**
@@ -104,6 +110,10 @@ export function renderAccountPage(
     : isStoreChannel()
       ? s.restoreBtn
       : s.loginGateway;
+  /** 没开通的人，做好了的那几行行首挂的那把小锁。 */
+  const lockGlyph = subscribed
+    ? ''
+    : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`;
   const lockedRow = (label: string) =>
     `<div class="profile-row profile-row--locked">` +
     `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>` +
@@ -166,9 +176,8 @@ export function renderAccountPage(
             byCode ? `<span class="profile-row-tick" role="img" aria-label="${s.insiderRedeemed}">✓</span> ›` : '›'
           }</span>
         </button>
-        <!-- 做好的排在上面，没做的排在下面。做好的三条是：内部码、多人游玩、
-             解锁更多配色；《随机得分目标》还只是一行「敬请期待」，所以跟着
-             其它敬请期待的一起排到下面去。 -->
+        <!-- 做好的排在上面，没做的排在下面：内部码、多人游玩，一条线，然后是
+             设置和几个做好了的去处；「敬请期待」的那几行垫底。 -->
         <button class="profile-row" id="multiRow">
           <span class="profile-row-label">${s.multiplayerTitle}</span>
           <span class="profile-row-value">&rsaquo;</span>
@@ -183,7 +192,7 @@ export function renderAccountPage(
              东西是假话，而一行按不动的灰字既不告诉他有什么，也不给他理由去
              开通。 -->
         <button class="profile-row" id="paletteRow">
-          ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
+          ${lockGlyph}
           <span class="profile-row-label">${privileges[0]}</span>
           <span class="profile-row-value">${
             subscribed
@@ -195,21 +204,40 @@ export function renderAccountPage(
              得开。没开通的人进去看得见那根拉杆、也看得见它在做什么（窗口里
              那枚棋子会照当前这一档翻给他看），只是拉不动。 -->
         <button class="profile-row" id="flipRow">
-          ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
+          ${lockGlyph}
           <span class="profile-row-label">${s.flipSpeedTitle}</span>
           <span class="profile-row-value">${
             subscribed ? `${flipLabel(flipStep())}&nbsp;&rsaquo;` : '&rsaquo;'
           }</span>
         </button>
-        <!-- 《随机得分目标》做好了，所以和上面几条一样：两种人都点得开。
-             没开通的人进去看得见这个玩法的标志、那句《选择图形，随机得分目
-             标，4-3-2-1 开始！》和三个图形，只是图形挂着锁按不动。 -->
+        <!-- 《老虎机模式》做好了，所以和上面几条一样：两种人都点得开。没开通
+             的人进去看得见三台转着的机器、按得动那颗 STOP，只是没有右下角那颗
+             《开始 〉》，开不了局。 -->
         <button class="profile-row" id="randomRow">
-          ${subscribed ? '' : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`}
+          ${lockGlyph}
           <span class="profile-row-label">${s.randomTargetTitle}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
-        ${privileges.slice(1).map(lockedRow).join('')}
+        <!-- 下面三行也是做好了的：二十个得分图案的总览、两副布局的缩图、整页
+             的世界排名。都是「看得见」的东西——没开通的人一样点得开，只是行
+             首挂着锁：图案和布局他玩不到，榜他看不清（那一页由服务器判）。 -->
+        <button class="profile-row" id="moreTargetsRow">
+          ${lockGlyph}
+          <span class="profile-row-label">${privileges[2]}</span>
+          <span class="profile-row-value">&rsaquo;</span>
+        </button>
+        <button class="profile-row" id="moreLayoutsRow">
+          ${lockGlyph}
+          <span class="profile-row-label">${privileges[3]}</span>
+          <span class="profile-row-value">&rsaquo;</span>
+        </button>
+        <button class="profile-row" id="worldRankRow">
+          ${lockGlyph}
+          <span class="profile-row-label">${privileges[6]}</span>
+          <span class="profile-row-value">&rsaquo;</span>
+        </button>
+        <!-- 还没做的才写「敬请期待」：更多关卡、更多玩法、更多竞赛、Apple Watch。 -->
+        ${[privileges[1], privileges[4], privileges[5], privileges[7]].map(lockedRow).join('')}
       </section>
 
       <!-- Tarifs, terms, refunds, privacy, contact — the five documents a
@@ -593,6 +621,9 @@ export function renderAccountPage(
   on('howToRow', handlers.onHowToSlide);
   on('randomRow', handlers.onRandomTarget);
   on('multiRow', handlers.onMultiplayer);
+  on('moreTargetsRow', handlers.onMoreTargets);
+  on('moreLayoutsRow', handlers.onMoreLayouts);
+  on('worldRankRow', handlers.onWorldRank);
   on('becomeGeniusBtn', () => openGeniusWindow(lang, refresh));
   on('insiderRow', () => openRedeemWindow(lang, refresh));
   for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {

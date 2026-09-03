@@ -39,6 +39,8 @@ export interface ReelPlan {
   land: number;
   /** 从开转算起，第几毫秒停住。 */
   stopAt: number;
+  /** 从第几张起转。默认第 0 张；再转一遍时从上一次停的那张接着走，不跳。 */
+  from?: number;
 }
 
 /** 减速滑停用多久。停之前的那一段是匀速的，慢下来的只有最后这一下。 */
@@ -81,6 +83,40 @@ export function spinSlot(
   /** 最后一个轮子停稳的那一刻。开局倒数从这儿起——转完了才数。 */
   onSettled?: () => void,
 ): () => void {
+  return runSpin(root, plans, onSettled, false).cancel;
+}
+
+/** 一台转着的机器的把手。 */
+export interface SpinHandle {
+  /**
+   * 现在开始停：第 i 个轮子在 delays[i] 毫秒后停稳。不给 delays 就按各自计划
+   * 里的 stopAt（从这一刻起算）。已经在停的轮子不受影响。
+   */
+  stop(delays?: readonly number[]): void;
+  /** 别转了（中途离开这一页）。 */
+  cancel(): void;
+}
+
+/**
+ * 一直转着，直到有人叫 stop() 才按给的延时逐个停。
+ *
+ * 介绍页那三台机器用的是它：进来就转，玩家按 STOP 才一台一台停下；停稳了按
+ * 《开始》再转——停在哪儿、什么时候停，由页面决定，不由计划决定。
+ */
+export function spinSlotHeld(
+  root: HTMLElement,
+  plans: readonly ReelPlan[],
+  onSettled?: () => void,
+): SpinHandle {
+  return runSpin(root, plans, onSettled, true);
+}
+
+function runSpin(
+  root: HTMLElement,
+  plans: readonly ReelPlan[],
+  onSettled: (() => void) | undefined,
+  held: boolean,
+): SpinHandle {
   const reels = Array.from(root.querySelectorAll<HTMLElement>('.slot-reel'));
   // 只转给了计划的那几个窗口；要是图上窗口比计划多（换了张图），多出来的
   // 铺白空着，不转。
@@ -94,7 +130,17 @@ export function spinSlot(
       .join('');
     // 铺上白底，给滚动的带子一块干净的底。只在真要转的时候铺。
     el.classList.add('slot-reel--live');
-    return { el, strip, plan, p: 0, ease: null as null | { from: number; to: number; t0: number } };
+    // 再转一遍的时候，上一回的「停稳」要先摘掉。
+    el.classList.remove('slot-reel--set');
+    return {
+      el,
+      strip,
+      plan,
+      p: plan.from ?? 0,
+      /** 这一个轮子第几毫秒停。转到叫停为止的，先是无穷大，stop() 才给数。 */
+      stopAt: held ? Infinity : plan.stopAt,
+      ease: null as null | { from: number; to: number; t0: number },
+    };
   });
 
   // 一格有多高得量——窗口的高是按那张图的比例算出来的，只有布局定了才知道
@@ -106,7 +152,9 @@ export function spinSlot(
     for (const lane of lanes) lane.strip.style.setProperty('--cell', `${cell}px`);
   };
   measure();
-  const box = root.querySelector<HTMLElement>('.slot-machine');
+  const box =
+    root.querySelector<HTMLElement>('.slot-machine') ??
+    (root.classList.contains('slot-machine') ? root : null);
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
   if (box) ro?.observe(box);
 
@@ -117,7 +165,7 @@ export function spinSlot(
     }
     ro?.disconnect();
     onSettled?.();
-    return () => {};
+    return { stop() {}, cancel() {} };
   }
 
   let raf = 0;
@@ -133,7 +181,7 @@ export function spinSlot(
     for (const lane of lanes) {
       const n = lane.plan.faces.length;
       const before = lane.p;
-      const stopStart = lane.plan.stopAt - EASE_MS;
+      const stopStart = lane.stopAt - EASE_MS;
       if (elapsed < stopStart) {
         lane.p += SPEED * dt;
         running = true;
@@ -163,9 +211,18 @@ export function spinSlot(
     else onSettled?.();
   };
   raf = requestAnimationFrame(frame);
-  return () => {
-    cancelAnimationFrame(raf);
-    ro?.disconnect();
+  return {
+    stop(delays) {
+      const at = performance.now() - t0;
+      lanes.forEach((lane, i) => {
+        if (lane.stopAt !== Infinity) return;
+        lane.stopAt = at + (delays?.[i] ?? lane.plan.stopAt);
+      });
+    },
+    cancel() {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    },
   };
 }
 

@@ -69,7 +69,10 @@ async function hostPicks(slot) {
   await A.page.click('#navProfile');
   await A.page.waitForSelector('#randomRow', { timeout: 8000 });
   await A.page.click('#randomRow');
-  await A.page.waitForSelector('.slot-page', { timeout: 8000 });
+  await A.page.waitForSelector('.slot-intro-page', { timeout: 8000 });
+  // 介绍页（三台机器）右下角那颗《开始 〉》才通向挑图形那一屏。
+  await A.page.click('#slotGo');
+  await A.page.waitForSelector('.slot-pick-row', { timeout: 8000 });
   const sw = await A.page.evaluate(() => ({
     seg: Boolean(document.querySelector('.slot-share')),
     on: document.querySelector('.slot-share-opt--on')?.dataset.slot,
