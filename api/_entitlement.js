@@ -7,9 +7,9 @@
  *
  * 三种身份里只有两种能在这儿验：银行卡订阅去问 Creem，内部码开通的账号对
  * 自己的登录令牌。第三种——从 App Store／Google Play 买的——验不了，那要
- * 苹果和谷歌的服务端接口和随之而来的凭证。在接上之前，商店版的说法就先信
- * 它。这么做放走的是「有人没付钱也开得了小屋」，说清楚比藏着好，也不值得
- * 为它把每一个老老实实付了钱的商店用户挡在门外。
+ * 苹果和谷歌的服务端接口和随之而来的凭证。接上之前，商店的说法**不信**
+ * （见 isGenius 末尾）：商店版还没上线，挡不着任何真买了的人，而信它就是
+ * 「客户端说一句话就白嫖」。
  */
 import { configured as creemConfigured, findSubscription } from './_creem.js';
 import { codeHolder, loadAccount, normalizeEmail } from './_accounts.js';
@@ -83,10 +83,21 @@ export async function isGenius({ email, accountToken, holderCode, storeClaim }, 
       const { sub } = await findSubscription(address);
       if (sub) return true;
     } catch {
-      // Creem 挂了不该把已经付过钱的人关在门外。
-      if (storeClaim) return true;
+      // Creem 挂了：这一次答不了，当作不是。别的路（内部码）在上面已经走过。
     }
   }
 
-  return Boolean(storeClaim);
+  // 商店那一句「我是 App Store／Google Play 买的」——不信。
+  //
+  // 它曾经是直接放行的（见文件顶上那段），理由是没有苹果和谷歌的收据校验就
+  // 验不了。可这和「报个别人的邮箱就白嫖」是同一种洞：客户端说一句话，服务
+  // 器就把收费的东西给出去。现在商店版还没上线，没有一个真买了的人会被挡，
+  // 所以先关上。
+  //
+  // ！！商店版上线之前必须回来改这里：接上收据校验（App Store Server API／
+  // Google Play Developer API），验过的收据才算数。不接就上线，等于把所有从
+  // 商店买的人挡在门外。storeClaim 这个参数先留着不用，免得客户端那头改来
+  // 改去。
+  void storeClaim;
+  return false;
 }

@@ -38,6 +38,8 @@ export interface RunData {
   extraPenalty: number;
   extraPenaltyReason: string;
   hazardEnd: boolean;
+  /** 在小屋里打的。老档没有这一项，读出来是 undefined，当 false 用。 */
+  room?: boolean;
   /** Epoch millis the run was settled. */
   at: number;
 }

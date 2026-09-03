@@ -402,9 +402,14 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const countWin = container.querySelector<HTMLElement>('#startCount');
   const startBtnEl = container.querySelector<HTMLButtonElement>('#startBtn');
   const pauseOv = container.querySelector<HTMLElement>('#pauseOverlay');
+  // 老虎机那一局：倒数不马上开始，也先不露面——等第二个轮子停稳了再数
+  //（玩家的原话：「最开始没有 5-4-3-2-1 的那个板块出现，等老虎机转出来第二
+  // 个内容之后开始倒计时」）。下面的 runCount 交给 spinSlot 的 onSettled。
+  let startCounting: (() => void) | null = null;
   if (countWin && startBtnEl) {
     let cancelCount: (() => void) | null = null;
     const runCount = () => {
+      countWin.classList.remove('cd-window--waiting');
       cancelCount?.();
       cancelCount = playCountdown(countWin, () => {
         cancelCount = null;
@@ -413,7 +418,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 后把牌重发一遍——所以只有这一页还挂着的时候才算数。
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
         startBtnEl.click();
-        // 老虎机那一局多数一个：多出来的那一秒就是让三个轮子停完。
+        // 老虎机那一局多数一个（5-4-3-2-1）——玩家定的。
       }, countFrom(meta.shapeId) + (meta.slotTargets ? 1 : 0));
     };
     container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
@@ -433,7 +438,12 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       cancelCount?.();
       cancelCount = null;
     });
-    runCount();
+    if (meta.slotTargets?.length) {
+      countWin.classList.add('cd-window--waiting');
+      startCounting = runCount;
+    } else {
+      runCount();
+    }
   }
 
   // ---- 老虎机：开局页那台机器真的在转 -----------------------------------
@@ -444,7 +454,12 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   if (meta.slotTargets?.length) {
     const stage = container.querySelector<HTMLElement>('#startOverlay');
     if (stage) {
-      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTargets));
+      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTargets), () => {
+        // 第二个轮子停稳了：这时候倒数才露面、才开始数。人已经离开这一页
+        // 的话什么都不做。
+        if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+        startCounting?.();
+      });
       container.querySelector<HTMLButtonElement>('#startBackBtn')?.addEventListener('click', stopSpin);
     }
   }

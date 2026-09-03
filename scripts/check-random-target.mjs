@@ -75,8 +75,8 @@ async function openPage(page) {
   const m = await page.evaluate(() => ({
     opts: document.querySelectorAll('.slot-pick-opt').length,
     locks: document.querySelectorAll('.slot-pick-lock').length,
+    // 这一屏上没有机器——三张图上下居中占整屏，机器只在下一幕转起来时出现。
     machine: Boolean(document.querySelector('.slot-page .slot-machine')),
-    art: Boolean(document.querySelector('.slot-machine-art svg')),
     // 这一屏只该有一颗键（挑图形那三张不算「额外的按钮」）。
     extras: [...document.querySelectorAll('.slot-page button')]
       .filter((b) => !b.classList.contains('slot-pick-opt')).length,
@@ -84,7 +84,7 @@ async function openPage(page) {
   }));
   check('没开通：三个图形照样画出来', m.opts === 3, `${m.opts} 个`);
   check('没开通：三个都挂着锁', m.locks === 3, `${m.locks} 把`);
-  check('那台老虎机就是给的那张图', m.machine && m.art);
+  check('挑图形那一屏上没有老虎机（三张图上下居中占整屏）', !m.machine);
   check('底下只有一颗《退出》', m.extras === 1, `${m.extras} 颗`);
   check('这一屏不留底排导航', m.nav === 'none', m.nav);
 
@@ -126,20 +126,52 @@ for (const fam of FAMILIES) {
   await openPage(page);
   await page.click(`.slot-pick-opt[data-family="${fam.key}"]`);
   await page.waitForSelector('#startOverlay .slot-machine', { timeout: 8000 });
+  // 记下每个轮子停稳的时刻（用 MutationObserver 盯 class），不靠「恰好在两次
+  // 停之间去看一眼」——那一眼总有一天会晚到。
+  await page.evaluate(() => {
+    const w = window;
+    w.__stops = [];
+    const reels = [...document.querySelectorAll('#startOverlay .slot-reel')];
+    reels.forEach((r, i) => {
+      if (r.classList.contains('slot-reel--set')) w.__stops.push([i, performance.now()]);
+      new MutationObserver(() => {
+        if (r.classList.contains('slot-reel--set') && !w.__stops.some((s) => s[0] === i)) w.__stops.push([i, performance.now()]);
+      }).observe(r, { attributes: true, attributeFilter: ['class'] });
+    });
+  });
+  const stage = await page.evaluate(() => ({
+    art: Boolean(document.querySelector('#startOverlay .slot-machine-art svg')),
+    // 只转左边两个；最右边那个窗口铺白、空着。
+    spinning: [...document.querySelectorAll('#startOverlay .slot-reel')]
+      .map((r) => r.querySelector('.slot-strip').children.length > 0),
+    // 轮子还在转，倒数窗口还不该露面。
+    countHidden: getComputedStyle(document.getElementById('startCount')).visibility === 'hidden',
+    digits: document.querySelectorAll('#startCount .cd-digit').length,
+    // 图案的描边：白窗口上要的是圆角黑边，不是白边。
+    edge: getComputedStyle(document.querySelector('#startOverlay .slot-reel')).getPropertyValue('--mark-edge').trim(),
+  }));
+  check(`${fam.name}：那台老虎机就是给的那张图`, stage.art);
+  check(`${fam.name}：只有左边两个滚筒在转，最右边空着`,
+    JSON.stringify(stage.spinning) === JSON.stringify([true, true, false]), stage.spinning.join(','));
+  check(`${fam.name}：转的时候倒数还没露面`, stage.countHidden && stage.digits === 0,
+    `visibility ${stage.countHidden ? 'hidden' : 'visible'} · ${stage.digits} 个数字`);
+  check(`${fam.name}：图案描的是黑边`, /2E2430/i.test(stage.edge), stage.edge || '（空）');
 
-  // 倒数从 5 起——比别的玩法多一秒，那一秒就是让轮子停完的。
+  // 第二个轮子停稳了才开始数，而且从 5 起。
+  await page.waitForFunction(() => document.querySelectorAll('.slot-reel--set').length >= 2, { timeout: 6000 });
   await page.waitForFunction(() => document.querySelector('#startCount .cd-digit'), { timeout: 4000 });
-  const first = await page.evaluate(() => document.querySelector('#startCount .cd-digit')?.textContent);
-  check(`${fam.name}：倒数从 5 起`, first === '5', first || '（没数）');
+  const first = await page.evaluate(() => ({
+    digit: document.querySelector('#startCount .cd-digit')?.textContent,
+    shown: getComputedStyle(document.getElementById('startCount')).visibility !== 'hidden',
+  }));
+  check(`${fam.name}：停稳之后倒数才露面，从 5 起`, first.digit === '5' && first.shown, first.digit || '（没数）');
 
-  // 从左到右先后停：第一个停住的时候，第二、第三个还在转。
-  await page.waitForFunction(() => document.querySelectorAll('.slot-reel--set').length === 1, { timeout: 4000 });
-  const staggered = await page.evaluate(() =>
-    [...document.querySelectorAll('.slot-reel')].map((r) => r.classList.contains('slot-reel--set')));
-  check(`${fam.name}：从左到右一个一个停`, staggered[0] && !staggered[1] && !staggered[2],
-    staggered.map((b) => (b ? '停' : '转')).join(''));
-
-  await page.waitForFunction(() => document.querySelectorAll('.slot-reel--set').length === 3, { timeout: 6000 });
+  await page.waitForFunction(() => document.querySelectorAll('.slot-reel--set').length === 2, { timeout: 6000 });
+  // 从左到右先后停：左边那个停稳的时刻要早于右边那个，中间隔得开。
+  const stops = await page.evaluate(() => window.__stops.slice().sort((a, b) => a[0] - b[0]));
+  const gap = stops.length === 2 ? stops[1][1] - stops[0][1] : NaN;
+  check(`${fam.name}：从左到右一个一个停`, stops.length === 2 && stops[0][0] === 0 && gap > 400,
+    `左 → 右相隔 ${Math.round(gap)}ms`);
   const reels = await page.evaluate(REELS);
   const spun = [reels[0].label, reels[1].label];
   check(`${fam.name}：左边两个转出两个不同的图案`,

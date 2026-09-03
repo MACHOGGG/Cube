@@ -5,15 +5,13 @@
  * 个窗口，位置按图自己的 viewBox 量出来（见 WINDOWS）。所以以后换一张图，
  * 只要显示区还在同一个地方，这里一行都不用动；真挪了，也只用改那几个数。
  *
- * 三个滚筒从左到右先后停住，不是一起定住——玩家的原话：「三个滚筒一直翻转
- * 然后从左到右先停一个再停第二个」。左边两个停的是这一局的两个得分目标，
- * 最右边那个停的是你刚挑的那个图形，等于把「你选的是这个」再说一遍。
+ * 两个滚筒从左到右先后停住，不是一起定住——玩家的原话：「从左到右先停一个
+ * 再停第二个」。停的是这一局的两个得分目标；最右边那个窗口不转，空着。
  */
 import { custom } from './customIcons';
 import { renderPatternHintIcons } from '../engine/patternIcon';
 import { targetPatternDefs } from '../engine/targetIcon';
 import { targetsOf, type Family, type TargetPattern } from '../engine/targets';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_BASE_TRIANGLE } from './homeIcons';
 
 /** 玩家画的那台机器。没有这个文件就退回一块素面板，转的东西照样在。 */
 const ART = custom('slot-machine') ?? '';
@@ -77,10 +75,18 @@ export function slotMachineHtml(): string {
  * 返回「别转了」：中途退出这一页时叫一声，免得一个 rAF 循环挂在已经不存在
  * 的 DOM 上。
  */
-export function spinSlot(root: HTMLElement, plans: readonly ReelPlan[]): () => void {
+export function spinSlot(
+  root: HTMLElement,
+  plans: readonly ReelPlan[],
+  /** 最后一个轮子停稳的那一刻。开局倒数从这儿起——转完了才数。 */
+  onSettled?: () => void,
+): () => void {
   const reels = Array.from(root.querySelectorAll<HTMLElement>('.slot-reel'));
-  const lanes = reels.map((el, i) => {
-    const plan = plans[i] ?? plans[plans.length - 1];
+  // 只转给了计划的那几个窗口；多出来的窗口铺白盖住图里画的符号，空着——
+  // 玩家的原话：「删除最右侧的那个滚轴和内容，只显示随机出来的得分图案」。
+  for (const el of reels.slice(plans.length)) el.classList.add('slot-reel--live');
+  const lanes = reels.slice(0, plans.length).map((el, i) => {
+    const plan = plans[i];
     const strip = el.querySelector<HTMLElement>('.slot-strip')!;
     // 两遍：窗口停在任何一张上时，底下都还接着一整张，接缝看不出来。
     strip.innerHTML = [...plan.faces, ...plan.faces]
@@ -111,6 +117,7 @@ export function spinSlot(root: HTMLElement, plans: readonly ReelPlan[]): () => v
       lane.el.classList.add('slot-reel--set');
     }
     ro?.disconnect();
+    onSettled?.();
     return () => {};
   }
 
@@ -154,6 +161,7 @@ export function spinSlot(root: HTMLElement, plans: readonly ReelPlan[]): () => v
       lane.strip.style.filter = blur > 0.25 ? `blur(${blur.toFixed(2)}px)` : '';
     }
     if (running) raf = requestAnimationFrame(frame);
+    else onSettled?.();
   };
   raf = requestAnimationFrame(frame);
   return () => {
@@ -169,14 +177,6 @@ function backOut(t: number): number {
   return 1 + (c + 1) * u ** 3 + c * u ** 2;
 }
 
-/** 三个基础玩法在主菜单上的那张图——最右边那个滚筒转的就是这三张。 */
-const FAMILY_ART: Record<Family, string> = {
-  square: ICON_BASE_SQUARE,
-  circle: ICON_BASE_CIRCLE,
-  triangle: ICON_BASE_TRIANGLE,
-};
-const FAMILY_ORDER: readonly Family[] = ['square', 'circle', 'triangle'];
-
 /**
  * 一族的图案各画成一张小图示（和棋盘上那一排是同一套画法）。
  *
@@ -189,19 +189,17 @@ const facesOf = (pool: readonly TargetPattern[]): string[] =>
   pool.map((p) => `<span class="slot-face">${renderPatternHintIcons(targetPatternDefs([p]), 'zhHans')[0]}</span>`);
 
 /**
- * 三个滚筒各转什么、各停在哪一张、第几毫秒停。
+ * 两个滚筒各转什么、各停在哪一张、第几毫秒停。
  *
- * 停的时刻卡在倒数里：这一幕一共五秒（5-4-3-2-1），三个轮子分别在第 1.5、
- * 2.6、3.7 秒停住，最后还剩一秒多是留给人看清转出了什么的。
+ * 只转左边两个——就是这一局的两个得分图案；最右边那个窗口空着。倒数不和转
+ * 动叠在一起：第二个轮子停稳了（2.6 秒）才开始 5-4-3-2-1。
  */
 export function planFor(family: Family, pair: readonly TargetPattern[]): ReelPlan[] {
   const pool = targetsOf(family);
   const faces = facesOf(pool);
   const at = (p: TargetPattern) => Math.max(0, pool.findIndex((q) => q.id === p.id));
-  const artFaces = FAMILY_ORDER.map((f) => `<span class="slot-face slot-face--art">${FAMILY_ART[f]}</span>`);
   return [
     { faces, land: at(pair[0]), stopAt: 1500 },
     { faces, land: at(pair[1] ?? pair[0]), stopAt: 2600 },
-    { faces: artFaces, land: Math.max(0, FAMILY_ORDER.indexOf(family)), stopAt: 3700 },
   ];
 }

@@ -45,26 +45,30 @@ export interface CascadeStepGroups {
  * boundary used to make one extra second cost a quarter of the score, which
  * rewarded quitting at 59s over playing on.
  *
- * `gain` 是这根杠杆的长度：1 就是上面这条曲线本身，房间局传 ROOM_TIME_GAIN。
+ * `gain` 是这根杠杆的长度：1 就是上面这条曲线本身，现在单人和小屋都用 TIME_GAIN。
  * 放大在夹紧之后做，所以无论多大的 gain，曲线都还是单调的一条——用时多一秒
  * 绝不会反而变得更划算。
  */
-export function timeMultiplierFor(elapsedSec: number, gain = 1): number {
-  const base = Math.max(0.5, Math.min(2, 2 - elapsedSec / 300));
+export function timeMultiplierFor(elapsedSec: number, gain = TIME_GAIN): number {
+  const t = Math.max(0, elapsedSec);
+  // 五分钟以内：从 2 直线落到 1。五分钟之后不再直线往下掉，改成越掉越慢，
+  // 慢慢贴向 0.5——曲线在五分钟那一点是接上的（同样的斜率），所以没有一个
+  // 「过了五分钟忽然变陡／变缓」的拐点。
+  const base = t <= 300 ? 2 - t / 300 : 0.5 + 0.5 * Math.exp(-(t - 300) / 150);
   return 1 + gain * (base - 1);
 }
 /**
- * 房间里，时间说话的分量放大到一倍半。
+ * 时间说话的分量：离 1 有多远，放大一倍半。单人和小屋同一条规矩。
  *
- * 单人局是一个人跟自己的棋盘过不去，慢一点想清楚是正当的打法；一场同步竞赛
- * 不是——四个人拿的是同一副牌，谁先走完就是这场比的全部意思。原来的系数在
- * 五分钟处才落到 1，快慢之间只差得开两倍，对一场比赛来说太平了。
+ * 这个数原来只给小屋用（单人是 1），理由是单人慢一点想清楚是正当打法。玩家
+ * 后来定的是两边统一按小屋这一套算——一方面同一份成绩要进同一张榜，两套系
+ * 数就是两把尺子；另一方面五分钟之后的那一段改缓了（见上面），慢的那头不再
+ * 一下子掉到底。
  *
- * 放大的是「离 1 有多远」，不是整条曲线：五分钟那个中点仍旧是 1 倍，快的那
- * 头顶到 2.5，慢的那头掉到 0.25。所以这不是给房间局普涨或普降，而是把同一
- * 根杠杆加长——打得快的赚得更多，拖着不走的赔得更狠。
+ * 数出来是：秒杀 2.5，两分半 1.75，五分钟 1，七分半 0.53，十分钟 0.35，再往
+ * 后慢慢贴向 0.25——而不是原来的七分半就到 0.25。
  */
-export const ROOM_TIME_GAIN = 1.5;
+export const TIME_GAIN = 1.5;
 
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
@@ -276,10 +280,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     const statusPercent = perf.valuePercent();
     const bonusMult = 1 + statusPercent / 100;
-    // 房间里这根杠杆更长——见 ROOM_TIME_GAIN。房间的实时排名比的仍然是原始
-    // 得分（那时这一局还没走完，综合得分还不存在），这里放大的是走完之后算
-    // 出来的综合得分。
-    const timeMult = timeMultiplierFor(elapsed, currentRoom() ? ROOM_TIME_GAIN : 1);
+    // 单人和小屋同一条时间曲线（见 TIME_GAIN）。房间的实时排名比的仍然是原始
+    // 得分（那时这一局还没走完，综合得分还不存在），这里算的是走完之后的综合
+    // 得分。
+    const timeMult = timeMultiplierFor(elapsed);
     // Leaving tiles face-up costs the same either way — walking away early
     // and running the board into a genuine dead end are charged alike, so
     // "stop now" is never a way to dodge the cost of an unfinished board.
@@ -323,6 +327,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       extraPenalty,
       extraPenaltyReason: extraPenaltyLabel,
       hazardEnd,
+      // 这一局是在小屋里打的。记录页、战绩图、云上的档都带着它——两边现在
+      // 是同一套计分了，可「和谁一起打的」仍然是这一局的一部分。
+      room: Boolean(currentRoom()),
       at: Date.now(),
     };
 

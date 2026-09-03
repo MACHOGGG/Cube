@@ -1,8 +1,8 @@
 /**
  * 《随机得分目标》第一幕：挑一个图形。
  *
- * 一整屏，排布和 4-3-2-1 开局页是同一套——上半屏是这个玩法自己的脸（那台老
- * 虎机），下半屏三个图形三选一，底下只有一颗《退出》。没有一句说明：三张图
+ * 一整屏，排布和 4-3-2-1 开局页是同一套——三个图形三选一上下居中，底下只有
+ * 一颗《退出》；那台机器不在这一屏，转起来的时候才出现。没有一句说明：三张图
  * 已经说完了要选什么。玩家的原话：「进来先是方块、圆球、三角三个三选一（不
  * 需要任何文字指示）……在这下面只有一个额外的按钮是退出」。
  *
@@ -18,7 +18,6 @@ import { STRINGS, type Lang } from '../i18n';
 import { drawPair, type Family, type TargetPattern } from '../engine/targets';
 import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_BASE_TRIANGLE, ICON_LOCK } from './homeIcons';
 import { shapeName } from './shapeLabels';
-import { slotMachineHtml } from './slotReels';
 import { CTL_BACK } from './ctlIcons';
 
 /** 三个基础玩法，和它们在主菜单上的那张图。 */
@@ -54,7 +53,9 @@ export function renderRandomTargetPage(
   root.innerHTML = `
     <div class="app slot-page">
       <div class="start-stage">
-        <div class="start-emblem">${slotMachineHtml()}</div>
+        <!-- 这一屏上没有那台机器：三张图上下居中占整屏（玩家的原话：「第一
+             个界面不要有上方的老虎机标识，剩下的 mode 标识上下居中」）。机器
+             只在下一幕、转起来的时候才出现。 -->
         <div class="start-count slot-pick-area">
           <div class="slot-pick-row${locked ? ' slot-pick-row--locked' : ''}" id="slotShapes">
             ${FAMILIES.map(

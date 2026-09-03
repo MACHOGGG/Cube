@@ -73,6 +73,11 @@ check('本人拿着自己的令牌来，才算',
   (await isGenius({ email: 'paying@example.com', accountToken: 'TOKEN-OF-THE-PAYER' })) === true);
 check('这时候才去问 Creem', asked > 0, `问了 ${asked} 次`);
 
+asked = 0;
+check('光说一句「我是商店买的」，不算（商店版上线前接收据校验，见 _entitlement.js）',
+  (await isGenius({ storeClaim: true })) === false);
+check('说这句也不去问 Creem', asked === 0, `问了 ${asked} 次`);
+
 if (useOld) rmSync(OLD, { force: true });
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);
 process.exit(fail ? 1 : 0);

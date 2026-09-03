@@ -87,8 +87,10 @@ function circleView(colors) {
 {
   // 23 = 上面一颗、下面两颗。整副同色时，每一个「上面一颗」都成立。
   const hits = M.findTargets(circleView(() => 0), T.targetById('23'));
-  // 行 r 的第 c 颗，下面两颗是 (r+1,c) 和 (r+1,c+1)——r 从 0 到 5，共 21 处。
-  check('小球 23（上一下二）：整副同色时 21 处', hits.length === 21, `${hits.length} 处`);
+  // 行 r 的第 c 颗，下面两颗是 (r+1,c) 和 (r+1,c+1)——r 从 0 到 5，共 21 处；
+  // 倒过来的（上二下一）也算，r 从 1 到 6 每行少一处，共 15 处。图案怎么摆
+  // 都算，和各玩法自己那套一个规矩。
+  check('小球 23（上一下二）：整副同色时正反各算，21 + 15 = 36 处', hits.length === 36, `${hits.length} 处`);
   // 只有最上面三颗同色，别的每一颗都给一个自己的颜色——不然下面那一大片
   // 同色的球自己也能凑出一堆 23 来（第一版就是这么写错的）。
   const one = M.findTargets(circleView((r, c) => (r <= 1 ? 0 : 100 + r * 10 + c)), T.targetById('23'));
@@ -114,16 +116,69 @@ function triView(colors, rows = 6) {
   check('三角 14（一排三个）：整副同色时找得到', hits.length > 0, `${hits.length} 处`);
   const big = M.findTargets(triView(() => 0), T.targetById('15'));
   check('三角 15（大三角）：整副同色时找得到', big.length > 0, `${big.length} 处`);
-  // 12（两块的菱形）和 15（大三角）在三角棋盘上摆得下的位置一样多，都是 25：
-  // 两者都只要求「这一行有一格、下一行够宽」，卡住它们的是同一个条件。手算
-  // 过：r 从 0 到 4，每行 2r+1 格，1+3+5+7+9 = 25。第一版想当然写了「小的
-  // 应该更多」，是错的。真正被多卡一道的是横着排四个的 13——它还要求
-  // p+3 不出界。
+  // 12（两块的菱形）三个方向都算：竖的 25 处（r 从 0 到 4，每行 2r+1 格，
+  // 1+3+5+7+9），斜的两个方向各 10 处（每一对共一条斜边的相邻三角）——共 45。
+  // 15（大三角）朝上 25 处，朝下的在六行的棋盘上摆不下（要三行、上宽下窄），
+  // 所以还是 25 减去被边卡掉的：实测 21。
   const rhombus = M.findTargets(triView(() => 0), T.targetById('12')).length;
   const run4 = M.findTargets(triView(() => 0), T.targetById('13')).length;
-  check('12（菱形）和 15（大三角）位置一样多，都是 25', rhombus === 25 && big.length === 25,
-    `${rhombus} / ${big.length}`);
-  check('13（横排四个）被多卡一道，比它们少', run4 < rhombus, `${run4} < ${rhombus}`);
+  check('12（菱形）三个方向都算，45 处', rhombus === 45, `${rhombus} 处`);
+  check('15（大三角）朝上朝下都算', big.length >= 21, `${big.length} 处`);
+  check('13（一排四个）三个方向都算，比只横着多', run4 > 25, `${run4} 处`);
+}
+// ---- 怎么摆都算：玩家报的那个 bug 就是从这儿来的 -------------------------
+{
+  // 方块 38 是横着五枚。竖着摆一列同色，也该给分——原来只认横的。
+  const col = [[0], [0], [0], [0], [0]];
+  check('方块 38（一排五枚）竖着也算', M.findTargets(squareView(col), T.targetById('38')).length === 1);
+  // 35 是个 L：转四次、照镜子，八种样子，每一种都得认。
+  const Ls = [
+    [[0, 9], [0, 9], [0, 0]],           // 原样
+    [[0, 0, 0], [0, 9, 9]],             // 转 90°
+    [[0, 0], [9, 0], [9, 0]],           // 转 180°
+    [[9, 9, 0], [0, 0, 0]],             // 转 270°
+    [[9, 0], [9, 0], [0, 0]],           // 照镜子
+  ];
+  for (const [i, g] of Ls.entries()) {
+    check(`方块 35（L 形）第 ${i + 1} 种摆法也算`, M.findTargets(squareView(g), T.targetById('35')).length === 1);
+  }
+  // 小球 27 是一排四颗：六角格子上一排有三个方向。整副同色的 28 颗三角里，
+  // 每个方向能摆几处是一样的（三角是对称的），所以总数得是 3 的倍数、而且
+  // 比只横着多。
+  const runs = M.findTargets(circleView(() => 0), T.targetById('27')).length;
+  check('小球 27（一排四颗）三个方向都算', runs % 3 === 0 && runs > 10, `${runs} 处`);
+}
+// ---- 三角：转 60° 之后朝向跟着变，但两枚只在尖上碰一下的不算 --------------
+{
+  // 12 = 上面一枚朝上、下面一枚朝下，共一条边。原来的判定从任何一格起手，
+  // 起手在朝下的那一格时，「下一行」那一枚就成了朝上的——两枚只在一个尖上
+  // 碰一下，却给了分。现在起手那一格的朝向必须对上。
+  //
+  // 棋盘：只把 (0,0)（朝上）和 (1,1)（朝下）涂成同色——它们共一条边，是真
+  // 的菱形；再把 (1,2)（朝上）和 (2,3)（朝下）涂成另一色——(1,2) 是朝上的，
+  // 它「下一行同 p+1」的 (2,3) 是朝下的，共边，也是真菱形；而 (1,1)（朝下）
+  // 和 (2,2)（朝上）只在尖上碰：给它们第三种颜色，不该被找到。
+  const paint = new Map([['0,0', 0], ['1,1', 0], ['1,2', 1], ['2,3', 1], ['2,2', 2]]);
+  const view = triView((r, c) => paint.get(`${r},${c}`) ?? 100 + r * 10 + c, 4);
+  const hits = M.findTargets(view, T.targetById('12')).map((h) => h.map((x) => x.join(',')).sort().join('|'));
+  check('三角 12：共一条边的两枚算', hits.includes('0,0|1,1') && hits.includes('1,2|2,3'), hits.join(' ; '));
+  check('三角 12：只在尖上碰一下的两枚不算', !hits.some((h) => h.includes('2,2')), hits.join(' ; '));
+  // 每一种摆法的朝向标记都得和 p 的奇偶对得上——不然图示会画错、判定会错位。
+  for (const t of T.TARGETS.filter((x) => x.family === 'triangle')) {
+    const ok = M.orientationsOf(t).every((v) => {
+      const [r0, c0, f0] = v.cells[0];
+      const p0 = f0 === 'D' ? 1 : 0;
+      return v.cells.every(([r, c, f]) => ((p0 + (c - c0) + (r - r0)) % 2 === 0 ? 'U' : 'D') === f);
+    });
+    check(`三角 ${t.id} 每一种摆法的朝向都对得上`, ok);
+  }
+  // 摆法的数目：转一转、翻一翻，去掉重复的。这张表是回归用的——它变了，
+  // 说明对称算法变了。
+  const counts = Object.fromEntries(T.TARGETS.map((t) => [t.id, M.orientationsOf(t).length]));
+  const want = { 11: 6, 12: 3, 13: 6, 14: 6, 15: 2, 21: 3, 22: 3, 23: 2, 24: 3, 25: 6, 26: 1, 27: 3,
+    31: 4, 32: 2, 33: 8, 34: 4, 35: 8, 36: 2, 37: 1, 38: 2 };
+  check('二十个图案各有几种摆法（回归表）', JSON.stringify(counts) === JSON.stringify(want),
+    JSON.stringify(counts));
 }
 // ---- 分值 --------------------------------------------------------------
 check('3 枚 5 分', T.scoreOf(T.targetById('14')) === 5);

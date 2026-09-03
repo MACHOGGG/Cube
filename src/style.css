@@ -1530,6 +1530,10 @@ body:has(.slot-page) .home-nav { display: none; }
 }
 .slot-pick-lock svg { width: 100%; height: 100%; display: block; }
 
+/* 老虎机那一局的倒数窗口：轮子还在转的时候先不露面（占着位置，不闪一下），
+   第二个轮子停稳了才出现、才开始数。 */
+.cd-window--waiting { visibility: hidden; }
+
 /* ---- 那台机器 ---------------------------------------------------------- */
 /* 图是玩家给的 slot-machine.svg，一个像素没动；三个滚筒是叠在它显示区上的三
    个窗口，位置由 slotReels.ts 按图自己的 viewBox 写在 style 里。 */
@@ -1545,9 +1549,10 @@ body:has(.slot-page) .home-nav { display: none; }
 }
 .slot-reel {
   position: absolute; overflow: hidden;
-  /* 显示区是白的，所以图案用棋盘上那一排的蓝，缝隙留白——两枚挨着的时候，
-     那道白线就是它们之间的分界。 */
-  color: var(--play-mark); --mark-edge: #FFFFFF;
+  /* 显示区是白的，图案用棋盘上那一排的蓝，描一圈圆角黑边——和浅色主题里
+     棋盘那一排一样（玩家的原话：「把白边改成同样的圆角黑边」）。窗口永远是
+     白的，所以这一条不跟主题走。 */
+  color: var(--play-mark); --mark-edge: #2E2430;
 }
 /* 真转起来的时候才铺白底：那张图自己的显示区里本来就画着三个符号（蓝三角、
    橙圆、红方块），转的时候得盖住它们，不然新旧两套叠在一起谁也看不清。没转
