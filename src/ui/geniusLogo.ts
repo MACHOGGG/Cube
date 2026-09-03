@@ -51,3 +51,15 @@ export function geniusLogoTag(size = 20, className = ''): string {
   return `<span class="genius-logo ${className}" aria-hidden="true"
                 style="width:${w}px;height:${size}px">${GENIUS_LOGO}</span>`;
 }
+
+/**
+ * 同一个标志，但不定死像素：宽高交给外面的 CSS（一般是按所在卡片的百分比），
+ * 这里只把原件的比例带上，免得被压扁。主菜单上锁着的玩法用的是这一款——
+ * 那些卡片在手机上和电脑上差一倍多，招牌得跟着卡片长缩，才能既看得清、又
+ * 永远压不到中间那把锁。
+ */
+export function geniusLogoFluid(className = ''): string {
+  if (!hasGeniusLogo()) return '';
+  return `<span class="genius-logo genius-logo--fluid ${className}" aria-hidden="true"
+                style="aspect-ratio:${ASPECT}">${GENIUS_LOGO}</span>`;
+}

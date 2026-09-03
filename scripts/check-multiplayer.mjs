@@ -572,10 +572,9 @@ check('结算完回到主菜单',
 // ---- 客人自己走：一张截止此刻的竞赛排名 ---------------------------------
 // 上面那一间已经散了，另开一间来验客人这条路。
 await A.page.click('#mpFinalDone');
-await A.page.waitForSelector('.home-page', { timeout: 8000 });
-await A.page.click('#navProfile');
-await A.page.click('#multiRow');
-await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
+// 看完战绩卡一步退回多人设置页，不是主菜单——散场的人多半还要再开一间。
+check('散场看完战绩卡，一步退回多人设置页',
+  await A.page.waitForSelector('#mpCreate', { timeout: 8000 }).then(() => true).catch(() => false));
 await A.page.click('#mpCreate');
 await A.page.waitForSelector('.mp-code', { timeout: 10000 });
 const code2 = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
@@ -680,18 +679,13 @@ await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
 await A.page.click('#mpLeaveYes');
 await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 });
 await A.page.click('#mpFinalDone');
-await A.page.waitForSelector('.home-page', { timeout: 8000 });
-await A.page.click('#navProfile');
-await A.page.click('#multiRow');
+// 看完战绩卡直接回到多人设置页（见上一段的断言），不用再绕主菜单。
 await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
 await A.page.click('#mpCreate');
 await A.page.waitForSelector('.mp-code', { timeout: 10000 });
 const code3 = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
-// B 上一段离开后停在那张战绩页上，先按《主页》回主菜单。
+// B 上一段离开后停在那张战绩页上，按下去也是一步退回多人设置页。
 await B.page.click('#mpFinalDone').catch(() => {});
-await B.page.waitForSelector('#navProfile', { timeout: 10000 });
-await B.page.click('#navProfile');
-await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCode', { timeout: 10000 });
 await B.page.fill('#mpCode', code3);
 await B.page.click('#mpJoin');

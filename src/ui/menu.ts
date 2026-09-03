@@ -6,10 +6,12 @@ import { isGenius } from '../engine/subscription';
 import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker, type PickerOption } from './centerPicker';
-import { geniusLogoTag } from './geniusLogo';
+import { geniusLogoFluid } from './geniusLogo';
 
 /** 《随机得分目标》在主菜单上的那块牌子——玩家给的老虎机图。 */
-const ICON_SLOT_MACHINE = custom('slot-machine') ?? '';
+// 主菜单上那台老虎机是单独一张图（三个窗口里画着蓝三角、橙圆、红方块），
+// 和开局时真的转起来的那台（slot-machine.svg，两个窗口）不是同一个文件。
+const ICON_SLOT_MACHINE = custom('slot-machine-menu') ?? custom('slot-machine') ?? '';
 import {
   ICON_BASE_SQUARE,
   ICON_BASE_CIRCLE,
@@ -304,7 +306,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       btn.insertAdjacentHTML(
         'beforeend',
         `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-          `<span class="center-pick-genius">${geniusLogoTag(80)}</span>`,
+          `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
       );
     }
     btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : handlers.onRandomTarget()));
@@ -330,14 +332,15 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       layoutIconIsWide(card.id) ? 'home-icon-btn--wide-art' : '',
     );
     if (isLocked) {
-      // 锁着的玩法现在直接摆在主菜单上，得一眼看出来是锁着的：图案压暗，中间
-      // 一把锁，右下角压着那块天才招牌——说明这把锁是哪一家的。和居中弹窗里
-      // 那两张是同一副打扮。
+      // 锁着的玩法现在直接摆在主菜单上，得一眼看出来是锁着的：图案压暗，正
+      // 中一把锁，右下角收着那块天才招牌——说明这把锁是哪一家的。招牌的大小
+      // 跟着卡片走（见 .home-icon-btn--locked .center-pick-genius），永远压
+      // 不到锁。
       btn.classList.add('home-icon-btn--locked');
       btn.insertAdjacentHTML(
         'beforeend',
         `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-          `<span class="center-pick-genius">${geniusLogoTag(80)}</span>`,
+          `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
       );
     }
     btn.addEventListener('click', () =>

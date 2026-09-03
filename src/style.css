@@ -1091,37 +1091,36 @@ button:hover { filter: brightness(1.05); }
 }
 .center-pick-lock svg { width: 100%; height: 100%; display: block; }
 
-/* 主菜单上锁着的那两个玩法，跟居中弹窗里是同一副打扮：图案压暗，中间一把锁，
-   右下角压着天才招牌。它们现在直接摆在主菜单上，不打扮就跟能玩的没有区别。 */
+/* 主菜单上锁着的那几个玩法（老虎机、七色圆球、进阶三角）：图案压暗，锁压在正
+   当中，右下角一块天才招牌——说明这把锁是哪一家的。 */
 .home-icon-btn--locked { position: relative; }
 .home-icon-btn--locked > svg { opacity: 0.38; }
-/* 弹窗里那块招牌是探出框外一点的——那儿四周都是空的。主菜单上旁边就是另一
-   张卡，探出去会压到人家身上，所以收回自己框里。 */
-/* 锁着的玩法，右下角那块天才招牌。
- *
- * 原来是钉在按钮底边上（bottom），而每个玩法的图形高矮不一样：菱形那张按钮
- * 201×201、图形中线在 101，招牌中线落在 159——低了 58px；进阶三角那张按钮
- * 201×104、图形中线 52，招牌中线 62——只低 10px。两张摆在一起，招牌就不在
- * 同一条水平线上。
- *
- * 改成钉在中线上：招牌的中线对齐图形的中线，右边缘贴图形的右边缘。大小一点
- * 没动，只是上下挪了。 */
-.home-icon-btn--locked .center-pick-genius {
-  right: 0; left: auto;
-  top: 50%; bottom: auto;
-  transform: translateY(-50%);
-}
-/* 那把锁往左让开，让整把都露出来。
-   居中弹窗里锁在正当中是对的，那儿四周是空的；主菜单上右边那块天才招牌
-   （88px 宽，钉在右边缘）正好压住锁的右半边，只剩半把锁露在外面。所以这
-   里改成从右边量：招牌 88px，再让开 8px，锁的右缘就落在招牌左缘外面。
-   min() 是给窄卡片兜底——再窄也不会把锁推出左边缘。 */
+/* 锁：三张卡都是 34px，都在图形的正中心（弹窗里那把往上提了一点，因为它
+   底下还有一行字；主菜单上没有，正中就是正中）。 */
 .home-icon-btn--locked .center-pick-lock {
-  left: auto;
-  right: min(96px, calc(100% - 42px));
-  top: 50%;
-  transform: translateY(-50%);
+  left: 50%; right: auto; top: 50%; bottom: auto;
+  width: 34px; height: 34px;
+  transform: translate(-50%, -50%);
 }
+/* 招牌：收在卡片自己的右下角（弹窗里那块探出框外一点，主菜单上旁边就是另
+   一张卡，探出去会压到人家身上），大小按卡片的宽度走——三分之一。
+
+   要保证的是它永远碰不到中间那把锁。锁 34px 宽，压在正中，右缘在 50% + 17px；
+   招牌从右边缘起，宽 33%，左缘就在 67%——卡片宽过 124px 时两者之间就有空。
+   卡片还能更窄：手机横过来时一张只有 96px（见 --home-card-cap），33% 的招牌
+   左缘落在 64px，锁的右缘在 65px，就碰上了。所以再加一道 min()：宽度不超过
+   「一半减 21px」——右半边留给锁的 17px 加 4px 空档——96px 的卡片上招牌收成
+   27px，左缘 69px，仍在锁外面。上面那行 33% 是不认 min() 的浏览器的退路。
+
+   从前写死 88×80 的招牌，手机上两列的卡片只有一百六七十像素，右下角正好压
+   在锁上，才把锁往左推了一截；现在不必了。 */
+.home-icon-btn--locked .center-pick-genius {
+  right: 0; left: auto; bottom: 0; top: auto;
+  transform: none;
+  width: 33%;
+  width: min(33%, calc(50% - 21px));
+}
+.genius-logo--fluid { display: block; width: 100%; height: auto; }
 
 /* ---------- profile page rows ---------- */
 .profile-row {
@@ -1534,6 +1533,17 @@ body:has(.slot-page) .home-nav { display: none; }
    第二个轮子停稳了才出现、才开始数。 */
 .cd-window--waiting { visibility: hidden; }
 
+/* 小屋那一屏的《相同 / 不同》开关：一段两格的选段，挑图形之前先定。 */
+.slot-share { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 10px; }
+.slot-share-caption { font-size: 0.86rem; color: var(--ink-soft); }
+.slot-share-seg { display: inline-flex; border-radius: var(--r-full); background: var(--surface); box-shadow: var(--shadow); padding: 3px; }
+.slot-share-opt {
+  border: none; background: none; border-radius: var(--r-full); padding: 8px 20px;
+  font: inherit; font-weight: 600; color: var(--ink-soft); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.slot-share-opt--on { background: var(--accent); color: #fff; }
+
 /* ---- 那台机器 ---------------------------------------------------------- */
 /* 图是玩家给的 slot-machine.svg，一个像素没动；三个滚筒是叠在它显示区上的三
    个窗口，位置由 slotReels.ts 按图自己的 viewBox 写在 style 里。 */
@@ -1554,9 +1564,9 @@ body:has(.slot-page) .home-nav { display: none; }
      白的，所以这一条不跟主题走。 */
   color: var(--play-mark); --mark-edge: #2E2430;
 }
-/* 真转起来的时候才铺白底：那张图自己的显示区里本来就画着三个符号（蓝三角、
-   橙圆、红方块），转的时候得盖住它们，不然新旧两套叠在一起谁也看不清。没转
-   的那一页（挑图形那屏）不铺，机器就还是玩家画的原样。 */
+/* 真转起来的时候才铺白底。开局那台机器（slot-machine.svg）的显示区本来就是
+   空白的，这层白只是给滚动的带子一块干净的底；主菜单上那张（画着三个符号的
+   slot-machine-menu.svg）从不转，也就从不铺。 */
 .slot-reel--live { background: #FFFFFF; }
 .slot-strip { display: block; will-change: transform; }
 /* 一格正好是一个窗口高，所以窗口里永远只看得见一张。--cell 是 slotReels.ts

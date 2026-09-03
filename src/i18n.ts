@@ -44,6 +44,10 @@ export interface I18nStrings {
   bombTimedTitle: string;
   bombAdvancedTitle: string;
   randomTargetTitle: string;
+  /** 小屋里的随机得分目标：全屋同一对图案，还是各转各的。 */
+  slotShareCaption: string;
+  slotSameLabel: string;
+  slotOwnLabel: string;
   randomTargetTagline: string;
   randomTargetPick: string;
   randomTargetSpinning: string;
@@ -447,6 +451,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
     randomTargetTitle: 'Random score target',
+    slotShareCaption: 'Patterns for the room',
+    slotSameLabel: 'Same',
+    slotOwnLabel: 'Different',
     randomTargetTagline: 'Pick a shape, spin for targets, 4-3-2-1 go!',
     randomTargetPick: 'Pick a shape',
     randomTargetSpinning: 'Spinning\u2026',
@@ -760,6 +767,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
     randomTargetTitle: 'Objectif de score aléatoire',
+    slotShareCaption: 'Motifs pour la salle',
+    slotSameLabel: 'Identiques',
+    slotOwnLabel: 'Différents',
     randomTargetTagline: 'Choisis une forme, tire les objectifs, 4-3-2-1 c\u2019est parti !',
     randomTargetPick: 'Choisis une forme',
     randomTargetSpinning: 'Tirage\u2026',
@@ -1073,6 +1083,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
     randomTargetTitle: '隨機得分目標',
+    slotShareCaption: '全屋的得分圖案',
+    slotSameLabel: '相同',
+    slotOwnLabel: '不同',
     randomTargetTagline: '選擇圖形，隨機得分目標，4-3-2-1 開始！',
     randomTargetPick: '先挑一個圖形',
     randomTargetSpinning: '轉著呢\u2026',
@@ -1386,6 +1399,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
     randomTargetTitle: '随机得分目标',
+    slotShareCaption: '全屋的得分图案',
+    slotSameLabel: '相同',
+    slotOwnLabel: '不同',
     randomTargetTagline: '选择图形，随机得分目标，4-3-2-1 开始！',
     randomTargetPick: '先挑一个图形',
     randomTargetSpinning: '转着呢\u2026',

@@ -61,6 +61,8 @@ export interface RoomState {
   host: string | null;
   /** The board the host chose; null until they do. */
   mode: string | null;
+  /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的；别的局 null。 */
+  slot: 'same' | 'own' | null;
   /** What every device deals the board from. Null before the match starts. */
   seed: string | null;
   /** The agreed instant, on the server's clock. */
@@ -399,9 +401,9 @@ export function fetchState(): Promise<RoomResult<RoomState>> {
 }
 
 /** Host only: pick the board, and put everyone on the same countdown. */
-export function startMatch(mode: string): Promise<RoomResult<RoomState>> {
+export function startMatch(mode: string, slot?: 'same' | 'own' | null): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
-  return post<RoomState>({ action: 'start', mode, ...session });
+  return post<RoomState>({ action: 'start', mode, ...(slot ? { slot } : {}), ...session });
 }
 
 export function reportScore(

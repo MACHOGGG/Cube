@@ -37,8 +37,8 @@ await page.waitForTimeout(400);
 // ---- 1. 尺寸由 CSS 定的那些图标，自己不许带 width/height -------------------
 //
 // 只查这几处的直接子 svg：它们的 CSS 只写了宽 + aspect-ratio，高度是算出来
-// 的，所以文件上多一个 height 属性就会把比例顶掉。天才招牌不在此列——它外面
-// 那层 span 宽高都写死了，属性压根轮不上。
+// 的，所以文件上多一个 height 属性就会把比例顶掉。天才招牌不在此列——它的
+// svg 宽高由 .genius-logo svg 那条 CSS 接管，文件上的属性压根轮不上。
 const SIZED_BY_CSS = '.home-icon-btn > svg, .center-pick-opt > svg, .start-mark > svg, .start-mark-art > svg';
 const sized = await page.$$eval(SIZED_BY_CSS, (els) =>
   els.filter((e) => e.hasAttribute('width') || e.hasAttribute('height'))
@@ -113,6 +113,60 @@ await page.waitForSelector('.home-page', { timeout: 8000 });
 await page.waitForTimeout(600);
 const after = await page.evaluate(() => window.scrollY);
 check('从一局里退出来，主菜单还停在刚才那儿', Math.abs(after - before) <= 4, `${before} → ${after}`);
+
+// ---- 5. 锁着的玩法：锁在正当中，招牌收在右下角，两者碰不到 -----------------
+//
+// 没开通的玩家在主菜单上看见三张锁着的卡（老虎机、七色圆球、进阶三角）。锁要正
+// 正地压在图形中心，三把一样大；天才招牌收在卡片右下角，不许压到锁上，也不
+// 许探出卡片去压到邻居。卡片的大小随屏幕变——手机竖着两列、横过来是电脑那
+// 套版式但一张只剩 96px、电脑上二百多——三种都量一遍。
+async function lockedCards(width, height) {
+  const c = await browser.newContext({ viewport: { width, height } });
+  await c.addInitScript(() => {
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+      localStorage.setItem(k, '1');
+    localStorage.setItem('slides_lang', 'zhHans');
+  });
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForSelector('.home-icon-btn--locked', { timeout: 20000 });
+  await p.waitForTimeout(400);
+  const cards = await p.$$eval('.home-icon-btn--locked', (btns) =>
+    btns.map((b) => {
+      const box = (el) => {
+        const q = el.getBoundingClientRect();
+        return { l: q.left, t: q.top, r: q.right, b: q.bottom, w: q.width, h: q.height };
+      };
+      const card = box(b);
+      const lock = box(b.querySelector('.center-pick-lock'));
+      const badge = box(b.querySelector('.center-pick-genius'));
+      const touch = (a, o) => a.l < o.r && o.l < a.r && a.t < o.b && o.t < a.b;
+      return {
+        name: (b.getAttribute('aria-label') || '').split(' ·')[0],
+        card: `${Math.round(card.w)}×${Math.round(card.h)}`,
+        lock: `${Math.round(lock.w)}×${Math.round(lock.h)}`,
+        off: [
+          Math.round(lock.l + lock.w / 2 - card.l - card.w / 2),
+          Math.round(lock.t + lock.h / 2 - card.t - card.h / 2),
+        ],
+        badge: `${Math.round(badge.w)}×${Math.round(badge.h)}`,
+        overlap: touch(lock, badge),
+        inside: badge.l >= card.l - 0.5 && badge.t >= card.t - 0.5 && badge.r <= card.r + 0.5 && badge.b <= card.b + 0.5,
+      };
+    }),
+  );
+  await c.close();
+  return cards;
+}
+for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
+  const cards = await lockedCards(w, h);
+  const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
+  check(`${label}：三张锁着的卡都在`, cards.length === 3, brief);
+  check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
+  check(`${label}：三把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
+  check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
+  check(`${label}：招牌收在卡片里`, cards.every((c) => c.inside));
+}
 
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

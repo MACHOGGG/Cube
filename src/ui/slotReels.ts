@@ -1,12 +1,12 @@
 /**
- * 那台老虎机：三个滚筒在玩家画的那张图里真的转起来。
+ * 那台老虎机：两个滚筒在玩家画的那张图里真的转起来。
  *
- * 图是玩家给的 slot-machine.svg，一个像素都没改——转的东西是叠在它上面的三
+ * 图是玩家给的 slot-machine.svg，一个像素都没改——转的东西是叠在它上面的两
  * 个窗口，位置按图自己的 viewBox 量出来（见 WINDOWS）。所以以后换一张图，
  * 只要显示区还在同一个地方，这里一行都不用动；真挪了，也只用改那几个数。
  *
  * 两个滚筒从左到右先后停住，不是一起定住——玩家的原话：「从左到右先停一个
- * 再停第二个」。停的是这一局的两个得分目标；最右边那个窗口不转，空着。
+ * 再停第二个」。停的是这一局的两个得分目标：左一个、右一个。
  */
 import { custom } from './customIcons';
 import { renderPatternHintIcons } from '../engine/patternIcon';
@@ -17,17 +17,17 @@ import { targetsOf, type Family, type TargetPattern } from '../engine/targets';
 const ART = custom('slot-machine') ?? '';
 
 /**
- * 三个滚筒窗口在那张图上的位置，按它的 viewBox（897×521）折成百分比。
+ * 两个滚筒窗口在那张图上的位置，按它的 viewBox（897×521）折成百分比。
  *
- * 每个窗口正好罩住那张图自己画在那一格里的符号（蓝三角 x=135…242、橙圆
- * x=336…479、红方块 x=568…692，上下都在 y=239…381 之间），再往外留一点：
- * 两道黑色分隔弧（x≈268…302 和 514…548）和显示区上下那两道白弧都得露在外
- * 面——转起来时窗口是铺白底的，铺过去就把机器自己的样子盖掉了。
+ * 这张图的显示区是一块白色圆角面板（x≈88…727、y≈171…451，两侧微微鼓出），
+ * 中间一道黑色分隔弧（含描边 x≈387…418）把它分成左右两格。窗口各自在自己
+ * 那一格里居中，两个一样宽（30%），停下来的两个图案就一样大；四边都比面板
+ * 和分隔弧往里收几个像素——转起来时窗口是铺白底的，铺过去就把机器自己的
+ * 边框盖掉了。
  */
 const WINDOWS: readonly { left: number; width: number }[] = [
-  { left: 14.3, width: 14.9 },
-  { left: 34.3, width: 22.3 },
-  { left: 61.8, width: 16.3 },
+  { left: 12.4, width: 30.0 },
+  { left: 48.1, width: 30.0 },
 ];
 const WIN_TOP = 44.5;
 const WIN_HEIGHT = 30.0;
@@ -49,7 +49,7 @@ const SPEED = 13;
 const reduceMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** 一台机器：图，加上叠在显示区上的三个空窗口。 */
+/** 一台机器：图，加上叠在显示区上的两个空窗口。 */
 export function slotMachineHtml(): string {
   const reels = WINDOWS.map(
     (w, i) =>
@@ -82,8 +82,8 @@ export function spinSlot(
   onSettled?: () => void,
 ): () => void {
   const reels = Array.from(root.querySelectorAll<HTMLElement>('.slot-reel'));
-  // 只转给了计划的那几个窗口；多出来的窗口铺白盖住图里画的符号，空着——
-  // 玩家的原话：「删除最右侧的那个滚轴和内容，只显示随机出来的得分图案」。
+  // 只转给了计划的那几个窗口；要是图上窗口比计划多（换了张图），多出来的
+  // 铺白空着，不转。
   for (const el of reels.slice(plans.length)) el.classList.add('slot-reel--live');
   const lanes = reels.slice(0, plans.length).map((el, i) => {
     const plan = plans[i];
@@ -92,8 +92,7 @@ export function spinSlot(
     strip.innerHTML = [...plan.faces, ...plan.faces]
       .map((f) => `<span class="slot-sym">${f}</span>`)
       .join('');
-    // 铺上白底，盖住那张图自己画在显示区里的三个符号——新旧两套叠在一起谁
-    // 也看不清。只在真要转的时候铺，挑图形那一页的机器仍是玩家画的原样。
+    // 铺上白底，给滚动的带子一块干净的底。只在真要转的时候铺。
     el.classList.add('slot-reel--live');
     return { el, strip, plan, p: 0, ease: null as null | { from: number; to: number; t0: number } };
   });
@@ -191,8 +190,8 @@ const facesOf = (pool: readonly TargetPattern[]): string[] =>
 /**
  * 两个滚筒各转什么、各停在哪一张、第几毫秒停。
  *
- * 只转左边两个——就是这一局的两个得分图案；最右边那个窗口空着。倒数不和转
- * 动叠在一起：第二个轮子停稳了（2.6 秒）才开始 5-4-3-2-1。
+ * 左右各一个——就是这一局的两个得分图案。倒数不和转动叠在一起：第二个轮子
+ * 停稳了（2.6 秒）才开始 5-4-3-2-1。
  */
 export function planFor(family: Family, pair: readonly TargetPattern[]): ReelPlan[] {
   const pool = targetsOf(family);

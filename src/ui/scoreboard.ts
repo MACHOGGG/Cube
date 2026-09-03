@@ -267,6 +267,28 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     },
   });
 
+  // 交卷那一刻就把等待页盖上，不等下一次轮询。
+  //
+  // 原来等待页是在轮询回调里盖的：交卷 → 结算页先亮出来 → 最多一秒之后下一
+  // 次轮询到了才盖上等待页。中间那一闪就是玩家说的「交卷时闪一下旧结算页」。
+  // 结算页亮起来的信号就是 #endOverlay 拿到 show，盯着它，同步盖上；名单先
+  // 用手上最后一份 state 画，下一次轮询到了再刷。
+  const endEl = document.getElementById(END_OVERLAY_ID);
+  const coverNow = () => {
+    if (dead || wait || !runFinished()) return;
+    const known = latestRoomState();
+    if (!known || roomOver(known) || known.roundOver) return;
+    wait = showWaitPanel(lang, {
+      shapeId,
+      meId: seat.playerId,
+      code: seat.code,
+      onLeave: () => confirmLeaveRoom(lang, handlers.onLeave),
+    });
+    wait.update(known);
+  };
+  const endWatch = endEl && typeof MutationObserver !== 'undefined' ? new MutationObserver(coverNow) : null;
+  if (endEl) endWatch?.observe(endEl, { attributes: true, attributeFilter: ['class'] });
+
   // Everyone else's scores.
   const stopWatching = watchRoom(
     (state) => {
@@ -366,6 +388,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   }, LOCAL_MS);
 
   return () => {
+    endWatch?.disconnect();
     dead = true;
     wait?.remove();
     notice.remove();

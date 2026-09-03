@@ -141,7 +141,7 @@ for (const fam of FAMILIES) {
   });
   const stage = await page.evaluate(() => ({
     art: Boolean(document.querySelector('#startOverlay .slot-machine-art svg')),
-    // 只转左边两个；最右边那个窗口铺白、空着。
+    // 两个窗口，两个都在转。
     spinning: [...document.querySelectorAll('#startOverlay .slot-reel')]
       .map((r) => r.querySelector('.slot-strip').children.length > 0),
     // 轮子还在转，倒数窗口还不该露面。
@@ -151,8 +151,8 @@ for (const fam of FAMILIES) {
     edge: getComputedStyle(document.querySelector('#startOverlay .slot-reel')).getPropertyValue('--mark-edge').trim(),
   }));
   check(`${fam.name}：那台老虎机就是给的那张图`, stage.art);
-  check(`${fam.name}：只有左边两个滚筒在转，最右边空着`,
-    JSON.stringify(stage.spinning) === JSON.stringify([true, true, false]), stage.spinning.join(','));
+  check(`${fam.name}：两个窗口、两个滚筒都在转`,
+    JSON.stringify(stage.spinning) === JSON.stringify([true, true]), stage.spinning.join(','));
   check(`${fam.name}：转的时候倒数还没露面`, stage.countHidden && stage.digits === 0,
     `visibility ${stage.countHidden ? 'hidden' : 'visible'} · ${stage.digits} 个数字`);
   check(`${fam.name}：图案描的是黑边`, /2E2430/i.test(stage.edge), stage.edge || '（空）');

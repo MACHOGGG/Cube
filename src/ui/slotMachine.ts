@@ -36,6 +36,12 @@ export interface RandomTargetHandlers {
   onStart: (family: Family, targets: TargetPattern[]) => void;
   /** 没开通的人点了那三张图里的任意一张。 */
   onGenius: () => void;
+  /**
+   * 屋主在为整屋挑玩法。给了它，这一屏多一个《相同 / 不同》开关：相同＝全
+   * 屋转出同一对得分图案，不同＝各转各的（棋盘两种情况都一样）。挑完不开单
+   * 人局，把这一族和开关交回去，全屋一起倒数。
+   */
+  room?: { onStart: (family: Family, slot: 'same' | 'own') => void };
 }
 
 /**
@@ -67,6 +73,17 @@ export function renderRandomTargetPage(
             ).join('')}
           </div>
         </div>
+        ${
+          handlers.room
+            ? `<div class="slot-share" role="radiogroup" aria-label="${s.slotShareCaption}">
+                 <span class="slot-share-caption">${s.slotShareCaption}</span>
+                 <div class="slot-share-seg">
+                   <button class="slot-share-opt slot-share-opt--on" data-slot="same" role="radio" aria-checked="true">${s.slotSameLabel}</button>
+                   <button class="slot-share-opt" data-slot="own" role="radio" aria-checked="false">${s.slotOwnLabel}</button>
+                 </div>
+               </div>`
+            : ''
+        }
         <div class="start-actions">
           <button class="icon-btn start-act" id="slotBack" aria-label="${s.back}">${CTL_BACK}</button>
         </div>
@@ -74,9 +91,25 @@ export function renderRandomTargetPage(
     </div>
   `;
 
+  // 小屋那一屏的开关：相同（默认）/ 不同。
+  let slot: 'same' | 'own' = 'same';
+  for (const opt of Array.from(root.querySelectorAll<HTMLButtonElement>('.slot-share-opt'))) {
+    opt.addEventListener('click', () => {
+      slot = opt.dataset.slot === 'own' ? 'own' : 'same';
+      for (const o of Array.from(root.querySelectorAll<HTMLButtonElement>('.slot-share-opt'))) {
+        const on = o === opt;
+        o.classList.toggle('slot-share-opt--on', on);
+        o.setAttribute('aria-checked', String(on));
+      }
+    });
+  }
+
   for (const btn of Array.from(root.querySelectorAll<HTMLButtonElement>('.slot-pick-opt'))) {
     btn.addEventListener('click', () => {
       if (locked) return handlers.onGenius();
+      // 屋主替整屋挑：图案不在这儿抽——'same' 要从小屋的种子里抽才能人人一
+      // 样，'own' 各自在开局那一刻抽。这里只把族和开关交回去。
+      if (handlers.room) return handlers.room.onStart(btn.dataset.family as Family, slot);
       const pair = drawPair(btn.dataset.family as Family);
       // 这一族没有能同时成立的两个——不会发生，check-targets 每次都验（真发
       // 生了也不该把人卡在一张按不动的页面上，所以退回上一页）。

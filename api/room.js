@@ -107,6 +107,8 @@ const MODES = new Set([
   'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced',
 ]);
 const AVATAR_SHAPES = new Set(['circle', 'triangle', 'square']);
+/** 随机得分目标能开在哪几副棋盘上——就是三个基础玩法。 */
+const SLOT_MODES = new Set(['square', 'circle', 'triangle']);
 /** Control characters, which a player's name has no business containing. */
 const CTRL_RE = /[\u0000-\u001F\u007F]/g;
 
@@ -260,6 +262,7 @@ function publicState(code, hash) {
     code,
     host: meta.host ?? null,
     mode: meta.mode ?? null,
+    slot: meta.slot ?? null,
     seed: meta.seed ?? null,
     startAt: meta.startAt ?? null,
     /** 0 before the first match; every 开始 raises it by one. */
@@ -328,6 +331,8 @@ async function create(res, body) {
   const meta = {
     host: playerId, createdAt: Date.now(),
     mode: null, seed: null, startAt: null,
+    /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的；别的局 null。 */
+    slot: null,
     /** Rounds played. The host may put up one board after another. */
     round: 0,
   };
@@ -455,6 +460,9 @@ async function start(res, body) {
   if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
   if (!MODES.has(body.mode)) return send(res, 400, { error: 'mode' });
   if (seatCount(hash) < MIN_PLAYERS) return send(res, 409, { error: 'tooFew' });
+  // 随机得分目标只开在三个基础棋盘上。'same'：全屋从同一个种子里抽同一对
+  // 图案；'own'：各自抽各自的。棋盘两种情况都一样——它照旧从 seed 发。
+  const slot = SLOT_MODES.has(body.mode) && (body.slot === 'same' || body.slot === 'own') ? body.slot : null;
 
   // The round that just ended is banked before the next one wipes the board,
   // because the closing card is the sum of all of them and a score only
@@ -470,6 +478,7 @@ async function start(res, body) {
   const meta = {
     ...hash.meta,
     mode: body.mode,
+    slot,
     round: (hash.meta.round || 0) + 1,
     // The one string from which every player builds the identical board.
     seed: id(8),

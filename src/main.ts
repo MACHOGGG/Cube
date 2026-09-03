@@ -30,10 +30,10 @@ import {
   startMatch,
   type RoomState,
 } from './engine/room';
-import { clearSeed, seedRandom } from './engine/rng';
+import { clearSeed, random as seededRandom, seedRandom } from './engine/rng';
 import { shapeName } from './ui/shapeLabels';
 import { renderRandomTargetPage } from './ui/slotMachine';
-import type { Family, TargetPattern } from './engine/targets';
+import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
 import { createCircleGame } from './shapes/circle';
@@ -227,12 +227,12 @@ function setPickingForRoom(code: string | null) {
  * The host taps a board on the home page. Instead of opening it for them, it
  * goes to the room, and this device joins the countdown with everyone else.
  */
-async function startRoundFor(mode: string) {
+async function startRoundFor(mode: string, slot?: 'same' | 'own') {
   const code = pickingForRoom;
   if (!code) return false;
   const banner = document.getElementById('roomPickMsg');
   if (banner) banner.textContent = STRINGS[currentLang].workingLabel;
-  const begun = await startMatch(mode);
+  const begun = await startMatch(mode, slot);
   if (begun.ok) {
     setPickingForRoom(null);
     showMultiplayer();
@@ -458,11 +458,18 @@ function startMultiplayerRun(match: MatchStart) {
   teardown();
   trackScreen('multiplayer_run');
   seedRandom(match.seed);
+  // 随机得分目标那一局：'same' 从刚种下的那条随机流里抽——每台设备种的是同
+  // 一个种子、抽的是同一下，所以抽出来的一对一样，而且棋盘接着从同一条流
+  // 里发，仍然人人相同；'own' 用各自的 Math.random 抽，不碰那条流，棋盘照旧
+  // 一样，只有认的图案各不相同。
+  const targets = match.slot
+    ? drawPair(slotFamilyOf(match.mode), match.slot === 'same' ? seededRandom : Math.random) ?? undefined
+    : undefined;
   // A finished round goes back to the room, not to the home page: the scores
   // are still up there and the host has another board to pick. Only a device
   // that has somehow lost its seat falls through to the home page.
   const back = () => (currentRoom() ? showMultiplayer() : showMenu());
-  const destroyGame = game.mount(root, back, { lang: currentLang });
+  const destroyGame = game.mount(root, back, { lang: currentLang, targets });
   // The countdown was the "get ready", and it ended for everyone at the same
   // instant. Leaving the start card up would undo exactly that: four players
   // would each press it a moment apart and the race would begin four times.
@@ -526,10 +533,14 @@ async function leaveRoomWithCard() {
   }
   teardown();
   setPickingForRoom(null);
-  if (!state) return showMenu();
+  // 看完那张战绩卡，一步退回多人设置页——不是主菜单。走的人多半还想再进一
+  // 间或者再开一间，回主菜单等于让他再点两下才回到这儿（玩家的原话：「屋主
+  // 解散/离开后一步退回多人设置页，不再一层层退」）。座位已经交回去了，
+  // showMultiplayer 在没有座位时画的就是设置页。
+  if (!state) return showMultiplayer();
   // 标题不另起一个：中途走的人和散场时看到的是同一间小屋的同一份战绩，
   // 一张写《小屋战绩》、另一张写《竞赛排名》，看图的人会以为是两件事。
-  showRoomCard(root, state, currentLang, showMenu, { meId });
+  showRoomCard(root, state, currentLang, showMultiplayer, { meId });
 }
 
 /**
@@ -541,7 +552,8 @@ function showRoomFinal(state: RoomState) {
   setPickingForRoom(null);
   showRoomCard(root, state, currentLang, () => {
     forgetRoom();
-    showMenu();
+    // 一步退回多人设置页（见 leaveRoomWithCard 那段）。
+    showMultiplayer();
   });
 }
 
@@ -636,6 +648,11 @@ function showRandomTarget() {
         showGame(game, { targets }, showRandomTarget);
       },
       onGenius: () => openGeniusWindow(currentLang, showRandomTarget),
+      // 屋主在为整屋挑玩法：这一屏多一个《相同 / 不同》开关，挑完不开单人
+      // 局，而是把这一族和开关一起交给小屋，全屋一起倒数。
+      room: pickingForRoom
+        ? { onStart: (family: Family, slot: 'same' | 'own') => void startRoundFor(family, slot) }
+        : undefined,
     },
     !isGenius(),
   );
@@ -643,6 +660,10 @@ function showRandomTarget() {
   repaintIcons();
   toTop();
 }
+
+/** 小屋那一局的 mode 就是族名（square / circle / triangle）——见 api/room.js 的 SLOT_MODES。 */
+const slotFamilyOf = (mode: string): Family =>
+  mode === 'square' ? 'square' : mode === 'circle' ? 'circle' : 'triangle';
 
 /** 这一族对应的基础玩法。三角那一档是主菜单上《三角》后面那块整三角。 */
 function randomTargetGame(family: Family): ShapeGame {

@@ -61,6 +61,8 @@ import {
 export interface MatchStart {
   mode: string;
   seed: string;
+  /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的。 */
+  slot?: 'same' | 'own' | null;
 }
 
 export interface MultiplayerHandlers {
@@ -165,6 +167,8 @@ export function renderMultiplayerPage(
   let seenNudges = -1;
   /** 这一局的「会不会规则」已经问过了——每局只问一次，问完不再挡路。 */
   let askedRound = -1;
+  /** 《会不会规则》那一问正挂着。 */
+  let asking = false;
   /** 「有人在学，稍等」那一屏已经画上了，别每次轮询都重画一遍。 */
   let waitingOnLearner = false;
   const stopAll = () => {
@@ -416,6 +420,8 @@ export function renderMultiplayerPage(
           // 2. 屋里还有没有别人在学——有就一起等；
           // 3. 都齐了，才数 4-3-2-1。
           if (askKnowsRules(next)) return;
+          // 问句还挂着：这一轮什么都不做。服务器那头我是「在学」，别人在等。
+          if (asking) return;
           if (next.players.some((p) => p.learning)) {
             // 数到一半有人说他不会：把数字收起来，换成「稍等」。倒数不是
             // 承诺，是一段可以退回去的路。
@@ -462,8 +468,17 @@ export function renderMultiplayerPage(
     }
     const fresh = now - seenNudges;
     seenNudges = now;
-    // 一轮里最多掉六个：轮询间隔里按了二十下的话，一次全倒出来只会糊成一团。
-    if (fresh > 0) rain.drop(Math.min(6, fresh));
+    if (fresh <= 0) return;
+    // 一颗一颗掉，摊在这一轮轮询的间隔里：按得越密掉得越密，而不是一次倒出
+    // 一批（玩家的原话：「按点击频率逐个掉，不按批次」）。一轮最多十二颗——
+    // 再多就是在刷屏，看不出频率了。
+    const count = Math.min(12, fresh);
+    const gap = 1000 / count;
+    for (let k = 0; k < count; k++) {
+      window.setTimeout(() => {
+        if (!dead && rain) rain.drop(1);
+      }, Math.round(k * gap));
+    }
   }
 
   /**
@@ -627,6 +642,12 @@ export function renderMultiplayerPage(
     }
     askedRound = state.round;
 
+    // 问的这几秒里全屋等我——和「去看教学」走同一条路：先向服务器报一声
+    // 「我在学」，别人那边立刻变成「稍等」，开赛时刻等我答完再重新盖一遍。
+    // 原来这一问只是本机上盖了一层，服务器那头的开赛时刻照走、下一次轮询就
+    // 在这层底下把倒数数起来了；答得慢一点，牌已经在底下开了。
+    asking = true;
+    void setLearning(true);
     const name = shapeName(lang, state.mode ?? '', family);
     const box = document.createElement('div');
     box.className = 'overlay opaque show';
@@ -647,9 +668,16 @@ export function renderMultiplayerPage(
     const close = () => {
       window.clearInterval(timer);
       box.remove();
+      asking = false;
     };
-    // 说「会」什么都不用做：底下那一层还在轮询，下一次进来就直接数数了。
-    box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', close);
+    // 说「会」（或者没答，时间到了）：向服务器销掉「我在学」。最后一个销掉
+    // 的人会让服务器把开赛时刻重新盖一遍，全屋一起从头数——见 api/room.js
+    // 的 learn。
+    const knows = () => {
+      close();
+      void setLearning(false);
+    };
+    box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
     box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
       close();
       void goLearn(family);
@@ -660,7 +688,7 @@ export function renderMultiplayerPage(
     const paint = () => {
       const left = Math.ceil((until - Date.now()) / 1000);
       tick.textContent = left > 0 ? String(left) : '';
-      if (left <= 0) close();
+      if (left <= 0) knows();
     };
     paint();
     timer = window.setInterval(paint, 200);
@@ -756,7 +784,7 @@ export function renderMultiplayerPage(
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
         playedRound = round;
-        if (!dead) handlers.onMatchStart({ mode, seed });
+        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null });
         return;
       }
       // 服务器留的是四秒半（建议横着玩的玩法五秒半），多出来的半秒都算在第一

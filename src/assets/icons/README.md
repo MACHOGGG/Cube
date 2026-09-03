@@ -38,6 +38,8 @@
 | `nav-profile.svg` `nav-records.svg` | 底部导航两颗 |
 | `sound-on.svg` `sound-off.svg` | 个人主页的声音开关 |
 | `lock.svg` | 未解锁内容旁边的小锁 |
+| `slot-machine-menu.svg` | 主菜单上《随机得分目标》那张老虎机（窗口里画着三个符号） |
+| `slot-machine.svg` | 开局时真的转起来的那台（两个窗口）。**画布 897×521**，滚筒窗口的位置在 `slotReels.ts` 里按它量 |
 | `ctl-pause.svg` `ctl-finish.svg` | 游戏进行中的暂停 / 完成 |
 | `app-tower-rgb.svg` 等 11 个 | 《更换图标》里的 11 个。名字是 `app-` 加上清单里的 id |
 
