@@ -108,6 +108,26 @@ export const answer = (sub, email, token) => ({
   ...(token ? { token } : {}),
 });
 
+/**
+ * 「这个邮箱在 Creem 那边有没有一份还活着的订阅」——只写一遍。
+ *
+ * 原来两个地方各写一份（登录那一支和权限那一支），于是有一天其中一份先认
+ * 了人、另一份没认，就成了「报个别人的邮箱就能白嫖」。查询本身收在这里，
+ * 「凭什么可以拿这个邮箱去查」由调用方各自把关——那是两处唯一该不一样的
+ * 地方，其余一模一样的两次 HTTP 不该抄两遍。
+ *
+ * 返回 { customer, sub }：查无此人是 { customer: null, sub: null }，有客户
+ * 但没有还活着的订阅是 { customer, sub: null }。
+ */
+export async function findSubscription(address) {
+  const customer = await creem('/v1/customers', { query: { email: address } });
+  if (!customer?.id) return { customer: null, sub: null };
+  const list = await creem(`/v1/customers/${encodeURIComponent(customer.id)}/subscriptions`, {
+    query: { page_size: 50 },
+  });
+  return { customer, sub: (list?.items || []).find(entitled) || null };
+}
+
 export const NOBODY = { active: false };
 
 export function readBody(req) {

@@ -11,7 +11,7 @@
  * 它。这么做放走的是「有人没付钱也开得了小屋」，说清楚比藏着好，也不值得
  * 为它把每一个老老实实付了钱的商店用户挡在门外。
  */
-import { creem, configured as creemConfigured, entitled } from './_creem.js';
+import { configured as creemConfigured, findSubscription } from './_creem.js';
 import { codeHolder, loadAccount, normalizeEmail } from './_accounts.js';
 
 /**
@@ -47,11 +47,20 @@ export const ownGrantLive = (account) => Boolean(account && (account.until || 0)
 
 /**
  * 这个人现在是不是天才。identify 已经认过的，把 account 一起传进来省一次读。
+ *
+ * 一条铁律：邮箱地址本身不是证据。它印在收据上、写在每一封发出去的信里，
+ * 谁都知道得到——所以每一条会放行的路，都得先拿令牌证明「这个邮箱是打请
+ * 求这个人自己的」。原来「去问 Creem」那一条没有过这一关，于是只要报出任
+ * 何一个正在付费的邮箱，就能白拿一份天才权益（开小屋、看锁着的排行榜），
+ * 而真正付钱的那位完全不知情。api/subscription.js 顶上早就把这条道理写下
+ * 来了，这里当时没照做。
  */
 export async function isGenius({ email, accountToken, holderCode, storeClaim }, account) {
   if (ownGrantLive(account)) return true;
 
   const address = normalizeEmail(email);
+  /** 这个邮箱确实属于打请求的人——只有证明了才敢拿它去问 Creem。 */
+  let emailProven = false;
 
   if (holderCode && accountToken) {
     const held = await loadAccount(codeHolder(holderCode));
@@ -60,18 +69,19 @@ export async function isGenius({ email, accountToken, holderCode, storeClaim }, 
 
   if (address && accountToken) {
     const own = await loadAccount(address);
-    if (own?.token && own.token === accountToken && ownGrantLive(own)) return true;
+    if (own?.token && own.token === accountToken) {
+      emailProven = true;
+      if (ownGrantLive(own)) return true;
+    }
   }
 
-  if (address && creemConfigured()) {
+  // 刷卡订阅的权益记在 Creem 那边，我们自己的库里只有账号和令牌，所以这一
+  // 步非问不可；但问的前提是上面那一关过了。没过就当没这回事——不是 403，
+  // 是「这个说法不算数」，别的路（内部码、商店）照走。
+  if (emailProven && creemConfigured()) {
     try {
-      const customer = await creem('/v1/customers', { query: { email: address } });
-      if (customer?.id) {
-        const list = await creem(`/v1/customers/${encodeURIComponent(customer.id)}/subscriptions`, {
-          query: { page_size: 50 },
-        });
-        if ((list?.items || []).some(entitled)) return true;
-      }
+      const { sub } = await findSubscription(address);
+      if (sub) return true;
     } catch {
       // Creem 挂了不该把已经付过钱的人关在门外。
       if (storeClaim) return true;

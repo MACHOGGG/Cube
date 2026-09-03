@@ -311,12 +311,18 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
  * subscription is checked against Creem and a redeemed code against its own
  * token; a store purchase has no server-side proof yet, so it is sent as a
  * claim and the server says as much about how far it trusts it.
+ *
+ * 令牌任何一种身份都要带上，不只是内部码那一种。邮箱本身不是证据——它印在
+ * 收据上，谁都知道得到；服务器现在（也应该）要求先拿令牌证明「这个邮箱是我
+ * 自己的」，才肯拿它去问 Creem。原来这里只在内部码那一支带令牌，于是刷卡订
+ * 阅那一支等于只报了个邮箱，服务器也就只能靠邮箱放行——那正是「报别人的邮
+ * 箱就能开走一间小屋」的另一半。见 api/_entitlement.js。
  */
 function hostProof() {
   const mine = entitlement();
   return {
     email: mine.email,
-    accountToken: mine.channel === 'code' ? mine.token : undefined,
+    accountToken: mine.token,
     // Redeemed but not yet attached to an address: the code is the only name
     // this entitlement has, so it has to travel with the token that claims it.
     holderCode: mine.channel === 'code' ? mine.code : undefined,

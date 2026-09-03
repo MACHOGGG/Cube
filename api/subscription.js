@@ -1,5 +1,5 @@
 import {
-  answer, configured, creem, emailOf, entitled, NOBODY, periodOf, readBody, send,
+  answer, configured, creem, emailOf, entitled, findSubscription, NOBODY, periodOf, readBody, send,
 } from './_creem.js';
 import {
   SECRET_RE,
@@ -162,12 +162,11 @@ async function fromEmail(res, rawEmail, password, token) {
   // able to ask is a server fault rather than a verdict about this player.
   if (!configured()) return send(res, 503, { error: 'notConfigured' });
 
-  const customer = await creem('/v1/customers', { query: { email: address } });
-  if (!customer?.id) return send(res, 200, NOBODY);
-  const list = await creem(`/v1/customers/${encodeURIComponent(customer.id)}/subscriptions`, {
-    query: { page_size: 50 },
-  });
-  const sub = (list?.items || []).find(entitled);
+  // 同一次查询别处也要用（api/_entitlement.js 判「是不是天才」），所以查询
+  // 本身收在 _creem.js 里只写一遍。两边唯一该不一样的是「凭什么可以拿这个
+  // 邮箱去查」：这儿凭刚验过的密码，那儿凭账户令牌。
+  const { customer, sub } = await findSubscription(address);
+  // 查无此人，和「有这个人但订阅早就停了」，对玩家是同一件事。
   if (!sub) return send(res, 200, NOBODY);
 
   // Subscribed, but no password was ever set — the tab closed before the
