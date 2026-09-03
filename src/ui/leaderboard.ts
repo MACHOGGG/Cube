@@ -56,16 +56,6 @@ function rowsHtml(page: BoardPage, lang: Lang): string {
     .join('');
 }
 
-/** 榜底下那一句：这张榜多少人，我排第几。 */
-function footHtml(page: BoardPage, lang: Lang): string {
-  const s = STRINGS[lang];
-  const players = s.rankPlayers.replace('{n}', String(page.players));
-  const mine = page.me
-    ? s.rankMyPlace.replace('{n}', String(page.me.rank))
-    : s.rankNotPlayed;
-  return `<p class="rank-foot">${players} · ${mine}</p>`;
-}
-
 /**
  * 锁着的那一屏。
  *
@@ -158,7 +148,7 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
 
   const paint = (result: BoardResult) => {
     if (result.ok) {
-      body.innerHTML = rowsHtml(result.page, opts.lang) + footHtml(result.page, opts.lang);
+      body.innerHTML = rowsHtml(result.page, opts.lang);
       return;
     }
     if (result.reason === 'geniusOnly') {
@@ -233,6 +223,6 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
       return;
     }
     const top = { ...result.page, rows: result.page.rows.slice(0, 3) };
-    host.innerHTML = rowsHtml(top, lang) + footHtml(result.page, lang);
+    host.innerHTML = rowsHtml(top, lang);
   });
 }

@@ -213,7 +213,22 @@ async function pickerAt(width, height) {
         return xs.length === 3 && xs.every((x) => x[0] === xs[0][0]) && xs[0][1] < xs[1][1] && xs[1][1] < xs[2][1];
       })(),
       rules: rules.length,
-      arts: rules.filter((r) => r.querySelector('.tut-rule-art .rl-tile, .tut-rule-art svg')).length,
+      arts: rules.filter((r) => r.querySelector('.tut-rule-art .ra-tile, .tut-rule-art svg')).length,
+      // 玩家的原话：「六条规则的配图……要能够清晰地展示对应的教学内容」——每幅都
+      // 得是会动的（有 CSS 动画在跑），不是一张静图。
+      animated: rules.filter((r) => [...r.querySelectorAll('.tut-rule-art *')].some((e) => getComputedStyle(e).animationName !== 'none')).length,
+      // 三个入口是横向的大圆角矩形按钮（有底、有圆角、比图形宽得多），图形居中。
+      bigBtns: (() => {
+        const page = document.querySelector('.tut-pick').getBoundingClientRect();
+        const btns = [...document.querySelectorAll('.tut-shape-btn')];
+        return btns.length === 3 && btns.every((b) => {
+          const r = b.getBoundingClientRect(); const cs = getComputedStyle(b);
+          const svg = b.querySelector('svg')?.getBoundingClientRect();
+          const centred = svg ? Math.abs((svg.left + svg.width / 2) - (r.left + r.width / 2)) <= 2 : false;
+          const boxed = parseFloat(cs.borderTopLeftRadius) >= 8 && (cs.borderTopStyle !== 'none' || cs.backgroundColor !== 'rgba(0, 0, 0, 0)');
+          return r.width >= page.width * 0.6 && r.width > r.height * 2 && centred && boxed;
+        });
+      })(),
       texts: rules.map((r) => r.querySelector('.tut-rule-text')?.textContent.trim().length || 0),
       oldTitle: /如何滑|重新观看/.test(document.body.textContent),
       backGlyph: Boolean(document.querySelector('#backBtn svg')),
@@ -234,6 +249,8 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   const m = await pickerAt(w, h);
   check(`${label} · 教学挑选页：三个图形上下排着（方块、小球、三角）`, m.shapes.join(',') === 'square,circle,triangle' && m.stacked, m.shapes.join(','));
   check(`${label} · 六条规则，每条配图`, m.rules === 6 && m.arts === 6 && m.texts.every((n) => n > 8), `${m.rules} 条 · ${m.arts} 幅`);
+  check(`${label} · 六幅配图都在动`, m.animated === 6, `${m.animated} 幅`);
+  check(`${label} · 三个入口是横向的大圆角矩形按钮，图形居中`, m.bigBtns);
   check(`${label} · 没有《如何滑……重新观看》那两行字`, !m.oldTitle);
   check(`${label} · 《返回》是「<」的图示，在最下面，不压底排`, m.backGlyph && m.backText === '' && m.backIsLast && m.backBottomOk);
   check(`${label} · 整页一屏装下，不用滚`, !m.scrolls);

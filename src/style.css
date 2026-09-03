@@ -3267,7 +3267,7 @@ body.is-room-host::after {
 .story-controls .icon-btn.story-ctl:active { transform: scale(0.94); }
 .story-controls .icon-btn.story-ctl:disabled { opacity: 0.38; }
 
-/* ---------- 教学挑选页：三个图形 + 六条规则，一屏装下 ---------- */
+/* ---------- 教学挑选页：三条大按钮 + 六条规则，一屏装下 ---------- */
 /* 整页的高就是屏幕减去底排导航那一条；里面按弹性分，谁都不许把页撑长。 */
 .tut-pick {
   height: calc(100vh - 106px - env(safe-area-inset-bottom, 0px));
@@ -3275,18 +3275,28 @@ body.is-room-host::after {
   min-height: 0; padding: clamp(8px, 1.6vh, 16px) 16px 0; gap: clamp(6px, 1.2vh, 12px);
   display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
 }
+/* 三个入口是三条横向的大圆角矩形按钮（和从前带文字那一版的卡片 .shape-card
+   一个底），里面只居中一个图形。玩家的原话：「三个横向的大按钮（就像上一版
+   未修改之前有文字版的那样圆角矩形作为按钮）现在只是只有居中的图案了而已」。 */
 .tut-pick-shapes {
-  display: flex; flex-direction: column; align-items: center; gap: clamp(6px, 1.3vh, 12px); flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.4vh, 12px);
+  flex: none; width: 100%;
 }
 .tut-shape-btn {
-  width: clamp(44px, 8vh, 68px); height: clamp(44px, 8vh, 68px); padding: 0;
-  border: none; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: transform 120ms ease;
+  --h: clamp(44px, 7vh, 62px);
+  width: min(100%, 420px); height: var(--h); padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease, border-color 150ms ease;
 }
-.tut-shape-btn svg { width: 100%; height: 100%; display: block; }
-.tut-shape-btn:active { transform: scale(0.94); }
+.tut-shape-btn:hover { border-color: var(--accent); }
+.tut-shape-btn:active { transform: scale(0.98); }
+/* 图形按按钮的高定大小（写死成 px，不用百分比——按钮是 flex 盒，百分比高在这儿靠不住）。 */
+.tut-shape-btn svg { width: calc(var(--h) * 0.72); height: calc(var(--h) * 0.72); display: block; }
+/* 六条在剩下的高度里匀开：高屏幕上不至于挤成一团、上面空一大块。 */
 .tut-rules {
-  display: flex; flex-direction: column; justify-content: center; gap: clamp(4px, 0.9vh, 10px);
+  display: flex; flex-direction: column; justify-content: space-evenly; gap: clamp(4px, 1vh, 10px);
   flex: 1; min-height: 0;
 }
 .tut-rule { display: flex; align-items: center; gap: 10px; min-height: 0; }
@@ -3294,10 +3304,12 @@ body.is-room-host::after {
   flex: none; width: 1.5em; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
   color: var(--ink-faint); text-align: right;
 }
+/* 配图的框：里面那块 4×2 的小棋盘按 em 画，所以整幅图跟着这一行的 font-size
+   缩放；一个周期（--T）里各元素各动各的那一段。 */
 .tut-rule-art {
-  flex: none; width: clamp(60px, 10vh, 84px); height: clamp(30px, 5vh, 42px);
-  display: flex; align-items: center; justify-content: center; gap: 4px;
-  font-size: clamp(13px, 2.3vh, 19px); color: var(--ink-soft);
+  --T: 6.4s;
+  flex: none; width: 5.2em; height: 2.7em; font-size: clamp(13px, 2.2vh, 19px);
+  display: flex; align-items: center; justify-content: center; gap: 0.22em; color: var(--ink-soft);
 }
 .tut-rule-text {
   flex: 1; min-width: 0; font-size: clamp(10.5px, 1.5vh, 13.5px); line-height: 1.3; color: var(--ink);
@@ -3305,36 +3317,133 @@ body.is-room-host::after {
 }
 .tut-pick .page-back-row { flex: none; margin: 0 0 4px; }
 .tut-pick .page-back.icon-btn { width: clamp(46px, 7vh, 62px); height: clamp(46px, 7vh, 62px); }
-/* 规则图解里的棋子：正面一块实色（--f），反面暗底一颗点（--d），1em 见方。 */
-.rl-row { display: inline-flex; gap: 0.16em; padding: 0.14em; border-radius: 0.3em; }
-.rl-grid { display: inline-grid; grid-template-columns: repeat(3, 1em); gap: 0.12em; }
-.rl-tile {
-  position: relative; display: inline-block; width: 1em; height: 1em; flex: none;
-  transform-style: preserve-3d;
+/* 横屏一屏太矮，装不下六条：改成左边三条按钮、右边六条规则的两栏，页可以
+   往下滚，底下给底排导航留出位置。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .tut-pick {
+    height: auto; min-height: calc(100dvh - 106px - env(safe-area-inset-bottom, 0px)); overflow: visible;
+    display: grid; grid-template-columns: minmax(150px, 2fr) 3fr; grid-template-rows: auto auto;
+    column-gap: 20px; row-gap: 8px; padding: 8px 16px calc(106px + env(safe-area-inset-bottom, 0px));
+  }
+  .tut-pick-shapes { grid-column: 1; grid-row: 1; justify-content: center; }
+  .tut-shape-btn { --h: 44px; }
+  .tut-rules { grid-column: 2; grid-row: 1 / 3; gap: 5px; }
+  .tut-rule-art { font-size: 11.5px; }
+  .tut-rule-text { font-size: 11px; -webkit-line-clamp: 4; }
+  /* 《返回》放在左栏三条按钮底下，右栏六条规则就能整个露在底排上面。 */
+  .tut-pick .page-back-row { grid-column: 1; grid-row: 2; margin-top: 2px; }
 }
-.rl-front, .rl-back {
-  position: absolute; inset: 0; border-radius: 22%; backface-visibility: hidden;
+
+/* ---- 规则配图（ruleArt.ts）：借基础教学分镜的画法 ---- */
+/* 4×2 的小棋盘：暗底、圆角，和游戏里的版图一个样子。整幅图在周期末尾淡出，
+   回到开头再来一遍（ra-still 的那幅不用，它本来就是来回的）。 */
+.ra-board {
+  --pad: 0.16em; --gap: 0.16em;
+  position: relative; display: grid; grid-template-columns: repeat(4, 1em); grid-auto-rows: 1em;
+  gap: var(--gap); padding: var(--pad); border-radius: 0.34em; background: var(--play-panel, #3D3128);
+  animation: ra-cycle var(--T) linear infinite;
 }
-.rl-front { background: var(--f); }
-.rl-back {
-  background: var(--play-panel, #3D3128); transform: rotateY(180deg);
+.ra-board.ra-still { animation: none; }
+@keyframes ra-cycle { 0%, 94% { opacity: 1; } 97%, 100% { opacity: 0; } }
+/* 一枚棋子：正面一块实色（--f），反面是比版图略深的一块、中间一颗点（--d）
+   ——和棋盘上翻过去的棋子一个样子。 */
+.ra-tile { position: relative; width: 1em; height: 1em; transform-style: preserve-3d; }
+.ra-tile.ra-blank { visibility: hidden; }
+.ra-f, .ra-b { position: absolute; inset: 0; border-radius: 22%; backface-visibility: hidden; }
+.ra-f { background: var(--f); }
+.ra-b {
+  background: #2A231C; transform: rotateY(180deg); box-shadow: inset 0 0 0 0.06em rgba(255, 255, 255, 0.16);
   display: flex; align-items: center; justify-content: center;
 }
-.rl-back b { width: 44%; height: 44%; border-radius: 50%; background: var(--d); }
-.rl-tile--back { transform: rotateY(180deg); }
-.rl-flip { animation: rl-flip 3.2s ease-in-out infinite alternate; }
-@keyframes rl-flip { 0%, 38% { transform: rotateY(0); } 62%, 100% { transform: rotateY(180deg); } }
-.rl-fade { animation: rl-fade 3.2s ease-in-out infinite; transform: rotateY(180deg); }
-@keyframes rl-fade { 0%, 45% { opacity: 1; } 65%, 85% { opacity: 0; } 100% { opacity: 1; } }
-/* 凑成图案那一圈光：和棋盘上得分时那一圈同一个意思。 */
-.rl-row--score { animation: rl-glow 2.4s ease-in-out infinite; }
-@keyframes rl-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(216, 155, 30, 0); }
-  50% { box-shadow: 0 0 0 0.16em rgba(216, 155, 30, 0.55); }
+.ra-b > span { width: 46%; height: 46%; border-radius: 50%; background: var(--d); }
+.ra-back { transform: rotateY(180deg); }
+/* 会滑的那一列：窗口盖住两格，里面三枚叠着，整条向上滑一格。 */
+.ra-win {
+  position: absolute; overflow: hidden; width: 1em; height: calc(2em + var(--gap));
+  left: calc(var(--pad) + var(--c) * (1em + var(--gap))); top: var(--pad);
 }
-.rl-check { width: 1.1em; height: 1.1em; margin-left: 0.2em; flex: none; }
-.rl-sym { width: 1.15em; height: 1.15em; flex: none; }
-@media (prefers-reduced-motion: reduce) { .rl-flip, .rl-fade, .rl-row--score { animation: none; } }
+.ra-strip { display: flex; flex-direction: column; gap: var(--gap); animation: ra-slide var(--T) ease-in-out infinite; }
+@keyframes ra-slide { 0%, 18% { transform: translateY(0); } 30%, 100% { transform: translateY(calc(-1em - var(--gap))); } }
+/* 白箭头：盖在要滑的那一列上，向上，开头拉一下（教学里箭头的那个动作），
+   滑完就收。 */
+.ra-arrow {
+  position: absolute; width: 1em; height: calc(2em + var(--gap));
+  left: calc(var(--pad) + var(--c) * (1em + var(--gap))); top: var(--pad);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)); animation: ra-arrow var(--T) linear infinite;
+}
+@keyframes ra-arrow { 0%, 16% { opacity: 1; } 19%, 100% { opacity: 0; } }
+.ra-arrow-nudge { transform-box: fill-box; transform-origin: 50% 85%; animation: ra-nudge var(--T) ease-in-out infinite; }
+@keyframes ra-nudge {
+  0%, 3% { transform: translateY(0) scaleY(1); }
+  7% { transform: translateY(-9%) scaleY(1.22); }
+  11% { transform: translateY(2%) scaleY(0.94); }
+  14%, 100% { transform: none; }
+}
+/* 白色对勾：得分那一段闪三下，停一会儿（教学里对勾的那个节奏）。 */
+.ra-check {
+  position: absolute; width: 1em; height: 1em; opacity: 0;
+  left: calc(var(--pad) + var(--c) * (1em + var(--gap))); top: calc(var(--pad) + var(--r) * (1em + var(--gap)));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)); animation: ra-check var(--T) linear infinite;
+}
+@keyframes ra-check {
+  0%, 33% { opacity: 0; } 36%, 40% { opacity: 1; } 43% { opacity: 0; } 46%, 50% { opacity: 1; }
+  53% { opacity: 0; } 56%, 64% { opacity: 1; } 67%, 100% { opacity: 0; }
+}
+/* 得分之后翻面：对勾停了再翻。 */
+.ra-flip { animation: ra-flip var(--T) ease-in-out infinite; }
+@keyframes ra-flip { 0%, 66% { transform: rotateY(0); } 74%, 100% { transform: rotateY(180deg); } }
+/* 第 1 条：一枚翻过去露一下反面，再翻回来。 */
+.ra-peek { animation: ra-peek var(--T) ease-in-out infinite; }
+@keyframes ra-peek { 0%, 26% { transform: rotateY(0); } 34%, 58% { transform: rotateY(180deg); } 66%, 100% { transform: rotateY(0); } }
+/* 第 4 条：反面连成一行，得分后整行消掉，留下虚线空位闪两下（方块教学最后
+   一幕的画法）。 */
+.ra-clear { animation: ra-clear var(--T) ease-in infinite; }
+@keyframes ra-clear { 0%, 70% { opacity: 1; scale: 1; } 76%, 100% { opacity: 0; scale: 0.5; } }
+.ra-hole {
+  position: absolute; width: 1em; height: 1em; box-sizing: border-box; border-radius: 50%; opacity: 0;
+  border: 0.09em dashed #9A9A9A;
+  left: calc(var(--pad) + var(--c) * (1em + var(--gap))); top: calc(var(--pad) + var(--r) * (1em + var(--gap)));
+  animation: ra-hole var(--T) linear infinite;
+}
+@keyframes ra-hole { 0%, 76% { opacity: 0; } 78%, 82% { opacity: 1; } 84%, 86% { opacity: 0; } 88%, 92% { opacity: 1; } 94%, 100% { opacity: 0; } }
+/* 第 5 条：八枚一枚接一枚翻到反面，全翻完了出一个「完成」。 */
+.ra-f0 { animation: ra-f0 var(--T) ease-in-out infinite; }
+.ra-f1 { animation: ra-f1 var(--T) ease-in-out infinite; }
+.ra-f2 { animation: ra-f2 var(--T) ease-in-out infinite; }
+.ra-f3 { animation: ra-f3 var(--T) ease-in-out infinite; }
+.ra-f4 { animation: ra-f4 var(--T) ease-in-out infinite; }
+.ra-f5 { animation: ra-f5 var(--T) ease-in-out infinite; }
+.ra-f6 { animation: ra-f6 var(--T) ease-in-out infinite; }
+.ra-f7 { animation: ra-f7 var(--T) ease-in-out infinite; }
+@keyframes ra-f0 { 0%, 8% { transform: rotateY(0); } 14%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f1 { 0%, 17% { transform: rotateY(0); } 23%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f2 { 0%, 26% { transform: rotateY(0); } 32%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f3 { 0%, 35% { transform: rotateY(0); } 41%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f4 { 0%, 44% { transform: rotateY(0); } 50%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f5 { 0%, 53% { transform: rotateY(0); } 59%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f6 { 0%, 62% { transform: rotateY(0); } 68%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-f7 { 0%, 71% { transform: rotateY(0); } 77%, 100% { transform: rotateY(180deg); } }
+.ra-end {
+  position: absolute; left: 50%; top: 50%; width: 1.3em; height: 1.3em;
+  transform: translate(-50%, -50%) scale(0); animation: ra-end var(--T) ease-out infinite;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+@keyframes ra-end { 0%, 80% { transform: translate(-50%, -50%) scale(0); } 86%, 100% { transform: translate(-50%, -50%) scale(1); } }
+/* 第 6 条：秒表的针走一圈、星星闪一下，等号右边的奖杯亮起来。 */
+.ra-sym { width: 1.1em; height: 1.1em; flex: none; }
+.ra-sym--eq { width: 0.66em; }
+.ra-hand { transform-box: view-box; transform-origin: 50px 56px; animation: ra-hand var(--T) linear infinite; }
+@keyframes ra-hand { 0% { transform: rotate(0); } 55%, 100% { transform: rotate(320deg); } }
+.ra-star { transform-box: fill-box; transform-origin: center; animation: ra-star var(--T) ease-in-out infinite; }
+@keyframes ra-star { 0%, 58% { transform: scale(1); } 64% { transform: scale(1.28); } 70%, 100% { transform: scale(1); } }
+.ra-trophy { animation: ra-trophy var(--T) ease-in-out infinite; }
+@keyframes ra-trophy {
+  0%, 70% { filter: drop-shadow(0 0 0 rgba(216, 155, 30, 0)); }
+  82%, 100% { filter: drop-shadow(0 0 0.28em rgba(216, 155, 30, 0.9)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tut-rule-art, .tut-rule-art * { animation: none !important; }
+}
 
 /* ---------- 《无限反转》挑图形那一屏：两张图 + 一句规矩 ---------- */
 .flip-tagline { margin: clamp(12px, 3vh, 26px) 0 0; text-align: center; }
