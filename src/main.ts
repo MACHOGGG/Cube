@@ -360,6 +360,7 @@ function showMenu() {
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onRandomTarget: () => showRandomTarget('menu'),
+    onFlipMode: showFlipMode,
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: () => {
       mpOrigin = 'menu';

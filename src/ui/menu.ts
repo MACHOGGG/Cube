@@ -12,6 +12,8 @@ import { geniusLogoFluid } from './geniusLogo';
 // 主菜单上那台老虎机是单独一张图（三个窗口里画着蓝三角、橙圆、红方块），
 // 和开局时真的转起来的那台（slot-machine.svg，两个窗口）不是同一个文件。
 const ICON_SLOT_MACHINE = custom('slot-machine-menu') ?? custom('slot-machine') ?? '';
+// 《无限反转》：玩家画的四层翻面（src/assets/icons/flip-mode-menu.svg）。
+const ICON_FLIP_MODE = custom('flip-mode-menu') ?? '';
 import {
   ICON_BASE_SQUARE,
   ICON_BASE_CIRCLE,
@@ -42,6 +44,8 @@ export interface MenuHandlers {
   onMultiplayer: () => void;
   /** 《随机得分目标》：挑图形、转出这一局的得分图案，然后开局。 */
   onRandomTarget: () => void;
+  /** 《无限反转》：挑方块或小球，得分翻面来回翻，120 秒。 */
+  onFlipMode: () => void;
 }
 
 /**
@@ -312,14 +316,38 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : handlers.onRandomTarget()));
     (wide ? row : grid).appendChild(btn);
     if (wide) inRow++;
+    dropFlipCard();
+  };
+  /**
+   * 锁区第二张：《无限反转》，紧跟在老虎机后面（玩家的原话：「放在主菜单的
+   * 老虎机下一个，也是对无权限的玩家封锁的」）。和老虎机同一套：没开通就是
+   * 居中一把锁加右下角的天才招牌，按下去开订阅窗；开通了按下去进挑图形那页。
+   */
+  const dropFlipCard = () => {
+    const locked = !isGenius();
+    const btn = iconButton(
+      ICON_FLIP_MODE,
+      locked ? `${s.flipModeTitle} · ${s.geniusOnly}` : s.flipModeTitle,
+    );
+    if (locked) {
+      btn.classList.add('home-icon-btn--locked');
+      btn.insertAdjacentHTML(
+        'beforeend',
+        `<span class="center-pick-lock">${ICON_LOCK}</span>` +
+          `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
+      );
+    }
+    btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : handlers.onFlipMode()));
+    (wide ? row : grid).appendChild(btn);
+    if (wide) inRow++;
   };
 
-  // 宽屏一排六张：稿子上这一排是五张棋盘，现在多了一张老虎机。让它换行的话
-  // 整页就高出一行（一百多像素），而这一页的规矩是「一屏装得下，不用滚」
-  // （见 check-overlap）。六张挤一排不会横着溢出——每张按 flex 平分，各自还
-  // 有 max-width 收着，多一张只是每张窄一点、跟着矮一点，整页反而更矮。
+  // 宽屏一排七张：稿子上这一排是五张棋盘，后来多了老虎机，现在又多了无限反
+  // 转。让它换行的话整页就高出一行（一百多像素），而这一页的规矩是「一屏装
+  // 得下，不用滚」（见 check-overlap）。七张挤一排不会横着溢出——每张按 flex
+  // 平分，各自还有 max-width 收着，多一张只是每张窄一点、跟着矮一点。
   for (const { card, shape } of ordered) {
-    if (wide && inRow >= 6) { row = newRow(); inRow = 0; }
+    if (wide && inRow >= 7) { row = newRow(); inRow = 0; }
     if (isLayoutLocked(card.id)) dropSlotCard();
     const isLocked = isLayoutLocked(card.id);
     const name = shapeName(lang, card.id, card.name);

@@ -116,7 +116,7 @@ check('从一局里退出来，主菜单还停在刚才那儿', Math.abs(after -
 
 // ---- 5. 锁着的玩法：锁在正当中，招牌收在右下角，两者碰不到 -----------------
 //
-// 没开通的玩家在主菜单上看见三张锁着的卡（老虎机、七色圆球、进阶三角）。锁要正
+// 没开通的玩家在主菜单上看见四张锁着的卡（老虎机、无限反转、七色圆球、进阶三角）。锁要正
 // 正地压在图形中心，三把一样大；天才招牌收在卡片右下角，不许压到锁上，也不
 // 许探出卡片去压到邻居。卡片的大小随屏幕变——手机竖着两列、横过来是电脑那
 // 套版式但一张只剩 96px、电脑上二百多——三种都量一遍。
@@ -161,9 +161,12 @@ async function lockedCards(width, height) {
 for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
-  check(`${label}：三张锁着的卡都在`, cards.length === 3, brief);
+  check(`${label}：四张锁着的卡都在`, cards.length === 4, brief);
+  // 玩家的原话：「作为无限反转模式的 logo 放在主菜单的老虎机下一个」。
+  check(`${label}：《无限反转》紧跟在老虎机后面`,
+    cards[0]?.name === '老虎机模式' && cards[1]?.name === '无限反转', cards.map((c) => c.name).join(' → '));
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
-  check(`${label}：三把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
+  check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
   check(`${label}：招牌收在卡片里`, cards.every((c) => c.inside));
 }
