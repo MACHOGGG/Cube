@@ -139,23 +139,27 @@ async function backToProfile(before, label, backSel = '#backBtn') {
   check('世界排名：标题就叫世界排名', r.label === '世界排名', r.label);
   await backToProfile(before, '世界排名');
 }
-// 更多玩法 → 无限反转：两张图（方块、小球）、一句规矩、锁
+// 更多玩法：陈列页——一个圆角框，装着无限反转那张图；要玩得回主菜单那张卡
 {
-  const before = await openFrom('moreModesRow', '.flip-page');
-  const f = await page.evaluate(() => ({
-    opts: [...document.querySelectorAll('.flip-page .slot-pick-opt')].map((b) => b.dataset.family),
-    locks: document.querySelectorAll('.flip-page .slot-pick-lock').length,
-    line: document.querySelector('.flip-tagline')?.textContent.trim(),
-    nav: getComputedStyle(document.querySelector('.home-nav')).display,
+  const before = await openFrom('moreModesRow', '.modes-page');
+  const m = await page.evaluate(() => ({
+    cards: [...document.querySelectorAll('.modes-page .lay-card')].map((c) => ({
+      mode: c.dataset.mode, name: c.querySelector('.lay-name')?.textContent.trim(),
+      svg: Boolean(c.querySelector('.lay-thumb svg')),
+      radius: parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0,
+      border: getComputedStyle(c).borderTopStyle,
+      buttons: c.querySelectorAll('button').length,
+    })),
+    picker: Boolean(document.querySelector('.flip-page')),
+    label: document.querySelector('.modes-page .menu-section-label')?.textContent.trim(),
   }));
-  check('无限反转：只有方块和小球两张图', f.opts.join(',') === 'square,circle', f.opts.join(','));
-  check('无限反转：没开通的两张都挂着锁，底下一句规矩', f.locks === 2 && /120/.test(f.line || ''), `${f.locks} 把 · ${f.line}`);
-  await page.click('.flip-page .slot-pick-opt[data-family="square"]');
-  await page.waitForTimeout(600);
-  check('无限反转：没开通，点了开的是订阅窗，不是一局', (await page.$('#boardWrap .tile')) === null && Boolean(await page.$('.genius-perks')));
-  await page.click('#geniusClose').catch(() => {});
-  await page.waitForTimeout(300);
-  await backToProfile(before, '无限反转', '#flipBack');
+  check('更多玩法：一个圆角框，装着无限反转那张图，底下写着名字',
+    m.cards.length === 1 && m.cards[0].mode === 'flip' && m.cards[0].svg && m.cards[0].radius >= 8 &&
+      m.cards[0].border !== 'none' && m.cards[0].name === '无限反转',
+    JSON.stringify(m.cards));
+  check('更多玩法：只是陈列，不是挑图形页，图也按不动', !m.picker && m.cards[0]?.buttons === 0);
+  check('更多玩法：标题就叫更多玩法', m.label === '更多玩法', m.label);
+  await backToProfile(before, '更多玩法');
 }
 // 老虎机模式（介绍页）
 {
@@ -273,7 +277,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   await c.close();
 }
 
-// ---- 4b. 开通了的人：无限反转真开得了局，钟从 2:00 往下数 ------------------
+// ---- 4b. 开通了的人：主菜单那张卡进挑图形页，真开得了局，钟从 1:00 往下数 ------
 {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await c.addInitScript(() => {
@@ -284,7 +288,8 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   const p = await c.newPage();
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForSelector('#navProfile', { timeout: 20000 });
-  await p.click('#navProfile'); await p.waitForSelector('#moreModesRow'); await p.click('#moreModesRow');
+  // 《更多玩法》那一行是陈列页；要玩走的是主菜单上那张卡。
+  await p.click('.home-icon-btn[aria-label="无限反转"]');
   await p.waitForSelector('.flip-page', { timeout: 8000 });
   check('开通了：两张图都不挂锁', (await p.$$('.flip-page .slot-pick-lock')).length === 0);
   await p.click('.flip-page .slot-pick-opt[data-family="square"]');
@@ -295,7 +300,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   await p.waitForTimeout(2200);
   const t2 = await p.$eval('#hud-time', (e) => e.textContent.trim());
   const sec = (t) => { const m = t.match(/(\d+):(\d+)/); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
-  check('无限反转：钟从 2:00 往下数', sec(t1) <= 120 && sec(t1) >= 115 && sec(t2) < sec(t1), `${t1} → ${t2}`);
+  check('无限反转：钟从 1:00 往下数', sec(t1) <= 60 && sec(t1) >= 55 && sec(t2) < sec(t1), `${t1} → ${t2}`);
   await c.close();
 }
 

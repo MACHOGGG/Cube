@@ -2,6 +2,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { CTL_BACK, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
+import { ICON_FLIP_MODE } from './homeIcons';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
@@ -50,6 +51,12 @@ export interface ShellMeta {
   practice?: boolean;
   /** 计时局。开局页摆的换成主菜单上那只橙色秒表，也就是玩家刚刚按下的那张。 */
   timed?: boolean;
+  /**
+   * 无限反转那一局（见 ShapeGameOpts.flip）。开局页上摆的仍是玩家挑的那个图形
+   * （不换成秒表——他按的不是计时卡），倒数底下多一块：无限反转的图标加一句
+   * 话，说清这一局的计分和别的局不同（连击加成减弱、没有时间奖励）。
+   */
+  flip?: boolean;
   /**
    * 随机得分目标那一局转出来的两个图案。
    *
@@ -119,6 +126,17 @@ export interface ShellRefs {
  * board's own piece colours inside — rather than a stock rotate glyph, and
  * it only ever appears where turning really helps.
  */
+/**
+ * 《无限反转》开局页上那一块：左边这个玩法的图标，右边一句话——连击加成减弱、
+ * 没有时间奖励。玩家的原话：「在进入游戏时，会显示一个图标和文字解释说，相对
+ * 应的，连击翻倍得分会减弱，时间奖励会取消」。样子和转手机那块提示是一套。
+ */
+const FLIP_HINT = (copy: string) => `
+  <div class="flip-hint">
+    <span class="flip-hint-icon" aria-hidden="true">${ICON_FLIP_MODE}</span>
+    <p class="flip-hint-copy">${copy}</p>
+  </div>`;
+
 const ROTATE_HINT = (copy: string | null) => `
   <div class="rotate-hint${copy ? '' : ' rotate-hint--bare'}">
     <svg class="rotate-hint-phone" viewBox="0 0 120 120" aria-hidden="true">
@@ -252,11 +270,16 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       ${startStageHtml({
         shapeId: meta.shapeId,
         bomb: meta.bomb,
-        timed: meta.timed,
+        // 无限反转也是计时的，但开局页上摆的是他挑的那个图形，不是秒表。
+        timed: meta.timed && !meta.flip,
         room: !!currentRoom(),
         countId: 'startCount',
         emblem: meta.slotTargets ? slotMachineHtml() : undefined,
-        extra: meta.landscape ? ROTATE_HINT(landscapePlayed() ? null : s.rotateHint) : '',
+        extra: meta.flip
+          ? FLIP_HINT(s.flipScoringHint)
+          : meta.landscape
+            ? ROTATE_HINT(landscapePlayed() ? null : s.rotateHint)
+            : '',
         // 老虎机那一局底下只留《退出》：轮子已经在转了，「暂停」停不住它，
         // 而这一幕本来就只有五秒。玩家的原话：「下面还是只有那个《退出》」。
         actions:

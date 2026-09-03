@@ -1,7 +1,7 @@
 import type { ShellRefs } from '../ui/gameShell';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { createTimer, formatClock } from './timer';
-import { createStreakTracker, createCascadeStepper, type CascadeConfig } from './scoring';
+import { createStreakTracker, createCascadeStepper, flipStreakDelta, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
 import { trackGameStart, trackGameEnd, trackShare } from './analytics';
@@ -91,6 +91,14 @@ export interface GameControllerHooks {
   timeLimitSec?: number;
   /** 练习盘：打完了就再来一盘，不结算、不存档、不上榜、不报统计。见 ShapeGameOpts.practice。 */
   practice?: boolean;
+  /**
+   * 无限反转（见 ShapeGameOpts.flip）。这一局的计分和别的局不同：
+   *   · 没有用时系数——综合得分里那一项恒为 1；
+   *   · 连击不再是 ×1 / 1.5 / 2 / 2.5 加同一步里 ×3 的连锁，而是连续第 n 次
+   *     得分 = 单次得分 × 1.2^(n−1)，每次四舍五入取整（4 → 4.8≈5 → 5.76≈6 …）；
+   *     一步没得分就从头数。
+   */
+  flip?: boolean;
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -214,6 +222,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   let score = 0;
   let moves = 0;
+  /** 无限反转：到现在为止连续得了几次分（含同一步里的连锁），一步没得分就归零。 */
+  let flipChain = 0;
   let started = false;
   let paused = false;
   let gameOver = false;
@@ -260,6 +270,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     paused = false;
     resolving = false;
     streak.reset();
+    flipChain = 0;
     scoreReel.reset();
     perf.reset();
     clearedDotColors = new Set();
@@ -293,7 +304,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 单人和小屋同一条时间曲线（见 TIME_GAIN）。房间的实时排名比的仍然是原始
     // 得分（那时这一局还没走完，综合得分还不存在），这里算的是走完之后的综合
     // 得分。
-    const timeMult = timeMultiplierFor(elapsed);
+    // 无限反转没有用时系数（玩家的原话：「用时系数要取消」）——一局本来就是
+    // 固定的 60 秒，快慢没有意义。
+    const timeMult = hooks.flip ? 1 : timeMultiplierFor(elapsed);
     // Leaving tiles face-up costs the same either way — walking away early
     // and running the board into a genuine dead end are charged alike, so
     // "stop now" is never a way to dodge the cost of an unfinished board.
@@ -534,6 +547,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // out of step() already rendered at least once on its own.
       if (!totalRaw) hooks.render();
       streak.apply(totalRaw); // advances/resets the streak level; its delta was already distributed live below
+      if (!totalRaw) flipChain = 0;
       perf.onMove(moveWeight);
       updatePerfDisplay();
       if (gameOver) {
@@ -564,7 +578,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // raw product lands on halves — and a fractional score is wrong twice
       // over: "184.5" is not a score a player should see, and the digit reel
       // has no way to draw a decimal point (see scoreReel.setValue).
-      const delta = Math.round(s.points * multiplier * comboMult);
+      // 无限反转：连续第 n 次得分 = 单次得分 × 1.2^(n−1)，每次四舍五入；同一步里
+      // 的连锁也各算一次。跨步的 ×1.5/2/2.5 和同一步里的 ×3 在这一局都不用。
+      const delta = hooks.flip
+        ? flipStreakDelta(s.points, flipChain)
+        : Math.round(s.points * multiplier * comboMult);
+      if (hooks.flip) flipChain++;
       // Split for the end-of-run breakdown: the pattern's own points, the
       // whole-line bonus, and everything the streak/chain multipliers added.
       if (s.lineBonusGroups.length) linePoints += s.points;
@@ -759,6 +778,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // 练习盘不接：它只是等待页上的一块，那一屏的返回归小屋页管。
   if (!hooks.practice) setScreenBack(backFromGame);
 
+  /**
+   * 页面被切到背后（iOS 上侧滑回桌面、切去别的 App、锁屏）：单人局立刻暂停。
+   *
+   * 表停在切走的那一刻，回来看到的是暂停页、按《继续》接着打——和手机游戏一
+   * 个习惯。不停的话，秒表在背后一直走：计时局回来已经结束，普通局的用时系数
+   * 白白掉下去，而玩家什么都没做错。
+   *
+   * 小屋局不停：一场同步竞赛，别人的钟不会跟着停（那一局本来就没有《暂停》）。
+   * 练习盘也不停，它不结算。
+   */
+  const onVisibility = () => {
+    if (document.visibilityState !== 'hidden') return;
+    if (!started || gameOver || paused || hooks.practice || currentRoom()) return;
+    doPause();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+
   return {
     get score() {
       return score;
@@ -787,6 +823,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();
+      document.removeEventListener('visibilitychange', onVisibility);
     },
   };
 }

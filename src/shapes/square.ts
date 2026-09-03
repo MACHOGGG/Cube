@@ -114,6 +114,7 @@ export function createSquareGame(): ShapeGame {
         practice: !!opts?.practice,
         shapeId: 'square',
         timed: !!opts?.timeLimitSec,
+        flip: flipMode,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'square', '方块')}`,
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
@@ -682,6 +683,7 @@ export function createSquareGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
+        flip: flipMode,
         bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'square', '方块'),
         shapeId: 'square',

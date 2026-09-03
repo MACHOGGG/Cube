@@ -1,0 +1,9 @@
+{
+  "name": "bankRun",
+  "version": "1.0.0",
+  "description": "Slides 小游戏：记一局，累计得分",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

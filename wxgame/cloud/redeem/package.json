@@ -1,0 +1,9 @@
+{
+  "name": "redeem",
+  "version": "1.0.0",
+  "description": "Slides 小游戏：累计得分换正规版天才码",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

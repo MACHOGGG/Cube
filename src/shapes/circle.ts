@@ -222,6 +222,7 @@ export function createCircleGame(): ShapeGame {
         practice: !!opts?.practice,
         shapeId: 'circle',
         timed: !!opts?.timeLimitSec,
+        flip: flipMode,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'circle', '圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
@@ -768,6 +769,7 @@ export function createCircleGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
+        flip: flipMode,
         bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circle', '圆球'),
         shapeId: 'circle',

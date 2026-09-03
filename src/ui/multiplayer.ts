@@ -29,6 +29,7 @@ import {
   type RoomError,
   type RoomState,
   lastPlayedRound,
+  latestRoomState,
   markRoundPlayed,
   nudgeHost,
   reportScore,
@@ -190,6 +191,8 @@ export function renderMultiplayerPage(
    * 中途进来的人、走了又回来的人都坐在这儿看实时排行，下一局开始才入局。
    */
   let sideWait: WaitPanel | null = null;
+  /** 坐等待页时那声「我不打了」正在路上：回来之前不重复发。 */
+  let sitOutPending = false;
   const stopAll = () => {
     sideWait?.remove();
     sideWait = null;
@@ -448,23 +451,33 @@ export function renderMultiplayerPage(
         sideWait = null;
         return;
       }
+      const meId = currentRoom()?.playerId;
       if (!sideWait) {
-        const meId = currentRoom()?.playerId;
         sideWait = showWaitPanel(lang, {
           shapeId: st.mode ?? 'square',
           meId,
           code: st.code,
           onLeave: () => confirmLeaveRoom(lang, leave),
         });
-        // 坐下来看的这一刻，向服务器交一次卷：「这一局我不打了」。服务器判
-        // 一局是否打完，看的是每个座位交没交卷；坐在这儿轮询的人，座位一直
-        // 「在线」却永远不交卷，别人交完卷就得等他——等到 90 秒无人报到才
-        // 算他缺席。来晚的、学教学学过了头的、局中刷新了的，都走这条路。
-        // 分数按服务器记着的那一份报回去（局中刷新的人已经拿到的分不丢）。
-        const me = st.players.find((p) => p.id === meId);
-        if (me && !me.finished && !me.left) void reportScore(me.score, true);
       }
       sideWait.update(st);
+      // 坐在这儿的每一次轮询，只要服务器还没记下我交了卷，就再交一次：「这一局
+      // 我不打了」。服务器判一局是否打完，看的是每个座位交没交卷；坐在这儿轮
+      // 询的人，座位一直「在线」却永远不交卷，别人交完卷就得等他——等到 90 秒
+      // 无人报到才算他缺席。来晚的、学教学学过了头的、局中刷新了的，都走这条路。
+      //
+      // 从前只在坐下来那一刻交一次。那一次要是没送到（手机网络晃一下就够了），
+      // 服务器上这个座位就永远是「还在打」：别人交完卷进等待页等他，他坐在
+      // 这儿等别人，两边互相等，直到屋主解散——玩家撞上的正是这个。所以改成
+      // 每次轮询都看一眼服务器记的那一份：还没勾上就再交，勾上了就不再发。
+      // 分数按服务器记着的那一份报回去（局中刷新的人已经拿到的分不丢）。
+      const me = st.players.find((p) => p.id === meId);
+      if (me && !me.finished && !me.left && !sitOutPending) {
+        sitOutPending = true;
+        void reportScore(me.score, true).finally(() => {
+          sitOutPending = false;
+        });
+      }
     };
 
     paint(state, iAmHost);
@@ -939,6 +952,19 @@ export function renderMultiplayerPage(
     // 以前它和「你那间房没了」走同一条路，于是每个第一次点进来的人都被
     // 告知「没有这个房间号」，而他压根还没输过房间号。
     if (!currentRoom()) return renderHome();
+    // 手上已经有一份小屋的样子（刚从一局里回来、刚从主菜单挑完玩法回来）：
+    // 先照它同步把小屋页画出来，不等网络。
+    //
+    // 原来这里一律先等 fetchState() 回来再画，等的那几十到几百毫秒里屏幕上
+    // 还是上一屏——一局打完回来，上一屏就是那张单局结算页，于是「结算时闪
+    // 一下单局结算页然后消失」。画好之后照常轮询：小屋页自己的 watchRoom
+    // 一进去就先取一次最新状态，散了、开了下一局，都由它接着处理。
+    const known = latestRoomState();
+    if (known && !known.ended) {
+      if (known.roundOver) markRoundPlayed(known.round);
+      playedRound = Math.max(playedRound, lastPlayedRound());
+      return renderLobby(known);
+    }
     const existing = await fetchState();
     if (dead) return;
     if (!existing.ok) {

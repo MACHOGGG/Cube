@@ -120,7 +120,8 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
   if (d.linePoints > 0) rows.push([s.linePointsLabel, '+' + Math.round(d.linePoints)]);
   rows.push([s.scoreLabel, String(d.score)]);
   rows.push([`${s.perfBonusLabel} (${d.ratePercent}%)`, '×' + d.bonusMult.toFixed(2)]);
-  rows.push([s.timeMultLabel, '×' + d.timeMult.toFixed(2)]);
+  // 无限反转没有用时系数，这一行不摆——摆一行「×1.00」等于告诉人有这回事。
+  if (d.modeKey !== 'flip') rows.push([s.timeMultLabel, '×' + d.timeMult.toFixed(2)]);
   if (d.neverFlipped > 0) {
     rows.push([`${s.neverFlippedLabel} × ${d.neverFlipped}`, Math.round(d.unflippedScale * 100) + '%']);
   }

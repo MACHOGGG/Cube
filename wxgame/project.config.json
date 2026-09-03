@@ -1,9 +1,9 @@
 {
-  "description": "Slides 微信小游戏（方块基础版原型）。用微信开发者工具「导入项目」打开这个文件夹；AppID 换成你自己的。",
-  "appid": "touristappid",
+  "description": "Slides 微信小游戏（方块基础版原型）。用微信开发者工具「导入项目」打开这个文件夹。",
+  "appid": "wx9cab5874e6df2aee",
   "projectname": "slides-wxgame",
   "compileType": "game",
-  "libVersion": "3.4.0",
+  "libVersion": "latest",
   "setting": {
     "es6": true,
     "enhance": true,

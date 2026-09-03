@@ -21,6 +21,8 @@ const check = (name, ok, extra = '') => {
   if (!ok) fail++;
 };
 const back = async (page, ms = 400) => {
+  // 哨兵是这一屏画到屏幕上之后才推的（见 backNav.ts 的 arm）：按返回之前先等它立好。
+  await page.waitForTimeout(150);
   await page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(ms);
 };

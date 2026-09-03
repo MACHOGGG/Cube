@@ -34,7 +34,7 @@ import {
 import { clearSeed, random as seededRandom, seedRandom } from './engine/rng';
 import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
-import { renderLayoutsShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
+import { renderLayoutsShowcase, renderModesShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { renderTutorialPicker } from './ui/tutorialPicker';
 import { renderFlipModePage } from './ui/flipMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
@@ -119,8 +119,8 @@ const recordSources: RecordSource[] = [
   ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip', mode: ' · ∞' })),
 ];
 
-/** 《无限反转》一局多长：玩家定的 120 秒。 */
-const FLIP_SECONDS = 120;
+/** 《无限反转》一局多长：玩家定的 60 秒（原来 120 秒）。 */
+const FLIP_SECONDS = 60;
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -366,7 +366,12 @@ function showMenu() {
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onRandomTarget: () => showRandomTarget('menu'),
-    onFlipMode: showFlipMode,
+    // 无限反转不是小屋玩法（服务器只认那八副棋盘加老虎机）：屋主替整屋挑玩
+    // 法时按到它，和计时、炸弹一样只提示一句，不让他一个人开进去。
+    onFlipMode: () => {
+      if (pickingForRoom) return void notAMultiplayerBoard();
+      showFlipMode();
+    },
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: () => {
       mpOrigin = 'menu';
@@ -460,7 +465,7 @@ function showAccountPage(tab: AuthTab, restore = false) {
       onMoreTargets: showTargetsShowcase,
       onMoreLayouts: showLayoutsShowcase,
       onWorldRank: showWorldRankPage,
-      onMoreModes: showFlipMode,
+      onMoreModes: showModesShowcase,
     },
     currentLang,
   );
@@ -492,8 +497,12 @@ function showSlotIntro() {
 }
 
 /**
- * 《无限反转》：挑方块还是小球，120 秒，得分翻面来回翻。天才特供的一档——
+ * 《无限反转》：挑方块还是小球，60 秒，得分翻面来回翻。天才特供的一档——
  * 没开通的人看得见那一屏，按下去是订阅那扇窗。
+ *
+ * 只从主菜单那张卡进来（个人主页里《更多玩法》那一行是陈列页，见
+ * showModesShowcase），所以《退出》和返回键都回主菜单——从前一律回个人主页，
+ * 从主菜单进来的人开局前一退就被送到了个人主页。
  */
 function showFlipMode() {
   teardown();
@@ -502,7 +511,7 @@ function showFlipMode() {
     root,
     currentLang,
     {
-      onBack: backToProfile,
+      onBack: showMenu,
       onStart: (family) => {
         const game = family === 'square' ? squareGame : circleGame;
         showGame(game, { flip: true, timeLimitSec: FLIP_SECONDS }, showFlipMode);
@@ -511,6 +520,18 @@ function showFlipMode() {
     },
     !isGenius(),
   );
+  wireHomeTitle();
+  repaintIcons();
+  setScreenBack(showMenu);
+  toTop();
+}
+
+/** 《更多玩法》：无限反转的图装在圆角矩形框里陈列着——玩还是要回主菜单去玩。 */
+function showModesShowcase() {
+  teardown();
+  trackScreen('more-modes');
+  renderModesShowcase(root, currentLang, backToProfile);
+  setNavTab(null);
   wireHomeTitle();
   repaintIcons();
   setScreenBack(backToProfile);

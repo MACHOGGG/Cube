@@ -49,6 +49,19 @@ export function createStreakTracker(): StreakTracker {
   return { apply, currentMultiplier, reset };
 }
 
+/**
+ * 无限反转的连击：连续第 n 次得分 = 单次得分 × base^(n−1)，每次四舍五入取整。
+ *
+ * `chain` 是这一次之前已经连续得了几次分（第一次是 0），同一步里的连锁也各算
+ * 一次；一步没得分就归零（见 gameController 的 flipChain）。玩家定的数：4 分
+ * 的图案连着来是 4、4.8≈5、5.76≈6、6.9≈7……不再是别的局那套 ×1.5/2/2.5 和同
+ * 一步里的 ×3。
+ */
+export const FLIP_STREAK_BASE = 1.2;
+export function flipStreakDelta(points: number, chain: number, base = FLIP_STREAK_BASE): number {
+  return Math.round(points * base ** Math.max(0, chain));
+}
+
 export interface CascadeConfig {
   tileAt(r: number, c: number): Tile;
   /** Groups of cells that now qualify for a whole-line color bonus; shape is responsible for not re-offering a line already bonused this game. */

@@ -15,7 +15,7 @@ if (!src) {
   console.error('用法: node scripts/check-scoring.mjs <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { createCascadeStepper } = await import(src);
+const { createCascadeStepper, flipStreakDelta } = await import(src);
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -167,6 +167,17 @@ function board(faces) {
   plain.next()?.commit();
   check('普通规则：只把正面翻到反面', group.map(([r, c]) => b2.faceOf(r, c)).join() === 'dot,dot,dot,dot');
   check('普通规则：翻完全是反面，同一组不再给分', plain.next() === null);
+}
+
+// ---------------------------------------------------------------------------
+// 4. 无限反转的连击：连续第 n 次 = 单次 × 1.2^(n−1)，每次四舍五入
+// ---------------------------------------------------------------------------
+{
+  const seq = [0, 1, 2, 3, 4, 9].map((chain) => flipStreakDelta(4, chain));
+  check('无限反转：4 分连着来 4、5、6、7、8，第十次 21', seq.join(',') === '4,5,6,7,8,21', seq.join(','));
+  check('无限反转：第一次不加成', flipStreakDelta(36, 0) === 36);
+  check('无限反转：负数当 0', flipStreakDelta(4, -3) === 4);
+  check('无限反转：整数，不带小数', Number.isInteger(flipStreakDelta(5, 2)), String(flipStreakDelta(5, 2)));
 }
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

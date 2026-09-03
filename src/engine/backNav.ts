@@ -38,6 +38,8 @@ let armed = false;
 let installed = false;
 /** 我们自己退的那几步（撤哨兵）：接下来这么多次 popstate 不是玩家按的返回。 */
 let suppress = 0;
+/** 哨兵已经排好队、等这一屏画到屏幕上再推（见 arm）。 */
+let armPending = false;
 
 function stateOf(st: unknown): string | null {
   if (!st || typeof st !== 'object') return null;
@@ -45,15 +47,39 @@ function stateOf(st: unknown): string | null {
   return typeof v === 'string' ? v : null;
 }
 
+/**
+ * 立哨兵——等这一屏真的画到了屏幕上再推，不在换屏的同一拍里推。
+ *
+ * iOS Safari 从屏幕左边往右滑就是「返回」，滑的过程中它给人看的是历史里「上一
+ * 条」的快照，而那张快照是推哨兵那一刻屏幕上的样子。换屏和推哨兵挤在同一拍
+ * 里，屏幕上还是上一屏（打一局的话，就是主菜单）：玩家在局里一侧滑，看到的
+ * 是主菜单滑进来、顿一下、再跳回一张已暂停的棋盘——玩家在 iOS 上撞见的正
+ * 是这个。晚一帧再推，快照里就是这一屏自己（开局页 / 这一局），滑出来的东西
+ * 和松手之后看到的是一回事。
+ *
+ * 推之前再看一眼还要不要：这几十毫秒里屏可能又换了（回主菜单就不该有哨兵）。
+ */
 function arm() {
-  if (armed) return;
-  try {
-    history.pushState(GUARD_STATE, '');
-    armed = true;
-  } catch {
-    /* 没有历史接口的老浏览器：返回键照旧是浏览器自己的事 */
+  if (armed || armPending) return;
+  armPending = true;
+  const push = () => {
+    armPending = false;
+    if (armed || !(screenBack || topLayer())) return;
+    try {
+      history.pushState(GUARD_STATE, '');
+      armed = true;
+    } catch {
+      /* 没有历史接口的老浏览器：返回键照旧是浏览器自己的事 */
+    }
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => window.setTimeout(push, ARM_AFTER_PAINT_MS));
+  } else {
+    push();
   }
 }
+/** 画出来之后再等这么久才推哨兵：给 Safari 留出把这一帧真正显示出来的时间。 */
+const ARM_AFTER_PAINT_MS = 40;
 
 export function installBackNav(): void {
   if (installed || typeof history === 'undefined') return;

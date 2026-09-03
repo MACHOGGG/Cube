@@ -2526,6 +2526,26 @@ html.is-playing body { background: var(--play-bg); }
 /* Already sideways: the prompt has nothing left to ask for. */
 @media (orientation: landscape) { .rotate-hint { display: none; } }
 
+/* 《无限反转》开局页上那一块：玩法图标 + 一句「连击加成减弱 · 没有时间奖励」。
+   样子借转手机那块（同样的底色、圆角、字号），横屏也留着——它说的是计分，
+   不是屏幕方向。 */
+.flip-hint {
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px auto 10px; padding: 10px 16px 10px 12px;
+  max-width: 320px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.flip-hint-icon { width: 26px; flex: none; }
+.flip-hint-icon svg { width: 100%; height: auto; display: block; }
+.flip-hint-copy { margin: 0; font-size: 0.86rem; line-height: 1.35; text-align: left; }
+/* 横屏时开局页是一排（图、数字、按钮列），这一块另起一行居中——挤在那一排里会
+   把按钮列顶到第二行、顶出屏幕。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .flip-hint { order: 10; flex: 0 0 100%; max-width: 320px; margin: 0 auto; padding: 8px 14px 8px 10px; }
+}
+
 /* ---------------------------------------------------------------------------
    Landscape play — every board, one layout
    --------------------------------------------------------------------------- */
@@ -3232,6 +3252,9 @@ body.is-room-host::after {
 }
 .lay-thumb { width: 104px; }
 .lay-thumb--wide { width: 152px; }
+/* 《更多玩法》里那张无限反转的图是竖长的（四层翻面叠着），窄一点才和两副
+   布局的缩图差不多分量。 */
+.lay-thumb--tall { width: 72px; }
 .lay-thumb svg { width: 100%; height: auto; display: block; }
 .lay-name { font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); text-align: center; }
 /* 整页的世界排名：一块面板装那张榜（切页 + 榜），榜有多长页就多长。

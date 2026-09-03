@@ -42,6 +42,8 @@ export interface I18nStrings {
   /** 《无限反转》：名字，和挑图形那一屏底下那句规矩。 */
   flipModeTitle: string;
   flipModeTagline: string;
+  /** 无限反转开局页上那一句：连击加成减弱、没有时间奖励。 */
+  flipScoringHint: string;
   sectionMore: string;
   bombBasicTitle: string;
   bombTimedTitle: string;
@@ -449,7 +451,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: 'Base games',
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
-    flipModeTagline: 'Scoring flips pieces both ways · back rows never clear · 120 s',
+    flipModeTagline: 'Scoring flips pieces both ways · back rows never clear · 60 s',
+    flipScoringHint: 'Streak bonus toned down: each consecutive score ×1.2 · no time bonus',
     sectionMore: 'More layouts',
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
@@ -763,7 +766,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: 'Jeux de base',
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
-    flipModeTagline: 'Marquer retourne les pièces dans les deux sens · les versos ne s’effacent jamais · 120 s',
+    flipModeTagline: 'Marquer retourne les pièces dans les deux sens · les versos ne s’effacent jamais · 60 s',
+    flipScoringHint: 'Bonus de série réduit : chaque score consécutif ×1,2 · pas de bonus de temps',
     sectionMore: 'Plus de plateaux',
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
@@ -1077,7 +1081,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: '基礎玩法',
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
-    flipModeTagline: '得分翻面來回翻，反面不消除，120 秒',
+    flipModeTagline: '得分翻面來回翻，反面不消除，60 秒',
+    flipScoringHint: '連擊加成減弱：連續得分每次 ×1.2 · 沒有時間獎勵',
     sectionMore: '更多佈局',
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
@@ -1391,7 +1396,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: '基础玩法',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
-    flipModeTagline: '得分翻面来回翻，反面不消除，120 秒',
+    flipModeTagline: '得分翻面来回翻，反面不消除，60 秒',
+    flipScoringHint: '连击加成减弱：连续得分每次 ×1.2 · 没有时间奖励',
     sectionMore: '更多布局',
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',

@@ -588,6 +588,10 @@ export const ICON_SOUND_OFF = custom('sound-off') ?? svg(
 /** The padlock worn by anything behind 「Slides 天才」 — the 「+」 picker's
  *  locked boards and the not-yet-built perks listed in 个人主页. Drawn in
  *  currentColor so each place it appears takes its own ink. */
+/** 《无限反转》：玩家画的四层翻面（src/assets/icons/flip-mode-menu.svg）。主菜单那
+ *  张卡和个人主页《更多玩法》的陈列页用的是同一张。 */
+export const ICON_FLIP_MODE = custom('flip-mode-menu') ?? '';
+
 export const ICON_LOCK =
   custom('lock') ??
   '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';

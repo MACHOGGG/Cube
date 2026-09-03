@@ -277,7 +277,16 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   const coverNow = () => {
     if (dead || wait || !runFinished()) return;
     const known = latestRoomState();
-    if (!known || roomOver(known) || known.roundOver) return;
+    if (!known || roomOver(known)) return;
+    // 这一局在我交卷之前就已经算结束了（别人都交了、我又被判缺席过）：没什
+    // 么可等的，直接回小屋——和下面轮询里那一条同一个去处，只是不必再等
+    // 下一次轮询、让结算页先露一秒。
+    if (known.roundOver) {
+      dead = true;
+      markPlayed();
+      handlers.onRoom();
+      return;
+    }
     wait = showWaitPanel(lang, {
       shapeId,
       meId: seat.playerId,
@@ -321,11 +330,16 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       // 直接把人送回小屋，比分和名次就在那一页上。
       // 单人局一个字都没动：mountScoreboard 在没有座位的时候第一行就返回了。
       if (runFinished() && state.roundOver) {
-        wait?.remove();
-        wait = null;
         dead = true;
         markPlayed();
-        return handlers.onRoom();
+        // 先把人送回小屋、小屋页画好，再撤等待页。撤早了，露出来的是底下那张
+        // 单局结算页——正是玩家看到的「结算时闪一下就没了」。小屋页那边现在
+        // 一进去就同步先画（见 multiplayer.ts 的开头那段），两件事在同一帧里
+        // 做完，中间没有一帧是结算页。
+        handlers.onRoom();
+        wait?.remove();
+        wait = null;
+        return;
       }
       // 自己交了卷、别人还在打：盖上一层等待页，上面是这一局的标志，下面是
       // 还在动的名单。

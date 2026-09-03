@@ -12,8 +12,6 @@ import { geniusLogoFluid } from './geniusLogo';
 // 主菜单上那台老虎机是单独一张图（三个窗口里画着蓝三角、橙圆、红方块），
 // 和开局时真的转起来的那台（slot-machine.svg，两个窗口）不是同一个文件。
 const ICON_SLOT_MACHINE = custom('slot-machine-menu') ?? custom('slot-machine') ?? '';
-// 《无限反转》：玩家画的四层翻面（src/assets/icons/flip-mode-menu.svg）。
-const ICON_FLIP_MODE = custom('flip-mode-menu') ?? '';
 import {
   ICON_BASE_SQUARE,
   ICON_BASE_CIRCLE,
@@ -27,6 +25,7 @@ import {
   layoutIconIsWide,
   timedOption,
   type BaseShape,
+  ICON_FLIP_MODE,
 } from './homeIcons';
 
 export interface MenuHandlers {

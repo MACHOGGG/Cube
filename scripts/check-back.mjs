@@ -36,24 +36,33 @@ async function open(viewport) {
   return { ctx, page };
 }
 const back = async (page, ms = 400) => {
+  // 哨兵是这一屏画到屏幕上之后才推的（backNav.ts 的 arm：晚一帧再加几十毫秒，
+  // 给 iOS 的侧滑快照留出这一屏自己的样子）——按返回之前先等它立好。
+  await page.waitForTimeout(150);
   await page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(ms);
 };
+/** 哨兵立起来了没有——它是画完之后才推的，所以等一小会儿，不看当下那一拍。 */
+const guardUp = (page) =>
+  page.waitForFunction(() => history.state?.slides === 'guard', null, { timeout: 1500 }).then(() => true, () => false);
+/** 哨兵撤了没有（回到主菜单）。 */
+const guardDown = (page) =>
+  page.waitForFunction(() => history.state?.slides === 'root', null, { timeout: 1500 }).then(() => true, () => false);
 const has = (page, sel) => page.$(sel).then(Boolean);
 const shown = (page, sel) => page.$eval(sel, (el) => el.classList.contains('show')).catch(() => false);
 const navShown = (page) => page.$eval('.home-nav', (n) => getComputedStyle(n).display !== 'none').catch(() => false);
 
 async function commonRounds(tag, viewport) {
   const { ctx, page } = await open(viewport);
-  check(`${tag} 刚打开在主菜单：只有根，没有哨兵（返回就是浏览器自己的退出）`, (await page.evaluate(() => history.state?.slides)) === 'root');
+  check(`${tag} 刚打开在主菜单：只有根，没有哨兵（返回就是浏览器自己的退出）`, await guardDown(page));
 
   // 个人主页 → 返回 → 主菜单
   await page.click('#navProfile');
   await page.waitForSelector('.profile-page', { timeout: 8000 });
-  check(`${tag} 进了个人主页：哨兵立起来了`, (await page.evaluate(() => history.state?.slides)) === 'guard');
+  check(`${tag} 进了个人主页：哨兵立起来了`, await guardUp(page));
   await back(page);
   check(`${tag} 个人主页按返回 → 主菜单`, (await has(page, '.home-page')) && !(await has(page, '.profile-page')));
-  check(`${tag} 回到主菜单之后哨兵撤了`, (await page.evaluate(() => history.state?.slides)) === 'root');
+  check(`${tag} 回到主菜单之后哨兵撤了`, await guardDown(page));
 
   // 个人主页 → 老虎机模式介绍页 → 返回 → 个人主页 → 返回 → 主菜单
   await page.click('#navProfile');
@@ -99,11 +108,11 @@ async function commonRounds(tag, viewport) {
   // 弹窗自己关掉（点外面）之后，主菜单上的哨兵也该撤——下一下返回就是退出。
   await page.click('[data-reopen="bomb"]');
   await page.waitForSelector('.center-pick--in', { timeout: 5000 });
-  check(`${tag} 主菜单开着弹窗：哨兵在`, (await page.evaluate(() => history.state?.slides)) === 'guard');
+  check(`${tag} 主菜单开着弹窗：哨兵在`, await guardUp(page));
   await page.mouse.click(8, 8);
   await page.waitForFunction(() => !document.querySelector('.center-pick'), { timeout: 5000 });
   await page.waitForTimeout(500);
-  check(`${tag} 点外面关掉弹窗之后：哨兵撤了`, (await page.evaluate(() => history.state?.slides)) === 'root');
+  check(`${tag} 点外面关掉弹窗之后：哨兵撤了`, await guardDown(page));
 
   // 游戏：开局页按返回 → 主菜单
   await page.$$eval('.home-icon-btn', (els) => els[0].click());
@@ -151,7 +160,7 @@ await P.page.waitForSelector('.profile-page', { timeout: 8000 });
 await P.page.reload({ waitUntil: 'load' });
 await P.page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 await P.page.waitForTimeout(500);
-check('刷新回来落在主菜单：哨兵撤了，历史里只剩根', (await P.page.evaluate(() => history.state?.slides)) === 'root');
+check('刷新回来落在主菜单：哨兵撤了，历史里只剩根', await guardDown(P.page));
 await P.page.click('#navProfile');
 await P.page.waitForSelector('.profile-page', { timeout: 8000 });
 await back(P.page);
