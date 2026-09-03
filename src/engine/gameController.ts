@@ -19,6 +19,7 @@ import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard'
 import { currentRoom, latestRoomState } from './room';
 import { leaderboardName, pushRun } from './cloudScores';
 import { confirmFinish } from '../ui/roomNotices';
+import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
 import { STRINGS, type Lang } from '../i18n';
@@ -725,6 +726,38 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   });
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));
+
+  /**
+   * 手机 / 浏览器的返回键在这一局里做什么（见 backNav.ts）：分享图开着先关它；开局
+   * 页（含 4-3-2-1）等同那颗《返回》；结算页等同《主页》（小屋局里 scoreboard 把它
+   * 换成了回小屋 / 挑下一局）；小屋局等同《离开小屋》（会先问一句）；单人局打着
+   * 就暂停、暂停着就继续——和手机游戏里「返回 = 暂停菜单的开关」一个习惯。这一
+   * 局不因为返回键而丢掉：想结束走《完成》。
+   */
+  function backFromGame() {
+    if (refs.shareOverlay.classList.contains('show')) {
+      refs.shareOverlay.classList.remove('show');
+      return;
+    }
+    if (!started) {
+      refs.buttons.startBack.click();
+      return;
+    }
+    if (gameOver) {
+      // 按 id 找而不用 refs.buttons.endBack：小屋局里 scoreboard 把这颗键整个换过。
+      refs.endOverlay.querySelector<HTMLButtonElement>('#endBackBtn')?.click();
+      return;
+    }
+    const leave = refs.buttons.leaveRoom;
+    if (leave && leave.isConnected && !leave.hidden) {
+      leave.click();
+      return;
+    }
+    if (paused) doResume();
+    else doPause();
+  }
+  // 练习盘不接：它只是等待页上的一块，那一屏的返回归小屋页管。
+  if (!hooks.practice) setScreenBack(backFromGame);
 
   return {
     get score() {

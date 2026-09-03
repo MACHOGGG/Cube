@@ -11,6 +11,7 @@
  */
 import { STRINGS, type Lang } from '../i18n';
 import { iAmHost } from '../engine/room';
+import { pushLayer } from '../engine/backNav';
 
 export function confirmLeaveRoom(lang: Lang, onLeave: () => void): void {
   const s = STRINGS[lang];
@@ -37,6 +38,8 @@ export function confirmLeaveRoom(lang: Lang, onLeave: () => void): void {
   `;
   document.body.appendChild(overlay);
   const shut = () => overlay.remove();
+  // 手机的返回键：等于「留下」。
+  pushLayer(shut, overlay);
   overlay.querySelector<HTMLButtonElement>('#mpLeaveNo')!.addEventListener('click', shut);
   overlay.querySelector<HTMLButtonElement>('#mpLeaveYes')!.addEventListener('click', () => {
     shut();

@@ -1,4 +1,5 @@
 import { STRINGS, LANG_ORDER, type Lang } from '../i18n';
+import { pushLayer } from '../engine/backNav';
 
 /** A quick language-switch popup for the bottom nav's language button —
  *  distinct from languageSelect.ts's letter-grid puzzle, which is a
@@ -16,6 +17,7 @@ export function showLangSwitchModal(current: Lang, onSelect: (lang: Lang) => voi
     </div>
   `;
   document.body.appendChild(overlay);
+  pushLayer(close, overlay);
 
   function close() {
     overlay.remove();

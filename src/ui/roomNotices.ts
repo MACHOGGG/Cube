@@ -21,6 +21,7 @@
  * 页正在发生什么已经不重要了。
  */
 import { STRINGS, type Lang } from '../i18n';
+import { pushLayer } from '../engine/backNav';
 import { avatarSvg, type RoomPlayer, type RoomState } from '../engine/room';
 import { modeBadges } from './startStage';
 import { gameIcon } from './homeIcons';
@@ -62,6 +63,11 @@ export function confirmFinish(
   `;
   handlers.onHold();
   document.body.appendChild(overlay);
+  // 手机的返回键：等于「否」，接着打。
+  pushLayer(() => {
+    overlay.remove();
+    handlers.onResume();
+  }, overlay);
   overlay.querySelector<HTMLButtonElement>('#mpFinishNo')!.addEventListener('click', () => {
     overlay.remove();
     handlers.onResume();
@@ -130,6 +136,8 @@ export function showWaitPanel(
     </div>
   `;
   document.body.appendChild(overlay);
+  // 手机的返回键：等于那颗《离开小屋》（会先问一句）。这一页本身不能撤——它等的是别人。
+  pushLayer(opts.onLeave, overlay);
   const rows = overlay.querySelector<HTMLElement>('#mpWaitRows')!;
   overlay.querySelector<HTMLButtonElement>('#mpWaitLeave')!.addEventListener('click', opts.onLeave);
   return {
@@ -192,6 +200,8 @@ export function hostNotice(
         </div>
       `;
       document.body.appendChild(overlay);
+      // 手机的返回键：小屋没了就等于《ok》；屋主卡住了就等于《离开小屋》。
+      pushLayer(kind === 'gone' ? handlers.onDismiss : handlers.onLeave, overlay);
       overlay
         .querySelector<HTMLButtonElement>('#roomCancelledOk')
         ?.addEventListener('click', handlers.onDismiss);

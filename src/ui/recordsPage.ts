@@ -1,4 +1,5 @@
 import { loadAllRuns, totalScoreOf, type StoredRun } from '../engine/persistence';
+import { pushLayer } from '../engine/backNav';
 import { renderShareCard } from '../engine/shareCard';
 import { buildShareInfo, formatRunTime, modeLabel } from '../engine/runRecord';
 import { STRINGS, type Lang } from '../i18n';
@@ -236,6 +237,7 @@ function openShareCard(run: StoredRun, lang: Lang): void {
     share.remove();
     window.removeEventListener('keydown', onKey, true);
   };
+  pushLayer(close, share);
   // Escape belongs to the card while it is up. The panel behind has its own
   // window-level Escape handler; this one is registered on the capture phase,
   // so it runs first and stops the key reaching that handler — otherwise

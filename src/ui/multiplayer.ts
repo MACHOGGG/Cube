@@ -3,6 +3,7 @@ import { isGenius } from '../engine/subscription';
 import { countFrom, pushDigit, startStageHtml } from './startStage';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
+import { pushLayer, setScreenBack } from '../engine/backNav';
 import { PLAYER_NAME_KEY } from '../engine/cloudScores';
 import { ICON_DOOR_WHITE, ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
@@ -18,6 +19,7 @@ import {
   endRoom,
   fetchState,
   forgetRoom,
+  iAmHost,
   joinRoom,
   leaveRoom,
   randomAvatar,
@@ -210,6 +212,35 @@ export function renderMultiplayerPage(
     stopAll();
   };
 
+  /**
+   * 交座位走人。屋主按的是《解散小屋》：先把屋子关掉（屋里其他人手上会亮起那张
+   * 总战绩图），再把自己的座位交回去。分成两颗键的时候，屋主按了《离开小屋》就
+   * 只是自己走人，剩下的人干坐在一间永远开不了下一局的屋里——对他来说这两件事
+   * 从来就是一件。
+   *
+   * 打过局的，屋主自己也看那张总战绩图（这原是《结束小屋》做的事）；一局都没打
+   * 就散场的，图上全是 0，不如直接退回多人设置页。
+   *
+   * 小屋页、等待页、重连页、倒数页上按返回键，问的和做的都是这一件（见 backNav）。
+   */
+  const leaveSeat = async () => {
+    const host = iAmHost();
+    stopAll();
+    if (!host) {
+      await leaveRoom();
+      if (!dead) renderHome();
+      return;
+    }
+    const closed = await endRoom();
+    const card = closed.ok && closed.value.round ? closed.value : null;
+    // 屋主不发 leave：屋子已经关了，再补一条「他走了」只会在别人手上那张
+    // 总战绩图里，把屋主自己标成中途离席的人。座位在本机上忘掉就够了。
+    forgetRoom();
+    if (dead) return;
+    if (card) return handlers.onRoomEnded(card);
+    renderHome();
+  };
+
   const savedName = (() => {
     try {
       return localStorage.getItem(NAME_KEY) ?? '';
@@ -350,6 +381,8 @@ export function renderMultiplayerPage(
       if (e.key === 'Enter') container.querySelector<HTMLButtonElement>('#mpJoin')?.click();
     });
     container.querySelector<HTMLButtonElement>('#mpBack')!.addEventListener('click', handlers.onBack);
+    // 手机的返回键：等同这颗《返回》。
+    setScreenBack(handlers.onBack);
   }
 
   // ---- screen 2: the room ----------------------------------------------
@@ -384,29 +417,9 @@ export function renderMultiplayerPage(
         }</button>
       </div>
     `;
-    // 屋主按的是《解散小屋》：先把屋子关掉（屋里其他人手上会亮起那张总战绩
-    // 图），再把自己的座位交回去。分成两颗键的时候，屋主按了《离开小屋》就
-    // 只是自己走人，剩下的人干坐在一间永远开不了下一局的屋里——对他来说这
-    // 两件事从来就是一件。
-    //
-    // 打过局的，屋主自己也看那张总战绩图（这原是《结束小屋》做的事）；一局
-    // 都没打就散场的，图上全是 0，不如直接退回多人设置页。
-    const leave = async () => {
-      stopAll();
-      if (!iAmHost) {
-        await leaveRoom();
-        if (!dead) renderHome();
-        return;
-      }
-      const closed = await endRoom();
-      const card = closed.ok && closed.value.round ? closed.value : null;
-      // 屋主不发 leave：屋子已经关了，再补一条「他走了」只会在别人手上那张
-      // 总战绩图里，把屋主自己标成中途离席的人。座位在本机上忘掉就够了。
-      forgetRoom();
-      if (dead) return;
-      if (card) return handlers.onRoomEnded(card);
-      renderHome();
-    };
+    const leave = leaveSeat;
+    // 手机的返回键：在小屋里等于那颗《离开小屋 / 解散小屋》，先问一句。
+    setScreenBack(() => confirmLeaveRoom(lang, leave));
     container.querySelector<HTMLButtonElement>('#mpLeave')!.addEventListener('click', () => {
       // Only the host is warned, because only the host's leaving costs the
       // others anything: the server writes 屋主 once when the room opens and
@@ -663,6 +676,8 @@ export function renderMultiplayerPage(
       </div>
     `;
     const hint = container.querySelector<HTMLElement>('#mpReconnectHint')!;
+    // 重连的时候按返回：还是问「要不要离开小屋」，别把人悄悄丢在一间还坐着的屋里。
+    setScreenBack(() => confirmLeaveRoom(lang, leaveSeat));
     let tries = 0;
     const again = async () => {
       if (dead) return;
@@ -775,6 +790,8 @@ export function renderMultiplayerPage(
     // 说「会」（或者没答，时间到了）：什么都不用告诉服务器，倒数本来就在走，
     // 收起这一问，下一次轮询接着数。
     const knows = () => close();
+    // 手机的返回键：等于答《会》。
+    pushLayer(knows, box);
     box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
     box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
       close();
@@ -831,6 +848,7 @@ export function renderMultiplayerPage(
     `;
     practiceStop?.();
     practiceStop = null;
+    setScreenBack(() => confirmLeaveRoom(lang, leaveSeat));
     const host = container.querySelector<HTMLElement>('#mpPractice');
     if (host && state.mode && handlers.onPractice) practiceStop = handlers.onPractice(host, state.mode);
   }
@@ -881,6 +899,8 @@ export function renderMultiplayerPage(
       </div>
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
+    // 倒数里按返回：还是问「要不要离开小屋」——倒数本身停不住，别人的钟在走。
+    setScreenBack(() => confirmLeaveRoom(lang, leaveSeat));
     // 从几数起。这一局是哪个玩法，服务器那边给的提前量就按同一份名单多留一秒
     // （api/room.js 的 WIDE_MODES），所以两边数出来的秒数对得上。
     // 可能有新手的局多四秒：服务器说从几数起就从几数起（8 / 9），普通局照旧。

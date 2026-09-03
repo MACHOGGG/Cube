@@ -3,6 +3,7 @@ import { CTL_BACK } from './ctlIcons';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
+import { pushLayer } from '../engine/backNav';
 
 export interface PickerOption {
   /** Inline SVG for this option's icon. */
@@ -132,6 +133,8 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
     overlay.appendChild(foot);
   }
   document.body.appendChild(overlay);
+  // 手机的返回键：先关这一层，不退页（见 backNav.ts）。
+  pushLayer(close, overlay);
   // The picker draws the same glyphs the home page does, from the same
   // literal SVG — so it needs the same colourblind pass over it.
   applyPaletteToTree(overlay);

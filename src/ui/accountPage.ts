@@ -1,4 +1,5 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
+import { pushLayer } from '../engine/backNav';
 import { RULES } from '../rules';
 import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
@@ -298,6 +299,7 @@ export function renderAccountPage(
     `;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
+    pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#rulesClose')!.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
@@ -327,6 +329,7 @@ export function renderAccountPage(
     `;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
+    pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#legalClose')!.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
@@ -386,6 +389,7 @@ export function renderAccountPage(
     `;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
+    pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#palGo')?.addEventListener('click', () => {
       close();
       openGeniusWindow(lang, refresh);
@@ -551,6 +555,7 @@ export function renderAccountPage(
       close();
       openGeniusWindow(lang, refresh);
     });
+    pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#flipClose')!.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
@@ -587,6 +592,7 @@ export function renderAccountPage(
       });
     }
     const close = () => overlay.remove();
+    pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#iconClose')!.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();

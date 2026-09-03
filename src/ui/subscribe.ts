@@ -1,4 +1,5 @@
 import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
+import { pushLayer } from '../engine/backNav';
 import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
@@ -76,6 +77,9 @@ function openModal(className: string, html: string, dismissable = true) {
   overlay.innerHTML = `<div class="modal ${className}">${html}</div>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
+  // 手机的返回键：能点掉的窗就关掉；不能点掉的那扇（设密码）返回也不放行——
+  // 登记一个什么都不做的关法，这一下就被吞掉，人还在窗里。
+  pushLayer(dismissable ? close : () => {}, overlay);
   // Every window here can be tapped away except the one that decides whether
   // this player can ever use their subscription on a second device.
   if (dismissable) {

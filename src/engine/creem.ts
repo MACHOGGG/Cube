@@ -287,5 +287,7 @@ function clearReturnParams(params: URLSearchParams): void {
     params.delete(key);
   }
   const query = params.toString();
-  history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
+  // 只换地址，不动状态：状态里记着返回键那套的「根 / 哨兵」（见 backNav.ts），抹掉它
+  // 返回键就又变成直接退出网站。
+  history.replaceState(history.state, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
 }

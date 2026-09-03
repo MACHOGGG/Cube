@@ -37,6 +37,7 @@ import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { renderTutorialPicker } from './ui/tutorialPicker';
 import { renderFlipModePage } from './ui/flipMode';
+import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -195,6 +196,11 @@ function restoreProfileScroll() {
 }
 /** 从个人主页点进去的那些页，按《退出》回来走的这条。 */
 const backToProfile = () => showAccountPage('login', true);
+/** 屋主在主菜单上替整屋挑玩法时，返回键等于横幅上那颗《回小屋》。 */
+const backToRoomFromPick = () => {
+  setPickingForRoom(null);
+  showMultiplayer();
+};
 /**
  * 多人游玩和老虎机模式各有两个入口——主菜单上的那张卡，和个人主页里的那一
  * 行——《退出》要回到进来的那一边。记的是最近一次从哪儿进来的：一局打完回到
@@ -378,6 +384,9 @@ function showMenu() {
   wireHomeTitle();
   repaintIcons();
   restoreMenuScroll();
+  // 手机 / 浏览器的返回键（见 backNav.ts）：主菜单是根，返回就真的离开网站；屋主替
+  // 整屋挑玩法的时候不是——那一下回小屋。
+  setScreenBack(pickingForRoom ? backToRoomFromPick : null);
   // Re-opening a picker works by replaying the tap on the card that owns it:
   // the freshly rendered card is a real, correctly positioned element, so the
   // fly-to-centre animation has a valid origin to start from.
@@ -458,6 +467,7 @@ function showAccountPage(tab: AuthTab, restore = false) {
   setNavTab('profile');
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(showMenu);
   if (restore) restoreProfileScroll();
   else toTop();
 }
@@ -477,6 +487,7 @@ function showSlotIntro() {
   );
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(backToProfile);
   toTop();
 }
 
@@ -502,6 +513,7 @@ function showFlipMode() {
   );
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(backToProfile);
   toTop();
 }
 
@@ -513,6 +525,7 @@ function showTargetsShowcase() {
   setNavTab(null);
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(backToProfile);
   toTop();
 }
 
@@ -527,6 +540,7 @@ function showLayoutsShowcase() {
   setNavTab(null);
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(backToProfile);
   toTop();
 }
 
@@ -544,6 +558,7 @@ function showWorldRankPage() {
   setNavTab(null);
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(backToProfile);
   toTop();
 }
 
@@ -578,6 +593,9 @@ function showMultiplayer() {
   teardown();
   setPickingForRoom(null);
   trackScreen('multiplayer');
+  // 返回键先按「回进来的那一边」登记；小屋页自己画到哪一屏（设置页 / 小屋里 /
+  // 重连 / 倒数）会再各自盖上（见 ui/multiplayer.ts）。
+  setScreenBack(() => (mpOrigin === 'profile' ? backToProfile() : showMenu()));
   activeDestroy = renderMultiplayerPage(
     root,
     {
@@ -733,6 +751,7 @@ async function leaveRoomWithCard() {
   // 标题不另起一个：中途走的人和散场时看到的是同一间小屋的同一份战绩，
   // 一张写《小屋战绩》、另一张写《竞赛排名》，看图的人会以为是两件事。
   showRoomCard(root, state, currentLang, showMultiplayer, { meId });
+  setScreenBack(showMultiplayer);
 }
 
 /**
@@ -742,11 +761,13 @@ async function leaveRoomWithCard() {
 function showRoomFinal(state: RoomState) {
   teardown();
   setPickingForRoom(null);
-  showRoomCard(root, state, currentLang, () => {
+  const done = () => {
     forgetRoom();
     // 一步退回多人设置页（见 leaveRoomWithCard 那段）。
     showMultiplayer();
-  });
+  };
+  showRoomCard(root, state, currentLang, done);
+  setScreenBack(done);
 }
 
 function showRecordsPage() {
@@ -769,6 +790,7 @@ function showRecordsPage() {
   setNavTab('records');
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(showMenu);
   toTop();
 }
 
@@ -783,12 +805,17 @@ function shapeTutorialFor(id: string): TutorialShape | null {
   return null;
 }
 
-function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void) {
+/**
+ * @param onBack 教学里按返回键去哪儿。不给就等同按《完成》（onDone）；开局前自动弹
+ *   出的那一段例外——返回该回主菜单，不该把人送进那一局。
+ */
+function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void, onBack: () => void = onDone) {
   teardown();
   trackScreen('tutorial');
   if (shape === 'square') renderTutorial(root, currentLang, onDone);
   else if (shape === 'circle') renderCircleTutorial(root, currentLang, onDone);
   else renderTriangleTutorial(root, currentLang, onDone);
+  setScreenBack(onBack);
 }
 
 function showTutorialPicker() {
@@ -800,6 +827,7 @@ function showTutorialPicker() {
     onBack: showMenu,
   });
   repaintIcons();
+  setScreenBack(showMenu);
   toTop();
 }
 
@@ -838,6 +866,7 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
   );
   wireHomeTitle();
   repaintIcons();
+  setScreenBack(() => (slotOrigin === 'intro' ? showSlotIntro() : showMenu()));
   toTop();
 }
 
@@ -880,13 +909,15 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
     // exactly once per family, and a player who skips out of it has still
     // been offered it.
     markTutorialSeen(tutorialShape);
-    renderShapeTutorialByShape(tutorialShape, mountNow);
+    renderShapeTutorialByShape(tutorialShape, mountNow, backFn);
     return;
   }
   mountNow();
 }
 
 function boot() {
+  // 返回键那套（见 backNav.ts）先立好：底下一条根、上面一条哨兵。
+  installBackNav();
   const savedLang = loadLang();
   // Analytics starts before the first screen so the visit is counted even if
   // the player closes the tab on the language page. It is given the saved
@@ -928,6 +959,7 @@ function afterLangChosen(lang: Lang, resume = false) {
     markTutorialSeen();
     teardown();
     renderTutorial(root, lang, showMenu);
+    setScreenBack(showMenu);
     return;
   }
   if (resume && currentRoom()) {
