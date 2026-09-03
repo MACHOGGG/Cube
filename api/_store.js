@@ -140,6 +140,13 @@ function memory(args) {
       mem.set(key, z);
       return changed;
     }
+    case 'ZREM': {
+      const z = mem.get(key);
+      if (!(z instanceof Map)) return 0;
+      let removed = 0;
+      for (const m of rest) if (z.delete(String(m))) removed++;
+      return removed;
+    }
     case 'ZSCORE': {
       const z = mem.get(key);
       if (!(z instanceof Map)) return null;
@@ -214,6 +221,8 @@ export const zaddIfHigher = (key, score, member) =>
 /** 覆盖式写入——累计分这种「重算之后就是它」的数用这个。 */
 export const zadd = (key, score, member) =>
   command(['ZADD', key, String(Math.round(score)), member]);
+/** 从榜上撤下一个人。不在榜上也不算错。 */
+export const zrem = (key, member) => command(['ZREM', key, member]);
 export const zscore = async (key, member) => {
   const raw = await command(['ZSCORE', key, member]);
   return raw === null || raw === undefined ? null : Number(raw);

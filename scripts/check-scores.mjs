@@ -163,6 +163,25 @@ check('老版本留下的累计总分，看一眼榜就按存档改回最高单�
 check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.score).join() === '1000000,900,700',
   JSON.stringify(healed.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
 
+// ---- 一局都没得过分的人不上总榜 ------------------------------------------
+// 玩家看到「总榜上显示了名字但没有标识」：老版本按累计总分写榜，一局都没得
+// 分的人也占一行 0 分，而 0 分没有「最高的那一局」可标，行首就空着。现在
+// 报一局 0 分不会上总榜；老版本留下的那种 0 分行，谁看一眼榜就撤下来。
+const D = await makePlayer('d@example.com');
+await call({ action: 'push', ...D, runId: 'd1', mode: 'square', score: 0, name: '丁' });
+const afterZero = await call({ action: 'board', ...A });
+check('报一局 0 分：总榜上没有这一行', !afterZero.payload?.rows?.some((r) => r.name === '丁'),
+  JSON.stringify(afterZero.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
+const dRow = (await store.zTop('lb:square', 50)).find((r) => r.score === 0);
+await store.zadd('lb:total', 0, dRow.member);
+check('（伪造成老版本的 0 分行之后它确实在总榜上）',
+  (await store.zTop('lb:total', 50)).some((r) => r.member === dRow.member));
+const swept = await call({ action: 'board', ...A });
+check('老版本留下的 0 分行，看一眼榜就撤下来，别的行不动',
+  !swept.payload?.rows?.some((r) => r.name === '丁') && swept.payload?.rows?.length === 3 &&
+    swept.payload?.rows?.every((r) => typeof r.mode === 'string' && r.mode.length > 0),
+  JSON.stringify(swept.payload?.rows?.map((r) => `${r.name}:${r.score}:${r.mode}`)));
+
 // ---- 玩法 id 不能变成一把写任意键的钥匙 ---------------------------------
 const bad = await call({ action: 'push', ...A, runId: 'x1', mode: 'lb:total', score: 5 });
 check('玩法 id 不合规就拒收', bad.status === 400 && bad.payload?.error === 'run',

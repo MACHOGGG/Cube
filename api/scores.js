@@ -36,6 +36,7 @@ import {
   zadd,
   zaddIfHigher,
   zcard,
+  zrem,
   zrevrank,
   zscore,
   zTop,
@@ -173,6 +174,10 @@ async function push(res, body, who) {
   if (top) {
     await zadd(TOTAL_BOARD, top.score, who.id);
     await hset(TOTAL_MODE, who.id, top.mode);
+  } else {
+    // 一局都没得过分：0 不算「最高」，总榜上不该有这一行。老版本按累计总分
+    // 写榜，0 分也会占一行，这里顺手撤掉。
+    await zrem(TOTAL_BOARD, who.id);
   }
 
   return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best });
@@ -203,7 +208,13 @@ async function healTotalBoard(myId) {
     if (typeof modes[id] === 'string') continue;
     const stats = await loadStats(id);
     const best = bestOverall(stats);
-    if (!best) continue;
+    if (!best) {
+      // 存档里一局得分的都没有（老版本按累计总分写榜，一局都没得分的人也占
+      // 一行 0 分）：没有玩法可标，行首就空着——玩家看到的正是「显示了名字
+      // 但没有标识」。0 不算「最高」，撤下来。
+      await zrem(TOTAL_BOARD, id);
+      continue;
+    }
     await zadd(TOTAL_BOARD, best.score, id);
     await hset(TOTAL_MODE, id, best.mode);
   }
