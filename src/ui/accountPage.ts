@@ -563,7 +563,6 @@ export function renderAccountPage(
     overlay.innerHTML = `
       <div class="modal icon-modal">
         <h2>${s.iconTitle}</h2>
-        <p>${s.iconHint}</p>
         <div class="icon-grid">
           ${APP_ICONS.map(
             (i) => `<button class="icon-opt" data-icon="${i.id}">${i.svg}</button>`,

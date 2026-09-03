@@ -262,12 +262,17 @@ function setPickingForRoom(code: string | null) {
  * The host taps a board on the home page. Instead of opening it for them, it
  * goes to the room, and this device joins the countdown with everyone else.
  */
+/** 开局的请求正在路上：连点两张图只算第一张。 */
+let startingRound = false;
 async function startRoundFor(mode: string, slot?: 'same' | 'own') {
   const code = pickingForRoom;
   if (!code) return false;
+  if (startingRound) return true;
+  startingRound = true;
   const banner = document.getElementById('roomPickMsg');
   if (banner) banner.textContent = STRINGS[currentLang].workingLabel;
   const begun = await startMatch(mode, slot);
+  startingRound = false;
   if (begun.ok) {
     setPickingForRoom(null);
     showMultiplayer();
@@ -896,10 +901,15 @@ function boot() {
     afterLangChosen(guess);
     return;
   }
-  afterLangChosen(savedLang);
+  afterLangChosen(savedLang, true);
 }
 
-function afterLangChosen(lang: Lang) {
+/**
+ * @param resume 刚打开页面（不是切语言）：这台设备要是还坐在哪间小屋里
+ *   ——刷新了、或者关掉又打开——就直接回小屋页接着走，别落在主菜单上让
+ *   屋里的人看着他「掉线」。小屋页自己会分辨座位还在不在、这一局打没打过。
+ */
+function afterLangChosen(lang: Lang, resume = false) {
   currentLang = lang;
   mountBottomNav(
     {
@@ -917,6 +927,11 @@ function afterLangChosen(lang: Lang) {
     markTutorialSeen();
     teardown();
     renderTutorial(root, lang, showMenu);
+    return;
+  }
+  if (resume && currentRoom()) {
+    mpOrigin = 'menu';
+    showMultiplayer();
     return;
   }
   showMenu();

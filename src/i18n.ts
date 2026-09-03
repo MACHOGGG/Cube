@@ -158,7 +158,6 @@ export interface I18nStrings {
   // ---- redeem codes, and the account one creates ----
   haveCode: string;
   redeemTitle: string;
-  redeemHint: string;
   redeemCodeLabel: string;
   redeemBtn: string;
   passwordLabel: string;
@@ -239,7 +238,6 @@ export interface I18nStrings {
   mpHostBadge: string;
   mpPickMode: string;
   mpStartBtn: string;
-  mpWaitingHost: string;
   /** 交出座位、离开这间房。房间页和结算页上是同一颗键、同一个说法——对玩家
    *  来说这本来就是同一件事，两个名字只会让人以为是两回事。 */
   mpLeave: string;
@@ -345,7 +343,6 @@ export interface I18nStrings {
   stuckEndBtn: string;
   startBtn: string;
   pausedTitle: string;
-  pausedBody: string;
   endTitleDefault: string;
   compositeScoreLabel: string;
   /** "Your average in this mode" on the end-of-run summary. */
@@ -368,7 +365,6 @@ export interface I18nStrings {
   rulesPill: string;
   iconPill: string;
   iconTitle: string;
-  iconHint: string;
   // ---- gain-bubble source labels (which pattern just paid out) ----
   labelRun4: string;
   labelBlock22: string;
@@ -537,7 +533,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: 'Genius only',
     haveCode: 'Have an insider code?',
     redeemTitle: 'Slides Genius insider code',
-    redeemHint: 'Type your insider code. It unlocks straight away.',
     redeemCodeLabel: 'Insider code',
     redeemBtn: 'Unlock',
     passwordLabel: 'Passcode (6 characters)',
@@ -602,7 +597,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostBadge: 'host',
     mpPickMode: 'Pick a board',
     mpStartBtn: 'Start',
-    mpWaitingHost: 'Waiting for the host to pick a board.',
     mpLeave: 'Leave the room',
     mpNeedGenius: 'Join a room a Slides Genius put up',
     mpGo: 'Go!',
@@ -676,7 +670,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: 'No more possible flips · tap to end',
     startBtn: 'Start',
     pausedTitle: 'Paused',
-    pausedBody: 'The timer has stopped and the board is hidden.',
     endTitleDefault: 'Challenge complete',
     compositeScoreLabel: 'Composite score',
     avgScoreLabel: 'Your average in this mode',
@@ -696,7 +689,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: 'How to play',
     iconPill: 'Icon',
     iconTitle: 'App icon',
-    iconHint: 'Pick the icon that shows on the browser tab.',
     labelRun4: 'Run of 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -855,7 +847,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: 'Réservé aux Génies',
     haveCode: 'Vous avez un code Génie ?',
     redeemTitle: 'Code Slides Génie',
-    redeemHint: 'Saisissez votre code Génie. Il débloque tout de suite.',
     redeemCodeLabel: 'Code Génie',
     redeemBtn: 'Débloquer',
     passwordLabel: 'Code secret (6 caractères)',
@@ -920,7 +911,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostBadge: 'hôte',
     mpPickMode: 'Choisissez un plateau',
     mpStartBtn: 'Commencer',
-    mpWaitingHost: 'En attente du plateau choisi par l’hôte.',
     mpLeave: 'Quitter la salle',
     mpNeedGenius: 'Rejoignez la salle d’un Slides Génie',
     mpGo: 'Partez !',
@@ -994,7 +984,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: 'Plus aucun retournement possible · appuyez pour terminer',
     startBtn: 'Commencer',
     pausedTitle: 'En pause',
-    pausedBody: 'Le chronomètre est arrêté et le plateau est caché.',
     endTitleDefault: 'Défi terminé',
     compositeScoreLabel: 'Score composite',
     avgScoreLabel: 'Votre moyenne dans ce mode',
@@ -1014,7 +1003,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: 'Règles du jeu',
     iconPill: 'Icône',
     iconTitle: 'Icône de l’app',
-    iconHint: 'Choisissez l’icône affichée sur l’onglet du navigateur.',
     labelRun4: 'Suite de 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -1173,7 +1161,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: '天才特供',
     haveCode: '有內部碼？',
     redeemTitle: 'Slides 天才內部碼',
-    redeemHint: '輸入你的內部碼，馬上生效。',
     redeemCodeLabel: '內部碼',
     redeemBtn: '解鎖',
     passwordLabel: '密碼（6 位字元）',
@@ -1238,7 +1225,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostBadge: '屋主',
     mpPickMode: '選一個玩法',
     mpStartBtn: '開始',
-    mpWaitingHost: '等屋主選玩法。',
     mpLeave: '離開小屋',
     mpNeedGenius: '加入 Slides 天才搭建的小屋',
     mpGo: '開始！',
@@ -1312,7 +1298,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: '無法全部翻面 · 點擊結束本局',
     startBtn: '開始',
     pausedTitle: '已暫停',
-    pausedBody: '計時已停止，棋盤已隱藏。',
     endTitleDefault: '挑戰結束',
     compositeScoreLabel: '綜合得分',
     avgScoreLabel: '該玩法您的均分',
@@ -1332,7 +1317,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: '遊戲規則',
     iconPill: '圖示',
     iconTitle: '更換圖示',
-    iconHint: '選擇顯示在瀏覽器分頁上的圖示。',
     labelRun4: '4連',
     labelBlock22: '2×2',
     label121: '121',
@@ -1491,7 +1475,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusOnly: '天才特供',
     haveCode: '有内部码？',
     redeemTitle: 'Slides 天才内部码',
-    redeemHint: '输入你的内部码，马上生效。',
     redeemCodeLabel: '内部码',
     redeemBtn: '解锁',
     passwordLabel: '密码（6 位字符）',
@@ -1556,7 +1539,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostBadge: '屋主',
     mpPickMode: '选一个玩法',
     mpStartBtn: '开始',
-    mpWaitingHost: '等屋主选玩法。',
     mpLeave: '离开小屋',
     mpNeedGenius: '加入 Slides 天才搭建的小屋',
     mpGo: '开始！',
@@ -1630,7 +1612,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: '无法全部翻面 · 点击结束本局',
     startBtn: '开始',
     pausedTitle: '已暂停',
-    pausedBody: '计时已停止，棋盘已隐藏。',
     endTitleDefault: '挑战结束',
     compositeScoreLabel: '综合得分',
     avgScoreLabel: '该玩法您的均分',
@@ -1650,7 +1631,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: '游戏规则',
     iconPill: '图标',
     iconTitle: '更换图标',
-    iconHint: '选择显示在浏览器标签页上的图标。',
     labelRun4: '4连',
     labelBlock22: '2×2',
     label121: '121',

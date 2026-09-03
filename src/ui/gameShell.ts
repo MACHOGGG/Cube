@@ -271,7 +271,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     <div class="overlay opaque" id="pauseOverlay">
       <div class="modal">
         <h2>${s.pausedTitle}</h2>
-        <p>${s.pausedBody}</p>
         <!-- Reachable from a run as well as from 个人主页: someone who needs
              the colourblind palette should not have to leave the board to
              turn it on. Same setting, same switch, either way in. -->

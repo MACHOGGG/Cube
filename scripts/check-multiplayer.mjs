@@ -528,16 +528,13 @@ const intoNextRound = (p) =>
     const tiles = document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length;
     return tiles > 0;
   }, { timeout: 40000 }).then(() => true).catch(() => false);
-check('屋主挑完下一场，自己进了局', await intoNextRound(A.page));
-
-// 客人这会儿还停在教学页上——这一段没有真把整段教学放完，而是替他按了
-// 「学完了」。真的看完教学的人会被 onLearnTutorial 的收尾直接送回小屋；
-// 这里手动走一遍那条路（刷新 → 多人游玩 → 凭存下来的座位回屋），
-// 好接上后面「屋主走了」的剧情。
+// 客人趁倒数还在数的时候刷新：座位还在，页面一打开就直接回到小屋页（不用再
+// 去个人主页点《多人游玩》），跟着大家一起入局。开赛五秒之后才回来的人不入
+// 这一局、坐等待页——那一条在 check-room-flow.mjs 里验。
 await B.page.goto(BASE, { waitUntil: 'load' });
-await B.page.waitForSelector('#navProfile', { timeout: 20000 });
-await B.page.click('#navProfile');
-await B.page.click('#multiRow');
+await B.page.waitForSelector('.mp-page, .home-page', { timeout: 30000 });
+check('刷新之后直接回到小屋页，不落在主菜单', await B.page.evaluate(() => !!document.querySelector('.mp-page')));
+check('屋主挑完下一场，自己进了局', await intoNextRound(A.page));
 check('客人回到小屋后被带进这一局', await intoNextRound(B.page));
 
 // ---- 屋主走了：其他人得到一句话和一颗《ok》 -----------------------------

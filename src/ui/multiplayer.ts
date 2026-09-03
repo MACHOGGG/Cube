@@ -29,6 +29,7 @@ import {
   lastPlayedRound,
   markRoundPlayed,
   nudgeHost,
+  reportScore,
   setLearning,
 } from '../engine/room';
 
@@ -99,6 +100,8 @@ function tutorialFamilyOf(mode: string): TutorialShape | null {
 
 /** 问「会不会规则」给多久。到点没人按，就当他会。 */
 const KNOW_ASK_MS = 4000;
+/** 开赛时刻过去多久之后才到的人，算来晚了，不入这一局。 */
+const LATE_MS = 5000;
 
 const NAME_KEY = PLAYER_NAME_KEY;
 
@@ -300,13 +303,19 @@ export function renderMultiplayerPage(
       if (slot) slot.innerHTML = avatarSvg(avatar);
     });
 
+    // 一次只发一个请求：连点两下《开小屋》会开出两间（第一间就此没人管，二十
+    // 分钟后才过期）；连点两下那扇门会进两次。请求在路上的时候，再按不算数。
+    let busy = false;
     container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', async () => {
       // Checked here as well as on the server, so the answer is the paywall
       // rather than an error message.
       if (!isGenius()) return handlers.onNeedGenius();
+      if (busy) return;
+      busy = true;
       remember();
       msg.textContent = s.workingLabel;
       const made = await createRoom(myName(), avatar);
+      busy = false;
       if (dead) return;
       if (!made.ok) return void (msg.textContent = errorText(made.reason, lang));
       renderLobby(made.value);
@@ -315,9 +324,12 @@ export function renderMultiplayerPage(
     container.querySelector<HTMLButtonElement>('#mpJoin')!.addEventListener('click', async () => {
       const code = codeBox.value.trim();
       if (!/^\d{4}$/.test(code)) return void (msg.textContent = s.mpErrNoRoom);
+      if (busy) return;
+      busy = true;
       remember();
       msg.textContent = s.workingLabel;
       const joined = await joinRoom(code, myName(), avatar);
+      busy = false;
       if (dead) return;
       if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang));
       // 一局正打到一半进来的（服务器现在放人进来了）：这一局不是我的，先记
@@ -424,12 +436,20 @@ export function renderMultiplayerPage(
         return;
       }
       if (!sideWait) {
+        const meId = currentRoom()?.playerId;
         sideWait = showWaitPanel(lang, {
           shapeId: st.mode ?? 'square',
-          meId: currentRoom()?.playerId,
+          meId,
           code: st.code,
           onLeave: () => confirmLeaveRoom(lang, leave),
         });
+        // 坐下来看的这一刻，向服务器交一次卷：「这一局我不打了」。服务器判
+        // 一局是否打完，看的是每个座位交没交卷；坐在这儿轮询的人，座位一直
+        // 「在线」却永远不交卷，别人交完卷就得等他——等到 90 秒无人报到才
+        // 算他缺席。来晚的、学教学学过了头的、局中刷新了的，都走这条路。
+        // 分数按服务器记着的那一份报回去（局中刷新的人已经拿到的分不丢）。
+        const me = st.players.find((p) => p.id === meId);
+        if (me && !me.finished && !me.left) void reportScore(me.score, true);
       }
       sideWait.update(st);
     };
@@ -464,6 +484,16 @@ export function renderMultiplayerPage(
         sideline(next);
         // The host has chosen: everyone counts down to the same instant.
         if (next.startAt && next.seed && next.mode && next.round > playedRound) {
+          // 来晚了：这一局早就开了（刷新、切走、看教学看过了头之后才回来），
+          // 开赛时刻已经过去好几秒。这一局不是我的——记成打过，坐等待页看
+          // 排行，下一局再入；不能拿着一块新起的表跳进别人打了一半的局。
+          // 留几秒余量给正常的一次轮询晚到。
+          if (!launched && next.startAt + LATE_MS < serverTime()) {
+            markRoundPlayed(next.round);
+            playedRound = next.round;
+            sideline(next);
+            return;
+          }
           // 三道关，顺序是有讲究的：
           // 1. 我自己会不会这个玩法——不会就去看教学，别人等我；
           // 2. 屋里还有没有别人在学——有就一起等；
@@ -484,12 +514,17 @@ export function renderMultiplayerPage(
       (reason) => {
         // 轮询本来就会偶尔掉一次。房间还在屏幕上，比分也还在，所以这里
         // 只说一句话，不重画、更不清身份。
+        // 服务器亲口说这间小屋没了（过期了，或者已经散了）：座位不必再留，
+        // 退回多人设置页，把那句话带过去。原来只是在小屋页底下写一句，人
+        // 还坐在一间已经不存在的屋里，催、等都没有回应。
+        if (reason === 'noRoom' || reason === 'ended') {
+          stopAll();
+          forgetRoom();
+          if (!dead) renderHome(errorText(reason, lang));
+          return;
+        }
         const msg = container.querySelector<HTMLElement>('#mpMsg');
-        if (!msg) return;
-        msg.textContent =
-          reason === 'noRoom' || reason === 'ended'
-            ? errorText(reason, lang)
-            : s.mpReconnecting;
+        if (msg) msg.textContent = s.mpReconnecting;
       },
     );
   }
@@ -579,9 +614,11 @@ export function renderMultiplayerPage(
     if (!area) return;
     // Mid-round — nothing to decide until everyone is back.
     if (state.round > 0 && !state.roundOver) {
+      // 一局正打着：这一块什么都不写。原来写的是「等屋主选玩法」——这会儿
+      // 屋主没在选，是大家在打；坐在这页上的人前面本来就盖着等待页。
       if (area.dataset.shape === 'mid') return;
       area.dataset.shape = 'mid';
-      area.innerHTML = `<p class="tag-line">${s.mpWaitingHost}</p>`;
+      area.innerHTML = '';
       return;
     }
     if (!iAmHost) {

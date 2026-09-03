@@ -828,7 +828,6 @@ export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
     'auth-modal',
     `
     <h2>${s.redeemTitle}</h2>
-    <p class="auth-hint">${s.redeemHint}</p>
     ${field('redeemCode', s.redeemCodeLabel,
       `type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(s.redeemCodePlaceholder)}"`)}
     <p class="auth-msg" id="redeemMsg" role="status"></p>
