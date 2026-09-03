@@ -36,12 +36,49 @@ function tile(front: string, dot: string, cls = ''): string {
   );
 }
 
+// 三个基础图形各自的正反面，画法照棋盘上的样子（也是基础教学分镜的画法）：
+// 方块反面是深褐的一块加一颗点；小球反面是浅色球面上一个六角星标；三角反面
+// 是浅色大三角里嵌一个描了黑边的小三角。
+const PAPER = '#FBF8F1';
+const DARK = '#3D3128';
+const sqFront = (c: string) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${c}"/></svg>`;
+const sqBack = (d: string) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${DARK}"/>` +
+  `<circle cx="50" cy="50" r="22" fill="${d}"/></svg>`;
+const ballFront = (c: string) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="${c}"/></svg>`;
+const ballBack = (d: string) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5"/>` +
+  `<g stroke="${d}" stroke-width="10" stroke-linecap="round"><line x1="50" y1="23" x2="50" y2="77"/>` +
+  `<line x1="27" y1="36.5" x2="73" y2="63.5"/><line x1="27" y1="63.5" x2="73" y2="36.5"/></g></svg>`;
+const triFront = (c: string) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,6 96,92 4,92" fill="${c}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/></svg>`;
+const triBack = (d: string) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,6 96,92 4,92" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5" stroke-linejoin="round"/>` +
+  `<polygon points="50,40 73,82 27,82" fill="${d}" stroke="#1A1A1A" stroke-width="3.5" stroke-linejoin="round"/></svg>`;
+
+/** 一枚正反面都是 SVG 的棋子（小球、三角，还有第 1 条里的方块）。 */
+function svgTile(front: string, back: string, cls = '', vars = ''): string {
+  return (
+    `<span class="ra-tile ra-tile--svg${cls ? ' ' + cls : ''}"${vars ? ` style="${vars}"` : ''}>` +
+    `<span class="ra-f">${front}</span><span class="ra-b">${back}</span></span>`
+  );
+}
+
+/**
+ * 会消掉的那一枚要再包一层：淡出的动画不能直接压在棋子上——一个元素的
+ * opacity 一动，浏览器就把它「压平」，它里面正反两面那套 3D 翻转就失效，露
+ * 出来的成了正面。所以淡出和缩小都动在外面这一层，棋子自己只管露着反面。
+ */
+const gone = (inner: string): string => `<span class="ra-gone">${inner}</span>`;
+
 /** 占位：被会滑的那一列的窗口盖住的格子，本身不画。 */
 const blank = '<span class="ra-tile ra-blank"></span>';
 
-/** 4×2 的小棋盘：暗底、圆角，和游戏里的版图一个样子。 */
-function board(inner: string, cls = ''): string {
-  return `<span class="ra-board${cls ? ' ' + cls : ''}">${inner}</span>`;
+/** 小棋盘（默认 4 列 2 行）：浅底、圆角。 */
+function board(inner: string, cls = '', cols = 4): string {
+  return `<span class="ra-board${cls ? ' ' + cls : ''}"${cols !== 4 ? ` style="--cols:${cols}"` : ''}>${inner}</span>`;
 }
 
 /**
@@ -64,11 +101,7 @@ const arrowUp = (c: number): string =>
   `<line x1="0" y1="34" x2="0" y2="4" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-dasharray="9 8"/>` +
   `<path d="M-9 -2 L0 -20 L9 -2 Z" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></g></svg>`;
 
-/** 消掉之后留下的虚线空位。 */
-const hole = (c: number, r: number): string => `<span class="ra-hole" style="--c:${c};--r:${r}"></span>`;
-
 const checksRow0 = check(0, 0) + check(1, 0) + check(2, 0) + check(3, 0);
-const holesRow0 = hole(0, 0) + hole(1, 0) + hole(2, 0) + hole(3, 0);
 
 /** 第 5 条最后出的那个「完成」：白底绿勾。 */
 const endMark =
@@ -98,11 +131,19 @@ const symTrophy =
   `<rect x="32" y="76" width="36" height="14" rx="5" fill="#D89B1E"/></svg>`;
 
 export const RULE_ART: string[] = [
-  // 1. 正反两面：开局全是正面；其中一枚翻过去露一下反面（暗底一颗点），再翻回来。
+  // 1. 正反两面：方块、小球、三角各一列——上排正面，下排它的反面。上排的
+  //    三枚轮流翻过去露一下反面再翻回来，翻出来的正是底下那一枚（玩家的原话：
+  //    「各展示一个正面和反面……用户需要看明白正-反关系，能用图示的尽量不要
+  //    文字」）。正面用的就是上面三颗入口键的三种颜色。
   board(
-    tile(B, R) + tile(O, G, 'ra-peek') + tile(M, T) + tile(Y, R) +
-      tile(G, M) + tile(B, O) + tile(O, R) + tile(M, G),
+    svgTile(sqFront('#2F9E52'), sqBack(O), 'ra-peek') +
+      svgTile(ballFront('#B23A3A'), ballBack('#4C68B0'), 'ra-peek', 'animation-delay:0.5s') +
+      svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-peek', 'animation-delay:1s') +
+      svgTile(sqFront('#2F9E52'), sqBack(O), 'ra-back') +
+      svgTile(ballFront('#B23A3A'), ballBack('#4C68B0'), 'ra-back') +
+      svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-back'),
     'ra-still',
+    3,
   ),
   // 2. 同色凑成图案：最右那列往上滑一格，橙色凑满一行 → 对勾 → 四枚翻面，反面各是不同的颜色。
   board(
@@ -118,12 +159,12 @@ export const RULE_ART: string[] = [
       slidingCol(tile(B, T), tile(G, T, 'ra-flip'), tile(B, T)) +
       arrowUp(3) + checksRow0,
   ),
-  // 4. 反面同色连成一行：滑一格凑齐四颗蓝点 → 对勾 → 整行消掉，留下虚线空位闪两下。
+  // 4. 反面同色连成一行：四颗蓝点排成一行 → 对勾 → 四颗一起缩小消失（玩家的
+  //    原话：「四个点然后消失消除的动画」）。
   board(
-    tile(B, B, 'ra-back ra-clear') + tile(B, B, 'ra-back ra-clear') + tile(B, B, 'ra-back ra-clear') + blank +
-      tile(O, R) + tile(M, G) + tile(G, T) + blank +
-      slidingCol(tile(G, R), tile(B, B, 'ra-back ra-clear'), tile(G, R)) +
-      arrowUp(3) + checksRow0 + holesRow0,
+    gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) +
+      tile(O, R) + tile(M, G) + tile(G, T) + tile(Y, M) +
+      checksRow0,
   ),
   // 5. 经典结束：八枚一枚接一枚翻到反面，全翻完了就出「完成」。
   board(
