@@ -1054,6 +1054,18 @@ button:hover { filter: brightness(1.05); }
   padding: 24px; opacity: 0; transition: opacity 200ms ease;
 }
 .center-pick--in { opacity: 1; }
+/* 底下带《返回》圆盘的那一种（记录与排名点开的三块）：整层改成上下两段，面
+   板在上、圆盘在下；面板的高度上限扣掉圆盘那一截，谁也不压谁。底排导航这时
+   候收起来——那一行位置正是圆盘站的地方。 */
+.center-pick--back { flex-direction: column; gap: 14px; padding-bottom: max(24px, calc(10px + env(safe-area-inset-bottom, 0px))); }
+.center-pick--back .center-pick-body { min-height: 0; }
+.center-pick--back .records-panel--big,
+.center-pick--back .total-card--big {
+  max-height: min(76vh, calc(100vh - 150px));
+  max-height: min(76vh, calc(100dvh - 150px));
+}
+.center-pick-foot { flex: none; display: flex; justify-content: center; }
+body:has(.center-pick--back) .home-nav { display: none; }
 .center-pick-body { display: flex; align-items: center; justify-content: center; }
 /* Wraps, so a wide option (进阶三角's two arms) that no longer fits beside
    its sibling drops onto its own line rather than being squeezed. */

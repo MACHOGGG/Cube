@@ -138,6 +138,25 @@ const rows = await page.$$eval('.records-panel--big .rank-row', (els) =>
     me: e.classList.contains('rank-row--me'),
   })));
 check('总榜上有我这一行', rows.length === 1 && rows[0].name === '甲', JSON.stringify(rows));
+// ---- 弹窗底下那颗《返回》圆盘 --------------------------------------------
+// 玩家的原话：「在成绩点开后的弹窗下方加入一个“<”作为退出到上一页的按钮，注意
+// 不要遮蔽任何内容（后面个人主页和成绩与排名可以在此时隐藏）」。量的是位置：
+// 圆盘整个在面板下方、又在屏幕里；底排导航这时候收起来了。
+const geo = await page.evaluate(() => {
+  const panel = document.querySelector('.records-panel--big')?.getBoundingClientRect();
+  const back = document.querySelector('.center-pick-back')?.getBoundingClientRect();
+  const nav = document.querySelector('.home-nav');
+  return {
+    panelBottom: panel ? Math.round(panel.bottom) : null,
+    back: back ? { top: Math.round(back.top), bottom: Math.round(back.bottom), w: Math.round(back.width) } : null,
+    navShown: nav ? getComputedStyle(nav).display !== 'none' : null,
+    vh: innerHeight,
+  };
+});
+check('弹窗底下有一颗《返回》圆盘，整个在面板下方、又在屏幕里',
+  Boolean(geo.back && geo.panelBottom !== null && geo.back.top >= geo.panelBottom && geo.back.bottom <= geo.vh && geo.back.w > 30),
+  JSON.stringify(geo));
+check('弹窗开着的时候底排导航收起来了', geo.navShown === false, JSON.stringify(geo.navShown));
 check('自己那一行被标出来了', rows[0]?.me === true);
 // 玩家的原话：「取消《1人在榜，您在榜1》的文字」——榜底下不再有那一句。
 check('榜底下没有《N 人在榜 · 你排第 N》那句',
@@ -156,6 +175,12 @@ await page.waitForFunction(
 check('没打过的玩法，榜是空的，而且明说「这个玩法你还没打过」',
   (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'),
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
+
+// 按那颗《返回》：弹窗关掉，底排导航回来。
+await page.click('.center-pick-back');
+await page.waitForSelector('.center-pick', { state: 'detached', timeout: 5000 });
+check('按《返回》关掉弹窗，底排导航回来了',
+  await page.$eval('.home-nav', (n) => getComputedStyle(n).display !== 'none'));
 
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

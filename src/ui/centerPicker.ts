@@ -1,4 +1,5 @@
 import { vibrate } from '../engine/haptics';
+import { CTL_BACK } from './ctlIcons';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { ICON_LOCK } from './homeIcons';
 import { geniusLogoTag } from './geniusLogo';
@@ -33,6 +34,13 @@ export interface CenterPickerOpts {
   /** Start the options stacked on top of each other and let them fan apart
    *  as the modal lands — the "one clock splits into three" beat. */
   split?: boolean;
+  /**
+   * 底下摆一颗《返回》圆盘（这里给的是它的无障碍标签），按下去就是关窗。有
+   * 它的时候底排导航先收起来——那一行位置让给它，面板的高度上限也扣掉它那
+   * 一截，谁也不压谁（玩家的原话：「注意不要遮蔽任何内容，后面个人主页和成
+   * 绩与排名可以在此时隐藏」）。
+   */
+  back?: string;
 }
 
 const FLIGHT_MS = 380;
@@ -108,6 +116,21 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
   }
 
   overlay.appendChild(body);
+  if (opts.back) {
+    overlay.classList.add('center-pick--back');
+    const foot = document.createElement('div');
+    foot.className = 'center-pick-foot';
+    const backBtn = document.createElement('button');
+    backBtn.className = 'icon-btn page-back center-pick-back';
+    backBtn.setAttribute('aria-label', opts.back);
+    backBtn.innerHTML = CTL_BACK;
+    backBtn.addEventListener('click', () => {
+      vibrate(12);
+      close();
+    });
+    foot.appendChild(backBtn);
+    overlay.appendChild(foot);
+  }
   document.body.appendChild(overlay);
   // The picker draws the same glyphs the home page does, from the same
   // literal SVG — so it needs the same colourblind pass over it.

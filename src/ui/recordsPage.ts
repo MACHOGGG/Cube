@@ -164,7 +164,7 @@ export function renderRecordsPage(
     const big = document.createElement('div');
     big.className = 'records-panel records-panel--records records-panel--big';
     fillRecords(big, null);
-    openCenterPicker({ originEl: panel, title: s.navRecords, panel: big, panelClass: 'records-panel--big' });
+    openCenterPicker({ originEl: panel, title: s.navRecords, panel: big, panelClass: 'records-panel--big', back: s.back });
   });
 
   const ranks = container.querySelector<HTMLButtonElement>('#ranksPanel')!;
@@ -181,7 +181,7 @@ export function renderRecordsPage(
       onWantGenius,
       onReLogin,
     });
-    openCenterPicker({ originEl: ranks, title: s.rankingsTitle, panel: big, panelClass: 'records-panel--big' });
+    openCenterPicker({ originEl: ranks, title: s.rankingsTitle, panel: big, panelClass: 'records-panel--big', back: s.back });
   });
 
   const valueEl = container.querySelector<HTMLElement>('#totalValue');
@@ -196,7 +196,7 @@ export function renderRecordsPage(
       `<span class="total-card-title">${s.totalScoreTitle}</span>` +
       `<span class="total-card-value" style="font-size:${scoreFontSize(full, true)}">${full}</span>` +
       syncNote;
-    openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big' });
+    openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big', back: s.back });
   });
 
   container.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', onBack);
