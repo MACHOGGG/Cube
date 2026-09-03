@@ -638,7 +638,8 @@ export function createSquareGame(): ShapeGame {
         // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
-        return findStuckColorGroups(liveTiles(), clearedDotColors, minMatchSize);
+        // 反面自己只靠整行 / 整列得分，而行列会随消除变短——门槛跟着当前较短的边长走。
+        return findStuckColorGroups(liveTiles(), clearedDotColors, minMatchSize, Math.min(rows, cols));
       }
 
       function countRemainingTiles() {

@@ -43,14 +43,19 @@ export interface LiveTile {
  * alive and nothing is reported — a single dead colour is the player's
  * problem to route around, not the game's to end.
  *
- * On top of that, four dot faces of one colour keep the run alive on their
- * own. Those pieces already show the colour they will always show and they
- * still slide, so they can be walked together into a pattern however dead
- * every front colour is — and a dot-face match scores like any other. That
- * has to be counted on the dot faces alone: the reachability walk above
- * mixes fronts into its per-colour totals, and four *front* tiles of a
- * colour prove nothing here, because a front tile has to be flipped before
- * it can score and being unable to flip it is the whole premise.
+ * On top of that, dot faces keep the run alive on their own once one colour
+ * has enough of them to fill a whole line. Those pieces already show the
+ * colour they will always show and they still slide, so they can be walked
+ * into one line however dead every front colour is — and a whole-line
+ * clear scores. It is the *only* way dot faces score by themselves: a
+ * pattern pays out only while it still holds at least one front tile (see
+ * createCascadeStepper in scoring.ts), so `minMatch` dot faces of a colour
+ * are worth nothing as a pattern and must not count here. The threshold is
+ * lineMin — the shortest whole-line bonus this board has: 3 on every ball
+ * and triangle layout, the shorter of the current row/column length on the
+ * square boards. Counted on the dot faces alone: the reachability walk
+ * above mixes fronts into its per-colour totals and asks about patterns,
+ * not lines.
  *
  * Bomb modes need no special case here: their shapes already leave the
  * hazard colour out of the liveTiles they pass in.
@@ -64,19 +69,30 @@ export function findStuckColorGroups(
   _clearedDotColors: ReadonlySet<number>,
   /** 这一局最少几枚才可能算分。不给就是各玩法自己那套图案的门槛（4 枚）。 */
   minMatch: number = MIN_MATCH_SIZE,
+  /**
+   * 这副棋盘最短的整线奖励要几枚同色反面：小球、三角各版式都是 3，方块是当
+   * 前行、列里较短的那个边长。反面自己只有「连成整线消掉」这一条得分路——
+   * 图案得分至少要含一枚正面（见 scoring.ts）——所以判「反面还能不能得分」
+   * 拿它当门槛，不能拿图案枚数：3 枚同色反面明明还能连成一线消掉，按 4 枚
+   * 算就成了死局，玩家眼看着场上还有能消的反面就被结算了。
+   */
+  lineMin: number,
 ): Cell[][] {
   const need = Math.max(1, Math.round(minMatch));
+  const lineNeed = Math.max(1, Math.round(lineMin));
   const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   if (fronts.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
 
-  // Four already-flipped tiles of one colour are a score the player can
-  // still go and take, whatever the front faces are doing.
+  // Enough already-flipped tiles of one colour to fill a whole line are a
+  // score the player can still go and take, whatever the front faces are
+  // doing. A whole line is the only score dot faces can make on their own
+  // — a pattern needs a front tile in it — so this is lineMin, not need.
   const dotCount = new Map<number, number>();
   for (const lt of liveTiles) {
     if (lt.tile.face !== 'dot') continue;
     dotCount.set(lt.tile.dotColor, (dotCount.get(lt.tile.dotColor) ?? 0) + 1);
   }
-  for (const n of dotCount.values()) if (n >= need) return [];
+  for (const n of dotCount.values()) if (n >= lineNeed) return [];
 
   const shownColor = (lt: LiveTile) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color);
   const up = new Map<number, number>();
