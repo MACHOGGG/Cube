@@ -1,6 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { fetchBoard, type BoardPage, type BoardResult } from '../engine/cloudScores';
 import { shapeName } from './shapeLabels';
+import { gameIcon } from './homeIcons';
 
 /**
  * 全球排行榜的那一块。
@@ -40,10 +41,14 @@ export function boardTabs(lang: Lang, shapeIds: readonly string[]): BoardTab[] {
 function rowsHtml(page: BoardPage, lang: Lang): string {
   const s = STRINGS[lang];
   if (!page.rows.length) return `<p class="rank-empty">${s.rankEmpty}</p>`;
+  // 总榜不分玩法，每一行是那个人最高的那一局——行首画一个小图形，说明那一局
+  // 是哪个玩法（玩家的原话：「在前面有小图形标识」）。单局榜整张都是同一个
+  // 玩法，不用画。
   return page.rows
     .map(
       (r) => `<div class="rank-row${r.me ? ' rank-row--me' : ''}">
         <span class="rank-place">${r.rank}</span>
+        ${r.mode ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.mode, r.mode))}">${gameIcon(r.mode)}</span>` : ''}
         <span class="rank-name">${esc(r.name)}</span>
         <span class="rank-score">${r.score}</span>
       </div>`,

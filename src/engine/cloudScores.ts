@@ -109,6 +109,8 @@ export interface BoardRow {
   name: string;
   score: number;
   me: boolean;
+  /** 总榜上这一行是哪个玩法的那一局（单局榜没有这个字段）。 */
+  mode?: string;
 }
 
 export interface BoardPage {

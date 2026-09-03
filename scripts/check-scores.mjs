@@ -9,7 +9,8 @@
  *   · 令牌对不上就什么都拿不到（不是「先当作是他」）；
  *   · 同一局报两次不会被算两次；
  *   · 单局榜只上不下——打了一局差的，榜上还是那个最好的；
- *   · 总分榜是重算出来的，不是一路加上去的（加法会被重复提交带偏）；
+ *   · 总榜是每个人各玩法里最高的那一局（不是累计总分），行上带着那一局的玩法；
+ *   · 老版本往总榜写的累计总分，看一眼榜就按存档改回来；
  *   · 榜上人人都在，但没订阅的人看不见——这是玩家自己定的分界；
  *   · 「我排第几」在我不在前五十名的时候也要对。
  */
@@ -118,12 +119,18 @@ check('「我排第几」是第二', squareBoard.payload?.me?.rank === 2 && squa
   JSON.stringify(squareBoard.payload?.me));
 
 const totalBoard = await call({ action: 'board', ...A });
-check('不给玩法就是总分榜',
-  totalBoard.payload?.rows?.map((r) => r.score).join() === '1000620,1000',
+// 总榜不分玩法：每人上榜的是他所有玩法里最高的那一局——甲是圆球那一局
+// （削到上限的一百万），乙是方块的 900。不是累计总分（那会是 1000620 / 1000）。
+check('不给玩法就是总榜：每人各玩法里最高的那一局，不是累计总分',
+  totalBoard.payload?.rows?.map((r) => r.score).join() === '1000000,900',
   JSON.stringify(totalBoard.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
-check('总分是重算出来的，不是一路加的——甲交过一次重复，也没被算两次',
-  totalBoard.payload?.rows?.[0]?.score === 620 + 1000000,
-  JSON.stringify(totalBoard.payload?.rows?.[0]));
+check('总榜每一行带着那一局是哪个玩法（画行首那个小图形用）',
+  totalBoard.payload?.rows?.map((r) => r.mode).join() === 'circle,square',
+  JSON.stringify(totalBoard.payload?.rows?.map((r) => r.mode)));
+check('单局榜上不带玩法记号——整张都是同一个玩法',
+  squareBoard.payload?.rows?.every((r) => r.mode === undefined));
+check('总榜上「我排第几」也是按最高单局算的', totalBoard.payload?.me?.rank === 1 && totalBoard.payload.me.score === 1000000,
+  JSON.stringify(totalBoard.payload?.me));
 
 const otherMode = await call({ action: 'board', ...A, mode: 'triangle' });
 check('没人打过的玩法，榜是空的', otherMode.payload?.rows?.length === 0);
@@ -143,12 +150,25 @@ check('但他打的成绩确确实实在榜上（上榜不要钱）',
 check('他自己的存档照样读得到（那是他自己的东西）',
   (await call({ action: 'mine', ...C })).payload?.total === 700);
 
+// ---- 老版本留下的累计总分：看一眼榜就改正 ------------------------------
+// 从前总榜写的是累计总分。把丙那一行伪造成那时候的样子（一个大数、没有玩法
+// 记号），甲一看榜，服务器就该按丙的存档把它改回他最高的那一局。
+const staleRow = (await store.zTop('lb:total', 50)).find((r) => r.score === 700);
+await store.zadd('lb:total', 777777, staleRow.member);
+await store.hdel('lb:total:mode', staleRow.member);
+const healed = await call({ action: 'board', ...A });
+const cRow = healed.payload?.rows?.find((r) => r.name === '丙');
+check('老版本留下的累计总分，看一眼榜就按存档改回最高单局',
+  cRow?.score === 700 && cRow?.mode === 'square', JSON.stringify(cRow));
+check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.score).join() === '1000000,900,700',
+  JSON.stringify(healed.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
+
 // ---- 玩法 id 不能变成一把写任意键的钥匙 ---------------------------------
 const bad = await call({ action: 'push', ...A, runId: 'x1', mode: 'lb:total', score: 5 });
 check('玩法 id 不合规就拒收', bad.status === 400 && bad.payload?.error === 'run',
   `${bad.status} ${JSON.stringify(bad.payload)}`);
 const stillTotal = await call({ action: 'board', ...A });
-check('总分榜没被那一下写坏', stillTotal.payload?.rows?.length === 3,
+check('总榜没被那一下写坏', stillTotal.payload?.rows?.length === 3,
   JSON.stringify(stillTotal.payload?.rows?.length));
 
 // ---- 有序集合本身 -------------------------------------------------------

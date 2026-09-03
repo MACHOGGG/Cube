@@ -53,7 +53,25 @@ const TOP_N = 50;
 const statsKey = (id) => 'stats:' + id;
 const runsKey = (id) => 'runs:' + id;
 const boardKey = (mode) => 'lb:' + mode;
+/**
+ * 总榜：不分玩法，每个人上榜的是他在所有玩法里有史以来最高的那一局（玩家的
+ * 原话：「总榜上是不分什么玩法……该玩家在各个玩法中有史以来最高分的那个记录
+ * 被放在总榜上」）。它不是累计总分——那个数在《记录与排名》的《累计得分》
+ * 卡上，是本机自己算的。
+ */
 const TOTAL_BOARD = 'lb:total';
+/** id → 总榜上那一局是哪个玩法。一张哈希表，画行首那个小图形用。 */
+const TOTAL_MODE = 'lb:total:mode';
+
+/** 一个账号有史以来最高的那一局：分数和玩法。一局都没有就是 null。 */
+function bestOverall(stats) {
+  let top = null;
+  for (const [mode, score] of Object.entries(stats.best || {})) {
+    const n = num(score);
+    if (n > 0 && (!top || n > top.score)) top = { mode, score: n };
+  }
+  return top;
+}
 /** id → 榜上显示的名字。一张哈希表，不是每人一个键。 */
 const NAMES = 'lbnames';
 
@@ -147,9 +165,15 @@ async function push(res, body, who) {
   const name = cleanName(body?.name);
   if (name) await hset(NAMES, who.id, { name, avatar: body?.avatar ?? null });
 
-  // 单局榜只上不下（GT）；总分榜是重算出来的，覆盖写。
+  // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
+  // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
+  // 顺手把它改正。
   await zaddIfHigher(boardKey(mode), stats.best[mode], who.id);
-  await zadd(TOTAL_BOARD, stats.total, who.id);
+  const top = bestOverall(stats);
+  if (top) {
+    await zadd(TOTAL_BOARD, top.score, who.id);
+    await hset(TOTAL_MODE, who.id, top.mode);
+  }
 
   return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best });
 }
@@ -168,9 +192,27 @@ async function mine(res, who) {
 }
 
 /**
+ * 总榜上没有玩法记号的行：老版本留下的累计总分。按各人的存档重算成「最高的
+ * 那一局」写回去。只看前五十名和看榜的人自己——这就是这一次会画出来的全部。
+ */
+async function healTotalBoard(myId) {
+  const [top, modes] = await Promise.all([zTop(TOTAL_BOARD, TOP_N), hgetall(TOTAL_MODE)]);
+  const ids = new Set(top.map((row) => row.member));
+  ids.add(myId);
+  for (const id of ids) {
+    if (typeof modes[id] === 'string') continue;
+    const stats = await loadStats(id);
+    const best = bestOverall(stats);
+    if (!best) continue;
+    await zadd(TOTAL_BOARD, best.score, id);
+    await hset(TOTAL_MODE, id, best.mode);
+  }
+}
+
+/**
  * 一张榜。
  *
- * mode 给了就是那个玩法的单局榜，没给就是累计总榜。回的除了前五十名，还有
+ * mode 给了就是那个玩法的单局榜，没给就是总榜——每个人所有玩法里最高的那一局。回的除了前五十名，还有
  * 「我自己排第几」——榜再长，玩家真正想知道的还是这一件事，而它不在前五十
  * 名里的时候恰恰最想知道。
  */
@@ -181,12 +223,17 @@ async function board(res, body, who, claim) {
 
   const mode = cleanMode(body?.mode);
   const key = mode ? boardKey(mode) : TOTAL_BOARD;
-  const [top, myScore, myRank, size, names] = await Promise.all([
+  // 总榜上还有老版本写进去的累计总分（那时总榜就是总分榜）：上面没有玩法
+  // 记号的那几行就是它们。看到一行就把那一个人的数从他的存档里重算一遍、
+  // 改回去，改完再取一次榜——只要有人看过一回榜，榜就是对的了。
+  if (!mode) await healTotalBoard(who.id);
+  const [top, myScore, myRank, size, names, modes] = await Promise.all([
     zTop(key, TOP_N),
     zscore(key, who.id),
     zrevrank(key, who.id),
     zcard(key),
     hgetall(NAMES),
+    mode ? Promise.resolve({}) : hgetall(TOTAL_MODE),
   ]);
 
   const rows = top.map((row, i) => ({
@@ -195,6 +242,8 @@ async function board(res, body, who, claim) {
     name: names[row.member]?.name || '',
     avatar: names[row.member]?.avatar ?? null,
     me: row.member === who.id,
+    // 总榜每一行是哪个玩法的那一局（单局榜不用说，就是这个玩法）。
+    ...(mode ? {} : { mode: typeof modes[row.member] === 'string' ? modes[row.member] : '' }),
   }));
 
   return send(res, 200, {
