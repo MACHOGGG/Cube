@@ -413,8 +413,9 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     PRIVILEGES[lang][2],
     PRIVILEGES[lang][3],
     PRIVILEGES[lang][6],
+    `${PRIVILEGES[lang][4]} · ${s.flipModeTitle}`,
   ];
-  const soonList = [1, 4, 5, 7].map((i) => PRIVILEGES[lang][i]);
+  const soonList = [1, 5, 7].map((i) => PRIVILEGES[lang][i]);
   const priceRows = plans()
     .map(
       (plan) => `

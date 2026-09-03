@@ -32,6 +32,12 @@ export interface ShapeGameOpts {
    * 不报统计；读数和按键也都不画。
    */
   practice?: boolean;
+  /**
+   * 无限反转（只有基础方块和小球有）：图案得分翻面之后，一组里正面的翻成反
+   * 面、反面的翻回正面，正反无限反转；反面同色连成一行 / 列不消除；没有
+   * 「翻完了」这回事——一局只由计时结束（main.ts 给 120 秒）。
+   */
+  flip?: boolean;
 }
 
 export interface ShapeGame {

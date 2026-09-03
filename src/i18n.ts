@@ -39,6 +39,9 @@ export interface I18nStrings {
   howToBtn: string;
   sectionBase: string;
   sectionTimed: string;
+  /** 《无限反转》：名字，和挑图形那一屏底下那句规矩。 */
+  flipModeTitle: string;
+  flipModeTagline: string;
   sectionMore: string;
   bombBasicTitle: string;
   bombTimedTitle: string;
@@ -452,6 +455,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     howToBtn: 'How to slide? · Watch the tutorial again',
     sectionBase: 'Base games',
     sectionTimed: 'Timed challenge',
+    flipModeTitle: 'Endless flip',
+    flipModeTagline: 'A scoring pattern flips both ways · lines never clear · 120 s',
     sectionMore: 'More layouts',
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
@@ -771,6 +776,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     howToBtn: 'Comment glisser ? · Revoir le tutoriel',
     sectionBase: 'Jeux de base',
     sectionTimed: 'Défi chronométré',
+    flipModeTitle: 'Retournement infini',
+    flipModeTagline: 'Un motif marqué se retourne dans les deux sens · aucune ligne n’est effacée · 120 s',
     sectionMore: 'Plus de plateaux',
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
@@ -1090,6 +1097,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     howToBtn: '如何滑？· 重新觀看新手教學',
     sectionBase: '基礎玩法',
     sectionTimed: '計時挑戰',
+    flipModeTitle: '無限反轉',
+    flipModeTagline: '得分翻面來回翻，反面不消除，120 秒',
     sectionMore: '更多佈局',
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
@@ -1409,6 +1418,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     howToBtn: '如何滑？· 重新观看新手教学',
     sectionBase: '基础玩法',
     sectionTimed: '计时挑战',
+    flipModeTitle: '无限反转',
+    flipModeTagline: '得分翻面来回翻，反面不消除，120 秒',
     sectionMore: '更多布局',
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',

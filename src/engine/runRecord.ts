@@ -45,13 +45,14 @@ export interface RunData {
 }
 
 /** Which challenge wrapper a run was played under. */
-export type ModeKey = 'base' | 'timed' | 'bomb' | 'bombTimed';
+export type ModeKey = 'base' | 'timed' | 'bomb' | 'bombTimed' | 'flip';
 
 const MODE_LABEL_KEY: Record<ModeKey, keyof I18nStrings | null> = {
   base: null,
   timed: 'sectionTimed',
   bomb: 'bombBasicTitle',
   bombTimed: 'bombTimedTitle',
+  flip: 'flipModeTitle',
 };
 
 export function modeLabel(key: ModeKey, lang: Lang): string {

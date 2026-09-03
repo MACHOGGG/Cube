@@ -48,6 +48,8 @@ const rows = await page.evaluate(() => {
     targets: label('moreTargetsRow'), targetsLock: lock('moreTargetsRow'),
     layouts: label('moreLayoutsRow'), layoutsLock: lock('moreLayoutsRow'),
     rank: label('worldRankRow'), rankLock: lock('worldRankRow'),
+    modes: label('moreModesRow'), modesLock: lock('moreModesRow'),
+    modesValue: document.querySelector('#moreModesRow .profile-row-value')?.textContent.trim() ?? '',
     soon: [...document.querySelectorAll('.profile-row--locked .profile-row-label')].map((e) => e.textContent.trim()),
     oldRank: document.body.textContent.includes('世界排名和好友排名'),
   };
@@ -57,9 +59,11 @@ check('《更多得分目标》《更多布局》点得开了', rows.targets ===
   `${rows.targets} / ${rows.layouts}`);
 check('《世界排名和好友排名》改叫《世界排名》，不再敬请期待',
   rows.rank === '世界排名' && !rows.oldRank && !rows.soon.includes('世界排名'), `${rows.rank}`);
-check('没开通：做好了的四行行首都挂着锁',
-  rows.randomLock && rows.targetsLock && rows.layoutsLock && rows.rankLock);
-check('还在敬请期待的只剩四行', rows.soon.length === 4, rows.soon.join(' / '));
+check('没开通：做好了的五行行首都挂着锁',
+  rows.randomLock && rows.targetsLock && rows.layoutsLock && rows.rankLock && rows.modesLock);
+check('《更多玩法》点得开了，右边写着《无限反转》', rows.modes === '更多玩法' && rows.modesValue.startsWith('无限反转'),
+  `${rows.modes} · ${rows.modesValue}`);
+check('还在敬请期待的只剩三行', rows.soon.length === 3, rows.soon.join(' / '));
 
 // ---- 2. 三页，和《退出》回原位 -------------------------------------------
 const SCROLL = 320;
@@ -134,6 +138,24 @@ async function backToProfile(before, label, backSel = '#backBtn') {
   check('世界排名：没有个人总分、没有个人成绩', !r.total && !r.records);
   check('世界排名：标题就叫世界排名', r.label === '世界排名', r.label);
   await backToProfile(before, '世界排名');
+}
+// 更多玩法 → 无限反转：两张图（方块、小球）、一句规矩、锁
+{
+  const before = await openFrom('moreModesRow', '.flip-page');
+  const f = await page.evaluate(() => ({
+    opts: [...document.querySelectorAll('.flip-page .slot-pick-opt')].map((b) => b.dataset.family),
+    locks: document.querySelectorAll('.flip-page .slot-pick-lock').length,
+    line: document.querySelector('.flip-tagline')?.textContent.trim(),
+    nav: getComputedStyle(document.querySelector('.home-nav')).display,
+  }));
+  check('无限反转：只有方块和小球两张图', f.opts.join(',') === 'square,circle', f.opts.join(','));
+  check('无限反转：没开通的两张都挂着锁，底下一句规矩', f.locks === 2 && /120/.test(f.line || ''), `${f.locks} 把 · ${f.line}`);
+  await page.click('.flip-page .slot-pick-opt[data-family="square"]');
+  await page.waitForTimeout(600);
+  check('无限反转：没开通，点了开的是订阅窗，不是一局', (await page.$('#boardWrap .tile')) === null && Boolean(await page.$('.genius-perks')));
+  await page.click('#geniusClose').catch(() => {});
+  await page.waitForTimeout(300);
+  await backToProfile(before, '无限反转', '#flipBack');
 }
 // 老虎机模式（介绍页）
 {
@@ -231,6 +253,32 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   check('教学四颗键都是图示（上一条 / 再一次 / 下一条 / 完成）',
     keys.length === 4 && keys.every((k) => k.svg && k.text === '' && k.label) && keys.map((k) => k.id).join(',') === 'stPrev,stReplay,stNext,stFinish',
     JSON.stringify(keys));
+  await c.close();
+}
+
+// ---- 4b. 开通了的人：无限反转真开得了局，钟从 2:00 往下数 ------------------
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c.addInitScript(() => {
+    localStorage.setItem('slides_lang', 'zhHans');
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 30 * 864e5, code: 'FLIPCHK' }));
+  });
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForSelector('#navProfile', { timeout: 20000 });
+  await p.click('#navProfile'); await p.waitForSelector('#moreModesRow'); await p.click('#moreModesRow');
+  await p.waitForSelector('.flip-page', { timeout: 8000 });
+  check('开通了：两张图都不挂锁', (await p.$$('.flip-page .slot-pick-lock')).length === 0);
+  await p.click('.flip-page .slot-pick-opt[data-family="square"]');
+  const started = await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 }).then(() => true).catch(() => false);
+  check('开通了：挑方块就开了一局', started);
+  await p.waitForTimeout(300);
+  const t1 = await p.$eval('#hud-time', (e) => e.textContent.trim());
+  await p.waitForTimeout(2200);
+  const t2 = await p.$eval('#hud-time', (e) => e.textContent.trim());
+  const sec = (t) => { const m = t.match(/(\d+):(\d+)/); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+  check('无限反转：钟从 2:00 往下数', sec(t1) <= 120 && sec(t1) >= 115 && sec(t2) < sec(t1), `${t1} → ${t2}`);
   await c.close();
 }
 

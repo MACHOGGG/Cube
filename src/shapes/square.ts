@@ -102,6 +102,8 @@ export function createSquareGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      /** 无限反转（见 ShapeGameOpts.flip）：得分翻面来回翻，不消行，只由计时结束。 */
+      const flipMode = !!opts?.flip;
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那两个。
       const targets = opts?.targets?.length ? opts.targets : null;
@@ -596,7 +598,9 @@ export function createSquareGame(): ShapeGame {
         return {
           tileAt: (r, c) => grid[r][c],
           findMatches,
-          findLineBonuses: findLineBonusGroups,
+          // 无限反转：反面同色连成一行 / 列不消除，也就不再找整线奖励。
+          findLineBonuses: flipMode ? () => [] : findLineBonusGroups,
+          toggleOnMatch: flipMode,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: true,
           isTerminalAfterLineBonus: () => rows === 0 || cols === 0,
@@ -604,6 +608,8 @@ export function createSquareGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
+        // 无限反转：翻完了还能翻回来，没有「全翻完」这回事——这一局只由计时结束。
+        if (flipMode) return false;
         // Red hazard tiles never flip by design — in bomb mode the "cleared"
         // condition is every *non-red* tile reaching its dot face, or the
         // run wouldn't be able to end this way at all.
@@ -627,6 +633,8 @@ export function createSquareGame(): ShapeGame {
       }
 
       function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+        // 无限反转：反面还会翻回来，「再也翻不动」这件事不成立。
+        if (flipMode) return [];
         // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
@@ -634,6 +642,8 @@ export function createSquareGame(): ShapeGame {
       }
 
       function countRemainingTiles() {
+        // 无限反转：正反面来回翻，「留着没翻」不是这一局的过失，不扣。
+        if (flipMode) return { neverFlipped: 0, flippedButRemaining: 0 };
         return countRemainingTilesFn(liveTiles());
       }
 
@@ -671,10 +681,10 @@ export function createSquareGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
-        bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'square', '方块'),
         shapeId: 'square',
-        modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey: flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         resetBoard,
         render,

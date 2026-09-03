@@ -63,6 +63,8 @@ export interface ProfileHandlers {
   onMoreLayouts: () => void;
   /** 《世界排名》——整页只有那张榜。 */
   onWorldRank: () => void;
+  /** 《更多玩法》——现在装的是《无限反转》：挑方块或小球，120 秒。 */
+  onMoreModes: () => void;
 }
 
 /**
@@ -236,8 +238,14 @@ export function renderAccountPage(
           <span class="profile-row-label">${privileges[6]}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
-        <!-- 还没做的才写「敬请期待」：更多关卡、更多玩法、更多竞赛、Apple Watch。 -->
-        ${[privileges[1], privileges[4], privileges[5], privileges[7]].map(lockedRow).join('')}
+        <!-- 《更多玩法》里现在有《无限反转》。 -->
+        <button class="profile-row" id="moreModesRow">
+          ${lockGlyph}
+          <span class="profile-row-label">${privileges[4]}</span>
+          <span class="profile-row-value">${s.flipModeTitle}&nbsp;&rsaquo;</span>
+        </button>
+        <!-- 还没做的才写「敬请期待」：更多关卡、更多竞赛、Apple Watch。 -->
+        ${[privileges[1], privileges[5], privileges[7]].map(lockedRow).join('')}
       </section>
 
       <!-- Tarifs, terms, refunds, privacy, contact — the five documents a
@@ -624,6 +632,7 @@ export function renderAccountPage(
   on('moreTargetsRow', handlers.onMoreTargets);
   on('moreLayoutsRow', handlers.onMoreLayouts);
   on('worldRankRow', handlers.onWorldRank);
+  on('moreModesRow', handlers.onMoreModes);
   on('becomeGeniusBtn', () => openGeniusWindow(lang, refresh));
   on('insiderRow', () => openRedeemWindow(lang, refresh));
   for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {

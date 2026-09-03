@@ -139,5 +139,35 @@ function board(faces) {
   check('全是反面的一组不再计分', stepper.next() === null);
 }
 
+// ---- 无限反转：得分之后一组里正面翻反面、反面翻正面 -----------------------
+{
+  const b = board(['0,0', '0,1']);               // 两枚正面；(0,2)(0,3) 一碰就是反面
+  b.tileAt(0, 2); b.tileAt(0, 3);
+  const group = [[0, 0], [0, 1], [0, 2], [0, 3]];
+  const cfg = {
+    tileAt: b.tileAt, findLineBonuses: () => [], onLineBonus() {}, resetMaskOnLineBonus: false,
+    findMatches: () => [{ cells: group, points: 4 }],
+    toggleOnMatch: true,
+  };
+  const stepper = createCascadeStepper(cfg, null, { line: '整线', pattern: '图案' });
+  const step = stepper.next();
+  check('无限反转：两正两反的 1×4 照样得分', step !== null && step.points === 4, JSON.stringify(step?.points));
+  step?.commit();
+  check('无限反转：得分后正面翻成反面、反面翻回正面',
+    group.map(([r, c]) => b.faceOf(r, c)).join() === 'dot,dot,flavor,flavor',
+    group.map(([r, c]) => b.faceOf(r, c)).join());
+  // 这份假的 findMatches 永远说「那一组还在」——翻回来的两枚是正面，于是又
+  // 得分、又翻回去……真棋盘上几乎不会绕回来，这里逼它绕，看上限拦不拦得住。
+  let beats = 0;
+  for (let step2 = stepper.next(); step2; step2 = stepper.next()) { step2.commit(); if (++beats > 40) break; }
+  check('无限反转：一次连锁有上限，不会转到天荒地老', beats > 0 && beats <= 12, `${beats} 拍`);
+  // 普通规则对照：同一副牌不开 toggleOnMatch，反面的两枚不动，正面翻过去就完了。
+  const b2 = board(['0,0', '0,1']); b2.tileAt(0, 2); b2.tileAt(0, 3);
+  const plain = createCascadeStepper({ ...cfg, tileAt: b2.tileAt, toggleOnMatch: false }, null, { line: '整线', pattern: '图案' });
+  plain.next()?.commit();
+  check('普通规则：只把正面翻到反面', group.map(([r, c]) => b2.faceOf(r, c)).join() === 'dot,dot,dot,dot');
+  check('普通规则：翻完全是反面，同一组不再给分', plain.next() === null);
+}
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

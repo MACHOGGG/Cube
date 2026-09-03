@@ -36,6 +36,7 @@ import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { renderTutorialPicker } from './ui/tutorialPicker';
+import { renderFlipModePage } from './ui/flipMode';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
 import { createTriangleGame } from './shapes/triangle';
@@ -113,7 +114,12 @@ const recordSources: RecordSource[] = [
   ...games.map((g) => ({ card: g.card, suffix: '_bomb', mode: ' · 💥' })),
   ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
   ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb', mode: ' · + 💥' })),
+  // 《无限反转》只有基础方块和小球有。
+  ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip', mode: ' · ∞' })),
 ];
+
+/** 《无限反转》一局多长：玩家定的 120 秒。 */
+const FLIP_SECONDS = 120;
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -439,6 +445,7 @@ function showAccountPage(tab: AuthTab, restore = false) {
       onMoreTargets: showTargetsShowcase,
       onMoreLayouts: showLayoutsShowcase,
       onWorldRank: showWorldRankPage,
+      onMoreModes: showFlipMode,
     },
     currentLang,
   );
@@ -460,6 +467,31 @@ function showSlotIntro() {
     root,
     currentLang,
     { onBack: backToProfile, onGo: () => showRandomTarget('intro') },
+    !isGenius(),
+  );
+  wireHomeTitle();
+  repaintIcons();
+  toTop();
+}
+
+/**
+ * 《无限反转》：挑方块还是小球，120 秒，得分翻面来回翻。天才特供的一档——
+ * 没开通的人看得见那一屏，按下去是订阅那扇窗。
+ */
+function showFlipMode() {
+  teardown();
+  trackScreen('flip-mode');
+  renderFlipModePage(
+    root,
+    currentLang,
+    {
+      onBack: backToProfile,
+      onStart: (family) => {
+        const game = family === 'square' ? squareGame : circleGame;
+        showGame(game, { flip: true, timeLimitSec: FLIP_SECONDS }, showFlipMode);
+      },
+      onGenius: () => openGeniusWindow(currentLang, showFlipMode),
+    },
     !isGenius(),
   );
   wireHomeTitle();

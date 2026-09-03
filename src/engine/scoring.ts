@@ -72,7 +72,20 @@ export interface CascadeConfig {
   /** Square also stops the instant the board is fully cleared away. */
   isTerminalAfterLineBonus?(): boolean;
   findMatches(mask: Set<string> | null): Match[];
+  /**
+   * 无限反转：得分之后一组里的每一枚都翻一次——正面翻到反面、反面翻回正面
+   * （普通规则只把正面翻到反面）。「至少要有一枚正面才算分」那条不变，所以
+   * 一组全是反面的照旧不给分。见 ShapeGameOpts.flip。
+   */
+  toggleOnMatch?: boolean;
 }
+
+/**
+ * 无限反转一次连锁最多几拍。翻回正面的那几枚理论上可能再凑成一组、再翻回
+ * 去；棋子的正反两面颜色几乎从不相同（一色只有一枚「自配」），所以真绕回来
+ * 的机会很小，但「几乎」不是「从不」——给一道硬上限，永远转不到天荒地老。
+ */
+const TOGGLE_STEP_CAP = 12;
 
 /**
  * One "beat" of a cascade — either a wave of whole-line bonuses or a wave of
@@ -166,9 +179,15 @@ export function createCascadeStepper(
 ): CascadeStepper {
   let mask = initialMask;
   let terminal = false;
+  let steps = 0;
 
   function next(): CascadeStep | null {
     if (terminal) return null;
+    if (cfg.toggleOnMatch && steps >= TOGGLE_STEP_CAP) {
+      terminal = true;
+      return null;
+    }
+    steps++;
 
     const lineBonuses = cfg.findLineBonuses();
     if (lineBonuses.length) {
@@ -204,7 +223,8 @@ export function createCascadeStepper(
         points += m.points;
         for (const [r, c] of m.cells) {
           nextMask.add(cellKey(r, c));
-          if (cfg.tileAt(r, c).face === 'flavor') toFlip.add(cellKey(r, c));
+          // 普通规则只翻正面；无限反转一组里每一枚都翻（反面翻回正面）。
+          if (cfg.toggleOnMatch || cfg.tileAt(r, c).face === 'flavor') toFlip.add(cellKey(r, c));
         }
       }
       mask = nextMask;
@@ -219,7 +239,8 @@ export function createCascadeStepper(
         commit() {
           for (const key of toFlip) {
             const [r, c] = key.split(',').map(Number);
-            cfg.tileAt(r, c).face = 'dot';
+            const t = cfg.tileAt(r, c);
+            t.face = cfg.toggleOnMatch && t.face === 'dot' ? 'flavor' : 'dot';
           }
         },
       };

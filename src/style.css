@@ -3335,3 +3335,9 @@ body.is-room-host::after {
 .rl-check { width: 1.1em; height: 1.1em; margin-left: 0.2em; flex: none; }
 .rl-sym { width: 1.15em; height: 1.15em; flex: none; }
 @media (prefers-reduced-motion: reduce) { .rl-flip, .rl-fade, .rl-row--score { animation: none; } }
+
+/* ---------- 《无限反转》挑图形那一屏：两张图 + 一句规矩 ---------- */
+.flip-tagline { margin: clamp(12px, 3vh, 26px) 0 0; text-align: center; }
+/* 这一页借的 .start-count 是横着排的（开局页里图和数字并排），两张图那一行和
+   底下那句规矩得竖着叠，否则句子会跑到图的右边去。 */
+.flip-page .slot-pick-area { flex-direction: column; }
