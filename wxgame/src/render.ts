@@ -4,6 +4,10 @@
  */
 import type { Cell, Tile } from '../../src/engine/types';
 import { cellKey } from '../../src/engine/types';
+import { BOARD_FORCE } from '../../src/engine/dragChain';
+
+/** 挤到底时压扁多少——和 dragChain.ts 里那个 SQUASH 同一个数。 */
+const SQUASH = 0.1;
 import type { Board } from './board';
 
 /**
@@ -26,12 +30,24 @@ export interface Layout {
 export const STEP_UNITS = 2;
 
 /** 手指还按着的那一条线：整条跟着手指挪，走出去的那一头从另一头补进来。 */
+/**
+ * 正被手指拖着的那条线，画的时候要知道的事。
+ *
+ * 一条线不是一块铁板：手指下面那一颗跟得最紧，越往两头越慢半拍，松手之后尾
+ * 巴还会晃一下——这套弹簧是网页版的 src/engine/dragChain.ts，两边用的是同一
+ * 份，所以手感一样。所以这儿给的不是「整条线挪了多少」，而是「第 i 颗挪了多
+ * 少」。
+ */
 export interface DragView {
   cells: readonly Cell[];
   /** 这条线在画面上的方向（单位向量）。 */
   vec: readonly [number, number];
-  /** 沿着这个方向挪了多少像素。 */
-  offsetPx: number;
+  /** 第 i 颗沿着这个方向挪了多少格（一格 = STEP_UNITS 个单位）。 */
+  slotsAt(i: number): number;
+  /** 第 i 颗被前面那颗挤到什么程度，0～1——画的时候顺着拖动方向压扁一点。 */
+  pressAt(i: number): number;
+  /** 不在这条线上的那一颗要跟着蹭多远（格）：按它离这条线几条来给。 */
+  nudgeAt(r: number, c: number): number;
 }
 
 export interface Highlight {
@@ -206,25 +222,53 @@ export function drawBoard(
     for (let c = 0; c < board.cellsInRow(r); c++) {
       if (onDrag.has(cellKey(r, c))) continue;
       const [px, py] = pixelOf(board, layout, r, c);
-      drawPiece(ctx, board.tileAt(r, c), board.kind, px, py, unit, palette);
+      // 旁边几条线跟着蹭一点（同网页版：被拖那条越快，邻居被带得越远，然后
+      // 各自弹回原位）。
+      const nudge = drag ? drag.nudgeAt(r, c) * STEP_UNITS * unit : 0;
+      const dx = drag && nudge ? drag.vec[0] * nudge : 0;
+      const dy = drag && nudge ? drag.vec[1] * nudge : 0;
+      drawPiece(ctx, board.tileAt(r, c), board.kind, px + dx, py + dy, unit, palette);
     }
   if (drag) {
     // 被拖的那条线画三份（本位、前一圈、后一圈），裁在版图里，看起来就是循
     // 环补位：从这头滑出去的那一颗，正好从那头进来。
-    const span = drag.cells.length * STEP_UNITS * unit;
+    //
+    // 每一颗自己挪自己的（drag.slotsAt(i)）：手指下面那颗跟得紧，越往两头越
+    // 慢半拍——弹簧在 src/engine/dragChain.ts，和网页版同一份。
+    //
+    // 淡出淡入的规矩也照网页版：滑出线两端之外的那一段按 FADE_RANGE 淡掉，
+    // 补位的那两份最浓只到 0.55——一眼能看出「那是绕回来的影子，不是又多出
+    // 一颗棋子」。
+    const n = drag.cells.length;
+    const step = STEP_UNITS * unit;
+    const FADE_RANGE = 0.4;
+    const fadeAt = (pos: number) => {
+      const over = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
+      return Math.max(0, 1 - over / FADE_RANGE);
+    };
     for (let k = -1; k <= 1; k++) {
-      const off = drag.offsetPx + k * span;
-      for (const [r, c] of drag.cells) {
+      for (let i = 0; i < n; i++) {
+        const slots = drag.slotsAt(i);
+        const pos = i + slots + k * n;
+        const alpha = fadeAt(pos) * (k === 0 ? 1 : 0.55);
+        if (alpha <= 0.01) continue;
+        const [r, c] = drag.cells[i];
         const [px, py] = pixelOf(board, layout, r, c);
-        drawPiece(
-          ctx,
-          board.tileAt(r, c),
-          board.kind,
-          px + drag.vec[0] * off,
-          py + drag.vec[1] * off,
-          unit,
-          palette,
-        );
+        const off = (pos - i) * step;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        // 挤到一起的那一下压扁一点：顺着拖动方向压，横着不动（同网页版的
+        // pressScale）。
+        const squash = drag.pressAt(i) * SQUASH * BOARD_FORCE;
+        const cx = px + drag.vec[0] * off;
+        const cy = py + drag.vec[1] * off;
+        if (squash > 0.0005) {
+          ctx.translate(cx, cy);
+          ctx.scale(1 - squash * Math.abs(drag.vec[0]), 1 - squash * Math.abs(drag.vec[1]));
+          ctx.translate(-cx, -cy);
+        }
+        drawPiece(ctx, board.tileAt(r, c), board.kind, cx, cy, unit, palette);
+        ctx.restore();
       }
     }
   }

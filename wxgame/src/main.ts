@@ -15,6 +15,7 @@
 import { createSquareBoard } from './squareBoard';
 import { createCircleBoard } from './circleBoard';
 import type { Board, BoardLabels, BoardLine } from './board';
+import type { Cell } from '../../src/engine/types';
 import { createPlatform } from './platform';
 import {
   cellAtPoint,
@@ -34,6 +35,10 @@ import { compositeScore } from './composite';
 import { createStreakTracker } from '../../src/engine/scoring';
 import { createPerformanceGauge } from '../../src/engine/performance';
 import { cellKey } from '../../src/engine/types';
+// 拖动的手感（磁吸卡点 + 弹簧拖尾 + 松手落位）直接用网页版那两份，不另写一
+// 套：玩家的原话是「操作效果我都不希望有任何改动」。
+import { magnetizeRawDist } from '../../src/engine/drag';
+import { BOARD_FORCE, createDragChain, type DragChain } from '../../src/engine/dragChain';
 
 // 先只做简体中文；多语言等界面定下来再接网页版的 i18n。
 const T = {
@@ -124,9 +129,24 @@ let againRect: [number, number, number, number] | null = null;
  * 挑一条——手指往哪边拖，投影最大的那条就是它。方块只有横竖两条，小球有三
  * 条（一横两斜），挑法是同一个。
  */
-let drag:
-  | { line: BoardLine | null; lines: BoardLine[]; x0: number; y0: number; dx: number; dy: number; lastShift: number }
-  | null = null;
+interface DragState {
+  line: BoardLine | null;
+  lines: BoardLine[];
+  x0: number;
+  y0: number;
+  dx: number;
+  dy: number;
+  lastShift: number;
+  /** 手指按住的是这条线上第几颗——弹簧从这一颗往两头传。 */
+  grabbed: number;
+  /** 那套弹簧本身（网页版 dragChain）。挑中线之后才有。 */
+  chain: DragChain | null;
+  /** 松手之后、这条线还在弹回卡点的那几百毫秒：画面照画，手指不再管用。 */
+  settling: boolean;
+}
+let drag: DragState | null = null;
+/** 手指按下时按中的那一颗——挑定线之后要靠它算「按住的是第几颗」。 */
+let grabbedCell: Cell | null = null;
 
 /** 手指这一下沿着某条线走了多远（像素，正数是顺着 vec 的方向）。 */
 const along = (line: BoardLine, dx: number, dy: number): number => dx * line.vec[0] + dy * line.vec[1];
@@ -162,6 +182,9 @@ function startCountdown(entry: Game) {
 }
 
 function newGame() {
+  drag?.chain?.stop();
+  drag = null;
+  grabbedCell = null;
   screen = 'play';
   board = current.create(LABELS);
   board.deal();
@@ -182,6 +205,9 @@ function newGame() {
 
 /** 回主菜单：这一局就此作罢，不留结算。 */
 function goHome() {
+  drag?.chain?.stop();
+  drag = null;
+  grabbedCell = null;
   screen = 'menu';
   over = false;
   resolving = false;
@@ -290,12 +316,31 @@ p.onTouch({
       return;
     }
     if (resolving) return;
+    // 上一条还在弹回去的时候又按下来：立刻把它落定，别把这一下吞掉（同网页版
+    // 的 chain.flush——快手连着走两行不该丢一步）。
+    if (drag?.settling) {
+      drag.chain?.flush();
+      drag = null;
+    }
+    if (resolving) return;
     const hit = cellAtPoint(board, layout(), x, y);
     if (!hit) return;
-    drag = { line: null, lines: board.linesThrough(hit[0], hit[1]), x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
+    drag = {
+      line: null,
+      lines: board.linesThrough(hit[0], hit[1]),
+      x0: x,
+      y0: y,
+      dx: 0,
+      dy: 0,
+      lastShift: 0,
+      grabbed: 0,
+      chain: null,
+      settling: false,
+    };
+    grabbedCell = hit;
   },
   move(x, y) {
-    if (screen !== 'play' || !drag) return;
+    if (screen !== 'play' || !drag || drag.settling) return;
     drag.dx = x - drag.x0;
     drag.dy = y - drag.y0;
     if (!drag.line) {
@@ -312,25 +357,57 @@ p.onTouch({
       }
       drag.line = best;
       if (!drag.line) return;
+      // 挑定了才架弹簧：它要知道这条线有几颗、手指按住的是第几颗。
+      const g = grabbedCell;
+      drag.grabbed = Math.max(
+        0,
+        drag.line.cells.findIndex(([r, c]) => !!g && r === g[0] && c === g[1]),
+      );
+      drag.chain = createDragChain({
+        n: drag.line.cells.length,
+        grabbed: drag.grabbed,
+        force: BOARD_FORCE,
+        // 画面本来就每帧重画（主循环），不用它再催一次。
+        onFrame: () => {},
+      });
     }
     const L = layout();
-    const shift = Math.round(along(drag.line, drag.dx, drag.dy) / (L.unit * STEP_UNITS));
+    const raw = along(drag.line, drag.dx, drag.dy) / (L.unit * STEP_UNITS);
+    const shift = Math.round(raw);
     if (shift !== drag.lastShift) {
       drag.lastShift = shift;
       p.vibrate();
     }
+    // 磁吸：卡点附近粘一下，过了半格才肯松开。落到哪一格没变，变的只是拖动
+    // 过程中看到的位置（magnetizeRawDist 的 round 和原值的 round 永远相同）。
+    drag.chain?.drive(magnetizeRawDist(raw));
   },
   end(x, y) {
     const d = drag;
-    drag = null;
-    if (screen !== 'play' || !d || !d.line) return;
+    if (screen !== 'play' || !d || !d.line || d.settling) {
+      drag = null;
+      return;
+    }
     d.dx = x - d.x0;
     d.dy = y - d.y0;
     const L = layout();
     // 松手落到最近的整格：走了几个「一步」就滑几格，没到半格就当没拖。
     const by = Math.round(along(d.line, d.dx, d.dy) / (L.unit * STEP_UNITS));
-    if (by === 0) return;
-    resolveMove(board.shiftLine(d.line.id, by));
+    const line = d.line;
+    if (!d.chain) {
+      drag = null;
+      if (by !== 0) resolveMove(board.shiftLine(line.id, by));
+      return;
+    }
+    // 不是「啪」一下切到结果：弹簧把这条线送进卡点，尾巴再晃一下，然后才真
+    // 的动棋盘（同网页版 chain.settle）。这几百毫秒里 drag 还留着，画面照画，
+    // 手指不管用。
+    d.settling = true;
+    d.chain.settle(by, () => {
+      d.chain?.stop();
+      drag = null;
+      if (by !== 0) resolveMove(board.shiftLine(line.id, by));
+    });
   },
 });
 
@@ -361,8 +438,25 @@ function draw() {
   });
   const L = layout();
   let dv: DragView | null = null;
-  if (drag?.line) {
-    dv = { cells: drag.line.cells, vec: drag.line.vec, offsetPx: along(drag.line, drag.dx, drag.dy) };
+  if (drag?.line && drag.chain) {
+    const chain = drag.chain;
+    const line = drag.line;
+    // 邻居跟着蹭多远：先找出它和被拖那条线隔了几条。两副棋盘的线号都是
+    // 「族 + 序号」（R3、A2、B5、C4），所以同族的两条线相差几号就是隔几条；
+    // 不同族的不算邻居。
+    const fam = line.id[0];
+    const own = Number(line.id.slice(1));
+    dv = {
+      cells: line.cells,
+      vec: line.vec,
+      slotsAt: (i) => chain.at(i),
+      pressAt: (i) => chain.press(i),
+      nudgeAt: (r, c) => {
+        const same = board.linesThrough(r, c).find((l) => l.id[0] === fam);
+        if (!same) return 0;
+        return chain.side(Math.abs(Number(same.id.slice(1)) - own));
+      },
+    };
   }
   if (board.rows > 0) drawBoard(ctx, board, L, dv, highlights, stuckKeys);
   if (over && endCard) {

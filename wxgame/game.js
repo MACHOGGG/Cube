@@ -227,15 +227,15 @@
     }
     function hasInitialClump(g) {
       const R = g.length;
-      const C = g[0].length;
+      const C2 = g[0].length;
       const col = (r, c) => g[r][c].color;
       for (let r = 0; r < R; r++)
-        for (let c = 0; c < C; c++) {
-          if (c <= C - 3 && col(r, c) === col(r, c + 1) && col(r, c) === col(r, c + 2)) return true;
+        for (let c = 0; c < C2; c++) {
+          if (c <= C2 - 3 && col(r, c) === col(r, c + 1) && col(r, c) === col(r, c + 2)) return true;
           if (r <= R - 3 && col(r, c) === col(r + 1, c) && col(r, c) === col(r + 2, c)) return true;
-          if (r <= R - 2 && c <= C - 2 && col(r, c) === col(r, c + 1) && col(r, c) === col(r + 1, c) && col(r, c) === col(r + 1, c + 1))
+          if (r <= R - 2 && c <= C2 - 2 && col(r, c) === col(r, c + 1) && col(r, c) === col(r + 1, c) && col(r, c) === col(r + 1, c + 1))
             return true;
-          if (r <= R - 3 && c <= C - 3 && col(r, c) === col(r + 1, c + 1) && col(r, c) === col(r + 2, c + 2)) return true;
+          if (r <= R - 3 && c <= C2 - 3 && col(r, c) === col(r + 1, c + 1) && col(r, c) === col(r + 2, c + 2)) return true;
           if (r <= R - 3 && c >= 2 && col(r, c) === col(r + 1, c - 1) && col(r, c) === col(r + 2, c - 2)) return true;
         }
       return false;
@@ -885,7 +885,188 @@
     };
   }
 
+  // src/engine/reducedMotion.ts
+  function reducedMotion() {
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // src/engine/dragChain.ts
+  var BOARD_FORCE = 0.03;
+  var COUPLE = 0.55;
+  var K = 260;
+  var C = 26;
+  var ENTRAIN = 0.03;
+  var K_N = 190;
+  var C_N = 17;
+  var REACH = [0, 1, 0.45, 0.18];
+  var K_SETTLE = 430;
+  var C_SETTLE = 42;
+  var SETTLE_CAP_MS = 260;
+  function createDragChain(opts) {
+    var _a, _b;
+    if (reducedMotion()) {
+      let s2 = 0;
+      return {
+        drive: (x) => {
+          s2 = x;
+          opts.onFrame();
+        },
+        at: () => s2,
+        press: () => 0,
+        side: () => 0,
+        settle: (finalSlots, done) => {
+          s2 = finalSlots;
+          opts.onFrame();
+          done();
+        },
+        flush: () => false,
+        stop: () => {
+        }
+      };
+    }
+    const { n, grabbed } = opts;
+    const clearance = (_a = opts.clearance) != null ? _a : 0.07;
+    const force = (_b = opts.force) != null ? _b : 1;
+    const couple = COUPLE * force;
+    const entrain = ENTRAIN * force;
+    const p2 = new Array(n).fill(0);
+    const v = new Array(n).fill(0);
+    const press = new Array(n).fill(0);
+    const nudge = new Array(REACH.length).fill(0);
+    const nv = new Array(REACH.length).fill(0);
+    let s = 0;
+    let prevS = 0;
+    let raf = 0;
+    let last = performance.now();
+    let settling = null;
+    let stopped = false;
+    function relax(i, ahead, dt) {
+      const target = s * (1 - couple) + p2[ahead] * couple;
+      v[i] += (K * (target - p2[i]) - C * v[i]) * dt;
+      p2[i] += v[i] * dt;
+      const gap = p2[i] - p2[ahead];
+      if (gap > clearance) {
+        press[i] = Math.min(1, (gap - clearance) / clearance);
+        p2[i] = p2[ahead] + clearance;
+        if (v[i] > 0) v[i] = 0;
+      } else if (gap < -clearance) {
+        press[i] = Math.min(1, (-gap - clearance) / clearance);
+        p2[i] = p2[ahead] - clearance;
+        if (v[i] < 0) v[i] = 0;
+      } else {
+        press[i] *= 0.86;
+      }
+    }
+    function step(now) {
+      var _a2, _b2;
+      if (stopped) return;
+      const dt = Math.min(0.032, (now - last) / 1e3);
+      last = now;
+      if (settling) {
+        settling.sv += (K_SETTLE * (settling.final - s) - C_SETTLE * settling.sv) * dt;
+        s += settling.sv * dt;
+      }
+      const driveV = (s - prevS) / Math.max(dt, 1e-4);
+      prevS = s;
+      p2[grabbed] = s;
+      v[grabbed] = driveV;
+      for (let i = grabbed + 1; i < n; i++) relax(i, i - 1, dt);
+      for (let i = grabbed - 1; i >= 0; i--) relax(i, i + 1, dt);
+      press[grabbed] = (((_a2 = press[grabbed - 1]) != null ? _a2 : 0) + ((_b2 = press[grabbed + 1]) != null ? _b2 : 0)) * 0.3;
+      let mean = 0;
+      for (let i = 0; i < n; i++) mean += v[i];
+      mean /= n;
+      for (let d = 1; d < REACH.length; d++) {
+        nv[d] += (entrain * REACH[d] * mean * K_N - K_N * nudge[d] - C_N * nv[d]) * dt;
+        nudge[d] += nv[d] * dt;
+      }
+      opts.onFrame();
+      if (settling) {
+        let rest = Math.abs(s - settling.final) < 8e-3 && Math.abs(settling.sv) < 0.05;
+        for (let i = 0; rest && i < n; i++) {
+          if (Math.abs(p2[i] - settling.final) > 0.012 || Math.abs(v[i]) > 0.06) rest = false;
+        }
+        if (rest || now - settling.start > SETTLE_CAP_MS) {
+          const done = settling.done;
+          s = settling.final;
+          p2.fill(settling.final);
+          v.fill(0);
+          press.fill(0);
+          settling = null;
+          stopped = true;
+          opts.onFrame();
+          done();
+          return;
+        }
+      }
+      raf = requestAnimationFrame(step);
+    }
+    raf = requestAnimationFrame((t) => {
+      last = t;
+      step(t);
+    });
+    return {
+      drive: (x) => {
+        s = x;
+      },
+      /**
+       * Slot i's travel, with the simulation's departure from the rigid line
+       * scaled by `force`.
+       *
+       * The scaling has to happen here rather than inside the integrator. The
+       * grabbed piece is pinned exactly to the finger while every follower only
+       * springs toward its target, so a follower trails by a fixed fraction of
+       * a cell that comes from the spring itself, not from the coupling — which
+       * meant that turning `force` all the way down still left the line
+       * visibly stretching under the finger (measured: 21% of a cell at every
+       * value of force, 1 through 0). Blending the read value back toward the
+       * drive makes `force` mean what it says: 0 is a rigid line, 1 is the full
+       * wave, and the physics underneath — contact, squash, the sprung settle —
+       * is untouched, so the release still eases rather than snapping.
+       */
+      at: (i) => {
+        const at = p2[i];
+        return at === void 0 ? s : s + (at - s) * force;
+      },
+      press: (i) => {
+        var _a2;
+        return (_a2 = press[i]) != null ? _a2 : 0;
+      },
+      side: (dist) => {
+        var _a2;
+        return (_a2 = nudge[dist]) != null ? _a2 : 0;
+      },
+      settle: (finalSlots, done) => {
+        if (settling) return;
+        settling = { final: finalSlots, sv: 0, start: performance.now(), done };
+      },
+      flush: () => {
+        if (!settling) return false;
+        const { final, done } = settling;
+        s = final;
+        p2.fill(final);
+        v.fill(0);
+        press.fill(0);
+        settling = null;
+        stopped = true;
+        cancelAnimationFrame(raf);
+        opts.onFrame();
+        done();
+        return true;
+      },
+      stop: () => {
+        stopped = true;
+        cancelAnimationFrame(raf);
+      }
+    };
+  }
+
   // wxgame/src/render.ts
+  var SQUASH = 0.1;
   var STEP_UNITS = 2;
   var COLORS = {
     page: "#FAF6EC",
@@ -994,23 +1175,40 @@
       for (let c = 0; c < board2.cellsInRow(r); c++) {
         if (onDrag.has(cellKey(r, c))) continue;
         const [px, py] = pixelOf(board2, layout2, r, c);
-        drawPiece(ctx, board2.tileAt(r, c), board2.kind, px, py, unit, palette);
+        const nudge = drag2 ? drag2.nudgeAt(r, c) * STEP_UNITS * unit : 0;
+        const dx = drag2 && nudge ? drag2.vec[0] * nudge : 0;
+        const dy = drag2 && nudge ? drag2.vec[1] * nudge : 0;
+        drawPiece(ctx, board2.tileAt(r, c), board2.kind, px + dx, py + dy, unit, palette);
       }
     if (drag2) {
-      const span = drag2.cells.length * STEP_UNITS * unit;
+      const n = drag2.cells.length;
+      const step = STEP_UNITS * unit;
+      const FADE_RANGE = 0.4;
+      const fadeAt = (pos) => {
+        const over2 = pos < 0 ? -pos : pos > n - 1 ? pos - (n - 1) : 0;
+        return Math.max(0, 1 - over2 / FADE_RANGE);
+      };
       for (let k = -1; k <= 1; k++) {
-        const off = drag2.offsetPx + k * span;
-        for (const [r, c] of drag2.cells) {
+        for (let i = 0; i < n; i++) {
+          const slots = drag2.slotsAt(i);
+          const pos = i + slots + k * n;
+          const alpha = fadeAt(pos) * (k === 0 ? 1 : 0.55);
+          if (alpha <= 0.01) continue;
+          const [r, c] = drag2.cells[i];
           const [px, py] = pixelOf(board2, layout2, r, c);
-          drawPiece(
-            ctx,
-            board2.tileAt(r, c),
-            board2.kind,
-            px + drag2.vec[0] * off,
-            py + drag2.vec[1] * off,
-            unit,
-            palette
-          );
+          const off = (pos - i) * step;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          const squash = drag2.pressAt(i) * SQUASH * BOARD_FORCE;
+          const cx = px + drag2.vec[0] * off;
+          const cy = py + drag2.vec[1] * off;
+          if (squash > 5e-4) {
+            ctx.translate(cx, cy);
+            ctx.scale(1 - squash * Math.abs(drag2.vec[0]), 1 - squash * Math.abs(drag2.vec[1]));
+            ctx.translate(-cx, -cy);
+          }
+          drawPiece(ctx, board2.tileAt(r, c), board2.kind, cx, cy, unit, palette);
+          ctx.restore();
         }
       }
     }
@@ -1237,6 +1435,14 @@
     return { onMove, valuePercent, reset };
   }
 
+  // src/engine/drag.ts
+  function magnetizeRawDist(x, power = 2.2) {
+    const nearest = Math.round(x);
+    const t = (x - nearest) * 2;
+    const eased = Math.sign(t) * Math.abs(t) ** power;
+    return nearest + eased / 2;
+  }
+
   // wxgame/src/main.ts
   var T = {
     score: "\u5F97\u5206",
@@ -1297,6 +1503,7 @@
   var endCard = null;
   var againRect = null;
   var drag = null;
+  var grabbedCell = null;
   var along = (line, dx, dy) => dx * line.vec[0] + dy * line.vec[1];
   var HUD_TOP = 48;
   var HUD_H = 58;
@@ -1320,6 +1527,10 @@
     countStartedAt = p.now();
   }
   function newGame() {
+    var _a;
+    (_a = drag == null ? void 0 : drag.chain) == null ? void 0 : _a.stop();
+    drag = null;
+    grabbedCell = null;
     screen = "play";
     board = current.create(LABELS);
     board.deal();
@@ -1338,6 +1549,10 @@
     startedAt = p.now();
   }
   function goHome() {
+    var _a;
+    (_a = drag == null ? void 0 : drag.chain) == null ? void 0 : _a.stop();
+    drag = null;
+    grabbedCell = null;
     screen = "menu";
     over = false;
     resolving = false;
@@ -1419,6 +1634,7 @@
   var inRect = (r, x, y) => !!r && x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3];
   p.onTouch({
     start(x, y) {
+      var _a;
       if (screen === "menu") {
         const hit2 = menuHits.find((h) => inRect(h.rect, x, y));
         const entry = hit2 && GAMES.find((g) => g.id === hit2.id);
@@ -1435,12 +1651,30 @@
         return;
       }
       if (resolving) return;
+      if (drag == null ? void 0 : drag.settling) {
+        (_a = drag.chain) == null ? void 0 : _a.flush();
+        drag = null;
+      }
+      if (resolving) return;
       const hit = cellAtPoint(board, layout(), x, y);
       if (!hit) return;
-      drag = { line: null, lines: board.linesThrough(hit[0], hit[1]), x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
+      drag = {
+        line: null,
+        lines: board.linesThrough(hit[0], hit[1]),
+        x0: x,
+        y0: y,
+        dx: 0,
+        dy: 0,
+        lastShift: 0,
+        grabbed: 0,
+        chain: null,
+        settling: false
+      };
+      grabbedCell = hit;
     },
     move(x, y) {
-      if (screen !== "play" || !drag) return;
+      var _a;
+      if (screen !== "play" || !drag || drag.settling) return;
       drag.dx = x - drag.x0;
       drag.dy = y - drag.y0;
       if (!drag.line) {
@@ -1456,24 +1690,52 @@
         }
         drag.line = best;
         if (!drag.line) return;
+        const g = grabbedCell;
+        drag.grabbed = Math.max(
+          0,
+          drag.line.cells.findIndex(([r, c]) => !!g && r === g[0] && c === g[1])
+        );
+        drag.chain = createDragChain({
+          n: drag.line.cells.length,
+          grabbed: drag.grabbed,
+          force: BOARD_FORCE,
+          // 画面本来就每帧重画（主循环），不用它再催一次。
+          onFrame: () => {
+          }
+        });
       }
       const L = layout();
-      const shift = Math.round(along(drag.line, drag.dx, drag.dy) / (L.unit * STEP_UNITS));
+      const raw = along(drag.line, drag.dx, drag.dy) / (L.unit * STEP_UNITS);
+      const shift = Math.round(raw);
       if (shift !== drag.lastShift) {
         drag.lastShift = shift;
         p.vibrate();
       }
+      (_a = drag.chain) == null ? void 0 : _a.drive(magnetizeRawDist(raw));
     },
     end(x, y) {
       const d = drag;
-      drag = null;
-      if (screen !== "play" || !d || !d.line) return;
+      if (screen !== "play" || !d || !d.line || d.settling) {
+        drag = null;
+        return;
+      }
       d.dx = x - d.x0;
       d.dy = y - d.y0;
       const L = layout();
       const by = Math.round(along(d.line, d.dx, d.dy) / (L.unit * STEP_UNITS));
-      if (by === 0) return;
-      resolveMove(board.shiftLine(d.line.id, by));
+      const line = d.line;
+      if (!d.chain) {
+        drag = null;
+        if (by !== 0) resolveMove(board.shiftLine(line.id, by));
+        return;
+      }
+      d.settling = true;
+      d.chain.settle(by, () => {
+        var _a;
+        (_a = d.chain) == null ? void 0 : _a.stop();
+        drag = null;
+        if (by !== 0) resolveMove(board.shiftLine(line.id, by));
+      });
     }
   });
   function draw() {
@@ -1502,8 +1764,22 @@
     });
     const L = layout();
     let dv = null;
-    if (drag == null ? void 0 : drag.line) {
-      dv = { cells: drag.line.cells, vec: drag.line.vec, offsetPx: along(drag.line, drag.dx, drag.dy) };
+    if ((drag == null ? void 0 : drag.line) && drag.chain) {
+      const chain = drag.chain;
+      const line = drag.line;
+      const fam = line.id[0];
+      const own = Number(line.id.slice(1));
+      dv = {
+        cells: line.cells,
+        vec: line.vec,
+        slotsAt: (i) => chain.at(i),
+        pressAt: (i) => chain.press(i),
+        nudgeAt: (r, c) => {
+          const same = board.linesThrough(r, c).find((l) => l.id[0] === fam);
+          if (!same) return 0;
+          return chain.side(Math.abs(Number(same.id.slice(1)) - own));
+        }
+      };
     }
     if (board.rows > 0) drawBoard(ctx, board, L, dv, highlights, stuckKeys);
     if (over && endCard) {

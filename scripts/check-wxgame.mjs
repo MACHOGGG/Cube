@@ -267,7 +267,12 @@ async function dragOne(r, c, dx, dy) {
     await page.waitForTimeout(16);
   }
   await page.mouse.up();
-  await page.waitForTimeout(150);
+  // 松手不等于落定：那条线还要被弹簧送进卡点、尾巴晃一下，之后才真的动棋盘
+  // （同网页版的 chain.settle）。等它彻底交回来再看结果。
+  await page
+    .waitForFunction(() => !globalThis.__slidesWx.drag && !globalThis.__slidesWx.resolving, { timeout: 5000 })
+    .catch(() => {});
+  await page.waitForTimeout(120);
 }
 
 // 真拖：第 2 行，向右一格。

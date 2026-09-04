@@ -22,7 +22,9 @@
  * drive for every slot, presses and side nudges are 0, and `settle` resolves
  * immediately — callers keep a single code path.
  */
-import { reducedMotion } from './juice';
+// 只从 reducedMotion.ts 拿，不从 juice 拿：微信小游戏那边也要用这套弹簧，而
+// juice 一加载就去读本地存档和音频 API，那边没有。
+import { reducedMotion } from './reducedMotion';
 
 /**
  * How far the pieces may depart from moving as one rigid line.

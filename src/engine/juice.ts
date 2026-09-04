@@ -8,13 +8,11 @@
  */
 import { play } from 'cuelume';
 
-export function reducedMotion(): boolean {
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return false;
-  }
-}
+// 这一句搬去了 reducedMotion.ts（那儿一个依赖都没有，小游戏那边的 dragChain
+// 只需要它，不该为它把整个 juice 拖进去）。这儿原样再导出一次，全站几十处
+// `from './juice'` 都不用改。
+import { reducedMotion } from './reducedMotion';
+export { reducedMotion };
 
 /** Front-loaded deceleration — most of the travel happens early, then a long soft settle, reading as friction rather than a hard stop. */
 export const EASE_GROUNDED = 'cubic-bezier(0.22, 1, 0.36, 1)';
