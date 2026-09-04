@@ -2137,7 +2137,19 @@ body:has(.slot-page) .home-nav { display: none; }
    so a buyer can tell at a glance which half they get today. */
 .genius-perk--soon { opacity: 0.58; }
 .genius-perk--soon::before { color: var(--ink-soft); }
-.auth-body { min-height: 96px; display: flex; align-items: center; justify-content: center; }
+/* 登录那扇窗的正文：一摞东西，自上而下。
+   从前这里是 flex 的默认方向——横排。它当初只装一件东西（一张表单），横排
+   竖排看不出区别，居中是它真正要的。后来这块地方陆续多了几件：一句说明、一
+   行状态、一颗《有内部码？》。五件东西挤在 272px 宽的窗里，每件都被压到自己
+   的最小宽度，于是「有内部码？」变成了一列字，一个字一行——玩家看到的正是这
+   个。
+   改成竖排：justify-content 仍然把整摞在竖直方向居中（窗有 96px 的最小高，
+   东西少时居中才好看），align-items: stretch 让每件占满整行宽——输入框那句
+   width: 100% 这才有得可依。 */
+.auth-body {
+  min-height: 96px; display: flex; flex-direction: column;
+  align-items: stretch; justify-content: center;
+}
 /* 设置密码: the account above, the empty password box below it. */
 .pw-form { display: flex; flex-direction: column; align-items: stretch; text-align: left; }
 /* 建账号时那一行「要不要收信」。刻意做得轻：它不是一道关卡，只是一句顺便问的
