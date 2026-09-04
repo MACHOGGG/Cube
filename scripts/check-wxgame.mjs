@@ -197,6 +197,136 @@ const clabels = { ...labels, diamond121: '1-2-1' };
   check('小球：全部翻到反面即结束', b.isGameOver());
 }
 
+// ---- 三角那副棋盘（54 枚拼成的六边形）----------------------------------------
+//
+// 这副的规则最容易写错，因为它多了一件另外两副没有的事：每一枚有朝向，而朝
+// 向是位置给的。所以查的重点不是「分算得对不对」，而是那几条几何前提——
+// 「每条线严格上下交替」「线长都是奇数」，正是它只能偶数步滑的原因；一旦哪
+// 天线的构造错了（比如只连上了一种朝向），这两条会立刻不成立。
+const triPath = join(tmp, 'triangleBoard.mjs');
+await build({ entryPoints: ['wxgame/src/triangleBoard.ts'], bundle: true, format: 'esm', outfile: triPath, logLevel: 'silent' });
+const { createTriangleBoard, TRIANGLE_PALETTE } = await import(triPath);
+const tlabels = { ...clabels, bigTriangle: '大三角' };
+const allLines = (b) => {
+  const seen = new Map();
+  for (let r = 0; r < b.rows; r++)
+    for (let c = 0; c < b.cellsInRow(r); c++) for (const l of b.linesThrough(r, c)) seen.set(l.id, l);
+  return [...seen.values()];
+};
+{
+  const b = createTriangleBoard(tlabels);
+  b.deal();
+  let n = 0;
+  const perColor = new Map();
+  for (let r = 0; r < b.rows; r++)
+    for (let c = 0; c < b.cellsInRow(r); c++) {
+      n++;
+      const col = b.tileAt(r, c).color;
+      perColor.set(col, (perColor.get(col) || 0) + 1);
+    }
+  check('三角：6 排共 54 枚（7/9/11/11/9/7）', b.rows === 6 && n === 54 &&
+    [7, 9, 11, 11, 9, 7].every((len, r) => b.cellsInRow(r) === len), String(n));
+  check('三角：六色各九枚', perColor.size === 6 && [...perColor.values()].every((x) => x === 9) && TRIANGLE_PALETTE.length === 6);
+
+  // 发牌要按朝向配平：一种颜色不能整批落在朝上的位置里，否则那个颜色永远凑
+  // 不出大三角（大三角是三枚同朝向 + 一枚反朝向）。
+  const up = new Map();
+  for (let r = 0; r < b.rows; r++)
+    for (let c = 0; c < b.cellsInRow(r); c++)
+      if (b.pointsUp(r, c)) up.set(b.tileAt(r, c).color, (up.get(b.tileAt(r, c).color) || 0) + 1);
+  const spread = [...perColor.keys()].map((k) => up.get(k) || 0);
+  check('三角：每种颜色都摊在朝上和朝下两边（各 4～5 枚）', spread.every((x) => x >= 4 && x <= 5), spread.join('/'));
+
+  const lines = allLines(b);
+  check('三角：18 条线（一横两斜各 6 条）', lines.length === 18, String(lines.length));
+  check('三角：每一枚都恰好在三条线上', (() => {
+    for (let r = 0; r < b.rows; r++)
+      for (let c = 0; c < b.cellsInRow(r); c++) if (b.linesThrough(r, c).length !== 3) return false;
+    return true;
+  })());
+  check('三角：每条线上朝向严格交替', lines.every((l) =>
+    l.cells.every(([r, c], i) => i === 0 || b.pointsUp(r, c) !== b.pointsUp(l.cells[i - 1][0], l.cells[i - 1][1]))));
+  check('三角：每条线的长度都是奇数（7/9/11）', lines.every((l) => l.cells.length % 2 === 1),
+    [...new Set(lines.map((l) => l.cells.length))].sort((a, x) => a - x).join('/'));
+}
+{
+  // 滑一步 = 两枚。没绕回的那一段整体挪两位；绕回来的那一对要对调，否则朝向
+  // 差一步——那正是玩家看到的「拖完之后有几枚上下颠倒了」。
+  const b = createTriangleBoard(tlabels);
+  b.deal();
+  const row = b.linesThrough(5, 3).find((l) => l.id[0] === 'R');
+  const before = row.cells.map(([r, c]) => b.tileAt(r, c).id);
+  b.shiftLine(row.id, 1);
+  const after = row.cells.map(([r, c]) => b.tileAt(r, c).id);
+  const n = before.length;
+  check('三角：滑一步就是挪两枚（没绕回的那段）', after.slice(2).every((id, i) => id === before[i]),
+    `${before} → ${after}`);
+  check('三角：绕回来的那一对是对调过的（朝向才对得上）',
+    after[0] === before[n - 1] && after[1] === before[n - 2], `${after[0]},${after[1]} vs ${before[n - 1]},${before[n - 2]}`);
+}
+{
+  // 四连给分：把一条线上头四枚刷成同色。
+  const b = createTriangleBoard(tlabels);
+  b.deal();
+  const line = allLines(b).find((l) => l.cells.length === 11);
+  const mask = new Set();
+  line.cells.slice(0, 4).forEach(([r, c], i) => {
+    b.tileAt(r, c).color = 0;
+    b.tileAt(r, c).face = 'flavor';
+    if (i === 0) mask.add(`${r},${c}`);
+  });
+  const step = b.cascade(mask).next();
+  check('三角：一条四连算一次得分', Boolean(step) && step.points >= 4, step ? `${step.points} 分 · ${step.matchGroups.length} 组` : '没算出来');
+}
+{
+  // 大三角给分：一枚朝上的 + 它正下方那一排连着的三枚，四枚同色。
+  const b = createTriangleBoard(tlabels);
+  b.deal();
+  // 全刷成不同色，免得撞上别的图案。
+  let k = 0;
+  for (let r = 0; r < b.rows; r++)
+    for (let c = 0; c < b.cellsInRow(r); c++) {
+      b.tileAt(r, c).color = k++ % 6;
+      b.tileAt(r, c).face = 'flavor';
+    }
+  // (0,0) 是朝上的那一枚（p=0），下面一排 (1,0)(1,1)(1,2) 正好是它的大三角。
+  const cells = [[0, 0], [1, 0], [1, 1], [1, 2]];
+  for (const [r, c] of cells) b.tileAt(r, c).color = 3;
+  const step = b.cascade(new Set(['0,0'])).next();
+  const got = step && step.matchGroups.some((g) => g.length === 4);
+  check('三角：大三角（三枚同朝向 + 一枚反朝向）算一次得分', Boolean(got),
+    step ? `${step.points} 分 · ${step.matchGroups.map((g) => g.length).join('/')}` : '没算出来');
+}
+{
+  // 整线奖励：一整条线全翻到反面且反面同色 → 变空位留在原地，形状不变。
+  const b = createTriangleBoard(tlabels);
+  b.deal();
+  const line = allLines(b).find((l) => l.cells.length === 7);
+  for (const [r, c] of line.cells) {
+    b.tileAt(r, c).face = 'dot';
+    b.tileAt(r, c).dotColor = 2;
+  }
+  const stepper = b.cascade(new Set(line.cells.map(([r, c]) => `${r},${c}`)));
+  let sawBonus = false;
+  for (let i = 0; i < 8; i++) {
+    const st = stepper.next();
+    if (!st) break;
+    if (st.lineBonusGroups.length) sawBonus = true;
+    st.commit();
+  }
+  let n = 0;
+  for (let r = 0; r < b.rows; r++) n += b.cellsInRow(r);
+  check('三角：整线（全反面同色）给整线奖励', sawBonus);
+  check('三角：拿过奖励的那几枚变成空位留在原地，棋盘形状不变',
+    n === 54 && line.cells.every(([r, c]) => b.isBlankAt(r, c)));
+}
+{
+  const b = createTriangleBoard(tlabels);
+  b.deal();
+  for (let r = 0; r < b.rows; r++) for (let c = 0; c < b.cellsInRow(r); c++) b.tileAt(r, c).face = 'dot';
+  check('三角：全部翻到反面即结束', b.isGameOver());
+}
+
 // ---- 浏览器里跑同一份 game.js ------------------------------------------------
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
@@ -385,6 +515,90 @@ await page.waitForTimeout(900);
 const circleShot = shot.replace(/\.png$/, '-circle.png');
 await page.screenshot({ path: circleShot });
 console.log('小球截图：' + circleShot);
+
+// ---- 三角那副棋盘，在浏览器里真的开一局 ---------------------------------
+//
+// 规则那一层上面单独验过了；这儿验画面和手指：54 枚摆得下、朝上朝下画对、
+// 按得中、拖得动，而且拖完之后每个位置上还是它该有的朝向。
+await page.evaluate(() => globalThis.__slidesWx.startNow('triangle'));
+await page.waitForTimeout(300);
+const tri0 = await page.evaluate(() => {
+  const g = globalThis.__slidesWx;
+  const e = g.board.extent();
+  const L = g.layout();
+  const canvas = document.querySelector('#wxgame');
+  const pts = [];
+  let ups = 0;
+  for (let r = 0; r < g.board.rows; r++)
+    for (let c = 0; c < g.board.cellsInRow(r); c++) {
+      pts.push(g.pixelOf(r, c));
+      if (g.board.pointsUp(r, c)) ups++;
+    }
+  return {
+    kind: g.board.kind,
+    count: pts.length,
+    ups,
+    minX: Math.min(...pts.map((q) => q[0])),
+    maxX: Math.max(...pts.map((q) => q[0])),
+    minY: Math.min(...pts.map((q) => q[1])),
+    maxY: Math.max(...pts.map((q) => q[1])),
+    unit: L.unit,
+    boxL: L.x,
+    boxR: L.x + e.w * L.unit,
+    boxT: L.y,
+    boxB: L.y + e.h * L.unit,
+    w: canvas.clientWidth,
+    h: canvas.clientHeight,
+  };
+});
+check('三角：开得起来，54 枚，朝上 27 朝下 27', tri0.kind === 'triangle' && tri0.count === 54 && tri0.ups === 27,
+  `${tri0.count} 枚 · 朝上 ${tri0.ups}`);
+check(
+  '三角：整副没有超出屏幕',
+  tri0.boxL >= 0 && tri0.boxR <= tri0.w && tri0.boxT >= 0 && tri0.boxB <= tri0.h,
+  `版图 ${Math.round(tri0.boxL)},${Math.round(tri0.boxT)} – ${Math.round(tri0.boxR)},${Math.round(tri0.boxB)} · 屏 ${tri0.w}×${tri0.h}`,
+);
+check(
+  '三角：54 枚的重心都落在版图里',
+  tri0.minX >= tri0.boxL - 1 && tri0.maxX <= tri0.boxR + 1 && tri0.minY >= tri0.boxT - 1 && tri0.maxY <= tri0.boxB + 1,
+  `重心 ${Math.round(tri0.minX)}–${Math.round(tri0.maxX)} / 版图 ${Math.round(tri0.boxL)}–${Math.round(tri0.boxR)}`,
+);
+check(
+  '三角：真画出了东西（版图中间不是底色）',
+  await page.evaluate(() => {
+    const g = globalThis.__slidesWx;
+    const c = document.querySelector('#wxgame');
+    const ctx = c.getContext('2d');
+    const dpr = c.width / c.clientWidth;
+    const [x, y] = g.pixelOf(3, 5);
+    const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+    return !(d[0] === 250 && d[1] === 246 && d[2] === 236);
+  }),
+);
+
+// 最长那一排（11 枚）横着拖一步 = 挪两枚。
+const triBefore = await page.evaluate(() =>
+  Array.from({ length: 11 }, (_, c) => globalThis.__slidesWx.board.tileAt(2, c).id),
+);
+await dragOne(2, 5, 1, 0);
+const triAfter = await page.evaluate(() =>
+  Array.from({ length: 11 }, (_, c) => globalThis.__slidesWx.board.tileAt(2, c).id),
+);
+check(
+  '三角：手指横着拖一步，整排挪两枚',
+  triAfter.slice(2).every((id, i) => id === triBefore[i]),
+  `${triBefore} → ${triAfter}`,
+);
+check(
+  '三角：绕回来那一对对调了（拖完没有谁上下颠倒）',
+  triAfter[0] === triBefore[10] && triAfter[1] === triBefore[9],
+  `${triAfter[0]},${triAfter[1]} vs ${triBefore[10]},${triBefore[9]}`,
+);
+
+await page.waitForTimeout(900);
+const triShot = shot.replace(/\.png$/, '-triangle.png');
+await page.screenshot({ path: triShot });
+console.log('三角截图：' + triShot);
 await browser.close();
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

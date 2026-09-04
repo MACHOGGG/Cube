@@ -312,6 +312,8 @@ export function createSquareBoard(labels: BoardLabels): SquareBoard {
     cellsInRow: () => cols,
     tileAt: (r, c) => grid[r][c],
     isBlankAt: () => false,
+    // 只有三角那副分朝向。
+    pointsUp: () => true,
     // 一格是 2×2 个单位（1 个单位 = 半格），所以中心在奇数格点上。
     centerOf: (r, c) => [c * 2 + 1, r * 2 + 1],
     extent: () => ({ minX: 0, minY: 0, w: cols * 2, h: rows * 2 }),
