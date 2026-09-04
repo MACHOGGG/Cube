@@ -10,6 +10,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine } from '../engine/matchGrowth';
+import { roundTriClip, roundTriPath } from '../engine/roundTri';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -83,7 +84,7 @@ const MIN_LINE_BONUS_LEN = 3;
 // p is even (see triGeom).
 const SLOT_IS_UP: boolean[] = SLOTS.flatMap((row) => row.map((p) => p % 2 === 0));
 
-const GLYPH = `<svg viewBox="0 0 32 32"><path d="M3 7 H11 L16 21 L21 7 H29 L20 27 H12 Z" fill="none" stroke="#4C68B0" stroke-width="2.4" stroke-linejoin="round"/><polygon points="8,11 11,17 5,17" fill="#D89B1E"/><polygon points="24,11 27,17 21,17" fill="#B23A3A"/></svg>`;
+const GLYPH = `<svg viewBox="0 0 32 32"><path d="M3 7 H11 L16 21 L21 7 H29 L20 27 H12 Z" fill="none" stroke="#4C68B0" stroke-width="2.4" stroke-linejoin="round"/><path d="${roundTriPath([[8, 11], [11, 17], [5, 17]])}" fill="#D89B1E"/><path d="${roundTriPath([[24, 11], [27, 17], [21, 17]])}" fill="#B23A3A"/></svg>`;
 
 // The board's 2 seed patterns (see findRunMatches/BIG_TRIANGLES below),
 // built with the exact same up/down triangle geometry snapshotBoard() uses
@@ -471,10 +472,10 @@ export function createTriangleAdvancedGame(): ShapeGame {
           maxY = Math.max(...ys);
         const w = maxX - minX,
           h = maxY - minY;
-        const clip =
-          'polygon(' +
-          pts.map((p) => `${(((p[0] - minX) / w) * 100).toFixed(2)}% ${(((p[1] - minY) / h) * 100).toFixed(2)}%`).join(',') +
-          ')';
+        // 尖角磨圆——三副三角棋盘、教学、图示用的是同一条轮廓（roundTri.ts），
+        // 圆角的深浅只在那儿定义一次：玩家在教学里看熟的形状，进了棋盘不该变
+        // 成另一个样子。
+        const clip = roundTriClip(pts, { minX, minY, w, h });
 
         const el = document.createElement('div');
         el.className = 'tri';
@@ -507,10 +508,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
           svg.style.width = '100%';
           svg.style.height = '100%';
           svg.style.overflow = 'visible';
-          const poly = document.createElementNS(svgNS, 'polygon');
+          const poly = document.createElementNS(svgNS, 'path');
+          // 尖角磨圆，和外面那圈轮廓同一条（见 engine/roundTri.ts）——里外两层
+          // 的圆角要是一个磨了一个没磨，小三角看着就像贴歪了。
           poly.setAttribute(
-            'points',
-            ringPts.map(([x, y]) => `${(((x - minX) / w) * 100).toFixed(2)},${(((y - minY) / h) * 100).toFixed(2)}`).join(' '),
+            'd',
+            roundTriPath(ringPts.map(([x, y]) => [((x - minX) / w) * 100, ((y - minY) / h) * 100] as [number, number])),
           );
           poly.setAttribute('fill', 'none');
           poly.setAttribute('stroke', 'var(--ink-faint)');
@@ -533,10 +536,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
           svg.style.width = '100%';
           svg.style.height = '100%';
           svg.style.overflow = 'visible';
-          const poly = document.createElementNS(svgNS, 'polygon');
+          const poly = document.createElementNS(svgNS, 'path');
+          // 尖角磨圆，和外面那圈轮廓同一条（见 engine/roundTri.ts）——里外两层
+          // 的圆角要是一个磨了一个没磨，小三角看着就像贴歪了。
           poly.setAttribute(
-            'points',
-            innerPts.map(([x, y]) => `${(((x - minX) / w) * 100).toFixed(2)},${(((y - minY) / h) * 100).toFixed(2)}`).join(' '),
+            'd',
+            roundTriPath(innerPts.map(([x, y]) => [((x - minX) / w) * 100, ((y - minY) / h) * 100] as [number, number])),
           );
           poly.setAttribute('fill', COLORS[tile.dotColor]);
           poly.setAttribute('stroke', '#1A1A1A');

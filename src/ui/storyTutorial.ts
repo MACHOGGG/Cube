@@ -4,6 +4,7 @@ import { CTL_FINISH, CTL_NEXT, CTL_PREV, CTL_REPLAY } from './ctlIcons';
 import { playMove, playScore, playFlip, playClear, seatEls } from '../engine/juice';
 import { createDragChain } from '../engine/dragChain';
 import { plankFlipEl, flipMs, flipStaggerMs } from '../engine/plankFlip';
+import { roundTriPath } from '../engine/roundTri';
 
 /**
  * The keyframe-playback engine behind all three basic tutorials.
@@ -150,8 +151,7 @@ function cellSvg(c: StoryCell): string {
   else {
     const pts: [number, number][] =
       c.shape === 'up' ? [[50, 3], [97, 93], [3, 93]] : [[3, 7], [97, 7], [50, 97]];
-    const str = (p: [number, number][]) => p.map(([x, y]) => `${x},${y}`).join(' ');
-    shape = `<polygon points="${str(pts)}" fill="${c.fill}"${dash} stroke-linejoin="round"/>`;
+    shape = `<path d="${roundTriPath(pts)}" fill="${c.fill}"${dash} stroke-linejoin="round"/>`;
     if (c.inner) {
       // Well under the 0.6 the boards themselves use: at this size the two
       // triangles have to be tellable apart at a glance, and the margin
@@ -161,7 +161,7 @@ function cellSvg(c: StoryCell): string {
       const cy = (pts[0][1] + pts[1][1] + pts[2][1]) / 3;
       const inner = pts.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k] as [number, number]);
       shape +=
-        `<polygon points="${str(inner)}" fill="${c.inner}" stroke="#1A1A1A"` +
+        `<path d="${roundTriPath(inner)}" fill="${c.inner}" stroke="#1A1A1A"` +
         ` stroke-width="3.5" stroke-linejoin="round"/>`;
     }
   }

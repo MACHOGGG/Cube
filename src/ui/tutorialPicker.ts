@@ -9,6 +9,7 @@
 import { STRINGS, TUTORIAL_RULES, type Lang, type TutorialShape } from '../i18n';
 import { CTL_BACK } from './ctlIcons';
 import { RULE_ART } from './ruleArt';
+import { roundTriPath } from '../engine/roundTri';
 import { shapeName } from './shapeLabels';
 
 export interface TutorialPickerHandlers {
@@ -25,7 +26,9 @@ const BLUE = '#4C68B0';
 const SHAPE_GLYPH: Record<TutorialShape, string> = {
   square: `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="8" y="8" width="84" height="84" rx="22" fill="${GREEN}"/></svg>`,
   circle: `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="${RED}"/></svg>`,
-  triangle: `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 9 L94 86 H6 Z" fill="${BLUE}" stroke="${BLUE}" stroke-width="10" stroke-linejoin="round"/></svg>`,
+  // 圆角走 roundTri.ts 那一条，和棋盘、教学分镜、规则配图里的三角同一个形状；
+  // 同色的描边留着，是为了不改这枚图形原来的大小。
+  triangle: `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${roundTriPath([[50, 9], [94, 86], [6, 86]])}" fill="${BLUE}" stroke="${BLUE}" stroke-width="10" stroke-linejoin="round"/></svg>`,
 };
 
 export function renderTutorialPicker(root: HTMLElement, lang: Lang, handlers: TutorialPickerHandlers): void {

@@ -1,4 +1,5 @@
 import { STRINGS, type Lang, type I18nStrings } from '../i18n';
+import { roundTriPath } from './roundTri';
 /**
  * Tiny blank/outline diagrams of a shape's own scoring patterns, shown in a
  * hint row under the HUD so a player can see what to aim for without having
@@ -121,7 +122,12 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: bool
         const rot = c.rotateDeg ? ` transform="rotate(${c.rotateDeg} ${cx.toFixed(1)} ${cy.toFixed(1)})"` : '';
         return `<rect x="${(cx - h2).toFixed(1)}" y="${(cy - h2).toFixed(1)}" width="${(h2 * 2).toFixed(1)}" height="${(h2 * 2).toFixed(1)}" rx="${(h2 * 0.3).toFixed(1)}"${rot}/>`;
       }
-      const pts = c.points.map(([x, y]) => T(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
+      // 三角走 roundTri.ts 那一条磨圆的轮廓，和棋盘上、教学里的三角同一个形
+      // 状——图示上画的就该是玩家在棋盘上看见的那枚。（三个点之外的多边形眼
+      // 下没有，留一条老路兜着。）
+      const at = c.points.map(([x, y]) => T(x, y));
+      if (at.length === 3) return `<path d="${roundTriPath(at)}"/>`;
+      const pts = at.map((v) => v.map((n) => n.toFixed(1)).join(',')).join(' ');
       return `<polygon points="${pts}"/>`;
     })
     .join('');

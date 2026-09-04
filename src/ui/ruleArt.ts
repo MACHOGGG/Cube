@@ -12,6 +12,8 @@
  * 永远按这个顺序来；循环时整幅图淡出再从头开始。
  */
 
+import { roundTriPath } from '../engine/roundTri';
+
 // 方块教学分镜用的那套颜色（tutorial.ts）。
 const O = '#EE8A2E'; // 橙（正面）
 const B = '#4A67C0'; // 蓝（正面）
@@ -52,11 +54,15 @@ const ballBack = (d: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5"/>` +
   `<g stroke="${d}" stroke-width="10" stroke-linecap="round"><line x1="50" y1="23" x2="50" y2="77"/>` +
   `<line x1="27" y1="36.5" x2="73" y2="63.5"/><line x1="27" y1="63.5" x2="73" y2="36.5"/></g></svg>`;
+// 圆角和棋盘上、教学分镜里的三角是同一条轮廓（roundTri.ts），三处一起改，
+// 玩家在哪儿看熟的形状，换个地方还是那个形状。
+const TRI_OUT = roundTriPath([[50, 6], [96, 92], [4, 92]]);
+const TRI_IN = roundTriPath([[50, 40], [73, 82], [27, 82]]);
 const triFront = (c: string) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,6 96,92 4,92" fill="${c}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/></svg>`;
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${TRI_OUT}" fill="${c}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/></svg>`;
 const triBack = (d: string) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,6 96,92 4,92" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5" stroke-linejoin="round"/>` +
-  `<polygon points="50,40 73,82 27,82" fill="${d}" stroke="#1A1A1A" stroke-width="3.5" stroke-linejoin="round"/></svg>`;
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${TRI_OUT}" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5" stroke-linejoin="round"/>` +
+  `<path d="${TRI_IN}" fill="${d}" stroke="#1A1A1A" stroke-width="3.5" stroke-linejoin="round"/></svg>`;
 
 /** 一枚正反面都是 SVG 的棋子（小球、三角，还有第 1 条里的方块）。 */
 function svgTile(front: string, back: string, cls = '', vars = ''): string {
