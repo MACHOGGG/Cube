@@ -157,9 +157,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       <div class="home-grid" id="homeGrid"></div>
     </div>
   `;
-  // 卡底下那行小字只在窄屏（手机竖着）给。宽屏那三排是按参考图排的，一张挨
-  // 一张，底下多一行字会把整页顶出一条滚动条——玩家说过电脑端不动。
-  const tag = (key: string): string => (wide ? '' : menuTag(lang, key));
+  // 卡底下那行小字，宽窄两版都给。宽屏那三排要站在一屏里，多出来的这一行高
+  // 度已经算进 style.css 的 --home-card-cap（那道算式里减掉的常数）——不减
+  // 的话整页会顶出一条滚动条，check-overlap 逮得到。
+  const tag = (key: string): string => menuTag(lang, key);
 
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');

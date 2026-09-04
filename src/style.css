@@ -895,25 +895,34 @@ button:hover { filter: brightness(1.05); }
   max-width: 165px;
   max-width: min(165px, (min(100vw, 460px) - 44px - var(--narrow-gap)) / 2);
 }
-/* 卡底下那行小字：一眼认出这张是哪个玩法。
+/* 卡底下那行小字：一眼认出这张是哪个玩法。宽窄两版都有。
    ─────────────────────────────────────────────────────────────────────────
-   只有窄屏有。宽屏那三排是按参考图排的，一张挨一张站在一屏里，底下多一行字
-   就会把整页顶出滚动条——玩家说过电脑端不动，所以那一路连这行字都不生成
-   （见 menu.ts 的 tag()），这条 display: none 只是转屏没重画时的兜底。
-
    卡这时候不再是个正方形了：图是正方的，字在图底下，卡是两者之和。所以
-   aspect-ratio 交回给里面那一格（.home-icon-art），卡自己改成一竖列。
+   aspect-ratio 从卡上摘掉，交给里面那一格（.home-icon-art）——摘的是「一排
+   里那几张卡」，不是所有 .home-icon-btn：炸弹面板里那些小片也顶着这个类，
+   它们没有小字，比例该留在自己身上。
 
    卡自己还是块级的，不改成 flex：图那一格是「宽定死、高按比例算」，而弹性布
    局里这种盒子的高会被里面那张 svg 的原始比例顶上去（多人那张画布是 195×452，
-   一顶就是 365 高，方格变竖条）。块级布局没这回事，比例说了算。 */
-.home-page:not(.home-page--wide) .home-icon-btn { aspect-ratio: auto; }
+   一顶就是 365 高，方格变竖条）。块级布局没这回事，比例说了算。
+
+   字号在宽屏上按屏宽给会失控（3.2vw 在 1280 上是 41px），所以取两条里小的
+   那个：窄屏还是跟着屏宽走，宽屏顶到 0.82rem 就不再长。 */
+.home-row > .home-icon-btn { aspect-ratio: auto; }
 .home-icon-tag {
   display: block; padding-top: 7px;
   font-size: clamp(0.68rem, 3.2vw, 0.82rem); line-height: 1.2;
   color: var(--ink-soft); letter-spacing: 0.02em; text-align: center;
+  /* 永远一行。
+     卡片有多大是算出来的（--home-card-cap 那道算式），算的时候按「每排小字
+     占一行」减掉了一个定数；小字要是折成两行，那道算式就少减了，整页会顶出
+     一条滚动条——法语的「Triangles classiques」「Retournement infini」正好
+     长到会折，check-overlap 在 1366×768 上逮到过。
+     一行放不下就让它左右稍微探出卡片：卡片之间留着 18~34px 的缝，探出去一
+     点点还在自己的地盘里，比折行安全。溢出的部分不裁（overflow: visible 是
+     默认），所以字始终是完整的。 */
+  white-space: nowrap;
 }
-.home-page--wide .home-icon-tag { display: none; }
 /* The icon grid wants far more width than the standard reading column.
    一排最多三张，每张被 --home-card-cap 收住，所以整页的宽由那三张决定；这里
    给的是上限，屏幕再宽也不会把三张拉散。 */
@@ -970,7 +979,12 @@ button:hover { filter: brightness(1.05); }
    张数少的那几排就窄一些、照样居中。 */
 .home-grid { display: flex; flex-direction: column; gap: 24px; align-items: center; }
 .home-row {
-  display: flex; align-items: center; justify-content: center;
+  /* 一排里按底边对齐，不是居中。
+     卡的高度不齐：炸弹那张是一整块板，比一张方卡片高一截；V 型三角那张图是
+     横画布，比别人矮一截。居中对齐的话，它俩底下那行小字就一高一低，一排看
+     过去是锯齿状的。底边对齐之后，每张卡最底下都是那行小字，于是整排的字落
+     在同一条线上，图各自往上长。 */
+  display: flex; align-items: end; justify-content: center;
   gap: clamp(18px, 2.4vw, 34px); width: 100%;
 }
 /* 每张按自己那一份平分整排，再各自被 max-width 收住：三张的排正好摊满那三
@@ -998,15 +1012,19 @@ button:hover { filter: brightness(1.05); }
    这个上限只要算错一点，页面就会长出滚动条，末排正好落在底排图标下面——
    看得见，按不着。所以两个数都是量出来的，不是估的：
 
-     317px = 页面上边距 28 + 招牌上边距 6 + 招牌本身 101（四种语言里最高
+     386px = 页面上边距 28 + 招牌上边距 6 + 招牌本身 101（四种语言里最高
              的那个）+ 招牌下边距 14 + 两道行间距 24×2 + 页面下边距 108 + 8 的余量
-             （底排图标从屏幕底算起占 88，留 20 的余地）
+             （底排图标从屏幕底算起占 88，留 20 的余地）+ 三行小字 23×3
+
+             最后那 69 是卡底下那行小字：字号在宽屏上顶到 0.82rem，行高 1.2，
+             加 7px 的上边距，一行 23px，三排就是 69。它是个定数（不跟着卡片
+             大小走），所以该减在这儿，不该动下面那个 3.11。
 
      3.11  = 上下两排各一张方卡片的高，加中间那排。中间那排有炸弹卡片，它比
              一张方卡片高 11.15%——里面三层叠着，最中间那颗 90s 的星芒还
              特意溢出到上下两层去。量出来是 255 宽 283 高，1.1115。
 
-   减去那 317，剩下的高度三排照 3.11 分。笔记本上是这条在起作用；屏幕够高
+   减去那 386，剩下的高度三排照 3.11 分。笔记本上是这条在起作用；屏幕够高
    时 255 那条重新接手，跟从前一样。
 
    量的是 svh 不是 dvh：dvh 是「此刻」的可视高度，手机上滑一下地址栏收起来
@@ -1021,7 +1039,7 @@ button:hover { filter: brightness(1.05); }
      中。下限只该在「算出来的数已经小到没意义」时接手——定高了它会反过来把
      整页顶出一条滚动条（check-overlap 逮过一次）。 */
   --home-card-cap: 255px;
-  --home-card-cap: min(255px, max(72px, (100svh - 317px) / 3.11));
+  --home-card-cap: min(255px, max(72px, (100svh - 386px) / 3.11));
 }
 /* 一个变量、两处引用：从前炸弹卡片的宽度在文件后面又被写了一遍 255，同样
    的选择器权重、位置更靠后，于是把上面这条高度上限整条盖掉了——中间那排
@@ -1065,7 +1083,9 @@ button:hover { filter: brightness(1.05); }
    框有多大，图形就有多大，点得到的地方就是看得见的地方。
    一个 2:1 的图形没法和正方形图标严丝合缝地一样大，这里取「占满这一列」，
    是不越界的前提下能给到的最大。 */
-.home-icon-btn--wide-art { aspect-ratio: 189 / 106; align-self: center; }
+/* 进阶三角那张图是横画布（2:1），比例交给里面那一格；卡自己跟着整排底边对
+   齐，不再单独居中——底下那行小字要和同排的对齐。 */
+.home-icon-btn--wide-art { aspect-ratio: 189 / 106; }
 .home-icon-btn--wide-art .home-icon-art { aspect-ratio: 189 / 106; }
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--r-sm); }
 
