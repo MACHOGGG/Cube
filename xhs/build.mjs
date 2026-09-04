@@ -3,13 +3,16 @@
  *
  *   npm run build:xhs
  *
- * 五步，缺一步都可能在真机上才发现：
+ * 六步，缺一步都可能在真机上才发现：
  *
  *   1. vite build（xhs/vite.config.ts：iife 经典脚本 + es2017/chrome61 +
  *      把联网模块换成空替身）
  *   2. 改 index.html：Vite 出的是 <script type="module" crossorigin>，容器的
  *      CSP 不认——换成普通的 <script src>。典型症状是「页面渲染出来但 JS 完
  *      全不执行」，所以这一步不能省。
+ *   2.5 把 xhs/polyfills.js 拼到产物最前面：补 Chrome 61 缺的那几个接口
+ *      （at / flat / matchAll / trimStart / replaceChildren / getAnimations /
+ *      ResizeObserver）。语法降级管不着接口，不补的话一拖动就抛错。
  *   3. 禁用能力扫描：按 device-capabilities.md §7 那张清单 grep 产物，命中
  *      就直接失败，不出包。
  *   4. 体积门禁：用小红书那份技能包自带的审计脚本。
@@ -44,6 +47,17 @@ html = html
 if (html === before) throw new Error('index.html 没改动——入口那一行的写法变了？');
 if (/type="module"/.test(html)) throw new Error('index.html 里还留着 type="module"');
 writeFileSync(htmlPath, html);
+
+// ---- 2.5 Chrome 61 能力补丁拼到最前 ----------------------------------------
+// xhs/polyfills.js 补的是「语法降级管不着」的那些接口（Array.prototype.at、
+// flat/flatMap、matchAll、trimStart、replaceChildren、getAnimations、
+// ResizeObserver）。它必须比任何模块的顶层代码先跑——有几个模块在加载时就调
+// flatMap——所以不走 Vite，直接拼在产物最前面。
+// 拼完再做第 3 步的扫描，保证补丁本身也过一遍禁用清单。
+const polyPath = join(here, 'polyfills.js');
+const appPath = join(dist, 'app.js');
+const poly = readFileSync(polyPath, 'utf8');
+writeFileSync(appPath, poly + '\n' + readFileSync(appPath, 'utf8'));
 
 // ---- 3. 禁用能力扫描 -------------------------------------------------------
 // 按 device-capabilities.md §7 的清单。只查产物，不查源码——源码里那些调用点
