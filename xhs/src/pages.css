@@ -87,10 +87,19 @@
   font-size: 0.95rem; line-height: 1.7;
 }
 
+/* 这一条在两个地方用：成绩页点开的那一屏（父容器自己会居中），和结算页那个
+   分享窗口（父容器不会）。所以居中写在自己身上——`max-width` 卡住之后，左右
+   两侧的 auto 外边距把多出来的宽度对半分掉。
+   从前只写了 max-width 没写 auto：窗口比 420px 宽的时候，这一排就贴在左边，
+   而上面那张图是居中的，看着像歪的（玩家原话「两个按钮不是居中排放的」）。 */
 .xhs-share-bar {
   width: 100%; max-width: 420px;
+  margin-left: auto; margin-right: auto;
   display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
 }
+/* 竖屏里这层壳是普通的块，上面那句 auto 就够了；这里再兜一层，是给「壳自己
+   被撑得很宽」的情形（横屏的网格列）留的。 */
+.xhs-share-host { display: flex; justify-content: center; }
 .xhs-share-btn {
   flex: 1 1 0; min-width: 120px;
   border: none; border-radius: var(--r-full); padding: 13px 18px;
@@ -119,4 +128,22 @@
   min-width: 0;
   padding-left: 18px;
   padding-right: 18px;
+}
+
+/* ---- 横屏的分享窗 ------------------------------------------------------
+   横过来之后 .share-modal 变成两列的网格：图占满左边一整列，标题和《关闭》
+   在右边（src/style.css 结尾那段）。这一排键是这一版后插进去的，网格不认得
+   它，会被自动排到一个新的行里去——图就被挤窄了。
+   原来「说明」那一格（第 2 列第 2 行）已经被我们摘掉（main.ts 里 remove 了
+   .hint），正好空着，把这一排放进去。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .share-modal .xhs-share-host {
+    grid-column: 2; grid-row: 2; align-self: center;
+    /* 右边那一列窄，两颗键并排放不下就自己上下摞——min-width 那条会让它们
+       在放得下的时候仍然并排。 */
+    min-width: 0;
+  }
+  .share-modal .xhs-share-bar { gap: 8px; }
+  .share-modal .xhs-share-btn { padding: 10px 14px; font-size: 0.94rem; }
+  .share-modal .xhs-share-note { font-size: 0.8rem; min-height: 0; }
 }
