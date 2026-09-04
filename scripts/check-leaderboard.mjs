@@ -164,18 +164,24 @@ check('榜底下没有《N 人在榜 · 你排第 N》那句',
   (await page.$$eval('.records-panel--big .rank-foot', (e) => e.length)) === 0 &&
     !/人在榜|你排第/.test(await page.$eval('.records-panel--big', (e) => e.textContent)));
 
-// 点开母标签《基础》：整排换成它旗下那几张，左边多一颗《＜》。
+// 点开母标签《基础》：上一行只剩它自己（左边多一颗《＜》），旗下那几张落到
+// 下一行去。
 const clickTab = (label) =>
   page.$$eval('.rank-tab', (els, want) => {
     const hit = els.find((e) => e.textContent.trim() === want);
     if (hit) hit.click();
     return Boolean(hit);
   }, label);
+const rowText = (sel) =>
+  page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.textContent.trim()).join(' '));
 await clickTab('基础');
 await page.waitForTimeout(400);
-const inner = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
-check('点开《基础》：原来那排换成它旗下的，左边一颗《＜》',
-  inner.join(' ') === '‹ 基础 方块 圆球 三角', inner.join(' '));
+check('点开《基础》：上一行只剩《＜》和它自己',
+  (await rowText('#rankTabs')) === '‹ 基础', await rowText('#rankTabs'));
+check('旗下那几张落在下一行',
+  (await rowText('#rankSubTabs')) === '方块 圆球 三角', await rowText('#rankSubTabs'));
+check('下一行是露出来的',
+  (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false);
 check('母标签自己是选中的那一个（看的是它合起来的榜）',
   (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '基础');
 await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
@@ -197,9 +203,11 @@ check('没打过的玩法，榜是空的，而且明说「这个玩法你还没�
 // 那颗《＜》：退回最外面那一排，底下那张榜不动。
 await page.click('.rank-tab--back');
 await page.waitForTimeout(300);
-const back = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
+const back = await rowText('#rankTabs');
 check('按《＜》退回最外面那一排',
-  back.join(' ') === '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转', back.join(' '));
+  back === '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转', back);
+check('退回来之后下一行收起来了',
+  (await page.$eval('#rankSubTabs', (e) => e.hidden)) === true);
 check('退回来之后高亮的是刚才那个母标签',
   (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '基础');
 check('底下那张榜没被这一下换掉',

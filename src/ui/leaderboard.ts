@@ -160,9 +160,11 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   host.classList.add('rank-view');
   host.innerHTML = `
     <div class="rank-tabs" role="tablist" id="rankTabs"></div>
+    <div class="rank-tabs rank-tabs--sub" role="tablist" id="rankSubTabs" hidden></div>
     <div class="rank-body" id="rankBody"><p class="rank-empty">${s.rankLoading}</p></div>
   `;
   const tabsEl = host.querySelector<HTMLElement>('#rankTabs')!;
+  const subEl = host.querySelector<HTMLElement>('#rankSubTabs')!;
   const body = host.querySelector<HTMLElement>('#rankBody')!;
   /** 换得比回包快的时候，别让旧的那一份盖住新的。 */
   let generation = 0;
@@ -208,25 +210,36 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
     `<button class="rank-tab${on ? ' rank-tab--on' : ''}" role="tab" data-mode="${esc(t.mode)}">${esc(t.label)}</button>`;
 
   /**
-   * 那一排标签。两层：最外面是总榜加六个母标签；点开一个，整排换成它自己加
-   * 它旗下那几张，最左边多一颗《＜》退回去（玩家的原话：「原有的 tag 会消失，
-   * 跳出它旗下的几个 tag，左边加一个『＜』的标识表示退出到上一母 tag」）。
+   * 标签分两行。
    *
-   * 退回去只换这一排，底下那张榜不动：人是回来找别的榜的，不是要把刚看的那
+   * 上一行是母标签：总榜，加六个玩法大类。点中其中一个，上一行就只剩它自己
+   * （左边多一颗《＜》退回去），旗下那几张榜落到下一行去（玩家的原话：「母
+   * tag 在上一行，如果点击了那么其他的消失，然后下一行子 tag 中可以选择」）。
+   *
+   * 下一行不点也行：钻进去的那一下已经把母标签自己那张合起来的榜摆出来了，
+   * 那就是这一类的「总榜」。子标签是想单看某一副棋盘时才点的。
+   *
+   * 退回去只换这两行，底下那张榜不动：人是回来找别的榜的，不是要把刚看的那
    * 张关掉。
    */
   function paintTabs(): void {
     const owner = ownerOf(current);
     tabsEl.innerHTML = open
       ? `<button class="rank-tab rank-tab--back" id="rankTabBack" aria-label="${esc(s.back)}">‹</button>` +
-        [open as BoardTab, ...open.children].map((t) => tabHtml(t, t.mode === current)).join('')
+        tabHtml(open as BoardTab, open.mode === current)
       : [total, ...groups].map((t) => tabHtml(t, t.mode === current || t.mode === owner?.mode)).join('');
+    subEl.innerHTML = open ? open.children.map((t) => tabHtml(t, t.mode === current)).join('') : '';
+    subEl.hidden = !open;
 
     tabsEl.querySelector<HTMLButtonElement>('#rankTabBack')?.addEventListener('click', () => {
       open = null;
       paintTabs();
     });
-    for (const tab of tabsEl.querySelectorAll<HTMLButtonElement>('.rank-tab:not(.rank-tab--back)')) {
+    const clickable = [
+      ...tabsEl.querySelectorAll<HTMLButtonElement>('.rank-tab:not(.rank-tab--back)'),
+      ...subEl.querySelectorAll<HTMLButtonElement>('.rank-tab'),
+    ];
+    for (const tab of clickable) {
       tab.addEventListener('click', () => {
         const mode = tab.dataset.mode ?? '';
         // 最外面那一排上点母标签：钻进去，同时就把它那张合起来的榜摆出来。
