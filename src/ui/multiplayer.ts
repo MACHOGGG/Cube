@@ -81,7 +81,11 @@ export interface MultiplayerHandlers {
   /** The host is off to the home page to choose what everyone plays. */
   onPickMode: (code: string) => void;
   /** The room is closed: hand over the standings for the closing card. */
-  onRoomEnded: (state: RoomState) => void;
+  /**
+   * 摆出那张总排行。meId 是「我是谁」——中途走的人交完座位就认不出自己那一
+   * 行了，所以先留一份传进来；散场时不用给（座位还在）。
+   */
+  onRoomEnded: (state: RoomState, meId?: string) => void;
   /**
    * 这个人说他不会规则：放这一族的教学给他看，看完了回小屋。
    *
@@ -233,8 +237,22 @@ export function renderMultiplayerPage(
     const host = iAmHost();
     stopAll();
     if (!host) {
+      // 走的人也要看到那张总排行——他在这间屋子里打过的每一局都算数，凭什么
+      // 因为先走一步就一笔勾销。从前这儿只是交座位、回设置页，一个数字都不
+      // 给（玩家的原话：「非屋主的玩家离开游戏的时候还是完全没有得到任何结算
+      // 分数和榜单的部分」）。
+      //
+      // 排行要在交座位之前先抓下来：leaveRoom() 会把最后一次看到的房间状态一
+      // 起清掉，晚一步就什么都画不出来了。自己那一行也一样——座位没了之后就
+      // 认不出「我是谁」，所以 id 也先留一份。
+      //
+      // 一局都没打过就走的，图上全是 0，不如直接退回设置页。
+      const state = latestRoomState();
+      const meId = currentRoom()?.playerId;
       await leaveRoom();
-      if (!dead) renderHome();
+      if (dead) return;
+      if (state && state.round > 0) return handlers.onRoomEnded(state, meId);
+      renderHome();
       return;
     }
     const closed = await endRoom();

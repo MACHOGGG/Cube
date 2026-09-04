@@ -189,6 +189,18 @@
 :root[data-cvd='1'] .profile-pill--rose { background: #D55E00; }
 :root[data-cvd='1'] .genius-panel { background: #F1F1F1; }
 
+/* 结算页顶上那一块：屋主中途散场、这一局转成单人打完之后，小屋那份成绩摆
+   在这儿（见 ui/roomLeftover.ts）。上面是小屋的总排行和它的战绩图，底下一
+   条横线，再下面才是这一局单人的结算和它自己那张图——两份各自完整，各有各
+   的图，谁也不替谁。平时这一块是 hidden 的，单人局的结算页一个字都不改。 */
+.end-room { margin: 0 0 4px; }
+.end-room .big-score { margin-bottom: 2px; }
+.end-room-rows { margin: 8px 0 10px; gap: 4px; }
+.end-room-rows .mp-player { padding: 4px 8px; }
+.end-room-card { width: 100%; max-width: 300px; margin: 0 auto 10px; display: block; border-radius: var(--r-md); }
+/* 两份摞在一起比一份高，结算弹窗要能滚——不滚就有一半够不着。 */
+.overlay--end .modal { max-height: 88svh; overflow-y: auto; }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
 /* Reserves room below whatever the browser scrolls into view (Tab focus, a

@@ -299,6 +299,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     <div class="overlay overlay--end" id="endOverlay">
       <div class="modal">
         <div class="end-hazard-bg" id="endHazardBg" aria-hidden="true">💥</div>
+        <!-- 屋主中途散场、这一局转成单人接着打完的时候，小屋那份成绩摆在这
+             儿：总排行和它的战绩图在上，底下才是这一局单人的结算和它自己那
+             张图。平时是空的、藏着的（见 roomLeftover.ts）。 -->
+        <div class="end-room" id="endRoomBlock" hidden></div>
         <h2 id="endTitle">${s.endTitleDefault}</h2>
         <div class="end-score-label">${s.compositeScoreLabel}</div>
         <div class="big-score" id="endScore">0</div>

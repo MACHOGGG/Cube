@@ -1,4 +1,5 @@
 import type { ShellRefs } from '../ui/gameShell';
+import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, type CascadeConfig } from './scoring';
@@ -289,6 +290,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     hooks.render();
     updateStuckState([]);
     startSnapshot = hooks.snapshotBoard?.() ?? null;
+    // 开新的一局就把小屋那份底忘掉。屋主散场之后转成单人的那一局，如果人没
+    // 打完就走了（按《主页》，没有结算页），那份底会一直留着——不清掉的话，
+    // 他下次随便开一局单人打完，顶上会莫名其妙冒出一间早散了的小屋。
+    clearRoomLeftover();
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
   }
@@ -393,6 +398,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 和上面那行秒数一样，放在这里是为了让 scoreboard 自己来取：八个玩法谁也
     // 不用知道房间这回事。
     refs.endOverlay.dataset.total = String(total);
+    // 屋主中途散场、这一局转成单人打完的：把小屋那份摆在结算页最上面。平时
+    // 什么也不做（见 roomLeftover.ts）——单人局的结算页一个字都不改样子。
+    mountRoomLeftover(document.getElementById('endRoomBlock'), hooks.lang);
     refs.endOverlay.classList.add('show');
     // One cue per ending, told apart by cause: a bomb gets the refusal, every
     // other way of finishing gets the settle. Reached the same way whether the

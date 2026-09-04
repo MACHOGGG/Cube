@@ -1,5 +1,6 @@
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
+import { stashRoomLeftover } from './roomLeftover';
 import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { pushLayer } from '../engine/backNav';
@@ -221,6 +222,10 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     wait = null;
     notice.remove();
     restoreEndPanel();
+    // 小屋那份成绩先留一份底：屋子已经散了，forgetRoom() 之后座位和最后看到
+    // 的房间状态都取不到了。等这一局打完，它会摆在结算页最上面（见
+    // roomLeftover.ts）——他在这间屋子里打过的那几局不该跟着屋子一起蒸发。
+    stashRoomLeftover(latestRoomState(), seat.playerId);
     forgetRoom();
     rows.remove();
     document.getElementById('leaveRoomBtn')?.remove();

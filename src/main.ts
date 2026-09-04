@@ -804,7 +804,7 @@ async function leaveRoomWithCard() {
  * 结束房间. The evening's card, and then out — the seat is given up here
  * rather than in the room page, so the card is the last thing that needed it.
  */
-function showRoomFinal(state: RoomState) {
+function showRoomFinal(state: RoomState, meId?: string) {
   teardown();
   setPickingForRoom(null);
   const done = () => {
@@ -812,7 +812,10 @@ function showRoomFinal(state: RoomState) {
     // 一步退回多人设置页（见 leaveRoomWithCard 那段）。
     showMultiplayer();
   };
-  showRoomCard(root, state, currentLang, done);
+  // meId 只有「中途走的人」会给：他的座位刚交回去，图上认不出哪一行是他，
+  // 所以先留了一份 id 传进来（见 multiplayer.ts 的 leaveSeat）。散场的时候
+  // 座位还在，不用给。
+  showRoomCard(root, state, currentLang, done, meId ? { meId } : undefined);
   setScreenBack(done);
 }
 
