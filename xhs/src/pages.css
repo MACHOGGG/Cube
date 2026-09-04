@@ -1,0 +1,58 @@
+/*
+ * 这一版自己那两块的样式——只有小红书版加载它。
+ *
+ * 绝大部分长相是白拿网页版的：成绩那一块用的是 .total-card /
+ * .records-panel / .records-row，src/style.css 里都写好了。这里只补三件网页
+ * 版没有的事：
+ *
+ *   1. 说明那一块（琥珀色板子下面那块蓝紫的）网页版是排行榜，装的是榜单；
+ *      这一版装的是几行字，得换一套内边距和字号。
+ *   2. 底排从两颗键变成一颗，居中。
+ *   3. 一屏里两块板子叠着，间距要收一点。
+ *
+ * 排在 src/style.css 之后 import，所以同名规则以这里为准。
+ */
+
+/* 两块板子叠在一屏里：默认的 16px 行距在这儿显得散，收到 14px。 */
+.xhs-profile { gap: 14px; }
+
+/* 成绩那一块。网页版的 46vh 是给「左右各半」的缩略版留的，这一版整宽一
+   块，空着的时候 40vh 就够站住，装满了自己会长。 */
+.xhs-profile .records-panel--records { min-height: 40vh; gap: 14px; }
+
+/* 说明那一块。它不是榜，是四行字：不撑高度、行距按读的来。 */
+.xhs-about {
+  min-height: 0;
+  padding: 24px 24px 26px;
+  gap: 8px;
+}
+/* 底是写死的蓝紫（.records-panel--ranks 的 #9BA5D6），所以字也得写死——用
+   var(--ink) 的话，哪天深色主题回来了就是近白压在浅蓝紫上，糊成一片。
+   同样的道理写在 src/style.css 的 .records-row 上面那段注释里。 */
+.xhs-about-line,
+.xhs-about-site {
+  margin: 0;
+  color: #241E33;
+  font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+/* 网址单拎一行，等宽字 + 加粗——它是这一页唯一要人记住的东西。
+   不做成链接：小工具里不许开外链（zip-artifact-spec.md），一颗点不动的链接
+   比一行普通的字更让人恼火。 */
+.xhs-about-site {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  padding: 2px 0 4px;
+}
+
+/* 底排只有一颗键，居中。网页版那两颗是 flex:1 各占一半（整块圆角矩形都能
+   点）；只剩一颗的时候那条规则会把它拉成一整条，所以这儿改回按内容宽。 */
+.xhs-profile-nav .home-nav-btn {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding-left: 18px;
+  padding-right: 18px;
+}

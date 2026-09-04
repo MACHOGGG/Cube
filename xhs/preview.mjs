@@ -53,8 +53,12 @@ const safe = code.split('</script').join('<\\/script');
 const html = `<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>方糖谜题 小工具版</title>
 <style>
-  /* 小红书容器里页面是满屏的，这里照做：不留边、不出滚动条。 */
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #14110F; }
+  /* 小红书容器里页面是满屏的，这里照做：不留边。
+     底色写成和游戏一样的米白（src/style.css 的 --bg）。之前这儿是一个近黑
+     的占位色，而 <html> 的底色就是浏览器画整个画布用的那个——body 盖不到的
+     地方（回弹、安全区、内容不满一屏）会露出黑边。
+     也不写 overflow: hidden：主菜单和成绩页本来就要能往下滑。 */
+  html, body { margin: 0; padding: 0; background: #FAF6EC; }
 </style>
 <div id="app"></div>
 <script>${safe}</script>

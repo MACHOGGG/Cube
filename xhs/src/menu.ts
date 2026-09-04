@@ -16,10 +16,9 @@ import {
   ICON_BASE_SQUARE,
   ICON_BOMB_BADGE,
   ICON_FLIP_MODE,
-  ICON_NAV_PROFILE,
-  ICON_NAV_RECORDS,
   ICON_SLOT_MACHINE,
 } from '../../src/ui/homeIcons';
+import { ICON_NAV_ME } from './icons';
 import { STRINGS, type Lang } from '../../src/i18n';
 
 /** 五个玩法。炸弹 / 老虎机 / 无限反转点开先挑方块还是小球。 */
@@ -27,8 +26,8 @@ export type XhsMode = 'square' | 'circle' | 'bomb' | 'slot' | 'flip';
 
 export interface XhsMenuHandlers {
   onPlay: (mode: XhsMode) => void;
-  onRecords: () => void;
-  onAbout: () => void;
+  /** 底排那唯一一颗键：成绩 + 说明合成的那一屏。 */
+  onProfile: () => void;
 }
 
 /** 宽屏（电脑、手机横屏）一排摆得下五张；窄屏一排两张。同网页版的分界。 */
@@ -66,18 +65,27 @@ function card(icon: string, label: string, onTap: () => void): HTMLButtonElement
   return btn;
 }
 
-/** 底排那两颗：左边《记录》，右边《介绍》。网页版是个人主页 + 记录与排名。 */
+/**
+ * 底排只有一颗键，居中。
+ *
+ * 网页版是两颗（个人主页 / 记录与排名），这一版把那两屏并成了一屏（见
+ * profile.ts），所以键也并成一颗——玩家定的：「用这个作为表示放在屏幕下方
+ * 的最中间」。图标是玩家给的那个橙色圆（icons.ts）。
+ *
+ * 图标要包一层 .home-nav-art：网页版的尺寸、投影、按下去的那点光都挂在这个
+ * 类上，直接把 SVG 塞进按钮里的话它没有尺寸，缩成一小点。
+ */
 function bottomNav(h: XhsMenuHandlers): HTMLElement {
   const nav = document.createElement('div');
-  nav.className = 'home-nav';
+  nav.className = 'home-nav xhs-profile-nav';
   nav.innerHTML = `
     <div class="home-nav-dock">
-      <button class="home-nav-btn" id="xhsRecords" aria-label="游玩记录">${ICON_NAV_RECORDS}</button>
-      <button class="home-nav-btn" id="xhsAbout" aria-label="关于 Slides">${ICON_NAV_PROFILE}</button>
+      <button class="home-nav-btn" id="xhsProfile" aria-label="成绩与说明">
+        <span class="home-nav-art">${ICON_NAV_ME}</span>
+      </button>
     </div>
   `;
-  nav.querySelector<HTMLButtonElement>('#xhsRecords')!.addEventListener('click', h.onRecords);
-  nav.querySelector<HTMLButtonElement>('#xhsAbout')!.addEventListener('click', h.onAbout);
+  nav.querySelector<HTMLButtonElement>('#xhsProfile')!.addEventListener('click', h.onProfile);
   return nav;
 }
 

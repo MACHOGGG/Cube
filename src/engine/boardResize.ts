@@ -105,10 +105,12 @@ export function floorBox(wrap: HTMLElement): DOMRect {
   wrap.style.height = '';
   wrap.style.flex = '';
   wrap.style.margin = '';
-  // 圆角也一起摘掉。下面 fitPanelRadius 会照这一轮的棋盘重算一个，而算的时
-  // 候要读得到样式表里那个设计值——不摘的话读到的是上一轮自己写下的那个，
-  // 于是圆角只会一轮比一轮小。
-  wrap.style.borderRadius = '';
+  // 圆角**不**在这里摘。摘过一版，出过这个毛病：拖动的时候棋盘会重排一次，
+  // 这一句把上一轮算好的圆角清掉，而重算是排到下一帧的——于是手指一按下去，
+  // 地板的四个角就从 14px 弹成样式表里的设计值（3vh ≈ 25px），松手才弹回
+  // 来。玩家的说法是「滑动的时候游戏版图会随之变化」。
+  // 设计值改由 fitPanelRadius 自己去读：它在同一个同步块里摘掉、读完、写
+  // 回，中间浏览器画不了帧，所以看不见。
   return wrap.getBoundingClientRect();
 }
 
@@ -145,8 +147,16 @@ const CORNER_PULL = 1 - Math.SQRT1_2;
 export function fitPanelRadius(wrap: HTMLElement): void {
   const pieces = wrap.querySelectorAll<HTMLElement>(PIECE_SELECTOR);
   if (!pieces.length) return;
+  // 读样式表里的设计值：得先把上一轮自己写下的那个摘掉，不然读到的是它，
+  // 圆角会一轮比一轮小。摘掉和写回在同一个同步块里，浏览器不会在中间画一
+  // 帧，所以屏幕上看不到那一瞬间的设计值。
+  const held = wrap.style.borderRadius;
+  wrap.style.borderRadius = '';
   const design = parseFloat(getComputedStyle(wrap).borderTopLeftRadius) || 0;
-  if (!(design > 0)) return;
+  const keep = () => {
+    wrap.style.borderRadius = held;
+  };
+  if (!(design > 0)) return keep();
 
   // 一枚棋子的圆角就够了：同一个棋盘上它们长得一样。三角是 clip-path 画的，
   // 读到 0，那就当它是方的——保守一点，不会切到。
@@ -155,13 +165,18 @@ export function fitPanelRadius(wrap: HTMLElement): void {
 
   const W = wrap.offsetWidth;
   const H = wrap.offsetHeight;
-  if (!(W > 0) || !(H > 0)) return;
+  if (!(W > 0) || !(H > 0)) return keep();
   // 顺序照 CSS 的 border-radius：左上、右上、右下、左下。
   const limit = [design, design, design, design];
 
   for (const p of pieces) {
     const box = offsetIn(p, wrap);
     if (!box || box.w <= 0 || box.h <= 0) continue;
+    // 整个落在地板外面的不算。拖动的时候每一行两头会各接上一枚补位的棋子，
+    // 它们的排版位置就在地板外（左边是负的，右边越过 W）——照它们算，
+    // maxRadius 拿到一个负数直接返回 0，那一侧的两个角当场变成直角。补位的
+    // 棋子是给手指看的，不是地板要迁就的东西。
+    if (box.x + box.w <= 0 || box.x >= W || box.y + box.h <= 0 || box.y >= H) continue;
     const left = box.x + pull;
     const top = box.y + pull;
     const right = W - (box.x + box.w) + pull;
@@ -175,6 +190,8 @@ export function fitPanelRadius(wrap: HTMLElement): void {
   // 没被任何棋子管到的角，原样保留设计值——那些角本来就是空的（菱形方块的
   // 四个角就是），没有理由为了取整少掉一个像素。被管到的才往下取整再退半格，
   // 亚像素的舍入不该把一枚棋子露在外面。
+  // 这一条不 keep()：四个角都放得下设计值，就该让设计值生效（消掉一行之后
+  // 角上空出来了，圆角要长回去）。此刻 inline 已经是空的，什么都不做就是。
   if (limit.every((r) => r >= design)) return;
   const px = limit.map((r) => (r >= design ? design : Math.max(0, Math.floor(r - 0.5))));
   wrap.style.borderRadius = `${px[0]}px ${px[1]}px ${px[2]}px ${px[3]}px`;
