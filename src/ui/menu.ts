@@ -4,6 +4,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { GENIUS_LAYOUTS, isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { shapeName } from './shapeLabels';
+import { menuTag } from './menuTags';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 
@@ -103,13 +104,42 @@ function wireTapFeedback(el: HTMLElement): void {
   el.addEventListener('animationend', () => el.classList.remove('home-tap'));
 }
 
-function iconButton(glyph: string, label: string, extraClass = ''): HTMLButtonElement {
+/**
+ * 一张卡：上面一格方的图，底下（窄屏才有）一行小字。
+ *
+ * 图外面那层 .home-icon-art 是有用的，不是包着好看：锁和天才招牌是绝对定位
+ * 的，得贴着「图」的正中和右下角，不能贴着整张卡——卡底下多了一行字，卡的
+ * 正中就不是图的正中了。所以定位的参照物是这一层。
+ */
+function iconButton(glyph: string, label: string, extraClass = '', tag = ''): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className = 'home-icon-btn' + (extraClass ? ' ' + extraClass : '');
   btn.setAttribute('aria-label', label);
-  btn.innerHTML = glyph;
+  const art = document.createElement('span');
+  art.className = 'home-icon-art';
+  art.innerHTML = glyph;
+  btn.appendChild(art);
+  if (tag) btn.appendChild(tagEl(tag));
   wireTapFeedback(btn);
   return btn;
+}
+
+/** 卡底下那行小字。用 textContent，玩法名字里将来带上 & 或 < 也不会出事。 */
+function tagEl(text: string): HTMLElement {
+  const cap = document.createElement('span');
+  cap.className = 'home-icon-tag';
+  cap.textContent = text;
+  return cap;
+}
+
+/** 锁着的卡上那两件东西：正中一把锁，右下角一块天才招牌。都压在图上。 */
+function lockOverlay(btn: HTMLElement): void {
+  const art = btn.querySelector('.home-icon-art') ?? btn;
+  art.insertAdjacentHTML(
+    'beforeend',
+    `<span class="center-pick-lock">${ICON_LOCK}</span>` +
+      `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
+  );
 }
 
 export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers: MenuHandlers, lang: Lang) {
@@ -127,6 +157,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       <div class="home-grid" id="homeGrid"></div>
     </div>
   `;
+  // 卡底下那行小字只在窄屏（手机竖着）给。宽屏那三排是按参考图排的，一张挨
+  // 一张，底下多一行字会把整页顶出一条滚动条——玩家说过电脑端不动。
+  const tag = (key: string): string => (wide ? '' : menuTag(lang, key));
+
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
 
@@ -192,7 +226,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const baseRow = wide ? newRow() : null;
   for (const shape of SHAPES) {
     const card = layout.base[shape];
-    const btn = iconButton(BASE_ICON[shape], shapeName(lang, card.id, card.name));
+    const btn = iconButton(BASE_ICON[shape], shapeName(lang, card.id, card.name), '', tag(card.id));
     btn.addEventListener('click', () => handlers.onSelectBase(card.id));
     if (baseRow) baseRow.appendChild(btn);
     else place(btn);
@@ -204,16 +238,12 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
    * 右下角收着天才招牌，按下去开订阅窗；开通了按下去直接进那个玩法。两张牌
    * 除了图和去处以外一模一样，所以只写一遍。
    */
-  const geniusCard = (glyph: string, title: string, open: () => void): HTMLButtonElement => {
+  const geniusCard = (glyph: string, title: string, tagKey: string, open: () => void): HTMLButtonElement => {
     const locked = !isGenius();
-    const btn = iconButton(glyph, locked ? `${title} · ${s.geniusOnly}` : title);
+    const btn = iconButton(glyph, locked ? `${title} · ${s.geniusOnly}` : title, '', tag(tagKey));
     if (locked) {
       btn.classList.add('home-icon-btn--locked');
-      btn.insertAdjacentHTML(
-        'beforeend',
-        `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-          `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
-      );
+      lockOverlay(btn);
     }
     btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : open()));
     return btn;
@@ -222,10 +252,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 那扇小门点进去直接是小屋那一页，不再绕个人主页。它右边是老虎机和无限反
   // 转——这两个不是新棋盘（挑完图形玩的还是那三个基础玩法），所以不排在下面
   // 的棋盘堆里，跟多人游玩同属「另一种玩法」这一排。
-  const mpBtn = iconButton(ICON_MULTIPLAYER, s.mpTitle);
+  const mpBtn = iconButton(ICON_MULTIPLAYER, s.mpTitle, '', tag('multiplayer'));
   mpBtn.addEventListener('click', handlers.onMultiplayer);
-  const slotBtn = geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, handlers.onRandomTarget);
-  const flipBtn = geniusCard(ICON_FLIP_MODE, s.flipModeTitle, handlers.onFlipMode);
+  const slotBtn = geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, 'slot', handlers.onRandomTarget);
+  const flipBtn = geniusCard(ICON_FLIP_MODE, s.flipModeTitle, 'flip', handlers.onFlipMode);
   // 窄屏：多人游玩顺着链往下摆，老虎机和无限反转收进天才特供那一段（它们是
   // 那一段里最前面的两张）。宽屏上这三张跟在计时和炸弹后面，凑成一排五张。
   if (!wide) {
@@ -246,7 +276,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 计时占的是一张的位置，不是三张——同一个板块在笔记本上和在手机上不该长
   // 成两个样子。
   const timedRow = wide ? newRow() : null;
-  const timedBtn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed');
+  const timedBtn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed', tag('timed'));
   timedBtn.dataset.reopen = 'timed';
   timedBtn.addEventListener('click', () =>
     openCenterPicker({ originEl: timedBtn, title: s.sectionTimed, options: timedOptions(), split: true }),
@@ -334,7 +364,12 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // open. Only the copy built for the picker below is live.
   const preview = buildBombPanel();
   preview.style.pointerEvents = 'none';
-  bombBtn.appendChild(preview);
+  const bombArt = document.createElement('span');
+  bombArt.className = 'home-icon-art';
+  bombArt.appendChild(preview);
+  bombBtn.appendChild(bombArt);
+  const bombTag = tag('bomb');
+  if (bombTag) bombBtn.appendChild(tagEl(bombTag));
   wireTapFeedback(bombBtn);
   bombBtn.addEventListener('click', () => {
     // The close handle only exists once the picker is open, but the panel
@@ -377,6 +412,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       // 进阶三角那张图是横画布，摆进方框里会比别人矮一半。给它一个自己的类，
       // 把它缩到和其它图标看着一样大——按「图形本身占多大」算，不是按方框算。
       layoutIconIsWide(card.id) ? 'home-icon-btn--wide-art' : '',
+      tag(card.id),
     );
     if (isLocked) {
       // 锁着的玩法现在直接摆在主菜单上，得一眼看出来是锁着的：图案压暗，正
@@ -384,11 +420,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       // 跟着卡片走（见 .home-icon-btn--locked .center-pick-genius），永远压
       // 不到锁。
       btn.classList.add('home-icon-btn--locked');
-      btn.insertAdjacentHTML(
-        'beforeend',
-        `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-          `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
-      );
+      lockOverlay(btn);
     }
     btn.addEventListener('click', () =>
       isLocked ? handlers.onLockedLayout() : handlers.onSelectLayout(card.id),

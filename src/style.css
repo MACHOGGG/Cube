@@ -834,7 +834,10 @@ button:hover { filter: brightness(1.05); }
    它现在把「手机横过来」也算宽版。CSS 要是另立一条自己的屏宽标准，横屏手机
    就会出现「HTML 按宽版排、样式按竖版给」的错位。一个判断，两处引用。 */
 .home-page:not(.home-page--wide) {
-  padding-top: 10px; padding-bottom: 99px; padding-left: 8px; padding-right: 8px;
+  /* 左右各让出 22px：从前只有 8，两列图标几乎贴着屏幕边（玩家的原话「再整体
+     靠中间一点」）。这道边是页面自己的内边距，所以它同时把整排往里收——图标
+     的上限式子里减掉的就是这两道。 */
+  padding-top: 10px; padding-bottom: 99px; padding-left: 22px; padding-right: 22px;
   /* 至少顶着一屏高，几排在招牌和底排之间匀开——屏幕高、图标又少的时候，
      几排不至于全挤在页面上半截、底下空出一大块。装不下就照常往下长。 */
   min-height: 100svh;
@@ -853,13 +856,16 @@ button:hover { filter: brightness(1.05); }
 
    上下用同一个数，所以横竖两个方向看起来一样疏。
 
-   那三份之后又整体放大了一半（玩家点的「1.5 倍」）：三等分乘一点五就是二等
-   分，于是式子里的 3 变成 2。放大之后中间那道比两边那道宽一些——390 的手机
-   上是 57 对 36——两张确实拉得更开，这是玩家要的。上下限跟着一起乘：下限 30
-   是小屏上还留得住的那道缝，上限 66 是宽一点的手机上两张不至于被推到贴着
-   屏幕边。 */
+   后来几次调整之后，这个数不再从「剩下多少」倒推，而是直接按屏宽给八分之
+   一：390 的手机上 31，360 上 29，430 上 34。理由是图标已经顶到上限了，「剩下多
+   少」几乎是零，倒推出来的数会一路涨到把两列推到屏幕边上去——玩家先说「拉
+   开一点」，又说「再靠中间一点」，两次要的其实是同一件事：两列之间和两列到
+   屏幕边这两道，谁也不能吃掉谁。现在中间这道由屏宽定，两边那道由页面内边距
+   定（22px），互不相干。
+
+   上下用同一个数，横竖两个方向看起来一样疏。 */
 .home-page:not(.home-page--wide) {
-  --narrow-gap: clamp(30px, (min(100vw, 460px) - 16px - 260px) / 2, 66px);
+  --narrow-gap: clamp(22px, 8vw, 44px);
 }
 .home-page:not(.home-page--wide) .home-grid { gap: var(--narrow-gap); }
 .home-page:not(.home-page--wide) .home-row { gap: var(--narrow-gap); }
@@ -869,20 +875,38 @@ button:hover { filter: brightness(1.05); }
    算的：手机一上滑就把地址栏收起来，dvh 跟着变大，图标就跟着胀大一圈（玩
    家报过「一上滑所有标识都放大了」）。
 
-   165 是上限，不是定数：两张 165 加上那道间距（390 的手机上是 57）一共 387，
-   比内容区的 374 还宽，所以后面那一条会接手，把它收成「这一排减掉间距再对
-   半分」。玩家是知道这个代价才点的这一档——他要的是间距不动、图标尽量大，
-   于是各个屏幕上图标不一样大，也几乎不留边：
+   165 是上限，不是定数：多数手机上装不到那么大，后面那一条会接手，把它收成
+   「这一排减掉两边内边距、再减掉中间那道缝，然后对半分」。所以各个屏幕上图
+   标不一样大——同一块屏幕上十三张仍然一样大，变的是屏幕之间：
 
-     320 宽 → 137px      360 宽 → 151px
-     390 宽 → 158px      430 宽及以上 → 165px（顶到上限，这时才留得住边）
+     320 宽 → 122px      360 宽 → 140px
+     390 宽 → 153px      430 宽及以上 → 165px（顶到上限，这时两边还多留一点）
 
-   同一块屏幕上十三张仍然一样大——变的是屏幕之间。 */
+   44 是左右两道内边距（22+22）。 */
 .home-page:not(.home-page--wide) .home-icon-btn,
 .home-page:not(.home-page--wide) .home-bomb-card {
   max-width: 165px;
-  max-width: min(165px, (min(100vw, 460px) - 16px - var(--narrow-gap)) / 2);
+  max-width: min(165px, (min(100vw, 460px) - 44px - var(--narrow-gap)) / 2);
 }
+/* 卡底下那行小字：一眼认出这张是哪个玩法。
+   ─────────────────────────────────────────────────────────────────────────
+   只有窄屏有。宽屏那三排是按参考图排的，一张挨一张站在一屏里，底下多一行字
+   就会把整页顶出滚动条——玩家说过电脑端不动，所以那一路连这行字都不生成
+   （见 menu.ts 的 tag()），这条 display: none 只是转屏没重画时的兜底。
+
+   卡这时候不再是个正方形了：图是正方的，字在图底下，卡是两者之和。所以
+   aspect-ratio 交回给里面那一格（.home-icon-art），卡自己改成一竖列。
+
+   卡自己还是块级的，不改成 flex：图那一格是「宽定死、高按比例算」，而弹性布
+   局里这种盒子的高会被里面那张 svg 的原始比例顶上去（多人那张画布是 195×452，
+   一顶就是 365 高，方格变竖条）。块级布局没这回事，比例说了算。 */
+.home-page:not(.home-page--wide) .home-icon-btn { aspect-ratio: auto; }
+.home-icon-tag {
+  display: block; padding-top: 7px;
+  font-size: clamp(0.68rem, 3.2vw, 0.82rem); line-height: 1.2;
+  color: var(--ink-soft); letter-spacing: 0.02em; text-align: center;
+}
+.home-page--wide .home-icon-tag { display: none; }
 /* The icon grid wants far more width than the standard reading column.
    一排最多三张，每张被 --home-card-cap 收住，所以整页的宽由那三张决定；这里
    给的是上限，屏幕再宽也不会把三张拉散。 */
@@ -1017,13 +1041,25 @@ button:hover { filter: brightness(1.05); }
   .home-page--wide .home-sub { margin-top: 3px; font-size: 0.68rem; }
   .home-page--wide .home-grid { gap: 14px; }
 }
-.home-icon-btn > svg { width: 100%; height: 100%; display: block; }
+/* 图那一格。卡片 = 这一格 +（窄屏才有的）一行小字，所以「图有多大」和「卡
+   有多高」从这里开始是两件事：图永远是正方的，卡可以更高。
+   position: relative 是给锁和天才招牌当参照物用的——它们要贴着图的正中和右
+   下角，不是贴着卡。 */
+.home-icon-art { display: block; position: relative; width: 100%; aspect-ratio: 1; }
+/* 炸弹那张不是一张图，是一整块「板」（三档炸弹叠着，中间那颗 90s 的星芒还特
+   意探到上下两层去），本来就比一张方卡片高一截。所以它那一格不摆方框——一
+   摆方框，里面按百分比算高度的那几层就全跟着变，整块板凭空长高一截，电脑端
+   三排立刻装不进一屏。 */
+.home-bomb-card .home-icon-art,
+.home-bomb-mini .home-icon-art { aspect-ratio: auto; }
+.home-icon-art > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
    空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：
    框有多大，图形就有多大，点得到的地方就是看得见的地方。
    一个 2:1 的图形没法和正方形图标严丝合缝地一样大，这里取「占满这一列」，
    是不越界的前提下能给到的最大。 */
 .home-icon-btn--wide-art { aspect-ratio: 189 / 106; align-self: center; }
+.home-icon-btn--wide-art .home-icon-art { aspect-ratio: 189 / 106; }
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--r-sm); }
 
 /* The press cue: a quick squash and tilt, fired from pointerdown so it plays
@@ -1169,7 +1205,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
 /* 主菜单上锁着的那几个玩法（老虎机、七色圆球、进阶三角）：图案压暗，锁压在正
    当中，右下角一块天才招牌——说明这把锁是哪一家的。 */
 .home-icon-btn--locked { position: relative; }
-.home-icon-btn--locked > svg { opacity: 0.38; }
+.home-icon-btn--locked .home-icon-art > svg { opacity: 0.38; }
 /* 锁：三张卡都是 34px，都在图形的正中心（弹窗里那把往上提了一点，因为它
    底下还有一行字；主菜单上没有，正中就是正中）。 */
 .home-icon-btn--locked .center-pick-lock {

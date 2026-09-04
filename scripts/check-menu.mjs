@@ -39,7 +39,7 @@ await page.waitForTimeout(400);
 // 只查这几处的直接子 svg：它们的 CSS 只写了宽 + aspect-ratio，高度是算出来
 // 的，所以文件上多一个 height 属性就会把比例顶掉。天才招牌不在此列——它的
 // svg 宽高由 .genius-logo svg 那条 CSS 接管，文件上的属性压根轮不上。
-const SIZED_BY_CSS = '.home-icon-btn > svg, .center-pick-opt > svg, .start-mark > svg, .start-mark-art > svg';
+const SIZED_BY_CSS = '.home-icon-art > svg, .center-pick-opt > svg, .start-mark > svg, .start-mark-art > svg';
 const sized = await page.$$eval(SIZED_BY_CSS, (els) =>
   els.filter((e) => e.hasAttribute('width') || e.hasAttribute('height'))
      .map((e) => e.getAttribute('width') + '×' + e.getAttribute('height')),
@@ -137,7 +137,9 @@ async function lockedCards(width, height) {
         const q = el.getBoundingClientRect();
         return { l: q.left, t: q.top, r: q.right, b: q.bottom, w: q.width, h: q.height };
       };
-      const card = box(b);
+      // 量的是「图」那一格，不是整张卡：窄屏上卡底下还有一行小字，卡的正中
+      // 早就不是图的正中了，锁该对齐的是图。
+      const card = box(b.querySelector('.home-icon-art') ?? b);
       const lock = box(b.querySelector('.center-pick-lock'));
       const badge = box(b.querySelector('.center-pick-genius'));
       const touch = (a, o) => a.l < o.r && o.l < a.r && a.t < o.b && o.t < a.b;
