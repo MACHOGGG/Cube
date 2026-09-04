@@ -208,11 +208,14 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
         ['菱形方块', '六边圆球', '七色圆球', '大三角', '进阶三角'],
       ]
     : [
-        ['方块', '圆球', '三角'],
-        ['多人游玩', '老虎机模式', '无限反转'],
+        // 窄屏：同一条顺序，一排两张摆完为止（玩家点的）。
+        ['方块', '圆球'],
+        ['三角', '多人游玩'],
+        ['老虎机模式', '无限反转'],
         ['计时挑战', '基础炸弹'],
-        ['菱形方块', '六边圆球', '七色圆球'],
-        ['大三角', '进阶三角'],
+        ['菱形方块', '六边圆球'],
+        ['七色圆球', '大三角'],
+        ['进阶三角'],
       ];
   check(`${label}：${WANT.length} 排，各 ${WANT.map((r) => r.length).join(' / ')} 张`,
     rows.length === WANT.length && rows.every((r, i) => r.length === WANT[i].length),
@@ -224,6 +227,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   const sizes = await cardWidths(w, h);
   const span = Math.max(...sizes) - Math.min(...sizes);
   check(`${label}：十三张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
+  if (!wide) check(`${label}：一张 130px 见方`, sizes.every((n) => n === 130), `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
   check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));

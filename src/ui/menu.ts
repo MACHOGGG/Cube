@@ -60,10 +60,10 @@ export interface HomeLayout {
 }
 
 const SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
-/** 主菜单一排最多摆几张。样式那边算图标上限用的也是这两个数：宽屏第二、三
- *  排各五张，窄屏一排三张。 */
+/** 主菜单一排摆几张。样式那边算图标上限用的也是这两个数：宽屏第二、三排各
+ *  五张，窄屏一排两张（一张 130px 见方，玩家点的）。 */
 const WIDE_PER_ROW = 5;
-const NARROW_PER_ROW = 3;
+const NARROW_PER_ROW = 2;
 /** The bomb panel's own order — the reference sheet lines its chips up
  *  square/triangle/circle rather than the square/circle/triangle the full-
  *  width rows above it use. */
@@ -127,25 +127,24 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
 
-  // 排法是玩家点的，宽屏和窄屏各一套——一排摆得下几张，两种屏幕差得远。
+  // 十三张的顺序从头到尾只有一条（这一条是玩家定的）：
   //
-  //   宽屏（三排）              窄屏（五排）
-  //   1 方块 · 小球 · 三角      1 方块 · 小球 · 三角
-  //   2 计时 · 炸弹 · 多人游玩  2 多人游玩 · 老虎机 · 无限反转
-  //     · 老虎机 · 无限反转     3 计时 · 炸弹
-  //   3 菱形方块 · 六边圆球     4 菱形方块 · 六边圆球 · 七色圆球
-  //     · 七色圆球 · 六边形三角 5 六边形三角 · V 型三角
-  //     · V 型三角
+  //   方块 · 小球 · 三角 · 多人游玩 · 老虎机 · 无限反转 · 计时 · 炸弹 ·
+  //   菱形方块 · 六边圆球 · 七色圆球 · 六边形三角 · V 型三角
   //
-  // 顺序是同一条链，只是断在不同的地方。每张图标不超过「一排摆满时的那一
-  // 份」那么宽（见 style.css 的 max-width），所以张数少的那几排不会因为人少
-  // 就长得比别人大——十三张从头到尾一样大。
+  // 两种屏幕只是把这条链断在不同的地方：
   //
-  // 从前手机上是两列的网格、一张一张往下排，排到第八张就出了屏幕，于是这一
-  // 页要往下滑。滑动本身不是问题，问题是滑动那一下手机会把地址栏收起来：
-  // 100dvh 跟着变大，按它算出来的图标上限也跟着变大——玩家看到的是「一滑所
-  // 有标识就胀大一圈」；同时 position: fixed 的底排在地址栏收放的那一下会跟
-  // 着漂。整页装进一屏、滑不动，这两件事一起没了。
+  //   窄屏（手机竖着）：一排两张，一张 130px 见方，摆完为止——十三张七排，
+  //     所以这一页要往下滑。这是玩家要的样子。
+  //   宽屏（电脑、手机横着）：三排——三个基础玩法；计时 · 炸弹 · 多人游玩 ·
+  //     老虎机 · 无限反转；五副棋盘。
+  //
+  // 每张图标不超过「一排摆满时的那一份」那么宽（见 style.css 的 max-width），
+  // 所以张数少的那几排不会因为人少就长得比别人大——十三张从头到尾一样大。
+  //
+  // 往下滑本身不是问题。真正咬过人的是另一件事：从前图标的大小是按 100dvh
+  // 算的，而手机一上滑就把地址栏收起来，dvh 跟着变大，图标就跟着胀大一圈。
+  // 现在窄屏的大小是个定数（130px），和屏幕高度、和滑没滑一概无关。
   const newRow = (): HTMLElement => {
     const row = document.createElement('div');
     row.className = 'home-row';
@@ -153,16 +152,33 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     return row;
   };
 
-  // ---- row 1: the three base games -------------------------------------
-  const baseRow = newRow();
+  /**
+   * 窄屏那一路：把图标按顺序一张张交给它，满了自己换排。宽屏不走这儿——
+   * 宽屏的三排是各自成段的，不是一条链切出来的。
+   */
+  const perRow = wide ? WIDE_PER_ROW : NARROW_PER_ROW;
+  let flowRow: HTMLElement | null = null;
+  let inFlow = 0;
+  const place = (btn: HTMLElement): void => {
+    if (!flowRow || inFlow >= perRow) {
+      flowRow = newRow();
+      inFlow = 0;
+    }
+    flowRow.appendChild(btn);
+    inFlow++;
+  };
+
+  // ---- 方块 · 小球 · 三角 ------------------------------------------------
+  const baseRow = wide ? newRow() : null;
   for (const shape of SHAPES) {
     const card = layout.base[shape];
     const btn = iconButton(BASE_ICON[shape], shapeName(lang, card.id, card.name));
     btn.addEventListener('click', () => handlers.onSelectBase(card.id));
-    baseRow.appendChild(btn);
+    if (baseRow) baseRow.appendChild(btn);
+    else place(btn);
   }
 
-  // ---- row 2: 多人游玩 · 老虎机 · 无限反转 -------------------------------
+  // ---- 多人游玩 · 老虎机 · 无限反转 --------------------------------------
   /**
    * 天才特供的那两张牌（老虎机、无限反转）：没开通就是图案压暗、正中一把锁、
    * 右下角收着天才招牌，按下去开订阅窗；开通了按下去直接进那个玩法。两张牌
@@ -190,15 +206,14 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   mpBtn.addEventListener('click', handlers.onMultiplayer);
   const slotBtn = geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, handlers.onRandomTarget);
   const flipBtn = geniusCard(ICON_FLIP_MODE, s.flipModeTitle, handlers.onFlipMode);
-  // 窄屏上这三张自成一排；宽屏上它们跟在计时和炸弹后面，凑成一排五张。
+  // 窄屏上这三张顺着链往下摆；宽屏上它们跟在计时和炸弹后面，凑成一排五张。
   if (!wide) {
-    const playRow = newRow();
-    playRow.appendChild(mpBtn);
-    playRow.appendChild(slotBtn);
-    playRow.appendChild(flipBtn);
+    place(mpBtn);
+    place(slotBtn);
+    place(flipBtn);
   }
 
-  // ---- row 3: 计时 · 炸弹 ------------------------------------------------
+  // ---- 计时 · 炸弹 --------------------------------------------------------
   const timedOptions = (): PickerOption[] =>
     SHAPES.map((shape) => ({
       glyph: timedOption(shape),
@@ -209,13 +224,14 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 一只沙漏代表三个，点下去飞到屏幕中间、落定时裂成三只。宽屏窄屏同一颗：
   // 计时占的是一张的位置，不是三张——同一个板块在笔记本上和在手机上不该长
   // 成两个样子。
-  const timedRow = newRow();
+  const timedRow = wide ? newRow() : null;
   const timedBtn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed');
   timedBtn.dataset.reopen = 'timed';
   timedBtn.addEventListener('click', () =>
     openCenterPicker({ originEl: timedBtn, title: s.sectionTimed, options: timedOptions(), split: true }),
   );
-  timedRow.appendChild(timedBtn);
+  if (timedRow) timedRow.appendChild(timedBtn);
+  else place(timedBtn);
 
 
   // ---- 炸弹，接在计时右边 ------------------------------------------------
@@ -306,11 +322,13 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     const panel = buildBombPanel('bomb', () => close?.());
     close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
   });
-  timedRow.appendChild(bombBtn);
-  if (wide) {
+  if (timedRow) {
+    timedRow.appendChild(bombBtn);
     timedRow.appendChild(mpBtn);
     timedRow.appendChild(slotBtn);
     timedRow.appendChild(flipBtn);
+  } else {
+    place(bombBtn);
   }
 
   // ---- 最后：每个布局玩法自己露脸，不再藏在「+」后面 ---------------------
@@ -318,18 +336,15 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 玩家一眼就知道有哪些棋盘，少一层点击。
   //
   // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起：菱形方块、六边
-  // 圆球、七色圆球、六边形三角、V 型三角。宽屏五张一排；窄屏一排三张，剩下
-  // 的往下一排放——以后再添棋盘，下一排自己就长出来了。
+  // 圆球、七色圆球、六边形三角、V 型三角。宽屏五张自成一排；窄屏接着那条链
+  // 往下摆——以后再添棋盘，下一排自己就长出来了。
   const ordered: { card: ShapeCardMeta; shape: BaseShape }[] = [];
   for (const shape of SHAPES) {
     for (const card of layout.moreLayouts[shape]) ordered.push({ card, shape });
   }
 
-  const perRow = wide ? WIDE_PER_ROW : NARROW_PER_ROW;
-  let row = newRow();
-  let inRow = 0;
+  const layoutRow = wide ? newRow() : null;
   for (const { card, shape } of ordered) {
-    if (inRow >= perRow) { row = newRow(); inRow = 0; }
     const isLocked = isLayoutLocked(card.id);
     const name = shapeName(lang, card.id, card.name);
     const btn = iconButton(
@@ -354,7 +369,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     btn.addEventListener('click', () =>
       isLocked ? handlers.onLockedLayout() : handlers.onSelectLayout(card.id),
     );
-    row.appendChild(btn);
-    inRow++;
+    if (layoutRow) layoutRow.appendChild(btn);
+    else place(btn);
   }
 }
