@@ -51,7 +51,24 @@ const FLIP_SECONDS = 60;
 const root = document.getElementById('app') as HTMLElement;
 const squareGame = createSquareGame();
 const circleGame = createCircleGame();
-const gameFor = (family: Family): ShapeGame => (family === 'circle' ? circleGame : squareGame);
+/**
+ * 这一版只有方块和小球两副棋盘。
+ *
+ * 从前这里写的是「不是小球就当方块」，那是一条会闷声出错的路：万一有个
+ * 'triangle' 传进来，抽出来的是三角的得分图案，摆出来的却是方块的棋盘——
+ * 玩家看到的就是「完全错误」的一局，而代码一声不吭。真发生过一次（老虎机
+ * 那一屏的三角按钮当时还在）。
+ *
+ * 现在只认这两个，别的返回 null，由调用方决定怎么办（都是「当没点」）。
+ */
+const gameFor = (family: Family): ShapeGame | null =>
+  family === 'circle' ? circleGame : family === 'square' ? squareGame : null;
+
+/** 开一局，但形状不是这一版有的就当没点——宁可没反应，也不能开错一局。 */
+function startWith(family: Family, opts: ShapeGameOpts, back: () => void): void {
+  const game = gameFor(family);
+  if (game) showGame(game, opts, back);
+}
 
 /**
  * 成绩那一页要翻的六本存档：两个玩法 × 三种模式。
@@ -163,7 +180,7 @@ function showBombPick() {
     title: '炸弹',
     tagline: '红色是危险色 · 四颗连起来这一局就结束',
     onBack: showMenu,
-    onPick: (family) => showGame(gameFor(family), { bomb: true }, showBombPick),
+    onPick: (family) => startWith(family, { bomb: true }, showBombPick),
   });
   setScreenBack(showMenu);
 }
@@ -177,7 +194,7 @@ function showSlot() {
     {
       onBack: showMenu,
       onStart: (family: Family, targets: TargetPattern[]) =>
-        showGame(gameFor(family), { targets }, showSlot),
+        startWith(family, { targets }, showSlot),
       // 这一版全部免费，没有「没开通」这条岔路；给个空函数只是接口要它。
       onGenius: () => {},
     },
@@ -202,7 +219,7 @@ function showFlip() {
     {
       onBack: showMenu,
       onStart: (family) =>
-        showGame(gameFor(family), { flip: true, timeLimitSec: FLIP_SECONDS }, showFlip),
+        startWith(family, { flip: true, timeLimitSec: FLIP_SECONDS }, showFlip),
       onGenius: () => {},
     },
     false,
