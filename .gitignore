@@ -26,6 +26,3 @@ slides-icons.zip
 
 # 界面模拟器：由 scripts/ui-screens.mjs + build-simulator.mjs 生成，不是源文件。
 slides-simulator.html
-
-# 小红书小工具的出包：由 npm run build:xhs 生成，不是源文件。
-xhs/slides-minitool.zip

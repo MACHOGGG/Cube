@@ -48,7 +48,15 @@ npm run build:xhs
 ```
 
 出来的是 `xhs/dist/`（`index.html` 在根）和一个可以直接传进 Builder Hub 的
-`xhs/slides-minitool.zip`。两者都提交进仓库——玩家那边没有 Node，从 GitHub
-下载 zip 就能传。
+`xhs/slides-minitool.zip`。
+
+`dist/` 不进仓库（根 `.gitignore` 里 `dist` 那条），**但 zip 进**——这是故意
+的：玩家那台电脑上没有 Node，跑不了 `npm run build:xhs`，只能从 GitHub 网页
+上把 zip 下下来传进 Builder Hub。直链：
+
+<https://github.com/MACHOGGG/Cube/raw/refs/heads/claude/fangtang-game-web-app-xbecza/xhs/slides-minitool.zip>
+
+所以每次改完这一版，**都要重新 `npm run build:xhs` 再提交那个 zip**，否则玩
+家下到的还是上一版。
 
 规范和限制见 `.claude/skills/minitool-zip-builder/`（小红书官方那份技能包）。
