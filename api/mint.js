@@ -3,6 +3,7 @@ import { send, readBody } from './_creem.js';
 import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, saveAccount } from './_accounts.js';
 import { mintCodes } from './_codes.js';
 import { storeConfigured } from './_store.js';
+import { callerId, tooMany } from './_ratelimit.js';
 
 /**
  * Minting codes, for whoever runs this game and nobody else.
@@ -27,6 +28,18 @@ import { storeConfigured } from './_store.js';
  * and an argument.
  */
 const MAX_PER_CALL = 200;
+/**
+ * 一个来源一小时最多敲多少次门。
+ *
+ * 这个接口能批量发码、也能列出全部玩家的邮箱，是站里权限最高的一处，全靠
+ * ADMIN_TOKEN 挡着。密码比对本身是等长比较（tokenOk），可从前没有失败计数、
+ * 也没有任何锁——理论上可以不受限制地一直猜。redeem 和 unlock 早就接了限速
+ * （_ratelimit.js），这里补上，用的是同一套。
+ *
+ * 二十次是给真人留的余量：管理员一次发一批码、看一眼名单，一小时用不了几次。
+ * 排在验令牌之前，所以猜密码的人先撞上它。
+ */
+const CALLS_PER_HOUR = 20;
 
 /** Compared in constant time: a token check that leaks its own progress is
  *  a token check an attacker can walk one character at a time. */
@@ -39,6 +52,11 @@ function tokenOk(given) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
+
+  // 先限速，再验令牌：挡的正是「一直猜这个令牌」。
+  if (await tooMany('mint', callerId(req), CALLS_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
 
   const body = readBody(req);
   const { token, plan, count, expiresInDays, action, emails } = body;

@@ -31,7 +31,9 @@ export async function tooMany(bucket, id, limit, windowS) {
  * real person redeeming a real code never meets them.
  */
 export function callerId(req) {
-  const fwd = req.headers['x-forwarded-for'];
+  // headers 一定有——除非是测试里那份手搭的 req。少一层判断就少一处会炸的地方。
+  const headers = req?.headers || {};
+  const fwd = headers['x-forwarded-for'];
   const first = String(fwd || '').split(',')[0].trim();
-  return first || req.headers['x-real-ip'] || 'unknown';
+  return first || headers['x-real-ip'] || 'unknown';
 }

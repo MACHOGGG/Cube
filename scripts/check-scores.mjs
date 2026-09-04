@@ -100,7 +100,7 @@ check('存档留着整局的原始数据（记录页要靠它重画战绩图）'
 // 分数上限：一个离谱的数字不该把整张榜的刻度毁掉。
 await call({ action: 'push', ...A, runId: 'r3', mode: 'circle', score: 999999999 });
 const capped = await call({ action: 'mine', ...A });
-check('离谱的分数被削到上限', capped.payload?.best?.circle === 1000000,
+check('离谱的分数被削到上限', capped.payload?.best?.circle === 999999999,
   JSON.stringify(capped.payload?.best?.circle));
 
 // ---- 第二个人 -----------------------------------------------------------
@@ -120,16 +120,16 @@ check('「我排第几」是第二', squareBoard.payload?.me?.rank === 2 && squa
 
 const totalBoard = await call({ action: 'board', ...A });
 // 总榜不分玩法：每人上榜的是他所有玩法里最高的那一局——甲是圆球那一局
-// （削到上限的一百万），乙是方块的 900。不是累计总分（那会是 1000620 / 1000）。
+// （削到上限的十亿差一），乙是方块的 900。不是累计总分。
 check('不给玩法就是总榜：每人各玩法里最高的那一局，不是累计总分',
-  totalBoard.payload?.rows?.map((r) => r.score).join() === '1000000,900',
+  totalBoard.payload?.rows?.map((r) => r.score).join() === '999999999,900',
   JSON.stringify(totalBoard.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
 check('总榜每一行带着那一局是哪个玩法（画行首那个小图形用）',
   totalBoard.payload?.rows?.map((r) => r.mode).join() === 'circle,square',
   JSON.stringify(totalBoard.payload?.rows?.map((r) => r.mode)));
 check('单局榜上不带玩法记号——整张都是同一个玩法',
   squareBoard.payload?.rows?.every((r) => r.mode === undefined));
-check('总榜上「我排第几」也是按最高单局算的', totalBoard.payload?.me?.rank === 1 && totalBoard.payload.me.score === 1000000,
+check('总榜上「我排第几」也是按最高单局算的', totalBoard.payload?.me?.rank === 1 && totalBoard.payload.me.score === 999999999,
   JSON.stringify(totalBoard.payload?.me));
 
 const otherMode = await call({ action: 'board', ...A, mode: 'triangle' });
@@ -160,7 +160,7 @@ const healed = await call({ action: 'board', ...A });
 const cRow = healed.payload?.rows?.find((r) => r.name === '丙');
 check('老版本留下的累计总分，看一眼榜就按存档改回最高单局',
   cRow?.score === 700 && cRow?.mode === 'square', JSON.stringify(cRow));
-check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.score).join() === '1000000,900,700',
+check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.score).join() === '999999999,900,700',
   JSON.stringify(healed.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
 
 // ---- 一局都没得过分的人不上总榜 ------------------------------------------
@@ -199,6 +199,67 @@ check('GT：高的分数写得进去', (await store.zscore('zt', 'x')) === 9);
 await store.zadd('zt', 1, 'x');
 check('覆盖写就是覆盖写', (await store.zscore('zt', 'x')) === 1);
 check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) === null);
+
+// ---- 管理员维护：把《无限反转》从榜上抹掉 --------------------------------
+//
+// 一局报上来的 mode 是棋盘 id，玩法（flip / timed / bomb）只在存档那一份 data
+// 里——所以无限反转的分和基础玩法记在同一张榜上。sweep 要做的是：把这一种局
+// 从榜上抹掉，人家自己的存档和累计得分一个字不动。
+{
+  process.env.ADMIN_TOKEN = 'x'.repeat(32);
+  const F = await makePlayer('f@example.com');
+  const G = await makePlayer('g@example.com');
+  // 己：基础方块 300，无限反转 5000（榜上现在是 5000），小球只打过无限反转 4000。
+  await call({ action: 'push', ...F, runId: 'f1', mode: 'square', score: 300, name: '己',
+    data: { shapeId: 'square', modeKey: 'base', totalScore: 300 } });
+  await call({ action: 'push', ...F, runId: 'f2', mode: 'square', score: 5000,
+    data: { shapeId: 'square', modeKey: 'flip', totalScore: 5000 } });
+  await call({ action: 'push', ...F, runId: 'f3', mode: 'circle', score: 4000,
+    data: { shapeId: 'circle', modeKey: 'flip', totalScore: 4000 } });
+  // 庚：一局无限反转都没打过——他的榜不该被动。
+  await call({ action: 'push', ...G, runId: 'g1', mode: 'square', score: 800, name: '庚',
+    data: { shapeId: 'square', modeKey: 'base', totalScore: 800 } });
+
+  const before = await call({ action: 'mine', ...F });
+  check('抹之前：己方块榜上是无限反转那 5000', before.payload?.best?.square === 5000 &&
+    before.payload?.best?.circle === 4000, JSON.stringify(before.payload?.best));
+
+  const noToken = await call({ action: 'sweep', modeKey: 'flip' });
+  check('没有管理员令牌，抹不动', noToken.status === 401, String(noToken.status));
+  const wrongToken = await call({ action: 'sweep', token: 'y'.repeat(32), modeKey: 'flip' });
+  check('令牌不对也抹不动', wrongToken.status === 401, String(wrongToken.status));
+
+  const done = await call({ action: 'sweep', token: process.env.ADMIN_TOKEN, modeKey: 'flip' });
+  check('抹了：动了一个人，改一行、撤一行', done.payload?.ok === true &&
+    done.payload.touched === 1 && done.payload.rowsChanged === 1 && done.payload.rowsDropped === 1,
+    JSON.stringify(done.payload));
+
+  const after = await call({ action: 'mine', ...F });
+  check('方块榜回到他自己那局基础玩法的 300', after.payload?.best?.square === 300,
+    JSON.stringify(after.payload?.best));
+  check('小球上他只打过无限反转：这一行整个撤下来', after.payload?.best?.circle === undefined,
+    JSON.stringify(after.payload?.best));
+  check('他自己的存档一局都没少（那是他的记录，不是榜）', after.payload?.archive?.length === 3,
+    JSON.stringify(after.payload?.archive?.map((r) => r.runId)));
+  check('累计得分也没动', after.payload?.total === 9300, JSON.stringify(after.payload?.total));
+
+  const board = await call({ action: 'board', ...F, mode: 'square' });
+  const rows = board.payload?.rows?.map((r) => `${r.name}:${r.score}`) ?? [];
+  check('方块榜上再没有那个五千', !rows.some((r) => r.includes('5000')), rows.join(' '));
+  check('没打过无限反转的人分毫未动', rows.includes('庚:800'), rows.join(' '));
+  const circle = await call({ action: 'board', ...F, mode: 'circle' });
+  check('小球榜上没有己那一行', !(circle.payload?.rows ?? []).some((r) => r.name === '己'),
+    JSON.stringify(circle.payload?.rows?.map((r) => r.name)));
+  const total = await call({ action: 'board', ...F });
+  const mine = total.payload?.rows?.find((r) => r.name === '己');
+  check('总榜上己按新的最高单局重排', mine?.score === 300 && mine?.mode === 'square',
+    JSON.stringify(mine));
+
+  const twice = await call({ action: 'sweep', token: process.env.ADMIN_TOKEN, modeKey: 'flip' });
+  check('再抹一次什么都不动（抹干净了就是干净的）', twice.payload?.touched === 0,
+    JSON.stringify(twice.payload));
+  delete process.env.ADMIN_TOKEN;
+}
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

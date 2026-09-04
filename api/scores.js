@@ -6,6 +6,7 @@
  *   push   打完一局，把这一局挂到账号上；顺手更新两张榜。
  *   mine   我自己的存档——换台设备登录，记录跟着回来。
  *   board  排行榜。所有人都上榜，但只有天才看得见（见下面那段）。
+ *   sweep  管理员维护：把某一种玩法（比如无限反转）从榜上抹掉，见文件末尾。
  *
  * ── 关于「谁上榜」和「谁看得见」 ──────────────────────────────
  *
@@ -25,6 +26,7 @@
  *
  * 剩下的写在《服务条款》里：发现作弊或明显异常的数据，我们会清除相关记录。
  */
+import { timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
 import {
@@ -101,6 +103,10 @@ export default async function handler(req, res) {
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
   const body = await readBody(req);
+
+  // 管理员维护：不认玩家，认的是 ADMIN_TOKEN，所以排在 identify 前面。
+  if (body?.action === 'sweep') return await sweep(res, body);
+
   const claim = {
     email: body?.email,
     accountToken: body?.token,
@@ -272,4 +278,103 @@ async function board(res, body, who, claim) {
     // 没打过这个玩法就没有名次，这里就是 null——别拿 0 冒充「第一名」。
     me: myScore === null ? null : { rank: (myRank ?? 0) + 1, score: myScore },
   });
+}
+
+// ---- 管理员维护 -----------------------------------------------------------
+
+/** 和 api/mint.js 同一把锁：ADMIN_TOKEN，等长比较，不泄露比到第几位。 */
+function tokenOk(given) {
+  const want = process.env.ADMIN_TOKEN || '';
+  if (!want || typeof given !== 'string' || given.length !== want.length) return false;
+  return timingSafeEqual(Buffer.from(given), Buffer.from(want));
+}
+
+/** 一个人的档里，某个玩法上「不算这一种局」的最高分；一局都没有就是 null。 */
+function bestExcluding(archive, mode, modeKey) {
+  let top = null;
+  for (const run of archive) {
+    if (run?.mode !== mode) continue;
+    if (run?.data?.modeKey === modeKey) continue;
+    const n = num(run.score);
+    if (n > 0 && (top === null || n > top)) top = n;
+  }
+  return top;
+}
+
+/**
+ * 把某一种玩法从榜上抹掉（现在用它抹《无限反转》）。
+ *
+ *   POST /api/scores
+ *   { "action": "sweep", "token": "…", "modeKey": "flip" }
+ *
+ * 为什么需要它：一局报上来的 mode 是棋盘的 id（square / circle），玩法本身
+ * （flip / timed / bomb）只写在存档那一份 data 里。所以无限反转打出来的分和
+ * 基础方块、基础小球记在同一张榜上——而它早先那版计分能打到七位数，榜上于是
+ * 一排削到上限的同一个数。玩家要的是「把之前无限反转的榜单清空」。
+ *
+ * 做法（只动榜，不动人家自己的东西）：
+ *   · 谁的档里有这一种局，才动他；
+ *   · 只动被它污染过的那几个棋盘：把 best 改成他存档里同一棋盘上「不算这一
+ *     种局」的最高分；一局都没有就把这一行从榜上撤下来；
+ *   · 总榜按新的 best 重算；
+ *   · 累计得分、他自己的存档，一个字不动——那是他的记录，不是榜。
+ *
+ * 存档只留最近 60 局（KEEP_RUNS）：更早的那些既然翻不出来，也就无从判断是哪
+ * 一种局，这里按「翻得到的」算。回包里报了动过几个人、改了几行。
+ */
+async function sweep(res, body) {
+  if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
+  const modeKey = String(body?.modeKey || '').slice(0, 24);
+  if (!modeKey) return send(res, 400, { error: 'modeKey' });
+
+  // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
+  const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
+  const ids = new Set([...ranked.map((row) => row.member), ...Object.keys(names || {})]);
+
+  let touched = 0;
+  let rowsChanged = 0;
+  let rowsDropped = 0;
+  for (const id of ids) {
+    const [stats, archive] = await Promise.all([loadStats(id), get(runsKey(id))]);
+    const runs = Array.isArray(archive) ? archive : [];
+    // 这个人的档里，这一种局都打在哪几个棋盘上。没有就跳过——他的榜没被污染。
+    const dirty = new Set(
+      runs.filter((r) => r?.data?.modeKey === modeKey && r?.mode).map((r) => r.mode),
+    );
+    if (!dirty.size) continue;
+
+    let changed = false;
+    for (const mode of dirty) {
+      const had = num(stats.best[mode]);
+      const clean = bestExcluding(runs, mode, modeKey);
+      if (clean === null) {
+        if (had > 0) {
+          delete stats.best[mode];
+          await zrem(boardKey(mode), id);
+          rowsDropped++;
+          changed = true;
+        }
+        continue;
+      }
+      if (clean !== had) {
+        stats.best[mode] = clean;
+        // zadd 而不是 zaddIfHigher：这一次要的正是把它改低。
+        await zadd(boardKey(mode), clean, id);
+        rowsChanged++;
+        changed = true;
+      }
+    }
+    if (!changed) continue;
+    touched++;
+    await set(statsKey(id), stats);
+    // 总榜跟着重算：他现在最高的那一局是哪个玩法的哪一分。
+    const top = bestOverall(stats);
+    if (top) {
+      await zadd(TOTAL_BOARD, top.score, id);
+      await hset(TOTAL_MODE, id, top.mode);
+    } else {
+      await zrem(TOTAL_BOARD, id);
+    }
+  }
+  return send(res, 200, { ok: true, modeKey, players: ids.size, touched, rowsChanged, rowsDropped });
 }

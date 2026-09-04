@@ -56,6 +56,8 @@ jobs:
         run: ALLOW_MEMORY_STORE=1 node scripts/check-inbox.mjs
       - name: Creem 那道门开在哪儿
         run: ALLOW_MEMORY_STORE=1 node scripts/check-creem-gate.mjs
+      - name: 发码接口的限速
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-mint-limit.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。
