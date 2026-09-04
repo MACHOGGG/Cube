@@ -413,14 +413,35 @@
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) live.push({ cell: [r, c], tile: grid[r][c] });
       return live;
     }
+    function linesThrough(r, c) {
+      const row = Array.from({ length: cols }, (_, i) => [r, i]);
+      const col = Array.from({ length: rows }, (_, i) => [i, c]);
+      return [
+        { id: "R" + r, cells: row, vec: [1, 0] },
+        { id: "C" + c, cells: col, vec: [0, 1] }
+      ];
+    }
+    function shiftLine(id, by) {
+      const index = Number(id.slice(1));
+      return shift(id[0] === "R" ? "row" : "col", index, by);
+    }
     return {
+      kind: "square",
+      palette: PALETTE,
       get rows() {
         return rows;
       },
       get cols() {
         return cols;
       },
+      cellsInRow: () => cols,
       tileAt: (r, c) => grid[r][c],
+      isBlankAt: () => false,
+      // 一格是 2×2 个单位（1 个单位 = 半格），所以中心在奇数格点上。
+      centerOf: (r, c) => [c * 2 + 1, r * 2 + 1],
+      extent: () => ({ minX: 0, minY: 0, w: cols * 2, h: rows * 2 }),
+      linesThrough,
+      shiftLine,
       deal,
       shift,
       cascade: (mask) => createCascadeStepper(cascadeConfig(), mask, { pattern: labels.pattern, line: labels.line }),
@@ -827,6 +848,7 @@
     run4: "1\xD74",
     line: "\u6574\u7EBF",
     pattern: "\u56FE\u6848",
+    diamond121: "1-2-1",
     over: "\u6311\u6218\u7ED3\u675F \xB7 \u7EFC\u5408\u5F97\u5206",
     again: "\u518D\u6765",
     rawScore: "\u5F97\u5206",
@@ -853,7 +875,14 @@
   var STUCK_END_MS = 1400;
   var DEAD_ZONE_PX = 6;
   var p = createPlatform();
-  var board = createSquareBoard({ block22: T.block22, run4: T.run4, line: T.line, pattern: T.pattern });
+  var LABELS = {
+    block22: T.block22,
+    run4: T.run4,
+    line: T.line,
+    pattern: T.pattern,
+    diamond121: T.diamond121
+  };
+  var board = createSquareBoard(LABELS);
   var streak = createStreakTracker();
   var perf = createPerformanceGauge();
   var score = 0;

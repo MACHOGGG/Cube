@@ -13,6 +13,7 @@
  * 抄：同一次滑动里的连锁每多一拍 ×3，跨滑动的连击 ×1 / 1.5 / 2 / 2.5。
  */
 import { createSquareBoard, PALETTE } from './squareBoard';
+import type { BoardLabels } from './board';
 import { createPlatform } from './platform';
 import { COLORS, drawBoard, drawEndCard, drawHud, fmtTime, type DragView, type Highlight, type Layout } from './render';
 import { drawCountdown, drawMenu, iconSquare, type MenuEntry, type MenuHit } from './menu';
@@ -30,6 +31,7 @@ const T = {
   run4: '1×4',
   line: '整线',
   pattern: '图案',
+  diamond121: '1-2-1',
   over: '挑战结束 · 综合得分',
   again: '再来',
   rawScore: '得分',
@@ -73,7 +75,15 @@ const STUCK_END_MS = 1400;
 const DEAD_ZONE_PX = 6;
 
 const p = createPlatform();
-const board = createSquareBoard({ block22: T.block22, run4: T.run4, line: T.line, pattern: T.pattern });
+/** 加分气泡上写的那几个名字，三副棋盘共用一份。 */
+const LABELS: BoardLabels = {
+  block22: T.block22,
+  run4: T.run4,
+  line: T.line,
+  pattern: T.pattern,
+  diamond121: T.diamond121,
+};
+const board = createSquareBoard(LABELS);
 const streak = createStreakTracker();
 const perf = createPerformanceGauge();
 

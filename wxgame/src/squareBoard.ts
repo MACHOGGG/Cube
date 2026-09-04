@@ -12,42 +12,20 @@
 import type { Cell, Match, Tile } from '../../src/engine/types';
 import { cellKey, effColor } from '../../src/engine/types';
 import { shuffle } from '../../src/engine/rng';
-import { createCascadeStepper, type CascadeConfig, type CascadeStepper } from '../../src/engine/scoring';
-import {
-  countRemainingTiles,
-  findStuckColorGroups,
-  type LiveTile,
-  type RemainingTileCounts,
-} from '../../src/engine/stalemate';
+import { createCascadeStepper, type CascadeConfig } from '../../src/engine/scoring';
+import { countRemainingTiles, findStuckColorGroups, type LiveTile } from '../../src/engine/stalemate';
+import type { Board, BoardLabels, BoardLine } from './board';
 
 export const BOARD_DIM = 6;
 /** 同 square.ts 的 standard 配色（六种色相至少隔 50°，正面和自己的反面不会认混）。 */
 export const PALETTE: readonly string[] = ['#C46A4E', '#9C8A3D', '#4A9573', '#4C7EAD', '#8067A8', '#AD5C82'];
 
-/** 加分气泡上写的名字：2×2、1×4、整线，以及没名字时的兜底。 */
-export interface BoardLabels {
-  block22: string;
-  run4: string;
-  line: string;
-  pattern: string;
-}
-
-export interface SquareBoard {
-  readonly rows: number;
+/** 方块那副棋盘。除了所有棋盘共有的那一套（见 board.ts），它还有「列」这个
+ *  概念——整列消掉之后棋盘会变窄，别处要知道现在有几列。 */
+export interface SquareBoard extends Board {
   readonly cols: number;
-  tileAt(r: number, c: number): Tile;
-  /** 重新发一副干净的牌（开局没有现成的三连 / 2×2）。 */
-  deal(): void;
-  /** 整行 / 整列循环滑 by 格（正数向右 / 向下）。返回这一线的格子——连锁从这儿找起。 */
+  /** 整行 / 整列循环滑 by 格（正数向右 / 向下）。返回这一线的格子。 */
   shift(axis: 'row' | 'col', index: number, by: number): Set<string>;
-  /** 一次滑动之后的整条连锁（得分 → 翻面 → 整线 → 再判），一拍一拍地给。 */
-  cascade(mask: Set<string>): CascadeStepper;
-  /** 全翻完了，或整块棋盘都消没了。 */
-  isGameOver(): boolean;
-  /** 再也翻不动了：[] 是还活着，否则是每种颜色剩下的正面（画红光用）。 */
-  stuckGroups(): Cell[][];
-  /** 结束时还留在盘上的：没翻过的几枚（扣分用）、翻过但没消掉的几枚。 */
-  remaining(): RemainingTileCounts;
 }
 
 export function createSquareBoard(labels: BoardLabels): SquareBoard {
@@ -308,14 +286,37 @@ export function createSquareBoard(labels: BoardLabels): SquareBoard {
     return live;
   }
 
+  /** 方块只有两个方向：横着一行、竖着一列。 */
+  function linesThrough(r: number, c: number): BoardLine[] {
+    const row: Cell[] = Array.from({ length: cols }, (_, i) => [r, i] as Cell);
+    const col: Cell[] = Array.from({ length: rows }, (_, i) => [i, c] as Cell);
+    return [
+      { id: 'R' + r, cells: row, vec: [1, 0] },
+      { id: 'C' + c, cells: col, vec: [0, 1] },
+    ];
+  }
+  function shiftLine(id: string, by: number): Set<string> {
+    const index = Number(id.slice(1));
+    return shift(id[0] === 'R' ? 'row' : 'col', index, by);
+  }
+
   return {
+    kind: 'square' as const,
+    palette: PALETTE,
     get rows() {
       return rows;
     },
     get cols() {
       return cols;
     },
+    cellsInRow: () => cols,
     tileAt: (r, c) => grid[r][c],
+    isBlankAt: () => false,
+    // 一格是 2×2 个单位（1 个单位 = 半格），所以中心在奇数格点上。
+    centerOf: (r, c) => [c * 2 + 1, r * 2 + 1],
+    extent: () => ({ minX: 0, minY: 0, w: cols * 2, h: rows * 2 }),
+    linesThrough,
+    shiftLine,
     deal,
     shift,
     cascade: (mask) => createCascadeStepper(cascadeConfig(), mask, { pattern: labels.pattern, line: labels.line }),

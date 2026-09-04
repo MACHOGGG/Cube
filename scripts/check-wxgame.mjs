@@ -110,6 +110,93 @@ const labels = { block22: '2×2', run4: '1×4', line: '整线', pattern: '图案
   check('全部翻到反面：结束', b.isGameOver());
 }
 
+// ---- 小球那副棋盘（28 颗堆成的三角）------------------------------------------
+const circlePath = join(tmp, 'circleBoard.mjs');
+await build({ entryPoints: ['wxgame/src/circleBoard.ts'], bundle: true, format: 'esm', outfile: circlePath, logLevel: 'silent' });
+const { createCircleBoard, CIRCLE_ROWS, CIRCLE_PALETTE } = await import(circlePath);
+const clabels = { ...labels, diamond121: '1-2-1' };
+{
+  const b = createCircleBoard(clabels);
+  b.deal();
+  let n = 0;
+  const perColor = new Map();
+  for (let r = 0; r < b.rows; r++)
+    for (let c = 0; c < b.cellsInRow(r); c++) {
+      const t = b.tileAt(r, c);
+      n++;
+      perColor.set(t.color, (perColor.get(t.color) ?? 0) + 1);
+    }
+  check('小球：7 排共 28 颗，第 r 排 r+1 颗', b.rows === CIRCLE_ROWS && n === 28 && b.cellsInRow(0) === 1 && b.cellsInRow(6) === 7, String(n));
+  check('小球：四色各七颗', perColor.size === 4 && [...perColor.values()].every((x) => x === 7), JSON.stringify([...perColor]));
+  check('小球：配色是四种', CIRCLE_PALETTE.length === 4);
+  // 反面颜色：同一正面色的七颗里，其余三色各两颗 + 自己一颗。
+  let dotsOk = true;
+  for (let color = 0; color < 4; color++) {
+    const dots = [];
+    for (let r = 0; r < b.rows; r++)
+      for (let c = 0; c < b.cellsInRow(r); c++) if (b.tileAt(r, c).color === color) dots.push(b.tileAt(r, c).dotColor);
+    const tally = new Map();
+    for (const d of dots) tally.set(d, (tally.get(d) ?? 0) + 1);
+    if (dots.length !== 7 || tally.get(color) !== 1) dotsOk = false;
+    for (let k = 0; k < 4; k++) if (k !== color && tally.get(k) !== 2) dotsOk = false;
+  }
+  check('小球：反面色按「其余三色各两颗 + 自己一颗」发', dotsOk);
+}
+{
+  // 三个滑动方向：横排、左斜（c 固定）、右斜（r-c 固定）。中间那一颗应该三条线都穿过。
+  const b = createCircleBoard(clabels);
+  b.deal();
+  const lines = b.linesThrough(4, 2);
+  check('小球：一颗上穿过三条线（一横两斜）', lines.length === 3, lines.map((l) => l.id).join(','));
+  // 最长那一排（第 7 排 7 颗）循环滑一格，真的转了一格。
+  const before = Array.from({ length: 7 }, (_, c) => b.tileAt(6, c).id);
+  b.shiftLine('R6', 1);
+  const after = Array.from({ length: 7 }, (_, c) => b.tileAt(6, c).id);
+  check('小球：整排循环滑一格', after.join() === [before[6], ...before.slice(0, 6)].join(), `${before} → ${after}`);
+}
+{
+  // 摆一条四连出来：第 7 排前四颗同色，滑动的 mask 覆盖到它，应该算一次 1×4。
+  const b = createCircleBoard(clabels);
+  b.deal();
+  for (let c = 0; c < 4; c++) {
+    b.tileAt(6, c).color = 0;
+    b.tileAt(6, c).face = 'flavor';
+  }
+  const mask = new Set(['6,0', '6,1', '6,2', '6,3']);
+  const step = b.cascade(mask).next();
+  check('小球：一条四连算一次得分', Boolean(step) && step.points >= 4, step ? `${step.points} 分 · ${step.matchGroups.length} 组` : '没算出来');
+}
+{
+  // 整线奖励：最短的整线是 3 颗（第 3 排）。全翻到反面、反面同色，才算。
+  const b = createCircleBoard(clabels);
+  b.deal();
+  const line = [[2, 0], [2, 1], [2, 2]];
+  for (const [r, c] of line) {
+    const t = b.tileAt(r, c);
+    t.face = 'dot';
+    t.dotColor = 1;
+  }
+  // 先把别处可能凑巧成立的整线排除掉：只看这三颗有没有变空。
+  let sawBonus = false;
+  const stepper = b.cascade(new Set(line.map(([r, c]) => `${r},${c}`)));
+  for (let i = 0; i < 8; i++) {
+    const s = stepper.next();
+    if (!s) break;
+    if (s.lineBonusGroups.length) sawBonus = true;
+    s.commit();
+  }
+  check('小球：三颗的整线（全反面同色）给整线奖励', sawBonus);
+  check('小球：拿过奖励的那几颗变成空球留在原地，棋盘形状不变',
+    line.every(([r, c]) => b.isBlankAt(r, c)) && b.rows === CIRCLE_ROWS && b.cellsInRow(6) === 7);
+}
+{
+  // 全翻到反面就结束。
+  const b = createCircleBoard(clabels);
+  b.deal();
+  for (let r = 0; r < b.rows; r++) for (let c = 0; c < b.cellsInRow(r); c++) b.tileAt(r, c).face = 'dot';
+  check('小球：全部翻到反面即结束', b.isGameOver());
+}
+
 // ---- 浏览器里跑同一份 game.js ------------------------------------------------
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
