@@ -198,27 +198,29 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
   check(`${label}：四张锁着的卡都在`, cards.length === 4, brief);
-  // 玩家点名的五排顺序，宽窄一个样：
-  //   1 方块 · 小球 · 三角
-  //   2 多人游玩 · 老虎机 · 无限反转
-  //   3 计时 · 炸弹
-  //   4 菱形方块 · 六边圆球 · 七色圆球
-  //   5 六边形三角 · V 型三角
+  // 玩家点名的顺序，宽屏三排、窄屏五排——同一条链，断在不同的地方。
+  const wide = w >= 720 || (w > h && w >= 560);
   const rows = await menuRows(w, h);
-  const WANT = [
-    ['方块', '圆球', '三角'],
-    ['多人游玩', '老虎机模式', '无限反转'],
-    ['计时挑战', '基础炸弹'],
-    ['菱形方块', '六边圆球', '七色圆球'],
-    ['大三角', '进阶三角'],
-  ];
-  check(`${label}：五排，各 3 / 3 / 2 / 3 / 2 张`,
-    rows.length === 5 && rows.every((r, i) => r.length === WANT[i].length),
+  const WANT = wide
+    ? [
+        ['方块', '圆球', '三角'],
+        ['计时挑战', '基础炸弹', '多人游玩', '老虎机模式', '无限反转'],
+        ['菱形方块', '六边圆球', '七色圆球', '大三角', '进阶三角'],
+      ]
+    : [
+        ['方块', '圆球', '三角'],
+        ['多人游玩', '老虎机模式', '无限反转'],
+        ['计时挑战', '基础炸弹'],
+        ['菱形方块', '六边圆球', '七色圆球'],
+        ['大三角', '进阶三角'],
+      ];
+  check(`${label}：${WANT.length} 排，各 ${WANT.map((r) => r.length).join(' / ')} 张`,
+    rows.length === WANT.length && rows.every((r, i) => r.length === WANT[i].length),
     rows.map((r) => r.length).join(' / '));
   check(`${label}：每一排的顺序都对`,
     JSON.stringify(rows) === JSON.stringify(WANT),
     rows.map((r) => r.join(' · ')).join('  |  '));
-  // 十三张一样大：一排两张的不能因为人少就长得比三张的大。
+  // 十三张一样大：张数少的那几排不能因为人少就长得比别人大。
   const sizes = await cardWidths(w, h);
   const span = Math.max(...sizes) - Math.min(...sizes);
   check(`${label}：十三张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);

@@ -64,8 +64,10 @@ export interface HomeLayout {
 }
 
 const SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
-/** 主菜单一排最多摆几张。样式那边的图标上限（一排三等分）是同一个数。 */
-const PER_ROW = 3;
+/** 主菜单一排最多摆几张。样式那边算图标上限用的也是这两个数：宽屏第二、三
+ *  排各五张，窄屏一排三张。 */
+const WIDE_PER_ROW = 5;
+const NARROW_PER_ROW = 3;
 /** The bomb panel's own order — the reference sheet lines its chips up
  *  square/triangle/circle rather than the square/circle/triangle the full-
  *  width rows above it use. */
@@ -129,17 +131,19 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
 
-  // 五排，宽屏窄屏一个排法（玩家点名的顺序）：
+  // 排法是玩家点的，宽屏和窄屏各一套——一排摆得下几张，两种屏幕差得远。
   //
-  //   1  方块 · 小球 · 三角
-  //   2  多人游玩 · 老虎机 · 无限反转
-  //   3  计时 · 炸弹
-  //   4  菱形方块 · 六边圆球 · 七色圆球
-  //   5  六边形三角 · V 型三角
+  //   宽屏（三排）              窄屏（五排）
+  //   1 方块 · 小球 · 三角      1 方块 · 小球 · 三角
+  //   2 计时 · 炸弹 · 多人游玩  2 多人游玩 · 老虎机 · 无限反转
+  //     · 老虎机 · 无限反转     3 计时 · 炸弹
+  //   3 菱形方块 · 六边圆球     4 菱形方块 · 六边圆球 · 七色圆球
+  //     · 七色圆球 · 六边形三角 5 六边形三角 · V 型三角
+  //     · V 型三角
   //
-  // 一排最多三张，多出来的往下一排放。每张图标一律不超过「这一排三等分」那
-  // 么宽（见 style.css 的 max-width），所以两张的那几排不会因为人少就长得比
-  // 别人大——十三张从头到尾一样大，只是每排摆几张不同。
+  // 顺序是同一条链，只是断在不同的地方。每张图标不超过「一排摆满时的那一
+  // 份」那么宽（见 style.css 的 max-width），所以张数少的那几排不会因为人少
+  // 就长得比别人大——十三张从头到尾一样大。
   //
   // 从前手机上是两列的网格、一张一张往下排，排到第八张就出了屏幕，于是这一
   // 页要往下滑。滑动本身不是问题，问题是滑动那一下手机会把地址栏收起来：
@@ -186,12 +190,17 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 那扇小门点进去直接是小屋那一页，不再绕个人主页。它右边是老虎机和无限反
   // 转——这两个不是新棋盘（挑完图形玩的还是那三个基础玩法），所以不排在下面
   // 的棋盘堆里，跟多人游玩同属「另一种玩法」这一排。
-  const playRow = newRow();
   const mpBtn = iconButton(ICON_MULTIPLAYER, s.mpTitle);
   mpBtn.addEventListener('click', handlers.onMultiplayer);
-  playRow.appendChild(mpBtn);
-  playRow.appendChild(geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, handlers.onRandomTarget));
-  playRow.appendChild(geniusCard(ICON_FLIP_MODE, s.flipModeTitle, handlers.onFlipMode));
+  const slotBtn = geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, handlers.onRandomTarget);
+  const flipBtn = geniusCard(ICON_FLIP_MODE, s.flipModeTitle, handlers.onFlipMode);
+  // 窄屏上这三张自成一排；宽屏上它们跟在计时和炸弹后面，凑成一排五张。
+  if (!wide) {
+    const playRow = newRow();
+    playRow.appendChild(mpBtn);
+    playRow.appendChild(slotBtn);
+    playRow.appendChild(flipBtn);
+  }
 
   // ---- row 3: 计时 · 炸弹 ------------------------------------------------
   const timedOptions = (): PickerOption[] =>
@@ -302,23 +311,29 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
   });
   timedRow.appendChild(bombBtn);
+  if (wide) {
+    timedRow.appendChild(mpBtn);
+    timedRow.appendChild(slotBtn);
+    timedRow.appendChild(flipBtn);
+  }
 
-  // ---- rows 4-5: 每个布局玩法自己露脸，不再藏在「+」后面 -----------------
+  // ---- 最后：每个布局玩法自己露脸，不再藏在「+」后面 ---------------------
   // 从前这里是三张通用的「+」卡，点开才看得到里面有什么。现在直接摆出来：
   // 玩家一眼就知道有哪些棋盘，少一层点击。
   //
   // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起：菱形方块、六边
-  // 圆球、七色圆球（第四排），六边形三角、V 型三角（第五排）。一排三张，多
-  // 出来的往下一排放——以后再添棋盘，第六排自己就长出来了。
+  // 圆球、七色圆球、六边形三角、V 型三角。宽屏五张一排；窄屏一排三张，剩下
+  // 的往下一排放——以后再添棋盘，下一排自己就长出来了。
   const ordered: { card: ShapeCardMeta; shape: BaseShape }[] = [];
   for (const shape of SHAPES) {
     for (const card of layout.moreLayouts[shape]) ordered.push({ card, shape });
   }
 
+  const perRow = wide ? WIDE_PER_ROW : NARROW_PER_ROW;
   let row = newRow();
   let inRow = 0;
   for (const { card, shape } of ordered) {
-    if (inRow >= PER_ROW) { row = newRow(); inRow = 0; }
+    if (inRow >= perRow) { row = newRow(); inRow = 0; }
     const isLocked = isLayoutLocked(card.id);
     const name = shapeName(lang, card.id, card.name);
     const btn = iconButton(
