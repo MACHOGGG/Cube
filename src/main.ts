@@ -851,12 +851,17 @@ function showTutorialPicker() {
   teardown();
   trackScreen('tutorial_picker');
   // 三个图形、六条规则、一颗《返回》，一屏装下——见 ui/tutorialPicker.ts。
+  //
+  // 《返回》回个人主页，不是主菜单：这一页只有一个入口，就是个人主页里的
+  // 《如何滑？》那一行（accountPage 的 howToRow）。从那儿进来、退出去却落在
+  // 主菜单，等于把人从他原来待的地方赶走了——和天才特供各页一样，退出要落
+  // 回刚才那一页的原位置（backToProfile 的 restore）。
   renderTutorialPicker(root, currentLang, {
     onPick: (shape) => renderShapeTutorialByShape(shape, showTutorialPicker),
-    onBack: showMenu,
+    onBack: backToProfile,
   });
   repaintIcons();
-  setScreenBack(showMenu);
+  setScreenBack(backToProfile);
   toTop();
 }
 

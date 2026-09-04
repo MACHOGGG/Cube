@@ -274,6 +274,22 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   check('教学四颗键都是图示（上一条 / 再一次 / 下一条 / 完成）',
     keys.length === 4 && keys.every((k) => k.svg && k.text === '' && k.label) && keys.map((k) => k.id).join(',') === 'stPrev,stReplay,stNext,stFinish',
     JSON.stringify(keys));
+  // 教学里按返回：回教学挑选页，不是主菜单。
+  await p.goBack();
+  await p.waitForTimeout(600);
+  check('教学里按返回，回到教学挑选页', Boolean(await p.$('.tut-shape-btn')));
+  // 挑选页按《返回》：回刚才那个个人主页，不是主菜单——这一页只有个人主页
+  // 一个入口，退到主菜单等于把人从他原来待的地方赶走。
+  await p.click('#backBtn');
+  await p.waitForTimeout(600);
+  check('教学挑选页按《返回》，回到个人主页', Boolean(await p.$('.profile-page')),
+    await p.$eval('.app', (e) => e.className).catch(() => '(没有 .app)'));
+  // 系统返回键走同一条路。
+  await p.click('#howToRow');
+  await p.waitForSelector('#backBtn', { timeout: 10000 });
+  await p.goBack();
+  await p.waitForTimeout(600);
+  check('教学挑选页按系统返回键，也回到个人主页', Boolean(await p.$('.profile-page')));
   await c.close();
 }
 
