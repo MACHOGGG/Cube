@@ -977,7 +977,7 @@ button:hover { filter: brightness(1.05); }
 /* 几排居中的东西，不是一张死板的网格。宽屏三排（三张 / 五张 / 五张），窄屏
    五排（一排最多三张）——顺序是同一条链，只是断在不同的地方。每张一样大，
    张数少的那几排就窄一些、照样居中。 */
-.home-grid { display: flex; flex-direction: column; gap: 24px; align-items: center; }
+.home-grid { display: flex; flex-direction: column; gap: 20px; align-items: center; }
 .home-row {
   /* 一排里按底边对齐，不是居中。
      卡的高度不齐：炸弹那张是一整块板，比一张方卡片高一截；V 型三角那张图是
@@ -1012,9 +1012,11 @@ button:hover { filter: brightness(1.05); }
    这个上限只要算错一点，页面就会长出滚动条，末排正好落在底排图标下面——
    看得见，按不着。所以两个数都是量出来的，不是估的：
 
-     386px = 页面上边距 28 + 招牌上边距 6 + 招牌本身 101（四种语言里最高
-             的那个）+ 招牌下边距 14 + 两道行间距 24×2 + 页面下边距 108 + 8 的余量
-             （底排图标从屏幕底算起占 88，留 20 的余地）+ 三行小字 23×3
+     356px = 页面上边距 22 + 招牌上边距 6 + 招牌本身 105（四种语言里最高
+             的那个，量出来的）+ 招牌下边距 12 + 两道行间距 20×2 + 页面下边距
+             100 + 三行小字 23×3 = 356
+             （底排图标从屏幕底算起占 86，页面下边距 100 就是留给它的，还多
+              出 14 的余地）
 
              最后那 69 是卡底下那行小字：字号在宽屏上顶到 0.82rem，行高 1.2，
              加 7px 的上边距，一行 23px，三排就是 69。它是个定数（不跟着卡片
@@ -1039,7 +1041,7 @@ button:hover { filter: brightness(1.05); }
      中。下限只该在「算出来的数已经小到没意义」时接手——定高了它会反过来把
      整页顶出一条滚动条（check-overlap 逮过一次）。 */
   --home-card-cap: 255px;
-  --home-card-cap: min(255px, max(72px, (100svh - 386px) / 3.11));
+  --home-card-cap: min(255px, max(72px, (100svh - 356px) / 3.11));
 }
 /* 一个变量、两处引用：从前炸弹卡片的宽度在文件后面又被写了一遍 255，同样
    的选择器权重、位置更靠后，于是把上面这条高度上限整条盖掉了——中间那排
@@ -1050,8 +1052,8 @@ button:hover { filter: brightness(1.05); }
 }
 /* 招牌和底排图标之间要让出的那两处，宽屏上也各收一点：省下来的高度直接
    变成卡片能长到多大。 */
-.app.home-page--wide { padding-bottom: 108px; }
-.home-page--wide .home-head { margin-bottom: 14px; }
+.app.home-page--wide { padding-top: 22px; padding-bottom: 100px; }
+.home-page--wide .home-head { margin-bottom: 12px; }
 
 /* 手机横过来：版式和电脑同一套（三排），但屏幕只剩三百多像素高，那块招牌
    按原来的尺寸要吃掉四成。电脑上它只占一小条，比例本来就该是这样——所以
