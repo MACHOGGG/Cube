@@ -4,31 +4,39 @@
  */
 import type { Cell, Tile } from '../../src/engine/types';
 import { cellKey } from '../../src/engine/types';
+import type { Board } from './board';
 
+/**
+ * 棋盘在屏幕上的落点。
+ *
+ * 三副棋盘的格子形状差得远，但摆法可以用同一套数说清楚：每副棋盘用
+ * board.centerOf() 报出每一颗的中心，单位是「半边长」（方块是半格，小球是一
+ * 个半径）；board.extent() 报出整副棋盘在这套单位里占多大。于是这儿只要记住
+ * 「一个单位有多少像素」和「棋盘的左上角落在哪」，就能画任何一副。
+ */
 export interface Layout {
-  /** 棋盘左上角、一格的边长（逻辑像素）。 */
+  /** extent 的左上角落在屏幕上的位置。 */
   x: number;
   y: number;
-  cell: number;
+  /** 一个「半边长」单位有多少像素。 */
+  unit: number;
 }
 
-/** 手指还按着的那一线：整行 / 整列跟着手指挪，超出的那一头从另一头补进来。 */
+/** 一步有多长：三副棋盘都是 2 个单位（一格 / 一个直径）。 */
+export const STEP_UNITS = 2;
+
+/** 手指还按着的那一条线：整条跟着手指挪，走出去的那一头从另一头补进来。 */
 export interface DragView {
-  axis: 'row' | 'col';
-  index: number;
-  /** 挪了多少像素（正数向右 / 向下）。 */
+  cells: readonly Cell[];
+  /** 这条线在画面上的方向（单位向量）。 */
+  vec: readonly [number, number];
+  /** 沿着这个方向挪了多少像素。 */
   offsetPx: number;
 }
 
 export interface Highlight {
   cells: readonly Cell[];
   kind: 'match' | 'line';
-}
-
-export interface BoardLike {
-  readonly rows: number;
-  readonly cols: number;
-  tileAt(r: number, c: number): Tile;
 }
 
 /** 网页版游戏页的底色与版图色（--play-bg / --board-bg）。 */
@@ -38,10 +46,11 @@ export const COLORS = {
   boardEdge: 'rgba(61, 49, 40, 0.18)',
   ink: '#2E2430',
   inkSoft: '#7A5C48',
-  dotFace: '#3D3128',
   outline: '#FFFFFF',
   stuck: '#C0392B',
   accent: '#B23A3A',
+  /** 消掉之后留在原地的空球（网页版的 --ink-faint，压到三成半）。 */
+  blank: 'rgba(154, 139, 152, 0.35)',
 };
 
 export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -55,45 +64,130 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.closePath();
 }
 
-/** 一枚棋子：正面是它的颜色；反面是深底加一颗反面颜色的圆点（同网页版）。 */
-export function drawTile(
+/**
+ * 一颗棋子的轮廓，以它的中心为准。
+ *
+ * 方块是圆角方格，小球是圆——形状不同，但「多大」是同一个数（半边长的
+ * radius 倍），所以同一副棋盘上两种形状也能一样大。
+ */
+function piecePath(
+  ctx: CanvasRenderingContext2D,
+  kind: Board['kind'],
+  cx: number,
+  cy: number,
+  radius: number,
+) {
+  if (kind === 'circle') {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    return;
+  }
+  roundRect(ctx, cx - radius, cy - radius, radius * 2, radius * 2, radius * 0.36);
+}
+
+/**
+ * 一枚棋子。正反两面画什么，照网页版那两个文件（src/shapes/square.ts、
+ * circle.ts）来——同一个游戏的两个版本，棋子长得不该不一样：
+ *
+ *   · 正面：这一颗的颜色，铺满整个形状。
+ *   · 反面：底色让出去（露出版图），上面留一个反面颜色的记号。方块留一颗
+ *     圆点；小球留一个画出来的星号（三道交叉的线）——小球的正面已经是圆
+ *     的了，反面再画个小圆只会读成「同一颗缩小了」，得换个真正不一样的记
+ *     号才认得出「这一面翻过来了」。
+ *   · 空球（小球独有，整线奖励之后留在原地）：一团淡影子。它还占着位置、
+ *     还跟着线滑，但没有颜色可以和别人凑成一组。
+ */
+export function drawPiece(
   ctx: CanvasRenderingContext2D,
   tile: Tile,
-  x: number,
-  y: number,
-  cell: number,
+  kind: Board['kind'],
+  cx: number,
+  cy: number,
+  unit: number,
   palette: readonly string[],
 ) {
-  const pad = Math.max(2, cell * 0.06);
-  const size = cell - pad * 2;
-  const radius = size * 0.18;
-  if (tile.face === 'dot') {
-    ctx.fillStyle = COLORS.dotFace;
-    roundRect(ctx, x + pad, y + pad, size, size, radius);
+  const radius = unit * 0.94;
+  const color = tile.face === 'dot' ? tile.dotColor : tile.color;
+  if (color < 0) {
+    ctx.fillStyle = COLORS.blank;
+    piecePath(ctx, kind, cx, cy, radius);
     ctx.fill();
-    ctx.fillStyle = palette[tile.dotColor];
-    ctx.beginPath();
-    ctx.arc(x + cell / 2, y + cell / 2, size * 0.43, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    ctx.fillStyle = palette[tile.color];
-    roundRect(ctx, x + pad, y + pad, size, size, radius);
-    ctx.fill();
+    return;
   }
+  if (tile.face !== 'dot') {
+    ctx.fillStyle = palette[color];
+    piecePath(ctx, kind, cx, cy, radius);
+    ctx.fill();
+    return;
+  }
+  if (kind === 'circle') {
+    // 星号：三道过中心的线，24 格坐标里 stroke-width 5.5、两头是圆的——和
+    // 网页版画的是同一个。
+    const k = (radius * 0.95) / 12;
+    ctx.strokeStyle = palette[color];
+    ctx.lineWidth = 5.5 * k;
+    ctx.lineCap = 'round';
+    const seg = (x1: number, y1: number, x2: number, y2: number) => {
+      ctx.beginPath();
+      ctx.moveTo(cx + (x1 - 12) * k, cy + (y1 - 12) * k);
+      ctx.lineTo(cx + (x2 - 12) * k, cy + (y2 - 12) * k);
+      ctx.stroke();
+    };
+    seg(12, 2.5, 12, 21.5);
+    seg(4, 6.75, 20, 17.25);
+    seg(20, 6.75, 4, 17.25);
+    return;
+  }
+  ctx.fillStyle = palette[color];
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.86, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** 一颗的中心在屏幕上的哪儿。 */
+export function pixelOf(board: Board, layout: Layout, r: number, c: number): [number, number] {
+  const [ux, uy] = board.centerOf(r, c);
+  const e = board.extent();
+  return [layout.x + (ux - e.minX) * layout.unit, layout.y + (uy - e.minY) * layout.unit];
+}
+
+/**
+ * 手指按在哪一颗上——按「离哪一颗的中心最近」算，不按格子的方框。
+ *
+ * 小球是圆的、三角是尖的，方框互相咬合，按方框判会把边角判给隔壁那一颗。按
+ * 中心距离就没有这回事，而且手指按偏一点也还认得出来（放宽到 1.1 个单位）。
+ */
+export function cellAtPoint(board: Board, layout: Layout, px: number, py: number): Cell | null {
+  let best: Cell | null = null;
+  let bestD = Infinity;
+  for (let r = 0; r < board.rows; r++)
+    for (let c = 0; c < board.cellsInRow(r); c++) {
+      const [x, y] = pixelOf(board, layout, r, c);
+      const d = (x - px) ** 2 + (y - py) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = [r, c];
+      }
+    }
+  // 一颗的半径是一个单位，放宽到 1.6 个：按在两颗中间也算得上最近的那一颗，
+  // 按到版图外面老远才算没按中。
+  const reach = layout.unit * 1.6;
+  return best && bestD <= reach * reach ? best : null;
 }
 
 export function drawBoard(
   ctx: CanvasRenderingContext2D,
-  board: BoardLike,
+  board: Board,
   layout: Layout,
-  palette: readonly string[],
   drag: DragView | null,
   highlights: readonly Highlight[],
   stuck: ReadonlySet<string> | null,
 ) {
-  const { x, y, cell } = layout;
-  const w = board.cols * cell;
-  const h = board.rows * cell;
+  const e = board.extent();
+  const { x, y, unit } = layout;
+  const w = e.w * unit;
+  const h = e.h * unit;
+  const palette = board.palette;
   // 版图
   ctx.fillStyle = COLORS.board;
   roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
@@ -102,50 +196,46 @@ export function drawBoard(
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  const onDrag = new Set<string>();
+  if (drag) for (const [r, c] of drag.cells) onDrag.add(cellKey(r, c));
+
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
+  roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
   ctx.clip();
   for (let r = 0; r < board.rows; r++)
-    for (let c = 0; c < board.cols; c++) {
-      const onDragLine = drag && (drag.axis === 'row' ? drag.index === r : drag.index === c);
-      if (onDragLine) continue;
-      drawTile(ctx, board.tileAt(r, c), x + c * cell, y + r * cell, cell, palette);
+    for (let c = 0; c < board.cellsInRow(r); c++) {
+      if (onDrag.has(cellKey(r, c))) continue;
+      const [px, py] = pixelOf(board, layout, r, c);
+      drawPiece(ctx, board.tileAt(r, c), board.kind, px, py, unit, palette);
     }
   if (drag) {
-    // 被拖的那一线画三份（本位、前一圈、后一圈），裁在版图里，看起来就是循环补位。
-    const n = drag.axis === 'row' ? board.cols : board.rows;
+    // 被拖的那条线画三份（本位、前一圈、后一圈），裁在版图里，看起来就是循
+    // 环补位：从这头滑出去的那一颗，正好从那头进来。
+    const span = drag.cells.length * STEP_UNITS * unit;
     for (let k = -1; k <= 1; k++) {
-      const wrap = k * n * cell;
-      for (let i = 0; i < n; i++) {
-        const r = drag.axis === 'row' ? drag.index : i;
-        const c = drag.axis === 'row' ? i : drag.index;
-        const tx = drag.axis === 'row' ? x + c * cell + drag.offsetPx + wrap : x + c * cell;
-        const ty = drag.axis === 'col' ? y + r * cell + drag.offsetPx + wrap : y + r * cell;
-        drawTile(ctx, board.tileAt(r, c), tx, ty, cell, palette);
+      const off = drag.offsetPx + k * span;
+      for (const [r, c] of drag.cells) {
+        const [px, py] = pixelOf(board, layout, r, c);
+        drawPiece(ctx, board.tileAt(r, c), board.kind, px + drag.vec[0] * off, py + drag.vec[1] * off, unit, palette);
       }
     }
   }
-  // 得分的那几组：白色描边（同网页版的得分框）
-  for (const hl of highlights) {
-    ctx.strokeStyle = hl.kind === 'line' ? COLORS.accent : COLORS.outline;
-    ctx.lineWidth = Math.max(2, cell * 0.08);
-    for (const [r, c] of hl.cells) {
-      const pad = Math.max(2, cell * 0.06);
-      roundRect(ctx, x + c * cell + pad, y + r * cell + pad, cell - pad * 2, cell - pad * 2, (cell - pad * 2) * 0.18);
+  // 得分的那几组描一圈边（同网页版的得分框）
+  const ring = (cells: readonly Cell[], color: string) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, unit * 0.16);
+    for (const [r, c] of cells) {
+      const [px, py] = pixelOf(board, layout, r, c);
+      piecePath(ctx, board.kind, px, py, unit * 0.94);
       ctx.stroke();
     }
-  }
+  };
+  for (const hl of highlights) ring(hl.cells, hl.kind === 'line' ? COLORS.accent : COLORS.outline);
   if (stuck) {
-    ctx.strokeStyle = COLORS.stuck;
-    ctx.lineWidth = Math.max(2, cell * 0.08);
+    const cells: Cell[] = [];
     for (let r = 0; r < board.rows; r++)
-      for (let c = 0; c < board.cols; c++) {
-        if (!stuck.has(cellKey(r, c))) continue;
-        const pad = Math.max(2, cell * 0.06);
-        roundRect(ctx, x + c * cell + pad, y + r * cell + pad, cell - pad * 2, cell - pad * 2, (cell - pad * 2) * 0.18);
-        ctx.stroke();
-      }
+      for (let c = 0; c < board.cellsInRow(r); c++) if (stuck.has(cellKey(r, c))) cells.push([r, c]);
+    ring(cells, COLORS.stuck);
   }
   ctx.restore();
 }

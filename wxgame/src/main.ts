@@ -12,11 +12,24 @@
  * 份；这个文件只管手指、节拍和画面。计分节拍照 gameController.resolveMove
  * 抄：同一次滑动里的连锁每多一拍 ×3，跨滑动的连击 ×1 / 1.5 / 2 / 2.5。
  */
-import { createSquareBoard, PALETTE } from './squareBoard';
-import type { BoardLabels } from './board';
+import { createSquareBoard } from './squareBoard';
+import { createCircleBoard } from './circleBoard';
+import type { Board, BoardLabels, BoardLine } from './board';
 import { createPlatform } from './platform';
-import { COLORS, drawBoard, drawEndCard, drawHud, fmtTime, type DragView, type Highlight, type Layout } from './render';
-import { drawCountdown, drawMenu, iconSquare, type MenuEntry, type MenuHit } from './menu';
+import {
+  cellAtPoint,
+  COLORS,
+  drawBoard,
+  drawEndCard,
+  drawHud,
+  fmtTime,
+  pixelOf,
+  STEP_UNITS,
+  type DragView,
+  type Highlight,
+  type Layout,
+} from './render';
+import { drawCountdown, drawMenu, iconCircle, iconSquare, type MenuEntry, type MenuHit } from './menu';
 import { compositeScore } from './composite';
 import { createStreakTracker } from '../../src/engine/scoring';
 import { createPerformanceGauge } from '../../src/engine/performance';
@@ -43,23 +56,30 @@ const T = {
   tagline: '滑动 – 得分 – 消除',
   home: '回主菜单',
   square: '方块',
+  circle: '小球',
 };
 
 /**
- * 菜单上摆哪几个玩法。
+ * 菜单上摆哪几个玩法，以及每个玩法开局时发哪一副棋盘。
  *
- * 只摆做好了的——少一张卡片，好过摆一张按下去什么也不发生的卡片。小球和三
- * 角的规则模型做好了（wxgame/src/circleBoard.ts / triangleBoard.ts），往这儿
- * 加一行就是了，菜单的排版自己会跟上。
+ * 只摆做好了的——少一张卡片，好过摆一张按下去什么也不发生的卡片。三角的规
+ * 则模型做好之后往这儿加一行就是了：菜单的排版、棋盘的摆法、手指那一套都是
+ * 照 Board 接口来的，一行也不用改。
  */
-const GAMES: readonly MenuEntry[] = [{ id: 'square', name: T.square, icon: iconSquare }];
+interface Game extends MenuEntry {
+  create: (labels: BoardLabels) => Board;
+}
+const GAMES: readonly Game[] = [
+  { id: 'square', name: T.square, icon: iconSquare, create: createSquareBoard },
+  { id: 'circle', name: T.circle, icon: iconCircle, create: createCircleBoard },
+];
 
 /** 这一屏是哪一屏。 */
 type Screen = 'menu' | 'count' | 'play';
 let screen: Screen = 'menu';
 let menuHits: MenuHit[] = [];
 /** 正在玩（或正要开）的那个玩法。 */
-let current: MenuEntry = GAMES[0];
+let current: Game = GAMES[0];
 /** 倒数从几数起，以及它开始的时刻。 */
 const COUNT_FROM = 4;
 let countStartedAt = 0;
@@ -83,7 +103,8 @@ const LABELS: BoardLabels = {
   pattern: T.pattern,
   diamond121: T.diamond121,
 };
-const board = createSquareBoard(LABELS);
+/** 这一局的棋盘。开局时按挑中的玩法换一副——主循环只认 Board 这个接口。 */
+let board: Board = GAMES[0].create(LABELS);
 const streak = createStreakTracker();
 const perf = createPerformanceGauge();
 
@@ -96,8 +117,19 @@ let highlights: Highlight[] = [];
 let stuckKeys: Set<string> | null = null;
 let endCard: { total: number; lines: string[] } | null = null;
 let againRect: [number, number, number, number] | null = null;
-let drag: { r: number; c: number; axis: 'row' | 'col' | null; x0: number; y0: number; dx: number; dy: number; lastShift: number } | null =
-  null;
+/**
+ * 手指按下之后的那一下。
+ *
+ * 按下时先记住按中了哪一颗；等手指挪出死区，才从「穿过这一颗的那几条线」里
+ * 挑一条——手指往哪边拖，投影最大的那条就是它。方块只有横竖两条，小球有三
+ * 条（一横两斜），挑法是同一个。
+ */
+let drag:
+  | { line: BoardLine | null; lines: BoardLine[]; x0: number; y0: number; dx: number; dy: number; lastShift: number }
+  | null = null;
+
+/** 手指这一下沿着某条线走了多远（像素，正数是顺着 vec 的方向）。 */
+const along = (line: BoardLine, dx: number, dy: number): number => dx * line.vec[0] + dy * line.vec[1];
 
 // ---- 排版 ------------------------------------------------------------------
 const HUD_TOP = 48;
@@ -106,10 +138,14 @@ function layout(): Layout {
   const top = HUD_TOP + HUD_H + 22;
   const availW = p.width - 32;
   const availH = p.height - top - 40;
-  const cell = Math.floor(Math.min(availW / Math.max(1, board.cols), availH / Math.max(1, board.rows)));
-  const x = Math.round((p.width - cell * board.cols) / 2);
-  const y = Math.round(top + (availH - cell * board.rows) / 2);
-  return { x, y, cell };
+  // 棋盘自己报出它占多少个「半边长」（extent），这儿只决定一个单位有多少像
+  // 素：横竖两头都放得下的那个数，然后整副居中。方块、小球、以后的三角走的
+  // 是同一段。
+  const e = board.extent();
+  const unit = Math.min(availW / e.w, availH / e.h);
+  const x = Math.round((p.width - e.w * unit) / 2);
+  const y = Math.round(top + (availH - e.h * unit) / 2);
+  return { x, y, unit };
 }
 
 function elapsedSec(): number {
@@ -119,7 +155,7 @@ let endElapsed = 0;
 
 // ---- 一局 ------------------------------------------------------------------
 /** 挑了一个玩法：先数 4-3-2-1，数完才开局。 */
-function startCountdown(entry: MenuEntry) {
+function startCountdown(entry: Game) {
   current = entry;
   screen = 'count';
   countStartedAt = p.now();
@@ -127,6 +163,7 @@ function startCountdown(entry: MenuEntry) {
 
 function newGame() {
   screen = 'play';
+  board = current.create(LABELS);
   board.deal();
   score = 0;
   moves = 0;
@@ -253,22 +290,31 @@ p.onTouch({
       return;
     }
     if (resolving) return;
-    const L = layout();
-    const c = Math.floor((x - L.x) / L.cell);
-    const r = Math.floor((y - L.y) / L.cell);
-    if (r < 0 || c < 0 || r >= board.rows || c >= board.cols) return;
-    drag = { r, c, axis: null, x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
+    const hit = cellAtPoint(board, layout(), x, y);
+    if (!hit) return;
+    drag = { line: null, lines: board.linesThrough(hit[0], hit[1]), x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
   },
   move(x, y) {
     if (screen !== 'play' || !drag) return;
     drag.dx = x - drag.x0;
     drag.dy = y - drag.y0;
-    if (!drag.axis) {
+    if (!drag.line) {
       if (Math.abs(drag.dx) < DEAD_ZONE_PX && Math.abs(drag.dy) < DEAD_ZONE_PX) return;
-      drag.axis = Math.abs(drag.dx) > Math.abs(drag.dy) ? 'row' : 'col';
+      // 挑一条线：手指这一下在哪条线上走得最远，就是想拖那一条。
+      let best: BoardLine | null = null;
+      let bestProj = 0;
+      for (const line of drag.lines) {
+        const proj = Math.abs(along(line, drag.dx, drag.dy));
+        if (proj > bestProj) {
+          bestProj = proj;
+          best = line;
+        }
+      }
+      drag.line = best;
+      if (!drag.line) return;
     }
     const L = layout();
-    const shift = Math.round((drag.axis === 'row' ? drag.dx : drag.dy) / L.cell);
+    const shift = Math.round(along(drag.line, drag.dx, drag.dy) / (L.unit * STEP_UNITS));
     if (shift !== drag.lastShift) {
       drag.lastShift = shift;
       p.vibrate();
@@ -277,14 +323,14 @@ p.onTouch({
   end(x, y) {
     const d = drag;
     drag = null;
-    if (screen !== 'play' || !d || !d.axis) return;
+    if (screen !== 'play' || !d || !d.line) return;
     d.dx = x - d.x0;
     d.dy = y - d.y0;
     const L = layout();
-    const by = Math.round((d.axis === 'row' ? d.dx : d.dy) / L.cell);
+    // 松手落到最近的整格：走了几个「一步」就滑几格，没到半格就当没拖。
+    const by = Math.round(along(d.line, d.dx, d.dy) / (L.unit * STEP_UNITS));
     if (by === 0) return;
-    const mask = board.shift(d.axis, d.axis === 'row' ? d.r : d.c, by);
-    resolveMove(mask);
+    resolveMove(board.shiftLine(d.line.id, by));
   },
 });
 
@@ -315,14 +361,10 @@ function draw() {
   });
   const L = layout();
   let dv: DragView | null = null;
-  if (drag?.axis) {
-    dv = {
-      axis: drag.axis,
-      index: drag.axis === 'row' ? drag.r : drag.c,
-      offsetPx: drag.axis === 'row' ? drag.dx : drag.dy,
-    };
+  if (drag?.line) {
+    dv = { cells: drag.line.cells, vec: drag.line.vec, offsetPx: along(drag.line, drag.dx, drag.dy) };
   }
-  if (board.rows > 0 && board.cols > 0) drawBoard(ctx, board, L, PALETTE, dv, highlights, stuckKeys);
+  if (board.rows > 0) drawBoard(ctx, board, L, dv, highlights, stuckKeys);
   if (over && endCard) {
     const r = drawEndCard(ctx, p.width, p.height, {
       title: T.over,
@@ -347,7 +389,9 @@ loop();
 // 浏览器里跑回归（scripts/check-wxgame.mjs）时露一个把手；小游戏里没有 window，不露。
 if (!p.isWx) {
   (globalThis as any).__slidesWx = {
-    board,
+    get board() {
+      return board;
+    },
     layout,
     games: GAMES.map((g) => g.id),
     get screen() {
@@ -361,7 +405,15 @@ if (!p.isWx) {
       current = GAMES.find((g) => g.id === id) ?? GAMES[0];
       newGame();
     },
+    /** 回归脚本用：照着屏幕坐标拖一条线，和真手指走同一段代码。 */
+    get drag() {
+      return drag;
+    },
     goHome,
+    /** 回归脚本用：这一颗的中心在屏幕上的哪儿——好照着它拖。 */
+    pixelOf: (r: number, c: number) => pixelOf(board, layout(), r, c),
+    /** 一步有多长（像素）：拖这么远正好滑一格。 */
+    stepPx: () => layout().unit * STEP_UNITS,
     get score() {
       return score;
     },

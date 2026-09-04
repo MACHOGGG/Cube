@@ -249,17 +249,29 @@ check('画布不是空白（版图画上去了）', await page.evaluate(() => {
   const d = g.getImageData(c.width / 2, c.height / 2, 1, 1).data;
   return !(d[0] === 250 && d[1] === 246 && d[2] === 236);
 }));
-// 真拖：第 2 行，向右一格。
-const cx = state0.L.x + state0.L.cell * 1.5;
-const cy = state0.L.y + state0.L.cell * 2.5;
-await page.mouse.move(cx, cy);
-await page.mouse.down();
-for (let i = 1; i <= 8; i++) {
-  await page.mouse.move(cx + (state0.L.cell * i) / 8, cy);
-  await page.waitForTimeout(16);
+/**
+ * 照着屏幕坐标真拖一把：按住 (r,c) 那一颗，朝 (dx,dy) 拖一步，松手。
+ *
+ * 坐标问棋盘自己要（__slidesWx.pixelOf），不在这儿重算一遍几何——方块是方
+ * 格、小球是堆成三角的圆，摆法不一样，但「一颗在哪」只有一个答案。
+ */
+async function dragOne(r, c, dx, dy) {
+  const { p0, step } = await page.evaluate(([r, c]) => {
+    const g = globalThis.__slidesWx;
+    return { p0: g.pixelOf(r, c), step: g.stepPx() };
+  }, [r, c]);
+  await page.mouse.move(p0[0], p0[1]);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) {
+    await page.mouse.move(p0[0] + (dx * step * i) / 8, p0[1] + (dy * step * i) / 8);
+    await page.waitForTimeout(16);
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(150);
 }
-await page.mouse.up();
-await page.waitForTimeout(150);
+
+// 真拖：第 2 行，向右一格。
+await dragOne(2, 1, 1, 0);
 const ids1 = await page.evaluate(() => {
   const g = globalThis.__slidesWx;
   return Array.from({ length: g.board.cols }, (_, c) => g.board.tileAt(2, c).id);
@@ -276,6 +288,103 @@ check('回得了主菜单', (await page.evaluate(() => globalThis.__slidesWx.scr
 const menuShot = shot.replace(/\.png$/, '-menu.png');
 await page.screenshot({ path: menuShot });
 console.log('主菜单截图：' + menuShot);
+
+// ---- 小球那副棋盘，在浏览器里真的开一局 -----------------------------------
+//
+// 规则那一层上面已经单独验过了；这儿验的是另一半：28 颗摆得下、画得出来，
+// 手指按得中、拖得动。小球和方块走的是同一段代码（Board 接口 + 通用画法），
+// 所以这一局跑通，等于那一段对两副棋盘都对。
+await page.evaluate(() => globalThis.__slidesWx.startNow('circle'));
+await page.waitForTimeout(300);
+const circle0 = await page.evaluate(() => {
+  const g = globalThis.__slidesWx;
+  const e = g.board.extent();
+  const L = g.layout();
+  const canvas = document.querySelector('#wxgame');
+  const dpr = canvas.width / canvas.clientWidth;
+  // 每一颗的中心，看有没有谁跑到版图外面去。
+  const pts = [];
+  for (let r = 0; r < g.board.rows; r++)
+    for (let c = 0; c < g.board.cellsInRow(r); c++) pts.push(g.pixelOf(r, c));
+  return {
+    rows: g.board.rows,
+    count: pts.length,
+    kind: g.board.kind,
+    minX: Math.min(...pts.map((q) => q[0])),
+    maxX: Math.max(...pts.map((q) => q[0])),
+    minY: Math.min(...pts.map((q) => q[1])),
+    maxY: Math.max(...pts.map((q) => q[1])),
+    unit: L.unit,
+    boxL: L.x,
+    boxR: L.x + e.w * L.unit,
+    boxT: L.y,
+    boxB: L.y + e.h * L.unit,
+    w: canvas.clientWidth,
+    h: canvas.clientHeight,
+    dpr,
+  };
+});
+check('小球：开得起来，7 排 28 颗', circle0.kind === 'circle' && circle0.rows === 7 && circle0.count === 28);
+check(
+  '小球：28 颗都在版图里（含各自的半径）',
+  circle0.minX - circle0.unit >= circle0.boxL - 1 &&
+    circle0.maxX + circle0.unit <= circle0.boxR + 1 &&
+    circle0.minY - circle0.unit >= circle0.boxT - 1 &&
+    circle0.maxY + circle0.unit <= circle0.boxB + 1,
+  `球 ${Math.round(circle0.minX)}–${Math.round(circle0.maxX)} / 版图 ${Math.round(circle0.boxL)}–${Math.round(circle0.boxR)}`,
+);
+check(
+  '小球：整副没有超出屏幕',
+  circle0.boxL >= 0 && circle0.boxR <= circle0.w && circle0.boxT >= 0 && circle0.boxB <= circle0.h,
+  `版图 ${Math.round(circle0.boxL)},${Math.round(circle0.boxT)} – ${Math.round(circle0.boxR)},${Math.round(circle0.boxB)} · 屏 ${circle0.w}×${circle0.h}`,
+);
+check(
+  '小球：真画出了东西（版图中间不是底色）',
+  await page.evaluate(() => {
+    const g = globalThis.__slidesWx;
+    const c = document.querySelector('#wxgame');
+    const ctx = c.getContext('2d');
+    const dpr = c.width / c.clientWidth;
+    // 最底下那排正中那一颗——一定有球。
+    const [x, y] = g.pixelOf(6, 3);
+    const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+    return !(d[0] === 250 && d[1] === 246 && d[2] === 236);
+  }),
+);
+
+// 最底下那排 7 颗，手指横着拖一格：整排循环转一格。
+const before = await page.evaluate(() =>
+  Array.from({ length: 7 }, (_, c) => globalThis.__slidesWx.board.tileAt(6, c).id),
+);
+await dragOne(6, 3, 1, 0);
+const after = await page.evaluate(() =>
+  Array.from({ length: 7 }, (_, c) => globalThis.__slidesWx.board.tileAt(6, c).id),
+);
+check(
+  '小球：手指把最下面那排向右拖一格，整排真的转了一格',
+  after.join() === [before[6], ...before.slice(0, 6)].join(),
+  `${before} → ${after}`,
+);
+
+// 斜着拖：右斜那一族（r-c 固定）在画面上是往左下走，vec = (-0.5, √3/2)。
+// 挑 A0 那条（(0,0)…(6,6)，7 颗）——按住 (3,3)，朝左下拖一步。
+const beforeA = await page.evaluate(() =>
+  Array.from({ length: 7 }, (_, i) => globalThis.__slidesWx.board.tileAt(i, i).id),
+);
+await dragOne(3, 3, -0.5, Math.sqrt(3) / 2);
+const afterA = await page.evaluate(() =>
+  Array.from({ length: 7 }, (_, i) => globalThis.__slidesWx.board.tileAt(i, i).id),
+);
+check(
+  '小球：斜着拖也认得出是哪一条线，整条转了一格',
+  afterA.join() === [beforeA[6], ...beforeA.slice(0, 6)].join(),
+  `${beforeA} → ${afterA}`,
+);
+
+await page.waitForTimeout(900);
+const circleShot = shot.replace(/\.png$/, '-circle.png');
+await page.screenshot({ path: circleShot });
+console.log('小球截图：' + circleShot);
 await browser.close();
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

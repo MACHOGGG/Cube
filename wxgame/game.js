@@ -452,6 +452,330 @@
     };
   }
 
+  // src/engine/matchGrowth.ts
+  function extendRunInLine(lineCells, seedStart, seedEnd, effColorAt, isLive) {
+    const [sr, sc] = lineCells[seedStart];
+    const color = effColorAt(sr, sc);
+    let lo = seedStart;
+    let hi = seedEnd;
+    while (lo - 1 >= 0) {
+      const [r, c] = lineCells[lo - 1];
+      if (!isLive(r, c) || effColorAt(r, c) !== color) break;
+      lo--;
+    }
+    while (hi + 1 < lineCells.length) {
+      const [r, c] = lineCells[hi + 1];
+      if (!isLive(r, c) || effColorAt(r, c) !== color) break;
+      hi++;
+    }
+    return lineCells.slice(lo, hi + 1);
+  }
+  function growParallelogram(positionAt, effColorAt, isLive) {
+    const anchor = positionAt(0, 0);
+    const color = effColorAt(anchor[0], anchor[1]);
+    const lineMatches = (fixedAxis, fixedVal, otherLo, otherHi) => {
+      for (let k = otherLo; k <= otherHi; k++) {
+        const cell = fixedAxis === "u" ? positionAt(fixedVal, k) : positionAt(k, fixedVal);
+        if (!cell) return false;
+        const [r, c] = cell;
+        if (!isLive(r, c) || effColorAt(r, c) !== color) return false;
+      }
+      return true;
+    };
+    let u0 = 0;
+    let u1 = 1;
+    let v0 = 0;
+    let v1 = 1;
+    let grew = true;
+    while (grew) {
+      grew = false;
+      if (lineMatches("u", u0 - 1, v0, v1)) {
+        u0--;
+        grew = true;
+      }
+      if (lineMatches("u", u1 + 1, v0, v1)) {
+        u1++;
+        grew = true;
+      }
+      if (lineMatches("v", v0 - 1, u0, u1)) {
+        v0--;
+        grew = true;
+      }
+      if (lineMatches("v", v1 + 1, u0, u1)) {
+        v1++;
+        grew = true;
+      }
+    }
+    const cells = [];
+    for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) cells.push(positionAt(u, v));
+    return cells;
+  }
+
+  // wxgame/src/circleBoard.ts
+  var CIRCLE_ROWS = 7;
+  var PER_COLOR = 7;
+  var MIN_LINE_BONUS_LEN = 3;
+  var BLANK = -1;
+  var CIRCLE_PALETTE = ["#C0666B", "#DDA857", "#7A9C4A", "#4F72C4"];
+  function cellValid(r, c) {
+    return r >= 0 && r < CIRCLE_ROWS && c >= 0 && c <= r;
+  }
+  function lineA(d) {
+    const cells = [];
+    for (let r = d; r < CIRCLE_ROWS; r++) cells.push([r, r - d]);
+    return cells;
+  }
+  function lineB(e) {
+    const cells = [];
+    for (let r = e; r < CIRCLE_ROWS; r++) cells.push([r, e]);
+    return cells;
+  }
+  function lineRow(r) {
+    const cells = [];
+    for (let c = 0; c <= r; c++) cells.push([r, c]);
+    return cells;
+  }
+  var LINES = (() => {
+    const out = [];
+    for (let d = 0; d < CIRCLE_ROWS; d++) out.push({ id: "A" + d, fam: "A", cells: lineA(d) });
+    for (let e = 0; e < CIRCLE_ROWS; e++) out.push({ id: "B" + e, fam: "B", cells: lineB(e) });
+    for (let r = 0; r < CIRCLE_ROWS; r++) out.push({ id: "R" + r, fam: "R", cells: lineRow(r) });
+    return out;
+  })();
+  var FAM_VEC = {
+    R: [1, 0],
+    B: [0.5, Math.sqrt(3) / 2],
+    A: [-0.5, Math.sqrt(3) / 2]
+  };
+  function rhombus22B(r, c) {
+    const cells = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+    return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+  }
+  function rhombus22A(r, c) {
+    const cells = [[r, c], [r, c + 1], [r + 1, c + 1], [r + 1, c + 2]];
+    return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+  }
+  function diamond121(r, c) {
+    const cells = [[r, c], [r + 1, c], [r + 1, c + 1], [r + 2, c + 1]];
+    return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
+  }
+  var CLUSTERS = (() => {
+    const groups = [];
+    for (let r = 0; r < CIRCLE_ROWS; r++)
+      for (let c = 0; c <= r; c++) {
+        const b = rhombus22B(r, c);
+        if (b) groups.push(b);
+        const a = rhombus22A(r, c);
+        if (a) groups.push(a);
+        const d = diamond121(r, c);
+        if (d) groups.push(d);
+      }
+    return groups;
+  })();
+  function createCircleBoard(labels) {
+    let grid = [];
+    let nextTileId = 0;
+    let bonusedSignatures = /* @__PURE__ */ new Set();
+    let pendingBonus = [];
+    const newTile = (color, dotColor) => ({ id: nextTileId++, color, face: "flavor", dotColor });
+    const isBlank = (t) => t.color === BLANK;
+    const anyBlank = (cells) => cells.some(([r, c]) => isBlank(grid[r][c]));
+    const effColorAt = (r, c) => effColor(grid[r][c]);
+    const isLiveCell = (r, c) => cellValid(r, c) && !isBlank(grid[r][c]);
+    function shuffledDeck() {
+      const deck = [];
+      for (let c = 0; c < CIRCLE_PALETTE.length; c++) for (let i = 0; i < PER_COLOR; i++) deck.push(c);
+      return shuffle(deck);
+    }
+    function assignDotColors(deck) {
+      const dots = new Array(deck.length);
+      for (let color = 0; color < CIRCLE_PALETTE.length; color++) {
+        const others = [];
+        for (let k = 0; k < CIRCLE_PALETTE.length; k++) if (k !== color) others.push(k, k);
+        others.push(color);
+        shuffle(others);
+        const idxs = [];
+        deck.forEach((c, i) => {
+          if (c === color) idxs.push(i);
+        });
+        idxs.forEach((idx, i) => {
+          dots[idx] = others[i];
+        });
+      }
+      return dots;
+    }
+    function boardFromDeck(deck) {
+      const dots = assignDotColors(deck);
+      const g = [];
+      let idx = 0;
+      for (let r = 0; r < CIRCLE_ROWS; r++) {
+        const row = [];
+        for (let c = 0; c <= r; c++) row.push(newTile(deck[idx], dots[idx++]));
+        g.push(row);
+      }
+      return g;
+    }
+    function hasInitialClump(g) {
+      for (const line of LINES) {
+        const colors = line.cells.map(([r, c]) => g[r][c].color);
+        for (let i = 0; i + 3 < colors.length; i++)
+          if (colors[i] === colors[i + 1] && colors[i] === colors[i + 2] && colors[i] === colors[i + 3]) return true;
+      }
+      for (const cells of CLUSTERS) {
+        const c0 = g[cells[0][0]][cells[0][1]].color;
+        if (cells.every(([r, c]) => g[r][c].color === c0)) return true;
+      }
+      return false;
+    }
+    function deal() {
+      let g;
+      let tries = 0;
+      do {
+        g = boardFromDeck(shuffledDeck());
+        tries++;
+      } while (hasInitialClump(g) && tries < 500);
+      grid = g;
+      bonusedSignatures = /* @__PURE__ */ new Set();
+      pendingBonus = [];
+    }
+    function shiftLine(id, by) {
+      const line = LINES.find((l) => l.id === id);
+      const mask = /* @__PURE__ */ new Set();
+      if (!line) return mask;
+      const n = line.cells.length;
+      const step = (by % n + n) % n;
+      if (step !== 0) {
+        const vals = line.cells.map(([r, c]) => grid[r][c]);
+        const shifted = vals.map((_, i) => vals[((i - by) % n + n) % n]);
+        line.cells.forEach(([r, c], i) => {
+          grid[r][c] = shifted[i];
+        });
+      }
+      for (const [r, c] of line.cells) mask.add(cellKey(r, c));
+      return mask;
+    }
+    function qualifies(seed, mask) {
+      if (anyBlank(seed)) return false;
+      const c0 = effColorAt(seed[0][0], seed[0][1]);
+      if (!seed.every(([r, c]) => effColorAt(r, c) === c0)) return false;
+      if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
+      return true;
+    }
+    function findMatches(mask) {
+      const matches = [];
+      for (const line of LINES) {
+        const cells = line.cells;
+        for (let i = 0; i + 3 < cells.length; i++) {
+          const seed = cells.slice(i, i + 4);
+          if (!qualifies(seed, mask)) continue;
+          const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
+          matches.push({ cells: region, points: Math.max(4, region.length), label: labels.run4 });
+        }
+      }
+      for (let r = 0; r < CIRCLE_ROWS; r++)
+        for (let c = 0; c <= r; c++) {
+          const b = rhombus22B(r, c);
+          if (b && qualifies(b, mask)) {
+            const at = (u, v) => cellValid(r + v, c + u) ? [r + v, c + u] : null;
+            const region = growParallelogram(at, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: Math.max(4, region.length), label: labels.block22 });
+          }
+          const a = rhombus22A(r, c);
+          if (a && qualifies(a, mask)) {
+            const at = (u, v) => cellValid(r + v, c + u + v) ? [r + v, c + u + v] : null;
+            const region = growParallelogram(at, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: Math.max(4, region.length), label: labels.block22 });
+          }
+          const d = diamond121(r, c);
+          if (d && qualifies(d, mask)) matches.push({ cells: d, points: 4, label: labels.diamond121 });
+        }
+      return matches;
+    }
+    function isFullDotMatch(cells) {
+      if (cells.some(([r, c]) => grid[r][c].face !== "dot")) return false;
+      const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
+      return cells.every(([r, c]) => grid[r][c].dotColor === c0);
+    }
+    function findLineBonuses() {
+      const found = [];
+      for (const line of LINES) {
+        if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
+        if (anyBlank(line.cells)) continue;
+        if (!isFullDotMatch(line.cells)) continue;
+        const sig = line.cells.map(([r, c]) => grid[r][c].id).sort((a, b) => a - b).join(",");
+        if (bonusedSignatures.has(sig)) continue;
+        bonusedSignatures.add(sig);
+        found.push(line.cells);
+      }
+      pendingBonus = found;
+      return found;
+    }
+    function applyLineBonus() {
+      for (const cells of pendingBonus)
+        for (const [r, c] of cells) {
+          const t = grid[r][c];
+          if (t.face === "flavor") t.face = "dot";
+          t.color = BLANK;
+          t.dotColor = BLANK;
+        }
+      pendingBonus = [];
+    }
+    function liveTiles() {
+      const live = [];
+      for (let r = 0; r < CIRCLE_ROWS; r++)
+        for (let c = 0; c <= r; c++) {
+          const t = grid[r][c];
+          if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
+        }
+      return live;
+    }
+    return {
+      kind: "circle",
+      palette: CIRCLE_PALETTE,
+      get rows() {
+        return CIRCLE_ROWS;
+      },
+      cellsInRow: (r) => r + 1,
+      tileAt: (r, c) => grid[r][c],
+      isBlankAt: (r, c) => isBlank(grid[r][c]),
+      // 一颗的中心，单位是半径的倍数：横向一步 2，纵向一排 √3，每往下一排整排
+      // 往左错半步——这就是三角形堆球的摆法。
+      centerOf: (r, c) => [(c - r / 2) * 2, r * Math.sqrt(3)],
+      // 中心的 x 从 -(排数-1) 到 +(排数-1)，y 从 0 到 (排数-1)×√3；每颗还有 1
+      // 个单位的半径要算进去，所以四边各往外让 1。
+      extent: () => ({
+        minX: -(CIRCLE_ROWS - 1) - 1,
+        minY: -1,
+        w: (CIRCLE_ROWS - 1) * 2 + 2,
+        h: (CIRCLE_ROWS - 1) * Math.sqrt(3) + 2
+      }),
+      linesThrough(r, c) {
+        return LINES.filter((l) => l.cells.some(([rr, cc]) => rr === r && cc === c)).map((l) => ({
+          id: l.id,
+          cells: l.cells,
+          vec: FAM_VEC[l.fam]
+        }));
+      },
+      shiftLine,
+      deal,
+      cascade: (mask) => createCascadeStepper(
+        {
+          tileAt: (r, c) => grid[r][c],
+          findMatches,
+          findLineBonuses,
+          onLineBonus: applyLineBonus,
+          resetMaskOnLineBonus: false
+        },
+        mask,
+        { pattern: labels.pattern, line: labels.line }
+      ),
+      isGameOver: () => grid.every((row) => row.every((t) => isBlank(t) || t.face === "dot")),
+      // 反面自己只靠整线得分，这副棋盘最短的整线是 3 颗。
+      stuckGroups: () => findStuckColorGroups(liveTiles(), /* @__PURE__ */ new Set(), void 0, MIN_LINE_BONUS_LEN),
+      remaining: () => countRemainingTiles(liveTiles())
+    };
+  }
+
   // wxgame/src/platform.ts
   function createPlatform() {
     if (typeof wx !== "undefined" && typeof wx.createCanvas === "function") return wxPlatform();
@@ -562,16 +886,18 @@
   }
 
   // wxgame/src/render.ts
+  var STEP_UNITS = 2;
   var COLORS = {
     page: "#FAF6EC",
     board: "rgba(251, 248, 241, 0.6)",
     boardEdge: "rgba(61, 49, 40, 0.18)",
     ink: "#2E2430",
     inkSoft: "#7A5C48",
-    dotFace: "#3D3128",
     outline: "#FFFFFF",
     stuck: "#C0392B",
-    accent: "#B23A3A"
+    accent: "#B23A3A",
+    /** 消掉之后留在原地的空球（网页版的 --ink-faint，压到三成半）。 */
+    blank: "rgba(154, 139, 152, 0.35)"
   };
   function roundRect(ctx, x, y, w, h, r) {
     const rr = Math.min(r, w / 2, h / 2);
@@ -583,76 +909,118 @@
     ctx.arcTo(x, y, x + w, y, rr);
     ctx.closePath();
   }
-  function drawTile(ctx, tile, x, y, cell, palette) {
-    const pad = Math.max(2, cell * 0.06);
-    const size = cell - pad * 2;
-    const radius = size * 0.18;
-    if (tile.face === "dot") {
-      ctx.fillStyle = COLORS.dotFace;
-      roundRect(ctx, x + pad, y + pad, size, size, radius);
-      ctx.fill();
-      ctx.fillStyle = palette[tile.dotColor];
+  function piecePath(ctx, kind, cx, cy, radius) {
+    if (kind === "circle") {
       ctx.beginPath();
-      ctx.arc(x + cell / 2, y + cell / 2, size * 0.43, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = palette[tile.color];
-      roundRect(ctx, x + pad, y + pad, size, size, radius);
-      ctx.fill();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      return;
     }
+    roundRect(ctx, cx - radius, cy - radius, radius * 2, radius * 2, radius * 0.36);
   }
-  function drawBoard(ctx, board2, layout2, palette, drag2, highlights2, stuck) {
-    const { x, y, cell } = layout2;
-    const w = board2.cols * cell;
-    const h = board2.rows * cell;
+  function drawPiece(ctx, tile, kind, cx, cy, unit, palette) {
+    const radius = unit * 0.94;
+    const color = tile.face === "dot" ? tile.dotColor : tile.color;
+    if (color < 0) {
+      ctx.fillStyle = COLORS.blank;
+      piecePath(ctx, kind, cx, cy, radius);
+      ctx.fill();
+      return;
+    }
+    if (tile.face !== "dot") {
+      ctx.fillStyle = palette[color];
+      piecePath(ctx, kind, cx, cy, radius);
+      ctx.fill();
+      return;
+    }
+    if (kind === "circle") {
+      const k = radius * 0.95 / 12;
+      ctx.strokeStyle = palette[color];
+      ctx.lineWidth = 5.5 * k;
+      ctx.lineCap = "round";
+      const seg = (x1, y1, x2, y2) => {
+        ctx.beginPath();
+        ctx.moveTo(cx + (x1 - 12) * k, cy + (y1 - 12) * k);
+        ctx.lineTo(cx + (x2 - 12) * k, cy + (y2 - 12) * k);
+        ctx.stroke();
+      };
+      seg(12, 2.5, 12, 21.5);
+      seg(4, 6.75, 20, 17.25);
+      seg(20, 6.75, 4, 17.25);
+      return;
+    }
+    ctx.fillStyle = palette[color];
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.86, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function pixelOf(board2, layout2, r, c) {
+    const [ux, uy] = board2.centerOf(r, c);
+    const e = board2.extent();
+    return [layout2.x + (ux - e.minX) * layout2.unit, layout2.y + (uy - e.minY) * layout2.unit];
+  }
+  function cellAtPoint(board2, layout2, px, py) {
+    let best = null;
+    let bestD = Infinity;
+    for (let r = 0; r < board2.rows; r++)
+      for (let c = 0; c < board2.cellsInRow(r); c++) {
+        const [x, y] = pixelOf(board2, layout2, r, c);
+        const d = (x - px) ** 2 + (y - py) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = [r, c];
+        }
+      }
+    const reach = layout2.unit * 1.6;
+    return best && bestD <= reach * reach ? best : null;
+  }
+  function drawBoard(ctx, board2, layout2, drag2, highlights2, stuck) {
+    const e = board2.extent();
+    const { x, y, unit } = layout2;
+    const w = e.w * unit;
+    const h = e.h * unit;
+    const palette = board2.palette;
     ctx.fillStyle = COLORS.board;
     roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
     ctx.fill();
     ctx.strokeStyle = COLORS.boardEdge;
     ctx.lineWidth = 1;
     ctx.stroke();
+    const onDrag = /* @__PURE__ */ new Set();
+    if (drag2) for (const [r, c] of drag2.cells) onDrag.add(cellKey(r, c));
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, w, h);
+    roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
     ctx.clip();
     for (let r = 0; r < board2.rows; r++)
-      for (let c = 0; c < board2.cols; c++) {
-        const onDragLine = drag2 && (drag2.axis === "row" ? drag2.index === r : drag2.index === c);
-        if (onDragLine) continue;
-        drawTile(ctx, board2.tileAt(r, c), x + c * cell, y + r * cell, cell, palette);
+      for (let c = 0; c < board2.cellsInRow(r); c++) {
+        if (onDrag.has(cellKey(r, c))) continue;
+        const [px, py] = pixelOf(board2, layout2, r, c);
+        drawPiece(ctx, board2.tileAt(r, c), board2.kind, px, py, unit, palette);
       }
     if (drag2) {
-      const n = drag2.axis === "row" ? board2.cols : board2.rows;
+      const span = drag2.cells.length * STEP_UNITS * unit;
       for (let k = -1; k <= 1; k++) {
-        const wrap = k * n * cell;
-        for (let i = 0; i < n; i++) {
-          const r = drag2.axis === "row" ? drag2.index : i;
-          const c = drag2.axis === "row" ? i : drag2.index;
-          const tx = drag2.axis === "row" ? x + c * cell + drag2.offsetPx + wrap : x + c * cell;
-          const ty = drag2.axis === "col" ? y + r * cell + drag2.offsetPx + wrap : y + r * cell;
-          drawTile(ctx, board2.tileAt(r, c), tx, ty, cell, palette);
+        const off = drag2.offsetPx + k * span;
+        for (const [r, c] of drag2.cells) {
+          const [px, py] = pixelOf(board2, layout2, r, c);
+          drawPiece(ctx, board2.tileAt(r, c), board2.kind, px + drag2.vec[0] * off, py + drag2.vec[1] * off, unit, palette);
         }
       }
     }
-    for (const hl of highlights2) {
-      ctx.strokeStyle = hl.kind === "line" ? COLORS.accent : COLORS.outline;
-      ctx.lineWidth = Math.max(2, cell * 0.08);
-      for (const [r, c] of hl.cells) {
-        const pad = Math.max(2, cell * 0.06);
-        roundRect(ctx, x + c * cell + pad, y + r * cell + pad, cell - pad * 2, cell - pad * 2, (cell - pad * 2) * 0.18);
+    const ring = (cells, color) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(2, unit * 0.16);
+      for (const [r, c] of cells) {
+        const [px, py] = pixelOf(board2, layout2, r, c);
+        piecePath(ctx, board2.kind, px, py, unit * 0.94);
         ctx.stroke();
       }
-    }
+    };
+    for (const hl of highlights2) ring(hl.cells, hl.kind === "line" ? COLORS.accent : COLORS.outline);
     if (stuck) {
-      ctx.strokeStyle = COLORS.stuck;
-      ctx.lineWidth = Math.max(2, cell * 0.08);
+      const cells = [];
       for (let r = 0; r < board2.rows; r++)
-        for (let c = 0; c < board2.cols; c++) {
-          if (!stuck.has(cellKey(r, c))) continue;
-          const pad = Math.max(2, cell * 0.06);
-          roundRect(ctx, x + c * cell + pad, y + r * cell + pad, cell - pad * 2, cell - pad * 2, (cell - pad * 2) * 0.18);
-          ctx.stroke();
-        }
+        for (let c = 0; c < board2.cellsInRow(r); c++) if (stuck.has(cellKey(r, c))) cells.push([r, c]);
+      ring(cells, COLORS.stuck);
     }
     ctx.restore();
   }
@@ -740,6 +1108,28 @@
       const cy = y + pad + Math.floor(i / 2) * (cell + gap);
       ctx.fillStyle = MARK_COLORS[i];
       roundRect(ctx, cx, cy, cell, cell, cell * 0.22);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.outline;
+      ctx.lineWidth = Math.max(1.5, s * 0.022);
+      ctx.stroke();
+    }
+  }
+  function iconCircle(ctx, x, y, s) {
+    ctx.fillStyle = MARK_BG;
+    ctx.beginPath();
+    ctx.arc(x + s / 2, y + s / 2, s / 2, 0, Math.PI * 2);
+    ctx.fill();
+    const r = s * 0.115;
+    const spots = [
+      [0.5, 0.28, 1],
+      [0.32, 0.5, 3],
+      [0.68, 0.5, 0],
+      [0.5, 0.72, 2]
+    ];
+    for (const [fx, fy, ci] of spots) {
+      ctx.fillStyle = MARK_COLORS[ci];
+      ctx.beginPath();
+      ctx.arc(x + s * fx, y + s * fy, r, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = COLORS.outline;
       ctx.lineWidth = Math.max(1.5, s * 0.022);
@@ -859,9 +1249,13 @@
     title: "Slides",
     tagline: "\u6ED1\u52A8 \u2013 \u5F97\u5206 \u2013 \u6D88\u9664",
     home: "\u56DE\u4E3B\u83DC\u5355",
-    square: "\u65B9\u5757"
+    square: "\u65B9\u5757",
+    circle: "\u5C0F\u7403"
   };
-  var GAMES = [{ id: "square", name: T.square, icon: iconSquare }];
+  var GAMES = [
+    { id: "square", name: T.square, icon: iconSquare, create: createSquareBoard },
+    { id: "circle", name: T.circle, icon: iconCircle, create: createCircleBoard }
+  ];
   var screen = "menu";
   var menuHits = [];
   var current = GAMES[0];
@@ -882,7 +1276,7 @@
     pattern: T.pattern,
     diamond121: T.diamond121
   };
-  var board = createSquareBoard(LABELS);
+  var board = GAMES[0].create(LABELS);
   var streak = createStreakTracker();
   var perf = createPerformanceGauge();
   var score = 0;
@@ -895,16 +1289,18 @@
   var endCard = null;
   var againRect = null;
   var drag = null;
+  var along = (line, dx, dy) => dx * line.vec[0] + dy * line.vec[1];
   var HUD_TOP = 48;
   var HUD_H = 58;
   function layout() {
     const top = HUD_TOP + HUD_H + 22;
     const availW = p.width - 32;
     const availH = p.height - top - 40;
-    const cell = Math.floor(Math.min(availW / Math.max(1, board.cols), availH / Math.max(1, board.rows)));
-    const x = Math.round((p.width - cell * board.cols) / 2);
-    const y = Math.round(top + (availH - cell * board.rows) / 2);
-    return { x, y, cell };
+    const e = board.extent();
+    const unit = Math.min(availW / e.w, availH / e.h);
+    const x = Math.round((p.width - e.w * unit) / 2);
+    const y = Math.round(top + (availH - e.h * unit) / 2);
+    return { x, y, unit };
   }
   function elapsedSec() {
     return over ? endElapsed : (p.now() - startedAt) / 1e3;
@@ -917,6 +1313,7 @@
   }
   function newGame() {
     screen = "play";
+    board = current.create(LABELS);
     board.deal();
     score = 0;
     moves = 0;
@@ -1015,8 +1412,8 @@
   p.onTouch({
     start(x, y) {
       if (screen === "menu") {
-        const hit = menuHits.find((h) => inRect(h.rect, x, y));
-        const entry = hit && GAMES.find((g) => g.id === hit.id);
+        const hit2 = menuHits.find((h) => inRect(h.rect, x, y));
+        const entry = hit2 && GAMES.find((g) => g.id === hit2.id);
         if (entry) {
           p.vibrate();
           startCountdown(entry);
@@ -1030,22 +1427,30 @@
         return;
       }
       if (resolving) return;
-      const L = layout();
-      const c = Math.floor((x - L.x) / L.cell);
-      const r = Math.floor((y - L.y) / L.cell);
-      if (r < 0 || c < 0 || r >= board.rows || c >= board.cols) return;
-      drag = { r, c, axis: null, x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
+      const hit = cellAtPoint(board, layout(), x, y);
+      if (!hit) return;
+      drag = { line: null, lines: board.linesThrough(hit[0], hit[1]), x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
     },
     move(x, y) {
       if (screen !== "play" || !drag) return;
       drag.dx = x - drag.x0;
       drag.dy = y - drag.y0;
-      if (!drag.axis) {
+      if (!drag.line) {
         if (Math.abs(drag.dx) < DEAD_ZONE_PX && Math.abs(drag.dy) < DEAD_ZONE_PX) return;
-        drag.axis = Math.abs(drag.dx) > Math.abs(drag.dy) ? "row" : "col";
+        let best = null;
+        let bestProj = 0;
+        for (const line of drag.lines) {
+          const proj = Math.abs(along(line, drag.dx, drag.dy));
+          if (proj > bestProj) {
+            bestProj = proj;
+            best = line;
+          }
+        }
+        drag.line = best;
+        if (!drag.line) return;
       }
       const L = layout();
-      const shift = Math.round((drag.axis === "row" ? drag.dx : drag.dy) / L.cell);
+      const shift = Math.round(along(drag.line, drag.dx, drag.dy) / (L.unit * STEP_UNITS));
       if (shift !== drag.lastShift) {
         drag.lastShift = shift;
         p.vibrate();
@@ -1054,14 +1459,13 @@
     end(x, y) {
       const d = drag;
       drag = null;
-      if (screen !== "play" || !d || !d.axis) return;
+      if (screen !== "play" || !d || !d.line) return;
       d.dx = x - d.x0;
       d.dy = y - d.y0;
       const L = layout();
-      const by = Math.round((d.axis === "row" ? d.dx : d.dy) / L.cell);
+      const by = Math.round(along(d.line, d.dx, d.dy) / (L.unit * STEP_UNITS));
       if (by === 0) return;
-      const mask = board.shift(d.axis, d.axis === "row" ? d.r : d.c, by);
-      resolveMove(mask);
+      resolveMove(board.shiftLine(d.line.id, by));
     }
   });
   function draw() {
@@ -1090,14 +1494,10 @@
     });
     const L = layout();
     let dv = null;
-    if (drag == null ? void 0 : drag.axis) {
-      dv = {
-        axis: drag.axis,
-        index: drag.axis === "row" ? drag.r : drag.c,
-        offsetPx: drag.axis === "row" ? drag.dx : drag.dy
-      };
+    if (drag == null ? void 0 : drag.line) {
+      dv = { cells: drag.line.cells, vec: drag.line.vec, offsetPx: along(drag.line, drag.dx, drag.dy) };
     }
-    if (board.rows > 0 && board.cols > 0) drawBoard(ctx, board, L, PALETTE, dv, highlights, stuckKeys);
+    if (board.rows > 0) drawBoard(ctx, board, L, dv, highlights, stuckKeys);
     if (over && endCard) {
       const r = drawEndCard(ctx, p.width, p.height, {
         title: T.over,
@@ -1117,7 +1517,9 @@
   loop();
   if (!p.isWx) {
     globalThis.__slidesWx = {
-      board,
+      get board() {
+        return board;
+      },
       layout,
       games: GAMES.map((g) => g.id),
       get screen() {
@@ -1132,7 +1534,15 @@
         current = (_a = GAMES.find((g) => g.id === id)) != null ? _a : GAMES[0];
         newGame();
       },
+      /** 回归脚本用：照着屏幕坐标拖一条线，和真手指走同一段代码。 */
+      get drag() {
+        return drag;
+      },
       goHome,
+      /** 回归脚本用：这一颗的中心在屏幕上的哪儿——好照着它拖。 */
+      pixelOf: (r, c) => pixelOf(board, layout(), r, c),
+      /** 一步有多长（像素）：拖这么远正好滑一格。 */
+      stepPx: () => layout().unit * STEP_UNITS,
       get score() {
         return score;
       },
