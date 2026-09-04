@@ -16,6 +16,10 @@ export interface Platform {
   /** 逻辑尺寸（和触摸坐标同一套单位）。画布本身按像素比放大过，ctx 已经 scale 过。 */
   width: number;
   height: number;
+  /** 刘海 / 状态栏那一截（顶上不能放东西的高度）。 */
+  safeTop: number;
+  /** 底下那道横杠占的高度。 */
+  safeBottom: number;
   onTouch(h: TouchHandlers): void;
   vibrate(): void;
   requestFrame(fn: () => void): void;
@@ -46,10 +50,14 @@ function wxPlatform(): Platform {
     const t = e?.touches?.[0] ?? e?.changedTouches?.[0];
     return t ? [t.clientX, t.clientY] : null;
   };
+  // 刘海和底下那道横杠：微信把它们报在 safeArea 里（相对屏幕的一个矩形）。
+  const safe = info.safeArea ?? { top: 0, bottom: height };
   return {
     ctx,
     width,
     height,
+    safeTop: Math.max(0, Math.round(safe.top ?? 0)),
+    safeBottom: Math.max(0, Math.round(height - (safe.bottom ?? height))),
     isWx: true,
     onTouch(h) {
       wx.onTouchStart((e: any) => {
@@ -103,6 +111,9 @@ function browserPlatform(): Platform {
     ctx,
     width,
     height,
+    // 浏览器这一份只给测试用，没有刘海，两头都是 0。
+    safeTop: 0,
+    safeBottom: 0,
     isWx: false,
     onTouch(h) {
       let down = false;

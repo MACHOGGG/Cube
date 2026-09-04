@@ -782,6 +782,7 @@
     return browserPlatform();
   }
   function wxPlatform() {
+    var _a, _b, _c;
     const canvas = wx.createCanvas();
     const info = typeof wx.getWindowInfo === "function" ? wx.getWindowInfo() : wx.getSystemInfoSync();
     const dpr = info.pixelRatio || 1;
@@ -792,14 +793,17 @@
     const ctx = canvas.getContext("2d");
     ctx.scale(dpr, dpr);
     const at = (e) => {
-      var _a, _b, _c;
-      const t = (_c = (_a = e == null ? void 0 : e.touches) == null ? void 0 : _a[0]) != null ? _c : (_b = e == null ? void 0 : e.changedTouches) == null ? void 0 : _b[0];
+      var _a2, _b2, _c2;
+      const t = (_c2 = (_a2 = e == null ? void 0 : e.touches) == null ? void 0 : _a2[0]) != null ? _c2 : (_b2 = e == null ? void 0 : e.changedTouches) == null ? void 0 : _b2[0];
       return t ? [t.clientX, t.clientY] : null;
     };
+    const safe = (_a = info.safeArea) != null ? _a : { top: 0, bottom: height };
     return {
       ctx,
       width,
       height,
+      safeTop: Math.max(0, Math.round((_b = safe.top) != null ? _b : 0)),
+      safeBottom: Math.max(0, Math.round(height - ((_c = safe.bottom) != null ? _c : height))),
       isWx: true,
       onTouch(h) {
         wx.onTouchStart((e) => {
@@ -820,9 +824,9 @@
         });
       },
       vibrate() {
-        var _a;
+        var _a2;
         try {
-          (_a = wx.vibrateShort) == null ? void 0 : _a.call(wx, { type: "light" });
+          (_a2 = wx.vibrateShort) == null ? void 0 : _a2.call(wx, { type: "light" });
         } catch (e) {
         }
       },
@@ -852,6 +856,9 @@
       ctx,
       width,
       height,
+      // 浏览器这一份只给测试用，没有刘海，两头都是 0。
+      safeTop: 0,
+      safeBottom: 0,
       isWx: false,
       onTouch(h) {
         let down = false;
@@ -1065,20 +1072,67 @@
     };
   }
 
+  // wxgame/src/theme.ts
+  var clamp = (lo, val, hi) => Math.min(hi, Math.max(lo, val));
+  var PLAY = {
+    bg: "#FAF6EC",
+    panel: "#3D3128",
+    chip: "#D2952F",
+    chipInk: "#3B2508",
+    chipPress: "#8E5138",
+    chipPressInk: "#FFF1E4",
+    btnDisc: "#B0454A",
+    btnMark: "#FFFFFF",
+    ink: "#2E2430",
+    inkSoft: "#6E5F6D",
+    inkFaint: "#9A8B98",
+    surface: "#FFFFFF",
+    accent: "#BE5762",
+    /** 得分图示那一排：实心蓝 + 近黑描边（style.css 的 --hint-fill / --hint-edge）。 */
+    hintFill: "#4C7EAD",
+    hintEdge: "#2E2430",
+    /** 卡死时框住那几枚的红。 */
+    stuck: "#C0392B",
+    /** 消掉之后留在原地的空球（--ink-faint 压到三成半）。 */
+    blank: "rgba(154, 139, 152, 0.35)",
+    /** 棋子之间那条缝的颜色就是地板本身——这里只留一个名字，画的时候不用它。 */
+    outline: "#FFFFFF"
+  };
+  function playMetrics(w, h, safeTop = 0, safeBottom = 0) {
+    const vh = h / 100;
+    const vw = w / 100;
+    const vmin = Math.min(w, h) / 100;
+    return {
+      // padding: calc(max(env(safe-area-inset-top), 14px) + 6px) max(…, 14px)
+      //          calc(max(env(safe-area-inset-bottom), 10px) + 6px) …
+      padTop: Math.max(safeTop, 14) + 6,
+      padSide: 14,
+      padBottom: Math.max(safeBottom, 10) + 6,
+      chipGap: clamp(8, 2.4 * vw, 18),
+      chipH: clamp(50, 8.2 * vh, 78),
+      chipR: clamp(11, 1.9 * vh, 17),
+      chipFont: clamp(1.15 * 16, 3.6 * vh, 2 * 16),
+      rowGap: clamp(8, 1.6 * vh, 16),
+      panelR: clamp(14, 3 * vh, 26),
+      // .app--game:not(.pattern-sides) .pattern-hint —— 方块和小球都走这一条。
+      hintEm: clamp(13, 4.4 * vmin, 21)
+    };
+  }
+  var FONT_NUM = (px) => `600 ${px}px Georgia, "Songti SC", serif`;
+
   // wxgame/src/render.ts
   var SQUASH = 0.1;
   var STEP_UNITS = 2;
   var COLORS = {
-    page: "#FAF6EC",
-    board: "rgba(251, 248, 241, 0.6)",
-    boardEdge: "rgba(61, 49, 40, 0.18)",
-    ink: "#2E2430",
-    inkSoft: "#7A5C48",
-    outline: "#FFFFFF",
-    stuck: "#C0392B",
-    accent: "#B23A3A",
-    /** 消掉之后留在原地的空球（网页版的 --ink-faint，压到三成半）。 */
-    blank: "rgba(154, 139, 152, 0.35)"
+    page: PLAY.bg,
+    board: PLAY.panel,
+    boardEdge: "transparent",
+    ink: PLAY.ink,
+    inkSoft: PLAY.inkSoft,
+    outline: PLAY.outline,
+    stuck: PLAY.stuck,
+    accent: PLAY.accent,
+    blank: PLAY.blank
   };
   function roundRect(ctx, x, y, w, h, r) {
     const rr = Math.min(r, w / 2, h / 2);
@@ -1155,21 +1209,21 @@
     return best && bestD <= reach * reach ? best : null;
   }
   function drawBoard(ctx, board2, layout2, drag2, highlights2, stuck) {
+    var _a, _b;
     const e = board2.extent();
     const { x, y, unit } = layout2;
     const w = e.w * unit;
     const h = e.h * unit;
     const palette = board2.palette;
+    const pad = (_a = layout2.panelPad) != null ? _a : 8;
+    const radius = (_b = layout2.panelR) != null ? _b : 14;
     ctx.fillStyle = COLORS.board;
-    roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
+    roundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, radius);
     ctx.fill();
-    ctx.strokeStyle = COLORS.boardEdge;
-    ctx.lineWidth = 1;
-    ctx.stroke();
     const onDrag = /* @__PURE__ */ new Set();
     if (drag2) for (const [r, c] of drag2.cells) onDrag.add(cellKey(r, c));
     ctx.save();
-    roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
+    roundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, radius);
     ctx.clip();
     for (let r = 0; r < board2.rows; r++)
       for (let c = 0; c < board2.cellsInRow(r); c++) {
@@ -1235,28 +1289,62 @@
     const s = Math.floor(sec % 60);
     return m + ":" + (s < 10 ? "0" : "") + s;
   }
-  function drawHud(ctx, width, top, hud) {
-    const slots = [
-      [hud.labels.score, String(hud.score)],
-      [hud.labels.rate, hud.ratePercent + "%"],
-      [hud.labels.time, fmtTime(hud.elapsedSec)]
-    ];
-    const gap = 10;
-    const slotW = (width - 32 - gap * 2) / 3;
-    slots.forEach(([label, value], i) => {
-      const sx = 16 + i * (slotW + gap);
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      roundRect(ctx, sx, top, slotW, 58, 12);
+  function drawHud(ctx, width, top, m, hud) {
+    const values = [fmtTime(hud.elapsedSec), hud.ratePercent + "%", String(hud.score)];
+    const cellW = (width - m.padSide * 2 - m.chipGap * 2) / 3;
+    let scoreBox = [0, 0, 0, 0];
+    values.forEach((value, i) => {
+      const x = m.padSide + i * (cellW + m.chipGap);
+      ctx.fillStyle = PLAY.chip;
+      roundRect(ctx, x, top, cellW, m.chipH, m.chipR);
       ctx.fill();
-      ctx.fillStyle = COLORS.inkSoft;
-      ctx.font = "600 11px sans-serif";
+      ctx.fillStyle = PLAY.chipInk;
+      ctx.font = FONT_NUM(m.chipFont);
       ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(label, sx + slotW / 2, top + 20);
-      ctx.fillStyle = COLORS.ink;
-      ctx.font = "700 22px monospace";
-      ctx.fillText(value, sx + slotW / 2, top + 47);
+      ctx.textBaseline = "middle";
+      ctx.fillText(value, x + cellW / 2, top + m.chipH / 2 + m.chipFont * 0.04);
+      if (i === 2) scoreBox = [x, top, cellW, m.chipH];
     });
+    return { score: scoreBox };
+  }
+  function drawControls(ctx, width, top, m, pressed) {
+    const cellW = (width - m.padSide * 2 - m.chipGap) / 2;
+    const boxes = [];
+    ["pause", "finish"].forEach((kind, i) => {
+      const x = m.padSide + i * (cellW + m.chipGap);
+      const down = pressed === kind;
+      ctx.fillStyle = down ? PLAY.chipPress : PLAY.chip;
+      roundRect(ctx, x, top, cellW, m.chipH, m.chipR);
+      ctx.fill();
+      const cx = x + cellW / 2;
+      const cy = top + m.chipH / 2;
+      const r = m.chipH * 0.325;
+      ctx.fillStyle = down ? PLAY.chipPressInk : PLAY.btnDisc;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = down ? PLAY.chipPress : PLAY.btnMark;
+      ctx.strokeStyle = ctx.fillStyle;
+      if (kind === "pause") {
+        const bw = r * 0.24;
+        const bh = r * 0.92;
+        roundRect(ctx, cx - r * 0.36 - bw / 2, cy - bh / 2, bw, bh, bw / 2);
+        ctx.fill();
+        roundRect(ctx, cx + r * 0.36 - bw / 2, cy - bh / 2, bw, bh, bw / 2);
+        ctx.fill();
+      } else {
+        ctx.lineWidth = r * 0.26;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.46, cy + r * 0.02);
+        ctx.lineTo(cx - r * 0.12, cy + r * 0.38);
+        ctx.lineTo(cx + r * 0.5, cy - r * 0.4);
+        ctx.stroke();
+      }
+      boxes.push([x, top, cellW, m.chipH]);
+    });
+    return { pause: boxes[0], finish: boxes[1] };
   }
   function drawEndCard(ctx, width, height, d) {
     ctx.fillStyle = "rgba(46, 36, 48, 0.45)";
@@ -1476,6 +1564,8 @@
   var COUNT_FROM = 4;
   var countStartedAt = 0;
   var homeRect = null;
+  var ctrlHits = null;
+  var pressedCtl = null;
   var CASCADE_COMBO_FACTOR = 3;
   var HIGHLIGHT_MS = 450;
   var STEP_GAP_MS = 260;
@@ -1505,17 +1595,24 @@
   var drag = null;
   var grabbedCell = null;
   var along = (line, dx, dy) => dx * line.vec[0] + dy * line.vec[1];
-  var HUD_TOP = 48;
-  var HUD_H = 58;
+  var metrics = () => playMetrics(p.width, p.height, p.safeTop, p.safeBottom);
+  var hintHeight = (_m) => 0;
+  var hudTop = (m) => m.padTop;
+  var controlsTop = (m) => p.height - m.padBottom - m.chipH;
   function layout() {
-    const top = HUD_TOP + HUD_H + 22;
-    const availW = p.width - 32;
-    const availH = p.height - top - 40;
+    const m = metrics();
+    const hintH = hintHeight(m);
+    const top = hudTop(m) + m.chipH;
+    const bottom = controlsTop(m) - m.rowGap;
+    const pad = Math.round(m.panelR * 0.55);
+    const availW = p.width - m.padSide * 2 - pad * 2;
+    const availH = bottom - top - m.rowGap * 2 - hintH - pad * 2;
     const e = board.extent();
-    const unit = Math.min(availW / e.w, availH / e.h);
+    const unit = Math.max(1, Math.min(availW / e.w, availH / e.h));
     const x = Math.round((p.width - e.w * unit) / 2);
-    const y = Math.round(top + (availH - e.h * unit) / 2);
-    return { x, y, unit };
+    const boardTop = top + m.rowGap * 2 + hintH;
+    const y = Math.round(boardTop + pad + (bottom - boardTop - pad * 2 - e.h * unit) / 2);
+    return { x, y, unit, panelPad: pad, panelR: m.panelR };
   }
   function elapsedSec() {
     return over ? endElapsed : (p.now() - startedAt) / 1e3;
@@ -1650,6 +1747,18 @@
         else if (inRect(homeRect, x, y)) goHome();
         return;
       }
+      if (ctrlHits && !over) {
+        if (inRect(ctrlHits.pause, x, y)) {
+          pressedCtl = "pause";
+          p.vibrate();
+          return;
+        }
+        if (inRect(ctrlHits.finish, x, y)) {
+          pressedCtl = "finish";
+          p.vibrate();
+          return;
+        }
+      }
       if (resolving) return;
       if (drag == null ? void 0 : drag.settling) {
         (_a = drag.chain) == null ? void 0 : _a.flush();
@@ -1714,6 +1823,14 @@
       (_a = drag.chain) == null ? void 0 : _a.drive(magnetizeRawDist(raw));
     },
     end(x, y) {
+      if (pressedCtl) {
+        const which = pressedCtl;
+        pressedCtl = null;
+        if (ctrlHits && !over && inRect(which === "pause" ? ctrlHits.pause : ctrlHits.finish, x, y)) {
+          if (which === "finish") endGame();
+        }
+        return;
+      }
       const d = drag;
       if (screen !== "play" || !d || !d.line || d.settling) {
         drag = null;
@@ -1756,12 +1873,14 @@
     }
     ctx.fillStyle = COLORS.page;
     ctx.fillRect(0, 0, p.width, p.height);
-    drawHud(ctx, p.width, HUD_TOP, {
+    const m = metrics();
+    drawHud(ctx, p.width, hudTop(m), m, {
       score,
       ratePercent: perf.valuePercent(),
       elapsedSec: elapsedSec(),
       labels: { score: T.score, rate: T.rate, time: T.time }
     });
+    if (!over) ctrlHits = drawControls(ctx, p.width, controlsTop(m), m, pressedCtl);
     const L = layout();
     let dv = null;
     if ((drag == null ? void 0 : drag.line) && drag.chain) {

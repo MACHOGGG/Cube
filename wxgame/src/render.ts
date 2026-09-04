@@ -5,6 +5,7 @@
 import type { Cell, Tile } from '../../src/engine/types';
 import { cellKey } from '../../src/engine/types';
 import { BOARD_FORCE } from '../../src/engine/dragChain';
+import { FONT_NUM, PLAY, type PlayMetrics } from './theme';
 
 /** 挤到底时压扁多少——和 dragChain.ts 里那个 SQUASH 同一个数。 */
 const SQUASH = 0.1;
@@ -24,6 +25,10 @@ export interface Layout {
   y: number;
   /** 一个「半边长」单位有多少像素。 */
   unit: number;
+  /** 地板比棋盘本身往外多出多少（网页版那圈留白）。不给就是 8。 */
+  panelPad?: number;
+  /** 地板的圆角。不给就是 14。 */
+  panelR?: number;
 }
 
 /** 一步有多长：三副棋盘都是 2 个单位（一格 / 一个直径）。 */
@@ -55,18 +60,20 @@ export interface Highlight {
   kind: 'match' | 'line';
 }
 
-/** 网页版游戏页的底色与版图色（--play-bg / --board-bg）。 */
+/**
+ * 游戏页那一套颜色。数值全在 theme.ts（从网页版 style.css 一条条抄过来的），
+ * 这儿只是给它们起个短名字，画的时候顺手。
+ */
 export const COLORS = {
-  page: '#FAF6EC',
-  board: 'rgba(251, 248, 241, 0.6)',
-  boardEdge: 'rgba(61, 49, 40, 0.18)',
-  ink: '#2E2430',
-  inkSoft: '#7A5C48',
-  outline: '#FFFFFF',
-  stuck: '#C0392B',
-  accent: '#B23A3A',
-  /** 消掉之后留在原地的空球（网页版的 --ink-faint，压到三成半）。 */
-  blank: 'rgba(154, 139, 152, 0.35)',
+  page: PLAY.bg,
+  board: PLAY.panel,
+  boardEdge: 'transparent',
+  ink: PLAY.ink,
+  inkSoft: PLAY.inkSoft,
+  outline: PLAY.outline,
+  stuck: PLAY.stuck,
+  accent: PLAY.accent,
+  blank: PLAY.blank,
 };
 
 export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -204,19 +211,19 @@ export function drawBoard(
   const w = e.w * unit;
   const h = e.h * unit;
   const palette = board.palette;
-  // 版图
+  // 地板：深褐的一大块圆角矩形，棋子摆在上面（网页版的 --play-panel）。棋盘
+  // 自己那一圈边距由 pad 给——网页版是「棋子自带外边距，地板本身不留内边距」。
+  const pad = layout.panelPad ?? 8;
+  const radius = layout.panelR ?? 14;
   ctx.fillStyle = COLORS.board;
-  roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
+  roundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, radius);
   ctx.fill();
-  ctx.strokeStyle = COLORS.boardEdge;
-  ctx.lineWidth = 1;
-  ctx.stroke();
 
   const onDrag = new Set<string>();
   if (drag) for (const [r, c] of drag.cells) onDrag.add(cellKey(r, c));
 
   ctx.save();
-  roundRect(ctx, x - 8, y - 8, w + 16, h + 16, 14);
+  roundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, radius);
   ctx.clip();
   for (let r = 0; r < board.rows; r++)
     for (let c = 0; c < board.cellsInRow(r); c++) {
@@ -306,28 +313,95 @@ export function fmtTime(sec: number): string {
 }
 
 /** 顶上三格读数：得分、有效得分率、用时（同网页版的顺序）。 */
-export function drawHud(ctx: CanvasRenderingContext2D, width: number, top: number, hud: HudData) {
-  const slots = [
-    [hud.labels.score, String(hud.score)],
-    [hud.labels.rate, hud.ratePercent + '%'],
-    [hud.labels.time, fmtTime(hud.elapsedSec)],
-  ];
-  const gap = 10;
-  const slotW = (width - 32 - gap * 2) / 3;
-  slots.forEach(([label, value], i) => {
-    const sx = 16 + i * (slotW + gap);
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    roundRect(ctx, sx, top, slotW, 58, 12);
+/**
+ * 顶上那三格读数。
+ *
+ * 照网页版（style.css 的 .app--game .hud）：三块等宽的橙金圆角矩形，里面只
+ * 有数字，没有标签——玩家定的「少文字」。顺序是 flex-direction: row-reverse
+ * 出来的那一版：用时在左，有效得分率在中，得分在右，「越往右越是要紧的那个
+ * 数」。
+ *
+ * 返回三格各自的方框，得分那一格要拿它冒加分气泡。
+ */
+export function drawHud(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  top: number,
+  m: PlayMetrics,
+  hud: HudData,
+): { score: [number, number, number, number] } {
+  const values = [fmtTime(hud.elapsedSec), hud.ratePercent + '%', String(hud.score)];
+  const cellW = (width - m.padSide * 2 - m.chipGap * 2) / 3;
+  let scoreBox: [number, number, number, number] = [0, 0, 0, 0];
+  values.forEach((value, i) => {
+    const x = m.padSide + i * (cellW + m.chipGap);
+    ctx.fillStyle = PLAY.chip;
+    roundRect(ctx, x, top, cellW, m.chipH, m.chipR);
     ctx.fill();
-    ctx.fillStyle = COLORS.inkSoft;
-    ctx.font = '600 11px sans-serif';
+    ctx.fillStyle = PLAY.chipInk;
+    ctx.font = FONT_NUM(m.chipFont);
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(label, sx + slotW / 2, top + 20);
-    ctx.fillStyle = COLORS.ink;
-    ctx.font = '700 22px monospace';
-    ctx.fillText(value, sx + slotW / 2, top + 47);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(value, x + cellW / 2, top + m.chipH / 2 + m.chipFont * 0.04);
+    if (i === 2) scoreBox = [x, top, cellW, m.chipH];
   });
+  return { score: scoreBox };
+}
+
+/**
+ * 底下那两颗键：《暂停》和《完成》。
+ *
+ * 照网页版（.app--game .controls .icon-btn）：和读数同宽同高的橙金圆角矩形，
+ * 正中一个红圆，圆里一个白记号（两根竖条 / 一个对勾）。按下去橙金变赭红、
+ * 记号反色——那一下的手感是「键按下去了」，不是「状态变了」。
+ */
+export function drawControls(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  top: number,
+  m: PlayMetrics,
+  pressed: 'pause' | 'finish' | null,
+): { pause: [number, number, number, number]; finish: [number, number, number, number] } {
+  const cellW = (width - m.padSide * 2 - m.chipGap) / 2;
+  const boxes: [number, number, number, number][] = [];
+  (['pause', 'finish'] as const).forEach((kind, i) => {
+    const x = m.padSide + i * (cellW + m.chipGap);
+    const down = pressed === kind;
+    ctx.fillStyle = down ? PLAY.chipPress : PLAY.chip;
+    roundRect(ctx, x, top, cellW, m.chipH, m.chipR);
+    ctx.fill();
+    // 红圆：高度的六成半，和网页版那颗圆的比例一样。
+    const cx = x + cellW / 2;
+    const cy = top + m.chipH / 2;
+    const r = m.chipH * 0.325;
+    ctx.fillStyle = down ? PLAY.chipPressInk : PLAY.btnDisc;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = down ? PLAY.chipPress : PLAY.btnMark;
+    ctx.strokeStyle = ctx.fillStyle;
+    if (kind === 'pause') {
+      // 两根竖条。
+      const bw = r * 0.24;
+      const bh = r * 0.92;
+      roundRect(ctx, cx - r * 0.36 - bw / 2, cy - bh / 2, bw, bh, bw / 2);
+      ctx.fill();
+      roundRect(ctx, cx + r * 0.36 - bw / 2, cy - bh / 2, bw, bh, bw / 2);
+      ctx.fill();
+    } else {
+      // 对勾。
+      ctx.lineWidth = r * 0.26;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.46, cy + r * 0.02);
+      ctx.lineTo(cx - r * 0.12, cy + r * 0.38);
+      ctx.lineTo(cx + r * 0.5, cy - r * 0.4);
+      ctx.stroke();
+    }
+    boxes.push([x, top, cellW, m.chipH]);
+  });
+  return { pause: boxes[0], finish: boxes[1] };
 }
 
 export interface EndCardData {

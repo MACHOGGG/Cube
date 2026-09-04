@@ -21,6 +21,7 @@ import {
   cellAtPoint,
   COLORS,
   drawBoard,
+  drawControls,
   drawEndCard,
   drawHud,
   fmtTime,
@@ -31,6 +32,7 @@ import {
   type Layout,
 } from './render';
 import { drawCountdown, drawMenu, iconCircle, iconSquare, type MenuEntry, type MenuHit } from './menu';
+import { playMetrics, type PlayMetrics } from './theme';
 import { compositeScore } from './composite';
 import { createStreakTracker } from '../../src/engine/scoring';
 import { createPerformanceGauge } from '../../src/engine/performance';
@@ -89,6 +91,10 @@ let current: Game = GAMES[0];
 const COUNT_FROM = 4;
 let countStartedAt = 0;
 let homeRect: [number, number, number, number] | null = null;
+/** 底下两颗键这一帧画在哪儿——手指按下去要拿它判命中。 */
+let ctrlHits: { pause: [number, number, number, number]; finish: [number, number, number, number] } | null = null;
+/** 正被按住的那一颗（画成按下去的样子）。 */
+let pressedCtl: 'pause' | 'finish' | null = null;
 
 /** 同 gameController：同一次滑动里的连锁，每多一拍再乘它。 */
 const CASCADE_COMBO_FACTOR = 3;
@@ -152,20 +158,49 @@ let grabbedCell: Cell | null = null;
 const along = (line: BoardLine, dx: number, dy: number): number => dx * line.vec[0] + dy * line.vec[1];
 
 // ---- 排版 ------------------------------------------------------------------
-const HUD_TOP = 48;
-const HUD_H = 58;
+//
+// 一页从上到下，照网页版（style.css 的 .app--game）：
+//
+//   页边距 → 读数三格 → 空当 → 得分图示 → 空当 → 棋盘地板 → 空当
+//   → 底下两颗键 → 页边距
+//
+// 中间那两段空当在网页版是 auto 外边距平分出来的，所以图示正好落在读数和棋
+// 盘的正中间。这儿照着算：先把固定的几块减掉，剩下的高度一半给图示上面、一
+// 半给图示下面。
+const metrics = () => playMetrics(p.width, p.height, p.safeTop, p.safeBottom);
+
+/**
+ * 得分图示那一排占多高。
+ *
+ * 网页版是棋盘上方一排蓝色小图（1×4、2×2……），这一版还没画，先按 0 算——
+ * 排版的式子已经给它留好位置了，图画出来之后把这里换成 m.hintEm * 1.6 就行。
+ */
+const hintHeight = (_m: PlayMetrics): number => 0;
+
+/** 读数三格的上边沿。 */
+const hudTop = (m: PlayMetrics) => m.padTop;
+/** 底下两颗键的上边沿。 */
+const controlsTop = (m: PlayMetrics) => p.height - m.padBottom - m.chipH;
+
 function layout(): Layout {
-  const top = HUD_TOP + HUD_H + 22;
-  const availW = p.width - 32;
-  const availH = p.height - top - 40;
+  const m = metrics();
+  const hintH = hintHeight(m);
+  const top = hudTop(m) + m.chipH;
+  const bottom = controlsTop(m) - m.rowGap;
+  // 地板往外多出的那一圈：网页版是棋子自带外边距，地板贴着算；这儿给一个和
+  // 圆角同量级的数，看起来才是「一块地板」而不是「刚好裹住棋子的一层皮」。
+  const pad = Math.round(m.panelR * 0.55);
+  const availW = p.width - m.padSide * 2 - pad * 2;
+  const availH = bottom - top - m.rowGap * 2 - hintH - pad * 2;
   // 棋盘自己报出它占多少个「半边长」（extent），这儿只决定一个单位有多少像
-  // 素：横竖两头都放得下的那个数，然后整副居中。方块、小球、以后的三角走的
-  // 是同一段。
+  // 素：横竖两头都放得下的那个数，然后整副居中。两副棋盘走的是同一段。
   const e = board.extent();
-  const unit = Math.min(availW / e.w, availH / e.h);
+  const unit = Math.max(1, Math.min(availW / e.w, availH / e.h));
   const x = Math.round((p.width - e.w * unit) / 2);
-  const y = Math.round(top + (availH - e.h * unit) / 2);
-  return { x, y, unit };
+  // 棋盘在「图示底下到两颗键上面」这一段里居中。
+  const boardTop = top + m.rowGap * 2 + hintH;
+  const y = Math.round(boardTop + pad + (bottom - boardTop - pad * 2 - e.h * unit) / 2);
+  return { x, y, unit, panelPad: pad, panelR: m.panelR };
 }
 
 function elapsedSec(): number {
@@ -315,6 +350,21 @@ p.onTouch({
       else if (inRect(homeRect, x, y)) goHome();
       return;
     }
+    // 底下那两颗键：《暂停》先只做成「按得动、有反馈」，暂停页和交卷确认是
+    // 下一步的事（见 wxgame/README.md 的待办）。《完成》= 这一局到此为止，
+    // 直接结算，同网页版的那颗对勾。
+    if (ctrlHits && !over) {
+      if (inRect(ctrlHits.pause, x, y)) {
+        pressedCtl = 'pause';
+        p.vibrate();
+        return;
+      }
+      if (inRect(ctrlHits.finish, x, y)) {
+        pressedCtl = 'finish';
+        p.vibrate();
+        return;
+      }
+    }
     if (resolving) return;
     // 上一条还在弹回去的时候又按下来：立刻把它落定，别把这一下吞掉（同网页版
     // 的 chain.flush——快手连着走两行不该丢一步）。
@@ -383,6 +433,15 @@ p.onTouch({
     drag.chain?.drive(magnetizeRawDist(raw));
   },
   end(x, y) {
+    // 先看是不是刚按住的那两颗键。
+    if (pressedCtl) {
+      const which = pressedCtl;
+      pressedCtl = null;
+      if (ctrlHits && !over && inRect(which === 'pause' ? ctrlHits.pause : ctrlHits.finish, x, y)) {
+        if (which === 'finish') endGame();
+      }
+      return;
+    }
     const d = drag;
     if (screen !== 'play' || !d || !d.line || d.settling) {
       drag = null;
@@ -430,12 +489,15 @@ function draw() {
   }
   ctx.fillStyle = COLORS.page;
   ctx.fillRect(0, 0, p.width, p.height);
-  drawHud(ctx, p.width, HUD_TOP, {
+  const m = metrics();
+  drawHud(ctx, p.width, hudTop(m), m, {
     score,
     ratePercent: perf.valuePercent(),
     elapsedSec: elapsedSec(),
     labels: { score: T.score, rate: T.rate, time: T.time },
   });
+  // 底下两颗键：《暂停》《完成》。结算页盖上来的时候就不画了。
+  if (!over) ctrlHits = drawControls(ctx, p.width, controlsTop(m), m, pressedCtl);
   const L = layout();
   let dv: DragView | null = null;
   if (drag?.line && drag.chain) {
