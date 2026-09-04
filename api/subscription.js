@@ -1,18 +1,14 @@
-import {
-  answer, configured, creem, emailOf, entitled, findSubscription, NOBODY, periodOf, readBody, send,
-} from './_creem.js';
+import { answer, configured, creem, emailOf, entitled, NOBODY, readBody, send } from './_creem.js';
 import {
   SECRET_RE,
   checkPin,
-  ensureGiftCodes,
-  entitlementOf,
-  liveGifts,
-  liveInbox,
   loadAccount,
+  lockRemainingMs,
   normalizeEmail,
   rotateToken,
   saveAccount,
 } from './_accounts.js';
+import { resolveEntitlement } from './_entitlement.js';
 import { storeConfigured } from './_store.js';
 
 /**
@@ -131,7 +127,9 @@ async function fromEmail(res, rawEmail, password, token) {
       if (!SECRET_RE.test(String(password || ''))) return send(res, 401, { error: 'wrong' });
       const verdict = await checkPin(address, String(password), account);
       if (verdict === 'blocked') return send(res, 423, { error: 'blocked' });
-      if (verdict === 'locked') return send(res, 423, { error: 'locked' });
+      if (verdict === 'locked') {
+        return send(res, 423, { error: 'locked', retryInMs: lockRemainingMs(account) });
+      }
       if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
       // A password sign-in issues a fresh token, which retires the one any
       // other device was holding.
@@ -140,49 +138,10 @@ async function fromEmail(res, rawEmail, password, token) {
     }
   }
 
-  // A redeemed code's entitlement is ours, not Creem's — Creem has never
-  // heard of this person. Answering from the account is not a shortcut here,
-  // it is the only correct source. Doing it after the credential check means
-  // one endpoint serves both kinds and the browser never has to guess which
-  // it is holding — which it could not do anyway, since a card password of
-  // six digits and a code's six-digit passcode look identical.
-  if (account?.kind === 'code') {
-    return send(res, 200, {
-      ...entitlementOf(account, address),
-      kind: 'code',
-      gifts: await liveGifts(account),
-      inbox: await liveInbox(account),
-      inboxUnseen: account.inboxUnseen || 0,
-    });
-  }
+  // 两条路各归各，只写一遍（api/_entitlement.js 的 resolveEntitlement）：内部码
+  // 账号看我们自己记的到期日，刷卡订阅去问 Creem。这儿凭刚验过的密码 / 令牌
+  // 可以拿这个邮箱去问，那是这一支和别处唯一该不一样的地方。
+  const { status, body } = await resolveEntitlement(address, account, issued);
+  return send(res, status, body);
 
-  // Here, and not a line earlier: everything above answers from our own
-  // store, so a code account signs in normally whatever state Creem's key is
-  // in. From this point on Creem is the only one who knows, and not being
-  // able to ask is a server fault rather than a verdict about this player.
-  if (!configured()) return send(res, 503, { error: 'notConfigured' });
-
-  // 同一次查询别处也要用（api/_entitlement.js 判「是不是天才」），所以查询
-  // 本身收在 _creem.js 里只写一遍。两边唯一该不一样的是「凭什么可以拿这个
-  // 邮箱去查」：这儿凭刚验过的密码，那儿凭账户令牌。
-  const { customer, sub } = await findSubscription(address);
-  // 查无此人，和「有这个人但订阅早就停了」，对玩家是同一件事。
-  if (!sub) return send(res, 200, NOBODY);
-
-  // Subscribed, but no password was ever set — the tab closed before the
-  // window appeared, or the subscription predates passwords existing. Say so
-  // rather than handing the subscription over: the app sends them to set one.
-  if (!account) return send(res, 200, { ...NOBODY, needsPasscode: true });
-
-  // Minted on the first sign-in that sees a yearly subscription, which is
-  // what gets them to someone who subscribed before the gift existed. The
-  // account remembers them, so signing in again hands back the same two
-  // rather than printing a fresh pair every launch.
-  await ensureGiftCodes(address, account, periodOf(sub));
-  return send(res, 200, {
-    ...answer(sub, customer.email || address, issued || account.token),
-    gifts: await liveGifts(account),
-    inbox: await liveInbox(account),
-    inboxUnseen: account.inboxUnseen || 0,
-  });
 }

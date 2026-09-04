@@ -319,13 +319,17 @@ export function openSetPasswordWindow(
     <p class="auth-msg" id="pwMsg" role="status"></p>
     <div class="btn-row">
       <button class="primary" id="pwGo">${fromCode ? s.bindTitle : s.setPwTitle}</button>
+      ${fromCode ? `<button class="icon-btn" id="pwLater">${s.bindLater}</button>` : ''}
     </div>
   `,
-    // Not dismissable. Someone who has just paid and has no password owns a
-    // subscription that lives in one browser and can never be moved; every
-    // way out of this window that is not "set one" leads there.
-    false,
+    // 刷卡的那扇不能点掉：刚付了钱、还没设密码的人，手上的订阅只活在这一个
+    // 浏览器里，永远搬不走；所有不是「设一个」的出路都通向那儿。
+    // 内部码的那扇能点掉：码一输进去权益就已经生效了，绑不绑账号是他自己的
+    // 事——这里只是建议（玩家的原话：「改为建议注册，不要一直弹窗然后不注
+    // 册就不能玩」）。以后想绑，状态窗里有《绑定到账户》。
+    fromCode,
   );
+  overlay.querySelector<HTMLButtonElement>('#pwLater')?.addEventListener('click', close);
 
   const form = overlay.querySelector<HTMLFormElement>('#pwForm')!;
   const input = overlay.querySelector<HTMLInputElement>('#pwNew')!;
@@ -388,7 +392,8 @@ export function openSetPasswordWindow(
  */
 export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
   const pending = pendingAccount();
-  if (pending) openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
+  // 只追刷卡的。内部码兑换后的绑定是建议，不在每次打开时再弹一遍。
+  if (pending && pending.kind !== 'code') openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
 }
 
 /**
@@ -523,10 +528,18 @@ export function openStatusWindow(lang: Lang, onChanged: () => void): void {
           : `<button class="icon-btn" id="statusManage">${s.manageSubscription}</button>
              <button class="icon-btn" id="statusSignOut">${s.signOutBtn}</button>`
       }
+      ${pendingAccount()?.kind === 'code' ? `<button class="icon-btn" id="statusBind">${s.bindNow}</button>` : ''}
       <button class="primary" id="statusClose">${s.closeBtn}</button>
     </div>
   `,
   );
+
+  // 内部码还只跟着这台设备走：想让它跟着自己走，从这儿绑到一个邮箱。
+  overlay.querySelector<HTMLButtonElement>('#statusBind')?.addEventListener('click', () => {
+    const pending = pendingAccount();
+    close();
+    if (pending) openSetPasswordWindow(lang, pending, '', onChanged);
+  });
 
   // Cancelling a web subscription happens on Creem's own portal page — they
   // hold the billing record, so it is never something this app pretends to do.

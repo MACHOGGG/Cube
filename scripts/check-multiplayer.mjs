@@ -716,16 +716,16 @@ await Promise.all([A, B].map((P) => P.page.waitForFunction(
 await A.page.click('#leaveRoomBtn');
 await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
 await A.page.click('#mpLeaveYes');
-const locked = await B.page.waitForSelector('#endOverlay.show', { timeout: 20000 })
+// 玩不了这块棋盘的人：不结算、不存档，一句话，按下去回主页（玩家定的）。
+const locked = await B.page.waitForSelector('#roomLockedOut', { timeout: 20000 })
   .then(() => true).catch(() => false);
-check('屋主散场，玩不了这块棋盘的人直接结算', locked);
+check('屋主散场，玩不了这块棋盘的人看到《屋主离开，小屋暂时解散，等一会再来？》', locked);
 if (locked) {
-  check('结算页最上面写着《屋主临时有事，小屋暂时解散》',
-    (await B.page.$eval('#endHostGone', (e) => e.textContent.trim())) === '屋主临时有事，小屋暂时解散',
-    await B.page.$eval('#endHostGone', (e) => e.textContent.trim()).catch(() => '（没有这一句）'));
-  check('那句话排在标题前面',
-    await B.page.evaluate(() =>
-      document.getElementById('endHostGone')?.nextElementSibling?.id === 'endTitle'));
+  check('那句话一字不差',
+    (await B.page.$eval('#roomLockedOut .tag-line', (e) => e.textContent.trim())) === '屋主离开，小屋暂时解散，等一会再来？');
+  check('没有结算页', !(await B.page.$('#endOverlay.show')));
+  await B.page.click('#roomLockedOk');
+  check('按 ok → 主页', await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
 }
 
 await browser.close();

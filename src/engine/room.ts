@@ -35,8 +35,10 @@ export interface RoomPlayer {
   score: number;
   finished: boolean;
   isHost: boolean;
-  /** 服务器有一阵子没听见这台设备了。屋主 away 就是「屋主在修电缆」。 */
+  /** 服务器有一阵子没听见这台设备了（30 秒）。屋主 away 就是「屋主等一下就来」。 */
   away: boolean;
+  /** 太久没听见了（90 秒，服务器的 ABSENT_MS）。屋主 gone 就是「离家出走，小屋暂时解散」。 */
+  gone: boolean;
   /** Every round banked so far — what the closing card ranks people by. */
   total: number;
   /** The best single round, and the quickest one, over the whole room. */
@@ -86,6 +88,28 @@ export interface RoomState {
   /** 这一局的倒数从几数起。可能有新手的局多四秒：8（横屏玩法 9）。 */
   countFrom: number | null;
   serverNow: number;
+}
+
+/** 小屋此刻在哪一段。 */
+export type RoomPhase = 'lobby' | 'countdown' | 'playing' | 'roundOver' | 'ended';
+
+/**
+ * 小屋此刻在哪一段——只在这儿判一次。
+ *
+ * 从前小屋页、局中的名单、几层提示各自拿 ended / round / startAt / roundOver
+ * 拼一遍，拼法稍有出入就是一处「该等的没等、不该等的等了」。这一份状态里的
+ * 那几个字段，从此只有这一个函数读它们的组合：
+ *   · ended     —— 屋主散场了，剩下的只有那张战绩卡；
+ *   · lobby     —— 还没开过局，或者上一局打完、下一局还没开；
+ *   · countdown —— 开赛时刻定了、还没到（4-3-2-1）；
+ *   · playing   —— 开赛了，还有人没交卷；
+ *   · roundOver —— 这一局人人都交了卷，等屋主挑下一局。
+ */
+export function roomPhase(st: RoomState): RoomPhase {
+  if (st.ended) return 'ended';
+  if (!st.round || !st.startAt || !st.seed) return 'lobby';
+  if (st.roundOver) return 'roundOver';
+  return st.startAt > serverTime() ? 'countdown' : 'playing';
 }
 
 export type RoomError =

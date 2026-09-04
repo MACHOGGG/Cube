@@ -1,6 +1,8 @@
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { isLayoutLocked } from '../engine/geniusContent';
+import { isGenius } from '../engine/subscription';
+import { pushLayer } from '../engine/backNav';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor } from './roomNotices';
 import {
   avatarSvg,
@@ -230,22 +232,44 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   };
 
   /**
-   * 屋主散场，而这一局这个人自己打不了（天才特供的棋盘，他没订阅也没有生效
-   * 的内部码）——那就到此为止，把结算摆出来，顶上写清楚为什么。
+   * 屋主散场，而这一局这个人自己打不了：天才特供的棋盘、无限反转、老虎机，
+   * 他没订阅也没有生效的内部码。
    *
-   * 借《完成》那颗键走完整套结算：先忘掉座位，于是它不再问「交卷吗」而是直
-   * 接结算，这一局的分数、用时、战绩图一样不少。
+   * 不结算、不存档、不上榜——一句话说清楚，按下去回主页（玩家的原话：「会跳
+   * 出《屋主离开，小屋暂时解散，等一会再来？》的标语，确认后就是回到主页没
+   * 有游戏结束结算也没有成绩储存」）。有权限的人不走这儿，走 goSolo 原地转成
+   * 单人接着打。
+   *
+   * 先把这一局停住：话还挂着的时候表不能再走——走完了就成了一场自动结算。
    */
-  const settleLocked = () => {
-    goSolo();
-    const banner = document.createElement('p');
-    banner.className = 'end-gone-note';
-    banner.id = 'endHostGone';
-    banner.textContent = s.mpHostGoneMidRun;
-    // 插在标题前面，而不是整块的最前面——那一格是 .end-hazard-bg（炸弹玩法
-    // 那个 💥 的底衬），它是装饰，这句话该紧挨着它说明的那个标题。
-    document.querySelector(`#${END_OVERLAY_ID} #endTitle`)?.before(banner);
-    document.querySelector<HTMLButtonElement>('#finishBtn')?.click();
+  const lockedMode = (st: RoomState) =>
+    isLayoutLocked(shapeId) || (!isGenius() && (st.flip || Boolean(st.slot)));
+  const lockedOut = () => {
+    dead = true;
+    stopWatching?.();
+    window.clearInterval(localTimer);
+    wait?.remove();
+    wait = null;
+    notice.remove();
+    forgetRoom();
+    // 房间局里这颗键藏着，但它还在、还接着 doPause：借它把表停住。
+    document.querySelector<HTMLButtonElement>('#stopBtn')?.click();
+    const box = document.createElement('div');
+    box.className = 'overlay opaque show';
+    box.id = 'roomLockedOut';
+    box.innerHTML = `
+      <div class="modal">
+        <p class="tag-line">${s.mpHostLeftLocked}</p>
+        <div class="btn-row"><button class="primary" id="roomLockedOk">${s.mpOk}</button></div>
+      </div>
+    `;
+    document.body.appendChild(box);
+    const go = () => {
+      box.remove();
+      handlers.onHome();
+    };
+    pushLayer(go, box);
+    box.querySelector<HTMLButtonElement>('#roomLockedOk')?.addEventListener('click', go);
   };
 
   /** 这间小屋结束了：屋主按了《解散小屋》，或者他的终端没了。 */
@@ -308,7 +332,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       // 这一条要排在 notice 前面：《Ohno！小屋被取消》那一层是给「已经没在
       // 打」的人看的，正打着的人不该被一张遮罩糊住盘面。
       if (roomOver(state) && !runFinished()) {
-        return isLayoutLocked(shapeId) ? settleLocked() : goSolo();
+        return lockedMode(state) ? lockedOut() : goSolo();
       }
       // 我已经交了卷、正等着别人，这时候小屋散了：当下的分数立刻算数，直接
       // 出那张战绩卡。要排在 notice 前面——那一层是「还没有结果」时的提示，

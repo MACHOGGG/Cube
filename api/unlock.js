@@ -3,13 +3,13 @@ import { send, readBody } from './_creem.js';
 import {
   EMAIL_RE,
   PASS_RE,
-  entitlementOf,
   loadAccount,
   normalizeEmail,
   rotateToken,
   saveAccount,
   unblock,
 } from './_accounts.js';
+import { resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { del, get, set, storeConfigured } from './_store.js';
 import { mailConfigured, sendMail } from './_mail.js';
@@ -115,8 +115,18 @@ async function confirm(res, address, { code, password }) {
   const account = await loadAccount(address);
   if (!account) return send(res, 400, { error: 'expired' });
   unblock(account, pin);
-  rotateToken(account);
+  const issued = rotateToken(account);
   await saveAccount(address, account);
   await del(key(address));
-  return send(res, 200, entitlementOf(account, address));
+  // 答的是这个账号此刻真正的权益：内部码账号看本地到期日，刷卡订阅去问
+  // Creem——和登录那一支同一个函数（api/_entitlement.js）。原来这里只看本地
+  // 日期，刷卡的人重设完密码会被告知「不是天才」，前端就报「网络出错」，而
+  // 密码其实已经改好了。
+  try {
+    const { status, body } = await resolveEntitlement(address, account, issued);
+    return send(res, status, body);
+  } catch (err) {
+    console.error('unlock entitlement lookup failed:', err?.message || err);
+    return send(res, 502, { error: 'upstream' });
+  }
 }

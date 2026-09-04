@@ -13,6 +13,9 @@ import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { hasSeenTutorial, type TutorialShape } from '../i18n';
 import {
+  type Avatar,
+  type RoomError,
+  type RoomState,
   avatarSvg,
   createRoom,
   currentRoom,
@@ -21,19 +24,17 @@ import {
   forgetRoom,
   iAmHost,
   joinRoom,
-  leaveRoom,
-  randomAvatar,
-  serverTime,
-  watchRoom,
-  type Avatar,
-  type RoomError,
-  type RoomState,
   lastPlayedRound,
   latestRoomState,
+  leaveRoom,
   markRoundPlayed,
   nudgeHost,
+  randomAvatar,
   reportScore,
+  roomPhase,
+  serverTime,
   setLearning,
+  watchRoom,
 } from '../engine/room';
 
 /**
@@ -447,7 +448,8 @@ export function renderMultiplayerPage(
      * 以和交卷之后那一页是同一张脸（roomNotices.showWaitPanel）。
      */
     const sideline = (st: RoomState) => {
-      const benched = st.round > 0 && !st.roundOver && st.round <= playedRound;
+      const phase = roomPhase(st);
+      const benched = (phase === 'countdown' || phase === 'playing') && st.round <= playedRound;
       if (!benched) {
         sideWait?.remove();
         sideWait = null;
@@ -612,9 +614,13 @@ export function renderMultiplayerPage(
   function paintPlayers(state: RoomState) {
     const label = container.querySelector<HTMLElement>('#mpPlayersLabel');
     if (label) {
+      // 「玩家 3/8」：坐着几个人、一共几把椅子（玩家的原话：「每进来一位都显示
+      // 相对应的 3/8 或者 5/8（算上屋主）」）。走了的人不占椅子。
+      const seated = state.players.filter((p) => !p.left).length;
+      const head = `${s.mpPlayers} ${seated}/${state.seats}`;
       label.textContent = state.round
-        ? `${s.mpPlayers} · ${s.mpRoundLabel.replace('{n}', String(state.round))}`
-        : s.mpPlayers;
+        ? `${head} · ${s.mpRoundLabel.replace('{n}', String(state.round))}`
+        : head;
     }
     const list = container.querySelector<HTMLElement>('#mpPlayers');
     if (!list) return;
@@ -964,7 +970,7 @@ export function renderMultiplayerPage(
     // 一下单局结算页然后消失」。画好之后照常轮询：小屋页自己的 watchRoom
     // 一进去就先取一次最新状态，散了、开了下一局，都由它接着处理。
     const known = latestRoomState();
-    if (known && !known.ended) {
+    if (known && roomPhase(known) !== 'ended') {
       if (known.roundOver) markRoundPlayed(known.round);
       playedRound = Math.max(playedRound, lastPlayedRound());
       return renderLobby(known);

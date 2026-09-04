@@ -127,14 +127,6 @@ export function redeemCode(
   });
 }
 
-/** Sign back in to a code-granted account on another device. */
-export function accountLogin(email: string, password: string): Promise<AccountResult> {
-  return guard(async () => {
-    const { status, reply } = await post('/api/login', { email, password });
-    return toResult(status, reply);
-  });
-}
-
 /** Whether the mail went out — never whether the address had an account. */
 export type UnlockRequest = { sent: true } | { sent: false; reason: AccountFailure };
 

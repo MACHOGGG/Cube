@@ -11,8 +11,16 @@
  * （见 isGenius 末尾）：商店版还没上线，挡不着任何真买了的人，而信它就是
  * 「客户端说一句话就白嫖」。
  */
-import { configured as creemConfigured, findSubscription } from './_creem.js';
-import { codeHolder, loadAccount, normalizeEmail } from './_accounts.js';
+import { NOBODY, answer, configured as creemConfigured, findSubscription, periodOf } from './_creem.js';
+import {
+  codeHolder,
+  ensureGiftCodes,
+  entitlementOf,
+  liveGifts,
+  liveInbox,
+  loadAccount,
+  normalizeEmail,
+} from './_accounts.js';
 
 /**
  * 认出「你是谁」，并且证明得了。
@@ -44,6 +52,63 @@ export async function identify({ email, accountToken, holderCode }) {
 
 /** 我们自己发出去的权益（内部码或已绑定的账号）这一刻还有效吗。 */
 export const ownGrantLive = (account) => Boolean(account && (account.until || 0) > Date.now());
+
+/**
+ * 「这个账号此刻是什么权益」——登录、重设密码之后都答这一句，只写一遍。
+ *
+ * 两条路各归各：
+ *   · 内部码开通的账号（kind === 'code'，或者我们自己记的到期日还没到）：权益
+ *     在我们自己的库里，看本地那份到期日就是答案，Creem 从没听说过这个人。
+ *   · 刷卡订阅的账号：本地不存到期日（设计如此），只能去问 Creem；问不了
+ *     （没配密钥）是 503「答不了」，不是「不是天才」。
+ *
+ * 原来登录那一支（api/subscription.js）分得清，重设密码那一支（api/unlock.js）
+ * 只看本地日期：刷卡的人重设完密码被告知「不是天才」，前端就报「网络出错」，
+ * 而密码其实早改好了。现在两支都走这里。
+ *
+ * @param address 已经证明是本人的邮箱（凭密码或令牌——由调用方把关）。
+ * @param account 已读出的账号，没有就 null。
+ * @param issued  这一次刚换发的令牌（没换就不给，沿用账号上那把）。
+ * @returns {{ status: number, body: object }}
+ */
+export async function resolveEntitlement(address, account, issued) {
+  if (account && (account.kind === 'code' || ownGrantLive(account))) {
+    return {
+      status: 200,
+      body: {
+        ...entitlementOf(account, address),
+        kind: 'code',
+        gifts: await liveGifts(account),
+        inbox: await liveInbox(account),
+        inboxUnseen: account.inboxUnseen || 0,
+      },
+    };
+  }
+  if (!creemConfigured()) return { status: 503, body: { error: 'notConfigured' } };
+  let found;
+  try {
+    found = await findSubscription(address);
+  } catch (err) {
+    // 查无此人：对玩家就是「没有订阅」。别的错往上抛，让调用方按 502 答。
+    if (err?.status === 404) return { status: 200, body: NOBODY };
+    throw err;
+  }
+  const { customer, sub } = found;
+  if (!sub) return { status: 200, body: NOBODY };
+  // 订阅是活的，可从来没设过密码（窗口出现前标签页就关了）：说出来，让
+  // 应用送他去设一个，而不是把订阅直接交出去。
+  if (!account) return { status: 200, body: { ...NOBODY, needsPasscode: true } };
+  await ensureGiftCodes(address, account, periodOf(sub));
+  return {
+    status: 200,
+    body: {
+      ...answer(sub, customer?.email || address, issued || account.token),
+      gifts: await liveGifts(account),
+      inbox: await liveInbox(account),
+      inboxUnseen: account.inboxUnseen || 0,
+    },
+  };
+}
 
 /**
  * 这个人现在是不是天才。identify 已经认过的，把 account 一起传进来省一次读。

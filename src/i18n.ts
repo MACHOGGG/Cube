@@ -178,6 +178,9 @@ export interface I18nStrings {
   /** 内部码换来的东西，绑到一个邮箱上，好换设备时取回。 */
   bindTitle: string;
   bindHint: string;
+  /** 内部码兑换后的绑定窗：这一颗是「以后再说」；状态窗里那一颗是「绑定到账户」。 */
+  bindLater: string;
+  bindNow: string;
   bindTaken: string;
   redeemCodePlaceholder: string;
   /** 内部码本身过了使用期限。 */
@@ -312,7 +315,8 @@ export interface I18nStrings {
   /** 屋主把座位交回去了，这间房再也开不了下一局。 */
   mpRoomCancelled: string;
   /** 屋主散场时，还在打的人看到的那句话。 */
-  mpHostGoneMidRun: string;
+  /** 屋主中途散场，而这个人没权限单独打这个玩法：一句话，按下去回主页。 */
+  mpHostLeftLocked: string;
   /** 知道了。 */
   mpOk: string;
   /** 屋主还在，只是这会儿听不见他——网络卡了，不是走了。 */
@@ -550,6 +554,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLater: 'Later',
     bindTitle: 'Save it to an address',
     bindHint: 'Your insider code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
+    bindLater: 'Later',
+    bindNow: 'Save it to an address',
     bindTaken: 'That address already has an account. Use another one, or write to us.',
     redeemCodePlaceholder: 'e.g. K7M2QD',
     codeExpired: 'That insider code has passed its use-by date.',
@@ -645,10 +651,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeaveAnyway: 'Leave anyway',
     mpStay: 'Stay',
     mpFinishConfirm: 'Done?',
-    mpRoomCancelled: 'Oh no — the room is gone',
-    mpHostGoneMidRun: 'Something came up for the host; the room has broken up for now',
+    mpRoomCancelled: 'The host has wandered off — the room is closed for now',
+    mpHostLeftLocked: 'The host has left and the room is closed for now — come back in a bit?',
     mpOk: 'ok',
-    mpHostFixing: 'The host is fixing the cables — hang on',
+    mpHostFixing: 'The host will be right back',
     mpErrNoRoom: 'No room with that code.',
     mpErrFull: 'That room is full.',
     mpErrStarted: 'That game has already started.',
@@ -865,6 +871,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLater: 'Plus tard',
     bindTitle: 'Rattachez-le à une adresse',
     bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
+    bindLater: 'Plus tard',
+    bindNow: 'Rattacher à une adresse',
     bindTaken: 'Cette adresse a déjà un compte. Utilisez-en une autre, ou écrivez-nous.',
     redeemCodePlaceholder: 'ex. K7M2QD',
     codeExpired: 'Ce code Génie a dépassé sa date limite.',
@@ -960,10 +968,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeaveAnyway: 'Partir quand même',
     mpStay: 'Rester',
     mpFinishConfirm: 'Terminé ?',
-    mpRoomCancelled: 'Oh non — la salle a disparu',
-    mpHostGoneMidRun: 'L’hôte a eu un imprévu ; la salle se dissout pour cette fois',
+    mpRoomCancelled: 'L’hôte est parti — la salle est fermée pour l’instant',
+    mpHostLeftLocked: 'L’hôte est parti, la salle est fermée pour l’instant — revenez un peu plus tard ?',
     mpOk: 'ok',
-    mpHostFixing: 'L’hôte répare les câbles, un instant',
+    mpHostFixing: 'L’hôte revient tout de suite',
     mpErrNoRoom: 'Aucune salle avec ce code.',
     mpErrFull: 'Cette salle est pleine.',
     mpErrStarted: 'Cette partie a déjà commencé.',
@@ -1180,6 +1188,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLater: '稍後再說',
     bindTitle: '綁定到一個信箱',
     bindHint: '內部碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
+    bindLater: '以後再說',
+    bindNow: '綁定到帳戶',
     bindTaken: '這個信箱已經有帳號了。換一個，或者寫信給我們。',
     redeemCodePlaceholder: '例如 K7M2QD',
     codeExpired: '這個內部碼已經過了使用期限。',
@@ -1275,10 +1285,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeaveAnyway: '還是離開',
     mpStay: '留下',
     mpFinishConfirm: '完成了嗎？',
-    mpRoomCancelled: 'Ohno！小屋被取消',
-    mpHostGoneMidRun: '屋主臨時有事，小屋暫時解散',
+    mpRoomCancelled: '屋主離家出走了，小屋暫時解散',
+    mpHostLeftLocked: '屋主離開，小屋暫時解散，等一會再來？',
     mpOk: 'ok',
-    mpHostFixing: '屋主修理電纜中，稍等',
+    mpHostFixing: '屋主等一下就來',
     mpErrNoRoom: '沒有這個小屋號碼。',
     mpErrFull: '小屋滿了。',
     mpErrStarted: '這一局已經開始了。',
@@ -1495,6 +1505,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwLater: '稍后再说',
     bindTitle: '绑定到一个邮箱',
     bindHint: '内部码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
+    bindLater: '以后再说',
+    bindNow: '绑定到账户',
     bindTaken: '这个邮箱已经有账号了。换一个，或者写信给我们。',
     redeemCodePlaceholder: '例如 K7M2QD',
     codeExpired: '这个内部码已经过了使用期限。',
@@ -1590,10 +1602,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpLeaveAnyway: '还是离开',
     mpStay: '留下',
     mpFinishConfirm: '完成了吗？',
-    mpRoomCancelled: 'Ohno！小屋被取消',
-    mpHostGoneMidRun: '屋主临时有事，小屋暂时解散',
+    mpRoomCancelled: '屋主离家出走了，小屋暂时解散',
+    mpHostLeftLocked: '屋主离开，小屋暂时解散，等一会再来？',
     mpOk: 'ok',
-    mpHostFixing: '屋主修理电缆中，稍等',
+    mpHostFixing: '屋主等一下就来',
     mpErrNoRoom: '没有这个小屋号码。',
     mpErrFull: '小屋满了。',
     mpErrStarted: '这一局已经开始了。',

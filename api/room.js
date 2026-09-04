@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { isGenius as isGeniusClaim } from './_entitlement.js';
-import { expire, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
+import { expire, hdel, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
 
 /**
  * Multiplayer rooms: a four-digit code, two to four players, one board.
@@ -42,7 +42,7 @@ import { expire, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
  */
 const ROOM_CAPACITY = 12;
 /** How many seats are open to players today. Raise this, not the line above. */
-const OPEN_SEATS = 4;
+const OPEN_SEATS = 8;
 const MAX_PLAYERS = Math.min(OPEN_SEATS, ROOM_CAPACITY);
 const MIN_PLAYERS = 2;
 /**
@@ -100,6 +100,15 @@ const AWAY_MS = 30_000;
 const SEEN_WRITE_MS = 4000;
 const seatAway = (seat, meta) =>
   Date.now() - Math.max(seat.lastSeen || 0, seat.joinedAt || 0, meta.startAt || 0) > AWAY_MS;
+/**
+ * 太久没听见他了（ABSENT_MS）：这一局不再等他（roundOver 也是这个数）；他要
+ * 是屋主，屋里其他人看到的就是「屋主离家出走了，小屋暂时解散」。走了的
+ * （left）和关了网页的（closed）各有各的标记，不算在这儿。
+ */
+const seatGone = (seat, meta) =>
+  !seat.left &&
+  seat.lastSeen !== 0 &&
+  Date.now() - Math.max(seat.lastSeen || 0, seat.joinedAt || 0, meta.startAt || 0) > ABSENT_MS;
 
 /** The boards a host may choose. Anything else is not a mode we ship. */
 const MODES = new Set([
@@ -131,6 +140,19 @@ const seatLearning = (seat) =>
  * 时限是同一个数（ui/multiplayer.ts 的 KNOW_ASK_MS）。
  */
 const ASK_MS = 4000;
+/*
+ * ── 「多久算……」一览：全在这个文件里，别处不另定 ─────────────────────
+ *   SEEN_WRITE_MS    4 s   一台设备至多多久写一次「我还在」（轮询本身一秒一次）
+ *   AWAY_MS         30 s   多久没听见就算「暂时不在」——屋主 → 「屋主等一下就来」
+ *   ABSENT_MS       90 s   多久没听见就算「不在了」——这一局不再等他；屋主 →
+ *                          「屋主离家出走了，小屋暂时解散」（publicState 的 gone）
+ *   LEARN_IDLE_MS   20 s   看教学的人多久没点一下就不再等他
+ *   ASK_MS           4 s   开局前「会不会规则」那一问留的时间（倒数多数这几秒）
+ *   ROOM_TTL_S      20 min 小屋多久没人碰就过期
+ * 客户端那边只有一个：LATE_MS（5 s，开赛之后晚到多久就坐等待页），见
+ * ui/multiplayer.ts。小屋此刻在哪一段（等人 / 倒数 / 打着 / 打完 / 散了）由
+ * engine/room.ts 的 roomPhase 一处判定。
+ */
 const FAMILIES = new Set(['square', 'circle', 'triangle']);
 /** 一个玩法属于哪一族——按 id 前缀认，和教学的族是同一份。 */
 const familyOf = (mode) =>
@@ -250,6 +272,8 @@ function publicState(code, hash) {
       isHost: field.slice(2) === meta.host,
       /** 这会儿听不见他。屋主 away 的时候，别人那边会显示「稍等」。 */
       away: seatAway(value, meta),
+      /** 太久没动静了（ABSENT_MS）。屋主 gone 就是「离家出走，小屋暂时解散」。 */
+      gone: seatGone(value, meta),
       // What the evening adds up to, rather than this one round: the total
       // across every round banked so far, the best single round, and the
       // quickest one. The room's closing card is drawn from these.
@@ -351,12 +375,46 @@ const seatCount = (hash) =>
 const sameName = (a, b) =>
   String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 /**
- * 这把椅子现在没人坐：按过《离开》（left）、网页关掉了（bye 把 lastSeen 抹
- * 成 0）、或者早就没动静了（away）。正在看教学的不算——那台设备整页被教学
- * 占着、不轮询，看着像没人，人其实在。
+ * 这把椅子能不能让同名的人认领：只认按过《离开》（left）和网页真的关掉了
+ * （bye 把 lastSeen 抹成 0）的座位。
+ *
+ * 只是一阵子没心跳（away）的不算。那个人多半只是锁了屏、接了个电话，座位、
+ * 名字、分数都还是他的。从前这一条把 away 的座位也交给同名的人——而两个都
+ * 没取名字的人在服务器眼里名字一模一样（都是占位那一句），于是先来的人接
+ * 个电话回来，座位连同分数已经是后来那个人的了。正在看教学的也不算——那台
+ * 设备整页被教学占着、不轮询，看着像没人，人其实在。
  */
-const seatReclaimable = (seat, meta) =>
-  Boolean(seat.left) || seat.lastSeen === 0 || (seatAway(seat, meta) && !seatLearning(seat));
+const seatReclaimable = (seat) => (Boolean(seat.left) || seat.lastSeen === 0) && !seatLearning(seat);
+
+/**
+ * 屋里已经有人叫这个名字（还坐着的）：后来的加个编号——「起个名字 2」。同名
+ * 不再可能，认领座位那一条也就永远不会把两个陌生人当成一个人。
+ */
+function uniqueName(name, hash) {
+  const taken = new Set(
+    Object.entries(hash)
+      .filter(([k, v]) => k.startsWith('p:') && v && !v.left)
+      .map(([, v]) => String(v.name ?? '').trim().toLowerCase()),
+  );
+  if (!taken.has(name.trim().toLowerCase())) return name;
+  for (let n = 2; n < 100; n++) {
+    const candidate = `${name} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return name;
+}
+
+/**
+ * 占一把椅子：s:0 … s:N-1 里第一把空的。HSETNX 是原子的——两个人同一瞬间进
+ * 来，同一把椅子只有一个人坐得上；都坐不上就是满了。从前是「先数一遍人、再
+ * 写座位」两步，中间没有锁，最后一把椅子能被两个人同时坐上去。
+ */
+async function claimSlot(code, playerId) {
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    if (await hsetnx(roomKey(code), 's:' + i, playerId)) return i;
+  }
+  return -1;
+}
 
 // ---- the six things a room can be asked ---------------------------------
 
@@ -380,6 +438,7 @@ async function create(res, body) {
   for (let attempt = 0; attempt < 12; attempt++) {
     const code = String(randomInt(0, 10000)).padStart(4, '0');
     if (!(await hsetnx(roomKey(code), 'meta', meta))) continue;
+    await hset(roomKey(code), 's:0', playerId);
     await hset(roomKey(code), 'p:' + playerId, {
       token,
       name: cleanName(body.name) || 'Host',
@@ -387,6 +446,7 @@ async function create(res, body) {
       score: 0,
       finished: false,
       joinedAt: Date.now(),
+      slot: 0,
       seen: cleanSeen(body.seen),
     });
     await expire(roomKey(code), ROOM_TTL_S);
@@ -419,14 +479,26 @@ async function join(res, body) {
   // 关掉网页的、早就没动静的座位也认：掉线的人多半连 localStorage 里的座位
   // 一起丢了（换了浏览器、清了数据），只剩名字能证明他是谁。正在报到的座位
   // 不认，那是另一个恰好同名的人（seatReclaimable）。
+  // 屋主的椅子一律不认领：屋主身份不能换人（玩家定的）。他不在，屋里的人看
+  // 到的是「屋主等一下就来」；太久不回来就是「屋主离家出走了，小屋暂时解散」。
   const back = Object.entries(hash).find(
     ([field, seat]) =>
-      field.startsWith('p:') && seat && sameName(seat.name, name) && seatReclaimable(seat, hash.meta),
+      field.startsWith('p:') &&
+      seat &&
+      field.slice(2) !== hash.meta.host &&
+      sameName(seat.name, name) &&
+      seatReclaimable(seat),
   );
   if (back) {
     const [field, seat] = back;
     const token = id(16);
-    const next = { ...seat, token, lastSeen: Date.now(), learningAt: 0, seen: cleanSeen(body.seen) };
+    // 按过《离开》的座位早把椅子交回去了（见 leave）：回来先重新占一把。
+    let slot = seat.slot;
+    if (seat.left || slot === undefined) {
+      slot = await claimSlot(code, field.slice(2));
+      if (slot < 0) return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
+    }
+    const next = { ...seat, token, slot, lastSeen: Date.now(), learningAt: 0, seen: cleanSeen(body.seen) };
     delete next.left;
     // 这一局已经开了：他手上的棋盘早没了，这一局不等他，下一局再入。走之前
     // 打出来的那点分留着，下一次 start 时 bankRound 照常记账。
@@ -441,23 +513,21 @@ async function join(res, body) {
     });
   }
 
-  // The seat count travels with the refusal, not just with a room you are
-  // already inside. Joining from the home page is where "满了" is actually
-  // read, and until now that path had nothing to go on but a number written
-  // into the app — right today only because OPEN_SEATS happens to be 4.
-  if (seatCount(hash) >= MAX_PLAYERS) {
-    return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
-  }
-
   const playerId = id(8);
   const token = id(16);
+  // The seat count travels with the refusal, not just with a room you are
+  // already inside. Joining from the home page is where "满了" is actually
+  // read. 占椅子是原子的（claimSlot），两个人同时按《加入》也塞不进第九个。
+  const slot = await claimSlot(code, playerId);
+  if (slot < 0) return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
   await hset(roomKey(code), 'p:' + playerId, {
     token,
-    name,
+    name: uniqueName(name, hash),
     avatar: distinctAvatar(cleanAvatar(body.avatar), hash),
     score: 0,
     finished: false,
     joinedAt: Date.now(),
+    slot,
     /** 看过哪几族的教学。开局时用来判「这一局可不可能有新手」（见 start）。 */
     seen: cleanSeen(body.seen),
   });
@@ -668,6 +738,17 @@ async function end(res, body) {
   const banked = {};
   for (const [field, seat] of Object.entries(hash)) {
     if (!field.startsWith('p:') || !seat) continue;
+    // 只给真的打完了这一局的人记账：交了卷的，和已经走了的（leave 标成
+    // finished）。正打到一半的人，这一局在小屋里不算数——他手上那盘棋原地转
+    // 成单人接着打（ui/scoreboard.ts 的 goSolo），分归他自己。从前是不管打没
+    // 打完，一律把此刻棋盘上的分当「最终成绩」记进战绩图，被腰斩的分谁都不认。
+    const done = Boolean(seat.finished) || Boolean(seat.left);
+    if (!done) {
+      const next = { ...seat, score: 0, finished: false, seconds: null };
+      banked[field] = next;
+      await hset(roomKey(code), field, next);
+      continue;
+    }
     const next = bankRound(seat, hash.meta.round, hash.meta.startAt || 0);
     // The round just played is what the card is about, so it stays readable
     // rather than being zeroed for a next round that will never come.
@@ -702,6 +783,8 @@ async function leave(res, body) {
       left: Date.now(),
       finished: true,
     });
+    // 椅子交回去，后面的人才坐得进来（座位是按 s:i 原子占的，见 claimSlot）。
+    if (seat.slot !== undefined) await hdel(roomKey(code), 's:' + seat.slot);
     // 走的正是大家在等的那个学生：不等了，大家继续。
     if (seatLearning(seat)) {
       const fresh = await hgetall(roomKey(code));

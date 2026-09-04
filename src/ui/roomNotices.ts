@@ -230,6 +230,8 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
   // 屋主把网页关掉了，也是同一件事：他的终端没了，这间屋子开不出下一局。
   // closed 只有 bye 那条路会置上（pagehide 且不进 bfcache），切应用、锁屏都
   // 不算——那些仍然走下面的 away，屋里等他回来。
-  if (!host || host.left || host.closed) return 'gone';
+  // 太久没动静（gone，服务器的 ABSENT_MS）也算走了：屋主离家出走，小屋暂时
+  // 解散——屋主身份不换人，屋里的人各自散去，等他回来再开一间。
+  if (!host || host.left || host.closed || host.gone) return 'gone';
   return host.away ? 'away' : null;
 }
