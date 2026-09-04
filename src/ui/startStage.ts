@@ -11,7 +11,7 @@
  * CSS，不会各画各的走样。区别只在倒数由谁驱动：单人是本地的秒表，多人是服务
  * 器给的开赛时刻。
  */
-import { gameIcon, layoutIconIsWide, ICON_BOMB_BADGE, ICON_MULTIPLAYER } from './homeIcons';
+import { gameIcon, layoutIconIsWide, ICON_BOMB_BADGE, ICON_FLIP_MODE, ICON_MULTIPLAYER } from './homeIcons';
 
 export interface StartStageOpts {
   /** 玩法 id，决定摆哪张图。 */
@@ -52,6 +52,20 @@ export function modeBadges(bomb?: boolean, room?: boolean): string[] {
   if (bomb) marks.push(`<span class="start-mark mode-badge--bomb">${ICON_BOMB_BADGE}</span>`);
   if (room) marks.push(`<span class="start-mark mode-badge--room">${ICON_MULTIPLAYER}</span>`);
   return marks;
+}
+
+/**
+ * 《无限反转》开局页上那一块：左边这个玩法的图标，右边一句话——连击加成减弱、
+ * 没有时间奖励。玩家的原话：「在进入游戏时，会显示一个图标和文字解释说，相对
+ * 应的，连击翻倍得分会减弱，时间奖励会取消」。单人开局页和小屋的倒数页都摆它
+ * （放在 extra 里，倒数底下），样子和转手机那块提示是一套。
+ */
+export function flipHintHtml(copy: string): string {
+  return `
+  <div class="flip-hint">
+    <span class="flip-hint-icon" aria-hidden="true">${ICON_FLIP_MODE}</span>
+    <p class="flip-hint-copy">${copy}</p>
+  </div>`;
 }
 
 export function startStageHtml(o: StartStageOpts): string {

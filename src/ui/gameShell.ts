@@ -1,8 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { CTL_BACK, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
-import { countFrom, playCountdown, startStageHtml } from './startStage';
-import { ICON_FLIP_MODE } from './homeIcons';
+import { countFrom, flipHintHtml, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
@@ -126,17 +125,6 @@ export interface ShellRefs {
  * board's own piece colours inside — rather than a stock rotate glyph, and
  * it only ever appears where turning really helps.
  */
-/**
- * 《无限反转》开局页上那一块：左边这个玩法的图标，右边一句话——连击加成减弱、
- * 没有时间奖励。玩家的原话：「在进入游戏时，会显示一个图标和文字解释说，相对
- * 应的，连击翻倍得分会减弱，时间奖励会取消」。样子和转手机那块提示是一套。
- */
-const FLIP_HINT = (copy: string) => `
-  <div class="flip-hint">
-    <span class="flip-hint-icon" aria-hidden="true">${ICON_FLIP_MODE}</span>
-    <p class="flip-hint-copy">${copy}</p>
-  </div>`;
-
 const ROTATE_HINT = (copy: string | null) => `
   <div class="rotate-hint${copy ? '' : ' rotate-hint--bare'}">
     <svg class="rotate-hint-phone" viewBox="0 0 120 120" aria-hidden="true">
@@ -276,7 +264,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         countId: 'startCount',
         emblem: meta.slotTargets ? slotMachineHtml() : undefined,
         extra: meta.flip
-          ? FLIP_HINT(s.flipScoringHint)
+          ? flipHintHtml(s.flipScoringHint)
           : meta.landscape
             ? ROTATE_HINT(landscapePlayed() ? null : s.rotateHint)
             : '',

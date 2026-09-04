@@ -95,7 +95,7 @@ await page.click('.slot-pick-opt[data-family="square"]');
 await page.waitForSelector('#startOverlay.show', { timeout: 8000 });
 check('开局页倒数底下有那块说明：图标 + 文字', (await has(page, '#startOverlay .flip-hint .flip-hint-icon svg')) && (await has(page, '#startOverlay .flip-hint-copy')));
 const hint = await page.$eval('#startOverlay .flip-hint-copy', (el) => el.textContent.trim());
-check('说明写的是连击减弱 ×1.2、没有时间奖励', hint.includes('×1.2') && hint.includes('时间'), hint);
+check('说明写的是连击减弱 ×1.5、没有时间奖励', hint.includes('×1.5') && hint.includes('时间'), hint);
 const markHtml = await page.$eval('#startOverlay .start-marks', (el) => el.innerHTML);
 // 玩家给的 SVG 里每个 id 都带着文件名前缀（customIcons.ts）：base-square-… 是方块那张，timed-… 是秒表。
 check('开局页摆的是方块那张图，不是秒表', markHtml.includes('base-square-') && !markHtml.includes('timed'), markHtml.slice(0, 80));
@@ -148,7 +148,8 @@ await page.click('#flipBack');
 await page.waitForTimeout(300);
 check('再《退出》→ 主菜单', await has(page, '.home-page'));
 
-// 5. 屋主替小屋挑玩法：按到无限反转只提示
+// 5. 屋主替小屋挑玩法：按到无限反转进挑图形页（小屋那圈粉边还在），《退出》回主菜单，横幅还在
+//    （挑完真开局的那条路在 check-room-flip.mjs 里，那儿有两台浏览器）
 await page.click('#navProfile');
 await page.waitForSelector('#multiRow', { timeout: 8000 });
 await page.click('#multiRow');
@@ -159,11 +160,12 @@ await page.waitForSelector('#mpPick', { timeout: 15000 });
 await page.click('#mpPick');
 await page.waitForSelector('#roomPickBar', { timeout: 8000 });
 await page.click(FLIP_CARD);
-await page.waitForTimeout(400);
-check('屋主挑玩法时按无限反转：人还在主菜单，横幅还在', (await has(page, '.home-page')) && (await has(page, '#roomPickBar')));
-const msg = await page.$eval('#roomPickMsg', (el) => el.textContent.trim()).catch(() => '');
-check('横幅上写了「不是小屋玩法」那句', msg.length > 0 && !msg.includes('{'), msg);
-check('没有开进无限反转那一屏', !(await has(page, '.flip-page')) && !(await has(page, '.app--game')));
+await page.waitForSelector('.flip-page', { timeout: 8000 });
+check('屋主挑玩法时按无限反转：进挑图形页，小屋那圈粉边还在', await page.evaluate(() => document.body.classList.contains('is-room-host')));
+check('没有一个人开进局里', !(await has(page, '.app--game')));
+await page.click('#flipBack');
+await page.waitForTimeout(300);
+check('挑图形页《退出》→ 主菜单，替小屋挑玩法的横幅还在', (await has(page, '.home-page')) && (await has(page, '#roomPickBar')));
 
 check('一路没有页面报错', errors.length === 0, errors.join(' / '));
 await browser.close();

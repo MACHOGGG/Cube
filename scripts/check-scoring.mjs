@@ -15,7 +15,7 @@ if (!src) {
   console.error('用法: node scripts/check-scoring.mjs <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { createCascadeStepper, flipStreakDelta } = await import(src);
+const { createCascadeStepper, createToggleLedger, flipStreakDelta } = await import(src);
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -174,10 +174,65 @@ function board(faces) {
 // ---------------------------------------------------------------------------
 {
   const seq = [0, 1, 2, 3, 4, 9].map((chain) => flipStreakDelta(4, chain));
-  check('无限反转：4 分连着来 4、5、6、7、8，第十次 21', seq.join(',') === '4,5,6,7,8,21', seq.join(','));
+  check('无限反转：4 分连着来 4、6、9、14、20，第十次 154', seq.join(',') === '4,6,9,14,20,154', seq.join(','));
   check('无限反转：第一次不加成', flipStreakDelta(36, 0) === 36);
   check('无限反转：负数当 0', flipStreakDelta(4, -3) === 4);
   check('无限反转：整数，不带小数', Number.isInteger(flipStreakDelta(5, 2)), String(flipStreakDelta(5, 2)));
+}
+
+// ---------------------------------------------------------------------------
+// 5. 无限反转的账本：同一组正反各一次就停，动手之后不满五步拼回来也不算
+// ---------------------------------------------------------------------------
+{
+  // 四枚棋子，正反两面都凑得成图案（findMatches 无条件报同一组）——没有账本
+  // 的话会一直翻到 TOGGLE_STEP_CAP 才停。
+  //
+  // 真局里绕回来的组每一拍都带着至少一枚正面（相邻的另一枚正面同色补进来），
+  // 才过得了「至少一枚正面才算分」那道门；这里用一枚翻不动的棋子（face 永远
+  // 是 flavor）代替那种情形，只考账本，不考那道门。
+  const cells = [[0, 0], [0, 1], [0, 2], [0, 3]];
+  const tiles = new Map(cells.map(([r, c], i) => [key(r, c), { id: 100 + i, face: 'flavor', dotColor: 1 }]));
+  Object.defineProperty(tiles.get(key(0, 0)), 'face', { get: () => 'flavor', set() {} });
+  const cfg = {
+    tileAt: (r, c) => tiles.get(key(r, c)),
+    findLineBonuses: () => [],
+    onLineBonus: () => {},
+    resetMaskOnLineBonus: false,
+    findMatches: () => [{ cells, points: 4, label: '4连' }],
+    toggleOnMatch: true,
+  };
+  const labels = { pattern: '图案', line: '整线' };
+  const runChain = (ledger) => {
+    const stepper = createCascadeStepper(cfg, null, labels, ledger);
+    let n = 0;
+    for (let step = stepper.next(); step; step = stepper.next()) {
+      step.commit();
+      n++;
+    }
+    return n;
+  };
+  check('没有账本：同一组翻来翻去一直给分（到硬上限才停）', runChain(undefined) === 12, String(runChain(undefined)));
+
+  const ledger = createToggleLedger();
+  ledger.beginMove(1);
+  const first = runChain(ledger);
+  check('有账本：第 1 步只给两次（正面一次、反面一次）就停', first === 2, String(first));
+  check('给完两次棋子回到正面', [...tiles.values()].every((t) => t.face === 'flavor'));
+  ledger.beginMove(2);
+  check('第 2 步拼回同一组：不给', runChain(ledger) === 0);
+  ledger.beginMove(5);
+  check('第 5 步（隔 4 步）拼回来：还不给', runChain(ledger) === 0);
+  ledger.beginMove(6);
+  const again = runChain(ledger);
+  check('第 6 步（隔 5 步）拼回来：又给两次', again === 2, String(again));
+  ledger.beginMove(7);
+  check('紧接着又不给了', runChain(ledger) === 0);
+  // 换一枚棋子就是另一组，各记各的账。
+  tiles.set(key(0, 3), { id: 999, face: 'flavor', dotColor: 1 });
+  check('组里换了一枚棋子：是另一组，照给', runChain(ledger) === 2);
+  ledger.reset();
+  ledger.beginMove(8);
+  check('新的一局账本清空：照给', runChain(ledger) === 2);
 }
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

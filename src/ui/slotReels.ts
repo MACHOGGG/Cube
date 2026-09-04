@@ -10,7 +10,7 @@
  */
 import { custom } from './customIcons';
 import { renderPatternHintIcons } from '../engine/patternIcon';
-import { targetPatternDefs } from '../engine/targetIcon';
+import { slotFaceDefs } from '../engine/targetIcon';
 import { targetsOf, type Family, type TargetPattern } from '../engine/targets';
 
 /** 玩家画的那台机器。没有这个文件就退回一块素面板，转的东西照样在。 */
@@ -236,13 +236,12 @@ function backOut(t: number): number {
 /**
  * 一族的图案各画成一张小图示（和棋盘上那一排是同一套画法）。
  *
- * 一枚一枚画，各按各自的外框铺满窗口——不是给整族一个统一的方框。统一方框
- * 在棋盘那一排上是对的（那儿要让人看出「这个图案摊得更开」），可轮子的窗口
- * 只有六十来个像素高，统一之后连四枚的方阵都缩成一撮小点。这儿要的是「每
- * 一张都尽可能大」，认得出是什么比互相之间的比例更重要。
+ * 整族装进同一个横长方框（见 targetIcon 的 slotFaceDefs）：棋子一样大，每一张
+ * 都尽量顶满窗口。从前是各按各自的正方框铺满窗口——四枚的方阵大得很，一条
+ * 五连却缩成一排小点；玩家的原话：「放大一些，但维持统一的大小」。
  */
 const facesOf = (pool: readonly TargetPattern[]): string[] =>
-  pool.map((p) => `<span class="slot-face">${renderPatternHintIcons(targetPatternDefs([p]), 'zhHans')[0]}</span>`);
+  renderPatternHintIcons(slotFaceDefs(pool), 'zhHans').map((icon) => `<span class="slot-face">${icon}</span>`);
 
 /**
  * 两个滚筒各转什么、各停在哪一张、第几毫秒停。

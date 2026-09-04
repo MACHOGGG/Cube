@@ -1,6 +1,6 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
-import { countFrom, pushDigit, startStageHtml } from './startStage';
+import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { pushLayer, setScreenBack } from '../engine/backNav';
@@ -67,6 +67,8 @@ export interface MatchStart {
   seed: string;
   /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的。 */
   slot?: 'same' | 'own' | null;
+  /** 无限反转那一局：60 秒，得分翻面来回翻。 */
+  flip?: boolean;
 }
 
 export interface MultiplayerHandlers {
@@ -90,7 +92,7 @@ export interface MultiplayerHandlers {
    * 等人学教学那一屏底下的练习盘：把这个玩法的棋盘（练习模式）挂到 host
    * 里，回来的是拆它的函数。玩法都长在 main.ts 里，所以由它来挂。
    */
-  onPractice?: (host: HTMLElement, mode: string) => (() => void) | null;
+  onPractice?: (host: HTMLElement, mode: string, flip?: boolean) => (() => void) | null;
 }
 
 /** 一个玩法归哪一族的教学。布局变体没有自己的课，跟着它那一族走。 */
@@ -863,7 +865,7 @@ export function renderMultiplayerPage(
     practiceStop = null;
     setScreenBack(() => confirmLeaveRoom(lang, leaveSeat));
     const host = container.querySelector<HTMLElement>('#mpPractice');
-    if (host && state.mode && handlers.onPractice) practiceStop = handlers.onPractice(host, state.mode);
+    if (host && state.mode && handlers.onPractice) practiceStop = handlers.onPractice(host, state.mode, state.flip);
   }
 
   /** 把倒数收回去（有人临时说他不会规则）。轮询不动——它正是等的那件事。 */
@@ -907,7 +909,9 @@ export function renderMultiplayerPage(
           shapeId: mode,
           room: true,
           countId: 'mpTick',
-          extra: standingsStrip(state),
+          // 无限反转那一局：倒数底下先是那块说明（图标 + 连击减弱、没有时间奖
+          // 励），和单人开局页一样；再是实时排行。
+          extra: (state.flip ? flipHintHtml(s.flipScoringHint) : '') + standingsStrip(state),
         })}
       </div>
     `;
@@ -928,7 +932,7 @@ export function renderMultiplayerPage(
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
         playedRound = round;
-        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null });
+        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null, flip: state.flip });
         return;
       }
       // 服务器留的是四秒半（建议横着玩的玩法五秒半），多出来的半秒都算在第一

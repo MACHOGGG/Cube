@@ -30,6 +30,12 @@ export interface PatternDef {
    */
   extent?: number;
   /**
+   * 竖着的那一边另给一个尺度（不给就和 extent 一样，是个正方框）。老虎机的
+   * 窗口是横着的长方形：横的按最宽的图案、竖的按最高的图案各定一个，整族的
+   * 图案都装进同一个长方框，棋子一样大，又比塞进正方框里大得多。
+   */
+  extentY?: number;
+  /**
    * Fill each tile with fine diagonal lines instead of leaving it hollow.
    * For a pattern whose tiles don't touch (the diamond board's 1-2-1), an
    * outline-only drawing lets the gap between them read as one more tile;
@@ -85,7 +91,7 @@ function unitHalf(cells: IconCell[]): number {
   return u || 0.5;
 }
 
-function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: boolean): string {
+function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: boolean, extentY = extent): string {
   if (!cells.length) return '';
   const { minX, maxX, minY, maxY } = bbox(cells);
   // `extent` still holds one shape's icons to a common span where a board
@@ -96,7 +102,7 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: bool
   const w = (maxX - minX) * scale + pad * 2;
   const h = (maxY - minY) * scale + pad * 2;
   const extraX = extent ? Math.max(0, (extent * scale - (maxX - minX) * scale) / 2) : 0;
-  const extraY = extent ? Math.max(0, (extent * scale - (maxY - minY) * scale) / 2) : 0;
+  const extraY = extentY ? Math.max(0, (extentY * scale - (maxY - minY) * scale) / 2) : 0;
   const W = w + extraX * 2;
   const H = h + extraY * 2;
   const T = (x: number, y: number): [number, number] => [
@@ -148,7 +154,7 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: bool
 export function renderPatternHintIcons(patterns: PatternDef[], lang: Lang): string[] {
   return patterns.map((p) => {
     const label = p.labelKey ? (STRINGS[lang][p.labelKey] as string) : p.label;
-    return `<span class="pattern-icon" role="img" aria-label="${label}">${renderPatternIconSvg(p.cells, p.extent, p.hatched)}</span>`;
+    return `<span class="pattern-icon" role="img" aria-label="${label}">${renderPatternIconSvg(p.cells, p.extent, p.hatched, p.extentY)}</span>`;
   });
 }
 

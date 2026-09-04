@@ -270,14 +270,14 @@ function setPickingForRoom(code: string | null) {
  */
 /** 开局的请求正在路上：连点两张图只算第一张。 */
 let startingRound = false;
-async function startRoundFor(mode: string, slot?: 'same' | 'own') {
+async function startRoundFor(mode: string, slot?: 'same' | 'own', flip?: boolean) {
   const code = pickingForRoom;
   if (!code) return false;
   if (startingRound) return true;
   startingRound = true;
   const banner = document.getElementById('roomPickMsg');
   if (banner) banner.textContent = STRINGS[currentLang].workingLabel;
-  const begun = await startMatch(mode, slot);
+  const begun = await startMatch(mode, slot, flip);
   startingRound = false;
   if (begun.ok) {
     setPickingForRoom(null);
@@ -366,12 +366,9 @@ function showMenu() {
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onRandomTarget: () => showRandomTarget('menu'),
-    // 无限反转不是小屋玩法（服务器只认那八副棋盘加老虎机）：屋主替整屋挑玩
-    // 法时按到它，和计时、炸弹一样只提示一句，不让他一个人开进去。
-    onFlipMode: () => {
-      if (pickingForRoom) return void notAMultiplayerBoard();
-      showFlipMode();
-    },
+    // 屋主替整屋挑玩法时按到它也进挑图形那一屏：挑完不开单人局，而是把这一
+    // 族交给小屋（见 showFlipMode 的 room）。
+    onFlipMode: showFlipMode,
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: () => {
       mpOrigin = 'menu';
@@ -503,6 +500,9 @@ function showSlotIntro() {
  * 只从主菜单那张卡进来（个人主页里《更多玩法》那一行是陈列页，见
  * showModesShowcase），所以《退出》和返回键都回主菜单——从前一律回个人主页，
  * 从主菜单进来的人开局前一退就被送到了个人主页。
+ *
+ * 屋主在为整屋挑玩法时也走这一屏：挑完不开单人局，而是把这一族连同「无限反
+ * 转」的标记交给小屋，全屋一起倒数、一起打 60 秒（api/room.js 的 FLIP_MODES）。
  */
 function showFlipMode() {
   teardown();
@@ -517,6 +517,7 @@ function showFlipMode() {
         showGame(game, { flip: true, timeLimitSec: FLIP_SECONDS }, showFlipMode);
       },
       onGenius: () => openGeniusWindow(currentLang, showFlipMode),
+      room: pickingForRoom ? { onStart: (family) => void startRoundFor(family, undefined, true) } : undefined,
     },
     !isGenius(),
   );
@@ -654,13 +655,14 @@ function showMultiplayer() {
         });
       },
       // 等人学教学那一屏底下的练习盘：这一局的玩法，练习模式（不结算）。
-      onPractice: (host, mode) => {
+      onPractice: (host, mode, flip) => {
         const game = everyGame.find((g) => g.card.id === mode);
         if (!game) return null;
         // 练习盘不能是真局那副：这时候真局的种子还没种下（下一次开局才种），
         // 这里只是把上一局残留的种子清掉，保险。
         clearSeed();
-        const destroy = game.mount(host, () => {}, { lang: currentLang, practice: true });
+        // 无限反转那一局的练习盘也按无限反转的规矩来（翻来翻去、不消行）。
+        const destroy = game.mount(host, () => {}, { lang: currentLang, practice: true, flip: !!flip });
         // 开局页那一幕不要：直接开打（和小屋开局那一下同一个按钮）。
         requestAnimationFrame(() => host.querySelector<HTMLButtonElement>('#startBtn')?.click());
         return destroy;
@@ -696,11 +698,18 @@ function startMultiplayerRun(match: MatchStart) {
   const targets = match.slot
     ? drawPair(slotFamilyOf(match.mode), match.slot === 'same' ? seededRandom : Math.random) ?? undefined
     : undefined;
+  // 无限反转那一局：和单人那一局同一套规则（flip + 60 秒），只是全屋同一副牌。
+  const flip = !!match.flip;
   // A finished round goes back to the room, not to the home page: the scores
   // are still up there and the host has another board to pick. Only a device
   // that has somehow lost its seat falls through to the home page.
   const back = () => (currentRoom() ? showMultiplayer() : showMenu());
-  const destroyGame = game.mount(root, back, { lang: currentLang, targets });
+  const destroyGame = game.mount(root, back, {
+    lang: currentLang,
+    targets,
+    flip,
+    timeLimitSec: flip ? FLIP_SECONDS : undefined,
+  });
   // The countdown was the "get ready", and it ended for everyone at the same
   // instant. Leaving the start card up would undo exactly that: four players
   // would each press it a moment apart and the race would begin four times.

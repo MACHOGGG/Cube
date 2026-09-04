@@ -64,6 +64,8 @@ export interface RoomState {
   mode: string | null;
   /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的；别的局 null。 */
   slot: 'same' | 'own' | null;
+  /** 这一局是无限反转：60 秒，得分翻面来回翻（只开在方块和小球上）。 */
+  flip: boolean;
   /** What every device deals the board from. Null before the match starts. */
   seed: string | null;
   /** The agreed instant, on the server's clock. */
@@ -409,9 +411,13 @@ export function fetchState(): Promise<RoomResult<RoomState>> {
 }
 
 /** Host only: pick the board, and put everyone on the same countdown. */
-export function startMatch(mode: string, slot?: 'same' | 'own' | null): Promise<RoomResult<RoomState>> {
+export function startMatch(
+  mode: string,
+  slot?: 'same' | 'own' | null,
+  flip?: boolean,
+): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
-  return post<RoomState>({ action: 'start', mode, ...(slot ? { slot } : {}), ...session });
+  return post<RoomState>({ action: 'start', mode, ...(slot ? { slot } : {}), ...(flip ? { flip: true } : {}), ...session });
 }
 
 export function reportScore(

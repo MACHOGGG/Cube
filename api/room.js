@@ -109,6 +109,8 @@ const MODES = new Set([
 const AVATAR_SHAPES = new Set(['circle', 'triangle', 'square']);
 /** 随机得分目标能开在哪几副棋盘上——就是三个基础玩法。 */
 const SLOT_MODES = new Set(['square', 'circle', 'triangle']);
+/** 无限反转能开在哪几副棋盘上——基础方块和小球（玩家定的）。 */
+const FLIP_MODES = new Set(['square', 'circle']);
 /** Control characters, which a player's name has no business containing. */
 const CTRL_RE = /[\u0000-\u001F\u007F]/g;
 
@@ -281,6 +283,8 @@ function publicState(code, hash) {
     host: meta.host ?? null,
     mode: meta.mode ?? null,
     slot: meta.slot ?? null,
+    /** 这一局是无限反转（60 秒、得分翻面来回翻）。 */
+    flip: Boolean(meta.flip),
     seed: meta.seed ?? null,
     startAt: meta.startAt ?? null,
     /** 0 before the first match; every 开始 raises it by one. */
@@ -552,9 +556,14 @@ async function start(res, body) {
   if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
   if (!MODES.has(body.mode)) return send(res, 400, { error: 'mode' });
   if (seatCount(hash) < MIN_PLAYERS) return send(res, 409, { error: 'tooFew' });
+  // 无限反转：只开在方块和小球上，60 秒，得分翻面来回翻——客户端按这个标记
+  // 挂上那套规则；棋盘照旧从 seed 发，所以全屋仍是同一副牌。
+  const flip = body.flip === true && FLIP_MODES.has(body.mode);
   // 随机得分目标只开在三个基础棋盘上。'same'：全屋从同一个种子里抽同一对
   // 图案；'own'：各自抽各自的。棋盘两种情况都一样——它照旧从 seed 发。
-  const slot = SLOT_MODES.has(body.mode) && (body.slot === 'same' || body.slot === 'own') ? body.slot : null;
+  // 无限反转那一局没有老虎机。
+  const slot =
+    !flip && SLOT_MODES.has(body.mode) && (body.slot === 'same' || body.slot === 'own') ? body.slot : null;
 
   // The round that just ended is banked before the next one wipes the board,
   // because the closing card is the sum of all of them and a score only
@@ -578,6 +587,7 @@ async function start(res, body) {
     ...hash.meta,
     mode: body.mode,
     slot,
+    flip,
     round: (hash.meta.round || 0) + 1,
     // The one string from which every player builds the identical board.
     seed: id(8),

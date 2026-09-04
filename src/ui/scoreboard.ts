@@ -468,9 +468,10 @@ function wireEndPanel(s: I18nStrings, lang: Lang, handlers: RoomRunHandlers): ()
   const again = row.querySelector<HTMLButtonElement>('#restartBtn');
   if (host) {
     swap('restartBtn', s.restartBtn, () => {
-      const mode = latestRoomState()?.mode;
+      // 再开的是同一种局：同一副棋盘，老虎机 / 无限反转的标记也照旧。
+      const last = latestRoomState();
       handlers.onRoom();
-      if (mode) void startMatch(mode);
+      if (last?.mode) void startMatch(last.mode, last.slot, last.flip);
     });
   } else if (again) {
     again.hidden = true;

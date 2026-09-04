@@ -50,8 +50,8 @@ function cellsOf(pattern: TargetPattern): IconCell[] {
   }));
 }
 
-/** 一枚图案铺开来占多宽/多高（取大的那一边），用来给一排图示定统一的尺度。 */
-function span(cells: IconCell[]): number {
+/** 一枚图案铺开来横着占多宽、竖着占多高。 */
+function spanXY(cells: IconCell[]): [number, number] {
   const xs: number[] = [];
   const ys: number[] = [];
   for (const c of cells) {
@@ -59,7 +59,27 @@ function span(cells: IconCell[]): number {
     else if (c.kind === 'rect') xs.push(c.cx - c.half, c.cx + c.half), ys.push(c.cy - c.half, c.cy + c.half);
     else for (const [x, y] of c.points) xs.push(x), ys.push(y);
   }
-  return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+}
+
+/** 一枚图案铺开来占多宽/多高（取大的那一边），用来给一排图示定统一的尺度。 */
+function span(cells: IconCell[]): number {
+  const [w, h] = spanXY(cells);
+  return Math.max(w, h);
+}
+
+/**
+ * 老虎机滚筒里的那一整族：每一张都装进同一个长方框——横的按整族最宽的图案，
+ * 竖的按最高的——所以棋子一样大（玩家的原话：「放大一些，但维持统一的大小」），
+ * 而框是横着的，正好顺着窗口的形状，比各自塞进正方框里大得多。四周不留呼吸，
+ * 图本身还有一圈自己的边距（patternIcon 的 MARGIN），不会贴到窗框上。
+ */
+export function slotFaceDefs(pool: readonly TargetPattern[]): PatternDef[] {
+  const drawn = pool.map(cellsOf);
+  const spans = drawn.map(spanXY);
+  const extent = Math.max(1, ...spans.map(([w]) => w));
+  const extentY = Math.max(1, ...spans.map(([, h]) => h));
+  return pool.map((t, i) => ({ label: t.id, cells: drawn[i], extent, extentY }));
 }
 
 /**

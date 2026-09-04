@@ -1,7 +1,7 @@
 import type { ShellRefs } from '../ui/gameShell';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { createTimer, formatClock } from './timer';
-import { createStreakTracker, createCascadeStepper, flipStreakDelta, type CascadeConfig } from './scoring';
+import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
 import { trackGameStart, trackGameEnd, trackShare } from './analytics';
@@ -95,8 +95,10 @@ export interface GameControllerHooks {
    * 无限反转（见 ShapeGameOpts.flip）。这一局的计分和别的局不同：
    *   · 没有用时系数——综合得分里那一项恒为 1；
    *   · 连击不再是 ×1 / 1.5 / 2 / 2.5 加同一步里 ×3 的连锁，而是连续第 n 次
-   *     得分 = 单次得分 × 1.2^(n−1)，每次四舍五入取整（4 → 4.8≈5 → 5.76≈6 …）；
-   *     一步没得分就从头数。
+   *     得分 = 单次得分 × 1.5^(n−1)，每次四舍五入取整（4 → 6 → 9 → 13.5≈14 …）；
+   *     一步没得分就从头数；
+   *   · 同一组棋子正面、反面各得一次分就停，要动手才有下一次，而且不满五步
+   *     拼回来不算（scoring.ts 的 ToggleLedger）。
    */
   flip?: boolean;
   /** (Re)builds the shape's internal grid for a fresh game. */
@@ -212,6 +214,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.hudTimeEl.textContent = formatClock(sec);
   });
   const streak = createStreakTracker();
+  /** 无限反转的连锁账本（见 scoring.ts 的 createToggleLedger）；别的局没有。 */
+  const flipLedger = hooks.flip ? createToggleLedger() : null;
 
   const HOT_THRESHOLD = 60;
   function updatePerfDisplay() {
@@ -271,6 +275,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resolving = false;
     streak.reset();
     flipChain = 0;
+    flipLedger?.reset();
     scoreReel.reset();
     perf.reset();
     clearedDotColors = new Set();
@@ -508,10 +513,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     };
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
-    const stepper = createCascadeStepper(hooks.buildCascadeConfig(), mask, {
-      pattern: s.labelPattern,
-      line: s.labelWholeLine,
-    });
+    flipLedger?.beginMove(moves);
+    const stepper = createCascadeStepper(
+      hooks.buildCascadeConfig(),
+      mask,
+      { pattern: s.labelPattern, line: s.labelWholeLine },
+      flipLedger ?? undefined,
+    );
     const multiplier = streak.currentMultiplier();
     // A chain reaction within *this* move is rewarded on top of (not instead
     // of) the cross-move streak above: that streak's own multiplier is fixed
@@ -578,7 +586,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // raw product lands on halves — and a fractional score is wrong twice
       // over: "184.5" is not a score a player should see, and the digit reel
       // has no way to draw a decimal point (see scoreReel.setValue).
-      // 无限反转：连续第 n 次得分 = 单次得分 × 1.2^(n−1)，每次四舍五入；同一步里
+      // 无限反转：连续第 n 次得分 = 单次得分 × 1.5^(n−1)，每次四舍五入；同一步里
       // 的连锁也各算一次。跨步的 ×1.5/2/2.5 和同一步里的 ×3 在这一局都不用。
       const delta = hooks.flip
         ? flipStreakDelta(s.points, flipChain)

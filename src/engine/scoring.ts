@@ -53,11 +53,11 @@ export function createStreakTracker(): StreakTracker {
  * 无限反转的连击：连续第 n 次得分 = 单次得分 × base^(n−1)，每次四舍五入取整。
  *
  * `chain` 是这一次之前已经连续得了几次分（第一次是 0），同一步里的连锁也各算
- * 一次；一步没得分就归零（见 gameController 的 flipChain）。玩家定的数：4 分
- * 的图案连着来是 4、4.8≈5、5.76≈6、6.9≈7……不再是别的局那套 ×1.5/2/2.5 和同
- * 一步里的 ×3。
+ * 一次；一步没得分就归零（见 gameController 的 flipChain）。玩家定的数（底数
+ * 先是 1.2，后来提到 1.5）：4 分的图案连着来是 4、6、9、13.5≈14、20.25≈20……
+ * 不再是别的局那套 ×1.5/2/2.5 和同一步里的 ×3。
  */
-export const FLIP_STREAK_BASE = 1.2;
+export const FLIP_STREAK_BASE = 1.5;
 export function flipStreakDelta(points: number, chain: number, base = FLIP_STREAK_BASE): number {
   return Math.round(points * base ** Math.max(0, chain));
 }
@@ -94,11 +94,66 @@ export interface CascadeConfig {
 }
 
 /**
- * 无限反转一次连锁最多几拍。翻回正面的那几枚理论上可能再凑成一组、再翻回
- * 去；棋子的正反两面颜色几乎从不相同（一色只有一枚「自配」），所以真绕回来
- * 的机会很小，但「几乎」不是「从不」——给一道硬上限，永远转不到天荒地老。
+ * 无限反转一次连锁最多几拍——只是最后一道保险。真正管「同一组翻来翻去无限得
+ * 分」的是下面的账本（ToggleLedger）。
  */
 const TOGGLE_STEP_CAP = 12;
+
+/** 无限反转里同一组棋子最多连着给几次分：正面一次、翻过去反面一次。 */
+export const TOGGLE_SCORES_PER_GROUP = 2;
+/** 给满之后，隔多少步才能再给——不满这个数把那几枚挪走再挪回来也不算。 */
+export const TOGGLE_COOLDOWN_MOVES = 5;
+
+/**
+ * 无限反转的连锁账本：按棋子身份记每一组给过几次分。
+ *
+ * 玩家撞上的情形：几枚棋子正面凑成图案得分翻面，反面恰好也同色、也成图案，
+ * 又得分翻回正面，正面再得分……手都不用动，分一直涨。规矩（玩家定的）：同一
+ * 组正面得一次、反面得一次，之后要动手；动了手，距上次得分不满五步又把这几
+ * 枚拼回来，也不给分。
+ *
+ * 「同一组」按棋子的 id 认，不按格子位置：整行挪走再挪回来，棋子还是那几枚。
+ * 组的成员换了（多拉进来一枚、换掉一枚）就是另一组，各记各的账。
+ */
+export interface ToggleLedger {
+  /** 新的一步开始了——传进来的是这一局的第几步。 */
+  beginMove(moveNo: number): void;
+  /** 这一组现在能不能给分。 */
+  allows(ids: readonly number[]): boolean;
+  /** 这一组刚给了分，记一笔。 */
+  note(ids: readonly number[]): void;
+  reset(): void;
+}
+
+export function createToggleLedger(): ToggleLedger {
+  const book = new Map<string, { count: number; lastMove: number }>();
+  let moveNo = 0;
+  const keyOf = (ids: readonly number[]) => [...ids].sort((a, b) => a - b).join('|');
+  const cooled = (e: { lastMove: number }) => moveNo - e.lastMove >= TOGGLE_COOLDOWN_MOVES;
+  return {
+    beginMove(n) {
+      moveNo = n;
+    },
+    allows(ids) {
+      const e = book.get(keyOf(ids));
+      if (!e || cooled(e)) return true;
+      return e.count < TOGGLE_SCORES_PER_GROUP;
+    },
+    note(ids) {
+      const k = keyOf(ids);
+      const e = book.get(k);
+      if (!e || cooled(e)) book.set(k, { count: 1, lastMove: moveNo });
+      else {
+        e.count++;
+        e.lastMove = moveNo;
+      }
+    },
+    reset() {
+      book.clear();
+      moveNo = 0;
+    },
+  };
+}
 
 /**
  * One "beat" of a cascade — either a wave of whole-line bonuses or a wave of
@@ -189,6 +244,10 @@ export function createCascadeStepper(
   // group of already-flipped tiles can be slid back into the same shape as
   // often as you like and it will never score again, because there is
   // nothing left in it to flip.
+  //
+  // 无限反转是例外：翻过去还能翻回来，「总有一枚正面」拦不住它，所以那一局
+  // 带一本账（ledger）：同一组正反各给一次分就停，见 createToggleLedger。
+  ledger?: ToggleLedger,
 ): CascadeStepper {
   let mask = initialMask;
   let terminal = false;
@@ -224,15 +283,17 @@ export function createCascadeStepper(
     }
 
     const nextMask = new Set<string>();
+    const idsOf = (m: Match) => m.cells.map(([r, c]) => cfg.tileAt(r, c).id);
     const matches = dedupe(
       cfg
         .findMatches(mask)
         .filter((m) => m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor')),
-    );
+    ).filter((m) => !ledger || ledger.allows(idsOf(m)));
     if (matches.length) {
       let points = 0;
       const toFlip = new Set<string>();
       for (const m of matches) {
+        ledger?.note(idsOf(m));
         points += m.points;
         for (const [r, c] of m.cells) {
           nextMask.add(cellKey(r, c));

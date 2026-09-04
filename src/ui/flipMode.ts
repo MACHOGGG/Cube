@@ -29,6 +29,11 @@ export interface FlipModeHandlers {
   onStart: (family: FlipFamily) => void;
   /** 没开通的人点了那两张图里的任意一张。 */
   onGenius: () => void;
+  /**
+   * 屋主在为整屋挑玩法：挑完不开单人局，而是把这一族交给小屋，全屋一起倒数
+   * ——和老虎机那一屏的 room 一个意思。
+   */
+  room?: { onStart: (family: FlipFamily) => void };
 }
 
 export function renderFlipModePage(
@@ -62,7 +67,9 @@ export function renderFlipModePage(
   for (const btn of Array.from(root.querySelectorAll<HTMLButtonElement>('.slot-pick-opt'))) {
     btn.addEventListener('click', () => {
       if (locked) return handlers.onGenius();
-      handlers.onStart(btn.dataset.family as FlipFamily);
+      const family = btn.dataset.family as FlipFamily;
+      if (handlers.room) return handlers.room.onStart(family);
+      handlers.onStart(family);
     });
   }
   root.querySelector<HTMLButtonElement>('#flipBack')!.addEventListener('click', handlers.onBack);
