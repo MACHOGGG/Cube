@@ -180,3 +180,63 @@ html.no-clamp .home-page:not(.home-page--wide) .home-row > .home-icon-btn {
   flex: 0 1 auto;
   min-width: 0;
 }
+
+/* ---- 三处算不掉的式子，手写等价 ----------------------------------------
+   对照台跑完会列出「降级之后还没算掉的」——带百分比或 var() 的那些，运行时
+   算不出容器多宽，所以 oldKernel 换不掉，也就等于在 Chrome 61 上被整条丢掉。
+   逐条看过之后，这一版真正会碰到的是下面三处；剩下那些落在多人小屋和教学
+   挑选页，这一版没有那两块。 */
+
+/* 1. 开局倒数页那一排玩法标识
+      源样式：width: min(calc((100% - (marks-1) * gap) / marks), 46vh, 260px)
+             aspect-ratio: 1
+      两条都没了：宽度那条带百分比算不出来，比例那条是 88 才有的。
+
+      这里给一对写死的宽高，不走「内边距撑比例」那条老路——那条路要求元素的
+      宽度正好是父级的 100%，而这一排是「几等分」的，宽度只有父级的一部分；
+      内边距的百分比却永远按父级的宽度算，于是 260 宽的图配上 350 高，整块
+      拉成竖条（第一版就是这样，对照台量出来差 90px）。
+
+      实际上那道式子在手机上几乎总是取到最后那个上限：390 宽的屏幕算出来是
+      min(350, 388, 260)=260，横过来是 min(…, 234, 220)=220。所以直接给上限，
+      再给窄屏和横屏各一档，比拐着弯算准。 */
+html.no-clamp .start-mark,
+html.no-ratio .start-mark {
+  aspect-ratio: auto;
+  width: 260px;
+  height: 260px;
+  max-width: 100%;
+}
+html.no-clamp .start-mark--wide,
+html.no-ratio .start-mark--wide {
+  aspect-ratio: auto;
+  width: 400px;
+  height: 206px; /* 194 : 100 */
+  max-width: 100%;
+}
+@media (max-width: 340px) {
+  html.no-clamp .start-mark,
+  html.no-ratio .start-mark { width: 220px; height: 220px; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  html.no-clamp .start-mark,
+  html.no-ratio .start-mark { width: 220px; height: 220px; }
+  html.no-clamp .start-mark--wide,
+  html.no-ratio .start-mark--wide { width: 340px; height: 175px; }
+}
+
+/* 2. 结算页上那道分隔线：min(62%, 190px) 拆成宽度加上限，两条都是老写法。 */
+html.no-clamp .end-rule {
+  width: 62%;
+  max-width: 190px;
+}
+
+/* 3. 分享窗口的宽度上限：min(620px, 100%) 里的 100% 对一个块级元素是多余的
+      （它本来就不会超过容器），所以只留那道像素上限就等价。横屏那一版是
+      760px。 */
+html.no-clamp .share-modal {
+  max-width: 620px;
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  html.no-clamp .share-modal { max-width: 760px; }
+}

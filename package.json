@@ -13,7 +13,8 @@
     "ios:sync": "npm run build && cap sync ios",
     "ios": "npm run ios:sync && cap open ios",
     "build:wxgame": "node scripts/build-wxgame.mjs",
-    "build:xhs": "node xhs/build.mjs"
+    "build:xhs": "node xhs/build.mjs",
+    "check:xhs": "npm run build:xhs && node xhs/preview.mjs && node xhs/check-oldkernel.mjs && node xhs/check-oldcss.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

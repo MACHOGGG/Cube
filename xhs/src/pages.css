@@ -87,18 +87,21 @@
   font-size: 0.95rem; line-height: 1.7;
 }
 
-/* 这一条在两个地方用：成绩页点开的那一屏（父容器自己会居中），和结算页那个
-   分享窗口（父容器不会）。所以居中写在自己身上——`max-width` 卡住之后，左右
-   两侧的 auto 外边距把多出来的宽度对半分掉。
-   从前只写了 max-width 没写 auto：窗口比 420px 宽的时候，这一排就贴在左边，
+/* 这一条在两个地方用：成绩页点开的那一屏和结算页那个分享窗口。
+   居中交给**父容器**——两处的父容器都会居中（.xhs-run-body 是
+   align-items: center，.xhs-share-host 是下面那句 justify-content: center）。
+
+   为什么不写在自己身上（`margin-left/right: auto`）：那样确实也居中，但
+   Chrome 61 的降级层要把 gap 换成子项的外边距，换完得从容器身上收回多出来
+   的那一圈——而 auto 的那一侧收不了，两颗键就各窄 6px。父容器居中没有这个
+   毛病，效果一样。
+
+   从前两样都没有，只写了 max-width：窗口比 420px 宽的时候这一排贴在左边，
    而上面那张图是居中的，看着像歪的（玩家原话「两个按钮不是居中排放的」）。 */
 .xhs-share-bar {
   width: 100%; max-width: 420px;
-  margin-left: auto; margin-right: auto;
   display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
 }
-/* 竖屏里这层壳是普通的块，上面那句 auto 就够了；这里再兜一层，是给「壳自己
-   被撑得很宽」的情形（横屏的网格列）留的。 */
 .xhs-share-host { display: flex; justify-content: center; }
 .xhs-share-btn {
   flex: 1 1 0; min-width: 120px;

@@ -15,6 +15,17 @@
  *
  * 删接口的时机很关键：用 addInitScript，在页面任何脚本之前跑，所以模块顶层
  * 的代码（有几个模块加载时就调 flatMap）也在缺接口的环境里执行。
+ *
+ * 跑之前要先出一次包和预览页（这两个脚本读的是 xhs/preview.html，
+ * 那是构建产物，不在仓库里）：
+ *
+ *   npm run check:xhs        ← 三步一起跑，平时用这个
+ *
+ * 只想单独跑这一个的话，先手动来两步：
+ *
+ *   npm run build:xhs && node xhs/preview.mjs
+ *   node xhs/check-oldkernel.mjs
+ *
  */
 import { chromium } from 'playwright';
 import { pathToFileURL } from 'node:url';

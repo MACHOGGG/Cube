@@ -398,6 +398,26 @@ const px = (v: string): number => {
 };
 
 /**
+ * 把 --sg 里那个长度换成像素。
+ *
+ * 不能直接 parseFloat：自定义属性的值是**原样存着的一串记号**，不做单位换
+ * 算——`gap: 4vw` 存进去还是 "4vw"，parseFloat 读出来是 4，于是 844 宽的屏幕
+ * 上本该 33.8px 的缝变成了 4px（对照台在挑图形那一页横屏量出来 15px）。
+ * 走 toPx 那一套换（它认 px / rem / vw / vh / vmin / vmax），em 再按这个元素
+ * 自己的字号折一次。剩下换不了的（百分比之类，这一版没有）当 0。
+ */
+function lenPx(value: string, el: HTMLElement): number {
+  const t = value.trim();
+  if (!t) return 0;
+  const rootFont = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const direct = toPx(t, rootFont);
+  if (direct !== null) return direct;
+  const em = /^([+-]?[\d.]+)em$/i.exec(t);
+  if (em) return parseFloat(em[1]) * (parseFloat(getComputedStyle(el).fontSize) || 16);
+  return 0;
+}
+
+/**
  * 哪些元素身上有 `auto` 外边距——那几道不能碰。
  *
  * 弹性布局里的 auto 外边距是「把多出来的空白平分给我」的意思，游戏页正是靠
@@ -457,6 +477,68 @@ function collectAutoMargins(css: string): AutoRule[] {
   return out;
 }
 
+/**
+ * 这一轮我们往哪些元素的哪一侧写过外边距，以及写之前它本来是多少。
+ *
+ * 「本来是多少」很重要：缝是**加在**元素原有外边距之上的，不是顶掉它。
+ * 分享那一排里的说明文字自己带着 20px 的下边距，第一版直接写 6px 把它顶掉，
+ * 整块矮了 20px（对照台在分享窗口那一屏逮到的）。
+ *
+ * 每一轮开头先把上一轮写过的清干净，这样读到的就是样式表里真正的值——
+ * 横竖屏一转，媒体查询换了一套边距，也不会拿着上一轮的旧底数去加。
+ */
+interface Wrote {
+  /** 样式表里本来的值。 */
+  base: number;
+  /** 这一轮往上加了多少。 */
+  extra: number;
+  /** 我们写进去的那个字符串，清的时候拿它对一下。 */
+  text: string;
+}
+const WROTE = new Map<HTMLElement, Map<string, Wrote>>();
+
+/**
+ * 把上一轮写进去的清掉，好让下一轮读到样式表里真正的值。
+ *
+ * 只清「现在还是我们写的那个值」的那些。别人后来改过就撒手——boardResize
+ * 就是这样：它在棋盘摆好之后给那一格钉 `style.margin = 'auto'`，而 auto 是
+ * 「把空白平分给我」，一清就没了，下一轮再读它就不是 auto，缝会被硬写上去，
+ * 整页往上缩一截（对照台在游戏页量出来 33px）。
+ */
+function clearWrites(): void {
+  WROTE.forEach((sides, el) => {
+    sides.forEach((w, side) => {
+      const style = el.style as unknown as Record<string, string>;
+      if (style[side] === w.text) style[side] = '';
+    });
+  });
+  WROTE.clear();
+}
+
+/**
+ * 在这一侧**原有的**外边距上加 extra 像素（原有的值只在这一轮开头读一次）。
+ * auto 的那一侧不碰。返回「这次写下去和上次不一样吗」——折行那一支靠它判断
+ * 排稳了没有。
+ */
+function addSide(el: HTMLElement, side: string, extra: number): boolean {
+  if (isAutoSide(el, side)) return false;
+  let sides = WROTE.get(el);
+  if (!sides) {
+    sides = new Map<string, Wrote>();
+    WROTE.set(el, sides);
+  }
+  const had = sides.get(side);
+  const base =
+    had !== undefined ? had.base : px((getComputedStyle(el) as unknown as Record<string, string>)[side]);
+  // 同一侧写第二次是**改写**，不是叠加：折行那一支会量了排、排了再量，跑
+  // 两轮，叠加的话第二轮会把缝加成双份（对照台在分享窗口量出来多了 12px）。
+  const text = base + extra + 'px';
+  const same = had !== undefined && had.extra === extra;
+  (el.style as unknown as Record<string, string>)[side] = text;
+  sides.set(side, { base, extra, text });
+  return !same;
+}
+
 let AUTO_RULES: AutoRule[] = [];
 
 /** 这个元素这一侧的外边距是 auto 吗（写在样式表里的，或者行内钉的）。 */
@@ -485,8 +567,9 @@ function isAutoSide(el: HTMLElement, side: string): boolean {
  * 一侧加会把整排推歪半道缝）；折下来的第二行也跟着有了行距。
  */
 export function applyGapFallback(root: ParentNode): void {
+  clearWrites();
   const all = root.querySelectorAll<HTMLElement>('*');
-  const wrapHosts: [HTMLElement, number, number][] = [];
+  const wrapHosts: [HTMLElement, number, number, boolean][] = [];
   for (let i = 0; i < all.length; i++) {
     const el = all[i];
     const cs = getComputedStyle(el);
@@ -497,8 +580,8 @@ export function applyGapFallback(root: ParentNode): void {
     const parts = g.split(/\s+/);
     const rowRaw = (cs.getPropertyValue('--srg').trim() || '').replace('none', '');
     const colRaw = (cs.getPropertyValue('--scg').trim() || '').replace('none', '');
-    const rg = px(rowRaw || parts[0]);
-    const cg = px(colRaw || parts[1] || parts[0]);
+    const rg = lenPx(rowRaw || parts[0], el);
+    const cg = lenPx(colRaw || parts[1] || parts[0], el);
 
     // 网格容器一行就够：grid-gap 这个名字 Chrome 57 就认。
     if (disp.indexOf('grid') >= 0) {
@@ -544,18 +627,10 @@ export function applyGapFallback(root: ParentNode): void {
 
     for (let k = 0; k < live.length; k++) {
       const kid = live[k];
-      const put = (side: string, value: string): boolean => {
-        // auto 的那一侧不碰：那是「把空白平分给我」，写死就把它顶掉了。
-        if (isAutoSide(kid, side)) return false;
-        (kid.style as unknown as Record<string, string>)[side] = value;
-        return true;
-      };
       if (wraps) {
-        put('marginTop', rg / 2 + 'px');
-        put('marginBottom', rg / 2 + 'px');
-        put('marginLeft', cg / 2 + 'px');
-        put('marginRight', cg / 2 + 'px');
-        wrapHosts.push([el, rg, cg]);
+        // 折行的那种交给下面 spreadWrapped 统一处理：它要先看清楚谁和谁落在
+        // 同一行，才知道哪一道缝该加、哪一道不该。
+        if (k === 0) wrapHosts.push([el, rg, cg, rowish]);
         continue;
       }
       const first = k === 0;
@@ -565,8 +640,8 @@ export function applyGapFallback(root: ParentNode): void {
             : dir === 'column-reverse' ? 'marginBottom'
               : 'marginTop';
       const amount = rowish ? cg : rg;
-      // 每次都写绝对值（第一个写 0），所以反复跑不会越加越多。
-      if (put(side, first ? '0px' : amount + 'px') || first) continue;
+      if (first) continue; // 头一个前面没有缝
+      if (addSide(kid, side, amount)) continue;
       // 这一侧是 auto，加不上去。可这一道缝还是得有——它是**两个**子项之间的
       // 空当，写在谁身上都行，所以改写到上一个的另一侧去。
       //
@@ -574,56 +649,79 @@ export function applyGapFallback(root: ParentNode): void {
       // 均分），直接跳过的话四个子项之间只剩一道缝，另外两道被 auto 悄悄吸收
       // 掉——总高度不变，但三段空当不再一样大，棋盘整个往上挪一截（对照台量
       // 出来 9px）。
-      const back = MIRROR[side];
-      const prev = live[k - 1];
-      if (!isAutoSide(prev, back)) {
-        (prev.style as unknown as Record<string, string>)[back] = amount + 'px';
-      }
+      addSide(live[k - 1], MIRROR[side], amount);
     }
   }
   for (let i = 0; i < wrapHosts.length; i++) {
-    trimWrapHost(wrapHosts[i][0], wrapHosts[i][1], wrapHosts[i][2]);
+    spreadWrapped(wrapHosts[i][0], wrapHosts[i][1], wrapHosts[i][2], wrapHosts[i][3]);
   }
 }
 
 /**
- * 会折行那种容器的收边。
+ * 会折行那种容器：把缝加在**真正相邻**的两个子项之间。
  *
- * 子项四周各加了半道缝，所以整块比原来大了一整道：左右各半、上下各半。gap
- * 只在**中间**加空，边上不加，所以要把多出来的这一圈从容器身上减回去
- * （第一次跑对照台，得分图案那一排就因为这个高了 20px）。
+ * 第一版是「每个子项四周各加半道，容器四周各减一整道收回来」。那套在纸上
+ * 是对的，落到实处一路漏水：负外边距只有在宽度是 auto 的时候才真的把盒子
+ * 撑宽，写死宽度的（分享那一排是 `width: 100%`）只是挪出去，里面每个子项
+ * 多出的那半道就白吃掉内容宽度；改成放宽 width 之后，它又把横屏那一列网格
+ * 撑开、把战绩图挤窄。补一处漏一处。
  *
- * 减的是「它本来的外边距」减半道缝，所以原值得先记下来——不记的话第二次跑
- * 读到的是上一次写进去的值，会一路减下去。写在 data 属性上，重画也带得走。
- * auto 的那几侧照旧不碰。
+ * 现在照 gap 本来的意思做：缝只在**两个挨着的**子项之间，边上不加。
+ * 先量一遍谁和谁落在同一行，然后
+ *   · 不是本行头一个 → 主轴那一侧加一道缝
+ *   · 不是头一行     → 交叉轴那一侧加一道缝
+ * 容器一动不动，也就没有挪位置、撑宽度这些连锁反应。
+ *
+ * 分行是按量出来的坐标，不是按「算算应该几个一行」——加了缝之后可能有一项
+ * 被挤到下一行去，那正是 gap 本来也会发生的事，所以再量一遍、再排一次，
+ * 排到不变为止（最多两轮，这一版的几处一轮就稳）。
  */
-function trimWrapHost(el: HTMLElement, rg: number, cg: number): void {
-  const KEY = 'sgOrig';
-  const data = el.dataset as unknown as Record<string, string | undefined>;
-  if (data[KEY] === undefined) {
-    const cs = getComputedStyle(el);
-    data[KEY] = [cs.marginTop, cs.marginRight, cs.marginBottom, cs.marginLeft].join('|');
-  }
-  const orig = (data[KEY] as string).split('|');
-  // 一根轴上一共要收掉一整道缝（子项在两头各多出半道）。两边都能收就一边
-  // 一半；有一边是 auto 收不了，就把整道都放到另一边——不然这一块会比原来
-  // 高出半道，而它上面那个 auto 外边距会把这半道从空当里让出来，看着就是
-  // 棋盘整体往上跳了一截（对照台量出来 9px）。
-  const cut = [0, 0, 0, 0];
-  const axis = (a: number, b: number, total: number) => {
-    const okA = !isAutoSide(el, SIDES[a]);
-    const okB = !isAutoSide(el, SIDES[b]);
-    if (okA && okB) {
-      cut[a] = total / 2;
-      cut[b] = total / 2;
-    } else if (okA) cut[a] = total;
-    else if (okB) cut[b] = total;
-  };
-  axis(0, 2, rg); // 上下
-  axis(1, 3, cg); // 左右
-  for (let i = 0; i < 4; i++) {
-    if (isAutoSide(el, SIDES[i])) continue;
-    (el.style as unknown as Record<string, string>)[SIDES[i]] = px(orig[i]) - cut[i] + 'px';
+function spreadWrapped(el: HTMLElement, rg: number, cg: number, rowish: boolean): void {
+  const dir = getComputedStyle(el).flexDirection || 'row';
+  const mainSide = rowish
+    ? (dir === 'row-reverse' ? 'marginRight' : 'marginLeft')
+    : (dir === 'column-reverse' ? 'marginBottom' : 'marginTop');
+  const crossSide = rowish ? 'marginTop' : 'marginLeft';
+
+  for (let round = 0; round < 2; round++) {
+    const kids: HTMLElement[] = [];
+    const box = el.children;
+    for (let i = 0; i < box.length; i++) {
+      const kid = box[i] as HTMLElement;
+      if (!kid.style) continue;
+      const kc = getComputedStyle(kid);
+      if (kc.display === 'none' || kc.position === 'absolute') continue;
+      kids.push(kid);
+    }
+    if (kids.length < 2) return;
+
+    // 分行：看主轴上的位置有没有「往回退」。
+    //
+    // 一行之内，后一个总在前一个的前面（横排就是 left 更大）；折了行，位置会
+    // 退回行首，也就是变小。退回去了就是新的一行。
+    //
+    // 第一版是按 top 一样不一样分的，错在 align-items: center 上：同一行里
+    // 两块高矮不同，top 本来就不一样，于是被当成两行，中间那道缝就没加——
+    // 挑图形那一页横屏时两块贴到一起（对照台量出来 17px）。
+    const rects = kids.map((k) => k.getBoundingClientRect());
+    const back = (i: number) => {
+      const a = rects[i];
+      const b = rects[i - 1];
+      if (dir === 'row') return a.left <= b.left;
+      if (dir === 'row-reverse') return a.left >= b.left;
+      if (dir === 'column-reverse') return a.top >= b.top;
+      return a.top <= b.top;
+    };
+    let lineStart = 0;
+    let changed = false;
+    for (let i = 0; i < kids.length; i++) {
+      if (i > 0 && back(i)) lineStart = i;
+      const firstInLine = i === lineStart;
+      const firstLine = lineStart === 0;
+      if (addSide(kids[i], mainSide, firstInLine ? 0 : cg)) changed = true;
+      if (addSide(kids[i], crossSide, firstLine ? 0 : rg)) changed = true;
+    }
+    if (!changed) return;
   }
 }
 
