@@ -6,6 +6,7 @@ import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
 import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
+import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
 import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
@@ -118,6 +119,20 @@ const recordSources: RecordSource[] = [
   // 《无限反转》只有基础方块和小球有。
   ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip', mode: ' · ∞' })),
 ];
+
+/**
+ * 一局归到哪个本地存档键下——从云上取回战绩时要按这个把每一局放回原处。
+ *
+ * 存的时候用的是「这副棋盘的 bestKey + 模式后缀」（见各个 shapes 文件末尾那
+ * 一行），这里照同一条式子倒推回去。炸弹压过计时：定时炸弹存的也是 _bomb。
+ */
+const runKeyFor: RunKeyFor = (data) => {
+  const card = recordSources.find((src) => src.card.id === data.shapeId)?.card;
+  if (!card) return null;
+  const mk = data.modeKey;
+  const suffix = mk === 'flip' ? '_flip' : mk === 'bomb' || mk === 'bombTimed' ? '_bomb' : mk === 'timed' ? '_timed' : '';
+  return card.bestKey + suffix;
+};
 
 /** 《无限反转》一局多长：玩家定的 60 秒（原来 120 秒）。 */
 const FLIP_SECONDS = 60;
@@ -447,6 +462,8 @@ syncScreenClass();
 function showAccountPage(tab: AuthTab, restore = false) {
   teardown();
   trackScreen('profile');
+  // 刚登录完最常落在这一页：顺手把云上那份战绩接回这台设备。
+  void restoreCloudRuns(runKeyFor);
   renderAccountPage(
     root,
     tab,
@@ -802,6 +819,13 @@ function showRoomFinal(state: RoomState) {
 function showRecordsPage() {
   teardown();
   trackScreen('records');
+  // 先把云上那份战绩接回这台设备，回来了就把这一页重画一遍。
+  //
+  // 这一步是补的，不是等的：先照本地有的画出来，取回来了再多几行。取不到
+  // （没登录、没网）就什么都不发生——这一页本来什么样还是什么样。
+  void restoreCloudRuns(runKeyFor).then((added) => {
+    if (added > 0 && root.querySelector('.records-page')) showRecordsPage();
+  });
   // 锁着的排行榜上那颗《成为 Slides 天才》：开订阅那一窗，关掉之后回到这一页。
   //
   // 《重新登录》直接开登录那一窗，不绕个人主页。绕不通：这台设备本地还以为
@@ -952,6 +976,8 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
 function boot() {
   // 返回键那套（见 backNav.ts）先立好：底下一条根、上面一条哨兵。
   installBackNav();
+  // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。
+  void restoreCloudRuns(runKeyFor);
   const savedLang = loadLang();
   // Analytics starts before the first screen so the visit is counted even if
   // the player closes the tab on the language page. It is given the saved
