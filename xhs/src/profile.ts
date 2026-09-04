@@ -147,7 +147,7 @@ export function renderProfilePage(
     <div class="records-panel xhs-about">
       <p class="xhs-about-line">这里是 Slides 的小红书版，开放五个单机玩法。</p>
       <p class="xhs-about-line">Slides 是一款原创的滑动补偿拼图游戏。通过滑动、翻面、消除得分解谜。它上手极其简单，可是想要取得高分却不容易，考验玩家的高智商，需要在最少的行动、最短的时间里得到最多的分数。</p>
-      <p class="xhs-about-line">完整版有多人小屋在线对战、slides天才特供玩法、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！详情请访问</p>
+      <p class="xhs-about-line">完整版有多人小屋在线对战、Slides 天才特供玩法、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！详情请访问</p>
       <p class="xhs-about-site">${SITE}</p>
       <p class="xhs-about-line">后续可能推出 APP 版，敬请期待。</p>
     </div>
