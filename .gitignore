@@ -29,3 +29,4 @@ slides-simulator.html
 
 # 小工具预览页：由 node xhs/preview.mjs 生成，不是源文件。
 xhs/preview.html
+.tmp-oldcss/

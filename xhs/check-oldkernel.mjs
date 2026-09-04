@@ -103,6 +103,10 @@ for (const key of list) {
     hasTouch: true,
   });
   await ctx.addInitScript(STRIP);
+  // 顺便把样式降级层也强制打开：真的 Chrome 61 上这两件事是同时发生的
+  // （接口缺、CSS 新写法也缺），分开测就漏了它们凑在一起的那一份。
+  // CSS 那边逐个盒子的对照在 xhs/check-oldcss.mjs。
+  await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));

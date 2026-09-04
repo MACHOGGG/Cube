@@ -36,6 +36,7 @@ import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
+import { installOldKernel } from './oldKernel';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
 import { renderRunSheet } from './runSheet';
@@ -92,12 +93,20 @@ function teardown() {
   activeDestroy?.();
   activeDestroy = null;
   root.innerHTML = '';
+  // 离开这一屏就摘掉「正在玩」那个标记，见下面 showGame 上的说明。
+  document.documentElement.classList.remove('is-playing');
 }
 
 /** 开一局。除了 lang，选项原样交给网页版那个 mount。 */
 function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   teardown();
   activeDestroy = game.mount(root, onBack, { ...opts, lang: LANG });
+  // 「正在玩」这个标记要钉在 <html> 上：游戏页的底色、藏底排、禁掉页面滚动
+  // 这三件事，src/style.css 里各写了两遍——一遍用 body:has(.app--game)，一遍
+  // 用 html.is-playing。:has 是 Chrome 105 才有的，老内核上只剩后面那一遍，
+  // 而钉这个类的是网页版的 src/main.ts，这一版没有它。不钉的话，老安卓上一
+  // 进游戏底色不变、页面还能上下滑。
+  document.documentElement.classList.add('is-playing');
   enhanceShareOverlay();
   setScreenBack(onBack);
 }
@@ -264,6 +273,11 @@ extra.id = 'xhs-styles';
 // （降级层要能盖住前面所有人）。
 extra.textContent = pagesCss + '\n' + baselineCss;
 document.head.appendChild(extra);
+
+// 样式装完之后立刻上 Chrome 61 降级层：它要就地改写上面这两块
+// （把 clamp/min/max 算成 px、svh 换成 vh、env 换成默认值、gap 换成子项的
+// 外边距），所以必须排在两块都进了 <head> 之后。新内核上它什么也不做。
+installOldKernel();
 
 installBackNav();
 // 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进主菜单。

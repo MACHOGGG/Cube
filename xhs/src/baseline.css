@@ -1,24 +1,182 @@
 /*
- * Chrome 61 基线层——**只有小红书这一版加载它**。
+ * Chrome 61 基线层——只有小红书这一版加载它。
  *
- * 小工具的最低内核是 Android 8.1 出场的 Chrome / WebView 61（规范见
- * .claude/skills/minitool-zip-builder/references/css-compatibility.md）。
- * 网页版那份 src/style.css 用了大量它不认识的 CSS：flex gap、clamp()、
- * min()/max()、aspect-ratio、dvh/svh、:has()、color-mix()……浏览器遇到不认
- * 识的声明会**整条丢掉**，遇到不认识的选择器会**整条规则丢掉**，页面不会
- * 报错，只会散架。
+ * 分工写在 xhs/src/oldKernel.ts 的开头：能算出来的（clamp / min / max /
+ * svh / dvh / env / gap）由那支代码在运行时就地改写样式表，一个数字只写一遍；
+ * 算不出来的写在这里——它们要的不是「把这个值换个写法」，而是「换一种排法」。
  *
- * 这个文件的活儿就是在后面补一层「它认得的写法」。规矩：
+ * 每条都挂在 oldKernel.ts 钉的那几个类下面（no-ratio / no-inset / no-has /
+ * no-colormix）。认得的内核上一条也不生效。
  *
- *   · 只补，不改。src/style.css 一个字不动——那是网页版正在跑的东西。
- *   · 按功能点补，不维护两套完整样式表（规范明说的，两套迟早会漂移）。
- *   · 新写法留着当增强层：认得的内核照旧用 gap、clamp，认不得的落到这一层。
- *
- * 排在 main.ts 里 style.css 之后 import，所以同名规则以这里为准。
- *
- * 【施工中】这一层按屏幕逐块补，补一块在下面记一块。还没补完的部分在新内核
- * 上不受影响（那边本来就用得上新写法），只影响 Chrome 61 那一档。
+ * 排在 src/style.css 之后 import（见 main.ts），所以同名规则以这里为准。
  */
 
-/* 还没有内容——先占位，让 main.ts 的 import 有东西可引。
-   下一步：flex gap → 子项 margin（139 处里落在这一版屏幕上的那些）。 */
+/* ---- aspect-ratio (Chrome 88) -----------------------------------------
+   老办法：高度写 0，用「上内边距按宽度的百分比算」把盒子撑成想要的比例，
+   里面那张图绝对定位铺满。
+   只补这一版真正用到的三处（主菜单那些图标格）——别的屏这一版没有。 */
+/* 每条降级规则都先把新写法本身关掉（aspect-ratio: auto / inset: auto）。
+   在真的 Chrome 61 上这一句会被整条丢掉，等于没写——那儿本来就没有这个属性。
+   它是给「在新浏览器上强制跑降级层」那条路用的（oldKernel.ts 的后门）：不关
+   掉的话新浏览器会两套一起算，对照台量出来的就不是老内核真正会看到的排版。 */
+html.no-ratio .home-icon-art {
+  aspect-ratio: auto;
+  height: 0;
+  padding-bottom: 100%; /* 1 : 1 */
+}
+html.no-ratio .home-icon-art > svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+/* 炸弹那张板和横画布那两张不摆方框（源样式里就是 aspect-ratio: auto）。 */
+html.no-ratio .home-bomb-card .home-icon-art,
+html.no-ratio .home-bomb-mini .home-icon-art {
+  height: auto;
+  padding-bottom: 0;
+}
+html.no-ratio .home-bomb-card .home-icon-art > svg,
+html.no-ratio .home-bomb-mini .home-icon-art > svg {
+  position: static;
+}
+html.no-ratio .home-icon-btn--wide-art .home-icon-art {
+  aspect-ratio: auto;
+  padding-bottom: 56.08%; /* 189 : 106 */
+}
+html.no-ratio .home-icon-btn--wide-art {
+  aspect-ratio: auto;
+}
+/* 一排里那几张卡的比例本来就交给里面那一格了（.home-row > .home-icon-btn
+   写着 aspect-ratio: auto），所以卡自己不用补。落单的那些（弹窗里的小片）
+   高度由内容撑，看着一样。 */
+html.no-ratio .home-icon-btn {
+  aspect-ratio: auto;
+  height: auto;
+}
+/* 棋盘那一格：源样式是 aspect-ratio + max-height 两道一起卡的，比例这一道
+   丢了之后，真正管事的是 boardResize.ts 每帧量出来的那个尺寸（它不看 CSS
+   比例，看的是地板的实际大小），所以这儿只要别让它塌成 0 就行。 */
+html.no-ratio .board-wrap {
+  aspect-ratio: auto;
+  min-height: 0;
+}
+/* 老虎机滚筒那两扇窗和形状选择那三颗按钮里的图：宽度定死，高度按比例。 */
+html.no-ratio .slot-pick-opt > svg,
+html.no-ratio .flip-demo-ball,
+html.no-ratio .slot-machine,
+html.no-ratio .slot-machine--bare {
+  aspect-ratio: auto;
+  height: auto;
+}
+
+/* ---- inset (Chrome 87) -------------------------------------------------
+   `inset: 0` 就是四个方向的简写，拆开写即可。 */
+html.no-inset .overlay,
+html.no-inset .app--game .gain-badge,
+html.no-inset .slot-machine-art {
+  inset: auto;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* ---- :has() (Chrome 105) -----------------------------------------------
+   这一版会碰到的 :has 只有三条，都是「正在玩的时候，页面整个换个样子」：
+   底色、藏底排、禁掉页面滚动。src/style.css 里本来就为它们各留了一条用
+   html.is-playing 写的等价规则（网页版是给不认 :has 的浏览器留的），所以
+   这里不用重写，只要有人把那个类钉上去——xhs/src/main.ts 的 showGame /
+   teardown 负责。
+
+   剩下那几条 body:has(.slot-page) .home-nav 之类，是「藏底排」；这一版换屏
+   会把整个 #app 清空重画，底排根本不在 DOM 里，本来就没得可藏。
+
+   唯一一条要在这儿补的：得分时那块「+N」的牌子冒出来，底下的分数要让位，
+   不然两个数字叠在一起。源规则是
+     .app--game .score-cell:has(.gain-pop) .v { opacity: 0 }
+   没有 :has 就反过来做——牌子是它的兄弟，用「相邻兄弟」够得着。 */
+html.no-has .app--game .score-cell .gain-pop ~ .v,
+html.no-has .app--game .score-cell .gain-pop + .v {
+  opacity: 0;
+}
+
+/* ---- color-mix() / backdrop-filter (111 / 76) --------------------------
+   标题那块毛玻璃：底色是拿页面底色和白色调出来的，模糊是 backdrop-filter。
+   两样都没有的话整块是透明的，白字压在米白上看不见。给一个不透明的近似色，
+   看着像一块浅浅的磨砂板——不做模糊，但读得清。 */
+html.no-colormix .home-head-glass {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(46, 36, 48, 0.06);
+}
+
+/* ---- 单独一条：主菜单卡片的上限 -----------------------------------------
+   `--home-card-cap` 在 oldKernel.ts 里会被算成一个真的 px（那段注释讲了为什
+   么「先写兜底后写新写法」对自定义属性不管用）。万一哪天那支代码没跑起来，
+   这一条兜住底：至少不会让卡片撑满整列。
+   写在 no-clamp 下面而不是无条件写死，是因为新内核上那个变量是活的。 */
+html.no-clamp .home-page--wide .home-icon-btn,
+html.no-clamp .home-page--wide .home-bomb-card {
+  max-width: 255px;
+}
+
+/* ---- 横屏游戏页那三条纵栏 ------------------------------------------------
+   源样式（src/style.css 横屏那一段）写的是
+
+     grid-template-columns:
+       minmax(max(66px, 8.4%), min-content)
+       minmax(0, 1fr)
+       minmax(max(66px, 8.4%), min-content);
+
+   里面那个 max() 带百分比，运行时算不出来（百分比要看容器多宽，那是排版排
+   到一半才知道的事），所以 oldKernel 那一遍换不掉它——换不掉就意味着整条
+   grid-template-columns 在 Chrome 61 上被丢掉，横屏那三栏塌成默认的一栏。
+   量出来是《暂停》《完成》那两颗键窄了 10px，实际上是整个版式没了。
+
+   minmax() 本身 Chrome 57 就有，缺的只是 max()。所以把 max(66px, 8.4%) 拆成
+   两条：窄屏用 66px，宽到 8.4% 已经超过 66px 时换成 8.4%。
+   交界点：66 ÷ 8.4% = 785.7px。 */
+html.no-minmax .app.app--game {
+  grid-template-columns:
+    minmax(66px, min-content)
+    minmax(0, 1fr)
+    minmax(66px, min-content);
+}
+@media (min-width: 786px) {
+  html.no-minmax .app.app--game {
+    grid-template-columns:
+      minmax(8.4%, min-content)
+      minmax(0, 1fr)
+      minmax(8.4%, min-content);
+  }
+}
+/* 得分图案摆到侧边的那一版是五栏，同样的两个 max() 在头尾。 */
+html.no-minmax .app.app--game.pattern-sides {
+  grid-template-columns:
+    minmax(66px, min-content) auto minmax(0, 1fr) auto minmax(66px, min-content);
+}
+@media (min-width: 786px) {
+  html.no-minmax .app.app--game.pattern-sides {
+    grid-template-columns:
+      minmax(8.4%, min-content) auto minmax(0, 1fr) auto minmax(8.4%, min-content);
+  }
+}
+
+/* ---- 竖屏主菜单：一排两张卡不许挤出屏幕 ---------------------------------
+   源样式先写死一个兜底再写新写法（这一条是普通属性，兜底是管用的）：
+
+     max-width: 165px;
+     max-width: min(165px, (min(100vw, 460px) - 44px - var(--narrow-gap)) / 2);
+
+   Chrome 61 拿到的是 165px。可 390 宽的手机上，一排的可用宽度是
+   390 - 44（页面左右内边距）= 346，两张 165 加中间那道 31.2 的缝是 361.2
+   ——超出 15px。而卡片写着 flex: none，不许缩，于是两张一起顶出屏幕两边。
+
+   这里只松一个口子：允许它缩。缩完正好是 (346 - 31.2) / 2 = 157.4，和新内核
+   上算出来的 153 只差几个像素，而且屏幕再窄也不会顶出去。宽屏上用不着缩，
+   165 的上限照旧管事。 */
+html.no-clamp .home-page:not(.home-page--wide) .home-row > .home-icon-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+}
