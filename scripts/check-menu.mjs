@@ -228,7 +228,12 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   const sizes = await cardWidths(w, h);
   const span = Math.max(...sizes) - Math.min(...sizes);
   check(`${label}：十三张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
-  if (!wide) check(`${label}：一张 130px 见方`, sizes.every((n) => n === 130), `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
+  // 窄屏的图标是「上限 165，装不下就按这一排减掉间距再对半分」——所以这个数
+  // 随屏幕变（390 的手机上是 158），只查它没越过上限、也没被挤没。同一块屏
+  // 幕上十三张一样大那一条在上面已经查过了。
+  if (!wide)
+    check(`${label}：一张不超过 165px 见方`, sizes.every((n) => n <= 165 && n >= 120),
+      `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
   check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));

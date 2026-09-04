@@ -863,18 +863,25 @@ button:hover { filter: brightness(1.05); }
 }
 .home-page:not(.home-page--wide) .home-grid { gap: var(--narrow-gap); }
 .home-page:not(.home-page--wide) .home-row { gap: var(--narrow-gap); }
-/* 一张 130px 见方（玩家点的数）。
+/* 一张最大 165px 见方（玩家点的数）。
 
-   这是个定数，不是算出来的——这一点是有意的。从前它是按 100dvh 算的：手机
-   一上滑就把地址栏收起来，dvh 跟着变大，图标就跟着胀大一圈（玩家报过「一
-   上滑所有标识都放大了」）。现在图标多大和屏幕多高、和滑没滑一概无关。
+   这个数和屏幕多高、和滑没滑一概无关——这一点是有意的。从前它是按 100dvh
+   算的：手机一上滑就把地址栏收起来，dvh 跟着变大，图标就跟着胀大一圈（玩
+   家报过「一上滑所有标识都放大了」）。
 
-   后面那一条只在「屏幕窄到两张 130 并排站不下」时才接手：把它收成这一排的
-   一半，免得横着溢出。360 宽的手机上算出来是 158，还轮不到它。 */
+   165 是上限，不是定数：两张 165 加上那道间距（390 的手机上是 57）一共 387，
+   比内容区的 374 还宽，所以后面那一条会接手，把它收成「这一排减掉间距再对
+   半分」。玩家是知道这个代价才点的这一档——他要的是间距不动、图标尽量大，
+   于是各个屏幕上图标不一样大，也几乎不留边：
+
+     320 宽 → 137px      360 宽 → 151px
+     390 宽 → 158px      430 宽及以上 → 165px（顶到上限，这时才留得住边）
+
+   同一块屏幕上十三张仍然一样大——变的是屏幕之间。 */
 .home-page:not(.home-page--wide) .home-icon-btn,
 .home-page:not(.home-page--wide) .home-bomb-card {
-  max-width: 130px;
-  max-width: min(130px, (min(100vw, 460px) - 16px - var(--narrow-gap)) / 2);
+  max-width: 165px;
+  max-width: min(165px, (min(100vw, 460px) - 16px - var(--narrow-gap)) / 2);
 }
 /* The icon grid wants far more width than the standard reading column.
    一排最多三张，每张被 --home-card-cap 收住，所以整页的宽由那三张决定；这里
