@@ -239,11 +239,11 @@ export function renderAccountPage(
           <span class="profile-row-label">${privileges[6]}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
-        <!-- 《更多玩法》里现在有《无限反转》。 -->
+        <!-- 《更多玩法》里现在有《老虎机模式》和《无限反转》两个。 -->
         <button class="profile-row" id="moreModesRow">
           ${lockGlyph}
           <span class="profile-row-label">${privileges[4]}</span>
-          <span class="profile-row-value">${s.flipModeTitle}&nbsp;&rsaquo;</span>
+          <span class="profile-row-value">${s.randomTargetTitle} · ${s.flipModeTitle}&nbsp;&rsaquo;</span>
         </button>
         <!-- 还没做的才写「敬请期待」：更多关卡、更多竞赛、Apple Watch。 -->
         ${[privileges[1], privileges[5], privileges[7]].map(lockedRow).join('')}

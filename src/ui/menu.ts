@@ -3,15 +3,10 @@ import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
 import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
-import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 
-/** 《随机得分目标》在主菜单上的那块牌子——玩家给的老虎机图。 */
-// 主菜单上那台老虎机是单独一张图（三个窗口里画着蓝三角、橙圆、红方块），
-// 和开局时真的转起来的那台（slot-machine.svg，两个窗口）不是同一个文件。
-const ICON_SLOT_MACHINE = custom('slot-machine-menu') ?? custom('slot-machine') ?? '';
 import {
   ICON_BASE_SQUARE,
   ICON_BASE_CIRCLE,
@@ -26,6 +21,7 @@ import {
   timedOption,
   type BaseShape,
   ICON_FLIP_MODE,
+  ICON_SLOT_MACHINE,
 } from './homeIcons';
 
 export interface MenuHandlers {

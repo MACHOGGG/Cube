@@ -592,6 +592,13 @@ export const ICON_SOUND_OFF = custom('sound-off') ?? svg(
  *  张卡和个人主页《更多玩法》的陈列页用的是同一张。 */
 export const ICON_FLIP_MODE = custom('flip-mode-menu') ?? '';
 
+/** 《老虎机模式》在主菜单上的那块牌子——玩家给的老虎机图。
+ *
+ *  主菜单那台是单独一张图（三个窗口里画着蓝三角、橙圆、红方块），和开局时
+ *  真转起来的那台（slot-machine.svg，两个窗口）不是同一个文件。个人主页
+ *  《更多玩法》的陈列页也用这一张，所以放在这儿而不是 menu.ts 里。 */
+export const ICON_SLOT_MACHINE = custom('slot-machine-menu') ?? custom('slot-machine') ?? '';
+
 export const ICON_LOCK =
   custom('lock') ??
   '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';

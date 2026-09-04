@@ -8,7 +8,7 @@
  * 量的是玩家点名的几件事：
  *   · 《随机得分目标》改叫《老虎机模式》；《世界排名和好友排名》改叫《世界排名》
  *     而且不再「敬请期待」；更多得分目标 / 更多布局也点得开了。
- *   · 《更多得分目标》三列二十个图案；《更多布局》两个圆角框里各一张缩图；
+ *   · 《更多得分目标》三列二十个图案；《更多布局》《更多玩法》各两个圆角框并排；
  *     《世界排名》整页只有榜，没有个人总分和成绩。
  *   · 从这些页（还有多人游玩、老虎机模式）按《退出》回到个人主页刚才看的位
  *     置，不是主菜单、也不是页顶。
@@ -61,7 +61,8 @@ check('《世界排名和好友排名》改叫《世界排名》，不再敬请�
   rows.rank === '世界排名' && !rows.oldRank && !rows.soon.includes('世界排名'), `${rows.rank}`);
 check('没开通：做好了的五行行首都挂着锁',
   rows.randomLock && rows.targetsLock && rows.layoutsLock && rows.rankLock && rows.modesLock);
-check('《更多玩法》点得开了，右边写着《无限反转》', rows.modes === '更多玩法' && rows.modesValue.startsWith('无限反转'),
+check('《更多玩法》点得开了，右边写着里面那两个玩法',
+  rows.modes === '更多玩法' && /老虎机模式/.test(rows.modesValue) && /无限反转/.test(rows.modesValue),
   `${rows.modes} · ${rows.modesValue}`);
 check('还在敬请期待的只剩三行', rows.soon.length === 3, rows.soon.join(' / '));
 
@@ -111,11 +112,15 @@ async function backToProfile(before, label, backSel = '#backBtn') {
       svg: Boolean(c.querySelector('.lay-thumb svg')),
       radius: parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0,
       border: getComputedStyle(c).borderTopStyle,
+      top: Math.round(c.getBoundingClientRect().top),
     })),
   }));
   check('更多布局：两个圆角框，各装一张缩图',
     l.cards.length === 2 && l.cards.every((c) => c.svg && c.radius >= 8 && c.border !== 'none'),
     JSON.stringify(l.cards));
+  check('更多布局：两张并排（不换行）',
+    Math.abs((l.cards[0]?.top ?? 0) - (l.cards[1]?.top ?? 0)) <= 1,
+    `${l.cards[0]?.top} / ${l.cards[1]?.top}`);
   check('更多布局：是菱形七色小球和 V 形三角',
     l.cards.map((c) => c.id).join(',') === 'circleSeven,triangleAdvanced' &&
       /七色圆球/.test(l.cards[0]?.name || '') && /进阶三角/.test(l.cards[1]?.name || ''),
@@ -139,7 +144,7 @@ async function backToProfile(before, label, backSel = '#backBtn') {
   check('世界排名：标题就叫世界排名', r.label === '世界排名', r.label);
   await backToProfile(before, '世界排名');
 }
-// 更多玩法：陈列页——一个圆角框，装着无限反转那张图；要玩得回主菜单那张卡
+// 更多玩法：陈列页——两个圆角框并排，老虎机和无限反转；要玩得回主菜单那两张卡
 {
   const before = await openFrom('moreModesRow', '.modes-page');
   const m = await page.evaluate(() => ({
@@ -149,15 +154,25 @@ async function backToProfile(before, label, backSel = '#backBtn') {
       radius: parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0,
       border: getComputedStyle(c).borderTopStyle,
       buttons: c.querySelectorAll('button').length,
+      top: Math.round(c.getBoundingClientRect().top),
+      nameTop: Math.round(c.querySelector('.lay-name').getBoundingClientRect().top),
     })),
     picker: Boolean(document.querySelector('.flip-page')),
     label: document.querySelector('.modes-page .menu-section-label')?.textContent.trim(),
   }));
-  check('更多玩法：一个圆角框，装着无限反转那张图，底下写着名字',
-    m.cards.length === 1 && m.cards[0].mode === 'flip' && m.cards[0].svg && m.cards[0].radius >= 8 &&
-      m.cards[0].border !== 'none' && m.cards[0].name === '无限反转',
+  check('更多玩法：两个圆角框，老虎机和无限反转，底下各写着名字',
+    m.cards.length === 2 && m.cards.map((c) => c.mode).join(',') === 'slot,flip' &&
+      m.cards.every((c) => c.svg && c.radius >= 8 && c.border !== 'none') &&
+      m.cards[0].name === '老虎机模式' && m.cards[1].name === '无限反转',
     JSON.stringify(m.cards));
-  check('更多玩法：只是陈列，不是挑图形页，图也按不动', !m.picker && m.cards[0]?.buttons === 0);
+  // 并排，不是上下叠着：两张卡片的上沿在同一条线上。
+  check('更多玩法：两张并排（不换行）', Math.abs(m.cards[0].top - m.cards[1].top) <= 1,
+    `${m.cards[0].top} / ${m.cards[1].top}`);
+  // 两张图一横一竖，名字仍要落在同一条线上。
+  check('更多玩法：两个名字对齐', Math.abs(m.cards[0].nameTop - m.cards[1].nameTop) <= 1,
+    `${m.cards[0].nameTop} / ${m.cards[1].nameTop}`);
+  check('更多玩法：只是陈列，不是挑图形页，图也按不动',
+    !m.picker && m.cards.every((c) => c.buttons === 0));
   check('更多玩法：标题就叫更多玩法', m.label === '更多玩法', m.label);
   await backToProfile(before, '更多玩法');
 }

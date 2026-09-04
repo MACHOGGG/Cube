@@ -18,7 +18,15 @@ import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { targetsOf, type Family } from '../engine/targets';
 import { targetPatternDefs } from '../engine/targetIcon';
 import { renderPatternHintIcons } from '../engine/patternIcon';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_BASE_TRIANGLE, ICON_FLIP_MODE, layoutIcon, layoutIconIsWide } from './homeIcons';
+import {
+  ICON_BASE_CIRCLE,
+  ICON_BASE_SQUARE,
+  ICON_BASE_TRIANGLE,
+  ICON_FLIP_MODE,
+  ICON_SLOT_MACHINE,
+  layoutIcon,
+  layoutIconIsWide,
+} from './homeIcons';
 import { shapeName } from './shapeLabels';
 import { mountBoardView } from './leaderboard';
 import { CTL_BACK } from './ctlIcons';
@@ -88,14 +96,24 @@ export function renderLayoutsShowcase(
   wireBack(root, onBack);
 }
 
-/** 《更多玩法》：无限反转的图装在圆角矩形框里陈列着，和《更多布局》同一副样子。 */
+/** 《更多玩法》：老虎机和无限反转并排陈列，各装在一个圆角矩形框里，和《更多
+ *  布局》同一副样子。只是陈列——真要玩还是回主菜单，那两张卡就在第二排。 */
 export function renderModesShowcase(root: HTMLElement, lang: Lang, onBack: () => void): void {
   const s = STRINGS[lang];
-  const card = `<div class="lay-card" data-mode="flip">
-        <div class="lay-thumb lay-thumb--tall">${ICON_FLIP_MODE}</div>
-        <div class="lay-name">${s.flipModeTitle}</div>
-      </div>`;
-  root.innerHTML = page('lay-page modes-page', PRIVILEGES[lang][4], `<div class="lay-grid">${card}</div>`, lang);
+  // 两张图一横一竖（老虎机 897×521，无限反转 252×519），所以各给各的宽度，
+  // 让它们在框里看着一样重。
+  const cards = [
+    { id: 'slot', art: ICON_SLOT_MACHINE, thumb: 'lay-thumb--wide', name: s.randomTargetTitle },
+    { id: 'flip', art: ICON_FLIP_MODE, thumb: 'lay-thumb--tall', name: s.flipModeTitle },
+  ]
+    .map(
+      (m) => `<div class="lay-card" data-mode="${m.id}">
+        <div class="lay-thumb ${m.thumb}">${m.art}</div>
+        <div class="lay-name">${m.name}</div>
+      </div>`,
+    )
+    .join('');
+  root.innerHTML = page('lay-page modes-page', PRIVILEGES[lang][4], `<div class="lay-grid">${cards}</div>`, lang);
   wireBack(root, onBack);
 }
 

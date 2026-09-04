@@ -3282,14 +3282,21 @@ body.is-room-host::after {
 }
 .tgt-cell .pattern-icon { gap: 0; color: inherit; }
 .tgt-cell .pattern-icon svg { width: auto; height: auto; display: block; }
-/* 两副布局的缩图，各装在一个圆角矩形的框里。 */
+/* 几张缩图，各装在一个圆角矩形的框里：《更多布局》两副棋盘，《更多玩法》
+   老虎机和无限反转。 */
 .lay-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; width: 100%; }
+/* 两张一排，各占一半：从前写的是 width: min(44vw, 200px)，在 390 宽的手机上
+   两张加中间那道 16 的间距正好比这一栏宽出一点点，于是第二张换了行——「并排
+   陈列」变成上下叠着。按剩下的宽度对半分就不会差这一两个像素了。 */
 .lay-card {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
-  width: min(44vw, 200px); padding: 16px 12px;
+  flex: 0 1 calc(50% - 8px); max-width: 200px; min-width: 0; padding: 16px 12px;
   background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-lg);
 }
-.lay-thumb { width: 104px; }
+/* 图占中间那块，名字贴着卡片底边：两张缩图一横一竖，高矮差得多，名字要是
+   紧跟着图走，两张卡片上的字就一高一低。让图那块吃掉多出来的高度、图在里
+   头居中，名字自然落在同一条线上。 */
+.lay-thumb { width: 104px; flex: 1 1 auto; display: flex; align-items: center; }
 .lay-thumb--wide { width: 152px; }
 /* 《更多玩法》里那张无限反转的图是竖长的（四层翻面叠着），窄一点才和两副
    布局的缩图差不多分量。 */
