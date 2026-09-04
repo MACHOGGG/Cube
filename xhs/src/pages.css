@@ -1,41 +1,60 @@
 /*
- * 这一版自己那两块的样式——只有小红书版加载它。
+ * 这一版自己那几块的样式——只有小红书版加载它。
  *
  * 绝大部分长相是白拿网页版的：成绩那一块用的是 .total-card /
- * .records-panel / .records-row，src/style.css 里都写好了。这里只补三件网页
- * 版没有的事：
- *
- *   1. 说明那一块（琥珀色板子下面那块蓝紫的）网页版是排行榜，装的是榜单；
- *      这一版装的是几行字，得换一套内边距和字号。
- *   2. 底排从两颗键变成一颗，居中。
- *   3. 一屏里两块板子叠着，间距要收一点。
+ * .records-panel / .records-row，src/style.css 里都写好了；色盲开关用的是
+ * .profile-pill--switch / .pill-switch，也是现成的。这里只补网页版没有的
+ * 几件：说明块、战绩详情页、分享那两颗键，以及一颗居中的底排键。
  *
  * 排在 src/style.css 之后 import，所以同名规则以这里为准。
  */
 
-/* 两块板子叠在一屏里：默认的 16px 行距在这儿显得散，收到 14px。 */
+/* 一屏里叠着好几块：默认的 16px 行距在这儿显得散，收到 14px。 */
 .xhs-profile { gap: 14px; }
 
 /* 成绩那一块。网页版的 46vh 是给「左右各半」的缩略版留的，这一版整宽一
    块，空着的时候 40vh 就够站住，装满了自己会长。 */
 .xhs-profile .records-panel--records { min-height: 40vh; gap: 14px; }
 
-/* 说明那一块。它不是榜，是四行字：不撑高度、行距按读的来。 */
+/* 记录行现在是按钮了（点开看那一局的战绩图）。按钮默认会继承一堆浏览器自
+   己的样式，这里把它掰回和网页版那个 div 一模一样。 */
+.xhs-profile .records-row {
+  width: 100%; font: inherit; text-align: left;
+  -webkit-tap-highlight-color: transparent; appearance: none;
+}
+
+/* 色盲开关那一行。挨着累计得分，宽度也跟它一样——两块读起来是一组。 */
+.xhs-setting-row { display: flex; justify-content: center; }
+.xhs-cvd {
+  max-width: none; margin: 0;
+  /* 药丸的默认底色是奶咖（--pill-bg），压在米白页面上偏淡。这一颗是设置，
+     不是入口，用页面自己的深紫墨色更像个开关。 */
+  --pill-bg: #6E5F6D;
+  font-size: 0.92rem;
+}
+
+/* ---- 说明块 ------------------------------------------------------------
+   本来借的是排行榜那块蓝紫（#9BA5D6）。那个底色是给一行行短榜单设计的，
+   压着整整五段字读起来费劲（玩家说的「换个更适合阅读的颜色」）。
+   换成同一支蓝紫但淡了三档，字用近乎黑的深靛——对比度从 6.5:1 升到 11:1，
+   还留在原来那个色系里，不像凭空多出一块。 */
 .xhs-about {
   min-height: 0;
-  padding: 24px 24px 26px;
-  gap: 8px;
+  padding: 22px 22px 24px;
+  gap: 10px;
+  background: #E7EBF7;
+  box-shadow: inset 0 0 0 1px rgba(60, 66, 112, 0.12);
 }
-/* 底是写死的蓝紫（.records-panel--ranks 的 #9BA5D6），所以字也得写死——用
-   var(--ink) 的话，哪天深色主题回来了就是近白压在浅蓝紫上，糊成一片。
-   同样的道理写在 src/style.css 的 .records-row 上面那段注释里。 */
+/* 底是写死的，字也得是写死的——用 var(--ink) 的话，哪天深色主题回来了就是
+   近白压在浅蓝紫上，糊成一片。同样的道理写在 src/style.css 的 .records-row
+   上面那段注释里。 */
 .xhs-about-line,
 .xhs-about-site {
   margin: 0;
-  color: #241E33;
+  color: #232945;
   font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
   font-size: 0.95rem;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 /* 网址单拎一行，等宽字 + 加粗——它是这一页唯一要人记住的东西。
    不做成链接：小工具里不许开外链（zip-artifact-spec.md），一颗点不动的链接
@@ -46,10 +65,55 @@
   font-size: 1.05rem;
   letter-spacing: 0.02em;
   padding: 2px 0 4px;
+  color: #1B2350;
 }
 
-/* 底排只有一颗键，居中。网页版那两颗是 flex:1 各占一半（整块圆角矩形都能
-   点）；只剩一颗的时候那条规则会把它拉成一整条，所以这儿改回按内容宽。 */
+/* ---- 战绩详情：一张图 + 两颗键 ---------------------------------------- */
+.xhs-run-sheet { gap: 14px; }
+.xhs-run-body { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.xhs-run-img {
+  width: 100%; max-width: 420px; height: auto; display: block;
+  border-radius: var(--r-lg);
+  box-shadow: 0 2px 4px rgba(46, 36, 48, 0.08), 0 18px 40px -22px rgba(46, 36, 48, 0.45);
+}
+/* 没留住照片的那一局：摆一块和图差不多大的板子说明原因，比一行孤零零的字
+   稳当（存档只给最近十局留照片，见 persistence.ts 的 MAX_RUNS）。 */
+.xhs-run-gone {
+  width: 100%; max-width: 420px; min-height: 220px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center;
+  border-radius: var(--r-lg);
+  background: var(--board-bg); color: var(--ink-soft);
+  font-size: 0.95rem; line-height: 1.7;
+}
+
+.xhs-share-bar {
+  width: 100%; max-width: 420px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+}
+.xhs-share-btn {
+  flex: 1 1 0; min-width: 120px;
+  border: none; border-radius: var(--r-full); padding: 13px 18px;
+  background: var(--surface); color: var(--accent-ink); cursor: pointer;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1rem;
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 10px rgba(46, 36, 48, 0.1);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+/* 发笔记是主键——这一版指望它把人带回小红书的信息流里。 */
+.xhs-share-btn--note { background: var(--accent); color: var(--on-accent); }
+.xhs-share-btn:active { transform: scale(0.97); }
+.xhs-share-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+/* 一行状态：正在做什么、做完了没有、为什么没成。平时是空的，不占地方。 */
+.xhs-share-note {
+  flex: 1 0 100%; margin: 0; min-height: 1.4em;
+  text-align: center; color: var(--ink-soft); font-size: 0.86rem; line-height: 1.4;
+}
+
+/* ---- 底排 --------------------------------------------------------------
+   只有一颗键，居中。网页版那两颗是 flex:1 各占一半（整块圆角矩形都能点）；
+   只剩一颗的时候那条规则会把它拉成一整条，所以这儿改回按内容宽。 */
 .xhs-profile-nav .home-nav-btn {
   flex: 0 0 auto;
   min-width: 0;

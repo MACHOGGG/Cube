@@ -8,8 +8,7 @@
  *
  * 成绩那一块「和现在的成绩记录栏一样内容和制作」：类名全是网页版现成的
  * （.total-card / .records-panel / .records-row / .records-rule），样式一条
- * 都不用新写，两边看着是同一件东西。差别只在排行榜那半块换成了说明——网页
- * 版是琥珀 + 蓝紫两块并排，这一版是琥珀在上、蓝紫在下。
+ * 都不用新写，两边看着是同一件东西。
  *
  * 数据也走网页版那一份存档：loadAllRuns 读的是每个玩法的 bestKey，
  * totalScoreOf 把它们加起来。上一版这里自己抄了一份键名清单，抄错了两处
@@ -19,6 +18,7 @@
  */
 import { loadAllRuns, totalScoreOf, type StoredRun } from '../../src/engine/persistence';
 import { formatRunTime, modeLabel } from '../../src/engine/runRecord';
+import { colorblindOn, setColorblind } from '../../src/engine/palettePref';
 import { shapeName } from '../../src/ui/shapeLabels';
 import { CTL_BACK } from '../../src/ui/ctlIcons';
 import { STRINGS, type Lang } from '../../src/i18n';
@@ -33,6 +33,8 @@ export interface Book {
 
 export interface ProfileHandlers {
   onBack: () => void;
+  /** 点开某一局，去看那一张战绩图（runSheet.ts）。 */
+  onOpenRun: (run: StoredRun) => void;
 }
 
 /** 空着的时候画几条横线，和网页版一样——「等着记录」比一块空白好看。 */
@@ -44,10 +46,22 @@ const SITE = 'play-slides.com';
 const esc = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** 一条记录：左边玩法小图形 + 名字 + 模式 + 时间，右边分数。 */
-function runRow(run: StoredRun, glyphOf: Map<string, string>, lang: Lang): HTMLElement {
+/**
+ * 一条记录：左边玩法小图形 + 名字 + 模式 + 时间，右边分数。
+ *
+ * 它是一颗按钮，不是一行字——点开能看那一局的战绩图。网页版也是这样
+ * （.records-row 本来就带着 cursor: pointer 和按下去缩一下的动效），这一版
+ * 之前漏掉了监听，看着像能点、按下去没反应。
+ */
+function runRow(
+  run: StoredRun,
+  glyphOf: Map<string, string>,
+  lang: Lang,
+  onOpen: (run: StoredRun) => void,
+): HTMLElement {
   const d = run.data;
-  const row = document.createElement('div');
+  const row = document.createElement('button');
+  row.type = 'button';
   row.className = 'records-row';
   const name = shapeName(lang, d.shapeId, d.shapeFallback);
   const mode = modeLabel(d.modeKey, lang);
@@ -57,7 +71,40 @@ function runRow(run: StoredRun, glyphOf: Map<string, string>, lang: Lang): HTMLE
     (mode ? `<span class="records-row-mode"> ${esc(mode)}</span>` : '') +
     `<span class="records-row-time">${formatRunTime(run.at)}</span></span>` +
     `<span class="records-row-score">${d.totalScore}</span>`;
+  row.addEventListener('click', () => onOpen(run));
   return row;
+}
+
+/**
+ * 色盲友好开关。
+ *
+ * 网页版把它放在个人主页，是一个全站设置：按下去在 <html> 上盖一个
+ * data-cvd="1"，样式表和每一块棋盘都跟着走（见 engine/palettePref.ts）。这
+ * 一版没有个人主页，所以挪到成绩页、紧挨着累计得分。
+ *
+ * 只有开和关，不给配色选择——玩家定的：用最经典那一套（palettePref 里的
+ * 'std'，Okabe–Ito 那八色），不提供选择。所以这里只调 setColorblind，从不
+ * 碰 setCvdVariant，变体永远停在默认的 std。
+ *
+ * 按键、开关的样子全用网页版现成的类（.profile-pill--switch / .pill-switch），
+ * 两边是同一个控件。
+ */
+function cvdSwitch(lang: Lang): HTMLElement {
+  const s = STRINGS[lang];
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'profile-pill profile-pill--switch xhs-cvd';
+  btn.setAttribute('role', 'switch');
+  btn.setAttribute('aria-checked', String(colorblindOn()));
+  btn.innerHTML =
+    `<span>${esc(s.colorblindBtn)}</span>` +
+    `<span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>`;
+  btn.addEventListener('click', () => {
+    const next = !colorblindOn();
+    setColorblind(next);
+    btn.setAttribute('aria-checked', String(next));
+  });
+  return btn;
 }
 
 export function renderProfilePage(
@@ -93,14 +140,16 @@ export function renderProfilePage(
       <span class="total-card-value">${total}</span>
     </div>
 
+    <div class="xhs-setting-row" id="xhsSettings"></div>
+
     <div class="records-panel records-panel--records" id="xhsRuns"></div>
 
-    <div class="records-panel records-panel--ranks xhs-about">
+    <div class="records-panel xhs-about">
       <p class="xhs-about-line">这里是 Slides 的小红书版，开放五个单机玩法。</p>
-      <p class="xhs-about-line">Slides 是一款原创的滑动补偿拼图游戏。它上手简单，可是想要拿到高分却不容易，考验玩家的高智商，需要在最少的行动和最短的时间里得到最多的分数。</p>
-      <p class="xhs-about-line">完整版有更多布局、计时挑战、多人小屋和全球排行榜：</p>
+      <p class="xhs-about-line">Slides 是一款原创的滑动补偿拼图游戏。通过滑动、翻面、消除得分解谜。它上手极其简单，可是想要拿到高分却不容易，考验玩家的高智商，需要在最少的行动、最短的时间里得到最多的分数。</p>
+      <p class="xhs-about-line">完整版有多人小屋在线对战、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！详情请访问</p>
       <p class="xhs-about-site">${SITE}</p>
-      <p class="xhs-about-line">后续可能推出 APP 版。</p>
+      <p class="xhs-about-line">后续可能推出 APP 版，敬请期待。</p>
     </div>
 
     <div class="page-back-row">
@@ -108,9 +157,11 @@ export function renderProfilePage(
     </div>
   `;
 
+  page.querySelector<HTMLElement>('#xhsSettings')!.appendChild(cvdSwitch(lang));
+
   const list = page.querySelector<HTMLElement>('#xhsRuns')!;
   if (runs.length) {
-    for (const run of runs) list.appendChild(runRow(run, glyphOf, lang));
+    for (const run of runs) list.appendChild(runRow(run, glyphOf, lang, h.onOpenRun));
   } else {
     for (let i = 0; i < PLACEHOLDER_ROWS; i++) {
       const rule = document.createElement('div');

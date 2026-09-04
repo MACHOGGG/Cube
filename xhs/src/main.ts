@@ -32,12 +32,16 @@ import type { Family, TargetPattern } from '../../src/engine/targets';
 import { renderRandomTargetPage } from '../../src/ui/slotMachine';
 import { renderFlipModePage } from '../../src/ui/flipMode';
 import { installBackNav, setScreenBack } from '../../src/engine/backNav';
+import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
+import { renderRunSheet } from './runSheet';
 import { renderShapePick } from './shapePick';
+import { mountShareActions } from './shareActions';
+import type { StoredRun } from '../../src/engine/persistence';
 
 /** 小红书是中文平台，这一版固定简体中文——没有语言选择页。 */
 const LANG: Lang = 'zhHans';
@@ -77,7 +81,60 @@ function teardown() {
 function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   teardown();
   activeDestroy = game.mount(root, onBack, { ...opts, lang: LANG });
+  enhanceShareOverlay();
   setScreenBack(onBack);
+}
+
+/**
+ * 结算页那个「分享战绩」窗口：把网页版的「长按图片保存」换成小红书的两颗键。
+ *
+ * 网页版靠的是浏览器的长按菜单，小工具的容器把它禁掉了——玩家长按什么也不会
+ * 发生。所以这里在游戏挂好之后，找到那个窗口，把提示那一行换成《发笔记》
+ * 《存相册》（和成绩页里点开一局看到的是同一套，见 shareActions.ts）。
+ *
+ * 用「挂完之后改 DOM」而不是改 src/ui/gameShell.ts：那个文件是网页版正在跑
+ * 的东西，这一版的规矩是只读不写。改动只在这一版的包里发生。
+ *
+ * 图是现取的，不是现在这一刻的——窗口每次打开，gameController 都会把新的
+ * data:uri 塞进那个 <img>，所以按下去的时候才读它。
+ */
+function enhanceShareOverlay() {
+  const img = root.querySelector<HTMLImageElement>('#shareImage');
+  const modal = img?.closest<HTMLElement>('.share-modal');
+  if (!img || !modal) return;
+  // 「长按保存」那句在这儿是假话，去掉。
+  modal.querySelector('.hint')?.remove();
+  const host = document.createElement('div');
+  host.className = 'xhs-share-host';
+  modal.insertBefore(host, modal.querySelector('.btn-row'));
+  // 每次窗口打开都重挂一次：分数和图都变了。用 MutationObserver 盯着 src。
+  const remount = () => {
+    host.innerHTML = '';
+    // 每次都重新去存档里取最新那一局——窗口打开的时候这一局刚存进去。
+    refreshLastRun();
+    const d = lastRunData;
+    if (img.src && img.src.indexOf('data:') === 0 && d) mountShareActions(host, img.src, d);
+  };
+  remount();
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(remount).observe(img, { attributes: true, attributeFilter: ['src'] });
+  }
+}
+
+/**
+ * 刚打完那一局的数据，给分享窗口填笔记用。
+ *
+ * 拿法是「结算之后去存档里翻最新的一条」——游戏自己不往外报这个，而每一局
+ * 结束时它都会写进 localStorage（见 engine/persistence.ts 的 saveRun）。
+ */
+let lastRunData: StoredRun['data'] | null = null;
+function refreshLastRun() {
+  try {
+    const all = loadAllRuns(BOOKS.map((b) => b.card.bestKey + b.suffix));
+    lastRunData = all.length ? all[0].data : null;
+  } catch {
+    lastRunData = null;
+  }
 }
 
 // ---- 各屏 -------------------------------------------------------------------
@@ -126,6 +183,13 @@ function showSlot() {
     },
     false,
   );
+  // 这一版只有方块和小球——三角整块不做（见 xhs/README.md）。网页版那一屏
+  // 摆的是三个，所以画完把三角那颗摘掉。
+  //
+  // 不去改 src/ui/slotMachine.ts 的 FAMILIES：那是网页版正在用的清单，动它
+  // 等于动网页版。摘一颗按钮是这一版自己的事，就在这一版里做。
+  // 剩下两颗自己会重新居中（.slot-pick-row 是 justify-content: center）。
+  root.querySelector('.slot-pick-opt[data-family="triangle"]')?.remove();
   setScreenBack(showMenu);
 }
 
@@ -149,8 +213,15 @@ function showFlip() {
 /** 成绩 + 说明，一屏。底排那颗橙色圆进来的就是这里。 */
 function showProfile() {
   teardown();
-  renderProfilePage(root, BOOKS, LANG, { onBack: showMenu });
+  renderProfilePage(root, BOOKS, LANG, { onBack: showMenu, onOpenRun: showRun });
   setScreenBack(showMenu);
+}
+
+/** 点开成绩页里的某一局：那一张战绩图 + 发笔记 / 存相册。 */
+function showRun(run: StoredRun) {
+  teardown();
+  renderRunSheet(root, run, LANG, { onBack: showProfile });
+  setScreenBack(showProfile);
 }
 
 // ---- 起飞 -------------------------------------------------------------------
