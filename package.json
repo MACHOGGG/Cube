@@ -12,7 +12,8 @@
     "typecheck": "tsc -b --noEmit",
     "ios:sync": "npm run build && cap sync ios",
     "ios": "npm run ios:sync && cap open ios",
-    "build:wxgame": "node scripts/build-wxgame.mjs"
+    "build:wxgame": "node scripts/build-wxgame.mjs",
+    "build:xhs": "node xhs/build.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

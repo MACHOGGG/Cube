@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <!-- viewport 三件套按小红书的规范来（zip-artifact-spec.md §5）：
+       width=device-width + initial-scale=1.0 + viewport-fit=cover，
+       真机和 PC 模拟器的布局、安全区都靠它。 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Slides 方糖谜题</title>
+  <!-- 开发时这里是 module（vite dev 要它）；打包之后由 xhs/build.mjs 换成
+       普通的 <script src>——容器的 CSP 不认 type="module"，也不认内联脚本。 -->
+  <script type="module" src="./src/main.ts"></script>
+</head>
+<body>
+  <div id="app"></div>
+</body>
+</html>

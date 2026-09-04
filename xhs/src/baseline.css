@@ -1,0 +1,24 @@
+/*
+ * Chrome 61 基线层——**只有小红书这一版加载它**。
+ *
+ * 小工具的最低内核是 Android 8.1 出场的 Chrome / WebView 61（规范见
+ * .claude/skills/minitool-zip-builder/references/css-compatibility.md）。
+ * 网页版那份 src/style.css 用了大量它不认识的 CSS：flex gap、clamp()、
+ * min()/max()、aspect-ratio、dvh/svh、:has()、color-mix()……浏览器遇到不认
+ * 识的声明会**整条丢掉**，遇到不认识的选择器会**整条规则丢掉**，页面不会
+ * 报错，只会散架。
+ *
+ * 这个文件的活儿就是在后面补一层「它认得的写法」。规矩：
+ *
+ *   · 只补，不改。src/style.css 一个字不动——那是网页版正在跑的东西。
+ *   · 按功能点补，不维护两套完整样式表（规范明说的，两套迟早会漂移）。
+ *   · 新写法留着当增强层：认得的内核照旧用 gap、clamp，认不得的落到这一层。
+ *
+ * 排在 main.ts 里 style.css 之后 import，所以同名规则以这里为准。
+ *
+ * 【施工中】这一层按屏幕逐块补，补一块在下面记一块。还没补完的部分在新内核
+ * 上不受影响（那边本来就用得上新写法），只影响 Chrome 61 那一档。
+ */
+
+/* 还没有内容——先占位，让 main.ts 的 import 有东西可引。
+   下一步：flex gap → 子项 margin（139 处里落在这一版屏幕上的那些）。 */
