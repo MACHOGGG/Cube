@@ -96,7 +96,8 @@ export function renderProfilePage(
     <div class="records-panel records-panel--records" id="xhsRuns"></div>
 
     <div class="records-panel records-panel--ranks xhs-about">
-      <p class="xhs-about-line">这里是 Slides 的小红书版，五个玩法，全部免费。</p>
+      <p class="xhs-about-line">这里是 Slides 的小红书版，开放五个单机玩法。</p>
+      <p class="xhs-about-line">Slides 是一款原创的滑动补偿拼图游戏。它上手简单，可是想要拿到高分却不容易，考验玩家的高智商，需要在最少的行动和最短的时间里得到最多的分数。</p>
       <p class="xhs-about-line">完整版有更多布局、计时挑战、多人小屋和全球排行榜：</p>
       <p class="xhs-about-site">${SITE}</p>
       <p class="xhs-about-line">后续可能推出 APP 版。</p>
