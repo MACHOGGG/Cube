@@ -73,36 +73,6 @@ export function iconCircle(ctx: CanvasRenderingContext2D, x: number, y: number, 
   }
 }
 
-/** 一个（圆角）正三角，尖朝上。 */
-function trianglePath(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
-  const h = (size * Math.sqrt(3)) / 2;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - h / 2);
-  ctx.lineTo(cx + size / 2, cy + h / 2);
-  ctx.lineTo(cx - size / 2, cy + h / 2);
-  ctx.closePath();
-}
-
-/** 三角：灰三角底，里面三个小三角。 */
-export function iconTriangle(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  ctx.fillStyle = MARK_BG;
-  trianglePath(ctx, x + s / 2, y + s / 2, s);
-  ctx.fill();
-  const small = s * 0.26;
-  const spots: [number, number, number][] = [
-    [0.5, 0.42, 1],
-    [0.34, 0.66, 2],
-    [0.66, 0.66, 3],
-  ];
-  for (const [fx, fy, ci] of spots) {
-    ctx.fillStyle = MARK_COLORS[ci];
-    trianglePath(ctx, x + s * fx, y + s * fy, small);
-    ctx.fill();
-    ctx.strokeStyle = COLORS.outline;
-    ctx.lineWidth = Math.max(1.5, s * 0.022);
-    ctx.stroke();
-  }
-}
 
 export interface MenuText {
   title: string;

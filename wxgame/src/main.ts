@@ -14,7 +14,6 @@
  */
 import { createSquareBoard } from './squareBoard';
 import { createCircleBoard } from './circleBoard';
-import { createTriangleBoard } from './triangleBoard';
 import type { Board, BoardLabels, BoardLine } from './board';
 import { createPlatform } from './platform';
 import {
@@ -30,7 +29,7 @@ import {
   type Highlight,
   type Layout,
 } from './render';
-import { drawCountdown, drawMenu, iconCircle, iconSquare, iconTriangle, type MenuEntry, type MenuHit } from './menu';
+import { drawCountdown, drawMenu, iconCircle, iconSquare, type MenuEntry, type MenuHit } from './menu';
 import { compositeScore } from './composite';
 import { createStreakTracker } from '../../src/engine/scoring';
 import { createPerformanceGauge } from '../../src/engine/performance';
@@ -46,7 +45,6 @@ const T = {
   line: '整线',
   pattern: '图案',
   diamond121: '1-2-1',
-  bigTriangle: '大三角',
   over: '挑战结束 · 综合得分',
   again: '再来',
   rawScore: '得分',
@@ -59,7 +57,6 @@ const T = {
   home: '回主菜单',
   square: '方块',
   circle: '小球',
-  triangle: '三角',
 };
 
 /**
@@ -75,7 +72,6 @@ interface Game extends MenuEntry {
 const GAMES: readonly Game[] = [
   { id: 'square', name: T.square, icon: iconSquare, create: createSquareBoard },
   { id: 'circle', name: T.circle, icon: iconCircle, create: createCircleBoard },
-  { id: 'triangle', name: T.triangle, icon: iconTriangle, create: createTriangleBoard },
 ];
 
 /** 这一屏是哪一屏。 */
@@ -106,7 +102,6 @@ const LABELS: BoardLabels = {
   line: T.line,
   pattern: T.pattern,
   diamond121: T.diamond121,
-  bigTriangle: T.bigTriangle,
 };
 /** 这一局的棋盘。开局时按挑中的玩法换一副——主循环只认 Board 这个接口。 */
 let board: Board = GAMES[0].create(LABELS);

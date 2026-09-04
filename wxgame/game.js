@@ -437,8 +437,6 @@
       cellsInRow: () => cols,
       tileAt: (r, c) => grid[r][c],
       isBlankAt: () => false,
-      // 只有三角那副分朝向。
-      pointsUp: () => true,
       // 一格是 2×2 个单位（1 个单位 = 半格），所以中心在奇数格点上。
       centerOf: (r, c) => [c * 2 + 1, r * 2 + 1],
       extent: () => ({ minX: 0, minY: 0, w: cols * 2, h: rows * 2 }),
@@ -740,8 +738,6 @@
       cellsInRow: (r) => r + 1,
       tileAt: (r, c) => grid[r][c],
       isBlankAt: (r, c) => isBlank(grid[r][c]),
-      // 只有三角那副分朝向。
-      pointsUp: () => true,
       // 一颗的中心，单位是半径的倍数：横向一步 2，纵向一排 √3，每往下一排整排
       // 往左错半步——这就是三角形堆球的摆法。
       centerOf: (r, c) => [(c - r / 2) * 2, r * Math.sqrt(3)],
@@ -776,412 +772,6 @@
       isGameOver: () => grid.every((row) => row.every((t) => isBlank(t) || t.face === "dot")),
       // 反面自己只靠整线得分，这副棋盘最短的整线是 3 颗。
       stuckGroups: () => findStuckColorGroups(liveTiles(), /* @__PURE__ */ new Set(), void 0, MIN_LINE_BONUS_LEN),
-      remaining: () => countRemainingTiles(liveTiles())
-    };
-  }
-
-  // src/engine/orientationDeal.ts
-  function dealBalancedDeck(orientations, colorCount, perColor) {
-    const n = orientations.length;
-    if (colorCount * perColor !== n) {
-      throw new Error(`dealBalancedDeck: ${colorCount}x${perColor} tiles for ${n} slots`);
-    }
-    const all = Array.from({ length: n }, (_, i) => i);
-    const upSlots = shuffle(all.filter((i) => orientations[i]));
-    const downSlots = shuffle(all.filter((i) => !orientations[i]));
-    const base = Math.floor(perColor * upSlots.length / n);
-    const extra = upSlots.length - base * colorCount;
-    const colors = shuffle(Array.from({ length: colorCount }, (_, i) => i));
-    const deck = new Array(n);
-    let u = 0;
-    let d = 0;
-    colors.forEach((color, rank) => {
-      const ups = base + (rank < extra ? 1 : 0);
-      for (let k = 0; k < ups; k++) deck[upSlots[u++]] = color;
-      for (let k = 0; k < perColor - ups; k++) deck[downSlots[d++]] = color;
-    });
-    return deck;
-  }
-  function spreadDotColors(groups, isUp2, out) {
-    const upCount = /* @__PURE__ */ new Map();
-    const downCount = /* @__PURE__ */ new Map();
-    const count = (m, k) => {
-      var _a;
-      return (_a = m.get(k)) != null ? _a : 0;
-    };
-    for (const group of groups) {
-      const pool = [...group.pool];
-      for (const slot of group.slots) {
-        const here = isUp2(slot) ? upCount : downCount;
-        const there = isUp2(slot) ? downCount : upCount;
-        let best = 0;
-        const want = (v) => count(there, v) - count(here, v);
-        for (let i = 1; i < pool.length; i++) if (want(pool[i]) > want(pool[best])) best = i;
-        const color = pool.splice(best, 1)[0];
-        out[slot] = color;
-        here.set(color, count(here, color) + 1);
-      }
-    }
-    return out;
-  }
-
-  // wxgame/src/triangleBoard.ts
-  var TRIANGLE_PALETTE = [
-    "#2F8A96",
-    "#B23A3A",
-    "#D89B1E",
-    "#4C68B0",
-    "#2F9E52",
-    "#9B958D"
-  ];
-  var ROW_LENS = [7, 9, 11, 11, 9, 7];
-  var LEFT_TRIM = [0, 0, 0, 1, 3, 5];
-  var GLOBAL_ROW_OFFSET = 3;
-  var PER_COLOR2 = 9;
-  var MIN_LINE_BONUS_LEN2 = 3;
-  var BLANK2 = -1;
-  var SLOT_IS_UP = ROW_LENS.flatMap(
-    (len, r) => Array.from({ length: len }, (_, c) => (c + LEFT_TRIM[r]) % 2 === 0)
-  );
-  function globalPos(r, c) {
-    return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
-  }
-  function globalToLocal(i, p2) {
-    const r = i - GLOBAL_ROW_OFFSET;
-    if (r < 0 || r >= ROW_LENS.length) return null;
-    const c = p2 - LEFT_TRIM[r];
-    if (c < 0 || c >= ROW_LENS[r]) return null;
-    return [r, c];
-  }
-  function isUp(r, c) {
-    return globalPos(r, c).p % 2 === 0;
-  }
-  function crossNeighbor(i, p2) {
-    return p2 % 2 === 0 ? globalToLocal(i + 1, p2 + 1) : globalToLocal(i - 1, p2 - 1);
-  }
-  function rowRightNeighbor(i, p2) {
-    return p2 % 2 === 0 ? globalToLocal(i, p2 + 1) : globalToLocal(i, p2 - 1);
-  }
-  function rowLeftNeighbor(i, p2) {
-    return p2 % 2 === 0 ? globalToLocal(i, p2 - 1) : globalToLocal(i, p2 + 1);
-  }
-  function buildDiagonalFamily(fam) {
-    var _a;
-    const useRowRight = fam === "B";
-    const parent = /* @__PURE__ */ new Map();
-    for (let r = 0; r < ROW_LENS.length; r++)
-      for (let c = 0; c < ROW_LENS[r]; c++) parent.set(cellKey(r, c), cellKey(r, c));
-    const find = (x) => {
-      while (parent.get(x) !== x) {
-        parent.set(x, parent.get(parent.get(x)));
-        x = parent.get(x);
-      }
-      return x;
-    };
-    const union = (a, b) => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent.set(ra, rb);
-    };
-    const neighborsOf = /* @__PURE__ */ new Map();
-    for (let r = 0; r < ROW_LENS.length; r++)
-      for (let c = 0; c < ROW_LENS[r]; c++) {
-        const { i, p: p2 } = globalPos(r, c);
-        const nbrs = [];
-        const cross = crossNeighbor(i, p2);
-        const along2 = useRowRight ? rowRightNeighbor(i, p2) : rowLeftNeighbor(i, p2);
-        if (cross) {
-          nbrs.push(cross);
-          union(cellKey(r, c), cellKey(cross[0], cross[1]));
-        }
-        if (along2) {
-          nbrs.push(along2);
-          union(cellKey(r, c), cellKey(along2[0], along2[1]));
-        }
-        neighborsOf.set(cellKey(r, c), nbrs);
-      }
-    const groups = /* @__PURE__ */ new Map();
-    for (let r = 0; r < ROW_LENS.length; r++)
-      for (let c = 0; c < ROW_LENS[r]; c++) {
-        const root = find(cellKey(r, c));
-        if (!groups.has(root)) groups.set(root, []);
-        groups.get(root).push([r, c]);
-      }
-    const lines = [];
-    let n = 0;
-    for (const group of groups.values()) {
-      const setK = new Set(group.map(([r, c]) => cellKey(r, c)));
-      const within = (r, c) => neighborsOf.get(cellKey(r, c)).filter(([rr, cc]) => setK.has(cellKey(rr, cc)));
-      const start = (_a = group.find(([r, c]) => within(r, c).length <= 1)) != null ? _a : group[0];
-      const ordered = [start];
-      const seen = /* @__PURE__ */ new Set([cellKey(start[0], start[1])]);
-      let cur = start;
-      for (; ; ) {
-        const next = within(cur[0], cur[1]).find(([r, c]) => !seen.has(cellKey(r, c)));
-        if (!next) break;
-        ordered.push(next);
-        seen.add(cellKey(next[0], next[1]));
-        cur = next;
-      }
-      lines.push({ id: fam + n++, fam, cells: ordered });
-    }
-    return lines;
-  }
-  var LINES2 = (() => {
-    const out = [...buildDiagonalFamily("A"), ...buildDiagonalFamily("B")];
-    for (let r = 0; r < ROW_LENS.length; r++)
-      out.push({ id: "R" + r, fam: "R", cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c]) });
-    return out;
-  })();
-  var FAM_VEC2 = {
-    R: [1, 0],
-    A: [0.5, Math.sqrt(3) / 2],
-    B: [-0.5, Math.sqrt(3) / 2]
-  };
-  function bigTriangleUp(r, c) {
-    const { i, p: p2 } = globalPos(r, c);
-    if (p2 % 2 !== 0) return null;
-    const a = globalToLocal(i + 1, p2);
-    const b = globalToLocal(i + 1, p2 + 1);
-    const d = globalToLocal(i + 1, p2 + 2);
-    return a && b && d ? [[r, c], a, b, d] : null;
-  }
-  function bigTriangleDown(r, c) {
-    const { i, p: p2 } = globalPos(r, c);
-    if (p2 % 2 === 0) return null;
-    const a = globalToLocal(i - 1, p2 - 2);
-    const b = globalToLocal(i - 1, p2 - 1);
-    const d = globalToLocal(i - 1, p2);
-    return a && b && d ? [[r, c], a, b, d] : null;
-  }
-  var BIG_TRIANGLES = (() => {
-    const groups = [];
-    for (let r = 0; r < ROW_LENS.length; r++)
-      for (let c = 0; c < ROW_LENS[r]; c++) {
-        const up = bigTriangleUp(r, c);
-        if (up) groups.push(up);
-        const down = bigTriangleDown(r, c);
-        if (down) groups.push(down);
-      }
-    return groups;
-  })();
-  function fillerAwareSource(idx, shift, n) {
-    const plain = ((idx - shift) % n + n) % n;
-    if (shift === 0) return plain;
-    const fillerSize = Math.abs(shift);
-    const regionStart = shift > 0 ? 0 : n - fillerSize;
-    const inFiller = shift > 0 ? idx < fillerSize : idx >= regionStart;
-    if (!inFiller) return plain;
-    const localIdx = idx - regionStart;
-    const partnerIdx = regionStart + (localIdx % 2 === 0 ? localIdx + 1 : localIdx - 1);
-    return ((partnerIdx - shift) % n + n) % n;
-  }
-  function createTriangleBoard(labels) {
-    let grid = [];
-    let nextTileId = 0;
-    let bonusedSignatures = /* @__PURE__ */ new Set();
-    let pendingBonus = [];
-    const isBlank = (t) => t.color === BLANK2;
-    const anyBlank = (cells) => cells.some(([r, c]) => isBlank(grid[r][c]));
-    const effColorAt = (r, c) => effColor(grid[r][c]);
-    const isLiveCell = (r, c) => !isBlank(grid[r][c]);
-    function newTile(color, dotColor) {
-      return { id: nextTileId++, color, face: "flavor", dotColor };
-    }
-    const shuffledDeck = () => dealBalancedDeck(SLOT_IS_UP, TRIANGLE_PALETTE.length, PER_COLOR2);
-    function assignDotColors(deck) {
-      const dotColors = new Array(deck.length);
-      const groups = [];
-      for (let color = 0; color < TRIANGLE_PALETTE.length; color++) {
-        const others = [];
-        for (let k = 0; k < TRIANGLE_PALETTE.length; k++) if (k !== color) others.push(k);
-        for (let i = 0; i < 4; i++) others.push(color);
-        shuffle(others);
-        const slots = [];
-        deck.forEach((c, idx) => {
-          if (c === color) slots.push(idx);
-        });
-        groups.push({ slots, pool: others });
-      }
-      return spreadDotColors(groups, (slot) => SLOT_IS_UP[slot], dotColors);
-    }
-    function boardFromDeck(deck) {
-      const dots = assignDotColors(deck);
-      const g = [];
-      let idx = 0;
-      for (let r = 0; r < ROW_LENS.length; r++) {
-        const row = [];
-        for (let c = 0; c < ROW_LENS[r]; c++) row.push(newTile(deck[idx], dots[idx++]));
-        g.push(row);
-      }
-      return g;
-    }
-    function hasInitialClump(g) {
-      for (const line of LINES2) {
-        const colors = line.cells.map(([r, c]) => g[r][c].color);
-        for (let i = 0; i + 3 < colors.length; i++)
-          if (colors[i] === colors[i + 1] && colors[i] === colors[i + 2] && colors[i] === colors[i + 3]) return true;
-      }
-      for (const cells of BIG_TRIANGLES) {
-        const c0 = g[cells[0][0]][cells[0][1]].color;
-        if (cells.every(([r, c]) => g[r][c].color === c0)) return true;
-      }
-      return false;
-    }
-    function deal() {
-      let g;
-      let tries = 0;
-      do {
-        nextTileId = 0;
-        g = boardFromDeck(shuffledDeck());
-        tries++;
-      } while (hasInitialClump(g) && tries < 500);
-      grid = g;
-      bonusedSignatures = /* @__PURE__ */ new Set();
-      pendingBonus = [];
-    }
-    function shiftLine(id, by) {
-      const line = LINES2.find((l) => l.id === id);
-      const mask = /* @__PURE__ */ new Set();
-      if (!line) return mask;
-      const n = line.cells.length;
-      const shift = 2 * by;
-      if ((shift % n + n) % n !== 0) {
-        const vals = line.cells.map(([r, c]) => grid[r][c]);
-        const shifted = vals.map((_, i) => vals[fillerAwareSource(i, shift, n)]);
-        line.cells.forEach(([r, c], i) => {
-          grid[r][c] = shifted[i];
-        });
-      }
-      for (const [r, c] of line.cells) mask.add(cellKey(r, c));
-      return mask;
-    }
-    function qualifies(seed, mask) {
-      if (anyBlank(seed)) return false;
-      const c0 = effColorAt(seed[0][0], seed[0][1]);
-      if (!seed.every(([r, c]) => effColorAt(r, c) === c0)) return false;
-      if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
-      return true;
-    }
-    function findMatches(mask) {
-      const matches = [];
-      for (const line of LINES2) {
-        const cells = line.cells;
-        for (let i = 0; i + 3 < cells.length; i++) {
-          const seed = cells.slice(i, i + 4);
-          if (!qualifies(seed, mask)) continue;
-          const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-          matches.push({ cells: region, points: Math.max(4, region.length), label: labels.run4 });
-        }
-      }
-      for (const cells of BIG_TRIANGLES)
-        if (qualifies(cells, mask)) matches.push({ cells, points: 4, label: labels.bigTriangle });
-      return matches;
-    }
-    function isFullDotMatch(cells) {
-      if (cells.some(([r, c]) => grid[r][c].face !== "dot")) return false;
-      const c0 = grid[cells[0][0]][cells[0][1]].dotColor;
-      return cells.every(([r, c]) => grid[r][c].dotColor === c0);
-    }
-    function findLineBonuses() {
-      const found = [];
-      for (const line of LINES2) {
-        if (line.cells.length < MIN_LINE_BONUS_LEN2) continue;
-        if (anyBlank(line.cells)) continue;
-        if (!isFullDotMatch(line.cells)) continue;
-        const sig = line.cells.map(([r, c]) => grid[r][c].id).sort((a, b) => a - b).join(",");
-        if (bonusedSignatures.has(sig)) continue;
-        bonusedSignatures.add(sig);
-        found.push(line.cells);
-      }
-      pendingBonus = found;
-      return found;
-    }
-    function applyLineBonus() {
-      for (const cells of pendingBonus)
-        for (const [r, c] of cells) {
-          const t = grid[r][c];
-          if (t.face === "flavor") t.face = "dot";
-          t.color = BLANK2;
-          t.dotColor = BLANK2;
-        }
-      pendingBonus = [];
-    }
-    function liveTiles() {
-      const live = [];
-      for (let r = 0; r < ROW_LENS.length; r++)
-        for (let c = 0; c < ROW_LENS[r]; c++) {
-          const t = grid[r][c];
-          if (!isBlank(t)) live.push({ cell: [r, c], tile: t });
-        }
-      return live;
-    }
-    return {
-      kind: "triangle",
-      palette: TRIANGLE_PALETTE,
-      rows: ROW_LENS.length,
-      cellsInRow: (r) => ROW_LENS[r],
-      tileAt: (r, c) => grid[r][c],
-      isBlankAt: (r, c) => isBlank(grid[r][c]),
-      pointsUp: isUp,
-      // 一枚的重心，单位是「半边长」（边长 = 2 个单位，和另外两副一样）。朝上
-      // 的重心偏下、朝下的偏上，所以两者的 y 差着 √3/3——一排里的重心是锯齿状
-      // 的，这是三角形拼图本来的样子，不是算错了。
-      centerOf: (r, c) => {
-        const { i, p: p2 } = globalPos(r, c);
-        const up = p2 % 2 === 0;
-        const j = up ? p2 / 2 : (p2 - 1) / 2;
-        const xBase = -i + j * 2;
-        return up ? [xBase, Math.sqrt(3) * (3 * i + 2) / 3] : [xBase + 1, Math.sqrt(3) * (3 * i + 1) / 3];
-      },
-      // 包围盒按真正的三个顶点算，不按重心——重心在三角里是偏的，按重心算会把
-      // 顶上那一排的尖和最底下那一排的底切掉。
-      extent: () => {
-        let minX = Infinity;
-        let maxX = -Infinity;
-        let minY = Infinity;
-        let maxY = -Infinity;
-        for (let r = 0; r < ROW_LENS.length; r++)
-          for (let c = 0; c < ROW_LENS[r]; c++) {
-            const { i, p: p2 } = globalPos(r, c);
-            const up = p2 % 2 === 0;
-            const j = up ? p2 / 2 : (p2 - 1) / 2;
-            const xBase = -i + j * 2;
-            const top = Math.sqrt(3) * i;
-            const bottom = Math.sqrt(3) * (i + 1);
-            const pts = up ? [[xBase, top], [xBase - 1, bottom], [xBase + 1, bottom]] : [[xBase + 1, bottom], [xBase, top], [xBase + 2, top]];
-            for (const [x, y] of pts) {
-              minX = Math.min(minX, x);
-              maxX = Math.max(maxX, x);
-              minY = Math.min(minY, y);
-              maxY = Math.max(maxY, y);
-            }
-          }
-        return { minX, minY, w: maxX - minX, h: maxY - minY };
-      },
-      linesThrough(r, c) {
-        return LINES2.filter((l) => l.cells.some(([rr, cc]) => rr === r && cc === c)).map((l) => ({
-          id: l.id,
-          cells: l.cells,
-          vec: FAM_VEC2[l.fam]
-        }));
-      },
-      shiftLine,
-      deal,
-      cascade: (mask) => createCascadeStepper(
-        {
-          tileAt: (r, c) => grid[r][c],
-          findMatches,
-          findLineBonuses,
-          onLineBonus: applyLineBonus,
-          resetMaskOnLineBonus: false
-        },
-        mask,
-        { pattern: labels.pattern, line: labels.line }
-      ),
-      isGameOver: () => grid.every((row) => row.every((t) => isBlank(t) || t.face === "dot")),
-      // 反面自己只靠整线得分，这副棋盘最短的整线是 3 枚。
-      stuckGroups: () => findStuckColorGroups(liveTiles(), /* @__PURE__ */ new Set(), void 0, MIN_LINE_BONUS_LEN2),
       remaining: () => countRemainingTiles(liveTiles())
     };
   }
@@ -1319,69 +909,27 @@
     ctx.arcTo(x, y, x + w, y, rr);
     ctx.closePath();
   }
-  function roundPoly(ctx, pts, r) {
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const prev = pts[(i - 1 + pts.length) % pts.length];
-      const cur = pts[i];
-      const next = pts[(i + 1) % pts.length];
-      const toPrev = Math.hypot(prev[0] - cur[0], prev[1] - cur[1]);
-      const start = [
-        cur[0] + (prev[0] - cur[0]) / toPrev * r,
-        cur[1] + (prev[1] - cur[1]) / toPrev * r
-      ];
-      if (i === 0) ctx.moveTo(start[0], start[1]);
-      else ctx.lineTo(start[0], start[1]);
-      ctx.arcTo(cur[0], cur[1], next[0], next[1], r);
-    }
-    ctx.closePath();
-  }
-  function triPoints(cx, cy, radius, up) {
-    const far = 2 * radius / Math.sqrt(3);
-    const near = radius / Math.sqrt(3);
-    return up ? [[cx, cy - far], [cx + radius, cy + near], [cx - radius, cy + near]] : [[cx, cy + far], [cx - radius, cy - near], [cx + radius, cy - near]];
-  }
-  function piecePath(ctx, kind, cx, cy, radius, up = true) {
+  function piecePath(ctx, kind, cx, cy, radius) {
     if (kind === "circle") {
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       return;
     }
-    if (kind === "triangle") {
-      roundPoly(ctx, triPoints(cx, cy, radius, up), radius * 0.2);
-      return;
-    }
     roundRect(ctx, cx - radius, cy - radius, radius * 2, radius * 2, radius * 0.36);
   }
-  function drawPiece(ctx, tile, kind, cx, cy, unit, palette, up = true) {
+  function drawPiece(ctx, tile, kind, cx, cy, unit, palette) {
     const radius = unit * 0.94;
     const color = tile.face === "dot" ? tile.dotColor : tile.color;
     if (color < 0) {
-      if (kind === "triangle") {
-        ctx.strokeStyle = COLORS.blank;
-        ctx.lineWidth = Math.max(1.5, unit * 0.12);
-        piecePath(ctx, kind, cx, cy, radius * 0.72, up);
-        ctx.stroke();
-        return;
-      }
       ctx.fillStyle = COLORS.blank;
-      piecePath(ctx, kind, cx, cy, radius, up);
+      piecePath(ctx, kind, cx, cy, radius);
       ctx.fill();
       return;
     }
     if (tile.face !== "dot") {
       ctx.fillStyle = palette[color];
-      piecePath(ctx, kind, cx, cy, radius, up);
+      piecePath(ctx, kind, cx, cy, radius);
       ctx.fill();
-      return;
-    }
-    if (kind === "triangle") {
-      ctx.fillStyle = palette[color];
-      piecePath(ctx, kind, cx, cy, radius * 0.6, up);
-      ctx.fill();
-      ctx.strokeStyle = "#1A1A1A";
-      ctx.lineWidth = Math.max(1.5, unit * 0.1);
-      ctx.stroke();
       return;
     }
     if (kind === "circle") {
@@ -1446,7 +994,7 @@
       for (let c = 0; c < board2.cellsInRow(r); c++) {
         if (onDrag.has(cellKey(r, c))) continue;
         const [px, py] = pixelOf(board2, layout2, r, c);
-        drawPiece(ctx, board2.tileAt(r, c), board2.kind, px, py, unit, palette, board2.pointsUp(r, c));
+        drawPiece(ctx, board2.tileAt(r, c), board2.kind, px, py, unit, palette);
       }
     if (drag2) {
       const span = drag2.cells.length * STEP_UNITS * unit;
@@ -1461,8 +1009,7 @@
             px + drag2.vec[0] * off,
             py + drag2.vec[1] * off,
             unit,
-            palette,
-            board2.pointsUp(r, c)
+            palette
           );
         }
       }
@@ -1472,7 +1019,7 @@
       ctx.lineWidth = Math.max(2, unit * 0.16);
       for (const [r, c] of cells) {
         const [px, py] = pixelOf(board2, layout2, r, c);
-        piecePath(ctx, board2.kind, px, py, unit * 0.94, board2.pointsUp(r, c));
+        piecePath(ctx, board2.kind, px, py, unit * 0.94);
         ctx.stroke();
       }
     };
@@ -1597,33 +1144,6 @@
       ctx.stroke();
     }
   }
-  function trianglePath(ctx, cx, cy, size) {
-    const h = size * Math.sqrt(3) / 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - h / 2);
-    ctx.lineTo(cx + size / 2, cy + h / 2);
-    ctx.lineTo(cx - size / 2, cy + h / 2);
-    ctx.closePath();
-  }
-  function iconTriangle(ctx, x, y, s) {
-    ctx.fillStyle = MARK_BG;
-    trianglePath(ctx, x + s / 2, y + s / 2, s);
-    ctx.fill();
-    const small = s * 0.26;
-    const spots = [
-      [0.5, 0.42, 1],
-      [0.34, 0.66, 2],
-      [0.66, 0.66, 3]
-    ];
-    for (const [fx, fy, ci] of spots) {
-      ctx.fillStyle = MARK_COLORS[ci];
-      trianglePath(ctx, x + s * fx, y + s * fy, small);
-      ctx.fill();
-      ctx.strokeStyle = COLORS.outline;
-      ctx.lineWidth = Math.max(1.5, s * 0.022);
-      ctx.stroke();
-    }
-  }
   function drawMenu(ctx, width, height, entries, text) {
     ctx.fillStyle = COLORS.page;
     ctx.fillRect(0, 0, width, height);
@@ -1727,7 +1247,6 @@
     line: "\u6574\u7EBF",
     pattern: "\u56FE\u6848",
     diamond121: "1-2-1",
-    bigTriangle: "\u5927\u4E09\u89D2",
     over: "\u6311\u6218\u7ED3\u675F \xB7 \u7EFC\u5408\u5F97\u5206",
     again: "\u518D\u6765",
     rawScore: "\u5F97\u5206",
@@ -1739,13 +1258,11 @@
     tagline: "\u6ED1\u52A8 \u2013 \u5F97\u5206 \u2013 \u6D88\u9664",
     home: "\u56DE\u4E3B\u83DC\u5355",
     square: "\u65B9\u5757",
-    circle: "\u5C0F\u7403",
-    triangle: "\u4E09\u89D2"
+    circle: "\u5C0F\u7403"
   };
   var GAMES = [
     { id: "square", name: T.square, icon: iconSquare, create: createSquareBoard },
-    { id: "circle", name: T.circle, icon: iconCircle, create: createCircleBoard },
-    { id: "triangle", name: T.triangle, icon: iconTriangle, create: createTriangleBoard }
+    { id: "circle", name: T.circle, icon: iconCircle, create: createCircleBoard }
   ];
   var screen = "menu";
   var menuHits = [];
@@ -1765,8 +1282,7 @@
     run4: T.run4,
     line: T.line,
     pattern: T.pattern,
-    diamond121: T.diamond121,
-    bigTriangle: T.bigTriangle
+    diamond121: T.diamond121
   };
   var board = GAMES[0].create(LABELS);
   var streak = createStreakTracker();

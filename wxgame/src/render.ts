@@ -64,40 +64,11 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.closePath();
 }
 
-/** 一条描着圆角的多边形。三角用它，圆角的半径按边长的比例给（同网页版）。 */
-function roundPoly(ctx: CanvasRenderingContext2D, pts: readonly [number, number][], r: number) {
-  ctx.beginPath();
-  for (let i = 0; i < pts.length; i++) {
-    const prev = pts[(i - 1 + pts.length) % pts.length];
-    const cur = pts[i];
-    const next = pts[(i + 1) % pts.length];
-    const toPrev = Math.hypot(prev[0] - cur[0], prev[1] - cur[1]);
-    const start: [number, number] = [
-      cur[0] + ((prev[0] - cur[0]) / toPrev) * r,
-      cur[1] + ((prev[1] - cur[1]) / toPrev) * r,
-    ];
-    if (i === 0) ctx.moveTo(start[0], start[1]);
-    else ctx.lineTo(start[0], start[1]);
-    ctx.arcTo(cur[0], cur[1], next[0], next[1], r);
-  }
-  ctx.closePath();
-}
-
-/** 一枚三角的三个顶点：边长 2×radius，重心落在 (cx, cy)。 */
-function triPoints(cx: number, cy: number, radius: number, up: boolean): [number, number][] {
-  // 重心到尖是 2r/√3，到底边是 r/√3——加起来正好是高 √3·r。
-  const far = (2 * radius) / Math.sqrt(3);
-  const near = radius / Math.sqrt(3);
-  return up
-    ? [[cx, cy - far], [cx + radius, cy + near], [cx - radius, cy + near]]
-    : [[cx, cy + far], [cx - radius, cy - near], [cx + radius, cy - near]];
-}
-
 /**
  * 一颗棋子的轮廓，以它的中心为准。
  *
- * 方块是圆角方格，小球是圆，三角是圆角三角（朝上朝下两种）——形状不同，但
- * 「多大」是同一个数（半边长的 radius 倍），所以同一副棋盘上大小一致。
+ * 方块是圆角方格，小球是圆——形状不同，但「多大」是同一个数（半边长的
+ * radius 倍），所以同一副棋盘上大小一致。
  */
 function piecePath(
   ctx: CanvasRenderingContext2D,
@@ -105,15 +76,10 @@ function piecePath(
   cx: number,
   cy: number,
   radius: number,
-  up = true,
 ) {
   if (kind === 'circle') {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    return;
-  }
-  if (kind === 'triangle') {
-    roundPoly(ctx, triPoints(cx, cy, radius, up), radius * 0.2);
     return;
   }
   roundRect(ctx, cx - radius, cy - radius, radius * 2, radius * 2, radius * 0.36);
@@ -139,41 +105,19 @@ export function drawPiece(
   cy: number,
   unit: number,
   palette: readonly string[],
-  up = true,
 ) {
   const radius = unit * 0.94;
   const color = tile.face === 'dot' ? tile.dotColor : tile.color;
   if (color < 0) {
-    // 三角那副的空位画成一圈空描边，不是一块淡实心——它自己那套配色里有一
-    // 个灰（#9B958D），淡实心和它太近，一眼分不出「这是空的」还是「这是灰
-    // 的」。空描边在哪套配色下都只有一个意思。
-    if (kind === 'triangle') {
-      ctx.strokeStyle = COLORS.blank;
-      ctx.lineWidth = Math.max(1.5, unit * 0.12);
-      piecePath(ctx, kind, cx, cy, radius * 0.72, up);
-      ctx.stroke();
-      return;
-    }
     ctx.fillStyle = COLORS.blank;
-    piecePath(ctx, kind, cx, cy, radius, up);
+    piecePath(ctx, kind, cx, cy, radius);
     ctx.fill();
     return;
   }
   if (tile.face !== 'dot') {
     ctx.fillStyle = palette[color];
-    piecePath(ctx, kind, cx, cy, radius, up);
+    piecePath(ctx, kind, cx, cy, radius);
     ctx.fill();
-    return;
-  }
-  if (kind === 'triangle') {
-    // 反面：同朝向、缩到六成的小三角，加一圈近黑的边。同大同形只会读成
-    // 「还是正面，换了个颜色」，缩小 + 描边才认得出这一面翻过来了。
-    ctx.fillStyle = palette[color];
-    piecePath(ctx, kind, cx, cy, radius * 0.6, up);
-    ctx.fill();
-    ctx.strokeStyle = '#1A1A1A';
-    ctx.lineWidth = Math.max(1.5, unit * 0.1);
-    ctx.stroke();
     return;
   }
   if (kind === 'circle') {
@@ -210,7 +154,7 @@ export function pixelOf(board: Board, layout: Layout, r: number, c: number): [nu
 /**
  * 手指按在哪一颗上——按「离哪一颗的中心最近」算，不按格子的方框。
  *
- * 小球是圆的、三角是尖的，方框互相咬合，按方框判会把边角判给隔壁那一颗。按
+ * 小球是圆的，方框互相咬合，按方框判会把边角判给隔壁那一颗。按
  * 中心距离就没有这回事，而且手指按偏一点也还认得出来（放宽到 1.1 个单位）。
  */
 export function cellAtPoint(board: Board, layout: Layout, px: number, py: number): Cell | null {
@@ -262,7 +206,7 @@ export function drawBoard(
     for (let c = 0; c < board.cellsInRow(r); c++) {
       if (onDrag.has(cellKey(r, c))) continue;
       const [px, py] = pixelOf(board, layout, r, c);
-      drawPiece(ctx, board.tileAt(r, c), board.kind, px, py, unit, palette, board.pointsUp(r, c));
+      drawPiece(ctx, board.tileAt(r, c), board.kind, px, py, unit, palette);
     }
   if (drag) {
     // 被拖的那条线画三份（本位、前一圈、后一圈），裁在版图里，看起来就是循
@@ -280,7 +224,6 @@ export function drawBoard(
           py + drag.vec[1] * off,
           unit,
           palette,
-          board.pointsUp(r, c),
         );
       }
     }
@@ -291,7 +234,7 @@ export function drawBoard(
     ctx.lineWidth = Math.max(2, unit * 0.16);
     for (const [r, c] of cells) {
       const [px, py] = pixelOf(board, layout, r, c);
-      piecePath(ctx, board.kind, px, py, unit * 0.94, board.pointsUp(r, c));
+      piecePath(ctx, board.kind, px, py, unit * 0.94);
       ctx.stroke();
     }
   };

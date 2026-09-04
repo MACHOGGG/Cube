@@ -303,8 +303,6 @@ export function createCircleBoard(labels: BoardLabels): Board {
     cellsInRow: (r) => r + 1,
     tileAt: (r, c) => grid[r][c],
     isBlankAt: (r, c) => isBlank(grid[r][c]),
-    // 只有三角那副分朝向。
-    pointsUp: () => true,
     // 一颗的中心，单位是半径的倍数：横向一步 2，纵向一排 √3，每往下一排整排
     // 往左错半步——这就是三角形堆球的摆法。
     centerOf: (r, c) => [(c - r / 2) * 2, r * Math.sqrt(3)],
