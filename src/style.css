@@ -913,16 +913,19 @@ button:hover { filter: brightness(1.05); }
   display: block; padding-top: 7px;
   font-size: clamp(0.68rem, 3.2vw, 0.82rem); line-height: 1.2;
   color: var(--ink-soft); letter-spacing: 0.02em; text-align: center;
-  /* 永远一行。
-     卡片有多大是算出来的（--home-card-cap 那道算式），算的时候按「每排小字
-     占一行」减掉了一个定数；小字要是折成两行，那道算式就少减了，整页会顶出
-     一条滚动条——法语的「Triangles classiques」「Retournement infini」正好
-     长到会折，check-overlap 在 1366×768 上逮到过。
-     一行放不下就让它左右稍微探出卡片：卡片之间留着 18~34px 的缝，探出去一
-     点点还在自己的地盘里，比折行安全。溢出的部分不裁（overflow: visible 是
-     默认），所以字始终是完整的。 */
-  white-space: nowrap;
 }
+/* 宽版的小字永远一行。
+   宽版的卡片有多大是按「屏幕还剩多高」算出来的（--home-card-cap 那道算式），
+   算的时候按「每排小字占一行」减掉了一个定数；小字要是折成两行，那道算式就
+   少减了，整页会顶出一条滚动条——法语的「Triangles classiques」
+   「Retournement infini」正好长到会折，check-overlap 在 1366×768 上逮到过。
+   一行放不下就让它左右稍微探出卡片：卡片之间留着 14~34px 的缝，探出去一点点
+   还在自己的地盘里，比折行安全。溢出的部分不裁（overflow: visible 是默认），
+   所以字始终是完整的。
+   窄版（手机竖屏）不受这条管：那一页本来就要往下滑，折行只是多占一点高度，
+   撑不坏什么。横过来的手机也不受管——见下面那条媒体查询，它的卡片改成按宽
+   度算了，跟高度无关。 */
+.home-page--wide .home-icon-tag { white-space: nowrap; }
 /* The icon grid wants far more width than the standard reading column.
    一排最多三张，每张被 --home-card-cap 收住，所以整页的宽由那三张决定；这里
    给的是上限，屏幕再宽也不会把三张拉散。 */
@@ -1061,12 +1064,31 @@ button:hover { filter: brightness(1.05); }
    收完仍然要往下滑一段：十一个图标排成三排，在 375px 高的屏幕里，除非把
    图标压到点不中，否则装不下。这一段滑动是应该有的。 */
 @media (orientation: landscape) and (max-height: 480px) {
-  .app.home-page--wide { padding-top: 10px; padding-bottom: 96px; }
+  .app.home-page--wide { padding-top: 10px; padding-bottom: 112px; }
   .home-page--wide .home-head { margin-bottom: 8px; padding-top: 2px; }
   .home-page--wide .home-head-glass { padding: 2px 18px 6px; }
   .home-page--wide .home-title { font-size: 1.5rem; padding-bottom: 2px; border-bottom-width: 2px; }
   .home-page--wide .home-sub { margin-top: 3px; font-size: 0.68rem; }
   .home-page--wide .home-grid { gap: 14px; }
+  /* 横过来的手机：图标改成按「屏幕还剩多宽」算，不再按高。
+     按高算的话，三百多像素的高度分给三排，一张卡只剩几个像素，于是永远落在
+     72px 那个下限上——玩家说那太小了，要至少大一倍。
+     按宽算就宽松得多：最挤的那两排各五张，横着排得下才是真的排得下。
+       一排 = 页面左右边距 16×2 + 五张卡 + 四道缝 14×4 = 100vw
+     反过来解出一张卡 = (100vw - 88px) / 5。844 宽的手机上是 151px，正好是从
+     前那 72px 的两倍出头；568 那种老机型上是 96px，也比从前大三成。
+     上限 200px 是给折叠屏展开那种超宽屏兜底的，免得三排卡片胀到一屏放不下
+     还得滑很久。
+     这一页本来就要往下滑一段（三排图标进不了三百多像素的高度），滑动是应该
+     有的；要保证的是滑到底时底排那两颗图标不压着最后一排的小字——所以上面
+     那行页面下边距从 96 提到 112：底排从屏幕底算起占 86，留出 26 的余地。 */
+  .home-page--wide { --home-card-cap: min(200px, (100vw - 88px) / 5); }
+  .home-page--wide .home-row { gap: 14px; }
+  /* 卡片按宽度算之后，小字折不折行就不再影响「装不装得下」，所以把宽版那条
+     「永远一行」放开。屏幕特别窄的横屏（568×320 那种老机型）上一张卡只有
+     96px，法语的「Triangles classiques」一行怎么都放不下，硬撑一行会把整页
+     顶出一条横向滚动条——那种屏幕上折成两行才是对的。 */
+  .home-page--wide .home-icon-tag { white-space: normal; }
 }
 /* 图那一格。卡片 = 这一格 +（窄屏才有的）一行小字，所以「图有多大」和「卡
    有多高」从这里开始是两件事：图永远是正方的，卡可以更高。
