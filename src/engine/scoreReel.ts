@@ -6,6 +6,8 @@ export interface ScoreReel {
 }
 
 const GAIN_POP_MS = 1400;
+/** 数字轮转一格多高（em）。和 style.css 的 --reel-step 必须一致。 */
+const REEL_STEP = 1.1;
 
 /** The slot-machine digit roll + floating "+N" gain popups shared by every board's HUD. */
 export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): ScoreReel {
@@ -49,7 +51,9 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
       boxes.pop()!.box.remove();
     }
     digits.forEach((d, i) => {
-      boxes[i].strip.style.transform = `translateY(-${d * 1.5}em)`;
+      // 一格的高度：和 style.css 里 .score-reel 的 --reel-step 是同一个数，
+      // 改一处必须改另一处（那边的注释里记着为什么是 1.1）。
+      boxes[i].strip.style.transform = `translateY(-${d * REEL_STEP}em)`;
     });
   }
 

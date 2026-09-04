@@ -312,13 +312,26 @@ h1 {
   .perf-cell.hot .v { animation: none; }
 }
 
-.score-reel { display: inline-flex; }
-.digit-box { position: relative; height: 1.5em; width: 0.64em; overflow: hidden; }
+/* 会滚动的得分数字。
+ *
+ * 一格的高度 = --reel-step，三处必须是同一个数：这里的 .digit-box、下面
+ * .digit-strip span 的高和行高、以及 scoreReel.ts 里那句 translateY。
+ *
+ * 为什么是 1.1em 而不是从前的 1.5em：游戏页顶上三个数字是并排的三格，旁边
+ * 两格是普通文字，跟着 .hud-cell 的 line-height: 1.1。数字轮从前是 1.5em，
+ * 两种行盒各自居中、各自算半行距，亚像素一取整就差出小半个到两个像素——
+ * 玩家一眼看出来了：「三个数字不在同一水平线上」。两边用同一个高度，这个
+ * 差就不存在了。
+ * 数字本身高不到 0.75em，1.1em 的框装得下，不会切到。 */
+.score-reel { display: inline-flex; --reel-step: 1.1em; }
+.digit-box { position: relative; height: var(--reel-step); width: 0.64em; overflow: hidden; }
 .digit-strip {
   position: absolute; left: 0; top: 0; width: 100%;
   transition: transform .5s cubic-bezier(.22,1,.36,1);
 }
-.digit-strip span { display: block; height: 1.5em; line-height: 1.5em; text-align: center; }
+.digit-strip span {
+  display: block; height: var(--reel-step); line-height: var(--reel-step); text-align: center;
+}
 
 /* Anchors a stack of independent per-action "+N" popups above the score;
    each .gain-pop child animates and removes itself on its own, so several
