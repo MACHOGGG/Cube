@@ -1472,12 +1472,9 @@ body:has(.center-pick--back) .home-nav { display: none; }
   transition: background 140ms ease;
 }
 .rank-tab--on { background: rgba(255, 255, 255, 0.96); }
-/* 钻进一个母标签之后，最左边那颗《＜》——退回外面那一排。它不是一张榜，所以
-   比别的窄一截，也不参与高亮。 */
-.rank-tab--back { padding-left: 10px; padding-right: 10px; font-size: 1.05rem; line-height: 1; opacity: 0.85; }
-/* 下一行：钻进一个母标签之后，它旗下那几张榜。药丸是同一套，只是底色再淡
-   一档——上一行答的是「在哪一类」，这一行答的是「这一类里的哪一张」。没钻进
-   去时这一行是 hidden 的，不占地方。
+/* 下一行：点开一个母标签之后，它旗下那几张榜。药丸是同一套，只是底色再淡
+   一档——上一行答的是「在哪一类」，这一行答的是「这一类里的哪一张」。没点开
+   时这一行是 hidden 的，不占地方。
    往上收 5px：.rank-view 那 12px 的行距是给「标签 / 榜」这两块之间用的，两
    行标签本来就是一件东西，贴近一点才像一组。 */
 .rank-tabs--sub { margin-top: -5px; }

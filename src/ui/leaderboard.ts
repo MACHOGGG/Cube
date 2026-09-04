@@ -212,39 +212,42 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   /**
    * 标签分两行。
    *
-   * 上一行是母标签：总榜，加六个玩法大类。点中其中一个，上一行就只剩它自己
-   * （左边多一颗《＜》退回去），旗下那几张榜落到下一行去（玩家的原话：「母
-   * tag 在上一行，如果点击了那么其他的消失，然后下一行子 tag 中可以选择」）。
+   * 上一行是母标签：总榜，加六个玩法大类。**这一行从头到尾都在**——点中其中
+   * 一个，它高亮起来，旗下那几张榜落到下一行；别的母标签一个都不撤（玩家的
+   * 原话：「点击了母 tag 后，其他母 tag 不要在第一行消失，仍然保留，只是下
+   * 面出现了子 tag」）。
    *
-   * 下一行不点也行：钻进去的那一下已经把母标签自己那张合起来的榜摆出来了，
-   * 那就是这一类的「总榜」。子标签是想单看某一副棋盘时才点的。
+   * 因为上一行一直在，换一类直接点上一行的另一个就是了，所以从前那颗《＜》
+   * 退回键没有存在的理由了——玩家点名删掉。要收起下一行，点最左边那颗《总
+   * 榜》：它本来就不是一个大类，没有子标签可展开。
    *
-   * 退回去只换这两行，底下那张榜不动：人是回来找别的榜的，不是要把刚看的那
-   * 张关掉。
+   * 下一行不点也行：点母标签的那一下已经把它那张合起来的榜摆出来了，那就是
+   * 这一类的「总榜」。子标签是想单看某一副棋盘时才点的。
    */
   function paintTabs(): void {
     const owner = ownerOf(current);
-    tabsEl.innerHTML = open
-      ? `<button class="rank-tab rank-tab--back" id="rankTabBack" aria-label="${esc(s.back)}">‹</button>` +
-        tabHtml(open as BoardTab, open.mode === current)
-      : [total, ...groups].map((t) => tabHtml(t, t.mode === current || t.mode === owner?.mode)).join('');
+    // 上一行：总榜 + 六个大类，永远是这七个。高亮的是「正在看的那张榜」，
+    // 或者「正在看的那张榜属于哪一类」——看子标签的时候，它的母标签也亮着，
+    // 这样一眼知道自己在哪一类里。
+    tabsEl.innerHTML = [total, ...groups]
+      .map((t) => tabHtml(t, t.mode === current || t.mode === owner?.mode || t.mode === open?.mode))
+      .join('');
     subEl.innerHTML = open ? open.children.map((t) => tabHtml(t, t.mode === current)).join('') : '';
     subEl.hidden = !open;
 
-    tabsEl.querySelector<HTMLButtonElement>('#rankTabBack')?.addEventListener('click', () => {
-      open = null;
-      paintTabs();
-    });
     const clickable = [
-      ...tabsEl.querySelectorAll<HTMLButtonElement>('.rank-tab:not(.rank-tab--back)'),
+      ...tabsEl.querySelectorAll<HTMLButtonElement>('.rank-tab'),
       ...subEl.querySelectorAll<HTMLButtonElement>('.rank-tab'),
     ];
     for (const tab of clickable) {
       tab.addEventListener('click', () => {
         const mode = tab.dataset.mode ?? '';
-        // 最外面那一排上点母标签：钻进去，同时就把它那张合起来的榜摆出来。
+        // 上一行点一个大类：展开它的子标签，同时把它那张合起来的榜摆出来。
+        // 点的是另一个大类就换过去——不像从前那样「已经开着就不再换」，因为
+        // 现在七个大类一直都在，随时可以横着跳。
         const group = groups.find((g) => g.mode === mode);
-        if (group && !open) open = group;
+        if (group) open = group;
+        // 《总榜》不是大类，没有子标签：点它就把下一行收起来。
         if (mode === '') open = null;
         void load(mode);
         paintTabs();

@@ -164,8 +164,7 @@ check('榜底下没有《N 人在榜 · 你排第 N》那句',
   (await page.$$eval('.records-panel--big .rank-foot', (e) => e.length)) === 0 &&
     !/人在榜|你排第/.test(await page.$eval('.records-panel--big', (e) => e.textContent)));
 
-// 点开母标签《基础》：上一行只剩它自己（左边多一颗《＜》），旗下那几张落到
-// 下一行去。
+// 点开母标签《基础》：上一行七个一个不少，旗下那几张落到下一行去。
 const clickTab = (label) =>
   page.$$eval('.rank-tab', (els, want) => {
     const hit = els.find((e) => e.textContent.trim() === want);
@@ -174,10 +173,14 @@ const clickTab = (label) =>
   }, label);
 const rowText = (sel) =>
   page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.textContent.trim()).join(' '));
+const ALL_TOP = '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转';
 await clickTab('基础');
 await page.waitForTimeout(400);
-check('点开《基础》：上一行只剩《＜》和它自己',
-  (await rowText('#rankTabs')) === '‹ 基础', await rowText('#rankTabs'));
+// 玩家点名改的：点开一个母标签之后，别的母标签不撤，上一行原样留着。
+check('点开《基础》：上一行七个一个不少',
+  (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
+check('那颗《＜》已经不存在了',
+  (await page.$$eval('.rank-tab--back', (e) => e.length)) === 0);
 check('旗下那几张落在下一行',
   (await rowText('#rankSubTabs')) === '方块 圆球 三角', await rowText('#rankSubTabs'));
 check('下一行是露出来的',
@@ -200,18 +203,30 @@ check('没打过的玩法，榜是空的，而且明说「这个玩法你还没�
   (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'),
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
 
-// 那颗《＜》：退回最外面那一排，底下那张榜不动。
-await page.click('.rank-tab--back');
-await page.waitForTimeout(300);
-const back = await rowText('#rankTabs');
-check('按《＜》退回最外面那一排',
-  back === '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转', back);
-check('退回来之后下一行收起来了',
+// 上一行一直在，所以换一类直接横着跳，不用先退回去。
+await clickTab('炸弹');
+await page.waitForTimeout(400);
+check('横着跳到《炸弹》：上一行还是那七个',
+  (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
+// 比的是 data-mode 不是字面：炸弹旗下那三张的名字和基础旗下那三张一模一样
+// （都是方块 / 圆球 / 三角），只有 mode 里的后缀不同。这也正是「上一行不能
+// 撤」的理由——光看下一行分不出自己在哪一类里。
+const rowModes = (sel) =>
+  page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.dataset.mode).join(' '));
+check('下一行换成了炸弹旗下那几张',
+  (await rowModes('#rankSubTabs')) === 'square:bomb circle:bomb triangle:bomb' &&
+    (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false,
+  await rowModes('#rankSubTabs'));
+check('高亮跟着跳到《炸弹》',
+  (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '炸弹');
+
+// 《总榜》不是大类，点它就把下一行收起来。
+await clickTab('总榜');
+await page.waitForTimeout(400);
+check('点《总榜》把下一行收起来',
   (await page.$eval('#rankSubTabs', (e) => e.hidden)) === true);
-check('退回来之后高亮的是刚才那个母标签',
-  (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '基础');
-check('底下那张榜没被这一下换掉',
-  (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'));
+check('收起来之后上一行还是那七个',
+  (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
 
 // 按那颗《返回》：弹窗关掉，底排导航回来。
 await page.click('.center-pick-back');
