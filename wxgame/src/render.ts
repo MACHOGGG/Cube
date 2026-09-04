@@ -193,14 +193,21 @@ export interface EndCardData {
   total: number;
   lines: string[];
   again: string;
+  /** 《回主菜单》那颗键上的字。 */
+  home: string;
 }
 
-/** 结算：一张居中的卡，综合得分大字，底下几行明细，一颗《再来》。 */
-export function drawEndCard(ctx: CanvasRenderingContext2D, width: number, height: number, d: EndCardData): { again: [number, number, number, number] } {
+/** 结算：一张居中的卡，综合得分大字，底下几行明细，一颗《再来》一颗《回主菜单》。 */
+export function drawEndCard(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  d: EndCardData,
+): { again: [number, number, number, number]; home: [number, number, number, number] } {
   ctx.fillStyle = 'rgba(46, 36, 48, 0.45)';
   ctx.fillRect(0, 0, width, height);
   const cw = Math.min(320, width - 40);
-  const ch = 220 + d.lines.length * 22;
+  const ch = 278 + d.lines.length * 22;
   const cx = (width - cw) / 2;
   const cy = (height - ch) / 2;
   ctx.fillStyle = '#FBF8F1';
@@ -216,15 +223,25 @@ export function drawEndCard(ctx: CanvasRenderingContext2D, width: number, height
   ctx.font = '500 13px sans-serif';
   ctx.fillStyle = COLORS.inkSoft;
   d.lines.forEach((line, i) => ctx.fillText(line, width / 2, cy + 122 + i * 22));
-  const bw = 140;
+  // 两颗键上下摞着：《再来》是主色，《回主菜单》收成一条描边的次要键——一
+  // 局打完最常按的是再来一局，回菜单是那条随时都在的退路。
+  const bw = 180;
   const bh = 46;
   const bx = width / 2 - bw / 2;
-  const by = cy + ch - bh - 22;
+  const hy = cy + ch - bh - 20;
+  const by = hy - bh - 12;
   ctx.fillStyle = COLORS.accent;
   roundRect(ctx, bx, by, bw, bh, 23);
   ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.font = '700 16px sans-serif';
   ctx.fillText(d.again, width / 2, by + 30);
-  return { again: [bx, by, bw, bh] };
+  ctx.strokeStyle = COLORS.boardEdge;
+  ctx.lineWidth = 2;
+  roundRect(ctx, bx, hy, bw, bh, 23);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.inkSoft;
+  ctx.font = '600 15px sans-serif';
+  ctx.fillText(d.home, width / 2, hy + 29);
+  return { again: [bx, by, bw, bh], home: [bx, hy, bw, bh] };
 }

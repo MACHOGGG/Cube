@@ -51,7 +51,7 @@
     }
     return kept;
   }
-  function createCascadeStepper(cfg, initialMask, labels) {
+  function createCascadeStepper(cfg, initialMask, labels, ledger) {
     let mask = initialMask;
     let terminal = false;
     let steps = 0;
@@ -82,13 +82,15 @@
         };
       }
       const nextMask = /* @__PURE__ */ new Set();
+      const idsOf = (m) => m.cells.map(([r, c]) => cfg.tileAt(r, c).id);
       const matches = dedupe(
         cfg.findMatches(mask).filter((m) => m.cells.some(([r, c]) => cfg.tileAt(r, c).face === "flavor"))
-      );
+      ).filter((m) => !ledger || ledger.allows(idsOf(m)));
       if (matches.length) {
         let points = 0;
         const toFlip = /* @__PURE__ */ new Set();
         for (const m of matches) {
+          ledger == null ? void 0 : ledger.note(idsOf(m));
           points += m.points;
           for (const [r, c] of m.cells) {
             nextMask.add(cellKey(r, c));
@@ -665,7 +667,7 @@
     ctx.fillStyle = "rgba(46, 36, 48, 0.45)";
     ctx.fillRect(0, 0, width, height);
     const cw = Math.min(320, width - 40);
-    const ch = 220 + d.lines.length * 22;
+    const ch = 278 + d.lines.length * 22;
     const cx = (width - cw) / 2;
     const cy = (height - ch) / 2;
     ctx.fillStyle = "#FBF8F1";
@@ -681,17 +683,103 @@
     ctx.font = "500 13px sans-serif";
     ctx.fillStyle = COLORS.inkSoft;
     d.lines.forEach((line, i) => ctx.fillText(line, width / 2, cy + 122 + i * 22));
-    const bw = 140;
+    const bw = 180;
     const bh = 46;
     const bx = width / 2 - bw / 2;
-    const by = cy + ch - bh - 22;
+    const hy = cy + ch - bh - 20;
+    const by = hy - bh - 12;
     ctx.fillStyle = COLORS.accent;
     roundRect(ctx, bx, by, bw, bh, 23);
     ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.font = "700 16px sans-serif";
     ctx.fillText(d.again, width / 2, by + 30);
-    return { again: [bx, by, bw, bh] };
+    ctx.strokeStyle = COLORS.boardEdge;
+    ctx.lineWidth = 2;
+    roundRect(ctx, bx, hy, bw, bh, 23);
+    ctx.stroke();
+    ctx.fillStyle = COLORS.inkSoft;
+    ctx.font = "600 15px sans-serif";
+    ctx.fillText(d.home, width / 2, hy + 29);
+    return { again: [bx, by, bw, bh], home: [bx, hy, bw, bh] };
+  }
+
+  // wxgame/src/menu.ts
+  var MARK_BG = "#A8A5A0";
+  var MARK_COLORS = ["#4C7EAD", "#E2941F", "#C0392B", "#2E8B45"];
+  function iconSquare(ctx, x, y, s) {
+    ctx.fillStyle = MARK_BG;
+    roundRect(ctx, x, y, s, s, s * 0.16);
+    ctx.fill();
+    const pad = s * 0.16;
+    const gap = s * 0.045;
+    const cell = (s - pad * 2 - gap) / 2;
+    for (let i = 0; i < 4; i++) {
+      const cx = x + pad + i % 2 * (cell + gap);
+      const cy = y + pad + Math.floor(i / 2) * (cell + gap);
+      ctx.fillStyle = MARK_COLORS[i];
+      roundRect(ctx, cx, cy, cell, cell, cell * 0.22);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.outline;
+      ctx.lineWidth = Math.max(1.5, s * 0.022);
+      ctx.stroke();
+    }
+  }
+  function drawMenu(ctx, width, height, entries, text) {
+    ctx.fillStyle = COLORS.page;
+    ctx.fillRect(0, 0, width, height);
+    const titleY = Math.max(72, height * 0.14);
+    ctx.textAlign = "center";
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = `700 ${Math.round(Math.min(width * 0.11, 46))}px sans-serif`;
+    ctx.fillText(text.title, width / 2, titleY);
+    ctx.fillStyle = COLORS.inkSoft;
+    ctx.font = `${Math.round(Math.min(width * 0.038, 16))}px sans-serif`;
+    ctx.fillText(text.tagline, width / 2, titleY + 26);
+    const perRow = Math.min(3, Math.max(1, entries.length));
+    const rows = Math.ceil(entries.length / perRow);
+    const gap = Math.round(width * 0.05);
+    const side = Math.round(width * 0.06);
+    const byWidth = (width - side * 2 - gap * (perRow - 1)) / perRow;
+    const top = titleY + 56;
+    const bottom = height - Math.max(40, height * 0.08);
+    const byHeight = (bottom - top - gap * (rows - 1)) / rows - 26;
+    const size = Math.max(64, Math.min(byWidth, byHeight, 190));
+    const hits = [];
+    const blockH = size + 26;
+    const startY = top + Math.max(0, (bottom - top - (blockH * rows + gap * (rows - 1))) / 2);
+    for (let i = 0; i < entries.length; i++) {
+      const row = Math.floor(i / perRow);
+      const inRow = Math.min(perRow, entries.length - row * perRow);
+      const col = i - row * perRow;
+      const rowW = size * inRow + gap * (inRow - 1);
+      const x = Math.round((width - rowW) / 2 + col * (size + gap));
+      const y = Math.round(startY + row * (blockH + gap));
+      entries[i].icon(ctx, x, y, size);
+      ctx.fillStyle = COLORS.ink;
+      ctx.font = `600 ${Math.round(Math.min(size * 0.16, 18))}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(entries[i].name, x + size / 2, y + size + 20);
+      hits.push({ id: entries[i].id, rect: [x, y, size, size + 26] });
+    }
+    return hits;
+  }
+  function drawCountdown(ctx, width, height, entry, n, phase) {
+    ctx.fillStyle = COLORS.page;
+    ctx.fillRect(0, 0, width, height);
+    const size = Math.min(width * 0.42, 180);
+    const x = (width - size) / 2;
+    const y = height * 0.28 - size / 2;
+    entry.icon(ctx, x, y, size);
+    ctx.textAlign = "center";
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = `600 ${Math.round(Math.min(width * 0.05, 20))}px sans-serif`;
+    ctx.fillText(entry.name, width / 2, y + size + 30);
+    const scale = 1.5 - 0.5 * Math.min(1, phase * 3);
+    const fs = Math.round(Math.min(width * 0.28, 120) * scale);
+    ctx.fillStyle = COLORS.accent;
+    ctx.font = `700 ${fs}px sans-serif`;
+    ctx.fillText(String(n), width / 2, height * 0.72);
   }
 
   // wxgame/src/composite.ts
@@ -745,8 +833,19 @@
     timeMult: "\u7528\u65F6\u7CFB\u6570",
     rateBonus: "\u6709\u6548\u5F97\u5206\u7387\u52A0\u6210",
     unflipped: "\u4ECE\u672A\u7FFB\u9762",
-    moves: "\u6B65"
+    moves: "\u6B65",
+    title: "Slides",
+    tagline: "\u6ED1\u52A8 \u2013 \u5F97\u5206 \u2013 \u6D88\u9664",
+    home: "\u56DE\u4E3B\u83DC\u5355",
+    square: "\u65B9\u5757"
   };
+  var GAMES = [{ id: "square", name: T.square, icon: iconSquare }];
+  var screen = "menu";
+  var menuHits = [];
+  var current = GAMES[0];
+  var COUNT_FROM = 4;
+  var countStartedAt = 0;
+  var homeRect = null;
   var CASCADE_COMBO_FACTOR = 3;
   var HIGHLIGHT_MS = 450;
   var STEP_GAP_MS = 260;
@@ -782,7 +881,13 @@
     return over ? endElapsed : (p.now() - startedAt) / 1e3;
   }
   var endElapsed = 0;
+  function startCountdown(entry) {
+    current = entry;
+    screen = "count";
+    countStartedAt = p.now();
+  }
   function newGame() {
+    screen = "play";
     board.deal();
     score = 0;
     moves = 0;
@@ -795,7 +900,17 @@
     over = false;
     resolving = false;
     drag = null;
+    homeRect = null;
     startedAt = p.now();
+  }
+  function goHome() {
+    screen = "menu";
+    over = false;
+    resolving = false;
+    drag = null;
+    endCard = null;
+    againRect = null;
+    homeRect = null;
   }
   function endGame() {
     if (over) return;
@@ -867,11 +982,22 @@
     };
     step();
   }
+  var inRect = (r, x, y) => !!r && x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3];
   p.onTouch({
     start(x, y) {
+      if (screen === "menu") {
+        const hit = menuHits.find((h) => inRect(h.rect, x, y));
+        const entry = hit && GAMES.find((g) => g.id === hit.id);
+        if (entry) {
+          p.vibrate();
+          startCountdown(entry);
+        }
+        return;
+      }
+      if (screen === "count") return;
       if (over) {
-        const a = againRect;
-        if (a && x >= a[0] && x <= a[0] + a[2] && y >= a[1] && y <= a[1] + a[3]) newGame();
+        if (inRect(againRect, x, y)) newGame();
+        else if (inRect(homeRect, x, y)) goHome();
         return;
       }
       if (resolving) return;
@@ -882,7 +1008,7 @@
       drag = { r, c, axis: null, x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
     },
     move(x, y) {
-      if (!drag) return;
+      if (screen !== "play" || !drag) return;
       drag.dx = x - drag.x0;
       drag.dy = y - drag.y0;
       if (!drag.axis) {
@@ -899,7 +1025,7 @@
     end(x, y) {
       const d = drag;
       drag = null;
-      if (!d || !d.axis) return;
+      if (screen !== "play" || !d || !d.axis) return;
       d.dx = x - d.x0;
       d.dy = y - d.y0;
       const L = layout();
@@ -911,6 +1037,20 @@
   });
   function draw() {
     const ctx = p.ctx;
+    if (screen === "menu") {
+      menuHits = drawMenu(ctx, p.width, p.height, GAMES, { title: T.title, tagline: T.tagline });
+      return;
+    }
+    if (screen === "count") {
+      const left = COUNT_FROM * 1e3 - (p.now() - countStartedAt);
+      if (left <= 0) {
+        newGame();
+        return;
+      }
+      const n = Math.ceil(left / 1e3);
+      drawCountdown(ctx, p.width, p.height, current, n, 1 - left % 1e3 / 1e3);
+      return;
+    }
     ctx.fillStyle = COLORS.page;
     ctx.fillRect(0, 0, p.width, p.height);
     drawHud(ctx, p.width, HUD_TOP, {
@@ -930,20 +1070,40 @@
     }
     if (board.rows > 0 && board.cols > 0) drawBoard(ctx, board, L, PALETTE, dv, highlights, stuckKeys);
     if (over && endCard) {
-      const r = drawEndCard(ctx, p.width, p.height, { title: T.over, total: endCard.total, lines: endCard.lines, again: T.again });
+      const r = drawEndCard(ctx, p.width, p.height, {
+        title: T.over,
+        total: endCard.total,
+        lines: endCard.lines,
+        again: T.again,
+        home: T.home
+      });
       againRect = r.again;
+      homeRect = r.home;
     }
   }
   function loop() {
     draw();
     p.requestFrame(loop);
   }
-  newGame();
   loop();
   if (!p.isWx) {
     globalThis.__slidesWx = {
       board,
       layout,
+      games: GAMES.map((g) => g.id),
+      get screen() {
+        return screen;
+      },
+      get menuHits() {
+        return menuHits;
+      },
+      /** 回归脚本用：直接开一局，不等那四秒。 */
+      startNow(id) {
+        var _a;
+        current = (_a = GAMES.find((g) => g.id === id)) != null ? _a : GAMES[0];
+        newGame();
+      },
+      goHome,
       get score() {
         return score;
       },

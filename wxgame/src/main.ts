@@ -1,9 +1,12 @@
 /**
- * Slides 微信小游戏——方块基础版原型的入口。
+ * Slides 微信小游戏的入口。
  *
- * 一屏：顶上三格读数（得分 / 有效得分率 / 用时），中间 6×6 棋盘，手指按住
- * 一行或一列拖，松手落到最近的整格，然后连锁：得分 → 翻面 → 整线消掉 → 再
- * 判；全翻完或死局就结算，综合得分和网页版同一条公式。
+ * 四屏，一条直线走下来：
+ *   主菜单 → 开局倒数 4-3-2-1 → 玩 → 结算（再来 / 回主菜单）
+ *
+ * 玩的那一屏：顶上三格读数（得分 / 有效得分率 / 用时），中间 6×6 棋盘，手指
+ * 按住一行或一列拖，松手落到最近的整格，然后连锁：得分 → 翻面 → 整线消掉 →
+ * 再判；全翻完或死局就结算，综合得分和网页版同一条公式。
  *
  * 规则那一半（squareBoard.ts + 网页版的 scoring / stalemate）和网页版是同一
  * 份；这个文件只管手指、节拍和画面。计分节拍照 gameController.resolveMove
@@ -12,6 +15,7 @@
 import { createSquareBoard, PALETTE } from './squareBoard';
 import { createPlatform } from './platform';
 import { COLORS, drawBoard, drawEndCard, drawHud, fmtTime, type DragView, type Highlight, type Layout } from './render';
+import { drawCountdown, drawMenu, iconSquare, type MenuEntry, type MenuHit } from './menu';
 import { compositeScore } from './composite';
 import { createStreakTracker } from '../../src/engine/scoring';
 import { createPerformanceGauge } from '../../src/engine/performance';
@@ -33,7 +37,31 @@ const T = {
   rateBonus: '有效得分率加成',
   unflipped: '从未翻面',
   moves: '步',
+  title: 'Slides',
+  tagline: '滑动 – 得分 – 消除',
+  home: '回主菜单',
+  square: '方块',
 };
+
+/**
+ * 菜单上摆哪几个玩法。
+ *
+ * 只摆做好了的——少一张卡片，好过摆一张按下去什么也不发生的卡片。小球和三
+ * 角的规则模型做好了（wxgame/src/circleBoard.ts / triangleBoard.ts），往这儿
+ * 加一行就是了，菜单的排版自己会跟上。
+ */
+const GAMES: readonly MenuEntry[] = [{ id: 'square', name: T.square, icon: iconSquare }];
+
+/** 这一屏是哪一屏。 */
+type Screen = 'menu' | 'count' | 'play';
+let screen: Screen = 'menu';
+let menuHits: MenuHit[] = [];
+/** 正在玩（或正要开）的那个玩法。 */
+let current: MenuEntry = GAMES[0];
+/** 倒数从几数起，以及它开始的时刻。 */
+const COUNT_FROM = 4;
+let countStartedAt = 0;
+let homeRect: [number, number, number, number] | null = null;
 
 /** 同 gameController：同一次滑动里的连锁，每多一拍再乘它。 */
 const CASCADE_COMBO_FACTOR = 3;
@@ -80,7 +108,15 @@ function elapsedSec(): number {
 let endElapsed = 0;
 
 // ---- 一局 ------------------------------------------------------------------
+/** 挑了一个玩法：先数 4-3-2-1，数完才开局。 */
+function startCountdown(entry: MenuEntry) {
+  current = entry;
+  screen = 'count';
+  countStartedAt = p.now();
+}
+
 function newGame() {
+  screen = 'play';
   board.deal();
   score = 0;
   moves = 0;
@@ -93,7 +129,19 @@ function newGame() {
   over = false;
   resolving = false;
   drag = null;
+  homeRect = null;
   startedAt = p.now();
+}
+
+/** 回主菜单：这一局就此作罢，不留结算。 */
+function goHome() {
+  screen = 'menu';
+  over = false;
+  resolving = false;
+  drag = null;
+  endCard = null;
+  againRect = null;
+  homeRect = null;
 }
 
 function endGame() {
@@ -173,11 +221,25 @@ function resolveMove(mask: Set<string>) {
 }
 
 // ---- 手指 ------------------------------------------------------------------
+const inRect = (r: [number, number, number, number] | null, x: number, y: number) =>
+  !!r && x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3];
+
 p.onTouch({
   start(x, y) {
+    if (screen === 'menu') {
+      const hit = menuHits.find((h) => inRect(h.rect, x, y));
+      const entry = hit && GAMES.find((g) => g.id === hit.id);
+      if (entry) {
+        p.vibrate();
+        startCountdown(entry);
+      }
+      return;
+    }
+    // 倒数那几秒按哪儿都不算——网页版也是，倒数停不住。
+    if (screen === 'count') return;
     if (over) {
-      const a = againRect;
-      if (a && x >= a[0] && x <= a[0] + a[2] && y >= a[1] && y <= a[1] + a[3]) newGame();
+      if (inRect(againRect, x, y)) newGame();
+      else if (inRect(homeRect, x, y)) goHome();
       return;
     }
     if (resolving) return;
@@ -188,7 +250,7 @@ p.onTouch({
     drag = { r, c, axis: null, x0: x, y0: y, dx: 0, dy: 0, lastShift: 0 };
   },
   move(x, y) {
-    if (!drag) return;
+    if (screen !== 'play' || !drag) return;
     drag.dx = x - drag.x0;
     drag.dy = y - drag.y0;
     if (!drag.axis) {
@@ -205,7 +267,7 @@ p.onTouch({
   end(x, y) {
     const d = drag;
     drag = null;
-    if (!d || !d.axis) return;
+    if (screen !== 'play' || !d || !d.axis) return;
     d.dx = x - d.x0;
     d.dy = y - d.y0;
     const L = layout();
@@ -219,6 +281,20 @@ p.onTouch({
 // ---- 画 --------------------------------------------------------------------
 function draw() {
   const ctx = p.ctx;
+  if (screen === 'menu') {
+    menuHits = drawMenu(ctx, p.width, p.height, GAMES, { title: T.title, tagline: T.tagline });
+    return;
+  }
+  if (screen === 'count') {
+    const left = COUNT_FROM * 1000 - (p.now() - countStartedAt);
+    if (left <= 0) {
+      newGame();
+      return;
+    }
+    const n = Math.ceil(left / 1000);
+    drawCountdown(ctx, p.width, p.height, current, n, 1 - (left % 1000) / 1000);
+    return;
+  }
   ctx.fillStyle = COLORS.page;
   ctx.fillRect(0, 0, p.width, p.height);
   drawHud(ctx, p.width, HUD_TOP, {
@@ -238,8 +314,15 @@ function draw() {
   }
   if (board.rows > 0 && board.cols > 0) drawBoard(ctx, board, L, PALETTE, dv, highlights, stuckKeys);
   if (over && endCard) {
-    const r = drawEndCard(ctx, p.width, p.height, { title: T.over, total: endCard.total, lines: endCard.lines, again: T.again });
+    const r = drawEndCard(ctx, p.width, p.height, {
+      title: T.over,
+      total: endCard.total,
+      lines: endCard.lines,
+      again: T.again,
+      home: T.home,
+    });
     againRect = r.again;
+    homeRect = r.home;
   }
 }
 
@@ -248,7 +331,7 @@ function loop() {
   p.requestFrame(loop);
 }
 
-newGame();
+// 开门见山是主菜单，不是直接开局——玩家先挑玩法。
 loop();
 
 // 浏览器里跑回归（scripts/check-wxgame.mjs）时露一个把手；小游戏里没有 window，不露。
@@ -256,6 +339,19 @@ if (!p.isWx) {
   (globalThis as any).__slidesWx = {
     board,
     layout,
+    games: GAMES.map((g) => g.id),
+    get screen() {
+      return screen;
+    },
+    get menuHits() {
+      return menuHits;
+    },
+    /** 回归脚本用：直接开一局，不等那四秒。 */
+    startNow(id?: string) {
+      current = GAMES.find((g) => g.id === id) ?? GAMES[0];
+      newGame();
+    },
+    goHome,
     get score() {
       return score;
     },

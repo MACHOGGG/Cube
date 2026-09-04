@@ -124,6 +124,31 @@ check('画布铺满一屏', await page.evaluate(() => {
   const c = document.querySelector('#wxgame');
   return Boolean(c) && c.getBoundingClientRect().width === innerWidth && c.getBoundingClientRect().height === innerHeight;
 }));
+
+// ---- 主菜单 → 倒数 → 玩 -------------------------------------------------------
+check('开门见山是主菜单，不是直接开局',
+  (await page.evaluate(() => globalThis.__slidesWx.screen)) === 'menu');
+const cards = await page.evaluate(() => globalThis.__slidesWx.menuHits.map((h) => ({ id: h.id, rect: h.rect })));
+check('菜单上摆着做好了的玩法，每张都有自己的方框',
+  cards.length === (await page.evaluate(() => globalThis.__slidesWx.games.length)) &&
+    cards.every((c) => c.rect[2] > 40 && c.rect[3] > 40),
+  JSON.stringify(cards));
+{
+  // 卡片横向居中：左边到屏幕的距离和右边一样。
+  const first = cards[0].rect;
+  const last = cards[cards.length - 1].rect;
+  const leftGap = first[0];
+  const rightGap = 390 - (last[0] + last[2]);
+  check('菜单卡片整体居中', Math.abs(leftGap - rightGap) <= 1, `${leftGap} / ${rightGap}`);
+}
+// 按一张卡片：进倒数，不是直接进棋盘。
+await page.mouse.click(cards[0].rect[0] + cards[0].rect[2] / 2, cards[0].rect[1] + cards[0].rect[3] / 2);
+await page.waitForTimeout(200);
+check('按下一张卡片，先数 4-3-2-1', (await page.evaluate(() => globalThis.__slidesWx.screen)) === 'count');
+// 数完自己开局（4 秒）。
+await page.waitForTimeout(4200);
+check('数完自动开局', (await page.evaluate(() => globalThis.__slidesWx.screen)) === 'play');
+
 const state0 = await page.evaluate(() => {
   const g = globalThis.__slidesWx;
   const L = g.layout();
@@ -157,6 +182,13 @@ await page.waitForTimeout(1600);
 const shot = process.argv[2] || join(tmp, 'wxgame.png');
 await page.screenshot({ path: shot });
 console.log('截图：' + shot);
+// 回主菜单这条退路。
+await page.evaluate(() => globalThis.__slidesWx.goHome());
+await page.waitForTimeout(200);
+check('回得了主菜单', (await page.evaluate(() => globalThis.__slidesWx.screen)) === 'menu');
+const menuShot = shot.replace(/\.png$/, '-menu.png');
+await page.screenshot({ path: menuShot });
+console.log('主菜单截图：' + menuShot);
 await browser.close();
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
