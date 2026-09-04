@@ -572,7 +572,6 @@ function showWorldRankPage() {
   trackScreen('world-rank');
   renderWorldRankPage(root, {
     lang: currentLang,
-    shapeIds: [...new Set(recordSources.map((src) => src.card.id))],
     onBack: backToProfile,
     onWantGenius: () => openGeniusWindow(currentLang, showWorldRankPage),
     onReLogin: () => openAuthWindow(currentLang, 'login', showWorldRankPage),

@@ -1308,6 +1308,9 @@ body:has(.center-pick--back) .home-nav { display: none; }
   transition: background 140ms ease;
 }
 .rank-tab--on { background: rgba(255, 255, 255, 0.96); }
+/* 钻进一个母标签之后，最左边那颗《＜》——退回外面那一排。它不是一张榜，所以
+   比别的窄一截，也不参与高亮。 */
+.rank-tab--back { padding-left: 10px; padding-right: 10px; font-size: 1.05rem; line-height: 1; opacity: 0.85; }
 .rank-body { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; min-height: 0; }
 .rank-row {
   display: flex; align-items: center; gap: 10px;

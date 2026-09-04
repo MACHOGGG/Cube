@@ -23,17 +23,40 @@ const esc = (v: string) =>
 const GHOST_ROWS = 8;
 
 export interface BoardTab {
-  /** 空字符串是总榜。 */
+  /** 空字符串是总榜；`g:` 开头是母榜（旗下几张合起来）；别的是一张单独的榜。 */
   mode: string;
   label: string;
 }
 
-/** 总榜 + 每个玩法一张。玩法的顺序就是主菜单的顺序。 */
-export function boardTabs(lang: Lang, shapeIds: readonly string[]): BoardTab[] {
+/** 一个母标签，和它旗下那几张榜。 */
+export interface BoardGroup extends BoardTab {
+  children: BoardTab[];
+}
+
+const BASE_THREE = ['square', 'circle', 'triangle'] as const;
+const LAYOUTS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'] as const;
+
+/**
+ * 排行榜的六个母标签，和它们旗下的榜。
+ *
+ * 玩家定的顺序：总榜、基础、计时、炸弹、特殊布局、老虎机、无限反转。点母标签
+ * 看的是它旗下几张合起来的样子，点子标签才是单独那一张（服务器那头同一套，见
+ * api/scores.js 的 GROUPS）。
+ *
+ * 特殊布局旗下按棋盘分，不再按玩法分：一张 V 形三角的榜就是「V 形三角打得最好
+ * 的人」，那几块棋盘玩的人本来就少，再切一遍只会切出五张空榜。
+ */
+export function boardGroups(lang: Lang): BoardGroup[] {
   const s = STRINGS[lang];
+  const named = (ids: readonly string[], kind: string): BoardTab[] =>
+    ids.map((id) => ({ mode: kind ? `${id}:${kind}` : id, label: shapeName(lang, id, id) }));
   return [
-    { mode: '', label: s.rankTotalBoard },
-    ...shapeIds.map((id) => ({ mode: id, label: shapeName(lang, id, id) })),
+    { mode: 'g:base', label: s.rankTabBase, children: named(BASE_THREE, 'base') },
+    { mode: 'g:timed', label: s.rankTabTimed, children: named(BASE_THREE, 'timed') },
+    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_THREE, 'bomb') },
+    { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
+    { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_THREE, 'slot') },
+    { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip') },
   ];
 }
 
@@ -107,7 +130,6 @@ function expiredHtml(lang: Lang): string {
 
 export interface BoardViewOpts {
   lang: Lang;
-  shapeIds: readonly string[];
   /** 点《成为 Slides 天才》时去哪儿。 */
   onWantGenius: () => void;
   /**
@@ -128,20 +150,19 @@ export interface BoardViewOpts {
  */
 export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   const s = STRINGS[opts.lang];
-  const tabs = boardTabs(opts.lang, opts.shapeIds);
+  const groups = boardGroups(opts.lang);
+  const total: BoardTab = { mode: '', label: s.rankTotalBoard };
+  /** 哪个母标签被点开了（null 就是最外面那一排）。 */
+  let open: BoardGroup | null = null;
+  /** 现在看的是哪一张榜。 */
+  let current = '';
+
   host.classList.add('rank-view');
   host.innerHTML = `
-    <div class="rank-tabs" role="tablist">
-      ${tabs
-        .map(
-          (t, i) =>
-            `<button class="rank-tab${i === 0 ? ' rank-tab--on' : ''}" role="tab" data-mode="${esc(t.mode)}">${esc(t.label)}</button>`,
-        )
-        .join('')}
-    </div>
+    <div class="rank-tabs" role="tablist" id="rankTabs"></div>
     <div class="rank-body" id="rankBody"><p class="rank-empty">${s.rankLoading}</p></div>
   `;
-
+  const tabsEl = host.querySelector<HTMLElement>('#rankTabs')!;
   const body = host.querySelector<HTMLElement>('#rankBody')!;
   /** 换得比回包快的时候，别让旧的那一份盖住新的。 */
   let generation = 0;
@@ -171,6 +192,7 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   };
 
   const load = async (mode: string) => {
+    current = mode;
     const mine = ++generation;
     body.innerHTML = `<p class="rank-empty">${s.rankLoading}</p>`;
     const result = await fetchBoard(mode || undefined);
@@ -178,14 +200,46 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
     paint(result);
   };
 
-  for (const tab of host.querySelectorAll<HTMLButtonElement>('.rank-tab')) {
-    tab.addEventListener('click', () => {
-      for (const other of host.querySelectorAll('.rank-tab')) other.classList.remove('rank-tab--on');
-      tab.classList.add('rank-tab--on');
-      void load(tab.dataset.mode ?? '');
+  /** 现在看的这张榜归哪个母标签——退回外面那一排时，高亮的是它。 */
+  const ownerOf = (mode: string): BoardGroup | null =>
+    groups.find((g) => g.mode === mode || g.children.some((c) => c.mode === mode)) ?? null;
+
+  const tabHtml = (t: BoardTab, on: boolean) =>
+    `<button class="rank-tab${on ? ' rank-tab--on' : ''}" role="tab" data-mode="${esc(t.mode)}">${esc(t.label)}</button>`;
+
+  /**
+   * 那一排标签。两层：最外面是总榜加六个母标签；点开一个，整排换成它自己加
+   * 它旗下那几张，最左边多一颗《＜》退回去（玩家的原话：「原有的 tag 会消失，
+   * 跳出它旗下的几个 tag，左边加一个『＜』的标识表示退出到上一母 tag」）。
+   *
+   * 退回去只换这一排，底下那张榜不动：人是回来找别的榜的，不是要把刚看的那
+   * 张关掉。
+   */
+  function paintTabs(): void {
+    const owner = ownerOf(current);
+    tabsEl.innerHTML = open
+      ? `<button class="rank-tab rank-tab--back" id="rankTabBack" aria-label="${esc(s.back)}">‹</button>` +
+        [open as BoardTab, ...open.children].map((t) => tabHtml(t, t.mode === current)).join('')
+      : [total, ...groups].map((t) => tabHtml(t, t.mode === current || t.mode === owner?.mode)).join('');
+
+    tabsEl.querySelector<HTMLButtonElement>('#rankTabBack')?.addEventListener('click', () => {
+      open = null;
+      paintTabs();
     });
+    for (const tab of tabsEl.querySelectorAll<HTMLButtonElement>('.rank-tab:not(.rank-tab--back)')) {
+      tab.addEventListener('click', () => {
+        const mode = tab.dataset.mode ?? '';
+        // 最外面那一排上点母标签：钻进去，同时就把它那张合起来的榜摆出来。
+        const group = groups.find((g) => g.mode === mode);
+        if (group && !open) open = group;
+        if (mode === '') open = null;
+        void load(mode);
+        paintTabs();
+      });
+    }
   }
 
+  paintTabs();
   void load('');
 }
 

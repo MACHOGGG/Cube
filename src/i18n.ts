@@ -67,6 +67,13 @@ export interface I18nStrings {
   rankingsTitle: string;
   /** 排行榜那一块。 */
   rankTotalBoard: string;
+  /** 排行榜上那六个母标签。点开来是它旗下的几张榜（见 ui/leaderboard 的 boardGroups）。 */
+  rankTabBase: string;
+  rankTabTimed: string;
+  rankTabBomb: string;
+  rankTabLayout: string;
+  rankTabSlot: string;
+  rankTabFlip: string;
   rankBestBoard: string;
   rankLocked: string;
   rankLockedCta: string;
@@ -476,6 +483,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     multiplayerTitle: 'Multiplayer',
     rankingsTitle: 'Records & rankings',
     rankTotalBoard: 'Overall',
+    rankTabBase: 'Base',
+    rankTabTimed: 'Timed',
+    rankTabBomb: 'Bomb',
+    rankTabLayout: 'Layouts',
+    rankTabSlot: 'Slots',
+    rankTabFlip: 'Flip',
     rankBestBoard: 'Best single run',
     rankLocked: 'The global leaderboard is a Slides Genius perk',
     rankLockedCta: 'Become a Slides Genius',
@@ -793,6 +806,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     multiplayerTitle: 'Multijoueur',
     rankingsTitle: 'Historique et classements',
     rankTotalBoard: 'Général',
+    rankTabBase: 'Base',
+    rankTabTimed: 'Chrono',
+    rankTabBomb: 'Bombe',
+    rankTabLayout: 'Plateaux',
+    rankTabSlot: 'Machine',
+    rankTabFlip: 'Infini',
     rankBestBoard: 'Meilleure partie',
     rankLocked: 'Le classement mondial est réservé aux Slides Genius',
     rankLockedCta: 'Devenir Slides Genius',
@@ -1110,6 +1129,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     multiplayerTitle: '多人遊玩',
     rankingsTitle: '成績與排名',
     rankTotalBoard: '總榜',
+    rankTabBase: '基礎',
+    rankTabTimed: '計時',
+    rankTabBomb: '炸彈',
+    rankTabLayout: '特殊佈局',
+    rankTabSlot: '老虎機',
+    rankTabFlip: '無限反轉',
     rankBestBoard: '單局最佳',
     rankLocked: '全球排行榜是 Slides 天才的特權',
     rankLockedCta: '成為 Slides 天才',
@@ -1427,6 +1452,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     multiplayerTitle: '多人游玩',
     rankingsTitle: '成绩与排名',
     rankTotalBoard: '总榜',
+    rankTabBase: '基础',
+    rankTabTimed: '计时',
+    rankTabBomb: '炸弹',
+    rankTabLayout: '特殊布局',
+    rankTabSlot: '老虎机',
+    rankTabFlip: '无限反转',
     rankBestBoard: '单局最佳',
     rankLocked: '全球排行榜是 Slides 天才的特权',
     rankLockedCta: '成为 Slides 天才',

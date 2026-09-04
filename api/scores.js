@@ -6,7 +6,7 @@
  *   push   打完一局，把这一局挂到账号上；顺手更新两张榜。
  *   mine   我自己的存档——换台设备登录，记录跟着回来。
  *   board  排行榜。所有人都上榜，但只有天才看得见（见下面那段）。
- *   sweep  管理员维护：把某一种玩法（比如无限反转）从榜上抹掉，见文件末尾。
+ *   rebuild  管理员维护：照存档把所有榜重算一遍（可以顺手清掉某一种局），见文件末尾。
  *
  * ── 关于「谁上榜」和「谁看得见」 ──────────────────────────────
  *
@@ -70,8 +70,61 @@ const boardKey = (mode) => 'lb:' + mode;
  * 卡上，是本机自己算的。
  */
 const TOTAL_BOARD = 'lb:total';
-/** id → 总榜上那一局是哪个玩法。一张哈希表，画行首那个小图形用。 */
+/** id → 总榜上那一局是哪张榜。一张哈希表，画行首那个小图形用。 */
 const TOTAL_MODE = 'lb:total:mode';
+
+/**
+ * 一张榜的名字。
+ *
+ * 三块基础棋盘按玩法分开记——`square:base`、`square:timed`、`square:bomb`、
+ * `square:slot`、`square:flip`。它们本来共用一张榜，可这几种局的分根本不是
+ * 一把尺子：无限反转翻来翻去、老虎机认的是另一对图案、计时局只有六十秒，混
+ * 在一起比谁高没有意义（玩家的原话：排行榜要分成基础、计时、炸弹、特殊布局、
+ * 老虎机、无限反转几块）。
+ *
+ * 别的布局各自一张，不再往下分：一张 V 形三角的榜就是「V 形三角打得最好的
+ * 人」，它上面的炸弹局、计时局都算在里头——那几块棋盘本来玩的人就少，再切成
+ * 五份只会切出五张空榜。
+ *
+ * 定时炸弹归到炸弹里（bombTimed → bomb）：它是炸弹的一种，不是第七块。
+ */
+const BASE_SHAPES = ['square', 'circle', 'triangle'];
+const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'];
+const KINDS = ['base', 'timed', 'bomb', 'slot', 'flip'];
+
+/** 这一局算哪一种。存档里那份 data 说了算（modeKey 加老虎机那个标记）。 */
+function kindOf(data) {
+  const mk = String(data?.modeKey || 'base');
+  if (mk === 'flip') return 'flip';
+  if (mk === 'bomb' || mk === 'bombTimed') return 'bomb';
+  if (mk === 'timed') return 'timed';
+  return data?.slot ? 'slot' : 'base';
+}
+const boardIdOf = (mode, data) =>
+  BASE_SHAPES.includes(mode) ? `${mode}:${kindOf(data)}` : mode;
+
+/** 现在一共有哪些榜。重建的时候要照着它把人先撤干净。 */
+const ALL_BOARDS = [
+  ...BASE_SHAPES.flatMap((shape) => KINDS.map((kind) => `${shape}:${kind}`)),
+  ...LAYOUT_BOARDS,
+];
+/** 老版本那一套：一块棋盘一张榜，不分玩法。重建时顺手撤掉。 */
+const LEGACY_BOARDS = [...BASE_SHAPES, ...LAYOUT_BOARDS];
+
+/**
+ * 母标签旗下的几张榜。点《基础》看到的是它们合起来的样子——每个人取自己在
+ * 这几张榜上最高的那一分（见 groupRows），点《方块》才是单独那一张。
+ */
+const GROUPS = {
+  base: BASE_SHAPES.map((s) => `${s}:base`),
+  timed: BASE_SHAPES.map((s) => `${s}:timed`),
+  bomb: BASE_SHAPES.map((s) => `${s}:bomb`),
+  layout: LAYOUT_BOARDS,
+  slot: BASE_SHAPES.map((s) => `${s}:slot`),
+  flip: ['square:flip', 'circle:flip'],
+};
+/** 合并一张母榜时，每张子榜先取前多少名。 */
+const GROUP_SCAN = 200;
 
 /** 一个账号有史以来最高的那一局：分数和玩法。一局都没有就是 null。 */
 function bestOverall(stats) {
@@ -85,9 +138,15 @@ function bestOverall(stats) {
 /** id → 榜上显示的名字。一张哈希表，不是每人一个键。 */
 const NAMES = 'lbnames';
 
-/** 玩法 id：只收长得像玩法 id 的字符串，别让它变成一把能写任意键的钥匙。 */
+/**
+ * 棋盘 id：只收长得像 id 的字符串，别让它变成一把能写任意键的钥匙。上报的一
+ * 局只说棋盘（square），玩法由存档里那份 data 说了算——所以这里不许带冒号。
+ */
 const MODE_RE = /^[a-zA-Z][a-zA-Z0-9]{0,23}$/;
 const cleanMode = (v) => (MODE_RE.test(String(v || '')) ? String(v) : '');
+/** 要看的那张榜：棋盘、棋盘:玩法，或者母标签 g:xxx。只读，不用它拼写入的键。 */
+const BOARD_RE = /^[a-zA-Z][a-zA-Z0-9]{0,23}(:[a-zA-Z]{1,8})?$/;
+const cleanBoard = (v) => (BOARD_RE.test(String(v || '')) ? String(v) : '');
 
 /** 榜上那个名字：十二个字，去掉会把一行撑坏的东西。 */
 const CTRL_RE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\u202a-\u202e\ufeff]/g;
@@ -105,7 +164,7 @@ export default async function handler(req, res) {
   const body = await readBody(req);
 
   // 管理员维护：不认玩家，认的是 ADMIN_TOKEN，所以排在 identify 前面。
-  if (body?.action === 'sweep') return await sweep(res, body);
+  if (body?.action === 'rebuild') return await rebuild(res, body);
 
   const claim = {
     email: body?.email,
@@ -164,9 +223,11 @@ async function push(res, body, who) {
     return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs });
   }
 
+  // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
+  const boardId = boardIdOf(mode, body?.data);
   stats.total += score;
   stats.runs += 1;
-  stats.best[mode] = Math.max(stats.best[mode] || 0, score);
+  stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
   stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
   await set(statsKey(who.id), stats);
 
@@ -182,7 +243,7 @@ async function push(res, body, who) {
   // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
   // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
   // 顺手把它改正。
-  await zaddIfHigher(boardKey(mode), stats.best[mode], who.id);
+  await zaddIfHigher(boardKey(boardId), stats.best[boardId], who.id);
   const top = bestOverall(stats);
   if (top) {
     await zadd(TOTAL_BOARD, top.score, who.id);
@@ -234,6 +295,27 @@ async function healTotalBoard(myId) {
 }
 
 /**
+ * 母榜：旗下每张子榜先取前 GROUP_SCAN 名，一个人取他在这几张里最高的那一分，
+ * 再排一次。
+ *
+ * 为什么不是把几张榜加起来：这一栏问的是「基础玩法打得最好的是谁」，那就该
+ * 看他最好的那一局，和总榜同一个道理——把三局加起来，比的会变成「谁打得多」。
+ */
+async function groupTop(boards) {
+  const lists = await Promise.all(boards.map((id) => zTop(boardKey(id), GROUP_SCAN)));
+  const best = new Map();
+  lists.forEach((list, i) => {
+    for (const row of list) {
+      const had = best.get(row.member);
+      if (!had || row.score > had.score) best.set(row.member, { score: row.score, board: boards[i] });
+    }
+  });
+  return [...best.entries()]
+    .map(([member, v]) => ({ member, score: v.score, board: v.board }))
+    .sort((a, b) => b.score - a.score);
+}
+
+/**
  * 一张榜。
  *
  * mode 给了就是那个玩法的单局榜，没给就是总榜——每个人所有玩法里最高的那一局。回的除了前五十名，还有
@@ -245,7 +327,29 @@ async function board(res, body, who, claim) {
     return send(res, 403, { error: 'geniusOnly' });
   }
 
-  const mode = cleanMode(body?.mode);
+  const mode = cleanBoard(body?.mode);
+  // 母标签（g:base、g:layout…）：旗下几张榜合起来看。
+  if (mode.startsWith('g:')) {
+    const boards = GROUPS[mode.slice(2)];
+    if (!boards) return send(res, 400, { error: 'mode' });
+    const [rows, names] = await Promise.all([groupTop(boards), hgetall(NAMES)]);
+    const mine = rows.findIndex((r) => r.member === who.id);
+    return send(res, 200, {
+      ok: true,
+      mode,
+      rows: rows.slice(0, TOP_N).map((row, i) => ({
+        rank: i + 1,
+        score: row.score,
+        name: names[row.member]?.name || '',
+        avatar: names[row.member]?.avatar ?? null,
+        me: row.member === who.id,
+        // 母榜上几块棋盘混在一起，所以每一行也画个小图形说明是哪一块。
+        mode: row.board.split(':')[0],
+      })),
+      players: rows.length,
+      me: mine < 0 ? null : { rank: mine + 1, score: rows[mine].score },
+    });
+  }
   const key = mode ? boardKey(mode) : TOTAL_BOARD;
   // 总榜上还有老版本写进去的累计总分（那时总榜就是总分榜）：上面没有玩法
   // 记号的那几行就是它们。看到一行就把那一个人的数从他的存档里重算一遍、
@@ -266,8 +370,11 @@ async function board(res, body, who, claim) {
     name: names[row.member]?.name || '',
     avatar: names[row.member]?.avatar ?? null,
     me: row.member === who.id,
-    // 总榜每一行是哪个玩法的那一局（单局榜不用说，就是这个玩法）。
-    ...(mode ? {} : { mode: typeof modes[row.member] === 'string' ? modes[row.member] : '' }),
+    // 总榜每一行是哪块棋盘的那一局（单局榜不用说，就是这一块）。存的是榜的
+    // id（square:flip），画图形只要棋盘那一截。
+    ...(mode
+      ? {}
+      : { mode: typeof modes[row.member] === 'string' ? modes[row.member].split(':')[0] : '' }),
   }));
 
   return send(res, 200, {
@@ -289,85 +396,61 @@ function tokenOk(given) {
   return timingSafeEqual(Buffer.from(given), Buffer.from(want));
 }
 
-/** 一个人的档里，某个玩法上「不算这一种局」的最高分；一局都没有就是 null。 */
-function bestExcluding(archive, mode, modeKey) {
-  let top = null;
-  for (const run of archive) {
-    if (run?.mode !== mode) continue;
-    if (run?.data?.modeKey === modeKey) continue;
-    const n = num(run.score);
-    if (n > 0 && (top === null || n > top)) top = n;
-  }
-  return top;
-}
-
 /**
- * 把某一种玩法从榜上抹掉（现在用它抹《无限反转》）。
+ * 重建榜单：照每个人自己的存档，把所有榜从头算一遍。
  *
  *   POST /api/scores
- *   { "action": "sweep", "token": "…", "modeKey": "flip" }
+ *   { "action": "rebuild", "token": "…", "drop": ["flip"] }
  *
- * 为什么需要它：一局报上来的 mode 是棋盘的 id（square / circle），玩法本身
- * （flip / timed / bomb）只写在存档那一份 data 里。所以无限反转打出来的分和
- * 基础方块、基础小球记在同一张榜上——而它早先那版计分能打到七位数，榜上于是
- * 一排削到上限的同一个数。玩家要的是「把之前无限反转的榜单清空」。
+ * 两件事一起做完：
  *
- * 做法（只动榜，不动人家自己的东西）：
- *   · 谁的档里有这一种局，才动他；
- *   · 只动被它污染过的那几个棋盘：把 best 改成他存档里同一棋盘上「不算这一
- *     种局」的最高分；一局都没有就把这一行从榜上撤下来；
- *   · 总榜按新的 best 重算；
- *   · 累计得分、他自己的存档，一个字不动——那是他的记录，不是榜。
+ *   · 换榜。以前一块棋盘一张榜，基础、计时、炸弹、老虎机、无限反转的分全挤
+ *     在一起；现在按玩法分开（见 boardIdOf），旧的那几张要按存档重新拆开。
+ *   · 清掉指定的那几种局（drop）。《无限反转》早先那版计分能打到七位数，还
+ *     被上限削成同一个数，玩家要的就是「把之前无限反转的榜单清空」——它写在
+ *     drop 里，重建时直接不计。这只动榜：人家自己的存档、累计得分一个字不改，
+ *     那是他的记录。
  *
- * 存档只留最近 60 局（KEEP_RUNS）：更早的那些既然翻不出来，也就无从判断是哪
- * 一种局，这里按「翻得到的」算。回包里报了动过几个人、改了几行。
+ * 做法：先把这个人从每一张榜（含老版本那几张）撤下来，再按重算的账写回去，
+ * 总榜跟着重算。存档只留最近 60 局（KEEP_RUNS），更早的翻不出来也就不算——
+ * 回包里报了动过几个人、写了几行。
  */
-async function sweep(res, body) {
+async function rebuild(res, body) {
   if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
-  const modeKey = String(body?.modeKey || '').slice(0, 24);
-  if (!modeKey) return send(res, 400, { error: 'modeKey' });
+  const drop = new Set((Array.isArray(body?.drop) ? body.drop : []).map((k) => String(k)));
 
   // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
   const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
   const ids = new Set([...ranked.map((row) => row.member), ...Object.keys(names || {})]);
 
-  let touched = 0;
-  let rowsChanged = 0;
-  let rowsDropped = 0;
+  let players = 0;
+  let rowsWritten = 0;
   for (const id of ids) {
     const [stats, archive] = await Promise.all([loadStats(id), get(runsKey(id))]);
     const runs = Array.isArray(archive) ? archive : [];
-    // 这个人的档里，这一种局都打在哪几个棋盘上。没有就跳过——他的榜没被污染。
-    const dirty = new Set(
-      runs.filter((r) => r?.data?.modeKey === modeKey && r?.mode).map((r) => r.mode),
-    );
-    if (!dirty.size) continue;
 
-    let changed = false;
-    for (const mode of dirty) {
-      const had = num(stats.best[mode]);
-      const clean = bestExcluding(runs, mode, modeKey);
-      if (clean === null) {
-        if (had > 0) {
-          delete stats.best[mode];
-          await zrem(boardKey(mode), id);
-          rowsDropped++;
-          changed = true;
-        }
-        continue;
-      }
-      if (clean !== had) {
-        stats.best[mode] = clean;
-        // zadd 而不是 zaddIfHigher：这一次要的正是把它改低。
-        await zadd(boardKey(mode), clean, id);
-        rowsChanged++;
-        changed = true;
-      }
+    const best = {};
+    for (const run of runs) {
+      const mode = cleanMode(run?.mode);
+      if (!mode) continue;
+      if (drop.has(kindOf(run?.data))) continue;
+      const boardId = boardIdOf(mode, run?.data);
+      const score = num(run.score);
+      if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
     }
-    if (!changed) continue;
-    touched++;
+
+    // 先撤干净：新榜、老榜都撤，没算出成绩的那几张就此空着。
+    for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS]) {
+      if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
+    }
+    for (const [boardId, score] of Object.entries(best)) {
+      // zadd 而不是 zaddIfHigher：这一次要的正是把它改成重算出来的那个数。
+      await zadd(boardKey(boardId), score, id);
+      rowsWritten++;
+    }
+
+    stats.best = best;
     await set(statsKey(id), stats);
-    // 总榜跟着重算：他现在最高的那一局是哪个玩法的哪一分。
     const top = bestOverall(stats);
     if (top) {
       await zadd(TOTAL_BOARD, top.score, id);
@@ -375,6 +458,7 @@ async function sweep(res, body) {
     } else {
       await zrem(TOTAL_BOARD, id);
     }
+    players++;
   }
-  return send(res, 200, { ok: true, modeKey, players: ids.size, touched, rowsChanged, rowsDropped });
+  return send(res, 200, { ok: true, players, rows: rowsWritten, dropped: [...drop] });
 }

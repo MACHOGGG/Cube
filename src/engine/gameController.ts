@@ -91,6 +91,8 @@ export interface GameControllerHooks {
   timeLimitSec?: number;
   /** 练习盘：打完了就再来一盘，不结算、不存档、不上榜、不报统计。见 ShapeGameOpts.practice。 */
   practice?: boolean;
+  /** 老虎机那一局（见 RunData.slot）：排行榜靠它把这一局单独排一张榜。 */
+  slot?: boolean;
   /**
    * 无限反转（见 ShapeGameOpts.flip）。这一局的计分和别的局不同：
    *   · 没有用时系数——综合得分里那一项恒为 1；
@@ -358,6 +360,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 这一局是在小屋里打的。记录页、战绩图、云上的档都带着它——两边现在
       // 是同一套计分了，可「和谁一起打的」仍然是这一局的一部分。
       room: Boolean(currentRoom()),
+      slot: Boolean(hooks.slot),
       at: Date.now(),
     };
 

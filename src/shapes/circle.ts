@@ -769,6 +769,8 @@ export function createCircleGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
+        // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
+        slot: !!targets,
         flip: flipMode,
         bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circle', '圆球'),

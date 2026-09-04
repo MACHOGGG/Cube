@@ -101,7 +101,6 @@ export function renderModesShowcase(root: HTMLElement, lang: Lang, onBack: () =>
 
 export interface WorldRankPageOpts {
   lang: Lang;
-  shapeIds: readonly string[];
   onBack: () => void;
   onWantGenius: () => void;
   onReLogin: () => void;
@@ -117,7 +116,6 @@ export function renderWorldRankPage(root: HTMLElement, opts: WorldRankPageOpts):
   );
   mountBoardView(root.querySelector<HTMLElement>('#rankPagePanel')!, {
     lang: opts.lang,
-    shapeIds: opts.shapeIds,
     onWantGenius: opts.onWantGenius,
     onReLogin: opts.onReLogin,
   });

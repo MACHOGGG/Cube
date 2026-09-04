@@ -163,7 +163,13 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
   // 铺满了整块屏幕，所以真正能关掉窗口的地方少得可怜；手一歪落在某个选项上，
   // 一局就直接开起来了。现在反过来判断：不是按钮，就关。
   overlay.addEventListener('click', (e) => {
-    const hit = e.target instanceof Element ? e.target.closest('button') : null;
+    const el = e.target instanceof Element ? e.target : null;
+    // 点到的那个东西已经不在文档里了：那是面板自己在这一下里重画——排行榜点
+    // 一个母标签，整排切页就换成了它旗下的那几个（见 ui/leaderboard）。冒泡到
+    // 这儿的时候原来那颗按钮已经被换掉，overlay.contains 当然找不到它，于是这
+    // 一下被当成「点在外面」，窗口自己关了。重画不是走开。
+    if (el && !el.isConnected) return;
+    const hit = el?.closest('button') ?? null;
     if (!hit || !overlay.contains(hit)) close();
   });
 

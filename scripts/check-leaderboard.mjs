@@ -50,7 +50,8 @@ await page.waitForTimeout(400);
 await page.click('#ranksPanel');
 await page.waitForSelector('.rank-tab', { timeout: 8000 });
 const tabs = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
-check('一张总榜加八个玩法，一共九个切页', tabs.length === 9 && tabs[0] === '总榜', tabs.join(' '));
+check('最外面一排：总榜加六个母标签',
+  tabs.join(' ') === '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转', tabs.join(' '));
 check('没登录时说的是「登录之后，你的成绩才会上榜」',
   (await page.$eval('#rankBody', (e) => e.textContent.trim())) === '登录之后，你的成绩才会上榜',
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
@@ -163,18 +164,46 @@ check('榜底下没有《N 人在榜 · 你排第 N》那句',
   (await page.$$eval('.records-panel--big .rank-foot', (e) => e.length)) === 0 &&
     !/人在榜|你排第/.test(await page.$eval('.records-panel--big', (e) => e.textContent)));
 
-// 换一张榜：方块那一张也该有我，三角那一张一个人都没有。
-await page.$$eval('.rank-tab', (els) => els.find((e) => e.textContent.trim() === '方块').click());
+// 点开母标签《基础》：整排换成它旗下那几张，左边多一颗《＜》。
+const clickTab = (label) =>
+  page.$$eval('.rank-tab', (els, want) => {
+    const hit = els.find((e) => e.textContent.trim() === want);
+    if (hit) hit.click();
+    return Boolean(hit);
+  }, label);
+await clickTab('基础');
+await page.waitForTimeout(400);
+const inner = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
+check('点开《基础》：原来那排换成它旗下的，左边一颗《＜》',
+  inner.join(' ') === '‹ 基础 方块 圆球 三角', inner.join(' '));
+check('母标签自己是选中的那一个（看的是它合起来的榜）',
+  (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '基础');
 await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
-check('方块那张单局榜上也有我',
+check('《基础》母榜上有我', (await page.$$eval('.records-panel--big .rank-row', (e) => e.length)) === 1);
+
+// 换一张榜：基础方块那一张也该有我，基础三角那一张一个人都没有。
+await clickTab('方块');
+await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
+check('基础方块那张单局榜上也有我',
   (await page.$$eval('.records-panel--big .rank-row', (e) => e.length)) === 1);
-await page.$$eval('.rank-tab', (els) => els.find((e) => e.textContent.trim() === '三角').click());
+await clickTab('三角');
 await page.waitForFunction(
   () => !document.querySelector('.records-panel--big .rank-row'), { timeout: 8000 })
   .then(() => true).catch(() => false);
 check('没打过的玩法，榜是空的，而且明说「这个玩法你还没打过」',
   (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'),
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
+
+// 那颗《＜》：退回最外面那一排，底下那张榜不动。
+await page.click('.rank-tab--back');
+await page.waitForTimeout(300);
+const back = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
+check('按《＜》退回最外面那一排',
+  back.join(' ') === '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转', back.join(' '));
+check('退回来之后高亮的是刚才那个母标签',
+  (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '基础');
+check('底下那张榜没被这一下换掉',
+  (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'));
 
 // 按那颗《返回》：弹窗关掉，底排导航回来。
 await page.click('.center-pick-back');

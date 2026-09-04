@@ -40,6 +40,12 @@ export interface RunData {
   hazardEnd: boolean;
   /** 在小屋里打的。老档没有这一项，读出来是 undefined，当 false 用。 */
   room?: boolean;
+  /**
+   * 老虎机那一局：这一局认的两个得分图案是转出来的，不是这个玩法自己那几个。
+   * modeKey 说不出这件事（老虎机局的 modeKey 还是 'base'），而排行榜要按它
+   * 单独排一张榜，所以单记一个标记。老档没有，当 false 用。
+   */
+  slot?: boolean;
   /** Epoch millis the run was settled. */
   at: number;
 }

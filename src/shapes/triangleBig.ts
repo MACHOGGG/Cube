@@ -874,6 +874,8 @@ export function createTriangleBigGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
+        // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
+        slot: !!targets,
         bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangle', '三角'),
         shapeId: 'triangle',

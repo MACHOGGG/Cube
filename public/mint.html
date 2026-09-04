@@ -115,6 +115,22 @@
     <p class="msg" id="msg"></p>
   </div>
 
+  <div class="card">
+    <label>维护：重建榜单</label>
+    <p style="margin:0 0 10px;color:var(--soft);font-size:0.9rem;line-height:1.5">
+      照每个人自己的存档，把全部排行榜重算一遍。换过记分规则、或者要把某一种玩法
+      从榜上清掉的时候用它。<strong>只动榜</strong>：玩家自己的存档、累计得分一个字不改。
+    </p>
+    <div class="check">
+      <input id="dropFlip" type="checkbox" checked />
+      <label for="dropFlip" style="margin:0;font-weight:400">
+        顺手清空《无限反转》的旧榜（它早先那版计分打得出七位数，和现在不是一把尺子）
+      </label>
+    </div>
+    <button class="go" id="rebuild">重建榜单</button>
+    <p class="msg" id="rebuildMsg"></p>
+  </div>
+
   <div class="card" id="out" hidden>
     <label id="outLabel"></label>
     <div class="codes" id="codes"></div>
@@ -175,6 +191,36 @@
     } catch {
       $('go').disabled = false;
       say('连不上服务器。', 'bad');
+    }
+  });
+
+  // ---- 维护：重建榜单 ----------------------------------------------------
+  $('rebuild').addEventListener('click', async () => {
+    const sayR = (t, kind) => {
+      $('rebuildMsg').textContent = t;
+      $('rebuildMsg').className = 'msg ' + (kind || '');
+    };
+    if (!token) return sayR('网址里没有令牌，见上面。', 'bad');
+    $('rebuild').disabled = true;
+    sayR('正在重算…（人多的话要等十几秒）');
+    try {
+      const res = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rebuild',
+          token,
+          drop: $('dropFlip').checked ? ['flip'] : [],
+        }),
+      });
+      const reply = await res.json().catch(() => ({}));
+      $('rebuild').disabled = false;
+      if (!res.ok) return sayR(ERRORS[reply.error] || ('出错了：HTTP ' + res.status), 'bad');
+      const dropped = (reply.dropped || []).length ? '，清掉了 ' + reply.dropped.join('、') : '';
+      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}。`, 'good');
+    } catch {
+      $('rebuild').disabled = false;
+      sayR('连不上服务器。', 'bad');
     }
   });
 

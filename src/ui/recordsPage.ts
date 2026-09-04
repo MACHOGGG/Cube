@@ -176,12 +176,7 @@ export function renderRecordsPage(
   ranks.addEventListener('click', () => {
     const big = document.createElement('div');
     big.className = 'records-panel records-panel--ranks records-panel--big';
-    mountBoardView(big, {
-      lang,
-      shapeIds: [...new Set(sources.map((src) => src.card.id))],
-      onWantGenius,
-      onReLogin,
-    });
+    mountBoardView(big, { lang, onWantGenius, onReLogin });
     openCenterPicker({ originEl: ranks, title: s.rankingsTitle, panel: big, panelClass: 'records-panel--big', back: s.back });
   });
 
