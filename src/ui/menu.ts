@@ -127,11 +127,17 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
 
-  // 宽屏是三排，照设计稿：三个基础玩法、计时 / 炸弹 / 多人、再是五个布局。
-  // 前两排各三张、最后一排五张，所以最后一排自然比上面两排宽——稿子上就是
-  // 这个样子。手机仍旧是两列的网格，一张一张按顺序往下排。
+  // 三排，宽屏窄屏同一个排法：三个基础玩法；计时 / 炸弹 / 多人（宽屏这排末
+  // 尾还有老虎机）；最后一排是那几副棋盘加无限反转（窄屏上老虎机也在这排）。
+  // 一排里几张，就把这排的宽平分成几份——所以头两排的图标自然比最后一排大，
+  // 稿子上就是这个关系。
+  //
+  // 从前手机上是两列的网格、一张一张往下排，排到第八张就出了屏幕，于是这一
+  // 页要往下滑。滑动本身不是问题，问题是滑动那一下手机会把地址栏收起来：
+  // 100dvh 跟着变大，按它算出来的图标上限也跟着变大——玩家看到的是「一滑所
+  // 有标识就胀大一圈」；同时 position: fixed 的底排在地址栏收放的那一下会跟
+  // 着漂。三排装进一屏，不滑了，这两件事一起没了。
   const newRow = (): HTMLElement => {
-    if (!wide) return grid;
     const row = document.createElement('div');
     row.className = 'home-row';
     grid.appendChild(row);
@@ -148,11 +154,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   }
 
   // ---- 多人游玩 ---------------------------------------------------------
-  // 手机上两列，基础三个之后紧挨着的那一格就是第二行右边——这一颗落在那里。
-  // 点进去直接是房间那一页，不再绕个人主页。宽屏上它和炸弹卡片同一行。
+  // 那扇小门排在第二排最后（宽屏上它右边还有老虎机）。点进去直接是小屋那一
+  // 页，不再绕个人主页。
   const mpBtn = iconButton(ICON_MULTIPLAYER, s.mpTitle);
   mpBtn.addEventListener('click', handlers.onMultiplayer);
-  if (!wide) grid.appendChild(mpBtn);
 
   // ---- row 2: timed challenge ------------------------------------------
   const timedOptions = (): PickerOption[] =>
@@ -262,48 +267,32 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     const panel = buildBombPanel('bomb', () => close?.());
     close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
   });
-  (wide ? timedRow : grid).appendChild(bombBtn);
-  // 那扇小门排在这一排最后。手机上它早在基础三个后面就摆过了。
-  if (wide) timedRow.appendChild(mpBtn);
+  timedRow.appendChild(bombBtn);
+  timedRow.appendChild(mpBtn);
 
   // ---- 每个布局玩法自己露脸，不再藏在「+」后面 -------------------------
   // 从前这里是三张通用的「+」卡，点开才看得到里面有什么。现在直接摆出来：
   // 玩家一眼就知道有哪些棋盘，少一层点击。
   //
-  // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起。
-  //
-  // 宽屏五张一排，就照这个顺序摆完——稿子上是菱形方块、六边圆球、七色圆球、
-  // 大三角、进阶三角。手机上两列，得把解锁不了的两张挪到最后：它们点下去只
-  // 会弹付费墙，夹在中间会把一串能玩的东西从中截断；一排摆得下的时候没有这
-  // 个问题，也就不必打乱形状的顺序。
-  const inOrder: { card: ShapeCardMeta; shape: BaseShape }[] = [];
+  // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起：菱形方块、六边
+  // 圆球、七色圆球、大三角、进阶三角。宽窄一个顺序——手机从前是两列，锁着
+  // 的两张夹在中间会把一串能玩的东西从中截断，所以那时把它们挪到最后；现在
+  // 手机上这也是一排，摆得下，就不必再打乱形状的顺序了。
+  const ordered: { card: ShapeCardMeta; shape: BaseShape }[] = [];
   for (const shape of SHAPES) {
-    for (const card of layout.moreLayouts[shape]) inOrder.push({ card, shape });
+    for (const card of layout.moreLayouts[shape]) ordered.push({ card, shape });
   }
-  const ordered = wide
-    ? inOrder
-    : [...inOrder.filter((e) => !isLayoutLocked(e.card.id)), ...inOrder.filter((e) => isLayoutLocked(e.card.id))];
 
-  let row = wide ? newRow() : grid;
+  let row = newRow();
   let inRow = 0;
   /**
-   * 锁区第一张：《随机得分目标》。
-   *
-   * 它不是一副新棋盘（挑完图形玩的就是那三个基础玩法），所以不在
-   * moreLayouts 里；但它和那两副锁着的棋盘是同一档东西——天才特供，没开通
-   * 就是一把锁。玩家点名要它排在锁区的第一个，所以这里在「第一张锁着的卡」
-   * 之前把它插进去；手机上锁着的几张本来就被挪到了最后，插的位置正好是那一
-   * 串的头上。
+   * 天才特供的那两张牌（老虎机、无限反转）：没开通就是图案压暗、正中一把锁、
+   * 右下角收着天才招牌，按下去开订阅窗；开通了按下去直接进那个玩法。两张牌
+   * 除了图和去处以外一模一样，所以只写一遍。
    */
-  let slotDone = false;
-  const dropSlotCard = () => {
-    if (slotDone) return;
-    slotDone = true;
+  const geniusCard = (glyph: string, title: string, open: () => void): HTMLButtonElement => {
     const locked = !isGenius();
-    const btn = iconButton(
-      ICON_SLOT_MACHINE,
-      locked ? `${s.randomTargetTitle} · ${s.geniusOnly}` : s.randomTargetTitle,
-    );
+    const btn = iconButton(glyph, locked ? `${title} · ${s.geniusOnly}` : title);
     if (locked) {
       btn.classList.add('home-icon-btn--locked');
       btn.insertAdjacentHTML(
@@ -312,42 +301,36 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
           `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
       );
     }
-    btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : handlers.onRandomTarget()));
-    (wide ? row : grid).appendChild(btn);
-    if (wide) inRow++;
-    dropFlipCard();
+    btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : open()));
+    return btn;
   };
+  // 宽屏上老虎机就排在多人游玩右边，第二排四张（玩家点名要的）。窄屏上它跟
+  // 无限反转一起留在最后一排——那一排本来就是「更多玩法」的地界。
+  if (wide) timedRow.appendChild(geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, handlers.onRandomTarget));
   /**
-   * 锁区第二张：《无限反转》，紧跟在老虎机后面（玩家的原话：「放在主菜单的
-   * 老虎机下一个，也是对无权限的玩家封锁的」）。和老虎机同一套：没开通就是
-   * 居中一把锁加右下角的天才招牌，按下去开订阅窗；开通了按下去进挑图形那页。
+   * 《老虎机模式》和《无限反转》排在这一排最后（稿子上就是这个位置）。
+   *
+   * 它们不是新棋盘——挑完图形玩的还是那三个基础玩法，所以不在 moreLayouts
+   * 里；但和那两副锁着的棋盘是同一档东西，所以摆在同一排。位置和有没有开通
+   * 天才无关：开通与否看到的是同一个顺序，只是锁着的那几张压暗加把锁。
+   *
+   * 宽屏上老虎机已经排在第二排多人游玩的右边了，这里就只剩无限反转一张。
    */
-  const dropFlipCard = () => {
-    const locked = !isGenius();
-    const btn = iconButton(
-      ICON_FLIP_MODE,
-      locked ? `${s.flipModeTitle} · ${s.geniusOnly}` : s.flipModeTitle,
-    );
-    if (locked) {
-      btn.classList.add('home-icon-btn--locked');
-      btn.insertAdjacentHTML(
-        'beforeend',
-        `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-          `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
-      );
+  const dropExtras = () => {
+    if (!wide) {
+      row.appendChild(geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, handlers.onRandomTarget));
+      inRow++;
     }
-    btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : handlers.onFlipMode()));
-    (wide ? row : grid).appendChild(btn);
-    if (wide) inRow++;
+    row.appendChild(geniusCard(ICON_FLIP_MODE, s.flipModeTitle, handlers.onFlipMode));
+    inRow++;
   };
 
-  // 宽屏一排七张：稿子上这一排是五张棋盘，后来多了老虎机，现在又多了无限反
+  // 一排最多七张：稿子上这一排是五张棋盘，后来多了老虎机，现在又多了无限反
   // 转。让它换行的话整页就高出一行（一百多像素），而这一页的规矩是「一屏装
   // 得下，不用滚」（见 check-overlap）。七张挤一排不会横着溢出——每张按 flex
   // 平分，各自还有 max-width 收着，多一张只是每张窄一点、跟着矮一点。
   for (const { card, shape } of ordered) {
-    if (wide && inRow >= 7) { row = newRow(); inRow = 0; }
-    if (isLayoutLocked(card.id)) dropSlotCard();
+    if (inRow >= 7) { row = newRow(); inRow = 0; }
     const isLocked = isLayoutLocked(card.id);
     const name = shapeName(lang, card.id, card.name);
     const btn = iconButton(
@@ -373,9 +356,8 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     btn.addEventListener('click', () =>
       isLocked ? handlers.onLockedLayout() : handlers.onSelectLayout(card.id),
     );
-    (wide ? row : grid).appendChild(btn);
+    row.appendChild(btn);
     inRow++;
   }
-  // 锁区可能一张都没有（比如以后那两副棋盘也解锁了），那就摆在这一串的最后。
-  dropSlotCard();
+  dropExtras();
 }

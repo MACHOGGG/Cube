@@ -158,13 +158,46 @@ async function lockedCards(width, height) {
   await c.close();
   return cards;
 }
+/** 主菜单每一排上都摆了些什么，按排返回它们的名字。 */
+async function menuRows(width, height) {
+  const c = await browser.newContext({ viewport: { width, height } });
+  await c.addInitScript(() => {
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+      localStorage.setItem(k, '1');
+    localStorage.setItem('slides_lang', 'zhHans');
+  });
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForSelector('.home-row .home-icon-btn', { timeout: 20000 });
+  await p.waitForTimeout(300);
+  const rows = await p.$$eval('.home-row', (rs) =>
+    rs.map((r) => [...r.children].map((k) => (k.getAttribute('aria-label') || '').split(' ·')[0])),
+  );
+  await c.close();
+  return rows;
+}
+
 for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
   check(`${label}：四张锁着的卡都在`, cards.length === 4, brief);
-  // 玩家的原话：「作为无限反转模式的 logo 放在主菜单的老虎机下一个」。
-  check(`${label}：《无限反转》紧跟在老虎机后面`,
-    cards[0]?.name === '老虎机模式' && cards[1]?.name === '无限反转', cards.map((c) => c.name).join(' → '));
+  // 老虎机和无限反转各自的位置。玩家点名：宽屏时老虎机排在多人游玩的右边
+  // （第二排四张），窄屏时它和无限反转一起收在最后一排的末尾。
+  const rows = await menuRows(w, h);
+  const last = rows[rows.length - 1] || [];
+  if (w >= 720 || (w > h && w >= 560)) {
+    check(`${label}：第二排是 计时 · 炸弹 · 多人 · 老虎机`,
+      rows[1]?.length === 4 && rows[1][2] === '多人游玩' && rows[1][3] === '老虎机模式',
+      (rows[1] || []).join(' → '));
+    check(`${label}：《无限反转》收在最后一排的末尾`,
+      last[last.length - 1] === '无限反转', last.join(' → '));
+  } else {
+    check(`${label}：三排，各 3 / 3 / 7 张`,
+      rows.length === 3 && rows[0].length === 3 && rows[1].length === 3 && rows[2].length === 7,
+      rows.map((r) => r.length).join(' / '));
+    check(`${label}：最后一排末尾是 老虎机 → 无限反转`,
+      last[last.length - 2] === '老虎机模式' && last[last.length - 1] === '无限反转', last.join(' → '));
+  }
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
   check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
