@@ -311,6 +311,11 @@ function publicState(code, hash) {
     flip: Boolean(meta.flip),
     seed: meta.seed ?? null,
     startAt: meta.startAt ?? null,
+    // 有人去看教学了，这一局的开赛被挂起——startAt 还是原来那个（已经过去
+    // 的）时刻，学完那一刻才重新盖一个（见 releaseHold）。等的人必须知道
+    // 「现在是挂起，不是我来晚了」，否则他们会把这一局记成打过，坐到等待
+    // 页去，学的人一个人开局。
+    learnHold: Boolean(meta.learnHold),
     /** 0 before the first match; every 开始 raises it by one. */
     round: meta.round || 0,
     /** Everyone is done: the host may pick the next board, or close up. */

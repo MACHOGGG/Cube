@@ -811,8 +811,8 @@ button:hover { filter: brightness(1.05); }
    它现在把「手机横过来」也算宽版。CSS 要是另立一条自己的屏宽标准，横屏手机
    就会出现「HTML 按宽版排、样式按竖版给」的错位。一个判断，两处引用。 */
 .home-page:not(.home-page--wide) {
-  padding-top: 12px; padding-bottom: 96px; padding-left: 8px; padding-right: 8px;
-  /* 整页顶着一屏高，三排在招牌和底排之间匀开——否则三排叠在页面上半截，底
+  padding-top: 10px; padding-bottom: 99px; padding-left: 8px; padding-right: 8px;
+  /* 整页顶着一屏高，五排在招牌和底排之间匀开——否则几排叠在页面上半截，底
      下空出一大块，看着像还没加载完。撑到一屏也顺手保证「没得滚」：滚不动，
      手机就不会去收地址栏，图标和底排也就没有跟着动的机会。 */
   min-height: 100svh;
@@ -820,39 +820,36 @@ button:hover { filter: brightness(1.05); }
 .home-page:not(.home-page--wide) .home-grid {
   flex: 1 1 auto; justify-content: space-evenly; min-height: 0;
 }
-.home-page:not(.home-page--wide) .home-head { margin-bottom: 10px; }
-/* 竖屏也是三排，和宽屏同一个排法（见 menu.ts 的 newRow）。间距和页边一起收
-   窄：手机上一排三张，图标能有多大是被「屏宽减掉留白再三等分」卡住的，不把
-   这两处让出来，抬高下面那个上限也不会变大一分。 */
-.home-page:not(.home-page--wide) .home-grid { gap: 12px; }
+.home-page:not(.home-page--wide) .home-head { margin-bottom: 6px; }
+/* 竖屏和宽屏同一个排法：五排，一排最多三张（见 menu.ts 的 newRow）。间距和
+   页边一起收窄：手机上一排三张，图标能有多大是被「屏宽减掉留白再三等分」卡
+   住的，不把这两处让出来，抬高下面那个上限也不会变大一分。 */
+.home-page:not(.home-page--wide) .home-grid { gap: 8px; }
 .home-page:not(.home-page--wide) .home-row { gap: 8px; }
-/* 每排一样高，高度按「一排三张」算——头两排正好填满，最后那排七张自己小一
-   圈，在这个高度里居中。玩家要的就是这个：排的高度一律，排里把总宽平分。 */
-.home-page:not(.home-page--wide) .home-row {
-  height: calc((min(100vw, 460px) - 16px) / 3);
-  height: min((min(100vw, 460px) - 16px) / 3, (100svh - 232px) / 3);
-}
-/* 图标除了被自己那一份宽度收住，还被这一排的高度收住——屏幕矮的时候先缩的
-   是图标，不是让这一页长出滚动条来。
+/* 每张图标一律不超过「这一排三等分」那么宽：三张的排正好填满，两张的排照同
+   样大小居中——十三张从头到尾一样大，只是每排摆几张不同。矮屏上再被「一屏
+   还剩多高」收一道，先缩的是图标，不是让这一页长出滚动条来。
 
    为什么是 svh 不是 dvh：dvh 量的是「此刻」的可视高度，手机上滑一下地址栏
    收起来，它就变大，按它算出来的图标跟着胀大一圈——玩家看到的正是「一上滑
    所有标识都放大了」。svh 量的是地址栏摊开时的高度，从头到尾是一个数，图标
    就不会自己变大变小。
 
-   232px = 页面上边距 12 + 招牌上边距 6 + 招牌本身 92（四种语言里最高的那个）
-           + 招牌下边距 10 + 两道行间距 12×2 + 页面下边距 96（底排图标从屏幕
-           底算起占 88，留 8 的余地）。
-   三排照这个数分完还有富余时，上面那条「一排三张」的宽度才是真正在起作用
+   256px = 页面上边距 10 + 招牌本身 105（四种语言里最高的那个，含它自己的上
+           边距）+ 招牌下边距 6 + 四道行间距 8×4 + 页面下边距 99（底排图标从
+           屏幕底算起占 91，留 8 的余地）+ 4 的余量。
+   5.11  = 五排里四排是方图；第三排的炸弹卡片比方图高 11.15%——里面三层叠
+           着，中间那颗 90s 的星芒溢出到上下两层去。
+   五排照这个数分完还有富余时，上面那条「一排三等分」的宽度才是真正在起作用
    的——常态就是这样，这一条只在矮屏（老式小屏手机）上接手。 */
 .home-page:not(.home-page--wide) .home-icon-btn,
 .home-page:not(.home-page--wide) .home-bomb-card {
   max-width: calc((min(100vw, 460px) - 16px) / 3);
-  max-width: min((min(100vw, 460px) - 16px) / 3, (100svh - 232px) / 3);
+  max-width: min((min(100vw, 460px) - 16px) / 3, (100svh - 256px) / 5.11);
 }
 /* The icon grid wants far more width than the standard reading column.
-   宽到能让最后一排并排站下——上面几排三张四张，于是它们自然比最后一排窄，
-   设计稿上就是这个关系。 */
+   一排最多三张，每张被 --home-card-cap 收住，所以整页的宽由那三张决定；这里
+   给的是上限，屏幕再宽也不会把三张拉散。 */
 .app.home-page--wide { max-width: 1360px; }
 /* The title, its rule and the tagline stay put however far the page is
    scrolled — but not as a full-width bar: only a centred frosted-glass
@@ -901,16 +898,16 @@ button:hover { filter: brightness(1.05); }
 }
 .home-sub { margin: 6px 0 0; color: var(--ink-soft); font-size: 0.82rem; letter-spacing: 0.08em; }
 
-/* 几排居中的东西，不是一张死板的网格：三个基础玩法；计时 / 炸弹 / 多人（宽
-   屏这排末尾还有老虎机）；再是那几副棋盘。三张的那几排自然比最后一排窄，稿
-   子上就是这个关系——一排里几张，就决定这排每张有多大。 */
-.home-grid { display: flex; flex-direction: column; gap: 26px; align-items: center; }
+/* 五排居中的东西，不是一张死板的网格：方块 / 小球 / 三角；多人游玩 / 老虎机
+   / 无限反转；计时 / 炸弹；菱形方块 / 六边圆球 / 七色圆球；六边形三角 / V 型
+   三角。一排最多三张，每张一样大，两张的那几排就窄一些、照样居中。 */
+.home-grid { display: flex; flex-direction: column; gap: 24px; align-items: center; }
 .home-row {
   display: flex; align-items: center; justify-content: center;
   gap: clamp(18px, 2.4vw, 34px); width: 100%;
 }
-/* 每张按自己那一份平分整排，再各自被 max-width 收住：三张的排收成三张的宽
-   度，七张的排铺满。so 一排里几张，就决定这排有多宽。
+/* 每张按自己那一份平分整排，再各自被 max-width 收住：三张的排正好摊满那三
+   份，两张的排每张也还是那么大，只是整排窄一点、居中站着。
    选择器要压过 .home-icon-btn 自己那句 flex: none（它是用来挣脱全局
    button { flex: 1 } 的），所以带上 .home-grid——两个类，权重高一级。 */
 .home-grid .home-row > * { flex: 1 1 0; min-width: 0; }
@@ -934,15 +931,15 @@ button:hover { filter: brightness(1.05); }
    这个上限只要算错一点，页面就会长出滚动条，末排正好落在底排图标下面——
    看得见，按不着。所以两个数都是量出来的，不是估的：
 
-     309px = 页面上边距 28 + 招牌上边距 6 + 招牌本身 101（四种语言里最高
-             的那个）+ 招牌下边距 14 + 两道行间距 26×2 + 页面下边距 108
+     361px = 页面上边距 28 + 招牌上边距 6 + 招牌本身 101（四种语言里最高
+             的那个）+ 招牌下边距 14 + 四道行间距 24×4 + 页面下边距 108
              （底排图标从屏幕底算起占 88，留 20 的余地）
 
-     3.11  = 上下两排各一张卡片的高，加中间那排。中间那排是炸弹卡片，它比
+     5.11  = 五排里四排各一张方卡片的高，加第三排。第三排是炸弹卡片，它比
              一张方卡片高 11.15%——里面三层叠着，最中间那颗 90s 的星芒还
              特意溢出到上下两层去。量出来是 255 宽 283 高，1.1115。
 
-   减去那 309，剩下的高度三排照 3.11 分。笔记本上是这条在起作用；屏幕够高
+   减去那 361，剩下的高度五排照 5.11 分。笔记本上是这条在起作用；屏幕够高
    时 255 那条重新接手，跟从前一样。
 
    量的是 svh 不是 dvh：dvh 是「此刻」的可视高度，手机上滑一下地址栏收起来
@@ -951,12 +948,14 @@ button:hover { filter: brightness(1.05); }
 .home-page--wide {
   /* 第一行是给不认 dvh 的浏览器兜底的固定值——没有它，整个 --home-card-cap
      会算不出来，max-width 变成 none，图标撑满一列。
-     max(96px, …)：这是个下限，不是目标。屏幕够高时永远轮不到它——一屏装得
-     下才是常态。轮到它的是横过来的手机：三百多像素高，按上面那道算式分下来
-     一张卡片只有二十几个像素，那不叫「装进一屏」，那叫看不见也点不着。宁可
-     让这一页往下滚一段，也要让每张图标大到能看清、能点中。 */
+     max(72px, …)：这是个下限，不是目标。轮到它的是横过来的手机：三百多像素
+     高，按上面那道算式分下来一张卡片只有几个像素，那不叫「装进一屏」，那叫
+     看不见也点不着。宁可让这一页往下滚一段，也要让每张图标大到能看清、能点
+     中。从前这个数是 96——五排之后，1366×768 那类笔记本按算式该给到 80，却
+     被 96 的下限顶上去，整页高出七十几像素、长出滚动条（check-overlap 逮到
+     的正是这个）。下限只该在「算出来的数已经小到没意义」时接手。 */
   --home-card-cap: 255px;
-  --home-card-cap: min(255px, max(96px, (100svh - 309px) / 3.11));
+  --home-card-cap: min(255px, max(72px, (100svh - 361px) / 5.11));
 }
 /* 一个变量、两处引用：从前炸弹卡片的宽度在文件后面又被写了一遍 255，同样
    的选择器权重、位置更靠后，于是把上面这条高度上限整条盖掉了——中间那排
@@ -981,7 +980,7 @@ button:hover { filter: brightness(1.05); }
   .home-page--wide .home-head-glass { padding: 2px 18px 6px; }
   .home-page--wide .home-title { font-size: 1.5rem; padding-bottom: 2px; border-bottom-width: 2px; }
   .home-page--wide .home-sub { margin-top: 3px; font-size: 0.68rem; }
-  .home-page--wide .home-grid { gap: 18px; }
+  .home-page--wide .home-grid { gap: 14px; }
 }
 .home-icon-btn > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
@@ -1038,8 +1037,7 @@ button:hover { filter: brightness(1.05); }
   cursor: pointer; display: block;
   -webkit-tap-highlight-color: transparent;
 }
-/* 宽屏上炸弹和它左右两边一样大：这一排是「计时 · 炸弹 · 多人 · 老虎机」
-   四张并排，谁也不比谁矮一截——上面那条 --home-card-cap 同时管着这三张，所以这里不
+/* 宽屏上炸弹和它旁边的计时一样大：谁也不比谁矮一截——上面那条 --home-card-cap 同时管着这三张，所以这里不
    必（也不能）再写一遍宽度。 */
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 252px; }
@@ -1651,7 +1649,10 @@ body:has(.slot-page) .home-nav { display: none; }
 .home-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
   display: flex; justify-content: center; align-items: flex-end;
-  padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  /* 这一块整体压低（玩家点名：「个人主页和成绩排名需要整体在各个界面中都向
+     下」）。上面留的那点是给「选中的那颗升起来」的地方——它升出圆角矩形一
+     半，不能被裁掉；下面只留够不贴屏幕边。 */
+  padding: 6px 16px calc(6px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 /* The two entries sit on a small rounded panel of their own rather than

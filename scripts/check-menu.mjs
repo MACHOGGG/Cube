@@ -177,27 +177,51 @@ async function menuRows(width, height) {
   return rows;
 }
 
+/** 主菜单上每张图标有多宽——用来核对「十三张一样大」。 */
+async function cardWidths(width, height) {
+  const c = await browser.newContext({ viewport: { width, height } });
+  await c.addInitScript(() => {
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+      localStorage.setItem(k, '1');
+    localStorage.setItem('slides_lang', 'zhHans');
+  });
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForSelector('.home-row .home-icon-btn', { timeout: 20000 });
+  await p.waitForTimeout(300);
+  const out = await p.$$eval('.home-row > *', (els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+  await c.close();
+  return out;
+}
+
 for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
   check(`${label}：四张锁着的卡都在`, cards.length === 4, brief);
-  // 老虎机和无限反转各自的位置。玩家点名：宽屏时老虎机排在多人游玩的右边
-  // （第二排四张），窄屏时它和无限反转一起收在最后一排的末尾。
+  // 玩家点名的五排顺序，宽窄一个样：
+  //   1 方块 · 小球 · 三角
+  //   2 多人游玩 · 老虎机 · 无限反转
+  //   3 计时 · 炸弹
+  //   4 菱形方块 · 六边圆球 · 七色圆球
+  //   5 六边形三角 · V 型三角
   const rows = await menuRows(w, h);
-  const last = rows[rows.length - 1] || [];
-  if (w >= 720 || (w > h && w >= 560)) {
-    check(`${label}：第二排是 计时 · 炸弹 · 多人 · 老虎机`,
-      rows[1]?.length === 4 && rows[1][2] === '多人游玩' && rows[1][3] === '老虎机模式',
-      (rows[1] || []).join(' → '));
-    check(`${label}：《无限反转》收在最后一排的末尾`,
-      last[last.length - 1] === '无限反转', last.join(' → '));
-  } else {
-    check(`${label}：三排，各 3 / 3 / 7 张`,
-      rows.length === 3 && rows[0].length === 3 && rows[1].length === 3 && rows[2].length === 7,
-      rows.map((r) => r.length).join(' / '));
-    check(`${label}：最后一排末尾是 老虎机 → 无限反转`,
-      last[last.length - 2] === '老虎机模式' && last[last.length - 1] === '无限反转', last.join(' → '));
-  }
+  const WANT = [
+    ['方块', '圆球', '三角'],
+    ['多人游玩', '老虎机模式', '无限反转'],
+    ['计时挑战', '基础炸弹'],
+    ['菱形方块', '六边圆球', '七色圆球'],
+    ['大三角', '进阶三角'],
+  ];
+  check(`${label}：五排，各 3 / 3 / 2 / 3 / 2 张`,
+    rows.length === 5 && rows.every((r, i) => r.length === WANT[i].length),
+    rows.map((r) => r.length).join(' / '));
+  check(`${label}：每一排的顺序都对`,
+    JSON.stringify(rows) === JSON.stringify(WANT),
+    rows.map((r) => r.join(' · ')).join('  |  '));
+  // 十三张一样大：一排两张的不能因为人少就长得比三张的大。
+  const sizes = await cardWidths(w, h);
+  const span = Math.max(...sizes) - Math.min(...sizes);
+  check(`${label}：十三张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
   check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));

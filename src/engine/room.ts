@@ -72,6 +72,14 @@ export interface RoomState {
   seed: string | null;
   /** The agreed instant, on the server's clock. */
   startAt: number | null;
+  /**
+   * 屋里有人去看教学了，这一局的开赛被挂起。
+   *
+   * 挂起的时候 startAt 还停在原来那个（已经过去了的）时刻——学完那一刻服务
+   * 器才重新盖一个，全屋一起从头数。所以「startAt 早就过去了」这件事，在挂
+   * 起期间不等于「我来晚了」，等的人得看这一位才知道自己该等还是该坐下。
+   */
+  learnHold: boolean;
   /** Rounds played. 0 before the host has put up anything. */
   round: number;
   /** Everyone is done: the host picks the next board, or closes the room. */
@@ -109,6 +117,10 @@ export function roomPhase(st: RoomState): RoomPhase {
   if (st.ended) return 'ended';
   if (!st.round || !st.startAt || !st.seed) return 'lobby';
   if (st.roundOver) return 'roundOver';
+  // 挂起等人学教学：开赛时刻虽然已经过去，这一局却一步都还没走。算「还在
+  // 数」而不是「正在打」——否则每一处「这局打起来了吗」的判断都会说打起来
+  // 了，而其实全屋都还坐着等。
+  if (st.learnHold) return 'countdown';
   return st.startAt > serverTime() ? 'countdown' : 'playing';
 }
 

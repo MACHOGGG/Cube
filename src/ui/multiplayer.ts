@@ -518,7 +518,14 @@ export function renderMultiplayerPage(
           // 开赛时刻已经过去好几秒。这一局不是我的——记成打过，坐等待页看
           // 排行，下一局再入；不能拿着一块新起的表跳进别人打了一半的局。
           // 留几秒余量给正常的一次轮询晚到。
-          if (!launched && next.startAt + LATE_MS < serverTime()) {
+          //
+          // learnHold 期间不算数：屋里有人在学，服务器把这一局挂起了，
+          // startAt 还停在挂起前那个时刻，一分钟不学完它就过去一分钟——按
+          // 「过了五秒就是来晚了」判，等的人在学的人刚点开教学那会儿就全被
+          // 记成打过、赶去等待页（练习盘也跟着没了），学完之后学的人一个人
+          // 开局。玩家撞上的正是这一幕。挂起解除时服务器会盖一个新的开赛时
+          // 刻，那时候这道关才重新有意义。
+          if (!launched && !next.learnHold && next.startAt + LATE_MS < serverTime()) {
             markRoundPlayed(next.round);
             playedRound = next.round;
             sideline(next);
