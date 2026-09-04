@@ -5,7 +5,8 @@ import {
   loadAccount,
   lockRemainingMs,
   normalizeEmail,
-  rotateToken,
+  issueToken,
+  tokenValid,
   saveAccount,
 } from './_accounts.js';
 import { resolveEntitlement } from './_entitlement.js';
@@ -59,9 +60,7 @@ export default async function handler(req, res) {
       if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
       const who = normalizeEmail(email);
       const acct = who ? await loadAccount(who) : null;
-      if (!acct || !acct.token || String(token || '') !== acct.token) {
-        return send(res, 401, { error: 'wrong' });
-      }
+      if (!tokenValid(acct, token)) return send(res, 401, { error: 'wrong' });
       if (acct.inboxUnseen) {
         acct.inboxUnseen = 0;
         await saveAccount(who, acct);
@@ -120,9 +119,10 @@ async function fromEmail(res, rawEmail, password, token) {
   let issued;
   if (account) {
     if (token) {
-      if (!account.token || String(token) !== account.token) {
-        return send(res, 401, { error: 'wrong' });
-      }
+      if (!tokenValid(account, token)) return send(res, 401, { error: 'wrong' });
+      // 答复里回给这台设备它自己那一把，而不是「最新签发的那一把」：几台设
+      // 备各拿各的，谁也别把谁挤掉。
+      issued = String(token);
     } else {
       if (!SECRET_RE.test(String(password || ''))) return send(res, 401, { error: 'wrong' });
       const verdict = await checkPin(address, String(password), account);
@@ -131,9 +131,10 @@ async function fromEmail(res, rawEmail, password, token) {
         return send(res, 423, { error: 'locked', retryInMs: lockRemainingMs(account) });
       }
       if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
-      // A password sign-in issues a fresh token, which retires the one any
-      // other device was holding.
-      issued = rotateToken(account);
+      // 拿密码登录：**添**一把新的给这台设备，别的设备手里那几把照旧有效
+      // （见 _accounts.js 的 issueToken）。从前这里是换发——手机上登录一次
+      // 就把电脑上那台顶下线了，那台下次去看排行榜只会被告知「请重新登录」。
+      issued = issueToken(account);
       await saveAccount(address, account);
     }
   }

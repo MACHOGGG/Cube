@@ -203,6 +203,8 @@ export function burnGuess(secret) {
 
 export function newAccount(secret, kind = 'code') {
   const salt = randomBytes(16).toString('hex');
+  const newToken = randomBytes(24).toString('hex');
+  const now = Date.now();
   return {
     /** 'card' — Creem holds the entitlement, this only proves identity.
      *  'code' — a redeemed code, whose entitlement lives in `until` below. */
@@ -214,8 +216,10 @@ export function newAccount(secret, kind = 'code') {
     lockUntil: 0,
     /** Set once the address itself has to vouch for whoever is trying. */
     blocked: false,
-    token: randomBytes(24).toString('hex'),
-    createdAt: Date.now(),
+    token: newToken,
+    /** 同时在线的几台设备，见 issueToken。新账号先记下第一台。 */
+    tokens: [{ t: newToken, at: now }],
+    createdAt: now,
     /** 他们愿不愿意收我们的邮件，以及是什么时候说的。
      *
      *  存两个字段而不是一个，是因为「同意」不只是一个是非题：真被问起来，要
@@ -283,10 +287,67 @@ export function unblock(account, newPin) {
 export const lockRemainingMs = (account) =>
   Math.max(0, (account.lockUntil || 0) - Date.now());
 
-/** A fresh session token on every successful sign-in, so the old one dies. */
-export function rotateToken(account) {
-  account.token = randomBytes(24).toString('hex');
-  return account.token;
+/**
+ * 一个账号可以同时在几台设备上登录。
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 为什么要一串令牌，不是一把
+ *
+ * 从前账号上只有一把 `token`，每次拿密码登录都换一把新的，旧的立刻作废。手
+ * 机上登录一次，电脑上再登录一次，手机那台下次去看排行榜就被服务器认成陌生
+ * 人（401），界面只能说「请重新登录」——玩家看到的就是「登录了一会儿又要重
+ * 新登录」。一个人有手机也有电脑，这不是异常用法，是常态。
+ *
+ * 所以改成一串：每次登录**添**一把，不动别人手里那几把。最多留 MAX 把（再
+ * 多就把最老的挤掉——不是为了安全，是为了这条记录不会无限长），每把有自己
+ * 的签发时间，超过 TTL 自然失效。
+ *
+ * `account.token` 保留，指向最新签发的那一把：老版本的客户端和几处只读它的
+ * 代码照旧能用，而「这把还算不算数」一律走 tokenValid()。
+ *
+ * 什么时候该把所有设备都踢下线：改密码、以及邮箱验证解锁（那两件事的前提正
+ * 是「这个账号可能已经不只我一个人在用」）。那两处调 revokeTokens()。
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+const MAX_TOKENS = 8;
+/** 一把令牌能用多久。一年不动的设备，下次要重新登录。 */
+const TOKEN_TTL_MS = 365 * 24 * 3600e3;
+
+/** 把老账号（只有一把 token、还没有这一串）就地补成一串。 */
+function tokenRing(account) {
+  if (Array.isArray(account.tokens)) return account.tokens;
+  account.tokens = account.token
+    ? [{ t: account.token, at: account.createdAt || Date.now() }]
+    : [];
+  return account.tokens;
+}
+
+const live = (entry, now) => entry && entry.t && now - (entry.at || 0) < TOKEN_TTL_MS;
+
+/** 又一台设备登录了。添一把，别人手里那几把不动。 */
+export function issueToken(account) {
+  const now = Date.now();
+  const ring = tokenRing(account).filter((e) => live(e, now));
+  const fresh = randomBytes(24).toString('hex');
+  ring.push({ t: fresh, at: now });
+  // 挤掉最老的：留住的是最近用得上的那几台。
+  account.tokens = ring.slice(-MAX_TOKENS);
+  account.token = fresh;
+  return fresh;
+}
+
+/** 这把令牌此刻还算不算数。 */
+export function tokenValid(account, presented) {
+  const token = String(presented || '');
+  if (!account || !token) return false;
+  const now = Date.now();
+  return tokenRing(account).some((e) => live(e, now) && e.t === token);
+}
+
+/** 全部作废，另发一把——改密码和邮箱解锁走这条。 */
+export function revokeTokens(account) {
+  account.tokens = [];
+  return issueToken(account);
 }
 
 /** How long a redeemed code is worth. 'life' is handled separately below. */

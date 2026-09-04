@@ -5,7 +5,7 @@ import {
   PASS_RE,
   loadAccount,
   normalizeEmail,
-  rotateToken,
+  revokeTokens,
   saveAccount,
   unblock,
 } from './_accounts.js';
@@ -115,7 +115,9 @@ async function confirm(res, address, { code, password }) {
   const account = await loadAccount(address);
   if (!account) return send(res, 400, { error: 'expired' });
   unblock(account, pin);
-  const issued = rotateToken(account);
+  // 邮箱验证解锁：这条路的前提就是「这个账号可能已经不只我一个人在用」，
+  // 所以把所有设备上的令牌一并作废，只留刚验过邮箱的这一台。
+  const issued = revokeTokens(account);
   await saveAccount(address, account);
   await del(key(address));
   // 答的是这个账号此刻真正的权益：内部码账号看本地到期日，刷卡订阅去问

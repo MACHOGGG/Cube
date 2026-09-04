@@ -20,6 +20,7 @@ import {
   liveInbox,
   loadAccount,
   normalizeEmail,
+  tokenValid,
 } from './_accounts.js';
 
 /**
@@ -37,14 +38,14 @@ export async function identify({ email, accountToken, holderCode }) {
   const address = normalizeEmail(email);
   if (address) {
     const account = await loadAccount(address);
-    if (account?.token && account.token === accountToken) return { id: address, account };
+    if (tokenValid(account, accountToken)) return { id: address, account };
   }
 
   // 兑了码还没绑邮箱的人。权益记在码底下，所以也去码底下认。
   if (holderCode) {
     const key = codeHolder(holderCode);
     const held = await loadAccount(key);
-    if (held?.token && held.token === accountToken) return { id: key, account: held };
+    if (tokenValid(held, accountToken)) return { id: key, account: held };
   }
 
   return null;
@@ -68,7 +69,8 @@ export const ownGrantLive = (account) => Boolean(account && (account.until || 0)
  *
  * @param address 已经证明是本人的邮箱（凭密码或令牌——由调用方把关）。
  * @param account 已读出的账号，没有就 null。
- * @param issued  这一次刚换发的令牌（没换就不给，沿用账号上那把）。
+ * @param issued  这台设备这一次用的令牌：拿密码登录的是刚签发的那一把，拿
+ *                令牌来的就是它自己带来的那一把。都没有就沿用账号上最新的。
  * @returns {{ status: number, body: object }}
  */
 export async function resolveEntitlement(address, account, issued) {
@@ -77,6 +79,11 @@ export async function resolveEntitlement(address, account, issued) {
       status: 200,
       body: {
         ...entitlementOf(account, address),
+        // 拿令牌来的那台设备，回给它自己那一把（issued）；拿密码来的那台，
+        // issued 是刚给它签发的新的。都没有才退回账号上最新的那一把。
+        // 几台设备同时在线，各拿各的，谁也别把谁挤掉——见 _accounts.js 的
+        // issueToken。
+        token: issued || account.token,
         kind: 'code',
         gifts: await liveGifts(account),
         inbox: await liveInbox(account),
@@ -129,12 +136,12 @@ export async function isGenius({ email, accountToken, holderCode, storeClaim }, 
 
   if (holderCode && accountToken) {
     const held = await loadAccount(codeHolder(holderCode));
-    if (held?.token && held.token === accountToken && ownGrantLive(held)) return true;
+    if (tokenValid(held, accountToken) && ownGrantLive(held)) return true;
   }
 
   if (address && accountToken) {
     const own = await loadAccount(address);
-    if (own?.token && own.token === accountToken) {
+    if (tokenValid(own, accountToken)) {
       emailProven = true;
       if (ownGrantLive(own)) return true;
     }
