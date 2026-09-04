@@ -201,7 +201,18 @@
 /* 两份摞在一起比一份高，结算弹窗要能滚——不滚就有一半够不着。 */
 .overlay--end .modal { max-height: 88svh; overflow-y: auto; }
 
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* touch-action: manipulation 关掉的是「同一个地方连点两下就放大」——手机浏览
+   器的默认手势。玩家在这个网站上连点是常事（连着按同一个玩法、在选择窗口里
+   改主意、连按两下返回），每一次都可能被浏览器当成「他想看清楚一点」，页面
+   就毫无预兆地放大一截，这正是「不要出现意料外的界面」说的那种事。
+
+   只关这一个手势：滚动照常，两指捏合放大也照常（那是无障碍功能，不能拿掉）。
+   写在 * 上是因为 touch-action 不继承——只写 html 或 body，手指按在按钮上时
+   仍然按按钮自己的值算。棋盘那块（.board-wrap）自己写着 touch-action: none，
+   类选择器比 * 强，不会被这一条盖掉。
+
+   顺带也就没有了 iOS 上那段「等 300ms 看看是不是双击」的点击延迟。 */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 html, body { height: 100%; }
 /* Reserves room below whatever the browser scrolls into view (Tab focus, a
    mobile keyboard nudging an input, Playwright's own scrollIntoView) so the
@@ -833,9 +844,20 @@ button:hover { filter: brightness(1.05); }
 }
 .home-page:not(.home-page--wide) .home-head { margin-bottom: 6px; }
 /* 竖屏是一排两张（见 menu.ts 的 NARROW_PER_ROW），十三张排成七排，所以这一
-   页要往下滑——玩家要的就是这个样子。 */
-.home-page:not(.home-page--wide) .home-grid { gap: 14px; }
-.home-page:not(.home-page--wide) .home-row { gap: 14px; }
+   页要往下滑——玩家要的就是这个样子。
+
+   两张之间空多少：正好等于整排到屏幕两边留的那道白。两张一共 260 宽，剩下
+   的宽度分成三份——左边一份、中间一份、右边一份——中间那份就是间距。这样
+   「居中」和「等距」是同一件事，不是两个各自调出来的数：以前中间只留 14，
+   两边却各空 50，两张看着就像黏在中间。16 是这一页左右的内边距（8+8）。
+
+   上下用同一个数，所以横竖两个方向看起来一样疏。上限 44 是为了宽一点的手
+   机上两张不至于被推到两边贴着屏幕看；下限 20 是为了小屏上还留得住一道缝。 */
+.home-page:not(.home-page--wide) {
+  --narrow-gap: clamp(20px, (min(100vw, 460px) - 16px - 260px) / 3, 44px);
+}
+.home-page:not(.home-page--wide) .home-grid { gap: var(--narrow-gap); }
+.home-page:not(.home-page--wide) .home-row { gap: var(--narrow-gap); }
 /* 一张 130px 见方（玩家点的数）。
 
    这是个定数，不是算出来的——这一点是有意的。从前它是按 100dvh 算的：手机
@@ -843,11 +865,11 @@ button:hover { filter: brightness(1.05); }
    上滑所有标识都放大了」）。现在图标多大和屏幕多高、和滑没滑一概无关。
 
    后面那一条只在「屏幕窄到两张 130 并排站不下」时才接手：把它收成这一排的
-   一半，免得横着溢出。360 宽的手机上算出来是 165，还轮不到它。 */
+   一半，免得横着溢出。360 宽的手机上算出来是 158，还轮不到它。 */
 .home-page:not(.home-page--wide) .home-icon-btn,
 .home-page:not(.home-page--wide) .home-bomb-card {
   max-width: 130px;
-  max-width: min(130px, (min(100vw, 460px) - 36px) / 2);
+  max-width: min(130px, (min(100vw, 460px) - 16px - var(--narrow-gap)) / 2);
 }
 /* The icon grid wants far more width than the standard reading column.
    一排最多三张，每张被 --home-card-cap 收住，所以整页的宽由那三张决定；这里

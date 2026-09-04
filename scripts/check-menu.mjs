@@ -234,6 +234,46 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   check(`${label}：招牌收在卡片里`, cards.every((c) => c.inside));
 }
 
+// ---- 连点两下不放大 -------------------------------------------------------
+//
+// 手机浏览器默认「同一个地方连点两下 = 放大」。这个网站上连点是常事（连着按
+// 同一个玩法、在选择窗口里改主意），每一次都可能被当成放大手势，页面毫无预
+// 兆地涨一截。touch-action: manipulation 只关这一个手势，滚动和两指捏合都还
+// 在——捏合是无障碍功能，拿掉了才是问题。
+//
+// 查的是「算出来的值」而不是「CSS 里写没写」：touch-action 不继承，所以按钮
+// 和空白得各自算过才算数。棋盘那块要的是 none（手指在上面拖不该滚页面），
+// 那一条不能被这一条盖掉，也一起查。
+await ctx.close();
+const tctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await tctx.addInitScript(() => {
+  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+    localStorage.setItem(k, '1');
+  localStorage.setItem('slides_lang', 'zhHans');
+});
+const tap = await tctx.newPage();
+await tap.goto(BASE, { waitUntil: 'load' });
+await tap.waitForSelector('.home-icon-btn', { timeout: 20000 });
+const zoomy = await tap.$$eval(
+  'body, .app, .home-grid, .home-row, .home-icon-btn, .home-head, .home-nav, .home-nav button',
+  (els) =>
+    els
+      .map((e) => (getComputedStyle(e).touchAction === 'manipulation' ? null : `${e.className || e.tagName}=${getComputedStyle(e).touchAction}`))
+      .filter(Boolean),
+);
+check('连点两下不放大：按钮和空白都算', zoomy.length === 0, zoomy.join(' / '));
+// 开一局，确认棋盘那块还是 none。
+await tap.$$eval('.home-icon-btn', (els) => els[0].click());
+await tap.waitForSelector('.start-go, .board-wrap', { timeout: 8000 });
+const goBtn = await tap.$('.start-go');
+if (goBtn) {
+  await goBtn.click();
+  await tap.waitForSelector('.board-wrap', { timeout: 15000 });
+}
+const boardTA = await tap.$eval('.board-wrap', (e) => getComputedStyle(e).touchAction);
+check('棋盘那块还是 none（手指在上面拖不滚页面）', boardTA === 'none', boardTA);
+await tctx.close();
+
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

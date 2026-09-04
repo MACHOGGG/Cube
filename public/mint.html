@@ -27,7 +27,8 @@
     :root { --bg:#1B1917; --card:#252220; --ink:#EDE7DA; --soft:#A69E92;
             --line:#3A3531; --accent:#D9787C; --ok:#6FBF8E; }
   }
-  * { box-sizing: border-box; }
+  /* 同主站：连点两下不放大页面（捏合缩放照旧）。见 src/style.css 那一条。 */
+  * { box-sizing: border-box; touch-action: manipulation; }
   body { margin:0; background:var(--bg); color:var(--ink); font: 15px/1.55 -apple-system,
          BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
          padding: 24px 16px 64px; }
