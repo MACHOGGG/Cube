@@ -95,6 +95,35 @@ if (hits.length) {
 }
 console.log('禁用能力扫描：干净');
 
+// ---- 3.5 语法门禁：Chrome 61 认不认得这份包 --------------------------------
+//
+// 这一关是别处补不上的。
+//
+// 两台体检台（check-oldkernel / check-oldcss）都在**新** Chromium 上跑，只是
+// 把接口删掉、把样式降级。删得掉接口，删不掉「这个浏览器认识 ?. 」这件事——
+// 包里真混进一个可选链、一个 ??、一个类字段，那两台照跑不误，到了真机上却是
+// **解析阶段**就失败：整个 app.js 一行都不执行，白屏，而且没有任何报错能看。
+//
+// Vite 的 target 已经写了 es2017/chrome61（见 vite.config.ts），esbuild 会把
+// 语法降下去。但第 2.5 步拼在最前面的 polyfills.js **不走 Vite**，是原样拼上
+// 的；以后要是有人往里写一句 `a?.b`，就这么混进去了。
+//
+// 所以这里拿一个只认 ES2017 的解析器（acorn）把**拼好之后的整个产物**再读一
+// 遍。读得下来，才敢说 Chrome 61 认得它的每一个字。
+const acorn = await import('acorn');
+try {
+  acorn.parse(readFileSync(appPath, 'utf8'), { ecmaVersion: 2017, sourceType: 'script' });
+  console.log('语法门禁：整份产物按 ES2017 解析通过');
+} catch (e) {
+  console.error(
+    '\n产物里有 Chrome 61 解析不了的语法，没出包：\n  ' +
+      e.message +
+      '\n\n  真机上的症状是白屏、没有任何报错。多半出在 xhs/polyfills.js——' +
+      '\n  那个文件不走 Vite，写什么就是什么，只能用 ES2017 以内的写法。',
+  );
+  process.exit(1);
+}
+
 // ---- 4. 体积门禁 -----------------------------------------------------------
 const audit = join(here, '../.claude/skills/minitool-zip-builder/scripts/audit_artifact.mjs');
 if (existsSync(audit)) run('node', [audit, dist]);
