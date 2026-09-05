@@ -195,7 +195,13 @@
   padding-top: calc(var(--xhs-top-clear, 0px) + 28px);
 }
 /* 棋盘页自己一套（`.app--game`），源样式那条会看安全区，可它把式子写成
-   `max(...)`——Chrome 61 没有 max()，整条会被丢掉。这里换成一句它算得动的。 */
+   `max(...)`——Chrome 61 没有 max()，整条会被丢掉。这里换成一句它算得动的。
+
+   接的这一截是 14px，不是源样式那边的 6px：让读数那一行和容器的键之间留出
+   和 4-3-2-1 开局页（`.start-stage`，接的也是 14px）一样宽的一道。两屏是前
+   后脚，上面那道忽宽忽窄很显眼；而且 6px 太紧，那三颗灰键几乎贴着金色读数
+   块。这一下不吃棋盘：这块屏上棋盘是被**宽度**卡住的（402 − 两边各 15 =
+   372 见方），上面多让 8px，它照样是 372，多出来的只是空白怎么分。 */
 .app.app--game {
-  padding-top: calc(var(--xhs-top-clear, 0px) + 6px);
+  padding-top: calc(var(--xhs-top-clear, 0px) + 14px);
 }
