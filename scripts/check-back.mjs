@@ -145,8 +145,12 @@ async function commonRounds(tag, viewport) {
   await page.waitForSelector('.story-tut', { timeout: 8000 });
   await back(page);
   check(`${tag} 教学里按返回 → 挑选页`, (await has(page, '.tut-pick')) && !(await has(page, '.story-tut')));
+  // 教学是从个人主页的《如何滑？》进来的，所以退回去也是个人主页——不是主
+  // 菜单（玩家定的，见任务 #446）。再按一下才回主菜单。
   await back(page);
-  check(`${tag} 挑选页按返回 → 主菜单`, await has(page, '.home-page'));
+  check(`${tag} 挑选页按返回 → 个人主页（教学是从那儿进来的）`, (await has(page, '.profile-page')) && !(await has(page, '.tut-pick')));
+  await back(page);
+  check(`${tag} 个人主页再按返回 → 主菜单`, await has(page, '.home-page'));
 
   return { ctx, page };
 }

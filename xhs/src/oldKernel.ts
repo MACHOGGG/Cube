@@ -326,6 +326,13 @@ export function downlevel(css: string, s: KernelSupport): string {
   }
   if (!s.env) {
     // env(safe-area-inset-bottom, 118px) 换成 118px；没写默认值的当 0。
+    //
+    // 样式里写的是「变量优先、env 兜底」的组合（小红书规范要求的那种）：
+    //   var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+    // 这里换掉的只是里面那个 env，换完剩下
+    //   var(--safe-area-inset-bottom, 0px)
+    // ——var() 在 Chrome 61 上是认得的，所以宿主注入的那个变量照样生效，
+    // 宿主没注入才落到 0。整条属性不会因为一个 env 就被整段丢掉。
     // 这一版跑在 2017 年前后那批安卓上，没有刘海也没有底部横杠，所以「当 0」
     // 不是将就，就是正确答案。
     //

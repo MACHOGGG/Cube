@@ -136,20 +136,34 @@ const symTrophy =
   `<path d="M50 62 V74" fill="none" stroke="#D89B1E" stroke-width="10" stroke-linecap="round"/>` +
   `<rect x="32" y="76" width="36" height="14" rx="5" fill="#D89B1E"/></svg>`;
 
-export const RULE_ART: string[] = [
+/**
+ * 这六幅图，可以要三角，也可以不要。
+ *
+ * 只有第 1 幅认得出三角——它画的是「每个图形都有正反两面」，方块、小球、三角
+ * 各一列。别的五幅画的是规矩本身（凑图案、翻面、连成一行、结束、综合得分），
+ * 用的都是方块和小球，本来就没有三角。
+ *
+ * 小红书那一版整块没有三角（玩家定的），所以那一版把它摘掉，剩两列；网页版
+ * 三角是真玩法，照旧三列。摘掉的是一整列（正面那一枚和它底下的反面那一枚一
+ * 起走），不是只藏一枚——只藏一枚会剩下一个空位，看起来像画错了。
+ */
+export function buildRuleArt(opts: { triangle?: boolean } = {}): string[] {
+  const withTri = opts.triangle !== false;
+  const cols = withTri ? 3 : 2;
+  return [
   // 1. 正反两面：方块、小球、三角各一列——上排正面，下排它的反面。上排的
-  //    三枚轮流翻过去露一下反面再翻回来，翻出来的正是底下那一枚（玩家的原话：
+  //    几枚轮流翻过去露一下反面再翻回来，翻出来的正是底下那一枚（玩家的原话：
   //    「各展示一个正面和反面……用户需要看明白正-反关系，能用图示的尽量不要
-  //    文字」）。正面用的就是上面三颗入口键的三种颜色。
+  //    文字」）。正面用的就是上面几颗入口键的颜色。
   board(
     svgTile(sqFront('#2F9E52'), sqBack(O), 'ra-peek') +
       svgTile(ballFront('#B23A3A'), ballBack('#4C68B0'), 'ra-peek', 'animation-delay:0.5s') +
-      svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-peek', 'animation-delay:1s') +
+      (withTri ? svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-peek', 'animation-delay:1s') : '') +
       svgTile(sqFront('#2F9E52'), sqBack(O), 'ra-back') +
       svgTile(ballFront('#B23A3A'), ballBack('#4C68B0'), 'ra-back') +
-      svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-back'),
+      (withTri ? svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-back') : ''),
     'ra-still',
-    3,
+    cols,
   ),
   // 2. 同色凑成图案：最右那列往上滑一格，橙色凑满一行 → 对勾 → 四枚翻面，反面各是不同的颜色。
   board(
@@ -180,4 +194,8 @@ export const RULE_ART: string[] = [
   ),
   // 6. 时间短、步数少、得分多 → 综合得分高：秒表、滑动、星星，等号右边是奖杯。
   symStopwatch + symMoves + symStar + symEq + symTrophy,
-];
+  ];
+}
+
+/** 网页版用的那一份：三种图形都在。 */
+export const RULE_ART: string[] = buildRuleArt();

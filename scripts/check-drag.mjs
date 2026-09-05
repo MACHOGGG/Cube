@@ -48,9 +48,10 @@ async function openBoard(n) {
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(300);
   await page.$$eval('.home-icon-btn', (els, i) => els[i].click(), n);
-  await page.waitForSelector('#startBtn', { timeout: 15000, state: 'attached' });
-  await page.$eval('#startBtn', (el) => el.click());
-  await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, PIECES, { timeout: 20000 });
+  // 开局键早就藏起来了（hidden，见 gameShell 的 .start-hidden-go）：4-3-2-1 数完
+  // 自己开局。所以这里不按键，直接等棋子出现——从前那句 waitForSelector 等的是
+  // 一颗看得见的 #startBtn，永远等不到，这个脚本按文档跑就是超时崩掉。
+  await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, PIECES, { timeout: 30000 });
   await page.waitForTimeout(700);
   return page.$$eval(PIECES, (els) => {
     const e = els[Math.floor(els.length / 2)];

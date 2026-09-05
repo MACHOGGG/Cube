@@ -88,7 +88,10 @@ await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').lengt
 check('三个人：写着 3/8', /3\/8/.test(await playersLabel(A)), await playersLabel(A));
 const st3 = await stateVia(A);
 const names = st3.players.map((p) => p.name);
-check('没取名字的两个客人：名字不一样（第二个带编号）', new Set(names).size === 3 && names.some((n) => / 2$/.test(n)), names.join(' / '));
+// 没取名字的人由服务器发一个屋里没被占的字母（A、B、C……见 api/room.js 的
+// freeLetter）。从前发的是占位那句话本身，第二个进来的被加编号成「起个名字
+// 2」——那一版这里断言的就是那个编号。
+check('没取名字的三个人：各拿一个字母，一个不重', new Set(names).size === 3 && names.every((n) => /^[A-Z]$/.test(n)), names.join(' / '));
 check('屋主还是屋主', st3.host === (await seatOf(A)).playerId && st3.players.find((p) => p.isHost)?.name === names[0] || st3.players.filter((p) => p.isHost).length === 1);
 
 // ---- 同名进来认领不走屋主的座位 --------------------------------------------

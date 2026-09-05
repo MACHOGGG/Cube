@@ -26,7 +26,17 @@
  * 网页版哪天改了文案或改了那几幅动画，这一版跟着变。
  */
 import { TUTORIAL_RULES, type Lang } from '../../src/i18n';
-import { RULE_ART } from '../../src/ui/ruleArt';
+import { buildRuleArt } from '../../src/ui/ruleArt';
+
+/**
+ * 这一版的六幅配图：不要三角。
+ *
+ * 只有第 1 幅有三角（它画的是「每个图形都有正反两面」，网页版是方块、小球、
+ * 三角各一列），这一版摘掉那一列，剩方块和小球两列——这一版整块没有三角，
+ * 讲一个玩家在这儿见不到的图形，只会让人以为自己漏了什么。别的五幅本来就
+ * 只有方块和小球。
+ */
+const RULE_ART = buildRuleArt({ triangle: false });
 
 /** 会放分镜动画的两族。三角整块不做，所以只有这两个。 */
 export type StoryFamily = 'square' | 'circle';

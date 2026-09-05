@@ -246,7 +246,7 @@ body {
    那道横条的安全区。原来只让了 92，正好差着最后那几像素。 */
 .app {
   width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px;
-  padding: 28px 16px calc(106px + env(safe-area-inset-bottom, 0px));
+  padding: 28px 16px calc(106px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
 }
 /* A few boards (七色圆球's 49-cell diamond, the base/big triangle's denser
    packing) read as cramped at the standard column width — widens just
@@ -432,6 +432,13 @@ h1 {
      的机会）。两句都只影响画法，不动排版。 */
   transform: translateZ(0);
   isolation: isolate;
+  /* 再加一道遮罩，专治老 WebKit / 老安卓 WebView。
+     那些内核上「圆角 + overflow: hidden」这一套只在普通绘制时管用；子元素一
+     旦带上 transform 被提层，裁剪就整个失效——拖一行的时候，本该被剪在框外
+     的补位棋子会实打实地画到版图上，玩家看到的是「滑动时方块跑出来一部分」。
+     遮罩不一样：它是按层合成的，提层之后照样生效。这一层没有文字，不必担心
+     遮罩会关掉次像素抗锯齿。 */
+  -webkit-mask-image: -webkit-radial-gradient(#fff, #000);
 }
 
 .ghost { opacity: 0.55; pointer-events: none; }
@@ -867,7 +874,7 @@ button:hover { filter: brightness(1.05); }
      一截是刘海屏底下那道横杠——底排会被它顶上来，不把它算进来，滑到底的时候
      那行小字就正好被盖住（玩家报的：「下滑到底部时个人主页和成绩与排名正好
      遮挡着 V 型三角的字样」）。 */
-  padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(118px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   /* 至少顶着一屏高，几排在招牌和底排之间匀开——屏幕高、图标又少的时候，
      几排不至于全挤在页面上半截、底下空出一大块。装不下就照常往下长。 */
   min-height: 100svh;
@@ -1230,7 +1237,7 @@ button:hover { filter: brightness(1.05); }
 /* 底下带《返回》圆盘的那一种（记录与排名点开的三块）：整层改成上下两段，面
    板在上、圆盘在下；面板的高度上限扣掉圆盘那一截，谁也不压谁。底排导航这时
    候收起来——那一行位置正是圆盘站的地方。 */
-.center-pick--back { flex-direction: column; gap: 14px; padding-bottom: max(24px, calc(10px + env(safe-area-inset-bottom, 0px))); }
+.center-pick--back { flex-direction: column; gap: 14px; padding-bottom: max(24px, calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))); }
 .center-pick--back .center-pick-body { min-height: 0; }
 .center-pick--back .records-panel--big,
 .center-pick--back .total-card--big {
@@ -1696,7 +1703,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
    底下一颗键。所以它得和开局页一样铺满整块屏幕，而不是像别的页面那样从上往
    下堆。 */
 .slot-page { min-height: 100dvh; padding: 0; gap: 0; max-width: none; }
-.slot-page .start-stage { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); }
+.slot-page .start-stage { padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 22px); }
 /* 和开局页一样是整屏的一幕，底下那一排导航在这儿只会挡住《退出》。 */
 body:has(.slot-page) .home-nav { display: none; }
 /* 三张图占的是开局页放倒数窗口的那一格，所以横着摊开、上下居中。 */
@@ -1803,7 +1810,7 @@ body:has(.slot-page) .home-nav { display: none; }
   /* 这一块整体压低（玩家点名：「个人主页和成绩排名需要整体在各个界面中都向
      下」）。上面留的那点是给「选中的那颗升起来」的地方——它升出圆角矩形一
      半，不能被裁掉；下面只留够不贴屏幕边。 */
-  padding: 6px 16px calc(6px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 16px calc(6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   pointer-events: none;
 }
 /* The two entries sit on a small rounded panel of their own rather than
@@ -2486,10 +2493,10 @@ html.is-tutorial .home-nav { display: none; }
      sideways, where the island is on one edge and the home indicator on the
      other. */
   padding:
-    calc(max(env(safe-area-inset-top, 0px), 14px) + 6px)
-    max(env(safe-area-inset-right, 0px), 14px)
-    calc(max(env(safe-area-inset-bottom, 0px), 10px) + 6px)
-    max(env(safe-area-inset-left, 0px), 14px);
+    calc(max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 14px) + 6px)
+    max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), 14px)
+    calc(max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 10px) + 6px)
+    max(var(--safe-area-inset-left, env(safe-area-inset-left, 0px)), 14px);
   gap: clamp(8px, 1.6vh, 16px);
 }
 /* 两条各写各的，不要用逗号并成一条。
@@ -2771,10 +2778,10 @@ html.is-playing body { background: var(--play-bg); }
        margin goes on the sides; the strip above the board keeps a little
        air so the pattern row is never under it either. */
     padding:
-      calc(max(env(safe-area-inset-top, 0px), 8px) + 2px)
-      max(env(safe-area-inset-right, 0px), clamp(12px, 3.4vw, 34px))
-      calc(max(env(safe-area-inset-bottom, 0px), 8px) + 2px)
-      max(env(safe-area-inset-left, 0px), clamp(12px, 3.4vw, 34px));
+      calc(max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 8px) + 2px)
+      max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), clamp(12px, 3.4vw, 34px))
+      calc(max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 8px) + 2px)
+      max(var(--safe-area-inset-left, env(safe-area-inset-left, 0px)), clamp(12px, 3.4vw, 34px));
     gap: clamp(8px, 1.6vw, 18px);
     display: grid;
     /* The side columns keep the width the sheet draws — 8.4%, floored at
@@ -3185,10 +3192,10 @@ body.is-room-host::after {
   display: flex; flex-direction: column;
 }
 /* 多人这一页底下常驻着导航栏，倒数的窗口得给它让开一截，不然贴在一起。 */
-.mp-countdown-page .start-stage { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); }
+.mp-countdown-page .start-stage { padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 96px); }
 /* 等人学教学的那一屏没有底排，那 96px 就不用让了，那句话落在整屏正中间。
    写在上面那条之后：两条权重一样，靠先后决胜负。 */
-.mp-learn-page .start-stage { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.mp-learn-page .start-stage { padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); }
 
 /* 「正在重连」那一页：只有两行字，居中就够了。 */
 .mp-wait-page { justify-content: center; min-height: 70vh; }
@@ -3303,7 +3310,7 @@ body.is-room-host::after {
 .start-stage {
   flex: 1; min-height: 0; width: 100%;
   display: flex; flex-direction: column; align-items: center;
-  padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px calc(env(safe-area-inset-bottom, 0px) + 22px);
+  padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 14px) 20px calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 22px);
 }
 /* 上下两半各占一半，按钮吃剩下的那点。图和数字因此永远一个在上半屏中间、一个
    在下半屏中间，不管这块屏幕是高是矮。 */
@@ -3410,7 +3417,7 @@ body.is-room-host::after {
 /* 开通了的人右下角那颗《开始 〉》：去挑图形那一屏。 */
 .slot-go {
   position: absolute; right: clamp(14px, 4vw, 28px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
+  bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 30px);
   display: inline-flex; align-items: center; gap: 6px;
   padding: 10px 14px 10px 20px; border: none; border-radius: var(--r-full);
   background: var(--accent); color: #FFFFFF; font: inherit; font-weight: 700; font-size: 16px;
@@ -3511,8 +3518,8 @@ body.is-room-host::after {
 /* ---------- 教学挑选页：三条大按钮 + 六条规则，一屏装下 ---------- */
 /* 整页的高就是屏幕减去底排导航那一条；里面按弹性分，谁都不许把页撑长。 */
 .tut-pick {
-  height: calc(100vh - 106px - env(safe-area-inset-bottom, 0px));
-  height: calc(100dvh - 106px - env(safe-area-inset-bottom, 0px));
+  height: calc(100vh - 106px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  height: calc(100dvh - 106px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   min-height: 0; padding: clamp(8px, 1.6vh, 16px) 16px 0; gap: clamp(6px, 1.2vh, 12px);
   display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
 }
@@ -3562,9 +3569,9 @@ body.is-room-host::after {
    往下滚，底下给底排导航留出位置。 */
 @media (orientation: landscape) and (max-height: 560px) {
   .tut-pick {
-    height: auto; min-height: calc(100dvh - 106px - env(safe-area-inset-bottom, 0px)); overflow: visible;
+    height: auto; min-height: calc(100dvh - 106px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); overflow: visible;
     display: grid; grid-template-columns: minmax(150px, 2fr) 3fr; grid-template-rows: auto auto;
-    column-gap: 20px; row-gap: 8px; padding: 8px 16px calc(106px + env(safe-area-inset-bottom, 0px));
+    column-gap: 20px; row-gap: 8px; padding: 8px 16px calc(106px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
   .tut-pick-shapes { grid-column: 1; grid-row: 1; justify-content: center; }
   .tut-shape-btn { --h: 44px; }

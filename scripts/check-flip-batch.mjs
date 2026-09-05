@@ -75,7 +75,17 @@ await page.click('#moreModesRow');
 await page.waitForSelector('.modes-page', { timeout: 8000 });
 check('《更多玩法》是陈列页，不是挑图形页', !(await has(page, '.flip-page')));
 check('陈列页里一个圆角框，装着无限反转那张图', (await has(page, '.modes-page .lay-card[data-mode="flip"] .lay-thumb svg')));
-check('框底下写着名字', (await page.$eval('.modes-page .lay-name', (el) => el.textContent.trim())) === '无限反转');
+// 这一页现在并排陈列两张卡：老虎机模式和无限反转（玩家定的，见任务 #444）。
+// 从前只有无限反转一张，所以这里取的是第一个 .lay-name——那一版它就是无限反转。
+check(
+  '两张卡并排：老虎机模式和无限反转',
+  (await page.$$eval('.modes-page .lay-name', (els) => els.map((e) => e.textContent.trim()).join('|'))) === '老虎机模式|无限反转',
+  await page.$$eval('.modes-page .lay-name', (els) => els.map((e) => e.textContent.trim()).join('|')),
+);
+check(
+  '无限反转那张框底下写着它自己的名字',
+  (await page.$eval('.modes-page .lay-card[data-mode="flip"] .lay-name', (el) => el.textContent.trim())) === '无限反转',
+);
 check('陈列页的图不能按（没有按钮）', !(await has(page, '.modes-page .lay-card button')));
 await page.click('#backBtn');
 await page.waitForTimeout(300);
