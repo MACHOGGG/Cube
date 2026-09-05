@@ -78,8 +78,11 @@ function arrow(r: number, c: number, ang: number, mode?: 'static'): StoryStep {
 }
 
 const BEATS: StoryStep[][] = [
-  // 1 — the opening deal; column 3 is about to slide down.
-  [{ t: 'show', f: 0 }, arrow(2, 3, 90)],
+  // 1 — the opening deal; column 3 is about to slide down. The hint just
+  // stands here; it wakes up and pulls in beat 2, the beat that actually
+  // slides — same idiom as beats 8→9. Two armed arrows in a row read as two
+  // separate tugs, which is what a player sees as 「拉扯了两次」.
+  [{ t: 'show', f: 0 }, arrow(2, 3, 90, 'static')],
   // 2 — column 3 slides down one: the orange 1×4 completes and scores.
   [
     { t: 'show', f: 0 },
@@ -87,8 +90,9 @@ const BEATS: StoryStep[][] = [
     { t: 'slide', f: 0, idx: col(3), dx: 0, dy: P, wx: 0, wy: SPAN, snap: 1 },
     { t: 'checks', pts: [0, 1, 2, 3].map((c) => ctr(3, c)), color: W },
   ],
-  // 3 — the scored oranges flip to their dot faces; column 4 is next.
-  [{ t: 'show', f: 1 }, { t: 'flip', f: 1, idx: [15, 16, 17, 18], snap: 2, dir: 90 }, arrow(2, 4, 90)],
+  // 3 — the scored oranges flip to their dot faces; column 4 is next (the
+  // hint stands, it pulls in beat 4).
+  [{ t: 'show', f: 1 }, { t: 'flip', f: 1, idx: [15, 16, 17, 18], snap: 2, dir: 90 }, arrow(2, 4, 90, 'static')],
   // 4 — column 4 slides down one: a 2×2 magenta forms across BOTH faces
   // (three fronts + one already-flipped dot) and still scores.
   [
@@ -99,8 +103,8 @@ const BEATS: StoryStep[][] = [
   ],
   // 5 — the magentas flip, each to its own randomly-printed dot colour.
   [{ t: 'show', f: 3 }, { t: 'flip', f: 3, idx: [13, 14, 19], snap: 4, dir: 90 }],
-  // 6 — row 1 is about to slide left.
-  [{ t: 'show', f: 4 }, arrow(1, 3, 180)],
+  // 6 — row 1 is about to slide left (the hint stands, it pulls in beat 7).
+  [{ t: 'show', f: 4 }, arrow(1, 3, 180, 'static')],
   // 7 — row 1 slides left one: a vertical gray 4 forms (again mixed faces).
   [
     { t: 'show', f: 4 },

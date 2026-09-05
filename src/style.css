@@ -2383,10 +2383,12 @@ html.is-tutorial .home-nav { display: none; }
    this duration plus a short tail, so the beat ends just after the recoil
    instead of standing on a dead arrow. */
 .story-arrow-nudge { display: block; width: 100%; height: 100%; transform-origin: 20% 50%; animation: story-arrow-nudge calc(0.72s / var(--story-speed, 1)) ease-in-out 1; }
+/* 一次拉伸：往前扯出去，再回到原样。中间那一帧从前是往回缩过头
+   （translateX(-2%) scaleX(0.94)），那是一记反方向的回弹——玩家看到的是
+   「扯了一下，又扯了一下」。去掉它，一拍就只剩一个动作。 */
 @keyframes story-arrow-nudge {
   0%, 100% { transform: translateX(0) scaleX(1); }
-  35% { transform: translateX(9%) scaleX(1.22); }
-  65% { transform: translateX(-2%) scaleX(0.94); }
+  40% { transform: translateX(9%) scaleX(1.22); }
 }
 
 /* The scoring cue: a checkmark that blinks in a few times, then holds. */

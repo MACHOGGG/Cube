@@ -334,8 +334,8 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         board.appendChild(a);
         await sleep(WAIT.arrowStatic);
       } else {
-        // Armed: exactly two stretch cycles (the CSS iteration count), then
-        // the move starts on its own; the slide that follows retires it.
+        // Armed: one stretch cycle (the CSS iteration count), then the move
+        // starts on its own; the slide that follows retires it.
         a.classList.add('story-arrow--armed');
         a.innerHTML = `<span class="story-arrow-nudge">${ARROW_SVG(st.color)}</span>`;
         board.appendChild(a);
