@@ -172,11 +172,21 @@ export function fitPanelRadius(wrap: HTMLElement): void {
   for (const p of pieces) {
     const box = offsetIn(p, wrap);
     if (!box || box.w <= 0 || box.h <= 0) continue;
-    // 整个落在地板外面的不算。拖动的时候每一行两头会各接上一枚补位的棋子，
-    // 它们的排版位置就在地板外（左边是负的，右边越过 W）——照它们算，
-    // maxRadius 拿到一个负数直接返回 0，那一侧的两个角当场变成直角。补位的
-    // 棋子是给手指看的，不是地板要迁就的东西。
-    if (box.x + box.w <= 0 || box.x >= W || box.y + box.h <= 0 || box.y >= H) continue;
+    // 补位的棋子一概不算。拖动的时候每一行（每一列）两头会各接上一枚补位的
+    // 棋子——`.ghost`，半透明，只画不接手——照它们算，maxRadius 会拿到一个很
+    // 小的数甚至负数，那一侧的两个角当场变成直角。补位的棋子是给手指看的，
+    // 不是地板要迁就的东西。
+    //
+    // 从前这里只挡掉「整个落在地板外面」的那些。可拖到一半时补位那枚正一点
+    // 一点滑进来，进来的那一截就被算上了：拖第一列的时候，左上和左下两个角
+    // 一路被压到 0，圆角当场变成直角，手一松又弹回来——玩家报的「滑动的时候
+    // 版图上能看到明显不美观的东西」就是这一下。玩家的实机截图里，正在拖的
+    // 那一列旁边，版图左上角是个不折不扣的方角。
+    if (p.classList.contains('ghost')) continue;
+    // 只有**整个**待在地板里的棋子说了算。伸出去一截的那些，要么是补位，要么
+    // 是正在滑的那一行/那一列——两种都是这一瞬间的事，地板没有理由为它们把角
+    // 削平；手一松它们就回来了，而那几帧里玩家看到的是圆角变直角。
+    if (box.x < -0.5 || box.y < -0.5 || box.x + box.w > W + 0.5 || box.y + box.h > H + 0.5) continue;
     const left = box.x + pull;
     const top = box.y + pull;
     const right = W - (box.x + box.w) + pull;
