@@ -12,6 +12,7 @@ import { custom } from './customIcons';
 import { renderPatternHintIcons } from '../engine/patternIcon';
 import { slotFaceDefs } from '../engine/targetIcon';
 import { targetsOf, type Family, type TargetPattern } from '../engine/targets';
+import type { Lang } from '../i18n';
 
 /** 玩家画的那台机器。没有这个文件就退回一块素面板，转的东西照样在。 */
 const ART = custom('slot-machine') ?? '';
@@ -239,9 +240,13 @@ function backOut(t: number): number {
  * 整族装进同一个横长方框（见 targetIcon 的 slotFaceDefs）：棋子一样大，每一张
  * 都尽量顶满窗口。从前是各按各自的正方框铺满窗口——四枚的方阵大得很，一条
  * 五连却缩成一排小点；玩家的原话：「放大一些，但维持统一的大小」。
+ *
+ * lang 要从外面传进来。这些图上没有字，可每一张都带着图案名当读屏标签
+ * （renderPatternHintIcons 的 aria-label）——这里从前写死 'zhHans'，于是英文、
+ * 日文、韩文玩家的读屏软件念的是中文。全站只有这一处是写死的。
  */
-const facesOf = (pool: readonly TargetPattern[]): string[] =>
-  renderPatternHintIcons(slotFaceDefs(pool), 'zhHans').map((icon) => `<span class="slot-face">${icon}</span>`);
+const facesOf = (pool: readonly TargetPattern[], lang: Lang): string[] =>
+  renderPatternHintIcons(slotFaceDefs(pool), lang).map((icon) => `<span class="slot-face">${icon}</span>`);
 
 /**
  * 两个滚筒各转什么、各停在哪一张、第几毫秒停。
@@ -249,9 +254,9 @@ const facesOf = (pool: readonly TargetPattern[]): string[] =>
  * 左右各一个——就是这一局的两个得分图案。倒数不和转动叠在一起：第二个轮子
  * 停稳了（2.6 秒）才开始 5-4-3-2-1。
  */
-export function planFor(family: Family, pair: readonly TargetPattern[]): ReelPlan[] {
+export function planFor(family: Family, pair: readonly TargetPattern[], lang: Lang): ReelPlan[] {
   const pool = targetsOf(family);
-  const faces = facesOf(pool);
+  const faces = facesOf(pool, lang);
   const at = (p: TargetPattern) => Math.max(0, pool.findIndex((q) => q.id === p.id));
   return [
     { faces, land: at(pair[0]), stopAt: 1500 },

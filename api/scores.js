@@ -29,6 +29,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import {
   get,
   hgetall,
@@ -164,7 +165,7 @@ export default async function handler(req, res) {
   const body = await readBody(req);
 
   // 管理员维护：不认玩家，认的是 ADMIN_TOKEN，所以排在 identify 前面。
-  if (body?.action === 'rebuild') return await rebuild(res, body);
+  if (body?.action === 'rebuild') return await rebuild(req, res, body);
 
   const claim = {
     email: body?.email,
@@ -389,6 +390,9 @@ async function board(res, body, who, claim) {
 
 // ---- 管理员维护 -----------------------------------------------------------
 
+/** 一个来源一小时最多敲多少次门。和 api/mint.js 同一个数。 */
+const CALLS_PER_HOUR = 20;
+
 /** 和 api/mint.js 同一把锁：ADMIN_TOKEN，等长比较，不泄露比到第几位。 */
 function tokenOk(given) {
   const want = process.env.ADMIN_TOKEN || '';
@@ -415,7 +419,14 @@ function tokenOk(given) {
  * 总榜跟着重算。存档只留最近 60 局（KEEP_RUNS），更早的翻不出来也就不算——
  * 回包里报了动过几个人、写了几行。
  */
-async function rebuild(res, body) {
+async function rebuild(req, res, body) {
+  // 先限速，再验令牌——挡的正是「一直猜这个令牌」。和 api/mint.js 同一套
+  // （_ratelimit.js），同一个数：管理员一小时重建不了几次榜，猜密码的人先撞上
+  // 它。这一条尤其该限：重建要把全站每个人的存档翻一遍再重写所有榜，是站里最
+  // 贵的一次调用，敲开门之前就已经不便宜了。
+  if (await tooMany('scores:rebuild', callerId(req), CALLS_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
   if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
   const drop = new Set((Array.isArray(body?.drop) ? body.drop : []).map((k) => String(k)));
 

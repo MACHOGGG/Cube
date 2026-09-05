@@ -94,3 +94,83 @@ export function growParallelogram(
   for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) cells.push(positionAt(u, v)!);
   return cells;
 }
+
+/**
+ * 方块那副棋盘「一片得分区域能长多大」的三条规矩。
+ *
+ * 上面那两个函数是别的七副在用的；方块的行、列、矩形有更省事的写法（它是规整
+ * 的网格，不必绕 LINES），一直长在 shapes/square.ts 那个工厂函数肚子里。搬到
+ * 这里来只为一件事：让体检脚本（scripts/check-match-growth.mjs）量的是真件。
+ * 从前它照着那几行手抄了一份副本去量，抄本永远是过的——真件改了、抄本没跟上，
+ * 那道体检还照样报「全部通过」。
+ *
+ * 棋盘尺寸取的是函数而不是数：方块消掉一整行或一整列时 rows/cols 会当场变小
+ * （见 square.ts 的 applyLineBonus），拿一个数存下来就会停在旧尺寸上。
+ */
+export interface SquareGrowthView {
+  rows(): number;
+  cols(): number;
+  /** 这一格此刻算什么颜色（正面是它自己的色，反面是点色）。 */
+  effColorAt(r: number, c: number): number;
+}
+
+export function squareGrowth(view: SquareGrowthView) {
+  const { effColorAt } = view;
+
+  /** 一条横的四连，沿着自己这一行往左右两头长到同色为止。 */
+  function extendRunHoriz(r: number, cStart: number, cEnd: number): Cell[] {
+    const color = effColorAt(r, cStart);
+    const cols = view.cols();
+    let lo = cStart;
+    let hi = cEnd;
+    while (lo - 1 >= 0 && effColorAt(r, lo - 1) === color) lo--;
+    while (hi + 1 < cols && effColorAt(r, hi + 1) === color) hi++;
+    const cells: Cell[] = [];
+    for (let c = lo; c <= hi; c++) cells.push([r, c]);
+    return cells;
+  }
+
+  /** 一条竖的四连，沿着自己这一列往上下两头长。 */
+  function extendRunVert(c: number, rStart: number, rEnd: number): Cell[] {
+    const color = effColorAt(rStart, c);
+    const rows = view.rows();
+    let lo = rStart;
+    let hi = rEnd;
+    while (lo - 1 >= 0 && effColorAt(lo - 1, c) === color) lo--;
+    while (hi + 1 < rows && effColorAt(hi + 1, c) === color) hi++;
+    const cells: Cell[] = [];
+    for (let r = lo; r <= hi; r++) cells.push([r, c]);
+    return cells;
+  }
+
+  function rowSpanMatches(r: number, c0: number, c1: number, color: number): boolean {
+    for (let c = c0; c <= c1; c++) if (effColorAt(r, c) !== color) return false;
+    return true;
+  }
+  function colSpanMatches(c: number, r0: number, r1: number, color: number): boolean {
+    for (let r = r0; r <= r1; r++) if (effColorAt(r, c) !== color) return false;
+    return true;
+  }
+
+  /**
+   * 一个 2×2，一次长一整行或一整列——歪在旁边的同色进不来。
+   */
+  function extendRect(r0: number, c0: number, r1: number, c1: number): Cell[] {
+    const color = effColorAt(r0, c0);
+    const rows = view.rows();
+    const cols = view.cols();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      if (r0 - 1 >= 0 && rowSpanMatches(r0 - 1, c0, c1, color)) { r0--; grew = true; }
+      if (r1 + 1 < rows && rowSpanMatches(r1 + 1, c0, c1, color)) { r1++; grew = true; }
+      if (c0 - 1 >= 0 && colSpanMatches(c0 - 1, r0, r1, color)) { c0--; grew = true; }
+      if (c1 + 1 < cols && colSpanMatches(c1 + 1, r0, r1, color)) { c1++; grew = true; }
+    }
+    const cells: Cell[] = [];
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push([r, c]);
+    return cells;
+  }
+
+  return { extendRunHoriz, extendRunVert, extendRect };
+}

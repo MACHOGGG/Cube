@@ -87,7 +87,7 @@ export function renderSlotIntroPage(
       // 两个顶上，别让这一页空着。
       const pair = drawPair(family) ?? targetsOf(family).slice(0, 2);
       const prev = plans[k];
-      const next = planFor(family, pair).map((p, i) => ({ ...p, from: prev[i]?.land ?? 0 }));
+      const next = planFor(family, pair, lang).map((p, i) => ({ ...p, from: prev[i]?.land ?? 0 }));
       plans[k] = next;
       return spinSlotHeld(el, next, () => {
         settled++;

@@ -8,6 +8,7 @@ import {
   newAccount,
   normalizeEmail,
   saveAccount,
+  tokenValid,
 } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { set, storeConfigured, takeOnce } from './_store.js';
@@ -55,11 +56,16 @@ export default async function handler(req, res) {
   // An address and a token that check out mean the month goes to that
   // account. Anything short of that is treated as not signed in at all,
   // never as a reason to refuse — the code is still theirs to spend.
+  //
+  // tokenValid 走的是整串 token（一个账户可以同时在好几台设备上登着），不是只
+  // 认最新那一枚。这里要是只比 account.token，玩家在手机上登一次，电脑上那台就
+  // 被挤成「没登录」——码照样能兑，可那个月落到码自己名下，而不是他账户上，他
+  // 换台设备就找不着了。
   const address = normalizeEmail(email);
   let account = null;
   if (EMAIL_RE.test(address) && token) {
     const found = await loadAccount(address);
-    if (found && found.token && String(token) === found.token) account = found;
+    if (tokenValid(found, token)) account = found;
   }
 
   const ticketDoc = await takeOnce('code:' + ticket);

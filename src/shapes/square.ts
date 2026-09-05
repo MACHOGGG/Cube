@@ -14,6 +14,7 @@ import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreOf, sizeOf } from '../engine/targets';
 import { findTargets, type BoardView } from '../engine/targetMatch';
 import { targetPatternDefs } from '../engine/targetIcon';
+import { squareGrowth } from '../engine/matchGrowth';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -430,48 +431,14 @@ export function createSquareGame(): ShapeGame {
         return effColor(grid[r][c]);
       }
 
-      function extendRunHoriz(r: number, cStart: number, cEnd: number): Cell[] {
-        const color = effColorAt(r, cStart);
-        let lo = cStart;
-        let hi = cEnd;
-        while (lo - 1 >= 0 && effColorAt(r, lo - 1) === color) lo--;
-        while (hi + 1 < cols && effColorAt(r, hi + 1) === color) hi++;
-        const cells: Cell[] = [];
-        for (let c = lo; c <= hi; c++) cells.push([r, c]);
-        return cells;
-      }
-      function extendRunVert(c: number, rStart: number, rEnd: number): Cell[] {
-        const color = effColorAt(rStart, c);
-        let lo = rStart;
-        let hi = rEnd;
-        while (lo - 1 >= 0 && effColorAt(lo - 1, c) === color) lo--;
-        while (hi + 1 < rows && effColorAt(hi + 1, c) === color) hi++;
-        const cells: Cell[] = [];
-        for (let r = lo; r <= hi; r++) cells.push([r, c]);
-        return cells;
-      }
-      function rowSpanMatches(r: number, c0: number, c1: number, color: number): boolean {
-        for (let c = c0; c <= c1; c++) if (effColorAt(r, c) !== color) return false;
-        return true;
-      }
-      function colSpanMatches(c: number, r0: number, r1: number, color: number): boolean {
-        for (let r = r0; r <= r1; r++) if (effColorAt(r, c) !== color) return false;
-        return true;
-      }
-      function extendRect(r0: number, c0: number, r1: number, c1: number): Cell[] {
-        const color = effColorAt(r0, c0);
-        let grew = true;
-        while (grew) {
-          grew = false;
-          if (r0 - 1 >= 0 && rowSpanMatches(r0 - 1, c0, c1, color)) { r0--; grew = true; }
-          if (r1 + 1 < rows && rowSpanMatches(r1 + 1, c0, c1, color)) { r1++; grew = true; }
-          if (c0 - 1 >= 0 && colSpanMatches(c0 - 1, r0, r1, color)) { c0--; grew = true; }
-          if (c1 + 1 < cols && colSpanMatches(c1 + 1, r0, r1, color)) { c1++; grew = true; }
-        }
-        const cells: Cell[] = [];
-        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push([r, c]);
-        return cells;
-      }
+      // 三条长大的规矩在 engine/matchGrowth.ts（squareGrowth），和别的七副的放
+      // 在一处；体检脚本量的就是那一份真件。
+      // rows/cols 传的是函数：消掉整行整列时棋盘会当场变小。
+      const { extendRunHoriz, extendRunVert, extendRect } = squareGrowth({
+        rows: () => rows,
+        cols: () => cols,
+        effColorAt,
+      });
 
       /**
        * 随机得分目标那一局，判定要问棋盘的那几件事。

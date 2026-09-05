@@ -16,8 +16,8 @@
  * 这个文件把这两个函数单独拎出来喂假棋盘，两头都查：该长的长到哪儿，不该长
  * 的一格都不许多。
  *
- * 方块那副没有走这两个函数（它的行、列、矩形有更省事的写法，在
- * src/shapes/square.ts 里），所以最后一段照着它的写法把同样几件事再验一遍。
+ * 方块那副没有走这两个函数（它的行、列、矩形有更省事的写法，就是同一个文件里
+ * 的 squareGrowth），最后一段把那三个也喂一遍。
  * ─────────────────────────────────────────────────────────────────────────
  */
 const src = process.argv[2];
@@ -25,7 +25,7 @@ if (!src) {
   console.error('用法: node scripts/check-match-growth.mjs <打包好的 matchGrowth.mjs>');
   process.exit(2);
 }
-const { extendRunInLine, growParallelogram } = await import(src);
+const { extendRunInLine, growParallelogram, squareGrowth } = await import(src);
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -130,47 +130,25 @@ const gridView = (grid) => ({
 }
 
 // ---------------------------------------------------------------------------
-// 方块那副：它自己那三个长大的函数（照 src/shapes/square.ts 抄一份来验）
+// 方块那副：它自己那三个长大的函数（import 真件，不是抄本）
 // ---------------------------------------------------------------------------
 //
-// 抄一份而不是 import：那三个函数长在玩法的闭包里（要用到那一局的 grid），
-// 拿不出来。抄的是同一段逻辑，改一处这里就该跟着改一处——所以每条都注明了
-// 原文在哪几行。
+// squareGrowth 就在 matchGrowth.ts 里，shapes/square.ts 用的是同一份——这里喂
+// 一块假棋盘进去量。从前这一段是照着那几行抄的副本：抄本永远是过的，真件改了
+// 抄本没跟上，这道体检还照样报「全部通过」。
+//
+// rows/cols 传的是函数，跟真局一样：方块消掉整行整列时棋盘会当场变小。
 function squareHelpers(grid) {
-  const rows = grid.length;
-  const cols = grid[0].length;
-  const effColorAt = (r, c) => grid[r][c];
-  // square.ts extendRunHoriz
-  const extendRunHoriz = (r, cStart, cEnd) => {
-    const color = effColorAt(r, cStart);
-    let lo = cStart;
-    let hi = cEnd;
-    while (lo - 1 >= 0 && effColorAt(r, lo - 1) === color) lo--;
-    while (hi + 1 < cols && effColorAt(r, hi + 1) === color) hi++;
-    return hi - lo + 1;
+  const { extendRunHoriz, extendRect } = squareGrowth({
+    rows: () => grid.length,
+    cols: () => (grid[0] ? grid[0].length : 0),
+    effColorAt: (r, c) => grid[r][c],
+  });
+  // 真件返回的是格子清单，这里只关心长出来几格。
+  return {
+    extendRunHoriz: (r, a, b) => extendRunHoriz(r, a, b).length,
+    extendRect: (r0, c0, r1, c1) => extendRect(r0, c0, r1, c1).length,
   };
-  // square.ts extendRect
-  const extendRect = (r0, c0, r1, c1) => {
-    const color = effColorAt(r0, c0);
-    const rowSpan = (r, a, b) => {
-      for (let c = a; c <= b; c++) if (effColorAt(r, c) !== color) return false;
-      return true;
-    };
-    const colSpan = (c, a, b) => {
-      for (let r = a; r <= b; r++) if (effColorAt(r, c) !== color) return false;
-      return true;
-    };
-    let grew = true;
-    while (grew) {
-      grew = false;
-      if (r0 - 1 >= 0 && rowSpan(r0 - 1, c0, c1)) { r0--; grew = true; }
-      if (r1 + 1 < rows && rowSpan(r1 + 1, c0, c1)) { r1++; grew = true; }
-      if (c0 - 1 >= 0 && colSpan(c0 - 1, r0, r1)) { c0--; grew = true; }
-      if (c1 + 1 < cols && colSpan(c1 + 1, r0, r1)) { c1++; grew = true; }
-    }
-    return (r1 - r0 + 1) * (c1 - c0 + 1);
-  };
-  return { extendRunHoriz, extendRect };
 }
 
 {
@@ -179,6 +157,15 @@ function squareHelpers(grid) {
     [2, 2, 2, 2, 2, 2],
   ]);
   check('方块：一行四连长成五连', extendRunHoriz(0, 0, 3) === 5, `${extendRunHoriz(0, 0, 3)} 格`);
+}
+{
+  // 种子在中间，两头都还有同色：两头都要长。上一条的种子贴着最左边，往左长的
+  // 那半边量不到——把它拆掉这道体检照样是绿的，所以这一条必须在。
+  const { extendRunHoriz } = squareHelpers([
+    [2, 1, 1, 1, 1, 1, 1, 2],
+    [2, 2, 2, 2, 2, 2, 2, 2],
+  ]);
+  check('方块：两头都同色就两头都长（六连）', extendRunHoriz(0, 2, 5) === 6, `${extendRunHoriz(0, 2, 5)} 格`);
 }
 {
   const { extendRunHoriz } = squareHelpers([
@@ -202,6 +189,15 @@ function squareHelpers(grid) {
     [1, 1, 1],
   ]);
   check('方块：2×2 长成 3×3（九格）', extendRect(0, 0, 1, 1) === 9, `${extendRect(0, 0, 1, 1)} 格`);
+}
+{
+  // 种子在右下角：往上、往左长的那两边，只有这一条量得到。
+  const { extendRect } = squareHelpers([
+    [1, 1, 1],
+    [1, 1, 1],
+    [1, 1, 1],
+  ]);
+  check('方块：2×2 往上往左也长（九格）', extendRect(1, 1, 2, 2) === 9, `${extendRect(1, 1, 2, 2)} 格`);
 }
 {
   const { extendRect } = squareHelpers([

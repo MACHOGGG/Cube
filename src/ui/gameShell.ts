@@ -470,7 +470,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   if (meta.slotTargets?.length) {
     const stage = container.querySelector<HTMLElement>('#startOverlay');
     if (stage) {
-      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTargets), () => {
+      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTargets, meta.lang), () => {
         // 第二个轮子停稳了：这时候倒数才露面、才开始数。人已经离开这一页
         // 的话什么都不做。
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
