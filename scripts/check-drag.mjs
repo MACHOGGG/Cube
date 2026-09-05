@@ -42,12 +42,24 @@ page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));
 const PIECES = '#boardWrap .tile, #boardWrap .ball, #boardWrap .tri';
 const marked = () => page.$$eval('.piece-grabbed', (els) => els.map((e) => `${e.dataset.r},${e.dataset.c}`));
 
-/** 开一局，返回中间那一颗的位置和大小。 */
-async function openBoard(n) {
+/**
+ * 开一局，返回中间那一颗的位置和大小。
+ *
+ * 认卡认的是读屏名（aria-label），不是它排第几个——主菜单的顺序改过好几回
+ * （见任务 #445），写死序号的那一版这里点到过《无限反转》，然后在等三角的
+ * 棋子里超时崩掉。
+ */
+async function openBoard(label) {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(300);
-  await page.$$eval('.home-icon-btn', (els, i) => els[i].click(), n);
+  const hit = await page.$$eval('.home-icon-btn', (els, want) => {
+    const i = els.findIndex((e) => (e.getAttribute('aria-label') || '').trim() === want);
+    if (i < 0) return null;
+    els[i].click();
+    return i;
+  }, label);
+  if (hit === null) throw new Error(`主菜单上找不到读屏名叫《${label}》的卡`);
   // 开局键早就藏起来了（hidden，见 gameShell 的 .start-hidden-go）：4-3-2-1 数完
   // 自己开局。所以这里不按键，直接等棋子出现——从前那句 waitForSelector 等的是
   // 一颗看得见的 #startBtn，永远等不到，这个脚本按文档跑就是超时崩掉。
@@ -62,7 +74,7 @@ async function openBoard(n) {
 
 // ---- 1. 按下就知道抓的是哪一颗 --------------------------------------------
 {
-  const box = await openBoard(0);
+  const box = await openBoard('方块');
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
   await page.waitForTimeout(110);
@@ -80,7 +92,7 @@ async function openBoard(n) {
 
 // ---- 2. 落在边界附近：死区里蹭一下就能改抓 --------------------------------
 {
-  const box = await openBoard(0);
+  const box = await openBoard('方块');
   const edgeY = box.y + box.h / 2 - 3; // 离下边界 3px，正是最容易抓错的落点
   await page.mouse.move(box.x, edgeY);
   await page.mouse.down();
@@ -100,8 +112,8 @@ async function openBoard(n) {
 // 这一条是上一条的反面，也是真正的边界条件：从格子正中按下往前走，那是这一
 // 笔的开头。死区（11px）必须明显小于半个格子，否则每一次正常拖动都会在开头
 // 把抓的换掉——那比抓错还糟，因为它连「你按的是哪一颗」都不作数了。
-for (const [name, idx] of [['方块', 0], ['三角', 2]]) {
-  const box = await openBoard(idx);
+for (const [name, label] of [['方块', '方块'], ['三角', '三角']]) {
+  const box = await openBoard(label);
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
   await page.waitForTimeout(100);
@@ -134,8 +146,8 @@ for (const [name, idx] of [['方块', 0], ['三角', 2]]) {
 // 下），于是速率被整体放大，读出 0.06～2.07 这种不可能的区间。是探针的换算
 // 不对，不是那块棋盘有毛病——三块三角走的是同一个 magnetizeFollow，基础三角
 // 和进阶三角都稳定在 0.79～1.14。等探针改好再把它加回来。
-for (const [n, name] of [[2, '基础三角'], [17, '进阶三角']]) {
-  const box = await openBoard(n);
+for (const [label, name] of [['三角', '基础三角'], ['进阶三角', '进阶三角']]) {
+  const box = await openBoard(label);
   const sel = `#boardWrap [data-r="${box.at.split(',')[0]}"][data-c="${box.at.split(',')[1]}"]`;
   const xOf = () => page.evaluate((q) => {
     const e = document.querySelector(q);
