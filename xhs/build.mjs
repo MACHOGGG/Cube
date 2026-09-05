@@ -21,7 +21,7 @@
  * 规范全文在 .claude/skills/minitool-zip-builder/。
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, readdirSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -134,3 +134,23 @@ if (existsSync(zip)) rmSync(zip);
 run('zip', ['-qr', zip, '.', '-x', '*.DS_Store'], { cwd: dist });
 if (existsSync(audit)) run('node', [audit, zip]);
 console.log('\n出包了：xhs/slides-minitool.zip —— 传进 Builder Hub 的就是它。');
+
+// ---- 6. 顺手放一份到网站上，给真机测试用 -------------------------------------
+//
+// BrowserStack 那样的真机服务只能打开网址，装不了 zip。所以把这一版原样复制到
+// public/xhs/，跟着网站一起发出去——玩家在真手机上开 play-slides.com/xhs/ 就是
+// 这一版本身。
+//
+// 「原样」是这一步的全部意义：复制的就是刚打好 zip 的那几个文件，一个字节都不
+// 改。要是这里再单独构建一次、或者手工维护一份副本，真机上测的就不是要提审的
+// 那一份了——那种测试比不测更糟，因为它给的是假的安心。所以这一步钉在出包之
+// 后，两者永远同步。
+//
+// 有一件事真机上和小红书里不一样，测之前要知道：JSBridge（存相册 / 发笔记）在
+// 普通浏览器里没有宿主，会老老实实报「要在小红书里才能用」。那不是坏了。
+// 整棵树一起复制（dist 里除了 index.html 和 app.js 还有 assets/），先清干净再
+// 复制：留着上一次的残file，网站上就会有一份谁也说不清是哪一版的东西。
+const webCopy = join(here, '../public/xhs');
+if (existsSync(webCopy)) rmSync(webCopy, { recursive: true, force: true });
+cpSync(dist, webCopy, { recursive: true });
+console.log('也放了一份到 public/xhs/ —— 网站发出去之后，真机上开 /xhs/ 就是它。');
