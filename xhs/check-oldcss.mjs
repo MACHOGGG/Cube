@@ -271,6 +271,34 @@ const SCREENS = [
     sels: ['.xhs-tut-modal', '.xhs-tut-rules', '.xhs-tut .tut-rule', '.xhs-tut .tut-rule-art', '.xhs-tut .btn-row', '#xhsTutOk'],
   },
   {
+    // 第一次点开方块弹的那一段分镜动画（网页版原件）。它是这一版唯一一屏
+    // 「不是我画的、也不是棋盘」的界面，降级层照样要管得住：进度条那一排、
+    // 舞台、底下四颗键。
+    //
+    // 别的屏在 run() 里先把「看过了」填上了（否则走不到棋盘），这一屏要的
+    // 正是没看过的状态，所以先把那一格擦掉再刷新。
+    name: '方块分镜动画',
+    async go(p) {
+      await p.evaluate(() => {
+        try {
+          localStorage.removeItem('slides.xhs.story.square');
+        } catch (e) {
+          /* 存不了就本来就是「没看过」，正好 */
+        }
+      });
+      await p.reload();
+      await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
+      await p.waitForTimeout(700);
+      await p.$$eval('.home-icon-btn', (e) => e[0].click());
+      // 第一拍要放完才定得下来，多等一会儿再量。
+      await p.waitForTimeout(2600);
+    },
+    sels: [
+      '.story-tut', '.story-prog', '.story-prog-seg', '.story-stage', '.story-board',
+      '.story-controls', '.story-controls .story-ctl',
+    ],
+  },
+  {
     name: '战绩详情页',
     async go(p) {
       await toBoard(p, 0);
@@ -307,7 +335,13 @@ async function run(browser, view, screen, old) {
   // 规则（xhs/src/tutorial.ts），弹出来就挡住棋盘，后面的拖动和量尺寸全做
   // 不了。这一屏本身单独测（check-oldcss 的「怎么玩」那一屏，和
   // 教学那支专门的脚本），不靠这里顺带。
-  await ctx.addInitScript(`try { localStorage.setItem('slides.xhs.tutorialSeen', '1'); } catch (e) {}`);
+  await ctx.addInitScript(`try {
+  // 教学那两处都先填上「看过了」，否则体检台点开方块 / 小球会落在分镜动画上，
+  // 等不到棋盘。教学本身另有专门的脚本测（check-story）和 check-oldcss 的
+  // 「方块分镜动画」那一屏。
+  localStorage.setItem('slides.xhs.story.square', '1');
+  localStorage.setItem('slides.xhs.story.circle', '1');
+} catch (e) {}`);
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));

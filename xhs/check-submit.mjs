@@ -173,7 +173,13 @@ const ctx = await browser.newContext({
   isMobile: true,
   hasTouch: true,
 });
-await ctx.addInitScript(`try { localStorage.setItem('slides.xhs.tutorialSeen', '1'); } catch (e) {}`);
+await ctx.addInitScript(`try {
+  // 教学那两处都先填上「看过了」，否则体检台点开方块 / 小球会落在分镜动画上，
+  // 等不到棋盘。教学本身另有专门的脚本测（check-story）和 check-oldcss 的
+  // 「方块分镜动画」那一屏。
+  localStorage.setItem('slides.xhs.story.square', '1');
+  localStorage.setItem('slides.xhs.story.circle', '1');
+} catch (e) {}`);
 const page = await ctx.newPage();
 
 const outbound = [];

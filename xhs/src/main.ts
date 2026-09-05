@@ -16,9 +16,14 @@
  * 棋盘、滑动手感、得分判定、连锁节拍、翻面动画、结算、战绩图——一律走网页
  * 版那一份，这里一个字都不改。玩家定的：选出来的玩法要「完全复刻一样」。
  *
+ * 教学也是网页版那一份：第一次点开基础方块 / 基础小球，先放它那一段分镜动画
+ * （src/ui/tutorial.ts、src/ui/circleTutorial.ts，连 1.5 倍速都是网页版的）；
+ * 六条规则那一屏在成绩页和暂停面板里等着人自己点。见 showShapeStory 与
+ * ./tutorial.ts 开头那段。
+ *
  * 这一版自己的东西只有四件：主菜单（五张卡）、本机游玩历史、介绍页、以及
- * Chrome 61 的基线样式层。多人小屋、排行榜、登录订阅、教学、语言选择整块
- * 不做（见 xhs/README.md）。
+ * Chrome 61 的基线样式层。多人小屋、排行榜、登录订阅、语言选择整块不做
+ * （见 xhs/README.md）。
  * ─────────────────────────────────────────────────────────────────────────
  */
 import { injectStyles } from '../../src/injectStyles';
@@ -31,13 +36,15 @@ import type { ShapeGame, ShapeGameOpts } from '../../src/shapes/types';
 import type { Family, TargetPattern } from '../../src/engine/targets';
 import { renderRandomTargetPage } from '../../src/ui/slotMachine';
 import { renderFlipModePage } from '../../src/ui/flipMode';
+import { renderTutorial } from '../../src/ui/tutorial';
+import { renderCircleTutorial } from '../../src/ui/circleTutorial';
 import { installBackNav, setScreenBack } from '../../src/engine/backNav';
 import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
 import { installOldKernel } from './oldKernel';
-import { openTutorial, tutorialSeen, markTutorialSeen } from './tutorial';
+import { openTutorial, storySeen, markStorySeen, type StoryFamily } from './tutorial';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
 import { renderRunSheet } from './runSheet';
@@ -100,21 +107,82 @@ function teardown() {
   document.documentElement.classList.remove('is-playing');
 }
 
-/** 开一局。除了 lang，选项原样交给网页版那个 mount。 */
+/**
+ * 开一局。除了 lang，选项原样交给网页版那个 mount。
+ *
+ * 第一次开基础方块 / 基础小球时，先放那一段分镜动画（见 showShapeStory）——
+ * 放完才真的进局。所以这里分成两步：mountNow 是「真的开」，前面那道岔是
+ * 「要不要先看一段」。
+ */
 function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   teardown();
-  activeDestroy = game.mount(root, onBack, { ...opts, lang: LANG });
-  // 「正在玩」这个标记要钉在 <html> 上：游戏页的底色、藏底排、禁掉页面滚动
-  // 这三件事，src/style.css 里各写了两遍——一遍用 body:has(.app--game)，一遍
-  // 用 html.is-playing。:has 是 Chrome 105 才有的，老内核上只剩后面那一遍，
-  // 而钉这个类的是网页版的 src/main.ts，这一版没有它。不钉的话，老安卓上一
-  // 进游戏底色不变、页面还能上下滑。
-  document.documentElement.classList.add('is-playing');
-  enhanceShareOverlay();
-  enhancePauseTutorial();
-  // 第一次进游戏自动弹一次六条规则，看过就记住。之后只能自己点开——
-  // 「不要出现意料之外的界面」。
-  if (!tutorialSeen()) showTutorial(markTutorialSeen);
+
+  const mountNow = () => {
+    activeDestroy = game.mount(root, onBack, { ...opts, lang: LANG });
+    // 「正在玩」这个标记要钉在 <html> 上：游戏页的底色、藏底排、禁掉页面滚动
+    // 这三件事，src/style.css 里各写了两遍——一遍用 body:has(.app--game)，一遍
+    // 用 html.is-playing。:has 是 Chrome 105 才有的，老内核上只剩后面那一遍，
+    // 而钉这个类的是网页版的 src/main.ts，这一版没有它。不钉的话，老安卓上一
+    // 进游戏底色不变、页面还能上下滑。
+    //
+    // 钉在这儿而不是函数开头：教学那一屏不是棋盘，它要能上下滑、底色也照旧。
+    document.documentElement.classList.add('is-playing');
+    enhanceShareOverlay();
+    enhancePauseTutorial();
+    setScreenBack(onBack);
+  };
+
+  const fam = storyFamilyFor(game, opts);
+  if (fam && !storySeen(fam)) {
+    // 记在「看到」而不是「看完」：它一族只放一次，中途退出去的人也算被请过了。
+    // 和网页版同一条（src/main.ts 的 markTutorialSeen 就在 render 之前）。
+    markStorySeen(fam);
+    showShapeStory(fam, mountNow, onBack);
+    return;
+  }
+  mountNow();
+}
+
+/**
+ * 这一局要不要先放分镜动画？要的话放哪一族的。
+ *
+ * 只有**基础**方块和基础小球会放。炸弹、老虎机、无限反转都不放——那三个是
+ * 在基础玩法上加一层规则，玩到那儿的人已经会滑了，中间插一段「这个形状怎么
+ * 玩」是把他从自己的节奏里拽出来。判断条件和网页版一字不差（src/main.ts 的
+ * `opts?.timeLimitSec || opts?.bomb || opts?.targets ? null : shapeTutorialFor(...)`）：
+ *
+ *   bomb         炸弹
+ *   targets      老虎机（这一局的得分图案是转出来的）
+ *   timeLimitSec 无限反转（60 秒）
+ */
+function storyFamilyFor(game: ShapeGame, opts: ShapeGameOpts): StoryFamily | null {
+  if (opts.bomb || opts.targets || opts.timeLimitSec) return null;
+  const id = game.card.id;
+  if (id.indexOf('square') === 0) return 'square';
+  if (id.indexOf('circle') === 0) return 'circle';
+  return null;
+}
+
+/**
+ * 放一段分镜动画。用的是网页版那两个原件，一个字没改：
+ *
+ *   方块  src/ui/tutorial.ts       renderTutorial
+ *   小球  src/ui/circleTutorial.ts renderCircleTutorial
+ *
+ * 连播放速度都是网页版的（storyTutorial.ts 里那个 `SPEED = 1.5`）——玩家定的
+ * 「这两个都照网页版的加速」。下面那四颗键（上一条 / 再一次 / 下一条 / 完成）
+ * 也是原件自带的，这一版不加不减不改。
+ *
+ * 这一屏是**纯动画、没有一个字**：要看字的人去成绩与说明页点《怎么玩》，或者
+ * 局中按暂停——那两处是六条规则加配图的详细版（见 tutorial.ts）。
+ *
+ * 返回键在这一屏按下去回主菜单，不是进这一局：人是在「还没开始」的地方，退
+ * 出该退回他来的地方。和网页版那句注释同一个意思（renderShapeTutorialByShape
+ * 的 onBack 参数）。
+ */
+function showShapeStory(fam: StoryFamily, onDone: () => void, onBack: () => void) {
+  if (fam === 'square') renderTutorial(root, LANG, onDone);
+  else renderCircleTutorial(root, LANG, onDone);
   setScreenBack(onBack);
 }
 

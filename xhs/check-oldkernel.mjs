@@ -118,7 +118,13 @@ for (const key of list) {
   // 规则（xhs/src/tutorial.ts），弹出来就挡住棋盘，后面的拖动和量尺寸全做
   // 不了。这一屏本身单独测（check-oldcss 的「怎么玩」那一屏，和
   // 教学那支专门的脚本），不靠这里顺带。
-  await ctx.addInitScript(`try { localStorage.setItem('slides.xhs.tutorialSeen', '1'); } catch (e) {}`);
+  await ctx.addInitScript(`try {
+  // 教学那两处都先填上「看过了」，否则体检台点开方块 / 小球会落在分镜动画上，
+  // 等不到棋盘。教学本身另有专门的脚本测（check-story）和 check-oldcss 的
+  // 「方块分镜动画」那一屏。
+  localStorage.setItem('slides.xhs.story.square', '1');
+  localStorage.setItem('slides.xhs.story.circle', '1');
+} catch (e) {}`);
   // 顺便把样式降级层也强制打开：真的 Chrome 61 上这两件事是同时发生的
   // （接口缺、CSS 新写法也缺），分开测就漏了它们凑在一起的那一份。
   // CSS 那边逐个盒子的对照在 xhs/check-oldcss.mjs。

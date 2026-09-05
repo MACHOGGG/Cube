@@ -716,7 +716,10 @@ try {
   localStorage.setItem('slides_tutorial_seen', '1');
   localStorage.setItem('slides_tutorial_seen_circle', '1');
   localStorage.setItem('slides_tutorial_seen_triangle', '1');
-  localStorage.setItem('slides.xhs.tutorialSeen', '1');
+  // 这一版第一次点开方块 / 小球会先放一段分镜动画，先填上「看过了」，
+  // 否则走不到棋盘。那两段本身另有专门的脚本测（check-story）。
+  localStorage.setItem('slides.xhs.story.square', '1');
+  localStorage.setItem('slides.xhs.story.circle', '1');
   // 网页版把老虎机和无限反转锁在天才票后面，不开锁走不到那一局。这一版全部
   // 免费，锁不在比对范围里，所以这里直接发一张。channel:'code' 是内部码那条
   // 路，subscription.ts 的 read() 对它免检渠道。
