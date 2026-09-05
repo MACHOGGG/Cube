@@ -271,6 +271,37 @@ function refreshLastRun() {
   }
 }
 
+/**
+ * 头一回打开这个小工具时的第一屏。
+ *
+ * 不是主菜单，是直接开一局《基础小球》——五张卡摊在眼前，刚点进来的人不知
+ * 道先按哪一张。showGame 自己那道教学闸口会先放小球的分镜动画（和点开那张
+ * 卡看到的是同一段），学完就在同一屏里打，打完按《退出》才第一次见到主菜
+ * 单。往后每次进来都直接是主菜单。和网页版同一条（src/main.ts 的 isFirstRun）。
+ *
+ * 钥匙是这一版自己的（slides.xhs.*），和网页版那把互不相干——玩家定的：两
+ * 边的存档完全分开。判「头一回」看两把钥匙，缺一不可：这把没立过，而且小球
+ * 那段分镜也没看过。只看新钥匙的话，第一版审核时就玩过的人升上来会被当成新
+ * 人，重新按进一局小球里。
+ */
+const FIRST_RUN_KEY = 'slides.xhs.firstRun';
+
+function firstScreen(): void {
+  let first = false;
+  try {
+    first = localStorage.getItem(FIRST_RUN_KEY) !== '1' && !storySeen('circle');
+  } catch {
+    /* 容器把 localStorage 关了：当老玩家处理，直接进主菜单，别硬按进一局里 */
+  }
+  if (!first) return showMenu();
+  try {
+    localStorage.setItem(FIRST_RUN_KEY, '1');
+  } catch {
+    /* 存不进去就下次再来一遍，不是什么大事 */
+  }
+  showGame(circleGame, {}, showMenu);
+}
+
 // ---- 各屏 -------------------------------------------------------------------
 
 function showMenu() {
@@ -400,5 +431,5 @@ installTopInset();
 installMenuFit();
 
 installBackNav();
-// 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进主菜单。
-void showLoadingScreen().then(showMenu);
+// 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进第一屏。
+void showLoadingScreen().then(firstScreen);

@@ -37,9 +37,29 @@ const say = (ok, t, x = '') => { if (!ok) fails++; console.log((ok ? '  PASS  ' 
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
-async function open(old = false) {
+/**
+ * @param old   强制走 Chrome 61 降级层
+ * @param seen  这台设备「方块那一段已经看过」——从前是先开页面、evaluate 写
+ *   一格 localStorage、再 reload。那一手在满负荷跑整套门禁时会掉：reload 有
+ *   时换了一个渲染进程，刚写下的那一格还没落到存储后端，新进程读回来是空
+ *   的，于是方块的分镜又弹了一次，量出来就是「看过之后再开方块：不再弹」
+ *   莫名其妙地红。改成开页面之前就把那一格塞进去，一次加载定死，不再有中间
+ *   那次 reload。
+ */
+async function open(old = false, seen = false) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   if (old) await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
+  if (seen) await ctx.addInitScript("try { localStorage.setItem('slides.xhs.story.square', '1'); } catch (e) {}");
+  // 「头一回打开」那一条单独在最底下量。这里每一条量的是「点开某张卡该不该
+  // 弹分镜」，所以先把头一回那把钥匙立上——不立的话，一进来就被按进小球那
+  // 一局，主菜单根本不会出现，下面每一条都等不到 .home-icon-btn。
+  await ctx.addInitScript(() => {
+    try {
+      localStorage.setItem('slides.xhs.firstRun', '1');
+    } catch {
+      /* 存不进去也不影响这一台：它只是想跳过头一回那一屏 */
+    }
+  });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
@@ -80,14 +100,9 @@ const has = (p, sel) => p.$(sel).then((e) => !!e);
 
 // ---- 2. 同一台设备再开一次方块：不该再弹 ----
 {
-  const { ctx, p } = await open();
-  await ctx.addInitScript('');
-  await p.evaluate(() => localStorage.setItem('slides.xhs.story.square', '1'));
-  await p.reload();
-  await p.waitForSelector('.home-icon-btn', { timeout: 40000 });
-  await p.waitForTimeout(800);
+  const { ctx, p } = await open(false, true);
   await card(p, 0);
-  await p.waitForTimeout(1500);
+  await p.waitForSelector('.start-stage', { timeout: 20000 }).catch(() => {});
   say(!(await has(p, '.story-tut')), '看过之后再开方块：不再弹');
   say(await has(p, '.start-stage'), '直接到开局页');
   await ctx.close();
@@ -137,13 +152,11 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await ctx.close();
 }
 {
-  const { ctx, p } = await open();
-  await p.evaluate(() => localStorage.setItem('slides.xhs.story.square', '1'));
-  await p.reload();
-  await p.waitForSelector('.home-icon-btn', { timeout: 40000 });
-  await p.waitForTimeout(800);
+  const { ctx, p } = await open(false, true);
   await card(p, 0);
-  await p.waitForTimeout(1200);
+  // 开局键是藏起来的（gameShell 的 .start-hidden-go），所以只等它「挂上来」，
+  // 不等它「看得见」——等看得见会一直等到超时。
+  await p.waitForSelector('#startBtn', { state: 'attached', timeout: 20000 });
   await p.$eval('#startBtn', (e) => e.click());
   await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 30000 });
   await p.waitForTimeout(1200);
@@ -151,6 +164,37 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await p.waitForTimeout(900);
   const btns = await p.$$eval('#pauseOverlay .modal button', (e) => e.map((b) => (b.textContent || '').trim()));
   say(btns.indexOf('怎么玩') >= 0, '暂停面板里那颗《怎么玩》还在', JSON.stringify(btns));
+  await ctx.close();
+}
+
+// ---- 5.5 头一回打开：不落主菜单，直接开一局小球 ----
+//
+// 这一条要的正是上面 open() 特意跳过的那一屏，所以在这儿自己开一台全新的
+// 浏览器上下文——localStorage 一格都没有，和玩家头一次点进小工具一样。
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(String(e)));
+  await p.goto(PAGE);
+  await p.waitForSelector('.story-tut', { timeout: 40000 }).catch(() => {});
+  say(await has(p, '.story-tut'), '头一回打开：直接是小球那段分镜，不是主菜单');
+  say(!(await has(p, '.home-icon-btn')), '头一回打开：主菜单没有先闪一下');
+  const ci = await p.$$eval('.story-board .story-cell svg circle', (e) => e.length).catch(() => 0);
+  const rc = await p.$$eval('.story-board .story-cell svg rect', (e) => e.length).catch(() => 0);
+  say(ci > 0 && rc === 0, '放的确实是小球那一段', `圆 ${ci} 个 / 方块 ${rc} 个`);
+  await p.click('#stFinish');
+  await p.waitForTimeout(1800);
+  say(await has(p, '.start-stage'), '按《完成》就落进小球那一局');
+  say(errs.length === 0, '这一路零报错', errs.slice(0, 2).join(' | '));
+  await ctx.close();
+}
+
+// ---- 5.6 第二回打开：这才是主菜单 ----
+{
+  const { ctx, p } = await open();
+  say(await has(p, '.home-icon-btn'), '第二回打开：直接是主菜单');
+  say(!(await has(p, '.story-tut')), '第二回打开：不再按进那一局');
   await ctx.close();
 }
 

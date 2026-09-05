@@ -13,7 +13,7 @@ import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
-import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
@@ -965,7 +965,7 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
   // 中间再插一段「这个形状怎么玩」是把他从自己的节奏里拽出来。
   const tutorialShape =
     opts?.timeLimitSec || opts?.bomb || opts?.targets ? null : shapeTutorialFor(game.card.id);
-  if (tutorialShape && tutorialShape !== 'square' && !hasSeenTutorial(tutorialShape)) {
+  if (tutorialShape && !hasSeenTutorial(tutorialShape)) {
     // Marked the moment it is shown, not when it finishes: it is offered
     // exactly once per family, and a player who skips out of it has still
     // been offered it.
@@ -1015,14 +1015,18 @@ function afterLangChosen(lang: Lang, resume = false) {
     lang,
   );
   repaintIcons();
-  if (!hasSeenTutorial()) {
-    // Only ever on a first visit, and marked as soon as it appears — leaving
-    // it half-watched still counts, so it never greets a returning player
-    // again on the way to the menu.
-    markTutorialSeen();
-    teardown();
-    renderTutorial(root, lang, showMenu);
-    setScreenBack(showMenu);
+  if (isFirstRun()) {
+    // 第一次打开这台设备上的游戏：不落在主菜单，直接开一局基础小球。
+    //
+    // 从前这里放的是方块那段分镜教学，看完落主菜单——五张卡摊在眼前，新
+    // 来的人不知道先按哪一张。现在改成先玩：showGame 自己那道教学闸口会
+    // 先放小球的分镜（和点开《基础小球》看到的是同一段），学完就在同一屏
+    // 里打，打完按《退出》才第一次见到主菜单。往后每次进来都直接是主菜单。
+    //
+    // 方块那段没有丢：闸口不再把 square 排除在外，第一次点开《基础方块》
+    // 就会放（见 showGame）。
+    markFirstRunDone();
+    showGame(circleGame);
     return;
   }
   if (resume && currentRoom()) {

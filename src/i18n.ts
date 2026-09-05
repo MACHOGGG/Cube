@@ -1737,36 +1737,36 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  */
 export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
-    'Every piece has a front and a back; a classic game starts with all fronts up.',
-    'Same-colour pieces forming a scoring pattern score and flip; the back is a different colour, each equally likely.',
-    'A back and fronts of the same colour can form a scoring pattern again.',
-    'Backs of one colour filling a row or column score and clear (balls need at least 3 in the line and turn into empty balls; squares go for good, and a line of any length clears).',
-    'In classic rules the game ends when every front has flipped, or when the rest can no longer flip.',
-    'The shortest time, fewer moves and more points give the highest total score.',
+    'Every piece has a front and a back. A game starts with all fronts up.',
+    'Match same-colour pieces into a scoring shape: you score, and those pieces flip. The colour of the back is random.',
+    'A back whose colour matches the fronts can join a shape too, and score again.',
+    'Backs of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
+    'The game ends when every piece is on its back — or when nothing left can flip.',
+    'Less time, fewer moves, more points: a higher total score.',
   ],
   fr: [
-    'Chaque pièce a un recto et un verso ; une partie classique commence avec tous les rectos visibles.',
-    'Des pièces de même couleur formant un motif marquent et se retournent ; le verso est d’une autre couleur, tirée au sort.',
-    'Un verso et des rectos de la même couleur peuvent reformer un motif et marquer.',
-    'Une ligne ou colonne entière de versos de même couleur marque et disparaît (billes : au moins 3, elles deviennent des billes vides ; les carrés partent pour de bon, et une ligne de n’importe quelle longueur disparaît).',
-    'En règles classiques la partie s’arrête quand tous les rectos sont retournés, ou quand le reste ne peut plus l’être.',
-    'Le temps le plus court, moins de coups et plus de points donnent le meilleur score total.',
+    'Chaque pièce a un recto et un verso. La partie commence tous rectos visibles.',
+    'Alignez des pièces de même couleur en un motif : vous marquez, et ces pièces se retournent. La couleur du verso est aléatoire.',
+    'Un verso de la même couleur que les rectos peut entrer dans un motif et marquer à nouveau.',
+    'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
+    'La partie s’arrête quand toutes les pièces sont sur le verso — ou quand plus rien ne peut se retourner.',
+    'Moins de temps, moins de coups, plus de points : meilleur score total.',
   ],
   zhHant: [
-    '圖形分正反兩面，經典開局為全部正面朝上。',
-    '同色圖形湊成得分圖案可以得分並翻面，翻面會是同機率的不同顏色的反面。',
-    '翻面和正面同顏色可以再次湊成得分圖案得分。',
-    '翻面圖案同色連成一行／列會得分並消除（小球消除的行／列最少為 3 個圖形，消除後會成為空小球；方塊消除後不再出現，任意幾個圖形的行／列都可以消除）。',
-    '經典規則中遊戲在全部正面翻至反面時結束，或在剩下的無法翻至反面時結束。',
-    '用最短的時間、較少的行動、較多的得分得到最高的綜合得分。',
+    '每個圖形都有正反兩面，開局全是正面。',
+    '同色湊成得分圖案就得分，湊成的那幾個翻到反面；反面是什麼顏色，隨機。',
+    '反面和正面顏色一樣時，也能一起湊圖案，再得一次分。',
+    '反面同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
+    '全部翻到反面，這一局結束；剩下的再也翻不動，也結束。',
+    '時間越短、步數越少、得分越高，綜合得分越高。',
   ],
   zhHans: [
-    '图形分正反两面，经典开局为全部正面朝上。',
-    '同色图形凑成得分图案可以得分并翻面，翻面会是同概率的不同颜色的反面。',
-    '翻面和正面同颜色可以再次凑成得分图案得分。',
-    '翻面图案同色连成一行/列会得分并消除（小球消除的行/列最少为 3 个图形，消除后会成为空小球；方块消除后不再出现，任意几个图形的行/列都可以消除）。',
-    '经典规则中游戏在全部正面翻至反面时结束，或在剩下的无法翻至反面时结束。',
-    '用最短的时间、较少的行动、较多的得分得到最高的综合得分。',
+    '每个图形都有正反两面，开局全是正面。',
+    '同色凑成得分图案就得分，凑成的那几个翻到反面；反面是什么颜色，随机。',
+    '反面和正面颜色一样时，也能一起凑图案，再得一次分。',
+    '反面同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
+    '全部翻到反面，这一局结束；剩下的再也翻不动，也结束。',
+    '时间越短、步数越少、得分越高，综合得分越高。',
   ],
 };
 
@@ -1827,6 +1827,35 @@ export function hasSeenTutorial(shape: TutorialShape = 'square'): boolean {
 
 export function markTutorialSeen(shape: TutorialShape = 'square'): void {
   localStorage.setItem(TUTORIAL_SEEN_KEYS[shape], '1');
+}
+
+/**
+ * 这台设备是不是头一回打开。
+ *
+ * 头一回不落在主菜单，先直接开一局《基础小球》（见 main.ts 的
+ * afterLangChosen）——五张卡摊在眼前，新来的人不知道先按哪一张，先玩一局
+ * 比先看菜单管用。
+ *
+ * 判「头一回」看两把钥匙，缺一不可：这把新钥匙没立过，而且方块那段教学也
+ * 没看过。只看新钥匙的话，改版之前就在玩的人升上来会被当成新人，重新按进
+ * 一局小球里——那是他最不想要的「意料之外的界面」。
+ */
+const FIRST_RUN_KEY = 'slides_first_run';
+
+export function isFirstRun(): boolean {
+  try {
+    return localStorage.getItem(FIRST_RUN_KEY) !== '1' && !hasSeenTutorial();
+  } catch {
+    return false;
+  }
+}
+
+export function markFirstRunDone(): void {
+  try {
+    localStorage.setItem(FIRST_RUN_KEY, '1');
+  } catch {
+    /* 无痕模式写不进去，那就每次都当头一回——总好过整页崩掉。 */
+  }
 }
 
 /** 这台设备看过哪几族的教学。进小屋时报给服务器，开局前它据此判「可不可能有新手」。 */
