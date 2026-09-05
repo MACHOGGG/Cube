@@ -239,10 +239,20 @@ for (const key of list) {
   await p.waitForTimeout(1200);
 
   // 结算 + 战绩图（getAnimations / replaceChildren 都在这条路上）
-  await p.click('#finishBtn');
-  await p.waitForTimeout(2600);
+  //
+  // 这一局有可能**已经自己结束了**——尤其老虎机：这一局只认转出来的那两个
+  // 图案，十下瞎拖很容易把场面拖到「再也凑不出来」，游戏就自己结算了。那是
+  // 一局正常走完，不是毛病；但结算页一盖上来，#finishBtn 就点不着了
+  // （overlay 挡住），从前这里会卡在那颗按钮上直到超时。
+  //
+  // 所以先看结算页在不在：在了就别再按《完成》。
+  const ended = await p.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
+  if (!ended) {
+    await p.click('#finishBtn');
+    await p.waitForTimeout(2600);
+  }
   const shareBtn = await p.$('#shareBtn');
-  say(!!shareBtn, '打得完，结算页出来了');
+  say(!!shareBtn, '打得完，结算页出来了', ended ? '（这一局自己打完了，没按《完成》）' : '');
   if (shareBtn) {
     await shareBtn.click();
     await p.waitForTimeout(2000);

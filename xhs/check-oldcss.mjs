@@ -147,7 +147,11 @@ async function playAndFinish(p) {
     await p.mouse.up();
     await p.waitForTimeout(260);
   }
-  await p.click('#finishBtn');
+  // 有可能这一局已经自己结束了（结算页盖上来，#finishBtn 就点不着了）。
+  // 那是一局正常走完，不是毛病——尤其老虎机：只认转出来的那两个图案，瞎拖
+  // 十下很容易把场面拖到「再也凑不出来」。
+  const ended = await p.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
+  if (!ended) await p.click('#finishBtn');
   await p.waitForTimeout(2600);
 }
 
