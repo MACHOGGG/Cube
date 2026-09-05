@@ -92,6 +92,13 @@ function unitHalf(cells: IconCell[]): number {
   return u || 0.5;
 }
 
+/**
+ * --mark-edge 取不到时用的颜色，和浅色主题里那一个一样（style.css 的 :root）。
+ * 见下面那段注释：这个兜底只在图被搬离页面时才轮得到，而那些场合底色多半是
+ * 白的，所以它必须是深的。
+ */
+const EDGE_FALLBACK = '#2E2430';
+
 function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: boolean, extentY = extent): string {
   if (!cells.length) return '';
   const { minX, maxX, minY, maxY } = bbox(cells);
@@ -137,14 +144,21 @@ function renderPatternIconSvg(cells: IconCell[], extent?: number, hatched?: bool
     // the play screen this row sits on a dark ground where an outline
     // drawing all but disappears, and a filled mark reads at a glance as
     // "four of these, like so".
-    return `<svg ${box} fill="currentColor" stroke="var(--mark-edge, #fff)" stroke-width="2" stroke-linejoin="round">${shapes}</svg>`;
+    //
+    // 兜底色是深的，不是白的。--mark-edge 跟着主题走（浅底描深、深底描白，见
+    // style.css 的 :root），正常情况下一定取得到。可 var() 的兜底值只在取不到
+    // 的时候才用得上——而「取不到」恰恰发生在这张图被搬离页面的时候（序列化进
+    // 别的 svg、画进画布、塞进一个还没挂上去的节点）。从前兜底写的是白色：那
+    // 些场合底色多半也是白的，于是描边整个消失，两枚挨着的图形糊成一片，看不
+    // 出是几枚。深色兜底最坏也只是「颜色不随主题」，永远还看得见。
+    return `<svg ${box} fill="currentColor" stroke="var(--mark-edge, ${EDGE_FALLBACK})" stroke-width="2" stroke-linejoin="round">${shapes}</svg>`;
   }
   const id = `pat-hatch-${hatchSeq++}`;
   const defs =
     `<defs><pattern id="${id}" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
     `<line x1="0" y1="0" x2="0" y2="3.2" stroke="currentColor" stroke-width="1.5" opacity="0.8"/>` +
     `</pattern></defs>`;
-  return `<svg ${box} fill="url(#${id})" stroke="var(--mark-edge, #fff)" stroke-width="2" stroke-linejoin="round">${defs}${shapes}</svg>`;
+  return `<svg ${box} fill="url(#${id})" stroke="var(--mark-edge, ${EDGE_FALLBACK})" stroke-width="2" stroke-linejoin="round">${defs}${shapes}</svg>`;
 }
 
 /**

@@ -18,6 +18,12 @@ import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
+import {
+  HEX_DIAMOND_121_OFFSETS,
+  HEX_RHOMBUS_A_OFFSETS,
+  HEX_RHOMBUS_B_OFFSETS,
+  hexBallXY,
+} from '../engine/ballLattice';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // A hex-cropped version of the ball board (37 cells: rows of 4/5/6/7/6/5/4
@@ -141,27 +147,17 @@ function lineFor(fam: Fam, r: number, c: number): Line {
 }
 
 // The board's two non-linear bonus shapes, same rhombus/diamond patterns the
-// base ball board uses (see circle.ts) — expressed here as (Δz,Δx) offsets
-// from a cube-space anchor so the row-trimmed hex crop doesn't distort them
-// (unlike the base board, this one's rows don't all start at the same local
-// column, so a plain local (r,c) offset would silently pick the wrong real
-// cells once trimming kicks in).
-const RHOMBUS_B_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, 0], [1, 1]];
-// The second leaning rhombus: (dz,dx) spanned by (0,+1) and (+1,-1). The
-// offsets that used to sit here were circle.ts's own, copied verbatim — but
-// that board's (r,c) are a different pair of screen vectors, and under
-// cx=2R*dx+R*dz they replay as a zig-zag chain of four rather than a
-// rhombus, so this orientation of the 2+2 never scored and a shape no hint
-// shows scored in its place.
-const RHOMBUS_A_OFFSETS: [number, number][] = [[0, 0], [0, 1], [1, -1], [1, 0]];
-// (dz,dx) pairs verified to actually plot as a symmetric diamond (top point,
-// two side-by-side middle points, bottom point centered under the top) under
-// this board's cube-coordinate screen mapping cx=2R·dx+R·dz — copying
-// circle.ts's own plain (r,c) offsets [[0,0],[1,0],[1,1],[2,1]] verbatim
-// doesn't work here: that board's ballCenter uses a different (r,c)->screen
-// formula, and the naive offsets drift the whole shape rightward as it goes
-// down (screen x: 0,1,3,4) instead of narrowing back to a point.
-const DIAMOND_121_OFFSETS: [number, number][] = [[0, 0], [1, -1], [1, 0], [2, -1]];
+// base ball board uses (see circle.ts) — expressed as (Δz,Δx) offsets from a
+// cube-space anchor so the row-trimmed hex crop doesn't distort them (unlike
+// the base board, this one's rows don't all start at the same local column,
+// so a plain local (r,c) offset would silently pick the wrong real cells
+// once trimming kicks in).
+//
+// 三张表和 ballBall 那个算式一起住在 engine/ballLattice.ts：形状对不对全看它们
+// 画到屏幕上是什么样，体检脚本（check-ball-offsets.mjs）拿的就是这一份真件。
+const RHOMBUS_B_OFFSETS = HEX_RHOMBUS_B_OFFSETS;
+const RHOMBUS_A_OFFSETS = HEX_RHOMBUS_A_OFFSETS;
+const DIAMOND_121_OFFSETS = HEX_DIAMOND_121_OFFSETS;
 
 function clusterFromCube(x0: number, z0: number, offsets: [number, number][]): Cell[] | null {
   const cells: Cell[] = [];
@@ -472,7 +468,8 @@ export function createCircleHexGame(): ShapeGame {
 
       function ballCenter(r: number, c: number): [number, number] {
         const { x, z } = localToCube(r, c);
-        return [boardLeft + 2 * R * x + R * z, boardTop + rowH * z];
+        const [ox, oy] = hexBallXY(x, z, R, rowH);
+        return [boardLeft + ox, boardTop + oy];
       }
 
       function makeBallEl(tile: Tile, r: number, c: number, opacity?: number): HTMLElement {
@@ -521,7 +518,14 @@ export function createCircleHexGame(): ShapeGame {
 
       function render() {
         layoutBoard();
-        refs.boardEl.innerHTML = '';
+        // 先在一张「离屏的纸」上把这一帧的棋子全摆好，再一次性换上去。
+        //
+        // 从前是先把棋盘清空，再一枚一枚往里塞。塞四十九次就是四十九次改动，
+        // 手机上每一次都可能让浏览器把这块重新算一遍；一步棋走完正好要重画整
+        // 副棋盘，玩家看到的就是「移动结束时轻轻闪一下」。DocumentFragment 不
+        // 在页面上，往它里面塞多少次都不惊动页面，最后那一下 appendChild 才是
+        // 唯一一次真正的改动。
+        const frag = document.createDocumentFragment();
         const outlineEntries = outlineTracker.current();
         const pulseMs = new Map<string, number>();
         for (const { cells, elapsedMs } of outlineEntries) {
@@ -535,9 +539,11 @@ export function createCircleHexGame(): ShapeGame {
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             if (warnKeys?.has(key)) el.classList.add('hazard-warn');
-            refs.boardEl.appendChild(el);
+            frag.appendChild(el);
           }
         }
+        refs.boardEl.innerHTML = '';
+        refs.boardEl.appendChild(frag);
         flipInCells = new Set();
         const size = R * 1.86;
         for (const { cells, elapsedMs } of outlineEntries) {

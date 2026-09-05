@@ -422,6 +422,16 @@ h1 {
 .board {
   position: relative; background: var(--board-bg); border-radius: var(--r-md);
   box-shadow: var(--shadow); overflow: hidden;
+  /* 圆角是靠 overflow: hidden 剪出来的。棋子拖动时各自带着 transform，浏览器
+     会把它们提到单独的合成层上去画；这些层的裁剪在手机上有时候会退回成一个
+     方框——玩家看到的就是棋盘的圆角「闪」出一下尖角，手一松又变回圆的。
+
+     让棋盘自己也成为一层，圆角连同那块裁剪就一起烘进这一层，子元素再怎么被
+     提层也是在它里面画，退不回方框去。translateZ(0) 负责开层，isolation 把
+     这一层的混合关在里面（少一处 Safari 上会把圆角连同 box-shadow 一起重算
+     的机会）。两句都只影响画法，不动排版。 */
+  transform: translateZ(0);
+  isolation: isolate;
 }
 
 .ghost { opacity: 0.55; pointer-events: none; }

@@ -392,6 +392,54 @@ const sameName = (a, b) =>
 const seatReclaimable = (seat) => (Boolean(seat.left) || seat.lastSeen === 0) && !seatLearning(seat);
 
 /**
+ * 没取名字的人，发一个字母：A、B、C……屋里没被占的第一个。
+ *
+ * 从前发的是占位那句话本身（《取个名字》/「Host」/「Player」）。两件事因此
+ * 出错：排行榜上一屋子人全叫同一句话，谁是谁看不出来（第二个人还会被加编号
+ * 成「取个名字 2」，更难看）；再就是座位认领——走了又回来的人靠名字认自己那
+ * 把椅子，名字人人一样，认到的可能是别人的。
+ *
+ * 字母在这里发，不在网页那头发：只有服务器手上有整屋的名单，才敢说「这一个
+ * 没被占」。发完之后网页把它记在本机上（见 ui/multiplayer.ts），所以断线回来
+ * 报的还是同一个字母，认领的还是自己那把椅子。
+ *
+ * 八个座位，26 个字母够用；真要一个都不剩（同名的人自己取名叫 A 到 Z），
+ * 就退回 uniqueName 那套加编号。
+ */
+function freeLetter(hash) {
+  const taken = new Set(
+    Object.entries(hash)
+      .filter(([k, v]) => k.startsWith('p:') && v && !v.left)
+      .map(([, v]) => String(v.name ?? '').trim().toUpperCase()),
+  );
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(65 + i);
+    if (!taken.has(letter)) return letter;
+  }
+  return 'A';
+}
+
+/**
+ * 走了又回来的人，这一趟叫什么。
+ *
+ * 名字通常还是他自己那个。只有一种情况要换：他不在的这段时间里，屋里来了个
+ * 人正好占了这个名字（尤其容易发生在字母上——他走了，B 就空出来了，下一个
+ * 没取名字的人拿到的就是 B）。同名一旦成真，排行榜上分不出谁是谁，下一次认
+ * 领座位也会认错人。
+ *
+ * 换的时候看他原来叫什么：本来就是发的字母，就再发一个没被占的字母；自己取
+ * 的名字则照老规矩加编号（「阿甲 2」）——把人家取的名字换成一个字母，比重名
+ * 还奇怪。
+ */
+function nameForReturner(seat, hash) {
+  const name = String(seat.name ?? '').trim();
+  if (!name) return freeLetter(hash);
+  const kept = uniqueName(name, hash);
+  if (kept === name) return name;
+  return /^[A-Za-z]$/.test(name) ? freeLetter(hash) : kept;
+}
+
+/**
  * 屋里已经有人叫这个名字（还坐着的）：后来的加个编号——「起个名字 2」。同名
  * 不再可能，认领座位那一条也就永远不会把两个陌生人当成一个人。
  */
@@ -446,7 +494,8 @@ async function create(res, body) {
     await hset(roomKey(code), 's:0', playerId);
     await hset(roomKey(code), 'p:' + playerId, {
       token,
-      name: cleanName(body.name) || 'Host',
+      // 空的名字发一个字母。这间屋刚开，谁都没坐，所以屋主拿到的是 A。
+      name: cleanName(body.name) || freeLetter({}),
       avatar: cleanAvatar(body.avatar),
       score: 0,
       finished: false,
@@ -470,7 +519,11 @@ async function join(res, body) {
   const hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
   if (hash.meta.endedAt) return send(res, 409, { error: 'ended' });
-  const name = cleanName(body.name) || 'Player';
+  // 自己取的名字（可能是空的）和最后落到座位上的名字，是两件事：认领旧椅子
+  // 只认前者。没取名字的人报上来的是空，认领这一步就整个跳过——拿一个空名字
+  // 去比，会认到别人那把椅子上去。
+  const typed = cleanName(body.name);
+  const name = typed || freeLetter(hash);
   // 一局正打到一半也进得来（从前这里回 409 started）。这一局不算他的：新座位
   // 的 joinedAt 在 startAt 之后，roundOver 不等他、bankRound 不记他；他在等待
   // 页看着实时排行，下一局开始时才入局——见 ui/multiplayer.ts 的 sideline。
@@ -491,9 +544,11 @@ async function join(res, body) {
       field.startsWith('p:') &&
       seat &&
       field.slice(2) !== hash.meta.host &&
-      sameName(seat.name, name) &&
+      sameName(seat.name, typed) &&
       seatReclaimable(seat),
   );
+  // typed 是空的时候上面那个 find 一定落空（座位名字不会是空的），不必另写
+  // 一句判断——留着这行注释是因为「空名字不认领」是有意的，不是漏了。
   if (back) {
     const [field, seat] = back;
     const token = id(16);
@@ -503,7 +558,15 @@ async function join(res, body) {
       slot = await claimSlot(code, field.slice(2));
       if (slot < 0) return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
     }
-    const next = { ...seat, token, slot, lastSeen: Date.now(), learningAt: 0, seen: cleanSeen(body.seen) };
+    const next = {
+      ...seat,
+      name: nameForReturner(seat, hash),
+      token,
+      slot,
+      lastSeen: Date.now(),
+      learningAt: 0,
+      seen: cleanSeen(body.seen),
+    };
     delete next.left;
     // 这一局已经开了：他手上的棋盘早没了，这一局不等他，下一局再入。走之前
     // 打出来的那点分留着，下一次 start 时 bankRound 照常记账。

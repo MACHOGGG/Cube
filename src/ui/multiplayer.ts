@@ -343,13 +343,29 @@ export function renderMultiplayerPage(
     const codeBox = container.querySelector<HTMLInputElement>('#mpCode')!;
     const msg = container.querySelector<HTMLElement>('#mpMsg')!;
 
-    const myName = () => nameBox.value.trim().slice(0, 12) || s.mpNamePlaceholder;
-    const remember = () => {
+    // 没填就是没填，空着报上去。从前这里拿占位那句话《取个名字》当名字用，于是
+    // 一屋子人可以全叫「取个名字」，排行榜上谁是谁看不出来。现在空名字由服务器
+    // 发一个屋里没被占的字母（A、B、C……见 api/room.js 的 freeLetter）。
+    const myName = () => nameBox.value.trim().slice(0, 12);
+    const keepName = (name: string) => {
       try {
-        localStorage.setItem(NAME_KEY, nameBox.value.trim().slice(0, 12));
+        localStorage.setItem(NAME_KEY, name);
       } catch {
         // A name that cannot be remembered is simply typed again next time.
       }
+    };
+    const remember = () => keepName(myName());
+    /**
+     * 把服务器最后落到我座位上的那个名字记在本机上。
+     *
+     * 领到字母的人下次打开这一页，名字栏里就是那个字母——他看得见别人看见的
+     * 是什么；更要紧的是断线回来时报的还是它，服务器才认得出那把椅子是他的
+     * （认领只按名字，见 api/room.js 的 join）。
+     */
+    const keepAssignedName = (st: RoomState) => {
+      const meId = currentRoom()?.playerId;
+      const me = st.players.find((p) => p.id === meId);
+      if (me?.name) keepName(String(me.name).slice(0, 12));
     };
 
     container.querySelector<HTMLButtonElement>('#mpShuffle')!.addEventListener('click', () => {
@@ -373,6 +389,7 @@ export function renderMultiplayerPage(
       busy = false;
       if (dead) return;
       if (!made.ok) return void (msg.textContent = errorText(made.reason, lang));
+      keepAssignedName(made.value);
       renderLobby(made.value);
     });
 
@@ -387,6 +404,7 @@ export function renderMultiplayerPage(
       busy = false;
       if (dead) return;
       if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang));
+      keepAssignedName(joined.value);
       // 一局正打到一半进来的（服务器现在放人进来了）：这一局不是我的，先记
       // 成「打过了」，免得轮询把我扔进一块别人打了一半的棋盘；下一局开始时
       // 才入局。这之前坐在等待页看实时排行——见 renderLobby 里的 sideline。
@@ -521,8 +539,15 @@ export function renderMultiplayerPage(
     stopWatching = watchRoom(
       (next) => {
         if (dead) return;
+        // 这一屋此刻是什么状态，只问一处（engine/room.ts 的 roomPhase）。这一段
+        // 从前是照着 ended / startAt / seed / roundOver / learnHold 就地又判了一
+        // 遍——同一件事两处判，改了一处漏了一处就是「小屋各页各说各话」。顺带
+        // 补上了漏掉的那一格：roundOver（这一局打完了、还没开下一局）从前落在
+        // 「可以入局」那一支里，中途进来的人有机会给一局已经结束的比赛数
+        // 4-3-2-1。
+        const phase = roomPhase(next);
         // The host closed up while we were sitting here.
-        if (next.ended) {
+        if (phase === 'ended') {
           stopAll();
           return handlers.onRoomEnded(next);
         }
@@ -531,7 +556,9 @@ export function renderMultiplayerPage(
         soakNudges(next, iAmHost);
         sideline(next);
         // The host has chosen: everyone counts down to the same instant.
-        if (next.startAt && next.seed && next.mode && next.round > playedRound) {
+        // countdown / playing 这两格，正好就是「有一局开着」：不是大厅、没散场、
+        // 也不是已经打完等下一局。
+        if ((phase === 'countdown' || phase === 'playing') && next.mode && next.round > playedRound) {
           // 来晚了：这一局早就开了（刷新、切走、看教学看过了头之后才回来），
           // 开赛时刻已经过去好几秒。这一局不是我的——记成打过，坐等待页看
           // 排行，下一局再入；不能拿着一块新起的表跳进别人打了一半的局。
@@ -543,7 +570,11 @@ export function renderMultiplayerPage(
           // 记成打过、赶去等待页（练习盘也跟着没了），学完之后学的人一个人
           // 开局。玩家撞上的正是这一幕。挂起解除时服务器会盖一个新的开赛时
           // 刻，那时候这道关才重新有意义。
-          if (!launched && !next.learnHold && next.startAt + LATE_MS < serverTime()) {
+          // phase 是 playing 就意味着「没挂起、开赛时刻已经过去」——正是下面
+          // 那段注释里说的两件事，不用再各问一遍 learnHold。startAt 到这儿一定
+          // 有值（没有的话 phase 是 lobby），`?? 0` 只是让类型看得出来。
+          const startAt = next.startAt ?? 0;
+          if (!launched && phase === 'playing' && startAt + LATE_MS < serverTime()) {
             markRoundPlayed(next.round);
             playedRound = next.round;
             sideline(next);

@@ -17,6 +17,7 @@ import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
+import { SEVEN_RHOMBI, sevenBallXY } from '../engine/ballLattice';
 import type { ShapeGame, ShapeGameOpts } from './types';
 
 // A 7x7 rhombus (49 balls) cut from the same triangular ball-packing lattice
@@ -127,11 +128,9 @@ function cellValid(r: number, c: number): boolean {
  * scored nothing — a player who assembled a 2+2 the "wrong" way round got
  * no points — while a shape no pattern hint has ever shown scored instead.
  */
-const RHOMBI: [[number, number], [number, number]][] = [
-  [[0, 1], [1, 0]], //  upright diamond   (the "1-2-1" hint)
-  [[0, 1], [1, -1]], // leaning one way  } together, the "2+2" hint
-  [[1, 0], [1, -1]], // leaning the other }
-];
+// 表和「一颗球画在屏幕哪儿」的算式一起住在 engine/ballLattice.ts——形状对不对
+// 全看它们画出来是什么样，体检脚本（check-ball-offsets.mjs）拿的就是这一份。
+const RHOMBI = SEVEN_RHOMBI;
 /** The rhombus's four cells: the corners of the unit parallelogram spanned
  *  by du and dv, in the same (u,v) order growParallelogram walks. */
 function rhombusCells(r: number, c: number, du: [number, number], dv: [number, number]): Cell[] | null {
@@ -421,7 +420,8 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       function ballCenter(r: number, c: number): [number, number] {
-        const [ox, oy] = rotXY((c - r) * R, (r + c) * rowH, lying);
+        const [bx, by] = sevenBallXY(r, c, R, rowH);
+        const [ox, oy] = rotXY(bx, by, lying);
         const cx = boardLeft + ox;
         const cy = boardTop + oy;
         return [cx, cy];
@@ -463,7 +463,14 @@ export function createCircleSevenGame(): ShapeGame {
 
       function render() {
         layoutBoard();
-        refs.boardEl.innerHTML = '';
+        // 先在一张「离屏的纸」上把这一帧的棋子全摆好，再一次性换上去。
+        //
+        // 从前是先把棋盘清空，再一枚一枚往里塞。塞四十九次就是四十九次改动，
+        // 手机上每一次都可能让浏览器把这块重新算一遍；一步棋走完正好要重画整
+        // 副棋盘，玩家看到的就是「移动结束时轻轻闪一下」。DocumentFragment 不
+        // 在页面上，往它里面塞多少次都不惊动页面，最后那一下 appendChild 才是
+        // 唯一一次真正的改动。
+        const frag = document.createDocumentFragment();
         const outlineEntries = outlineTracker.current();
         const pulseMs = new Map<string, number>();
         for (const { cells, elapsedMs } of outlineEntries) {
@@ -475,9 +482,11 @@ export function createCircleSevenGame(): ShapeGame {
             const el = makeBallEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
-            refs.boardEl.appendChild(el);
+            frag.appendChild(el);
           }
         }
+        refs.boardEl.innerHTML = '';
+        refs.boardEl.appendChild(frag);
         flipInCells = new Set();
         const size = R * 1.86;
         for (const { cells, elapsedMs } of outlineEntries) {

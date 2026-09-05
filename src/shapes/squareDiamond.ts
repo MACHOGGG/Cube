@@ -468,7 +468,14 @@ export function createSquareDiamondGame(): ShapeGame {
 
       function render() {
         layoutBoard();
-        refs.boardEl.innerHTML = '';
+        // 先在一张「离屏的纸」上把这一帧的棋子全摆好，再一次性换上去。
+        //
+        // 从前是先把棋盘清空，再一枚一枚往里塞。塞四十九次就是四十九次改动，
+        // 手机上每一次都可能让浏览器把这块重新算一遍；一步棋走完正好要重画整
+        // 副棋盘，玩家看到的就是「移动结束时轻轻闪一下」。DocumentFragment 不
+        // 在页面上，往它里面塞多少次都不惊动页面，最后那一下 appendChild 才是
+        // 唯一一次真正的改动。
+        const frag = document.createDocumentFragment();
         const outlineEntries = outlineTracker.current();
         const pulseMs = new Map<string, number>();
         for (const { cells, elapsedMs } of outlineEntries) {
@@ -482,9 +489,11 @@ export function createSquareDiamondGame(): ShapeGame {
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
             if (warnKeys?.has(key)) el.classList.add('hazard-warn');
-            refs.boardEl.appendChild(el);
+            frag.appendChild(el);
           }
         }
+        refs.boardEl.innerHTML = '';
+        refs.boardEl.appendChild(frag);
         flipInCells = new Set();
       }
 
