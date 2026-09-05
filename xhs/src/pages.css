@@ -48,6 +48,15 @@
   max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
   justify-content: flex-start; gap: 12px; padding: 4px 2px 8px;
 }
+.xhs-tut-rules .tut-rule {
+  /* 不许被压扁。这一列是弹性盒，外面又扣了 max-height——矮屏上（量的是
+     360×640）浏览器会把每一行按比例缩到装得下为止，行框缩了，可下面那条
+     让字「看全」的规则又不让字跟着裁，于是字直接漫出行外，压在下一条上：
+     六条里五处相邻重叠，最多叠 26px，第 4 条那段长的溢出 24px。
+     flex: none 之后行按内容撑开，装不下就由外面那层滚——它本来就
+     overflow-y: auto。 */
+  flex: none;
+}
 .xhs-tut-rules .tut-rule-text {
   /* 挑选页那条 -webkit-line-clamp: 3 会把长句子切掉，这儿要看全。 */
   display: block; overflow: visible;
