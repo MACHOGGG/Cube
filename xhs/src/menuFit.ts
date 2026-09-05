@@ -55,13 +55,19 @@ export function fitMenu(): void {
   document.body.style.setProperty('--xhs-card', want + 'px');
 
   // 取整、小数、每排那点边边角角，算完可能还差一两个像素——差一像素也是要滑
-  // 的，那一滑就把「一屏装完」这件事否掉了。所以照着剩下的再补一次。
+  // 的，那一滑就把「一屏装完」这件事否掉了。所以照着剩下的再补。
+  //
+  // 补一次不一定够：一排的高度不是「卡宽」一个数说了算（底下还有一行小字、
+  // 排与排之间还有间距），卡窄 1px 那一排未必正好矮 1px。所以追着量、追着
+  // 缩，最多四轮——四轮还收不住就是别的地方撑着，再缩只会把卡缩没。
   // 门槛是 1 不是 0：scrollHeight 是取整往上进的，874.4 高的页面它报 875，
   // 差这一像素滑不动，追它只会白缩一圈。
-  const left = document.documentElement.scrollHeight - window.innerHeight;
-  if (left > 1) {
-    const fix = Math.max(MIN_CARD, want - Math.ceil(left / rows.length));
-    document.body.style.setProperty('--xhs-card', fix + 'px');
+  let now = want;
+  for (let round = 0; round < 4; round++) {
+    const left = document.documentElement.scrollHeight - window.innerHeight;
+    if (left <= 1 || now <= MIN_CARD) break;
+    now = Math.max(MIN_CARD, now - Math.max(1, Math.ceil(left / rows.length)));
+    document.body.style.setProperty('--xhs-card', now + 'px');
   }
 }
 

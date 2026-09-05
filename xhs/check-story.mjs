@@ -51,11 +51,13 @@ async function open(old = false, seen = false) {
   if (old) await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
   if (seen) await ctx.addInitScript("try { localStorage.setItem('slides.xhs.story.square', '1'); } catch (e) {}");
   // 「头一回打开」那一条单独在最底下量。这里每一条量的是「点开某张卡该不该
-  // 弹分镜」，所以先把头一回那把钥匙立上——不立的话，一进来就被按进小球那
-  // 一局，主菜单根本不会出现，下面每一条都等不到 .home-icon-btn。
+  // 弹分镜」，铺的是**走过头一回之后**那台设备的真实状态：头一回那一局会把
+  // 小球那把钥匙一起记上（main.ts 的 firstScreen 里 markStorySeen('circle')），
+  // 所以两格都塞。只塞 firstRun 的话，量到的是一个玩家永远走不到的状态。
   await ctx.addInitScript(() => {
     try {
       localStorage.setItem('slides.xhs.firstRun', '1');
+      localStorage.setItem('slides.xhs.story.circle', '1');
     } catch {
       /* 存不进去也不影响这一台：它只是想跳过头一回那一屏 */
     }
@@ -108,17 +110,16 @@ const has = (p, sel) => p.$(sel).then((e) => !!e);
   await ctx.close();
 }
 
-// ---- 3. 第一次开小球：该弹小球那一段 ----
+// ---- 3. 开小球：分镜一律不放 ----
+//
+// 玩家定的：头一回进来直接落进小球那一局，规矩靠棋盘底下那块教学条讲，小球
+// 那段分镜从此不再出现——他已经边玩边学过一遍了。所以这里量的是「不弹」。
 {
   const { ctx, p } = await open();
   await card(p, 1);
-  await p.waitForTimeout(1500);
-  say(await has(p, '.story-tut'), '第一次开《经典小球》：分镜动画弹出来了');
-  // 分镜的棋子是 SVG：球画成 <circle>，方块画成 <rect>（storyTutorial 的
-  // cellSvg）。所以「有圆、没有方」就是「弹的确实是小球那一段」。
-  const ci = await p.$$eval('.story-board .story-cell svg circle', (e) => e.length);
-  const rc = await p.$$eval('.story-board .story-cell svg rect', (e) => e.length);
-  say(ci > 0 && rc === 0, '弹的是小球那一段（棋盘上画的是圆）', `圆 ${ci} 个 / 方块 ${rc} 个`);
+  await p.waitForSelector('.start-stage', { timeout: 20000 }).catch(() => {});
+  say(!(await has(p, '.story-tut')), '开《经典小球》：不再弹分镜（头一局里已经学过）');
+  say(await has(p, '.start-stage'), '直接到开局页');
   await ctx.close();
 }
 
@@ -167,7 +168,7 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await ctx.close();
 }
 
-// ---- 5.5 头一回打开：不落主菜单，直接开一局小球 ----
+// ---- 5.5 头一回打开：不落主菜单，也不放分镜，直接开一局小球 ----
 //
 // 这一条要的正是上面 open() 特意跳过的那一屏，所以在这儿自己开一台全新的
 // 浏览器上下文——localStorage 一格都没有，和玩家头一次点进小工具一样。
@@ -177,15 +178,19 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(PAGE);
-  await p.waitForSelector('.story-tut', { timeout: 40000 }).catch(() => {});
-  say(await has(p, '.story-tut'), '头一回打开：直接是小球那段分镜，不是主菜单');
+  await p.waitForSelector('.start-stage', { timeout: 40000 }).catch(() => {});
   say(!(await has(p, '.home-icon-btn')), '头一回打开：主菜单没有先闪一下');
-  const ci = await p.$$eval('.story-board .story-cell svg circle', (e) => e.length).catch(() => 0);
-  const rc = await p.$$eval('.story-board .story-cell svg rect', (e) => e.length).catch(() => 0);
-  say(ci > 0 && rc === 0, '放的确实是小球那一段', `圆 ${ci} 个 / 方块 ${rc} 个`);
-  await p.click('#stFinish');
-  await p.waitForTimeout(1800);
-  say(await has(p, '.start-stage'), '按《完成》就落进小球那一局');
+  say(!(await has(p, '.story-tut')), '头一回打开：不放分镜动画');
+  say(await has(p, '.start-stage'), '头一回打开：直接是小球那一局的开局页');
+  await p.waitForFunction(() => document.querySelectorAll('#boardWrap .ball').length > 0, { timeout: 40000 });
+  await p.waitForTimeout(900);
+  const balls = await p.$$eval('#boardWrap .ball', (e) => e.length);
+  say(balls > 0, '摆的确实是小球', balls + ' 颗');
+  say(await has(p, '.coach-bar'), '棋盘底下那块教学条在');
+  say(
+    (await p.evaluate(() => localStorage.getItem('slides.xhs.story.circle'))) === '1',
+    '小球那把钥匙记成了「看过」——以后自己点开也不会再弹',
+  );
   say(errs.length === 0, '这一路零报错', errs.slice(0, 2).join(' | '));
   await ctx.close();
 }

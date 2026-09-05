@@ -1702,8 +1702,14 @@ body:has(.center-pick--back) .home-nav { display: none; }
 /* 挑图形那一页借的是开局页的骨架（.start-stage）：上半屏一张脸、下半屏内容、
    底下一颗键。所以它得和开局页一样铺满整块屏幕，而不是像别的页面那样从上往
    下堆。 */
-.slot-page { min-height: 100dvh; padding: 0; gap: 0; max-width: none; }
+/* 高度按 svh 算，不按 dvh：dvh 是「此刻」的可视高度，Safari 的工具条一收起
+   它就变大；svh 是工具条摊开时的高度，从头到尾一个数。这一屏底下就一颗
+   《退出》，按大的那个排版，工具条一露面就把它压掉半个（iPhone 11 上量到
+   的）。前面那行 100vh 是给不认识 svh 的老浏览器兜底。 */
+.slot-page { min-height: 100vh; min-height: 100svh; padding: 0; gap: 0; max-width: none; }
 .slot-page .start-stage { padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 22px); }
+/* 同上：普通浏览器里安全区报 0，这颗键就只剩 22px，贴着工具条。给个下限。 */
+.slot-page .start-stage { padding-bottom: calc(max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px) + 22px); }
 /* 和开局页一样是整屏的一幕，底下那一排导航在这儿只会挡住《退出》。 */
 body:has(.slot-page) .home-nav { display: none; }
 /* 三张图占的是开局页放倒数窗口的那一格，所以横着摊开、上下居中。 */
@@ -1811,6 +1817,13 @@ body:has(.slot-page) .home-nav { display: none; }
      下」）。上面留的那点是给「选中的那颗升起来」的地方——它升出圆角矩形一
      半，不能被裁掉；下面只留够不贴屏幕边。 */
   padding: 6px 16px calc(6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  /* 底下那一截给一个下限。上面那行在小红书容器里是对的（安全区报得准），可在
+     普通浏览器里——真机测试走的就是这条路——Safari 的下工具条盖在可视区底
+     部，而那时候 env(safe-area-inset-bottom) 报的是 0：这一块就只剩 6px，正好
+     贴着工具条，玩家看到的是「那颗键被切掉一半」（iPhone 11 上量到的）。
+     两行都留着：老内核（Chrome 61）算不了带 var() 的 max()，那一行会被整条丢
+     掉，它就用上面那行——它本来也没有下工具条这回事。 */
+  padding: 6px 16px calc(max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px) + 6px);
   pointer-events: none;
 }
 /* The two entries sit on a small rounded panel of their own rather than

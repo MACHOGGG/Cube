@@ -233,6 +233,9 @@
 .home-page:not(.home-page--wide) {
   --narrow-gap: clamp(18px, 6vw, 34px);
   padding-bottom: calc(94px + var(--safe-area-inset-bottom, 0px));
+  /* 底排那一块自己也垫了 14px 的下限（style.css 的 .home-nav），这儿要跟着让
+     出同样多，不然最后一张卡会压到它身上。老内核照旧用上面那行。 */
+  padding-bottom: calc(94px + max(var(--safe-area-inset-bottom, 0px), 14px));
 }
 .home-page:not(.home-page--wide) .home-icon-btn {
   max-width: var(--xhs-card, 165px);
