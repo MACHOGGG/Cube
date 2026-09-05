@@ -44,6 +44,7 @@ import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
 import { installOldKernel } from './oldKernel';
+import { installTopInset } from './topInset';
 import { openTutorial, storySeen, markStorySeen, type StoryFamily } from './tutorial';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
@@ -388,6 +389,10 @@ document.head.appendChild(extra);
 // （把 clamp/min/max 算成 px、svh 换成 vh、env 换成默认值、gap 换成子项的
 // 外边距），所以必须排在两块都进了 <head> 之后。新内核上它什么也不做。
 installOldKernel();
+
+// 再给小红书自己那排按钮（退出 / 分享 / 用户）让开上面那道——它压在页面上，
+// 不让就正好盖住主菜单的标题。见 topInset.ts 开头那段。
+installTopInset();
 
 installBackNav();
 // 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进主菜单。

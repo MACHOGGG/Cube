@@ -705,6 +705,23 @@ const SCREENS = [
       规则序号: { sel: '.tut-rule .tut-rule-num', kind: 'text' },
       规则配图: { sel: '.tut-rule .tut-rule-art svg', kind: 'svg' },
     },
+    // 第 1 条那幅图，网页版摆的是方块、小球、三角各一正一反，这一版摆两样
+    // ——三角这一版整个不做（玩家定的：详细教学里凡是三角的字和图都去掉），
+    // 摆一个玩不到的形状是在说假话。
+    //
+    // 认领的口径卡得很死：把网页版那份里**所有三角**摘掉之后，必须和这一版
+    // 一个字节不差。所以少了别的、多了别的、留下的哪一张改了样子，这一条都
+    // 认不了，照样报红。
+    accept: (k, web, xhs) => {
+      if (k !== '规则配图') return null;
+      // 三角那张图的轮廓（src/ui/ruleArt.ts 的 TRI_OUT，圆角三角）。正面反面
+      // 都是这条路径打头，认它就够了。
+      const TRI = 'M40.8 23.2 Q50 6 59.2 23.2';
+      const cut = web.filter((s) => s.indexOf(TRI) < 0);
+      if (JSON.stringify(cut) === JSON.stringify(xhs))
+        return `这一版摘掉了三角（xhs/src/tutorial.ts 的 buildRuleArt({ triangle: false })），少的正好是那 ${web.length - xhs.length} 张三角图，其余逐字节相同`;
+      return null;
+    },
   },
 ];
 

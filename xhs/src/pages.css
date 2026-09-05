@@ -172,3 +172,30 @@
   .share-modal .xhs-share-btn { padding: 10px 14px; font-size: 0.94rem; }
   .share-modal .xhs-share-note { font-size: 0.8rem; min-height: 0; }
 }
+
+/* ---- 给小红书自己那排按钮让开上面那道 ----------------------------------
+   容器在页面上方有一排它自己的键（退出 / 分享 / 用户），撤不掉也改不了。
+   要让开多少由 topInset.ts 算出来，写在 <body> 上的两个自定义属性里：
+
+     --safe-area-inset-top   网页版每一处让开刘海的式子读的都是它，写一次
+                             棋盘页、开局页、个人主页全都跟着让；
+     --xhs-top-clear         同一个数，专给下面这几条写死了内边距的用。
+
+   竖版主菜单的上内边距在源样式里是写死的 10px（src/style.css 的
+   `.home-page:not(.home-page--wide)`），安全区注得再大它也不动——量出来
+   注 88px 进去，标题还停在 20px。这里把那 10px 接到算好的高度上。
+   注：写成 calc(var() + 10px)，不用 max()——Chrome 61 没有 max()，
+   oldKernel 那一遍又算不动带 var() 的式子，写了会整条被丢掉。 */
+.home-page:not(.home-page--wide) {
+  padding-top: calc(var(--xhs-top-clear, 0px) + 10px);
+}
+/* 其余各页（信息栏、挑形状、战绩详情）走的是 src/style.css 的 `.app`，那条
+   的上内边距同样是写死的 28px。 */
+.app {
+  padding-top: calc(var(--xhs-top-clear, 0px) + 28px);
+}
+/* 棋盘页自己一套（`.app--game`），源样式那条会看安全区，可它把式子写成
+   `max(...)`——Chrome 61 没有 max()，整条会被丢掉。这里换成一句它算得动的。 */
+.app.app--game {
+  padding-top: calc(var(--xhs-top-clear, 0px) + 6px);
+}
