@@ -109,9 +109,6 @@ const BEATS: StoryStep[][] = [
     { t: 'show', f: 0 },
     { t: 'flip', f: 0, idx: BIG_TRI, snap: 6 },
     { t: 'flip', f: 6, idx: RUN4, snap: 1 },
-    // 站着，不拉——它在下一拍（真正滑的那一拍）才醒过来扯一下。连着两拍都
-    // 是「醒着的」箭头，看上去就是拉扯了两次。
-    { t: 'arrow', x: ctr(2, 2).x + 40, y: ctr(2, 2).y, ang: 0, color: MAG, mode: 'static' },
   ],
   // 3 — the middle row slides right one pair (triangles move two slots at a
   // time, so every cell lands in its own orientation); then the diagonal
@@ -123,8 +120,6 @@ const BEATS: StoryStep[][] = [
     // so the low-opacity refill keeps every orientation and never overlaps
     // the leading cells (row 2 is 5 slots long → ghosts trail 6).
     { t: 'slide', f: 1, idx: R2, dx: S, dy: 0, wx: 3 * S, wy: 0, snap: 2 },
-    // 同上：这里只把下一步标出来，扯那一下留给第 4 拍。
-    { t: 'arrow', x: diagArrowAt.x, y: diagArrowAt.y, ang: 240, color: MAG, mode: 'static' },
   ],
   // 4 — the right-slant diagonal slides up one pair; its two wrapped cells
   // re-enter at the bottom swapped, keeping every orientation valid.

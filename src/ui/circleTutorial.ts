@@ -108,14 +108,11 @@ const BEATS: StoryStep[][] = [
     { t: 'flip', f: 7, idx: DIAMOND_22, snap: 8 },
     { t: 'flip', f: 8, idx: RUN_4, snap: 1 },
   ],
-  // 3 — the sheet's three arrows all come up first; then each pulls in turn
-  // and its diagonal slides, which lines four orange dots up along the
-  // middle-left diagonal.
+  // 3 — three moves in a row; each arrow appears, pulls once, and its
+  // diagonal slides, which lines four orange dots up along the middle-left
+  // diagonal.
   [
     { t: 'show', f: 1 },
-    arrow1('static'),
-    arrow2('static'),
-    arrow3('static'),
     arrow1(),
     { t: 'slide', f: 1, idx: D0, dx: VX, dy: VY, wx: VX * 6, wy: VY * 6, snap: 4 },
     arrow2(),

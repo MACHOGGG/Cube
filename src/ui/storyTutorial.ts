@@ -78,7 +78,7 @@ const sleepRaw = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * pace and divided by this, so the whole sequence stays in proportion when
  * the speed changes.
  */
-const SPEED = 1.5;
+const SPEED = 2.25;
 const sleep = (ms: number) => sleepRaw(ms / SPEED);
 
 /** The hand-off gap between one beat finishing and the next starting on its
