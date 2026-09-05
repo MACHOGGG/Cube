@@ -15,7 +15,9 @@
     "build:wxgame": "node scripts/build-wxgame.mjs",
     "build:xhs": "node xhs/build.mjs",
     "check:xhs": "npm run build:xhs && node xhs/preview.mjs && node xhs/check-oldkernel.mjs && node xhs/check-oldcss.mjs",
-    "check:vsweb": "npm run build && npm run build:xhs && node xhs/preview.mjs && node xhs/check-vsweb.mjs"
+    "check:vsweb": "npm run build && npm run build:xhs && node xhs/preview.mjs && node xhs/check-vsweb.mjs",
+    "check:submit": "npm run build:xhs && node xhs/check-submit.mjs",
+    "check:xhs:all": "npm run check:vsweb && node xhs/check-oldkernel.mjs && node xhs/check-oldcss.mjs && node xhs/check-submit.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
