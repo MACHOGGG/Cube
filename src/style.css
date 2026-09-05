@@ -3606,7 +3606,7 @@ body.is-room-host::after {
 .coach-art { font-size: clamp(12px, 2vh, 17px); }
 .coach-text {
   flex: 1; min-width: 0; margin: 0;
-  font-size: clamp(11px, 1.6vh, 13.5px); line-height: 1.35; color: var(--ink);
+  font-size: clamp(12px, 1.85vh, 15px); line-height: 1.38; color: var(--ink);
 }
 /* 换一条的时候淡进来一下——不动的话，一行字忽然变成另一行，人会以为自己看
    错了。类由 coachBar.ts 摘了再挂，所以这是一次性的。 */
@@ -3639,8 +3639,14 @@ body.is-room-host::after {
   /* 得分图示贴两边的那几个玩法：中间三列（图示 | 棋盘 | 图示）都只占第一行，
      底下这一行整条空着，条子横过来铺在上面。 */
   .app.app--game.has-coach.pattern-sides > .coach-bar { grid-column: 2 / 5; }
+  /* 配图横屏也留着——它是这一条讲的事，只有字的那一版少了一半。只在真的
+     矮得放不下的屏幕上（不到 360px 高）才摘掉：那种屏上多这一行图，棋盘就
+     被压得没法看了。 */
+  .app.app--game.has-coach > .coach-bar .coach-art { font-size: clamp(9px, 2.4vh, 13px); }
+  .app.app--game.has-coach > .coach-bar .coach-text { font-size: clamp(11.5px, 2.9vh, 14px); }
+}
+@media (orientation: landscape) and (max-height: 359px) {
   .app.app--game.has-coach > .coach-bar .coach-art { display: none; }
-  .app.app--game.has-coach > .coach-bar .coach-text { font-size: clamp(10.5px, 2.6vh, 13px); }
 }
 
 /* ---- 规则配图（ruleArt.ts）：借基础教学分镜的画法 ---- */

@@ -6,7 +6,7 @@
  * 候算完——从前都藏在六条规则那一屏里，得他自己去点。这块条子把那六条搬到棋
  * 盘底下，一条一条摆出来：
  *
- *   第 1 条 每个图形都有正反两面   → 滑动一次就算读懂了
+ *   第 1 条 每个图形都有正反两面   → 没有动作可做，摆够 10 秒读一遍
  *   第 2 条 同色凑成图案就得分      → 得一次分
  *   第 3 条 反面也能一起凑          → 得分的那一组里有反面
  *   第 4 条 反面同色连成一行就消    → 消掉一行 / 一列
@@ -33,13 +33,19 @@ import { RULE_ART } from './ruleArt';
 /** 玩家做了什么。gameController 在它已经知道的那几个点上报进来。 */
 export type CoachSignal = 'move' | 'match' | 'mixed' | 'line';
 
-/** 第 n 条靠哪个动作算「做到了」。null = 没有动作可做，读完就走。 */
-const DONE_BY: readonly (CoachSignal | null)[] = ['move', 'match', 'mixed', 'line', null, null];
+/**
+ * 第 n 条靠哪个动作算「做到了」。null = 没有动作可做，摆够 READ_MS[n] 就走。
+ *
+ * 第 1 条讲的是「每个图形都有正反两面」——那是一句要看明白的话，不是一件要
+ * 做的事（棋盘上本来就一枚反面都没有，无从「做」起）。玩家定的：这一条摆
+ * 10 秒就换，不等他动手。后面几条不变，还是做到了才走。
+ */
+const DONE_BY: readonly (CoachSignal | null)[] = [null, 'match', 'mixed', 'line', null, null];
 
 /** 做到了之后再停一下：让加分、翻面那一下演完，别在半空中换文字。 */
 const AFTER_MS = 1100;
-/** 没有动作可做的那一条，摆够读一遍的时间。 */
-const READ_MS = 8000;
+/** 没有动作可做的那几条各摆多久。缺的按最后一个数算。 */
+const READ_MS: readonly number[] = [10000, 8000, 8000, 8000, 8000, 8000];
 /** 轮到它时早就做过了：亮一下就走。 */
 const ALREADY_MS = 2600;
 /** 保底：一条停够这么久还没做到，自己往下走。 */
@@ -108,7 +114,7 @@ export function mountCoachBar(host: HTMLElement, lang: Lang, art: readonly strin
 
     if (i >= last) return clear(); // 最后一条不走
     const need = DONE_BY[i];
-    if (need === null) later(READ_MS, () => show(i + 1));
+    if (need === null) later(READ_MS[i] ?? READ_MS[READ_MS.length - 1], () => show(i + 1));
     else if (hit.has(need)) later(ALREADY_MS, () => show(i + 1));
     else later(STUCK_MS, () => show(i + 1));
   }
