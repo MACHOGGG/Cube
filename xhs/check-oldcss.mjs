@@ -106,6 +106,12 @@ function compare(label, a, b, tol) {
       }
     }
   }
+  // 一个盒子都没量到，多半是选择器没匹配上或者根本没走到这一屏——那不是
+  // 「一致」，是「什么都没比」。这种假通过比报错更糟，所以单独判掉。
+  if (seen === 0) {
+    say(false, `${label}：一个盒子都没量到（选择器没匹配上，或者没走到这一屏）`);
+    return;
+  }
   say(worst === 0, `${label}：两边排版一致（量了 ${seen} 个盒子）`, worst ? `最大差 ${worst}px @ ${where}` : '');
   if (worst) all.slice(0, 12).forEach((l) => console.log('           ' + l));
 }
@@ -279,6 +285,10 @@ const SCREENS = [
     // 正是没看过的状态，所以先把那一格擦掉再刷新。
     name: '方块分镜动画',
     async go(p) {
+      // 擦掉那一格就直接点，**不要 reload**：addInitScript 是每次导航都跑的，
+      // 一刷新那一格又被填回去，教学就不弹了——那样这一屏会「量了 0 个盒子」
+      // 然后假装通过，比报错还糟。这里不用刷新也行，因为「看过没有」是点下去
+      // 那一刻才读的（main.ts 的 storySeen）。
       await p.evaluate(() => {
         try {
           localStorage.removeItem('slides.xhs.story.square');
@@ -286,12 +296,10 @@ const SCREENS = [
           /* 存不了就本来就是「没看过」，正好 */
         }
       });
-      await p.reload();
-      await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
-      await p.waitForTimeout(700);
       await p.$$eval('.home-icon-btn', (e) => e[0].click());
-      // 第一拍要放完才定得下来，多等一会儿再量。
-      await p.waitForTimeout(2600);
+      // 等这一屏真的立起来再量，别量到一半的骨架。
+      await p.waitForSelector('.story-board .story-cell', { timeout: 20000 });
+      await p.waitForTimeout(1800);
     },
     sels: [
       '.story-tut', '.story-prog', '.story-prog-seg', '.story-stage', '.story-board',
