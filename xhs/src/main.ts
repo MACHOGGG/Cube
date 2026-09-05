@@ -45,6 +45,7 @@ import type { Lang } from '../../src/i18n';
 
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
+import { installMenuFit, scheduleFitMenu } from './menuFit';
 import { openTutorial, storySeen, markStorySeen, type StoryFamily } from './tutorial';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
@@ -284,6 +285,8 @@ function showMenu() {
     },
     onProfile: showProfile,
   });
+  // 卡多大要等这一屏排完版才算得了，所以画完再叫一声。
+  scheduleFitMenu();
   // 主菜单是最外面那一屏：在这儿按返回键（安卓的实体键、浏览器的后退）就该
   // 退出小工具，不再往回走，所以不给它挂返回处理。
   setScreenBack(null);
@@ -393,6 +396,8 @@ installOldKernel();
 // 再给小红书自己那排按钮（退出 / 分享 / 用户）让开上面那道——它压在页面上，
 // 不让就正好盖住主菜单的标题。见 topInset.ts 开头那段。
 installTopInset();
+// 主菜单那五张卡按屏幕算大小，别压到底排上。见 menuFit.ts。
+installMenuFit();
 
 installBackNav();
 // 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进主菜单。

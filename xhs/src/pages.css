@@ -205,3 +205,26 @@
 .app.app--game {
   padding-top: calc(var(--xhs-top-clear, 0px) + 14px);
 }
+
+
+/* ---- 主菜单：五张卡收进一屏 --------------------------------------------
+   网页版那一页有十三张卡，本来就要滑，所以底下留的是 118px + 安全区，够最后
+   一排滑到底时露在底排之上。这一版只有五张，一屏装得下才对——可给顶栏让开
+   106px 之后就装不下了，最后那张《无限反转》压在底排那颗键上 93px。
+
+   三处一起收：
+     · 中间那道缝小一号（8vw → 6vw），一排两张之间和上下排之间都跟着收；
+     · 底下只留底排自己那么高（74 的键 + 6 上边距 + 14 余量 + 底部横杠），
+       不用网页版那份给「滑到底」留的余量——这一页不滑了；
+     · 卡多大交给 menuFit.ts 现量现算，写在 --xhs-card 上。它按「整页比屏幕
+       高出多少」平摊到每一排，所以每台机器都正好装下，装得下的机器一点不缩。
+
+   写成 var(--xhs-card, 165px) 而不是 min(...)：Chrome 61 没有 min()，那一句
+   会被整条丢掉；而 --xhs-card 里已经是算好的像素数，老内核照样认。 */
+.home-page:not(.home-page--wide) {
+  --narrow-gap: clamp(18px, 6vw, 34px);
+  padding-bottom: calc(94px + var(--safe-area-inset-bottom, 0px));
+}
+.home-page:not(.home-page--wide) .home-icon-btn {
+  max-width: var(--xhs-card, 165px);
+}
