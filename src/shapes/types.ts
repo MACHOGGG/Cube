@@ -38,6 +38,16 @@ export interface ShapeGameOpts {
    * 「翻完了」这回事——一局只由计时结束（main.ts 给 120 秒）。
    */
   flip?: boolean;
+  /**
+   * 头一局那块教学条（见 ui/coachBar.ts）：棋盘底下一块小圆角矩形，把六条
+   * 规则一条一条摆出来，玩家做到了哪一条就换下一条。
+   *
+   * 只有玩家头一回打开、被直接按进的那一局基础小球才给（main.ts 的
+   * isFirstRun）——他这时候刚看完「怎么滑」的分镜，别的还一概不知道。
+   */
+  coach?: boolean;
+  /** 教学条那六幅配图。不给就是网页版那一份；小红书版传摘掉三角的那一份。 */
+  coachArt?: readonly string[];
 }
 
 export interface ShapeGame {

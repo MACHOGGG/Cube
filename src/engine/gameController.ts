@@ -74,6 +74,8 @@ export const TIME_GAIN = 1.5;
 
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
+import { mountCoachBar, type CoachBar } from '../ui/coachBar';
+
 export interface GameControllerHooks {
   bestKey: string;
   /** Human-readable name for the share card, already localized. */
@@ -104,6 +106,14 @@ export interface GameControllerHooks {
    *     拼回来不算（scoring.ts 的 ToggleLedger）。
    */
   flip?: boolean;
+  /**
+   * 头一局那块教学条（见 ui/coachBar.ts）。开着的话，棋盘底下那块壳子里会
+   * 一条一条摆出六条规则，玩家做到了哪一条就换到下一条。只有玩家头一回打
+   * 开被直接按进的那一局基础小球才开。
+   */
+  coach?: boolean;
+  /** 教学条用的六幅配图。不给就是网页版那一份；小红书版传摘掉三角的那一份。 */
+  coachArt?: readonly string[];
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -269,6 +279,27 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
   }
 
+  /** 头一局那块教学条。没开、或者外壳没画那块壳子，就一直是 null。 */
+  let coach: CoachBar | null = null;
+
+  /**
+   * 得分的这一组里有没有反面（第 3 条：反面和正面一起凑）。
+   *
+   * 看的是**这一刻**屏幕上的样子，不是数据：这里离翻面还有一步（commit 在
+   * proceed 里，比这儿晚一拍），所以每一枚身上的 data-face 还是它进这一组时
+   * 的那一面——正是要问的那件事。棋子那个属性由各个玩法自己挂（circle.ts 的
+   * makeBallEl）。
+   */
+  function anyDotFace(groups: readonly Cell[][]): boolean {
+    for (const g of groups) {
+      for (const [r, c] of g) {
+        const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
+        if (el?.dataset.face === 'dot') return true;
+      }
+    }
+    return false;
+  }
+
   function newGame() {
     hooks.resetBoard();
     score = 0;
@@ -296,6 +327,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     clearRoomLeftover();
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
+    // 教学条跟着新的一局从第 1 条重来。第一次开局时才真的建出来——建在开局
+    // 页还盖着的时候没有意义，玩家根本看不见它。
+    if (hooks.coach && refs.coachEl) {
+      if (coach) coach.reset();
+      else coach = mountCoachBar(refs.coachEl, hooks.lang, hooks.coachArt);
+    }
   }
 
   function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = s.defaultPenaltyLabel) {
@@ -512,6 +549,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   function resolveMove(mask: Set<string>, moveDirDeg = 0) {
     if (gameOver || paused || resolving) return;
     moves++;
+    coach?.signal('move');
     resolving = true;
     pendingBeat = null;
     /** The next beat of the reveal, held so hurry() can bring it forward. */
@@ -615,6 +653,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       comboMult *= CASCADE_COMBO_FACTOR;
       const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
+      // 教学条要的三件事都在这一拍里：得分了、这一组里有反面、消掉了一整行。
+      // 报在翻面之前——anyDotFace 问的正是「翻之前它是哪一面」。
+      if (coach) {
+        if (s.matchGroups.length) {
+          coach.signal('match');
+          if (anyDotFace(s.matchGroups)) coach.signal('mixed');
+        }
+        if (isBonus) coach.signal('line');
+      }
       // A bonus (the whole-line, 36-point event) gets its own distinct
       // double-pulse — it's the bigger moment — while an ordinary match gets
       // one light buzz, right as its highlight appears.
@@ -842,6 +889,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();
+      coach?.destroy();
+      coach = null;
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };

@@ -1026,7 +1026,9 @@ function afterLangChosen(lang: Lang, resume = false) {
     // 方块那段没有丢：闸口不再把 square 排除在外，第一次点开《基础方块》
     // 就会放（见 showGame）。
     markFirstRunDone();
-    showGame(circleGame);
+    // coach：棋盘底下那块教学条（ui/coachBar.ts）。六条规则一条一条摆出来，
+    // 玩家做到了哪一条就换下一条，最后一条留到这一局结束。
+    showGame(circleGame, { coach: true });
     return;
   }
   if (resume && currentRoom()) {

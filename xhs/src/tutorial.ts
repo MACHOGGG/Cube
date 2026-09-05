@@ -36,7 +36,13 @@ import { buildRuleArt } from '../../src/ui/ruleArt';
  * 讲一个玩家在这儿见不到的图形，只会让人以为自己漏了什么。别的五幅本来就
  * 只有方块和小球。
  */
-const RULE_ART = buildRuleArt({ triangle: false });
+/**
+ * 这一版的六幅配图：摘掉三角那一列（这一版没有三角玩法）。
+ *
+ * 导出去是因为头一局那块教学条（ui/coachBar.ts）要的是同一份——两处画的是
+ * 同样六条规矩，配图不能一处有三角、另一处没有。
+ */
+export const RULE_ART = buildRuleArt({ triangle: false });
 
 /** 会放分镜动画的两族。三角整块不做，所以只有这两个。 */
 export type StoryFamily = 'square' | 'circle';

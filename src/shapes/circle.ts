@@ -230,6 +230,8 @@ export function createCircleGame(): ShapeGame {
         patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
         // 随机得分目标：开局页换成那台老虎机，当场把这两个转出来。
         slotTargets: targets ?? undefined,
+        // 头一局那块教学条（见 ui/coachBar.ts）。只有头一回进来的那一局有。
+        coach: !!opts?.coach,
       });
 
       const pickPalette = (): readonly string[] =>
@@ -510,6 +512,10 @@ export function createCircleGame(): ShapeGame {
         if (opacity !== undefined) el.style.opacity = String(opacity);
         el.dataset.r = String(r);
         el.dataset.c = String(c);
+        // 这一枚这会儿是哪一面。画面上本来就看得出来（实色 / 星标 / 空球），
+        // 写成属性是为了让不认识这块棋盘的人也问得到——头一局那块教学条要靠
+        // 它认出「这一组里有反面」（gameController 的 anyDotFace）。
+        el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         return el;
       }
 
@@ -786,6 +792,8 @@ export function createCircleGame(): ShapeGame {
         shapeId: 'circle',
         modeKey: flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
+        coach: !!opts?.coach,
+        coachArt: opts?.coachArt,
         resetBoard,
         render,
         isGameOver,

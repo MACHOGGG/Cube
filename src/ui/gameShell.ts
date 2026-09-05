@@ -65,6 +65,12 @@ export interface ShellMeta {
    * 停」这回事。见 ui/slotReels.ts。
    */
   slotTargets?: readonly TargetPattern[];
+  /**
+   * 头一局那块教学条（见 ui/coachBar.ts）。只有玩家头一回打开、被直接按进
+   * 的那一局基础小球才给——棋盘底下多一块小圆角矩形，把六条规则一条一条摆
+   * 出来。别的局一律没有：这块条子是给还没上手的人的。
+   */
+  coach?: boolean;
 }
 
 export interface ShellRefs {
@@ -72,6 +78,8 @@ export interface ShellRefs {
   boardWrap: HTMLElement;
   boardEl: HTMLElement;
   legendEl: HTMLElement;
+  /** 头一局那块教学条的壳子；meta.coach 没开时是 null（那一局根本没画它）。 */
+  coachEl: HTMLElement | null;
   hudTimeEl: HTMLElement;
   hudPerfEl: HTMLElement;
   scoreReelEl: HTMLElement;
@@ -200,7 +208,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   container.innerHTML = `
     <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}${
       sides ? ' pattern-sides' : ''
-    }${meta.practice ? ' app--practice' : ''}" data-shape="${meta.shapeId}">
+    }${meta.practice ? ' app--practice' : ''}${meta.coach ? ' has-coach' : ''}" data-shape="${meta.shapeId}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 
@@ -221,6 +229,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
 
       <div class="legend" id="legend"></div>
+      <!-- 头一局的教学条。空壳子先摆在这儿，内容由 coachBar.ts 填——它要跟着
+           玩家做到哪一步换，不是画一次就完了。 -->
+      ${meta.coach ? '<div class="coach-bar" id="coachBar" hidden></div>' : ''}
       <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
 
       <!-- Two controls, and only two: 完成 and 暂停. Anything a player
@@ -506,6 +517,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     boardWrap: req('boardWrap'),
     boardEl: req('board'),
     legendEl: req('legend'),
+    coachEl: container.querySelector<HTMLElement>('#coachBar'),
     hudTimeEl: req('hud-time'),
     hudPerfEl: req('hud-perf'),
     scoreReelEl: req('scoreReel'),

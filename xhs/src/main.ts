@@ -46,7 +46,7 @@ import type { Lang } from '../../src/i18n';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
-import { openTutorial, storySeen, markStorySeen, type StoryFamily } from './tutorial';
+import { openTutorial, storySeen, markStorySeen, RULE_ART, type StoryFamily } from './tutorial';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
 import { renderRunSheet } from './runSheet';
@@ -299,7 +299,9 @@ function firstScreen(): void {
   } catch {
     /* 存不进去就下次再来一遍，不是什么大事 */
   }
-  showGame(circleGame, {}, showMenu);
+  // coach：棋盘底下那块教学条（ui/coachBar.ts）。头一局才给——他这会儿刚看完
+  // 「怎么滑」的分镜，别的规矩还一概不知道。配图用这一版摘掉三角的那一份。
+  showGame(circleGame, { coach: true, coachArt: RULE_ART }, showMenu);
 }
 
 // ---- 各屏 -------------------------------------------------------------------
