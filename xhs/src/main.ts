@@ -37,6 +37,7 @@ import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
 import { installOldKernel } from './oldKernel';
+import { openTutorial, tutorialSeen, markTutorialSeen } from './tutorial';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
 import { renderRunSheet } from './runSheet';
@@ -92,6 +93,8 @@ let activeDestroy: (() => void) | null = null;
 function teardown() {
   activeDestroy?.();
   activeDestroy = null;
+  closeTutorial?.();
+  closeTutorial = null;
   root.innerHTML = '';
   // 离开这一屏就摘掉「正在玩」那个标记，见下面 showGame 上的说明。
   document.documentElement.classList.remove('is-playing');
@@ -108,7 +111,42 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   // 进游戏底色不变、页面还能上下滑。
   document.documentElement.classList.add('is-playing');
   enhanceShareOverlay();
+  enhancePauseTutorial();
+  // 第一次进游戏自动弹一次六条规则，看过就记住。之后只能自己点开——
+  // 「不要出现意料之外的界面」。
+  if (!tutorialSeen()) showTutorial(markTutorialSeen);
   setScreenBack(onBack);
+}
+
+/** 教学窗开着的话，关掉它的那只手。换屏时要用（见 teardown）。 */
+let closeTutorial: (() => void) | null = null;
+
+function showTutorial(after?: () => void) {
+  closeTutorial?.();
+  closeTutorial = openTutorial(LANG, () => {
+    closeTutorial = null;
+    after?.();
+  });
+}
+
+/**
+ * 暂停面板里加一颗《怎么玩》。
+ *
+ * 和分享窗口那处一样，是「挂好之后改 DOM」：网页版那块面板的额外按钮来自
+ * 形状自己的 meta.extraControls（src/ui/gameShell.ts），从这一版传不进去，
+ * 而 src/ 这一版只读不写。改动只在这一版的包里发生。
+ *
+ * 位置放在色盲开关和《继续》之间：面板从上到下是「设置 → 帮助 → 回去玩」。
+ */
+function enhancePauseTutorial() {
+  const modal = root.querySelector<HTMLElement>('#pauseOverlay .modal');
+  const resumeRow = modal?.querySelector<HTMLElement>('#continueBtn')?.closest<HTMLElement>('.btn-row');
+  if (!modal || !resumeRow) return;
+  const row = document.createElement('div');
+  row.className = 'btn-row';
+  row.innerHTML = '<button class="icon-btn pause-switch xhs-how-btn" type="button"><span>怎么玩</span></button>';
+  modal.insertBefore(row, resumeRow);
+  row.querySelector('button')?.addEventListener('click', () => showTutorial());
 }
 
 /**
@@ -239,7 +277,11 @@ function showFlip() {
 /** 成绩 + 说明，一屏。底排那颗橙色圆进来的就是这里。 */
 function showProfile() {
   teardown();
-  renderProfilePage(root, BOOKS, LANG, { onBack: showMenu, onOpenRun: showRun });
+  renderProfilePage(root, BOOKS, LANG, {
+    onBack: showMenu,
+    onOpenRun: showRun,
+    onHowToPlay: () => showTutorial(),
+  });
   setScreenBack(showMenu);
 }
 

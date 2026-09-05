@@ -23,15 +23,37 @@
   -webkit-tap-highlight-color: transparent; appearance: none;
 }
 
-/* 色盲开关那一行。挨着累计得分，宽度也跟它一样——两块读起来是一组。 */
-.xhs-setting-row { display: flex; justify-content: center; }
+/* 设置那一行：色盲开关 + 《怎么玩》。挨着累计得分，读起来是一组。
+   开关那颗宽一些（里面有个滑块），《怎么玩》按内容宽。 */
+.xhs-setting-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .xhs-cvd {
   max-width: none; margin: 0;
   /* 药丸的默认底色是奶咖（--pill-bg），压在米白页面上偏淡。这一颗是设置，
      不是入口，用页面自己的深紫墨色更像个开关。 */
   --pill-bg: #6E5F6D;
   font-size: 0.92rem;
+  flex: 1 1 auto; min-width: 0;
 }
+/* 《怎么玩》是个入口，不是设置，所以留着药丸本来那身奶咖底色。 */
+.xhs-how { max-width: none; margin: 0; flex: 0 0 auto; font-size: 0.92rem; }
+
+/* ---- 六条规则那一屏 ----------------------------------------------------
+   文字、配图、样式全用网页版教学挑选页那一套（.tut-rule / .ra-*），这里只
+   改两处：挑选页要把六条压进一屏，所以每条最多三行、字号跟着屏高缩；弹窗
+   里没有这个限制，把话说全更要紧。 */
+.xhs-tut-modal { width: 100%; max-width: 460px; text-align: left; }
+.xhs-tut-modal h2 { text-align: center; }
+.xhs-tut-rules {
+  /* 六条在窄屏上摞起来会比一屏高，让它自己滚，别把《知道了》顶出去。 */
+  max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  justify-content: flex-start; gap: 12px; padding: 4px 2px 8px;
+}
+.xhs-tut-rules .tut-rule-text {
+  /* 挑选页那条 -webkit-line-clamp: 3 会把长句子切掉，这儿要看全。 */
+  display: block; overflow: visible;
+  font-size: 0.88rem; line-height: 1.5;
+}
+.xhs-tut-rules .tut-rule-art { font-size: 15px; }
 
 /* ---- 说明块 ------------------------------------------------------------
    本来借的是排行榜那块蓝紫（#9BA5D6）。那个底色是给一行行短榜单设计的，

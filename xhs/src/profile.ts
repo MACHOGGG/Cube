@@ -35,6 +35,8 @@ export interface ProfileHandlers {
   onBack: () => void;
   /** 点开某一局，去看那一张战绩图（runSheet.ts）。 */
   onOpenRun: (run: StoredRun) => void;
+  /** 打开那六条规则（tutorial.ts）。第一次进游戏会自动弹一次，这儿是随时重看的入口。 */
+  onHowToPlay: () => void;
 }
 
 /** 空着的时候画几条横线，和网页版一样——「等着记录」比一块空白好看。 */
@@ -89,6 +91,22 @@ function runRow(
  * 按键、开关的样子全用网页版现成的类（.profile-pill--switch / .pill-switch），
  * 两边是同一个控件。
  */
+/**
+ * 《怎么玩》——和色盲开关并排。
+ *
+ * 这一页是「成绩 + 说明」，规则本来就该在这儿有个入口：第一次进游戏那次自动
+ * 弹过之后就不再弹了，想再看一遍得有地方点。局中的那个入口在暂停面板里
+ * （xhs/src/main.ts 的 enhancePauseTutorial）。
+ */
+function howToPlayPill(onClick: () => void): HTMLElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'profile-pill xhs-how';
+  btn.textContent = '怎么玩';
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
 function cvdSwitch(lang: Lang): HTMLElement {
   const s = STRINGS[lang];
   const btn = document.createElement('button');
@@ -157,7 +175,9 @@ export function renderProfilePage(
     </div>
   `;
 
-  page.querySelector<HTMLElement>('#xhsSettings')!.appendChild(cvdSwitch(lang));
+  const settings = page.querySelector<HTMLElement>('#xhsSettings')!;
+  settings.appendChild(cvdSwitch(lang));
+  settings.appendChild(howToPlayPill(h.onHowToPlay));
 
   const list = page.querySelector<HTMLElement>('#xhsRuns')!;
   if (runs.length) {

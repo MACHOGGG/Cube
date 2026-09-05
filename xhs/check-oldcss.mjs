@@ -257,6 +257,16 @@ const SCREENS = [
     ],
   },
   {
+    name: '怎么玩',
+    async go(p) {
+      if (await p.$('#xhsProfile')) await p.click('#xhsProfile');
+      await p.waitForTimeout(900);
+      await p.click('.xhs-how');
+      await p.waitForTimeout(700);
+    },
+    sels: ['.xhs-tut-modal', '.xhs-tut-rules', '.xhs-tut .tut-rule', '.xhs-tut .tut-rule-art', '.xhs-tut .btn-row', '#xhsTutOk'],
+  },
+  {
     name: '战绩详情页',
     async go(p) {
       await toBoard(p, 0);
@@ -289,6 +299,11 @@ async function run(browser, view, screen, old) {
     hasTouch: true,
   });
   if (old) await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
+  // 两台体检台都先把「教学看过了」这一格填上：第一次进游戏会自动弹那六条
+  // 规则（xhs/src/tutorial.ts），弹出来就挡住棋盘，后面的拖动和量尺寸全做
+  // 不了。这一屏本身单独测（check-oldcss 的「怎么玩」那一屏，和
+  // 教学那支专门的脚本），不靠这里顺带。
+  await ctx.addInitScript(`try { localStorage.setItem('slides.xhs.tutorialSeen', '1'); } catch (e) {}`);
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
