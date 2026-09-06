@@ -1168,6 +1168,19 @@ button:hover { filter: brightness(1.05); }
 @media (prefers-reduced-motion: reduce) {
   .home-icon-btn--glow .home-icon-art { animation: none; box-shadow: 0 0 12px 3px rgba(179, 57, 43, 0.3); }
 }
+/* ---- 小红书版：三张「完整版里是天才玩法」的卡 --------------------------
+   玩家定的：除了发光那张，其余几张暗淡一点、写上「天才进入」，当完整版的预
+   告。这一版这三个照样点得开、照样免费——牌子说的是「完整版里它们归天才」，
+   不是一道锁，所以不压锁、不拦手。 */
+.home-icon-btn--soon .home-icon-art > svg { opacity: 0.55; }
+.xhs-soon-tag {
+  position: absolute; left: 50%; bottom: 5%;
+  transform: translateX(-50%);
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(46, 36, 48, 0.74); color: #FBF8F1;
+  font-size: 10px; line-height: 1.5; letter-spacing: 0.04em; white-space: nowrap;
+  pointer-events: none;
+}
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--r-sm); }
 
 /* The press cue: a quick squash and tilt, fired from pointerdown so it plays
@@ -3647,6 +3660,19 @@ body.is-room-host::after {
 }
 .coach-seg.on { background: var(--accent); }
 .coach-row { display: flex; align-items: center; gap: 10px; }
+/* 一步摆两条的时候（头一局的第 1+2 条）整体压扁一点：缝、内边距、行距各收
+   一档，字和图只小半档——玩家的原话是「稍微上下压缩一下」，压的是空白，不是
+   内容。多出来的那点高度全从棋盘身上出，能省一点是一点。 */
+.coach-bar--pair { gap: 3px; padding: 6px 12px 7px; }
+.coach-bar--pair .coach-row { gap: 8px; }
+/* 两条并排时给配图一个统一的宽度：两幅图本来一宽一窄（第 1 条两列、第 2 条
+   六列），不统一的话两行文字的左边对不齐，看着像两件不相干的东西而不是一份
+   清单。窄的那幅在这个宽度里居中（.tut-rule-art 本来就是居中的）。 */
+.coach-bar--pair .coach-art { font-size: clamp(11px, 1.75vh, 15px); min-width: 6.5em; }
+/* 再收半档：统一了配图宽度之后，第 1 条那句正好差一个字换行，末行只剩「面。」
+   两个字。收到 13.5px 它就回到一行了（外语长句照样会折，那没办法，也不难看）。 */
+.coach-bar--pair .coach-text { font-size: clamp(11px, 1.62vh, 13.5px); line-height: 1.3; }
+.coach-row[hidden] { display: none; }
 /* 配图不许被旁边的文字挤：它是几幅按 em 定死大小的小棋盘，挤一下就漫出底板。
    文字那边是 flex: 1，剩多少占多少。 */
 /* 宽高交给内容自己算。这块 span 同时挂着 .tut-rule-art（画法是借它的），而那

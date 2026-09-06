@@ -6,12 +6,16 @@
  * **一、头一局小球（plan: 'first'）**——玩家头一回打开就被直接按进的那一局
  * （main.ts 的 isFirstRun）。分镜动画不放了，六条规矩全靠这块条子讲：
  *
- *   第 1 条 每个图形都有正反两面   → 没有动作可做，摆够 10 秒读一遍
- *   第 2 条 同色凑成图案就得分      → 得一次分
- *   第 3 条 反面也能一起凑          → 得分的那一组里有反面
- *   第 4 条 反面同色连成一行就消    → 消掉一行 / 一列
- *   第 5 条 全部翻到反面这一局结束  → 没有动作可做，摆够读一遍的时间
- *   第 6 条 时间短、步数少、分高    → 最后一条，一直留到这一局结束
+ *   第 1+2 条 正反两面 / 同色凑成图案就得分 → 一起摆，得一次分才走
+ *   第 3 条   反面也能一起凑          → 得分的那一组里有反面
+ *   第 4 条   反面同色连成一行就消    → 消掉一行 / 一列
+ *   第 5 条   全部翻到反面这一局结束  → 没有动作可做，摆够读一遍的时间
+ *   第 6 条   时间短、步数少、分高    → 最后一条，一直留到这一局结束
+ *
+ * 第 1、2 条并成一步一起摆（玩家定的）：第 1 条讲的是「图形有两面」，本身没有
+ * 可做的事，单独占一屏只能干等；和第 2 条摆在一起，他一边读一边就能去凑那一
+ * 组，两句话正好是一件事的两半。并了之后条子高一截，所以这一步整体压扁一点
+ * （.coach-bar--pair），别把棋盘挤小。
  *
  * **二、头一回玩方块（plan: 'square'）**——他刚打完那一局小球，六条已经听过
  * 一遍了。所以这块条子先不出声：
@@ -52,10 +56,20 @@ export type CoachPlan = 'first' | 'square';
  * 第 n 条靠哪个动作算「做到了」。null = 没有动作可做，摆够 READ_MS[n] 就走。
  *
  * 第 1 条讲的是「每个图形都有正反两面」——那是一句要看明白的话，不是一件要
- * 做的事（棋盘上本来就一枚反面都没有，无从「做」起）。玩家定的：这一条摆
- * 10 秒就换，不等他动手。后面几条不变，还是做到了才走。
+ * 做的事（棋盘上本来就一枚反面都没有，无从「做」起），所以它不单独等谁：它
+ * 和第 2 条并在同一步里，走不走看第 2 条。
  */
 const DONE_BY: readonly (CoachSignal | null)[] = [null, 'match', 'mixed', 'line', null, null];
+
+/**
+ * 每一步摆哪几条。一步可以摆一条，也可以摆两条。
+ *
+ * 一步走不走，看这一步里**最后**那一条的条件（DONE_BY / READ_MS）——前面那
+ * 几条是陪着一起读的，不各自卡一道。
+ */
+const STEPS_FIRST: readonly (readonly number[])[] = [[0, 1], [2], [3], [4], [5]];
+/** 头一回玩方块：第 1 条他刚在小球那一局学过，不再重复；从第 2 条起一条一步。 */
+const STEPS_SQUARE: readonly (readonly number[])[] = [[1], [2], [3], [4], [5]];
 
 /** 做到了之后再停一下：让加分、翻面那一下演完，别在半空中换文字。 */
 const AFTER_MS = 1100;
@@ -99,17 +113,16 @@ function artFor(shape: CoachShape): string[] {
   return a;
 }
 
-/** 条子的骨架：顶上六段进度，底下一幅图 + 一句话。 */
-function frame(host: HTMLElement, segs: number): void {
+/** 条子的骨架：顶上几段进度，底下摆几行「一幅图 + 一句话」。 */
+function frame(host: HTMLElement, segs: number, rows: number): void {
   host.hidden = false;
   host.innerHTML =
     (segs > 0
       ? `<div class="coach-prog" aria-hidden="true">${'<span class="coach-seg"></span>'.repeat(segs)}</div>`
       : '') +
-    `<div class="coach-row">` +
-    `<span class="coach-art tut-rule-art"></span>` +
-    `<p class="coach-text"></p>` +
-    `</div>`;
+    `<div class="coach-row"><span class="coach-art tut-rule-art"></span><p class="coach-text"></p></div>`.repeat(
+      rows,
+    );
   // 换条子是自己换的，不是玩家点出来的——读屏软件要主动念出来，不然对看不见
   // 屏幕的人这块条子等于不存在。polite：等他手上这句话读完再插进去。
   host.setAttribute('aria-live', 'polite');
@@ -130,19 +143,21 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const plan: CoachPlan = opts.plan ?? 'first';
   const texts = tutorialRules(opts.lang, opts.shape);
   const art = opts.art ?? artFor(opts.shape);
-  const last = Math.min(texts.length, DONE_BY.length) - 1;
+  const steps = plan === 'square' ? STEPS_SQUARE : STEPS_FIRST;
+  const lastStep = steps.length - 1;
+  /** 一步里最多摆几行——骨架按这个数一次画够，换步时只改内容不重建。 */
+  const rows = Math.max(...steps.map((g) => g.length));
 
-  frame(host, last + 1);
+  frame(host, texts.length, rows);
   // 方块那一路先不出声：等 10 秒，或者等他自己得一次分。
   if (plan === 'square') host.hidden = true;
 
   const progEl = host.querySelector('.coach-prog') as HTMLElement;
-  const artEl = host.querySelector('.coach-art') as HTMLElement;
-  const textEl = host.querySelector('.coach-text') as HTMLElement;
+  const rowEls = Array.from(host.querySelectorAll<HTMLElement>('.coach-row'));
 
   let at = -1;
   let hit = new Set<CoachSignal>();
-  /** 方块那一路：得过分了没有。得过之后剩下几条自己往下走。 */
+  /** 方块那一路：得过分了没有。得过之后剩下几步自己往下走。 */
   let rolling = false;
   let timer = 0;
   let dead = false;
@@ -159,14 +174,26 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   function show(i: number) {
     if (dead) return;
     at = i;
+    const group = steps[i];
     host.hidden = false;
-    artEl.innerHTML = art[i] ?? '';
-    textEl.textContent = texts[i] ?? '';
+    // 用满的那几行填内容，多出来的收起来——行是一次画够的，来回增删会把
+    // 淡入动画打断，也会让读屏软件把整块条子当成新的再念一遍。
+    rowEls.forEach((row, k) => {
+      const rule = group[k];
+      row.hidden = rule === undefined;
+      if (rule === undefined) return;
+      (row.querySelector('.coach-art') as HTMLElement).innerHTML = art[rule] ?? '';
+      (row.querySelector('.coach-text') as HTMLElement).textContent = texts[rule] ?? '';
+    });
+    // 这一步摆两条的时候整体压扁一点，别把棋盘挤小。
+    host.classList.toggle('coach-bar--pair', group.length > 1);
+    // 进度按「条」算不按「步」算：玩家看到的是六条规矩，摆在几步里是我们的事。
+    const done = group[group.length - 1];
     const segs = progEl.children;
-    for (let k = 0; k < segs.length; k++) segs[k].classList.toggle('on', k <= i);
+    for (let k = 0; k < segs.length; k++) segs[k].classList.toggle('on', k <= done);
     fadeIn(host);
 
-    if (i >= last) return clear(); // 最后一条不走
+    if (i >= lastStep) return clear(); // 最后一步不走
     if (plan === 'square') {
       // 还没得过分：停在第 2 条等他，压一道 STUCK_MS 的保底免得永远不动。
       if (!rolling) {
@@ -177,8 +204,9 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       }
       return later(AUTO_MS, () => show(i + 1));
     }
-    const need = DONE_BY[i];
-    if (need === null) later(READ_MS[i] ?? READ_MS[READ_MS.length - 1], () => show(i + 1));
+    // 走不走看这一步最后那一条。
+    const need = DONE_BY[done];
+    if (need === null) later(READ_MS[done] ?? READ_MS[READ_MS.length - 1], () => show(i + 1));
     else if (hit.has(need)) later(ALREADY_MS, () => show(i + 1));
     else later(STUCK_MS, () => show(i + 1));
   }
@@ -188,8 +216,8 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       host.hidden = true;
       at = -1;
       rolling = false;
-      // 10 秒还没得过分，就把第 2 条摆出来。
-      later(QUIET_MS, () => show(1));
+      // 10 秒还没得过分，就把第 2 条摆出来（方块那一路第 0 步就是第 2 条）。
+      later(QUIET_MS, () => show(0));
     } else {
       show(0);
     }
@@ -206,11 +234,12 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
         if (sig !== 'match') return; // 只认「得了一次分」
         rolling = true;
         // 还没出过声（10 秒内就得分了）：先把第 2 条亮一下算个招呼，再往下播。
-        later(AFTER_MS, () => show(at < 0 ? 1 : at + 1));
+        later(AFTER_MS, () => show(at < 0 ? 0 : at + 1));
         return;
       }
-      if (at >= last) return;
-      if (DONE_BY[at] !== sig) return;
+      if (at >= lastStep) return;
+      const group = steps[at];
+      if (DONE_BY[group[group.length - 1]] !== sig) return;
       later(AFTER_MS, () => show(at + 1));
     },
     reset() {
@@ -241,7 +270,7 @@ export function mountCoachTip(
   art: string,
   ms: number = TIP_MS,
 ): { destroy(): void } {
-  frame(host, 0);
+  frame(host, 0, 1);
   (host.querySelector('.coach-art') as HTMLElement).innerHTML = art;
   (host.querySelector('.coach-text') as HTMLElement).textContent = text;
   fadeIn(host);

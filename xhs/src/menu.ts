@@ -36,6 +36,14 @@ export interface XhsMenuHandlers {
    * 撤掉（main.ts 记的那把钥匙），不再打扰他。
    */
   glow?: readonly XhsMode[];
+  /**
+   * 这几张卡调暗一点、写上「天才进入」。
+   *
+   * 玩家定的：头一局打完回主菜单，除了发光的那张，其余几张暗一点、标出来，
+   * 当完整版的预告——完整版里这几个是天才玩法。这一版它们照样免费、照样点得
+   * 开，所以只是一块牌子，不是一道锁。
+   */
+  soon?: readonly XhsMode[];
 }
 
 /** 宽屏（电脑、手机横屏）一排摆得下五张；窄屏一排两张。同网页版的分界。 */
@@ -50,13 +58,28 @@ const CARDS: { mode: XhsMode; icon: string; tag: string }[] = [
 ];
 
 /** 一张卡：上面一格方的图，底下一行小字。和网页版的 iconButton 同一个形状。 */
-function card(icon: string, label: string, onTap: () => void, glow = false): HTMLButtonElement {
+function card(
+  icon: string,
+  label: string,
+  onTap: () => void,
+  glow = false,
+  soon = false,
+): HTMLButtonElement {
   const btn = document.createElement('button');
-  btn.className = 'home-icon-btn' + (glow ? ' home-icon-btn--glow' : '');
-  btn.setAttribute('aria-label', label);
+  btn.className =
+    'home-icon-btn' + (glow ? ' home-icon-btn--glow' : '') + (soon ? ' home-icon-btn--soon' : '');
+  btn.setAttribute('aria-label', soon ? `${label}（完整版里是天才玩法）` : label);
   const art = document.createElement('span');
   art.className = 'home-icon-art';
   art.innerHTML = icon;
+  // 「天才进入」那块小牌子：说的是「完整版里它归天才」，不是一道锁——这一版
+  // 照样点得开、照样免费，所以不压锁、不拦手（pointer-events 在样式里关掉）。
+  if (soon) {
+    const tag = document.createElement('span');
+    tag.className = 'xhs-soon-tag';
+    tag.textContent = '天才进入';
+    art.appendChild(tag);
+  }
   btn.appendChild(art);
   const cap = document.createElement('span');
   cap.className = 'home-icon-tag';
@@ -120,7 +143,15 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
     const row = document.createElement('div');
     row.className = 'home-row';
     for (const c of CARDS.slice(i, i + perRow)) {
-      row.appendChild(card(c.icon, menuTag(lang, c.tag), () => h.onPlay(c.mode), !!h.glow?.includes(c.mode)));
+      row.appendChild(
+        card(
+          c.icon,
+          menuTag(lang, c.tag),
+          () => h.onPlay(c.mode),
+          !!h.glow?.includes(c.mode),
+          !!h.soon?.includes(c.mode),
+        ),
+      );
     }
     grid.appendChild(row);
   }
