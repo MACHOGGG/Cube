@@ -751,9 +751,22 @@ async function start(res, body) {
  */
 function bankRound(seat, round, startAt = 0) {
   const next = { ...seat, score: 0, finished: false, seconds: null };
-  // Nothing to bank: no round has been played, or this seat arrived after
-  // the last one had begun and sat it out.
-  if (!round || (seat.joinedAt || 0) > startAt) return next;
+  // Nothing to bank: no round has been played, this seat arrived after the
+  // last one had begun and sat it out, or whoever sat here had already gone
+  // before it began.
+  //
+  // 两头都要挡，而且是对称的：来晚了（joinedAt 在开赛之后）不算这一局，走早
+  // 了（left 在开赛之前）同样不算。原先只挡了前一头，于是打完第一局就退出的
+  // 人，rounds 会跟着屋里其他人一路涨到 10——total 和 best 看不出来，他的
+  // score 是 0，加零、取大都不动，只有 rounds 是无条件加一的。今天没有哪个
+  // 界面在读这个数，所以没人看得见；等有人拿它去算人均得分，退出的人就会把
+  // 平均分拉下去，而且从数上完全看不出问题出在哪。
+  //
+  // 注意挡的是「走之后才开的那些局」，不是「走了的人」。他离开时正打着的那
+  // 一局要照记：分数在 leave 里原样留着（见那里的注释），那一局他确实打了，
+  // 也确实要出现在最后那张竞赛排名图上。
+  const goneBefore = (seat.left || 0) > 0 && seat.left <= startAt;
+  if (!round || goneBefore || (seat.joinedAt || 0) > startAt) return next;
   const scored = Math.max(0, Math.floor(Number(seat.score) || 0));
   next.total = (seat.total || 0) + scored;
   next.best = Math.max(seat.best || 0, scored);

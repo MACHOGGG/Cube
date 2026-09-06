@@ -113,7 +113,18 @@ const KNOW_ASK_MS = 4000;
 /** 开赛时刻过去多久之后才到的人，算来晚了，不入这一局。 */
 const LATE_MS = 5000;
 
+/** 他自己敲的那个名字。也是排行榜上写的那个（engine/cloudScores.ts）。 */
 const NAME_KEY = PLAYER_NAME_KEY;
+/**
+ * 服务器最后落到我这把椅子上的名字，单独存。
+ *
+ * 不填名字进小屋，服务器会发一个屋里没被占的字母（api/room.js 的
+ * freeLetter）。这个字母要记下来：断线回来时报的还得是它，服务器才认得出那
+ * 把椅子是他的（认领只按名字，见 join）。但它不能写进 NAME_KEY——那个键同时
+ * 是全站排行榜上的昵称，写进去的话，一次图省事的匿名进屋，会把他单人榜上的
+ * 名字永久改成一个字母，而且不会自己变回来。
+ */
+const ASSIGNED_NAME_KEY = 'slides_mp_seat_name';
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -265,9 +276,11 @@ export function renderMultiplayerPage(
     renderHome();
   };
 
+  // 名字栏里先填什么：优先填服务器给我这把椅子的那个名字——它是别人此刻看见
+  // 的我，也是断线回来认椅子要报的那个。没有就填他自己敲过的。
   const savedName = (() => {
     try {
-      return localStorage.getItem(NAME_KEY) ?? '';
+      return localStorage.getItem(ASSIGNED_NAME_KEY) || localStorage.getItem(NAME_KEY) || '';
     } catch {
       return '';
     }
@@ -347,25 +360,37 @@ export function renderMultiplayerPage(
     // 一屋子人可以全叫「取个名字」，排行榜上谁是谁看不出来。现在空名字由服务器
     // 发一个屋里没被占的字母（A、B、C……见 api/room.js 的 freeLetter）。
     const myName = () => nameBox.value.trim().slice(0, 12);
-    const keepName = (name: string) => {
+    const write = (key: string, name: string) => {
       try {
-        localStorage.setItem(NAME_KEY, name);
+        localStorage.setItem(key, name);
       } catch {
         // A name that cannot be remembered is simply typed again next time.
       }
     };
-    const remember = () => keepName(myName());
+    /**
+     * 他自己敲的名字，记进排行榜那个键。
+     *
+     * 空着不记：什么都没填不等于「我叫空白」，把上一次认认真真取的名字擦掉，
+     * 他下次打开这一页会莫名其妙。
+     */
+    const remember = () => {
+      const typed = myName();
+      if (typed) write(NAME_KEY, typed);
+    };
     /**
      * 把服务器最后落到我座位上的那个名字记在本机上。
      *
      * 领到字母的人下次打开这一页，名字栏里就是那个字母——他看得见别人看见的
      * 是什么；更要紧的是断线回来时报的还是它，服务器才认得出那把椅子是他的
      * （认领只按名字，见 api/room.js 的 join）。
+     *
+     * 只写椅子那个键。它可能是一个字母，那是这一屋子里的编号，不是他的名
+     * 字——写进排行榜那个键的话，全站榜上他就叫「B」了。
      */
     const keepAssignedName = (st: RoomState) => {
       const meId = currentRoom()?.playerId;
       const me = st.players.find((p) => p.id === meId);
-      if (me?.name) keepName(String(me.name).slice(0, 12));
+      if (me?.name) write(ASSIGNED_NAME_KEY, String(me.name).slice(0, 12));
     };
 
     container.querySelector<HTMLButtonElement>('#mpShuffle')!.addEventListener('click', () => {

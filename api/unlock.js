@@ -8,10 +8,11 @@ import {
   revokeTokens,
   saveAccount,
   unblock,
+  clearFails,
 } from './_accounts.js';
 import { resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
-import { del, get, set, storeConfigured } from './_store.js';
+import { bump, del, get, set, storeConfigured } from './_store.js';
 import { mailConfigured, sendMail } from './_mail.js';
 
 /**
@@ -32,6 +33,19 @@ import { mailConfigured, sendMail } from './_mail.js';
 const CODE_TTL_S = 30 * 60;
 const MAX_TRIES = 5;
 const key = (email) => 'unlock:' + email;
+/**
+ * 猜了几次，单独存一个键。
+ *
+ * 从前这个数字是跟着验证码一起存的（pending.tries），改它要走「读出整个
+ * pending → 判断 → 改一个字段 → 整个存回去」。三步之间隔着两次网络往返，同
+ * 一瞬间打进来的几十个请求都会读到「才猜了 0 次」，于是这一批只被记成一
+ * 次——5 次上限就此形同虚设，六位数字在 30 分钟里能被撞开的概率高得多。
+ *
+ * 分出来存，是为了能用 INCR：加一和读回是同一步（见 _store.js 的 bump），每
+ * 个请求各拿到一个属于自己的号。发新码的时候把它删掉，上一轮猜掉的次数不算
+ * 在这一轮头上。
+ */
+const triesKey = (email) => 'unlock:tries:' + email;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
@@ -74,7 +88,9 @@ async function request(res, req, address) {
   // one that is not blocked, is answered exactly the same way.
   if (account?.blocked) {
     const code = String(randomInt(0, 1e6)).padStart(6, '0');
-    await set(key(address), { code, tries: 0 }, CODE_TTL_S);
+    await set(key(address), { code }, CODE_TTL_S);
+    // 新码新账：上一张码猜掉的次数不跟着过来。
+    await del(triesKey(address));
     await sendMail({
       to: address,
       subject: 'Slides — 解锁验证码 / unlock code',
@@ -100,26 +116,34 @@ async function confirm(res, address, { code, password }) {
   const pin = String(password || '');
   if (!PASS_RE.test(pin)) return send(res, 400, { error: 'password' });
 
-  const pending = await get(key(address));
-  if (!pending) return send(res, 400, { error: 'expired' });
-  if ((pending.tries || 0) >= MAX_TRIES) {
+  // 先占掉一次机会，再去比对——次序反过来就是那道假门：几十个并发请求会一
+  // 起通过「还没到 5 次」这一关，然后一起猜。占号是原子的，所以第 6 个请求
+  // 拿到的就是 6，它连码是多少都不会去读。
+  const tries = await bump(triesKey(address), CODE_TTL_S);
+  if (tries > MAX_TRIES) {
     await del(key(address));
+    await del(triesKey(address));
     return send(res, 429, { error: 'expired' });
   }
+
+  const pending = await get(key(address));
+  if (!pending) return send(res, 400, { error: 'expired' });
   if (String(code || '').trim() !== pending.code) {
-    pending.tries = (pending.tries || 0) + 1;
-    await set(key(address), pending, CODE_TTL_S);
     return send(res, 401, { error: 'wrongCode' });
   }
 
   const account = await loadAccount(address);
   if (!account) return send(res, 400, { error: 'expired' });
   unblock(account, pin);
+  // 账号对象上的 fails 归零了，另外那个计数键也要清——不然下一次输错密码，
+  // 它会拿旧的次数接着往上数（见 _accounts.js 的 failKey）。
+  await clearFails(address);
   // 邮箱验证解锁：这条路的前提就是「这个账号可能已经不只我一个人在用」，
   // 所以把所有设备上的令牌一并作废，只留刚验过邮箱的这一台。
   const issued = revokeTokens(account);
   await saveAccount(address, account);
   await del(key(address));
+  await del(triesKey(address));
   // 答的是这个账号此刻真正的权益：内部码账号看本地到期日，刷卡订阅去问
   // Creem——和登录那一支同一个函数（api/_entitlement.js）。原来这里只看本地
   // 日期，刷卡的人重设完密码会被告知「不是天才」，前端就报「网络出错」，而

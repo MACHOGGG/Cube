@@ -121,6 +121,13 @@ function memory(args) {
     case 'EXPIRE':
       expiries.set(key, Date.now() + Number(rest[0]) * 1000);
       return 1;
+    // 真 Redis 那头 INCR 是一条命令一次做完的；这里是单进程内存，一个 case
+    // 里读了再写中间没有别人插得进来，同样是一步。
+    case 'INCR': {
+      const next = (Number(mem.get(key) ?? 0) || 0) + 1;
+      mem.set(key, String(next));
+      return next;
+    }
     // 排行榜就是一个有序集合。用 Map 冒充：成员 → 分数，读的时候再排。真的
     // Redis 那头是 O(log n) 的跳表，这里是 O(n log n) 的一次排序——本地跑
     // 测试够用，也只在这里用。
@@ -197,6 +204,27 @@ export const get = async (key) => decode(await command(['GET', key]));
 export const set = (key, value, ttl) =>
   command(ttl ? ['SET', key, encode(value), 'EX', ttl] : ['SET', key, encode(value)]);
 export const del = (key) => command(['DEL', key]);
+
+/**
+ * 加一，并把加完的那个数拿回来——加和读是同一步，中间没有缝。
+ *
+ * 「先读出来看看到了几次，再判断，再加一写回去」这个写法，在一台机器上看着
+ * 没问题，放到并发里就是一道假门：三步之间隔着两次网络往返，同一瞬间打进来
+ * 的几十个请求会读到同一个旧值，于是这一批只被记成一次。猜验证码、猜密码那
+ * 两处的次数上限，靠的正是这个计数（api/unlock.js、api/_accounts.js）——上
+ * 限被这样绕过去，等于没有上限。
+ *
+ * INCR 是 Redis 自己那一步：加一，返回新值。每个请求各拿到一个属于自己的
+ * 号，超号的当场退回，比对根本轮不上。
+ *
+ * ttl 只在这个键刚落地那一下压（返回 1 的时候）。每次都压的话，一直猜的人
+ * 会把窗口一路往后顺延，反倒是猜得越勤活得越久。
+ */
+export async function bump(key, ttl) {
+  const n = Number(await command(['INCR', key])) || 0;
+  if (n === 1 && ttl) await command(['EXPIRE', key, ttl]);
+  return n;
+}
 
 /** Read and delete in one step, so a code cannot be spent twice at once. */
 export const takeOnce = async (key) => decode(await command(['GETDEL', key]));

@@ -28,6 +28,12 @@ import { isStoreChannel } from './channel';
  *
  * 这个键的写入方在多人页面（ui/multiplayer.ts），它从这里取常量，所以两边
  * 不会各写各的。
+ *
+ * 只存**他自己敲进去的那个名字**。进小屋不填名字时，服务器会发一个屋里没被
+ * 占用的字母（A、B、C……），那个字母另有一个键（ui/multiplayer.ts 的
+ * ASSIGNED_NAME_KEY），不写到这里来——它是一把椅子的编号，不是一个人的名
+ * 字。两个混用过一阵：图省事进了一次小屋，从此他一个人打单人榜，名字也变成
+ * 了孤零零一个「B」，还不会自己变回来。
  */
 export const PLAYER_NAME_KEY = 'slides_mp_name';
 

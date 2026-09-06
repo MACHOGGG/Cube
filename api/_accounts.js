@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
-import { del, get, hdel, hgetall, hset, set, takeOnce } from './_store.js';
+import { bump, del, get, hdel, hgetall, hset, set, takeOnce } from './_store.js';
 
 /**
  * The accounts a redeemed code creates — the only accounts this app has.
@@ -81,6 +81,29 @@ export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LOCK_AFTER = 4;
 const BLOCK_AFTER = 6;
 const LOCK_MS = 4 * 3600e3;
+/**
+ * 密码错了几次，另外存一个键，用 INCR 数。
+ *
+ * 这个数原本只写在账号对象里（account.fails），于是每次都要走「读出整个账号
+ * → 判断到了几次 → 改一个字段 → 整个存回去」。中间隔着两次网络往返：同一瞬
+ * 间打进来的一批请求会读到同一个旧值，一批猜测只被记成一次失败，错 4 次锁、
+ * 错 6 次封那道门就被绕过去了。而 passcode.js（改密码）、portal.js（账号中
+ * 心，看得见卡后四位和退订）、subscription.js 三处共用这个判断，它们本身没
+ * 有按 IP 限速，全靠这个计数兜底。
+ *
+ * 分出来数，是为了能一步做完（见 _store.js 的 bump）。account.fails 仍然写，
+ * 它是给人看的那份记录（锁到几点、封没封），也是这个键过期或者存储换了一台
+ * 之后重新起算的底数。
+ */
+const failKey = (email) => 'pinfail:' + email;
+/**
+ * 计数键留多久。
+ *
+ * 给一天。过期了也不会把已经攒下的次数弄丢——下一次进来会拿 account.fails
+ * 当底数把它顶回去（见 checkPin）。给它一个期限只是不想在存储里留一堆再也
+ * 用不着的键。
+ */
+const FAIL_TTL_S = 24 * 3600;
 
 export const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
@@ -252,12 +275,40 @@ export async function checkPin(email, pin, account) {
   if (account.blocked) return 'blocked';
   if (account.lockUntil && account.lockUntil > now) return 'locked';
 
+  // 先占掉一次尝试，再去比对。次序不能反：先比对再计数的话，同一瞬间打进来
+  // 的一批请求全都在「还没到 4 次」的时候通过了那一关，等它们各自去加一，猜
+  // 已经猜完了。占号是一步做完的，每个请求各拿到一个属于自己的号。
+  let tries = await bump(failKey(email), FAIL_TTL_S);
+  const onRecord = Number(account.fails || 0);
+  // 键刚落地（返回 1），而账号上记着更多次——键过期了，或者换了一台存储。
+  // 拿账号上那份当底数顶回去，攒下的次数不会因此清零。
+  if (tries === 1 && onRecord > 0) {
+    tries = onRecord + 1;
+    await set(failKey(email), tries, FAIL_TTL_S);
+  }
+
+  // 号已经超出封号线了，密码是什么都不必再比。
+  //
+  // 开头那道 `account.blocked` 也拦得住这种情况——正常情况下。但一批并发请
+  // 求各自读了一份账号对象，谁最后存回去谁说了算：号小的那个存回去时带着
+  // 「才错了 2 次、没封」，能把号大的那个刚写下的「封了」盖掉。所以真正说了
+  // 算的是这个号，不是账号对象上那面旗；顺手把被盖掉的旗子重新立上。
+  if (tries > BLOCK_AFTER) {
+    if (!account.blocked || onRecord < tries) {
+      account.blocked = true;
+      account.fails = Math.max(onRecord, tries);
+      await saveAccount(email, account);
+    }
+    return 'blocked';
+  }
+
   const attempt = Buffer.from(hash(pin, account.salt), 'hex');
   const known = Buffer.from(account.hash, 'hex');
   const ok = attempt.length === known.length && timingSafeEqual(attempt, known);
 
   if (ok) {
     // Only getting it right clears the count.
+    await del(failKey(email));
     if (account.fails || account.lockUntil) {
       account.fails = 0;
       account.lockUntil = 0;
@@ -266,14 +317,22 @@ export async function checkPin(email, pin, account) {
     return 'ok';
   }
 
-  account.fails = (account.fails || 0) + 1;
-  if (account.fails >= BLOCK_AFTER) account.blocked = true;
-  else if (account.fails >= LOCK_AFTER) account.lockUntil = now + LOCK_MS;
+  // 记的数只上不下：并发时几份账号对象各存各的，取大的那个，慢的那一份才
+  // 不会把已经攒下的次数抹回去。答给调用方的话按 tries 说——那是这次真正的
+  // 号，不受别人存回去的影响。
+  account.fails = Math.max(onRecord, tries);
+  if (tries >= BLOCK_AFTER) account.blocked = true;
+  else if (tries >= LOCK_AFTER) account.lockUntil = Math.max(account.lockUntil || 0, now + LOCK_MS);
   await saveAccount(email, account);
-  return account.blocked ? 'blocked' : account.lockUntil > now ? 'locked' : 'wrong';
+  return tries >= BLOCK_AFTER ? 'blocked' : tries >= LOCK_AFTER ? 'locked' : 'wrong';
 }
 
-/** Cleared by the address proving itself — see api/unlock.js. */
+/**
+ * Cleared by the address proving itself — see api/unlock.js.
+ *
+ * 只动账号对象。另外那个计数键由 clearFails 清，两件事分开，是因为这个函数
+ * 是同步的、也在没有存储的测试里用。
+ */
 export function unblock(account, newPin) {
   account.salt = randomBytes(16).toString('hex');
   account.hash = hash(newPin, account.salt);
@@ -282,6 +341,9 @@ export function unblock(account, newPin) {
   account.blocked = false;
   return account;
 }
+
+/** 把「错了几次」那个计数键清掉。解锁重设密码之后要叫一次。 */
+export const clearFails = (email) => del(failKey(email));
 
 /** How long a timed lock still has to run, for the message shown. */
 export const lockRemainingMs = (account) =>
