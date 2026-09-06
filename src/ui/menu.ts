@@ -42,6 +42,14 @@ export interface MenuHandlers {
   onRandomTarget: () => void;
   /** 《无限反转》：挑方块或小球，得分翻面来回翻，120 秒。 */
   onFlipMode: () => void;
+  /**
+   * 哪几张基础卡要镶一圈光（engine/firstPlay.ts 的 glowingBasics）。
+   *
+   * 玩家定的：新人一进来，《基础方块》和《基础小球》两张都亮着；打完一个那
+   * 张就不亮了，另一张接着亮，直到两张都打过。两张都打过了给空的，主菜单从
+   * 此安安静静——光是用来指路的，路走完了就该撤。
+   */
+  glow?: readonly BaseShape[];
 }
 
 /**
@@ -227,7 +235,12 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const baseRow = wide ? newRow() : null;
   for (const shape of SHAPES) {
     const card = layout.base[shape];
-    const btn = iconButton(BASE_ICON[shape], shapeName(lang, card.id, card.name), '', tag(card.id));
+    const btn = iconButton(
+      BASE_ICON[shape],
+      shapeName(lang, card.id, card.name),
+      handlers.glow?.includes(shape) ? 'home-icon-btn--glow' : '',
+      tag(card.id),
+    );
     btn.addEventListener('click', () => handlers.onSelectBase(card.id));
     if (baseRow) baseRow.appendChild(btn);
     else place(btn);

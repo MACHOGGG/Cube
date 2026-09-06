@@ -292,6 +292,9 @@ export function createTriangleGame(): ShapeGame {
         practice: !!opts?.practice,
         shapeId: 'triangleBig',
         timed: !!opts?.timeLimitSec,
+        // 棋盘底下那块教学条（见 ui/coachBar.ts）。这一副只用它摆头一回进来的
+        // 那一句提示（coachTip）——特殊布局、计时、炸弹各一句。
+        coach: !!opts?.coach,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'triangleBig', '大三角')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
@@ -934,6 +937,8 @@ export function createTriangleGame(): ShapeGame {
         shapeId: 'triangleBig',
         modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
+        coach: !!opts?.coach,
+        coachTip: opts?.coachTip,
         resetBoard,
         render,
         isGameOver,

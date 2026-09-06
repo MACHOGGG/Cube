@@ -223,6 +223,9 @@ export function createCircleSevenGame(): ShapeGame {
         practice: !!opts?.practice,
         shapeId: 'circleSeven',
         timed: !!opts?.timeLimitSec,
+        // 棋盘底下那块教学条（见 ui/coachBar.ts）。这一副只用它摆头一回进来的
+        // 那一句提示（coachTip）——特殊布局、计时、炸弹各一句。
+        coach: !!opts?.coach,
         title: `Slides · ${shapeName(lang, 'circleSeven', '七色圆球')}`,
         tagline: SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
@@ -648,6 +651,8 @@ export function createCircleSevenGame(): ShapeGame {
         shapeId: 'circleSeven',
         modeKey: opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
+        coach: !!opts?.coach,
+        coachTip: opts?.coachTip,
         resetBoard,
         render,
         isGameOver,

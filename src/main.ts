@@ -37,6 +37,8 @@ import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderModesShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { renderTutorialPicker } from './ui/tutorialPicker';
+import { firstTimeIn, glowingBasics, markOpened, type PlayKey } from './engine/firstPlay';
+import { bombTip, flipTip, layoutTip, slotTip, timedTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
@@ -398,6 +400,55 @@ function teardown() {
   gameInProgress = false;
 }
 
+/**
+ * 头一回进这个玩法时，摊进开局那个大 opts 里的那一小撮字段。
+ *
+ * 五个玩法各有一句话，说的都是「这个玩法在基础规则上加的那一层」——炸弹为什
+ * 么炸、反面为什么又翻回来、这一局的得分图案是随机的、头上那个数字在倒着
+ * 走、这副棋盘换了摆法但规矩没变。摆一整局，不定时走掉（玩家定的）；第二回
+ * 再进来就没有了，想再看去《暂停》和信息栏的《教学》里找。
+ *
+ * 不是头一回就返回空对象，什么也不加。
+ */
+function tipFor(kind: PlayKey, make: () => { text: string; art: string }): ShapeGameOpts {
+  if (!firstTimeIn(kind)) return {};
+  markOpened(kind);
+  return { coach: true, coachTip: make() };
+}
+
+/**
+ * 头一回点开《基础方块》或《基础小球》时，棋盘底下那块教学条按哪一路走。
+ *
+ * 主菜单上这两张卡镶着光，玩家爱先点哪张点哪张（玩家定的），所以这一路得看
+ * 他之前打过哪一张：
+ *
+ *   · 这是头一张（另一张也还没打过）→ 'first'。六条规矩从第 1 条讲起，跟着
+ *     他的手走四步讲完。方块和小球都能走这一路——条子上的字和图跟着这一局的
+ *     图形走，讲方块就画方块。玩家的原话：「方块的需要补齐完整因为玩家可能
+ *     先玩方块」。
+ *   · 先打的是小球，现在打方块 → 'square'。六条他刚听过一遍了，条子先不出
+ *     声，等他自己打出三次得分再补那条他还没见过的（他早先定的那一路，见
+ *     ui/coachBar.ts）。
+ *   · 先打的是方块，现在打小球 → 'first'。小球那一路玩家说「照搬」，不动。
+ *
+ * 三角不在这两张里——它自己那段分镜动画照旧（showGame 里那道闸口），这里返
+ * 回空对象。
+ */
+function basicCoach(id: string): ShapeGameOpts {
+  const key: PlayKey | null = id === 'square' ? 'square' : id === 'circle' ? 'circle' : null;
+  if (!key || !firstTimeIn(key)) return {};
+  // 先记下来再开局：这一局打到一半退出去，主菜单上这张卡也该熄了——他已经
+  // 进去看过一遍了，光该让给还没点过的那一张。
+  const secondOne = !firstTimeIn(key === 'square' ? 'circle' : 'square');
+  markOpened(key);
+  return { coach: true, coachPlan: key === 'square' && secondOne ? 'square' : 'first' };
+}
+
+/** 炸弹 / 无限反转的那幅配图跟着他挑的图形走。三角没有自己那一份，当方块画。 */
+function tipShape(id: string): 'square' | 'circle' {
+  return id.startsWith('circle') ? 'circle' : 'square';
+}
+
 function showMenu() {
   teardown();
   trackScreen('menu');
@@ -405,12 +456,12 @@ function showMenu() {
     onSelectBase: (id) => {
       if (pickingForRoom) return void startRoundFor(id);
       const game = games.find((g) => g.card.id === id);
-      if (game) showGame(game);
+      if (game) showGame(game, basicCoach(id));
     },
     onSelectLayout: (id, reopenKey) => {
       if (pickingForRoom) return void startRoundFor(id);
       const game = layoutGames.find((g) => g.card.id === id);
-      if (game) showGame(game, undefined, undefined, reopenKey);
+      if (game) showGame(game, tipFor('layout', () => layoutTip(currentLang)), undefined, reopenKey);
     },
     onTimedFor: (id, reopenKey) => {
       // Rooms deal one plain board from one seed. A clock or a bomb layer on
@@ -418,13 +469,22 @@ function showMenu() {
       // server will accept, so the host is told rather than left guessing.
       if (pickingForRoom) return void notAMultiplayerBoard();
       const game = games.find((g) => g.card.id === id);
-      if (game) showGame(game, { timeLimitSec: 60 }, undefined, reopenKey);
+      if (game) {
+        showGame(
+          game,
+          { timeLimitSec: 60, ...tipFor('timed', () => timedTip(currentLang)) },
+          undefined,
+          reopenKey,
+        );
+      }
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     onRandomTarget: () => showRandomTarget('menu'),
     // 屋主替整屋挑玩法时按到它也进挑图形那一屏：挑完不开单人局，而是把这一
     // 族交给小屋（见 showFlipMode 的 room）。
     onFlipMode: showFlipMode,
+    // 没打过的那几张基础卡镶一圈光，指路用；两张都打过了这里就是空的。
+    glow: glowingBasics(),
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: () => {
       mpOrigin = 'menu';
@@ -434,7 +494,18 @@ function showMenu() {
       if (pickingForRoom) return void notAMultiplayerBoard();
       const pool = tier === 'advanced' ? bombLayoutGames : games;
       const game = pool.find((g) => g.card.id === id);
-      if (game) showGame(game, { bomb: true, timeLimitSec: tier === 'timed' ? 90 : undefined }, undefined, reopenKey);
+      if (game) {
+        showGame(
+          game,
+          {
+            bomb: true,
+            timeLimitSec: tier === 'timed' ? 90 : undefined,
+            ...tipFor('bomb', () => bombTip(currentLang, tipShape(id))),
+          },
+          undefined,
+          reopenKey,
+        );
+      }
     },
   }, currentLang);
   setNavTab(null);
@@ -572,7 +643,15 @@ function showFlipMode() {
       onBack: showMenu,
       onStart: (family) => {
         const game = family === 'square' ? squareGame : circleGame;
-        showGame(game, { flip: true, timeLimitSec: FLIP_SECONDS }, showFlipMode);
+        showGame(
+          game,
+          {
+            flip: true,
+            timeLimitSec: FLIP_SECONDS,
+            ...tipFor('flip', () => flipTip(currentLang, family === 'circle' ? 'circle' : 'square')),
+          },
+          showFlipMode,
+        );
       },
       onGenius: () => openGeniusWindow(currentLang, showFlipMode),
       room: pickingForRoom ? { onStart: (family) => void startRoundFor(family, undefined, true) } : undefined,
@@ -955,7 +1034,11 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
       onBack: () => (slotOrigin === 'intro' ? showSlotIntro() : showMenu()),
       onStart: (family: Family, targets: TargetPattern[]) => {
         const game = randomTargetGame(family);
-        showGame(game, { targets }, showRandomTarget);
+        showGame(
+          game,
+          { targets, ...tipFor('slot', () => slotTip(currentLang, targets)) },
+          showRandomTarget,
+        );
       },
       onGenius: () => openGeniusWindow(currentLang, showRandomTarget),
       // 屋主在为整屋挑玩法：这一屏多一个《相同 / 不同》开关，挑完不开单人
@@ -1057,20 +1140,18 @@ function afterLangChosen(lang: Lang, resume = false) {
   );
   repaintIcons();
   if (isFirstRun()) {
-    // 第一次打开这台设备上的游戏：不落在主菜单，直接开一局基础小球。
+    // 第一次打开这台设备上的游戏：就落在主菜单，只是《基础方块》和《基础小
+    // 球》两张卡镶着一圈光（玩家定的）。
     //
-    // 从前这里放的是方块那段分镜教学，看完落主菜单——五张卡摊在眼前，新
-    // 来的人不知道先按哪一张。现在改成先玩：showGame 自己那道教学闸口会
-    // 先放小球的分镜（和点开《基础小球》看到的是同一段），学完就在同一屏
-    // 里打，打完按《退出》才第一次见到主菜单。往后每次进来都直接是主菜单。
+    // 中间试过两版：先是进来就放方块那段分镜，看完落主菜单——五张卡摊在眼
+    // 前，新来的人不知道先按哪一张；后来改成不问自答直接开一局小球——路是指
+    // 明了，可这一下他连主菜单长什么样都还没见过就被按进了游戏里，是「意料
+    // 之外的界面」。
     //
-    // 方块那段没有丢：闸口不再把 square 排除在外，第一次点开《基础方块》
-    // 就会放（见 showGame）。
+    // 现在这一版两头都占：主菜单照常是第一屏，光替他挑好了先按哪两张；点进
+    // 去还是那段分镜加那块教学条（见 showGame 那道闸口和 basicCoach）。打完
+    // 一张那张就不亮了，另一张接着亮，直到两张都打过（engine/firstPlay.ts）。
     markFirstRunDone();
-    // coach：棋盘底下那块教学条（ui/coachBar.ts）。六条规则一条一条摆出来，
-    // 玩家做到了哪一条就换下一条，最后一条留到这一局结束。
-    showGame(circleGame, { coach: true });
-    return;
   }
   if (resume && currentRoom()) {
     mpOrigin = 'menu';

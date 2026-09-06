@@ -1811,32 +1811,48 @@ export function tutorialRules(lang: Lang, shape: 'circle' | 'square'): string[] 
 }
 
 /**
- * 炸弹 / 无限反转 / 老虎机头一回进来时，棋盘底下摆的那一句。
+ * 炸弹 / 无限反转 / 老虎机 / 计时 / 特殊布局头一回进来时，棋盘底下摆的那一句。
  *
- * 这三个玩法都是在基础规则上加一层：滑动、得分、翻面、消除全没变，变的只是
- * 多出来的那一条。所以每个只说那一条，说完 15 秒自己走掉（见 ui/coachBar.ts
- * 的 mountCoachTip）——能玩到这儿的人六条规矩早听过了。这一句摆一整局。
+ * 这几个玩法都是在基础规则上加一层：滑动、得分、翻面、消除全没变，变的只是
+ * 多出来的那一条。所以每个只说那一条——能玩到这儿的人六条规矩早听过了。这一
+ * 句摆一整局，不定时走掉（见 ui/coachBar.ts 的 mountCoachTip）。
+ *
+ * timed 和 layout 这两句是玩家逐字点的名，翻译时中文那两条一个字都不要动。
+ * layout 说的是「特殊布局」那几副棋盘（菱形方块、六边形小球、六边形三角、菱
+ * 形小球、V 字三角）：规矩和基础版一模一样，只是格子摆法不同——所以这一句不
+ * 讲规矩，只是把这件事说破，免得他以为自己进了一个没学过的玩法。
  */
-export const MODE_TIPS: Record<Lang, Record<'bomb' | 'flip' | 'slot', string>> = {
+export const MODE_TIPS: Record<
+  Lang,
+  Record<'bomb' | 'flip' | 'slot' | 'timed' | 'layout', string>
+> = {
   en: {
     bomb: 'Same sliding, scoring and clearing as before — but red is the bomb colour. Four reds touching blow up! Any four that touch will set it off.',
     flip: 'Score and a piece turns to its back. In Endless Flip a back that scores turns straight back to its front — nothing ever clears. 60 seconds. Off you go!',
     slot: 'In Slot Machine the two scoring shapes are drawn at random: build those two, score, and flip. Clearing works exactly as before. Give it a go!',
+    timed: '60 seconds on the clock — how many points can you get?',
+    layout: 'Same rules, different board. Fancy the challenge?',
   },
   fr: {
     bomb: 'Même glissement, mêmes points, mêmes disparitions — mais le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent ! N’importe lesquels, du moment qu’ils se touchent.',
     flip: 'Marquez et la pièce passe sur son verso. Dans Retournement infini, un verso qui marque revient aussitôt sur son recto — rien ne disparaît. 60 secondes. C’est parti !',
     slot: 'En mode Machine à sous, les deux motifs gagnants sont tirés au hasard : formez ces deux-là, marquez, retournez. Les disparitions ne changent pas. À vous !',
+    timed: '60 secondes au compteur — combien de points allez-vous marquer ?',
+    layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
   },
   zhHant: {
     bomb: '在滑動、得分、消除的基礎上，紅色作為炸彈色，四個相連會爆炸！注意，任何接觸的四個相連都會引爆。',
     flip: '滑動得分後反轉到反面。在《無限反轉》中，反面得分會再次翻回正面，不會消除。限時 60 秒，開始吧！',
     slot: '老虎機玩法中，隨機得到什麼得分圖案，就要根據這兩個圖案拼湊圖形、得分並翻面；消除規則不變。快挑戰一下吧！',
+    timed: '限時60s，能得多少分呢？',
+    layout: '規則相同，佈局不同，你能挑戰麼？',
   },
   zhHans: {
     bomb: '在滑动、得分、消除的基础上，红色作为炸弹色，四个相连会爆炸！注意，任何接触的四个相连都会引爆。',
     flip: '滑动得分后反转到反面。在《无限反转》中，反面得分会再次翻回正面，不会消除。限时 60 秒，开始吧！',
     slot: '老虎机玩法中，随机得到什么得分图案，就要根据这两个图案拼凑图形、得分并翻面；消除规则不变。快挑战一下吧！',
+    timed: '限时60s，能得多少分呢？',
+    layout: '规则相同，布局不同，你能挑战么？',
   },
 };
 
@@ -1902,13 +1918,13 @@ export function markTutorialSeen(shape: TutorialShape = 'square'): void {
 /**
  * 这台设备是不是头一回打开。
  *
- * 头一回不落在主菜单，先直接开一局《基础小球》（见 main.ts 的
- * afterLangChosen）——五张卡摊在眼前，新来的人不知道先按哪一张，先玩一局
- * 比先看菜单管用。
+ * 现在头一回和往后一样都落在主菜单，只是《基础方块》和《基础小球》两张卡镶
+ * 着一圈光替他指路（见 main.ts 的 afterLangChosen 和 engine/firstPlay.ts）。
+ * 中间有一版是进来就直接开一局小球，路是指明了，可他连主菜单长什么样都还没
+ * 见过就被按进了游戏里，是「意料之外的界面」。
  *
  * 判「头一回」看两把钥匙，缺一不可：这把新钥匙没立过，而且方块那段教学也
- * 没看过。只看新钥匙的话，改版之前就在玩的人升上来会被当成新人，重新按进
- * 一局小球里——那是他最不想要的「意料之外的界面」。
+ * 没看过。只看新钥匙的话，改版之前就在玩的人升上来会被当成新人。
  */
 const FIRST_RUN_KEY = 'slides_first_run';
 

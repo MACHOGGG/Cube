@@ -317,7 +317,11 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
  */
 export function mountCoachTip(host: HTMLElement, text: string, art: string): { destroy(): void } {
   frame(host, 0, 1);
-  (host.querySelector('.coach-art') as HTMLElement).innerHTML = art;
+  const artEl = host.querySelector('.coach-art') as HTMLElement;
+  // 有几句是没有配图的（计时、特殊布局）：空着的那个格子会留下一道说不清的
+  // 缝，索性收掉，让那一句自己占满这块条子。
+  artEl.innerHTML = art;
+  artEl.hidden = !art;
   (host.querySelector('.coach-text') as HTMLElement).textContent = text;
   fadeIn(host);
 

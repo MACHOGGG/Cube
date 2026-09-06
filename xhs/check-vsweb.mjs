@@ -740,11 +740,18 @@ try {
   // 否则走不到棋盘。那两段本身另有专门的脚本测（check-story）。
   localStorage.setItem('slides.xhs.story.square', '1');
   localStorage.setItem('slides.xhs.story.circle', '1');
-  // 同理：这一版头一回进炸弹 / 老虎机 / 无限反转，棋盘底下会摆一句提示（15 秒
-  // 自己走，见 ui/modeTips.ts）；头一回玩方块则是那块教学条。这两样都是「只有
-  // 第一次才有」的招待，网页版没有对应物，也不是这份脚本要比的东西——它比的
-  // 是两边平常长什么样。填上「进过了」，让每一局都从平常那一面开始。
+  // 同理：头一回进炸弹 / 老虎机 / 无限反转，棋盘底下会摆一句提示（摆一整局，
+  // 见 ui/modeTips.ts）；头一回玩方块 / 小球则是那块跟着人走的教学条。这些都
+  // 是「只有第一次才有」的招待，不是这份脚本要比的东西——它比的是两边平常长
+  // 什么样。两边各自的钥匙都填上「进过了」，让每一局都从平常那一面开始。
+  //
+  // 两套钥匙名字不同是有意的：这一版的历史存在自己的命名空间里（同一台设备
+  // 上两个版本互不相认，玩家定的第一条），网页版用的是 engine/firstPlay.ts
+  // 那一套。
   for (const k of ['square', 'bomb', 'slot', 'flip']) localStorage.setItem('slides.xhs.opened.' + k, '1');
+  for (const k of ['square', 'circle', 'bomb', 'slot', 'flip', 'timed', 'layout']) {
+    localStorage.setItem('slides_played_' + k, '1');
+  }
   // 网页版把老虎机和无限反转锁在天才票后面，不开锁走不到那一局。这一版全部
   // 免费，锁不在比对范围里，所以这里直接发一张。channel:'code' 是内部码那条
   // 路，subscription.ts 的 read() 对它免检渠道。
