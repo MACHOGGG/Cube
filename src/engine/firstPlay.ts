@@ -18,7 +18,7 @@
  */
 import { hasSeenTutorial } from '../i18n';
 
-export type PlayKey = 'square' | 'circle' | 'bomb' | 'slot' | 'flip' | 'timed' | 'layout';
+export type PlayKey = 'square' | 'circle' | 'bomb' | 'slot' | 'flip' | 'timed' | 'layout' | 'endcard';
 
 const KEY = (k: PlayKey) => `slides_played_${k}`;
 
@@ -31,6 +31,13 @@ const KEY = (k: PlayKey) => `slides_played_${k}`;
  */
 function playedBefore(k: PlayKey): boolean {
   if (k === 'square' || k === 'circle') return hasSeenTutorial(k);
+  // endcard 故意**不**在这里认旧钥匙。试过一版用「看过分镜没有」来认老玩
+  // 家，结果是死的：现在头一回点开那两张发光的卡就会把分镜记成看过（见
+  // main.ts 的 basicCoach），等这一局打完要判结算页时，新人已经被当成老玩
+  // 家了，那道光永远不会亮。
+  //
+  // 所以这条不认旧钥匙：改版之前就在玩的人会被多指一次路——一次，之后再也
+  // 不会。拿「一次多余的光」换「新人一定看得见」，这笔账划算。
   return false;
 }
 
@@ -60,4 +67,20 @@ export function markOpened(k: PlayKey): void {
  */
 export function glowingBasics(): readonly ('square' | 'circle')[] {
   return (['square', 'circle'] as const).filter((k) => firstTimeIn(k));
+}
+
+/**
+ * 结算页那对指路的光（《分享》→《首页》）该不该亮。
+ *
+ * 玩家定的：「只有第一次结算的时候这两个轮流发光，随后的每局游戏都不要发
+ * 光」。所以判的不是「这一局有没有教学条」，而是「他这辈子见过结算页没
+ * 有」——头一回进炸弹、进老虎机同样有教学条，可那时候结算页他早看过了。
+ *
+ * 问一次记一次：结算页真的露面了才叫得到这儿（gameController 的
+ * shouldLeadOut），所以打到一半退出去的那些局不会白白把这一次用掉。
+ */
+export function claimFirstEndcard(): boolean {
+  if (!firstTimeIn('endcard')) return false;
+  markOpened('endcard');
+  return true;
 }

@@ -61,6 +61,19 @@ export interface ShapeGameOpts {
    * 一幅图，15 秒后自己走掉。给了它就不摆六条规则。
    */
   coachTip?: { text: string; art: string };
+
+  /**
+   * 不数 4-3-2-1，直接开局。只给小红书那一版的头一局小球用，见
+   * ui/gameShell.ts 的 ShellMeta.noCountdown。
+   */
+  noCountdown?: boolean;
+
+  /**
+   * 结算页那对指路的光要不要亮（见 engine/gameController.ts 的
+   * shouldLeadOut）。结算页真的露面了才会被叫到——各版自己拿自己那份记录
+   * 答，网页版和小红书版的记录是分开存的。
+   */
+  shouldLeadOut?: () => boolean;
 }
 
 export interface ShapeGame {

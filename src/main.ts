@@ -37,7 +37,7 @@ import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderModesShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { renderTutorialPicker } from './ui/tutorialPicker';
-import { firstTimeIn, glowingBasics, markOpened, type PlayKey } from './engine/firstPlay';
+import { claimFirstEndcard, firstTimeIn, glowingBasics, markOpened, type PlayKey } from './engine/firstPlay';
 import { bombTip, flipTip, layoutTip, slotTip, timedTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
@@ -441,6 +441,10 @@ function basicCoach(id: string): ShapeGameOpts {
   // 进去看过一遍了，光该让给还没点过的那一张。
   const secondOne = !firstTimeIn(key === 'square' ? 'circle' : 'square');
   markOpened(key);
+  // 那一族的分镜也一并记成「看过」。这一局的规矩他是靠教学条学的，学的是同
+  // 一批内容；不记的话，第二次点开这张卡（那时候没有教学条了）反而会被那段
+  // 动画拦一次——「意料之外的界面」。想重看的人去《教学》里找得到。
+  markTutorialSeen(key);
   return { coach: true, coachPlan: key === 'square' && secondOne ? 'square' : 'first' };
 }
 
@@ -1068,7 +1072,9 @@ function randomTargetGame(family: Family): ShapeGame {
 
 
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, reopenKey?: string) {
-  const fullOpts: ShapeGameOpts = { ...opts, lang: currentLang };
+  // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
+  // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
+  const fullOpts: ShapeGameOpts = { shouldLeadOut: claimFirstEndcard, ...opts, lang: currentLang };
   // Going back lands on the home page and, when this game was chosen from one
   // of its pop-up pickers, re-opens that picker — so "back" always means the
   // screen the player actually came from.
@@ -1087,8 +1093,15 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
   // shape's *own* base game gets the auto-popup.
   // 随机得分目标那一局也跳过教学：玩家刚从老虎机那一页挑完图形转完图案，
   // 中间再插一段「这个形状怎么玩」是把他从自己的节奏里拽出来。
+  //
+  // 头一回点开那两张发光的基础卡也不放分镜（玩家定的）：那一屏是一段没有互
+  // 动的动画，把刚决定要玩的人挡在门外；规矩改由棋盘底下那块教学条一条一条
+  // 讲，讲到哪一条就等他真的做到那一条，做到了才往下走，中间得分目标一直
+  // 亮着（见 ui/coachBar.ts 和 basicCoach）。三角那一段不受影响，照旧放。
   const tutorialShape =
-    opts?.timeLimitSec || opts?.bomb || opts?.targets ? null : shapeTutorialFor(game.card.id);
+    opts?.timeLimitSec || opts?.bomb || opts?.targets || opts?.coach
+      ? null
+      : shapeTutorialFor(game.card.id);
   if (tutorialShape && !hasSeenTutorial(tutorialShape)) {
     // Marked the moment it is shown, not when it finishes: it is offered
     // exactly once per family, and a player who skips out of it has still

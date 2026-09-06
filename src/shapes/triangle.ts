@@ -939,6 +939,7 @@ export function createTriangleGame(): ShapeGame {
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         coachTip: opts?.coachTip,
+        shouldLeadOut: opts?.shouldLeadOut,
         resetBoard,
         render,
         isGameOver,

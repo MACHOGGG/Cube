@@ -121,7 +121,13 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   teardown();
 
   const mountNow = () => {
-    activeDestroy = game.mount(root, onBack, { ...opts, lang: LANG });
+    // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
+    // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
+    activeDestroy = game.mount(root, onBack, {
+      shouldLeadOut: claimFirstEndcard,
+      ...opts,
+      lang: LANG,
+    });
     // 「正在玩」这个标记要钉在 <html> 上：游戏页的底色、藏底排、禁掉页面滚动
     // 这三件事，src/style.css 里各写了两遍——一遍用 body:has(.app--game)，一遍
     // 用 html.is-playing。:has 是 Chrome 105 才有的，老内核上只剩后面那一遍，
@@ -299,7 +305,7 @@ const FIRST_RUN_KEY = 'slides.xhs.firstRun';
  * 存不进 localStorage（容器把它关了）就当「已经开过」——宁可少招待一次，也
  * 不要每一局都重来一遍：一句每次都冒出来的提示比没有还烦。
  */
-type FirstKey = 'square' | 'bomb' | 'slot' | 'flip';
+type FirstKey = 'square' | 'bomb' | 'slot' | 'flip' | 'endcard';
 const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
 
 /** 小球和方块都打过一遍了没有——主菜单要不要再压暗别的玩法，看这个。 */
@@ -329,6 +335,22 @@ function markOpened(k: FirstKey): void {
   }
 }
 
+/**
+ * 结算页那对指路的光（《分享》→《首页》）该不该亮。
+ *
+ * 玩家定的：「只有第一次结算的时候这两个轮流发光，随后的每局游戏都不要发
+ * 光」。判的是「他见过结算页没有」，不是「这一局有没有教学条」——头一回进炸
+ * 弹、进老虎机同样有教学条，可那时候结算页早看过了。
+ *
+ * 钥匙存在这一版自己的命名空间里（玩家定的第一条：和网页版完全分开）。结算
+ * 页真的露面了才叫得到这儿，所以打到一半退出去的局不会白白把这一次用掉。
+ */
+function claimFirstEndcard(): boolean {
+  if (!firstTimeIn('endcard')) return false;
+  markOpened('endcard');
+  return true;
+}
+
 function firstScreen(): void {
   let first = false;
   try {
@@ -352,7 +374,16 @@ function firstScreen(): void {
   markStorySeen('circle');
   // coach：棋盘底下那块教学条（ui/coachBar.ts）。头一局才给——这一局的规矩全
   // 靠它讲。配图用这一版摘掉三角的那一份。
-  showGame(circleGame, { coach: true, coachArt: RULE_ART_CIRCLE }, showMenu);
+  //
+  // noCountdown：这一局不数 4-3-2-1，直接落进棋盘（玩家定的：「第一回合小球
+  // 的版本里取消 4-3-2-1 倒计时，之后其他的所有都保留只有这个取消」）。这是
+  // 新来的人打开小工具看见的第一屏，他还不知道这是什么——让他先看见棋盘和棋
+  // 盘底下那句话，比先让他对着四个数字等四秒管用。往后每一局照旧数。
+  showGame(
+    circleGame,
+    { coach: true, coachArt: RULE_ART_CIRCLE, noCountdown: true },
+    showMenu,
+  );
 }
 
 // ---- 各屏 -------------------------------------------------------------------

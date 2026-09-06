@@ -676,6 +676,7 @@ export function createSquareGame(): ShapeGame {
         coachShape: 'square',
         coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
+        shouldLeadOut: opts?.shouldLeadOut,
         resetBoard,
         render,
         isGameOver,

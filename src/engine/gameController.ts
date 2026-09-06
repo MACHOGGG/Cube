@@ -126,6 +126,19 @@ export interface GameControllerHooks {
    * 儿的人六条早听过了，要说的只有加的那一层。
    */
   coachTip?: { text: string; art: string };
+
+  /**
+   * 结算页上那对轮流发光的键（《分享》→《首页》）要不要亮。
+   *
+   * 玩家定的：「只有第一次结算的时候这两个轮流发光，随后的每局游戏都不要发
+   * 光」。所以这不是「有没有教学条」的事——头一回进炸弹、进老虎机同样有教学
+   * 条，可那时候他早就见过结算页了，再指一次就成了噪音。
+   *
+   * 判「是不是第一次」要落到本地记录上，而网页版和小红书版的记录**各存各
+   * 的**（玩家定的头一条）。所以这里不自己读存储，改成问一句：结算页真的要
+   * 露面了才叫这个函数，返回 true 就亮。谁来答、答案存哪儿，各版自己管。
+   */
+  shouldLeadOut?: () => boolean;
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -299,7 +312,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   /**
    * 结算页上替他指路：《分享》先亮三个来回，然后换《首页》一直亮着。
    *
-   * 只在头一局（有教学条的那几局）做。之后他认得这一排键了，再亮就是噪音。
+   * 只在他**头一回看见结算页**那一次做（见 hooks.shouldLeadOut）。之后他认
+   * 得这一排键了，再亮就是噪音。
    */
   let leadTimer = 0;
   function leadTheWayOut() {
@@ -494,7 +508,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 结算页上摆着三颗键，他头一回看见，不知道哪一颗是「接着往下」。顺序是
     // 玩家定的——先分享（这一局的战绩此刻最值钱），再回主菜单。用的是全站同
     // 一套光（style.css 的 glow-pulse），贴着按钮自己的轮廓发。
-    if (hooks.coach) leadTheWayOut();
+    if (hooks.shouldLeadOut?.()) leadTheWayOut();
     // One cue per ending, told apart by cause: a bomb gets the refusal, every
     // other way of finishing gets the settle. Reached the same way whether the
     // player pressed 结束, ran the clock out, or hit a dead end.

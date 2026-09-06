@@ -232,6 +232,7 @@ export function createCircleGame(): ShapeGame {
         slotTargets: targets ?? undefined,
         // 头一局那块教学条（见 ui/coachBar.ts）。只有头一回进来的那一局有。
         coach: !!opts?.coach,
+        noCountdown: !!opts?.noCountdown,
       });
 
       const pickPalette = (): readonly string[] =>
@@ -797,6 +798,7 @@ export function createCircleGame(): ShapeGame {
         coachShape: 'circle',
         coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
+        shouldLeadOut: opts?.shouldLeadOut,
         resetBoard,
         render,
         isGameOver,

@@ -35,6 +35,16 @@ export interface ShellMeta {
    *  The landscape layout itself is not gated on this — every game switches
    *  to it in a short, wide viewport; see the ".app--game" landscape CSS. */
   landscape?: boolean;
+
+  /**
+   * 不数 4-3-2-1，直接开局。
+   *
+   * 只给小红书那一版的头一局小球用（玩家定的：「第一回合小球的版本里取消
+   * 4-3-2-1 倒计时，之后其他的所有都保留只有这个取消」）。那一局是新来的人
+   * 打开小工具看见的**第一屏**——他还不知道这是什么，先让他看见棋盘、看见
+   * 棋盘底下那句话，比先让他等四秒管用。往后每一局照旧数。
+   */
+  noCountdown?: boolean;
   /** Every string on this screen is localized through STRINGS[lang]; the
    *  shapes pass in already-translated title/tagline/startBody. The long
    *  rules that used to sit under each board now live in one translated
@@ -434,7 +444,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   //（玩家的原话：「最开始没有 5-4-3-2-1 的那个板块出现，等老虎机转出来第二
   // 个内容之后开始倒计时」）。下面的 runCount 交给 spinSlot 的 onSettled。
   let startCounting: (() => void) | null = null;
-  if (countWin && startBtnEl) {
+  if (meta.noCountdown && startBtnEl) {
+    // 不数了，直接替他按下那颗藏起来的键。放在下一帧：这一屏此刻还没上树，
+    // 现在按等于对着一块还没排版的 DOM 开局，棋盘会量出错的尺寸。
+    requestAnimationFrame(() => {
+      if (container.querySelector('#startOverlay')?.classList.contains('show')) startBtnEl.click();
+    });
+  } else if (countWin && startBtnEl) {
     let cancelCount: (() => void) | null = null;
     const runCount = () => {
       countWin.classList.remove('cd-window--waiting');
