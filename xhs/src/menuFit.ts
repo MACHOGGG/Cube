@@ -27,7 +27,10 @@
  */
 
 /** 再小就不像个能点的东西了。 */
-const MIN_CARD = 84;
+const MIN_CARD = 76;
+
+/** 卡缩到头还是装不下时，把排与排之间那道缝也收一收。收到这儿为止。 */
+const MIN_GAP = 10;
 
 function menuParts() {
   const app = document.querySelector<HTMLElement>('.app.home-page');
@@ -38,6 +41,29 @@ function menuParts() {
   return { app, grid, rows, card, art };
 }
 
+/** 最后一张卡的小字，和底排那一块之间隔多少——负数就是没挨着。 */
+const CLEAR = 8;
+function overlap(): number {
+  const cards = document.querySelectorAll<HTMLElement>('.home-icon-btn');
+  const last = cards[cards.length - 1];
+  const nav = document.querySelector<HTMLElement>('.home-nav');
+  if (!last || !nav) return 0;
+  const tag = last.querySelector<HTMLElement>('.home-icon-tag') ?? last;
+  return Math.ceil(tag.getBoundingClientRect().bottom + CLEAR - nav.getBoundingClientRect().top);
+}
+
+/**
+ * 还差多少地方：整页高出屏幕的那一截，和「压着底排」的那一截，取大的。
+ *
+ * 只看 scrollHeight 不够。底排是 position: fixed 的，它不进文档高度——页面
+ * 可以一点不滑，最后那张卡的小字却正正压在那颗键上。真机上更明显：底下那道
+ * 安全区（home indicator，34pt 上下）把底排整块往上顶，无头浏览器量到的是
+ * 0，于是本机看着刚好、玩家手里就压住了。所以这里两个都量，按坏的那个缩。
+ */
+function shortfall(): number {
+  return Math.max(document.documentElement.scrollHeight - window.innerHeight, overlap());
+}
+
 /** 算一遍，把卡的宽度写到 `--xhs-card` 上。 */
 export function fitMenu(): void {
   const { app, rows, card } = menuParts();
@@ -46,10 +72,13 @@ export function fitMenu(): void {
   // 摘掉自己上一轮写的，量到的才是样式表想要的那个大小；不摘的话每跑一次就
   // 在上一次的基础上再缩一点，越缩越小。
   document.body.style.removeProperty('--xhs-card');
+  // 缝那个变量是 .home-page 自己定义的（pages.css），写在 body 上会被它盖
+  // 掉——要压住它，只能写进同一个元素的行内样式。
+  app.style.removeProperty('--narrow-gap');
   const design = card.getBoundingClientRect().width;
   if (!(design > 0)) return;
 
-  const over = document.documentElement.scrollHeight - window.innerHeight;
+  const over = shortfall();
   const shrink = over > 0 ? over / rows.length : 0;
   const want = Math.max(MIN_CARD, Math.floor(design - shrink));
   document.body.style.setProperty('--xhs-card', want + 'px');
@@ -64,10 +93,28 @@ export function fitMenu(): void {
   // 差这一像素滑不动，追它只会白缩一圈。
   let now = want;
   for (let round = 0; round < 4; round++) {
-    const left = document.documentElement.scrollHeight - window.innerHeight;
+    const left = shortfall();
     if (left <= 1 || now <= MIN_CARD) break;
     now = Math.max(MIN_CARD, now - Math.max(1, Math.ceil(left / rows.length)));
     document.body.style.setProperty('--xhs-card', now + 'px');
+  }
+
+  // 卡缩到头了还是装不下（矮屏幕，比如 375×667）：再从排与排之间那道缝里
+  // 挤。缝比卡便宜——挤掉 8px 谁也看不出来，卡再小就不像个能按的东西了。
+  const left = shortfall();
+  if (left > 1) {
+    // 量出来，不去读 --narrow-gap：自定义属性读回来的是写在样式表里的原话
+    // （clamp(18px, 6vw, 34px)），不是算完的像素数，parseFloat 只会得到 NaN。
+    // 两排之间的实际距离才是这道缝真正有多宽。
+    const gap =
+      rows.length > 1
+        ? rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().bottom
+        : NaN;
+    if (Number.isFinite(gap)) {
+      // 一排一道缝，外加上下各一道：整页矮 (排数+1)×δ。
+      const shrinkGap = Math.ceil(left / (rows.length + 1));
+      app.style.setProperty('--narrow-gap', Math.max(MIN_GAP, gap - shrinkGap) + 'px');
+    }
   }
 }
 

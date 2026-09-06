@@ -297,6 +297,30 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let coachTip: { destroy(): void } | null = null;
 
   /**
+   * 结算页上替他指路：《分享》先亮三个来回，然后换《首页》一直亮着。
+   *
+   * 只在头一局（有教学条的那几局）做。之后他认得这一排键了，再亮就是噪音。
+   */
+  let leadTimer = 0;
+  function leadTheWayOut() {
+    window.clearTimeout(leadTimer);
+    refs.buttons.endBack.classList.remove('glow-pulse');
+    refs.buttons.share.classList.add('glow-pulse');
+    leadTimer = window.setTimeout(() => {
+      refs.buttons.share.classList.remove('glow-pulse');
+      refs.buttons.endBack.classList.add('glow-pulse');
+    }, 6600);
+  }
+
+  /** 离开结算页时把这两处光撤掉——下一局重开时不该还亮着。 */
+  function stopLeading() {
+    window.clearTimeout(leadTimer);
+    leadTimer = 0;
+    refs.buttons.share.classList.remove('glow-pulse');
+    refs.buttons.endBack.classList.remove('glow-pulse');
+  }
+
+  /**
    * 得分的这一组里有没有反面（第 3 条：反面和正面一起凑）。
    *
    * 看的是**这一刻**屏幕上的样子，不是数据：这里离翻面还有一步（commit 在
@@ -339,6 +363,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 打完就走了（按《主页》，没有结算页），那份底会一直留着——不清掉的话，
     // 他下次随便开一局单人打完，顶上会莫名其妙冒出一间早散了的小屋。
     clearRoomLeftover();
+    stopLeading();
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
     // 教学条跟着新的一局从第 1 条重来。第一次开局时才真的建出来——建在开局
@@ -464,6 +489,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 什么也不做（见 roomLeftover.ts）——单人局的结算页一个字都不改样子。
     mountRoomLeftover(document.getElementById('endRoomBlock'), hooks.lang);
     refs.endOverlay.classList.add('show');
+    // 头一局打完，替他指一下路：先让《分享》亮一阵，再换《首页》亮着不停。
+    //
+    // 结算页上摆着三颗键，他头一回看见，不知道哪一颗是「接着往下」。顺序是
+    // 玩家定的——先分享（这一局的战绩此刻最值钱），再回主菜单。用的是全站同
+    // 一套光（style.css 的 glow-pulse），贴着按钮自己的轮廓发。
+    if (hooks.coach) leadTheWayOut();
     // One cue per ending, told apart by cause: a bomb gets the refusal, every
     // other way of finishing gets the settle. Reached the same way whether the
     // player pressed 结束, ran the clock out, or hit a dead end.
@@ -917,6 +948,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       coach?.destroy();
       coach = null;
       coachTip?.destroy();
+      stopLeading();
       coachTip = null;
       document.removeEventListener('visibilitychange', onVisibility);
     },

@@ -1815,7 +1815,7 @@ export function tutorialRules(lang: Lang, shape: 'circle' | 'square'): string[] 
  *
  * 这三个玩法都是在基础规则上加一层：滑动、得分、翻面、消除全没变，变的只是
  * 多出来的那一条。所以每个只说那一条，说完 15 秒自己走掉（见 ui/coachBar.ts
- * 的 mountCoachTip）——能玩到这儿的人六条规矩早听过了。
+ * 的 mountCoachTip）——能玩到这儿的人六条规矩早听过了。这一句摆一整局。
  */
 export const MODE_TIPS: Record<Lang, Record<'bomb' | 'flip' | 'slot', string>> = {
   en: {

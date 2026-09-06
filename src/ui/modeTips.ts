@@ -3,8 +3,8 @@
  *
  * 把「哪一句」（i18n 的 MODE_TIPS）和「配什么图」（ruleArt 的 bombTipArt /
  * flipTipArt，老虎机直接用这一局转出来的两个图案）凑成 gameController 要的那
- * 个 `{ text, art }`——它交给 coachBar 的 mountCoachTip 摆 15 秒，然后自己走
- * 掉（玩家定的）。
+ * 个 `{ text, art }`——它交给 coachBar 的 mountCoachTip，在棋盘底下摆一整局
+ * （玩家定的）。
  *
  * 这三个玩法都是在基础规则上加一层，所以每句只说加的那一层；六条规矩他在头
  * 一局小球那块教学条上已经听过一遍了。

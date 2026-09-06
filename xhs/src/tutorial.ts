@@ -25,8 +25,9 @@
  * 样式是 style.css 里 .tut-rule / .ra-* 那一节。三样都原样用，一个字不抄：
  * 网页版哪天改了文案或改了那几幅动画，这一版跟着变。
  */
-import { TUTORIAL_RULES, type Lang } from '../../src/i18n';
-import { buildRuleArt } from '../../src/ui/ruleArt';
+import { MODE_TIPS, TUTORIAL_RULES, type Lang } from '../../src/i18n';
+import { bombTipArt, buildRuleArt, flipTipArt } from '../../src/ui/ruleArt';
+import { menuTag } from '../../src/ui/menuTags';
 
 /**
  * 这一版的六幅配图：不要三角。
@@ -55,6 +56,25 @@ export const RULE_ART = buildRuleArt({ triangle: false });
  */
 export const RULE_ART_CIRCLE = buildRuleArt({ triangle: false, shape: 'circle' });
 export const RULE_ART_SQUARE = RULE_ART;
+
+/**
+ * 《怎么玩》最下面那两条：炸弹和无限反转各自加的那一层。
+ *
+ * 这两句原本只在头一回进那个玩法时，在棋盘底下摆一整局（ui/modeTips.ts）。
+ * 之后想再看一眼就没地方了——所以搬一份到这一屏来，玩家随时点得开（《暂
+ * 停》里和信息栏里都是这一屏）。
+ *
+ * 和上面六条之间隔一道圆角黑线（.xhs-tut-split）：那六条是「这个游戏怎么
+ * 玩」，人人都要看；这两条是「这两个玩法各自多了什么」，只跟点进去的人有
+ * 关。混在一张单子上，六条会被当成八条。
+ *
+ * 老虎机没有这一条：它那句提示的配图是当局现抽的那两个得分图案，离开那一局
+ * 就无从画起。
+ */
+const EXTRA_TIPS: readonly { key: 'bomb' | 'flip'; art: string }[] = [
+  { key: 'bomb', art: bombTipArt('square') },
+  { key: 'flip', art: flipTipArt('square') },
+];
 
 /** 会放分镜动画的两族。三角整块不做，所以只有这两个。 */
 export type StoryFamily = 'square' | 'circle';
@@ -122,6 +142,14 @@ export function openTutorial(lang: Lang, onClose?: () => void): () => void {
             </div>`,
           )
           .join('')}
+        <div class="xhs-tut-split" aria-hidden="true"></div>
+        ${EXTRA_TIPS.map(
+          ({ key, art }) => `<div class="tut-rule tut-rule--extra">
+              <span class="tut-rule-num tut-rule-num--word">${esc(menuTag(lang, key))}</span>
+              <span class="tut-rule-art">${art}</span>
+              <span class="tut-rule-text">${esc(MODE_TIPS[lang][key])}</span>
+            </div>`,
+        ).join('')}
       </div>
       <div class="btn-row"><button class="primary" id="xhsTutOk">知道了</button></div>
     </div>

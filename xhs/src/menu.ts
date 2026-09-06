@@ -37,7 +37,7 @@ export interface XhsMenuHandlers {
    */
   glow?: readonly XhsMode[];
   /**
-   * 这几张卡调暗一点、写上「天才进入」。
+   * 这几张卡调暗一点、写上「天才入口」。
    *
    * 玩家定的：头一局打完回主菜单，除了发光的那张，其余几张暗一点、标出来，
    * 当完整版的预告——完整版里这几个是天才玩法。这一版它们照样免费、照样点得
@@ -72,12 +72,12 @@ function card(
   const art = document.createElement('span');
   art.className = 'home-icon-art';
   art.innerHTML = icon;
-  // 「天才进入」那块小牌子：说的是「完整版里它归天才」，不是一道锁——这一版
+  // 「天才入口」那块小牌子：说的是「完整版里它归天才」，不是一道锁——这一版
   // 照样点得开、照样免费，所以不压锁、不拦手（pointer-events 在样式里关掉）。
   if (soon) {
     const tag = document.createElement('span');
     tag.className = 'xhs-soon-tag';
-    tag.textContent = '天才进入';
+    tag.textContent = '天才入口';
     art.appendChild(tag);
   }
   btn.appendChild(art);

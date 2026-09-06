@@ -700,10 +700,13 @@ const SCREENS = [
       await p.click('.xhs-how');
       await p.waitForTimeout(900);
     },
+    // 只核前六条。这一版的《怎么玩》底下还多两条——炸弹和无限反转各自加的
+    // 那一层，隔着一道圆角黑线单列（玩家定的：那两句要能随时回头看）。网页
+    // 版没有这一节，它们不该被当成「和网页版不一致」。
     snap: {
-      规则文字: { sel: '.tut-rule .tut-rule-text', kind: 'text' },
-      规则序号: { sel: '.tut-rule .tut-rule-num', kind: 'text' },
-      规则配图: { sel: '.tut-rule .tut-rule-art svg', kind: 'svg' },
+      规则文字: { sel: '.tut-rule:not(.tut-rule--extra) .tut-rule-text', kind: 'text' },
+      规则序号: { sel: '.tut-rule:not(.tut-rule--extra) .tut-rule-num', kind: 'text' },
+      规则配图: { sel: '.tut-rule:not(.tut-rule--extra) .tut-rule-art svg', kind: 'svg' },
     },
     // 第 1 条那幅图，网页版摆的是方块、小球、三角各一正一反，这一版摆两样
     // ——三角这一版整个不做（玩家定的：详细教学里凡是三角的字和图都去掉），

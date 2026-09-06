@@ -46,6 +46,9 @@
   --warn: #B5793A;
   --warn-soft: #F1E1C6;
   --board-bg: #EFE6E2;
+  /* 全站那一套「呼吸的光」用的颜色，见下面的 glow-pulse。米色底给微红的光，
+     暗色底给白的光——两种底色各自最跳、又不刺眼的那一种（玩家定的）。 */
+  --glow: rgba(179, 57, 43, 0.55);
   --shadow: 0 1px 2px rgba(46,36,48,0.06), 0 8px 24px -12px rgba(46,36,48,0.16);
   /* The play screen has its own scheme, the same in either theme: a board
      under a finger should look the same at 9am and at midnight, and it is
@@ -108,6 +111,8 @@
     --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
     --mark-edge: #FFFFFF;
+    /* 暗底上那道光换成白的，见 glow-pulse。 */
+    --glow: rgba(255, 255, 255, 0.72);
   }
 }
 :root[data-theme="dark"] {
@@ -116,6 +121,8 @@
   --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   --mark-edge: #FFFFFF;
+  /* 暗底上那道光换成白的，见 glow-pulse。 */
+  --glow: rgba(255, 255, 255, 0.72);
 }
 
 /* ---------- colourblind-friendly palette (the whole site) ----------
@@ -1149,30 +1156,50 @@ button:hover { filter: brightness(1.05); }
    米色底给微红的光，暗色底给白的光：两种底色各自最跳、又不刺眼的那一种
    （玩家定的）。光画在图那一格上而不是整张卡上——卡底下还有一行小字，连字
    一起罩住就成了一块发光的方牌，不像「这张图在叫你」。 */
-.home-icon-btn--glow .home-icon-art {
-  border-radius: var(--r-sm);
-  animation: home-glow 2.2s ease-in-out infinite;
+/* ---- 全站唯一的那一套「呼吸的光」 --------------------------------------
+
+   玩家定的：这个游戏里所有的光芒是同一套设定，只有颜色不一样。所以节奏、
+   浓淡、大小都写在这一处（glow-pulse），谁要发光就挂上这个类，再用 --glow
+   换一支颜色。
+
+   用 drop-shadow，不用 box-shadow。box-shadow 画的是**盒子**的影子：它按元
+   素自己的圆角走，而里面的图形圆角多半不是这个数——两条弧对不上，那圈光在
+   转角处就离开了图形，看着不像光，像给图标镶了一道白边（玩家实拍到的正是这
+   个）。而且它带 spread，边缘是硬的。drop-shadow 描的是**图形本身**那圈不
+   透明的轮廓，没有 spread，从边上往外一路淡出去；方的圆的、正的斜的，贴的
+   都是它自己。
+
+   0% 那一帧写 `0 0 0`：同一支颜色、零模糊零位移，等于没有影子。这样一整个
+   周期里颜色不变，只有浓淡在走——中途不会经过一层发灰的半透明黑。 */
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 var(--glow)); }
+  50% { filter: drop-shadow(0 0 10px var(--glow)); }
 }
-@keyframes home-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(179, 57, 43, 0); }
-  50% { box-shadow: 0 0 15px 5px rgba(179, 57, 43, 0.42); }
+/* 谁要发光，挂上这一条。颜色不写在这儿——写在 :root 的 --glow 上，跟着主题
+   走（米色底给微红，暗底给白）。个别地方要换一支颜色，就地覆盖 --glow 就
+   行，节奏和浓淡还是这一套。
+
+     · 主菜单那张该点的卡（光挂在图上，不是那一格方盒子上——图标未必填满它）
+     · 头一局棋盘上方那排得分目标（.coach-aim，见 ui/coachBar.ts）
+     · 结算页的《分享》和《首页》（ui/scoreboard.ts） */
+.glow-pulse,
+.home-icon-btn--glow .home-icon-art > svg,
+.app--game.coach-aim .pattern-hint .pattern-icon {
+  animation: glow-pulse 2.2s ease-in-out infinite;
 }
-@keyframes home-glow-dark {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
-  50% { box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.5); }
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .home-icon-btn--glow .home-icon-art { animation-name: home-glow-dark; }
-}
-:root[data-theme="dark"] .home-icon-btn--glow .home-icon-art { animation-name: home-glow-dark; }
 @media (prefers-reduced-motion: reduce) {
-  .home-icon-btn--glow .home-icon-art { animation: none; box-shadow: 0 0 12px 3px rgba(179, 57, 43, 0.3); }
+  .glow-pulse,
+  .home-icon-btn--glow .home-icon-art > svg,
+  .app--game.coach-aim .pattern-hint .pattern-icon {
+    animation: none;
+    filter: drop-shadow(0 0 7px var(--glow));
+  }
 }
 /* ---- 小红书版：三张「完整版里是天才玩法」的卡 --------------------------
-   玩家定的：除了发光那张，其余几张暗淡一点、写上「天才进入」，当完整版的预
+   玩家定的：除了发光那张，其余几张暗淡一点、写上「天才入口」，当完整版的预
    告。这一版这三个照样点得开、照样免费——牌子说的是「完整版里它们归天才」，
    不是一道锁，所以不压锁、不拦手。 */
-.home-icon-btn--soon .home-icon-art > svg { opacity: 0.55; }
+.home-icon-btn--soon .home-icon-art > svg { opacity: 0.7; }
 .xhs-soon-tag {
   position: absolute; left: 50%; bottom: 5%;
   transform: translateX(-50%);

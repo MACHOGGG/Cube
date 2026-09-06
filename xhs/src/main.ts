@@ -351,9 +351,9 @@ function firstScreen(): void {
 function showMenu() {
   teardown();
   renderXhsMenu(root, LANG, {
-    // 头一局小球打完退回这一屏时，《基础方块》镶一圈光——五张卡摊在眼前，
-    // 得给他指一条路。他开过一次方块，这圈光就没了。
-    glow: firstTimeIn('square') ? ['square'] : [],
+    // 主菜单不再单独点亮某一张：基础那两个正常亮，其余三个调暗一档（玩家
+    // 定的「基础的两个玩法是明亮的，剩下的轻微暗淡」，见 menu.ts 的 soon）。
+    glow: [],
     // 炸弹 / 老虎机 / 无限反转：完整版里是天才玩法，这儿标一块牌子当预告。
     // 这一版它们照样免费——牌子不拦手，点开就能玩。
     soon: ['bomb', 'slot', 'flip'],

@@ -1,42 +1,47 @@
 /**
  * 棋盘底下那块教学条。
  *
- * 两种排法，都是这一块条子：
+ * 六条规矩不摊开给他读，跟着他的手走：讲完一件事，等他真的做到，再讲下一
+ * 件。两种排法，都是这一块条子。
  *
  * **一、头一局小球（plan: 'first'）**——玩家头一回打开就被直接按进的那一局
- * （main.ts 的 isFirstRun）。分镜动画不放了，六条规矩全靠这块条子讲：
+ * （main.ts 的 isFirstRun）。分镜动画不放了，六条全靠这块条子讲，走四步：
  *
- *   第 1+2 条 正反两面 / 同色凑成图案就得分 → 一起摆，得一次分才走
- *   第 3 条   反面也能一起凑          → 得分的那一组里有反面
- *   第 4 条   反面同色连成一行就消    → 消掉一行 / 一列
- *   第 5 条   全部翻到反面这一局结束  → 没有动作可做，摆够读一遍的时间
- *   第 6 条   时间短、步数少、分高    → 最后一条，一直留到这一局结束
+ *   第 1+2 条 正反两面 / 同色凑成图案就得分 → 得两次分才走（或者第一次得分
+ *                                              之后 8 秒还没有第二次，也走）
+ *   第 3 条   反面也能一起凑                → 他真的用反面凑出一组
+ *   第 4 条   反面同色连成一行就消          → 他真的消掉一行 / 一列
+ *   第 5+6 条 怎么结束 / 综合得分怎么算     → 最后一步，一直留到这一局结束
  *
- * 第 1、2 条并成一步一起摆（玩家定的）：第 1 条讲的是「图形有两面」，本身没有
- * 可做的事，单独占一屏只能干等；和第 2 条摆在一起，他一边读一边就能去凑那一
- * 组，两句话正好是一件事的两半。并了之后条子高一截，所以这一步整体压扁一点
- * （.coach-bar--pair），别把棋盘挤小。
+ * 第 1、2 条并成一步（玩家定的）：第 1 条讲「图形有两面」，本身没有可做的
+ * 事，单独占一屏只能干等；和第 2 条摆在一起，他一边读一边就能去凑那一组。
+ * 最后两条同理——都是「这一局怎么算完」，一起摆完事。并了之后条子高一截，所
+ * 以这两步整体压扁一点（.coach-bar--pair），别把棋盘挤小。
+ *
+ * 这一路还会让棋盘上方那排得分目标一起慢慢发光（.coach-aim，样式在
+ * style.css 的 glow-pulse）：第 2 条说的「同色凑成得分图案」是哪几个图案，
+ * 答案本来就挂在他头顶上，只是没人指过。
  *
  * **二、头一回玩方块（plan: 'square'）**——他刚打完那一局小球，六条已经听过
- * 一遍了。所以这块条子先不出声：
+ * 一遍了，所以这块条子先不出声，等他自己打出三次得分再开口，讲三步：
  *
- *   · 10 秒之内自己得了分 → 那就不用教了，把第 2 条亮一下算个招呼，剩下的
- *     一条接一条自己播完；
- *   · 10 秒了还没得过分   → 摆出第 2 条（「同色凑成图案就得分」，卡住的人缺
- *     的正是这一句），等他得分之后再往下播。
+ *   第 4 条   反面同色连成一行/列就消除，方块消掉不再出现 → 他真的消掉一行
+ *   第 5 条   全部翻到反面这一局就结束                    → 摆 8 秒
+ *   第 5+6 条 加上综合得分怎么算                          → 到这一局结束
  *
- * 玩家的原话：「第一次玩矩形的时候如果 10s 没有触发任何得分，那么跳出第二
- * 条教学内容，在玩家完成得分后自动播放后续内容」。
+ * 玩家的原话：「只有到了出现了三次得分后出现，关于反面同色连起来消除的教
+ * 学，然后消除后引发下一条教学内容……然后播放 8s 之后就是……最后那两条教学一
+ * 起直到游戏结束」。
  *
- * 'first' 那一路有三条规矩把它和一个「读不完就卡住」的东西分开：
+ * 两路共通的三条规矩，把它和一个「读不完就卡住」的东西分开：
  *
  *   · **提前做到的记下来。** 玩家可能第一步就消掉一行——那时候条子还停在第 1
  *     条。不能跳过（跳过等于没讲），也不能装作没发生，所以记在 hit 里；轮到那
  *     一条时只停 ALREADY_MS，亮一下就走。
  *   · **谁也不许卡死。** 第 3 条要「反面和正面凑一组」，一局里未必凑得出来。
- *     每一条都压着 STUCK_MS 的保底，到点自己往下走——一块永远不动的提示比讲
- *     错还糟。
- *   · **最后一条不走。** 玩家自己定的：「最后一条一直显示到游戏结束」。
+ *     每一步都压着 STUCK_MS 的保底，到点自己往下走——一块永远不动的提示比讲
+ *     错还糟。方块那一路「等三次得分」也压着同一道保底。
+ *   · **最后一步不走。** 玩家自己定的：「最后一条一直显示到游戏结束」。
  *
  * 文字和配图跟着这一局的图形走（见 i18n 的 tutorialRules、ruleArt 的
  * buildRuleArt）：小球那一局讲小球、画小球，方块那一局讲方块、画方块——他
@@ -52,39 +57,60 @@ export type CoachShape = 'square' | 'circle';
 /** 哪一种排法，见文件开头。 */
 export type CoachPlan = 'first' | 'square';
 
-/**
- * 第 n 条靠哪个动作算「做到了」。null = 没有动作可做，摆够 READ_MS[n] 就走。
- *
- * 第 1 条讲的是「每个图形都有正反两面」——那是一句要看明白的话，不是一件要
- * 做的事（棋盘上本来就一枚反面都没有，无从「做」起），所以它不单独等谁：它
- * 和第 2 条并在同一步里，走不走看第 2 条。
- */
-const DONE_BY: readonly (CoachSignal | null)[] = [null, 'match', 'mixed', 'line', null, null];
+/** 一步：摆哪几条，靠什么走到下一步。 */
+interface Step {
+  /** 摆出来的那几条（tutorialRules 的下标）。 */
+  readonly rules: readonly number[];
+  /** 要玩家做到的那个动作。留空 = 没有可做的事，摆够 ms 就走。 */
+  readonly by?: CoachSignal;
+  /** 要做到几次，默认一次。 */
+  readonly times?: number;
+  /**
+   * by 留空时：摆够这么久就走。
+   * by 有值而 times > 1 时：做到第一次之后再等这么久，没凑够次数也走——他已
+   * 经会了，别为了凑一个数把他扣在这一条上。
+   */
+  readonly ms?: number;
+}
+
+/** 头一局小球：四步。 */
+const PLAN_FIRST: readonly Step[] = [
+  { rules: [0, 1], by: 'match', times: 2, ms: 8000 },
+  { rules: [2], by: 'mixed' },
+  { rules: [3], by: 'line' },
+  { rules: [4, 5] },
+];
+
+/** 头一回玩方块：三步。开口之前还有一道门槛，见 SQUARE_OPEN。 */
+const PLAN_SQUARE: readonly Step[] = [
+  { rules: [3], by: 'line' },
+  { rules: [4], ms: 8000 },
+  { rules: [4, 5] },
+];
 
 /**
- * 每一步摆哪几条。一步可以摆一条，也可以摆两条。
+ * 方块那一路：打出这么多次得分之后，条子才开口。
  *
- * 一步走不走，看这一步里**最后**那一条的条件（DONE_BY / READ_MS）——前面那
- * 几条是陪着一起读的，不各自卡一道。
+ * 他刚打完一局小球，规矩听过一遍了。先让他自己打，打顺了（三次得分）再补
+ * 那一条他还没见过的——反面同色连成一行会消除。
  */
-const STEPS_FIRST: readonly (readonly number[])[] = [[0, 1], [2], [3], [4], [5]];
-/** 头一回玩方块：第 1 条他刚在小球那一局学过，不再重复；从第 2 条起一条一步。 */
-const STEPS_SQUARE: readonly (readonly number[])[] = [[1], [2], [3], [4], [5]];
+const SQUARE_OPEN: { by: CoachSignal; times: number } = { by: 'match', times: 3 };
 
-/** 做到了之后再停一下：让加分、翻面那一下演完，别在半空中换文字。 */
+/** 做到之后隔多久换下一条：让那一下的动画先演完，别抢在得分动画前面。 */
 const AFTER_MS = 1100;
-/** 没有动作可做的那几条各摆多久。缺的按最后一个数算。 */
-const READ_MS: readonly number[] = [10000, 8000, 8000, 8000, 8000, 8000];
-/** 轮到它时早就做过了：亮一下就走。 */
+
+/** 没有动作可做的那几步，默认摆多久。 */
+const READ_MS = 8000;
+
+/** 这一条要做的事，他在轮到它之前就已经做过了：亮一下算个招呼就走。 */
 const ALREADY_MS = 2600;
-/** 保底：一条停够这么久还没做到，自己往下走。 */
+
+/**
+ * 保底。一分钟还没做到，就当这一局凑不出来，自己往下走。
+ *
+ * 一块永远不动的提示比讲错还糟——玩家会以为它坏了，或者以为自己漏了什么。
+ */
 const STUCK_MS = 60000;
-/** 头一回玩方块：先不出声，等这么久还没得过分才摆出第 2 条。 */
-const QUIET_MS = 10000;
-/** 方块那一局得过分之后，剩下几条自己一条接一条播完。 */
-const AUTO_MS = 8000;
-/** 炸弹 / 无限反转 / 老虎机那句首玩提示摆多久。玩家定的：15 秒。 */
-export const TIP_MS = 15000;
 
 export interface CoachBar {
   /** 玩家做了一件事。不认识的、已经走过的，静静吞掉。 */
@@ -143,22 +169,38 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const plan: CoachPlan = opts.plan ?? 'first';
   const texts = tutorialRules(opts.lang, opts.shape);
   const art = opts.art ?? artFor(opts.shape);
-  const steps = plan === 'square' ? STEPS_SQUARE : STEPS_FIRST;
+  const steps = plan === 'square' ? PLAN_SQUARE : PLAN_FIRST;
   const lastStep = steps.length - 1;
   /** 一步里最多摆几行——骨架按这个数一次画够，换步时只改内容不重建。 */
-  const rows = Math.max(...steps.map((g) => g.length));
+  const rows = Math.max(...steps.map((st) => st.rules.length));
+  /** 进度条按「条」算：玩家看到的是六条规矩，摆在几步里是我们的事。 */
+  const segs = texts.length;
 
-  frame(host, texts.length, rows);
-  // 方块那一路先不出声：等 10 秒，或者等他自己得一次分。
-  if (plan === 'square') host.hidden = true;
+  frame(host, segs, rows);
+
+  /**
+   * 讲到第 2、3 条的时候，棋盘上方那排得分目标跟着微微发光。
+   *
+   * 这两条说的都是「同色凑成得分图案」——是哪几个图案，答案本来就挂在他头顶
+   * 上，只是从来没人指过。讲完这两条就把光撤了：再亮下去就成了噪音（玩家
+   * 定的：「在播放到第二条和第三条教学的时候，上方的得分目标图案微微闪烁」）。
+   */
+  const stage = host.closest('.app--game');
+  /** 这一步里有没有第 2 条或第 3 条（下标 1、2）。 */
+  const aims = (step: Step) => step.rules.some((r) => r === 1 || r === 2);
 
   const progEl = host.querySelector('.coach-prog') as HTMLElement;
   const rowEls = Array.from(host.querySelectorAll<HTMLElement>('.coach-row'));
 
   let at = -1;
+  /** 整局里他做到过哪些事——用来认「这一条我提前就做过了」。 */
   let hit = new Set<CoachSignal>();
-  /** 方块那一路：得过分了没有。得过之后剩下几步自己往下走。 */
-  let rolling = false;
+  /** 当前这一步里，要等的那个动作做到了几次。 */
+  let done = 0;
+  /** 条子开口了没有。方块那一路要等够 SQUARE_OPEN 才开口。 */
+  let open = plan !== 'square';
+  /** 方块那一路：开口之前数他得了几次分。 */
+  let opening = 0;
   let timer = 0;
   let dead = false;
 
@@ -174,53 +216,55 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   function show(i: number) {
     if (dead) return;
     at = i;
-    const group = steps[i];
+    done = 0;
+    const step = steps[i];
     host.hidden = false;
     // 用满的那几行填内容，多出来的收起来——行是一次画够的，来回增删会把
     // 淡入动画打断，也会让读屏软件把整块条子当成新的再念一遍。
     rowEls.forEach((row, k) => {
-      const rule = group[k];
+      const rule = step.rules[k];
       row.hidden = rule === undefined;
       if (rule === undefined) return;
       (row.querySelector('.coach-art') as HTMLElement).innerHTML = art[rule] ?? '';
       (row.querySelector('.coach-text') as HTMLElement).textContent = texts[rule] ?? '';
     });
     // 这一步摆两条的时候整体压扁一点，别把棋盘挤小。
-    host.classList.toggle('coach-bar--pair', group.length > 1);
-    // 进度按「条」算不按「步」算：玩家看到的是六条规矩，摆在几步里是我们的事。
-    const done = group[group.length - 1];
-    const segs = progEl.children;
-    for (let k = 0; k < segs.length; k++) segs[k].classList.toggle('on', k <= done);
+    host.classList.toggle('coach-bar--pair', step.rules.length > 1);
+    stage?.classList.toggle('coach-aim', aims(step));
+    const upto = step.rules[step.rules.length - 1];
+    const cells = progEl.children;
+    for (let k = 0; k < cells.length; k++) cells[k].classList.toggle('on', k <= upto);
     fadeIn(host);
+    arm(i);
+  }
 
+  /** 摆好这一步之后，安排它怎么走到下一步。 */
+  function arm(i: number) {
     if (i >= lastStep) return clear(); // 最后一步不走
-    if (plan === 'square') {
-      // 还没得过分：停在第 2 条等他，压一道 STUCK_MS 的保底免得永远不动。
-      if (!rolling) {
-        return later(STUCK_MS, () => {
-          rolling = true;
-          show(i + 1);
-        });
-      }
-      return later(AUTO_MS, () => show(i + 1));
+    const step = steps[i];
+    // 没有可做的事：摆够读一遍的时间。
+    if (!step.by) return later(step.ms ?? READ_MS, () => show(i + 1));
+    // 这一条要做的事他早就做过了：亮一下算个招呼。次数要求不止一次的那一步
+    // 不走这条捷径——「得两次分」本来就是让他多做一次，提前做过不算数。
+    if ((step.times ?? 1) === 1 && hit.has(step.by)) {
+      return later(ALREADY_MS, () => show(i + 1));
     }
-    // 走不走看这一步最后那一条。
-    const need = DONE_BY[done];
-    if (need === null) later(READ_MS[done] ?? READ_MS[READ_MS.length - 1], () => show(i + 1));
-    else if (hit.has(need)) later(ALREADY_MS, () => show(i + 1));
-    else later(STUCK_MS, () => show(i + 1));
+    later(STUCK_MS, () => show(i + 1));
   }
 
   function start() {
-    if (plan === 'square') {
-      host.hidden = true;
-      at = -1;
-      rolling = false;
-      // 10 秒还没得过分，就把第 2 条摆出来（方块那一路第 0 步就是第 2 条）。
-      later(QUIET_MS, () => show(0));
-    } else {
+    at = -1;
+    done = 0;
+    opening = 0;
+    open = plan !== 'square';
+    if (open) return show(0);
+    // 方块那一路：先不出声，等他自己打出三次得分。一分钟还没打出来也开口，
+    // 免得这块条子一整局都不见人。
+    host.hidden = true;
+    later(STUCK_MS, () => {
+      open = true;
       show(0);
-    }
+    });
   }
 
   start();
@@ -229,18 +273,20 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     signal(sig) {
       if (dead) return;
       hit.add(sig);
-      if (plan === 'square') {
-        if (rolling) return; // 已经在自己往下播了
-        if (sig !== 'match') return; // 只认「得了一次分」
-        rolling = true;
-        // 还没出过声（10 秒内就得分了）：先把第 2 条亮一下算个招呼，再往下播。
-        later(AFTER_MS, () => show(at < 0 ? 0 : at + 1));
-        return;
+      // 还没开口：数够那几次得分就开讲。
+      if (!open) {
+        if (sig !== SQUARE_OPEN.by) return;
+        if (++opening < SQUARE_OPEN.times) return;
+        open = true;
+        return later(AFTER_MS, () => show(0));
       }
-      if (at >= lastStep) return;
-      const group = steps[at];
-      if (DONE_BY[group[group.length - 1]] !== sig) return;
-      later(AFTER_MS, () => show(at + 1));
+      if (at < 0 || at >= lastStep) return;
+      const step = steps[at];
+      if (step.by !== sig) return;
+      const need = step.times ?? 1;
+      if (++done >= need) return later(AFTER_MS, () => show(at + 1));
+      // 还差几次，但这一步给了个宽限：第一次做到之后再等这么久，没凑够也走。
+      if (done === 1 && step.ms) later(step.ms, () => show(at + 1));
     },
     reset() {
       if (dead) return;
@@ -251,6 +297,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     destroy() {
       dead = true;
       clear();
+      stage?.classList.remove('coach-aim');
       host.hidden = true;
       host.innerHTML = '';
     },
@@ -261,31 +308,21 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
  * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示。
  *
  * 和上面那块是同一条子、同一个盒子，但没有六段进度、不跟着玩家走——就一句
- * 话加一幅图，摆 15 秒自己走掉（玩家定的）。这三个玩法是在基础规则上加一层，
- * 加的是哪一层一句话说得完，说完就该把屏幕还给他。
+ * 话加一幅图。这三个玩法是在基础规则上加一层，加的是哪一层一句话说得完。
+ *
+ * 摆一整局，不定时走掉（玩家定的）。原先是 15 秒自己消失，问题是这一句正是
+ * 他这一局要用的那条规矩——炸弹为什么炸、反面为什么又翻回来——读完还得能回
+ * 头再看一眼。而且它只在头一回进这个玩法时出现，之后想看去《暂停》和信息栏
+ * 的《教学》里找（见 ui/tutorialPicker.ts）。
  */
-export function mountCoachTip(
-  host: HTMLElement,
-  text: string,
-  art: string,
-  ms: number = TIP_MS,
-): { destroy(): void } {
+export function mountCoachTip(host: HTMLElement, text: string, art: string): { destroy(): void } {
   frame(host, 0, 1);
   (host.querySelector('.coach-art') as HTMLElement).innerHTML = art;
   (host.querySelector('.coach-text') as HTMLElement).textContent = text;
   fadeIn(host);
 
-  let dead = false;
-  const timer = window.setTimeout(() => {
-    if (dead) return;
-    host.hidden = true;
-    host.innerHTML = '';
-  }, ms);
-
   return {
     destroy() {
-      dead = true;
-      window.clearTimeout(timer);
       host.hidden = true;
       host.innerHTML = '';
     },

@@ -232,11 +232,38 @@
    会被整条丢掉；而 --xhs-card 里已经是算好的像素数，老内核照样认。 */
 .home-page:not(.home-page--wide) {
   --narrow-gap: clamp(18px, 6vw, 34px);
-  padding-bottom: calc(94px + var(--safe-area-inset-bottom, 0px));
+  padding-bottom: calc(102px + var(--safe-area-inset-bottom, 0px));
   /* 底排那一块自己也垫了 14px 的下限（style.css 的 .home-nav），这儿要跟着让
-     出同样多，不然最后一张卡会压到它身上。老内核照旧用上面那行。 */
-  padding-bottom: calc(94px + max(var(--safe-area-inset-bottom, 0px), 14px));
+     出同样多，不然最后一张卡会压到它身上。老内核照旧用上面那行。
+
+     102 是量出来的：那一块连键带内边距整整 100px 高，原先写的 94 一开始就
+     短了 6px——本机上刚好卡在「差一点没压上」，真机再让出底下那道安全区就压
+     住了。 */
+  padding-bottom: calc(102px + max(var(--safe-area-inset-bottom, 0px), 14px));
 }
 .home-page:not(.home-page--wide) .home-icon-btn {
   max-width: var(--xhs-card, 165px);
+}
+
+
+/* ---- 《怎么玩》最后那两条：炸弹和无限反转 ------------------------------
+   六条基础规矩是「这个游戏怎么玩」，人人都要看；这两条是「那两个玩法各自
+   多了什么」，只跟点进去的人有关。中间隔一道圆角黑线，眼睛一扫就知道下面
+   换了一档，六条不会被读成八条（玩家定的）。 */
+.xhs-tut-split {
+  height: 3px;
+  margin: 16px 6px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  opacity: 0.5;
+}
+/* 这两条的序号位不写数字，写玩法名——它们不是第 7、第 8 条。 */
+.tut-rule-num--word {
+  width: auto;
+  min-width: 3.4em;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
