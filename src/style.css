@@ -1203,8 +1203,11 @@ button:hover { filter: brightness(1.05); }
    淡撤掉（xhs/src/main.ts 的 dim），牌子留着。 */
 .home-icon-btn--dim .home-icon-art > svg { opacity: 0.7; }
 .xhs-soon-tag {
-  position: absolute; left: 50%; bottom: 5%;
-  transform: translateX(-50%);
+  /* 自己占一行，落在图和名字中间——不压图（玩家定的）。图那一格是正方的、
+     多半被图案填满，牌子摞上去就成了「图上贴了张条」；单独占一行，五张卡看
+     起来才是一套。 */
+  align-self: center;
+  margin: 4px 0 2px;
   padding: 2px 8px; border-radius: 999px;
   background: rgba(46, 36, 48, 0.74); color: #FBF8F1;
   font-size: 10px; line-height: 1.5; letter-spacing: 0.04em; white-space: nowrap;

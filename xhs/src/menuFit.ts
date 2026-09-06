@@ -26,11 +26,20 @@
  * 看不到那一瞬间的大小。
  */
 
-/** 再小就不像个能点的东西了。 */
-const MIN_CARD = 76;
+/**
+ * 再小就不像个能点的东西了。
+ *
+ * 从 76 降到 68：那三张卡上多了一行「天才入口」，矮屏（375×667）三排一共多
+ * 出五十来个像素，卡不再缩一档就会把最后一排顶到底排上。68px 的图配上底下
+ * 那行小字，整张卡还有九十来个像素高，手指按得住。
+ */
+const MIN_CARD = 68;
 
 /** 卡缩到头还是装不下时，把排与排之间那道缝也收一收。收到这儿为止。 */
 const MIN_GAP = 10;
+
+/** 再不够就收标题。收到这儿为止——再小就不像个招牌了。 */
+const MIN_TITLE = 22;
 
 function menuParts() {
   const app = document.querySelector<HTMLElement>('.app.home-page');
@@ -41,8 +50,14 @@ function menuParts() {
   return { app, grid, rows, card, art };
 }
 
-/** 最后一张卡的小字，和底排那一块之间隔多少——负数就是没挨着。 */
-const CLEAR = 8;
+/**
+ * 最后一张卡的小字，和底排那一块之间要留多少——量出来是负数就是还没挨着。
+ *
+ * 从 8 放宽到 16：8px 在算术上够了（谁也没压着谁），可一眼看过去卡的小字几
+ * 乎贴在底排那颗键上，像是「差一点就要压上」。玩家要的是「所有内容互相不
+ * 遮蔽」，那就该看得出中间有条缝，而不是刚好没碰上。
+ */
+const CLEAR = 16;
 function overlap(): number {
   const cards = document.querySelectorAll<HTMLElement>('.home-icon-btn');
   const last = cards[cards.length - 1];
@@ -75,6 +90,7 @@ export function fitMenu(): void {
   // 缝那个变量是 .home-page 自己定义的（pages.css），写在 body 上会被它盖
   // 掉——要压住它，只能写进同一个元素的行内样式。
   app.style.removeProperty('--narrow-gap');
+  app.style.removeProperty('--xhs-title');
   const design = card.getBoundingClientRect().width;
   if (!(design > 0)) return;
 
@@ -114,6 +130,21 @@ export function fitMenu(): void {
       // 一排一道缝，外加上下各一道：整页矮 (排数+1)×δ。
       const shrinkGap = Math.ceil(left / (rows.length + 1));
       app.style.setProperty('--narrow-gap', Math.max(MIN_GAP, gap - shrinkGap) + 'px');
+    }
+  }
+
+  // 缝也挤到头了还差（375×667 那种矮屏）：最后从顶上那块招牌里要。它是这一
+  // 页最不必要的高度——玩家进来是找玩法的，不是读标题的。
+  const title = app.querySelector<HTMLElement>('.home-title');
+  if (title) {
+    title.style.removeProperty('font-size');
+    app.style.removeProperty('--xhs-title');
+    const still = shortfall();
+    if (still > 1) {
+      const size = parseFloat(getComputedStyle(title).fontSize);
+      if (Number.isFinite(size)) {
+        app.style.setProperty('--xhs-title', Math.max(MIN_TITLE, size - still) + 'px');
+      }
     }
   }
 }

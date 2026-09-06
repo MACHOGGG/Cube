@@ -84,15 +84,21 @@ function card(
   const art = document.createElement('span');
   art.className = 'home-icon-art';
   art.innerHTML = icon;
+  btn.appendChild(art);
   // 「天才入口」那块小牌子：说的是「完整版里它归天才」，不是一道锁——这一版
   // 照样点得开、照样免费，所以不压锁、不拦手（pointer-events 在样式里关掉）。
+  //
+  // 摆在图和名字**中间**，不压在图上（玩家定的）。原先是绝对定位贴在图的下
+  // 沿：老虎机那张图是横的、下面本来就空着一截，牌子正好落在缝里；方块、炸
+  // 弹那几张图是填满整格的，同一块牌子就盖在图案身上了。同一块牌子在五张卡
+  // 上长得不一样，看着就像是没对齐。改成自己占一行，五张一致；卡因此高出一
+  // 截，menuFit 会把卡缩回来（它现量现算，见 menuFit.ts）。
   if (soon) {
     const tag = document.createElement('span');
     tag.className = 'xhs-soon-tag';
     tag.textContent = '天才入口';
-    art.appendChild(tag);
+    btn.appendChild(tag);
   }
-  btn.appendChild(art);
   const cap = document.createElement('span');
   cap.className = 'home-icon-tag';
   cap.textContent = label;
