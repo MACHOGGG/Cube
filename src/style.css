@@ -3649,7 +3649,13 @@ body.is-room-host::after {
 .coach-row { display: flex; align-items: center; gap: 10px; }
 /* 配图不许被旁边的文字挤：它是几幅按 em 定死大小的小棋盘，挤一下就漫出底板。
    文字那边是 flex: 1，剩多少占多少。 */
-.coach-art { font-size: clamp(12px, 2vh, 17px); flex: none; }
+/* 宽高交给内容自己算。这块 span 同时挂着 .tut-rule-art（画法是借它的），而那
+   个类给的是《怎么玩》那一页的固定框 5.2em × 2.7em——小球那一版有六列，装不
+   进 5.2em，一半漫到文字上去。 */
+.coach-art {
+  font-size: clamp(12px, 2vh, 17px);
+  flex: none; width: auto; height: auto;
+}
 /* 老虎机那句提示的配图：这一局转出来的两个得分图案，并排摆。用的是读数条上
    那两个图标同一份画法，那边靠外面的盒子撑大小，这儿得自己给一个。 */
 .tip-targets { display: flex; align-items: center; gap: 6px; }

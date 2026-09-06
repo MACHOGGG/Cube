@@ -304,6 +304,23 @@ export function buildRuleArt(opts: { triangle?: boolean; shape?: 'square' | 'cir
  */
 /** 炸弹色。和棋盘上那一枚是同一个红（circle.ts / square.ts 的 BOMB_PALETTES）。 */
 const RED = '#B3392B';
+/**
+ * 炸弹色那一枚身上的白色「！」。
+ *
+ * 棋盘上它是一个字（.hazard-mark 里那个 '!'，字号取棋子的一半）；这儿画成两块
+ * 白色——一竖一点，和字一个样子，但不看设备上装了什么字体。玩家的原话：「炸弹
+ * 的提示上放上与游戏中一样的感叹号」。
+ */
+const BANG =
+  `<g fill="#FFFFFF"><rect x="43.5" y="21" width="13" height="37" rx="6.5"/>` +
+  `<circle cx="50" cy="72" r="7.5"/></g>`;
+/** 红方块 / 红小球，身上带那个「！」——就是棋盘上危险的那一枚。 */
+const sqHazard =
+  `<svg viewBox="0 0 100 100" aria-hidden="true">` +
+  `<rect x="4" y="4" width="92" height="92" rx="20" fill="${RED}"/>${BANG}</svg>`;
+const ballHazard =
+  `<svg viewBox="0 0 100 100" aria-hidden="true">` +
+  `<circle cx="50" cy="50" r="46" fill="${RED}"/>${BANG}</svg>`;
 /** 炸开的那一下：和第 5 条的「完成」同一个位置、同一个节奏，只是换了张脸、大一圈。 */
 const boomMark =
   `<svg class="ra-end ra-boom" viewBox="0 0 100 100" aria-hidden="true">` +
@@ -316,11 +333,14 @@ const pieceFor = (shape: 'square' | 'circle') =>
     ? (f: string, d: string, cls = '') => ball(f, d, cls)
     : (f: string, d: string, cls = '') => tile(f, d, cls);
 
-/** 炸弹：一行四颗红的挨在一起 → 一起没了 → 炸开。 */
+/** 炸弹：一行四颗带「！」的红的挨在一起 → 一起没了 → 炸开。 */
 export function bombTipArt(shape: 'square' | 'circle'): string {
   const p = pieceFor(shape);
+  // 反面这一路走不到（这四枚只会淡出，不会翻过去），给一个正常的反面占位即可。
+  const hazard = () =>
+    shape === 'circle' ? svgTile(ballHazard, ballBack(RED)) : svgTile(sqHazard, sqBack(RED));
   return board(
-    gone(p(RED, RED)) + gone(p(RED, RED)) + gone(p(RED, RED)) + gone(p(RED, RED)) +
+    gone(hazard()) + gone(hazard()) + gone(hazard()) + gone(hazard()) +
       p(B, T) + p(G, M) + p(Y, O) + p(M, G) +
       boomMark,
   );
