@@ -1199,7 +1199,9 @@ button:hover { filter: brightness(1.05); }
    玩家定的：除了发光那张，其余几张暗淡一点、写上「天才入口」，当完整版的预
    告。这一版这三个照样点得开、照样免费——牌子说的是「完整版里它们归天才」，
    不是一道锁，所以不压锁、不拦手。 */
-.home-icon-btn--soon .home-icon-art > svg { opacity: 0.7; }
+/* 暗淡是路标，牌子是预告，两件事分开：玩家把小球和方块都打过一遍之后，暗
+   淡撤掉（xhs/src/main.ts 的 dim），牌子留着。 */
+.home-icon-btn--dim .home-icon-art > svg { opacity: 0.7; }
 .xhs-soon-tag {
   position: absolute; left: 50%; bottom: 5%;
   transform: translateX(-50%);
@@ -3961,3 +3963,31 @@ body.is-room-host::after {
 /* 这一页借的 .start-count 是横着排的（开局页里图和数字并排），两张图那一行和
    底下那句规矩得竖着叠，否则句子会跑到图的右边去。 */
 .flip-page .slot-pick-area { flex-direction: column; }
+
+/* ---- 有教学条的那几局：把地方让给棋盘 ---------------------------------
+
+   头几局底下多了一块教学条，屏幕就那么高，谁都得让一点。让的是顶上那三块
+   读数——那一局他正在学怎么滑，时间和有效得分率是打完才看的东西；棋盘和条
+   子上那几行字才是他此刻要看清的。所以这一档里读数矮一档、字小一档，各块
+   之间的缝收一档，省下来的高度自动落到棋盘那一格（它写着 flex:1，boardResize
+   照着这一格的实际尺寸现算格子大小）。
+
+   只在这一档生效：教学讲完这一局也就完了，下一局 has-coach 不在，一切照旧
+   （玩家定的「最开始需要教学的内容结束后保持不变」）。
+
+   分寸拿捏过：读数从 50–78 收到 44–64，缝从 8–16 收到 6–11，都是一档，不是
+   一跳。改完在 402×874 / 390×844 / 375×667 三种屏上量过：横竖都不溢出，条子
+   和底排不打架。 */
+.app--game.has-coach { gap: clamp(6px, 1.1vh, 11px); }
+.app--game.has-coach .hud-cell {
+  height: clamp(44px, 6.6vh, 64px);
+  font-size: clamp(1rem, 3vh, 1.6rem);
+  border-radius: clamp(10px, 1.6vh, 14px);
+}
+/* 条子里的字跟着大一档：这一局他要读的就是这几行。
+   摆两条的那一步单写一份：它本来就为了不挤棋盘压扁过一档，拿一条通用规则
+   盖上去会把那一档还回去——量出来条子一下高 27px，棋盘反而没多几个像素。 */
+.coach-bar:not(.coach-bar--pair) .coach-text { font-size: clamp(12.5px, 1.95vh, 15px); }
+.coach-bar:not(.coach-bar--pair) .coach-art { font-size: clamp(13px, 2.2vh, 18px); }
+.coach-bar--pair .coach-text { font-size: clamp(11.5px, 1.72vh, 14px); }
+.coach-bar--pair .coach-art { font-size: clamp(11.5px, 1.82vh, 15.5px); }

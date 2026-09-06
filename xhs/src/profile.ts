@@ -42,7 +42,14 @@ export interface ProfileHandlers {
 /** 空着的时候画几条横线，和网页版一样——「等着记录」比一块空白好看。 */
 const PLACEHOLDER_ROWS = 5;
 
-/** 完整版在哪儿。小工具里不能开外链，所以它只是一行字，不是链接。 */
+/**
+ * 完整版在哪儿。
+ *
+ * 只能是一行字，做不成链接——试过了：打包自查（xhs/check-submit.mjs）把
+ * `target="_blank"` 和 `https://` 都列在禁用能力里，带上就出不了包。规范不
+ * 让小工具把人带出容器，这是平台的规矩，不是我们的取舍。所以留一行可以长
+ * 按复制的字。
+ */
 const SITE = 'play-slides.com';
 
 const esc = (t: string) =>

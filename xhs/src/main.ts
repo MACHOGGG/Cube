@@ -302,6 +302,15 @@ const FIRST_RUN_KEY = 'slides.xhs.firstRun';
 type FirstKey = 'square' | 'bomb' | 'slot' | 'flip';
 const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
 
+/** 小球和方块都打过一遍了没有——主菜单要不要再压暗别的玩法，看这个。 */
+function basicsDone(): boolean {
+  try {
+    return storySeen('circle') && !firstTimeIn('square');
+  } catch {
+    return true;
+  }
+}
+
 function firstTimeIn(k: FirstKey): boolean {
   try {
     // 方块还认那段分镜的旧钥匙：上一版玩过方块的人升上来不该又被当成新人。
@@ -355,8 +364,12 @@ function showMenu() {
     // 定的「基础的两个玩法是明亮的，剩下的轻微暗淡」，见 menu.ts 的 soon）。
     glow: [],
     // 炸弹 / 老虎机 / 无限反转：完整版里是天才玩法，这儿标一块牌子当预告。
-    // 这一版它们照样免费——牌子不拦手，点开就能玩。
+    // 这一版它们照样免费——牌子不拦手，点开就能玩。牌子是常驻的。
     soon: ['bomb', 'slot', 'flip'],
+    // 暗淡只在头几局当路标：小球和方块都打过一遍之后就撤掉（玩家定的）。
+    // 那时候路他自己认得了，再压着别的玩法只剩「这几个不太重要」这一层意
+    // 思，不是我们想说的。
+    dim: basicsDone() ? [] : (['bomb', 'slot', 'flip'] as const),
     onPlay: (mode: XhsMode) => {
       if (mode === 'square') return showSquare();
       if (mode === 'circle') return showGame(circleGame, {}, showMenu);

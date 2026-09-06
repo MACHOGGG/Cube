@@ -44,6 +44,14 @@ export interface XhsMenuHandlers {
    * 开，所以只是一块牌子，不是一道锁。
    */
   soon?: readonly XhsMode[];
+  /**
+   * 这几张卡调暗一档。
+   *
+   * 和 soon 分开：牌子（「天才入口」）是常驻的预告，暗淡只是头几局的路标。
+   * 玩家把小球和方块都打过一遍之后，路他自己认得了，就不该再压着别的玩法
+   * ——那时候暗淡只剩「这几个不太重要」这一层意思，不是我们想说的。
+   */
+  dim?: readonly XhsMode[];
 }
 
 /** 宽屏（电脑、手机横屏）一排摆得下五张；窄屏一排两张。同网页版的分界。 */
@@ -64,10 +72,14 @@ function card(
   onTap: () => void,
   glow = false,
   soon = false,
+  dim = false,
 ): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className =
-    'home-icon-btn' + (glow ? ' home-icon-btn--glow' : '') + (soon ? ' home-icon-btn--soon' : '');
+    'home-icon-btn' +
+    (glow ? ' home-icon-btn--glow' : '') +
+    (soon ? ' home-icon-btn--soon' : '') +
+    (dim ? ' home-icon-btn--dim' : '');
   btn.setAttribute('aria-label', soon ? `${label}（完整版里是天才玩法）` : label);
   const art = document.createElement('span');
   art.className = 'home-icon-art';
@@ -150,6 +162,7 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
           () => h.onPlay(c.mode),
           !!h.glow?.includes(c.mode),
           !!h.soon?.includes(c.mode),
+          !!h.dim?.includes(c.mode),
         ),
       );
     }

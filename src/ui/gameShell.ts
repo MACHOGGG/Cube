@@ -1,7 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { CTL_BACK, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
-import { countFrom, flipHintHtml, playCountdown, startStageHtml } from './startStage';
+import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
@@ -274,9 +274,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         room: !!currentRoom(),
         countId: 'startCount',
         emblem: meta.slotTargets ? slotMachineHtml() : undefined,
-        extra: meta.flip
-          ? flipHintHtml(s.flipScoringHint)
-          : meta.landscape
+        // 无限反转这一屏不再解释计分怎么算（玩家定的）。4-3-2-1 数完就开打，
+        // 上半屏那张图已经说清「你选的是这个玩法」；连击底数、有没有时间奖
+        // 励，是打完看结算页的事，不是站在开局线上要读的。
+        extra: meta.landscape
             ? ROTATE_HINT(landscapePlayed() ? null : s.rotateHint)
             : '',
         // 老虎机那一局底下只留《退出》：轮子已经在转了，「暂停」停不住它，
