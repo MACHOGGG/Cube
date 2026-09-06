@@ -123,6 +123,10 @@ export function createSquareGame(): ShapeGame {
         patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
         // 随机得分目标：开局页换成那台老虎机，当场把这两个转出来。
         slotTargets: targets ?? undefined,
+        // 棋盘底下那块教学条（见 ui/coachBar.ts）。方块这边只有两种局给：头
+        // 一回玩方块（先不出声，见 coachPlan），和炸弹 / 无限反转 / 老虎机头
+        // 一回进来时的那一句提示（coachTip）。
+        coach: !!opts?.coach,
       });
 
       const pickPalette = (): readonly string[] =>
@@ -667,6 +671,11 @@ export function createSquareGame(): ShapeGame {
         shapeId: 'square',
         modeKey: flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
+        coach: !!opts?.coach,
+        coachArt: opts?.coachArt,
+        coachShape: 'square',
+        coachPlan: opts?.coachPlan,
+        coachTip: opts?.coachTip,
         resetBoard,
         render,
         isGameOver,

@@ -74,7 +74,7 @@ export const TIME_GAIN = 1.5;
 
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
-import { mountCoachBar, type CoachBar } from '../ui/coachBar';
+import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -112,8 +112,20 @@ export interface GameControllerHooks {
    * 开被直接按进的那一局基础小球才开。
    */
   coach?: boolean;
-  /** 教学条用的六幅配图。不给就是网页版那一份；小红书版传摘掉三角的那一份。 */
+  /** 教学条用的六幅配图。不给就按图形现算；小红书版传摘掉三角的那一份。 */
   coachArt?: readonly string[];
+  /** 这一局玩的是哪种图形——决定第 4 条那句话，也决定配图画方块还是小球。 */
+  coachShape?: CoachShape;
+  /** 哪一种排法：头一局小球从第 1 条起，头一回玩方块先不出声。见 coachBar.ts。 */
+  coachPlan?: CoachPlan;
+  /**
+   * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示。
+   *
+   * 给了就用同一块条子摆这一句（没有六段进度、不跟着玩家走），15 秒后自己
+   * 走掉；给了它就不摆六条规则——这三个玩法是在基础规则上加一层，能玩到这
+   * 儿的人六条早听过了，要说的只有加的那一层。
+   */
+  coachTip?: { text: string; art: string };
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -281,6 +293,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   /** 头一局那块教学条。没开、或者外壳没画那块壳子，就一直是 null。 */
   let coach: CoachBar | null = null;
+  /** 那三个玩法头一回进来的一句提示。摆 15 秒自己走，走了就不再回来。 */
+  let coachTip: { destroy(): void } | null = null;
 
   /**
    * 得分的这一组里有没有反面（第 3 条：反面和正面一起凑）。
@@ -330,8 +344,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 教学条跟着新的一局从第 1 条重来。第一次开局时才真的建出来——建在开局
     // 页还盖着的时候没有意义，玩家根本看不见它。
     if (hooks.coach && refs.coachEl) {
-      if (coach) coach.reset();
-      else coach = mountCoachBar(refs.coachEl, hooks.lang, hooks.coachArt);
+      if (hooks.coachTip) {
+        // 一句提示：只在真正的第一局摆一次。再来一局的人已经看过了，再摆一
+        // 遍是把同一句话说第二次。
+        if (!coachTip) coachTip = mountCoachTip(refs.coachEl, hooks.coachTip.text, hooks.coachTip.art);
+      } else if (coach) coach.reset();
+      else {
+        coach = mountCoachBar(refs.coachEl, {
+          lang: hooks.lang,
+          shape: hooks.coachShape ?? 'circle',
+          plan: hooks.coachPlan,
+          art: hooks.coachArt,
+        });
+      }
     }
   }
 
@@ -891,6 +916,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       timer.stop();
       coach?.destroy();
       coach = null;
+      coachTip?.destroy();
+      coachTip = null;
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };

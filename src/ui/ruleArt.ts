@@ -136,6 +136,97 @@ const symTrophy =
   `<path d="M50 62 V74" fill="none" stroke="#D89B1E" stroke-width="10" stroke-linecap="round"/>` +
   `<rect x="32" y="76" width="36" height="14" rx="5" fill="#D89B1E"/></svg>`;
 
+/** 小球的一枚棋子：正面实色球，反面浅球面 + 星标（和棋盘上一个样）。 */
+const ball = (front: string, dot: string, cls = ''): string =>
+  svgTile(ballFront(front), ballBack(dot), cls);
+
+/**
+ * 消掉之后留下的那颗空球。
+ *
+ * 棋盘上它是一枚淡到 35% 的实心灰球（circle.ts 的 `--ink-faint` 那一支），
+ * 这儿照抄——第 4 条讲的正是「小球消掉后留下空球」，配图里要真的留下这颗，
+ * 不然那句话没有落点。
+ */
+const ballVoid = `<span class="ra-void"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#8A7F79" opacity="0.35"/></svg></span>`;
+
+/**
+ * 第 4 条里会消掉的那一格：空球一直摆着，上面压一颗反面的球，到时候淡出。
+ *
+ * 分成两层是因为淡出得动在外面（见 ra-gone 上的说明），而且「消掉后留下空
+ * 球」本来就是两样东西——底下那颗是留下的，上面那颗是走掉的。
+ */
+const ballClears = (dot: string): string =>
+  `<span class="ra-cell">${ballVoid}<span class="ra-gone">${ball(B, dot, 'ra-back')}</span></span>`;
+
+/** 一行六颗小球，第二行整体往右挪半格——棋盘上小球就是这样交错排的。 */
+const STAG = 'ra-stag';
+
+/**
+ * 小球那一版的滑动窗口：横着来。
+ *
+ * 方块那一版滑的是一列（窗口竖着盖两格，里面三枚上下叠着往上走）。小球换
+ * 成横的：窗口横盖两格，里面三颗左右排着往左走一格——新的一颗从右边补进
+ * 来，正好落在那一行的第 4 个位置上，凑满四连。棋盘上小球本来就是整行滑，
+ * 竖着滑那一套在交错排布里也对不上格。
+ */
+function slidingRow(a: string, b: string, c: string): string {
+  return `<span class="ra-hwin" style="--c:2;--r:0"><span class="ra-hstrip">${a}${b}${c}</span></span>`;
+}
+
+/** 白箭头，横着的，指向左边（那一行往左滑）。 */
+const arrowLeft = (c: number, r: number): string =>
+  // 视野收紧到只比图形本身大一圈：横着的窗口只有一格高，viewBox 留白多一分，
+  // 箭头就小一分——竖着那一支上下有两格可占，用不着这么省。
+  `<svg class="ra-arrow ra-arrow--x" style="--c:${c};--r:${r}" viewBox="-22 -11 60 22" aria-hidden="true"><g class="ra-arrow-nudge">` +
+  `<line x1="34" y1="0" x2="2" y2="0" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-dasharray="8 7"/>` +
+  `<path d="M-4 -8 L-20 0 L-4 8 Z" fill="#fff" stroke="#fff" stroke-width="5" stroke-linejoin="round"/></g></svg>`;
+
+/** 一行六颗的底排：颜色摆得杂一点，别让人以为底下那排也在凑图案。 */
+const ballRow2 = (cls = STAG): string =>
+  ball(G, T, cls) + ball(M, R, cls) + ball(Y, G, cls) + ball(B, M, cls) + ball(O, R, cls) + ball(G, B, cls);
+
+/**
+ * 第 2–5 条的小球版：上下两行各六颗，下面那行错开半格。
+ *
+ * 玩家的原话：「把逐步教学的图形从方块改为小球，除了第一条以外……两行小球
+ * 然后交叉排列比如上面 6 颗下面 6 颗，教学的内容一样你只是把图形、反面样式
+ * 更改」。所以讲的还是那四件事，只是棋子换成小球、反面换成星标、消除换成留
+ * 空球，节奏（滑 → 对勾 → 翻面）一拍不改。
+ */
+function ballArt(): string[] {
+  const b = (inner: string) => board(inner, 'ra-board--stag', 6);
+  return [
+    // 2. 同色凑成图案：那一行往左滑一格，橙色补进第 4 颗 → 对勾 → 四颗翻面。
+    b(
+      ball(O, R, 'ra-flip') + ball(O, G, 'ra-flip') + blank + blank + ball(B, T) + ball(M, Y) +
+        ballRow2() +
+        slidingRow(ball(B, G), ball(O, Y, 'ra-flip'), ball(O, M, 'ra-flip')) +
+        arrowLeft(2, 0) + checksRow0,
+    ),
+    // 3. 反面和正面同色：前两颗已经是绿点的反面，和滑进来的两颗绿正面凑成一
+    //    行照样得分；只有正面那两颗翻过去。
+    b(
+      ball(G, G, 'ra-back') + ball(G, G, 'ra-back') + blank + blank + ball(B, T) + ball(M, Y) +
+        ballRow2() +
+        slidingRow(ball(B, O), ball(G, R, 'ra-flip'), ball(G, T, 'ra-flip')) +
+        arrowLeft(2, 0) + checksRow0,
+    ),
+    // 4. 反面同色连成一行：四颗蓝点排在一行 → 对勾 → 四颗淡出，底下露出空球。
+    b(
+      ballClears(B) + ballClears(B) + ballClears(B) + ballClears(B) + ball(O, R) + ball(M, G) +
+        ballRow2() + checksRow0,
+    ),
+    // 5. 经典结束：十二颗一颗接一颗翻到反面，全翻完了出「完成」。
+    b(
+      ball(B, R, 'ra-g0') + ball(O, G, 'ra-g1') + ball(M, T, 'ra-g2') +
+        ball(Y, R, 'ra-g3') + ball(G, M, 'ra-g4') + ball(B, O, 'ra-g5') +
+        ball(O, T, 'ra-g6 ' + STAG) + ball(M, G, 'ra-g7 ' + STAG) + ball(G, R, 'ra-g8 ' + STAG) +
+        ball(B, Y, 'ra-g9 ' + STAG) + ball(Y, B, 'ra-g10 ' + STAG) + ball(O, M, 'ra-g11 ' + STAG) +
+        endMark,
+    ),
+  ];
+}
+
 /**
  * 这六幅图，可以要三角，也可以不要。
  *
@@ -147,9 +238,13 @@ const symTrophy =
  * 三角是真玩法，照旧三列。摘掉的是一整列（正面那一枚和它底下的反面那一枚一
  * 起走），不是只藏一枚——只藏一枚会剩下一个空位，看起来像画错了。
  */
-export function buildRuleArt(opts: { triangle?: boolean } = {}): string[] {
+export function buildRuleArt(opts: { triangle?: boolean; shape?: 'square' | 'circle' } = {}): string[] {
   const withTri = opts.triangle !== false;
   const cols = withTri ? 3 : 2;
+  // 第 2–5 条可以换成小球那一套画法（ballArt）。第 1 条不换：它讲的是「每个
+  // 图形都有正反两面」，本来就要把几种图形并排摆出来。第 6 条是几个符号，
+  // 和图形无关。
+  const balls = opts.shape === 'circle' ? ballArt() : null;
   return [
   // 1. 正反两面：方块、小球、三角各一列——上排正面，下排它的反面。上排的
   //    几枚轮流翻过去露一下反面再翻回来，翻出来的正是底下那一枚（玩家的原话：
@@ -166,6 +261,7 @@ export function buildRuleArt(opts: { triangle?: boolean } = {}): string[] {
     cols,
   ),
   // 2. 同色凑成图案：最右那列往上滑一格，橙色凑满一行 → 对勾 → 四枚翻面，反面各是不同的颜色。
+  balls ? balls[0] :
   board(
     tile(O, R, 'ra-flip') + tile(O, G, 'ra-flip') + tile(O, Y, 'ra-flip') + blank +
       tile(G, T) + tile(M, R) + tile(Y, G) + blank +
@@ -173,6 +269,7 @@ export function buildRuleArt(opts: { triangle?: boolean } = {}): string[] {
       arrowUp(3) + checksRow0,
   ),
   // 3. 反面和正面同色：两枚绿点的反面 + 两枚绿正面凑成一行照样得分；只有正面的那两枚翻过去。
+  balls ? balls[1] :
   board(
     tile(G, G, 'ra-back') + tile(G, G, 'ra-back') + tile(G, R, 'ra-flip') + blank +
       tile(B, O) + tile(M, R) + tile(Y, G) + blank +
@@ -181,12 +278,14 @@ export function buildRuleArt(opts: { triangle?: boolean } = {}): string[] {
   ),
   // 4. 反面同色连成一行：四颗蓝点排成一行 → 对勾 → 四颗一起缩小消失（玩家的
   //    原话：「四个点然后消失消除的动画」）。
+  balls ? balls[2] :
   board(
     gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) +
       tile(O, R) + tile(M, G) + tile(G, T) + tile(Y, M) +
       checksRow0,
   ),
   // 5. 经典结束：八枚一枚接一枚翻到反面，全翻完了就出「完成」。
+  balls ? balls[3] :
   board(
     tile(B, R, 'ra-f0') + tile(O, G, 'ra-f1') + tile(M, T, 'ra-f2') + tile(Y, R, 'ra-f3') +
       tile(G, M, 'ra-f4') + tile(B, O, 'ra-f5') + tile(O, R, 'ra-f6') + tile(M, G, 'ra-f7') +
@@ -195,6 +294,46 @@ export function buildRuleArt(opts: { triangle?: boolean } = {}): string[] {
   // 6. 时间短、步数少、得分多 → 综合得分高：秒表、滑动、星星，等号右边是奖杯。
   symStopwatch + symMoves + symStar + symEq + symTrophy,
   ];
+}
+
+/**
+ * 炸弹 / 无限反转 那两句首玩提示的配图（见 ui/modeTips.ts）。
+ *
+ * 和上面六条那一套是同一批零件（同一块小棋盘、同一种棋子、同一个周期），所以
+ * 玩家在教学条里看熟的画法，换到这三个玩法的提示里还是那一套。
+ */
+/** 炸弹色。和棋盘上那一枚是同一个红（circle.ts / square.ts 的 BOMB_PALETTES）。 */
+const RED = '#B3392B';
+/** 炸开的那一下：和第 5 条的「完成」同一个位置、同一个节奏，只是换了张脸、大一圈。 */
+const boomMark =
+  `<svg class="ra-end ra-boom" viewBox="0 0 100 100" aria-hidden="true">` +
+  `<path d="M50 3 L61 29 L88 19 L75 45 L97 58 L70 63 L76 93 L50 77 L24 93 L30 63 L3 58 L25 45 L12 19 L39 29 Z"` +
+  ` fill="#D8452A" stroke="#FFF3E0" stroke-width="5" stroke-linejoin="round"/></svg>`;
+
+/** 这两幅提示图按玩家挑的图形画：他点开炸弹时挑了方块，图里就是方块。 */
+const pieceFor = (shape: 'square' | 'circle') =>
+  shape === 'circle'
+    ? (f: string, d: string, cls = '') => ball(f, d, cls)
+    : (f: string, d: string, cls = '') => tile(f, d, cls);
+
+/** 炸弹：一行四颗红的挨在一起 → 一起没了 → 炸开。 */
+export function bombTipArt(shape: 'square' | 'circle'): string {
+  const p = pieceFor(shape);
+  return board(
+    gone(p(RED, RED)) + gone(p(RED, RED)) + gone(p(RED, RED)) + gone(p(RED, RED)) +
+      p(B, T) + p(G, M) + p(Y, O) + p(M, G) +
+      boomMark,
+  );
+}
+
+/** 无限反转：三枚图形正面 ↔ 反面来回翻，3 秒一次，一直翻下去。 */
+export function flipTipArt(shape: 'square' | 'circle'): string {
+  const p = pieceFor(shape);
+  return board(
+    p(O, O, 'ra-toss') + p(B, B, 'ra-toss') + p(G, G, 'ra-toss'),
+    'ra-still ra-board--toss',
+    3,
+  );
 }
 
 /** 网页版用的那一份：三种图形都在。 */

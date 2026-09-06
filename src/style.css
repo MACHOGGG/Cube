@@ -1141,6 +1141,33 @@ button:hover { filter: brightness(1.05); }
    齐，不再单独居中——底下那行小字要和同排的对齐。 */
 .home-icon-btn--wide-art { aspect-ratio: 189 / 106; }
 .home-icon-btn--wide-art .home-icon-art { aspect-ratio: 189 / 106; }
+/* ---- 引导用的那圈光（menu 的 glow）------------------------------------
+   头一局小球打完退回主菜单，五张卡摊在眼前，他还是不知道该点哪一张。给该
+   点的那一张镶一圈会呼吸的光——不加字、不弹窗，只把眼睛领过去（「不要出现
+   意料之外的界面」）。玩过一次之后这圈光就撤掉。
+
+   米色底给微红的光，暗色底给白的光：两种底色各自最跳、又不刺眼的那一种
+   （玩家定的）。光画在图那一格上而不是整张卡上——卡底下还有一行小字，连字
+   一起罩住就成了一块发光的方牌，不像「这张图在叫你」。 */
+.home-icon-btn--glow .home-icon-art {
+  border-radius: var(--r-sm);
+  animation: home-glow 2.2s ease-in-out infinite;
+}
+@keyframes home-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(179, 57, 43, 0); }
+  50% { box-shadow: 0 0 15px 5px rgba(179, 57, 43, 0.42); }
+}
+@keyframes home-glow-dark {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+  50% { box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.5); }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .home-icon-btn--glow .home-icon-art { animation-name: home-glow-dark; }
+}
+:root[data-theme="dark"] .home-icon-btn--glow .home-icon-art { animation-name: home-glow-dark; }
+@media (prefers-reduced-motion: reduce) {
+  .home-icon-btn--glow .home-icon-art { animation: none; box-shadow: 0 0 12px 3px rgba(179, 57, 43, 0.3); }
+}
 .home-icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--r-sm); }
 
 /* The press cue: a quick squash and tilt, fired from pointerdown so it plays
@@ -3609,6 +3636,10 @@ body.is-room-host::after {
   display: flex; flex-direction: column; gap: 6px;
   flex: none;                     /* 矮屏上不许被压扁——挤没了字就漫出盒子 */
 }
+/* 上面那条 display 是作者样式，压得过浏览器自带的 [hidden]，所以要自己再写
+   一遍。方块那一局开头这块条子是藏着的（等 10 秒或等他得一次分），少了这条
+   就变成一个空白的圆角盒子摆在棋盘底下。 */
+.coach-bar[hidden] { display: none; }
 .coach-prog { display: flex; gap: 4px; }
 .coach-seg {
   flex: 1; height: 3px; border-radius: 2px;
@@ -3616,7 +3647,13 @@ body.is-room-host::after {
 }
 .coach-seg.on { background: var(--accent); }
 .coach-row { display: flex; align-items: center; gap: 10px; }
-.coach-art { font-size: clamp(12px, 2vh, 17px); }
+/* 配图不许被旁边的文字挤：它是几幅按 em 定死大小的小棋盘，挤一下就漫出底板。
+   文字那边是 flex: 1，剩多少占多少。 */
+.coach-art { font-size: clamp(12px, 2vh, 17px); flex: none; }
+/* 老虎机那句提示的配图：这一局转出来的两个得分图案，并排摆。用的是读数条上
+   那两个图标同一份画法，那边靠外面的盒子撑大小，这儿得自己给一个。 */
+.tip-targets { display: flex; align-items: center; gap: 6px; }
+.tip-targets .pattern-icon { width: 2.1em; height: 2.1em; }
 .coach-text {
   flex: 1; min-width: 0; margin: 0;
   font-size: clamp(12px, 1.85vh, 15px); line-height: 1.38; color: var(--ink);
@@ -3670,6 +3707,11 @@ body.is-room-host::after {
 .ra-board {
   --pad: 0.16em; --gap: 0.16em;
   position: relative; display: grid; grid-template-columns: repeat(var(--cols, 4), 1em); grid-auto-rows: 1em;
+  /* 宽度写死成「几列就是几列」：这块棋盘常常是别人的弹性子项（教学条里它和
+     文字并排），不写死就会被旁边的文字挤扁——列宽是 1em 定死的，挤扁的不是
+     格子而是这块底板，棋子就漫到底板外面去了。小球那一版有六列，正是它先撞
+     上这件事。 */
+  width: -webkit-max-content; width: max-content;
   gap: var(--gap); padding: var(--pad); border-radius: 0.34em;
   background: var(--board-bg, #EFE6E2); box-shadow: inset 0 0 0 1px var(--line, #E5DAD8);
   animation: ra-cycle var(--T) linear infinite;
@@ -3756,6 +3798,89 @@ body.is-room-host::after {
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
 @keyframes ra-end { 0%, 80% { transform: translate(-50%, -50%) scale(0); } 86%, 100% { transform: translate(-50%, -50%) scale(1); } }
+/* ---- 小球那一版的配图（第 2–5 条，ballArt）----------------------------
+   上下两行各六颗，下面那行整体往右挪半格——棋盘上小球本来就是这样交错排
+   的。整块比方块那一版宽了两列，所以字号收一点，免得把教学条里的文字挤没
+   了（.ra-board 里的内边距、缝隙都是 em，跟着一起缩，比例不变）。 */
+.ra-board--stag {
+  font-size: 0.85em;
+  padding-right: calc(var(--pad) + 0.5em + var(--gap) / 2);
+}
+.ra-stag { margin-left: calc(0.5em + var(--gap) / 2); }
+/* 第 4 条：消掉之后留下的那颗空球。底下那颗一直摆着，上面那颗反面的球淡出
+   （.ra-gone）之后就露出来——和棋盘上「小球消掉留下空球」是同一回事。 */
+.ra-cell { position: relative; display: block; width: 1em; height: 1em; }
+.ra-cell > .ra-void,
+.ra-cell > .ra-gone { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.ra-void > svg { display: block; width: 100%; height: 100%; }
+/* 横着滑的窗口：盖住两格，里面三颗左右排着，整条向左滑一格，新的一颗从右
+   边补进来。小球在棋盘上滑的就是整行，竖着滑那一套在交错排布里对不上格。 */
+.ra-hwin {
+  position: absolute; overflow: hidden;
+  width: calc(2em + var(--gap)); height: 1em;
+  left: calc(var(--pad) + var(--c) * (1em + var(--gap)));
+  top: calc(var(--pad) + var(--r) * (1em + var(--gap)));
+}
+/* 宽度得写死成三颗的宽度：窗口只有两格宽，而这一条是块级的弹性盒——不写死
+   它就跟着窗口只有两格，三颗棋子被挤成两格，滑出来的是三个瘪掉的形状。竖着
+   那一支（.ra-strip）没这毛病：它的高度本来就是内容撑的。 */
+.ra-hstrip {
+  display: flex; width: calc(3em + 2 * var(--gap)); gap: var(--gap);
+  animation: ra-hslide var(--T) ease-in-out infinite;
+}
+.ra-hstrip > * { flex: none; }
+@keyframes ra-hslide { 0%, 18% { transform: translateX(0); } 30%, 100% { transform: translateX(calc(-1em - var(--gap))); } }
+/* 横着的白箭头：指向左边，开头拉一下，滑完就收（竖的那支同一个节奏）。 */
+.ra-arrow--x {
+  width: calc(2em + var(--gap)); height: 1em;
+  top: calc(var(--pad) + var(--r) * (1em + var(--gap)));
+}
+.ra-arrow--x .ra-arrow-nudge { transform-origin: 85% 50%; animation-name: ra-nudge-x; }
+@keyframes ra-nudge-x {
+  0%, 3% { transform: translateX(0) scaleX(1); }
+  7% { transform: translateX(-9%) scaleX(1.22); }
+  11% { transform: translateX(2%) scaleX(0.94); }
+  14%, 100% { transform: none; }
+}
+/* 第 5 条的小球版：十二颗一颗接一颗翻到反面，74% 处翻完，正好给「完成」
+   （ra-end，80% 起）留出冒出来的时间。 */
+.ra-g0 { animation: ra-g0 var(--T) ease-in-out infinite; }
+.ra-g1 { animation: ra-g1 var(--T) ease-in-out infinite; }
+.ra-g2 { animation: ra-g2 var(--T) ease-in-out infinite; }
+.ra-g3 { animation: ra-g3 var(--T) ease-in-out infinite; }
+.ra-g4 { animation: ra-g4 var(--T) ease-in-out infinite; }
+.ra-g5 { animation: ra-g5 var(--T) ease-in-out infinite; }
+.ra-g6 { animation: ra-g6 var(--T) ease-in-out infinite; }
+.ra-g7 { animation: ra-g7 var(--T) ease-in-out infinite; }
+.ra-g8 { animation: ra-g8 var(--T) ease-in-out infinite; }
+.ra-g9 { animation: ra-g9 var(--T) ease-in-out infinite; }
+.ra-g10 { animation: ra-g10 var(--T) ease-in-out infinite; }
+.ra-g11 { animation: ra-g11 var(--T) ease-in-out infinite; }
+@keyframes ra-g0 { 0%, 2% { transform: rotateY(0); } 8%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g1 { 0%, 8% { transform: rotateY(0); } 14%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g2 { 0%, 14% { transform: rotateY(0); } 20%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g3 { 0%, 20% { transform: rotateY(0); } 26%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g4 { 0%, 26% { transform: rotateY(0); } 32%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g5 { 0%, 32% { transform: rotateY(0); } 38%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g6 { 0%, 38% { transform: rotateY(0); } 44%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g7 { 0%, 44% { transform: rotateY(0); } 50%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g8 { 0%, 50% { transform: rotateY(0); } 56%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g9 { 0%, 56% { transform: rotateY(0); } 62%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g10 { 0%, 62% { transform: rotateY(0); } 68%, 100% { transform: rotateY(180deg); } }
+@keyframes ra-g11 { 0%, 68% { transform: rotateY(0); } 74%, 100% { transform: rotateY(180deg); } }
+
+/* ---- 炸弹 / 无限反转 那两句提示的配图（bombTipArt / flipTipArt）---------
+   炸开的那一下：位置和节奏跟第 5 条的「完成」同一支（.ra-end），只是大一圈。 */
+.ra-boom { width: 1.9em; height: 1.9em; }
+/* 无限反转：三枚来回翻，3 秒一面（玩家定的），所以整个周期定成 6 秒——这一
+   幅不跟六条那套 6.4 秒走。ra-still 已经把整幅淡出关了，翻面就这么一直翻。 */
+.ra-board--toss { --T: 6s; }
+.ra-toss { animation: ra-toss var(--T) ease-in-out infinite; }
+@keyframes ra-toss {
+  0%, 44% { transform: rotateY(0); }
+  50%, 94% { transform: rotateY(180deg); }
+  100% { transform: rotateY(0); }
+}
 /* 第 6 条：秒表的针走一圈、星星闪一下，等号右边的奖杯亮起来。 */
 .ra-sym { width: 1.1em; height: 1.1em; flex: none; }
 .ra-sym--eq { width: 0.66em; }

@@ -28,6 +28,14 @@ export interface XhsMenuHandlers {
   onPlay: (mode: XhsMode) => void;
   /** 底排那唯一一颗键：成绩 + 说明合成的那一屏。 */
   onProfile: () => void;
+  /**
+   * 这几张卡要发光——「下一张点这儿」。
+   *
+   * 头一局小球打完退回主菜单时，五张卡摊在眼前，他还是不知道该点哪一张；给
+   * 《基础方块》镶一圈会呼吸的光，路就只有一条了。玩过一次方块之后这圈光就
+   * 撤掉（main.ts 记的那把钥匙），不再打扰他。
+   */
+  glow?: readonly XhsMode[];
 }
 
 /** 宽屏（电脑、手机横屏）一排摆得下五张；窄屏一排两张。同网页版的分界。 */
@@ -42,9 +50,9 @@ const CARDS: { mode: XhsMode; icon: string; tag: string }[] = [
 ];
 
 /** 一张卡：上面一格方的图，底下一行小字。和网页版的 iconButton 同一个形状。 */
-function card(icon: string, label: string, onTap: () => void): HTMLButtonElement {
+function card(icon: string, label: string, onTap: () => void, glow = false): HTMLButtonElement {
   const btn = document.createElement('button');
-  btn.className = 'home-icon-btn';
+  btn.className = 'home-icon-btn' + (glow ? ' home-icon-btn--glow' : '');
   btn.setAttribute('aria-label', label);
   const art = document.createElement('span');
   art.className = 'home-icon-art';
@@ -112,7 +120,7 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
     const row = document.createElement('div');
     row.className = 'home-row';
     for (const c of CARDS.slice(i, i + perRow)) {
-      row.appendChild(card(c.icon, menuTag(lang, c.tag), () => h.onPlay(c.mode)));
+      row.appendChild(card(c.icon, menuTag(lang, c.tag), () => h.onPlay(c.mode), !!h.glow?.includes(c.mode)));
     }
     grid.appendChild(row);
   }

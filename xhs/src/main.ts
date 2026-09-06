@@ -46,7 +46,8 @@ import type { Lang } from '../../src/i18n';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
-import { openTutorial, storySeen, markStorySeen, RULE_ART, type StoryFamily } from './tutorial';
+import { openTutorial, storySeen, markStorySeen, RULE_ART, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
+import { bombTip, flipTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
 import { renderRunSheet } from './runSheet';
@@ -286,6 +287,39 @@ function refreshLastRun() {
  */
 const FIRST_RUN_KEY = 'slides.xhs.firstRun';
 
+/**
+ * 「这个玩法他开过没有」——头一回进去时才有的那点招待，都靠它。
+ *
+ *   square          头一回点开《基础方块》：棋盘底下那块教学条按 'square' 那
+ *                   一路走（先不出声，见 ui/coachBar.ts）；在他开过之前，主菜
+ *                   单上那张卡一直镶着一圈光。
+ *   bomb/slot/flip  头一回进去：棋盘底下摆一句话说清加的那一层规矩，15 秒自
+ *                   己走掉（ui/modeTips.ts）。
+ *
+ * 存不进 localStorage（容器把它关了）就当「已经开过」——宁可少招待一次，也
+ * 不要每一局都重来一遍：一句每次都冒出来的提示比没有还烦。
+ */
+type FirstKey = 'square' | 'bomb' | 'slot' | 'flip';
+const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
+
+function firstTimeIn(k: FirstKey): boolean {
+  try {
+    // 方块还认那段分镜的旧钥匙：上一版玩过方块的人升上来不该又被当成新人。
+    if (k === 'square' && storySeen('square')) return false;
+    return localStorage.getItem(OPENED_KEY(k)) !== '1';
+  } catch {
+    return false;
+  }
+}
+
+function markOpened(k: FirstKey): void {
+  try {
+    localStorage.setItem(OPENED_KEY(k), '1');
+  } catch {
+    /* 存不进去就下次再招待一遍，不是什么大事 */
+  }
+}
+
 function firstScreen(): void {
   let first = false;
   try {
@@ -309,7 +343,7 @@ function firstScreen(): void {
   markStorySeen('circle');
   // coach：棋盘底下那块教学条（ui/coachBar.ts）。头一局才给——这一局的规矩全
   // 靠它讲。配图用这一版摘掉三角的那一份。
-  showGame(circleGame, { coach: true, coachArt: RULE_ART }, showMenu);
+  showGame(circleGame, { coach: true, coachArt: RULE_ART_CIRCLE }, showMenu);
 }
 
 // ---- 各屏 -------------------------------------------------------------------
@@ -317,8 +351,11 @@ function firstScreen(): void {
 function showMenu() {
   teardown();
   renderXhsMenu(root, LANG, {
+    // 头一局小球打完退回这一屏时，《基础方块》镶一圈光——五张卡摊在眼前，
+    // 得给他指一条路。他开过一次方块，这圈光就没了。
+    glow: firstTimeIn('square') ? ['square'] : [],
     onPlay: (mode: XhsMode) => {
-      if (mode === 'square') return showGame(squareGame, {}, showMenu);
+      if (mode === 'square') return showSquare();
       if (mode === 'circle') return showGame(circleGame, {}, showMenu);
       if (mode === 'bomb') return showBombPick();
       if (mode === 'slot') return showSlot();
@@ -333,6 +370,57 @@ function showMenu() {
   setScreenBack(null);
 }
 
+/**
+ * 基础方块。头一回点开时棋盘底下也给一块教学条，但走的是另一路。
+ *
+ * 他刚打完那一局小球，六条已经跟着走过一遍了，所以这块条子先不出声：10 秒
+ * 之内自己得了分就不用教，把第 2 条亮一下算个招呼，剩下的一条接一条播完；
+ * 10 秒还没得过分才把第 2 条摆出来——卡住的人缺的正是那一句（见
+ * ui/coachBar.ts 的 'square' 那一路）。配图和文字都换成方块那一份。
+ *
+ * 分镜动画照旧放（showGame 里那道闸口）：玩家定的「等到这局完成之后如果再点
+ * 开方块时播放方块的那个动画」。
+ */
+function showSquare(): void {
+  const first = firstTimeIn('square');
+  if (first) markOpened('square');
+  showGame(
+    squareGame,
+    first ? { coach: true, coachPlan: 'square', coachArt: RULE_ART_SQUARE } : {},
+    showMenu,
+  );
+}
+
+/**
+ * 炸弹 / 老虎机 / 无限反转头一回进去时，棋盘底下摆的那一句。
+ *
+ * 这三个都是在基础规则上加一层，所以只说加的那一层，摆 15 秒自己走掉（玩家
+ * 定的）。第二回再进来就没有了——同一句话说两遍就成了噪音。
+ *
+ * 配图跟着他刚挑的图形走（炸弹、无限反转），老虎机那幅直接用这一局转出来的
+ * 那两个得分图案——就是他抬头在读数条上看见的同两个。
+ *
+ * 返回的是 ShapeGameOpts 的一小撮字段，摊进开局那个大 opts 里；不是头一回就
+ * 返回空对象，什么也不加。
+ */
+function tipFor(
+  kind: 'bomb' | 'slot' | 'flip',
+  family: Family,
+  targets?: readonly TargetPattern[],
+): ShapeGameOpts {
+  if (!firstTimeIn(kind)) return {};
+  markOpened(kind);
+  // 这一版只有方块和小球，三角整块不做；真来了个别的就当方块画。
+  const shape = family === 'circle' ? 'circle' : 'square';
+  const tip =
+    kind === 'bomb'
+      ? bombTip(LANG, shape)
+      : kind === 'flip'
+        ? flipTip(LANG, shape)
+        : slotTip(LANG, targets ?? []);
+  return { coach: true, coachTip: tip };
+}
+
 /** 炸弹：先挑方块还是小球，再开局。 */
 function showBombPick() {
   teardown();
@@ -340,7 +428,7 @@ function showBombPick() {
     title: '炸弹',
     tagline: '红色是危险色 · 四颗连起来这一局就结束',
     onBack: showMenu,
-    onPick: (family) => startWith(family, { bomb: true }, showBombPick),
+    onPick: (family) => startWith(family, { bomb: true, ...tipFor('bomb', family) }, showBombPick),
   });
   setScreenBack(showMenu);
 }
@@ -354,7 +442,7 @@ function showSlot() {
     {
       onBack: showMenu,
       onStart: (family: Family, targets: TargetPattern[]) =>
-        startWith(family, { targets }, showSlot),
+        startWith(family, { targets, ...tipFor('slot', family, targets) }, showSlot),
       // 这一版全部免费，没有「没开通」这条岔路；给个空函数只是接口要它。
       onGenius: () => {},
     },
@@ -379,7 +467,7 @@ function showFlip() {
     {
       onBack: showMenu,
       onStart: (family) =>
-        startWith(family, { flip: true, timeLimitSec: FLIP_SECONDS }, showFlip),
+        startWith(family, { flip: true, timeLimitSec: FLIP_SECONDS, ...tipFor('flip', family) }, showFlip),
       onGenius: () => {},
     },
     false,

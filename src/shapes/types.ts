@@ -46,8 +46,21 @@ export interface ShapeGameOpts {
    * isFirstRun）——他这时候刚看完「怎么滑」的分镜，别的还一概不知道。
    */
   coach?: boolean;
-  /** 教学条那六幅配图。不给就是网页版那一份；小红书版传摘掉三角的那一份。 */
+  /** 教学条那六幅配图。不给就按这一局的图形现算；小红书版传摘掉三角的那一份。 */
   coachArt?: readonly string[];
+  /**
+   * 教学条按哪一种排法走（见 ui/coachBar.ts）：
+   *   'first'  头一局小球——从第 1 条起，跟着玩家一条一条走。
+   *   'square' 头一回玩方块——先不出声，10 秒没得分才摆出第 2 条，得分后自
+   *            己往下播完。
+   * 不给就是 'first'。
+   */
+  coachPlan?: 'first' | 'square';
+  /**
+   * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示：同一块条子，一句话加
+   * 一幅图，15 秒后自己走掉。给了它就不摆六条规则。
+   */
+  coachTip?: { text: string; art: string };
 }
 
 export interface ShapeGame {

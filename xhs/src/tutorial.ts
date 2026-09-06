@@ -44,6 +44,18 @@ import { buildRuleArt } from '../../src/ui/ruleArt';
  */
 export const RULE_ART = buildRuleArt({ triangle: false });
 
+/**
+ * 教学条在一局里用的那两份：讲小球那一局画小球，讲方块那一局画方块。
+ *
+ * 上面那一份（RULE_ART）是《怎么玩》整页用的通稿——那一页玩家还没挑玩法，
+ * 两种图形都要照顾到。棋盘底下那块条子不一样：他眼前只有一种图形，画另一
+ * 种是在他手上这一局里插一段用不上的画（玩家定的：「把逐步教学的图形从方
+ * 块改为小球，除了第一条以外」）。第 1 条两份都一样——它讲的正是「每个图形
+ * 都有正反两面」，本来就要并排摆几种。
+ */
+export const RULE_ART_CIRCLE = buildRuleArt({ triangle: false, shape: 'circle' });
+export const RULE_ART_SQUARE = RULE_ART;
+
 /** 会放分镜动画的两族。三角整块不做，所以只有这两个。 */
 export type StoryFamily = 'square' | 'circle';
 

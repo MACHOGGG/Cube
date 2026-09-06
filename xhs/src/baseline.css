@@ -75,7 +75,11 @@ html.no-ratio .slot-machine--bare {
    `inset: 0` 就是四个方向的简写，拆开写即可。 */
 html.no-inset .overlay,
 html.no-inset .app--game .gain-badge,
-html.no-inset .slot-machine-art {
+html.no-inset .slot-machine-art,
+/* 规则配图那套小棋子（ruleArt.ts）：正反两面各是一张铺满的图，全靠 inset: 0
+   撑开。少了它两面都没有尺寸，教学条和《怎么玩》那一屏的配图整片是空的。 */
+html.no-inset .ra-f,
+html.no-inset .ra-b {
   inset: auto;
   top: 0;
   right: 0;

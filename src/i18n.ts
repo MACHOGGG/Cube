@@ -1770,6 +1770,76 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   ],
 };
 
+/**
+ * 第 4 条按形状分两句。
+ *
+ * 上面那一份是「两种图形都讲」的通稿，教学挑选页、暂停面板、《怎么玩》那一
+ * 屏用它——那几处玩家还没挑玩法，两边都得说。
+ *
+ * 但棋盘底下那块教学条（ui/coachBar.ts）是在**某一局里**讲的：他眼前只有小
+ * 球，或者只有方块。这时候再讲另一种图形的规矩，是在他手上这一局里插进一段
+ * 用不上的话。玩家的原话——小球那一局「在文字内容中也去除所有与方块有关的
+ * 内容」，方块那一局「只讲方块连成一行/列后会完全消除」。
+ *
+ * 只有第 4 条要分：别的五条讲的是正反面、凑图案、结束、综合得分，两种图形
+ * 一个样。
+ */
+export const TUTORIAL_RULE4: Record<Lang, Record<'circle' | 'square', string>> = {
+  en: {
+    circle: 'Backs of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty balls behind.',
+    square: 'Backs of one colour filling a whole row or column score and clear away for good.',
+  },
+  fr: {
+    circle: 'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et ils laissent des billes vides.',
+    square: 'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent définitivement.',
+  },
+  zhHant: {
+    circle: '反面同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空球。',
+    square: '反面同色連成一行或一列，方塊就完全消除，不再出現。',
+  },
+  zhHans: {
+    circle: '反面同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空球。',
+    square: '反面同色连成一行或一列，方块就完全消除，不再出现。',
+  },
+};
+
+/** 教学条那一局要念的六条：第 4 条换成这个形状自己那一句，其余照通稿。 */
+export function tutorialRules(lang: Lang, shape: 'circle' | 'square'): string[] {
+  const base = TUTORIAL_RULES[lang] ?? TUTORIAL_RULES.zhHans;
+  const four = (TUTORIAL_RULE4[lang] ?? TUTORIAL_RULE4.zhHans)[shape];
+  return base.map((t, i) => (i === 3 ? four : t));
+}
+
+/**
+ * 炸弹 / 无限反转 / 老虎机头一回进来时，棋盘底下摆的那一句。
+ *
+ * 这三个玩法都是在基础规则上加一层：滑动、得分、翻面、消除全没变，变的只是
+ * 多出来的那一条。所以每个只说那一条，说完 15 秒自己走掉（见 ui/coachBar.ts
+ * 的 mountCoachTip）——能玩到这儿的人六条规矩早听过了。
+ */
+export const MODE_TIPS: Record<Lang, Record<'bomb' | 'flip' | 'slot', string>> = {
+  en: {
+    bomb: 'Same sliding, scoring and clearing as before — but red is the bomb colour. Four reds touching blow up! Any four that touch will set it off.',
+    flip: 'Score and a piece turns to its back. In Endless Flip a back that scores turns straight back to its front — nothing ever clears. 60 seconds. Off you go!',
+    slot: 'In Slot Machine the two scoring shapes are drawn at random: build those two, score, and flip. Clearing works exactly as before. Give it a go!',
+  },
+  fr: {
+    bomb: 'Même glissement, mêmes points, mêmes disparitions — mais le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent ! N’importe lesquels, du moment qu’ils se touchent.',
+    flip: 'Marquez et la pièce passe sur son verso. Dans Retournement infini, un verso qui marque revient aussitôt sur son recto — rien ne disparaît. 60 secondes. C’est parti !',
+    slot: 'En mode Machine à sous, les deux motifs gagnants sont tirés au hasard : formez ces deux-là, marquez, retournez. Les disparitions ne changent pas. À vous !',
+  },
+  zhHant: {
+    bomb: '在滑動、得分、消除的基礎上，紅色作為炸彈色，四個相連會爆炸！注意，任何接觸的四個相連都會引爆。',
+    flip: '滑動得分後反轉到反面。在《無限反轉》中，反面得分會再次翻回正面，不會消除。限時 60 秒，開始吧！',
+    slot: '老虎機玩法中，隨機得到什麼得分圖案，就要根據這兩個圖案拼湊圖形、得分並翻面；消除規則不變。快挑戰一下吧！',
+  },
+  zhHans: {
+    bomb: '在滑动、得分、消除的基础上，红色作为炸弹色，四个相连会爆炸！注意，任何接触的四个相连都会引爆。',
+    flip: '滑动得分后反转到反面。在《无限反转》中，反面得分会再次翻回正面，不会消除。限时 60 秒，开始吧！',
+    slot: '老虎机玩法中，随机得到什么得分图案，就要根据这两个图案拼凑图形、得分并翻面；消除规则不变。快挑战一下吧！',
+  },
+};
+
 export function loadLang(): Lang | null {
   const v = localStorage.getItem(LANG_STORAGE_KEY);
   return v && LANG_ORDER.includes(v as Lang) ? (v as Lang) : null;
