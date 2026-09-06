@@ -194,20 +194,65 @@ const onMenuPage = () => !!root.querySelector('.home-page');
  */
 let profileScrollY = 0;
 const onProfilePage = () => !!root.querySelector('.profile-page');
+/**
+ * 正在把位置放回去的那一小段时间里，不记新位置。
+ *
+ * 这是那个「有时候回来落在顶上、有时候好好的」的根子：画完菜单到真正滚回
+ * 去，中间隔着一两帧；那几帧里文档还没长到原来那么高，浏览器会发一个
+ * `scrollY = 0` 的滚动事件，而这时候 `.home-page` 已经在 DOM 里了——监听器
+ * 就把这个 0 当成「玩家滚到了最上面」记下来，紧接着的还原自然还原到 0。
+ *
+ * 字体和图标晚一点解码完（真机上很常见），文档长高得更晚，这一下就更容易
+ * 赶上，所以它时灵时不灵。
+ */
+let restoringScroll = 0;
 window.addEventListener(
   'scroll',
   () => {
+    if (restoringScroll > Date.now()) return;
     if (onMenuPage()) menuScrollY = window.scrollY;
     else if (onProfilePage()) profileScrollY = window.scrollY;
   },
   { passive: true },
 );
+
+/**
+ * 把位置放回去，并且追着放——一次不够。
+ *
+ * 文档是慢慢长高的：先是骨架，然后字体落位、图标解码，高度一路往上走。在它
+ * 还矮的时候 scrollTo 会被浏览器夹到「当前能滚到的最远处」，也就是没滚到
+ * 位。所以每一帧再试一次，直到真的到了那个数，或者半秒过去（半秒还长不完
+ * 的页面，再等下去玩家已经自己动手了）。
+ */
+function keepScrollAt(target: number, stillThere: () => boolean) {
+  if (!target) return;
+  const until = Date.now() + 500;
+  restoringScroll = until;
+  // 玩家在这半秒里自己动手了，就立刻松手——追着放本来是为了对付慢一拍的
+  // 排版，不是为了跟玩家的手指抢。
+  let handsOff = false;
+  const letGo = () => {
+    handsOff = true;
+    restoringScroll = 0;
+  };
+  const watch = ['touchstart', 'wheel', 'keydown'] as const;
+  watch.forEach((k) => window.addEventListener(k, letGo, { passive: true, once: true }));
+  const stop = () => watch.forEach((k) => window.removeEventListener(k, letGo));
+  const put = () => {
+    if (handsOff) return stop();
+    if (!stillThere()) return stop();
+    if (Math.abs(window.scrollY - target) > 1) window.scrollTo(0, target);
+    if (Date.now() < until) requestAnimationFrame(put);
+    else {
+      restoringScroll = 0;
+      stop();
+    }
+  };
+  put();
+}
+
 function restoreProfileScroll() {
-  if (!profileScrollY) return;
-  window.scrollTo(0, profileScrollY);
-  requestAnimationFrame(() => {
-    if (onProfilePage()) window.scrollTo(0, profileScrollY);
-  });
+  keepScrollAt(profileScrollY, onProfilePage);
 }
 /** 从个人主页点进去的那些页，按《退出》回来走的这条。 */
 const backToProfile = () => showAccountPage('login', true);
@@ -223,15 +268,11 @@ const backToRoomFromPick = () => {
  */
 let mpOrigin: 'menu' | 'profile' = 'menu';
 let slotOrigin: 'menu' | 'intro' = 'menu';
-/** 放回刚才那个位置。同步做一次，是因为紧接着可能要重开某个弹窗，而那个飞入
- *  动画要量卡片此刻在屏幕上的真实位置；下一帧再放一次，挡住字体或图片加载
- *  完之后高度变化把它又冲掉。 */
+/** 放回刚才那个位置。第一下是同步的，因为紧接着可能要重开某个弹窗，而那个
+ *  飞入动画要量卡片此刻在屏幕上的真实位置；之后半秒里每帧再放一次，挡住字
+ *  体和图标加载完之后高度变化把它冲掉（见 keepScrollAt）。 */
 function restoreMenuScroll() {
-  if (!menuScrollY) return;
-  window.scrollTo(0, menuScrollY);
-  requestAnimationFrame(() => {
-    if (onMenuPage()) window.scrollTo(0, menuScrollY);
-  });
+  keepScrollAt(menuScrollY, onMenuPage);
 }
 
 /** Re-paints the inline SVG glyphs of whatever was just rendered for the
