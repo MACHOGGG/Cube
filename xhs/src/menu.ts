@@ -37,17 +37,17 @@ export interface XhsMenuHandlers {
    */
   glow?: readonly XhsMode[];
   /**
-   * 这几张卡调暗一点、写上「天才入口」。
+   * 这几张卡调暗一点、写上「进阶入口」。
    *
    * 玩家定的：头一局打完回主菜单，除了发光的那张，其余几张暗一点、标出来，
-   * 当完整版的预告——完整版里这几个是天才玩法。这一版它们照样免费、照样点得
+   * 当完整版的预告——完整版里还有更进阶的玩法。这一版它们照样免费、照样点得
    * 开，所以只是一块牌子，不是一道锁。
    */
   soon?: readonly XhsMode[];
   /**
    * 这几张卡调暗一档。
    *
-   * 和 soon 分开：牌子（「天才入口」）是常驻的预告，暗淡只是头几局的路标。
+   * 和 soon 分开：牌子（「进阶入口」）是常驻的预告，暗淡只是头几局的路标。
    * 玩家把小球和方块都打过一遍之后，路他自己认得了，就不该再压着别的玩法
    * ——那时候暗淡只剩「这几个不太重要」这一层意思，不是我们想说的。
    */
@@ -80,12 +80,12 @@ function card(
     (glow ? ' home-icon-btn--glow' : '') +
     (soon ? ' home-icon-btn--soon' : '') +
     (dim ? ' home-icon-btn--dim' : '');
-  btn.setAttribute('aria-label', soon ? `${label}（完整版里是天才玩法）` : label);
+  btn.setAttribute('aria-label', soon ? `${label}（完整版里还有更进阶的玩法）` : label);
   const art = document.createElement('span');
   art.className = 'home-icon-art';
   art.innerHTML = icon;
   btn.appendChild(art);
-  // 「天才入口」那块小牌子：说的是「完整版里它归天才」，不是一道锁——这一版
+  // 「进阶入口」那块小牌子：说的是「完整版里还有更进阶的玩法」，不是一道锁——这一版
   // 照样点得开、照样免费，所以不压锁、不拦手（pointer-events 在样式里关掉）。
   //
   // 摆在图和名字**中间**，不压在图上（玩家定的）。原先是绝对定位贴在图的下
@@ -96,7 +96,7 @@ function card(
   if (soon) {
     const tag = document.createElement('span');
     tag.className = 'xhs-soon-tag';
-    tag.textContent = '天才入口';
+    tag.textContent = '进阶入口';
     btn.appendChild(tag);
   }
   const cap = document.createElement('span');
