@@ -1765,11 +1765,21 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * 教学挑选页底下那六条规则。和 PRIVILEGES 一样单放（值是数组，不进 I18nStrings）。
  * 中文是玩家自己写的原话。
  */
+/**
+ * 六条规则：教学条（ui/coachBar.ts）、《怎么玩》那一屏（ui/rulesModal.ts）、
+ * 教学挑选页，三处念的都是这一份；网页版和小红书版也是这一份。
+ *
+ * 第 3 条尾巴上那句「但图案里至少要有一个正面」是 2026-09 补的。这条规矩
+ * 引擎里一直就在（engine/scoring.ts：一个图案里没有正面就不给分，所以每次
+ * 得分都必然翻动一枚，把同一组滑回原样刷不到分），《游戏规则》那本词条里也
+ * 早写着（rules.ts 的「必须有正面」）——只有玩家真会读的这六条漏了它。漏掉
+ * 的后果是玩家会以为「反面同色也算」，凑了一组全反面的却不给分，看着像 bug。
+ */
 export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
     'Every piece has a front and a back. A game starts with all fronts up.',
     'Match same-colour pieces into a scoring shape: you score, and those pieces flip. The colour of the back is random.',
-    'A back whose colour matches the fronts can join a shape too, and score again.',
+    'A back whose colour matches the fronts can join a shape too, and score again — but a shape must always hold at least one front.',
     'Backs of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
     'The game ends when every piece is on its back — or when nothing left can flip.',
     'Less time, fewer moves, more points: a higher total score.',
@@ -1777,7 +1787,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   fr: [
     'Chaque pièce a un recto et un verso. La partie commence tous rectos visibles.',
     'Alignez des pièces de même couleur en un motif : vous marquez, et ces pièces se retournent. La couleur du verso est aléatoire.',
-    'Un verso de la même couleur que les rectos peut entrer dans un motif et marquer à nouveau.',
+    'Un verso de la même couleur que les rectos peut entrer dans un motif et marquer à nouveau — mais un motif doit toujours contenir au moins un recto.',
     'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
     'La partie s’arrête quand toutes les pièces sont sur le verso — ou quand plus rien ne peut se retourner.',
     'Moins de temps, moins de coups, plus de points : meilleur score total.',
@@ -1785,7 +1795,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   zhHant: [
     '每個圖形都有正反兩面，開局全是正面。',
     '同色湊成得分圖案就得分，湊成的那幾個翻到反面；反面是什麼顏色，隨機。',
-    '反面和正面顏色一樣時，也能一起湊圖案，再得一次分。',
+    '反面和正面顏色一樣時，也能一起湊圖案，再得一次分；但圖案裡至少要有一個正面。',
     '反面同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
     '全部翻到反面，這一局結束；剩下的再也翻不動，也結束。',
     '時間越短、步數越少、得分越高，綜合得分越高。',
@@ -1793,7 +1803,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   zhHans: [
     '每个图形都有正反两面，开局全是正面。',
     '同色凑成得分图案就得分，凑成的那几个翻到反面；反面是什么颜色，随机。',
-    '反面和正面颜色一样时，也能一起凑图案，再得一次分。',
+    '反面和正面颜色一样时，也能一起凑图案，再得一次分；但图案里至少要有一个正面。',
     '反面同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
     '全部翻到反面，这一局结束；剩下的再也翻不动，也结束。',
     '时间越短、步数越少、得分越高，综合得分越高。',

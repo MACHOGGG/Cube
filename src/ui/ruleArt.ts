@@ -39,30 +39,45 @@ function tile(front: string, dot: string, cls = ''): string {
 }
 
 // 三个基础图形各自的正反面，画法照棋盘上的样子（也是基础教学分镜的画法）：
-// 方块反面是深褐的一块加一颗点；小球反面是浅色球面上一个六角星标；三角反面
-// 是浅色大三角里嵌一个描了黑边的小三角。
+// 反面都是浅色的一块加一颗「＊」。三族现在共用同一个记号（玩家 2026-09 定
+// 的统一，见 ui/dotFaceMark.ts）——从前方块是深褐底加一颗点、三角是浅色大三
+// 角里嵌一个描了黑边的小三角，只有小球是这三笔。
+//
+// 棋盘上反面是「底板透出来」，这儿不能照搬：这几幅小图背后没有棋盘，抽掉底
+// 色就只剩三根悬空的线，认不出是哪一种图形。所以底色换成纸色加一圈浅灰边
+// ——小球那一枚本来就是这么画的，另外两个跟上。
 const PAPER = '#FBF8F1';
-const DARK = '#3D3128';
+/** 那颗星，画在 100×100 的格子里。k=1 就是小球那一枚的大小。 */
+const star100 = (cx: number, cy: number, d: string, k = 1) =>
+  `<g stroke="${d}" stroke-width="${(10 * k).toFixed(1)}" stroke-linecap="round" ` +
+  `transform="translate(${cx} ${cy}) scale(${k}) translate(-50 -50)">` +
+  `<line x1="50" y1="23" x2="50" y2="77"/>` +
+  `<line x1="27" y1="36.5" x2="73" y2="63.5"/><line x1="27" y1="63.5" x2="73" y2="36.5"/></g>`;
 const sqFront = (c: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${c}"/></svg>`;
 const sqBack = (d: string) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${DARK}"/>` +
-  `<circle cx="50" cy="50" r="22" fill="${d}"/></svg>`;
+  `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5"/>` +
+  star100(50, 50, d) +
+  `</svg>`;
 const ballFront = (c: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="${c}"/></svg>`;
 const ballBack = (d: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5"/>` +
-  `<g stroke="${d}" stroke-width="10" stroke-linecap="round"><line x1="50" y1="23" x2="50" y2="77"/>` +
-  `<line x1="27" y1="36.5" x2="73" y2="63.5"/><line x1="27" y1="63.5" x2="73" y2="36.5"/></g></svg>`;
+  star100(50, 50, d) +
+  `</svg>`;
 // 圆角和棋盘上、教学分镜里的三角是同一条轮廓（roundTri.ts），三处一起改，
 // 玩家在哪儿看熟的形状，换个地方还是那个形状。
 const TRI_OUT = roundTriPath([[50, 6], [96, 92], [4, 92]]);
-const TRI_IN = roundTriPath([[50, 40], [73, 82], [27, 82]]);
 const triFront = (c: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${TRI_OUT}" fill="${c}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/></svg>`;
+// 三角这一枚：星星摆在重心上（外框的正中在三角里偏空），比另外两个小一号
+// ——三角是斜的，同样大的星会顶出斜边去。0.8 是「装得下，又还认得出是同一
+// 个记号」之间取的：它的内切圆半径只有 27.6，照小球那个比例算会小到 0.61，
+// 三幅小图并排时那一颗就像另一种东西了。
 const triBack = (d: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${TRI_OUT}" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5" stroke-linejoin="round"/>` +
-  `<path d="${TRI_IN}" fill="${d}" stroke="#1A1A1A" stroke-width="3.5" stroke-linejoin="round"/></svg>`;
+  star100(50, 63.3, d, 0.8) +
+  `</svg>`;
 
 /** 一枚正反面都是 SVG 的棋子（小球、三角，还有第 1 条里的方块）。 */
 function svgTile(front: string, back: string, cls = '', vars = ''): string {

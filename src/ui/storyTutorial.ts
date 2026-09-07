@@ -31,7 +31,6 @@ export interface StoryCell {
    *  drawn in this colour with a dark outline, exactly as src/shapes puts a
    *  turned-over triangle on the board. Set `fill` to the board's paper so
    *  the surround reads as the white margin the small triangle sits in. */
-  inner?: string;
   /** Blanked cell: light fill + dashed outline. */
   dashed?: boolean;
   /** Thin gray outline (the white dot-face balls). */
@@ -138,35 +137,30 @@ function humanP(t: number): number {
   return 0.58 + ease((t - 0.56) / 0.44) * 0.42;
 }
 
-/** How far a turned-over triangle's printed face is shrunk inside its own
- *  silhouette. */
-export const TRI_DOT_SCALE = 0.46;
-
 function cellSvg(c: StoryCell): string {
   const dash = c.dashed ? ' stroke="#6F6F6F" stroke-width="4" stroke-dasharray="12 9"' : '';
   const ring = c.ring && !c.dashed ? ' stroke="#9A9A9A" stroke-width="3.5"' : '';
+  // 反面那颗星摆在哪儿、多大。三角要单算：外框的正中在一个三角里是空的（得
+  // 用重心），而它的内切圆比外框小得多（同样大的星会顶出斜边）。方块和小球
+  // 就在正中，原样大小。
+  let starAt: [number, number, number] = [50, 50, 1];
   let shape = '';
   if (c.shape === 'ci') shape = `<circle cx="50" cy="50" r="45" fill="${c.fill}"${ring}${dash}/>`;
-  else if (c.shape === 'sq') shape = `<rect x="4" y="4" width="92" height="92" rx="20" fill="${c.fill}"${dash}/>`;
+  else if (c.shape === 'sq') shape = `<rect x="4" y="4" width="92" height="92" rx="20" fill="${c.fill}"${ring}${dash}/>`;
   else {
     const pts: [number, number][] =
       c.shape === 'up' ? [[50, 3], [97, 93], [3, 93]] : [[3, 7], [97, 7], [50, 97]];
-    shape = `<path d="${roundTriPath(pts)}" fill="${c.fill}"${dash} stroke-linejoin="round"/>`;
-    if (c.inner) {
-      // Well under the 0.6 the boards themselves use: at this size the two
-      // triangles have to be tellable apart at a glance, and the margin
-      // around the small one is what does that.
-      const k = TRI_DOT_SCALE;
-      const cx = (pts[0][0] + pts[1][0] + pts[2][0]) / 3;
-      const cy = (pts[0][1] + pts[1][1] + pts[2][1]) / 3;
-      const inner = pts.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k] as [number, number]);
-      shape +=
-        `<path d="${roundTriPath(inner)}" fill="${c.inner}" stroke="#1A1A1A"` +
-        ` stroke-width="3.5" stroke-linejoin="round"/>`;
-    }
+    shape = `<path d="${roundTriPath(pts)}" fill="${c.fill}"${ring}${dash} stroke-linejoin="round"/>`;
+    starAt = [
+      (pts[0][0] + pts[1][0] + pts[2][0]) / 3,
+      (pts[0][1] + pts[1][1] + pts[2][1]) / 3,
+      0.8,
+    ];
   }
+  const [sx, sy, sk] = starAt;
   const star = c.star
-    ? `<g stroke="${c.star}" stroke-width="10" stroke-linecap="round">` +
+    ? `<g stroke="${c.star}" stroke-width="${(10 * sk).toFixed(1)}" stroke-linecap="round"` +
+      ` transform="translate(${sx} ${sy}) scale(${sk}) translate(-50 -50)">` +
       `<line x1="50" y1="23" x2="50" y2="77"/><line x1="27" y1="36.5" x2="73" y2="63.5"/>` +
       `<line x1="27" y1="63.5" x2="73" y2="36.5"/></g>`
     : '';

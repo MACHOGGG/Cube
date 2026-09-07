@@ -49,7 +49,9 @@ function frame(rows: string[], dots: readonly number[] = []): StoryCell[] {
         shape: i % 2 === 0 ? 'up' : 'dn',
         fill: blank ? '#D2D2D2' : isDot ? '#FFFFFF' : cvdHex(FILL[ch]),
         dashed: blank,
-        ...(isDot ? { inner: cvdHex(FILL[ch]) } : {}),
+        // 反面：浅色的三角上摆一颗星，和小球、方块同一个记号（玩家 2026-09
+        // 定的统一）。从前这儿是一个描了黑边的小三角。
+        ...(isDot ? { star: cvdHex(FILL[ch]), ring: true } : {}),
       });
     });
   });

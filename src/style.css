@@ -449,7 +449,6 @@ h1 {
 }
 
 .ghost { opacity: 0.55; pointer-events: none; }
-.dot-circle { position: absolute; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.16); }
 
 /* Three reds in a row is one drag from ending the run, so they blink. The
    inset shadow follows border-radius, which is what a square tile or a ball
@@ -476,7 +475,7 @@ h1 {
 /* Bomb-mode hazard tile: a red tile's front face never flips, so this mark
    never needs to animate — it's a static "avoid me" glyph. Font size is set
    inline per tile (proportional to that tile's actual rendered pixel size,
-   same convention as .dot-circle's inline width/height) rather than in CSS. */
+   same convention the pieces use for their own inline width/height) rather than in CSS. */
 .hazard-mark {
   color: #FFFFFF; font-family: 'Fraunces', Georgia, serif; font-weight: 700;
   line-height: 1; user-select: none; pointer-events: none;

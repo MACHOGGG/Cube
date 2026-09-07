@@ -30,3 +30,12 @@ slides-simulator.html
 # 小工具预览页：由 node xhs/preview.mjs 生成，不是源文件。
 xhs/preview.html
 .tmp-oldcss/
+
+# 开场动画导出的产物：源在 tools/splash/，产物随时能重出
+#   npm run build:splash        → splash.html
+#   node tools/splash/record.mjs → splash-<边长>.webm
+# 都是一两百 KB 到几百 KB 的二进制，进版本库只会一次比一次旧。
+tools/splash/splash.html
+tools/splash/*.webm
+tools/splash/frames-*
+tools/splash/.video

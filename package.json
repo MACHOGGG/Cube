@@ -18,7 +18,8 @@
     "check:vsweb": "npm run build && npm run build:xhs && node xhs/preview.mjs && node xhs/check-vsweb.mjs",
     "check:submit": "npm run build:xhs && node xhs/check-submit.mjs",
     "check:story": "npm run build:xhs && node xhs/preview.mjs && node xhs/check-story.mjs",
-    "check:xhs:all": "npm run check:vsweb && node xhs/check-story.mjs && node xhs/check-oldkernel.mjs && node xhs/check-oldcss.mjs && node xhs/check-submit.mjs"
+    "check:xhs:all": "npm run check:vsweb && node xhs/check-story.mjs && node xhs/check-oldkernel.mjs && node xhs/check-oldcss.mjs && node xhs/check-submit.mjs",
+    "build:splash": "vite build --config tools/splash/vite.config.ts && node tools/splash/finish.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

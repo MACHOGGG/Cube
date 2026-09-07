@@ -84,8 +84,6 @@ export function packSnapshot(raw: RawCell[]): BoardSnapshot {
   };
 }
 
-const DOT_SCALE = 0.6;
-const DOT_STROKE = '#1A1A1A';
 // Several palettes include a muted gray/brown flavor color of their own
 // (e.g. #9B958D) that sits too close to any dim gray *fill* to reliably
 // tell apart at a glance — same reasoning the live circleHex board already
@@ -96,8 +94,9 @@ const RING_COLOR = '#9A8B98';
 const RING_SCALE = 0.88;
 
 // Traces one cell's outline at an optional shrink factor around its own
-// center — full size (scale 1) for a live front face, shrunk (DOT_SCALE)
-// for a flipped dot face or (RING_SCALE) for a blanked cell's ring.
+// center — full size (scale 1) for a live front face, shrunk (RING_SCALE)
+// for a blanked cell's ring. 反面不再走这条路：它现在是三笔画的「＊」，不是
+// 这一枚自己的缩小轮廓（见 drawDotFace）。
 function tracePrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number, scale: number) {
   ctx.beginPath();
   if (cell.kind === 'circle') {
@@ -122,13 +121,11 @@ function tracePrimitive(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size:
   }
 }
 
-// The live boards use 3 genuinely different dot-face glyphs, not one
-// generic stand-in — the rect family (square/diamond) shows a small inset
-// circle, the circle family (ball/hex) shows a 3-line asterisk with no
-// fill at all, and only the poly family (triangle) actually is a shrunk
-// copy of its own silhouette with a dark outline. Routing by cell.kind
-// here reproduces each shape's own real look instead of approximating all
-// three with the one that happens to fit triangle.
+// 三族棋盘的反面现在是同一个记号：三笔画的「＊」，没有底色（玩家 2026-09
+// 定的统一，见 ui/dotFaceMark.ts）。从前这儿要分三路——方块一颗实心小圆、
+// 三角一个缩小的同向小三角、只有小球是这三笔。现在只剩「摆多大」还分：
+// 小球按半径，方块按半边长，三角按内切圆半径——三角是斜的，照外框算，星星
+// 的斜角会顶出斜边去。
 const ASTERISK_SEGS: [[number, number], [number, number]][] = [
   [[12, 2.5], [12, 21.5]],
   [[4, 6.75], [20, 17.25]],
@@ -148,26 +145,21 @@ function drawAsterisk(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: 
 }
 
 function drawDotFace(ctx: CanvasRenderingContext2D, cell: SnapshotCell, size: number) {
-  if (cell.kind === 'rect') {
-    // Matches the live board's .dot-circle: a small inset disc, not a
-    // shrunk square.
-    const r = cell.half * size * 0.8;
-    ctx.beginPath();
-    ctx.arc(cell.cx * size, cell.cy * size, r, 0, Math.PI * 2);
-    ctx.fillStyle = cell.color;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.16)';
-    ctx.lineWidth = Math.max(1, size * 0.004);
-    ctx.stroke();
-  } else if (cell.kind === 'circle') {
+  if (cell.kind === 'circle') {
     drawAsterisk(ctx, cell.cx * size, cell.cy * size, cell.r * size, cell.color);
+  } else if (cell.kind === 'rect') {
+    drawAsterisk(ctx, cell.cx * size, cell.cy * size, cell.half * size, cell.color);
   } else {
-    tracePrimitive(ctx, cell, size, DOT_SCALE);
-    ctx.fillStyle = cell.color;
-    ctx.fill();
-    ctx.strokeStyle = DOT_STROKE;
-    ctx.lineWidth = Math.max(1, size * 0.008);
-    ctx.stroke();
+    // 三角：中心用重心（外框的正中在一个朝下的三角里是空的），大小用内切圆
+    // 半径 = 面积 / 半周长。
+    const pts = cell.points.map(([x, y]) => [x * size, y * size] as [number, number]);
+    const d = (p: [number, number], q: [number, number]) => Math.hypot(q[0] - p[0], q[1] - p[1]);
+    const semi = (d(pts[1], pts[2]) + d(pts[0], pts[2]) + d(pts[0], pts[1])) / 2;
+    const area =
+      Math.abs((pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[2][0] - pts[0][0]) * (pts[1][1] - pts[0][1])) / 2;
+    const cx = (pts[0][0] + pts[1][0] + pts[2][0]) / 3;
+    const cy = (pts[0][1] + pts[1][1] + pts[2][1]) / 3;
+    drawAsterisk(ctx, cx, cy, semi > 0 ? area / semi : 0, cell.color);
   }
 }
 

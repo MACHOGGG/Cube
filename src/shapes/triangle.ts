@@ -15,6 +15,7 @@ import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareC
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
+import { asteriskGroup, triCentroid, triInradius, TRI_STAR_OF_INRADIUS } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
@@ -629,44 +630,31 @@ export function createTriangleGame(): ShapeGame {
           svg.appendChild(poly);
           el.appendChild(svg);
         } else if (tile.face === 'dot') {
-          // A same-size same-shape triangle read as "still the front, just a
-          // different color" — the dot face needs its own distinct glyph.
-          // A smaller triangle (same orientation, shrunk toward the
-          // centroid) reads clearly as "the back" without the clutter of a
-          // small inscribed circle, and a near-black stroke marks it unambiguously
-          // as the flipped face. Built as an SVG polygon (fill + stroke
-          // together, exactly the technique spawnTriangleOutline already
-          // uses for the score highlight) rather than a clip-path div, since
-          // clip-path can't render a clean border following a triangular
-          // silhouette.
-          const cen = centroid(pts);
-          const DOT_SCALE = 0.6;
-          const innerPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * DOT_SCALE, cen[1] + (y - cen[1]) * DOT_SCALE] as [number, number]);
-          const svgNS = 'http://www.w3.org/2000/svg';
-          const svg = document.createElementNS(svgNS, 'svg');
-          svg.setAttribute('viewBox', '0 0 100 100');
-          svg.setAttribute('preserveAspectRatio', 'none');
-          svg.style.position = 'absolute';
-          svg.style.left = '0';
-          svg.style.top = '0';
-          svg.style.width = '100%';
-          svg.style.height = '100%';
-          svg.style.overflow = 'visible';
-          const poly = document.createElementNS(svgNS, 'path');
-          // 尖角磨圆，和外面那圈轮廓同一条（见 engine/roundTri.ts）——里外两层
-          // 的圆角要是一个磨了一个没磨，小三角看着就像贴歪了。
-          poly.setAttribute(
-            'd',
-            roundTriPath(innerPts.map(([x, y]) => [((x - minX) / w) * 100, ((y - minY) / h) * 100] as [number, number])),
-          );
-          poly.setAttribute('fill', COLORS[tile.dotColor]);
-          poly.setAttribute('stroke', '#1A1A1A');
-          poly.setAttribute('stroke-width', '3.5');
-          poly.setAttribute('stroke-linejoin', 'round');
-          poly.setAttribute('vector-effect', 'non-scaling-stroke');
-          svg.appendChild(poly);
+          // 反面：底板从三角自己的轮廓里透出来，中间摆一颗星——和小球、方块
+          // 同一个记号（玩家 2026-09 定的统一，见 ui/dotFaceMark.ts）。从前这
+          // 儿是一个缩小的同向小三角加深色描边：三副棋盘各认各的记号，翻过面
+          // 的三角和一枚小一号的正面三角要靠「有没有描边」去分。
+          //
+          // 星星按**内切圆**定大小，不按那个方方的外框：三角是斜的，照外框
+          // 算，两只斜角会顶出斜边去。位置也在重心上，不是外框的正中——外框
+          // 的中点在一个朝下的三角里是空的。
+          const local = pts.map(([x, y]) => [x - minX, y - minY] as [number, number]);
+          const [starX, starY] = triCentroid(local);
+          const starSize = triInradius(local) * 2 * TRI_STAR_OF_INRADIUS;
+          const mark = document.createElement('div');
+          mark.style.position = 'absolute';
+          mark.style.left = '0';
+          mark.style.top = '0';
+          mark.style.width = '100%';
+          mark.style.height = '100%';
+          // 用 div 的 innerHTML 包一层，而不是往 SVG 元素上写 innerHTML：小红
+          // 书那一版跑在 Chrome 61 上，那儿 SVGElement 的 innerHTML 靠不住。
+          mark.innerHTML =
+            `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" style="display:block;overflow:visible">` +
+            asteriskGroup(starX, starY, starSize, COLORS[tile.dotColor]) +
+            `</svg>`;
           el.appendChild(fill);
-          el.appendChild(svg);
+          el.appendChild(mark);
         } else {
           fill.style.background = COLORS[tile.color];
           el.appendChild(fill);

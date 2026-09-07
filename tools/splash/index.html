@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Slides 开场动画</title>
+<style>
+  /* 这一页只干一件事：把那扇窗摆在正中，按 --k 放大。
+     .splash 本来是 position:fixed 铺满整屏、并且往下让 23.6vh（黄金分割位，
+     见 loadingScreen.css）。导出要的是**那扇窗本身**，不是它在手机屏上的位
+     置，所以这儿把它按住：不铺满、不让位、不淡入淡出地等，就贴着舞台。 */
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #FAF6EC;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #6E5F6D;
+  }
+  #stage { position: relative; overflow: hidden; border-radius: calc(28px * var(--k, 1)); }
+  #stage .splash {
+    position: absolute; inset: 0; padding-bottom: 0;
+    transform: scale(var(--k, 1)); transform-origin: center center;
+    width: 100%; height: 100%;
+  }
+  /* 放大之后 .splash 自己还是 320 见方的那块内容，所以先让它铺满舞台再缩放
+     ——顺序反了会先按舞台排版、再放大，球就跑出窗外了。 */
+  #stage .splash { width: 100%; height: 100%; }
+  #bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; font-size: 14px; }
+  #bar button {
+    appearance: none; border: 1px solid #E5DAD8; background: #fff; color: #2E2430;
+    font: inherit; padding: 7px 14px; border-radius: 10px; cursor: pointer;
+  }
+  #bar button[aria-pressed="true"] { background: #BE5762; color: #fff; border-color: #BE5762; }
+  #bar .sizes { display: flex; gap: 6px; }
+  #bar .note { color: #9A8B98; }
+  @media (prefers-reduced-motion: reduce) { #stage .splash { transition: none; } }
+</style>
+</head>
+<body>
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -40,6 +40,7 @@ import {
   openStatusWindow,
   runStoreRestore,
 } from './subscribe';
+import { asteriskSvg } from './dotFaceMark';
 
 /** 《图形翻面速度》那扇窗里排几颗球。六颗是棋盘上连成一条得分的常见样子，
  *  一颗看不出「一批一起翻」是什么节奏，而节奏也归这根拉杆管。 */
@@ -480,9 +481,10 @@ export function renderAccountPage(
     document.body.appendChild(overlay);
 
     const balls = Array.from(overlay.querySelectorAll<HTMLElement>('.flip-demo-ball'));
-    // 一颗球现在是哪一面。正面是一支实色，反面是那个星标——和圆球玩法上画的
-    // 是同一份（见 circle.ts 里的 makeBallEl），所以这里演的就是他等一下真会
-    // 看到的那一下，不是另做的示意。
+    // 一颗球现在是哪一面。正面是一支实色，反面是那颗星——三副棋盘现在共用的
+    // 同一个记号（ui/dotFaceMark.ts），所以这里演的就是他等一下真会看到的那
+    // 一下，不是另做的示意。从前这儿抄了一份一样的 SVG，抄的那份不会跟着改：
+    // 记号一动，演示就和棋盘对不上了。
     const paintBall = (el: HTMLElement, dotFace: boolean) => {
       if (!dotFace) {
         el.style.background = faceA;
@@ -490,14 +492,7 @@ export function renderAccountPage(
         return;
       }
       el.style.background = 'transparent';
-      const d = Math.round(el.offsetWidth * 0.95);
-      el.innerHTML =
-        `<svg viewBox="0 0 24 24" width="${d}" height="${d}">` +
-        `<g stroke="${faceB}" stroke-width="5.5" stroke-linecap="round">` +
-        `<line x1="12" y1="2.5" x2="12" y2="21.5"/>` +
-        `<line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
-        `<line x1="20" y1="6.75" x2="4" y2="17.25"/>` +
-        `</g></svg>`;
+      el.innerHTML = asteriskSvg(el.offsetWidth * 0.95, faceB);
     };
     let dotFace = false;
     for (const el of balls) paintBall(el, dotFace);

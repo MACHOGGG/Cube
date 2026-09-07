@@ -17,6 +17,7 @@ import { targetPatternDefs } from '../engine/targetIcon';
 import { squareGrowth } from '../engine/matchGrowth';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
+import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
@@ -361,14 +362,15 @@ export function createSquareGame(): ShapeGame {
         el.style.left = c * cell + 2 + 'px';
         el.style.top = r * cell + 2 + 'px';
         if (tile.face === 'dot') {
+          // 反面：底板透出来，颜色只留在那三笔上。和小球那颗一模一样（玩家
+          // 2026-09 定的统一，见 ui/dotFaceMark.ts）——从前这儿是一颗实心小
+          // 圆，一枚翻过面的方块和一枚正面的圆球看着差不多，两副棋盘摆在一
+          // 起要认两套记号。dotColor 写成属性，是因为消行动画要照着这一枚原
+          // 来的颜色画一个替身（captureTileSnapshots），它从前是去问那颗小圆
+          // 的底色的，现在没有底色可问了。
           el.style.background = 'transparent';
-          const dot = document.createElement('div');
-          dot.className = 'dot-circle';
-          const dsize = Math.round(size * 0.86);
-          dot.style.width = dsize + 'px';
-          dot.style.height = dsize + 'px';
-          dot.style.background = COLORS[tile.dotColor];
-          el.appendChild(dot);
+          el.dataset.dotColor = COLORS[tile.dotColor];
+          el.innerHTML = asteriskSvg(size * 0.95, COLORS[tile.dotColor]);
         } else {
           el.style.background = COLORS[tile.color];
           if (isBomb && tile.color === RED_IDX) {
@@ -820,8 +822,7 @@ export function createSquareGame(): ShapeGame {
         const map = new Map<number, TileSnapshot>();
         refs.boardEl.querySelectorAll<HTMLElement>('.tile[data-id]').forEach((el) => {
           const id = Number(el.dataset.id);
-          const dot = el.querySelector<HTMLElement>('.dot-circle');
-          const color = (dot ? dot.style.background : el.style.background) || 'var(--ink-faint)';
+          const color = el.dataset.dotColor || el.style.background || 'var(--ink-faint)';
           map.set(id, { left: parseFloat(el.style.left), top: parseFloat(el.style.top), color });
         });
         return map;
@@ -872,8 +873,8 @@ export function createSquareGame(): ShapeGame {
           // A whole-line bonus only ever fires once every cell in that line
           // is already dot-faced (see isFullDotMatch), so what the player
           // just saw complete — and what should visibly disappear — is the
-          // dot face: a transparent tile with an inset colored circle, not
-          // a solid-fill square (which reads as the *front* of that color).
+          // dot face: a transparent tile wearing the asterisk, not a
+          // solid-fill square (which reads as the *front* of that color).
           const ghost = document.createElement('div');
           ghost.className = 'tile';
           const size = CELL - 4;
@@ -882,13 +883,7 @@ export function createSquareGame(): ShapeGame {
           ghost.style.left = prev.left + 'px';
           ghost.style.top = prev.top + 'px';
           ghost.style.pointerEvents = 'none';
-          const dot = document.createElement('div');
-          dot.className = 'dot-circle';
-          const dsize = Math.round(size * 0.86);
-          dot.style.width = dsize + 'px';
-          dot.style.height = dsize + 'px';
-          dot.style.background = prev.color;
-          ghost.appendChild(dot);
+          ghost.innerHTML = asteriskSvg(size * 0.95, prev.color);
           refs.boardEl.appendChild(ghost);
           if (reduceMotion()) { ghost.remove(); return; }
           ghost.style.transition = `opacity ${COLLAPSE_FADE_MS}ms ease`;

@@ -30,10 +30,15 @@ function frame(rows: string[]): StoryCell[] {
       // 'x' — a slot the clear emptied: a hollow dashed circle, nothing in
       // it. Unlike the circle and triangle boards, a completed dot line on
       // the square board is gone for good rather than left as a blank piece,
-      // so it is drawn as a hole and not as a spent tile.
+      // so it is drawn as a hole and not as a spent tile — 圆的，正是为了不像
+      // 一枚方块，它已经不是一枚棋子了。
       if (ch === 'x') cells.push({ ...base, shape: 'ci', fill: '#FFFFFF', dashed: true });
       else if (SQ[ch]) cells.push({ ...base, shape: 'sq', fill: cvdHex(SQ[ch]) });
-      else cells.push({ ...base, shape: 'ci', fill: cvdHex(CI[ch]) });
+      // 反面：还是一枚方块，浅色的，中间一颗星（玩家 2026-09 定的统一，见
+      // ui/dotFaceMark.ts）。从前这儿画的是一颗实心小圆——那是方块旧的反面。
+      // 这一段是教「翻过面长什么样」的，它自己要是还留着旧记号，玩家学完进
+      // 棋盘会认不出。
+      else cells.push({ ...base, shape: 'sq', fill: '#FFFFFF', star: cvdHex(CI[ch]), ring: true });
     });
   });
   return cells;

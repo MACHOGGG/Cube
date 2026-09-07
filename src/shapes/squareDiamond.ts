@@ -14,6 +14,7 @@ import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareC
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
+import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
@@ -445,14 +446,11 @@ export function createSquareDiamondGame(): ShapeGame {
           el.style.background = 'var(--ink-faint)';
           el.style.opacity = '0.35';
         } else if (tile.face === 'dot') {
+          // 和基础方块同一颗星（ui/dotFaceMark.ts）。这副棋盘的格子比基础版
+          // 密，从前那颗小圆是 0.72，星星按 0.86 走——线画的记号比实心色块
+          // 「占地」小，同样的比例看着会瘦一圈。
           el.style.background = 'transparent';
-          const dot = document.createElement('div');
-          dot.className = 'dot-circle';
-          const dsize = Math.round(size * 0.72);
-          dot.style.width = dsize + 'px';
-          dot.style.height = dsize + 'px';
-          dot.style.background = COLORS[tile.dotColor];
-          el.appendChild(dot);
+          el.innerHTML = asteriskSvg(size * 0.86, COLORS[tile.dotColor]);
         } else {
           el.style.background = COLORS[tile.color];
           if (isBomb && tile.color === RED_IDX) {
