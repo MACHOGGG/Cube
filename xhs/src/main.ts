@@ -43,6 +43,7 @@ import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
+import { setRulesTriangle } from '../../src/ui/rulesModal';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
@@ -137,7 +138,6 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
     // 钉在这儿而不是函数开头：教学那一屏不是棋盘，它要能上下滑、底色也照旧。
     document.documentElement.classList.add('is-playing');
     enhanceShareOverlay();
-    enhancePauseTutorial();
     setScreenBack(onBack);
   };
 
@@ -188,26 +188,6 @@ function showTutorial(after?: () => void, onStory?: (fam: StoryFamily) => void) 
         onStory(fam);
       }),
   );
-}
-
-/**
- * 暂停面板里加一颗《怎么玩》。
- *
- * 和分享窗口那处一样，是「挂好之后改 DOM」：网页版那块面板的额外按钮来自
- * 形状自己的 meta.extraControls（src/ui/gameShell.ts），从这一版传不进去，
- * 而 src/ 这一版只读不写。改动只在这一版的包里发生。
- *
- * 位置放在色盲开关和《继续》之间：面板从上到下是「设置 → 帮助 → 回去玩」。
- */
-function enhancePauseTutorial() {
-  const modal = root.querySelector<HTMLElement>('#pauseOverlay .modal');
-  const resumeRow = modal?.querySelector<HTMLElement>('#continueBtn')?.closest<HTMLElement>('.btn-row');
-  if (!modal || !resumeRow) return;
-  const row = document.createElement('div');
-  row.className = 'btn-row';
-  row.innerHTML = '<button class="icon-btn pause-switch xhs-how-btn" type="button"><span>怎么玩</span></button>';
-  modal.insertBefore(row, resumeRow);
-  row.querySelector('button')?.addEventListener('click', () => showTutorial());
 }
 
 /**
@@ -538,6 +518,12 @@ function showRun(run: StoredRun) {
 // 所以根元素上钉一个 data-theme="light"，整套深色就都不生效了。src/ 一个字
 // 不用动，网页版的深色主题照旧。
 document.documentElement.setAttribute('data-theme', 'light');
+
+// 这一版整块没有三角玩法。局中按暂停、面板里那颗《怎么玩》是网页版外壳自带
+// 的（gameShell 的 #howBtn），它开的那一屏默认按网页版来、六幅配图的第 1 幅
+// 有三角那一列——在这儿讲一个玩家见不到的图形，只会让人以为自己漏了什么。
+// 开机时喊这一声，那一屏就跟着这一版走（见 src/ui/rulesModal.ts）。
+setRulesTriangle(false);
 
 // 样式：先装网页版那一整套（字体 + 主样式 + 两副棋盘 + 开场动画，见
 // src/injectStyles.ts），再把这一版的 Chrome 61 基线层叠在后面——同名规则

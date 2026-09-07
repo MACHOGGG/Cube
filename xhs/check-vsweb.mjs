@@ -197,11 +197,16 @@ async function playAndFinish(p) {
     await p.mouse.up();
     await p.waitForTimeout(260);
   }
-  // 有可能这一局已经自己结束了（结算页盖上来，#finishBtn 就点不着了）。
+  // 有可能这一局已经自己结束了（结算页盖上来，暂停键就点不着了）。
   // 那是一局正常走完，不是毛病——尤其老虎机：只认转出来的那两个图案，瞎拖
   // 十下很容易把场面拖到「再也凑不出来」。
   const ended = await p.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
-  if (!ended) await p.click('#finishBtn');
+  // 收尾是两步：《完成》搬进了暂停面板，现在叫《结束游戏》。
+  if (!ended) {
+    await p.click('#stopBtn');
+    await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await p.click('#pauseFinishBtn');
+  }
   await p.waitForTimeout(2800);
 }
 
@@ -499,16 +504,6 @@ const SCREENS = [
     snap: {
       面板文字: { sel: '#pauseOverlay .modal h2, #pauseOverlay .modal p', kind: 'text' },
       面板按键: { sel: '#pauseOverlay .modal button', kind: 'label' },
-    },
-    // 多的必须正好是《怎么玩》，而且必须插在《继续》前面——别的键一颗不许多、
-    // 一颗不许少，顺序也不许变。
-    accept: (k, web, xhs) => {
-      if (k !== '面板按键') return null;
-      const without = xhs.filter((t) => t !== '怎么玩');
-      const at = xhs.indexOf('怎么玩');
-      if (JSON.stringify(without) === JSON.stringify(web) && at === xhs.indexOf('继续') - 1)
-        return '这一版在《继续》上面多插了一颗《怎么玩》（main.ts 的 enhancePauseTutorial），别的键一字不差';
-      return null;
     },
   },
   {

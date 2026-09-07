@@ -356,6 +356,16 @@ export interface I18nStrings {
   stuckEndBtn: string;
   startBtn: string;
   pausedTitle: string;
+  /** 暂停面板里那一颗《怎么玩》，也是那一屏自己的标题。 */
+  howToPlayBtn: string;
+  /** 《怎么玩》那一屏底下的那一颗。 */
+  gotItBtn: string;
+  /** 暂停面板里《再来一局》：把这一局丢掉，原地重开一局同样的玩法。 */
+  restartRunBtn: string;
+  /** 丢掉这一局之前问的那一句。 */
+  restartConfirm: string;
+  /** 暂停面板里《结束游戏》——从前底排那一颗《完成》。 */
+  endRunBtn: string;
   endTitleDefault: string;
   compositeScoreLabel: string;
   /** "Your average in this mode" on the end-of-run summary. */
@@ -692,6 +702,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: 'No more possible flips · tap to end',
     startBtn: 'Start',
     pausedTitle: 'Paused',
+    howToPlayBtn: 'How to play',
+    gotItBtn: 'Got it',
+    restartRunBtn: 'Play again',
+    restartConfirm: 'Start over?',
+    endRunBtn: 'End game',
     endTitleDefault: 'Challenge complete',
     compositeScoreLabel: 'Composite score',
     avgScoreLabel: 'Your average in this mode',
@@ -1015,6 +1030,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: 'Plus aucun retournement possible · appuyez pour terminer',
     startBtn: 'Commencer',
     pausedTitle: 'En pause',
+    howToPlayBtn: 'Comment jouer',
+    gotItBtn: 'Compris',
+    restartRunBtn: 'Rejouer',
+    restartConfirm: 'Recommencer ?',
+    endRunBtn: 'Terminer',
     endTitleDefault: 'Défi terminé',
     compositeScoreLabel: 'Score composite',
     avgScoreLabel: 'Votre moyenne dans ce mode',
@@ -1338,6 +1358,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: '無法全部翻面 · 點擊結束本局',
     startBtn: '開始',
     pausedTitle: '已暫停',
+    howToPlayBtn: '怎麼玩',
+    gotItBtn: '知道了',
+    restartRunBtn: '再來一局',
+    restartConfirm: '重新開一局？',
+    endRunBtn: '結束遊戲',
     endTitleDefault: '挑戰結束',
     compositeScoreLabel: '綜合得分',
     avgScoreLabel: '該玩法您的均分',
@@ -1661,6 +1686,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stuckEndBtn: '无法全部翻面 · 点击结束本局',
     startBtn: '开始',
     pausedTitle: '已暂停',
+    howToPlayBtn: '怎么玩',
+    gotItBtn: '知道了',
+    restartRunBtn: '再来一局',
+    restartConfirm: '重新开一局？',
+    endRunBtn: '结束游戏',
     endTitleDefault: '挑战结束',
     compositeScoreLabel: '综合得分',
     avgScoreLabel: '该玩法您的均分',

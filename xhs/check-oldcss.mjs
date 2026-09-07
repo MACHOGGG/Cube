@@ -153,11 +153,16 @@ async function playAndFinish(p) {
     await p.mouse.up();
     await p.waitForTimeout(260);
   }
-  // 有可能这一局已经自己结束了（结算页盖上来，#finishBtn 就点不着了）。
+  // 有可能这一局已经自己结束了（结算页盖上来，暂停键就点不着了）。
   // 那是一局正常走完，不是毛病——尤其老虎机：只认转出来的那两个图案，瞎拖
   // 十下很容易把场面拖到「再也凑不出来」。
   const ended = await p.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
-  if (!ended) await p.click('#finishBtn');
+  // 收尾是两步：《完成》搬进了暂停面板，现在叫《结束游戏》。
+  if (!ended) {
+    await p.click('#stopBtn');
+    await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await p.click('#pauseFinishBtn');
+  }
   await p.waitForTimeout(2600);
 }
 
@@ -274,7 +279,7 @@ const SCREENS = [
       await p.click('.xhs-how');
       await p.waitForTimeout(700);
     },
-    sels: ['.xhs-tut-modal', '.xhs-tut-rules', '.xhs-tut .tut-rule', '.xhs-tut .tut-rule-art', '.xhs-tut .btn-row', '#xhsTutOk'],
+    sels: ['.howto-modal', '.howto-list', '.howto-ov .tut-rule', '.howto-ov .tut-rule-art', '.howto-ov .btn-row', '#howtoOkBtn'],
   },
   {
     // 第一次点开方块弹的那一段分镜动画（网页版原件）。它是这一版唯一一屏
@@ -291,8 +296,8 @@ const SCREENS = [
       await p.click('#xhsProfile');
       await p.waitForTimeout(900);
       await p.click('.xhs-how');
-      await p.waitForSelector('.xhs-tut-story[data-fam="square"]', { timeout: 20000 });
-      await p.click('.xhs-tut-story[data-fam="square"]');
+      await p.waitForSelector('.howto-story[data-fam="square"]', { timeout: 20000 });
+      await p.click('.howto-story[data-fam="square"]');
       // 等这一屏真的立起来再量，别量到一半的骨架。
       await p.waitForSelector('.story-board .story-cell', { timeout: 20000 });
       await p.waitForTimeout(1800);

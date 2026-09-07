@@ -2008,6 +2008,28 @@ body:has(.slot-page) .home-nav { display: none; }
   .pill-switch, .pill-switch-knob { transition: none; }
 }
 
+/* ---- 暂停面板的排版 ----------------------------------------------------
+   四件事分三组，看一眼就知道哪一颗把你带出这一局（玩家选的「方案 B」）：
+
+     怎么玩 ／ 色盲友好      看一眼就回来，不动这一局      ┐ 8px
+     再来一局 ／ 结束游戏    离开这一局，两颗并排          ┤ 20px
+     继续                    回棋盘，单独一颗              ┘ 20px
+
+   .btn-row 自己没有上下外边距（好几处弹窗靠这一点把两排贴在一起），所以组
+   内的 8px 和组间的 20px 都写在这儿。三条都带上 .modal：相邻兄弟那一条是
+   (1,0,3)，不带 .modal 的 .pause-exits 只有 (1,0,1)，会被它盖掉——这一处
+   先后踩过两次。 */
+#pauseOverlay .modal .btn-row + .btn-row { margin-top: 8px; }
+#pauseOverlay .modal .btn-row.pause-exits { margin-top: 20px; }
+#pauseOverlay .modal .btn-row.pause-resume { margin-top: 20px; }
+#pauseOverlay .modal .pause-exits button { flex: 1; }
+/* 《怎么玩》右边那个「〉」：色盲那条右边是开关，这一条右边得有点什么，才看
+   得出两条一个是设置、一个是能点进去的门。 */
+.pause-chev { flex: none; color: var(--ink-faint); font-size: 1.1rem; line-height: 1; }
+/* 开局倒数那一屏借的是同一层面板。那时候还没开局，「再来一局 / 结束游戏」
+   无从谈起（见 gameShell 里 #startPauseBtn 那段）。 */
+#pauseOverlay.pause--pre .pause-exits { display: none; }
+
 /* The page is a stack of destinations under the Slides masthead: one wide
    sign-in pill, the language/tutorial pair, then the perks panel. */
 /* 上半部是一排排快捷入口，不是这一页的主角——收紧它们，天才那一块就整体
@@ -2647,6 +2669,32 @@ html.is-playing body { background: var(--play-bg); }
   --ctl-mark: var(--play-chip-press);
 }
 .app--game .controls .icon-btn:hover { filter: none; }
+/* 单人局这一排上只剩一颗《暂停》（《完成》进了暂停面板）。它保持从前那一半
+   的宽度、居中站着——玩家选的「底排②」：和改版前长得更像，也不至于一颗键
+   横贯整条屏幕。半条 = (整条 − 一个间距) ÷ 2，间距和 .controls 的 gap 是同
+   一个式子。 */
+.app--game .controls--solo .icon-btn {
+  flex: 0 0 auto;
+  width: calc((100% - clamp(8px, 2.4vw, 18px)) / 2);
+}
+/* 小屋局这一排上现在是三颗小的（色盲友好 / 离开小屋 / 完成），名单还是要占
+   满一半——玩家定的「最重要的（一半位置）还是留给实时排行榜」。
+
+   名单直接写死那一半（和单人局那颗《暂停》同一个式子），三颗键分剩下的一
+   半。不写「名单三份、每颗键一份」：按钮的 min-width 是按内容算的，三颗一
+   挤，名单就被推到不足一半（量出来 177px / 一半是 196px）。 */
+.app--game .controls--room .mp-rank {
+  flex: 0 0 auto;
+  width: calc((100% - clamp(8px, 2.4vw, 18px)) / 2);
+}
+.app--game .controls--room .icon-btn--half { flex: 1 1 0%; min-width: 0; }
+/* 那颗小的《色盲友好》开着的时候：和按下去同一套反色，看一眼就知道它亮着。
+   这一排上别的键都是「按一下做件事」，只有它是个开关，得有个留得住的状态。 */
+.app--game .controls #cvdRoomBtn[aria-checked='true'] {
+  background: var(--play-chip-press); color: var(--play-chip-press-ink);
+  --ctl-disc: var(--play-chip-press-ink);
+  --ctl-mark: var(--play-chip-press);
+}
 /* The score chip takes the same colour, for exactly as long as the number
    is going up — an animation rather than a held class, so it puts itself
    back without anything having to remember to. */
@@ -2941,6 +2989,19 @@ html.is-playing body { background: var(--play-bg); }
   }
   .app.app--game > .controls .icon-btn--half {
     flex: 0 0 auto; width: 100%; height: auto; aspect-ratio: 1;
+  }
+  /* 竖屏那颗《暂停》占半条宽，横过来就占半条高——同一件事换个方向。 */
+  .app.app--game > .controls--solo .icon-btn {
+    flex: 0 0 auto; width: 100%; height: calc((100% - clamp(8px, 2.6vh, 22px)) / 2);
+    aspect-ratio: auto;
+  }
+  /* 小屋局同理：名单占半条高，三颗键分剩下的一半。它们于是不再是正方形——
+     圆盘自己会在给它的框里居中缩放（见上面 .ctl-glyph 那条）。 */
+  .app.app--game > .controls--room .mp-rank {
+    flex: 0 0 auto; width: 100%; height: calc((100% - clamp(8px, 2.6vh, 22px)) / 2);
+  }
+  .app.app--game > .controls--room .icon-btn--half {
+    flex: 1 1 0%; width: 100%; height: auto; min-height: 0; aspect-ratio: auto;
   }
   .app.app--game > .controls .mp-rank .mp-board-name { display: none; }
   .app.app--game > .controls .mp-rank .mp-board-row {
@@ -3652,6 +3713,95 @@ body.is-room-host::after {
 }
 .tut-pick .page-back-row { flex: none; margin: 0 0 4px; }
 .tut-pick .page-back.icon-btn { width: clamp(46px, 7vh, 62px); height: clamp(46px, 7vh, 62px); }
+
+/* ---- 《怎么玩》那一屏（ui/rulesModal.ts） -------------------------------
+   网页版局中按《暂停》里那一颗，和小红书版成绩页上的同名那一颗，是同一屏
+   （玩家定的：「网页端的《怎么玩》同步小红书的版本」）。所以这一节写在共用
+   的 style.css 里，不在哪一端自己的样式表里。
+
+   文字、配图全用上面教学挑选页那一套（.tut-rule / .ra-*），这里只改两处：
+   挑选页要把六条压进一屏，所以每条最多三行、字号跟着屏高缩；弹窗里没有这
+   个限制，把话说全更要紧。 */
+.howto-modal { width: 100%; max-width: 460px; text-align: left; }
+.howto-modal h2 { text-align: center; }
+
+/* ---- 六条规则上头那两颗分镜键 -------------------------------------------
+   分镜动画不再自己弹出来（玩家定的），只有成绩与说明页那个入口进来的这一
+   屏摆着它俩：一颗方块、一颗小球，按下去放对应的那一段。局中按暂停开的同
+   一屏不摆——他正在玩，不该在这儿被一段动画接走（见 rulesModal.ts 的 onStory）。
+
+   照网页版教学挑选页的样子：图在上、名字在下，两颗一样宽。不用 gap，老内
+   核（Chrome 61）没有它；靠一左一右的外边距分开。 */
+.howto-stories {
+  display: flex;
+  margin: 2px 2px 12px;
+}
+.howto-story {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 4px;
+  padding: 10px 6px 8px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.howto-story:active { background: rgba(0, 0, 0, 0.1); }
+.howto-story > svg {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 6px;
+  display: block;
+}
+.howto-list {
+  /* 六条在窄屏上摞起来会比一屏高，让它自己滚，别把《知道了》顶出去。 */
+  max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  justify-content: flex-start; gap: 12px; padding: 4px 2px 8px;
+}
+.howto-list .tut-rule {
+  /* 不许被压扁。这一列是弹性盒，外面又扣了 max-height——矮屏上（量的是
+     360×640）浏览器会把每一行按比例缩到装得下为止，行框缩了，可下面那条
+     让字「看全」的规则又不让字跟着裁，于是字直接漫出行外，压在下一条上：
+     六条里五处相邻重叠，最多叠 26px，第 4 条那段长的溢出 24px。
+     flex: none 之后行按内容撑开，装不下就由外面那层滚——它本来就
+     overflow-y: auto。 */
+  flex: none;
+}
+.howto-list .tut-rule-text {
+  /* 挑选页那条 -webkit-line-clamp: 3 会把长句子切掉，这儿要看全。 */
+  display: block; overflow: visible;
+  font-size: 0.88rem; line-height: 1.5;
+}
+.howto-list .tut-rule-art { font-size: 15px; }
+
+/* ---- 《怎么玩》最后那两条：炸弹和无限反转 ------------------------------
+   六条基础规矩是「这个游戏怎么玩」，人人都要看；这两条是「那两个玩法各自
+   多了什么」，只跟点进去的人有关。中间隔一道圆角黑线，眼睛一扫就知道下面
+   换了一档，六条不会被读成八条（玩家定的）。 */
+.howto-split {
+  height: 3px;
+  margin: 16px 6px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  opacity: 0.5;
+}
+/* 这两条的序号位不写数字，写玩法名——它们不是第 7、第 8 条。 */
+.tut-rule-num--word {
+  width: auto;
+  min-width: 3.4em;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 /* 横屏一屏太矮，装不下六条：改成左边三条按钮、右边六条规则的两栏，页可以
    往下滚，底下给底排导航留出位置。 */
 @media (orientation: landscape) and (max-height: 560px) {

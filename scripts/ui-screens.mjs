@@ -74,13 +74,18 @@ const SCREENS = [
   } },
   { id: 'gameEnd', name: '结算', group: '玩', w: 390, h: 844, go: async (p) => {
     await play(0)(p);
-    await p.click('#finishBtn');
+    // 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
+    await p.click('#stopBtn');
+    await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await p.click('#pauseFinishBtn');
     await p.waitForSelector('#endOverlay.show', { timeout: 10000 });
     await p.waitForTimeout(1200);
   } },
   { id: 'gameShare', name: '分享战绩', group: '玩', w: 390, h: 844, go: async (p) => {
     await play(0)(p);
-    await p.click('#finishBtn');
+    await p.click('#stopBtn');
+    await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await p.click('#pauseFinishBtn');
     await p.waitForSelector('#endOverlay.show', { timeout: 10000 });
     await p.click('#shareBtn');
     await p.waitForSelector('#shareOverlay.show', { timeout: 10000 });

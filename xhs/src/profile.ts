@@ -101,9 +101,9 @@ function runRow(
 /**
  * 《怎么玩》——和色盲开关并排。
  *
- * 这一页是「成绩 + 说明」，规则本来就该在这儿有个入口：第一次进游戏那次自动
- * 弹过之后就不再弹了，想再看一遍得有地方点。局中的那个入口在暂停面板里
- * （xhs/src/main.ts 的 enhancePauseTutorial）。
+ * 这一页是「成绩 + 说明」，规则本来就该在这儿有个入口：这一屏不会自己跳出来，
+ * 想看的人得有地方点。局中的那个入口在暂停面板里，现在由游戏外壳自带
+ * （src/ui/gameShell.ts 的 #howBtn，开的是同一屏 ui/rulesModal.ts）。
  */
 function howToPlayPill(onClick: () => void): HTMLElement {
   const btn = document.createElement('button');

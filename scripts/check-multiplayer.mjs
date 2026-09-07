@@ -194,8 +194,10 @@ const sigB = await boardSignature(B.page);
 check('两端棋盘逐格完全一致', sigA === sigB && sigA.length > 0,
   `${sigA.split(',').length} 格`);
 
-// 房间局的那一排只有两块：左边一整条实时排名，右边一颗《离开房间》。
-// 《暂停》没有——一场同步竞赛暂停不了，别人的钟不会跟着停；《完成》也没有。
+// 房间局的那一排：左边一半是实时排名，右边一半分给三颗小的——《色盲友好》、
+// 《离开小屋》、《完成》。玩家定的：「最重要的（一半位置）还是留给实时排行
+// 榜」。《暂停》藏着——一场同步竞赛暂停不了，别人的钟不会跟着停，所以那一层
+// 里的色盲开关在这儿够不着，才要在这一排上单摆一颗。
 const inRun = await A.page.evaluate(() => {
   const box = (sel) => {
     const e = document.querySelector(sel);
@@ -207,20 +209,29 @@ const inRun = await A.page.evaluate(() => {
     // 它在，但藏着：屋主散场、这一局转成单人的时候才顶上来。造在这儿是因
     // 为它的监听器是开局那一刻接上的（见 gameShell.ts 里那段注释）。
     pauseShown: document.getElementById('stopBtn')?.hidden === false,
+    row: box('.controls'),
     rank: box('.mp-rank'),
+    cvd: box('#cvdRoomBtn'),
     leave: box('#leaveRoomBtn'),
     finish: box('#finishBtn'),
+    cvdSwitch: document.getElementById('cvdRoomBtn')?.getAttribute('role') === 'switch',
   };
 });
 check('多人局进行中看不见《暂停》（它藏着，散场转单人才露面）', inRun.pauseShown === false);
-// 左边一半是名单，右边一半分给《离开房间》和《完成》——所以名单差不多是
-// 两颗键加起来那么宽。
-check('左边一半是排名，右边一半是两颗键',
-  !!inRun.rank && !!inRun.leave && !!inRun.finish &&
-    inRun.rank.x < inRun.leave.x && inRun.leave.x < inRun.finish.x &&
-    Math.abs(inRun.rank.w - (inRun.leave.w + inRun.finish.w)) <= 24,
-  `排名 ${inRun.rank?.w}px · 离开 ${inRun.leave?.w}px · 完成 ${inRun.finish?.w}px`);
-check('两颗键一样宽', Math.abs((inRun.leave?.w ?? 0) - (inRun.finish?.w ?? -1)) <= 1);
+check('这一排上有一颗小的《色盲友好》，而且它是个开关', !!inRun.cvd && inRun.cvdSwitch === true);
+// 排名占一半，三颗键分另一半，顺序是 色盲 → 离开 → 完成。
+const keysW = (inRun.cvd?.w ?? 0) + (inRun.leave?.w ?? 0) + (inRun.finish?.w ?? 0);
+check('左边一半是排名，右边一半是三颗键',
+  !!inRun.rank && !!inRun.cvd && !!inRun.leave && !!inRun.finish &&
+    inRun.rank.x < inRun.cvd.x && inRun.cvd.x < inRun.leave.x && inRun.leave.x < inRun.finish.x &&
+    Math.abs(inRun.rank.w - keysW) <= 40,
+  `排名 ${inRun.rank?.w}px · 三颗键合计 ${keysW}px · 整排 ${inRun.row?.w}px`);
+check('排名正好是整排的一半',
+  !!inRun.row && Math.abs(inRun.rank.w - inRun.row.w / 2) <= 14,
+  `${inRun.rank?.w}px / ${inRun.row?.w}px`);
+check('三颗键一样宽',
+  Math.abs((inRun.cvd?.w ?? 0) - (inRun.leave?.w ?? -1)) <= 1 &&
+    Math.abs((inRun.leave?.w ?? 0) - (inRun.finish?.w ?? -1)) <= 1);
 // 名单要和右边那颗键一样高——它们是同一排里的两块，不是一块压着另一块。
 check('排名和《离开房间》一样高，站在同一排',
   Math.abs((inRun.rank?.h ?? 0) - (inRun.leave?.h ?? -1)) <= 1,
@@ -568,16 +579,31 @@ check('屋主散场，正打着免费玩法的人就地转成单人', soloed,
     pause: document.getElementById('stopBtn')?.hidden === false,
   }))));
 check('没有《小屋被取消》那一层糊在盘面上', (await B.page.$('#roomCancelled')) === null);
-check('《完成》从半条变回整条', (await B.page.$('#finishBtn.icon-btn--half')) === null);
+// 底排整条换成单人局那一套：三颗小的（色盲 / 离开 / 完成）一起撤掉，只剩
+// 一颗《暂停》占半条宽——那三件事并没有消失，是进了暂停面板。
+check('转单人之后底排只剩一颗《暂停》，占半条宽居中',
+  await B.page.evaluate(() => {
+    const row = document.querySelector('.controls');
+    const b = document.getElementById('stopBtn');
+    if (!row || !b) return false;
+    if (document.getElementById('finishBtn') || document.getElementById('cvdRoomBtn')) return false;
+    if (!row.classList.contains('controls--solo')) return false;
+    const r = row.getBoundingClientRect(), q = b.getBoundingClientRect();
+    return Math.abs(q.width - r.width / 2) <= 14 &&
+      Math.abs((q.left - r.left) - (r.right - q.right)) <= 2;
+  }));
 // 暂停真的能按——那颗键的监听器是开局那一刻接上的，不是事后新建的。
 await B.page.click('#stopBtn');
 check('转单人之后《暂停》真的停得下来',
   await B.page.waitForSelector('#pauseOverlay.show', { timeout: 6000 })
     .then(() => true).catch(() => false));
-await B.page.click('#continueBtn');
-// 这一局已经不属于任何小屋了，自己结束它，好接下面的剧情。
-await B.page.click('#finishBtn');
-check('转单人之后《完成》直接结算，不再问「交卷吗」',
+check('面板里《再来一局》和《结束游戏》都露出来了（不是开局倒数那一屏）',
+  (await B.page.$('#pauseOverlay.pause--pre')) === null &&
+    (await B.page.$('#pauseRestartBtn')) !== null && (await B.page.$('#pauseFinishBtn')) !== null);
+// 这一局已经不属于任何小屋了，自己结束它，好接下面的剧情。走的是面板里那颗
+// 《结束游戏》——它接的是从前底排《完成》那一个处理函数。
+await B.page.click('#pauseFinishBtn');
+check('转单人之后《结束游戏》直接结算，不再问「交卷吗」',
   await B.page.waitForSelector('#endOverlay.show', { timeout: 8000 })
     .then(() => true).catch(() => false));
 await B.page.click('#endBackBtn');

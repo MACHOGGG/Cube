@@ -224,7 +224,12 @@ for (let i = 0; i < 8; i++) {
   await page.waitForTimeout(260);
 }
 const ended = await page.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
-if (!ended) await page.click('#finishBtn');
+// 收尾是两步：《完成》搬进了暂停面板，现在叫《结束游戏》。
+if (!ended) {
+  await page.click('#stopBtn');
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.click('#pauseFinishBtn');
+}
 await page.waitForTimeout(2800);
 
 const gotEnd = !!(await page.$('#shareBtn'));

@@ -84,7 +84,7 @@ const has = (p, sel) => p.$(sel).then((e) => !!e);
   await p.waitForTimeout(1500);
   say(!(await has(p, '.story-tut')), '第一次开《经典方块》：不再自己弹分镜');
   say(await has(p, '.start-stage'), '直接到开局页');
-  say(!(await has(p, '.xhs-tut')), '六条规则那一屏也没有自动跳出来');
+  say(!(await has(p, '.howto-ov')), '六条规则那一屏也没有自动跳出来');
   say(errs.length === 0, '这一路零报错', errs.slice(0, 2).join(' | '));
   await ctx.close();
 }
@@ -138,13 +138,13 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await p.click('.xhs-how');
   await p.waitForTimeout(800);
   const n = await p
-    .$$eval('.xhs-tut .tut-rule:not(.tut-rule--extra)', (e) => e.length)
+    .$$eval('.howto-ov .tut-rule:not(.tut-rule--extra)', (e) => e.length)
     .catch(() => 0);
   say(n === 6, '点开是六条规则（有字有配图）', n + ' 条');
   // 六条底下还有一节：炸弹和无限反转各自加的那一层，隔着一道圆角黑线。那两
   // 句原本只在头一回进那个玩法时出现，玩家要能随时回头看（他定的）。
   const extra = await p
-    .$$eval('.xhs-tut .tut-rule--extra .tut-rule-text', (e) => e.map((x) => x.textContent.trim()))
+    .$$eval('.howto-ov .tut-rule--extra .tut-rule-text', (e) => e.map((x) => x.textContent.trim()))
     .catch(() => []);
   say(extra.length === 2, '底下还有炸弹和无限反转那两条', extra.length + ' 条');
   say(
@@ -152,12 +152,12 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
     '那两条都有字',
     extra.map((t) => t.slice(0, 12)).join(' / '),
   );
-  say(await has(p, '.xhs-tut .xhs-tut-split'), '中间隔着那道圆角黑线');
+  say(await has(p, '.howto-ov .howto-split'), '中间隔着那道圆角黑线');
 
   // 分镜动画唯一的入口：六条规则上头那两颗键（方块 / 小球）。
-  const stories = await p.$$eval('.xhs-tut-story', (e) => e.map((b) => b.getAttribute('aria-label') || ''));
+  const stories = await p.$$eval('.howto-story', (e) => e.map((b) => b.getAttribute('aria-label') || ''));
   say(stories.length === 2, '六条上头摆着两颗分镜键', stories.join(' / '));
-  await p.click('.xhs-tut-story[data-fam="square"]');
+  await p.click('.howto-story[data-fam="square"]');
   await p.waitForTimeout(1600);
   say(await has(p, '.story-tut'), '点《方块》→ 分镜动画放出来了');
   const ctl = await p.$$eval('.story-controls .story-ctl', (e) => e.map((b) => b.getAttribute('aria-label')));
@@ -237,7 +237,7 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await p.waitForTimeout(1000);
   await p.click('.xhs-how');
   await p.waitForTimeout(900);
-  await p.click('.xhs-tut-story[data-fam="square"]');
+  await p.click('.howto-story[data-fam="square"]');
   await p.waitForTimeout(2000);
   say(await has(p, '.story-tut'), '强制降级层：分镜动画照样放得出来');
   const box = await p.$eval('.story-tut', (e) => {

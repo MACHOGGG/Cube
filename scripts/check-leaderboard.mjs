@@ -78,7 +78,7 @@ await page.waitForTimeout(1200);
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 await page.$$eval('.home-icon-btn', (els) => els[0].click());
-await page.waitForSelector('#finishBtn', { timeout: 25000 });
+await page.waitForSelector('#stopBtn', { timeout: 25000 });
 // 等 4-3-2-1 数完、棋盘真的起来：开局页还盖着的时候《完成》按下去不算数
 // （那一局还没开始，doFinish 直接返回）。
 await page.waitForFunction(
@@ -101,7 +101,10 @@ await page.route('**/api/scores', async (route) => {
   return route.continue();
 });
 await page.waitForTimeout(300);
-await page.$eval('#finishBtn', (el) => el.click());
+// 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
+await page.$eval('#stopBtn', (el) => el.click());
+await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+await page.$eval('#pauseFinishBtn', (el) => el.click());
 await page.waitForSelector('#endOverlay.show', { timeout: 10000 });
 await page.waitForTimeout(1200);
 

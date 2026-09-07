@@ -19,6 +19,7 @@ import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
 import { leaderboardName, pushRun } from './cloudScores';
+import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
@@ -848,6 +849,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 连锁也一起停：遮罩盖上之后，翻面、加分、判死局都不该在背后继续跑
     // （见 heldBeat）。
     holdBeat();
+    // 开局倒数那一屏借的是同一层面板，那时候「再来一局 / 结束游戏」无从谈
+    // 起，所以那条路上挂了 .pause--pre 把它们藏起来（见 gameShell 的
+    // #startPauseBtn）。现在是真的在打了，摘掉。写在这儿而不是那颗《暂停》
+    // 的监听里：切到后台自动暂停走的也是这条路，不经过任何按钮。
+    refs.pauseOverlay.classList.remove('pause--pre');
     refs.pauseOverlay.classList.add('show');
   }
 
@@ -890,7 +896,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // face-up tile can ever be flipped). Nothing else can navigate away from a
   // game any more — the bottom dock is hidden while one is open — so there
   // is nothing left for a yes/no gate to protect against.
-  refs.buttons.finish.addEventListener('click', () => {
+  //
+  // 这颗键有两处：小屋局在底排上（那一排还留着《完成》），单人局在暂停面板里
+  // （《结束游戏》——玩家定的「把游戏界面中的暂停和完成全部放在暂停里」）。两
+  // 处接的是同一个处理函数，行为一字不差。
+  const onFinishPressed = () => {
     if (!started || gameOver) return;
     // 单人局按下去就是结束——这一局是自己的，没有别人在等。
     if (!currentRoom()) return doFinish();
@@ -912,6 +922,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         doFinish();
       },
     });
+  };
+  refs.buttons.finish?.addEventListener('click', onFinishPressed);
+  refs.buttons.pauseFinish.addEventListener('click', onFinishPressed);
+  // 暂停面板里的《再来一局》：丢掉这一局原地重开。先问一句——它紧挨着《结束
+  // 游戏》，按错一下这一局的分就没了，而这一步退不回来（见 confirmRestart）。
+  // 答「是」之后 newGame() 自己会把暂停那一层撤掉、把表重新起头。
+  refs.buttons.pauseRestart.addEventListener('click', () => {
+    if (!started || gameOver) return;
+    confirmRestart(hooks.lang, newGame);
   });
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));

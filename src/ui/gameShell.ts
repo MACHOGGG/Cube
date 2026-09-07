@@ -1,8 +1,9 @@
 import { STRINGS, type Lang } from '../i18n';
-import { CTL_BACK, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
+import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { openRulesModal } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import type { Family, TargetPattern } from '../engine/targets';
@@ -111,7 +112,14 @@ export interface ShellRefs {
     stop: HTMLButtonElement;
     /** 只有多人局才有：进行到一半也走得掉。由 scoreboard.ts 接上。 */
     leaveRoom?: HTMLButtonElement;
-    finish: HTMLButtonElement;
+    /** 底排上那颗《完成》：只有小屋局有。单人局它搬进了暂停面板，见
+     *  pauseFinish——两颗接的是同一个处理函数。 */
+    finish?: HTMLButtonElement;
+    /** 暂停面板里的《结束游戏》。哪一局都在（小屋局散场转单人之后也够得
+     *  着），内容就是从前底排那颗《完成》。 */
+    pauseFinish: HTMLButtonElement;
+    /** 暂停面板里的《再来一局》：丢掉这一局，原地重开一局同样的玩法。 */
+    pauseRestart: HTMLButtonElement;
     /** Absent in-game (the row has no way-out button any more — leaving a
      *  run goes through the title or the bottom nav, which ask first); the
      *  shape modules still wire it when it exists. */
@@ -244,16 +252,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       ${meta.coach ? '<div class="coach-bar" id="coachBar" hidden></div>' : ''}
       <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
 
-      <!-- Two controls, and only two: 完成 and 暂停. Anything a player
-           changes rather than does — the colourblind palette — lives in the
-           pause panel instead, so the play screen stays the board plus the
-           three readings plus the two things you can do to a run.
+      <!-- 单人局这一排上只剩一颗《暂停》，占从前那一半的宽度、居中站着
+           （玩家定的「底排②」）。《完成》搬进了暂停面板——玩家的原话：「把
+           游戏界面中的暂停和完成全部放在暂停里（只保留现在的《暂停》）」。
+           棋盘底下于是只剩一件事可按，别的都在那一层后面。
 
-           房间局的这一排是另一套：左边一半是实时排名，右边一半分给两颗键，
-           《离开房间》和《完成》。《暂停》没有意义——一场同步竞赛停不下来，
-           别人的钟不会跟着停，按下去只是把自己关在外面。而一场比赛里最该一
-           直看得见的，是自己此刻排第几，所以那半条屏幕给了名单。 -->
-      <div class="controls">
+           小屋局的这一排是另一套，也是玩家单独定的：最重要的那一半留给实时
+           排名（「一半位置还是留给实时排行榜」），另一半分给三颗小的——色盲
+           友好、离开小屋、完成。《暂停》在这儿没有意义（一场同步竞赛停不下
+           来，别人的钟不会跟着停），所以那一层里的《色盲友好》够不着，得在
+           这一排上单摆一颗。 -->
+      <div class="controls${inRoom ? ' controls--room' : ' controls--solo'}">
         ${inRoom
           ? `<div class="mp-rank" id="mpRank" aria-live="polite"></div>
              <!-- 房间局里《暂停》先藏着。屋主散场之后这一局原地转成单人，那
@@ -262,12 +271,12 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
                   刻接上的（gameController 的 refs.buttons.stop），事后新建的
                   按钮长得一样，却谁也不听。 -->
              <button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}" hidden>${CTL_PAUSE}</button>
+             <button class="icon-btn icon-btn--half" id="cvdRoomBtn" role="switch" aria-checked="false" aria-label="${s.colorblindBtn}">${CTL_CVD}</button>
              <button class="icon-btn icon-btn--half" id="leaveRoomBtn" aria-label="${
                iAmHost() ? s.mpDisbandRoom : s.mpLeave
              }">${CTL_LEAVE}</button>
              <button class="icon-btn icon-btn--half" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`
-          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>
-             <button class="icon-btn" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`}
+          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`}
       </div>
     </div>
 
@@ -301,9 +310,33 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <button id="startBtn" class="start-hidden-go" hidden aria-hidden="true" tabindex="-1">${s.startBtn}</button>
     </div>
 
+    <!-- 暂停面板：从前只有一条色盲开关和一颗《继续》，现在四件事都收在这
+         儿（玩家定的顺序：教学、色盲友好、再来一局、结束游戏）。
+
+         分三组，看一眼就知道哪一颗把你带出这一局（玩家选的「方案 B」）：
+
+           · 上面两条是「看一眼就回来」——《怎么玩》开一层弹窗，色盲友好是
+             个开关，两条都不动这一局；
+           · 中间一排是「离开这一局」，两颗并排：《再来一局》丢掉重开，
+             《结束游戏》交卷去结算；
+           · 最下面单独一颗《继续》，回棋盘。
+
+         开局倒数那一屏也用这同一层（#startPauseBtn 打开、#continueBtn 接着
+         数）。那时候还没开局，「再来一局 / 结束游戏」无从谈起——所以那条路上
+         多挂一个 .pause--pre 把中间那一排藏起来，等真的开打、真的暂停了，
+         gameController 的 doPause 再把它摘掉。 -->
     <div class="overlay opaque" id="pauseOverlay">
       <div class="modal">
         <h2>${s.pausedTitle}</h2>
+        <!-- 局中也进得去的那一屏六条规则：和个人主页 / 小红书版《怎么玩》是
+             同一份（ui/rulesModal.ts）。规则记不清的人不该为了看一眼而丢掉
+             手上这一局。 -->
+        <div class="btn-row">
+          <button class="icon-btn pause-switch" id="howBtn">
+            <span>${s.howToPlayBtn}</span>
+            <span class="pause-chev" aria-hidden="true">›</span>
+          </button>
+        </div>
         <!-- Reachable from a run as well as from 个人主页: someone who needs
              the colourblind palette should not have to leave the board to
              turn it on. Same setting, same switch, either way in. -->
@@ -314,7 +347,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
           </button>
         </div>
         ${extraButtonsHtml ? `<div class="btn-row pause-extras">${extraButtonsHtml}</div>` : ''}
-        <div class="btn-row"><button class="primary" id="continueBtn">${s.resume}</button></div>
+        <div class="btn-row pause-exits">
+          <button class="secondary" id="pauseRestartBtn">${s.restartRunBtn}</button>
+          <button class="secondary" id="pauseFinishBtn">${s.endRunBtn}</button>
+        </div>
+        <div class="btn-row pause-resume"><button class="primary" id="continueBtn">${s.resume}</button></div>
       </div>
     </div>
 
@@ -409,11 +446,27 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   if (hudEl) new MutationObserver(scheduleFit).observe(hudEl, { subtree: true, childList: true, characterData: true });
   for (const ev of ['resize', 'orientationchange']) window.addEventListener(ev, scheduleFit);
 
-  const cvdBtn = container.querySelector<HTMLButtonElement>('#cvdBtn');
-  cvdBtn?.setAttribute('aria-checked', String(colorblindOn()));
-  cvdBtn?.addEventListener('click', () => {
-    setColorblind(!colorblindOn());
-    cvdBtn.setAttribute('aria-checked', String(colorblindOn()));
+  // 色盲友好这一条有两颗开关：暂停面板里那条长的（单人局），和小屋局底排上
+  // 那颗小的（小屋局按不了暂停，见控制条那段注释）。同一个设置，两处一起跟着
+  // 变——按了哪一颗，另一颗的 aria-checked 也翻过来。
+  const cvdBtns = Array.from(container.querySelectorAll<HTMLButtonElement>('#cvdBtn, #cvdRoomBtn'));
+  const showCvd = () => {
+    for (const b of cvdBtns) b.setAttribute('aria-checked', String(colorblindOn()));
+  };
+  showCvd();
+  for (const b of cvdBtns) {
+    b.addEventListener('click', () => {
+      setColorblind(!colorblindOn());
+      showCvd();
+    });
+  }
+
+  // 暂停面板里的《怎么玩》：开的是全站同一屏六条规则（ui/rulesModal.ts）。有
+  // 没有三角那一列由整包说了算（网页版有，小红书版在自己的 main.ts 里关
+  // 掉），这儿不写死。关掉之后什么也不做——这一层还压在暂停面板上，玩家回到
+  // 的正是他刚才那一屏。
+  container.querySelector<HTMLButtonElement>('#howBtn')?.addEventListener('click', () => {
+    openRulesModal({ lang: meta.lang });
   });
 
   // The press flip on 完成/暂停 is driven from pointer events rather than
@@ -468,7 +521,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
       cancelCount?.();
       cancelCount = null;
-      pauseOv?.classList.add('show');
+      pauseOv?.classList.add('show', 'pause--pre');
     });
     // 游戏本身的《继续》也挂在这颗键上，但那一路在没开局时会自己空转，所以两
     // 边可以共用，互不干扰。
@@ -555,7 +608,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       // 在开局那一刻就接上（见上面控制条里的注释）。
       stop: req<HTMLButtonElement>('stopBtn'),
       leaveRoom: inRoom ? req<HTMLButtonElement>('leaveRoomBtn') : undefined,
-      finish: req('finishBtn'),
+      // 单人局底排上没有《完成》了（它进了暂停面板），所以这儿是 query 不是
+      // req——小屋局才找得到。
+      finish: container.querySelector<HTMLButtonElement>('#finishBtn') ?? undefined,
+      pauseFinish: req('pauseFinishBtn'),
+      pauseRestart: req('pauseRestartBtn'),
       back: undefined,
       start: req('startBtn'),
       continueBtn: req('continueBtn'),

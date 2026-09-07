@@ -148,7 +148,10 @@ let bombShare = null;
   await page.$eval('#startBtn', (el) => el.click());
   await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, PIECES, { timeout: 20000 });
   await page.waitForTimeout(700);
-  await page.click('#finishBtn');
+  // 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
+  await page.click('#stopBtn');
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.click('#pauseFinishBtn');
   await page.waitForSelector('#endOverlay.show', { timeout: 10000 });
   await page.waitForTimeout(700);
   await page.click('#shareBtn');

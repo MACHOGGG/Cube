@@ -43,6 +43,21 @@ export const CTL_LEAVE = custom('ctl-leave') ?? ctlGlyph(
     'stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>',
 );
 
+/**
+ * 小屋局底排那颗《色盲友好》开关。
+ *
+ * 小屋局按不了《暂停》（一场同步竞赛停不下来），可色盲配色是这局里随时该
+ * 够得着的东西——玩家定的：「在小屋对战里有一个小的《色盲友好》开关和《完
+ * 成》按钮在游戏界面下方」。所以它单独摆在那一排上，不藏在暂停面板里。
+ *
+ * 画的是一颗左半实心的圆：同一副圆盘上「换一套配色」最直白的记号，和暂停
+ * 那两条、完成那个勾、离开那扇门都不会认混。换成自己的：ctl-cvd.svg。
+ */
+export const CTL_CVD = custom('ctl-cvd') ?? ctlGlyph(
+  '<circle cx="50" cy="50" r="26" fill="none" stroke="var(--ctl-mark)" stroke-width="9"/>' +
+    '<path d="M50 24 A26 26 0 0 0 50 76 Z" fill="var(--ctl-mark)"/>',
+);
+
 /** 开局页那颗《返回》：同一副圆盘，里面是一支向左的箭。换成自己的：ctl-back.svg。 */
 export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
   '<path d="M60 30 L40 50 L60 70" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +

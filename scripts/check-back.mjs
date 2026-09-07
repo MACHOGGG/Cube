@@ -131,7 +131,11 @@ async function commonRounds(tag, viewport) {
   check(`${tag} 打着按返回 → 暂停页盖上，棋盘还在`, (await shown(page, '#pauseOverlay')) && (await has(page, '#boardWrap')));
   await back(page);
   check(`${tag} 暂停着再按 → 继续，暂停页撤掉`, !(await shown(page, '#pauseOverlay')) && (await has(page, '#boardWrap')));
-  await page.$eval('#finishBtn', (el) => el.click());
+  // 单人局的《完成》搬进了暂停面板（玩家定的），所以收尾是两步：先按《暂
+  // 停》，再在面板里按《结束游戏》。
+  await page.$eval('#stopBtn', (el) => el.click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.$eval('#pauseFinishBtn', (el) => el.click());
   await page.waitForSelector('#endOverlay.show', { timeout: 10000 });
   await back(page, 600);
   check(`${tag} 结算页按返回 → 主菜单`, (await has(page, '.home-page')) && !(await has(page, '#endOverlay')));

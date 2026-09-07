@@ -137,7 +137,10 @@ await page.click('#continueBtn');
 await page.waitForTimeout(200);
 check('按《继续》→ 接着打', !(await shown(page, '#pauseOverlay')));
 // 再切一次：已经暂停着的不重复处理；结算之后也不暂停
-await page.click('#finishBtn');
+// 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
+await page.click('#stopBtn');
+await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+await page.click('#pauseFinishBtn');
 await page.waitForSelector('#endOverlay.show', { timeout: 8000 });
 const rows = await page.$$eval('#endBreakdown .end-row', (els) => els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()));
 check('结算页没有《用时系数》那一行', !rows.some((r) => r.includes('用时系数')), rows.join(' | '));

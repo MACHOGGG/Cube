@@ -231,12 +231,17 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     // leaveRoom 会把最后看到的房间状态一起清掉。
     void leaveRoom();
     rows.remove();
+    // 这一排原地换成单人局那一套：名单、《离开小屋》、《完成》和那颗小的
+    // 《色盲友好》一起撤掉，只留一颗《暂停》，占半条宽、居中。撤掉的那三件
+    // 事并没有消失，是搬进了暂停面板——而这颗《暂停》正是这时候才露面的。
     document.getElementById('leaveRoomBtn')?.remove();
+    document.getElementById('cvdRoomBtn')?.remove();
+    document.getElementById('finishBtn')?.remove();
+    const row = document.querySelector('.controls');
+    row?.classList.remove('controls--room');
+    row?.classList.add('controls--solo');
     const pause = document.getElementById('stopBtn');
     if (pause) pause.hidden = false;
-    // 房间局里《完成》占半条，单人局占整条——名单和《离开小屋》走了，它就
-    // 不再是「半」。
-    document.getElementById('finishBtn')?.classList.remove('icon-btn--half');
   };
 
   /**
