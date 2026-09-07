@@ -37,7 +37,16 @@ import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderModesShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
 import { renderTutorialPicker } from './ui/tutorialPicker';
-import { claimFirstEndcard, firstTimeIn, glowingBasics, markOpened, type PlayKey } from './engine/firstPlay';
+import {
+  BASIC_KEYS,
+  claimFirstEndcard,
+  claimFirstTotalTip,
+  firstTimeIn,
+  glowingBasics,
+  lockedForFirstPlay,
+  markOpened,
+  type PlayKey,
+} from './engine/firstPlay';
 import { bombTip, flipTip, layoutTip, slotTip, timedTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
@@ -417,35 +426,37 @@ function tipFor(kind: PlayKey, make: () => { text: string; art: string }): Shape
 }
 
 /**
- * 头一回点开《基础方块》或《基础小球》时，棋盘底下那块教学条按哪一路走。
+ * 头一回点开一个基础玩法时，棋盘底下那块教学条按哪一路走。
  *
- * 主菜单上这两张卡镶着光，玩家爱先点哪张点哪张（玩家定的），所以这一路得看
- * 他之前打过哪一张：
+ * 玩家 2026-09 定的：「玩家玩的第一个，我们尽量教学」——所以看的是「这是不是
+ * 他打的第一个基础玩法」，不是「这是哪一张卡」：
  *
- *   · 这是头一张（另一张也还没打过）→ 'first'。六条规矩从第 1 条讲起，跟着
- *     他的手走四步讲完。方块和小球都能走这一路——条子上的字和图跟着这一局的
- *     图形走，讲方块就画方块。玩家的原话：「方块的需要补齐完整因为玩家可能
- *     先玩方块」。
- *   · 先打的是小球，现在打方块 → 'square'。六条他刚听过一遍了，条子先不出
- *     声，等他自己打出三次得分再补那条他还没见过的（他早先定的那一路，见
- *     ui/coachBar.ts）。
- *   · 先打的是方块，现在打小球 → 'first'。小球那一路玩家说「照搬」，不动。
+ *   · 三张里他一张都没打过 → 'first'。六条里的前五条从第 1 条讲起，跟着他的
+ *     手走四步讲完。方块、小球、三角哪一张都走这一路——条子上的字和图跟着这
+ *     一局的图形走，讲方块就画方块。
+ *   · 已经打过别的基础玩法 → 'second'。前几条他上一局跟着走过一遍了，这一局
+ *     只讲第 4 条：这一族消掉之后是留下一个空图形（小球、三角），还是拿走不
+ *     再出现（方块）。这块条子先不出声，等他自己打出三次得分再开口。
  *
- * 三角不在这两张里——它自己那段分镜动画照旧（showGame 里那道闸口），这里返
- * 回空对象。
+ * 第 3 条（星星和色块同色也能一起凑）是个例外：上一局要是没真的做到，
+ * coachBar 会在 'second' 这一路前面补讲一次（见它的 mixedTaught）。
+ *
+ * 头一回打开的玩家只能点方块和小球两张（engine/firstPlay.ts 的
+ * lockedForFirstPlay），所以三角走到这儿时必定是 'second'。
  */
 function basicCoach(id: string): ShapeGameOpts {
-  const key: PlayKey | null = id === 'square' ? 'square' : id === 'circle' ? 'circle' : null;
+  const key: PlayKey | null =
+    id === 'square' ? 'square' : id === 'circle' ? 'circle' : id === 'triangle' ? 'triangle' : null;
   if (!key || !firstTimeIn(key)) return {};
   // 先记下来再开局：这一局打到一半退出去，主菜单上这张卡也该熄了——他已经
   // 进去看过一遍了，光该让给还没点过的那一张。
-  const secondOne = !firstTimeIn(key === 'square' ? 'circle' : 'square');
+  const firstOne = BASIC_KEYS.every((k) => firstTimeIn(k));
   markOpened(key);
   // 那一族的分镜也一并记成「看过」。这一局的规矩他是靠教学条学的，学的是同
   // 一批内容；不记的话，第二次点开这张卡（那时候没有教学条了）反而会被那段
   // 动画拦一次——「意料之外的界面」。想重看的人去《教学》里找得到。
   markTutorialSeen(key);
-  return { coach: true, coachPlan: key === 'square' && secondOne ? 'square' : 'first' };
+  return { coach: true, coachPlan: firstOne ? 'first' : 'second' };
 }
 
 /** 炸弹 / 无限反转的那幅配图跟着他挑的图形走。三角没有自己那一份，当方块画。 */
@@ -489,6 +500,7 @@ function showMenu() {
     onFlipMode: showFlipMode,
     // 没打过的那几张基础卡镶一圈光，指路用；两张都打过了这里就是空的。
     glow: glowingBasics(),
+    firstPlayLock: lockedForFirstPlay(),
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: () => {
       mpOrigin = 'menu';
@@ -1063,7 +1075,12 @@ function randomTargetGame(family: Family): ShapeGame {
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, reopenKey?: string) {
   // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
   // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
-  const fullOpts: ShapeGameOpts = { shouldLeadOut: claimFirstEndcard, ...opts, lang: currentLang };
+  const fullOpts: ShapeGameOpts = {
+    shouldLeadOut: claimFirstEndcard,
+    shouldTeachTotal: claimFirstTotalTip,
+    ...opts,
+    lang: currentLang,
+  };
   // Going back lands on the home page and, when this game was chosen from one
   // of its pop-up pickers, re-opens that picker — so "back" always means the
   // screen the player actually came from.

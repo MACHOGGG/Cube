@@ -1220,6 +1220,45 @@ button:hover { filter: brightness(1.05); }
     filter: drop-shadow(0 0 7px var(--glow));
   }
 }
+/* ---- 头一回打开时的那道软锁（ui/menu.ts 的 armFirstPlayLock）----------
+   按到方块和小球以外的卡：那两张抖一下、光更亮一档，别的什么也不发生。不写
+   字——两张亮着的卡本身就是答案（玩家定的「少文字」）。
+   光用的是 --glow，深色主题下它本来就是白的（见文件开头那两处 @media），所以
+   「暗色背景配白色光芒」不用另写一套，只把它加重一档。 */
+.home-icon-btn--nudge { animation: home-nudge 0.42s ease-in-out; }
+.home-icon-btn--nudge .home-icon-art > svg {
+  animation: glow-pulse 0.55s ease-in-out 2;
+  filter: drop-shadow(0 0 12px var(--glow)) drop-shadow(0 0 22px var(--glow));
+}
+@keyframes home-nudge {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-5px); }
+  42% { transform: translateX(5px); }
+  68% { transform: translateX(-3px); }
+  86% { transform: translateX(2px); }
+}
+/* 往上滑的那个小圆角箭头：只在他按的那张卡在两张基础卡下面时出现，1.4 秒后
+   自己淡走。占位不挤版——绝对定位，压在基础那一排上方的空当里。 */
+/* 那个箭头是绝对定位的，得有个参照——给这一排一个 position 不动别的。 */
+.home-row { position: relative; }
+.home-up-hint {
+  position: absolute; left: 50%; top: -6px;
+  transform: translate(-50%, 6px);
+  color: var(--accent);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.home-up-hint--in { opacity: 0.95; transform: translate(-50%, -2px); animation: home-up-float 1s ease-in-out 1; }
+@keyframes home-up-float {
+  0%, 100% { margin-top: 0; }
+  50% { margin-top: -5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-icon-btn--nudge,
+  .home-icon-btn--nudge .home-icon-art > svg,
+  .home-up-hint--in { animation: none; }
+}
+
 /* ---- 小红书版：三张「完整版里是天才玩法」的卡 --------------------------
    玩家定的：除了发光那张，其余几张暗淡一点、写上「进阶入口」，当完整版的预
    告。这一版这三个照样点得开、照样免费——牌子说的是「完整版里它们归天才」，

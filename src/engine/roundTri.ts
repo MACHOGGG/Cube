@@ -78,6 +78,32 @@ export function roundTriPath(pts: readonly Pt[], cut = TRI_CORNER): string {
 }
 
 /**
+ * 那圈灰边往里缩多少。
+ *
+ * 三角有两种「空着」的样子要戴这圈边：真的空掉的格子（消除之后留下的空三
+ * 角），和得分之后变成星星的格子。玩家 2026-09 定的：「所有三角玩法在更新到
+ * 得分后变成星星之后需要和之后空三角一样的灰色圆角边框一直存在」——所以缩多
+ * 少只在这儿写一遍，两处都读它；一处调了另一处没调，同一块棋盘上就会出现两
+ * 种大小的灰圈。
+ */
+export const TRI_RING_INSET = 0.88;
+
+/**
+ * 那圈灰边本身：把三个顶点朝重心缩 TRI_RING_INSET，再磨一次圆角。
+ *
+ * 里外两层的圆角要是一个磨了一个没磨，小三角看着就像贴歪了——所以走的是同一
+ * 条 roundTriPath。
+ */
+export function triRingPath(pts: readonly Pt[], inset = TRI_RING_INSET, cut = TRI_CORNER): string {
+  const cx = (pts[0][0] + pts[1][0] + pts[2][0]) / 3;
+  const cy = (pts[0][1] + pts[1][1] + pts[2][1]) / 3;
+  return roundTriPath(
+    pts.map(([x, y]) => [cx + (x - cx) * inset, cy + (y - cy) * inset] as [number, number]),
+    cut,
+  );
+}
+
+/**
  * 给 CSS 用：一条已经磨圆的 `polygon(...)`，坐标是这个方框里的百分比。
  *
  * clip-path 的 polygon() 只认直线段，所以这儿用的是采样点那一版——角上一段

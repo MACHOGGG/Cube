@@ -6,8 +6,9 @@
  *
  * 盯着三件玩家点过名的事：
  *
- *   · 用词——第 1 条仍旧说「反面是一颗星星」，把这个词交代一次；从第 2 条起
- *     一律只说「星星」，再不出现「反面」二字。
+ *   · 用词——只剩「色块」和「星星」两个词。第 1 条就是「色块得分后会变成星
+ *     星」，六条里再不出现翻面、反面、正面（玩家 2026-09 定的：不再有「翻
+ *     面」这件事硬性存在的中间概念）。
  *   · 无限反转——第 4、5 条整条抽掉（那一局星星同色不消除，也不会「全部翻成
  *     星星就结束」），剩下四条重新从 1 编号。
  *   · 底下那几条附注——一个玩法一条，讲的是它比基础规矩多出来的那一层。基础
@@ -81,8 +82,12 @@ await startFrom('方块');
 let r = await openHowto();
 check('基础方块：六条规则', r.nums.join(',') === '1,2,3,4,5,6', r.nums.join(','));
 check('基础方块：一条附注也没有', r.extras.length === 0, JSON.stringify(r.extras));
-check('基础方块：第 1 条仍然说「反面是一颗星星」', r.texts[0].includes('反面') && r.texts[0].includes('星星'), r.texts[0]);
-check('基础方块：第 2 条起只说星星', r.texts.slice(1).every((t) => !t.includes('反面')), JSON.stringify(r.texts.slice(1).map((t) => t.slice(0, 10))));
+check('基础方块：第 1 条就是「色块得分后会变成星星」', r.texts[0].includes('色块') && r.texts[0].includes('变成星星'), r.texts[0]);
+check(
+  '六条里一个「反面／正面／翻面」都没有',
+  r.texts.every((t) => !/反面|正面|翻面/.test(t)),
+  JSON.stringify(r.texts.filter((t) => /反面|正面|翻面/.test(t))),
+);
 await closeAll();
 
 // ── 2. 无限反转 ──────────────────────────────────────────────────────

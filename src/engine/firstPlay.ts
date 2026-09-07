@@ -18,7 +18,20 @@
  */
 import { hasSeenTutorial } from '../i18n';
 
-export type PlayKey = 'square' | 'circle' | 'bomb' | 'slot' | 'flip' | 'timed' | 'layout' | 'endcard';
+export type PlayKey =
+  | 'square'
+  | 'circle'
+  | 'triangle'
+  | 'bomb'
+  | 'slot'
+  | 'flip'
+  | 'timed'
+  | 'layout'
+  | 'endcard'
+  | 'totaltip';
+
+/** 三个基础玩法。「这是不是他打的第一个」按这三张算（见 main.ts 的 basicCoach）。 */
+export const BASIC_KEYS = ['square', 'circle', 'triangle'] as const;
 
 const KEY = (k: PlayKey) => `slides_played_${k}`;
 
@@ -30,7 +43,7 @@ const KEY = (k: PlayKey) => `slides_played_${k}`;
  * 法的必经之路，看过就等于打开过。
  */
 function playedBefore(k: PlayKey): boolean {
-  if (k === 'square' || k === 'circle') return hasSeenTutorial(k);
+  if (k === 'square' || k === 'circle' || k === 'triangle') return hasSeenTutorial(k);
   // endcard 故意**不**在这里认旧钥匙。试过一版用「看过分镜没有」来认老玩
   // 家，结果是死的：现在头一回点开那两张发光的卡就会把分镜记成看过（见
   // main.ts 的 basicCoach），等这一局打完要判结算页时，新人已经被当成老玩
@@ -70,6 +83,19 @@ export function glowingBasics(): readonly ('square' | 'circle')[] {
 }
 
 /**
+ * 主菜单要不要把方块和小球以外的全锁上。
+ *
+ * 玩家 2026-09 定的：「第一次玩的玩家只能选择基础方块 or 基础小球，在游玩过
+ * 第一个玩法之后就可以解锁」。锁只在他一局都还没打过时存在，打完第一局就永远
+ * 撤掉——这是给一个刚打开、面前摊着十几张卡的人指路的，不是一道关卡。
+ *
+ * 判的是这两张，不是三张：三角这时候也锁着，拿它当解锁条件就永远解不开。
+ */
+export function lockedForFirstPlay(): boolean {
+  return firstTimeIn('square') && firstTimeIn('circle');
+}
+
+/**
  * 结算页那对指路的光（《分享》→《首页》）该不该亮。
  *
  * 玩家定的：「只有第一次结算的时候这两个轮流发光，随后的每局游戏都不要发
@@ -82,5 +108,18 @@ export function glowingBasics(): readonly ('square' | 'circle')[] {
 export function claimFirstEndcard(): boolean {
   if (!firstTimeIn('endcard')) return false;
   markOpened('endcard');
+  return true;
+}
+
+/**
+ * 结算页那一句「综合得分怎么算」该不该摆。
+ *
+ * 六条规矩的最后一条从棋盘底下挪到了这儿（玩家 2026-09 定的），只摆头一回：
+ * 明细就在它上面，指着实物讲一次就够了。和上面那颗光各记各的——那颗认的是
+ * 「见过结算页没有」，这一句认的是「这句话讲过没有」。
+ */
+export function claimFirstTotalTip(): boolean {
+  if (!firstTimeIn('totaltip')) return false;
+  markOpened('totaltip');
   return true;
 }

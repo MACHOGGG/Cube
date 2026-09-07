@@ -90,9 +90,20 @@ export async function webCheckout(period: PlanPeriod, email?: string): Promise<P
     window.location.assign(url);
     return { ok: 'redirecting' };
   } catch (err) {
-    // 503 is the server saying it has no Creem key or no products yet — the
-    // subscription is genuinely not on sale, which is not a network fault.
-    return { ok: false, reason: String(err) === 'Error: 503' ? 'notConfigured' : 'network' };
+    // 每一种失败都要说对是哪一种，这一段从前一律报「连不上网络」——玩家的网
+    // 络好好的，坏的是别处，他照着那句话去重连 Wi-Fi 只会白忙。三种：
+    //
+    //   503  服务器说它没有 Creem 密钥或没配商品 → 确实还没开售
+    //   5xx  我们这边或 Creem 那边出错（最常见的是 502：商品 id 和密钥不是同
+    //        一个模式，test 的 id 配 live 的密钥，或者反过来）→ 服务器出错
+    //   别的 请求发出去了但被拒了 → 也算服务器出错，不是他的网络
+    //
+    // 真正的「连不上网络」只有一种：fetch 本身就没发出去（抛的不是 HttpError）。
+    if (err instanceof HttpError) {
+      if (err.status === 503) return { ok: false, reason: 'notConfigured' };
+      return { ok: false, reason: 'server' };
+    }
+    return { ok: false, reason: 'network' };
   }
 }
 

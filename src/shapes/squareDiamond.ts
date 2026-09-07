@@ -680,6 +680,7 @@ export function createSquareDiamondGame(): ShapeGame {
         coach: !!opts?.coach,
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
+        shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,
         isGameOver,

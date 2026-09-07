@@ -10,7 +10,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine } from '../engine/matchGrowth';
-import { roundTriClip, roundTriPath } from '../engine/roundTri';
+import { roundTriClip, roundTriPath, triRingPath, TRI_RING_INSET } from '../engine/roundTri';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreOf, sizeOf } from '../engine/targets';
@@ -559,7 +559,7 @@ export function createTriangleBigGame(): ShapeGame {
           // balls). No fill in any palette reads unambiguously as "an
           // empty slot" while the outline still shows a piece is here.
           const cen = centroid(pts);
-          const RING_SCALE = 0.88;
+          const RING_SCALE = TRI_RING_INSET;
           const ringPts = pts.map(([x, y]) => [cen[0] + (x - cen[0]) * RING_SCALE, cen[1] + (y - cen[1]) * RING_SCALE] as [number, number]);
           const svgNS = 'http://www.w3.org/2000/svg';
           const svg = document.createElementNS(svgNS, 'svg');
@@ -605,8 +605,13 @@ export function createTriangleBigGame(): ShapeGame {
           mark.style.height = '100%';
           // 用 div 的 innerHTML 包一层，而不是往 SVG 元素上写 innerHTML：小红
           // 书那一版跑在 Chrome 61 上，那儿 SVGElement 的 innerHTML 靠不住。
+          // 那圈灰边：和消掉之后剩下的空三角是同一圈（engine/roundTri.ts 的
+          // triRingPath），得分变成星星之后一直留着。玩家 2026-09 定的——星星
+          // 面的底板是透出来的，没有这圈边，一枚变成星星的三角在深色底板上就
+          // 只剩一颗浮着的星，看不出它还占着一格、还会跟着整行滑。
           mark.innerHTML =
             `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" style="display:block;overflow:visible">` +
+            `<path d="${triRingPath(local)}" fill="none" stroke="var(--ink-faint)" stroke-width="3.5" stroke-linejoin="round"/>` +
             asteriskGroup(starX, starY, starSize, COLORS[tile.dotColor]) +
             `</svg>`;
           el.appendChild(fill);
@@ -899,8 +904,16 @@ export function createTriangleBigGame(): ShapeGame {
         modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
+        // 三角也接教学条：玩家 2026-09 定的「玩家玩的第一个，我们尽量教学……
+        // 然后等玩家之后玩到小球或者三角的时候，小球只有第四条」——三角那一条
+        // 和小球一样（消掉留下一个空三角），和方块不一样。三角没有自己那套配
+        // 图，coachBar 会退回通稿那一份。
+        coachArt: opts?.coachArt,
+        coachShape: 'triangle',
+        coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
+        shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,
         isGameOver,

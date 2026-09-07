@@ -16,6 +16,8 @@
  * 同样的线段表，那边是离线画图，不引 ui 层）。
  */
 
+import { TRI_RING_INSET } from '../engine/roundTri';
+
 /** 三笔：一竖，两斜。坐标在 24×24 里，中心 (12,12)。 */
 export const ASTERISK_SEGS: readonly [[number, number], [number, number]][] = [
   [[12, 2.5], [12, 21.5]],
@@ -76,5 +78,15 @@ export function triCentroid(pts: readonly (readonly [number, number])[]): [numbe
   return [(pts[0][0] + pts[1][0] + pts[2][0]) / 3, (pts[0][1] + pts[1][1] + pts[2][1]) / 3];
 }
 
-/** 星星占内切圆的多少。小球那边是格子的 0.95，这里对着内切圆同一个数。 */
-export const TRI_STAR_OF_INRADIUS = 0.95;
+/**
+ * 三角那颗星占内切圆的多少。
+ *
+ * 玩家 2026-09 定的：「不要放大三角的星星，就正好内切那个灰色边框就好」。那
+ * 圈灰边是三角朝重心缩 TRI_RING_INSET（0.88）之后的轮廓，所以这个数就是它
+ * ——星星的直径等于那圈边框自己的内切圆直径，一分不多一分不少。
+ *
+ * 从前是 0.95，对的是**整块三角**的内切圆：星星比边框大一点点，两只斜角压在
+ * 边上。两个数只差 0.07，可那圈边框存在的意义正是「这一格还占着位子」，被星
+ * 星压掉一角就说不清了。
+ */
+export const TRI_STAR_OF_INRADIUS = TRI_RING_INSET;

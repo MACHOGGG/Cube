@@ -799,6 +799,7 @@ export function createCircleGame(): ShapeGame {
         coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
+        shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,
         isGameOver,

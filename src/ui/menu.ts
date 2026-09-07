@@ -50,6 +50,19 @@ export interface MenuHandlers {
    * 此安安静静——光是用来指路的，路走完了就该撤。
    */
   glow?: readonly BaseShape[];
+  /**
+   * 头一回打开、一局都还没打过：除了《基础方块》和《基础小球》，别的一概按不
+   * 开（engine/firstPlay.ts 的 lockedForFirstPlay）。
+   *
+   * 玩家 2026-09 定的：「第一次玩的玩家只能选择基础方块 or 基础小球，在游玩
+   * 过第一个玩法之后就可以解锁……这些封锁的设置都是只给第一次游玩的玩家才会
+   * 出现，在此之后再也不会出现」。
+   *
+   * 按到别的卡不是没反应：那两张会轻轻抖一下、光更亮一点；要是他按的那张在
+   * 屏幕靠下的位置，还会在两张卡那儿冒一个小圆角箭头，指他往上滑。锁不写字
+   * ——两张亮着的卡本身就是答案。
+   */
+  firstPlayLock?: boolean;
 }
 
 /**
@@ -447,4 +460,65 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // ---- 最后那一段：天才特供 ----------------------------------------------
   // 老虎机 · 无限反转 · 七色圆球 · V 型三角，就是它们被攒起来的次序。
   for (const btn of geniusTail) place(btn);
+
+  if (handlers.firstPlayLock) armFirstPlayLock(grid);
+}
+
+/**
+ * 头一回打开时的那道软锁。
+ *
+ * 拦在**捕获**阶段的一个监听器，不是给十几张卡各挂一遍：这一页上的卡是分七八
+ * 处摆出来的（基础三张、炸弹的九颗小片、更多布局、天才特供……），逐个去改要
+ * 改七八处，还得记得以后新加的卡也照做。拦在这儿，往后加什么卡都自动锁上。
+ *
+ * 被拦下来的那一下不是「没反应」：两张基础卡抖一下、光更亮一档；他按的那张要
+ * 是在两张卡下面，就在那儿冒一个小圆角箭头指他往上滑。
+ */
+function armFirstPlayLock(grid: HTMLElement): void {
+  const basics = Array.from(grid.querySelectorAll<HTMLElement>('.home-icon-btn--glow'));
+  if (!basics.length) return;
+  let hint: HTMLElement | null = null;
+  let off = 0;
+
+  grid.addEventListener(
+    'click',
+    (e) => {
+      const btn = (e.target as HTMLElement | null)?.closest?.('.home-icon-btn') as HTMLElement | null;
+      if (!btn || basics.includes(btn)) return;
+      e.stopPropagation();
+      e.preventDefault();
+
+      // 抖 + 更亮一档。先摘再挂，中间读一次 offsetWidth 逼浏览器把「没有这个
+      // 类」当成一帧算掉，否则连按两下第二下不会重播。
+      for (const b of basics) b.classList.remove('home-icon-btn--nudge');
+      void basics[0].offsetWidth;
+      for (const b of basics) b.classList.add('home-icon-btn--nudge');
+
+      // 他按的那张在两张卡下面：指一下往上滑。用的是两者在页面上的位置，不是
+      // 「第几张」——宽窄两版的排法不一样，位置才是他眼睛看见的事实。
+      const target = basics[0].getBoundingClientRect();
+      if (btn.getBoundingClientRect().top > target.bottom + 8) {
+        if (!hint) {
+          hint = document.createElement('div');
+          hint.className = 'home-up-hint';
+          hint.setAttribute('aria-hidden', 'true');
+          hint.innerHTML =
+            '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"' +
+            ' stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M12 19.5 V6"/><path d="M5.5 12 L12 5.4 L18.5 12"/></svg>';
+          basics[0].parentElement?.insertBefore(hint, basics[0]);
+        }
+        hint.classList.remove('home-up-hint--in');
+        void hint.offsetWidth;
+        hint.classList.add('home-up-hint--in');
+      }
+
+      window.clearTimeout(off);
+      off = window.setTimeout(() => {
+        for (const b of basics) b.classList.remove('home-icon-btn--nudge');
+        hint?.classList.remove('home-up-hint--in');
+      }, 1400);
+    },
+    true,
+  );
 }

@@ -20,6 +20,9 @@ import { targetPatternDefs } from '../engine/targetIcon';
 import type { TargetPattern } from '../engine/targets';
 import type { CoachShape } from './coachBar';
 
+/** ruleArt 只画得出方块和小球两套；三角借方块那一份（它没有自己的画法）。 */
+const drawAs = (shape: CoachShape): 'square' | 'circle' => (shape === 'circle' ? 'circle' : 'square');
+
 export interface ModeTip {
   text: string;
   art: string;
@@ -27,12 +30,12 @@ export interface ModeTip {
 
 /** 炸弹：一行四颗红的挨在一起就炸。图里画的是他刚挑的那种图形。 */
 export function bombTip(lang: Lang, shape: CoachShape): ModeTip {
-  return { text: MODE_TIPS[lang].bomb, art: bombTipArt(shape) };
+  return { text: MODE_TIPS[lang].bomb, art: bombTipArt(drawAs(shape)) };
 }
 
 /** 无限反转：三枚图形正反面来回翻，3 秒一次。同样跟着他挑的图形走。 */
 export function flipTip(lang: Lang, shape: CoachShape): ModeTip {
-  return { text: MODE_TIPS[lang].flip, art: flipTipArt(shape) };
+  return { text: MODE_TIPS[lang].flip, art: flipTipArt(drawAs(shape)) };
 }
 
 /**

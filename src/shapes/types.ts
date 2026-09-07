@@ -55,7 +55,7 @@ export interface ShapeGameOpts {
    *            己往下播完。
    * 不给就是 'first'。
    */
-  coachPlan?: 'first' | 'square';
+  coachPlan?: 'first' | 'second';
   /**
    * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示：同一块条子，一句话加
    * 一幅图，15 秒后自己走掉。给了它就不摆六条规则。
@@ -74,6 +74,11 @@ export interface ShapeGameOpts {
    * 答，网页版和小红书版的记录是分开存的。
    */
   shouldLeadOut?: () => boolean;
+  /**
+   * 头一回看见结算页时，明细底下补一句「综合得分怎么算」（见 engine/firstPlay.ts
+   * 的 claimFirstTotalTip）。六条规矩的最后一条从棋盘底下挪到了那儿。
+   */
+  shouldTeachTotal?: () => boolean;
 }
 
 export interface ShapeGame {

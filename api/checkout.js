@@ -31,10 +31,20 @@ export default async function handler(req, res) {
     if (!checkout?.checkout_url) return send(res, 502, { error: 'upstream' });
     return send(res, 200, { url: checkout.checkout_url });
   } catch (err) {
-    // Vercel's runtime log is the only place this is visible; without it a
-    // 502 here is indistinguishable from every other 502.
+    // Vercel's runtime log is the only place the whole Creem message is
+    // visible; without it a 502 here is indistinguishable from every other
+    // 502.
     console.error('checkout failed:', err?.message || err);
-    return send(res, 502, { error: 'upstream' });
+    // Creem 的状态码跟着回给浏览器。这不是秘密——密钥走的是请求头，商品 id
+    // 本来就是浏览器点哪个套餐决定的，回去的只有「Creem 拒了，它说 404」。
+    // 有了它，出问题的那一刻在浏览器的网络面板里就看得出是哪一类：
+    //
+    //   404 / 403  这个商品 id 在这把密钥的那本目录里不存在——十有八九是
+    //              test 的 id 配了 live 的密钥，或者反过来（见 _creem.js 的
+    //              base()：走哪个域名是按密钥前缀选的）。
+    //   401        密钥本身不对。
+    //   5xx        Creem 自己出问题了，等一会儿再试。
+    return send(res, 502, { error: 'upstream', upstreamStatus: err?.status ?? 0 });
   }
 }
 

@@ -47,15 +47,46 @@
  * buildRuleArt）：小球那一局讲小球、画小球，方块那一局讲方块、画方块——他
  * 眼前只有一种图形，讲另一种是在他手上这一局里插一段用不上的话。
  */
-import { tutorialRules, type Lang } from '../i18n';
+import { STRINGS, tutorialRules, type Lang } from '../i18n';
 import { buildRuleArt } from './ruleArt';
 
 /** 玩家做了什么。gameController 在它已经知道的那几个点上报进来。 */
 export type CoachSignal = 'move' | 'match' | 'mixed' | 'line';
-/** 这一局玩的是哪种图形。 */
-export type CoachShape = 'square' | 'circle';
+/** 这一局玩的是哪种图形。三角没有自己那套配图，用通稿那份。 */
+export type CoachShape = 'square' | 'circle' | 'triangle';
 /** 哪一种排法，见文件开头。 */
-export type CoachPlan = 'first' | 'square';
+export type CoachPlan = 'first' | 'second';
+
+/**
+ * 「第 3 条他真的做到过没有」记在这儿。
+ *
+ * 玩家 2026-09 定的：「把『讲过就算讲过』改成『做到过才算讲过』」——第 3 条
+ * （星星和色块同色也能一起凑）是这个游戏最独特、也最容易被误解的一条（会以为
+ * 星星只能配星星），偏偏一局里未必凑得出来。从前它靠保底自己跳过去，跳过等
+ * 于没讲；现在跳过去的那一次不记账，下一个基础玩法开局时补讲一次。
+ *
+ * 键名由各端自己定（网页 slides_*，小红书 slides.xhs.*）——玩家的第一条要求是
+ * 两边存档完全分开。存不进去（无痕窗口）就当讲过：宁可少补一次，也不要每一局
+ * 都从第 3 条讲起。
+ */
+let mixedKey = 'slides_coach_mixed';
+export function setCoachStoreKey(k: string): void {
+  mixedKey = k;
+}
+export function mixedTaught(): boolean {
+  try {
+    return localStorage.getItem(mixedKey) === '1';
+  } catch {
+    return true;
+  }
+}
+function markMixedTaught(): void {
+  try {
+    localStorage.setItem(mixedKey, '1');
+  } catch {
+    /* 存不进去就下次再补讲一遍，不是什么大事 */
+  }
+}
 
 /** 一步：摆哪几条，靠什么走到下一步。 */
 interface Step {
@@ -71,30 +102,48 @@ interface Step {
    * 经会了，别为了凑一个数把他扣在这一条上。
    */
   readonly ms?: number;
+  /**
+   * 到点还没做到，就把这一步的话换成更具体的那一句（不往下走）。
+   *
+   * 只有第 1 步用得上：一个完全没玩过的人，第一次得分可能要三四十秒，而这一
+   * 步的门槛是「得两次分」。从前它只有一分钟的保底，最糟的一幕是他盯着同一句
+   * 话看满一分钟，什么也没发生——偏偏这里正是学习成本最高的地方，最不该沉默。
+   */
+  readonly nudge?: boolean;
+  /** 这一步是靠玩家**做到**才走的话，走的时候记一格（见 mixedTaught）。 */
+  readonly teaches?: 'mixed';
 }
 
-/** 头一局小球：四步。 */
+/** 他玩的第一个基础玩法：四步，六条里的前五条。 */
 const PLAN_FIRST: readonly Step[] = [
-  { rules: [0, 1], by: 'match', times: 2, ms: 8000 },
-  { rules: [2], by: 'mixed' },
+  { rules: [0, 1], by: 'match', times: 2, ms: 8000, nudge: true },
+  { rules: [2], by: 'mixed', teaches: 'mixed' },
   { rules: [3], by: 'line' },
-  { rules: [4, 5] },
-];
-
-/** 头一回玩方块：三步。开口之前还有一道门槛，见 SQUARE_OPEN。 */
-const PLAN_SQUARE: readonly Step[] = [
-  { rules: [3], by: 'line' },
-  { rules: [4], ms: 8000 },
-  { rules: [4, 5] },
+  { rules: [4] },
 ];
 
 /**
- * 方块那一路：打出这么多次得分之后，条子才开口。
+ * 之后再玩另一族棋盘：只讲第 4 条。
  *
- * 他刚打完一局小球，规矩听过一遍了。先让他自己打，打顺了（三次得分）再补
- * 那一条他还没见过的——反面同色连成一行会消除。
+ * 玩家 2026-09 定的：「玩家玩的第一个，我们尽量教学……然后等玩家之后玩到小球
+ * 或者三角的时候，小球只有第四条」。前三条他上一局已经跟着走过一遍了，只有第
+ * 4 条是这一族自己的事——小球和三角消掉之后留下一个空图形还能继续滑，方块是
+ * 真的拿走不再出现（见 i18n 的 TUTORIAL_RULE4）。
+ *
+ * 开口之前还有一道门槛，见 SECOND_OPEN。
  */
-const SQUARE_OPEN: { by: CoachSignal; times: number } = { by: 'match', times: 3 };
+const PLAN_SECOND: readonly Step[] = [{ rules: [3] }];
+
+/** 第 3 条那一局没做到的话，补讲一次，摆在第 4 条前面。 */
+const MAKEUP_MIXED: Step = { rules: [2], by: 'mixed', teaches: 'mixed' };
+
+/**
+ * 第二个基础玩法：打出这么多次得分之后，条子才开口。
+ *
+ * 他刚打完一局别的，规矩听过一遍了。先让他自己打，打顺了（三次得分）再补那
+ * 一条这一族自己的。
+ */
+const SECOND_OPEN: { by: CoachSignal; times: number } = { by: 'match', times: 3 };
 
 /** 做到之后隔多久换下一条：让那一下的动画先演完，别抢在得分动画前面。 */
 const AFTER_MS = 1100;
@@ -111,6 +160,9 @@ const ALREADY_MS = 2600;
  * 一块永远不动的提示比讲错还糟——玩家会以为它坏了，或者以为自己漏了什么。
  */
 const STUCK_MS = 60000;
+
+/** 第 1 步：到这个点还一次分都没得，就把话换成更具体的那一句（见 Step.nudge）。 */
+const NUDGE_MS = 22000;
 
 export interface CoachBar {
   /** 玩家做了一件事。不认识的、已经走过的，静静吞掉。 */
@@ -133,7 +185,9 @@ const ART_CACHE = new Map<CoachShape, string[]>();
 function artFor(shape: CoachShape): string[] {
   let a = ART_CACHE.get(shape);
   if (!a) {
-    a = buildRuleArt({ shape });
+    // buildRuleArt 只画得出方块和小球两套；三角走通稿那一份（那份第 1 幅本来
+    // 就三种图形并排，三角在里面）。
+    a = buildRuleArt(shape === 'triangle' ? {} : { shape });
     ART_CACHE.set(shape, a);
   }
   return a;
@@ -169,12 +223,24 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const plan: CoachPlan = opts.plan ?? 'first';
   const texts = tutorialRules(opts.lang, opts.shape);
   const art = opts.art ?? artFor(opts.shape);
-  const steps = plan === 'square' ? PLAN_SQUARE : PLAN_FIRST;
+  const steps: readonly Step[] =
+    plan === 'first'
+      ? PLAN_FIRST
+      : // 上一局第 3 条没做到就补讲一次，摆在这一族那条前面（见 mixedTaught）。
+        mixedTaught()
+        ? PLAN_SECOND
+        : [MAKEUP_MIXED, ...PLAN_SECOND];
   const lastStep = steps.length - 1;
   /** 一步里最多摆几行——骨架按这个数一次画够，换步时只改内容不重建。 */
   const rows = Math.max(...steps.map((st) => st.rules.length));
-  /** 进度条按「条」算：玩家看到的是六条规矩，摆在几步里是我们的事。 */
-  const segs = texts.length;
+  /**
+   * 进度条按「条」算：玩家看到的是一条条规矩，摆在几步里是我们的事。
+   *
+   * 只有从第 1 条讲起的那一路才画这条进度——第二个玩法只讲一两条，画一条走到
+   * 头的进度条只会让人以为自己漏了前面几条。
+   */
+  const covered = steps.flatMap((st) => st.rules);
+  const segs = Math.min(...covered) === 0 ? Math.max(...covered) + 1 : 0;
 
   frame(host, segs, rows);
 
@@ -189,7 +255,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   /** 这一步里有没有第 2 条或第 3 条（下标 1、2）。 */
   const aims = (step: Step) => step.rules.some((r) => r === 1 || r === 2);
 
-  const progEl = host.querySelector('.coach-prog') as HTMLElement;
+  const progEl = host.querySelector<HTMLElement>('.coach-prog');
   const rowEls = Array.from(host.querySelectorAll<HTMLElement>('.coach-row'));
 
   let at = -1;
@@ -198,7 +264,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   /** 当前这一步里，要等的那个动作做到了几次。 */
   let done = 0;
   /** 条子开口了没有。方块那一路要等够 SQUARE_OPEN 才开口。 */
-  let open = plan !== 'square';
+  let open = plan === 'first';
   /** 方块那一路：开口之前数他得了几次分。 */
   let opening = 0;
   let timer = 0;
@@ -232,10 +298,27 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     host.classList.toggle('coach-bar--pair', step.rules.length > 1);
     stage?.classList.toggle('coach-aim', aims(step));
     const upto = step.rules[step.rules.length - 1];
-    const cells = progEl.children;
+    const cells = progEl?.children ?? [];
     for (let k = 0; k < cells.length; k++) cells[k].classList.toggle('on', k <= upto);
     fadeIn(host);
     arm(i);
+  }
+
+  /**
+   * 到点还一次都没做到：不往下走，把话换成更具体的那一句。
+   *
+   * 换的是「说法」，不是「进度」——这一步的条件一个没变，他照样要得两次分才
+   * 走。摆的是第 2 条那幅图（同色凑成一条线的那一幅），因为要他做的正是这件事。
+   */
+  function nudge(): void {
+    rowEls.forEach((row, k) => {
+      row.hidden = k > 0;
+      if (k > 0) return;
+      (row.querySelector('.coach-art') as HTMLElement).innerHTML = art[1] ?? '';
+      (row.querySelector('.coach-text') as HTMLElement).textContent = STRINGS[opts.lang].coachNudge;
+    });
+    host.classList.remove('coach-bar--pair');
+    fadeIn(host);
   }
 
   /** 摆好这一步之后，安排它怎么走到下一步。 */
@@ -249,6 +332,13 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     if ((step.times ?? 1) === 1 && hit.has(step.by)) {
       return later(ALREADY_MS, () => show(i + 1));
     }
+    // 第 1 步：先换一句更具体的，再接着压那一分钟的保底。
+    if (step.nudge && !hit.has(step.by)) {
+      return later(NUDGE_MS, () => {
+        if (done === 0) nudge();
+        later(STUCK_MS, () => show(i + 1));
+      });
+    }
     later(STUCK_MS, () => show(i + 1));
   }
 
@@ -256,10 +346,10 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     at = -1;
     done = 0;
     opening = 0;
-    open = plan !== 'square';
+    open = plan === 'first';
     if (open) return show(0);
-    // 方块那一路：先不出声，等他自己打出三次得分。一分钟还没打出来也开口，
-    // 免得这块条子一整局都不见人。
+    // 第二个玩法那一路：先不出声，等他自己打出三次得分。一分钟还没打出来也
+    // 开口，免得这块条子一整局都不见人。
     host.hidden = true;
     later(STUCK_MS, () => {
       open = true;
@@ -275,8 +365,8 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       hit.add(sig);
       // 还没开口：数够那几次得分就开讲。
       if (!open) {
-        if (sig !== SQUARE_OPEN.by) return;
-        if (++opening < SQUARE_OPEN.times) return;
+        if (sig !== SECOND_OPEN.by) return;
+        if (++opening < SECOND_OPEN.times) return;
         open = true;
         return later(AFTER_MS, () => show(0));
       }
@@ -284,7 +374,11 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       const step = steps[at];
       if (step.by !== sig) return;
       const need = step.times ?? 1;
-      if (++done >= need) return later(AFTER_MS, () => show(at + 1));
+      if (++done >= need) {
+        // 「做到过才算讲过」：只有真的做到才记账，保底跳过去的那一次不算。
+        if (step.teaches === 'mixed') markMixedTaught();
+        return later(AFTER_MS, () => show(at + 1));
+      }
       // 还差几次，但这一步给了个宽限：第一次做到之后再等这么久，没凑够也走。
       if (done === 1 && step.ms) later(step.ms, () => show(at + 1));
     },

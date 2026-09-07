@@ -23,7 +23,7 @@ import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
-import { STRINGS, type Lang } from '../i18n';
+import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -139,6 +139,13 @@ export interface GameControllerHooks {
    * 露面了才叫这个函数，返回 true 就亮。谁来答、答案存哪儿，各版自己管。
    */
   shouldLeadOut?: () => boolean;
+  /**
+   * 头一回看见结算页时，在明细底下补一句「综合得分怎么算」。
+   *
+   * 问一次记一次（engine/firstPlay.ts 的 claimFirstTotalTip），所以只出现一
+   * 次；结算页真的露面了才叫得到这儿。
+   */
+  shouldTeachTotal?: () => boolean;
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -237,6 +244,10 @@ export interface GameController {
  * persistence. Shapes plug in board setup/render/end-condition/cascade-config
  * and call resolveMove() once they've applied a confirmed drag to their grid.
  */
+/** 往 HTML 里塞一句话之前先转义。这一句是六条规矩里的原文，不含标记。 */
+const escHtml = (t: string) =>
+  t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export function createGameController(refs: ShellRefs, hooks: GameControllerHooks): GameController {
   const s = STRINGS[hooks.lang];
 
@@ -528,9 +539,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       (past.reduce((sum, r) => sum + (r.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
     );
     refs.endAvgEl.textContent = `${s.avgScoreLabel} = ${avg}`;
-    refs.endBreakdownEl.innerHTML = runBreakdown(lastRun, hooks.lang)
-      .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
-      .join('');
+    refs.endBreakdownEl.innerHTML =
+      runBreakdown(lastRun, hooks.lang)
+        .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
+        .join('') +
+      // 六条规矩的最后一条（时间越短、步数越少、得分越高，综合得分越高）摆在
+      // 这儿，只摆头一回。
+      //
+      // 玩家 2026-09 定的：从前它在棋盘底下那块教学条上，和「这一局怎么结
+      // 束」并成最后一步——可那是他正专心滑的时候，讲的却是结算页才用得着的
+      // 知识，在他最忙的时候讲最不急的事。挪到这儿，上面那几行明细就是实物，
+      // 指着实物讲。
+      (hooks.shouldTeachTotal?.()
+        ? `<div class="end-row end-row--tip"><span>${escHtml(TUTORIAL_RULES[hooks.lang][5] ?? '')}</span></div>`
+        : '');
     // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
     // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
     // 最快玩家 on a room's closing card is read from here, the same way the

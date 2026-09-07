@@ -47,6 +47,7 @@ import { setRulesTriangle } from '../../src/ui/rulesModal';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
+import { setCoachStoreKey } from '../../src/ui/coachBar';
 import { openTutorial, storySeen, markStorySeen, RULE_ART, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
 import { bombTip, flipTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, type XhsMode } from './menu';
@@ -414,7 +415,7 @@ function showSquare(): void {
   if (first) markOpened('square');
   showGame(
     squareGame,
-    first ? { coach: true, coachPlan: 'square', coachArt: RULE_ART_SQUARE } : {},
+    first ? { coach: true, coachPlan: 'second', coachArt: RULE_ART_SQUARE } : {},
     showMenu,
   );
 }
@@ -541,6 +542,9 @@ document.documentElement.setAttribute('data-theme', 'light');
 // 有三角那一列——在这儿讲一个玩家见不到的图形，只会让人以为自己漏了什么。
 // 开机时喊这一声，那一屏就跟着这一版走（见 src/ui/rulesModal.ts）。
 setRulesTriangle(false);
+// 教学条那一格「第 3 条做到过没有」也分开存：玩家的第一条要求是两边存档完全
+// 分离（见 ui/coachBar.ts 的 setCoachStoreKey）。
+setCoachStoreKey('slides.xhs.coach.mixed');
 
 // 样式：先装网页版那一整套（字体 + 主样式 + 两副棋盘 + 开场动画，见
 // src/injectStyles.ts），再把这一版的 Chrome 61 基线层叠在后面——同名规则
