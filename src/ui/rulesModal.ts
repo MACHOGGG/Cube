@@ -12,8 +12,9 @@
  *   六条规则   文字是 i18n.ts 的 TUTORIAL_RULES，配图是 ruleArt.ts 的
  *              buildRuleArt()——和个人主页那张教学挑选页同一份。
  *   一道黑线   分档用的。上面六条是「这个游戏怎么玩」，人人都要看。
- *   几条附注   炸弹和无限反转各自多的那一层（MODE_TIPS）。它们本来只在头一
- *              回进那个玩法时在棋盘底下摆一局，之后想再看一眼就没地方了。
+ *   几条附注   这一局在基础规矩之外多的那一层（MODE_TIPS）——炸弹、无限反转、
+ *              老虎机、计时、特殊布局，一个玩法一条。它们本来只在头一回进那
+ *              个玩法时在棋盘底下摆一局，之后想再看一眼就没地方了。
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 开在局中的时候，它认得出自己在哪一局
@@ -23,6 +24,9 @@
  * 这两个参数一给，这一屏就只讲当局的事：第 4 条换成这一族自己那一句，底下的
  * 附注只留当局那一条（基础局一条都没有，那道黑线也跟着不画）。两个都不给才
  * 是通稿，那是玩家还没挑玩法时的入口（小红书的信息页）。
+ *
+ * 还有一层：无限反转局用 omitRules 把第 4、5 条整条抽掉——那两条讲的事在那一
+ * 局根本不会发生。
  *
  * 唯一的分歧是三角：网页版有三角玩法，第 1 幅配图就要三列；小红书版整块没有
  * 三角，讲一个玩家在那儿见不到的图形只会让人以为自己漏了什么。这件事按整包
@@ -64,14 +68,41 @@ function ruleArt(triangle: boolean, shape?: RuleShape): string[] {
   return art;
 }
 
-/** 最下面那两条各自的配图。老虎机没有——它那句提示的配图是当局现抽的那两个
- *  得分图案，离开那一局就无从画起。 */
-export type ExtraTip = 'bomb' | 'flip';
+/**
+ * 底下那几条附注，一个玩法一条。文案在 i18n 的 MODE_TIPS，和头一回进那个玩法
+ * 时棋盘底下摆的那一句是同一份。
+ *
+ * 炸弹和无限反转有固定的配图；老虎机那一幅是当局现抽的两个得分图案（离开那
+ * 一局就无从画起，所以由调用方随 art 传进来）；计时和特殊布局本来就没有配图
+ * ——计时要说的是头上那个数字，他抬头看得见；特殊布局要说的是「这副棋盘和你
+ * 学过的那副规矩一样」，另画一幅新棋盘反倒像在说「这里有新东西」。
+ */
+export type ExtraTip = 'bomb' | 'flip' | 'slot' | 'timed' | 'layout';
 const TIP_ART: Record<ExtraTip, string> = {
   bomb: bombTipArt('square'),
   flip: flipTipArt('square'),
+  slot: '',
+  timed: '',
+  layout: '',
 };
-const ALL_TIPS: readonly ExtraTip[] = ['bomb', 'flip'];
+
+/** 摆一条附注要知道的三件事。key 之外两样都可不给，见下面各自的注。 */
+export interface ExtraTipView {
+  /** 哪一条：决定那句话（MODE_TIPS）和默认配图。 */
+  key: ExtraTip;
+  /**
+   * 左边那个词。不给就用这个玩法在主菜单上的小字（menuTag）。
+   *
+   * 'layout' 没有自己的那张卡——它说的是「这一副棋盘」，所以那个词该是这副棋
+   * 盘自己的名字（菱形方块、六边形小球……），由局中那一方传进来。
+   */
+  label?: string;
+  /** 配图。不给就用这一条的固定配图（老虎机要传当局那两个图案）。 */
+  art?: string;
+}
+
+/** 没有「当局」可言的那个入口摆哪几条：只有这两条不依赖当局的任何东西。 */
+const ALL_TIPS: readonly ExtraTipView[] = [{ key: 'bomb' }, { key: 'flip' }];
 
 const esc = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -101,7 +132,18 @@ export interface RulesModalOptions {
    *
    * 不给 = 摆齐（没有当局可言的那个入口）。给空数组就是一条都不摆。
    */
-  tips?: readonly ExtraTip[];
+  tips?: readonly ExtraTipView[];
+  /**
+   * 这一局不讲哪几条（按玩家看见的编号，从 1 数起）。
+   *
+   * 无限反转局给的是 [4, 5]：那一局星星同色不消除（第 4 条讲的事不会发生），
+   * 也不会「全部翻成星星就结束」（第 5 条同理——正反面一直来回翻，60 秒到了才
+   * 结束）。讲一条这一局根本不会发生的规矩，比不讲更糟：玩家会照着去凑，凑
+   * 出来什么也没发生，然后以为是坏了。玩家 2026-09 定的。
+   *
+   * 剩下的几条重新从 1 编号——他看见的是 1234，不是 1236。
+   */
+  omitRules?: readonly number[];
   /** 关掉之后回哪儿。 */
   onClose?: () => void;
   /**
@@ -126,8 +168,13 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   const triangle = opts.triangle ?? hasTriangle;
   const tips = opts.tips ?? ALL_TIPS;
   const s = STRINGS[lang];
-  const rules = shape ? tutorialRules(lang, shape) : TUTORIAL_RULES[lang];
   const art = ruleArt(triangle, shape);
+  const omit = new Set(opts.omitRules ?? []);
+  // 先配好图再筛：配图是按**原来的**条号排的（第 3 条那幅画的就是第 3 条的
+  // 事），筛完再按下标去取就会错位。
+  const rules = (shape ? tutorialRules(lang, shape) : TUTORIAL_RULES[lang])
+    .map((text, i) => ({ text, art: art[i] ?? '' }))
+    .filter((_, i) => !omit.has(i + 1));
   // 两颗分镜键上的字。图本身带着 Illustrator 留下的 <title>编组</title>，光靠
   // 里面的文字读出来会是「编组方块」——所以名字自己写一遍，图那半边设成
   // aria-hidden。
@@ -156,22 +203,25 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
       <div class="tut-rules howto-list">
         ${rules
           .map(
-            (text, i) => `<div class="tut-rule">
+            (r, i) => `<div class="tut-rule">
               <span class="tut-rule-num">${i + 1}</span>
-              <span class="tut-rule-art">${art[i] ?? ''}</span>
-              <span class="tut-rule-text">${esc(text)}</span>
+              <span class="tut-rule-art">${r.art}</span>
+              <span class="tut-rule-text">${esc(r.text)}</span>
             </div>`,
           )
           .join('')}
         ${tips.length ? '<div class="howto-split" aria-hidden="true"></div>' : ''}
         ${tips
-          .map(
-            (key) => `<div class="tut-rule tut-rule--extra">
-              <span class="tut-rule-num tut-rule-num--word">${esc(menuTag(lang, key))}</span>
-              <span class="tut-rule-art">${TIP_ART[key]}</span>
-              <span class="tut-rule-text">${esc(MODE_TIPS[lang][key])}</span>
-            </div>`,
-          )
+          .map((t) => {
+            // 没有配图的那几条（计时、特殊布局）连这块 span 也不画——它是定死
+            // 5.2em 宽的，空着就是一句话左边挂着一大块白。
+            const a = t.art ?? TIP_ART[t.key];
+            return `<div class="tut-rule tut-rule--extra">
+              <span class="tut-rule-num tut-rule-num--word">${esc(t.label ?? menuTag(lang, t.key))}</span>
+              ${a ? `<span class="tut-rule-art">${a}</span>` : ''}
+              <span class="tut-rule-text">${esc(MODE_TIPS[lang][t.key])}</span>
+            </div>`;
+          })
           .join('')}
       </div>
       <div class="btn-row"><button class="primary" id="howtoOkBtn">${esc(s.gotItBtn)}</button></div>

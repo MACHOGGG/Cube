@@ -779,7 +779,12 @@ h1 {
 .end-share { margin: 0 0 14px; }
 .end-share img {
   display: block; margin: 0 auto 6px;
-  width: auto; height: auto; max-width: 100%; max-height: 34svh;
+  width: auto; height: auto; max-width: 100%;
+  /* 两行都要，和全文件每一处 dvh / svh 一个规矩：老浏览器认不得 svh，整条
+     声明会被连着丢掉——图就没了上限，按原始比例撑到 370px 高，把《主页》
+     《分享》《再来》顶出弹窗外面。先写 vh 兜底，认得 svh 的再用后一行盖掉。 */
+  max-height: 34vh;
+  max-height: 34svh;
   border-radius: var(--r-sm); box-shadow: var(--shadow);
 }
 /* 图还没画出来的那一刻（开局到打完之间）整块收起来，别在结算页上留一个坏掉
@@ -3129,7 +3134,7 @@ html.is-playing body { background: var(--play-bg); }
   /* 两个上限都写死成看得见的尺寸，不用 max-width: 100%——右边这一列是 auto，
      宽度由图撑出来，而图又拿这一列当 100% 的基准：循环了，浏览器会把整列让
      给图，左边那半挤成一列竖着的字（真出过这一幕）。 */
-  .overlay--end .end-share img { max-height: 74svh; max-width: 32vw; margin-bottom: 4px; }
+  .overlay--end .end-share img { max-height: 74vh; max-height: 74svh; max-width: 32vw; margin-bottom: 4px; }
   .overlay--end .modal p { margin: 0 0 9px; font-size: 0.85rem; }
   .overlay--end .end-gone-note { margin: 0 0 7px; padding: 6px 10px; font-size: 0.8rem; }
 }

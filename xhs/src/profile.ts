@@ -42,15 +42,10 @@ export interface ProfileHandlers {
 /** 空着的时候画几条横线，和网页版一样——「等着记录」比一块空白好看。 */
 const PLACEHOLDER_ROWS = 5;
 
-/**
- * 完整版在哪儿。
- *
- * 只能是一行字，做不成链接——试过了：打包自查（xhs/check-submit.mjs）把
- * `target="_blank"` 和 `https://` 都列在禁用能力里，带上就出不了包。规范不
- * 让小工具把人带出容器，这是平台的规矩，不是我们的取舍。所以留一行可以长
- * 按复制的字。
- */
-const SITE = 'play-slides.com';
+// 这一页从前在介绍段落末尾摆着「详情请访问」加一行 play-slides.com。2026-09
+// 玩家把它去掉了：那一行做不成链接（规范不让小工具把人带出容器，见
+// check-submit.mjs 的禁用能力表），摆在这儿只是一串要人手抄的字母——完整版
+// 值不值得去，前面那两句已经说清了。
 
 const esc = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -172,8 +167,7 @@ export function renderProfilePage(
     <div class="records-panel xhs-about">
       <p class="xhs-about-line">这里是 Slides 的小红书版，开放五个单机玩法。</p>
       <p class="xhs-about-line">Slides 是一款原创的滑动补偿拼图游戏。通过滑动、翻面、消除得分解谜。它上手极其简单，可是想要取得高分却不容易，考验玩家的高智商，需要在最少的行动、最短的时间里得到最多的分数。</p>
-      <p class="xhs-about-line">完整版有多人小屋在线对战、Slides 天才特供玩法、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！详情请访问</p>
-      <p class="xhs-about-site">${SITE}</p>
+      <p class="xhs-about-line">完整版有多人小屋在线对战、Slides 天才特供玩法、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！</p>
       <p class="xhs-about-line">后续可能推出 APP 版，敬请期待。</p>
     </div>
 

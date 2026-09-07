@@ -53,25 +53,16 @@
 /* 底是写死的，字也得是写死的——用 var(--ink) 的话，哪天深色主题回来了就是
    近白压在浅蓝紫上，糊成一片。同样的道理写在 src/style.css 的 .records-row
    上面那段注释里。 */
-.xhs-about-line,
-.xhs-about-site {
+.xhs-about-line {
   margin: 0;
   color: #232945;
   font-family: 'Karla', -apple-system, 'PingFang SC', sans-serif;
   font-size: 0.95rem;
   line-height: 1.75;
 }
-/* 网址单拎一行，等宽字 + 加粗——它是这一页唯一要人记住的东西。
-   不做成链接：小工具里不许开外链（zip-artifact-spec.md），一颗点不动的链接
-   比一行普通的字更让人恼火。 */
-.xhs-about-site {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: 0.02em;
-  padding: 2px 0 4px;
-  color: #1B2350;
-}
+/* 这儿从前还有一条 .xhs-about-site：介绍段落末尾那行等宽加粗的
+   play-slides.com。2026-09 玩家把那一行去掉了（见 xhs/src/profile.ts 里的
+   说明），样式跟着一起撤。 */
 
 /* ---- 战绩详情：一张图 + 两颗键 ---------------------------------------- */
 .xhs-run-sheet { gap: 14px; }
@@ -132,6 +123,12 @@
    放大看的那一窗里，图和这两颗键是全部内容，键可以大大方方地摆；结算页不
    一样——上头还站着分数、明细和一张图，底下还有《主页 / 分享 / 再来》三颗，
    照原样摆就把那一排顶出屏幕了（量出来 772px 的内容装进 743px 的窗）。 */
+/* 结算页那张战绩图底下，网页版是一句「长按或右键保存」，这一版换成两颗键加
+   一句说明——比一行字高出七十来像素。结算页本来就是掐着屏幕高度排的（那个
+   弹窗封在 88svh 里），多出来的这七十像素会把《主页》《分享》《再来》顶到弹
+   窗外面去：能滚到，但按不着。
+   所以这一版的图自己让一让，收到 26svh，让出来的正好是那两颗键占的地方。 */
+.end-share img { max-height: 26vh; max-height: 26svh; }
 .end-share .xhs-share-host { margin-top: 8px; }
 .end-share .xhs-share-btn { padding: 9px 14px; font-size: 0.94rem; }
 .end-share .xhs-share-note { min-height: 0; font-size: 0.8rem; }

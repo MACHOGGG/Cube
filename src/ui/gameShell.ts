@@ -3,9 +3,11 @@ import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons'
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
-import { openRulesModal, type ExtraTip } from './rulesModal';
+import { openRulesModal, type ExtraTipView } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
+import { menuTag } from './menuTags';
+import { slotTip } from './modeTips';
 import type { Family, TargetPattern } from '../engine/targets';
 
 export interface ExtraControl {
@@ -183,6 +185,10 @@ export { CTL_PAUSE, CTL_FINISH, CTL_LEAVE, CTL_BACK } from './ctlIcons';
  */
 const familyOf = (shapeId: string): Family =>
   shapeId === 'square' ? 'square' : shapeId === 'circle' ? 'circle' : 'triangle';
+
+/** 三个基础玩法的棋盘。除它们之外的都是「特殊布局」——格子怎么摆不一样，规矩
+ *  一条没变（菱形方块、六边形小球、六边形三角、菱形小球、V 字三角）。 */
+const BASE_BOARDS = new Set(['square', 'circle', 'triangle']);
 
 export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const s = STRINGS[meta.lang];
@@ -486,12 +492,35 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   //   shape  第 4 条换成这一族自己那一句——小球留空球、方块拿走不再出现、三角
   //          留空三角。局中他眼前只有一种图形，讲另外两种是白讲。
   //   tips   底下那几条附注只留当局那一条。基础局一条都没有，连那道分档的黑线
-  //          也不画；炸弹局只有炸弹，无限反转局只有无限反转。
+  //          也不画；炸弹局只有炸弹，老虎机局只有老虎机，如此类推。
+  //
+  // 摆的是「这一局比基础规矩多出来的每一层」，所以定时炸弹会摆两条（炸弹一
+  // 条、计时一条）——它确实是两层。玩家 2026-09 点的名：老虎机 / 计时 / 特殊布
+  // 局从前一条也没有，那三句只在头一回进去时在棋盘底下摆一局，看过就没了。
   container.querySelector<HTMLButtonElement>('#howBtn')?.addEventListener('click', () => {
-    const tips: ExtraTip[] = [];
-    if (meta.bomb) tips.push('bomb');
-    if (meta.flip) tips.push('flip');
-    openRulesModal({ lang: meta.lang, shape: familyOf(meta.shapeId), tips });
+    const tips: ExtraTipView[] = [];
+    if (meta.bomb) tips.push({ key: 'bomb' });
+    if (meta.flip) tips.push({ key: 'flip' });
+    // 老虎机那一幅是当局现抽的两个得分图案，和读数条上那两个是同一份画法
+    // ——换一张重画，等于让他自己去对。
+    if (meta.slotTargets?.length) {
+      tips.push({ key: 'slot', art: slotTip(meta.lang, meta.slotTargets).art });
+    }
+    // 无限反转也是 60 秒，可它那一条自己就带着「限时 60 秒」，不必再摆一条计时
+    //（头上那个读数的显隐用的也是这同一个判断）。
+    if (meta.timed && !meta.flip) tips.push({ key: 'timed' });
+    // 特殊布局没有自己的那张卡，左边那个词就用这副棋盘自己的名字。
+    if (!BASE_BOARDS.has(meta.shapeId)) {
+      tips.push({ key: 'layout', label: menuTag(meta.lang, meta.shapeId) });
+    }
+    openRulesModal({
+      lang: meta.lang,
+      shape: familyOf(meta.shapeId),
+      tips,
+      // 无限反转局：第 4、5 条讲的事那一局不会发生（星星同色不消除、也不会全
+      // 部翻成星星就结束），整条抽掉，剩下四条重新编号。
+      omitRules: meta.flip ? [4, 5] : undefined,
+    });
   });
 
   // The press flip on 完成/暂停 is driven from pointer events rather than

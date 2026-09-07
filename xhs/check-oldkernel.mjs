@@ -260,8 +260,13 @@ for (const key of list) {
     await p.click('#pauseFinishBtn');
     await p.waitForTimeout(2600);
   }
-  const shareBtn = await p.$('#shareBtn');
-  say(!!shareBtn, '打得完，结算页出来了', ended ? '（这一局自己打完了，没按《结束游戏》）' : '');
+  // 要看的是**结算页真的盖上来了**，不是「页面里有这么个按钮」——那三颗键
+  // 从头到尾都在 DOM 里，只查得到它就等于什么也没查。从前这条就是这么写的，
+  // 结果结算页压根没出来（画图那一步抛了错），它照样绿着，红的是下一行那颗
+  // 点不着的《分享》，报的还是「棋盘挡住了」——查了半天才查到真凶。
+  const endUp = await p.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
+  const shareBtn = endUp ? await p.$('#shareBtn') : null;
+  say(endUp && !!shareBtn, '打得完，结算页出来了', (ended ? '（这一局自己打完了，没按《结束游戏》）' : '') + (endUp ? '' : ' 结算页没盖上来：' + errs.slice(-2).join(' | ')));
   if (shareBtn) {
     await shareBtn.click();
     await p.waitForTimeout(2000);

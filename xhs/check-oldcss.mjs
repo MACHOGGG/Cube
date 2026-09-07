@@ -80,8 +80,35 @@ const WRAP_HOSTS = [
 ];
 const isHost = (sel) => WRAP_HOSTS.some((h) => sel === h || sel.indexOf(h) >= 0);
 
+/**
+ * 「这一格是被**这一局的分数**推出来的」——那就别比它。
+ *
+ * 只有横屏的结算页有这个毛病，而且是 2026-09「结算页整合分享图」之后才有
+ * 的：那一屏从此劈成两栏，左边一列文字、右边一张战绩图，左边这一列是 auto
+ * 宽，宽度由最长那一行决定。两遍体检各打各的一局，分数本来就不一样——
+ * 「有效得分率加成（0%）」和「（14%）」差一个字，这一列就宽出十来像素，底下
+ * 那道分隔线跟着变宽，《主页 / 分享 / 再来》整排跟着右移。
+ *
+ * 这十来像素每次都在，和降级层没有半点关系：两张截图叠起来一模一样（跑完
+ * 看 .tmp-oldcss/844-结算页-new.png 和 -old.png）。文件开头就写着「刻意避开
+ * 纯文字的盒子」，这里是同一条规矩的下游——盒子自己不是文字，可它的位置和
+ * 宽度是文字推出来的。
+ *
+ * 放的只是列出来的那几格，其余每一格、别的每一屏，全都照旧按 2px 卡。
+ */
+const LOOSE = {
+  结算页: {
+    // 分隔线：宽度跟着上面那块分数走。
+    '.end-rule': ['x', 'w'],
+    // 三颗键：整排被左边那一列推着走，宽高本来就归 WRAP_HOSTS 管。
+    '.btn-row': ['x'],
+    '.btn-row button': ['x'],
+  },
+};
+
 /** 两批量测比一比。 */
 function compare(label, a, b, tol) {
+  const loose = LOOSE[label] || {};
   let worst = 0;
   let where = '';
   let seen = 0;
@@ -95,6 +122,7 @@ function compare(label, a, b, tol) {
     const host = isHost(k);
     for (let i = 0; i < a[k].length; i++) {
       for (const f of ['x', 'y', 'w', 'h']) {
+        if ((loose[k] || []).indexOf(f) >= 0) continue;
         const limit = host && (f === 'w' || f === 'h') ? 70 : tol;
         const d = Math.abs(a[k][i][f] - b[k][i][f]);
         if (d <= limit) continue;

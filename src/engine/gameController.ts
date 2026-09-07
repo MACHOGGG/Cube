@@ -557,7 +557,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (lastCardUrl) refs.endShareImgEl.src = lastCardUrl;
     // 画不出来（理论上只有 lastRun 为空，走不到这儿）就整块不摆，别在结算页
     // 上留一个坏掉的图标和一句没着落的「长按保存」。
-    refs.endShareImgEl.parentElement?.toggleAttribute('hidden', !lastCardUrl);
+    //
+    // 写成 setAttribute / removeAttribute 两句，不用 toggleAttribute：小红书那
+    // 一版的底线是 Chrome 61，那个方法要到 69 才有，在这儿一喊就抛错——而这一
+    // 行正卡在结算页露面之前，一抛错整页就不出来了（体检 check-oldkernel 逮到
+    // 过一次）。
+    const shareBox = refs.endShareImgEl.parentElement;
+    if (shareBox) {
+      if (lastCardUrl) shareBox.removeAttribute('hidden');
+      else shareBox.setAttribute('hidden', '');
+    }
     // 屋主中途散场、这一局转成单人打完的：把小屋那份摆在结算页最上面。平时
     // 什么也不做（见 roomLeftover.ts）——单人局的结算页一个字都不改样子。
     mountRoomLeftover(document.getElementById('endRoomBlock'), hooks.lang);

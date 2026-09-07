@@ -451,7 +451,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     twoByTwo: 'A 2×2 block of the same color scores too',
     flip: 'Scored tiles flip to a color chosen at random',
     mixedFace: 'A flipped tile can keep scoring — match its color with a front-facing tile too',
-    wholeLine: 'A whole row or column of matching flipped tiles scores big and clears the board',
+    wholeLine: 'A whole row or column of same-colour stars scores big and clears the board',
     circleClusterIntro: 'Drag horizontally, or along either diagonal; same-colored balls score three ways — a run of 4, a "22" diamond, or a "121" diamond. Drag once to see all three flip in turn',
     circleFlipTeach: "Scored balls flip to a randomly determined color — balls cleared together in one group don't always end up the same color",
     circleFlipDragHint: 'Drag to flip it',
@@ -472,7 +472,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: 'Base games',
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
-    flipModeTagline: 'Scoring flips pieces both ways · back rows never clear · 60 s',
+    flipModeTagline: 'Scoring flips pieces both ways · star rows never clear · 60 s',
     flipScoringHint: 'Streak bonus toned down: each consecutive score ×1.5 · no time bonus',
     sectionMore: 'More layouts',
     bombBasicTitle: 'Basic bomb',
@@ -743,7 +743,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: 'Bomb penalty',
     timeUpReason: "Time's up",
     noMoreMatchesReason: 'No face-up tile can ever be flipped',
-    allFlippedReason: 'Every tile is flipped',
+    allFlippedReason: 'Every piece is a star',
     manualEndReason: 'Ended manually',
     bombHazardReason: 'Bomb tiles connected',
     stepsPhrase: '{n} moves',
@@ -779,7 +779,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     twoByTwo: 'Un carré 2×2 de la même couleur rapporte aussi',
     flip: 'Les cases marquées se retournent sur une couleur tirée au hasard',
     mixedFace: 'Une case retournée peut aussi marquer — associez-la à une case encore de face',
-    wholeLine: 'Une ligne ou colonne entière retournée de la même couleur rapporte gros et vide le plateau',
+    wholeLine: 'Une ligne ou colonne entière d’étoiles de la même couleur rapporte gros et vide le plateau',
     circleClusterIntro: 'Faites glisser à l\'horizontale ou en diagonale ; des boules de la même couleur marquent de trois façons — une ligne de 4, un losange "22", ou un losange "121". Faites glisser une fois pour voir les trois se retourner tour à tour',
     circleFlipTeach: 'Les boules marquées se retournent sur une couleur tirée au hasard — des boules effacées ensemble ne finissent pas forcément de la même couleur',
     circleFlipDragHint: 'Fais-la glisser pour la retourner',
@@ -800,7 +800,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: 'Jeux de base',
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
-    flipModeTagline: 'Marquer retourne les pièces dans les deux sens · les versos ne s’effacent jamais · 60 s',
+    flipModeTagline: 'Marquer retourne les pièces dans les deux sens · les étoiles ne s’effacent jamais · 60 s',
     flipScoringHint: 'Bonus de série réduit : chaque score consécutif ×1,5 · pas de bonus de temps',
     sectionMore: 'Plus de plateaux',
     bombBasicTitle: 'Bombe de base',
@@ -1071,7 +1071,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: 'Pénalité de bombe',
     timeUpReason: 'Temps écoulé',
     noMoreMatchesReason: 'Plus aucune tuile visible ne peut être retournée',
-    allFlippedReason: 'Toutes les cases sont retournées',
+    allFlippedReason: 'Toutes les pièces sont des étoiles',
     manualEndReason: 'Terminé manuellement',
     bombHazardReason: 'Cases-bombes connectées',
     stepsPhrase: '{n} coups',
@@ -1107,7 +1107,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     twoByTwo: '湊成 2×2 的同色方塊同樣得分',
     flip: '得分的方塊會翻面到隨機決定的顏色',
     mixedFace: '翻面後的方塊一樣能繼續得分——把它和正面的同色方塊拼在一起',
-    wholeLine: '反面同色連成一整行或一整列，會獲得高分並清空棋盤',
+    wholeLine: '星星同色連成一整行或一整列，會獲得高分並清空棋盤',
     circleClusterIntro: '圓球能沿水平、左斜、右斜拖動；同色能拼出三種得分圖案——4連線、「22」菱形、「121」菱形。拖動一下，依次看看它們翻面得分',
     circleFlipTeach: '得分的圓球會翻面，換成隨機決定的顏色——同一組消除的圓球，翻面後的顏色不一定相同',
     circleFlipDragHint: '拖動它試著翻面',
@@ -1128,7 +1128,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: '基礎玩法',
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
-    flipModeTagline: '得分翻面來回翻，反面不消除，60 秒',
+    flipModeTagline: '得分翻面來回翻，星星不消除，60 秒',
     flipScoringHint: '連擊加成減弱：連續得分每次 ×1.5 · 沒有時間獎勵',
     sectionMore: '更多佈局',
     bombBasicTitle: '基礎炸彈',
@@ -1399,7 +1399,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: '炸彈懲罰',
     timeUpReason: '時間到',
     noMoreMatchesReason: '無法翻面所有正面色塊',
-    allFlippedReason: '全部方塊已翻成反面',
+    allFlippedReason: '全部方塊已翻成星星',
     manualEndReason: '手動結束',
     bombHazardReason: '紅色炸彈相連',
     stepsPhrase: '共 {n} 步',
@@ -1435,7 +1435,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     twoByTwo: '凑成 2×2 的同色方块同样得分',
     flip: '得分的方块会翻面到随机决定的颜色',
     mixedFace: '翻面后的方块一样能继续得分——把它和正面的同色方块拼在一起',
-    wholeLine: '反面同色连成一整行或一整列，会获得高分并清空棋盘',
+    wholeLine: '星星同色连成一整行或一整列，会获得高分并清空棋盘',
     circleClusterIntro: '圆球能沿水平、左斜、右斜拖动；同色能拼出三种得分图案——4连线、"22"菱形、"121"菱形。拖动一下，依次看看它们翻面得分',
     circleFlipTeach: '得分的圆球会翻面，换成随机决定的颜色——同一组消除的圆球，翻面后的颜色不一定相同',
     circleFlipDragHint: '拖动它试着翻面',
@@ -1456,7 +1456,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: '基础玩法',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
-    flipModeTagline: '得分翻面来回翻，反面不消除，60 秒',
+    flipModeTagline: '得分翻面来回翻，星星不消除，60 秒',
     flipScoringHint: '连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励',
     sectionMore: '更多布局',
     bombBasicTitle: '基础炸弹',
@@ -1727,7 +1727,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: '炸弹惩罚',
     timeUpReason: '时间到',
     noMoreMatchesReason: '无法翻面所有正面色块',
-    allFlippedReason: '全部方块已翻成反面',
+    allFlippedReason: '全部方块已翻成星星',
     manualEndReason: '手动结束',
     bombHazardReason: '红色炸弹相连',
     stepsPhrase: '共 {n} 步',
@@ -1774,38 +1774,52 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * 得分都必然翻动一枚，把同一组滑回原样刷不到分），《游戏规则》那本词条里也
  * 早写着（rules.ts 的「必须有正面」）——只有玩家真会读的这六条漏了它。漏掉
  * 的后果是玩家会以为「反面同色也算」，凑了一组全反面的却不给分，看着像 bug。
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 「反面」这个词只出现在第 1 条
+ *
+ * 玩家 2026-09 定的：「除了最开始的每个第一条教学是反面是星星，随后都把『反
+ * 面』改为星星这个用词」。所以第 1 条负责把这件事说破一次——每个图形都有正
+ * 反两面，反面是一颗星星——从第 2 条起，以及底下那几条附注、结算页上的收尾
+ * 话，一律只说「星星」。
+ *
+ * 为什么值得这么改：棋盘上翻过去露出来的就是一颗星，玩家看见的是星，脑子里
+ * 记的也是星；「反面」是从做的人那边看过去的说法，他要多绕一道才对得上。四
+ * 种语言一起改（back / verso / 反面），改的是同一件事。
+ *
+ * 往下加句子的时候照这个来：第 1 条以外，别再写「反面」。
  */
 export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
-    'Every piece has a front and a back. A game starts with all fronts up.',
-    'Match same-colour pieces into a scoring shape: you score, and those pieces flip. The colour of the back is random.',
-    'A back whose colour matches the fronts can join a shape too, and score again — but a shape must always hold at least one front.',
-    'Backs of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
-    'The game ends when every piece is on its back — or when nothing left can flip.',
+    'Every piece has a front and a back — the back is a star. A game starts with all fronts up.',
+    'Match same-colour pieces into a scoring shape: you score, and those pieces flip to stars. The colour of the star is random.',
+    'A star whose colour matches the fronts can join a shape too, and score again — but a shape must always hold at least one front.',
+    'Stars of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
+    'The game ends when every piece is a star — or when nothing left can flip.',
     'Less time, fewer moves, more points: a higher total score.',
   ],
   fr: [
-    'Chaque pièce a un recto et un verso. La partie commence tous rectos visibles.',
-    'Alignez des pièces de même couleur en un motif : vous marquez, et ces pièces se retournent. La couleur du verso est aléatoire.',
-    'Un verso de la même couleur que les rectos peut entrer dans un motif et marquer à nouveau — mais un motif doit toujours contenir au moins un recto.',
-    'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
-    'La partie s’arrête quand toutes les pièces sont sur le verso — ou quand plus rien ne peut se retourner.',
+    'Chaque pièce a un recto et un verso — le verso est une étoile. La partie commence tous rectos visibles.',
+    'Alignez des pièces de même couleur en un motif : vous marquez, et ces pièces se retournent sur leur étoile. La couleur de l’étoile est aléatoire.',
+    'Une étoile de la même couleur que les rectos peut entrer dans un motif et marquer à nouveau — mais un motif doit toujours contenir au moins un recto.',
+    'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
+    'La partie s’arrête quand toutes les pièces sont des étoiles — ou quand plus rien ne peut se retourner.',
     'Moins de temps, moins de coups, plus de points : meilleur score total.',
   ],
   zhHant: [
-    '每個圖形都有正反兩面，開局全是正面。',
-    '同色湊成得分圖案就得分，湊成的那幾個翻到反面；反面是什麼顏色，隨機。',
-    '反面和正面顏色一樣時，也能一起湊圖案，再得一次分；但圖案裡至少要有一個正面。',
-    '反面同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
-    '全部翻到反面，這一局結束；剩下的再也翻不動，也結束。',
+    '每個圖形都有正反兩面，反面是一顆星星；開局全是正面。',
+    '同色湊成得分圖案就得分，湊成的那幾個翻成星星；星星是什麼顏色，隨機。',
+    '星星和正面顏色一樣時，也能一起湊圖案，再得一次分；但圖案裡至少要有一個正面。',
+    '星星同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
+    '全部翻成星星，這一局結束；剩下的再也翻不動，也結束。',
     '時間越短、步數越少、得分越高，綜合得分越高。',
   ],
   zhHans: [
-    '每个图形都有正反两面，开局全是正面。',
-    '同色凑成得分图案就得分，凑成的那几个翻到反面；反面是什么颜色，随机。',
-    '反面和正面颜色一样时，也能一起凑图案，再得一次分；但图案里至少要有一个正面。',
-    '反面同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
-    '全部翻到反面，这一局结束；剩下的再也翻不动，也结束。',
+    '每个图形都有正反两面，反面是一颗星星；开局全是正面。',
+    '同色凑成得分图案就得分，凑成的那几个翻成星星；星星是什么颜色，随机。',
+    '星星和正面颜色一样时，也能一起凑图案，再得一次分；但图案里至少要有一个正面。',
+    '星星同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
+    '全部翻成星星，这一局结束；剩下的再也翻不动，也结束。',
     '时间越短、步数越少、得分越高，综合得分越高。',
   ],
 };
@@ -1834,24 +1848,24 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
 export type RuleShape = 'circle' | 'square' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
-    circle: 'Backs of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty balls behind.',
-    square: 'Backs of one colour filling a whole row or column score and clear away for good.',
-    triangle: 'Backs of one colour filling a whole line score and clear — at least 3 of them, and they leave empty triangles behind.',
+    circle: 'Stars of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty balls behind.',
+    square: 'Stars of one colour filling a whole row or column score and clear away for good.',
+    triangle: 'Stars of one colour filling a whole line score and clear — at least 3 of them, and they leave empty triangles behind.',
   },
   fr: {
-    circle: 'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et ils laissent des billes vides.',
-    square: 'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent définitivement.',
-    triangle: 'Des versos de même couleur sur toute une ligne marquent et disparaissent — au moins 3, et ils laissent des triangles vides.',
+    circle: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et elles laissent des billes vides.',
+    square: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent définitivement.',
+    triangle: 'Des étoiles de même couleur sur toute une ligne marquent et disparaissent — au moins 3, et elles laissent des triangles vides.',
   },
   zhHant: {
-    circle: '反面同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空球。',
-    square: '反面同色連成一行或一列，方塊就完全消除，不再出現。',
-    triangle: '反面同色連成一整條線，得分並消除；最少 3 個，消掉後留下空三角。',
+    circle: '星星同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空球。',
+    square: '星星同色連成一行或一列，方塊就完全消除，不再出現。',
+    triangle: '星星同色連成一整條線，得分並消除；最少 3 個，消掉後留下空三角。',
   },
   zhHans: {
-    circle: '反面同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空球。',
-    square: '反面同色连成一行或一列，方块就完全消除，不再出现。',
-    triangle: '反面同色连成一整条线，得分并消除；最少 3 个，消掉后留下空三角。',
+    circle: '星星同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空球。',
+    square: '星星同色连成一行或一列，方块就完全消除，不再出现。',
+    triangle: '星星同色连成一整条线，得分并消除；最少 3 个，消掉后留下空三角。',
   },
 };
 
@@ -1880,28 +1894,28 @@ export const MODE_TIPS: Record<
 > = {
   en: {
     bomb: 'Same sliding, scoring and clearing as before — but red is the bomb colour. Four reds touching blow up! Any four that touch will set it off.',
-    flip: 'Score and a piece turns to its back. In Endless Flip a back that scores turns straight back to its front — nothing ever clears. 60 seconds. Off you go!',
+    flip: 'Score and a piece turns to a star. In Endless Flip a star that scores turns straight back to its front — same-colour stars never clear. 60 seconds. Off you go!',
     slot: 'In Slot Machine the two scoring shapes are drawn at random: build those two, score, and flip. Clearing works exactly as before. Give it a go!',
     timed: '60 seconds on the clock — how many points can you get?',
     layout: 'Same rules, different board. Fancy the challenge?',
   },
   fr: {
     bomb: 'Même glissement, mêmes points, mêmes disparitions — mais le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent ! N’importe lesquels, du moment qu’ils se touchent.',
-    flip: 'Marquez et la pièce passe sur son verso. Dans Retournement infini, un verso qui marque revient aussitôt sur son recto — rien ne disparaît. 60 secondes. C’est parti !',
+    flip: 'Marquez et la pièce devient une étoile. Dans Retournement infini, une étoile qui marque revient aussitôt sur son recto — les étoiles de même couleur ne disparaissent jamais. 60 secondes. C’est parti !',
     slot: 'En mode Machine à sous, les deux motifs gagnants sont tirés au hasard : formez ces deux-là, marquez, retournez. Les disparitions ne changent pas. À vous !',
     timed: '60 secondes au compteur — combien de points allez-vous marquer ?',
     layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
   },
   zhHant: {
     bomb: '在滑動、得分、消除的基礎上，紅色作為炸彈色，四個相連會爆炸！注意，任何接觸的四個相連都會引爆。',
-    flip: '滑動得分後反轉到反面。在《無限反轉》中，反面得分會再次翻回正面，不會消除。限時 60 秒，開始吧！',
+    flip: '滑動得分後翻成星星。在《無限反轉》中，星星得分會再次翻回正面，星星同色不會消除。限時 60 秒，開始吧！',
     slot: '老虎機玩法中，隨機得到什麼得分圖案，就要根據這兩個圖案拼湊圖形、得分並翻面；消除規則不變。快挑戰一下吧！',
     timed: '限時60s，能得多少分呢？',
     layout: '規則相同，佈局不同，你能挑戰麼？',
   },
   zhHans: {
     bomb: '在滑动、得分、消除的基础上，红色作为炸弹色，四个相连会爆炸！注意，任何接触的四个相连都会引爆。',
-    flip: '滑动得分后反转到反面。在《无限反转》中，反面得分会再次翻回正面，不会消除。限时 60 秒，开始吧！',
+    flip: '滑动得分后翻成星星。在《无限反转》中，星星得分会再次翻回正面，星星同色不会消除。限时 60 秒，开始吧！',
     slot: '老虎机玩法中，随机得到什么得分图案，就要根据这两个图案拼凑图形、得分并翻面；消除规则不变。快挑战一下吧！',
     timed: '限时60s，能得多少分呢？',
     layout: '规则相同，布局不同，你能挑战么？',
