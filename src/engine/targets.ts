@@ -137,7 +137,18 @@ export const compatible = (a: string, b: string): boolean =>
 export function drawPair(family: Family, rand: () => number = Math.random): [TargetPattern, TargetPattern] | null {
   const pool = targetsOf(family);
   if (pool.length < 2) return null;
-  const order = [...pool].sort(() => rand() - 0.5);
+  // 洗牌走 Fisher–Yates，不用 `.sort(() => rand() - 0.5)`。
+  //
+  // 那个写法不是一个合法的比较器（同一对元素问两次可能得到两个答案），各家
+  // 引擎排一个数组要问多少次比较器并不一样。小屋里选「大家拼同一组图案」
+  // 时，这里咬的是全屋共用的那条种子流（main.ts 传进来的 seededRandom），
+  // 问的次数不一样，从流里读走的数量就不一样——后面发牌用的是同一条流，
+  // 于是苹果和安卓拿到的棋盘不是同一副，排名却还按「同一局」来比。
+  const order = [...pool];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
   for (const first of order) {
     const mates = pool.filter((p) => compatible(first.id, p.id));
     if (mates.length) return [first, mates[Math.floor(rand() * mates.length)]];

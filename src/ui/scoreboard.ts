@@ -8,7 +8,7 @@ import { hostNotice, hostTroubleIn, showWaitPanel, tickFor } from './roomNotices
 import {
   avatarSvg,
   currentRoom,
-  forgetRoom,
+  leaveRoom,
   iAmHost,
   lastPlayedRound,
   latestRoomState,
@@ -222,11 +222,14 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     wait = null;
     notice.remove();
     restoreEndPanel();
-    // 小屋那份成绩先留一份底：屋子已经散了，forgetRoom() 之后座位和最后看到
+    // 小屋那份成绩先留一份底：屋子已经散了，交回座位之后座位和最后看到
     // 的房间状态都取不到了。等这一局打完，它会摆在结算页最上面（见
     // roomLeftover.ts）——他在这间屋子里打过的那几局不该跟着屋子一起蒸发。
     stashRoomLeftover(latestRoomState(), seat.playerId);
-    forgetRoom();
+    // 正式交回座位，不只是本机忘掉：屋主可能只是暂时联系不上（hostTroubleIn
+    // 的 'gone' 说的是「太久没动静」，不是「他按了解散」）。先 stash 再走，
+    // leaveRoom 会把最后看到的房间状态一起清掉。
+    void leaveRoom();
     rows.remove();
     document.getElementById('leaveRoomBtn')?.remove();
     const pause = document.getElementById('stopBtn');
@@ -256,7 +259,8 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     wait?.remove();
     wait = null;
     notice.remove();
-    forgetRoom();
+    // 同上：正式交回座位。
+    void leaveRoom();
     // 房间局里这颗键藏着，但它还在、还接着 doPause：借它把表停住。
     document.querySelector<HTMLButtonElement>('#stopBtn')?.click();
     const box = document.createElement('div');
@@ -287,7 +291,9 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   const notice = hostNotice(lang, {
     onDismiss: () => {
       dead = true;
-      forgetRoom();
+      // 和小屋页那一处同一条：屋主可能只是暂时联系不上，屋子并没有散——
+      // 按下确定就把座位正式交回去，别把一把清不掉的空椅子留在屋里。
+      void leaveRoom();
       handlers.onHome();
     },
     onLeave: () => {
@@ -427,7 +433,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     sentFinished = over;
     lastSentAt = Date.now();
     if (over) markPlayed();
-    void reportScore(score, over, settled ? settled.seconds : runSeconds());
+    void reportScore(score, over, settled ? settled.seconds : runSeconds(), myRound);
   }, LOCAL_MS);
 
   return () => {
@@ -447,7 +453,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     const score = settled ? settled.score : localScore();
     if (score !== null) {
       markPlayed();
-      void reportScore(score, true, settled ? settled.seconds : runSeconds());
+      void reportScore(score, true, settled ? settled.seconds : runSeconds(), myRound);
     }
     rows.innerHTML = '';
   };

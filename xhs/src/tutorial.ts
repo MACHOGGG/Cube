@@ -28,6 +28,7 @@
 import { MODE_TIPS, TUTORIAL_RULES, type Lang } from '../../src/i18n';
 import { bombTipArt, buildRuleArt, flipTipArt } from '../../src/ui/ruleArt';
 import { menuTag } from '../../src/ui/menuTags';
+import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE } from '../../src/ui/homeIcons';
 
 /**
  * 这一版的六幅配图：不要三角。
@@ -122,7 +123,17 @@ const esc = (t: string) =>
  * 关掉的三条路：《知道了》、点窗外、系统返回键（backNav 那一套只管 #app 里
  * 的屏，所以这里自己接一下键盘的 Esc；手机上真正管用的是前两条）。
  */
-export function openTutorial(lang: Lang, onClose?: () => void): () => void {
+/**
+ * @param onStory 给了就在六条规则上头摆两颗键（方块 / 小球），按下去放那一族的
+ *   分镜动画。只有成绩与说明页那个入口会给——分镜不再自己弹出来（玩家定的），
+ *   想看的人从那儿自己点。局中按暂停开的这一屏不给：他正在玩，不该在这儿被
+ *   一段动画接走。
+ */
+export function openTutorial(
+  lang: Lang,
+  onClose?: () => void,
+  onStory?: (fam: StoryFamily) => void,
+): () => void {
   const rules = TUTORIAL_RULES[lang];
 
   const overlay = document.createElement('div');
@@ -132,6 +143,14 @@ export function openTutorial(lang: Lang, onClose?: () => void): () => void {
   overlay.innerHTML = `
     <div class="modal xhs-tut-modal" role="dialog" aria-modal="true" aria-label="怎么玩">
       <h2>怎么玩</h2>
+      ${
+        onStory
+          ? `<div class="xhs-tut-stories">
+               <button class="xhs-tut-story" type="button" data-fam="square" aria-label="方块">${ICON_BASE_SQUARE}<span aria-hidden="true">方块</span></button>
+               <button class="xhs-tut-story" type="button" data-fam="circle" aria-label="小球">${ICON_BASE_CIRCLE}<span aria-hidden="true">小球</span></button>
+             </div>`
+          : ''
+      }
       <div class="tut-rules xhs-tut-rules">
         ${rules
           .map(
@@ -168,6 +187,16 @@ export function openTutorial(lang: Lang, onClose?: () => void): () => void {
   };
 
   overlay.querySelector<HTMLButtonElement>('#xhsTutOk')?.addEventListener('click', close);
+  // 两颗分镜键：先关掉这一屏再放，不然动画会盖在这层遮罩底下。
+  overlay.querySelectorAll<HTMLButtonElement>('.xhs-tut-story').forEach((b) => {
+    b.addEventListener('click', () => {
+      const fam = b.getAttribute('data-fam') === 'square' ? 'square' : 'circle';
+      closed = true;
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+      onStory?.(fam);
+    });
+  });
   // 点窗外也关：和这一版别处的弹窗一个规矩（网页版「弹窗外点击一律返回」）。
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();

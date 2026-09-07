@@ -469,6 +469,85 @@ async function claimSlot(code, playerId) {
   return -1;
 }
 
+/**
+ * 抢名字、抢头像：和占椅子同一个办法（HSETNX），不是「先算一遍再写」。
+ *
+ * 玩家撞上的是这个：一群朋友几乎同时点《加入》。占椅子本来就是原子的，可
+ * 「这个字母有没有被占」「这个昵称重不重」「这个头像撞不撞」三件事吃的都是
+ * 函数一进来读的那一份旧快照——四个人同一瞬间读到的是同一份，于是四个人都
+ * 叫「A」，或者四个人都叫「小明」、都顶着同一个头像。排行榜和结算图上就出现
+ * 几行一模一样的名字，而认领座位正是按名字认的。
+ *
+ * 现在把「这个名字归我了」也做成一次原子写：n:<小写名字> / a:<形状:色相格>
+ * 写成功才算抢到，抢不到就试下一个候选。两台手机同时按，同一把锁只有一台
+ * 抢得到。
+ *
+ * @param taken 快照里已经占着的（键的写法要和候选的 key 一致）。屋主的名字、
+ *   走了又回来的人的名字都是不经过这里写下去的，没有对应的锁；拿快照兜住
+ *   它们，抢锁只负责挡住「同时进来的这几个人」。
+ * @returns 抢到的那个值；一个都没抢到（候选用完了）就返回最后一个，宁可重
+ *   一个名字也不拦人进屋。
+ */
+async function claimTag(code, prefix, playerId, candidates, taken) {
+  let last = null;
+  for (const c of candidates) {
+    last = c.value;
+    if (taken.has(c.key)) continue;
+    if (await hsetnx(roomKey(code), prefix + c.key, playerId)) return c.value;
+  }
+  return last;
+}
+
+/** 没取名字的人发字母；取了名字的人重了就加编号。候选按老规矩排。 */
+function nameCandidates(typed) {
+  const trimmed = String(typed ?? '').trim();
+  if (!trimmed) {
+    return Array.from({ length: 26 }, (_, i) => {
+      const letter = String.fromCharCode(65 + i);
+      return { key: letter.toLowerCase(), value: letter };
+    });
+  }
+  const list = [{ key: trimmed.toLowerCase(), value: trimmed }];
+  for (let n = 2; n < 100; n++) {
+    list.push({ key: `${trimmed} ${n}`.toLowerCase(), value: `${trimmed} ${n}` });
+  }
+  return list;
+}
+
+/** 头像候选：先本形状，再换形状，再沿色环挪。和 distinctAvatar 同一条路。 */
+function avatarCandidates(wanted) {
+  const shapes = [...AVATAR_SHAPES];
+  const list = [{ key: avatarKey(wanted), value: wanted }];
+  for (const shape of shapes) {
+    const tryIt = { shape, hue: wanted.hue };
+    list.push({ key: avatarKey(tryIt), value: tryIt });
+  }
+  const buckets = Math.round(360 / HUE_STEP);
+  for (let step = 1; step <= buckets; step++) {
+    for (const shape of shapes) {
+      const tryIt = { shape, hue: (wanted.hue + step * HUE_STEP) % 360 };
+      list.push({ key: avatarKey(tryIt), value: tryIt });
+    }
+  }
+  return list;
+}
+
+/** 快照里这些名字已经有人用了（小写比对，和 uniqueName/freeLetter 一致）。 */
+const namesTaken = (hash) =>
+  new Set(
+    Object.entries(hash)
+      .filter(([k, v]) => k.startsWith('p:') && v && !v.left)
+      .map(([, v]) => String(v.name ?? '').trim().toLowerCase()),
+  );
+
+/** 快照里这些头像格已经有人占了。 */
+const avatarsTaken = (hash) =>
+  new Set(
+    Object.entries(hash || {})
+      .filter(([field, value]) => field.startsWith('p:') && value?.avatar)
+      .map(([, value]) => avatarKey(cleanAvatar(value.avatar))),
+  );
+
 // ---- the six things a room can be asked ---------------------------------
 
 async function create(res, body) {
@@ -588,10 +667,22 @@ async function join(res, body) {
   // read. 占椅子是原子的（claimSlot），两个人同时按《加入》也塞不进第九个。
   const slot = await claimSlot(code, playerId);
   if (slot < 0) return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
+  // 名字和头像等占到椅子之后再定，而且是「抢」不是「算」：函数一进来读的那
+  // 份快照，几个同时进来的人读到的是同一份（见 claimTag）。快照仍要用——屋
+  // 主和认领回来的人没有走这条路，他们的名字只在快照里。
+  const fresh = (await hgetall(roomKey(code))) || hash;
+  const seatName = await claimTag(code, 'n:', playerId, nameCandidates(typed), namesTaken(fresh));
+  const seatAvatar = await claimTag(
+    code,
+    'a:',
+    playerId,
+    avatarCandidates(cleanAvatar(body.avatar)),
+    avatarsTaken(fresh),
+  );
   await hset(roomKey(code), 'p:' + playerId, {
     token,
-    name: uniqueName(name, hash),
-    avatar: distinctAvatar(cleanAvatar(body.avatar), hash),
+    name: seatName,
+    avatar: seatAvatar,
     score: 0,
     finished: false,
     joinedAt: Date.now(),
@@ -784,6 +875,21 @@ async function score(res, body) {
   if (!hash) return send(res, 404, { error: 'noRoom' });
   const seat = seatOf(hash, body.playerId, body.playerToken);
   if (!seat) return send(res, 403, { error: 'notInRoom' });
+
+  // 这一份成绩是哪一局算出来的。
+  //
+  // 断线重连撞上的就是这里：一个人网断了 90 秒以上，这一局不再等他，屋主开
+  // 了下一局；他网一恢复，手机上还在跑的是上一局，算完把上一局的分数发出
+  // 来。从前这儿无条件覆盖写入，于是服务器把他记成「新的这一局已经打完并交
+  // 卷了」——新一局还没打的人被这一票凑够了「全员交卷」，局就在他们手里断掉。
+  //
+  // 局次编号客户端本来就收到（publicState 的 round），报分数时带回来，对不上
+  // 就整条丢掉：不写分数、不写交卷、连 lastSeen 都不动（那是在替另一局的他
+  // 续命）。回的仍是当前状态 200，他那一端读到新的 round 自己就跟上了。
+  const saidRound = Math.floor(Number(body.round));
+  if (Number.isFinite(saidRound) && saidRound > 0 && hash.meta && hash.meta.round && saidRound !== hash.meta.round) {
+    return send(res, 200, publicState(code, hash));
+  }
 
   seat.score = Math.max(0, Math.floor(Number(body.score) || 0));
   seat.finished = Boolean(body.finished);

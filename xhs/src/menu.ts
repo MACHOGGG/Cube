@@ -78,7 +78,6 @@ function card(
   btn.className =
     'home-icon-btn' +
     (glow ? ' home-icon-btn--glow' : '') +
-    (soon ? ' home-icon-btn--soon' : '') +
     (dim ? ' home-icon-btn--dim' : '');
   btn.setAttribute('aria-label', soon ? `${label}（完整版里还有更进阶的玩法）` : label);
   const art = document.createElement('span');

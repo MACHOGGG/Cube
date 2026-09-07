@@ -539,7 +539,7 @@ export function renderMultiplayerPage(
       const me = st.players.find((p) => p.id === meId);
       if (me && !me.finished && !me.left && !sitOutPending) {
         sitOutPending = true;
-        void reportScore(me.score, true).finally(() => {
+        void reportScore(me.score, true, undefined, st.round).finally(() => {
           sitOutPending = false;
         });
       }
@@ -555,7 +555,14 @@ export function renderMultiplayerPage(
     notice = hostNotice(lang, {
       onDismiss: () => {
         stopAll();
-        forgetRoom();
+        // 走的是正式的《离开》，不只是本机忘掉这间屋子。
+        //
+        // 屋主接了个电话被系统挂起 90 秒以上，屋子其实**没有**解散；这一页
+        // 上的人看到「屋主离开」按了确定，从前只调 forgetRoom()——服务器那
+        // 边他们的座位还占着。屋主回来看见几把清不掉的空椅子，那几个人自己
+        // 也认领不回来（除非同名而且屋子还没满）。leaveRoom 会先在本机清干
+        // 净、再告诉服务器，所以屋子真的散了也不会出错。
+        void leaveRoom();
         if (!dead) renderHome();
       },
       onLeave: () => confirmLeaveRoom(lang, leave),

@@ -323,10 +323,10 @@ export function createTriangleAdvancedGame(): ShapeGame {
         return dealBalancedDeck(SLOT_IS_UP, COLORS.length, PER_COLOR);
       }
 
-      // Per color group of 5: the other 4 colors get 1 each, and one of
-      // those 4 (picked round-robin below, then shuffled into a random slot)
-      // gets a 2nd copy to fill the 5th spot — this tile's own color never
-      // appears as its dot color.
+      // Per color group of 7 (PER_COLOR, and this board's palette is 7 wide):
+      // the other 6 colors get 1 each, and one of those 6 (picked round-robin
+      // below, then shuffled into a random slot) gets a 2nd copy to fill the
+      // 7th spot — this tile's own color never appears as its dot color.
       function assignDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length);
         const groups: { slots: number[]; pool: number[] }[] = [];

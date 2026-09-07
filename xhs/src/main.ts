@@ -141,35 +141,9 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
     setScreenBack(onBack);
   };
 
-  const fam = storyFamilyFor(game, opts);
-  if (fam && !storySeen(fam)) {
-    // 记在「看到」而不是「看完」：它一族只放一次，中途退出去的人也算被请过了。
-    // 和网页版同一条（src/main.ts 的 markTutorialSeen 就在 render 之前）。
-    markStorySeen(fam);
-    showShapeStory(fam, mountNow, onBack);
-    return;
-  }
+  // 开局前不再自己放分镜动画（玩家定的，网页版同一条）。想看的人去成绩与说
+  // 明页那一颗《怎么玩》，六条规则上头摆着方块和小球两颗键。
   mountNow();
-}
-
-/**
- * 这一局要不要先放分镜动画？要的话放哪一族的。
- *
- * 只有**基础**方块和基础小球会放。炸弹、老虎机、无限反转都不放——那三个是
- * 在基础玩法上加一层规则，玩到那儿的人已经会滑了，中间插一段「这个形状怎么
- * 玩」是把他从自己的节奏里拽出来。判断条件和网页版一字不差（src/main.ts 的
- * `opts?.timeLimitSec || opts?.bomb || opts?.targets ? null : shapeTutorialFor(...)`）：
- *
- *   bomb         炸弹
- *   targets      老虎机（这一局的得分图案是转出来的）
- *   timeLimitSec 无限反转（60 秒）
- */
-function storyFamilyFor(game: ShapeGame, opts: ShapeGameOpts): StoryFamily | null {
-  if (opts.bomb || opts.targets || opts.timeLimitSec) return null;
-  const id = game.card.id;
-  if (id.indexOf('square') === 0) return 'square';
-  if (id.indexOf('circle') === 0) return 'circle';
-  return null;
 }
 
 /**
@@ -190,6 +164,8 @@ function storyFamilyFor(game: ShapeGame, opts: ShapeGameOpts): StoryFamily | nul
  * 的 onBack 参数）。
  */
 function showShapeStory(fam: StoryFamily, onDone: () => void, onBack: () => void) {
+  teardown();
+  markStorySeen(fam);
   if (fam === 'square') renderTutorial(root, LANG, onDone);
   else renderCircleTutorial(root, LANG, onDone);
   setScreenBack(onBack);
@@ -198,12 +174,20 @@ function showShapeStory(fam: StoryFamily, onDone: () => void, onBack: () => void
 /** 教学窗开着的话，关掉它的那只手。换屏时要用（见 teardown）。 */
 let closeTutorial: (() => void) | null = null;
 
-function showTutorial(after?: () => void) {
+function showTutorial(after?: () => void, onStory?: (fam: StoryFamily) => void) {
   closeTutorial?.();
-  closeTutorial = openTutorial(LANG, () => {
-    closeTutorial = null;
-    after?.();
-  });
+  closeTutorial = openTutorial(
+    LANG,
+    () => {
+      closeTutorial = null;
+      after?.();
+    },
+    onStory &&
+      ((fam) => {
+        closeTutorial = null;
+        onStory(fam);
+      }),
+  );
 }
 
 /**
@@ -528,7 +512,9 @@ function showProfile() {
   renderProfilePage(root, BOOKS, LANG, {
     onBack: showMenu,
     onOpenRun: showRun,
-    onHowToPlay: () => showTutorial(),
+    // 分镜动画只有这一条路能走到（玩家定的）。看完、按返回，都回成绩页。
+    onHowToPlay: () =>
+      showTutorial(undefined, (fam) => showShapeStory(fam, showProfile, showProfile)),
   });
   setScreenBack(showMenu);
 }

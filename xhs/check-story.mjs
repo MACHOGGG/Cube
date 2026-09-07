@@ -73,39 +73,28 @@ async function open(old = false, seen = false) {
 const card = (p, i) => p.$$eval('.home-icon-btn', (e, k) => e[k].click(), i);
 const has = (p, sel) => p.$(sel).then((e) => !!e);
 
-// ---- 1. 第一次开方块：该弹方块那一段 ----
+// ---- 1. 第一次开方块：分镜不再自己弹出来 ----
+//
+// 玩家定的：网页端和小红书端都不再主动播放这段动画。它是一段没有互动的片
+// 子，把刚决定要玩的人挡在门外；规矩改由棋盘底下那块教学条一条一条讲。片子
+// 本身没删，挪到成绩与说明页那颗《怎么玩》里，想看的人自己点（见段 5）。
 {
   const { ctx, p, errs } = await open();
   await card(p, 0);
   await p.waitForTimeout(1500);
-  say(await has(p, '.story-tut'), '第一次开《经典方块》：分镜动画弹出来了');
-  const ctl = await p.$$eval('.story-controls .story-ctl', (e) => e.map((b) => b.getAttribute('aria-label')));
-  say(JSON.stringify(ctl) === '["上一条","再一次","下一条","完成"]', '下方四颗键和网页版一样', JSON.stringify(ctl));
-  const segs = await p.$$eval('.story-prog-seg', (e) => e.length);
-  say(segs > 0, '顶上的分段进度条在', segs + ' 段');
-  const sq = await p.$$eval('.story-board .story-cell svg rect', (e) => e.length);
-  const ci0 = await p.$$eval('.story-board .story-cell svg circle', (e) => e.length);
-  // 方块那一段里也会出现两个圆——最后一条消除之后换的是「小球消失」那一帧
-  // （网页版有意为之）。所以判据是「方块占压倒多数」，不是「一个圆都没有」。
-  say(sq > 0 && sq > ci0 * 3, '弹的是方块那一段（棋盘上画的是圆角方块）', `方块 ${sq} 个 / 圆 ${ci0} 个`);
-  const words = await p.$eval('.story-tut', (e) => (e.textContent || '').trim());
-  say(words === '', '这一屏没有一个字（纯动画）', words ? `出现了「${words.slice(0, 30)}」` : '');
-  say(!(await has(p, '.xhs-tut')), '六条规则那一屏没有自动跳出来');
-
-  // 按《完成》→ 进这一局
-  await p.click('#stFinish');
-  await p.waitForTimeout(1800);
-  say(await has(p, '.start-stage'), '按《完成》之后进了开局页');
+  say(!(await has(p, '.story-tut')), '第一次开《经典方块》：不再自己弹分镜');
+  say(await has(p, '.start-stage'), '直接到开局页');
+  say(!(await has(p, '.xhs-tut')), '六条规则那一屏也没有自动跳出来');
   say(errs.length === 0, '这一路零报错', errs.slice(0, 2).join(' | '));
   await ctx.close();
 }
 
-// ---- 2. 同一台设备再开一次方块：不该再弹 ----
+// ---- 2. 看过分镜的设备再开方块：一样直接进局 ----
 {
   const { ctx, p } = await open(false, true);
   await card(p, 0);
   await p.waitForSelector('.start-stage', { timeout: 20000 }).catch(() => {});
-  say(!(await has(p, '.story-tut')), '看过之后再开方块：不再弹');
+  say(!(await has(p, '.story-tut')), '看过之后再开方块：不弹');
   say(await has(p, '.start-stage'), '直接到开局页');
   await ctx.close();
 }
@@ -164,6 +153,28 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
     extra.map((t) => t.slice(0, 12)).join(' / '),
   );
   say(await has(p, '.xhs-tut .xhs-tut-split'), '中间隔着那道圆角黑线');
+
+  // 分镜动画唯一的入口：六条规则上头那两颗键（方块 / 小球）。
+  const stories = await p.$$eval('.xhs-tut-story', (e) => e.map((b) => b.getAttribute('aria-label') || ''));
+  say(stories.length === 2, '六条上头摆着两颗分镜键', stories.join(' / '));
+  await p.click('.xhs-tut-story[data-fam="square"]');
+  await p.waitForTimeout(1600);
+  say(await has(p, '.story-tut'), '点《方块》→ 分镜动画放出来了');
+  const ctl = await p.$$eval('.story-controls .story-ctl', (e) => e.map((b) => b.getAttribute('aria-label')));
+  say(JSON.stringify(ctl) === '["上一条","再一次","下一条","完成"]', '下方四颗键和网页版一样', JSON.stringify(ctl));
+  const segs = await p.$$eval('.story-prog-seg', (e) => e.length);
+  say(segs > 0, '顶上的分段进度条在', segs + ' 段');
+  const sq = await p.$$eval('.story-board .story-cell svg rect', (e) => e.length);
+  const ci0 = await p.$$eval('.story-board .story-cell svg circle', (e) => e.length);
+  // 方块那一段里也会出现两个圆——最后一条消除之后换的是「小球消失」那一帧
+  // （网页版有意为之）。所以判据是「方块占压倒多数」，不是「一个圆都没有」。
+  say(sq > 0 && sq > ci0 * 3, '放的是方块那一段（棋盘上画的是圆角方块）', `方块 ${sq} 个 / 圆 ${ci0} 个`);
+  const words = await p.$eval('.story-tut', (e) => (e.textContent || '').trim());
+  say(words === '', '这一屏没有一个字（纯动画）', words ? `出现了「${words.slice(0, 30)}」` : '');
+  // 看完退回成绩页，不是把人丢进一局里。
+  await p.click('#stFinish');
+  await p.waitForTimeout(1200);
+  say(await has(p, '.xhs-how'), '按《完成》回成绩与说明页，不是掉进一局里');
   await ctx.close();
 }
 {
@@ -220,9 +231,15 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
 // ---- 6. 老内核上也跑得起来 ----
 {
   const { ctx, p, errs } = await open(true);
-  await card(p, 0);
+  // 分镜不再自己弹（段 1），所以老内核这一趟也得从成绩与说明页那颗《怎么玩》
+  // 走进去——那是它现在唯一的入口。
+  await p.click('#xhsProfile');
+  await p.waitForTimeout(1000);
+  await p.click('.xhs-how');
+  await p.waitForTimeout(900);
+  await p.click('.xhs-tut-story[data-fam="square"]');
   await p.waitForTimeout(2000);
-  say(await has(p, '.story-tut'), '强制降级层：分镜动画照样弹得出来');
+  say(await has(p, '.story-tut'), '强制降级层：分镜动画照样放得出来');
   const box = await p.$eval('.story-tut', (e) => {
     const r = e.getBoundingClientRect();
     return { w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right) };

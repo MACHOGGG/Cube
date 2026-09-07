@@ -285,18 +285,14 @@ const SCREENS = [
     // 正是没看过的状态，所以先把那一格擦掉再刷新。
     name: '方块分镜动画',
     async go(p) {
-      // 擦掉那一格就直接点，**不要 reload**：addInitScript 是每次导航都跑的，
-      // 一刷新那一格又被填回去，教学就不弹了——那样这一屏会「量了 0 个盒子」
-      // 然后假装通过，比报错还糟。这里不用刷新也行，因为「看过没有」是点下去
-      // 那一刻才读的（main.ts 的 storySeen）。
-      await p.evaluate(() => {
-        try {
-          localStorage.removeItem('slides.xhs.story.square');
-        } catch (e) {
-          /* 存不了就本来就是「没看过」，正好 */
-        }
-      });
-      await p.$$eval('.home-icon-btn', (e) => e[0].click());
+      // 分镜不再自己弹（玩家定的，见 xhs/src/main.ts 的 showGame）。现在唯一
+      // 的入口是成绩与说明页那颗《怎么玩》，六条规则上头摆着方块和小球两颗
+      // 键——这一屏就从那儿进去量。
+      await p.click('#xhsProfile');
+      await p.waitForTimeout(900);
+      await p.click('.xhs-how');
+      await p.waitForSelector('.xhs-tut-story[data-fam="square"]', { timeout: 20000 });
+      await p.click('.xhs-tut-story[data-fam="square"]');
       // 等这一屏真的立起来再量，别量到一半的骨架。
       await p.waitForSelector('.story-board .story-cell', { timeout: 20000 });
       await p.waitForTimeout(1800);

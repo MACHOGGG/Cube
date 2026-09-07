@@ -43,6 +43,41 @@
    里没有这个限制，把话说全更要紧。 */
 .xhs-tut-modal { width: 100%; max-width: 460px; text-align: left; }
 .xhs-tut-modal h2 { text-align: center; }
+
+/* ---- 六条规则上头那两颗分镜键 -------------------------------------------
+   分镜动画不再自己弹出来（玩家定的），只有成绩与说明页那个入口进来的这一
+   屏摆着它俩：一颗方块、一颗小球，按下去放对应的那一段。局中按暂停开的同
+   一屏不摆——他正在玩，不该在这儿被一段动画接走（见 tutorial.ts 的 onStory）。
+
+   照网页版教学挑选页的样子：图在上、名字在下，两颗一样宽。不用 gap，老内
+   核（Chrome 61）没有它；靠一左一右的外边距分开。 */
+.xhs-tut-stories {
+  display: flex;
+  margin: 2px 2px 12px;
+}
+.xhs-tut-story {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 4px;
+  padding: 10px 6px 8px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.xhs-tut-story:active { background: rgba(0, 0, 0, 0.1); }
+.xhs-tut-story > svg {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 6px;
+  display: block;
+}
 .xhs-tut-rules {
   /* 六条在窄屏上摞起来会比一屏高，让它自己滚，别把《知道了》顶出去。 */
   max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch;

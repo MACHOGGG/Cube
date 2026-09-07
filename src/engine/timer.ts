@@ -32,8 +32,8 @@ export function createTimer(onTick: (elapsedSeconds: number) => void): Timer {
       timerId = window.setInterval(tick, 250);
     },
     pause() {
-      running = false;
       pausedElapsed = Date.now() - startTime;
+      running = false;
       clearInterval(timerId);
     },
     resume() {
@@ -43,11 +43,23 @@ export function createTimer(onTick: (elapsedSeconds: number) => void): Timer {
       timerId = window.setInterval(tick, 250);
     },
     stop() {
+      // 停表也记一次：停下之后再问「打了多久」，答案该是停下那一刻的数，不
+      // 该跟着墙上的钟继续涨。结算页是在停表之后画的。
+      if (running) pausedElapsed = Date.now() - startTime;
       running = false;
       clearInterval(timerId);
     },
+    /**
+     * 打了多久。停着的时候读到的是停下那一刻的数。
+     *
+     * 从前这里一律拿 Date.now() 减开表时刻，不看表在不在走。表面上没事——
+     * resume() 会把 startTime 往后挪，把暂停的那一段抹掉。可是**停着的时候
+     * 读**就不对了：暂停中（或者切到后台自动暂停中）问一次，答案里含着这一
+     * 段还没被抹掉的空白；玩家接了个电话，回来一看用时凭空多了两分钟，用时
+     * 系数把这一局的分压了下去。
+     */
     elapsedSeconds() {
-      return Math.floor((Date.now() - startTime) / 1000);
+      return Math.floor((running ? Date.now() - startTime : pausedElapsed) / 1000);
     },
   };
 }

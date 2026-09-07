@@ -456,13 +456,31 @@ export function startMatch(
   return post<RoomState>({ action: 'start', mode, ...(slot ? { slot } : {}), ...(flip ? { flip: true } : {}), ...session });
 }
 
+/**
+ * @param round 这份成绩是哪一局算出来的（开局那一刻记下的那个数）。
+ *
+ *   断了 90 秒以上的人，这一局不再等他，屋主已经开了下一局；他网一恢复，手
+ *   机上还在跑的是上一局，算完把上一局的分数发出来。带上局次，服务器对不上
+ *   就整条丢掉（api/room.js 的 score），不会把他记成「新的这一局已经交卷」
+ *   ——那一票会替别人把还没打完的一局判成「全员交卷」。
+ *
+ *   不给就照旧写入：这是给还没接上局次的调用留的后路，不是常态。
+ */
 export function reportScore(
   score: number,
   finished: boolean,
   seconds?: number,
+  round?: number,
 ): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
-  return post<RoomState>({ action: 'score', score, finished, seconds, ...session });
+  return post<RoomState>({
+    action: 'score',
+    score,
+    finished,
+    seconds,
+    ...(Number.isFinite(round) && (round as number) > 0 ? { round } : {}),
+    ...session,
+  });
 }
 
 /** Host only: 结束房间. Everyone still polling sees the closing card. */

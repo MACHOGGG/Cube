@@ -272,7 +272,33 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let resolving = false;
   // The one timer the reveal is waiting on, so a fresh touch can run the
   // rest of it now instead of waiting it out — see hurry().
-  let pendingBeat: { id: number; run: () => void } | null = null;
+  let pendingBeat: { id: number; run: () => void; at: number; ms: number } | null = null;
+  /**
+   * 暂停时把还没到点的那一拍收在这儿，《继续》时原样放回去。
+   *
+   * 玩家撞上的是这个：滑出一步能连锁好几拍的棋，这时候手机来电、或者手一抖
+   * 按了暂停——遮罩盖上了，连锁、加分、判死局却都在遮罩背后接着跑，可能在他
+   * 完全没看见的情况下自己弹出结算页。现在暂停连这一拍一起停，剩下多少毫秒
+   * 就记多少，回来接着数。
+   */
+  let heldBeat: { run: () => void; ms: number } | null = null;
+
+  /** 排下一拍。记下排的时刻和时长，暂停时才算得出「还剩多久」。 */
+  function armBeat(run: () => void, ms: number): void {
+    const id = window.setTimeout(() => {
+      if (pendingBeat?.id === id) pendingBeat = null;
+      run();
+    }, ms);
+    pendingBeat = { id, run, at: Date.now(), ms };
+  }
+
+  /** 把还没到点的那一拍收起来（暂停用）。 */
+  function holdBeat(): void {
+    if (!pendingBeat) return;
+    window.clearTimeout(pendingBeat.id);
+    heldBeat = { run: pendingBeat.run, ms: Math.max(0, pendingBeat.ms - (Date.now() - pendingBeat.at)) };
+    pendingBeat = null;
+  }
   // Every dot colour a whole-line clear has drained this run — the first of
   // the two stalemate conditions (see stalemate.ts).
   let clearedDotColors = new Set<number>();
@@ -359,6 +385,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     gameOver = false;
     paused = false;
     resolving = false;
+    // 上一局暂停时收起来的那一拍不能带到这一局里（重开是从暂停面板按下去的）。
+    heldBeat = null;
+    if (pendingBeat) {
+      window.clearTimeout(pendingBeat.id);
+      pendingBeat = null;
+    }
     streak.reset();
     flipChain = 0;
     flipLedger?.reset();
@@ -622,14 +654,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     coach?.signal('move');
     resolving = true;
     pendingBeat = null;
+    heldBeat = null;
     /** The next beat of the reveal, held so hurry() can bring it forward. */
-    const beat = (run: () => void, ms: number) => {
-      const id = window.setTimeout(() => {
-        if (pendingBeat?.id === id) pendingBeat = null;
-        run();
-      }, ms);
-      pendingBeat = { id, run };
-    };
+    const beat = armBeat;
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
     flipLedger?.beginMove(moves);
@@ -818,6 +845,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!started || gameOver || paused) return;
     paused = true;
     timer.pause();
+    // 连锁也一起停：遮罩盖上之后，翻面、加分、判死局都不该在背后继续跑
+    // （见 heldBeat）。
+    holdBeat();
     refs.pauseOverlay.classList.add('show');
   }
 
@@ -826,6 +856,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     paused = false;
     timer.resume();
     refs.pauseOverlay.classList.remove('show');
+    // 停下时还剩多少毫秒，就接着数多少——连锁从他离开的那一拍往下走。
+    const held = heldBeat;
+    heldBeat = null;
+    if (held && resolving && !gameOver) armBeat(held.run, held.ms);
   }
 
   function doFinish() {

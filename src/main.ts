@@ -13,7 +13,7 @@ import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { renderTriangleTutorial } from './ui/triangleTutorial';
-import { loadLang, saveLang, detectLang, hasSeenTutorial, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
@@ -974,17 +974,6 @@ function showRecordsPage() {
   toTop();
 }
 
-// Which shape's tutorial a card belongs to. A layout variant has no lesson
-// of its own — it teaches nothing beyond its family's — but it still counts
-// as that family: a newcomer who opens 七色圆球 first should meet the ball
-// tutorial there, not only if they happen to start from the base game.
-function shapeTutorialFor(id: string): TutorialShape | null {
-  if (id.startsWith('square')) return 'square';
-  if (id.startsWith('circle')) return 'circle';
-  if (id.startsWith('triangle')) return 'triangle';
-  return null;
-}
-
 /**
  * @param onBack 教学里按返回键去哪儿。不给就等同按《完成》（onDone）；开局前自动弹
  *   出的那一段例外——返回该回主菜单，不该把人送进那一局。
@@ -1088,28 +1077,16 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
     activeDestroy = game.mount(root, backFn, fullOpts);
     gameInProgress = true;
   };
-  // A timed-challenge run or a replay from another shape's "更多布局" card
-  // skips the tutorial gate — only the very first time a player opens this
-  // shape's *own* base game gets the auto-popup.
-  // 随机得分目标那一局也跳过教学：玩家刚从老虎机那一页挑完图形转完图案，
-  // 中间再插一段「这个形状怎么玩」是把他从自己的节奏里拽出来。
+  // 开局前不再自己弹分镜动画（玩家定的）。
   //
-  // 头一回点开那两张发光的基础卡也不放分镜（玩家定的）：那一屏是一段没有互
-  // 动的动画，把刚决定要玩的人挡在门外；规矩改由棋盘底下那块教学条一条一条
-  // 讲，讲到哪一条就等他真的做到那一条，做到了才往下走，中间得分目标一直
-  // 亮着（见 ui/coachBar.ts 和 basicCoach）。三角那一段不受影响，照旧放。
-  const tutorialShape =
-    opts?.timeLimitSec || opts?.bomb || opts?.targets || opts?.coach
-      ? null
-      : shapeTutorialFor(game.card.id);
-  if (tutorialShape && !hasSeenTutorial(tutorialShape)) {
-    // Marked the moment it is shown, not when it finishes: it is offered
-    // exactly once per family, and a player who skips out of it has still
-    // been offered it.
-    markTutorialSeen(tutorialShape);
-    renderShapeTutorialByShape(tutorialShape, mountNow, backFn);
-    return;
-  }
+  // 那一屏是一段没有互动的动画，把刚决定要玩的人挡在门外——不管他是头一回点
+  // 基础方块，还是头一回点三角。规矩改由棋盘底下那块教学条一条一条讲，讲到
+  // 哪一条就等他真的做到那一条，做到了才往下走，中间得分目标一直亮着（见
+  // ui/coachBar.ts 和 basicCoach）。
+  //
+  // 分镜本身没有删：想看的人自己去个人主页那一行《如何滑？》点开（教学挑选
+  // 页，showTutorialPicker）。小屋里那条也留着——那不是自动弹，是玩家自己回
+  // 答了「我不会这个玩法」才放的（onLearnTutorial）。
   mountNow();
 }
 
