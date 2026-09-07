@@ -188,8 +188,23 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await p.waitForTimeout(1200);
   await p.click('#stopBtn');
   await p.waitForTimeout(900);
-  const btns = await p.$$eval('#pauseOverlay .modal button', (e) => e.map((b) => (b.textContent || '').trim()));
-  say(btns.indexOf('怎么玩') >= 0, '暂停面板里那颗《怎么玩》还在', JSON.stringify(btns));
+  // 收成一行再比：那颗《怎么玩》右边还挂着一个「〉」（面板改版之后加的，见
+  // gameShell 里 .pause-chev 那段），textContent 里于是夹着换行和缩进。
+  const btns = await p.$$eval('#pauseOverlay .modal button', (e) =>
+    e.map((b) => (b.textContent || '').replace(/\s+/g, ' ').trim()),
+  );
+  say(btns.some((x) => x.indexOf('怎么玩') === 0), '暂停面板里那颗《怎么玩》还在', JSON.stringify(btns));
+  // 面板改版之后这一层里的四件事（玩家定的顺序）：教学、色盲友好、再来一局、
+  // 结束游戏，最后一颗《继续》回棋盘。
+  say(
+    btns.length === 5 &&
+      btns[1].indexOf('色盲') === 0 &&
+      btns[2] === '再来一局' &&
+      btns[3] === '结束游戏' &&
+      btns[4] === '继续',
+    '面板里就是那四件事 + 一颗《继续》',
+    JSON.stringify(btns),
+  );
   await ctx.close();
 }
 
