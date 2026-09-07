@@ -3,7 +3,7 @@ import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons'
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
-import { openRulesModal } from './rulesModal';
+import { openRulesModal, type ExtraTip } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import type { Family, TargetPattern } from '../engine/targets';
@@ -103,7 +103,8 @@ export interface ShellRefs {
   endScoreEl: HTMLElement;
   endAvgEl: HTMLElement;
   endBreakdownEl: HTMLElement;
-  endDetailEl: HTMLElement;
+  /** 结算页上那张战绩图。开局那一刻还是空的，一局打完由 endGame 填上。 */
+  endShareImgEl: HTMLImageElement;
   shareOverlay: HTMLElement;
   shareImageEl: HTMLImageElement;
   buttons: {
@@ -371,7 +372,20 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <div class="end-avg" id="endAvg"></div>
         <div class="end-rule" aria-hidden="true"></div>
         <div class="end-breakdown" id="endBreakdown"></div>
-        <p id="endDetail">${s.stepsPhrase.replace('{n}', '0')} · ${s.timeLabel} 0:00 · ${s.bestPhrase.replace('{n}', '0')}</p>
+        <!-- 这一局的战绩图，就摆在这儿——玩家定的：「整合分享和结算两部分」。
+             从前这个位置是一行字（手动结束 · 共 N 步 · 用时 · 本机最佳）。那
+             行字没丢：它本来就印在图上（shareCard.ts 画的 info.detail），所以
+             这不是拿掉一件事，是让同一件事以看得见的样子出现。
+
+             图是结算页露面之前就画好的（gameController 的 endGame），不是等
+             玩家按了《分享》才画——不然这块地方会先空着、图落下来时整页跳一
+             下。底下那句「长按或右键保存」是给网页版的；小红书版的容器把长按
+             禁掉了，那一句在那儿是假话，由 xhs/src/main.ts 换成《发笔记》
+             《存相册》两颗键。 -->
+        <figure class="end-share" id="endShare" hidden>
+          <img id="endShareImg" alt="${s.shareImgAlt}" />
+          <figcaption class="hint" id="endShareHint">${s.shareHint}</figcaption>
+        </figure>
         <div class="btn-row">
           <button class="secondary" id="endBackBtn">${s.homeBtn}</button>
           <button class="secondary" id="shareBtn">${s.shareBtn}</button>
@@ -465,8 +479,19 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 没有三角那一列由整包说了算（网页版有，小红书版在自己的 main.ts 里关
   // 掉），这儿不写死。关掉之后什么也不做——这一层还压在暂停面板上，玩家回到
   // 的正是他刚才那一屏。
+  //
+  // 这一屏认得出自己开在哪一局里（玩家的原话：「在每个游戏界面里的暂停里的怎
+  // 么玩？教学中 都是针对这个玩法的内容……现在在基础玩法里的教学会带有特殊玩
+  // 法的规则」）：
+  //   shape  第 4 条换成这一族自己那一句——小球留空球、方块拿走不再出现、三角
+  //          留空三角。局中他眼前只有一种图形，讲另外两种是白讲。
+  //   tips   底下那几条附注只留当局那一条。基础局一条都没有，连那道分档的黑线
+  //          也不画；炸弹局只有炸弹，无限反转局只有无限反转。
   container.querySelector<HTMLButtonElement>('#howBtn')?.addEventListener('click', () => {
-    openRulesModal({ lang: meta.lang });
+    const tips: ExtraTip[] = [];
+    if (meta.bomb) tips.push('bomb');
+    if (meta.flip) tips.push('flip');
+    openRulesModal({ lang: meta.lang, shape: familyOf(meta.shapeId), tips });
   });
 
   // The press flip on 完成/暂停 is driven from pointer events rather than
@@ -600,7 +625,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),
     endBreakdownEl: req('endBreakdown'),
-    endDetailEl: req('endDetail'),
+    endShareImgEl: req<HTMLImageElement>('endShareImg'),
     shareOverlay: req('shareOverlay'),
     shareImageEl: req('shareImage'),
     buttons: {

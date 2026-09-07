@@ -128,6 +128,14 @@
   text-align: center; color: var(--ink-soft); font-size: 0.86rem; line-height: 1.4;
 }
 
+/* 结算页上那一份收小一档。
+   放大看的那一窗里，图和这两颗键是全部内容，键可以大大方方地摆；结算页不
+   一样——上头还站着分数、明细和一张图，底下还有《主页 / 分享 / 再来》三颗，
+   照原样摆就把那一排顶出屏幕了（量出来 772px 的内容装进 743px 的窗）。 */
+.end-share .xhs-share-host { margin-top: 8px; }
+.end-share .xhs-share-btn { padding: 9px 14px; font-size: 0.94rem; }
+.end-share .xhs-share-note { min-height: 0; font-size: 0.8rem; }
+
 /* ---- 底排 --------------------------------------------------------------
    只有一颗键，居中。网页版那两颗是 flex:1 各占一半（整块圆角矩形都能点）；
    只剩一颗的时候那条规则会把它拉成一整条，所以这儿改回按内容宽。 */

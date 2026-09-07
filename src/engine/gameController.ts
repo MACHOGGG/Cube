@@ -10,7 +10,6 @@ import {
   MANUAL_END_REASON,
   buildShareInfo,
   runBreakdown,
-  runDetailLine,
   type ModeKey,
   type RunData,
 } from './runRecord';
@@ -315,6 +314,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let startSnapshot: BoardSnapshot | null = null;
   let endSnapshot: BoardSnapshot | null = null;
   let lastRun: RunData | null = null;
+  /**
+   * 这一局的战绩图（PNG 的 data:uri）。一局画一次，结算页和《分享》那一窗共
+   * 用同一张——见 renderCard。
+   */
+  let lastCardUrl: string | null = null;
 
   function updateStuckState(groups: Cell[][]) {
     hooks.highlightStuck?.(groups.length ? groups.flat() : null);
@@ -388,6 +392,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resolving = false;
     // 上一局暂停时收起来的那一拍不能带到这一局里（重开是从暂停面板按下去的）。
     heldBeat = null;
+    // 上一局那张战绩图也一起忘掉：这一局还没打完，结算页上不该留着上一局的图。
+    lastCardUrl = null;
+    refs.endShareImgEl.removeAttribute('src');
+    refs.endShareImgEl.parentElement?.setAttribute('hidden', '');
     if (pendingBeat) {
       window.clearTimeout(pendingBeat.id);
       pendingBeat = null;
@@ -443,6 +451,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     gameOver = true;
     resolving = false;
     timer.stop();
+    // 单人局的《结束游戏》就长在暂停面板上，所以这一局多半是从那一层按下来
+    // 的——不撤掉的话，暂停那一层会一直亮着躺在结算页底下：按结算页的《主页》
+    // 走人、下一次再进游戏，它就跟着冒出来了。paused 也要跟着放平，不然回到
+    // 前台时那套「还在暂停中」的判断会当作这一局还停在半路。
+    paused = false;
+    refs.pauseOverlay.classList.remove('show');
     const elapsed = timer.elapsedSeconds();
 
     const statusPercent = perf.valuePercent();
@@ -517,7 +531,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endBreakdownEl.innerHTML = runBreakdown(lastRun, hooks.lang)
       .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
       .join('');
-    refs.endDetailEl.textContent = runDetailLine(lastRun, hooks.lang);
+    // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
+    // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
     // 最快玩家 on a room's closing card is read from here, the same way the
     // live standings read the score off the HUD's reel: the scoreboard takes
     // what is already on screen, and none of the eight boards has to know
@@ -532,6 +547,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 和上面那行秒数一样，放在这里是为了让 scoreboard 自己来取：八个玩法谁也
     // 不用知道房间这回事。
     refs.endOverlay.dataset.total = String(total);
+    // 终局的盘面，和照着它画出来的战绩图。
+    //
+    // 两件事都赶在结算页露面之前做完：图现在是结算页的一部分（玩家定的「整
+    // 合分享和结算」），等页出来了再往里塞，这一屏会先空着一块、图落下来时
+    // 整页跳一下。画一张图是几十毫秒的事，那一局刚打完的这一瞬间花得起。
+    endSnapshot = hooks.snapshotBoard?.() ?? null;
+    lastCardUrl = renderCard();
+    if (lastCardUrl) refs.endShareImgEl.src = lastCardUrl;
+    // 画不出来（理论上只有 lastRun 为空，走不到这儿）就整块不摆，别在结算页
+    // 上留一个坏掉的图标和一句没着落的「长按保存」。
+    refs.endShareImgEl.parentElement?.toggleAttribute('hidden', !lastCardUrl);
     // 屋主中途散场、这一局转成单人打完的：把小屋那份摆在结算页最上面。平时
     // 什么也不做（见 roomLeftover.ts）——单人局的结算页一个字都不改样子。
     mountRoomLeftover(document.getElementById('endRoomBlock'), hooks.lang);
@@ -548,7 +574,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (hazardEnd) playError();
     else playSettle();
 
-    endSnapshot = hooks.snapshotBoard?.() ?? null;
     // Archive the run so the 记录 panel can re-open the very same card.
     saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
     // 登录了就顺手往云上报一份：换台设备记录跟着回来，成绩也进全球榜。
@@ -567,10 +592,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     });
   }
 
-  function doShare() {
-    if (!lastRun) return;
-    trackShare('end_modal');
-    const dataUrl = renderShareCard(
+  /**
+   * 这一局的战绩图。没有 lastRun 就画不出来（还没打完），返回 null。
+   *
+   * 一局只画一次：结算页露面之前画好（endGame），《分享》那一窗直接拿这一
+   * 张。同一局两处两张图会不一致——名次是现取的（roundStandings），中间要是
+   * 又轮询回来一次，两张图上的排名就能对不上。
+   */
+  function renderCard(): string | null {
+    if (!lastRun) return null;
+    return renderShareCard(
       {
         ...buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
         standings: roundStandings(),
@@ -579,6 +610,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       endSnapshot,
       startSnapshot,
     );
+  }
+
+  function doShare() {
+    // 图在结算页上已经有一张了；这一窗是把它放大了看（和小红书版那两颗原生
+    // 键的落脚处）。所以这儿不重画，用刚才那一张。
+    const dataUrl = lastCardUrl ?? renderCard();
+    if (!dataUrl) return;
+    trackShare('end_modal');
     refs.shareImageEl.src = dataUrl;
     refs.shareOverlay.classList.add('show');
   }

@@ -68,6 +68,16 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
       '<div class="end-row"><span>基础得分</span><span>612</span></div>' +
       '<div class="end-row"><span>时间系数</span><span>×1.32</span></div>' +
       '<div class="end-row"><span>有效得分率</span><span>+59%</span></div>';
+    // 战绩图现在就摆在结算页上（玩家定的「整合分享和结算」），它是这一窗里
+    // 最高的一块——不摆上去，下面那三条「按得到吗」量的就不是真的排版。
+    // 720×940，和真图同比例。
+    const c = document.createElement('canvas');
+    c.width = 720; c.height = 940;
+    const g = c.getContext('2d');
+    g.fillStyle = '#3D3128';
+    g.fillRect(0, 0, 720, 940);
+    document.getElementById('endShare').removeAttribute('hidden');
+    document.getElementById('endShareImg').src = c.toDataURL();
   });
   await page.waitForTimeout(600);
   const end = await page.evaluate(() => {
@@ -85,13 +95,8 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
   // ---- 分享窗 -----------------------------------------------------------
   await page.evaluate(() => {
     document.getElementById('endOverlay').classList.remove('show');
-    // 战绩图是 720 宽、九百多高的一张。同比例的占位图就够量排版了。
-    const c = document.createElement('canvas');
-    c.width = 720; c.height = 940;
-    const g = c.getContext('2d');
-    g.fillStyle = '#3D3128';
-    g.fillRect(0, 0, 720, 940);
-    document.getElementById('shareImage').src = c.toDataURL();
+    // 上面结算页那张占位图，放大看的这一窗用同一张。
+    document.getElementById('shareImage').src = document.getElementById('endShareImg').src;
     document.getElementById('shareOverlay').classList.add('show');
   });
   await page.waitForTimeout(700);

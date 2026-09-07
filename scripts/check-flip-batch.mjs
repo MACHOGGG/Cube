@@ -98,19 +98,18 @@ check('陈列页按返回键 → 个人主页', await has(page, '.profile-page')
 await back(page);
 check('个人主页再按返回键 → 主菜单', await has(page, '.home-page'));
 
-// 4. 开局页：图形 + 说明块；60 秒；后台暂停；结算页没有用时系数
+// 4. 开局页：图形（没有说明块）；60 秒；后台暂停；结算页没有用时系数
 await page.click(FLIP_CARD);
 await page.waitForSelector('.flip-page', { timeout: 8000 });
 await page.click('.slot-pick-opt[data-family="square"]');
 await page.waitForSelector('#startOverlay.show', { timeout: 8000 });
-check('开局页倒数底下有那块说明：图标 + 文字', (await has(page, '#startOverlay .flip-hint .flip-hint-icon svg')) && (await has(page, '#startOverlay .flip-hint-copy')));
-const hint = await page.$eval('#startOverlay .flip-hint-copy', (el) => el.textContent.trim());
-check('说明写的是连击减弱 ×1.5、没有时间奖励', hint.includes('×1.5') && hint.includes('时间'), hint);
+// 这一屏从前解释计分怎么算（连击 ×1.5、没有时间奖励），玩家后来定下不要了：
+// 4-3-2-1 数完就开打，上半屏那张图已经说清「你选的是这个玩法」。所以这里反过
+// 来立着哨兵——那块说明不许回来。小屋的倒数页仍然摆它（见 multiplayer.ts）。
+check('开局页倒数底下没有计分说明', !(await has(page, '#startOverlay .flip-hint')));
 const markHtml = await page.$eval('#startOverlay .start-marks', (el) => el.innerHTML);
 // 玩家给的 SVG 里每个 id 都带着文件名前缀（customIcons.ts）：base-square-… 是方块那张，timed-… 是秒表。
 check('开局页摆的是方块那张图，不是秒表', markHtml.includes('base-square-') && !markHtml.includes('timed'), markHtml.slice(0, 80));
-const hintBox = await page.$eval('#startOverlay .flip-hint', (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, w: r.width, vh: innerHeight, vw: innerWidth }; });
-check('说明块在屏幕里', hintBox.top >= 0 && hintBox.bottom <= hintBox.vh && hintBox.w <= hintBox.vw, JSON.stringify(hintBox));
 await page.screenshot({ path: '/tmp/claude-0/-home-user-Cube/31e4410f-1c28-5dc5-871f-485b2d55eb01/scratchpad/flip-start.png' });
 await page.waitForFunction(() => !document.querySelector('#startOverlay')?.classList.contains('show'), { timeout: 15000 });
 await page.waitForTimeout(300);

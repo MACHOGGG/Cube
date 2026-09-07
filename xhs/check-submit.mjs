@@ -235,6 +235,28 @@ await page.waitForTimeout(2800);
 const gotEnd = !!(await page.$('#shareBtn'));
 say(gotEnd, '一局从主菜单打到结算页');
 if (gotEnd) {
+  // 战绩图现在就摆在结算页上（玩家定的「整合分享和结算」），不用先按《分享》。
+  // 底下那句「长按或右键保存」在这一版是假话（容器禁掉了长按），换成两颗原生
+  // 键——见 xhs/src/main.ts 的 swapHintForActions。
+  const inline = await page.evaluate(() => {
+    const fig = document.getElementById('endShare');
+    const img = document.getElementById('endShareImg');
+    return {
+      shown: !!fig && !fig.hasAttribute('hidden'),
+      png: (img && img.getAttribute('src') || '').indexOf('data:image/png') === 0,
+      h: img ? img.naturalHeight : 0,
+      hint: !!document.getElementById('endShareHint'),
+      keys: [].slice.call(fig ? fig.querySelectorAll('.xhs-share-btn') : []).map((b) => b.textContent.trim()),
+    };
+  });
+  say(inline.shown && inline.png && inline.h > 100, '结算页上就摆着战绩图（现画的 PNG）', JSON.stringify(inline));
+  say(!inline.hint, '底下那句「长按保存」没留下——容器里长按没用');
+  say(
+    JSON.stringify(inline.keys) === JSON.stringify(['发笔记', '存相册']),
+    '换成了《发笔记》《存相册》两颗原生键',
+    JSON.stringify(inline.keys),
+  );
+
   await page.click('#shareBtn');
   await page.waitForTimeout(2500);
   const img = await page.evaluate(() => {

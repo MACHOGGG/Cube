@@ -767,6 +767,27 @@ h1 {
   background: var(--line); margin: 0 auto 14px;
 }
 .end-breakdown { display: flex; flex-direction: column; gap: 3px; margin: 0 0 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+/* ---- 结算页上的战绩图 --------------------------------------------------
+   玩家定的：「整合分享和结算两部分」。从前这个位置是一行字（手动结束 · 共
+   N 步 · 用时 · 本机最佳），现在摆的是印着同样这行字的那张图。
+
+   高度卡在 34svh：结算页本来就能滚（.overlay--end .modal 有 overflow-y），
+   可底下那三颗键（主页 / 分享 / 再来）是这一屏真正要按的东西，不该被一张图
+   顶到看不见的地方。宽度吃满这一窗，图按原比例取小的那一边。
+
+   要看清点面的人按《分享》——那一窗宽得多（.share-modal 是 620px），专门
+   为看图留的。这儿是「一眼认出这是自己刚打的那一局」，外加长按保存。 */
+.end-share { margin: 0 0 14px; }
+.end-share img {
+  display: block; margin: 0 auto 6px;
+  width: auto; height: auto; max-width: 100%; max-height: 34svh;
+  border-radius: var(--r-sm); box-shadow: var(--shadow);
+}
+/* 图还没画出来的那一刻（开局到打完之间）整块收起来，别在结算页上留一个坏掉
+   的图标和一句没着落的「长按保存」。用的是 hidden 属性，由 gameController
+   开关——不用 :has，老内核（Chrome 61，小红书那一版的底线）不认它，整条规则
+   会被连着丢掉。 */
+.end-share .hint { margin: 0; }
 .end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
 #endOverlay .modal { position: relative; overflow: hidden; }
 .end-hazard-bg {
@@ -3083,6 +3104,33 @@ html.is-playing body { background: var(--play-bg); }
   .overlay--end .end-avg { font-size: 0.92rem; margin: 0 0 6px; }
   .overlay--end .end-rule { margin: 0 auto 7px; }
   .overlay--end .end-breakdown { gap: 1px; margin: 0 0 7px; }
+  /* 横屏的战绩图挪到右边一列，占满这一窗的高度。
+     竖着排的时候图在分数下面、三颗键上面——横过来只剩三百多像素高，图夹在
+     中间，《主页 / 分享 / 再来》就正好掉到看不见的地方（量过：内容 411px、
+     窗口 343px）。把图摆到侧边，两件事都成立：图能吃满这一屏的高度，三颗键
+     始终在。和分享窗横屏那一套是同一个办法（见下面 .share-modal）。 */
+  .overlay--end .modal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start; column-gap: 16px;
+    /* 宽度得先定下来，1fr 才算得出来：minmax(0, 1fr) 对「按内容撑开」这件事
+       贡献的是 0，而这一窗本来是 max-width: 340px、宽度由内容决定的——两下
+       一凑，整窗缩到只剩右边那张图那么宽，左半边被挤成一列竖着的字（量出来
+       10px）。给个确定的宽度就没这回事了。 */
+    width: 100%; max-width: min(680px, 100%);
+  }
+  /* 别的东西一律走左边那一列，按原来的顺序一行一行排下去。 */
+  .overlay--end .modal > * { grid-column: 1; }
+  /* span 30 而不是 1 / -1：这一窗的行是隐式的（有几行看这一局摆了什么，小屋
+     那一块平时藏着），而 -1 指的是**显式**网格的最后一条线——没有显式行时它
+     就是第 1 条，图于是只占一行、把别的东西往下顶。 */
+  .overlay--end .end-share {
+    grid-column: 2; grid-row: 1 / span 30; align-self: center; margin: 0;
+  }
+  /* 两个上限都写死成看得见的尺寸，不用 max-width: 100%——右边这一列是 auto，
+     宽度由图撑出来，而图又拿这一列当 100% 的基准：循环了，浏览器会把整列让
+     给图，左边那半挤成一列竖着的字（真出过这一幕）。 */
+  .overlay--end .end-share img { max-height: 74svh; max-width: 32vw; margin-bottom: 4px; }
   .overlay--end .modal p { margin: 0 0 9px; font-size: 0.85rem; }
   .overlay--end .end-gone-note { margin: 0 0 7px; padding: 6px 10px; font-size: 0.8rem; }
 }

@@ -191,31 +191,48 @@ function showTutorial(after?: () => void, onStory?: (fam: StoryFamily) => void) 
 }
 
 /**
- * 结算页那个「分享战绩」窗口：把网页版的「长按图片保存」换成小红书的两颗键。
+ * 战绩图底下那句「长按或右键保存」，在这一版换成两颗键：《发笔记》《存相册》。
  *
  * 网页版靠的是浏览器的长按菜单，小工具的容器把它禁掉了——玩家长按什么也不会
- * 发生。所以这里在游戏挂好之后，找到那个窗口，把提示那一行换成《发笔记》
- * 《存相册》（和成绩页里点开一局看到的是同一套，见 shareActions.ts）。
+ * 发生，那句话在这儿是假话。规范给的替代品是两个原生接口，见 shareActions.ts
+ * （和成绩页里点开一局看到的是同一套）。
+ *
+ * 两处都要换：结算页上那张图（#endShareImg，玩家定的「整合分享和结算」），
+ * 和按《分享》放大看的那一窗（#shareImage）。
  *
  * 用「挂完之后改 DOM」而不是改 src/ui/gameShell.ts：那个文件是网页版正在跑
  * 的东西，这一版的规矩是只读不写。改动只在这一版的包里发生。
  *
- * 图是现取的，不是现在这一刻的——窗口每次打开，gameController 都会把新的
+ * 图是现取的，不是现在这一刻的——每打完一局 gameController 都会把新的
  * data:uri 塞进那个 <img>，所以按下去的时候才读它。
  */
 function enhanceShareOverlay() {
-  const img = root.querySelector<HTMLImageElement>('#shareImage');
-  const modal = img?.closest<HTMLElement>('.share-modal');
+  swapHintForActions(root.querySelector<HTMLImageElement>('#endShareImg'), '.end-share');
+  swapHintForActions(root.querySelector<HTMLImageElement>('#shareImage'), '.share-modal');
+}
+
+/**
+ * 把 `img` 所在那一块里的「长按保存」换成两颗原生键。
+ *
+ * `boxSel` 是那一块的选择器——结算页上是 <figure class="end-share">，放大看
+ * 的那一窗是 .share-modal。
+ */
+function swapHintForActions(img: HTMLImageElement | null, boxSel: string) {
+  const modal = img?.closest<HTMLElement>(boxSel);
   if (!img || !modal) return;
   // 「长按保存」那句在这儿是假话，去掉。
   modal.querySelector('.hint')?.remove();
   const host = document.createElement('div');
   host.className = 'xhs-share-host';
-  modal.insertBefore(host, modal.querySelector('.btn-row'));
-  // 每次窗口打开都重挂一次：分数和图都变了。用 MutationObserver 盯着 src。
+  // 放大看的那一窗里，两颗键要摆在《关闭》上面；结算页那块 <figure> 里没有
+  // 别的东西，接在图后面就是。
+  const before = modal.querySelector('.btn-row');
+  if (before) modal.insertBefore(host, before);
+  else modal.appendChild(host);
+  // 每换一张图就重挂一次：分数和图都变了。用 MutationObserver 盯着 src。
   const remount = () => {
     host.innerHTML = '';
-    // 每次都重新去存档里取最新那一局——窗口打开的时候这一局刚存进去。
+    // 每次都重新去存档里取最新那一局——图落下来的时候这一局刚存进去。
     refreshLastRun();
     const d = lastRunData;
     if (img.src && img.src.indexOf('data:') === 0 && d) mountShareActions(host, img.src, d);

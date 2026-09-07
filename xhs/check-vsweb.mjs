@@ -598,7 +598,13 @@ const SCREENS = [
     snap: {
       结算标题: { sel: '.overlay--end .modal h2', kind: 'text' },
       结算明细名: { sel: '.overlay--end .end-breakdown .eb-k, .overlay--end .end-breakdown dt', kind: 'text' },
-      结算文字: { sel: '.overlay--end .modal p', kind: 'text' },
+      // 直接子级的 p——从前那一行「手动结束 · 共 N 步…」就在这一层。它现在
+      // 印在战绩图上了（结算页和分享整合成了一屏），两端都不该再有这一行。
+      // 写成 > p 是因为这一版在图底下摆了《发笔记》《存相册》，那两颗键带一
+      // 行 <p> 状态字——它是这一版自己的东西，不该拿去和网页版比。
+      结算文字: { sel: '.overlay--end .modal > p', kind: 'text' },
+      // 战绩图现在是结算页的一部分，两端都得有，而且都得真画出来。
+      结算战绩图: { sel: '.overlay--end .end-share img[src^="data:image"]', kind: 'count' },
       结算按键: { sel: '.overlay--end .btn-row button', kind: 'label' },
     },
     // 网页版结算页上那颗《再来一局》/《回主菜单》两边一样；如果哪天不一样了

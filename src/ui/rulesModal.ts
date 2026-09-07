@@ -12,8 +12,17 @@
  *   六条规则   文字是 i18n.ts 的 TUTORIAL_RULES，配图是 ruleArt.ts 的
  *              buildRuleArt()——和个人主页那张教学挑选页同一份。
  *   一道黑线   分档用的。上面六条是「这个游戏怎么玩」，人人都要看。
- *   两条附注   炸弹和无限反转各自多的那一层（MODE_TIPS）。它们本来只在头一
+ *   几条附注   炸弹和无限反转各自多的那一层（MODE_TIPS）。它们本来只在头一
  *              回进那个玩法时在棋盘底下摆一局，之后想再看一眼就没地方了。
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 开在局中的时候，它认得出自己在哪一局
+ *
+ * 玩家的原话：「在每个游戏界面里的暂停里的怎么玩？教学中 都是针对这个玩法的
+ * 内容。现在在基础玩法里的教学会带有特殊玩法的规则。」——所以 shape 和 tips
+ * 这两个参数一给，这一屏就只讲当局的事：第 4 条换成这一族自己那一句，底下的
+ * 附注只留当局那一条（基础局一条都没有，那道黑线也跟着不画）。两个都不给才
+ * 是通稿，那是玩家还没挑玩法时的入口（小红书的信息页）。
  *
  * 唯一的分歧是三角：网页版有三角玩法，第 1 幅配图就要三列；小红书版整块没有
  * 三角，讲一个玩家在那儿见不到的图形只会让人以为自己漏了什么。这件事按整包
@@ -21,7 +30,7 @@
  *
  * 这一屏**不会自己跳出来**，只有玩家自己按了才走到这儿。
  */
-import { MODE_TIPS, STRINGS, TUTORIAL_RULES, type Lang } from '../i18n';
+import { MODE_TIPS, STRINGS, TUTORIAL_RULES, tutorialRules, type Lang, type RuleShape } from '../i18n';
 import { bombTipArt, buildRuleArt, flipTipArt } from './ruleArt';
 import { menuTag } from './menuTags';
 import { shapeName } from './shapeLabels';
@@ -43,26 +52,26 @@ export function setRulesTriangle(v: boolean): void {
 }
 
 /** 配图一族画一次就够了，两处轮流开关这一屏不必每次重画。 */
-const ART_CACHE = new Map<boolean, string[]>();
-function ruleArt(triangle: boolean): string[] {
-  let art = ART_CACHE.get(triangle);
+const ART_CACHE = new Map<string, string[]>();
+function ruleArt(triangle: boolean, shape?: RuleShape): string[] {
+  const key = `${triangle}|${shape ?? ''}`;
+  let art = ART_CACHE.get(key);
   if (!art) {
-    art = buildRuleArt({ triangle });
-    ART_CACHE.set(triangle, art);
+    // buildRuleArt 只认得方块和小球两套画法（三角没有自己的一套，用通稿那套）。
+    art = buildRuleArt({ triangle, shape: shape === 'circle' ? 'circle' : undefined });
+    ART_CACHE.set(key, art);
   }
   return art;
 }
 
-/**
- * 最下面那两条：炸弹和无限反转。
- *
- * 老虎机没有——它那句提示的配图是当局现抽的那两个得分图案，离开那一局就无从
- * 画起。
- */
-const EXTRA_TIPS: readonly { key: 'bomb' | 'flip'; art: string }[] = [
-  { key: 'bomb', art: bombTipArt('square') },
-  { key: 'flip', art: flipTipArt('square') },
-];
+/** 最下面那两条各自的配图。老虎机没有——它那句提示的配图是当局现抽的那两个
+ *  得分图案，离开那一局就无从画起。 */
+export type ExtraTip = 'bomb' | 'flip';
+const TIP_ART: Record<ExtraTip, string> = {
+  bomb: bombTipArt('square'),
+  flip: flipTipArt('square'),
+};
+const ALL_TIPS: readonly ExtraTip[] = ['bomb', 'flip'];
 
 const esc = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -74,6 +83,25 @@ export interface RulesModalOptions {
    * ——绝大多数调用方都不该关心这件事。
    */
   triangle?: boolean;
+  /**
+   * 正在打的是哪一族棋盘。给了就把第 4 条换成这一族自己那一句（小球留空球、
+   * 方块拿走不再出现、三角留空三角），配图也跟着换成这一族的画法。
+   *
+   * 不给 = 玩家还没挑玩法（小红书那个信息页的入口），那时候讲通稿——两边都得
+   * 说，因为他等下可能去玩任何一个。
+   */
+  shape?: RuleShape;
+  /**
+   * 底下那几条附注里，这一次要摆哪几条。
+   *
+   * 玩家的原话：「在每个游戏界面里的暂停里的怎么玩？教学中 都是针对这个玩法
+   * 的内容……现在在基础玩法里的教学会带有特殊玩法的规则」。所以局中开的这一
+   * 屏只摆当局那一条：基础局一条都没有（连那道分档的黑线也不画），炸弹局只有
+   * 炸弹，无限反转局只有无限反转。
+   *
+   * 不给 = 摆齐（没有当局可言的那个入口）。给空数组就是一条都不摆。
+   */
+  tips?: readonly ExtraTip[];
   /** 关掉之后回哪儿。 */
   onClose?: () => void;
   /**
@@ -94,11 +122,12 @@ export interface RulesModalOptions {
  * 各端自己那套 backNav 接）。
  */
 export function openRulesModal(opts: RulesModalOptions): () => void {
-  const { lang, onClose, onStory } = opts;
+  const { lang, onClose, onStory, shape } = opts;
   const triangle = opts.triangle ?? hasTriangle;
+  const tips = opts.tips ?? ALL_TIPS;
   const s = STRINGS[lang];
-  const rules = TUTORIAL_RULES[lang];
-  const art = ruleArt(triangle);
+  const rules = shape ? tutorialRules(lang, shape) : TUTORIAL_RULES[lang];
+  const art = ruleArt(triangle, shape);
   // 两颗分镜键上的字。图本身带着 Illustrator 留下的 <title>编组</title>，光靠
   // 里面的文字读出来会是「编组方块」——所以名字自己写一遍，图那半边设成
   // aria-hidden。
@@ -134,14 +163,16 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
             </div>`,
           )
           .join('')}
-        <div class="howto-split" aria-hidden="true"></div>
-        ${EXTRA_TIPS.map(
-          ({ key, art: tip }) => `<div class="tut-rule tut-rule--extra">
+        ${tips.length ? '<div class="howto-split" aria-hidden="true"></div>' : ''}
+        ${tips
+          .map(
+            (key) => `<div class="tut-rule tut-rule--extra">
               <span class="tut-rule-num tut-rule-num--word">${esc(menuTag(lang, key))}</span>
-              <span class="tut-rule-art">${tip}</span>
+              <span class="tut-rule-art">${TIP_ART[key]}</span>
               <span class="tut-rule-text">${esc(MODE_TIPS[lang][key])}</span>
             </div>`,
-        ).join('')}
+          )
+          .join('')}
       </div>
       <div class="btn-row"><button class="primary" id="howtoOkBtn">${esc(s.gotItBtn)}</button></div>
     </div>

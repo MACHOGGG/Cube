@@ -1811,30 +1811,42 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
  * 用不上的话。玩家的原话——小球那一局「在文字内容中也去除所有与方块有关的
  * 内容」，方块那一局「只讲方块连成一行/列后会完全消除」。
  *
- * 只有第 4 条要分：别的五条讲的是正反面、凑图案、结束、综合得分，两种图形
+ * 只有第 4 条要分：别的五条讲的是正反面、凑图案、结束、综合得分，几种图形
  * 一个样。
+ *
+ * 三角这一句是后补的（玩家的原话：「在每个游戏界面里的暂停里的怎么玩？教学
+ * 中 都是针对这个玩法的内容」）——局中那一屏认得出自己是哪一族，就不该再念
+ * 别人的规矩。三角的行为和小球一样：最少 3 个，消掉之后原地留下一个空三角
+ * （见 shapes/triangle.ts 的 MIN_LINE_BONUS_LEN 与 applyLineBonus，那里把格子
+ * 涂成 BLANK 而不是拿走）。只有方块是真的拿走不再出现。
  */
-export const TUTORIAL_RULE4: Record<Lang, Record<'circle' | 'square', string>> = {
+/** 第 4 条按族分。三副棋盘各有各的说法，别的五条通用。 */
+export type RuleShape = 'circle' | 'square' | 'triangle';
+export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
     circle: 'Backs of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty balls behind.',
     square: 'Backs of one colour filling a whole row or column score and clear away for good.',
+    triangle: 'Backs of one colour filling a whole line score and clear — at least 3 of them, and they leave empty triangles behind.',
   },
   fr: {
     circle: 'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et ils laissent des billes vides.',
     square: 'Des versos de même couleur sur toute une ligne ou colonne marquent et disparaissent définitivement.',
+    triangle: 'Des versos de même couleur sur toute une ligne marquent et disparaissent — au moins 3, et ils laissent des triangles vides.',
   },
   zhHant: {
     circle: '反面同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空球。',
     square: '反面同色連成一行或一列，方塊就完全消除，不再出現。',
+    triangle: '反面同色連成一整條線，得分並消除；最少 3 個，消掉後留下空三角。',
   },
   zhHans: {
     circle: '反面同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空球。',
     square: '反面同色连成一行或一列，方块就完全消除，不再出现。',
+    triangle: '反面同色连成一整条线，得分并消除；最少 3 个，消掉后留下空三角。',
   },
 };
 
 /** 教学条那一局要念的六条：第 4 条换成这个形状自己那一句，其余照通稿。 */
-export function tutorialRules(lang: Lang, shape: 'circle' | 'square'): string[] {
+export function tutorialRules(lang: Lang, shape: RuleShape): string[] {
   const base = TUTORIAL_RULES[lang] ?? TUTORIAL_RULES.zhHans;
   const four = (TUTORIAL_RULE4[lang] ?? TUTORIAL_RULE4.zhHans)[shape];
   return base.map((t, i) => (i === 3 ? four : t));
