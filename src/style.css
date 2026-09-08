@@ -267,6 +267,33 @@ h1 {
 }
 .tag-line { text-align: center; color: var(--ink-soft); font-size: 0.9rem; margin: -8px 0 4px; }
 
+/* 屋主走了、这一局就地转成单人时飘过的那一句（见 ui/scoreboard.ts 的
+   goSolo）。位置就在标语底下、HUD 上面——版图一格都不占，所以既不挡正在打
+   的这一局，也不用玩家按什么把它关掉：淡进来、停一会儿、自己飘走。 */
+.solo-flyby {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin: 0 auto 4px;
+  max-width: 22em;
+  opacity: 0;
+  animation: solo-flyby 6s ease-in-out forwards;
+}
+@keyframes solo-flyby {
+  0% { opacity: 0; transform: translateY(8px); }
+  12% { opacity: 1; transform: translateY(0); }
+  78% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+/* 关掉动画的机器上不要它上下飘，但话还是要看得见、也还是要自己走。 */
+@media (prefers-reduced-motion: reduce) {
+  .solo-flyby { animation: solo-flyby-still 6s linear forwards; }
+  @keyframes solo-flyby-still {
+    0%, 100% { opacity: 0; }
+    12%, 78% { opacity: 1; }
+  }
+}
+
 /* Every Slides masthead breathes, everywhere it appears — the same pulse the
    opening language page uses, so the wordmark reads as one living thing across
    the app rather than only being alive on the first screen.

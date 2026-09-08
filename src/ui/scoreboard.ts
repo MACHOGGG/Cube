@@ -242,6 +242,11 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     row?.classList.add('controls--solo');
     const pause = document.getElementById('stopBtn');
     if (pause) pause.hidden = false;
+    // 版图上一格都没变，名单却忽然没了——不说一句，玩家只会以为哪里出了错。
+    // 一句话从标语下面飘过去就够（玩家的原话：「在非游戏版图内出现一句标语
+    // 《屋主暂时离开，正在独自游玩》飘过就好」）：不挡棋盘、不用按、说完自
+    // 己走，这一局照打不误。
+    flyby(s.mpHostAwaySolo);
   };
 
   /**
@@ -286,7 +291,26 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     box.querySelector<HTMLButtonElement>('#roomLockedOk')?.addEventListener('click', go);
   };
 
-  /** 这间小屋结束了：屋主按了《解散小屋》，或者他的终端没了。 */
+  /**
+ * 棋盘上方飘过一句话，说完自己撤。
+ *
+ * 摆在标语底下、HUD 上面——那一块是页面自己的地方，版图一格都不占，所以它
+ * 既不会挡住正在打的这一局，也不用玩家按任何东西把它关掉。
+ */
+function flyby(text: string): void {
+  const anchor = document.querySelector('.app--game .tag-line');
+  if (!anchor || !anchor.parentElement) return;
+  const el = document.createElement('p');
+  el.className = 'solo-flyby';
+  el.textContent = text;
+  anchor.insertAdjacentElement('afterend', el);
+  el.addEventListener('animationend', () => el.remove());
+  // 动画被系统关掉（prefers-reduced-motion 之外还有直接禁掉动画的机器）时
+  // animationend 不会来：兜一个底，到点无论如何撤掉。
+  window.setTimeout(() => el.remove(), 9000);
+}
+
+/** 这间小屋结束了：屋主按了《解散小屋》，或者他的终端没了。 */
   const roomOver = (state: RoomState) =>
     state.ended || hostTroubleIn(state, iAmHost()) === 'gone';
 

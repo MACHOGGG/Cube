@@ -937,9 +937,15 @@ async function end(res, body) {
       continue;
     }
     const next = bankRound(seat, hash.meta.round, hash.meta.startAt || 0);
-    // The round just played is what the card is about, so it stays readable
-    // rather than being zeroed for a next round that will never come.
-    next.score = Math.max(0, Math.floor(Number(seat.score) || 0));
+    // score 不写回去——bankRound 已经把这一局并进 total 了。
+    //
+    // 从前这儿有一行 `next.score = seat.score`，本意是「最后这一局是这张卡要
+    // 讲的事，留着别清零」。可屏幕上每一处总分算的都是 total + score（见
+    // ui/roomCard.ts 的 liveTotal、multiplayer.ts 的排行、roomNotices.ts），于
+    // 是最后一局被加了两遍：三个人实打 300 分，那张要发出去的小屋战绩图上写
+    // 的是 500。开下一局那条路（next）不写回，所以只有「解散」这一条路上错。
+    //
+    // 留着也没有意义：没有任何一处单独读这一局的分，它只是 total 的加数。
     next.finished = true;
     next.seconds = seat.seconds ?? null;
     banked[field] = next;

@@ -179,12 +179,22 @@ const ROTATE_HINT = (copy: string | null) => `
 export { CTL_PAUSE, CTL_FINISH, CTL_LEAVE, CTL_BACK } from './ctlIcons';
 
 /**
- * 随机得分目标只开在三个基础玩法上，玩法 id 就是族名——唯一要小心的是三角：
- * 主菜单上《三角》后面装的是 triangleBig.ts（它自己的 id 叫 'triangle'），
- * 两个三角 2026-09 对调过。所以这里认的是 id，不是文件名。
+ * 认的是 id 的**前缀**，不是那三个基础 id。八副棋盘的 id 就是按家族起的：
+ *
+ *   square  squareDiamond                     → 方块家
+ *   circle  circleHex  circleSeven            → 小球家
+ *   triangle  triangleBig  triangleAdvanced   → 三角家
+ *
+ * 从前这儿写的是「square 归方块、circle 归小球、其余一律归三角」——菱形方块、
+ * 六边形小球、七色圆球三副棋盘于是全被当成三角，暂停里的《怎么玩》第 4 条给
+ * 他讲的是三角的说法（最少 3 个、消掉留下空三角），而他眼前那副棋盘消掉是直
+ * 接拿走的。玩家一脸问号：是不是进错了玩法。
+ *
+ * 唯一要小心的是三角：主菜单上《三角》后面装的是 triangleBig.ts（它自己的 id
+ * 叫 'triangle'），两个三角 2026-09 对调过。按前缀认就不受这件事影响。
  */
 const familyOf = (shapeId: string): Family =>
-  shapeId === 'square' ? 'square' : shapeId === 'circle' ? 'circle' : 'triangle';
+  shapeId.startsWith('circle') ? 'circle' : shapeId.startsWith('triangle') ? 'triangle' : 'square';
 
 /** 三个基础玩法的棋盘。除它们之外的都是「特殊布局」——格子怎么摆不一样，规矩
  *  一条没变（菱形方块、六边形小球、六边形三角、菱形小球、V 字三角）。 */

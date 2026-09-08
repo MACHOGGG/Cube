@@ -90,7 +90,6 @@ export interface I18nStrings {
   flipSpeedPick: string;
   totalScoreTitle: string;
   totalScoreSync: string;
-  exclusiveEntry: string;
   // ---- tutorial picker / generic back buttons ----
   tutorialPickerTitle: string;
   tutorialPickerTagline: string;
@@ -324,6 +323,7 @@ export interface I18nStrings {
   /** 屋主散场时，还在打的人看到的那句话。 */
   /** 屋主中途散场，而这个人没权限单独打这个玩法：一句话，按下去回主页。 */
   mpHostLeftLocked: string;
+  mpHostAwaySolo: string;
   /** 知道了。 */
   mpOk: string;
   /** 屋主还在，只是这会儿听不见他——网络卡了，不是走了。 */
@@ -404,7 +404,6 @@ export interface I18nStrings {
   perfBonusLabel: string;
   timeMultLabel: string;
   neverFlippedLabel: string;
-  remainingLabel: string;
   defaultPenaltyLabel: string;
   bombPenaltyLabel: string;
   timeUpReason: string;
@@ -474,7 +473,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: 'Base games',
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
-    flipModeTagline: 'Scoring flips pieces both ways · star rows never clear · 60 s',
+    flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 60 s',
     flipScoringHint: 'Streak bonus toned down: each consecutive score ×1.5 · no time bonus',
     sectionMore: 'More layouts',
     bombBasicTitle: 'Basic bomb',
@@ -517,7 +516,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: 'Recommended',
     totalScoreTitle: 'Total score',
     totalScoreSync: 'Slides Genius keeps every run forever',
-    exclusiveEntry: 'Genius',
     tutorialPickerTitle: 'How to slide?',
     tutorialPickerTagline: 'Pick a game to watch its tutorial again',
     backToMenu: 'Back to menu',
@@ -678,6 +676,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinishConfirm: 'Done?',
     mpRoomCancelled: 'The host has wandered off — the room is closed for now',
     mpHostLeftLocked: 'The host has left and the room is closed for now — come back in a bit?',
+    mpHostAwaySolo: 'The host has stepped away · playing on your own now',
     mpOk: 'ok',
     mpHostFixing: 'The host will be right back',
     mpErrNoRoom: 'No room with that code.',
@@ -741,7 +740,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     perfBonusLabel: 'Hit-rate bonus',
     timeMultLabel: 'Time multiplier',
     neverFlippedLabel: 'Never became a star',
-    remainingLabel: 'Flipped, unfinished',
     defaultPenaltyLabel: 'Penalty',
     bombPenaltyLabel: 'Bomb penalty',
     timeUpReason: "Time's up",
@@ -803,7 +801,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: 'Jeux de base',
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
-    flipModeTagline: 'Marquer retourne les pièces dans les deux sens · les étoiles ne s’effacent jamais · 60 s',
+    flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 60 s',
     flipScoringHint: 'Bonus de série réduit : chaque score consécutif ×1,5 · pas de bonus de temps',
     sectionMore: 'Plus de plateaux',
     bombBasicTitle: 'Bombe de base',
@@ -846,7 +844,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: 'Recommandé',
     totalScoreTitle: 'Score cumulé',
     totalScoreSync: 'Slides Génie garde chaque partie pour toujours',
-    exclusiveEntry: 'Génie',
     tutorialPickerTitle: 'Comment glisser ?',
     tutorialPickerTagline: 'Choisissez un jeu pour revoir son tutoriel',
     backToMenu: 'Retour au menu',
@@ -1007,6 +1004,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinishConfirm: 'Terminé ?',
     mpRoomCancelled: 'L’hôte est parti — la salle est fermée pour l’instant',
     mpHostLeftLocked: 'L’hôte est parti, la salle est fermée pour l’instant — revenez un peu plus tard ?',
+    mpHostAwaySolo: 'L’hôte s’est absenté · vous jouez seul désormais',
     mpOk: 'ok',
     mpHostFixing: 'L’hôte revient tout de suite',
     mpErrNoRoom: 'Aucune salle avec ce code.',
@@ -1070,7 +1068,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     perfBonusLabel: 'Bonus de taux de réussite',
     timeMultLabel: 'Multiplicateur de temps',
     neverFlippedLabel: 'Jamais devenues étoiles',
-    remainingLabel: 'Retournées, inachevées',
     defaultPenaltyLabel: 'Pénalité',
     bombPenaltyLabel: 'Pénalité de bombe',
     timeUpReason: 'Temps écoulé',
@@ -1132,7 +1129,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: '基礎玩法',
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
-    flipModeTagline: '得分翻面來回翻，星星不消除，60 秒',
+    flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，60 秒',
     flipScoringHint: '連擊加成減弱：連續得分每次 ×1.5 · 沒有時間獎勵',
     sectionMore: '更多佈局',
     bombBasicTitle: '基礎炸彈',
@@ -1175,7 +1172,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: '推薦',
     totalScoreTitle: '累計得分',
     totalScoreSync: 'Slides 天才可永久記憶所有成績',
-    exclusiveEntry: '进阶入口',
     tutorialPickerTitle: '如何滑？',
     tutorialPickerTagline: '選擇一種玩法，重新觀看新手教學',
     backToMenu: '返回選單',
@@ -1336,6 +1332,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinishConfirm: '完成了嗎？',
     mpRoomCancelled: '屋主離家出走了，小屋暫時解散',
     mpHostLeftLocked: '屋主離開，小屋暫時解散，等一會再來？',
+    mpHostAwaySolo: '屋主暫時離開，正在獨自遊玩',
     mpOk: 'ok',
     mpHostFixing: '屋主等一下就來',
     mpErrNoRoom: '沒有這個小屋號碼。',
@@ -1399,7 +1396,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     perfBonusLabel: '有效得分率加成',
     timeMultLabel: '用時係數',
     neverFlippedLabel: '沒變成星星',
-    remainingLabel: '翻面未收尾',
     defaultPenaltyLabel: '懲罰',
     bombPenaltyLabel: '炸彈懲罰',
     timeUpReason: '時間到',
@@ -1461,7 +1457,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionBase: '基础玩法',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
-    flipModeTagline: '得分翻面来回翻，星星不消除，60 秒',
+    flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，60 秒',
     flipScoringHint: '连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励',
     sectionMore: '更多布局',
     bombBasicTitle: '基础炸弹',
@@ -1504,7 +1500,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: '推荐',
     totalScoreTitle: '累计得分',
     totalScoreSync: 'Slides 天才可永久记忆所有成绩',
-    exclusiveEntry: '进阶入口',
     tutorialPickerTitle: '如何滑？',
     tutorialPickerTagline: '选择一种玩法，重新观看新手教学',
     backToMenu: '返回菜单',
@@ -1665,6 +1660,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinishConfirm: '完成了吗？',
     mpRoomCancelled: '屋主离家出走了，小屋暂时解散',
     mpHostLeftLocked: '屋主离开，小屋暂时解散，等一会再来？',
+    mpHostAwaySolo: '屋主暂时离开，正在独自游玩',
     mpOk: 'ok',
     mpHostFixing: '屋主等一下就来',
     mpErrNoRoom: '没有这个小屋号码。',
@@ -1728,7 +1724,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     perfBonusLabel: '有效得分率加成',
     timeMultLabel: '用时系数',
     neverFlippedLabel: '没变成星星',
-    remainingLabel: '翻面未收尾',
     defaultPenaltyLabel: '惩罚',
     bombPenaltyLabel: '炸弹惩罚',
     timeUpReason: '时间到',
