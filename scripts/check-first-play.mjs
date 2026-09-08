@@ -84,23 +84,62 @@ await page.waitForTimeout(600);
 if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
 await page.waitForFunction(() => document.querySelectorAll('.tri').length > 0, { timeout: 25000 });
 await page.waitForTimeout(900);
-// 逼出几个星星面：直接翻不了，就查渲染代码有没有把边画上——先滑几下拿到得分
-const box = await page.$eval('.board', (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
-for (let i = 0; i < 40; i++) {
-  const row = 0.12 + (i % 6) * 0.15;
-  await page.mouse.move(box.x + box.w * 0.5, box.y + box.h * row);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.w * 0.5 + (i % 2 ? 70 : -70), box.y + box.h * row, { steps: 6 });
-  await page.mouse.up();
-  await page.waitForTimeout(240);
+/**
+ * 先逼出几个星星面来，才有东西可看。
+ *
+ * 这一段原来是照着 `.board` 的外框算落点，在同一条竖线上横滑 40 下，然后直
+ * 接断言。实测三次里有两次一颗星都出不来——查下来不是运气：那些跑次里棋盘
+ * 从头到尾一个格子都没动过。外框是在入场动画还没停稳的时候量的，量到的是
+ * 一个还在变的矩形，于是之后每一下都滑在棋盘外面，滑多少下都一样。
+ *
+ * 现在改成从真正的棋子身上起手：每一下都现读一枚 .tri 的中心，棋盘在哪、多
+ * 大、有没有动画都不影响。方向也补齐三条（三角能沿三条线拖），而且每滑一下
+ * 就看一眼，出星星就停。
+ */
+const starCount = () => page.evaluate(() => document.querySelectorAll('.tri line').length);
+/** 现读第 i 枚棋子的中心——不缓存，棋盘动过也不会算错。 */
+const triCenter = (i) =>
+  page.evaluate((n) => {
+    const els = document.querySelectorAll('.tri');
+    if (!els.length) return null;
+    const r = els[n % els.length].getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, i);
+// 三角能沿这三条线拖，六个方向各来一份。
+const DIRS = [
+  [1, 0], [-1, 0],
+  [0.5, 0.87], [-0.5, -0.87],
+  [0.5, -0.87], [-0.5, 0.87],
+];
+let drags = 0;
+let moved = false;
+const boardSig = () =>
+  page.evaluate(() => [...document.querySelectorAll('.tri path')].map((e) => e.getAttribute('fill')).join(','));
+const sig0 = await boardSig();
+outer: for (const span of [90, 140, 60]) {
+  for (let i = 0; i < 25; i++) {
+    for (const [dx, dy] of DIRS) {
+      const c = await triCenter(i);
+      if (!c) break outer;
+      await page.mouse.move(c.x, c.y);
+      await page.mouse.down();
+      await page.mouse.move(c.x + dx * span, c.y + dy * span, { steps: 6 });
+      await page.mouse.up();
+      drags++;
+      await page.waitForTimeout(170);
+      if (await starCount()) break outer;
+    }
+  }
 }
+moved = (await boardSig()) !== sig0;
+check('滑得动这副棋盘（滑不动的话下面两条就没在验渲染）', moved, `滑了 ${drags} 下`);
 await page.waitForTimeout(1200);
 const tri = await page.evaluate(() => {
   // 星星面认「有三笔线」；那圈灰边是同一块 svg 里一条带 stroke 的 path。
   const stars = [...document.querySelectorAll('.tri')].filter((el) => el.querySelector('line'));
   return { stars: stars.length, withRing: stars.filter((el) => el.querySelector('path[stroke]')).length };
 });
-check('三角上真的出现了星星面', tri.stars > 0, JSON.stringify(tri));
+check('三角上真的出现了星星面', tri.stars > 0, `${JSON.stringify(tri)} · 滑了 ${drags} 下`);
 check('每一枚星星面都戴着那圈灰边', tri.stars > 0 && tri.withRing === tri.stars, JSON.stringify(tri));
 
 console.log(errs.length ? '\n页面报错：' + errs.slice(0, 3).join(' | ') : '\n全程零报错');
