@@ -28,6 +28,7 @@ type Props = Record<string, string | number | boolean>;
 const FIRST_KEY = 'slides_analytics_first';
 const LAST_KEY = 'slides_analytics_last';
 const VISITS_KEY = 'slides_analytics_visits';
+const GAMES_KEY = 'slides_analytics_games';
 
 let enabled = false;
 let gaId = '';
@@ -127,6 +128,7 @@ export function initAnalytics(lang: string): void {
     first = num(FIRST_KEY) || now;
     last = num(LAST_KEY);
     visits = num(VISITS_KEY) + 1;
+    lifetimeGames = num(GAMES_KEY);
     localStorage.setItem(FIRST_KEY, String(first));
     localStorage.setItem(LAST_KEY, String(now));
     localStorage.setItem(VISITS_KEY, String(visits));
@@ -142,6 +144,11 @@ export function initAnalytics(lang: string): void {
     returning: visits > 1,
     days_since_first: Math.floor((now - first) / DAY),
     days_since_last: last ? Math.floor((now - last) / DAY) : -1,
+    // 「来的人」分两种，广告漏斗的第一格问的正是这个：这一次打开之前，这台
+    // 设备有没有打过。returning 说的是「来过没有」，这两个不是一回事——看了
+    // 一眼就走、第二天又回来的人，returning 是真的，new_player 也还是真的。
+    new_player: lifetimeGames === 0,
+    games_before: lifetimeGames,
     lang,
     screen: screenSizeBucket(),
   });
@@ -170,6 +177,21 @@ let visibleMs = 0;
 let visibleSince = 0;
 let screens = 0;
 let games = 0;
+/**
+ * 这台设备一共开过几局——跨会话算，不是这一次打开。
+ *
+ * 广告漏斗问的是「进来的人里，有几成真的开了第一局、又有几成把它打完了」，
+ * 所以「第一局」必须按设备的一生来算：同一个人第二天回来再打一局，那不是
+ * 第一局。上面那个 `games` 数的是这一次打开，两个都要，各答各的问题。
+ */
+let lifetimeGames = 0;
+/**
+ * 手上这一局是不是这台设备的第一局。
+ *
+ * 开局那一刻就定下来，结算时照着报——不在结算时重算：那时候计数器已经加过
+ * 一了，重算出来的每一局都不是第一局。
+ */
+let firstRunOpen = false;
 let durationSent = false;
 
 function startDurationTracking(): void {
@@ -230,9 +252,32 @@ export function trackScreen(screen: string): void {
   report('screen_view', { screen });
 }
 
+/**
+ * 记下又开了一局，并回答「这一局是不是这台设备的第一局」。
+ *
+ * 每次都重新读存储，不信任 initAnalytics 那时候读到的数：init 有两条提前
+ * 返回的路（不是线上的域名、insights 起不来），走了那两条 lifetimeGames 就
+ * 还是 0——照着它写回去，等于把一个老玩家抹成了新玩家。
+ *
+ * 存储被禁掉（无痕窗口）时读不到也写不进，于是每一局看上去都是第一局；这
+ * 和上面来访计数退化的方式是一致的：宁可多算，也不要漏掉真正的第一局。
+ */
+function bumpLifetimeGames(): boolean {
+  let before = lifetimeGames;
+  try {
+    before = num(GAMES_KEY);
+    localStorage.setItem(GAMES_KEY, String(before + 1));
+  } catch {
+    /* 记不住这台设备打过几局 */
+  }
+  lifetimeGames = before + 1;
+  return before === 0;
+}
+
 export function trackGameStart(shape: string, mode: string): void {
   games++;
-  report('game_start', { shape, mode });
+  firstRunOpen = bumpLifetimeGames();
+  report('game_start', { shape, mode, first: firstRunOpen });
 }
 
 export function trackGameEnd(e: {
@@ -254,6 +299,9 @@ export function trackGameEnd(e: {
     reason: e.reason,
     hazard: e.hazard,
     scored: e.score > 0,
+    // 和 game_start 上那个是同一局的同一个答案，所以「开了第一局的人里有
+    // 几成把它打完」这一格，两边的数直接就能相除。
+    first: firstRunOpen,
   });
 }
 
