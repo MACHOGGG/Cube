@@ -24,6 +24,19 @@ const base = () =>
 
 export const configured = () => Boolean(key());
 
+/**
+ * Which Creem catalogue this deployment is pointed at.
+ *
+ * It is decided by nothing but the key's prefix (see base() above), and
+ * getting it wrong is silent in the worst possible way: a test key builds a
+ * perfectly good-looking checkout page that no real card can ever pay on.
+ * That failure looks, from outside, exactly like "the subscription doesn't
+ * work" — which is what a payment provider's reviewer would report. So the
+ * mode is worth being able to read off the running deployment rather than
+ * inferring it from a dashboard.
+ */
+export const mode = () => (key().startsWith('creem_test_') ? 'test' : 'live');
+
 /** The two products 「Slides 天才」 is sold as, by billing period. */
 export const products = () => ({
   monthly: process.env.CREEM_PRODUCT_MONTHLY || '',

@@ -79,7 +79,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   zhHans: {
     pricing: {
       title: '价格与订阅',
-      intro: 'Slides 的全部玩法都免费。「Slides 天才」是可选订阅，用来解锁额外内容。订阅尚未开放，以下是开放后的条款。',
+      intro: 'Slides 的全部玩法都免费。「Slides 天才」是可选订阅，用来解锁额外内容。以下是它的条款。',
       items: [
         { term: '免费的部分', body: '方块、圆球、三角三种基础玩法，以及计时挑战、炸弹挑战和更多布局，全部免费，无广告，不需要注册。' },
         { term: '价格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最终金额以结账页上显示的为准——它可能因你所在地区的定价和当地税费而不同。价格会调整，调整只影响之后的新订阅；已经在续的那一档变动前会先通知你。', only: 'web' },
@@ -91,7 +91,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: '怎么取消', body: '随时可以在 {store} 的账号设置里取消，取消后不再产生新的扣款。已经付过费的当期会用到期末，不会立刻中断。', only: 'store' },
         { term: '退款', body: '见《退款政策》：首次订阅 14 天内可以无理由全额退款。', only: 'web' },
         { term: '退款', body: '见《退款政策》：在 App 内购买的订阅，由 {store} 按它自己的退款规则受理。', only: 'store' },
-        { term: '谁在收款', body: '订阅开放后，由 Creem 作为记录商户（Merchant of Record）代为销售、收款和开具收据。我们不接触、也不保存你的银行卡信息。', only: 'web' },
+        { term: '谁在收款', body: '由 Creem 作为记录商户（Merchant of Record）代为销售、收款和开具收据。我们不接触、也不保存你的银行卡信息。', only: 'web' },
         { term: '谁在收款', body: '由 {store} 销售、收款并开具收据。我们不接触、也不保存你的任何支付信息。', only: 'store' },
       ],
     },
@@ -168,7 +168,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   zhHant: {
     pricing: {
       title: '價格與訂閱',
-      intro: 'Slides 的全部玩法都免費。「Slides 天才」是選配訂閱，用來解鎖額外內容。訂閱尚未開放，以下是開放後的條款。',
+      intro: 'Slides 的全部玩法都免費。「Slides 天才」是選配訂閱，用來解鎖額外內容。以下是它的條款。',
       items: [
         { term: '免費的部分', body: '方塊、圓球、三角三種基礎玩法，以及計時挑戰、炸彈挑戰和更多版面，全部免費，無廣告，不需要註冊。' },
         { term: '價格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最終金額以結帳頁上顯示的為準——它可能因你所在地區的定價和當地稅費而不同。價格會調整，調整只影響之後的新訂閱；已經在續的那一檔變動前會先通知你。', only: 'web' },
@@ -180,7 +180,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: '怎麼取消', body: '隨時可以在 {store} 的帳號設定裡取消，取消後不再產生新的扣款。已經付過費的當期會用到期末，不會立刻中斷。', only: 'store' },
         { term: '退款', body: '見《退款政策》：首次訂閱 14 天內可以無理由全額退款。', only: 'web' },
         { term: '退款', body: '見《退款政策》：在 App 內購買的訂閱，由 {store} 按它自己的退款規則受理。', only: 'store' },
-        { term: '誰在收款', body: '訂閱開放後，由 Creem 作為記錄商戶（Merchant of Record）代為銷售、收款和開立收據。我們不接觸、也不保存你的信用卡資訊。', only: 'web' },
+        { term: '誰在收款', body: '由 Creem 作為記錄商戶（Merchant of Record）代為銷售、收款和開立收據。我們不接觸、也不保存你的信用卡資訊。', only: 'web' },
         { term: '誰在收款', body: '由 {store} 銷售、收款並開立收據。我們不接觸、也不保存你的任何付款資訊。', only: 'store' },
       ],
     },
@@ -257,7 +257,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   en: {
     pricing: {
       title: 'Pricing & subscription',
-      intro: 'Every game mode in Slides is free. "Slides Genius" is an optional subscription that unlocks extra content. It is not on sale yet; these are the terms it will be sold on.',
+      intro: 'Every game mode in Slides is free. "Slides Genius" is an optional subscription that unlocks extra content. These are the terms it is sold on.',
       items: [
         { term: "What's free", body: 'All three base games — squares, balls, triangles — plus the timed challenge, the bomb challenge and the extra layouts. No ads, no account needed.' },
         { term: 'Price', body: 'Currently US$1.99 per month, or US$4.99 per year. The final amount is the one shown at checkout — it can differ with the pricing for your region and with local tax. Prices change; a change applies to new subscriptions only, and you are told before the rate on a running subscription moves.', only: 'web' },
@@ -269,7 +269,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: 'Cancelling', body: 'Cancel whenever you like, in your {store} account settings: no further charges are made. The period you have already paid for runs to its end — nothing is cut off early.', only: 'store' },
         { term: 'Refunds', body: 'See the refund policy: a full, no-questions refund within 14 days of your first purchase.', only: 'web' },
         { term: 'Refunds', body: 'See the refund policy: a subscription bought in the app is refunded by {store}, under its own rules.', only: 'store' },
-        { term: 'Who takes the payment', body: 'Once the subscription opens, Creem sells it as merchant of record and handles payment and receipts. We never see or store your card details.', only: 'web' },
+        { term: 'Who takes the payment', body: 'Creem sells it as merchant of record and handles payment and receipts. We never see or store your card details.', only: 'web' },
         { term: 'Who takes the payment', body: '{store} sells it, takes the payment and issues the receipt. We never see or store anything about how you paid.', only: 'store' },
       ],
     },
@@ -346,7 +346,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   fr: {
     pricing: {
       title: 'Tarifs et abonnement',
-      intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est un abonnement facultatif qui débloque du contenu supplémentaire. Il n’est pas encore en vente ; voici les conditions qui s’appliqueront.',
+      intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est un abonnement facultatif qui débloque du contenu supplémentaire. Voici les conditions dans lesquelles il est vendu.',
       items: [
         { term: 'Ce qui est gratuit', body: 'Les trois jeux de base — carrés, billes, triangles — ainsi que le défi chronométré, le défi bombe et les dispositions supplémentaires. Sans publicité et sans compte.' },
         { term: 'Prix', body: 'Actuellement 1,99 $US par mois, ou 4,99 $US par an. Le montant final est celui affiché au paiement — il peut varier selon la tarification de votre région et la taxe locale. Les prix évoluent ; un changement ne vaut que pour les nouveaux abonnements, et vous êtes prévenu avant que le tarif d’un abonnement en cours ne change.', only: 'web' },
@@ -358,7 +358,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: 'Résiliation', body: 'Vous pouvez résilier quand vous voulez, dans les réglages de votre compte {store} : aucun nouveau prélèvement n’a lieu. La période déjà payée va jusqu’à son terme, rien n’est coupé avant.', only: 'store' },
         { term: 'Remboursement', body: 'Voir la politique de remboursement : remboursement intégral et sans motif dans les 14 jours suivant le premier achat.', only: 'web' },
         { term: 'Remboursement', body: 'Voir la politique de remboursement : un abonnement acheté dans l’application est remboursé par {store}, selon ses propres règles.', only: 'store' },
-        { term: 'Qui encaisse', body: 'Une fois l’abonnement ouvert, Creem le vend en tant que marchand officiel (merchant of record) et gère le paiement et les reçus. Nous ne voyons ni ne conservons jamais vos données bancaires.', only: 'web' },
+        { term: 'Qui encaisse', body: 'Creem le vend en tant que marchand officiel (merchant of record) et gère le paiement et les reçus. Nous ne voyons ni ne conservons jamais vos données bancaires.', only: 'web' },
         { term: 'Qui encaisse', body: '{store} vend l’abonnement, encaisse et émet le reçu. Nous ne voyons ni ne conservons rien de votre moyen de paiement.', only: 'store' },
       ],
     },

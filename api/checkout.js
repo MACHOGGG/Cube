@@ -1,4 +1,4 @@
-import { configured, creem, products, readBody, send } from './_creem.js';
+import { configured, creem, mode, products, readBody, send } from './_creem.js';
 
 /**
  * Open a Creem checkout for 「Slides 天才」 and hand back the URL to send the
@@ -10,6 +10,31 @@ import { configured, creem, products, readBody, send } from './_creem.js';
  * checkout for anything we did not put on sale.
  */
 export default async function handler(req, res) {
+  // GET is a self-check, openable in a browser: is this deployment actually
+  // able to sell anything, and out of which catalogue?
+  //
+  // It exists because the two ways this can be broken are invisible from the
+  // outside and identical to each other. Either the environment has no Creem
+  // settings at all — and the paywall then says, correctly but unhelpfully,
+  // that the subscription is not open yet — or it has *test* settings, and
+  // the checkout page opens and looks completely normal and no card on earth
+  // can complete it. Both read as "the subscription doesn't work", and
+  // guessing which one it is from the outside is not possible.
+  //
+  // Nothing secret is returned. The key never appears; what comes back is
+  // whether one is set, which catalogue its prefix points at, and whether
+  // the two product ids are filled in — all of which the paywall's own
+  // behaviour already reveals, one click at a time.
+  if (req.method === 'GET') {
+    const { monthly, yearly } = products();
+    return send(res, 200, {
+      configured: configured(),
+      mode: configured() ? mode() : null,
+      monthly: Boolean(monthly),
+      yearly: Boolean(yearly),
+      sellable: Boolean(configured() && monthly && yearly),
+    });
+  }
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   // No key, or no products configured: the subscription is not on sale yet.
   // The paywall says exactly that rather than showing a broken button.
