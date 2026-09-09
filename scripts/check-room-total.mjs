@@ -133,5 +133,54 @@ check('最后一局收完账就不再挂在手头', a.score === 0 && b.score ===
 check('两个人各打了两局', a.rounds === 2 && b.rounds === 2, `甲 ${a.rounds} · 乙 ${b.rounds}`);
 check('单局最高记的是各自最好的那一局（甲 120 · 乙 130）', a.best === 120 && b.best === 130, `甲 ${a.best} · 乙 ${b.best}`);
 
+// ── 第二场：中途掉线的人，他那半截分不该算数 ──────────────────────────────
+//
+// 「这一局结束了没有」（roundOver）除了「交了卷」和「走了」，还认第三种：某
+// 人 90 秒没消息，就不再等他。那时候他的 finished 还是 false——屋主一开下一
+// 局，start() 从前会把他掉线前最后一次心跳报上来的、根本没打完的分数当成最
+// 终成绩记进 total / best / rounds。他事后翻自己的战绩，会看到一个比实际打
+// 出来的高、又说不清哪来的数。
+//
+// 这一场非等满 90 秒不可：那正是被测的那道门槛，短一秒都进不了那条分支。
+const ROOM2_WAIT_MS = 95_000;
+
+const made2 = await room({
+  action: 'create', name: '丙', avatar: 0, seen: ['square', 'circle', 'triangle'],
+  email: genius.email, accountToken: genius.token, holderCode: genius.code,
+});
+check('第二间小屋开出来了', made2.status === 200 && /^\d{4}$/.test(made2.body.code || ''), made2.body.code || JSON.stringify(made2.body));
+const code2 = made2.body.code;
+const host2 = { code: code2, playerId: made2.body.playerId, playerToken: made2.body.playerToken };
+const j2 = await room({ action: 'join', code: code2, name: '丁', avatar: 1, seen: ['square', 'circle', 'triangle'] });
+const gone = { code: code2, playerId: j2.body.playerId, playerToken: j2.body.playerToken };
+
+const g1 = await room({ action: 'start', ...host2, mode: 'square' });
+check('那间屋的第一局开起来了', g1.status === 200 && g1.body.round === 1, `round ${g1.body.round}`);
+await untilStart(g1.body);
+// 屋主打完交卷；丁报了个半截的分数就再也没消息了（掉线 / 切后台）。
+await room({ action: 'score', ...host2, round: 1, score: 120, finished: true, seconds: 40 });
+await room({ action: 'score', ...gone, round: 1, score: 999, finished: false, seconds: 0 });
+
+console.log(`  （等 ${ROOM2_WAIT_MS / 1000} 秒——ABSENT_MS 是 90 秒，等不满就进不了被测的那条路）`);
+await new Promise((r) => setTimeout(r, ROOM2_WAIT_MS));
+
+const g2 = await room({ action: 'start', ...host2, mode: 'square' });
+check('等他等到超时之后，屋主开得了下一局', g2.status === 200 && g2.body.round === 2, JSON.stringify(g2.body).slice(0, 80));
+
+const goneSeat = seatIn(g2.body, gone.playerId);
+check(
+  '掉线那半截分没有被记进总分（应当是 0，不是 999）',
+  liveTotal(goneSeat) === 0,
+  `total ${goneSeat && goneSeat.total} + score ${goneSeat && goneSeat.score} = ${liveTotal(goneSeat)}`,
+);
+check('也没给他记上这一局（rounds 应当还是 0）', goneSeat.rounds === 0, `rounds ${goneSeat.rounds}`);
+check('单局最高也不该被这半截分顶起来', goneSeat.best === 0, `best ${goneSeat.best}`);
+check(
+  '打完了的屋主照记不误（120）',
+  liveTotal(seatIn(g2.body, host2.playerId)) === 120,
+  `${liveTotal(seatIn(g2.body, host2.playerId))}`,
+);
+await room({ action: 'end', ...host2 });
+
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

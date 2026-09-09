@@ -800,7 +800,21 @@ async function start(res, body) {
   const banked = {};
   for (const [field, seat] of Object.entries(hash)) {
     if (!field.startsWith('p:') || !seat) continue;
-    const next = bankRound(seat, hash.meta.round, hash.meta.startAt || 0);
+    // 和 end() 那条路同一把尺子：只有真的打完了这一局的人才记账——交了卷的，
+    // 和已经走了的（leave 标成 finished）。
+    //
+    // 这一句非补不可，因为「这一局算结束了没有」（roundOver）除了这两种，还
+    // 认第三种：某人 90 秒没消息，就不再等他。那时候他的 finished 还是 false
+    // ——屋主一开下一局，从前这儿会把他掉线前最后一次心跳报上来的、根本没打
+    // 完的那个分数当成最终成绩记进 total、best 和 rounds。他事后翻自己的战绩，
+    // 会看到一个比实际打出来的高、又说不清哪来的数。
+    //
+    // 昨天只改了 end()，这半边留在了姊妹函数里。两条路必须信同一套：不能一
+    // 条认「90 秒没动静=打完了」，另一条不认。
+    const done = Boolean(seat.finished) || Boolean(seat.left);
+    const next = done
+      ? bankRound(seat, hash.meta.round, hash.meta.startAt || 0)
+      : { ...seat, score: 0, finished: false, seconds: null };
     banked[field] = next;
     await hset(roomKey(code), field, next);
   }

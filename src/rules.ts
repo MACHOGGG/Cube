@@ -36,7 +36,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: '变成星星', body: '得分的图形变成星星，之后按星星的颜色继续参与配对。' },
       { term: '整线奖励', body: '一整条线（长度 ≥3）全部变成星星且颜色相同时，额外得「线长 × 线长」分，该线随后消除或变成空白。' },
       { term: '连击', body: '连续多步得分依次 ×1、×1.5、×2、×2.5……每多连一步就多 0.5 倍；某一步没得分就从 ×1 重新开始。' },
-      { term: '结束', body: '所有图形都变成星星或变空白时自动结束，也可以随时点《结束》。当某个颜色确定再也凑不出图案时，《自行结束》会亮起提醒你。' },
+      { term: '结束', body: '所有图形都变成星星或变空白时自动结束，也可以随时点《结束》。当场上再也凑不出任何得分图案时，那几枚会红一下，这一局随即自动结算。' },
       { term: '综合得分', body: '得分 × 时间系数 × (1 + 有效得分率) × 0.95^没变成星星的块数。时间系数按这一局的用时算，越快越高，单人和小屋是同一条曲线；这一局实际取到的数，结算页上写着（无限反转固定 60 秒，不算时间系数）。有效得分率 = 整局累计的得分行动 ÷ 总行动（普通图案算 1 个行动、超过 4 枚的图案算 2 个、整线消除算 3 个）。' },
     ],
     modes: [
@@ -63,7 +63,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: '變成星星', body: '得分的圖形變成星星，之後按星星的顏色繼續參與配對。' },
       { term: '整線獎勵', body: '一整條線（長度 ≥3）全部變成星星且顏色相同時，額外得「線長 × 線長」分，該線隨後消除或變成空白。' },
       { term: '連擊', body: '連續多步得分依次 ×1、×1.5、×2、×2.5……每多連一步就多 0.5 倍；某一步沒得分就從 ×1 重新開始。' },
-      { term: '結束', body: '所有圖形都變成星星或變空白時自動結束，也可以隨時點《結束》。當某個顏色確定再也湊不出圖案時，《自行結束》會亮起提醒你。' },
+      { term: '結束', body: '所有圖形都變成星星或變空白時自動結束，也可以隨時點《結束》。當場上再也湊不出任何得分圖案時，那幾枚會紅一下，這一局隨即自動結算。' },
       { term: '綜合得分', body: '得分 × 時間係數 × (1 + 有效得分率) × 0.95^沒變成星星的塊數。時間係數按這一局的用時算，越快越高，單人和小屋是同一條曲線；這一局實際取到的數，結算頁上寫著（無限反轉固定 60 秒，不算時間係數）。有效得分率 = 整局累計的得分行動 ÷ 總行動（普通圖案算 1 個行動、超過 4 枚的圖案算 2 個、整線消除算 3 個）。' },
     ],
     modes: [
@@ -90,7 +90,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: 'Turning into a star', body: 'Pieces that score turn into stars and keep playing, now matching on the star\'s colour.' },
       { term: 'Full-line bonus', body: 'When a whole line (3 or longer) is all dot-faced in one dot colour, it pays its length squared, then clears or turns blank.' },
       { term: 'Streak', body: 'Consecutive scoring moves pay ×1, ×1.5, ×2, ×2.5 and so on — half a multiplier more each time. One move without a score resets it to ×1.' },
-      { term: 'Ending', body: 'The run ends when every tile is dot-faced or blank; you can also stop any time with End. When a colour provably can never flip again, the "Stop here" button lights up to tell you.' },
+      { term: 'Ending', body: 'The run ends when every tile is dot-faced or blank; you can also stop any time with End. When no scoring shape is possible anywhere on the board, those pieces flash red and the run scores itself.' },
       { term: 'Final score', body: 'points × time factor × (1 + hit rate) × 0.95 per piece that never became a star. The time factor comes from how long the run took — faster is higher, on the same curve solo and in a room — and the results screen prints the exact figure this run got (Endless flip is a fixed 60 seconds and takes no time factor). Hit rate = scoring actions ÷ total actions over the whole run (an ordinary pattern counts 1, one grown past 4 tiles counts 2, a full-line clear counts 3).' },
     ],
     modes: [
@@ -117,7 +117,7 @@ export const RULES: Record<Lang, RuleBook> = {
       { term: 'Devenir une étoile', body: 'Les pièces qui marquent deviennent des étoiles et continuent de jouer, en s\'associant désormais par la couleur de l\'étoile.' },
       { term: 'Bonus de ligne', body: 'Quand une ligne entière (3 ou plus) est faite d\'étoiles d\'une seule couleur, elle rapporte sa longueur au carré, puis disparaît ou devient vierge.' },
       { term: 'Série', body: 'Les coups gagnants consécutifs valent ×1, ×1,5, ×2, ×2,5… soit un demi-multiplicateur de plus à chaque fois. Un coup sans point remet la série à ×1.' },
-      { term: 'Fin de partie', body: 'La partie se termine quand toutes les pièces sont des étoiles ou vierges ; vous pouvez aussi arrêter à tout moment. Quand une couleur ne peut plus jamais devenir étoile, le bouton « Arrêter ici » s\'allume pour vous prévenir.' },
+      { term: 'Fin de partie', body: 'La partie se termine quand toutes les pièces sont des étoiles ou vierges ; vous pouvez aussi arrêter à tout moment. Quand plus aucun motif ne peut être formé sur le plateau, ces pièces clignotent en rouge et la partie se conclut d\'elle-même.' },
       { term: 'Score final', body: 'points × facteur temps × (1 + taux de réussite) × 0,95 par pièce jamais devenue étoile. Le facteur temps dépend de la durée de la partie — plus c\'est rapide, plus il est élevé, sur la même courbe en solo comme en salle — et l\'écran de score affiche la valeur exacte obtenue (le retournement infini dure 60 secondes fixes et n\'a pas de facteur temps). Taux de réussite = actions payantes ÷ actions totales sur toute la partie (un motif ordinaire compte 1, un motif étendu au-delà de 4 pièces compte 2, une ligne entière compte 3).' },
     ],
     modes: [

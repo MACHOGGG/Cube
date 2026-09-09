@@ -957,7 +957,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.startOverlay.classList.remove('show');
     newGame();
   });
-  refs.buttons.restart.addEventListener('click', newGame);
+  refs.buttons.restart.addEventListener('click', () => {
+    // 《再来一局》也是开一局，也要报一条 game_start。
+    //
+    // 从前这儿是直接 newGame，整条埋点被绕过去了，坏的是两件事：重开的那些
+    // 局在后台只有 game_end、没有对应的 game_start（「哪个玩法最受欢迎」因此
+    // 少数了一大截）；而且 first 这个标记是在 trackGameStart 里定的，不再报
+    // 就不再重算，于是第二局、第三局的 game_end 仍然带着 first: true。一个新
+    // 玩家打完第一局接着连打两局——最平常不过的操作，不用刷新也不用离开页面
+    // ——后台算出来的「首局完成率」就会超过 100%，一个不可能出现的数。
+    //
+    // 埋在这儿而不是埋进 newGame：newGame 还有一条练习盘的路（endGame 里那
+    // 一句），那种盘本来就不上报。
+    if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
+    newGame();
+  });
   // 多人局里没有这颗键——一场同步竞赛暂停不了，那个位置让给了《离开房间》。
   refs.buttons.stop?.addEventListener('click', doPause);
   refs.buttons.continueBtn.addEventListener('click', doResume);

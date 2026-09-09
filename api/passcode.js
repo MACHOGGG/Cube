@@ -205,7 +205,29 @@ async function change(res, email, password, newPassword) {
   // remaining time included — and replaces only the secret and its salt.
   // A change keeps what the account is worth and retires every token, so a
   // device someone else still holds stops working the moment you change it.
-  const next = { ...account, ...fresh, until: account.until, plan: account.plan };
+  //
+  // 显式带过去的这几样，是 fresh 里有同名字段、会被它的出厂值盖掉的：
+  //   until / plan  这个账号值多少钱——内部码剩下的时间、订阅的档位。
+  //   news / newsAt 他愿不愿意收邮件，以及什么时候说的。改一把钥匙不该顺手
+  //                 把这个意愿清成「不愿意」——_accounts.js 里那段注释讲得很
+  //                 清楚：真被问起来，要拿得出「谁、什么时候、对什么说的同
+  //                 意」。改密码把 newsAt 抹掉，那份底就没了。
+  //   createdAt     注册时间。不带过去的话，一个老玩家改一次密码，发码页上
+  //                 看就成了「今天刚注册」。
+  //
+  // 没带过去的是故意的：salt / hash / token / tokens 就是这次要换的东西（换
+  // 钥匙，并把别人手上还留着的设备一起撤掉）；fails / lockUntil 归零也是对
+  // 的——他刚用旧密码证明过自己是本人。blocked 走不到这儿（checkPin 判 blocked
+  // 会先 423 返回），所以它取 fresh 的 false 不影响任何账号。
+  const next = {
+    ...account,
+    ...fresh,
+    until: account.until,
+    plan: account.plan,
+    news: account.news,
+    newsAt: account.newsAt,
+    createdAt: account.createdAt,
+  };
   await saveAccount(address, next);
   return send(res, 200, { ok: true, email: address, token: next.token });
 }
