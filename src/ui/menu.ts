@@ -2,6 +2,7 @@ import type { ShapeCardMeta } from '../shapes/types';
 import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
 import { GENIUS_LAYOUTS, isLayoutLocked } from '../engine/geniusContent';
+import { LEGAL, LEGAL_ORDER, LEGAL_PATH } from '../legal';
 import { isGenius } from '../engine/subscription';
 import { shapeName } from './shapeLabels';
 import { menuTag } from './menuTags';
@@ -176,6 +177,15 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         </div>
       </header>
       <div class="home-grid" id="homeGrid"></div>
+      <!-- 五份法务文档的常驻入口。它们在个人主页里也有一份（点开是弹窗），
+           这里摆的是真链接：收单方的审核要能从落地页一眼看见、点得进去，也
+           要有个网址能填进后台的表格——弹窗给不了网址。静态页由
+           scripts/build-legal.mjs 从同一份 src/legal.ts 生成，两处文案不会分叉。 -->
+      <footer class="home-legal">
+        ${LEGAL_ORDER.map(
+          (k) => `<a href="${LEGAL_PATH[k]}">${LEGAL[lang][k].title}</a>`,
+        ).join('')}
+      </footer>
     </div>
   `;
   // 卡底下那行小字，宽窄两版都给。宽屏那三排要站在一屏里，多出来的这一行高

@@ -3,6 +3,8 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "//cleanUrls": "把 /terms 映到 terms.html——那五份法务文档的网址（见 scripts/build-legal.mjs）。不开这一条，/terms 是 404。",
+  "cleanUrls": true,
   "headers": [
     {
       "source": "/assets/(.*)",

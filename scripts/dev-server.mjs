@@ -105,6 +105,15 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': TYPES[extname(path)] ?? 'application/octet-stream' });
     res.end(file);
   } catch {
-    res.writeHead(404).end('not found');
+    // 没这个文件，就再试一次 `.html`——Vercel 的 cleanUrls 就是这么把 /terms
+    // 发成 terms.html 的（见 vercel.json）。本地不照做的话，那五份法务页在
+    // 门里全是 404，而线上是好的：两边不一样，门就白跑了。
+    try {
+      const alt = await readFile(path + '.html');
+      res.writeHead(200, { 'Content-Type': TYPES['.html'] });
+      res.end(alt);
+    } catch {
+      res.writeHead(404).end('not found');
+    }
   }
 }).listen(port, () => console.log(`serving ${root} + api/ on http://localhost:${port}`));

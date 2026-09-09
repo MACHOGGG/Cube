@@ -1058,6 +1058,28 @@ button:hover { filter: brightness(1.05); }
    五排（一排最多三张）——顺序是同一条链，只是断在不同的地方。每张一样大，
    张数少的那几排就窄一些、照样居中。 */
 .home-grid { display: flex; flex-direction: column; gap: 20px; align-items: center; }
+
+/* 主菜单最底下那排法务链接（价格 / 条款 / 退款 / 隐私 / 联系）。
+   摆在这儿是给两种人看的：想读条款的玩家，和收单方的审核员——后者打开落地页
+   只停几秒，条款藏在个人主页第三层他不会去翻。字小、色淡、不抢玩法卡，但一直
+   在，而且是真链接（有网址，填得进审核表）。
+
+   只在窄屏出现。宽屏那一版是按「整页装进一屏、不用滚」逐像素调出来的：实测
+   1440×820，最后一排卡片下缘 708，底排导航从 720 起，中间只剩 12px，而这一排
+   最矮也要 21px。上下两条边又都归别人（上面是标题那块招牌，下面是整条可点的
+   底排导航），绝对定位放哪个角落都会压到它们；横向也满，三张卡是 flex:1 撑满
+   整行的。所以宽屏上这五个入口走另外两条路：个人主页底部那五行，以及
+   /pricing /terms /refund /privacy /contact 这五个网址本身。 */
+.home-legal {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 4px 16px; margin: 26px auto 0; max-width: 34rem; padding: 0 12px;
+}
+.home-legal a {
+  color: var(--ink-soft); font-size: 0.78rem; line-height: 1.9;
+  text-decoration: none; border-bottom: 1px solid transparent;
+}
+.home-legal a:hover, .home-legal a:focus-visible { color: var(--accent); border-bottom-color: currentColor; }
+.home-page--wide .home-legal { display: none; }
 .home-row {
   /* 一排里按底边对齐，不是居中。
      卡的高度不齐：炸弹那张是一整块板，比一张方卡片高一截；V 型三角那张图是
