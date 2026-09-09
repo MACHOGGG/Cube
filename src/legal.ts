@@ -106,7 +106,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: '免费的部分', body: '方块、圆球、三角三种基础玩法，以及计时挑战、炸弹挑战，全部免费，无广告，不需要注册。特殊布局里三种形状各有一副也是免费的；另外两副属于订阅，在主菜单上挂着锁，点开看得到是什么。' },
         { term: '价格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最终金额以结账页上显示的为准——它可能因你所在地区的定价和当地税费而不同。价格会调整，调整只影响之后的新订阅；已经在续的那一档变动前会先通知你。', only: 'web' },
-        { term: '价格', body: '由 {store} 按你所在地区的价目档显示并收取，确认付款那一页上的金额就是最终金额。在亚洲、非洲、南美洲等欧美以外的地区，定价相当于 2 元／月、9.9 元／年，并按同等价值折算成当地货币。', only: 'store' },
+        { term: '价格', body: '由 {store} 按你所在地区的价目档显示并收取，确认付款那一页上的金额就是最终金额。', only: 'store' },
         { term: '订阅周期', body: '按你选的周期计费：月订阅每 1 个月一期，年订阅每 12 个月一期，都从付款当天起算。' },
         { term: '自动续费', body: '每期结束时会自动续期并按当时的价格扣款，直到你取消为止。续期提醒和收据由收款方 Creem 发出。', only: 'web' },
         { term: '自动续费', body: '每期结束时由 {store} 自动续期并扣款，直到你取消为止。续期提醒按 {store} 自己的规则发出。', only: 'store' },
@@ -195,7 +195,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: '免費的部分', body: '方塊、圓球、三角三種基礎玩法，以及計時挑戰、炸彈挑戰，全部免費，無廣告，不需要註冊。特殊版面裡三種形狀各有一副也是免費的；另外兩副屬於訂閱，在主選單上掛著鎖，點開看得到是什麼。' },
         { term: '價格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最終金額以結帳頁上顯示的為準——它可能因你所在地區的定價和當地稅費而不同。價格會調整，調整只影響之後的新訂閱；已經在續的那一檔變動前會先通知你。', only: 'web' },
-        { term: '價格', body: '由 {store} 按你所在地區的價目檔顯示並收取，確認付款那一頁上的金額就是最終金額。在亞洲、非洲、南美洲等歐美以外的地區，定價相當於 2 元／月、9.9 元／年，並按同等價值折算成當地貨幣。', only: 'store' },
+        { term: '價格', body: '由 {store} 按你所在地區的價目檔顯示並收取，確認付款那一頁上的金額就是最終金額。', only: 'store' },
         { term: '訂閱週期', body: '按你選的週期計費：月訂閱每 1 個月一期，年訂閱每 12 個月一期，都從付款當天起算。' },
         { term: '自動續費', body: '每期結束時會自動續期並按當時的價格扣款，直到你取消為止。續期提醒和收據由收款方 Creem 寄出。', only: 'web' },
         { term: '自動續費', body: '每期結束時由 {store} 自動續期並扣款，直到你取消為止。續期提醒按 {store} 自己的規則發出。', only: 'store' },
@@ -284,7 +284,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: "What's free", body: 'All three base games — squares, balls, triangles — plus the timed challenge and the bomb challenge. No ads, no account needed. Among the extra layouts each of the three shapes has one that is free as well; the remaining two belong to the subscription and carry a lock on the home screen.' },
         { term: 'Price', body: 'Currently US$1.99 per month, or US$4.99 per year. The final amount is the one shown at checkout — it can differ with the pricing for your region and with local tax. Prices change; a change applies to new subscriptions only, and you are told before the rate on a running subscription moves.', only: 'web' },
-        { term: 'Price', body: 'Shown and charged by {store} at the price tier for your region; the amount on the confirmation sheet is the final one. Across Asia, Africa, South America and other regions outside Europe and the Americas the tier is the equivalent of ¥2 per month and ¥9.9 per year, converted to the local currency at comparable value.', only: 'store' },
+        { term: 'Price', body: 'Shown and charged by {store} at the price tier for your region; the amount on the confirmation sheet is the final one.', only: 'store' },
         { term: 'Billing period', body: 'You are billed for the period you pick: a monthly subscription renews every 1 month, a yearly one every 12 months, counted from the day you pay.' },
         { term: 'Automatic renewal', body: 'The subscription renews automatically at the end of each period and is charged at the price current at that time, until you cancel. Creem, which takes the payment, sends the renewal notices and the receipts.', only: 'web' },
         { term: 'Automatic renewal', body: '{store} renews and charges it at the end of each period, until you cancel. Renewal notices go out under {store}’s own rules.', only: 'store' },
@@ -373,7 +373,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: 'Ce qui est gratuit', body: 'Les trois jeux de base — carrés, billes, triangles — ainsi que le défi chronométré et le défi bombe. Sans publicité et sans compte. Parmi les dispositions supplémentaires, chacune des trois formes en a une gratuite ; les deux autres relèvent de l’abonnement et portent un cadenas sur l’écran d’accueil.' },
         { term: 'Prix', body: 'Actuellement 1,99 $US par mois, ou 4,99 $US par an. Le montant final est celui affiché au paiement — il peut varier selon la tarification de votre région et la taxe locale. Les prix évoluent ; un changement ne vaut que pour les nouveaux abonnements, et vous êtes prévenu avant que le tarif d’un abonnement en cours ne change.', only: 'web' },
-        { term: 'Prix', body: 'Affiché et prélevé par {store} au palier tarifaire de votre région ; le montant de l’écran de confirmation est le montant final. En Asie, en Afrique, en Amérique du Sud et dans les autres régions hors Europe et Amériques, le palier équivaut à 2 ¥ par mois et 9,9 ¥ par an, converti en monnaie locale à valeur comparable.', only: 'store' },
+        { term: 'Prix', body: 'Affiché et prélevé par {store} au palier tarifaire de votre région ; le montant de l’écran de confirmation est le montant final.', only: 'store' },
         { term: 'Période de facturation', body: 'Vous êtes facturé pour la période choisie : un abonnement mensuel se renouvelle tous les mois, un abonnement annuel tous les 12 mois, à compter du jour du paiement.' },
         { term: 'Renouvellement automatique', body: 'L’abonnement se renouvelle automatiquement à la fin de chaque période, au tarif alors en vigueur, jusqu’à ce que vous résiliiez. Les avis de renouvellement et les reçus sont envoyés par Creem, qui encaisse le paiement.', only: 'web' },
         { term: 'Renouvellement automatique', body: '{store} renouvelle et prélève à la fin de chaque période, jusqu’à ce que vous résiliiez. Les avis de renouvellement suivent les règles propres à {store}.', only: 'store' },

@@ -34,10 +34,10 @@ const normalizeCode = (code) => String(code || '').toUpperCase().replace(/[^0-9A
  * one who burned their own gift early.
  *
  * GETDEL takes the code in one step, so two people racing for the same code
- * cannot both win. An expired code is taken too and then refused: it was
- * never going to be worth anything again, and saying "expired" rather than
- * "no such code" is the difference between an answerable support question
- * and an argument.
+ * cannot both win. An expired code is taken too, then refused and put back:
+ * saying "expired" rather than "no such code" is the difference between an
+ * answerable support question and an argument, and that only holds if the
+ * same code still answers the same way the second time it is typed.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
@@ -70,11 +70,6 @@ export default async function handler(req, res) {
 
   const ticketDoc = await takeOnce('code:' + ticket);
   if (!ticketDoc) return send(res, 404, { error: 'code' });
-  if (ticketDoc.expiresAt && Date.now() > ticketDoc.expiresAt) {
-    return send(res, 410, { error: 'expired' });
-  }
-
-  const plan = ticketDoc.plan;
 
   /**
    * 码已经被拿走了，但这几行还没写进账户——中间任何一步摔了，就得把码放回去。
@@ -88,6 +83,13 @@ export default async function handler(req, res) {
    * 所以照 passcode.js 的 bind() 那个样子来：失败就把整份 ticketDoc 原样写
    * 回去。放回去这一步自己也可能失败，那就真没办法了——但它把「一定丢」变成
    * 了「两次都刚好摔了才丢」，而且日志里留得下痕迹。
+   *
+   * 过期的码也要放回去，理由是另一条：这个文件开头写着「说『已过期』而不是
+   * 『查无此码』，是能答的客服问题和一场争执之间的差别」——可码在 takeOnce
+   * 那一步就已经从库里拿走了。玩家把同一张过期码再输一遍（他一定会：第一遍
+   * 多半以为自己打错了），得到的是「这张码不存在或已经用过」，两句话对不上；
+   * 客服想查也查不到，库里已经没有这张码了。放回去之后，同一张过期码答的永
+   * 远是同一句，而它本来就不会再值任何东西，放回去不多给谁一分钱。
    */
   const giveBack = async () => {
     try {
@@ -96,6 +98,13 @@ export default async function handler(req, res) {
       console.error('兑换码放不回去了', ticket, err);
     }
   };
+
+  if (ticketDoc.expiresAt && Date.now() > ticketDoc.expiresAt) {
+    await giveBack();
+    return send(res, 410, { error: 'expired' });
+  }
+
+  const plan = ticketDoc.plan;
 
   /**
    * 留个痕：这张码什么时候、被谁用掉的。

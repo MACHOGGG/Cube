@@ -114,6 +114,8 @@ function failureText(reason: PurchaseFailure, lang: Lang): string {
       return s.restoreNothing;
     case 'server':
       return s.serverBusy;
+    case 'tooMany':
+      return s.tooManyTries;
     default:
       return s.purchaseNetwork;
   }

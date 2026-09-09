@@ -1,4 +1,4 @@
-import { STRINGS, type Lang } from '../i18n';
+import { STRINGS, type Lang, type RuleShape } from '../i18n';
 import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
@@ -193,6 +193,20 @@ export { CTL_PAUSE, CTL_FINISH, CTL_LEAVE, CTL_BACK } from './ctlIcons';
  */
 const familyOf = (shapeId: string): Family =>
   shapeId.startsWith('circle') ? 'circle' : shapeId.startsWith('triangle') ? 'triangle' : 'square';
+
+/**
+ * 《怎么玩》第 4 条要按哪一套讲——和上面那个「哪一家」不是同一个问题。
+ *
+ * 上面认的是棋子长什么样（老虎机要照它挑图案）；这里认的是消行之后那一格会
+ * 怎样，而菱形方块在这件事上不跟基础方块走：它最少要 3 个，消掉之后**原地留
+ * 一个空位**（shapes/squareDiamond.ts 的 MIN_LINE_BONUS_LEN，和那份文件头上
+ * 写的「like triangle/circle」），而基础方块是整块拿走、不再出现。
+ *
+ * 从前这儿直接把 familyOf 的结果递进去，于是菱形方块那一局的《怎么玩》念的
+ * 是「方块就完全消除，不再出现」——玩家眼前明明留着一排空位。
+ */
+const rulesShapeOf = (shapeId: string): RuleShape =>
+  shapeId === 'squareDiamond' ? 'squareDiamond' : familyOf(shapeId);
 
 /** 三个基础玩法的棋盘。除它们之外的都是「特殊布局」——格子怎么摆不一样，规矩
  *  一条没变（菱形方块、六边形小球、六边形三角、菱形小球、V 字三角）。 */
@@ -522,7 +536,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     }
     openRulesModal({
       lang: meta.lang,
-      shape: familyOf(meta.shapeId),
+      shape: rulesShapeOf(meta.shapeId),
       tips,
       // 无限反转局：第 4、5 条讲的事那一局不会发生（星星同色不消除、也不会全
       // 部翻成星星就结束），整条抽掉，剩下四条重新编号。

@@ -11,6 +11,7 @@ import { geniusLogoTag } from './geniusLogo';
 import { mountTitleRain, type TitleRain } from './titleRain';
 import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
+import { rankRoom } from './roomCard';
 import { hasSeenTutorial, type TutorialShape } from '../i18n';
 import {
   type Avatar,
@@ -825,9 +826,9 @@ export function renderMultiplayerPage(
    * 这段时间谁的分也不会变。
    */
   function standingsStrip(state: RoomState): string {
-    const ranked = [...state.players].sort(
-      (a, b) => b.total + b.score - (a.total + a.score) || b.best - a.best,
-    );
+    // 名次只有一处算法（roomCard.ts 的 rankRoom），这儿照调——原先这里自己
+    // 又排了一遍，并列时和服务器那头不是同一个顺序。
+    const ranked = rankRoom(state.players);
     if (state.round < 1 || !ranked.some((p) => p.total + p.score > 0)) return '';
     const meId = currentRoom()?.playerId;
     const rows = ranked

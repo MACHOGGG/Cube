@@ -107,7 +107,10 @@ export type PurchaseFailure =
   /** The request reached the server and the server could not answer. Kept
    *  apart from 'network' because telling someone whose connection is fine
    *  to check their connection sends them looking in the wrong place. */
-  | 'server';
+  | 'server'
+  /** 这条来路问得太密了（api/subscription.js 的两个限速桶）。同样不是他的网
+   *  络坏了——说成「连不上网络」他会去重连 Wi-Fi，那儿什么也修不好。 */
+  | 'tooMany';
 
 const KEY = 'slides_genius';
 
@@ -345,6 +348,16 @@ export async function restore(email?: string, password?: string): Promise<Purcha
 }
 
 /**
+ * 手上这份内部码权益还在有效期内。
+ *
+ * 「是不是内部码」和「还没过期」要一起问。只问前一半的后果见下面
+ * refreshEntitlement 里那两处注释：过期之后就再也不去问卖家了。
+ */
+function codeStillLive(): boolean {
+  return entitlement().channel === 'code' && isGenius();
+}
+
+/**
  * Quietly re-ask the seller whether the subscription is still live, and
  * settle a checkout the player has just come back from. Called once at boot;
  * it never blocks a screen and it never reports an error to anyone — with no
@@ -362,9 +375,14 @@ export async function refreshEntitlement(): Promise<void> {
         rememberPending({ kind: 'checkout', id: settled.checkoutId });
         return;
       }
-      // A redeemed code carries its own end date and cannot be extended
-      // without another code, so there is nothing to re-ask anyone about.
-      if (entitlement().channel === 'code') return;
+      // 码还在有效期内：它自带到期日，也没人能替它续，确实没什么可问的。
+      //
+      // 可**过期之后**要问。这一行从前不管到没到期一律不问，于是「先兑过一
+      // 张码、后来又刷卡订阅」的人被卡死在这儿：channel 一直停在 'code'，码
+      // 一到期应用就说他没开通，而卡还在按月扣——它再也不去问 Creem，除非他
+      // 自己想到退出重登一次。服务器那头是同一个毛病，一起改的（见
+      // api/_entitlement.js 的 resolveEntitlement）。
+      if (codeStillLive()) return;
       // Re-asking needs a credential now, and the password is deliberately
       // not kept on the device — the token issued at sign-in is. Without one
       // (a subscription that predates passwords) the cache simply stands and
@@ -376,7 +394,8 @@ export async function refreshEntitlement(): Promise<void> {
       if (current) setEntitlement(current);
       return;
     }
-    if (entitlement().channel === 'code') return;
+    // 同上：过期之后要回去问商店，不然刷卡（这里是商店订阅）那一份永远看不见。
+    if (codeStillLive()) return;
     const iap = await import('./iap');
     // Loading the store's own price list is part of the same round trip, so
     // the paywall shows Apple's or Google's figure rather than our fallback.

@@ -101,6 +101,7 @@ export async function webCheckout(period: PlanPeriod, email?: string): Promise<P
     // 真正的「连不上网络」只有一种：fetch 本身就没发出去（抛的不是 HttpError）。
     if (err instanceof HttpError) {
       if (err.status === 503) return { ok: false, reason: 'notConfigured' };
+      if (err.status === 429) return { ok: false, reason: 'tooMany' };
       return { ok: false, reason: 'server' };
     }
     return { ok: false, reason: 'network' };
@@ -203,11 +204,14 @@ export async function bindCode(
  * the hours the server had already worked out.
  */
 function failureFor(err: unknown): {
-  reason: 'wrong' | 'locked' | 'blocked' | 'server' | 'network';
+  reason: 'wrong' | 'locked' | 'blocked' | 'server' | 'network' | 'tooMany';
   retryInMs?: number;
 } {
   if (err instanceof HttpError) {
     if (err.status === 401) return { reason: 'wrong' };
+    // 限速把这条来路挡下了。落到下面那行会被算成 'network'（429 不到 500），
+    // 于是屏幕上写「连不上网络」——他的网好好的，去重连 Wi-Fi 只会白忙。
+    if (err.status === 429) return { reason: 'tooMany' };
     if (err.status === 423) {
       return err.code === 'blocked'
         ? { reason: 'blocked' }

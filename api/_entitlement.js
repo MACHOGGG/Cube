@@ -74,34 +74,59 @@ export const ownGrantLive = (account) => Boolean(account && (account.until || 0)
  * @returns {{ status: number, body: object }}
  */
 export async function resolveEntitlement(address, account, issued) {
-  if (account && (account.kind === 'code' || ownGrantLive(account))) {
-    return {
-      status: 200,
-      body: {
-        ...entitlementOf(account, address),
-        // 拿令牌来的那台设备，回给它自己那一把（issued）；拿密码来的那台，
-        // issued 是刚给它签发的新的。都没有才退回账号上最新的那一把。
-        // 几台设备同时在线，各拿各的，谁也别把谁挤掉——见 _accounts.js 的
-        // issueToken。
-        token: issued || account.token,
-        kind: 'code',
-        gifts: await liveGifts(account),
-        inbox: await liveInbox(account),
-        inboxUnseen: account.inboxUnseen || 0,
-      },
-    };
+  /** 我们自己库里那份，原样答出去。 */
+  const localAnswer = async () => ({
+    status: 200,
+    body: {
+      ...entitlementOf(account, address),
+      // 拿令牌来的那台设备，回给它自己那一把（issued）；拿密码来的那台，
+      // issued 是刚给它签发的新的。都没有才退回账号上最新的那一把。
+      // 几台设备同时在线，各拿各的，谁也别把谁挤掉——见 _accounts.js 的
+      // issueToken。
+      token: issued || account.token,
+      kind: 'code',
+      gifts: await liveGifts(account),
+      inbox: await liveInbox(account),
+      inboxUnseen: account.inboxUnseen || 0,
+    },
+  });
+
+  // 我们自己发出去的那份还活着：就地回答，Creem 从没听说过这个人。
+  if (account && ownGrantLive(account)) return localAnswer();
+
+  // 到这儿，本地那份要么没有、要么已经过期了。
+  //
+  // 这个判断从前是 `account.kind === 'code' || ownGrantLive(account)`——多出
+  // 来的那半句意味着：只要账号是内部码开的，过期之后也永远不去问 Creem。而
+  // kind 一旦写成 'code' 就没有变回来的路（见 _accounts.js 的 newAccount、
+  // passcode.js 的 change 会原样带过去），于是「先兑过一张码、后来又刷卡订
+  // 阅」的人被永久判成过期：卡按月照扣，应用照说没开通，他自己怎么弄都没用，
+  // 除非碰巧想到退出再登一次。现在过期之后照常往下走。
+  //
+  /** Creem 那头没有这个人时的兜底：内部码账号仍按本地那份如实答。
+   *
+   *  不能直接答 NOBODY——信箱（收到的内部码）、赠码和令牌都在本地那份里，
+   *  「去问了一趟 Creem」不该把它们弄丢。答出去的 active 本来就是 false。 */
+  const noCreemSub = () =>
+    account && account.kind === 'code' ? localAnswer() : { status: 200, body: NOBODY };
+
+  if (!creemConfigured()) {
+    // 问不了。刷卡那一支这是「答不上来」（503，应用说稍后再试）；内部码账号
+    // 的答案本来就在我们自己库里，如实说比 503 准确。
+    return account && account.kind === 'code'
+      ? localAnswer()
+      : { status: 503, body: { error: 'notConfigured' } };
   }
-  if (!creemConfigured()) return { status: 503, body: { error: 'notConfigured' } };
   let found;
   try {
     found = await findSubscription(address);
   } catch (err) {
     // 查无此人：对玩家就是「没有订阅」。别的错往上抛，让调用方按 502 答。
-    if (err?.status === 404) return { status: 200, body: NOBODY };
+    if (err?.status === 404) return noCreemSub();
     throw err;
   }
   const { customer, sub } = found;
-  if (!sub) return { status: 200, body: NOBODY };
+  if (!sub) return noCreemSub();
   // 订阅是活的，可从来没设过密码（窗口出现前标签页就关了）：说出来，让
   // 应用送他去设一个，而不是把订阅直接交出去。
   if (!account) return { status: 200, body: { ...NOBODY, needsPasscode: true } };

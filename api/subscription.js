@@ -10,6 +10,7 @@ import {
   saveAccount,
 } from './_accounts.js';
 import { resolveEntitlement } from './_entitlement.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
 
 /**
@@ -50,6 +51,26 @@ import { storeConfigured } from './_store.js';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
 
+  // 限速。这个接口谁都能打（它本来就是「还没登录的人来问」的那个口），每一
+  // 次都要读一次库，有几条路还要替调用方去打一次 Creem——不挡的话，一个循环
+  // 就能把 Creem 那边的额度替我们用光，也能拿密码一路撞过去。
+  //
+  // 两个桶，因为两件事要挡的东西不一样：
+  //
+  //   粗的那个管住整个接口。正常玩家每开一次网页问一次（见 engine/
+  //     subscription.ts 的 refreshEntitlement），所以一小时 120 次对一个真人
+  //     绰绰有余，对一个脚本立刻见底。挡在最前面，checkoutId 那条也一起挡。
+  //   细的那个只数「拿密码来登录」那一条（见 fromEmail）。撞密码是这里唯一
+  //     值钱的事，而真人一次登录只按一两下。账号那头本来就有锁定计数，可那
+  //     是按账号数的——脚本挨个换邮箱就绕过去了，这一层挡的正是这一种。
+  //
+  // 拿令牌来的那条路不进细桶：那是每次开网页都会走的一条，真人走得最勤。
+  // storeConfigured() 那半句和 redeem.js 一个道理：没有库就没有计数器，这一
+  // 步不能因为数不了就把人全挡在外面。
+  if (storeConfigured() && (await tooMany('sub', callerId(req), 120, 3600))) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+
   const { checkoutId, email, password, token, action } = readBody(req);
   try {
     // 「我看过了」——玩家点开内部码弹窗时说一声，主菜单那块提示就该收起来。
@@ -73,7 +94,7 @@ export default async function handler(req, res) {
       if (!configured()) return send(res, 503, { error: 'notConfigured' });
       return send(res, 200, await fromCheckout(checkoutId));
     }
-    if (email) return await fromEmail(res, String(email), password, token);
+    if (email) return await fromEmail(req, res, String(email), password, token);
     return send(res, 400, { error: 'missing' });
   } catch (err) {
     // A customer Creem has never heard of is a 404, and the honest answer to
@@ -105,7 +126,7 @@ async function fromCheckout(checkoutId) {
  * all; checking the password first means a stranger's guess costs them a
  * scrypt round and a place in the lockout counter, and tells them nothing.
  */
-async function fromEmail(res, rawEmail, password, token) {
+async function fromEmail(req, res, rawEmail, password, token) {
   // Without the store there are no accounts to check against, and a check
   // that cannot run must not be treated as a check that passed.
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
@@ -125,6 +146,11 @@ async function fromEmail(res, rawEmail, password, token) {
       issued = String(token);
     } else {
       if (!SECRET_RE.test(String(password || ''))) return send(res, 401, { error: 'wrong' });
+      // 一小时二十次密码。真人登录一次按一两下；账号自己的锁定计数是按账号
+      // 数的，脚本换个邮箱就重新开始，这一道按来路数，换邮箱绕不过去。
+      if (await tooMany('subpw', callerId(req), 20, 3600)) {
+        return send(res, 429, { error: 'tooMany' });
+      }
       const verdict = await checkPin(address, String(password), account);
       if (verdict === 'blocked') return send(res, 423, { error: 'blocked' });
       if (verdict === 'locked') {

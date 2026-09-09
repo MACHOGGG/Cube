@@ -55,9 +55,17 @@ export function shortTime(seconds: number): string {
  */
 export const liveTotal = (p: RoomPlayer): number => p.total + p.score;
 
-/** Highest total first; a tie is broken by the better single round. */
+/**
+ * Highest total first; a tie is broken by the better single round.
+ *
+ * 这一句是全站排小屋名次的那一句：小屋战绩图、散场名单、倒数那一屏都调它，
+ * 服务器那头（api/room.js）也照着同一个顺序排。名字是最后一档，纯粹为了让
+ * 打成完全一样的两行不要每次刷新都互换位置。
+ */
 export const rankRoom = (players: RoomPlayer[]): RoomPlayer[] =>
-  [...players].sort((a, b) => liveTotal(b) - liveTotal(a) || b.best - a.best);
+  [...players].sort(
+    (a, b) => liveTotal(b) - liveTotal(a) || b.best - a.best || a.name.localeCompare(b.name),
+  );
 
 /** Whoever put together the single best board, when anyone did. */
 function bestRoundOf(players: RoomPlayer[]): RoomPlayer | null {

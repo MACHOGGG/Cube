@@ -1844,26 +1844,38 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
  * 涂成 BLANK 而不是拿走）。只有方块是真的拿走不再出现。
  */
 /** 第 4 条按族分。三副棋盘各有各的说法，别的五条通用。 */
-export type RuleShape = 'circle' | 'square' | 'triangle';
+/**
+ * 《怎么玩》第 4 条按哪一套讲。
+ *
+ * 它不是「棋子长什么样」，是「消行之后那一格会怎样」——所以菱形方块自己单独
+ * 算一档：它长得是方块，可它消掉之后是**原地留一个空位**（最少 3 个），和小
+ * 球、三角一路，跟基础方块的「整块拿走、不再出现」正好相反。
+ * 见 shapes/squareDiamond.ts 的 MIN_LINE_BONUS_LEN 与文件头那段说明。
+ */
+export type RuleShape = 'circle' | 'square' | 'squareDiamond' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
     circle: 'Stars of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty balls behind.',
     square: 'Stars of one colour filling a whole row or column score and clear away for good.',
+    squareDiamond: 'Stars of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty squares behind.',
     triangle: 'Stars of one colour filling a whole line score and clear — at least 3 of them, and they leave empty triangles behind.',
   },
   fr: {
     circle: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et elles laissent des billes vides.',
     square: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent définitivement.',
+    squareDiamond: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et elles laissent des cases vides.',
     triangle: 'Des étoiles de même couleur sur toute une ligne marquent et disparaissent — au moins 3, et elles laissent des triangles vides.',
   },
   zhHant: {
     circle: '星星同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空球。',
     square: '星星同色連成一行或一列，方塊就完全消除，不再出現。',
+    squareDiamond: '星星同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空位。',
     triangle: '星星同色連成一整條線，得分並消除；最少 3 個，消掉後留下空三角。',
   },
   zhHans: {
     circle: '星星同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空球。',
     square: '星星同色连成一行或一列，方块就完全消除，不再出现。',
+    squareDiamond: '星星同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空位。',
     triangle: '星星同色连成一整条线，得分并消除；最少 3 个，消掉后留下空三角。',
   },
 };

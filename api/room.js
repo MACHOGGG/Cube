@@ -300,8 +300,19 @@ function publicState(code, hash) {
   // 按累计总分排，不是按刚打完那一局。名单上每一行印的就是累计总分（前几局
   // 加上这一局），倒计时那一屏和最后那张战绩图也都是按累计排的——只有这里
   // 按单局排，于是会出现「写着 3000 的人排在写着 1500 的人下面」。
+  //
+  // 并列的时候比什么，三处必须是同一句话：这儿、名单那张卡（ui/roomCard.ts
+  // 的 rankRoom）、倒数那一屏（ui/multiplayer.ts）。原先这儿并列比名字，另
+  // 外两处并列比「单局最高」——两个人打平的那一刻，屏幕上的名次和倒数那一
+  // 屏的名次会对不上，同一间小屋里两张表说两种话。名字留在最后一档，只是
+  // 为了让完全一样的两行不要每次刷新都换位置。
   const running = (p) => (p.total || 0) + (p.score || 0);
-  players.sort((a, b) => running(b) - running(a) || String(a.name).localeCompare(String(b.name)));
+  players.sort(
+    (a, b) =>
+      running(b) - running(a) ||
+      (b.best || 0) - (a.best || 0) ||
+      String(a.name).localeCompare(String(b.name)),
+  );
   return {
     code,
     host: meta.host ?? null,
