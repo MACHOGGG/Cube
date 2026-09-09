@@ -317,11 +317,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let patternPoints = 0;
   let linePoints = 0;
   let comboBonusPoints = 0;
-  // Every group of cells findStuckGroups has ever named this game — once a
-  // color is genuinely stuck it can only ever stay that way (see
-  // stalemate.ts: nothing can un-flip), so this only ever grows. The run
-  // does NOT end because of it; the player ends it themselves via
-  // stuckEndBtn, once they've decided nothing more is worth waiting for.
+  // 一局里 findStuckGroups 点过名的每一组格子。一种颜色一旦真的死了就只会一
+  // 直死着（见 stalemate.ts：没有什么能让它翻回来），所以这个集合只会变大。
   let startSnapshot: BoardSnapshot | null = null;
   let endSnapshot: BoardSnapshot | null = null;
   let lastRun: RunData | null = null;
@@ -333,11 +330,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   function updateStuckState(groups: Cell[][]) {
     hooks.highlightStuck?.(groups.length ? groups.flat() : null);
-    // findStuckGroups now only ever reports a *total* dead end — no front
-    // colour on the board can ever score again — so instead of arming a
-    // "自行结束" button the run ends on its own: the stuck tiles get a beat
-    // of red highlight so the player can see what died, then the summary.
-    refs.buttons.stuckEnd.hidden = true;
+    // findStuckGroups 现在只报「全死」——场上没有任何一种正面颜色还能再得分。
+    // 所以这一局不再等玩家自己按什么键结束，它自己结束：那几枚先红一下让人看
+    // 清是什么死了，随后出结算页。
+    //
+    // 从前这儿还有一颗《自行结束》键（单色死就亮起来，让玩家自己决定还磨不
+    // 磨）。判定改成只认「全死」之后那颗键就再也没有亮起来的时机了，2026-09
+    // 连同它的四条文案一起删掉——留着一颗永远不出现的键，只会让读规则的人去
+    // 找一个不存在的东西（《游戏规则》里那句话当时也一起改了）。
     if (groups.length && !gameOver) {
       hooks.render();
       window.setTimeout(() => {

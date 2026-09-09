@@ -353,7 +353,6 @@ export interface I18nStrings {
   scoreLabel: string;
   perfLabel: string;
   timeLabel: string;
-  stuckEndBtn: string;
   /** 教学条第 1 步：到点还一次分都没得，换上这一句更具体的。 */
   coachNudge: string;
   startBtn: string;
@@ -700,7 +699,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     scoreLabel: 'Score',
     perfLabel: 'Hit rate',
     timeLabel: 'Time',
-    stuckEndBtn: 'No scoring shape left · tap to end',
     coachNudge: 'Try sliding four of one colour into a line',
     startBtn: 'Start',
     pausedTitle: 'Paused',
@@ -1028,7 +1026,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     scoreLabel: 'Score',
     perfLabel: 'Taux de réussite',
     timeLabel: 'Temps',
-    stuckEndBtn: 'Plus aucun motif possible · appuyez pour terminer',
     coachNudge: 'Essayez d’aligner quatre pièces d’une même couleur',
     startBtn: 'Commencer',
     pausedTitle: 'En pause',
@@ -1356,7 +1353,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     scoreLabel: '得分',
     perfLabel: '有效得分率',
     timeLabel: '用時',
-    stuckEndBtn: '再也湊不出圖案 · 點擊結束本局',
     coachNudge: '把同色的四個滑到一條線上試試',
     startBtn: '開始',
     pausedTitle: '已暫停',
@@ -1684,7 +1680,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     scoreLabel: '得分',
     perfLabel: '有效得分率',
     timeLabel: '用时',
-    stuckEndBtn: '再也凑不出图案 · 点击结束本局',
     coachNudge: '把同色的四个滑到一条线上试试',
     startBtn: '开始',
     pausedTitle: '已暂停',

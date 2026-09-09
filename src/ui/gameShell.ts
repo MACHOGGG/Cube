@@ -131,8 +131,6 @@ export interface ShellRefs {
     continueBtn: HTMLButtonElement;
     restart: HTMLButtonElement;
     endBack: HTMLButtonElement;
-    /** Hidden until some tile is genuinely unable to ever flip again; the player decides when (or whether) to end the run over it, rather than the run ending on its own. */
-    stuckEnd: HTMLButtonElement;
     /** Leaves without starting a run — same destination as `back`. */
     startBack: HTMLButtonElement;
     share: HTMLButtonElement;
@@ -267,7 +265,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <!-- 头一局的教学条。空壳子先摆在这儿，内容由 coachBar.ts 填——它要跟着
            玩家做到哪一步换，不是画一次就完了。 -->
       ${meta.coach ? '<div class="coach-bar" id="coachBar" hidden></div>' : ''}
-      <button class="stuck-end-btn stuck-glow" id="stuckEndBtn" hidden>${s.stuckEndBtn}</button>
 
       <!-- 单人局这一排上只剩一颗《暂停》，占从前那一半的宽度、居中站着
            （玩家定的「底排②」）。《完成》搬进了暂停面板——玩家的原话：「把
@@ -682,7 +679,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       continueBtn: req('continueBtn'),
       restart: req('restartBtn'),
       endBack: req('endBackBtn'),
-      stuckEnd: req('stuckEndBtn'),
       startBack: req('startBackBtn'),
       share: req('shareBtn'),
       shareClose: req('shareCloseBtn'),

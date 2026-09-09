@@ -367,7 +367,7 @@ const CUE_OVERRIDES: [selector: string, cue: () => void][] = [
   ['#startBtn', playReady],
   ['#stopBtn', playPause],
   ['#navProfile:not(.home-nav-btn--active), #navRecords:not(.home-nav-btn--active)', playArrive],
-  ['#stFinish, #finishBtn, #stuckEndBtn, [data-cue="finish"]', playFinish],
+  ['#stFinish, #finishBtn, [data-cue="finish"]', playFinish],
 ];
 
 export function wireClickCues(): void {

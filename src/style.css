@@ -642,9 +642,9 @@ h1 {
 /* Red "this can never score again" glow for a permanently stuck tile — a
    shape applies this class (or its own outline-overlay equivalent) to every
    cell GameController names via the highlightStuck hook, all at once and for
-   as long as they stay stuck (the run doesn't end on its own over this —
-   see stuckEndBtn below, which shares this same flash so the two read as
-   one signal: "these tiles, that button"). */
+   as long as they stay stuck. 亮完这一下，这一局随即自动结算（见
+   gameController 的 updateStuckState）——所以它是「你看，是这几枚死了」，
+   而不是在等玩家按什么。 */
 .stuck-glow { animation: stuck-glow 1s ease-in-out infinite; }
 @keyframes stuck-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
@@ -654,18 +654,6 @@ h1 {
   .stuck-glow { animation: none; box-shadow: 0 0 10px 3px rgba(220,38,38,0.5); }
 }
 
-/* Only shown once findStuckGroups actually returns something — the
-   player's own way to end a run that can never fully flip, instead of it
-   ending on its own. Reuses .stuck-glow's exact animation so the flashing
-   button and the flashing tiles it refers to read as the same prompt. */
-.stuck-end-btn {
-  display: block; width: 100%; margin: 4px 0;
-  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600;
-  background: var(--surface); color: #B91C1C; border: 1px solid rgba(220,38,38,0.4);
-  border-radius: var(--r-sm); padding: 10px 16px; cursor: pointer;
-}
-.stuck-end-btn:hover { filter: brightness(0.98); border-color: #B91C1C; }
-.stuck-end-btn[hidden] { display: none; }
 /* 房间局里《暂停》先藏着，等屋主散场、这一局转成单人时才顶上来。写死它，
    因为 .app--game .controls .icon-btn 给了 display:flex——UA 的 [hidden]
    拦不住一条更具体的规则。 */
@@ -3105,9 +3093,6 @@ html.is-playing body { background: var(--play-bg); }
     grid-column: 2; grid-row: 2;
     min-width: 0; min-height: 0;
   }
-  .app.app--game > .stuck-end-btn {
-    grid-column: 2; grid-row: 2; align-self: end; justify-self: center; margin: 0 0 4px;
-  }
 }
 
 /* 横屏，除了七色圆球和进阶三角：得分图示不占上面那一条，劈成两半竖着贴在
@@ -3134,7 +3119,6 @@ html.is-playing body { background: var(--play-bg); }
   .app.app--game.pattern-sides > .board-wrap { grid-column: 3; grid-row: 1; }
   .app.app--game.pattern-sides > .pattern-hint--b { grid-column: 4; grid-row: 1; display: flex; }
   .app.app--game.pattern-sides > .controls { grid-column: 5; grid-row: 1; }
-  .app.app--game.pattern-sides > .stuck-end-btn { grid-column: 3; grid-row: 1; }
   .app.app--game.pattern-sides > .pattern-hint,
   .app.app--game.pattern-sides > .pattern-hint .ph-part {
     flex-direction: column; flex-wrap: nowrap;
@@ -3765,7 +3749,7 @@ body.is-room-host::after {
 }
 .mp-practice .app--game > h1, .mp-practice .app--game > .tag-line,
 .mp-practice .hud, .mp-practice .controls, .mp-practice .legend,
-.mp-practice .pattern-hint, .mp-practice .stuck-end-btn, .mp-practice .overlay { display: none !important; }
+.mp-practice .pattern-hint, .mp-practice .overlay { display: none !important; }
 .mp-practice .board-wrap { flex: 1; min-height: 0; margin: 0; }
 
 /* ---------- 教学那一排：四颗圆盘图示 ---------- */

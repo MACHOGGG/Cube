@@ -72,6 +72,17 @@ await set('code:TESTHALF', { plan: 'half' });
 await set('code:TESTLIFE', { plan: 'life' });
 console.log('test redeem codes: TESTMONTH, TESTYEAR, TESTHALF, TESTLIFE');
 
+/**
+ * 一个本机用的管理口令，好让 check-passcode-change 那类门能读回账号（发码页
+ * 的 list 是唯一看得到 news / createdAt 的地方）。
+ *
+ * 和上面那几张测试码是同一类东西：这个文件配的是那个内存里的 store，部署上
+ * 去的东西既到不了这个文件，也到不了那个 store。真要自己设一个就设，这儿只
+ * 在空着的时候兜底。
+ */
+if (!process.env.ADMIN_TOKEN) process.env.ADMIN_TOKEN = 'dev-admin';
+console.log('admin token (local only): ' + process.env.ADMIN_TOKEN);
+
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
