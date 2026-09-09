@@ -60,7 +60,7 @@ function makeRun(alive) {
   };
 }
 
-/** 导出的那张 PNG 里，「结束」那一格的样子。坐标照 shareCard 里那几个常数。 */
+/** 导出的那张 PNG 里，「结束」那一格的样子。坐标照 shareCard 的排版算。 */
 const SAMPLE = () => {
   const img = document.querySelector('.overlay--top .share-modal img');
   if (!img) return Promise.resolve(null);
@@ -73,8 +73,18 @@ const SAMPLE = () => {
       c.height = probe.naturalHeight;
       const g = c.getContext('2d');
       g.drawImage(probe, 0, 0);
-      const PAD = 80, gap = 28, boardY = 300;
+      const PAD = 80, gap = 28;
       const panel = (720 - PAD * 2 - gap) / 2;
+      // 棋盘那一行摆在哪儿，是从图的实际高度倒推的，不写死。
+      //
+      // 抬头那一块会随语言和明细行数长高（法语的标签长，明细最多能有八
+      // 行），整张图跟着高，棋盘也跟着往下走。从前这儿钉着 300，那是中文
+      // 四行明细时的值——一换语言，取样窗就整个错位，量出来的「没居中」是
+      // 这个门自己看错了地方，不是图画歪了。
+      //
+      // 棋盘底下那一截是固定的：一格棋盘的高，加 110（单人图；小屋图是
+      // 132，这个门不造小屋图）。所以拿图的总高减掉它，就是棋盘的上沿。
+      const boardY = probe.naturalHeight / k - panel - 110;
       const x = Math.round((PAD + panel + gap) * k);
       const y = Math.round(boardY * k);
       const w = Math.round(panel * k);

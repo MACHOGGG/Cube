@@ -378,6 +378,80 @@ export function drawQr(
   }
 }
 
+/** 明细第一行的基线。二维码和它那句说明占着右上角，这是它们下面第一个能用的位置。 */
+const ROWS_TOP = 186;
+/** 大分数那一栏（数字 + 「综合得分」）在抬头里占到的最低处。 */
+const LEFT_HEAD_BOTTOM = 232;
+
+/**
+ * 把一段字缩到放得下为止，返回该用多大的字号。
+ *
+ * 一号一号往下试，到 min 为止——到了 min 还是放不下，就认了：宁可挤一点，也
+ * 不要小到看不清。返回的是字号，不是宽度，因为调用方还要拿它去 fillText。
+ */
+function fitPx(ctx: CanvasRenderingContext2D, text: string, maxW: number, font: (px: number) => string, start: number, min: number): number {
+  for (let px = start; px > min; px--) {
+    ctx.font = font(px);
+    if (ctx.measureText(text).width <= maxW) return px;
+  }
+  return min;
+}
+
+/**
+ * 抬头这一块到底占多高、每行该多大字。
+ *
+ * 三件事在这儿一起定下来，因为它们互相牵制：
+ *
+ *   1. 右边那列明细有几行是这一局决定的（最少四行，最多八行——连击、整线、
+ *      没变成星星的、炸弹扣分都是有才摆）。行数一多，这一列就往下长。
+ *   2. 每一行有多宽是语言决定的。法语的「Bonus de taux de réussite (43%)」
+ *      比中文的「有效得分率」长出一倍不止，长到会顶进左边那个大分数里。所以
+ *      量出最宽的一行，放不下就把这一列的字号往下调。
+ *   3. 「一共几步、用了多久」那一句得摆在左右两栏都结束之后——从前它钉在
+ *      268，而右边那列在法语里铺到 274，两行就叠在了一起。
+ *
+ * 量完把最低点交出去，棋盘和整张图的高度都跟着它走：抬头长了，图就高一点，
+ * 而不是让下面的东西被压住。
+ */
+function measureHead(
+  ctx: CanvasRenderingContext2D,
+  info: ShareCardInfo,
+  s: { compositeScoreLabel: string },
+): { rows: string[]; rowPx: number; rowStep: number; detailY: number; detailPx: number; bottom: number } {
+  const mono = (px: number) => `500 ${px}px "JetBrains Mono", monospace`;
+  const karla = (px: number) => `500 ${px}px "Karla", sans-serif`;
+  const rows = info.scoreRows.map(([label, value]) => `${label} ${value}`);
+
+  // 右边这一列不许伸进左边那个大分数里。左栏的实际右缘按两样里宽的那个算：
+  // 分数本身（位数多了会很宽）和它底下那行「综合得分」。
+  ctx.font = '700 88px "JetBrains Mono", monospace';
+  const scoreW = ctx.measureText(String(info.totalScore)).width;
+  ctx.font = karla(15);
+  const labelW = ctx.measureText(s.compositeScoreLabel).width;
+  const leftEdge = PAD + Math.max(scoreW, labelW);
+  const roomForRows = CARD_W - PAD - leftEdge - 24;
+
+  // 缩到几号得看最宽的那一行——不是最后一行。法语里最宽的常常是中间那条
+  // 「有效得分率 (43%)」，照最后一行缩，最宽的那条照样伸出去。
+  ctx.font = mono(15);
+  let widestLine = '';
+  let widest = 0;
+  for (const line of rows) {
+    const w = ctx.measureText(line).width;
+    if (w > widest) { widest = w; widestLine = line; }
+  }
+  const rowPx = widest <= roomForRows ? 15 : fitPx(ctx, widestLine, roomForRows, mono, 15, 11);
+  // 行距跟着字号走，不然缩了字号行还是那么疏，白缩。
+  const rowStep = Math.round(rowPx * 1.47);
+
+  const rowsBottom = rows.length ? ROWS_TOP + (rows.length - 1) * rowStep : ROWS_TOP - rowStep;
+  // 那一句摆在左右两栏里低的那个下面，两边都不压。
+  const detailY = Math.max(LEFT_HEAD_BOTTOM, rowsBottom) + 36;
+  const detailPx = fitPx(ctx, info.detail, CARD_W - PAD * 2, karla, 13, 10);
+
+  return { rows, rowPx, rowStep, detailY, detailPx, bottom: detailY };
+}
+
 /**
  * Renders the composed PNG data URL: the run's headline score and breakdown
  * up top, then the board as it started and as it finished, side by side, so
@@ -390,7 +464,6 @@ export function renderShareCard(
   startSnap: BoardSnapshot | null = null,
 ): string {
   const s = STRINGS[info.lang];
-  const boardY = 300;
   const gap = 28;
   // A room card gives the two boards a little over half the width they get
   // on their own, and spends what it saves on the places — on a shared card
@@ -398,12 +471,28 @@ export function renderShareCard(
   const standings = info.standings ?? [];
   const full = (CARD_W - PAD * 2 - gap) / 2;
   const panel = standings.length ? full * 0.62 : full;
-  const cardH = boardY + panel + (standings.length ? 132 : 110);
 
   const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+
+  // 先量抬头，再定这张图多高。
+  //
+  // 从前这一段的每个 y 都是写死的：明细行从 186 起、每行 22，那一句「一共几
+  // 步、用了多久」钉在 268，棋盘钉在 300。中文短，看不出问题；换成法语就露
+  // 馅了——「Bonus de taux de réussite」「Multiplicateur de temps」这些标签
+  // 一行都下不来，明细五行铺到 274，正好压在 268 那一句上，两行字叠在一起。
+  //
+  // 而且这不只是法语的事：明细最多能有八行（图案分、连击、整线、得分、有效
+  // 得分率、时间系数、没变成星星的、炸弹扣分），八行铺到 340，连棋盘都能盖
+  // 住。写死的数字挡不住这个，得让下面的东西跟着上面的实际高度走。
+  const head = measureHead(ctx, info, s);
+  const boardY = head.bottom + 32;
+  const cardH = boardY + panel + (standings.length ? 132 : 110);
+
   canvas.width = CARD_W * EXPORT_SCALE;
   canvas.height = cardH * EXPORT_SCALE;
-  const ctx = canvas.getContext('2d')!;
+  // 改过尺寸的画布，画笔的状态（scale、font、对齐）全被清掉了，所以缩放放在
+  // 量完之后——上面那一趟只是拿它当尺子用。
   ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
 
   ctx.fillStyle = '#faf9f5';
@@ -448,19 +537,16 @@ export function renderShareCard(
   ctx.fillStyle = '#5b5650';
   ctx.fillText(s.compositeScoreLabel, PAD + 2, 232);
 
-  ctx.font = '500 15px "JetBrains Mono", monospace';
+  ctx.font = `500 ${head.rowPx}px "JetBrains Mono", monospace`;
   ctx.fillStyle = '#8b8680';
-  let rowY = 186;
-  const rowX = CARD_W - PAD;
-  for (const [label, value] of info.scoreRows) {
-    ctx.textAlign = 'right';
-    ctx.fillText(`${label} ${value}`, rowX, rowY);
-    rowY += 22;
-  }
+  ctx.textAlign = 'right';
+  head.rows.forEach((line, i) => {
+    ctx.fillText(line, CARD_W - PAD, ROWS_TOP + i * head.rowStep);
+  });
   ctx.textAlign = 'left';
-  ctx.font = '500 13px "Karla", sans-serif';
+  ctx.font = `500 ${head.detailPx}px "Karla", sans-serif`;
   ctx.fillStyle = '#8b8680';
-  ctx.fillText(info.detail, PAD, 268);
+  ctx.fillText(info.detail, PAD, head.detailY);
 
   // Start on the left, end on the right, each centred in its own panel.
   //
