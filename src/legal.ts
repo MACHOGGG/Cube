@@ -42,6 +42,29 @@ export type LegalKey = 'pricing' | 'terms' | 'refund' | 'privacy' | 'contact';
 /** Row order in 个人主页. */
 export const LEGAL_ORDER: LegalKey[] = ['pricing', 'terms', 'refund', 'privacy', 'contact'];
 
+/**
+ * 每份文档自己的网址。
+ *
+ * 从前这五份只活在个人主页底下那五行里——点开是个弹窗，地址栏一动不动。对
+ * 玩家没问题，对收单方的审核就不行了：他们要能直接打开这几页，也要能把网址
+ * 填进后台的表格里，而「先点底排的小人、再滚到最底下」不是一个能填进表格的
+ * 东西。所以每份多给一个网址，内容还是这一份，没有第二套文案。
+ */
+export const LEGAL_PATH: Record<LegalKey, string> = {
+  pricing: '/pricing',
+  terms: '/terms',
+  refund: '/refund',
+  privacy: '/privacy',
+  contact: '/contact',
+};
+
+/** 反过来问：现在这个地址是五份里的哪一份？不是就返回 null（照常进游戏）。 */
+export function legalKeyForPath(pathname: string): LegalKey | null {
+  const want = '/' + pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  for (const key of LEGAL_ORDER) if (LEGAL_PATH[key] === want) return key;
+  return null;
+}
+
 const E = CONTACT_EMAIL;
 
 /**
@@ -79,9 +102,9 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   zhHans: {
     pricing: {
       title: '价格与订阅',
-      intro: 'Slides 的全部玩法都免费。「Slides 天才」是可选订阅，用来解锁额外内容。订阅尚未开放，以下是开放后的条款。',
+      intro: 'Slides 的全部玩法都免费。「Slides 天才」是可选订阅，用来解锁额外内容。以下是它的条款。',
       items: [
-        { term: '免费的部分', body: '方块、圆球、三角三种基础玩法，以及计时挑战、炸弹挑战和更多布局，全部免费，无广告，不需要注册。' },
+        { term: '免费的部分', body: '方块、圆球、三角三种基础玩法，以及计时挑战、炸弹挑战，全部免费，无广告，不需要注册。特殊布局里三种形状各有一副也是免费的；另外两副属于订阅，在主菜单上挂着锁，点开看得到是什么。' },
         { term: '价格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最终金额以结账页上显示的为准——它可能因你所在地区的定价和当地税费而不同。价格会调整，调整只影响之后的新订阅；已经在续的那一档变动前会先通知你。', only: 'web' },
         { term: '价格', body: '由 {store} 按你所在地区的价目档显示并收取，确认付款那一页上的金额就是最终金额。在亚洲、非洲、南美洲等欧美以外的地区，定价相当于 2 元／月、9.9 元／年，并按同等价值折算成当地货币。', only: 'store' },
         { term: '订阅周期', body: '按你选的周期计费：月订阅每 1 个月一期，年订阅每 12 个月一期，都从付款当天起算。' },
@@ -99,7 +122,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: '服务条款',
       intro: `这些条款适用于 play-slides.com 与 Slides 的相关应用。使用即表示你接受这些条款。最后更新：${LEGAL_UPDATED}。`,
       items: [
-        { term: '谁在运营', body: `本站由一位居住在法国的独立开发者运营。联系邮箱：${E}。` },
+        { term: '谁在运营', body: `本站由一位居住在法国的独立开发者以个人身份运营，没有注册公司。联系邮箱：${E}。` },
         { term: '服务内容', body: 'Slides 是一款滑动益智游戏。基础玩法免费提供，「Slides 天才」是可选订阅。' },
         { term: '账号', body: '基础玩法不需要账号。用银行卡在网页版订阅的，付完款要为这个邮箱设一组 6 位密码——邮箱加密码就是你的账号，换台设备用这两样取回订阅。' , only: 'web' },
         { term: '内部码开通的账号', body: '用内部码开通时会留下邮箱和一组 6 位密码，这是我们唯一保管的账号。密码请自己记好——被锁住的是这个账号，不是那张码：密码连续输错 4 次，账号锁 4 小时；错到 6 次就一直锁着，要通过邮箱验证才能重新开启并设置新密码。' },
@@ -140,8 +163,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: '登录之后的战绩', body: '登录之后打的每一局，会连同这一局的分数、用时、玩法和你取的名字一起存一份在我们的 Redis 里，挂在你的账号下——换台设备登录，记录跟着回来，成绩也进全球排行榜。榜上写的是你自己取的那个名字，不是邮箱。没登录就一份都不上传，记录只在这台设备上。想删掉云上那份，来信说一声就行。' },
         { term: '多人小屋', body: '开一间或加入一间小屋时，上传的只有你取的昵称、头像图形、这一局的得分与是否交卷，以及进出小屋的时间。棋盘本身在你自己的设备上算，不会上传；我们也不记你的邮箱和 IP。小屋没了，这些就一起没了。' },
         { term: '使用统计', body: '我们用 Vercel Analytics，以及（在配置了的情况下）Google Analytics 4，统计访问量、看了哪些页面、开始和结束了哪种玩法、用时与得分区间。这些是汇总数据，不用来识别你本人。Google Analytics 会使用 Cookie。' },
-        { term: '订阅与邮箱', body: '用银行卡在网页版订阅时，Creem 会记下你的下单邮箱。这一份我们不保存——判断你是不是订阅用户，每次都是拿这个邮箱去问 Creem。', only: 'web' },
-        { term: '内部码开通的账号', body: '这是我们唯一自建的账号数据：你的邮箱、密码经 scrypt 加盐后的哈希值（不是密码本身，我们无法还原出你的密码）、到期时间，以及一个登录令牌。因为这份权益是我们发的，只能由我们记住。' },
+        { term: '订阅与邮箱', body: '用银行卡在网页版订阅时，Creem 会记下你的下单邮箱，钱和收据都在它那边。你是不是订阅用户这件事，我们每次都拿这个邮箱去问 Creem，自己不另存一份答案。但付完款要设的那个密码，会在我们这边建起一个账号，用的就是同一个邮箱——存了什么见下一条。', only: 'web' },
+        { term: '内部码开通的账号', body: '刷卡订阅之后设的密码，和用内部码开通，都会在我们这边留下一个账号。存的是：你的邮箱、密码经 scrypt 加盐后的哈希值（不是密码本身，我们无法还原出你的密码）、这个账号是刷卡来的还是内部码来的、买的是哪一档、到期时间、注册时间、你对收邮件的选择和做出选择的那一刻、几个登录令牌（同时登录的设备各一个），以及密码输错的次数和锁定状态。年付还会记下发给你的那两张赠码。这是我们自己保存的唯一一份账号数据。' },
         { term: '邮件', body: '建账号时有一个勾选框：要不要收 Slides 的邮件。不勾就不会收到，功能上没有任何区别；勾了我们只用这个邮箱发新玩法、新版本和偶尔的优惠，不会把它给任何广告商或者第三方。每封信底部都有退订链接，点一下就不再发，也可以来信让我们改。你什么时候做的这个选择我们一并记下来，因为需要能说清楚同意是哪一刻给的。跟服务本身有关的信不算营销邮件，不勾也会发：收据和续期提醒由 Creem 发出，我们自己只会在你申请解锁账号时发一封验证码。' },
         { term: '订阅', body: 'App 内订阅不需要注册，我们也拿不到你 {store} 账号的任何信息。订阅状态由设备上的商店收据证明，不经过我们的服务器。', only: 'store' },
         { term: '支付信息', body: '由 Creem 处理。我们收到的只有订单状态和你的下单邮箱，永远看不到、也不保存你的卡号。', only: 'web' },
@@ -159,7 +182,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: '邮箱', body: E },
         { term: '回复时间', body: '通常 3 个工作日内。' },
-        { term: '运营者', body: '一位独立开发者，做游戏，也写作，还是一个学生。' },
+        { term: '运营者', body: '独立开发者，个人经营，没有注册公司。做游戏，也写作，还是一个学生。' },
         { term: '网站托管', body: 'Vercel Inc.（美国）。' },
         { term: '可用语言', body: '中文、English、Français 都可以。' },
       ],
@@ -168,9 +191,9 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   zhHant: {
     pricing: {
       title: '價格與訂閱',
-      intro: 'Slides 的全部玩法都免費。「Slides 天才」是選配訂閱，用來解鎖額外內容。訂閱尚未開放，以下是開放後的條款。',
+      intro: 'Slides 的全部玩法都免費。「Slides 天才」是選配訂閱，用來解鎖額外內容。以下是它的條款。',
       items: [
-        { term: '免費的部分', body: '方塊、圓球、三角三種基礎玩法，以及計時挑戰、炸彈挑戰和更多版面，全部免費，無廣告，不需要註冊。' },
+        { term: '免費的部分', body: '方塊、圓球、三角三種基礎玩法，以及計時挑戰、炸彈挑戰，全部免費，無廣告，不需要註冊。特殊版面裡三種形狀各有一副也是免費的；另外兩副屬於訂閱，在主選單上掛著鎖，點開看得到是什麼。' },
         { term: '價格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最終金額以結帳頁上顯示的為準——它可能因你所在地區的定價和當地稅費而不同。價格會調整，調整只影響之後的新訂閱；已經在續的那一檔變動前會先通知你。', only: 'web' },
         { term: '價格', body: '由 {store} 按你所在地區的價目檔顯示並收取，確認付款那一頁上的金額就是最終金額。在亞洲、非洲、南美洲等歐美以外的地區，定價相當於 2 元／月、9.9 元／年，並按同等價值折算成當地貨幣。', only: 'store' },
         { term: '訂閱週期', body: '按你選的週期計費：月訂閱每 1 個月一期，年訂閱每 12 個月一期，都從付款當天起算。' },
@@ -188,7 +211,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: '服務條款',
       intro: `這些條款適用於 play-slides.com 與 Slides 的相關應用。使用即表示你接受這些條款。最後更新：${LEGAL_UPDATED}。`,
       items: [
-        { term: '誰在營運', body: `本站由一位居住在法國的獨立開發者營運。聯絡信箱：${E}。` },
+        { term: '誰在營運', body: `本站由一位居住在法國的獨立開發者以個人身分營運，沒有註冊公司。聯絡信箱：${E}。` },
         { term: '服務內容', body: 'Slides 是一款滑動益智遊戲。基礎玩法免費提供，「Slides 天才」是選配訂閱。' },
         { term: '帳號', body: '基礎玩法不需要帳號。用信用卡在網頁版訂閱的，付完款要為這個信箱設一組 6 位密碼——信箱加密碼就是你的帳號，換台裝置用這兩樣取回訂閱。', only: 'web' },
         { term: '內部碼開通的帳號', body: '用內部碼開通時會留下信箱和一組 6 位密碼，這是我們唯一保管的帳號。密碼請自己記好——被鎖住的是這個帳號，不是那張碼：密碼連續輸錯 4 次，帳號鎖 4 小時；錯到 6 次就一直鎖著，要透過電子郵件驗證才能重新開啟並設定新密碼。' },
@@ -229,8 +252,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: '登入之後的戰績', body: '登入之後打的每一局，會連同這一局的分數、用時、玩法和你取的名字一起存一份在我們的 Redis 裡，掛在你的帳號下——換台裝置登入，紀錄跟著回來，成績也進全球排行榜。榜上寫的是你自己取的那個名字，不是信箱。沒登入就一份都不上傳，紀錄只在這台裝置上。想刪掉雲端那份，來信說一聲就行。' },
         { term: '多人小屋', body: '開一間或加入一間小屋時，上傳的只有你取的暱稱、頭像圖形、這一局的得分與是否交卷，以及進出小屋的時間。棋盤本身在你自己的裝置上算，不會上傳；我們也不記你的信箱和 IP。小屋沒了，這些就一起沒了。' },
         { term: '使用統計', body: '我們用 Vercel Analytics，以及（在有設定的情況下）Google Analytics 4，統計造訪量、看了哪些頁面、開始和結束了哪種玩法、用時與分數區間。這些是彙總資料，不用來識別你本人。Google Analytics 會使用 Cookie。' },
-        { term: '訂閱與信箱', body: '用信用卡在網頁版訂閱時，Creem 會記下你的下單信箱。這一份我們不保存——判斷你是不是訂閱使用者，每次都是拿這個信箱去問 Creem。', only: 'web' },
-        { term: '內部碼開通的帳號', body: '這是我們唯一自建的帳號資料：你的信箱、密碼經 scrypt 加鹽後的雜湊值（不是密碼本身，我們無法還原出你的密碼）、到期時間，以及一個登入權杖。因為這份權益是我們發的，只能由我們記住。' },
+        { term: '訂閱與信箱', body: '用信用卡在網頁版訂閱時，Creem 會記下你的下單信箱，錢和收據都在它那邊。你是不是訂閱使用者這件事，我們每次都拿這個信箱去問 Creem，自己不另存一份答案。但付完款要設的那個密碼，會在我們這邊建起一個帳號，用的就是同一個信箱——存了什麼見下一條。', only: 'web' },
+        { term: '內部碼開通的帳號', body: '刷卡訂閱之後設的密碼，和用內部碼開通，都會在我們這邊留下一個帳號。存的是：你的信箱、密碼經 scrypt 加鹽後的雜湊值（不是密碼本身，我們無法還原出你的密碼）、這個帳號是刷卡來的還是內部碼來的、買的是哪一檔、到期時間、註冊時間、你對收信的選擇和做出選擇的那一刻、幾個登入權杖（同時登入的裝置各一個），以及密碼輸錯的次數和鎖定狀態。年付還會記下發給你的那兩張贈碼。這是我們自己保存的唯一一份帳號資料。' },
         { term: '郵件', body: '建帳號時有一個勾選框：要不要收 Slides 的郵件。不勾就不會收到，功能上沒有任何差別；勾了我們只用這個信箱寄新玩法、新版本和偶爾的優惠，不會把它交給任何廣告商或第三方。每封信底部都有退訂連結，點一下就不再寄，也可以來信要我們改。你是什麼時候做這個選擇的我們一併記下，因為需要說得清楚同意是哪一刻給的。跟服務本身有關的信不算行銷郵件，沒勾也會寄：收據和續期提醒由 Creem 寄出，我們自己只會在你申請解鎖帳號時寄一封驗證碼。' },
         { term: '訂閱', body: 'App 內訂閱不需要註冊，我們也拿不到你 {store} 帳號的任何資訊。訂閱狀態由裝置上的商店收據證明，不經過我們的伺服器。', only: 'store' },
         { term: '付款資訊', body: '由 Creem 處理。我們收到的只有訂單狀態和你的下單信箱，永遠看不到、也不保存你的卡號。', only: 'web' },
@@ -248,7 +271,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: '信箱', body: E },
         { term: '回覆時間', body: '通常 3 個工作天內。' },
-        { term: '營運者', body: '一位獨立開發者，做遊戲，也寫作，還是一個學生。' },
+        { term: '營運者', body: '獨立開發者，個人經營，沒有註冊公司。做遊戲，也寫作，還是一個學生。' },
         { term: '網站代管', body: 'Vercel Inc.（美國）。' },
         { term: '可用語言', body: '中文、English、Français 都可以。' },
       ],
@@ -257,9 +280,9 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   en: {
     pricing: {
       title: 'Pricing & subscription',
-      intro: 'Every game mode in Slides is free. "Slides Genius" is an optional subscription that unlocks extra content. It is not on sale yet; these are the terms it will be sold on.',
+      intro: 'Every game mode in Slides is free. "Slides Genius" is an optional subscription that unlocks extra content. These are the terms it is sold on.',
       items: [
-        { term: "What's free", body: 'All three base games — squares, balls, triangles — plus the timed challenge, the bomb challenge and the extra layouts. No ads, no account needed.' },
+        { term: "What's free", body: 'All three base games — squares, balls, triangles — plus the timed challenge and the bomb challenge. No ads, no account needed. Among the extra layouts each of the three shapes has one that is free as well; the remaining two belong to the subscription and carry a lock on the home screen.' },
         { term: 'Price', body: 'Currently US$1.99 per month, or US$4.99 per year. The final amount is the one shown at checkout — it can differ with the pricing for your region and with local tax. Prices change; a change applies to new subscriptions only, and you are told before the rate on a running subscription moves.', only: 'web' },
         { term: 'Price', body: 'Shown and charged by {store} at the price tier for your region; the amount on the confirmation sheet is the final one. Across Asia, Africa, South America and other regions outside Europe and the Americas the tier is the equivalent of ¥2 per month and ¥9.9 per year, converted to the local currency at comparable value.', only: 'store' },
         { term: 'Billing period', body: 'You are billed for the period you pick: a monthly subscription renews every 1 month, a yearly one every 12 months, counted from the day you pay.' },
@@ -277,7 +300,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: 'Terms of service',
       intro: `These terms cover play-slides.com and the Slides apps. Using the service means you accept them. Last updated ${LEGAL_UPDATED}.`,
       items: [
-        { term: 'Who runs this', body: `Slides is run by an independent developer based in France. Contact: ${E}.` },
+        { term: 'Who runs this', body: `Slides is run by an independent developer based in France, acting as an individual — there is no registered company. Contact: ${E}.` },
         { term: 'What the service is', body: 'Slides is a sliding puzzle game. The base games are free; "Slides Genius" is an optional subscription.' },
         { term: 'Accounts', body: 'The base games need no account. For a subscription bought by card on the site, you set a six-character passcode for that address after paying — the address and the passcode together are your account, and the two of them bring the subscription back on another device.', only: 'web' },
         { term: 'Accounts made by a code', body: 'Redeeming a code leaves an email address and a six-character passcode with us — the only account we keep. Remember it: what gets locked is the account, not the code. Four wrong tries lock the account for four hours; six leave it locked until you verify by email and set a new passcode.' },
@@ -318,8 +341,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: 'Runs, once you are signed in', body: 'Every run you finish while signed in is also stored in our Redis under your account: the score, how long it took, which board, and the name you chose — so a new device brings your records back with it, and the run goes on the global leaderboard. The board shows the name you picked, never an email address. Signed out, nothing is uploaded and your records stay on the device. Ask us and we will delete the cloud copy.' },
         { term: 'Multiplayer rooms', body: 'Opening or joining a room uploads only the nickname you chose, your avatar shape, this round’s score and whether you have handed in, and the times you came and went. The board itself is worked out on your own device and never leaves it; we record neither your email address nor your IP. When the room goes, this goes with it.' },
         { term: 'Usage statistics', body: 'We use Vercel Analytics and, where it is configured, Google Analytics 4 to count visits, which screens are opened, which mode was started and finished, and the range of times and scores. This is aggregate data and is not used to identify you. Google Analytics sets cookies.' },
-        { term: 'Subscription and email', body: 'Paying by card on the site records your address with Creem. We do not keep that copy — establishing whether you are a subscriber means asking Creem about the address, every time.', only: 'web' },
-        { term: 'Accounts made by a code', body: 'This is the one account record we hold ourselves: your email address, a salted scrypt hash of your passcode (never the passcode, and it cannot be turned back into one), the date it runs to, and a sign-in token. The entitlement was granted by us, so only we can remember it.' },
+        { term: 'Subscription and email', body: 'Paying by card on the site records your address with Creem, which holds the money and the receipts. Whether you are a subscriber is a question we put to Creem about that address every time, rather than an answer we store. The passcode you set after paying does, however, open an account on our side under that same address — the next clause says what it holds.', only: 'web' },
+        { term: 'Accounts made by a code', body: 'Both routes — the passcode you set after paying by card, and redeeming a code — leave an account with us. It holds your email address, a salted scrypt hash of your passcode (never the passcode, and it cannot be turned back into one), whether the account came from a card or a code, which plan was bought, the date it runs to, when it was created, your choice about email from us and the moment you made it, a sign-in token per signed-in device, and the count and lock state of wrong passcode tries. A yearly subscription also records the two gift codes minted for it. This is the one account record we hold ourselves.' },
         { term: 'Email from us', body: 'Creating an account puts one tick box in front of you: whether you want email from Slides. Leave it unticked and none is sent — nothing about the app works differently either way. Tick it and we use the address only for new boards, new versions and the occasional offer; we never hand it to an advertiser or anyone else. Every message carries an unsubscribe link that stops them at once, and you can write to us instead. We also record when you made that choice, because consent has to be traceable to a moment. Messages about the service itself are not marketing and are sent either way: receipts and renewal notices come from Creem, and the only message we send ourselves is the code that unlocks a locked account.' },
         { term: 'Subscription', body: 'Subscribing in the app needs no sign-up, and we receive nothing at all about your {store} account. The store receipt held on the device is what proves the subscription; it never passes through a server of ours.', only: 'store' },
         { term: 'Payment details', body: 'Handled by Creem. All we receive is the order status and the email you ordered with. We never see or store your card number.', only: 'web' },
@@ -337,7 +360,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: 'Email', body: E },
         { term: 'Response time', body: 'Usually within 3 working days.' },
-        { term: 'Operator', body: 'An independent developer who makes games, writes, and is also a student.' },
+        { term: 'Operator', body: 'An independent developer, operating as an individual with no registered company. Makes games, writes, and is also a student.' },
         { term: 'Hosting', body: 'Vercel Inc. (United States).' },
         { term: 'Languages', body: 'English, Français, 中文.' },
       ],
@@ -346,9 +369,9 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   fr: {
     pricing: {
       title: 'Tarifs et abonnement',
-      intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est un abonnement facultatif qui débloque du contenu supplémentaire. Il n’est pas encore en vente ; voici les conditions qui s’appliqueront.',
+      intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est un abonnement facultatif qui débloque du contenu supplémentaire. Voici les conditions qui s’y appliquent.',
       items: [
-        { term: 'Ce qui est gratuit', body: 'Les trois jeux de base — carrés, billes, triangles — ainsi que le défi chronométré, le défi bombe et les dispositions supplémentaires. Sans publicité et sans compte.' },
+        { term: 'Ce qui est gratuit', body: 'Les trois jeux de base — carrés, billes, triangles — ainsi que le défi chronométré et le défi bombe. Sans publicité et sans compte. Parmi les dispositions supplémentaires, chacune des trois formes en a une gratuite ; les deux autres relèvent de l’abonnement et portent un cadenas sur l’écran d’accueil.' },
         { term: 'Prix', body: 'Actuellement 1,99 $US par mois, ou 4,99 $US par an. Le montant final est celui affiché au paiement — il peut varier selon la tarification de votre région et la taxe locale. Les prix évoluent ; un changement ne vaut que pour les nouveaux abonnements, et vous êtes prévenu avant que le tarif d’un abonnement en cours ne change.', only: 'web' },
         { term: 'Prix', body: 'Affiché et prélevé par {store} au palier tarifaire de votre région ; le montant de l’écran de confirmation est le montant final. En Asie, en Afrique, en Amérique du Sud et dans les autres régions hors Europe et Amériques, le palier équivaut à 2 ¥ par mois et 9,9 ¥ par an, converti en monnaie locale à valeur comparable.', only: 'store' },
         { term: 'Période de facturation', body: 'Vous êtes facturé pour la période choisie : un abonnement mensuel se renouvelle tous les mois, un abonnement annuel tous les 12 mois, à compter du jour du paiement.' },
@@ -366,7 +389,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: 'Conditions d’utilisation',
       intro: `Ces conditions couvrent play-slides.com et les applications Slides. Utiliser le service vaut acceptation. Dernière mise à jour : ${LEGAL_UPDATED}.`,
       items: [
-        { term: 'Qui édite ce site', body: `Slides est édité par un développeur indépendant résidant en France. Contact : ${E}.` },
+        { term: 'Qui édite ce site', body: `Slides est édité à titre individuel par un développeur indépendant résidant en France ; il n’existe pas de société enregistrée. Contact : ${E}.` },
         { term: 'Le service', body: 'Slides est un jeu de puzzle à glissement. Les jeux de base sont gratuits ; « Slides Génie » est un abonnement facultatif.' },
         { term: 'Comptes', body: 'Les jeux de base ne demandent aucun compte. Pour un abonnement payé par carte sur le site, vous choisissez après le paiement un mot de passe de six caractères pour cette adresse — l’adresse et le mot de passe forment votre compte, et à eux deux ils rouvrent l’abonnement sur un autre appareil.', only: 'web' },
         { term: 'Comptes créés par un code', body: 'Utiliser un code laisse chez nous une adresse courriel et un mot de passe de six caractères — le seul compte que nous conservions. Retenez-le : ce qui se verrouille est le compte, pas le code. Quatre erreurs verrouillent le compte pendant quatre heures ; six le laissent verrouillé jusqu’à une vérification par courriel et la définition d’un nouveau mot de passe.' },
@@ -407,8 +430,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
         { term: 'Vos parties, une fois connecté', body: 'Chaque partie terminée en étant connecté est aussi enregistrée dans notre Redis sous votre compte : le score, la durée, le plateau et le pseudonyme choisi — ainsi un nouvel appareil retrouve vos parties, et le score entre au classement mondial. Le classement affiche le pseudonyme, jamais une adresse courriel. Déconnecté, rien n’est envoyé et vos parties restent sur l’appareil. Écrivez-nous et nous supprimons la copie en ligne.' },
         { term: 'Salles multijoueur', body: 'Ouvrir ou rejoindre une salle n’envoie que le pseudonyme choisi, la forme de votre avatar, le score de la manche et le fait d’avoir rendu, ainsi que vos heures d’arrivée et de départ. Le plateau lui-même est calculé sur votre appareil et n’en sort jamais ; nous n’enregistrons ni votre adresse courriel ni votre IP. Quand la salle disparaît, cela disparaît avec elle.' },
         { term: 'Statistiques d’usage', body: 'Nous utilisons Vercel Analytics et, lorsqu’il est configuré, Google Analytics 4 pour compter les visites, les écrans ouverts, le mode commencé et terminé, et les plages de durée et de score. Ce sont des données agrégées, qui ne servent pas à vous identifier. Google Analytics dépose des cookies.' },
-        { term: 'Abonnement et courriel', body: 'Payer par carte sur le site enregistre votre adresse chez Creem. Nous n’en gardons pas de copie : savoir si vous êtes abonné, c’est interroger Creem sur cette adresse, à chaque fois.', only: 'web' },
-        { term: 'Comptes créés par un code', body: 'C’est le seul compte que nous conservions nous-mêmes : votre adresse, une empreinte scrypt salée de votre code secret (jamais le code, et l’empreinte ne permet pas de le retrouver), la date de fin, et un jeton de connexion. C’est nous qui avons accordé ce droit, nous seuls pouvons donc nous en souvenir.' },
+        { term: 'Abonnement et courriel', body: 'Payer par carte sur le site enregistre votre adresse chez Creem, qui détient l’argent et les reçus. Savoir si vous êtes abonné, c’est interroger Creem sur cette adresse à chaque fois, plutôt que d’en conserver la réponse. En revanche, le mot de passe défini après le paiement ouvre chez nous un compte à cette même adresse — la clause suivante dit ce qu’il contient.', only: 'web' },
+        { term: 'Comptes créés par un code', body: 'Les deux chemins — le mot de passe défini après un paiement par carte, et l’utilisation d’un code — laissent chez nous un compte. Il contient votre adresse, une empreinte scrypt salée de votre code secret (jamais le code, et l’empreinte ne permet pas de le retrouver), l’origine du compte (carte ou code), la formule achetée, la date de fin, la date de création, votre choix quant aux courriels et le moment où vous l’avez fait, un jeton de connexion par appareil connecté, ainsi que le compte des saisies erronées et l’état de verrouillage. Un abonnement annuel enregistre en plus les deux codes cadeaux émis. C’est le seul compte que nous conservions nous-mêmes.' },
         { term: 'Nos courriels', body: 'La création d’un compte pose une seule case à cocher : voulez-vous recevoir les courriels de Slides ? Laissée vide, nous n’écrivons jamais — rien ne fonctionne différemment pour autant. Cochée, l’adresse ne sert qu’aux nouveaux plateaux, aux nouvelles versions et à une offre de temps en temps ; elle n’est remise à aucun annonceur ni à personne d’autre. Chaque message porte un lien de désinscription qui les arrête aussitôt, et vous pouvez aussi simplement nous écrire. Nous notons également le moment de ce choix, un consentement devant pouvoir être rattaché à un instant précis. Les messages liés au service lui-même ne sont pas de la publicité et partent dans tous les cas : les reçus et les avis de renouvellement viennent de Creem, et le seul que nous envoyions nous-mêmes est le code qui déverrouille un compte verrouillé.' },
         { term: 'Abonnement', body: 'S’abonner dans l’application ne demande aucune inscription, et nous ne recevons rien de votre compte {store}. C’est le reçu du magasin, conservé sur l’appareil, qui atteste l’abonnement ; il ne passe par aucun serveur à nous.', only: 'store' },
         { term: 'Données de paiement', body: 'Traitées par Creem. Nous ne recevons que l’état de la commande et l’adresse utilisée. Nous ne voyons ni ne conservons jamais votre numéro de carte.', only: 'web' },
@@ -426,7 +449,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: 'Courriel', body: E },
         { term: 'Délai de réponse', body: 'Généralement sous 3 jours ouvrés.' },
-        { term: 'Éditeur', body: 'Un développeur indépendant qui fait des jeux, écrit, et est aussi étudiant.' },
+        { term: 'Éditeur', body: 'Un développeur indépendant exerçant à titre individuel, sans société enregistrée. Il fait des jeux, écrit, et est aussi étudiant.' },
         { term: 'Hébergeur', body: 'Vercel Inc. (États-Unis).' },
         { term: 'Langues', body: 'Français, English, 中文.' },
       ],
