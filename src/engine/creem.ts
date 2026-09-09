@@ -234,15 +234,39 @@ export interface SettledReturn {
   checkoutId: string;
 }
 
-export async function settleReturn(): Promise<SettledReturn | null> {
+/**
+ * The checkout id Creem put in the return URL, taken out of the address bar
+ * as it is read.
+ *
+ * Deliberately separate from asking the server about it. The two used to be
+ * one function, and the order inside it was the wrong way round: the address
+ * bar was cleared *before* the request went out, and every failure path
+ * returned null. So a buyer who came back from a completed payment on a
+ * flaky connection — or whose card was still in 3-D Secure, which Creem
+ * reports as not-yet-active — lost the only handle anyone had on their
+ * payment, permanently. They had paid; the app no longer knew which payment.
+ *
+ * Split apart, the caller can write the id down first and ask afterwards,
+ * which is the only order that survives the request failing.
+ */
+export function takeReturnedCheckoutId(): string | null {
   const params = new URLSearchParams(window.location.search);
   const checkoutId = params.get('checkout_id') || params.get('checkoutId');
   if (!checkoutId) return null;
+  // Out of the address bar either way: a reload or a shared link must not be
+  // a second attempt at the same order. What keeps it now is localStorage.
   clearReturnParams(params);
+  return checkoutId;
+}
+
+/** Confirm one checkout with Creem, through our own endpoint. Null means
+ *  "not settled" — which is not the same as "not paid", so callers keep the
+ *  id and ask again rather than throwing it away. */
+export async function settleCheckout(checkoutId: string): Promise<Entitlement | null> {
   try {
     const reply = await postJson<SubscriptionReply>('/api/subscription', { checkoutId });
     if (!reply.active) return null;
-    return { entitlement: toEntitlement(reply, reply.email ?? ''), checkoutId };
+    return toEntitlement(reply, reply.email ?? '');
   } catch {
     return null;
   }

@@ -393,7 +393,19 @@ export function openSetPasswordWindow(
 export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
   const pending = pendingAccount();
   // 只追刷卡的。内部码兑换后的绑定是建议，不在每次打开时再弹一遍。
-  if (pending && pending.kind !== 'code') openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
+  if (!pending || pending.kind === 'code') return;
+  // 而且必须真的有权益在手上才弹。
+  //
+  // 刷卡那扇窗是关不掉的（openSetPasswordWindow 里 dismissable = fromCode），
+  // 这对刚付完钱的人是对的——他手上的订阅只活在这一个浏览器里。但记下这个
+  // checkout id 的那一步现在早于「问服务器这笔到底成没成」，所以光有 id 不
+  // 等于有人付过钱：地址栏里随手拼一个 ?checkout_id= 也能留下一个。真按 id
+  // 就弹，那种链接会把人永久锁在一扇打不开的窗里。
+  //
+  // 权益是那道分界：结算成功才会有。付了钱但那一次请求没成的人，id 还留着，
+  // 下次启动重试成功之后照样会看到这扇窗。
+  if (!isGenius()) return;
+  openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
 }
 
 /**

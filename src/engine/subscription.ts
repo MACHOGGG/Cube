@@ -356,11 +356,28 @@ export async function refreshEntitlement(): Promise<void> {
       const creem = await import('./creem');
       // A return from Creem's page carries the order in the URL; that is a
       // fresh purchase to record, and it takes precedence over the cache.
-      const settled = await creem.settleReturn();
-      if (settled) {
-        setEntitlement(settled.entitlement);
-        rememberPending({ kind: 'checkout', id: settled.checkoutId });
-        return;
+      //
+      // Written down before anyone is asked about it. The id exists only
+      // because Creem sent this browser back from a checkout it considered
+      // finished, so it is worth more than the answer to any single request:
+      // the request can fail, and the id cannot be recovered once the address
+      // bar is cleared. Storing first turns "the network blinked and this
+      // buyer's payment is now unfindable" into "we will ask again".
+      const returned = creem.takeReturnedCheckoutId();
+      if (returned) rememberPending({ kind: 'checkout', id: returned });
+
+      // Whatever checkout is still outstanding — the one that just came
+      // back, or one an earlier launch never managed to settle.
+      const outstanding = pendingAccount();
+      if (outstanding?.kind === 'checkout') {
+        const paid = await creem.settleCheckout(outstanding.id);
+        if (paid) {
+          setEntitlement(paid);
+          return;
+        }
+        // Not settled. The id stays: a card in 3-D Secure reads as not-active
+        // for a while, and a request that never arrived says nothing at all.
+        if (returned) return;
       }
       // A redeemed code carries its own end date and cannot be extended
       // without another code, so there is nothing to re-ask anyone about.
