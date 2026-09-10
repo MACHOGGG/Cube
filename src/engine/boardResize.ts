@@ -157,6 +157,9 @@ export function fitPanelRadius(wrap: HTMLElement): void {
     wrap.style.borderRadius = held;
   };
   if (!(design > 0)) return keep();
+  // 手指还在棋盘上：这几帧棋子不在自己格子里，算出来的不是这副棋盘的圆角。
+  // 记号由 drag.ts 挂（DRAG_CLASS），从手指落下到松开。
+  if (wrap.classList.contains('board-dragging')) return keep();
 
   // 一枚棋子的圆角就够了：同一个棋盘上它们长得一样。三角是 clip-path 画的，
   // 读到 0，那就当它是方的——保守一点，不会切到。
@@ -168,6 +171,38 @@ export function fitPanelRadius(wrap: HTMLElement): void {
   if (!(W > 0) || !(H > 0)) return keep();
   // 顺序照 CSS 的 border-radius：左上、右上、右下、左下。
   const limit = [design, design, design, design];
+
+  /**
+   * 有棋子正滑在地板外面，就什么都不算，把现在挂着的圆角留着。
+   *
+   * 这一条是「圆角闪一下」的真凶，而且和从前那次是同一个洞的另一面。
+   *
+   * 从前是**缩**：拖动时补位和正在滑的那一行伸出地板，照它们算，那一侧的角
+   * 被压到 0，圆角当场变直角（见下面 .ghost 和「整个待在地板里」两条）。
+   * 那次把它们排除掉之后，变成了**涨**：拖第一行的时候，上面两个角一个棋子
+   * 都管不着了，于是从贴着棋子的 14px 一路长回设计值 25px，手一松又掉回
+   * 14px。逐帧量出来是 14 → 25.32 → 14。玩家报的「移动结束后被拖的那一行会
+   * 闪一下」「圆角闪烁」，看到的就是这一下。
+   *
+   * 根子在于：圆角是**排版**的性质，不是某一帧的性质。offsetIn 特意不认
+   * transform 正是为了这个——可拖动预览动的是 style.left，那是货真价实的排
+   * 版位移，offsetLeft 照单全收。所以光靠「不认 transform」漏了这一路。
+   *
+   * 于是改成：只要有一枚（非补位的）棋子这一帧不在地板里，就认定「正在动」，
+   * 这一帧不重算。棋子回到自己格子里的那一帧再算，算出来还是那个 14px——从
+   * 头到尾没有一帧是别的数。
+   *
+   * 「静止时没有棋子戳在地板外面」这个前提不是假设：check-board-fit.mjs 八
+   * 个玩法 × 横竖两个方向都在盯着它。
+   */
+  for (const p of pieces) {
+    if (p.classList.contains('ghost')) continue;
+    const box = offsetIn(p, wrap);
+    if (!box) continue;
+    if (box.x < -0.5 || box.y < -0.5 || box.x + box.w > W + 0.5 || box.y + box.h > H + 0.5) {
+      return keep();
+    }
+  }
 
   for (const p of pieces) {
     const box = offsetIn(p, wrap);

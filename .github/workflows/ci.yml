@@ -45,6 +45,13 @@ jobs:
         run: |
           npx esbuild src/engine/stalemate.ts --bundle --format=esm --outfile=/tmp/stalemate.mjs
           node scripts/check-stalemate.mjs /tmp/stalemate.mjs
+      # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
+      # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
+      # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。
+      - name: 得分图案怎么长大
+        run: |
+          npx esbuild src/engine/matchGrowth.ts --bundle --format=esm --outfile=/tmp/growth.mjs
+          node scripts/check-match-growth.mjs /tmp/growth.mjs
 
       # 服务端：权限、战绩与排行榜、兑换码的竞态。都用内存里的 Redis 替身，
       # 不连任何外部服务。

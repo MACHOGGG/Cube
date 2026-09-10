@@ -106,6 +106,16 @@ export interface Grab {
 const GRAB_CLASS = 'piece-grabbed';
 
 /**
+ * 手指在棋盘上的那一段，地板身上挂的记号。
+ *
+ * 它只有一个用处：告诉 boardResize.ts 的 fitPanelRadius「这几帧棋子不在自己
+ * 格子里，别照它们算圆角」。圆角是排版的性质，不是某一帧的性质——拖动预览动
+ * 的是 style.left（货真价实的排版位移，offsetLeft 照单全收），不加这个记号，
+ * 地板的角会跟着手指一路变，松手再弹回去。见 fitPanelRadius 上面那段。
+ */
+const DRAG_CLASS = 'board-dragging';
+
+/**
  * Wires the pointerdown/move/up/cancel lifecycle every board shares: capture
  * the pointer, hold off on committing to an axis/line until the drag clears a
  * small dead zone, then hand raw deltas to the shape so it can do its own
@@ -140,6 +150,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
     const rect = (cb.origin ?? target).getBoundingClientRect();
     active = true;
     locked = false;
+    target.classList.add(DRAG_CLASS);
     sx = e.clientX;
     sy = e.clientY;
     mark(cb.onStart(e.clientX - rect.left, e.clientY - rect.top));
@@ -171,6 +182,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
   function up(e: PointerEvent) {
     if (!active) return;
     active = false;
+    target.classList.remove(DRAG_CLASS);
     mark(null);
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
