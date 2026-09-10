@@ -1131,11 +1131,10 @@ function boot() {
 }
 
 /**
- * @param resume 刚打开页面（不是切语言）：这台设备要是还坐在哪间小屋里
- *   ——刷新了、或者关掉又打开——就直接回小屋页接着走，别落在主菜单上让
- *   屋里的人看着他「掉线」。小屋页自己会分辨座位还在不在、这一局打没打过。
+ * 页面框架（底排那两个字、图示）换一种语言重画。开机和切语言都走这儿——
+ * 切语言的时候只有它够，屏幕上那一页由调用方自己原地重画。
  */
-function afterLangChosen(lang: Lang, resume = false) {
+function relocalizeChrome(lang: Lang) {
   currentLang = lang;
   mountBottomNav(
     {
@@ -1146,6 +1145,15 @@ function afterLangChosen(lang: Lang, resume = false) {
     lang,
   );
   repaintIcons();
+}
+
+/**
+ * @param resume 刚打开页面（不是切语言）：这台设备要是还坐在哪间小屋里
+ *   ——刷新了、或者关掉又打开——就直接回小屋页接着走，别落在主菜单上让
+ *   屋里的人看着他「掉线」。小屋页自己会分辨座位还在不在、这一局打没打过。
+ */
+function afterLangChosen(lang: Lang, resume = false) {
+  relocalizeChrome(lang);
   if (isFirstRun()) {
     // 第一次打开这台设备上的游戏：就落在主菜单，只是《基础方块》和《基础小
     // 球》两张卡镶着一圈光（玩家定的）。
@@ -1168,14 +1176,23 @@ function afterLangChosen(lang: Lang, resume = false) {
   showMenu();
 }
 
-// Switching language always lands back on the (now newly localized) home
-// page rather than trying to re-render whatever screen was showing — every
-// screen builder in this file takes currentLang implicitly at render time,
-// so there's no single "redraw the current screen" hook to call generically.
+/**
+ * 换语言：**原地换**，不换页。
+ *
+ * 原先这儿走的是 afterLangChosen()，也就是开机那条路——它最后一句是
+ * showMenu()。于是玩家在个人主页上点一下《语言》，字是换了，人却被扔回了主
+ * 菜单，刚才翻到哪儿也没了。玩家的原话：「现在在web端更换语言后会立刻跳回主
+ * 页，不能这样」。这正是那条「不要出现意料之外的界面」。
+ *
+ * 《语言》这颗键只长在个人主页上（accountPage.ts 的 #langRow，全站独一
+ * 处），所以「原地」就是把个人主页照新语言再画一遍，连带把滚动位置放回去
+ * ——和天才特供那几页按《退出》回来走的是同一条（backToProfile）。
+ */
 function onLanguageSwitched(lang: Lang) {
   saveLang(lang);
   trackLanguage(lang, 'switch');
-  afterLangChosen(lang);
+  relocalizeChrome(lang);
+  showAccountPage('login', true);
 }
 
 // 个人主页 is written from the subscription as it stood when it rendered, so

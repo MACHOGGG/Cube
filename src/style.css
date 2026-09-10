@@ -849,6 +849,28 @@ button.btn-quiet {
 button.btn-quiet:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink-faint); }
 button:hover { filter: brightness(1.05); }
 
+/* 头一回按下暂停时，《怎么玩》那一行描一次呼吸的边。
+ *
+ * 那一屏和它下面的色盲开关长得一模一样，新玩家没有理由知道它通向六条规则
+ * ——巡检的原话：「不要假设玩家会自己发现」。所以亮一次，只亮一次（记在本
+ * 机，见 engine/firstPlay.ts 的 claimFirstHowToHint）。
+ *
+ * 描边用 box-shadow 不用 border：border 会改变盒子的尺寸，这一行在一排里，
+ * 胖一下整排都跟着动。一个来回 1.6 秒，播两遍就停——它是「看这里」，不是一
+ * 直闪的警报。 */
+@keyframes pause-hint-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 10px 1px var(--accent-soft); }
+}
+.pause-switch--hint {
+  border-color: var(--accent);
+  animation: pause-hint-breathe 1.6s ease-in-out 2;
+}
+/* 关掉动画的人也该看得见这是「有话要说的那一行」——留住那圈静止的描边。 */
+@media (prefers-reduced-motion: reduce) {
+  .pause-switch--hint { animation: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+}
+
 /* ---------- shape-select menu ---------- */
 .menu-grid { display: flex; flex-direction: column; gap: 12px; }
 .shape-card {
@@ -2340,9 +2362,14 @@ body:has(.slot-page) .home-nav { display: none; }
 .order-block, .gift-block { text-align: left; margin: 0 0 16px; }
 /* The shared label is tuned for the home grid — centred, and pulled 4px down
    onto the cards under it. Both are wrong over a left-aligned list, where
-   that negative margin puts the first row on top of the heading. */
+   that negative margin puts the first row on top of the heading.
+   《帐户》窗里那个《帐户设定》漏在了这张名单外面（它不在 .order-block /
+   .gift-block 里，是直接摆在窗里的），于是那四个字被底下《更换密码》那颗键
+   压掉了一截，而且还是居中的——同一扇窗里，上面两个小标题靠左、它居中。
+   玩家的原话：「这个界面文字遮挡了请确定移动端和电脑端的排版」。 */
 .order-block .menu-section-label,
 .gift-block .menu-section-label,
+.acct-label,
 .genius-perks .menu-section-label { text-align: left; margin: 12px 0 6px; }
 .genius-perks .menu-section-label:first-child { margin-top: 0; }
 .gift-block .auth-hint { margin: 0 0 10px; }

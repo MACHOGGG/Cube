@@ -556,7 +556,7 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
     ${orderBlock(current, lang)}
     ${giftBlock(current.gifts ?? [], lang)}
     <p class="auth-msg" id="statusMsg" role="status">${esc(notice)}</p>
-    <div class="menu-section-label">${s.accountActions}</div>
+    <div class="menu-section-label acct-label">${s.accountActions}</div>
     <div class="acct-rows">
       ${row('statusChangePw', s.changePwRow)}
       ${row('statusChangeEmail', s.changeEmailRow)}
