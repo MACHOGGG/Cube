@@ -104,6 +104,14 @@ export interface I18nStrings {
   circleTutorialDesc: string;
   triangleTutorialDesc: string;
   // ---- account page ----
+  /**
+   * 《账户》——已登录的人点开的那一扇窗，抬头就这两个字。
+   *
+   * 不写「你已是 Slides 天才」：登录和有权限是两回事（玩家原话：「登录是登
+   * 录……登录不代表有权限」）。一个订阅到期的人照样登得进来看自己的战绩、换
+   * 密码、兑一张内部码，给他挂一块「你已是天才」的招牌是说假话。是不是天
+   * 才，由窗里那一段《订单情况》如实回答。
+   */
   accountTitle: string;
   tabRegister: string;
   tabLogin: string;
@@ -231,6 +239,26 @@ export interface I18nStrings {
   pwReset: string;
   /** 登录成功，但这个账号此刻没有在续的订阅。同样是「哪一半成了」。 */
   signedInNoSub: string;
+  // ---- 已登录：《账户》那一扇窗，以及窗里那两件事 ----
+  /** 窗里那一段小标签：底下几行都是「对这个账号做的事」。 */
+  accountActions: string;
+  changePwRow: string;
+  changeEmailRow: string;
+  /** 改密码：先证明你是本人。 */
+  oldPwLabel: string;
+  newPwLabel: string;
+  pwChanged: string;
+  /** 换邮箱：码寄到**新**地址——谁收得到，那个地址就是谁的。 */
+  newEmailLabel: string;
+  emailCodeSent: string;
+  emailChanged: string;
+  /** 想换过去的那个地址上已经有账号了。 */
+  emailTaken: string;
+  emailSame: string;
+  /** 两扇小窗共用的那一颗：确认。 */
+  confirmBtn: string;
+  /** 这台设备手里的令牌不作数了（在别处改过密码、或者过期）。 */
+  sessionGone: string;
   unlockConfirmBtn: string;
   unlockBadCode: string;
   unlockExpired: string;
@@ -614,6 +642,19 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockNewPw: 'New passcode (6 characters)',
     pwReset: 'Your new passcode is set — sign in with it.',
     signedInNoSub: 'Signed in. This account has no subscription running right now.',
+    accountActions: 'Account settings',
+    changePwRow: 'Change passcode',
+    changeEmailRow: 'Change email',
+    oldPwLabel: 'Current passcode',
+    newPwLabel: 'New passcode (exactly 6 letters or digits)',
+    pwChanged: 'Passcode changed. Your other devices will need it to sign in again.',
+    newEmailLabel: 'New email',
+    emailCodeSent: 'We sent a 6-digit code to the new address. Enter it to finish.',
+    emailChanged: 'Done — your account is on the new address.',
+    emailTaken: 'That address already has an account.',
+    emailSame: 'That is the address you are already on.',
+    confirmBtn: 'Confirm',
+    sessionGone: 'This device is no longer signed in. Please sign in again.',
     unlockConfirmBtn: 'Unlock and set passcode',
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
@@ -943,6 +984,19 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockNewPw: 'Nouveau code secret (6 caractères)',
     pwReset: 'Votre nouveau code secret est enregistré — connectez-vous avec.',
     signedInNoSub: 'Connecté. Ce compte n’a pas d’abonnement en cours.',
+    accountActions: 'Réglages du compte',
+    changePwRow: 'Changer le code secret',
+    changeEmailRow: 'Changer d’adresse',
+    oldPwLabel: 'Code secret actuel',
+    newPwLabel: 'Nouveau code secret (6 lettres ou chiffres)',
+    pwChanged: 'Code secret modifié. Vos autres appareils devront se reconnecter.',
+    newEmailLabel: 'Nouvelle adresse',
+    emailCodeSent: 'Un code à 6 chiffres est parti vers la nouvelle adresse. Saisissez-le pour terminer.',
+    emailChanged: 'C’est fait — votre compte est sur la nouvelle adresse.',
+    emailTaken: 'Cette adresse a déjà un compte.',
+    emailSame: 'C’est déjà votre adresse actuelle.',
+    confirmBtn: 'Confirmer',
+    sessionGone: 'Cet appareil n’est plus connecté. Reconnectez-vous.',
     unlockConfirmBtn: 'Déverrouiller et enregistrer',
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
@@ -1272,6 +1326,19 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockNewPw: '新密碼（6 位字元）',
     pwReset: '新密碼已經設好，用它登入就行。',
     signedInNoSub: '已登入。這個帳號目前沒有在續的訂閱。',
+    accountActions: '帳戶設定',
+    changePwRow: '更換密碼',
+    changeEmailRow: '更換信箱',
+    oldPwLabel: '目前的密碼',
+    newPwLabel: '新密碼（6 位數字或字母）',
+    pwChanged: '密碼換好了。其他裝置要用新密碼重新登入。',
+    newEmailLabel: '新的信箱',
+    emailCodeSent: '確認碼已經寄到新信箱，填進來就換好。',
+    emailChanged: '換好了——帳戶已經在新的信箱底下。',
+    emailTaken: '這個信箱已經有帳號了。',
+    emailSame: '這就是你現在用的信箱。',
+    confirmBtn: '確認',
+    sessionGone: '這台裝置的登入已經失效，請重新登入。',
     unlockConfirmBtn: '解鎖並設定新密碼',
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
@@ -1601,6 +1668,19 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockNewPw: '新密码（6 位字符）',
     pwReset: '新密码已经设好，用它登录就行。',
     signedInNoSub: '已登录。这个账号目前没有在续的订阅。',
+    accountActions: '账户设置',
+    changePwRow: '更换密码',
+    changeEmailRow: '更换邮箱',
+    oldPwLabel: '现在的密码',
+    newPwLabel: '新密码（6 位数字或字母）',
+    pwChanged: '密码换好了。其他设备要用新密码重新登录。',
+    newEmailLabel: '新的邮箱',
+    emailCodeSent: '确认码已经寄到新邮箱，填进来就换好。',
+    emailChanged: '换好了——账户已经在新的邮箱底下。',
+    emailTaken: '这个邮箱已经有账号了。',
+    emailSame: '这就是你现在用的邮箱。',
+    confirmBtn: '确认',
+    sessionGone: '这台设备的登录已经失效，请重新登录。',
     unlockConfirmBtn: '解锁并设置新密码',
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',

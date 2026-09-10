@@ -32,7 +32,7 @@ import {
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
-import { entitlement, isGenius } from '../engine/subscription';
+import { entitlement, isGenius, signedInEmail } from '../engine/subscription';
 import {
   openAuthWindow,
   openGeniusWindow,
@@ -107,13 +107,24 @@ export function renderAccountPage(
   // and Google already know who is holding the phone — so what would have
   // been 登录通道 there is 恢复购买, the only "sign in" they need.
   const subscribed = isGenius();
+  /**
+   * 登着的人，哪怕此刻没有权限，那颗大键也该带他去《账户》。
+   *
+   * 原先这里问的是 isGenius()：订阅一过期，他自己的账号就没有入口了——云端战
+   * 绩、别人寄给他的内部码、改密码，全都摸不着，只剩一颗写着「登录通道」的
+   * 键，按下去是让他再登一次已经登着的账号。玩家的原话是「登录是登录……登录
+   * 不代表有权限」，这一行就是那句话在代码里的样子。
+   */
+  const signedIn = Boolean(signedInEmail());
   /** 权益是内部码换来的（不是刷卡、也不是商店）——那一行右边挂个对勾。 */
   const byCode = subscribed && entitlement().channel === 'code';
   const gatewayLabel = subscribed
     ? s.geniusStatus
-    : isStoreChannel()
-      ? s.restoreBtn
-      : s.loginGateway;
+    : signedIn
+      ? s.accountTitle
+      : isStoreChannel()
+        ? s.restoreBtn
+        : s.loginGateway;
   /** 没开通的人，做好了的那几行行首挂的那把小锁。 */
   const lockGlyph = subscribed
     ? ''
@@ -599,7 +610,8 @@ export function renderAccountPage(
   const on = (id: string, fn: () => void) =>
     container.querySelector<HTMLButtonElement>('#' + id)?.addEventListener('click', fn);
   on('loginBtn', () => {
-    if (isGenius()) openStatusWindow(lang, refresh);
+    // 认「登着没登着」，不认「是不是天才」——理由见上面 signedIn 那一段。
+    if (signedInEmail()) openStatusWindow(lang, refresh);
     else if (isStoreChannel()) runStoreRestore(lang, refresh);
     else openAuthWindow(lang, initialTab, refresh);
   });

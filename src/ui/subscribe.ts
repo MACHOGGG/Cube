@@ -21,8 +21,11 @@ import {
   type PurchaseFailure,
 } from '../engine/subscription';
 import {
+  changePasscode,
+  confirmEmailChange,
   confirmUnlock,
   redeemCode,
+  requestEmailChange,
   requestUnlock,
   type AccountFailure,
 } from '../engine/account';
@@ -151,6 +154,16 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
       return s.alreadyActive;
     case 'notConfigured':
       return s.notOnSaleYet;
+    case 'taken':
+      return s.emailTaken;
+    case 'sameEmail':
+      return s.emailSame;
+    case 'weak':
+      return s.setPwShort;
+    // 令牌不作数了（在别处改过密码、或者过期）：这台设备得重新登一次。这
+    // 一支从没问过密码，答「密码不对」会把玩家支到一个他改不动的地方去。
+    case 'auth':
+      return s.sessionGone;
     default:
       return s.purchaseNetwork;
   }
@@ -507,34 +520,81 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
   overlay.querySelector<HTMLButtonElement>('#geniusClose')!.addEventListener('click', close);
 }
 
-/** What a subscriber sees: how long they have, and the way out. */
-export function openStatusWindow(lang: Lang, onChanged: () => void): void {
+/**
+ * 《账户》——登录之后，跟这个账号有关的每一件事都在这一扇窗里。
+ *
+ * 原先它叫「订单情况」，只有天才点得开，抬头写着「你已是 Slides 天才」，底
+ * 下横着一排小按钮（管理订阅 / 退出登录 / 绑定），《关闭》还是最红的那一颗。
+ * 玩家指出的两件事都指向同一个毛病：
+ *
+ *   「登录是登录……登录不代表有权限」——订阅过期的人照样是这个账号的主人，
+ *     他的云端战绩、别人寄给他的内部码都在里面，那扇门不该只对天才开。
+ *   「注意整体排版清晰放在一起，不要东一个西一个」——一排横着的小按钮，
+ *     宽窄不一、轻重不分，本来就不是给「几件并列的事」用的排法。
+ *
+ * 所以现在：抬头只写《账户》；是不是天才由《订单情况》如实回答（没有在续
+ * 的订阅就写那一句 orderLapsed）；能做的事排成一列，和个人主页上那些行长得
+ * 一模一样——同一种样子代表同一件事「点进去还有一层」，玩家不用重新学。
+ *
+ * 底下只留一颗《关闭》。一排里只有它，就不存在「本来想按别的、顺手按到关
+ * 闭」——那正是玩家抱怨的那一下。
+ */
+export function openStatusWindow(lang: Lang, onChanged: () => void, notice = ''): void {
   const s = STRINGS[lang];
   const current = entitlement();
+  /** 刷卡订阅那一条：商店里买的没有这个门户，内部码换来的也没有。 */
+  const hasPortal = !isStoreChannel() && current.channel !== 'code';
+  const row = (id: string, label: string) =>
+    `<button class="profile-row" id="${id}">
+       <span class="profile-row-label">${label}</span>
+       <span class="profile-row-value">&rsaquo;</span>
+     </button>`;
   const { overlay, close } = openModal(
     'genius-modal',
     `
-    <h2>${s.subscribedTitle}</h2>
+    <h2>${s.accountTitle}</h2>
     ${orderBlock(current, lang)}
     ${giftBlock(current.gifts ?? [], lang)}
-    <p class="auth-hint">${
-      isStoreChannel()
-        ? s.manageOnStore.replace('{store}', payeeName())
-        : s.subscribeIntro
-    }</p>
-    <p class="auth-msg" id="statusMsg" role="status"></p>
-    <div class="btn-row">
+    <p class="auth-msg" id="statusMsg" role="status">${esc(notice)}</p>
+    <div class="menu-section-label">${s.accountActions}</div>
+    <div class="acct-rows">
+      ${row('statusChangePw', s.changePwRow)}
+      ${row('statusChangeEmail', s.changeEmailRow)}
       ${
-        isStoreChannel()
-          ? ''
-          : `<button class="btn-quiet" id="statusSignOut">${s.signOutBtn}</button>
-             <button class="icon-btn" id="statusManage">${s.manageSubscription}</button>`
+        // 没有在续的订阅：兑一张内部码就是他此刻最该走的那条路，所以它排在
+        // 这里，而不是只藏在登录窗的一行小字后面。
+        isGenius() ? '' : row('statusRedeem', s.insiderCode)
       }
-      ${pendingAccount()?.kind === 'code' ? `<button class="icon-btn" id="statusBind">${s.bindNow}</button>` : ''}
+      ${pendingAccount()?.kind === 'code' ? row('statusBind', s.bindNow) : ''}
+      ${hasPortal ? row('statusManage', s.manageSubscription) : ''}
+      ${isStoreChannel() ? '' : row('statusSignOut', s.signOutBtn)}
+    </div>
+    ${
+      isStoreChannel()
+        ? `<p class="auth-hint">${s.manageOnStore.replace('{store}', payeeName())}</p>`
+        : ''
+    }
+    <div class="btn-row">
       <button class="btn-quiet" id="statusClose">${s.closeBtn}</button>
     </div>
   `,
   );
+
+  // 换密码 / 换邮箱：各自一扇小窗，关掉之后回到这一扇（refresh），这样玩家
+  // 改完能当场看见改成了什么，不用自己再点回来。
+  const back = (notice = '') => openStatusWindow(lang, onChanged, notice);
+  overlay.querySelector<HTMLButtonElement>('#statusChangePw')?.addEventListener('click', () => {
+    close();
+    openChangePasswordWindow(lang, onChanged, back);
+  });
+  overlay.querySelector<HTMLButtonElement>('#statusChangeEmail')?.addEventListener('click', () => {
+    close();
+    openChangeEmailWindow(lang, onChanged, back);
+  });
+  overlay.querySelector<HTMLButtonElement>('#statusRedeem')?.addEventListener('click', () => {
+    close();
+    openRedeemWindow(lang, onChanged);
+  });
 
   // 内部码还只跟着这台设备走：想让它跟着自己走，从这儿绑到一个邮箱。
   overlay.querySelector<HTMLButtonElement>('#statusBind')?.addEventListener('click', () => {
@@ -583,7 +643,16 @@ function orderBlock(current: Entitlement, lang: Lang): string {
   else if (current.until) {
     rows.push([s.orderUntilLabel, new Date(current.until).toLocaleDateString(LOCALES[lang])]);
   }
-  if (!rows.length) return `<p class="auth-hint">${s.orderLapsed}</p>`;
+  /**
+   * 没有在续的订阅，就明说这一句。
+   *
+   * 原先它只在「一行都排不出来」时才出现，可登录之后邮箱那一行总是排得出来
+   * ——于是一个订阅早过期的人，看到的是一块写着《你的订阅》、底下只有他邮箱
+   * 的牌子，一个字都没说他此刻没有权限。玩家的原话是「登录是登录……登录不代
+   * 表有权限」，那这扇窗就得把后半句说出来。
+   */
+  const lapsed = current.active ? '' : `<p class="auth-hint">${s.orderLapsed}</p>`;
+  if (!rows.length) return lapsed || `<p class="auth-hint">${s.orderLapsed}</p>`;
   return `<div class="order-block">
     <div class="menu-section-label">${s.orderTitle}</div>
     ${rows
@@ -594,7 +663,7 @@ function orderBlock(current: Entitlement, lang: Lang): string {
         </div>`,
       )
       .join('')}
-  </div>`;
+  </div>${lapsed}`;
 }
 
 /**
@@ -656,6 +725,179 @@ function wireCopyButtons(overlay: HTMLElement, lang: Lang): void {
       window.setTimeout(() => (btn.textContent = was), 1400);
     });
   }
+}
+
+/**
+ * 更换密码。旧密码是唯一的凭据——不是「登着就能改」。
+ *
+ * 一台没锁屏的手机被人拿去，如果登着就能改密码，那台手机的主人当场就丢了账
+ * 号（新密码是拿手机的人设的，真主人反而进不去）。多问一次旧密码，挡的正是
+ * 这一种；真主人不过是多打六个字符。
+ *
+ * 改完服务端会把所有设备的令牌一并作废（换了钥匙，别人手上那把就该不好使），
+ * 再发一把新的给这台。那把新的一定要存下来，不然刚改完密码的人自己先掉线。
+ */
+export function openChangePasswordWindow(
+  lang: Lang,
+  onChanged: () => void,
+  onBack: (notice?: string) => void,
+): void {
+  const s = STRINGS[lang];
+  const email = signedInEmail() ?? '';
+  const { overlay, close } = openModal(
+    'auth-modal',
+    `
+    <h2>${s.changePwRow}</h2>
+    <p class="auth-hint">${esc(email)}</p>
+    <form id="cpwForm" autocomplete="on">
+      <input type="email" name="username" autocomplete="username" value="${esc(email)}" hidden readonly />
+      ${field('cpwOld', s.oldPwLabel, `type="password" name="current-password" autocomplete="current-password"`)}
+      ${field('cpwNew', s.newPwLabel,
+        `type="password" name="new-password" autocomplete="new-password" placeholder="${esc(s.setPwPlaceholder)}"`)}
+      <button type="submit" hidden></button>
+    </form>
+    <p class="auth-msg" id="cpwMsg" role="status"></p>
+    <div class="btn-row">
+      <button class="btn-quiet" id="cpwClose">${s.closeBtn}</button>
+      <button class="primary" id="cpwGo">${s.confirmBtn}</button>
+    </div>
+  `,
+  );
+
+  const oldPw = overlay.querySelector<HTMLInputElement>('#cpwOld')!;
+  const newPw = overlay.querySelector<HTMLInputElement>('#cpwNew')!;
+  const msg = overlay.querySelector<HTMLElement>('#cpwMsg')!;
+  const go = overlay.querySelector<HTMLButtonElement>('#cpwGo')!;
+  const form = overlay.querySelector<HTMLFormElement>('#cpwForm')!;
+
+  const submit = async () => {
+    if (!oldPw.value) return void (msg.textContent = s.pwWrong);
+    // 和服务器同一条规矩（PASS_RE：正好 6 位，数字或字母）。先在这儿说一遍，
+    // 省一趟往返，也省得玩家把「不合格」读成「旧密码错了」。
+    if (!isPin(newPw.value)) return void (msg.textContent = s.setPwShort);
+    go.disabled = true;
+    msg.textContent = s.workingLabel;
+    const done = await changePasscode(email, oldPw.value, newPw.value);
+    go.disabled = false;
+    if (!done.ok) {
+      msg.textContent = accountFailText(done.reason, lang);
+      return;
+    }
+    // 旧的那些令牌已经在服务端作废了，这一把是刚发给这台设备的。不接住的话，
+    // 这台设备下一次去看排行榜就会被告知「请重新登录」——刚改完密码的人被自
+    // 己的改动踢下线，是说不通的。
+    setEntitlement({ ...entitlement(), token: done.token });
+    void offerToSave(email, newPw.value);
+    onChanged();
+    close();
+    onBack(s.pwChanged);
+  };
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void submit();
+  });
+  go.addEventListener('click', () => form.requestSubmit());
+  overlay.querySelector<HTMLButtonElement>('#cpwClose')!.addEventListener('click', () => {
+    close();
+    onBack();
+  });
+}
+
+/**
+ * 更换邮箱。两步，一屏——不另开一扇窗，因为这是同一件事的上下半段。
+ *
+ * 邮箱在这个站里就是账号本身（账号存在 acct:<邮箱> 底下，排行榜上的成员也是
+ * 这个地址），所以换邮箱是搬家：服务器会把账号、云端战绩、榜上的位置一起挪
+ * 过去。见 api/email.js。
+ *
+ * 确认码寄给**新**地址，不是现在这个。谁收得到，那个地址就是谁的——少了这一
+ * 步，打错一个字母就把自己关在门外（此后《忘记密码》的信永远寄到一个他打不
+ * 开的信箱），更别说可以把账号停在别人的地址上。
+ */
+export function openChangeEmailWindow(
+  lang: Lang,
+  onChanged: () => void,
+  onBack: (notice?: string) => void,
+): void {
+  const s = STRINGS[lang];
+  const current = entitlement();
+  const email = current.email ?? '';
+  const { overlay, close } = openModal(
+    'auth-modal',
+    `
+    <h2>${s.changeEmailRow}</h2>
+    <p class="auth-hint">${esc(email)}</p>
+    ${field('cemNew', s.newEmailLabel,
+      `type="email" autocomplete="off" inputmode="email" placeholder="${esc(s.emailPlaceholder)}"`)}
+    <div id="cemStep2" hidden>
+      ${field('cemCode', s.unlockCodeLabel,
+        `type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6"`)}
+    </div>
+    <p class="auth-msg" id="cemMsg" role="status"></p>
+    <div class="btn-row">
+      <button class="btn-quiet" id="cemClose">${s.closeBtn}</button>
+      <button class="primary" id="cemGo">${s.unlockSendBtn}</button>
+    </div>
+  `,
+  );
+
+  const wanted = overlay.querySelector<HTMLInputElement>('#cemNew')!;
+  const step2 = overlay.querySelector<HTMLElement>('#cemStep2')!;
+  const codeInput = overlay.querySelector<HTMLInputElement>('#cemCode')!;
+  const msg = overlay.querySelector<HTMLElement>('#cemMsg')!;
+  const go = overlay.querySelector<HTMLButtonElement>('#cemGo')!;
+  let sent = false;
+
+  const submit = async () => {
+    const next = wanted.value.trim();
+    if (!isEmail(next)) return void (msg.textContent = s.emailInvalid);
+    const token = entitlement().token ?? '';
+    go.disabled = true;
+    msg.textContent = s.workingLabel;
+
+    if (!sent) {
+      const asked = await requestEmailChange(email, token, next, lang);
+      go.disabled = false;
+      if (!asked.ok) {
+        msg.textContent = accountFailText(asked.reason, lang);
+        return;
+      }
+      // 码寄出去了，这一屏就变成第二段：新地址那一栏锁住（改了它，手里那张
+      // 码就对不上——服务器认的是「发码时的那个地址」），下面露出验证码。
+      sent = true;
+      wanted.readOnly = true;
+      step2.hidden = false;
+      go.textContent = s.confirmBtn;
+      msg.textContent = s.emailCodeSent;
+      codeInput.focus();
+      return;
+    }
+
+    const done = await confirmEmailChange(email, token, next, codeInput.value.trim());
+    go.disabled = false;
+    if (!done.ok) {
+      msg.textContent = accountFailText(done.reason, lang);
+      return;
+    }
+    // 搬完了。本机这份要跟着换——不换的话它还拿旧地址去问权益，服务器那边已
+    // 经没有那个账号了，下一次刷新就成了「查无此人」。
+    setEntitlement({ ...entitlement(), email: done.email, token: done.token });
+    onChanged();
+    close();
+    onBack(s.emailChanged);
+  };
+
+  for (const el of [wanted, codeInput]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') void submit();
+    });
+  }
+  go.addEventListener('click', () => void submit());
+  overlay.querySelector<HTMLButtonElement>('#cemClose')!.addEventListener('click', () => {
+    close();
+    onBack();
+  });
 }
 
 /**

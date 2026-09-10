@@ -31,7 +31,10 @@ import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import {
+  del,
   get,
+  hdel,
+  hget,
   hgetall,
   hset,
   set,
@@ -472,4 +475,55 @@ async function rebuild(req, res, body) {
     players++;
   }
   return send(res, 200, { ok: true, players, rows: rowsWritten, dropped: [...drop] });
+}
+
+/**
+ * 换邮箱的时候，把这个人的战绩一起搬过去（api/email.js 调它）。
+ *
+ * 为什么在这个文件里：`stats:` `runs:` `lb:*` `lbnames` 这几把钥匙是这个文件
+ * 造出来的，别处不知道它们长什么样。搬家的活儿留在拥有钥匙的这一边，将来加
+ * 一张榜也只用改这一处。
+ *
+ * 榜上的成员就是玩家的 id（也就是邮箱本身），所以「搬」= 在新 id 上重新写一
+ * 遍，再把旧 id 从每张榜上撤掉。写哪几张榜不用去猜：`stats.best` 里记着他打
+ * 过的每一张，逐张照抄就是了。
+ *
+ * 顺序是**先写新的，最后删旧的**——中间摔了，他的战绩在两个 id 底下各有一
+ * 份（多一份，不好看，但一分没丢）；反过来先删就可能什么都不剩。这条和
+ * redeem.js 那次「码烧掉却没到账」是同一条教训。
+ */
+export async function renameScoreOwner(from, to) {
+  if (!from || !to || from === to) return;
+
+  const stats = await get(statsKey(from));
+  const runs = await get(runsKey(from));
+  const name = await hget(NAMES, from);
+
+  if (stats) await set(statsKey(to), stats);
+  if (runs) await set(runsKey(to), runs);
+  if (name) await hset(NAMES, to, name);
+
+  // 每一张他上过的榜。zadd 而不是 zaddIfHigher：新 id 上本来就该是这个数，
+  // 而不是「和已有的比一比」——新邮箱按规矩是个没有账号的地址，榜上不该有它。
+  const best = (stats && typeof stats.best === 'object' && stats.best) || {};
+  for (const [boardId, score] of Object.entries(best)) {
+    const n = Number(score) || 0;
+    if (n <= 0) continue;
+    await zadd(boardKey(boardId), n, to);
+    await zrem(boardKey(boardId), from);
+  }
+
+  // 总榜单独记一笔玩法（行首那个小图形靠它画）。
+  const top = bestOverall({ best });
+  if (top) {
+    await zadd(TOTAL_BOARD, top.score, to);
+    await hset(TOTAL_MODE, to, top.mode);
+  }
+  await zrem(TOTAL_BOARD, from);
+  await hdel(TOTAL_MODE, from);
+  await hdel(NAMES, from);
+
+  // 旧 id 下的存档最后清。到这一行为止，新 id 那边什么都齐了。
+  await del(statsKey(from));
+  await del(runsKey(from));
 }

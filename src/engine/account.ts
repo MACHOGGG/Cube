@@ -38,6 +38,14 @@ export type AccountFailure =
   | 'notConfigured'
   /** Nowhere to send the unlock mail from — the app points at support. */
   | 'noMail'
+  /** 换邮箱：想换去的那个地址上已经有账号了。 */
+  | 'taken'
+  /** 换邮箱：填的就是现在这个地址。 */
+  | 'sameEmail'
+  /** 改密码：新密码不合规矩（不是正好 6 位数字或字母）。 */
+  | 'weak'
+  /** 令牌不认了——这台设备得重新登一次。 */
+  | 'auth'
   | 'network';
 
 export type AccountResult =
@@ -64,6 +72,10 @@ interface Reply {
   reset?: boolean;
   /** 'code' 表示这份权益是内部码给的；刷卡订阅那一支不带它。 */
   kind?: string;
+  /** /api/passcode 的改密码那一支：换好了。 */
+  ok?: boolean;
+  /** /api/email 的 confirm：账号真的搬到新地址了。 */
+  moved?: boolean;
 }
 
 async function post(path: string, body: unknown): Promise<{ status: number; reply: Reply }> {
@@ -106,6 +118,7 @@ function toResult(status: number, reply: Reply): AccountResult {
   const known: AccountFailure[] = [
     'wrong', 'locked', 'blocked', 'code', 'email', 'password',
     'wrongCode', 'expired', 'notConfigured', 'noMail', 'tooMany',
+    'taken', 'sameEmail', 'weak', 'auth',
   ];
   // The server calls it 'expired' on its own endpoint; here it has to be
   // told apart from the unlock mail's expiry, which shares the word.
@@ -176,4 +189,95 @@ export function confirmUnlock(email: string, code: string, password: string): Pr
     });
     return toResult(status, reply);
   });
+}
+
+/**
+ * 换密码 / 换邮箱：登录之后在《账户》窗里做的两件事。
+ *
+ * 两件事都只影响这一个账号，所以答复不带权益——他是不是天才，和他刚换了什么
+ * 没有关系。「这一趟成没成」单独说一句（done / sent），这是 api/unlock.js 那
+ * 次「密码换好了却被报成失败」教出来的规矩。
+ */
+export type SimpleResult = { ok: true } | { ok: false; reason: AccountFailure };
+
+const simple = async (
+  run: () => Promise<{ status: number; reply: Reply }>,
+  won: (reply: Reply) => boolean,
+): Promise<SimpleResult> => {
+  try {
+    const { status, reply } = await run();
+    if (status === 200 && won(reply)) return { ok: true };
+    const failed = toResult(status, reply);
+    return { ok: false, reason: failed.ok ? 'network' : failed.reason };
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+};
+
+/**
+ * 换密码。旧密码是唯一的凭据。
+ *
+ * 服务端换完会把**所有**设备的令牌一并作废（api/passcode.js 的 change：换了
+ * 钥匙，别人手里那把就该不好使），然后回一把新的给这台设备——所以这把令牌
+ * 一定要接住存下来，不然刚改完密码的人自己先被踢下线。
+ */
+export function changePasscode(
+  email: string,
+  password: string,
+  newPassword: string,
+): Promise<{ ok: true; token: string } | { ok: false; reason: AccountFailure }> {
+  return (async () => {
+    try {
+      const { status, reply } = await post('/api/passcode', { email, password, newPassword });
+      // 这条接口答的是 { ok, email, token }，没有 active——它管的是钥匙，不是
+      // 权益。所以不能拿 toResult 判成功（那一条只认 active / reset）。
+      if (status === 200 && reply.ok && reply.token) {
+        return { ok: true as const, token: reply.token };
+      }
+      const failed = toResult(status, reply);
+      return { ok: false as const, reason: failed.ok ? 'network' : failed.reason };
+    } catch {
+      return { ok: false as const, reason: 'network' as const };
+    }
+  })();
+}
+
+/** 换邮箱第一步：把确认码寄到**新**地址（谁收得到，谁说了算）。 */
+export function requestEmailChange(
+  email: string,
+  token: string,
+  newEmail: string,
+  lang: string,
+): Promise<SimpleResult> {
+  return simple(
+    () => post('/api/email', { email, token, newEmail, lang }),
+    (reply) => reply.sent === true,
+  );
+}
+
+/** 换邮箱第二步：码对上了就真的搬。回来的是新地址和这台设备手里那把令牌。 */
+export function confirmEmailChange(
+  email: string,
+  token: string,
+  newEmail: string,
+  code: string,
+): Promise<{ ok: true; email: string; token: string } | { ok: false; reason: AccountFailure }> {
+  return (async () => {
+    try {
+      const { status, reply } = await post('/api/email', {
+        action: 'confirm',
+        email,
+        token,
+        newEmail,
+        code,
+      });
+      if (status === 200 && reply.moved && reply.email && reply.token) {
+        return { ok: true as const, email: reply.email, token: reply.token };
+      }
+      const failed = toResult(status, reply);
+      return { ok: false as const, reason: failed.ok ? 'network' : failed.reason };
+    } catch {
+      return { ok: false as const, reason: 'network' as const };
+    }
+  })();
 }

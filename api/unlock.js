@@ -13,7 +13,7 @@ import {
 import { resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { bump, del, get, set, storeConfigured } from './_store.js';
-import { mailConfigured, sendMail } from './_mail.js';
+import { compose, mailConfigured, mailLang, sendMail } from './_mail.js';
 
 /**
  * 忘了密码的那条路——连错六次被锁死的，走的也是这一条。
@@ -49,13 +49,10 @@ const key = (email) => 'unlock:' + email;
 const triesKey = (email) => 'unlock:tries:' + email;
 
 /**
- * 验证码那封信，四种语言。
+ * 验证码那封信，四种语言。挑哪一种、以及「英文永远附一份」，见 _mail.js 的
+ * compose——所有发信的地方共用那一条规矩。
  *
  * 「不说『解锁』」这一条照旧：绝大多数收到它的人只是忘了密码，没被锁过。
- *
- * 英文永远附一份在后面（英文那档除外）。收信的可能是他手机上一个只认英文的
- * 客户端、也可能是他换了台设备、还可能是他自己在国外——一封只有他此刻界面语
- * 言的信，读不懂就等于没发。多这几行字换「一定读得懂」，值。
  */
 const MAIL = {
   en: {
@@ -84,11 +81,6 @@ const MAIL = {
   },
 };
 
-const mailText = (code, lang) =>
-  lang === 'en'
-    ? MAIL.en.body(code)
-    : `${MAIL[lang].body(code)}\n\n${MAIL.en.body(code)}`;
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
@@ -103,10 +95,7 @@ export default async function handler(req, res) {
 }
 
 async function request(res, req, address, wantLang) {
-  // 玩家界面上是哪种语言，信就用哪种写。这一串是客户端报上来的，所以只认名
-  // 单里那四个，别的一律当英文——一个陌生人拿到的信，英文总比一种他读不懂的
-  // 文字强。
-  const lang = MAIL[String(wantLang || '')] ? String(wantLang) : 'en';
+  const lang = mailLang(wantLang);
   // No provider, no code. Saying so lets the app point at the support
   // address instead of leaving the player waiting for mail that never sends.
   if (!mailConfigured()) return send(res, 503, { error: 'noMail' });
@@ -134,11 +123,7 @@ async function request(res, req, address, wantLang) {
     await set(key(address), { code }, CODE_TTL_S);
     // 新码新账：上一张码猜掉的次数不跟着过来。
     await del(triesKey(address));
-    await sendMail({
-      to: address,
-      subject: MAIL[lang].subject,
-      text: mailText(code, lang),
-    });
+    await sendMail({ to: address, ...compose(MAIL, lang, code) });
   }
   return send(res, 200, { sent: true });
 }

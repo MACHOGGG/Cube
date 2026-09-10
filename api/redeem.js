@@ -132,7 +132,10 @@ export default async function handler(req, res) {
       throw err;
     }
     await noteUsed({ email: address });
-    return send(res, 200, { ...entitlementOf(account, address), kind: 'code' });
+    // token 回这台设备自己带来的那一把。entitlementOf 给的是 account.token
+    // ——「最新签发的那一把」，他要是后来在别处又登过一次，那两把就不是同一
+    // 个；拿最新的盖上去会把这台设备手里的抹掉，等于兑一次码把自己顶下线。
+    return send(res, 200, { ...entitlementOf(account, address), token: String(token), kind: 'code' });
   }
 
   // Nobody to attach it to yet. It lives under the code, and the token below

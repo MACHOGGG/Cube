@@ -108,6 +108,10 @@ function memory(args) {
       mem.set(key, h);
       return 1;
     }
+    case 'HGET': {
+      const h = mem.get(key);
+      return h instanceof Map ? (h.get(String(rest[0])) ?? null) : null;
+    }
     case 'HGETALL': {
       const h = mem.get(key);
       if (!(h instanceof Map)) return [];
@@ -230,6 +234,9 @@ export async function bump(key, ttl) {
 export const takeOnce = async (key) => decode(await command(['GETDEL', key]));
 
 export const hset = (key, field, value) => command(['HSET', key, field, encode(value)]);
+/** 只要一个字段。排行榜的名字表是全站一张大 hash，为搬一个人的名字去
+ *  hgetall 一遍，读回来的是所有玩家。 */
+export const hget = async (key, field) => decode(await command(['HGET', key, field]));
 /** Returns true when the field was created — how a room claims its code. */
 export const hsetnx = async (key, field, value) =>
   (await command(['HSETNX', key, field, encode(value)])) === 1;

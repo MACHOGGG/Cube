@@ -122,6 +122,21 @@ Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写
   都要先拿令牌证明「这个邮箱是打请求这个人的」。
 - 客户端那份缓存在 `src/engine/subscription.ts`，`isGenius()` 是同步的、可以在
   渲染里调。
+- **「登着」和「是天才」是两件事，别拿一个当另一个。** 订阅过期的人照样是他自
+  己账号的主人（云端战绩、别人寄给他的内部码都在里面），照样该登得进来、改得
+  了密码、兑得了码——只是没有权限而已。所以入口问的是 `signedInEmail()`，能不
+  能玩才问 `isGenius()`。这两个混用过一次，代价是玩家进不去自己的账号。
+
+### 邮箱 = 账号身份，所以换邮箱是搬家
+
+账号存在 `acct:<邮箱>` 底下，云端战绩（`stats:` `runs:`）和排行榜上的**成员名**
+也都是这个地址。所以 `api/email.js` 的换邮箱要把这几样一起挪：账号 → 战绩 →
+每一张他上过的榜（`scores.js` 的 `renameScoreOwner`，钥匙归谁谁搬）。两条规矩：
+
+- **码寄给新地址**，不是现在这个——谁收得到，那个地址就是谁的。少了这一步，打
+  错一个字母就把自己关在门外，还能把账号停在别人的地址上。
+- **先在新地址写齐，最后才拆旧地址。** 中间摔了，他的东西在两个地址底下各有一
+  份（多一份，不好看，但一分没丢）；反过来先删就可能什么都不剩。
 
 ### 卖价：先问在哪个柜台
 
@@ -170,11 +185,12 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 | `_accounts.js` | 账号结构、scrypt 密码、多设备令牌、锁定计数 |
 | `_entitlement.js` | 谁是天才（见上） |
 | `_ratelimit.js` | `tooMany(bucket, id, limit, windowS)` + `callerId(req)` |
-| `_mail.js` | 唯一一种邮件：解锁验证码，走 Resend |
+| `_mail.js` | 走 Resend 发信；`compose()` 定了「按界面语言写 + 英文永远附一份」 |
 
 面向外的：`subscription`（登录/查权益）、`passcode`（设/改密码）、`unlock`
-（忘密码的解锁码）、`redeem`（兑内部码）、`checkout` / `portal`（Creem）、
-`room`（小屋）、`scores`（战绩与排行榜）、`mint`（批量发码，`ADMIN_TOKEN` 保护）。
+（忘密码的解锁码）、`email`（换邮箱，见上）、`redeem`（兑内部码）、
+`checkout` / `portal`（Creem）、`room`（小屋）、`scores`（战绩与排行榜）、
+`mint`（批量发码，`ADMIN_TOKEN` 保护）。
 
 ## 约定
 

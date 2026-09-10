@@ -2329,6 +2329,14 @@ body:has(.slot-page) .home-nav { display: none; }
 }
 /* 订单情况 — labelled rows, because this window is checked rather than read:
    whoever opens it already knows they subscribed and wants one line of it. */
+/* 《账户》窗里那一列：更换密码 / 更换邮箱 / 管理订阅 / 退出登录……
+ *
+ * 用的就是个人主页上那种行（.profile-row），一样的高度、一样的箭头。玩家原
+ * 话：「注意整体排版清晰放在一起，不要东一个西一个」——原先它们是横着一排宽
+ * 窄不一的小按钮，看不出这几件事是并列的。同一种样子代表同一件事「点进去还
+ * 有一层」，这样他不用为这扇窗重新学一遍。 */
+.acct-rows { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; }
+
 .order-block, .gift-block { text-align: left; margin: 0 0 16px; }
 /* The shared label is tuned for the home grid — centred, and pulled 4px down
    onto the cards under it. Both are wrong over a left-aligned list, where
