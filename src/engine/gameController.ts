@@ -23,6 +23,7 @@ import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON } from './bomb';
+import { claimFirstHowToHint } from './firstPlay';
 import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
 import type { Cell } from './types';
 
@@ -925,6 +926,29 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 的监听里：切到后台自动暂停走的也是这条路，不经过任何按钮。
     refs.pauseOverlay.classList.remove('pause--pre');
     refs.pauseOverlay.classList.add('show');
+    hintHowToOnce();
+  }
+
+  /**
+   * 头一回按下暂停：让《怎么玩》那一行描一次呼吸的边。
+   *
+   * 那一屏是全站唯一「打到一半还能把规则再看一遍」的地方，可它和下面那条色
+   * 盲开关长得一模一样——不点一下，新玩家没有任何理由知道它通向六条规则。
+   * 巡检的原话是「不要假设玩家会自己发现」。
+   *
+   * 一次就一次（firstPlay.ts 的 claimFirstHowToHint 记在本机），而且写在这
+   * 儿而不是那颗《暂停》的监听里：切到后台自动暂停走的也是这条路，不经过任
+   * 何按钮。动画自己播完就把类摘掉，省得它一直挂在 DOM 上。
+   */
+  function hintHowToOnce() {
+    const btn = refs.pauseOverlay.querySelector<HTMLElement>('#howBtn');
+    if (!btn || !claimFirstHowToHint()) return;
+    btn.classList.add('pause-switch--hint');
+    btn.addEventListener(
+      'animationend',
+      () => btn.classList.remove('pause-switch--hint'),
+      { once: true },
+    );
   }
 
   function doResume() {

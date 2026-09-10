@@ -28,7 +28,8 @@ export type PlayKey =
   | 'timed'
   | 'layout'
   | 'endcard'
-  | 'totaltip';
+  | 'totaltip'
+  | 'howhint';
 
 /** 三个基础玩法。「这是不是他打的第一个」按这三张算（见 main.ts 的 basicCoach）。 */
 export const BASIC_KEYS = ['square', 'circle', 'triangle'] as const;
@@ -121,5 +122,25 @@ export function claimFirstEndcard(): boolean {
 export function claimFirstTotalTip(): boolean {
   if (!firstTimeIn('totaltip')) return false;
   markOpened('totaltip');
+  return true;
+}
+
+/**
+ * 暂停面板里那颗《怎么玩》，第一次该不该亮一下。
+ *
+ * 这一屏是全站唯一「打到一半还能把规则再看一遍」的地方，可它长得和旁边的
+ * 色盲开关一模一样，谁也没理由相信新玩家会自己发现它——巡检的原话：「不要
+ * 假设玩家会自己发现」。所以第一次按下暂停时，让它描一次呼吸的边。
+ *
+ * 只一次，而且认的是「这辈子暂停过没有」，不是「这一局」：一个人头一回暂停
+ * 多半就在头一局里，但他要是头一局一路打到底、第二局才想起来暂停，那颗光也
+ * 该等着他。
+ *
+ * 和结算页那两处一样是「问一次记一次」，所以真的把面板打开了才叫得到（见
+ * gameController 的 doPause），不会被别的路白白用掉。
+ */
+export function claimFirstHowToHint(): boolean {
+  if (!firstTimeIn('howhint')) return false;
+  markOpened('howhint');
   return true;
 }
