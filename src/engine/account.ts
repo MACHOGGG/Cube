@@ -152,9 +152,11 @@ export type UnlockRequest = { sent: true } | { sent: false; reason: AccountFailu
  * who plays — 'noMail' is the one real failure, and it means this
  * deployment has no way to send it, so the app says to write to support.
  */
-export async function requestUnlock(email: string): Promise<UnlockRequest> {
+export async function requestUnlock(email: string, lang: string): Promise<UnlockRequest> {
   try {
-    const { status, reply } = await post('/api/unlock', { email });
+    // 界面上是哪种语言，那封信就用哪种写（服务器那头只认四个名字，别的当英
+    // 文，而且英文永远附一份——见 api/unlock.js 的 MAIL）。
+    const { status, reply } = await post('/api/unlock', { email, lang });
     if (status === 200 && reply.sent) return { sent: true };
     const failed = toResult(status, reply);
     return { sent: false, reason: failed.ok ? 'network' : failed.reason };

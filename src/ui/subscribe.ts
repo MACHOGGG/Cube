@@ -196,8 +196,8 @@ export function openPortalWindow(lang: Lang, email: string): void {
     </form>
     <p class="auth-msg" id="portalMsg" role="status"></p>
     <div class="btn-row">
-      <button class="icon-btn" id="portalGo">${s.manageSubscription}</button>
-      <button class="primary" id="portalClose">${s.closeBtn}</button>
+      <button class="btn-quiet" id="portalClose">${s.closeBtn}</button>
+      <button class="primary" id="portalGo">${s.manageSubscription}</button>
     </div>
   `,
   );
@@ -320,8 +320,8 @@ export function openSetPasswordWindow(
     ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder, !fromCode, s.newsOptIn)}
     <p class="auth-msg" id="pwMsg" role="status"></p>
     <div class="btn-row">
+      ${fromCode ? `<button class="btn-quiet" id="pwLater">${s.bindLater}</button>` : ''}
       <button class="primary" id="pwGo">${fromCode ? s.bindTitle : s.setPwTitle}</button>
-      ${fromCode ? `<button class="icon-btn" id="pwLater">${s.bindLater}</button>` : ''}
     </div>
   `,
     // 刷卡的那扇不能点掉：刚付了钱、还没设密码的人，手上的订阅只活在这一个
@@ -463,7 +463,7 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
       <!-- 登录 is the accented one. Someone who already subscribed and is
            looking at the paywall got here by accident, and the way out of
            that is signing in, not closing the window. -->
-      <button class="secondary" id="geniusClose">${s.closeBtn}</button>
+      <button class="btn-quiet" id="geniusClose">${s.closeBtn}</button>
       <button class="primary" id="geniusRestore">${
         isStoreChannel() ? s.restoreBtn : s.signInBtn
       }</button>
@@ -527,11 +527,11 @@ export function openStatusWindow(lang: Lang, onChanged: () => void): void {
       ${
         isStoreChannel()
           ? ''
-          : `<button class="icon-btn" id="statusManage">${s.manageSubscription}</button>
-             <button class="icon-btn" id="statusSignOut">${s.signOutBtn}</button>`
+          : `<button class="btn-quiet" id="statusSignOut">${s.signOutBtn}</button>
+             <button class="icon-btn" id="statusManage">${s.manageSubscription}</button>`
       }
       ${pendingAccount()?.kind === 'code' ? `<button class="icon-btn" id="statusBind">${s.bindNow}</button>` : ''}
-      <button class="primary" id="statusClose">${s.closeBtn}</button>
+      <button class="btn-quiet" id="statusClose">${s.closeBtn}</button>
     </div>
   `,
   );
@@ -689,8 +689,8 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
       <button class="link-btn" id="authRedeem">${s.haveCode}</button>
     </div>
     <div class="btn-row">
-      <button class="icon-btn" id="authGo"></button>
-      <button class="primary" id="authClose">${s.closeBtn}</button>
+      <button class="btn-quiet" id="authClose">${s.closeBtn}</button>
+      <button class="primary" id="authGo"></button>
     </div>
   `,
   );
@@ -867,8 +867,8 @@ export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
       `type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(s.redeemCodePlaceholder)}"`)}
     <p class="auth-msg" id="redeemMsg" role="status"></p>
     <div class="btn-row">
+      <button class="btn-quiet" id="redeemClose">${s.closeBtn}</button>
       <button class="primary" id="redeemGo">${s.redeemBtn}</button>
-      <button class="icon-btn" id="redeemClose">${s.closeBtn}</button>
     </div>
   `,
   );
@@ -945,8 +945,8 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
     </div>
     <p class="auth-msg" id="unlockMsg" role="status"></p>
     <div class="btn-row">
-      <button class="icon-btn" id="unlockGo">${s.unlockSendBtn}</button>
-      <button class="primary" id="unlockClose">${s.closeBtn}</button>
+      <button class="btn-quiet" id="unlockClose">${s.closeBtn}</button>
+      <button class="primary" id="unlockGo">${s.unlockSendBtn}</button>
     </div>
   `,
   );
@@ -968,7 +968,7 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
     msg.textContent = s.workingLabel;
 
     if (!sent) {
-      const asked = await requestUnlock(mail);
+      const asked = await requestUnlock(mail, lang);
       go.disabled = false;
       if (!asked.sent) {
         msg.textContent = accountFailText(asked.reason, lang);

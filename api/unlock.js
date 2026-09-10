@@ -48,6 +48,47 @@ const key = (email) => 'unlock:' + email;
  */
 const triesKey = (email) => 'unlock:tries:' + email;
 
+/**
+ * 验证码那封信，四种语言。
+ *
+ * 「不说『解锁』」这一条照旧：绝大多数收到它的人只是忘了密码，没被锁过。
+ *
+ * 英文永远附一份在后面（英文那档除外）。收信的可能是他手机上一个只认英文的
+ * 客户端、也可能是他换了台设备、还可能是他自己在国外——一封只有他此刻界面语
+ * 言的信，读不懂就等于没发。多这几行字换「一定读得懂」，值。
+ */
+const MAIL = {
+  en: {
+    subject: 'Slides — your code',
+    body: (c) =>
+      `Your Slides code is ${c}. It is valid for 30 minutes and lets you set a\n` +
+      `new passcode. If this was not you, you can ignore this message.`,
+  },
+  zhHans: {
+    subject: 'Slides — 验证码 / your code',
+    body: (c) =>
+      `你的 Slides 验证码是 ${c}，30 分钟内有效。\n` +
+      `输入后可以设置一个新的密码。如果这不是你本人操作，忽略这封邮件即可。`,
+  },
+  zhHant: {
+    subject: 'Slides — 驗證碼 / your code',
+    body: (c) =>
+      `你的 Slides 驗證碼是 ${c}，30 分鐘內有效。\n` +
+      `輸入後可以設定一組新密碼。如果這不是你本人操作，忽略這封郵件即可。`,
+  },
+  fr: {
+    subject: 'Slides — votre code / your code',
+    body: (c) =>
+      `Votre code Slides est ${c}. Il est valable 30 minutes et permet de définir\n` +
+      `un nouveau code secret. Si ce n’est pas vous, ignorez ce message.`,
+  },
+};
+
+const mailText = (code, lang) =>
+  lang === 'en'
+    ? MAIL.en.body(code)
+    : `${MAIL[lang].body(code)}\n\n${MAIL.en.body(code)}`;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
@@ -58,10 +99,14 @@ export default async function handler(req, res) {
 
   return body.action === 'confirm'
     ? confirm(res, address, body)
-    : request(res, req, address);
+    : request(res, req, address, body.lang);
 }
 
-async function request(res, req, address) {
+async function request(res, req, address, wantLang) {
+  // 玩家界面上是哪种语言，信就用哪种写。这一串是客户端报上来的，所以只认名
+  // 单里那四个，别的一律当英文——一个陌生人拿到的信，英文总比一种他读不懂的
+  // 文字强。
+  const lang = MAIL[String(wantLang || '')] ? String(wantLang) : 'en';
   // No provider, no code. Saying so lets the app point at the support
   // address instead of leaving the player waiting for mail that never sends.
   if (!mailConfigured()) return send(res, 503, { error: 'noMail' });
@@ -91,13 +136,8 @@ async function request(res, req, address) {
     await del(triesKey(address));
     await sendMail({
       to: address,
-      subject: 'Slides — 验证码 / your code',
-      // 不说「解锁」——绝大多数收到这封信的人只是忘了密码，没被锁过。
-      text:
-        `你的 Slides 验证码是 ${code}，30 分钟内有效。\n` +
-        `输入后可以设置一个新的密码。如果这不是你本人操作，忽略这封邮件即可。\n\n` +
-        `Your Slides code is ${code}. It is valid for 30 minutes and lets you set a\n` +
-        `new passcode. If this was not you, you can ignore this message.`,
+      subject: MAIL[lang].subject,
+      text: mailText(code, lang),
     });
   }
   return send(res, 200, { sent: true });
