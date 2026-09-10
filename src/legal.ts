@@ -16,8 +16,12 @@ import { isStoreChannel, payeeName } from './engine/channel';
 
 /** The single address every one of these documents points at. It is also the
  *  address a payment processor's review expects to find on the site itself,
- *  so it lives in one place and is quoted from there. */
-export const CONTACT_EMAIL = 'ogmach0000@gmail.com';
+ *  so it lives in one place and is quoted from there.
+ *
+ *  带域名的地址，不是随手一个免费邮箱——Creem 的审核清单点名要的就是这一条
+ *  （「Use a branded support email … not a generic address」）。信箱本身是
+ *  ImprovMX 转发到人在读的那个邮箱，域名这半边才是这里要的。 */
+export const CONTACT_EMAIL = 'support@play-slides.com';
 export const LEGAL_UPDATED = '2026-09-01';
 
 export interface LegalItem {
