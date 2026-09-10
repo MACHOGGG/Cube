@@ -174,6 +174,12 @@ web / ios / android。`src/engine/pricing.ts` 的 `plans()` **只返回一份价
 支付审核把「网站陈述与实际不符」直接归为 false information，比缺一份文档严重。
 改代码改到这些行为时，**回来同步这五份文档**。
 
+**还要留意「将来时」。** 《价格与订阅》里有一条写了很久的「**订阅开放后**，由
+Creem 作为记录商户……」——同一页别处全是现在时，只有它是条件句。订阅早就在卖
+了，这句话于是成了假话，而 Creem 的审核原样把它引了回来：「still described as
+not on sale yet」。写条款的时候，凡是「等 X 之后就会……」的句式，都要问一句
+「X 已经发生了没有」。
+
 ## 服务端 `api/`
 
 Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用模块：
@@ -213,11 +219,20 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 见 `.env.example`。`.env` 是 gitignore 的，生产值填在 Vercel 后台。
 
 - `CREEM_API_KEY` / `CREEM_PRODUCT_MONTHLY` / `CREEM_PRODUCT_YEARLY` ——
-  **现在用的是测试密钥**（`creem_test_` 开头）。上线前必须换成正式密钥并作废
-  旧的。
+  **已经换成正式的了**（2026-09）。
+  - `_creem.js` 的 `base()` 按密钥前缀选域名：`creem_test_` 开头走沙箱
+    （`test-api.creem.io`），别的走 `api.creem.io`。**两本目录是分开的**——
+    正式密钥查不到测试模式建的商品。
+  - 所以这三个**永远要一起换**。只换密钥不换商品 id，Creem 答 404，
+    `/api/checkout` 转成 502，玩家看到「服务器出了点问题」；三个都缺就是 503，
+    屏幕上写「订阅尚未开放」。这两句话分别对应哪一种，出问题时照着认。
+  - 这件事咬过一次：网站挂着测试密钥去申请 Creem 审核，被拒的理由正是
+    「the subscription checkout does not complete when selected」。
 - `KV_REST_API_URL` / `KV_REST_API_TOKEN` —— 没有它，小屋和兑换码报「还没开」。
-- `RESEND_API_KEY` / `MAIL_FROM` —— **还没配**。没配时忘记密码那一屏告诉玩家
-  写信到支持邮箱，而不是假装发出去了。
+- `RESEND_API_KEY` / `MAIL_FROM` —— **已经配好了**（2026-09，域名
+  `send.play-slides.com`）。`mailConfigured()` 要两个都在才算数：只填了密钥、
+  漏了 `MAIL_FROM`，忘记密码那一屏会说「目前还无法自动寄信」——踩过一次。
+  没配时它告诉玩家写信到支持邮箱，而不是假装发出去了。
 - `ADMIN_TOKEN` —— 至少 32 个随机字符。它背后是「无限发码」和「导出全部玩家
   邮箱」。
 

@@ -125,7 +125,13 @@ export interface I18nStrings {
   geniusSpecialTitle: string;
   /** 付费墙上「订阅后立刻拿到」那一段的小标题。 */
   geniusNowTitle: string;
-  /** 付费墙上「还没做、做完自动包含」那一段的小标题。 */
+  /**
+   * 付费墙上「还没做、做完自动包含」那一段的小标题。
+   *
+   * 分段的规矩：**确定的、已经做好的** 排进上面《订阅后立刻解锁》那一段；
+   * 剩下的排这一段。所以这一句只需要说「还没到」，不必再说一遍「正在做」
+   * ——原先写的是「正在制作　敬请期待」，两句话说的是同一件事。
+   */
   geniusSoonTitle: string;
   /**
    * 付费墙上「订阅后立刻解锁」那三条的说法。
@@ -570,7 +576,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusNowTitle: 'Unlocked the moment you subscribe',
     geniusNowCircleSeven: 'Seven-colour diamond ball board',
     geniusNowTriangleAdvanced: 'Advanced V-shaped triangle board',
-    geniusSoonTitle: 'In the works — coming soon',
+    geniusSoonTitle: 'Coming soon',
     geniusHostRooms: 'Put up a room and race your friends online',
     subscribeTitle: 'Become a Slides Genius',
     subscribeIntro: 'More unlocked right away, more added now and then, cancel any time.',
@@ -912,7 +918,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusNowTitle: 'Débloqué dès votre abonnement',
     geniusNowCircleSeven: 'Plateau losange à sept couleurs',
     geniusNowTriangleAdvanced: 'Plateau triangle avancé en V',
-    geniusSoonTitle: 'En cours de réalisation — bientôt disponible',
+    geniusSoonTitle: 'Bientôt disponible',
     geniusHostRooms: 'Montez une salle et faites la course en ligne',
     subscribeTitle: 'Devenir un Slides Génie',
     subscribeIntro: 'Plus de jeux tout de suite, d’autres de temps en temps, résiliable à tout moment.',
@@ -1255,7 +1261,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusNowTitle: '訂閱後立刻解鎖',
     geniusNowCircleSeven: '七色菱形小球棋盤',
     geniusNowTriangleAdvanced: '進階V型三角棋盤',
-    geniusSoonTitle: '正在製作　敬請期待',
+    geniusSoonTitle: '敬請期待',
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
     subscribeIntro: '立刻解鎖更多，不定時更新，隨時取消',
     planMonthly: '每月',
@@ -1597,7 +1603,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusNowTitle: '订阅后立刻解锁',
     geniusNowCircleSeven: '七色菱形小球棋盘',
     geniusNowTriangleAdvanced: '进阶V型三角棋盘',
-    geniusSoonTitle: '正在制作　敬请期待',
+    geniusSoonTitle: '敬请期待',
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
     subscribeIntro: '立刻解锁更多，不定时更新，随时取消',
     planMonthly: '每月',
