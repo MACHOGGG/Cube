@@ -29,7 +29,7 @@ import {
   requestUnlock,
   type AccountFailure,
 } from '../engine/account';
-import { CONTACT_EMAIL } from '../legal';
+import { CONTACT_EMAIL, LEGAL, LEGAL_PATH, type LegalKey } from '../legal';
 
 /**
  * How the paywall describes each board the subscription unlocks.
@@ -408,7 +408,42 @@ export function openSetPasswordWindow(
 export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
   const pending = pendingAccount();
   // 只追刷卡的。内部码兑换后的绑定是建议，不在每次打开时再弹一遍。
-  if (pending && pending.kind !== 'code') openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
+  if (!pending || pending.kind === 'code') return;
+  // 而且要真付过。刷卡这一路的窗是关不掉的（openSetPasswordWindow 的
+  // dismissable 只对兑码开——设密码是他把这份订阅带走的唯一办法，那扇窗没有
+  // 《以后再说》），所以它只能在权益确实到手之后弹。
+  //
+  // 一个 checkout id 本身不是付过钱的证明：地址栏里随手写一个 ?checkout_id=
+  // 就有一个，而现在这个 id 会被记下来、下次打开还接着问。没有这道闸，那样
+  // 一个网址能把人锁在一扇关不掉的窗后面，重开也还在。
+  if (!isGenius()) return;
+  openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
+}
+
+/**
+ * 付款前一定要能读到的那三份：多少钱、怎么退、按什么条款卖。
+ *
+ * 五份里只摆这三份。隐私政策和联系方式跟「这一笔要不要付」无关，而这扇窗
+ * 底下已经排着一长串权益——每多一行，真正该被读到的那三行就更容易被略过。
+ * 另外两份在个人主页的法务那一段里，一直都在。
+ */
+const PAYWALL_LEGAL: LegalKey[] = ['pricing', 'refund', 'terms'];
+
+/**
+ * 那三份的入口，只在网页版摆。
+ *
+ * 摆的是真链接（新标签打开，这扇窗不会被顶掉）。应用里不摆：那几个网址靠
+ * Vercel 的 cleanUrls 才解析得开（/pricing → pricing.html，见 vercel.json），
+ * 装进 WebView 之后没人做这一步转换，摆上去就是三条点不开的链接——比不摆
+ * 更糟。应用里那五份在个人主页的法务那一段，点开是弹窗，不用走网络。
+ */
+function paywallLegalLinks(lang: Lang): string {
+  if (isStoreChannel()) return '';
+  const links = PAYWALL_LEGAL.map(
+    (k) =>
+      `<a href="${LEGAL_PATH[k]}" target="_blank" rel="noopener">${LEGAL[lang][k].title}</a>`,
+  ).join('');
+  return `<div class="genius-legal">${links}</div>`;
 }
 
 /**
@@ -464,6 +499,11 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
         ? `<p class="auth-hint">${s.storeNoAccountHint.replace('{store}', store)}</p>`
         : ''
     }
+    <!-- 钱是谁收的，要在他按下那一行价钱之前就说清楚——按下去就直接去结账
+         页了，这儿是最后一处还来得及说的地方。三个渠道各有各的收款方，名字
+         由 payeeName() 给（网页 Creem，应用里 App Store / Google Play）。 -->
+    <p class="auth-hint">${s.merchantNote.replace('{store}', store)}</p>
+    ${paywallLegalLinks(lang)}
     <button class="link-btn" id="geniusRedeem">${s.haveCode}</button>
     <p class="auth-msg" id="geniusMsg" role="status"></p>
     <div class="genius-perks">
@@ -574,6 +614,13 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
         ? `<p class="auth-hint">${s.manageOnStore.replace('{store}', payeeName())}</p>`
         : ''
     }
+    <!-- 客服信箱。它本来只活在法务文档里和一句「你没填邮箱」的提示里，而收单
+         方要的是「公开网站上有，用户自己的账户里也有」——所以摆在这儿：他为
+         订阅的事来这扇窗，要写信也是在这一刻。写成 mailto，点一下就是新邮件。 -->
+    <p class="auth-hint">${s.supportLine.replace(
+      '{email}',
+      `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`,
+    )}</p>
     <div class="btn-row">
       <button class="btn-quiet" id="statusClose">${s.closeBtn}</button>
     </div>

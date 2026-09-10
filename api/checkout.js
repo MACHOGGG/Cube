@@ -1,4 +1,4 @@
-import { configured, creem, products, readBody, send } from './_creem.js';
+import { configured, creem, mode, products, readBody, send } from './_creem.js';
 
 /**
  * Open a Creem checkout for 「Slides 天才」 and hand back the URL to send the
@@ -10,6 +10,24 @@ import { configured, creem, products, readBody, send } from './_creem.js';
  * checkout for anything we did not put on sale.
  */
 export default async function handler(req, res) {
+  // GET /api/checkout — 「这套东西到底配好了没有」，一个网址就能问。
+  //
+  // 存在的理由是一次真事：收单方的审核说「订阅结不了账」，而后台里密钥、商品
+  // 都填着，从外面看不出是哪一环空的。要查只能翻 Vercel 的运行日志，或者拿
+  // 一张真卡去点一遍。现在打开这个网址就有答案：四个布尔加一个 test/live。
+  //
+  // 回的全是「有没有」，没有一个字是密钥或商品 id 本身——那两样都还在这个函
+  // 数的环境变量里，浏览器拿不到。
+  if (req.method === 'GET') {
+    const { monthly, yearly } = products();
+    return send(res, 200, {
+      configured: configured(),
+      mode: configured() ? mode() : null,
+      monthly: Boolean(monthly),
+      yearly: Boolean(yearly),
+      sellable: Boolean(configured() && monthly && yearly),
+    });
+  }
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   // No key, or no products configured: the subscription is not on sale yet.
   // The paywall says exactly that rather than showing a broken button.

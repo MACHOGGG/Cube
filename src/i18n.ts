@@ -216,6 +216,13 @@ export interface I18nStrings {
   // ---- 已登录：《账户》那一扇窗，以及窗里那两件事 ----
   /** 窗里那一段小标签：底下几行都是「对这个账号做的事」。 */
   accountActions: string;
+  /** 客服信箱那一行。收单方的要求是它「在公开网站上、也在用户自己的账户里」
+   *  都看得见——不是法务文档第三段里的一个地址，是他打开账户就在那儿的一行。 */
+  supportLine: string;
+  /** 付款前那一句：钱是谁收的、对账单上会写谁。三个渠道都有一个 merchant of
+   *  record（网页是 Creem，应用里是 App Store / Google Play），所以这句话
+   *  四处通用，只换名字。 */
+  merchantNote: string;
   changePwRow: string;
   changeEmailRow: string;
   /** 改密码：先证明你是本人。 */
@@ -573,6 +580,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwReset: 'Your new passcode is set — sign in with it.',
     signedInNoSub: 'Signed in. This account has no subscription running right now.',
     accountActions: 'Account settings',
+    supportLine: 'A question, a refund, anything at all — write to {email}.',
+    merchantNote: '{store} takes the payment as merchant of record, and is the name on your statement.',
     changePwRow: 'Change passcode',
     changeEmailRow: 'Change email',
     oldPwLabel: 'Current passcode',
@@ -872,6 +881,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwReset: 'Votre nouveau code secret est enregistré — connectez-vous avec.',
     signedInNoSub: 'Connecté. Ce compte n’a pas d’abonnement en cours.',
     accountActions: 'Réglages du compte',
+    supportLine: 'Une question, un remboursement, quoi que ce soit — écrivez à {email}.',
+    merchantNote: '{store} encaisse le paiement en tant que revendeur officiel, et figure sous ce nom sur votre relevé.',
     changePwRow: 'Changer le code secret',
     changeEmailRow: 'Changer d’adresse',
     oldPwLabel: 'Code secret actuel',
@@ -1171,6 +1182,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwReset: '新密碼已經設好，用它登入就行。',
     signedInNoSub: '已登入。這個帳號目前沒有在續的訂閱。',
     accountActions: '帳戶設定',
+    supportLine: '有問題、要退款，什麼事都可以寫信到 {email}。',
+    merchantNote: '款項由 {store} 以商戶身分收取，對帳單上寫的也是它。',
     changePwRow: '更換密碼',
     changeEmailRow: '更換信箱',
     oldPwLabel: '目前的密碼',
@@ -1470,6 +1483,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwReset: '新密码已经设好，用它登录就行。',
     signedInNoSub: '已登录。这个账号目前没有在续的订阅。',
     accountActions: '账户设置',
+    supportLine: '有问题、要退款，什么事都可以写信到 {email}。',
+    merchantNote: '款项由 {store} 以商户身份收取，对账单上写的也是它。',
     changePwRow: '更换密码',
     changeEmailRow: '更换邮箱',
     oldPwLabel: '现在的密码',
