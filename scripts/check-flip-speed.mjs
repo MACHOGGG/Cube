@@ -1,5 +1,5 @@
 /**
- * 《图形翻面速度》那根拉杆：拉了到底有没有用。
+ * 《变成星星的速度》那根拉杆：拉了到底有没有用。
  *
  *   npm run build
  *   node scripts/dev-server.mjs 8817 dist
@@ -48,7 +48,7 @@ const seed = (genius) => {
   }
 };
 
-/** 打开个人主页，把《图形翻面速度》那一行点开。 */
+/** 打开个人主页，把《变成星星的速度》那一行（#flipRow）点开。 */
 async function openPicker(page) {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('#navProfile', { timeout: 20000 });

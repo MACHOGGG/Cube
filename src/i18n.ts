@@ -82,6 +82,11 @@ export interface I18nStrings {
   rankLoading: string;
   rankExpired: string;
   rankReLogin: string;
+  /**
+   * 那根拉杆的名字。原先叫「图形翻面速度」——可站里已经不再有「翻面」这件事
+   * 了（玩家 2026-09 定的：色块得分就变成星星，不要再用翻面/正面/反面去解释
+   * 它）。这一处和下面 triangleTutorialDesc 是最后两处漏网的界面文字。
+   */
   flipSpeedTitle: string;
   flipSpeedHint: string;
   flipSpeedLocked: string;
@@ -545,7 +550,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Loading…',
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
     rankReLogin: 'Sign in again',
-    flipSpeedTitle: 'Flip speed',
+    flipSpeedTitle: 'Star speed',
     flipSpeedHint: 'How fast a piece turns over. Everything else stays the same.',
     flipSpeedLocked: 'Slides Genius sets this. Here is what it does.',
     flipSpeedSlow: 'Slow',
@@ -561,7 +566,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     back: 'Back',
     squareTutorialDesc: 'Drag a whole row/column · the basics',
     circleTutorialDesc: '3 slide directions · "22"/"121" diamonds',
-    triangleTutorialDesc: '3 slide directions · big triangle & flip',
+    triangleTutorialDesc: '3 slide directions · big triangle & stars',
     accountTitle: 'Account',
     tabRegister: 'Sign up',
     tabLogin: 'Log in',
@@ -887,7 +892,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
-    flipSpeedTitle: 'Vitesse de retournement',
+    flipSpeedTitle: 'Vitesse des étoiles',
     flipSpeedHint: 'À quelle vitesse une pièce se retourne. Le reste ne change pas.',
     flipSpeedLocked: 'Réglage Slides Génie. Voici ce qu\u2019il fait.',
     flipSpeedSlow: 'Lent',
@@ -903,7 +908,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     back: 'Retour',
     squareTutorialDesc: 'Faites glisser une ligne/colonne entière · les bases',
     circleTutorialDesc: '3 directions · losanges "22"/"121"',
-    triangleTutorialDesc: '3 directions · grand triangle et retournement',
+    triangleTutorialDesc: '3 directions · grand triangle et étoiles',
     accountTitle: 'Compte',
     tabRegister: "S'inscrire",
     tabLogin: 'Se connecter',
@@ -1229,7 +1234,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: '載入中…',
     rankExpired: '登入已過期，重新登入後成績才會上榜',
     rankReLogin: '重新登入',
-    flipSpeedTitle: '圖形翻面速度',
+    flipSpeedTitle: '變成星星的速度',
     flipSpeedHint: '一枚棋子翻過來要多快。其他的都不變。',
     flipSpeedLocked: '這是 Slides 天才的設定。先看看它是做什麼的。',
     flipSpeedSlow: '慢',
@@ -1245,7 +1250,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     back: '返回',
     squareTutorialDesc: '拖動整行/整列 · 基礎教學',
     circleTutorialDesc: '三向滑動 ·「22」/「121」菱形',
-    triangleTutorialDesc: '三向滑動 · 大三角與翻面',
+    triangleTutorialDesc: '三向滑動 · 大三角與星星',
     accountTitle: '帳戶',
     tabRegister: '註冊',
     tabLogin: '登入',
@@ -1571,7 +1576,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: '加载中…',
     rankExpired: '登录已过期，重新登录后成绩才会上榜',
     rankReLogin: '重新登录',
-    flipSpeedTitle: '图形翻面速度',
+    flipSpeedTitle: '变成星星的速度',
     flipSpeedHint: '一枚棋子翻过来要多快。其他的都不变。',
     flipSpeedLocked: '这是 Slides 天才的设定。先看看它是做什么的。',
     flipSpeedSlow: '慢',
@@ -1587,7 +1592,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     back: '返回',
     squareTutorialDesc: '拖动整行/整列 · 基础教学',
     circleTutorialDesc: '三向滑动 ·"22"/"121"菱形',
-    triangleTutorialDesc: '三向滑动 · 大三角与翻面',
+    triangleTutorialDesc: '三向滑动 · 大三角与星星',
     accountTitle: '账户',
     tabRegister: '注册',
     tabLogin: '登录',
