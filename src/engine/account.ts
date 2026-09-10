@@ -1,3 +1,4 @@
+import { salesChannel } from './channel';
 import type { Entitlement } from './subscription';
 
 /**
@@ -59,6 +60,10 @@ interface Reply {
   error?: string;
   retryInMs?: number;
   sent?: boolean;
+  /** /api/unlock 的 confirm：这一趟把密码换好了。和 active 是两件事。 */
+  reset?: boolean;
+  /** 'code' 表示这份权益是内部码给的；刷卡订阅那一支不带它。 */
+  kind?: string;
 }
 
 async function post(path: string, body: unknown): Promise<{ status: number; reply: Reply }> {
@@ -71,15 +76,26 @@ async function post(path: string, body: unknown): Promise<{ status: number; repl
 }
 
 function toResult(status: number, reply: Reply): AccountResult {
-  if (status === 200 && reply.active) {
+  // 「这一趟成没成」和「这个人是不是天才」是两个问题。
+  //
+  // 兑内部码那一支两者同真——码兑上了就是天才。可邮箱重设密码那一支不是：
+  // 密码换好了，而这个账号此刻完全可以没有在续的订阅（服务器如实答
+  // active: false，那是正确答案）。原先这里只认 active，于是那种情况被判成
+  // 失败，还落进最后那行兜底的 'network'——屏幕上写「连不上网络」。玩家再点
+  // 一次，验证码已经用掉了，答的是「验证码已过期」，而他的密码早就换好了。
+  if (status === 200 && (reply.active || reply.reset)) {
     return {
       ok: true,
       ...(reply.code ? { code: reply.code } : {}),
       entitlement: {
-        active: true,
+        active: Boolean(reply.active),
         period: reply.period,
         until: reply.until,
-        channel: 'code',
+        // 内部码不属于任何柜台（没人卖过它），刷卡订阅属于这个构建所在的
+        // 那个柜台。原先一律写死 'code'：刷卡的人走一趟邮箱重设密码，就被
+        // 贴上内部码的标签，此后再也不去问 Creem——因为「码自带到期日，没什
+        // 么可问的」（见 engine/subscription.ts 的 codeStillLive）。
+        channel: reply.kind === 'code' ? 'code' : salesChannel(),
         email: reply.email,
         token: reply.token,
         code: reply.code,

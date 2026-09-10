@@ -227,6 +227,8 @@ export interface I18nStrings {
   unlockSent: string;
   unlockCodeLabel: string;
   unlockNewPw: string;
+  /** 密码换好了，但这个账号此刻没有在续的订阅——说清楚哪一半成了。 */
+  pwReset: string;
   unlockConfirmBtn: string;
   unlockBadCode: string;
   unlockExpired: string;
@@ -608,6 +610,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockSent: 'Sent. The code is good for 30 minutes.',
     unlockCodeLabel: 'The 6-digit code from the email',
     unlockNewPw: 'New passcode (6 characters)',
+    pwReset: 'Your new passcode is set — sign in with it.',
     unlockConfirmBtn: 'Unlock and set passcode',
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
@@ -935,6 +938,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockSent: 'Envoyé. Le code est valable 30 minutes.',
     unlockCodeLabel: 'Le code à 6 chiffres reçu par courriel',
     unlockNewPw: 'Nouveau code secret (6 caractères)',
+    pwReset: 'Votre nouveau code secret est enregistré — connectez-vous avec.',
     unlockConfirmBtn: 'Déverrouiller et enregistrer',
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
@@ -1262,6 +1266,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockSent: '已寄出，驗證碼 30 分鐘內有效。',
     unlockCodeLabel: '信件裡的 6 位數驗證碼',
     unlockNewPw: '新密碼（6 位字元）',
+    pwReset: '新密碼已經設好，用它登入就行。',
     unlockConfirmBtn: '解鎖並設定新密碼',
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
@@ -1589,6 +1594,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockSent: '已发送，验证码 30 分钟内有效。',
     unlockCodeLabel: '邮件里的 6 位验证码',
     unlockNewPw: '新密码（6 位字符）',
+    pwReset: '新密码已经设好，用它登录就行。',
     unlockConfirmBtn: '解锁并设置新密码',
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',

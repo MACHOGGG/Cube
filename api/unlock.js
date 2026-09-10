@@ -143,15 +143,33 @@ async function confirm(res, address, { code, password }) {
   await saveAccount(address, account);
   await del(key(address));
   await del(triesKey(address));
-  // 答的是这个账号此刻真正的权益：内部码账号看本地到期日，刷卡订阅去问
-  // Creem——和登录那一支同一个函数（api/_entitlement.js）。原来这里只看本地
-  // 日期，刷卡的人重设完密码会被告知「不是天才」，前端就报「网络出错」，而
-  // 密码其实已经改好了。
+  /**
+   * 到这一行为止，三件回不去的事都已经做完了：密码换成了新的、所有设备的
+   * 令牌作废了、验证码从库里删掉了。**这一趟已经成功了。**
+   *
+   * 下面还要问一句「这个人此刻是不是天才」——内部码账号看本地到期日，刷卡
+   * 订阅去问 Creem（和登录那一支同一个函数）。可那一问有两种答案是「不是
+   * 失败、但也不是天才」：没有在续的订阅（如实答 active: false），以及压根
+   * 问不出来（Creem 挂了、没配密钥）。
+   *
+   * 原先这两种都会把整趟说成失败：前者被前端读成 'network'，后者直接 502。
+   * 而玩家看到失败一定会再点一次——这一次码已经没了，他收到的是「验证码已
+   * 过期」，可他的密码明明早就是新的那一把了。他于是拿着一把自己不知道已经
+   * 生效的新密码，被告知什么都没发生。这和 redeem.js 那次「码烧掉却没到账」
+   * 是同一种病：先做不可逆的事，再做可能失败的事，然后拿后者的结果去汇报
+   * 前者。
+   *
+   * 所以 reset: true 单独说一遍，它只回答「密码换好了没有」。权益答得出来
+   * 就一并带上，答不出来也不影响这一句。
+   */
+  const done = { reset: true, email: address, token: issued };
   try {
     const { status, body } = await resolveEntitlement(address, account, issued);
-    return send(res, status, body);
+    // token 一律用这台设备刚拿到的那一把：NOBODY 身上没有 token，让 body
+    // 盖上去会把它抹掉，那台设备就白改了一次密码还得再登一次。
+    return send(res, 200, status === 200 ? { ...done, ...body, token: issued } : done);
   } catch (err) {
     console.error('unlock entitlement lookup failed:', err?.message || err);
-    return send(res, 502, { error: 'upstream' });
+    return send(res, 200, done);
   }
 }

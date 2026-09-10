@@ -984,8 +984,17 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
     go.disabled = false;
     if (result.ok) {
       setEntitlement(result.entitlement);
-      close();
       onChanged();
+      // 密码换好了，可这个账号此刻没有在续的订阅——《订单情况》那一屏的抬头
+      // 写着「已订阅」，开给他看就是说了句假话，而且他还会以为自己刚才什么
+      // 也没改成。就地说一句「新密码已经设好」，留着《关闭》让他自己走。
+      if (!result.entitlement.active) {
+        step2.hidden = true;
+        go.hidden = true;
+        msg.textContent = s.pwReset;
+        return;
+      }
+      close();
       openStatusWindow(lang, onChanged);
       return;
     }
