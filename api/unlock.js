@@ -16,18 +16,19 @@ import { bump, del, get, set, storeConfigured } from './_store.js';
 import { mailConfigured, sendMail } from './_mail.js';
 
 /**
- * The way back in after six wrong passcodes.
+ * 忘了密码的那条路——连错六次被锁死的，走的也是这一条。
  *
- * Six wrong guesses is not an attack on a ten-thousand-wide space; it is
- * someone who has forgotten which four digits they chose. So the way out is
- * the address the account is attached to, and it ends by setting a new
- * passcode — unlocking without resetting would only hand the player back the
- * same lock they were already standing in front of.
+ * 两件事听着不一样，出路却是同一条：拿邮箱证明这个账号是自己的，然后设一把
+ * 新的。所以这条路走完一定以「设了新密码」收尾——只解锁不重设，等于把玩家送
+ * 回他本来就打不开的那把锁跟前。
  *
- * The verification code is six digits, good for thirty minutes, and dies
- * after five wrong tries. Requesting one says nothing about whether the
- * address has an account: the same answer comes back either way, so this
- * cannot be turned into a way of finding out who plays.
+ * 原先这里只给 `blocked` 的账号发码，而 blocked 要连输错六次才会出现。于是一
+ * 个老老实实「我忘了密码」的人根本走不进来，除非他自己想到「故意连错六次把
+ * 自己锁死」——没有人会这么想。现在任何存在的账号都发。
+ *
+ * 验证码六位，30 分钟有效，猜错五次作废。**要一张码这件事本身，问不出任何东
+ * 西**：有没有这个账号，回的话一模一样（都是 200 `{ sent: true }`），所以这
+ * 条接口不能被拿来试探谁在玩。
  */
 
 const CODE_TTL_S = 30 * 60;
@@ -67,10 +68,8 @@ async function request(res, req, address) {
 
   // Two limits, because there are two different things worth stopping.
   //
-  //   by address — anyone who knows where a blocked account lives could
-  //     otherwise point this endpoint at it and post them an unlock code
-  //     every few seconds. Three an hour is more than a person who has
-  //     genuinely lost the mail ever needs.
+  //   by address — 知道某个玩家邮箱的人，否则可以拿这个接口每隔几秒往他信
+  //     箱里塞一封验证码。一小时三封，比一个真的没收到信的人所需要的还多。
   //   by caller  — and one machine cannot work through a list of addresses
   //     either, whoever they belong to.
   //
@@ -84,21 +83,21 @@ async function request(res, req, address) {
   }
 
   const account = await loadAccount(address);
-  // Only a blocked account gets a code — but an address with no account, or
-  // one that is not blocked, is answered exactly the same way.
-  if (account?.blocked) {
+  // 有账号就发。没有账号的地址不发，但回的话和发了一模一样——见文件顶上那段。
+  if (account) {
     const code = String(randomInt(0, 1e6)).padStart(6, '0');
     await set(key(address), { code }, CODE_TTL_S);
     // 新码新账：上一张码猜掉的次数不跟着过来。
     await del(triesKey(address));
     await sendMail({
       to: address,
-      subject: 'Slides — 解锁验证码 / unlock code',
+      subject: 'Slides — 验证码 / your code',
+      // 不说「解锁」——绝大多数收到这封信的人只是忘了密码，没被锁过。
       text:
-        `你的 Slides 解锁验证码是 ${code}，30 分钟内有效。\n` +
+        `你的 Slides 验证码是 ${code}，30 分钟内有效。\n` +
         `输入后可以设置一个新的密码。如果这不是你本人操作，忽略这封邮件即可。\n\n` +
-        `Your Slides unlock code is ${code}. It is valid for 30 minutes and lets you\n` +
-        `set a new passcode. If this was not you, you can ignore this message.`,
+        `Your Slides code is ${code}. It is valid for 30 minutes and lets you set a\n` +
+        `new passcode. If this was not you, you can ignore this message.`,
     });
   }
   return send(res, 200, { sent: true });
@@ -138,7 +137,7 @@ async function confirm(res, address, { code, password }) {
   // 账号对象上的 fails 归零了，另外那个计数键也要清——不然下一次输错密码，
   // 它会拿旧的次数接着往上数（见 _accounts.js 的 failKey）。
   await clearFails(address);
-  // 邮箱验证解锁：这条路的前提就是「这个账号可能已经不只我一个人在用」，
+  // 走邮箱重设密码：这条路的前提就是「这个账号可能已经不只我一个人在用」，
   // 所以把所有设备上的令牌一并作废，只留刚验过邮箱的这一台。
   const issued = revokeTokens(account);
   await saveAccount(address, account);

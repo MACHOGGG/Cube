@@ -685,7 +685,7 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
         <button type="submit" hidden></button>
       </form>
       <p class="auth-msg" id="authMsg" role="status"></p>
-      <div id="authUnlock"></div>
+      <button class="link-btn" id="authForgot">${s.forgotPw}</button>
       <button class="link-btn" id="authRedeem">${s.haveCode}</button>
     </div>
     <div class="btn-row">
@@ -702,27 +702,36 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
   const msg = overlay.querySelector<HTMLElement>('#authMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#authGo')!;
   const tabs = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.auth-tab'));
-  const unlockSlot = overlay.querySelector<HTMLElement>('#authUnlock')!;
+  const forgot = overlay.querySelector<HTMLButtonElement>('#authForgot')!;
   let current: AuthTab = tab;
 
-  /** The way out of a blocked account, offered only once there is one. */
-  const showUnlock = (address: string) => {
-    unlockSlot.innerHTML = `<button class="link-btn" id="authUnlockGo">${s.unlockNow}</button>`;
-    unlockSlot.querySelector<HTMLButtonElement>('#authUnlockGo')!.addEventListener('click', () => {
-      close();
-      openUnlockWindow(lang, address, onChanged);
-    });
-  };
+  /**
+   * 《忘记密码？》——常驻，不是等出事了才冒出来。
+   *
+   * 原先这一行只在登录被答「blocked」（连输错六次，账号锁死）之后才摆出来，
+   * 而服务器那头也只给锁死的账号发码。合起来的意思是：一个老老实实「我忘了
+   * 密码」的人根本没有入口——除非他自己想到「故意连错六次把自己锁死」，而没
+   * 有人会这么想。两头一起改（见 api/unlock.js）。
+   *
+   * 锁死那一支因此不必再单独摆一行：这一行本来就在他眼前，摆第二个一模一样
+   * 的按钮只会让人以为那是两件不同的事。
+   */
+  forgot.addEventListener('click', () => {
+    const address = input.value.trim();
+    close();
+    openUnlockWindow(lang, address, onChanged);
+  });
 
   const setTab = (next: AuthTab) => {
     current = next;
     for (const el of tabs) el.classList.toggle('active', el.dataset.tab === next);
     msg.textContent = '';
-    unlockSlot.innerHTML = '';
     hint.textContent = next === 'register' ? s.registerIsSubscribe : s.signInHint;
     // Registering asks for nothing: Creem's checkout collects the address
     // itself, and one form is better than two asking for the same thing.
+    // 没有密码栏的那一屏上，《忘记密码？》无从谈起，一并收起来。
     fields.hidden = next === 'register';
+    forgot.hidden = next === 'register';
     go.textContent = next === 'register' ? s.subscribeBtn : s.signInBtn;
   };
 
@@ -768,8 +777,8 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     //             already worked out when. Saying "check your email" here
     //             sent people looking for a message that is never sent.
     //   blocked — six; the address itself has to vouch for them, which is
-    //             exactly what openUnlockWindow does. That window has been
-    //             finished for a while and nothing ever opened it.
+    //             exactly what openUnlockWindow does——而那扇窗现在有一行常驻
+    //             的《忘记密码？》通着，不必等锁死了才现身。
     if (outcome.ok === false && outcome.reason === 'locked') {
       msg.textContent = s.pwLocked.replace(
         '{hours}',
@@ -778,8 +787,8 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
       return;
     }
     if (outcome.ok === false && outcome.reason === 'blocked') {
+      // 出路那一行（《忘记密码？》）一直就在下面，不用再补一个。
       msg.textContent = s.pwBlocked;
-      showUnlock(email);
       return;
     }
     msg.textContent =

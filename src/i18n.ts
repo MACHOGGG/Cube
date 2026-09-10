@@ -221,7 +221,7 @@ export interface I18nStrings {
   pwBlocked: string;
   unlockTitle: string;
   /** 锁死之后那个真的能按的按钮。 */
-  unlockNow: string;
+  forgotPw: string;
   unlockIntro: string;
   unlockSendBtn: string;
   unlockSent: string;
@@ -601,8 +601,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwWrong: 'That passcode is not right.',
     pwLocked: 'Too many wrong tries. Opens again in about {hours} h.',
     pwBlocked: 'Locked after too many wrong tries. Open it by email.',
-    unlockTitle: 'Unlock by email',
-    unlockNow: 'Unlock',
+    unlockTitle: 'Reset your passcode',
+    forgotPw: 'Forgot your passcode?',
     unlockIntro: 'We will send a six-digit code to your address. It lets you set a new passcode.',
     unlockSendBtn: 'Send the code',
     unlockSent: 'Sent. The code is good for 30 minutes.',
@@ -928,8 +928,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwWrong: 'Ce code secret n’est pas le bon.',
     pwLocked: 'Trop d’essais. Se rouvre dans environ {hours} h.',
     pwBlocked: 'Verrouillé après trop d’essais. Rouvrez-le par courriel.',
-    unlockTitle: 'Déverrouiller par courriel',
-    unlockNow: 'Déverrouiller',
+    unlockTitle: 'Réinitialiser le code secret',
+    forgotPw: 'Code secret oublié ?',
     unlockIntro: 'Nous envoyons un code à six chiffres à votre adresse. Il permet de définir un nouveau code secret.',
     unlockSendBtn: 'Envoyer le code',
     unlockSent: 'Envoyé. Le code est valable 30 minutes.',
@@ -1255,8 +1255,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwWrong: '密碼不對。',
     pwLocked: '錯太多次了，約 {hours} 小時後自動解開。',
     pwBlocked: '錯太多次，已鎖住。用電子郵件解開。',
-    unlockTitle: '電子郵件驗證解鎖',
-    unlockNow: '解鎖',
+    unlockTitle: '重設密碼',
+    forgotPw: '忘記密碼？',
     unlockIntro: '我們會寄一組六位數驗證碼到你的信箱，用它可以設定新密碼。',
     unlockSendBtn: '寄出驗證碼',
     unlockSent: '已寄出，驗證碼 30 分鐘內有效。',
@@ -1582,8 +1582,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwWrong: '密码不对。',
     pwLocked: '错太多次了，约 {hours} 小时后自动解开。',
     pwBlocked: '错太多次，已锁住。用邮箱解开。',
-    unlockTitle: '邮箱验证解锁',
-    unlockNow: '解锁',
+    unlockTitle: '重设密码',
+    forgotPw: '忘记密码？',
     unlockIntro: '我们会发一组六位数验证码到你的邮箱，用它可以设置新密码。',
     unlockSendBtn: '发送验证码',
     unlockSent: '已发送，验证码 30 分钟内有效。',

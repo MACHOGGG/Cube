@@ -333,6 +333,13 @@ export async function checkPin(email, pin, account) {
  * 只动账号对象。另外那个计数键由 clearFails 清，两件事分开，是因为这个函数
  * 是同步的、也在没有存储的测试里用。
  */
+/**
+ * 换一把新密码，并把这个账号身上所有的锁一起解掉。
+ *
+ * 名字是「解锁」，可它同时也是「忘了密码，重设一把」走的那条路（见
+ * api/unlock.js）——没被锁的账号跑这一段照样对：换掉盐和哈希，把两个计数归
+ * 零，blocked 本来就是 false。
+ */
 export function unblock(account, newPin) {
   account.salt = randomBytes(16).toString('hex');
   account.hash = hash(newPin, account.salt);
