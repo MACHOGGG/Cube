@@ -229,6 +229,8 @@ export interface I18nStrings {
   unlockNewPw: string;
   /** 密码换好了，但这个账号此刻没有在续的订阅——说清楚哪一半成了。 */
   pwReset: string;
+  /** 登录成功，但这个账号此刻没有在续的订阅。同样是「哪一半成了」。 */
+  signedInNoSub: string;
   unlockConfirmBtn: string;
   unlockBadCode: string;
   unlockExpired: string;
@@ -611,6 +613,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockCodeLabel: 'The 6-digit code from the email',
     unlockNewPw: 'New passcode (6 characters)',
     pwReset: 'Your new passcode is set — sign in with it.',
+    signedInNoSub: 'Signed in. This account has no subscription running right now.',
     unlockConfirmBtn: 'Unlock and set passcode',
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
@@ -939,6 +942,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockCodeLabel: 'Le code à 6 chiffres reçu par courriel',
     unlockNewPw: 'Nouveau code secret (6 caractères)',
     pwReset: 'Votre nouveau code secret est enregistré — connectez-vous avec.',
+    signedInNoSub: 'Connecté. Ce compte n’a pas d’abonnement en cours.',
     unlockConfirmBtn: 'Déverrouiller et enregistrer',
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
@@ -1267,6 +1271,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockCodeLabel: '信件裡的 6 位數驗證碼',
     unlockNewPw: '新密碼（6 位字元）',
     pwReset: '新密碼已經設好，用它登入就行。',
+    signedInNoSub: '已登入。這個帳號目前沒有在續的訂閱。',
     unlockConfirmBtn: '解鎖並設定新密碼',
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
@@ -1595,6 +1600,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockCodeLabel: '邮件里的 6 位验证码',
     unlockNewPw: '新密码（6 位字符）',
     pwReset: '新密码已经设好，用它登录就行。',
+    signedInNoSub: '已登录。这个账号目前没有在续的订阅。',
     unlockConfirmBtn: '解锁并设置新密码',
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',

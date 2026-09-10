@@ -124,7 +124,12 @@ export async function webRestore(email: string, password: string): Promise<Purch
     // is the only honest answer: they own this subscription, and the way to
     // prove it on the next device is the password they have yet to choose.
     if (reply.needsPasscode) return { ok: false, reason: 'needsPasscode' };
-    if (!reply.active) return { ok: false, reason: 'none' };
+    // 密码对了、令牌拿到了，就是登录成功——哪怕这个账号此刻一份在续的订阅都
+    // 没有。原先这里是 `if (!reply.active) return 'none'`，于是订阅过期的人被
+    // 挡在自己的账号外面，屏幕上写「这个邮箱名下没有有效的订阅」：那句话本身
+    // 是真的，可他要的不是订阅，是进他自己的账号——里头有他的云端战绩和寄给
+    // 他的内部码。没有令牌才是真的没登上（服务器那头也认这一条）。
+    if (!reply.token) return { ok: false, reason: 'none' };
     return { ok: true, entitlement: toEntitlement(reply, address) };
   } catch (err) {
     const { reason, retryInMs } = failureFor(err);
@@ -286,7 +291,9 @@ export async function webPortal(email: string, password: string): Promise<boolea
 
 function toEntitlement(reply: SubscriptionReply, email: string): Entitlement {
   return {
-    active: true,
+    // 如实照抄，不写死 true：这份东西同时充当「我是谁」和「我是不是天才」，
+    // 而登录成功的人完全可以不是天才（见上面 webRestore 那段）。
+    active: Boolean(reply.active),
     period: reply.period,
     until: reply.until,
     channel: reply.kind === 'code' ? 'code' : 'web',

@@ -169,6 +169,23 @@ async function fromEmail(req, res, rawEmail, password, token) {
   // 账号看我们自己记的到期日，刷卡订阅去问 Creem。这儿凭刚验过的密码 / 令牌
   // 可以拿这个邮箱去问，那是这一支和别处唯一该不一样的地方。
   const { status, body } = await resolveEntitlement(address, account, issued);
+
+  /**
+   * 「他是谁」和「他是不是天才」是两个问题，答案要分开给。
+   *
+   * 密码验过了，令牌也签发了——**这个人已经登录成功了**，哪怕他此刻一份在续
+   * 的订阅都没有。可 resolveEntitlement 在那种情况下答的是 NOBODY，而 NOBODY
+   * 身上没有 token 也没有 email：前端于是既拿不到身份、又看到 active: false，
+   * 只能报「这个邮箱名下没有有效的订阅」，把人挡在他自己的账号外面。
+   *
+   * 那个账号里有他的云端战绩、有寄给他的内部码。进不去还会连环：兑码要令牌，
+   * 没登录就兑不到这个邮箱名下，只会另起一个跟他邮箱无关的身份。
+   *
+   * 所以密码对了就把身份一并给出去。active 照旧如实——不是天才就不是天才。
+   */
+  if (status === 200 && account && issued) {
+    return send(res, 200, { email: address, ...body, token: issued });
+  }
   return send(res, status, body);
 
 }

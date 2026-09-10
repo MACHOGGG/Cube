@@ -1,5 +1,5 @@
 /**
- * 忘了密码那条路：**换完密码就要说换完了**，别拿下一问的结果去汇报上一步。
+ * 认证那两条路：**验过了就要说验过了**，别拿下一问的结果去汇报上一步。
  *
  *   node scripts/check-unlock-reset.mjs
  *
@@ -21,6 +21,12 @@
  *     01:58:27  POST /api/unlock  400   ← 玩家再点一次：「验证码已过期」
  *
  * 和 redeem.js 那次「码烧掉却没到账」（scripts 里那条 giveBack）是同一种病。
+ *
+ * 登录那一支（api/subscription.js）也犯了同一个错，而且更狠：密码验过了、令
+ * 牌也签发了，可因为这个账号此刻没有在续的订阅，答的是 NOBODY——身上既没有
+ * token 也没有 email。前端于是报「这个邮箱名下没有有效的订阅」，把人挡在他
+ * 自己的账号外面。那个账号里有他的云端战绩、有寄给他的内部码；进不去还会连
+ * 环，因为兑码要令牌。⑥ 盯的就是这一条。
  *
  * 不起服务器、不连 Redis、不真发信也不真问 Creem：库用进程内的那份，两个外
  * 部 HTTP 各用一个假 fetch 顶掉——顺便把验证码从那封假邮件里读出来。
@@ -59,10 +65,11 @@ globalThis.fetch = async (url, init) => {
 };
 
 const unlock = (await import('../api/unlock.js')).default;
+const subscription = (await import('../api/subscription.js')).default;
 const { saveAccount, loadAccount, checkPin, newAccount } = await import('../api/_accounts.js');
 
 /** api/ 里的 handler 是照着 Vercel 的 res 写的，这儿搭一个够用的。 */
-const call = async (body) => {
+const callOn = async (handler, body) => {
   let status = 0;
   let text = '';
   const res = {
@@ -70,9 +77,10 @@ const call = async (body) => {
     setHeader: () => res,
     end: (t) => ((text = t), res),
   };
-  await unlock({ method: 'POST', headers: {}, body }, res);
+  await handler({ method: 'POST', headers: {}, body }, res);
   return { status, body: JSON.parse(text || '{}') };
 };
+const call = (body) => callOn(unlock, body);
 
 const EMAIL = 'card-subscriber@example.com';
 const OLD_PW = 'aaa111';
@@ -140,6 +148,23 @@ check('问不出权益（没配 Creem）也答 200', noCreem.status === 200, Str
 check('reset 照样是 true', noCreem.body.reset === true, JSON.stringify(noCreem.body));
 const after2 = await loadAccount(EMAIL2);
 check('密码确实换了', (await checkPin(EMAIL2, NEW_PW, after2)) === 'ok');
+
+// ---- ⑥ 登录：密码对了就是登上了，哪怕这个账号没有在续的订阅 ----------------
+
+process.env.CREEM_API_KEY = 'creem_test_stub';
+const EMAIL3 = 'lapsed@example.com';
+await saveAccount(EMAIL3, newAccount(OLD_PW, 'card'));
+
+const signedIn = await callOn(subscription, { email: EMAIL3, password: OLD_PW });
+check('订阅过期的人，密码对了就该登得上', signedIn.status === 200, String(signedIn.status));
+check('回了令牌——没有它前端就当没登上',
+  typeof signedIn.body.token === 'string' && signedIn.body.token.length > 0,
+  JSON.stringify(signedIn.body));
+check('也回了邮箱（前端拿它认「我是谁」）', signedIn.body.email === EMAIL3);
+check('同时如实说不是天才', signedIn.body.active !== true);
+
+const wrongPw = await callOn(subscription, { email: EMAIL3, password: 'zzz999' });
+check('密码不对照旧进不来', wrongPw.status === 401, String(wrongPw.status));
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

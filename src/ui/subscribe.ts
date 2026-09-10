@@ -757,8 +757,15 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     const outcome = await restore(email, password);
     go.disabled = false;
     if (outcome.ok === true) {
-      close();
       onChanged();
+      // 登上了，可这个账号此刻没有在续的订阅——《订单情况》那一屏抬头写着
+      // 「已订阅」，开给他看是说假话。就地说一句，《关闭》让他自己走；他确实
+      // 已经登录了，背后那一页（onChanged）已经跟着变了。
+      if (!outcome.entitlement.active) {
+        msg.textContent = s.signedInNoSub;
+        return;
+      }
+      close();
       openStatusWindow(lang, onChanged);
       return;
     }
@@ -945,6 +952,8 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
   );
 
   const address = overlay.querySelector<HTMLInputElement>('#unlockEmail')!;
+  const intro = overlay.querySelector<HTMLElement>('.auth-hint')!;
+  const mailRow = address.closest('label') ?? address.parentElement!;
   const step2 = overlay.querySelector<HTMLElement>('#unlockStep2')!;
   const codeBox = overlay.querySelector<HTMLInputElement>('#unlockCode')!;
   const pwBox = overlay.querySelector<HTMLInputElement>('#unlockPw')!;
@@ -989,6 +998,11 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
       // 写着「已订阅」，开给他看就是说了句假话，而且他还会以为自己刚才什么
       // 也没改成。就地说一句「新密码已经设好」，留着《关闭》让他自己走。
       if (!result.entitlement.active) {
+        // 说完「新密码已经设好」，这一屏上就不该再留着「我们会寄一组六位数
+        // 验证码到你的信箱」——那句话是给还没开始的人看的，码早就寄过、用过
+        // 了。同一屏里一句说要寄、一句说已经设好，读起来是自相矛盾的。
+        intro.hidden = true;
+        mailRow.hidden = true;
         step2.hidden = true;
         go.hidden = true;
         msg.textContent = s.pwReset;
