@@ -13,6 +13,10 @@
  * 报，服务器只好把这个月挂在码自己名下——玩家换台设备就找不着了。所以 ②
  * 验的是「一个订阅过期、但登着的人，码要落到他账户上」。
  *
+ * ②′ 是同一件事的多设备版：一个人手机、电脑都登着，拿**先登那台**的令牌去
+ * 兑码，也得落到账户上。这条已经修好很久了（885c154），加断言是因为它反复被
+ * 当成「还没修的高优先级问题」重提——注释拦不住这个，门可以。
+ *
  * 换邮箱是这里面唯一动数据的：账号存在 acct:<邮箱> 底下，排行榜上的成员也是
  * 这个地址，所以换邮箱是搬家。④⑤⑥ 分别验：码寄给**新**地址（不是现在这
  * 个）、账号和战绩确实搬过去了、以及几种该拦下来的。
@@ -97,6 +101,45 @@ check('回的是这台设备自己那把令牌，没被换掉', spent.body.token
 const afterCode = await loadAccount(EMAIL);
 check('账户上真的记了到期日', (afterCode.until || 0) > Date.now());
 check('码从库里没了', (await get('code:GATE01')) === null || (await get('code:GATE01')) === undefined);
+
+// ---- ②′ 两台设备都登着，拿**先登那台**的令牌兑码 --------------------------
+//
+// 这一条守的不是一个还没修的 bug，是一个**已经修好、却反复被当成没修重提**
+// 的地方——巡检报告里到今天还写着「手机先登录、电脑后登录之后去兑换码会被
+// 判定未登录，还会新建一个孤儿账号」。它在 885c154 就修了，可当时只留了一段
+// 注释，没有任何一条断言守着。
+//
+// 会坏成什么样：tokenValid() 比的是账户上那一串令牌（多台设备各一把），
+// 谁要是「顺手简化」成 token === account.token（最新签发的那一把），先登的
+// 那台立刻被判成没登录。码照样兑得掉，可那个月挂在码自己名下、不在他账户
+// 上——他换台设备就找不着了，而这种事玩家多半不会来报，只会觉得被骗了。
+//
+// 所以自带一个账号，跟上面那条主线互不干扰。
+
+const TWO = 'twodevices@example.com';
+const TWO_PW = 'ccc111';
+await saveAccount(TWO, newAccount(TWO_PW, 'card'));
+
+const phone = await callOn(subscription, { email: TWO, password: TWO_PW });
+const laptop = await callOn(subscription, { email: TWO, password: TWO_PW });
+check('两台设备各拿到一把不同的令牌',
+  phone.body.token && laptop.body.token && phone.body.token !== laptop.body.token);
+
+await set('code:GATE02', { plan: 'month' });
+const oldDevice = await callOn(redeem, { code: 'GATE02', email: TWO, token: phone.body.token });
+check('拿**先登那台**的令牌兑码，一样落到账户上',
+  oldDevice.status === 200 && oldDevice.body.email === TWO, JSON.stringify(oldDevice.body));
+check('**没有** code 字段——没被当成「没登录」挂到码自己名下',
+  oldDevice.body.code === undefined);
+check('回的是先登那台自己那把令牌，没被后登那台顶掉',
+  oldDevice.body.token === phone.body.token);
+const twoAfter = await loadAccount(TWO);
+check('两台设备的令牌都还在，兑一次码没把谁挤下线',
+  twoAfter.tokens.some((e) => e.t === phone.body.token) &&
+  twoAfter.tokens.some((e) => e.t === laptop.body.token),
+  `${twoAfter.tokens.length} 把`);
+check('没有生出和账户无关的孤儿账号（acct:code:GATE02）',
+  !(await loadAccount('code:GATE02')) && !(await get('acct:code:GATE02')));
 
 // ---- ③ 换密码：旧密码是唯一凭据，换完别的设备下线 --------------------------
 
