@@ -11,6 +11,8 @@
  * Each string is one row, '1' = a dark module. The quiet zone is NOT
  * included; whoever draws it must leave a 4-module margin.
  */
+/** 这张矩阵是照着这个地址生成的。代码里没人读它——留着是因为上面那段说明
+ *  指着它说「from the URL below」：地址要是改了，得照它重新生成一次矩阵。 */
 export const QR_URL = 'https://play-slides.com';
 export const QR_QUIET_MODULES = 4;
 export const QR_MATRIX: readonly string[] = [

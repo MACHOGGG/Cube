@@ -55,11 +55,6 @@ export function mountBottomNav(handlers: BottomNavHandlers, lang: Lang): void {
   barEl = el;
 }
 
-/** Kept as a no-op so the screens can keep calling it: the bar used to hide
- *  itself at the top of a phone screen and had to be re-checked after every
- *  screen swap. It is simply always there now. */
-export function refreshBottomNav(): void {}
-
 /** Lifts and darkens whichever entry point is open (null puts both back
  *  down). Purely visual — main.ts owns what the second tap actually does. */
 export function setActiveNavTab(tab: NavTab): void {

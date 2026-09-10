@@ -62,13 +62,6 @@ export const LEGAL_PATH: Record<LegalKey, string> = {
   contact: '/contact',
 };
 
-/** 反过来问：现在这个地址是五份里的哪一份？不是就返回 null（照常进游戏）。 */
-export function legalKeyForPath(pathname: string): LegalKey | null {
-  const want = '/' + pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-  for (const key of LEGAL_ORDER) if (LEGAL_PATH[key] === want) return key;
-  return null;
-}
-
 const E = CONTACT_EMAIL;
 
 /**

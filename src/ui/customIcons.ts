@@ -151,10 +151,3 @@ export function customAny(...names: string[]): string | null {
   }
   return null;
 }
-
-/** 现在放了哪些文件——发码页和自检脚本用来核对文件名有没有写错。 */
-export function customIconNames(): string[] {
-  return Object.keys(FILES)
-    .map((p) => p.replace('../assets/icons/', '').replace(/\.svg$/, ''))
-    .sort();
-}

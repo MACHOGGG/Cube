@@ -64,10 +64,6 @@ export function clearSeed(): void {
   source = Math.random;
 }
 
-export function isSeeded(): boolean {
-  return source !== Math.random;
-}
-
 /** The raw stream, for anything that needs a number rather than an order. */
 export function random(): number {
   return source();

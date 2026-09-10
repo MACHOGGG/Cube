@@ -50,7 +50,7 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 
 ## 检查门（`scripts/check-*.mjs`）
 
-没有 npm test，也没有测试框架。**51 个门就是这个项目的测试**，每个门盯着一件
+没有 npm test，也没有测试框架。**54 个门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
 三类，跑法不同：
@@ -243,6 +243,9 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 
 - `scripts/` 里除了门，还有 `build-legal` `build-wxgame` `build-artifact`
   `gen-app-icons` 等生成脚本，和 `ui-snapshot` / `ui-screens` 两个截图工具。
+- `report-*.mjs` 是**体检台，不是门**：永远返回 0，只把数字摆出来。现在有
+  `report-cvd-sim`（色盲开关关着时，棋子颜色在二色觉下还分不分得开——量出来
+  是不够用的，等玩家拍板要不要换颜色）。
 - `slides-simulator.html` / `slides-interface.html` 是给玩家自己调排版的可视化
   台子。
 - 四份上手指南在仓库根：`iOS上手指南.md`、`后台数据指南.md`、

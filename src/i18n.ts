@@ -5,9 +5,7 @@ export const TUTORIAL_SEEN_KEY = 'slides_tutorial_seen';
 
 export interface I18nStrings {
   langName: string;
-  pickerTagline: string;
   homeTagline: string;
-  skip: string;
   next: string;
   prev: string;
   replay: string;
@@ -15,36 +13,18 @@ export interface I18nStrings {
   pause: string;
   resume: string;
   run4: string;
-  twoByTwo: string;
   flip: string;
-  mixedFace: string;
-  wholeLine: string;
-  circleClusterIntro: string;
-  circleFlipTeach: string;
-  circleFlipDragHint: string;
-  circleBlank: string;
-  circleBlankMove: string;
-  triSlide: string;
-  triBigTriangle: string;
-  triFlipOrientation: string;
-  triBlank: string;
-  navHome: string;
-  navAccount: string;
   navProfile: string;
   navRecords: string;
   noRecordsYet: string;
-  moreModesTitle: string;
   switchLanguage: string;
   // ---- home page ----
-  howToBtn: string;
-  sectionBase: string;
   sectionTimed: string;
   /** 《无限反转》：名字，和挑图形那一屏底下那句规矩。 */
   flipModeTitle: string;
   flipModeTagline: string;
   /** 无限反转开局页上那一句：连击加成减弱、没有时间奖励。 */
   flipScoringHint: string;
-  sectionMore: string;
   bombBasicTitle: string;
   bombTimedTitle: string;
   bombAdvancedTitle: string;
@@ -53,15 +33,10 @@ export interface I18nStrings {
   slotShareCaption: string;
   slotSameLabel: string;
   slotOwnLabel: string;
-  randomTargetTagline: string;
   /** 《老虎机模式》介绍页：三台机器底下那颗键的两种字（红 STOP / 绿 开始），
    *  和右下角那颗《开始 〉》。 */
   slotDemoStop: string;
   slotStartLabel: string;
-  randomTargetPick: string;
-  randomTargetSpinning: string;
-  randomTargetOnly: string;
-  randomTargetPoints: string;
   comingSoon: string;
   multiplayerTitle: string;
   rankingsTitle: string;
@@ -74,7 +49,6 @@ export interface I18nStrings {
   rankTabLayout: string;
   rankTabSlot: string;
   rankTabFlip: string;
-  rankBestBoard: string;
   rankLocked: string;
   rankLockedCta: string;
   rankSignedOut: string;
@@ -85,7 +59,7 @@ export interface I18nStrings {
   /**
    * 那根拉杆的名字。原先叫「图形翻面速度」——可站里已经不再有「翻面」这件事
    * 了（玩家 2026-09 定的：色块得分就变成星星，不要再用翻面/正面/反面去解释
-   * 它）。这一处和下面 triangleTutorialDesc 是最后两处漏网的界面文字。
+   * 它）。它是界面上最后一处写着「翻面」的字。
    */
   flipSpeedTitle: string;
   flipSpeedHint: string;
@@ -95,9 +69,7 @@ export interface I18nStrings {
   flipSpeedPick: string;
   totalScoreTitle: string;
   totalScoreSync: string;
-  // ---- tutorial picker / generic back buttons ----
-  tutorialPickerTitle: string;
-  tutorialPickerTagline: string;
+  // ---- 各页通用的返回键 ----
   backToMenu: string;
   /** The end-of-run summary's way out — short, since it sits beside two
    *  other buttons on one row. */
@@ -105,9 +77,6 @@ export interface I18nStrings {
   /** Shown on a wide board's start card, under the turn-your-phone glyph. */
   rotateHint: string;
   back: string;
-  squareTutorialDesc: string;
-  circleTutorialDesc: string;
-  triangleTutorialDesc: string;
   // ---- account page ----
   /**
    * 《账户》——已登录的人点开的那一扇窗，抬头就这两个字。
@@ -120,12 +89,8 @@ export interface I18nStrings {
   accountTitle: string;
   tabRegister: string;
   tabLogin: string;
-  accountComingSoon: string;
   loginGateway: string;
-  contactUs: string;
   tutorialShort: string;
-  geniusPrivilegesTitle: string;
-  privilegesSoon: string;
   becomeGenius: string;
   geniusSpecialTitle: string;
   /** 付费墙上「订阅后立刻拿到」那一段的小标题。 */
@@ -175,7 +140,6 @@ export interface I18nStrings {
   /** Carries {store} — "App Store" or "Google Play", per platform. */
   storeNoAccountHint: string;
   subscribedTitle: string;
-  subscribedUntil: string;
   manageSubscription: string;
   /** Also carries {store}: where a store subscription is cancelled. */
   manageOnStore: string;
@@ -199,7 +163,6 @@ export interface I18nStrings {
   setPwShort: string;
   /** 注册时那一行勾选：要不要收 Slides 的邮件。默认不勾——同意得是主动给的。 */
   newsOptIn: string;
-  setPwLater: string;
   /** 内部码换来的东西，绑到一个邮箱上，好换设备时取回。 */
   bindTitle: string;
   bindHint: string;
@@ -282,7 +245,6 @@ export interface I18nStrings {
   mpJoin: string;
   mpNameLabel: string;
   mpNamePlaceholder: string;
-  mpAvatarLabel: string;
   mpShuffle: string;
   mpCodeLabel: string;
   mpCodePlaceholder: string;
@@ -290,14 +252,11 @@ export interface I18nStrings {
   mpShareHint: string;
   mpPlayers: string;
   mpHostBadge: string;
-  mpPickMode: string;
-  mpStartBtn: string;
   /** 交出座位、离开这间房。房间页和结算页上是同一颗键、同一个说法——对玩家
    *  来说这本来就是同一件事，两个名字只会让人以为是两回事。 */
   mpLeave: string;
   /** 离开房间后那张总排名的标题 */
   mpNeedGenius: string;
-  mpGo: string;
   mpStandings: string;
   mpFinished: string;
   /** The host picks the board from the home page, where all eight of them
@@ -389,8 +348,6 @@ export interface I18nStrings {
   // ---- game shell (shared HUD/overlays across every shape) ----
   pauseBtn: string;
   finishBtn: string;
-  /** The "are you sure" a player gets before a run is thrown away. */
-  endRunTitle: string;
   endRunYes: string;
   endRunNo: string;
   scoreLabel: string;
@@ -457,7 +414,6 @@ export interface I18nStrings {
   stepsPhrase: string;
   /** Contains a literal "{n}" placeholder substituted with the best score. */
   bestPhrase: string;
-  rateLabel: string;
   // ---- share card (canvas-drawn) ----
   shareStartLabel: string;
   shareEndLabel: string;
@@ -481,9 +437,7 @@ export const LANG_ORDER: Lang[] = ['en', 'fr', 'zhHant', 'zhHans'];
 export const STRINGS: Record<Lang, I18nStrings> = {
   en: {
     langName: 'English',
-    pickerTagline: 'Choose your language',
     homeTagline: 'Slide · Score · Clear',
-    skip: 'Skip tutorial',
     next: 'Next',
     prev: 'Back',
     replay: 'Replay',
@@ -491,33 +445,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pause: 'Pause',
     resume: 'Resume',
     run4: 'Slide a row or column to line up 4 tiles of the same color',
-    twoByTwo: 'A 2×2 block of the same color scores too',
     flip: 'A tile that scores turns into a star, in a colour chosen at random',
-    mixedFace: 'A star keeps scoring — match its colour with a coloured tile too',
-    wholeLine: 'A whole row or column of same-colour stars scores big and clears the board',
-    circleClusterIntro: 'Drag horizontally, or along either diagonal; same-colored balls score three ways — a run of 4, a "22" diamond, or a "121" diamond. Drag once to see all three score in turn',
-    circleFlipTeach: "Balls that score turn into stars, each in a colour of its own — balls cleared together don't always end up the same colour",
-    circleFlipDragHint: 'Drag it and see',
-    circleBlank: 'When a whole line of stars matches, it becomes blank balls — still slide freely, but they can never score again',
-    circleBlankMove: 'A blank ball still holds its place on the board and drags normally — try it and watch it slide along',
-    triSlide: 'Drag along a horizontal, left-diagonal, or right-diagonal line to line up 4 triangles of the same color',
-    triBigTriangle: '4 triangles combining into one big triangle (3 one way, 1 the other) score too',
-    triFlipOrientation: 'Triangles that score turn into stars, each in a colour of its own — watch this group change and change back',
-    triBlank: 'When a whole line of stars matches, it becomes blank triangles — still slide freely, but they can never score again',
-    navHome: 'Home',
-    navAccount: 'Account',
     navProfile: 'Profile',
     navRecords: 'Records & rankings',
     noRecordsYet: 'No score yet',
-    moreModesTitle: 'More modes',
     switchLanguage: 'Language',
-    howToBtn: 'How to slide? · Watch the tutorial again',
-    sectionBase: 'Base games',
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
     flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 60 s',
     flipScoringHint: 'Streak bonus toned down: each consecutive score ×1.5 · no time bonus',
-    sectionMore: 'More layouts',
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
@@ -525,13 +461,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotShareCaption: 'Patterns for the room',
     slotSameLabel: 'Same',
     slotOwnLabel: 'Different',
-    randomTargetTagline: 'Pick a shape, spin for targets, 4-3-2-1 go!',
     slotDemoStop: 'STOP',
     slotStartLabel: 'Start',
-    randomTargetPick: 'Pick a shape',
-    randomTargetSpinning: 'Spinning\u2026',
-    randomTargetOnly: 'Only these two score this run.',
-    randomTargetPoints: '{n} pts',
     comingSoon: 'Coming soon',
     multiplayerTitle: 'Multiplayer',
     rankingsTitle: 'Records & rankings',
@@ -542,7 +473,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: 'Layouts',
     rankTabSlot: 'Slots',
     rankTabFlip: 'Flip',
-    rankBestBoard: 'Best single run',
     rankLocked: 'The global leaderboard is a Slides Genius perk',
     rankLockedCta: 'Become a Slides Genius',
     rankSignedOut: 'Sign in and your runs go on the board',
@@ -558,24 +488,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: 'Recommended',
     totalScoreTitle: 'Total score',
     totalScoreSync: 'Slides Genius keeps every run forever',
-    tutorialPickerTitle: 'How to slide?',
-    tutorialPickerTagline: 'Pick a game to watch its tutorial again',
     backToMenu: 'Back to menu',
     homeBtn: 'Home',
     rotateHint: 'Turn your phone sideways — this board is a wide one',
     back: 'Back',
-    squareTutorialDesc: 'Drag a whole row/column · the basics',
-    circleTutorialDesc: '3 slide directions · "22"/"121" diamonds',
-    triangleTutorialDesc: '3 slide directions · big triangle & stars',
     accountTitle: 'Account',
     tabRegister: 'Sign up',
     tabLogin: 'Log in',
-    accountComingSoon: 'A full account system is coming soon',
     loginGateway: 'Sign in',
-    contactUs: 'Contact us',
     tutorialShort: 'Tutorial',
-    geniusPrivilegesTitle: 'Slides Genius perks',
-    privilegesSoon: '…more coming soon',
     becomeGenius: 'Become a Slides Genius',
     geniusSpecialTitle: 'Slides Genius Exclusives',
     geniusNowTitle: 'Unlocked the moment you subscribe',
@@ -598,7 +519,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     signInHint: 'Your email address and the password you set.',
     storeNoAccountHint: 'Bought with your {store} account — no sign-up, and you never leave the app.',
     subscribedTitle: 'You are a Slides Genius',
-    subscribedUntil: 'Runs until',
     manageSubscription: 'Manage subscription',
     manageOnStore: 'Cancel or change it in your {store} account settings.',
     geniusStatus: 'Subscription',
@@ -616,7 +536,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '6 letters or digits',
     setPwShort: 'Use exactly six letters or digits.',
     newsOptIn: 'Email me about new Slides boards and updates. Unsubscribe anytime.',
-    setPwLater: 'Later',
     bindTitle: 'Save it to an address',
     bindHint: 'Your insider code is redeemed and the boards are open. Give an email address and a password and it comes back on your other devices too — without them it lives in this browser alone.',
     bindLater: 'Later',
@@ -676,7 +595,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpJoin: 'Join a room',
     mpNameLabel: 'Your name',
     mpNamePlaceholder: 'Pick a name',
-    mpAvatarLabel: 'Your mark',
     mpShuffle: 'Another',
     mpCodeLabel: 'Room code',
     mpCodePlaceholder: 'four digits',
@@ -684,11 +602,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpShareHint: 'Give these four digits to a friend and they can join the room.',
     mpPlayers: 'Players',
     mpHostBadge: 'host',
-    mpPickMode: 'Pick a board',
-    mpStartBtn: 'Start',
     mpLeave: 'Leave the room',
     mpNeedGenius: 'Join a room a Slides Genius put up',
-    mpGo: 'Go!',
     mpStandings: 'Standings',
     mpFinished: 'done',
     mpGoPick: 'Pick a board on the home page',
@@ -751,7 +666,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     workingLabel: 'Working…',
     pauseBtn: 'Pause',
     finishBtn: 'Finish',
-    endRunTitle: 'End this game?',
     endRunYes: 'Yes',
     endRunNo: 'No',
     scoreLabel: 'Score',
@@ -805,7 +719,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombHazardReason: 'Bomb tiles connected',
     stepsPhrase: '{n} moves',
     bestPhrase: 'best {n}',
-    rateLabel: 'Hit rate ',
     shareQrCaption: 'Scan to play Slides',
     shareStartLabel: 'Start',
     shareEndLabel: 'End',
@@ -823,9 +736,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   },
   fr: {
     langName: 'Français',
-    pickerTagline: 'Choisissez votre langue',
     homeTagline: 'Glisser · Marquer · Effacer',
-    skip: 'Passer le tutoriel',
     next: 'Suivant',
     prev: 'Précédent',
     replay: 'Rejouer',
@@ -833,33 +744,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pause: 'Pause',
     resume: 'Reprendre',
     run4: 'Faites glisser une ligne ou une colonne pour aligner 4 cases de la même couleur',
-    twoByTwo: 'Un carré 2×2 de la même couleur rapporte aussi',
     flip: 'Une case qui marque devient une étoile, d’une couleur tirée au hasard',
-    mixedFace: 'Une étoile marque elle aussi — associez-la à une case colorée de la même couleur',
-    wholeLine: 'Une ligne ou colonne entière d’étoiles de la même couleur rapporte gros et vide le plateau',
-    circleClusterIntro: 'Faites glisser à l\'horizontale ou en diagonale ; des boules de la même couleur marquent de trois façons — une ligne de 4, un losange "22", ou un losange "121". Faites glisser une fois pour voir les trois marquer tour à tour',
-    circleFlipTeach: 'Les boules qui marquent deviennent des étoiles, chacune sa couleur — des boules effacées ensemble ne finissent pas forcément de la même couleur',
-    circleFlipDragHint: 'Fais-la glisser pour voir',
-    circleBlank: 'Quand toute une ligne d’étoiles est assortie, ses boules deviennent vides — elles glissent toujours librement, mais ne peuvent plus jamais marquer',
-    circleBlankMove: 'Une boule vide garde sa place sur le plateau et glisse normalement — essayez et regardez-la se déplacer',
-    triSlide: 'Faites glisser le long d\'une ligne horizontale, diagonale gauche ou diagonale droite pour aligner 4 triangles de la même couleur',
-    triBigTriangle: '4 triangles formant un grand triangle (3 dans un sens, 1 dans l\'autre) rapportent aussi',
-    triFlipOrientation: 'Les triangles qui marquent deviennent des étoiles, chacun sa couleur — regardez ce groupe changer puis revenir',
-    triBlank: 'Quand toute une ligne d’étoiles est assortie, ses triangles deviennent vides — ils glissent toujours librement, mais ne peuvent plus jamais marquer',
-    navHome: 'Accueil',
-    navAccount: 'Compte',
     navProfile: 'Profil',
     navRecords: 'Historique et classements',
     noRecordsYet: 'Pas encore de score',
-    moreModesTitle: 'Autres modes',
     switchLanguage: 'Langue',
-    howToBtn: 'Comment glisser ? · Revoir le tutoriel',
-    sectionBase: 'Jeux de base',
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
     flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 60 s',
     flipScoringHint: 'Bonus de série réduit : chaque score consécutif ×1,5 · pas de bonus de temps',
-    sectionMore: 'Plus de plateaux',
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
@@ -867,13 +760,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotShareCaption: 'Motifs pour la salle',
     slotSameLabel: 'Identiques',
     slotOwnLabel: 'Différents',
-    randomTargetTagline: 'Choisissez une forme, tirez les objectifs, 4-3-2-1 c\u2019est parti !',
     slotDemoStop: 'STOP',
     slotStartLabel: 'Démarrer',
-    randomTargetPick: 'Choisissez une forme',
-    randomTargetSpinning: 'Tirage\u2026',
-    randomTargetOnly: 'Seuls ces deux-là comptent cette partie.',
-    randomTargetPoints: '{n} pts',
     comingSoon: 'Bientôt disponible',
     multiplayerTitle: 'Multijoueur',
     rankingsTitle: 'Historique et classements',
@@ -884,7 +772,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: 'Plateaux',
     rankTabSlot: 'Machine',
     rankTabFlip: 'Infini',
-    rankBestBoard: 'Meilleure partie',
     rankLocked: 'Le classement mondial est réservé aux Slides Génie',
     rankLockedCta: 'Devenir un Slides Génie',
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
@@ -900,24 +787,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: 'Recommandé',
     totalScoreTitle: 'Score cumulé',
     totalScoreSync: 'Slides Génie garde chaque partie pour toujours',
-    tutorialPickerTitle: 'Comment glisser ?',
-    tutorialPickerTagline: 'Choisissez un jeu pour revoir son tutoriel',
     backToMenu: 'Retour au menu',
     homeBtn: 'Accueil',
     rotateHint: 'Tournez votre téléphone — ce plateau est large',
     back: 'Retour',
-    squareTutorialDesc: 'Faites glisser une ligne/colonne entière · les bases',
-    circleTutorialDesc: '3 directions · losanges "22"/"121"',
-    triangleTutorialDesc: '3 directions · grand triangle et étoiles',
     accountTitle: 'Compte',
     tabRegister: "S'inscrire",
     tabLogin: 'Se connecter',
-    accountComingSoon: 'Un système de compte complet arrive bientôt',
     loginGateway: 'Connexion',
-    contactUs: 'Nous contacter',
     tutorialShort: 'Tutoriel',
-    geniusPrivilegesTitle: 'Avantages Slides Génie',
-    privilegesSoon: '…encore plus à venir',
     becomeGenius: 'Devenir un Slides Génie',
     geniusSpecialTitle: 'Exclusivités Slides Génie',
     geniusNowTitle: 'Débloqué dès votre abonnement',
@@ -940,7 +818,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     signInHint: 'Votre adresse et le mot de passe que vous avez défini.',
     storeNoAccountHint: 'Acheté avec votre compte {store} — sans inscription, sans quitter l’application.',
     subscribedTitle: 'Vous êtes un Slides Génie',
-    subscribedUntil: 'Valable jusqu’au',
     manageSubscription: 'Gérer l’abonnement',
     manageOnStore: 'Résiliez ou modifiez dans les réglages de votre compte {store}.',
     geniusStatus: 'Abonnement',
@@ -958,7 +835,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '6 lettres ou chiffres',
     setPwShort: 'Exactement six lettres ou chiffres.',
     newsOptIn: 'M’envoyer les nouveautés Slides par e-mail. Désinscription à tout moment.',
-    setPwLater: 'Plus tard',
     bindTitle: 'Rattachez-le à une adresse',
     bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un mot de passe et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
     bindLater: 'Plus tard',
@@ -1018,7 +894,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpJoin: 'Rejoindre une salle',
     mpNameLabel: 'Votre nom',
     mpNamePlaceholder: 'Choisissez un nom',
-    mpAvatarLabel: 'Votre signe',
     mpShuffle: 'Un autre',
     mpCodeLabel: 'Code de la salle',
     mpCodePlaceholder: 'quatre chiffres',
@@ -1026,11 +901,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpShareHint: 'Donnez ces quatre chiffres à un ami : il pourra rejoindre la salle.',
     mpPlayers: 'Joueurs',
     mpHostBadge: 'hôte',
-    mpPickMode: 'Choisissez un plateau',
-    mpStartBtn: 'Commencer',
     mpLeave: 'Quitter la salle',
     mpNeedGenius: 'Rejoignez la salle d’un Slides Génie',
-    mpGo: 'Partez !',
     mpStandings: 'Classement',
     mpFinished: 'terminé',
     mpGoPick: 'Choisir un plateau sur l’accueil',
@@ -1093,7 +965,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     workingLabel: 'En cours…',
     pauseBtn: 'Pause',
     finishBtn: 'Terminer',
-    endRunTitle: 'Terminer la partie ?',
     endRunYes: 'Oui',
     endRunNo: 'Non',
     scoreLabel: 'Score',
@@ -1147,7 +1018,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombHazardReason: 'Cases-bombes connectées',
     stepsPhrase: '{n} coups',
     bestPhrase: 'meilleur score {n}',
-    rateLabel: 'Taux de réussite ',
     shareQrCaption: 'Scannez pour jouer à Slides',
     shareStartLabel: 'Début',
     shareEndLabel: 'Fin',
@@ -1165,9 +1035,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   },
   zhHant: {
     langName: '繁體中文',
-    pickerTagline: '選擇語言',
     homeTagline: '滑動－得分－消除',
-    skip: '跳過教學',
     next: '下一條',
     prev: '上一條',
     replay: '再一次',
@@ -1175,33 +1043,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pause: '暫停',
     resume: '繼續',
     run4: '滑動一整行或一整列，湊齊 4 個同色方塊',
-    twoByTwo: '湊成 2×2 的同色方塊同樣得分',
     flip: '得分的方塊會變成星星，顏色隨機',
-    mixedFace: '星星一樣能繼續得分——把它和同色的色塊拼在一起',
-    wholeLine: '星星同色連成一整行或一整列，會獲得高分並清空棋盤',
-    circleClusterIntro: '圓球能沿水平、左斜、右斜拖動；同色能拼出三種得分圖案——4連線、「22」菱形、「121」菱形。拖動一下，依次看看它們得分變成星星',
-    circleFlipTeach: '得分的圓球會變成星星，顏色隨機決定——同一組消除的圓球，星星的顏色不一定相同',
-    circleFlipDragHint: '拖動它試試看',
-    circleBlank: '整條線星星同色湊齊時，會變成空白球——仍可自由滑動補位，但不會再得分',
-    circleBlankMove: '空白球依然佔著位置，也能被正常拖動——試著拖一下，看它照樣跟著滑動',
-    triSlide: '沿水平、左斜或右斜方向拖動一整條線，湊齊 4 個同色三角',
-    triBigTriangle: '4 個三角拼成一個大三角（3 個同向 + 1 個反向）同樣得分',
-    triFlipOrientation: '得分的三角會變成星星，每個的顏色各不相同——一起看這一組變過去再變回來',
-    triBlank: '整條線星星同色湊齊時，會變成空白角——仍可自由滑動補位，但不會再得分',
-    navHome: '首頁',
-    navAccount: '帳戶',
     navProfile: '個人主頁',
     navRecords: '記錄與排名',
     noRecordsYet: '尚無成績',
-    moreModesTitle: '更多玩法',
     switchLanguage: '語言',
-    howToBtn: '如何滑？· 重新觀看新手教學',
-    sectionBase: '基礎玩法',
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
     flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，60 秒',
     flipScoringHint: '連擊加成減弱：連續得分每次 ×1.5 · 沒有時間獎勵',
-    sectionMore: '更多佈局',
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
@@ -1209,13 +1059,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotShareCaption: '全屋的得分圖案',
     slotSameLabel: '相同',
     slotOwnLabel: '不同',
-    randomTargetTagline: '選擇圖形，隨機得分目標，4-3-2-1 開始！',
     slotDemoStop: 'STOP',
     slotStartLabel: '開始',
-    randomTargetPick: '先挑一個圖形',
-    randomTargetSpinning: '轉著呢\u2026',
-    randomTargetOnly: '這一局只有這兩個算分。',
-    randomTargetPoints: '{n} 分',
     comingSoon: '敬請期待',
     multiplayerTitle: '多人遊玩',
     rankingsTitle: '成績與排名',
@@ -1226,7 +1071,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: '特殊佈局',
     rankTabSlot: '老虎機',
     rankTabFlip: '無限反轉',
-    rankBestBoard: '單局最佳',
     rankLocked: '全球排行榜是 Slides 天才的特權',
     rankLockedCta: '成為 Slides 天才',
     rankSignedOut: '登入之後，你的成績才會上榜',
@@ -1242,24 +1086,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: '推薦',
     totalScoreTitle: '累計得分',
     totalScoreSync: 'Slides 天才可永久記憶所有成績',
-    tutorialPickerTitle: '如何滑？',
-    tutorialPickerTagline: '選擇一種玩法，重新觀看新手教學',
     backToMenu: '返回選單',
     homeBtn: '主頁',
     rotateHint: '這個棋盤很寬，把手機橫過來玩',
     back: '返回',
-    squareTutorialDesc: '拖動整行/整列 · 基礎教學',
-    circleTutorialDesc: '三向滑動 ·「22」/「121」菱形',
-    triangleTutorialDesc: '三向滑動 · 大三角與星星',
     accountTitle: '帳戶',
     tabRegister: '註冊',
     tabLogin: '登入',
-    accountComingSoon: '敬請期待完整的帳戶系統',
     loginGateway: '登入',
-    contactUs: '聯絡我們',
     tutorialShort: '教學',
-    geniusPrivilegesTitle: 'Slides 天才專屬特權',
-    privilegesSoon: '……敬請期待',
     becomeGenius: '成為 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '成為 Slides 天才',
@@ -1282,7 +1117,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     signInHint: '你的電子郵件，加上你設的密碼。',
     storeNoAccountHint: '用你的 {store} 帳號購買，不必註冊，也不用離開 App。',
     subscribedTitle: '你已經是 Slides 天才',
-    subscribedUntil: '有效期至',
     manageSubscription: '管理訂閱',
     manageOnStore: '到 {store} 的帳號設定裡取消或更改。',
     geniusStatus: '訂閱狀態',
@@ -1300,7 +1134,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '6 位數字或字母',
     setPwShort: '密碼要正好 6 位，數字或字母。',
     newsOptIn: '想收到 Slides 的新玩法與更新郵件。可隨時退訂。',
-    setPwLater: '稍後再說',
     bindTitle: '綁定到一個信箱',
     bindHint: '內部碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
     bindLater: '以後再說',
@@ -1360,7 +1193,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpJoin: '加入小屋',
     mpNameLabel: '你的名字',
     mpNamePlaceholder: '起個名字',
-    mpAvatarLabel: '你的圖形',
     mpShuffle: '換一個',
     mpCodeLabel: '小屋號碼',
     mpCodePlaceholder: '四位數字',
@@ -1368,11 +1200,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpShareHint: '把這四位數字給朋友，邀請加入小屋',
     mpPlayers: '玩家',
     mpHostBadge: '屋主',
-    mpPickMode: '選一個玩法',
-    mpStartBtn: '開始',
     mpLeave: '離開小屋',
     mpNeedGenius: '加入 Slides 天才搭建的小屋',
-    mpGo: '開始！',
     mpStandings: '排名',
     mpFinished: '已完成',
     mpGoPick: '去主選單選玩法',
@@ -1435,7 +1264,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     workingLabel: '處理中…',
     pauseBtn: '暫停',
     finishBtn: '完成',
-    endRunTitle: '是否結束遊戲？',
     endRunYes: '是',
     endRunNo: '否',
     scoreLabel: '得分',
@@ -1489,7 +1317,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombHazardReason: '紅色炸彈相連',
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本機最佳 {n}',
-    rateLabel: '得分率',
     shareQrCaption: '掃碼來 Slides～',
     shareStartLabel: '開始',
     shareEndLabel: '結束',
@@ -1507,9 +1334,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   },
   zhHans: {
     langName: '简体中文',
-    pickerTagline: '选择语言',
     homeTagline: '滑动－得分－消除',
-    skip: '跳过教学',
     next: '下一条',
     prev: '上一条',
     replay: '再一次',
@@ -1517,33 +1342,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pause: '暂停',
     resume: '继续',
     run4: '滑动一整行或一整列，凑齐 4 个同色方块',
-    twoByTwo: '凑成 2×2 的同色方块同样得分',
     flip: '得分的方块会变成星星，颜色随机',
-    mixedFace: '星星一样能继续得分——把它和同色的色块拼在一起',
-    wholeLine: '星星同色连成一整行或一整列，会获得高分并清空棋盘',
-    circleClusterIntro: '圆球能沿水平、左斜、右斜拖动；同色能拼出三种得分图案——4连线、"22"菱形、"121"菱形。拖动一下，依次看看它们得分变成星星',
-    circleFlipTeach: '得分的圆球会变成星星，颜色随机决定——同一组消除的圆球，星星的颜色不一定相同',
-    circleFlipDragHint: '拖动它试试看',
-    circleBlank: '整条线星星同色凑齐时，会变成空白球——仍可自由滑动补位，但不会再得分',
-    circleBlankMove: '空白球依然占着位置，也能被正常拖动——试着拖一下，看它照样跟着滑动',
-    triSlide: '沿水平、左斜或右斜方向拖动一整条线，凑齐 4 个同色三角',
-    triBigTriangle: '4 个三角拼成一个大三角（3 个同向 + 1 个反向）同样得分',
-    triFlipOrientation: '得分的三角会变成星星，每个的颜色各不相同——一起看这一组变过去再变回来',
-    triBlank: '整条线星星同色凑齐时，会变成空白角——仍可自由滑动补位，但不会再得分',
-    navHome: '首页',
-    navAccount: '账户',
     navProfile: '个人主页',
     navRecords: '记录与排名',
     noRecordsYet: '尚无成绩',
-    moreModesTitle: '更多玩法',
     switchLanguage: '语言',
-    howToBtn: '如何滑？· 重新观看新手教学',
-    sectionBase: '基础玩法',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
     flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，60 秒',
     flipScoringHint: '连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励',
-    sectionMore: '更多布局',
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
@@ -1551,13 +1358,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotShareCaption: '全屋的得分图案',
     slotSameLabel: '相同',
     slotOwnLabel: '不同',
-    randomTargetTagline: '选择图形，随机得分目标，4-3-2-1 开始！',
     slotDemoStop: 'STOP',
     slotStartLabel: '开始',
-    randomTargetPick: '先挑一个图形',
-    randomTargetSpinning: '转着呢\u2026',
-    randomTargetOnly: '这一局只有这两个算分。',
-    randomTargetPoints: '{n} 分',
     comingSoon: '敬请期待',
     multiplayerTitle: '多人游玩',
     rankingsTitle: '成绩与排名',
@@ -1568,7 +1370,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: '特殊布局',
     rankTabSlot: '老虎机',
     rankTabFlip: '无限反转',
-    rankBestBoard: '单局最佳',
     rankLocked: '全球排行榜是 Slides 天才的特权',
     rankLockedCta: '成为 Slides 天才',
     rankSignedOut: '登录之后，你的成绩才会上榜',
@@ -1584,24 +1385,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipSpeedPick: '推荐',
     totalScoreTitle: '累计得分',
     totalScoreSync: 'Slides 天才可永久记忆所有成绩',
-    tutorialPickerTitle: '如何滑？',
-    tutorialPickerTagline: '选择一种玩法，重新观看新手教学',
     backToMenu: '返回菜单',
     homeBtn: '主页',
     rotateHint: '这个棋盘很宽，把手机横过来玩',
     back: '返回',
-    squareTutorialDesc: '拖动整行/整列 · 基础教学',
-    circleTutorialDesc: '三向滑动 ·"22"/"121"菱形',
-    triangleTutorialDesc: '三向滑动 · 大三角与星星',
     accountTitle: '账户',
     tabRegister: '注册',
     tabLogin: '登录',
-    accountComingSoon: '敬请期待完整的账户系统',
     loginGateway: '登录',
-    contactUs: '联系我们',
     tutorialShort: '教学',
-    geniusPrivilegesTitle: 'Slides 天才专属特权',
-    privilegesSoon: '……敬请期待',
     becomeGenius: '成为 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '成为 Slides 天才',
@@ -1624,7 +1416,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     signInHint: '你的邮箱，加上你设的密码。',
     storeNoAccountHint: '用你的 {store} 账号购买，不用注册，也不用离开 App。',
     subscribedTitle: '你已经是 Slides 天才',
-    subscribedUntil: '有效期至',
     manageSubscription: '管理订阅',
     manageOnStore: '到 {store} 的账号设置里取消或更改。',
     geniusStatus: '订阅状态',
@@ -1642,7 +1433,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwPlaceholder: '6 位数字或字母',
     setPwShort: '密码要正好 6 位，数字或字母。',
     newsOptIn: '想收到 Slides 的新玩法与更新邮件。可随时退订。',
-    setPwLater: '稍后再说',
     bindTitle: '绑定到一个邮箱',
     bindHint: '内部码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
     bindLater: '以后再说',
@@ -1702,7 +1492,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpJoin: '加入小屋',
     mpNameLabel: '你的名字',
     mpNamePlaceholder: '起个名字',
-    mpAvatarLabel: '你的图形',
     mpShuffle: '换一个',
     mpCodeLabel: '小屋号码',
     mpCodePlaceholder: '四位数字',
@@ -1710,11 +1499,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpShareHint: '把这四位数字给朋友，邀请加入小屋',
     mpPlayers: '玩家',
     mpHostBadge: '屋主',
-    mpPickMode: '选一个玩法',
-    mpStartBtn: '开始',
     mpLeave: '离开小屋',
     mpNeedGenius: '加入 Slides 天才搭建的小屋',
-    mpGo: '开始！',
     mpStandings: '排名',
     mpFinished: '已完成',
     mpGoPick: '去主菜单选玩法',
@@ -1777,7 +1563,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     workingLabel: '处理中…',
     pauseBtn: '暂停',
     finishBtn: '完成',
-    endRunTitle: '是否结束游戏？',
     endRunYes: '是',
     endRunNo: '否',
     scoreLabel: '得分',
@@ -1831,7 +1616,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombHazardReason: '红色炸弹相连',
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本机最佳 {n}',
-    rateLabel: '得分率',
     shareQrCaption: '扫码来 Slides～',
     shareStartLabel: '开始',
     shareEndLabel: '结束',

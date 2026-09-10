@@ -17,9 +17,6 @@ import { isGenius } from './subscription';
  */
 export const GENIUS_LAYOUTS: readonly string[] = ['circleSeven', 'triangleAdvanced'];
 
-/** Hosting a multiplayer room is the subscriber's; joining one is not. */
-export const GENIUS_HOSTS_ROOMS = true;
-
 /** True when this board is behind the subscription and the player is not. */
 export function isLayoutLocked(cardId: string): boolean {
   return GENIUS_LAYOUTS.includes(cardId) && !isGenius();

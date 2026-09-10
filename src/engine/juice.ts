@@ -16,8 +16,6 @@ export { reducedMotion };
 
 /** Front-loaded deceleration — most of the travel happens early, then a long soft settle, reading as friction rather than a hard stop. */
 export const EASE_GROUNDED = 'cubic-bezier(0.22, 1, 0.36, 1)';
-/** Overshoots past 1.0 before settling back — the "punch" feel. */
-export const EASE_PUNCH = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 /**
  * Forces the browser to notice a class was removed before it's re-added, so
@@ -28,17 +26,6 @@ export function retrigger(el: HTMLElement, className: string): void {
   el.classList.remove(className);
   void el.offsetWidth;
   el.classList.add(className);
-}
-
-/**
- * A brief pause before continuing a sequence — the cheapest, highest-payoff
- * "impact" trick in action games: nothing animates any differently, time
- * just visibly catches for a beat right at the moment of contact. Resolves
- * immediately under reduced motion.
- */
-export function hitStop(ms: number): Promise<void> {
-  if (reducedMotion() || ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -202,8 +189,6 @@ const CUE = {
  * another one after the player turns the sound back on.
  */
 const SOUND_KEY = 'slides_sound';
-type SoundListener = () => void;
-const soundListeners = new Set<SoundListener>();
 let sound = readSound();
 
 function readSound(): boolean {
@@ -227,13 +212,6 @@ export function setSoundOn(next: boolean): void {
   } catch {
     /* private mode: the choice just won't outlive the session */
   }
-  for (const fn of Array.from(soundListeners)) fn();
-}
-
-/** Subscribes to changes; call the returned function to stop listening. */
-export function onSoundChange(fn: SoundListener): () => void {
-  soundListeners.add(fn);
-  return () => soundListeners.delete(fn);
 }
 
 /** Every cue goes through here, so muting is one check in one place. */

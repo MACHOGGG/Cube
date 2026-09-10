@@ -32,8 +32,6 @@ export function rateOfStep(step: number): number {
   return 2 ** t;
 }
 
-type Listener = () => void;
-const listeners = new Set<Listener>();
 let step = read();
 
 function read(): number {
@@ -65,10 +63,4 @@ export function setFlipStep(next: number): void {
   } catch {
     /* 存不下就只在这一次会话里生效，不值得为它报错。 */
   }
-  for (const fn of listeners) fn();
-}
-
-export function onFlipSpeedChange(fn: Listener): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
 }
