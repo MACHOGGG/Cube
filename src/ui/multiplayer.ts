@@ -414,7 +414,32 @@ export function renderMultiplayerPage(
       const made = await createRoom(myName(), avatar);
       busy = false;
       if (dead) return;
-      if (!made.ok) return void (msg.textContent = errorText(made.reason, lang));
+      if (!made.ok) {
+        /*
+         * 服务器答 geniusOnly，走到这儿就一定不是「你不是天才」。
+         *
+         * 上面那道 `if (!isGenius())` 已经把没开通的人拦在付费墙那边了——能
+         * 发出这个请求的，本机缓存都说「我是天才」。所以服务器说不是，说的
+         * 其实是另一件事：**这台设备手里那把令牌它已经不认了**（在别处改过
+         * 密码、换过邮箱，或者令牌过期）。
+         *
+         * 原先这儿一律走 errorText，而 geniusOnly 那一档回的是
+         * mpNeedGenius ——「加入 Slides 天才搭建的小屋」。那是分割线底下那句
+         * 招呼，既没说出了什么事，也没给出路：一个付过钱的人按下《开小屋》，
+         * 屏幕上跳出一句和他处境无关的话，然后就没有然后了。线上真出过：
+         * 同一台设备上 /api/scores 连着 401、/api/room 连着 403，玩家看到的
+         * 只有那一句。
+         *
+         * 现在照实说（sessionGone，全站同一句），并且把登录那扇窗打开——他
+         * 缺的就是在这台设备上再登一次。
+         */
+        if (made.reason === 'geniusOnly') {
+          msg.textContent = s.sessionGone;
+          handlers.onNeedGenius();
+          return;
+        }
+        return void (msg.textContent = errorText(made.reason, lang));
+      }
       keepAssignedName(made.value);
       renderLobby(made.value);
     });
