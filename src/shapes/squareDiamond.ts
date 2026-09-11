@@ -771,10 +771,25 @@ export function createSquareDiamondGame(): ShapeGame {
             el.style.scale = pressScale(chain.press(i), dirX / stepLen, dirY / stepLen, BOARD_FORCE);
           }
         }
-        for (let kk = -1; kk <= 1; kk++) {
-          if (kk === 0) continue;
-          for (let i = 0; i < n; i++) {
-            const off = chain.at(i);
+        // 补位的影子跟着手指走，不再钉在线段左右那一轮上。
+        //
+        // 原先这里是 for (kk = -1; kk <= 1)：只在本尊左右各一个线段长的地方铺
+        // 影子。手机上版图差不多占满屏幕，拖不了那么远，一直没露馅；电脑上版
+        // 图只占窗口的一小块，鼠标一路拖出去很容易就超过两个线段长——过了那
+        // 条线，本尊已经淡到全透明（edgeOpacity），仅有的那一轮影子也还在更远
+        // 处，版图里这一条线就空了，接着又凭空冒出来。玩家看到的就是「拖出版
+        // 图之后一顿一跳」。
+        //
+        // 现在按每一颗此刻的位置反推它该落在第几轮（k0），只铺它自己那一轮和
+        // 左右各一轮：拖多远都一样，每帧造的影子还比从前少。造好的先攒在一张
+        // 离屏的纸上，最后一次性挂进版图——和 render() 用 DocumentFragment 是
+        // 同一个道理，那儿的注释写着为什么。
+        const ghosts = document.createDocumentFragment();
+        for (let i = 0; i < n; i++) {
+          const off = chain.at(i);
+          const k0 = Math.round(-off / n);
+          for (let kk = k0 - 1; kk <= k0 + 1; kk++) {
+            if (kk === 0) continue;
             const pos = i + off + kk * n;
             const fade = edgeOpacity(pos, n);
             if (fade <= 0) continue;
@@ -786,9 +801,10 @@ export function createSquareDiamondGame(): ShapeGame {
             ghost.style.left = shiftedX - size / 2 + 'px';
             ghost.style.top = shiftedY - size / 2 + 'px';
             ghost.classList.add('ghost');
-            refs.boardEl.appendChild(ghost);
+            ghosts.appendChild(ghost);
           }
         }
+        refs.boardEl.appendChild(ghosts);
         // The parallel lines either side, carried a little and sprung home.
         const inLine = new Set(cells.map(([r, c]) => cellKey(r, c)));
         const lineCoord = (r: number, c: number) =>

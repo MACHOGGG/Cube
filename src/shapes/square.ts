@@ -743,18 +743,39 @@ export function createSquareGame(): ShapeGame {
               el.style.scale = pressScale(chain.press(c), 1, 0, BOARD_FORCE);
             }
           }
-          for (let k = -2; k <= 2; k++) {
-            if (k === 0) continue;
-            for (let c = 0; c < cols; c++) {
-              const x = c * cell + chain.at(c) * cell + k * span;
+          // 补位的影子跟着手指走，不再钉在版图旁边那两轮上。
+          //
+          // 原先这里是 for (k = -2; k <= 2)：只在本尊左右各两个版图宽的地方
+          // 铺影子。手机上版图差不多占满屏幕，两个版图宽根本拖不到，所以一直
+          // 没露馅；电脑上版图只有窗口的三分之一，鼠标一路拖过去很容易就超过
+          // 两轮——过了那条线，本尊早被裁在版图外，最远的影子也还在更远处，
+          // 版图里这一行就空了，接着又凭空冒出来。玩家看到的就是「拖出版图之
+          // 后一顿一跳」。
+          //
+          // 现在按每一颗此刻的位置反推它该落在第几轮（k0），只铺它自己那一轮
+          // 和左右各一轮。可见的那一条带子宽度比一轮多一格，最多容得下两轮，
+          // 三个候选一定够；拖多远都一样，而且每帧造的影子还比从前少一个。
+          //
+          // 造好的影子先攒在一张离屏的纸上，最后一次性挂到版图里——和 render()
+          // 用 DocumentFragment 是同一个道理，那儿的注释写着为什么：一枚一枚
+          // 往活页面里塞，每一次都可能让浏览器重算一遍这块。影子的枚数正好在
+          // 「拖出版图」那一刻从零跳到一整行，所以这笔账也是那时候才结的。
+          const ghosts = document.createDocumentFragment();
+          for (let c = 0; c < cols; c++) {
+            const travel = chain.at(c);
+            const k0 = Math.round(-travel / cols);
+            for (let k = k0 - 1; k <= k0 + 1; k++) {
+              if (k === 0) continue;
+              const x = c * cell + travel * cell + k * span;
               const fade = edgeFade(x, -cell, span, fadeRange);
               if (fade <= 0) continue;
               const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55 * fade);
               ghost.classList.add('ghost');
               ghost.style.left = x + 'px';
-              refs.boardEl.appendChild(ghost);
+              ghosts.appendChild(ghost);
             }
           }
+          refs.boardEl.appendChild(ghosts);
           for (let r2 = 0; r2 < rows; r2++) {
             if (r2 === r) continue;
             const nudge = chain.side(Math.abs(r2 - r));
@@ -775,18 +796,23 @@ export function createSquareGame(): ShapeGame {
               el.style.scale = pressScale(chain.press(r), 0, 1, BOARD_FORCE);
             }
           }
-          for (let k = -2; k <= 2; k++) {
-            if (k === 0) continue;
-            for (let r = 0; r < rows; r++) {
-              const y = r * cell + chain.at(r) * cell + k * span;
+          // 竖着拖同一条：影子跟着手指走，一次性挂上去。见上面那段。
+          const ghosts = document.createDocumentFragment();
+          for (let r = 0; r < rows; r++) {
+            const travel = chain.at(r);
+            const k0 = Math.round(-travel / rows);
+            for (let k = k0 - 1; k <= k0 + 1; k++) {
+              if (k === 0) continue;
+              const y = r * cell + travel * cell + k * span;
               const fade = edgeFade(y, -cell, span, fadeRange);
               if (fade <= 0) continue;
               const ghost = makeTileEl(grid[r][c], r, c, cell, 0.55 * fade);
               ghost.classList.add('ghost');
               ghost.style.top = y + 'px';
-              refs.boardEl.appendChild(ghost);
+              ghosts.appendChild(ghost);
             }
           }
+          refs.boardEl.appendChild(ghosts);
           for (let c2 = 0; c2 < cols; c2++) {
             if (c2 === c) continue;
             const nudge = chain.side(Math.abs(c2 - c));
