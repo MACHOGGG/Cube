@@ -40,6 +40,10 @@ jobs:
         run: |
           npx esbuild src/engine/puzzleScore.ts --bundle --format=esm --outfile=/tmp/puzzle.mjs
           node scripts/check-puzzle.mjs /tmp/puzzle.mjs
+      - name: 局中实时排名摆哪几行
+        run: |
+          npx esbuild src/engine/standingsWindow.ts --bundle --format=esm --outfile=/tmp/window.mjs
+          node scripts/check-standings-window.mjs /tmp/window.mjs
       - name: 随机得分目标的图案与判定
         run: |
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
