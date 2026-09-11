@@ -1056,35 +1056,20 @@ button:hover { filter: brightness(1.05); }
   pointer-events: none;
 }
 /*
- * 从标题底下过的东西，先淡掉再进去。
+ * 这块招牌底下**不许再垫任何东西**。
  *
- * 招牌是钉在页顶的（上面那条 sticky），而那块玻璃 display: inline-block ——
- * 只有「Slides」那么宽。于是往下滑的时候，经过它的内容会被 backdrop-filter
- * 洗亮一块、糊一块，边缘正好是那块玻璃的圆角框：玩家看到的是「图像旁边奇怪
- * 被遮挡的亮光」，一块凭空出现的亮方框，压在天才标志上。真出过这一次，截图
- * 里那个方框就是它。
+ * 试过一次：给它加一条和页面同色的带子（::after，往下渐隐 34px），想让滑过
+ * 去的内容在进玻璃之前先淡掉。可这条带子是跟着 .home-head 走的，而
+ * .home-head 是 z-index: 60 的 sticky——带子于是浮在页面内容之上，它那 34px
+ * 的渐隐尾巴正好压住主菜单第一排图标的上沿：量出来盖进去 28px，图标顶上一
+ * 截被洗成米色，个人主页上则是一块米色楔子压在天才那块面板上。玩家的原话是
+ * 「毛玻璃的效果覆盖到了下面的 icon」。
  *
- * 这一层是一条和页面同色的带子，垫在招牌底下（z-index: -1 让它落在玻璃后
- * 面，但仍在招牌这个 z-60 的层里，所以盖得住页面内容）。招牌那一段是实心
- * 的——东西还没走到玻璃跟前就已经看不见了，玻璃底下永远是干净的底色；再往
- * 下 34px 渐隐到透明，所以内容是「淡出去」的，不是撞在一条硬边上。
- *
- * 左右各探出 16px：那是 .app 的左右内边距（见上面 .app），探到这儿正好铺满
- * 整幅版心又不多出一分，不会把页面撑出横向滚动条。
+ * 而且它本来要解决的那件事并不存在：内容从毛玻璃底下滚过去时被糊一块、洗
+ * 亮一块，那正是这块 iOS 毛玻璃招牌的设计（见下面的 backdrop-filter），不是
+ * 事故。真正那个「被遮挡」的毛病在别处——天才标志的投影被它下面那颗按钮盖
+ * 掉了半截，修在 .genius-crest 那儿。
  */
-.home-head::after {
-  content: '';
-  position: absolute;
-  left: -16px; right: -16px; top: 0; bottom: -34px;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    var(--bg) 0,
-    var(--bg) calc(100% - 34px),
-    transparent 100%
-  );
-}
 .home-head-glass {
   display: inline-block;
   pointer-events: auto;
@@ -2266,7 +2251,22 @@ body:has(.slot-page) .home-nav { display: none; }
 .genius-panel .menu-section-label { margin: 2px 0 2px; }
 /* 这一块的招牌。大到一眼就知道这一整块讲的是什么，所以它在最上面、居中，
    底下才是那句话和那行小字。 */
-.genius-crest { display: flex; justify-content: center; margin: 2px 0 6px; }
+/*
+ * z-index 是为了那道投影。
+ *
+ * 标志底下那道 drop-shadow 往下探 6+16 = 22px，而它到《你已经是 Slides 天
+ * 才》那颗按钮之间只有 18px（6px 外边距 + 面板 10px 的 gap，量出来 18）。
+ * 按钮排在后面，底色是不透明的橙，于是投影走到按钮上沿就被齐齐切断——玩家
+ * 看到的是标志底下一道影子突然被削平，「阴影效果被下方的按钮遮蔽了」。
+ *
+ * 把这一格抬到同层的上面，影子就落在按钮上，而不是被按钮吃掉。这也正是它
+ * 本来该有的样子：标志浮在这块面板上，影子自然要投在它底下的东西上。抬的是
+ * 整格（不是只抬标志），所以居中和留白一点没变，没有任何位移。
+ */
+.genius-crest {
+  display: flex; justify-content: center; margin: 2px 0 6px;
+  position: relative; z-index: 1;
+}
 .genius-logo--crest { filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.14)); }
 /*
  * 深色下这一块的底色。
