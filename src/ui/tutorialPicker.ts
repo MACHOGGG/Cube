@@ -41,8 +41,22 @@ export function renderTutorialPicker(root: HTMLElement, lang: Lang, handlers: Tu
       <div class="tut-pick-shapes" id="tutorialGrid">
         ${shapes
           .map(
+            // 图形上压一个播放三角。
+            //
+            // 玩家报的：「个人主页中的教学里上方的三个图形看不出是教学内
+            // 容」。原先这三颗就是三个纯色图形——绿方块、红小球、蓝三角，
+            // 和棋盘上的棋子长得一模一样，谁也看不出点下去会放一段动画；
+            // 而这一页底下就摆着六条规则，更像是「这三个是图例」。
+            //
+            // 这一站少文字（玩家定的），所以不写「教学」两个字，压一个播放
+            // 标志：那是全世界都认识的「点这里会播放」。
             (shape) =>
-              `<button class="tut-shape-btn" data-shape="${shape}" aria-label="${name(shape)}">${SHAPE_GLYPH[shape]}</button>`,
+              `<button class="tut-shape-btn" data-shape="${shape}" aria-label="${name(shape)}">
+                 ${SHAPE_GLYPH[shape]}
+                 <span class="tut-shape-play" aria-hidden="true">
+                   <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="var(--ink)"/><path d="M41 30 L72 50 L41 70 Z" fill="var(--surface)"/></svg>
+                 </span>
+               </button>`,
           )
           .join('')}
       </div>

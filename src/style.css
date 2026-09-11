@@ -3789,6 +3789,22 @@ body.is-room-host::after {
 .tut-shape-btn:active { transform: scale(0.98); }
 /* 图形按按钮的高定大小（写死成 px，不用百分比——按钮是 flex 盒，百分比高在这儿靠不住）。 */
 .tut-shape-btn svg { width: calc(var(--h) * 0.72); height: calc(var(--h) * 0.72); display: block; }
+/*
+ * 图形旁边那个播放标志。
+ *
+ * 这三颗按钮原先只是三个纯色图形，和棋盘上的棋子长得一样——玩家看不出点下
+ * 去会放一段教学动画（他的原话：「上方的三个图形看不出是教学内容」）。这一
+ * 站的规矩是少文字，所以不写字，压一个谁都认识的播放三角。
+ *
+ * 它比图形小一圈：主角仍是那个图形（他要挑的是「学哪一种」），播放标志只回
+ * 答「点下去会发生什么」。颜色走 --ink / --surface 两个主题变量，深色下自己
+ * 就反过来了。
+ */
+.tut-shape-btn { gap: calc(var(--h) * 0.18); }
+.tut-shape-play { display: flex; flex: none; }
+.tut-shape-btn .tut-shape-play svg {
+  width: calc(var(--h) * 0.40); height: calc(var(--h) * 0.40);
+}
 /* 六条在剩下的高度里匀开：高屏幕上不至于挤成一团、上面空一大块。 */
 .tut-rules {
   display: flex; flex-direction: column; justify-content: space-evenly; gap: clamp(4px, 1vh, 10px);
@@ -3934,6 +3950,26 @@ body.is-room-host::after {
    一遍。方块那一局开头这块条子是藏着的（等 10 秒或等他得一次分），少了这条
    就变成一个空白的圆角盒子摆在棋盘底下。 */
 .coach-bar[hidden] { display: none; }
+/*
+ * 进度那一条和《<》摆在同一排。
+ *
+ * 《<》是回头看上一条用的（见 ui/coachBar.ts 的 peek）。摆在这儿而不是压在
+ * 图文上：这块条子本来就只有两三行高，按钮往行里一放就会挡住配图；而这一排
+ * 原本只有 3px 高的进度条，空着的正是右边那一截。
+ */
+.coach-head { display: flex; align-items: center; gap: 10px; }
+.coach-prog { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.coach-peek {
+  flex: none; width: 26px; height: 26px; margin: -6px -4px -6px 0;
+  padding: 0; border: none; background: none; cursor: pointer;
+  color: var(--ink-soft); font-size: 20px; line-height: 1;
+  border-radius: 50%; -webkit-tap-highlight-color: transparent;
+}
+.coach-peek[hidden] { display: none; }
+.coach-peek:active { transform: scale(0.9); }
+/* 回头看的时候整块条子换个底，一眼看得出「这不是现在这一条」——否则他读完
+   上一条，会以为教学倒回去了。 */
+.coach-bar:has(.coach-peek--fwd) { background: color-mix(in srgb, var(--surface) 82%, var(--accent-soft)); }
 .coach-prog { display: flex; gap: 4px; }
 .coach-seg {
   flex: 1; height: 3px; border-radius: 2px;

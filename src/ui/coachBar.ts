@@ -37,7 +37,7 @@
  *
  *   · **提前做到的记下来。** 玩家可能第一步就消掉一行——那时候条子还停在第 1
  *     条。不能跳过（跳过等于没讲），也不能装作没发生，所以记在 hit 里；轮到那
- *     一条时只停 ALREADY_MS，亮一下就走。
+ *     一条时只停 ALREADY_READ_MS——不等他再做一次，但话要读得完。
  *   · **谁也不许卡死。** 第 3 条要「反面和正面凑一组」，一局里未必凑得出来。
  *     每一步都压着 STUCK_MS 的保底，到点自己往下走——一块永远不动的提示比讲
  *     错还糟。方块那一路「等三次得分」也压着同一道保底。
@@ -151,18 +151,36 @@ const AFTER_MS = 1100;
 /** 没有动作可做的那几步，默认摆多久。 */
 const READ_MS = 8000;
 
-/** 这一条要做的事，他在轮到它之前就已经做过了：亮一下算个招呼就走。 */
-const ALREADY_MS = 2600;
-
 /**
- * 保底。一分钟还没做到，就当这一局凑不出来，自己往下走。
+ * 保底。这么久还没做到，就当这一局凑不出来，自己往下走。
  *
  * 一块永远不动的提示比讲错还糟——玩家会以为它坏了，或者以为自己漏了什么。
+ *
+ * 原先是 60 秒，而且第 1 步的 22 秒（nudge）是**加在它前面**的，于是最坏情况
+ * 下：第 1 步 22+60 = 82 秒，第 2 步再 60 秒——玩家要等两分二十秒才轮得到第 4
+ * 条（「反面同色连成一行就消」）。而头一局小球本来就未必打得到那么久，于是
+ * 玩家报「第四条教学好像没有在第一次游玩的过程中出现」。
+ *
+ * 现在 40 秒，而且 nudge 只是换一句话、不再重新起算（见 arm）：最坏情况下第
+ * 4 条在第 80 秒登场，一局小球（28 颗）通常打得到。
  */
-const STUCK_MS = 60000;
+const STUCK_MS = 40000;
 
 /** 第 1 步：到这个点还一次分都没得，就把话换成更具体的那一句（见 Step.nudge）。 */
 const NUDGE_MS = 22000;
+
+/** 回头看上一条，最多停这么久，然后自己回到现在（见 peek）。 */
+const PEEK_MS = 12000;
+
+/**
+ * 这一条他提前就做过了：亮一下算个招呼。
+ *
+ * 原先 2.6 秒。太短了——一句话加一幅图，2.6 秒读不完，而「提前做过」在头一局
+ * 里很常见（消掉一行往往发生在条子还停在第 1 条的时候），于是第 4 条经常是
+ * 一闪而过，玩家等于没看见。现在给够读一遍的时间，只是仍然比正常那一步短：
+ * 他确实已经会了，不必再等他做一次。
+ */
+const ALREADY_READ_MS = 6000;
 
 export interface CoachBar {
   /** 玩家做了一件事。不认识的、已经走过的，静静吞掉。 */
@@ -193,13 +211,25 @@ function artFor(shape: CoachShape): string[] {
   return a;
 }
 
-/** 条子的骨架：顶上几段进度，底下摆几行「一幅图 + 一句话」。 */
+/**
+ * 条子的骨架：顶上几段进度，底下摆几行「一幅图 + 一句话」，左边一颗《<》。
+ *
+ * 那颗《<》是玩家要的：「给第一次打开基础玩法的玩家，加入一个『<』查看上一
+ * 条」。条子是跟着他的手自己往下走的，走过去就没了——可他很可能正低头滑棋
+ * 子，一抬头上一条已经换掉了。
+ *
+ * 它翻的是「看」，不是「进度」：按下去只是把上一条的图文摆回来，这一步在等
+ * 的事一件没变、计时一秒没停（见 peek）。所以它不会让人卡在过去，也不会因
+ * 为回头看一眼就漏掉正在讲的这一条。
+ */
 function frame(host: HTMLElement, segs: number, rows: number): void {
   host.hidden = false;
   host.innerHTML =
+    `<div class="coach-head">` +
     (segs > 0
       ? `<div class="coach-prog" aria-hidden="true">${'<span class="coach-seg"></span>'.repeat(segs)}</div>`
-      : '') +
+      : '<span class="coach-prog"></span>') +
+    `<button class="coach-peek" type="button" hidden></button></div>` +
     `<div class="coach-row"><span class="coach-art tut-rule-art"></span><p class="coach-text"></p></div>`.repeat(
       rows,
     );
@@ -234,13 +264,18 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   /** 一步里最多摆几行——骨架按这个数一次画够，换步时只改内容不重建。 */
   const rows = Math.max(...steps.map((st) => st.rules.length));
   /**
-   * 进度条按「条」算：玩家看到的是一条条规矩，摆在几步里是我们的事。
+   * 进度条按「步」算，不按「条」。
+   *
+   * 玩家定的：「第一第二条教学内容在进度条上合并为一条」。这两条本来就是一
+   * 步摆出来的（第 1 条讲「图形有两面」，自己没有可做的事，和第 2 条一起读才
+   * 有用），可进度条从前按规矩的条数画五格——屏幕上摆着一屏，进度条却走了两
+   * 格，看起来像漏掉了一条。现在一步就是一格：走一格，屏幕上换一屏，对得上。
    *
    * 只有从第 1 条讲起的那一路才画这条进度——第二个玩法只讲一两条，画一条走到
    * 头的进度条只会让人以为自己漏了前面几条。
    */
   const covered = steps.flatMap((st) => st.rules);
-  const segs = Math.min(...covered) === 0 ? Math.max(...covered) + 1 : 0;
+  const segs = Math.min(...covered) === 0 ? steps.length : 0;
 
   frame(host, segs, rows);
 
@@ -259,6 +294,10 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const rowEls = Array.from(host.querySelectorAll<HTMLElement>('.coach-row'));
 
   let at = -1;
+  /** 正在回头看上一条（见 peek）。 */
+  let peeking = false;
+  let peekTimer = 0;
+  const peekEl = host.querySelector<HTMLButtonElement>('.coach-peek');
   /** 整局里他做到过哪些事——用来认「这一条我提前就做过了」。 */
   let hit = new Set<CoachSignal>();
   /** 当前这一步里，要等的那个动作做到了几次。 */
@@ -279,10 +318,8 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     timer = window.setTimeout(run, ms);
   };
 
-  function show(i: number) {
-    if (dead) return;
-    at = i;
-    done = 0;
+  /** 把第 i 步的图文摆上去。只管画，不动进度、不动计时。 */
+  function paintStep(i: number) {
     const step = steps[i];
     host.hidden = false;
     // 用满的那几行填内容，多出来的收起来——行是一次画够的，来回增删会把
@@ -296,12 +333,53 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     });
     // 这一步摆两条的时候整体压扁一点，别把棋盘挤小。
     host.classList.toggle('coach-bar--pair', step.rules.length > 1);
-    stage?.classList.toggle('coach-aim', aims(step));
-    const upto = step.rules[step.rules.length - 1];
-    const cells = progEl?.children ?? [];
-    for (let k = 0; k < cells.length; k++) cells[k].classList.toggle('on', k <= upto);
     fadeIn(host);
+  }
+
+  function show(i: number) {
+    if (dead) return;
+    at = i;
+    done = 0;
+    // 正在回头看的时候这一步走掉了：把他拉回现在。走掉的那一条他刚刚还在
+    // 读，而现在这一条才是他手上要做的事——留在过去等于漏掉一条。
+    peeking = false;
+    paintStep(i);
+    stage?.classList.toggle('coach-aim', aims(steps[i]));
+    const cells = progEl?.children ?? [];
+    for (let k = 0; k < cells.length; k++) cells[k].classList.toggle('on', k <= i);
+    paintPeek();
     arm(i);
+  }
+
+  /**
+   * 《<》：把上一条摆回来看一眼。
+   *
+   * 翻的只是「看」——这一步在等的那件事一件没变，计时一秒没停（arm 的定时器
+   * 跟 peek 完全无关）。所以回头看不会让他卡在过去：这一步一走完，show() 把
+   * 他拉回现在；他自己按《>》也能立刻回来；什么都不按，PEEK_MS 之后自动回。
+   *
+   * 三道保险都留着，是因为这一颗键的风险正是「看着看着忘了回来」——那就成了
+   * 「意料之外的疏漏操作」。
+   */
+  function peek(on: boolean) {
+    if (dead) return;
+    peeking = on && at > 0;
+    paintStep(peeking ? at - 1 : at);
+    paintPeek();
+    if (peekTimer) window.clearTimeout(peekTimer);
+    peekTimer = peeking ? window.setTimeout(() => peek(false), PEEK_MS) : 0;
+  }
+
+  /** 那颗键此刻是《<》、《>》，还是根本不该有。 */
+  function paintPeek() {
+    if (!peekEl) return;
+    // 第一步没有「上一条」；方块那一路只讲一两条，也不必有。
+    const usable = steps.length > 1 && (at > 0 || peeking);
+    peekEl.hidden = !usable;
+    if (!usable) return;
+    peekEl.textContent = peeking ? '\u203A' : '\u2039';
+    peekEl.setAttribute('aria-label', peeking ? STRINGS[opts.lang].next : STRINGS[opts.lang].back);
+    peekEl.classList.toggle('coach-peek--fwd', peeking);
   }
 
   /**
@@ -330,13 +408,15 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     // 这一条要做的事他早就做过了：亮一下算个招呼。次数要求不止一次的那一步
     // 不走这条捷径——「得两次分」本来就是让他多做一次，提前做过不算数。
     if ((step.times ?? 1) === 1 && hit.has(step.by)) {
-      return later(ALREADY_MS, () => show(i + 1));
+      return later(ALREADY_READ_MS, () => show(i + 1));
     }
-    // 第 1 步：先换一句更具体的，再接着压那一分钟的保底。
+    // 第 1 步：中途换一句更具体的，但**保底是同一个**——换说法不是重新起算。
+    // 从前这儿是 NUDGE_MS 之后再压一整个 STUCK_MS，两段相加把第 1 步拖到 82
+    // 秒，后面几条就排不进这一局了（见 STUCK_MS 的说明）。
     if (step.nudge && !hit.has(step.by)) {
       return later(NUDGE_MS, () => {
         if (done === 0) nudge();
-        later(STUCK_MS, () => show(i + 1));
+        later(Math.max(0, STUCK_MS - NUDGE_MS), () => show(i + 1));
       });
     }
     later(STUCK_MS, () => show(i + 1));
@@ -356,6 +436,8 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       show(0);
     });
   }
+
+  peekEl?.addEventListener('click', () => peek(!peeking));
 
   start();
 
@@ -385,12 +467,17 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     reset() {
       if (dead) return;
       hit = new Set();
+      peeking = false;
+      if (peekTimer) window.clearTimeout(peekTimer);
+      peekTimer = 0;
       clear();
       start();
     },
     destroy() {
       dead = true;
       clear();
+      if (peekTimer) window.clearTimeout(peekTimer);
+      peekTimer = 0;
       stage?.classList.remove('coach-aim');
       host.hidden = true;
       host.innerHTML = '';
