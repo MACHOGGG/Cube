@@ -20,9 +20,11 @@ import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
 import { confirmLeaveRoom } from './ui/confirmLeaveRoom';
+import { createNudgeSoak, type NudgeSoak } from './ui/nudgeRain';
 import {
   currentRoom,
   endRoom,
+  fetchState,
   forgetRoom,
   iAmHost,
   latestRoomState,
@@ -329,6 +331,48 @@ let pickingForRoom: string | null = null;
 function setPickingForRoom(code: string | null) {
   pickingForRoom = code;
   document.body.classList.toggle('is-room-host', Boolean(code));
+  if (code) startPickWatch();
+  else stopPickWatch();
+}
+
+/**
+ * 屋主去主菜单替大家挑玩法的那几分钟，小屋那边还得听得见他。
+ *
+ * 小屋页自己一秒一轮地问服务器，而这一轮询正是「我还在」的凭据（api/room.js
+ * 的 state 顺手写 lastSeen）。屋主一离开小屋页，那条轮询就停了，于是三十秒
+ * 后屋里所有人看到《屋主等一下就来》，九十秒后是《屋主离家出走了，小屋暂时
+ * 解散》——而他其实就在主菜单上，正低头挑玩法。玩家截到的就是这一屏。
+ *
+ * 顺带解决第二件事：催他的球。那套动画本来只挂在小屋页上，屋主不在那一页，
+ * 催多少下都一个不掉，等他回小屋才一次性砸下来。现在这几分钟里的每一下都落
+ * 在主菜单这块招牌里——他这会儿正看着它。
+ *
+ * 四秒一次：AWAY_MS 是三十秒，四秒一次给了七次机会，掉几次也判不出「不在」；
+ * 而服务器那头 SEEN_WRITE_MS 也正好是四秒，再密也不会多写一笔。
+ */
+const PICK_BEAT_MS = 4000;
+let pickBeat = 0;
+let pickNudges: NudgeSoak | null = null;
+
+function startPickWatch() {
+  if (pickBeat) return;
+  pickNudges = createNudgeSoak();
+  const beat = async () => {
+    if (!pickingForRoom) return;
+    const st = await fetchState();
+    // 这一趟答回来的时候他可能已经不在挑了（开了局、回了小屋、走了）。
+    if (!pickingForRoom) return;
+    if (st.ok) pickNudges?.soak(st.value);
+  };
+  void beat();
+  pickBeat = window.setInterval(() => void beat(), PICK_BEAT_MS);
+}
+
+function stopPickWatch() {
+  window.clearInterval(pickBeat);
+  pickBeat = 0;
+  pickNudges?.stop();
+  pickNudges = null;
 }
 
 /**
@@ -399,6 +443,10 @@ function paintRoomHostBanner() {
   bar.querySelector<HTMLButtonElement>('#roomPickLeave')!.addEventListener('click', () => {
     confirmLeaveRoom(currentLang, leaveRoomWithCard);
   });
+  // 催他的球掉进主菜单这块招牌里。主菜单每重画一次，画布就得重新接一块（旧
+  // 的那块跟着旧的 DOM 一起没了）；「掉到哪一下了」那个书签留在 pickNudges
+  // 里不动——书签跟着画布一起重置，攒下的那几十下会在下一轮一起砸下来。
+  pickNudges?.attach(root.querySelector<HTMLElement>('.home-head-glass'));
 }
 
 function teardown() {

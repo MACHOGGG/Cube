@@ -8,7 +8,7 @@ import { PLAYER_NAME_KEY } from '../engine/cloudScores';
 import { ICON_DOOR_WHITE, ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
-import { mountTitleRain, type TitleRain } from './titleRain';
+import { createNudgeSoak, type NudgeSoak } from './nudgeRain';
 import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { rankRoom } from './roomCard';
@@ -185,18 +185,15 @@ export function renderMultiplayerPage(
 
   /** 屋主出状况时盖上去的那一层，见 roomNotices.ts。 */
   let notice: HostNotice | null = null;
-  /** 被催的时候往标题框里掉东西的那块画布（只有屋主挂）。 */
-  let rain: TitleRain | null = null;
   /**
-   * 上一次看到的催促计数。
+   * 被催的时候往标题框里掉东西的那一份（节奏和书签都在它里头，见
+   * ui/nudgeRain.ts）。只有屋主 attach 画布；客人也要 soak，但不掉东西。
    *
-   * 初值是 -1「还没看过」：进小屋页的第一次轮询只是把数字记下来，不掉东西。
-   * 否则屋主去主菜单挑玩法、回来的时候，这段时间里攒下的每一下会一次性砸
-   * 满整个框——那不是「有人在催」，那是一堵墙。
+   * 每次进小屋页都是新的一份：新的一份书签是「还没看过」，第一轮只记不掉
+   * ——屋主刚从主菜单回来的那一刻，这期间攒下的每一下已经在主菜单那块招牌
+   * 里掉过了（见 main.ts 的 startPickWatch），不该在这儿再砸一遍。
    */
-  let seenNudges = -1;
-  /** 上一次已经掉过的那一下催促是什么时刻（服务器的钟）。 */
-  let seenNudgeAt = -1;
+  let nudges: NudgeSoak | null = null;
   /** 等人学教学那一屏底下的练习盘，拆它用的。 */
   let practiceStop: (() => void) | null = null;
   /** 这一局的「会不会规则」已经问过了——每局只问一次，问完不再挡路。 */
@@ -223,10 +220,8 @@ export function renderMultiplayerPage(
     countdownTimer = 0;
     notice?.remove();
     notice = null;
-    rain?.stop();
-    rain = null;
-    seenNudges = -1;
-    seenNudgeAt = -1;
+    nudges?.stop();
+    nudges = null;
     waitingOnLearner = false;
   };
   const teardown = () => {
@@ -523,11 +518,10 @@ export function renderMultiplayerPage(
       confirmLeaveRoom(lang, leave);
     });
 
-    // 只有屋主的标题框会下雨——催的就是他。
-    if (iAmHost) {
-      const glass = container.querySelector<HTMLElement>('.home-head-glass');
-      if (glass) rain = mountTitleRain(glass);
-    }
+    // 只有屋主的标题框会下雨——催的就是他。客人那一份不 attach：书签照走，
+    // 东西不掉。
+    nudges = createNudgeSoak();
+    if (iAmHost) nudges.attach(container.querySelector<HTMLElement>('.home-head-glass'));
 
     /**
      * 一局正在打、而我不在局里（中途进来的、走了又回来的、或者打完了先回
@@ -572,7 +566,7 @@ export function renderMultiplayerPage(
     };
 
     paint(state, iAmHost);
-    soakNudges(state, iAmHost);
+    soakNudges(state);
     sideline(state);
 
     // 屋主走了、还是屋主卡住了。这一页上也要分得清：坐在房间里等下一局的
@@ -611,7 +605,7 @@ export function renderMultiplayerPage(
         }
         notice?.set(hostTroubleIn(next, iAmHost));
         paint(next, iAmHost);
-        soakNudges(next, iAmHost);
+        soakNudges(next);
         sideline(next);
         // The host has chosen: everyone counts down to the same instant.
         // countdown / playing 这两格，正好就是「有一局开着」：不是大厅、没散场、
@@ -679,45 +673,11 @@ export function renderMultiplayerPage(
   }
 
   /**
-   * 有人催了，就往标题框里掉——按他按的节奏掉。
-   *
-   * 服务器记着最近四十下催促各是什么时刻（nudgeAt）。这一轮轮询新看到的那
-   * 几下，按它们之间原本的间隔一颗一颗放出来：按得越密掉得越密，按一下掉一
-   * 颗——不是一秒一批（玩家的原话：「不要分批掉落，而是根据点击的速度掉
-   * 落」）。这一串最多摊在九百五十毫秒里，赶在下一轮轮询之前放完。
-   *
-   * 只看新的：服务器上那些时刻只增不减，记的是「这间小屋一共被催过哪几下」，
-   * 而这里要的是「刚刚又被催了哪几下」。
+   * 有人催了，就往标题框里掉——节奏和书签都在 ui/nudgeRain.ts 里，这儿只是
+   * 把这一轮的状态递过去。主菜单那边（屋主在挑玩法）用的是同一套。
    */
-  function soakNudges(state: RoomState, iAmHost: boolean) {
-    const now = state.nudges || 0;
-    const stamps = state.nudgeAt ?? [];
-    const newest = stamps.length ? stamps[stamps.length - 1] : 0;
-    if (!iAmHost || !rain) {
-      seenNudges = now;
-      seenNudgeAt = Math.max(seenNudgeAt, newest);
-      return;
-    }
-    if (seenNudges < 0) {
-      seenNudges = now;   // 第一次看见，只记不掉
-      seenNudgeAt = newest;
-      return;
-    }
-    const fresh = stamps.filter((t) => t > seenNudgeAt);
-    // 老服务器没有时间戳：退回按数量匀开。
-    const count = fresh.length ? fresh.length : Math.max(0, now - seenNudges);
-    seenNudges = now;
-    seenNudgeAt = Math.max(seenNudgeAt, newest);
-    if (count <= 0) return;
-    const span = fresh.length > 1 ? fresh[fresh.length - 1] - fresh[0] : 0;
-    const scale = span > 950 ? 950 / span : 1;
-    const shown = Math.min(40, count);
-    for (let k = 0; k < shown; k++) {
-      const at = fresh.length ? (fresh[k] - fresh[0]) * scale : (k * 1000) / shown;
-      window.setTimeout(() => {
-        if (!dead && rain) rain.drop(1);
-      }, Math.round(at));
-    }
+  function soakNudges(state: RoomState) {
+    nudges?.soak(state);
   }
 
   /**
@@ -965,8 +925,8 @@ export function renderMultiplayerPage(
   function showLearningWait(state: RoomState) {
     if (waitingOnLearner) return;
     waitingOnLearner = true;
-    rain?.stop();
-    rain = null;
+    // 这一屏把标题框换掉了：收起画布，但书签留着（见 ui/nudgeRain.ts）。
+    nudges?.attach(null);
     const spinner = custom('mp-loading') ?? '';
     // 那句话和转圈的小人往上挪，底下是一块练习盘：这一局的玩法、真的规则，
     // 只是不结算——等的人先练一练（玩家的原话：「加入一个模拟玩的小区域在屏
@@ -1013,8 +973,8 @@ export function renderMultiplayerPage(
     // 几秒。
     window.clearInterval(countdownTimer);
     countdownTimer = 0;
-    rain?.stop();
-    rain = null;
+    // 这一屏把标题框换掉了：收起画布，但书签留着（见 ui/nudgeRain.ts）。
+    nudges?.attach(null);
     const { startAt, seed, mode } = state;
     // 等人学教学那一屏底下的练习盘，这一幕不要了。
     practiceStop?.();
