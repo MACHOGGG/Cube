@@ -1055,6 +1055,36 @@ button:hover { filter: brightness(1.05); }
   margin: 0 0 22px; padding: 6px 0 0;
   pointer-events: none;
 }
+/*
+ * 从标题底下过的东西，先淡掉再进去。
+ *
+ * 招牌是钉在页顶的（上面那条 sticky），而那块玻璃 display: inline-block ——
+ * 只有「Slides」那么宽。于是往下滑的时候，经过它的内容会被 backdrop-filter
+ * 洗亮一块、糊一块，边缘正好是那块玻璃的圆角框：玩家看到的是「图像旁边奇怪
+ * 被遮挡的亮光」，一块凭空出现的亮方框，压在天才标志上。真出过这一次，截图
+ * 里那个方框就是它。
+ *
+ * 这一层是一条和页面同色的带子，垫在招牌底下（z-index: -1 让它落在玻璃后
+ * 面，但仍在招牌这个 z-60 的层里，所以盖得住页面内容）。招牌那一段是实心
+ * 的——东西还没走到玻璃跟前就已经看不见了，玻璃底下永远是干净的底色；再往
+ * 下 34px 渐隐到透明，所以内容是「淡出去」的，不是撞在一条硬边上。
+ *
+ * 左右各探出 16px：那是 .app 的左右内边距（见上面 .app），探到这儿正好铺满
+ * 整幅版心又不多出一分，不会把页面撑出横向滚动条。
+ */
+.home-head::after {
+  content: '';
+  position: absolute;
+  left: -16px; right: -16px; top: 0; bottom: -34px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    var(--bg) 0,
+    var(--bg) calc(100% - 34px),
+    transparent 100%
+  );
+}
 .home-head-glass {
   display: inline-block;
   pointer-events: auto;
@@ -2238,6 +2268,18 @@ body:has(.slot-page) .home-nav { display: none; }
    底下才是那句话和那行小字。 */
 .genius-crest { display: flex; justify-content: center; margin: 2px 0 6px; }
 .genius-logo--crest { filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.14)); }
+/*
+ * 深色下这一块的底色。
+ *
+ * 上面那个 #F5F2EE 是写死的，不跟主题走：深色下整页是近黑（--bg 是
+ * #1E1820），就这一块还铺着一大片米白，像贴了张纸上去，而且和全站别的卡片
+ * 不是一套。浅色一个像素都不动，只在深色下换成 --surface —— 别的卡片用的
+ * 就是它，色盲那套配色在深色下也自带一份，所以这一条同时管住了两种深色。
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .genius-panel { background: var(--surface); }
+}
+:root[data-theme="dark"] .genius-panel { background: var(--surface); }
 /* 全站的《返回》：和开局页那颗、游戏里那一排是同一副圆盘，只是小一号，单独
    居中占一行。文字版没有了——玩家的原话：「替代游戏中所有 开始 返回 暂停 用
    统一的图标展示」。 */
