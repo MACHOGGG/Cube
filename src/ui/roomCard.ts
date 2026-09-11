@@ -1,4 +1,4 @@
-import { STRINGS, type Lang } from '../i18n';
+import { countPhrase, STRINGS, type Lang } from '../i18n';
 import { drawQr, drawStandings, type Standing } from '../engine/shareCard';
 import { avatarSvg, currentRoom, type RoomPlayer, type RoomState } from '../engine/room';
 
@@ -150,7 +150,7 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   ctx.font = '500 15px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
   ctx.fillText(
-    `${s.mpRoomTotal} · ${s.mpRoundsPlayed.replace('{n}', String(state.round))}`,
+    `${s.mpRoomTotal} · ${countPhrase(s.mpRoundsPlayed, state.round, lang)}`,
     PAD + 2,
     202,
   );
@@ -206,7 +206,7 @@ export function showRoomCard(
       <div class="mp-code-card">
         <div class="menu-section-label">${s.mpRoomTotal}</div>
         <div class="mp-code">${roomTotal}</div>
-        <p class="auth-hint">${s.mpRoundsPlayed.replace('{n}', String(state.round))}</p>
+        <p class="auth-hint">${countPhrase(s.mpRoundsPlayed, state.round, lang)}</p>
       </div>
 
       <div class="mp-players" id="mpFinalRows">

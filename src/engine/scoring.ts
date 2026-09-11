@@ -93,12 +93,6 @@ export interface CascadeConfig {
   toggleOnMatch?: boolean;
 }
 
-/**
- * 无限反转一次连锁最多几拍——只是最后一道保险。真正管「同一组翻来翻去无限得
- * 分」的是下面的账本（ToggleLedger）。
- */
-const TOGGLE_STEP_CAP = 12;
-
 /** 无限反转里同一组棋子最多连着给几次分：正面一次、翻过去反面一次。 */
 export const TOGGLE_SCORES_PER_GROUP = 2;
 /** 给满之后，隔多少步才能再给——不满这个数把那几枚挪走再挪回来也不算。 */
@@ -247,19 +241,20 @@ export function createCascadeStepper(
   //
   // 无限反转是例外：翻过去还能翻回来，「总有一枚正面」拦不住它，所以那一局
   // 带一本账（ledger）：同一组正反各给一次分就停，见 createToggleLedger。
+  //
+  // 这儿原先还压着一条「一次连锁最多 12 拍」的硬上限，说法是「最后一道保
+  // 险」。它拦掉的是玩家真打出来的长连锁——第 13 拍开始，明明还在成图案，分
+  // 却不给了，屏幕上也不说一声。玩家要的是连锁能一直连下去，所以按他的意思
+  // 撤掉了。撤掉之后还是停得下来：一步之内 moveNo 不动，账本里每一组最多记
+  // 两笔（cooled 在同一步里永远是假），而一副盘面上凑得成图案的组是有限的，
+  // 所以连锁至多两倍于那个数就走到头。
   ledger?: ToggleLedger,
 ): CascadeStepper {
   let mask = initialMask;
   let terminal = false;
-  let steps = 0;
 
   function next(): CascadeStep | null {
     if (terminal) return null;
-    if (cfg.toggleOnMatch && steps >= TOGGLE_STEP_CAP) {
-      terminal = true;
-      return null;
-    }
-    steps++;
 
     const lineBonuses = cfg.findLineBonuses();
     if (lineBonuses.length) {

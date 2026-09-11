@@ -1,4 +1,4 @@
-import { STRINGS, type Lang, type I18nStrings } from '../i18n';
+import { countPhrase, STRINGS, type Lang, type I18nStrings } from '../i18n';
 import { BOMB_HAZARD_REASON } from './bomb';
 import type { ShareCardInfo } from './shareCard';
 
@@ -112,7 +112,7 @@ export function runDetailLine(d: RunData, lang: Lang): string {
   const s = STRINGS[lang];
   return (
     displayReason(d.reason, lang) +
-    ' · ' + s.stepsPhrase.replace('{n}', String(d.moves)) +
+    ' · ' + countPhrase(s.stepsPhrase, d.moves, lang) +
     ' · ' + s.timeLabel + ' ' + formatClock(d.elapsedSec) +
     ' · ' + s.bestPhrase.replace('{n}', String(d.best))
   );

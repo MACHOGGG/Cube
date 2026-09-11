@@ -308,6 +308,8 @@ export interface I18nStrings {
   mpBestRound: string;
   mpFastest: string;
   mpRoundsPlayed: string;
+  /** 离开太久，服务器已经开了下一局，这一盘没能算进小屋总分。 */
+  mpRoundDropped: string;
   mpErrEnded: string;
   /** 网络断了一下，但座位还留着——不是把人踢出房间的理由。 */
   mpReconnecting: string;
@@ -433,6 +435,22 @@ export interface I18nStrings {
 }
 
 export const LANG_ORDER: Lang[] = ['en', 'fr', 'zhHant', 'zhHans'];
+
+/**
+ * 带数字的那几句怎么念：模板里用 `|` 隔开单数形和复数形
+ * （`'{n} round|{n} rounds'`），没有 `|` 的（中文那两份）原样用。
+ *
+ * 原先每种语言都只写了一份复数形，于是只打过一局的人看见的是「1 rounds」、
+ * 走了一步的人看见的是「1 moves」。单复数的界线各语言还不一样：英文只有 1
+ * 用单数，法文 0 和 1 都用单数（« 0 manche »、« 1 manche »），中文根本没有
+ * 这回事——所以这条规矩只能写在这里，写在调用处就得每处都记一遍。
+ */
+export function countPhrase(tpl: string, n: number, lang: Lang): string {
+  const forms = tpl.split('|');
+  const singular = lang === 'fr' ? Math.abs(n) < 2 : n === 1;
+  const pick = forms.length > 1 && singular ? forms[0] : forms[forms.length - 1];
+  return pick.replace('{n}', String(n));
+}
 
 export const STRINGS: Record<Lang, I18nStrings> = {
   en: {
@@ -638,7 +656,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinalTitle: 'How the room finished',
     mpBestRound: 'Best single round',
     mpFastest: 'Quickest board',
-    mpRoundsPlayed: '{n} rounds',
+    mpRoundsPlayed: '{n} round|{n} rounds',
+    mpRoundDropped: 'Away too long — this round missed the room total. It’s still in your own records.',
     mpErrEnded: 'That room has been closed.',
     mpReconnecting: 'Connection lost — getting you back in…',
     mpHostLeaveWarn: 'Close the room?',
@@ -717,7 +736,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     allFlippedReason: 'Every piece is a star',
     manualEndReason: 'Ended manually',
     bombHazardReason: 'Bomb tiles connected',
-    stepsPhrase: '{n} moves',
+    stepsPhrase: '{n} move|{n} moves',
     bestPhrase: 'best {n}',
     shareQrCaption: 'Scan to play Slides',
     shareStartLabel: 'Start',
@@ -937,7 +956,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinalTitle: 'Bilan de la salle',
     mpBestRound: 'Meilleure manche',
     mpFastest: 'Plateau le plus rapide',
-    mpRoundsPlayed: '{n} manches',
+    mpRoundsPlayed: '{n} manche|{n} manches',
+    mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total du salon. Elle reste dans vos records.',
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
     mpHostLeaveWarn: 'Dissoudre la salle ?',
@@ -1016,7 +1036,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     allFlippedReason: 'Toutes les pièces sont des étoiles',
     manualEndReason: 'Terminé manuellement',
     bombHazardReason: 'Cases-bombes connectées',
-    stepsPhrase: '{n} coups',
+    stepsPhrase: '{n} coup|{n} coups',
     bestPhrase: 'meilleur score {n}',
     shareQrCaption: 'Scannez pour jouer à Slides',
     shareStartLabel: 'Début',
@@ -1237,6 +1257,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpBestRound: '單局最高',
     mpFastest: '最快玩家',
     mpRoundsPlayed: '共 {n} 局',
+    mpRoundDropped: '離開太久了，這一局沒算進小屋總分；你自己的記錄裡還在。',
     mpErrEnded: '這個小屋已經結束了。',
     mpReconnecting: '網路斷了一下，正在把你接回小屋…',
     mpHostLeaveWarn: '解散小屋？',
@@ -1536,6 +1557,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpBestRound: '单局最高',
     mpFastest: '最快玩家',
     mpRoundsPlayed: '共 {n} 局',
+    mpRoundDropped: '离开太久了，这一局没算进小屋总分；你自己的记录里还在。',
     mpErrEnded: '这个小屋已经结束了。',
     mpReconnecting: '网络断了一下，正在把你接回小屋…',
     mpHostLeaveWarn: '解散小屋？',

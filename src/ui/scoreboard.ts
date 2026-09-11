@@ -41,8 +41,11 @@ const REEL_ID = 'scoreReel';
 const END_OVERLAY_ID = 'endOverlay';
 /** Often enough to feel live, rarely enough to be nothing on a battery. */
 const LOCAL_MS = 500;
-/** 分数没动也要隔多久报一次到。服务器那边 12 秒不见人就算掉线（api/room.js
- *  的 AWAY_MS），4 秒一次留出三次的余量：掉一两个包不至于被判出局。 */
+/** 分数没动也要隔多久报一次到。服务器那边 30 秒不见人就算掉线（api/room.js
+ *  的 AWAY_MS），4 秒一次留出六七次的余量：掉几个包不至于被判出局。
+ *
+ *  这个数原先写的是 12 秒——那是 AWAY_MS 放宽到 30 秒之前的旧值，注释没跟着
+ *  改，于是后来的人照着它算余量会算少一半。 */
 const HEARTBEAT_MS = 4000;
 const REMOTE_MS = 1000;
 
@@ -165,6 +168,32 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   const myRound = latestRoomState()?.round ?? 0;
   /** 这一局在本机算打完了：回到房间时才不会把它当新的一局重开。 */
   const markPlayed = () => markRoundPlayed(myRound);
+
+  /** 「这一局没算进总分」只说一次——心跳每四秒一条，说四次就成了骚扰。 */
+  let droppedTold = false;
+  /**
+   * 报一次分，顺便看一眼服务器还认不认这一局。
+   *
+   * 玩家切出去太久（api/room.js 的 ABSENT_MS，90 秒），屋主开了下一局，他回
+   * 来交的这一份就带着旧的回合号。服务器那边（api/room.js 的 score）认出回
+   * 合号对不上，**一声不吭地扔掉**，还照样回 200 和一份房间状态——从客户端
+   * 看和成功报到一模一样。于是他打完一整局，分数一分没进小屋总分，屏幕上什
+   * 么都没说。
+   *
+   * 分辨的办法就在那份状态里：它带着服务器现在的回合号。和自己手里这一局的
+   * 对不上，就是被扔了。飘一句话说清楚（不占版面、不用按、自己会走），其余
+   * 什么都不改——这一盘照旧存进他自己的《记录与排名》（gameController 的
+   * saveRun 是无条件的），所以那句话的后半句是实话。
+   */
+  const report = (score: number, over: boolean, seconds: number | undefined) => {
+    void reportScore(score, over, seconds, myRound).then((res) => {
+      if (droppedTold || myRound <= 0 || !res.ok) return;
+      const serverRound = res.value.round;
+      if (!serverRound || serverRound === myRound) return;
+      droppedTold = true;
+      flyby(s.mpRoundDropped);
+    });
+  };
 
   // 名单就画在底下那一排里，《离开房间》左边那一整条。
   //
@@ -385,7 +414,16 @@ function flyby(text: string): void {
         return handlers.onRoomEnded(state);
       }
       // 屋主走了、还是屋主卡住了——两件事说两句不同的话，见 roomNotices.ts。
-      notice.set(hostTroubleIn(state, iAmHost()));
+      //
+      // 只在「这一局已经打完、正等着别人」的时候说。上面两条都写着「正打着的
+      // 人不该被一张遮罩糊住盘面」，偏偏这一行漏了这道判断：屋主网卡一下，全
+      // 屋还在打的人就被《屋主暂时联系不上》整屏罩住，那张遮罩上只有一颗
+      //《离开小屋》，连关都关不掉——想接着打只能退出去。屋主的状态跟他们手里
+      // 这一局没有关系，等他们打完再说也不迟。
+      //
+      // 这里拦掉的只会是《屋主暂时联系不上》（away）那一种：屋主真的走了
+      //（gone）在上面第一条就被 roomOver 接走转了单人，走不到这一行。
+      notice.set(runFinished() ? hostTroubleIn(state, iAmHost()) : null);
       // 这一局所有人都交卷了 —— 直接回小屋，不出结算页。
       //
       // 小屋里的一局不是一个完整的故事，它是一晚上里的一段：结算页问的
@@ -462,7 +500,7 @@ function flyby(text: string): void {
     sentFinished = over;
     lastSentAt = Date.now();
     if (over) markPlayed();
-    void reportScore(score, over, settled ? settled.seconds : runSeconds(), myRound);
+    report(score, over, settled ? settled.seconds : runSeconds());
   }, LOCAL_MS);
 
   return () => {
@@ -482,7 +520,7 @@ function flyby(text: string): void {
     const score = settled ? settled.score : localScore();
     if (score !== null) {
       markPlayed();
-      void reportScore(score, true, settled ? settled.seconds : runSeconds(), myRound);
+      report(score, true, settled ? settled.seconds : runSeconds());
     }
     rows.innerHTML = '';
   };

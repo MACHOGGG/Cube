@@ -149,7 +149,9 @@ function board(faces) {
     findMatches: () => [{ cells: group, points: 4 }],
     toggleOnMatch: true,
   };
-  const stepper = createCascadeStepper(cfg, null, { line: '整线', pattern: '图案' });
+  // 带上账本——真局里无限反转永远带着它（gameController 的 flipLedger 跟
+  // toggleOnMatch 同一个开关来的），下面那条「连锁停得下来」考的就是它。
+  const stepper = createCascadeStepper(cfg, null, { line: '整线', pattern: '图案' }, createToggleLedger());
   const step = stepper.next();
   check('无限反转：两正两反的 1×4 照样得分', step !== null && step.points === 4, JSON.stringify(step?.points));
   step?.commit();
@@ -157,10 +159,16 @@ function board(faces) {
     group.map(([r, c]) => b.faceOf(r, c)).join() === 'dot,dot,flavor,flavor',
     group.map(([r, c]) => b.faceOf(r, c)).join());
   // 这份假的 findMatches 永远说「那一组还在」——翻回来的两枚是正面，于是又
-  // 得分、又翻回去……真棋盘上几乎不会绕回来，这里逼它绕，看上限拦不拦得住。
+  // 得分、又翻回去……真棋盘上几乎不会绕回来，这里逼它绕，看它停不停得下来。
+  //
+  // 原先停下来的是 scoring.ts 里一条「一次连锁最多 12 拍」的硬上限，这条断
+  // 言当年写的是「≤ 12 拍」。那条上限按玩家的意思撤掉了——它拦掉的是真打出
+  // 来的长连锁，第 13 拍起明明还成图案却不给分，屏幕上也不说一声。现在停下
+  // 来的是账本：同一组正面一次、反面一次，给完就停，所以这里改考「一步之内
+  // 同一组只给两次」。40 是这道门自己的保险，走到它就说明根本没停。
   let beats = 0;
   for (let step2 = stepper.next(); step2; step2 = stepper.next()) { step2.commit(); if (++beats > 40) break; }
-  check('无限反转：一次连锁有上限，不会转到天荒地老', beats > 0 && beats <= 12, `${beats} 拍`);
+  check('无限反转：同一组翻来翻去，一步之内给满两次就停', beats === 1, `再给了 ${beats} 拍`);
   // 普通规则对照：同一副牌不开 toggleOnMatch，反面的两枚不动，正面翻过去就完了。
   const b2 = board(['0,0', '0,1']); b2.tileAt(0, 2); b2.tileAt(0, 3);
   const plain = createCascadeStepper({ ...cfg, tileAt: b2.tileAt, toggleOnMatch: false }, null, { line: '整线', pattern: '图案' });
@@ -186,7 +194,8 @@ function board(faces) {
 // ---------------------------------------------------------------------------
 {
   // 四枚棋子，正反两面都凑得成图案（findMatches 无条件报同一组）——没有账本
-  // 的话会一直翻到 TOGGLE_STEP_CAP 才停。
+  // 的话它根本停不下来（findMatches 在这儿是写死的，不看盘面）。所以下面
+  // runChain 自己带一个数到头就断的保险，专门用来证明「停下来的是账本」。
   //
   // 真局里绕回来的组每一拍都带着至少一枚正面（相邻的另一枚正面同色补进来），
   // 才过得了「至少一枚正面才算分」那道门；这里用一枚翻不动的棋子（face 永远
@@ -203,16 +212,22 @@ function board(faces) {
     toggleOnMatch: true,
   };
   const labels = { pattern: '图案', line: '整线' };
+  /** 这道门自己的保险：真局里停得下来的连锁远到不了这个数。 */
+  const GATE_MAX_STEPS = 50;
   const runChain = (ledger) => {
     const stepper = createCascadeStepper(cfg, null, labels, ledger);
     let n = 0;
     for (let step = stepper.next(); step; step = stepper.next()) {
       step.commit();
-      n++;
+      if (++n >= GATE_MAX_STEPS) break;
     }
     return n;
   };
-  check('没有账本：同一组翻来翻去一直给分（到硬上限才停）', runChain(undefined) === 12, String(runChain(undefined)));
+  // scoring.ts 里原先还有一条「一次连锁最多 12 拍」的硬上限，这条断言当年写
+  // 的是「刚好停在 12」。上限按玩家的意思撤掉了（长连锁不该被悄悄掐断），这
+  // 里于是改成「不给账本就停不下来」——要考的本来就是账本管不管用，不是那个
+  // 上限还在不在。
+  check('没有账本：同一组翻来翻去一直给分，自己停不下来', runChain(undefined) === GATE_MAX_STEPS, String(runChain(undefined)));
 
   const ledger = createToggleLedger();
   ledger.beginMove(1);

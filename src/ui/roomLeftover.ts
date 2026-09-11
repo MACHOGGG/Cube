@@ -21,7 +21,7 @@
  * 和它的战绩图在下。两份各自完整，各有各的图。
  * ─────────────────────────────────────────────────────────────────────────
  */
-import { STRINGS, type Lang } from '../i18n';
+import { countPhrase, STRINGS, type Lang } from '../i18n';
 import { avatarSvg, type RoomState } from '../engine/room';
 import { liveTotal, rankRoom, renderRoomCard } from './roomCard';
 
@@ -68,7 +68,7 @@ export function mountRoomLeftover(host: HTMLElement | null, lang: Lang): void {
     <div class="end-room-head">
       <div class="end-score-label">${s.mpRoomTotal}</div>
       <div class="big-score">${roomTotal}</div>
-      <p class="auth-hint auth-hint--center">${s.mpRoundsPlayed.replace('{n}', String(state.round))}</p>
+      <p class="auth-hint auth-hint--center">${countPhrase(s.mpRoundsPlayed, state.round, lang)}</p>
     </div>
     <div class="mp-players end-room-rows">
       ${ranked
