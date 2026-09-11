@@ -36,6 +36,10 @@ jobs:
         run: |
           npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
           node scripts/check-scoring.mjs /tmp/scoring.mjs
+      - name: 解密的步数与综合得分
+        run: |
+          npx esbuild src/engine/puzzleScore.ts --bundle --format=esm --outfile=/tmp/puzzle.mjs
+          node scripts/check-puzzle.mjs /tmp/puzzle.mjs
       - name: 随机得分目标的图案与判定
         run: |
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
