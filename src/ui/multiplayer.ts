@@ -1,6 +1,9 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage';
+import { planFor, slotMachineHtml, spinSlot } from './slotReels';
+import { drawPair, type Family, type TargetPattern } from '../engine/targets';
+import { random as seededRandom, seedRandom } from '../engine/rng';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { pushLayer, setScreenBack } from '../engine/backNav';
@@ -71,6 +74,15 @@ export interface MatchStart {
   slot?: 'same' | 'own' | null;
   /** 无限反转那一局：60 秒，得分翻面来回翻。 */
   flip?: boolean;
+  /**
+   * 老虎机那一局转出来的两个图案。
+   *
+   * 倒数那一屏上滚筒已经转过一遍了，转出来的就是这一对——所以它得跟着走到
+   * 棋盘上去，不能让棋盘再抽一次。'own' 那一档尤其要紧：各转各的，用的是本
+   * 机的 Math.random，再抽一次抽到的是另一对，玩家眼睁睁看着轮子停在 A，进
+   * 去要凑的却是 B。
+   */
+  targets?: readonly TargetPattern[];
 }
 
 export interface MultiplayerHandlers {
@@ -196,6 +208,8 @@ export function renderMultiplayerPage(
   let nudges: NudgeSoak | null = null;
   /** 等人学教学那一屏底下的练习盘，拆它用的。 */
   let practiceStop: (() => void) | null = null;
+  /** 倒数那一屏上转着的老虎机，拆它用的。 */
+  let stopSpin: (() => void) | null = null;
   /** 这一局的「会不会规则」已经问过了——每局只问一次，问完不再挡路。 */
   let askedRound = -1;
   /** 《会不会规则》那一问正挂着。 */
@@ -214,6 +228,8 @@ export function renderMultiplayerPage(
     sideWait = null;
     practiceStop?.();
     practiceStop = null;
+    stopSpin?.();
+    stopSpin = null;
     stopWatching?.();
     stopWatching = null;
     window.clearInterval(countdownTimer);
@@ -980,6 +996,34 @@ export function renderMultiplayerPage(
     practiceStop?.();
     practiceStop = null;
 
+    /*
+     * 老虎机那一局：这一屏上要有那台机器，而且要真的转。
+     *
+     * 单人那边，滚筒是在游戏自己的开局页上转的（ui/gameShell.ts 的 emblem +
+     * spinSlot），转停了才开始数 5-4-3-2-1。小屋这边根本不走那张开局页——倒
+     * 数是在这一屏数的，数完直接把棋盘摆出来。于是玩家看到的是「什么都没
+     * 有，直接进游戏了」，这一局要凑哪两个图案，他是进去之后自己猜的。
+     *
+     * 所以把同一台机器摆到这一屏上。它和倒数并排跑，不像单人那样排在倒数前
+     * 面——这里的开赛时刻是服务器钉死的（全屋同一刻），不能为了转轮子往后
+     * 推。塞得下：滚筒 2.6 秒停稳（slotReels.ts 的 planFor），而这一屏至少
+     * 有 4.5 秒（WIDE_MODES 5.5 秒，可能有新手的局 8–9 秒）。
+     *
+     * 'same' 和 'own' 在这儿都抽一次，抽法和棋盘那边完全一样（同一份
+     * drawPair、同一个种子）：'same' 从刚种下的那条流里抽，全屋抽出同一对；
+     * 'own' 用本机的 Math.random，各转各的。抽出来的这一对跟着 onMatchStart
+     * 走到棋盘上去，屏幕上停的就是手里要凑的。
+     */
+    const family: Family =
+      mode === 'square' ? 'square' : mode === 'circle' ? 'circle' : 'triangle';
+    let spun: readonly TargetPattern[] | undefined;
+    if (state.slot) {
+      // 'same' 要先把那条共享的流种上——棋盘那边开局时会再种一次同一个种
+      // 子，所以这儿先抽一次不会把牌抽乱。
+      if (state.slot === 'same') seedRandom(seed);
+      spun = drawPair(family, state.slot === 'same' ? seededRandom : Math.random) ?? undefined;
+    }
+
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
     // 一场竞赛），下半屏 4、3、2、1。区别只在谁在数——这里数的是服务器给的开
     // 赛时刻，不是本地的秒表，所有人的数字才会同时跳。
@@ -989,6 +1033,9 @@ export function renderMultiplayerPage(
           shapeId: mode,
           room: true,
           countId: 'mpTick',
+          // 老虎机那一局：上半屏摆那台机器，不摆静止的玩法图（见
+          // startStage.ts 的 emblem——两套身份摆一屏，两套都读不清）。
+          emblem: spun ? slotMachineHtml() : undefined,
           // 无限反转那一局：倒数底下先是那块说明（图标 + 连击减弱、没有时间奖
           // 励），和单人开局页一样；再是实时排行。
           extra: (state.flip ? flipHintHtml(s.flipScoringHint) : '') + standingsStrip(state),
@@ -996,6 +1043,12 @@ export function renderMultiplayerPage(
       </div>
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
+    // 转起来。stopAll 里会叫它别转了——一个 rAF 循环挂在已经不存在的 DOM 上
+    // 是要一直烧电的。
+    if (spun) {
+      const stage = container.querySelector<HTMLElement>('.start-stage');
+      if (stage) stopSpin = spinSlot(stage, planFor(family, spun, lang));
+    }
     // 倒数里按返回：还是问「要不要离开小屋」——倒数本身停不住，别人的钟在走。
     setScreenBack(() => confirmLeaveRoom(lang, leaveSeat));
     // 从几数起。这一局是哪个玩法，服务器那边给的提前量就按同一份名单多留一秒
@@ -1012,7 +1065,7 @@ export function renderMultiplayerPage(
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
         playedRound = round;
-        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null, flip: state.flip });
+        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null, flip: state.flip, targets: spun });
         return;
       }
       // 服务器留的是四秒半（建议横着玩的玩法五秒半），多出来的半秒都算在第一

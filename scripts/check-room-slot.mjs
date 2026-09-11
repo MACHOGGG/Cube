@@ -82,6 +82,19 @@ async function hostPicks(slot) {
   if (slot === 'own') await A.page.click('.slot-share-opt[data-slot="own"]');
   await A.page.click('.slot-pick-opt[data-family="square"]');
 }
+/**
+ * 倒数那一屏上到底有没有那台机器，而且在转。
+ *
+ * 玩家报的：「老虎机模式在多人模式下，没有老虎机的动画直接就进来游戏了」。
+ * 单人那边滚筒是在游戏自己的开局页上转的，而小屋这边根本不走那张页——倒数
+ * 在小屋页上数，数完直接摆棋盘。所以要在倒数这几秒里抓一把。
+ */
+async function reelsShowing(P) {
+  return P.page
+    .waitForFunction(() => document.querySelectorAll('.slot-machine').length > 0, { timeout: 12000 })
+    .then(() => true)
+    .catch(() => false);
+}
 async function bothBoards() {
   for (const P of [A, B]) {
     await P.page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 40000 });
@@ -103,6 +116,10 @@ async function finishBoth() {
 
 // ---- 第一局：相同 ---------------------------------------------------------
 await hostPicks('same');
+const reelA = await reelsShowing(A);
+const reelB = await reelsShowing(B);
+check('倒数那一屏上摆着那台老虎机（屋主）', reelA);
+check('倒数那一屏上摆着那台老虎机（客人）', reelB);
 const r1 = await bothBoards();
 check('相同：两边棋盘上认的是同两个图案', r1.la.length === 2 && r1.la.join('|') === r1.lb.join('|'),
   `甲 ${r1.la.join('/')} · 乙 ${r1.lb.join('/')}`);

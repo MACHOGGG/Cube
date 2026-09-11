@@ -895,9 +895,16 @@ function startMultiplayerRun(match: MatchStart) {
   // 一个种子、抽的是同一下，所以抽出来的一对一样，而且棋盘接着从同一条流
   // 里发，仍然人人相同；'own' 用各自的 Math.random 抽，不碰那条流，棋盘照旧
   // 一样，只有认的图案各不相同。
-  const targets = match.slot
+  //
+  // 抽这一下**照抽不误**，哪怕倒数那一屏已经把图案转出来交过来了：'same' 那
+  // 一档的棋盘是接着这条流往下发的，少抽一次，这台设备发出来的牌就和别人的
+  // 对不上了。抽出来的那一对和屏幕上转出来的是同一对（同一个种子、同一下）。
+  // 'own' 那一档用的是本机的 Math.random，不碰这条流，所以以屏幕上停住的那
+  // 一对为准——玩家看着轮子停在哪儿，手里要凑的就得是哪个。
+  const dealt = match.slot
     ? drawPair(slotFamilyOf(match.mode), match.slot === 'same' ? seededRandom : Math.random) ?? undefined
     : undefined;
+  const targets = match.targets ?? dealt;
   // 无限反转那一局：和单人那一局同一套规则（flip + 60 秒），只是全屋同一副牌。
   const flip = !!match.flip;
   // A finished round goes back to the room, not to the home page: the scores
