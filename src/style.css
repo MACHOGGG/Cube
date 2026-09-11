@@ -2296,6 +2296,7 @@ body:has(.slot-page) .home-nav { display: none; }
   .genius-modal .genius-perk { padding: 1px 0; }
   .genius-modal .genius-perks .menu-section-label { margin: 8px 0 3px; }
   .genius-modal .link-btn { margin: 2px 0; }
+  .genius-modal .genius-legal { margin: -2px 0 8px; }
   .genius-modal .btn-row { margin-top: 12px; }
 }
 .plan-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
@@ -2315,6 +2316,23 @@ body:has(.slot-page) .home-nav { display: none; }
 /* Both of these sit inside .modal, whose own p rule would otherwise give
    them the 20px tail meant for a paragraph of prose. */
 .modal .auth-hint { color: var(--ink-soft); font-size: 0.85rem; margin: 0 0 10px; }
+/* 小字里的链接（账户那行客服信箱就是）。比周围的字显眼一点点就够——这两扇
+   窗真正要人按的是价钱那两行和底下那颗按钮，不是这里。 */
+.modal .auth-hint a {
+  color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor;
+}
+/* 付款前那三份文档的入口。和个人主页底下那排（.home-legal）长得一样，因为
+   它们是同一批东西——只是这一排站在价钱底下，那一排站在整页底下。 */
+.genius-legal {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; margin: -4px 0 12px;
+}
+.genius-legal a {
+  color: var(--ink-soft); font-size: 0.8rem; line-height: 1.8;
+  text-decoration: none; border-bottom: 1px solid transparent;
+}
+.genius-legal a:hover, .genius-legal a:focus-visible {
+  color: var(--accent); border-bottom-color: currentColor;
+}
 .modal .auth-msg { color: var(--accent-ink); font-size: 0.85rem; margin: 0 0 12px; min-height: 1.2em; }
 .auth-field { display: block; text-align: left; margin: 0 0 12px; }
 /* 注册 hides the field rather than removing it, and a class that sets

@@ -367,13 +367,29 @@ export async function refreshEntitlement(): Promise<void> {
   try {
     if (salesChannel() === 'web') {
       const creem = await import('./creem');
-      // A return from Creem's page carries the order in the URL; that is a
-      // fresh purchase to record, and it takes precedence over the cache.
-      const settled = await creem.settleReturn();
-      if (settled) {
-        setEntitlement(settled.entitlement);
-        rememberPending({ kind: 'checkout', id: settled.checkoutId });
-        return;
+      // A return from Creem's page carries the order in the URL, and reading
+      // it is also what clears it out of the address bar — so from that line
+      // on, whatever is in `returned` is the only copy anywhere. Write it
+      // down first, ask afterwards. The reverse order is what used to let a
+      // dropped request destroy the proof of a payment already taken (see
+      // takeReturnedCheckoutId in creem.ts).
+      const returned = creem.takeReturnedCheckoutId();
+      if (returned) rememberPending({ kind: 'checkout', id: returned });
+      // 这一笔可能是刚回来的，也可能是上回没问出结果的：网断了、标签页关早
+      // 了，或者那张卡还在走 3-D Secure，Creem 当时只肯说 processing。两种都
+      // 从这儿再问一次，而这不是一个会永远问下去的问题——密码一设上，
+      // pendingAccount() 自己就把它扔了。
+      const outstanding = pendingAccount();
+      if (outstanding?.kind === 'checkout') {
+        const paid = await creem.settleCheckout(outstanding.id);
+        if (paid) {
+          setEntitlement(paid);
+          return;
+        }
+        // 刚从结账页回来、却还问不出结果：就停在这儿。底下那半段是「拿旧凭据
+        // 去续问」，而刚订阅的人手上多半还没有凭据，问下去只会把「钱刚付过」
+        // 冲成「你没登录」。下次打开再问，id 已经记下了。
+        if (returned) return;
       }
       // 码还在有效期内：它自带到期日，也没人能替它续，确实没什么可问的。
       //

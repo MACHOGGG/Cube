@@ -75,7 +75,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
  * Hand the tab to Creem's hosted checkout. On success this function does not
  * really return — the page is replaced — so the caller is told 'redirecting'
  * rather than being left waiting for a result that will arrive in a new
- * document, through settleReturn() below.
+ * document, through takeReturnedCheckoutId() and settleCheckout() below.
  */
 export async function webCheckout(period: PlanPeriod, email?: string): Promise<PurchaseOutcome> {
   try {
@@ -228,30 +228,47 @@ function failureFor(err: unknown): {
 }
 
 /**
- * A player coming back from the checkout page. Creem appends the order to
- * the return URL; we ask our own endpoint to confirm it with Creem rather
- * than believing the query string, since anyone can type one of those.
+ * The order a player has just come back from the checkout page with.
  *
- * The parameters are stripped afterwards, so a reload or a shared link is
- * not a second attempt to settle the same order.
+ * Creem appends it to the return URL. This reads it out and wipes it from
+ * the address bar in the same breath, so that a reload or a shared link is
+ * not a second attempt at the same order.
+ *
+ * Reading it is deliberately all this does. It used to also be the function
+ * that confirmed the order, and those two jobs in one had an order of
+ * operations that could take away someone's money: the id left the address
+ * bar first, the request went second, and nothing wrote the id down until
+ * that request came back saying 'paid'. One blip in between — a dropped
+ * connection, a tab closed at the wrong second, a 3-D Secure card Creem
+ * still reports as processing — and the only proof of purchase this browser
+ * would ever hold was gone, on a subscription that had already been charged.
+ *
+ * The caller now writes the id down before asking anything (refreshEntitlement
+ * in subscription.ts), which lets the answer be 'not yet' and the next launch
+ * simply ask again.
  */
-export interface SettledReturn {
-  entitlement: Entitlement;
-  /** Kept so the password window can prove which address it may set one for.
-   *  The player never sees it: it arrives in the URL and is wiped from the
-   *  address bar the moment it is read, one line below. */
-  checkoutId: string;
-}
-
-export async function settleReturn(): Promise<SettledReturn | null> {
+export function takeReturnedCheckoutId(): string | null {
   const params = new URLSearchParams(window.location.search);
   const checkoutId = params.get('checkout_id') || params.get('checkoutId');
   if (!checkoutId) return null;
   clearReturnParams(params);
+  return checkoutId;
+}
+
+/**
+ * Ask our own endpoint whether that order is paid — asked, not believed,
+ * because anyone can type a checkout id into an address bar.
+ *
+ * Null means 'nothing to grant from this, not now', and it deliberately
+ * covers three different things — unpaid, unanswerable, still clearing —
+ * because the caller does the same thing with all three: keep the id, ask
+ * again next time.
+ */
+export async function settleCheckout(checkoutId: string): Promise<Entitlement | null> {
   try {
     const reply = await postJson<SubscriptionReply>('/api/subscription', { checkoutId });
     if (!reply.active) return null;
-    return { entitlement: toEntitlement(reply, reply.email ?? ''), checkoutId };
+    return toEntitlement(reply, reply.email ?? '');
   } catch {
     return null;
   }

@@ -24,6 +24,16 @@ const base = () =>
 
 export const configured = () => Boolean(key());
 
+/**
+ * Which of Creem's two catalogues this deployment is wired to.
+ *
+ * Same rule as base() above, said out loud so that a person can check it
+ * without shell access: the commonest way for a working key and a working
+ * product id to still fail is that they belong to different catalogues, and
+ * from the browser that failure looks exactly like every other 502.
+ */
+export const mode = () => (key().startsWith('creem_test_') ? 'test' : 'live');
+
 /** The two products 「Slides 天才」 is sold as, by billing period. */
 export const products = () => ({
   monthly: process.env.CREEM_PRODUCT_MONTHLY || '',
