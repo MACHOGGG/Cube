@@ -29,22 +29,50 @@ import { expire, hdel, hgetall, hset, hsetnx, storeConfigured } from './_store.j
  */
 
 /**
- * Two numbers, not one, because they answer different questions.
+ * 三个数，不是一个，因为它们回答的是三个不同的问题。
  *
  * ROOM_CAPACITY is what the machinery can carry: a room is a Redis hash with
  * one field per player and every write touches only that player's own field,
- * so nothing here gets harder as the table grows — twelve is simply the size
- * the standings panel, the closing card and a four-digit room code space all
- * still read well at.
+ * so nothing here gets harder as the table grows. 二十是屋号（四位数字）、
+ * 名单和那张战绩图都还读得下去的那个数。
  *
- * MAX_PLAYERS is what is open today. Raising it is one number, and nothing
- * else has to move.
+ * OPEN_SEATS 是普通小屋开着的座位——玩家定的「一般小屋是 2-8 人」。
+ * CONTEST_SEATS 是竞赛小屋的——「竞赛版本开放到 20 人上限」。
+ *
+ * 要紧的是第三件事：**座位数是跟着屋子走的，不是跟着这个文件走的**。一间屋
+ * 开出来的那一刻就把自己的座位数写进 meta.seats，往后满不满、名单上写
+ * 「3/8」还是「3/20」，都问它自己那一个数（seatsFor）。所以以后调这儿的常
+ * 数，不会把正开着的那些屋子从「3/8」变成「3/20」——玩家盯着的那个数在一
+ * 局中间自己变了，正是「意料之外的界面」。meta 里没有 seats 的老屋（这次改
+ * 动之前开的）按 OPEN_SEATS 算，和从前一模一样。
  */
-const ROOM_CAPACITY = 12;
-/** How many seats are open to players today. Raise this, not the line above. */
+const ROOM_CAPACITY = 20;
+/** 普通小屋开着的座位。 */
 const OPEN_SEATS = 8;
-const MAX_PLAYERS = Math.min(OPEN_SEATS, ROOM_CAPACITY);
+/**
+ * 竞赛小屋开着的座位。
+ *
+ * 竞赛模式还在筹备：**今天没有任何一个界面会请求开一间竞赛屋**，所以实际跑
+ * 起来每一间屋拿到的都还是 OPEN_SEATS。这条路先修通，等局中那条实时排名改
+ * 成三行（engine/standingsWindow.ts）、名单和战绩图都摆得下二十个人之后，
+ * 再把入口放出来——反过来先放入口，今晚就会有人开出一间二十人的屋子配着八
+ * 人的排版。
+ */
+const CONTEST_SEATS = 20;
 const MIN_PLAYERS = 2;
+
+/**
+ * 这一间屋有几把椅子。
+ *
+ * 认 meta.seats；没有（老屋）或者写坏了就按普通小屋算。再夹一道
+ * [MIN_PLAYERS, ROOM_CAPACITY]——这个数是从请求里来的，不夹住的话一个
+ * `seats: 99999` 就能让 claimSlot 空转十万圈。
+ */
+function seatsFor(meta) {
+  const n = Number(meta && meta.seats);
+  if (!Number.isFinite(n)) return OPEN_SEATS;
+  return Math.max(MIN_PLAYERS, Math.min(ROOM_CAPACITY, Math.round(n)));
+}
 /**
  * 一间小屋在「没人动它」之后还留多久。
  *
@@ -334,8 +362,9 @@ function publicState(code, hash) {
     /** The host has closed the room. What is left is the closing card. */
     ended: Boolean(meta.endedAt),
     /** Seats open today, so what the app says about a full room is one
-     *  number rather than the word "four" written into four languages. */
-    seats: MAX_PLAYERS,
+     *  number rather than the word "four" written into four languages.
+     *  这一间屋自己的数（见 seatsFor）：普通小屋 8，竞赛小屋 20。 */
+    seats: seatsFor(meta),
     players,
     /** 被催了多少下。屋主那边看它变大就往标题里掉图形。 */
     nudges: meta.nudges || 0,
@@ -472,9 +501,12 @@ function uniqueName(name, hash) {
  * 占一把椅子：s:0 … s:N-1 里第一把空的。HSETNX 是原子的——两个人同一瞬间进
  * 来，同一把椅子只有一个人坐得上；都坐不上就是满了。从前是「先数一遍人、再
  * 写座位」两步，中间没有锁，最后一把椅子能被两个人同时坐上去。
+ *
+ * `seats` 由调用方从这一间屋自己的 meta 里取（seatsFor），不是这个文件里的
+ * 常数——普通小屋八把，竞赛小屋二十把。
  */
-async function claimSlot(code, playerId) {
-  for (let i = 0; i < MAX_PLAYERS; i++) {
+async function claimSlot(code, playerId, seats) {
+  for (let i = 0; i < seats; i++) {
     if (await hsetnx(roomKey(code), 's:' + i, playerId)) return i;
   }
   return -1;
@@ -569,6 +601,13 @@ async function create(res, body) {
   const meta = {
     host: playerId, createdAt: Date.now(),
     mode: null, seed: null, startAt: null,
+    /**
+     * 这间屋有几把椅子，开屋那一刻定死（见上面 seatsFor 的说明）。
+     *
+     * body.contest 今天没有任何界面会送过来，所以现在开出来的每一间都是普
+     * 通小屋（8 把）。竞赛模式的入口做好之后，那个界面送 contest: true。
+     */
+    seats: body.contest === true ? CONTEST_SEATS : OPEN_SEATS,
     /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的；别的局 null。 */
     slot: null,
     /** Rounds played. The host may put up one board after another. */
@@ -645,8 +684,8 @@ async function join(res, body) {
     // 按过《离开》的座位早把椅子交回去了（见 leave）：回来先重新占一把。
     let slot = seat.slot;
     if (seat.left || slot === undefined) {
-      slot = await claimSlot(code, field.slice(2));
-      if (slot < 0) return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
+      slot = await claimSlot(code, field.slice(2), seatsFor(hash.meta));
+      if (slot < 0) return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
     }
     const next = {
       ...seat,
@@ -676,8 +715,8 @@ async function join(res, body) {
   // The seat count travels with the refusal, not just with a room you are
   // already inside. Joining from the home page is where "满了" is actually
   // read. 占椅子是原子的（claimSlot），两个人同时按《加入》也塞不进第九个。
-  const slot = await claimSlot(code, playerId);
-  if (slot < 0) return send(res, 409, { error: 'full', seats: MAX_PLAYERS });
+  const slot = await claimSlot(code, playerId, seatsFor(hash.meta));
+  if (slot < 0) return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
   // 名字和头像等占到椅子之后再定，而且是「抢」不是「算」：函数一进来读的那
   // 份快照，几个同时进来的人读到的是同一份（见 claimTag）。快照仍要用——屋
   // 主和认领回来的人没有走这条路，他们的名字只在快照里。

@@ -8,6 +8,7 @@
  *   · 没取名字的人进屋：服务器发一个屋里没被占的字母（A、B、C……），不重名；
  *   · 屋主的座位谁也认领不走：同名的人进来是新座位，屋主还是屋主；
  *   · 只剩最后一把椅子时三个人同时按《加入》：只进一个，另两个是「满了」；
+ *   · 座位数跟着屋子走：普通小屋 8 把、竞赛小屋 20 把，开屋那一刻定死；
  *   · 屋主 30 秒没动静：屋里的人看到「屋主等一下就来」；90 秒没动静：
  *     「屋主离家出走了，小屋暂时解散」，按 ok 回主菜单；
  *   · 没权限的客人在无限反转局里，屋主中途解散：弹《屋主离开，小屋暂时解散，
@@ -120,6 +121,29 @@ const winner = race.find((r) => r.status === 200).body;
 await api({ action: 'leave', code, playerId: winner.playerId, playerToken: winner.playerToken });
 const after = await api({ action: 'join', code, name: '补位', avatar: { shape: 'square', hue: 200 }, seen: [] });
 check('有人走了，椅子空出来，下一个进得来', after.status === 200, String(after.status));
+
+// ---- 座位数是跟着屋子走的，不是跟着服务器此刻的常数走的 ---------------------
+// 普通小屋 8 把、竞赛小屋 20 把（玩家定的），而且一间屋开出来那一刻就定死。
+// 要紧的是「定死」这半句：往后调 OPEN_SEATS，正开着的那些屋子不能从「3/8」
+// 自己变成「3/20」——玩家盯着的那个数在一局中间自己变了，正是「意料之外的
+// 界面」。竞赛那条路今天没有任何界面走，所以这儿直接打接口。
+const proof = { email: granted.email, accountToken: granted.token, holderCode: granted.code };
+const plain = await api({ action: 'create', name: '普通', avatar: { shape: 'circle', hue: 300 }, seen: [], ...proof });
+check('不说是竞赛：开出来的是普通小屋，8 把椅子', plain.status === 200 && plain.body.state.seats === 8, `${plain.status} · ${plain.body.state?.seats}`);
+const arena = await api({ action: 'create', name: '竞赛', avatar: { shape: 'circle', hue: 320 }, seen: [], contest: true, ...proof });
+check('说是竞赛：开出来的是 20 把椅子', arena.status === 200 && arena.body.state.seats === 20, `${arena.status} · ${arena.body.state?.seats}`);
+{
+  // 竞赛屋真的坐得下第 9 个——上面那间普通屋第 9 个是「满了」。
+  const arenaCode = arena.body.code;
+  const many = [];
+  for (let i = 0; i < 10; i++)
+    many.push(await api({ action: 'join', code: arenaCode, name: `选手${i}`, avatar: { shape: 'square', hue: 10 * i }, seen: [] }));
+  const seated = many.filter((r) => r.status === 200).length;
+  check('竞赛屋坐得下十个客人（屋主 + 10 = 11 > 8）', seated === 10, `${seated}/10`);
+  const st = (await api({ action: 'state', code: arenaCode, playerId: arena.body.playerId, playerToken: arena.body.playerToken })).body;
+  check('竞赛屋的 state 一直报 20', st.seats === 20, String(st.seats));
+  check('竞赛屋里正好 11 个人', st.players.filter((p) => !p.left).length === 11, String(st.players.length));
+}
 
 // ---- 屋主不在：先是「等一下就来」，太久就是「离家出走」 -------------------------
 // 屋主断网：轮询发不出去、也发不出 bye（等于锁了屏、进了电梯）。关掉浏览器不一样——

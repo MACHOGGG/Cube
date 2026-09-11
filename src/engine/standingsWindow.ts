@@ -18,10 +18,27 @@
  * 号。我在前三名时这三个位子本来就连着，省略号不出现——所以这块最多四行，
  * 高度只在「三行」和「四行」之间变一次。
  *
+ * 这套摆法**不是竞赛模式专有的**。玩家的原话：「人数超过3个也是按照这个竞
+ * 赛版本的排名方式」——普通小屋（2–8 人）和竞赛（20 人）用的是同一块，从第
+ * 四个人进屋起就换成这三行。座位上限是两边唯一的差别，跟这儿无关。
+ *
  * 纯算术，不碰 DOM：名单怎么画是 ui/ 那边的事，这儿只回答「该画哪几个」。
  * 所以 scripts/check-standings-window.mjs 能把边界情形一条条钉住，不用开浏
  * 览器。
  */
+
+/**
+ * 到几个人为止，整张名单原样摆出来。
+ *
+ * 三个人及以下不收——三行本来就是这块的高度上限，摆满也不会把棋盘往下挤；
+ * 而收了反而更糟：我是第一的时候那三个位子（第一 / 我前一名 / 我）合并成一
+ * 行，屏幕上就只剩我自己，后面追上来的人一个都看不见。第四个人一进屋，名单
+ * 才收成上面那三行。
+ *
+ * 玩家定的线是「超过 3 个」，所以这儿是 3 不是 4：`count <= 3` 全摆，
+ * `count >= 4` 收。
+ */
+export const STANDINGS_FULL_UP_TO = 3;
 
 export type StandingsRow =
   /** 要画的一个人。`index` 是他在已排好序的名单里的下标，`rank` 是印出来的名次。 */
@@ -38,6 +55,16 @@ export type StandingsRow =
  */
 export function standingsWindow(count: number, meIndex: number): StandingsRow[] {
   if (count <= 0) return [];
+  // 人少就整张摆（见 STANDINGS_FULL_UP_TO）。这一条也顺手管住了投屏那一端：
+  // 屋里三个人时，那台没有「我」的机器照样看得见全场。
+  if (count <= STANDINGS_FULL_UP_TO) {
+    return Array.from({ length: count }, (_, i): StandingsRow => ({
+      kind: 'player',
+      rank: i + 1,
+      index: i,
+    }));
+  }
+
   // 三个位子：第一名、我前面那一名、我自己。重复的（我就是第一、我前面那个
   // 就是第一）在这儿自然合成一个，不必分情形去写。
   //
