@@ -373,6 +373,16 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   /** 那颗键此刻是《<》、《>》，还是根本不该有。 */
   function paintPeek() {
     if (!peekEl) return;
+    // 「正在回头看」这件事盖在条子本身上，让 CSS 换底色时按类去认。
+    //
+    // 原先 CSS 那一条写的是 .coach-bar:has(.coach-peek--fwd)。:has() 在小红书
+    // 那台要兼容的内核（Chrome 61）上根本不认识，整条规则连同它一起作废——
+    // 不白屏、不报错，就是底色不变：玩家按了《<》，屏幕上没有任何东西告诉他
+    // 「这是上一条」。而且这一类「构建得出来、运行时静默失效」的事，仓库里那
+    // 个兼容体检台按设计也验不出来。项目里已经有一处栽过同样的坑并写下了做
+    // 法（style.css 里 body:has(.app--game) 那一段）：状态由脚本盖成类，CSS
+    // 按类认。这儿照办。
+    host.classList.toggle('coach-bar--peek', peeking);
     // 第一步没有「上一条」；方块那一路只讲一两条，也不必有。
     const usable = steps.length > 1 && (at > 0 || peeking);
     peekEl.hidden = !usable;
@@ -396,6 +406,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       (row.querySelector('.coach-text') as HTMLElement).textContent = STRINGS[opts.lang].coachNudge;
     });
     host.classList.remove('coach-bar--pair');
+    host.classList.remove('coach-bar--peek');
     fadeIn(host);
   }
 

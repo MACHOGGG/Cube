@@ -3990,8 +3990,17 @@ body.is-room-host::after {
 .coach-peek[hidden] { display: none; }
 .coach-peek:active { transform: scale(0.9); }
 /* 回头看的时候整块条子换个底，一眼看得出「这不是现在这一条」——否则他读完
-   上一条，会以为教学倒回去了。 */
-.coach-bar:has(.coach-peek--fwd) { background: color-mix(in srgb, var(--surface) 82%, var(--accent-soft)); }
+   上一条，会以为教学倒回去了。
+   按类认，不用 :has()：小红书那台要兼容的内核（Chrome 61）不认识 :has()，
+   整条规则会连同它一起作废——不白屏、不报错，底色就是不变（同 style.css 里
+   body:has(.app--game) 那一段栽过的坑）。类由 ui/coachBar.ts 的 paintPeek 盖。
+   两条 background 是给 color-mix() 留的老写法兜底：老内核只认第一条，得到的
+   是整块 --accent-soft（比 18% 的混色更明显一点，但四套配色下都读得清）；新
+   内核走第二条，那一档淡得多。 */
+.coach-bar--peek {
+  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent-soft));
+}
 .coach-prog { display: flex; gap: 4px; }
 .coach-seg {
   flex: 1; height: 3px; border-radius: 2px;
