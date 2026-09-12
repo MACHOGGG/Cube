@@ -29,7 +29,7 @@ const dot = (color) => live(color, 'dot');
 const front = (color) => live(color, 'flavor');
 const NONE = new Set();
 /** 判死了吗（need 不给就是各玩法自己的 4 枚）。 */
-const stuck = (board, need, lineMin) => S.findStuckColorGroups(board, NONE, need, lineMin).length > 0;
+const stuck = (board, need, lineMin) => S.findStuckColorGroups(board, need, lineMin).length > 0;
 const LINE3 = 3; // 小球 / 三角各版式最短的整线
 const ROW6 = 6; // 6×6 方块没消过行时的整行
 

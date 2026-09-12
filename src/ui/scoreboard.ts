@@ -5,6 +5,8 @@ import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { pushLayer } from '../engine/backNav';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor } from './roomNotices';
+import { liveTotal } from './roomCard';
+import { standingsWindow } from '../engine/standingsWindow';
 import {
   avatarSvg,
   currentRoom,
@@ -210,18 +212,44 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   let dead = false;
 
   const paint = (state: RoomState) => {
-    // 名单按人数分行高：两个人就两行大字，四个人就四行小字，整块的高度不
-    // 变——它是那一排里的一块，和右边那颗键一样高，不能随人数长个儿。
-    rows.style.setProperty('--rank-rows', String(Math.max(2, state.players.length)));
-    rows.innerHTML = state.players
-      .map((p, rank) => {
+    /**
+     * 超过三个人就只摆三行：第一名、我前面那一名、我自己（engine/
+     * standingsWindow.ts，规矩和边界情形都在那儿，门是 check-standings-window）。
+     *
+     * 这块地方只有 66–104px 高，行高是它除以人数：八个人挤进来，一行只剩约
+     * 11px、字号 7px——那不是「小」，是读不出来。而选手在局中真正要知道的只
+     * 有两件事：冠军现在多少分（还差多远），我前面那个多少分（够不够得着）。
+     * 全场名单是大屏那一端的事。
+     */
+    const meIndex = state.players.findIndex((p) => p.id === seat.playerId);
+    const win = standingsWindow(state.players.length, meIndex);
+    // 名单按**摆出来的行数**分行高（不是屋里的人数）：两个人就两行大字，收
+    // 成三行之后就按三四行算，整块的高度自始至终不变——它是那一排里的一块，
+    // 和右边那颗键一样高，不能随人数长个儿。
+    rows.style.setProperty('--rank-rows', String(Math.max(2, win.length)));
+    rows.innerHTML = win
+      .map((row) => {
+        // 名次接不上的那一截。只画一个省略号，不写「还有 N 人」——这一行本来
+        // 就是「中间还有人」的意思，而读屏从下一行的名次（1. 之后直接是 8.）
+        // 已经读得出来，多一句话是这块巴掌大的地方最不需要的东西。
+        if (row.kind === 'gap') {
+          return '<div class="mp-board-row mp-board-row--gap" aria-hidden="true">···</div>';
+        }
+        const p = state.players[row.index];
         const me = p.id === seat.playerId;
+        // 印的是**累计总分**（前几局加上这一局），不是刚打的这一局。
+        //
+        // 座次本来就是按累计排的（服务器 publicState、名单卡 rankRoom、倒数
+        // 那一屏，三处同一把尺子），只有这儿印的是单局分。于是从第二局起就
+        // 看得出毛病：上一局领先的人这一局还没得分，名单上他排第一、写着
+        // 「0」，压在写着「900」的人头上；交卷那一瞬间界面换成累计分，前后两
+        // 屏说的又是两回事。liveTotal 就是别处在用的那一个（ui/roomCard.ts）。
         return `<div class="mp-board-row${me ? ' mp-board-row--me' : ''}${p.left ? ' mp-board-row--left' : ''}">
-          <span class="mp-board-rank">${rank + 1}</span>
+          <span class="mp-board-rank">${row.rank}</span>
           <span class="mp-avatar mp-avatar--small">${avatarSvg(p.avatar)}</span>
           <span class="mp-board-name">${esc(p.name)}</span>
           ${p.left ? '' : tickFor(p.finished, s.mpFinished)}
-          <span class="mp-board-score">${p.score}</span>
+          <span class="mp-board-score">${liveTotal(p)}</span>
         </div>`;
       })
       .join('');

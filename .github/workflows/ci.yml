@@ -80,6 +80,10 @@ jobs:
       # 从外面看这几扇门：登录接口不能当查号机，改密码和账号中心要按来路限速。
       - name: 认证：查号机与来路限速
         run: node scripts/check-auth-probe.mjs
+      # 小屋里两件「谁写谁赢」的事：催屋主不能把刚开的一局抹掉，关了网页的人
+      # 不该让全屋再等九十秒。直接叫 api/room.js 的 handler，不起服务器。
+      - name: 小屋：催促与开局抢数据、关了网页的座位
+        run: node scripts/check-room-race.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。

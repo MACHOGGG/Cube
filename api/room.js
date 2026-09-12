@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { isGenius as isGeniusClaim } from './_entitlement.js';
-import { expire, hdel, hgetall, hset, hsetnx, storeConfigured } from './_store.js';
+import { expire, hdel, hgetall, hincrby, hset, hsetnx, storeConfigured } from './_store.js';
 
 /**
  * Multiplayer rooms: a four-digit code, two to four players, one board.
@@ -285,9 +285,61 @@ function distinctAvatar(wanted, hash) {
   return wanted; // 挤不下了也不拦人进来，重一个图形总比进不来强。
 }
 
+/**
+ * 催屋主：一人一格，不写进 meta。
+ *
+ * 原先这个计数和「这一局是什么」住在同一格（meta）里，而催一下是「读一份
+ * meta → 改两个字段 → 整份写回去」。屋主按下《开始》写的也是整份 meta。两个
+ * 请求前后脚撞上，后写的那个把先写的整段盖掉，于是出过两种事：
+ *
+ *   · 客人在屋主开局之后催了一下 —— 这一下被吃掉，计数没动，他自己不知道；
+ *   · 客人那一下和屋主开局撞在同一瞬间 —— 屋主自己进了棋盘开始打，别人的画
+ *     面还停在小屋等待页，什么反应都没有：round、seed、startAt 一起被那份旧
+ *     meta 盖回去了。
+ *
+ * 而「等屋主开局的时候一直点催促」恰好是玩家最常做的那个动作。
+ *
+ * 拆成两样东西，各用各的办法：
+ *
+ *   **数目** —— 整间屋一个数，用 HINCRBY 加（`nudges` 字段）。加和读是同一
+ *     步，所以一个手快的人打出来的那一串同时在飞的请求，一下都不会少。它住
+ *     在这间屋的 hash 里，读整间屋的时候顺带就回来了——每台设备一秒问一次状
+ *     态，为这一个数字多跑一趟，八个人就是每秒八趟。
+ *
+ *   **时刻** —— 一人一格（`nu:<playerId>`），照抄这个仓库对付并发唯一的那个
+ *     办法（文件顶上就写着，玩家分数从来都是这么存的）。各写各的，谁也盖不
+ *     到谁，更盖不到 meta。同一个人同一瞬间按的两下里丢掉一个时刻，屏幕上看
+ *     不出来（那两颗本来就是同时掉的），而数目一下都不会少。
+ *
+ * 键前缀避开了已经占用的那几个：`p:` 座位、`s:` 椅子、`n:` 名字锁、`a:` 头像锁。
+ */
+const nudgeField = (playerId) => 'nu:' + String(playerId);
+/** 被催了多少下——整间屋一个数，用 HINCRBY 加，所以它就住在这间屋的 hash 里。 */
+const NUDGE_COUNT = 'nudges';
+
+/**
+ * 全屋催了多少下、各在什么时刻。
+ *
+ * `meta.nudges` / `meta.nudgeAt` 那两句是给**改这一版之前就开着的屋**留的：
+ * 小屋只活二十分钟，可正好跨在部署那一下的屋不该让数字倒退回去——数字一退，
+ * 屋主那头的书签（ui/nudgeRain.ts 的 seen）就再也对不上了。
+ */
+function nudgeTally(hash) {
+  const meta = hash.meta || {};
+  const nudges = (Number(hash[NUDGE_COUNT]) || 0) + (meta.nudges || 0);
+  const stamps = Array.isArray(meta.nudgeAt) ? [...meta.nudgeAt] : [];
+  for (const [field, value] of Object.entries(hash)) {
+    if (!field.startsWith('nu:') || !value) continue;
+    if (Array.isArray(value.at)) stamps.push(...value.at);
+  }
+  stamps.sort((a, b) => a - b);
+  return { nudges, nudgeAt: stamps.slice(-40) };
+}
+
 /** Everything the room looks like - minus every player's private token. */
 function publicState(code, hash) {
   const meta = hash.meta || {};
+  const tally = nudgeTally(hash);
   const players = [];
   for (const [field, value] of Object.entries(hash)) {
     if (!field.startsWith('p:') || !value) continue;
@@ -367,9 +419,9 @@ function publicState(code, hash) {
     seats: seatsFor(meta),
     players,
     /** 被催了多少下。屋主那边看它变大就往标题里掉图形。 */
-    nudges: meta.nudges || 0,
+    nudges: tally.nudges,
     /** 最近几十下催促各是什么时刻——屋主按这个节奏一颗一颗掉。 */
-    nudgeAt: Array.isArray(meta.nudgeAt) ? meta.nudgeAt : [],
+    nudgeAt: tally.nudgeAt,
     /** 这一局的倒数从几数起（可能有新手的局是 8 / 9）。 */
     countFrom: meta.countFrom ?? null,
     // Lets a device with a wrong clock still count down to the same instant.
@@ -389,6 +441,13 @@ function roundOver(hash) {
     // 走掉的人不是这一局在等的人。leave 已经把他标成 finished 了，这一行
     // 是把意图写明白：名单上留着他，不代表整局要等他。
     if (seat.left) return true;
+    // 网页已经关了，而且是他的浏览器自己说的（bye 把 lastSeen 抹成 0，见
+    // publicState 的 closed）。
+    //
+    // 这一句原先没有，于是服务器明明已经知道「这个人走了」，却还是只认「九十
+    // 秒没消息」那一条：屋里一个人中途直接关掉网页——很常见——其余所有人交
+    // 完卷都要干等到第 90 秒才开得了下一局。已经收到的消息就该当消息用。
+    if (seat.lastSeen === 0) return true;
     // Walked in after this round began: they were never in it, so they
     // cannot be what it is waiting on.
     if ((seat.joinedAt || 0) > meta.startAt) return true;
@@ -510,6 +569,41 @@ async function claimSlot(code, playerId, seats) {
     if (await hsetnx(roomKey(code), 's:' + i, playerId)) return i;
   }
   return -1;
+}
+
+/**
+ * 占一把椅子；满了就先看看有没有「已经确认走了」的椅子空着人。
+ *
+ * 按过《离开》的椅子早就交回去了（leave 里的 hdel）。**关掉网页的没有**：那
+ * 条路故意不把座位标成 left（关标签页和按《离开》是两回事，手滑关掉、切个应
+ * 用的人马上就回来，座位得留着）。可代价是这把椅子从此谁也坐不上——新朋友
+ * 进不来，要等整间小屋二十分钟过期才能重新凑齐人。
+ *
+ * 只有在真的坐满了、又确实有人进不来的时候才收：平时那把椅子照旧留着他。
+ * 三种不收——屋主的（屋主身份不能换人）、正在看教学的（那台设备整页被教学
+ * 占着、不轮询，看着像没人，人其实在）、已经交回去的。收的时候把 seat.slot
+ * 一并抹掉，他回来时会重新占一把（join 里 `slot === undefined` 那一支），而
+ * 名字、分数、打过几局都还在他名下——人还在名单和排行里，只是不再占位子。
+ */
+async function claimSeat(code, playerId, hash) {
+  const seats = seatsFor(hash.meta);
+  let slot = await claimSlot(code, playerId, seats);
+  if (slot >= 0) return slot;
+  let freed = 0;
+  for (const [field, seat] of Object.entries(hash)) {
+    if (!field.startsWith('p:') || !seat) continue;
+    if (field.slice(2) === hash.meta.host) continue;
+    if (seat.left || seat.slot === undefined) continue;
+    if (seat.lastSeen !== 0 || seatLearning(seat)) continue;
+    await hdel(roomKey(code), 's:' + seat.slot);
+    const next = { ...seat };
+    delete next.slot;
+    await hset(roomKey(code), field, next);
+    freed++;
+  }
+  if (!freed) return -1;
+  slot = await claimSlot(code, playerId, seats);
+  return slot;
 }
 
 /**
@@ -684,7 +778,7 @@ async function join(res, body) {
     // 按过《离开》的座位早把椅子交回去了（见 leave）：回来先重新占一把。
     let slot = seat.slot;
     if (seat.left || slot === undefined) {
-      slot = await claimSlot(code, field.slice(2), seatsFor(hash.meta));
+      slot = await claimSeat(code, field.slice(2), hash);
       if (slot < 0) return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
     }
     const next = {
@@ -715,7 +809,7 @@ async function join(res, body) {
   // The seat count travels with the refusal, not just with a room you are
   // already inside. Joining from the home page is where "满了" is actually
   // read. 占椅子是原子的（claimSlot），两个人同时按《加入》也塞不进第九个。
-  const slot = await claimSlot(code, playerId, seatsFor(hash.meta));
+  const slot = await claimSeat(code, playerId, hash);
   if (slot < 0) return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
   // 名字和头像等占到椅子之后再定，而且是「抢」不是「算」：函数一进来读的那
   // 份快照，几个同时进来的人读到的是同一份（见 claimTag）。快照仍要用——屋
@@ -1105,14 +1199,19 @@ async function nudge(res, body) {
   const hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
   if (!seatOf(hash, body.playerId, body.playerToken)) return send(res, 403, { error: 'seat' });
-  const meta = hash.meta || {};
-  // 上限是防一个按住不放的人把数字撑到没边；掉落那头本来也会在拥挤时加快
-  // 消失，所以这里只要保证数字本身不失控就够。
-  const next = Math.min((meta.nudges || 0) + 1, 9_000_000);
+  // 计数是一步做完的（HINCRBY）。催促这颗键按下去不等回包（见 engine/room.ts
+  // 的 nudgeHost：「催是一件可以连着按的事」），所以一个手快的人打出来的就是
+  // 一串真正同时在飞的请求——「读一份、加一、写回去」会让那一串只算成一下。
+  const nudges = Math.min(await hincrby(roomKey(code), NUDGE_COUNT, 1), 9_000_000);
   // 顺手记下这一下是什么时刻（只留最近四十下）：屋主那边按这些时刻之间的
   // 间隔一颗一颗掉，按得多快掉得多快，而不是一秒一批。
-  const nudgeAt = [...(Array.isArray(meta.nudgeAt) ? meta.nudgeAt : []), Date.now()].slice(-40);
-  await hset(roomKey(code), 'meta', { ...meta, nudges: next, nudgeAt });
+  //
+  // 时刻这一份是一人一格的读-改-写：同一个人同一瞬间按下的两下里丢掉一个时
+  // 刻，屏幕上看不出来（那两颗本来就是同时掉的），而**数目**一下都不会少。
+  const field = nudgeField(body.playerId);
+  const mine = hash[field] || {};
+  const at = [...(Array.isArray(mine.at) ? mine.at : []), Date.now()].slice(-40);
+  await hset(roomKey(code), field, { at });
   await expire(roomKey(code), ROOM_TTL_S);
-  return send(res, 200, { ok: true, nudges: next });
+  return send(res, 200, { ok: true, nudges });
 }

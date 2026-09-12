@@ -3500,6 +3500,13 @@ body.is-room-host::after {
   mask-image: linear-gradient(to right, #000 calc(100% - 1.6em), transparent);
 }
 .mp-board-score { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* 名次接不上的那一截（第一名和我之间还隔着几个人）。一个省略号，和名次数
+   字左对齐——它站的正是那几行本该在的位置，所以不居中。 */
+.mp-board-row--gap {
+  justify-content: flex-start; padding-left: 0.15em;
+  opacity: 0.45; letter-spacing: 0.12em;
+  height: min(calc(var(--rank-line) * 0.7), 18px);
+}
 /* ---------------------------------------------------------------------------
    交卷之后那一页
    ---------------------------------------------------------------------------

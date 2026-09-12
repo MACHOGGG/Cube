@@ -117,6 +117,15 @@ function memory(args) {
       if (!(h instanceof Map)) return [];
       return [...h.entries()].flat();
     }
+    // 同 INCR，只是数字住在一个 hash 字段里。单进程内存，一个 case 里读了再
+    // 写中间没有别人插得进来，同样是一步。
+    case 'HINCRBY': {
+      const h = mem.get(key) instanceof Map ? mem.get(key) : new Map();
+      const next = (Number(h.get(String(rest[0])) ?? 0) || 0) + Number(rest[1]);
+      h.set(String(rest[0]), String(next));
+      mem.set(key, h);
+      return next;
+    }
     case 'HDEL': {
       const h = mem.get(key);
       if (!(h instanceof Map)) return 0;
@@ -241,6 +250,16 @@ export const hget = async (key, field) => decode(await command(['HGET', key, fie
 export const hsetnx = async (key, field, value) =>
   (await command(['HSETNX', key, field, encode(value)])) === 1;
 export const hdel = (key, field) => command(['HDEL', key, field]);
+/**
+ * 给 hash 里的一个数字加一点，并把加完的那个数拿回来——加和读是同一步。
+ *
+ * 和 bump 是同一个道理（见它上面那段），区别只在这个数住在 hash 里：所以读
+ * 整间屋（hgetall）的时候它顺带就回来了，不必为它多跑一趟。小屋那头「被催了
+ * 多少下」正是这样一个数——每台设备一秒问一次屋子的状态，为这一个数字多发
+ * 一条命令，八个人就是每秒八条。
+ */
+export const hincrby = async (key, field, by = 1) =>
+  Number(await command(['HINCRBY', key, field, by])) || 0;
 export const expire = (key, ttl) => command(['EXPIRE', key, ttl]);
 
 /**
