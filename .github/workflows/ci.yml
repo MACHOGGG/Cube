@@ -77,6 +77,9 @@ jobs:
         run: node scripts/check-unlock-reset.mjs
       - name: 账户：兑码落到账户上、改密码、换邮箱
         run: node scripts/check-account-hub.mjs
+      # 从外面看这几扇门：登录接口不能当查号机，改密码和账号中心要按来路限速。
+      - name: 认证：查号机与来路限速
+        run: node scripts/check-auth-probe.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。

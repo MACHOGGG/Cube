@@ -109,5 +109,24 @@ check('重建榜：第 21 次连**拿对令牌**也被 429 挡下——限速在
   stopped.status === 429 && stopped.payload?.error === 'tooMany',
   `${stopped.status} ${JSON.stringify(stopped.payload)}`);
 
+// ── 同时打进来的 200 次，也只能放行 20 次 ───────────────────────────────
+//
+// 上面每一条都是「一个一个地发」——发一次、等回来、再发下一次。限速原先那个
+// 写法（读一次数字 → 加一 → 写回去）在这种发法下是对的，所以上面那些断言一
+// 直是绿的，而门其实是虚掩的：三步之间隔着两次往返，同一瞬间打进来的请求会
+// 读到同一个旧值，整整一批只被记成一次。实测过一回：并发打 200 次，本该 20
+// 次/小时的上限一次都没拦住。
+//
+// 这条断言就是拿来钉住「已经改成原子的」这件事的。它必须在 Promise.all 里
+// 一起发——顺序发的版本永远是绿的，验不出任何东西。
+const SWARM = '203.0.113.99';
+const swarm = await Promise.all(
+  Array.from({ length: 200 }, () =>
+    call({ token: 'wrong'.padEnd(32, 'x'), plan: 'month', count: 1 }, SWARM)),
+);
+const letIn = swarm.filter((r) => r.status !== 429).length;
+check('200 次并发只放行 20 次（限速是一步做完的，不是读-改-写）', letIn === 20,
+  `放行了 ${letIn} 次，挡下 ${200 - letIn} 次`);
+
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,6 @@
 import { configured, creem, readBody, send } from './_creem.js';
 import { SECRET_RE, burnGuess, checkPin, loadAccount, normalizeEmail } from './_accounts.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
 
 /**
@@ -28,6 +29,13 @@ export default async function handler(req, res) {
   const { email, password } = readBody(req);
   const address = normalizeEmail(email);
   if (!address) return send(res, 400, { error: 'missing' });
+
+  // 按来路再数一道。理由和 passcode.js 的 change 一模一样：账号那头的锁定计
+  // 数（错 4 次锁 4 小时）挡得住猜密码的人，可它同时也是一把递给陌生人的
+  // 锁——知道你邮箱的人发四次乱填的请求就能把你关在自己的账号外面四小时。
+  if (storeConfigured() && (await tooMany('portal', callerId(req), 20, 3600))) {
+    return send(res, 429, { error: 'tooMany' });
+  }
 
   // Same proof as signing in. An account that does not exist and a wrong
   // password get the same answer, so this cannot be used to find subscribers.

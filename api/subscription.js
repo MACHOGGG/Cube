@@ -1,6 +1,7 @@
 import { answer, configured, creem, emailOf, entitled, NOBODY, readBody, send } from './_creem.js';
 import {
   SECRET_RE,
+  burnGuess,
   checkPin,
   loadAccount,
   lockRemainingMs,
@@ -163,6 +164,27 @@ async function fromEmail(req, res, rawEmail, password, token) {
       issued = issueToken(account);
       await saveAccount(address, account);
     }
+  } else {
+    /**
+     * 这个地址根本没有账号——可是答出去的话不能因此长得不一样。
+     *
+     * 原先这一支是空的：没有账号就把上面整段跳过去，不查密码格式、不进限速
+     * 桶、不烧那一次 scrypt，直接往下走，最后答 200「你还没订阅」。而有账号
+     * 的地址密码不对答的是 401。两句不一样的话摆在一起，就成了一台查号机：
+     * 拿一份邮箱名单挨个打过来，哪些是本站注册用户一目了然——为后面的精准
+     * 诈骗和撞库省了第一步。玩家自己一点感觉都没有。
+     *
+     * 这条规矩项目里早就写死了（passcode.js 的 change：「Same answer for
+     * 'no such account' as for 'wrong password'」，unlock.js 也照做了），
+     * 唯独登录这一支漏了。所以这里把有账号那一路的每一步都原样走一遍：
+     * 同一个格式检查、同一个限速桶、同一份 scrypt 的时间。
+     */
+    if (token) return send(res, 401, { error: 'wrong' });
+    if (!SECRET_RE.test(String(password || ''))) return send(res, 401, { error: 'wrong' });
+    if (await tooMany('subpw', callerId(req), 20, 3600)) {
+      return send(res, 429, { error: 'tooMany' });
+    }
+    burnGuess(String(password));
   }
 
   // 两条路各归各，只写一遍（api/_entitlement.js 的 resolveEntitlement）：内部码
@@ -185,6 +207,21 @@ async function fromEmail(req, res, rawEmail, password, token) {
    */
   if (status === 200 && account && issued) {
     return send(res, 200, { email: address, ...body, token: issued });
+  }
+
+  /**
+   * 没有账号的那一路，只有一种答案允许和「密码不对」不一样：**订阅是活的、
+   * 却还没设过密码**（付完款那一下标签页就关了）。那一句 needsPasscode 是
+   * 故意要说的——不说，这个人就被永久挡在他已经付过钱的东西外面；而它透露
+   * 的「这个地址是订户」，和任何一个《忘记密码》表单透露的是同一件事（见文
+   * 件顶上那段）。
+   *
+   * 除此之外一律和「密码不对」同一句：200「你还没订阅」会把「这个地址没有
+   * 账号」告诉外面的人，而这句话本身就是不该白送的。
+   */
+  if (!account) {
+    if (status === 200 && body?.needsPasscode) return send(res, 200, body);
+    return send(res, 401, { error: 'wrong' });
   }
   return send(res, status, body);
 

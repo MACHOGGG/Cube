@@ -241,5 +241,52 @@ const swapped = await callOn(emailApi, {
 check('中途把新地址换成别的，那张码不认', swapped.status === 400, String(swapped.status));
 check('而且没有搬走', Boolean(await loadAccount(NEXT)));
 
+// ---- ⑦ 那张六位码，猜错五次就作废 -------------------------------------------
+//
+// 六位数字只有一百万种。限速拦的是「一小时敲几次门」（而且只拦要码那一步，
+// 输码这一步根本不过限速），不是「这张码被试了几次」——两件事。
+//
+// 少了这道闸能连成一条完整的链：坏人拿自己的账号申请搬到**别人**的地址上，
+// 然后在 30 分钟里慢慢撞那六位数；撞中了，他的账号就挂在受害者的邮箱底下，
+// 而受害者从此注册不了自己的邮箱——哪天真去刷卡订阅，设密码那一步会被「这
+// 个地址已经有账号了」挡住，钱花了却进不去。
+//
+// 《忘记密码》那条路早就有这道闸（api/unlock.js 的 MAX_TRIES），换邮箱这条
+// 路一直没抄这份作业。两条路是同一件事，门也该是同一道。
+
+const SIEGE = 'siege-one@example.com';
+mails = [];
+await callOn(emailApi, { email: NEXT, token: token2, newEmail: SIEGE, lang: 'en' });
+const realCode = lastCode();
+const guess = (code) =>
+  callOn(emailApi, { action: 'confirm', email: NEXT, token: token2, newEmail: SIEGE, code });
+
+const wrongs = [];
+for (let i = 0; i < 5; i++) wrongs.push((await guess('000000')).status);
+check('前 5 次猜错，如实答「码不对」', wrongs.every((c) => c === 401), wrongs.join(','));
+
+// 第 6 次故意拿**对的**码来：闸在比对之前，所以它也进不去。
+const sixth = await guess(realCode);
+check('第 6 次连拿对的码也被挡下（闸在比对之前）', sixth.status === 429, String(sixth.status));
+
+const afterBurn = await guess(realCode);
+check('这张码已经作废了，重新要一张才行', afterBurn.status === 400, String(afterBurn.status));
+check('而且没搬走', Boolean(await loadAccount(NEXT)) && !(await loadAccount(SIEGE)));
+
+// 同时打进来的 50 次：也只有 5 次能摸到那张码。
+//
+// 这一条是拿来钉住「计数是一步做完的」的。原先那个写法（读一次次数 → 判断
+// → 加一写回去）在一个一个发的时候是对的，上面那五条会全绿，可门是虚掩
+// 的：并发打进来的请求会一起通过「还没到 5 次」那一关，然后一起猜。
+const SIEGE2 = 'siege-two@example.com';
+mails = [];
+await callOn(emailApi, { email: NEXT, token: token2, newEmail: SIEGE2, lang: 'en' });
+const swarmed = await Promise.all(
+  Array.from({ length: 50 }, () =>
+    callOn(emailApi, { action: 'confirm', email: NEXT, token: token2, newEmail: SIEGE2, code: '000000' })),
+);
+const compared = swarmed.filter((r) => r.status !== 429).length;
+check('50 次并发，只有 5 次摸得到那张码', compared === 5, `摸到 ${compared} 次`);
+
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

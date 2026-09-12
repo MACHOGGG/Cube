@@ -13,7 +13,8 @@
  *
  * 所以这里同时起两台 dev-server，一台不给密钥、一台给个假的，验证：
  *   · 没密钥时，内部码账号照常登录（它本来就不该问 Creem）
- *   · 没密钥时，要问 Creem 的那几条路回 503「答不上来」，不是 200「没订阅」
+ *   · 没密钥时，要问 Creem 的那条路回 503「答不上来」，不是 200「没订阅」
+ *   · 库里没有的地址，和「密码不对」答同一句（别把这个接口变成查号机）
  *   · 有密钥时，一切照旧
  */
 import { spawn } from 'node:child_process';
@@ -77,9 +78,21 @@ try {
     inCode.status === 200 && inCode.body.active === true && inCode.body.kind === 'code',
     `${inCode.status} active=${inCode.body.active}`);
 
+  // 一个库里根本没有账号的地址。
+  //
+  // 这一条原先验的是 503「答不上来」。后来堵账号枚举那一处改了它（见
+  // api/subscription.js 的 fromEmail、scripts/check-auth-probe.mjs）：没有账
+  // 号的地址一律和「密码不对」答同一句，否则拿一份邮箱名单挨个打过来就能筛
+  // 出谁是本站用户。
+  //
+  // 这条门要守的东西一个字没变——**绝不能静默地答 200「你没订阅」**。401 离
+  // 那句话比 503 还远：它说的是「这把钥匙不对」，不是「你的码失效了」。真正
+  // 「要问 Creem 却问不了」的那条路是**有账号、密码也对**的刷卡用户，那一路
+  // 仍然是 503（resolveEntitlement 里 kind !== 'code' 那一支），另外它下面
+  // 「刚付完款回来」那条也还钉着同一件事。
   const stranger = await post(noKey.base, '/api/subscription', { email: 'nobody@test.com', password: '123456' });
-  check('要问 Creem 的那条路说「答不上来」，不是「你没订阅」',
-    stranger.status === 503 && stranger.body.error === 'notConfigured',
+  check('库里没有的地址：和「密码不对」同一句，既不是 200「你没订阅」，也不说有没有账号',
+    stranger.status === 401 && stranger.body.error === 'wrong',
     `${stranger.status} ${JSON.stringify(stranger.body)}`);
 
   const settle = await post(noKey.base, '/api/subscription', { checkoutId: 'ch_whatever' });

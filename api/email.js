@@ -12,7 +12,7 @@ import {
 import { compose, mailConfigured, mailLang, sendMail } from './_mail.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { renameScoreOwner } from './scores.js';
-import { del, get, set, storeConfigured } from './_store.js';
+import { bump, del, get, set, storeConfigured } from './_store.js';
 
 /**
  * 换一个邮箱。
@@ -38,6 +38,21 @@ import { del, get, set, storeConfigured } from './_store.js';
 
 const CODE_TTL_S = 30 * 60;
 const key = (email) => 'chmail:' + email;
+
+/**
+ * 这张码猜错几次就作废。
+ *
+ * 六位数字只有一百万种，限速拦的是「一小时敲几次门」，不是「这张码被试了几
+ * 次」——两件事。少了这个计数，坏人可以拿自己的账号申请搬到**别人**的地址
+ * 上，然后在 30 分钟里慢慢撞那六位数；撞中了，他的账号就挂在受害者的邮箱底
+ * 下，而受害者从此再也注册不了自己的邮箱——哪天他真去刷卡订阅，设密码那一
+ * 步会被「这个地址已经有账号了」挡下来，钱花了却进不去。
+ *
+ * 《忘记密码》那条路（api/unlock.js）早就有这道闸，换邮箱这条路一直没抄这份
+ * 作业。数字和键名都照它来，两条路是同一件事，没有理由各有一套。
+ */
+const MAX_TRIES = 5;
+const triesKey = (email) => 'chmail:tries:' + email;
 
 /** 换邮箱那封信，四种语言。挑哪一种、英文附一份，见 _mail.js 的 compose。 */
 const MAIL = {
@@ -115,11 +130,23 @@ async function request(res, req, address, wanted, wantLang) {
 
   const code = String(randomInt(0, 1e6)).padStart(6, '0');
   await set(key(address), { code, to: wanted }, CODE_TTL_S);
+  // 新码新账：上一张码被猜掉的次数不跟着过来（同 unlock.js）。
+  await del(triesKey(address));
   await sendMail({ to: wanted, ...compose(MAIL, mailLang(wantLang), code) });
   return send(res, 200, { sent: true });
 }
 
 async function confirm(res, address, wanted, account, { code, token }) {
+  // 先占掉一次机会，再去比对——次序反过来就是一道假门：同时打进来的几十个
+  // 请求会一起通过「还没到 5 次」这一关，然后一起猜。bump 是一步做完的，
+  // 所以第 6 个请求拿到的就是 6，它连码是多少都不会去读。
+  const tries = await bump(triesKey(address), CODE_TTL_S);
+  if (tries > MAX_TRIES) {
+    await del(key(address));
+    await del(triesKey(address));
+    return send(res, 429, { error: 'expired' });
+  }
+
   const pending = await get(key(address));
   if (!pending) return send(res, 400, { error: 'expired' });
   // 码是对着**当时那个新地址**发的。中途把 newEmail 换成别的再把码填进来，
@@ -144,6 +171,7 @@ async function confirm(res, address, wanted, account, { code, token }) {
   // 旧地址上那些跟着地址走的零碎：输错密码的计数、这张换邮箱的码。
   await clearFails(address);
   await del(key(address));
+  await del(triesKey(address));
 
   // 令牌一把都没动：换的是门牌，不是钥匙，他这台设备照旧登着，别的设备也是。
   // 回的是**这台设备自己带来的那一把**，不是账号上最新签发的那一把——他在

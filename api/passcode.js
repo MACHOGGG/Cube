@@ -14,6 +14,7 @@ import {
   saveAccount,
   takeAccount,
 } from './_accounts.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
 
 /**
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
   // 个问题的地方，顺手改掉别人的订阅偏好是不对的。
   if (checkoutId) return create(res, String(checkoutId), password, news === true);
   if (code) return bind(res, String(code), String(token || ''), email, password, news === true);
-  return change(res, email, password, newPassword);
+  return change(req, res, email, password, newPassword);
 }
 
 /**
@@ -179,12 +180,30 @@ async function create(res, checkoutId, password, news) {
 }
 
 /** Changing a password, proven by the one it replaces. */
-async function change(res, email, password, newPassword) {
+async function change(req, res, email, password, newPassword) {
   const address = normalizeEmail(email);
   if (!EMAIL_RE.test(address) || !SECRET_RE.test(String(password || ''))) {
     return send(res, 400, { error: 'invalid' });
   }
   if (!PASS_RE.test(String(newPassword || ''))) return send(res, 400, { error: 'weak' });
+
+  /**
+   * 按**来路**再数一道，不只按账号。
+   *
+   * 账号那头的计数（checkPin）是按账号数的：错 4 次锁 4 小时，错 6 次封号。
+   * 那道闸挡的是「有人在猜我的密码」，可它同时也是一把递到陌生人手里的锁：
+   * 只要知道你的邮箱——这不难——发四次乱填的请求就能把你关在门外四个小时，
+   * 而你自己一次都没输错过。《忘记密码》那条路解得开，可界面不会主动告诉被
+   * 锁的人「这不是你的错，走那条路」。
+   *
+   * 登录那一支早就按来路数了（subscription.js 的 subpw），改密码和账号中心
+   * 这两处一直没有。数一样多：真人改一次密码按一两下，脚本一小时二十次立刻
+   * 见底。storeConfigured() 那半句和别处一个道理——没有库就没有计数器，不能
+   * 因为数不了就把人全挡在外面。
+   */
+  if (storeConfigured() && (await tooMany('pwchange', callerId(req), 20, 3600))) {
+    return send(res, 429, { error: 'tooMany' });
+  }
 
   const account = await loadAccount(address);
   // Same answer for "no such account" as for "wrong password", so this
