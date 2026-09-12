@@ -846,12 +846,12 @@ export function createTriangleBigGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+      function findStuckGroups(): Cell[][] {
         // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
         // 反面自己只靠整线得分，这副棋盘最短的整线是 3 枚（见 findWholeLineBonuses）。
-        return findStuckColorGroups(liveTiles(), clearedDotColors, minMatchSize, MIN_LINE_BONUS_LEN);
+        return findStuckColorGroups(liveTiles(), minMatchSize, MIN_LINE_BONUS_LEN);
       }
 
       function countRemainingTiles() {

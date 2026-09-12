@@ -66,7 +66,6 @@ export interface LiveTile {
  */
 export function findStuckColorGroups(
   liveTiles: LiveTile[],
-  _clearedDotColors: ReadonlySet<number>,
   /** 这一局最少几枚才可能算分。不给就是各玩法自己那套图案的门槛（4 枚）。 */
   minMatch: number = MIN_MATCH_SIZE,
   /**

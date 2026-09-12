@@ -878,9 +878,9 @@ export function createTriangleGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+      function findStuckGroups(): Cell[][] {
         // 反面自己只靠整线得分，这副棋盘最短的整线是 3 枚（见 findWholeLineBonuses）。
-        return findStuckColorGroups(liveTiles(), clearedDotColors, undefined, MIN_LINE_BONUS_LEN);
+        return findStuckColorGroups(liveTiles(), undefined, MIN_LINE_BONUS_LEN);
       }
 
       function countRemainingTiles() {

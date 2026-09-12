@@ -615,14 +615,14 @@ export function createSquareGame(): ShapeGame {
         return live;
       }
 
-      function findStuckGroups(clearedDotColors: ReadonlySet<number>): Cell[][] {
+      function findStuckGroups(): Cell[][] {
         // 无限反转：反面还会翻回来，「再也翻不动」这件事不成立。
         if (flipMode) return [];
         // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
         // 反面自己只靠整行 / 整列得分，而行列会随消除变短——门槛跟着当前较短的边长走。
-        return findStuckColorGroups(liveTiles(), clearedDotColors, minMatchSize, Math.min(rows, cols));
+        return findStuckColorGroups(liveTiles(), minMatchSize, Math.min(rows, cols));
       }
 
       function countRemainingTiles() {

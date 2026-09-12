@@ -168,13 +168,6 @@ export interface CascadeStep {
   weight: number;
   /** What paid out, for the gain bubble ("4连", "整线"…). */
   label: string;
-  /**
-   * For a whole-line clear: the dot colour each cleared line was made of —
-   * read while its tiles are still in place, since a shape whose bonus
-   * removes cells has already dropped them by the time this step is handed
-   * back. The stalemate rule needs these (see stalemate.ts).
-   */
-  clearedDotColors: number[];
   /** Applies this step's mutation: flips matchGroups' cells to their dot face (a no-op for a bonus step, whose cells are already dot-faced and already removed by the time next() returns). Call once, after showing the pre-flip highlight, before requesting the next step. */
   commit(): void;
 }
@@ -262,7 +255,6 @@ export function createCascadeStepper(
       // line (a new layout's diagonal, say) is worth more than a shorter one
       // rather than every shape's line being flatly worth the same bonus.
       const points = lineBonuses.reduce((sum, cells) => sum + cells.length ** 2, 0);
-      const clearedDotColors = lineBonuses.map(([[r, c]]) => cfg.tileAt(r, c).dotColor);
       cfg.onLineBonus(lineBonuses);
       if (cfg.resetMaskOnLineBonus) mask = null;
       if (cfg.isTerminalAfterLineBonus?.()) terminal = true;
@@ -272,7 +264,6 @@ export function createCascadeStepper(
         lineBonusGroups: lineBonuses,
         weight: 3 * lineBonuses.length,
         label: labels.line,
-        clearedDotColors,
         commit() {},
       };
     }
@@ -304,7 +295,6 @@ export function createCascadeStepper(
         // A pattern that grew past its 4-cell seed is worth two actions.
         weight: matches.reduce((sum, m) => sum + (m.cells.length > 4 ? 2 : 1), 0),
         label: matches.map((m) => m.label ?? labels.pattern).join(' · '),
-        clearedDotColors: [],
         commit() {
           for (const key of toFlip) {
             const [r, c] = key.split(',').map(Number);

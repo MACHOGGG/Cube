@@ -2,7 +2,7 @@ import type { ShellRefs } from '../ui/gameShell';
 import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { createTimer, formatClock } from './timer';
-import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, type CascadeConfig } from './scoring';
+import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
 import { trackGameStart, trackGameEnd, trackShare } from './analytics';
@@ -193,7 +193,7 @@ export interface GameControllerHooks {
    * cells, shown to the player before settling. Omit, or return [], if the
    * shape doesn't implement stalemate detection.
    */
-  findStuckGroups?(clearedDotColors: ReadonlySet<number>): Cell[][];
+  findStuckGroups?(): Cell[][];
   /**
    * Tells the shape which cells (if any) to draw the red "stuck" glow
    * around on its next render(); null clears it. Only meaningful together
@@ -311,9 +311,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     heldBeat = { run: pendingBeat.run, ms: Math.max(0, pendingBeat.ms - (Date.now() - pendingBeat.at)) };
     pendingBeat = null;
   }
-  // Every dot colour a whole-line clear has drained this run — the first of
-  // the two stalemate conditions (see stalemate.ts).
-  let clearedDotColors = new Set<number>();
   // Running split of where the score came from, for the end-of-run breakdown.
   let patternPoints = 0;
   let linePoints = 0;
@@ -417,7 +414,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     flipLedger?.reset();
     scoreReel.reset();
     perf.reset();
-    clearedDotColors = new Set();
     patternPoints = 0;
     linePoints = 0;
     comboBonusPoints = 0;
@@ -785,7 +781,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         endGame('全部方块已翻成点面');
         return;
       }
-      updateStuckState(hooks.findStuckGroups?.(clearedDotColors) ?? []);
+      updateStuckState(hooks.findStuckGroups?.() ?? []);
       resolving = false;
     };
 
@@ -798,7 +794,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       }
       totalRaw += s.points;
       moveWeight += s.weight;
-      for (const dot of s.clearedDotColors) clearedDotColors.add(dot);
       // Rounded, so the score stays a whole number. The streak multipliers
       // are ×1/×1.5/×2/×2.5 and the cascade factor compounds on top, so the
       // raw product lands on halves — and a fractional score is wrong twice
@@ -809,6 +804,22 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       const delta = hooks.flip
         ? flipStreakDelta(s.points, flipChain)
         : Math.round(s.points * multiplier * comboMult);
+      /**
+       * 加分气泡上印的那个倍率——这一步真正用的那一个。
+       *
+       * 无限反转走的是另一套公式（1.5^(n−1)，见 scoring.ts 的
+       * flipStreakDelta），可气泡上从前印的一直是基础玩法那两个因子
+       * （multiplier × tierComboMult），而这一局里它们一个都没参与计算。于是
+       * 屏幕上的数字和跳动的分数对不上：一个 4 分的图案连续第 3 次得分实际加
+       * 9 分，气泡却写「×2」（照它算该是 8）；第 5 次实际加 20，气泡写「×3」。
+       * 玩家盯着倍率心算，永远算不出屏幕上那个数。
+       *
+       * 在这里算、而不是在下面 proceed 里：flipChain 下一行就自增了，到那时
+       * 已经是**下一次**的连击数（同 tierComboMult 那一处的道理）。
+       */
+      const shownMult = hooks.flip
+        ? FLIP_STREAK_BASE ** Math.max(0, flipChain)
+        : multiplier * comboMult;
       if (hooks.flip) flipChain++;
       // Split for the end-of-run breakdown: the pattern's own points, the
       // whole-line bonus, and everything the streak/chain multipliers added.
@@ -883,7 +894,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0) {
           score += delta;
-          const mult = multiplier * tierComboMult;
+          // shownMult 是这一步实打实用的那个因子（两种玩法各一套，见上面）。
+          // 1.5^n 会长出一串小数（3.375、5.0625……），印一位就够——气泡是拿
+          // 来说「越连越多」的，不是拿来对账的。
+          const mult = Math.round(shownMult * 10) / 10;
           scoreReel.showGain(delta, mult > 1 ? `${s.label} ×${mult % 1 ? mult.toFixed(1) : mult}` : s.label);
           scoreReel.setValue(score);
           punch(refs.scoreReelEl);

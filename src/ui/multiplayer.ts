@@ -91,6 +91,19 @@ export interface MultiplayerHandlers {
   onMatchStart: (match: MatchStart) => void;
   /** Opening a room is the subscriber's — this shows them what that is. */
   onNeedGenius: () => void;
+  /**
+   * 服务器不认这台设备了（403 geniusOnly）：把**登录**那扇窗打开。
+   *
+   * 和 onNeedGenius 是两件事，必须分开走。这个人多半已经付过钱了，缺的只是
+   * 在这台设备上再登一次；而 onNeedGenius 那条路第一句就是「他是不是天
+   * 才」——本机缓存这会儿仍然以为是，于是打开的是《账户》窗：里面只有改密
+   * 码、换邮箱、退出登录，唯独没有《登录》。他看着一扇写着自己订阅到期日的
+   * 窗，找不到任何入口，得自己想到先退出再登一次。
+   *
+   * 世界排行榜遇到同一件事走的就是这条路（ui/leaderboard.ts 的 onReLogin），
+   * 这儿照抄。
+   */
+  onSessionGone: () => void;
   /** The host is off to the home page to choose what everyone plays. */
   onPickMode: (code: string) => void;
   /** The room is closed: hand over the standings for the closing card. */
@@ -446,7 +459,10 @@ export function renderMultiplayerPage(
          */
         if (made.reason === 'geniusOnly') {
           msg.textContent = s.sessionGone;
-          handlers.onNeedGenius();
+          // 开的是**登录**窗，不是「办会员」那条路：本机缓存这会儿还以为自己
+          // 是天才，那条路会因此拐进《账户》窗——里面没有登录入口（见
+          // MultiplayerHandlers 的 onSessionGone）。
+          handlers.onSessionGone();
           return;
         }
         return void (msg.textContent = errorText(made.reason, lang));

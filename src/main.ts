@@ -826,6 +826,11 @@ function showMultiplayer() {
       onMatchStart: startMultiplayerRun,
       // Opening a room is the subscriber's; buying it lands back here.
       onNeedGenius: () => openGeniusWindow(currentLang, showMultiplayer),
+      // 服务器答「不认这台设备」：直接开登录窗。和上面那条不是一回事——这个
+      // 人多半已经付过钱，缺的只是重登一次；走 openGeniusWindow 会因为本机缓
+      // 存还以为自己是天才而拐进《账户》窗，那里没有登录入口。世界排行榜那
+      // 一处（onReLogin）走的就是这一句。
+      onSessionGone: () => openAuthWindow(currentLang, 'login', showMultiplayer),
       // Off to the home page, where all eight boards live with their icons.
       onPickMode: (code) => {
         setPickingForRoom(code);
@@ -1146,6 +1151,21 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
       showMenu();
     });
   const mountNow = () => {
+    /**
+     * 单人局一律从真随机发牌——把上一次留下的共享种子清掉。
+     *
+     * 小屋的倒数那一屏会种一条全屋共用的随机流（'相同' 那一档要全屋抽到同一
+     * 对图案，见 ui/multiplayer.ts）。种下之后只有一处会清：真的开了那一局、
+     * 而且那一局拆掉的时候（startMultiplayerRun 的 activeDestroy）。中途退出、
+     * 断线、这一局没赶上的人，那条流就一直钉在那儿——他接下来打的每一局单人
+     * 发的都是同一副牌，而且同一间屋里两个这样退出的人摸到的牌一模一样。刷新
+     * 页面才恢复正常。
+     *
+     * 清在这儿而不是清在小屋那边：所有单人局都从这道门进来（等待页的练习盘
+     * 另有一句，见 onPractice），一句话管住全部，也不必去操心小屋那几屏的拆
+     * 除顺序会不会反过来把真局的种子抹掉。
+     */
+    clearSeed();
     activeDestroy = game.mount(root, backFn, fullOpts);
     gameInProgress = true;
   };
