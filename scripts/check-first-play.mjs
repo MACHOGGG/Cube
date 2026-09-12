@@ -9,8 +9,12 @@
  *   · 软锁——一局都没打过时，主菜单上只有《基础方块》和《基础小球》按得开；
  *     按到别的卡，那两张抖一下、光更亮一档，靠下的还会冒一个上滑箭头。打完
  *     第一局锁就永远撤掉。
- *   · 教学条——他玩的第一个基础玩法从第 1 条讲起，五段进度（第 6 条挪去了结
- *     算页），第 1 条说的是「色块得分后会变成星星」。
+ *   · 教学条——他玩的第一个基础玩法从第 1 条讲起，四段进度，第 1 条说的是
+ *     「色块得分后会变成星星」。
+ *
+ *     四段不是五段：六条规则里，第 6 条（综合得分）挪去了结算页，第 1、2 条
+ *     按玩家的要求并成了一步（「第一第二条教学内容在进度条上合并为一条」，
+ *     下面那条断言验的就是这一步摆着两条）。进度条一段一步，不是一段一条。
  *   · 三角——得分变成星星之后，那圈灰色圆角边框一直在（和消掉之后的空三角
  *     同一圈）。
  *
@@ -67,7 +71,7 @@ const coach = await page.evaluate(() => ({
   segs: document.querySelectorAll('.coach-seg').length,
   rows: [...document.querySelectorAll('.coach-row:not([hidden]) .coach-text')].map((e) => e.textContent.trim()),
 }));
-check('教学条：五段进度（第 6 条挪去结算页了）', coach.segs === 5, String(coach.segs));
+check('教学条：四段进度（一段一步，不是一段一条）', coach.segs === 4, String(coach.segs));
 check('第 1 步摆的是前两条', coach.rows.length === 2, JSON.stringify(coach.rows.map((t) => t.slice(0, 12))));
 check('第 1 条讲的是色块变星星', (coach.rows[0] || '').includes('变成星星'), coach.rows[0]);
 
