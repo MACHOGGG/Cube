@@ -3579,8 +3579,23 @@ body.is-room-host::after {
   position: relative; aspect-ratio: 1; flex: 0 0 auto;
   width: min(calc((100% - (var(--marks, 1) - 1) * var(--mark-gap)) / var(--marks, 1)), 46vh, 260px);
 }
-/* V 形那张图是 2:1 的宽画布，单独占一行才不至于把旁边的挤扁。 */
-.start-mark--wide { flex-basis: 100%; width: min(80vw, 74vh, 400px); aspect-ratio: 194 / 100; margin: 0 auto; }
+/* V 形那张图是 2:1 的宽画布，单独占一行才不至于把旁边的挤扁。
+   「占一行」和「多大」必须拆成两层写。原先两件事写在同一个盒子上——
+   `flex-basis: 100%` 负责换行，`width: min(…, 400px)` 负责封顶——可是在弹性
+   行里主轴尺寸由 flex-basis 说了算，width 根本没参与，那个上限于是一直是
+   摆设：1280 的窗口里这张图被撑到 1240px 宽，按 194:100 算出 639px 高，比它
+   那半屏高出一倍，于是往上溢出屏幕外、往下压住倒数窗口。手机上碰巧没露馅
+   ——一行本来就只有 350px，比上限还窄，所以只有电脑端看得见。
+   现在外面那层只管占满一行（纯为换行），真正的画布在 .start-mark-art 上，
+   尺寸由它自己说了算。100% 而不是 80vw：那才是手机上现在的实际宽度，换成
+   80vw 会把手机端一起改小。 */
+.start-mark--wide {
+  flex-basis: 100%; width: auto; height: auto; aspect-ratio: auto; margin: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.start-mark--wide .start-mark-art {
+  width: min(100%, 74vh, 400px); height: auto; aspect-ratio: 194 / 100;
+}
 .start-mark-art { display: block; width: 100%; height: 100%; }
 .start-mark > svg, .start-mark-art > svg { width: 100%; height: 100%; display: block; }
 
@@ -3636,7 +3651,7 @@ body.is-room-host::after {
   .start-emblem, .start-count { flex: 0 0 auto; width: auto; }
   .start-marks { --mark-gap: 10px; width: auto; max-width: 62vw; }
   .start-mark { width: min(calc((62vw - (var(--marks, 1) - 1) * var(--mark-gap)) / var(--marks, 1)), 60vh, 220px); }
-  .start-mark--wide { width: min(46vw, 92vh, 340px); }
+  .start-mark--wide .start-mark-art { width: min(46vw, 92vh, 340px); }
   .cd-window { width: min(20vw, 46vh, 150px); }
   .cd-digit { font-size: min(14vw, 32vh, 108px); }
   .start-actions { flex: 0 0 auto; flex-direction: column; gap: 14px; padding-top: 0; }
