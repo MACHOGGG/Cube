@@ -182,8 +182,15 @@ const code = await openRoom(A.page, '甲');
     .catch(() => false);
   check('屋主散场，有权限的客人原地转成单人接着打', solo);
 
-  // 打完这一局单人。转单人之后《完成》是单人那一颗，不再问「交卷吗」。
-  await C.page.click('#finishBtn');
+  // 打完这一局单人。
+  //
+  // 走的是《暂停》→《结束这一局》，不是《完成》：转单人那一下把底排换成了单
+  // 人那一套（见 ui/scoreboard.ts），《完成》《离开小屋》和那颗小的《色盲友
+  // 好》一起撤掉，只留一颗《暂停》，那三件事搬进了暂停面板。这条门原先点的
+  // 是 `#finishBtn`，那是底排改版（暂停面板收编四项）之前的按钮——改版之后
+  // 它在这一屏根本不存在，于是这条门一直红着，红的却不是被测的那件事。
+  await C.page.click('#stopBtn');
+  await C.page.click('#pauseFinishBtn');
   const ended = await C.page
     .waitForFunction(() => document.querySelector('#endOverlay')?.classList.contains('show'), { timeout: 20000 })
     .then(() => true)
@@ -213,9 +220,13 @@ const code = await openRoom(A.page, '甲');
   }
 
   // 再开一局纯单人：小屋那一块不该跟着冒出来（那份底开局就该清掉）。
+  //
+  // 《再来》重开的是棋盘，不重画底下那一排——转单人那一下撤掉的《完成》不会
+  // 自己回来，所以这一局也走《暂停》→《结束这一局》（同上面那一段）。
   await C.page.evaluate(() => document.getElementById('restartBtn')?.click());
   await boardUp(C.page);
-  await C.page.click('#finishBtn');
+  await C.page.click('#stopBtn');
+  await C.page.click('#pauseFinishBtn');
   await C.page
     .waitForFunction(() => document.querySelector('#endOverlay')?.classList.contains('show'), { timeout: 20000 })
     .catch(() => {});

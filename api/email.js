@@ -71,10 +71,10 @@ const MAIL = {
       `码没输进去之前什么都不会变。`,
   },
   zhHant: {
-    subject: 'Slides — 確認新信箱 / confirm your new address',
+    subject: 'Slides — 確認新的電子郵件 / confirm your new address',
     body: (c) =>
       `你的 Slides 確認碼是 ${c}，30 分鐘內有效。\n` +
-      `輸入它就把帳戶換到這個信箱。如果這不是你本人操作，忽略這封郵件即可——\n` +
+      `輸入它就把帳戶換到這個電子郵件。如果這不是你本人操作，忽略這封郵件即可——\n` +
       `碼還沒輸進去之前什麼都不會變。`,
   },
   fr: {
