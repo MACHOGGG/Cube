@@ -1,10 +1,22 @@
 /**
  * Where every board in the game gets its randomness.
  *
- * `shuffle` is the single source: all eight modes deal through it, and the
- * triangle boards' balanced deal (engine/orientationDeal.ts) does too. The
- * only other Math.random in the app scatters particles in engine/juice.ts,
- * which is decoration and touches nothing about the board.
+ * `shuffle` is the single source *for what ends up on a board*: all eight
+ * modes deal through it, and the triangle boards' balanced deal
+ * (engine/orientationDeal.ts) does too.
+ *
+ * Every other Math.random in the app is outside that: decoration that never
+ * touches a board — the score particles (engine/juice.ts), a player's avatar
+ * shape and hue (engine/room.ts's randomAvatar) and the nudge-the-host rain
+ * (ui/titleRain.ts) — plus the slot machine's 「各抽各的」 draw, which passes
+ * Math.random to targets.ts's drawPair *on purpose* so that档 lands on a
+ * different pair for each player (the 「大家一样」档 passes the seeded stream
+ * instead; see main.ts). None of them can pull on the stream below, so none
+ * of them can make two devices deal different boards.
+ *
+ * 这一段从前写的是「全站只有一处别的地方用 Math.random」——那时候只有粒子那
+ * 一处。后来又多了头像、催屋主的雨和老虎机的「各抽各的」，注释没跟上。以后
+ * 有人来查「随机种子会不会被意外污染」，照那句话找会漏掉三条路。
  *
  * That single funnel is what makes a shared game possible. Seed this module
  * and every player's device deals the identical board — same colours in the

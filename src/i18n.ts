@@ -79,7 +79,9 @@ export interface I18nStrings {
   back: string;
   // ---- account page ----
   /**
-   * 《账户》——已登录的人点开的那一扇窗，抬头就这两个字。
+   * 《账号》——已登录的人点开的那一扇窗，抬头就这两个字。全站只用「账号」
+   * 这一个词（「账户」从前在这儿和几处混着用，指的是同一件事）；只有
+   * {store} 那两句说的是苹果／谷歌自己的账号，不是我们这儿的。
    *
    * 不写「你已是 Slides 天才」：登录和有权限是两回事（玩家原话：「登录是登
    * 录……登录不代表有权限」）。一个订阅到期的人照样登得进来看自己的战绩、换
@@ -166,7 +168,7 @@ export interface I18nStrings {
   /** 内部码换来的东西，绑到一个邮箱上，好换设备时取回。 */
   bindTitle: string;
   bindHint: string;
-  /** 内部码兑换后的绑定窗：这一颗是「以后再说」；状态窗里那一颗是「绑定到账户」。 */
+  /** 内部码兑换后的绑定窗：这一颗是「以后再说」；状态窗里那一颗是「绑定到账号」。 */
   bindLater: string;
   bindNow: string;
   bindTaken: string;
@@ -213,11 +215,11 @@ export interface I18nStrings {
   pwReset: string;
   /** 登录成功，但这个账号此刻没有在续的订阅。同样是「哪一半成了」。 */
   signedInNoSub: string;
-  // ---- 已登录：《账户》那一扇窗，以及窗里那两件事 ----
+  // ---- 已登录：《账号》那一扇窗，以及窗里那两件事 ----
   /** 窗里那一段小标签：底下几行都是「对这个账号做的事」。 */
   accountActions: string;
-  /** 客服信箱那一行。收单方的要求是它「在公开网站上、也在用户自己的账户里」
-   *  都看得见——不是法务文档第三段里的一个地址，是他打开账户就在那儿的一行。 */
+  /** 客服信箱那一行。收单方的要求是它「在公开网站上、也在用户自己的账号里」
+   *  都看得见——不是法务文档第三段里的一个地址，是他打开账号就在那儿的一行。 */
   supportLine: string;
   /** 付款前那一句：钱是谁收的、对账单上会写谁。三个渠道都有一个 merchant of
    *  record（网页是 Creem，应用里是 App Store / Google Play），所以这句话
@@ -839,7 +841,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restoreBtn: 'Restaurer l’achat',
     signInBtn: 'Se connecter',
     signOutBtn: 'Se déconnecter',
-    emailLabel: 'Courriel',
+    emailLabel: 'E-mail',
     emailPlaceholder: 'vous@exemple.com',
     emailInvalid: 'Cette adresse ne semble pas valide.',
     registerIsSubscribe: 'S’inscrire, c’est s’abonner. Payez d’abord, puis choisissez un code secret de six caractères pour cette adresse — à eux deux, ils rouvrent votre abonnement sur n’importe quel appareil.',
@@ -864,7 +866,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: 'Exactement six lettres ou chiffres.',
     newsOptIn: 'M’envoyer les nouveautés Slides par e-mail. Désinscription à tout moment.',
     bindTitle: 'Rattachez-le à une adresse',
-    bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse courriel et un code secret et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
+    bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse e-mail et un code secret et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
     bindLater: 'Plus tard',
     bindNow: 'Rattacher à une adresse',
     bindTaken: 'Cette adresse a déjà un compte. Utilisez-en une autre, ou écrivez-nous.',
@@ -889,13 +891,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     redeemBadCode: 'Ce code Génie n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
     pwLocked: 'Trop d’essais. Se rouvre dans environ {hours} h.',
-    pwBlocked: 'Verrouillé après trop d’essais. Rouvrez-le par courriel.',
+    pwBlocked: 'Verrouillé après trop d’essais. Rouvrez-le par e-mail.',
     unlockTitle: 'Réinitialiser le code secret',
     forgotPw: 'Code secret oublié ?',
     unlockIntro: 'Nous envoyons un code à six chiffres à votre adresse. Il permet de définir un nouveau code secret.',
     unlockSendBtn: 'Envoyer le code',
     unlockSent: 'Envoyé. Le code est valable 30 minutes.',
-    unlockCodeLabel: 'Le code à 6 chiffres reçu par courriel',
+    unlockCodeLabel: 'Le code à 6 chiffres reçu par e-mail',
     unlockNewPw: 'Nouveau code secret (6 caractères)',
     pwReset: 'Votre nouveau code secret est enregistré — connectez-vous avec.',
     signedInNoSub: 'Connecté. Ce compte n’a pas d’abonnement en cours.',
@@ -917,7 +919,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockConfirmBtn: 'Déverrouiller et enregistrer',
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
-    unlockNoMail: 'Nous ne pouvons pas encore envoyer de courriel automatiquement. Écrivez à {email} et nous le rouvrirons.',
+    unlockNoMail: 'Nous ne pouvons pas encore envoyer d’e-mail automatiquement. Écrivez à {email} et nous le rouvrirons.',
     mpTitle: 'Multijoueur',
     mpIntro: 'Montez une petite salle, un seul et même plateau, et faites la course.',
     mpCreate: 'Ouvrir une salle',
@@ -1121,7 +1123,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     homeBtn: '主頁',
     rotateHint: '這個棋盤很寬，把手機橫過來玩',
     back: '返回',
-    accountTitle: '帳戶',
+    accountTitle: '帳號',
     tabRegister: '註冊',
     tabLogin: '登入',
     loginGateway: '登入',
@@ -1168,7 +1170,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindTitle: '綁定到一個電子郵件',
     bindHint: '內部碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
     bindLater: '以後再說',
-    bindNow: '綁定到帳戶',
+    bindNow: '綁定到帳號',
     bindTaken: '這個電子郵件已經有帳號了。換一個，或者寫信給我們。',
     redeemCodePlaceholder: '例如 K7M2QD',
     codeExpired: '這個內部碼已經過了使用期限。',
@@ -1201,7 +1203,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockNewPw: '新密碼（6 位字元）',
     pwReset: '新密碼已經設好，用它登入就行。',
     signedInNoSub: '已登入。這個帳號目前沒有在續的訂閱。',
-    accountActions: '帳戶設定',
+    accountActions: '帳號設定',
     supportLine: '有問題、要退款，什麼事都可以寫信到 {email}。',
     merchantNote: '款項由 {store} 以商戶身分收取，對帳單上寫的也是它。',
     changePwRow: '更換密碼',
@@ -1211,7 +1213,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwChanged: '密碼換好了。其他裝置要用新密碼重新登入。',
     newEmailLabel: '新的電子郵件',
     emailCodeSent: '驗證碼已經寄到新的電子郵件，填進來就換好。',
-    emailChanged: '換好了——帳戶已經在新的電子郵件底下。',
+    emailChanged: '換好了——帳號已經在新的電子郵件底下。',
     emailTaken: '這個電子郵件已經有帳號了。',
     emailSame: '這就是你現在用的電子郵件。',
     confirmBtn: '確認',
@@ -1321,7 +1323,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: '戰績卡片',
     shareHint: '長按或右鍵圖片即可儲存',
     closeBtn: '關閉',
-    shellStartBody: '拖動整條線拼出同色圖案，點擊開始生成一局新的方糖陣勢。',
+    shellStartBody: '拖動整條線拼出同色圖案，點擊開始生成一局新的棋盤。',
     taglineRowCol: '拖動一整行或一整列 · 拼出同色圖案',
     taglineThreeWay: '沿水平、左斜或右斜方向拖動整條線 · 拼出同色圖案',
     taglineDiagonal: '拖動水平或斜線方向的整條線 · 拼出同色圖案',
@@ -1423,7 +1425,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     homeBtn: '主页',
     rotateHint: '这个棋盘很宽，把手机横过来玩',
     back: '返回',
-    accountTitle: '账户',
+    accountTitle: '账号',
     tabRegister: '注册',
     tabLogin: '登录',
     loginGateway: '登录',
@@ -1470,7 +1472,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindTitle: '绑定到一个邮箱',
     bindHint: '内部码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
     bindLater: '以后再说',
-    bindNow: '绑定到账户',
+    bindNow: '绑定到账号',
     bindTaken: '这个邮箱已经有账号了。换一个，或者写信给我们。',
     redeemCodePlaceholder: '例如 K7M2QD',
     codeExpired: '这个内部码已经过了使用期限。',
@@ -1503,7 +1505,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockNewPw: '新密码（6 位字符）',
     pwReset: '新密码已经设好，用它登录就行。',
     signedInNoSub: '已登录。这个账号目前没有在续的订阅。',
-    accountActions: '账户设置',
+    accountActions: '账号设置',
     supportLine: '有问题、要退款，什么事都可以写信到 {email}。',
     merchantNote: '款项由 {store} 以商户身份收取，对账单上写的也是它。',
     changePwRow: '更换密码',
@@ -1513,7 +1515,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwChanged: '密码换好了。其他设备要用新密码重新登录。',
     newEmailLabel: '新的邮箱',
     emailCodeSent: '验证码已经寄到新邮箱，填进来就换好。',
-    emailChanged: '换好了——账户已经在新的邮箱底下。',
+    emailChanged: '换好了——账号已经在新的邮箱底下。',
     emailTaken: '这个邮箱已经有账号了。',
     emailSame: '这就是你现在用的邮箱。',
     confirmBtn: '确认',
@@ -1623,7 +1625,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareImgAlt: '战绩卡片',
     shareHint: '长按或右键图片即可保存',
     closeBtn: '关闭',
-    shellStartBody: '拖动整条线拼出同色图案，点击开始生成一局新的方糖阵势。',
+    shellStartBody: '拖动整条线拼出同色图案，点击开始生成一局新的棋盘。',
     taglineRowCol: '拖动一整行或一整列 · 拼出同色图案',
     taglineThreeWay: '沿水平、左斜或右斜方向拖动整条线 · 拼出同色图案',
     taglineDiagonal: '拖动水平或斜线方向的整条线 · 拼出同色图案',
