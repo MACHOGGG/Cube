@@ -122,7 +122,10 @@ const arrowUp = (c: number): string =>
   `<line x1="0" y1="34" x2="0" y2="4" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-dasharray="9 8"/>` +
   `<path d="M-9 -2 L0 -20 L9 -2 Z" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></g></svg>`;
 
-const checksRow0 = check(0, 0) + check(1, 0) + check(2, 0) + check(3, 0);
+/** 横着四颗对勾，从第 `from` 格起——得分的是哪四颗就盖哪四颗。 */
+const checksAt = (from: number): string =>
+  check(from, 0) + check(from + 1, 0) + check(from + 2, 0) + check(from + 3, 0);
+const checksRow0 = checksAt(0);
 
 /** 第 5 条最后出的那个「完成」：白底绿勾。 */
 const endMark =
@@ -177,15 +180,31 @@ const ballClears = (dot: string): string =>
 const STAG = 'ra-stag';
 
 /**
- * 小球那一版的滑动窗口：横着来。
+ * 小球那一版的滑动窗口：横着来，而且**整行一起走**。
  *
- * 方块那一版滑的是一列（窗口竖着盖两格，里面三枚上下叠着往上走）。小球换
- * 成横的：窗口横盖两格，里面三颗左右排着往左走一格——新的一颗从右边补进
- * 来，正好落在那一行的第 4 个位置上，凑满四连。棋盘上小球本来就是整行滑，
- * 竖着滑那一套在交错排布里也对不上格。
+ * 传进来的是这一行**滑完之后**该有的样子（六颗，从左到右）。窗口盖住整整
+ * 一行，条子比它多一颗：开头先摆一份 `after` 的最后那颗，整条向左滑一格，
+ * 于是「从左边挤出去的」和「从右边补回来的」看着就是同一颗——棋盘上滑一行
+ * 就是这么回事。
+ *
+ * 原先这个窗口只盖两格、条子只有三颗：一行六颗小球，滑的只有中间那两颗，
+ * 另外四颗一动不动，紧接着四颗打上勾得分。玩家看见的是「一行里的几颗小球
+ * 自己滑动了，剩下的不滑动就得分了」——那不是这个游戏的规矩。方块那一版没
+ * 踩到：它的窗口竖着盖两格，而那块小棋盘本来就只有两行，两格正好是整整一
+ * 列，所以它一直是整条线在走。
+ *
+ * 还有一件跟着改的：既然整行一起走，行内相邻的四颗滑之前就已经相邻了，靠
+ * 滑动是凑不出来的。所以那四颗改成**跨着接缝**凑——滑之前三颗挤在右头、一
+ * 颗落在最左边，滑一格之后那一颗绕回右边，四连才成立。补位这件事于是有了
+ * 实实在在的用处，不再只是个摆设。
  */
-function slidingRow(a: string, b: string, c: string): string {
-  return `<span class="ra-hwin" style="--c:2;--r:0"><span class="ra-hstrip">${a}${b}${c}</span></span>`;
+function slidingRow(after: readonly string[]): string {
+  const n = after.length;
+  const strip = after[n - 1] + after.join('');
+  return (
+    `<span class="ra-hwin" style="--c:0;--r:0;--w:${n};--n:${n + 1}">` +
+    `<span class="ra-hstrip">${strip}</span></span>`
+  );
 }
 
 /** 白箭头，横着的，指向左边（那一行往左滑）。 */
@@ -210,21 +229,30 @@ const ballRow2 = (cls = STAG): string =>
  */
 function ballArt(): string[] {
   const b = (inner: string) => board(inner, 'ra-board--stag', 6);
+  // 上面那一行整条都在窗口里滑（slidingRow），所以格子里摆的全是占位——真正
+  // 画出来的六颗在窗口里面。
+  const blankRow = blank + blank + blank + blank + blank + blank;
   return [
-    // 2. 同色凑成图案：那一行往左滑一格，橙色补进第 4 颗 → 对勾 → 四颗翻面。
+    // 2. 同色凑成图案：整行往左滑一格，最左边那颗橙的绕回右头，和原先挤在右
+    //    头的三颗凑成四连 → 对勾 → 四颗翻面（反面各是不同的颜色）。
     b(
-      ball(O, R, 'ra-flip') + ball(O, G, 'ra-flip') + blank + blank + ball(B, T) + ball(M, Y) +
-        ballRow2() +
-        slidingRow(ball(B, G), ball(O, Y, 'ra-flip'), ball(O, M, 'ra-flip')) +
-        arrowLeft(2, 0) + checksRow0,
+      blankRow + ballRow2() +
+        slidingRow([
+          ball(B, T), ball(M, Y),
+          ball(O, R, 'ra-flip'), ball(O, G, 'ra-flip'), ball(O, Y, 'ra-flip'), ball(O, M, 'ra-flip'),
+        ]) +
+        arrowLeft(2, 0) + checksAt(2),
     ),
-    // 3. 反面和正面同色：前两颗已经是绿点的反面，和滑进来的两颗绿正面凑成一
-    //    行照样得分；只有正面那两颗翻过去。
+    // 3. 反面和正面同色：两颗绿点的反面，和两颗绿正面凑成一行照样得分；只有
+    //    正面那两颗翻过去。滑法和上一条一样，绕回右头的是那颗绿正面。
     b(
-      ball(G, G, 'ra-back') + ball(G, G, 'ra-back') + blank + blank + ball(B, T) + ball(M, Y) +
-        ballRow2() +
-        slidingRow(ball(B, O), ball(G, R, 'ra-flip'), ball(G, T, 'ra-flip')) +
-        arrowLeft(2, 0) + checksRow0,
+      blankRow + ballRow2() +
+        slidingRow([
+          ball(B, O), ball(M, Y),
+          ball(G, G, 'ra-back'), ball(G, G, 'ra-back'),
+          ball(G, R, 'ra-flip'), ball(G, T, 'ra-flip'),
+        ]) +
+        arrowLeft(2, 0) + checksAt(2),
     ),
     // 4. 反面同色连成一行：四颗蓝点排在一行 → 对勾 → 四颗淡出，底下露出空球。
     b(

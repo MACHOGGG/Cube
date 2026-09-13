@@ -4193,19 +4193,23 @@ body.is-room-host::after {
 .ra-cell > .ra-void,
 .ra-cell > .ra-gone { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .ra-void > svg { display: block; width: 100%; height: 100%; }
-/* 横着滑的窗口：盖住两格，里面三颗左右排着，整条向左滑一格，新的一颗从右
-   边补进来。小球在棋盘上滑的就是整行，竖着滑那一套在交错排布里对不上格。 */
+/* 横着滑的窗口：盖住**整整一行**（--w 格），里面比它多一颗（--n 格）左右排
+   着，整条向左滑一格，挤出左边的那颗从右边补回来。小球在棋盘上滑的就是整
+   行，竖着滑那一套在交错排布里对不上格。
+   这两个格数从前是写死的 2 和 3。一行六颗，窗口只盖两格，于是滑的只有中间
+   那两颗，另外四颗一动不动、紧接着四颗打勾得分——玩家看见的是「一行里的几
+   颗小球自己滑动了，剩下的不滑动就得分了」。 */
 .ra-hwin {
   position: absolute; overflow: hidden;
-  width: calc(2em + var(--gap)); height: 1em;
+  width: calc(var(--w, 2) * (1em + var(--gap)) - var(--gap)); height: 1em;
   left: calc(var(--pad) + var(--c) * (1em + var(--gap)));
   top: calc(var(--pad) + var(--r) * (1em + var(--gap)));
 }
-/* 宽度得写死成三颗的宽度：窗口只有两格宽，而这一条是块级的弹性盒——不写死
-   它就跟着窗口只有两格，三颗棋子被挤成两格，滑出来的是三个瘪掉的形状。竖着
-   那一支（.ra-strip）没这毛病：它的高度本来就是内容撑的。 */
+/* 宽度得自己写清楚：这一条是块级的弹性盒，不写死它就跟着窗口那么宽，多出
+   来的那颗被挤进去，滑出来的是一排瘪掉的形状。竖着那一支（.ra-strip）没这
+   毛病：它的高度本来就是内容撑的。 */
 .ra-hstrip {
-  display: flex; width: calc(3em + 2 * var(--gap)); gap: var(--gap);
+  display: flex; width: calc(var(--n, 3) * (1em + var(--gap)) - var(--gap)); gap: var(--gap);
   animation: ra-hslide var(--T) ease-in-out infinite;
 }
 .ra-hstrip > * { flex: none; }
