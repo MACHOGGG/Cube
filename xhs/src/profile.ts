@@ -20,8 +20,9 @@ import { loadAllRuns, totalScoreOf, type StoredRun } from '../../src/engine/pers
 import { formatRunTime, modeLabel } from '../../src/engine/runRecord';
 import { colorblindOn, setColorblind } from '../../src/engine/palettePref';
 import { shapeName } from '../../src/ui/shapeLabels';
-import { CTL_BACK } from '../../src/ui/ctlIcons';
+import { openCenterPicker } from '../../src/ui/centerPicker';
 import { STRINGS, type Lang } from '../../src/i18n';
+import { xhsBottomNav } from './menu';
 import type { ShapeCardMeta } from '../../src/shapes/types';
 
 /** 一个「玩法 + 模式」，也就是一本存档。 */
@@ -39,7 +40,14 @@ export interface ProfileHandlers {
   onHowToPlay: () => void;
 }
 
-/** 空着的时候画几条横线，和网页版一样——「等着记录」比一块空白好看。 */
+/**
+ * 这一块摆几行。
+ *
+ * 两个意思，网页版（ui/recordsPage.ts）也是同一个数：空着的时候画几条横线
+ * （「等着记录」比一块空白好看），有记录的时候只摆最近这么多场——剩下的点开
+ * 那一层慢慢滑。从前这儿是一股脑全摆出来：打过三十局的人，中间那段介绍被顶
+ * 到了很下面，得一直滑才看得到。
+ */
 const PLACEHOLDER_ROWS = 5;
 
 // 这一页从前在介绍段落末尾摆着「详情请访问」加一行 play-slides.com。2026-09
@@ -49,6 +57,29 @@ const PLACEHOLDER_ROWS = 5;
 
 const esc = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * 点开那一层的时候，把底排那颗橙色的键收起来。
+ *
+ * 那一层底下自己站着一颗《返回》圆盘（centerPicker 的 `back`），站的正是底排
+ * 那一行。网页版靠一条 CSS 让位：`body:has(.center-pick--back) .home-nav`。可
+ * **Chrome 61 不认得 :has()**，整条选择器会被丢掉（这一版跑的就是它，见
+ * xhs/check-oldcss.mjs），于是圆盘和那颗键叠在一起。
+ *
+ * 所以照这个仓库对付老内核的老规矩：状态由 TS 写成 <body> 上的一个类，样式
+ * 只认类（pages.css 里的 .xhs-modal）。关窗的路不止一条（圆盘、点外面、手机
+ * 返回键、Esc），所以不在自己那一次 close 里摘这个类，而是盯着那一层还在不
+ * 在——谁关的都算。
+ */
+function keepNavClear(): void {
+  document.body.classList.add('xhs-modal');
+  const ob = new MutationObserver(() => {
+    if (document.querySelector('.center-pick')) return;
+    document.body.classList.remove('xhs-modal');
+    ob.disconnect();
+  });
+  ob.observe(document.body, { childList: true });
+}
 
 /**
  * 一条记录：左边玩法小图形 + 名字 + 模式 + 时间，右边分数。
@@ -75,7 +106,12 @@ function runRow(
     (mode ? `<span class="records-row-mode"> ${esc(mode)}</span>` : '') +
     `<span class="records-row-time">${formatRunTime(run.at)}</span></span>` +
     `<span class="records-row-score">${d.totalScore}</span>`;
-  row.addEventListener('click', () => onOpen(run));
+  // 整块面板自己也能点（点开看全部），所以一行被点到的时候要把这一下拦下来
+  // ——玩家点的是这一局，不是「展开」。网页版的 .records-row 也是这么做的。
+  row.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onOpen(run);
+  });
   return row;
 }
 
@@ -162,7 +198,7 @@ export function renderProfilePage(
 
     <div class="xhs-setting-row" id="xhsSettings"></div>
 
-    <div class="records-panel records-panel--records" id="xhsRuns"></div>
+    <button class="records-panel records-panel--records" id="xhsRuns" aria-label="${esc(s.navRecords)}"></button>
 
     <div class="records-panel xhs-about">
       <p class="xhs-about-line">这里是 Slides 的小红书版，开放五个单机玩法。</p>
@@ -171,30 +207,69 @@ export function renderProfilePage(
       <p class="xhs-about-line">后续可能推出 APP 版，敬请期待。</p>
     </div>
 
-    <div class="page-back-row">
-      <button class="icon-btn page-back" id="xhsProfileBack" aria-label="${esc(s.back)}">${CTL_BACK}</button>
-    </div>
   `;
 
   const settings = page.querySelector<HTMLElement>('#xhsSettings')!;
   settings.appendChild(cvdSwitch(lang));
   settings.appendChild(howToPlayPill(h.onHowToPlay));
 
-  const list = page.querySelector<HTMLElement>('#xhsRuns')!;
-  if (runs.length) {
-    for (const run of runs) list.appendChild(runRow(run, glyphOf, lang, h.onOpenRun));
-  } else {
-    for (let i = 0; i < PLACEHOLDER_ROWS; i++) {
+  /**
+   * 把记录摆进一块面板里。`limit` 给 null 就是全摆（点开那一层用的）。
+   *
+   * 摆不满的时候补横线补到 PLACEHOLDER_ROWS 条，一块面板于是永远是同一个高
+   * 度——打过两局和打过五局，这一页不会一高一矮。
+   */
+  function fillRuns(host: HTMLElement, limit: number | null, onOpen: (run: StoredRun) => void): void {
+    host.innerHTML = '';
+    const shown = limit === null ? runs : runs.slice(0, limit);
+    if (!shown.length) {
+      for (let i = 0; i < PLACEHOLDER_ROWS; i++) {
+        const rule = document.createElement('div');
+        rule.className = 'records-rule';
+        host.appendChild(rule);
+      }
+      const note = document.createElement('p');
+      note.className = 'records-locked';
+      note.textContent = s.noRecordsYet;
+      host.appendChild(note);
+      return;
+    }
+    for (const run of shown) host.appendChild(runRow(run, glyphOf, lang, onOpen));
+    for (let i = shown.length; i < PLACEHOLDER_ROWS; i++) {
       const rule = document.createElement('div');
       rule.className = 'records-rule';
-      list.appendChild(rule);
+      host.appendChild(rule);
     }
-    const note = document.createElement('p');
-    note.className = 'records-locked';
-    note.textContent = s.noRecordsYet;
-    list.appendChild(note);
   }
 
-  page.querySelector<HTMLButtonElement>('#xhsProfileBack')!.addEventListener('click', h.onBack);
+  const list = page.querySelector<HTMLElement>('#xhsRuns')!;
+  fillRuns(list, PLACEHOLDER_ROWS, h.onOpenRun);
+  // 点这一块（行与行之间、面板本身）就把它整个放大到屏幕中间，里头是全部的
+  // 记录，可以一直滑——和网页版《记录与排名》那一块是同一个动作、同一个窗
+  // （ui/centerPicker.ts）。
+  list.addEventListener('click', () => {
+    const big = document.createElement('div');
+    big.className = 'records-panel records-panel--records records-panel--big';
+    let close = () => {};
+    fillRuns(big, null, (run) => {
+      // 那一层是挂在 <body> 上的，不跟着 #app 一起被换掉——不先关掉，战绩图
+      // 就会被它整个盖住。
+      close();
+      h.onOpenRun(run);
+    });
+    keepNavClear();
+    close = openCenterPicker({
+      originEl: list,
+      title: s.navRecords,
+      panel: big,
+      panelClass: 'records-panel--big',
+      back: s.back,
+    });
+  });
+
+  // 底下那颗橙色的键：和主菜单上的是同一颗，位置也是同一个（.home-nav 是
+  // position:fixed，所以这一页怎么上下滑它都不动）。现在它是「亮着的」那一
+  // 颗——再按一下就回主菜单。
+  page.appendChild(xhsBottomNav(h.onBack, true));
   root.appendChild(page);
 }

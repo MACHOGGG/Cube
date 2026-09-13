@@ -123,18 +123,37 @@ function card(
  * 图标要包一层 .home-nav-art：网页版的尺寸、投影、按下去的那点光都挂在这个
  * 类上，直接把 SVG 塞进按钮里的话它没有尺寸，缩成一小点。
  */
-function bottomNav(h: XhsMenuHandlers): HTMLElement {
+/**
+ * @param active 这一刻正开着成绩与说明那一屏。这颗键于是升出圆角矩形一半、
+ *   暗一档、带一圈红光（.home-nav-btn--active，网页版底排的同一套），按下去
+ *   是「收起来」——回主菜单。玩家定的：那颗键在信息栏里也留着，位置不变，
+ *   再点一下回主菜单。
+ */
+export function xhsBottomNav(onTap: () => void, active = false): HTMLElement {
   const nav = document.createElement('div');
   nav.className = 'home-nav xhs-profile-nav';
   nav.innerHTML = `
     <div class="home-nav-dock">
-      <button class="home-nav-btn" id="xhsProfile" aria-label="成绩与说明">
+      <button class="home-nav-btn${active ? ' home-nav-btn--active' : ''}" id="xhsProfile" aria-label="成绩与说明">
         <span class="home-nav-art">${ICON_NAV_ME}</span>
       </button>
     </div>
   `;
-  nav.querySelector<HTMLButtonElement>('#xhsProfile')!.addEventListener('click', h.onProfile);
+  const btn = nav.querySelector<HTMLButtonElement>('#xhsProfile')!;
+  // 按下去那一下亮一亮再落回来——玩家的原话「点击的时候会呼吸感的亮一下」。
+  // 从 pointerdown 起，不等 click：这一下往往同时换屏，等 click 就来不及放。
+  btn.addEventListener('pointerdown', () => {
+    btn.classList.remove('xhs-nav-breath');
+    void btn.offsetWidth; // 逼浏览器把上一次的动画收掉，不然连点第二下不播
+    btn.classList.add('xhs-nav-breath');
+  });
+  btn.addEventListener('animationend', () => btn.classList.remove('xhs-nav-breath'));
+  btn.addEventListener('click', onTap);
   return nav;
+}
+
+function bottomNav(h: XhsMenuHandlers): HTMLElement {
+  return xhsBottomNav(h.onProfile);
 }
 
 export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers): void {

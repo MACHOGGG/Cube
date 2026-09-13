@@ -143,6 +143,31 @@
   padding-right: 18px;
 }
 
+/* 按下去那一下，亮一亮再落回来——玩家的原话「点击的时候会呼吸感的亮一下」。
+   只写中间那一帧：首尾留空，浏览器就拿元素自己此刻的样子当两头
+   （implicit keyframes）。这一颗在主菜单上是暗着的、在信息栏里是亮着的
+   （.home-nav-btn--active），两种起点各不相同，写死首尾就得写两套，而且
+   哪天那两套值一改，这儿又会悄悄对不上。
+   滤镜要能补间，两头的函数个数和次序必须一模一样——三个 drop-shadow 加
+   brightness 加 saturate，和 src/style.css 里那两处写法对齐，一个都不能少
+   （少一个就不是「亮起来又落下去」，而是「啪地跳一下」）。 */
+.xhs-nav-breath .home-nav-art { animation: xhs-nav-breath 640ms ease-in-out; }
+@keyframes xhs-nav-breath {
+  45% {
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.22))
+            drop-shadow(0 0 10px rgba(var(--nav-glow), 0.95))
+            drop-shadow(0 0 26px rgba(var(--nav-glow), 0.6))
+            brightness(1.12) saturate(1.25);
+  }
+}
+@media (prefers-reduced-motion: reduce) { .xhs-nav-breath .home-nav-art { animation: none; } }
+
+/* 成绩点开的那一层站着自己的《返回》圆盘，站的正是底排那一行。网页版靠
+   `body:has(.center-pick--back) .home-nav` 让位，可 Chrome 61 不认得 :has()，
+   整条选择器会被丢掉，两颗键就叠在一起了。所以状态改由 TS 写成 <body> 上的
+   一个类（profile.ts 的 keepNavClear），样式只认类。 */
+.xhs-modal .home-nav { display: none; }
+
 /* ---- 横屏的分享窗 ------------------------------------------------------
    横过来之后 .share-modal 变成两列的网格：图占满左边一整列，标题和《关闭》
    在右边（src/style.css 结尾那段）。这一排键是这一版后插进去的，网格不认得
