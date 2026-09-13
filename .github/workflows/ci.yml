@@ -60,6 +60,14 @@ jobs:
         run: |
           npx esbuild src/engine/matchGrowth.ts --bundle --format=esm --outfile=/tmp/growth.mjs
           node scripts/check-match-growth.mjs /tmp/growth.mjs
+      # 屋主连点两下《再来》只能开出一局。两条 start 都会被服务器办成（它们看到
+      # 的是同一份「上一局已结束」的快照），而每条各自随机一个新种子——库里留后
+      # 到那条的，屋主用先回来那条的，于是屋主和大家不是同一副牌。把 fetch 换成
+      # 会数次数的假货，量的就是「发出去了几条」。
+      - name: 开局只开一次
+        run: |
+          npx esbuild src/engine/room.ts --bundle --format=esm --platform=neutral --outfile=/tmp/mproom.mjs
+          node scripts/check-room-start-once.mjs /tmp/mproom.mjs
 
       # 服务端：权限、战绩与排行榜、兑换码的竞态。都用内存里的 Redis 替身，
       # 不连任何外部服务。
@@ -89,6 +97,12 @@ jobs:
       # 同样直接叫 handler，「还算不算在」那条规则是纯函数，不用真等九十秒。
       - name: 小屋：还算不算在、椅子还在不在
         run: node scripts/check-room-seat.mjs
+      # 同一名玩家的几条路同时落地：报分撞心跳 / 撞关网页 / 撞点《离开》/ 撞看
+      # 教学，以及断线重连带回来的旧局次。玩家看到的是「分数对不上」和「全屋卡
+      # 着等一个已经交过卷的人」。并发那几条用 Promise.all 一起发——一条一条发
+      # 的版本永远是绿的，量不到任何东西。同样直接叫 handler。
+      - name: 小屋：同一个人的几条路同时落地
+        run: node scripts/check-room-races.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。

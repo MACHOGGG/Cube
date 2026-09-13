@@ -296,6 +296,15 @@ let clockOffset = 0;
  * was watching, without the poll having to be threaded through the game.
  */
 let lastState: RoomState | null = null;
+/**
+ * 记下手上这一份是服务器什么时候生成的（publicState 每一份都带 serverNow）。
+ *
+ * 四种请求（score / state / learn / nudge）的回包都带着完整状态，并发在途的
+ * 时候谁后到谁说了算——晚到的那份旧状态会把新的推回去。局中那块计分板挂上
+ * 来的第一件事就是从这儿读「现在第几局」（ui/scoreboard.ts 的 myRound），读
+ * 到一个被推回去的旧局次，这一局报上去的分服务器一份都不认。
+ */
+let lastStateAt = 0;
 
 export const currentRoom = (): Session | null => session;
 
@@ -335,7 +344,14 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
     // …and to remember the room, whether it came back on its own or wrapped
     // in the reply to create/join.
     const described = (reply.state ?? reply) as unknown as RoomState;
-    if (res.ok && Array.isArray(described?.players)) lastState = described;
+    // 只认更新的那一份（见 lastStateAt 上面那段）。带 players 的回包必定是
+    // publicState 出来的，所以 serverNow 一定在；真拿不到就当 0，那一份仍然
+    // 收得下（>= 0），不会把整条路堵死。
+    const at = typeof described?.serverNow === 'number' ? described.serverNow : 0;
+    if (res.ok && Array.isArray(described?.players) && at >= lastStateAt) {
+      lastState = described;
+      lastStateAt = at;
+    }
     if (!res.ok) {
       return {
         ok: false,
@@ -446,6 +462,23 @@ export function fetchState(): Promise<RoomResult<RoomState>> {
   return post<RoomState>({ action: 'state', touched: moved, ...session });
 }
 
+/**
+ * 已经在路上的那一次开局。两颗按钮都能开局——主菜单上屋主挑的那张图
+ * （main.ts 的 startRoundFor），和结算页上的《再来》（ui/scoreboard.ts）——
+ * 而只有前者自己挡了连点。于是《再来》上双击会真的发出两条 start。
+ *
+ * 服务器两条都办：两条都看到「上一局已经结束」这个同一份快照，各自记账
+ * （记出来的数一样，bankRound 读的是同一份，不会翻倍），然后**各自随机一个
+ * 新种子**写回去。库里留下的是后到那一条的，而屋主这台设备用的是先回来那一
+ * 条——于是屋主和屋里其他人发的不是同一副牌。同理 startAt：两个不同的开赛
+ * 时刻，屋主的倒数和大家的差着几十毫秒到几百毫秒。
+ *
+ * 挡在这里而不是各自挡一遍：开局只有一条路通到服务器，规矩就写在这条路上。
+ * 第二次调用**接上同一个请求**（而不是假装成功或直接失败）——两个调用者拿到
+ * 的是同一份回包、同一副牌，谁先谁后都一样。
+ */
+let starting: Promise<RoomResult<RoomState>> | null = null;
+
 /** Host only: pick the board, and put everyone on the same countdown. */
 export function startMatch(
   mode: string,
@@ -453,7 +486,20 @@ export function startMatch(
   flip?: boolean,
 ): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
-  return post<RoomState>({ action: 'start', mode, ...(slot ? { slot } : {}), ...(flip ? { flip: true } : {}), ...session });
+  if (starting) return starting;
+  starting = post<RoomState>({
+    action: 'start',
+    mode,
+    ...(slot ? { slot } : {}),
+    ...(flip ? { flip: true } : {}),
+    ...session,
+  });
+  // finally 而不是 then：请求失败（网断了、服务器回 409）也要把闸放开，不然
+  // 屋主这一整局都开不了第二次，界面上那颗键按下去没反应。
+  void starting.finally(() => {
+    starting = null;
+  });
+  return starting;
 }
 
 /**
@@ -494,6 +540,7 @@ export async function leaveRoom(): Promise<void> {
   const leaving = session;
   session = null;
   lastState = null;
+  lastStateAt = 0;
   rememberSeat(null);
   forgetPlayed();
   await post({ action: 'leave', ...leaving });
@@ -562,6 +609,7 @@ if (typeof window !== 'undefined') wireLeaveBeacon();
 export const forgetRoom = (): void => {
   session = null;
   lastState = null;
+  lastStateAt = 0;
   rememberSeat(null);
   forgetPlayed();
 };

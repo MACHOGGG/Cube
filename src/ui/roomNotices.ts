@@ -129,7 +129,9 @@ export function showWaitPanel(
         <div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>
       </div>
       ${spinner ? `<div class="mp-wait-spin">${spinner}</div>` : ''}
-      <div class="mp-wait-rows mp-players" id="mpWaitRows"></div>
+      <!-- aria-live：等待页只有一个转圈动画，用读屏的人听不到「还在等谁」，
+           也听不到有人陆续交卷。polite 是「等他说完这句再播」，不打断。 -->
+      <div class="mp-wait-rows mp-players" id="mpWaitRows" aria-live="polite"></div>
       <div class="start-actions">
         <button class="icon-btn start-act" id="mpWaitLeave">${s.mpLeave}</button>
       </div>

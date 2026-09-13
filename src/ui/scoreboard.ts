@@ -161,15 +161,28 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   const midRunLeave = document.querySelector<HTMLButtonElement>('#leaveRoomBtn');
   midRunLeave?.addEventListener('click', () => confirmLeaveRoom(lang, handlers.onLeave));
   /**
-   * 这一局是第几局——在开局的这一刻记下来，之后不再改。
+   * 这一局是第几局——定一次就不再改。
    *
    * 不能等到交卷时再去问「现在是第几局」：屋主可能已经开了下一局，那时问到
    * 的是新的回合号，于是一局都没打的新回合被记成「打过了」，人回到房间也不
    * 会再倒计时。这个数字属于这一局，就该在这一局开始时定下来。
+   *
+   * 但「定一次」的起点可以是**还不知道**。挂上来的这一刻手里不一定有房间状
+   * 态：刚进页面、断线重连、App 被划掉再打开——latestRoomState() 都是 null。
+   * 从前那句写的是 `?? 0`，于是局次成了 0，reportScore 干脆不带 round 字段
+   * （engine/room.ts 里那个三元判断），服务器那道「局次对不上就丢掉」的守卫
+   * 整个被绕过——**它专为断线重连而设，却恰恰在断线重连时失效**，上一局的分
+   * 就这么写进了新的一局。
+   *
+   * 所以 null 是「还不知道」，不是 0：不知道的时候一分都不报，攒着；第一次
+   * 轮询回来就把它定下来，再把攒的那一份补发出去。这块计分板只活一局，所以
+   * 「定一次」和「这一局」说的仍然是同一件事。
    */
-  const myRound = latestRoomState()?.round ?? 0;
+  let myRound: number | null = latestRoomState()?.round ?? null;
+  /** 还不知道局次那会儿攒下的最后一次成绩。知道了立刻补发。 */
+  let pending: { score: number; over: boolean; seconds: number | undefined } | null = null;
   /** 这一局在本机算打完了：回到房间时才不会把它当新的一局重开。 */
-  const markPlayed = () => markRoundPlayed(myRound);
+  const markPlayed = () => markRoundPlayed(myRound ?? 0);
 
   /** 「这一局没算进总分」只说一次——心跳每四秒一条，说四次就成了骚扰。 */
   let droppedTold = false;
@@ -188,10 +201,16 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    * saveRun 是无条件的），所以那句话的后半句是实话。
    */
   const report = (score: number, over: boolean, seconds: number | undefined) => {
-    void reportScore(score, over, seconds, myRound).then((res) => {
-      if (droppedTold || myRound <= 0 || !res.ok) return;
+    // 还不知道这一局是第几局：攒着，别拿一个「不带局次」的请求去绕过守卫。
+    if (myRound === null) {
+      pending = { score, over, seconds };
+      return;
+    }
+    const mine = myRound;
+    void reportScore(score, over, seconds, mine).then((res) => {
+      if (droppedTold || mine <= 0 || !res.ok) return;
       const serverRound = res.value.round;
-      if (!serverRound || serverRound === myRound) return;
+      if (!serverRound || serverRound === mine) return;
       droppedTold = true;
       flyby(s.mpRoundDropped);
     });
@@ -212,6 +231,15 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
   let dead = false;
 
   const paint = (state: RoomState) => {
+    // 第一次问到房间状态：把「这一局是第几局」定下来，并且把还不知道那会儿
+    // 攒下的那一份成绩补发出去（见上面 myRound 那段）。只定这一次——往后屋
+    // 主再开新局，这块计分板会整个换掉，不该在原地改号。
+    if (myRound === null && typeof state.round === 'number' && state.round > 0) {
+      myRound = state.round;
+      const owed = pending;
+      pending = null;
+      if (owed) report(owed.score, owed.over, owed.seconds);
+    }
     /**
      * 超过三个人就只摆三行：第一名、我前面那一名、我自己（engine/
      * standingsWindow.ts，规矩和边界情形都在那儿，门是 check-standings-window）。
