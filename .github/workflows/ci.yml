@@ -84,6 +84,11 @@ jobs:
       # 不该让全屋再等九十秒。直接叫 api/room.js 的 handler，不起服务器。
       - name: 小屋：催促与开局抢数据、关了网页的座位
         run: node scripts/check-room-race.mjs
+      # 小屋的两本账：真断线的人不该让往后每一局都重新等满九十秒，座位被借走
+      # 的人回来要重新坐得回去（不然他占着名额却没有椅子，屋里会写出「9/8」）。
+      # 同样直接叫 handler，「还算不算在」那条规则是纯函数，不用真等九十秒。
+      - name: 小屋：还算不算在、椅子还在不在
+        run: node scripts/check-room-seat.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。

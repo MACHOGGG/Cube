@@ -126,17 +126,41 @@ const AWAY_MS = 30_000;
  * 四秒记一次，AWAY_MS 里能记七次，掉几次也判不出「不在」。
  */
 const SEEN_WRITE_MS = 4000;
-const seatAway = (seat, meta) =>
-  Date.now() - Math.max(seat.lastSeen || 0, seat.joinedAt || 0, meta.startAt || 0) > AWAY_MS;
+/**
+ * 这个座位「最后一次露面」从哪一刻算起——away / gone / roundOver 三处同一句话。
+ *
+ * 平时就是他自己最后一次报到的时刻。**开局那一下要往后挪**：一局刚开始的时
+ * 候谁都还没来得及报，照上一次报到算会把整屋人一起判成「不在」，这一局还没
+ * 打就先结束了。
+ *
+ * 但这一挪不能无条件——真断线的人就是被它坑的。手机没电直接关机（来不及发
+ * bye，这是最常见的一种断线）的人此后再也不会报到，而「开局时刻」每开一局
+ * 刷新一次：从他消失的那一局起，后面每开一局都要重新傻等满 ABSENT_MS 才进
+ * 得了下一局——不是等一次，是场场都等，直到大家受不了只能解散重开。屋里还
+ * 一直看不出是谁卡着：他每局开头都被这一挪重新算成「在」。
+ *
+ * 所以只有「这一局开始的时候他还算在」的人才跟着开局时刻走。开局那一刻就已
+ * 经超过 ABSENT_MS 没露面的，从头到尾按他自己最后一次露面算——这一局直接认
+ * 定他出局，不再重新给一次宽限，名单上也如实标成「不在」。
+ *
+ * 导出只为了一件事：scripts/check-room-seat.mjs 直接量这一条规则。它是个纯
+ * 函数（自己不读 Date.now），所以那一台不用真的等满九十秒——把「上一局是什
+ * 么时候开的」当参数递进去就行。
+ */
+export function seenFrom(seat, meta) {
+  const last = Math.max(seat.lastSeen || 0, seat.joinedAt || 0);
+  const startAt = meta.startAt || 0;
+  if (startAt - last > ABSENT_MS) return last;
+  return Math.max(last, startAt);
+}
+const seatAway = (seat, meta) => Date.now() - seenFrom(seat, meta) > AWAY_MS;
 /**
  * 太久没听见他了（ABSENT_MS）：这一局不再等他（roundOver 也是这个数）；他要
  * 是屋主，屋里其他人看到的就是「屋主离家出走了，小屋暂时解散」。走了的
  * （left）和关了网页的（closed）各有各的标记，不算在这儿。
  */
 const seatGone = (seat, meta) =>
-  !seat.left &&
-  seat.lastSeen !== 0 &&
-  Date.now() - Math.max(seat.lastSeen || 0, seat.joinedAt || 0, meta.startAt || 0) > ABSENT_MS;
+  !seat.left && seat.lastSeen !== 0 && Date.now() - seenFrom(seat, meta) > ABSENT_MS;
 
 /** The boards a host may choose. Anything else is not a mode we ship. */
 const MODES = new Set([
@@ -452,11 +476,10 @@ function roundOver(hash) {
     // cannot be what it is waiting on.
     if ((seat.joinedAt || 0) > meta.startAt) return true;
     if (seat.finished) return true;
-    // Counting from the start of the round, not from this seat's last report:
-    // at the moment a round begins nobody has reported yet, and reading that
-    // as "absent" would declare the round over before it had been played.
-    const seen = Math.max(seat.lastSeen || 0, meta.startAt);
-    return Date.now() - seen > ABSENT_MS;
+    // 从哪一刻算「最后一次露面」，规则只写在一处（seenFrom）：一局刚开始时
+    // 基准往后挪到开局时刻，但开局那一刻就已经超时的人不再跟着挪——不然一个
+    // 真断线的人会让后面每一局都重新等满 ABSENT_MS。
+    return Date.now() - seenFrom(seat, meta) > ABSENT_MS;
   });
 }
 
@@ -886,6 +909,28 @@ async function state(res, body) {
   // engine/room.ts 的 noteTouch）——于是这条 EXPIRE 一分钟最多跑几次，而
   // 一间没人碰的屋子是真的没人碰。
   if (seat && body.touched) await expire(roomKey(code), ROOM_TTL_S);
+  // 椅子被借走的人回来了：在他证明自己是谁的这一刻，顺手补一把椅子。
+  //
+  // 小屋坐满的时候有新朋友按《加入》，claimSeat 会把「网页已经关掉」的座位
+  // 借给他，并把原主人的 slot 抹掉——名字、分数、打过几局都还在，只是不再占
+  // 位子。原主人从别的设备回来走的是 join 的认领那条路，那儿会重新占一把；
+  // 可他要是就在原来那台手机上切回来（切个应用、锁屏再解开——这才是最常见
+  // 的那种「暂时不在」），带着 sessionStorage 里的身份直接接着轮询，而这条路
+  // 从前只刷新 lastSeen，不管椅子。
+  //
+  // 于是他成了一个占着名额、却没有真实座位的幽灵：自己没有任何异常提示，照
+  // 常出现在名单里，但再也分不到座位；屋里显示的人数会超过它自己号称的上限
+  // （「9/8」），而那个名额一直到小屋过期都回收不了，新朋友反而进不来。
+  //
+  // 抢不到（真的一把空椅子都腾不出来）就先这样，下一次轮询再试——他的分数和
+  // 局数一直都是好的，这里补的只是座位这本账。
+  if (seat && !seat.left && seat.slot === undefined) {
+    const slot = await claimSeat(code, body.playerId, hash);
+    if (slot >= 0) {
+      await hset(roomKey(code), 'p:' + body.playerId, { ...seat, slot, lastSeen: Date.now() });
+      return send(res, 200, publicState(code, await hgetall(roomKey(code))));
+    }
+  }
   if (seat && Date.now() - (seat.lastSeen || 0) > SEEN_WRITE_MS && !seat.left) {
     await hset(roomKey(code), 'p:' + body.playerId, { ...seat, lastSeen: Date.now() });
     return send(res, 200, publicState(code, await hgetall(roomKey(code))));
