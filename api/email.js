@@ -3,10 +3,10 @@ import { send, readBody } from './_creem.js';
 import {
   EMAIL_RE,
   clearFails,
+  createAccount,
   deleteAccount,
   loadAccount,
   normalizeEmail,
-  saveAccount,
   tokenValid,
 } from './_accounts.js';
 import { compose, mailConfigured, mailLang, sendMail } from './_mail.js';
@@ -155,8 +155,6 @@ async function confirm(res, address, wanted, account, { code, token }) {
   if (String(code || '').trim() !== pending.code) {
     return send(res, 401, { error: 'wrongCode' });
   }
-  // 要码到输码之间隔着 30 分钟，那头完全可能有人刚注册了这个地址。再看一遍。
-  if (await loadAccount(wanted)) return send(res, 409, { error: 'taken' });
 
   /**
    * 搬家的顺序：**先在新地址写齐，最后才拆旧地址。**
@@ -165,7 +163,16 @@ async function confirm(res, address, wanted, account, { code, token }) {
    * 门——不好看，但他什么都没丢，再走一遍就好）。反过来先删旧的，摔在中间
    * 就是账号连同战绩一起消失。同 redeem.js 那次「码烧掉却没到账」。
    */
-  await saveAccount(wanted, account);
+  // 要码到输码之间隔着 30 分钟，那头完全可能有人刚注册了这个地址。
+  //
+  // 「再看一遍有没有人」和「写进去」是同一步（createAccount 用的是
+  // SET ... NX）。从前是先 loadAccount 看一眼、再 saveAccount 写进去——中间
+  // 隔着一次网络往返，恰好那一瞬间别人拿这个地址注册成功，他的账号就会被这
+  // 次搬家整个盖掉，而他那边收到的是「注册成功」。
+  //
+  // 挡在搬家的第一步，所以拦下来的时候旧地址一个字都还没动：他的账号、战绩、
+  // 榜上的名字全在原处，重来一次就好。
+  if (!(await createAccount(wanted, account))) return send(res, 409, { error: 'taken' });
   await renameScoreOwner(address, wanted);
   await deleteAccount(address);
   // 旧地址上那些跟着地址走的零碎：输错密码的计数、这张换邮箱的码。

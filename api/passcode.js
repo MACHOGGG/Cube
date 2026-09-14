@@ -6,6 +6,7 @@ import {
   burnGuess,
   checkPin,
   codeHolder,
+  createAccount,
   ensureGiftCodes,
   loadAccount,
   newAccount,
@@ -112,21 +113,27 @@ async function bind(res, rawCode, token, email, password, news) {
     await giveBack();
     return send(res, 401, { error: 'wrong' });
   }
-  if (await loadAccount(address)) {
-    await giveBack();
-    return send(res, 409, { error: 'exists' });
-  }
-
   // Everything the code was worth moves across; only the secret is new.
   const account = newAccount(String(password), 'code');
   account.until = granted.until;
   account.plan = granted.plan;
   setNews(account, news);
+  // 「这个地址有没有人」和「把账号写进去」是同一步（createAccount 用的是
+  // SET ... NX）。从前是先 loadAccount 看一眼、再 saveAccount 写进去，两步
+  // 之间隔着一次网络往返——一家人共用一个邮箱、两个人各拿一张码前后脚点
+  // 《绑定》，两边都读到「没人」，于是两边都写，后写的把先写的整个盖掉：
+  // 两张码都被吃掉，库里只剩一份，先操作那个人手里的令牌当场作废，而他那
+  // 屏上写的是「成功」。见 _accounts.js 的 createAccount。
+  let created = false;
   try {
-    await saveAccount(address, account);
+    created = await createAccount(address, account);
   } catch (err) {
     await giveBack();
     throw err;
+  }
+  if (!created) {
+    await giveBack();
+    return send(res, 409, { error: 'exists' });
   }
 
   return send(res, 200, { ok: true, email: address, token: account.token });
@@ -157,14 +164,16 @@ async function create(res, checkoutId, password, news) {
   }
   if (!EMAIL_RE.test(address)) return send(res, 502, { error: 'upstream' });
 
-  // An address that already has a password keeps it. Otherwise a second
-  // checkout — anyone's — would be a way to overwrite someone else's.
-  if (await loadAccount(address)) return send(res, 409, { error: 'exists' });
-
   const account = newAccount(String(password), 'card');
   account.period = period;
   setNews(account, news);
-  await saveAccount(address, account);
+  // An address that already has a password keeps it. Otherwise a second
+  // checkout — anyone's — would be a way to overwrite someone else's.
+  //
+  // 「已经有人就不写」和「写进去」必须是同一步，不能先查再写：两笔结账同一
+  // 瞬间回来（同一个地址买两次、或者一家人共用一个邮箱），两边都会读到「没
+  // 人」，于是后写的那份把先写的密码和令牌一起顶掉。见 bind 里那段。
+  if (!(await createAccount(address, account))) return send(res, 409, { error: 'exists' });
   // A year is a long thing to buy on your own recommendation, so a yearly
   // subscriber gets two months to hand out. Minted here, where the account
   // first exists, and remembered on it so they are never minted twice.

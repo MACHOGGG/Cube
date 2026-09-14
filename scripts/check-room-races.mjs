@@ -27,13 +27,14 @@
  * 玩家看到的就是「分数对不上」：打完一局分数回退成中途那个数，或者干脆是
  * 0；交卷标记一起丢掉之后，全屋还要继续等一个已经交过卷的人。
  *
- * 五条场景（前四条是并发，第五条是「同一件事存了两份」）：
+ * 六条场景（并发四条，「同一件事存了两份」一条，开局抢锁一条）：
  *
  *   ① score 撞 state（心跳）  → 分数和交卷都要留着
  *   ② score 撞 bye（关网页）  → 分数和交卷要留着，而且 closed 要成立
  *   ③ score 撞 leave（离开）  → 分数要留着，left 和 finished 要为真
  *   ④ 拿旧局次报分            → 不记分，但座位要放下，而且回包说得出来
  *   ⑥ 散场之后重读一次        → 最后一局不能被算两遍
+ *   ⑦ 两条 start 落在一起      → 记账不能记两遍
  *
  * ④ 的守卫本身没问题，它挡的正是断线重连带回来的旧分。要守的是它挡完之后的
  * 两件事：**座位要放下**（不然全屋等一个在打旧局的人，等到天荒地老），以及
@@ -206,6 +207,54 @@ const seatOf = (st, id) => (st.body.players || []).find((p) => p.id === id) || {
   check('⑥ 重读一次：屋主还是 100', sum(reread, host.playerId) === 100, String(sum(reread, host.playerId)));
   // 用时不能跟着清掉——那张卡上「用时」那一行读的就是它。
   check('⑥ 重读一次：用时还在（卡上要印）', seatOf(reread, guest.playerId).seconds === 20, String(seatOf(reread, guest.playerId).seconds));
+}
+
+// ---- ⑦ 屋主双击《再来》：两条 start 落在一起，记账不能记两遍 -----------
+//
+// 客户端那道闸（engine/room.ts 的 startMatch）合并的是同一个网页里的连点，挡
+// 不住两个来源：两个分页、手机加电脑、或者请求在路上时页面被刷新（闸随之消
+// 失）再按一次。
+//
+// 服务器这一侧从前没锁。要命的不是种子分叉——那一条躲过去了：所有人拼棋盘的
+// 种子都是从每秒一次的轮询里读的，不是开局回包（ui/multiplayer.ts 的
+// beginCountdown）——而是**记账记了两遍**：B 的读恰好落在 A 的记账循环中间，
+// A 已经把屋主那一格并进 total、meta 还没写，B 就读到一个「记过一半、局次还
+// 是旧的、roundOver 还是真」的屋子，把记过的又记一遍。
+//
+// 实测：屋主 total=200、rounds=2，而他那一局只打了 100 分。要撞上它得让两条
+// 请求错开恰好两个微任务——所以这儿不是一把 Promise.all 了事，而是把错位量从
+// 0 到 20 挨个走一遍，哪一档都不许记重。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  let worst = null;
+  for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20]) {
+    const { code, host, guest } = await openRoom();
+    const st = await call({ action: 'state', code, ...host });
+    // 开局倒数走完才算得上「这一局打过了」（roundOver 有 startAt 那道门槛）。
+    await new Promise((r) => setTimeout(r, Math.max(0, st.body.startAt - Date.now() + 40)));
+    await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
+    await call({ action: 'score', code, ...guest, score: 200, finished: true, seconds: 20, round: 1 });
+    await Promise.all([
+      call({ action: 'start', code, ...host, mode: 'square' }),
+      (async () => {
+        await ticks(k);
+        return call({ action: 'start', code, ...host, mode: 'square' });
+      })(),
+    ]);
+    const after = await call({ action: 'state', code, ...host });
+    for (const p of after.body.players) {
+      const should = p.id === host.playerId ? 100 : 200;
+      if (p.rounds !== 1 || p.total !== should) {
+        worst = `错位 ${k}：${p.name} total=${p.total}（该是 ${should}）rounds=${p.rounds}`;
+      }
+    }
+  }
+  check('⑦ 双击《再来》：十一档错位，一档都没记重', worst === null, worst || '');
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

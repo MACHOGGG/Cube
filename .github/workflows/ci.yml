@@ -85,6 +85,13 @@ jobs:
         run: node scripts/check-unlock-reset.mjs
       - name: 账户：兑码落到账户上、改密码、换邮箱
         run: node scripts/check-account-hub.mjs
+      # 开账号那三条路（绑内部码 / 刷卡设密码 / 确认换邮箱）从前都是「先看一眼
+      # 这个地址有没有人，再整份写进去」。一家人共用一个邮箱、两个人各拿一张码前
+      # 后脚点《绑定》，两边都读到「没人」——两边都显示成功，两张码都被吃掉，库里
+      # 只留后写的那一份，先操作那人的令牌当场作废。并发那几条用 Promise.all 一
+      # 起发；一条一条发的版本永远是绿的。
+      - name: 开账号：两个人抢同一个邮箱
+        run: node scripts/check-account-race.mjs
       # 从外面看这几扇门：登录接口不能当查号机，改密码和账号中心要按来路限速。
       - name: 认证：查号机与来路限速
         run: node scripts/check-auth-probe.mjs

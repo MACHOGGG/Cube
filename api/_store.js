@@ -216,6 +216,25 @@ const decode = (raw) => {
 export const get = async (key) => decode(await command(['GET', key]));
 export const set = (key, value, ttl) =>
   command(ttl ? ['SET', key, encode(value), 'EX', ttl] : ['SET', key, encode(value)]);
+/**
+ * 只有这个键还空着才写得进去——查和写是同一步。
+ *
+ * 「先 get 看看有没有人，再 set 写进去」这个写法，在一台机器上看着没问题，放
+ * 到并发里就是一道假门：两步之间隔着一次网络往返，同一瞬间打进来的两个请求
+ * 都会读到「没人」，于是两个都写，后写的那份把先写的整个盖掉。
+ *
+ * 开账号那三条路（passcode 的 bind / create、email 的确认换邮箱）栽的正是这
+ * 个。实测：一家人共用一个邮箱，两个人各拿一张码前后脚点「绑定」——两边手机
+ * 上都显示成功，两张码都被吃掉，而库里只留得下后写的那一份；先操作那个人码
+ * 没了、权益没了，手里那个登录令牌当场作废。
+ *
+ * SET ... NX 是 Redis 自己那一步：没人才写，写成了回 "OK"，已经有人回 nil。
+ * 和小屋抢房号用的 HSETNX 是同一个道理，只是那边住在 hash 里。
+ *
+ * @returns 写进去了 true；这个键上已经有人 false。
+ */
+export const setnx = async (key, value) =>
+  (await command(['SET', key, encode(value), 'NX'])) !== null;
 export const del = (key) => command(['DEL', key]);
 
 /**

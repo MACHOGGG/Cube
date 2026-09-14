@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
-import { bump, del, get, hdel, hgetall, hset, set, takeOnce } from './_store.js';
+import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce } from './_store.js';
 
 /**
  * The accounts a redeemed code creates — the only accounts this app has.
@@ -176,6 +176,38 @@ export async function saveAccount(email, account) {
   } catch (err) {
     console.error('名单没记上', address, err);
   }
+}
+
+/**
+ * 开一个新账号——**这个地址上还没有账号**才写得进去。查和写是同一步。
+ *
+ * 开账号有三条路（passcode 的 bind / create、email 的确认换邮箱），从前三条
+ * 都是「先 loadAccount 看一眼有没有人，再 saveAccount 整份写进去」。那两步之
+ * 间隔着一次网络往返，同一瞬间进来的两个请求都会读到「没人」，于是都写，后
+ * 写的把先写的整个盖掉。
+ *
+ * 实测过一次，比想象的难受：一家人共用一个邮箱，两个人各拿一张不同的内部码
+ * 前后脚点《绑定》——两边手机上都显示「成功」，**两张码都被吃掉了**（取码那
+ * 一步 takeAccount 是 GETDEL，本来就是原子的，两张都取走了），而库里只留得下
+ * 后写的那一份。先操作的那个人：码没了、权益没了，手里刚拿到的登录令牌当场
+ * 作废——他会一头雾水「明明说我成功了」。这不用刻意攻击，手快就能撞上。
+ *
+ * 现在改成一步：SET ... NX。写成了才是成功，没写成说明这个地址已经有人了，
+ * 调用方自己决定怎么退（bind 要把码放回去，见那里）。
+ *
+ * @returns 开成了 true；这个地址上已经有账号 false。
+ */
+export async function createAccount(email, account) {
+  if (!(await setnx(accountKey(email), account))) return false;
+  // 名单和 saveAccount 那边同一套规矩：只收真邮箱，它自己摔了不算这次失败。
+  const address = normalizeEmail(email);
+  if (!EMAIL_RE.test(address)) return true;
+  try {
+    await hset(INDEX_KEY, address, indexRow(account));
+  } catch (err) {
+    console.error('名单没记上', address, err);
+  }
+  return true;
 }
 
 /** 名单全文：{ 邮箱: indexRow }。只有带 ADMIN_TOKEN 的后台读得到。 */

@@ -518,6 +518,30 @@ const beatKey = (playerId) => 'h:' + String(playerId);
  * 个可以抢的地方。
  */
 const roundKey = (playerId) => 'r:' + String(playerId);
+/**
+ * 「这一局是谁开的」——一局一格，抢到的那个才办。
+ *
+ * 屋主双击《再来》：客户端那道闸（engine/room.ts 的 startMatch）把同一个网页
+ * 里的连点合并成一条，可它挡不住两个来源——两个分页、手机加电脑、或者请求在
+ * 路上时页面被刷新（闸随之消失）再按一次。
+ *
+ * 从前服务器这一侧是「先看一眼上一局结束没有，再各自算一份新棋盘写回去」，
+ * 中间没锁。两条都能过那道 `if (round && !roundOver) return 409` 的闸，因为
+ * 它们看到的是同一份「上一局已结束」的快照。
+ *
+ * 实测出来的不是种子分叉（那一条躲过去了：所有人拼棋盘的种子都是从每秒一次
+ * 的轮询里读的，不是开局回包，见 ui/multiplayer.ts 的 beginCountdown），而是
+ * **记账记了两遍**：B 的读恰好落在 A 的记账循环中间——A 已经把屋主那一格并
+ * 进 total 了，meta 还没写，于是 B 读到一个「记过一半、局次还是旧的、roundOver
+ * 还是真」的屋子，把已经记过的那几格又记了一遍。量到的是屋主 total=200、
+ * rounds=2，而他那一局只打了 100 分。和 2026-09 那次「散场时最后一局算两遍」
+ * 是同一种账。
+ *
+ * HSETNX 是 Redis 自己那一步：这一格空着才写得进去。和抢房号、抢椅子用的是
+ * 同一个办法。抢不到的那一条不报错——屋主按下去是想开局，而局确实开起来了，
+ * 回一份当前状态就好；一秒后的轮询会把新局次和种子一起带给他。
+ */
+const startLockKey = (round) => 'ls:' + String(round);
 /** 一局收尾时把那三样清回零（开下一局、散场各用一次）。 */
 const CLEAR_ROUND = { score: 0, finished: false, seconds: null };
 
@@ -1068,6 +1092,13 @@ async function start(res, body) {
   const slot =
     !flip && SLOT_MODES.has(body.mode) && (body.slot === 'same' || body.slot === 'own') ? body.slot : null;
 
+  // 这一局的开局权，抢到才办（见 startLockKey 上面那段）。抢不到说明已经有
+  // 一条在开这一局了：回当前状态，不重复记账。
+  const nextRound = (hash.meta.round || 0) + 1;
+  if (!(await hsetnx(roomKey(code), startLockKey(nextRound), { at: Date.now() }))) {
+    return send(res, 200, publicState(code, await readRoom(code)));
+  }
+
   // The round that just ended is banked before the next one wipes the board,
   // because the closing card is the sum of all of them and a score only
   // exists on the server between one round and the next.
@@ -1107,7 +1138,7 @@ async function start(res, body) {
     mode: body.mode,
     slot,
     flip,
-    round: (hash.meta.round || 0) + 1,
+    round: nextRound,
     // The one string from which every player builds the identical board.
     seed: id(8),
     startAt: Date.now() + countdownMsFor(body.mode) + (novice ? ASK_MS : 0),
