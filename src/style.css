@@ -4099,6 +4099,122 @@ body.is-room-host::after {
   .app.app--game.has-coach > .coach-bar .coach-art { display: none; }
 }
 
+/* 手机横屏：教学挪到两边得分目标底下，一边一块牌子 ------------------------
+ *
+ * 玩家的原话：「两边得分目标下方放在合适的居中的地方，条件允许请略微放大文字
+ * 和配图，这包括所有移动端的横屏教学」，并从四版模拟图里挑了「左右分家·各套
+ * 一块牌子」这一版。
+ *
+ * 为什么这么排得开：横屏时棋盘是被**高度**卡住的，不是宽度——844×390 上量出
+ * 来棋盘那一列有 438px 宽，棋盘只占 294px，白白空着 144px。把这块宽度分给两
+ * 侧，教学就有地方站，而且底下那一整行可以整个撤掉，那一行的高度还给棋盘。
+ * 上一版把条子横铺在棋盘底下，字号被压到 11.5px，配图在矮屏上还得整个摘掉。
+ *
+ * 排法：上下各留一条 1fr 把中间那一摞夹在正中；得分目标贴着自己那一格的底边
+ * 站（align-self: end），紧接着是进度条（只在左边），再往下是两块牌子。棋盘、
+ * 读数、按键照旧一路通到底（grid-row: 1 / -1），位置一个像素没动。
+ *
+ * 条子自己 display: contents——它的三个孩子（进度条 + 两行）直接当格子里的东
+ * 西用，条子那层盒子连同它的底色、内边距一起消失，底色改由每一行自己那块牌子
+ * 出。这样不用动 coachBar.ts 一个字：它照旧往同一个 #coachBar 里填，填几行、
+ * 哪一行藏起来都不变。
+ *
+ * 整段关在 @supports (display: contents) 里：小红书那一版要兼容 Chrome 61，
+ * 它不认识 display: contents。不兜住的话，条子会退回成一个普通块，被网格随手
+ * 摆进某个空格里，多半压在棋盘上。兜住之后那些老内核走的还是上面那一套（条子
+ * 横铺在棋盘底下），原样不动。
+ */
+@supports (display: contents) {
+  @media (orientation: landscape) and (max-height: 560px) and (min-width: 760px) and (min-aspect-ratio: 8 / 5) {
+    .app.app--game.has-coach.pattern-sides {
+      /*
+       * 棋盘那一列先拿够它「按高度算出来」的那么大，剩下的才归两侧。
+       *
+       * 这一句的写法比看上去要紧。第一版给两侧写的是 clamp(148px, 20vw, 190px)
+       * ——屏幕宽就多给，听着合理，实际上把棋盘挤小了：667×375 的手机上棋盘从
+       * 257px 掉到 168px（量出来的）。因为棋盘本来是被**高度**卡住的，两侧一旦
+       * 占过了头，它就改成被宽度卡住，一路缩。
+       *
+       * 现在反过来：棋盘那一列的**下限**写成 75vh——横屏时棋盘的大小差不多就是
+       * 「屏幕高度的四分之三」（844×390 上量到 294 ÷ 390 = 0.754）。两侧写成
+       * minmax(0, 200px)：宽松时各拿 200px，紧的时候自己让，让到棋盘拿满为止。
+       * 谁先谁后由网格自己算，不用我猜屏幕。
+       *
+       * 外面那两道门是给「让也让不出来」的屏幕留的：不到 760px 宽、或者宽高比
+       * 不足 8:5（760×560 这种方一点的平板横屏），两侧挤到 100px 以下就装不下
+       * 一句话了，那些屏幕走上面那一套——条子照旧横铺在棋盘底下，原样不动。
+       */
+      grid-template-columns:
+        minmax(max(66px, 8.4%), min-content)
+        minmax(0, 200px)
+        minmax(75vh, 1fr)
+        minmax(0, 200px)
+        minmax(max(66px, 8.4%), min-content);
+      grid-template-rows: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+    }
+    .app.app--game.has-coach.pattern-sides > .hud,
+    .app.app--game.has-coach.pattern-sides > .board-wrap,
+    .app.app--game.has-coach.pattern-sides > .controls { grid-row: 1 / -1; }
+    .app.app--game.has-coach.pattern-sides > .pattern-hint--a,
+    .app.app--game.has-coach.pattern-sides > .pattern-hint--b {
+      grid-row: 2; align-self: end; height: auto; width: 100%; min-width: 0;
+      box-sizing: border-box; padding: 0 4px;
+      /* 原来那半个 slack 的横移是按「图示紧贴读数那一侧」推的，现在这一列宽
+         得多、内容自己居中，再挪就偏了。 */
+      transform: none;
+      gap: clamp(8px, 2.4vh, 16px);
+    }
+    .app.app--game.has-coach.pattern-sides > .pattern-hint--a { grid-column: 2; }
+    .app.app--game.has-coach.pattern-sides > .pattern-hint--b { grid-column: 4; }
+
+    .app.app--game.has-coach.pattern-sides > .coach-bar { display: contents; }
+    /* 上面那句比 .coach-bar[hidden] 权重高，藏起来的条子会被它拆开重新露出来。
+       方块那一局开头这块条子正是藏着的（等 10 秒或等他得一次分），所以要自己
+       再写一遍——同 .coach-bar[hidden] 那一条栽过的坑。 */
+    .app.app--game.has-coach.pattern-sides > .coach-bar[hidden] { display: none; }
+    /* 进度条只在左边那一列，夹在得分目标和牌子中间。 */
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-head {
+      grid-column: 2; grid-row: 3;
+      justify-self: center; align-self: center;
+      width: 100%; max-width: 170px; margin: 0 0 4px;
+      pointer-events: none;
+    }
+    /* 第 1 行的牌子在左边，第 2 行的在右边。一步只讲一条时只有第 1 行，右边
+       那一列就只剩得分目标——这也是对的，不是漏了。
+       按 nth-child 认：coach-head 是第 1 个孩子，两行紧跟其后（见 coachBar.ts
+       的 frame）。 */
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row {
+      grid-row: 4; align-self: start;
+      flex-direction: column; gap: 7px;
+      width: 100%; min-width: 0; box-sizing: border-box;
+      background: var(--surface); border-radius: var(--r-md);
+      box-shadow: var(--shadow);
+      padding: 9px 11px 11px;
+      pointer-events: none;
+    }
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row:nth-child(2) { grid-column: 2; }
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row:nth-child(3) { grid-column: 4; }
+    /* 字和图各放大一档（玩家要的「略微放大」）：横铺那一版是 11.5px / 9px，
+       这儿给到 15px / 18px 上下。两行并排时不再需要统一配图宽度——它们分在两
+       列，本来就对不上齐，各自居中就好。 */
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row .coach-art {
+      display: block; flex: none; min-width: 0;
+      font-size: clamp(14px, 4.6vh, 20px);
+    }
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row .coach-text {
+      display: block; flex: none; width: 100%;
+      font-size: clamp(12.5px, 3.9vh, 16px); line-height: 1.45; text-align: center;
+      overflow-wrap: break-word;
+    }
+  }
+  /* 矮屏（不到 360px 高）上面那条「配图摘掉」不再适用：图现在站在两侧的空当
+     里，不占棋盘的高度。反过来，牌子要收紧一档，别顶到屏幕上下边。 */
+  @media (orientation: landscape) and (max-height: 359px) and (min-width: 760px) and (min-aspect-ratio: 8 / 5) {
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row .coach-art { display: block; }
+    .app.app--game.has-coach.pattern-sides > .coach-bar > .coach-row { padding: 7px 9px 9px; gap: 5px; }
+  }
+}
+
 /* 电脑端：教学内容单独拎出来，贴在屏幕右边、上下居中，放大 ------------------
  *
  * 玩家的原话：「电脑端显示时候的教学内容利用度太低，挤在一起，教学的内容应该
@@ -4127,7 +4243,10 @@ body.is-room-host::after {
 @media (min-width: 1000px) and (min-height: 561px) {
   .app.app--game.has-coach {
     /* 面板自己的宽和它离屏幕右沿的距离，下面几处都引这两个。 */
-    --coach-w: clamp(300px, 24vw, 420px);
+    /* 玩家第二轮：「网页端可以再放大整体教学的文字动画等内容」。所以这一栏
+       整体再宽一档，字和配图跟着各放大一档——这一栏的宽度就是配图能画多大的
+       上限（配图按 em 定尺寸），不放宽只调字号，图会挤到栏外去。 */
+    --coach-w: clamp(340px, 27vw, 500px);
     --coach-gap: clamp(24px, 3vw, 56px);
     /*
      * 把整列往左让出面板那一条——**不是**给它加 padding-right。
@@ -4151,7 +4270,7 @@ body.is-room-host::after {
     right: max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), var(--coach-gap));
     top: 50%; transform: translateY(-50%);
     width: var(--coach-w); max-width: none; margin: 0;
-    padding: 18px 20px 20px; gap: 14px;
+    padding: 22px 24px 24px; gap: 16px;
     /* 一块独立的牌子，不再是棋盘底下那条缝里的小条：影子重一档，圆角大一档。 */
     border-radius: var(--r-lg, 18px);
     box-shadow: 0 10px 30px rgb(0 0 0 / 0.13);
@@ -4159,32 +4278,32 @@ body.is-room-host::after {
   /* 图在上、字在下，各自占满这一栏的宽度。原先是左图右字并排——那是为了在一条
      只有两三行高的缝里塞下两样东西；这儿有一整栏的高度，叠起来两样都能放大。 */
   .app.app--game.has-coach > .coach-bar .coach-row {
-    flex-direction: column; align-items: center; gap: 12px;
+    flex-direction: column; align-items: center; gap: 15px;
   }
   .app.app--game.has-coach > .coach-bar .coach-art {
-    font-size: clamp(17px, 2.7vh, 26px);
+    font-size: clamp(21px, 3.4vh, 34px);
     /* --pair 那一档给配图钉过一个 6.5em 的统一宽度，是为了让并排时两行字的左边
        对齐。这儿已经是上下叠的，图自己居中就好，钉死的宽度反而让它偏。 */
     min-width: 0;
   }
   .app.app--game.has-coach > .coach-bar .coach-text {
-    font-size: clamp(15px, 2.15vh, 19px); line-height: 1.5;
+    font-size: clamp(17px, 2.5vh, 23px); line-height: 1.55;
     text-align: center; flex: none;
   }
   /* 进度那一条也跟着放大：它在这块牌子上是「还剩几条」的唯一指示。 */
-  .app.app--game.has-coach > .coach-bar .coach-seg { height: 4px; }
+  .app.app--game.has-coach > .coach-bar .coach-seg { height: 5px; }
   .app.app--game.has-coach > .coach-bar .coach-peek {
-    width: 34px; height: 34px; font-size: 26px; margin: -8px -6px -8px 0;
+    width: 38px; height: 38px; font-size: 29px; margin: -9px -7px -9px 0;
   }
   /* 一步摆两条时（头一局的第 1+2 条）在这块牌子上不必再压扁——压扁是为了把高度
      还给棋盘，而这儿的高度是白送的。中间加一道分隔，两条才不像一段话。 */
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair { padding: 18px 20px 20px; gap: 14px; }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row { gap: 12px; }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair { padding: 22px 24px 24px; gap: 16px; }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row { gap: 14px; }
   .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row + .coach-row {
-    border-top: 1px solid var(--line); padding-top: 14px;
+    border-top: 1px solid var(--line); padding-top: 16px;
   }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-art { font-size: clamp(15px, 2.3vh, 22px); }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-text { font-size: clamp(14px, 1.95vh, 17px); }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-art { font-size: clamp(18px, 2.9vh, 28px); }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-text { font-size: clamp(16px, 2.3vh, 20px); }
 }
 
 /* ---- 规则配图（ruleArt.ts）：借基础教学分镜的画法 ---- */
