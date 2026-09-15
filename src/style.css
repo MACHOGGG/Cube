@@ -4079,6 +4079,94 @@ body.is-room-host::after {
   .app.app--game.has-coach > .coach-bar .coach-art { display: none; }
 }
 
+/* 电脑端：教学内容单独拎出来，贴在屏幕右边、上下居中，放大 ------------------
+ *
+ * 玩家的原话：「电脑端显示时候的教学内容利用度太低，挤在一起，教学的内容应该
+ * 单独拿出来放在屏幕右边居中然后放大到合适的大小」。
+ *
+ * 为什么电脑上会挤成那样：整页**宽屏**那套排版（读数贴左、按键贴右、棋盘居中）
+ * 关在 `(orientation: landscape) and (max-height: 560px)` 里——那是「手机横过来」
+ * 的尺寸。笔记本是横的，可高七八百像素，`max-height: 560px` 不成立，于是电脑端
+ * 退回手机竖屏那一套：所有东西挤在中间一条里，教学条按 `max-width: 420px` 缩在
+ * 棋盘底下，两边几百像素的空白一点没用上。这一段先把教学这一块救出来（整页宽
+ * 屏排版是另一件事，没在这次的范围里）。
+ *
+ * 只认 has-coach：这个类只有头一局那种带教学的局才有（gameShell 按 meta.coach
+ * 盖），别的局在电脑上一个像素都不动。
+ *
+ * 门槛两条，缺一不可：
+ *   · min-width: 1000px —— 这一列本身宽 460px（七色圆球和三角那几副 620px），
+ *     面板再占去三百多，1000px 是两样都摆得下的最小值。720px（全站别处的
+ *     「宽屏」门槛）在这儿远远不够。
+ *   · min-height: 561px —— 和上面手机横屏那一档正好互斥，两套永远不会同时成立。
+ *
+ * 用 fixed 不用 absolute：absolute 要给 .app--game 加 position: relative，而这一页
+ * 里还有别的绝对定位的东西（加分气泡之类），改了包含块就可能把它们挪走。这一页
+ * 本来就是满屏不滚动的，fixed 和 absolute 在这儿是同一个位置，却不动任何人。
+ */
+@media (min-width: 1000px) and (min-height: 561px) {
+  .app.app--game.has-coach {
+    /* 面板自己的宽和它离屏幕右沿的距离，下面几处都引这两个。 */
+    --coach-w: clamp(300px, 24vw, 420px);
+    --coach-gap: clamp(24px, 3vw, 56px);
+    /*
+     * 把整列往左让出面板那一条——**不是**给它加 padding-right。
+     *
+     * 这是第一版栽的地方，记下来：.app 是一列定宽的东西（max-width 460px，七色
+     * 圆球和三角那几副 620px，见 .app-wide），padding-right 是往这 460px **里面**
+     * 挤，于是棋盘被压成了几十像素（量到过 1440 宽的窗口上棋盘只剩 14px，而且
+     * 窗口越宽压得越狠——因为面板按 vw 算，越宽越厚）。列宽一分不能动，要动的是
+     * 这一列站在哪儿。
+     *
+     * 为什么 margin-right 写的是「面板宽 + 边距」这一整条，而位移只有它的一半：
+     * .app 是 #app 的 flex 子项，而 #app 是 justify-content: center。居中分的是
+     * 「容器减去子项**连同外边距**」剩下的空当，两边各一半——所以右边加多少外边
+     * 距，盒子就往左挪多少的一半。写成一整条，挪过去正好把这一列重新居中在「除
+     * 去面板之后」的那片地方，中间不留一个大洞。
+     */
+    margin-right: calc(var(--coach-w) + var(--coach-gap));
+  }
+  .app.app--game.has-coach > .coach-bar {
+    position: fixed;
+    right: max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), var(--coach-gap));
+    top: 50%; transform: translateY(-50%);
+    width: var(--coach-w); max-width: none; margin: 0;
+    padding: 18px 20px 20px; gap: 14px;
+    /* 一块独立的牌子，不再是棋盘底下那条缝里的小条：影子重一档，圆角大一档。 */
+    border-radius: var(--r-lg, 18px);
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.13);
+  }
+  /* 图在上、字在下，各自占满这一栏的宽度。原先是左图右字并排——那是为了在一条
+     只有两三行高的缝里塞下两样东西；这儿有一整栏的高度，叠起来两样都能放大。 */
+  .app.app--game.has-coach > .coach-bar .coach-row {
+    flex-direction: column; align-items: center; gap: 12px;
+  }
+  .app.app--game.has-coach > .coach-bar .coach-art {
+    font-size: clamp(17px, 2.7vh, 26px);
+    /* --pair 那一档给配图钉过一个 6.5em 的统一宽度，是为了让并排时两行字的左边
+       对齐。这儿已经是上下叠的，图自己居中就好，钉死的宽度反而让它偏。 */
+    min-width: 0;
+  }
+  .app.app--game.has-coach > .coach-bar .coach-text {
+    font-size: clamp(15px, 2.15vh, 19px); line-height: 1.5;
+    text-align: center; flex: none;
+  }
+  /* 进度那一条也跟着放大：它在这块牌子上是「还剩几条」的唯一指示。 */
+  .app.app--game.has-coach > .coach-bar .coach-seg { height: 4px; }
+  .app.app--game.has-coach > .coach-bar .coach-peek {
+    width: 34px; height: 34px; font-size: 26px; margin: -8px -6px -8px 0;
+  }
+  /* 一步摆两条时（头一局的第 1+2 条）在这块牌子上不必再压扁——压扁是为了把高度
+     还给棋盘，而这儿的高度是白送的。中间加一道分隔，两条才不像一段话。 */
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair { padding: 18px 20px 20px; gap: 14px; }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row { gap: 12px; }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row + .coach-row {
+    border-top: 1px solid var(--line); padding-top: 14px;
+  }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-art { font-size: clamp(15px, 2.3vh, 22px); }
+  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-text { font-size: clamp(14px, 1.95vh, 17px); }
+}
+
 /* ---- 规则配图（ruleArt.ts）：借基础教学分镜的画法 ---- */
 /* 4×2 的小棋盘：浅底、圆角（玩家的原话：「把配图/动画的底色改浅一点现在太
    深了」——所以不用游戏版图那块深褐，用的是页面里放图形的那种浅底，描一圈
