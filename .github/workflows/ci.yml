@@ -129,3 +129,9 @@ jobs:
       # 产物里的 CSS：自定义属性里不许写「新函数」（安卓上会整块不显示）。
       - name: CSS 兜底
         run: node scripts/check-css-fallbacks.mjs
+      # 会呼吸的光：@keyframes 里 drop-shadow 的模糊半径一整圈都不许变，要明灭
+      # 就改颜色。半径一变，滤镜区域每帧都跟着变，iOS 的 Safari 会把挨着的几个
+      # 发光元素并成一块不透明的方框——玩家实拍到的「主菜单两张卡外面罩着个发
+      # 光的透明方块」就是这么来的。读 CSS 就完了，不到一秒。
+      - name: 会呼吸的光
+        run: node scripts/check-glow.mjs

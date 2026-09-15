@@ -625,8 +625,12 @@ h1 {
   vector-effect: non-scaling-stroke;
   animation: score-outline-stroke-flash 2.5s ease-in-out 1 both;
 }
+/* 模糊半径一整段都钉在 8px，只有颜色在明灭——理由和 glow-pulse 那一处一样
+   （见下面「全站唯一的那一套呼吸的光」）：半径一变，滤镜区域每帧都跟着变，
+   iOS 的 Safari 会把这一层按不透明的方框来画。这几帧的颜色本来就是全透明的，
+   钉住半径看不出任何差别。 */
 @keyframes score-outline-stroke-flash {
-  0%, 100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); fill: transparent; }
+  0%, 100% { stroke: transparent; filter: drop-shadow(0 0 8px transparent); fill: transparent; }
   4%, 13%  { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
   37%, 46% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
   70%, 79% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
@@ -635,7 +639,7 @@ h1 {
   .score-outline-tri polygon { animation: score-outline-stroke-fade 1.1s ease-out 1 both; }
   @keyframes score-outline-stroke-fade {
     0% { stroke: var(--ink); filter: drop-shadow(0 0 8px var(--score-glow)); fill: var(--score-wash); }
-    100% { stroke: transparent; filter: drop-shadow(0 0 0 transparent); fill: transparent; }
+    100% { stroke: transparent; filter: drop-shadow(0 0 8px transparent); fill: transparent; }
   }
 }
 
@@ -1282,10 +1286,24 @@ button:hover { filter: brightness(1.05); }
    透明的轮廓，没有 spread，从边上往外一路淡出去；方的圆的、正的斜的，贴的
    都是它自己。
 
-   0% 那一帧写 `0 0 0`：同一支颜色、零模糊零位移，等于没有影子。这样一整个
-   周期里颜色不变，只有浓淡在走——中途不会经过一层发灰的半透明黑。 */
+   **模糊半径一整圈都不许变**，变的只有颜色的浓淡（`transparent` ↔ `--glow`）。
+   原先这儿是 `0 0 0` ↔ `0 0 10px`——同一支颜色，靠半径从 0 长到 10。看着一
+   样，画起来不是一回事：滤镜要先算出「这团光最远能画到哪儿」（滤镜区域），
+   半径一变，这块区域每一帧都跟着变，浏览器只好每一帧重开一块画布。iOS 的
+   Safari 在这儿会走岔：它把两张挨着的发光卡片并进同一块画布，按**不透明**
+   处理，于是那圈光不再贴着图形，而是贴着这块画布的**方框**——玩家实拍到的
+   就是这个：主菜单头两张卡外面罩着一个发光的透明方块，方块里面的光全没了
+   （2026-09，iPhone）。Chrome 上一直是对的，所以只看电脑端看不出来。
+
+   半径钉死，滤镜区域就是个定数，那块画布从头到尾是同一块，并层也就没了由
+   头。颜色从 `transparent` 淡进来不会发灰：CSS 的颜色插值走的是预乘 alpha，
+   白色 → 透明中途仍然是白色，只是越来越淡（页面顶上那行 Slides 的
+   home-title-breathe 早就是这么写的，iOS 上一直没出过事）。
+
+   还加了 will-change: filter：明说「这一层自己占一块画布」，两张卡各画各
+   的，谁也别和谁挤。 */
 @keyframes glow-pulse {
-  0%, 100% { filter: drop-shadow(0 0 0 var(--glow)); }
+  0%, 100% { filter: drop-shadow(0 0 10px transparent); }
   50% { filter: drop-shadow(0 0 10px var(--glow)); }
 }
 /* 谁要发光，挂上这一条。颜色不写在这儿——写在 :root 的 --glow 上，跟着主题
@@ -1299,6 +1317,8 @@ button:hover { filter: brightness(1.05); }
 .home-icon-btn--glow .home-icon-art > svg,
 .app--game.coach-aim .pattern-hint .pattern-icon {
   animation: glow-pulse 2.2s ease-in-out infinite;
+  /* 见上面那段：各占一块画布，别让 Safari 把挨着的两张并成一块方框。 */
+  will-change: filter;
 }
 @media (prefers-reduced-motion: reduce) {
   .glow-pulse,
@@ -4361,8 +4381,10 @@ body.is-room-host::after {
 .ra-star { transform-box: fill-box; transform-origin: center; animation: ra-star var(--T) ease-in-out infinite; }
 @keyframes ra-star { 0%, 58% { transform: scale(1); } 64% { transform: scale(1.28); } 70%, 100% { transform: scale(1); } }
 .ra-trophy { animation: ra-trophy var(--T) ease-in-out infinite; }
+/* 半径两头一样（理由同 glow-pulse：滤镜区域别每帧都变，见 style.css 里
+   「全站唯一的那一套呼吸的光」那一段），亮起来的是颜色不是半径。 */
 @keyframes ra-trophy {
-  0%, 70% { filter: drop-shadow(0 0 0 rgba(216, 155, 30, 0)); }
+  0%, 70% { filter: drop-shadow(0 0 0.28em rgba(216, 155, 30, 0)); }
   82%, 100% { filter: drop-shadow(0 0 0.28em rgba(216, 155, 30, 0.9)); }
 }
 @media (prefers-reduced-motion: reduce) {
