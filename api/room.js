@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { isGenius as isGeniusClaim } from './_entitlement.js';
-import { expire, hdel, hgetall, hincrby, hset, hsetnx, storeConfigured } from './_store.js';
+import { expire, hdel, hget, hgetall, hincrby, hset, hsetnx, storeConfigured } from './_store.js';
 
 /**
  * Multiplayer rooms: a four-digit code, two to four players, one board.
@@ -542,6 +542,85 @@ const roundKey = (playerId) => 'r:' + String(playerId);
  * 回一份当前状态就好；一秒后的轮询会把新局次和种子一起带给他。
  */
 const startLockKey = (round) => 'ls:' + String(round);
+/**
+ * 散场那一件事的锁。一间屋只散一次，所以不按局次分格，就一格。
+ *
+ * end() 从前也没锁，而它和 start() 是同一段账：第 1266 行的
+ * `if (hash.meta.endedAt) return` 只是「看一眼有没有结束」，不是原子的，而真正
+ * 写 endedAt 是在整个记账循环**跑完之后**——两条 end 都能过那道闸。
+ *
+ * 今天凌晨那一笔只堵了 start()，这个几乎逐字相同的口子留在了原地。
+ *
+ * 实测（scripts/check-room-races.mjs 的 ⑧，两人各 100/200 分，把错位量从 0 到
+ * 40 挨个走）：错位 2 屋主的总分从 100 变 200，错位 4 客人的从 200 变 400，
+ * 错位 3 和 5 是 rounds 变 2。翻倍**只翻在恰好被撞上的那一个人头上**——每个座
+ * 位各有自己「写完 p: 还没写 r:」那两步的窗口，撞上谁是谁。所以那张要发给朋友
+ * 看的小屋战绩卡上，是三个人里有一个的分数莫名其妙翻了倍，比全屋一起翻更难
+ * 解释。
+ *
+ * 另外记一笔：错位 0（也就是干脆用一把 Promise.all 同时发两条）是**绿的**——
+ * 两条读到同一份快照，各自算出同一个结果，写回去的值一模一样。所以这个 bug
+ * 只能靠扫错位量量出来，一把 Promise.all 会让人以为没事。
+ */
+const END_LOCK = 'le:end';
+/**
+ * 一把锁「多久没动静就算是废的」。
+ *
+ * 锁本身带来一个新毛病：抢锁和把结果写进 meta 之间隔着一整段记账循环（20 个
+ * 座位就是 40 次 Redis 往返）。中间任何一次超时抛错，最外层的 catch 回一个
+ * 502，而 **meta 一步没动、锁也没人删**。于是屋主再点《再来一局》，算出来的
+ * 「下一局」局次和刚才失败那次一模一样（拿的是没变过的旧局次），锁的位置也没
+ * 变，永远抢不到——回的还是 200，一份「什么都没变」的状态，连错都不报。屋主
+ * 怎么点都没反应，其他人卡在「等屋主选玩法」，一晚上的战绩只能等这间屋自己过
+ * 期。而且不一定等得到 20 分钟就好：TTL 是「任何点击都续命」的（见 state 里的
+ * touched），几个人在界面上乱点，这间死屋能一直续下去。
+ *
+ * 20 秒这个数怎么来的：它必须**大于任何一次跑得成的记账**（不然就是把一条还在
+ * 干活的请求的锁抢走，⑦⑧ 修的东西白修），又要尽量小（它就是这间屋卡住之后要等
+ * 多久才自愈）。算得出来的那一头：最坏是 20 座 × 2 次 hset + meta + expire ≈
+ * 43 次往返，Upstash 一次 50–200ms，也就是最多八九秒。20 秒留了两倍多的余量，
+ * 同时比「等这间屋自己过期」（20 分钟）快六十倍。
+ *
+ * 两头错的后果不对称，所以宁可留厚一点：定得太小是**又开始记两遍**，定得太大
+ * 只是自愈慢一点。真要改这个数，先量一遍记账那一段在生产上的耗时。
+ *
+ * （本来想再加一句「反正 Vercel 会先把函数掐掉」当第二道保险，查了文档没找到
+ * Hobby 档默认上限的确切数，就不写了——没核实的数字不该当成依据。）
+ */
+const LOCK_STALE_MS = 20_000;
+/**
+ * 抢一格一次性的锁：抢到回 true，没抢到回 false。start() 和 end() 共用。
+ *
+ * 平常就是一句 HSETNX（Redis 自己那一步：这一格空着才写得进去），和抢房号、抢
+ * 椅子用的是同一个办法。
+ *
+ * 多出来的那一半是「接手废锁」，而它必须**也是原子的**，不然就是把刚补上的洞
+ * 又挖开：最自然的写法是「看一眼时间戳，旧了就 hdel 掉重抢」，可那样两条都会
+ * 先看到同一把废锁、都去删、都重抢——第二条删掉的是第一条刚写下的新锁，于是
+ * 两条都以为自己抢到了，记账又是两遍。
+ *
+ * 所以接手权另记一格，**格名里带上「我看到的那个时刻」**（`ls:2:1789…`）：看到
+ * 同一把废锁的几条一定竞争同一格，HSETNX 保证只有一条拿得到；看到的是更新的
+ * 那把（也就是已经有人接手了）的，压根不会走到这一步。接手成功的那一条先占下
+ * 这一格、再把锁的时间戳刷新，所以就算它也半路死掉，下一轮会按新时间戳再选出
+ * 一个接手人，一层套一层，永远只有一个。
+ *
+ * 多出来的那几格不用清：它们和小屋同生共死（一间屋就是一个 hash，TTL 到了整间
+ * 一起走），而且下游读座位的地方全都按 `p:` 前缀过滤（publicState / seatCount /
+ * roundOver / 两处记账循环），多几格非 p: 的字段一个都不看。
+ */
+async function takeRoomLock(code, field) {
+  const now = Date.now();
+  if (await hsetnx(roomKey(code), field, { at: now })) return true;
+  const held = await hget(roomKey(code), field);
+  const at = Number(held && held.at) || 0;
+  // 还有人在办这件事。抢不到的那一条不报错——屋主按下去是想开局/散场，而那件
+  // 事确实正在办，回一份当前状态就好。
+  if (at && now - at < LOCK_STALE_MS) return false;
+  if (!(await hsetnx(roomKey(code), field + ':' + at, { at: now }))) return false;
+  await hset(roomKey(code), field, { at: now });
+  return true;
+}
 /** 一局收尾时把那三样清回零（开下一局、散场各用一次）。 */
 const CLEAR_ROUND = { score: 0, finished: false, seconds: null };
 
@@ -1095,7 +1174,7 @@ async function start(res, body) {
   // 这一局的开局权，抢到才办（见 startLockKey 上面那段）。抢不到说明已经有
   // 一条在开这一局了：回当前状态，不重复记账。
   const nextRound = (hash.meta.round || 0) + 1;
-  if (!(await hsetnx(roomKey(code), startLockKey(nextRound), { at: Date.now() }))) {
+  if (!(await takeRoomLock(code, startLockKey(nextRound)))) {
     return send(res, 200, publicState(code, await readRoom(code)));
   }
 
@@ -1248,6 +1327,48 @@ async function score(res, body) {
 }
 
 /**
+ * 抢不到散场那把锁的那一条，回什么。
+ *
+ * 不能像 start() 那样「回一份当前状态就完事」。两条路对回包的用法完全不同：
+ *
+ *   · start() 的回包没有谁在读——所有人拼棋盘的种子、局次、开赛时刻，全是从每
+ *     秒一次的轮询里拿的（ui/multiplayer.ts 的 beginCountdown）。
+ *   · end() 的回包**就是那张小屋战绩卡**：ui/multiplayer.ts 第 294 行
+ *     `const card = closed.ok && closed.value.round ? closed.value : null`，而且
+ *     紧接着就 forgetRoom() 把轮询停掉了——没有第二次机会。
+ *
+ * 所以这一条要是回一份「记了一半」的状态，屋主手上那张要发给朋友看的卡就是残
+ * 的。**丢的不是总分**——这一点差点写反：卡上的总分是 liveTotal = total + score
+ * （ui/roomCard.ts 第 56 行），而记账干的事就是把 score 挪进 total，这个和记不
+ * 记账都一样。丢的是只在 bankRound 里才被写、而卡上正在用的那两样：
+ *
+ *   · best —— 「单局最高 · 某某 N」那一行（roomCard.ts 第 164 行），也是排名的
+ *     第二档（第 67 行，总分并列时比它）；
+ *   · bestTime —— 「最快玩家」那一行（第 165 行）。
+ *
+ * 撤掉这个函数实测过（check-room-races.mjs 的 ⑧乙）：回包里屋主 best=0、
+ * bestTime=null，那两行在卡上就是空的或者写了错的人。那是把翻倍换成另一种错，
+ * 不算修好。
+ *
+ * 等就是了：赢的那条把 endedAt 写在**整段记账的最后**，所以 endedAt 一出现，账
+ * 就一定记齐了。三秒的预算是照记账的最坏情况给的（见 LOCK_STALE_MS 上面那段：
+ * 20 座约 43 次 Redis 往返，最多八九秒；但真到八九秒那一条早该被平台掐了）。
+ * 常见情形是一两百毫秒就等到。等不到就说明赢的那条自己也半路死了——那时回当前
+ * 状态是唯一诚实的答案，而且锁已经变成废锁，下一次 end 会按 takeRoomLock 那套
+ * 接手，把账记完。
+ */
+async function settled(code) {
+  for (let i = 0; i < 30; i++) {
+    const hash = await readRoom(code);
+    if (!hash) break;
+    if (hash.meta.endedAt) return publicState(code, hash);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const hash = await readRoom(code);
+  return hash ? publicState(code, hash) : { error: 'noRoom' };
+}
+
+/**
  * 结束房间. The room is marked closed rather than deleted: everyone else is
  * still polling, and the closing card - who won the evening - is the last
  * thing any of them will see. Deleting it here would replace that with a
@@ -1264,6 +1385,9 @@ async function end(res, body) {
     return send(res, 403, { error: 'notHost' });
   }
   if (hash.meta.endedAt) return send(res, 200, publicState(code, hash));
+  // 上面那一句只是「看一眼」，两条 end 都过得去（见 END_LOCK 上面那段：实测
+  // 屋主的总分从 100 变 200）。真正只许一条进来的是这一句。
+  if (!(await takeRoomLock(code, END_LOCK))) return send(res, 200, await settled(code));
 
   const banked = {};
   for (const [field, seat] of Object.entries(hash)) {
