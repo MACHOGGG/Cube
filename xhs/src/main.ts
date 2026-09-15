@@ -48,7 +48,7 @@ import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
 import { setCoachStoreKey } from '../../src/ui/coachBar';
-import { openTutorial, storySeen, markStorySeen, RULE_ART, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
+import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
 import { bombTip, flipTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';

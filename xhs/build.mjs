@@ -5,6 +5,11 @@
  *
  * 六步，缺一步都可能在真机上才发现：
  *
+ *   0. 类型检查（xhs/tsconfig.json）：小红书端这 13 个文件大量调用 src/ 的引
+ *      擎，而根 tsconfig 的 include 只有 ["src"]，从来不含 xhs/src——于是网页
+ *      端改了某个函数的签名，这边的引用点本该报错，却一个字都不会红（出包这
+ *      条路对 TS 只是「剥掉类型直接转译」）。照 build-wxgame.mjs 的办法，先验
+ *      类型再打包：错在这儿拦住，而不是等真机上白屏。第一次接上就抓到两个。
  *   1. vite build（xhs/vite.config.ts：iife 经典脚本 + es2017/chrome61 +
  *      把联网模块换成空替身）
  *   2. 改 index.html：Vite 出的是 <script type="module" crossorigin>，容器的
@@ -29,6 +34,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, 'dist');
 const zip = join(here, 'slides-minitool.zip');
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', ...opts });
+
+// ---- 0. 类型检查 -----------------------------------------------------------
+// 摆在最前面：类型错不必等一整轮 vite build 才知道，而且这一步红了就不该出包。
+run('npx', ['tsc', '-p', join(here, 'tsconfig.json')], { cwd: join(here, '..') });
 
 // ---- 1. 构建 ---------------------------------------------------------------
 run('npx', ['vite', 'build', '--config', join(here, 'vite.config.ts')], { cwd: join(here, '..') });
@@ -110,6 +119,11 @@ console.log('禁用能力扫描：干净');
 //
 // 所以这里拿一个只认 ES2017 的解析器（acorn）把**拼好之后的整个产物**再读一
 // 遍。读得下来，才敢说 Chrome 61 认得它的每一个字。
+// acorn 是 package.json 里**声明过**的 devDependency，而且钉死了版本。
+// 从前没声明，能跑纯粹是因为 vite/rollup 内部依赖它、npm 把它平铺到了顶层
+// node_modules——正是 CLAUDE.md 点名警告的那种「搭 vite 的便车」：升一次
+// vite，它可能挪进更深的目录或换成不兼容的版本，届时这道专门为 Chrome 61
+// 把关的门会先失效（报「找不到模块」，整个出包跑不起来）。
 const acorn = await import('acorn');
 try {
   acorn.parse(readFileSync(appPath, 'utf8'), { ecmaVersion: 2017, sourceType: 'script' });

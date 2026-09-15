@@ -11,7 +11,11 @@
  *   · pushRun() 空转 —— 结算照常，只是不上传。
  *   · fetchMine / fetchBoard 永远给 null / signedOut。
  */
-import type { RunData } from '../../../src/engine/persistence';
+// RunData 住在 runRecord，不在 persistence——后者只是 import 它，并不再导出。
+// 原先这里写的是 persistence，于是这个替身的每一处签名都没被核过；而替身存在
+// 的全部意义就是签名和真身（src/engine/cloudScores.ts）一样，它导入的也正是
+// runRecord 这一份。这是给 xhs/ 补上类型检查之后抓到的第一个真错。
+import type { RunData } from '../../../src/engine/runRecord';
 
 export const PLAYER_NAME_KEY = 'slides_mp_name';
 

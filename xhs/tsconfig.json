@@ -1,0 +1,21 @@
+{
+  // 小红书端自己的类型检查。根 tsconfig 的 include 只有 ["src"]，从来不含
+  // xhs/src——于是这 13 个文件大量调用 src/ 的引擎，却一次都没被 tsc 看过：
+  // 网页端改了某个函数的签名，小红书这边的引用点本该报错，可 npm run
+  // typecheck、build:xhs、check:xhs:all 没有一个会红，因为出包那条路对 TS 只
+  // 是「剥掉类型直接转译」。第一次跑起来就抓到两个：main.ts 里一个从没用过的
+  // 导入，和 stubs/cloudScores.ts 拿 RunData 拿错了模块（persistence 只是
+  // import 它，并不导出）——后面这个正是「替身的签名和真身对不上」，而替身存
+  // 在的全部意义就是签名要一样。
+  //
+  // 照 wxgame/tsconfig.json 的办法：继承根的那套严格档，只换 include。
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  // 两份 .d.ts 必须点名带上。它们住在 src/ 根上（不在 xhs/src 里），而
+  // import.meta.env、import.meta.glob 和 `*.css?inline` 这三样全靠它们声明
+  // ——不带，就会收到 10 条「ImportMeta 上没有 env」「找不到模块 ./x.css?inline」
+  // 之类的假警报，把真正的错埋在里面。
+  "include": ["src", "../src/env.d.ts", "../src/css-inline.d.ts"]
+}
