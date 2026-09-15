@@ -1640,31 +1640,49 @@ body:has(.center-pick--back) .home-nav { display: none; }
 /* 手机上也左右各一半。竖着叠的时候一屏只装得下《记录》那一块，《排行榜》
    得往下滑才露头；并排之后两块一眼都在。窄了就装不下整行字，所以面板里
    只留缩略的内容——图形加分数——玩法小字和日期交给点开后的整页。 */
-.records-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* 两道 minmax(0, …) 是这一行的正事，不是装饰：`1fr` 的真身是
+   `minmax(auto, 1fr)`，而那个 auto 的下限是**内容的最小宽度**。榜上出现一个
+   十位数的分数（等宽字体、不能折行、不能省略号——省略号写在数字上就是在撒
+   谎），那一半就按它撑开：先把另一半挤扁（量到过 229 / 117，本该各 173），
+   再把整块顶出屏幕。玩家实拍到过（2026-09，榜首 1000000000）。
+   写成 minmax(0, 1fr)，两半永远各占一半，谁也挤不着谁。至于「自己这一半装
+   不下」，由数字自己缩写解决（engine/compactScore）。 */
+.records-panels {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
+}
+/* 面板自己也要能收：它是 <button>，默认 min-width: auto，不写这一条的话上面
+   那道 minmax(0, …) 到了它这一层又被顶回去。 */
+.records-panels > .records-panel { min-width: 0; }
 @media (min-width: 720px) { .records-panels { gap: 40px; } }
 
 /* 缩略版。每条规则都挂在 .records-panels 底下是有意的：点开的放大版
    (.records-panel--big) 是挂到 body 上的另一个元素，不在这个容器里，
-   所以它一个字都不会被这里缩掉，照旧是完整的那一份。 */
-@media (max-width: 719px) {
-  /* 46vh 是给整幅宽的面板定的；缩到半幅之后同样的高度只剩一大片空底色，
-     所以这里按缩略版自己的内容给高度：五行 + 底下那句话，正好 260。 */
-  .records-panels .records-panel { padding: 18px 12px; gap: 10px; border-radius: var(--r-lg); min-height: 260px; }
-  .records-panels .records-row { padding: 7px 10px; gap: 6px; }
-  .records-panels .records-row-glyph { width: 18px; height: 18px; }
-  /* 基础样式里这行是竖排的 flex（名字/玩法/日期三层）。缩略版只剩名字一层，
-     改回 block 才能让 text-overflow 的省略号生效——flex 容器里的裸文本是
-     匿名子项，省略号管不到它。 */
-  .records-panels .records-row-name {
-    display: block; font-size: 0.76rem;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .records-panels .records-row-mode,
-  .records-panels .records-row-time { display: none; }
-  .records-panels .records-row-score { font-size: 0.78rem; }
-  .records-panels .records-rule { height: 6px; }
-  .records-panels .records-locked { font-size: 0.7rem; letter-spacing: 0.02em; }
+   所以它一个字都不会被这里缩掉，照旧是完整的那一份。
+
+   这一段原先整个包在 @media (max-width: 719px) 里，是按「宽屏上位置宽裕」
+   写的——可这页从来没宽裕过：`.app` 全站封了 max-width: 460px，电脑上整个
+   应用就是屏幕中间一条 460 的窄栏，两块牌子各约 194，和手机上一模一样。于是
+   电脑端拿到的是「整幅宽面板」那套样式塞进 194 的格子：「方塊」两个字竖着
+   折行，日期挤成一列，分数也折成两行。右边那半（.records-panels .rank-*）
+   从来就没加这道门，所以一直是好的——两半长得不一样，正是这道多余的门。
+   按屏幕宽度开门在这儿没有意义，缩略牌就是缩略牌。 */
+/* 46vh 是给整幅宽的面板定的；缩到半幅之后同样的高度只剩一大片空底色，
+   所以这里按缩略版自己的内容给高度：五行 + 底下那句话，正好 260。 */
+.records-panels .records-panel { padding: 18px 12px; gap: 10px; border-radius: var(--r-lg); min-height: 260px; }
+.records-panels .records-row { padding: 7px 10px; gap: 6px; }
+.records-panels .records-row-glyph { width: 18px; height: 18px; }
+/* 基础样式里这行是竖排的 flex（名字/玩法/日期三层）。缩略版只剩名字一层，
+   改回 block 才能让 text-overflow 的省略号生效——flex 容器里的裸文本是
+   匿名子项，省略号管不到它。 */
+.records-panels .records-row-name {
+  display: block; font-size: 0.76rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.records-panels .records-row-mode,
+.records-panels .records-row-time { display: none; }
+.records-panels .records-row-score { font-size: 0.78rem; }
+.records-panels .records-rule { height: 6px; }
+.records-panels .records-locked { font-size: 0.7rem; letter-spacing: 0.02em; }
 
 .records-panel {
   border-radius: var(--r-xl); padding: 30px 26px; min-height: 46vh;

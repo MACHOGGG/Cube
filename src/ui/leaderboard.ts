@@ -2,6 +2,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { fetchBoard, type BoardPage, type BoardResult } from '../engine/cloudScores';
 import { shapeName } from './shapeLabels';
 import { gameIcon } from './homeIcons';
+import { compactScore } from '../engine/compactScore';
 
 /**
  * 全球排行榜的那一块。
@@ -21,6 +22,16 @@ const esc = (v: string) =>
 
 /** 锁住时垫在底下的那几行假名次。长短不一，才像一张真的榜。 */
 const GHOST_ROWS = 8;
+
+/**
+ * 缩略牌上摆前几名。
+ *
+ * 五，跟左边《记录》那一块一样多（recordsPage 的 PLACEHOLDER_ROWS）——两块并
+ * 排站着，行数不一样的话矮的那块底下空一截，看着像少了点什么。原先是三（玩家
+ * 2026-09：「在缩小图里只显示 3 个，应该显示 top5」）。
+ * 再多就不摆了：完整的那张榜点一下就有。
+ */
+const THUMB_ROWS = 5;
 
 export interface BoardTab {
   /** 空字符串是总榜；`g:` 开头是母榜（旗下几张合起来）；别的是一张单独的榜。 */
@@ -61,7 +72,7 @@ export function boardGroups(lang: Lang): BoardGroup[] {
 }
 
 /** 一张榜画成的行。自己那一行会被标出来。 */
-function rowsHtml(page: BoardPage, lang: Lang): string {
+function rowsHtml(page: BoardPage, lang: Lang, compact = false): string {
   const s = STRINGS[lang];
   if (!page.rows.length) return `<p class="rank-empty">${s.rankEmpty}</p>`;
   // 总榜不分玩法，每一行是那个人最高的那一局——行首画一个小图形，说明那一局
@@ -73,7 +84,7 @@ function rowsHtml(page: BoardPage, lang: Lang): string {
         <span class="rank-place">${r.rank}</span>
         ${r.mode ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.mode, r.mode))}">${gameIcon(r.mode)}</span>` : ''}
         <span class="rank-name">${esc(r.name)}</span>
-        <span class="rank-score">${r.score}</span>
+        <span class="rank-score">${compact ? compactScore(r.score, lang) : r.score}</span>
       </div>`,
     )
     .join('');
@@ -271,12 +282,14 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
   void fetchBoard().then((result) => {
     if (!result.ok) {
       if (result.reason === 'geniusOnly') {
+        // 灰杠的宽度在 45/60/75 三档里轮着来。原先写的是 45 + i*15，三行的时候
+        // 刚好停在 75；现在摆五行，第五行会算成 105%，那条杠要顶出牌子。
         host.innerHTML =
           Array.from(
-            { length: 3 },
+            { length: THUMB_ROWS },
             (_, i) => `<div class="rank-row rank-row--ghost">
               <span class="rank-place">${i + 1}</span>
-              <span class="rank-ghost-bar" style="width:${45 + i * 15}%"></span>
+              <span class="rank-ghost-bar" style="width:${45 + ((i * 15) % 45)}%"></span>
             </div>`,
           ).join('') + `<p class="rank-foot">${s.rankLocked}</p>`;
         return;
@@ -292,7 +305,7 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
       }</p>`;
       return;
     }
-    const top = { ...result.page, rows: result.page.rows.slice(0, 3) };
-    host.innerHTML = rowsHtml(top, lang);
+    const top = { ...result.page, rows: result.page.rows.slice(0, THUMB_ROWS) };
+    host.innerHTML = rowsHtml(top, lang, true);
   });
 }

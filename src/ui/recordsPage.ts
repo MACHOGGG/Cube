@@ -10,6 +10,9 @@ import { trackShare } from '../engine/analytics';
 import { isGenius } from '../engine/subscription';
 import { mountBoardThumb, mountBoardView } from './leaderboard';
 import { CTL_BACK } from './ctlIcons';
+// 累计得分没有上限，而它那张卡是页面上一个固定的格子——数字长到装不下就缩写，
+// 点开的放大版再写全每一位。排行榜缩略牌用的是同一份（见 engine/compactScore）。
+import { compactScore } from '../engine/compactScore';
 
 /** One playable game+mode combination, so the page knows which archives to
  *  read and which glyph belongs to a stored run's shape id. */
@@ -24,28 +27,6 @@ export interface RecordSource {
  *  them — the reference sheet draws five, and an empty panel keeps them so it
  *  reads as "waiting for entries" rather than as a blank block. */
 const PLACEHOLDER_ROWS = 5;
-
-/**
- * 累计得分 has no upper bound, but its card is a fixed slot on the page — so
- * the number is shortened (万/亿 in Chinese, K/M/B elsewhere) once it grows
- * past what fits comfortably, and the blown-up view then shows every digit.
- */
-function compactScore(n: number, lang: Lang): string {
-  const zh = lang === 'zhHans' || lang === 'zhHant';
-  const cut = (v: number, unit: string) => {
-    const t = (n / v).toFixed(n / v >= 100 ? 0 : 1);
-    return (t.endsWith('.0') ? t.slice(0, -2) : t) + unit;
-  };
-  if (zh) {
-    if (n >= 1e8) return cut(1e8, '亿');
-    if (n >= 1e5) return cut(1e4, '万');
-    return String(n);
-  }
-  if (n >= 1e9) return cut(1e9, 'B');
-  if (n >= 1e6) return cut(1e6, 'M');
-  if (n >= 1e5) return cut(1e3, 'K');
-  return String(n);
-}
 
 /** The full number, grouped, for the blown-up view. */
 function fullScore(n: number): string {
@@ -118,7 +99,7 @@ export function renderRecordsPage(
 
   /** One record line: which shape, which mode, when it finished, what it
    *  scored. Tapping it goes straight to that run's share card. */
-  function recordRow(run: StoredRun): HTMLElement {
+  function recordRow(run: StoredRun, compact: boolean): HTMLElement {
     const d = run.data;
     const name = shapeName(lang, d.shapeId, d.shapeFallback);
     const mode = modeLabel(d.modeKey, lang);
@@ -128,7 +109,7 @@ export function renderRecordsPage(
       `<span class="records-row-glyph">${glyphOf.get(d.shapeId) ?? ''}</span>` +
       `<span class="records-row-name">${name}${mode ? `<span class="records-row-mode">${mode}</span>` : ''}` +
       `<span class="records-row-time">${formatRunTime(d.at)}</span></span>` +
-      `<span class="records-row-score">${d.totalScore}</span>`;
+      `<span class="records-row-score">${compact ? compactScore(d.totalScore, lang) : d.totalScore}</span>`;
     row.addEventListener('click', (e) => {
       // The panel itself is clickable (to blow it up); a row click is about
       // that one run, so it must not also trigger the panel.
@@ -141,6 +122,9 @@ export function renderRecordsPage(
   /** Fills a container with record rows, padded out with ruled lines so a
    *  short list still reads as the design's ruled sheet. */
   function fillRecords(host: HTMLElement, limit: number | null) {
+    // limit 不为 null 的那一次就是半幅的缩略牌：那儿的分数得缩写，否则一个十位
+    // 数能把这半幅撑破（见 engine/compactScore 开头那段）。点开的整页不缩。
+    const compact = limit !== null;
     host.innerHTML = '';
     const shown = limit === null ? runs : runs.slice(0, limit);
     if (!shown.length) {
@@ -149,7 +133,7 @@ export function renderRecordsPage(
         `<p class="records-locked">${s.noRecordsYet}</p>`;
       return;
     }
-    for (const run of shown) host.appendChild(recordRow(run));
+    for (const run of shown) host.appendChild(recordRow(run, compact));
     for (let i = shown.length; i < PLACEHOLDER_ROWS; i++) {
       const rule = document.createElement('div');
       rule.className = 'records-rule';
@@ -169,8 +153,9 @@ export function renderRecordsPage(
   });
 
   const ranks = container.querySelector<HTMLButtonElement>('#ranksPanel')!;
-  // 缩略图上只有总榜的前三名和「我排第几」——那半块屏幕装不下九个切页，而
-  // 站在这儿的人想知道的也就这一件事。点开才是完整的九张榜。
+  // 缩略图上只有总榜的前几名（leaderboard 的 THUMB_ROWS）——那半块屏幕装不下
+  // 六个母标签和它们旗下的子标签，而站在这儿的人想知道的也就「榜上头几个是
+  // 谁」。点开才是完整的那几张榜。
   mountBoardThumb(ranks, lang);
   // 排行榜是活的：每次点开都重新去问，而不是把上一次的结果留在手上。
   ranks.addEventListener('click', () => {
