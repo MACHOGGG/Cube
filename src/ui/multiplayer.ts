@@ -164,6 +164,11 @@ function errorText(reason: RoomError, lang: Lang): string {
       return s.mpErrNoRoom;
     case 'full':
       return s.mpErrFull;
+    // 两台设备同时来认领同一把离线的椅子，慢的那一台。不说清楚的话，那台拿
+    // 到的是一把表面成功、其实当场作废的钥匙：屋里画面照常，报分、催屋主、
+    // 离开却全被安静地拒绝，一整局打完才发现自己那一行一直是 0。
+    case 'claimed':
+      return s.mpErrClaimed;
     case 'started':
       return s.mpErrStarted;
     case 'tooFew':

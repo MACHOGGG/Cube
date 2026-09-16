@@ -93,6 +93,11 @@ jobs:
         run: ALLOW_MEMORY_STORE=1 node scripts/check-creem-gate.mjs
       - name: 发码接口的限速
         run: ALLOW_MEMORY_STORE=1 node scripts/check-mint-limit.mjs
+      # 付费入口也要限速。它曾是全站唯一一个「碰钱却没限速」的漏网之鱼，而浏览
+      # 器那头早就写好了收到 429 该说什么——前后端说好了的事，服务端一直空着。
+      # 不连 Creem（那一跳换成会数次数的假货），几百毫秒。
+      - name: 付费入口的限速
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-checkout-limit.mjs
       - name: 认证：验过了就要说验过了
         run: node scripts/check-unlock-reset.mjs
       - name: 账户：兑码落到账户上、改密码、换邮箱

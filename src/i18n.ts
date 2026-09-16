@@ -344,6 +344,8 @@ export interface I18nStrings {
   mpErrNoRoom: string;
   mpErrFull: string;
   mpErrStarted: string;
+  /** 同一把离线的椅子，另一台设备先一步认领走了。 */
+  mpErrClaimed: string;
   mpErrTooFew: string;
   mpErrNotOpen: string;
   notOnSaleYet: string;
@@ -684,6 +686,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrNoRoom: 'No room with that code.',
     mpErrFull: 'That room is full.',
     mpErrStarted: 'That game has already started.',
+    mpErrClaimed: 'Someone just took that seat back. Try another name.',
     mpErrTooFew: 'Two players at least.',
     mpErrNotOpen: 'Multiplayer is not open yet.',
     notOnSaleYet: 'The subscription is not open yet.',
@@ -986,6 +989,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrNoRoom: 'Aucune salle avec ce code.',
     mpErrFull: 'Cette salle est pleine.',
     mpErrStarted: 'Cette partie a déjà commencé.',
+    mpErrClaimed: 'Quelqu’un vient de reprendre cette place. Essayez un autre nom.',
     mpErrTooFew: 'Il faut au moins deux joueurs.',
     mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
@@ -1288,6 +1292,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrNoRoom: '沒有這個小屋號碼。',
     mpErrFull: '小屋滿了。',
     mpErrStarted: '這一局已經開始了。',
+    mpErrClaimed: '剛才有人先一步坐回這個位子了。換個名字再試。',
     mpErrTooFew: '至少要兩個人。',
     mpErrNotOpen: '多人遊玩尚未開放。',
     notOnSaleYet: '訂閱尚未開放。',
@@ -1590,6 +1595,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrNoRoom: '没有这个小屋号码。',
     mpErrFull: '小屋满了。',
     mpErrStarted: '这一局已经开始了。',
+    mpErrClaimed: '刚才有人先一步坐回这个位子了。换个名字再试。',
     mpErrTooFew: '至少要两个人。',
     mpErrNotOpen: '多人游玩尚未开放。',
     notOnSaleYet: '订阅尚未开放。',

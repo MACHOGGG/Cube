@@ -84,6 +84,9 @@ async function openRoom() {
   return { code, host, guest };
 }
 const seatOf = (st, id) => (st.body.players || []).find((p) => p.id === id) || {};
+// ⑨ 和 ⑩ 要直接摆库里的状态（废锁、推老的心跳），从外面是摆不出来的。
+const { hset: hsetRace, hgetall } = await import('../api/_store.js');
+const roomKey = (code) => 'room:' + code;
 
 // ---- ① 报分撞上心跳 ------------------------------------------------------
 {
@@ -422,6 +425,154 @@ const seatOf = (st, id) => (st.body.players || []).find((p) => p.id === id) || {
     check('⑨丙 两条同时接手，记账还是只记一遍', !bad, bad ? `${bad.name} rounds=${bad.rounds}` : '');
     check('⑨丙 接手之后锁是新鲜的', Number((await hget(roomKey(code), 'ls:2'))?.at) > Date.now() - 30_000);
   }
+}
+
+// ---- ⑩ 屋主开下一局，撞上一条真的报分 ----------------------------------
+//
+// ⑦ 扫的是「两条 start 互相撞」，这一条扫的是「一条 start 撞上一条 score」——
+// 昨天凌晨（878da16）补的锁把前者堵住了，后者一个字都没测到，于是漏网。
+//
+// start() 一进门读一次库，然后去抢开局锁，抢到之后**照着那份旧快照**结算。
+// 抢锁这中间要跑一趟库（hsetnx 一个来回），恰好这时候有人把最后一次分报上来
+// ——那一份写进的是 `r:<id>`（score() 只写这一格），而旧快照里那一格还是旧
+// 的。于是记账按旧的记，紧接着又把 `r:` 清成 CLEAR_ROUND：新报的分连记带存
+// 两头落空，凭空消失。
+//
+// 最常见的真实场景：客人网卡了一下被判成「九十秒没消息」，其实他正在补报最后
+// 一次分；屋主看着「都交了」就按了《再来》。两件事前后脚到服务器。
+//
+// 和 ⑦ 一样扫错位：真正同时（错位 0）反而安全（score 在 start 读库之前就落地
+// 了）。危险的是它落在「start 读完库」和「start 开始写」之间那几个微任务里。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  let worst = null;
+  for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20]) {
+    const { code, host, guest } = await openRoom();
+    const st = await call({ action: 'state', code, ...host });
+    await new Promise((r) => setTimeout(r, Math.max(0, st.body.startAt - Date.now() + 40)));
+    await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
+    // 客人被判成「九十秒没消息」——这一局不再等他，屋主于是按得下《再来》。
+    // 这正是玩家描述的那一幕：他其实没走，网卡了一下，正在把最后一次分补报
+    // 上来。不把心跳推老的话 roundOver 为假，start 直接回 409，这一档什么都
+    // 量不到（第一版就是这样，看着「全档失败」，其实是根本没开成局）。
+    // 心跳和 joinedAt 都要推老：seenFrom 取的是两者的较大值（刚进屋的人
+    // joinedAt 就是此刻，只推心跳的话他照样算「在」，roundOver 为假，start
+    // 直接回 409——那一档等于什么都没量到）。
+    const rawX = await hgetall('room:' + code);
+    await hsetRace(roomKey(code), 'p:' + guest.playerId, { ...rawX['p:' + guest.playerId], joinedAt: Date.now() - 95_000 });
+    await hsetRace(roomKey(code), 'h:' + guest.playerId, { lastSeen: Date.now() - 95_000 });
+    let told = false;
+    await Promise.all([
+      call({ action: 'start', code, ...host, mode: 'square' }),
+      (async () => {
+        await ticks(k);
+        const r = await call({ action: 'score', code, ...guest, score: 777, finished: true, seconds: 33, round: 1 });
+        told = Boolean(r.body.scoreDropped);
+      })(),
+    ]);
+    const after = await call({ action: 'state', code, ...host });
+    const g = seatOf(after, guest.playerId);
+    // 只有两种结局算对：
+    //   · 赶在立锁之前到的 → 记进 total（抢到锁之后那次重读接住了它）；
+    //   · 立锁之后到的     → 一个字都没写，而且**明说没收下**（scoreDropped，
+    //                        客户端认得这句，见 ui/scoreboard.ts）。
+    // 不许出现第三种：回了成功，分却蒸发。那正是玩家碰上的那一种。
+    const banked = (g.total || 0) === 777;
+    const refused = (g.total || 0) === 0 && (g.score || 0) === 0 && told;
+    if (!banked && !refused) {
+      worst = `错位 ${k}：客人 total=${g.total} score=${g.score} 告知=${told}`;
+    }
+  }
+  check('⑩ 开下一局撞上报分：要么记进账，要么明说没收下', worst === null, worst || '');
+}
+
+// ---- ⑪ 屋主解散小屋，撞上一条真的报分 ----------------------------------
+//
+// ⑩ 的另外半边，一模一样的病：end() 也是「先读一次、再抢锁、抢到之后照旧快照
+// 结算」。最后一局大家陆续交卷，屋主一看「好像都交了」就按《解散小屋》——这个
+// 动作和某个人最后一次报分前后脚到服务器，是最普通不过的场景。那张发出去的小
+// 屋战绩卡上，那个人这一局就是 0 分，客户端和服务端都不报错。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  let worst = null;
+  for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20]) {
+    const { code, host, guest } = await openRoom();
+    await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
+    let told = false;
+    await Promise.all([
+      call({ action: 'end', code, ...host }),
+      (async () => {
+        await ticks(k);
+        const r = await call({ action: 'score', code, ...guest, score: 888, finished: true, seconds: 44, round: 1 });
+        told = Boolean(r.body.scoreDropped);
+      })(),
+    ]);
+    // 和 ⑥ 一样重读：end 的回包里 banked 盖过了库里那一份，只看回包看不出来。
+    const after = await call({ action: 'state', code, ...guest });
+    const g = seatOf(after, guest.playerId);
+    const sum = (g.total || 0) + (g.score || 0);
+    // 判定和 ⑩ 一样：要么记进那张卡，要么明说没收下。散场这一条更要紧——没有
+    // 「下一局」可以把分捡回来。
+    if (!(sum === 888 || (sum === 0 && told))) {
+      worst = `错位 ${k}：客人 total+score=${sum} 告知=${told}`;
+    }
+  }
+  check('⑪ 解散小屋撞上报分：要么记进卡，要么明说没收下', worst === null, worst || '');
+}
+
+// ---- ⑫ 两台设备同时认领同一把离线的椅子 --------------------------------
+//
+// 抢椅子本身是原子的（claimSlot 用 HSETNX 占 s:i），可抢到之后「往座位里写一
+// 把新钥匙」不是：两台都读到「这把椅子空着」，各自生成一把新钥匙写进同一个
+// `p:<id>`，后写的赢，先写的那把当场作废。
+//
+// 最容易踩到的是同一个人：手机快没电换平板接着玩（手机那个标签页没关），或者
+// 网络卡顿时对着《加入》点了两下。输掉那台设备表面上一切正常——小屋画面、名
+// 单、倒数照常——可从那一刻起报分、催屋主、看教学、离开，服务器全都安静地拒
+// 绝，界面上一个字的错都不弹。他打完一整局，回到小屋才发现自己那一行一直是 0。
+{
+  const { code, host } = await openRoom();
+  await call({ action: 'join', code, name: '回头客' });
+  // 先让他走掉，椅子才认领得回来（seatReclaimable）。
+  const first = await call({ action: 'join', code, name: '回头客2' });
+  await call({ action: 'leave', code, playerId: first.body.playerId, playerToken: first.body.playerToken });
+  const both = await Promise.all([
+    call({ action: 'join', code, name: '回头客2' }),
+    call({ action: 'join', code, name: '回头客2' }),
+  ]);
+  const won = both.filter((r) => r.status === 200 && r.body.playerToken);
+  check('⑫ 两台同时认领：只有一台拿到钥匙', won.length === 1, `${won.length} 台都说成功了`);
+  // 拿到钥匙的那一台，钥匙必须真的能用。
+  let usable = 0;
+  for (const r of won) {
+    const st = await call({
+      action: 'score', code, playerId: r.body.playerId, playerToken: r.body.playerToken,
+      score: 55, finished: true, seconds: 9, round: 1,
+    });
+    if (st.status === 200 && !st.body.error) usable++;
+  }
+  check('⑫ 拿到的那把钥匙真的开得了门', usable === won.length, `${usable}/${won.length} 把能用`);
+  // 没抢到的那一台要收到一句看得懂的话，而不是一把表面成功、其实作废的钥匙。
+  const lost = both.filter((r) => !(r.status === 200 && r.body.playerToken));
+  check('⑫ 没抢到的那一台收到了明说的错', lost.every((r) => r.status >= 400 && r.body.error),
+    lost.map((r) => `${r.status}:${r.body.error || '（没说）'}`).join(' '));
+  // 椅子不许漏。直接数库里的 `s:i`（占位格）对不对得上坐着的人——从外面
+  // 看不出来：漏一把椅子的表现是「屋里明明还有空位，却报满了」，要等到第
+  // 九个人来敲门才发觉。两台各占一把、只有一台写进座位，就会漏。
+  const raw = await hgetall(roomKey(code));
+  const taken = Object.keys(raw).filter((f) => f.startsWith('s:')).length;
+  const sitting = Object.entries(raw).filter(([f, v]) => f.startsWith('p:') && v && !v.left).length;
+  check('⑫ 椅子没漏出去（占位格和坐着的人对得上）', taken === sitting, `占位=${taken} 在座=${sitting}`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

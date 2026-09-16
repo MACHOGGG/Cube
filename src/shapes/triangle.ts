@@ -722,6 +722,14 @@ export function createTriangleGame(): ShapeGame {
         if (opacityOverride !== undefined) el.style.opacity = String(opacityOverride);
         el.dataset.r = String(r);
         el.dataset.c = String(c);
+        // 这一枚这会儿是哪一面。画面上本来就看得出来，写成属性是为了让不认识
+        // 这块棋盘的人也问得到——头一局那块教学条要靠它认出「这一组里有反面」
+        // （gameController 的 anyDotFace）。
+        //
+        // 原先八个玩法里只有 circle.ts 挂了这一句。于是头一局要是玩的方块，
+        // 教学条第 2 条「反面也能一起凑」哪怕玩家真的做对了也感知不到，只能干
+        // 等超时跳过；而且「教会了没有」不算数，下次玩小球或三角还要补讲一遍。
+        el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         return el;
       }
 

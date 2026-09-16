@@ -130,6 +130,8 @@ export type RoomError =
   | 'noRoom'
   | 'started'
   | 'full'
+  /** 同一把离线的椅子，两台设备同时来认领，慢的那一台。 */
+  | 'claimed'
   | 'notHost'
   | 'tooFew'
   | 'mode'
@@ -321,7 +323,7 @@ export function iAmHost(state: RoomState | null = lastState): boolean {
 export const serverTime = (): number => Date.now() + clockOffset;
 
 const KNOWN: RoomError[] = [
-  'geniusOnly', 'noRoom', 'started', 'full', 'notHost',
+  'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',
   'tooFew', 'mode', 'ended', 'busy', 'notConfigured',
 ];
 

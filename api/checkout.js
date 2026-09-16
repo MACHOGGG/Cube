@@ -1,4 +1,6 @@
 import { configured, creem, mode, products, readBody, send } from './_creem.js';
+import { callerId, tooMany } from './_ratelimit.js';
+import { storeConfigured } from './_store.js';
 
 /**
  * Open a Creem checkout for 「Slides 天才」 and hand back the URL to send the
@@ -32,6 +34,26 @@ export default async function handler(req, res) {
   // No key, or no products configured: the subscription is not on sale yet.
   // The paywall says exactly that rather than showing a broken button.
   if (!configured()) return send(res, 503, { error: 'notConfigured' });
+
+  // 按来路数一道。
+  //
+  // 这是全站最后一个「碰钱、却一次都没限过速」的接口——同样碰钱碰账号的
+  // subscription / redeem / unlock / email / passcode / portal / mint 全都限了。
+  // 它不要登录、不要任何验证，每调一次就真的去敲一次 Creem 的下单接口：一个
+  // 跑坏的脚本就能把 Creem 给商户的调用额度打满，那段时间里真想订阅的玩家看
+  // 到的是「服务器出了点问题」，钱付不出去。请求体里那个邮箱也不做归属校验
+  // （开单本来就不需要证明这个地址是谁的），于是它还可能被当成往任意邮箱发
+  // 「完成购买」提醒的跳板。
+  //
+  // 浏览器那头早就写好了收到 429 该说什么（engine/creem.ts 把它翻成 tooMany，
+  // ui/subscribe.ts 显示成「试得太多了」）——前后端当初说好了要限速，服务端
+  // 这一步一直空着。
+  //
+  // storeConfigured() 那半句和 redeem.js / subscription.js 一个道理：没有库就
+  // 没有计数器，这一步不能因为数不了就把人全挡在外面——付钱这条路尤其不能。
+  if (storeConfigured() && (await tooMany('checkout', callerId(req), 20, 3600))) {
+    return send(res, 429, { error: 'tooMany' });
+  }
 
   const { period, email, returnUrl } = readBody(req);
   const productId = products()[period === 'yearly' ? 'yearly' : 'monthly'];
