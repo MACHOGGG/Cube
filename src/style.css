@@ -499,11 +499,16 @@ h1 {
   .hazard-ring { animation: none; stroke-opacity: 1; }
 }
 
-/* Bomb-mode hazard tile: a red tile's front face never flips, so this mark
-   never needs to animate — it's a static "avoid me" glyph. Font size is set
-   inline per tile (proportional to that tile's actual rendered pixel size,
-   same convention the pieces use for their own inline width/height) rather than in CSS. */
+/* 炸弹身上那个「！」。静态的一个「别碰我」记号，不用动画。字号是每一枚棋子
+   自己按渲染出来的像素算好写在行内的（棋子的宽高也是这么来的），不写在这儿。
+
+   铺满整枚棋子、自己居中，而不是靠棋子那层 flex 居中：棋子是 flex 容器，
+   2026-09 炸弹改规则之后，那一枚永久炸弹翻过来是一颗红星星——星星是棋子的
+   第一个孩子，「！」是第二个，两个并排一摆，「！」就被挤到棋子右边、贴着边
+   缘切掉了一半（三角那几副一直是绝对定位，所以只有方块和小球中过招）。 */
 .hazard-mark {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
   color: #FFFFFF; font-family: 'Fraunces', Georgia, serif; font-weight: 700;
   line-height: 1; user-select: none; pointer-events: none;
   text-shadow: 0 1px 2px rgba(0,0,0,0.25);

@@ -28,7 +28,7 @@ import type { ShapeCardMeta } from '../../src/shapes/types';
 /** 一个「玩法 + 模式」，也就是一本存档。 */
 export interface Book {
   card: ShapeCardMeta;
-  /** 接在 bestKey 后面的后缀：'' 基础、'_bomb' 炸弹、'_flip' 无限反转。 */
+  /** 接在 bestKey 后面的后缀：'' 基础、'_bomb2' 炸弹、'_flip' 无限反转。 */
   suffix: string;
 }
 

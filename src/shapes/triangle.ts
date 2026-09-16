@@ -18,7 +18,7 @@ import { cellKey, effColor } from '../engine/types';
 import { asteriskGroup, triCentroid, triInradius, TRI_STAR_OF_INRADIUS } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, isLiveBomb } from '../engine/bomb';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
@@ -287,6 +287,13 @@ export function createTriangleGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      /**
+       * 这一枚此刻是不是一颗**活**炸弹（判四连、闪三连预警、数活棋子都问它）。
+       *
+       * 问的是露在外面的那一面：正面红 = 还没拆；反面红 = 那一枚永久炸弹；拆成
+       * 基础色星星的，不再是炸弹。理由写在 engine/bomb.ts 的 isLiveBomb 上面。
+       */
+      const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
       const lang = opts?.lang ?? 'zhHans';
       const refs = buildShell(container, {
         lang,
@@ -418,8 +425,9 @@ export function createTriangleGame(): ShapeGame {
       // dot-color slot each (4), and the tile's own front color gets the
       // remaining 5 — the same "others get 1 each, self gets what's left"
       // shape as the base game's own 9-per-group rule, just with one fewer
-      // other color available. Red is excluded from every dot-color pool
-      // since red tiles never flip and never need one.
+      // other color available. Red is excluded from every *normal* tile's
+      // dot-color pool, so a normal star is never mistaken for a hazard. The
+      // red tiles' own backs are dealt separately just below (dealBombBacks).
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
         const groups: { slots: number[]; pool: number[] }[] = [];
@@ -433,7 +441,24 @@ export function createTriangleGame(): ShapeGame {
           });
           groups.push({ slots, pool: pool });
         }
-        return spreadDotColors(groups, (slot) => SLOT_IS_UP[slot], dotColors);
+        const spread = spreadDotColors(groups, (slot) => SLOT_IS_UP[slot], dotColors);
+        // 炸弹自己的反面。
+        //
+        // 从前这一格留着上面 fill(RED_IDX) 的默认值——红块永不翻面，那个反面
+        // 谁也没见过。现在炸弹挨着得分图案会被连带拆掉、翻成星星，它就得是一
+        // 颗真的星星：一枚永久炸弹（反面还是红 + 「！」，拆完照旧算炸弹），其
+        // 余按五种基础色配平。为什么在发牌时定、为什么是配平，见
+        // engine/bomb.ts 的 dealBombBacks。
+        const bombBackPool = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== RED_IDX);
+        const bombSlots: number[] = [];
+        deck.forEach((c, idx) => {
+          if (c === RED_IDX) bombSlots.push(idx);
+        });
+        const bombBacks = dealBombBacks(bombSlots.length, bombBackPool, RED_IDX, shuffle);
+        bombSlots.forEach((idx, i) => {
+          spread[idx] = bombBacks[i];
+        });
+        return spread;
       }
 
       function boardFromBombDeck(deck: number[]): Tile[][] {
@@ -464,12 +489,47 @@ export function createTriangleGame(): ShapeGame {
         return out;
       }
 
+      /** 炸弹的「挨着」：和判四连、闪预警用同一份邻接（triangleAdjacency）。 */
+      const bombNeighbors = (r: number, c: number): Cell[] => triangleAdjacency(r, c);
+
+      /**
+       * 得分图案旁边的炸弹，跟着这一拍一起拆掉——翻成它自己的反面（一枚基础
+       * 色星星，或者那一枚永久炸弹的红星星）。没有上限，挨着的全拆。
+       *
+       * 回传拆掉的那几格，连锁那边会把它们并进**下一拍的遮罩**（见 scoring.ts
+       * 的 afterCommit）。不并的话会出这种事：蓝色 2×2 得分，右边的炸弹翻成绿
+       * 星星，这颗绿星星另一侧恰好有三枚绿正面、四枚正好凑成一个绿色 2×2——可
+       * 它一格都不在遮罩里，这一步找不到它，图案摆在盘上不给分，要等以后某次
+       * 滑动碰巧碰到。玩家看见的是「拼好了却没给分，过几步又莫名其妙给了」。
+       *
+       * 拆弹本身不给分、weight 也不记，所以计分和「有效得分率」的口径不变。
+       */
+      function defuseAround(scored: Cell[]): Cell[] {
+        if (!isBomb) return [];
+        const hit: Cell[] = [];
+        const seen = new Set<string>();
+        for (const [r, c] of scored) {
+          for (const [nr, nc] of bombNeighbors(r, c)) {
+            const key = cellKey(nr, nc);
+            if (seen.has(key)) continue;
+            const t = grid[nr][nc];
+            // 只拆还立着的那些。已经翻过去的（包括那枚翻完仍算炸弹的永久
+            // 炸弹）不再动它，不然它会被反复算进「这一拍又拆了几枚」。
+            if (t.face !== 'flavor' || !liveBomb(t)) continue;
+            seen.add(key);
+            t.face = 'dot';
+            hit.push([nr, nc]);
+          }
+        }
+        return hit;
+      }
+
       function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
         const found = new Set<string>();
         const seen = new Set<string>();
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
-            if (g[r][c].color !== RED_IDX) continue;
+            if (!liveBomb(g[r][c])) continue;
             const startKey = cellKey(r, c);
             if (seen.has(startKey)) continue;
             const comp: string[] = [];
@@ -480,7 +540,7 @@ export function createTriangleGame(): ShapeGame {
               comp.push(cellKey(cr, cc));
               for (const [nr, nc] of triangleAdjacency(cr, cc)) {
                 const key = cellKey(nr, nc);
-                if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
+                if (seen.has(key) || !liveBomb(g[nr][nc])) continue;
                 seen.add(key);
                 stack.push([nr, nc]);
               }
@@ -663,26 +723,6 @@ export function createTriangleGame(): ShapeGame {
         } else {
           fill.style.background = COLORS[tile.color];
           el.appendChild(fill);
-          if (isBomb && tile.color === RED_IDX) {
-            const mark = document.createElement('div');
-            mark.className = 'hazard-mark';
-            mark.textContent = '!';
-            mark.style.position = 'absolute';
-            mark.style.left = '0';
-            mark.style.top = '0';
-            mark.style.width = '100%';
-            mark.style.height = '100%';
-            mark.style.display = 'flex';
-            mark.style.alignItems = 'center';
-            mark.style.justifyContent = 'center';
-            // Nudged down from dead-center toward the triangle's visual
-            // centroid (a third of the way from its top edge to its base),
-            // and sized off the shorter of the two axes so it never
-            // overflows a bounding box this non-square.
-            mark.style.paddingTop = Math.round(h * 0.22) + 'px';
-            mark.style.fontSize = Math.round(Math.min(w, h) * 0.4) + 'px';
-            el.appendChild(mark);
-          }
         }
         if (warn) {
           // A triangle's element is a rectangle with a clip-path, so the
@@ -718,6 +758,29 @@ export function createTriangleGame(): ShapeGame {
           poly.setAttribute('vector-effect', 'non-scaling-stroke');
           svg.appendChild(poly);
           el.appendChild(svg);
+        }
+        // 「！」两面都要画。正面是还没拆的炸弹；反面是那一枚永久炸弹——它的
+        // 反面还是红（dealBombBacks 留的），照旧按炸弹规则算，而红星星和别的
+        // 星星形状一模一样，不加这个记号就混在里面认不出来了。
+        if (liveBomb(tile)) {
+          const mark = document.createElement('div');
+          mark.className = 'hazard-mark';
+          mark.textContent = '!';
+          mark.style.position = 'absolute';
+          mark.style.left = '0';
+          mark.style.top = '0';
+          mark.style.width = '100%';
+          mark.style.height = '100%';
+          mark.style.display = 'flex';
+          mark.style.alignItems = 'center';
+          mark.style.justifyContent = 'center';
+          // Nudged down from dead-center toward the triangle's visual
+          // centroid (a third of the way from its top edge to its base),
+          // and sized off the shorter of the two axes so it never
+          // overflows a bounding box this non-square.
+          mark.style.paddingTop = Math.round(h * 0.22) + 'px';
+          mark.style.fontSize = Math.round(Math.min(w, h) * 0.4) + 'px';
+          el.appendChild(mark);
         }
         if (opacityOverride !== undefined) el.style.opacity = String(opacityOverride);
         el.dataset.r = String(r);
@@ -865,13 +928,15 @@ export function createTriangleGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
+          // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
+          afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
         };
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || (isBomb && t.color === RED_IDX)));
+        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || liveBomb(t)));
       }
 
       function liveTiles(): LiveTile[] {
@@ -880,7 +945,7 @@ export function createTriangleGame(): ShapeGame {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const t = grid[r][c];
             if (isBlank(t)) continue;
-            if (isBomb && t.color === RED_IDX) continue;
+            if (liveBomb(t)) continue;
             live.push({ cell: [r, c], tile: t });
           }
         return live;
@@ -913,7 +978,7 @@ export function createTriangleGame(): ShapeGame {
               points,
               face: isBlank(tile) ? 'blank' : tile.face,
               color: COLORS[effColor(tile)],
-              hazard: isBomb && !isBlank(tile) && tile.face === 'flavor' && tile.color === RED_IDX,
+              hazard: isBomb && !isBlank(tile) && liveBomb(tile),
             });
           }
         return packSnapshot(raw);
@@ -933,7 +998,7 @@ export function createTriangleGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
-        bestKey: isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangleBig', '大三角'),
         shapeId: 'triangleBig',
         modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
@@ -946,6 +1011,7 @@ export function createTriangleGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
+        checkHazard: isBomb ? checkBombHazard : undefined,
         findStuckGroups,
         countRemainingTiles,
         snapshotBoard,
@@ -1189,10 +1255,12 @@ export function createTriangleGame(): ShapeGame {
       // step's ghost/flip/highlight elements before they ever get a frame
       // painted (resolveMove no longer settles synchronously — see
       // gameController's stepper-driven reveal).
-      // Checked right after a drag lands, before normal move resolution —
-      // red tiles are never removed or flipped (see qualifies/findWholeLineBonuses
-      // guards above), so the only way their adjacency ever changes is a
-      // line shift landing two clusters next to each other.
+      // 四连爆炸在**这一步的连锁全部走完之后**查一次，由 gameController 的
+      // checkHazard 钩子调（见那里的注释）。从前是拖拽一落地就立刻查：那时红块
+      // 永不消也永不翻，滑动是它们唯一会挨到一起的原因，落地查就够了。现在炸弹
+      // 挨着得分图案会被拆成星星，连锁每一拍都在改「谁还算活炸弹」——落地那一刻
+      // 查，会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查
+      // 又会让同一堆红块报两遍。所以只在盘面安定下来之后查这一次。
       function checkBombHazard(): boolean {
         if (!isBomb || !hasRedCluster(grid)) return false;
         render();
@@ -1216,7 +1284,6 @@ export function createTriangleGame(): ShapeGame {
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
-        if (checkBombHazard()) return true;
         const mask = new Set<string>(cells.map(([r, c]) => cellKey(r, c)));
         seatLine(refs.boardEl, mask);
         const [vx, vy] = trueStepVector(d.fam);

@@ -7,6 +7,7 @@ import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
+import { BOMB_RULES_VERSION } from './engine/bomb';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
 import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
@@ -126,9 +127,9 @@ const homeLayout: HomeLayout = {
 const recordSources: RecordSource[] = [
   ...games.map((g) => ({ card: g.card, suffix: '', mode: '' })),
   ...games.map((g) => ({ card: g.card, suffix: '_timed', mode: ' · 60s' })),
-  ...games.map((g) => ({ card: g.card, suffix: '_bomb', mode: ' · 💥' })),
+  ...games.map((g) => ({ card: g.card, suffix: '_bomb2', mode: ' · 💥' })),
   ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
-  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb', mode: ' · + 💥' })),
+  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb2', mode: ' · + 💥' })),
   // 《无限反转》只有基础方块和小球有。
   ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip', mode: ' · ∞' })),
 ];
@@ -137,13 +138,18 @@ const recordSources: RecordSource[] = [
  * 一局归到哪个本地存档键下——从云上取回战绩时要按这个把每一局放回原处。
  *
  * 存的时候用的是「这副棋盘的 bestKey + 模式后缀」（见各个 shapes 文件末尾那
- * 一行），这里照同一条式子倒推回去。炸弹压过计时：定时炸弹存的也是 _bomb。
+ * 一行），这里照同一条式子倒推回去。炸弹压过计时：定时炸弹存的也是 _bomb2。
+ *
+ * 炸弹还要看规则版本：2026-09 之前打的那些局（bombRules 是 undefined）是六枚
+ * 炸弹的老规则，认回老的 _bomb 键——那个键《记录与排名》已经不显示了，等于原样
+ * 归档。少了这一步，从云端取回来的老局会写进新键，和新规则的分混在一起比。
  */
 const runKeyFor: RunKeyFor = (data) => {
   const card = recordSources.find((src) => src.card.id === data.shapeId)?.card;
   if (!card) return null;
   const mk = data.modeKey;
-  const suffix = mk === 'flip' ? '_flip' : mk === 'bomb' || mk === 'bombTimed' ? '_bomb' : mk === 'timed' ? '_timed' : '';
+  const bombSuffix = (data.bombRules ?? 1) >= BOMB_RULES_VERSION ? '_bomb2' : '_bomb';
+  const suffix = mk === 'flip' ? '_flip' : mk === 'bomb' || mk === 'bombTimed' ? bombSuffix : mk === 'timed' ? '_timed' : '';
   return card.bestKey + suffix;
 };
 

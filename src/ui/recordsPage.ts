@@ -18,7 +18,7 @@ import { compactScore } from '../engine/compactScore';
  *  read and which glyph belongs to a stored run's shape id. */
 export interface RecordSource {
   card: ShapeCardMeta;
-  /** Suffix on the persisted best-score key — '' base, '_timed', '_bomb'. */
+  /** Suffix on the persisted best-score key — '' base, '_timed', '_bomb2'. */
   suffix: string;
   mode: string;
 }

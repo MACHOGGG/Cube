@@ -91,16 +91,25 @@ const TOTAL_MODE = 'lb:total:mode';
  * 五份只会切出五张空榜。
  *
  * 定时炸弹归到炸弹里（bombTimed → bomb）：它是炸弹的一种，不是第七块。
+ *
+ * 炸弹还分两版规则。2026-09 之前一局里每一枚红块都是炸弹、永不翻面；之后炸弹
+ * 挨着得分图案会被连带拆成星星，整局只剩一枚永久炸弹。同一副棋盘，躲六枚和躲
+ * 一枚打出来的分不是一把尺子量的，所以新规则记在 `square:bomb2` 这样的新榜
+ * 上，老的 `square:bomb` 原样归档——它不在 ALL_BOARDS 里，重建时不撤人，存档
+ * 里那些老局照旧算回它自己那张榜（见 kindOf）。
  */
 const BASE_SHAPES = ['square', 'circle', 'triangle'];
 const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'];
-const KINDS = ['base', 'timed', 'bomb', 'slot', 'flip'];
+/** 炸弹这一档现在叫什么。改规则就往上加一版，老的那个名字留着当归档榜。 */
+const BOMB_KIND = 'bomb2';
+const KINDS = ['base', 'timed', BOMB_KIND, 'slot', 'flip'];
 
 /** 这一局算哪一种。存档里那份 data 说了算（modeKey 加老虎机那个标记）。 */
 function kindOf(data) {
   const mk = String(data?.modeKey || 'base');
   if (mk === 'flip') return 'flip';
-  if (mk === 'bomb' || mk === 'bombTimed') return 'bomb';
+  // 老档没有 bombRules，读出来是 undefined——那是第一版规则，归老榜。
+  if (mk === 'bomb' || mk === 'bombTimed') return Number(data?.bombRules) >= 2 ? BOMB_KIND : 'bomb';
   if (mk === 'timed') return 'timed';
   return data?.slot ? 'slot' : 'base';
 }
@@ -122,7 +131,7 @@ const LEGACY_BOARDS = [...BASE_SHAPES, ...LAYOUT_BOARDS];
 const GROUPS = {
   base: BASE_SHAPES.map((s) => `${s}:base`),
   timed: BASE_SHAPES.map((s) => `${s}:timed`),
-  bomb: BASE_SHAPES.map((s) => `${s}:bomb`),
+  bomb: BASE_SHAPES.map((s) => `${s}:${BOMB_KIND}`),
   layout: LAYOUT_BOARDS,
   slot: BASE_SHAPES.map((s) => `${s}:slot`),
   flip: ['square:flip', 'circle:flip'],
@@ -148,8 +157,9 @@ const NAMES = 'lbnames';
  */
 const MODE_RE = /^[a-zA-Z][a-zA-Z0-9]{0,23}$/;
 const cleanMode = (v) => (MODE_RE.test(String(v || '')) ? String(v) : '');
-/** 要看的那张榜：棋盘、棋盘:玩法，或者母标签 g:xxx。只读，不用它拼写入的键。 */
-const BOARD_RE = /^[a-zA-Z][a-zA-Z0-9]{0,23}(:[a-zA-Z]{1,8})?$/;
+/** 要看的那张榜：棋盘、棋盘:玩法，或者母标签 g:xxx。只读，不用它拼写入的键。
+ *  玩法那一截允许带数字，因为它带着规则版本号（bomb2，见 BOMB_KIND）。 */
+const BOARD_RE = /^[a-zA-Z][a-zA-Z0-9]{0,23}(:[a-zA-Z][a-zA-Z0-9]{0,7})?$/;
 const cleanBoard = (v) => (BOARD_RE.test(String(v || '')) ? String(v) : '');
 
 /** 榜上那个名字：十二个字，去掉会把一行撑坏的东西。 */

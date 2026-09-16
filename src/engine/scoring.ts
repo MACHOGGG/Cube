@@ -91,6 +91,20 @@ export interface CascadeConfig {
    * 一组全是反面的照旧不给分。见 ShapeGameOpts.flip。
    */
   toggleOnMatch?: boolean;
+  /**
+   * 这一拍翻完之后，棋盘自己还顺手动了哪几格——把它们并进下一拍的遮罩。
+   *
+   * 炸弹玩法要的就是这个。举一个具体局面：一个蓝色 2×2 得分，右边紧邻一枚炸
+   * 弹，炸弹被连带拆掉、翻成绿色星星；这颗绿星星的另一侧恰好有三枚绿色正面，
+   * 四枚合起来正好是一个绿色 2×2。不并进遮罩的话，第一拍之后遮罩里只有那 4
+   * 个蓝格子，绿色 2×2 没有一格在遮罩里，touches 不通过——这个图案在这一步
+   * 不会被找到、不会得分，会一直摆在盘上，直到以后某次滑动碰巧碰到它。玩家
+   * 看见的是「图案拼好了却没给分，过了几步又莫名其妙给了」。
+   *
+   * 传进来的是这一拍得分的那些格子，回传要并进遮罩的格子。拆弹本身不给分、
+   * weight 也不记（这个回调不碰分数），所以计分和「有效得分率」的口径不变。
+   */
+  afterCommit?(scored: Cell[]): Cell[];
 }
 
 /** 无限反转里同一组棋子最多连着给几次分：正面一次、翻过去反面一次。 */
@@ -301,6 +315,11 @@ export function createCascadeStepper(
             const t = cfg.tileAt(r, c);
             t.face = cfg.toggleOnMatch && t.face === 'dot' ? 'flavor' : 'dot';
           }
+          // 棋盘顺手动的那几格（炸弹被连带拆掉）也算进下一拍的遮罩。
+          // 这会儿 mask 已经是 nextMask 了（上面那一行），而 commit 一定在
+          // 下一次 next() 之前跑，所以直接往里加就是加进下一拍。
+          const also = cfg.afterCommit?.(matches.flatMap((m) => m.cells)) ?? [];
+          for (const [r, c] of also) mask?.add(cellKey(r, c));
         },
       };
     }

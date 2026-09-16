@@ -94,8 +94,8 @@ function startWith(family: Family, opts: ShapeGameOpts, back: () => void): void 
 const BOOKS: Book[] = [
   { card: squareGame.card, suffix: '' },
   { card: circleGame.card, suffix: '' },
-  { card: squareGame.card, suffix: '_bomb' },
-  { card: circleGame.card, suffix: '_bomb' },
+  { card: squareGame.card, suffix: '_bomb2' },
+  { card: circleGame.card, suffix: '_bomb2' },
   { card: squareGame.card, suffix: '_flip' },
   { card: circleGame.card, suffix: '_flip' },
 ];

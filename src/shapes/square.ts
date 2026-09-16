@@ -19,7 +19,7 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, isLiveBomb } from '../engine/bomb';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
@@ -44,8 +44,9 @@ const PALETTES = {
 // Bomb mode reuses the exact same 6-color deck as the base game — same
 // color count, same 6-tiles-per-color — it doesn't drop colors or reserve
 // extra board slots for red. It just reinterprets slot 0 (each palette's
-// own reddish hue) as the hazard color: those 6 tiles never flip, and no
-// other tile is ever assigned red as its dot color.
+// own reddish hue) as the hazard color. 这 6 枚炸弹的反面在发牌时就印好了
+// （dealBombBacks）：一枚仍是红的永久炸弹，其余五枚各印一种基础色；正常棋子
+// 的反面里永远不会出现红，不然拆出来的星星会和真炸弹混淆。
 const BOMB_PALETTES = {
   standard: PALETTES.standard.map((c, i) => (i === 0 ? BOMB_RED_HEX : c)),
   colorblind: PALETTES.colorblind.map((c, i) => (i === 0 ? BOMB_RED_HEX : c)),
@@ -104,6 +105,13 @@ export function createSquareGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      /**
+       * 这一枚此刻是不是一颗**活**炸弹（判四连、闪三连预警、数活棋子都问它）。
+       *
+       * 问的是露在外面的那一面：正面红 = 还没拆；反面红 = 那一枚永久炸弹；拆成
+       * 基础色星星的，不再是炸弹。理由写在 engine/bomb.ts 的 isLiveBomb 上面。
+       */
+      const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
       /** 无限反转（见 ShapeGameOpts.flip）：得分翻面来回翻，不消行，只由计时结束。 */
       const flipMode = !!opts?.flip;
       const lang = opts?.lang ?? 'zhHans';
@@ -248,9 +256,9 @@ export function createSquareGame(): ShapeGame {
       // Per non-red front-color group of 6: the other 4 non-red colors get 1
       // dot-color slot each, and the tile's own front color gets 2 (1 "own
       // share" + 1 extra) to fill out the 6th slot — red is excluded from
-      // every dot-color pool since red tiles never flip and never need one,
-      // and a normal tile flipping to a "red" back would be confusable with
-      // an actual hazard tile.
+      // every *normal* tile's dot-color pool, because a normal tile flipping
+      // to a "red" back would be confusable with an actual hazard tile. The
+      // red tiles' own backs are dealt separately just below (dealBombBacks).
       function assignBombDotColors(deck: number[]): number[] {
         const dotColors = new Array<number>(deck.length).fill(RED_IDX);
         for (let color = 0; color < COLORS.length; color++) {
@@ -265,6 +273,22 @@ export function createSquareGame(): ShapeGame {
             dotColors[idx] = pool[i];
           });
         }
+        // 炸弹自己的反面。
+        //
+        // 从前这一格留着上面 fill(RED_IDX) 的默认值——红块永不翻面，那个反面
+        // 谁也没见过。现在炸弹挨着得分图案会被连带拆掉、翻成星星，它就得是一
+        // 颗真的星星：一枚永久炸弹（反面还是红 + 「！」，拆完照旧算炸弹），其
+        // 余按五种基础色配平。为什么在发牌时定、为什么是配平，见
+        // engine/bomb.ts 的 dealBombBacks。
+        const bombBackPool = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== RED_IDX);
+        const bombSlots: number[] = [];
+        deck.forEach((c, idx) => {
+          if (c === RED_IDX) bombSlots.push(idx);
+        });
+        const bombBacks = dealBombBacks(bombSlots.length, bombBackPool, RED_IDX, shuffle);
+        bombSlots.forEach((idx, i) => {
+          dotColors[idx] = bombBacks[i];
+        });
         return dotColors;
       }
 
@@ -285,6 +309,52 @@ export function createSquareGame(): ShapeGame {
       // General 4-directional connected-component check for red tiles —
       // used both to reject an initial deal that already starts lost and to
       // watch for the same condition forming live as the player drags.
+      /**
+       * 炸弹的「挨着」：上下左右四格。判四连、闪三连预警、以及得分时连带拆
+       * 弹，用的是同一份邻接——三处口径必须一致，不然会出现「预警闪了却不
+       * 炸」「拆得掉的却没拆」。
+       */
+      function bombNeighbors(r: number, c: number): Cell[] {
+        const out: Cell[] = [];
+        for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]] as Cell[]) {
+          if (nr < 0 || nr >= grid.length || nc < 0 || nc >= grid[nr].length) continue;
+          out.push([nr, nc]);
+        }
+        return out;
+      }
+
+      /**
+       * 得分图案旁边的炸弹，跟着这一拍一起拆掉——翻成它自己的反面（一枚基础
+       * 色星星，或者那一枚永久炸弹的红星星）。没有上限，挨着的全拆。
+       *
+       * 回传拆掉的那几格，连锁那边会把它们并进**下一拍的遮罩**（见 scoring.ts
+       * 的 afterCommit）。不并的话会出这种事：蓝色 2×2 得分，右边的炸弹翻成绿
+       * 星星，这颗绿星星另一侧恰好有三枚绿正面、四枚正好凑成一个绿色 2×2——可
+       * 它一格都不在遮罩里，这一步找不到它，图案摆在盘上不给分，要等以后某次
+       * 滑动碰巧碰到。玩家看见的是「拼好了却没给分，过几步又莫名其妙给了」。
+       *
+       * 拆弹本身不给分、weight 也不记，所以计分和「有效得分率」的口径不变。
+       */
+      function defuseAround(scored: Cell[]): Cell[] {
+        if (!isBomb) return [];
+        const hit: Cell[] = [];
+        const seen = new Set<string>();
+        for (const [r, c] of scored) {
+          for (const [nr, nc] of bombNeighbors(r, c)) {
+            const key = cellKey(nr, nc);
+            if (seen.has(key)) continue;
+            const t = grid[nr][nc];
+            // 只拆还立着的那些。已经翻过去的（包括那枚翻完仍算炸弹的永久
+            // 炸弹）不再动它，不然它会被反复算进「这一拍又拆了几枚」。
+            if (t.face !== 'flavor' || !liveBomb(t)) continue;
+            seen.add(key);
+            t.face = 'dot';
+            hit.push([nr, nc]);
+          }
+        }
+        return hit;
+      }
+
       function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
         const found = new Set<string>();
         const R = g.length,
@@ -292,7 +362,7 @@ export function createSquareGame(): ShapeGame {
         const seen = new Set<string>();
         for (let r = 0; r < R; r++)
           for (let c = 0; c < C; c++) {
-            if (g[r][c].color !== RED_IDX) continue;
+            if (!liveBomb(g[r][c])) continue;
             const startKey = cellKey(r, c);
             if (seen.has(startKey)) continue;
             const comp: string[] = [];
@@ -310,7 +380,7 @@ export function createSquareGame(): ShapeGame {
               for (const [nr, nc] of neighbors) {
                 if (nr < 0 || nr >= R || nc < 0 || nc >= C) continue;
                 const key = cellKey(nr, nc);
-                if (seen.has(key) || g[nr][nc].color !== RED_IDX) continue;
+                if (seen.has(key) || !liveBomb(g[nr][nc])) continue;
                 seen.add(key);
                 stack.push([nr, nc]);
               }
@@ -373,13 +443,16 @@ export function createSquareGame(): ShapeGame {
           el.innerHTML = asteriskSvg(size * 0.95, COLORS[tile.dotColor]);
         } else {
           el.style.background = COLORS[tile.color];
-          if (isBomb && tile.color === RED_IDX) {
-            const mark = document.createElement('div');
-            mark.className = 'hazard-mark';
-            mark.textContent = '!';
-            mark.style.fontSize = Math.round(size * 0.55) + 'px';
-            el.appendChild(mark);
-          }
+        }
+        // 「！」两面都要画。正面是还没拆的炸弹；反面是那一枚永久炸弹——它的
+        // 反面还是红（dealBombBacks 留的），照旧按炸弹规则算，而红星星和别的
+        // 星星形状一模一样，不加这个记号就混在里面认不出来了。
+        if (liveBomb(tile)) {
+          const mark = document.createElement('div');
+          mark.className = 'hazard-mark';
+          mark.textContent = '!';
+          mark.style.fontSize = Math.round(size * 0.55) + 'px';
+          el.appendChild(mark);
         }
         if (opacity !== undefined) el.style.opacity = String(opacity);
         el.dataset.r = String(r);
@@ -592,6 +665,8 @@ export function createSquareGame(): ShapeGame {
           // 无限反转：反面同色连成一行 / 列不消除，也就不再找整线奖励。
           findLineBonuses: flipMode ? () => [] : findLineBonusGroups,
           toggleOnMatch: flipMode,
+          // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
+          afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: true,
           isTerminalAfterLineBonus: () => rows === 0 || cols === 0,
@@ -601,12 +676,12 @@ export function createSquareGame(): ShapeGame {
       function isGameOver(): boolean {
         // 无限反转：翻完了还能翻回来，没有「全翻完」这回事——这一局只由计时结束。
         if (flipMode) return false;
-        // Red hazard tiles never flip by design — in bomb mode the "cleared"
-        // condition is every *non-red* tile reaching its dot face, or the
-        // run wouldn't be able to end this way at all.
+        // 还活着的炸弹拆不掉也翻不动，所以炸弹局的「全翻完」是**除了活炸弹
+        // 以外**每一枚都到了反面。认的是活炸弹（liveBomb）不是红色：已经被拆
+        // 成基础色星星的那几枚本来就是反面，算在里头没问题。
         const allDot =
           grid.length > 0 &&
-          grid.every((row) => row.every((t) => t.face === 'dot' || (isBomb && t.color === RED_IDX)));
+          grid.every((row) => row.every((t) => t.face === 'dot' || liveBomb(t)));
         return allDot || rows === 0 || cols === 0;
       }
 
@@ -617,7 +692,7 @@ export function createSquareGame(): ShapeGame {
             // Red hazard tiles are permanent obstacles, not something the
             // player is expected to ever flip — excluded from stalemate
             // detection and the end-of-run "left on the board" penalty.
-            if (isBomb && grid[r][c].color === RED_IDX) continue;
+            if (liveBomb(grid[r][c])) continue;
             live.push({ cell: [r, c], tile: grid[r][c] });
           }
         return live;
@@ -656,7 +731,7 @@ export function createSquareGame(): ShapeGame {
               half,
               face: t.face,
               color: COLORS[effColor(t)],
-              hazard: isBomb && t.face === 'flavor' && t.color === RED_IDX,
+              hazard: isBomb && liveBomb(t),
             });
           }
         return { cells };
@@ -676,7 +751,7 @@ export function createSquareGame(): ShapeGame {
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
         slot: !!targets,
         flip: flipMode,
-        bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'square', '方块'),
         shapeId: 'square',
         modeKey: flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
@@ -692,6 +767,7 @@ export function createSquareGame(): ShapeGame {
         render,
         isGameOver,
         buildCascadeConfig,
+        checkHazard: isBomb ? checkBombHazard : undefined,
         findStuckGroups,
         countRemainingTiles,
         snapshotBoard,
@@ -934,10 +1010,12 @@ export function createSquareGame(): ShapeGame {
       // blindly render() again right after, which would wipe out a cascade
       // step's ghost/flip/highlight elements before they ever get a frame
       // painted.
-      // Checked right after a drag lands, before normal move resolution —
-      // red tiles are never removed or flipped (see findMatches/applyLineBonus
-      // guards above), so the only way their adjacency ever changes is a row/
-      // column shift landing two clusters next to each other.
+      // 四连爆炸在**这一步的连锁全部走完之后**查一次，由 gameController 的
+      // checkHazard 钩子调（见那里的注释）。从前是拖拽一落地就立刻查：那时红块
+      // 永不消也永不翻，滑动是它们唯一会挨到一起的原因，落地查就够了。现在炸弹
+      // 挨着得分图案会被拆成星星，连锁每一拍都在改「谁还算活炸弹」——落地那一刻
+      // 查，会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查
+      // 又会让同一堆红块报两遍。所以只在盘面安定下来之后查这一次。
       function checkBombHazard(): boolean {
         if (!isBomb || !hasRedCluster(grid)) return false;
         render();
@@ -953,7 +1031,6 @@ export function createSquareGame(): ShapeGame {
           const r = drag.r,
             n = cols;
           grid[r] = grid[r].map((_, i) => grid[r][(((i - shift) % n) + n) % n]);
-          if (checkBombHazard()) return true;
           const mask = new Set<string>();
           for (let c = 0; c < cols; c++) mask.add(cellKey(r, c));
           seatLine(refs.boardEl, mask);
@@ -967,7 +1044,6 @@ export function createSquareGame(): ShapeGame {
           const colVals = grid.map((row) => row[c]);
           const shifted = colVals.map((_, i) => colVals[(((i - shift) % n) + n) % n]);
           for (let r = 0; r < rows; r++) grid[r][c] = shifted[r];
-          if (checkBombHazard()) return true;
           const mask = new Set<string>();
           for (let r = 0; r < rows; r++) mask.add(cellKey(r, c));
           seatLine(refs.boardEl, mask);

@@ -72,6 +72,14 @@ jobs:
         run: |
           npx esbuild src/engine/matchGrowth.ts --bundle --format=esm --outfile=/tmp/growth.mjs
           node scripts/check-match-growth.mjs /tmp/growth.mjs
+      # 炸弹 2026-09 改了规则（拆弹 + 一枚永久炸弹），牵着六副棋盘和两个引擎文件
+      # 一起动。这道门一半喂函数（发牌配平、认活炸弹、拆掉的格子并进遮罩），一半
+      # 对着源码验那几处接线还在——错了不会崩，只会让玩家莫名其妙输一局或少拿分。
+      - name: 炸弹的新规则
+        run: |
+          npx esbuild src/engine/bomb.ts --bundle --format=esm --outfile=/tmp/bomb.mjs
+          npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
+          node scripts/check-bomb-rules.mjs /tmp/bomb.mjs /tmp/scoring.mjs
       # 屋主连点两下《再来》只能开出一局。两条 start 都会被服务器办成（它们看到
       # 的是同一份「上一局已结束」的快照），而每条各自随机一个新种子——库里留后
       # 到那条的，屋主用先回来那条的，于是屋主和大家不是同一副牌。把 fetch 换成

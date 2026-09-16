@@ -46,6 +46,12 @@ export interface RunData {
    * 单独排一张榜，所以单记一个标记。老档没有，当 false 用。
    */
   slot?: boolean;
+  /**
+   * 这一局的炸弹按第几版规则打的（见 bomb.ts 的 BOMB_RULES_VERSION）。老档
+   * 没有这一项，读出来是 undefined，就是第一版。存档键和排行榜都按它分开——
+   * 六枚炸弹的局和一枚炸弹的局不能放一起比。非炸弹局不写这一项。
+   */
+  bombRules?: number;
   /** Epoch millis the run was settled. */
   at: number;
 }

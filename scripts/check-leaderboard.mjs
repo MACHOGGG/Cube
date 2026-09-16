@@ -216,8 +216,11 @@ check('横着跳到《炸弹》：上一行还是那七个',
 // 撤」的理由——光看下一行分不出自己在哪一类里。
 const rowModes = (sel) =>
   page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.dataset.mode).join(' '));
+// bomb2 是炸弹规则的第二版（api/scores.js 的 BOMB_KIND）——2026-09 改成「一局只
+// 剩一枚永久炸弹」之后开的新榜。这里连版本号一起对，就是防着「客户端点开的还是
+// 老榜、新局全报去了新榜」这种两头对不上的错。
 check('下一行换成了炸弹旗下那几张',
-  (await rowModes('#rankSubTabs')) === 'square:bomb circle:bomb triangle:bomb' &&
+  (await rowModes('#rankSubTabs')) === 'square:bomb2 circle:bomb2 triangle:bomb2' &&
     (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false,
   await rowModes('#rankSubTabs'));
 check('高亮跟着跳到《炸弹》',

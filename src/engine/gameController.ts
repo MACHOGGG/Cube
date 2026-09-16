@@ -22,7 +22,7 @@ import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
-import { BOMB_HAZARD_REASON } from './bomb';
+import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import { claimFirstHowToHint } from './firstPlay';
 import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
 import type { Cell } from './types';
@@ -155,6 +155,24 @@ export interface GameControllerHooks {
   isGameOver(): boolean;
   /** Builds the cascade config for resolving one confirmed move. */
   buildCascadeConfig(): CascadeConfig;
+  /**
+   * 炸弹玩法：这一步结束时，盘面上有没有四枚活炸弹连成一片。回 true 表示这一
+   * 局已经被它结束了（形状那边自己调了 forceEnd）。
+   *
+   * 为什么放在这儿、而且只查一次。从前它在 applyDrag 里：滑动一落定立刻查，
+   * 然后才开始连锁。新规则下连锁里会拆炸弹，「这一步到底有没有四枚活炸弹相
+   * 连」得等连锁跑完才知道，所以挪到连锁收尾的 finish()，看结算完的盘面。
+   *
+   * 只查一次，是为了不出现两个爆炸时刻：要是滑完查一次、连锁完再查一次，那一
+   * 步「滑完的确四连、可连锁里恰好把其中一枚拆掉了」的走法就会被头一次检查提
+   * 前引爆，规则从此要多解释一句「什么时候算被拆弹救回来、什么时候不算」。只
+   * 留后一次，规则一句话说得清：**爆炸看这一步结束时的盘面**。
+   *
+   * 它还顺手补上一个旧漏洞：连锁里消掉一整行，上下两团炸弹会贴到一起——从前
+   * 连锁里从不判死，这个四连要等玩家下一次在别处滑动、进了 applyDrag 才引爆，
+   * 一个和炸弹无关的动作触发了爆炸。现在消行造成的四连就在那一步结算。
+   */
+  checkHazard?(): boolean;
   /**
    * Called once per cascade step (one "beat" of a chain reaction), right
    * before render() paints it — for a match step, matchGroups' cells are
@@ -522,6 +540,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 是同一套计分了，可「和谁一起打的」仍然是这一局的一部分。
       room: Boolean(currentRoom()),
       slot: Boolean(hooks.slot),
+      // 炸弹局带上规则版本号：存档键和排行榜靠它把新旧两套规则的局分开（见
+      // bomb.ts 的 BOMB_RULES_VERSION）。非炸弹局不写，省得每一局都多一个字段。
+      bombRules:
+        hooks.modeKey === 'bomb' || hooks.modeKey === 'bombTimed' ? BOMB_RULES_VERSION : undefined,
       at: Date.now(),
     };
 
@@ -773,6 +795,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       perf.onMove(moveWeight);
       updatePerfDisplay();
       if (gameOver) {
+        resolving = false;
+        return;
+      }
+      // 炸弹四连炸在**这一步结束时**的盘面上判（见 checkHazard 上面那段）。
+      // 排在 isGameOver 前面：被炸掉的那一局不该同时报「全部翻成点面」。
+      if (hooks.checkHazard?.()) {
         resolving = false;
         return;
       }

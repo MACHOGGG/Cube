@@ -46,10 +46,15 @@ check('拿到一个能上报成绩的身份', Boolean(auth && auth.token));
 if (!auth) { await browser.close(); process.exit(1); }
 
 // ---- 报三局上去（走的就是打完一局那条路）-------------------------------------
+// 第四局是**老规则**的炸弹局（没有 bombRules）：2026-09 炸弹改成「一局只剩一枚
+// 永久炸弹」之后，老局归到老的 _bomb 存档键下，《记录与排名》不再摆出来，所以它
+// 取回来了也不该出现在下面那三行里、更不该进累计得分。少了这一条，从云端取回的
+// 老局会写进新键，和新规则的分混在一起比。
 const RUNS = [
   { at: 1_700_000_001_000, shapeId: 'square', modeKey: 'base', totalScore: 1234 },
   { at: 1_700_000_002_000, shapeId: 'circle', modeKey: 'timed', totalScore: 777 },
-  { at: 1_700_000_003_000, shapeId: 'triangle', modeKey: 'bomb', totalScore: 88 },
+  { at: 1_700_000_003_000, shapeId: 'triangle', modeKey: 'bomb', totalScore: 88, bombRules: 2 },
+  { at: 1_700_000_004_000, shapeId: 'triangle', modeKey: 'bomb', totalScore: 50_000 },
 ];
 const pushed = await page.evaluate(async ({ who, runs }) => {
   const out = [];
@@ -67,7 +72,7 @@ const pushed = await page.evaluate(async ({ who, runs }) => {
   }
   return out;
 }, { who: auth, runs: RUNS });
-check('三局都报上去了', pushed.every(Boolean), JSON.stringify(pushed));
+check('四局都报上去了', pushed.every(Boolean), JSON.stringify(pushed));
 
 // ---- 把这台设备的存储清空：等于换了台手机 / 从桌面图标打开 --------------------
 await page.evaluate(() => localStorage.clear());
@@ -99,6 +104,7 @@ const back = await page.waitForFunction(
 check('登录之后，累计得分回来了', back !== null, String(back));
 const rows = await page.$$eval('.records-row-score', (els) => els.map((e) => Number(e.textContent.trim())));
 check('三局记录都回来了', rows.length >= 3 && [1234, 777, 88].every((n) => rows.includes(n)), JSON.stringify(rows));
+check('老规则那局炸弹没混进来', !rows.includes(50_000), JSON.stringify(rows));
 check('累计得分是这三局的和（2099）', back === '2099', String(back));
 
 // ---- 再取一次不会翻倍 ---------------------------------------------------------

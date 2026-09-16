@@ -64,7 +64,9 @@ export function boardGroups(lang: Lang): BoardGroup[] {
   return [
     { mode: 'g:base', label: s.rankTabBase, children: named(BASE_THREE, 'base') },
     { mode: 'g:timed', label: s.rankTabTimed, children: named(BASE_THREE, 'timed') },
-    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_THREE, 'bomb') },
+    // 'bomb2' 是炸弹规则的第二版（见 api/scores.js 的 BOMB_KIND）：2026-09 改
+    // 成「一局只剩一枚永久炸弹」之后开的新榜，老的 square:bomb 归档不再露面。
+    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_THREE, 'bomb2') },
     { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
     { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_THREE, 'slot') },
     { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip') },
