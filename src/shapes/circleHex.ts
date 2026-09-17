@@ -15,7 +15,8 @@ import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, isLiveBomb } from '../engine/bomb';
+import { crackLayer } from '../ui/bombCrack';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import {
@@ -432,8 +433,10 @@ export function createCircleHexGame(): ShapeGame {
       const bombNeighbors = (r: number, c: number): Cell[] => hexNeighbors(r, c);
 
       /**
-       * 得分图案旁边的炸弹，跟着这一拍一起拆掉——翻成它自己的反面（一枚基础
-       * 色星星，或者那一枚永久炸弹的红星星）。没有上限，挨着的全拆。
+       * 得分图案旁边的炸弹，跟着这一拍挨一下。**两下才拆**（玩家定的，见
+       * engine/bomb.ts 的 BOMB_HITS_TO_DEFUSE）：第一下只留一道裂纹，第二下才
+       * 翻成它自己的反面（一枚基础色星星，或者那一枚永久炸弹的红星星）。挨着
+       * 的全算，没有上限。
        *
        * 回传拆掉的那几格，连锁那边会把它们并进**下一拍的遮罩**（见 scoring.ts
        * 的 afterCommit）。不并的话会出这种事：蓝色 2×2 得分，右边的炸弹翻成绿
@@ -452,10 +455,14 @@ export function createCircleHexGame(): ShapeGame {
             const key = cellKey(nr, nc);
             if (seen.has(key)) continue;
             const t = grid[nr][nc];
-            // 只拆还立着的那些。已经翻过去的（包括那枚翻完仍算炸弹的永久
+            // 只打还立着的那些。已经翻过去的（包括那枚翻完仍算炸弹的永久
             // 炸弹）不再动它，不然它会被反复算进「这一拍又拆了几枚」。
             if (t.face !== 'flavor' || !liveBomb(t)) continue;
+            // 一拍之内同一枚最多挨一下——seen 拦的正是「两组图案同时贴着它」。
             seen.add(key);
+            // 第一下只裂，不翻面，也不并进遮罩：盘面对配对来说一个字没变，它
+            // 仍旧是一枚立着的红障碍。裂纹由 render 照着 bombHits 画。
+            if (!hitBomb(t)) continue;
             t.face = 'dot';
             hit.push([nr, nc]);
           }
@@ -564,6 +571,10 @@ export function createCircleHexGame(): ShapeGame {
         } else {
           el.style.background = COLORS[tile.color];
         }
+        // 挨过一下、还没拆的那几枚：身上画一道裂纹（ui/bombCrack.ts）。没有它，
+        // 「两下才拆」这条规则在屏幕上根本不存在，玩家只会觉得「贴着打了一次
+        // 怎么没掉」。画在「！」前面，所以那个记号压在裂纹上，不会被盖住。
+        if (isCrackedBomb(tile)) el.appendChild(crackLayer(size * 0.72));
         // 「！」两面都要画。正面是还没拆的炸弹；反面是那一枚永久炸弹——它的
         // 反面还是红（dealBombBacks 留的），照旧按炸弹规则算，而红星星和别的
         // 星星形状一模一样，不加这个记号就混在里面认不出来了。

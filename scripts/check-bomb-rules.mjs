@@ -13,7 +13,10 @@
  *   ② 四连爆炸挪到一步的连锁全部走完之后，只查一次；
  *   ③ 判四连、数活棋子、闪三连预警都只认**活**炸弹（露在外面那一面是红）；
  *   ④ 被拆掉的格子要并进下一拍的连锁遮罩，不然图案拼好了却不给分；
- *   ⑤ 存档键和排行榜换新版本，六枚炸弹的老局不和一枚炸弹的新局混在一起比。
+ *   ⑤ 存档键和排行榜换新版本，六枚炸弹的老局不和一枚炸弹的新局混在一起比；
+ *   ⑥ **两下才拆**：第一下只留裂纹。数出来这是三档里最均衡的——方块上不谨慎
+ *      的玩家炸死率 66% → 16%（不归零），谨慎的仍零死亡，炸弹存在率八成，分
+ *      数 126 最接近基础方块的 139。差一下就是另一个游戏，所以它有自己的门。
  *
  * ①③④ 能直接喂函数验（下面第 1–3 段），②⑤ 落在六副棋盘和两个引擎文件的接线
  * 上，只能对着源码验这几处接对了没有（第 4 段）——接线断了不会崩，只会静悄悄
@@ -31,7 +34,8 @@ if (!bombSrc || !scoringSrc) {
   console.error('用法: node scripts/check-bomb-rules.mjs <打包好的 bomb.mjs> <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { dealBombBacks, isLiveBomb, BOMB_RULES_VERSION } = await import(bombSrc);
+const { dealBombBacks, isLiveBomb, hitBomb, isCrackedBomb, BOMB_HITS_TO_DEFUSE, BOMB_RULES_VERSION } =
+  await import(bombSrc);
 const { createCascadeStepper } = await import(scoringSrc);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -135,6 +139,27 @@ const tally = (arr) => {
 }
 
 // ---------------------------------------------------------------------------
+// 2b. 两下才拆，第一下只裂
+// ---------------------------------------------------------------------------
+{
+  check('规则就是两下', BOMB_HITS_TO_DEFUSE === 2, String(BOMB_HITS_TO_DEFUSE));
+
+  const bomb = {};
+  check('没挨过打的炸弹身上不画裂纹', isCrackedBomb(bomb) === false);
+  check('第一下不拆', hitBomb(bomb) === false);
+  check('第一下之后要画裂纹', isCrackedBomb(bomb) === true, JSON.stringify(bomb));
+  check('第二下才拆', hitBomb(bomb) === true, JSON.stringify(bomb));
+  check('拆掉之后不再画裂纹（它已经是星星了）', isCrackedBomb(bomb) === false);
+
+  // 老档 / 刚发出来的牌没有这一项，读出来是 undefined——当 0 用，不能当 NaN。
+  check('bombHits 缺省当 0 用', hitBomb({ bombHits: undefined }) === false);
+  // 万一同一枚被多打了一下（不该发生，但别让它把状态搅坏）。
+  const over = { bombHits: 5 };
+  check('已经拆过的再打一下仍然是「拆了」', hitBomb(over) === true);
+  check('打过头也不会又变回裂纹', isCrackedBomb(over) === false);
+}
+
+// ---------------------------------------------------------------------------
 // 3. 拆掉的格子并进下一拍的遮罩
 // ---------------------------------------------------------------------------
 {
@@ -204,6 +229,12 @@ const tally = (arr) => {
       `${(s.match(/checkBombHazard/g) || []).length} 处`);
     // 判四连 / 活棋子表 / 三连预警一律走 liveBomb（= isLiveBomb），不再看颜色。
     check(`${name}：活炸弹认的是 isLiveBomb`, s.includes('isLiveBomb(t, RED_IDX)'));
+    // 两层：拆弹走 hitBomb（它记账、它说什么时候拆），裂纹走 isCrackedBomb +
+    // crackLayer。少了 hitBomb 就退回一下就拆；少了 crackLayer，规则还在、屏幕
+    // 上却看不出来，玩家只会觉得「贴着打了一次怎么没掉」。
+    check(`${name}：拆弹走 hitBomb（两下才拆）`, s.includes('if (!hitBomb(t)) continue;'));
+    check(`${name}：挨过一下的画裂纹`,
+      s.includes('if (isCrackedBomb(tile)) el.appendChild(crackLayer('));
     check(`${name}：存档键换到新版本`, s.includes("bestKey + '_bomb2'"));
   }
 

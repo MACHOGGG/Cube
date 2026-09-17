@@ -4566,3 +4566,13 @@ body.is-room-host::after {
 .coach-bar:not(.coach-bar--pair) .coach-art { font-size: clamp(13px, 2.2vh, 18px); }
 .coach-bar--pair .coach-text { font-size: clamp(11.5px, 1.72vh, 14px); }
 .coach-bar--pair .coach-art { font-size: clamp(11.5px, 1.82vh, 15.5px); }
+
+/* 挨过一下、还没拆的炸弹身上那道裂纹（画在 ui/bombCrack.ts）。和「！」同一个
+   摆法：铺满整枚棋子、自己居中，所以棋子那层 flex 有几个孩子都不影响它，两者
+   叠在一起——裂纹在下，记号在上。 */
+.bomb-crack {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.bomb-crack svg { display: block; }

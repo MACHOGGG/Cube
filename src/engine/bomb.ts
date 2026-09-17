@@ -40,6 +40,35 @@ export const isLiveBomb = (t: { color: number; face: string; dotColor: number },
   (t.face === 'dot' ? t.dotColor : t.color) === redIdx;
 
 /**
+ * 得分图案旁边的炸弹要被打中几下才拆。玩家 2026-09 定的：**两下**。
+ *
+ * 一下就拆（改版最初那一版）太软：炸弹几乎构不成威胁；一下不拆、三下才拆又
+ * 回到了改版之前——炸弹事实上拆不掉。两下是三档里最均衡的那一档：方块上不谨
+ * 慎的玩家炸死率从 66% 降到 16%（**不是归零**，它仍然是个威胁），谨慎的玩家
+ * 仍然零死亡，一局打完炸弹存在率还有八成（棋盘不会被清空成普通局），综合得分
+ * 126 最接近基础方块的 139，而「要不要绕过去拆它」这件事玩家还完全做得了主。
+ *
+ * 第一下留一道裂纹（ui/bombCrack.ts）。没有那道裂纹，两层规则在屏幕上就不存
+ * 在了，玩家只会觉得「贴着打了一次怎么没掉」。
+ */
+export const BOMB_HITS_TO_DEFUSE = 2;
+
+/**
+ * 这一枚炸弹挨了一下。回 true 表示这一下把它拆了（翻面由调用方做——六副棋盘
+ * 翻面各有各的动画）。
+ */
+export function hitBomb(t: { bombHits?: number }): boolean {
+  t.bombHits = (t.bombHits ?? 0) + 1;
+  return t.bombHits >= BOMB_HITS_TO_DEFUSE;
+}
+
+/** 挨过打、还没拆掉——身上要画那道裂纹的，就是它。 */
+export const isCrackedBomb = (t: { bombHits?: number }): boolean => {
+  const n = t.bombHits ?? 0;
+  return n > 0 && n < BOMB_HITS_TO_DEFUSE;
+};
+
+/**
  * 发牌时给这一局的炸弹排反面。
  *
  * **为什么在发牌时定，不在翻面时抽。** 两种做法玩家看不见，但「是不是同一副
