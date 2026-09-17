@@ -45,6 +45,21 @@ const roomMod = await import('../api/room.js');
 const room = roomMod.default;
 const { seenFrom } = roomMod;
 const { saveAccount, newAccount } = await import('../api/_accounts.js');
+const { hset, hgetall } = await import('../api/_store.js');
+
+/**
+ * 把这个人说 bye 的时刻往前推到宽限期之外——等于「十秒过了他还没回来」。
+ *
+ * bye 现在不是当场生效的：api/room.js 的 BYE_GRACE_MS 给了十秒，专为「他只是
+ * 刷新了一下网页」——浏览器刷新时先发 bye 再重新加载，不留这十秒的话按一下
+ * F5 就等于退出。直接摆库里的状态，不然这一台要真的干等十秒。
+ * check-room-race.mjs / check-room-races.mjs 里那两个同名的助手是同一个做法。
+ */
+async function agePast(code, playerId) {
+  const hash = await hgetall('room:' + code);
+  const beat = hash['h:' + playerId] || {};
+  await hset('room:' + code, 'h:' + playerId, { ...beat, byeAt: 1 });
+}
 
 const call = async (body) => {
   let status = 0;
@@ -106,8 +121,19 @@ const call = async (body) => {
   // 有人切了个应用，浏览器发出了最后那一下 bye。
   const away = guests[0];
   await call({ action: 'bye', code, playerId: away.playerId, playerToken: away.playerToken });
+
+  // 刚说完 bye 的那十秒里，椅子还不外借（BYE_GRACE_MS）：他可能只是刷新了
+  // 一下网页，刷新时浏览器也发 bye。这一条不验的话，把宽限期整个删掉这道门
+  // 照样绿。
+  const tooSoon = await call({ action: 'join', code, name: '手快的' });
+  check('刚说完 bye 的这十秒里，椅子还不外借（他可能只是刷新）',
+    tooSoon.status === 409 && tooSoon.body.error === 'full',
+    `${tooSoon.status} ${tooSoon.body.error}`);
+
+  // 十秒过了他还没回来：这回椅子可以借出去了。
+  await agePast(code, away.playerId);
   const borrower = await call({ action: 'join', code, name: '晚到的' });
-  check('这几秒里晚到的那位进来了（借走了那把椅子）', borrower.status === 200, String(borrower.status));
+  check('十秒过了人没回来，晚到的那位进来了（借走了那把椅子）', borrower.status === 200, String(borrower.status));
 
   // 借椅子的那位随后自己走了：椅子空出来一把。
   await call({ action: 'leave', code, playerId: borrower.body.playerId, playerToken: borrower.body.playerToken });

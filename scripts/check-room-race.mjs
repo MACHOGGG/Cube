@@ -12,10 +12,17 @@
  *    而「等屋主开局的时候一直点催促」恰好是玩家最常做的那个动作。
  *
  * ② **网页已经关了的人，不该让全屋再等九十秒。** 关标签页那一下浏览器发一个
- *    beacon（bye），服务器把 lastSeen 抹成 0——它**已经知道**这个人走了。可
+ *    beacon（bye），服务器把这一刻记进 byeAt——它**已经知道**这个人走了。可
  *    结算判定（roundOver）只认「九十秒没消息」那一条，座位也一直占着：屋里
  *    其余人交完卷要干等到第 90 秒才开得了下一局，新朋友也进不来，得等整间屋
  *    二十分钟过期。
+ *
+ *    这里还压着后来加的那道宽限期（api/room.js 的 BYE_GRACE_MS，十秒）。原先
+ *    bye 是当场生效的，于是**刷新一下网页**和**关掉网页**在服务器看来一模一
+ *    样——屋主按 F5，浏览器先发 bye 再重新加载，全屋的这一局当场被判完，人还
+ *    在就散了场。所以现在 bye 只是记一个时刻：十秒之内他回来（任何一次轮询都
+ *    算），当没发生过；十秒过了还没回来，才真的算关了网页。下面两段分别量这
+ *    十秒之内和之外——只量之外的话，把宽限期整个删掉这道门照样绿。
  *
  * 不起服务器、不开浏览器：库用进程内的那份，直接叫 api/room.js 的 handler。
  * 并发那几条必须用 Promise.all 一起发——一个一个发的版本永远是绿的。
@@ -30,6 +37,19 @@ const check = (n, ok, extra = '') => {
 
 const room = (await import('../api/room.js')).default;
 const { saveAccount, newAccount } = await import('../api/_accounts.js');
+const { hset, hgetall } = await import('../api/_store.js');
+
+/**
+ * 把这个人说 bye 的时刻往前推到宽限期之外——等于「十秒过了他还没回来」。
+ *
+ * 直接摆库里的状态，不然这一台要真的干等十秒。和 check-room-races.mjs 里那个
+ * 同名的助手是同一个做法。
+ */
+async function agePast(code, playerId) {
+  const hash = await hgetall('room:' + code);
+  const beat = hash['h:' + playerId] || {};
+  await hset('room:' + code, 'h:' + playerId, { ...beat, byeAt: 1 });
+}
 
 const call = async (body) => {
   let status = 0;
@@ -100,8 +120,20 @@ const beforeBye = await stateOf();
 check('客人还在打，这一局当然没完', beforeBye.roundOver === false, String(beforeBye.roundOver));
 
 await call({ action: 'bye', ...guest });
+
+// 宽限期之内：还不算数。这十秒是留给「他只是刷新了一下」的——这一局不能就
+// 这么判完，椅子也不能这就让出去。
+const inGrace = await stateOf();
+check('刚说完 bye 的这十秒里，这一局还不算完（他可能只是刷新）',
+  inGrace.roundOver === false, String(inGrace.roundOver));
+check('这十秒里也还不标「关了」',
+  inGrace.players.every((p) => p.id !== guest.playerId || p.closed !== true),
+  JSON.stringify(inGrace.players.map((p) => [p.name, p.closed])));
+
+// 十秒过了他还没回来：这回是真走了。
+await agePast(code, guest.playerId);
 const afterBye = await stateOf();
-check('浏览器说了一声「关了」，这一局当场就算完，不用再等九十秒',
+check('十秒过了人没回来，这一局就算完，不用再等九十秒',
   afterBye.roundOver === true, String(afterBye.roundOver));
 check('他还留在名单和排名里，只是标着「关了」',
   afterBye.players.some((p) => p.id === guest.playerId && p.closed === true),
