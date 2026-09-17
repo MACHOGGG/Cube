@@ -9,6 +9,7 @@ import {
   normalizeEmail,
   saveAccount,
   tokenValid,
+  updateAccount,
 } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { set, storeConfigured, takeOnce } from './_store.js';
@@ -124,13 +125,23 @@ export default async function handler(req, res) {
   };
 
   if (account) {
-    extend(account, plan);
+    // 加时长要走 updateAccount（带锁的读—改—写），不是 loadAccount + 改 +
+    // saveAccount：同一个账号几乎同时兑两张码，朴素写法会让后写的那一份把前
+    // 一次加的时长整个盖掉——两张码都吃掉了、两次都说成功，账号上却只多了一
+    // 个月。见 _accounts.js 的 updateAccount。
+    let saved;
     try {
-      await saveAccount(address, account);
+      saved = await updateAccount(address, (acct) => extend(acct, plan));
     } catch (err) {
       await giveBack();
       throw err;
     }
+    if (!saved.ok) {
+      // 没加上就得把码放回去，不然玩家白丢一张。放回去之后重试一次就成了。
+      await giveBack();
+      throw new Error(saved.busy ? '账号正忙，这一次没加上（码已放回）' : '账号不见了（码已放回）');
+    }
+    account = saved.account;
     await noteUsed({ email: address });
     // token 回这台设备自己带来的那一把。entitlementOf 给的是 account.token
     // ——「最新签发的那一把」，他要是后来在别处又登过一次，那两把就不是同一

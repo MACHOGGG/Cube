@@ -50,7 +50,8 @@ export interface RoomPlayer {
   /** 中途走了。人留在名单和排名里，只是不再报到，也不占座位。 */
   left: boolean;
   /**
-   * 他的网页被关掉了（不是网差，是真的关了——见 api/room.js 的 closed）。
+   * 他的网页被关掉了（不是网差、也不是刷新——服务器要过了宽限期还没再听见
+   * 他才置这个位，见 api/room.js 的 BYE_GRACE_MS / seatClosed）。
    *
    * 老一点的服务器不会带这个字段，所以它是可选的：读不到就当没关。
    */

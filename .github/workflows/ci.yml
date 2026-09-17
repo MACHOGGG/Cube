@@ -101,6 +101,11 @@ jobs:
         run: ALLOW_MEMORY_STORE=1 node scripts/check-creem-gate.mjs
       - name: 发码接口的限速
         run: ALLOW_MEMORY_STORE=1 node scripts/check-mint-limit.mjs
+      # 同一个账号几乎同时兑两张码，两张的时长都要真的加上去。朴素的「读—改—
+      # 写」会让后写的那一份把前一次盖掉：两张码都吃掉、两次都说成功，账号上
+      # 只多了一个月，而且玩家和客服都查不出来。不连任何外部服务，几百毫秒。
+      - name: 兑码的并发
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-redeem-race.mjs
       # 付费入口也要限速。它曾是全站唯一一个「碰钱却没限速」的漏网之鱼，而浏览
       # 器那头早就写好了收到 429 该说什么——前后端说好了的事，服务端一直空着。
       # 不连 Creem（那一跳换成会数次数的假货），几百毫秒。

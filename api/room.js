@@ -127,6 +127,26 @@ const AWAY_MS = 30_000;
  */
 const SEEN_WRITE_MS = 4000;
 /**
+ * 收到「我的网页关了」（bye）之后，再等多久才真的当他关了。
+ *
+ * **为什么要等。** 浏览器刷新一次页面，pagehide 照样会触发、persisted 照样是
+ * 假——和真的关掉网页在事件上一模一样，客户端分不出来。于是屋主的网页只是刷
+ * 新了一下（手机上很常见：网抖一下、内存紧张浏览器自己重载、或者他自己觉得
+ * 卡随手点了刷新，手机网络下要 2-4 秒），这几秒里屋里其他人一轮询就看见「屋
+ * 主走了」，正打着的那一局当场被转成单人或者弹「小屋暂时关闭」——一两秒后屋
+ * 主刷新完，人好好地坐在屋里，别人却已经被请出这一局，回不去了。
+ *
+ * 这个文件里别的判定（AWAY_MS 三十秒、ABSENT_MS 九十秒）都留了缓冲，唯独
+ * 「网页真的关了」一点没留，是漏的，不是有意的。
+ *
+ * **为什么是十秒。** 比最慢的一次手机刷新（2-4 秒）宽出一大截，又远远短于
+ * AWAY_MS——真关了网页的人，屋里最多多等十秒就知道，仍然比干等九十秒快得多。
+ *
+ * 等的这十秒里他不是「在」：lastSeen 已经被 bye 抹成 0，屏幕上照旧走 away 那
+ * 条路，屋主那儿显示的是「屋主等一下就来」——刷新期间要的正是这句话。
+ */
+const BYE_GRACE_MS = 10_000;
+/**
  * 这个座位「最后一次露面」从哪一刻算起——away / gone / roundOver 三处同一句话。
  *
  * 平时就是他自己最后一次报到的时刻。**开局那一下要往后挪**：一局刚开始的时
@@ -161,6 +181,17 @@ const seatAway = (seat, meta) => Date.now() - seenFrom(seat, meta) > AWAY_MS;
  */
 const seatGone = (seat, meta) =>
   !seat.left && seat.lastSeen !== 0 && Date.now() - seenFrom(seat, meta) > ABSENT_MS;
+/**
+ * 这台设备真的关了：它自己说了一声（bye 写下 byeAt），而且过了宽限期还没再
+ * 露面。见 BYE_GRACE_MS——刷新一次页面发的是同一个信号，所以不能一收到就信。
+ *
+ * 只要他再报一次到（轮询、报分、认领座位……任何一条写心跳的路），byeAt 就被
+ * 抹成 0，这一条立刻不成立：刷新完的那台设备自己把自己救回来。
+ */
+const seatClosed = (seat) => {
+  const at = Number(seat.byeAt) || 0;
+  return at > 0 && Date.now() - at >= BYE_GRACE_MS;
+};
 
 /** The boards a host may choose. Anything else is not a mode we ship. */
 const MODES = new Set([
@@ -391,12 +422,13 @@ function publicState(code, hash) {
       /**
        * 这个人的网页真的被关掉了。
        *
-       * 只有 bye 那条路会把 lastSeen 写成 0（见下面的注释），而 bye 只在
-       * pagehide 且不进 bfcache 的时候发——切个应用、锁个屏都不算。所以这个
-       * 布尔值说的是「终端关了」，和 away（听不见他，可能只是网差）是两件事：
-       * 屋主终端关了，这间小屋就散了；屋主网差，大家等他。
+       * 只有 bye 那条路会写下 byeAt，而 bye 只在 pagehide 且不进 bfcache 的时
+       * 候发——切个应用、锁个屏都不算。但**刷新一次页面发的也是它**，所以还要
+       * 过了 BYE_GRACE_MS 他仍然没再露面才算数（见 seatClosed）。这个布尔值说
+       * 的是「终端真的没了」，和 away（听不见他，可能只是网差、也可能正在刷
+       * 新）是两件事：屋主终端没了，这间小屋就散了；屋主网差，大家等他。
        */
-      closed: value.lastSeen === 0,
+      closed: seatClosed(value),
       /** 正在看这个玩法的教学——全屋等他学完再一起数 4-3-2-1。 */
       learning: seatLearning(value),
     });
@@ -465,13 +497,13 @@ function roundOver(hash) {
     // 走掉的人不是这一局在等的人。leave 已经把他标成 finished 了，这一行
     // 是把意图写明白：名单上留着他，不代表整局要等他。
     if (seat.left) return true;
-    // 网页已经关了，而且是他的浏览器自己说的（bye 把 lastSeen 抹成 0，见
-    // publicState 的 closed）。
+    // 网页已经关了，而且是他的浏览器自己说的（bye 写下 byeAt，过了宽限期还
+    // 没回来才算数，见 seatClosed）。
     //
     // 这一句原先没有，于是服务器明明已经知道「这个人走了」，却还是只认「九十
     // 秒没消息」那一条：屋里一个人中途直接关掉网页——很常见——其余所有人交
     // 完卷都要干等到第 90 秒才开得了下一局。已经收到的消息就该当消息用。
-    if (seat.lastSeen === 0) return true;
+    if (seatClosed(seat)) return true;
     // Walked in after this round began: they were never in it, so they
     // cannot be what it is waiting on.
     if ((seat.joinedAt || 0) > meta.startAt) return true;
@@ -704,6 +736,8 @@ const readRoom = async (code) => {
     const id = field.slice(2);
     const beat = hash[beatKey(id)];
     if (beat && typeof beat.lastSeen === 'number') seat.lastSeen = beat.lastSeen;
+    // byeAt 和 lastSeen 一样住在心跳那一格里，也要折回来——seatClosed 读的是它。
+    if (beat && typeof beat.byeAt === 'number') seat.byeAt = beat.byeAt;
     const run = hash[roundKey(id)];
     if (run) {
       seat.score = Math.max(0, Math.floor(Number(run.score) || 0));
@@ -731,7 +765,7 @@ const sameName = (a, b) =>
   String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 /**
  * 这把椅子能不能让同名的人认领：只认按过《离开》（left）和网页真的关掉了
- * （bye 把 lastSeen 抹成 0）的座位。
+ * （seatClosed：说过 bye，而且过了宽限期没再回来）的座位。
  *
  * 只是一阵子没心跳（away）的不算。那个人多半只是锁了屏、接了个电话，座位、
  * 名字、分数都还是他的。从前这一条把 away 的座位也交给同名的人——而两个都
@@ -739,7 +773,7 @@ const sameName = (a, b) =>
  * 个电话回来，座位连同分数已经是后来那个人的了。正在看教学的也不算——那台
  * 设备整页被教学占着、不轮询，看着像没人，人其实在。
  */
-const seatReclaimable = (seat) => (Boolean(seat.left) || seat.lastSeen === 0) && !seatLearning(seat);
+const seatReclaimable = (seat) => (Boolean(seat.left) || seatClosed(seat)) && !seatLearning(seat);
 
 /**
  * 没取名字的人，发一个字母：A、B、C……屋里没被占的第一个。
@@ -845,7 +879,7 @@ async function claimSeat(code, playerId, hash) {
     if (!field.startsWith('p:') || !seat) continue;
     if (field.slice(2) === hash.meta.host) continue;
     if (seat.left || seat.slot === undefined) continue;
-    if (seat.lastSeen !== 0 || seatLearning(seat)) continue;
+    if (!seatClosed(seat) || seatLearning(seat)) continue;
     await hdel(roomKey(code), 's:' + seat.slot);
     const next = { ...seat };
     delete next.slot;
@@ -1053,9 +1087,10 @@ async function join(res, body) {
     if (midRound) next.finished = true;
     await hset(roomKey(code), field, next);
     // 心跳那一格也要翻新。他多半是关了网页才被认领回来的，那一格里留着的是
-    // bye 写下的 0；不盖掉的话 readRoom 会把 0 折回座位上——人明明回来了，屋
-    // 里却一直显示他「终端关着」，座位还随时会被下一个同名的人认领走。
-    await hset(roomKey(code), beatKey(field.slice(2)), { lastSeen: Date.now() });
+    // bye 写下的 lastSeen 0 和 byeAt；不盖掉的话 readRoom 会把它们折回座位上
+    // ——人明明回来了，屋里却一直显示他「终端关着」，座位还随时会被下一个同
+    // 名的人认领走。
+    await hset(roomKey(code), beatKey(field.slice(2)), { lastSeen: Date.now(), byeAt: 0 });
     // 这一局那一格同理：走之前打出来的那点分留着（bankRound 下一次 start 照
     // 常记账），而「这一局已经开了，不等他」要写成 finished。不写这一格的
     // 话，readRoom 会拿旧的那一份把上面刚算好的 next 折回去。
@@ -1176,13 +1211,13 @@ async function state(res, body) {
       // 写回去的这一份会带着 readRoom 折进来的成绩影子（见 readRoom 那段：
       // p: 里那几个字段是死数据，r: 存在就以 r: 为准），所以这儿只管椅子。
       await hset(roomKey(code), 'p:' + body.playerId, { ...seat, slot });
-      await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now() });
+      await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now(), byeAt: 0 });
       return send(res, 200, publicState(code, await readRoom(code)));
     }
   }
   if (seat && Date.now() - (seat.lastSeen || 0) > SEEN_WRITE_MS && !seat.left) {
     // 只写心跳那一格，绝不碰座位——这一下和他自己那一刻的报分是并发的。
-    await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now() });
+    await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now(), byeAt: 0 });
     return send(res, 200, publicState(code, await readRoom(code)));
   }
   return send(res, 200, publicState(code, hash));
@@ -1208,7 +1243,10 @@ async function bye(res, body) {
     // 飞出去（打完最后一步随手切应用），从前两条路抢同一份座位，分数就停在
     // 中途那个数上。0 这个值 readRoom 会原样折回去，publicState 的 closed
     // （终端关了，和网差的 away 是两件事）照常成立。
-    await hset(roomKey(code), beatKey(body.playerId), { lastSeen: 0 });
+    // byeAt 是「他什么时候说的这句话」：屋里要过了 BYE_GRACE_MS 还没再听见他
+    // 才当真（见 seatClosed）——刷新一次页面发的是同一个 beacon，不能一收到就
+    // 把正在打的那一局judge 掉。
+    await hset(roomKey(code), beatKey(body.playerId), { lastSeen: 0, byeAt: Date.now() });
   }
   return send(res, 200, { ok: true });
 }
@@ -1612,7 +1650,7 @@ async function learn(res, body) {
     learningAt: learning ? Date.now() : 0,
     ...(seen ? { seen } : {}),
   });
-  await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now() });
+  await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now(), byeAt: 0 });
   let fresh = await hgetall(roomKey(code));
   const meta = fresh.meta || {};
   if (learning) {

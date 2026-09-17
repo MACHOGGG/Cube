@@ -30,7 +30,8 @@
  * 八条场景（并发四条，「同一件事存了两份」一条，抢锁三条）：
  *
  *   ① score 撞 state（心跳）  → 分数和交卷都要留着
- *   ② score 撞 bye（关网页）  → 分数和交卷要留着，而且 closed 要成立
+ *   ② score 撞 bye（关网页）  → 分数和交卷要留着；closed 要等过了宽限期
+ *   ⑬ 屋主只是刷新了一下网页    → 这几秒里屋里其他人不许看见「屋主走了」
  *   ③ score 撞 leave（离开）  → 分数要留着，left 和 finished 要为真
  *   ④ 拿旧局次报分            → 不记分，但座位要放下，而且回包说得出来
  *   ⑥ 散场之后重读一次        → 最后一局不能被算两遍
@@ -87,6 +88,15 @@ const seatOf = (st, id) => (st.body.players || []).find((p) => p.id === id) || {
 // ⑨ 和 ⑩ 要直接摆库里的状态（废锁、推老的心跳），从外面是摆不出来的。
 const { hset: hsetRace, hgetall } = await import('../api/_store.js');
 const roomKey = (code) => 'room:' + code;
+/**
+ * 把这个人说 bye 的时刻往前推，推到 BYE_GRACE_MS 以外——等于「时间到了他还
+ * 没回来」。直接摆库里的状态，不然这一台要真的干等十秒。
+ */
+async function agePast(code, playerId) {
+  const hash = await hgetall(roomKey(code));
+  const beat = hash['h:' + playerId] || {};
+  await hsetRace(roomKey(code), 'h:' + playerId, { ...beat, byeAt: 1 });
+}
 
 // ---- ① 报分撞上心跳 ------------------------------------------------------
 {
@@ -114,7 +124,42 @@ const roomKey = (code) => 'room:' + code;
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('② 报分撞关网页：分数留着', p.score === 900, String(p.score));
   check('② 报分撞关网页：交卷标记留着', p.finished === true, String(p.finished));
-  check('② 报分撞关网页：closed 照常成立', p.closed === true, String(p.closed));
+  // closed 不再是「一收到 bye 就成立」——刷新一次页面发的是同一个 beacon，见
+  // BYE_GRACE_MS。刚发完的这一下只能是 away（屏幕上写「等一下就来」）。
+  check('② 报分撞关网页：closed 先不成立（还在宽限期里）', p.closed !== true, String(p.closed));
+  // 把 byeAt 往前推过宽限期 = 时间到了他还没回来。
+  await agePast(code, guest.playerId);
+  const after = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  check('② 宽限期过了还没回来：closed 成立', after.closed === true, String(after.closed));
+}
+
+// ---- ⑬ 屋主只是刷新了一下网页 --------------------------------------------
+//
+// 刷新页面和关掉页面，浏览器给的是同一个事件（pagehide，persisted 为假），
+// 客户端分不出来，所以两种都会发 bye。从前服务器一收到就把座位标成「终端关
+// 了」：屋主的手机自己重载一下（2-4 秒），屋里其他人下一次轮询就看见「屋主走
+// 了」——正打着的那一局当场被转单人或者弹「小屋暂时关闭」，一两秒后屋主刷新
+// 完人还在，别人却已经被请出这一局，回不去。
+//
+// 现在要过了 BYE_GRACE_MS 还没再听见他才算数，而刷新完的那台设备一轮询就把
+// byeAt 抹掉，自己把自己救回来。
+{
+  const { code, host, guest } = await openRoom();
+  // 屋主的网页被重载：beacon 发出去了。
+  await call({ action: 'bye', code, ...host });
+  const mid = await call({ action: 'state', code, ...guest });
+  const h1 = seatOf(mid, host.playerId);
+  check('⑬ 刷新那几秒：客人看不到「屋主走了」', h1.closed !== true, String(h1.closed));
+  check('⑬ 刷新那几秒：屋主的座位还在', Boolean(h1.id), JSON.stringify(h1.id));
+  // 刷新完了，同一台设备带着同一个身份回来轮询。
+  await call({ action: 'state', code, ...host });
+  const h2 = seatOf(await call({ action: 'state', code, ...guest }), host.playerId);
+  check('⑬ 刷新完：closed 被自己抹掉了', h2.closed !== true, String(h2.closed));
+  // 而且这一下之后再怎么等也不会突然变成「走了」：byeAt 已经归零，而 seatClosed
+  // 只认大于 0 的 byeAt——「等多久」这件事根本无从谈起。直接量那一格的值，比
+  // 再摆一次库里的状态诚实（摆成 1 等于伪造一次他没说过的 bye）。
+  const beat = (await hgetall(roomKey(code)))['h:' + host.playerId] || {};
+  check('⑬ 回来之后 byeAt 归零，再等多久也不算走', Number(beat.byeAt) === 0, JSON.stringify(beat));
 }
 
 // ---- ③ 报分撞上离开 ------------------------------------------------------

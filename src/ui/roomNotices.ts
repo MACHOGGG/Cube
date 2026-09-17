@@ -231,7 +231,10 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
   // （见 api/room.js 的 leave），不是为了假装他还在。
   // 屋主把网页关掉了，也是同一件事：他的终端没了，这间屋子开不出下一局。
   // closed 只有 bye 那条路会置上（pagehide 且不进 bfcache），切应用、锁屏都
-  // 不算——那些仍然走下面的 away，屋里等他回来。
+  // 不算——那些仍然走下面的 away，屋里等他回来。刷新一次页面发的也是 bye，
+  // 但服务器要过了宽限期还没再听见他才置这个位（api/room.js 的
+  // BYE_GRACE_MS）：屋主刷新的那几秒里，屋里看到的是 away（等一下就来），
+  // 不是这一条。
   // 太久没动静（gone，服务器的 ABSENT_MS）也算走了：屋主离家出走，小屋暂时
   // 解散——屋主身份不换人，屋里的人各自散去，等他回来再开一间。
   if (!host || host.left || host.closed || host.gone) return 'gone';

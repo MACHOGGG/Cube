@@ -231,10 +231,16 @@ export const set = (key, value, ttl) =>
  * SET ... NX 是 Redis 自己那一步：没人才写，写成了回 "OK"，已经有人回 nil。
  * 和小屋抢房号用的 HSETNX 是同一个道理，只是那边住在 hash 里。
  *
+ * ttl（秒）是给**锁**用的：一把没有期限的锁，只要持有者中途摔了（函数超时、
+ * 实例被回收），那个键就永远占着，后面谁也进不来——比它要修的并发问题更糟。
+ * 当「开账号」这种一次性占位用时不给 ttl，那就是永久的，本来也该永久。
+ *
  * @returns 写进去了 true；这个键上已经有人 false。
  */
-export const setnx = async (key, value) =>
-  (await command(['SET', key, encode(value), 'NX'])) !== null;
+export const setnx = async (key, value, ttl) =>
+  (await command(
+    ttl ? ['SET', key, encode(value), 'NX', 'EX', ttl] : ['SET', key, encode(value), 'NX'],
+  )) !== null;
 export const del = (key) => command(['DEL', key]);
 
 /**

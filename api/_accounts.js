@@ -210,6 +210,65 @@ export async function createAccount(email, account) {
   return true;
 }
 
+/**
+ * 改一个**已经存在**的账号，而且不会被同时进来的另一条改动整份盖掉。
+ *
+ * saveAccount 是一次朴素的整份覆盖写：`loadAccount → 改 → saveAccount` 这三
+ * 步之间隔着两次网络往返，同一瞬间进来的两条都会读到同一份旧账号，各自在它
+ * 上面改，后写的那一份把前一次的结果整个盖掉。
+ *
+ * 实测最难受的一处是兑码：网站给年付用户发两张一个月的礼品码，一个登录着的
+ * 账号几乎同时兑两张（手快连点、两个标签页、或者网络凑巧），两条都读到「现
+ * 在到期日是几号」，各自加一个月——**两张码都真的被吃掉了**（取码那一步
+ * takeAccount 是 GETDEL，本来就是原子的），两次都告诉玩家「兑换成功」，而账
+ * 号上实际只多了一个月。玩家自己发现不了（两次都说成功），客服也查不出来
+ * （码已经从库里拿走了）。
+ *
+ * 这个仓库别的地方早就处理过同一类问题：开账号用 SET NX（createAccount）、
+ * 认领码用 GETDEL（takeAccount）、猜密码计数用 INCR（bump）。只有「给已经存
+ * 在的账号加时长」漏了。它没法用那三招——要读出旧值、算出新值、再写回去——所
+ * 以这里用一把短命的锁，让这三步一次只有一个人走。
+ *
+ * 锁自带 TTL（LOCK_TTL_S）：持有者中途摔了，最多锁住这么久，绝不会把一个账号
+ * 永久焊死。抢不到就等一下重试，等够 LOCK_TRIES 次还抢不到才回 busy——调用方
+ * 该把已经拿走的东西放回去（见 api/redeem.js 的 giveBack）。
+ *
+ * @param mutate 拿到账号本人，就地改；不用返回。
+ * @returns { ok: true, account } 改好了；{ ok: false, missing: true } 没有这
+ *          个账号；{ ok: false, busy: true } 一直没抢到锁。
+ */
+const acctLockKey = (email) => 'acctlock:' + normalizeEmail(email);
+/** 锁最多活这么久。比任何一次「读—改—写」都长得多，又短到卡住了也能自愈。 */
+const LOCK_TTL_S = 10;
+/** 抢不到就等一下再来，最多这么多次（约 1.8 秒）。 */
+const LOCK_TRIES = 30;
+const LOCK_WAIT_MS = 60;
+const napMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function updateAccount(email, mutate) {
+  const lock = acctLockKey(email);
+  for (let i = 0; i < LOCK_TRIES; i++) {
+    if (await setnx(lock, { at: Date.now() }, LOCK_TTL_S)) {
+      try {
+        const account = await loadAccount(email);
+        if (!account) return { ok: false, missing: true };
+        mutate(account);
+        await saveAccount(email, account);
+        return { ok: true, account };
+      } finally {
+        // 放锁失败也不要紧：它自己有 TTL，最多十秒后自己消失。
+        try {
+          await del(lock);
+        } catch (err) {
+          console.error('账号锁没放掉（十秒后自己过期）', email, err);
+        }
+      }
+    }
+    await napMs(LOCK_WAIT_MS);
+  }
+  return { ok: false, busy: true };
+}
+
 /** 名单全文：{ 邮箱: indexRow }。只有带 ADMIN_TOKEN 的后台读得到。 */
 export const listAccounts = () => hgetall(INDEX_KEY);
 
