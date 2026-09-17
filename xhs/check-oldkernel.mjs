@@ -240,7 +240,14 @@ for (const key of list) {
     const r = b.getBoundingClientRect();
     return { w: Math.round(r.width), h: Math.round(r.height), vw: window.innerWidth, vh: window.innerHeight };
   });
-  say(land.h <= land.vh && land.w <= land.vw, '转横屏后棋盘还在屏幕里', JSON.stringify(land));
+  // **下限和上限一样要紧**。原先这一条只写了「不超出屏幕」，于是棋盘塌成
+  // 0×0 的时候它照样绿——0 当然既不超宽也不超高。真出过这一幕：降级层那份
+  // 五栏兜底把横屏教学条那套新版式的列宽盖掉，棋盘那一列算成 0px，控制台刷
+  // 出 `<svg> attribute width: A negative value is not valid. ("-4")`（0 减掉
+  // 五道缝再除以六列 = −4.17），而这一行一声不吭，红的是下面那条「全程零报
+  // 错」——查了半天才查到真凶。40px 的门槛照竖屏那一条（fit.w > 40）写。
+  say(land.w > 40 && land.h > 40 && land.h <= land.vh && land.w <= land.vw,
+    '转横屏后棋盘还在屏幕里，而且没塌', JSON.stringify(land));
   await p.setViewportSize({ width: 390, height: 844 });
   await p.waitForTimeout(1200);
 

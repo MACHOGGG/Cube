@@ -155,15 +155,57 @@ html.no-minmax .app.app--game {
       minmax(8.4%, min-content);
   }
 }
-/* 得分图案摆到侧边的那一版是五栏，同样的两个 max() 在头尾。 */
-html.no-minmax .app.app--game.pattern-sides {
+/* 得分图案摆到侧边的那一版是五栏，同样的两个 max() 在头尾。
+ *
+ * 这一段按「有没有教学条」拆成两半写，上面那段三栏的不用拆。原因：
+ *
+ * 横屏 + 头一局的教学条那一版（src/style.css 里 .has-coach.pattern-sides 那
+ * 段）整个关在 `@supports (display: contents)` 里——条子自己 display: contents
+ * 把三个孩子摊进网格，列宽跟着重写成另一套（棋盘那一列是 minmax(75vh, 1fr)）。
+ * Chrome 61 不认得 display: contents，那一整段对它不存在，所以它照样需要这里
+ * 这份五栏兜底。
+ *
+ * 可 `no-minmax` 这个类不只 Chrome 61 会有——xhs/check-oldkernel.mjs 和
+ * check-oldcss.mjs 会在**新内核上**强行盖上它来体检。于是那台浏览器成了现实中
+ * 不存在的一种：认得 display: contents（走了教学条那套新版式），却又拿到了这
+ * 份为「不认得」准备的列宽。权重上兜底这条（0,4,1）压过
+ * `.app.app--game.has-coach.pattern-sides`（0,4,0），两套一撞，五栏把新版式算
+ * 好的盖掉，棋盘那一列当场变成 0px——逐帧量出来是
+ * `66px | 554px | 0px | 76px | 66px`，棋盘 0×0，跟着算出 −4.17 的格子尺寸，
+ * 控制台刷出 `<svg> attribute width: A negative value is not valid. ("-4")`。
+ *
+ * 所以只把**带教学条**的那一半关进 @supports not (display: contents)：撞车只
+ * 发生在这一半；另一半（没有教学条的横屏局）两边内核都该拿到兜底。
+ *
+ * 曾经试过把整段两半一起关进 @supports，那是错的，而且错得很不显眼：新内核上
+ * 体检时五栏整条消失，上面那条**没关**的三栏兜底（0,3,1）就反过来压过真规则
+ * `.app.app--game.pattern-sides`（0,3,0），棋盘那一列从 324px 掉到 66px。
+ * check-oldcss 当场量出「最大差 258px @ .board-wrap.w 新 324 / 降级 66」。
+ * 两条兜底是一对，拆开一条关、一条不关就会这样。
+ *
+ * 代价写明白：下面 @supports 里那两行，在新内核上没有任何体检台走得到——它们
+ * 守的是一个新内核根本不会踩的坑，只能靠真机。另一半（:not(.has-coach)）照旧
+ * 每次都被 check-oldcss 逐个盒子量过。 */
+html.no-minmax .app.app--game.pattern-sides:not(.has-coach) {
   grid-template-columns:
     minmax(66px, min-content) auto minmax(0, 1fr) auto minmax(66px, min-content);
 }
 @media (min-width: 786px) {
-  html.no-minmax .app.app--game.pattern-sides {
+  html.no-minmax .app.app--game.pattern-sides:not(.has-coach) {
     grid-template-columns:
       minmax(8.4%, min-content) auto minmax(0, 1fr) auto minmax(8.4%, min-content);
+  }
+}
+@supports not (display: contents) {
+  html.no-minmax .app.app--game.pattern-sides.has-coach {
+    grid-template-columns:
+      minmax(66px, min-content) auto minmax(0, 1fr) auto minmax(66px, min-content);
+  }
+  @media (min-width: 786px) {
+    html.no-minmax .app.app--game.pattern-sides.has-coach {
+      grid-template-columns:
+        minmax(8.4%, min-content) auto minmax(0, 1fr) auto minmax(8.4%, min-content);
+    }
   }
 }
 

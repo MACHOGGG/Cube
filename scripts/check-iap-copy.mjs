@@ -38,18 +38,18 @@
  * iap / revenuecat）。认得宽一点是故意的——这道门要答的是「有没有任何一个东西
  * 可能在收钱」，宁可多认，不可漏认。
  *
- * ── 这道门今天是红的，这就是它要说的话 ────────────────────────────────
+ * ── 现在的状态：条款收起来了，所以两边都是「没有」 ──────────────────────
  *
- * 不进 CI（见 .github/workflows/ci.yml）：它现在必然红，进了 CI 就是把每一次
- * 提交都堵死。让它绿有两条路，出商店包之前必须走一条：
+ * 2026-09：那 48 条（四种语言各 12 条）已经从 LEGAL 表里搬进
+ * src/legal.store.ts——那个文件谁都不 import，是一份存放，不是代码。于是
+ * 「有条款」和「有插件」两边都是「没有」，对得上，这道门是绿的。
  *
- *   甲、把内购插件装上（Xcode / Gradle 那边的原生改动 + App Store Connect 和
- *       Play Console 里把 engine/pricing.ts 那两个商品 id 建出来）。装上了这
- *       道门自己就绿了。
- *   乙、暂时不出商店包的话，把那批 `only: 'store'` 的条款收起来——它们描述的
- *       是一套还不存在的购买流程。
+ * 插件装上的那一天，把归档里的条款粘回 legal.ts、删掉那个文件，两边就又都是
+ * 「有」，仍然对得上。**只做一半**它才红：装了插件不写条款（卖东西没有条
+ * 款），或者写了条款没装插件（承诺一套做不到的流程）。
  *
- * 网页版不受这两条影响：静态页和网页端的柜台是 'web'，本来就看不到这些条款。
+ * 网页版从头到尾不受影响：静态页和网页端的柜台是 'web'，本来就看不到这些条款
+ * （build-legal.mjs 把柜台写死成 'web'，legalDoc() 按柜台过滤）。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -104,10 +104,13 @@ check(
   hasCopy && !hasPlugin
     ? '条款已经把一套商店购买流程整个承诺出去了，可是没有任何插件能执行它——' +
         'iap.ts 的三个操作现在一律回 unavailable。商店包出去之前要么把插件装上，' +
-        '要么把这些条款收起来（文件头上写了两条路）。'
+        '要么把这些条款收起来（现在收在 src/legal.store.ts）。'
     : !hasCopy && hasPlugin
-      ? '插件装上了，法务文本里却没有对应的商店条款——卖东西不能没有条款。'
-      : '',
+      ? '插件装上了，法务文本里却没有对应的商店条款——卖东西不能没有条款。' +
+          '归档在 src/legal.store.ts，粘回 legal.ts 之前逐条对一遍真实实现。'
+      : hasPlugin
+        ? '两边都有'
+        : '两边都没有：条款收在 src/legal.store.ts，插件也还没装',
 );
 
 // 附带一条：iap.ts 那段「还没装插件」的说明不能和实际情况打架。它是这件事在
@@ -123,6 +126,18 @@ check(
       ? '注释不再说「还没装」，可 package.json 里确实还没有'
       : '',
 );
+
+// 收起来的那一份还在不在。删掉它不会让这道门红（它不是代码），但那 48 条
+// 四种语言的文本就只剩 git 历史里有了——装上插件那天要从头写。
+if (!hasCopy && !hasPlugin) {
+  const { existsSync } = await import('node:fs');
+  const archive = join(root, 'src/legal.store.ts');
+  check(
+    '收起来的那 48 条还在归档里（装上插件那天粘回去）',
+    existsSync(archive),
+    existsSync(archive) ? 'src/legal.store.ts' : '归档不见了——去 git 历史里找回来',
+  );
+}
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);
