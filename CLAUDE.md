@@ -71,7 +71,7 @@ node scripts/check-multiplayer.mjs http://localhost:8816/
 CI（`.github/workflows/ci.yml`）只收第 ①② 类里跑得快的那几个——要开浏览器的、
 要等真实超时的都留在本地手跑，文件头上写明了为什么。
 
-**跑门时的三个坑**（都真的坑过人）：
+**跑门时的四个坑**（都真的坑过人）：
 
 - **兑换码在一个 dev-server 进程里只能用一次。** 两个都要兑码的门跑在同一台
   服务器上，第二个会莫名其妙红。**一个门一台新服务器。**
@@ -79,6 +79,14 @@ CI（`.github/workflows/ci.yml`）只收第 ①② 类里跑得快的那几个�
   被测的那条路）。它不是卡住了。
 - **绝对不要用 `pkill -f`** 去关 dev-server——它会连 Bash 工具自己的 shell 一起
   杀掉（exit 144）。用 python 起进程再 `terminate()`，或者换个端口。
+- **改完 `xhs/src/baseline.css` 只跑 `npm run build:xhs`，`xhs/preview.html`
+  不会跟着重出。** 它由 `node xhs/preview.mjs` 单独生成，而且在 .gitignore
+  里，所以工作区里躺着的是**上一次**那一份——打开一看「改动没生效」，其实
+  `dist/app.js` 里早就有了。两道小红书的门（`check-oldkernel` /
+  `check-oldcss`）读的都是这个文件，于是它们量的是旧样式。**改完 CSS 要看效
+  果，两句一起跑：** `npm run build:xhs && node xhs/preview.mjs`。
+  （`check:xhs` / `check:vsweb` / `check:story` 已经把两步串好了，不用补；
+  单跑 `build:xhs` 和 `check:submit` 没有。）
 
 Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写这个），
 不要跑 `playwright install`。

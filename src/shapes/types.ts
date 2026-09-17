@@ -9,6 +9,7 @@ export interface ShapeCardMeta {
 
 import type { Lang } from '../i18n';
 import type { TargetPattern } from '../engine/targets';
+import type { CoachPlan } from '../ui/coachBar';
 
 export interface ShapeGameOpts {
   /** Timed-challenge mode: run ends automatically after this many seconds. */
@@ -51,11 +52,17 @@ export interface ShapeGameOpts {
   /**
    * 教学条按哪一种排法走（见 ui/coachBar.ts）：
    *   'first'  头一局小球——从第 1 条起，跟着玩家一条一条走。
-   *   'square' 头一回玩方块——先不出声，10 秒没得分才摆出第 2 条，得分后自
+   *   'second' 头一回玩方块——先不出声，10 秒没得分才摆出第 2 条，得分后自
    *            己往下播完。
    * 不给就是 'first'。
+   *
+   * 类型直接引 coachBar 那份，不在这儿再手抄一遍 `'first' | 'second'`：抄出
+   * 来的那一份和注释一起过期过——注释上一版写的是 `'square'`，而真正传进去
+   * 的一直是 `'second'`（src/main.ts、xhs/src/main.ts 两个调用点），于是照
+   * 注释去全仓搜 `'square'` 的人什么都搜不到。取值只有一处定义，就没有第二
+   * 份会走样。
    */
-  coachPlan?: 'first' | 'second';
+  coachPlan?: CoachPlan;
   /**
    * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示：同一块条子，一句话加
    * 一幅图，15 秒后自己走掉。给了它就不摆六条规则。
