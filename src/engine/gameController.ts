@@ -1,6 +1,7 @@
 import type { ShellRefs } from '../ui/gameShell';
 import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
+import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
@@ -282,6 +283,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.hudTimeEl.textContent = formatClock(sec);
   });
   const streak = createStreakTracker();
+  /**
+   * 这一局的帧时采样（engine/frameTier.ts）。量到连续两秒都跑不到 45fps 就
+   * 把粒子和震屏降一档，之后不再量。只在局中挂着：主菜单的帧时说明不了棋盘
+   * 跑不跑得动，而一条永远在转的 rAF 会让手机没法休眠。
+   */
+  const stopFrameWatch = watchFrames();
   /** 无限反转的连锁账本（见 scoring.ts 的 createToggleLedger）；别的局没有。 */
   const flipLedger = hooks.flip ? createToggleLedger() : null;
 
@@ -1162,6 +1169,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();
+      stopFrameWatch();
       coach?.destroy();
       coach = null;
       coachTip?.destroy();

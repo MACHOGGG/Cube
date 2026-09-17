@@ -80,6 +80,26 @@ jobs:
           npx esbuild src/engine/bomb.ts --bundle --format=esm --outfile=/tmp/bomb.mjs
           npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
           node scripts/check-bomb-rules.mjs /tmp/bomb.mjs /tmp/scoring.mjs
+      # 棋盘底下那块教学条：六条规矩靠玩家的动作往下走，靠的是 gameController
+      # 在四个点上报进来的四个信号。哪一步等的信号没人报，这一条就只剩四十秒的
+      # 保底——屏幕上一句话挂着不动，然后自己翻篇，规矩等于没讲，而且不报错、不
+      # 白屏。这个仓库已经栽过一次同一形状的事故（anyDotFace 只有 circle.ts 挂
+      # 了 data-face，玩方块的新人第 2 条永远等保底）。这道门用假时钟把整条线走
+      # 一遍（全程三秒多，保底一次就要四十秒），再静态扫一遍「每个 by 都有人
+      # 报」。自带一个够用的小 DOM，不开浏览器。
+      - name: 教学条走得完，不靠保底
+        run: |
+          npx esbuild src/ui/coachBar.ts --bundle --format=esm --outfile=/tmp/coach.mjs
+          npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
+          node scripts/check-coach.mjs /tmp/coach.mjs /tmp/i18n.mjs
+      # 跑不动的机器上自动把粒子和震屏降一档。判错的两种后果不对称：该降没降
+      # 只是继续卡，**不该降却降了**是一台好手机上特效突然少一半、而且这一局回
+      # 不去。所以这里喂四种帧流，三种是「不该降」（开局那阵子、切后台那一帧、
+      # 偶尔一帧毛刺），一种是「该降」。时钟和 rAF 都是假的，几十毫秒。
+      - name: 跑不动时才降档
+        run: |
+          npx esbuild src/engine/frameTier.ts --bundle --format=esm --outfile=/tmp/tier.mjs
+          node scripts/check-frame-tier.mjs /tmp/tier.mjs
       # 屋主连点两下《再来》只能开出一局。两条 start 都会被服务器办成（它们看到
       # 的是同一份「上一局已结束」的快照），而每条各自随机一个新种子——库里留后
       # 到那条的，屋主用先回来那条的，于是屋主和大家不是同一副牌。把 fetch 换成

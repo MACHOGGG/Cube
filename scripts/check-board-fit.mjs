@@ -13,6 +13,29 @@
  * 但看不住——改一次圆角、动一下间距，十六种里总有一种会悄悄越界。
  *
  * 容差 0.5px：亚像素的取整不算越界，肉眼也看不见。
+ *
+ * ── 第二件事：手指按着的那几帧，圆角不许动 ──────────────────────────────
+ *
+ * 上面量的是**静止**的一帧。可这块底板的圆角出过三次事故，三次都只在**动的
+ * 那几帧**里看得见（见 engine/boardResize.ts 的 floorBox 和 fitPanelRadius）：
+ *
+ *   · 拖动时重排，上一轮算好的圆角被清掉、重算排到下一帧——手指一按，四个角
+ *     从 14px 弹成样式表里的 25px，松手才弹回来；
+ *   · 补位的 `.ghost` 被当成实体算进去，那一侧的角被压成 0，当场变直角；
+ *   · 把 ghost 排除之后又变成**涨**：拖第一行时上面两个角一枚棋子都管不着，
+ *     圆角一路长回设计值。逐帧量出来是 14 → 25.32 → 14。
+ *
+ * 三次修下来收敛到同一条不变量：**圆角是排版的性质，不是某一帧的性质**。可是
+ * 它今天靠两个约定撑着——补位块必须叫 `.ghost`，`offsetIn` 必须不认 transform
+ * ——新玩法只要用 transform 做拖动预览、或者把补位块换个类名，就会静默绕过这
+ * 两条，而静止那一帧照样是对的，上面那半道门一个字都不会红。
+ *
+ * 所以这里真的按下去拖一段，逐帧量四个角：全程必须和静止时是同一个数。约定
+ * 换不换无所谓，这一条量的是玩家眼睛看得见的那件事。
+ *
+ * 只量「手指还按着」的那一段，不量松手之后：松手之后棋子落位、可能得分、可能
+ * 消掉一整行，角上空出来圆角本来就该长回去（fitPanelRadius 最后那句就是为这
+ * 个写的）。把松手后也一起断言，量的就不是这个 bug 了。
  */
 import { chromium } from 'playwright';
 
@@ -87,6 +110,28 @@ const MEASURE = () => {
     where,
     radius: R.map((r) => Math.round(r)).join('/'),
     floor: { w: Math.round(w.width), h: Math.round(w.height) },
+  };
+};
+
+/**
+ * 底板四个角的圆角，外加「这一帧棋盘认不认得自己正被拖着」。
+ *
+ * 后面这一格是防「这道门量了个寂寞」：要是这一下拖动压根没被棋盘接住（落点
+ * 没抓到棋子、这个玩法这一刻不收拖动），四个角当然不会变，断言就永远绿。所以
+ * 把 drag.ts 挂的那个记号一起读回来——一次都没挂上，这一条就是没量到，要红。
+ */
+const RADIUS = () => {
+  const wrap = document.querySelector('.app--game .board-wrap');
+  if (!wrap) return null;
+  const cs = getComputedStyle(wrap);
+  return {
+    r: [
+      cs.borderTopLeftRadius,
+      cs.borderTopRightRadius,
+      cs.borderBottomRightRadius,
+      cs.borderBottomLeftRadius,
+    ].map((v) => Math.round((parseFloat(v) || 0) * 10) / 10),
+    dragging: wrap.classList.contains('board-dragging'),
   };
 };
 
@@ -178,6 +223,42 @@ for (const vp of VIEWPORTS) {
       m.worst > TOL
         ? `${m.where}越界 ${m.worst}px · 圆角 ${m.radius} · 底板 ${m.floor.w}×${m.floor.h} · ${m.n} 枚`
         : `余量 ${-m.worst}px（最紧的是${m.where}）· 圆角 ${m.radius}`,
+    );
+
+    // ── 手指按着的那几帧，圆角不许动（见文件头）──────────────────────
+    const rest = await page.evaluate(RADIUS);
+    const box = await page.$eval('.app--game .board-wrap', (e) => {
+      const r = e.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    });
+    // 落点挑**第一行**，这是故意的：上面那两个角此刻一枚不动的棋子都管不着，
+    // 正是三次事故里最后那一次的配置（圆角从贴着棋子的 14px 一路长回样式表
+    // 里的 25px，手一松又掉回来）。拿别的行试过，28% 那一行上头还有棋子压着
+    // 两个上角，把三层保护全拆掉这道门照样绿——那就成了一道量不到东西的门。
+    //
+    // 横着拖，一小步一小步地走：要量的是过程，不是终点。
+    await page.mouse.move(box.x + box.w * 0.5, box.y + box.h * 0.08);
+    await page.mouse.down();
+    const frames = [];
+    for (let k = 1; k <= 12; k++) {
+      await page.mouse.move(box.x + box.w * 0.5 + k * 7, box.y + box.h * 0.08, { steps: 2 });
+      await page.waitForTimeout(45);
+      frames.push(await page.evaluate(RADIUS));
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const grabbed = frames.some((f) => f && f.dragging);
+    const same = (a, b) => a && b && a.r.every((v, i) => Math.abs(v - b.r[i]) <= TOL);
+    const off = frames.filter((f) => !same(f, rest));
+    check(
+      `${vp.name} · ${label}：拖动的那几帧圆角没动过`,
+      grabbed && off.length === 0,
+      !grabbed
+        ? '这一下拖动没被棋盘接住（board-dragging 一帧都没挂上），等于没量到'
+        : off.length
+          ? `静止是 ${rest.r.join('/')}，拖动中出现过 ${[...new Set(off.map((f) => f.r.join('/')))].join('  ')}`
+          : `全程 ${rest.r.join('/')}（量了 ${frames.length} 帧）`,
     );
   }
   await ctx.close();

@@ -13,6 +13,10 @@ import { play } from 'cuelume';
 // `from './juice'` 都不用改。
 import { reducedMotion } from './reducedMotion';
 export { reducedMotion };
+// 「这台机器跑不跑得动」——量出来的档位，和 reducedMotion（系统设置）是两件
+// 事。下面只有两处用到它：粒子和震屏，三个特效里最贵的那两个。full 档下这
+// 两处的行为和从前一个字不差。
+import { motionTier } from './frameTier';
 
 /** Front-loaded deceleration — most of the travel happens early, then a long soft settle, reading as friction rather than a hard stop. */
 export const EASE_GROUNDED = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -93,7 +97,10 @@ const SHAKE_CLASS: Record<ShakeTier, string> = {
 /** Translate *and* rotate jitter on el — pure translate alone reads as a display glitch, not a force. */
 export function screenShake(el: HTMLElement, tier: ShakeTier): void {
   if (reducedMotion()) return;
-  retrigger(el, SHAKE_CLASS[tier]);
+  // 跑不动的机器上只给最轻的那一档：medium / heavy 抖得更远，重绘的面积也
+  // 更大，而屏幕已经在掉帧了——再抖下去玩家看到的不是力度，是卡顿。
+  const use = motionTier() === 'lite' ? 'light' : tier;
+  retrigger(el, SHAKE_CLASS[use]);
 }
 
 export interface ParticleOpts {
@@ -112,8 +119,12 @@ export interface ParticleOpts {
 export function spawnParticles(container: HTMLElement, x: number, y: number, opts: ParticleOpts): void {
   if (reducedMotion()) return;
   const { color, count = 10, spread = 46, life = 560 } = opts;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.6;
+  // 跑不动的机器上减半。每一颗都是一个真的 div——要进排版、要合成、要在
+  // life 毫秒后再删掉，是这套手感里最贵的一样。保底留 3 颗：再少就不是
+  // 「一圈迸开」而是「掉了几个点」，那不如不放。
+  const n = motionTier() === 'lite' ? Math.max(3, Math.round(count / 2)) : count;
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n + (Math.random() - 0.5) * 0.6;
     const dist = spread * (0.6 + Math.random() * 0.5);
     const dx = Math.cos(angle) * dist;
     const dy = Math.sin(angle) * dist - spread * 0.25;

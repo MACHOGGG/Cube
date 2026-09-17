@@ -80,6 +80,24 @@ const key = (r: number, c: number) => `${r},${c}`;
  * an `animation` shorthand shared with the ongoing score pulse (see
  * applyScoreAnimations), which is why this cannot simply clear the
  * property: the pulse has to survive.
+ *
+ * 「脉冲要活下来」说的是**上面那个整组一次性的调用**，不是下面 plankFlipEl
+ * 里那一次。两个调用点要的是两件事，别把它们当成一件：
+ *
+ *   · plankFlipCells 开头那一遍（整组、立刻）——这一组里大部分棋子的木片还
+ *     没轮到（错峰最多几百毫秒），它们此刻该继续闪得分脉冲。所以这里必须
+ *     只摘挤压、留下脉冲，整段字符串手术就是为了这一次。
+ *   · plankFlipEl 里那一次（单枚、木片开演的那一刻）——从这一刻起木片独占
+ *     这枚棋子，脉冲**应该**停：它接下来会被清空内容、底色改成透明、塞进一
+ *     块 3D 木片，一个还在缩放/发光的脉冲会连着木片一起缩放。停它的是下一
+ *     行的 getAnimations().cancel()，不是这里。
+ *
+ * 那为什么 plankFlipEl 里还要叫这一句？因为 cancel() 那一行在老内核上是空
+ * 的：小红书那一版跑 Chrome 61，getAnimations 是 xhs/polyfills.js 补的，而
+ * 那个补丁只记 element.animate() 建出来的动画（WAAPI），**认不得 CSS 动画**
+ * ——挤压和脉冲都是 CSS 动画。所以在 Chrome 61 上，拦住挤压的自始至终只有
+ * 这个函数。删掉它在新浏览器上看不出区别，小红书那头会当场回到「木片底下
+ * 又翻了一次」。
  */
 function muteSquish(el: HTMLElement): void {
   el.classList.remove('flip-in');
@@ -155,8 +173,16 @@ export function plankFlipEl(el: HTMLElement, front: HTMLElement, dirDeg: number)
   const box = el.getBoundingClientRect();
   const d = Math.max(box.width, box.height);
   if (!d) return;
-  // The boards' own one-shot flip class (and any seat squash mid-flight)
-  // would fight the plank for the same element — the plank owns this moment.
+  // 从这一刻起木片独占这枚棋子：底下马上要清空内容、把底色改成透明、塞进
+  // 一块 3D 木片，任何还在跑的动画都会连着木片一起动。
+  //
+  // 两句都要，各管一头（见 muteSquish 上面那段）：
+  //   · muteSquish 摘掉一次性的挤压，而且它是老内核上**唯一**管用的那一句
+  //     ——Chrome 61 的 getAnimations 是补丁补的，只记 element.animate()，
+  //     认不得 CSS 动画；
+  //   · cancel() 把新浏览器上还在跑的都停掉，其中包括得分脉冲。脉冲在这儿
+  //     停是对的，而且不是永久的：下一次 render 会由 applyScoreAnimations
+  //     带着 pulseElapsedMs 把它按原进度接回去。
   muteSquish(el);
   for (const a of el.getAnimations()) a.cancel();
   el.dataset.flipping = '1';
