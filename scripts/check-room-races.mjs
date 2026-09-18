@@ -56,6 +56,26 @@ const check = (n, ok, extra = '') => {
 const room = (await import('../api/room.js')).default;
 const { saveAccount, newAccount } = await import('../api/_accounts.js');
 
+/**
+ * 每一次调用派一个新的假 IP。
+ *
+ * api/room.js 现在按 callerId（也就是 IP）分桶限速，而这道门从前发的是空
+ * headers——几十个模拟玩家全算成同一个 'unknown'。在没有限速的年代那无所谓；
+ * 有了之后，这道门在循环里开十几间小屋就会撞上 create 那个桶（20 次/小时），
+ * 于是 create 回 429、code 是 undefined、后面那句 state 回 404，最后崩在
+ * `after.body.players is not iterable` 上——看起来像小屋的 bug，其实是门自己
+ * 把几十个人挤进了一个 IP。
+ *
+ * 线上每个人各有自己的 IP，所以这里一人一个（其实是一次一个，更宽松）才是
+ * 真实的模型。限速本身归 scripts/check-room-rate.mjs 管，那道门专门量「该挡
+ * 的挡住、该放过的不误伤」；这道门量的是服务端的并发写入，两件事不该互相绑住。
+ */
+let ipSeq = 0;
+const nextIp = () => {
+  ipSeq++;
+  return `198.18.${Math.floor(ipSeq / 254) % 254}.${(ipSeq % 254) + 1}`;
+};
+
 const call = async (body) => {
   let status = 0;
   let text = '';
@@ -64,7 +84,7 @@ const call = async (body) => {
     setHeader: () => res,
     end: (t) => ((text = t), res),
   };
-  await room({ method: 'POST', headers: {}, body }, res);
+  await room({ method: 'POST', headers: { 'x-forwarded-for': nextIp() }, body }, res);
   return { status, body: JSON.parse(text || '{}') };
 };
 

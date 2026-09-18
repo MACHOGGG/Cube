@@ -17,6 +17,25 @@ const from = () => process.env.MAIL_FROM || '';
 
 export const mailConfigured = () => Boolean(key() && from());
 
+/**
+ * 发一封信。回 false = 没发出去。
+ *
+ * **失败必须留痕**，这是这个函数里唯一不为了发信而存在的一段代码。
+ *
+ * 两个调用点（unlock.js 的 request、email.js 的 request）都是 `await
+ * sendMail(...)` 之后不看返回值，紧接着回一句 `{ sent: true }`——那是故意的，
+ * 因为回包一旦跟着发信成败变化，外人就能拿它区分「这个地址注册过没有」
+ * （unlock.js 里「地址没账号也回 sent: true」那一整套防枚举就白做了）。
+ *
+ * 可代价是：Resend 那头出任何问题——密钥失效、域名验证掉了、被它限流、收件
+ * 地址进了黑名单——玩家看到的都是「验证码已寄出」，然后等一封永远不来的信，
+ * 码在 Redis 里躺三十分钟自己过期。而这个文件从前一句 console 都没有，所以
+ * **服务端日志里也看不到任何痕迹**：玩家说「点了没反应」，这边查无此事。
+ *
+ * 所以回包照旧不动（防枚举那条更要紧），但失败一定写进日志。日志里不写收件
+ * 地址——那是玩家的邮箱，不该躺在日志里；只写状态码和服务商的回话，足够分辨
+ * 是密钥失效、域名没验证，还是对方限流。
+ */
 export async function sendMail({ to, subject, text }) {
   if (!mailConfigured()) return false;
   try {
@@ -28,8 +47,12 @@ export async function sendMail({ to, subject, text }) {
       },
       body: JSON.stringify({ from: from(), to: [to], subject, text }),
     });
+    if (!res.ok) {
+      console.error('resend failed:', res.status, await res.text().catch(() => ''));
+    }
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.error('resend threw:', err?.message || err);
     return false;
   }
 }

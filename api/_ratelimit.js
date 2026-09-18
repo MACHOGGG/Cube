@@ -44,7 +44,22 @@ export async function tooMany(bucket, id, limit, windowS) {
 export function callerId(req) {
   // headers 一定有——除非是测试里那份手搭的 req。少一层判断就少一处会炸的地方。
   const headers = req?.headers || {};
-  const fwd = headers['x-forwarded-for'];
+  // x-vercel-forwarded-for 排在前面，理由不是「今天更安全」，而是「将来还安全」。
+  //
+  // 今天两个头的内容是一样的，而且 `split(',')[0]` 拿到的就是真实 IP：Vercel 的
+  // 边缘**覆写**这个头、不转发外部传进来的值，正是为了防 IP 伪造（企业版客户才
+  // 能申请让它信任自己传的那一份）。所以客户端自己塞一个
+  // `X-Forwarded-For: 1.2.3.4` 换不掉自己的桶。
+  //
+  // 会变的是那个前提：**Vercel 前面没有别的代理**。哪天为了加速或防护在前面挂
+  // 一层 CDN，x-forwarded-for 就可能被那一层改写，而 x-vercel-forwarded-for 是
+  // 边缘自己写的、始终作数。这一行现在换掉，是因为真到那天没人会想起来回头改
+  // 这里——而那时全站的限速会一起变成摆设。
+  //
+  // 顺带记一句：**不要**改成「取最后一段」。那是给「代理把真实 IP 追加在末尾」
+  // 那种模型写的，Vercel 是覆写模型，末尾可能是它自己的内部跳数，改了会把所有
+  // 人归进同一个桶——比不限速更糟，因为它看起来还在工作。
+  const fwd = headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'];
   const first = String(fwd || '').split(',')[0].trim();
   return first || headers['x-real-ip'] || 'unknown';
 }

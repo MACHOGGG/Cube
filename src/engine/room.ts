@@ -141,6 +141,15 @@ export type RoomError =
   | 'busy'
   /** Rooms are not switched on for this deployment yet. */
   | 'notConfigured'
+  /**
+   * 服务器的限速把这一下挡住了（api/room.js 的 RATE）。
+   *
+   * 正常玩到不了这儿——轮询一秒一次，八个人挤在一个 IP 后面也只有 80 次/十秒，
+   * 桶是 300。真会看到它的是两种人：一个网络里挂着脚本在扫房号，和自己开了一
+   * 堆标签页的人。所以要有一句自己的话：掉进 'network' 兜底的话，屏幕上写的是
+   * 「连不上网络」，他会去查 Wi-Fi，而 Wi-Fi 一点问题都没有。
+   */
+  | 'tooMany'
   | 'network';
 
 export type RoomResult<T> =
@@ -325,7 +334,7 @@ export const serverTime = (): number => Date.now() + clockOffset;
 
 const KNOWN: RoomError[] = [
   'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',
-  'tooFew', 'mode', 'ended', 'busy', 'notConfigured',
+  'tooFew', 'mode', 'ended', 'busy', 'notConfigured', 'tooMany',
 ];
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {

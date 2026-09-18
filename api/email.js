@@ -160,8 +160,20 @@ async function confirm(res, address, wanted, account, { code, token }) {
    * 搬家的顺序：**先在新地址写齐，最后才拆旧地址。**
    *
    * 中间任何一步摔了，玩家的账号在两个地址底下各有一份（同一把密码，两扇
-   * 门——不好看，但他什么都没丢，再走一遍就好）。反过来先删旧的，摔在中间
-   * 就是账号连同战绩一起消失。同 redeem.js 那次「码烧掉却没到账」。
+   * 门——不好看，但他什么都没丢）。反过来先删旧的，摔在中间就是账号连同战绩
+   * 一起消失。同 redeem.js 那次「码烧掉却没到账」。
+   *
+   * **但「再走一遍就好」这句话曾经是假的，所以下面那两步套了补偿。**
+   *
+   * createAccount 用的是 SET ... NX：它一成功，新地址就被占住了。假如紧接着
+   * renameScoreOwner 或 deleteAccount 摔了（Redis 抖一下就够），玩家看到的是
+   * 「网络错误」，于是他重来一遍——而 request() 开头那句
+   * `if (await loadAccount(wanted)) return send(res, 409, { error: 'taken' })`
+   * 当场把他拦死：挡住他的正是他自己上一次的半成品。
+   *
+   * 而这一步卡住之后没有自助的出路：api/mint.js 只有 list 和 grant 两个动作，
+   * **后台根本没有「删账号」这个操作**，只能进 Upstash 控制台手删一个键。所以
+   * 摔了就把刚占住的新地址退回去，让「再走一遍」重新成立。
    */
   // 要码到输码之间隔着 30 分钟，那头完全可能有人刚注册了这个地址。
   //
@@ -173,12 +185,20 @@ async function confirm(res, address, wanted, account, { code, token }) {
   // 挡在搬家的第一步，所以拦下来的时候旧地址一个字都还没动：他的账号、战绩、
   // 榜上的名字全在原处，重来一次就好。
   if (!(await createAccount(wanted, account))) return send(res, 409, { error: 'taken' });
-  await renameScoreOwner(address, wanted);
-  await deleteAccount(address);
-  // 旧地址上那些跟着地址走的零碎：输错密码的计数、这张换邮箱的码。
-  await clearFails(address);
-  await del(key(address));
-  await del(triesKey(address));
+  try {
+    await renameScoreOwner(address, wanted);
+    await deleteAccount(address);
+    // 旧地址上那些跟着地址走的零碎：输错密码的计数、这张换邮箱的码。
+    await clearFails(address);
+    await del(key(address));
+    await del(triesKey(address));
+  } catch (err) {
+    // 把刚占住的新地址退回去（理由见上面那段）。这一步本身再摔就没办法了，
+    // 所以它不许把原来那个错误盖掉——玩家要看到的是「出错了，重试」，而不是
+    // 一个来自收尾动作的第二个错误。
+    await deleteAccount(wanted).catch(() => {});
+    throw err;
+  }
 
   // 令牌一把都没动：换的是门牌，不是钥匙，他这台设备照旧登着，别的设备也是。
   // 回的是**这台设备自己带来的那一把**，不是账号上最新签发的那一把——他在

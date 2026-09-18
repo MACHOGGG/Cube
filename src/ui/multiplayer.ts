@@ -178,6 +178,10 @@ function errorText(reason: RoomError, lang: Lang): string {
     case 'notConfigured':
     case 'busy':
       return s.mpErrNotOpen;
+    // 服务器限速挡住了。不接这一条的话它会掉进下面的 default（「连不上网络」），
+    // 而这恰恰是玩家最不该去查的地方——他的网好得很。
+    case 'tooMany':
+      return s.mpErrTooMany;
     default:
       return s.purchaseNetwork;
   }

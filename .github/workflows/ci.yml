@@ -165,6 +165,22 @@ jobs:
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。
 
       # 产物里的 CSS：自定义属性里不许写「新函数」（安卓上会整块不显示）。
+      # 小屋那四个桶：该挡的挡住，**该放过的一个都不能误伤**。后者才是这道门的
+      # 重点——callerId 认的是 IP，而小屋就是给朋友一起玩的，四个人常在同一个
+      # Wi-Fi 后面，轮询每人每秒一次。桶给小了，一屋人打到一半集体断线，而屏幕
+      # 上写的是「连不上网络」，他们会去查路由器。第一版差点就照一份建议里的
+      # 3000 次/小时写（≈0.83 次/秒），这道门当场量出「80 次合法轮询被挡掉 60」。
+      - name: 小屋限速：挡扫号，不挡朋友
+        run: node scripts/check-room-rate.mjs
+      # 《游戏规则》写的枚数要和棋盘真的有几枚一致。起因是「三角」和「大三角」
+      # 两条 body 整段挂反了，四种语言全错——不崩、不红，只有玩家读到假话。这道
+      # 门自己解开那个对调的陷阱（main.ts 里 triangle 跑的是 triangleBig.ts）。
+      - name: 规则里的枚数
+        run: node scripts/check-rules-counts.mjs
+      # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白
+      # 做了）。把 Resend 那一跳换成必然 401 的假货，不连网。
+      - name: 发信失败留得下痕
+        run: node scripts/check-unlock-mail.mjs
       - name: CSS 兜底
         run: node scripts/check-css-fallbacks.mjs
       # 会呼吸的光：@keyframes 里 drop-shadow 的模糊半径一整圈都不许变，要明灭

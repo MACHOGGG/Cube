@@ -2,6 +2,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { isGenius as isGeniusClaim } from './_entitlement.js';
 import { expire, hdel, hget, hgetall, hincrby, hset, hsetnx, storeConfigured } from './_store.js';
+import { callerId, tooMany } from './_ratelimit.js';
 
 /**
  * Multiplayer rooms: a four-digit code, two to four players, one board.
@@ -250,11 +251,61 @@ const anyoneLearning = (hash) =>
 const roomKey = (code) => 'room:' + code;
 const id = (bytes) => randomBytes(bytes).toString('hex');
 
+/**
+ * 一动作一个桶。这个文件从前一条限速都没有，而它是全站唯一「不出示身份也办」
+ * 的接口——房号只有四位数（randomInt(0, 10000)），一个脚本从 0000 数到 9999
+ * 就能把每一间正在打的小屋的 publicState 全拉下来：玩家自己填的名字、头像、
+ * 实时比分、谁交了卷。这不是猜出来的，state() 不给 playerId 也照样整份返回。
+ * create 那条更贵：它会一路走到 hostMayOpen → isGeniusClaim，刷卡订阅那支每
+ * 次都真的去问一次 Creem（_creem.js），于是一条不限速的路能拿来烧我们的 Creem
+ * 调用额度。checkout.js 和 redeem.js 早就挂了限速，只有这儿漏了。
+ *
+ * ── 为什么 state / nudge 用十秒窗口，join / create 用一小时 ──────────────
+ *
+ * 因为要挡的东西和要放过的东西在**频率**上分得开，不在总量上分得开：
+ *
+ *   · 扫号是爆发：一秒上千次。
+ *   · 轮询是匀速：每人每秒一次（engine/room.ts 的 everyMs = 1000）。
+ *
+ * 所以 state 挂小时桶是两头不着：给得紧会踢掉合法玩家——callerId 认的是 IP，
+ * 而小屋本来就是给朋友一起玩的，四个人常常在同一个 Wi-Fi 后面，一小时就是
+ * 4 × 3600 = 14400 次；给得松（比如 40000）等于让扫号脚本把整个房号空间来
+ * 回扫四遍。十秒窗口两件事一起成立：八个人满座挤在一个 IP 后面是 80 次/十
+ * 秒，300 留了两倍半的余量；而一秒一千次的脚本三百次就被关在门外。
+ *
+ * join / create 是一次性动作（进一次屋、开一间屋），一小时几十次绰绰有余，
+ * 短窗口反而会在网络抖动连点几下时误伤，所以这两个照 redeem.js 的写法。
+ *
+ * nudge 要先有座位（seatOf 那句 403），所以它不是给陌生人用的门；这里给的
+ * 200 次/十秒是给「催是一件可以连着按的事」留的——玩家按多快掉多快是设计好
+ * 的（见 nudge 里那段注释），不能让限速把手感掐掉。
+ *
+ * leave / bye 故意不挂：它们是**关页面时用 beacon 发出去的**，刷新一次也发同
+ * 一条。限速一旦误伤，屋里就要白等九十秒才判定这个人走了——为一点 Redis 读写
+ * 去换这个风险不值。而且这两条不给身份时一个字都不写（seatOf 拦在写之前），
+ * 也不吐任何别人的数据，回的就是 { ok: true }。
+ *
+ * start / score / end / learn 都要先出示座位或屋主令牌，够不上「陌生人的门」。
+ */
+const RATE = {
+  state: { limit: 300, windowS: 10 },
+  nudge: { limit: 200, windowS: 10 },
+  join: { limit: 60, windowS: 3600 },
+  create: { limit: 20, windowS: 3600 },
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
   const body = readBody(req);
+  // 限速排在分发之前，所以 create 的桶也排在 hostMayOpen 之前——不然「别拿这条
+  // 路烧 Creem 额度」这个目的就没达成（和 mint.js 的 adminGate 同一个道理：先
+  // 数数，再验身份）。
+  const rate = RATE[body.action];
+  if (rate && (await tooMany(`room:${body.action}`, callerId(req), rate.limit, rate.windowS))) {
+    return send(res, 429, { error: 'tooMany' });
+  }
   try {
     switch (body.action) {
       case 'create': return await create(res, body);
@@ -751,6 +802,22 @@ const readRoom = async (code) => {
 };
 
 /** Checks that this really is the player it claims to be. */
+/**
+ * 折好的一份，专给「刚写完、下一句就要摆给玩家看」的那几处。
+ *
+ * 为什么非得折：readRoom 把 h:（lastSeen / byeAt）和 r:（score / finished /
+ * seconds）折回座位上，并且它自己的注释写明「p: 里同名的那几个字段从此是死数
+ * 据」。所以直接 hgetall 出来的那份 p: 是一份**影子**：谁都不读它，它也不跟着
+ * 报分和心跳更新。拿影子去 publicState，玩家在「刚加入 / 刚认领椅子 / 刚点完
+ * 看教学」那一次响应里看到的别人的比分、交卷勾、「网页关了」就可能是旧的——
+ * 下一次轮询（一秒后）自己好，所以它一直没被当成 bug，只是一闪。
+ *
+ * readRoom 在房间不存在（!hash.meta）时回 null，而 publicState 收到 null 会
+ * 当场炸。这几处房间刚写过、一定在，可 TTL 恰好在这一瞬间到期不是不可能，所
+ * 以兜一手裸快照——宁可摆一次影子，不能白屏。
+ */
+const freshRoom = async (code) => (await readRoom(code)) || (await hgetall(roomKey(code)));
+
 function seatOf(hash, playerId, token) {
   const seat = hash['p:' + playerId];
   return seat && seat.token && seat.token === token ? seat : null;
@@ -1016,7 +1083,7 @@ async function create(res, body) {
       code,
       playerId,
       playerToken: token,
-      state: publicState(code, await hgetall(roomKey(code))),
+      state: publicState(code, await freshRoom(code)),
     });
   }
   return send(res, 503, { error: 'busy' });
@@ -1104,7 +1171,7 @@ async function join(res, body) {
       playerId: field.slice(2),
       playerToken: token,
       rejoined: true,
-      state: publicState(code, await hgetall(roomKey(code))),
+      state: publicState(code, await freshRoom(code)),
     });
   }
 
@@ -1143,7 +1210,7 @@ async function join(res, body) {
     playerId,
     playerToken: token,
     rejoined: false,
-    state: publicState(code, await hgetall(roomKey(code))),
+    state: publicState(code, await freshRoom(code)),
   });
 }
 
@@ -1170,7 +1237,7 @@ async function state(res, body) {
   // 儿的路，所以这一步放在这里而不是等谁来「说一声」。
   if (hash.meta.learnHold && !anyoneLearning(hash)) {
     await releaseHold(code, hash.meta);
-    hash = await hgetall(roomKey(code));
+    hash = (await readRoom(code)) || hash;
   }
   // 问一次状态，也就是报一次到。
   //
@@ -1611,6 +1678,10 @@ async function leave(res, body) {
     // seen）。那两条撞上的概率很低——看教学是开局前主动点的——而彻底堵死要
     // 一把座位级的锁；《离开》是一次性动作，重试代价极低，不值得为它上锁。
     // 这是这一处的天花板，不是没想到。
+    // 这一处**故意**是裸 hgetall，不要「顺手」改成 readRoom：下一行就要把读到
+    // 的那份座位原样写回 p:，而 readRoom 会把 h:/r: 折进座位里——折好的东西写
+    // 回 p:，就等于亲手造出 readRoom 注释里说的那份「死数据影子」。读 p: 是为
+    // 了写 p:，就只能读 p: 本身。（learn 里的 beforeLearn 同理。）
     const nowHash = await hgetall(roomKey(code));
     const latest = nowHash?.['p:' + body.playerId] || seat;
     await hset(roomKey(code), 'p:' + body.playerId, { ...latest, left: Date.now() });
@@ -1644,6 +1715,8 @@ async function learn(res, body) {
   const seen = Array.isArray(body.seen) ? cleanSeen(body.seen) : null;
   // learningAt 和 seen 是座位自己的属性，留在座位里；心跳走自己那一格。
   // 和 score / leave 一样，写之前重读一次——这中间可能刚落地一次报分。
+  // 同 leave 里的 nowHash：读到的这份马上要写回 p:，所以必须是裸的那一份，
+  // 不能用 readRoom（折好的写回去就是影子）。
   const beforeLearn = await hgetall(roomKey(code));
   await hset(roomKey(code), 'p:' + body.playerId, {
     ...(beforeLearn?.['p:' + body.playerId] || seat),
@@ -1651,20 +1724,20 @@ async function learn(res, body) {
     ...(seen ? { seen } : {}),
   });
   await hset(roomKey(code), beatKey(body.playerId), { lastSeen: Date.now(), byeAt: 0 });
-  let fresh = await hgetall(roomKey(code));
+  let fresh = await freshRoom(code);
   const meta = fresh.meta || {};
   if (learning) {
     // 这一局第一次有人去学：把开赛挂起。同一局只挂一次——被放行之后（学完、
     // 走了、二十秒没动静）再来的「我在学」不再把大家拦住：他们已经在打了。
     if (meta.round && meta.heldRound !== meta.round) {
       await hset(roomKey(code), 'meta', { ...meta, learnHold: true, heldRound: meta.round });
-      fresh = await hgetall(roomKey(code));
+      fresh = await freshRoom(code);
     }
   } else if (meta.learnHold && !anyoneLearning(fresh)) {
     // 最后一个学完的人：把开赛时刻重新盖一遍，全屋一起从 4 数起。等的人看的
     // 是「还有谁在学」，学完这一刻他们的倒数才开始走。
     await releaseHold(code, meta);
-    fresh = await hgetall(roomKey(code));
+    fresh = await freshRoom(code);
   }
   await expire(roomKey(code), ROOM_TTL_S);
   return send(res, 200, { ok: true, state: publicState(code, fresh) });

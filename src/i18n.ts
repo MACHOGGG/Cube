@@ -348,6 +348,8 @@ export interface I18nStrings {
   mpErrClaimed: string;
   mpErrTooFew: string;
   mpErrNotOpen: string;
+  /** 服务器的限速把这一下挡住了（api/room.js 的 RATE）。 */
+  mpErrTooMany: string;
   notOnSaleYet: string;
   purchaseUnavailable: string;
   purchaseCancelled: string;
@@ -689,11 +691,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrClaimed: 'Someone just took that seat back. Try another name.',
     mpErrTooFew: 'Two players at least.',
     mpErrNotOpen: 'Multiplayer is not open yet.',
+    mpErrTooMany: 'Too many requests from your network just now. Wait a few seconds and try again — this is not your connection.',
     notOnSaleYet: 'The subscription is not open yet.',
     purchaseUnavailable: 'This device cannot complete the purchase yet.',
     purchaseCancelled: 'Cancelled — you have not been charged.',
     purchaseNetwork: 'No connection. Please try again in a moment.',
-    serverBusy: 'Something went wrong on our side. Please try again in a moment.',
+    serverBusy: 'Something went wrong on our side, not with your connection. Please try again in a moment.',
     restoreNothing: 'No subscription found to restore.',
     signInNotFound: 'No active subscription under that address.',
     workingLabel: 'Working…',
@@ -992,11 +995,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrClaimed: 'Quelqu’un vient de reprendre cette place. Essayez un autre nom.',
     mpErrTooFew: 'Il faut au moins deux joueurs.',
     mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
+    mpErrTooMany: 'Trop de requêtes depuis votre réseau à l’instant. Attendez quelques secondes et réessayez — ce n’est pas votre connexion.',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
     purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
     purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
     purchaseNetwork: 'Pas de connexion. Réessayez dans un instant.',
-    serverBusy: 'Un problème de notre côté. Réessayez dans un instant.',
+    serverBusy: 'Un problème de notre côté, pas avec votre connexion. Réessayez dans un instant.',
     restoreNothing: 'Aucun abonnement à restaurer.',
     signInNotFound: 'Aucun abonnement actif à cette adresse.',
     workingLabel: 'En cours…',
@@ -1295,6 +1299,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrClaimed: '剛才有人先一步坐回這個位子了。換個名字再試。',
     mpErrTooFew: '至少要兩個人。',
     mpErrNotOpen: '多人遊玩尚未開放。',
+    mpErrTooMany: '剛才你這個網路發來的請求太多了，等幾秒再試一次。這不是你的網路問題。',
     notOnSaleYet: '訂閱尚未開放。',
     purchaseUnavailable: '這台裝置目前還無法完成購買。',
     purchaseCancelled: '已取消，沒有扣款。',
@@ -1598,6 +1603,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrClaimed: '刚才有人先一步坐回这个位子了。换个名字再试。',
     mpErrTooFew: '至少要两个人。',
     mpErrNotOpen: '多人游玩尚未开放。',
+    mpErrTooMany: '刚才你这个网络发来的请求太多了，等几秒再试一次。这不是你的网络问题。',
     notOnSaleYet: '订阅尚未开放。',
     purchaseUnavailable: '这台设备暂时还无法完成购买。',
     purchaseCancelled: '已取消，没有扣款。',
