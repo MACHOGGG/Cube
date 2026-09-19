@@ -591,6 +591,9 @@ export const ICON_SOUND_OFF = custom('sound-off') ?? svg(
 /** 《无限反转》：玩家画的四层翻面（src/assets/icons/flip-mode-menu.svg）。主菜单那
  *  张卡和个人主页《更多玩法》的陈列页用的是同一张。 */
 export const ICON_FLIP_MODE = custom('flip-mode-menu') ?? '';
+/** 《真正解密 · 步步为营》：玩家画的那张（src/assets/icons/puzzle-mode-menu.svg）。
+ *  主菜单那张卡和个人主页《更多玩法》的陈列页用的是同一张。 */
+export const ICON_PUZZLE_MODE = custom('puzzle-mode-menu') ?? '';
 
 /** 《老虎机模式》在主菜单上的那块牌子——玩家给的老虎机图。
  *

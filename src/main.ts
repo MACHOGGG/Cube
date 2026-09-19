@@ -50,8 +50,9 @@ import {
   markOpened,
   type PlayKey,
 } from './engine/firstPlay';
-import { bombTip, flipTip, layoutTip, slotTip, timedTip } from './ui/modeTips';
+import { bombTip, flipTip, layoutTip, slotTip, timedTip, puzzleTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
+import { renderPuzzleModePage } from './ui/puzzleMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
@@ -552,6 +553,13 @@ function showMenu() {
     // 屋主替整屋挑玩法时按到它也进挑图形那一屏：挑完不开单人局，而是把这一
     // 族交给小屋（见 showFlipMode 的 room）。
     onFlipMode: showFlipMode,
+    // 步步为营不进小屋（见 showPuzzleMode）：屋主替整屋挑玩法时按到它，只提示
+    // 一句「不是小屋玩法」，和计时、炸弹同一条路——绝不能让他一个人开起来，
+    // 那样整屋还等着他。
+    onPuzzleMode: () => {
+      if (pickingForRoom) return void notAMultiplayerBoard();
+      showPuzzleMode();
+    },
     // 没打过的那几张基础卡镶一圈光，指路用；两张都打过了这里就是空的。
     glow: glowingBasics(),
     firstPlayLock: lockedForFirstPlay(),
@@ -725,6 +733,42 @@ function showFlipMode() {
       },
       onGenius: () => openGeniusWindow(currentLang, showFlipMode),
       room: pickingForRoom ? { onStart: (family) => void startRoundFor(family, undefined, true) } : undefined,
+    },
+    !isGenius(),
+  );
+  wireHomeTitle();
+  repaintIcons();
+  setScreenBack(showMenu);
+  toTop();
+}
+
+/**
+ * 《真正解密 · 步步为营》：挑方块、小球还是三角。天才特供，只从主菜单那张卡进来。
+ *
+ * 三角那一栏用的是 **triangleGame 这个变量**，不是按文件名找的：这个仓库里
+ * `const triangleGame = createTriangleBigGame()`——菜单上的「三角」由
+ * triangleBig.ts 造，两个三角文件在 2026-09 对调过内容，照文件名推会正好推反
+ * （见 CLAUDE.md《家族按 id 前缀认，但有一个陷阱》）。
+ *
+ * 没有 room 入口：这一局不比时间，和小屋「同一段时间里谁分高」凑不到一起。
+ */
+function showPuzzleMode() {
+  teardown();
+  trackScreen('puzzle-mode');
+  renderPuzzleModePage(
+    root,
+    currentLang,
+    {
+      onBack: showMenu,
+      onStart: (family) => {
+        const game = family === 'square' ? squareGame : family === 'circle' ? circleGame : triangleGame;
+        showGame(
+          game,
+          { steps: true, ...tipFor('puzzle', () => puzzleTip(currentLang)) },
+          showPuzzleMode,
+        );
+      },
+      onGenius: () => openGeniusWindow(currentLang, showPuzzleMode),
     },
     !isGenius(),
   );

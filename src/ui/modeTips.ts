@@ -61,3 +61,13 @@ export function timedTip(lang: Lang): ModeTip {
 export function layoutTip(lang: Lang): ModeTip {
   return { text: MODE_TIPS[lang].layout, art: '' };
 }
+
+/**
+ * 步步为营：**不配图**，照计时那一句的做法。
+ *
+ * 这一局要说的是头上那个「余步」，他抬头就看得见；画一幅新棋盘反而是在说
+ * 「这里有新棋盘」——而这一局的棋盘和基础玩法一模一样，唯一新的是那本账。
+ */
+export function puzzleTip(lang: Lang): ModeTip {
+  return { text: MODE_TIPS[lang].puzzle, art: '' };
+}

@@ -34,6 +34,7 @@ export type MenuTagKey =
   | 'triangleBig'
   | 'slot'
   | 'flip'
+  | 'puzzle'
   | 'circleSeven'
   | 'triangleAdvanced';
 
@@ -50,6 +51,7 @@ const TAGS: Record<Lang, Record<MenuTagKey, string>> = {
     triangleBig: 'Hex Triangles',
     slot: 'Slot Machine',
     flip: 'Endless Flip',
+    puzzle: 'Step by step',
     circleSeven: 'Diamond Balls',
     triangleAdvanced: 'V Triangle',
   },
@@ -65,6 +67,7 @@ const TAGS: Record<Lang, Record<MenuTagKey, string>> = {
     triangleBig: 'Triangles hexagone',
     slot: 'Machine à sous',
     flip: 'Retournement infini',
+    puzzle: 'Pas à pas',
     circleSeven: 'Billes losange',
     triangleAdvanced: 'Triangle en V',
   },
@@ -80,6 +83,7 @@ const TAGS: Record<Lang, Record<MenuTagKey, string>> = {
     triangleBig: '六邊形三角',
     slot: '老虎機',
     flip: '無限反轉',
+    puzzle: '步步為營',
     circleSeven: '菱形小球',
     triangleAdvanced: 'V字三角',
   },
@@ -95,6 +99,7 @@ const TAGS: Record<Lang, Record<MenuTagKey, string>> = {
     triangleBig: '六边形三角',
     slot: '老虎机',
     flip: '无限反转',
+    puzzle: '步步为营',
     circleSeven: '菱形小球',
     triangleAdvanced: 'V字三角',
   },

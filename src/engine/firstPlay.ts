@@ -25,6 +25,7 @@ export type PlayKey =
   | 'bomb'
   | 'slot'
   | 'flip'
+  | 'puzzle'
   | 'timed'
   | 'layout'
   | 'endcard'

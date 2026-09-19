@@ -23,6 +23,7 @@ import {
   timedOption,
   type BaseShape,
   ICON_FLIP_MODE,
+  ICON_PUZZLE_MODE,
   ICON_SLOT_MACHINE,
 } from './homeIcons';
 
@@ -43,6 +44,7 @@ export interface MenuHandlers {
   onRandomTarget: () => void;
   /** 《无限反转》：挑方块或小球，得分翻面来回翻，120 秒。 */
   onFlipMode: () => void;
+  onPuzzleMode: () => void;
   /**
    * 哪几张基础卡要镶一圈光（engine/firstPlay.ts 的 glowingBasics）。
    *
@@ -86,9 +88,12 @@ const SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
 /** 这副棋盘是不是天才特供的——按内容问，不按这个人开没开通（isLayoutLocked
  *  问的是后者）。窄屏的顺序要用前者：菜单的排布不该因为身份而变。 */
 const isGeniusLayout = (cardId: string): boolean => GENIUS_LAYOUTS.includes(cardId);
-/** 主菜单一排摆几张。样式那边算图标上限用的也是这两个数：宽屏第二、三排各
- *  五张，窄屏一排两张（一张 130px 见方，玩家点的）。 */
-const WIDE_PER_ROW = 5;
+/** 主菜单一排摆几张。样式那边算图标上限用的也是这两个数：宽屏第二排六张、
+ *  第三排五张，窄屏一排两张（一张 130px 见方，玩家点的）。
+ *
+ *  ⚠️ 这个数一动，style.css 里 --home-card-cap 那条公式的除数要跟着动——那一
+ *  项算的就是「一排站得下几张」。不跟着改的后果是横屏手机上整页横向溢出。 */
+const WIDE_PER_ROW = 6;
 const NARROW_PER_ROW = 2;
 /** The bomb panel's own order — the reference sheet lines its chips up
  *  square/triangle/circle rather than the square/circle/triangle the full-
@@ -293,12 +298,19 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   mpBtn.addEventListener('click', handlers.onMultiplayer);
   const slotBtn = geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, 'slot', handlers.onRandomTarget);
   const flipBtn = geniusCard(ICON_FLIP_MODE, s.flipModeTitle, 'flip', handlers.onFlipMode);
+  // 这一张的读屏名传的是**短名**（tag('puzzle') = 「步步为营」），不是全名
+  // 「真正解密 · 步步为营」。全名里带着一个 ` · `，而 check-menu.mjs 读
+  // aria-label 之后 .split(' ·')[0]，会把它切成「真正解密」——那道门的期望数
+  // 组就得写一个界面上没人见过的名字。全名留给陈列页、规则页、排行榜页签和
+  // 结算页，菜单上要的只是认得出来。
+  const puzzleBtn = geniusCard(ICON_PUZZLE_MODE, tag('puzzle'), 'puzzle', handlers.onPuzzleMode);
   // 窄屏：多人游玩顺着链往下摆，老虎机和无限反转收进天才特供那一段（它们是
   // 那一段里最前面的两张）。宽屏上这三张跟在计时和炸弹后面，凑成一排五张。
   if (!wide) {
     place(mpBtn);
     later(slotBtn);
     later(flipBtn);
+    later(puzzleBtn);
   }
 
   // ---- 计时 · 炸弹 --------------------------------------------------------
@@ -420,6 +432,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     timedRow.appendChild(mpBtn);
     timedRow.appendChild(slotBtn);
     timedRow.appendChild(flipBtn);
+    timedRow.appendChild(puzzleBtn);
   } else {
     place(bombBtn);
   }

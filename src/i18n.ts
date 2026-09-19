@@ -1895,7 +1895,7 @@ export function tutorialRules(lang: Lang, shape: RuleShape): string[] {
  */
 export const MODE_TIPS: Record<
   Lang,
-  Record<'bomb' | 'flip' | 'slot' | 'timed' | 'layout', string>
+  Record<'bomb' | 'flip' | 'slot' | 'timed' | 'layout' | 'puzzle', string>
 > = {
   en: {
     bomb: 'Same sliding, scoring and clearing as before — but red is the bomb colour. Four reds touching blow up! Any four that touch will set it off. A bomb next to a scoring pattern gets defused.',
@@ -1903,6 +1903,7 @@ export const MODE_TIPS: Record<
     slot: 'In Slot Machine the two scoring shapes are drawn at random: build those two, score, and they turn into stars. Clearing works exactly as before. Give it a go!',
     timed: '60 seconds on the clock — how many points can you get?',
     layout: 'Same rules, different board. Fancy the challenge?',
+    puzzle: 'Eight moves to start. Every move costs 1; every pattern you score — every star you make — pays 1 back. How high can you score?',
   },
   fr: {
     bomb: 'Même glissement, mêmes points, mêmes disparitions — mais le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent ! N’importe lesquels, du moment qu’ils se touchent. Une bombe voisine d’une figure qui marque se désamorce.',
@@ -1910,6 +1911,7 @@ export const MODE_TIPS: Record<
     slot: 'En mode Machine à sous, les deux motifs gagnants sont tirés au hasard : formez ces deux-là, marquez, elles deviennent des étoiles. Les disparitions ne changent pas. À vous !',
     timed: '60 secondes au compteur — combien de points allez-vous marquer ?',
     layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
+    puzzle: 'Huit coups pour commencer. Chaque coup en coûte 1 ; chaque figure réussie, chaque étoile, en rend 1. Quel score allez-vous atteindre ?',
   },
   zhHant: {
     bomb: '在滑動、得分、消除的基礎上，紅色作為炸彈色，四個相連會爆炸！注意，任何接觸的四個相連都會引爆。在得分圖案旁邊的炸彈會被拆掉。',
@@ -1917,6 +1919,7 @@ export const MODE_TIPS: Record<
     slot: '老虎機玩法中，隨機得到什麼得分圖案，就要根據這兩個圖案拼湊圖形、得分並變成星星；消除規則不變。快挑戰一下吧！',
     timed: '限時60s，能得多少分呢？',
     layout: '規則相同，佈局不同，你能挑戰麼？',
+    puzzle: '起始 8 步，每次行動消耗 1，每次得分圖案／消除星星得到 1，你能得多少分？',
   },
   zhHans: {
     bomb: '在滑动、得分、消除的基础上，红色作为炸弹色，四个相连会爆炸！注意，任何接触的四个相连都会引爆。在得分图案旁边的炸弹会被拆掉。',
@@ -1924,6 +1927,7 @@ export const MODE_TIPS: Record<
     slot: '老虎机玩法中，随机得到什么得分图案，就要根据这两个图案拼凑图形、得分并变成星星；消除规则不变。快挑战一下吧！',
     timed: '限时60s，能得多少分呢？',
     layout: '规则相同，布局不同，你能挑战么？',
+    puzzle: '起始 8 步，每次行动消耗 1，每次得分图案／消除星星得到 1，你能得多少分？',
   },
 };
 

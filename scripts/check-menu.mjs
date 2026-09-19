@@ -116,7 +116,7 @@ check('从一局里退出来，主菜单还停在刚才那儿', Math.abs(after -
 
 // ---- 5. 锁着的玩法：锁在正当中，招牌收在右下角，两者碰不到 -----------------
 //
-// 没开通的玩家在主菜单上看见四张锁着的卡（老虎机、无限反转、七色圆球、进阶三角）。锁要正
+// 没开通的玩家在主菜单上看见五张锁着的卡（老虎机、无限反转、步步为营、七色圆球、进阶三角）。锁要正
 // 正地压在图形中心，三把一样大；天才招牌收在卡片右下角，不许压到锁上，也不
 // 许探出卡片去压到邻居。卡片的大小随屏幕变——手机竖着两列、横过来是电脑那
 // 套版式但一张只剩 96px、电脑上二百多——三种都量一遍。
@@ -179,7 +179,7 @@ async function menuRows(width, height) {
   return rows;
 }
 
-/** 主菜单上每张图标有多宽——用来核对「十三张一样大」。 */
+/** 主菜单上每张图标有多宽——用来核对「十四张一样大」。 */
 async function cardWidths(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
   await c.addInitScript(() => {
@@ -199,14 +199,14 @@ async function cardWidths(width, height) {
 for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
-  check(`${label}：四张锁着的卡都在`, cards.length === 4, brief);
+  check(`${label}：五张锁着的卡都在`, cards.length === 5, brief);
   // 玩家点名的顺序，宽屏三排、窄屏五排——同一条链，断在不同的地方。
   const wide = w >= 720 || (w > h && w >= 560);
   const rows = await menuRows(w, h);
   const WANT = wide
     ? [
         ['方块', '圆球', '三角'],
-        ['计时挑战', '基础炸弹', '多人游玩', '老虎机模式', '无限反转'],
+        ['计时挑战', '基础炸弹', '多人游玩', '老虎机模式', '无限反转', '步步为营'],
         ['菱形方块', '六边圆球', '七色圆球', '大三角', '进阶三角'],
       ]
     : [
@@ -217,8 +217,10 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
         ['计时挑战', '基础炸弹'],
         ['菱形方块', '六边圆球'],
         ['大三角', '老虎机模式'],
-        ['无限反转', '七色圆球'],
-        ['进阶三角'],
+        // 两张都是竖长条的图，视觉分量相当。加上这一张之后窄屏正好排满七排，
+        // 从前那张孤零零的「进阶三角」没有了。
+        ['无限反转', '步步为营'],
+        ['七色圆球', '进阶三角'],
       ];
   check(`${label}：${WANT.length} 排，各 ${WANT.map((r) => r.length).join(' / ')} 张`,
     rows.length === WANT.length && rows.every((r, i) => r.length === WANT[i].length),
@@ -226,10 +228,13 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   check(`${label}：每一排的顺序都对`,
     JSON.stringify(rows) === JSON.stringify(WANT),
     rows.map((r) => r.join(' · ')).join('  |  '));
-  // 十三张一样大：张数少的那几排不能因为人少就长得比别人大。
+  // 十四张一样大：张数少的那几排不能因为人少就长得比别人大。
+  // ⚠️ 宽屏第二排从五张变六张之后（menu.ts 的 WIDE_PER_ROW），这一条是
+  // --home-card-cap 那道公式的岗哨：公式里少了「一排站得下几张」那一项，第二
+  // 排的六张就会被挤得比第三排的五张窄，这里立刻红。
   const sizes = await cardWidths(w, h);
   const span = Math.max(...sizes) - Math.min(...sizes);
-  check(`${label}：十三张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
+  check(`${label}：十四张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
   // 窄屏的图标是「上限 165，装不下就按这一排减掉间距再对半分」——所以这个数
   // 随屏幕变（390 的手机上是 158），只查它没越过上限、也没被挤没。同一块屏
   // 幕上十三张一样大那一条在上面已经查过了。
