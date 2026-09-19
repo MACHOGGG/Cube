@@ -24,6 +24,7 @@ import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
+import { createStepBank, puzzleComposite, PUZZLE_STEPS_OUT_REASON } from './puzzleScore';
 import { claimFirstHowToHint } from './firstPlay';
 import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
 import type { Cell } from './types';
@@ -228,6 +229,23 @@ export interface GameControllerHooks {
    */
   countRemainingTiles?(): { neverFlipped: number; flippedButRemaining: number };
   /**
+   * 《真正解密 · 步步为营》。给了就是这一局玩它（见 engine/puzzleScore.ts）。
+   *
+   * 它和别的玩法的差别不在难度上，在**计什么**上：没有钟，HUD 第三格从「时间」
+   * 换成「余步」，分数格印的是「此刻这副盘面值多少分」而不是一路攒的原始分，
+   * 结算看终局盘面。所以这一个布尔在这份文件里岔开六处，每一处都点名了它。
+   */
+  puzzle?: boolean;
+  /**
+   * 步步为营的结算要数的两个数：被消除的枚数、终局还在盘上的星星数。
+   *
+   * **每副棋盘自己数。** 不许用「开局枚数 − 现在还剩几枚」一刀切——「被消除」
+   * 在三副盘上长得不一样：方块是真的把格子拿走、两侧收拢；小球消完留一枚空白
+   * 球在原位；三角留一个空洞。一刀切在小球和三角上会数成 0，那两副盘的分数就
+   * 全靠星星，整个玩法的目标都歪了。
+   */
+  puzzleTally?(): { cleared: number; stars: number };
+  /**
    * A lightweight snapshot of the board's current appearance for the share
    * card (see shareCard.ts) — called once right after a fresh board is dealt
    * and once when the run ends. Omit if the shape doesn't support sharing.
@@ -274,6 +292,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   const perf = createPerformanceGauge();
   const timer = createTimer((sec) => {
+    // 步步为营那一格印的是余步，不是时间。计时器**照常走**——结算档案里的
+    // elapsedSec 还要用（记录页、云端、战绩图都读它），只是不往 HUD 上画：
+    // 一写就把余步那个读数盖掉了。
+    if (hooks.puzzle) return;
     if (hooks.timeLimitSec !== undefined) {
       const remaining = Math.max(0, hooks.timeLimitSec - sec);
       refs.hudTimeEl.textContent = formatClock(remaining);
@@ -291,6 +313,45 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const stopFrameWatch = watchFrames();
   /** 无限反转的连锁账本（见 scoring.ts 的 createToggleLedger）；别的局没有。 */
   const flipLedger = hooks.flip ? createToggleLedger() : null;
+  /** 步步为营手里那几步（见 engine/puzzleScore.ts）；别的局没有。 */
+  const bank = hooks.puzzle ? createStepBank() : null;
+
+  /** 余步 ≤ 2 就把那一格点红。这一局没有钟，紧张感全在这个数上。 */
+  const STEPS_LOW = 2;
+  function paintSteps(left: number) {
+    refs.hudTimeEl.textContent = String(left);
+    // 照 perf-cell.hot 的做法用 --accent，不写死一个红：色盲友好开关会把
+    // --accent 换成蓝色，写死的红在那一套配色下反而是最不该出现的颜色。
+    refs.hudTimeEl.parentElement?.classList.toggle('low', left <= STEPS_LOW);
+  }
+  /**
+   * 那一格上冒一下「+2 / +1 / −1」。
+   *
+   * 没有借 scoreReel.showGain：它 amount <= 0 直接 return、而且永远印「+」号
+   * ——而这一局最常见的那一下正是 −1。借 .gain-pop 那个类，动画是同一套。
+   */
+  function bumpSteps(delta: number) {
+    const host = refs.stepsBadgeEl;
+    if (!host || delta === 0) return;
+    const pop = document.createElement('span');
+    pop.className = 'gain-pop';
+    pop.textContent = (delta > 0 ? '+' : '−') + Math.abs(delta);
+    host.appendChild(pop);
+    window.setTimeout(() => pop.remove(), 1400);
+  }
+  /**
+   * 此刻这副盘面值多少分（分数格印的就是它）。
+   *
+   * 这一局的分数不是一路攒的，所以印原始分是在让玩家盯着一个**在这一局里不决
+   * 定任何事**的数去优化。算的时机要紧：只在一步的连锁全部走完、盘面落定之后
+   * 算一次——连锁中途盘面是半改完的，那时候数出来的枚数没有意义。
+   */
+  function puzzleScoreNow(): number {
+    const t = hooks.puzzleTally?.() ?? { cleared: 0, stars: 0 };
+    return puzzleComposite({ cleared: t.cleared, stars: t.stars, ratePercent: perf.valuePercent() });
+  }
+  /** 上一次印在分数格上的解密得分，用来算气泡上那个增量。 */
+  let shownPuzzleScore = 0;
 
   const HOT_THRESHOLD = 60;
   function updatePerfDisplay() {
@@ -437,8 +498,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     streak.reset();
     flipChain = 0;
     flipLedger?.reset();
+    bank?.reset();
     scoreReel.reset();
     perf.reset();
+    // scoreReel.reset() 把分数格清成 0，所以这两个也得跟着回到开局：一副还没
+    // 动过的盘面，解密得分本来就是 0（一枚没消、一颗星没有）。
+    shownPuzzleScore = 0;
+    if (bank) paintSteps(bank.left());
     patternPoints = 0;
     linePoints = 0;
     comboBonusPoints = 0;
@@ -499,7 +565,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 得分。
     // 无限反转没有用时系数（玩家的原话：「用时系数要取消」）——一局本来就是
     // 固定的 60 秒，快慢没有意义。
-    const timeMult = hooks.flip ? 1 : timeMultiplierFor(elapsed);
+    // 步步为营连钟都没有，「快」根本不是一种本事，所以同样是 1。
+    const timeMult = hooks.flip || hooks.puzzle ? 1 : timeMultiplierFor(elapsed);
     // Leaving tiles face-up costs the same either way — walking away early
     // and running the board into a genuine dead end are charged alike, so
     // "stop now" is never a way to dodge the cost of an unfinished board.
@@ -509,11 +576,26 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // which read as "you scored nothing" on the results modal and on the
     // share card. Scaling always leaves a good run's score visible.
     const remaining = hooks.countRemainingTiles?.() ?? { neverFlipped: 0, flippedButRemaining: 0 };
-    const unflippedScale = UNFLIPPED_SCALE ** remaining.neverFlipped;
-    const total = Math.max(
-      0,
-      Math.round(score * timeMult * bonusMult * unflippedScale) - extraPenalty,
-    );
+    /**
+     * 步步为营这三项一律 1 / 1 / 0，另走一条公式（见 engine/puzzleScore.ts）。
+     *
+     * 不是「顺手简化」，是那条四项连乘里有两项在这一局是**坏的**：
+     *   · 时间系数——没有钟，快慢不再是本事（上面那一行已经按下去了）；
+     *   · 0.95^未翻面——步数耗尽是这一局的常态，盘上必然剩一堆没碰过的，剩 29
+     *     枚就把系数压到两成，等于把所有人一起砸到底，罚的不是失误而是规则。
+     * 惩罚那一项这一局没有任何路径会传进来（没有炸弹），写成 0 是把这件事钉住，
+     * 而不是靠「反正没人传」。
+     *
+     * 写成定值、而不是留着算出一个 1.00，是为了让 runBreakdown 的 puzzle 分支
+     * 干脆不摆那几行——摆一行「×1.00」等于告诉玩家有这回事。
+     */
+    const unflippedScale = hooks.puzzle ? 1 : UNFLIPPED_SCALE ** remaining.neverFlipped;
+    const penalty = hooks.puzzle ? 0 : extraPenalty;
+    /** 这一局的终局盘面（每副棋盘自己数，见 hooks.puzzleTally）。 */
+    const tally = hooks.puzzle ? (hooks.puzzleTally?.() ?? { cleared: 0, stars: 0 }) : null;
+    const total = tally
+      ? puzzleComposite({ cleared: tally.cleared, stars: tally.stars, ratePercent: statusPercent })
+      : Math.max(0, Math.round(score * timeMult * bonusMult * unflippedScale) - penalty);
 
     const best = saveBestIfHigher(hooks.bestKey, total);
 
@@ -540,9 +622,27 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       patternPoints,
       comboBonusPoints,
       linePoints,
-      extraPenalty,
+      extraPenalty: penalty,
       extraPenaltyReason: extraPenaltyLabel,
       hazardEnd,
+      /**
+       * 步步为营这一局的明细。存**数字**不存句子——结算页、战绩图、记录页都从
+       * 这一份重新讲一遍，换种语言打开旧档要能重新描述，而不是复述它当时恰好
+       * 用的那些词（见 runRecord.ts 顶上那段）。
+       */
+      puzzle:
+        tally && bank
+          ? {
+              cleared: tally.cleared,
+              stars: tally.stars,
+              spent: bank.spent(),
+              scoredMoves: bank.scoredMoves(),
+              streakRefunds: bank.streakRefunds(),
+              edgeRefunds: bank.edgeRefunds(),
+              left: bank.left(),
+              peak: bank.peak(),
+            }
+          : undefined,
       // 这一局是在小屋里打的。记录页、战绩图、云上的档都带着它——两边现在
       // 是同一套计分了，可「和谁一起打的」仍然是这一局的一部分。
       room: Boolean(currentRoom()),
@@ -763,7 +863,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       { pattern: s.labelPattern, line: s.labelWholeLine },
       flipLedger ?? undefined,
     );
-    const multiplier = streak.currentMultiplier();
+    // 步步为营没有连击倍率（玩家原话：「没有连击机制」）。这一局的「连续得分」
+    // 退的是**步数**，不是分数——两样都给就成了双份奖励，而且分数那一份还会把
+    // 「连着得分」的回报藏进一个玩家算不出来的乘数里。
+    const multiplier = hooks.puzzle ? 1 : streak.currentMultiplier();
     // A chain reaction within *this* move is rewarded on top of (not instead
     // of) the cross-move streak above: that streak's own multiplier is fixed
     // for the whole move (captured once, just above), so without this a
@@ -777,9 +880,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // but every additional step *within the same move* compounds faster than
     // spreading the same steps across separate moves ever could.
     let comboMult = 1;
-    const CASCADE_COMBO_FACTOR = 3;
+    // 同上：步步为营连同一步之内的连锁也不加倍（恒 1）。
+    const CASCADE_COMBO_FACTOR = hooks.puzzle ? 1 : 3;
     let totalRaw = 0;
     let moveWeight = 0;
+    /**
+     * 这一步的连锁里有没有整线奖励（步步为营的「消边」判据）。
+     *
+     * 判的是 step.lineBonusGroups.length > 0。今天它是「整行／整列消除」，
+     * 《外边消除》那套规则落地之后它自动变成「消掉此刻的最外边」——同一个字段，
+     * 这儿一个字都不用改。
+     */
+    let hadLineBonus = false;
+    /** 走这一步之前手里还剩几步，用来算气泡上那个增量。 */
+    const beforeLeft = bank?.left() ?? 0;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : 550;
     const STEP_GAP_MS = reduceMotion ? 0 : 350;
@@ -801,6 +915,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (!totalRaw) flipChain = 0;
       perf.onMove(moveWeight);
       updatePerfDisplay();
+      // 步步为营的分数格：盘面落定了才算一次（有效得分率也刚在上一行更新完，
+      // 它是公式里的一项）。摆在几个 return 之前，为的是最后那一步也印得到——
+      // 「翻完了」那一下如果不印，玩家看见的是倒数第二步的分数。
+      if (bank) {
+        const now = puzzleScoreNow();
+        if (now !== shownPuzzleScore) {
+          if (now > shownPuzzleScore) scoreReel.showGain(now - shownPuzzleScore);
+          scoreReel.setValue(now);
+          shownPuzzleScore = now;
+        }
+      }
       if (gameOver) {
         resolving = false;
         return;
@@ -815,6 +940,26 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         resolving = false;
         endGame('全部方块已翻成点面');
         return;
+      }
+      /**
+       * 扣步，放在最后。
+       *
+       * 顺序是玩家定的那一条：**盘面真的走完了，就该报「都消完了」，不该报
+       * 「步数用完了」**——后者会让玩家以为自己输了，而他其实是赢到了头。所以
+       * isGameOver() 排在这前面，走到这儿才轮到步数说话。
+       *
+       * 同理它也排在 checkHazard 后面（这一局没炸弹，恒 false，但顺序照规矩摆，
+       * 将来真给它配上炸弹时不用重新想一遍）。
+       */
+      if (bank) {
+        const left = bank.spend(totalRaw > 0, { edge: hadLineBonus });
+        paintSteps(left);
+        bumpSteps(left - beforeLeft);
+        if (left <= 0) {
+          resolving = false;
+          endGame(PUZZLE_STEPS_OUT_REASON);
+          return;
+        }
       }
       updateStuckState(hooks.findStuckGroups?.() ?? []);
       resolving = false;
@@ -860,6 +1005,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // whole-line bonus, and everything the streak/chain multipliers added.
       if (s.lineBonusGroups.length) linePoints += s.points;
       else patternPoints += s.points;
+      // 步步为营的「消边」：一步引发的连锁里**任意一拍**是整线奖励就算，所以
+      // 这儿只置真、不置假（后面的拍子没消线，不该把前面那一拍的功劳抹掉）。
+      if (s.lineBonusGroups.length) hadLineBonus = true;
       comboBonusPoints += delta - s.points;
       // Captured before comboMult advances for the *next* step — this
       // step's own tier is "how deep into this move's chain are we",
@@ -929,13 +1077,22 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0) {
           score += delta;
-          // shownMult 是这一步实打实用的那个因子（两种玩法各一套，见上面）。
-          // 1.5^n 会长出一串小数（3.375、5.0625……），印一位就够——气泡是拿
-          // 来说「越连越多」的，不是拿来对账的。
-          const mult = Math.round(shownMult * 10) / 10;
-          scoreReel.showGain(delta, mult > 1 ? `${s.label} ×${mult % 1 ? mult.toFixed(1) : mult}` : s.label);
-          scoreReel.setValue(score);
-          punch(refs.scoreReelEl);
+          // 步步为营的分数格印的是「此刻这副盘面值多少分」，而且在**一步全部走
+          // 完之后**才更新一次（见 finish()）：连锁中途盘面是半改完的，那时候数
+          // 出来的枚数没有意义；印原始分更糟——那个数在这一局里不决定任何事，
+          // 摆着只会让玩家按错的东西去优化。
+          // 这一拍的那下轻弹留着：得分了就该有反馈，只是不报错的数。
+          if (hooks.puzzle) {
+            punch(refs.scoreReelEl);
+          } else {
+            // shownMult 是这一步实打实用的那个因子（两种玩法各一套，见上面）。
+            // 1.5^n 会长出一串小数（3.375、5.0625……），印一位就够——气泡是拿
+            // 来说「越连越多」的，不是拿来对账的。
+            const mult = Math.round(shownMult * 10) / 10;
+            scoreReel.showGain(delta, mult > 1 ? `${s.label} ×${mult % 1 ? mult.toFixed(1) : mult}` : s.label);
+            scoreReel.setValue(score);
+            punch(refs.scoreReelEl);
+          }
         }
         // Only a match step's commit() actually changes anything (the
         // flip) — a bonus step's commit() is a no-op (its cells were

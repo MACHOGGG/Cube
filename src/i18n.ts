@@ -25,6 +25,25 @@ export interface I18nStrings {
   flipModeTagline: string;
   /** 无限反转开局页上那一句：连击加成减弱、没有时间奖励。 */
   flipScoringHint: string;
+  /** 《真正解密 · 步步为营》：名字，和挑图形那一屏底下那句规矩。 */
+  puzzleModeTitle: string;
+  puzzleModeTagline: string;
+  /** 步步为营 HUD 第三格的抬头（别的玩法那一格写「用时」）。 */
+  stepsLeftLabel: string;
+  /** 步步为营的结束理由（engine/puzzleScore.ts 的 PUZZLE_STEPS_OUT_REASON）。 */
+  stepsOutReason: string;
+  /**
+   * 步步为营结算页那四行（见 engine/runRecord.ts 的 runBreakdown）。
+   *
+   * {n} 是每一枚值多少分——从 puzzleScore.ts 的常数填进来，不写死在文案里：
+   * 10 和 5 是暂定值，改常数的时候这两句要跟着改口，而不是变成假话。
+   */
+  puzzleClearedLabel: string;
+  puzzleStarsLabel: string;
+  /** 第四行的抬头：{n} 走了几步、{k} 其中几步得分。 */
+  puzzleStepsLabel: string;
+  /** 第四行的值：{m} 连续多退、{e} 消边多退、{l} 最后剩几步、{p} 最多攒到过几步。 */
+  puzzleRefundsLabel: string;
   bombBasicTitle: string;
   bombTimedTitle: string;
   bombAdvancedTitle: string;
@@ -49,6 +68,7 @@ export interface I18nStrings {
   rankTabLayout: string;
   rankTabSlot: string;
   rankTabFlip: string;
+  rankTabPuzzle: string;
   rankLocked: string;
   rankLockedCta: string;
   rankSignedOut: string;
@@ -485,6 +505,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipModeTitle: 'Endless flip',
     flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 60 s',
     flipScoringHint: 'Streak bonus toned down: each consecutive score ×1.5 · no time bonus',
+    puzzleModeTitle: 'Puzzle · Step by step',
+    puzzleModeTagline: 'Eight moves in hand · a move costs 1, a scoring move pays 1 back; +1 if it follows another score, +1 if it clears a line · no clock',
+    stepsLeftLabel: 'Moves left',
+    stepsOutReason: 'Out of moves',
+    puzzleClearedLabel: 'Cleared × {n}',
+    puzzleStarsLabel: 'Stars × {n}',
+    puzzleStepsLabel: '{n} moves · {k} scored',
+    puzzleRefundsLabel: '+{m} streak · +{e} lines · {l} left (peak {p})',
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
@@ -504,6 +532,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: 'Layouts',
     rankTabSlot: 'Slots',
     rankTabFlip: 'Flip',
+    rankTabPuzzle: 'Step by step',
     rankLocked: 'The global leaderboard is a Slides Genius perk',
     rankLockedCta: 'Become a Slides Genius',
     rankSignedOut: 'Sign in and your runs go on the board',
@@ -789,6 +818,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipModeTitle: 'Retournement infini',
     flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 60 s',
     flipScoringHint: 'Bonus de série réduit : chaque score consécutif ×1,5 · pas de bonus de temps',
+    puzzleModeTitle: 'Énigme · Pas à pas',
+    puzzleModeTagline: 'Huit coups en main · un coup coûte 1, un coup qui marque en rend 1 ; +1 s’il enchaîne, +1 s’il efface une ligne · sans chronomètre',
+    stepsLeftLabel: 'Coups',
+    stepsOutReason: 'Plus de coups',
+    puzzleClearedLabel: 'Effacées × {n}',
+    puzzleStarsLabel: 'Étoiles × {n}',
+    puzzleStepsLabel: '{n} coups · {k} ont marqué',
+    puzzleRefundsLabel: '+{m} enchaînés · +{e} lignes · {l} restants (max {p})',
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
@@ -808,6 +845,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: 'Plateaux',
     rankTabSlot: 'Machine',
     rankTabFlip: 'Infini',
+    rankTabPuzzle: 'Pas à pas',
     rankLocked: 'Le classement mondial est réservé aux Slides Génie',
     rankLockedCta: 'Devenir un Slides Génie',
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
@@ -1093,6 +1131,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipModeTitle: '無限反轉',
     flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，60 秒',
     flipScoringHint: '連擊加成減弱：連續得分每次 ×1.5 · 沒有時間獎勵',
+    puzzleModeTitle: '真正解密 · 步步為營',
+    puzzleModeTagline: '手裡 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整線再退 1 · 沒有時間限制',
+    stepsLeftLabel: '餘步',
+    stepsOutReason: '步數用完了',
+    puzzleClearedLabel: '被消除 × {n}',
+    puzzleStarsLabel: '星星 × {n}',
+    puzzleStepsLabel: '走了 {n} 步 · 得分 {k} 步',
+    puzzleRefundsLabel: '連續多退 {m} · 消邊多退 {e} · 剩 {l}（最多攢到 {p}）',
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
@@ -1112,6 +1158,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: '特殊佈局',
     rankTabSlot: '老虎機',
     rankTabFlip: '無限反轉',
+    rankTabPuzzle: '步步為營',
     rankLocked: '全球排行榜是 Slides 天才的特權',
     rankLockedCta: '成為 Slides 天才',
     rankSignedOut: '登入之後，你的成績才會上榜',
@@ -1397,6 +1444,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipModeTitle: '无限反转',
     flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，60 秒',
     flipScoringHint: '连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励',
+    puzzleModeTitle: '真正解密 · 步步为营',
+    puzzleModeTagline: '手里 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整线再退 1 · 没有时间限制',
+    stepsLeftLabel: '余步',
+    stepsOutReason: '步数用完了',
+    puzzleClearedLabel: '被消除 × {n}',
+    puzzleStarsLabel: '星星 × {n}',
+    puzzleStepsLabel: '走了 {n} 步 · 得分 {k} 步',
+    puzzleRefundsLabel: '连续多退 {m} · 消边多退 {e} · 剩 {l}（最多攒到 {p}）',
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
@@ -1416,6 +1471,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankTabLayout: '特殊布局',
     rankTabSlot: '老虎机',
     rankTabFlip: '无限反转',
+    rankTabPuzzle: '步步为营',
     rankLocked: '全球排行榜是 Slides 天才的特权',
     rankLockedCta: '成为 Slides 天才',
     rankSignedOut: '登录之后，你的成绩才会上榜',

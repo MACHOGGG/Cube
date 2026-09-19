@@ -345,6 +345,17 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .perf-cell.hot .v { animation: none; }
 }
+/* 步步为营那一格（HUD 第三格，平时写「用时」的那一格换成「余步」）。
+   position: relative 是给那颗「+2 / −1」气泡定位用的——.gain-badge 是绝对定位，
+   没有这一行它会跑到最近的定位祖先上去，也就是整块 .app。 */
+.steps-cell { position: relative; }
+/* 余步 ≤ 2：这一局没有钟，紧张感全在这个数上。
+   用 --accent 而不是写死一个红：色盲友好开关会把 --accent 换成蓝色，而写死的
+   红正是那一套配色里最不该出现的颜色（见 engine/palettePref.ts）。 */
+.steps-cell.low .v { color: var(--accent); animation: perf-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .steps-cell.low .v { animation: none; }
+}
 
 /* 会滚动的得分数字。
  *

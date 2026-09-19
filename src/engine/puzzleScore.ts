@@ -76,6 +76,16 @@ export const PUZZLE_EDGE_BONUS = 1;
 export const PUZZLE_CLEARED_POINTS = 10;
 export const PUZZLE_STAR_POINTS = 5;
 
+/**
+ * 这一局的结束理由。
+ *
+ * 和别处的结束理由一样，中文原文只当**查表的钥匙**，从不直接摆给玩家看
+ * （runRecord.ts 的 REASON_LABEL_KEY 把它翻成四种语言）。写成常数而不是在
+ * gameController 和 runRecord 各抄一遍字面量：抄出来的两份一旦差一个字，
+ * 结算页上就会冒出这句中文原文——四种语言里有三种是错的。
+ */
+export const PUZZLE_STEPS_OUT_REASON = '步数用完了';
+
 /** 结算时数出来的那副盘面。 */
 export interface PuzzleBoardTally {
   /**

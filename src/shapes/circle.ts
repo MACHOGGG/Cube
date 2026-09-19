@@ -221,6 +221,8 @@ export function createCircleGame(): ShapeGame {
       const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
       /** 无限反转（见 ShapeGameOpts.flip）：得分翻面来回翻，不消行，只由计时结束。 */
       const flipMode = !!opts?.flip;
+      /** 步步为营（见 ShapeGameOpts.steps 与 engine/puzzleScore.ts）：手里 8 步，没有钟。 */
+      const puzzleMode = !!opts?.steps;
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那几个。
       const targets = opts?.targets?.length ? opts.targets : null;
@@ -232,6 +234,7 @@ export function createCircleGame(): ShapeGame {
         shapeId: 'circle',
         timed: !!opts?.timeLimitSec,
         flip: flipMode,
+        steps: puzzleMode,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'circle', '圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
@@ -828,6 +831,24 @@ export function createCircleGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      /**
+       * 步步为营的结算要数的两个数（见 engine/puzzleScore.ts）。
+       *
+       * **小球这一副的「被消除」留在原位**：整线奖励不把球拿走，而是把它的颜色
+       * 抹成 BLANK（见 applyLineBonus 上面那段），变成一枚仍然能滑、但再也配不
+       * 上任何颜色的空白球。枚数一枚不少——所以「开局枚数 − 现在还剩几枚」在这
+       * 副盘上恒等于 0，被消除的枚数只能靠数空白球。
+       *
+       * stars 直接叫 countRemainingTilesFn（它已经把空白球排除在外了），不走上
+       * 面那个 countRemainingTiles——那一个在无限反转里返回 0。
+       */
+      function puzzleTally() {
+        let blanks = 0;
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c <= r; c++) if (isBlank(grid[r][c])) blanks++;
+        return { cleared: blanks, stars: countRemainingTilesFn(liveTiles()).flippedButRemaining };
+      }
+
       function snapshotBoard(): BoardSnapshot {
         const rowH = Math.sqrt(3);
         const raw: RawCell[] = [];
@@ -864,10 +885,12 @@ export function createCircleGame(): ShapeGame {
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
         slot: !!targets,
         flip: flipMode,
-        bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        puzzle: puzzleMode,
+        puzzleTally,
+        bestKey: puzzleMode ? bestKey + '_puzzle' : flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'circle', '圆球'),
         shapeId: 'circle',
-        modeKey: flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey: puzzleMode ? 'puzzle' : flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         coachArt: opts?.coachArt,

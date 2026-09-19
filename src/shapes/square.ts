@@ -115,6 +115,8 @@ export function createSquareGame(): ShapeGame {
       const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
       /** 无限反转（见 ShapeGameOpts.flip）：得分翻面来回翻，不消行，只由计时结束。 */
       const flipMode = !!opts?.flip;
+      /** 步步为营（见 ShapeGameOpts.steps 与 engine/puzzleScore.ts）：手里 8 步，没有钟。 */
+      const puzzleMode = !!opts?.steps;
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那两个。
       const targets = opts?.targets?.length ? opts.targets : null;
@@ -126,6 +128,7 @@ export function createSquareGame(): ShapeGame {
         shapeId: 'square',
         timed: !!opts?.timeLimitSec,
         flip: flipMode,
+        steps: puzzleMode,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'square', '方块')}`,
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
@@ -725,6 +728,27 @@ export function createSquareGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      /**
+       * 步步为营的结算要数的两个数（见 engine/puzzleScore.ts）。
+       *
+       * **方块这一副的「被消除」是真的把格子拿走、两侧收拢**：整行 / 整列奖励
+       * 一落，rows 或 cols 就少一，棋盘整个缩小。所以少掉的那些格子就是被消除
+       * 的枚数——开局 36 枚，现在 rows × cols 枚，差额就是答案。
+       *
+       * 小球和三角**不能**这么数：它们消完是把那一枚留在原位（变成空白球 /
+       * 空洞），枚数一枚不少，这个减法在那两副盘上恒等于 0。三副盘各数各的。
+       *
+       * stars 直接叫 countRemainingTilesFn，不走上面那个 countRemainingTiles
+       * ——那一个在无限反转里返回 0。两种玩法今天不会同时开，但这儿不靠那个
+       * 前提：数错了星星，玩家的分就凭空少一截，而且看不出来。
+       */
+      function puzzleTally() {
+        return {
+          cleared: BOARD_DIM * BOARD_DIM - rows * cols,
+          stars: countRemainingTilesFn(liveTiles()).flippedButRemaining,
+        };
+      }
+
       function highlightStuck(cells: Cell[] | null) {
         stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
       }
@@ -762,10 +786,12 @@ export function createSquareGame(): ShapeGame {
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
         slot: !!targets,
         flip: flipMode,
-        bestKey: flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        puzzle: puzzleMode,
+        puzzleTally,
+        bestKey: puzzleMode ? bestKey + '_puzzle' : flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'square', '方块'),
         shapeId: 'square',
-        modeKey: flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey: puzzleMode ? 'puzzle' : flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         coachArt: opts?.coachArt,

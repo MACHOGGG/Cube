@@ -263,6 +263,8 @@ export function createTriangleBigGame(): ShapeGame {
        * 基础色星星的，不再是炸弹。理由写在 engine/bomb.ts 的 isLiveBomb 上面。
        */
       const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
+      /** 步步为营（见 ShapeGameOpts.steps 与 engine/puzzleScore.ts）：手里 8 步，没有钟。 */
+      const puzzleMode = !!opts?.steps;
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那几个。
       const targets = opts?.targets?.length ? opts.targets : null;
@@ -273,6 +275,7 @@ export function createTriangleBigGame(): ShapeGame {
         practice: !!opts?.practice,
         shapeId: 'triangle',
         timed: !!opts?.timeLimitSec,
+        steps: puzzleMode,
         // 棋盘底下那块教学条（见 ui/coachBar.ts）。这一副只用它摆头一回进来的
         // 那一句提示（coachTip）——特殊布局、计时、炸弹各一句。
         coach: !!opts?.coach,
@@ -943,6 +946,25 @@ export function createTriangleBigGame(): ShapeGame {
         return countRemainingTilesFn(liveTiles());
       }
 
+      /**
+       * 步步为营的结算要数的两个数（见 engine/puzzleScore.ts）。
+       *
+       * **三角这一副的「被消除」留在原位**：整线奖励不把三角拿走，而是把它的颜
+       * 色抹成 BLANK（见这个文件里 BLANK 上面那段），留下一个仍然能滑、但再也
+       * 配不上任何颜色的空洞。枚数一枚不少——所以「开局枚数 − 现在还剩几枚」在
+       * 这副盘上恒等于 0，被消除的枚数只能靠数空洞。
+       *
+       * ⚠️ 这个文件是**主菜单上那副三角**（createTriangleBigGame）。两个三角
+       * 文件在 2026-09 对调过内容，文件名和菜单上的位置对不上——按文件名推会
+       * 推错，认准 main.ts 里那个 triangleGame 变量。
+       */
+      function puzzleTally() {
+        let holes = 0;
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) if (isBlank(grid[r][c])) holes++;
+        return { cleared: holes, stars: countRemainingTilesFn(liveTiles()).flippedButRemaining };
+      }
+
       function snapshotBoard(): BoardSnapshot {
         const H = Math.sqrt(3) / 2;
         const raw: RawCell[] = [];
@@ -983,10 +1005,12 @@ export function createTriangleBigGame(): ShapeGame {
         practice: !!opts?.practice,
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
         slot: !!targets,
-        bestKey: isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        puzzle: puzzleMode,
+        puzzleTally,
+        bestKey: puzzleMode ? bestKey + '_puzzle' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
         shapeName: shapeName(lang, 'triangle', '三角'),
         shapeId: 'triangle',
-        modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey: puzzleMode ? 'puzzle' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         // 三角也接教学条：玩家 2026-09 定的「玩家玩的第一个，我们尽量教学……

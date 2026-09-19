@@ -9,6 +9,7 @@ import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { menuTag } from './menuTags';
 import { slotTip } from './modeTips';
 import type { Family, TargetPattern } from '../engine/targets';
+import { PUZZLE_START_STEPS } from '../engine/puzzleScore';
 
 export interface ExtraControl {
   id: string;
@@ -56,6 +57,14 @@ export interface ShellMeta {
   /** 炸弹局。开局页和战绩图上都会挂一个炸弹标志，让人一眼认出这是哪一种局
    *  ——同一副棋盘，有没有炸弹是两回事。 */
   bomb?: boolean;
+  /**
+   * 《真正解密 · 步步为营》（见 engine/puzzleScore.ts）：HUD 第三格从「时间」
+   * 换成「余步」。
+   *
+   * 复用 hudTimeEl，**不新加一格**——三格的 HUD 宽度是按三格调出来的（四格在
+   * 360 宽上就开始挤，法语那几个词尤其）。这一局没有钟，那一格本来就空着。
+   */
+  steps?: boolean;
   /** 这个玩法在主菜单上的 id（square / circleHex / …）。开局页摆的就是它在
    *  主菜单上的那张图——按下去的是哪个图形，倒数时看见的就是同一个。 */
   shapeId: string;
@@ -94,6 +103,8 @@ export interface ShellRefs {
   /** 头一局那块教学条的壳子；meta.coach 没开时是 null（那一局根本没画它）。 */
   coachEl: HTMLElement | null;
   hudTimeEl: HTMLElement;
+  /** 步步为营那一格上冒「+2 / −1」的壳子；别的玩法没画它，是 null。 */
+  stepsBadgeEl: HTMLElement | null;
   hudPerfEl: HTMLElement;
   scoreReelEl: HTMLElement;
   gainBadgeEl: HTMLElement;
@@ -266,7 +277,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
           <div class="v"><span class="score-reel" id="scoreReel"></span></div>
         </div>
         <div class="hud-cell perf-cell"><div class="k">${s.perfLabel}</div><div class="v" id="hud-perf">0%</div></div>
-        <div class="hud-cell"><div class="k">${s.timeLabel}</div><div class="v" id="hud-time">0:00</div></div>
+        <div class="hud-cell${meta.steps ? ' steps-cell' : ''}">${
+          meta.steps ? '<span class="gain-badge steps-badge" id="stepsBadge"></span>' : ''
+        }<div class="k">${meta.steps ? s.stepsLeftLabel : s.timeLabel}</div><div class="v" id="hud-time">${
+          meta.steps ? String(PUZZLE_START_STEPS) : '0:00'
+        }</div></div>
       </div>
 
       ${patternHtml}
@@ -664,6 +679,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     legendEl: req('legend'),
     coachEl: container.querySelector<HTMLElement>('#coachBar'),
     hudTimeEl: req('hud-time'),
+    // query 不是 req：只有步步为营那一局画了它。
+    stepsBadgeEl: container.querySelector<HTMLElement>('#stepsBadge'),
     hudPerfEl: req('hud-perf'),
     scoreReelEl: req('scoreReel'),
     gainBadgeEl: req('gainBadge'),
