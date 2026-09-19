@@ -12,7 +12,7 @@
  * 查的是什么
  *
  * join() 里三件事各自要「屋里现在有谁」：发字母（freeLetter）、昵称去重
- * （uniqueName）、头像去重（distinctAvatar）。占座位那一步是原子的
+ * （uniqueName）、头像去重（avatarCandidates + claimTag）。占座位那一步是原子的
  * （claimSlot 走 HSETNX），这三件事却不是——从前它们吃的是函数一进来读的那
  * 一份旧快照，占完座位也没有重读。于是一群朋友几乎同时点《加入》：
  *

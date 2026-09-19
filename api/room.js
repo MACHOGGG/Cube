@@ -366,31 +366,6 @@ function cleanAvatar(value) {
 const HUE_STEP = 40;
 const avatarKey = (a) => `${a.shape}:${Math.round(a.hue / HUE_STEP)}`;
 
-function distinctAvatar(wanted, hash) {
-  const taken = new Set(
-    Object.entries(hash || {})
-      .filter(([field, value]) => field.startsWith('p:') && value?.avatar)
-      .map(([, value]) => avatarKey(cleanAvatar(value.avatar))),
-  );
-  if (!taken.has(avatarKey(wanted))) return wanted;
-
-  const shapes = [...AVATAR_SHAPES];
-  for (const shape of shapes) {
-    const tryIt = { shape, hue: wanted.hue };
-    if (!taken.has(avatarKey(tryIt))) return tryIt;
-  }
-  // 三个形状都被占了，就沿着色环挪，一圈之内一定有空位——房间最多 12 个人，
-  // 而形状乘上色相段有 27 个格子。
-  const buckets = Math.round(360 / HUE_STEP);
-  for (let step = 1; step <= buckets; step++) {
-    for (const shape of shapes) {
-      const tryIt = { shape, hue: (wanted.hue + step * HUE_STEP) % 360 };
-      if (!taken.has(avatarKey(tryIt))) return tryIt;
-    }
-  }
-  return wanted; // 挤不下了也不拦人进来，重一个图形总比进不来强。
-}
-
 /**
  * 催屋主：一人一格，不写进 meta。
  *
@@ -1003,7 +978,7 @@ function nameCandidates(typed) {
   return list;
 }
 
-/** 头像候选：先本形状，再换形状，再沿色环挪。和 distinctAvatar 同一条路。 */
+/** 头像候选：先本形状，再换形状，再沿色环挪（挑法见上面 avatarKey 那段）。 */
 function avatarCandidates(wanted) {
   const shapes = [...AVATAR_SHAPES];
   const list = [{ key: avatarKey(wanted), value: wanted }];

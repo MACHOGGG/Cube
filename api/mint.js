@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
-import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, saveAccount } from './_accounts.js';
+import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, updateAccount } from './_accounts.js';
 import { mintCodes } from './_codes.js';
 import { storeConfigured } from './_store.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -98,13 +98,28 @@ export default async function handler(req, res) {
 
     const sent = [];
     for (const address of list) {
-      const account = await loadAccount(address);
       // 没有这个账户就跳过，不报错整批失败：勾了一个刚被删掉的人，不该让
-      // 另外九个人也收不到码。
-      if (!account) { sent.push({ email: address, error: 'noAccount' }); continue; }
+      // 另外九个人也收不到码。这一步还挡住了「白造一批没人知道的码」——下一行
+      // mintCodes 一跑就在库里落下真能兑的东西，得先确认收件人还在。
+      if (!(await loadAccount(address))) {
+        sent.push({ email: address, error: 'noAccount' });
+        continue;
+      }
       const codes = await mintCodes(plan, per, expiresAt, { source: 'grant', to: address });
-      addToInbox(account, codes, plan, expiresAt);
-      await saveAccount(address, account);
+      // 带锁的读—改—写，和 redeem.js 那句 `updateAccount(address, (acct) =>
+      // extend(acct, plan))` 同一条路。朴素的 loadAccount + 改 + saveAccount 会
+      // 被同一瞬间的另一次写整份盖掉：玩家自己正在兑码、或者后台对同一个人连点
+      // 两次，后写的赢，先写的那一批码就此消失，两边还都显示「成功」。
+      const saved = await updateAccount(address, (acct) => addToInbox(acct, codes, plan, expiresAt));
+      if (!saved.ok) {
+        // busy 是「约一秒八都没抢到锁」。这一批码已经造出来了，却没记到任何人
+        // 名下，回包里也不给——免得后台以为发成功了。它们留在库里没人知道，是
+        // 这条路今天的天花板：mintCodes 自己要写库，只能在锁外面跑，所以这一小
+        // 段窗口关不掉。redeem.js 那头有 giveBack() 把码放回去，这头暂时没有对
+        // 应动作。
+        sent.push({ email: address, error: saved.busy ? 'busy' : 'noAccount' });
+        continue;
+      }
       sent.push({ email: address, codes });
     }
     return send(res, 200, { plan, per, ...(expiresAt ? { expiresAt } : {}), sent });
