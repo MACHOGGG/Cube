@@ -24,7 +24,9 @@ import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
-import { createStepBank, puzzleComposite, PUZZLE_STEPS_OUT_REASON } from './puzzleScore';
+import {
+  createStepBank, puzzleComposite, stepLedgerText, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
+} from './puzzleScore';
 import { claimFirstHowToHint } from './firstPlay';
 import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
 import type { Cell } from './types';
@@ -325,34 +327,28 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.hudTimeEl.parentElement?.classList.toggle('low', left <= STEPS_LOW);
   }
   /**
-   * 那一格上冒一下「+2 / +1 / −1」。
+   * 那一格上冒一下「−1」「−1 +1」「−1 +2」「−1 +3」。
+   *
+   * 收的是**这一步退回来了几步**，不是净变化——净变化那一版把最要紧的那一下
+   * 吞掉了（孤立得分净 0，于是什么都不冒，见 puzzleScore.ts 的 stepLedgerText）。
+   * 字怎么排由那个纯函数说了算，这儿只负责把它放上去：那样 check-puzzle 不用
+   * 开浏览器就能把四种情况钉住。
    *
    * 没有借 scoreReel.showGain：它 amount <= 0 直接 return、而且永远印「+」号
-   * ——而这一局最常见的那一下正是 −1。借 .gain-pop 那个类，动画是同一套。
+   * ——而这一局每一步都带着一个 −1。借 .gain-pop 那个类，动画是同一套。
    */
-  function bumpSteps(delta: number) {
+  function bumpSteps(refund: number) {
     const host = refs.stepsBadgeEl;
-    if (!host || delta === 0) return;
+    if (!host) return;
     const pop = document.createElement('span');
     pop.className = 'gain-pop';
-    pop.textContent = (delta > 0 ? '+' : '−') + Math.abs(delta);
+    pop.textContent = stepLedgerText(refund);
     host.appendChild(pop);
     window.setTimeout(() => pop.remove(), 1400);
+    // 从前这下轻弹打在分数格上（得分了就该有反馈）。这一局分数不在局中露面
+    // 了，反馈就跟着搬到真正在变的那一格来。
+    punch(refs.hudTimeEl);
   }
-  /**
-   * 此刻这副盘面值多少分（分数格印的就是它）。
-   *
-   * 这一局的分数不是一路攒的，所以印原始分是在让玩家盯着一个**在这一局里不决
-   * 定任何事**的数去优化。算的时机要紧：只在一步的连锁全部走完、盘面落定之后
-   * 算一次——连锁中途盘面是半改完的，那时候数出来的枚数没有意义。
-   */
-  function puzzleScoreNow(): number {
-    const t = hooks.puzzleTally?.() ?? { cleared: 0, stars: 0 };
-    return puzzleComposite({ cleared: t.cleared, stars: t.stars, ratePercent: perf.valuePercent() });
-  }
-  /** 上一次印在分数格上的解密得分，用来算气泡上那个增量。 */
-  let shownPuzzleScore = 0;
-
   const HOT_THRESHOLD = 60;
   function updatePerfDisplay() {
     const value = perf.valuePercent();
@@ -501,9 +497,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     bank?.reset();
     scoreReel.reset();
     perf.reset();
-    // scoreReel.reset() 把分数格清成 0，所以这两个也得跟着回到开局：一副还没
-    // 动过的盘面，解密得分本来就是 0（一枚没消、一颗星没有）。
-    shownPuzzleScore = 0;
     if (bank) paintSteps(bank.left());
     patternPoints = 0;
     linePoints = 0;
@@ -915,17 +908,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (!totalRaw) flipChain = 0;
       perf.onMove(moveWeight);
       updatePerfDisplay();
-      // 步步为营的分数格：盘面落定了才算一次（有效得分率也刚在上一行更新完，
-      // 它是公式里的一项）。摆在几个 return 之前，为的是最后那一步也印得到——
-      // 「翻完了」那一下如果不印，玩家看见的是倒数第二步的分数。
-      if (bank) {
-        const now = puzzleScoreNow();
-        if (now !== shownPuzzleScore) {
-          if (now > shownPuzzleScore) scoreReel.showGain(now - shownPuzzleScore);
-          scoreReel.setValue(now);
-          shownPuzzleScore = now;
-        }
-      }
       if (gameOver) {
         resolving = false;
         return;
@@ -954,7 +936,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (bank) {
         const left = bank.spend(totalRaw > 0, { edge: hadLineBonus });
         paintSteps(left);
-        bumpSteps(left - beforeLeft);
+        // 退回来了几步 = 现在剩的 − 走之前剩的 + 那一步的成本。要的是「退了几
+        // 步」而不是净变化：孤立得分净变化是 0，可屏幕上必须看得见「付了 1、
+        // 退回 1」——那正是这一局要教的那句话（见 stepLedgerText）。
+        bumpSteps(Math.max(0, left - beforeLeft + PUZZLE_STEP_COST));
         if (left <= 0) {
           resolving = false;
           endGame(PUZZLE_STEPS_OUT_REASON);
@@ -1077,14 +1062,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0) {
           score += delta;
-          // 步步为营的分数格印的是「此刻这副盘面值多少分」，而且在**一步全部走
-          // 完之后**才更新一次（见 finish()）：连锁中途盘面是半改完的，那时候数
-          // 出来的枚数没有意义；印原始分更糟——那个数在这一局里不决定任何事，
-          // 摆着只会让玩家按错的东西去优化。
-          // 这一拍的那下轻弹留着：得分了就该有反馈，只是不报错的数。
-          if (hooks.puzzle) {
-            punch(refs.scoreReelEl);
-          } else {
+          // 步步为营：分数在局中**整个不露面**（那一格印的是破折号，见
+          // gameShell 的 score-cell--hold），结算页才揭晓。
+          //
+          // 玩家报的原话是「得分现在还是加分不是加步数」。只要屏幕上还有一个数
+          // 在涨，这一局的回报就被读成了分数——而它真正换来的是步数。先前这儿
+          // 印的是「此刻这副盘面值多少分」，本意是别让人盯着原始分，可玩家分辨
+          // 不出这两种数，看到的一样是「得分 +27」。
+          //
+          // 所以这一拍什么都不印（连那下轻弹也搬走了）。这一步换到了几步，等
+          // 盘面落定之后在《余步》那一格上说——见 finish() 里的 bumpSteps。
+          if (!hooks.puzzle) {
             // shownMult 是这一步实打实用的那个因子（两种玩法各一套，见上面）。
             // 1.5^n 会长出一串小数（3.375、5.0625……），印一位就够——气泡是拿
             // 来说「越连越多」的，不是拿来对账的。

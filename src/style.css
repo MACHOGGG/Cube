@@ -369,6 +369,11 @@ h1 {
  * 差就不存在了。
  * 数字本身高不到 0.75em，1.1em 的框装得下，不会切到。 */
 .score-reel { display: inline-flex; --reel-step: 1.1em; }
+/* 步步为营：分数在局中不露面，那一格印一个破折号（见 gameShell 的
+   score-cell--hold 那段）。滚筒本体留着不删——scoreReel 那个元素是必需的
+   （gameShell 的 req('scoreReel')），而且结算和战绩图还要用同一套读数。 */
+.score-cell--hold .score-reel { display: none; }
+.score-hold { color: var(--ink-faint); }
 .digit-box { position: relative; height: var(--reel-step); width: 0.64em; overflow: hidden; }
 .digit-strip {
   position: absolute; left: 0; top: 0; width: 100%;

@@ -28,6 +28,7 @@ if (!src) {
 const {
   createStepBank,
   puzzleComposite,
+  stepLedgerText,
   PUZZLE_START_STEPS,
   PUZZLE_STEP_COST,
   PUZZLE_STEP_REWARD,
@@ -216,6 +217,69 @@ check(
   check('磨了十五分钟也不打折（这一局没有钟）', plain === slow, `${plain} vs ${slow}`);
 }
 check('得分率是负的当 0 算，不会算出负分', puzzleComposite({ cleared: 1, stars: 0, ratePercent: -50 }) === 10);
+
+// ---------------------------------------------------------------------------
+// 第 6 节：《余步》那一格上冒的那行字
+//
+// 这一节钉的是一次真事故。原先那一格只认「净变化」，净 0 就什么都不冒：
+//
+//     function bumpSteps(delta) { if (!host || delta === 0) return; … }
+//
+// 而这套经济里孤立的一次得分正好回本（−1 +1，净 0）。于是最常见的那次得分
+// ——第一次得分，或任何一次断了链子的得分——在余步那一格上一个字都没有，屏幕
+// 上唯一动的东西是分数格冒出来的「+27」。玩家报回来的原话是「得分现在还是加
+// 分不是加步数」。实测 8 局 67 步，三次得分，三次都是余步纹丝不动。
+//
+// 所以这一节的四条里，**第二条（净 0 也要出字）是主角**，别的三条是陪它的。
+// ---------------------------------------------------------------------------
+console.log('\n【6】余步那一格上的那行字');
+
+// 退回来几步，是从账本自己算出来的，不是手写的常数——这样改了经济数字，这一
+// 节会跟着一起红，而不是悄悄地和账本对不上。
+const refundOf = (bank, scored, edge) => {
+  const before = bank.left();
+  const after = bank.spend(scored, { edge });
+  return after - before + PUZZLE_STEP_COST;
+};
+
+{
+  const b = createStepBank();
+  check('没得分：只印成本', stepLedgerText(refundOf(b, false)) === '−1', stepLedgerText(0));
+}
+{
+  // 主角这一条。上一步没得分，所以没有连续加成；净变化 0，但字必须在。
+  const b = createStepBank();
+  b.spend(false);
+  const txt = stepLedgerText(refundOf(b, true));
+  check('孤立得分：净 0 也要出字，而且要看得出「付了 1、退回 1」', txt === '−1 +1', txt);
+}
+{
+  const b = createStepBank();
+  b.spend(true); // 上一步得分，链子接上了
+  const txt = stepLedgerText(refundOf(b, true));
+  check('连续得分：退 2', txt === '−1 +2', txt);
+}
+{
+  const b = createStepBank();
+  b.spend(true);
+  const txt = stepLedgerText(refundOf(b, true, true));
+  check('连续得分又消了边：退 3', txt === '−1 +3', txt);
+}
+{
+  const b = createStepBank();
+  b.spend(false);
+  const txt = stepLedgerText(refundOf(b, true, true));
+  check('孤立得分但消了边：退 2', txt === '−1 +2', txt);
+}
+// 哨兵：这四种情况在屏幕上必须是四行不一样的字。少一种能分辨的，玩家就少一
+// 条能学会的规律——而「连着得分才涨」正是这一局的全部意思。
+{
+  const all = [0, 1, 2, 3].map(stepLedgerText);
+  check('四种情况四行字，没有两行撞脸', new Set(all).size === 4, all.join(' / '));
+}
+// 成本那一段用的是 U+2212 减号，不是连字符（U+002D）：它和「+」等宽，两种字
+// 并排在那一格里才对得齐。抄成连字符肉眼看不出来，屏幕上会歪。
+check('减号是 U+2212，不是连字符', stepLedgerText(0).charCodeAt(0) === 0x2212, `U+${stepLedgerText(0).charCodeAt(0).toString(16).toUpperCase()}`);
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

@@ -271,10 +271,25 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <p class="tag-line">${meta.tagline}</p>
 
       <div class="hud">
-        <div class="hud-cell score-cell">
+        <div class="hud-cell score-cell${meta.steps ? ' score-cell--hold' : ''}">
           <span class="gain-badge" id="gainBadge"></span>
           <div class="k">${s.scoreLabel}</div>
-          <div class="v"><span class="score-reel" id="scoreReel"></span></div>
+          <div class="v">${
+            // 步步为营：这一格在局中印一个破折号，分数到结算页才揭晓。
+            //
+            // 这一局的分数不是一路攒的，而是「终局这副盘面值多少分」（消掉的
+            // ×10 ＋ 星星 ×5，再乘有效得分率）。可玩家分辨不出这两种数：屏幕上
+            // 只要有一个数在涨，他就当那是得分的回报——而这一局真正的回报是步
+            // 数。玩家报的原话是「得分现在还是加分不是加步数」。
+            //
+            // 为什么不干脆冻在 0：那是撒谎。得分确实把棋子翻成了星星，盘面确实
+            // 值钱了，印 0 等于告诉他「这一步白走了」。破折号说的是「还没揭晓」，
+            // 那是实话。
+            //
+            // 读数格仍然留着、不删：三格的 HUD 宽度是按三格调出来的（见上面
+            // ShellMeta.steps），删一格整条读数带要重新排。
+            meta.steps ? '<span class="score-hold" aria-hidden="true">—</span>' : ''
+          }<span class="score-reel" id="scoreReel"></span></div>
         </div>
         <div class="hud-cell perf-cell"><div class="k">${s.perfLabel}</div><div class="v" id="hud-perf">0%</div></div>
         <div class="hud-cell${meta.steps ? ' steps-cell' : ''}">${
