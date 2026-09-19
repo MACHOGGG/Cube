@@ -14,6 +14,7 @@
     "ios": "npm run ios:sync && cap open ios",
     "build:wxgame": "node scripts/build-wxgame.mjs",
     "build:xhs": "node xhs/build.mjs",
+    "preview:xhs": "npm run build:xhs && node xhs/preview.mjs",
     "check:xhs": "npm run build:xhs && node xhs/preview.mjs && node xhs/check-oldkernel.mjs && node xhs/check-oldcss.mjs",
     "check:vsweb": "npm run build && npm run build:xhs && node xhs/preview.mjs && node xhs/check-vsweb.mjs",
     "check:submit": "npm run build:xhs && node xhs/check-submit.mjs",

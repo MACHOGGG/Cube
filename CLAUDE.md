@@ -40,7 +40,7 @@ node scripts/dev-server.mjs 8815 dist    # 内置 api/ + 内存版 store
 node scripts/check-<名字>.mjs http://localhost:8815/
 
 # 小红书端
-npm run build:xhs
+npm run preview:xhs
 npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 ```
 
