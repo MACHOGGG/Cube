@@ -254,7 +254,23 @@ const tally = (arr) => {
     scores.includes("Number(data?.bombRules) >= 2 ? BOMB_KIND : 'bomb'"));
   // 老的 square:bomb 等是归档榜：它不在 ALL_BOARDS / LEGACY_BOARDS 里，重建时
   // 不会被撤人。KINDS 里要是还留着 'bomb'，新旧两版就又混回一张榜上了。
-  check('KINDS 里只剩新版本那一档', /const KINDS = \['base', 'timed', BOMB_KIND, 'slot', 'flip'\]/.test(scores));
+  //
+  // ⚠️ 这一条从前抠的是**整个数组的字面量**：
+  //     /const KINDS = \['base', 'timed', BOMB_KIND, 'slot', 'flip'\]/
+  //   于是步步为营（5cad428）往 KINDS 里合法地加了一档 PUZZLE_KIND，它就红了
+  //   ——要守的东西一点没坏（'bomb' 本来就不在里面），门自己先倒了。而 CI 是遇
+  //   错即停，这一条把它**后面那 23 步挡了五次推送**，那几步一次都没跑过。
+  //
+  //   所以现在只查它真正在意的两件事：数组内容里有没有老的 'bomb'、走的是不是
+  //   版本化的 BOMB_KIND。往 KINDS 里加新玩法不会再误伤；真有人把 'bomb' 加回
+  //   去，照样当场红。
+  //
+  //   **这是同一个病的第三例**（前两例：check-perk-pages 抠按钮里第一个 svg 的
+  //   位置、check-outer-edges 守一个没人调用的函数）。门要抠的是「它做到了什
+  //   么」，不是「代码长什么样」——写新断言时回来读这一段。
+  const kinds = (scores.match(/const KINDS = \[([^\]]*)\]/) || [, ''])[1];
+  check('KINDS 里没有老版本那一档', kinds.length > 0 && !/'bomb'/.test(kinds), kinds);
+  check('KINDS 里走的是版本化的那一档', kinds.includes('BOMB_KIND'));
 
   const board = read('src/ui/leaderboard.ts');
   check('客户端点开的也是新榜', board.includes("named(BASE_THREE, 'bomb2')"));
