@@ -45,6 +45,8 @@ const TOL = 0.5;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
 let fail = 0;
+/** 哪几副盘这一轮压根没量到（见下面那个 `stuck` 分支）。 */
+const skipped = [];
 const check = (n, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
   if (!ok) fail++;
@@ -135,6 +137,9 @@ const RADIUS = () => {
   };
 };
 
+/** 主菜单上「点一下到不了棋盘」的那几张，按 aria-label 认（见下面的循环）。 */
+const NOT_A_BOARD = ['多人游玩', '老虎机模式', '无限反转'];
+
 const ALL_VIEWPORTS = [
   { key: 'portrait', name: '竖屏 390×844', width: 390, height: 844 },
   { key: 'landscape', name: '横屏 844×390', width: 844, height: 390 },
@@ -151,6 +156,33 @@ for (const vp of VIEWPORTS) {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
+    // 种一份天才权益，不然天才特供那两副盘这道门一次都量不到。
+    //
+    // 漏掉的偏偏是最该量的两副：七色圆球 49 枚菱形、进阶三角 49 枚 V 形——格子
+    // 最多（比方块的 36 枚多三成），包围盒最不规整。量得到的那几副反而是最规
+    // 整的。一道门的覆盖面和它的风险面对不上，而且它跳过去的时候一声不吭，跑
+    // 完满屏 PASS。
+    //
+    // 为什么种 localStorage 就够（逐条查过才敢这么写）：
+    //   · engine/subscription.ts 的 isGenius() 是同步的，只读这一个键；主菜单
+    //     那几张卡（menu.ts 的 geniusCard、geniusContent.ts 的 isLayoutLocked）
+    //     点下去那一刻不问服务器。
+    //   · channel 必须写 'code'。read() 会把「柜台对不上」的权益整份丢成
+    //     NOBODY，只有内部码不归任何柜台管，web 和 app 两边都认。
+    //   · 开机时 main.ts 会调一次 refreshEntitlement()。它第一句实质判断就是
+    //     `if (codeStillLive()) return;`（内部码 + 没过期 = 原地掉头），所以
+    //     一个请求都不发，种下的这份不会被网络那头冲掉——dev-server 那边什么
+    //     都不用配。
+    //
+    // 换句话说这不是绕过付费墙，是照着「兑过一张长期内部码的玩家」原样摆一份。
+    localStorage.setItem(
+      'slides_genius',
+      JSON.stringify({
+        active: true,
+        channel: 'code',
+        until: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      }),
+    );
   });
   const page = await ctx.newPage();
   await page.goto(BASE, { waitUntil: 'load' });
@@ -161,13 +193,26 @@ for (const vp of VIEWPORTS) {
 
   for (let i = 0; i < labels.length; i++) {
     const label = labels[i];
-    // 多人游玩不是一个棋盘，它是一整套流程（check-multiplayer 管那一头）。
-    if (!label || label === '多人游玩') continue;
+    // 这三张不是棋盘，是流程：点一下到不了棋盘，所以这道门不从这儿进。
+    //   · 多人游玩 → 小屋那一页（check-multiplayer 管那一头）；
+    //   · 老虎机模式 → 三选一 → 滚筒 → 5-4-3-2-1；
+    //   · 无限反转 → 先挑形状。
+    //
+    // 更要紧的是它们**没有自己的棋盘**：两个都只是给基础方块/小球/三角加一个
+    // 选项（gameController 的 targets / flip），几何形状和上面已经量过的那三副
+    // 逐格相同。跳过它们不少量任何一种布局——文件头说的「八副棋盘 × 两个方向」
+    // 本来也不含它们。
+    //
+    // 这一条是种了权益之后才看清的：从前这两张撞在订阅墙上被跳过，看着像「没
+    // 权限所以量不到」，其实是「不该从这儿进」。权益一种上，它们真的点开了，
+    // 然后卡在滚筒和挑形状那一屏上，红成「棋盘没出现」——那才是真相。
+    if (!label || NOT_A_BOARD.some((n) => label === n || label.startsWith(n + ' · '))) continue;
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
     await page.$$eval('.home-icon-btn', (els, k) => els[k].click(), i);
     // 炸弹那几张点开是「选个形状」的窗口，不是直接开局——挑第一个。天才特供
-    // 那两张点开是订阅墙，那一档这里跳过（没订阅的人本来也进不去）。
+    // 那两副盘（七色圆球、进阶三角）现在跟别的卡一样直接开局：权益在上面
+    // 种过了，主菜单上它们不再是锁着的那一档。
     await page.waitForTimeout(500);
     // 有的卡片点开不是开局，是先让你挑一个形状。两种挑法都在这儿接住：
     //   · 弹一个居中的窗（进阶炸弹那几张）；
@@ -198,13 +243,20 @@ for (const vp of VIEWPORTS) {
       .then(() => true)
       .catch(() => false);
     if (!started) {
-      // 订阅墙拦下来的不算失败——它本来就不该让没订阅的人进去。
-      // 天才特供那两张点开是订阅墙。没订阅进不去是对的，不算失败。
-      const paywall = await page.evaluate(() =>
+      // 停在一个窗口上、没进到棋盘。从前这里是一句 SKIP 就过去了，理由是
+      // 「天才特供那两张点开是订阅墙，没订阅进不去是对的」——可上面已经种了
+      // 权益，它们现在该开得进去。所以还撞上窗口只剩两种可能：种子失效了
+      // （权益的键名或字段变过），或者挑形状那一窗没点穿。两种都是「这一副
+      // 没量到」。
+      //
+      // 一道门最危险的状态不是红，是绿着但没在看：十六种里少量四种，屏幕上
+      // 照样一片 PASS，没人会发现。所以记下来，结尾统一报红。
+      const stuck = await page.evaluate(() =>
         Boolean(document.querySelector('.overlay.show, .center-pick')) &&
         !document.querySelector('.app--game'));
-      if (paywall) {
-        console.log(`SKIP  ${vp.name} · ${label}：订阅墙拦着，没订阅进不去`);
+      if (stuck) {
+        skipped.push(`${vp.name} · ${label}`);
+        console.log(`SKIP  ${vp.name} · ${label}：停在一个窗口上，没进到棋盘`);
         continue;
       }
       check(`${vp.name} · ${label}：开得起来`, false, '棋盘没出现');
@@ -265,5 +317,11 @@ for (const vp of VIEWPORTS) {
 }
 
 await browser.close();
+// 没量到的也算红。跳过去而屏幕全绿，正是这道门最该避免的样子——它量的是十六
+// 种，少一种就不是十六种了。
+if (skipped.length) {
+  console.log(`\n⚠ 这一轮有 ${skipped.length} 副盘没量到：${skipped.join('、')}`);
+  fail += skipped.length;
+}
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);
