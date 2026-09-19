@@ -81,6 +81,14 @@ jobs:
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
           npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
           node scripts/check-targets.mjs /tmp/targets.mjs /tmp/match.mjs
+      # 「此刻的最外边」——《外边消除》那套规则的几何地基，八副棋盘共用一份。
+      # 三条判定里端头条件最不直观，也最容易走样，而走样的表现不是崩：是某副盘上
+      # 某条边突然消得掉或消不掉。这道门把它当纯函数喂，自己搭线集、答案手推，
+      # 所以不用起浏览器、几十毫秒。
+      - name: 此刻的最外边
+        run: |
+          npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
+          node scripts/check-outer-edges.mjs /tmp/scoring.mjs
       - name: 死局门槛
         run: |
           npx esbuild src/engine/stalemate.ts --bundle --format=esm --outfile=/tmp/stalemate.mjs
