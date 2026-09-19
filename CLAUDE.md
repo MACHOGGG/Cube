@@ -82,11 +82,13 @@ CI（`.github/workflows/ci.yml`）只收第 ①② 类里跑得快的那几个�
 - **改完 `xhs/src/baseline.css` 只跑 `npm run build:xhs`，`xhs/preview.html`
   不会跟着重出。** 它由 `node xhs/preview.mjs` 单独生成，而且在 .gitignore
   里，所以工作区里躺着的是**上一次**那一份——打开一看「改动没生效」，其实
-  `dist/app.js` 里早就有了。两道小红书的门（`check-oldkernel` /
-  `check-oldcss`）读的都是这个文件，于是它们量的是旧样式。**改完 CSS 要看效
-  果，两句一起跑：** `npm run build:xhs && node xhs/preview.mjs`。
-  （`check:xhs` / `check:vsweb` / `check:story` 已经把两步串好了，不用补；
-  单跑 `build:xhs` 和 `check:submit` 没有。）
+  `dist/app.js` 里早就有了。**五道**小红书的门（`check-oldkernel` /
+  `check-oldcss` / `check-story` / `check-vsweb` / `check-profile`）读的都是这
+  个文件，于是它们量的是旧样式。**改完 CSS 要看效果，跑
+  `npm run preview:xhs`**（出包和出预览两步已经串在一条脚本里）。
+  （`check:xhs` / `check:vsweb` / `check:story` 也已经串好，不用补；单跑
+  `build:xhs` 和 `check:submit` 没有串，`check-profile` 连自己的 npm 脚本都
+  没有——手跑它之前先 `npm run preview:xhs`。）
 
 Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写这个），
 不要跑 `playwright install`。

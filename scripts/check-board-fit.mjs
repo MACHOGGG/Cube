@@ -47,6 +47,23 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 let fail = 0;
 /** 哪几副盘这一轮压根没量到（见下面那个 `stuck` 分支）。 */
 const skipped = [];
+/**
+ * 余量薄到这个数以下的，单独报出来。
+ *
+ * `worst` 量的是「越界了多少」，负数才是余量，所以 `worst = 0` 的意思不是「卡在
+ * 容差线上」——它没越界，容差一点没用上——而是**不多不少正好贴齐，一点余量都没
+ * 有**。这两件事差别很大，上一轮的报告混过一次。
+ *
+ * 为什么余量 0 该被单独说一句：它现在是绿的，可下一次任何让棋子变大或底板变小
+ * 的改动（间距、圆角、字号、边框，哪怕半个像素）第一个破的就是它。而实测最紧的
+ * 那副是七色圆球（三档视口都是 0px），它是订阅专属棋盘——普通玩家和日常自测都
+ * 不会点进去，破了最没人看得见。
+ *
+ * 这一栏**不算红**，只在结尾汇总。红留给真越界的；这是「绿着但危险」，和
+ * skipped 那一栏的「绿着但没在看」是两件事。
+ */
+const TIGHT = 2;
+const tight = [];
 const check = (n, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
   if (!ok) fail++;
@@ -276,6 +293,10 @@ for (const vp of VIEWPORTS) {
         ? `${m.where}越界 ${m.worst}px · 圆角 ${m.radius} · 底板 ${m.floor.w}×${m.floor.h} · ${m.n} 枚`
         : `余量 ${-m.worst}px（最紧的是${m.where}）· 圆角 ${m.radius}`,
     );
+    // 过了，但余量薄。记一笔，结尾单独摆出来（见上面 TIGHT 那段）。
+    if (m.worst <= TOL && m.worst > -TIGHT) {
+      tight.push(`${vp.name} · ${label}：余量只剩 ${-m.worst}px（${m.where}）`);
+    }
 
     // ── 手指按着的那几帧，圆角不许动（见文件头）──────────────────────
     const rest = await page.evaluate(RADIUS);
@@ -322,6 +343,11 @@ await browser.close();
 if (skipped.length) {
   console.log(`\n⚠ 这一轮有 ${skipped.length} 副盘没量到：${skipped.join('、')}`);
   fail += skipped.length;
+}
+// 不算红：它们此刻都在底板里。但下一次调间距、圆角、字号，第一个破的就是它们。
+if (tight.length) {
+  console.log(`\n⚠ 余量不足 ${TIGHT}px 的 ${tight.length} 处（过了，但下次一动就破）：`);
+  for (const line of tight) console.log(`   ${line}`);
 }
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

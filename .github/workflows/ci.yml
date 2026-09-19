@@ -43,6 +43,26 @@ jobs:
       - name: 小红书端的类型
         run: npx tsc -p xhs/tsconfig.json
 
+      # 提交进仓库的小红书产物，必须能由当下的源码重新出一遍。
+      #
+      # public/xhs/ 不是构建产物目录，是**提交进仓库的成品**（网站发出去之后，真机
+      # 上开 play-slides.com/xhs/ 就是这一份）。所以 src/ 改了文案而没重出包，小红
+      # 书那一端就一直发着旧字，而 CI 一个字都不会红——2026-09 真出过一次：上一个
+      # 提交改了 i18n，产物里少了六句（mpErrTooMany 四语言、serverBusy 英法），是
+      # 外部巡检偶然看出来的。「需要有人记得」的事，交给机器每次都查。
+      #
+      # 只比 public/xhs/。xhs/slides-minitool.zip 不比：它的整体字节每次都不同（zip
+      # 头里存了 mtime），比它会天天误报。而 public/xhs 下那五个文件是确定性的
+      # ——app.js 连出三遍 sha256 一模一样，index.html 和三个字体本来就是照抄。
+      - name: 小红书产物必须能由源码重现
+        run: |
+          npm run build:xhs
+          if ! git diff --quiet -- public/xhs; then
+            echo "::error::public/xhs/ 落后于源码。本地跑一次 npm run preview:xhs，把 public/xhs/ 和 xhs/slides-minitool.zip 一起提交。"
+            git diff --stat -- public/xhs
+            exit 1
+          fi
+
       # 纯逻辑，不碰 DOM：得分连锁、图案表与判定、死局门槛。
       - name: 计分连锁
         run: |
@@ -115,6 +135,14 @@ jobs:
         run: node scripts/check-entitlement.mjs
       - name: 战绩与排行榜
         run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
+      # 玩家交卷的那一瞬间管理员点了《重建榜单》：重建读出整份 stats（total /
+      # runs / best / seen 四个字段住在同一份 JSON 里），只改 best，写整份回去
+      # ——四个字段一起回退。而它**从来不重算 total 和 runs**，所以再点一次重建
+      # 只救得回 best，那两个数永久错着：玩家《记录与排名》上的累计得分凭空少一
+      # 局，管理员那一侧全绿。这道门扫 31 档时序偏移（把交卷放在重建那一段的每
+      # 个位置），不注入延迟、不留测试口子。两秒。
+      - name: 交卷撞重建榜单
+        run: node scripts/check-stats-race.mjs
       - name: 内部码信箱
         run: ALLOW_MEMORY_STORE=1 node scripts/check-inbox.mjs
       - name: Creem 那道门开在哪儿
