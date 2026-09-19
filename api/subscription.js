@@ -1,14 +1,14 @@
 import { answer, configured, creem, emailOf, entitled, NOBODY, readBody, send } from './_creem.js';
 import {
-  SECRET_RE,
   burnGuess,
   checkPin,
+  issueToken,
   loadAccount,
   lockRemainingMs,
   normalizeEmail,
-  issueToken,
+  SECRET_RE,
   tokenValid,
-  saveAccount,
+  updateAccount,
 } from './_accounts.js';
 import { resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -84,8 +84,15 @@ export default async function handler(req, res) {
       const acct = who ? await loadAccount(who) : null;
       if (!tokenValid(acct, token)) return send(res, 401, { error: 'wrong' });
       if (acct.inboxUnseen) {
-        acct.inboxUnseen = 0;
-        await saveAccount(who, acct);
+        // 带锁的读—改—写（updateAccount），不是朴素的整份覆盖。这一下写的是整
+        // 份账号，而它和后台给他发码（api/mint.js 的 grant）是并发的：覆盖写会
+        // 拿点开弹窗那一刻读到的旧 inbox 盖回去——玩家「看一眼」这个动作，反而
+        // 把别人刚寄给他的几张码抹掉了，两边都不报错。
+        const saved = await updateAccount(who, (a) => {
+          a.inboxUnseen = 0;
+        });
+        // 没抢到锁就不清这个计数：弹窗上那个小红点多挂一会儿，比吃掉几张码好。
+        if (!saved.ok) return send(res, saved.busy ? 503 : 401, { error: saved.busy ? 'busy' : 'wrong' });
       }
       return send(res, 200, { ok: true });
     }
@@ -132,7 +139,9 @@ async function fromEmail(req, res, rawEmail, password, token) {
   // that cannot run must not be treated as a check that passed.
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
   const address = normalizeEmail(rawEmail);
-  const account = await loadAccount(address);
+  // let 而不是 const：拿密码登录那一支会在锁里重新读一份（见下面那段），下面
+  // 问权益要用锁里那一份，不能再用这一刻的快照。
+  let account = await loadAccount(address);
 
   // A token stands in for the password on a device that has already used
   // it once. It is checked against the account rather than trusted, it is
@@ -161,8 +170,24 @@ async function fromEmail(req, res, rawEmail, password, token) {
       // 拿密码登录：**添**一把新的给这台设备，别的设备手里那几把照旧有效
       // （见 _accounts.js 的 issueToken）。从前这里是换发——手机上登录一次
       // 就把电脑上那台顶下线了，那台下次去看排行榜只会被告知「请重新登录」。
-      issued = issueToken(account);
-      await saveAccount(address, account);
+      //
+      // 带锁的读—改—写（updateAccount），不是朴素的整份覆盖。这一句看着只是往
+      // 令牌环里加一项，写回去的却是**整份账号**：同一瞬间他在别处兑了一张码
+      // （redeem 走 updateAccount 加时长）、或者后台刚给他发了码（mint 加收件
+      // 箱），都会被这一份按登录那一刻读到的旧值盖回去。玩家刚兑上的一个月，
+      // 因为他紧接着在另一台设备上登了一次，就没了——而两边都显示成功。
+      const saved = await updateAccount(address, (a) => {
+        issued = issueToken(a);
+      });
+      if (!saved.ok) {
+        // busy 是「约一秒八都没抢到锁」，如实说一句，前端会译成「服务器正忙」
+        // （5xx → 'server' → serverBusy，见 src/engine/creem.ts 的 failureFor）。
+        // missing 走不到这儿——上面刚读到过这个账号——真走到了就和密码不对同一
+        // 句话，这个文件里「同一句话」那条规矩管着所有分支。
+        return send(res, saved.busy ? 503 : 401, { error: saved.busy ? 'busy' : 'wrong' });
+      }
+      // 往下问权益要用锁里那一份：它才是库里此刻的样子（到期日可能刚被别处改过）。
+      account = saved.account;
     }
   } else {
     /**

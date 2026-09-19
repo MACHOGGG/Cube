@@ -39,6 +39,7 @@ import {
   hset,
   set,
   storeConfigured,
+  withLock,
   zadd,
   zaddIfHigher,
   zcard,
@@ -66,6 +67,14 @@ const TOP_N = 50;
 
 const statsKey = (id) => 'stats:' + id;
 const runsKey = (id) => 'runs:' + id;
+/**
+ * 这个人那份战绩的锁（_store.js 的 withLock）。
+ *
+ * `stats:<id>` 是一份 JSON 大文档，`runs:<id>` 是他的存档，而榜上那几行是从这
+ * 两样算出来的。三样必须一起改，否则重建和交卷会互相盖掉——见 push 和 rebuild
+ * 各自那段说明，以及 scripts/check-stats-race.mjs。
+ */
+const statsLockKey = (id) => 'statslock:' + id;
 const boardKey = (mode) => 'lb:' + mode;
 /**
  * 总榜：不分玩法，每个人上榜的是他在所有玩法里有史以来最高的那一局（玩家的
@@ -221,9 +230,20 @@ async function loadStats(id) {
 /**
  * 打完一局。
  *
- * 读一次、写一次，写的都是这个账号自己的文档——同一个人不会在两台设备上同
- * 时交卷，所以这里的「读改写」没有别人来抢。榜上那两笔是分开的两条命令，
- * 因为有序集合本来就该这么用。
+ * **整段在这个人自己那把锁里**（statsLockKey）。这里原先写着「同一个人不会在两
+ * 台设备上同时交卷，所以这里的读改写没有别人来抢」——那句话是假的，两个方向都
+ * 假：
+ *
+ *   · 有别人来抢：管理员点《重建榜单》（见下面的 rebuild）读的、写的正是这两
+ *     份文档。它读出整份 stats 之后要走二十几次撤榜上榜才轮到写入，那几百毫秒
+ *     里交上来的这一局先写进去、随即被它整份盖掉。实测三个数一起回退，而重建
+ *     只重算 best，**total 和 runs 再重建一次也救不回来**。
+ *   · 同一个人也真会撞自己：网差重发、返回键再点一下、两个标签页——实测两局几
+ *     乎同时交，后写的把先写的盖掉，玩家那一局连存档里都没有。
+ *
+ * 为什么榜上那几笔也在锁里，而不只是两次写入：重建在它自己的锁里撤榜上榜，如果
+ * 交卷这一侧在锁外面 zadd，重建刚撤掉的那一行会被它重新加回去（点了《清掉无限
+ * 反转》那一档尤其明显）。凡是「从这两份文档算出来的」写入，都归这把锁管。
  */
 async function push(res, body, who) {
   const runId = String(body?.runId || '').slice(0, 64);
@@ -231,43 +251,56 @@ async function push(res, body, who) {
   const score = num(body?.score);
   if (!runId || !mode) return send(res, 400, { error: 'run' });
 
-  const stats = await loadStats(who.id);
-  // 同一局报两次不算两次。网差重发、返回键再点一下，都会走到这儿。
-  if (stats.seen.includes(runId)) {
-    return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs });
-  }
-
   // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
   const boardId = boardIdOf(mode, body?.data);
-  stats.total += score;
-  stats.runs += 1;
-  stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
-  stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
-  await set(statsKey(who.id), stats);
-
-  // 存档。整局的原始数据都留着——记录页要靠它把那张战绩图重新画出来。
-  const archive = await get(runsKey(who.id));
-  const list = Array.isArray(archive) ? archive : [];
-  list.unshift({ runId, mode, score, at: Date.now(), data: body?.data ?? null });
-  await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
-
   const name = cleanName(body?.name);
-  if (name) await hset(NAMES, who.id, { name, avatar: body?.avatar ?? null });
 
-  // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
-  // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
-  // 顺手把它改正。
-  await zaddIfHigher(boardKey(boardId), stats.best[boardId], who.id);
-  const top = bestOverall(stats);
-  if (top) {
-    await zadd(TOTAL_BOARD, top.score, who.id);
-    await hset(TOTAL_MODE, who.id, top.mode);
-  } else {
-    // 一局都没得过分：0 不算「最高」，总榜上不该有这一行。老版本按累计总分
-    // 写榜，0 分也会占一行，这里顺手撤掉。
-    await zrem(TOTAL_BOARD, who.id);
+  const got = await withLock(statsLockKey(who.id), async () => {
+    const stats = await loadStats(who.id);
+    // 同一局报两次不算两次。网差重发、返回键再点一下，都会走到这儿。
+    if (stats.seen.includes(runId)) return { duplicate: true, stats };
+
+    stats.total += score;
+    stats.runs += 1;
+    stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
+    stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
+    await set(statsKey(who.id), stats);
+
+    // 存档。整局的原始数据都留着——记录页要靠它把那张战绩图重新画出来。
+    // 它必须和上面那份 stats 在同一把锁里：重建是从**存档**重算 best 的，两样
+    // 分开写就会出现「存档里有这一局、汇总里没有」的半截状态。
+    const archive = await get(runsKey(who.id));
+    const list = Array.isArray(archive) ? archive : [];
+    list.unshift({ runId, mode, score, at: Date.now(), data: body?.data ?? null });
+    await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
+
+    if (name) await hset(NAMES, who.id, { name, avatar: body?.avatar ?? null });
+
+    // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
+    // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
+    // 顺手把它改正。
+    await zaddIfHigher(boardKey(boardId), stats.best[boardId], who.id);
+    const top = bestOverall(stats);
+    if (top) {
+      await zadd(TOTAL_BOARD, top.score, who.id);
+      await hset(TOTAL_MODE, who.id, top.mode);
+    } else {
+      // 一局都没得过分：0 不算「最高」，总榜上不该有这一行。老版本按累计总分
+      // 写榜，0 分也会占一行，这里顺手撤掉。
+      await zrem(TOTAL_BOARD, who.id);
+    }
+    return { duplicate: false, stats };
+  });
+
+  // 约一秒八都没抢到锁：明说一句，让客户端过一会再报。**不能默默丢掉**——这一局
+  // 是玩家刚打完的东西，客户端那边还留着，重报一次就好（runId 一样，seen 认得
+  // 出来，不会算两次）。
+  if (!got.ok) return send(res, 503, { error: 'busy' });
+
+  const { duplicate, stats } = got.value;
+  if (duplicate) {
+    return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs });
   }
-
   return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best });
 }
 
@@ -430,7 +463,25 @@ function tokenOk(given) {
  *
  * 做法：先把这个人从每一张榜（含老版本那几张）撤下来，再按重算的账写回去，
  * 总榜跟着重算。存档只留最近 60 局（KEEP_RUNS），更早的翻不出来也就不算——
- * 回包里报了动过几个人、写了几行。
+ * 回包里报了动过几个人、写了几行、跳过了几个人。
+ *
+ * ── 一个人一把锁，而且是整段进锁 ──────────────────────────────
+ *
+ * 这一段从前不带锁，于是它和玩家交卷会互相盖掉：读出整份 stats 之后要走二十几
+ * 次撤榜上榜才轮到写入，那几百毫秒里交上来的那一局先写进去、随即被这里的整份
+ * set 抹掉。实测 total 600→100、runs 2→1、best 500→100 三个数一起回退，而**这
+ * 里只重算 best**——再点一次重建救得回 best，`total` 和 `runs` 永久错着。
+ *
+ * 为什么不是「写之前重读一次」：那只把窗口从二十几次往返缩到一次，没关上。而
+ * best 是从**存档**算出来的，重读也救不了——算完之后还要撤榜上榜，中间只要松过
+ * 锁，新交的那一局就溜进了存档，而 best 已经按旧存档算完了。所以读存档、算
+ * best、撤榜上榜、写 stats 必须整段在同一把锁里（实测过四个版本，只有这一版三
+ * 个数都对；见 scripts/check-stats-race.mjs）。
+ *
+ * 一个人的这一段是二十几次顺序往返，几百毫秒，远在锁的十秒 TTL 之内；而锁是一
+ * 人一把，五千个人依次来，谁也不等别人。**抢不到锁的人跳过、不盖掉**——他正在
+ * 打这一局，那份存档一会儿就是新的，下次重建自然算对。跳过的人数报在
+ * `skipped` 里：跳过比盖掉好，但得看得见。
  */
 async function rebuild(req, res, body) {
   // 先限速，再验令牌——挡的正是「一直猜这个令牌」。和 api/mint.js 同一套
@@ -449,42 +500,61 @@ async function rebuild(req, res, body) {
 
   let players = 0;
   let rowsWritten = 0;
+  /** 这一轮没抢到锁、因此原样放过的人。正在打这一局的人就落在这里。 */
+  const skipped = [];
   for (const id of ids) {
-    const [stats, archive] = await Promise.all([loadStats(id), get(runsKey(id))]);
-    const runs = Array.isArray(archive) ? archive : [];
+    const got = await withLock(statsLockKey(id), async () => {
+      const [stats, archive] = await Promise.all([loadStats(id), get(runsKey(id))]);
+      const runs = Array.isArray(archive) ? archive : [];
 
-    const best = {};
-    for (const run of runs) {
-      const mode = cleanMode(run?.mode);
-      if (!mode) continue;
-      if (drop.has(kindOf(run?.data))) continue;
-      const boardId = boardIdOf(mode, run?.data);
-      const score = num(run.score);
-      if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
-    }
+      const best = {};
+      for (const run of runs) {
+        const mode = cleanMode(run?.mode);
+        if (!mode) continue;
+        if (drop.has(kindOf(run?.data))) continue;
+        const boardId = boardIdOf(mode, run?.data);
+        const score = num(run.score);
+        if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
+      }
 
-    // 先撤干净：新榜、老榜都撤，没算出成绩的那几张就此空着。
-    for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS]) {
-      if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
-    }
-    for (const [boardId, score] of Object.entries(best)) {
-      // zadd 而不是 zaddIfHigher：这一次要的正是把它改成重算出来的那个数。
-      await zadd(boardKey(boardId), score, id);
-      rowsWritten++;
-    }
+      let rows = 0;
+      // 先撤干净：新榜、老榜都撤，没算出成绩的那几张就此空着。
+      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS]) {
+        if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
+      }
+      for (const [boardId, score] of Object.entries(best)) {
+        // zadd 而不是 zaddIfHigher：这一次要的正是把它改成重算出来的那个数。
+        await zadd(boardKey(boardId), score, id);
+        rows++;
+      }
 
-    stats.best = best;
-    await set(statsKey(id), stats);
-    const top = bestOverall(stats);
-    if (top) {
-      await zadd(TOTAL_BOARD, top.score, id);
-      await hset(TOTAL_MODE, id, top.mode);
-    } else {
-      await zrem(TOTAL_BOARD, id);
+      // 只改 best。total 和 runs 是玩家自己攒下来的，这里压根不重算它们——读出
+      // 来的那一份原样带回去，别的字段（seen）同理。
+      stats.best = best;
+      await set(statsKey(id), stats);
+      const top = bestOverall(stats);
+      if (top) {
+        await zadd(TOTAL_BOARD, top.score, id);
+        await hset(TOTAL_MODE, id, top.mode);
+      } else {
+        await zrem(TOTAL_BOARD, id);
+      }
+      return rows;
+    });
+    if (!got.ok) {
+      skipped.push(id);
+      continue;
     }
+    rowsWritten += got.value;
     players++;
   }
-  return send(res, 200, { ok: true, players, rows: rowsWritten, dropped: [...drop] });
+  return send(res, 200, {
+    ok: true,
+    players,
+    rows: rowsWritten,
+    skipped: skipped.length,
+    dropped: [...drop],
+  });
 }
 
 /**

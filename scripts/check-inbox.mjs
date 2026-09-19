@@ -14,7 +14,8 @@
 process.env.ALLOW_MEMORY_STORE = '1';
 process.env.ADMIN_TOKEN = 'test-admin-token-1234567890';
 const A = new URL('../api/', import.meta.url).href;
-const { set } = await import(A + '_store.js');
+const { set, setnx } = await import(A + '_store.js');
+const accounts = await import(A + '_accounts.js');
 const redeem = (await import(A + 'redeem.js')).default;
 const mint = (await import(A + 'mint.js')).default;
 const passcode = (await import(A + 'passcode.js')).default;
@@ -71,6 +72,45 @@ check('码还在，没被清掉', (r.payload.inbox||[]).length===3);
 // 7. 别人报个邮箱不能把提示按掉
 r = res(); await subscription(req({ action:'seenInbox', email:'wan@example.com', token:'瞎编的' }), r);
 check('没有 token 清不掉别人的提示', r.code===401, String(r.code));
+
+// ---------------------------------------------------------------------------
+// 8. 有一个人的账号正被别的写入锁着：他这一份 busy，别人照旧收到码
+// ---------------------------------------------------------------------------
+//
+// 发码是「先 mintCodes 把码落进库，再 updateAccount 写进收件箱」。第二步抢不到
+// 锁（约一秒八），码已经造出来了——那一批必须撤回去，否则它留在库里没人知道归
+// 谁：谁知道这串字就能兑，而后台的记录里没有它，账对不平，而且后台看到 busy 多
+// 半会重试，于是又造一批。
+//
+// 这里量的是**这条路的对外契约**，因为撤回本身量不到：内存库没有 KEYS/SCAN，
+// 而造出来的码是随机的，回包里又（故意）不给，所以没有任何办法从外面数一遍库
+// 里还剩几张。能钉住的是三件事，而第三件恰恰是最容易写坏的那一件——撤码那一步
+// 要是把异常抛出去，整批发码当场中断，勾了两个人另一个也收不到。
+//
+// 锁是手动占上的（和 _accounts.js 的 updateAccount 抢同一把 acctlock:<邮箱>），
+// 这比真去制造并发稳：不依赖时序，每次都必然走到 busy 那一支。
+{
+  await accounts.saveAccount('other@example.com', accounts.newAccount('zzz999', 'code'));
+  const locked = 'acctlock:' + accounts.normalizeEmail('wan@example.com');
+  const held = await setnx(locked, { at: Date.now() }, 10);
+  check('先把那个账号的锁占上', held === true);
+
+  r = res();
+  await mint(req({ token: process.env.ADMIN_TOKEN, action:'grant',
+                   emails:['wan@example.com','other@example.com'], plan:'month', count:2 }), r);
+  const rows = (r.payload && r.payload.sent) || [];
+  const stuck = rows.find(x => x.email === 'wan@example.com') || {};
+  const fine = rows.find(x => x.email === 'other@example.com') || {};
+  check('锁着的那个人明说是 busy，不假装成功', stuck.error === 'busy', JSON.stringify(stuck));
+  check('锁着的那个人一张码都没拿到', !stuck.codes, JSON.stringify(stuck.codes || null));
+  check('同一批里另一个人照旧收到码（撤码那一步没把整批带崩）',
+        Array.isArray(fine.codes) && fine.codes.length === 2, JSON.stringify(fine));
+
+  // 锁着的那一份也不该悄悄写进收件箱——他手上还是原来那三张。
+  r = res(); await subscription(req({ email:'wan@example.com', token }), r);
+  check('锁着的那个人收件箱没变（还是 3 张）', (r.payload.inbox||[]).length===3,
+        String((r.payload.inbox||[]).length));
+}
 
 console.log(fail ? `\n${fail} 条没过` : '\nALL PASS');
 process.exit(fail?1:0);

@@ -244,6 +244,63 @@ export const setnx = async (key, value, ttl) =>
 export const del = (key) => command(['DEL', key]);
 
 /**
+ * 一把短命的锁，圈住一段「读出来—算—写回去」。
+ *
+ * 这一段本来长在 _accounts.js 的 updateAccount 里，只有账号用得上。现在抽到这
+ * 里，因为**同一种病不止一处**：任何存成「一份 JSON 大文档」的东西，只要有两
+ * 条路会读它、改它、整份写回去，后写的那一份就会把前一次的结果整个盖掉。已经
+ * 咬过人的两处——
+ *
+ *   · 账号（acct:<邮箱>）：一个人几乎同时兑两张码，两张都真的被吃掉、两次都
+ *     说成功，账号上只多了一个月。
+ *   · 战绩（stats:<id>）：玩家交卷的同一瞬间管理员点了《重建榜单》，重建读整
+ *     份、只改 best、写整份回去——`total` 和 `runs` 跟着回退，而重建永远不重算
+ *     这两个数，**再重建一次也救不回来**。
+ *
+ * 抄第二份锁是不行的：抄了以后调 TTL、调重试次数就要改两处，而漏改的那一处
+ * 会安静地按旧参数跑。所以这里只有一份。
+ *
+ * 为什么必须是整段进锁，不是「写之前重读一次」：写之前重读只把窗口从几十次
+ * 往返缩到一次，没关上。而且对 best 这种「从存档算出来的」值，重读也救不了
+ * ——算完之后还要撤榜上榜，中间只要松过锁，新交的那一局就溜进了存档，而 best
+ * 已经按旧存档算完了。实测过四个版本，只有整段进锁的那一版三个数都对。
+ *
+ * 锁自带 TTL（LOCK_TTL_S）：持有者中途摔了（函数超时、实例被回收），最多锁住
+ * 这么久，绝不会把一个键永久焊死。抢不到就等一下重试，等够 LOCK_TRIES 次才回
+ * busy——调用方该把已经拿走的东西放回去（见 api/redeem.js 的 giveBack）。
+ *
+ * @param lockKey 锁自己的键。和被保护的那个键一一对应，别和数据键同名。
+ * @param run 抢到锁之后跑的那一段。它的返回值原样放在 value 里。
+ * @returns { ok: true, value } 跑完了；{ ok: false, busy: true } 一直没抢到。
+ *          run 自己抛出来的异常照旧往上抛（锁在那之前已经放掉了）。
+ */
+/** 锁最多活这么久。比任何一次「读—改—写」都长得多，又短到卡住了也能自愈。 */
+export const LOCK_TTL_S = 10;
+/** 抢不到就等一下再来，最多这么多次（约 1.8 秒）。 */
+const LOCK_TRIES = 30;
+const LOCK_WAIT_MS = 60;
+const napMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function withLock(lockKey, run) {
+  for (let i = 0; i < LOCK_TRIES; i++) {
+    if (await setnx(lockKey, { at: Date.now() }, LOCK_TTL_S)) {
+      try {
+        return { ok: true, value: await run() };
+      } finally {
+        // 放锁失败也不要紧：它自己有 TTL，最多十秒后自己消失。
+        try {
+          await del(lockKey);
+        } catch (err) {
+          console.error('锁没放掉（十秒后自己过期）', lockKey, err);
+        }
+      }
+    }
+    await napMs(LOCK_WAIT_MS);
+  }
+  return { ok: false, busy: true };
+}
+
+/**
  * 加一，并把加完的那个数拿回来——加和读是同一步，中间没有缝。
  *
  * 「先读出来看看到了几次，再判断，再加一写回去」这个写法，在一台机器上看着

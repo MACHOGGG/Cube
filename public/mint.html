@@ -218,7 +218,13 @@
       $('rebuild').disabled = false;
       if (!res.ok) return sayR(ERRORS[reply.error] || ('出错了：HTTP ' + res.status), 'bad');
       const dropped = (reply.dropped || []).length ? '，清掉了 ' + reply.dropped.join('、') : '';
-      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}。`, 'good');
+      // 跳过的人是「这一刻正在打」的人：他那份战绩被锁着（api/scores.js 的
+      // statsLockKey），重建原样放过，不去盖。零个就不提——平时它一定是零，天天
+      // 挂一句「跳过 0 个」只是噪音。
+      const skipped = reply.skipped
+        ? `，跳过 ${reply.skipped} 个正在打的人（过一会再点一次就补上）`
+        : '';
+      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}${skipped}。`, 'good');
     } catch {
       $('rebuild').disabled = false;
       sayR('连不上服务器。', 'bad');

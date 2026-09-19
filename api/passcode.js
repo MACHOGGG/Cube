@@ -1,19 +1,20 @@
 import { configured, creem, emailOf, entitled, periodOf, readBody, send } from './_creem.js';
 import {
-  EMAIL_RE,
-  PASS_RE,
-  SECRET_RE,
   burnGuess,
   checkPin,
   codeHolder,
   createAccount,
+  EMAIL_RE,
   ensureGiftCodes,
   loadAccount,
   newAccount,
   normalizeEmail,
-  setNews,
+  PASS_RE,
   saveAccount,
+  SECRET_RE,
+  setNews,
   takeAccount,
+  updateAccount,
 } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
@@ -247,15 +248,34 @@ async function change(req, res, email, password, newPassword) {
   // 钥匙，并把别人手上还留着的设备一起撤掉）；fails / lockUntil 归零也是对
   // 的——他刚用旧密码证明过自己是本人。blocked 走不到这儿（checkPin 判 blocked
   // 会先 423 返回），所以它取 fresh 的 false 不影响任何账号。
-  const next = {
-    ...account,
-    ...fresh,
-    until: account.until,
-    plan: account.plan,
-    news: account.news,
-    newsAt: account.newsAt,
-    createdAt: account.createdAt,
-  };
-  await saveAccount(address, next);
-  return send(res, 200, { ok: true, email: address, token: next.token });
+  //
+  // 带锁的读—改—写（updateAccount），不是朴素的整份覆盖。上面那份 account 是
+  // 进函数时读的快照，而这一句写回去的是整份账号：同一瞬间他在别处兑了一张码
+  // （redeem 加时长）、或者后台给他发了码（mint 加收件箱），都会被 `until:
+  // account.until` 这样的「显式带过去」按旧值盖回去——玩家刚兑上的一个月，因为
+  // 他紧接着改了一次密码，就没了。
+  //
+  // 锁里那一份 a 就是库里此刻的样子，所以「要带过去的」不再是从 account 抄，而
+  // 是**原地不动**：Object.assign(a, fresh, keep) 和原来那个 {...account,
+  // ...fresh, ...keep} 展开出来一模一样，只是基准换成了新读的那一份。
+  //
+  // fresh 留在锁外面算是故意的：newAccount 要跑一次 scrypt（几十毫秒），不该占
+  // 着锁烧。它带的 kind 来自 account 那份快照，和原来一样。
+  const saved = await updateAccount(address, (a) => {
+    const keep = {
+      until: a.until,
+      plan: a.plan,
+      news: a.news,
+      newsAt: a.newsAt,
+      createdAt: a.createdAt,
+    };
+    Object.assign(a, fresh, keep);
+  });
+  if (!saved.ok) {
+    // 和这个文件里别处同一条规矩：不因为失败的种类不同而说不一样的话。busy 例
+    // 外——它和「密码不对」不是一回事，说错了玩家会去改密码，而他该做的是过一
+    // 会儿再试。
+    return send(res, saved.busy ? 503 : 401, { error: saved.busy ? 'busy' : 'wrong' });
+  }
+  return send(res, 200, { ok: true, email: address, token: saved.account.token });
 }

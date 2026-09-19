@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
-import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce } from './_store.js';
+import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce, withLock } from './_store.js';
 
 /**
  * The accounts a redeemed code creates — the only accounts this app has.
@@ -229,44 +229,28 @@ export async function createAccount(email, account) {
  * 在的账号加时长」漏了。它没法用那三招——要读出旧值、算出新值、再写回去——所
  * 以这里用一把短命的锁，让这三步一次只有一个人走。
  *
- * 锁自带 TTL（LOCK_TTL_S）：持有者中途摔了，最多锁住这么久，绝不会把一个账号
- * 永久焊死。抢不到就等一下重试，等够 LOCK_TRIES 次还抢不到才回 busy——调用方
- * 该把已经拿走的东西放回去（见 api/redeem.js 的 giveBack）。
+ * 锁本身在 _store.js 的 withLock：同一种病不止账号一处（战绩 stats:<id> 也
+ * 是），所以那把锁是全站共用的一份，TTL 和重试次数都写在那儿。
  *
  * @param mutate 拿到账号本人，就地改；不用返回。
  * @returns { ok: true, account } 改好了；{ ok: false, missing: true } 没有这
- *          个账号；{ ok: false, busy: true } 一直没抢到锁。
+ *          个账号；{ ok: false, busy: true } 一直没抢到锁——调用方该把已经拿走
+ *          的东西放回去（见 api/redeem.js 的 giveBack）。
  */
 const acctLockKey = (email) => 'acctlock:' + normalizeEmail(email);
-/** 锁最多活这么久。比任何一次「读—改—写」都长得多，又短到卡住了也能自愈。 */
-const LOCK_TTL_S = 10;
-/** 抢不到就等一下再来，最多这么多次（约 1.8 秒）。 */
-const LOCK_TRIES = 30;
-const LOCK_WAIT_MS = 60;
-const napMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function updateAccount(email, mutate) {
-  const lock = acctLockKey(email);
-  for (let i = 0; i < LOCK_TRIES; i++) {
-    if (await setnx(lock, { at: Date.now() }, LOCK_TTL_S)) {
-      try {
-        const account = await loadAccount(email);
-        if (!account) return { ok: false, missing: true };
-        mutate(account);
-        await saveAccount(email, account);
-        return { ok: true, account };
-      } finally {
-        // 放锁失败也不要紧：它自己有 TTL，最多十秒后自己消失。
-        try {
-          await del(lock);
-        } catch (err) {
-          console.error('账号锁没放掉（十秒后自己过期）', email, err);
-        }
-      }
-    }
-    await napMs(LOCK_WAIT_MS);
-  }
-  return { ok: false, busy: true };
+  const got = await withLock(acctLockKey(email), async () => {
+    const account = await loadAccount(email);
+    // 没有这个账号：直接回 null，withLock 照旧把锁放掉。
+    if (!account) return null;
+    mutate(account);
+    await saveAccount(email, account);
+    return account;
+  });
+  if (!got.ok) return { ok: false, busy: true };
+  if (!got.value) return { ok: false, missing: true };
+  return { ok: true, account: got.value };
 }
 
 /** 名单全文：{ 邮箱: indexRow }。只有带 ADMIN_TOKEN 的后台读得到。 */

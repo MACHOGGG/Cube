@@ -1,14 +1,15 @@
 import { randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import {
+  clearFails,
   EMAIL_RE,
-  PASS_RE,
   loadAccount,
   normalizeEmail,
+  PASS_RE,
   revokeTokens,
   saveAccount,
   unblock,
-  clearFails,
+  updateAccount,
 } from './_accounts.js';
 import { resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -158,14 +159,29 @@ async function confirm(res, address, { code, password }) {
 
   const account = await loadAccount(address);
   if (!account) return send(res, 400, { error: 'expired' });
-  unblock(account, pin);
-  // 账号对象上的 fails 归零了，另外那个计数键也要清——不然下一次输错密码，
-  // 它会拿旧的次数接着往上数（见 _accounts.js 的 failKey）。
+  // 另外那个计数键也要清——不然下一次输错密码，它会拿旧的次数接着往上数
+  // （见 _accounts.js 的 failKey）。这一步和账号那份文档无关，留在锁外面。
   await clearFails(address);
-  // 走邮箱重设密码：这条路的前提就是「这个账号可能已经不只我一个人在用」，
-  // 所以把所有设备上的令牌一并作废，只留刚验过邮箱的这一台。
-  const issued = revokeTokens(account);
-  await saveAccount(address, account);
+  // 带锁的读—改—写（updateAccount），不是朴素的整份覆盖。这一句改的是密码和令
+  // 牌，写回去的却是整份账号：同一瞬间他在别处兑了一张码（redeem 加时长）、或
+  // 者后台给他发了码（mint 加收件箱），都会被这一份按上面那个快照盖回去。
+  //
+  // 锁里干两件事：unblock 把封号和错误计数归零（走到这儿说明他刚用邮箱证明过自
+  // 己是本人），revokeTokens 把所有设备的令牌一并作废、只留这一台——这条路的前
+  // 提就是「这个账号可能已经不只我一个人在用」。
+  let issued;
+  const locked = await updateAccount(address, (a) => {
+    unblock(a, pin);
+    issued = revokeTokens(a);
+  });
+  if (!locked.ok) {
+    // 到这一行为止**什么不可逆的事都还没做**（验证码还在库里，密码还是旧的），
+    // 所以这里如实说一句，他重来一次就好。反过来若在这儿谎报成功，他会拿着一把
+    // 根本没生效的新密码被关在门外。
+    return send(res, locked.busy ? 503 : 400, { error: locked.busy ? 'busy' : 'expired' });
+  }
+  // 往下问权益要用锁里那一份：它才是库里此刻的样子。
+  const fresh = locked.account;
   await del(key(address));
   await del(triesKey(address));
   /**
@@ -189,7 +205,7 @@ async function confirm(res, address, { code, password }) {
    */
   const done = { reset: true, email: address, token: issued };
   try {
-    const { status, body } = await resolveEntitlement(address, account, issued);
+    const { status, body } = await resolveEntitlement(address, fresh, issued);
     // token 一律用这台设备刚拿到的那一把：NOBODY 身上没有 token，让 body
     // 盖上去会把它抹掉，那台设备就白改了一次密码还得再登一次。
     return send(res, 200, status === 200 ? { ...done, ...body, token: issued } : done);

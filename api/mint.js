@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, updateAccount } from './_accounts.js';
-import { mintCodes } from './_codes.js';
-import { storeConfigured } from './_store.js';
+import { codeKey, mintCodes } from './_codes.js';
+import { del, storeConfigured } from './_store.js';
 import { callerId, tooMany } from './_ratelimit.js';
 
 /**
@@ -112,11 +112,25 @@ export default async function handler(req, res) {
       // 两次，后写的赢，先写的那一批码就此消失，两边还都显示「成功」。
       const saved = await updateAccount(address, (acct) => addToInbox(acct, codes, plan, expiresAt));
       if (!saved.ok) {
-        // busy 是「约一秒八都没抢到锁」。这一批码已经造出来了，却没记到任何人
-        // 名下，回包里也不给——免得后台以为发成功了。它们留在库里没人知道，是
-        // 这条路今天的天花板：mintCodes 自己要写库，只能在锁外面跑，所以这一小
-        // 段窗口关不掉。redeem.js 那头有 giveBack() 把码放回去，这头暂时没有对
-        // 应动作。
+        // 码已经造出来了，收件箱却没写进去（busy = 约一秒八都没抢到锁）。把这
+        // 一批撤回去。
+        //
+        // 不撤的后果不是「记错人名下」，是**留在库里没人知道归谁**：谁知道这串
+        // 字就能兑，而后台的发码记录里没有它。两个实际问题——账对不平（「我到底
+        // 发了多少张年卡」查不出来），以及后台看到 busy 多半会重试，于是又造一
+        // 批，重试几次就是几批孤儿码。
+        //
+        // 撤不掉也不要紧，照 redeem.js 的 giveBack() 那个样子：记一笔日志就过，
+        // 绝不往上抛。抛出去会让整批发码中断，勾了十个人，另外九个也收不到。
+        await Promise.all(
+          codes.map(async (code) => {
+            try {
+              await del(codeKey(code));
+            } catch (err) {
+              console.error('这张码撤不回去了（留在库里没人知道归谁）', code, err);
+            }
+          }),
+        );
         sent.push({ email: address, error: saved.busy ? 'busy' : 'noAccount' });
         continue;
       }

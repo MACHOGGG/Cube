@@ -47,6 +47,8 @@ const check = (n, ok, extra = '') => {
 
 const passcode = (await import('../api/passcode.js')).default;
 const emailApi = (await import('../api/email.js')).default;
+const redeem = (await import('../api/redeem.js')).default;
+const subscription = (await import('../api/subscription.js')).default;
 const A = await import('../api/_accounts.js');
 const { set } = await import('../api/_store.js');
 
@@ -135,6 +137,50 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
   const acct = await A.loadAccount(mail);
   const kept = a ? first : second;
   check('③ 留下的正是开成那一份，没被另一份盖掉', acct?.token === kept.token);
+}
+
+// ---- ④ 兑码撞登录 / 撞改密码：加上去的时长不许被盖掉 ------------------------
+//
+// 登录（subscription.js）和改密码（passcode.js）都只想改一样小东西——登录添一
+// 把令牌，改密码换一把钥匙——可它们写回去的是**整份账号**。从前两处都是朴素的
+// 「loadAccount → 改 → saveAccount」，于是同一瞬间的兑码（redeem 走 updateAccount
+// 加时长）会被它们按进函数那一刻读到的旧 until 盖回去：码真的被吃掉了、两边都
+// 说成功，而账号上一天都没多。玩家自己查不出来，客服也查不出来（码已经从库里
+// 拿走了）。
+//
+// 现在两处都走 updateAccount，和兑码抢同一把 acctlock:<邮箱>。
+{
+  const mail = 'racer@example.com';
+  const acct = A.newAccount('old111', 'code');
+  acct.until = Date.now() + 5 * 86400e3;   // 先有五天
+  await A.saveAccount(mail, acct);
+  const before = acct.until;
+
+  // redeem 读的是码本身那张票（code:XXXXXX，takeOnce 取走），不是上面 mint()
+  // 那个「绑码用的寄存处」（acct:code:XXXXXX）。两者是两条路，别搞混。
+  await set('code:DDDD44', { plan: 'month' });
+  const [rRedeem, rLogin] = await Promise.all([
+    call(redeem, { code: 'DDDD44', email: mail, token: acct.token }),
+    call(subscription, { email: mail, password: 'old111' }),
+  ]);
+  check('④ 兑码撞登录：两条都办成了', rRedeem.status === 200 && rLogin.status === 200,
+    `兑码 ${rRedeem.status} / 登录 ${rLogin.status}`);
+  const after = (await A.loadAccount(mail))?.until || 0;
+  // 一个月是 PLAN_MS.month（31 天）。只要比原来的五天多出二十天以上，就说明那
+  // 张码真的加上去了、没被登录那一笔按旧值盖回去。
+  check('④ 兑码撞登录：那一个月还在（没被登录写回去的旧到期日盖掉）',
+    after - before > 20 * 86400e3, `到期日多了 ${Math.round((after - before) / 86400e3)} 天`);
+
+  await set('code:EEEE55', { plan: 'month' });
+  const [rRedeem2, rChange] = await Promise.all([
+    call(redeem, { code: 'EEEE55', email: mail, token: acct.token }),
+    call(passcode, { action: 'change', email: mail, password: 'old111', newPassword: 'new222' }),
+  ]);
+  check('④ 兑码撞改密码：两条都办成了', rRedeem2.status === 200 && rChange.status === 200,
+    `兑码 ${rRedeem2.status} / 改密码 ${rChange.status}`);
+  const after2 = (await A.loadAccount(mail))?.until || 0;
+  check('④ 兑码撞改密码：那一个月还在（没被改密码显式带过去的旧 until 盖掉）',
+    after2 - after > 20 * 86400e3, `到期日又多了 ${Math.round((after2 - after) / 86400e3)} 天`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
