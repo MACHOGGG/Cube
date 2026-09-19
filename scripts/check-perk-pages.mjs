@@ -247,14 +247,28 @@ async function pickerAt(width, height) {
       // 玩家的原话：「六条规则的配图……要能够清晰地展示对应的教学内容」——每幅都
       // 得是会动的（有 CSS 动画在跑），不是一张静图。
       animated: rules.filter((r) => [...r.querySelectorAll('.tut-rule-art *')].some((e) => getComputedStyle(e).animationName !== 'none')).length,
-      // 三个入口是横向的大圆角矩形按钮（有底、有圆角、比图形宽得多），图形居中。
+      // 三个入口是横向的大圆角矩形按钮（有底、有圆角、比图形宽得多），里面那
+      // 一对图示居中。
+      //
+      // 这儿原先写的是 b.querySelector('svg')——只取第一幅，也就是棋子那幅，
+      // 然后拿它的中点和按钮中点比，容差 2px。后来按玩家的话（「上方的三个
+      // 图形看不出是教学内容」）在棋子旁边压了一枚播放标志，按钮里于是有两
+      // 幅图：CSS 是 justify-content: center + gap，居中的是「这一对」，棋子
+      // 自己就必然偏左——390×844 上偏 17.1px，375×667 上偏 13.5px，都远超
+      // 2px。页面是对的，是这道门从那天起一直红着。
+      //
+      // 所以改成量两幅图合起来那一段的中点。kids.length >= 2 这一句别省：它
+      // 顺带把「播放标志还在不在」也钉住了——门要守住的是那个设计决定（这一
+      // 页少文字，靠一枚播放标志说明点下去会放动画），不只是几何。
       bigBtns: (() => {
         const page = document.querySelector('.tut-pick').getBoundingClientRect();
         const btns = [...document.querySelectorAll('.tut-shape-btn')];
         return btns.length === 3 && btns.every((b) => {
           const r = b.getBoundingClientRect(); const cs = getComputedStyle(b);
-          const svg = b.querySelector('svg')?.getBoundingClientRect();
-          const centred = svg ? Math.abs((svg.left + svg.width / 2) - (r.left + r.width / 2)) <= 2 : false;
+          const kids = [...b.querySelectorAll('svg')].map((k) => k.getBoundingClientRect());
+          const left = Math.min(...kids.map((k) => k.left));
+          const right = Math.max(...kids.map((k) => k.right));
+          const centred = kids.length >= 2 && Math.abs((left + right) / 2 - (r.left + r.width / 2)) <= 2;
           const boxed = parseFloat(cs.borderTopLeftRadius) >= 8 && (cs.borderTopStyle !== 'none' || cs.backgroundColor !== 'rgba(0, 0, 0, 0)');
           return r.width >= page.width * 0.6 && r.width > r.height * 2 && centred && boxed;
         });
@@ -280,7 +294,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   check(`${label} · 教学挑选页：三个图形上下排着（方块、小球、三角）`, m.shapes.join(',') === 'square,circle,triangle' && m.stacked, m.shapes.join(','));
   check(`${label} · 六条规则，每条配图`, m.rules === 6 && m.arts === 6 && m.texts.every((n) => n > 8), `${m.rules} 条 · ${m.arts} 幅`);
   check(`${label} · 六幅配图都在动`, m.animated === 6, `${m.animated} 幅`);
-  check(`${label} · 三个入口是横向的大圆角矩形按钮，图形居中`, m.bigBtns);
+  check(`${label} · 三个入口是横向的大圆角矩形按钮，图形和播放标志居中`, m.bigBtns);
   check(`${label} · 没有《如何滑……重新观看》那两行字`, !m.oldTitle);
   check(`${label} · 《返回》是「<」的图示，在最下面，不压底排`, m.backGlyph && m.backText === '' && m.backIsLast && m.backBottomOk);
   check(`${label} · 整页一屏装下，不用滚`, !m.scrolls);
