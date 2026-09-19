@@ -133,6 +133,9 @@ const recordSources: RecordSource[] = [
   ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb2', mode: ' · + 💥' })),
   // 《无限反转》只有基础方块和小球有。
   ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip', mode: ' · ∞' })),
+  // 《真正解密 · 步步为营》三个基础玩法都有。三角这一栏用 triangleGame 变量，
+  // 不按文件名推——菜单上的「三角」由 triangleBig.ts 造（见文件开头那几行）。
+  ...[squareGame, circleGame, triangleGame].map((g) => ({ card: g.card, suffix: '_puzzle', mode: ' · 步' })),
 ];
 
 /**
@@ -150,7 +153,14 @@ const runKeyFor: RunKeyFor = (data) => {
   if (!card) return null;
   const mk = data.modeKey;
   const bombSuffix = (data.bombRules ?? 1) >= BOMB_RULES_VERSION ? '_bomb2' : '_bomb';
-  const suffix = mk === 'flip' ? '_flip' : mk === 'bomb' || mk === 'bombTimed' ? bombSuffix : mk === 'timed' ? '_timed' : '';
+  // 步步为营排在最前面：它和炸弹、计时不会同时出现（这一局没有钟也没有炸弹），
+  // 摆在哪儿都不冲突，摆最前面是为了读起来一眼能看见「这一局另算一张榜」。
+  const suffix =
+    mk === 'puzzle' ? '_puzzle'
+    : mk === 'flip' ? '_flip'
+    : mk === 'bomb' || mk === 'bombTimed' ? bombSuffix
+    : mk === 'timed' ? '_timed'
+    : '';
   return card.bestKey + suffix;
 };
 

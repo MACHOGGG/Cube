@@ -111,11 +111,22 @@ const BASE_SHAPES = ['square', 'circle', 'triangle'];
 const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'];
 /** 炸弹这一档现在叫什么。改规则就往上加一版，老的那个名字留着当归档榜。 */
 const BOMB_KIND = 'bomb2';
-const KINDS = ['base', 'timed', BOMB_KIND, 'slot', 'flip'];
+/**
+ * 步步为营这一档。
+ *
+ * **它没有版本后缀**（不是 'puzzle1'），因为这是新开的一张榜，没有旧局要归档
+ * ——不是忘了。将来《外边消除》改了消除规则、这一局的分不再是同一把尺子量出
+ * 来的时候，再照 bomb → bomb2 那条路往上加一版，把这一张留着当归档榜。
+ */
+const PUZZLE_KIND = 'puzzle';
+const KINDS = ['base', 'timed', BOMB_KIND, 'slot', 'flip', PUZZLE_KIND];
 
 /** 这一局算哪一种。存档里那份 data 说了算（modeKey 加老虎机那个标记）。 */
 function kindOf(data) {
   const mk = String(data?.modeKey || 'base');
+  // 排在 timed 前面：步步为营这一局没有钟，modeKey 也不会是 'timed'，可顺序照
+  // 规矩摆——一局只归一档，越专的档越先问。
+  if (mk === PUZZLE_KIND) return PUZZLE_KIND;
   if (mk === 'flip') return 'flip';
   // 老档没有 bombRules，读出来是 undefined——那是第一版规则，归老榜。
   if (mk === 'bomb' || mk === 'bombTimed') return Number(data?.bombRules) >= 2 ? BOMB_KIND : 'bomb';
@@ -144,6 +155,7 @@ const GROUPS = {
   layout: LAYOUT_BOARDS,
   slot: BASE_SHAPES.map((s) => `${s}:slot`),
   flip: ['square:flip', 'circle:flip'],
+  puzzle: BASE_SHAPES.map((s) => `${s}:${PUZZLE_KIND}`),
 };
 /** 合并一张母榜时，每张子榜先取前多少名。 */
 const GROUP_SCAN = 200;

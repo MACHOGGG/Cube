@@ -3812,6 +3812,21 @@ body.is-room-host::after {
 /* 《更多玩法》里那张无限反转的图是竖长的（四层翻面叠着），窄一点才和两副
    布局的缩图差不多分量。 */
 .lay-thumb--tall { width: 72px; }
+/* 《更多玩法》现在有三张：两张一排，第三张落到第二行**左**边，和上面第一张
+   左边缘对齐（玩家定的）。
+   .lay-grid 本来是 flex + justify-content: center，第三张会居中吊在第二行正
+   中间——那不是「罗列」，是「孤零零站着」。换成两列网格之后，格子按列走，第
+   三张自然落在左边一格；整组仍然居中站在页面里（max-width + margin auto），
+   所以是「网格居中、格子左对齐」，不是把整排推到页面左边。
+   作用域**必须**带 .modes-page：.lay-grid 是和《更多布局》共用的，那一页只有
+   两张卡，两列网格对它没有意义，也不该被这一条连带改掉。 */
+.modes-page .lay-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-content: center;
+  max-width: 416px;   /* 两张 200 + 中间那道 16 */
+  margin-inline: auto;
+}
 .lay-thumb svg { width: 100%; height: auto; display: block; }
 .lay-name { font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); text-align: center; }
 /* 整页的世界排名：一块面板装那张榜（切页 + 榜），榜有多长页就多长。

@@ -25,8 +25,7 @@ import {
   ICON_FLIP_MODE,
   ICON_SLOT_MACHINE,
   layoutIcon,
-  layoutIconIsWide,
-} from './homeIcons';
+  layoutIconIsWide, ICON_PUZZLE_MODE,} from './homeIcons';
 import { shapeName } from './shapeLabels';
 import { mountBoardView } from './leaderboard';
 import { CTL_BACK } from './ctlIcons';
@@ -100,11 +99,13 @@ export function renderLayoutsShowcase(
  *  布局》同一副样子。只是陈列——真要玩还是回主菜单，那两张卡就在第二排。 */
 export function renderModesShowcase(root: HTMLElement, lang: Lang, onBack: () => void): void {
   const s = STRINGS[lang];
-  // 两张图一横一竖（老虎机 897×521，无限反转 252×519），所以各给各的宽度，
-  // 让它们在框里看着一样重。
+  // 三张图一横两竖（老虎机 897×521，无限反转 252×519，步步为营 225×472），所
+  // 以各给各的宽度，让它们在框里看着一样重——步步为营和无限反转的长宽比几乎
+  // 一样（0.477 对 0.485），用同一档宽度。
   const cards = [
     { id: 'slot', art: ICON_SLOT_MACHINE, thumb: 'lay-thumb--wide', name: s.randomTargetTitle },
     { id: 'flip', art: ICON_FLIP_MODE, thumb: 'lay-thumb--tall', name: s.flipModeTitle },
+    { id: 'puzzle', art: ICON_PUZZLE_MODE, thumb: 'lay-thumb--tall', name: s.puzzleModeTitle },
   ]
     .map(
       (m) => `<div class="lay-card" data-mode="${m.id}">

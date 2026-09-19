@@ -62,7 +62,8 @@ check('《世界排名和好友排名》改叫《世界排名》，不再敬请�
 check('没开通：做好了的五行行首都挂着锁',
   rows.randomLock && rows.targetsLock && rows.layoutsLock && rows.rankLock && rows.modesLock);
 check('《更多玩法》点得开了，右边写着里面那两个玩法',
-  rows.modes === '更多玩法' && /老虎机模式/.test(rows.modesValue) && /无限反转/.test(rows.modesValue),
+  rows.modes === '更多玩法' && /老虎机模式/.test(rows.modesValue) && /无限反转/.test(rows.modesValue) &&
+    /步步为营/.test(rows.modesValue),
   `${rows.modes} · ${rows.modesValue}`);
 check('还在敬请期待的只剩三行', rows.soon.length === 3, rows.soon.join(' / '));
 
@@ -144,7 +145,8 @@ async function backToProfile(before, label, backSel = '#backBtn') {
   check('世界排名：标题就叫世界排名', r.label === '世界排名', r.label);
   await backToProfile(before, '世界排名');
 }
-// 更多玩法：陈列页——两个圆角框并排，老虎机和无限反转；要玩得回主菜单那两张卡
+// 更多玩法：陈列页——三个圆角框，老虎机和无限反转一排，步步为营落到第二行左边；
+// 要玩得回主菜单那三张卡
 {
   const before = await openFrom('moreModesRow', '.modes-page');
   const m = await page.evaluate(() => ({
@@ -155,22 +157,31 @@ async function backToProfile(before, label, backSel = '#backBtn') {
       border: getComputedStyle(c).borderTopStyle,
       buttons: c.querySelectorAll('button').length,
       top: Math.round(c.getBoundingClientRect().top),
+      left: Math.round(c.getBoundingClientRect().left),
+      bottom: Math.round(c.getBoundingClientRect().bottom),
       nameTop: Math.round(c.querySelector('.lay-name').getBoundingClientRect().top),
     })),
     picker: Boolean(document.querySelector('.flip-page')),
     label: document.querySelector('.modes-page .menu-section-label')?.textContent.trim(),
   }));
-  check('更多玩法：两个圆角框，老虎机和无限反转，底下各写着名字',
-    m.cards.length === 2 && m.cards.map((c) => c.mode).join(',') === 'slot,flip' &&
+  check('更多玩法：三个圆角框，老虎机 / 无限反转 / 步步为营，底下各写着名字',
+    m.cards.length === 3 && m.cards.map((c) => c.mode).join(',') === 'slot,flip,puzzle' &&
       m.cards.every((c) => c.svg && c.radius >= 8 && c.border !== 'none') &&
-      m.cards[0].name === '老虎机模式' && m.cards[1].name === '无限反转',
+      m.cards[0].name === '老虎机模式' && m.cards[1].name === '无限反转' &&
+      m.cards[2].name === '真正解密 · 步步为营',
     JSON.stringify(m.cards));
-  // 并排，不是上下叠着：两张卡片的上沿在同一条线上。
-  check('更多玩法：两张并排（不换行）', Math.abs(m.cards[0].top - m.cards[1].top) <= 1,
+  // 头两张并排，不是上下叠着：卡片的上沿在同一条线上。
+  check('更多玩法：头两张并排（不换行）', Math.abs(m.cards[0].top - m.cards[1].top) <= 1,
     `${m.cards[0].top} / ${m.cards[1].top}`);
   // 两张图一横一竖，名字仍要落在同一条线上。
-  check('更多玩法：两个名字对齐', Math.abs(m.cards[0].nameTop - m.cards[1].nameTop) <= 1,
+  check('更多玩法：前两个名字对齐', Math.abs(m.cards[0].nameTop - m.cards[1].nameTop) <= 1,
     `${m.cards[0].nameTop} / ${m.cards[1].nameTop}`);
+  // 「罗列到第二行的左边对齐」这句话的机器读法（玩家定的）：第三张的左边缘和
+  // 第一张对齐，而且它确实落在第一排下面——从前 .lay-grid 是 flex + 居中，第
+  // 三张会居中吊在第二行正中间，那不是罗列，是孤零零站着。
+  check('更多玩法：第三张落在第二行，左边缘和第一张对齐',
+    Math.abs(m.cards[2].left - m.cards[0].left) <= 1 && m.cards[2].top >= m.cards[0].bottom,
+    `左 ${m.cards[0].left} / ${m.cards[2].left} · 上 ${m.cards[2].top} vs 第一张底 ${m.cards[0].bottom}`);
   check('更多玩法：只是陈列，不是挑图形页，图也按不动',
     !m.picker && m.cards.every((c) => c.buttons === 0));
   check('更多玩法：标题就叫更多玩法', m.label === '更多玩法', m.label);

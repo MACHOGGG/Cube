@@ -70,6 +70,9 @@ export function boardGroups(lang: Lang): BoardGroup[] {
     { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
     { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_THREE, 'slot') },
     { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip') },
+    // 步步为营三个基础玩法都有。这是**新开**的一张榜，没有旧局要归档，所以没
+    // 有 bomb2 那样的版本后缀（见 api/scores.js 里那段注释）。
+    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_THREE, 'puzzle') },
   ];
 }
 
