@@ -1524,8 +1524,12 @@ button:hover { filter: brightness(1.05); }
 .center-pick--in { opacity: 1; }
 /* 底下带《返回》圆盘的那一种（记录与排名点开的三块）：整层改成上下两段，面
    板在上、圆盘在下；面板的高度上限扣掉圆盘那一截，谁也不压谁。底排导航这时
-   候收起来——那一行位置正是圆盘站的地方。 */
-.center-pick--back { flex-direction: column; gap: 14px; padding-bottom: max(24px, calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))); }
+   候收起来——那一行位置正是圆盘站的地方。
+   padding-bottom 写两遍，前一行不带 max()：老内核（Chrome 61）算不了带 var()
+   的 max()，带 max() 那一行在它那儿被**整条丢掉**，圆盘就只剩 .center-pick 那
+   条简写给的 24px。写明白比靠另一个选择器的简写兜着好——那条简写哪天改了，
+   这儿会跟着悄悄变。24 正是这道式子在安全区报 0 时的结果。 */
+.center-pick--back { flex-direction: column; gap: 14px; padding-bottom: 24px; padding-bottom: max(24px, calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))); }
 .center-pick--back .center-pick-body { min-height: 0; }
 .center-pick--back .records-panel--big,
 .center-pick--back .total-card--big {
@@ -2759,6 +2763,11 @@ html.is-tutorial .home-nav { display: none; }
      the inset alone. The sides get the same treatment for a phone held
      sideways, where the island is on one edge and the home indicator on the
      other. */
+  /* 先写一条不带 max() 的。老内核（Chrome 61）算不了带 var() 的 max()，下面那
+     条整条被丢掉——棋盘四周一点留白都不剩，棋子贴着屏幕边，而这一页正是小红
+     书容器里玩家待得最久的一页。这四个数是下面那道式子在安全区报 0 时算出来的
+     结果，所以老内核上看到的和普通手机浏览器上一样。 */
+  padding: 20px 14px 16px;
   padding:
     calc(max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 14px) + 6px)
     max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), 14px)
@@ -3070,6 +3079,9 @@ html.is-playing body { background: var(--play-bg); }
     /* Sideways the island is on one of the long edges, so the generous
        margin goes on the sides; the strip above the board keeps a little
        air so the pattern row is never under it either. */
+    /* 同竖屏那条：先给一行不带 max() 的，老内核上带 max() 的整条会被丢掉。
+       clamp() 留着没关系——降级层认得它，会当场算成一个 px 数。 */
+    padding: 10px clamp(12px, 3.4vw, 34px);
     padding:
       calc(max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 8px) + 2px)
       max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), clamp(12px, 3.4vw, 34px))
@@ -3250,7 +3262,11 @@ html.is-playing body { background: var(--play-bg); }
        贡献的是 0，而这一窗本来是 max-width: 340px、宽度由内容决定的——两下
        一凑，整窗缩到只剩右边那张图那么宽，左半边被挤成一列竖着的字（量出来
        10px）。给个确定的宽度就没这回事了。 */
-    width: 100%; max-width: min(680px, 100%);
+    /* max-width 写两遍：老内核算不了 min()，带 min() 那行整条丢掉，这一窗就退
+       回 .modal 的 340px 上限——正是上面那段注释里说的「左半边被挤成一列竖着
+       的字」。前一行和后一行其实等价：width 已经是 100%，那个 100% 本来就封不
+       住什么，真正管事的只有 680。 */
+    width: 100%; max-width: 680px; max-width: min(680px, 100%);
   }
   /* 别的东西一律走左边那一列，按原来的顺序一行一行排下去。 */
   .overlay--end .modal > * { grid-column: 1; }
@@ -3566,8 +3582,12 @@ body.is-room-host::after {
   display: flex; align-items: center; gap: clamp(4px, 1.4vw, 8px);
   /* 人少的时候行不跟着抻长——两个人的名单是两行正常大小的字浮在中间，
      不是两条撑满整块的横杠。 */
-  height: min(var(--rank-line), 26px); min-height: 0;
-  font-size: min(calc(var(--rank-line) * 0.62), 15px);
+  /* 两条各写两遍，前一行不带 min()。老内核（Chrome 61）算不了这两道式子（里面
+     套着 var()），带 min() 的那行整条被丢掉：行高退回 auto、字号退回继承来的那
+     个，四行小字挤成一团。退回前一行只丢掉那个上限——人少的时候行会抻长一点，
+     谁是谁照样认得出。 */
+  height: var(--rank-line); height: min(var(--rank-line), 26px); min-height: 0;
+  font-size: calc(var(--rank-line) * 0.62); font-size: min(calc(var(--rank-line) * 0.62), 15px);
   line-height: 1;
 }
 .mp-board-row--me { font-weight: 700; }
@@ -3587,7 +3607,8 @@ body.is-room-host::after {
 .mp-board-row--gap {
   justify-content: flex-start; padding-left: 0.15em;
   opacity: 0.45; letter-spacing: 0.12em;
-  height: min(calc(var(--rank-line) * 0.7), 18px);
+  /* 同上，两行写法。 */
+  height: calc(var(--rank-line) * 0.7); height: min(calc(var(--rank-line) * 0.7), 18px);
 }
 /* ---------------------------------------------------------------------------
    交卷之后那一页
@@ -3683,6 +3704,11 @@ body.is-room-host::after {
   display: flex; align-items: center; justify-content: center;
 }
 .start-mark--wide .start-mark-art {
+  /* 两行写法：老内核算不了带 % 的 min()（百分比要看容器多宽，那是排版排到一半
+     才知道的事），带 min() 那行整条丢掉，这块画布就只剩下面 .start-mark-art 那
+     条低权重规则给的 100%。写明白比靠那条兜着好，而且 100% 正是手机上这道式子
+     的实际取值——一行本来就只有三百多，比 400 那个上限还窄。 */
+  width: 100%;
   width: min(100%, 74vh, 400px); height: auto; aspect-ratio: 194 / 100;
 }
 .start-mark-art { display: block; width: 100%; height: 100%; }
@@ -3852,7 +3878,9 @@ body.is-room-host::after {
 .mp-learn-page .mp-learn-line { margin-bottom: 10px; }
 .mp-practice-hint { margin: 10px 0 6px; text-align: center; }
 .mp-practice {
-  width: min(100%, 420px); height: clamp(220px, 44vh, 440px);
+  /* 两行写法（带 % 的 min() 算不掉，见 .start-mark-art 那段）：老内核上退回
+     100%，只丢掉 420 那个上限。 */
+  width: 100%; width: min(100%, 420px); height: clamp(220px, 44vh, 440px);
   display: flex; flex-direction: column; margin: 0 auto;
 }
 /* 真的游戏外壳装进这个小框里：外壳只剩棋盘，读数、按键、图示、开局页那一层
@@ -3898,7 +3926,8 @@ body.is-room-host::after {
 }
 .tut-shape-btn {
   --h: clamp(44px, 7vh, 62px);
-  width: min(100%, 420px); height: var(--h); padding: 0;
+  /* 同上，两行写法。 */
+  width: 100%; width: min(100%, 420px); height: var(--h); padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
@@ -4160,7 +4189,10 @@ body.is-room-host::after {
   .app.app--game.has-coach > .coach-bar {
     grid-column: 2; grid-row: -2 / -1;
     justify-self: center; align-self: end;
-    width: auto; max-width: min(100%, 560px); margin: 0;
+    /* max-width 两行写法：老内核上退回 100%，只丢掉 560 那个上限。反过来只留
+       560 是不行的——568 宽的老横屏上这一格只有四百来宽，条子里的字一长就顶出
+       格子外面。 */
+    width: auto; max-width: 100%; max-width: min(100%, 560px); margin: 0;
     padding: 5px 10px 7px; pointer-events: none;
   }
   /* 得分图示贴两边的那几个玩法：中间三列（图示 | 棋盘 | 图示）都只占第一行，
@@ -4344,6 +4376,9 @@ body.is-room-host::after {
   }
   .app.app--game.has-coach > .coach-bar {
     position: fixed;
+    /* 两行写法：老内核算不了带 var() 的 max()，退回 --coach-gap；整条丢掉的话
+       right 变成 auto，这块 position: fixed 的牌子会飘到左上角去。 */
+    right: var(--coach-gap);
     right: max(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)), var(--coach-gap));
     top: 50%; transform: translateY(-50%);
     width: var(--coach-w); max-width: none; margin: 0;

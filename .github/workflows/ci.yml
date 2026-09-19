@@ -217,3 +217,16 @@ jobs:
       # 光的透明方块」就是这么来的。读 CSS 就完了，不到一秒。
       - name: 会呼吸的光
         run: node scripts/check-glow.mjs
+      # 小红书那一版的样式降级：clamp/min/max 会被 downlevel() 当场算成 px，因为
+      # Chrome 61 不认这三个函数。算不掉的原样留着，而留着就等于在 Chrome 61 上
+      # **整条声明被丢掉**（不是退回上一条，是那条声明没有了）。所以每一条算不掉
+      # 的都必须有退路：同一处自己写了两行、baseline.css 里手写了等价规则、或者那
+      # 段代码 Chrome 61 根本走不到。三样都没有就是裸的，那就是某处排版在老内核上
+      # 无声地塌了——`--home-card-cap` 那次就是这么塌的（横屏第一张卡差 69px），
+      # 而当时唯一能验证它的门要开浏览器、还要有人先跑 preview:xhs，那一次预览页
+      # 是旧的，于是报了「全部通过」。假绿比没有门更坏。这道门不开浏览器、不看预
+      # 览页，几十毫秒。
+      - name: 降级层：算不掉的都有退路
+        run: |
+          npx esbuild xhs/src/oldKernel.ts --bundle --format=esm --outfile=/tmp/oldkernel.mjs
+          node scripts/check-downlevel.mjs /tmp/oldkernel.mjs

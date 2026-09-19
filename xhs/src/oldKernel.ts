@@ -182,6 +182,25 @@ function toPx(token: string, rootFont: number): number | null {
 /**
  * 算一段 CSS 算式，例如 `(100vh - 356px) / 3.11`、`8vw`、`100% - 2px`（最后
  * 这个会放弃）。只认 + - * / 和圆括号。算不出来返回 null。
+ *
+ * ⚠️ 不要把它「改进」成认得 var()。
+ *
+ * 看上去很顺手：算式里剩下的多半就是几个变量，照样式表里声明的值替进来不就都
+ * 算得掉了？2026-09 真动手写过一版，两百来行，然后否掉了——它一行都没修好，还
+ * 带进两个错：
+ *
+ *  · **一个变量在样式表里可以有好几个值。** `--home-row-gap` 在横屏那段媒体查询
+ *    里是 14px（style.css 里 .home-page--wide 那条 clamp 之外另写了一遍）。文本
+ *    级的替换挑不了作用域，照外面那条烘，844×390 上算出 118px，而对的是 124px
+ *    ——错的正好是最需要它算准的那批屏幕。
+ *  · **一个变量可以是 JS 当场写上去的。** `--narrow-gap` 由 menuFit.ts 按实际装
+ *    得下装不下 setProperty / removeProperty（375×667 就是靠它才排得开），
+ *    `--rank-rows` 由 scoreboard.ts 按真实人数写（排行榜的行高全靠它）。样式表
+ *    里那个值只是默认值，烘死了就等于把运行时的调整永久按掉。
+ *
+ * 今天挡住这两件事的，是 resolveFns 里「值里还含 var( 的一律跳过」那一条。算不
+ * 掉不等于坏——算不掉的声明前面都有一行老内核吃得下的兜底，或者 baseline.css 里
+ * 有一条手写的等价规则；scripts/check-downlevel.mjs 逐条盯着这件事。
  */
 function evalExpr(src: string, rootFont: number): number | null {
   const tokens = src.match(/[()+\-*/]|[\d.]+[a-z%]*/gi);
