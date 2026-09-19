@@ -1,5 +1,5 @@
 /**
- * 《解密》的步数经济和综合得分。
+ * 《真正解密 · 步步为营》的步数账本和综合得分。
  *
  *   npx esbuild src/engine/puzzleScore.ts --bundle --format=esm --outfile=/tmp/puzzle.mjs
  *   node scripts/check-puzzle.mjs /tmp/puzzle.mjs
@@ -7,12 +7,16 @@
  * 这一局和别的都不一样，所以值得单独一道门：它没有钟，结算看的是终局盘面而
  * 不是一路攒下来的分。两件事要钉住——
  *
- *   · 步数这本账：起手 3，走一步扣 1，得分退 2。得分率正好一半时不进不退，
- *     低于一半必死、高于一半能一直玩下去，这条「一半」是整个玩法的支点，
- *     动了 PUZZLE_STEP_COST 或 PUZZLE_STEP_REWARD 就会挪，得有人喊一声。
- *   · 综合得分：(被消除 × 10 + 星星 × 5) × (1 + 有效得分率/100)。别的玩法那
- *     条四项连乘里的时间系数和未翻面惩罚在这儿是有意去掉的（理由写在
+ *   · **步数这本账**：起手 8，走一步扣 1，得分退 1，上一步也得分再退 1，这一
+ *     步消了边再退 1，不封顶。所以孤立的一次得分只够回本（净 0），手里的步数
+ *     只能靠「连得上」和「消边」长出来。
+ *   · **综合得分**：(被消除 × 10 + 星星 × 5) × (1 + 有效得分率/100)。别的玩法
+ *     那条四项连乘里的时间系数和未翻面惩罚在这儿是有意去掉的（理由写在
  *     puzzleScore.ts 里），这道门顺便把「没有偷偷混进来」也一起钉住。
+ *
+ * ⚠️ 这道门在 2026-09 整段重写过。旧的那一版钉的是 3/1/2 那一套，里头有一条
+ * 「得分率正好一半时不进不退」——**新规则下 50% 是会死的**（第 4 节量出来是 15
+ * 步就耗尽）。谁把这句话从哪儿抄回来，就是把旧规则抄回来了。
  *
  * 不碰 DOM、不开浏览器，进得了 CI。
  */
@@ -27,6 +31,8 @@ const {
   PUZZLE_START_STEPS,
   PUZZLE_STEP_COST,
   PUZZLE_STEP_REWARD,
+  PUZZLE_STREAK_BONUS,
+  PUZZLE_EDGE_BONUS,
   PUZZLE_CLEARED_POINTS,
   PUZZLE_STAR_POINTS,
 } = await import(src);
@@ -40,42 +46,109 @@ const check = (name, ok, extra = '') => {
 // ---------------------------------------------------------------------------
 // 1. 几个数就是玩家定的那几个
 // ---------------------------------------------------------------------------
-check('起手 3 步', PUZZLE_START_STEPS === 3, String(PUZZLE_START_STEPS));
+check('起手 8 步', PUZZLE_START_STEPS === 8, String(PUZZLE_START_STEPS));
 check('走一步扣 1', PUZZLE_STEP_COST === 1, String(PUZZLE_STEP_COST));
-check('得分退 2', PUZZLE_STEP_REWARD === 2, String(PUZZLE_STEP_REWARD));
+check('得分退 1', PUZZLE_STEP_REWARD === 1, String(PUZZLE_STEP_REWARD));
+check('上一步也得分，再退 1', PUZZLE_STREAK_BONUS === 1, String(PUZZLE_STREAK_BONUS));
+check('这一步消了边，再退 1', PUZZLE_EDGE_BONUS === 1, String(PUZZLE_EDGE_BONUS));
 check('被消除的一枚 10 分', PUZZLE_CLEARED_POINTS === 10, String(PUZZLE_CLEARED_POINTS));
 check('星星一枚 5 分', PUZZLE_STAR_POINTS === 5, String(PUZZLE_STAR_POINTS));
+// 扣 1 退 1 就是「孤立得分只够回本」这条骨架。它一动，整个玩法的支点就挪了
+// （见第 4 节），得有人喊一声。
+check('扣 1 退 1：孤立的一次得分净变化是 0', PUZZLE_STEP_REWARD === PUZZLE_STEP_COST);
 
 // ---------------------------------------------------------------------------
-// 2. 步数这本账
+// 2. 步数账本：§1.2 那张净变化表，一格一格对
 // ---------------------------------------------------------------------------
 {
   const bank = createStepBank();
-  check('开局手里 3 步', bank.left() === 3, String(bank.left()));
+  check('开局手里 8 步', bank.left() === 8, String(bank.left()));
   check('还没走，spent 是 0', bank.spent() === 0);
-
-  check('空走一步：剩 2', bank.spend(false) === 2);
-  check('再空走一步：剩 1', bank.spend(false) === 1);
-  check('第三步空走：剩 0，到头了', bank.spend(false) === 0);
-  check('走过三步', bank.spent() === 3, String(bank.spent()));
-  // 到 0 之后不该变成负数——界面上那个读数是直接印出来的。
-  check('已经 0 了再走也不会变负', bank.spend(false) === 0);
+  check('空走一步：8 → 7（净 −1）', bank.spend(false) === 7, String(bank.left()));
+}
+{
+  // 这一串是连着走的同一局，所以「上一步有没有得分」才量得出来。
+  const bank = createStepBank();
+  check('孤立得分：8 → 8（1 − 1 + 1，净 0）', bank.spend(true) === 8, String(bank.left()));
+  check('接着再得分（连上了）：8 → 9（净 +1）', bank.spend(true) === 9, String(bank.left()));
+  check('接着得分且消边：9 → 11（净 +2）', bank.spend(true, { edge: true }) === 11, String(bank.left()));
+  check('接着空走：11 → 10', bank.spend(false) === 10, String(bank.left()));
+  check('再得分（上一步没得分，链断了）：10 → 10（净 0）', bank.spend(true) === 10, String(bank.left()));
+  // 结算页那句「最多攒到 X 步」读的是这个，不是最后剩下的那个数。
+  check('峰值记的是攒到过最多的那一下（11），不是收尾的 10', bank.peak() === 11, String(bank.peak()));
+  check('走过五步，其中四步得分', bank.spent() === 5 && bank.scoredMoves() === 4,
+    `${bank.spent()} 步 / ${bank.scoredMoves()} 步得分`);
 }
 {
   const bank = createStepBank();
-  check('得分的那一步：1 − 1 + 2，净赚一步（3 → 4）', bank.spend(true) === 4, String(bank.left()));
-  check('连锁几拍也只退一次 2 步', bank.spend(true) === 5, String(bank.left()));
+  check('首步就得分且消边：8 → 9（首步没有「上一步」，只有消边那一下）',
+    bank.spend(true, { edge: true }) === 9, String(bank.left()));
 }
 {
   // 手里只剩一步时得分：先扣后退，不该出现负数的中间态。
   const bank = createStepBank(1);
-  check('只剩一步时得分：1 − 1 + 2 = 2', bank.spend(true) === 2, String(bank.left()));
+  check('剩 1 步时得分：1 → 1（用掉一步又赚回一步）', bank.spend(true) === 1, String(bank.left()));
+}
+{
+  const bank = createStepBank(1);
+  check('剩 1 步时空走：1 → 0，这一局到头了', bank.spend(false) === 0, String(bank.left()));
+  // 到 0 之后不该变成负数——界面上那个读数是直接印出来的。
+  check('已经 0 了再走也不会变负', bank.spend(false) === 0, String(bank.left()));
+}
+{
+  // reset() 要把「上一步得分了」这件事也一起忘掉，不然下一局的第一步会白拿
+  // 一份连续奖励（这一局是按局重开的，同一个 bank 会被用好几遍）。
+  const bank = createStepBank();
+  bank.spend(true);
+  bank.spend(true);
+  bank.reset();
+  check('reset 之后回到开局：8 步、spent 0、峰值也回去', 
+    bank.left() === 8 && bank.spent() === 0 && bank.peak() === 8,
+    `${bank.left()} / ${bank.spent()} / ${bank.peak()}`);
+  check('reset 之后第一步得分只是回本（连续奖励没被带过来）', bank.spend(true) === 8, String(bank.left()));
 }
 
 // ---------------------------------------------------------------------------
-// 3. 「一半」这个支点：得分率决定能不能一直玩下去
+// 3. 「上一步有没有得分」由账本自己记
 // ---------------------------------------------------------------------------
-/** 按固定的得分率一路走下去，返回走了多少步才把步数用光（上限 500 步）。 */
+//
+// 这是整套接线里最容易接错的一处：resolveMove 里到处都是这一拍那一拍的局部变
+// 量，传错一个就成了「按拍算连续」。所以 prevScored 不让调用方传进来，记在账
+// 本里——连着调三次 spend(true) 就能整段验出来：第一次只回本，第二、三次都必
+// 须多退 1。
+{
+  const bank = createStepBank();
+  const a = bank.spend(true);
+  const b = bank.spend(true);
+  const c = bank.spend(true);
+  check('连调三次 spend(true)：8 → 8 → 9 → 10', a === 8 && b === 9 && c === 10, `${a} / ${b} / ${c}`);
+  check('多退回来的两步记在连续账上', bank.streakRefunds() === 2, String(bank.streakRefunds()));
+  check('一次都没消边，消边账是 0', bank.edgeRefunds() === 0, String(bank.edgeRefunds()));
+}
+{
+  // 第二个参数是可选的：不传 ctx 和传 {} 必须一模一样（接线时漏传不该白拿一步）。
+  const x = createStepBank();
+  const y = createStepBank();
+  check('spend 的第二个参数可以不传，和传 {} 等价',
+    x.spend(true) === y.spend(true, {}) && x.edgeRefunds() === y.edgeRefunds());
+  // 没得分的那一步就算「消了边」也什么都不退——没得分就没有消边这件事。
+  const z = createStepBank();
+  check('没得分的一步，带 edge 也不退（8 → 7）', z.spend(false, { edge: true }) === 7, String(z.left()));
+  check('没得分的一步不记消边账', z.edgeRefunds() === 0, String(z.edgeRefunds()));
+}
+
+// ---------------------------------------------------------------------------
+// 4. 支点：不再是「一半」
+// ---------------------------------------------------------------------------
+//
+// 旧的 3/1/2 那一版，每两步中一次就能永生。新这一版孤立得分只够回本，所以
+// 50% 是会死的——下面量出来是 15 步。手里的步数只能靠「连得上」和「消边」长
+// 出来，这就是这个玩法和别的玩法的分界线。
+//
+// （随机走时不进不退的那个概率是 p + p² = 1，也就是 p ≈ 0.618。这道门不模拟
+// 随机，只钉住三条确定的节律——固定节律下「每两步中一次」的连续得分恰好一次
+// 也凑不出来，所以它比 0.618 那个说法更难看，这是对的。）
+/** 按固定的节律一路走下去，返回走了多少步才把步数用光（上限 500 步）。 */
 function survive(hitEveryN) {
   const bank = createStepBank();
   let n = 0;
@@ -85,19 +158,23 @@ function survive(hitEveryN) {
   }
   return n;
 }
-check('每两步中一次（50%）：不进不退，走满 500 步还活着', survive(2) === 500, `${survive(2)} 步`);
-check('每三步中一次（33%）：撑不住，几步就完', survive(3) < 20, `${survive(3)} 步`);
-check('步步得分（100%）：一直活着', survive(1) === 500, `${survive(1)} 步`);
+check('一次不中：正好走 8 步', survive(Infinity) === 8, `${survive(Infinity)} 步`);
+check('每两步中一次（50%）：15 步耗尽——旧规则下这是永生，新规则下不是了',
+  survive(2) === 15, `${survive(2)} 步`);
+check('每三步中一次：11 步', survive(3) === 11, `${survive(3)} 步`);
+check('步步得分：走满 500 步还活着', survive(1) === 500, `${survive(1)} 步`);
 {
-  // 一次不中：起手三步，走三步到头，不多不少。
+  // 没有封顶。玩家明确否掉了《封顶》这条规则，这一条就是哨兵：步步得分走满
+  // 100 步，手里必须正好 107 步（= 8 + 99，头一步只回本，后 99 步各净 +1）。
+  // 谁「为了安全」偷偷加一个上限，这里立刻红。
   const bank = createStepBank();
-  let n = 0;
-  while (bank.left() > 0 && n < 50) { n++; bank.spend(false); }
-  check('一次不中：正好走三步', n === 3, `${n} 步`);
+  for (let i = 0; i < 100; i++) bank.spend(true);
+  check('步步得分 100 步之后手里 107 步（没有封顶）', bank.left() === 107, String(bank.left()));
+  check('那 99 步的连续奖励都记上了', bank.streakRefunds() === 99, String(bank.streakRefunds()));
 }
 
 // ---------------------------------------------------------------------------
-// 4. 综合得分
+// 5. 综合得分
 // ---------------------------------------------------------------------------
 check('一枚没动：0 分', puzzleComposite({ cleared: 0, stars: 0, ratePercent: 0 }) === 0);
 check(
@@ -131,6 +208,12 @@ check(
   const plain = puzzleComposite({ cleared: 2, stars: 3, ratePercent: 40 });
   const withPile = puzzleComposite({ cleared: 2, stars: 3, ratePercent: 40, neverFlipped: 29 });
   check('盘上剩 29 枚没翻的，一分不扣', plain === withPile && plain === 49, `${plain} vs ${withPile}`);
+}
+// 没有钟，所以也不许有时间系数。同上，真喂一个进去看它动不动分。
+{
+  const plain = puzzleComposite({ cleared: 2, stars: 3, ratePercent: 40 });
+  const slow = puzzleComposite({ cleared: 2, stars: 3, ratePercent: 40, seconds: 900, timeFactor: 0.2 });
+  check('磨了十五分钟也不打折（这一局没有钟）', plain === slow, `${plain} vs ${slow}`);
 }
 check('得分率是负的当 0 算，不会算出负分', puzzleComposite({ cleared: 1, stars: 0, ratePercent: -50 }) === 10);
 
