@@ -85,6 +85,16 @@ jobs:
         run: |
           npx esbuild src/engine/stalemate.ts --bundle --format=esm --outfile=/tmp/stalemate.mjs
           node scripts/check-stalemate.mjs /tmp/stalemate.mjs
+      # 主菜单鱼眼转盘的三份纯函数地基（形变 / 弹簧 / 滚轮归一化）。这三样出错
+      # 不会白屏、不会报错，只会让转盘「选中框没对准图标」「环合不上裂一道缝」
+      # 「鼠标一格跳一下、触控板顺滑滑行」——都是看着像设计如此的毛病，只有拿数
+      # 去量才认得出来。纯逻辑、几十毫秒。
+      - name: 鱼眼转盘的形变与输入
+        run: |
+          npx esbuild src/engine/fisheye.ts --bundle --format=esm --outfile=/tmp/fisheye.mjs
+          npx esbuild src/engine/spring.ts --bundle --format=esm --outfile=/tmp/spring.mjs
+          npx esbuild src/engine/wheelSpin.ts --bundle --format=esm --outfile=/tmp/spin.mjs
+          node scripts/check-fisheye.mjs /tmp/fisheye.mjs /tmp/spring.mjs /tmp/spin.mjs
       # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
       # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
       # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。
