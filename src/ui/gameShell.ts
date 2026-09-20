@@ -571,6 +571,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       // 无限反转局：第 4、5 条讲的事那一局不会发生（星星同色不消除、也不会全
       // 部翻成星星就结束），整条抽掉，剩下四条重新编号。
       omitRules: meta.flip ? [4, 5] : undefined,
+      // 第 3 条那一局也要换一句：纯星星的图案在那儿不得分（见 i18n 的
+      // TUTORIAL_RULE3_FLIP）。
+      flip: meta.flip,
     });
   });
 

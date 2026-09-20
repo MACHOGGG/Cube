@@ -31,8 +31,8 @@ export const RULES: Record<Lang, RuleBook> = {
     modesHeading: '各玩法的差别',
     general: [
       { term: '滑动', body: '拖动一整条线，整条线一起循环移动，滑出棋盘的部分从另一端补回来。' },
-      { term: '得分', body: '一条线上连续 4 个同色（不分正反面）得 4 分，连得更长按实际枚数得分。每种玩法还有自己的块状图案，见下。' },
-      { term: '必须有色块', body: '得分图案至少要含 1 个还是色块的图形。全是星星的图案不再得分，所以把同一组反复滑回原样是刷不到分的。' },
+      { term: '得分', body: '一条线上连续 4 个同色（色块和星星都算）得 4 分，连得更长按实际枚数得分。每种玩法还有自己的块状图案，见下。' },
+      { term: '星星也能单独成图案', body: '图案里还有色块时，算分和从前一模一样：按枚数算，色块变成星星，星星留在原地。整组都是星星的图案也得分，按星星枚数的平方算（4 颗 16 分、5 颗 25 分、2×3 那一块 6 颗 36 分），算完这几颗从棋盘上消除——所以同一批星星凑不出第二次分，把一组反复滑回原样也刷不到分。《无限反转》例外：那一局的图案里必须有色块。' },
       { term: '变成星星', body: '得分的图形变成星星，之后按星星的颜色继续参与配对。' },
       { term: '整线奖励', body: '一整条线（长度 ≥3）全部变成星星且颜色相同时，额外得「线长 × 线长」分，该线随后消除或变成空白。' },
       { term: '连击', body: '连续多步得分依次 ×1、×1.5、×2、×2.5……每多连一步就多 0.5 倍；某一步没得分就从 ×1 重新开始。' },
@@ -59,8 +59,8 @@ export const RULES: Record<Lang, RuleBook> = {
     modesHeading: '各玩法的差別',
     general: [
       { term: '滑動', body: '拖動一整條線，整條線一起循環移動，滑出棋盤的部分從另一端補回來。' },
-      { term: '得分', body: '一條線上連續 4 個同色（不分正反面）得 4 分，連得更長按實際枚數得分。每種玩法還有自己的塊狀圖案，見下。' },
-      { term: '必須有色塊', body: '得分圖案至少要含 1 個還是色塊的圖形。全是星星的圖案不再得分，所以把同一組反覆滑回原樣是刷不到分的。' },
+      { term: '得分', body: '一條線上連續 4 個同色（色塊和星星都算）得 4 分，連得更長按實際枚數得分。每種玩法還有自己的塊狀圖案，見下。' },
+      { term: '星星也能單獨成圖案', body: '圖案裡還有色塊時，算分和從前一模一樣：按枚數算，色塊變成星星，星星留在原地。整組都是星星的圖案也得分，按星星枚數的平方算（4 顆 16 分、5 顆 25 分、2×3 那一塊 6 顆 36 分），算完這幾顆從棋盤上消除——所以同一批星星湊不出第二次分，把一組反覆滑回原樣也刷不到分。《無限反轉》例外：那一局的圖案裡必須有色塊。' },
       { term: '變成星星', body: '得分的圖形變成星星，之後按星星的顏色繼續參與配對。' },
       { term: '整線獎勵', body: '一整條線（長度 ≥3）全部變成星星且顏色相同時，額外得「線長 × 線長」分，該線隨後消除或變成空白。' },
       { term: '連擊', body: '連續多步得分依次 ×1、×1.5、×2、×2.5……每多連一步就多 0.5 倍；某一步沒得分就從 ×1 重新開始。' },
@@ -88,7 +88,7 @@ export const RULES: Record<Lang, RuleBook> = {
     general: [
       { term: 'Sliding', body: 'Drag a whole line. It moves as one and wraps around: whatever slides off one end comes back on the other.' },
       { term: 'Scoring', body: 'Four in a row of the same colour (face or dot side, either counts) scores 4. A longer run scores its actual length. Each mode adds its own block patterns — see below.' },
-      { term: 'Needs a coloured piece', body: 'A scoring pattern must contain at least one piece still showing a colour. A pattern made entirely of stars never scores, so sliding the same group back into shape cannot farm points.' },
+      { term: 'Stars can form a shape on their own', body: 'While a shape still holds a coloured piece, scoring works exactly as before: points by piece count, the coloured pieces become stars, the stars stay put. A shape made only of stars scores as well — the star count squared (4 stars 16, 5 stars 25, a 2×3 block of 6 stars 36) — and those stars are then cleared from the board, so the same stars can never score twice and sliding one group back into shape cannot farm points. Endless Flip is the exception: there a shape must hold a coloured piece.' },
       { term: 'Turning into a star', body: 'Pieces that score turn into stars and keep playing, now matching on the star\'s colour.' },
       { term: 'Full-line bonus', body: 'When a whole line (3 or longer) is all dot-faced in one dot colour, it pays its length squared, then clears or turns blank.' },
       { term: 'Streak', body: 'Consecutive scoring moves pay ×1, ×1.5, ×2, ×2.5 and so on — half a multiplier more each time. One move without a score resets it to ×1.' },
@@ -116,7 +116,7 @@ export const RULES: Record<Lang, RuleBook> = {
     general: [
       { term: 'Glisser', body: 'Faites glisser une ligne entière. Elle se déplace d\'un bloc et boucle : ce qui sort d\'un côté revient de l\'autre.' },
       { term: 'Marquer', body: 'Quatre pièces de la même couleur à la suite (face ou revers, peu importe) valent 4 points ; une suite plus longue vaut sa longueur réelle. Chaque mode ajoute ses propres motifs compacts — voir plus bas.' },
-      { term: 'Une pièce colorée obligatoire', body: 'Un motif ne marque que s\'il contient au moins une pièce encore colorée. Un motif entièrement fait d\'étoiles ne rapporte rien : refaire glisser le même groupe ne permet donc pas de farmer des points.' },
+      { term: 'Les étoiles peuvent former un motif à elles seules', body: 'Tant qu\'un motif contient une pièce colorée, le calcul ne change pas : des points selon le nombre de pièces, les pièces colorées deviennent des étoiles, les étoiles restent en place. Un motif entièrement fait d\'étoiles marque aussi — le nombre d\'étoiles au carré (4 étoiles 16, 5 étoiles 25, un bloc 2×3 de 6 étoiles 36) — puis ces étoiles disparaissent du plateau : les mêmes étoiles ne peuvent donc jamais marquer deux fois, et refaire glisser un groupe ne permet pas de farmer des points. Exception, Retournement infini : là, un motif doit contenir une pièce colorée.' },
       { term: 'Devenir une étoile', body: 'Les pièces qui marquent deviennent des étoiles et continuent de jouer, en s\'associant désormais par la couleur de l\'étoile.' },
       { term: 'Bonus de ligne', body: 'Quand une ligne entière (3 ou plus) est faite d\'étoiles d\'une seule couleur, elle rapporte sa longueur au carré, puis disparaît ou devient vierge.' },
       { term: 'Série', body: 'Les coups gagnants consécutifs valent ×1, ×1,5, ×2, ×2,5… soit un demi-multiplicateur de plus à chaque fois. Un coup sans point remet la série à ×1.' },

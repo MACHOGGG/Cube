@@ -144,6 +144,12 @@ export interface RulesModalOptions {
    * 剩下的几条重新从 1 编号——他看见的是 1234，不是 1236。
    */
   omitRules?: readonly number[];
+  /**
+   * 《无限反转》局：第 3 条换成那一局的说法（纯星星的图案在那儿不得分，见
+   * i18n 的 TUTORIAL_RULE3_FLIP）。和 omitRules 分开两个参数——一个是「抽掉整
+   * 条」，一个是「换一句」，混在一起以后谁也想不起来哪条是哪。
+   */
+  flip?: boolean;
   /** 关掉之后回哪儿。 */
   onClose?: () => void;
   /**
@@ -172,7 +178,7 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   const omit = new Set(opts.omitRules ?? []);
   // 先配好图再筛：配图是按**原来的**条号排的（第 3 条那幅画的就是第 3 条的
   // 事），筛完再按下标去取就会错位。
-  const rules = (shape ? tutorialRules(lang, shape) : TUTORIAL_RULES[lang])
+  const rules = (shape ? tutorialRules(lang, shape, opts.flip) : TUTORIAL_RULES[lang])
     .map((text, i) => ({ text, art: art[i] ?? '' }))
     .filter((_, i) => !omit.has(i + 1));
   // 两颗分镜键上的字。图本身带着 Illustrator 留下的 <title>编组</title>，光靠

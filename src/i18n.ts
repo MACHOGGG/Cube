@@ -1759,11 +1759,21 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * 六条规则：教学条（ui/coachBar.ts）、《怎么玩》那一屏（ui/rulesModal.ts）、
  * 教学挑选页，三处念的都是这一份；网页版和小红书版也是这一份。
  *
- * 第 3 条尾巴上那句「但图案里至少要有一个正面」是 2026-09 补的。这条规矩
- * 引擎里一直就在（engine/scoring.ts：一个图案里没有正面就不给分，所以每次
- * 得分都必然翻动一枚，把同一组滑回原样刷不到分），《游戏规则》那本词条里也
- * 早写着（rules.ts 的「必须有正面」）——只有玩家真会读的这六条漏了它。漏掉
- * 的后果是玩家会以为「反面同色也算」，凑了一组全反面的却不给分，看着像 bug。
+ * 第 3 条的尾巴改过两次，记在这儿：
+ *
+ *   · 2026-09 先补上「但图案里至少要有一个色块」——那条规矩引擎里一直就在，
+ *     《游戏规则》里也早写着，只有玩家真会读的这六条漏了它。漏掉的后果是玩
+ *     家以为「星星同色也算」，凑了一组全星星的却不给分，看着像 bug。
+ *   · 同月《星星跟随色块消除》上线之后，这句话自己变成了假话：整组都是星星
+ *     的图案**现在能得分**了，按星星枚数的平方算，那几颗随后从棋盘上消除
+ *     （engine/groupScore.ts + scoring.ts 的 clearStars）。所以第 3 条现在讲
+ *     的是两件事：混合组一分不变，纯星星组另算一套。
+ *     漏掉它的后果和上一次正好反过来——玩家不知道凑纯星星值钱得多（4 颗就
+ *     16 分，而 4 枚色块只有 4 分），整局都在做低分的事。
+ *
+ * 《无限反转》是唯一的例外：那一局 toggleOnMatch 开着，纯星星组不得分（见
+ * scoring.ts 的 starsScore）。所以它的《怎么玩》换用下面那条
+ * TUTORIAL_RULE3_FLIP，讲的还是老规矩。
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 只有两个词：色块、星星
@@ -1786,7 +1796,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
     'A piece that scores turns into a star. Which colour the star gets is random.',
     'Line up pieces of one colour into a scoring shape and you score.',
-    'A star of that same colour counts too, and scores again — but a shape must always hold at least one coloured piece.',
+    'A star of that same colour counts too, and scores again. A shape made only of stars scores as well — the star count squared, so 4 stars are worth 16 — and those stars then vanish.',
     'Stars of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
     'The game ends when every piece is a star — or when no scoring shape is left to make.',
     'Less time, fewer moves, more points: a higher total score.',
@@ -1794,7 +1804,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   fr: [
     'Une pièce qui marque devient une étoile. Sa couleur est tirée au hasard.',
     'Alignez des pièces d’une même couleur en un motif : vous marquez.',
-    'Une étoile de cette même couleur compte aussi et marque à nouveau — mais un motif doit toujours contenir au moins une pièce colorée.',
+    'Une étoile de cette même couleur compte aussi et marque à nouveau. Un motif fait uniquement d’étoiles marque également — le nombre d’étoiles au carré, donc 4 étoiles valent 16 — puis ces étoiles disparaissent.',
     'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
     'La partie s’arrête quand toutes les pièces sont des étoiles — ou quand plus aucun motif ne peut être formé.',
     'Moins de temps, moins de coups, plus de points : meilleur score total.',
@@ -1802,7 +1812,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   zhHant: [
     '色塊得分後會變成星星；星星是什麼顏色，隨機。',
     '同色湊成得分圖案就得分。',
-    '星星和色塊顏色一樣時，也能一起湊圖案，再得一次分；但圖案裡至少要有一個色塊。',
+    '星星和色塊顏色一樣時，也能一起湊圖案，再得一次分。整組都是星星也能得分——按星星個數的平方算，4 顆就是 16 分，那幾顆隨後消失。',
     '星星同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
     '全部變成星星，這一局結束；再也湊不出得分圖案，也結束。',
     '時間越短、步數越少、得分越高，綜合得分越高。',
@@ -1810,7 +1820,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
   zhHans: [
     '色块得分后会变成星星；星星是什么颜色，随机。',
     '同色凑成得分图案就得分。',
-    '星星和色块颜色一样时，也能一起凑图案，再得一次分；但图案里至少要有一个色块。',
+    '星星和色块颜色一样时，也能一起凑图案，再得一次分。整组都是星星也能得分——按星星个数的平方算，4 颗就是 16 分，那几颗随后消失。',
     '星星同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
     '全部变成星星，这一局结束；再也凑不出得分图案，也结束。',
     '时间越短、步数越少、得分越高，综合得分越高。',
@@ -1874,11 +1884,35 @@ export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   },
 };
 
-/** 教学条那一局要念的六条：第 4 条换成这个形状自己那一句，其余照通稿。 */
-export function tutorialRules(lang: Lang, shape: RuleShape): string[] {
+/**
+ * 《无限反转》那一局的第 3 条。
+ *
+ * 那一局 toggleOnMatch 开着：得分只是把这一组来回翻，星星同色**不**消除，纯
+ * 星星的图案也不得分（engine/scoring.ts 的 starsScore 要求 !toggleOnMatch）。
+ * 所以通稿第 3 条后半句「整组都是星星也能得分」在那一局是假话，换成这一条
+ * ——它正是 2026-09 之前全站通用的那句。
+ *
+ * 第 4、5 条那一局整条抽掉（ui/rulesModal.ts 的 omitRules），这一条不能抽：
+ * 星星和色块一起凑图案在那一局照样成立，抽掉他就不知道星星还算数。
+ */
+export const TUTORIAL_RULE3_FLIP: Record<Lang, string> = {
+  en: 'A star of that same colour counts too, and scores again — but a shape must always hold at least one coloured piece.',
+  fr: 'Une étoile de cette même couleur compte aussi et marque à nouveau — mais un motif doit toujours contenir au moins une pièce colorée.',
+  zhHant: '星星和色塊顏色一樣時，也能一起湊圖案，再得一次分；但圖案裡至少要有一個色塊。',
+  zhHans: '星星和色块颜色一样时，也能一起凑图案，再得一次分；但图案里至少要有一个色块。',
+};
+
+/**
+ * 教学条那一局要念的六条：第 4 条换成这个形状自己那一句，其余照通稿。
+ *
+ * flip = 《无限反转》：第 3 条也要换（见 TUTORIAL_RULE3_FLIP）。教学条本身走
+ * 不到这一路（那一局摆的是一句 MODE_TIPS，不是六条），用它的是《怎么玩》。
+ */
+export function tutorialRules(lang: Lang, shape: RuleShape, flip = false): string[] {
   const base = TUTORIAL_RULES[lang] ?? TUTORIAL_RULES.zhHans;
   const four = (TUTORIAL_RULE4[lang] ?? TUTORIAL_RULE4.zhHans)[shape];
-  return base.map((t, i) => (i === 3 ? four : t));
+  const three = TUTORIAL_RULE3_FLIP[lang] ?? TUTORIAL_RULE3_FLIP.zhHans;
+  return base.map((t, i) => (i === 3 ? four : i === 2 && flip ? three : t));
 }
 
 /**

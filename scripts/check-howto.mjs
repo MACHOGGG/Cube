@@ -88,6 +88,22 @@ check(
   r.texts.every((t) => !/反面|正面|翻面/.test(t)),
   JSON.stringify(r.texts.filter((t) => /反面|正面|翻面/.test(t))),
 );
+// 《星星跟随色块消除》上线之后，第 3 条必须讲到「整组都是星星也能得分」。
+//
+// 漏掉它的后果不是看不懂，是**玩家整局都在做低分的事**：凑一组纯星星 4 颗就
+// 16 分，而 4 枚色块只有 4 分。而且这一条上线那天，第 3 条原来的尾巴（「但图
+// 案里至少要有一个色块」）当场变成了假话——规则改了、文案没跟上，这道门就是
+// 为了不让那种事再悄悄过去。
+check(
+  '基础方块：第 3 条讲了「整组都是星星也能得分」',
+  /整组都是星星/.test(r.texts[2]) && /16/.test(r.texts[2]),
+  r.texts[2],
+);
+check(
+  '基础方块：第 3 条不再写「至少要有一个色块」（那句现在是假的）',
+  !/至少要有一个色块/.test(r.texts[2]),
+  r.texts[2],
+);
 await closeAll();
 
 // ── 2. 无限反转 ──────────────────────────────────────────────────────
@@ -99,6 +115,14 @@ r = await openHowto();
 check('无限反转：只剩四条，编号 1234', r.nums.join(',') === '1,2,3,4', r.nums.join(','));
 check('无限反转：不再讲整行消除', !r.texts.some((t) => t.includes('消除')), JSON.stringify(r.texts.map((t) => t.slice(0, 10))));
 check('无限反转：不再讲「全部翻成星星就结束」', !r.texts.some((t) => t.includes('全部翻成星星')), '');
+// 反过来的一条：纯星星的图案在**这一局**不得分（toggleOnMatch 开着，见
+// engine/scoring.ts 的 starsScore），所以这一屏绝不能出现基础局那句「整组都是
+// 星星也能得分」，第 3 条要换回老说法（i18n 的 TUTORIAL_RULE3_FLIP）。
+check(
+  '无限反转：第 3 条讲的是老规矩「至少要有一个色块」',
+  r.texts.some((t) => /至少要有一个色块/.test(t)) && !r.texts.some((t) => /整组都是星星/.test(t)),
+  JSON.stringify(r.texts.map((t) => t.slice(0, 16))),
+);
 check('无限反转：底下只一条，写着《无限反转》', r.extras.length === 1 && r.extras[0].tag === '无限反转', JSON.stringify(r.extras));
 await closeAll();
 
