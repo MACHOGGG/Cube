@@ -681,12 +681,35 @@ export function createTriangleAdvancedGame(): ShapeGame {
         }
       }
 
+      /**
+       * 一组**整组都是星星**的图案得分了：这几格从棋盘上拿掉，留空位。
+       *
+       * 和整行奖励那条路（applyLineBonus）用的是同一套写法——先把 dotColor 存进
+       * pendingBlankSnapshot，淡出动画靠它画出「消失前长什么样」那一帧
+       * （playBlankTransition），然后把 color / dotColor 都打成 BLANK，于是
+       * isBlank 那六处（渲染、移动合法性、卡死判定、liveTiles、拖拽预览、
+       * anyBlank）自动全都认得它。
+       *
+       * 这个「消除」同时是这条规则的防刷分闸：星星从盘上没了，同一批星星凑不回
+       * 同一个形状。
+       */
+      function clearStarGroup(cells: Cell[]) {
+        for (const [r, c] of cells) {
+          const t = grid[r][c];
+          if (isBlank(t)) continue;
+          pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
+          t.color = BLANK;
+          t.dotColor = BLANK;
+        }
+      }
+
       function buildCascadeConfig(): CascadeConfig {
         return {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
           onLineBonus: applyLineBonus,
+          clearStars: clearStarGroup,
           resetMaskOnLineBonus: false,
         };
       }
@@ -764,9 +787,12 @@ export function createTriangleAdvancedGame(): ShapeGame {
         snapshotBoard,
         highlightStuck,
         onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
-        onCascadeStepRendered: ({ lineBonusGroups }) => {
-          if (lineBonusGroups.length) {
-            playBlankTransition(lineBonusGroups, pendingBlankSnapshot);
+        // 按快照有没有东西判断，不按「这一拍有没有整行奖励」——整组星星得分也会
+        // 往快照里塞东西，而它走的是 matchGroups 那条路。两个列表都传进去，
+        // playBlankTransition 自己会跳过快照里没有的格子。
+        onCascadeStepRendered: ({ lineBonusGroups, matchGroups }) => {
+          if (pendingBlankSnapshot.size) {
+            playBlankTransition([...lineBonusGroups, ...matchGroups], pendingBlankSnapshot);
             pendingBlankSnapshot = new Map();
           }
         },

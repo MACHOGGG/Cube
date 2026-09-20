@@ -105,6 +105,22 @@ export interface CascadeConfig {
    * weight 也不记（这个回调不碰分数），所以计分和「有效得分率」的口径不变。
    */
   afterCommit?(scored: Cell[]): Cell[];
+  /**
+   * 一组**整组都是星星**的图案得分了——把这几格从棋盘上拿掉（留空位）。
+   *
+   * 这是《星星跟随色块消除》里唯一的新机制。普通的一组（里头有色块）照旧：色块
+   * 翻成星星，星星留在原地，分也照旧是 max(4, 整组枚数)。只有整组都是星星的那一
+   * 种按星星枚数平方给分，然后**消除**。
+   *
+   * 「消除」这件事同时也是这条规则的防刷分闸：星星从棋盘上没了，同一批星星就凑
+   * 不回同一个形状，所以不需要另记一本账（对比 createToggleLedger——无限反转翻过
+   * 去还能翻回来，那边才需要账本）。
+   *
+   * 不实现这个回调 = 这副棋盘不开「星星单独成图案」，整组星星照旧不给分。八副
+   * 棋盘现在都实现了；留成可选是为了让「没实现就退回老行为」这件事在类型上成立，
+   * 而不是靠记性。
+   */
+  clearStars?(cells: Cell[]): void;
 }
 
 /** 无限反转里同一组棋子最多连着给几次分：正面一次、翻过去反面一次。 */
@@ -284,19 +300,41 @@ export function createCascadeStepper(
 
     const nextMask = new Set<string>();
     const idsOf = (m: Match) => m.cells.map(([r, c]) => cfg.tileAt(r, c).id);
+    /** 整组都是星星（一枚色块都没有）。这一种走消除那条路。 */
+    const allStars = (m: Match) => m.cells.every(([r, c]) => cfg.tileAt(r, c).face === 'dot');
+    /**
+     * 整组星星能不能得分。两个条件都要：
+     *
+     *  · 这副棋盘认得「消除」（实现了 clearStars）；
+     *  · **不是无限反转**。那一局翻过去还能翻回来，「消除」和它的本意打架
+     *    （玩家的原话是「无限反转维持原样」），所以那一局照旧只认「组里至少有一
+     *    枚正面」。
+     */
+    const starsScore = !cfg.toggleOnMatch && Boolean(cfg.clearStars);
     const matches = dedupe(
       cfg
         .findMatches(mask)
-        .filter((m) => m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor')),
+        .filter(
+          (m) =>
+            m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor') ||
+            (starsScore && allStars(m)),
+        ),
     ).filter((m) => !ledger || ledger.allows(idsOf(m)));
     if (matches.length) {
       let points = 0;
       const toFlip = new Set<string>();
+      /** 整组都是星星的那几组：commit 里走消除，不走翻面。 */
+      const toClear: Cell[][] = [];
       for (const m of matches) {
         ledger?.note(idsOf(m));
         points += m.points;
+        const clearing = starsScore && allStars(m);
+        if (clearing) toClear.push(m.cells);
         for (const [r, c] of m.cells) {
           nextMask.add(cellKey(r, c));
+          // 要消除的那一组一枚都不翻——它们马上就不在盘上了，翻了也是白翻，而且
+          // 翻一下会让淡出动画从「星星变色块」那一帧开始，看着像出了错。
+          if (clearing) continue;
           // 普通规则只翻正面；无限反转一组里每一枚都翻（反面翻回正面）。
           if (cfg.toggleOnMatch || cfg.tileAt(r, c).face === 'flavor') toFlip.add(cellKey(r, c));
         }
@@ -315,6 +353,9 @@ export function createCascadeStepper(
             const t = cfg.tileAt(r, c);
             t.face = cfg.toggleOnMatch && t.face === 'dot' ? 'flavor' : 'dot';
           }
+          // 消除放在翻面之后：两件事不会落在同一格（一组要么整组星星、要么带色
+          // 块），但顺序固定下来，将来加别的机制时不用重新想。
+          for (const cells of toClear) cfg.clearStars?.(cells);
           // 棋盘顺手动的那几格（炸弹被连带拆掉）也算进下一拍的遮罩。
           // 这会儿 mask 已经是 nextMask 了（上面那一行），而 commit 一定在
           // 下一次 next() 之前跑，所以直接往里加就是加进下一拍。

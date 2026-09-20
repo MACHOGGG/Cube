@@ -251,5 +251,115 @@ function board(faces) {
   check('新的一局账本清空：照给', runChain(ledger) === 2);
 }
 
+// ---------------------------------------------------------------------------
+// 5. 整组都是星星：给分 + 消除，而不是翻面
+// ---------------------------------------------------------------------------
+//
+// 《星星跟随色块消除》唯一的新机制。三条要一起成立：
+//
+//   ① 棋盘实现了 clearStars → 整组星星过得了那道「至少一枚正面」的闸，
+//      commit 调 clearStars 把它们拿掉，而且**一枚都不翻**
+//   ② 棋盘没实现 clearStars → 整组星星照旧不给分（老行为原样保留）
+//   ③ 无限反转（toggleOnMatch）→ 就算实现了 clearStars 也不给分、不消除
+//
+// 第 ③ 条是玩家亲口定的「无限反转维持原样」。那一局翻过去还能翻回来，「消除」
+// 和它的本意打架；漏掉这个判断的话，反转局里第一次得分之后棋子就开始永久消失，
+// 一局 60 秒的盘会被清空。
+{
+  const four = [[0, 0], [0, 1], [0, 2], [0, 3]];
+  /** 摆一组全是星星的格子。board() 里没列出来的格子默认就是 'dot'，正好。 */
+  const allStars = () => board([]);
+
+  // ① 认得消除的棋盘
+  {
+    const b = allStars();
+    const cleared = [];
+    const stepper = createCascadeStepper(
+      {
+        tileAt: b.tileAt,
+        findLineBonuses: () => [],
+        onLineBonus: () => {},
+        resetMaskOnLineBonus: false,
+        findMatches: () => [{ cells: four, points: 16, label: '纯星星' }],
+        clearStars: (cells) => cleared.push(cells),
+      },
+      null,
+      { line: '整线', pattern: '图案' },
+    );
+    const step = stepper.next();
+    check('① 整组星星：给分了', Boolean(step) && step.points === 16, String(step && step.points));
+    step?.commit();
+    check('① 整组星星：clearStars 收到了那四格', cleared.length === 1 && cleared[0].length === 4,
+      `调了 ${cleared.length} 次`);
+    check('① 整组星星：一枚都没被翻（消除的组不翻面）',
+      four.every(([r, c]) => b.faceOf(r, c) === 'dot'),
+      four.map(([r, c]) => b.faceOf(r, c)).join(' '));
+  }
+
+  // ② 不认得消除的棋盘：照旧不给分
+  {
+    const b = allStars();
+    const stepper = createCascadeStepper(
+      {
+        tileAt: b.tileAt,
+        findLineBonuses: () => [],
+        onLineBonus: () => {},
+        resetMaskOnLineBonus: false,
+        findMatches: () => [{ cells: four, points: 16, label: '纯星星' }],
+        // 故意不给 clearStars
+      },
+      null,
+      { line: '整线', pattern: '图案' },
+    );
+    check('② 没实现 clearStars 的棋盘：整组星星照旧不给分', stepper.next() === null);
+  }
+
+  // ③ 无限反转：实现了也不给
+  {
+    const b = allStars();
+    const cleared = [];
+    const stepper = createCascadeStepper(
+      {
+        tileAt: b.tileAt,
+        findLineBonuses: () => [],
+        onLineBonus: () => {},
+        resetMaskOnLineBonus: false,
+        findMatches: () => [{ cells: four, points: 16, label: '纯星星' }],
+        toggleOnMatch: true,
+        clearStars: (cells) => cleared.push(cells),
+      },
+      null,
+      { line: '整线', pattern: '图案' },
+      createToggleLedger(),
+    );
+    check('③ 无限反转：整组星星不给分（玩家定的「维持原样」）', stepper.next() === null);
+    check('③ 无限反转：一格都没被消除', cleared.length === 0, `调了 ${cleared.length} 次`);
+  }
+
+  // 混合组（有色块）照旧走翻面那条路，一格都不消除——这条守的是「混合组一分不
+  // 变、星星不消除」那半条规则在引擎这一层也成立。
+  {
+    const b = board([key(0, 0), key(0, 1)]);   // 前两格色块，后两格星星
+    const cleared = [];
+    const stepper = createCascadeStepper(
+      {
+        tileAt: b.tileAt,
+        findLineBonuses: () => [],
+        onLineBonus: () => {},
+        resetMaskOnLineBonus: false,
+        findMatches: () => [{ cells: four, points: 4, label: '混合' }],
+        clearStars: (cells) => cleared.push(cells),
+      },
+      null,
+      { line: '整线', pattern: '图案' },
+    );
+    const step = stepper.next();
+    step?.commit();
+    check('混合组：不走消除', cleared.length === 0, `调了 ${cleared.length} 次`);
+    check('混合组：两枚色块翻成了星星，原来的星星原样留着',
+      four.every(([r, c]) => b.faceOf(r, c) === 'dot'));
+  }
+}
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

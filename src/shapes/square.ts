@@ -56,6 +56,17 @@ const BOMB_PALETTES = {
 const RED_IDX = 0;
 
 const BOARD_DIM = 6;
+/**
+ * 空位：星星单独成图案得分之后，那几格从棋盘上拿掉留下的洞。
+ *
+ * 用 color 里的一个哨兵值表示，和菱形方块（squareDiamond.ts）同一套办法——那副
+ * 盘早就有这个概念，这里是照它抄的。空位不是一种新的「面」，而是一枚 color 和
+ * dotColor 都等于 BLANK 的棋子：于是它跟着整行照常滑动（和别的棋子一样），只是
+ * effColor 永远对不上任何真颜色，所以再也凑不进任何图案。
+ *
+ * 玩家 2026-09 拍板：基础方块也走「留空洞」，和另外七副一致。
+ */
+const BLANK = -1;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12" rx="3" fill="#C46A4E"/><rect x="18" y="2" width="12" height="12" rx="3" fill="#4A9573"/><rect x="2" y="18" width="12" height="12" rx="3" fill="#4C7EAD"/><rect x="18" y="18" width="12" height="12" rx="3" fill="#AD5C82"/></svg>`;
 
@@ -442,7 +453,10 @@ export function createSquareGame(): ShapeGame {
         el.style.height = size + 'px';
         el.style.left = c * cell + 2 + 'px';
         el.style.top = r * cell + 2 + 'px';
-        if (tile.face === 'dot') {
+        if (isBlank(tile)) {
+          // 空位：底板透出来，什么都不画。照菱形方块那套。
+          el.style.background = 'transparent';
+        } else if (tile.face === 'dot') {
           // 反面：底板透出来，颜色只留在那三笔上。和小球那颗一模一样（玩家
           // 2026-09 定的统一，见 ui/dotFaceMark.ts）——从前这儿是一颗实心小
           // 圆，一枚翻过面的方块和一枚正面的圆球看着差不多，两副棋盘摆在一
@@ -480,7 +494,7 @@ export function createSquareGame(): ShapeGame {
         // 原先八个玩法里只有 circle.ts 挂了这一句。于是头一局要是玩的方块，
         // 教学条第 2 条「反面也能一起凑」哪怕玩家真的做对了也感知不到，只能干
         // 等超时跳过；而且「教会了没有」不算数，下次玩小球或三角还要补讲一遍。
-        el.dataset.face = tile.face;
+        el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         return el;
       }
 
@@ -527,7 +541,16 @@ export function createSquareGame(): ShapeGame {
       // scoring.ts's dedupe() collapses those identical regions into a single
       // payout (an earlier version of this comment claimed that already
       // happened when in fact nothing did it, and a five-run scored double).
+      function isBlank(t: Tile): boolean {
+        return t.color === BLANK;
+      }
+      function anyBlank(cells: Cell[]): boolean {
+        return cells.some(([r, c]) => isBlank(grid[r][c]));
+      }
       function cellsSameColor(cells: Cell[]): boolean {
+        // 空位不进任何图案。不写这一句也几乎不会错（空位的 effColor 是 BLANK，
+        // 对不上任何真颜色），但一整组都是空位的时候「大家颜色一样」会成立。
+        if (anyBlank(cells)) return false;
         const c0 = effColor(grid[cells[0][0]][cells[0][1]]);
         // Red hazard tiles are obstacles, not a matchable color — never a
         // valid seed even though they'd otherwise pass the same-color check.
@@ -673,6 +696,23 @@ export function createSquareGame(): ShapeGame {
         removeLines(rowClears, colClears);
       }
 
+      /**
+       * 一组**整组都是星星**的图案得分了：这几格从棋盘上拿掉，留空位。
+       *
+       * 这副盘和另外七副的差别只在「没有淡出动画」：square 的消行有它自己那套
+       * 整行收拢的动画（captureTileSnapshots），没有 playBlankTransition 这条路，
+       * 所以这儿的空位是下一帧直接出现的。先这样——把动画补上是纯观感，不影响
+       * 规则，也不该在同一笔里混进来。
+       */
+      function clearStarGroup(cells: Cell[]) {
+        for (const [r, c] of cells) {
+          const t = grid[r][c];
+          if (isBlank(t)) continue;
+          t.color = BLANK;
+          t.dotColor = BLANK;
+        }
+      }
+
       function buildCascadeConfig(): CascadeConfig {
         return {
           tileAt: (r, c) => grid[r][c],
@@ -683,6 +723,7 @@ export function createSquareGame(): ShapeGame {
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
+          clearStars: clearStarGroup,
           resetMaskOnLineBonus: true,
           isTerminalAfterLineBonus: () => rows === 0 || cols === 0,
         };
@@ -696,7 +737,8 @@ export function createSquareGame(): ShapeGame {
         // 成基础色星星的那几枚本来就是反面，算在里头没问题。
         const allDot =
           grid.length > 0 &&
-          grid.every((row) => row.every((t) => t.face === 'dot' || liveBomb(t)));
+          // 空位算「已经清掉了」——它本来就不需要再翻。
+          grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || liveBomb(t)));
         return allDot || rows === 0 || cols === 0;
       }
 
@@ -708,6 +750,8 @@ export function createSquareGame(): ShapeGame {
             // player is expected to ever flip — excluded from stalemate
             // detection and the end-of-run "left on the board" penalty.
             if (liveBomb(grid[r][c])) continue;
+            // 空位不算「留在盘上没翻的」——结算那笔扣分和卡死判定都不该算它。
+            if (isBlank(grid[r][c])) continue;
             live.push({ cell: [r, c], tile: grid[r][c] });
           }
         return live;
