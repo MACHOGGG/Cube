@@ -23,6 +23,16 @@
  *      `.app--game.has-coach`（为手机腾高度，收窄各块间的缝和读数）排在三栏那
  *      一段后面、选择器又一样宽，于是把栏间缝盖成了 7.7px。同一副棋盘头一局和
  *      第二局不一样，正是「不要出现意料之外的界面」。
+ *   ④ **地板压住了底下那排《暂停》**（玩家截图报的）。三栏第一版里，得分图示那
+ *      一行是 auto、棋盘那一格自己写死 `height: 100dvh − 228px`，而 228 是按方
+ *      块那条 82px 高的图示估的。菱形方块的斜向图案要占四行、图示高 133，整格
+ *      于是比那一行高出五十来像素，align-items: center 让它朝上下一起溢出——
+ *      1920 上压住按键 35px，1280×720 上 11px。所以这道门量的是**每一副棋盘**，
+ *      不是挑一副。
+ *   ⑤ 同一件配件在不同玩法之间大小位置不一样：得分图示 28px 和 21px 两档、暂停
+ *      键跟着棋盘宽从 227 到 562、读数格被竖着的 flex 压成文字高（49px，而样式
+ *      表里写着 50–78）。玩家：「统一得分标记、左侧三个信息栏、下方的暂停按钮
+ *      的大小和位置，不要不停改变」。
  *
  * 所以这道门量的就是这三条，外加一条「三样东西互不重叠」。量的是成效（位置和
  * 尺寸），不是某一行 CSS 长什么样——这个仓库栽过好几次「门只认字面量」的跟头。
@@ -34,9 +44,12 @@ const BASE = process.argv[2] || 'http://localhost:8815/';
 /** 四档常见的电脑屏。1000×700 是这套排版的下限（媒体查询的门槛是 1000×561）。 */
 const VPS = [
   { w: 1920, h: 1080 },
-  { w: 1440, h: 900 },
-  { w: 1280, h: 800 },
-  { w: 1000, h: 700 },
+  { w: 1366, h: 768 },
+  // 1280×720 和 1366×768 是④那次压住按键最明显的两档（压 11 / 16px）。
+  { w: 1280, h: 720 },
+  // 这一段媒体查询的门槛（1000×561）。中间那一行在这儿只剩 299px，是最容易
+  // 挤出事的一档。
+  { w: 1000, h: 561 },
 ];
 
 /** 「这个玩法开过了」的全部钥匙（engine/firstPlay.ts 的 PlayKey）。 */
@@ -61,6 +74,9 @@ const ALL_KEYS = ['square', 'circle', 'triangle', 'timed', 'bomb', 'flip', 'slot
  */
 const BOARDS = [
   { name: '方块', firstSeed: [] },
+  // 菱形方块：④ 就出在它身上——它的斜向图案要占四行，是全站最高的一条得分图示
+  // （133px）。少了它，这道门在第一版的 bug 上是绿的。
+  { name: '菱形方块', firstSeed: ALL_KEYS.filter((k) => k !== 'layout') },
   { name: '七色圆球', firstSeed: ALL_KEYS.filter((k) => k !== 'layout') },
 ];
 
@@ -92,10 +108,19 @@ const MEASURE = () => {
   };
   return {
     hud: box('.app--game .hud'),
+    cell: box('.app--game .hud-cell'),
     wrap: box('#boardWrap'),
     coach: box('.app--game .coach-bar'),
     ctl: box('.app--game .controls'),
+    btn: box('#stopBtn'),
     hint: box('.app--game .pattern-hint--a'),
+    // 图示「一样大」说的是一枚图标多大（字号），不是这一条多高——菱形方块的斜
+    // 向图案本来就占四行，比方块的两行高，那是图案自己的事。真正要钉住的是
+    // ①每枚图标一样大 ②这一条占的行高不变（所以棋盘的上沿不动）。
+    hintFont: (() => {
+      const el = document.querySelector('.app--game .pattern-hint--a');
+      return el ? getComputedStyle(el).fontSize : '';
+    })(),
     vw: window.innerWidth,
     vh: window.innerHeight,
     // 这一页本来就该是满屏不滚的。横着能滚 = 有东西顶出去了。
@@ -159,6 +184,8 @@ async function open(vp, board, coach) {
 
 for (const vp of VPS) {
   const tag = `${vp.w}×${vp.h}`;
+  /** 这一档视口上各副棋盘的「熟客」那一遍，留着横向比（⑤）。 */
+  const sameVp = [];
   for (const board of BOARDS) {
     const name = board.name;
     /** 同一副棋盘的两种局，边长要一样（③）。 */
@@ -171,6 +198,7 @@ for (const vp of VPS) {
         continue;
       }
       sides[coach ? 'first' : 'later'] = m;
+      if (!coach) sameVp.push({ name, m });
 
       // ① 棋盘落在屏幕正中。左右两栏同宽，这一条才成立。
       const off = m.wrap.x + m.wrap.w / 2 - m.vw / 2;
@@ -239,6 +267,52 @@ for (const vp of VPS) {
         off.join('；') || `棋盘 ${Math.round(sides.first.wrap.w)}、读数、按键三个框都对上`,
       );
     }
+  }
+
+  // ⑤ 同一档屏幕上，换个玩法这三样不许动：得分图示那一条的高度、读数格、暂停
+  //    键。量的是「玩家来回切玩法时眼睛看到的东西有没有跳」，所以比的是尺寸和
+  //    纵向位置（横向位置本来就跟着棋盘宽走，棋盘宽是各副棋盘自己的事）。
+  if (sameVp.length > 1) {
+    const base = sameVp[0];
+    const diff = [];
+    const cmp = (label, pick, keys) => {
+      for (const one of sameVp.slice(1)) {
+        const a = pick(base.m);
+        const b = pick(one.m);
+        if (!a || !b) { diff.push(`${label}：${one.name} 量不到`); continue; }
+        for (const k of keys) {
+          if (Math.abs(a[k] - b[k]) > SAME_TOL) {
+            diff.push(`${label}${k} ${base.name} ${a[k].toFixed(0)} / ${one.name} ${b[k].toFixed(0)}`);
+          }
+        }
+      }
+    };
+    // 图示：每枚图标一样大。
+    const fonts = [...new Set(sameVp.map((x) => x.m.hintFont))];
+    if (fonts.length > 1) {
+      diff.push(`图示字号 ${sameVp.map((x) => `${x.name} ${x.m.hintFont}`).join(' / ')}`);
+    }
+    // 图示那一条的**下沿**不动 = 那一行的高度钉住了，而且这一条离棋盘的距离不
+    // 变（④ 那次就是这一行被撑高，棋盘跟着往下长，压住了底下那排键）。
+    //
+    // 比下沿，不比上沿也不比中线：图案几行是各副棋盘自己的事（方块两行 82px，
+    // 菱形方块的斜向图案四行 133px），而这一条是**贴着行底**站的
+    // （style.css 里 `.app--game > .pattern-hint--a { margin-top: auto }`），所以
+    // 高的那条往上长、离棋盘的距离一分不差。玩家看的就是这段距离。
+    //
+    // 也不比棋盘的上沿：地板是贴着棋盘收的（boardResize 的 fitFloor），七色圆球
+    // 的地板本来就比方块矮一截，在这一行里居中，上沿当然低一些。那是地板的形
+    // 状，不是排版在跳。
+    cmp('图示下沿', (m) => (m.hint ? { b: m.hint.y + m.hint.h } : null), ['b']);
+    cmp('读数格', (m) => m.cell, ['w', 'h']);
+    cmp('读数整条', (m) => m.hud, ['x', 'w']);
+    cmp('暂停键', (m) => m.btn, ['w', 'h', 'y']);
+    check(
+      `${tag}：换个玩法，得分图示 / 读数 / 暂停键三样一个像素不动`,
+      diff.length === 0,
+      diff.slice(0, 5).join('；') ||
+        `读数格 ${Math.round(base.m.cell.w)}×${Math.round(base.m.cell.h)}、暂停键 ${Math.round(base.m.btn.w)}×${Math.round(base.m.btn.h)}（${sameVp.map((x) => x.name).join(' / ')}）`,
+    );
   }
 }
 

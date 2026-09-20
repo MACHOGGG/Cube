@@ -13,6 +13,14 @@ const REEL_STEP = 1.1;
 export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): ScoreReel {
   let boxes: { box: HTMLElement; strip: HTMLElement }[] = [];
   const scoreCell = reelEl.closest<HTMLElement>('.score-cell');
+  /**
+   * 得分那一下，整块地板也亮一次（玩家：「得分的时候得分的版图闪烁一次呼吸感的
+   * 光明，不要太过抢眼」）。
+   *
+   * 从这一页里找，不从 document 找：一页上只有一块地板，但教学那几屏里也有长得
+   * 一样的东西，认这一页才不会亮错人。
+   */
+  const floor = reelEl.closest('.app--game')?.querySelector<HTMLElement>('.board-wrap') ?? null;
 
   function makeDigitBox() {
     const box = document.createElement('div');
@@ -81,11 +89,19 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
       void scoreCell.offsetWidth; // restart the flash even if one is already mid-flight
       scoreCell.classList.add('score-flash');
     }
+    if (floor) {
+      // 和上面一样要重排一次才能让动画从头放：连着得分的时候，第二次要能盖掉还
+      // 没放完的第一次，不然连击时只亮一下。
+      floor.classList.remove('floor-pulse');
+      void floor.offsetWidth;
+      floor.classList.add('floor-pulse');
+    }
   }
 
   function reset() {
     gainBadgeEl.replaceChildren();
     scoreCell?.classList.remove('score-flash');
+    floor?.classList.remove('floor-pulse');
     boxes.forEach((b) => b.box.remove());
     boxes = [];
     setValue(0);
