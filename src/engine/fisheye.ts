@@ -85,7 +85,14 @@ export interface FisheyeLayout {
 }
 
 export interface FisheyeOpts {
-  /** 循环（桌面端转盘）。默认 false ＝ 到端点为止（玩家 2026-09 定的手机端不循环）。 */
+  /**
+   * 循环。默认 false ＝ 到端点为止。
+   *
+   * 手机端 2026-09 第一轮定的是「不循环」，第二轮玩家改了口径（「没有做到任何循
+   * 环的效果」），于是那一版现在传 `wrap: true`——项数够多的时候（见 modeAxis 的
+   * WRAP_MIN）。留着 false 这一档不是历史包袱：首玩期轴上只有两张卡，两张围成的
+   * 环会让同一张同时出现在上下两头。
+   */
   wrap?: boolean;
   /** 循环一整圈对应多少个单位，默认 360（度）。 */
   wrapTotal?: number;

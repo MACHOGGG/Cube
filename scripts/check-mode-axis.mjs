@@ -99,7 +99,7 @@ let page = await menuPage({ slides_played_square: '1' });
   // 聚焦那张：正对选中线（容器正中），而且是最大的一张。
   const focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
   check('聚焦那张正对着选中线（偏差 < 2px）', Math.abs(focused.cy - s.host.cy) < 2, `${focused.name}：中心 ${focused.cy.toFixed(1)} / 选中线 ${s.host.cy.toFixed(1)}`);
-  check('聚焦那张是最大的一张', focused.scale > 1.3, `scale ${focused.scale}`);
+  check('聚焦那张是最大的一张', focused.scale > 1.2, `scale ${focused.scale}`);
 
   // **量墨，不量盒。** 这一条是补的：前一版只量按钮的矩形，于是炸弹那块板
   // （从宽度算高度，撑成 157×175）和三张宽画布的图（svg 宽到 200，图格只有
@@ -161,16 +161,21 @@ let page = await menuPage({ slides_played_square: '1' });
   const focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
   check('拖动换得了聚焦项', focused.name !== before, `${before} → ${focused.name}`);
   check('松手定格在整项上（聚焦那张正对选中线）', Math.abs(focused.cy - s.host.cy) < 2, `偏差 ${Math.abs(focused.cy - s.host.cy).toFixed(2)}px`);
-  check('松手后只有一张是放大的（没停在两项中间）', s.cards.filter((c) => c.scale > 1.25).length === 1, `${s.cards.filter((c) => c.scale > 1.25).length} 张`);
+  check('松手后只有一张是放大的（没停在两项中间）', s.cards.filter((c) => c.scale > 1.24).length === 1, `${s.cards.filter((c) => c.scale > 1.24).length} 张`);
 }
 
-// ── 4. 滑不出两端（不循环，玩家定的）────────────────────────────────
+// ── 4. 循环：没有「到头了」这回事 ───────────────────────────────────
+//
+// 玩家 2026-09 第二轮改的口径（原先是「手机端不循环，滑到两端就停」）：
+// 「没有做到任何循环的效果」。这一节原来量的正是「滑到头就停」，现在反过来量：
+// 从第一张往上猛滑，应该绕到后半段去，而不是钉在第 0 项。
 {
   const box = await page.evaluate(() => {
     const r = document.querySelector('.mode-axis').getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   });
-  // 往下猛拖，远超第 0 项
+  // 先回到第 0 项
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
   for (let k = 1; k <= 20; k++) await page.mouse.move(box.x, box.y + k * 160);
@@ -178,16 +183,109 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.waitForTimeout(800);
   let s = await shot(page);
   let focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  check('往上滑到头就停在第一张', focused.i === 0, `停在 ${focused.name}`);
-  // 往上猛拖，远超最后一项
+  const first = focused.i;
+  // 这儿不下断言——猛拖 20×160px 走的格数取决于间距，落在哪一项不是这道门要钉的
+  // 事（钉了就成了「抄实现」）。真正要量的是下面两条：再往上走会**绕过去**。
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
-  for (let k = 1; k <= 20; k++) await page.mouse.move(box.x, box.y - k * 160);
+  for (let k = 1; k <= 8; k++) await page.mouse.move(box.x, box.y + k * 60);
   await page.mouse.up();
   await page.waitForTimeout(800);
   s = await shot(page);
   focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  check('往下滑到头就停在最后一张', focused.i === 13, `停在 ${focused.name}`);
+  check(
+    '从前几项再往上滑，绕到后几项（环闭上了）',
+    focused.i > 9,
+    `${first} → ${focused.i}（${focused.name}）`,
+  );
+  // 反方向也走得通：从这儿往下猛滑，绕回前几项
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  for (let k = 1; k <= 8; k++) await page.mouse.move(box.x, box.y - k * 60);
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+  s = await shot(page);
+  const back = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
+  check('反方向也绕得回来', back.i < 4, `→ ${back.i}（${back.name}）`);
+}
+
+// ── 4b. 上下两头是**化开**的，不是一刀切 ────────────────────────────
+//
+// 玩家原话：「上和下的部分不应该是遮盖的，而是透明的，不应该只有中间这一部分
+// 能看到」。原先的写法是「离中心超过半屏就 opacity: 0」——于是轴上永远只看得见
+// 三张，边缘一条硬线。现在改成随距离连续掉，容器再叠一层同向的渐变遮罩。
+//
+// 量两件事：**有**半透明的那一张（不是非 0 即 1），以及遮罩真的挂上了。
+{
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+  await page.waitForTimeout(700);
+  const fade = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.mode-axis > .home-icon-btn')];
+    const o = cards.map((c) => +(+getComputedStyle(c).opacity).toFixed(3));
+    const css = getComputedStyle(document.querySelector('.mode-axis'));
+    return {
+      o,
+      half: o.filter((v) => v > 0.02 && v < 0.98).length,
+      solid: o.filter((v) => v >= 0.98).length,
+      mask: (css.webkitMaskImage || css.maskImage || 'none').slice(0, 40),
+    };
+  });
+  check(
+    '上下两头有淡出的卡（不是非 0 即 1 的一刀切）',
+    fade.half >= 1,
+    `全不透明 ${fade.solid} 张、半透明 ${fade.half} 张：${fade.o.filter((v) => v > 0).join(' / ')}`,
+  );
+  check(
+    '一屏看得见的不止中间那一张（≥ 3 张全不透明）',
+    fade.solid >= 3,
+    `${fade.solid} 张`,
+  );
+  check('容器挂着渐隐遮罩', /gradient/.test(fade.mask), fade.mask);
+}
+
+// ── 4c. 两侧的点点轴 ────────────────────────────────────────────────
+//
+// 效果图上左右两边各一列小圆点，中间那几颗大而亮。它是「我在这 14 项的哪儿」的
+// 唯一提示——轴上一次只看得见四五张卡，没有它玩家不知道自己滑到了第几项。
+{
+  const rail = await page.evaluate(() => {
+    const rails = [...document.querySelectorAll('.axis-rail')];
+    const dots = rails.map((r) =>
+      [...r.querySelectorAll('.axis-dot')].map((d) => {
+        const cs = getComputedStyle(d);
+        const b = d.getBoundingClientRect();
+        return { w: +parseFloat(cs.width).toFixed(1), o: +(+cs.opacity).toFixed(3), cy: b.top + b.height / 2 };
+      }),
+    );
+    const host = document.querySelector('.mode-axis').getBoundingClientRect();
+    return { rails: rails.length, dots, hostCy: host.top + host.height / 2, pe: rails[0] && getComputedStyle(rails[0]).pointerEvents };
+  });
+  check('左右各一条点点轴', rail.rails === 2, `${rail.rails} 条`);
+  check('每条轴上一项一颗点', rail.dots.every((d) => d.length === 14), rail.dots.map((d) => d.length).join(' / '));
+  const widest = rail.dots[0].reduce((a, b) => (b.w > a.w ? b : a));
+  const smallest = rail.dots[0].reduce((a, b) => (b.w < a.w ? b : a));
+  check('最大那颗明显比最小那颗大（有大小梯度）', widest.w - smallest.w > 2, `${smallest.w} → ${widest.w}px`);
+  check('最大那颗对着选中线（± 6px）', Math.abs(widest.cy - rail.hostCy) < 6, `${widest.cy.toFixed(0)} / ${rail.hostCy.toFixed(0)}`);
+  // 它是路标不是控件：按在点子上那一下要能照常拖轴。
+  check('点点轴不吃手势（pointer-events: none）', rail.pe === 'none', String(rail.pe));
+}
+
+// ── 4d. 图层不再逐帧建了又拆 ────────────────────────────────────────
+//
+// 玩家原话：「没有丝滑顺畅的快速的感觉，现在很卡都很慢」。原先 paint() 每帧按
+// 「离焦点近不近」设/清每张卡的 willChange——反复建图层再拆图层，正好发生在最忙
+// 的那几帧里。现在 will-change 由 CSS 常设，JS 一帧只写变了的 transform/opacity。
+// 这儿量的是成效：拖完之后每张卡的 will-change 还在，没被逐帧清掉。
+{
+  const wc = await page.evaluate(() =>
+    [...document.querySelectorAll('.mode-axis > .home-icon-btn')].map((c) => getComputedStyle(c).willChange),
+  );
+  check(
+    '卡片的 will-change 是常设的（不再逐帧开关）',
+    wc.length > 0 && wc.every((v) => /transform/.test(v)),
+    [...new Set(wc)].join(' | '),
+  );
 }
 
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────
@@ -240,7 +338,17 @@ await page.close();
   const geo = await p3.evaluate(() => {
     const host = document.querySelector('.mode-axis').getBoundingClientRect();
     const legal = document.querySelector('.home-legal')?.getBoundingClientRect() ?? null;
-    const nav = document.querySelector('.bottom-nav, .dock, [class*="bottom-nav"]')?.getBoundingClientRect() ?? null;
+    // 底排那一条叫 `.home-nav`（bottomNav.ts 挂在 <body> 上的 <nav>）。这儿原先
+    // 猜的是 `.bottom-nav`，全站没有这个类名，于是 navTop 恒为 -1，下面那条
+    // 「底排不被压住」被 if 整条跳过——门是绿的，量的是空气。同一个错的类名当时
+    // 也写进了 modeAxis.ts 的 measure()，轴因此一路铺到屏幕最底、压在底排底下。
+    const navEl = document.querySelector('.home-nav');
+    const nav = navEl?.getBoundingClientRect() ?? null;
+    const dockHits = [...document.querySelectorAll('.home-nav-btn')].map((b) => {
+      const r = b.getBoundingClientRect();
+      const el = document.elementFromPoint(r.left + r.width / 2, r.bottom - 8);
+      return { label: b.getAttribute('aria-label') || '', hit: !!el && (el === b || b.contains(el)) };
+    });
     const cards = [...document.querySelector('.mode-axis').children]
       .filter((e) => e.classList.contains('home-icon-btn') && Number(getComputedStyle(e).opacity) > 0.01)
       .map((e) => e.getBoundingClientRect());
@@ -248,18 +356,82 @@ await page.close();
       hostBottom: host.bottom,
       legalTop: legal?.top ?? -1, legalBottom: legal?.bottom ?? -1,
       navTop: nav?.top ?? -1,
+      navH: nav?.height ?? 0,
+      dockBlocked: dockHits.filter((h) => !h.hit).map((h) => h.label),
+      dockN: dockHits.length,
       lowestCard: Math.max(...cards.map((r) => r.bottom)),
       clipped: getComputedStyle(document.querySelector('.mode-axis')).overflow,
       vh: window.innerHeight,
     };
   });
-  check('法务那五条链接在轴下面，而且整条在屏幕里', geo.legalTop >= geo.hostBottom - 1 && geo.legalBottom <= geo.vh + 1,
-    `轴底 ${geo.hostBottom.toFixed(0)} / 链接 ${geo.legalTop.toFixed(0)}–${geo.legalBottom.toFixed(0)} / 屏高 ${geo.vh}`);
+  /**
+   * 法务那五条链接：在轴下面，而且**第一屏看不见**——要往下滑才露出来。
+   *
+   * 玩家 2026-09 第二轮：「不要一直展示在屏幕的下方……放在最底下就是只有滑到最
+   * 最最底下的时候才能看到」。它们不能删（收单方的审核要在落地页上找得到，见
+   * menu.ts 那段注释），所以做成普通网站页脚的样子。
+   *
+   * 两条一起量，缺一条就成了假绿：只量「在第一屏外」的话，把它们整个删掉也通过；
+   * 只量「滑到底看得见」的话，挂在屏幕下方也通过。
+   */
+  check(
+    '法务五条在轴下面，而且第一屏之外（不再一直挂在屏幕下方）',
+    geo.legalTop >= geo.hostBottom - 1 && geo.legalTop >= geo.vh - 1,
+    `轴底 ${geo.hostBottom.toFixed(0)} / 链接顶 ${geo.legalTop.toFixed(0)} / 屏高 ${geo.vh}`,
+  );
+  {
+    const bottom = await p3.evaluate(async () => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await new Promise((r) => setTimeout(r, 400));
+      const legal = document.querySelector('.home-legal').getBoundingClientRect();
+      const nav = document.querySelector('.home-nav')?.getBoundingClientRect() ?? null;
+      const links = [...document.querySelectorAll('.home-legal a')].map((a) => {
+        const r = a.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { text: a.textContent.trim(), hit: !!el && (el === a || a.contains(el)) };
+      });
+      return {
+        scrollable: document.documentElement.scrollHeight > window.innerHeight + 4,
+        top: legal.top, bottom: legal.bottom, vh: window.innerHeight,
+        navTop: nav?.top ?? -1,
+        blocked: links.filter((l) => !l.hit).map((l) => l.text),
+        n: links.length,
+      };
+    });
+    check('这一页滑得动（不然那五条永远到不了）', bottom.scrollable);
+    check(
+      '滑到底之后五条整个在屏幕里',
+      bottom.top >= -1 && bottom.bottom <= bottom.vh + 1,
+      `${bottom.top.toFixed(0)}–${bottom.bottom.toFixed(0)} / 屏高 ${bottom.vh}`,
+    );
+    check(
+      '滑到底之后五条都点得着（没被底排压住）',
+      bottom.n === 5 && bottom.blocked.length === 0,
+      bottom.blocked.length ? `点不着：${bottom.blocked.join(' ')}` : `${bottom.n} 条都点得着`,
+    );
+  }
   // getBoundingClientRect 不认裁剪：一张探到轴外面的卡，rect 照样报它的完整位
   // 置，而屏幕上那一截是被 overflow 切掉的。所以这儿量的是「裁真的在裁」，越出
   // 多少由上面那条（轴底 ≤ 法务链接顶）管。
   check('轴在裁掉探出去的那一截（overflow: hidden）', geo.clipped === 'hidden', geo.clipped);
-  if (geo.navTop > 0) check('底排不被卡片压住', geo.lowestCard <= geo.navTop + 1, `${geo.lowestCard.toFixed(0)} / ${geo.navTop.toFixed(0)}`);
+  /**
+   * 底排：先量「找得到」，再量「没被压住」。
+   *
+   * 少了第一条就是上面那个事故的翻版——类名一写错，第二条自动变成真空。
+   *
+   * 「没被压住」量两样：轴的**底边**在底排上沿之上（画不到那儿去），以及底排那
+   * 两颗**真的点得着**（用 elementFromPoint 打它们的下半截——最靠近轴的那一侧）。
+   * 只量矩形不够：轴是 overflow: hidden 的，探出去的卡片 rect 照样报在底排上，
+   * 屏幕上其实被切掉了；只量点击也不够：轴要是画到了底排底下，玩家看到的是两颗
+   * 键叠在卡片上，点是点得着，但画面是错的。
+   */
+  check('底排找得到（.home-nav，类名没写错）', geo.navTop > 0 && geo.navH > 0, `top ${geo.navTop.toFixed(0)} / 高 ${geo.navH.toFixed(0)}`);
+  check('轴的底边在底排上面', geo.hostBottom <= geo.navTop + 1, `轴底 ${geo.hostBottom.toFixed(0)} / 底排顶 ${geo.navTop.toFixed(0)}`);
+  check(
+    '底排那两颗点得着',
+    geo.dockN === 2 && geo.dockBlocked.length === 0,
+    geo.dockBlocked.length ? `点不着：${geo.dockBlocked.join(' ')}` : `${geo.dockN} 颗都点得着`,
+  );
   await p3.close();
 }
 

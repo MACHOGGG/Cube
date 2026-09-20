@@ -223,7 +223,7 @@
 html, body { height: 100%; }
 /* Reserves room below whatever the browser scrolls into view (Tab focus, a
    mobile keyboard nudging an input, Playwright's own scrollIntoView) so the
-   fixed .bottom-nav bar never ends up sitting directly on top of it — plain
+   fixed .home-nav bar never ends up sitting directly on top of it — plain
    padding-bottom on .app doesn't help here, since "scroll target into view"
    only guarantees the target itself is visible, not the padding after it. */
 html { scroll-padding-bottom: 76px; }
@@ -237,14 +237,14 @@ body {
      one screen the real content then overflows past that definite box in
      `overflow:visible`, past where .app's own padding-bottom was meant to
      land — so a page's last interactive element could butt right up
-     against (or sit under) the fixed .bottom-nav bar at max scroll,
+     against (or sit under) the fixed .home-nav bar at max scroll,
      regardless of how much bottom padding .app declares. flex-start makes
      #app/.app size to their actual content instead, so the padding lands
      where it's supposed to. */
   display: flex; justify-content: center; align-items: flex-start;
 }
 #app { width: 100%; display: flex; justify-content: center; align-items: flex-start; }
-/* Bottom padding leaves room for the persistent .bottom-nav bar below —
+/* Bottom padding leaves room for the persistent .home-nav bar below —
    see that rule for why it's a fixed sibling of #app rather than part of
    each screen's own markup. */
 /* 底下那一排图标是浮在页面上的，所以每一页都得先把它那块地方让出来，
@@ -1146,7 +1146,9 @@ button:hover { filter: brightness(1.05); }
    宽度随图形自己的比例走」：图一律 112px 高，宽的宽、窄的窄，但每一站一样高。
    check-mode-axis 逐对量这件事。 */
 .mode-axis {
-  --axis-art: 112px;
+  /* 一站的图多高。2026-09 第二轮按效果图从 112 收到 100——理由和间距一起记在
+     ui/modeAxis.ts 的 PARAMS 上面（一屏要看得见四张）。 */
+  --axis-art: 100px;
   position: relative;
   /* 覆盖 .home-grid 的 flex 列：卡片是绝对定位的，容器不需要排它们。 */
   display: block;
@@ -1156,6 +1158,74 @@ button:hover { filter: brightness(1.05); }
   overflow: hidden;
   /* 轴自己吃掉竖向手势：不写这一条，手指一滑页面跟着滚，轴只走一半。 */
   touch-action: none;
+  /*
+   * 上下两头**化开**，不是被一块板盖住。
+   *
+   * 玩家 2026-09 第二轮的原话：「上和下的部分不应该是遮盖的，而是透明的，不应该
+   * 只有中间这一部分能看到」。原先只有 `overflow: hidden` 那一刀——卡片滑到边上
+   * 是被**切**掉的，边缘一条硬线，看着像中间开了个窗口。加一层同向的渐变遮罩，
+   * 边缘就变成渐隐；JS 那边也把卡片的透明度改成随距离连续掉（modeAxis.ts 的
+   * FADE_TAIL），两样叠起来，上下两头是真的透，不是盖着。
+   *
+   * `overflow: hidden` 留着：遮罩只管画面，不管布局——没有它，卡片的盒子还是会
+   * 伸到标题和法务链接上去（门 check-overlap 量的就是这件事）。
+   *
+   * -webkit- 那一行是给 iOS 的 WKWebView 留的（Capacitor 那一版就跑在它上面），
+   * 旧一点的 iOS 只认带前缀的那个。
+   */
+  --axis-fade: 14%;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--axis-fade),
+    #000 calc(100% - var(--axis-fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--axis-fade),
+    #000 calc(100% - var(--axis-fade)),
+    transparent 100%
+  );
+}
+
+/*
+ * 两侧那两条点点轴（ui/modeAxis.ts 的 makeRail）。
+ *
+ * 玩家给的效果图上，左右两边各有一列小圆点，中间那几颗大而亮、往两头越来越小越
+ * 淡——它是「我在这 13 项的哪儿」的唯一提示。轴上一次只看得见四五张卡，没有它，
+ * 玩家不知道自己滑到了第几项、后面还有多少。
+ *
+ * `pointer-events: none`：它是路标不是控件。手指按在上面照样是在拖轴——不写这一
+ * 条，按到点子上那一下会被点子吃掉，滑动直接断。
+ */
+.axis-rail {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-faint, currentColor);
+  z-index: 2;
+}
+.axis-rail--l { left: 6px; }
+.axis-rail--r { right: 6px; }
+.axis-dot {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  display: block;
+  border-radius: 50%;
+  background: currentColor;
+  /* 尺寸、位置、透明度全由 JS 每帧写（和卡片同一次 paint）。这儿只给一个默认，
+     免得第一帧之前是个 0×0 的点。 */
+  width: 4px;
+  height: 4px;
+  opacity: 0;
+  /* 和卡片同一条规矩：位置是每帧算出来的，不能再被 CSS 平滑一遍。 */
+  transition: none;
+  will-change: transform, opacity;
 }
 /* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
    `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }`
@@ -1183,6 +1253,11 @@ button:hover { filter: brightness(1.05); }
   /* 比例交给里面那一格（下面那条）。 */
   aspect-ratio: auto;
   transform-origin: 50% 50%;
+  /* 常设，不再逐帧开关。
+     原先是 JS 每帧按「离焦点近不近」设/清 willChange——反复建图层再拆图层，正好
+     发生在最忙的那几帧里，玩家的原话是「很卡都很慢」。13 张卡常驻合成层的代价是
+     一点显存，换来的是滑动时不再每帧重新栅格化那张大 SVG。 */
+  will-change: transform, opacity;
   /* 图在整幅宽的卡里居中：靠这一条加上图那一格的 inline-block（下面）。
      不能靠 `margin: 0 auto`——块级元素的 `width: auto` 是「撑满容器」而不是
      「收缩到内容」，撑满之后 auto 边距没有富余可分，图就顶在左边，再被

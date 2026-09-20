@@ -512,6 +512,25 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 老虎机 · 无限反转 · 七色圆球 · V 型三角，就是它们被攒起来的次序。
   for (const btn of geniusTail) place(btn);
 
+  if (handlers.firstPlayLock) {
+    if (!onAxis) armFirstPlayLock(grid);
+    // 《我会玩》摆在整张菜单的**下方**（玩家原话「新手检测拦截的下方」），不是
+    // 塞在卡片之间：它不是一个玩法，不该和那十三张卡排在同一条链上。
+    //
+    // 插在 .home-grid 之后、.home-legal 之前——法务那五条链接得留在最底下（收单
+    // 方的审核要一眼看见），所以不能直接 append 到页面末尾。
+    //
+    // **这一段必须排在 mountModeAxis 前面。** 轴的高度是它自己量出来的「从我这儿
+    // 到底排还剩多少」，量的时候会把这颗按钮那一截让出来（见 modeAxis 的
+    // measure）——先挂轴再插按钮的话，轴量到的是「底下什么都没有」，铺满整屏，
+    // 按钮被顶到屏幕外面去（实测 top 839 / 屏高 844，只露出一条边）。而它是
+    // 「跳过引导」的唯一出口，藏起来等于没有。
+    const legal = container.querySelector('.home-legal');
+    const btn = knowHowButton(lang, () => handlers.onKnowHow?.());
+    if (legal) legal.parentElement?.insertBefore(btn, legal);
+    else grid.parentElement?.appendChild(btn);
+  }
+
   if (onAxis) {
     // 首玩期只摆那两张：轴上滑不到别的地方去，就不需要「按了不给进」这种反馈了
     // （玩家在两个选项里挑的就是这一个）。所以这一路不装 armFirstPlayLock。
@@ -526,19 +545,6 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         axisFocus = i;
       },
     });
-  }
-
-  if (handlers.firstPlayLock) {
-    if (!onAxis) armFirstPlayLock(grid);
-    // 《我会玩》摆在整张菜单的**下方**（玩家原话「新手检测拦截的下方」），不是
-    // 塞在卡片之间：它不是一个玩法，不该和那十三张卡排在同一条链上。
-    //
-    // 插在 .home-grid 之后、.home-legal 之前——法务那五条链接得留在最底下（收单
-    // 方的审核要一眼看见），所以不能直接 append 到页面末尾。
-    const legal = container.querySelector('.home-legal');
-    const btn = knowHowButton(lang, () => handlers.onKnowHow?.());
-    if (legal) legal.parentElement?.insertBefore(btn, legal);
-    else grid.parentElement?.appendChild(btn);
   }
 }
 

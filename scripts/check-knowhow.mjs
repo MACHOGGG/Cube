@@ -55,6 +55,25 @@ async function freshPage(ctx) {
   return page;
 }
 
+/**
+ * 点主菜单上的一张玩法卡。
+ *
+ * 手机竖屏的主菜单是那条鱼眼轴（`.mode-axis`），它铺满整幅宽、自己收手势，离焦
+ * 点远的卡因此吃不到指针事件——Playwright 的 `page.click()` 会一路重试到超时，
+ * 报「`#homeGrid` intercepts pointer events」。玩家在真机上是先滑到那一张再点，
+ * 这道门量的不是轴（那是 check-mode-axis 的活），是「按下去之后会怎样」，所以
+ * 直接在按钮上派发 click，不复刻滑动那一段。
+ *
+ * 找不到那张卡就返回 false（首玩期轴上只摆基础方块和基础小球两张，别的玩法根本
+ * 不在 DOM 里）——调用方据此判断，而不是吞掉一个超时。
+ */
+async function clickCard(page, label) {
+  const el = await page.$(`.home-icon-btn[aria-label^="${label}"]`);
+  if (!el) return false;
+  await el.evaluate((e) => e.click());
+  return true;
+}
+
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const errs = [];
 ctx.on('page', (p) => p.on('pageerror', (e) => errs.push(e.message)));
@@ -87,7 +106,12 @@ let page = await freshPage(ctx);
   check('摆在菜单下方、法务链接之上', order?.belowGrid === true && order?.aboveLegal === true, JSON.stringify(order));
 
   // 拦着：按一张不该点的卡，不会开局。
-  await page.click('.home-icon-btn[aria-label^="菱形方块"]').catch(() => {});
+  //
+  // 轴上这会儿根本没有第三张卡（首玩期只摆基础方块和基础小球），所以先把这件事
+  // 量出来再去按——不然「按不开」这一条会在卡片压根不存在时自动通过，量的是空
+  // 气。两样都要：卡不在是**这一版**的拦法，按不开是**这一条**要保的结果。
+  const reachable = await clickCard(page, '菱形方块');
+  check('首玩期别的玩法根本不在菜单上', reachable === false);
   await page.waitForTimeout(900);
   const stillMenu = await page.evaluate(() => !!document.querySelector('.home-grid'));
   check('按别的玩法开不起来（锁在拦着）', stillMenu);
@@ -107,7 +131,7 @@ let page = await freshPage(ctx);
   check('按完还在主菜单上（不是跳到别处去了）', after.menu);
 
   // 真的解锁了：刚才按不开的那一张现在按得开。
-  await page.click('.home-icon-btn[aria-label^="菱形方块"]');
+  check('按完菱形方块出现在菜单上了', await clickCard(page, '菱形方块'));
   await page.waitForFunction(
     () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball, #startBtn').length > 0,
     { timeout: 15000 },
@@ -136,7 +160,7 @@ let page = await freshPage(ctx);
 // 按过《我会玩》的人第一次点开基础方块，棋盘底下那块教学条还是要在。把「跳过
 // 引导」实现成「把 firstTimeIn 全记成已看过」就会在这儿露出来。
 {
-  await page.click('.home-icon-btn[aria-label^="方块"]');
+  await clickCard(page, '方块');
   await page.waitForTimeout(900);
   if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
   await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });

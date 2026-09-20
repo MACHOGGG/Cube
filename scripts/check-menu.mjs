@@ -143,10 +143,16 @@ async function lockedCards(width, height) {
       const lock = box(b.querySelector('.center-pick-lock'));
       const badge = box(b.querySelector('.center-pick-genius'));
       const touch = (a, o) => a.l < o.r && o.l < a.r && a.t < o.b && o.t < a.b;
+      const lockEl = b.querySelector('.center-pick-lock');
       return {
         name: (b.getAttribute('aria-label') || '').split(' ·')[0],
         card: `${Math.round(card.w)}×${Math.round(card.h)}`,
-        lock: `${Math.round(lock.w)}×${Math.round(lock.h)}`,
+        // 锁的大小量的是**版面盒子**（offsetWidth/Height），不是屏幕上的矩形。
+        // 竖屏的主菜单是那条鱼眼轴，卡片按「离焦点多远」被 scale 过——同一把
+        // 34px 的锁，在焦点旁边那张上量出来是 39，隔两张是 35。那不是锁变大了，
+        // 是整张卡被放大了，而 getBoundingClientRect 算的是变换之后的数。
+        // 版面盒子不吃 transform，三种排法下都是同一个数。
+        lock: `${Math.round(lockEl.offsetWidth)}×${Math.round(lockEl.offsetHeight)}`,
         off: [
           Math.round(lock.l + lock.w / 2 - card.l - card.w / 2),
           Math.round(lock.t + lock.h / 2 - card.t - card.h / 2),
@@ -160,8 +166,19 @@ async function lockedCards(width, height) {
   await c.close();
   return cards;
 }
-/** 主菜单每一排上都摆了些什么，按排返回它们的名字。 */
-async function menuRows(width, height) {
+/**
+ * 主菜单上摆了些什么、什么次序。
+ *
+ * 两种排法，所以两条路：
+ *  · **宽屏**（电脑、手机横屏）还是一排一排的 `.home-row`，返回二维。
+ *  · **手机竖屏** 2026-09 整个换成了一条鱼眼轴（`.mode-axis`，见 ui/modeAxis.ts）
+ *    ——没有「排」这回事，十四张卡是一条链，返回一维。
+ *
+ * 这道门原先只认 `.home-row`：轴上线之后，竖屏那一轮在这儿等 20 秒然后抛异常，
+ * **后面十几条一条都没跑**（而整个进程还是 exit 0，看着像跑完了）。所以这儿两
+ * 条路都写死，找不到就红，不写成「找不到就跳过」。
+ */
+async function menuOrder(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
   await c.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
@@ -170,13 +187,21 @@ async function menuRows(width, height) {
   });
   const p = await c.newPage();
   await p.goto(BASE, { waitUntil: 'load' });
-  await p.waitForSelector('.home-row .home-icon-btn', { timeout: 20000 });
+  await p.waitForSelector('.home-row .home-icon-btn, .mode-axis .home-icon-btn', { timeout: 20000 });
   await p.waitForTimeout(300);
-  const rows = await p.$$eval('.home-row', (rs) =>
-    rs.map((r) => [...r.children].map((k) => (k.getAttribute('aria-label') || '').split(' ·')[0])),
-  );
+  const out = await p.evaluate(() => {
+    const name = (e) => (e.getAttribute('aria-label') || '').split(' ·')[0];
+    const rows = [...document.querySelectorAll('.home-row')];
+    if (rows.length) return { kind: 'rows', items: rows.map((r) => [...r.children].map(name)) };
+    // 轴上只取**直接子元素**里的卡：两条点点轴（.axis-rail）也挂在同一个容器上。
+    const axis = document.querySelector('.mode-axis');
+    return {
+      kind: 'axis',
+      items: [...(axis?.children ?? [])].filter((e) => e.classList.contains('home-icon-btn')).map(name),
+    };
+  });
   await c.close();
-  return rows;
+  return out;
 }
 
 /** 主菜单上每张图标有多宽——用来核对「十四张一样大」。 */
@@ -202,7 +227,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   check(`${label}：五张锁着的卡都在`, cards.length === 5, brief);
   // 玩家点名的顺序，宽屏三排、窄屏五排——同一条链，断在不同的地方。
   const wide = w >= 720 || (w > h && w >= 560);
-  const rows = await menuRows(w, h);
+  const got = await menuOrder(w, h);
   const WANT = wide
     ? [
         ['方块', '圆球', '三角'],
@@ -222,25 +247,33 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
         ['无限反转', '步步为营'],
         ['七色圆球', '进阶三角'],
       ];
-  check(`${label}：${WANT.length} 排，各 ${WANT.map((r) => r.length).join(' / ')} 张`,
-    rows.length === WANT.length && rows.every((r, i) => r.length === WANT[i].length),
-    rows.map((r) => r.length).join(' / '));
-  check(`${label}：每一排的顺序都对`,
-    JSON.stringify(rows) === JSON.stringify(WANT),
-    rows.map((r) => r.join(' · ')).join('  |  '));
-  // 十四张一样大：张数少的那几排不能因为人少就长得比别人大。
-  // ⚠️ 宽屏第二排从五张变六张之后（menu.ts 的 WIDE_PER_ROW），这一条是
-  // --home-card-cap 那道公式的岗哨：公式里少了「一排站得下几张」那一项，第二
-  // 排的六张就会被挤得比第三排的五张窄，这里立刻红。
-  const sizes = await cardWidths(w, h);
-  const span = Math.max(...sizes) - Math.min(...sizes);
-  check(`${label}：十四张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
-  // 窄屏的图标是「上限 165，装不下就按这一排减掉间距再对半分」——所以这个数
-  // 随屏幕变（390 的手机上是 158），只查它没越过上限、也没被挤没。同一块屏
-  // 幕上十三张一样大那一条在上面已经查过了。
-  if (!wide)
-    check(`${label}：一张不超过 165px 见方`, sizes.every((n) => n <= 165 && n >= 120),
-      `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
+  if (got.kind === 'rows') {
+    const rows = got.items;
+    check(`${label}：${WANT.length} 排，各 ${WANT.map((r) => r.length).join(' / ')} 张`,
+      rows.length === WANT.length && rows.every((r, i) => r.length === WANT[i].length),
+      rows.map((r) => r.length).join(' / '));
+    check(`${label}：每一排的顺序都对`,
+      JSON.stringify(rows) === JSON.stringify(WANT),
+      rows.map((r) => r.join(' · ')).join('  |  '));
+    // 十四张一样大：张数少的那几排不能因为人少就长得比别人大。
+    // ⚠️ 宽屏第二排从五张变六张之后（menu.ts 的 WIDE_PER_ROW），这一条是
+    // --home-card-cap 那道公式的岗哨：公式里少了「一排站得下几张」那一项，第二
+    // 排的六张就会被挤得比第三排的五张窄，这里立刻红。
+    const sizes = await cardWidths(w, h);
+    const span = Math.max(...sizes) - Math.min(...sizes);
+    check(`${label}：十四张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
+  } else {
+    // 轴上没有「排」，只有一条链。摆的次序还是窄屏那一条（玩家点名的顺序），
+    // 所以把 WANT 摊平了比——次序要是散了，这儿立刻红。
+    //
+    // 不在这儿量「每张一样大」：轴上的卡是被鱼眼缩放过的，本来就不一样大。
+    // 「每一站等高、相邻两张不相撞」由 check-mode-axis 逐对量，那是它的活。
+    const want = WANT.flat();
+    check(`${label}：轴上 ${want.length} 站`, got.items.length === want.length, `${got.items.length} 张`);
+    check(`${label}：轴上的次序就是窄屏那一条链`,
+      JSON.stringify(got.items) === JSON.stringify(want),
+      got.items.join(' · '));
+  }
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
   check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
@@ -267,14 +300,19 @@ await tctx.addInitScript(() => {
 const tap = await tctx.newPage();
 await tap.goto(BASE, { waitUntil: 'load' });
 await tap.waitForSelector('.home-icon-btn', { timeout: 20000 });
+// `.home-grid` 挑掉带 .mode-axis 的那一个：竖屏主菜单那条鱼眼轴自己要吃竖向手势
+// （不吃的话手指一滑页面跟着滚，轴只走一半），和棋盘一样是 touch-action: none。
+// 它不是漏网的，下面单列一条量它——挑出去而不量，才是把洞留在门上。
 const zoomy = await tap.$$eval(
-  'body, .app, .home-grid, .home-row, .home-icon-btn, .home-head, .home-nav, .home-nav button',
+  'body, .app, .home-grid:not(.mode-axis), .home-row, .home-icon-btn, .home-head, .home-nav, .home-nav button',
   (els) =>
     els
       .map((e) => (getComputedStyle(e).touchAction === 'manipulation' ? null : `${e.className || e.tagName}=${getComputedStyle(e).touchAction}`))
       .filter(Boolean),
 );
 check('连点两下不放大：按钮和空白都算', zoomy.length === 0, zoomy.join(' / '));
+const axisTA = await tap.$eval('.mode-axis', (e) => getComputedStyle(e).touchAction).catch(() => '没有轴');
+check('鱼眼轴是 none（它自己吃竖向手势）', axisTA === 'none', axisTA);
 // 开一局，确认棋盘那块还是 none。
 await tap.$$eval('.home-icon-btn', (els) => els[0].click());
 await tap.waitForSelector('.start-go, .board-wrap', { timeout: 8000 });
