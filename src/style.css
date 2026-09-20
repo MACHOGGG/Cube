@@ -1135,6 +1135,94 @@ button:hover { filter: brightness(1.05); }
    张数少的那几排就窄一些、照样居中。 */
 .home-grid { display: flex; flex-direction: column; gap: 20px; align-items: center; }
 
+/* 主菜单的鱼眼轴（ui/modeAxis.ts），手机竖屏那一路。
+   玩家 2026-09 定的「主菜单整个换掉」：从前是两列七排往下滚，现在是一条竖轴，
+   手指在哪那一带就隆起。位置和缩放全由 JS 每帧算（engine/fisheye.ts），CSS 这
+   边只负责三件事：把容器变成定位坐标系、让卡片绝对定位、**把每一站的高度统一**。
+
+   统一高度是要紧的一条：炸弹那张的画布是 195×452 的竖板，V 型三角那张是 2:1 的
+   横板。照各自的比例摆，轴上一站的高度就不再是同一个数，相邻两张会叠上——叠的
+   后果不是难看，是**点错**（两张卡的热区叠在一起）。所以这儿改成「按高度对齐、
+   宽度随图形自己的比例走」：图一律 112px 高，宽的宽、窄的窄，但每一站一样高。
+   check-mode-axis 逐对量这件事。 */
+.mode-axis {
+  --axis-art: 112px;
+  position: relative;
+  /* 覆盖 .home-grid 的 flex 列：卡片是绝对定位的，容器不需要排它们。 */
+  display: block;
+  /* 高度由 JS 量出来（视口减去轴上下那些东西），所以别让 flex 再把它拉长。 */
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: hidden;
+  /* 轴自己吃掉竖向手势：不写这一条，手指一滑页面跟着滚，轴只走一半。 */
+  touch-action: none;
+}
+/* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
+   `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }`
+   （给两列网格用的，390 屏上算出来 157px）特指度是 0,3,0，压得过 `.mode-axis >
+   .home-icon-btn` 的 0,2,0——于是轴上的卡片被按在 157px 宽，老虎机、七色圆球、
+   V 型三角那三张宽画布的图（193/179/200）溢出去压住左右。 */
+.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn {
+  position: absolute;
+  /* **整幅宽**，不是 left:50% 的收缩盒。
+     `left: 50%` 的绝对定位元素可用宽度只剩半屏（173px），于是宽画布的那几张图
+     （老虎机 193、七色圆球 179、进阶三角 200）被挤到 157，多出来的部分溢到卡
+     外面，压在左右两边。整幅宽之后，图在卡里自己居中，要多宽有多宽。 */
+  left: 0;
+  right: 0;
+  width: 100%;
+  top: 50%;
+  /* 轴上的位置是**每帧算出来的**，不能再被 CSS 平滑一遍。
+     全局那条 `button { transition: transform .1s ease }`（style.css 顶上）会把
+     JS 每帧写进 style.transform 的新位置当成一次过渡的起点——于是整条轴比手指
+     慢 100ms，reduced-motion 下「直接跳过去」也跳不动。门 check-mode-axis 量到
+     的是：松手 80ms 后聚焦那张还差 2.8px 没到位。规格 §1.4 说的就是这件事——
+     跟手的量本身就是输入位置的函数，不需要额外的时间动画。 */
+  transition: none;
+  max-width: none;
+  /* 比例交给里面那一格（下面那条）。 */
+  aspect-ratio: auto;
+  transform-origin: 50% 50%;
+  /* 图在整幅宽的卡里居中：靠这一条加上图那一格的 inline-block（下面）。
+     不能靠 `margin: 0 auto`——块级元素的 `width: auto` 是「撑满容器」而不是
+     「收缩到内容」，撑满之后 auto 边距没有富余可分，图就顶在左边，再被
+     scale() 绕中心一放大，左半截直接推出屏幕。 */
+  text-align: center;
+}
+.mode-axis > .home-icon-btn > .home-icon-art {
+  /* 按高度对齐、宽度随图形比例走，然后靠父级的 text-align 居中。
+     `inline-block` 是为了「收缩到内容」——块级的 `width: auto` 会撑满。 */
+  display: inline-block;
+  /* inline-block 默认按基线对齐，底下会多出一道行内盒的降部空隙（实测 4px），
+     于是「每一站等高」凭空差出 4px，相邻两张的余量也跟着被吃掉。顶对齐就没有
+     这道空隙。 */
+  vertical-align: top;
+  width: auto;
+  height: var(--axis-art);
+  aspect-ratio: auto;
+}
+/* 炸弹那张的「图」不是 svg，是一块 `.bomb-panel`（width:100% + aspect-ratio:1）。
+   它是**从宽度算高度**的，放进一个「高度定死、宽度自适应」的格子里就撑成
+   157×175，往下溢出 63px 压住下一张卡。这儿把它反过来：从高度算宽度。 */
+.mode-axis > .home-icon-btn > .home-icon-art > .bomb-panel {
+  width: auto;
+  height: 100%;
+}
+/* 图按高度铺满，宽度由 viewBox 的比例算出来。全局那条是 width/height 都 100%，
+   在「宽度 auto」的盒子里会绕成循环，所以这儿反过来写。 */
+.mode-axis > .home-icon-btn > .home-icon-art > svg {
+  height: 100%;
+  width: auto;
+}
+/* 按下时那段抖动（.home-tap 的 home-tap-wobble）在轴上要关掉。
+   它是一段 340ms 的 transform 关键帧动画，而运行中的动画**整个顶掉**内联
+   style.transform——那套关键帧里只有 scale 和 rotate，没有 translateY，所以被按
+   的那张卡会当场跳到轴的正中、340ms 后再跳回来。轴上不缺按下的反馈：被聚焦的
+   那张本来就是最大的一张，而且点下去玩法立刻就开了。 */
+.mode-axis > .home-icon-btn.home-tap { animation: none; }
+/* 轴上一行小字永不折行：折了那一站就比别人高，统一高度立刻破功。 */
+.mode-axis .home-icon-tag { white-space: nowrap; }
+
 /* 新手拦截底下那颗《我会玩》（ui/knowHowBtn.ts）。玩家 2026-09 定的：按下去引
    导的锁全撤，但每个玩法头一回进去自带的教学照旧。
 

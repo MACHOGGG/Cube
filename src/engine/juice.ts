@@ -189,6 +189,13 @@ const CUE = {
   arrive: { name: 'arrival', vol: 0.55 },
   /** The run settling into its final score. */
   settle: { name: 'release', vol: 0.6 },
+  /**
+   * 主菜单鱼眼轴上「聚焦项换了」那一下（ui/modeAxis.ts）。
+   *
+   * 玩家 2026-09 点名要 cuelume 的 **scan**——和暂停那一颗同一个音色。音量比暂停
+   * 低一档：暂停一局只响一次，这一颗一次滑动会连响好几下，同样响度会吵。
+   */
+  axis: { name: 'scan', vol: 0.38 },
 } as const;
 
 /**
@@ -273,6 +280,11 @@ export function playReady(): void {
 /** 暂停. */
 export function playPause(): void {
   cue(CUE.pause.name, CUE.pause.vol);
+}
+
+/** 主菜单鱼眼轴：滑过一项。玩家定的音色就是暂停那一颗（scan），见 CUE.axis。 */
+export function playAxisTick(): void {
+  cue(CUE.axis.name, CUE.axis.vol);
 }
 
 /** Landing on 个人主页 or 记录与排名. */

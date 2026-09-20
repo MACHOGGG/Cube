@@ -9,6 +9,7 @@ import { menuTag } from './menuTags';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
+import { mountModeAxis } from './modeAxis';
 
 import {
   ICON_BASE_SQUARE,
@@ -105,6 +106,14 @@ const NARROW_PER_ROW = 2;
  *  square/triangle/circle rather than the square/circle/triangle the full-
  *  width rows above it use. */
 const BOMB_SHAPES: BaseShape[] = ['square', 'triangle', 'circle'];
+/**
+ * 鱼眼轴上次停在哪一项。
+ *
+ * 主菜单每次都是重画的，轴活不到下一次，所以记在模块里。玩家定过「返回主页不
+ * 自动置顶」——从一个玩法退回来，轴该停在他刚才那一项上，不是又回到第一张。
+ */
+let axisFocus = 0;
+
 const BASE_ICON: Record<BaseShape, string> = {
   square: ICON_BASE_SQUARE,
   circle: ICON_BASE_CIRCLE,
@@ -244,7 +253,18 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const perRow = wide ? WIDE_PER_ROW : NARROW_PER_ROW;
   let flowRow: HTMLElement | null = null;
   let inFlow = 0;
+  /**
+   * 窄屏（手机竖屏）现在走鱼眼轴：卡片不进排，先攒起来，最后整条交给
+   * ui/modeAxis.ts 摆（玩家定的「主菜单整个换掉」）。宽屏那三排一个字没动——
+   * 桌面端是规格里另一套（角度制转盘），排在后面的 PR。
+   */
+  const onAxis = !wide;
+  const axisCards: HTMLElement[] = [];
   const place = (btn: HTMLElement): void => {
+    if (onAxis) {
+      axisCards.push(btn);
+      return;
+    }
     if (!flowRow || inFlow >= perRow) {
       flowRow = newRow();
       inFlow = 0;
@@ -276,6 +296,8 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       tag(card.id),
     );
     btn.addEventListener('click', () => handlers.onSelectBase(card.id));
+    // 首玩期轴上只摆这两张（玩家定的）。三角这时候也不摆——它本来就在锁里。
+    if (shape === 'square' || shape === 'circle') btn.dataset.firstPlayable = '1';
     if (baseRow) baseRow.appendChild(btn);
     else place(btn);
   }
@@ -490,8 +512,24 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 老虎机 · 无限反转 · 七色圆球 · V 型三角，就是它们被攒起来的次序。
   for (const btn of geniusTail) place(btn);
 
+  if (onAxis) {
+    // 首玩期只摆那两张：轴上滑不到别的地方去，就不需要「按了不给进」这种反馈了
+    // （玩家在两个选项里挑的就是这一个）。所以这一路不装 armFirstPlayLock。
+    const shown = handlers.firstPlayLock
+      ? axisCards.filter((c) => c.dataset.firstPlayable === '1')
+      : axisCards;
+    axisFocus = Math.min(axisFocus, Math.max(shown.length - 1, 0));
+    mountModeAxis(grid, {
+      cards: shown,
+      initial: axisFocus,
+      onFocus: (i) => {
+        axisFocus = i;
+      },
+    });
+  }
+
   if (handlers.firstPlayLock) {
-    armFirstPlayLock(grid);
+    if (!onAxis) armFirstPlayLock(grid);
     // 《我会玩》摆在整张菜单的**下方**（玩家原话「新手检测拦截的下方」），不是
     // 塞在卡片之间：它不是一个玩法，不该和那十三张卡排在同一条链上。
     //

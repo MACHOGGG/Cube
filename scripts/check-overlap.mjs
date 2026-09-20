@@ -83,6 +83,32 @@ const blocked = (page) => page.evaluate(async () => {
       if (r.width < 8 || r.height < 8) return false;
       return ![...el.children].some((c) => c.getBoundingClientRect().height > 8);
     });
+  /**
+   * 元素**真正画出来的**那块矩形：拿自己的矩形和一路上会裁剪的祖先求交。
+   *
+   * `getBoundingClientRect` 不认裁剪——一张被 `overflow: hidden` 切掉下半截的
+   * 卡，它照样报完整位置。主菜单换成鱼眼轴（ui/modeAxis.ts）之后这一点立刻咬
+   * 人：轴外那几张卡的矩形垂到底排底下，这道门就报「经典三角被底排压住」，而
+   * 屏幕上那截根本没画出来。四种语言各红一条，全是假的。
+   *
+   * 交集为空就是整个被裁掉了，这种元素这道门一概不管。
+   */
+  const visibleRect = (el) => {
+    let r = el.getBoundingClientRect();
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const ov = getComputedStyle(p).overflow;
+      if (ov === 'visible') continue;
+      const pr = p.getBoundingClientRect();
+      const left = Math.max(r.left, pr.left);
+      const top = Math.max(r.top, pr.top);
+      const right = Math.min(r.right, pr.right);
+      const bottom = Math.min(r.bottom, pr.bottom);
+      if (right <= left || bottom <= top) return null;
+      r = { left, top, right, bottom, width: right - left, height: bottom - top };
+    }
+    return r;
+  };
+
   const name = (el) => {
     const t = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim();
     return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} 「${t.slice(0, 18)}」`;
@@ -96,7 +122,9 @@ const blocked = (page) => page.evaluate(async () => {
    * 具，才是真的被埋住了。沿着元素上下各取几个点，任何一点被埋都算。
    */
   const buriedUnder = (el) => {
-    const r = el.getBoundingClientRect();
+    // 量的是画出来的那块，不是元素自称的那块（见 visibleRect）。
+    const r = visibleRect(el);
+    if (!r || r.width < 4 || r.height < 4) return null;
     const xs = [r.left + r.width * 0.2, r.left + r.width * 0.5, r.right - r.width * 0.2];
     const ys = [r.top + 2, r.top + r.height / 2, r.bottom - 2];
     let worst = null;
