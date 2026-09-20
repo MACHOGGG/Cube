@@ -305,7 +305,23 @@ for (const vp of VPS) {
     // 状，不是排版在跳。
     cmp('图示下沿', (m) => (m.hint ? { b: m.hint.y + m.hint.h } : null), ['b']);
     cmp('读数格', (m) => m.cell, ['w', 'h']);
-    cmp('读数整条', (m) => m.hud, ['x', 'w']);
+    // 读数这一条只比**宽**，不比左沿。
+    //
+    // 从前两样都比。玩家 2026-09 第二轮改了口径：「左侧的三个信息栏现在没有剧
+    // 中，没有左右等距」——贴左沿那一版量出来是 14px 对 66–318px，一眼就歪。改
+    // 成居中在「屏幕沿到棋盘」这条空当里之后，这一条的左沿当然跟着棋盘宽走
+    // （1920 上方块 166、七色圆球 96），正是上面那段注释说的「横向位置本来就跟
+    // 着棋盘宽走」。宽（220）还是钉死的，换玩法不变。
+    cmp('读数整条', (m) => m.hud, ['w']);
+    // 换来的那件事要单独钉住：这三块读数左右两边一样宽。左边量到屏幕沿，右边
+    // 量到棋盘——玩家眼里就是这两段。
+    for (const one of sameVp) {
+      const left = one.m.hud.x;
+      const right = one.m.wrap.x - (one.m.hud.x + one.m.hud.w);
+      if (Math.abs(left - right) > SAME_TOL) {
+        diff.push(`${one.name} 读数左右不等距 ${left.toFixed(0)} / ${right.toFixed(0)}`);
+      }
+    }
     cmp('暂停键', (m) => m.btn, ['w', 'h', 'y']);
     check(
       `${tag}：换个玩法，得分图示 / 读数 / 暂停键三样一个像素不动`,
