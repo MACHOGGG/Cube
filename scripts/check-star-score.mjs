@@ -173,6 +173,26 @@ check('空组是 0 分', groupPoints([], () => null) === 0);
     missing.length === 0,
     missing.length ? `没调的：${missing.join(' ')}` : '八副都调了',
   );
+
+  // 「星星消除」这件事在八副上必须是同一套：同一个消除函数、同一份淡出快照、
+  // 同一条淡出动画。少一样就是某一副的玩家看到的和别人不一样——基础方块头一版
+  // 就漏了淡出那一条（消除是瞬间发生的，别的七副有 700ms 的淡出），玩家一眼看
+  // 出来了。静态扫，不猜某一行长什么样，只查这三样在不在。
+  const PIECES = ['clearStarGroup', 'pendingBlankSnapshot', 'playBlankTransition'];
+  const short = [];
+  for (const name of SHAPES) {
+    const code = readFileSync(new URL(`${name}.ts`, dir), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    // 按词边界找，不是 includes：`playBlankTransitionXX` 里含着
+    // `playBlankTransition` 这个子串，用 includes 的第一版因此认不出「这一副把
+    // 它改名了/拆掉了」——反例当场没红，是这道门自己犯了「只认字面量」的病。
+    const lack = PIECES.filter((piece) => !new RegExp(`\\b${piece}\\b`).test(code));
+    if (lack.length) short.push(`${name}(缺 ${lack.join('/')})`);
+  }
+  check(
+    '八副棋盘的「星星消除」是同一套：消除函数 + 淡出快照 + 淡出动画',
+    short.length === 0,
+    short.length ? short.join('；') : '八副齐了',
+  );
 }
 
 // ---- 6. 老虎机那套不受影响 ---------------------------------------------------
