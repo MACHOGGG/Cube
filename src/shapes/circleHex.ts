@@ -1,5 +1,6 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
+import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
@@ -669,7 +670,7 @@ export function createCircleHexGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (let r = 0; r < ROW_LENS.length; r++)
@@ -680,14 +681,14 @@ export function createCircleHexGame(): ShapeGame {
               // RHOMBUS_B_OFFSETS's (dz, dx) pairs are u*(dz=0,dx=1) + v*(dz=1,dx=0).
               const positionAt = (u: number, v: number): Cell | null => cubeToLocal(x0 + u, z0 + v);
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
+              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
             }
             const a = clusterFromCube(x0, z0, RHOMBUS_A_OFFSETS);
             if (a && qualifies(a, mask)) {
               // RHOMBUS_A_OFFSETS's (dz, dx) pairs are u*(dz=0,dx=1) + v*(dz=1,dx=-1).
               const positionAt = (u: number, v: number): Cell | null => cubeToLocal(x0 + u - v, z0 + v);
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
+              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
             }
             const d = clusterFromCube(x0, z0, DIAMOND_121_OFFSETS);
             if (d && qualifies(d, mask)) {

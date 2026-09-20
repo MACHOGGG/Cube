@@ -1,5 +1,6 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
+import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
@@ -701,7 +702,7 @@ export function createCircleGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (let r = 0; r < ROWS; r++)
@@ -716,7 +717,7 @@ export function createCircleGame(): ShapeGame {
                 return cellValid(cell[0], cell[1]) ? cell : null;
               };
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
+              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
             }
             // rhombus22A's 4 offsets are (r, c) + u*(0,1) + v*(1,1) — a step
             // along the row, and a step along the *other* diagonal.
@@ -727,7 +728,7 @@ export function createCircleGame(): ShapeGame {
                 return cellValid(cell[0], cell[1]) ? cell : null;
               };
               const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
+              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
             }
             const d = diamond121(r, c);
             if (d && qualifies(d, mask)) {

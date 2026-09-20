@@ -230,3 +230,13 @@ jobs:
         run: |
           npx esbuild xhs/src/oldKernel.ts --bundle --format=esm --outfile=/tmp/oldkernel.mjs
           node scripts/check-downlevel.mjs /tmp/oldkernel.mjs
+      # 一组图案值几分。这条规则原先在八副棋盘里各抄一遍，一共十六处——星星要单
+      # 独一套算法，十六处各改一遍必漏，而漏掉的那一副不会崩、不会白屏，只会安静
+      # 地按旧尺子给分，最后混进同一张排行榜。所以规则收成了
+      # src/engine/groupScore.ts 一处，这道门量两件事：那几个拍板过的数算得对，
+      # 而且**没有哪副棋盘又抄了一份** Math.max(4, …)。第二条是重点——这个仓库
+      # 已经栽过三次「门只认字面量、不认成效」的跟头。
+      - name: 一组图案值几分
+        run: |
+          npx esbuild src/engine/groupScore.ts --bundle --format=esm --outfile=/tmp/group.mjs
+          node scripts/check-star-score.mjs /tmp/group.mjs

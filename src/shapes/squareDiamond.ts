@@ -1,5 +1,6 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
+import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
@@ -635,7 +636,7 @@ export function createSquareDiamondGame(): ShapeGame {
             const seed = cells.slice(i, i + 4);
             if (!qualifies(seed, mask)) continue;
             const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
           }
         }
         for (let r = 0; r < BOARD_DIM; r++)
@@ -651,7 +652,7 @@ export function createSquareDiamondGame(): ShapeGame {
               const seed = parallelogramCells(r, c, du, dv);
               if (seed.every(([rr, cc]) => inBounds(rr, cc)) && qualifies(seed, mask)) {
                 const region = growParallelogram(boundedPositionAt(r, c, du, dv), effColorAt, isLiveCell);
-                matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
+                matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
               }
             }
             const d = diamond121(r, c);

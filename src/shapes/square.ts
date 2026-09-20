@@ -1,5 +1,6 @@
 import { buildShell } from '../ui/gameShell';
 import { createGameController } from '../engine/gameController';
+import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
@@ -585,21 +586,21 @@ export function createSquareGame(): ShapeGame {
             const seed: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
             const region = extendRect(r, c, r + 1, c + 1);
-            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelBlock22 });
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
           }
         for (let r = 0; r < rows; r++)
           for (let c = 0; c <= cols - 4; c++) {
             const seed: Cell[] = [[r, c], [r, c + 1], [r, c + 2], [r, c + 3]];
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
             const region = extendRunHoriz(r, c, c + 3);
-            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
           }
         for (let c = 0; c < cols; c++)
           for (let r = 0; r <= rows - 4; r++) {
             const seed: Cell[] = [[r, c], [r + 1, c], [r + 2, c], [r + 3, c]];
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
             const region = extendRunVert(c, r, r + 3);
-            matches.push({ cells: region, points: Math.max(4, region.length), label: MATCH_LABELS[lang].labelRun4 });
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
           }
         return matches;
       }
