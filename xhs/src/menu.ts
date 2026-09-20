@@ -11,6 +11,7 @@
  * src/style.css 里现成的那几条，所以两边看着是同一个 App。
  */
 import { menuTag } from '../../src/ui/menuTags';
+import { knowHowButton } from '../../src/ui/knowHowBtn';
 import {
   ICON_BASE_CIRCLE,
   ICON_BASE_SQUARE,
@@ -52,6 +53,14 @@ export interface XhsMenuHandlers {
    * ——那时候暗淡只剩「这几个不太重要」这一层意思，不是我们想说的。
    */
   dim?: readonly XhsMode[];
+  /**
+   * 按了《我会玩》：引导的路标（发光 + 压暗）全撤，主菜单重画一遍。
+   *
+   * 这一版的「新手检测拦截」不是锁——五张卡一直都点得开，压暗只是路标（见上面
+   * dim 那段）。玩家要的按钮是同一颗，撤掉的东西按各端自己有的算：网页版撤锁和
+   * 光，这一版撤压暗和光。
+   */
+  onKnowHow?: () => void;
 }
 
 /** 宽屏（电脑、手机横屏）一排摆得下五张；窄屏一排两张。同网页版的分界。 */
@@ -191,6 +200,12 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
       );
     }
     grid.appendChild(row);
+  }
+
+  // 《我会玩》：只在引导还在压暗别的玩法时摆出来，摆在整张菜单的下方。
+  if (h.dim && h.dim.length > 0) {
+    const btn = knowHowButton(lang, () => h.onKnowHow?.());
+    page.appendChild(btn);
   }
 
   root.appendChild(page);

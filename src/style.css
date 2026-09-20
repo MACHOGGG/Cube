@@ -1135,6 +1135,27 @@ button:hover { filter: brightness(1.05); }
    张数少的那几排就窄一些、照样居中。 */
 .home-grid { display: flex; flex-direction: column; gap: 20px; align-items: center; }
 
+/* 新手拦截底下那颗《我会玩》（ui/knowHowBtn.ts）。玩家 2026-09 定的：按下去引
+   导的锁全撤，但每个玩法头一回进去自带的教学照旧。
+
+   刻意做得小：没有底色、没有边框，只有一条下划线说明它能点，字比卡片底下那行
+   小字还小一档——它不该和那两张发光的卡抢。热区仍然留足 44px（全站最小触控标
+   准），看着小，按着不小。
+
+   `flex: none` 是躲全局那条 `button { flex: 1 }`：这一颗的父容器是 flex 列，不
+   躲的话它会被拉成一整条。`align-self: center` 而不是 `margin: 0 auto`，理由同
+   ——列方向的 flex 项默认 stretch，横向 auto 边距在 stretch 之后不居中。 */
+.know-how-btn {
+  align-self: center; flex: none;
+  margin-top: 2px; padding: 12px 20px; min-height: 44px;
+  background: none; border: none; border-radius: 0;
+  font-family: inherit; font-size: 0.82rem; line-height: 1.2; letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  text-decoration: underline; text-underline-offset: 3px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.know-how-btn:active { opacity: 0.6; }
+
 /* 主菜单最底下那排法务链接（价格 / 条款 / 退款 / 隐私 / 联系）。
    摆在这儿是给两种人看的：想读条款的玩家，和收单方的审核员——后者打开落地页
    只停几秒，条款藏在个人主页第三层他不会去翻。字小、色淡、不抢玩法卡，但一直

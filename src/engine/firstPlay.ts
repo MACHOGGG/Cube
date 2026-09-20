@@ -38,6 +38,51 @@ export const BASIC_KEYS = ['square', 'circle', 'triangle'] as const;
 const KEY = (k: PlayKey) => `slides_played_${k}`;
 
 /**
+ * 《我会玩》——玩家自己把新手引导关掉的那一下。
+ *
+ * 玩家 2026-09 定的：新手拦截（主菜单上只点得开基础方块和基础小球，别的上锁
+ * 或压暗）的下方摆一颗小按钮，按下去**立刻**跳过所有引导的锁。
+ *
+ * 它关掉的只有「拦」这一层：
+ *   · 主菜单不再锁（lockedForFirstPlay）、两张基础卡不再镶光（glowingBasics）；
+ *   · **每个玩法头一回进去自带的那份教学照旧**——棋盘底下那块教学条、各玩法
+ *     那一句附注，一样都不少（玩家原话：「第一次点击开每个玩法还是会触发自带
+ *     的教学」）。所以下面那几个 firstTimeIn / claimXxx 一个都不看这把钥匙。
+ *
+ * 为什么要有它：这个仓库的引导是给「面前摊着十几张卡、不知道点哪张」的人指路
+ * 的，而会玩的人（换了台设备、清了站点数据、朋友推荐过来的）撞上的是一道没必
+ * 要的墙——他想玩老虎机，屏幕只让他点方块。指路和挡路之间只差一个「他要不要」，
+ * 所以把这个选择交给他。
+ *
+ * 小红书那一版的存档键不一样（那边整套键都带 slides.xhs. 前缀），所以键名可换
+ * ——和 ui/coachBar.ts 的 setCoachStoreKey 同一个路子。
+ */
+let knowHowKey = 'slides_know_how';
+
+/** 小红书端在开机时换成自己那把（xhs/src/main.ts）。 */
+export function setKnowHowKey(key: string): void {
+  knowHowKey = key;
+}
+
+/** 他按过《我会玩》没有。存不进 localStorage 就当没按过——少跳一次，不是大事。 */
+export function knowsHow(): boolean {
+  try {
+    return localStorage.getItem(knowHowKey) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** 按下《我会玩》。 */
+export function claimKnowsHow(): void {
+  try {
+    localStorage.setItem(knowHowKey, '1');
+  } catch {
+    /* 存不进去就这一次有效，下次打开还会再问一遍——比报错好 */
+  }
+}
+
+/**
  * 老玩家不该被当成新人。
  *
  * 这把新钥匙是今天才有的，在它之前打过几百局的人本地并没有它。方块和小球那
@@ -81,6 +126,8 @@ export function markOpened(k: PlayKey): void {
  * 安静静。
  */
 export function glowingBasics(): readonly ('square' | 'circle')[] {
+  // 按过《我会玩》就一张都不亮：那圈光是指路的，他说了不用指。
+  if (knowsHow()) return [];
   return (['square', 'circle'] as const).filter((k) => firstTimeIn(k));
 }
 
@@ -94,6 +141,7 @@ export function glowingBasics(): readonly ('square' | 'circle')[] {
  * 判的是这两张，不是三张：三角这时候也锁着，拿它当解锁条件就永远解不开。
  */
 export function lockedForFirstPlay(): boolean {
+  if (knowsHow()) return false;
   return firstTimeIn('square') && firstTimeIn('circle');
 }
 

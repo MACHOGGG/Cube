@@ -48,6 +48,7 @@ import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
 import { setCoachStoreKey } from '../../src/ui/coachBar';
+import { knowsHow, setKnowHowKey } from '../../src/engine/firstPlay';
 import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
 import { bombTip, flipTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, type XhsMode } from './menu';
@@ -292,6 +293,9 @@ const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
 
 /** 小球和方块都打过一遍了没有——主菜单要不要再压暗别的玩法，看这个。 */
 function basicsDone(): boolean {
+  // 按过《我会玩》就当路已经走完了——那颗按钮撤掉的就是这套路标（见
+  // src/engine/firstPlay.ts 的 knowsHow）。
+  if (knowsHow()) return true;
   try {
     return storySeen('circle') && !firstTimeIn('square');
   } catch {
@@ -383,6 +387,8 @@ function showMenu() {
     // 那时候路他自己认得了，再压着别的玩法只剩「这几个不太重要」这一层意
     // 思，不是我们想说的。
     dim: basicsDone() ? [] : (['bomb', 'slot', 'flip'] as const),
+    // 按了《我会玩》就地重画：上面那三样（glow / soon / dim）都由 basicsDone 算。
+    onKnowHow: showMenu,
     onPlay: (mode: XhsMode) => {
       if (mode === 'square') return showSquare();
       if (mode === 'circle') return showGame(circleGame, {}, showMenu);
@@ -545,6 +551,9 @@ setRulesTriangle(false);
 // 教学条那一格「第 3 条做到过没有」也分开存：玩家的第一条要求是两边存档完全
 // 分离（见 ui/coachBar.ts 的 setCoachStoreKey）。
 setCoachStoreKey('slides.xhs.coach.mixed');
+// 《我会玩》那把钥匙也换成这一版自己的：容器里两版可能共用一个域名下的存档，
+// 一版按过不该把另一版的引导也关掉（整套 slides.xhs. 前缀就是为这件事）。
+setKnowHowKey('slides.xhs.knowHow');
 
 // 样式：先装网页版那一整套（字体 + 主样式 + 两副棋盘 + 开场动画，见
 // src/injectStyles.ts），再把这一版的 Chrome 61 基线层叠在后面——同名规则

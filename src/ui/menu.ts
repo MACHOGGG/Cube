@@ -8,6 +8,7 @@ import { shapeName } from './shapeLabels';
 import { menuTag } from './menuTags';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
+import { knowHowButton } from './knowHowBtn';
 
 import {
   ICON_BASE_SQUARE,
@@ -66,6 +67,11 @@ export interface MenuHandlers {
    * ——两张亮着的卡本身就是答案。
    */
   firstPlayLock?: boolean;
+  /**
+   * 按了《我会玩》：引擎里那把钥匙已经记下了（knowHowBtn 自己记的），这儿只要
+   * 把主菜单重画一遍——锁撤了、光撤了、那颗按钮自己也就不该在了。
+   */
+  onKnowHow?: () => void;
 }
 
 /**
@@ -484,7 +490,18 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 老虎机 · 无限反转 · 七色圆球 · V 型三角，就是它们被攒起来的次序。
   for (const btn of geniusTail) place(btn);
 
-  if (handlers.firstPlayLock) armFirstPlayLock(grid);
+  if (handlers.firstPlayLock) {
+    armFirstPlayLock(grid);
+    // 《我会玩》摆在整张菜单的**下方**（玩家原话「新手检测拦截的下方」），不是
+    // 塞在卡片之间：它不是一个玩法，不该和那十三张卡排在同一条链上。
+    //
+    // 插在 .home-grid 之后、.home-legal 之前——法务那五条链接得留在最底下（收单
+    // 方的审核要一眼看见），所以不能直接 append 到页面末尾。
+    const legal = container.querySelector('.home-legal');
+    const btn = knowHowButton(lang, () => handlers.onKnowHow?.());
+    if (legal) legal.parentElement?.insertBefore(btn, legal);
+    else grid.parentElement?.appendChild(btn);
+  }
 }
 
 /**

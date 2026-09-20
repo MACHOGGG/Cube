@@ -6,6 +6,8 @@ export const TUTORIAL_SEEN_KEY = 'slides_tutorial_seen';
 export interface I18nStrings {
   langName: string;
   homeTagline: string;
+  /** 新手拦截底下那颗小按钮：《我会玩》，按下去引导的锁全撤（见 engine/firstPlay.ts）。 */
+  knowHow: string;
   next: string;
   prev: string;
   replay: string;
@@ -489,6 +491,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   en: {
     langName: 'English',
     homeTagline: 'Slide · Score · Clear',
+    knowHow: 'I know how',
     next: 'Next',
     prev: 'Back',
     replay: 'Replay',
@@ -802,6 +805,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   fr: {
     langName: 'Français',
     homeTagline: 'Glisser · Marquer · Effacer',
+    knowHow: 'Je sais jouer',
     next: 'Suivant',
     prev: 'Précédent',
     replay: 'Rejouer',
@@ -1115,6 +1119,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   zhHant: {
     langName: '繁體中文',
     homeTagline: '滑動－得分－消除',
+    knowHow: '我會玩',
     next: '下一條',
     prev: '上一條',
     replay: '再一次',
@@ -1428,6 +1433,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
   zhHans: {
     langName: '简体中文',
     homeTagline: '滑动－得分－消除',
+    knowHow: '我会玩',
     next: '下一条',
     prev: '上一条',
     replay: '再一次',
