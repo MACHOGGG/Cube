@@ -128,6 +128,17 @@
         顺手清空《无限反转》的旧榜（它早先那版计分打得出七位数，和现在不是一把尺子）
       </label>
     </div>
+    <div class="check">
+      <input id="wipeAll" type="checkbox" />
+      <label for="wipeAll" style="margin:0;font-weight:400">
+        <strong>全部清空</strong>：所有玩法的榜一张不留，总榜也清。改了记分尺子之后用它。
+      </label>
+    </div>
+    <p style="margin:0 0 10px;color:var(--soft);font-size:0.85rem;line-height:1.5">
+      全清<strong>是可逆的</strong>：玩家的存档和累计得分一个字不动，再点一次<strong>不勾</strong>全清的
+      《重建榜单》就照存档把榜重算回来。也正因为这样——清完之后别手滑再点一次普通
+      重建，那会把旧尺子量出来的分从存档里请回榜上。
+    </p>
     <button class="go" id="rebuild">重建榜单</button>
     <p class="msg" id="rebuildMsg"></p>
   </div>
@@ -212,6 +223,7 @@
           action: 'rebuild',
           token,
           drop: $('dropFlip').checked ? ['flip'] : [],
+          all: $('wipeAll').checked,
         }),
       });
       const reply = await res.json().catch(() => ({}));

@@ -505,6 +505,21 @@ async function rebuild(req, res, body) {
   }
   if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
   const drop = new Set((Array.isArray(body?.drop) ? body.drop : []).map((k) => String(k)));
+  /**
+   * 全部清空：一张榜都不留。
+   *
+   * 和 drop 不是一回事——drop 是「这几种玩法别上榜」，要一一点名，漏一种就留一
+   * 种。改记分尺子的时候要的是「全清」，点名法太脆（2026-09 改星星那套计分就撞
+   * 上了：得把所有 kind 都数出来才算清干净）。
+   *
+   * 做法是干脆不算 best：下面那个 best 保持空的，于是每个人在每一张榜上都走
+   * zrem 那一支，总榜连同行首那个玩法标记一起撤掉。
+   *
+   * **它是可逆的**：存档（runs:）一个字不动，所以再点一次**不勾**全清的《重建
+   * 榜单》就会照存档把榜重算回来。反过来说也是个坑——清完之后别手滑再点一次普通
+   * 重建，那会把旧尺子量出来的分从存档里请回榜上。
+   */
+  const wipeAll = body?.all === true;
 
   // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
   const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
@@ -520,13 +535,16 @@ async function rebuild(req, res, body) {
       const runs = Array.isArray(archive) ? archive : [];
 
       const best = {};
-      for (const run of runs) {
-        const mode = cleanMode(run?.mode);
-        if (!mode) continue;
-        if (drop.has(kindOf(run?.data))) continue;
-        const boardId = boardIdOf(mode, run?.data);
-        const score = num(run.score);
-        if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
+      // 全清那一路直接跳过：best 空着，下面每张榜都走 zrem。
+      if (!wipeAll) {
+        for (const run of runs) {
+          const mode = cleanMode(run?.mode);
+          if (!mode) continue;
+          if (drop.has(kindOf(run?.data))) continue;
+          const boardId = boardIdOf(mode, run?.data);
+          const score = num(run.score);
+          if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
+        }
       }
 
       let rows = 0;
@@ -550,6 +568,9 @@ async function rebuild(req, res, body) {
         await hset(TOTAL_MODE, id, top.mode);
       } else {
         await zrem(TOTAL_BOARD, id);
+        // 行首那个玩法小图形靠 TOTAL_MODE 画。人从总榜上撤了，这一格也得撤——
+        // 留着就是一条指向不存在的行的死数据。
+        await hdel(TOTAL_MODE, id);
       }
       return rows;
     });
@@ -566,6 +587,7 @@ async function rebuild(req, res, body) {
     rows: rowsWritten,
     skipped: skipped.length,
     dropped: [...drop],
+    wiped: wipeAll,
   });
 }
 
