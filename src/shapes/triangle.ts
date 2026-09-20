@@ -4,7 +4,7 @@ import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
+import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -614,7 +614,7 @@ export function createTriangleGame(): ShapeGame {
         refs.boardEl.style.width = boardSize + 'px';
         refs.boardEl.style.height = boardSize + 'px';
              // 图形已经按整格算满了，地板收成正方形不会动到它。
-        squareFloor(refs.boardWrap, boardSize, boardSize);
+        fitFloor(refs.boardWrap, boardSize, boardSize);
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {

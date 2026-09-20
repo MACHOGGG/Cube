@@ -2774,6 +2774,19 @@ html.is-tutorial .home-nav { display: none; }
     calc(max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 10px) + 6px)
     max(var(--safe-area-inset-left, env(safe-area-inset-left, 0px)), 14px);
   gap: clamp(8px, 1.6vh, 16px);
+  /*
+   * 这一页自成一个层叠上下文，为的是地板那圈补回来的透明余量
+   * （.board-wrap::before，见下面）能落在「这一页的底色之上、这一页的内容之
+   * 下」这一层。
+   *
+   * 不写这一句的话，那个 z-index: -1 的伪元素会跑到更外面的层叠上下文里去，
+   * 结果是落在**这一页的底色底下**——量出来 elementFromPoint 在那一圈上返回的
+   * 是 .app--game 自己，手指按上去什么都不会发生，补回来的余量等于没补。
+   *
+   * isolation 只造层叠上下文，不造包含块，所以这一页里任何 position: fixed 的
+   * 东西照旧按视口定位；这一页里也没有别的谁在用 z-index。
+   */
+  isolation: isolate;
 }
 /* 两条各写各的，不要用逗号并成一条。
    CSS 的规矩：选择器列表里只要有一个是浏览器不认识的，整条规则连同其余选择
@@ -2911,8 +2924,8 @@ html.is-playing body { background: var(--play-bg); }
 /* 右边那一条只在横屏出现。 */
 .app--game .pattern-hint--b { display: none; }
 /* 上下居中在读数和棋盘中间那段空当里。
-   靠的是 auto 外边距，不是某个算出来的数：地板排完版之后被 squareFloor 钉成
-   一个固定的正方形（见 boardResize），竖着这一列就多出一段空白，而空白会平
+   靠的是 auto 外边距，不是某个算出来的数：地板排完版之后被 fitFloor 钉成
+   棋盘那么大（见 boardResize），竖着这一列就多出一段空白，而空白会平
    均分给所有写着 auto 的外边距——这里三个，图示的上边一个、地板的上下各一
    个。三份一样大，于是「读数到图示」和「图示到棋盘」正好相等。
    地板没被钉住的时候（七色圆球竖屏，菱形立着占满整列）没有空白可分，auto
@@ -2930,7 +2943,41 @@ html.is-playing body { background: var(--play-bg); }
      then overflowed. The pieces bring their own margins. */
 }
 .app--game .board { background: none; box-shadow: none; }
-/* 地板多大不在这里决定，在 engine/boardResize.ts 的 squareFloor 里：棋盘
+/*
+ * 地板收掉的那一圈，可按的范围要补回来。
+ *
+ * 拖拽听在 .board-wrap 上（engine/drag.ts），而各副棋盘的 cellAt 找的是**最近**
+ * 的那一格、从不说「没抓到」——所以从前地板比棋盘大出来的那一圈，一直在当「手
+ * 指落偏了也算」的余量。2026-09 地板改成贴着棋盘收（boardResize 的 fitFloor），
+ * 那圈余量就没了：V 形三角在手机上只有 122px 高，一横排不到 20px，手指高出去
+ * 二十像素就什么都不会发生——「意料之外的疏漏操作」。
+ *
+ * 所以拿一块透明的 ::before 把范围补回去。伪元素在命中测试上算它的宿主，所以按
+ * 在这一圈上就等于按在地板上，拖拽照样从这儿开始。补多少由 boardResize 的
+ * fitFloor 算：补的是**从前那版地板**占过的地方，不多不少——六副正方形的棋盘补
+ * 0（它们的地板本来就是那个正方形，外面从前也按不动），只有宽棋盘那两副补回一
+ * 整条。
+ *
+ * 两处要紧的：
+ *   · z-index: -1 —— 不写的话它是个定位元素，会盖在后面那排《暂停》上面（那
+ *     一排没定位），按键当场按不动。负层只在宿主的背景之下、页面内容之上，既
+ *     按得到，又压不住任何人。配套的是 .app--game 上那句 isolation: isolate：
+ *     没有它，这一层会跑到更外面去，落在这一页的底色底下，按上去就没反应了
+ *     （第一版就是这样，elementFromPoint 在这一圈上返回的是 .app--game）。
+ *   · 四条边分开写，不用 inset 简写 —— inset 要 Chrome 87，小红书那个内核是
+ *     61。calc(-1 * var(…)) 它认。
+ *   · --floor-trim-* 没写（地板没收）时退回 0px，这一圈正好贴着地板，等于没有。
+ */
+.app--game .board-wrap::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: calc(-1 * var(--floor-trim-y, 0px));
+  bottom: calc(-1 * var(--floor-trim-y, 0px));
+  left: calc(-1 * var(--floor-trim-x, 0px));
+  right: calc(-1 * var(--floor-trim-x, 0px));
+}
+/* 地板多大不在这里决定，在 engine/boardResize.ts 的 fitFloor 里：棋盘
    先按整格算满，算完了才问一句「收成圆角正方形装得下吗」，装得下就收、居中，
    装不下就保持整格。写在 JS 里是因为这个判断要用到棋盘自己算出来的尺寸，
    CSS 看不见那个数——上一版拿「是哪个玩法」当代理写在样式里，结果对不上：
@@ -3222,7 +3269,7 @@ html.is-playing body { background: var(--play-bg); }
   .app.app--game.pattern-sides > .pattern-hint--a .ph-part--tail { display: none; }
   /* 落在「棋盘边到按键那一列」之间的正中。
      这一段空当由两截拼成：图示自己那一格两边的间距，和棋盘收成正方形之后
-     在它那一格里空出来的那一截（--board-slack-x，squareFloor 写的）。图示
+     在它那一格里空出来的那一截（--board-slack-x，fitFloor 写的）。图示
      原来紧贴着读数那一侧，朝棋盘挪半个 slack 就正好居中——推导：空当
      G = 间距 + 图示 + 间距 + slack，居中要求左边留 (G − 图示)/2，减去原来
      的那一个间距，差正好是 slack/2。
@@ -4453,10 +4500,10 @@ body.is-room-host::after {
      （.app-wide）下面单独把宽度放开。
      为什么高度也要挨那条横向上限：这一段的门槛只管「宽 1000、高 561 以上」，
      竖着的大平板（iPad Pro 竖屏 1024×1366）也落在里面。只写「高度 = 这一屏剩
-     下的」的话，地板会是 496 宽、1138 高的一条，而七色圆球的菱形在这么窄的框
-     里只用得到 810 的高——上下各空出 163px 深褐色的空地板。地板收成正方形是
-     boardResize 的 squareFloor 干的活，可它只在「棋盘本来就装得进这个正方形」
-     时才收，宽一档的棋盘正好不满足，于是那条空地板留在了屏幕上。 */
+     下的」的话，这一格会是 496 宽、1138 高的一条，而七色圆球的菱形在这么窄的
+     框里只用得到 810 的高——剩下那 328px 就全靠 boardResize 的 fitFloor 去收。
+     它收得掉（那正是它的活），但这一格自己就摆正比例更稳当：地板是什么形状取
+     决于八副棋盘各自的排版代码，这一条不指望它们。 */
   .app.app--game > .board-wrap {
     grid-column: 2; grid-row: 2; flex: none;
     width: min(calc(100vh - 228px), calc(100vw - 28px - 2 * 220px - 60px));

@@ -4,7 +4,7 @@ import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
+import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -442,7 +442,7 @@ export function createSquareGame(): ShapeGame {
         CELL = computeCell();
         refs.boardEl.style.width = CELL * cols + 'px';
         refs.boardEl.style.height = CELL * rows + 'px';
-        squareFloor(refs.boardWrap, CELL * cols, CELL * rows);
+        fitFloor(refs.boardWrap, CELL * cols, CELL * rows);
       }
 
       function makeTileEl(tile: Tile, r: number, c: number, cell: number, opacity?: number): HTMLElement {

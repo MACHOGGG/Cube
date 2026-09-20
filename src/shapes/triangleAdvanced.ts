@@ -4,7 +4,7 @@ import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
+import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -451,8 +451,10 @@ export function createTriangleAdvancedGame(): ShapeGame {
         refs.boardEl.style.height = height + 'px';
         refs.boardWrap.style.aspectRatio = 'auto';
         // 传棋盘元素自己的框，不是 V 画出来的那块：地板收得比元素还小的话，
-        // 元素会顶出地板。横屏时 V 撑满整格的宽，收不成正方形；竖屏时收得成。
-        squareFloor(refs.boardWrap, width, height);
+        // 元素会顶出地板。V 是宽而矮的，所以这一句主要是把地板的高度收到 V 这
+        // 么高——从前那版只收正方形，收不成就整格留着，1920 上因此上下各空出
+        // 234px 的空地板。
+        fitFloor(refs.boardWrap, width, height);
       }
 
       function toScreen([x, y]: [number, number]): [number, number] {

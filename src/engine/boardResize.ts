@@ -17,7 +17,7 @@
 export function observeBoardSize(el: HTMLElement, redraw: () => void): () => void {
   // 装地板的那一格。它的高宽是屏幕定的（.app--game 是 min-height 和
   // max-height 都写死 100dvh 的一整屏），所以它变了就是屏幕变了，而且它不会
-  // 被下面 squareFloor 钉住的地板反过来推着走——不然这里就成了一个来回缩的
+  // 被下面 fitFloor 钉住的地板反过来推着走——不然这里就成了一个来回缩的
   // 死循环。
   const cell = el.parentElement;
   let w = -1;
@@ -37,7 +37,7 @@ export function observeBoardSize(el: HTMLElement, redraw: () => void): () => voi
     // feed back into another one.
     //
     // 「地板的框」一个人说了不算，屏幕的尺寸也要算一票。原因是排完版之后
-    // squareFloor 会把地板钉成一个固定像素的正方形（见下面）——钉住之后它
+    // fitFloor 会把地板钉成一个固定像素的框（见下面）——钉住之后它
     // 就不再跟着屏幕走了：手机一转，屏幕从 390×844 变成 844×390，地板还是
     // 362×362，这一句于是说「什么都没动」，直接跳过，整局就停在竖屏那一版
     // 排版上，直到玩家去碰一下棋盘（拖一次会触发 render）才回过神来。玩家
@@ -84,13 +84,12 @@ export function observeBoardSize(el: HTMLElement, redraw: () => void): () => voi
  * 玩家定的顺序，照这个顺序读这两个函数：
  *   1. 棋盘最大——它拿到那一格能给的全部空间；
  *   2. 图形在棋盘里最大；
- *   3. 图形已经最大之后，地板再大也不会让图形更大了，那就把地板尽量收成一个
- *      圆角正方形。
+ *   3. 图形已经最大之后，地板再大也不会让图形更大了，那就把地板收到贴着棋盘
+ *      （见下面 fitFloor）。
  *
  * 关键是第三条只在「不要钱」的时候才做。从前我把顺序弄反了：先把地板定成正
  * 方形，再让棋盘去将就它——七色圆球的菱形因此从 609px 宽缩到 303px，整整一
- * 半。现在是反过来的：棋盘先按整格算满，算完了才问一句「收成正方形装得下
- * 吗」，装得下就收，装不下就不收。
+ * 半。现在是反过来的：棋盘先按整格算满，算完了才把地板收到它那么大。
  */
 
 /**
@@ -105,6 +104,10 @@ export function floorBox(wrap: HTMLElement): DOMRect {
   wrap.style.height = '';
   wrap.style.flex = '';
   wrap.style.margin = '';
+  // 上一轮收掉多少也一起摘：这一轮还没收，那圈补回来的余量就不该还挂着上一
+  // 轮的数——量的是这一格本来有多大，量完 fitFloor 会写上新的。
+  wrap.style.removeProperty('--floor-trim-x');
+  wrap.style.removeProperty('--floor-trim-y');
   // 圆角**不**在这里摘。摘过一版，出过这个毛病：拖动的时候棋盘会重排一次，
   // 这一句把上一轮算好的圆角清掉，而重算是排到下一帧的——于是手指一按下去，
   // 地板的四个角就从 14px 弹成样式表里的设计值（3vh ≈ 25px），松手才弹回
@@ -280,45 +283,104 @@ function maxRadius(a: number, b: number, design: number): number {
 }
 
 /**
- * 排完版之后叫一声：把地板收成正方形，前提是这不会动到棋盘。
+ * 排完版之后叫一声：把地板收到贴着棋盘，两个方向各收各的。
  *
  * boardW / boardH 是棋盘那个元素自己的框（不是格子的尺寸，也不是图形画出来
- * 的那一块——地板收得比元素还小的话，元素会顶出地板）。边长取两
- * 者的大者，所以正方形一定装得下棋盘；而棋盘的尺寸本来就是照着整格算满的，
- * 收到这个边长之后再算一遍，得到的比例分毫不变——数学上是这样：棋盘的两边是
- * K₁·R 和 K₂·R，边长 = R·max(K₁,K₂)，再算一次得到的
- * R' = 边长 / max(K₁,K₂) = R。
+ * 的那一块——地板收得比元素还小的话，元素会顶出地板）。每个方向取「棋盘那一
+ * 边」和「这一格给的那一边」里小的那个，所以地板一定装得下棋盘，而且棋盘的
+ * 尺寸本来就是照着整格算满的，收完再算一遍分毫不变。
  *
- * 装不下（比如躺着的菱形比这一格的高度还宽）就什么都不做，地板保持整格——那
- * 时候「方」已经要拿棋盘的大小去换了，而那是第一条。
+ * 玩家定的顺序（见上面 floorBox 那段）是：棋盘最大 → 图形最大 → 图形已经最
+ * 大之后，地板再大也不会让图形更大了，那就把地板收掉。
+ *
+ * ── 原先这儿收的是「正方形」，2026-09 改成按棋盘的形状收 ────────────────
+ *
+ * 原先是 `side = max(boardW, boardH)`，收出来永远是个正方形，而且只在「正方
+ * 形装得进这一格」时才收，装不下就整格留着。八副棋盘里六副传的本来就是正方
+ * 形（S, S），那一条对它们没有区别；出问题的是传真实长宽的两副——七色圆球和
+ * V 形三角：
+ *
+ *   电脑端 1920×1080 上，七色圆球的地板是 1142×852，而棋盘元素只有 1142×699
+ *   ——上下各空出 76px 深褐色的空地板。V 形三角更明显：棋盘元素 1142×384，地板
+ *   还是 852 高，上下各空 234px。手机上同样空，只是没那么扎眼。
+ *
+ * 空出来的那一条既不是棋盘也不是页面底色，看上去就是「这块板子画大了」。所以
+ * 现在两个方向各自收：地板 = 棋盘元素的框。六副正方形的棋盘一个像素都不变。
+ *
+ * 代价（认了，而且是老规矩）：棋子贴到地板边上之后，圆角会被 fitPanelRadius
+ * 按「切不到棋子」往回收——V 形三角的两条臂顶在上面两个角上，那两个角于是收成
+ * 直角，下面两个角照旧是设计值。不统一，但这正是玩家早先拍过板的那一条：「哪
+ * 怕圆角不统一也要修复」（见 fitPanelRadius 的甲/乙两条）。基础方块现在就是这
+ * 样——它四个角都顶着方块，圆角早就只剩 7px 了。
  *
  * 居中用 margin: auto，不用 align-self：竖屏那一列的交叉轴是横的，一句
  * align-self: center 会让地板在没被钉住尺寸的那一瞬间横向塌成内容宽，
  * 下一次量格子就量错了。
  */
-export function squareFloor(wrap: HTMLElement, boardW: number, boardH: number): void {
+export function fitFloor(wrap: HTMLElement, boardW: number, boardH: number): void {
   // 圆角要等棋子画出来才算得了，而排版跑在渲染之前——所以推到下一帧。八个玩
   // 法排版的最后一句都是这一行，写在这儿等于八处都接上了，一处都不用改。
   requestAnimationFrame(() => fitPanelRadius(wrap));
 
   const rect = wrap.getBoundingClientRect();
-  const side = Math.max(boardW, boardH);
-  if (!(side > 0) || side > rect.width + 0.5 || side > rect.height + 0.5) {
+  // 每个方向都不收到比棋盘还小（那会让棋盘元素顶出地板），也不撑得比这一格还
+  // 大（那会把别人挤走）。躺着的菱形横屏时宽度正好顶满整格，于是那个方向不动、
+  // 只收高度——原先那版在这种情况下两个方向都不收。
+  const w = Math.min(boardW, rect.width);
+  const h = Math.min(boardH, rect.height);
+  if (!(w > 0) || !(h > 0)) {
     slack(wrap, 0);
+    trim(wrap, 0, 0);
     return;
   }
-  wrap.style.width = side + 'px';
-  wrap.style.height = side + 'px';
+  wrap.style.width = w + 'px';
+  wrap.style.height = h + 'px';
   wrap.style.flex = '0 0 auto';
   wrap.style.margin = 'auto';
-  // 收成正方形之后，这一格左右各空出来多少。横屏里得分图示贴在棋盘两边，
+  // 收掉的那一圈，告诉样式表：地板缩了，可按的地方不能跟着缩。
+  //
+  // 拖拽是听在地板这个元素上的（engine/drag.ts 的 attachDrag(refs.boardWrap)），
+  // 而每副棋盘的 cellAt 拿到坐标之后找的是**最近**的那一格，从不返回「没抓到」
+  // ——所以地板比棋盘大出来的那一圈一直在当「手指落偏了也算」的余量。地板一收
+  // 到贴着棋盘，那圈余量就没了：V 形三角在手机上只有 122px 高，一横排不到
+  // 20px，手指高出去二十像素就什么都不会发生。那正是「不要让玩家出现意料之外
+  // 的疏漏操作」说的那种事。
+  //
+  // 所以把收掉的尺寸写出来，样式表用一块透明的 ::before 把范围补回去（见
+  // style.css 里 .board-wrap::before）。看得见的板子贴着棋盘，接手指的范围一个
+  // 像素没少。
+  //
+  // 补的是**从前那版地板**占过的地方，不是「这一格」——一个像素不多、不少。这次
+  // 想改的只有「看得见的空地板」，手感一点都不想动：
+  //   从前 = 收得成正方形（边长 max(长, 宽)）就收，收不成就整格留着。
+  // 于是六副正方形的棋盘补 0（它们的地板本来就收成那个正方形了，外面那一圈从前
+  // 也按不动，不该凭这次改动白送出去），只有宽棋盘那两副真的补回一整条。
+  const oldSide = Math.max(boardW, boardH);
+  const oldSquareFits = oldSide <= rect.width + 0.5 && oldSide <= rect.height + 0.5;
+  const oldW = oldSquareFits ? oldSide : rect.width;
+  const oldH = oldSquareFits ? oldSide : rect.height;
+  trim(wrap, (oldW - w) / 2, (oldH - h) / 2);
+  // 收完之后，这一格左右各空出来多少。横屏里得分图示贴在棋盘两边，
   // 而玩家要的是「图示落在棋盘和按键之间那段空当的正中」——这段空当有一半
   // 就是这里空出来的，所以把它告诉样式表（见 style.css 里 .pattern-sides
   // 那一段：两边各朝棋盘挪半个 slack，正好落在正中）。
   //
   // 用的是 transform 挪，不是外边距：transform 不进排版，所以这个数不会反
   // 过来影响下一轮量出来的格子大小。
-  slack(wrap, (rect.width - side) / 2);
+  slack(wrap, (rect.width - w) / 2);
+}
+
+/**
+ * 把「地板每边收掉多少」写到地板自己身上，给 ::before 那圈透明的余量用。
+ *
+ * 只在真的收掉了才写（>0.5px）：写成 0 的话每一轮都要动一次 style，白让浏览
+ * 器重算一遍。
+ */
+function trim(wrap: HTMLElement, x: number, y: number): void {
+  if (x > 0.5) wrap.style.setProperty('--floor-trim-x', x.toFixed(1) + 'px');
+  else wrap.style.removeProperty('--floor-trim-x');
+  if (y > 0.5) wrap.style.setProperty('--floor-trim-y', y.toFixed(1) + 'px');
+  else wrap.style.removeProperty('--floor-trim-y');
 }
 
 /** 把「地板两侧各空出多少」写到父层上，让兄弟节点也读得到。 */

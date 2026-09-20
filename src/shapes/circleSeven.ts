@@ -4,7 +4,7 @@ import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
-import { floorBox, observeBoardSize, squareFloor } from '../engine/boardResize';
+import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -406,10 +406,11 @@ export function createCircleSevenGame(): ShapeGame {
           boardTop = height / 2;
           refs.boardEl.style.width = width + 'px';
           refs.boardEl.style.height = height + 'px';
-          // 传的是棋盘元素自己的框（width × height），不是菱形画出来的那块。
-          // 地板收到比棋盘元素还小的话，元素会顶出去——躺着的菱形横屏时正是
-          // 这样，所以那时候这一句什么都不做。
-          squareFloor(refs.boardWrap, width, height);
+          // 传的是棋盘元素自己的框（width × height），不是菱形画出来的那块：
+          // 地板收到比棋盘元素还小的话，元素会顶出去。fitFloor 两个方向各收各
+          // 的——躺着的菱形宽度顶满整格，那个方向不动，只把高度收到菱形这么高
+          // （从前那版是「只收正方形」，收不成就整格留着，于是上下空出一条）。
+          fitFloor(refs.boardWrap, width, height);
           return;
         }
         R = Math.min(width / SHORT, availH / LONG);
@@ -420,7 +421,7 @@ export function createCircleSevenGame(): ShapeGame {
         boardTop = (height - 12 * rowH) / 2;
         refs.boardEl.style.width = width + 'px';
         refs.boardEl.style.height = height + 'px';
-        squareFloor(refs.boardWrap, width, height);
+        fitFloor(refs.boardWrap, width, height);
       }
 
       function ballCenter(r: number, c: number): [number, number] {
