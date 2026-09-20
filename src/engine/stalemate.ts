@@ -43,55 +43,84 @@ export interface LiveTile {
  * alive and nothing is reported — a single dead colour is the player's
  * problem to route around, not the game's to end.
  *
- * On top of that, dot faces keep the run alive on their own once one colour
- * has enough of them to fill a whole line. Those pieces already show the
- * colour they will always show and they still slide, so they can be walked
- * into one line however dead every front colour is — and a whole-line
- * clear scores. It is the *only* way dot faces score by themselves: a
- * pattern pays out only while it still holds at least one front tile (see
- * createCascadeStepper in scoring.ts), so `minMatch` dot faces of a colour
- * are worth nothing as a pattern and must not count here. The threshold is
- * lineMin — the shortest whole-line bonus this board has: 3 on every ball
- * and triangle layout, the shorter of the current row/column length on the
- * square boards. Counted on the dot faces alone: the reachability walk
- * above mixes fronts into its per-colour totals and asks about patterns,
- * not lines.
+ * On top of that, dot faces keep the run alive on their own — they already
+ * show the colour they will always show and they still slide, so they can be
+ * walked together however dead every front colour is. Since 2026-09 they have
+ * two ways to score that way: a whole line (lineMin) and, new with star
+ * clearing, a pattern made only of stars (minMatch, paid as the star count
+ * squared and then cleared — see clearStars in scoring.ts). Whichever comes
+ * first keeps the run alive, so the threshold here is min(minMatch, lineMin),
+ * counted on the dot faces alone: the reachability walk above mixes fronts
+ * into its per-colour totals and asks a different question.
  *
  * Bomb modes need no special case here: their shapes already leave the
  * hazard colour out of the liveTiles they pass in.
  *
- * Returns [] while the run is alive; when stuck, every remaining front
- * tile, grouped by colour — the pieces the player can look at and confirm
- * none of them will ever pair up. gameController ends the run over it.
+ * Returns [] while the run is alive; when stuck, the pieces the player can
+ * look at and confirm none of them will ever pair up, grouped by colour —
+ * the remaining front tiles, or, on a board where none are left, the stars
+ * themselves. gameController ends the run over it.
  */
 export function findStuckColorGroups(
   liveTiles: LiveTile[],
   /** 这一局最少几枚才可能算分。不给就是各玩法自己那套图案的门槛（4 枚）。 */
   minMatch: number = MIN_MATCH_SIZE,
   /**
-   * 这副棋盘最短的整线奖励要几枚同色反面：小球、三角各版式都是 3，方块是当
-   * 前行、列里较短的那个边长。反面自己只有「连成整线消掉」这一条得分路——
-   * 图案得分至少要含一枚正面（见 scoring.ts）——所以判「反面还能不能得分」
-   * 拿它当门槛，不能拿图案枚数：3 枚同色反面明明还能连成一线消掉，按 4 枚
-   * 算就成了死局，玩家眼看着场上还有能消的反面就被结算了。
+   * 这副棋盘最短的整线奖励要几枚同色星星：小球、三角各版式都是 3，方块是当
+   * 前行、列里较短的那个边长。这是星星自己得分的两条路之一，另一条是「整组
+   * 星星凑出图案」（门槛就是上面那个 minMatch），所以判「星星还能不能得分」
+   * 要拿**两者中小的那个**——只认哪一条都会判出死局来：
+   *
+   *   · 只认图案枚数：3 枚同色星星明明还能连成一线消掉，按 4 枚算就是死局
+   *     （玩家眼看着场上还有能消的星星就被结算了）；
+   *   · 只认这一个：方块盘上 4 枚同色星星明明能凑出 2×2，按边长 6 算又是死局。
    */
   lineMin: number,
 ): Cell[][] {
   const need = Math.max(1, Math.round(minMatch));
   const lineNeed = Math.max(1, Math.round(lineMin));
   const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
-  if (fronts.length === 0) return []; // nothing left to ever get stuck on; isGameOver handles this
 
-  // Enough already-flipped tiles of one colour to fill a whole line are a
-  // score the player can still go and take, whatever the front faces are
-  // doing. A whole line is the only score dot faces can make on their own
-  // — a pattern needs a front tile in it — so this is lineMin, not need.
+  /**
+   * 星星自己能得分的门槛。
+   *
+   * 2026-09 星星消除上线之前，星星只有「连成整线消掉」这一条路，所以这儿用的是
+   * lineNeed。现在它多了一条：**整组星星自己就能凑图案**，按枚数平方得分，然后
+   * 从棋盘上消除（scoring.ts 的 clearStars）。两条路哪条先够得着就算还活着，所
+   * 以取两者中小的那个。
+   *
+   * 照旧用 lineNeed 的后果是判得太松：玩家报过一次，结算页写着「全部已变成星
+   * 星」，盘面上还躺着四颗同色蓝星——凑得出图案，可 isGameOver 先把局结了。
+   */
+  const starNeed = Math.min(need, lineNeed);
   const dotCount = new Map<number, number>();
   for (const lt of liveTiles) {
     if (lt.tile.face !== 'dot') continue;
     dotCount.set(lt.tile.dotColor, (dotCount.get(lt.tile.dotColor) ?? 0) + 1);
   }
-  for (const n of dotCount.values()) if (n >= lineNeed) return [];
+  for (const n of dotCount.values()) if (n >= starNeed) return [];
+
+  /**
+   * 一枚色块都不剩了。
+   *
+   * 从前这儿直接 `return []`（「没有正面就不存在卡死，交给 isGameOver」）——那是
+   * 星星消除之前的分工：那时候「全是星星」就是终局，isGameOver 会收场。现在
+   * 「全是星星」不再是终局（八副棋盘的 isGameOver 都改了），所以这条路必须在这
+   * 儿判完：上面那一关没有任何颜色的星星够得着门槛，就是真的走不动了。
+   *
+   * 不改的后果比原来的 bug 更糟：isGameOver 不再收场、这儿又说「还活着」，一盘
+   * 谁也凑不出来的棋盘会永远结束不了。
+   */
+  if (fronts.length === 0) {
+    const stuckStars = new Map<number, Cell[]>();
+    for (const lt of liveTiles) {
+      if (lt.tile.face !== 'dot') continue;
+      const arr = stuckStars.get(lt.tile.dotColor);
+      if (arr) arr.push(lt.cell);
+      else stuckStars.set(lt.tile.dotColor, [lt.cell]);
+    }
+    return [...stuckStars.values()];
+  }
 
   const shownColor = (lt: LiveTile) => (lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color);
   const up = new Map<number, number>();

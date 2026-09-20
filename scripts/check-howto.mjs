@@ -69,7 +69,20 @@ async function closeAll() {
   await page.waitForTimeout(600);
 }
 async function startFrom(prefix, after) {
-  await page.click(`.home-icon-btn[aria-label^="${prefix}"]`);
+  // 用 el.click() 而不是 page.click(选择器)。
+  //
+  // 手机竖屏的主菜单 2026-09 换成了一条鱼眼轴（ui/modeAxis.ts）：焦点附近那几
+  // 张卡才看得见，远处的卡 opacity 是 0，而指针事件归那条轴自己（它要认滑动）。
+  // 所以按坐标点一张远处的卡，点到的是轴本身——真玩家是先把轴滑到那张卡上再
+  // 点的。这道门量的是《怎么玩》那一屏里写了什么，不是主菜单点不点得着（那是
+  // check-mode-axis 的活），所以这儿直接叫它的 click()。
+  const hit = await page.$$eval('.home-icon-btn', (els, want) => {
+    const el = els.find((e) => (e.getAttribute('aria-label') || '').startsWith(want));
+    if (!el) return false;
+    el.click();
+    return true;
+  }, prefix);
+  if (!hit) throw new Error(`主菜单上找不到《${prefix}》那张卡`);
   await page.waitForTimeout(800);
   if (after) await after();
   if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
@@ -104,6 +117,14 @@ check(
   !/至少要有一个色块/.test(r.texts[2]),
   r.texts[2],
 );
+// 第 5 条（结束条件）2026-09 也因为星星消除改过。原话是「全部变成星星，这一局
+// 结束」——星星会被消成空图形之后这句话成了假话，而且玩家撞上过：结算页写着
+// 「全部已變成星星」，盘面上还躺着四颗同色蓝星，明明凑得出图案。
+check(
+  '基础方块：第 5 条讲的是「全部消完才结束」，不是「变成星星就结束」',
+  /全部消完/.test(r.texts[4]) && !/变成星星，这一局结束/.test(r.texts[4]),
+  r.texts[4],
+);
 await closeAll();
 
 // ── 2. 无限反转 ──────────────────────────────────────────────────────
@@ -114,7 +135,16 @@ await startFrom('无限反转', async () => {
 r = await openHowto();
 check('无限反转：只剩四条，编号 1234', r.nums.join(',') === '1,2,3,4', r.nums.join(','));
 check('无限反转：不再讲整行消除', !r.texts.some((t) => t.includes('消除')), JSON.stringify(r.texts.map((t) => t.slice(0, 10))));
-check('无限反转：不再讲「全部翻成星星就结束」', !r.texts.some((t) => t.includes('全部翻成星星')), '');
+// 第 5 条（结束条件）整条抽掉了，所以这一屏不该出现「结束」二字。
+//
+// 这一条原先量的是 `includes('全部翻成星星')`——那句话早就不在 i18n 里了（第 5
+// 条 2026-09 改成「全部消完」，更早还改过一次措辞），于是它把「谁也没写过的一
+// 句话不在」当成了通过，是一条空断言。改成量那一整条在不在。
+check(
+  '无限反转：不讲结束条件（第 5 条整条抽掉了）',
+  !r.texts.some((t) => /结束|消完/.test(t)),
+  JSON.stringify(r.texts.map((t) => t.slice(0, 12))),
+);
 // 反过来的一条：纯星星的图案在**这一局**不得分（toggleOnMatch 开着，见
 // engine/scoring.ts 的 starsScore），所以这一屏绝不能出现基础局那句「整组都是
 // 星星也能得分」，第 3 条要换回老说法（i18n 的 TUTORIAL_RULE3_FLIP）。

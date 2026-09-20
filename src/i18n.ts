@@ -444,6 +444,18 @@ export interface I18nStrings {
   bombPenaltyLabel: string;
   timeUpReason: string;
   noMoreMatchesReason: string;
+  /**
+   * 这一局是怎么收场的：**盘面清空了**。
+   *
+   * 键名 allFlipped 是 2026-09 星星消除上线之前留下的——那时候终局是「全部翻成
+   * 星星」，所以这四句话原本都写着「全部已变成星星」。星星现在会被消成空图形，
+   * 终局变成「一枚不剩」（见各棋盘的 isGameOver），那句话于是成了假话：玩家报
+   * 过一次，结算页写着「全部已變成星星」，盘面上还躺着四颗同色蓝星。
+   *
+   * 键名没跟着改，是因为它同时是**存档里的那个字符串**（runRecord 的
+   * REASON_LABEL_KEY，云端战绩里存的也是它）——改了名，玩家早先那些记录就会
+   * 显示成一行生硬的中文原文。
+   */
   allFlippedReason: string;
   manualEndReason: string;
   bombHazardReason: string;
@@ -782,7 +794,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: 'Bomb penalty',
     timeUpReason: "Time's up",
     noMoreMatchesReason: 'No scoring shape can be made any more',
-    allFlippedReason: 'Every piece is a star',
+    allFlippedReason: 'Board cleared',
     manualEndReason: 'Ended manually',
     bombHazardReason: 'Bomb tiles connected',
     stepsPhrase: '{n} move|{n} moves',
@@ -1096,7 +1108,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: 'Pénalité de bombe',
     timeUpReason: 'Temps écoulé',
     noMoreMatchesReason: 'Plus aucun motif ne peut être formé',
-    allFlippedReason: 'Toutes les pièces sont des étoiles',
+    allFlippedReason: 'Plateau vidé',
     manualEndReason: 'Terminé manuellement',
     bombHazardReason: 'Cases-bombes connectées',
     stepsPhrase: '{n} coup|{n} coups',
@@ -1410,7 +1422,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: '炸彈懲罰',
     timeUpReason: '時間到',
     noMoreMatchesReason: '再也湊不出得分圖案',
-    allFlippedReason: '全部已變成星星',
+    allFlippedReason: '全部消完了',
     manualEndReason: '手動結束',
     bombHazardReason: '紅色炸彈相連',
     stepsPhrase: '共 {n} 步',
@@ -1724,7 +1736,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombPenaltyLabel: '炸弹惩罚',
     timeUpReason: '时间到',
     noMoreMatchesReason: '再也凑不出得分图案',
-    allFlippedReason: '全部已变成星星',
+    allFlippedReason: '全部消完了',
     manualEndReason: '手动结束',
     bombHazardReason: '红色炸弹相连',
     stepsPhrase: '共 {n} 步',
@@ -1781,6 +1793,12 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * scoring.ts 的 starsScore）。所以它的《怎么玩》换用下面那条
  * TUTORIAL_RULE3_FLIP，讲的还是老规矩。
  *
+ * **第 5 条也被同一件事改过（2026-09）。** 原话是「全部变成星星，这一局结束」
+ * ——星星会被消掉之后这句话也成了假话，而且这一条比第 3 条更要紧：它是写在规
+ * 则里的一句承诺，引擎按它办事。玩家报的那一局正是撞在这上面：结算页写着「全
+ * 部已變成星星」，盘面上还躺着四颗同色蓝星，明明凑得出图案。现在终局是「一枚
+ * 不剩」（八副棋盘的 isGameOver），这一条跟着改成「全部消完」。
+ *
  * ─────────────────────────────────────────────────────────────────────────
  * 只有两个词：色块、星星
  *
@@ -1804,7 +1822,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
     'Line up pieces of one colour into a scoring shape and you score.',
     'A star of that same colour counts too, and scores again. A shape made only of stars scores as well — the star count squared, so 4 stars are worth 16 — and those stars then vanish.',
     'Stars of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
-    'The game ends when every piece is a star — or when no scoring shape is left to make.',
+    'The game ends when every piece has been cleared — or when no scoring shape is left to make.',
     'Less time, fewer moves, more points: a higher total score.',
   ],
   fr: [
@@ -1812,7 +1830,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
     'Alignez des pièces d’une même couleur en un motif : vous marquez.',
     'Une étoile de cette même couleur compte aussi et marque à nouveau. Un motif fait uniquement d’étoiles marque également — le nombre d’étoiles au carré, donc 4 étoiles valent 16 — puis ces étoiles disparaissent.',
     'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
-    'La partie s’arrête quand toutes les pièces sont des étoiles — ou quand plus aucun motif ne peut être formé.',
+    'La partie s’arrête quand toutes les pièces ont disparu — ou quand plus aucun motif ne peut être formé.',
     'Moins de temps, moins de coups, plus de points : meilleur score total.',
   ],
   zhHant: [
@@ -1820,7 +1838,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
     '同色湊成得分圖案就得分。',
     '星星和色塊顏色一樣時，也能一起湊圖案，再得一次分。整組都是星星也能得分——按星星個數的平方算，4 顆就是 16 分，那幾顆隨後消失。',
     '星星同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
-    '全部變成星星，這一局結束；再也湊不出得分圖案，也結束。',
+    '全部消完，這一局結束；再也湊不出得分圖案，也結束。',
     '時間越短、步數越少、得分越高，綜合得分越高。',
   ],
   zhHans: [
@@ -1828,7 +1846,7 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
     '同色凑成得分图案就得分。',
     '星星和色块颜色一样时，也能一起凑图案，再得一次分。整组都是星星也能得分——按星星个数的平方算，4 颗就是 16 分，那几颗随后消失。',
     '星星同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
-    '全部变成星星，这一局结束；再也凑不出得分图案，也结束。',
+    '全部消完，这一局结束；再也凑不出得分图案，也结束。',
     '时间越短、步数越少、得分越高，综合得分越高。',
   ],
 };

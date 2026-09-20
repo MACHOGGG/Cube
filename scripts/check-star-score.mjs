@@ -195,7 +195,131 @@ check('空组是 0 分', groupPoints([], () => null) === 0);
   );
 }
 
-// ---- 6. 老虎机那套不受影响 ---------------------------------------------------
+// ---- 6. 「全是星星」不再是终局：八副棋盘的 isGameOver -----------------------
+//
+// 星星会被消成空图形之后，「每一枚都翻成星星了」这句话就不再等于「这一局打完
+// 了」——玩家报过一次：结算页写着「全部已變成星星」，盘面上还躺着四颗同色蓝
+// 星，明明还凑得出图案。终局改成了「一枚不剩」（空图形，和拆不掉的活炸弹）。
+//
+// 和上面第 ⑤ 条同一个理由放在这道门里：这句判定在八副棋盘里各写了一遍，改漏
+// 一副不会崩、不会白屏，只会让那一副的玩家被提前结算——而他自己说不出哪儿不
+// 对，只觉得「我还能玩啊」。所以静态扫八副：哪一副的 isGameOver 还在把
+// face === 'dot' 当成「这一枚清掉了」，这道门就红。
+{
+  const dir = new URL('../src/shapes/', import.meta.url);
+  const SHAPES = [
+    'square', 'squareDiamond', 'circle', 'circleHex',
+    'circleSeven', 'triangle', 'triangleBig', 'triangleAdvanced',
+  ];
+
+  /** 抠出 isGameOver 的函数体（数花括号，不猜它长几行）。 */
+  function bodyOf(src, head) {
+    const at = src.indexOf(head);
+    if (at < 0) return null;
+    let i = src.indexOf('{', at);
+    if (i < 0) return null;
+    let depth = 0;
+    for (let j = i; j < src.length; j++) {
+      if (src[j] === '{') depth++;
+      else if (src[j] === '}') {
+        depth--;
+        if (depth === 0) return src.slice(i + 1, j);
+      }
+    }
+    return null;
+  }
+
+  const missing = [];
+  const stillDot = [];
+  const noBlank = [];
+  for (const name of SHAPES) {
+    const src = readFileSync(new URL(`${name}.ts`, dir), 'utf8');
+    const raw = bodyOf(src, 'function isGameOver(): boolean');
+    if (raw == null) { missing.push(name); continue; }
+    // 注释里提「星星曾经是终局」是**要**留着的（那段注释点名了这次事故），所以
+    // 剥掉注释只看代码。
+    const code = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    if (/'dot'|"dot"/.test(code)) stillDot.push(name);
+    if (!/\bisBlank\b/.test(code)) noBlank.push(name);
+  }
+  check(
+    '八副棋盘都找得到 isGameOver（改了签名就回来改这道门）',
+    missing.length === 0,
+    missing.length ? `找不到的：${missing.join(' ')}` : '八副都在',
+  );
+  check(
+    "没有哪副棋盘的 isGameOver 还把星星（face 'dot'）当成打完了",
+    stillDot.length === 0,
+    stillDot.length ? `还在认星星的：${stillDot.join(' ')}` : '八副都不认了',
+  );
+  check(
+    '八副棋盘的终局判的都是「剩下的是空图形」',
+    noBlank.length === 0,
+    noBlank.length ? `没判空图形的：${noBlank.join(' ')}` : '八副都判了',
+  );
+
+  // 结算页那句话也得跟着改。它的键名（allFlippedReason）是星星消除之前留下的
+  // ——名字动不了（存档里存的就是那个中文字符串），但四种语言说出来的话必须是
+  // 「清空了」，不能再是「全变成星星了」。
+  const i18n = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
+  const says = [...i18n.matchAll(/^\s*allFlippedReason: '([^']*)',$/gm)].map((m) => m[1]);
+  check(
+    '四种语言都有这句结算话',
+    says.length === 4,
+    `找到 ${says.length} 句：${says.join(' / ')}`,
+  );
+  const starry = says.filter((t) => /星星|star|étoile/i.test(t));
+  check(
+    '四句都不再说「全都变成星星了」（那是假话，星星会被消掉）',
+    starry.length === 0,
+    starry.length ? `还这么写的：${starry.join(' / ')}` : says.join(' / '),
+  );
+
+  // 这句话认的是那个**中文原文当钥匙**：引擎 endGame 传一个中文字符串，runRecord
+  // 拿它去查该说哪一句。两边必须是同一个字符串，而它同时又是玩家存档里存着的那
+  // 个（本地和云端的战绩都记它），所以只改一边不会崩、不会报错——只会让所有旧
+  // 记录在《记录与排名》里显示成一行生硬的中文。这一条把两边钉在一起。
+  const KEY = '全部方块已翻成点面';
+  const ctrl = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
+  const rec = readFileSync(new URL('../src/engine/runRecord.ts', import.meta.url), 'utf8');
+  check(
+    '引擎传的那把钥匙和 runRecord 查的是同一个字符串',
+    ctrl.includes(`endGame('${KEY}')`) && new RegExp(`^\\s*${KEY}: 'allFlippedReason',$`, 'm').test(rec),
+    `gameController ${ctrl.includes(`endGame('${KEY}')`) ? '有' : '没有'} · runRecord ${rec.includes(KEY) ? '有' : '没有'}`,
+  );
+
+  // 六条规则里的第 5 条讲的就是结束条件，它也跟着改过（原话「全部变成星星，这
+  // 一局结束」）。四种语言一起量：漏一种，那种语言的玩家读到的还是假话。
+  const rulesEnd = [...i18n.matchAll(/^\s*'([^']*(?:ends when|s’arrête quand|這一局結束|这一局结束)[^']*)',$/gm)].map((m) => m[1]);
+  check(
+    '六条规则的第 5 条四种语言都有',
+    rulesEnd.length === 4,
+    `找到 ${rulesEnd.length} 句`,
+  );
+  const stillStars = rulesEnd.filter((t) => /变成星星|變成星星|is a star|sont des étoiles/.test(t));
+  check(
+    '第 5 条四种语言都不再说「全部变成星星就结束」',
+    stillStars.length === 0,
+    stillStars.length ? `还这么写的：${stillStars.join(' | ')}` : rulesEnd.join(' | '),
+  );
+
+  // 《游戏规则》那一屏（src/rules.ts）的「结束」条目同一件事，四种语言。
+  const doc = readFileSync(new URL('../src/rules.ts', import.meta.url), 'utf8');
+  const ends = [...doc.matchAll(/\{ term: '(?:结束|結束|Ending|Fin de partie)', body: '([^']*)'/g)].map((m) => m[1]);
+  check(
+    '《游戏规则》里的「结束」四种语言都有',
+    ends.length === 4,
+    `找到 ${ends.length} 条`,
+  );
+  const docStars = ends.filter((t) => /都变成星星|都變成星星|every tile is dot-faced|sont des étoiles ou vierges/.test(t));
+  check(
+    '《游戏规则》里的「结束」不再写成「全变成星星就结束」',
+    docStars.length === 0,
+    docStars.length ? `还这么写的：${docStars.length} 条` : '四条都改了',
+  );
+}
+
+// ---- 7. 老虎机那套不受影响 ---------------------------------------------------
 //
 // 老虎机模式（targets）的图案分走 targets.ts 的 scoreOf（ceil(n²/2)），是另一条
 // 路。规则改动不许把它一起卷进来——它的分早就印在玩家的记录里了。

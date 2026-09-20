@@ -822,9 +822,17 @@ export function createCircleGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
+        // 「全是星星」**不再是终局**（星星消除 2026-09 上线之后）。星星现在自己
+        // 就能凑图案得分、并从棋盘上消除（见 scoring.ts 的 clearStars），所以一盘
+        // 全是星星的棋盘往往还能继续打——玩家报过一次：结算页写着「全部已变成星
+        // 星」，可盘面上还躺着四颗同色蓝星，明明凑得出图案。
+        //
+        // 真正的终局只剩两种：**一枚不剩**（全消完，就是这儿判的），或者**谁也
+        // 凑不出来了**（死局，交给 engine/stalemate.ts）。活炸弹拆不掉也消不掉，
+        // 不算在「还剩东西」里。
         // 无限反转：翻完了还能翻回来，没有「全翻完」这回事——这一局只由计时结束。
         if (flipMode) return false;
-        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || liveBomb(t)));
+        return grid.every((row) => row.every((t) => isBlank(t) || liveBomb(t)));
       }
 
       function liveTiles(): LiveTile[] {
@@ -845,7 +853,9 @@ export function createCircleGame(): ShapeGame {
         // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
-        // 反面自己只靠整线得分，这副棋盘最短的整线是 3 枚（见 findWholeLineBonuses）。
+        // 传进去的是这副棋盘最短的整线枚数（3 枚，见 findWholeLineBonuses）。星星自己
+        // 得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate 取
+        // 两者中小的那个当门槛，见那儿的 starNeed。
         return findStuckColorGroups(liveTiles(), minMatchSize, MIN_LINE_BONUS_LEN);
       }
 

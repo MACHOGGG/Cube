@@ -625,7 +625,14 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        return grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot'));
+        // 「全是星星」**不再是终局**（星星消除 2026-09 上线之后）。星星现在自己
+        // 就能凑图案得分、并从棋盘上消除（见 scoring.ts 的 clearStars），所以一盘
+        // 全是星星的棋盘往往还能继续打——玩家报过一次：结算页写着「全部已变成星
+        // 星」，可盘面上还躺着四颗同色蓝星，明明凑得出图案。
+        //
+        // 真正的终局只剩两种：**一枚不剩**（全消完，就是这儿判的），或者**谁也
+        // 凑不出来了**（死局，交给 engine/stalemate.ts）。
+        return grid.every((row) => row.every((t) => isBlank(t)));
       }
 
       function liveTiles(): LiveTile[] {
@@ -639,7 +646,9 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       function findStuckGroups(): Cell[][] {
-        // 反面自己只靠整线得分，这副棋盘最短的整线是 3 枚（见 findWholeLineBonuses）。
+        // 传进去的是这副棋盘最短的整线枚数（3 枚，见 findWholeLineBonuses）。星星自己
+        // 得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate 取
+        // 两者中小的那个当门槛，见那儿的 starNeed。
         return findStuckColorGroups(liveTiles(), undefined, MIN_LINE_BONUS_LEN);
       }
 

@@ -730,16 +730,23 @@ export function createSquareGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
+        // 「全是星星」**不再是终局**（星星消除 2026-09 上线之后）。星星现在自己
+        // 就能凑图案得分、并从棋盘上消除（见 scoring.ts 的 clearStars），所以一盘
+        // 全是星星的棋盘往往还能继续打——玩家报过一次：结算页写着「全部已变成星
+        // 星」，可盘面上还躺着四颗同色蓝星，明明凑得出图案。
+        //
+        // 真正的终局只剩两种：**一枚不剩**（全消完，就是这儿判的），或者**谁也
+        // 凑不出来了**（死局，交给 engine/stalemate.ts）。活炸弹拆不掉也消不掉，
+        // 不算在「还剩东西」里。
         // 无限反转：翻完了还能翻回来，没有「全翻完」这回事——这一局只由计时结束。
         if (flipMode) return false;
-        // 还活着的炸弹拆不掉也翻不动，所以炸弹局的「全翻完」是**除了活炸弹
-        // 以外**每一枚都到了反面。认的是活炸弹（liveBomb）不是红色：已经被拆
-        // 成基础色星星的那几枚本来就是反面，算在里头没问题。
-        const allDot =
+        // 认的是活炸弹（liveBomb）不是红色：拆成基础色星星的那几枚照常参与消
+        // 除，不该算成「还没清掉的障碍」。
+        const allGone =
           grid.length > 0 &&
           // 空位算「已经清掉了」——它本来就不需要再翻。
-          grid.every((row) => row.every((t) => isBlank(t) || t.face === 'dot' || liveBomb(t)));
-        return allDot || rows === 0 || cols === 0;
+          grid.every((row) => row.every((t) => isBlank(t) || liveBomb(t)));
+        return allGone || rows === 0 || cols === 0;
       }
 
       function liveTiles(): LiveTile[] {
@@ -763,7 +770,9 @@ export function createSquareGame(): ShapeGame {
         // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
-        // 反面自己只靠整行 / 整列得分，而行列会随消除变短——门槛跟着当前较短的边长走。
+        // 传进去的是当前较短的那条边长：整行 / 整列会随消除变短，门槛得跟着走。星星
+        // 自己得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate
+        // 取两者中小的那个当门槛，见那儿的 starNeed。
         return findStuckColorGroups(liveTiles(), minMatchSize, Math.min(rows, cols));
       }
 

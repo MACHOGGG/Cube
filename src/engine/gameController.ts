@@ -913,13 +913,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         return;
       }
       // 炸弹四连炸在**这一步结束时**的盘面上判（见 checkHazard 上面那段）。
-      // 排在 isGameOver 前面：被炸掉的那一局不该同时报「全部翻成点面」。
+      // 排在 isGameOver 前面：被炸掉的那一局不该同时报「盘面清空了」。
       if (hooks.checkHazard?.()) {
         resolving = false;
         return;
       }
       if (hooks.isGameOver()) {
         resolving = false;
+        // 这个字符串是**存档里的那一个**（见 runRecord 的 REASON_LABEL_KEY）：它的
+        // 名字是星星消除上线之前留下的（那时候终局是「全翻成星星」），现在这条路
+        // 的意思是「一枚不剩」。名字没改，因为玩家早先的记录里存的就是它。
         endGame('全部方块已翻成点面');
         return;
       }
