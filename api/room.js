@@ -1247,7 +1247,20 @@ async function state(res, body) {
   //
   // 抢不到（真的一把空椅子都腾不出来）就先这样，下一次轮询再试——他的分数和
   // 局数一直都是好的，这里补的只是座位这本账。
-  if (seat && !seat.left && seat.slot === undefined) {
+  //
+  // 补椅子这一下要独占。HSETNX 只保证「同一把椅子不会被两个人占到」，不保证
+  // 「同一个人不会占到两把」：这台设备从后台切回前台、或者不小心开了两个标签
+  // 页，并发发出两次轮询，两次各找到一把不同的空椅子、各自 HSETNX 成功，最后
+  // 写 p: 的那一次赢，另一把刚占到的椅子就成了一条谁也认领不到、leave() 也回收
+  // 不了的幽灵座位——屋里显示的人数比实际坐着的人多一个（这份代码自己点名过的
+  // 「9/8 幽灵」），新朋友看着有空位却进不来，只能等二十分钟过期。join() 那条
+  // 认领的路有 claimKey 挡着，state() 这条新路没覆盖到。
+  //
+  // 用 takeRoomLock 而不是 claimKey：claimKey 的格名里带着座位那把钥匙，而这条
+  // 路上钥匙不换，抢过一次就永久占着——椅子哪天再被借走，就再也补不回来了。
+  // takeRoomLock 过 LOCK_STALE_MS 会被接手，所以「借走—补回」来回多少次都成立。
+  // 抢不到的那一次什么都不做，下一次轮询再试（本来就是这个约定）。
+  if (seat && !seat.left && seat.slot === undefined && (await takeRoomLock(code, 'refill:' + body.playerId))) {
     const slot = await claimSeat(code, body.playerId, hash);
     if (slot >= 0) {
       // 写回去的这一份会带着 readRoom 折进来的成绩影子（见 readRoom 那段：

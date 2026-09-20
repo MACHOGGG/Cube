@@ -583,10 +583,25 @@ async function rebuild(req, res, body) {
  * 顺序是**先写新的，最后删旧的**——中间摔了，他的战绩在两个 id 底下各有一
  * 份（多一份，不好看，但一分没丢）；反过来先删就可能什么都不剩。这条和
  * redeem.js 那次「码烧掉却没到账」是同一条教训。
+ *
+ * **整段在旧 id 那把锁里**（statsLockKey(from)，和 push / rebuild 同一把）。
+ * 没有这把锁的话：换邮箱这几秒里（要走好几次网络往返，跨度不短）旧邮箱那台设
+ * 备上正好有一局收尾交卷，push 读的是「搬走之前」的那份 stats，写回旧 id；而这
+ * 边已经把旧 id 的存档删掉了——那一局的分数彻底消失，两边都回 200，玩家和客服
+ * 都查不出异常。现实里完全撞得上：在电脑上确认换邮箱，手机上那局正好打完。
+ *
+ * 新地址 to 不用锁：它是刚刚建出来的，这一刻不可能有别人在写它。
+ *
+ * 抢不到锁就抛——api/email.js 那一段本来就为「renameScoreOwner 摔了」准备了
+ * 补偿（把刚占住的新地址退回去，让玩家「再走一遍」重新成立）。
  */
 export async function renameScoreOwner(from, to) {
   if (!from || !to || from === to) return;
+  const got = await withLock(statsLockKey(from), () => moveScores(from, to));
+  if (!got.ok) throw new Error('战绩搬家没抢到锁：' + from);
+}
 
+async function moveScores(from, to) {
   const stats = await get(statsKey(from));
   const runs = await get(runsKey(from));
   const name = await hget(NAMES, from);

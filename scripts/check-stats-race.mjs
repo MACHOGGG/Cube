@@ -48,6 +48,7 @@ process.env.ALLOW_MEMORY_STORE = '1';
 process.env.ADMIN_TOKEN = 'x'.repeat(32);
 
 const scores = (await import('../api/scores.js')).default;
+const { renameScoreOwner } = await import('../api/scores.js');
 const A = await import('../api/_accounts.js');
 const S = await import('../api/_store.js');
 
@@ -236,6 +237,55 @@ check(
   );
   check('两局同时交，存档里两局都留着', (mine.archive || []).length === 2, `存了 ${(mine.archive || []).length} 局`);
   await wipe(who.email);
+}
+
+// ---------------------------------------------------------------------------
+// 换邮箱搬家撞上交卷：那一局会不会在两个地址之间掉下去
+// ---------------------------------------------------------------------------
+//
+// renameScoreOwner 是第三条「读整份 → 写到新 id → 删旧 id」的裸路。补锁那次给
+// push 和 rebuild 都套上了 statsLockKey，唯独漏了它。
+//
+// 触发条件：玩家正在换邮箱（要走好几次网络往返，这几秒跨度不短），而旧邮箱那台
+// 设备上正好有一局收尾交卷——比如在电脑上确认换邮箱，手机上那局刚好打完。两边
+// 都回 200、都不报错，可新邮箱名下少了这一局，旧邮箱的存档已经删掉了：这一局的
+// 分数彻底消失，玩家自己和客服都查不出任何异常。
+//
+// 这道门守的是**一分都没丢**：那一局要么跟着搬到了新地址，要么还留在旧地址上
+// （多一份不好看，但一分没丢，和 renameScoreOwner 那段注释里的「先写新、最后删
+// 旧」同一条教训）。两个地址加起来必须还是 600 分、2 局。
+const MOVE_UPTO = 24;
+for (let k = 0; k <= MOVE_UPTO; k++) {
+  const who = await freshPlayer(`move${k}`);
+  const from = who.email;
+  const to = `moved${k}@example.com`;
+
+  const first = await call({ action: 'push', email: from, token: who.token, runId: 'm1', mode: 'square', score: 100 });
+  if (first.status !== 200) {
+    console.error(`第一局就没交上（k=${k}）：`, first.status);
+    process.exit(2);
+  }
+
+  const moving = renameScoreOwner(from, to).catch((err) => ({ err }));
+  await ticks(k);
+  const second = await call({ action: 'push', email: from, token: who.token, runId: 'm2', mode: 'square', score: 500 });
+  await moving;
+
+  const oldStats = (await S.get('stats:' + from)) || { total: 0, runs: 0 };
+  const newStats = (await S.get('stats:' + to)) || { total: 0, runs: 0 };
+  const total = Number(oldStats.total || 0) + Number(newStats.total || 0);
+  const runs = Number(oldStats.runs || 0) + Number(newStats.runs || 0);
+  const ok = second.status === 200 && total === 600 && runs === 2;
+  if (!ok || k === MOVE_UPTO) {
+    check(
+      `搬家撞交卷（让出 ${k} 个微任务）：两个地址加起来一分没丢`,
+      ok,
+      `交卷 ${second.status}，旧 ${oldStats.total}/${oldStats.runs} + 新 ${newStats.total}/${newStats.runs} = ${total}/${runs}`,
+    );
+  }
+  if (!ok) break;
+  await wipe(from);
+  await wipe(to);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

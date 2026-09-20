@@ -340,6 +340,45 @@ export function setNews(account, wanted) {
 }
 
 /**
+ * 把这次尝试的结果记到账号上——**只记那三个字段**，绝不整份覆盖。
+ *
+ * 为什么非这样不可（这是一次真事故的形状，只是这一处漏了）：三个入口
+ * （subscription.js 登录、passcode.js 改密码、portal.js 账号中心）都是先
+ * loadAccount 读一份快照，再把这份快照交给 checkPin。原先这里写的是裸的
+ * saveAccount(email, account)——把那份**进门时读到的旧账号整份**存回去。
+ *
+ * 于是密码打错一次（最普通的手滑就够，不必是坏人）就会抹掉这期间别处写进去的
+ * 东西：他在另一个网页刚兑的一张月卡（redeem 走 updateAccount 加 until）、后台
+ * 刚发给他的内部码（mint 加 inbox）、他刚在另一台设备上登录拿到的那把令牌
+ * （那台设备会被安静地顶下线）。两边都回「成功」，玩家只当是「改密码失败了」，
+ * 不知道账号同时被改坏了。subscription.js 那一处的注释早把这个形状写清楚了，
+ * 它自己也改成了 updateAccount——唯独藏在它旁边的这一处漏了。
+ *
+ * 所以这里进 updateAccount（带锁的读—改—写），而且**在锁里拿到的那份新账号上
+ * 重算**，不是把外面那份旧的塞进去。
+ *
+ * 抢不到锁（busy）就不写，这是安全的：真正说了算的次数是 failKey 那个原子计数
+ * 器（bump），账号对象上的 fails/blocked 只是它的影子；checkPin 答给调用方的话
+ * 也是按 tries 说的，不看这一次写成没写成。
+ *
+ * 外面那份 account 照旧就地改（调用方紧接着要读它——subscription.js 拿
+ * lockRemainingMs(account) 去告诉玩家还要等多久）。
+ */
+async function patchCounters(email, account) {
+  const fails = Number(account.fails || 0);
+  const blocked = account.blocked === true;
+  const lockUntil = Number(account.lockUntil || 0);
+  const got = await updateAccount(email, (fresh) => {
+    // 计数只上不下：锁里这一份可能已经被别的请求推得更高了。
+    fresh.fails = fails === 0 ? 0 : Math.max(Number(fresh.fails || 0), fails);
+    if (blocked) fresh.blocked = true;
+    if (lockUntil === 0) fresh.lockUntil = 0;
+    else fresh.lockUntil = Math.max(Number(fresh.lockUntil || 0), lockUntil);
+  });
+  if (!got.ok && got.busy) console.error('这次尝试没记到账号上（锁忙，计数器那边已经记下了）', email);
+}
+
+/**
  * Checks a passcode and records the attempt. Returns one of
  * 'ok' | 'wrong' | 'locked' | 'blocked'. Callers must give the same answer
  * for 'wrong' as for an address with no account at all, so that this cannot
@@ -372,7 +411,7 @@ export async function checkPin(email, pin, account) {
     if (!account.blocked || onRecord < tries) {
       account.blocked = true;
       account.fails = Math.max(onRecord, tries);
-      await saveAccount(email, account);
+      await patchCounters(email, account);
     }
     return 'blocked';
   }
@@ -387,7 +426,7 @@ export async function checkPin(email, pin, account) {
     if (account.fails || account.lockUntil) {
       account.fails = 0;
       account.lockUntil = 0;
-      await saveAccount(email, account);
+      await patchCounters(email, account);
     }
     return 'ok';
   }
@@ -398,7 +437,7 @@ export async function checkPin(email, pin, account) {
   account.fails = Math.max(onRecord, tries);
   if (tries >= BLOCK_AFTER) account.blocked = true;
   else if (tries >= LOCK_AFTER) account.lockUntil = Math.max(account.lockUntil || 0, now + LOCK_MS);
-  await saveAccount(email, account);
+  await patchCounters(email, account);
   return tries >= BLOCK_AFTER ? 'blocked' : tries >= LOCK_AFTER ? 'locked' : 'wrong';
 }
 

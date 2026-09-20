@@ -183,5 +183,81 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
     after2 - after > 20 * 86400e3, `到期日又多了 ${Math.round((after2 - after) / 86400e3)} 天`);
 }
 
+// ---- ⑤ 密码打错一次，不许顺手抹掉这期间别处写进去的东西 -----------------
+//
+// 上面 ④ 守的是「密码对」那几条路。可**密码打错**也要写账号——checkPin 要记下
+// 「错了几次」、够次数了还要落锁、落封号。原先那三处写的都是裸的
+// saveAccount(email, account)：把三个入口（登录 / 改密码 / 账号中心）**进门时
+// loadAccount 读到的那份旧账号整份**存回去。
+//
+// 于是一次最普通的手滑就能抹掉这期间别处写进去的真东西。2026-09 实测的形状：
+// 玩家在网页 A 上兑了一张月卡（到期日 5 天 → 36 天），同时在网页 B 上想改密码、
+// 旧密码打错了一个字母——网页 B 那份「到期日还是 5 天」的旧账号被整份写回去，
+// 网页 A 那笔真实生效的兑换就这样消失了。两边都不报错（一边 200、一边就是他预
+// 期的「密码错」），玩家只当是改密码失败了，不知道账号同时被改坏了。同样会被
+// 吞掉的还有：后台刚发给他的内部码（inbox）、他刚在另一台设备上登录拿到的令牌
+// （那台设备被安静地顶下线）。
+//
+// 补锁那次（d23dff4）其实专门想到过 checkPin，但只核了「错误次数」那个字段安不
+// 安全（它确实安全，真正计数的是另一把原子计数器），没注意到同一次 saveAccount
+// 把 until / tokens / inbox 这些真金白银也一起整份覆盖了。
+//
+// 现在 checkPin 那三处走 patchCounters → updateAccount（带锁，而且在锁里那份新
+// 账号上重算），只碰 fails / blocked / lockUntil 三格。
+{
+  const mail = 'fatfinger@example.com';
+  const acct = A.newAccount('good11', 'code');
+  acct.until = Date.now() + 5 * 86400e3;
+  await A.saveAccount(mail, acct);
+
+  // 按事故的真实次序走，不靠 Promise.all 撞运气——这里要量的正是「快照过期」，
+  // 而两条路各有几次 await 是实现细节，一变这道门就变成摆设（第一版就是这样：
+  // 把修复退回裸 saveAccount，它照样全绿）。
+  //
+  //   1. 网页 B 打开改密码那一屏，loadAccount 读到一份快照（到期日 5 天）
+  const stale = await A.loadAccount(mail);
+  //   2. 这期间玩家在网页 A 上兑了一张月卡（到期日 → 36 天）
+  await set('code:FFFF66', { plan: 'month' });
+  const rRedeem = await call(redeem, { code: 'FFFF66', email: mail, token: acct.token });
+  const gained = (await A.loadAccount(mail))?.until || 0;
+  check('⑤ 先兑上那一张月卡', rRedeem.status === 200 && gained > acct.until + 20 * 86400e3,
+    `${rRedeem.status} / 多了 ${Math.round((gained - acct.until) / 86400e3)} 天`);
+  //   3. 网页 B 上他手滑，旧密码打错一个字母
+  const verdict = await A.checkPin(mail, 'nope99', stale);
+  check('⑤ 打错就是打错（判定没变）', verdict === 'wrong', verdict);
+  //   4. 那一个月必须还在。原先这一步把第 1 步那份旧快照整份写回去，36 天变回 5 天。
+  const after = (await A.loadAccount(mail))?.until || 0;
+  check('⑤ 那一个月还在（没被「密码打错」那一笔按旧快照盖回去）', after === gained,
+    `现在 ${Math.round((after - Date.now()) / 86400e3)} 天，应该 ${Math.round((gained - Date.now()) / 86400e3)} 天`);
+  // 这道门不能只看「东西没丢」：把写账号那一步整个删掉也能让上面那条绿。锁定计
+  // 数必须照旧记下来，不然是拿一个更坏的 bug 换一个 bug。
+  const counted = Number((await A.loadAccount(mail))?.fails || 0);
+  check('⑤ 这次打错照旧记在账上（不是干脆不写了）', counted >= 1, `fails=${counted}`);
+}
+
+// ---- ⑥ 同一形状，吞的是令牌：新设备刚登录，这台手滑一次 -------------------
+//
+// 令牌环和到期日在同一份 JSON 里，所以同一笔整份覆盖两样都吞。玩家看到的是：
+// 手机上刚登录好，电脑上手滑输错一次密码，手机那台下次去看排行榜被告知「请重新
+// 登录」——而两边都没有任何报错。
+{
+  const mail = 'twodevice@example.com';
+  const acct = A.newAccount('good22', 'code');
+  acct.until = Date.now() + 40 * 86400e3;
+  await A.saveAccount(mail, acct);
+
+  const stale = await A.loadAccount(mail);            // 电脑那台进门时的快照
+  const rLogin = await call(subscription, { email: mail, password: 'good22' });
+  const fresh = await A.loadAccount(mail);
+  check('⑥ 新设备登录拿到一把新令牌', rLogin.status === 200 && Boolean(rLogin.body.token)
+    && A.tokenValid(fresh, rLogin.body.token), String(rLogin.status));
+  await A.checkPin(mail, 'nope88', stale);            // 电脑那台手滑
+  const later = await A.loadAccount(mail);
+  check('⑥ 新设备那把令牌还有效（没被打错那一笔顶下线）',
+    A.tokenValid(later, rLogin.body.token));
+  // 原来那把也不许丢——他自己这台还在用着。
+  check('⑥ 原来那把也还在（两台各拿各的）', A.tokenValid(later, acct.token));
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);
