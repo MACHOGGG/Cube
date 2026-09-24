@@ -1003,8 +1003,11 @@ button:hover { filter: brightness(1.05); }
   /* 左右各让出 22px：从前只有 8，两列图标几乎贴着屏幕边（玩家的原话「再整体
      靠中间一点」）。这道边是页面自己的内边距，所以它同时把整排往里收——图标
      的上限式子里减掉的就是这两道。 */
-  /* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。 */
-  padding-top: var(--head-top); padding-left: 22px; padding-right: 22px;
+  /* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。
+     两边这道白抽成了变量：主菜单那条带子要**往外挣回这么多**才能跑到屏幕边
+     上（见 .mode-strip）。两处各写一个 22 的话，改一处忘了另一处，带子就歪了。 */
+  --narrow-pad: 22px;
+  padding-top: var(--head-top); padding-left: var(--narrow-pad); padding-right: var(--narrow-pad);
   /* 底下留的这一截是给底排让的：滑到最底下时，最后一排卡片和它底下那行小字
      都要完整露在底排之上。
      80 = 底排自己占的高（圆角矩形 74 + 上边距 6）；再加 38 是余量；env() 那
@@ -1334,6 +1337,19 @@ button:hover { filter: brightness(1.05); }
  * 这个类由 menu.ts 在窄版（也就是走鱼眼轴的那一版）挂上，不是靠 :has()——旧一点的
  * iOS Safari 不认 :has()，那一条整条丢掉就又回到「多出一截」。
  */
+/*
+ * 带子那一版的页：不再给底排留内边距，也不再撞满一屏。
+ *
+ * 带子自己就是整屏那么高（见 modeStrip 的 fit），卡片从招牌和底排底下滑过去。
+ * 再留那 118px 的底边和 `min-height: 100svh` 的话，文档会比一屏高出一百多像素——
+ * 空白本身不难看，难看的是它让人以为「下面还有东西」。鱼眼轴时代就是这么定的。
+ */
+.home-page.home-page--strip:not(.home-page--wide) {
+  padding-bottom: 0;
+  min-height: 0;
+  /* 带子是绝对定位的（见下面），得有个参照。 */
+  position: relative;
+}
 .home-page.home-page--axis:not(.home-page--wide) {
   padding-bottom: 0;
   min-height: 0;
@@ -1460,6 +1476,195 @@ button:hover { filter: brightness(1.05); }
  * 绝对定位那几行和轴上的卡片一模一样（见下面 .mode-axis > .home-icon-btn）：整幅
  * 宽、top: 50%、不许 CSS 再给 transform 加过渡（那会让它比手指慢 100ms）。
  */
+/*
+ * 主菜单那条横着跑的带子（ui/modeStrip.ts）。
+ *
+ * 玩家 2026-09 第十轮：「带子取代鱼眼轴」。这一块是从 .mode-axis 改过来的，
+ * 那边踩过的坑这儿一个不少，逐条写明。
+ */
+/* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
+   `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }` 特指度是
+   0,3,0，压得过 `.mode-strip .home-icon-btn` 的 0,2,0——鱼眼轴当年就是这么被
+   压成 157px，宽画布的那几张图溢出去压住左右。 */
+.mode-strip {
+  /* 一张卡里那个**正方格**有多大。和鱼眼轴同一个数（--axis-art）：图还是
+     那些图，换的只是摆法。 */
+  --strip-art: 112px;
+  /* 盖掉 .home-grid 的 flex 列：marquee 自己里面摆。 */
+  display: block;
+  /*
+   * 带子自己吃掉竖向手势。
+   *
+   * 和以前的鱼眼轴一样：不写这一条，手指一滑页面跟着滚，带子只走一半。
+   */
+  touch-action: none;
+  /*
+   * 上下两头**什么都不盖**：这一列图标就从 Slides 招牌和底排那两块板子底下
+   * 滑过去（玩家第三轮定的，鱼眼轴时代就是这么定的）。
+   *
+   *   · `overflow: clip` 画不出自己的盒子，但**也不撑大页面的可滚区**；前面
+   *     那句 hidden 是给老内核兜底的（Chrome 61 不认 clip），顺序不能反。
+   *   · `z-index: 0` 建一个层叠上下文，把整条带子压在招牌（.home-head，z-index 60）
+   *     和底排（.home-nav，60）下面。不写的话卡片会浮到那两块板子**上面**。
+   */
+  overflow: hidden;
+  overflow: clip;
+  z-index: 0;
+}
+/*
+ * 带子要从**屏幕边上**跑出去，不是从页边距里跑出去。
+ *
+ * 这一页两边各有 --narrow-pad 的白（给两列图标留的）。带子不把它挣回来的话，
+ * 宽画布的那几张图（老虎机 193、七色圆球 179、进阶三角 200）会被挤窄。
+ */
+.home-page:not(.home-page--wide) .mode-strip {
+  /*
+   * 抽出文流，直接钉在视口上。
+   *
+   * 两件事一起办了：带子占满整屏（卡片从招牌和底排底下滑过去），而且
+   * **不再撑高页面**——两份内容加起来四千多像素，留在文流里的话整页跟着被
+   * 撑到 4657px。
+   *
+   * `top` 要把 --head-top 那四像素内边距退回来：绝对定位的子元素是按**内边距
+   * 盒**算的，写 0 的话带子顶在 y=4 而不是 y=0，整页于是高出几像素，手机上
+   * 就是「页面能滑一点点」那一下死活。左右同理，要把 --narrow-pad 退回来才能
+   * 贴到屏幕边上（不贴的话，宽画布的那几张图会被挤窄）。
+   */
+  position: absolute;
+  top: calc(-1 * var(--head-top));
+  left: calc(-1 * var(--narrow-pad));
+  right: calc(-1 * var(--narrow-pad));
+  width: auto;
+  height: 100svh;
+  margin: 0;
+}
+/* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
+   `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }` 特指度是
+   0,3,0，压得过 `.mode-strip .home-icon-btn` 的 0,2,0——鱼眼轴当年就是这么被
+   压成 157px，宽画布的那几张图溢出去压住左右。 */
+.home-page:not(.home-page--wide) .mode-strip .home-icon-btn {
+  position: static;
+  flex: 0 0 auto;
+  /* **整幅宽**，图在卡里自己居中（和鱼眼轴同一个道理）。 */
+  width: 100%;
+  max-width: none;
+  aspect-ratio: auto;
+  /* 一站多高：图那个格子＋底下一行小字＋上下那点宽余。每站一样高，带子才是
+     匀的；匀了，绕回去那一下才看不出接缝。 */
+  height: calc(var(--strip-art) + 46px);
+  margin: 0;
+  text-align: center;
+}
+.home-page:not(.home-page--wide) .mode-strip .home-icon-btn > .home-icon-art {
+  display: block;
+  width: var(--strip-art);
+  height: var(--strip-art);
+  margin: 0 auto;
+  aspect-ratio: auto;
+}
+.mode-strip .home-icon-btn > .home-icon-art > .bomb-panel,
+.mode-strip .home-icon-btn > .home-icon-art > svg {
+  width: 100%;
+  height: 100%;
+}
+/* 宽画布那张（V 型三角）在别处会把整张卡压成 189:106，带子上不要——
+   每一格都是正方的，图自己在里面居中留白。 */
+.home-page:not(.home-page--wide) .mode-strip .home-icon-btn--wide-art,
+.home-page:not(.home-page--wide) .mode-strip .home-icon-btn--wide-art > .home-icon-art {
+  aspect-ratio: auto;
+}
+/* 一行小字永不折行：折了那一站就比别人高，统一高度立刻破功，接缝也跟着错位。 */
+.mode-strip .home-icon-tag { white-space: nowrap; }
+/* 按下那段抖动（.home-tap 的 home-tap-wobble）在带子上留着没关系：带子的
+   transform 写在轨道上、不在卡上，不像鱼眼轴那样会被关键帧整个顶掉。 */
+
+/*
+ * 首玩期《我会玩》那条分界线。
+ *
+ * 竖着摆的时候它是一行：两条横线夹一行小字。鱼眼轴那一版得每帧算位置
+ * （站距是均匀的，而它只有四十来像素高，当成一站会上下各空出一大截，玩家
+ * 第九轮报的就是这个）；带子这一版它就是队伍里的一员，只占自己那点高，
+ * 「不占额外的位置」自动成立。
+ */
+.mode-strip .axis-divider {
+  position: static;
+  /* `display: flex` 不能省：那两条线是 `flex: 1 1 auto` 的 span，父亲不是 flex 的话它们
+     是行内元素、宽度 0——画出来就是「一行字贴在最左边，一条线都没有」。
+     鱼眼轴那一版的 display: flex 写在 `.mode-axis > .axis-divider` 里，换成带子之后
+     那条选择器就不匹配了。 */
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 26px;
+  width: 100%;
+  transform: none;
+  opacity: 1;
+}
+.mode-strip .axis-divider-line {
+  height: 1px;
+  width: auto;
+  flex: 1 1 auto;
+}
+.mode-strip .axis-divider .know-how-btn { white-space: nowrap; }
+
+/*
+ * 横向无缝滚动的带子（src/engine/marquee.ts）。
+ *
+ * 这儿只定**结构**——每帧的 transform 由 JS 写，CSS 一个字都不许管它：给
+ * .marquee-track 加 transition 的话，带子会比手指慢一拍，接缝当场露出来。
+ *
+ * 一份内容要能比屏幕宽，所以 track 是 max-content：flex 默认会把子项压到容器
+ * 宽度里去，压完两份一样宽，减一份就减错了。
+ */
+.marquee {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  /* skewX 绕竖向中线切，带子上下对称地斜——原点在上沿的话整条会往下掉。 */
+  transform-origin: center;
+  will-change: transform;
+  transition: none;
+}
+.marquee-copy {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+/*
+ * 竖着走的那一版（axis: 'y'，主菜单那条就是）。
+ *
+ * 摆法整个转九十度：轨道和两份都改成竖列，「一份比屏幕长」量的是**高**。
+ * width: max-content 在这儿反而有害（会把列撑成最宽那张卡的宽），改成撞满宽、
+ * 高度按内容。
+ */
+.marquee--y > .marquee-track {
+  flex-direction: column;
+  width: 100%;
+  height: max-content;
+}
+.marquee--y .marquee-copy {
+  flex-direction: column;
+  width: 100%;
+  align-items: stretch;
+}
+/* 手动那一路（reduced-motion）：竖着的带子改成竖向滚动。 */
+.marquee--y.marquee--manual {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+/* reduced-motion：不自动滚，改成玩家自己横着拨（见 marquee.ts 里那一段）。 */
+.marquee--manual {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.marquee--manual .marquee-track { transform: none; }
+
 /*
  * 首玩期那条分界线：两条横线夹一行《我会玩》，骑在「基础」和「锁着的」中间。
  *
@@ -1814,6 +2019,21 @@ button:hover { filter: brightness(1.05); }
   transition: opacity 0.22s ease, transform 0.22s ease;
 }
 .home-up-hint--in { opacity: 0.95; transform: translate(-50%, -2px); animation: home-up-float 1s ease-in-out 1; }
+/*
+ * 带子那一路：箭头指左指右，摆在带子的正中。
+ *
+ * 横着跑的时候「能玩的在上面」不成立了（见 menu.ts 的 armFirstPlayLock）。
+ * 它挂在 .mode-strip 上、不在任何一份里：一份的宽度就是绕回去的距离，不能动。
+ */
+.mode-strip > .home-up-hint {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 120;
+}
+/* 向下那一种：同一个箭头转半圈。带子是无缝循环的，能玩的那两张可能在上
+   也可能在下（鱼眼轴时代它们永远在上面）。 */
+.home-up-hint--down,
+.home-up-hint--down.home-up-hint--in { transform: translate(-50%, -50%) rotate(180deg); }
 @keyframes home-up-float {
   0%, 100% { margin-top: 0; }
   50% { margin-top: -5px; }

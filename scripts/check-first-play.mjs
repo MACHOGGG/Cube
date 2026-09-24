@@ -42,7 +42,12 @@ await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 
 // ── 软锁 ──────────────────────────────────────────────────────────────
-const glow = await page.$$eval('.home-icon-btn--glow', (bs) => bs.map((b) => b.getAttribute('aria-label')));
+/*
+ * 去重：主菜单那条带子把内容摆了两份（无缝循环靠的就是这个），两张发光的
+ * 卡于是各有一个分身。不去重的话这儿数出四张——不是多了两张能玩的。
+ */
+const glow = await page.$$eval('.home-icon-btn--glow', (bs) =>
+  [...new Set(bs.map((b) => b.getAttribute('aria-label')))]);
 check('新人进来：只有方块和小球两张亮着', glow.length === 2 && glow.includes('方块') && glow.includes('圆球'), JSON.stringify(glow));
 
 await page.$eval('.home-icon-btn[aria-label^="老虎机"]', (e) => e.click());
@@ -54,7 +59,33 @@ const after = await page.evaluate(() => ({
 }));
 check('按到锁着的玩法：人还在主菜单，没进去', after.onMenu, JSON.stringify(after));
 check('两张基础卡抖起来了', after.nudging === 2, String(after.nudging));
-check('那张在下面，冒出了上滑箭头', after.hint === true);
+/*
+ * 指路的那个箭头。
+ *
+ * 窄版 2026-09 第十轮换成了一条横着跑的带子，能玩的那两张不再在「上面」
+ * 而是在左边或右边，所以量的不再是「是不是上箭头」，是「有没有指路」。
+ * 下一条接着量方向对不对——只看「有」的话，指错边也能蒙混过关。
+ */
+check('按不开的那一下，冒出了指路的箭头', after.hint === true, JSON.stringify(after));
+const arrow = await page.evaluate(() => {
+  const h = document.querySelector('.home-up-hint--in');
+  if (!h) return null;
+  // 带子是无缝循环的，能玩的那两张上下都可能：取离屏心最近的那一个比。
+  const mid = window.innerHeight / 2;
+  let nearest = null, best = Infinity;
+  for (const el of document.querySelectorAll('[data-first-playable="1"]')) {
+    const r = el.getBoundingClientRect();
+    const d = Math.abs(r.top + r.height / 2 - mid);
+    if (d < best) { best = d; nearest = r; }
+  }
+  const locked = document.querySelector('.home-icon-btn[aria-label^="老虎机"]').getBoundingClientRect();
+  return { cls: h.className, playableAboveLocked: nearest.top < locked.top };
+});
+check(
+  '而且指的是能玩的那一头',
+  !!arrow && arrow.cls.includes(arrow.playableAboveLocked ? '--up' : '--down'),
+  JSON.stringify(arrow),
+);
 
 // 玩过一局之后锁就没了
 await page.evaluate(() => localStorage.setItem('slides_played_circle', '1'));

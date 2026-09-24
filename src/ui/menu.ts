@@ -8,7 +8,7 @@ import { menuTag } from './menuTags';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
-import { mountModeAxis } from './modeAxis';
+import { mountModeStrip } from './modeStrip';
 
 import {
   ICON_BASE_SQUARE,
@@ -218,7 +218,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const wide = window.matchMedia(WIDE_QUERY).matches;
 
   container.innerHTML = `
-    <div class="app home-page${wide ? ' home-page--wide' : ''}${wide ? '' : ' home-page--axis'}">
+    <div class="app home-page${wide ? ' home-page--wide' : ''}${wide ? '' : ' home-page--strip'}">
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
@@ -624,7 +624,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       dividerAfter = after;
     }
     axisFocus = Math.min(axisFocus, Math.max(entries.length - 1, 0));
-    mountModeAxis(grid, {
+    mountModeStrip(grid, {
       cards: entries,
       initial: axisFocus,
       onFocus: saveAxisFocus,
@@ -678,21 +678,50 @@ function armFirstPlayLock(grid: HTMLElement, given?: HTMLElement[]): void {
       void basics[0].offsetWidth;
       for (const b of basics) b.classList.add('home-icon-btn--nudge');
 
-      // 他按的那张在两张卡下面：指一下往上滑。用的是两者在页面上的位置，不是
-      // 「第几张」——宽窄两版的排法不一样，位置才是他眼睛看见的事实。
-      const target = basics[0].getBoundingClientRect();
-      if (btn.getBoundingClientRect().top > target.bottom + 8) {
+      /**
+       * 指路：他按的那张不能玩，能玩的在别处。
+       *
+       * 宽版（电脑、横屏）能玩的那两张在**上面**，所以是个上箭头。窄版
+       * 2026-09 第十轮换成了一条横着跑的带子（玩家：「带子取代鱼眼轴」），
+       * 「上面」于是不成立了——能玩的在左边或右边。所以这儿按**实际方位**挑
+       * 箭头，不写死一个方向。
+       *
+       * 摆在哪里也跟着变：宽版插在那一排里，带子那一路挂在**带子这一块**
+       * 上。绝不能插进 `.marquee-copy`：那一份的宽度就是无缝循环绕回去的距离，
+       * 往里面塞一个元素，两份就不一样长了，接缝当场露出来。
+       */
+      const onStrip = grid.classList.contains('mode-strip');
+      const bb = btn.getBoundingClientRect();
+      /** 离屏心最近的那个「能玩的」（带子上真身和克隆各有一份）。 */
+      let near = basics[0].getBoundingClientRect();
+      if (onStrip) {
+        const mid = window.innerHeight / 2;
+        let best = Infinity;
+        for (const el of grid.querySelectorAll<HTMLElement>('[data-first-playable="1"]')) {
+          const r = el.getBoundingClientRect();
+          const d = Math.abs(r.top + r.height / 2 - mid);
+          if (d < best) { best = d; near = r; }
+        }
+      }
+      /*
+       * 带子是无缝循环的，所以能玩的那两张**上下都可能**。鱼眼轴时代它们永
+       * 远在上面，所以只有上箭头；现在要看哪一头更近。
+       */
+      let dir: '' | 'up' | 'down' = '';
+      if (bb.top > near.bottom + 8) dir = 'up';
+      else if (near.top > bb.bottom + 8) dir = 'down';
+      if (dir) {
         if (!hint) {
           hint = document.createElement('div');
-          hint.className = 'home-up-hint';
           hint.setAttribute('aria-hidden', 'true');
           hint.innerHTML =
             '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"' +
             ' stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' +
             '<path d="M12 19.5 V6"/><path d="M5.5 12 L12 5.4 L18.5 12"/></svg>';
-          basics[0].parentElement?.insertBefore(hint, basics[0]);
+          if (onStrip) grid.appendChild(hint);
+          else basics[0].parentElement?.insertBefore(hint, basics[0]);
         }
-        hint.classList.remove('home-up-hint--in');
+        hint.className = `home-up-hint home-up-hint--${dir}`;
         void hint.offsetWidth;
         hint.classList.add('home-up-hint--in');
       }

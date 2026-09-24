@@ -74,11 +74,12 @@ function ensure(): Lenis | null {
     /**
      * 手指按在这些地方的时候，Lenis 一概不管——它们自己吃手势。
      *
-     * 鱼眼轴（主菜单那条竖轴）是自己算位置的，`touch-action: none`；棋盘同理。
-     * 这两处本来也不该有页面滚动，写在这儿是把话说死：以后谁把轴放进一个会滚
-     * 的页面里，也不会变成「一根手指同时拖两样东西」。
+     * 主菜单那条带子（.mode-strip）和棋盘都是自己算位置、自己吃手势的。
+     * 写在这儿是把话说死：以后谁把它们放进一个会滚的页面里，也不会变成「一
+     * 根手指同时拖两样东西」。`.mode-axis` 也留着：鱼眼轴那一版暂时还在仓库里
+     * （见 ui/modeStrip.ts 文件头），换回去的话这一句不用跟着改。
      */
-    prevent: (node) => !!(node instanceof Element && node.closest('.mode-axis, .board-wrap')),
+    prevent: (node) => !!(node instanceof Element && node.closest('.mode-strip, .mode-axis, .board-wrap')),
   });
   lenis.stop();
   return lenis;

@@ -86,12 +86,12 @@ const blocked = (page) => page.evaluate(async () => {
        * 底下那行小字）正落在底排那一带——那不是事故，是那条轴的样子，而且它照样
        * 够得着：滑一下就到正中。
        *
-       * 轴自己那一摊由 check-mode-axis 守着：底排那两颗点得着、底排画在卡片上
+       * 带子自己那一摊由 check-mode-strip 守着：底排那两颗点得着、底排画在卡片上
        * 面、选中的那张正对屏幕中线。这儿再管一遍只会逼着人把玩家要的效果改回去
        * （第五轮图标放大之后，四种语言各红一条，红的全是「经典三角的小字压在底
        * 排下面」）。
        */
-      if (el.closest('.mode-axis')) return false;
+      if (el.closest('.mode-strip')) return false;
       if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') return false;
       const r = el.getBoundingClientRect();
       if (r.width < 8 || r.height < 8) return false;

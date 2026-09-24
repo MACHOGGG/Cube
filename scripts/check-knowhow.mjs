@@ -84,7 +84,7 @@ let page = await freshPage(ctx);
   const seen = await page.evaluate(() => {
     const b = document.querySelector('.know-how-btn');
     const r = b?.getBoundingClientRect();
-    const glow = document.querySelectorAll('.home-icon-btn--glow').length;
+    const glow = new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((e) => e.dataset.stripIdx ?? e.getAttribute('aria-label'))).size;
     // 轴上这一项是被鱼眼缩放过的，屏幕上的高度＝版面高度 × 这一帧的 scale。量
     // 「热区够不够 44px」要看**版面**高度：它离中线远的时候本来就该小一圈，滑到
     // 中线上又会胀到 44×1.6。除掉 scale 才是那个不变量。
@@ -97,6 +97,11 @@ let page = await freshPage(ctx);
   });
   check('新人的主菜单上有《我会玩》', seen.text === '我会玩', JSON.stringify(seen.text));
   check('热区不小于 44px（看着小，按着不小）', seen.h >= 44, `版面 ${seen.h.toFixed(1)}px 高 × ${seen.w.toFixed(1)}px 宽（这一帧 scale ${seen.scale}）`);
+  /*
+   * 带子上的东西摆了**两份**（无缝循环靠的就是这个，见 engine/marquee.ts），
+   * 所以得按 data-strip-idx 去重。不去重的话这儿量出来是 4，而它并不是「多了
+   * 两张发光的卡」，是同两张各有一个分身。
+   */
   check('这时候两张基础卡还镶着光', seen.glow === 2, `${seen.glow} 张`);
 
   /**
@@ -114,32 +119,42 @@ let page = await freshPage(ctx);
     const host = document.querySelector('.home-grid');
     const b = document.querySelector('.know-how-btn');
     if (!host || !b) return null;
-    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    /*
+     * 只看**真身那一份**。
+     *
+     * 带子（.mode-strip）把内容摆了两份，第二份是 `cloneNode` 出来的画（整个
+     * aria-hidden）。两份一起数的话，十四张卡数出二十八张、两张发光的数出四张
+     * ——都不是真的多了，是同一件东西的分身。
+     */
+    const copy = host.querySelector('.marquee-copy') || host;
+    const cards = [...copy.children].filter((e) => e.classList.contains('home-icon-btn'));
     const box = b.closest('.axis-divider') || b;
-    const cy = (e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
-    const my = cy(box);
-    const above = cards.filter((e) => cy(e) < my);
-    const below = cards.filter((e) => cy(e) > my);
+    /*
+     * 量的是「它夹在能玩的和锁着的之间」。用**布局坐标**（offsetTop）而不是屏幕
+     * 坐标：带子每帧都在走，屏幕坐标量的是这一帧的运气。
+     */
+    const ly = (e) => e.offsetTop + e.offsetHeight / 2;
+    const my = ly(box);
+    const before = cards.filter((e) => ly(e) < my);
+    const after = cards.filter((e) => ly(e) > my);
     return {
-      onAxis: host.classList.contains('mode-axis'),
-      // 鱼眼轴那一路它是**两站之间的一条分界线**（不占站位），所以按画出来的位置
-      // 分上下，不按 DOM 顺序数第几项——旧那把尺子量的是已经不存在的设计。
-      above: above.map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
-      belowLocked: below.length > 0 && below.every((e) => e.classList.contains('home-icon-btn--locked')),
+      onStrip: host.classList.contains('mode-strip'),
+      before: before.map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+      afterLocked: after.length > 0 && after.every((e) => e.classList.contains('home-icon-btn--locked')),
       stations: cards.length,
-      inAxis: box.parentElement === host,
+      inStrip: box.parentElement === copy,
     };
   });
   check(
     '《我会玩》就在两张基础卡下面（上头只有它们俩）',
-    order?.above.length === 2,
-    `上头有 ${order?.above.join(' ') || '（空）'}`,
+    order?.before.length === 2,
+    `上头有 ${order?.before.join(' ') || '（空）'}`,
   );
-  check('它下面那些玩法这会儿都锁着', order?.belowLocked === true);
-  if (order?.onAxis) {
-    check('鱼眼轴那一路：它就住在轴上（跟着一起滑）', order?.inAxis === true);
-    // 玩家第九轮：它「不占额外的位置」——轴还是十四站，它只是骑在两站之间那条缝上。
-    check('而且不占站位（轴还是十四站）', order?.stations === 14, `${order?.stations} 站`);
+  check('它下面那些玩法这会儿都锁着', order?.afterLocked === true);
+  if (order?.onStrip) {
+    check('带子那一路：它就排在带子里（跟着一起滑）', order?.inStrip === true);
+    // 一份里十四张卡：分界线不算一站。
+    check('带子上还是十四项', order?.stations === 14, `${order?.stations} 项`);
   }
 
   /**
@@ -156,8 +171,10 @@ let page = await freshPage(ctx);
     // **直接子元素**，不是后代：炸弹那张卡里嵌着九颗小片，其中一颗的名字也叫
     // 「进阶炸弹 · 菱形方块」——按后代找会先撞上它（它是画不是控件，自然没有
     // 锁），于是这一条会莫名其妙地红。
+    // 带子把内容摆了两份，只看真身那一份（第二份是 aria-hidden 的克隆）。
     const host = document.querySelector('.home-grid');
-    const el = [...host.children].find(
+    const copy = host.querySelector('.marquee-copy') || host;
+    const el = [...copy.children].find(
       (e) =>
         e.classList.contains('home-icon-btn') &&
         (e.getAttribute('aria-label') || '').includes('菱形方块'),
@@ -180,7 +197,7 @@ let page = await freshPage(ctx);
   await page.waitForTimeout(700);
   const after = await page.evaluate(() => ({
     btn: !!document.querySelector('.know-how-btn'),
-    glow: document.querySelectorAll('.home-icon-btn--glow').length,
+    glow: new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((e) => e.dataset.stripIdx ?? e.getAttribute('aria-label'))).size,
     menu: !!document.querySelector('.home-grid'),
   }));
   check('按完按钮自己不在了', after.btn === false);
@@ -206,7 +223,7 @@ let page = await freshPage(ctx);
   await page.waitForTimeout(500);
   const after = await page.evaluate(() => ({
     btn: !!document.querySelector('.know-how-btn'),
-    glow: document.querySelectorAll('.home-icon-btn--glow').length,
+    glow: new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((e) => e.dataset.stripIdx ?? e.getAttribute('aria-label'))).size,
   }));
   check('刷新之后按钮不再出现', after.btn === false);
   check('刷新之后光也不再出现', after.glow === 0, `${after.glow} 张`);
