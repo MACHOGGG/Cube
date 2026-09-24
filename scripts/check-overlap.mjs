@@ -86,12 +86,17 @@ const blocked = (page) => page.evaluate(async () => {
        * 底下那行小字）正落在底排那一带——那不是事故，是那条轴的样子，而且它照样
        * 够得着：滑一下就到正中。
        *
-       * 带子自己那一摊由 check-mode-strip 守着：底排那两颗点得着、底排画在卡片上
-       * 面、选中的那张正对屏幕中线。这儿再管一遍只会逼着人把玩家要的效果改回去
+       * 轴自己那一摊由 check-mode-axis 守着：底排那两颗点得着、底排画在卡片上
+       * 面、选中的那张正对选中线。这儿再管一遍只会逼着人把玩家要的效果改回去
        * （第五轮图标放大之后，四种语言各红一条，红的全是「经典三角的小字压在底
        * 排下面」）。
+       *
+       * **两个类名都写上。** 第十轮菜单换成带子时这一句只留了 `.mode-strip`，
+       * 第十一轮换回轴，这句排除当场落空——这道门从那天起四种语言 × 两种屏各红
+       * 一条（span「多人」「经典三角」），红的全是轴本来的样子。同一个遗留在
+       * check-menu 里也埋了一份。现在两个都认，换哪一版都不会再落空。
        */
-      if (el.closest('.mode-strip')) return false;
+      if (el.closest('.mode-axis, .mode-strip')) return false;
       if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') return false;
       const r = el.getBoundingClientRect();
       if (r.width < 8 || r.height < 8) return false;
