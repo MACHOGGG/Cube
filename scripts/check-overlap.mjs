@@ -78,6 +78,20 @@ const blocked = (page) => page.evaluate(async () => {
   const leaves = () =>
     [...document.querySelectorAll('button, input, a, p, h1, h2, span, div')].filter((el) => {
       if (furniture(el)) return false;
+      /**
+       * 鱼眼轴上的东西这道门一概不管。
+       *
+       * 这道门问的是「有没有东西永远够不着」。轴上的卡**本来就要从底排和招牌底
+       * 下滑过去**（玩家 2026-09 第四轮点名的效果），所以随时会有一两张（连同它
+       * 底下那行小字）正落在底排那一带——那不是事故，是那条轴的样子，而且它照样
+       * 够得着：滑一下就到正中。
+       *
+       * 轴自己那一摊由 check-mode-axis 守着：底排那两颗点得着、底排画在卡片上
+       * 面、选中的那张正对屏幕中线。这儿再管一遍只会逼着人把玩家要的效果改回去
+       * （第五轮图标放大之后，四种语言各红一条，红的全是「经典三角的小字压在底
+       * 排下面」）。
+       */
+      if (el.closest('.mode-axis')) return false;
       if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') return false;
       const r = el.getBoundingClientRect();
       if (r.width < 8 || r.height < 8) return false;
