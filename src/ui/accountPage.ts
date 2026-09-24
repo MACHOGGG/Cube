@@ -29,7 +29,7 @@ import {
   type PieceVariant,
   variantSwatch,
 } from '../engine/palettePref';
-import { THEME_SWATCH, pickedTheme, setTheme, type Theme } from '../engine/themePref';
+import { pickedTheme, setTheme } from '../engine/themePref';
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
@@ -98,8 +98,6 @@ export function renderAccountPage(
     jia: s.paletteJia,
     bing: s.paletteBing,
   };
-  /** 两套界面的名字。挑选窗口和外面那一行共用同一份，不各写各的。 */
-  const THEME_NAME: Record<Theme, string> = { light: s.themeLight, dark: s.themeDark };
   /** 《图形翻面速度》那一行右边写什么：推荐档就写「推荐」，其余写倍率。
    *  写倍率而不是毫秒——毫秒要跟设计时长走，倍率是玩家自己拉出来的那个数。 */
   const flipLabel = (i: number) =>
@@ -218,17 +216,17 @@ export function renderAccountPage(
               : '&rsaquo;'
           }</span>
         </button>
-        <!-- 《界面明暗》和上面那行配色是一对：一个换棋子的颜色，一个换整个
-             界面的底色。玩家 2026-09 定的：「默认是白色米白的系统，如果是
-             slides 天才可以解锁选择暗色系统（深紫色）」。
-             同样是两种人都点得开：没开通的人进去看得见两条色带，米白那条还
-             挑得动（他本来就用着它），深紫那条挂着锁。 -->
-        <button class="profile-row" id="themeRow">
+        <!-- 《深色界面》：一颗开关，不是一扇窗（玩家 2026-09 第二句：「简化一
+             下，就和现在开关色盲友好模式一样，亮/暗的开关按钮」）。原先是「点开
+             → 两条色带里挑一条 → 关窗」，三步换一件只有两种可能的事。
+             和上面那颗色盲开关同一个零件（.pill-switch），只是它住在天才特供这
+             一段里，所以行首多一把锁：没开通的按下去不是没反应，是带他去开通那
+             一页——和这一段里别的锁着的几行一个样。 -->
+        <button class="profile-row" id="themeRow" role="switch"
+                aria-checked="${subscribed && pickedTheme() === 'dark'}"${subscribed ? '' : ' aria-disabled="true"'}>
           ${lockGlyph}
           <span class="profile-row-label">${s.themeTitle}</span>
-          <span class="profile-row-value">${
-            subscribed ? `${THEME_NAME[pickedTheme()]}&nbsp;&rsaquo;` : '&rsaquo;'
-          }</span>
+          <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
         </button>
         <!-- 《图形翻面速度》跟上面那一行同一个规矩：做好了，所以两种人都点
              得开。没开通的人进去看得见那根拉杆、也看得见它在做什么（窗口里
@@ -446,75 +444,6 @@ export function renderAccountPage(
   }
 
   /**
-   * 《界面明暗》——米白还是深紫。
-   *
-   * 和《解锁更多配色》同一套窗口（.pal-opt 那几个类名原样复用：一行一套，名字加
-   * 一条色带）。不一样的只有一处：**米白那条永远挑得动**。它是默认那一套、也是
-   * 没开通的人正用着的那一套，把它一起锁上只会让人以为「我连现在这个都不能选」。
-   * 锁只挂在深紫那条上——它才是要开通的那件东西。
-   *
-   * 挑了当场就变：窗口底下那一整页跟着换底色，这比任何说明都直观。没开通的人点
-   * 深紫点不动（disabled），但看得见它长什么样，也看得见那颗《成为 Slides 天才》。
-   */
-  function openThemePicker() {
-    const locked = !isGenius();
-    const name = THEME_NAME;
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay show';
-    const row = (v: Theme) => {
-      const shut = locked && v === 'dark';
-      return `<button class="pal-opt${shut ? ' pal-opt--locked' : ''}" data-theme-opt="${v}"${
-        shut ? ' disabled aria-disabled="true"' : ''
-      }>
-         ${shut ? `<span class="pal-lock">${ICON_LOCK}</span>` : ''}
-         <span class="pal-name">${name[v]}</span>
-         <span class="pal-strip">${THEME_SWATCH[v]
-           .map((c) => `<span style="background:${c}"></span>`)
-           .join('')}</span>
-       </button>`;
-    };
-    overlay.innerHTML = `
-      <div class="modal pal-modal">
-        <h2>${s.themeTitle}</h2>
-        <p class="hint">${locked ? s.paletteLocked : s.themeHint}</p>
-        <div class="pal-list">${(['light', 'dark'] as Theme[]).map(row).join('')}</div>
-        <div class="btn-row">
-          ${locked ? `<button class="genius-cta" id="themeGo">${s.becomeGenius}</button>` : ''}
-          <button class="${locked ? 'profile-row profile-row--back' : 'primary'}" id="themeClose">${s.doneBtn}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const close = () => overlay.remove();
-    pushLayer(close, overlay);
-    overlay.querySelector<HTMLButtonElement>('#themeGo')?.addEventListener('click', () => {
-      close();
-      openGeniusWindow(lang, refresh);
-    });
-    const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.pal-opt'));
-    const mark = (v: Theme) => {
-      for (const el of opts) el.classList.toggle('pal-opt--on', el.dataset.themeOpt === v);
-      // 和配色窗口同一条规矩：锁着的时候不去改外面那一行。写上名字会让他以为
-      // 自己已经挑好了，而他挑不了深紫。
-      if (locked) return;
-      const value = container.querySelector<HTMLElement>('#themeRow .profile-row-value');
-      if (value) value.innerHTML = `${name[v]}&nbsp;&rsaquo;`;
-    };
-    mark(pickedTheme());
-    for (const el of opts) {
-      el.addEventListener('click', () => {
-        const v = el.dataset.themeOpt as Theme;
-        setTheme(v);
-        mark(v);
-      });
-    }
-    overlay.querySelector<HTMLButtonElement>('#themeClose')!.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
-  }
-
-  /**
    * 《图形翻面速度》——一根十档的拉杆。
    *
    * 从设计速度的一半到两倍，正中那一档标《推荐》。这件事没有一个对所有人
@@ -703,7 +632,22 @@ export function renderAccountPage(
   on('rulesRow', openRules);
   on('iconRow', openIconPicker);
   on('paletteRow', openPalettePicker);
-  on('themeRow', openThemePicker);
+  /**
+   * 《深色界面》那颗开关。
+   *
+   * 和色盲那颗一样：按一下就换，aria-checked 跟着改（开关的样子全靠它，见
+   * style.css 的 [aria-checked='true'] .pill-switch）。不用重画整页——换主题只是
+   * 在 <html> 上换一个属性，这一页连同底下的主菜单当场就变了。
+   */
+  on('themeRow', () => {
+    if (!isGenius()) {
+      openGeniusWindow(lang, refresh);
+      return;
+    }
+    const dark = pickedTheme() !== 'dark';
+    setTheme(dark ? 'dark' : 'light');
+    container.querySelector('#themeRow')?.setAttribute('aria-checked', String(dark));
+  });
   on('flipRow', openFlipSpeedPicker);
   on('cvdRow', () => {
     setColorblind(!colorblindOn());

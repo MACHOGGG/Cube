@@ -16,10 +16,9 @@
  *   · **没开通的人挑不动深紫。** 看得见（知道开通了有什么），按不动。
  *   · **权益没了就自己退回米白，但他挑的那一格要留着。** 订阅过期不该把人家的选
  *     择抹掉——重新开通当场回到深紫。
- *   · **窗口里那两条色带和真的样式不能走散。** 色带是 themePref 里的一份常量，样
- *     式在 style.css 的两块 `:root` 里；两处写同一组颜色，迟早有人只改一边。所以
- *     这儿把属性真的盖上去，读 getComputedStyle 拿到的四支，和窗口里画出来的逐支
- *     比。
+ *   · **它是一颗开关，不是一扇窗。** 玩家第二句：「简化一下，就和现在开关色盲友
+ *     好模式一样，亮/暗的开关按钮」。所以量的是「按一下就换」，不是「点开→挑→
+ *     关窗」；顺带量它确实用着色盲那颗开关的同一个零件。
  */
 import { chromium } from 'playwright';
 const BASE = process.argv[2] || 'http://localhost:8976/';
@@ -85,16 +84,37 @@ const look = (p) =>
     };
   });
 
-/** 打开个人主页 → 点开《界面明暗》那一行。 */
-async function openPicker(p) {
+/** 走到个人主页（底排左半边那颗）。 */
+async function toProfile(p) {
   await p.evaluate(() => {
     document.querySelector('.home-nav-btn')?.click();
   });
   await p.waitForSelector('#themeRow', { timeout: 10000 });
-  await p.evaluate(() => document.querySelector('#themeRow').click());
-  await p.waitForSelector('.pal-modal .pal-opt', { timeout: 10000 });
   await p.waitForTimeout(250);
 }
+
+/** 那颗开关现在是什么样。 */
+const sw = (p) =>
+  p.evaluate(() => {
+    const el = document.querySelector('#themeRow');
+    const knob = el.querySelector('.pill-switch');
+    return {
+      label: el.querySelector('.profile-row-label')?.textContent?.trim() || '',
+      role: el.getAttribute('role'),
+      checked: el.getAttribute('aria-checked'),
+      disabled: el.getAttribute('aria-disabled'),
+      lock: !!el.querySelector('.profile-row-glyph--lock'),
+      inGenius: !!el.closest('.genius-panel'),
+      hasSwitch: !!knob,
+      // 和色盲那颗是不是同一个零件：同样的类名、同样的轨道尺寸。
+      track: knob ? `${Math.round(knob.getBoundingClientRect().width)}×${Math.round(knob.getBoundingClientRect().height)}` : '',
+      cvdTrack: (() => {
+        const k = document.querySelector('#cvdRow .pill-switch');
+        return k ? `${Math.round(k.getBoundingClientRect().width)}×${Math.round(k.getBoundingClientRect().height)}` : '';
+      })(),
+      knobX: knob ? getComputedStyle(knob.querySelector('.pill-switch-knob')).translate : '',
+    };
+  });
 
 // ── 1. 系统开着深色，界面还是米白 ───────────────────────────────────
 {
@@ -113,64 +133,67 @@ async function openPicker(p) {
   await p.close();
 }
 
-// ── 2. 个人主页那一行 ───────────────────────────────────────────────
+// ── 2. 个人主页上那颗开关 ──────────────────────────────────────────
 {
   const p = await page();
-  await p.evaluate(() => document.querySelector('.home-nav-btn')?.click());
-  await p.waitForSelector('#themeRow', { timeout: 10000 });
-  const row = await p.evaluate(() => {
-    const el = document.querySelector('#themeRow');
-    return {
-      label: el.querySelector('.profile-row-label')?.textContent?.trim() || '',
-      lock: !!el.querySelector('.profile-row-glyph--lock'),
-      inGenius: !!el.closest('.genius-panel'),
-    };
-  });
-  check('个人主页上有《界面明暗》这一行', row.label === '界面明暗', row.label);
-  check('它排在天才特供那一块里', row.inGenius);
-  check('没开通的时候行首挂着锁', row.lock);
+  await toProfile(p);
+  const w = await sw(p);
+  check('个人主页上有《深色界面》', w.label === '深色界面', w.label);
+  check('它是一颗开关（role=switch + 那个拨钮）', w.role === 'switch' && w.hasSwitch, `role=${w.role} 拨钮=${w.hasSwitch}`);
+  check('和色盲那颗是同一个零件（一样大）', w.track === w.cvdTrack && w.track !== '', `${w.track} / ${w.cvdTrack}`);
+  check('它排在天才特供那一块里', w.inGenius);
+  check('没开通的时候行首挂着锁', w.lock);
+  check('页面上没有挑选窗那一套了（点开→挑→关窗）', await p.evaluate(() => !document.querySelector('.pal-modal')));
   await p.close();
 }
 
-// ── 3. 没开通：看得见，深紫按不动 ──────────────────────────────────
+// ── 3. 没开通：拨不动，但按下去有去处 ─────────────────────────────
 {
   const p = await page();
-  await openPicker(p);
-  const opts = await p.evaluate(() =>
-    [...document.querySelectorAll('.pal-modal .pal-opt')].map((el) => ({
-      v: el.dataset.themeOpt,
-      name: el.querySelector('.pal-name')?.textContent?.trim() || '',
-      disabled: el.disabled,
-      on: el.classList.contains('pal-opt--on'),
-      strip: [...el.querySelectorAll('.pal-strip span')].map((s) => getComputedStyle(s).backgroundColor),
-    })),
-  );
-  check('窗口里就两条：米白和深紫', opts.length === 2 && opts[0].name === '米白' && opts[1].name === '深紫', opts.map((o) => o.name).join(' / '));
-  check('米白那条按得动（他本来就用着它）', opts[0].disabled === false);
-  check('深紫那条锁着', opts[1].disabled === true);
-  check('打勾的是米白', opts[0].on === true && opts[1].on === false);
-  check('窗口里有一颗《成为 Slides 天才》', await p.evaluate(() => !!document.querySelector('#themeGo')));
-  // 按不动就是按不动：强行点一下，界面不能变。
-  await p.evaluate(() => document.querySelector('.pal-opt[data-theme-opt="dark"]')?.click());
-  await p.waitForTimeout(250);
+  await toProfile(p);
+  const before = await sw(p);
+  check('没开通时开关是关着的', before.checked === 'false', `aria-checked=${before.checked}`);
+  check('没开通时标着拨不动', before.disabled === 'true', `aria-disabled=${before.disabled}`);
+  await p.evaluate(() => document.querySelector('#themeRow').click());
+  await p.waitForTimeout(400);
   const l = await look(p);
-  check('硬点深紫也不生效', l.attr === 'light' && l.stored !== 'dark', `data-theme=${l.attr} 存的=${l.stored}`);
+  const after = await sw(p);
+  check('按一下也不会偷偷变深', l.attr === 'light' && l.stored !== 'dark', `data-theme=${l.attr} 存的=${l.stored}`);
+  check('开关也没跟着拨过去', after.checked === 'false', `aria-checked=${after.checked}`);
+  /**
+   * 按下去不是「没反应」：和这一段里别的锁着的几行一样，带他去开通那一页。
+   *
+   * 认的是那扇窗里的**价目行**（`.plan-row`，订阅窗独有），不是「页面上有没有一
+   * 层 overlay」——后者随便哪个弹窗都算数，等于没量。
+   */
+  const opened = await p.evaluate(() => ({
+    rows: document.querySelectorAll('.overlay .plan-row').length,
+    any: document.querySelectorAll('.overlay').length,
+  }));
+  check('按下去开的是《成为 Slides 天才》那扇窗', opened.rows >= 1, `价目行 ${opened.rows} 条 / 弹层 ${opened.any} 个`);
   await p.close();
 }
 
-// ── 4. 天才：点了当场就变，刷新还记得 ──────────────────────────────
+// ── 4. 天才：按一下就换，再按一下换回来，刷新还记得 ────────────────
 {
   const p = await page({ genius: true });
-  await openPicker(p);
-  const both = await p.evaluate(() =>
-    [...document.querySelectorAll('.pal-modal .pal-opt')].map((el) => el.disabled),
-  );
-  check('天才两条都按得动', both.every((d) => d === false), both.join(' / '));
-  await p.evaluate(() => document.querySelector('.pal-opt[data-theme-opt="dark"]').click());
-  await p.waitForTimeout(300);
+  await toProfile(p);
+  check('天才这颗没有锁', (await sw(p)).lock === false);
+  check('天才这颗拨得动', (await sw(p)).disabled === null);
+  await p.evaluate(() => document.querySelector('#themeRow').click());
+  await p.waitForTimeout(350);
   let l = await look(p);
-  check('点深紫当场变深紫', l.attr === 'dark' && /1E1820/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
-  check('外面那一行跟着写上「深紫」', await p.evaluate(() => /深紫/.test(document.querySelector('#themeRow .profile-row-value')?.textContent || '')));
+  let w = await sw(p);
+  check('拨一下当场变深紫', l.attr === 'dark' && /1E1820/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
+  check('开关自己也拨过去了', w.checked === 'true', `aria-checked=${w.checked}`);
+  check('拨钮真的挪到了右边', /19px/.test(w.knobX), w.knobX);
+  // 再按一下要回得来——开关最要紧的一半是「拨得回去」。
+  await p.evaluate(() => document.querySelector('#themeRow').click());
+  await p.waitForTimeout(350);
+  l = await look(p);
+  check('再拨一下回到米白', l.attr === 'light' && /FAF6EC/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
+  await p.evaluate(() => document.querySelector('#themeRow').click());
+  await p.waitForTimeout(350);
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('.home-page', { timeout: 20000 });
   await p.waitForTimeout(400);
@@ -192,52 +215,29 @@ async function openPicker(p) {
   await p2.close();
 }
 
-// ── 6. 色带和真的样式不许走散 ───────────────────────────────────────
+// ── 6. 开关映的是真的状态；棋盘那块底板两套都一样 ──────────────────
 {
-  const p = await page({ genius: true });
-  await openPicker(p);
-  const cmp = await p.evaluate(() => {
+  const p = await page({ genius: true, theme: 'dark' });
+  await toProfile(p);
+  const w = await sw(p);
+  // 进来时就该是「开着」的：开关最容易出的错是「状态只在拨的那一下对，重进一
+  // 次又回到默认」——那样玩家看到的是界面深着、开关关着。
+  check('深色开着的时候，重进个人主页开关也是开着的', w.checked === 'true', `aria-checked=${w.checked}`);
+  const panel = await p.evaluate(() => {
     const root = document.documentElement;
     const keep = root.getAttribute('data-theme');
-    const strips = {};
-    for (const el of document.querySelectorAll('.pal-modal .pal-opt')) {
-      strips[el.dataset.themeOpt] = [...el.querySelectorAll('.pal-strip span')].map(
-        (s) => getComputedStyle(s).backgroundColor,
-      );
-    }
-    const real = {};
+    const out = {};
     for (const t of ['light', 'dark']) {
       root.setAttribute('data-theme', t);
-      const cs = getComputedStyle(root);
-      // 拿一个临时的盒子把十六进制换算成 rgb()，好和色带那几个值直接比。
-      const probe = document.createElement('span');
-      document.body.appendChild(probe);
-      real[t] = ['--bg', '--surface', '--ink', '--accent'].map((k) => {
-        probe.style.backgroundColor = cs.getPropertyValue(k).trim();
-        return getComputedStyle(probe).backgroundColor;
-      });
-      probe.remove();
-    }
-    const panel = {};
-    for (const t of ['light', 'dark']) {
-      root.setAttribute('data-theme', t);
-      panel[t] = getComputedStyle(root).getPropertyValue('--play-panel').trim();
+      out[t] = getComputedStyle(root).getPropertyValue('--play-panel').trim();
     }
     root.setAttribute('data-theme', keep);
-    return { strips, real, panel };
+    return out;
   });
-  for (const t of ['light', 'dark']) {
-    check(
-      `${t === 'light' ? '米白' : '深紫'}那条色带和样式表一致`,
-      JSON.stringify(cmp.strips[t]) === JSON.stringify(cmp.real[t]),
-      `窗口 ${cmp.strips[t].join(' ')} / 样式 ${cmp.real[t].join(' ')}`,
-    );
-  }
-  // 窗口里那句话说「棋盘那块底板不跟着变」——它得是真的。
   check(
-    '棋盘那块底板两套都一样（窗口里那句话是真的）',
-    cmp.panel.light === cmp.panel.dark && /3D3128/i.test(cmp.panel.light),
-    `${cmp.panel.light} / ${cmp.panel.dark}`,
+    '棋盘那块底板两套都一样（换的只是界面）',
+    panel.light === panel.dark && /3D3128/i.test(panel.light),
+    `${panel.light} / ${panel.dark}`,
   );
   await p.close();
 }

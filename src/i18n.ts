@@ -320,16 +320,15 @@ export interface I18nStrings {
       《界面明暗》那扇窗也用它：同一句话，不必翻两遍。 */
   paletteLocked: string;
   /**
-   * 《界面明暗》：整个界面是米白还是深紫。
+   * 《深色界面》那颗开关。
    *
-   * 深紫是天才特供（玩家 2026-09：「默认是白色米白的系统，如果是 slides 天才可以
-   * 解锁选择暗色系统」），所以两个名字都只说颜色，不说「浅色/深色模式」——那是系
-   * 统设置里的说法，这儿跟系统没关系。
+   * 是一颗开关，不是一扇挑选窗（玩家 2026-09：「简化一下，就和现在开关色盲友好模
+   * 式一样，亮/暗的开关按钮」）。所以只有一个名字，而且名字说的是**打开**之后是
+   * 什么样——「界面明暗」那种两头都提的说法，放在开关上看不出往哪边拨。
+   *
+   * 深色是天才特供，没开通的按不动（个人主页那一行挂着锁）。
    */
   themeTitle: string;
-  themeHint: string;
-  themeLight: string;
-  themeDark: string;
   /** 色盲友好开着时，配色窗口的标题和那一句。 */
   paletteCvdTitle: string;
   paletteCvdHint: string;
@@ -720,10 +719,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteTitle: 'Piece colours',
     paletteHint: 'Changes the pieces in every board. Off while the colourblind palette is on.',
     paletteLocked: 'Here is what a Slides Genius gets to pick from.',
-    themeTitle: 'Light or dark',
-    themeHint: 'Changes the whole interface. The board itself keeps its own colours.',
-    themeLight: 'Off-white',
-    themeDark: 'Deep purple',
+    themeTitle: 'Dark interface',
     paletteCvdTitle: 'Colourblind palette',
     paletteCvdHint: 'All three are checked against red-, green- and blue-yellow-blind vision. Pick the one you like.',
     cvdStd: 'Standard',
@@ -1038,10 +1034,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteTitle: 'Couleurs des pièces',
     paletteHint: 'S’applique à tous les plateaux. Inactif quand la palette daltonienne est active.',
     paletteLocked: 'Voici ce dans quoi un Slides Génie peut choisir.',
-    themeTitle: 'Clair ou sombre',
-    themeHint: 'Change toute l’interface. Le plateau, lui, garde ses couleurs.',
-    themeLight: 'Blanc cassé',
-    themeDark: 'Violet profond',
+    themeTitle: 'Interface sombre',
     paletteCvdTitle: 'Palette daltonienne',
     paletteCvdHint: 'Les trois sont vérifiées pour les daltonismes rouge, vert et bleu-jaune. Choisissez celle qui vous plaît.',
     cvdStd: 'Standard',
@@ -1356,10 +1349,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteTitle: '棋子配色',
     paletteHint: '換的是每個玩法裡棋子的顏色。開著色盲配色時這裡不生效。',
     paletteLocked: '這就是 Slides 天才能挑的幾套。',
-    themeTitle: '介面明暗',
-    themeHint: '換的是整個介面的底色。棋盤那塊底板不跟著變。',
-    themeLight: '米白',
-    themeDark: '深紫',
+    themeTitle: '深色介面',
     paletteCvdTitle: '色盲配色',
     paletteCvdHint: '三套都驗過紅色盲、綠色盲、藍黃色盲。挑你順眼的那一套。',
     cvdStd: '標準',
@@ -1674,10 +1664,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteTitle: '棋子配色',
     paletteHint: '换的是每个玩法里棋子的颜色。开着色盲配色时这里不生效。',
     paletteLocked: '这就是 Slides 天才能挑的几套。',
-    themeTitle: '界面明暗',
-    themeHint: '换的是整个界面的底色。棋盘那块底板不跟着变。',
-    themeLight: '米白',
-    themeDark: '深紫',
+    themeTitle: '深色界面',
     paletteCvdTitle: '色盲配色',
     paletteCvdHint: '三套都验过红色盲、绿色盲、蓝黄色盲。挑你顺眼的那一套。',
     cvdStd: '标准',

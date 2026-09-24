@@ -80,18 +80,3 @@ export function onThemeChange(fn: Listener): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
-
-/**
- * 挑选窗口里那两条色带。
- *
- * **必须和 style.css 里那两块 `:root` 一致**——那边是真的样式，这边只是画给玩家
- * 看的说明。两处写同一组颜色本来是会走散的，所以 `scripts/check-theme.mjs` 里有
- * 一条门：它把属性真的盖上去，读 `getComputedStyle` 拿到的 `--bg` 等四支，和这儿
- * 逐支比。改了那边忘了这边，门当场红。
- *
- * 四支是「底色、卡片、字、强调色」——一套配色最先被认出来的就是这四样。
- */
-export const THEME_SWATCH: Record<Theme, readonly string[]> = {
-  light: ['#FAF6EC', '#FFFFFF', '#2E2430', '#BE5762'],
-  dark: ['#1E1820', '#2B222D', '#F2EAEE', '#E68F98'],
-};
