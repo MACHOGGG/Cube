@@ -129,16 +129,29 @@ let page = await freshPage(ctx);
     const copy = host.querySelector('.marquee-copy') || host;
     const cards = [...copy.children].filter((e) => e.classList.contains('home-icon-btn'));
     const box = b.closest('.axis-divider') || b;
+    const onAxis = host.classList.contains('mode-axis');
     /*
-     * 量的是「它夹在能玩的和锁着的之间」。用**布局坐标**（offsetTop）而不是屏幕
-     * 坐标：带子每帧都在走，屏幕坐标量的是这一帧的运气。
+     * 量的是「它夹在能玩的和锁着的之间」。两种排法要用两把尺子：
+     *
+     *   · **带子**用布局坐标（offsetTop）：它每帧都在走，屏幕坐标量的是这一帧的
+     *     运气。
+     *   · **鱼眼轴**只能用屏幕坐标。轴把十四张卡**绝对定位在同一条线上**
+     *     （`top: calc(50% − …)`），前后全靠 transform 排开——offsetTop 十四张
+     *     一模一样，连分界线也一样，按它分「上头/下头」分出来是两个空集。这道门
+     *     从第十一轮菜单换回轴那天起就是这么红的（「上头有（空）」）。轴不会自己
+     *     滑（玩家点名不要自动滑），停着的时候屏幕坐标是稳的，正好拿来量。
      */
-    const ly = (e) => e.offsetTop + e.offsetHeight / 2;
+    const ly = (e) => {
+      if (!onAxis) return e.offsetTop + e.offsetHeight / 2;
+      const r = e.getBoundingClientRect();
+      return r.top + r.height / 2;
+    };
     const my = ly(box);
     const before = cards.filter((e) => ly(e) < my);
     const after = cards.filter((e) => ly(e) > my);
     return {
       onStrip: host.classList.contains('mode-strip'),
+      onAxis,
       before: before.map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
       afterLocked: after.length > 0 && after.every((e) => e.classList.contains('home-icon-btn--locked')),
       stations: cards.length,
@@ -155,6 +168,10 @@ let page = await freshPage(ctx);
     check('带子那一路：它就排在带子里（跟着一起滑）', order?.inStrip === true);
     // 一份里十四张卡：分界线不算一站。
     check('带子上还是十四项', order?.stations === 14, `${order?.stations} 项`);
+  }
+  if (order?.onAxis) {
+    // 轴上十四张卡（分界线不算一站）。少一张就是首玩期那一组锁没摆全。
+    check('轴上还是十四项', order?.stations === 14, `${order?.stations} 项`);
   }
 
   /**

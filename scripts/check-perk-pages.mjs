@@ -344,7 +344,31 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   const p = await c.newPage();
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForSelector('#navProfile', { timeout: 20000 });
-  // 《更多玩法》那一行是陈列页；要玩走的是主菜单上那张卡。
+  /*
+   * 《更多玩法》那一行是陈列页；要玩走的是主菜单上那张卡。
+   *
+   * **先把轴滑到那张卡那儿再点。** 手机竖屏的主菜单是那条鱼眼轴
+   * （ui/modeAxis.ts），一次只看得见四五张，而「无限反转」是第 10 站——离第一张
+   * 十站远，画在屏幕外面。轴不是滚动容器，Playwright 的自动滚动够不着它，于是
+   * 这一行会一直重试到超时抛异常，**后面那十几条一条都没跑过**（而这道门第十一
+   * 轮把菜单换回轴之后就一直是这个样子）。
+   *
+   * 滑法用轴自己那一格 sessionStorage（menu.ts 的 AXIS_KEY，玩家定的「停在你
+   * 上次看的那一项」），下标当场从 DOM 里数出来——写死数字的话，哪天卡的次序一
+   * 变这儿就会去点别的玩法，而且还是绿的。
+   */
+  await p.waitForSelector('.mode-axis > .home-icon-btn', { timeout: 20000 });
+  const flipIdx = await p.evaluate(() =>
+    [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
+      .findIndex((b) => (b.getAttribute('aria-label') || '').startsWith('无限反转')),
+  );
+  check('主菜单的轴上找得到《无限反转》（下面几条才有意义）', flipIdx >= 0, `第 ${flipIdx} 站`);
+  await p.evaluate((i) => {
+    try { sessionStorage.setItem('slides_axis_focus', String(i)); } catch { /* 无痕模式 */ }
+  }, flipIdx);
+  await p.reload({ waitUntil: 'load' });
+  await p.waitForSelector('.mode-axis > .home-icon-btn', { timeout: 20000 });
+  await p.waitForTimeout(500);
   await p.click('.home-icon-btn[aria-label="无限反转"]');
   await p.waitForSelector('.flip-page', { timeout: 8000 });
   check('开通了：两张图都不挂锁', (await p.$$('.flip-page .slot-pick-lock')).length === 0);
