@@ -19,7 +19,12 @@
  *   · **滑不出两端。** 不循环是玩家定的，所以最后一张之后不能再滑出新东西。
  *   · **首玩期轴上只有两张。** 也是玩家定的；按了《我会玩》当场长成 14 张。
  *     （14 不是 13——menu.ts 那句「十三张」的注释漏算了后来加的步步为营。）
- *   · **法务那五条链接和底排导航都不被压住。** 轴的高度是算出来的，算错就压人。
+ *   · **法务那五条链接和底排导航都不被压住。** 轴占满整屏，卡片从底排底下滑过
+ *     ——所以量的不是「轴够不着底排」，是底排那两颗照样点得着、照样画在上面。
+ *   · **轴从屏幕最顶铺到最底。** 玩家第四轮点名的（「鱼眼转盘的范围一直从头到尾
+ *     延伸」）。上一版停在底排上沿，两头各空一条带子，在他眼里就是「被挡住」。
+ *   · **力道分档。** 同样的位移，快甩要比慢拖走得远（第四轮：「根据力道会有不同
+ *     速度」「现在的 0.75 倍作为正常滑动的灵敏度」）。
  */
 import { chromium } from 'playwright';
 const BASE = process.argv[2] || 'http://localhost:8958/';
@@ -88,7 +93,19 @@ let page = await menuPage({ slides_played_square: '1' });
 {
   const s = await shot(page);
   check('轴上有 14 张卡', s.cards.length === 14, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
-  check('轴的高度是算出来的（不是 0，也没顶出屏幕）', s.host.h > 300 && s.host.bottom <= 844 + 1, `${s.host.h.toFixed(0)}px，底边 ${s.host.bottom.toFixed(0)}`);
+  /**
+   * 轴占**整块屏幕**：上沿贴视口顶，下沿贴视口底。
+   *
+   * 玩家第四轮原话：「鱼眼转盘的范围一直从头到尾延伸」。上一版量的是「高度 > 300
+   * 且底边不超出屏幕」——那条断言在「轴只有半屏高」的时候照样是绿的，正是它让
+   * 「两头各空一条带子」一路活到玩家手里。所以这儿改成逐边对齐视口，留 1px 的
+   * 取整余量。
+   */
+  check(
+    '轴从屏幕最顶铺到最底（上沿 0、下沿 = 屏高）',
+    Math.abs(s.host.top) <= 1 && Math.abs(s.host.bottom - 844) <= 1,
+    `上沿 ${s.host.top.toFixed(1)} / 下沿 ${s.host.bottom.toFixed(1)} / 屏高 844`,
+  );
 
   /**
    * 每一站等高——量的是**版面高度**（屏幕上那一份除掉这一帧的 scale），十四张
@@ -264,6 +281,10 @@ let page = await menuPage({ slides_played_square: '1' });
       legalBottom: Math.round(
         document.querySelector('.home-legal').getBoundingClientRect().bottom + window.scrollY,
       ),
+      // 法务链接下面本来就该有的那一截：`.app` 给底排留的内边距（窄屏是
+      // 118px + 安全区）。把它读出来，下面那条就不用押一个写死的余量——押死的
+      // 那个数会跟着内边距、安全区、语言慢慢走散（实测正好卡在 141 : 140 上）。
+      padBottom: Math.round(parseFloat(getComputedStyle(document.querySelector('.app.home-page')).paddingBottom) || 0),
     };
   });
   check(
@@ -283,9 +304,44 @@ let page = await menuPage({ slides_played_square: '1' });
   // 底部留白，给 140px 的余量）。
   check(
     '画出去不撑大页面（overflow: clip 那一截）',
-    look.docH <= look.legalBottom + 140,
-    `文档高 ${look.docH} / 法务底 ${look.legalBottom}`,
+    look.docH <= look.legalBottom + look.padBottom + 40,
+    `文档高 ${look.docH} / 法务底 ${look.legalBottom} + 底部内边距 ${look.padBottom}`,
   );
+  /**
+   * 两头那一点**虚**。
+   *
+   * 玩家第四轮：「可以在上下两端有点轻微的模糊处理」。这是「不盖任何东西」之后
+   * 唯一剩下的交代方式——不是淡出、不是遮罩（那两样他都否过），是景深。
+   *
+   * 三条一起量，缺一条都能成假绿：
+   *   ① 靠边的那几张真的虚了；
+   *   ② 正中那张一点都不虚（整条都糊 = 另一种事故）；
+   *   ③ 虚的量是**量化过**的（0.5px 一档）——逐帧改 filter 要软件光栅化，量化是
+   *      那条性能红线的实现手段，写进断言才不会被后来人顺手改掉。
+   */
+  const blur = await page.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2;
+    return [...host.children]
+      .filter((e) => e.classList.contains('home-icon-btn'))
+      .map((e) => {
+        const r = e.getBoundingClientRect();
+        const cy = r.top + r.height / 2;
+        const m = /blur\(([\d.]+)px\)/.exec(e.style.filter || '');
+        return { cy, d: Math.abs(cy - mid), px: m ? +m[1] : 0, on: cy > -100 && cy < window.innerHeight + 100 };
+      })
+      .filter((c) => c.on);
+  });
+  const nearEdge = blur.filter((c) => c.d > 300);
+  const atLine = blur.filter((c) => c.d < 60);
+  check('靠近屏幕两端的卡是虚的', nearEdge.length > 0 && nearEdge.every((c) => c.px > 0),
+    nearEdge.map((c) => `${c.cy.toFixed(0)}→${c.px}px`).join(' ') || '屏幕上没有靠边的卡');
+  check('正中那张一点都不虚', atLine.length > 0 && atLine.every((c) => c.px === 0),
+    atLine.map((c) => `${c.cy.toFixed(0)}→${c.px}px`).join(' '));
+  check('虚的量是 0.5px 一档（量化过，不逐帧改 filter）',
+    blur.every((c) => Math.abs(c.px * 2 - Math.round(c.px * 2)) < 1e-6),
+    [...new Set(blur.map((c) => c.px))].sort((a, b) => a - b).join(' / '));
 }
 
 // ── 4c. 两侧的点点轴 ────────────────────────────────────────────────
@@ -332,6 +388,94 @@ let page = await menuPage({ slides_played_square: '1' });
   );
 }
 
+// ── 4e. 力道分档：同样的位移，快甩走得比慢拖远 ──────────────────────
+//
+// 玩家第四轮原话：「我希望滑动鱼眼转盘是根据力道会有不同速度的……现在的 0.75 倍
+// 作为正常滑动的灵敏度，然后但用户上下滑动点点快速滑动的时候是现在这样的灵敏
+// 度」。所以慢拖打 0.75 折、快甩不打折（modeAxis 的 SLOW_K / V_SLOW / V_FAST）。
+//
+// 量法：同一段 200px 的位移走两遍——一遍分 20 小步、每步停 30ms（慢），一遍分 5
+// 大步、不停（快）——比走过了几项。每遍之前都先回到第一项：不回的话第二遍会撞上
+// 轴的端点，走不动，量出来的是「一样远」（写这道门的时候就先掉进过这个坑）。
+{
+  const p5 = await menuPage({ slides_played_square: '1' });
+  const box = await p5.evaluate(() => {
+    const r = document.querySelector('.mode-axis').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  const focusedIndex = () => p5.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2;
+    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    let best = -1, bd = 1e9;
+    cards.forEach((e, i) => {
+      const r = e.getBoundingClientRect();
+      const d = Math.abs(r.top + r.height / 2 - mid);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  });
+  const toFirst = async () => {
+    for (let i = 0; i < 3; i++) {
+      await p5.mouse.move(box.x, box.y);
+      await p5.mouse.down();
+      for (let k = 1; k <= 10; k++) await p5.mouse.move(box.x, box.y + k * 60);
+      await p5.mouse.up();
+      await p5.waitForTimeout(220);
+    }
+    await p5.waitForTimeout(300);
+  };
+  const stroke = async (steps, pause) => {
+    await toFirst();
+    const from = await focusedIndex();
+    await p5.mouse.move(box.x, box.y);
+    await p5.mouse.down();
+    for (let k = 1; k <= steps; k++) {
+      await p5.mouse.move(box.x, box.y - (k * 200) / steps);
+      if (pause) await p5.waitForTimeout(pause);
+    }
+    await p5.mouse.up();
+    await p5.waitForTimeout(450);
+    return (await focusedIndex()) - from;
+  };
+  const slow = await stroke(20, 30);
+  const fast = await stroke(5, 0);
+  check('慢拖也走得动（不是推不动）', slow >= 2, `慢拖 200px 走了 ${slow} 项`);
+  check('同样 200px，快甩走得比慢拖远', fast > slow, `慢 ${slow} 项 / 快 ${fast} 项`);
+  check('快甩也没飞到底（还停得住）', fast < 13, `${fast} 项`);
+  await p5.close();
+}
+
+// ── 4f. 每滑过一项，震一下 ──────────────────────────────────────────
+//
+// 玩家第四轮：「每一经过一个玩法都有一点经过每一小卡的感觉」。声音本来就有（滑过
+// 一项一声 scan），这一轮补上震动。桌面浏览器没有振动马达，所以这儿把
+// navigator.vibrate 换成一个记账的桩——量的是「叫了几次、每次多长」，不是真的震。
+{
+  const p6 = await menuPage({ slides_played_square: '1' });
+  await p6.evaluate(() => {
+    window.__vib = [];
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      value: (ms) => { window.__vib.push(ms); return true; },
+    });
+  });
+  const box = await p6.evaluate(() => {
+    const r = document.querySelector('.mode-axis').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await p6.mouse.move(box.x, box.y);
+  await p6.mouse.down();
+  for (let k = 1; k <= 20; k++) { await p6.mouse.move(box.x, box.y - k * 12); await p6.waitForTimeout(16); }
+  await p6.mouse.up();
+  await p6.waitForTimeout(500);
+  const vib = await p6.evaluate(() => window.__vib);
+  check('滑过好几项就震好几下（一项一记）', vib.length >= 3, `震了 ${vib.length} 下`);
+  check('每一记都很短（8ms，不是嗡一声）', vib.length > 0 && vib.every((v) => v === 8), [...new Set(vib)].join('/'));
+  await p6.close();
+}
+
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────
 {
   await page.goto(BASE, { waitUntil: 'load' });
@@ -368,6 +512,36 @@ await page.close();
   check('首玩期轴上只摆两张', s.cards.length === 2, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
   check('那两张就是基础方块和基础小球', s.cards.every((c) => /方块|圆球|小球/.test(c.name)), s.cards.map((c) => c.name).join(' '));
   check('首玩期那颗《我会玩》还在', await p2.evaluate(() => !!document.querySelector('.know-how-btn')));
+  /**
+   * 它必须在**第一屏上**，而且热区只有它自己那么宽。
+   *
+   * 轴占满整屏之后，排在轴后面的它落到了屏幕外（上一版是给它在轴底下让出一截，
+   * 这一版没有「底下」可让），所以改成浮在底排上方那道缝里（modeAxis 的
+   * floatKnowHow + style.css 的 .know-how-btn--float）。两条都要量：
+   *   · 藏起来等于没有——它是「跳过引导」的唯一出口；
+   *   · 居中要靠 `left: 50%` + `translateX(-50%)`，不能靠 `left/right: 0`。后者
+   *     那颗按钮横贯整屏，屏幕底下随便点一下都算按了它，引导就这么悄悄撤了
+   *     （玩家点名不要的「意料之外的疏漏操作」）。所以同高度的最左最右各打一
+   *     下，打到的**不能**是它。
+   */
+  const skip = await p2.evaluate(() => {
+    const e = document.querySelector('.know-how-btn');
+    const r = e.getBoundingClientRect();
+    const nav = document.querySelector('.home-nav')?.getBoundingClientRect() ?? null;
+    const at = (x) => {
+      const t = document.elementFromPoint(x, r.top + r.height / 2);
+      return !!t && (t === e || e.contains(t));
+    };
+    return {
+      top: r.top, bottom: r.bottom, w: r.width, vh: window.innerHeight, vw: window.innerWidth,
+      navTop: nav ? nav.top : -1,
+      self: at(r.left + r.width / 2), left: at(10), right: at(window.innerWidth - 10),
+    };
+  });
+  check('《我会玩》整颗都在第一屏上', skip.top >= 0 && skip.bottom <= skip.vh, `${skip.top.toFixed(0)}–${skip.bottom.toFixed(0)} / 屏高 ${skip.vh}`);
+  check('《我会玩》在底排上方，不压着它', skip.navTop > 0 && skip.bottom <= skip.navTop + 1, `按钮底 ${skip.bottom.toFixed(0)} / 底排顶 ${skip.navTop.toFixed(0)}`);
+  check('《我会玩》点得着', skip.self);
+  check('《我会玩》的热区没有横贯整屏', !skip.left && !skip.right && skip.w < skip.vw * 0.7, `宽 ${skip.w.toFixed(0)} / 屏宽 ${skip.vw}`);
   // 按下《我会玩》→ 轴当场长成 13 项
   await p2.click('.know-how-btn');
   await p2.waitForTimeout(800);
@@ -376,7 +550,7 @@ await page.close();
   await p2.close();
 }
 
-// ── 7. 轴不压住法务链接和底排 ───────────────────────────────────────
+// ── 7. 轴从底排底下过去，但不妨碍底排和法务链接 ─────────────────────
 {
   const p3 = await menuPage({ slides_played_square: '1' });
   const geo = await p3.evaluate(() => {
@@ -393,6 +567,15 @@ await page.close();
       const el = document.elementFromPoint(r.left + r.width / 2, r.bottom - 8);
       return { label: b.getAttribute('aria-label') || '', hit: !!el && (el === b || b.contains(el)) };
     });
+    // 底排那块圆角面板正中打一下：打到的必须是底排自己，不能是从底下滑过去的卡。
+    const dockEl = document.querySelector('.home-nav-dock');
+    const dr = dockEl?.getBoundingClientRect() ?? null;
+    const overDock = dr
+      ? (() => {
+          const t = document.elementFromPoint(dr.left + dr.width / 2, dr.top + dr.height / 2);
+          return t ? (t.className || t.tagName) : '';
+        })()
+      : '';
     const cards = [...document.querySelector('.mode-axis').children]
       .filter((e) => e.classList.contains('home-icon-btn') && Number(getComputedStyle(e).opacity) > 0.01)
       .map((e) => e.getBoundingClientRect());
@@ -403,6 +586,7 @@ await page.close();
       navH: nav?.height ?? 0,
       dockBlocked: dockHits.filter((h) => !h.hit).map((h) => h.label),
       dockN: dockHits.length,
+      overDock: String(overDock),
       lowestCard: Math.max(...cards.map((r) => r.bottom)),
       clipped: getComputedStyle(document.querySelector('.mode-axis')).overflow,
       vh: window.innerHeight,
@@ -478,18 +662,30 @@ await page.close();
    *
    * 少了第一条就是上面那个事故的翻版——类名一写错，第二条自动变成真空。
    *
-   * 「没被压住」量两样：轴的**底边**在底排上沿之上（画不到那儿去），以及底排那
-   * 两颗**真的点得着**（用 elementFromPoint 打它们的下半截——最靠近轴的那一侧）。
-   * 只量矩形不够：轴是 overflow: hidden 的，探出去的卡片 rect 照样报在底排上，
-   * 屏幕上其实被切掉了；只量点击也不够：轴要是画到了底排底下，玩家看到的是两颗
-   * 键叠在卡片上，点是点得着，但画面是错的。
+   * 「没被压住」这一条第四轮换了口径。从前量的是「轴的底边在底排上沿之上」——
+   * 那是上一版的排法（轴停在底排那儿）。现在轴铺满整屏，卡片**本来就要从底排底
+   * 下滑过去**（玩家原话：「就让这一列 icon 在……个人主页和记录排名的板块下面滑
+   * 过」），再量那个反而是逼着人把玩家要的效果改回去。
+   *
+   * 所以改量两件真正要紧的事：
+   *   · 底排那两颗**真的点得着**（elementFromPoint 打它们的下半截——最靠近轴的那
+   *     一侧）。这一条是「卡片不许截走底排的手势」。
+   *   · 底排**画在卡片上面**（打中的是底排自己，不是某张卡）。只量点得着不够：
+   *     真出事的时候是两颗键叠在一张卡上面，点还是点得着，画面却是错的。
+   * 再加上第一条「底排找得到」——类名一写错，后面两条自动变成真空（`.bottom-nav`
+   * 那次就是这么绿了一整轮的）。
    */
   check('底排找得到（.home-nav，类名没写错）', geo.navTop > 0 && geo.navH > 0, `top ${geo.navTop.toFixed(0)} / 高 ${geo.navH.toFixed(0)}`);
-  check('轴的底边在底排上面', geo.hostBottom <= geo.navTop + 1, `轴底 ${geo.hostBottom.toFixed(0)} / 底排顶 ${geo.navTop.toFixed(0)}`);
+  check('轴一直铺到底排底下（第四轮：从头到尾）', geo.hostBottom >= geo.navTop + 10, `轴底 ${geo.hostBottom.toFixed(0)} / 底排顶 ${geo.navTop.toFixed(0)}`);
   check(
     '底排那两颗点得着',
     geo.dockN === 2 && geo.dockBlocked.length === 0,
     geo.dockBlocked.length ? `点不着：${geo.dockBlocked.join(' ')}` : `${geo.dockN} 颗都点得着`,
+  );
+  check(
+    '底排画在卡片上面（是卡从底下滑过，不是卡盖住底排）',
+    /home-nav/.test(geo.overDock),
+    geo.overDock,
   );
   await p3.close();
 }

@@ -1152,7 +1152,10 @@ button:hover { filter: brightness(1.05); }
   position: relative;
   /* 覆盖 .home-grid 的 flex 列：卡片是绝对定位的，容器不需要排它们。 */
   display: block;
-  /* 高度由 JS 量出来（视口减去轴上下那些东西），所以别让 flex 再把它拉长。 */
+  /* 高度由 JS 量出来（就是视口高，见 modeAxis 的 measure），所以别让 flex 再动它。
+     这一条**压不住**：窄屏那句 `.home-page:not(.home-page--wide) .home-grid` 里有
+     `flex: 1 1 auto`，特指度 0,3,0 比这儿的 0,1,0 高——所以下面另有一条带全名的
+     （`…​.home-grid.mode-axis`）。这一句留着是给别处引用 .mode-axis 的场合兜底。 */
   flex: 0 0 auto;
   width: 100%;
   /*
@@ -1237,6 +1240,15 @@ button:hover { filter: brightness(1.05); }
  * 一圈上下的 clip-margin 照旧有效。
  */
 .home-page:not(.home-page--wide) { overflow-x: clip; }
+
+/* 轴的高度只由 JS 说了算。
+   窄屏那句 `.home-page:not(.home-page--wide) .home-grid { flex: 1 1 auto }` 是给两
+   列网格用的（几排在招牌和底排之间匀开），它的特指度压过 `.mode-axis` 自己那句
+   `flex: 0 0 auto`——于是轴也跟着能长能缩。平时看不出来：轴铺满一屏之后这根 flex
+   列已经没有富余可分了。可它是一颗定时炸弹：JS 算 `edge = hostH / 2` 用的是它自己
+   写进去的那个数，flex 一把盒子拉长，屏幕上的中线就和 JS 以为的中线错开——选中的
+   那张对不准屏幕正中，两头的虚也虚错地方。所以这儿把它钉死。 */
+.home-page:not(.home-page--wide) .home-grid.mode-axis { flex: 0 0 auto; }
 
 /* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
    `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }`
@@ -1332,6 +1344,28 @@ button:hover { filter: brightness(1.05); }
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .know-how-btn:active { opacity: 0.6; }
+/*
+ * 鱼眼轴那一路：这颗按钮浮到底排上方那道缝里（ui/modeAxis.ts 的 floatKnowHow 加
+ * 这个类、并把 bottom 量出来写进来）。
+ *
+ * 为什么要浮：轴现在占满整块屏幕（玩家 2026-09 第四轮「鱼眼转盘的范围一直从头到
+ * 尾延伸」），排在轴后面的它于是落到第一屏外面去了——而它是「跳过引导」的唯一出
+ * 口，藏起来等于没有。
+ *
+ * `left: 50%` + `translateX(-50%)`，**不是** `left: 0; right: 0`：后者那颗按钮会
+ * 横贯整屏，热区跟着变成屏幕底下一整条——手指落在那一带随便哪儿都算按了它，引导
+ * 就这么悄悄撤了（玩家点名不要的「意料之外的疏漏操作」）。居中也不能靠
+ * `width: fit-content`（Chrome 61 不认，整条丢掉之后又回到横贯整屏）。
+ *
+ * z-index 1 是压在轴上面：轴整条是 z-index: 0 的层叠上下文，卡片在它里面最高也只
+ * 到 100，所以 1 就够，而且照旧在招牌和底排（都是 60）下面。
+ */
+.know-how-btn--float {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+}
 
 /* 主菜单最底下那排法务链接（价格 / 条款 / 退款 / 隐私 / 联系）。
    摆在这儿是给两种人看的：想读条款的玩家，和收单方的审核员——后者打开落地页

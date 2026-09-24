@@ -17,6 +17,13 @@
  *     么从 Slides 招牌和底排那两块板子**底下滑过去**（玩家第三轮原话）。做法是
  *     `overflow: clip` + 一圈 clip-margin（画得出去，但不撑大页面的可滚动区），
  *     加上 `z-index: 0` 把这条轴整个压在那两块板子下面——见 style.css。
+ *   · **轴占满整块屏幕**：第四轮又往前一步——「最上方和最下方仍然有遮挡，我希望
+ *     完全没有，就是可以理解为最底下是底色、第二层是鱼眼转盘、最上面是 title 区
+ *     块和个人主页和信息栏区块。鱼眼转盘的范围一直从头到尾延伸，可以在上下两端
+ *     有点轻微的模糊处理」。所以轴的高度就是视口高，上沿贴视口顶（见 measure），
+ *     两头那一点交代靠**虚**——不是淡出、不是遮罩（那两样他都否过），见 BLUR_*。
+ *   · **滑起来要有力道和顿挫**：慢慢拖是一档灵敏度，快速甩是另一档（见 SLOW_K
+ *     那一段），每滑过一项出一声、震一下（DETENT_MS）。
  *   · **焦点锁定不做开关**：首版直接做死（§1.2）。
  *   · **reduced-motion 下只在定格那一刻出声**，快速滑过不播。
  *   · **首玩期轴上只摆基础方块和基础小球**，打完第一局（或按过《我会玩》）其余
@@ -30,6 +37,7 @@ import { fisheye, hitTest, influence, SIGMA, type FisheyeParams } from '../engin
 import { createSpring, snapSpring, springAtRest, stepSpring, type SpringState } from '../engine/spring';
 import { reducedMotion } from '../engine/reducedMotion';
 import { playAxisTick } from '../engine/juice';
+import { vibrate } from '../engine/haptics';
 
 /**
  * 一张卡的「站位」有多高，以及聚焦时能长到多大。
@@ -97,12 +105,62 @@ const RUBBER = 0.35;
  *     那一两张全靠它；
  *   · 超出的部分按 GAIN_FAR 倍走——一次长滑能扫过大半条轴，十四张卡不用滑五次。
  *
- * 分段的写法（两段各自乘完再相加）保证这条映射是连续且单调的：手指往同一个方向
- * 走，焦点绝不会倒退，接缝处也不会跳一下。
+ * 分两段的写法本身是连续且单调的：手指往同一个方向走，焦点绝不会倒退，接缝处也
+ * 不会跳一下。（第四轮之后这两个数是**快滑**那一档的倍率，慢慢拖要再打折——见
+ * 下面 SLOW_K。）
  */
 const GAIN = 2;
 const GAIN_FAR = 5;
 const GAIN_KNEE = 130;
+/**
+ * 快慢分档：**同样的手指位移，滑得越快走得越多**。
+ *
+ * 玩家 2026-09 第三轮：「滑动鱼眼转盘是根据力道会有不同速度的……现在的 0.75 倍
+ * 作为正常滑动的灵敏度，然后用户上下快速滑动的时候是现在这样的灵敏度」。所以上
+ * 面那两段（2 倍 / 5 倍）现在是**快滑**那一档的值，慢慢拖的时候整体打 0.75 折。
+ *
+ * 判快慢用的是手指的瞬时速度（px/ms）：0.35 以下算「在挑」——这时候要跟手，手感
+ * 比距离重要；1.6 以上算「在甩」——这时候他要的是快点翻过去。中间线性过渡，不会
+ * 在某个速度上突然变一档。
+ *
+ * 因为倍率随时在变，位移不能再拿「按下到现在的总距离」一次换算（那样倍率一变，
+ * 焦点会当场跳一下）。改成**逐段累加**：每来一条 pointermove，把这一小段位移按
+ * 当时的倍率折算成轴上的像素加进去。见 onMove。
+ */
+const SLOW_K = 0.75;
+const V_SLOW = 0.35;
+const V_FAST = 1.6;
+/**
+ * 速度要先过一道低通再拿去挑档。
+ *
+ * 单条 pointermove 算出来的瞬时速度抖得厉害：手机上一秒来一百多条，而 iOS 会把两
+ * 三条合并成一条送过来，dt 忽大忽小，同一次匀速滑动里算出来的 v 能差三倍。直接拿
+ * 它挑档，倍率在一次滑动里来回跳，手上的感觉是「一顿一顿的」。这道一阶低通认的是
+ * 「这一下大概多快」，不是「这一条事件多快」。
+ */
+const V_SMOOTH = 0.45;
+/**
+ * 每滑过一项的那一下「咔」。
+ *
+ * 玩家第三轮：「每一经过一个玩法都有一点经过每一小卡的感觉」。声音本来就有（滑
+ * 过一项出一声 scan），这儿再补一记极短的震动——两样加上焦点锁定那个死区（见
+ * fisheye 的 lockRadius），滑过每一张卡就有一记轻轻的顿挫。
+ */
+const DETENT_MS = 8;
+/**
+ * 上下两头那一点**模糊**。
+ *
+ * 玩家第三轮：「最底下是底色、第二层是鱼眼转盘、最上面是 title 区块和个人主页和
+ * 信息栏区块。鱼眼转盘的范围一直从头到尾延伸，可以在上下两端有点轻微的模糊处
+ * 理」。所以两头不再是「淡出」或者「遮罩」（那两样他都否过），而是**还在、只是
+ * 有点虚**——像景深，不像盖了块板。
+ *
+ * 只在离屏幕边 BLUR_EDGE 以内才给，最多 BLUR_MAX；而且**量化成 0.5px 一档**再
+ * 写：`filter` 一改就要软件光栅化那一张，量化之后一次滑动里每张卡只写那么几次，
+ * 不是每帧都写（§5.4 那条「不许逐帧改 filter」说的就是这个）。
+ */
+const BLUR_EDGE = 150;
+const BLUR_MAX = 2.5;
 /**
  * 两侧那两条点点轴（玩家给的效果图上，左右两边各一列小圆点）。
  *
@@ -188,6 +246,19 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let moved = 0;
   let startY = 0;
   let startFocus = 0;
+  /**
+   * 这一次按下以来，轴上一共走了多少像素（**已经按倍率折算过**）。
+   *
+   * 为什么不像从前那样拿「按下到现在的总位移」一次换算：倍率现在跟着手速变，同一
+   * 段位移在慢拖和快甩下折算出来不是一个数——一次换算的话，倍率一变，整条轴会当场
+   * 跳一下（手指没动，焦点却蹦了半格）。改成逐段累加：每来一条 pointermove，把这
+   * 一小段位移按**当时**的倍率折进来。累加全程是浮点、不取整，所以不会漂。
+   */
+  let axisPx = 0;
+  let lastY = 0;
+  let lastT = 0;
+  /** 平滑过的手速（px/ms），见 V_SMOOTH。 */
+  let vel = 0;
   let ruler: { k: number; at: number }[] | null = null;
   const spring: SpringState = createSpring(focus);
   let springing = false;
@@ -197,59 +268,77 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   const params = () => (reducedMotion() ? RIGID : PARAMS);
 
   /**
-   * 轴有多高：自己量，不写死。
+   * 轴占**整块屏幕**：上沿贴视口顶，高度就是视口高。
    *
-   * 量法是「整页底边减去轴的底边」＝ 轴下面那些东西（法务那五条链接 + 页面给底
-   * 排留的那截内边距）占了多少，再拿视口高度减掉轴的顶边和这一截。写死一个常数
-   * 迟早和 CSS 走散——这个仓库为「按 100dvh 算图标大小，手机一上滑地址栏收起来
-   * 图标就胀大一圈」已经栽过一次，教训是尺寸要么是定数、要么现量。
+   * 玩家 2026-09 第四轮原话：「最上方和最下方仍然有遮挡，我希望完全没有，就是可
+   * 以理解为最底下是底色、第二层是鱼眼转盘、最上面是 title 区块和个人主页和信息
+   * 栏区块。鱼眼转盘的范围一直从头到尾延伸」。
+   *
+   * 前一版是「从招牌下沿铺到底排上沿」（量 `.home-nav` 的上边），于是上下两头各
+   * 空出一条一百多像素的带子，卡片滑到那儿就消失——在玩家眼里那就是「被挡住
+   * 了」，跟第二轮那层渐变遮罩看上去是同一回事。这一版两头都不留：
+   *
+   *   · 高度 = `window.innerHeight`（不是「剩下多少」）；
+   *   · 用一截**负的上外边距**把它从文档流里的位置拉回视口顶——它在 DOM 里排在
+   *     招牌后面，自然位置就在招牌下沿。拉多少是量出来的：`rect.top + scrollY`
+   *     是它自然位置在**文档**里的 y，取负正好把上沿对到文档 0。用文档坐标而不
+   *     是视口坐标，是因为 measure() 也会在页面已经滑下去之后跑（resize、地址栏
+   *     收起）——视口坐标那会儿是负的，照它算会把轴越推越上去。
+   *     **量之前要先把内联的外边距清掉**，否则量到的是「上一次拉过之后」的位置；
+   *     而且要**先把高度设成最终值再量**：轴矮的时候这一页装得进一屏，`.app` 那根
+   *     flex 列于是有富余可分，招牌的位置和铺满之后差 4px——拿那个位置去算，轴的
+   *     上沿就落在 4 而不是 0。量的状态和最终状态一致，这道误差就不存在。
+   *
+   * 招牌是 sticky 的，照旧浮在最上面；轴整条压在它下面一层（style.css 里那句
+   * `z-index: 0`），所以卡片是从它底下滑过去的，不是盖住它。两头那一点交代靠
+   * **虚**，见 paint 里的 BLUR_*。
+   *
+   * 高度写死一个常数迟早和 CSS 走散——这个仓库为「按 100dvh 算图标大小，手机一
+   * 上滑地址栏收起来图标就胀大一圈」栽过一次，教训是尺寸要么是定数、要么现量。
    */
   function measure(): void {
-    host.style.height = '0px';
+    host.style.marginTop = '';
+    hostH = Math.max(260, Math.round(window.innerHeight));
+    host.style.height = hostH + 'px';
     const hr = host.getBoundingClientRect();
-    /**
-     * 轴一直铺到**底排那一条**为止，不是铺到 `.app` 的底边。
-     *
-     * 从前是后者，于是法务那五条链接（`.home-legal`，`.app` 里轴下面的那一块）
-     * 也被算进「轴下面占了多少」，轴因此短一截，而那五条链接一直挂在屏幕下方。
-     * 玩家 2026-09 第二轮：「不要一直展示在屏幕的下方……放在最底下就是只有滑到
-     * 最最最底下的时候才能看到」。改成量底排之后，轴占满第一屏，那五条自然被顶
-     * 到屏幕外，往下滑才看得见——就是普通网站页脚的样子。（它们不能删：收单方
-     * 的审核要在落地页上找得到，见 menu.ts 那段注释。）
-     *
-     * 底排那一条的类名是 `.home-nav`（`bottomNav.ts` 挂在 <body> 上的那个
-     * `<nav>`，不是里面那块圆角面板 `.home-nav-dock`）——它是 position: fixed
-     * 的，量它的上沿最准，而且它的上沿已经把「选中那颗升起来」留的那点空算进去
-     * 了。**类名写错不会报错，只会悄悄退回视口底边**，于是轴一路铺到屏幕最底、
-     * 压在底排下面——这儿一开始写的就是不存在的 `.bottom-nav`。它要是没画出来
-     * （高度 0），才退回视口底边。
-     */
+    host.style.marginTop = -Math.round(hr.top + window.scrollY) + 'px';
+    if (cards[0]) stationH = Math.max(60, cards[0].offsetHeight);
+    floatKnowHow();
+    pushLegal();
+  }
+
+  /**
+   * 首玩期那颗《我会玩》：轴占满屏之后，得把它浮到轴上面来。
+   *
+   * 它在 DOM 里排在轴和法务链接之间（menu.ts）。轴一占满整屏，它就跟着法务那几
+   * 条一起被顶到屏幕外面去了——而它是「跳过引导」的唯一出口，藏起来等于没有
+   * （上一版为它在轴底下让出过一截，这一版没有「底下」可让了）。
+   *
+   * 所以改成固定定位，浮在底排**上方**那道缝里：位置是量底排上沿得出来的，不写
+   * 死——底排那一条的高度跟着安全区走（刘海屏底下那道横杠会把它顶上来）。
+   * `left: 50%` + `translateX(-50%)` 居中（见 style.css），不是 `left/right: 0`：
+   * 后者那颗按钮会横贯整屏，热区跟着变成一整条——手指落在屏幕底下随便哪儿都算
+   * 按了它，引导就这么悄悄撤了。这正是玩家说的那种「意料之外的疏漏操作」。
+   */
+  function floatKnowHow(): void {
+    const skip = document.querySelector<HTMLElement>('.know-how-btn');
+    if (!skip) return;
+    skip.classList.add('know-how-btn--float');
     const nav = document.querySelector('.home-nav');
     const nr = nav?.getBoundingClientRect();
-    const floor = nr && nr.height > 0 ? Math.min(nr.top, window.innerHeight) : window.innerHeight;
-    /**
-     * 首玩期那颗《我会玩》要留在第一屏上。
-     *
-     * 它排在轴和法务链接之间（menu.ts）。轴一铺到底，它会跟着法务那几条一起被
-     * 顶出屏幕——而它是「跳过引导」的唯一出口，藏起来等于没有。所以量到它就把
-     * 它那一截让出来。
-     */
-    const skip = document.querySelector('.know-how-btn');
-    const sr = skip?.getBoundingClientRect();
-    const keep = sr && sr.height > 0 ? sr.height + 18 : 0;
-    hostH = Math.max(260, Math.round(floor - 10 - keep - hr.top));
-    host.style.height = hostH + 'px';
-    if (cards[0]) stationH = Math.max(60, cards[0].offsetHeight);
-    pushLegal();
+    // 底排没画出来（高度 0）就退回一个够高的默认值：宁可高一点，也不要压在底排上。
+    const above = nr && nr.height > 0 ? Math.round(window.innerHeight - nr.top + 6) : 112;
+    skip.style.bottom = above + 'px';
   }
 
   /**
    * 把法务那五条链接推到第一屏**外面**。
    *
-   * 轴只铺到底排上沿（上面那段），底排那一条是 fixed 的、不占文档高度，于是紧
-   * 跟在轴后面的那五条链接正好落在底排那一带——390×844 上量到链接顶 764，还在
-   * 屏幕里，只是被底排压着。玩家 2026-09 第二轮要的是「只有滑到最最最底下的时
-   * 候才能看到」，所以这儿补一截外边距，把它们顶到视口底边以下。
+   * 轴现在占满整屏（上面那段），紧跟在它后面的那五条链接本来就落在视口底边以
+   * 下了，所以多数时候这儿补的是 0。留着它是因为「多数时候」不等于「永远」：
+   * 轴有个 260px 的下限（屏幕极矮、或者被容器切过的时候会用到），那时候链接又
+   * 会浮上来。玩家 2026-09 第二轮要的是「不要一直展示在屏幕的下方……只有滑到最
+   * 最最底下的时候才能看到」，这一句就是那条要求的兜底。
    *
    * 为什么是量出来的而不是写死一个数：这一截等于「底排有多高」加「轴和页脚之
    * 间本来的那些间距」，两样都跟着安全区、字号、语言变。先把内联的外边距清掉
@@ -278,7 +367,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 图层——都是**每一帧**都在做，而实际上一帧里真正变了的只有 transform 和
    * opacity。这儿记住上一帧的值，变了才写。
    */
-  const lastPaint = cards.map(() => ({ t: '', o: '', z: 0, pe: '' }));
+  const lastPaint = cards.map(() => ({ t: '', o: '', z: 0, pe: '', f: '' }));
   const lastDot = cards.map(() => '');
 
   function paint(): void {
@@ -319,10 +408,30 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        *
        * 挡法用 pointer-events，**不是 visibility: hidden**：后者键盘聚焦不到，于
        * 是 Tab 只走得到眼前那四五张，剩下九张玩法用键盘永远到不了。
+       *
+       * 轴占满整屏之后这一条挡的是**画到 clip-margin 那一圈里去的那几张**：页面
+       * 往下滑一点，轴的下沿就抬进屏幕里，而 clip-margin 让它外面 220px 照样画得
+       * 出来、也照样点得到——那一带底下是底排，手指落在那儿本该点到底排。
        */
       const far = Math.abs(s.at);
       const pe = far > edge + stationH * 1.5 ? 'none' : '';
       if (pe !== prev.pe) { el.style.pointerEvents = pe; prev.pe = pe; }
+      /**
+       * 上下两头那一点**虚**（出处和两个数在 BLUR_EDGE 上面）。
+       *
+       * 量的是「这张卡的中心离最近的那条屏幕边还有多远」——轴的盒子就是视口，所
+       * 以 `半高 − |位移|` 正好是这个距离。越近越虚，越过边之后一律 BLUR_MAX。
+       *
+       * 写之前先量化成 0.5px 一档：`filter` 每变一次都要重新栅格化那张卡（还是走
+       * 软件光栅化那条路），逐帧改就是逐帧重画 13 张 SVG。量化之后一次滑动里每张
+       * 卡只写那么五六次。0 的时候写空串退回 CSS，不是写 `blur(0px)`——留着一个
+       * 空的 filter 也会让这张卡一直待在「有滤镜」那条慢路上。
+       */
+      const room = edge - Math.abs(s.at);
+      const raw = room >= BLUR_EDGE ? 0 : BLUR_MAX * Math.min(1, (BLUR_EDGE - room) / BLUR_EDGE);
+      const q = Math.round(raw * 2) / 2;
+      const f = q > 0 ? `blur(${q}px)` : '';
+      if (f !== prev.f) { el.style.filter = f; prev.f = f; }
 
       // 点点轴：按**项**等距排，不跟着卡片的形变走——它量的是「第几项」，中间那
       // 颗永远对着当前选中的那张。
@@ -349,7 +458,14 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // §5.2：只在「聚焦项换了」这一个离散事件上出一声，不跟着连续的形变播。
       // reduced-motion 下拖动途中一声不出，只在松手定格那一下出——玩家原话：
       // 「只在最后选中一个图标停下来的那一刻出声，快速滑过的时候不播」。
-      if (!reducedMotion()) tick();
+      //
+      // 震动和声音同一个时机：玩家第四轮要的「每一经过一个玩法都有一点经过每一
+      // 小卡的感觉」，就是这一声加这一下，再加上焦点锁定那个死区（lockRadius）
+      // ——三样凑起来，滑过每一张卡手上都有一记轻轻的顿挫。
+      if (!reducedMotion()) {
+        tick();
+        vibrate(DETENT_MS);
+      }
     }
   }
 
@@ -433,23 +549,30 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   /**
-   * 手指走了多少像素 → 轴上该走多少像素。两段放大，见 GAIN / GAIN_FAR。
+   * 这一小段位移在轴上算几倍：**行程**那一档 × **手速**那一档。
    *
-   * 分段写成「前一截乘完 + 超出那截再乘」，这条映射就是连续且单调的：手指朝同
-   * 一个方向走，焦点绝不倒退，接缝处也不跳。乘在**总位移**上而不是每帧的增量
-   * 上，也是为了这个——增量各自取整、各自放大，攒起来会漂。
+   * 行程那一档（stepGain）就是原先那条两段映射的斜率：这一次按下以来手指已经走了
+   * 不到 GAIN_KNEE 就按 GAIN 倍，超过了按 GAIN_FAR 倍。拿「按下以来的总行程」而不
+   * 是这一小段的长度来分档，是为了保住它原来的意思——「一次长滑能扫过大半条轴」。
+   *
+   * 手速那一档（speedK）是第四轮加的：慢慢拖打 SLOW_K 折，快速甩不打折，中间线性
+   * 过渡。两头都是常数（不是一直线性外推下去），所以再慢不会慢到推不动、再快也不
+   * 会快到一甩就飞到底。
    */
-  function gain(dy: number): number {
-    const d = Math.abs(dy);
-    const near = Math.min(d, GAIN_KNEE) * GAIN;
-    const far = Math.max(0, d - GAIN_KNEE) * GAIN_FAR;
-    return (dy < 0 ? -1 : 1) * (near + far);
+  function stepGain(travel: number): number {
+    return travel < GAIN_KNEE ? GAIN : GAIN_FAR;
   }
 
-  function focusFromDrag(dy: number): number {
+  function speedK(v: number): number {
+    if (v <= V_SLOW) return SLOW_K;
+    if (v >= V_FAST) return 1;
+    return SLOW_K + (1 - SLOW_K) * ((v - V_SLOW) / (V_FAST - V_SLOW));
+  }
+
+  /** 轴上走了这么多像素之后，焦点落在第几项（可以是小数）。 */
+  function focusFromAxis(want: number): number {
     const L = ruler;
     if (!L || n < 2) return startFocus;
-    const want = -gain(dy); // 手指往下 → 轴往下走 → 焦点往前
     // 落在两格之间就线性插值；出了尺子的范围按基准间距外推（成环之后可以一直滑
     // 下去，所以外推这条路是常走的，不是兜底）。
     if (want <= L[0].at) return startFocus + L[0].k + (want - L[0].at) / PARAMS.minGap;
@@ -487,6 +610,10 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     moved = 0;
     startY = e.clientY;
     startFocus = focus;
+    axisPx = 0;
+    lastY = e.clientY;
+    lastT = e.timeStamp;
+    vel = 0;
     springing = false;
     ruler = localRuler();
     // 这儿**不能**立刻 setPointerCapture。捕获之后 pointerup 的目标变成容器，浏
@@ -510,10 +637,27 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
         /* 有些内核在某些时序下会拒绝捕获：不捕获只是滑出容器会断，不影响主路 */
       }
     }
-    focus = clampRubber(focusFromDrag(dy));
+    /**
+     * 这一小段：走了多少、多快，然后按当时的倍率折进累加器。
+     *
+     * `e.timeStamp` 而不是 `Date.now()`：它和事件本身同一条时间线，浏览器把几条
+     * move 合并送过来的时候也还是各自的真实时刻。dt 有下限 1ms——同一毫秒里来两
+     * 条（合并事件、或者时钟精度被降频）的话，除下去会得到一个无穷大的速度。
+     *
+     * 手指往下（seg > 0）＝ 轴往下走 ＝ 焦点往**前**（索引变小），所以是减。
+     */
+    const seg = e.clientY - lastY;
+    const dt = Math.max(1, e.timeStamp - lastT);
+    lastY = e.clientY;
+    lastT = e.timeStamp;
+    vel = vel * (1 - V_SMOOTH) + (Math.abs(seg) / dt) * V_SMOOTH;
+    axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel);
+    focus = clampRubber(focusFromAxis(axisPx));
     // 一帧只画一次。pointermove 在手机上一秒能来一百多条（而且 iOS 会把两三条
     // 合并成一条送过来），每来一条就画一次等于一帧里重复画好几遍——手上的感觉
     // 反而更黏。攒到下一帧再画，画的是最新的 focus，一点不丢。
+    // （累加是在**每一条** move 上做的，不是每帧一次：攒到帧里再算就会漏掉合并
+    // 进来的那几段位移，一次快滑少走一大截。）
     scheduleFrame();
   }
 
@@ -571,6 +715,20 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     // 滚过算的。归零一次，比事后找原因便宜。
     if (host.scrollTop !== 0) host.scrollTop = 0;
     if (host.scrollLeft !== 0) host.scrollLeft = 0;
+    /**
+     * 同一件事还有**整页**那一份。
+     *
+     * 浏览器让刚获得焦点的元素露出来时，滚的不止那个带 overflow 的容器，还有页
+     * 面本身。轴上的卡是绝对定位的，屏幕外那几张离文档顶两千多像素——一次 Tab
+     * 就把页面滚到底（实测 scrollY 220，也就是这一页能滚的全部），而轴现在是钉在
+     * 文档顶上、正好一屏高的，于是整条被拉出屏幕 220px：选中的那张跑到屏幕上方，
+     * 底下空出一条底色。选中项该在哪儿由 focusTo 管（它会把那张带到正中），页面
+     * 一点都不需要动。
+     *
+     * 正在拖的时候不管：那会儿的 focusin 是手指按在卡上带出来的，页面本来就在他
+     * 刚才滑到的地方，中途抽一下反而是「意料之外的界面」。
+     */
+    if (!dragging && window.scrollY !== 0) window.scrollTo(0, 0);
     const i = cards.indexOf((e.target as HTMLElement)?.closest?.('.home-icon-btn') as HTMLElement);
     if (i >= 0 && Math.round(focus) !== i) focusTo(i, !reducedMotion());
   }
@@ -598,6 +756,24 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     measure();
     paint();
   }
+
+  /**
+   * 字体到货之后再量一次。
+   *
+   * 招牌那行 Slides 用的是自托管的 Fraunces：头一次打开时先拿后备字体（Georgia）
+   * 排一遍，字体文件到货再重排——招牌的高度从 101 长到 105。而轴的上沿是**按招牌
+   * 的下沿算出来**的（measure 里那截负外边距），算的时候招牌还是矮的，字体一到货
+   * 招牌长高 4px，轴就跟着被顶下去 4px：屏幕最上面留出一条 4px 的底色缝。玩家这一
+   * 轮要的正是「最上方完全没有遮挡」，4px 也算。
+   *
+   * 只补量这一次就够：字体不会再变。`?.` 两道是给老内核留的（FontFaceSet 很早就
+   * 有，但小红书那一版跑在 Chrome 61 上，宁可当它没有）。
+   */
+  document.fonts?.ready?.then(() => {
+    if (destroyed) return;
+    measure();
+    paint();
+  });
 
   host.addEventListener('pointerdown', onDown);
   host.addEventListener('pointermove', onMove);
@@ -629,6 +805,12 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       window.removeEventListener('resize', onResize);
       host.classList.remove('mode-axis');
       host.style.height = '';
+      host.style.marginTop = '';
+      const skip = document.querySelector<HTMLElement>('.know-how-btn');
+      if (skip) {
+        skip.classList.remove('know-how-btn--float');
+        skip.style.bottom = '';
+      }
     },
   };
 }

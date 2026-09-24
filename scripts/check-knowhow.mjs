@@ -91,19 +91,49 @@ let page = await freshPage(ctx);
   check('热区不小于 44px（看着小，按着不小）', seen.h >= 44, `${seen.h.toFixed(1)}px 高 × ${seen.w.toFixed(1)}px 宽`);
   check('这时候两张基础卡还镶着光', seen.glow === 2, `${seen.glow} 张`);
 
-  // 它摆在整张菜单的下方，而且在法务那五条链接**之上**——那五条要留在最底下
-  // （收单方的审核要一眼看见）。
+  /**
+   * 它摆在整张菜单的**下方**，而且在法务那五条链接**之上**——那五条要留在最底下
+   * （收单方的审核要一眼看见）。
+   *
+   * 「下方」怎么量，2026-09 第四轮换过一次口径。从前量的是「按钮的上沿在
+   * `.home-grid` 的下沿之下」；那时候菜单这一格只占屏幕中间一截，量它的盒子就够
+   * 了。现在窄屏这一格是鱼眼轴，**整块屏幕都是它的盒子**（玩家：「鱼眼转盘的范围
+   * 一直从头到尾延伸」），按钮浮在底排上方那道缝里——盒子这个口径于是永远为假，
+   * 量的不再是玩家在意的那件事。
+   *
+   * 玩家在意的是「它在那几张卡底下、不和卡抢地方」。所以改成量**卡片**：屏幕上看
+   * 得见的每一张卡，下沿都要在这颗按钮的上沿之上。轴那一路还多量一条「浮着」，
+   * 免得哪天它又掉回文档流里、被顶出第一屏（那是它上一次差点消失的原因）。
+   */
   const order = await page.evaluate(() => {
     const b = document.querySelector('.know-how-btn');
     const legal = document.querySelector('.home-legal');
     const grid = document.querySelector('.home-grid');
     if (!b || !legal || !grid) return null;
+    const br = b.getBoundingClientRect();
+    const cards = [...grid.children]
+      .filter((e) => e.classList.contains('home-icon-btn'))
+      .map((e) => e.getBoundingClientRect())
+      .filter((r) => r.bottom > 0 && r.top < window.innerHeight);
     return {
-      belowGrid: b.getBoundingClientRect().top >= grid.getBoundingClientRect().bottom - 1,
-      aboveLegal: b.getBoundingClientRect().bottom <= legal.getBoundingClientRect().top + 1,
+      onAxis: grid.classList.contains('mode-axis'),
+      floating: getComputedStyle(b).position === 'fixed',
+      inScreen: br.top >= 0 && br.bottom <= window.innerHeight,
+      belowCards: cards.length > 0 && cards.every((r) => r.bottom <= br.top + 1),
+      lowestCard: cards.length ? Math.max(...cards.map((r) => r.bottom)).toFixed(0) : 'none',
+      btnTop: br.top.toFixed(0),
+      aboveLegal: br.bottom <= legal.getBoundingClientRect().top + 1,
     };
   });
-  check('摆在菜单下方、法务链接之上', order?.belowGrid === true && order?.aboveLegal === true, JSON.stringify(order));
+  check(
+    '摆在那几张卡下面、法务链接之上',
+    order?.belowCards === true && order?.aboveLegal === true,
+    `最低那张卡底 ${order?.lowestCard} / 按钮顶 ${order?.btnTop}`,
+  );
+  check('整颗都在第一屏上（藏起来等于没有）', order?.inScreen === true, JSON.stringify(order?.inScreen));
+  if (order?.onAxis) {
+    check('鱼眼轴那一路：它是浮在轴上面的', order?.floating === true, `position: ${order?.floating ? 'fixed' : '不是 fixed'}`);
+  }
 
   // 拦着：按一张不该点的卡，不会开局。
   //
