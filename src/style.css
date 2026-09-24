@@ -1204,6 +1204,21 @@ button:hover { filter: brightness(1.05); }
    宽度随图形自己的比例走」：图一律 112px 高，宽的宽、窄的窄，但每一站一样高。
    check-mode-axis 逐对量这件事。 */
 .mode-axis {
+  /*
+   * 整条轴（卡片 + 两侧点点 + 中线）往上挪的那一截。
+   *
+   * 玩家 2026-09 第十二轮：「把主菜单中的两侧的点点快捷滑动（包括中线）和鱼眼
+   * 转盘整体上移屏幕的 1/5 大概」。
+   *
+   * **一个变量管住所有挂在中线上的东西**：卡片、两条点点轴、首玩期那条分界
+   * 线——四处原本各写一个 `top: 50%`，改成同一句 `calc(50% - var(--axis-shift))`。
+   * 各改各的话，漏一处就是「点点跟卡片对不上」——而点点正是告诉玩家「我在第几
+   * 项」的唯一提示。
+   *
+   * 具体的像素数由 modeAxis 的 measure() 喝进来（屏高的 1/5，转屏重量）。这儿的
+   * 0 是兜底：JS 没跑到的时候轴还是居中的，不会因为变量缺失而整条跳到别处。
+   */
+  --axis-shift: 0px;
   /* 一站那个**正方格**有多大。图一律装进这个格子里（下面那条），所以它同时是
      「最小」和「最大」的基准：十四张图在轴上占的地方一样大，差别只由鱼眼的
      scale 给（0.72–1.60，见 ui/modeAxis.ts 的 PARAMS）。
@@ -1263,7 +1278,7 @@ button:hover { filter: brightness(1.05); }
  */
 .axis-rail {
   position: absolute;
-  top: 50%;
+  top: calc(50% - var(--axis-shift, 0px));
   width: 14px;
   height: 0;
   pointer-events: none;
@@ -1369,7 +1384,7 @@ button:hover { filter: brightness(1.05); }
   left: 0;
   right: 0;
   width: 100%;
-  top: 50%;
+  top: calc(50% - var(--axis-shift, 0px));
   /* 轴上的位置是**每帧算出来的**，不能再被 CSS 平滑一遍。
      全局那条 `button { transition: transform .1s ease }`（style.css 顶上）会把
      JS 每帧写进 style.transform 的新位置当成一次过渡的起点——于是整条轴比手指
@@ -1681,7 +1696,7 @@ button:hover { filter: brightness(1.05); }
   position: absolute;
   left: 0;
   right: 0;
-  top: 50%;
+  top: calc(50% - var(--axis-shift, 0px));
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1713,7 +1728,7 @@ button:hover { filter: brightness(1.05); }
   position: absolute;
   left: 0;
   right: 0;
-  top: 50%;
+  top: calc(50% - var(--axis-shift, 0px));
   /* **收缩到文字那么宽**，不是整幅宽。整幅宽的话，屏幕上那一整条（看上去空空
      如也）都算按到了它——手指随便落一下就把整套引导撤了，正是玩家点名不要的
      「意料之外的疏漏操作」。居中不能靠 transform（轴每帧往 transform 里写位置，

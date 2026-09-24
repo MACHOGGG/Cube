@@ -101,7 +101,16 @@ const shot = (page) =>
         scale: Number((el.style.transform.match(/scale\(([\d.]+)\)/) || [0, '1'])[1]),
       };
     });
-    return { host: { top: hr.top, bottom: hr.bottom, h: hr.height, cy: hr.top + hr.height / 2 }, cards };
+    /*
+     * 「选中线」不再是轴盒子的正中。
+     *
+     * 玩家 2026-09 第十二轮把整条轴（卡片 + 两侧点点 + 中线）往上挪了屏高的 1/5，具体
+     * 像素数在 `--axis-shift` 里（modeAxis 的 measure 喝进去的）。这道门里凡是「哪一张
+     * 对着选中线」的量法都要减它。**读变量而不写死 1/5**：写死的话，改了那一个
+     * 数的那天这道门会红在**尺子**上而不是代码上。
+     */
+    const SH = (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
+    return { host: { top: hr.top, bottom: hr.bottom, h: hr.height, cy: hr.top + hr.height / 2 - SH, shift: SH }, cards };
   });
 
 // ── 1. 轴立起来了，13 张卡都在上面 ───────────────────────────────────
@@ -244,16 +253,22 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.mouse.down();
   for (let k = 1; k <= 6; k++) await page.mouse.move(box.x, box.y + k * 40);
   const pulled = await page.evaluate(() => {
-    const host = document.querySelector('.mode-axis').getBoundingClientRect();
+    const el = document.querySelector('.mode-axis');
+    const host = el.getBoundingClientRect();
     const first = document.querySelector('.mode-axis > .home-icon-btn').getBoundingClientRect();
-    return { gap: first.top + first.height / 2 - (host.top + host.height / 2) };
+    // 选中线往上挪了 --axis-shift（见 shot 里那段）。
+    const mid = host.top + host.height / 2 - (parseFloat(getComputedStyle(el).getPropertyValue('--axis-shift')) || 0);
+    return { gap: first.top + first.height / 2 - mid };
   });
   await page.mouse.up();
   await page.waitForTimeout(900);
   const back = await page.evaluate(() => {
-    const host = document.querySelector('.mode-axis').getBoundingClientRect();
+    const el = document.querySelector('.mode-axis');
+    const host = el.getBoundingClientRect();
     const first = document.querySelector('.mode-axis > .home-icon-btn').getBoundingClientRect();
-    return { gap: first.top + first.height / 2 - (host.top + host.height / 2) };
+    // 选中线往上挪了 --axis-shift（见 shot 里那段）。
+    const mid = host.top + host.height / 2 - (parseFloat(getComputedStyle(el).getPropertyValue('--axis-shift')) || 0);
+    return { gap: first.top + first.height / 2 - mid };
   });
   check('到头了还能再拉出一点空白', pulled.gap > 20, `拉出 ${pulled.gap.toFixed(0)}px`);
   check('松手弹回来，第一张回到选中线', Math.abs(back.gap) < 2, `偏差 ${Math.abs(back.gap).toFixed(1)}px`);
@@ -282,6 +297,20 @@ let page = await menuPage({ slides_played_square: '1' });
 //   ④ 画出去不撑大页面（overflow: clip 那一截）。
 {
   await page.goto(BASE, { waitUntil: 'load' });
+  /**
+   * 先把选中项摆回**中间**再量。
+   *
+   * 上一节末尾把轴拖到了最后一张，而选中项记在 sessionStorage 的
+   * `slides_axis_focus` 里（menu.ts 那个 AXIS_KEY），同一个标签页里 goto 一次
+   * 不会清掉它——于是这一节一进来就停在第 14 张：线以上堆着十三张，线以下一张
+   * 都没有。这一节要量的偏偏是「上下两头」，少了一头就只剩半条路。
+   *
+   * 第十二轮整体上移屏幕 1/5 之后这件事才露出来：线从 422 挪到 253，线底下空
+   * 出 591px，停在最后一张时那一大片全是空的，屏幕上只剩两张卡，
+   * 「一张都不淡」和「靠边的卡是虚的」双双变红——红的是量法，不是代码。
+   */
+  await page.evaluate(() => sessionStorage.setItem('slides_axis_focus', '6'));
+  await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(700);
   const look = await page.evaluate(() => {
@@ -351,21 +380,34 @@ let page = await menuPage({ slides_played_square: '1' });
   const blur = await page.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
-    const mid = hr.top + hr.height / 2;
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
     return [...host.children]
       .filter((e) => e.classList.contains('home-icon-btn'))
       .map((e) => {
         const r = e.getBoundingClientRect();
         const cy = r.top + r.height / 2;
         const m = /blur\(([\d.]+)px\)/.exec(e.style.filter || '');
-        return { cy, d: Math.abs(cy - mid), px: m ? +m[1] : 0, on: cy > -100 && cy < window.innerHeight + 100 };
+        // room＝这张卡的中心离**最近那条屏幕边**还有多远，和 modeAxis.ts 里
+        // `edgeOf(at) - far` 算的是同一件事。
+        const room = Math.min(cy, window.innerHeight - cy);
+        return { cy, room, d: Math.abs(cy - mid), px: m ? +m[1] : 0, on: cy > -100 && cy < window.innerHeight + 100 };
       })
       .filter((c) => c.on);
   });
-  const nearEdge = blur.filter((c) => c.d > 300);
+  /**
+   * 「靠边」原先写成「离选中线 > 300px」。那是个**代理量**，只在选中线正好在
+   * 屏幕正中时才等于「靠近屏幕边」——第十二轮把整条轴上移屏幕 1/5 之后，线挪到
+   * 了 253，线底下 300px 处是 553，离底边还有 291px，一点都不该虚，于是这条断言
+   * 找不到「靠边的卡」直接红了。
+   *
+   * 改成量**离最近那条屏幕边的距离**，门槛照抄代码里的 BLUR_EDGE（150px）——量
+   * 的和判的从此是同一件事，中线再挪也不用回来改这个数。
+   */
+  const BLUR_EDGE = 150; // 和 src/ui/modeAxis.ts 里那个常量对齐
+  const nearEdge = blur.filter((c) => c.room < BLUR_EDGE);
   const atLine = blur.filter((c) => c.d < 60);
   check('靠近屏幕两端的卡是虚的', nearEdge.length > 0 && nearEdge.every((c) => c.px > 0),
-    nearEdge.map((c) => `${c.cy.toFixed(0)}→${c.px}px`).join(' ') || '屏幕上没有靠边的卡');
+    nearEdge.map((c) => `${c.cy.toFixed(0)}(边距${c.room.toFixed(0)})→${c.px}px`).join(' ') || '屏幕上没有靠边的卡');
   check('正中那张一点都不虚', atLine.length > 0 && atLine.every((c) => c.px === 0),
     atLine.map((c) => `${c.cy.toFixed(0)}→${c.px}px`).join(' '));
   check('虚的量是 0.5px 一档（量化过，不逐帧改 filter）',
@@ -390,8 +432,26 @@ let page = await menuPage({ slides_played_square: '1' });
         return { w: +b.width.toFixed(1), o: +(+cs.opacity).toFixed(3), cy: b.top + b.height / 2 };
       }),
     );
-    const host = document.querySelector('.mode-axis').getBoundingClientRect();
-    return { rails: rails.length, dots, hostCy: host.top + host.height / 2, pe: rails[0] && getComputedStyle(rails[0]).pointerEvents };
+    const el = document.querySelector('.mode-axis');
+    const host = el.getBoundingClientRect();
+    // 选中的那张：按**写出来的 scale** 认，和 shot() 一个认法。
+    const cards = [...el.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const scaleOf = (e) => {
+      const m = /scale\(([\d.]+)\)/.exec(e.style.transform || '');
+      return m ? +m[1] : 0;
+    };
+    const fr = cards.reduce((a, b) => (scaleOf(b) > scaleOf(a) ? b : a)).getBoundingClientRect();
+    const dv = document.querySelector('.mode-axis > .axis-divider');
+    const dvr = dv && dv.getBoundingClientRect();
+    return {
+      rails: rails.length, dots,
+      // 选中线往上挪了 --axis-shift（见 shot 里那段）。
+      hostCy: host.top + host.height / 2 - (parseFloat(getComputedStyle(el).getPropertyValue('--axis-shift')) || 0),
+      pe: rails[0] && getComputedStyle(rails[0]).pointerEvents,
+      vh: window.innerHeight,
+      cardCy: fr.top + fr.height / 2,
+      dividerCy: dvr ? dvr.top + dvr.height / 2 : null,
+    };
   });
   check('左右各一条点点轴', rail.rails === 2, `${rail.rails} 条`);
   check('每条轴上一项一颗点', rail.dots.every((d) => d.length === 14), rail.dots.map((d) => d.length).join(' / '));
@@ -401,6 +461,25 @@ let page = await menuPage({ slides_played_square: '1' });
   check('最大那颗对着选中线（± 6px）', Math.abs(widest.cy - rail.hostCy) < 6, `${widest.cy.toFixed(0)} / ${rail.hostCy.toFixed(0)}`);
   // 它是路标不是控件：按在点子上那一下要能照常拖轴。
   check('点点轴不吃手势（pointer-events: none）', rail.pe === 'none', String(rail.pe));
+  /**
+   * 第十二轮：**整条轴上移屏幕的 1/5**。玩家原话「把主菜单中的两侧的点点快捷
+   * 滑动（包括中线）和鱼眼转盘整体上移屏幕的 1/5 大概」——三样东西挂在同一条线
+   * 上，一起挪才叫「整体」，挪了卡片没挪点点就是错位。
+   *
+   * 量的是**画出来的绝对位置**（该在 0.3 屏高处），不是 `--axis-shift` 这个变量
+   * 本身：照着那个变量量等于拿尺子量尺子——SHIFT_FRAC 改回 0，上面那几条用
+   * hostCy 的断言会跟着一起挪、照样全绿，只有这一条会红。
+   */
+  const wantCy = rail.vh / 2 - rail.vh / 5;
+  const movedAll =
+    Math.abs(rail.cardCy - wantCy) < 6 &&
+    rail.dots.every((d) => Math.abs(d.reduce((a, b) => (b.w > a.w ? b : a)).cy - wantCy) < 6) &&
+    (rail.dividerCy === null || Math.abs(rail.dividerCy - wantCy) < 6);
+  check(
+    '卡片、两侧点点、中线一起上移了屏幕的 1/5（该在 ' + wantCy.toFixed(0) + 'px）',
+    movedAll,
+    `卡 ${rail.cardCy.toFixed(0)} / 点 ${rail.dots.map((d) => d.reduce((a, b) => (b.w > a.w ? b : a)).cy.toFixed(0)).join(' ')} / 中线 ${rail.dividerCy === null ? '无' : rail.dividerCy.toFixed(0)}`,
+  );
 }
 
 // ── 4d. 图层不再逐帧建了又拆 ────────────────────────────────────────
@@ -438,7 +517,7 @@ let page = await menuPage({ slides_played_square: '1' });
   const focusedIndex = () => p5.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
-    const mid = hr.top + hr.height / 2;
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
     const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
     let best = -1, bd = 1e9;
     cards.forEach((e, i) => {
@@ -534,7 +613,7 @@ let page = await menuPage({ slides_played_square: '1' });
     window.__focus = () => {
       const host = document.querySelector('.mode-axis');
       const hr = host.getBoundingClientRect();
-      const mid = hr.top + hr.height / 2;
+      const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
       const cs = [...host.children]
         .filter((e) => e.classList.contains('home-icon-btn'))
         .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
@@ -789,7 +868,7 @@ let page = await menuPage({ slides_played_square: '1' });
     const host = document.querySelector('.mode-axis');
     if (!host) return null;
     const hr = host.getBoundingClientRect();
-    const mid = hr.top + hr.height / 2;
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
     let best = null, bd = 1e9, idx = -1, i = -1;
     for (const el of [...host.children]) {
       if (!el.classList.contains('home-icon-btn')) continue;
@@ -820,7 +899,7 @@ let page = await menuPage({ slides_played_square: '1' });
   await p9.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
-    const mid = hr.top + hr.height / 2;
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
     let best = null, bd = 1e9;
     for (const el of [...host.children]) {
       if (!el.classList.contains('home-icon-btn')) continue;
@@ -857,7 +936,7 @@ let page = await menuPage({ slides_played_square: '1' });
   const fresh = await p10.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
-    const mid = hr.top + hr.height / 2;
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
     let bd = 1e9, idx = -1, i = -1, name = '';
     for (const el of [...host.children]) {
       if (!el.classList.contains('home-icon-btn')) continue;

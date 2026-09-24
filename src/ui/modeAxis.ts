@@ -255,6 +255,14 @@ const RAIL_SPAN = 4.6;
 const RULER_SPAN = 8;
 /** 位移超过这么多像素就算「拖」，不算「点」——否则滑一下手会误开一个玩法。 */
 const TAP_SLOP = 10;
+/**
+ * 整条轴（卡片 + 两侧点点 + 中线）往上挪屏高的几分之几。
+ *
+ * 玩家 2026-09 第十二轮：「把主菜单中的两侧的点点快捷滑动（包括中线）和鱼眼转盘
+ * 整体上移屏幕的 1/5 大概」。挪的是**中心那条线**——所有挂在它上面的东西一起走，
+ * 所以只有这一个数（见 style.css 里 `--axis-shift` 那段）。
+ */
+const SHIFT_FRAC = 0.2;
 
 export interface ModeAxisOpts {
   /** 轴上的卡，按顺序。menu.ts 造好了原样交过来——美术内容一个字都不改。 */
@@ -327,6 +335,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   /** 焦点：一个实数，2.4 就是第 2 张和第 3 张之间。 */
   let focus = Math.min(Math.max(opts.initial ?? 0, 0), Math.max(n - 1, 0));
   let hostH = 0;
+  /** 中线离视口正中往上挪了多少（见 SHIFT_FRAC）。measure() 里算。 */
+  let shift = 0;
   /** 一站（卡片本身）多高——量出来的，用来算「露出半张」那条边界。 */
   let stationH = 130;
   let raf = 0;
@@ -397,6 +407,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     host.style.width = '';
     hostH = Math.max(260, Math.round(window.innerHeight));
     host.style.height = hostH + 'px';
+    // 中线往上挪的那一截：屏高的 1/5。转屏、地址栏收起都会重量一遍。
+    shift = Math.round(hostH * SHIFT_FRAC);
+    host.style.setProperty('--axis-shift', shift + 'px');
     const hr = host.getBoundingClientRect();
     host.style.marginTop = -Math.round(hr.top + window.scrollY) + 'px';
     /**
@@ -510,7 +523,17 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   function paint(): void {
     if (destroyed || n === 0) return;
     const L = fisheye(n, focus, params());
-    const edge = hostH / 2;
+    /**
+     * 中心到屏幕**那一头**还有多远。
+     *
+     * 中线往上挪了 shift 之后，上下两边就不再一样宽了：上面只剩
+     * `hostH/2 − shift`，下面多出 `hostH/2 + shift`。还用一个 `hostH/2` 的话，
+     * 下半边那几张明明还在屏幕里，却会被当成「已经出界」——先是两头那一点虚提前
+     * 糊上来，再往下一点连 pointer-events 都被摘掉，**看得见却点不着**。
+     */
+    const edgeUp = hostH / 2 - shift;
+    const edgeDown = hostH / 2 + shift;
+    const edgeOf = (at: number) => (at < 0 ? edgeUp : edgeDown);
     // 正在动吗？两头那一点虚只在停稳之后给（见下面那段），滑动中一律不写
     // filter。
     const still = !dragging && !springing;
@@ -554,7 +577,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 出来、也照样点得到——那一带底下是底排，手指落在那儿本该点到底排。
        */
       const far = Math.abs(s.at);
-      const pe = far > edge + stationH * 1.5 ? 'none' : '';
+      const pe = far > edgeOf(s.at) + stationH * 1.5 ? 'none' : '';
       if (pe !== prev.pe) { el.style.pointerEvents = pe; prev.pe = pe; }
       /**
        * 上下两头那一点**虚**（出处和两个数在 BLUR_EDGE 上面）——**只在停稳之后
@@ -573,7 +596,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 量的是「这张卡的中心离最近的那条屏幕边还有多远」——轴的盒子就是视口，所
        * 以 `半高 − |位移|` 正好是这个距离。写之前量化成 0.5px 一档，理由同上。
        */
-      const room = edge - Math.abs(s.at);
+      const room = edgeOf(s.at) - far;
       const raw =
         !still || room >= BLUR_EDGE
           ? 0
