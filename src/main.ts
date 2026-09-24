@@ -10,6 +10,10 @@ import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
 import { BOMB_RULES_VERSION } from './engine/bomb';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
 import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
+// 只为它的副作用引进来：模块一加载就把玩家挑的那一套（米白 / 深紫）盖到
+// <html> 上，并盯着权限变化（深紫是天才特供，过期要自己退回米白）。
+// 个人主页那边本来也会引它，但那是换到那一页才发生的事——首页就该是对的。
+import './engine/themePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';

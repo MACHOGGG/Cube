@@ -1,5 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
+<!-- data-theme 写在这儿而不是等 JS 跑起来再盖：默认是米白那一套（玩家定的），
+     而 style.css 里深色那一块是 `@media (prefers-color-scheme: dark)` +
+     `:root:not([data-theme="light"])`——属性一挂上，系统的深色模式就说不上话
+     了。要是等 src/main.ts 加载完再盖，开着深色模式的手机会先闪一下深紫。
+     深紫是 Slides 天才的权益，由 engine/themePref.ts 在有权限时改成 dark。 -->
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
