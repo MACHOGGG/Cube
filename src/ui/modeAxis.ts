@@ -160,6 +160,53 @@ const FAST_K = 1.6;
  */
 const V_SMOOTH = 0.45;
 /**
+ * 两条路，两个灵敏度：**拨侧边的点点比拖卡片快**。
+ *
+ * 玩家 2026-09 第六轮：「滑动侧边的点点快捷上下滑动滚轮按照现在的灵敏度，……然后
+ * 灵敏度调稍微低一点，明显要能感受到上下滑动点点要比上下滑动主菜单内容要更快速
+ * 便捷」。
+ *
+ * 点点那两条从此是**滚轮**：靠边 RAIL_GRAB 这么宽的一带，手指按在那儿拖就是在
+ * 拨滚轮，倍率保持上一版那个（×1）；拖中间的卡片则整体打 CARD_K 折。同样的手指
+ * 位移，拨点点走得远三成——不用写一个字，手上就分得出来。
+ *
+ * 认「在不在点点上」看的是**按下那一刻的横坐标**，不是命中了哪个元素：点点自己
+ * 是 `pointer-events: none` 的路标（碰它不该吃掉手势），而且真手指按下去的落点本
+ * 来就散在点子周围十几个像素里。46px 是一根拇指的宽度。
+ *
+ * 只影响**拖动**：点一下照旧是点中那张卡（点和拖由 TAP_SLOP 分开）。
+ */
+const RAIL_GRAB = 46;
+const CARD_K = 0.72;
+/**
+ * 松手之后再滑一段——「轻微的物理动感」。
+ *
+ * 上一版是松手即刻弹到最近那一项：手感干净，但没有「甩出去」这回事，玩家第六轮
+ * 要的正是那点惯性。现在按松手那一刻的速度往前**投影**一段，落在哪一项就弹去哪
+ * 一项，再由弹簧（engine/spring 的 SETTLE_SPRING，k=150、阻尼比 0.78）收尾——它
+ * 自带 2% 的过冲，落定时有一记轻轻的回弹。
+ *
+ * 投影要封顶，而且要**轻**——玩家要的是「轻微的物理动感」，不是甩出去半张菜单：
+ *   · FLING_MS：把速度换成距离的那个系数（等效「再滑 18ms」）。头一版拍了 45，
+ *     实测一次 90px 的中速滑（本该走 1 项）被它推到 3 项、240px 的快甩多走 3
+ *     项——那不是「轻微」，那是「按下去以后它自己又走了两站」。
+ *   · FLING_MAX：最多再滑两站。
+ *   · FLING_MIN：**低于两成项的投影一律当没有。** 慢慢拖到位再松手的那一下，
+ *     手上其实还有一点残速，算出来是 0.1–0.4 项；不设这道下限的话，它正好够
+ *     把「停在 5.45」推过 5.5 那条线，于是松手定在 6——玩家眼睛看着 5，手一松
+ *     跳到 6。站点原则第三条（不要让玩家出现意料之外的疏漏操作）说的就是这个。
+ *   · FLING_CARRY / FLING_VMAX：交给弹簧的初速度（只给三成、并且封顶），过冲才
+ *     是「轻轻一荡」而不是「冲过头好几张」。
+ *   · 手指在松手前已经停住（超过 FLING_STALE 没有新的 move）就不投影——那是
+ *     「放下」，不是「甩出去」。
+ */
+const FLING_MS = 18;
+const FLING_MAX = 2;
+const FLING_MIN = 0.2;
+const FLING_CARRY = 0.3;
+const FLING_VMAX = 6;
+const FLING_STALE = 80;
+/**
  * 每滑过一项的那一下「咔」。
  *
  * 玩家第三轮：「每一经过一个玩法都有一点经过每一小卡的感觉」。声音本来就有（滑
@@ -279,6 +326,12 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let lastT = 0;
   /** 平滑过的手速（px/ms），见 V_SMOOTH。 */
   let vel = 0;
+  /** 这一次拖动的灵敏度：拨点点是 1，拖卡片打 CARD_K 折。见 RAIL_GRAB。 */
+  let srcK = CARD_K;
+  /** 平滑过的**焦点**速度（项/毫秒，带正负）：松手那一下拿它投影，见 FLING_MS。 */
+  let vFocus = 0;
+  /** 弹簧这一趟要去的那一项。松手时定下来，途中不再改。 */
+  let springTarget = 0;
   let ruler: { k: number; at: number }[] | null = null;
   const spring: SpringState = createSpring(focus);
   let springing = false;
@@ -318,10 +371,36 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    */
   function measure(): void {
     host.style.marginTop = '';
+    host.style.marginLeft = '';
+    host.style.width = '';
     hostH = Math.max(260, Math.round(window.innerHeight));
     host.style.height = hostH + 'px';
     const hr = host.getBoundingClientRect();
     host.style.marginTop = -Math.round(hr.top + window.scrollY) + 'px';
+    /**
+     * **横着也铺满整屏**：左右两条边到屏幕边之间那一截也要能拖。
+     *
+     * 轴本来跟着 `.home-page` 的左右内边距走，390 的屏上是 22–368——于是屏幕最
+     * 边上那两条 22px 宽的带子根本不在轴上：手指落在那儿，pointerdown 打到的是
+     * 页面，轴一动不动。偏偏那正是拇指从边上摸过来时最常落的地方，而点点（左边
+     * 那条画在 26–35）就贴着它。玩家这一轮要的是「拨点点＝快速滚轮」，按在点点
+     * 左边一点点却什么都没有，比慢还糟。
+     *
+     * 不动版面的办法：盒子往两边撑到视口，点点用同样的量往回缩（下面那两个变量
+     * 喂给 style.css 的 `.axis-rail--l/r`）——屏幕上的位置一个像素都不变，变的只
+     * 有「手指按在哪儿算数」。卡片是 `left:0;right:0` 的整幅宽，跟着变宽，里面
+     * 的图本来就自己居中，所以也不动。
+     *
+     * 用 `clientWidth` 不用 `innerWidth`：后者在有滚动条的时候会多算那几像素，
+     * 撑出一条横向滚动。
+     */
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const bleedL = Math.max(0, Math.round(hr.left));
+    const bleedR = Math.max(0, Math.round(vw - hr.right));
+    host.style.marginLeft = -bleedL + 'px';
+    host.style.width = vw + 'px';
+    host.style.setProperty('--axis-bleed-l', bleedL + 'px');
+    host.style.setProperty('--axis-bleed-r', bleedR + 'px');
     if (cards[0]) stationH = Math.max(60, cards[0].offsetHeight);
     floatKnowHow();
   }
@@ -496,8 +575,35 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   function loop(): void {
     raf = 0;
     if (destroyed) return;
+    /**
+     * **手指按着的时候，弹簧一律不许动。**
+     *
+     * 弹簧每帧写一次 `focus`，跟手那条路每来一条 move 写一次 `focus`——两个人写
+     * 同一个格子，手指必输：move 一秒来五六十条，帧也是六十次，最后一次写进去
+     * 的是谁全看时序。实测后果是「快滑滑不动」：一次 420px 的快滑本该走 9 项，
+     * 实际只走了 1 项（axisPx 累加到 2004，而 focus 被弹簧按在 1.01），正是玩家
+     * 说的「快速滑动敏感度并没有很高」「滑动转盘不够丝滑还是卡卡的」。
+     *
+     * 谁在按下的时候把弹簧打开的？`onFocusIn`——浏览器在 mousedown/touchstart
+     * 的默认动作里给按到的那张卡上焦点，focusin 于是在 pointerdown **之后**到，
+     * 那儿调 `focusTo()` 把弹簧点着了。那一条本身是对的（键盘 Tab 要把卡带到焦
+     * 点来），只是不该在手指按着的时候管事，所以 onFocusIn 那儿也加了同一道闸。
+     *
+     * 两道闸都要：那儿堵的是这一条来路，这儿堵的是「以后谁再点着弹簧」。
+     */
+    if (dragging) {
+      springing = false;
+      return;
+    }
     if (springing) {
-      const target = Math.min(Math.max(Math.round(spring.value), 0), n - 1);
+      /**
+       * 目标是**松手那一刻定下的**（onUp / focusTo），途中不再改。
+       *
+       * 从前是每帧拿 `Math.round(spring.value)` 当目标——那等于「永远奔向此刻最近
+       * 的那一项」，于是甩出去的那一段被自己吃掉：刚滑过半格，目标就跟着换成新的
+       * 那一项，再快的手势也只走一项。要有惯性，目标就得是投影出来的那一项。
+       */
+      const target = springTarget;
       stepSpring(spring, target, 16.7);
       focus = spring.value;
       if (springAtRest(spring, target)) {
@@ -626,6 +732,10 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     moved = 0;
     startY = e.clientY;
     startFocus = focus;
+    // 按下那一刻的横坐标决定这一次用哪一档灵敏度（见 RAIL_GRAB）。
+    const hr = host.getBoundingClientRect();
+    srcK = e.clientX - hr.left < RAIL_GRAB || hr.right - e.clientX < RAIL_GRAB ? 1 : CARD_K;
+    vFocus = 0;
     axisPx = 0;
     lastY = e.clientY;
     lastT = e.timeStamp;
@@ -671,8 +781,12 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     // 动敏感度并没有很高」的另一半原因。
     const now = Math.abs(seg) / dt;
     vel = vel === 0 ? now : vel * (1 - V_SMOOTH) + now * V_SMOOTH;
-    axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel);
+    axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel) * srcK;
+    const was = focus;
     focus = clampRubber(focusFromAxis(axisPx));
+    // 焦点走了多快（项/毫秒，带正负）。松手那一下拿它投影出「再滑一段」。
+    const nowF = (focus - was) / dt;
+    vFocus = vFocus === 0 ? nowF : vFocus * (1 - V_SMOOTH) + nowF * V_SMOOTH;
     // 一帧只画一次。pointermove 在手机上一秒能来一百多条（而且 iOS 会把两三条
     // 合并成一条送过来），每来一条就画一次等于一帧里重复画好几遍——手上的感觉
     // 反而更黏。攒到下一帧再画，画的是最新的 focus，一点不丢。
@@ -691,19 +805,36 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
         /* 已经自动释放了 */
       }
     }
+    /**
+     * 松手：先按速度投影出「还会再滑到哪儿」，再定格到那一项上。
+     *
+     * 投影只在「手指还在动的时候松开」才算数——停住超过 FLING_STALE 没有新的
+     * move，那是把它放下，不是甩出去（而且那会儿 vFocus 还留着最后一次的值，不
+     * 拦一下就会凭空飞走一段）。
+     */
+    const stale = e.timeStamp - lastT > FLING_STALE;
+    const raw = stale ? 0 : vFocus * FLING_MS;
+    const glide = Math.abs(raw) < FLING_MIN ? 0 : Math.max(-FLING_MAX, Math.min(FLING_MAX, raw));
     ruler = null;
     // §5.3 离散定格：松手必须停在某一项上，不能停在两项中间。
-    const target = Math.min(Math.max(Math.round(focus), 0), n - 1);
+    const target = Math.min(Math.max(Math.round(focus + glide), 0), n - 1);
     if (reducedMotion()) {
-      // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。
-      focus = target;
-      snapSpring(spring, target);
+      // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。也不投影：那是动画。
+      const near = Math.min(Math.max(Math.round(focus), 0), n - 1);
+      focus = near;
+      springTarget = near;
+      snapSpring(spring, near);
       paint();
       settled();
       return;
     }
+    springTarget = target;
     spring.value = focus;
-    spring.velocity = 0;
+    // 给弹簧留三成初速度（封顶 FLING_VMAX 项/秒）：它带来的那一点过冲就是「轻微
+    // 的物理动感」。全给的话会冲过头好几张，一点都不给又像硬停。
+    spring.velocity = glide === 0
+      ? 0
+      : Math.max(-FLING_VMAX, Math.min(FLING_VMAX, vFocus * 1000 * FLING_CARRY));
     springing = true;
     schedule();
   }
@@ -749,6 +880,14 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      * 刚才滑到的地方，中途抽一下反而是「意料之外的界面」。
      */
     if (!dragging && window.scrollY !== 0) window.scrollTo(0, 0);
+    /**
+     * **正在拖的时候什么都不做。**
+     *
+     * 手指按在一张卡上，浏览器的默认动作会给那张卡上焦点——focusin 于是紧跟在
+     * pointerdown 后面到，这一行要是照常执行，就等于在手势刚开始的那一刻点着一
+     * 根弹簧去拽 `focus`，和手指抢同一个格子（见 loop 里那段）。
+     */
+    if (dragging) return;
     const i = cards.indexOf((e.target as HTMLElement)?.closest?.('.home-icon-btn') as HTMLElement);
     if (i >= 0 && Math.round(focus) !== i) focusTo(i, !reducedMotion());
   }
@@ -762,14 +901,11 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       paint();
       return;
     }
+    springTarget = target;
     spring.value = focus;
     spring.velocity = 0;
     springing = true;
     schedule();
-    // 弹簧的目标是「离当前值最近的整数项」，所以先把 focus 推到目标附近一格内，
-    // 它才会往对的方向收（否则从第 0 项跳到第 12 项会原地不动）。
-    focus = target + (focus > target ? 0.49 : -0.49);
-    spring.value = focus;
   }
 
   function onResize(): void {

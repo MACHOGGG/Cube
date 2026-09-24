@@ -1212,8 +1212,10 @@ button:hover { filter: brightness(1.05); }
   color: var(--ink-faint, currentColor);
   z-index: 2;
 }
-.axis-rail--l { left: 6px; }
-.axis-rail--r { right: 6px; }
+/* 那 `--axis-bleed-*` 是 modeAxis 的 measure 喂进来的：轴横着撑到了视口边上（好
+   让屏幕最边上那两条也能拖），点点用同样的量缩回来，位置一个像素都不变。 */
+.axis-rail--l { left: calc(6px + var(--axis-bleed-l, 0px)); }
+.axis-rail--r { right: calc(6px + var(--axis-bleed-r, 0px)); }
 .axis-dot {
   position: absolute;
   left: 50%;
@@ -1783,6 +1785,57 @@ button:hover { filter: brightness(1.05); }
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 252px; }
 .home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
+/*
+ * 手机上那张**缩图**：三层等高，而且整个装得进那个方格。
+ *
+ * 玩家 2026-09 报的：「三个小的圆角矩形上下空间不等距，最下面那个的一部分被卡
+ * 走了」。量出来正是这么回事——一层 31.1 + 一层 35（中间那层里 90s 那道星芒比
+ * 别人高）+ 一层 31.1，加上两道缝，一共 97.2，而格子里只有 82.9 可用。`.bomb-row`
+ * 是 `flex: 1` 但 `min-height: auto`，缩不下去，于是第三层被挤出格子底下 4.6px，
+ * 让轴那一格的 overflow 一刀切掉。上下也就不等距了：顶上是正经的内边距，底下是
+ * 溢出。
+ *
+ * 这儿只改**手机上这张缩图**（.home-bomb-mini），不碰点开之后那张大的
+ * （.bomb-panel--big）——那一张是按真实的触控热区逐个调出来的，动它等于重调那
+ * 一屏。
+ *
+ * 三条合起来才成立，而且**三条都只认宽度**：
+ *
+ *   · `flex: 1 1 0` + `min-height: 0`：三层严格等高，而且缩得下去。（`min-height`
+ *     的默认值 `auto` 正是「缩不下去」的那一条，改 0 是标准写法。）
+ *   · 小片按**板宽**定大小（width: 23% + 1:1），不按层高。头一版写的是
+ *     `height: 72%`——在 Chromium 上量着没问题，但那是「flex 分出来的高度」的百
+ *     分比，正是 Safari 历来最容易算不准的一种；这张卡上一次出事（整张溢到屏幕
+ *     外）也只在 iPhone 上复现得出来。宽度在哪个内核上都是确定值，所以一律走宽
+ *     度：23% × 层内宽 ≈ 20px，而层高 ≈ 27.6px，留着三成余量，怎么算都顶不出去。
+ *   · 90s 那道星芒**绝对定位**，钉在整块板的正中。它本来就比自己那一层高（探进
+ *     上下两层是效果图的画法），留在流里就会把中间那层顶高——头一版靠「给它
+ *     118% 的高」压着，同样是拿层高算的。脱离文档流之后它根本不参与分高，中间那
+ *     层于是和另外两层一样高；它画多大只由 `width` 和 1:2.6 决定。
+ */
+.home-bomb-mini .bomb-panel {
+  /* 星芒的定位基准（下面那条 absolute）。 */
+  position: relative;
+}
+.home-bomb-mini .bomb-row {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0 5%;
+}
+.home-bomb-mini .bomb-chip {
+  width: 23%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.home-bomb-mini .bomb-90s {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 77%;
+  height: auto;
+  aspect-ratio: 2.6;
+}
 
 /* Desktop only: every icon lifts a touch under the pointer, so a mouse gets
    the same "this is live" feedback a tap gets from .home-tap. Gated on a

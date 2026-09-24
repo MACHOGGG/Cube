@@ -481,6 +481,206 @@ let page = await menuPage({ slides_played_square: '1' });
   await p6.close();
 }
 
+// ── 4g. 第六轮：两档灵敏度、松手的那点惯性、炸弹缩图 ───────────────
+//
+// 玩家 2026-09 第六轮原话：「滑动侧边的点点快捷上下滑动滚轮按照现在的灵敏度，整体
+// 滑动的动画更丝滑有轻微的物理动感，然后灵敏度调稍微低一点，明显要能感受到上下滑
+// 动点点要比上下滑动主菜单内容要更快速便捷」。
+//
+// 这一段量四件事，每一件都是真出过的事故：
+//
+//   · **两档灵敏度**：同一段位移，靠边那一带（拨点点）要比中间（拖卡片）走得明显
+//     更远。「明显」得有个数：这儿要求 ≥ 1.2 倍（代码里是 1 ÷ CARD_K ≈ 1.39）。
+//   · **屏幕最边上那一条也要拖得动**。轴从前只占 `.home-page` 的内容宽（390 的屏
+//     上是 22–368），屏幕最边上那两条 22px 宽的带子按下去打到的是页面，轴一动不
+//     动——而那正是拇指从边上摸过来时最常落的地方，点点就画在旁边。
+//   · **点点不许跟着挪**。上面那条是靠「盒子撑到视口、点点往回缩」做的，缩错了点
+//     点就会贴到屏幕边上去。所以这儿按**页面内容框**对一遍位置。
+//   · **松手那点惯性**：手指还在动的时候松开，要比「停下来再松」多走一点（但只多
+//     走一点）。两遍手势的轨迹一模一样，差别只有「松手前停没停」，所以量到的差就
+//     是惯性本身，不掺别的。
+{
+  const p7 = await menuPage({ slides_played_square: '1' });
+  /** 每次刷新之后都要重装一遍（刷新会把这两样一起清掉）。 */
+  const install = () => p7.evaluate(() => {
+    /** 连续的焦点：哪一项的中心正落在选中线上（跨线的两张之间线性插值）。 */
+    window.__focus = () => {
+      const host = document.querySelector('.mode-axis');
+      const hr = host.getBoundingClientRect();
+      const mid = hr.top + hr.height / 2;
+      const cs = [...host.children]
+        .filter((e) => e.classList.contains('home-icon-btn'))
+        .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
+      for (let k = 1; k < cs.length; k++) {
+        const a = cs[k - 1], b = cs[k];
+        if (a.d <= 0 && b.d >= 0) return a.i + (a.d === b.d ? 0 : -a.d / (b.d - a.d));
+      }
+      return cs[0] && cs[0].d > 0 ? cs[0].i : cs.length - 1;
+    };
+    // 松手**那一刻**的焦点：拿 window 的捕获阶段记，它比轴自己的 pointerup 先到。
+    // 事后再用 evaluate 去问就晚了——那会儿弹簧已经在走，量到的是终点不是起点。
+    addEventListener('pointerup', () => { window.__atUp = window.__focus(); }, true);
+  });
+  await install();
+  /**
+   * 从头上拖一把：x 决定走哪一档（靠边＝拨点点），hold 是松手前停多久。
+   *
+   * 每把之前先刷新回第一项——不回的话第二把会撞上轴的端点，两把都「走到底」，
+   * 量出来的是「一样远」（4e 那一段就先掉进过这个坑）。
+   */
+  const swipe = async (x, { dist = 240, steps = 8, wait = 12, hold = 0 } = {}) => {
+    await p7.reload({ waitUntil: 'load' });
+    await p7.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+    await p7.waitForTimeout(500);
+    await install();
+    const y0 = 620;
+    const from = await p7.evaluate(() => window.__focus());
+    await p7.mouse.move(x, y0);
+    await p7.mouse.down();
+    for (let k = 1; k <= steps; k++) {
+      await p7.mouse.move(x, y0 - Math.round((dist * k) / steps));
+      if (wait) await p7.waitForTimeout(wait);
+    }
+    if (hold) await p7.waitForTimeout(hold);
+    await p7.mouse.up();
+    await p7.waitForTimeout(900);
+    const r = await p7.evaluate(() => ({ atUp: window.__atUp, final: window.__focus() }));
+    return { from, atUp: r.atUp, final: r.final, went: r.final - from };
+  };
+  const mid = await p7.evaluate(() => {
+    const r = document.querySelector('.mode-axis').getBoundingClientRect();
+    return r.left + r.width / 2;
+  });
+  const card = await swipe(mid);
+  const rail = await swipe(6);
+  // 先立住尺子：卡片那一遍本身得真走了好几项，不然「几倍」是拿 0 当分母。
+  check('拖卡片：240px 真的走得动（下面那条倍率才有意义）', card.went >= 3, `走了 ${card.went.toFixed(2)} 项`);
+  check(
+    '屏幕最边上那一条也拖得动（拇指从边上摸过来那一下）',
+    rail.went >= 3,
+    `x=6 走了 ${rail.went.toFixed(2)} 项`,
+  );
+  check(
+    '同样的位移，拨点点比拖卡片走得明显更远（≥ 1.2 倍）',
+    rail.went >= card.went * 1.2,
+    `卡片 ${card.went.toFixed(2)} 项 / 点点 ${rail.went.toFixed(2)} 项 = ×${(rail.went / Math.max(0.01, card.went)).toFixed(2)}`,
+  );
+  // 点点还在老地方：`.home-page` 内容框左边 + 6（轨）+ 7（半个轨宽）。
+  const dots = await p7.evaluate(() => {
+    const page = document.querySelector('.home-page');
+    const pr = page.getBoundingClientRect();
+    const cs = getComputedStyle(page);
+    const l = pr.left + parseFloat(cs.paddingLeft);
+    const r = pr.right - parseFloat(cs.paddingRight);
+    const dl = document.querySelector('.axis-rail--l .axis-dot').getBoundingClientRect();
+    const dr = document.querySelector('.axis-rail--r .axis-dot').getBoundingClientRect();
+    return {
+      left: dl.left + dl.width / 2, want: l + 13,
+      right: dr.left + dr.width / 2, wantR: r - 13,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  check(
+    '点点还在页面内容框里，没被推到屏幕边上',
+    Math.abs(dots.left - dots.want) <= 1.5 && Math.abs(dots.right - dots.wantR) <= 1.5,
+    `左 ${dots.left.toFixed(1)}（该在 ${dots.want.toFixed(1)}）/ 右 ${dots.right.toFixed(1)}（该在 ${dots.wantR.toFixed(1)}）`,
+  );
+  check('轴撑到视口也没撑出横向滚动', dots.overflow === 0, `多出 ${dots.overflow}px`);
+
+  // 惯性：同一把手势，一遍松手时手还在动，一遍停 150ms 再松。
+  const fling = await swipe(mid, { steps: 6, wait: 6 });
+  const put = await swipe(mid, { steps: 6, wait: 6, hold: 150 });
+  check(
+    '手还在动的时候松开，会比「停下来再松」多滑一点（这就是那点物理动感）',
+    fling.final - put.final >= 1,
+    `甩 ${fling.final.toFixed(0)} / 放 ${put.final.toFixed(0)}（松手时都在 ${fling.atUp.toFixed(2)}）`,
+  );
+  check(
+    '但也只多滑一点，不会自己飞走好几项',
+    fling.final - put.final <= 2,
+    `多走 ${(fling.final - put.final).toFixed(2)} 项`,
+  );
+  check(
+    '停下来再松手，就停在眼睛看着的那一项（不会凭空跳一格）',
+    Math.abs(put.final - Math.round(put.atUp)) < 0.01,
+    `松手时 ${put.atUp.toFixed(2)} → 停在 ${put.final.toFixed(0)}`,
+  );
+  await p7.close();
+}
+
+// ── 4h. 炸弹那张缩图：三层等高，整个装得进格子 ──────────────────────
+//
+// 玩家 2026-09 报的：「点开前缩图里三个小的圆角矩形上下空间不等距，最下面那个的一
+// 部分被卡走了」。根子是 `.bomb-row` 的 `flex: 1` 配上默认的 `min-height: auto`：
+// 中间那层里 90s 那道星芒比别人高，整块内容 97 > 格子里的 83，第三层于是被挤到格
+// 子外面，让轴那一格的 overflow 一刀切掉——上下也就不等距了（顶上是内边距，底下是
+// 溢出）。量的是比例，不是像素：这张卡在轴上随时被 scale 着，像素每帧都不一样。
+{
+  const p8 = await menuPage({ slides_played_square: '1' });
+  const m = await p8.evaluate(() => {
+    const mini = document.querySelector('.mode-axis .home-bomb-mini');
+    if (!mini) return null;
+    const panel = mini.querySelector('.bomb-panel') || mini;
+    const pr = panel.getBoundingClientRect();
+    const rows = [...panel.querySelectorAll('.bomb-row')].map((r) => r.getBoundingClientRect());
+    const chips = [...panel.querySelectorAll('.bomb-chip')].map((c) => c.getBoundingClientRect());
+    const burst = panel.querySelector('.bomb-90s')?.getBoundingClientRect();
+    return {
+      rows: rows.map((r) => ({ h: r.height, top: r.top - pr.top, bottom: pr.bottom - r.bottom })),
+      panelH: pr.height,
+      // 小片顶出自己那一层多少（负数＝还在层里）。前三颗在第一层，后三颗在第三层。
+      chipOut: chips.length
+        ? Math.max(...chips.map((c, i) => {
+            const r = rows[i < 3 ? 0 : 2];
+            return Math.max(r.top - c.top, c.bottom - r.bottom);
+          }))
+        : null,
+      burstPos: burst ? getComputedStyle(panel.querySelector('.bomb-90s')).position : null,
+      burstOff: burst
+        ? Math.max(
+            Math.abs(burst.left + burst.width / 2 - (pr.left + pr.width / 2)),
+            Math.abs(burst.top + burst.height / 2 - (pr.top + pr.height / 2)),
+          )
+        : null,
+    };
+  });
+  check('炸弹缩图找得到（下面几条才有意义）', !!m && m.rows.length === 3, m ? `${m.rows.length} 层` : '没找到');
+  if (m && m.rows.length === 3) {
+    const hs = m.rows.map((r) => r.h);
+    const spread = (Math.max(...hs) - Math.min(...hs)) / m.panelH;
+    check('三层等高（差不到整块的 2%）', spread < 0.02, `${hs.map((h) => h.toFixed(1)).join(' / ')}px`);
+    const padTop = m.rows[0].top;
+    const padBottom = m.rows[2].bottom;
+    check(
+      '上下等距（最下面那层没有被卡掉）',
+      Math.abs(padTop - padBottom) / m.panelH < 0.02 && padBottom > -0.5,
+      `顶上 ${padTop.toFixed(1)}px / 底下 ${padBottom.toFixed(1)}px`,
+    );
+    const gaps = [m.rows[1].top - (m.rows[0].top + hs[0]), m.rows[2].top - (m.rows[1].top + hs[1])];
+    check('三层之间两道缝也一样宽', Math.abs(gaps[0] - gaps[1]) / m.panelH < 0.02, `${gaps.map((g) => g.toFixed(1)).join(' / ')}px`);
+    /**
+     * 下面两条守的是**那三条为什么成立**，不是它们成立没有。
+     *
+     * 小片改成按板宽定大小（不按 flex 分出来的层高）、星芒改成绝对定位（不参与
+     * 分高），为的是别再踩「百分比高度在 Safari 上算不准」那一脚——这张卡上一次
+     * 出事（整张溢到屏幕外）就只在 iPhone 上复现得出来，而这儿的门跑在 Chromium
+     * 上，量不到那种差异。所以量的是「有没有留出余量」和「星芒在不在流里」：这
+     * 两样一旦回到老写法，Chromium 上也立刻看得见。
+     */
+    check(
+      '小片整个待在自己那一层里（留着余量，不是刚好卡住）',
+      m.chipOut !== null && m.chipOut < -0.02 * m.panelH,
+      `离层边还有 ${(-m.chipOut).toFixed(1)}px`,
+    );
+    check(
+      '星芒不参与分高（绝对定位，钉在板正中）',
+      m.burstPos === 'absolute' && m.burstOff < 1,
+      `position: ${m.burstPos} / 偏离板心 ${m.burstOff?.toFixed(1)}px`,
+    );
+  }
+  await p8.close();
+}
+
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────
 {
   await page.goto(BASE, { waitUntil: 'load' });

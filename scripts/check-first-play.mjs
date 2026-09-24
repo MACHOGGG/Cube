@@ -19,6 +19,13 @@
  *     同一圈）。
  *
  * 这支脚本每一段都从 localStorage.clear() 重新做人，所以顺序无关，单跑也行。
+ *
+ * **主菜单上那几下为什么不用 `page.click()`。** 手机竖屏的主菜单 2026-09 改成了
+ * 鱼眼轴（ui/modeAxis.ts）：十四张卡是绝对定位的，一次只有中间那几张在屏幕上，
+ * 别的在视口外几百像素处待着。Playwright 的 `click()` 会先「滚动到可见」再按，
+ * 而轴是自己管位置的（滚不动），于是它一直等到超时——门红的不是代码，是这把尺
+ * 子。改成在页面里直接 `el.click()`：合成的这一下照样冒泡到轴和首玩期那道拦截
+ * 上，量的还是同一件事。（check-knowhow 先踩过同一个坑。）
  */
 import { chromium } from 'playwright';
 const BASE = process.argv[2] || 'http://localhost:8976/';
@@ -38,7 +45,7 @@ await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 const glow = await page.$$eval('.home-icon-btn--glow', (bs) => bs.map((b) => b.getAttribute('aria-label')));
 check('新人进来：只有方块和小球两张亮着', glow.length === 2 && glow.includes('方块') && glow.includes('圆球'), JSON.stringify(glow));
 
-await page.click('.home-icon-btn[aria-label^="老虎机"]');
+await page.$eval('.home-icon-btn[aria-label^="老虎机"]', (e) => e.click());
 await page.waitForTimeout(260);
 const after = await page.evaluate(() => ({
   onMenu: !!document.querySelector('.home-page'),
@@ -53,7 +60,7 @@ check('那张在下面，冒出了上滑箭头', after.hint === true);
 await page.evaluate(() => localStorage.setItem('slides_played_circle', '1'));
 await page.reload({ waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.click('.home-icon-btn[aria-label="菱形方块"]');
+await page.$eval('.home-icon-btn[aria-label="菱形方块"]', (e) => e.click());
 await page.waitForTimeout(800);
 check('打过一局之后：锁撤了，点得进去', !(await page.$('.home-page')), '还在主菜单就是没撤');
 check('也不再抖了', (await page.$$('.home-icon-btn--nudge')).length === 0);
@@ -62,7 +69,7 @@ check('也不再抖了', (await page.$$('.home-icon-btn--nudge')).length === 0);
 await page.evaluate(() => { localStorage.clear(); localStorage.setItem('slides_lang', 'zhHans'); });
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.click('.home-icon-btn[aria-label="圆球"]');
+await page.$eval('.home-icon-btn[aria-label="圆球"]', (e) => e.click());
 await page.waitForTimeout(600);
 if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
 await page.waitForSelector('.coach-bar:not([hidden])', { timeout: 25000 });
@@ -83,7 +90,7 @@ await page.evaluate(() => {
 });
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.click('.home-icon-btn[aria-label="三角"]');
+await page.$eval('.home-icon-btn[aria-label="三角"]', (e) => e.click());
 await page.waitForTimeout(600);
 if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
 await page.waitForFunction(() => document.querySelectorAll('.tri').length > 0, { timeout: 25000 });
