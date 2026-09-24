@@ -56,6 +56,22 @@ async function menuPage(extra = {}) {
   return page;
 }
 
+/**
+ * 把「上次停在哪一项」那一格抹掉，让下一次载入回到第一张。
+ *
+ * 轴的位置现在记在 sessionStorage 里（玩家定的「停在你上次看的那一项」，见
+ * menu.ts 的 axisFocus）——刷新**不再**是回到第一项，所以凡是「先回到第一项再
+ * 量」的那几段，都得自己先抹一下。不抹的话，第二把手势从上一把停的地方接着走，
+ * 一路撞到轴的端点，两把量出来一样远（4g 那条倍率就是这么红的）。
+ */
+const forgetAxis = (pg) => pg.evaluate(() => {
+  try {
+    sessionStorage.removeItem('slides_axis_focus');
+  } catch {
+    /* 无痕模式：本来就没存 */
+  }
+});
+
 /** 轴上每张卡的实测矩形，按渲染位置从上往下排。 */
 const shot = (page) =>
   page.evaluate(() => {
@@ -529,6 +545,7 @@ let page = await menuPage({ slides_played_square: '1' });
    * 量出来的是「一样远」（4e 那一段就先掉进过这个坑）。
    */
   const swipe = async (x, { dist = 240, steps = 8, wait = 12, hold = 0 } = {}) => {
+    await forgetAxis(p7);
     await p7.reload({ waitUntil: 'load' });
     await p7.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
     await p7.waitForTimeout(500);
@@ -681,8 +698,106 @@ let page = await menuPage({ slides_played_square: '1' });
   await p8.close();
 }
 
+// ── 4i. 回到主菜单，停在他离开时那一项 ──────────────────────────────
+//
+// 玩家 2026-09 定的：「停在你上次看的那一项」。主菜单每次都是**重画**的（轴活不
+// 到下一次），所以位置记在 menu.ts 的 axisFocus 里，再存一份到 sessionStorage。
+//
+// 存那一份是给 iPhone 的：Safari 切到后台过一会儿会把整个标签页丢掉重新载入——玩
+// 家自己什么都没做，回来却从第一张开始。只记在模块变量里的话，这道门的「退回来
+// 还在」是绿的，而真机上那条路是红的。所以这儿**刷新一次再量一遍**。
+//
+// 同时也量反面：**新开一个标签页要从第一张开始**。用 sessionStorage 不用
+// localStorage 就是为了这个——隔天再来还停在第九张上是另一种「意料之外的界面」。
+{
+  const p9 = await menuPage({ slides_played_square: '1' });
+  const focusedNow = () => p9.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    if (!host) return null;
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2;
+    let best = null, bd = 1e9, idx = -1, i = -1;
+    for (const el of [...host.children]) {
+      if (!el.classList.contains('home-icon-btn')) continue;
+      i++;
+      const r = el.getBoundingClientRect();
+      const d = Math.abs(r.top + r.height / 2 - mid);
+      if (d < bd) { bd = d; best = el; idx = i; }
+    }
+    return { i: idx, name: best.getAttribute('aria-label') };
+  });
+  // 一小步一小步往下挪几项（慢拖，免得甩过头）
+  for (let t = 0; t < 3; t++) {
+    await p9.mouse.move(195, 620);
+    await p9.mouse.down();
+    for (let k = 1; k <= 6; k++) { await p9.mouse.move(195, 620 - k * 9); await p9.waitForTimeout(45); }
+    await p9.waitForTimeout(160);
+    await p9.mouse.up();
+    await p9.waitForTimeout(500);
+  }
+  const left = await focusedNow();
+  // 先立前提：真的挪开了。停在第 0 项的话，下面两条「还在原处」自己就成立了。
+  check('先滑开几项（下面两条才有意义）', left && left.i > 0, `停在第 ${left?.i} 项 ${left?.name}`);
+  await p9.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2;
+    let best = null, bd = 1e9;
+    for (const el of [...host.children]) {
+      if (!el.classList.contains('home-icon-btn')) continue;
+      const r = el.getBoundingClientRect();
+      const d = Math.abs(r.top + r.height / 2 - mid);
+      if (d < bd) { bd = d; best = el; }
+    }
+    best.click();
+  });
+  await p9.waitForTimeout(1200);
+  check('点进去了（离开了主菜单）', !(await p9.$('.mode-axis')));
+  await p9.evaluate(() => history.back());
+  await p9.waitForSelector('.mode-axis .home-icon-btn', { timeout: 15000 });
+  await p9.waitForTimeout(700);
+  const back = await focusedNow();
+  check(
+    '退回主菜单：还停在他离开时那一项',
+    back && left && back.i === left.i,
+    `走的时候 ${left?.name}（第 ${left?.i} 项）/ 回来 ${back?.name}（第 ${back?.i} 项）`,
+  );
+  // iPhone 把标签页丢掉重载的那条路。
+  await p9.reload({ waitUntil: 'load' });
+  await p9.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+  await p9.waitForTimeout(700);
+  const reloaded = await focusedNow();
+  check(
+    '刷新之后也还在那一项（iPhone 会自己把标签页丢掉重载）',
+    reloaded && left && reloaded.i === left.i,
+    `${reloaded?.name}（第 ${reloaded?.i} 项）`,
+  );
+  await p9.close();
+  // 反面：另开一个标签页，从第一张开始。
+  const p10 = await menuPage({ slides_played_square: '1' });
+  const fresh = await p10.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2;
+    let bd = 1e9, idx = -1, i = -1, name = '';
+    for (const el of [...host.children]) {
+      if (!el.classList.contains('home-icon-btn')) continue;
+      i++;
+      const r = el.getBoundingClientRect();
+      const d = Math.abs(r.top + r.height / 2 - mid);
+      if (d < bd) { bd = d; idx = i; name = el.getAttribute('aria-label'); }
+    }
+    return { i: idx, name };
+  });
+  check('新开一个标签页还是从第一张（基础方块）开始', fresh.i === 0, `${fresh.name}（第 ${fresh.i} 项）`);
+  await p10.close();
+}
+
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────
 {
+  // 从第一张开始：这一段要点的是**滑到哪儿就是哪儿**的那张卡，从上一段停的位置
+  // 接着滑会落到天才那几张锁着的上面——点锁着的开的是订阅窗，不是玩法。
+  await forgetAxis(page);
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(500);

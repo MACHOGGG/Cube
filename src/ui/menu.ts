@@ -109,9 +109,39 @@ const BOMB_SHAPES: BaseShape[] = ['square', 'triangle', 'circle'];
  * 鱼眼轴上次停在哪一项。
  *
  * 主菜单每次都是重画的，轴活不到下一次，所以记在模块里。玩家定过「返回主页不
- * 自动置顶」——从一个玩法退回来，轴该停在他刚才那一项上，不是又回到第一张。
+ * 自动置顶」，2026-09 又确认过一次「停在你上次看的那一项」——从一个玩法退回来，
+ * 轴该停在他刚才那一项上，不是又回到第一张。
+ *
+ * **还要再存一份到 sessionStorage**，因为「重画」不是唯一一种会把这个变量清掉的
+ * 事：iPhone 上把 Safari 切到后台、过一会儿再回来，系统会把这个标签页整个丢掉重
+ * 新载入——玩家自己什么都没做，页面却从头开始，模块变量当然也没了。他眼里就是
+ * 「我刚才明明停在炸弹上，回来又跳回方块了」。
+ *
+ * 用 sessionStorage 不用 localStorage：**同一个标签页里记着，换一次新的就从头
+ * 来**。隔了一天重新打开网站还停在第九张上，那是另一种「意料之外的界面」——一进
+ * 门就该是熟悉的那张基础方块。
  */
-let axisFocus = 0;
+const AXIS_KEY = 'slides_axis_focus';
+let axisFocus = readAxisFocus();
+
+function readAxisFocus(): number {
+  try {
+    const n = Number(sessionStorage.getItem(AXIS_KEY));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    // 无痕模式：读不到就从第一张开始，不影响别的。
+    return 0;
+  }
+}
+
+function saveAxisFocus(i: number): void {
+  axisFocus = i;
+  try {
+    sessionStorage.setItem(AXIS_KEY, String(i));
+  } catch {
+    /* 无痕模式：这一次会话里照样跟手，只是活不过刷新 */
+  }
+}
 
 const BASE_ICON: Record<BaseShape, string> = {
   square: ICON_BASE_SQUARE,
@@ -570,9 +600,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     mountModeAxis(grid, {
       cards: entries,
       initial: axisFocus,
-      onFocus: (i) => {
-        axisFocus = i;
-      },
+      onFocus: saveAxisFocus,
     });
   }
 }
