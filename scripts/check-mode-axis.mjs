@@ -113,6 +113,24 @@ const shot = (page) =>
     return { host: { top: hr.top, bottom: hr.bottom, h: hr.height, cy: hr.top + hr.height / 2 - SH, shift: SH }, cards };
   });
 
+/**
+ * 盯住每一帧写进卡片 transform 里的那个 skewY，记下全程最大的绝对值。
+ *
+ * 倾斜是**瞬时**的（速度一衰减它就回零），事后再去问 DOM 永远是 0——那正是这类
+ * 断言最容易写成假绿的地方。所以开一条自己的 rAF，在手势进行中一帧一帧地录。
+ */
+const recordSkew = (pg) => pg.evaluate(() => {
+  window.__maxSkew = 0;
+  const tick = () => {
+    for (const el of document.querySelectorAll('.mode-axis > .home-icon-btn')) {
+      const m = /skewY\(([-\d.]+)deg\)/.exec(el.style.transform || '');
+      if (m) window.__maxSkew = Math.max(window.__maxSkew, Math.abs(+m[1]));
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+
 // ── 1. 轴立起来了，13 张卡都在上面 ───────────────────────────────────
 let page = await menuPage({ slides_played_square: '1' });
 {
@@ -1137,6 +1155,70 @@ let page = await menuPage({ slides_played_square: '1' });
   await p10.close();
 }
 
+// ── 4k. 速度倾斜：慢挑不歪、快甩微歪、停下回正 ────────────────────
+//
+// 玩家第十三轮：轴要有「有重量、被甩动」的感觉。鱼眼的形变只跟**位置**走——甩得
+// 再快，定格那一瞬和慢慢拖过去一模一样。倾斜是这条轴上速度的唯一出口
+// （engine/axisMotion 的 skewFor，三个常数的出处在那儿）。
+//
+// 四条一起量，缺一条就能成假绿：真的歪了（没歪＝白做）、不超过封顶（歪过头是
+// 另一种事故）、停下来回正（不回正就是整个菜单永远斜着）、死区以下不歪。
+// reduced-motion 下「一度都不许有」那一条在第 8 节，那台设备的上下文在那儿。
+{
+  const p11 = await menuPage({ slides_played_square: '1' });
+  await recordSkew(p11);
+  const midX = await p11.evaluate(() => {
+    const r = document.querySelector('.mode-axis').getBoundingClientRect();
+    return r.left + r.width / 2;
+  });
+  const maxSkew = () => p11.evaluate(() => window.__maxSkew);
+  const reset = () => p11.evaluate(() => { window.__maxSkew = 0; });
+  /**
+   * ① 比死区还慢地挑：一度都不歪。
+   *
+   * **一步只走 2px**（每 50ms 一条，合 40px/s，约 1.2 项/秒，在 SKEW_DEAD 的
+   * 1.5 项/秒以下）。头一版写的是「8px / 200ms」——平均速度一样慢，量出来却有
+   * 0.33°：8px 是**一口气跳过去的**，画面在随后那一两帧里补这一跳，瞬时速度并
+   * 不慢。真手指不是这样动的（iOS 合并到 60Hz，40px/s 每条事件才 0.67px），所以
+   * 那是造手势造得不像，不是代码歪了。
+   */
+  await reset();
+  await p11.mouse.move(midX, 450);
+  await p11.mouse.down();
+  for (let k = 1; k <= 20; k++) {
+    await p11.mouse.move(midX, 450 - k * 2);
+    await p11.waitForTimeout(50);
+  }
+  const slowSkew = await maxSkew();
+  await p11.mouse.up();
+  await p11.waitForTimeout(900);
+  check('慢到死区以下的时候一点都不歪', slowSkew === 0, `拖动全程最大 ${slowSkew}°`);
+  // ② 一把快甩：真的歪了，但封得住。
+  await reset();
+  await p11.mouse.move(midX, 700);
+  await p11.mouse.down();
+  for (let k = 1; k <= 8; k++) await p11.mouse.move(midX, 700 - k * 60);
+  await p11.mouse.up();
+  await p11.waitForTimeout(1200);
+  const flingSkew = await maxSkew();
+  check('快甩的时候真的歪了（没歪＝这一整条白做）', flingSkew > 0.3, `全程最大 ${flingSkew.toFixed(2)}°`);
+  check('但歪不过封顶的 3°', flingSkew <= 3.0001, `全程最大 ${flingSkew.toFixed(2)}°`);
+  // ③ 停稳之后每张都回正。倾斜没有自己的回零动画——速度衰减到 0，它跟着回正
+  //    （见 skewFor 上面那段）。这一条就是在量那件事真的发生了。
+  const rest = await p11.evaluate(() =>
+    [...document.querySelectorAll('.mode-axis > .home-icon-btn')].map((el) => {
+      const m = /skewY\(([-\d.]+)deg\)/.exec(el.style.transform || '');
+      return m ? +m[1] : null;
+    }),
+  );
+  check(
+    '停稳之后每张卡都回正了（skewY 全是 0）',
+    rest.length > 0 && rest.every((v) => v === 0),
+    `${rest.length} 张：${[...new Set(rest)].join(' / ')}`,
+  );
+  await p11.close();
+}
+
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────
 {
   // 从第一张开始：这一段要点的是**滑到哪儿就是哪儿**的那张卡，从上一段停的位置
@@ -1407,6 +1489,7 @@ await page.close();
   await p4.goto(BASE, { waitUntil: 'load' });
   await p4.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
   await p4.waitForTimeout(500);
+  await recordSkew(p4);
   const s = await shot(p4);
   const scales = s.cards.map((c) => c.scale);
   check('reduced-motion 下一张都不放大（§5.1 退化成离散翻页）', Math.max(...scales) <= 1.001, `最大 scale ${Math.max(...scales)}`);
@@ -1429,6 +1512,15 @@ await page.close();
   const vis = s2.cards.filter((c) => c.vis);
   const onLine = vis.some((c) => Math.abs(c.cy - s2.host.cy) < 2);
   check('reduced-motion 下松手立刻就位（80ms 内已经对准选中线）', onLine, '');
+  /**
+   * 速度倾斜在这台设备上**一度都不许有**。
+   *
+   * 它是纯粹锦上添花的东西（见 engine/axisMotion 的 skewFor），而这台设备说了
+   * 不要动画。量的是上面那把 300px 快拖**期间**写进去的每一帧——不是量停下来之
+   * 后，那时候本来就是 0，量了等于没量。
+   */
+  const skewSeen = await p4.evaluate(() => window.__maxSkew ?? -1);
+  check('reduced-motion 下拖动也一度都不歪', skewSeen === 0, `拖动全程最大 ${skewSeen}°`);
   await ctx2.close();
 }
 

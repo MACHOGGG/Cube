@@ -48,8 +48,9 @@
  */
 import { fisheye, hitTest, influence, SIGMA, type FisheyeParams } from '../engine/fisheye';
 import { createSpring, snapSpring, springAtRest, stepSpring, type SpringState } from '../engine/spring';
-import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, damp, rubber } from '../engine/axisMotion';
+import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, damp, rubber, skewFor } from '../engine/axisMotion';
 import { reducedMotion } from '../engine/reducedMotion';
+import { motionTier } from '../engine/frameTier';
 import { playAxisTick } from '../engine/juice';
 import { vibrate } from '../engine/haptics';
 
@@ -583,6 +584,15 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     // 正在动吗？两头那一点虚只在停稳之后给（见下面那段），滑动中一律不写
     // filter。
     const still = !dragging && !springing;
+    /**
+     * 这一帧歪多少度（见 engine/axisMotion 的 skewFor）。整条轴一个数，每张卡
+     * 绕自己的中心歪——不是整列一起歪，理由在 skewFor 上面。
+     *
+     * 降档（motionTier 'lite'）和 reduced-motion 下一律为 0：这是锦上添花的东
+     * 西，帧不够的时候第一个该撤的就是它。**只用 transform**，不许拿 filter 去
+     * 做动态模糊（§5.4：逐帧改 filter 要软件光栅化）。
+     */
+    const sk = reducedMotion() || motionTier() === 'lite' ? 0 : skewFor(vRender);
     for (const s of L.slots) {
       const el = cards[s.index];
       const prev = lastPaint[s.index];
@@ -591,7 +601,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // 所以横向不用再 -50%，只把纵向拉回自己的一半高，再叠上这一帧的偏移。
       // translate3d 打头是为了让它整张进合成层——`will-change: transform` 由 CSS
       // 常设（不再逐帧开关），两样配起来，滑动时不再每帧重新栅格化那张大 SVG。
-      const t = `translate3d(0,-50%,0) translateY(${s.at.toFixed(2)}px) scale(${s.scale.toFixed(4)})`;
+      const t =
+        `translate3d(0,-50%,0) translateY(${s.at.toFixed(2)}px) scale(${s.scale.toFixed(4)})` +
+        ` skewY(${sk.toFixed(2)}deg)`;
       if (t !== prev.t) { el.style.transform = t; prev.t = t; }
       // 聚焦那张压在上面：形变之后相邻两张的边距只剩十来个像素，层序错了会看见
       // 大的那张被小的压住一条边。

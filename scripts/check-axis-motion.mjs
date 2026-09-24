@@ -19,7 +19,7 @@ if (!motionSrc || !springSrc) {
   console.error('用法: node scripts/check-axis-motion.mjs <打包好的 axisMotion.mjs> <打包好的 spring.mjs>');
   process.exit(2);
 }
-const { damp, AXIS_LERP, AXIS_LAMBDA, rubber, RUBBER_D } = await import(motionSrc);
+const { damp, AXIS_LERP, AXIS_LAMBDA, rubber, RUBBER_D, skewFor, SKEW_DEAD, SKEW_MAX } = await import(motionSrc);
 const { createSpring, stepSpring } = await import(springSrc);
 
 let fail = 0;
@@ -131,6 +131,31 @@ const check = (name, ok, extra = '') => {
     '同样再拉一项，露出来的越来越少（阻力递增）',
     gain.every((g, i) => i === 0 || g < gain[i - 1]),
     gain.map((g) => g.toFixed(3)).join(' > '),
+  );
+}
+
+// ── 速度倾斜：死区和封顶 ────────────────────────────────────────────
+{
+  const dead = [0, 0.5, 1, SKEW_DEAD - 1e-9, -1, -SKEW_DEAD + 1e-9];
+  check(
+    `死区：|v| < ${SKEW_DEAD} 项/秒一律为 0`,
+    dead.every((v) => skewFor(v) === 0),
+    dead.map((v) => `${v}→${skewFor(v)}`).join(' '),
+  );
+  const wild = [2, 5, 20, 1e6, -2, -5, -20, -1e6];
+  check(
+    `封顶：再快也不超过 ${SKEW_MAX}°`,
+    wild.every((v) => Math.abs(skewFor(v)) <= SKEW_MAX + 1e-12),
+    wild.map((v) => `${v}→${skewFor(v).toFixed(2)}`).join(' '),
+  );
+  // 方向要跟着速度的正负走：两边都往一个方向歪的话，甩上去和甩下去看着一样，
+  // 「被甩动」那点意思就没了。
+  check('方向跟着速度走（左右对称）', skewFor(5) === -skewFor(-5) && skewFor(5) > 0, `${skewFor(5).toFixed(2)}° / ${skewFor(-5).toFixed(2)}°`);
+  // 死区刚出去那一下不能是个台阶——从 0 突然跳到一度多，眼睛看得见。
+  check(
+    '刚出死区是从 0 连续长出来的（不是台阶）',
+    skewFor(SKEW_DEAD + 0.01) < 0.05 && skewFor(SKEW_DEAD + 0.01) > 0,
+    `${skewFor(SKEW_DEAD + 0.01).toFixed(4)}°`,
   );
 }
 

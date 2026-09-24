@@ -97,3 +97,36 @@ export const RUBBER_D = 1.2;
 export function rubber(x: number): number {
   return (1 - 1 / ((x * RUBBER_C) / RUBBER_D + 1)) * RUBBER_D;
 }
+
+/**
+ * 速度倾斜：画面走得越快，每张卡歪得越多。
+ *
+ * 玩家 2026-09 第十三轮要的「有重量、被甩动」那种感觉，参照的是那几个跑马灯站点
+ * ——它们把速度变成了**次级视觉**（带子跑得快、整块跟着倾斜）。这条轴上原本没有
+ * 任何视觉属性跟着速度走：鱼眼的形变只跟**位置**走，甩得再快，定格那一瞬和慢慢
+ * 拖过去没有任何区别。倾斜就是这条轴上速度的唯一出口。
+ *
+ * 三个数各管一件事：
+ *   · SKEW_DEAD —— 这个速度以下一点都不歪。慢慢挑的时候歪一下是噪声，不是重量。
+ *   · SKEW_K   —— 每「项/秒」换多少度。
+ *   · SKEW_MAX —— 封顶。参照站约 ±6°，我们的卡大得多、又是竖着排，收一半。
+ *
+ * **为什么是每张卡各自歪，不是整列一起歪**：参照站的倾斜在横向跑马灯上，一行很
+ * 矮，整行一起 skewY 没问题。我们这条轴是竖的、占满整屏高，整列一起 skewY 会以
+ * 屏幕中心为轴——离中心越远的卡横向偏得越多，两头那几张会被甩到屏幕外面去。每张
+ * 卡绕自己的中心歪就没有这回事，而且只是在现有那条 transform 后面多一项，DOM
+ * 写入一个字节都没多。
+ *
+ * **不要另写一条回零的动画**：v 来自追赶和弹簧，停下来它自己就衰减到 0，倾斜
+ * 跟着回正。多一条动画就多一个和它抢同一个属性的人。
+ */
+export const SKEW_DEAD = 1.5;
+export const SKEW_K = 0.6;
+export const SKEW_MAX = 3;
+
+/** 画面速度（项/秒，带正负）换成倾斜角（度）。 */
+export function skewFor(v: number): number {
+  const a = Math.abs(v);
+  if (a < SKEW_DEAD) return 0;
+  return Math.sign(v) * Math.min(SKEW_MAX, (a - SKEW_DEAD) * SKEW_K);
+}
