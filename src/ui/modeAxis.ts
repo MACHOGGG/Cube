@@ -268,6 +268,14 @@ export interface ModeAxisOpts {
    * 下一次，记在外面才留得住。
    */
   onFocus?: (index: number) => void;
+  /**
+   * 骑在两站中间的那条分界线（首玩期的《我会玩》，见 menu.ts）。
+   *
+   * 它**不占站位**：轴还是 n 站，这条线摆在第 `after` 站和第 `after+1` 站正中
+   * 间，跟着它们一起滑。当成一站塞进 cards 的话，它会白占一整个站距
+   * （150–210px），而它自己只有四十来像素高——上下就空出一大截。
+   */
+  divider?: { el: HTMLElement; after: number };
 }
 
 export interface ModeAxis {
@@ -290,6 +298,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   host.classList.add('mode-axis');
   host.innerHTML = '';
   for (const c of cards) host.appendChild(c);
+  // 分界线也住进轴里：和卡片同一个定位参照，才好摆到「两站中间」。
+  if (opts.divider) host.appendChild(opts.divider.el);
 
   /**
    * 两侧的点点轴。
@@ -432,7 +442,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    */
   function floatKnowHow(): void {
     const skip = document.querySelector<HTMLElement>('.know-how-btn');
-    if (!skip) return;
+    // 它已经住在轴上那条分界线里了（见 opts.divider）：那一路自己会摆位置，这儿
+    // 再给它加一层固定定位，两边会打架（上一版就是这么同时存在的）。
+    if (!skip || skip.closest('.axis-divider')) return;
     skip.classList.add('know-how-btn--float');
     const nav = document.querySelector('.home-nav');
     const nr = nav?.getBoundingClientRect();
@@ -451,6 +463,49 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    */
   const lastPaint = cards.map(() => ({ t: '', o: '', z: 0, pe: '', f: '' }));
   const lastDot = cards.map(() => '');
+  let lastDivider = '';
+
+  /**
+   * 把分界线摆到两站正中间。
+   *
+   * 位置取那两站**这一帧**的坐标平均：两张卡自己的位置是鱼眼算出来的（越靠边
+   * 越挤），所以中点也跟着挤——线永远贴在它俩之间，不会在滑动中跑到卡片上去。
+   * 两站有一站不在这一帧的 slots 里（滑得太远、被裁掉了）就把线藏起来。
+   */
+  function paintDivider(L: ReturnType<typeof fisheye>): void {
+    const d = opts.divider;
+    if (!d) return;
+    const a = L.slots.find((s) => s.index === d.after);
+    const b = L.slots.find((s) => s.index === d.after + 1);
+    if (!a || !b) {
+      if (lastDivider !== 'off') {
+        lastDivider = 'off';
+        d.el.style.opacity = '0';
+        d.el.style.pointerEvents = 'none';
+      }
+      return;
+    }
+    /**
+     * 摆在**两张卡之间那道缝**的正中，不是两个站心的正中。
+     *
+     * 站心的中点看着对、画出来压字：一站不只是那张图，底下还挂着一行小字，整张
+     * 卡有 134px 高（stationH），而两站心相距 150–210px——中点离上面那张卡的下
+     * 沿只有十几个像素，「我会玩」正好印在「经典小球」那行字上（第一版就是这么
+     * 出来的）。取「上面那张的底」和「下面那张的顶」的中点，那才是眼睛看到的
+     * 那道缝。两张卡各自的高要按这一帧的 scale 算——鱼眼里它俩多半不一样大。
+     */
+    const bottomA = a.at + (stationH * a.scale) / 2;
+    const topB = b.at - (stationH * b.scale) / 2;
+    const mid = (bottomA + topB) / 2;
+    // 线的粗细不跟着鱼眼缩放——它是一条分界，不是一张卡；缩起来会细到看不见。
+    const t = `translate3d(0,-50%,0) translateY(${mid.toFixed(2)}px)`;
+    const key = t;
+    if (key === lastDivider) return;
+    lastDivider = key;
+    d.el.style.transform = t;
+    d.el.style.opacity = '1';
+    d.el.style.pointerEvents = 'auto';
+  }
 
   function paint(): void {
     if (destroyed || n === 0) return;
@@ -552,6 +607,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
         }
       }
     }
+    paintDivider(L);
     const near = L.nearest;
     if (near !== lastNearest) {
       lastNearest = near;

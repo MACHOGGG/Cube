@@ -110,6 +110,17 @@ let page = await menuPage({ slides_played_square: '1' });
   const s = await shot(page);
   check('轴上有 14 张卡', s.cards.length === 14, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
   /**
+   * 卡片底下那行小字缩过一档（玩家第九轮：「主菜单的文字整体缩小字号」）。
+   *
+   * 量出来的数而不是 CSS 里那行 clamp()：clamp 有三个值，只改中间那个在 390 的
+   * 屏上看不出来。12.5px 是改之前的，所以门设在 11——回到旧值立刻红。
+   */
+  const tagPx = await page.evaluate(() => {
+    const t = document.querySelector('.mode-axis .home-icon-tag');
+    return t ? parseFloat(getComputedStyle(t).fontSize) : -1;
+  });
+  check('卡片底下那行小字缩了一档（≤ 11px，原先 12.5）', tagPx > 0 && tagPx <= 11, `${tagPx}px`);
+  /**
    * 轴占**整块屏幕**：上沿贴视口顶，下沿贴视口底。
    *
    * 玩家第四轮原话：「鱼眼转盘的范围一直从头到尾延伸」。上一版量的是「高度 > 300
@@ -904,20 +915,46 @@ await page.close();
   const p2 = await menuPage();
   const s = await shot(p2);
   check('首玩期十四张全在轴上', s.cards.length === 14, `${s.cards.length} 张`);
-  const order = await p2.evaluate(() => {
+  const shape = await p2.evaluate(() => {
     const host = document.querySelector('.mode-axis');
-    return [...host.children]
-      .filter((e) => e.classList.contains('home-icon-btn') || e.classList.contains('axis-know-how'))
-      .map((e) => ({
-        name: (e.getAttribute('aria-label') || e.textContent || '').split(' ·')[0].trim(),
+    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const div = host.querySelector('.axis-divider');
+    const cy = (e) => { const b = e.getBoundingClientRect(); return b.top + b.height / 2; };
+    return {
+      list: cards.map((e) => ({
+        name: (e.getAttribute('aria-label') || '').split(' ·')[0].trim(),
         locked: e.classList.contains('home-icon-btn--locked'),
-        skip: e.classList.contains('axis-know-how'),
-      }));
+        cy: cy(e),
+      })),
+      // 分界线在第几张和第几张之间（按这一帧画出来的位置算，不按 DOM 顺序）
+      divAbove: div ? cards.filter((c) => cy(c) < cy(div)).length : -1,
+      divCy: div ? cy(div) : null,
+      hasDiv: !!div,
+    };
   });
+  const order = shape.list;
   check('前两张是基础方块和基础小球，而且没锁',
     order.slice(0, 2).every((o) => !o.locked) && /方块/.test(order[0].name) && /圆球|小球/.test(order[1].name),
     order.slice(0, 2).map((o) => o.name).join(' '));
-  check('《我会玩》就排在这两张后面（第 3 项）', order[2]?.skip === true, order[2]?.name || '（没有）');
+  /**
+   * 《我会玩》是**两站之间那条分界线**，不是轴上的一站。
+   *
+   * 玩家 2026-09 第九轮：「《我会玩》上方有巨大的空格，按理说就是一个小小的文字
+   * （文字两边是分割线分出上面基础方块、小球玩法和其他锁住的）和按钮不占额外的
+   * 位置」。上一版把它塞成轴上的一项，站距是均匀的 150–210px，而它只有 44px 高
+   * ——上下各空出一大截。
+   *
+   * 所以这儿量的不再是「它排第几项」（那是旧设计的尺子），而是两件现在才成立的
+   * 事：**轴还是十四站**（它没占位），**画出来正好落在第 2 张和第 3 张之间**。
+   * 前者是玩家那句话的直接翻译，后者保证它还在分该分的那条缝。
+   */
+  check('轴上还是十四站（《我会玩》没占掉一站）', order.length === 14, `${order.length} 站`);
+  check('有那条分界线', shape.hasDiv);
+  check(
+    '分界线落在两张基础卡和锁着的那些之间',
+    shape.divAbove === 2,
+    `线上头有 ${shape.divAbove} 张（该是 方块 圆球 两张）`,
+  );
   check('其余十二张都锁着', order.filter((o) => o.locked).length === 12, `锁着 ${order.filter((o) => o.locked).length} 张`);
   /**
    * 锁着的那张**按不动**。
@@ -956,15 +993,16 @@ await page.close();
       const t = document.elementFromPoint(x, r.top + r.height / 2);
       return !!t && (t === e || e.contains(t));
     };
+    const box = e.closest('.axis-divider') || e;
     return {
-      inAxis: e.parentElement === host,
-      pos: getComputedStyle(e).position,
+      inAxis: box.parentElement === host,
+      pos: getComputedStyle(box).position,
       w: r.width, vw: window.innerWidth,
       cx: r.left + r.width / 2,
       left: at(10), right: at(window.innerWidth - 10),
     };
   });
-  check('《我会玩》是轴上的一项', skip.inAxis && skip.pos === 'absolute', `父级=${skip.inAxis ? '轴' : '别处'} / ${skip.pos}`);
+  check('《我会玩》住在轴上（跟着卡片一起滑）', skip.inAxis && skip.pos === 'absolute', `父级=${skip.inAxis ? '轴' : '别处'} / ${skip.pos}`);
   check('《我会玩》横向居中', Math.abs(skip.cx - skip.vw / 2) < 2, `中心 ${skip.cx.toFixed(0)} / 屏心 ${skip.vw / 2}`);
   check('《我会玩》的热区没有横贯整屏', !skip.left && !skip.right && skip.w < skip.vw * 0.5, `宽 ${skip.w.toFixed(0)} / 屏宽 ${skip.vw}`);
   // 按下《我会玩》→ 锁全撤、那一项自己也没了

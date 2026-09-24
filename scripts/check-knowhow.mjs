@@ -114,23 +114,32 @@ let page = await freshPage(ctx);
     const host = document.querySelector('.home-grid');
     const b = document.querySelector('.know-how-btn');
     if (!host || !b) return null;
-    const items = [...host.children].filter(
-      (e) => e.classList.contains('home-icon-btn') || e.classList.contains('axis-know-how'),
-    );
+    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const box = b.closest('.axis-divider') || b;
+    const cy = (e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
+    const my = cy(box);
+    const above = cards.filter((e) => cy(e) < my);
+    const below = cards.filter((e) => cy(e) > my);
     return {
       onAxis: host.classList.contains('mode-axis'),
-      at: items.indexOf(b),
-      before: items.slice(0, items.indexOf(b)).map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
-      afterLocked: items
-        .slice(items.indexOf(b) + 1)
-        .every((e) => e.classList.contains('home-icon-btn--locked')),
-      inAxis: b.parentElement === host,
+      // 鱼眼轴那一路它是**两站之间的一条分界线**（不占站位），所以按画出来的位置
+      // 分上下，不按 DOM 顺序数第几项——旧那把尺子量的是已经不存在的设计。
+      above: above.map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+      belowLocked: below.length > 0 && below.every((e) => e.classList.contains('home-icon-btn--locked')),
+      stations: cards.length,
+      inAxis: box.parentElement === host,
     };
   });
-  check('《我会玩》排在两张基础卡之后（第 3 项）', order?.at === 2, `第 ${(order?.at ?? -1) + 1} 项，前面是 ${order?.before.join(' ')}`);
-  check('它后面那些玩法这会儿都锁着', order?.afterLocked === true);
+  check(
+    '《我会玩》就在两张基础卡下面（上头只有它们俩）',
+    order?.above.length === 2,
+    `上头有 ${order?.above.join(' ') || '（空）'}`,
+  );
+  check('它下面那些玩法这会儿都锁着', order?.belowLocked === true);
   if (order?.onAxis) {
     check('鱼眼轴那一路：它就住在轴上（跟着一起滑）', order?.inAxis === true);
+    // 玩家第九轮：它「不占额外的位置」——轴还是十四站，它只是骑在两站之间那条缝上。
+    check('而且不占站位（轴还是十四站）', order?.stations === 14, `${order?.stations} 站`);
   }
 
   /**

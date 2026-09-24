@@ -334,6 +334,84 @@ for (const size of SIZES) {
   check('三页的招牌都找得到（下面两条才有意义）', vals.every((v) => v !== null), desc);
   check('三页的 Slides 招牌站在同一条线上（差 < 1px）', Math.max(...vals) - Math.min(...vals) < 1, desc);
   check('而且比主菜单原先那一版更靠上（≤ 12px，原先 16）', Math.max(...vals) <= 12, desc);
+
+  /**
+   * 招牌里的字是**清楚**的，而且那口气**换页也不断**。
+   *
+   * 玩家 2026-09 第九轮两句：「感觉现在 slides 上方有一点模糊效果……保持 slides
+   * 标题板块内的清晰」「我希望 slides 标题板块的呼吸感是连续的，不是在主菜单、
+   * 个人主页、成绩与排名的界面切换的时候直接重置了」。
+   *
+   *   · 「模糊」不是毛玻璃（那一层糊的是招牌背后滑过去的卡片），是呼吸那句
+   *     text-shadow 里原先贴着笔画的 `0 0 2px`——2px 的光晕压在字边上，呼到顶就
+   *     像失焦。所以量的是「这一层还在不在」：把关键帧里还亮着的那些层拆开，看
+   *     有没有小半径的那一道。
+   *   · 相位量的是**呼到第几成**（(currentTime − delay) / duration），不是
+   *     currentTime——换页换的是元素，currentTime 当然从 0 起；负的
+   *     animation-delay 正是用来把相位拨回去的（见 main.ts 的 wireHomeTitle）。
+   */
+  const shadow = await page.evaluate(() => {
+    const t = document.querySelector('.home-title');
+    const a = t.getAnimations()[0];
+    if (!a) return { raw: '（没有动画）', radii: [] };
+    /**
+     * 读的是**关键帧本身**，不是某一帧算出来的样式。
+     *
+     * 试过拨 `a.currentTime` 到 50% 再读 computed style——拨完那一下样式还没重
+     * 算，读到的是半路上的值（量出来 4.9px，看着像「那道 2px 还在」，其实是这把
+     * 尺子在中途取的样）。关键帧是定义，什么时候读都一样。
+     */
+    const layers = a.effect
+      .getKeyframes()
+      .map((k) => k.textShadow || '')
+      .join(', ')
+      // 一句 text-shadow 里可以叠好几层，逗号分层；`rgba(…)` 里面的逗号不算
+      .split(/,(?![^(]*\))/)
+      .map((v) => v.trim())
+      .filter(Boolean)
+      /*
+       * 「灭了的那一层」要扔掉，而且**两种写法都要认**。
+       *
+       * 关键帧里写的是 `transparent`，但 getKeyframes() 交回来的是 Chromium 序
+       * 列化过的 `rgba(0, 0, 0, 0)`——原先只认 `transparent` 三个字母，于是
+       * 0% 和 100% 两帧（呼到底、光全灭）整个漏了进来，量出三层，这道门红在了
+       * 尺子上而不是代码上。
+       */
+      .filter((v) => !/transparent/.test(v) && !/rgba\([^)]*,\s*0\s*\)/.test(v));
+    return {
+      raw: layers.join(' | '),
+      // 每一层里那个「模糊半径」（px 的第三个数）
+      radii: layers.map((seg) => {
+        const nums = seg.match(/-?[\d.]+px/g) || [];
+        return nums[2] ? parseFloat(nums[2]) : 0;
+      }),
+    };
+  });
+  check(
+    '招牌里的字是清楚的：呼吸只剩远处那一层光，没有贴着笔画的那道',
+    shadow.radii.length === 1 && shadow.radii[0] >= 10,
+    shadow.raw || '（没有动画）',
+  );
+  const phase = () => page.evaluate(() => {
+    const t = document.querySelector('.home-title');
+    const cs = getComputedStyle(t);
+    const dur = parseFloat(cs.animationDuration) * 1000;
+    const delay = parseFloat(cs.animationDelay) * 1000;
+    const a = t.getAnimations()[0];
+    return dur > 0 ? ((((Number(a?.currentTime ?? 0) - delay) % dur) + dur) % dur) / dur : -1;
+  });
+  const pRecords = await phase();
+  await page.click('#navProfile');
+  await page.waitForSelector('.profile-page', { timeout: 10000 });
+  await page.waitForTimeout(150);
+  const pProfile = await phase();
+  let drift = Math.abs(pProfile - pRecords);
+  if (drift > 0.5) drift = 1 - drift;
+  check(
+    '换一页，这口气接着呼（相位不从头来）',
+    drift < 0.12,
+    `记录 ${(pRecords * 100).toFixed(0)}% → 个人主页 ${(pProfile * 100).toFixed(0)}%，差 ${(drift * 100).toFixed(0)}%`,
+  );
   await ctx.close();
 }
 

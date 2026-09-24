@@ -317,9 +317,21 @@ h1 {
    modifier existed but no page ever added it, so all three mastheads (menu,
    记录与排名, 个人主页) sat static while the opening page pulsed. */
 .home-title { animation: home-title-breathe 3.2s ease-in-out infinite; }
+/*
+ * 呼吸只留**远处那一层光**，贴着字边的那一道去掉了。
+ *
+ * 玩家 2026-09 第九轮：「感觉现在 slides 上方有一点模糊效果……保持 slides 标题板
+ * 块内的清晰」。他看到的不是毛玻璃（那一层糊的是招牌**背后**滑过去的卡片，字在
+ * 玻璃上面，一点没被糊到），是这句 text-shadow 里原先还有的 `0 0 2px
+ * var(--accent)`：2px 的光晕正好压在笔画边上，每次呼吸到顶，字就像**失焦**了一
+ * 下——远处那道 22px 是「发光」，贴边这道 2px 是「虚」。
+ *
+ * 所以只删那一道，呼吸照旧（玩家同一轮还点名要它连着呼吸，见 main.ts 的
+ * wireHomeTitle）。
+ */
 @keyframes home-title-breathe {
   0%, 100% { text-shadow: 0 0 0 transparent; }
-  50% { text-shadow: 0 0 22px var(--score-glow), 0 0 2px var(--accent); }
+  50% { text-shadow: 0 0 22px var(--score-glow); }
 }
 @media (prefers-reduced-motion: reduce) { .home-title { animation: none; text-shadow: 0 0 16px var(--score-glow); } }
 
@@ -1066,7 +1078,9 @@ button:hover { filter: brightness(1.05); }
 .home-row > .home-icon-btn { aspect-ratio: auto; }
 .home-icon-tag {
   display: block; padding-top: 7px;
-  font-size: clamp(0.68rem, 3.2vw, 0.82rem); line-height: 1.2;
+  /* 2026-09 第九轮整体缩一档（玩家：「主菜单的文字整体缩小字号」）：390 的屏上
+     12.5px → 10.5px。三个数一起缩，不然窄屏缩了宽屏没缩。 */
+  font-size: clamp(0.58rem, 2.7vw, 0.72rem); line-height: 1.2;
   color: var(--ink-soft); letter-spacing: 0.02em; text-align: center;
 }
 /* 宽版的小字永远一行。
@@ -1446,6 +1460,50 @@ button:hover { filter: brightness(1.05); }
  * 绝对定位那几行和轴上的卡片一模一样（见下面 .mode-axis > .home-icon-btn）：整幅
  * 宽、top: 50%、不许 CSS 再给 transform 加过渡（那会让它比手指慢 100ms）。
  */
+/*
+ * 首玩期那条分界线：两条横线夹一行《我会玩》，骑在「基础」和「锁着的」中间。
+ *
+ * 玩家 2026-09 第九轮：「《我会玩》上方有巨大的空格，按理说就是一个小小的文字
+ * （文字两边是分割线分出上面基础方块、小球玩法和其他锁住的）和按钮不占额外的位
+ * 置」。上一版它是轴上的一站——站距是均匀的 150–210px，而它只有 44px 高，上下各
+ * 空出一大截。现在它不占站位，由 modeAxis 每帧摆到两站正中间。
+ *
+ * 绝对定位那几行和轴上的卡片一样（整幅宽、top: 50%、不许 CSS 再给 transform 加
+ * 过渡）。**整幅宽的是这条线，不是按钮**：按钮还在中间那一小块，热区没跟着变宽
+ * ——手指落在线上不算按了它。
+ */
+.mode-axis > .axis-divider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 26px;
+  box-sizing: border-box;
+  transition: none;
+  will-change: transform;
+  /* 卡片的 z-index 是 10–100（见 paint）：线要压在它们上面，不然滑过来的卡会盖
+     住它——它是「跳过引导」的唯一出口。 */
+  z-index: 110;
+}
+.axis-divider-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--ink-faint, currentColor);
+  opacity: 0.35;
+}
+/* 线里那颗按钮：不再是 flex 列里的项，所以 .know-how-btn 那两行 align-self /
+   margin-top 在这儿不作数；padding 收一档，让整条看起来是「一行字」而不是「一颗
+   按钮」。 */
+.axis-divider .know-how-btn {
+  flex: 0 0 auto;
+  align-self: auto;
+  margin-top: 0;
+  padding: 10px 14px;
+}
+
 .mode-axis > .axis-know-how {
   position: absolute;
   left: 0;

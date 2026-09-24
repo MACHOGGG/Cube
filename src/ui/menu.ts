@@ -581,6 +581,9 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
      * 不要求每一项都是一张卡）。
      */
     let entries: HTMLElement[] = axisCards;
+    /** 首玩期那条「基础 | 锁着」的分界线（见下面），没有就是 undefined。 */
+    let divider: HTMLElement | undefined;
+    let dividerAfter = -1;
     if (handlers.firstPlayLock) {
       armFirstPlayLock(
         grid,
@@ -591,16 +594,41 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         if (axisCards[i].dataset.firstPlayable === '1') after = i;
         else axisCards[i].classList.add('home-icon-btn--locked');
       }
+      /**
+       * **它是一条分界线，不是轴上的一站。**
+       *
+       * 上一版把它当成轴上的一项塞进 entries 里——轴的站距是均匀的（一站
+       * 150–210px），而这颗按钮只有 44px 高，于是它上下各空出一大截。玩家
+       * 2026-09 第九轮报的正是这个：「《我会玩》上方有巨大的空格，按理说就是一
+       * 个小小的文字（文字两边是分割线分出上面基础方块、小球玩法和其他锁住的）
+       * 和按钮不占额外的位置」。
+       *
+       * 所以改成**骑在两站中间的那条缝上**：两条横线夹一行小字，由 modeAxis 每
+       * 帧摆到「最后一张基础卡」和「下一张锁着的卡」正中间（见那儿的 divider）。
+       * 它不占站位，轴还是十四站；线和字跟着卡片一起滑，位置永远对得上。
+       *
+       * 外面那层 `.axis-divider` 才是被摆的那个，按钮仍旧只有文字那么宽——热区
+       * 横贯整屏的话，手指落在屏幕中间随便哪儿都算撤掉引导（门里有一条盯着）。
+       */
       const skip = knowHowButton(lang, () => handlers.onKnowHow?.());
-      skip.classList.add('axis-know-how');
-      entries = axisCards.slice();
-      entries.splice(after + 1, 0, skip);
+      divider = document.createElement('div');
+      divider.className = 'axis-divider';
+      const line = () => {
+        const el = document.createElement('span');
+        el.className = 'axis-divider-line';
+        // 两条线是画，不是内容：读屏念到这儿只该听见「我会玩」。
+        el.setAttribute('aria-hidden', 'true');
+        return el;
+      };
+      divider.append(line(), skip, line());
+      dividerAfter = after;
     }
     axisFocus = Math.min(axisFocus, Math.max(entries.length - 1, 0));
     mountModeAxis(grid, {
       cards: entries,
       initial: axisFocus,
       onFocus: saveAxisFocus,
+      divider: divider ? { el: divider, after: dividerAfter } : undefined,
     });
   }
 }

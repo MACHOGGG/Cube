@@ -200,6 +200,20 @@ let gameInProgress = false;
 function wireHomeTitle() {
   const title = root.querySelector<HTMLElement>('.home-title');
   if (!title) return;
+  /**
+   * 招牌那口气是**连着的**，不在换页时重来。
+   *
+   * 玩家 2026-09 第九轮：「我希望 slides 标题板块的呼吸感是连续的，不是在主菜
+   * 单、个人主页、成绩与排名的界面切换的时候直接重置了」。三页的招牌是各自
+   * 渲染出来的**新元素**，CSS 动画于是每次都从第 0 帧起步——他看到的就是「刚
+   * 呼到一半，换个页，又从头吸起」。
+   *
+   * 补一个负的 animation-delay，等于把这口气拨到「从网页打开那一刻就一直在呼」
+   * 的相位上：换几次页都接得上。时长从 computed style 上读，不在这儿再写一遍
+   * 3.2s——那样改 CSS 就得记得同步改这儿。
+   */
+  const dur = parseFloat(getComputedStyle(title).animationDuration) || 0;
+  if (dur > 0) title.style.animationDelay = `-${((performance.now() / 1000) % dur).toFixed(3)}s`;
   title.tabIndex = 0;
   title.setAttribute('role', 'button');
   const go = () => leaveGame(() => { showMenu(); toTop(); });
