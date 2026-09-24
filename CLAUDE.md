@@ -74,6 +74,19 @@ node scripts/check-multiplayer.mjs http://localhost:8816/
 CI（`.github/workflows/ci.yml`）只收第 ①② 类里跑得快的那几个——要开浏览器的、
 要等真实超时的都留在本地手跑，文件头上写明了为什么。
 
+**要开浏览器的那一组目前没有 npm 脚本串起来**（没有 `check:browser`），全靠手
+跑。改了主菜单的摆位、图标尺寸、或者 style.css 里任何一条 `.mode-axis` 的规则，
+手跑这一道：
+
+```bash
+node scripts/dev-server.mjs 8958 dist &
+node scripts/check-mode-axis.mjs http://localhost:8958/
+```
+
+它第 9 节量的是「每张图多大、有没有溢出格子、有没有歪」，并且把十四张卡的尺寸
+打成一张表随门输出——炸弹那张被撑开的 bug 玩家报过两轮、修好过一次、又回来过，
+从前一直没有门守着。
+
 **跑门时的四个坑**（都真的坑过人）：
 
 - **兑换码在一个 dev-server 进程里只能用一次。** 两个都要兑码的门跑在同一台

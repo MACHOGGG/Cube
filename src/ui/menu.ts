@@ -8,7 +8,7 @@ import { menuTag } from './menuTags';
 import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
-import { mountModeStrip } from './modeStrip';
+import { mountModeAxis } from './modeAxis';
 
 import {
   ICON_BASE_SQUARE,
@@ -218,7 +218,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const wide = window.matchMedia(WIDE_QUERY).matches;
 
   container.innerHTML = `
-    <div class="app home-page${wide ? ' home-page--wide' : ''}${wide ? '' : ' home-page--strip'}">
+    <div class="app home-page${wide ? ' home-page--wide' : ''}${wide ? '' : ' home-page--axis'}">
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
@@ -624,7 +624,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       dividerAfter = after;
     }
     axisFocus = Math.min(axisFocus, Math.max(entries.length - 1, 0));
-    mountModeStrip(grid, {
+    mountModeAxis(grid, {
       cards: entries,
       initial: axisFocus,
       onFocus: saveAxisFocus,
