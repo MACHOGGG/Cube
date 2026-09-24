@@ -95,6 +95,16 @@ jobs:
           npx esbuild src/engine/spring.ts --bundle --format=esm --outfile=/tmp/spring.mjs
           npx esbuild src/engine/wheelSpin.ts --bundle --format=esm --outfile=/tmp/spin.mjs
           node scripts/check-fisheye.mjs /tmp/fisheye.mjs /tmp/spring.mjs /tmp/spin.mjs
+      # 同一条轴的**时间**那一维：追赶、弹簧、橡皮筋、速度倾斜。上面那道门量的是
+      # 形变（位置的函数），这道门量的是「同一段真实时间，帧率不同结果要一样」。
+      # 帧率相关的毛病不会白屏、不会报错，只会让同一条轴在 30Hz（低电量模式）和
+      # 120Hz 的机器上手感不同——那种事玩家报不清楚，我们也量不出来。
+      # 纯逻辑、几十毫秒。
+      - name: 鱼眼转盘的运动学
+        run: |
+          npx esbuild src/engine/axisMotion.ts --bundle --format=esm --outfile=/tmp/axismotion.mjs
+          npx esbuild src/engine/spring.ts --bundle --format=esm --outfile=/tmp/spring.mjs
+          node scripts/check-axis-motion.mjs /tmp/axismotion.mjs /tmp/spring.mjs
       # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
       # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
       # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。

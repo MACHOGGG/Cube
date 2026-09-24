@@ -53,7 +53,7 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 没有 npm test，也没有测试框架。**这些门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
-数目：`scripts/` 下 86 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
+数目：`scripts/` 下 89 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
 在涨，所以别在别处再抄一遍——要用就当场 `ls scripts/check-*.mjs | wc -l`。
 
 三类，跑法不同：
@@ -75,13 +75,19 @@ CI（`.github/workflows/ci.yml`）只收第 ①② 类里跑得快的那几个�
 要等真实超时的都留在本地手跑，文件头上写明了为什么。
 
 **要开浏览器的那一组目前没有 npm 脚本串起来**（没有 `check:browser`），全靠手
-跑。改了主菜单的摆位、图标尺寸、或者 style.css 里任何一条 `.mode-axis` 的规则，
-手跑这一道：
+跑。改了主菜单的摆位、图标尺寸、style.css 里任何一条 `.mode-axis` 的规则，**或者
+`src/engine/axisMotion.ts` / `modeAxis.ts` 里任何一个跟手感有关的数**，手跑这
+一道：
 
 ```bash
 node scripts/dev-server.mjs 8958 dist &
 node scripts/check-mode-axis.mjs http://localhost:8958/
 ```
+
+（`engine/axisMotion.ts` 那几个纯函数另有一道不开浏览器的门，已经在 CI 里：
+`npx esbuild src/engine/axisMotion.ts --bundle --format=esm --outfile=/tmp/axismotion.mjs`
+＋ `check-axis-motion.mjs`。它量的是「帧率无关」——同一段真实时间，30Hz 和
+120Hz 要追到同一处。那种毛病不白屏也不报错，只是每台机器手感不一样。）
 
 它第 9 节量的是「每张图多大、有没有溢出格子、有没有歪」，并且把十四张卡的尺寸
 打成一张表随门输出——炸弹那张被撑开的 bug 玩家报过两轮、修好过一次、又回来过，
