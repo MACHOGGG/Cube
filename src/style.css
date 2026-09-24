@@ -1155,39 +1155,35 @@ button:hover { filter: brightness(1.05); }
   /* 高度由 JS 量出来（视口减去轴上下那些东西），所以别让 flex 再把它拉长。 */
   flex: 0 0 auto;
   width: 100%;
+  /*
+   * 上下两头**什么都不盖**：这一列图标就从 Slides 招牌和底排那两块板子底下滑过
+   * 去（玩家 2026-09 第三轮原话：「上方和下方仍然有渐变的覆盖，完全去除，就让这
+   * 一列 icon 在 slides title 板块、个人主页和记录排名的板块下面滑过」）。
+   *
+   * 前两轮两次都走岔了：第一轮 `overflow: hidden` 一刀切在轴的边上，边缘一条硬
+   * 线；第二轮改成渐变遮罩 + 卡片按距离淡出，玩家说那还是「覆盖」。这一轮两样一
+   * 起撤掉，卡片从头到尾是实的（JS 那边也不再算透明度，见 modeAxis.ts 的 paint）。
+   *
+   * 三条合起来才成立：
+   *
+   *   · `overflow: clip` + `overflow-clip-margin` —— 画得出自己的盒子（够到招牌
+   *     和底排那两带），但**不撑大页面的可滚动区**。这一条要紧：绝对定位的卡片
+   *     在 `overflow: visible` 下会把文档撑高几百像素，法务那五条就被推得更远，
+   *     「滑到底」要多滑一屏。220px 是量出来的——招牌高约 140、底排约 100，两头
+   *     各留一张卡还够，再远的本来就在屏幕外了。
+   *   · `overflow: hidden` 写在前面**是给老内核兜底的**（Chrome 61 不认 clip，
+   *     整条丢掉之后回到 hidden：切在边上，不好看但不塌）。顺序不能反。
+   *   · `z-index: 0` 建一个层叠上下文，把整条轴连同它那些 z-index 10–100 的卡片
+   *     一起压在招牌（`.home-head`，z-index 60）和底排（`.home-nav`，60）下面。
+   *     不写这一条，卡片会浮到那两块板子**上面**——那就不是「从底下滑过去」，是
+   *     「盖住招牌」。
+   */
   overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 220px;
+  z-index: 0;
   /* 轴自己吃掉竖向手势：不写这一条，手指一滑页面跟着滚，轴只走一半。 */
   touch-action: none;
-  /*
-   * 上下两头**化开**，不是被一块板盖住。
-   *
-   * 玩家 2026-09 第二轮的原话：「上和下的部分不应该是遮盖的，而是透明的，不应该
-   * 只有中间这一部分能看到」。原先只有 `overflow: hidden` 那一刀——卡片滑到边上
-   * 是被**切**掉的，边缘一条硬线，看着像中间开了个窗口。加一层同向的渐变遮罩，
-   * 边缘就变成渐隐；JS 那边也把卡片的透明度改成随距离连续掉（modeAxis.ts 的
-   * FADE_TAIL），两样叠起来，上下两头是真的透，不是盖着。
-   *
-   * `overflow: hidden` 留着：遮罩只管画面，不管布局——没有它，卡片的盒子还是会
-   * 伸到标题和法务链接上去（门 check-overlap 量的就是这件事）。
-   *
-   * -webkit- 那一行是给 iOS 的 WKWebView 留的（Capacitor 那一版就跑在它上面），
-   * 旧一点的 iOS 只认带前缀的那个。
-   */
-  --axis-fade: 14%;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 var(--axis-fade),
-    #000 calc(100% - var(--axis-fade)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 var(--axis-fade),
-    #000 calc(100% - var(--axis-fade)),
-    transparent 100%
-  );
 }
 
 /*
@@ -1227,6 +1223,21 @@ button:hover { filter: brightness(1.05); }
   transition: none;
   will-change: transform, opacity;
 }
+/*
+ * 轴的 `overflow-clip-margin` 是**四面都给**的（CSS 没有「只给上下」的写法），
+ * 横向那 220px 会把文档撑宽——手机浏览器于是把整页缩小塞进屏幕：390×844 的机
+ * 器上 innerWidth 变成 413、innerHeight 变成 894。
+ *
+ * 后果不是「看着小一点」那么简单：**按视口宽居中的东西和按 .app 宽居中的东西
+ * 从此差 12px**。挑形状那个弹窗（.center-pick）是整幅视口宽的，卡片列是 .app
+ * 那 390 宽的，两个中心一个 207、一个 195——玩家看到的就是「炸弹那一屏没居
+ * 中」。（玩家 2026-09 第三轮原话：「web 移动端现在炸弹玩法也不在居中」。）
+ *
+ * 所以横向在这一层自己裁掉：clip 只管画面、不建滚动容器，纵向留 visible，轴那
+ * 一圈上下的 clip-margin 照旧有效。
+ */
+.home-page:not(.home-page--wide) { overflow-x: clip; }
+
 /* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
    `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }`
    （给两列网格用的，390 屏上算出来 157px）特指度是 0,3,0，压得过 `.mode-axis >
@@ -1309,6 +1320,9 @@ button:hover { filter: brightness(1.05); }
    躲的话它会被拉成一整条。`align-self: center` 而不是 `margin: 0 auto`，理由同
    ——列方向的 flex 项默认 stretch，横向 auto 边距在 stretch 之后不居中。 */
 .know-how-btn {
+  /* 轴不再裁自己的边（见 .mode-axis），卡片会滑到它这一带来。这两行把它垫在卡
+     片上面——它是「跳过引导」的唯一出口，被一张滑过去的卡盖住就点不着了。 */
+  position: relative; z-index: 1;
   align-self: center; flex: none;
   margin-top: 2px; padding: 12px 20px; min-height: 44px;
   background: none; border: none; border-radius: 0;
@@ -1331,6 +1345,9 @@ button:hover { filter: brightness(1.05); }
    整行的。所以宽屏上这五个入口走另外两条路：个人主页底部那五行，以及
    /pricing /terms /refund /privacy /contact 这五个网址本身。 */
 .home-legal {
+  /* 同 .know-how-btn：轴上的卡片会从这一带滑过去，这五条链接要在它们上面
+     （收单方的审核员得点得着）。 */
+  position: relative; z-index: 1;
   display: flex; flex-wrap: wrap; justify-content: center;
   gap: 4px 16px; margin: 26px auto 0; max-width: 34rem; padding: 0 12px;
 }

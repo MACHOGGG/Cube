@@ -9,12 +9,14 @@
  * 玩家 2026-09 拍板的几条，都在这儿：
  *   · **全摊平**：13 张卡各占轴上一站，没有「点开再挑」的分组。（炸弹的三档三
  *     形、计时挑形状仍然保留——那是进了玩法之后的选择，不是菜单条目。）
- *   · **循环**：玩家 2026-09 第二轮改的口径——「没有做到任何循环的效果」。原先
- *     按第一轮的「手机端不循环」做成滑到两端就停 + 回弹，实际用起来是「到头了」
- *     的顿挫，13 张卡里想从最后一张回到第一张要整条滑回去。现在整条轴是一个
- *     **环**（`fisheye` 的 wrap 模式，见 engine/fisheye.ts 头注释第 ③ 条），往
- *     哪边滑都走得通。卡少于 6 张时不成环（首玩期轴上只有两张，成环会让同一张
- *     卡同时出现在上下两头），那时候照旧到头就停。
+ *   · **不循环**：滑到最后一张就停，两端各留一点空白（拉得出去、松手弹回来）。
+ *     这一条来回改过：第一轮定「不循环」→ 第二轮玩家说「没有做到任何循环的效
+ *     果」，改成了环 → 第三轮又改回来：「不要循环的，滑动到底（留有一点空白）
+ *     就停止」。所以 `fisheye` 的 wrap 模式这边不再用（引擎里那一档还留着）。
+ *   · **上下两头不盖任何东西**：轴不裁自己的边，也不给卡片加渐隐。整列图标就这
+ *     么从 Slides 招牌和底排那两块板子**底下滑过去**（玩家第三轮原话）。做法是
+ *     `overflow: clip` + 一圈 clip-margin（画得出去，但不撑大页面的可滚动区），
+ *     加上 `z-index: 0` 把这条轴整个压在那两块板子下面——见 style.css。
  *   · **焦点锁定不做开关**：首版直接做死（§1.2）。
  *   · **reduced-motion 下只在定格那一刻出声**，快速滑过不播。
  *   · **首玩期轴上只摆基础方块和基础小球**，打完第一局（或按过《我会玩》）其余
@@ -52,10 +54,18 @@ import { playAxisTick } from '../engine/juice';
  */
 const PARAMS: FisheyeParams = {
   sigma: SIGMA,
-  minScale: 1,
-  maxScale: 1.26,
-  minGap: 130,
-  maxGap: 164,
+  // 玩家 2026-09 第三轮：「鱼眼的放大和缩小要更明显」。原先是 1 → 1.26（远处的
+  // 卡就是原大，近处胀 26%），一眼扫过去几乎看不出哪张被选中。现在两头都拉开：
+  // 远处缩到 0.80、焦点胀到 1.40，一大一小差 1.75 倍。
+  //
+  // 间距跟着一起放（126 / 182）：焦点那张长大了，挨着它的那张要是不让开就会撞
+  // 上——撞上的后果不是难看，是**点错**（两张卡的热区叠在一起）。按最紧那一对
+  // 算：半高 123×1.40/2 = 86.1 加 123×1.124/2 = 69.1 ＝ 155.2，而那一段的间距是
+  // 126 + 56×0.857 = 174.0，留 18.8px。门 check-mode-axis 逐对量这件事。
+  minScale: 0.8,
+  maxScale: 1.4,
+  minGap: 126,
+  maxGap: 182,
   lockRadius: 0.22,
 };
 
@@ -67,25 +77,32 @@ const RIGID: FisheyeParams = {
   lockRadius: 0,
 };
 
-/** 超出端点之后还能拉多远（单位＝项），以及拉出去时手指位移打几折。只在**不成环**
- *  的那一档（卡少于 WRAP_MIN 张）用得上——成环之后没有「端点」这回事。 */
+/**
+ * 超出端点之后还能拉多远（单位＝项），以及拉出去时手指位移打几折。
+ *
+ * **这条轴不循环**——玩家 2026-09 第三轮定的：「不要循环的，滑动到底（留有一点
+ * 空白）就停止」。（第二轮曾经改成环，用了一轮就撤回来了；`fisheye` 的 wrap 模式
+ * 还在引擎里，这边不再用它。）第一张之上、最后一张之下还能再拉出去半格多一点，
+ * 松手弹回——那点空白就是「到底了」的手感，不是卡住。
+ */
 const OVERSCROLL = 0.55;
 const RUBBER = 0.35;
-/** 少于这么多张就不成环：两三张卡围成的环会让同一张同时出现在上下两头。 */
-const WRAP_MIN = 6;
 /**
- * 上下两头怎么淡出。
+ * 手指位移放大多少倍。
  *
- * 玩家 2026-09 第二轮：「上和下的部分不应该是遮盖的，而是透明的，不应该只有中间
- * 这一部分能看到」。原先是一刀切——离中心超过半屏 +140px 就 `opacity: 0`，于是轴
- * 的上下缘看着像被一块板盖住。现在改成一段**渐变**：从 FADE_FROM（离中心多少像素
- * 起开始淡）到轴边缘线性掉到 0，容器再叠一层同样走向的 mask（见 style.css 的
- * `.mode-axis`），所以边缘是化开的，不是切断的。
+ * 玩家 2026-09 第三轮：「滑动图标的灵敏度加强（先 2 倍），然后两次点点的滑动速度
+ * 更加大幅度增强」。所以是两段：
  *
- * 透到 FADE_MIN 以下就不再吃手势了——看不见的东西不该挡着点下面那张。
+ *   · 头 GAIN_KNEE 像素（正好是 2 格的行程）按 GAIN 倍走——这一段要跟手，挑相邻
+ *     那一两张全靠它；
+ *   · 超出的部分按 GAIN_FAR 倍走——一次长滑能扫过大半条轴，十四张卡不用滑五次。
+ *
+ * 分段的写法（两段各自乘完再相加）保证这条映射是连续且单调的：手指往同一个方向
+ * 走，焦点绝不会倒退，接缝处也不会跳一下。
  */
-const FADE_TAIL = 150;
-const FADE_MIN = 0.06;
+const GAIN = 2;
+const GAIN_FAR = 5;
+const GAIN_KNEE = 130;
 /**
  * 两侧那两条点点轴（玩家给的效果图上，左右两边各一列小圆点）。
  *
@@ -99,14 +116,6 @@ const RAIL_DOT_MAX = 9;
 const RAIL_SPAN = 4.6;
 /** 按下那一刻合成的尺子往两边各排几格（见 localRuler）。 */
 const RULER_SPAN = 8;
-/**
- * 那条隆起在整条轴上一共鼓出来多少（以「一份 maxGap−minGap」为单位）。
- *
- * ＝ Σ influence(k + 0.5)，k 取遍整数。σ = 0.9 时：0.857×2 + 0.249×2 + 0.021×2
- * + … ≈ 2.256。和项数无关（再远的项贡献已经小于 0.001）。成环时拿它算整圈长度，
- * 见 wrapTotal。
- */
-const SWELL_SUM = 2.256;
 /** 位移超过这么多像素就算「拖」，不算「点」——否则滑一下手会误开一个玩法。 */
 const TAP_SLOP = 10;
 
@@ -144,26 +153,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   host.classList.add('mode-axis');
   host.innerHTML = '';
   for (const c of cards) host.appendChild(c);
-
-  /** 这一轴成不成环（见 WRAP_MIN）。 */
-  const wrap = n >= WRAP_MIN;
-  /**
-   * 整圈多长。
-   *
-   * `fisheye` 在 wrap 模式下会把这一圈的间距**等比缩回**这个数（隆起的相对关系
-   * 不变）。所以这个数要正好等于「不缩之前的一圈」，缩放系数才是 1，远离焦点的
-   * 地方间距才还是 minGap。
-   *
-   * 不缩之前的一圈 = 基准间距 × 项数 ＋ 焦点那一带鼓出来的总量。后者是那条高斯
-   * 在所有半整数点上的和，和项数无关，σ = 0.9 时约 2.256（见 SWELL_SUM）。
-   *
-   * 少算这一截的代价是实打实的：第一版写的是 `n * minGap`，于是整圈被缩掉 4%，
-   * 环背面那几张的间距从 130 掉到 124.7——比一站的高度（122）只多 2.7px，门
-   * check-mode-axis 逐对量下来最紧的一对只剩 1.0px，再往下就是两张卡的热区叠在
-   * 一起、点错玩法。
-   */
-  const wrapTotal = n * PARAMS.minGap + (PARAMS.maxGap - PARAMS.minGap) * SWELL_SUM;
-  const fisheyeOpts = wrap ? { wrap: true, wrapTotal } : {};
 
   /**
    * 两侧的点点轴。
@@ -294,7 +283,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
 
   function paint(): void {
     if (destroyed || n === 0) return;
-    const L = fisheye(n, focus, params(), fisheyeOpts);
+    const L = fisheye(n, focus, params());
     const edge = hostH / 2;
     for (const s of L.slots) {
       const el = cards[s.index];
@@ -311,37 +300,33 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       const z = 10 + Math.round(s.inf * 90);
       if (z !== prev.z) { el.style.zIndex = String(z); prev.z = z; }
       /**
-       * 上下两头**化开**，不是切断。
+       * **一张都不淡**：玩家 2026-09 第三轮——「上方和下方仍然有渐变的覆盖，完全
+       * 去除」。所以这儿不再按距离算透明度，卡片从头到尾都是实的，越过轴的上下
+       * 边之后就从招牌和底排那两块板子底下滑过去（容器那边 z-index: 0 + clip
+       * margin，见 style.css）。
        *
-       * 玩家原话：「上和下的部分不应该是遮盖的，而是透明的」。所以这儿不再是
-       * 「超出半屏就 opacity: 0」那一刀，而是从 edge − FADE_TAIL 起线性淡到边缘
-       * 的 0；容器上还叠了一层同样走向的 mask，两样一起，边缘看着是化开的。
+       * 这一行留着不是多余：上一版给这些卡写过内联的 opacity，不清掉的话它会一直
+       * 挂在 style 上。写成空串就退回 CSS。
+       */
+      if (prev.o !== '') { el.style.opacity = ''; prev.o = ''; }
+      /**
+       * 离轴太远的就别挡手。
        *
-       * 淡法是 `opacity`，**不是 `visibility: hidden`**：后者的元素键盘聚焦不到，
-       * 于是 Tab 只走得到当下露在轴上的那四五张，剩下九张玩法用键盘永远到不了
-       * （门 check-mode-axis 里「拖动换得了聚焦项」那条先红的就是这个：门想
-       * focus() 一张藏起来的卡，浏览器一声不响地没给焦点）。用 opacity 淡掉的卡
-       * 照样聚焦得到，而 focusin 会立刻把它带到轴中间来——一 Tab 就看见。
+       * 它们现在是**看得见**的（从板子底下滑过去），但轴外面那一带上面盖着底排
+       * 导航和招牌——手指落在那儿本该点到底排，不该被一张飘到那儿的卡截走。界线
+       * 取「轴的半高 + 一张半卡」：屏幕上看得见的那几张都在界内，再远的只剩画面，
+       * 不吃手势。
+       *
+       * 挡法用 pointer-events，**不是 visibility: hidden**：后者键盘聚焦不到，于
+       * 是 Tab 只走得到眼前那四五张，剩下九张玩法用键盘永远到不了。
        */
       const far = Math.abs(s.at);
-      // 边界要加上**半张卡**：中心正好压在边上的那一张，还有半张在里头。不加这
-      // 一截，它的透明度按中心算已经是 0，于是轴上永远只看得见三张，上下两头是
-      // 空的——玩家说的「不应该只有中间这一部分能看到」正是这个。加上之后它露出
-      // 半张、淡淡地挂在边上，和效果图一样。
-      const a = Math.max(0, Math.min(1, (edge + stationH * 0.55 - far) / FADE_TAIL));
-      const o = a >= 0.999 ? '' : a.toFixed(3);
-      if (o !== prev.o) { el.style.opacity = o; prev.o = o; }
-      // 看不见的就别挡手（绝对定位的卡即使在屏幕外也照样命中）。
-      const pe = a < FADE_MIN ? 'none' : '';
+      const pe = far > edge + stationH * 1.5 ? 'none' : '';
       if (pe !== prev.pe) { el.style.pointerEvents = pe; prev.pe = pe; }
 
       // 点点轴：按**项**等距排，不跟着卡片的形变走——它量的是「第几项」，中间那
       // 颗永远对着当前选中的那张。
-      let k = s.index - L.lockedFocus;
-      if (wrap) {
-        k = ((k % n) + n) % n;
-        if (k > n / 2) k -= n;
-      }
+      const k = s.index - L.lockedFocus;
       const dotA = Math.max(0, Math.min(1, (RAIL_SPAN - Math.abs(k)) / 1.6)) *
         (0.28 + 0.72 * s.inf);
       const size = RAIL_DOT_MIN + (RAIL_DOT_MAX - RAIL_DOT_MIN) * s.inf;
@@ -386,9 +371,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     raf = 0;
     if (destroyed) return;
     if (springing) {
-      const target = wrap
-        ? Math.round(spring.value)
-        : Math.min(Math.max(Math.round(spring.value), 0), n - 1);
+      const target = Math.min(Math.max(Math.round(spring.value), 0), n - 1);
       stepSpring(spring, target, 16.7);
       focus = spring.value;
       if (springAtRest(spring, target)) {
@@ -449,10 +432,24 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     });
   }
 
+  /**
+   * 手指走了多少像素 → 轴上该走多少像素。两段放大，见 GAIN / GAIN_FAR。
+   *
+   * 分段写成「前一截乘完 + 超出那截再乘」，这条映射就是连续且单调的：手指朝同
+   * 一个方向走，焦点绝不倒退，接缝处也不跳。乘在**总位移**上而不是每帧的增量
+   * 上，也是为了这个——增量各自取整、各自放大，攒起来会漂。
+   */
+  function gain(dy: number): number {
+    const d = Math.abs(dy);
+    const near = Math.min(d, GAIN_KNEE) * GAIN;
+    const far = Math.max(0, d - GAIN_KNEE) * GAIN_FAR;
+    return (dy < 0 ? -1 : 1) * (near + far);
+  }
+
   function focusFromDrag(dy: number): number {
     const L = ruler;
     if (!L || n < 2) return startFocus;
-    const want = -dy; // 手指往下 → 轴往下走 → 焦点往前
+    const want = -gain(dy); // 手指往下 → 轴往下走 → 焦点往前
     // 落在两格之间就线性插值；出了尺子的范围按基准间距外推（成环之后可以一直滑
     // 下去，所以外推这条路是常走的，不是兜底）。
     if (want <= L[0].at) return startFocus + L[0].k + (want - L[0].at) / PARAMS.minGap;
@@ -470,12 +467,13 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   /**
-   * 拉出端点之外要费力：超出的那一截打折，松手再弹回去（§2 的「到底了」回弹）。
+   * 拉出端点之外要费力：超出的那一截打折，松手再弹回去。
    *
-   * **成环之后这件事不存在**——没有端点，往哪边滑都走得通，所以原样返回。
+   * 玩家第三轮点名要的就是这个——「滑动到底（留有一点空白）就停止」：到头了还能
+   * 再拉出半格多一点，看得见那一点空白，手一松弹回去。没有这一截的话，滑到头是
+   * 硬生生一堵墙，手感像卡住了。
    */
   function clampRubber(f: number): number {
-    if (wrap) return f;
     if (f < 0) return Math.max(-OVERSCROLL, f * RUBBER);
     const max = n - 1;
     if (f > max) return Math.min(max + OVERSCROLL, max + (f - max) * RUBBER);
@@ -531,7 +529,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     }
     ruler = null;
     // §5.3 离散定格：松手必须停在某一项上，不能停在两项中间。
-    const target = wrap ? Math.round(focus) : Math.min(Math.max(Math.round(focus), 0), n - 1);
+    const target = Math.min(Math.max(Math.round(focus), 0), n - 1);
     if (reducedMotion()) {
       // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。
       focus = target;
@@ -578,14 +576,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   function focusTo(index: number, animate = true): void {
-    let target = Math.min(Math.max(index, 0), Math.max(n - 1, 0));
-    // 成环：从当前位置走**最近**的那一边过去。不折算的话，从第 12 项跳到第 0 项
-    // 会整条轴倒着滑回去（12 格），而实际只隔一格。
-    if (wrap && n > 0) {
-      const here = focus;
-      const base = Math.round((here - target) / n) * n;
-      target += base;
-    }
+    const target = Math.min(Math.max(index, 0), Math.max(n - 1, 0));
     if (!animate || reducedMotion()) {
       focus = target;
       snapSpring(spring, target);
@@ -620,12 +611,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   paint();
 
   return {
-    // 成环之后 focus 是一个可以一直往上（或往下）走的实数——滑了三圈就是 39.2。
-    // 对外报的必须是「第几项」，所以折回 0..n-1。
-    focused: () =>
-      wrap
-        ? ((Math.round(focus) % n) + n) % n
-        : Math.min(Math.max(Math.round(focus), 0), Math.max(n - 1, 0)),
+    // focus 在回弹区里会短暂越界（-0.55 ~ n-1+0.55），对外报的必须是「第几项」。
+    focused: () => Math.min(Math.max(Math.round(focus), 0), Math.max(n - 1, 0)),
     focusTo,
     destroy() {
       destroyed = true;

@@ -90,11 +90,21 @@ let page = await menuPage({ slides_played_square: '1' });
   check('轴上有 14 张卡', s.cards.length === 14, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
   check('轴的高度是算出来的（不是 0，也没顶出屏幕）', s.host.h > 300 && s.host.bottom <= 844 + 1, `${s.host.h.toFixed(0)}px，底边 ${s.host.bottom.toFixed(0)}`);
 
-  // 每一站等高：拿「未形变」的那几张（离焦点远、scale≈1）互相比。
-  const flat = s.cards.filter((c) => c.scale < 1.02 && c.h > 0);
-  const hs = flat.map((c) => c.h);
+  /**
+   * 每一站等高——量的是**版面高度**（屏幕上那一份除掉这一帧的 scale），十四张
+   * 全查，不挑「未形变」的那几张。
+   *
+   * 从前挑 `scale < 1.02` 的来比，是因为那时候 minScale 就是 1，远处的卡都恰好
+   * 原大。第三轮把鱼眼拉开（0.8 → 1.4，玩家要「放大缩小更明显」）之后，离焦点
+   * 两三格的卡各是 0.85、0.80……屏幕上的高度本来就不一样，那条断言于是红了——
+   * 红的不是版式，是这把尺子。
+   *
+   * 版面高度才是那个不变量：一站 = 图 100 + 小字一行。它一旦不齐，相邻两站的
+   * 间距就算不准，下面「永不相撞」那条也跟着失去意义。
+   */
+  const hs = s.cards.filter((c) => c.h > 0).map((c) => c.h / (c.scale || 1));
   const spread = Math.max(...hs) - Math.min(...hs);
-  check('每一站等高（未形变的几张高度一致，差 < 2px）', spread < 2, `${Math.min(...hs).toFixed(1)}–${Math.max(...hs).toFixed(1)}px，共 ${hs.length} 张`);
+  check('每一站等高（十四张的版面高度一致，差 < 2px）', spread < 2, `${Math.min(...hs).toFixed(1)}–${Math.max(...hs).toFixed(1)}px，共 ${hs.length} 张`);
 
   // 聚焦那张：正对选中线（容器正中），而且是最大的一张。
   const focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
@@ -164,11 +174,11 @@ let page = await menuPage({ slides_played_square: '1' });
   check('松手后只有一张是放大的（没停在两项中间）', s.cards.filter((c) => c.scale > 1.24).length === 1, `${s.cards.filter((c) => c.scale > 1.24).length} 张`);
 }
 
-// ── 4. 循环：没有「到头了」这回事 ───────────────────────────────────
+// ── 4. 滑到底就停，两头各留一点空白 ────────────────────────────────
 //
-// 玩家 2026-09 第二轮改的口径（原先是「手机端不循环，滑到两端就停」）：
-// 「没有做到任何循环的效果」。这一节原来量的正是「滑到头就停」，现在反过来量：
-// 从第一张往上猛滑，应该绕到后半段去，而不是钉在第 0 项。
+// 口径来回改过两轮，这是第三轮定的（玩家原话：「不要循环的，滑动到底（留有一点
+// 空白）就停止」）：第二轮做成了环，用了一轮就撤。所以这一节量回「到头就停」，
+// 外加那点空白——拉得出去、松手弹回来，滑到头的手感是「到边了」，不是撞墙。
 {
   const box = await page.evaluate(() => {
     const r = document.querySelector('.mode-axis').getBoundingClientRect();
@@ -183,65 +193,99 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.waitForTimeout(800);
   let s = await shot(page);
   let focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  const first = focused.i;
-  // 这儿不下断言——猛拖 20×160px 走的格数取决于间距，落在哪一项不是这道门要钉的
-  // 事（钉了就成了「抄实现」）。真正要量的是下面两条：再往上走会**绕过去**。
+  check('往上滑到头就停在第一张（不绕回最后一张）', focused.i === 0, `停在 ${focused.name}`);
+  // 「留一点空白」：拉过头的那一瞬间，第一张会被拖到选中线**下面**去（回弹区），
+  // 松手才弹回来。量的就是这个中间态——不量它，「到头就停」和「到头钉死」分不开。
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
-  for (let k = 1; k <= 8; k++) await page.mouse.move(box.x, box.y + k * 60);
+  for (let k = 1; k <= 6; k++) await page.mouse.move(box.x, box.y + k * 40);
+  const pulled = await page.evaluate(() => {
+    const host = document.querySelector('.mode-axis').getBoundingClientRect();
+    const first = document.querySelector('.mode-axis > .home-icon-btn').getBoundingClientRect();
+    return { gap: first.top + first.height / 2 - (host.top + host.height / 2) };
+  });
   await page.mouse.up();
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(900);
+  const back = await page.evaluate(() => {
+    const host = document.querySelector('.mode-axis').getBoundingClientRect();
+    const first = document.querySelector('.mode-axis > .home-icon-btn').getBoundingClientRect();
+    return { gap: first.top + first.height / 2 - (host.top + host.height / 2) };
+  });
+  check('到头了还能再拉出一点空白', pulled.gap > 20, `拉出 ${pulled.gap.toFixed(0)}px`);
+  check('松手弹回来，第一张回到选中线', Math.abs(back.gap) < 2, `偏差 ${Math.abs(back.gap).toFixed(1)}px`);
+  // 另一头：往下猛拖，停在最后一张
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  for (let k = 1; k <= 20; k++) await page.mouse.move(box.x, box.y - k * 160);
+  await page.mouse.up();
+  await page.waitForTimeout(900);
   s = await shot(page);
   focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  check(
-    '从前几项再往上滑，绕到后几项（环闭上了）',
-    focused.i > 9,
-    `${first} → ${focused.i}（${focused.name}）`,
-  );
-  // 反方向也走得通：从这儿往下猛滑，绕回前几项
-  await page.mouse.move(box.x, box.y);
-  await page.mouse.down();
-  for (let k = 1; k <= 8; k++) await page.mouse.move(box.x, box.y - k * 60);
-  await page.mouse.up();
-  await page.waitForTimeout(800);
-  s = await shot(page);
-  const back = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  check('反方向也绕得回来', back.i < 4, `→ ${back.i}（${back.name}）`);
+  check('往下滑到头就停在最后一张', focused.i === 13, `停在 ${focused.name}`);
 }
 
-// ── 4b. 上下两头是**化开**的，不是一刀切 ────────────────────────────
+// ── 4b. 上下两头**什么都不盖**：从招牌和底排底下滑过去 ──────────────
 //
-// 玩家原话：「上和下的部分不应该是遮盖的，而是透明的，不应该只有中间这一部分
-// 能看到」。原先的写法是「离中心超过半屏就 opacity: 0」——于是轴上永远只看得见
-// 三张，边缘一条硬线。现在改成随距离连续掉，容器再叠一层同向的渐变遮罩。
+// 玩家第三轮原话：「上方和下方仍然有渐变的覆盖，完全去除，就让这一列 icon 在
+// slides title 板块、个人主页和记录排名的板块下面滑过」。前两轮两次都走岔了：
+// 第一轮一刀切在轴的边上，第二轮改成渐变遮罩——玩家说那还是「覆盖」。
 //
-// 量两件事：**有**半透明的那一张（不是非 0 即 1），以及遮罩真的挂上了。
+// 所以这一节现在量四件事，缺一条都能让它变成假绿：
+//   ① 一张都不淡（看得见的卡全是实的）；
+//   ② 容器上没有遮罩；
+//   ③ 卡片**真的画到了轴的盒子外面**，而且是从招牌底下过去的——拿招牌上一个点
+//      去打，打到的必须是招牌，不是卡片；
+//   ④ 画出去不撑大页面（overflow: clip 那一截）。
 {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(700);
-  const fade = await page.evaluate(() => {
-    const cards = [...document.querySelectorAll('.mode-axis > .home-icon-btn')];
-    const o = cards.map((c) => +(+getComputedStyle(c).opacity).toFixed(3));
-    const css = getComputedStyle(document.querySelector('.mode-axis'));
+  const look = await page.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const rects = cards.map((c) => c.getBoundingClientRect());
+    // 看得见的＝矩形和视口有交集的那几张
+    const onScreen = rects
+      .map((r, i) => ({ i, r }))
+      .filter((x) => x.r.bottom > 0 && x.r.top < window.innerHeight);
+    const css = getComputedStyle(host);
+    const head = document.querySelector('.home-head-glass').getBoundingClientRect();
+    // 招牌正中偏下那一点：轴的卡片正从这一带底下走
+    const hit = document.elementFromPoint(head.left + head.width / 2, head.bottom - 6);
     return {
-      o,
-      half: o.filter((v) => v > 0.02 && v < 0.98).length,
-      solid: o.filter((v) => v >= 0.98).length,
-      mask: (css.webkitMaskImage || css.maskImage || 'none').slice(0, 40),
+      op: onScreen.map((x) => +(+getComputedStyle(cards[x.i]).opacity).toFixed(3)),
+      mask: (css.webkitMaskImage || css.maskImage || 'none').slice(0, 30),
+      overflow: css.overflow,
+      // 有没有卡片探出盒子（上或下）
+      outside: rects.some((r) => r.top < hr.top - 2 || r.bottom > hr.bottom + 2),
+      hitTag: hit ? hit.className || hit.tagName : '',
+      docH: document.documentElement.scrollHeight,
+      legalBottom: Math.round(
+        document.querySelector('.home-legal').getBoundingClientRect().bottom + window.scrollY,
+      ),
     };
   });
   check(
-    '上下两头有淡出的卡（不是非 0 即 1 的一刀切）',
-    fade.half >= 1,
-    `全不透明 ${fade.solid} 张、半透明 ${fade.half} 张：${fade.o.filter((v) => v > 0).join(' / ')}`,
+    '一张都不淡（看得见的卡全是实的）',
+    look.op.length >= 3 && look.op.every((v) => v >= 0.999),
+    `${look.op.length} 张在屏幕上：${look.op.join(' / ')}`,
   );
+  check('容器上没有遮罩了', !/gradient/.test(look.mask), look.mask);
+  check('卡片画得出轴的盒子（要从两块板子底下过去）', look.outside);
   check(
-    '一屏看得见的不止中间那一张（≥ 3 张全不透明）',
-    fade.solid >= 3,
-    `${fade.solid} 张`,
+    '招牌压在卡片上面（是卡从底下滑过，不是卡盖住招牌）',
+    /home-head|home-title|home-sub/.test(String(look.hitTag)),
+    String(look.hitTag),
   );
-  check('容器挂着渐隐遮罩', /gradient/.test(fade.mask), fade.mask);
+  // 画出去**不撑大页面**：探出去的卡如果算进可滚动区，文档会凭空高出几百像素，
+  // 法务那五条就被推得更远。页面总高应该到法务链接那一排为止（加上 .app 的
+  // 底部留白，给 140px 的余量）。
+  check(
+    '画出去不撑大页面（overflow: clip 那一截）',
+    look.docH <= look.legalBottom + 140,
+    `文档高 ${look.docH} / 法务底 ${look.legalBottom}`,
+  );
 }
 
 // ── 4c. 两侧的点点轴 ────────────────────────────────────────────────
@@ -362,6 +406,7 @@ await page.close();
       lowestCard: Math.max(...cards.map((r) => r.bottom)),
       clipped: getComputedStyle(document.querySelector('.mode-axis')).overflow,
       vh: window.innerHeight,
+      vw: window.innerWidth,
     };
   });
   /**
@@ -410,10 +455,24 @@ await page.close();
       bottom.blocked.length ? `点不着：${bottom.blocked.join(' ')}` : `${bottom.n} 条都点得着`,
     );
   }
-  // getBoundingClientRect 不认裁剪：一张探到轴外面的卡，rect 照样报它的完整位
-  // 置，而屏幕上那一截是被 overflow 切掉的。所以这儿量的是「裁真的在裁」，越出
-  // 多少由上面那条（轴底 ≤ 法务链接顶）管。
-  check('轴在裁掉探出去的那一截（overflow: hidden）', geo.clipped === 'hidden', geo.clipped);
+  /**
+   * 轴现在是 `overflow: clip` + 一圈 clip-margin：**画得出去**（卡片要从招牌和
+   * 底排底下滑过），但不建滚动容器、不撑大页面。
+   *
+   * 这一条从前写的是 `=== 'hidden'`——那是第一轮一刀切在边上的做法，第三轮改掉
+   * 了。老内核（Chrome 61）不认 clip，整条声明丢掉之后退回前面那行 hidden，所以
+   * 两个值都算合格；真正不合格的是 `visible`：那样横竖都不裁，文档被探出去的卡
+   * 撑大，手机上整页被缩小塞进屏幕（实测 390→413 宽），按视口居中的弹窗就和卡
+   * 片列差出十几个像素——玩家看到的「炸弹那一屏没居中」就是这么来的。
+   */
+  check(
+    '轴是 clip（能画出去但不撑大页面；老内核退回 hidden）',
+    geo.clipped === 'clip' || geo.clipped === 'hidden',
+    geo.clipped,
+  );
+  // 上面那条只看轴自己。横向那一截是 `.home-page` 兜的（clip-margin 四面都给，
+  // 横向会撑宽文档），所以这儿连着量：视口宽必须还是 390，不是被缩放过的 413。
+  check('页面没有被撑宽（视口还是 390）', geo.vw === 390, `innerWidth ${geo.vw}`);
   /**
    * 底排：先量「找得到」，再量「没被压住」。
    *
