@@ -682,14 +682,18 @@ if (rankPage) {
     () => document.getElementById('mpFinalCard')?.naturalWidth > 0, { timeout: 8000 },
   ).then(() => true).catch(() => false);
   check('竞赛排名图渲染出来了', drawn);
-  // 单局最高和最快玩家只在图里写，页面上不再用文字说一遍。
+  // 单局最高和单局最快只在图里写，页面上不再用文字说一遍。
   // 这一页在客人那边（他刚离开小屋），所以问的是 B 不是 A。
+  //
+  // 这两个词要和 i18n 的 mpBestRound / mpFastest 对得上：词改了这儿不改，门盯
+  // 的就是一个全站已经不存在的字符串——永远绿，等于没盯。（「最快玩家」是
+  // 2026-09 之前的旧说法，那一轮统一成了「单局最快」。）
   const notes = await B.page.evaluate(() => ({
     text: document.querySelector('.mp-page')?.textContent || '',
     img: !!document.querySelector('#mpFinalCard'),
   }));
-  const leftover = ['单局最高', '最快玩家'].filter((w) => notes.text.includes(w));
-  check('小屋战绩页面上没有《单局最高》《最快玩家》的文字行',
+  const leftover = ['单局最高', '单局最快'].filter((w) => notes.text.includes(w));
+  check('小屋战绩页面上没有《单局最高》《单局最快》的文字行',
     leftover.length === 0, leftover.join('、'));
   check('那两项仍然画在战绩图里（图还在）', notes.img);
 }

@@ -191,7 +191,7 @@ export function showRoomCard(
   const s = STRINGS[lang];
   const meId = opts.meId ?? currentRoom()?.playerId;
   const ranked = rankRoom(state.players);
-  // 单局最高和最快玩家这一页上不再用文字说——它们写在战绩图里（drawCard）。
+  // 单局最高和单局最快这一页上不再用文字说——它们写在战绩图里（drawCard）。
   const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
 
   container.innerHTML = `
@@ -223,7 +223,7 @@ export function showRoomCard(
           .join('')}
       </div>
 
-      <!-- 单局最高和最快玩家不在这儿用文字再说一遍：底下那张战绩图上已经写着
+      <!-- 单局最高和单局最快不在这儿用文字再说一遍：底下那张战绩图上已经写着
            它们了（见上面 drawCard 的 fillText）。同一件事说两遍，一遍在页面上、
            一遍在图里，读起来是重复的，而图才是要发出去的那一份。 -->
 

@@ -1408,7 +1408,7 @@ async function start(res, body) {
  * for the next one. Called with `round` 0 - before anyone has played - it
  * only clears, so opening the first board never banks a phantom zero.
  *
- * 最快玩家 is the quickest single round anyone put together, not the sum of
+ * 单局最快 is the quickest single round anyone put together, not the sum of
  * their times: a player who sat out one board should not win it by having
  * spent less of the evening playing.
  */
@@ -1508,9 +1508,30 @@ async function score(res, body) {
   // state / bye / leave / learn）它一条都挡不住：拿函数入口那份旧快照整份写
   // 回去，中间落地的那一次就被抹掉了，玩家看到的就是「分数对不上」。
   const run = { ...CLEAR_ROUND };
+  /**
+   * **分数是客户端报上来的，服务器只收拾格式，不核实真伪。** 记在这儿，不是
+   * 忘了：2026-09 盘点过，明知留着。
+   *
+   * 下面这两行只做三件事：负数归零、取整、非数字当 0；用时也只要求是个正数。
+   * 所以一个会开开发者工具的人，能把自己这一局报成任意大的分、或者 0.01 秒，
+   * 散场那张战绩卡上「单局最高 / 单局最快」就归他。
+   *
+   * 为什么不修：
+   *   · 伤害面只到这一间私人小屋：坑得到的只有他自己叫来的朋友。
+   *   · （**全站排行榜不从这条路进**，它走 scores.js。不过说句实话：那边严的
+   *     是「你是谁」——要账号、要令牌，报上去的分只挂在他自己名下、还按 runId
+   *     去重、封顶 MAX_SCORE；至于「这个分是不是真打出来的」，那边同样没验。
+   *     两处是同一件事的两个面，哪天要做真验证，得一起做。）
+   *   · 真要验，只有两条路：把每一步都传上来在服务器重放一遍（工程量远超这
+   *     个功能本身），或者给每个玩法定一个「理论上限」再卡（要先把八副棋盘的
+   *     上限都算准，算错就是把正常高分误判成作弊——那比作弊更伤人）。
+   *
+   * 什么时候该回来做：朋友之间真的吵起来「你这分是假的」，或者小屋哪天不再
+   * 只是熟人之间玩。那时候先做「理论上限」那一档，别一上来就重放。
+   */
   run.score = Math.max(0, Math.floor(Number(body.score) || 0));
   run.finished = Boolean(body.finished);
-  // Only read off the HUD once the run is over, so 最快玩家 is a finishing
+  // Only read off the HUD once the run is over, so 单局最快 is a finishing
   // time rather than however far into the board someone happened to be.
   const took = Math.round(Number(body.seconds));
   if (run.finished && Number.isFinite(took) && took > 0) run.seconds = took;
@@ -1537,7 +1558,7 @@ async function score(res, body) {
  *
  *   · best —— 「单局最高 · 某某 N」那一行（roomCard.ts 第 164 行），也是排名的
  *     第二档（第 67 行，总分并列时比它）；
- *   · bestTime —— 「最快玩家」那一行（第 165 行）。
+ *   · bestTime —— 「单局最快」那一行（第 165 行）。
  *
  * 撤掉这个函数实测过（check-room-races.mjs 的 ⑧乙）：回包里屋主 best=0、
  * bestTime=null，那两行在卡上就是空的或者写了错的人。那是把翻倍换成另一种错，

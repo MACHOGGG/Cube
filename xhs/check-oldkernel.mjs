@@ -1,8 +1,9 @@
 /**
  * 老内核体检台——在新浏览器上装成 Chrome 61 的样子，跑一遍这一版。
  *
- *   node xhs/check-oldkernel.mjs            # 五个玩法各打一局
+ *   node xhs/check-oldkernel.mjs            # 五个玩法各打一局 + 走一遍不是棋盘的那几屏
  *   node xhs/check-oldkernel.mjs square     # 只跑一个
+ *   node xhs/check-oldkernel.mjs screens    # 只走成绩页那一条路
  *
  * 为什么要有这个：小工具的最低内核是 Android 8.1 那一档的 Chrome / WebView
  * 61，手边没有那样的真机，小红书的审核也要几天。但「缺哪些接口」是查得到
@@ -88,6 +89,21 @@ const MODES = {
   bomb: { name: '炸弹', card: 2, pick: true },
   slot: { name: '老虎机', card: 3, slot: true },
   flip: { name: '无限反转', card: 4, pick: true },
+  /**
+   * 最后这一档不是玩法，是**不是棋盘的那几屏**：成绩与说明页 → 战绩详情 →
+   * 《怎么玩》→ 分镜动画。
+   *
+   * 补这一档的理由：这台体检台原先只走五个游戏局面，那三四屏一次都没在「接口
+   * 被摘掉」的状态下画出来过。今天它们碰巧没事（用到的接口补丁层都补上了），
+   * 可往后谁在成绩页、战绩详情、规则弹窗里顺手用一个新写法（一个 `Object
+   * .fromEntries` 就够），五道门会**全绿**，而老手机上的玩家一点成绩页就是白
+   * 屏——后台连一条报错都留不下，因为那条路根本没人测过。
+   *
+   * 它借方块那一局开路：战绩详情要有一条真的战绩才点得开，而战绩是打完一局才
+   * 写进 localStorage 的。所以这一档先照 card 0 打一局（和 square 那一档一模
+   * 一样的走法），打完从结算页退回主菜单，再往那几屏走。
+   */
+  screens: { name: '成绩页 → 战绩详情 → 怎么玩 → 分镜动画', card: 0, screens: true },
 };
 
 const only = process.argv[2];
@@ -282,6 +298,101 @@ for (const key of list) {
       return { src: (i?.getAttribute('src') || '').slice(0, 22), h: i?.naturalHeight ?? 0 };
     });
     say(img.src.indexOf('data:image/png') === 0 && img.h > 100, '战绩图画得出来', JSON.stringify(img));
+  }
+
+  // ── 不是棋盘的那几屏（只有 screens 这一档走）──────────────────────
+  //
+  // 一路按下去，每一屏都**量它真的立起来了**，不是「DOM 里有这么个节点」：
+  // 老内核上这几屏出事的样子是「JS 抛错 → 这一屏半张脸」，节点在不在说明不了
+  // 问题。所以战绩详情量那张图解码出来没有、分镜动画量棋盘格子画出来没有。
+  if (mode.screens) {
+    // 结算页那会儿分享窗口还盖着（上面点过《分享》），先收起来再退。
+    if (await p.$('#shareCloseBtn')) {
+      await p.click('#shareCloseBtn');
+      await p.waitForTimeout(600);
+    }
+    // 退回主菜单：结算页上那颗《返回主页》。按文字找，和 check-oldcss 同一招
+    // ——那几颗键的 id 换过，文字没换。
+    for (const btn of await p.$$('.endcard button, .modal button, #endOverlay button')) {
+      const t = ((await btn.textContent()) || '').trim();
+      if (/菜单|返回|主页/.test(t)) {
+        await btn.click();
+        break;
+      }
+    }
+    await p.waitForTimeout(1400);
+
+    // ① 成绩与说明页
+    const navOk = await p.$('#xhsProfile');
+    say(!!navOk, '底排那颗《成绩与说明》还在');
+    if (navOk) {
+      await p.click('#xhsProfile');
+      await p.waitForTimeout(1200);
+    }
+    const prof = await p.evaluate(() => ({
+      page: !!document.querySelector('.xhs-profile'),
+      total: (document.querySelector('.total-card-value') || {}).textContent || '',
+      rows: document.querySelectorAll('.records-row').length,
+      how: !!document.querySelector('.xhs-how'),
+    }));
+    // 累计得分是从 localStorage 里那几条战绩算出来的——它有数，说明刚打完这一
+    // 局真的存进去、又读出来了（存/读这条路上有 JSON、有 Object 遍历）。
+    say(prof.page && prof.how && prof.rows >= 1 && prof.total !== '',
+      '成绩与说明页画出来了（有战绩行、有《怎么玩》）', JSON.stringify(prof));
+
+    // ② 战绩详情：那张图是现画的 canvas，老内核上最容易在这儿栽
+    if (prof.rows >= 1) {
+      await p.$eval('.records-row', (e) => e.click());
+      await p.waitForTimeout(2200);
+      const sheet = await p.evaluate(() => {
+        const img = document.querySelector('.xhs-run-img');
+        return {
+          page: !!document.querySelector('.xhs-run-sheet'),
+          src: ((img && img.getAttribute('src')) || '').slice(0, 22),
+          h: (img && img.naturalHeight) || 0,
+          back: !!document.querySelector('#runBack'),
+        };
+      });
+      say(sheet.page && sheet.src.indexOf('data:image/png') === 0 && sheet.h > 100,
+        '战绩详情页出来了，图也画得出来', JSON.stringify(sheet));
+      if (sheet.back) {
+        await p.click('#runBack');
+        await p.waitForTimeout(1000);
+      }
+    }
+
+    // ③ 《怎么玩》那一屏（六条规则 + 配图）
+    if (await p.$('.xhs-how')) {
+      await p.click('.xhs-how');
+      await p.waitForTimeout(1000);
+    }
+    const how = await p.evaluate(() => ({
+      modal: !!document.querySelector('.howto-modal, .howto-ov'),
+      rules: document.querySelectorAll('.howto-ov .tut-rule, .howto-list .tut-rule').length,
+      arts: document.querySelectorAll('.howto-ov .tut-rule-art').length,
+      story: document.querySelectorAll('.howto-story').length,
+    }));
+    say(how.modal && how.rules >= 5 && how.arts >= 5,
+      '《怎么玩》六条规则连配图都画出来了', JSON.stringify(how));
+
+    // ④ 分镜动画——这一版唯一一屏「不是我画的、也不是棋盘」的界面
+    if (how.story >= 1) {
+      await p.click('.howto-story[data-fam="square"]');
+      const up = await p
+        .waitForSelector('.story-board .story-cell', { timeout: 20000 })
+        .then(() => true)
+        .catch(() => false);
+      await p.waitForTimeout(1800);
+      const story = await p.evaluate(() => ({
+        cells: document.querySelectorAll('.story-board .story-cell').length,
+        segs: document.querySelectorAll('.story-prog-seg').length,
+        ctl: document.querySelectorAll('.story-controls .story-ctl').length,
+      }));
+      say(up && story.cells > 0 && story.segs > 0 && story.ctl >= 3,
+        '分镜动画立起来了（棋盘格子 + 进度条 + 四颗键）', JSON.stringify(story));
+    } else {
+      say(false, '《怎么玩》里没有进分镜的入口', JSON.stringify(how));
+    }
   }
 
   say(errs.length === 0, '全程零报错', errs.slice(0, 3).join(' | '));

@@ -674,7 +674,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         : '');
     // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
     // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
-    // 最快玩家 on a room's closing card is read from here, the same way the
+    // 单局最快 on a room's closing card is read from here, the same way the
     // live standings read the score off the HUD's reel: the scoreboard takes
     // what is already on screen, and none of the eight boards has to know
     // that multiplayer exists.

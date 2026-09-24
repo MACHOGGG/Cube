@@ -230,7 +230,7 @@ async function agePast(code, playerId) {
   await call({ action: 'score', code, ...guest, score: 640, finished: true, seconds: 33, round: 1 });
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('④乙 局次对上了：真实分数盖回来', p.score === 640, String(p.score));
-  check('④乙 局次对上了：用时也跟上（最快玩家要用它）', p.seconds === 33, String(p.seconds));
+  check('④乙 局次对上了：用时也跟上（单局最快要用它）', p.seconds === 33, String(p.seconds));
 }
 
 // ---- ⑤ 教学那条路也不能把分数写回去 --------------------------------------
@@ -392,7 +392,7 @@ async function agePast(code, playerId) {
 // bankRound 里才被写、而且卡上正在用的是这两样：
 //   · best —— 「单局最高 · 某某 N」那一行（第 164 行），也是排名的第二档
 //     （第 67 行，总分并列时比它）；
-//   · bestTime —— 「最快玩家」那一行（第 165 行）。
+//   · bestTime —— 「单局最快」那一行（第 165 行）。
 //
 // **不靠抢，直接摆出那个状态。** 上面 ⑧ 那样扫错位量不到这件事：内存版的库每
 // 次调用一个微任务就回，赢的那条把两个座位记完比输的那条读一次还快，窗口在这

@@ -286,8 +286,10 @@ export interface I18nStrings {
   /** 交出座位、离开这间房。房间页和结算页上是同一颗键、同一个说法——对玩家
    *  来说这本来就是同一件事，两个名字只会让人以为是两回事。 */
   mpLeave: string;
-  /** 离开房间后那张总排名的标题 */
+  /** 多人设置页分割线底下那句招呼——「加入 Slides 天才搭建的小屋」，说的是下半
+   *  段「进别人开的屋子」（ui/multiplayer.ts 第 367 行）。 */
   mpNeedGenius: string;
+  /** 离开小屋后那张总排名的标题。 */
   mpStandings: string;
   mpFinished: string;
   /** The host picks the board from the home page, where all eight of them
@@ -337,6 +339,14 @@ export interface I18nStrings {
   mpRoundResult: string;
   mpFinalTitle: string;
   mpBestRound: string;
+  /**
+   * 小屋战绩卡上和 mpBestRound 并排的那一栏，后面接「名字 + 用时」。
+   *
+   * 四种语言都说**同一件事：最快的那一局**。从前中文写的是「最快玩家」（说的是
+   * 人），英/法写的是「最快的那块棋盘」（说的是局）——同一栏两个概念，而且和左
+   * 边那栏「单局最高 / Best single round」也对不上。玩家看得懂，只是没对齐，
+   * 2026-09 统一成「单局最快」这一版。
+   */
   mpFastest: string;
   mpRoundsPlayed: string;
   /** 离开太久，服务器已经开了下一局，这一盘没能算进小屋总分。 */
@@ -714,7 +724,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundResult: 'This round',
     mpFinalTitle: 'How the room finished',
     mpBestRound: 'Best single round',
-    mpFastest: 'Quickest board',
+    mpFastest: 'Fastest single round',
     mpRoundsPlayed: '{n} round|{n} rounds',
     mpRoundDropped: 'Away too long — this round missed the room total. It’s still in your own records.',
     mpErrEnded: 'That room has been closed.',
@@ -1028,7 +1038,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundResult: 'Cette manche',
     mpFinalTitle: 'Bilan de la salle',
     mpBestRound: 'Meilleure manche',
-    mpFastest: 'Plateau le plus rapide',
+    mpFastest: 'Manche la plus rapide',
     mpRoundsPlayed: '{n} manche|{n} manches',
     mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total de la salle. Elle reste dans vos records.',
     mpErrEnded: 'Cette salle a été fermée.',
@@ -1342,7 +1352,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundResult: '本局',
     mpFinalTitle: '小屋戰績',
     mpBestRound: '單局最高',
-    mpFastest: '最快玩家',
+    mpFastest: '單局最快',
     mpRoundsPlayed: '共 {n} 局',
     mpRoundDropped: '離開太久了，這一局沒算進小屋總分；你自己的記錄裡還在。',
     mpErrEnded: '這個小屋已經結束了。',
@@ -1656,7 +1666,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundResult: '本局',
     mpFinalTitle: '小屋战绩',
     mpBestRound: '单局最高',
-    mpFastest: '最快玩家',
+    mpFastest: '单局最快',
     mpRoundsPlayed: '共 {n} 局',
     mpRoundDropped: '离开太久了，这一局没算进小屋总分；你自己的记录里还在。',
     mpErrEnded: '这个小屋已经结束了。',
