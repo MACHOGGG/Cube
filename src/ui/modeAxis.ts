@@ -29,12 +29,26 @@
  *   · **首玩期轴上只摆基础方块和基础小球**，打完第一局（或按过《我会玩》）其余
  *     的才长出来——这一条由 menu.ts 决定要把哪几张卡交给它，这个文件不管。
  *
+ *   · **拖动中慢半拍**：第十三轮——「手指移动一个目标值，画面每帧追它，拖动中
+ *     始终慢半拍、恒定、可预期」（参照 Lenis 默认 lerp 0.1）。所以这个文件里有
+ *     **两个位置**：`aimFocus`（手指指着第几项）和 `focus`（画面画到第几项），
+ *     后者每帧往前者追一截（engine/axisMotion.ts 的 damp，按时间算、帧率无关）。
+ *
+ * **「慢半拍」不等于「选不准」——这一条是死规矩。**
+ * 松手时 round 的是**目标值**，不是画面值；目标值和手指之间那一整套换算
+ * （stepGain / speedK / ruler / clampRubber）一行都没改。也就是说：追赶只影响
+ * 过程，落点和它无关。慢慢拖到某一张、停住、松手，停的还是那一张。
+ * check-mode-axis 里「慢拖到第 k 张松手就停在第 k 张」那一组锁着这件事，第一张、
+ * 中间、最后一张各测一遍。
+ *
  * 形变、弹簧、距离换算全部来自 engine/fisheye.ts 和 engine/spring.ts（那两份有
- * 门守着：scripts/check-fisheye.mjs）。这个文件只做三件事：把卡片摆到算出来的位
- * 置上、把手指的位移换成焦点、在该出声的时候出声。
+ * 门守着：scripts/check-fisheye.mjs），追赶和橡皮筋在 engine/axisMotion.ts
+ * （门：scripts/check-axis-motion.mjs）。这个文件只做三件事：把卡片摆到算出来的
+ * 位置上、把手指的位移换成焦点、在该出声的时候出声。
  */
 import { fisheye, hitTest, influence, SIGMA, type FisheyeParams } from '../engine/fisheye';
 import { createSpring, snapSpring, springAtRest, stepSpring, type SpringState } from '../engine/spring';
+import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, damp } from '../engine/axisMotion';
 import { reducedMotion } from '../engine/reducedMotion';
 import { playAxisTick } from '../engine/juice';
 import { vibrate } from '../engine/haptics';
@@ -189,7 +203,17 @@ const V_SMOOTH = 0.45;
  * 只影响**拖动**：点一下照旧是点中那张卡（点和拖由 TAP_SLOP 分开）。
  */
 const RAIL_GRAB = 56;
-const CARD_K = 0.72;
+/**
+ * 拖卡片那条路的折扣。
+ *
+ * 0.72 → 0.80：目标值加了追赶（画面每帧追手指，见下面 aimFocus）之后，同一段
+ * 手指位移在**眼睛看到的那一刻**总是还差一点没走完——手上的感觉就是「变迟钝
+ * 了」。玩家因此要求「灵敏度增加一点」。把折扣松一档正好抵消掉那一点落后，
+ * 落点（由目标值决定）一点没变。
+ *
+ * 这是这一轮唯一改动的旧常量。
+ */
+const CARD_K = 0.8;
 /**
  * 松手之后再滑一段——「轻微的物理动感」。
  *
@@ -362,6 +386,28 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let rail = false;
   /** 平滑过的**焦点**速度（项/毫秒，带正负）：松手那一下拿它投影，见 FLING_MS。 */
   let vFocus = 0;
+  /**
+   * **目标值**：手指此刻指着第几项。`focus` 是画面上此刻画到第几项。
+   *
+   * 玩家 2026-09 第十三轮要的就是这两个数分开：「手指移动一个目标值，画面每帧
+   * 追它，拖动中始终慢半拍、恒定、可预期」（参照 Lenis 默认 lerp 0.1）。
+   *
+   * **落点由目标值决定，追赶只影响过程。** 目标值和手指之间那一整套换算（分档
+   * 倍率 stepGain、手速系数 speedK、静态尺子 ruler、橡皮筋 clampRubber）一行都
+   * 没改，松手时 round 的也是目标值——所以「慢半拍」不等于「选不准」：慢慢拖到
+   * 某一张停住再松手，停的还是那一张。check-mode-axis 的精度那一条锁着这件事。
+   *
+   * 每次 onDown 都把它重置成当时的 focus，所以别处不用管它。
+   */
+  let aimFocus = focus;
+  /**
+   * 画面这一帧走了多快（项/秒，带正负）——**渲染值的速度**，不是手指的速度。
+   *
+   * 两个用处：松手时拿它当弹簧的初速度（从画面当前的动势接上去，不断档），
+   * 以及速度倾斜（见 skewFor）。拿手指速度接的话，画面还落后着，弹簧却按手指
+   * 的速度起步，衔接那一下会顶一顿。
+   */
+  let vRender = 0;
   /** 弹簧这一趟要去的那一项。松手时定下来，途中不再改。 */
   let springTarget = 0;
   let ruler: { k: number; at: number }[] | null = null;
@@ -695,9 +741,37 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      * 点来），只是不该在手指按着的时候管事，所以 onFocusIn 那儿也加了同一道闸。
      *
      * 两道闸都要：那儿堵的是这一条来路，这儿堵的是「以后谁再点着弹簧」。
+     *
+     * **「两个人写同一个格子」这件事本身，第十三轮之后已经不存在了。** onMove
+     * 现在只写目标值（aimFocus），`focus` 全仓库只有 loop 这一个地方写——追赶
+     * 那一支写、弹簧那一支写，同一帧里二选一。上面那两道闸留着不是为了抢格子，
+     * 是为了「手指按着的时候弹簧不许有意见」：真让它掺一脚，手指往一个方向拖、
+     * 弹簧往另一个方向拽，画面会在两者之间抖。
      */
     if (dragging) {
       springing = false;
+      const prev = focus;
+      /**
+       * 卡片那条路慢半拍（追赶），**点点那条路一比一贴着手指**。
+       *
+       * 点点是「一把滚轮」：玩家点名要的就是「那一列点子贴着手指走」，那一条路
+       * 上任何一点落后都是退步（见 RAIL_GRAB 上面那段）。追赶只给中间那一大片。
+       */
+      // 手指停住了没？停住就追齐，别让玩家「停好、松手、轴又自己滑两张」
+      // （见 AXIS_SETTLE_LAMBDA）。lastT 是最后一条 move 的时刻，和 rAF 的时间戳
+      // 同一条时间线。
+      const stalled = now - lastT > FLING_STALE;
+      focus = rail
+        ? aimFocus
+        : damp(focus, aimFocus, dt, stalled ? AXIS_SETTLE_LAMBDA : AXIS_LAMBDA);
+      // 追到头就贴上去。差得比一个千分位还少的时候，再追也只是每帧重画同一张
+      // 图——而手指停着不动（慢慢挑的时候常有）能停好几百毫秒。下一条 move 会把
+      // 循环重新点起来，那时 lastLoopTs 已清零，从 60Hz 重新起算。
+      if (Math.abs(aimFocus - focus) < 1e-4) focus = aimFocus;
+      vRender = dt > 0 ? ((focus - prev) / dt) * 1000 : 0;
+      paint();
+      if (focus !== aimFocus || vRender !== 0) schedule();
+      else lastLoopTs = 0;
       return;
     }
     if (springing) {
@@ -709,12 +783,16 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 那一项，再快的手势也只走一项。要有惯性，目标就得是投影出来的那一项。
        */
       const target = springTarget;
+      const prev = focus;
       stepSpring(spring, target, dt);
       focus = spring.value;
+      // 弹簧这一段也要报速度：倾斜靠它，而且它自己会衰减到 0，停下来倾斜就回正。
+      vRender = dt > 0 ? ((focus - prev) / dt) * 1000 : 0;
       if (springAtRest(spring, target)) {
         springing = false;
         focus = target;
         spring.value = target;
+        vRender = 0;
         // 这一段完了。下一段（下一次松手）要从零起算，别拿隔了几秒的旧时间戳
         // 去当上一帧——那会让新弹簧的第一帧 dt 是几百毫秒，一步跳到位。
         lastLoopTs = 0;
@@ -766,16 +844,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       out.unshift({ k: k - 1, at: acc });
     }
     return out;
-  }
-
-  /** 攒到下一帧再画（拖动途中用；弹簧那条路有它自己的 loop）。 */
-  let frameRaf = 0;
-  function scheduleFrame(): void {
-    if (frameRaf || destroyed) return;
-    frameRaf = requestAnimationFrame(() => {
-      frameRaf = 0;
-      paint();
-    });
   }
 
   /**
@@ -840,6 +908,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     moved = 0;
     startY = e.clientY;
     startFocus = focus;
+    // 目标值从画面此刻的位置起步：上一段弹簧要是还没停稳就被按住，接着拖的是
+    // 眼睛看着的那个位置，不是它本来要去的地方。
+    aimFocus = focus;
     // 按下那一刻的横坐标决定这一次拖的是哪一个控件（见 RAIL_GRAB）。
     const hr = host.getBoundingClientRect();
     rail = e.clientX - hr.left < RAIL_GRAB || hr.right - e.clientX < RAIL_GRAB;
@@ -891,7 +962,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     // 动敏感度并没有很高」的另一半原因。
     const now = Math.abs(seg) / dt;
     vel = vel === 0 ? now : vel * (1 - V_SMOOTH) + now * V_SMOOTH;
-    const was = focus;
+    const wasAim = aimFocus;
     if (rail) {
       /**
        * 滚轮：**位置直接映到项上**，手指走一颗点的间距就过一项。
@@ -903,20 +974,24 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 这儿不过 stepGain / speedK：滚轮没有加速度这回事——快拨慢拨走得一样远，
        * 那一列点子永远贴着手指。加速度是中间那条路的东西（见下面）。
        */
-      focus = clampRubber(startFocus - dy / RAIL_PITCH);
+      aimFocus = clampRubber(startFocus - dy / RAIL_PITCH);
     } else {
       axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel) * CARD_K;
-      focus = clampRubber(focusFromAxis(axisPx));
+      aimFocus = clampRubber(focusFromAxis(axisPx));
     }
-    // 焦点走了多快（项/毫秒，带正负）。松手那一下拿它投影出「再滑一段」。
-    const nowF = (focus - was) / dt;
+    // 目标值走了多快（项/毫秒，带正负）。松手那一下拿它投影出「再滑一段」——
+    // 甩多远看的是**手指的意图**，所以按目标值算，不按还落后着的画面算。
+    const nowF = (aimFocus - wasAim) / dt;
     vFocus = vFocus === 0 ? nowF : vFocus * (1 - V_SMOOTH) + nowF * V_SMOOTH;
     // 一帧只画一次。pointermove 在手机上一秒能来一百多条（而且 iOS 会把两三条
     // 合并成一条送过来），每来一条就画一次等于一帧里重复画好几遍——手上的感觉
     // 反而更黏。攒到下一帧再画，画的是最新的 focus，一点不丢。
     // （累加是在**每一条** move 上做的，不是每帧一次：攒到帧里再算就会漏掉合并
     // 进来的那几段位移，一次快滑少走一大截。）
-    scheduleFrame();
+    //
+    // 这儿只是**把循环点起来**：画什么由 loop 决定——它每帧把 focus 往 aimFocus
+    // 追一截再画（见 loop 里 dragging 那一支）。
+    schedule();
   }
 
   function onUp(e: PointerEvent): void {
@@ -941,12 +1016,19 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     const raw = stale ? 0 : vFocus * FLING_MS;
     const glide = Math.abs(raw) < FLING_MIN ? 0 : Math.max(-FLING_MAX, Math.min(FLING_MAX, raw));
     ruler = null;
-    // §5.3 离散定格：松手必须停在某一项上，不能停在两项中间。
-    const target = Math.min(Math.max(Math.round(focus + glide), 0), n - 1);
+    /**
+     * §5.3 离散定格：松手必须停在某一项上，不能停在两项中间。
+     *
+     * round 的是**目标值**，不是画面值。画面永远落后一点点（追赶），拿它去 round
+     * 就会在「慢慢拖到某一张、停住、松手」的时候停到上一张去——那正是玩家最怕的
+     * 「选不准」。目标值是手指指着的那一项，落点从此和追赶无关。
+     */
+    const target = Math.min(Math.max(Math.round(aimFocus + glide), 0), n - 1);
     if (reducedMotion()) {
       // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。也不投影：那是动画。
-      const near = Math.min(Math.max(Math.round(focus), 0), n - 1);
+      const near = Math.min(Math.max(Math.round(aimFocus), 0), n - 1);
       focus = near;
+      aimFocus = near;
       springTarget = near;
       snapSpring(spring, near);
       paint();
@@ -954,12 +1036,16 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       return;
     }
     springTarget = target;
+    // 弹簧从**画面当前的位置**起步，不是从目标值起步——从目标值起步等于松手那
+    // 一刻画面凭空跳过去补上那点落后，一次可见的闪动。
     spring.value = focus;
     // 给弹簧留三成初速度（封顶 FLING_VMAX 项/秒）：它带来的那一点过冲就是「轻微
     // 的物理动感」。全给的话会冲过头好几张，一点都不给又像硬停。
+    // 用**渲染值**的速度（vRender，项/秒）而不是手指的速度：画面正以这个速度在
+    // 走，弹簧接着这个速度往下走，衔接处一点顿挫都没有。
     spring.velocity = glide === 0
       ? 0
-      : Math.max(-FLING_VMAX, Math.min(FLING_VMAX, vFocus * 1000 * FLING_CARRY));
+      : Math.max(-FLING_VMAX, Math.min(FLING_VMAX, vRender * FLING_CARRY));
     lastLoopTs = 0; // 新的一段：帧间隔从这一帧重新起算（见 lastLoopTs）
     springing = true;
     schedule();
@@ -1076,7 +1162,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     destroy() {
       destroyed = true;
       if (raf) cancelAnimationFrame(raf);
-      if (frameRaf) cancelAnimationFrame(frameRaf);
       railL.rail.remove();
       railR.rail.remove();
       host.removeEventListener('pointerdown', onDown);

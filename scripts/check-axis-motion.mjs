@@ -1,8 +1,9 @@
 /**
  * 主菜单那条轴的**运动学**单元测试——纯 node，不碰 DOM，几十毫秒，进 CI。
  *
- *   npx esbuild src/engine/spring.ts --bundle --format=esm --outfile=/tmp/spring.mjs
- *   node scripts/check-axis-motion.mjs /tmp/spring.mjs
+ *   npx esbuild src/engine/axisMotion.ts --bundle --format=esm --outfile=/tmp/axismotion.mjs
+ *   npx esbuild src/engine/spring.ts     --bundle --format=esm --outfile=/tmp/spring.mjs
+ *   node scripts/check-axis-motion.mjs /tmp/axismotion.mjs /tmp/spring.mjs
  *
  * 它盯的是一类**量不出来也不报错**的毛病：手感在不同机器上不一样。
  * 60Hz 的开发机上调好的追赶和弹簧，到了 iPhone 低电量模式（30Hz）会慢一倍，
@@ -13,11 +14,12 @@
  * 整定时间；这道门量的是**时间**这一维——同一段真实时间，帧率不同结果要一样。
  */
 
-const [springSrc] = process.argv.slice(2);
-if (!springSrc) {
-  console.error('用法: node scripts/check-axis-motion.mjs <打包好的 spring.mjs>');
+const [motionSrc, springSrc] = process.argv.slice(2);
+if (!motionSrc || !springSrc) {
+  console.error('用法: node scripts/check-axis-motion.mjs <打包好的 axisMotion.mjs> <打包好的 spring.mjs>');
   process.exit(2);
 }
+const { damp, AXIS_LERP, AXIS_LAMBDA } = await import(motionSrc);
 const { createSpring, stepSpring } = await import(springSrc);
 
 let fail = 0;
@@ -56,6 +58,45 @@ const check = (name, ok, extra = '') => {
     '走满 200ms 之后三种帧率也还在一起（差 < 0.5%）',
     Math.max(...vals) - Math.min(...vals) < 0.005,
     long.map(([n, s]) => `${n} ${s.value.toFixed(5)}`).join(' / '),
+  );
+}
+
+// ── 追赶：同一段真实时间，帧率不同追到的地方要一样 ──────────────────
+//
+// 这是 damp 存在的全部理由。写成 `x += (target - x) * 0.1` 的话，同样 100ms 里
+// 30Hz 只追回 27.1%、60Hz 46.9%、120Hz 71.8%——开发机上调好的那一点「慢半拍」，
+// 到低电量模式的 iPhone 上是拖泥带水，到 120Hz 上几乎不慢。
+{
+  const run = (dtMs, steps) => {
+    let x = 0;
+    for (let i = 0; i < steps; i++) x = damp(x, 1, dtMs);
+    return x;
+  };
+  // 都走满 100ms 真实时间，只是帧数不同。
+  const at = [
+    ['120Hz', run(100 / 12, 12)],
+    ['60Hz', run(100 / 6, 6)],
+    ['30Hz', run(100 / 3, 3)],
+  ];
+  const vals = at.map(([, v]) => v);
+  const spread = Math.max(...vals) - Math.min(...vals);
+  check(
+    '追赶帧率无关：100ms 里 120/60/30Hz 追到同一处（相差 < 0.5%）',
+    spread / vals[1] < 0.005,
+    at.map(([n, v]) => `${n} ${(v * 100).toFixed(2)}%`).join(' / '),
+  );
+  // 60Hz 那一档必须正好等于 AXIS_LERP：这是「λ 由 0.1 反推」那句话的验算。数对
+  // 不上的话，参照 Lenis 的那个 0.1 就名存实亡了。
+  check(
+    `60Hz 下每帧正好追 AXIS_LERP（${AXIS_LERP}）`,
+    Math.abs(damp(0, 1, 1000 / 60) - AXIS_LERP) < 1e-6,
+    `${damp(0, 1, 1000 / 60).toFixed(8)}，λ = ${AXIS_LAMBDA.toFixed(6)}`,
+  );
+  // 切后台回来那一下 dt 可能是几秒：截断到 64ms，不能一帧贴到目标上。
+  check(
+    'dt 再大也截断在 64ms（切后台回来不会一帧跳到位）',
+    Math.abs(damp(0, 1, 5000) - damp(0, 1, 64)) < 1e-12 && damp(0, 1, 5000) < 0.4,
+    `dt=5000ms 追了 ${(damp(0, 1, 5000) * 100).toFixed(2)}%`,
   );
 }
 

@@ -252,6 +252,11 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
   for (let k = 1; k <= 6; k++) await page.mouse.move(box.x, box.y + k * 40);
+  // 等画面追上手指再量。第十三轮之后画面是**每帧往目标追一截**的（modeAxis 的
+  // aimFocus / damp），而上面那六下 move 是一口气发完、中间一帧都不给——不等的
+  // 话量到的是「手指已经拉到了、画面还没动」那一瞬间（实测 1px），红的是尺子。
+  // 250ms：手指停住 80ms 之后转成追齐档（AXIS_SETTLE_LAMBDA），剩下的 170ms 足够。
+  await page.waitForTimeout(250);
   const pulled = await page.evaluate(() => {
     const el = document.querySelector('.mode-axis');
     const host = el.getBoundingClientRect();
@@ -948,6 +953,140 @@ let page = await menuPage({ slides_played_square: '1' });
     return { i: idx, name };
   });
   check('新开一个标签页还是从第一张（基础方块）开始', fresh.i === 0, `${fresh.name}（第 ${fresh.i} 项）`);
+  await p10.close();
+}
+
+// ── 4j. 慢半拍不等于选不准 ──────────────────────────────────────────
+//
+// 玩家第十三轮把拖动改成了「手指移动一个目标值，画面每帧追它」（modeAxis 的
+// aimFocus + engine/axisMotion 的 damp）。这一节守的是那件事**唯一的风险**：
+//
+//   · **落点不许跟着慢。** 松手时 round 的是目标值，不是还落后着的画面值。慢慢
+//     拖到某一张、停住、松手，停的必须还是那一张——这是玩家最怕的「选不准」。
+//   · **点点那条路一点都不许慢。** 「那一列点子贴着手指走」是他第七轮点名要的，
+//     追赶只给中间那一大片。
+//
+// 两条都配了反证，免得写成假绿：精度那条量的是「停住之后画面在哪、松手停在
+// 哪」，两个数一起打出来；点点那条旁边紧跟着同样手法量卡片那条路——它要是也
+// 「一帧之内就到位」，说明追赶根本没生效，上面那条就白绿了。
+{
+  const p10 = await menuPage({ slides_played_square: '1' });
+  const install = () => p10.evaluate(() => {
+    window.__focus = () => {
+      const host = document.querySelector('.mode-axis');
+      const hr = host.getBoundingClientRect();
+      const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
+      const cs = [...host.children]
+        .filter((e) => e.classList.contains('home-icon-btn'))
+        .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
+      for (let k = 1; k < cs.length; k++) {
+        const a = cs[k - 1], b = cs[k];
+        if (a.d <= 0 && b.d >= 0) return a.i + (a.d === b.d ? 0 : -a.d / (b.d - a.d));
+      }
+      return cs[0] && cs[0].d > 0 ? cs[0].i : cs.length - 1;
+    };
+  });
+  const midX = await p10.evaluate(() => {
+    const r = document.querySelector('.mode-axis').getBoundingClientRect();
+    return r.left + r.width / 2;
+  });
+  /** 从第 from 项开始重新载入（轴记着上次停在哪，见 menu.ts 的 AXIS_KEY）。 */
+  const startAt = async (from) => {
+    await p10.evaluate((i) => {
+      try { sessionStorage.setItem('slides_axis_focus', String(i)); } catch { /* 无痕 */ }
+    }, from);
+    await p10.reload({ waitUntil: 'load' });
+    await p10.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+    await p10.waitForTimeout(500);
+    await install();
+  };
+  /**
+   * **慢慢**拖到第 k 项，停住，松手。
+   *
+   * 一步 20px、每步停 120ms ＝ 0.17 px/ms，比「慢拖」那一档的判定线还慢。每一步
+   * 之后都给足时间让画面追齐再看走到哪儿了——这才叫「拖到第 k 张」：屏幕上那一张
+   * 真的落在选中线上，不是手指已经过去了而画面还在后头。
+   *
+   * 手指走到屏幕顶上就松一次手再从下面重新抓（松手前已经停了 120ms，按
+   * FLING_STALE 算作「放下」，不投影，所以中途重抓不会把落点带偏）。
+   */
+  const slowTo = async (from, k) => {
+    await startAt(from);
+    // 起手点和上下边界都躲开招牌和底排：那两块板子画在轴**上面**（玩家第三轮
+    // 要的「卡从它们底下滑过」），手指落在它们身上，pointerdown 根本到不了轴。
+    // 头一版把起手点写在 760，正好压在底排（顶在 744）上——量出来是「一步都没
+    // 走」，红的是尺子不是代码。
+    const y0 = 450;
+    const dir = k > from ? -1 : 1; // 手指往上 ＝ 索引变大
+    let y = y0;
+    await p10.mouse.move(midX, y);
+    await p10.mouse.down();
+    let f = await p10.evaluate(() => window.__focus());
+    for (let guard = 0; guard < 160; guard++) {
+      if (dir < 0 ? f >= k - 0.12 : f <= k + 0.12) break;
+      y += dir * 20;
+      if (y < 210 || y > 700) {
+        // 到屏幕边了：松一次手，从头再抓一把（见上面那段）。
+        await p10.mouse.up();
+        await p10.waitForTimeout(700);
+        y = y0;
+        await p10.mouse.move(midX, y);
+        await p10.mouse.down();
+      } else {
+        await p10.mouse.move(midX, y);
+      }
+      await p10.waitForTimeout(120);
+      f = await p10.evaluate(() => window.__focus());
+    }
+    await p10.waitForTimeout(150); // 停住：画面追齐（AXIS_SETTLE_LAMBDA）
+    const seen = await p10.evaluate(() => window.__focus());
+    await p10.mouse.up();
+    await p10.waitForTimeout(900);
+    const final = await p10.evaluate(() => window.__focus());
+    return { seen, final };
+  };
+  for (const [from, k, label] of [[0, 7, '中间那张'], [0, 13, '最后一张'], [13, 0, '第一张']]) {
+    const r = await slowTo(from, k);
+    check(
+      `慢慢拖到${label}（第 ${k} 项）、停住、松手，就停在那一张`,
+      Math.abs(r.final - k) < 0.01 && Math.abs(r.seen - k) < 0.35,
+      `松手时画面在 ${r.seen.toFixed(2)} → 停在 ${r.final.toFixed(2)}`,
+    );
+  }
+  /**
+   * 点点那条路：一帧之内就到位，一点都不慢。
+   *
+   * 一口气挪四颗点的间距（4 × RAIL_PITCH ＝ 52px），只等两帧再量。
+   */
+  const oneShot = async (x, px) => {
+    await startAt(0);
+    await p10.mouse.move(x, 450); // 同样躲开底排，见 slowTo 那段
+    await p10.mouse.down();
+    const before = await p10.evaluate(() => window.__focus());
+    await p10.mouse.move(x, 450 - px);
+    const after = await p10.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(window.__focus())))),
+    );
+    await p10.waitForTimeout(400); // 追齐之后再看一眼：这一把本来该走多远
+    const settled = await p10.evaluate(() => window.__focus());
+    await p10.mouse.up();
+    await p10.waitForTimeout(900);
+    return { before, after, settled };
+  };
+  const railShot = await oneShot(6, 4 * 13);
+  check(
+    '拨点点一比一跟手：一帧之内就到位，不慢半拍',
+    Math.abs(railShot.after - (railShot.before + 4)) < 0.15,
+    `两帧之后 ${railShot.after.toFixed(2)}（该 ${(railShot.before + 4).toFixed(2)}）`,
+  );
+  const cardShot = await oneShot(midX, 4 * 13);
+  // 反证：同样的一把，中间那条路两帧之内**只走一小截**，追齐之后才走到。两条都
+  // 瞬间到位的话，说明追赶压根没生效，上面那条就是假绿。
+  check(
+    '拖卡片是慢半拍的（同样一把，两帧之内只走一小截，追齐之后才到）',
+    cardShot.settled - cardShot.before > 0.5 && cardShot.after - cardShot.before < (cardShot.settled - cardShot.before) * 0.5,
+    `两帧后走了 ${(cardShot.after - cardShot.before).toFixed(2)} 项，追齐之后 ${(cardShot.settled - cardShot.before).toFixed(2)} 项`,
+  );
   await p10.close();
 }
 
