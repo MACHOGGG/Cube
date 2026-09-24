@@ -278,13 +278,7 @@ let page = await menuPage({ slides_played_square: '1' });
       outside: rects.some((r) => r.top < hr.top - 2 || r.bottom > hr.bottom + 2),
       hitTag: hit ? hit.className || hit.tagName : '',
       docH: document.documentElement.scrollHeight,
-      legalBottom: Math.round(
-        document.querySelector('.home-legal').getBoundingClientRect().bottom + window.scrollY,
-      ),
-      // 法务链接下面本来就该有的那一截：`.app` 给底排留的内边距（窄屏是
-      // 118px + 安全区）。把它读出来，下面那条就不用押一个写死的余量——押死的
-      // 那个数会跟着内边距、安全区、语言慢慢走散（实测正好卡在 141 : 140 上）。
-      padBottom: Math.round(parseFloat(getComputedStyle(document.querySelector('.app.home-page')).paddingBottom) || 0),
+      vh: window.innerHeight,
     };
   });
   check(
@@ -302,10 +296,18 @@ let page = await menuPage({ slides_played_square: '1' });
   // 画出去**不撑大页面**：探出去的卡如果算进可滚动区，文档会凭空高出几百像素，
   // 法务那五条就被推得更远。页面总高应该到法务链接那一排为止（加上 .app 的
   // 底部留白，给 140px 的余量）。
+  /**
+   * 画出去**不撑大页面**，而且这一页正好一屏。
+   *
+   * 轴是 overflow: clip + 一圈 220px 的 clip-margin：卡片画得到招牌和底排那两带
+   * 去，但不该把文档撑高。第五轮法务那五条从主菜单挪走之后，轴底下什么都没有
+   * 了——于是「不撑大」可以量得更死：整页高度就该等于一屏（留 8px 取整余量）。
+   * 多出来的那一截会让人以为下面还有东西，其实是空白。
+   */
   check(
-    '画出去不撑大页面（overflow: clip 那一截）',
-    look.docH <= look.legalBottom + look.padBottom + 40,
-    `文档高 ${look.docH} / 法务底 ${look.legalBottom} + 底部内边距 ${look.padBottom}`,
+    '画出去不撑大页面，整页正好一屏',
+    look.docH <= look.vh + 8,
+    `文档高 ${look.docH} / 屏高 ${look.vh}`,
   );
   /**
    * 两头那一点**虚**。
@@ -355,7 +357,10 @@ let page = await menuPage({ slides_played_square: '1' });
       [...r.querySelectorAll('.axis-dot')].map((d) => {
         const cs = getComputedStyle(d);
         const b = d.getBoundingClientRect();
-        return { w: +parseFloat(cs.width).toFixed(1), o: +(+cs.opacity).toFixed(3), cy: b.top + b.height / 2 };
+        // 量**画出来的**那个矩形，不是 computed width：点子的大小现在由
+        // transform: scale() 给（逐帧改宽高太贵，见 modeAxis 的 paint），
+        // computed width 十四颗全是 9px，照它量等于没量。
+        return { w: +b.width.toFixed(1), o: +(+cs.opacity).toFixed(3), cy: b.top + b.height / 2 };
       }),
     );
     const host = document.querySelector('.mode-axis').getBoundingClientRect();
@@ -505,57 +510,101 @@ let page = await menuPage({ slides_played_square: '1' });
 }
 await page.close();
 
-// ── 6. 首玩期轴上只有两张 ───────────────────────────────────────────
+// ── 6. 首玩期：十四张全在轴上，除了两张基础的都锁着 ────────────────
+//
+// 口径 2026-09 第五轮换过一次。上一版是「轴上只摆那两张」，玩家改成：「转盘也可
+// 以看到所有内容只是有锁而已，在基础的方块、小球玩法下面写着『我会玩』，下面是
+// 其他的玩法。玩家如果点击了『我会玩』就解锁了」。
+//
+// 所以这一节量四件事：都在、锁对了、锁着的按不动、《我会玩》排在两张基础卡后面。
 {
   const p2 = await menuPage();
   const s = await shot(p2);
-  check('首玩期轴上只摆两张', s.cards.length === 2, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
-  check('那两张就是基础方块和基础小球', s.cards.every((c) => /方块|圆球|小球/.test(c.name)), s.cards.map((c) => c.name).join(' '));
+  check('首玩期十四张全在轴上', s.cards.length === 14, `${s.cards.length} 张`);
+  const order = await p2.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    return [...host.children]
+      .filter((e) => e.classList.contains('home-icon-btn') || e.classList.contains('axis-know-how'))
+      .map((e) => ({
+        name: (e.getAttribute('aria-label') || e.textContent || '').split(' ·')[0].trim(),
+        locked: e.classList.contains('home-icon-btn--locked'),
+        skip: e.classList.contains('axis-know-how'),
+      }));
+  });
+  check('前两张是基础方块和基础小球，而且没锁',
+    order.slice(0, 2).every((o) => !o.locked) && /方块/.test(order[0].name) && /圆球|小球/.test(order[1].name),
+    order.slice(0, 2).map((o) => o.name).join(' '));
+  check('《我会玩》就排在这两张后面（第 3 项）', order[2]?.skip === true, order[2]?.name || '（没有）');
+  check('其余十二张都锁着', order.filter((o) => o.locked).length === 12, `锁着 ${order.filter((o) => o.locked).length} 张`);
+  /**
+   * 锁着的那张**按不动**。
+   *
+   * 这一条是这一轮真出过的事故：拦截那段（armFirstPlayLock）从前是靠
+   * `.home-icon-btn--glow` 认「哪几张能玩」——头一回打开的人一圈光都没有，于是
+   * 它一次都没装上，新玩家点哪张都能直接开局。所以这儿不光量「还在菜单上」，
+   * 还量「两张基础卡抖了一下」，两条一起才说明拦截真的在。
+   */
+  const blocked = await p2.evaluate(async () => {
+    const host = document.querySelector('.mode-axis');
+    const locked = [...host.children].find((e) => e.classList.contains('home-icon-btn--locked'));
+    locked.click();
+    await new Promise((r) => setTimeout(r, 400));
+    return {
+      stay: !!document.querySelector('.mode-axis'),
+      nudge: document.querySelectorAll('.home-icon-btn--nudge').length,
+    };
+  });
+  check('点锁着的那张：开不了局', blocked.stay);
+  check('点锁着的那张：两张基础卡抖一下（拦截真的装上了）', blocked.nudge === 2, `${blocked.nudge} 张`);
   check('首玩期那颗《我会玩》还在', await p2.evaluate(() => !!document.querySelector('.know-how-btn')));
   /**
-   * 它必须在**第一屏上**，而且热区只有它自己那么宽。
-   *
-   * 轴占满整屏之后，排在轴后面的它落到了屏幕外（上一版是给它在轴底下让出一截，
-   * 这一版没有「底下」可让），所以改成浮在底排上方那道缝里（modeAxis 的
-   * floatKnowHow + style.css 的 .know-how-btn--float）。两条都要量：
-   *   · 藏起来等于没有——它是「跳过引导」的唯一出口；
-   *   · 居中要靠 `left: 50%` + `translateX(-50%)`，不能靠 `left/right: 0`。后者
-   *     那颗按钮横贯整屏，屏幕底下随便点一下都算按了它，引导就这么悄悄撤了
-   *     （玩家点名不要的「意料之外的疏漏操作」）。所以同高度的最左最右各打一
-   *     下，打到的**不能**是它。
+   * 《我会玩》现在是**轴上的一项**，不是浮在底排上方的那颗了（第五轮改的：它排
+   * 在两张基础卡和其余玩法之间）。所以量的东西也跟着换：
+   *   · 它跟着轴走——绝对定位在轴里，横向居中；
+   *   · **热区只有文字那么宽**。整幅宽的话，那一行左右两截看上去空空如也，手指
+   *     落一下就把整套引导撤了（玩家点名不要的「意料之外的疏漏操作」）。同一高
+   *     度的最左最右各打一下，打到的不能是它。
    */
   const skip = await p2.evaluate(() => {
     const e = document.querySelector('.know-how-btn');
+    const host = document.querySelector('.mode-axis');
     const r = e.getBoundingClientRect();
-    const nav = document.querySelector('.home-nav')?.getBoundingClientRect() ?? null;
     const at = (x) => {
       const t = document.elementFromPoint(x, r.top + r.height / 2);
       return !!t && (t === e || e.contains(t));
     };
     return {
-      top: r.top, bottom: r.bottom, w: r.width, vh: window.innerHeight, vw: window.innerWidth,
-      navTop: nav ? nav.top : -1,
-      self: at(r.left + r.width / 2), left: at(10), right: at(window.innerWidth - 10),
+      inAxis: e.parentElement === host,
+      pos: getComputedStyle(e).position,
+      w: r.width, vw: window.innerWidth,
+      cx: r.left + r.width / 2,
+      left: at(10), right: at(window.innerWidth - 10),
     };
   });
-  check('《我会玩》整颗都在第一屏上', skip.top >= 0 && skip.bottom <= skip.vh, `${skip.top.toFixed(0)}–${skip.bottom.toFixed(0)} / 屏高 ${skip.vh}`);
-  check('《我会玩》在底排上方，不压着它', skip.navTop > 0 && skip.bottom <= skip.navTop + 1, `按钮底 ${skip.bottom.toFixed(0)} / 底排顶 ${skip.navTop.toFixed(0)}`);
-  check('《我会玩》点得着', skip.self);
-  check('《我会玩》的热区没有横贯整屏', !skip.left && !skip.right && skip.w < skip.vw * 0.7, `宽 ${skip.w.toFixed(0)} / 屏宽 ${skip.vw}`);
-  // 按下《我会玩》→ 轴当场长成 13 项
-  await p2.click('.know-how-btn');
+  check('《我会玩》是轴上的一项', skip.inAxis && skip.pos === 'absolute', `父级=${skip.inAxis ? '轴' : '别处'} / ${skip.pos}`);
+  check('《我会玩》横向居中', Math.abs(skip.cx - skip.vw / 2) < 2, `中心 ${skip.cx.toFixed(0)} / 屏心 ${skip.vw / 2}`);
+  check('《我会玩》的热区没有横贯整屏', !skip.left && !skip.right && skip.w < skip.vw * 0.5, `宽 ${skip.w.toFixed(0)} / 屏宽 ${skip.vw}`);
+  // 按下《我会玩》→ 锁全撤、那一项自己也没了
+  await p2.evaluate(() => document.querySelector('.know-how-btn').click());
   await p2.waitForTimeout(800);
   const s2 = await shot(p2);
-  check('按了《我会玩》轴长成 14 项', s2.cards.length === 14, `${s2.cards.length} 张`);
+  check('按了《我会玩》轴上还是 14 项', s2.cards.length === 14, `${s2.cards.length} 张`);
+  const after = await p2.evaluate(() => ({
+    locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
+    skip: !!document.querySelector('.axis-know-how'),
+  }));
+  // 剩下那 5 张锁是 Slides 天才那一套（老虎机 · 无限反转 · 步步为营 · 七色圆球 ·
+  // 进阶三角），和首玩期这道锁是两回事，不该被一起撤掉。
+  check('按了《我会玩》之后只剩天才那 5 把锁', after.locked === 5, `${after.locked} 把`);
+  check('《我会玩》自己也从轴上撤了', after.skip === false);
   await p2.close();
 }
 
-// ── 7. 轴从底排底下过去，但不妨碍底排和法务链接 ─────────────────────
+// ── 7. 轴从底排底下过去，但底排照样点得着 ──────────────────────────
 {
   const p3 = await menuPage({ slides_played_square: '1' });
   const geo = await p3.evaluate(() => {
     const host = document.querySelector('.mode-axis').getBoundingClientRect();
-    const legal = document.querySelector('.home-legal')?.getBoundingClientRect() ?? null;
     // 底排那一条叫 `.home-nav`（bottomNav.ts 挂在 <body> 上的 <nav>）。这儿原先
     // 猜的是 `.bottom-nav`，全站没有这个类名，于是 navTop 恒为 -1，下面那条
     // 「底排不被压住」被 if 整条跳过——门是绿的，量的是空气。同一个错的类名当时
@@ -581,7 +630,7 @@ await page.close();
       .map((e) => e.getBoundingClientRect());
     return {
       hostBottom: host.bottom,
-      legalTop: legal?.top ?? -1, legalBottom: legal?.bottom ?? -1,
+      hasLegal: !!document.querySelector('.home-legal'),
       navTop: nav?.top ?? -1,
       navH: nav?.height ?? 0,
       dockBlocked: dockHits.filter((h) => !h.hit).map((h) => h.label),
@@ -594,51 +643,17 @@ await page.close();
     };
   });
   /**
-   * 法务那五条链接：在轴下面，而且**第一屏看不见**——要往下滑才露出来。
+   * 主菜单上**不再有**法务那五条链接。
    *
-   * 玩家 2026-09 第二轮：「不要一直展示在屏幕的下方……放在最底下就是只有滑到最
-   * 最最底下的时候才能看到」。它们不能删（收单方的审核要在落地页上找得到，见
-   * menu.ts 那段注释），所以做成普通网站页脚的样子。
+   * 玩家 2026-09 第五轮：「主页省略下方的价格、法律等部分，只留在个人主页的部
+   * 分」。（宽版本来就不摆，所以这一改之后宽窄一个样。）它们没有消失：个人主页
+   * 最底下那五行、以及 /pricing /terms /refund /privacy /contact 五个真网址都还
+   * 在——那一半由 check-legal-pages 和 check-creem-review 守着，不在这道门里。
    *
-   * 两条一起量，缺一条就成了假绿：只量「在第一屏外」的话，把它们整个删掉也通过；
-   * 只量「滑到底看得见」的话，挂在屏幕下方也通过。
+   * 这儿只量「主菜单上没有了」，外加下面那条「整页正好一屏」——两条合起来才是
+   * 玩家要的那个样子：滑到底也没有多出来的一截。
    */
-  check(
-    '法务五条在轴下面，而且第一屏之外（不再一直挂在屏幕下方）',
-    geo.legalTop >= geo.hostBottom - 1 && geo.legalTop >= geo.vh - 1,
-    `轴底 ${geo.hostBottom.toFixed(0)} / 链接顶 ${geo.legalTop.toFixed(0)} / 屏高 ${geo.vh}`,
-  );
-  {
-    const bottom = await p3.evaluate(async () => {
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await new Promise((r) => setTimeout(r, 400));
-      const legal = document.querySelector('.home-legal').getBoundingClientRect();
-      const nav = document.querySelector('.home-nav')?.getBoundingClientRect() ?? null;
-      const links = [...document.querySelectorAll('.home-legal a')].map((a) => {
-        const r = a.getBoundingClientRect();
-        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        return { text: a.textContent.trim(), hit: !!el && (el === a || a.contains(el)) };
-      });
-      return {
-        scrollable: document.documentElement.scrollHeight > window.innerHeight + 4,
-        top: legal.top, bottom: legal.bottom, vh: window.innerHeight,
-        navTop: nav?.top ?? -1,
-        blocked: links.filter((l) => !l.hit).map((l) => l.text),
-        n: links.length,
-      };
-    });
-    check('这一页滑得动（不然那五条永远到不了）', bottom.scrollable);
-    check(
-      '滑到底之后五条整个在屏幕里',
-      bottom.top >= -1 && bottom.bottom <= bottom.vh + 1,
-      `${bottom.top.toFixed(0)}–${bottom.bottom.toFixed(0)} / 屏高 ${bottom.vh}`,
-    );
-    check(
-      '滑到底之后五条都点得着（没被底排压住）',
-      bottom.n === 5 && bottom.blocked.length === 0,
-      bottom.blocked.length ? `点不着：${bottom.blocked.join(' ')}` : `${bottom.n} 条都点得着`,
-    );
-  }
+  check('主菜单上没有法务那五条了', geo.hasLegal === false);
   /**
    * 轴现在是 `overflow: clip` + 一圈 clip-margin：**画得出去**（卡片要从招牌和
    * 底排底下滑过），但不建滚动容器、不撑大页面。

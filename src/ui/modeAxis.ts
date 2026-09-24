@@ -70,10 +70,19 @@ const PARAMS: FisheyeParams = {
   // 上——撞上的后果不是难看，是**点错**（两张卡的热区叠在一起）。按最紧那一对
   // 算：半高 123×1.40/2 = 86.1 加 123×1.124/2 = 69.1 ＝ 155.2，而那一段的间距是
   // 126 + 56×0.857 = 174.0，留 18.8px。门 check-mode-axis 逐对量这件事。
-  minScale: 0.8,
-  maxScale: 1.4,
-  minGap: 126,
-  maxGap: 182,
+  //
+  // 第四轮之后玩家还要更大的落差：「整体大小差异再大一点，中线（被选中）的最大
+  // 的尺寸还要再放大一些」。于是 0.80–1.40 再拉到 0.72–1.60（一大一小差 2.2
+  // 倍），图本身也从 100 收到 112（style.css 的 --axis-art）。
+  //
+  // 间距跟着一起放，否则焦点那张一胀就压上邻居。按最紧那一对算（一站 112 + 小字
+  // 23 = 135）：焦点半高 135×1.60/2 = 108.0，邻居 scale 1.195 半高 80.7，合
+  // 188.7；那一段的间距是 150 + 60×0.857 = 201.4，留 12.7px。门 check-mode-axis
+  // 逐对量这件事，改这几个数之前先跑它。
+  minScale: 0.72,
+  maxScale: 1.6,
+  minGap: 150,
+  maxGap: 210,
   lockRadius: 0.22,
 };
 
@@ -128,8 +137,19 @@ const GAIN_KNEE = 130;
  * 当时的倍率折算成轴上的像素加进去。见 onMove。
  */
 const SLOW_K = 0.75;
-const V_SLOW = 0.35;
-const V_FAST = 1.6;
+/**
+ * 两档的分界线，2026-09 第五轮重新标过。
+ *
+ * 原先是 0.35 / 1.6 px/ms。玩家试下来「点点快速滑动……敏感度并没有很高」——量了
+ * 一下才明白：手机上一次「轻甩」也就 0.6–1.2 px/ms，1.6 这条线几乎够不着，于是
+ * 快滑那一档形同虚设，他感觉到的永远是慢档那 0.75 折。
+ *
+ * 现在 0.22 / 0.85：轻轻一甩就到顶。而且顶上那一档不再只是「不打折」，是 FAST_K
+ * 倍——同样的位移，甩过去要比慢慢拖多走六成，差别才摆得出来。
+ */
+const V_SLOW = 0.22;
+const V_FAST = 0.85;
+const FAST_K = 1.6;
 /**
  * 速度要先过一道低通再拿去挑档。
  *
@@ -304,7 +324,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     host.style.marginTop = -Math.round(hr.top + window.scrollY) + 'px';
     if (cards[0]) stationH = Math.max(60, cards[0].offsetHeight);
     floatKnowHow();
-    pushLegal();
   }
 
   /**
@@ -332,34 +351,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   /**
-   * 把法务那五条链接推到第一屏**外面**。
-   *
-   * 轴现在占满整屏（上面那段），紧跟在它后面的那五条链接本来就落在视口底边以
-   * 下了，所以多数时候这儿补的是 0。留着它是因为「多数时候」不等于「永远」：
-   * 轴有个 260px 的下限（屏幕极矮、或者被容器切过的时候会用到），那时候链接又
-   * 会浮上来。玩家 2026-09 第二轮要的是「不要一直展示在屏幕的下方……只有滑到最
-   * 最最底下的时候才能看到」，这一句就是那条要求的兜底。
-   *
-   * 为什么是量出来的而不是写死一个数：这一截等于「底排有多高」加「轴和页脚之
-   * 间本来的那些间距」，两样都跟着安全区、字号、语言变。先把内联的外边距清掉
-   * 量它的静止位置（`''` 会退回 style.css 里那条 26px），再按差值补。用文档坐
-   * 标（rect + scrollY）比视口坐标稳——measure() 也会在页面已经滑下去之后跑。
-   * 静止的那一截也是**读出来的**（清掉内联样式之后问 getComputedStyle），不在这
-   * 儿再抄一份 26px：抄了就会跟 style.css 走散。
-   *
-   * 这几条不能删：收单方的审核要在落地页上找得到（见 menu.ts 那段注释）。
-   */
-  function pushLegal(): void {
-    const legal = document.querySelector<HTMLElement>('.home-legal');
-    if (!legal) return;
-    legal.style.marginTop = '';
-    const rest = parseFloat(getComputedStyle(legal).marginTop) || 0;
-    const docTop = legal.getBoundingClientRect().top + window.scrollY;
-    const push = Math.ceil(window.innerHeight + 8 - docTop);
-    if (push > 0) legal.style.marginTop = rest + push + 'px';
-  }
-
-  /**
    * 上一帧给每张卡写过的那几样。
    *
    * 逐帧无脑写 style 是这条轴「很卡」的一半原因：一次 paint 要动 13 张卡 × 5 个
@@ -374,6 +365,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     if (destroyed || n === 0) return;
     const L = fisheye(n, focus, params());
     const edge = hostH / 2;
+    // 正在动吗？两头那一点虚只在停稳之后给（见下面那段），滑动中一律不写
+    // filter。
+    const still = !dragging && !springing;
     for (const s of L.slots) {
       const el = cards[s.index];
       const prev = lastPaint[s.index];
@@ -417,36 +411,52 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       const pe = far > edge + stationH * 1.5 ? 'none' : '';
       if (pe !== prev.pe) { el.style.pointerEvents = pe; prev.pe = pe; }
       /**
-       * 上下两头那一点**虚**（出处和两个数在 BLUR_EDGE 上面）。
+       * 上下两头那一点**虚**（出处和两个数在 BLUR_EDGE 上面）——**只在停稳之后
+       * 给，手指一碰就全撤掉**。
+       *
+       * 第四轮是一直给着的，玩家第五轮报「滑动转盘不够丝滑现在还是卡卡的」。
+       * `filter: blur()` 是这条轴上最贵的一样东西：每变一次就要把那张卡连同里面
+       * 那张 SVG 重新栅格化一遍，手机上一次滑动里有四五张卡在虚着，每张又要改好
+       * 几档——帧全花在这儿了。
+       *
+       * 而它本来就是给「停着看」的一个交代（两头不是被切掉，是化开了）。滑动中
+       * 那一眼没人盯着两头，所以这一版：`dragging || springing` 的时候一律清空，
+       * 停稳那一刻再补一次 paint 把它加回来（见 settled）。滑动时一次 filter 都
+       * 不写。
        *
        * 量的是「这张卡的中心离最近的那条屏幕边还有多远」——轴的盒子就是视口，所
-       * 以 `半高 − |位移|` 正好是这个距离。越近越虚，越过边之后一律 BLUR_MAX。
-       *
-       * 写之前先量化成 0.5px 一档：`filter` 每变一次都要重新栅格化那张卡（还是走
-       * 软件光栅化那条路），逐帧改就是逐帧重画 13 张 SVG。量化之后一次滑动里每张
-       * 卡只写那么五六次。0 的时候写空串退回 CSS，不是写 `blur(0px)`——留着一个
-       * 空的 filter 也会让这张卡一直待在「有滤镜」那条慢路上。
+       * 以 `半高 − |位移|` 正好是这个距离。写之前量化成 0.5px 一档，理由同上。
        */
       const room = edge - Math.abs(s.at);
-      const raw = room >= BLUR_EDGE ? 0 : BLUR_MAX * Math.min(1, (BLUR_EDGE - room) / BLUR_EDGE);
+      const raw =
+        !still || room >= BLUR_EDGE
+          ? 0
+          : BLUR_MAX * Math.min(1, (BLUR_EDGE - room) / BLUR_EDGE);
       const q = Math.round(raw * 2) / 2;
       const f = q > 0 ? `blur(${q}px)` : '';
       if (f !== prev.f) { el.style.filter = f; prev.f = f; }
 
-      // 点点轴：按**项**等距排，不跟着卡片的形变走——它量的是「第几项」，中间那
-      // 颗永远对着当前选中的那张。
+      /**
+       * 点点轴：按**项**等距排，不跟着卡片的形变走——它量的是「第几项」，中间那
+       * 颗永远对着当前选中的那张。
+       *
+       * 大小用 `transform: scale()`，**不改 width/height**。这是第五轮那条「还是
+       * 卡卡的」的另一半：两条轴一共 28 颗点，逐帧改宽高就是逐帧让浏览器重新排
+       * 版 28 次——排版是整棵树的事，比画 13 张卡还贵。scale 只走合成，一行都不
+       * 重排。点子在 CSS 里就是最大的那个尺寸（RAIL_DOT_MAX），这儿只往下缩。
+       */
       const k = s.index - L.lockedFocus;
       const dotA = Math.max(0, Math.min(1, (RAIL_SPAN - Math.abs(k)) / 1.6)) *
         (0.28 + 0.72 * s.inf);
       const size = RAIL_DOT_MIN + (RAIL_DOT_MAX - RAIL_DOT_MIN) * s.inf;
-      const dt = `translate3d(-50%,-50%,0) translateY(${(k * RAIL_PITCH).toFixed(2)}px)`;
-      const key = `${dt}|${size.toFixed(2)}|${dotA.toFixed(3)}`;
+      const dt =
+        `translate3d(-50%,-50%,0) translateY(${(k * RAIL_PITCH).toFixed(2)}px)` +
+        ` scale(${(size / RAIL_DOT_MAX).toFixed(3)})`;
+      const key = `${dt}|${dotA.toFixed(3)}`;
       if (key !== lastDot[s.index]) {
         lastDot[s.index] = key;
         for (const dot of [railL.dots[s.index], railR.dots[s.index]]) {
           dot.style.transform = dt;
-          dot.style.width = size.toFixed(1) + 'px';
-          dot.style.height = size.toFixed(1) + 'px';
           dot.style.opacity = dotA.toFixed(3);
         }
       }
@@ -505,9 +515,15 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     if (!raf && !destroyed) raf = requestAnimationFrame(loop);
   }
 
-  /** 停稳那一刻。reduced-motion 下的唯一一声就在这儿。 */
+  /**
+   * 停稳那一刻。reduced-motion 下的唯一一声就在这儿。
+   *
+   * 还要再画一次：两头那一点虚是「停着才给」的（见 paint），而最后那一帧是在
+   * `springing` 还为真的时候画的——不补这一次，轴停下来了却一直不虚。
+   */
   function settled(): void {
     if (reducedMotion()) tick();
+    paint();
   }
 
   /**
@@ -565,8 +581,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
 
   function speedK(v: number): number {
     if (v <= V_SLOW) return SLOW_K;
-    if (v >= V_FAST) return 1;
-    return SLOW_K + (1 - SLOW_K) * ((v - V_SLOW) / (V_FAST - V_SLOW));
+    if (v >= V_FAST) return FAST_K;
+    return SLOW_K + (FAST_K - SLOW_K) * ((v - V_SLOW) / (V_FAST - V_SLOW));
   }
 
   /** 轴上走了这么多像素之后，焦点落在第几项（可以是小数）。 */
@@ -650,7 +666,11 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     const dt = Math.max(1, e.timeStamp - lastT);
     lastY = e.clientY;
     lastT = e.timeStamp;
-    vel = vel * (1 - V_SMOOTH) + (Math.abs(seg) / dt) * V_SMOOTH;
+    // 第一条 move 不做平滑，直接就是它自己：低通从 0 起步的话，一次「轻甩」总
+    // 共也就五六条事件，等它爬上来手指已经离开屏幕了——这正是玩家说的「快速滑
+    // 动敏感度并没有很高」的另一半原因。
+    const now = Math.abs(seg) / dt;
+    vel = vel === 0 ? now : vel * (1 - V_SMOOTH) + now * V_SMOOTH;
     axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel);
     focus = clampRubber(focusFromAxis(axisPx));
     // 一帧只画一次。pointermove 在手机上一秒能来一百多条（而且 iOS 会把两三条

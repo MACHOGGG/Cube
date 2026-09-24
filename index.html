@@ -8,7 +8,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#BE5762" />
+  <!-- 手机上这一支不是「装饰色」：iOS Safari 和 Android Chrome 拿它给地址栏
+       那一带（刘海底下那条）上色。原先写的是强调色 #BE5762，于是竖屏手机一打开
+       就顶着一条粉红的横带，从开场动画那一刻起就在（玩家 2026-09 报的）。改成页
+       面自己的米白，那条带子和页面连成一片，等于看不见。
+       深紫那一套是 Slides 天才的开关（engine/themePref.ts），暂时不给它单配一支
+       ——media="(prefers-color-scheme: dark)" 跟的是系统而不是我们这个开关，配上
+       反而会在米白界面上顶一条深色带。 -->
+  <meta name="theme-color" content="#FAF6EC" />
   <meta name="description" content="Slides：拖动整行整列或整条斜线，拼出同色图案的益智消除游戏。" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <!-- The default icon's own files. applyAppIcon() swaps all three of these

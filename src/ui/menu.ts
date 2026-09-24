@@ -2,7 +2,6 @@ import type { ShapeCardMeta } from '../shapes/types';
 import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
 import { GENIUS_LAYOUTS, isLayoutLocked } from '../engine/geniusContent';
-import { LEGAL, LEGAL_ORDER, LEGAL_PATH } from '../legal';
 import { isGenius } from '../engine/subscription';
 import { shapeName } from './shapeLabels';
 import { menuTag } from './menuTags';
@@ -189,7 +188,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const wide = window.matchMedia(WIDE_QUERY).matches;
 
   container.innerHTML = `
-    <div class="app home-page${wide ? ' home-page--wide' : ''}">
+    <div class="app home-page${wide ? ' home-page--wide' : ''}${wide ? '' : ' home-page--axis'}">
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
@@ -197,15 +196,24 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         </div>
       </header>
       <div class="home-grid" id="homeGrid"></div>
-      <!-- 五份法务文档的常驻入口。它们在个人主页里也有一份（点开是弹窗），
-           这里摆的是真链接：收单方的审核要能从落地页一眼看见、点得进去，也
-           要有个网址能填进后台的表格——弹窗给不了网址。静态页由
-           scripts/build-legal.mjs 从同一份 src/legal.ts 生成，两处文案不会分叉。 -->
-      <footer class="home-legal">
-        ${LEGAL_ORDER.map(
-          (k) => `<a href="${LEGAL_PATH[k]}">${LEGAL[lang][k].title}</a>`,
-        ).join('')}
-      </footer>
+      <!--
+        法务那五条链接**不在这一页**了（玩家 2026-09：「主页省略下方的价格、法律
+        等部分，只留在个人主页的部分」）。
+
+        宽版本来就不摆（style.css 里那条 .home-page--wide .home-legal 是 display:
+        none——电脑端一屏排不下），所以这一改之后窄版和宽版是同一个样子：主菜单上
+        只有玩法。
+        （这段注释在模板字符串里，所以不能用反引号包代码——用了会把整个字符串截
+        断，tsc 报的是莫名其妙的「缺少 ;」。）
+
+        **它们没有消失，只是挪了个地方**，三条路都还在：
+          · 个人主页最底下那五行（accountPage.ts，点开是弹窗）；
+          · /pricing /terms /refund /privacy /contact 五个真网址（静态页由
+            scripts/build-legal.mjs 从 src/legal.ts 生成，填得进收单方后台的表格）；
+          · 五张静态页彼此的页脚互相链着。
+        收单方的审核从前是在落地页上找它们的——这一条是玩家权衡过的，记在这儿，
+        万一哪天审核又问起，知道去哪儿把它加回来。
+      -->
     </div>
   `;
   // 卡底下那行小字，宽窄两版都给。宽屏那三排要站在一屏里，多出来的这一行高
@@ -512,34 +520,55 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 老虎机 · 无限反转 · 七色圆球 · V 型三角，就是它们被攒起来的次序。
   for (const btn of geniusTail) place(btn);
 
-  if (handlers.firstPlayLock) {
-    if (!onAxis) armFirstPlayLock(grid);
-    // 《我会玩》摆在整张菜单的**下方**（玩家原话「新手检测拦截的下方」），不是
-    // 塞在卡片之间：它不是一个玩法，不该和那十三张卡排在同一条链上。
-    //
-    // 插在 .home-grid 之后、.home-legal 之前——法务那五条链接得留在最底下（收单
-    // 方的审核要一眼看见），所以不能直接 append 到页面末尾。
-    //
-    // **这一段必须排在 mountModeAxis 前面。** 轴的高度是它自己量出来的「从我这儿
-    // 到底排还剩多少」，量的时候会把这颗按钮那一截让出来（见 modeAxis 的
-    // measure）——先挂轴再插按钮的话，轴量到的是「底下什么都没有」，铺满整屏，
-    // 按钮被顶到屏幕外面去（实测 top 839 / 屏高 844，只露出一条边）。而它是
-    // 「跳过引导」的唯一出口，藏起来等于没有。
-    const legal = container.querySelector('.home-legal');
+  /**
+   * 首玩期的《我会玩》。
+   *
+   * 宽版（电脑、横屏手机）摆在整张菜单的**下方**——它不是一个玩法，不该和那十
+   * 几张卡排在同一条链上。窄版那一路不走这儿：轴上它是链条里的一环，见下面
+   * mountModeAxis 那一段。
+   */
+  if (handlers.firstPlayLock && !onAxis) {
+    armFirstPlayLock(grid);
     const btn = knowHowButton(lang, () => handlers.onKnowHow?.());
-    if (legal) legal.parentElement?.insertBefore(btn, legal);
-    else grid.parentElement?.appendChild(btn);
+    grid.parentElement?.appendChild(btn);
   }
 
   if (onAxis) {
-    // 首玩期只摆那两张：轴上滑不到别的地方去，就不需要「按了不给进」这种反馈了
-    // （玩家在两个选项里挑的就是这一个）。所以这一路不装 armFirstPlayLock。
-    const shown = handlers.firstPlayLock
-      ? axisCards.filter((c) => c.dataset.firstPlayable === '1')
-      : axisCards;
-    axisFocus = Math.min(axisFocus, Math.max(shown.length - 1, 0));
+    /**
+     * 首玩期的轴：**十四张全摆出来，只是除了两张基础的以外都挂着锁**。
+     *
+     * 玩家 2026-09 第五轮改的口径：「对于检测到的初始玩家来说，转盘也可以看到所
+     * 有内容只是有锁而已，在基础的方块、小球玩法下面写着『我会玩』，下面是其他
+     * 的玩法。玩家如果点击了『我会玩』就解锁了」。
+     *
+     * 上一版是「轴上只摆那两张」——滑不到别处去，新玩家也就看不见这游戏里到底
+     * 有什么。现在能看见、能滑过去，只是按不动（锁着那几张走 armFirstPlayLock
+     * 那条捕获阶段的拦截：抖一下、光更亮一档，不开局）。
+     *
+     * 《我会玩》就排在两张基础卡后面、其余玩法前面——它是「我不用学，全给我打
+     * 开」的那个闸，位置正好在能玩的和锁着的之间。它跟着轴一起形变、一起滑，所
+     * 以直接当成轴上的一项交给 mountModeAxis（轴只管把元素摆到算出来的位置上，
+     * 不要求每一项都是一张卡）。
+     */
+    let entries: HTMLElement[] = axisCards;
+    if (handlers.firstPlayLock) {
+      armFirstPlayLock(
+        grid,
+        axisCards.filter((c) => c.dataset.firstPlayable === '1'),
+      );
+      let after = -1;
+      for (let i = 0; i < axisCards.length; i++) {
+        if (axisCards[i].dataset.firstPlayable === '1') after = i;
+        else axisCards[i].classList.add('home-icon-btn--locked');
+      }
+      const skip = knowHowButton(lang, () => handlers.onKnowHow?.());
+      skip.classList.add('axis-know-how');
+      entries = axisCards.slice();
+      entries.splice(after + 1, 0, skip);
+    }
+    axisFocus = Math.min(axisFocus, Math.max(entries.length - 1, 0));
     mountModeAxis(grid, {
-      cards: shown,
+      cards: entries,
       initial: axisFocus,
       onFocus: (i) => {
         axisFocus = i;
@@ -558,8 +587,23 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
  * 被拦下来的那一下不是「没反应」：两张基础卡抖一下、光更亮一档；他按的那张要
  * 是在两张卡下面，就在那儿冒一个小圆角箭头指他往上滑。
  */
-function armFirstPlayLock(grid: HTMLElement): void {
-  const basics = Array.from(grid.querySelectorAll<HTMLElement>('.home-icon-btn--glow'));
+function armFirstPlayLock(grid: HTMLElement, given?: HTMLElement[]): void {
+  /**
+   * 「能玩的那几张」由调用方点名（`given`），认不到才去 grid 里找。
+   *
+   * 这儿栽过两次，都是同一个毛病——**去问 DOM「哪几张能玩」，而问的时机不对**：
+   *
+   *   · 原先找的是 `.home-icon-btn--glow`。光是**引导**加的（打完第一局才给某一
+   *     张镶上），和「这一张现在能不能点」是两件事；真正头一回打开的人一圈光都
+   *     没有，`basics.length === 0` 当场 return，整道拦截一次都没装上。
+   *   · 改成找 `[data-first-playable]` 之后，轴那一路还是空的：轴上的卡这会儿还
+   *     在 axisCards 那个数组里，要等 mountModeAxis 才进 grid。
+   *
+   * 所以现在不猜了：谁造的卡谁最清楚，直接把那两张传进来。
+   */
+  const basics = given?.length
+    ? given
+    : Array.from(grid.querySelectorAll<HTMLElement>('[data-first-playable="1"]'));
   if (!basics.length) return;
   let hint: HTMLElement | null = null;
   let off = 0;

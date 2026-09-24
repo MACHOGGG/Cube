@@ -85,63 +85,78 @@ let page = await freshPage(ctx);
     const b = document.querySelector('.know-how-btn');
     const r = b?.getBoundingClientRect();
     const glow = document.querySelectorAll('.home-icon-btn--glow').length;
-    return { text: b?.textContent?.trim() || '', h: r?.height || 0, w: r?.width || 0, top: r?.top ?? -1, glow };
+    // 轴上这一项是被鱼眼缩放过的，屏幕上的高度＝版面高度 × 这一帧的 scale。量
+    // 「热区够不够 44px」要看**版面**高度：它离中线远的时候本来就该小一圈，滑到
+    // 中线上又会胀到 44×1.6。除掉 scale 才是那个不变量。
+    const sc = Number((b?.style.transform.match(/scale\(([\d.]+)\)/) || [0, '1'])[1]) || 1;
+    return {
+      text: b?.textContent?.trim() || '',
+      h: (r?.height || 0) / sc, w: (r?.width || 0) / sc, scale: sc,
+      top: r?.top ?? -1, glow,
+    };
   });
   check('新人的主菜单上有《我会玩》', seen.text === '我会玩', JSON.stringify(seen.text));
-  check('热区不小于 44px（看着小，按着不小）', seen.h >= 44, `${seen.h.toFixed(1)}px 高 × ${seen.w.toFixed(1)}px 宽`);
+  check('热区不小于 44px（看着小，按着不小）', seen.h >= 44, `版面 ${seen.h.toFixed(1)}px 高 × ${seen.w.toFixed(1)}px 宽（这一帧 scale ${seen.scale}）`);
   check('这时候两张基础卡还镶着光', seen.glow === 2, `${seen.glow} 张`);
 
   /**
-   * 它摆在整张菜单的**下方**，而且在法务那五条链接**之上**——那五条要留在最底下
-   * （收单方的审核要一眼看见）。
+   * 它在轴上的**位置**：两张基础卡之后、其余玩法之前。
    *
-   * 「下方」怎么量，2026-09 第四轮换过一次口径。从前量的是「按钮的上沿在
-   * `.home-grid` 的下沿之下」；那时候菜单这一格只占屏幕中间一截，量它的盒子就够
-   * 了。现在窄屏这一格是鱼眼轴，**整块屏幕都是它的盒子**（玩家：「鱼眼转盘的范围
-   * 一直从头到尾延伸」），按钮浮在底排上方那道缝里——盒子这个口径于是永远为假，
-   * 量的不再是玩家在意的那件事。
+   * 口径 2026-09 第五轮定的（玩家原话：「在基础的方块、小球玩法下面写着『我会
+   * 玩』，下面是其他的玩法」）。前两轮它先是页面下方的一颗按钮、又是浮在底排上
+   * 方的一颗；现在它是**链条里的一环**，所以量的是「第几项」，不再是「在谁下面
+   * 多少像素」——轴上每一项的屏幕位置随时在变，量像素等于量这一帧的运气。
    *
-   * 玩家在意的是「它在那几张卡底下、不和卡抢地方」。所以改成量**卡片**：屏幕上看
-   * 得见的每一张卡，下沿都要在这颗按钮的上沿之上。轴那一路还多量一条「浮着」，
-   * 免得哪天它又掉回文档流里、被顶出第一屏（那是它上一次差点消失的原因）。
+   * 热区那一条（上面）和「按下去解锁」那一条（下面）没变：它仍然是跳过引导的唯
+   * 一出口。
    */
   const order = await page.evaluate(() => {
+    const host = document.querySelector('.home-grid');
     const b = document.querySelector('.know-how-btn');
-    const legal = document.querySelector('.home-legal');
-    const grid = document.querySelector('.home-grid');
-    if (!b || !legal || !grid) return null;
-    const br = b.getBoundingClientRect();
-    const cards = [...grid.children]
-      .filter((e) => e.classList.contains('home-icon-btn'))
-      .map((e) => e.getBoundingClientRect())
-      .filter((r) => r.bottom > 0 && r.top < window.innerHeight);
+    if (!host || !b) return null;
+    const items = [...host.children].filter(
+      (e) => e.classList.contains('home-icon-btn') || e.classList.contains('axis-know-how'),
+    );
     return {
-      onAxis: grid.classList.contains('mode-axis'),
-      floating: getComputedStyle(b).position === 'fixed',
-      inScreen: br.top >= 0 && br.bottom <= window.innerHeight,
-      belowCards: cards.length > 0 && cards.every((r) => r.bottom <= br.top + 1),
-      lowestCard: cards.length ? Math.max(...cards.map((r) => r.bottom)).toFixed(0) : 'none',
-      btnTop: br.top.toFixed(0),
-      aboveLegal: br.bottom <= legal.getBoundingClientRect().top + 1,
+      onAxis: host.classList.contains('mode-axis'),
+      at: items.indexOf(b),
+      before: items.slice(0, items.indexOf(b)).map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+      afterLocked: items
+        .slice(items.indexOf(b) + 1)
+        .every((e) => e.classList.contains('home-icon-btn--locked')),
+      inAxis: b.parentElement === host,
     };
   });
-  check(
-    '摆在那几张卡下面、法务链接之上',
-    order?.belowCards === true && order?.aboveLegal === true,
-    `最低那张卡底 ${order?.lowestCard} / 按钮顶 ${order?.btnTop}`,
-  );
-  check('整颗都在第一屏上（藏起来等于没有）', order?.inScreen === true, JSON.stringify(order?.inScreen));
+  check('《我会玩》排在两张基础卡之后（第 3 项）', order?.at === 2, `第 ${(order?.at ?? -1) + 1} 项，前面是 ${order?.before.join(' ')}`);
+  check('它后面那些玩法这会儿都锁着', order?.afterLocked === true);
   if (order?.onAxis) {
-    check('鱼眼轴那一路：它是浮在轴上面的', order?.floating === true, `position: ${order?.floating ? 'fixed' : '不是 fixed'}`);
+    check('鱼眼轴那一路：它就住在轴上（跟着一起滑）', order?.inAxis === true);
   }
 
-  // 拦着：按一张不该点的卡，不会开局。
-  //
-  // 轴上这会儿根本没有第三张卡（首玩期只摆基础方块和基础小球），所以先把这件事
-  // 量出来再去按——不然「按不开」这一条会在卡片压根不存在时自动通过，量的是空
-  // 气。两样都要：卡不在是**这一版**的拦法，按不开是**这一条**要保的结果。
+  /**
+   * 拦着：按一张不该点的卡，不会开局。
+   *
+   * 这一条的口径也是第五轮换的。上一版轴上只摆那两张，所以量的是「别的玩法根本
+   * 不在菜单上」；现在**全摆出来了，只是挂着锁**（玩家：「转盘也可以看到所有内容
+   * 只是有锁而已」）。于是两样都要量：它在（找得到、有锁），以及按下去开不了局。
+   *
+   * 少了前一半，「按不开」会在卡片压根不存在时自动通过，量的是空气；少了后一
+   * 半，锁就只是一张图。
+   */
+  const lockedCard = await page.evaluate(() => {
+    // **直接子元素**，不是后代：炸弹那张卡里嵌着九颗小片，其中一颗的名字也叫
+    // 「进阶炸弹 · 菱形方块」——按后代找会先撞上它（它是画不是控件，自然没有
+    // 锁），于是这一条会莫名其妙地红。
+    const host = document.querySelector('.home-grid');
+    const el = [...host.children].find(
+      (e) =>
+        e.classList.contains('home-icon-btn') &&
+        (e.getAttribute('aria-label') || '').includes('菱形方块'),
+    );
+    return el ? { there: true, locked: el.classList.contains('home-icon-btn--locked') } : { there: false };
+  });
+  check('首玩期别的玩法也摆在菜单上，只是挂着锁', lockedCard.there === true && lockedCard.locked === true, JSON.stringify(lockedCard));
   const reachable = await clickCard(page, '菱形方块');
-  check('首玩期别的玩法根本不在菜单上', reachable === false);
   await page.waitForTimeout(900);
   const stillMenu = await page.evaluate(() => !!document.querySelector('.home-grid'));
   check('按别的玩法开不起来（锁在拦着）', stillMenu);
@@ -149,7 +164,10 @@ let page = await freshPage(ctx);
 
 // ── 2. 按下去：锁、光、按钮自己，一起撤掉 ────────────────────────────
 {
-  await page.click('.know-how-btn');
+  // 轴上那一项多半在屏幕外（它是第 3 项），Playwright 的 click 会等它「进视口」
+  // 然后超时。轴不是滚动容器，滚不出来——直接派发一次 click，和玩家滑过去按那一
+  // 下是同一条路。
+  await page.evaluate(() => document.querySelector('.know-how-btn').click());
   await page.waitForTimeout(700);
   const after = await page.evaluate(() => ({
     btn: !!document.querySelector('.know-how-btn'),
@@ -253,7 +271,7 @@ if (XHS) {
   check('小红书版热区不小于 44px', shot.h >= 44, `${shot.h.toFixed(1)}px`);
   check('小红书版这时候确实压着暗（拦截在生效）', dim0 > 0, `${dim0} 张`);
   if (shot.text === '我会玩') {
-    await p3.click('.know-how-btn');
+    await p3.evaluate(() => document.querySelector('.know-how-btn').click());
     await p3.waitForTimeout(800);
     const after = await p3.evaluate(() => ({
       btn: !!document.querySelector('.know-how-btn'),

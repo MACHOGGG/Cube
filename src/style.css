@@ -1146,9 +1146,12 @@ button:hover { filter: brightness(1.05); }
    宽度随图形自己的比例走」：图一律 112px 高，宽的宽、窄的窄，但每一站一样高。
    check-mode-axis 逐对量这件事。 */
 .mode-axis {
-  /* 一站的图多高。2026-09 第二轮按效果图从 112 收到 100——理由和间距一起记在
-     ui/modeAxis.ts 的 PARAMS 上面（一屏要看得见四张）。 */
-  --axis-art: 100px;
+  /* 一站那个**正方格**有多大。图一律装进这个格子里（下面那条），所以它同时是
+     「最小」和「最大」的基准：十四张图在轴上占的地方一样大，差别只由鱼眼的
+     scale 给（0.72–1.60，见 ui/modeAxis.ts 的 PARAMS）。
+     2026-09 第二轮从 112 收到 100，第五轮又回到 112——玩家要「整体大小差异再大
+     一点，中线那张再放大一些」。 */
+  --axis-art: 112px;
   position: relative;
   /* 覆盖 .home-grid 的 flex 列：卡片是绝对定位的，容器不需要排它们。 */
   display: block;
@@ -1169,11 +1172,13 @@ button:hover { filter: brightness(1.05); }
    *
    * 三条合起来才成立：
    *
-   *   · `overflow: clip` + `overflow-clip-margin` —— 画得出自己的盒子（够到招牌
-   *     和底排那两带），但**不撑大页面的可滚动区**。这一条要紧：绝对定位的卡片
-   *     在 `overflow: visible` 下会把文档撑高几百像素，法务那五条就被推得更远，
-   *     「滑到底」要多滑一屏。220px 是量出来的——招牌高约 140、底排约 100，两头
-   *     各留一张卡还够，再远的本来就在屏幕外了。
+   *   · `overflow: clip` —— 画不出自己的盒子，但**也不撑大页面的可滚动区**（绝
+   *     对定位的卡片在 `overflow: visible` 下会把文档撑高几百像素）。
+   *     从前这儿还跟着一圈 `overflow-clip-margin: 220px`：那是轴比屏幕矮的时代
+   *     留下的——卡片得画到盒子外面去，才够得着招牌和底排那两带。第四轮轴占满
+   *     整屏之后，招牌和底排本来就在盒子**里面**，那一圈余量于是只剩坏处：它
+   *     **算进可滚动区**，整页凭空高出 220px，滑到底是一片空白（实测文档高
+   *     1064 / 屏高 844）。所以撤掉。
    *   · `overflow: hidden` 写在前面**是给老内核兜底的**（Chrome 61 不认 clip，
    *     整条丢掉之后回到 hidden：切在边上，不好看但不塌）。顺序不能反。
    *   · `z-index: 0` 建一个层叠上下文，把整条轴连同它那些 z-index 10–100 的卡片
@@ -1183,7 +1188,6 @@ button:hover { filter: brightness(1.05); }
    */
   overflow: hidden;
   overflow: clip;
-  overflow-clip-margin: 220px;
   z-index: 0;
   /* 轴自己吃掉竖向手势：不写这一条，手指一滑页面跟着滚，轴只走一半。 */
   touch-action: none;
@@ -1217,10 +1221,11 @@ button:hover { filter: brightness(1.05); }
   display: block;
   border-radius: 50%;
   background: currentColor;
-  /* 尺寸、位置、透明度全由 JS 每帧写（和卡片同一次 paint）。这儿只给一个默认，
-     免得第一帧之前是个 0×0 的点。 */
-  width: 4px;
-  height: 4px;
+  /* **宽高在这儿定死成最大那一档**（modeAxis 的 RAIL_DOT_MAX），JS 每帧只用
+     transform: scale() 往下缩。从前是 JS 逐帧写 width/height——两条轴 28 颗点，
+     每帧让浏览器重排 28 次，正是玩家说的「滑起来卡卡的」里最贵的一份。 */
+  width: 9px;
+  height: 9px;
   opacity: 0;
   /* 和卡片同一条规矩：位置是每帧算出来的，不能再被 CSS 平滑一遍。 */
   transition: none;
@@ -1250,6 +1255,22 @@ button:hover { filter: brightness(1.05); }
    那张对不准屏幕正中，两头的虚也虚错地方。所以这儿把它钉死。 */
 .home-page:not(.home-page--wide) .home-grid.mode-axis { flex: 0 0 auto; }
 
+/*
+ * 轴那一路：整页就是一屏，一滴都不多。
+ *
+ * 法务那五条链接从主菜单挪走之后（玩家 2026-09 第五轮），轴底下什么都没有了；可
+ * `.home-page:not(--wide)` 还留着给底排让的那 118px 内边距和 `min-height: 100svh`
+ * ——于是文档比一屏高出一百多像素，滑下去是一片空白。空白本身不难看，难看的是它
+ * 让人以为「下面还有东西」。
+ *
+ * 这个类由 menu.ts 在窄版（也就是走鱼眼轴的那一版）挂上，不是靠 :has()——旧一点的
+ * iOS Safari 不认 :has()，那一条整条丢掉就又回到「多出一截」。
+ */
+.home-page.home-page--axis:not(.home-page--wide) {
+  padding-bottom: 0;
+  min-height: 0;
+}
+
 /* 选择器要带上 `.home-page:not(.home-page--wide)`，不是图省事。窄屏那条
    `.home-page:not(.home-page--wide) .home-icon-btn { max-width: min(165px, …) }`
    （给两列网格用的，390 屏上算出来 157px）特指度是 0,3,0，压得过 `.mode-axis >
@@ -1270,8 +1291,11 @@ button:hover { filter: brightness(1.05); }
      JS 每帧写进 style.transform 的新位置当成一次过渡的起点——于是整条轴比手指
      慢 100ms，reduced-motion 下「直接跳过去」也跳不动。门 check-mode-axis 量到
      的是：松手 80ms 后聚焦那张还差 2.8px 没到位。规格 §1.4 说的就是这件事——
-     跟手的量本身就是输入位置的函数，不需要额外的时间动画。 */
-  transition: none;
+     跟手的量本身就是输入位置的函数，不需要额外的时间动画。
+     **只有 filter 例外**：两头那一点虚是停稳之后才加的（modeAxis 的 paint），不
+     给它一段过渡的话，轴停下来那一刻两头会「啪」地糊一下。transform 仍然是
+     none——这一条只平滑 filter。 */
+  transition: filter 220ms ease;
   max-width: none;
   /* 比例交给里面那一格（下面那条）。 */
   aspect-ratio: auto;
@@ -1287,30 +1311,44 @@ button:hover { filter: brightness(1.05); }
      scale() 绕中心一放大，左半截直接推出屏幕。 */
   text-align: center;
 }
+/*
+ * 轴上每张图都住在**同一个正方格**里。
+ *
+ * 玩家 2026-09 第五轮：「每个 icon 在主菜单的最小和最大的大小统一一下，然后应该
+ * 是根据中线『被选中的玩法』上下对称的」。上一版是「高度定死 112、宽度随图形比
+ * 例走」，于是每张图占的地方各不相同：方块 112 宽，V 型三角 200 宽，炸弹那块板
+ * 更宽——一眼看过去就不是同一套尺寸，上下也谈不上对称。
+ *
+ * 现在格子是 112×112 的定数，图按 `preserveAspectRatio` 装进去（宽的左右顶满、
+ * 上下留白，高的反过来）。于是「上一个玩法的图标大小和下面那一个一样」这件事只
+ * 由鱼眼的 scale 决定，而 scale 本来就是对称的。
+ *
+ * 顺带治好了 iPhone 上那个「炸弹卡在半个屏幕外」（玩家两轮都在报）：炸弹的图不是
+ * svg，是一块 `.bomb-panel`（block + aspect-ratio: 1）。上一版给它的是
+ * `width: auto; height: 100%`——块级元素的 `width: auto` 在「收缩到内容」的盒子里
+ * 是一道循环，Chromium 按 aspect-ratio 解成 112，**Safari 解成整幅可用宽**，于是
+ * 那块红板子撑成三百多像素宽，从 112 的格子里往左溢出去半个屏幕。宽高都写死就没
+ * 有循环可解，两个内核算出来是同一个数。
+ */
 .mode-axis > .home-icon-btn > .home-icon-art {
-  /* 按高度对齐、宽度随图形比例走，然后靠父级的 text-align 居中。
-     `inline-block` 是为了「收缩到内容」——块级的 `width: auto` 会撑满。 */
-  display: inline-block;
-  /* inline-block 默认按基线对齐，底下会多出一道行内盒的降部空隙（实测 4px），
-     于是「每一站等高」凭空差出 4px，相邻两张的余量也跟着被吃掉。顶对齐就没有
-     这道空隙。 */
-  vertical-align: top;
-  width: auto;
+  display: block;
+  width: var(--axis-art);
   height: var(--axis-art);
+  margin: 0 auto;
   aspect-ratio: auto;
 }
-/* 炸弹那张的「图」不是 svg，是一块 `.bomb-panel`（width:100% + aspect-ratio:1）。
-   它是**从宽度算高度**的，放进一个「高度定死、宽度自适应」的格子里就撑成
-   157×175，往下溢出 63px 压住下一张卡。这儿把它反过来：从高度算宽度。 */
-.mode-axis > .home-icon-btn > .home-icon-art > .bomb-panel {
-  width: auto;
+/* 格子是定数，里面这两样就都铺满它，一个 auto 都不留（上面那段说了为什么：
+   auto 在这儿是一道循环，Safari 和 Chromium 解得不一样）。 */
+.mode-axis > .home-icon-btn > .home-icon-art > .bomb-panel,
+.mode-axis > .home-icon-btn > .home-icon-art > svg {
+  width: 100%;
   height: 100%;
 }
-/* 图按高度铺满，宽度由 viewBox 的比例算出来。全局那条是 width/height 都 100%，
-   在「宽度 auto」的盒子里会绕成循环，所以这儿反过来写。 */
-.mode-axis > .home-icon-btn > .home-icon-art > svg {
-  height: 100%;
-  width: auto;
+/* 横画布那张（V 型三角）在别处会把整张卡压成 189:106，轴上不要——轴上每一格都
+   是正方的，图自己在里面居中留白。 */
+.mode-axis > .home-icon-btn.home-icon-btn--wide-art,
+.mode-axis > .home-icon-btn.home-icon-btn--wide-art > .home-icon-art {
+  aspect-ratio: auto;
 }
 /* 按下时那段抖动（.home-tap 的 home-tap-wobble）在轴上要关掉。
    它是一段 340ms 的 transform 关键帧动画，而运行中的动画**整个顶掉**内联
@@ -1344,6 +1382,34 @@ button:hover { filter: brightness(1.05); }
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .know-how-btn:active { opacity: 0.6; }
+/*
+ * 鱼眼轴上的《我会玩》——它是轴上的**一项**，不是页面上的一颗按钮。
+ *
+ * 玩家 2026-09 第五轮：「在基础的方块、小球玩法下面写着『我会玩』，下面是其他的
+ * 玩法」。所以它排在两张基础卡和其余玩法之间，跟着轴一起滑、一起形变（位置由
+ * ui/modeAxis.ts 每帧写进 transform，和卡片走同一条路）。
+ *
+ * 绝对定位那几行和轴上的卡片一模一样（见下面 .mode-axis > .home-icon-btn）：整幅
+ * 宽、top: 50%、不许 CSS 再给 transform 加过渡（那会让它比手指慢 100ms）。
+ */
+.mode-axis > .axis-know-how {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  /* **收缩到文字那么宽**，不是整幅宽。整幅宽的话，屏幕上那一整条（看上去空空
+     如也）都算按到了它——手指随便落一下就把整套引导撤了，正是玩家点名不要的
+     「意料之外的疏漏操作」。居中不能靠 transform（轴每帧往 transform 里写位置，
+     会被顶掉），所以用 max-content 宽 + auto 边距。老内核认前缀那一行。 */
+  width: -webkit-max-content;
+  width: max-content;
+  max-width: 88%;
+  margin: 0 auto;
+  transition: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  text-align: center;
+}
 /*
  * 鱼眼轴那一路：这颗按钮浮到底排上方那道缝里（ui/modeAxis.ts 的 floatKnowHow 加
  * 这个类、并把 bottom 量出来写进来）。
