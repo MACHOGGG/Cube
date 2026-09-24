@@ -254,6 +254,22 @@ body {
 .app {
   width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px;
   padding: 28px 16px calc(106px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  /**
+   * 挂 Slides 招牌那几页，招牌离屏幕顶多远——**一处定，三页跟着走**。
+   *
+   * 玩家 2026-09 第七轮：「在主菜单、个人主页、成绩与排名三个会出现 Slides 标记
+   * 部分的页面，slides 标题板块的位置都不同，统一一下按照比主菜单的标题板块还要
+   * 再往上轻微上移一点的位置，下方所有内容都整体上移」。
+   *
+   * 从前这三页各写各的上内边距：主菜单 10、个人主页 16、记录与排名 28（那一页
+   * 干脆没写，吃的是上面这条 .app 的 28）——量出来玻璃板的上沿分别落在 16 /
+   * 22 / 34，一页一个位置。现在三页都用这个变量，招牌自然对齐；下面的内容跟着
+   * 招牌一起上去，不用再各调一遍。
+   *
+   * 4 ＝ 比主菜单原先那 10 再往上 6px（玻璃上沿 16 → 10）。招牌自己还有 6px 的
+   * 上内边距，所以这个数不是玻璃离屏幕边的距离。
+   */
+  --head-top: 4px;
 }
 /* A few boards (七色圆球's 49-cell diamond, the base/big triangle's denser
    packing) read as cramped at the standard column width — widens just
@@ -975,7 +991,8 @@ button:hover { filter: brightness(1.05); }
   /* 左右各让出 22px：从前只有 8，两列图标几乎贴着屏幕边（玩家的原话「再整体
      靠中间一点」）。这道边是页面自己的内边距，所以它同时把整排往里收——图标
      的上限式子里减掉的就是这两道。 */
-  padding-top: 10px; padding-left: 22px; padding-right: 22px;
+  /* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。 */
+  padding-top: var(--head-top); padding-left: 22px; padding-right: 22px;
   /* 底下留的这一截是给底排让的：滑到最底下时，最后一排卡片和它底下那行小字
      都要完整露在底排之上。
      80 = 底排自己占的高（圆角矩形 74 + 上边距 6）；再加 38 是余量；env() 那
@@ -1120,6 +1137,30 @@ button:hover { filter: brightness(1.05); }
 @supports not (backdrop-filter: blur(1px)) {
   .home-head-glass { background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); }
 }
+/*
+ * 换页时的那一点过渡（main.ts 的 softSwap）。
+ *
+ * 老虎机 / 无限反转 / 步步为营 这三张按下去进的是整页，从前是一次 DOM 替换——上
+ * 一帧主菜单、下一帧另一屏。玩家 2026-09 第七轮要的是「轻微的转化，而不是直接硬
+ * 生生地切到下一个画面」。
+ *
+ * 退场那一拍还要 `pointer-events: none`：这 120ms 里页面还看得见，不拦一下他能
+ * 再按到一张正在淡出去的卡，开出第二页来。
+ *
+ * 只动 opacity 和 transform（合成器上的两样），不碰宽高——换页那一下本来就在建
+ * 一整棵新的 DOM，再让它排版一次就该掉帧了。
+ */
+@keyframes app-leave { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes app-enter { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+.app--leave {
+  animation: app-leave 120ms ease-in both;
+  pointer-events: none;
+}
+.app--enter { animation: app-enter 200ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .app--leave, .app--enter { animation: none; }
+}
+
 /* Tapping it goes home, so it has to look tappable. */
 .home-title { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .home-title:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
@@ -1216,6 +1257,17 @@ button:hover { filter: brightness(1.05); }
    让屏幕最边上那两条也能拖），点点用同样的量缩回来，位置一个像素都不变。 */
 .axis-rail--l { left: calc(6px + var(--axis-bleed-l, 0px)); }
 .axis-rail--r { right: calc(6px + var(--axis-bleed-r, 0px)); }
+/*
+ * 手指按在这一带拖的时候，整列点子变成强调色（modeAxis 的 onDown 挂的类）。
+ *
+ * 玩家 2026-09 第七轮要的是「两个东西、两个触碰区域」——两条路算法本来就分开了
+ * （滚轮是位置映射，卡片是带加速度的那一套），但手指按下去那一刻得**看得见**自
+ * 己抓住的是哪一个，不然还是只能靠手感猜。换的是 `color`：点子的底色是
+ * `currentColor`，所以一条规则就把两条轴上二十八颗全带过去了，一次重排都不用。
+ */
+.mode-axis--rail .axis-rail { color: var(--accent); }
+.axis-rail { transition: color 140ms ease; }
+@media (prefers-reduced-motion: reduce) { .axis-rail { transition: none; } }
 .axis-dot {
   position: absolute;
   left: 50%;
@@ -2038,7 +2090,9 @@ body:has(.center-pick--back) .home-nav { display: none; }
    reserved for rankings. Side by side on a desktop, stacked on a phone, and
    the rankings half keeps its full size even though it has nothing to show
    yet — the space is part of the design, not something to collapse away. */
-.records-page { padding-bottom: 120px; }
+/* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。这一页从前没写，
+   吃的是 .app 那条 28——所以三页里数它的招牌最低（玻璃上沿 34）。 */
+.records-page { padding-top: var(--head-top); padding-bottom: 120px; }
 /* 手机上也左右各一半。竖着叠的时候一屏只装得下《记录》那一块，《排行榜》
    得往下滑才露头；并排之后两块一眼都在。窄了就装不下整行字，所以面板里
    只留缩略的内容——图形加分数——玩法小字和日期交给点开后的整页。 */
@@ -2626,7 +2680,8 @@ body:has(.slot-page) .home-nav { display: none; }
    sign-in pill, the language/tutorial pair, then the perks panel. */
 /* 上半部是一排排快捷入口，不是这一页的主角——收紧它们，天才那一块就整体
    往上走，一进页面就看得到。 */
-.profile-page { gap: 8px; padding-top: 16px; }
+/* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。 */
+.profile-page { gap: 8px; padding-top: var(--head-top); }
 .profile-page .home-head { margin-bottom: 6px; }
 .profile-page .profile-pill { padding: 8px 18px; }
 .profile-page .profile-pill-row { gap: 8px; }

@@ -289,6 +289,54 @@ for (const size of SIZES) {
   }
 }
 
+/**
+ * 三页的 Slides 招牌站在同一条线上。
+ *
+ * 玩家 2026-09 第七轮：「在主菜单、个人主页、成绩与排名三个会出现 Slides 标记部
+ * 分的页面，slides 标题板块的位置都不同，统一一下按照比主菜单的标题板块还要再往
+ * 上轻微上移一点的位置，下方所有内容都整体上移」。
+ *
+ * 从前这三页各写各的上内边距（10 / 16 / 28，记录那一页干脆没写、吃的是 .app 的
+ * 28），玻璃板上沿分别落在 16 / 22 / 34——在三页之间来回跳，招牌就跟着上下跳一
+ * 下。现在三页都用 .app 的 --head-top。
+ *
+ * 量两件事：三页一样高，而且比主菜单原先那 16 更靠上。只量「一样」不够——三页一
+ * 起往下挪到 40 也是「一样」的。
+ */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_intro_seen', '1');
+    localStorage.setItem('slides_played_square', '1');
+  });
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForSelector('.home-page', { timeout: 20000 });
+  await page.waitForTimeout(700);
+  const glassTop = () => page.evaluate(() => {
+    const g = document.querySelector('.home-head-glass');
+    return g ? +g.getBoundingClientRect().top.toFixed(1) : null;
+  });
+  const tops = { 主菜单: await glassTop() };
+  await page.click('#navProfile');
+  await page.waitForSelector('.profile-page', { timeout: 10000 });
+  await page.waitForTimeout(500);
+  tops['个人主页'] = await glassTop();
+  await page.click('#navRecords');
+  await page.waitForSelector('.records-page', { timeout: 10000 });
+  await page.waitForTimeout(500);
+  tops['记录与排名'] = await glassTop();
+  const vals = Object.values(tops);
+  const desc = Object.entries(tops).map(([k, v]) => `${k} ${v}`).join(' / ');
+  check('三页的招牌都找得到（下面两条才有意义）', vals.every((v) => v !== null), desc);
+  check('三页的 Slides 招牌站在同一条线上（差 < 1px）', Math.max(...vals) - Math.min(...vals) < 1, desc);
+  check('而且比主菜单原先那一版更靠上（≤ 12px，原先 16）', Math.max(...vals) <= 12, desc);
+  await ctx.close();
+}
+
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

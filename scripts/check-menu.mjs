@@ -325,6 +325,117 @@ const boardTA = await tap.$eval('.board-wrap', (e) => getComputedStyle(e).touchA
 check('棋盘那块还是 none（手指在上面拖不滚页面）', boardTA === 'none', boardTA);
 await tctx.close();
 
+/**
+ * 老虎机 / 无限反转 / 步步为营：按下去不是硬切。
+ *
+ * 玩家 2026-09 第七轮：「这几个版本，在点击主菜单 icon 到进入选择图形的过程做一
+ * 个轻微的转化，而不是直接硬生生地切到下一个画面」。炸弹和计时本来就有（开的是
+ * 居中挑选窗，从按到的那张卡飞到屏幕正中）；这三个进的是整页，整页从前是一次
+ * DOM 替换——上一帧主菜单，下一帧另一屏。
+ *
+ * 量的是**过场真的演了**：旧页先挂上退场那一拍（.app--leave），新页带着入场那一
+ * 拍（.app--enter）出来，然后两个类都撤掉。逐帧记下来，不是事后看一眼——事后那
+ * 会儿动画早演完了，什么都看不见，那样的断言永远是绿的。
+ *
+ * 还量两件同样要紧的：退场那一拍**不接受点击**（免得那 120ms 里他又按开第二
+ * 页），以及 reduced-motion 下一拍都不等。
+ */
+{
+  const sctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await sctx.addInitScript(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_intro_seen', '1');
+    localStorage.setItem('slides_played_square', '1');
+    // 这三张是天才特供，没权限按下去开的是订阅窗，不是那一页。
+    localStorage.setItem(
+      'slides_genius',
+      JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code' }),
+    );
+  });
+  const watch = () => {
+    window.__tl = [];
+    const tick = () => {
+      const el = document.querySelector('#app > *');
+      if (el) {
+        const tag = el.classList.contains('app--leave') ? 'leave' : el.classList.contains('app--enter') ? 'enter' : '-';
+        const page = el.className.split(' ').filter((c) => c.endsWith('-page')).join(',');
+        const line = `${tag}|${page}`;
+        if (window.__tl[window.__tl.length - 1] !== line) window.__tl.push(line);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  for (const label of ['老虎机', '无限反转', '步步为营']) {
+    const sp = await sctx.newPage();
+    await sp.addInitScript(watch);
+    await sp.goto(BASE, { waitUntil: 'load' });
+    await sp.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+    await sp.waitForTimeout(600);
+    const found = await sp.evaluate((l) => {
+      const btn = [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
+        .find((b) => (b.getAttribute('aria-label') || '').startsWith(l));
+      if (!btn) return false;
+      btn.click();
+      return true;
+    }, label);
+    check(`${label}：这张卡在轴上找得到（下面几条才有意义）`, found);
+    await sp.waitForTimeout(1400);
+    const tl = await sp.evaluate(() => window.__tl);
+    const left = tl.some((t) => t.startsWith('leave|home-page'));
+    const entered = tl.some((t) => t.startsWith('enter|') && !t.includes('home-page'));
+    const settled = /^-\|/.test(tl[tl.length - 1] || '') && !(tl[tl.length - 1] || '').includes('home-page');
+    check(`${label}：主菜单先淡出去（不是硬切）`, left, tl.join(' → '));
+    check(`${label}：新那一屏带着入场那一拍出来`, entered, tl.join(' → '));
+    check(`${label}：演完两个类都撤了（不会留在页面上）`, settled, tl[tl.length - 1] || '（什么都没记到）');
+    await sp.close();
+  }
+  // 退场那 120ms 里按不动
+  {
+    const sp = await sctx.newPage();
+    await sp.goto(BASE, { waitUntil: 'load' });
+    await sp.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+    await sp.waitForTimeout(600);
+    await sp.evaluate(() => {
+      const btn = [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
+        .find((b) => (b.getAttribute('aria-label') || '').startsWith('老虎机'));
+      btn.click();
+    });
+    await sp.waitForTimeout(40);
+    const pe = await sp.evaluate(() => {
+      const el = document.querySelector('#app > *');
+      return el ? getComputedStyle(el).pointerEvents : '没有页';
+    });
+    check('退场那一拍里整页按不动（不会再开出第二页）', pe === 'none', pe);
+    await sp.close();
+  }
+  // reduced-motion：一拍都不等
+  {
+    const sp = await sctx.newPage();
+    await sp.emulateMedia({ reducedMotion: 'reduce' });
+    await sp.addInitScript(watch);
+    await sp.goto(BASE, { waitUntil: 'load' });
+    await sp.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+    await sp.waitForTimeout(600);
+    await sp.evaluate(() => {
+      const btn = [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
+        .find((b) => (b.getAttribute('aria-label') || '').startsWith('老虎机'));
+      btn.click();
+    });
+    await sp.waitForTimeout(900);
+    const tl = await sp.evaluate(() => window.__tl);
+    check(
+      'reduced-motion 下直接换，一拍都不等',
+      !tl.some((t) => t.startsWith('leave') || t.startsWith('enter')),
+      tl.join(' → '),
+    );
+    await sp.close();
+  }
+  await sctx.close();
+}
+
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

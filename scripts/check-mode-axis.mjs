@@ -568,20 +568,83 @@ let page = await menuPage({ slides_played_square: '1' });
     const r = document.querySelector('.mode-axis').getBoundingClientRect();
     return r.left + r.width / 2;
   });
-  const card = await swipe(mid);
-  const rail = await swipe(6);
-  // 先立住尺子：卡片那一遍本身得真走了好几项，不然「几倍」是拿 0 当分母。
-  check('拖卡片：240px 真的走得动（下面那条倍率才有意义）', card.went >= 3, `走了 ${card.went.toFixed(2)} 项`);
+  /**
+   * 两条路各量各的，最后比的是**每走一项要多少手指位移**，不是「同样位移走了
+   * 几项」。
+   *
+   * 后者在这儿会说谎：滚轮 240px 能翻十八项，可轴上一共才十四项——量出来是「到
+   * 头了」（13），再拿它去除卡片的 7，得到 1.86，看着两者差不多。换成 px/项就
+   * 没有这回事：滚轮拿一把不会到头的 120px 量，卡片拿 240px 量，各自算各自的斜
+   * 率。
+   */
+  const card = await swipe(mid, { dist: 240 });
+  const rail = await swipe(6, { dist: 120 });
+  // 先立住尺子：两边本身都得真走得动，不然下面那条是拿 0 做除数。
+  check('拖卡片：240px 真的走得动（下面那条才有意义）', card.went >= 3, `走了 ${card.went.toFixed(2)} 项`);
   check(
     '屏幕最边上那一条也拖得动（拇指从边上摸过来那一下）',
     rail.went >= 3,
-    `x=6 走了 ${rail.went.toFixed(2)} 项`,
+    `x=6，120px 走了 ${rail.went.toFixed(2)} 项`,
   );
+  const cardPer = 240 / card.went;
+  const railPer = 120 / rail.went;
   check(
-    '同样的位移，拨点点比拖卡片走得明显更远（≥ 1.2 倍）',
-    rail.went >= card.went * 1.2,
-    `卡片 ${card.went.toFixed(2)} 项 / 点点 ${rail.went.toFixed(2)} 项 = ×${(rail.went / Math.max(0.01, card.went)).toFixed(2)}`,
+    '拨点点和拖卡片是两个灵敏度，而且差得出来（每项的手指位移差一倍以上）',
+    railPer * 2 <= cardPer,
+    `卡片 ${cardPer.toFixed(1)}px/项　点点 ${railPer.toFixed(1)}px/项　＝ 快 ${(cardPer / railPer).toFixed(1)} 倍`,
   );
+  /**
+   * 滚轮是**位置映射**：手指原路退回去，轴也原路退回来。
+   *
+   * 这一条把「两个控件」钉死了——卡片那条带加速度，原路退回去是回不到原点的
+   * （快拨出去、慢拨回来，净走一段）。只有位置映射的滚轮才严格可逆，所以它一
+   * 旦被改回「同一条路乘个数」，这一条立刻红。
+   */
+  // 先忘掉「上次停在哪一项」：不抹的话这一把从上一段停的地方（多半已经到底）开
+  // 始，拨出去就撞在端点上，「原路退回来」量的是橡皮筋不是映射。
+  await forgetAxis(p7);
+  await p7.reload({ waitUntil: 'load' });
+  await p7.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+  await p7.waitForTimeout(500);
+  await install();
+  const trip = await (async () => {
+    const y0 = 620;
+    const from = await p7.evaluate(() => window.__focus());
+    await p7.mouse.move(6, y0);
+    await p7.mouse.down();
+    for (let k = 1; k <= 10; k++) { await p7.mouse.move(6, y0 - k * 12); await p7.waitForTimeout(16); }
+    const far = await p7.evaluate(() => window.__focus());
+    const lit = await p7.evaluate(() => document.querySelector('.mode-axis').classList.contains('mode-axis--rail'));
+    for (let k = 9; k >= 0; k--) { await p7.mouse.move(6, y0 - k * 12); await p7.waitForTimeout(16); }
+    const home = await p7.evaluate(() => window.__focus());
+    await p7.mouse.up();
+    await p7.waitForTimeout(500);
+    const off = await p7.evaluate(() => document.querySelector('.mode-axis').classList.contains('mode-axis--rail'));
+    return { from, far, home, lit, off };
+  })();
+  check('滚轮拨得出去（下面那条才有意义）', trip.far - trip.from >= 5, `从 ${trip.from.toFixed(2)} 拨到 ${trip.far.toFixed(2)} 项`);
+  check(
+    '滚轮是位置映射：手指原路退回去，轴也回到原处',
+    Math.abs(trip.home - trip.from) < 0.05,
+    `出发 ${trip.from.toFixed(2)} → 退回来 ${trip.home.toFixed(2)} 项`,
+  );
+  check('拨的时候那一列点子亮着（看得见自己抓住了哪一个）', trip.lit === true);
+  check('松手就灭（不会一直亮着）', trip.off === false);
+  // 反证：拖中间的卡片不该点亮点点——不然「亮」就不是在说「你抓住的是滚轮」。
+  await forgetAxis(p7);
+  await p7.reload({ waitUntil: 'load' });
+  await p7.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+  await p7.waitForTimeout(500);
+  const cardLit = await (async () => {
+    const y0 = 620;
+    await p7.mouse.move(mid, y0);
+    await p7.mouse.down();
+    for (let k = 1; k <= 6; k++) { await p7.mouse.move(mid, y0 - k * 20); await p7.waitForTimeout(16); }
+    const lit = await p7.evaluate(() => document.querySelector('.mode-axis').classList.contains('mode-axis--rail'));
+    await p7.mouse.up();
+    return lit;
+  })();
+  check('拖中间的卡片不点亮点点（亮着就是「你抓的是滚轮」）', cardLit === false);
   // 点点还在老地方：`.home-page` 内容框左边 + 6（轨）+ 7（半个轨宽）。
   const dots = await p7.evaluate(() => {
     const page = document.querySelector('.home-page');
@@ -726,15 +789,20 @@ let page = await menuPage({ slides_played_square: '1' });
     }
     return { i: idx, name: best.getAttribute('aria-label') };
   });
-  // 一小步一小步往下挪几项（慢拖，免得甩过头）
-  for (let t = 0; t < 3; t++) {
-    await p9.mouse.move(195, 620);
-    await p9.mouse.down();
-    for (let k = 1; k <= 6; k++) { await p9.mouse.move(195, 620 - k * 9); await p9.waitForTimeout(45); }
-    await p9.waitForTimeout(160);
-    await p9.mouse.up();
-    await p9.waitForTimeout(500);
-  }
+  /**
+   * 往下挪几项：**拨侧边那条点点**，不是拖中间的卡片。
+   *
+   * 从前这儿拖的是卡片，一把 54px、拨三把。第七轮把两条路分开之后，卡片那条
+   * 明显钝了（玩家要的「灵敏度稍微低一点」），54px 一项都不走——这一段于是停在
+   * 第 0 项，后面「退回来还在原处」就成了空话（停在 0 怎么退都在 0）。
+   * 滚轮一把 40px 正好三项，稳当，也顺带证明了滚轮真的在工作。
+   */
+  await p9.mouse.move(6, 620);
+  await p9.mouse.down();
+  for (let k = 1; k <= 6; k++) { await p9.mouse.move(6, 620 - k * 7); await p9.waitForTimeout(30); }
+  await p9.waitForTimeout(160);
+  await p9.mouse.up();
+  await p9.waitForTimeout(600);
   const left = await focusedNow();
   // 先立前提：真的挪开了。停在第 0 项的话，下面两条「还在原处」自己就成立了。
   check('先滑开几项（下面两条才有意义）', left && left.i > 0, `停在第 ${left?.i} 项 ${left?.name}`);

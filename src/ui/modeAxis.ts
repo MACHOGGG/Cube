@@ -160,23 +160,35 @@ const FAST_K = 1.6;
  */
 const V_SMOOTH = 0.45;
 /**
- * 两条路，两个灵敏度：**拨侧边的点点比拖卡片快**。
+ * **两个控件，不是一个控件两档倍率。**
  *
- * 玩家 2026-09 第六轮：「滑动侧边的点点快捷上下滑动滚轮按照现在的灵敏度，……然后
- * 灵敏度调稍微低一点，明显要能感受到上下滑动点点要比上下滑动主菜单内容要更快速
- * 便捷」。
+ * 玩家 2026-09 第七轮：「你仍然没有区分普通上下滑动和点点快速快捷上下滑动是两个
+ * 东西、两个触碰区域、两个不同的灵敏度」。上一版确实只是给同一条路乘了个数
+ * （×1 对 ×0.72，差三成）——三成在手上分不出来，他说得对。
  *
- * 点点那两条从此是**滚轮**：靠边 RAIL_GRAB 这么宽的一带，手指按在那儿拖就是在
- * 拨滚轮，倍率保持上一版那个（×1）；拖中间的卡片则整体打 CARD_K 折。同样的手指
- * 位移，拨点点走得远三成——不用写一个字，手上就分得出来。
+ * 现在这两条路**算法都不是同一个**：
+ *
+ *   · **中间那一大片 = 拖卡片。** 带加速度的那一套：这一下走了多远（stepGain）、
+ *     多快（speedK），再打 CARD_K 折，最后换算成轴上的像素。手指走 240px 大概
+ *     翻过 6 项，慢拖快甩还不一样远。
+ *   · **靠边那两条 = 拨点点，一把滚轮。** 位置直接映到项上：手指每走一颗点的间
+ *     距（RAIL_PITCH，13px）就过一项，不看速度、不带加速度、不打折——**那一列
+ *     点子就贴着手指走**。整条轴 14 项，182px 就从头拨到尾；同样 240px 的手指
+ *     位移，这边翻过去 18 项（到头就是到头），那边 6 项。三倍，闭着眼睛也分得
+ *     出来。
+ *
+ * 按下去还要**看得见自己抓住了哪一个**：拨点点的时候整列点子变成强调色（见
+ * style.css 的 `.mode-axis--rail`），松手复原。不写一个字，但「这是另一个东西」
+ * 说清楚了。
  *
  * 认「在不在点点上」看的是**按下那一刻的横坐标**，不是命中了哪个元素：点点自己
  * 是 `pointer-events: none` 的路标（碰它不该吃掉手势），而且真手指按下去的落点本
- * 来就散在点子周围十几个像素里。46px 是一根拇指的宽度。
+ * 来就散在点子周围十几个像素里。56px ＝ 一根拇指的宽度还富余：点子画在离屏幕边
+ * 35px 处，这一带在它两侧各留出二十来个像素。
  *
  * 只影响**拖动**：点一下照旧是点中那张卡（点和拖由 TAP_SLOP 分开）。
  */
-const RAIL_GRAB = 46;
+const RAIL_GRAB = 56;
 const CARD_K = 0.72;
 /**
  * 松手之后再滑一段——「轻微的物理动感」。
@@ -326,8 +338,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let lastT = 0;
   /** 平滑过的手速（px/ms），见 V_SMOOTH。 */
   let vel = 0;
-  /** 这一次拖动的灵敏度：拨点点是 1，拖卡片打 CARD_K 折。见 RAIL_GRAB。 */
-  let srcK = CARD_K;
+  /** 这一次拖的是哪一个控件：靠边那两条点点（滚轮）还是中间的卡片。见 RAIL_GRAB。 */
+  let rail = false;
   /** 平滑过的**焦点**速度（项/毫秒，带正负）：松手那一下拿它投影，见 FLING_MS。 */
   let vFocus = 0;
   /** 弹簧这一趟要去的那一项。松手时定下来，途中不再改。 */
@@ -732,9 +744,11 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     moved = 0;
     startY = e.clientY;
     startFocus = focus;
-    // 按下那一刻的横坐标决定这一次用哪一档灵敏度（见 RAIL_GRAB）。
+    // 按下那一刻的横坐标决定这一次拖的是哪一个控件（见 RAIL_GRAB）。
     const hr = host.getBoundingClientRect();
-    srcK = e.clientX - hr.left < RAIL_GRAB || hr.right - e.clientX < RAIL_GRAB ? 1 : CARD_K;
+    rail = e.clientX - hr.left < RAIL_GRAB || hr.right - e.clientX < RAIL_GRAB;
+    // 抓住的是滚轮就让整列点子亮起来——玩家要的「两个触碰区域」得看得见。
+    host.classList.toggle('mode-axis--rail', rail);
     vFocus = 0;
     axisPx = 0;
     lastY = e.clientY;
@@ -781,9 +795,23 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     // 动敏感度并没有很高」的另一半原因。
     const now = Math.abs(seg) / dt;
     vel = vel === 0 ? now : vel * (1 - V_SMOOTH) + now * V_SMOOTH;
-    axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel) * srcK;
     const was = focus;
-    focus = clampRubber(focusFromAxis(axisPx));
+    if (rail) {
+      /**
+       * 滚轮：**位置直接映到项上**，手指走一颗点的间距就过一项。
+       *
+       * 拿 `dy`（按下到现在的总位移）算，不是把每一小段累加起来：累加会把每一
+       * 帧的取整误差攒起来，手指原地绕一圈回到起点，轴却回不到起点。一把尺子从
+       * 头量到尾，手指回哪儿轴就回哪儿。
+       *
+       * 这儿不过 stepGain / speedK：滚轮没有加速度这回事——快拨慢拨走得一样远，
+       * 那一列点子永远贴着手指。加速度是中间那条路的东西（见下面）。
+       */
+      focus = clampRubber(startFocus - dy / RAIL_PITCH);
+    } else {
+      axisPx -= seg * stepGain(Math.abs(dy)) * speedK(vel) * CARD_K;
+      focus = clampRubber(focusFromAxis(axisPx));
+    }
     // 焦点走了多快（项/毫秒，带正负）。松手那一下拿它投影出「再滑一段」。
     const nowF = (focus - was) / dt;
     vFocus = vFocus === 0 ? nowF : vFocus * (1 - V_SMOOTH) + nowF * V_SMOOTH;
@@ -798,6 +826,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   function onUp(e: PointerEvent): void {
     if (!dragging) return;
     dragging = false;
+    host.classList.remove('mode-axis--rail');
     if (captured) {
       try {
         host.releasePointerCapture?.(e.pointerId);

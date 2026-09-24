@@ -68,6 +68,7 @@ import { createTriangleBigGame } from './shapes/triangleBig';
 import { createCircleSevenGame } from './shapes/circleSeven';
 import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
+import { reducedMotion } from './engine/reducedMotion';
 
 injectStyles();
 
@@ -470,6 +471,45 @@ function paintRoomHostBanner() {
   pickNudges?.attach(root.querySelector<HTMLElement>('.home-head-glass'));
 }
 
+/**
+ * 换页时的那一点过渡：旧的先淡出去，新的再托上来。
+ *
+ * 玩家 2026-09 第七轮：「老虎机、无限反转、步步为营这几个版本，在点击主菜单
+ * icon 到进入选择图形的过程做一个轻微的转化，而不是直接硬生生地切到下一个画
+ * 面」。炸弹和计时本来就有（它们开的是居中挑选窗，从按到的那张卡飞到屏幕正
+ * 中，见 ui/centerPicker.ts）；这三个进的是**整页**，整页是一次 DOM 替换——
+ * 上一帧还是主菜单，下一帧就是另一屏，中间什么都没有。
+ *
+ * 为什么不是「新页淡入」就完了：旧页在那一瞬间已经没了，新页又从透明开始，
+ * 中间会闪一下空白的底色——那比硬切还难看。所以分两拍：旧页先淡掉、同时不再
+ * 接受点击（`pointer-events: none`，免得这 120ms 里他又按到一张已经在退场的
+ * 卡），落幕之后才画新的那一屏，新页往上托一点点进来。
+ *
+ * 总共 120 + 200ms。再长就开始像「等它」了——站点原则第二条说的是不要出现意料
+ * 之外的界面，不是要给每一次跳转配一段动画。
+ *
+ * reduced-motion 下直接换，一拍都不等（和轴、开局倒数同一条规矩）。
+ */
+const LEAVE_MS = 120;
+let swapping = false;
+
+function softSwap(render: () => void): void {
+  const cur = root.firstElementChild as HTMLElement | null;
+  if (!cur || reducedMotion()) return void render();
+  // 上一次的过渡还没落幕就又按了一下：认后一下，但别让两拍叠在一起。
+  if (swapping) return void render();
+  swapping = true;
+  cur.classList.add('app--leave');
+  window.setTimeout(() => {
+    swapping = false;
+    render();
+    const next = root.firstElementChild as HTMLElement | null;
+    if (!next) return;
+    next.classList.add('app--enter');
+    next.addEventListener('animationend', () => next.classList.remove('app--enter'), { once: true });
+  }, LEAVE_MS);
+}
+
 function teardown() {
   if (activeDestroy) {
     activeDestroy();
@@ -563,16 +603,24 @@ function showMenu() {
       }
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
-    onRandomTarget: () => showRandomTarget('menu'),
+    /**
+     * 这三张（老虎机 / 无限反转 / 步步为营）按下去进的是**整页**，所以在这儿
+     * 包一层 softSwap：旧的淡出去、新的托上来，不再硬切（玩家第七轮点名的）。
+     *
+     * 包在**主菜单这一侧**，不是包进那三个 show 函数里：从开局页按《返回》回
+     * 到这几页、或者开完一局再回来，走的是同一个函数——那是退回来，不该再演一
+     * 次「进去」。
+     */
+    onRandomTarget: () => softSwap(() => showRandomTarget('menu')),
     // 屋主替整屋挑玩法时按到它也进挑图形那一屏：挑完不开单人局，而是把这一
     // 族交给小屋（见 showFlipMode 的 room）。
-    onFlipMode: showFlipMode,
+    onFlipMode: () => softSwap(showFlipMode),
     // 步步为营不进小屋（见 showPuzzleMode）：屋主替整屋挑玩法时按到它，只提示
     // 一句「不是小屋玩法」，和计时、炸弹同一条路——绝不能让他一个人开起来，
     // 那样整屋还等着他。
     onPuzzleMode: () => {
       if (pickingForRoom) return void notAMultiplayerBoard();
-      showPuzzleMode();
+      softSwap(showPuzzleMode);
     },
     // 没打过的那几张基础卡镶一圈光，指路用；两张都打过了这里就是空的。
     glow: glowingBasics(),
