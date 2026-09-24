@@ -19,7 +19,7 @@ if (!motionSrc || !springSrc) {
   console.error('用法: node scripts/check-axis-motion.mjs <打包好的 axisMotion.mjs> <打包好的 spring.mjs>');
   process.exit(2);
 }
-const { damp, AXIS_LERP, AXIS_LAMBDA } = await import(motionSrc);
+const { damp, AXIS_LERP, AXIS_LAMBDA, rubber, RUBBER_D } = await import(motionSrc);
 const { createSpring, stepSpring } = await import(springSrc);
 
 let fail = 0;
@@ -97,6 +97,40 @@ const check = (name, ok, extra = '') => {
     'dt 再大也截断在 64ms（切后台回来不会一帧跳到位）',
     Math.abs(damp(0, 1, 5000) - damp(0, 1, 64)) < 1e-12 && damp(0, 1, 5000) < 0.4,
     `dt=5000ms 追了 ${(damp(0, 1, 5000) * 100).toFixed(2)}%`,
+  );
+}
+
+// ── 橡皮筋：越拉越难拉，但没有墙 ────────────────────────────────────
+//
+// 上一版是「线性打 0.35 折、到 0.55 项一刀切」——拉到 0.55 就是一堵墙。现在换成
+// iOS UIScrollView 那条渐近曲线。两条断言把这次换的两个要点各钉死一头：
+//   · 和旧手感的**对齐点**还在（拉出 1 项时仍然是 0.350）；
+//   · 渐近线永远到不了（没有墙，也不会拉到天上去）。
+{
+  check('拉出 1 项时和旧手感一样（0.350）', Math.abs(rubber(1) - 0.35) < 1e-3, rubber(1).toFixed(4));
+  let mono = true;
+  let over = null;
+  let prev = -Infinity;
+  for (let x = 0; x <= 1e6; x = x < 10 ? x + 0.01 : x * 1.5) {
+    const v = rubber(x);
+    if (v < prev - 1e-12) mono = false;
+    if (v >= RUBBER_D) over = over ?? x;
+    prev = v;
+  }
+  check('越拉越远，单调递增（拉回去也没有反向的台阶）', mono);
+  check(
+    `永远到不了 ${RUBBER_D} 项（渐近线，不是墙）`,
+    over === null,
+    over === null
+      ? `拉出 3 项 ${rubber(3).toFixed(3)} / 10 项 ${rubber(10).toFixed(3)} / 1e6 项 ${rubber(1e6).toFixed(6)}`
+      : `x=${over} 就到顶了`,
+  );
+  // 「越拉越难拉」不是形容词：同样再拉 1 项，露出来的那一截必须一段比一段短。
+  const gain = [1, 2, 3, 4].map((x) => rubber(x) - rubber(x - 1));
+  check(
+    '同样再拉一项，露出来的越来越少（阻力递增）',
+    gain.every((g, i) => i === 0 || g < gain[i - 1]),
+    gain.map((g) => g.toFixed(3)).join(' > '),
   );
 }
 

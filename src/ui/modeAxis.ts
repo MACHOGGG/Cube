@@ -48,7 +48,7 @@
  */
 import { fisheye, hitTest, influence, SIGMA, type FisheyeParams } from '../engine/fisheye';
 import { createSpring, snapSpring, springAtRest, stepSpring, type SpringState } from '../engine/spring';
-import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, damp } from '../engine/axisMotion';
+import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, damp, rubber } from '../engine/axisMotion';
 import { reducedMotion } from '../engine/reducedMotion';
 import { playAxisTick } from '../engine/juice';
 import { vibrate } from '../engine/haptics';
@@ -108,16 +108,6 @@ const RIGID: FisheyeParams = {
   lockRadius: 0,
 };
 
-/**
- * 超出端点之后还能拉多远（单位＝项），以及拉出去时手指位移打几折。
- *
- * **这条轴不循环**——玩家 2026-09 第三轮定的：「不要循环的，滑动到底（留有一点
- * 空白）就停止」。（第二轮曾经改成环，用了一轮就撤回来了；`fisheye` 的 wrap 模式
- * 还在引擎里，这边不再用它。）第一张之上、最后一张之下还能再拉出去半格多一点，
- * 松手弹回——那点空白就是「到底了」的手感，不是卡住。
- */
-const OVERSCROLL = 0.55;
-const RUBBER = 0.35;
 /**
  * 手指位移放大多少倍。
  *
@@ -894,10 +884,17 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 再拉出半格多一点，看得见那一点空白，手一松弹回去。没有这一截的话，滑到头是
    * 硬生生一堵墙，手感像卡住了。
    */
+  /**
+   * 两端的橡皮筋。曲线和那两个参数在 engine/axisMotion.ts 的 rubber 上面，
+   * 连同「为什么不再是一堵墙」和实算出来的对照表。
+   *
+   * 这儿只负责把它按到两头去。松手之后照旧夹回 [0, n−1]（见 onUp 的 target），
+   * 所以从过冲处松手仍然弹回端点——去掉的只是那堵墙，不是「不循环」。
+   */
   function clampRubber(f: number): number {
-    if (f < 0) return Math.max(-OVERSCROLL, f * RUBBER);
+    if (f < 0) return -rubber(-f);
     const max = n - 1;
-    if (f > max) return Math.min(max + OVERSCROLL, max + (f - max) * RUBBER);
+    if (f > max) return max + rubber(f - max);
     return f;
   }
 

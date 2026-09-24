@@ -1087,6 +1087,53 @@ let page = await menuPage({ slides_played_square: '1' });
     cardShot.settled - cardShot.before > 0.5 && cardShot.after - cardShot.before < (cardShot.settled - cardShot.before) * 0.5,
     `两帧后走了 ${(cardShot.after - cardShot.before).toFixed(2)} 项，追齐之后 ${(cardShot.settled - cardShot.before).toFixed(2)} 项`,
   );
+  /**
+   * 橡皮筋：越拉越难拉，但**没有墙**。
+   *
+   * 曲线本身有 check-axis-motion 守着（纯函数）。这儿量的是摆到真 DOM 上之后：
+   *
+   *   · **没有墙**——拉 2000px 要比拉 400px 露出得更多。旧那版线性打折 + 0.55
+   *     一刀切，两者会**一模一样**（都顶在墙上），所以这一条正是那次改动的反证。
+   *   · **但也有个头**——渐近线 RUBBER_D（1.2 项）永远到不了。
+   *
+   * 量的单位是「项」：拿当时最上面两张卡的间距当一项换算。轴上的间距本来就随
+   * 鱼眼变，所以这一条留了余量，它防的是「拉到天上去」，不是量 1.2 这个数。
+   */
+  const pull = async (px) => {
+    await startAt(0);
+    await p10.mouse.move(midX, 300);
+    await p10.mouse.down();
+    for (let k = 1; k <= 10; k++) await p10.mouse.move(midX, 300 + Math.round((px * k) / 10));
+    await p10.waitForTimeout(300); // 等画面追齐（见 AXIS_SETTLE_LAMBDA）
+    const held = await p10.evaluate(() => {
+      const host = document.querySelector('.mode-axis');
+      const hr = host.getBoundingClientRect();
+      const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
+      const cs = [...host.children]
+        .filter((e) => e.classList.contains('home-icon-btn'))
+        .map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
+      // 「露出了几项」＝ 第一张离选中线多远，除以当时最上面两张的间距。
+      return { out: (cs[0] - mid) / Math.abs(cs[1] - cs[0]) };
+    });
+    await p10.mouse.up();
+    await p10.waitForTimeout(900);
+    const back = await p10.evaluate(() => window.__focus());
+    return { out: held.out, back };
+  };
+  const far = await pull(2000);
+  const near = await pull(400);
+  check(
+    '用力拉和轻轻拉不一样远（没有墙——旧那版这两个数会一模一样）',
+    far.out - near.out > 0.08,
+    `拉 2000px 露出 ${far.out.toFixed(3)} 项，拉 400px 露出 ${near.out.toFixed(3)} 项`,
+  );
+  check(
+    '但拉不过那条渐近线（1.2 项）',
+    far.out > 0.6 && far.out < 1.45,
+    `${far.out.toFixed(3)} 项`,
+  );
+  check('松手弹回第一张', Math.abs(far.back) < 0.01 && Math.abs(near.back) < 0.01,
+    `${far.back.toFixed(3)} / ${near.back.toFixed(3)}`);
   await p10.close();
 }
 
