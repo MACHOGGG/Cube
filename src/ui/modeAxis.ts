@@ -367,6 +367,16 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let ruler: { k: number; at: number }[] | null = null;
   const spring: SpringState = createSpring(focus);
   let springing = false;
+  /**
+   * 上一帧 rAF 给的时间戳，用来算**真实的**帧间隔。0 ＝ 这一段刚开始。
+   *
+   * 从前 loop 把步长写死成 16.7ms（默认 60Hz）。结果是同一条轴在不同机器上手感
+   * 不同：iPhone 低电量模式 30Hz 下弹簧只有正常的 0.5 倍速（每秒 30 帧 × 16.7ms
+   * ＝ 只积分了半秒的时间），120Hz 上反过来是 2 倍速。engine/spring.ts 本来就收
+   * 真实 dt（MAX_DT_MS 截断、4ms 子步，切后台回来那一下也兜得住），只有这一个
+   * 调用方写死了。
+   */
+  let lastLoopTs = 0;
   let lastNearest = Math.round(focus);
   let destroyed = false;
 
@@ -663,9 +673,13 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     }
   }
 
-  function loop(): void {
+  function loop(ts?: number): void {
     raf = 0;
     if (destroyed) return;
+    // 真实帧间隔。第一帧（lastLoopTs 为 0）没有上一帧可比，按 60Hz 起步。
+    const now = ts ?? performance.now();
+    const dt = lastLoopTs ? now - lastLoopTs : 16.7;
+    lastLoopTs = now;
     /**
      * **手指按着的时候，弹簧一律不许动。**
      *
@@ -695,12 +709,15 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 那一项，再快的手势也只走一项。要有惯性，目标就得是投影出来的那一项。
        */
       const target = springTarget;
-      stepSpring(spring, target, 16.7);
+      stepSpring(spring, target, dt);
       focus = spring.value;
       if (springAtRest(spring, target)) {
         springing = false;
         focus = target;
         spring.value = target;
+        // 这一段完了。下一段（下一次松手）要从零起算，别拿隔了几秒的旧时间戳
+        // 去当上一帧——那会让新弹簧的第一帧 dt 是几百毫秒，一步跳到位。
+        lastLoopTs = 0;
       }
       paint();
       if (springing) schedule();
@@ -943,6 +960,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     spring.velocity = glide === 0
       ? 0
       : Math.max(-FLING_VMAX, Math.min(FLING_VMAX, vFocus * 1000 * FLING_CARRY));
+    lastLoopTs = 0; // 新的一段：帧间隔从这一帧重新起算（见 lastLoopTs）
     springing = true;
     schedule();
   }
@@ -1012,6 +1030,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     springTarget = target;
     spring.value = focus;
     spring.velocity = 0;
+    lastLoopTs = 0; // 同 onUp：新的一段从这一帧重新起算
     springing = true;
     schedule();
   }
