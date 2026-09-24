@@ -1,6 +1,14 @@
 /**
  * 主菜单那条竖着跑的带子（ui/modeStrip.ts + engine/marquee.ts）。
  *
+ * ⚠️ **第十一轮主菜单换回了鱼眼轴，这条带子没有接线，所以这道门跑不通。**
+ * 它现在量的是一块不在页面上的界面：跑它只会在等选择器的地方超时。带子那一版
+ * 和 engine/marquee.ts 一起留着当后备（见 ui/modeStrip.ts 文件头），这道门也就
+ * 一起留着——哪天再换回带子，它是现成的。**现行菜单的门是
+ * scripts/check-mode-axis.mjs 和 scripts/check-menu.mjs。**
+ * 写明这一句的理由照 9c73a07 的教训：没接线的东西不写明，下一个人会以为它是
+ * 现行的，然后拿一道注定红的门去怀疑好好的代码。
+ *
  *   node scripts/dev-server.mjs 8815 dist
  *   node scripts/check-mode-strip.mjs http://localhost:8815/
  *

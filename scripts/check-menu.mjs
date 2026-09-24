@@ -132,12 +132,15 @@ async function lockedCards(width, height) {
   await p.waitForSelector('.home-icon-btn--locked', { timeout: 20000 });
   await p.waitForTimeout(400);
   /*
-   * 只看**真身那一份**。手机竖屏的主菜单是那条带子（.mode-strip），内容摆了两
-   * 份、第二份是 aria-hidden 的克隆（无缝循环靠的就是这个）。一起数的话五张锁着
-   * 的卡会数出十张——不是真的多了五张，是各有一个分身。
+   * 手机竖屏的主菜单是那条鱼眼轴（.mode-axis），卡是它的**直接子元素**——炸弹那
+   * 张卡里还嵌着一块缩图，里面九颗小片也顶着 .home-icon-btn（是画不是控件），
+   * 用后代选择器会把它们一起数进来。宽屏那一路还是一排一排的，照旧全取。
+   *
+   * （带子那一版内容摆了两份、第二份是克隆，所以这儿曾经要挑「真身那一份」。
+   * 换回轴之后没有克隆了，那一段连同 .marquee-copy 一起撤掉。）
    */
-  const sel = (await p.$('.mode-strip .marquee-copy'))
-    ? '.mode-strip .marquee-copy:first-of-type .home-icon-btn--locked'
+  const sel = (await p.$('.mode-axis'))
+    ? '.mode-axis > .home-icon-btn--locked'
     : '.home-icon-btn--locked';
   const cards = await p.$$eval(sel, (btns) =>
     btns.map((b) => {
@@ -179,8 +182,8 @@ async function lockedCards(width, height) {
  *
  * 两种排法，所以两条路：
  *  · **宽屏**（电脑、手机横屏）还是一排一排的 `.home-row`，返回二维。
- *  · **手机竖屏** 2026-09 整个换成了一条横着跑的带子（`.mode-strip`，见 ui/modeStrip.ts）
- *    ——没有「排」这回事，十四张卡是一条链，返回一维。
+ *  · **手机竖屏** 是那条鱼眼轴（`.mode-axis`，见 ui/modeAxis.ts）——没有「排」这
+ *    回事，十四张卡是一条链，返回一维。
  *
  * 这道门原先只认 `.home-row`：轴上线之后，竖屏那一轮在这儿等 20 秒然后抛异常，
  * **后面十几条一条都没跑**（而整个进程还是 exit 0，看着像跑完了）。所以这儿两
@@ -195,19 +198,19 @@ async function menuOrder(width, height) {
   });
   const p = await c.newPage();
   await p.goto(BASE, { waitUntil: 'load' });
-  await p.waitForSelector('.home-row .home-icon-btn, .mode-strip .home-icon-btn', { timeout: 20000 });
+  await p.waitForSelector('.home-row .home-icon-btn, .mode-axis .home-icon-btn', { timeout: 20000 });
   await p.waitForTimeout(300);
   const out = await p.evaluate(() => {
     const name = (e) => (e.getAttribute('aria-label') || '').split(' ·')[0];
     const rows = [...document.querySelectorAll('.home-row')];
     if (rows.length) return { kind: 'rows', items: rows.map((r) => [...r.children].map(name)) };
-    // 轴上只取**直接子元素**里的卡：两条点点轴（.axis-rail）也挂在同一个容器上。
-    // 带子上只数**真身那一份**（第二份是克隆）。
-    const strip = document.querySelector('.mode-strip');
-    const copy = strip?.querySelector('.marquee-copy') ?? strip;
+    // 轴上只取**直接子元素**里的卡：两条点点轴（.axis-rail）、分界线、《我会玩》
+    // 都挂在同一个容器上，炸弹那张卡里还嵌着一块缩图（里面九颗小片也顶着
+    // .home-icon-btn，是画不是控件）。
+    const axis = document.querySelector('.mode-axis');
     return {
-      kind: 'strip',
-      items: [...(copy?.children ?? [])].filter((e) => e.classList.contains('home-icon-btn')).map(name),
+      kind: 'axis',
+      items: [...(axis?.children ?? [])].filter((e) => e.classList.contains('home-icon-btn')).map(name),
     };
   });
   await c.close();
@@ -277,7 +280,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
     // 所以把 WANT 摊平了比——次序要是散了，这儿立刻红。
     //
     // 不在这儿量「每张一样大」：轴上的卡是被鱼眼缩放过的，本来就不一样大。
-    // 「每一站等高、相邻两张不相撞」由 check-mode-strip 逐条量，那是它的活。
+    // 「每一站等高、相邻两张不相撞」由 check-mode-axis 逐条量，那是它的活。
     const want = WANT.flat();
     check(`${label}：轴上 ${want.length} 站`, got.items.length === want.length, `${got.items.length} 张`);
     check(`${label}：轴上的次序就是窄屏那一条链`,
@@ -310,21 +313,21 @@ await tctx.addInitScript(() => {
 const tap = await tctx.newPage();
 await tap.goto(BASE, { waitUntil: 'load' });
 await tap.waitForSelector('.home-icon-btn', { timeout: 20000 });
-// `.home-grid` 挑掉带 .mode-strip 的那一个：竖屏主菜单那条带子自己要吃横向手势
+// `.home-grid` 挑掉带 .mode-axis 的那一个：竖屏主菜单那条轴自己要吃竖向手势
 // （不吃的话手指一滑页面跟着滚，轴只走一半），和棋盘一样是 touch-action: none。
 // 它不是漏网的，下面单列一条量它——挑出去而不量，才是把洞留在门上。
 const zoomy = await tap.$$eval(
-  'body, .app, .home-grid:not(.mode-strip), .home-row, .home-icon-btn, .home-head, .home-nav, .home-nav button',
+  'body, .app, .home-grid:not(.mode-axis), .home-row, .home-icon-btn, .home-head, .home-nav, .home-nav button',
   (els) =>
     els
       .map((e) => (getComputedStyle(e).touchAction === 'manipulation' ? null : `${e.className || e.tagName}=${getComputedStyle(e).touchAction}`))
       .filter(Boolean),
 );
 check('连点两下不放大：按钮和空白都算', zoomy.length === 0, zoomy.join(' / '));
-/* 带子是竖着走的，竖向手势归它——和鱼眼轴当年一样是 none。不写的话手指一滑
-   页面跟着滚，带子只走一半。 */
-const stripTA = await tap.$eval('.mode-strip', (e) => getComputedStyle(e).touchAction).catch(() => '没有带子');
-check('带子是 none（竖向手势它自己吃）', stripTA === 'none', stripTA);
+/* 轴是竖着走的，竖向手势归它。不写的话手指一滑页面跟着滚，轴只走一半
+   （style.css 的 .mode-axis 上那条 touch-action: none）。 */
+const axisTA = await tap.$eval('.mode-axis', (e) => getComputedStyle(e).touchAction).catch(() => '没有轴');
+check('轴是 none（竖向手势它自己吃）', axisTA === 'none', axisTA);
 // 开一局，确认棋盘那块还是 none。
 await tap.$$eval('.home-icon-btn', (els) => els[0].click());
 await tap.waitForSelector('.start-go, .board-wrap', { timeout: 8000 });
@@ -384,10 +387,10 @@ await tctx.close();
     const sp = await sctx.newPage();
     await sp.addInitScript(watch);
     await sp.goto(BASE, { waitUntil: 'load' });
-    await sp.waitForSelector('.mode-strip .home-icon-btn', { timeout: 20000 });
+    await sp.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
     await sp.waitForTimeout(600);
     const found = await sp.evaluate((l) => {
-      const btn = [...document.querySelectorAll('.mode-strip [data-strip-idx]')]
+      const btn = [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
         .find((b) => (b.getAttribute('aria-label') || '').startsWith(l));
       if (!btn) return false;
       btn.click();
@@ -408,10 +411,10 @@ await tctx.close();
   {
     const sp = await sctx.newPage();
     await sp.goto(BASE, { waitUntil: 'load' });
-    await sp.waitForSelector('.mode-strip .home-icon-btn', { timeout: 20000 });
+    await sp.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
     await sp.waitForTimeout(600);
     await sp.evaluate(() => {
-      const btn = [...document.querySelectorAll('.mode-strip [data-strip-idx]')]
+      const btn = [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
         .find((b) => (b.getAttribute('aria-label') || '').startsWith('老虎机'));
       btn.click();
     });
@@ -429,10 +432,10 @@ await tctx.close();
     await sp.emulateMedia({ reducedMotion: 'reduce' });
     await sp.addInitScript(watch);
     await sp.goto(BASE, { waitUntil: 'load' });
-    await sp.waitForSelector('.mode-strip .home-icon-btn', { timeout: 20000 });
+    await sp.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
     await sp.waitForTimeout(600);
     await sp.evaluate(() => {
-      const btn = [...document.querySelectorAll('.mode-strip [data-strip-idx]')]
+      const btn = [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
         .find((b) => (b.getAttribute('aria-label') || '').startsWith('老虎机'));
       btn.click();
     });
