@@ -69,6 +69,7 @@ import { createCircleSevenGame } from './shapes/circleSeven';
 import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 import { reducedMotion } from './engine/reducedMotion';
+import * as smoothScroll from './engine/smoothScroll';
 
 injectStyles();
 
@@ -516,6 +517,15 @@ function teardown() {
     activeDestroy = null;
   }
   gameInProgress = false;
+  /**
+   * 换屏默认「开阻尼」，进局内的那一条自己关（showGame 里那句 stop）。
+   *
+   * 这么接是为了**只改两处**：teardown 是每一屏进来时第一件事，所有内容页都经
+   * 过它；局内是唯一的例外，就在那一处摘掉。反过来写（默认关、每个内容页各开
+   * 一次）要改十几处，往后新加一页还得记得补——忘一处就是「这一页没有阻尼」，
+   * 而那种毛病没人会报，只会觉得「怪怪的」。
+   */
+  smoothScroll.start();
 }
 
 /**
@@ -1265,6 +1275,15 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
       showMenu();
     });
   const mountNow = () => {
+    /**
+     * 局内不要滚动阻尼（玩家第八轮点名）。
+     *
+     * teardown 默认给所有屏开着（见那儿），局内是唯一的例外：棋盘那块自己吃
+     * 手势（`touch-action: none`），再插一层接管滚动只会打架。关在挂载棋盘的
+     * 这一句旁边，而不是 showGame 头上——开局页、倒数那几屏走的也是 showGame，
+     * 它们是正经的内容页。
+     */
+    smoothScroll.stop();
     /**
      * 单人局一律从真随机发牌——把上一次留下的共享种子清掉。
      *

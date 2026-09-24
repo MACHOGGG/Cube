@@ -31,6 +31,8 @@ const SWAP: Record<string, string> = {
   'src/engine/analytics.ts': stub('analytics.ts'),
   'src/engine/cloudScores.ts': stub('cloudScores.ts'),
   'src/engine/room.ts': stub('room.ts'),
+  // 滚动阻尼（Lenis）：Chrome 61 上没测过，而且包有体积门禁。见那个替身的文件头。
+  'src/engine/smoothScroll.ts': stub('smoothScroll.ts'),
 };
 
 function swapModules(): Plugin {
