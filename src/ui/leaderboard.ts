@@ -64,12 +64,17 @@ export function boardGroups(lang: Lang): BoardGroup[] {
   return [
     { mode: 'g:base', label: s.rankTabBase, children: named(BASE_THREE, 'base') },
     { mode: 'g:timed', label: s.rankTabTimed, children: named(BASE_THREE, 'timed') },
-    // 'bomb2' 是炸弹规则的第二版（见 api/scores.js 的 BOMB_KIND）：2026-09 改
-    // 成「一局只剩一枚永久炸弹」之后开的新榜，老的 square:bomb 归档不再露面。
-    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_THREE, 'bomb2') },
+    // 'bomb3' 是炸弹规则的第三版（见 api/scores.js 的 BOMB_KIND）：2026-09 改
+    // 成「炸弹会被拆成星星」之后开过 bomb2，再取消那一枚永久炸弹之后开的这一张；
+    // 老的 square:bomb / square:bomb2 归档，不再露面。
+    // 'flip2' 同理：给连击加了封顶（scoring.ts 的 FLIP_STREAK_CAP）之后开的新榜，
+    // 没封顶那一版能打出的分高一个量级，放一起比就是把老局钉死在榜首。
+    // **这两处最容易漏**：改了服务端的 KIND 却没改这儿，客户端点开的是归档榜，
+    // 新分一个都看不见（反转那一版第一遍就漏了，check-bomb-rules 逮到的）。
+    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_THREE, 'bomb3') },
     { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
     { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_THREE, 'slot') },
-    { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip') },
+    { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip2') },
     // 步步为营三个基础玩法都有。这是**新开**的一张榜，没有旧局要归档，所以没
     // 有 bomb2 那样的版本后缀（见 api/scores.js 里那段注释）。
     { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_THREE, 'puzzle') },

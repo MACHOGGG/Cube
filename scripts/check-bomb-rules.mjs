@@ -103,8 +103,10 @@ const tally = (arr) => {
       worstSpread = Math.max(worstSpread, Math.max(...counts) - Math.min(...counts));
       if (normals.length >= pool.length && counts.some((n) => n === 0)) missingColorRuns++;
     }
-    check(`${b.name}：每一副牌都正好一枚永久炸弹`,
-      redCounts.size === 1 && redCounts.has(1), JSON.stringify([...redCounts]));
+    // 第 3 版（《外边消除决策》D1b，玩家 2026-09-25 拍板）：**一枚永久炸弹都不留**。
+    // 从前这一条量的是「正好一枚」——反过来了，现在一枚都不许有。
+    check(`${b.name}：一副牌里一枚红反面都没有（没有永久炸弹了）`,
+      redCounts.size === 1 && redCounts.has(0), JSON.stringify([...redCounts]));
     check(`${b.name}：其余按基础色摊开，任意两色最多差 1 枚`,
       worstSpread <= 1, `最大差 ${worstSpread}`);
     check(`${b.name}：够摊的时候没有哪一色缺席`, missingColorRuns === 0, `${missingColorRuns} 副缺色`);
@@ -116,11 +118,21 @@ const tally = (arr) => {
   const b2 = dealBombBacks(6, [1, 2, 3, 4, 5], 0, seededShuffle(7));
   check('同一个种子发两次，结果相同', JSON.stringify(a) === JSON.stringify(b2), JSON.stringify(a));
 
-  // 永久炸弹落在第几枚上也要跟着种子走，不能永远是牌堆里第一颗（那样玩家一眼
-  // 就知道哪一枚拆不掉）。
-  const spots = new Set();
-  for (let seed = 1; seed <= 200; seed++) spots.add(dealBombBacks(6, [1, 2, 3, 4, 5], 0, seededShuffle(seed)).indexOf(0));
-  check('永久炸弹的位置也洗过（不是永远第一枚）', spots.size > 1, `落过 ${spots.size} 个位置`);
+  /*
+   * 哪一枚拿到哪一色也要跟着种子走，不能永远按颜色表的顺序发。
+   *
+   * 这一条原先量的是「那一枚永久炸弹落在第几个位置」（`indexOf(RED)`）。取消永久
+   * 炸弹之后牌里没有红了，那个量法会永远拿到 −1、这条断言变成真空——所以换成量
+   * 「第一枚的颜色在两百个种子里出现过几种」。同一件事：洗过没有。
+   */
+  const firstColors = new Set();
+  for (let seed = 1; seed <= 200; seed++) firstColors.add(dealBombBacks(6, [1, 2, 3, 4, 5], 0, seededShuffle(seed))[0]);
+  check('反面的排法跟着种子洗过（不是永远同一个颜色开头）', firstColors.size > 1,
+    `第一枚出现过 ${firstColors.size} 种颜色`);
+  // redIdx 那道保险：调色板里混进红，也不许发出一枚红反面（见 dealBombBacks）。
+  const dirty = dealBombBacks(6, [0, 1, 2, 3], 0, seededShuffle(3));
+  check('调色板里混进红也不会发出红反面（redIdx 那道保险）',
+    dirty.length === 6 && !dirty.includes(0), JSON.stringify(dirty));
 
   check('没有炸弹的时候发空牌', dealBombBacks(0, [1, 2, 3], 0, seededShuffle(1)).length === 0);
 }
@@ -133,7 +145,10 @@ const tally = (arr) => {
   const t = (color, face, dotColor) => ({ color, face, dotColor });
   check('正面朝上的红块是活炸弹', isLiveBomb(t(RED, 'flavor', 3), RED) === true);
   check('拆成基础色星星的不再是炸弹', isLiveBomb(t(RED, 'dot', 3), RED) === false);
-  check('反面也是红的那一枚（永久炸弹）仍然算', isLiveBomb(t(RED, 'dot', RED), RED) === true);
+  // 这一条量的是 isLiveBomb 的**行为**，不是发牌：第 3 版之后 dealBombBacks 再也不
+  // 发红反面，所以这个组合实际出不来了。断言留着——那一行照旧按「露在外面的那一面」
+  // 问，和有没有永久炸弹无关（这件事已经来回过两轮，见 bomb.ts）。
+  check('反面是红的那一枚照旧算活炸弹（isLiveBomb 按露在外面那一面问）', isLiveBomb(t(RED, 'dot', RED), RED) === true);
   check('普通正面色块不是炸弹', isLiveBomb(t(2, 'flavor', 3), RED) === false);
   check('普通星星不是炸弹', isLiveBomb(t(2, 'dot', 3), RED) === false);
 }
@@ -249,9 +264,11 @@ const tally = (arr) => {
     gc.includes('BOMB_RULES_VERSION') && gc.includes("hooks.modeKey === 'bomb'"));
 
   const scores = read('api/scores.js');
-  check('服务器炸弹榜换了新版本键', scores.includes("const BOMB_KIND = 'bomb2'"));
-  check('老局仍然算回老榜（bombRules 缺省 = 第一版）',
-    scores.includes("Number(data?.bombRules) >= 2 ? BOMB_KIND : 'bomb'"));
+  check('服务器炸弹榜换了新版本键', scores.includes("const BOMB_KIND = 'bomb3'"));
+  // 三档都要认得出来：没有 bombRules 的老档是第 1 版，2 是留一枚永久炸弹那一版，
+  // 3 起是现行规则。少认一档就是把两代成绩混回一张榜。
+  check('老局仍然算回老榜（bombRules 缺省 = 第一版，2 归 bomb2）',
+    scores.includes("v >= 3 ? BOMB_KIND : v >= 2 ? 'bomb2' : 'bomb'"));
   // 老的 square:bomb 等是归档榜：它不在 ALL_BOARDS / LEGACY_BOARDS 里，重建时
   // 不会被撤人。KINDS 里要是还留着 'bomb'，新旧两版就又混回一张榜上了。
   //
@@ -269,13 +286,16 @@ const tally = (arr) => {
   //   位置、check-outer-edges 守一个没人调用的函数）。门要抠的是「它做到了什
   //   么」，不是「代码长什么样」——写新断言时回来读这一段。
   const kinds = (scores.match(/const KINDS = \[([^\]]*)\]/) || [, ''])[1];
-  check('KINDS 里没有老版本那一档', kinds.length > 0 && !/'bomb'/.test(kinds), kinds);
+  check('KINDS 里没有老版本那两档', kinds.length > 0 && !/'bomb'/.test(kinds) && !/'bomb2'/.test(kinds), kinds);
   check('KINDS 里走的是版本化的那一档', kinds.includes('BOMB_KIND'));
 
   const board = read('src/ui/leaderboard.ts');
-  check('客户端点开的也是新榜', board.includes("named(BASE_THREE, 'bomb2')"));
+  // 这一处最容易漏：改了服务端的 KIND 却没改客户端，玩家点开的是归档榜，新分一个都
+  // 看不见。反转那一版（flip → flip2）第一遍就漏了，是这条的姊妹检查逮到的。
+  check('客户端点开的也是新榜', board.includes("named(BASE_THREE, 'bomb3')"));
+  check('客户端的无限反转也点在新榜上', board.includes("named(['square', 'circle'], 'flip2')"));
 
-  check('版本号本身是 2', BOMB_RULES_VERSION === 2, String(BOMB_RULES_VERSION));
+  check('版本号本身是 3', BOMB_RULES_VERSION === 3, String(BOMB_RULES_VERSION));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

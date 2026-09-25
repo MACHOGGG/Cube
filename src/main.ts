@@ -152,9 +152,9 @@ const homeLayout: HomeLayout = {
 const recordSources: RecordSource[] = [
   ...games.map((g) => ({ card: g.card, suffix: '', mode: '' })),
   ...games.map((g) => ({ card: g.card, suffix: '_timed', mode: ' · 60s' })),
-  ...games.map((g) => ({ card: g.card, suffix: '_bomb2', mode: ' · 💥' })),
+  ...games.map((g) => ({ card: g.card, suffix: '_bomb3', mode: ' · 💥' })),
   ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
-  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb2', mode: ' · + 💥' })),
+  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb3', mode: ' · + 💥' })),
   // 《无限反转》只有基础方块和小球有。
   // 后缀跟着规则版本走（和上面炸弹那两行写 '_bomb2' 同一个道理）：封顶之前那些局
   // 留在 '_flip' 那张榜上归档，记录页只摆现行规则这一张。
@@ -178,7 +178,9 @@ const runKeyFor: RunKeyFor = (data) => {
   const card = recordSources.find((src) => src.card.id === data.shapeId)?.card;
   if (!card) return null;
   const mk = data.modeKey;
-  const bombSuffix = (data.bombRules ?? 1) >= BOMB_RULES_VERSION ? '_bomb2' : '_bomb';
+  // 三档：没有 bombRules 的老档是第 1 版，2 是留一枚永久炸弹那一版，3 起是现行规则。
+  const bombRules = data.bombRules ?? 1;
+  const bombSuffix = bombRules >= BOMB_RULES_VERSION ? '_bomb3' : bombRules >= 2 ? '_bomb2' : '_bomb';
   // 无限反转同理：连击封顶（scoring.ts 的 FLIP_STREAK_CAP）之前那些局能打出的分高
   // 一个量级，放一起比就是把老局钉死在榜首。老档没有 flipRules，是第一版。
   const flipSuffix = (data.flipRules ?? 1) >= FLIP_RULES_VERSION ? '_flip2' : '_flip';

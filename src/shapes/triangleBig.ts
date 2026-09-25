@@ -60,7 +60,7 @@ const SLOT_IS_UP: boolean[] = ROW_LENS.flatMap((len, r) =>
 // Bomb mode reuses the exact same 5-colors × 5-each deck as the base game —
 // one existing palette index just becomes a fixed hazard color instead of
 // dropping colors and inflating a separate red group. 炸弹的反面在发牌时印好
-// （dealBombBacks）：一枚仍是红的永久炸弹，其余各印一种基础色。
+// （dealBombBacks）：每一枚都印一种基础色（第 3 版之后没有永久炸弹了，见 engine/bomb.ts 的 BOMB_RULES_VERSION）。
 // standard's own red sits at index 1, but colorblind's naturally-reddest hue
 // sits at index 0 (see PALETTES above) — since the deck is generated once
 // using a single numeric index and the palette toggle only remaps hex-per-index
@@ -262,7 +262,7 @@ export function createTriangleBigGame(): ShapeGame {
       /**
        * 这一枚此刻是不是一颗**活**炸弹（判四连、闪三连预警、数活棋子都问它）。
        *
-       * 问的是露在外面的那一面：正面红 = 还没拆；反面红 = 那一枚永久炸弹；拆成
+       * 问的是露在外面的那一面：正面红 = 还没拆；拆成
        * 基础色星星的，不再是炸弹。理由写在 engine/bomb.ts 的 isLiveBomb 上面。
        */
       const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
@@ -414,7 +414,7 @@ export function createTriangleBigGame(): ShapeGame {
         //
         // 从前这一格留着上面 fill(RED_IDX) 的默认值——红块永不翻面，那个反面
         // 谁也没见过。现在炸弹挨着得分图案会被连带拆掉、翻成星星，它就得是一
-        // 颗真的星星：一枚永久炸弹（反面还是红 + 「！」，拆完照旧算炸弹），其
+        // 颗真的星星：每一枚的反面都印基础色（第 3 版之后没有永久炸弹了，见 engine/bomb.ts 的 BOMB_RULES_VERSION），其
         // 余按五种基础色配平。为什么在发牌时定、为什么是配平，见
         // engine/bomb.ts 的 dealBombBacks。
         const bombBackPool = Array.from({ length: COLORS.length }, (_, k) => k).filter((k) => k !== RED_IDX);
@@ -462,7 +462,7 @@ export function createTriangleBigGame(): ShapeGame {
       /**
        * 得分图案旁边的炸弹，跟着这一拍挨一下。**两下才拆**（玩家定的，见
        * engine/bomb.ts 的 BOMB_HITS_TO_DEFUSE）：第一下只留一道裂纹，第二下才
-       * 翻成它自己的反面（一枚基础色星星，或者那一枚永久炸弹的红星星）。挨着
+       * 翻成它自己的反面（一枚基础色星星）。挨着
        * 的全算，没有上限。
        *
        * 回传拆掉的那几格，连锁那边会把它们并进**下一拍的遮罩**（见 scoring.ts
@@ -733,7 +733,8 @@ export function createTriangleBigGame(): ShapeGame {
         // 「两下才拆」这条规则在屏幕上根本不存在，玩家只会觉得「贴着打了一次
         // 怎么没掉」。画在「！」前面，所以那个记号压在裂纹上，不会被盖住。
         if (isCrackedBomb(tile)) el.appendChild(crackLayer(Math.min(w, h) * 0.5, h * 0.22));
-        // 「！」两面都要画。正面是还没拆的炸弹；反面是那一枚永久炸弹——它的
+        // 「！」画在正面（还没拆的炸弹）。反面那一支留着：第 3 版取消了永久炸弹，所以
+        // 现在发不出红反面；这件事来回过两轮，画法不跟着删（见 engine/bomb.ts）。它的
         // 反面还是红（dealBombBacks 留的），照旧按炸弹规则算，而红星星和别的
         // 星星形状一模一样，不加这个记号就混在里面认不出来了。
         if (liveBomb(tile)) {

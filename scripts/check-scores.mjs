@@ -250,35 +250,47 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   const noSuchGroup = await call({ action: 'board', ...H, mode: 'g:nope' });
   check('没有的母标签是 400，不是一张空榜', noSuchGroup.status === 400, String(noSuchGroup.status));
 
-  // 炸弹分两版规则（2026-09 从六枚永不翻面的红块改成「一枚永久炸弹 + 其余可
-  // 拆」），躲六枚和躲一枚打出来的分不是一把尺子量的，所以各记各的榜：新局带
-  // bombRules 归 square:bomb2，老档没有这一项，仍旧归老的 square:bomb（归档，
-  // 重建时不撤人）。少了这一分，老纪录会压在新榜前列，新规则等于白改。
+  /*
+   * 炸弹分**三版**规则，各记各的榜（`bombRules` 说了算，见 api/scores.js 的 kindOf）：
+   *   第 1 版（老档没有 bombRules）—— 六枚永不翻面的红块 → `square:bomb`
+   *   第 2 版 —— 炸弹可拆，但留一枚永久炸弹      → `square:bomb2`
+   *   第 3 版（现行，玩家 2026-09-25 拍板取消那一枚）→ `square:bomb3`
+   * 躲六枚、躲一枚、一枚都不躲，打出来的分不是一把尺子量的。少分一档，老纪录会压在
+   * 新榜前列，新规则等于白改。
+   */
   await call({ action: 'push', ...H, runId: 'h4', mode: 'square', score: 250,
     data: { shapeId: 'square', modeKey: 'bomb', totalScore: 250 } });
   await call({ action: 'push', ...H, runId: 'h5', mode: 'square', score: 1100,
     data: { shapeId: 'square', modeKey: 'bomb', bombRules: 2, totalScore: 1100 } });
+  await call({ action: 'push', ...H, runId: 'h5b', mode: 'square', score: 900,
+    data: { shapeId: 'square', modeKey: 'bomb', bombRules: 3, totalScore: 900 } });
   // 定时炸弹也是炸弹的一种，不是第七块榜——它跟着同一个版本号走。
   await call({ action: 'push', ...H, runId: 'h6', mode: 'square', score: 1500,
-    data: { shapeId: 'square', modeKey: 'bombTimed', bombRules: 2, totalScore: 1500 } });
+    data: { shapeId: 'square', modeKey: 'bombTimed', bombRules: 3, totalScore: 1500 } });
 
   const mineBomb = await call({ action: 'mine', ...H });
-  check('老规则那局炸弹留在老榜上',
+  check('第一版那局炸弹留在最老那张榜上',
     mineBomb.payload?.best?.['square:bomb'] === 250, JSON.stringify(mineBomb.payload?.best));
-  check('新规则的炸弹（含定时炸弹）记在新榜上',
-    mineBomb.payload?.best?.['square:bomb2'] === 1500, JSON.stringify(mineBomb.payload?.best));
+  check('第二版那局留在 bomb2（没被现行规则顶走）',
+    mineBomb.payload?.best?.['square:bomb2'] === 1100, JSON.stringify(mineBomb.payload?.best));
+  check('现行规则的炸弹（含定时炸弹）记在 bomb3 上',
+    mineBomb.payload?.best?.['square:bomb3'] === 1500, JSON.stringify(mineBomb.payload?.best));
 
-  const bombBoard = await call({ action: 'board', ...H, mode: 'square:bomb2' });
-  check('新榜上只有新规则那两局里高的那一个',
+  const bombBoard = await call({ action: 'board', ...H, mode: 'square:bomb3' });
+  check('现行那张榜上只有现行规则那两局里高的那一个',
     bombBoard.payload?.rows?.map((r) => r.score).join() === '1500',
     JSON.stringify(bombBoard.payload?.rows));
   const oldBombBoard = await call({ action: 'board', ...H, mode: 'square:bomb' });
-  check('老榜原样留着，没被新局顶掉',
+  check('最老那张榜原样留着，没被新局顶掉',
     oldBombBoard.payload?.rows?.map((r) => r.score).join() === '250',
     JSON.stringify(oldBombBoard.payload?.rows));
+  const midBombBoard = await call({ action: 'board', ...H, mode: 'square:bomb2' });
+  check('第二版那张榜也原样留着（两张归档榜互不相干）',
+    midBombBoard.payload?.rows?.map((r) => r.score).join() === '1100',
+    JSON.stringify(midBombBoard.payload?.rows));
 
   const bombGroup = await call({ action: 'board', ...H, mode: 'g:bomb' });
-  check('《炸弹》母榜看的是新榜',
+  check('《炸弹》母榜看的是现行那张',
     (bombGroup.payload?.rows ?? []).map((r) => `${r.score}`).join() === '1500',
     JSON.stringify(bombGroup.payload?.rows));
 }

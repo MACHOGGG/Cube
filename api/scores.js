@@ -101,16 +101,18 @@ const TOTAL_MODE = 'lb:total:mode';
  *
  * 定时炸弹归到炸弹里（bombTimed → bomb）：它是炸弹的一种，不是第七块。
  *
- * 炸弹还分两版规则。2026-09 之前一局里每一枚红块都是炸弹、永不翻面；之后炸弹
- * 挨着得分图案会被连带拆成星星，整局只剩一枚永久炸弹。同一副棋盘，躲六枚和躲
- * 一枚打出来的分不是一把尺子量的，所以新规则记在 `square:bomb2` 这样的新榜
- * 上，老的 `square:bomb` 原样归档——它不在 ALL_BOARDS 里，重建时不撤人，存档
- * 里那些老局照旧算回它自己那张榜（见 kindOf）。
+ * 炸弹分**三版**规则。第 1 版：一局里每一枚红块都是炸弹、永不翻面（躲六枚）。第 2
+ * 版：炸弹挨着得分图案会被连带拆成星星，但留一枚永久炸弹（躲一枚）。第 3 版（玩家
+ * 2026-09-25 拍板的《外边消除决策》D1b）：那一枚也取消，一局打到最后一枚活炸弹都不
+ * 剩。同一副棋盘，躲六枚、躲一枚、一枚都不躲，打出来的分不是一把尺子量的，所以现行
+ * 规则记在 `square:bomb3` 这样的新榜上，老的两张（`square:bomb`、`square:bomb2`）原样
+ * 归档——它们不在 ALL_BOARDS 里，重建时不撤人，存档里那些老局照旧算回自己那张榜
+ * （见 kindOf）；除非 `drop` 点名，那时候连归档榜一起撤（见 droppedBoards）。
  */
 const BASE_SHAPES = ['square', 'circle', 'triangle'];
 const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'];
 /** 炸弹这一档现在叫什么。改规则就往上加一版，老的那个名字留着当归档榜。 */
-const BOMB_KIND = 'bomb2';
+const BOMB_KIND = 'bomb3';
 /**
  * 步步为营这一档。
  *
@@ -140,7 +142,11 @@ function kindOf(data) {
   // 老档没有 flipRules，读出来是 undefined——那是没封顶那一版，归老榜。
   if (mk === 'flip') return Number(data?.flipRules) >= 2 ? FLIP_KIND : 'flip';
   // 老档没有 bombRules，读出来是 undefined——那是第一版规则，归老榜。
-  if (mk === 'bomb' || mk === 'bombTimed') return Number(data?.bombRules) >= 2 ? BOMB_KIND : 'bomb';
+  // 三档：没有 bombRules 的老档是第 1 版，2 是留一枚永久炸弹那一版，3 起是现行规则。
+  if (mk === 'bomb' || mk === 'bombTimed') {
+    const v = Number(data?.bombRules) || 1;
+    return v >= 3 ? BOMB_KIND : v >= 2 ? 'bomb2' : 'bomb';
+  }
   if (mk === 'timed') return 'timed';
   return data?.slot ? 'slot' : 'base';
 }
@@ -165,7 +171,7 @@ const GROUPS = {
   bomb: BASE_SHAPES.map((s) => `${s}:${BOMB_KIND}`),
   layout: LAYOUT_BOARDS,
   slot: BASE_SHAPES.map((s) => `${s}:slot`),
-  flip: ['square:flip', 'circle:flip'],
+  flip: [`square:${FLIP_KIND}`, `circle:${FLIP_KIND}`],
   puzzle: BASE_SHAPES.map((s) => `${s}:${PUZZLE_KIND}`),
 };
 /** 合并一张母榜时，每张子榜先取前多少名。 */
