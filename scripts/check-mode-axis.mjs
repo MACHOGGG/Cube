@@ -114,6 +114,29 @@ const shot = (page) =>
   });
 
 /**
+ * 往页面里装一个**连续的焦点读数** `window.__focus()`：哪一项的中心正落在选中线
+ * 上（跨线的两张之间线性插值）。刷新会清掉，所以每次 reload 之后都要重装。
+ *
+ * 量的是**画出来的位置**，所以它同时也是「画面追到哪儿了」的读数（第十三轮之后
+ * 画面和手指是两个数，见 modeAxis 的 aimFocus）。
+ */
+const installFocus = (pg) => pg.evaluate(() => {
+  window.__focus = () => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
+    const cs = [...host.children]
+      .filter((e) => e.classList.contains('home-icon-btn'))
+      .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
+    for (let k = 1; k < cs.length; k++) {
+      const a = cs[k - 1], b = cs[k];
+      if (a.d <= 0 && b.d >= 0) return a.i + (a.d === b.d ? 0 : -a.d / (b.d - a.d));
+    }
+    return cs[0] && cs[0].d > 0 ? cs[0].i : cs.length - 1;
+  };
+});
+
+/**
  * 盯住每一帧写进卡片 transform 里的那个 skewY，记下全程最大的绝对值。
  *
  * 倾斜是**瞬时**的（速度一衰减它就回零），事后再去问 DOM 永远是 0——那正是这类
@@ -989,21 +1012,7 @@ let page = await menuPage({ slides_played_square: '1' });
 // 「一帧之内就到位」，说明追赶根本没生效，上面那条就白绿了。
 {
   const p10 = await menuPage({ slides_played_square: '1' });
-  const install = () => p10.evaluate(() => {
-    window.__focus = () => {
-      const host = document.querySelector('.mode-axis');
-      const hr = host.getBoundingClientRect();
-      const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
-      const cs = [...host.children]
-        .filter((e) => e.classList.contains('home-icon-btn'))
-        .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
-      for (let k = 1; k < cs.length; k++) {
-        const a = cs[k - 1], b = cs[k];
-        if (a.d <= 0 && b.d >= 0) return a.i + (a.d === b.d ? 0 : -a.d / (b.d - a.d));
-      }
-      return cs[0] && cs[0].d > 0 ? cs[0].i : cs.length - 1;
-    };
-  });
+  const install = () => installFocus(p10);
   const midX = await p10.evaluate(() => {
     const r = document.querySelector('.mode-axis').getBoundingClientRect();
     return r.left + r.width / 2;
@@ -1217,6 +1226,106 @@ let page = await menuPage({ slides_played_square: '1' });
     `${rest.length} 张：${[...new Set(rest)].join(' / ')}`,
   );
   await p11.close();
+}
+
+// ── 4l. 第二根手指不许打断拖动 ──────────────────────────────────────
+//
+// 三个手势函数（onDown / onMove / onUp）从前一个都不看 `pointerId`，于是屏幕上
+// **任何**第二个触点都会插进正在进行的那一把里：
+//
+//   · 它的 pointerdown 会把 startY / startFocus / axisPx 全部重置，还按它自己
+//     的横坐标重新判「拖的是卡片还是点点」（两档灵敏度差三倍）——于是第一根手
+//     指接下来的位移是按**第二根手指**的起点算的，轴当场跳到一个玩家根本没滑到
+//     的地方；
+//   · 它的 pointerup 会直接把这一把手势结束掉并定格。
+//
+// 单手拿手机的人虎口、小指碰到屏幕是家常事。而这一处从前踩不太到，是因为轴只占
+// 招牌底下一小块；第四轮玩家点名要「鱼眼转盘的范围一直从头到尾延伸」之后，可触
+// 范围变成**整个屏幕**，踩中的概率就明显上去了。这正撞上仓库自己那条站点原则：
+// 「不要让玩家出现意料之外的疏漏操作」。
+//
+// 量法：拿两个不同 pointerId 的真 PointerEvent 打在轴上——那就是「另一根手指」
+// 在代码里的样子。第二根故意落在**靠边那一条**（拨点点那一档），这是最坏的情形。
+{
+  const p12 = await menuPage({ slides_played_square: '1' });
+  await installFocus(p12);
+  const out = await p12.evaluate(async () => {
+    const host = document.querySelector('.mode-axis');
+    const rect = host.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const ev = (type, o) =>
+      host.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerType: 'touch', button: 0, ...o,
+      }));
+    /**
+     * 每一处量之前都等画面追上手指（250ms）。
+     *
+     * 第十三轮之后画面是每帧往手指那个目标追一截的（modeAxis 的 aimFocus/damp），
+     * 手指停住 80ms 之后转成追齐档——等两帧远远不够：头一版只等两帧，量出「第一
+     * 根手指只走了 0.16 项」，连尺子都立不住。
+     */
+    const settle = () => new Promise((r) => setTimeout(r, 250));
+    const y0 = 600;
+    /**
+     * 一段 60px，两段合起来 120px——**故意留在 GAIN_KNEE（130px）以内**。
+     *
+     * 那一档是「按下以来的总行程超过 130px 就从 2 倍换成 5 倍」（modeAxis 的
+     * stepGain，玩家要的「一次长滑能扫过大半条轴」）。头一版两段各 120px，第二段
+     * 正好跨过拐点，量出「后半段 5.13 项 / 前半段 1.75 项」——那是设计如此，不是
+     * 第二根手指的错。两段都待在同一档里，「同样输入同样输出」才比得上。
+     */
+    const seg = 10;
+    const start = window.__focus();
+    // 第一根手指：按住，往上拖 60px（分六小段，像真手指）
+    ev('pointerdown', { pointerId: 1, isPrimary: true, clientX: x, clientY: y0 });
+    for (let k = 1; k <= 6; k++) ev('pointermove', { pointerId: 1, isPrimary: true, clientX: x, clientY: y0 - k * seg });
+    await settle();
+    const before = window.__focus();
+    const railBefore = host.classList.contains('mode-axis--rail');
+    // 第二根手指（虎口）：在屏幕靠边那一条上碰一下就抬起
+    ev('pointerdown', { pointerId: 2, isPrimary: false, clientX: rect.left + 20, clientY: 260 });
+    await settle();
+    const afterTouch = window.__focus();
+    const railAfter = host.classList.contains('mode-axis--rail');
+    ev('pointerup', { pointerId: 2, isPrimary: false, clientX: rect.left + 20, clientY: 260 });
+    await settle();
+    const afterTap = window.__focus();
+    // 第一根手指接着往上拖同样的 60px
+    for (let k = 7; k <= 12; k++) ev('pointermove', { pointerId: 1, isPrimary: true, clientX: x, clientY: y0 - k * seg });
+    await settle();
+    const afterMore = window.__focus();
+    ev('pointerup', { pointerId: 1, isPrimary: true, clientX: x, clientY: y0 - 12 * seg });
+    return { start, before, afterTouch, afterTap, afterMore, railBefore, railAfter };
+  });
+  // 先立住尺子：第一根手指那 120px 真的把轴拖动了，下面几条才有意义。
+  const moved1 = out.before - out.start;
+  check('第一根手指真的拖动了轴（下面几条才有意义）', moved1 > 0.3, `走了 ${moved1.toFixed(2)} 项`);
+  check(
+    '第二根手指落下，轴一动不动',
+    Math.abs(out.afterTouch - out.before) < 0.05,
+    `${out.before.toFixed(3)} → ${out.afterTouch.toFixed(3)}`,
+  );
+  check(
+    '第二根手指也没把「拨点点」那一档切过去',
+    out.railAfter === out.railBefore,
+    `点点档 ${out.railBefore} → ${out.railAfter}`,
+  );
+  check(
+    '第二根手指抬起，不算这一把手势结束',
+    Math.abs(out.afterTap - out.afterTouch) < 0.05,
+    `${out.afterTouch.toFixed(3)} → ${out.afterTap.toFixed(3)}`,
+  );
+  // 最要紧的一条：第一根手指接着拖，还要跟手，而且走的距离和前半段一样。
+  const moved2 = out.afterMore - out.afterTap;
+  // 容差留得比「一模一样」宽一点：手速那一档（speedK）会认停顿——第二段头一条
+  // move 的 dt 是那 250ms，算出来的手速比第一段低一档。量的是「还跟手、方向没
+  // 反、量级没变」，不是两个数相等。
+  check(
+    '第一根手指接着拖，照旧跟手（同样 60px 走同样远）',
+    moved2 > moved1 * 0.5 && moved2 < moved1 * 1.8,
+    `前半段 ${moved1.toFixed(2)} 项 / 后半段 ${moved2.toFixed(2)} 项`,
+  );
+  await p12.close();
 }
 
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────

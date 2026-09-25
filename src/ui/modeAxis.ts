@@ -375,6 +375,31 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let vel = 0;
   /** 这一次拖的是哪一个控件：靠边那两条点点（滚轮）还是中间的卡片。见 RAIL_GRAB。 */
   let rail = false;
+  /**
+   * **正在拖的是哪一根手指**（pointerId）。没在拖就是 null。
+   *
+   * 从前三个手势函数一个都不看 pointerId，于是屏幕上任何第二个触点都会插进正在
+   * 进行的那一把里：
+   *
+   *   · 它的 pointerdown 把 startY / startFocus / axisPx 全部重置，还按**它自己**
+   *     的横坐标重新判「拖的是卡片还是点点」（两档灵敏度差三倍）——第一根手指接
+   *     下来的位移于是按第二根手指的起点算，轴当场跳到一个玩家根本没滑到的地方；
+   *   · 它的 pointerup 直接把这一把手势结束掉并定格。
+   *
+   * 门（check-mode-axis 的 4l）实测出来的就是这个：第一根手指拖了 1.75 项，第二
+   * 根手指在靠边那一条上碰一下，「拨点点」那一档被切过去、松手当场定格到第 2
+   * 项，第一根手指再拖同样的 120px **一动不动**（改之前还量到过倒着走 0.09 项）。
+   *
+   * 单手拿手机的人虎口、小指碰到屏幕是家常事。这一处从前踩不太到，是因为轴只占
+   * 招牌底下一小块；第四轮玩家点名要「鱼眼转盘的范围一直从头到尾延伸」之后，可
+   * 触范围变成整个屏幕，概率就明显上去了。而它撞的是站点原则里那一条「不要让玩
+   * 家出现意料之外的疏漏操作」。
+   *
+   * 会不会卡死在「永远以为还有一根手指按着」？不会：`pointercancel` 也接到
+   * onUp（系统把这个触点作废时一定会来一条），而真正的 pointerup 在捕获之后必
+   * 到容器上。所以不另加超时阀门——多一个凭时间猜的阀门，就多一种说不清的行为。
+   */
+  let activeId: number | null = null;
   /** 平滑过的**焦点**速度（项/毫秒，带正负）：松手那一下拿它投影，见 FLING_MS。 */
   let vFocus = 0;
   /**
@@ -912,6 +937,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
 
   function onDown(e: PointerEvent): void {
     if (e.button !== undefined && e.button !== 0) return;
+    // 已经有一根手指在拖了：第二根一概不理（见 activeId 上面那段）。
+    if (dragging) return;
+    activeId = e.pointerId;
     dragging = true;
     captured = false;
     moved = 0;
@@ -940,7 +968,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   function onMove(e: PointerEvent): void {
-    if (!dragging) return;
+    if (!dragging || (activeId !== null && e.pointerId !== activeId)) return;
     const dy = e.clientY - startY;
     moved = Math.max(moved, Math.abs(dy));
     // 一旦确定是拖动，才把指针捕获过来：这样手指滑出容器（滑到标题或法务链接上）
@@ -1004,7 +1032,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   function onUp(e: PointerEvent): void {
-    if (!dragging) return;
+    if (!dragging || (activeId !== null && e.pointerId !== activeId)) return;
+    activeId = null;
     dragging = false;
     host.classList.remove('mode-axis--rail');
     if (captured) {
