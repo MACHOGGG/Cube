@@ -371,7 +371,13 @@ export function renderMultiplayerPage(
              后是上限 20 人、发起人不参加游戏单独看到实时榜单情况的版本」。
              和《开小屋》同一颗键的样子——它们是同一件事的两个档，不是两件事；
              差别由底下那一行小字讲，而那一行是**必须有字**的地方：不写的话玩家按
-             下去会发现自己没有棋盘，那正是「意料之外的界面」。 -->
+             下去会发现自己没有棋盘，那正是「意料之外的界面」。
+
+             那一行**必须一行装得下**（四种语言都要）。这一页整页只有一屏的高度
+             （check-overlap 的「多人游玩：一屏装得下，不用滚」），而加了这颗键和这
+             一行之后，英文和中文刚好卡在 844 上、一点余量都没有——头一版法语那句长
+             到折成两行，整页高出 5px，那道门当场红。所以英法两句写得比中文短：
+             「你主持、看实时榜单」那半句的意思由这一屏自己说（他看到的就是榜单）。 -->
         <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpContest">
           ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
           <span>${s.mpContest}</span>
