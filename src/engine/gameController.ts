@@ -457,18 +457,29 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   /**
-   * 得分的这一组里有没有反面（第 3 条：反面和正面一起凑）。
+   * 得分的这一组里有没有反面（教学第 3 条：反面和正面一起凑）。
    *
-   * 看的是**这一刻**屏幕上的样子，不是数据：这里离翻面还有一步（commit 在
-   * proceed 里，比这儿晚一拍），所以每一枚身上的 data-face 还是它进这一组时
-   * 的那一面——正是要问的那件事。棋子那个属性由各个玩法自己挂（circle.ts 的
-   * makeBallEl）。
+   * **问数据，不问画面。** 时序是对的：这儿离翻面还有一步（`s.commit()` 在
+   * `proceed()` 里，比这儿晚一拍，而 CascadeStep.commit 的契约写着「flips
+   * matchGroups' cells to their dot face … Call once, after showing the pre-flip
+   * highlight」），所以此刻 `tileAt(r, c).face` 还是它进这一组时的那一面——正是要问
+   * 的那件事。
+   *
+   * 从前这儿是拿 `boardEl.querySelector('[data-r][data-c]').dataset.face` 读 DOM 的，
+   * 而那个属性**只有 circle.ts 挂过**：别的七副棋盘上这个函数永远回 false，第 3 条
+   * 的演示于是只能等保底计时器，方块、三角上从来触发不了。那件事在星星消除 PR-2
+   * （4fffbb4）里按「八副都补上 el.dataset.face」修掉了，但病根没动：**控制器在读画
+   * 面来推断数据**——八副棋盘必须各自记得挂同一个属性，少挂一副就回到老 bug，而且
+   * 没有任何门守着这一条。
+   *
+   * 现在走的是共享契约里本来就有、而且**必填**的那个读法：`CascadeConfig.tileAt`
+   * （scoring.ts）。少实现一副 TypeScript 当场编译不过——这比「记得挂属性」硬得多。
+   * 各棋盘上的 `el.dataset.face` 保留（样式和翻面动画还在用），但**控制器不再靠它**。
    */
-  function anyDotFace(groups: readonly Cell[][]): boolean {
+  function anyDotFace(cfg: CascadeConfig, groups: readonly Cell[][]): boolean {
     for (const g of groups) {
       for (const [r, c] of g) {
-        const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-        if (el?.dataset.face === 'dot') return true;
+        if (cfg.tileAt(r, c).face === 'dot') return true;
       }
     }
     return false;
@@ -850,8 +861,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
     flipLedger?.beginMove(moves);
+    /**
+     * 这一步的棋盘读法。接住它是为了让 `anyDotFace` 问**数据**而不是问 DOM
+     * （见那个函数上面那段）——它本来就是每副棋盘必须实现的那份契约
+     * （`CascadeConfig.tileAt`），不用新造字段。
+     */
+    const cascade = hooks.buildCascadeConfig();
     const stepper = createCascadeStepper(
-      hooks.buildCascadeConfig(),
+      cascade,
       mask,
       { pattern: s.labelPattern, line: s.labelWholeLine },
       flipLedger ?? undefined,
@@ -1009,7 +1026,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (coach) {
         if (s.matchGroups.length) {
           coach.signal('match');
-          if (anyDotFace(s.matchGroups)) coach.signal('mixed');
+          if (anyDotFace(cascade, s.matchGroups)) coach.signal('mixed');
         }
         if (isBonus) coach.signal('line');
       }

@@ -593,9 +593,18 @@ export function createCircleGame(): ShapeGame {
         if (opacity !== undefined) el.style.opacity = String(opacity);
         el.dataset.r = String(r);
         el.dataset.c = String(c);
-        // 这一枚这会儿是哪一面。画面上本来就看得出来（实色 / 星标 / 空球），
-        // 写成属性是为了让不认识这块棋盘的人也问得到——头一局那块教学条要靠
-        // 它认出「这一组里有反面」（gameController 的 anyDotFace）。
+        // 这一枚这会儿是哪一面。写成属性是给**画面上的东西**用的：翻面动画那一
+        // 拍要先拍一张旧面的快照（engine/plankFlip.ts 的 snapFlipFaces），样式和
+        // 门也拿它认牌。
+        //
+        // **控制器已经不靠它了。** 从前头一局那块教学条要靠这个属性认出「这一组
+        // 里有反面」（gameController 的 anyDotFace），而那时八副棋盘里只有
+        // circle.ts 挂了它——于是头一局玩方块、三角的人，第 3 条哪怕真的做对了也
+        // 感知不到，只能干等超时跳过。星星消除 PR-2（4fffbb4）给八副都补上了这一
+        // 句，但病根是「控制器在读画面来推断数据」：八副必须各自记得挂同一个属性，
+        // 少挂一副就回到老 bug，而且没有门守着。现在 anyDotFace 问的是共享契约里
+        // 本来就必填的 `CascadeConfig.tileAt(r, c).face`（少实现一副当场编译不过），
+        // 那条路和这一句再也没有关系了。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         return el;
       }
