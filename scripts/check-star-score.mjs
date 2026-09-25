@@ -146,8 +146,16 @@ check('空组是 0 分', groupPoints([], () => null) === 0);
     'circleSeven', 'triangle', 'triangleBig', 'triangleAdvanced',
   ];
   const present = readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => f.replace(/\.ts$/, ''));
-  // 名单自己也要对：哪天多一副棋盘，这道门得知道。types.ts 不是棋盘。
-  const boards = present.filter((n) => n !== 'types');
+  /*
+   * 名单自己也要对：哪天多一副棋盘，这道门得知道。
+   *
+   * `src/shapes/` 下不是每个文件都是一副棋盘——`types.ts` 是那份共享契约，
+   * `registry.ts` 是按 id 查名片的那张表（家族和规则归属都从那儿走，见它的文件头）。
+   * 这个排除名单是**写死的**，不是按文件名猜：真多了一副棋盘，它就会落在名单外面，
+   * 上面那条断言当场红——那正是这一条要的。
+   */
+  const NOT_BOARDS = new Set(['types', 'registry']);
+  const boards = present.filter((n) => !NOT_BOARDS.has(n));
   check(
     '棋盘名单没变（多一副就回来把它加进这道门）',
     boards.length === SHAPES.length && SHAPES.every((n) => boards.includes(n)),
