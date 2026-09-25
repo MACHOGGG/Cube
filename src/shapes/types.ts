@@ -5,9 +5,35 @@ export interface ShapeCardMeta {
   bestKey: string;
   /** Inline SVG markup for the menu card glyph. */
   glyph: string;
+  /**
+   * **长得像哪一族**：老虎机挑图案、教学配图按这个。
+   *
+   * 从前这件事是**猜**出来的——四处各写一个函数按 id 前缀猜（gameShell 的
+   * `familyOf`、multiplayer 的 `tutorialFamilyOf`、main 的 `slotFamilyOf`），而且
+   * 对不认识的 id 给出三种不同的静默默认值（`'square'` / `null` / `'triangle'`）。
+   * 下一副新棋盘只要 id 不以 square / circle / triangle 开头，就会在三个地方被分进
+   * 三个不同的家族，而且**不报任何错**。
+   *
+   * 前缀之所以一直没出事，是运气：两个三角 2026-09 对调过内容，恰好两个 id 都以
+   * triangle 开头。
+   *
+   * 所以改成**棋盘自己声明**，而且是必填的——少填一副，`npm run typecheck` 当场编
+   * 译不过。这比任何运行时的门都硬。查表在 shapes/registry.ts。
+   */
+  family: Family;
+  /**
+   * **规则按哪一套讲**：《怎么玩》第 4 条按这个。和上面那个不是同一个问题。
+   *
+   * `squareDiamond` 长得是方块（family 'square'），消行行为却像小球/三角：最少 3 个、
+   * 消掉之后**原地留一个空位**（见 shapes/squareDiamond.ts 的 MIN_LINE_BONUS_LEN）。
+   * 从前《怎么玩》直接拿 family 去念，于是菱形方块那一局念的是「方块就完全消除，不
+   * 再出现」——玩家眼前明明留着一排空位。
+   */
+  ruleShape: RuleShape;
 }
 
-import type { Lang } from '../i18n';
+import type { Lang, RuleShape } from '../i18n';
+import type { Family } from '../engine/targets';
 import type { TargetPattern } from '../engine/targets';
 import type { CoachPlan } from '../ui/coachBar';
 

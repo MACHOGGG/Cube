@@ -254,6 +254,8 @@ export function createTriangleBigGame(): ShapeGame {
       desc: '整块大三角 · 5 色各 5 枚',
       bestKey,
       glyph: GLYPH,
+      family: 'triangle',
+      ruleShape: 'triangle',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;

@@ -214,6 +214,12 @@ export function createSquareDiamondGame(): ShapeGame {
       desc: '36 格菱形 · 斜向与水平滑动',
       bestKey,
       glyph: GLYPH,
+      // 这两位**故意不一样**：长得是方块（老虎机按它挑图案），消行行为却像
+      // 小球/三角——最少 3 个、消掉之后原地留一个空位（见上面的
+      // MIN_LINE_BONUS_LEN）。从前《怎么玩》按家族念，于是这一局念的是「方块就
+      // 完全消除，不再出现」，而玩家眼前明明留着一排空位。
+      family: 'square',
+      ruleShape: 'squareDiamond',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;

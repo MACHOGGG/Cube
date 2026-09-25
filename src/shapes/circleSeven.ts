@@ -216,6 +216,8 @@ export function createCircleSevenGame(): ShapeGame {
       desc: '49 格菱形 · 7 种颜色',
       bestKey,
       glyph: GLYPH,
+      family: 'circle',
+      ruleShape: 'circle',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const lang = opts?.lang ?? 'zhHans';

@@ -217,6 +217,14 @@ jobs:
       # check-room-contest-ui.mjs。
       - name: 小屋：竞赛屋的规矩
         run: node scripts/check-room-contest.mjs
+      # 八副棋盘「归哪一族、按哪一套规则讲」。从前四个函数各按 id 前缀猜一遍，而且对
+      # 不认识的 id 给出三种不同的静默默认值（'square' / null / 'triangle'）——新棋盘的
+      # id 只要不以 square / circle / triangle 开头，就会在三个地方被分进三个不同的家
+      # 族，不报任何错：老虎机转错族的图案、《怎么玩》念错那一条、教学配图配错一族，
+      # 三样各错各的。现在由棋盘自己在 card 里声明，这道门钉住那张表，并且不许那几个
+      # 文件再回去按前缀猜。读源码、不打包，几十毫秒。
+      - name: 八副棋盘的家族与规则归属
+        run: node scripts/check-shape-registry.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。

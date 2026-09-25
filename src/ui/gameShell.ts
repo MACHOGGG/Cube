@@ -9,6 +9,7 @@ import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { menuTag } from './menuTags';
 import { slotTip } from './modeTips';
 import type { Family, TargetPattern } from '../engine/targets';
+import { cardOf } from '../shapes/registry';
 import { PUZZLE_START_STEPS } from '../engine/puzzleScore';
 
 export interface ExtraControl {
@@ -200,10 +201,13 @@ export { CTL_PAUSE, CTL_FINISH, CTL_LEAVE, CTL_BACK } from './ctlIcons';
  * 接拿走的。玩家一脸问号：是不是进错了玩法。
  *
  * 唯一要小心的是三角：主菜单上《三角》后面装的是 triangleBig.ts（它自己的 id
- * 叫 'triangle'），两个三角 2026-09 对调过。按前缀认就不受这件事影响。
+ * 叫 'triangle'），两个三角 2026-09 对调过。
+ *
+ * **判定现在是查表，不是猜前缀**（shapes/registry.ts 的 `cardOf`，家族由棋盘自己在
+ * card 里声明）。从前这儿写着「按前缀认就不受这件事影响」——那句话对，但它靠的是
+ * 「两个三角的 id 恰好都以 triangle 开头」这个巧合，不是一条保证。
  */
-const familyOf = (shapeId: string): Family =>
-  shapeId.startsWith('circle') ? 'circle' : shapeId.startsWith('triangle') ? 'triangle' : 'square';
+const familyOf = (shapeId: string): Family => cardOf(shapeId).family;
 
 /**
  * 《怎么玩》第 4 条要按哪一套讲——和上面那个「哪一家」不是同一个问题。
@@ -215,9 +219,12 @@ const familyOf = (shapeId: string): Family =>
  *
  * 从前这儿直接把 familyOf 的结果递进去，于是菱形方块那一局的《怎么玩》念的
  * 是「方块就完全消除，不再出现」——玩家眼前明明留着一排空位。
+ *
+ * 这两件事现在都由棋盘自己在 card 里声明（family / ruleShape，见
+ * shapes/types.ts），这儿只是查表——`squareDiamond` 那一处特判连同它，搬到了
+ * shapes/squareDiamond.ts 自己身上。
  */
-const rulesShapeOf = (shapeId: string): RuleShape =>
-  shapeId === 'squareDiamond' ? 'squareDiamond' : familyOf(shapeId);
+const rulesShapeOf = (shapeId: string): RuleShape => cardOf(shapeId).ruleShape;
 
 /** 三个基础玩法的棋盘。除它们之外的都是「特殊布局」——格子怎么摆不一样，规矩
  *  一条没变（菱形方块、六边形小球、六边形三角、菱形小球、V 字三角）。 */

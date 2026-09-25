@@ -226,6 +226,8 @@ export function createCircleHexGame(): ShapeGame {
       desc: '37 格六边形 · 中心空白球',
       bestKey,
       glyph: GLYPH,
+      family: 'circle',
+      ruleShape: 'circle',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;

@@ -269,6 +269,8 @@ export function createTriangleAdvancedGame(): ShapeGame {
       desc: 'V 形 49 块 · 左右两臂各自滑动',
       bestKey,
       glyph: GLYPH,
+      family: 'triangle',
+      ruleShape: 'triangle',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const lang = opts?.lang ?? 'zhHans';

@@ -286,6 +286,8 @@ export function createTriangleGame(): ShapeGame {
       desc: '沿斜线拖动 · 六边蜂窝三角',
       bestKey,
       glyph: GLYPH,
+      family: 'triangle',
+      ruleShape: 'triangle',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;

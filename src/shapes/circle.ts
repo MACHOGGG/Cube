@@ -210,6 +210,8 @@ export function createCircleGame(): ShapeGame {
       desc: '沿斜线拖动 · 三角堆叠圆球',
       bestKey,
       glyph: GLYPH,
+      family: 'circle',
+      ruleShape: 'circle',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;

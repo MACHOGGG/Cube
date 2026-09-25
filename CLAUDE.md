@@ -53,7 +53,7 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 没有 npm test，也没有测试框架。**这些门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
-数目：`scripts/` 下 91 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
+数目：`scripts/` 下 92 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
 在涨，所以别在别处再抄一遍——要用就当场 `ls scripts/check-*.mjs | wc -l`。
 
 三类，跑法不同：
@@ -132,18 +132,43 @@ Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写
 `timeLimitSec`（计时）、`bomb`（炸弹）、`targets`（老虎机换得分图案）、
 `flip`（无限反转）、`practice`（小屋等待页的练习盘）、`coach`（头一局的教学条）。
 
-### 家族按 id 前缀认，但有一个陷阱
+### 家族和规则：棋盘自己声明，一处查表
 
-好几处（`src/ui/gameShell.ts` 的 `familyOf`、暂停里的《怎么玩》、老虎机挑图案）
-靠 **id 前缀**分三家：`square*` / `circle*` / `triangle*`。
+每副棋盘在自己的 `card` 里声明两位（`ShapeCardMeta`，**必填**——少填一副
+`npm run typecheck` 当场编译不过）：
 
-**陷阱**：`main.ts:94` 是 `const triangleGame = createTriangleBigGame()`
-——两个三角文件在 2026-09 对调过内容，**文件名和主菜单上的位置对不上**。按前缀
-认不受影响，按文件名推断会错。
+- **`family`** —— 长得像哪一族（`square` / `circle` / `triangle`）。老虎机挑图案、
+  教学配图按它。
+- **`ruleShape`** —— 规则按哪一套讲（多一个 `squareDiamond`）。《怎么玩》第 4 条按它。
 
-**另一个陷阱**：家族 ≠ 规则。`squareDiamond` 长得是方块，消行行为却像小球/三角
-（最少 3 个、原地留空位）。所以 `gameShell.ts` 里分了 `familyOf()`（认棋子长相，
-老虎机用）和 `rulesShapeOf()`（认消行行为，《怎么玩》用）两个函数。
+查表在 `src/shapes/registry.ts`：`cardOf(id)`（**查不到就抛**，给我们自己的 id 用）、
+`cardOrNull(id)`（给服务器发来的 mode、存档里的旧 id 用，查不到回 undefined）、
+`familyFromName(name)`（小屋那一局的 mode 在老虎机那一档就是族名本身）。
+**表由 `main.ts` 调 `registerCards` 注册**，不是 registry 自己 import 八个工厂——八副
+棋盘都 import `gameShell`，而 gameShell 要用 `cardOf`，反过来 import 就成环，那张表会
+在第一次被查的时候还是空的。
+
+**从前这件事是猜出来的，而且猜错不报错。** 四处各按 id 前缀猜一遍
+（`familyOf` / `rulesShapeOf` / `tutorialFamilyOf` / `slotFamilyOf`，另有
+`tipShape` 和 `homeIcons.ts` 的 `gameIcon` 两处），对不认识的 id 给出**三种不同的静默
+默认值**（`'square'` / `null` / `'triangle'`）：下一副新棋盘只要 id 不以 square /
+circle / triangle 开头，就会在三个地方被分进三个不同的家族——老虎机转错族的图案、
+《怎么玩》念错那一条、教学配图配错一族，三样各错各的，屏幕上看不出是同一个原因。
+（`gameIcon` 有意留着猜：它收的是服务器发来的 mode，猜错只影响摆哪张图标，而且必须
+容得下脏数据。）
+
+**两个陷阱还在，只是不再咬人：**
+
+- `main.ts` 里 `const triangleGame = createTriangleBigGame()`——两个三角文件在
+  2026-09 对调过内容，**文件名和主菜单上的位置对不上**。从前那句「按前缀认就不受影
+  响」是对的，但它靠的是「两个 id 恰好都以 triangle 开头」这个巧合。现在家族由棋盘
+  自己说，和巧合无关。
+- **家族 ≠ 规则**：`squareDiamond` 长得是方块（`family: 'square'`），消行行为却像小球/
+  三角——最少 3 个、原地留空位（`ruleShape: 'squareDiamond'`）。这两位在那个文件里
+  故意不一样，旁边写着为什么。
+
+门：`scripts/check-shape-registry.mjs`（读源码、不打包，已在 CI 里）——钉住那张表、
+钉住菱形方块那一对故意的不同，并且不许那四处再回去按前缀猜。
 
 ### 权益：三种身份，一处判定
 

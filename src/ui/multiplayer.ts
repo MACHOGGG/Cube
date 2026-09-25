@@ -3,6 +3,7 @@ import { isGenius } from '../engine/subscription';
 import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { drawPair, type Family, type TargetPattern } from '../engine/targets';
+import { cardOrNull } from '../shapes/registry';
 import { random as seededRandom, seedRandom } from '../engine/rng';
 import { hostNotice, hostTroubleIn, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
@@ -126,12 +127,18 @@ export interface MultiplayerHandlers {
   onPractice?: (host: HTMLElement, mode: string, flip?: boolean) => (() => void) | null;
 }
 
-/** 一个玩法归哪一族的教学。布局变体没有自己的课，跟着它那一族走。 */
+/**
+ * 一个玩法归哪一族的教学。布局变体没有自己的课，跟着它那一族走。
+ *
+ * 判定搬到 shapes/registry.ts（家族由棋盘自己在 card 里声明），不再按 id 前缀猜——
+ * 三处各猜一遍、还给出三种不同的静默默认值，理由和那张对照表在那个文件的文件头。
+ *
+ * 这儿用 `cardOrNull` 而不是 `cardOf`：`mode` 是**服务器发来的**，不在我们手里。
+ * 拿一条脏数据去抛异常，等于让它把玩家的小屋界面整个打掉；认不出来就当「没有对应的
+ * 教学」，和从前返回 null 是同一个意思，调用方本来就处理得了。
+ */
 function tutorialFamilyOf(mode: string): TutorialShape | null {
-  if (mode.startsWith('square')) return 'square';
-  if (mode.startsWith('circle')) return 'circle';
-  if (mode.startsWith('triangle')) return 'triangle';
-  return null;
+  return cardOrNull(mode)?.family ?? null;
 }
 
 /** 问「会不会规则」给多久。到点没人按，就当他会。 */

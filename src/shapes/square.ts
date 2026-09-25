@@ -115,6 +115,8 @@ export function createSquareGame(): ShapeGame {
       desc: '拖动整行/整列 · 6×6 棋盘',
       bestKey,
       glyph: GLYPH,
+      family: 'square',
+      ruleShape: 'square',
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;

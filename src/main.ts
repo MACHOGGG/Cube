@@ -60,6 +60,7 @@ import { renderPuzzleModePage } from './ui/puzzleMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
 import { createSquareGame } from './shapes/square';
+import { cardOf, familyFromName, registerCards } from './shapes/registry';
 import { createTriangleGame } from './shapes/triangle';
 import { createCircleGame } from './shapes/circle';
 import { createCircleHexGame } from './shapes/circleHex';
@@ -107,6 +108,22 @@ const squareDiamondGame = createSquareDiamondGame();
 const triangleBigGame = createTriangleGame();
 const circleSevenGame = createCircleSevenGame();
 const triangleAdvancedGame = createTriangleAdvancedGame();
+/**
+ * 把八张名片登记进 shapes/registry.ts。
+ *
+ * 「这一副归哪一族、按哪一套规则讲」从前是四处各猜一遍（按 id 前缀），对不认识的 id
+ * 还给出三种不同的静默默认值——理由和那张对照表在 registry.ts 的文件头。现在由棋盘
+ * 自己在 card 里声明，这儿只是把它们交给那张表。
+ *
+ * **为什么注册在这儿、不在 registry.ts 里直接 import 八个工厂**：八副棋盘每一副都
+ * import gameShell，而 gameShell 要用 registry 的 cardOf——反过来 import 就成环，模块
+ * 初始化的顺序会让那张表在第一次被查的时候还是空的。main.ts 是整张图的顶点，而且这
+ * 八个实例本来就建在这儿，所以登记放在这一行：早于任何界面跑起来。
+ */
+registerCards([
+  squareGame, circleGame, triangleGame, circleHexGame,
+  squareDiamondGame, triangleBigGame, circleSevenGame, triangleAdvancedGame,
+].map((g) => g.card));
 
 const games: ShapeGame[] = [squareGame, circleGame, triangleGame];
 // The 3 layouts bomb mode actually supports (进阶炸弹's own shape pool) —
@@ -592,9 +609,16 @@ function basicCoach(id: string): ShapeGameOpts {
   return { coach: true, coachPlan: firstOne ? 'first' : 'second' };
 }
 
-/** 炸弹 / 无限反转的那幅配图跟着他挑的图形走。三角没有自己那一份，当方块画。 */
+/**
+ * 炸弹 / 无限反转的那幅配图跟着他挑的图形走。配图只有两幅，三角没有自己那一份，
+ * 当方块画。
+ *
+ * 问的是家族（棋盘自己在 card 里声明，见 shapes/registry.ts），不再按 id 前缀猜——
+ * 行为和从前一模一样（circle 一族→circle，其余→square），只是判定不再是这个文件里
+ * 自己的一份。这是第六处按前缀猜的地方，前五处见 registry.ts 文件头那张表。
+ */
 function tipShape(id: string): 'square' | 'circle' {
-  return id.startsWith('circle') ? 'circle' : 'square';
+  return cardOf(id).family === 'circle' ? 'circle' : 'square';
 }
 
 function showMenu() {
@@ -1258,9 +1282,15 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
   toTop();
 }
 
-/** 小屋那一局的 mode 就是族名（square / circle / triangle）——见 api/room.js 的 SLOT_MODES。 */
-const slotFamilyOf = (mode: string): Family =>
-  mode === 'square' ? 'square' : mode === 'circle' ? 'circle' : 'triangle';
+/**
+ * 小屋那一局的 mode 就是族名（square / circle / triangle）——见 api/room.js 的
+ * SLOT_MODES。判定搬到 shapes/registry.ts 的 `familyFromName`：**认不出来就抛**，
+ * 不再拿 `'triangle'` 兜底。
+ *
+ * 兜底的后果是把三角的得分图案发到一副方块棋盘上，玩家要凑的图案根本凑不出来，而屏
+ * 幕上一个字的错都没有。真收到别的值，那是前后端的协议对不上了，那种事该响。
+ */
+const slotFamilyOf = (mode: string): Family => familyFromName(mode);
 
 /** 这一族对应的基础玩法。三角那一档是主菜单上《三角》后面那块整三角。 */
 function randomTargetGame(family: Family): ShapeGame {
