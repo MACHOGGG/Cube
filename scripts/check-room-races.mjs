@@ -640,5 +640,131 @@ async function agePast(code, playerId) {
   check('⑫ 椅子没漏出去（占位格和坐着的人对得上）', taken === sitting, `占位=${taken} 在座=${sitting}`);
 }
 
+// ---- ⑭ 有人在学规则，屋主同时散场／开新局 ------------------------------
+//
+// 「有人在学」这个挂起状态（meta.learnHold）是**整间屋子**的东西，而放行它的
+// 那一步（releaseHold）把 meta **整份**写回去——拿的还是进函数时那份快照。
+// meta 里同时装着 endedAt（屋子散了）和 round（第几局），于是：
+//
+//   · 屋里有人举手说「我还不会玩」，房间正等他学完，屋主这时按《解散小屋》。
+//     别人的手机每秒轮询一次，只要有一条恰好读到「还没散」的旧 meta、又在
+//     这一瞬走了放行那条路，就会把 endedAt 整个抹掉。房间在服务器那边看起来
+//     「没散」：还在等的人看到的是「等屋主开下一局」，要干等到 90 秒外的
+//     「房间被取消」，而不是当场那张该出现的结算战绩卡。
+//   · 同理，屋主按《再来一局》的那一下也可能被这条路把 round 悄悄拉回上一局。
+//
+// 窗口只有零点几秒，不是必现——所以这儿和 ⑩⑪ 一样把错位扫一遍（0…20 个
+// 微任务），哪一档都不许出事。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  /**
+   * 把「他还在学」那一刻推到 LEARN_IDLE_MS（20 秒）以外——等于「学的人二十秒
+   * 没动静了」，于是任何一次轮询都会走放行那条路。直接摆库里的状态，不然这一
+   * 台要真的干等二十秒（同 agePast）。
+   */
+  const ageLearning = async (code, playerId) => {
+    const hash = await hgetall(roomKey(code));
+    const seat = hash['p:' + playerId] || {};
+    await hsetRace(roomKey(code), 'p:' + playerId, { ...seat, learningAt: 1 });
+  };
+  /**
+   * 把开赛时刻拨到过去——`roundOver` 的第一道门槛是「倒数走完了没有」，不拨的话
+   * 屋主按《再来一局》一律回 409 started，这一节量到的会是「局次没动」，而那是
+   * 门自己摆错了状态（头一版就这么红的）。
+   *
+   * ⑦ 那一节是真的 setTimeout 等四秒；这儿要扫十七档错位，等不起，直接摆库。
+   */
+  const ageStart = async (code) => {
+    const hash = await hgetall(roomKey(code));
+    await hsetRace(roomKey(code), 'meta', { ...hash.meta, startAt: Date.now() - 1000 });
+  };
+  /*
+   * 错位要扫到很后面。放行那一步在 state() 的**最开头**，而 endedAt 是 end()
+   * 记完账（一人两次 hset）才写的——想让放行的写入落在 endedAt 之后，轮询这条
+   * 必须一直等到 end() 快办完。⑩⑪ 那两节的 0…20 在这儿不够（实测全绿），
+   * 那是「量不到」，不是「没问题」。
+   */
+  const OFFSETS = [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20, 30, 45, 60, 80, 120, 200];
+
+  /*
+   * 放行有**三道门**：轮询（state）、学完了说一声（learn false）、学的人走了
+   * （leave）。三条最后都落到同一个 releaseHold 上，所以补一处就都补上了。
+   *
+   * 这儿拿「学完了说一声」当撞的那一条：它在写 meta 之前要跑六趟库（读屋子、
+   * 读裸 p:、写 p:、写心跳、再读屋子），和 end() 记完账再写 meta 的长度相当，
+   * 于是这个错位真的扫得到。轮询那条只跑两趟，在内存库里怎么排都落在 endedAt
+   * 之前——扫出来全绿是「量不到」，不是「没问题」（真 Redis 上每一步都是一次
+   * 网络往返，谁先谁后没有保证）。所以下面那条正面的放行断言也照样量着
+   * state() 这道门。
+   */
+  let worstEnd = null;
+  for (const k of OFFSETS) {
+    const { code, host, guest } = await openRoom();
+    await call({ action: 'learn', code, ...guest, learning: true });
+    await Promise.all([
+      call({ action: 'end', code, ...host }),
+      (async () => {
+        await ticks(k);
+        await call({ action: 'learn', code, ...guest, learning: false });
+      })(),
+    ]);
+    // 直接读库：回包里那份是各自函数手上的快照，看不出最后落在库里的是哪一份。
+    const raw = await hgetall(roomKey(code));
+    if (!raw?.meta?.endedAt) worstEnd = `错位 ${k}：endedAt 没了`;
+  }
+  check('⑭ 有人在学 + 屋主散场：房间真的散了（放行不许抹掉 endedAt）', worstEnd === null, worstEnd || '');
+
+  let worstRound = null;
+  for (const k of OFFSETS) {
+    const { code, host, guest } = await openRoom();
+    // 两个人都交卷，这一局才算完，屋主才开得了下一局（roundOver）。
+    await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 5, round: 1 });
+    await call({ action: 'score', code, ...guest, score: 20, finished: true, seconds: 6, round: 1 });
+    await ageStart(code);
+    // 两局之间有人去读《怎么玩》：这一局的挂起立起来了。
+    await call({ action: 'learn', code, ...guest, learning: true });
+    // 撞的那一条同样用「学完了说一声」，理由和上面散场那一节一样（轮询只跑两趟
+    // 库，它的写入在内存库里永远落在 start 写 meta 之前——扫出来全绿是量不到）。
+    // 这一条头一版用的是轮询，反向对照当场露馅：把 releaseHold 换回旧写法它照样
+    // 全绿。
+    const [s1] = await Promise.all([
+      call({ action: 'start', code, ...host, mode: 'circle' }),
+      (async () => {
+        await ticks(k);
+        await call({ action: 'learn', code, ...guest, learning: false });
+      })(),
+    ]);
+    const raw = await hgetall(roomKey(code));
+    // 先立住尺子：屋主这一下**真的**开出了第二局。头一版没有这一句，而当时
+    // start() 一路回 409（开赛倒数没走完，见 ageStart），于是「局次是 1」被当
+    // 成了倒退——量的是门自己摆错的状态。
+    if (s1.status !== 200 || s1.body.error) worstRound = `错位 ${k}：屋主压根没开出下一局（${s1.status} ${s1.body.error || ''}）`;
+    else if (Number(raw?.meta?.round) !== 2) worstRound = `错位 ${k}：局次是 ${raw?.meta?.round}，该是 2`;
+  }
+  check('⑭ 有人在学 + 屋主开新局：局次不许被拉回上一局', worstRound === null, worstRound || '');
+
+  // 放行本身**还要真的管用**——上面两条都是「不许写坏」，只写这两条的话，把
+  // releaseHold 整个删掉也全绿：屋子不散、局次不退，代价是全屋永远等一个早就
+  // 不在学的人。所以这儿正面量一次：学的人没动静了，开赛挂起必须被放掉。
+  {
+    const { code, host, guest } = await openRoom();
+    await call({ action: 'learn', code, ...guest, learning: true });
+    const held = await hgetall(roomKey(code));
+    await ageLearning(code, guest.playerId);
+    await call({ action: 'state', code, ...guest });
+    const after = await hgetall(roomKey(code));
+    check(
+      '⑭ 学的人没动静了，开赛挂起要被放掉（不然全屋白等）',
+      held?.meta?.learnHold === true && after?.meta?.learnHold === false,
+      `挂起 ${held?.meta?.learnHold} → ${after?.meta?.learnHold}`,
+    );
+  }
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

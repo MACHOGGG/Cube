@@ -645,6 +645,13 @@ const startLockKey = (round) => 'ls:' + String(round);
  */
 const END_LOCK = 'le:end';
 /**
+ * 「放行这一局的开赛挂起」那一格锁（见 patchMeta / releaseHold）。
+ *
+ * 一局只挂一次、也只放行一次（learn 里那句 `heldRound !== round` 保证的），所以
+ * 一局一格的一次性锁正合适——和 startLockKey 同一个形状。
+ */
+const holdLockKey = (round) => 'lh:' + String(round);
+/**
  * 一把锁「多久没动静就算是废的」。
  *
  * 锁本身带来一个新毛病：抢锁和把结果写进 meta 之间隔着一整段记账循环（20 个
@@ -1190,18 +1197,70 @@ async function join(res, body) {
 }
 
 /**
+ * 往 meta 上打一个补丁：**重读之后往最新那一份上盖**，而且屋子散了、已经是下
+ * 一局了、或者 start/end 正在办事，一律不写。
+ *
+ * 为什么非这么写不可：`meta` 不是一格一个字段，而是**整间屋子共用的一份 JSON
+ * 文档**（小屋是一个 hash，meta 占一格）。所以改它只能读—改—写，而拿进函数时
+ * 那份旧快照整份写回去，就会把这中间别人写进去的东西抹掉——和座位 `p:` 那五条
+ * 路踩的是同一个坑（见 readRoom 上面那段、check-room-races 的 ①②③）。
+ *
+ * meta 里同时装着 `endedAt`（屋子散了）和 `round`（第几局），于是漏了这一道的
+ * 后果是这样的：
+ *
+ *   · 屋里有人举手说「我还不会玩」，房间正等他学完，屋主这时按《解散小屋》。
+ *     别人的手机每秒轮询一次，只要有一条恰好读到「还没散」的旧 meta、又在这
+ *     一瞬走了放行那条路，`endedAt` 就被整个抹掉。房间在服务器那边看起来「没
+ *     散」：还在等的人看到的是「等屋主开下一局」，要干等到 90 秒外的「房间被
+ *     取消」，而不是当场那张该出现的结算战绩卡。
+ *   · 同理，屋主按《再来一局》的那一下会被这条路把 `round` 悄悄拉回上一局。
+ *
+ * 窗口只有零点几秒，不是必现——所以门（check-room-races 的 ⑭）是**扫错位**量
+ * 的：一把 Promise.all 同时发两条是绿的（两条读到同一份快照，写回去的值一样），
+ * 只有把轮询那条往后推到恰好落在 end() 写完 meta 之后，才量得出来。
+ *
+ * 三道保险，缺一不可：
+ *   ① 抢一格一次性的锁——两条同时看到「学的人不见了」（轮询每秒一次、屋里几
+ *      个人就有几条）只许一条动手；
+ *   ② `lockHeld` 看一眼 start/end 是不是正在办事——它们要跑几十趟库才写到
+ *      meta，这中间我们绝不能插一脚（和 score() 里那一道是同一个写法）；
+ *   ③ 重读一遍，往**刚读到的那份**上盖，并且散了/换局了/别人已经放行过了都
+ *      直接回头。
+ */
+async function patchMeta(code, round, patch) {
+  if (!(await takeRoomLock(code, holdLockKey(round)))) return null;
+  const live = await readRoom(code);
+  if (!live) return null;
+  const meta = live.meta || {};
+  // 散场和开新局都要跑几十趟库才写到 meta。它们正在路上的时候我们一个字都不
+  // 能写：写了就是把人家马上要落地的那一份提前作废。
+  if (lockHeld(live, startLockKey((Number(meta.round) || 0) + 1)) || lockHeld(live, END_LOCK)) return null;
+  if (meta.endedAt) return null;
+  if ((Number(meta.round) || 0) !== round) return null;
+  const next = { ...meta, ...patch(meta) };
+  await hset(roomKey(code), 'meta', next);
+  return next;
+}
+
+/**
  * 「有人在学」的挂起到此为止：开赛时刻重新盖一遍，大家一起从头数。
  * 学完了、走了、二十秒没动静，走到这儿的是同一件事。
+ *
+ * 三道门都落到这儿（轮询 state、学完了说一声 learn、学的人走了 leave），所以
+ * 那一道「不许把别人写进去的东西抹掉」只补在这一处就够了——补在三个调用点上，
+ * 下一条路会忘。写入那一段在 patchMeta 里，连同为什么。
+ *
+ * 回的是**此刻真正生效的那一份 meta**：没写成（散了、换局了、别人已经放行过）
+ * 就回传进来的那一份，调用方照旧自己重读一次屋子（三处都这么做）。
  */
 async function releaseHold(code, meta) {
-  const released = {
-    ...meta,
+  const round = Number(meta.round) || 0;
+  const released = await patchMeta(code, round, (live) => ({
     learnHold: false,
-    startAt: Date.now() + countdownMsFor(meta.mode),
-    countFrom: countFromFor(meta.mode),
-  };
-  await hset(roomKey(code), 'meta', released);
-  return released;
+    startAt: Date.now() + countdownMsFor(live.mode),
+    countFrom: countFromFor(live.mode),
+  }));
+  return released || meta;
 }
 
 async function state(res, body) {
