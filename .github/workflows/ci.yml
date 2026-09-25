@@ -1,9 +1,14 @@
 # 每次推到这个分支，机器先替我们跑一遍。
 #
-# 只收「不用起浏览器、几十秒就跑完」的那几个：类型、构建，加上一批纯逻辑的
-# 检查。要开真浏览器的那些（check-board-fit、check-multiplayer 之类）留在本
-# 地手跑——它们要装 Chromium、要起服务器，放进来会让每一次推送都等上好几
-# 分钟，而等得久的检查最后一定会被人跳过。
+# **两个 job，并排跑。**
+#
+# `check`：不用起浏览器、几十秒就跑完的那一批——类型、构建，加上一堆纯逻辑的检查。
+# 这一条的节奏不许被拖慢：等得久的检查最后一定会被人跳过。
+#
+# `browser`：要装 Chromium、要起 dev-server 的那一批。从前一道都没收，全靠手跑，
+# 于是「换回鱼眼轴那天起 check-menu 就一直崩着、后面 39 条一条都没跑过」这种事没人
+# 发现。所以先收**最近真的拦下过回归**的那四道，跑稳了再逐批加。
+# 它和 check 是**并行**的：browser 慢几分钟，不影响 check 什么时候出结果。
 #
 # 这件事的由来：在这之前一次自动化都没有，tsc 和这一批 check-*.mjs 全靠
 # 「某次会话里有没有想起来跑一遍」。像「两个函数各自都对、放在一起却矛盾」
@@ -277,3 +282,69 @@ jobs:
         run: |
           npx esbuild src/engine/groupScore.ts --bundle --format=esm --outfile=/tmp/group.mjs
           node scripts/check-star-score.mjs /tmp/group.mjs
+
+  # 要开真浏览器的那一批。和上面那个 job 并行，所以它慢几分钟不拖累谁。
+  #
+  # **为什么先只收这四道**：都是最近真的拦下过回归的。
+  #   · check-mode-axis  —— 主菜单那条鱼眼轴。第 9 节那五条断言是为「炸弹那张图被撑
+  #     开」补的（玩家报过两轮、修好过一次、又回来过）。
+  #   · check-menu       —— 换回鱼眼轴那天起它就一直崩在等 .mode-strip 上，**后面 39
+  #     条一条都没跑过**，而整个进程还是 exit 0，看着像跑完了。
+  #   · check-overlap    —— 同一族遗留；它还管「有没有东西永远够不着」。
+  #   · check-board-fit  —— 棋子戳出底板（七色圆球余量为 0 那件事）。
+  #
+  # **为什么 xhs 那几道还没进来**：check-oldcss 现在有一条先前就存在的横屏红（横屏
+  # 844×390 的主菜单走 .home-row 宽版排布，降级层那边盒子差 69px）。带着一条红进 CI，
+  # 第一天就会被人加 `continue-on-error` 或者干脆关掉——那比不收更糟。等那一条修掉再收。
+  #
+  # **一个门一台服务器、一人一个端口**：CLAUDE.md 记着「兑换码在一个 dev-server 进程里
+  # 只能用一次」。这四道都不兑码，但按同一条规矩摆，往后加要兑码的门不用回来改结构。
+  # 关服务器不用 pkill -f（那会连 shell 一起杀掉）——job 跑完容器就没了。
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: 出一份产物（门读的是 dist）
+        run: npm run build
+      - name: 主菜单：鱼眼轴
+        run: |
+          # `nohup` + 把输出丢掉：不让这台服务器占着这一步的 stdout。占着的话，
+          # 前台的门跑完了这一步也可能还在等它——本地试的时候就是这么挂住的。
+          nohup node scripts/dev-server.mjs 8811 dist >/dev/null 2>&1 &
+          # 等它真的起来再跑，不要盲等一个固定秒数：CI 的机器冷启动比本地慢，
+          # 盲等出来的是偶发红，而偶发红最后一定会被人加 continue-on-error。
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8811/ && break; sleep 0.25; done
+          node scripts/check-mode-axis.mjs http://localhost:8811/
+      - name: 主菜单：摆了什么、什么次序、点一下开哪儿
+        run: |
+          # `nohup` + 把输出丢掉：不让这台服务器占着这一步的 stdout。占着的话，
+          # 前台的门跑完了这一步也可能还在等它——本地试的时候就是这么挂住的。
+          nohup node scripts/dev-server.mjs 8812 dist >/dev/null 2>&1 &
+          # 等它真的起来再跑，不要盲等一个固定秒数：CI 的机器冷启动比本地慢，
+          # 盲等出来的是偶发红，而偶发红最后一定会被人加 continue-on-error。
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8812/ && break; sleep 0.25; done
+          node scripts/check-menu.mjs http://localhost:8812/
+      - name: 有没有东西被压住、够不着
+        run: |
+          # `nohup` + 把输出丢掉：不让这台服务器占着这一步的 stdout。占着的话，
+          # 前台的门跑完了这一步也可能还在等它——本地试的时候就是这么挂住的。
+          nohup node scripts/dev-server.mjs 8813 dist >/dev/null 2>&1 &
+          # 等它真的起来再跑，不要盲等一个固定秒数：CI 的机器冷启动比本地慢，
+          # 盲等出来的是偶发红，而偶发红最后一定会被人加 continue-on-error。
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8813/ && break; sleep 0.25; done
+          node scripts/check-overlap.mjs http://localhost:8813/
+      - name: 棋子都在底板里
+        run: |
+          # `nohup` + 把输出丢掉：不让这台服务器占着这一步的 stdout。占着的话，
+          # 前台的门跑完了这一步也可能还在等它——本地试的时候就是这么挂住的。
+          nohup node scripts/dev-server.mjs 8814 dist >/dev/null 2>&1 &
+          # 等它真的起来再跑，不要盲等一个固定秒数：CI 的机器冷启动比本地慢，
+          # 盲等出来的是偶发红，而偶发红最后一定会被人加 continue-on-error。
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8814/ && break; sleep 0.25; done
+          node scripts/check-board-fit.mjs http://localhost:8814/

@@ -71,10 +71,20 @@ node scripts/dev-server.mjs 8816 dist &
 node scripts/check-multiplayer.mjs http://localhost:8816/
 ```
 
-CI（`.github/workflows/ci.yml`）只收第 ①② 类里跑得快的那几个——要开浏览器的、
-要等真实超时的都留在本地手跑，文件头上写明了为什么。
+CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**：
 
-**要开浏览器的那一组目前没有 npm 脚本串起来**（没有 `check:browser`），全靠手
+- `check` —— 第 ①② 类里跑得快的那一批。这一条的节奏不许被拖慢（等得久的检查最后
+  一定会被人跳过）。
+- `browser` —— 装 Chromium、起 dev-server，目前收四道：`check-mode-axis`、
+  `check-menu`、`check-overlap`、`check-board-fit`。都是最近真的拦下过回归的。
+  一门一台服务器、一人一个端口，起完用一个有界的 curl 循环等它真的起来（盲等固定
+  秒数在 CI 上会出偶发红，而偶发红最后一定会被人加 `continue-on-error`）。
+  **小红书那几道还没收**：`check-oldcss` 有一条先前就存在的横屏红（横屏 844×390 的
+  主菜单走 `.home-row` 宽版排布，降级层那边盒子差 69px）。带着一条红进 CI 比不收更糟。
+
+要等真实超时的（`check-room-total` 那种 sleep 95 秒的）仍然只在本地手跑。
+
+**CI 之外那一批要开浏览器的没有 npm 脚本串起来**（没有 `check:browser`），全靠手
 跑。改了主菜单的摆位、图标尺寸、style.css 里任何一条 `.mode-axis` 的规则，**或者
 `src/engine/axisMotion.ts` / `modeAxis.ts` 里任何一个跟手感有关的数**，手跑这
 一道：
@@ -248,7 +258,7 @@ web / ios / android。`src/engine/pricing.ts` 的 `plans()` **只返回一份价
 - **小屋存成 Redis hash，一个玩家一个 field**，绝不是一个 JSON blob——八个人
   同时报分，读-改-写整份文档会丢掉大部分。
 - 没有真 Redis 也没有 `ALLOW_MEMORY_STORE=1` 时，接口回「这个功能还没开」，
-  而不是半работ着。
+  而不是半通半不通地撑着。
 
 ### 文案：四种语言，两处底稿
 
