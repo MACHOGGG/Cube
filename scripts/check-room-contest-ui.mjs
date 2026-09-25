@@ -12,7 +12,7 @@
  *     界面」。
  *   · **主持人这一局不拿到棋盘**，改坐在实时榜单上，榜上**没有他自己**（列进去
  *     就是一行恒定 0 分挂在最后一名），那颗键上的字是《解散小屋》。
- *   · **二十个人的榜单摆得下。** api/room.js 开头那段注释早写着这件事要先办：
+ *   · **二十名选手的榜单摆得下。** api/room.js 开头那段注释早写着这件事要先办：
  *     「等名单和战绩图都摆得下二十个人之后，再把入口放出来——反过来先放入口，今
  *     晚就会有人开出一间二十人的屋子配着八人的排版」。实测过那个排版：榜单盒子
  *     长到 1322px 塞在 844px 的屏幕里，整块被挤出去（顶边 −138，滚都滚不回去），
@@ -121,7 +121,7 @@ const { ctx, p } = await hostPage();
   check('竞赛屋开出来了，屋号在屏幕上', /^\d{4}$/.test(code || ''), String(code));
   const joined = await p.evaluate(async (code) => {
     const keys = [];
-    for (let i = 1; i <= 19; i++) {
+    for (let i = 1; i <= 20; i++) {
       const r = await fetch('/api/room', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'join', code, name: '选手' + String(i).padStart(2, '0'), seen: ['square', 'circle', 'triangle'] }),
@@ -131,14 +131,16 @@ const { ctx, p } = await hostPage();
     window.__keys = keys;
     return keys.length;
   }, code);
-  check('十九名选手都进来了（连主持人二十个，坐满）', joined === 19, `进了 ${joined} 个`);
+  check('二十名选手都进来了（连主持人二十一个，坐满）', joined === 20, `进了 ${joined} 个`);
   await p.waitForTimeout(1800);
   const roster = await p.evaluate(() => ({
     rows: document.querySelectorAll('.mp-player').length,
     seats: (document.body.textContent.match(/\d+\s*\/\s*20/) || [])[0] ?? '（没找到 n/20）',
     overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
-  check('小屋名单上二十个人都在，而且写着 /20', roster.rows === 20 && /20\s*\/\s*20/.test(roster.seats),
+  // 名单上是二十一行（连主持人），而屏幕上那个「几/几」数的是**选手**：满员写
+  // 「20/20」，不是「21/21」——那行小字写的就是「最多 20 人」。
+  check('小屋名单上二十一个人都在，而屏幕上写的是 20/20', roster.rows === 21 && /20\s*\/\s*20/.test(roster.seats),
     `${roster.rows} 行 · ${roster.seats}`);
   check('小屋页没有被撑出横向滚动', roster.overflowX === 0, `${roster.overflowX}px`);
 
@@ -178,8 +180,8 @@ const { ctx, p } = await hostPage();
     };
   });
   check('主持人手上没有棋盘', panel.hasBoard === false);
-  check('榜上是十九名选手，没有主持人自己', panel.rows === 19, `${panel.rows} 行`);
-  check('榜按分数排（第一名是分最高的那个）', /选手19/.test(panel.top3[0] || ''), panel.top3.join(' | '));
+  check('榜上是二十名选手，没有主持人自己', panel.rows === 20, `${panel.rows} 行`);
+  check('榜按分数排（第一名是分最高的那个）', /选手20/.test(panel.top3[0] || ''), panel.top3.join(' | '));
   check('那颗键上写的是《解散小屋》（他按下去做的就是这件事）',
     panel.leaveLabel.includes('解散'), panel.leaveLabel);
   // 排版那三条。这一节就是 api/room.js 开头「先把排版摆好再放入口」那句话的门。

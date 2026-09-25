@@ -223,10 +223,16 @@ web / ios / android。`src/engine/pricing.ts` 的 `plans()` **只返回一份价
 
 `api/room.js` 一间屋开出来的那一刻定死两样，之后都跟着这间屋走（不跟着常数走）：
 
-- **`meta.seats`** —— 几把椅子。普通屋 8（`OPEN_SEATS`），竞赛屋 20
+- **`meta.seats`** —— 几把椅子。普通屋 8（`OPEN_SEATS`），竞赛屋 **21**
   （`CONTEST_SEATS`）。问的地方只有 `seatsFor()` 一处；请求里塞 `seats` 不管用。
+  21 而不是 20：玩家拍的板是「要 20 名选手（连主持人 21 人）」——主持人不参赛，但
+  座位就是身份（`s:0…s:N-1` 原子占位），他也要占一把。`ROOM_CAPACITY` 跟着到 21，
+  不抬它 `seatsFor` 会把 21 夹回去。
 - **`meta.contest`** —— 开屋的人**不参赛**（玩家 2026-09：「上限 20 人、发起人不
   参加游戏单独看到实时榜单情况」）。判定只写一遍：`isSpectator(meta, playerId)`。
+- 屏幕上那个「几/几」由服务器算好送来（`playersIn` / `playerSeats`）：**竞赛屋数的
+  是选手，不是椅子**。照椅子数会写成「21/21」，而那行小字写的是「最多 20 人」——两个
+  数对不上就是「意料之外的界面」。
 
 「主持人不参赛」听着像界面规矩，其实是服务端三件事，少一件就出事：
 
@@ -242,7 +248,7 @@ web / ios / android。`src/engine/pricing.ts` 的 `plans()` **只返回一份价
 （和中途进来的人同一张脸），榜上藏掉他自己（`showWaitPanel` 的 `hideId`），
 那张要发出去的卡也不列他（`ui/roomCard.ts` 的 `onCard`）。
 
-**二十行的榜单差点摆不下。** `.mp-wait-rows` 上那句 `flex:1 + overflow-y:auto` 只在
+**二十名选手的榜单差点摆不下。** `.mp-wait-rows` 上那句 `flex:1 + overflow-y:auto` 只在
 外面那一层有高度上限时才生效，而 `.overlay` 是横向弹性盒——八个人看不出来，二十个
 人时榜单盒子长到 1322px 塞在 844px 的屏幕里，整块被挤出去（顶边 −138，滚都滚不回
 去）。修在 `style.css` 的 `.overlay--wait .mp-wait-stage`。门：

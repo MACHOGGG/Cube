@@ -38,7 +38,12 @@ import { callerId, tooMany } from './_ratelimit.js';
  * 名单和那张战绩图都还读得下去的那个数。
  *
  * OPEN_SEATS 是普通小屋开着的座位——玩家定的「一般小屋是 2-8 人」。
- * CONTEST_SEATS 是竞赛小屋的——「竞赛版本开放到 20 人上限」。
+ * CONTEST_SEATS 是竞赛小屋的——「竞赛版本开放到 20 人上限」，而那 20 指的是
+ * **选手**：主持人不参赛（见 isSpectator），但他也要占一把椅子（座位就是身份，
+ * `s:0…s:N-1` 是原子占位的那一套），所以是 **21 把**。玩家 2026-09 拍的板：
+ * 「要 20 名选手（连主持人 21 人）」。
+ * ROOM_CAPACITY 跟着到 21——`seatsFor` 会把座位数夹进
+ * [MIN_PLAYERS, ROOM_CAPACITY]，不抬这个数，21 会被夹回 20。
  *
  * 要紧的是第三件事：**座位数是跟着屋子走的，不是跟着这个文件走的**。一间屋
  * 开出来的那一刻就把自己的座位数写进 meta.seats，往后满不满、名单上写
@@ -47,7 +52,7 @@ import { callerId, tooMany } from './_ratelimit.js';
  * 局中间自己变了，正是「意料之外的界面」。meta 里没有 seats 的老屋（这次改
  * 动之前开的）按 OPEN_SEATS 算，和从前一模一样。
  */
-const ROOM_CAPACITY = 20;
+const ROOM_CAPACITY = 21;
 /** 普通小屋开着的座位。 */
 const OPEN_SEATS = 8;
 /**
@@ -59,7 +64,7 @@ const OPEN_SEATS = 8;
  * 再把入口放出来——反过来先放入口，今晚就会有人开出一间二十人的屋子配着八
  * 人的排版。
  */
-const CONTEST_SEATS = 20;
+const CONTEST_SEATS = 21;
 const MIN_PLAYERS = 2;
 
 /**
@@ -500,10 +505,22 @@ function publicState(code, hash) {
      *  这一间屋自己的数（见 seatsFor）：普通小屋 8，竞赛小屋 20。 */
     seats: seatsFor(meta),
     /**
-     * 竞赛屋：上限 20 人，开屋的人不参赛、只看实时榜单（见 isSpectator）。
+     * 竞赛屋：上限 20 名选手，开屋的人不参赛、只看实时榜单（见 isSpectator）。
      * 客户端拿它决定主持人那台设备这一局到底开不开棋盘。
      */
     contest: Boolean(meta.contest),
+    /**
+     * **屏幕上那个「几/几」该拿谁去数。**
+     *
+     * 普通小屋两个数就是座位：屋主自己也在打，「3/8」里那个 3 包括他。竞赛屋不
+     * 一样——主持人占一把椅子但不参赛，照座位数就会写成「21/21」，而那一行小字
+     * 写的是「最多 20 人」。两个数对不上，正是「意料之外的界面」。
+     *
+     * 所以竞赛屋报的是**选手**那一对：上限 20（座位数减掉主持人那一把），当前
+     * 是已入座的选手数（playerCount 已经把主持人排除了）。普通小屋原样。
+     */
+    playerSeats: Boolean(meta.contest) ? Math.max(0, seatsFor(meta) - 1) : seatsFor(meta),
+    playersIn: Boolean(meta.contest) ? playerCount(hash) : seatCount(hash),
     players,
     /** 被催了多少下。屋主那边看它变大就往标题里掉图形。 */
     nudges: tally.nudges,

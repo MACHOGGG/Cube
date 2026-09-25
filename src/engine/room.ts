@@ -98,6 +98,16 @@ export interface RoomState {
    * 棋盘**，改坐到榜单上去（见 ui/multiplayer.ts 里 sideline 那一段）。
    */
   contest: boolean;
+  /**
+   * 屏幕上那个「几/几」该拿谁去数——**竞赛屋数的是选手，不是椅子**。
+   *
+   * 普通小屋这两位就是座位（屋主自己也在打，「3/8」里那个 3 包括他）。竞赛屋里
+   * 主持人占一把椅子但不参赛，照座位数会写成「21/21」，而那行小字写的是「最多
+   * 20 人」——两个数对不上就是「意料之外的界面」。所以服务器直接把该显示的那一对
+   * 算好送来（api/room.js 的 publicState），客户端不自己减。
+   */
+  playerSeats: number;
+  playersIn: number;
   players: RoomPlayer[];
   /** 这间小屋被催了多少下。屋主那边看它变大就往标题里掉图形。 */
   nudges: number;

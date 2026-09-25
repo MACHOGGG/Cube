@@ -790,8 +790,12 @@ export function renderMultiplayerPage(
     if (label) {
       // 「玩家 3/8」：坐着几个人、一共几把椅子（玩家的原话：「每进来一位都显示
       // 相对应的 3/8 或者 5/8（算上屋主）」）。走了的人不占椅子。
-      const seated = state.players.filter((p) => !p.left).length;
-      const head = `${s.mpPlayers} ${seated}/${state.seats}`;
+      //
+      // 两个数由服务器算好送来（playersIn / playerSeats）：**竞赛屋数的是选手，
+      // 不是椅子**——主持人占一把椅子但不参赛，照座位数会写成「21/21」，而那行
+      // 小字写的是「最多 20 人」。老回包没有这两位，就退回原来的算法。
+      const seated = state.playersIn ?? state.players.filter((p) => !p.left).length;
+      const head = `${s.mpPlayers} ${seated}/${state.playerSeats ?? state.seats}`;
       label.textContent = state.round
         ? `${head} · ${s.mpRoundLabel.replace('{n}', String(state.round))}`
         : head;

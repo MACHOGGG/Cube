@@ -106,9 +106,17 @@ const seatOf = (st, id) => (st.players || []).find((p) => p.id === id) || {};
   const plain = await open(false);
   const contest = await open(true);
   check('普通屋还是 8 把椅子', plain.state.seats === 8, String(plain.state.seats));
-  check('竞赛屋是 20 把椅子', contest.state.seats === 20, String(contest.state.seats));
+  // 21 把，不是 20：玩家拍的板是「要 20 名选手（连主持人 21 人）」——主持人不参赛，
+  // 但座位就是身份，他也要占一把。
+  check('竞赛屋是 21 把椅子（20 名选手 + 主持人）', contest.state.seats === 21, String(contest.state.seats));
   check('普通屋不是竞赛屋', plain.state.contest === false, String(plain.state.contest));
   check('竞赛屋报得出自己是竞赛屋（客户端拿它决定开不开棋盘）', contest.state.contest === true, String(contest.state.contest));
+  // 屏幕上那个「几/几」数的是**选手**，不是椅子：照椅子数会写成 21/21，而那行小字
+  // 写的是「最多 20 人」，两个数对不上就是「意料之外的界面」。
+  check('竞赛屋报的「几/几」是选手那一对（上限 20）', contest.state.playerSeats === 20, String(contest.state.playerSeats));
+  check('刚开屋时选手数是 0（主持人不算）', contest.state.playersIn === 0, String(contest.state.playersIn));
+  check('普通屋那一对还是座位（8）', plain.state.playerSeats === 8 && plain.state.playersIn === 1,
+    `${plain.state.playersIn}/${plain.state.playerSeats}`);
   // 座位数只认 contest 这一位，不认请求里随便塞的数——不然 claimSlot 会空转十万圈。
   const forged = await open(false, { seats: 99999 });
   check('请求里塞 seats 不管用（座位数跟着屋子走）', forged.state.seats === 8, String(forged.state.seats));
@@ -119,16 +127,20 @@ const seatOf = (st, id) => (st.players || []).find((p) => p.id === id) || {};
   const { code, state } = await open(true);
   let joined = 0;
   let refused = null;
-  // 屋主已经占了一把，所以还能进 19 个；第 20 个该被拒。
-  for (let i = 1; i <= 20; i++) {
+  // 屋主已经占了一把，所以还能进 20 个；第 21 个该被拒。
+  for (let i = 1; i <= 21; i++) {
     const r = await call({ action: 'join', code, name: '选手' + i });
     if (r.body.playerToken) joined++;
     else if (!refused) refused = `第 ${i} 个：${r.status} ${r.body.error}（seats=${r.body.seats}）`;
   }
-  check('竞赛屋坐得下 20 个人（屋主 + 19 名选手）', joined === 19, `进了 ${joined} 个`);
-  check('第 21 个人被挡住，而且话说得明白', /full/.test(refused || ''), refused || '（一个都没被挡）');
+  check('竞赛屋坐得下 20 名选手（连主持人 21 人）', joined === 20, `进了 ${joined} 个`);
+  check('第 21 名选手被挡住，而且话说得明白', /full/.test(refused || ''), refused || '（一个都没被挡）');
   const full = await call({ action: 'state', code, ...{} });
-  check('名单上二十个人都在', (full.body.players || []).length === 20, `${(full.body.players || []).length} 人`);
+  check('名单上二十一个人都在', (full.body.players || []).length === 21, `${(full.body.players || []).length} 人`);
+  // 屏幕上该写「20/20」——满员时选手正好 20 名。
+  check('满员时那一对是 20/20（不是 21/21）',
+    full.body.playersIn === 20 && full.body.playerSeats === 20,
+    `${full.body.playersIn}/${full.body.playerSeats}`);
   void state;
 }
 
