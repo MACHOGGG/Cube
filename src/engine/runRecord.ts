@@ -58,6 +58,12 @@ export interface RunData {
    */
   bombRules?: number;
   /**
+   * 这一局的无限反转按第几版规则打的（见 scoring.ts 的 FLIP_RULES_VERSION）。
+   * 老档没有这一项，读出来是 undefined，就是第一版（连击不封顶）。存档键和排行榜
+   * 都按它分开——能不能打出上亿分，封顶前后不是一把尺子量的。非反转局不写这一项。
+   */
+  flipRules?: number;
+  /**
    * 《真正解密 · 步步为营》这一局的账（见 engine/puzzleScore.ts）。老档没有这
    * 一项，读出来是 undefined，照旧走老分支。
    *

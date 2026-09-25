@@ -119,7 +119,17 @@ const BOMB_KIND = 'bomb2';
  * 来的时候，再照 bomb → bomb2 那条路往上加一版，把这一张留着当归档榜。
  */
 const PUZZLE_KIND = 'puzzle';
-const KINDS = ['base', 'timed', BOMB_KIND, 'slot', 'flip', PUZZLE_KIND];
+/**
+ * 无限反转这一档现在叫什么。
+ *
+ * 2026-09 给连击倍率加了封顶（`src/engine/scoring.ts` 的 FLIP_STREAK_CAP，1.5¹⁰ ≈
+ * 57.7 倍）。封顶之前那是个不封的指数：4 分的图案连续第 49 次单次得分就超过
+ * MAX_SCORE，一局能打穿这张榜的上限。封顶前后打出来的分不是一把尺子量的，所以照
+ * bomb → bomb2 那条路往上加一版，老的 `square:flip` 原样归档（它不在 ALL_BOARDS
+ * 里，重建时不撤人，存档里那些老局照旧算回它自己那张榜，见 kindOf）。
+ */
+const FLIP_KIND = 'flip2';
+const KINDS = ['base', 'timed', BOMB_KIND, 'slot', FLIP_KIND, PUZZLE_KIND];
 
 /** 这一局算哪一种。存档里那份 data 说了算（modeKey 加老虎机那个标记）。 */
 function kindOf(data) {
@@ -127,7 +137,8 @@ function kindOf(data) {
   // 排在 timed 前面：步步为营这一局没有钟，modeKey 也不会是 'timed'，可顺序照
   // 规矩摆——一局只归一档，越专的档越先问。
   if (mk === PUZZLE_KIND) return PUZZLE_KIND;
-  if (mk === 'flip') return 'flip';
+  // 老档没有 flipRules，读出来是 undefined——那是没封顶那一版，归老榜。
+  if (mk === 'flip') return Number(data?.flipRules) >= 2 ? FLIP_KIND : 'flip';
   // 老档没有 bombRules，读出来是 undefined——那是第一版规则，归老榜。
   if (mk === 'bomb' || mk === 'bombTimed') return Number(data?.bombRules) >= 2 ? BOMB_KIND : 'bomb';
   if (mk === 'timed') return 'timed';
@@ -520,6 +531,19 @@ async function rebuild(req, res, body) {
    * 重建，那会把旧尺子量出来的分从存档里请回榜上。
    */
   const wipeAll = body?.all === true;
+  /**
+   * 点名要 drop 的那几种，**它们的榜也要撤干净——包括已经归档的那几张**。
+   *
+   * `ALL_BOARDS` 只有现行的 kind（`KINDS`），而改过规则的老档位（`…:bomb`、
+   * `…:flip`）不在里面：那是有意的，归档榜不该被每一次重建重写。可 `drop` 的意思
+   * 是「这几种玩法别上榜」——点了名却清不掉，那句话就没做到。
+   *
+   * check-scores 的「《无限反转》母榜上一个人都没有了」逮到的正是这一处：给连击加
+   * 封顶、`flip` → `flip2` 之后，`…:flip` 成了归档榜，rebuild 再也不碰它，那张榜上
+   * 按老尺子量出来的分就永远留在那儿。`…:bomb` 其实一直有同一个洞，只是没人点过
+   * 它的名。
+   */
+  const droppedBoards = [...drop].flatMap((kind) => BASE_SHAPES.map((shape) => `${shape}:${kind}`));
 
   // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
   const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
@@ -549,7 +573,7 @@ async function rebuild(req, res, body) {
 
       let rows = 0;
       // 先撤干净：新榜、老榜都撤，没算出成绩的那几张就此空着。
-      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS]) {
+      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS, ...droppedBoards]) {
         if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
       }
       for (const [boardId, score] of Object.entries(best)) {

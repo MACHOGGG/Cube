@@ -3,7 +3,7 @@ import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
-import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
+import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
 import { trackGameStart, trackGameEnd, trackShare } from './analytics';
@@ -655,6 +655,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // bomb.ts 的 BOMB_RULES_VERSION）。非炸弹局不写，省得每一局都多一个字段。
       bombRules:
         hooks.modeKey === 'bomb' || hooks.modeKey === 'bombTimed' ? BOMB_RULES_VERSION : undefined,
+      // 无限反转同理（见 scoring.ts 的 FLIP_RULES_VERSION）：连击封顶前后的分不是
+      // 一把尺子量的。非反转局不写。
+      flipRules: hooks.modeKey === 'flip' ? FLIP_RULES_VERSION : undefined,
       at: Date.now(),
     };
 

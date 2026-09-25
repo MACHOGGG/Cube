@@ -8,6 +8,7 @@ import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
 import { BOMB_RULES_VERSION } from './engine/bomb';
+import { FLIP_RULES_VERSION } from './engine/scoring';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
 import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 // 只为它的副作用引进来：模块一加载就把玩家挑的那一套（米白 / 深紫）盖到
@@ -155,7 +156,9 @@ const recordSources: RecordSource[] = [
   ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
   ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb2', mode: ' · + 💥' })),
   // 《无限反转》只有基础方块和小球有。
-  ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip', mode: ' · ∞' })),
+  // 后缀跟着规则版本走（和上面炸弹那两行写 '_bomb2' 同一个道理）：封顶之前那些局
+  // 留在 '_flip' 那张榜上归档，记录页只摆现行规则这一张。
+  ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip2', mode: ' · ∞' })),
   // 《真正解密 · 步步为营》三个基础玩法都有。三角这一栏用 triangleGame 变量，
   // 不按文件名推——菜单上的「三角」由 triangleBig.ts 造（见文件开头那几行）。
   ...[squareGame, circleGame, triangleGame].map((g) => ({ card: g.card, suffix: '_puzzle', mode: ' · 步' })),
@@ -176,11 +179,14 @@ const runKeyFor: RunKeyFor = (data) => {
   if (!card) return null;
   const mk = data.modeKey;
   const bombSuffix = (data.bombRules ?? 1) >= BOMB_RULES_VERSION ? '_bomb2' : '_bomb';
+  // 无限反转同理：连击封顶（scoring.ts 的 FLIP_STREAK_CAP）之前那些局能打出的分高
+  // 一个量级，放一起比就是把老局钉死在榜首。老档没有 flipRules，是第一版。
+  const flipSuffix = (data.flipRules ?? 1) >= FLIP_RULES_VERSION ? '_flip2' : '_flip';
   // 步步为营排在最前面：它和炸弹、计时不会同时出现（这一局没有钟也没有炸弹），
   // 摆在哪儿都不冲突，摆最前面是为了读起来一眼能看见「这一局另算一张榜」。
   const suffix =
     mk === 'puzzle' ? '_puzzle'
-    : mk === 'flip' ? '_flip'
+    : mk === 'flip' ? flipSuffix
     : mk === 'bomb' || mk === 'bombTimed' ? bombSuffix
     : mk === 'timed' ? '_timed'
     : '';

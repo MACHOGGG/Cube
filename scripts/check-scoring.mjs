@@ -15,7 +15,7 @@ if (!src) {
   console.error('用法: node scripts/check-scoring.mjs <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { createCascadeStepper, createToggleLedger, flipStreakDelta } = await import(src);
+const { createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_STREAK_CAP, FLIP_STREAK_BASE } = await import(src);
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -187,6 +187,30 @@ function board(faces) {
   check('无限反转：第一次不加成', flipStreakDelta(36, 0) === 36);
   check('无限反转：负数当 0', flipStreakDelta(4, -3) === 4);
   check('无限反转：整数，不带小数', Number.isInteger(flipStreakDelta(5, 2)), String(flipStreakDelta(5, 2)));
+  /*
+   * **倍率封顶**（玩家 2026-09 拍的板：n ≤ 10，约 57.7 倍）。
+   *
+   * 不封的话这是个不封顶的指数，而排行榜有上限（api/scores.js 的 MAX_SCORE = 1e9）：
+   * 超过就一律截断成十亿，榜首那一批全显示同一个数字——玩家报过的那个 bug（「过了
+   * 上限以后都按照同一数字显示了」）。实算过：4 分的图案大约连续第 49 次单次得分就
+   * 超过十亿。
+   *
+   * 顺手钉一件事：《外边消除决策》D5 原先写的「第 32 步 ≈1.4×10¹⁵」按这个公式重现
+   * 不出来（第 32 次是 ×2.9×10⁵）。下面那条「第 32 次和第 11 次一样」顺带也说明了
+   * 为什么那个数不可能——封顶之后它压根不再涨。
+   */
+  check(`无限反转：倍率封在第 ${FLIP_STREAK_CAP} 次（约 ${(FLIP_STREAK_BASE ** FLIP_STREAK_CAP).toFixed(1)} 倍）`,
+    flipStreakDelta(4, FLIP_STREAK_CAP) === flipStreakDelta(4, FLIP_STREAK_CAP + 1),
+    `第 ${FLIP_STREAK_CAP + 1} 次 ${flipStreakDelta(4, FLIP_STREAK_CAP)} / 第 ${FLIP_STREAK_CAP + 2} 次 ${flipStreakDelta(4, FLIP_STREAK_CAP + 1)}`);
+  check('无限反转：封顶之前照旧一次一涨（不是从头就压平了）',
+    flipStreakDelta(4, FLIP_STREAK_CAP - 1) < flipStreakDelta(4, FLIP_STREAK_CAP),
+    `第 ${FLIP_STREAK_CAP} 次 ${flipStreakDelta(4, FLIP_STREAK_CAP - 1)} → 第 ${FLIP_STREAK_CAP + 1} 次 ${flipStreakDelta(4, FLIP_STREAK_CAP)}`);
+  // 再怎么连都打不穿排行榜的上限（这才是封顶要拦的那件事）。
+  const MAX_SCORE = 1e9;
+  const wild = [30, 49, 100, 1000, 1e6].map((n) => flipStreakDelta(36, n));
+  check('无限反转：连到一千次、一百万次，单次得分也远在十亿以下',
+    wild.every((v) => v < MAX_SCORE / 1000),
+    [...new Set(wild)].join(' / '));
 }
 
 // ---------------------------------------------------------------------------

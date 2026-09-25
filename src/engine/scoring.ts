@@ -56,10 +56,37 @@ export function createStreakTracker(): StreakTracker {
  * 一次；一步没得分就归零（见 gameController 的 flipChain）。玩家定的数（底数
  * 先是 1.2，后来提到 1.5）：4 分的图案连着来是 4、6、9、13.5≈14、20.25≈20……
  * 不再是别的局那套 ×1.5/2/2.5 和同一步里的 ×3。
+ *
+ * **倍率有封顶**（FLIP_STREAK_CAP，见下面）：它是指数，不封的话一局能打穿排行榜
+ * 的上限。
  */
 export const FLIP_STREAK_BASE = 1.5;
+/**
+ * 连击倍率的**封顶**：`chain` 再大也按这个数算（1.5¹⁰ ≈ 57.7 倍）。
+ *
+ * 为什么非封不可：这是指数，而排行榜有上限（`api/scores.js` 的 `MAX_SCORE = 1e9`），
+ * 超过就一律**截断成十亿**。实算过（node，照下面这个公式逐项算）：4 分的图案大约
+ * **连续第 49 次**时单次得分就超过十亿——于是榜首那一批全显示同一个数字，正是玩家
+ * 报过的那个 bug（原话「过了上限以后都按照同一数字显示了」）。
+ *
+ * 顺手记一笔：《外边消除决策》D5 那一节原先写着「到第 32 步倍率已经 ≈1.4×10¹⁵」，
+ * 那个数按这个公式**重现不出来**（第 32 次是 ×2.9×10⁵，要到 1.4×10¹⁵ 得连续约 87
+ * 次）。文档里已经改对，别再引那个数。
+ *
+ * 10 是玩家 2026-09 拍的板（「直接封顶，按 n ≤ 10（约 57.7 倍）」）。封顶是**规则
+ * 变更**，所以配了 FLIP_RULES_VERSION，让封顶前后的成绩分开排榜。
+ */
+export const FLIP_STREAK_CAP = 10;
+/**
+ * 无限反转按第几版规则打的。
+ *
+ * 1 = 连击不封顶（2026-09 之前）；2 = 封顶在 FLIP_STREAK_CAP。
+ * 一局能不能打出上亿分，两版不是一把尺子量的，所以存档键和排行榜要按它分开——
+ * 照 `bomb.ts` 的 `BOMB_RULES_VERSION` 那条路走（`_flip` → `_flip2`）。
+ */
+export const FLIP_RULES_VERSION = 2;
 export function flipStreakDelta(points: number, chain: number, base = FLIP_STREAK_BASE): number {
-  return Math.round(points * base ** Math.max(0, chain));
+  return Math.round(points * base ** Math.min(Math.max(0, chain), FLIP_STREAK_CAP));
 }
 
 export interface CascadeConfig {
