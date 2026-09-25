@@ -125,15 +125,34 @@ const openProfile = async (page) => {
   await page.waitForSelector('.profile-page', { timeout: 10000 });
 };
 
-// ---- 3a. 落地页底下那五行 ----------------------------------------------------
+// ---- 3a. 那五份文档：个人主页那五行 + 五个真网址 ----------------------------
+//
+// **这一节换过口径。** 从前量的是「落地页底下摆着五行」，而玩家 2026-09 把它们从
+// 主菜单挪走了（原话：「主页省略下方的价格、法律等部分，只留在个人主页的部分」，
+// 出处记在 ui/menu.ts 那段注释里，连同「收单方的审核从前是在落地页上找它们的」这
+// 句权衡）。从那一轮起这道门就一直红在**已经被推翻的口径**上——而它是给收单方
+// 审核用的门，红着没人敢当真，等于没有。
+//
+// 现在量玩家定下来的那两条路（那段注释里列的三条，第三条是五张静态页彼此的页脚，
+// 由 build-legal.mjs 生成，跟着下面那五个网址一起验）：
+//   · 个人主页最底下那五行（是按钮，点开是弹窗，不是 <a href>）；
+//   · /pricing /terms /refund /privacy /contact 五个真网址——**填进收单方后台表格
+//     的就是这五个**，所以它们必须一个不少、一个不坏。
 {
   const { ctx, page } = await fresh();
-  const feet = await page.$$eval('.home-legal a', (as) =>
-    as.map((a) => ({ href: a.getAttribute('href'), text: a.textContent.trim(), w: a.getBoundingClientRect().width })),
+  await openProfile(page);
+  const rows = await page.$$eval('[data-legal]', (bs) =>
+    bs.map((b) => ({ key: b.dataset.legal, w: b.getBoundingClientRect().width })),
   );
-  check('落地页底下摆着五份文档', feet.length === 5, feet.map((f) => f.href).join(' '));
-  check('五个都是真链接、都看得见', feet.every((f) => f.href?.startsWith('/') && f.w > 0));
-  for (const f of feet) check(`  ${f.href} 点得开`, Boolean(await resolves(f.href)), f.text);
+  check('个人主页最底下摆着五份文档', rows.length === 5, rows.map((r) => r.key).join(' '));
+  check('五个都看得见（不是摆在那儿高度为 0）', rows.length === 5 && rows.every((r) => r.w > 0),
+    rows.map((r) => `${r.key}:${r.w.toFixed(0)}px`).join(' '));
+  // 点开第一行，弹窗真的出得来——只量「按钮在」的话，绑事件那一步断掉也是绿的。
+  await page.click('[data-legal]');
+  const opened = await page.waitForSelector('.legal-intro', { timeout: 8000 }).then(() => true).catch(() => false);
+  check('点一行，文档弹窗真的开出来', opened);
+  // 五个真网址（收单方后台填的就是它们）。
+  for (const href of LEGAL) check(`  ${href} 点得开`, Boolean(await resolves(href)));
   await ctx.close();
 }
 
