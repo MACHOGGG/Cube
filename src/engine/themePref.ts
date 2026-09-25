@@ -23,6 +23,27 @@ import { isGenius, onGeniusChange } from './subscription';
 export type Theme = 'light' | 'dark';
 
 const KEY = 'slides_theme';
+/**
+ * **上一次真正画出来的**那一套（不是他挑的那一套）。
+ *
+ * 只给 index.html 头上那一小段脚本用：它在页面第一帧之前读这一格，直接把
+ * `data-theme` 定下来。存的是 `theme()` 的结果而不是 `picked`，这一点是关键——
+ *
+ *   · 真正付了钱、自己挑了深紫的人，下次一打开**第一帧就是深紫**，不再先闪一下
+ *     米白。实测过那一闪：正常网速 55ms（2 帧），CPU 降速 3 倍 140ms（3 帧），
+ *     而那还是 JS 已经在本地、没有网络下载的情况。看得见。
+ *   · 没开通、但手机系统是深色、又碰巧挑过深紫的人，这一格里永远是 `light`
+ *     ——因为 `theme()` 给的就是 light。那一闪深紫本来就是 index.html 上那句
+ *     `data-theme="light"` 在防的事（深紫是要花钱才有的东西），这一格不会把它
+ *     放回来。
+ *
+ * 为什么不让那段脚本自己去判「是不是天才」：那要把 isGenius() 的整套逻辑
+ * （渠道要对得上、到期日留一天余量）抄一遍进 HTML，而**渠道那一条它判不准**
+ * ——`salesChannel()` 看的是 `window.Capacitor`，那东西在 <head> 里那一刻可能还
+ * 没注入。判错的后果是 App 里先闪深紫再退回米白，正好是反方向的同一个毛病。
+ * 存结果不存条件，就没有第二份会走样的判断。
+ */
+const PAINTED_KEY = 'slides_theme_paint';
 type Listener = () => void;
 
 const listeners = new Set<Listener>();
@@ -55,7 +76,16 @@ export function theme(): Theme {
 /** 把它盖到 <html> 上，样式表跟着走。 */
 function paint(): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.setAttribute('data-theme', theme());
+  const now = theme();
+  document.documentElement.setAttribute('data-theme', now);
+  // 记下「这一次画的是哪一套」，好让下一次打开的第一帧就对（见 PAINTED_KEY）。
+  // 权限一变这儿也会跟着跑一遍（onGeniusChange），所以订阅过期之后这一格自己就
+  // 退回 light，不需要谁去清它。
+  try {
+    localStorage.setItem(PAINTED_KEY, now);
+  } catch {
+    /* 无痕模式：这一次照样对，只是下一次又会闪那一下 */
+  }
 }
 paint();
 

@@ -242,6 +242,79 @@ const sw = (p) =>
   await p.close();
 }
 
+// ---- 第一帧就是对的那一套（不许再闪那一下） ----------------------------------
+//
+// index.html 上那句 `data-theme="light"` 管的是一半：**没挑过深紫的人不许闪一下深
+// 紫**（深紫是要花钱才有的东西）。代价是反过来那一半——真正付了钱、自己挑了深紫的
+// 人，从前每次刷新都先看到米白再跳深紫。实测过那一闪：正常网速 55ms（2 帧），CPU
+// 降速 3 倍 140ms（3 帧），而那还是 JS 已经在本地、没有网络下载的情况。
+//
+// 现在 <head> 里那一小段脚本读 `slides_theme_paint`（engine/themePref.ts 上一次
+// **真正画出来**那一套）把第一帧定下来。所以这一节两头都要量，缺一条就是修好一头
+// 坏了另一头：
+//   · 付了钱挑深紫 → 刷新之后**一帧米白都没有**；
+//   · 没付钱挑过深紫 → 刷新之后**一帧深紫都没有**。
+{
+  /** 从第一帧起逐帧记 data-theme。刷新之后这一份要重新装（addInitScript 每次导航都跑）。 */
+  const sample = () => {
+    window.__themeFrames = [];
+    const tick = () => {
+      window.__themeFrames.push(document.documentElement.getAttribute('data-theme'));
+      if (window.__themeFrames.length < 400) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  for (const [label, genius, wantFirst] of [['付了钱', true, 'dark'], ['没付钱', false, 'light']]) {
+    const p = await ctx.newPage();
+    await p.addInitScript(
+      (g) => {
+        if (sessionStorage.getItem('gate_primed') !== '1') {
+          sessionStorage.setItem('gate_primed', '1');
+          localStorage.clear();
+          localStorage.setItem('slides_lang', 'zhHans');
+          localStorage.setItem('slides_intro_seen', '1');
+          localStorage.setItem('slides_played_square', '1');
+          localStorage.setItem('slides_theme', 'dark'); // 两边都挑了深紫
+          if (g) {
+            localStorage.setItem(
+              'slides_genius',
+              JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code' }),
+            );
+          }
+        }
+      },
+      genius,
+    );
+    await p.addInitScript(sample);
+    // 第一次打开：这一次本来就还没有那一格，允许闪。它的作用是把那一格写出来。
+    await p.goto(BASE, { waitUntil: 'load' });
+    await p.waitForSelector('.home-page', { timeout: 20000 });
+    await p.waitForTimeout(500);
+    const painted = await p.evaluate(() => localStorage.getItem('slides_theme_paint'));
+    check(
+      `${label}：那一格记下的是**实际画出来**的那一套`,
+      painted === wantFirst,
+      `slides_theme_paint = ${painted}（该是 ${wantFirst}）`,
+    );
+    // 刷新——这才是玩家天天遇到的那一次。
+    await p.reload({ waitUntil: 'load' });
+    await p.waitForSelector('.home-page', { timeout: 20000 });
+    await p.waitForTimeout(500);
+    const f = await p.evaluate(() => window.__themeFrames || []);
+    // 先立住尺子：真的逐帧量到了。量不到几帧的话下面两条是真空的。
+    check(`${label}：逐帧量到了（下面两条才有意义）`, f.length > 3, `${f.length} 帧`);
+    check(`${label}：刷新之后第一帧就是 ${wantFirst}`, f[0] === wantFirst, `第一帧 ${f[0]}`);
+    check(
+      wantFirst === 'dark'
+        ? '付了钱：全程一帧米白都没有（那一闪没了）'
+        : '没付钱：全程一帧深紫都没有（花钱才有的东西不许先给他看）',
+      wantFirst === 'dark' ? f.every((v) => v === 'dark') : f.every((v) => v !== 'dark'),
+      `${[...new Set(f)].join(' / ')}`,
+    );
+    await p.close();
+  }
+}
+
 console.log(errs.length ? '\n页面报错：' + errs.slice(0, 3).join(' | ') : '\n全程零报错');
 await browser.close();
 process.exit(fail ? 1 : 0);

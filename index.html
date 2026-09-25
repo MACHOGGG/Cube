@@ -7,6 +7,21 @@
 <html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="UTF-8" />
+  <!-- 第一帧就把明暗定下来，不等 JS 加载完。
+       上面那句 data-theme="light" 管的是「没挑过深紫的人不许闪一下深紫」；这一小
+       段管的是**反过来那一半**——真正付了钱、自己挑了深紫的人，从前每次刷新都会
+       先看到米白再跳深紫。实测过：正常网速 55ms（2 帧），CPU 降速 3 倍 140ms
+       （3 帧），而那还是 JS 已经在本地、没有网络下载的情况。这批人恰恰是最该被
+       照顾好的人。
+       读的是 engine/themePref.ts 上一次**真正画出来**那一套（slides_theme_paint），
+       不是他挑的那一套，也不在这儿重判「是不是天才」——判定只写一遍，理由在那个
+       文件里 PAINTED_KEY 那段（简单说：渠道那一条在 <head> 里判不准，
+       window.Capacitor 可能还没注入，判错就是反方向的同一个毛病）。
+       写成 try/catch + 只认 'dark'：无痕模式读不到、这一格被写坏了，都退回米白，
+       也就是退回今天的行为。 -->
+  <script>
+    try { if (localStorage.getItem('slides_theme_paint') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <!-- 手机上这一支不是「装饰色」：iOS Safari 和 Android Chrome 拿它给地址栏
        那一带（刘海底下那条）上色。原先写的是强调色 #BE5762，于是竖屏手机一打开
