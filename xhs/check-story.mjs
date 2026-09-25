@@ -29,7 +29,12 @@
 import { chromium } from 'playwright';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { ensurePreview } from './ensurePreview.mjs';
 
+
+// 读的是产物 preview.html，它不提交、也不会自己重出——过期了就在这儿重出一次
+// （理由在 ensurePreview.mjs 的文件头：不这么做，这道门会在旧样式上全绿）。
+ensurePreview();
 const here = dirname(fileURLToPath(import.meta.url));
 const PAGE = pathToFileURL(join(here, 'preview.html')).href;
 let fails = 0;

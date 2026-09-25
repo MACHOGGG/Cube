@@ -104,10 +104,14 @@ node scripts/check-mode-axis.mjs http://localhost:8958/
 - **改完 `xhs/src/baseline.css` 只跑 `npm run build:xhs`，`xhs/preview.html`
   不会跟着重出。** 它由 `node xhs/preview.mjs` 单独生成，而且在 .gitignore
   里，所以工作区里躺着的是**上一次**那一份——打开一看「改动没生效」，其实
-  `dist/app.js` 里早就有了。**五道**小红书的门（`check-oldkernel` /
-  `check-oldcss` / `check-story` / `check-vsweb` / `check-profile`）读的都是这
-  个文件，于是它们量的是旧样式。**改完 CSS 要看效果，跑
-  `npm run preview:xhs`**（出包和出预览两步已经串在一条脚本里）。
+  `dist/app.js` 里早就有了。**改完 CSS 要看效果，跑 `npm run preview:xhs`**
+  （出包和出预览两步已经串在一条脚本里）。
+  **门这一头已经不用操心了**：`check-oldkernel` / `check-oldcss` / `check-story` /
+  `check-vsweb` 四道开头各调一次 `xhs/ensurePreview.mjs`——预览页比 `src/`、
+  `xhs/src/`、两个生成脚本里任何一样旧，就自己重出一次（约 5 秒）并打印一行。
+  自动重出而不是报错退出：这个文件从不提交，门自己保证它是新的没有副作用。
+  （`check-profile` 还没接，它连自己的 npm 脚本都没有——手跑它之前先
+  `npm run preview:xhs`。）
   （`check:xhs` / `check:vsweb` / `check:story` 也已经串好，不用补；单跑
   `build:xhs` 和 `check:submit` 没有串，`check-profile` 连自己的 npm 脚本都
   没有——手跑它之前先 `npm run preview:xhs`。）
