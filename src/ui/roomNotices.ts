@@ -109,7 +109,21 @@ export interface WaitPanel {
  */
 export function showWaitPanel(
   lang: Lang,
-  opts: { shapeId: string; meId?: string; code?: string; onLeave: () => void },
+  opts: {
+    shapeId: string;
+    meId?: string;
+    code?: string;
+    onLeave: () => void;
+    /**
+     * 榜上不列这个人。
+     *
+     * 竞赛屋的主持人不参赛（api/room.js 的 isSpectator），他看的就是这一屏——把他
+     * 自己也列进去，就是一行恒定 0 分挂在最后一名。名次也跟着只按选手排。
+     */
+    hideId?: string;
+    /** 那颗键上的字。主持人按下去是《解散小屋》，不是《离开小屋》。 */
+    leaveLabel?: string;
+  },
 ): WaitPanel {
   const s = STRINGS[lang];
   const marks = [
@@ -133,7 +147,7 @@ export function showWaitPanel(
            也听不到有人陆续交卷。polite 是「等他说完这句再播」，不打断。 -->
       <div class="mp-wait-rows mp-players" id="mpWaitRows" aria-live="polite"></div>
       <div class="start-actions">
-        <button class="icon-btn start-act" id="mpWaitLeave">${s.mpLeave}</button>
+        <button class="icon-btn start-act" id="mpWaitLeave">${opts.leaveLabel ?? s.mpLeave}</button>
       </div>
     </div>
   `;
@@ -145,6 +159,7 @@ export function showWaitPanel(
   return {
     update(state) {
       rows.innerHTML = state.players
+        .filter((p) => p.id !== opts.hideId)
         .map((p, i) => waitRow(p, i + 1, opts.meId, s.mpFinished, s.mpLeftTag))
         .join('');
     },

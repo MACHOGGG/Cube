@@ -100,10 +100,20 @@ export interface RoomCardOpts {
  * 排名》进来：页头写着一个名字、图里印着另一个，是同一张纸上自己跟自己打架。
  * `meId` 同理——画这张图的时候座位可能已经交回去了。
  */
+/**
+ * 卡上要列的人：**竞赛屋的主持人不算**。
+ *
+ * 他不参赛（api/room.js 的 isSpectator 已经保证账上一分都没有），所以列进来就是
+ * 一行 0 分 0 局挂在最后一名，还会把「全屋总分」和名次都算歪。普通小屋原样返回
+ * state.players，这一条一个字都不影响八人屋。
+ */
+const onCard = (state: RoomState): RoomState['players'] =>
+  state.contest && state.host ? state.players.filter((p) => p.id !== state.host) : state.players;
+
 export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts = {}): string {
   const s = STRINGS[lang];
   const meId = opts.meId ?? currentRoom()?.playerId;
-  const ranked = rankRoom(state.players);
+  const ranked = rankRoom(onCard(state));
   const rows: Standing[] = ranked.map((p) => ({
     name: p.name,
     score: liveTotal(p),
@@ -143,7 +153,7 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   // 最大的那个数字是全屋总分——这一整晚，所有人、所有局，加起来打了多少。
   // 原先这里印的是小屋号码：那是一串只在当晚有效、发出去之后对谁都没有意义
   // 的数字，却占着整张图上最大的字号。房号留在小屋页面里够用了。
-  const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
+  const roomTotal = onCard(state).reduce((sum, p) => sum + liveTotal(p), 0);
   ctx.font = '700 56px "Fraunces", serif';
   ctx.fillStyle = '#BE5762';
   ctx.fillText(String(roomTotal), PAD, 178);
@@ -156,8 +166,8 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   );
 
   // 两条并排在大数字下面，各占半边——左边《单局最高》，右边《最快完成》。
-  const best = bestRoundOf(state.players);
-  const fastest = fastestOf(state.players);
+  const best = bestRoundOf(onCard(state));
+  const fastest = fastestOf(onCard(state));
   const half = (CARD_W - PAD * 2) / 2;
   ctx.font = '500 14px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
@@ -190,9 +200,9 @@ export function showRoomCard(
 ): void {
   const s = STRINGS[lang];
   const meId = opts.meId ?? currentRoom()?.playerId;
-  const ranked = rankRoom(state.players);
+  const ranked = rankRoom(onCard(state));
   // 单局最高和单局最快这一页上不再用文字说——它们写在战绩图里（drawCard）。
-  const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
+  const roomTotal = onCard(state).reduce((sum, p) => sum + liveTotal(p), 0);
 
   container.innerHTML = `
     <div class="app mp-page">

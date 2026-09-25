@@ -89,6 +89,15 @@ export interface RoomState {
   ended: boolean;
   /** Seats open today. The room machinery carries more; this is what is on. */
   seats: number;
+  /**
+   * 竞赛屋：上限 20 人，**开屋的人不参赛**，只看实时榜单。
+   *
+   * 玩家 2026-09：「增加一个《竞赛》的入口在多人小屋里，点击后是上限 20 人、发起人
+   * 不参加游戏单独看到实时榜单情况的版本」。判定在服务端只写一遍
+   * （api/room.js 的 isSpectator）；这一位是让主持人那台设备知道**这一局不给它开
+   * 棋盘**，改坐到榜单上去（见 ui/multiplayer.ts 里 sideline 那一段）。
+   */
+  contest: boolean;
   players: RoomPlayer[];
   /** 这间小屋被催了多少下。屋主那边看它变大就往标题里掉图形。 */
   nudges: number;
@@ -403,11 +412,21 @@ function hostProof() {
   };
 }
 
-export async function createRoom(name: string, avatar: Avatar): Promise<RoomResult<RoomState>> {
+/**
+ * 开一间小屋。`contest` 为真就是竞赛屋：20 把椅子、开屋的人不参赛（见
+ * RoomState.contest）。**座位数和这条规则都由服务器按这一位定下来，跟着屋子走**
+ * ——请求里塞 seats 不管用（api/room.js 的 seatsFor）。
+ */
+export async function createRoom(
+  name: string,
+  avatar: Avatar,
+  contest = false,
+): Promise<RoomResult<RoomState>> {
   const made = await post<{ code: string; playerId: string; playerToken: string; state: RoomState }>({
     action: 'create',
     name,
     avatar,
+    ...(contest ? { contest: true } : {}),
     // 看过哪几族的教学：开局前服务器据此判这一局可不可能有新手。
     seen: seenTutorials(),
     ...hostProof(),

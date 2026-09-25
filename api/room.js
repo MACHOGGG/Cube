@@ -499,6 +499,11 @@ function publicState(code, hash) {
      *  number rather than the word "four" written into four languages.
      *  这一间屋自己的数（见 seatsFor）：普通小屋 8，竞赛小屋 20。 */
     seats: seatsFor(meta),
+    /**
+     * 竞赛屋：上限 20 人，开屋的人不参赛、只看实时榜单（见 isSpectator）。
+     * 客户端拿它决定主持人那台设备这一局到底开不开棋盘。
+     */
+    contest: Boolean(meta.contest),
     players,
     /** 被催了多少下。屋主那边看它变大就往标题里掉图形。 */
     nudges: tally.nudges,
@@ -516,7 +521,9 @@ function roundOver(hash) {
   const meta = hash.meta || {};
   if (!meta.round || !meta.startAt || Date.now() < meta.startAt) return false;
   const seats = Object.entries(hash)
-    .filter(([field, value]) => field.startsWith('p:') && value)
+    // 竞赛屋的主持人不参赛（见 isSpectator）：这一局压根不等他。他那台设备坐在
+    // 实时榜单上，永远不会交卷——把他算进来，每一局都要干等满 ABSENT_MS。
+    .filter(([field, value]) => field.startsWith('p:') && value && !isSpectator(meta, field.slice(2)))
     .map(([, value]) => value);
   if (!seats.length) return false;
   return seats.every((seat) => {
@@ -809,6 +816,33 @@ function seatOf(hash, playerId, token) {
 const seatCount = (hash) =>
   Object.entries(hash).filter(([k, v]) => k.startsWith('p:') && v && !v.left).length;
 
+/**
+ * 这个座位是不是**主持人**——竞赛屋里开屋那个人，他不参赛。
+ *
+ * 玩家 2026-09 定的竞赛版：「上限 20 人、发起人不参加游戏单独看到实时榜单情况」。
+ * 所以竞赛屋里屋主的那把椅子是一张**看台票**：
+ *   · 这一局不等他交卷（roundOver 跳过他）；
+ *   · 他没有分（两处记账循环都跳过他），榜单和那张战绩图上也不该有他；
+ *   · 他仍然是屋主——开局、解散、被催，一样都不少。
+ *
+ * 判定只写这一遍，三处（roundOver / start 记账 / end 记账）都问它。**普通小屋一律
+ * 回 false**：屋主照旧打自己的局，这一条一个字都不影响八人屋。
+ */
+const isSpectator = (meta, playerId) => Boolean(meta && meta.contest) && playerId === (meta && meta.host);
+
+/**
+ * 真正下场比的有几个人（主持人不算）。
+ *
+ * 开局那道「至少两个人」的门槛问的是这个数：竞赛屋里「屋主 + 一个人」只有一名选手，
+ * 开出来是一个人自己跟自己比。
+ */
+const playerCount = (hash) => {
+  const meta = hash.meta || {};
+  return Object.entries(hash).filter(
+    ([k, v]) => k.startsWith('p:') && v && !v.left && !isSpectator(meta, k.slice(2)),
+  ).length;
+};
+
 /** 同一个昵称——不分大小写，两头的空白不算。 */
 const sameName = (a, b) =>
   String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
@@ -1036,6 +1070,12 @@ async function create(res, body) {
      * 通小屋（8 把）。竞赛模式的入口做好之后，那个界面送 contest: true。
      */
     seats: body.contest === true ? CONTEST_SEATS : OPEN_SEATS,
+    /**
+     * 这是一间竞赛屋。座位数上面那一行已经定了，这一位管的是**规则**：开屋的人
+     * 不参赛，只看实时榜单（见 isSpectator）。两样分开存，因为它们回答的是两个
+     * 不同的问题——「几把椅子」和「屋主算不算选手」。
+     */
+    contest: body.contest === true,
     /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的；别的局 null。 */
     slot: null,
     /** Rounds played. The host may put up one board after another. */
@@ -1379,7 +1419,9 @@ async function start(res, body) {
   // has finished.
   if (hash.meta.round && !roundOver(hash)) return send(res, 409, { error: 'started' });
   if (!MODES.has(body.mode)) return send(res, 400, { error: 'mode' });
-  if (seatCount(hash) < MIN_PLAYERS) return send(res, 409, { error: 'tooFew' });
+  // 问的是「下场比的有几个」，不是「屋里有几个」：竞赛屋的主持人不参赛，
+  // 「屋主 + 一个人」开出来是一个人自己跟自己比（见 playerCount）。
+  if (playerCount(hash) < MIN_PLAYERS) return send(res, 409, { error: 'tooFew' });
   // 无限反转：只开在方块和小球上，60 秒，得分翻面来回翻——客户端按这个标记
   // 挂上那套规则；棋盘照旧从 seed 发，所以全屋仍是同一副牌。
   const flip = body.flip === true && FLIP_MODES.has(body.mode);
@@ -1414,6 +1456,21 @@ async function start(res, body) {
   const banked = {};
   for (const [field, seat] of Object.entries(hash)) {
     if (!field.startsWith('p:') || !seat) continue;
+    /**
+     * 竞赛屋的主持人不参赛（见 isSpectator）：他没有分，账上不该有他。
+     *
+     * 他那台设备坐在实时榜单上，每一次轮询都会「交一次卷」（客户端那条 sitOut，
+     * 好让屋里别人不等他）——不拦这一道，那些 0 分会被一局一局记进 total、
+     * rounds，最后那张竞赛排名图上凭空多出一个打了十局全是 0 的人，还排在最后
+     * 一名。这一局那一格照旧清掉，不然 readRoom 会把它折回来。
+     */
+    if (isSpectator(hash.meta, field.slice(2))) {
+      const cleared = { ...seat, ...CLEAR_ROUND };
+      banked[field] = cleared;
+      await hset(roomKey(code), field, cleared);
+      await hset(roomKey(code), roundKey(field.slice(2)), { ...CLEAR_ROUND });
+      continue;
+    }
     // 和 end() 那条路同一把尺子：只有真的打完了这一局的人才记账——交了卷的，
     // 和已经走了的（leave 标成 finished）。
     //
@@ -1673,6 +1730,15 @@ async function end(res, body) {
   const banked = {};
   for (const [field, seat] of Object.entries(hash)) {
     if (!field.startsWith('p:') || !seat) continue;
+    // 竞赛屋的主持人不参赛：账上不该有他，那张要发出去的竞赛排名图上也不该有
+    // （理由和 start() 那一处一模一样，见那段注释和 isSpectator）。
+    if (isSpectator(hash.meta, field.slice(2))) {
+      const cleared = { ...seat, ...CLEAR_ROUND };
+      banked[field] = cleared;
+      await hset(roomKey(code), field, cleared);
+      await hset(roomKey(code), roundKey(field.slice(2)), { ...CLEAR_ROUND });
+      continue;
+    }
     // 只给真的打完了这一局的人记账：交了卷的，和已经走了的（leave 标成
     // finished）。正打到一半的人，这一局在小屋里不算数——他手上那盘棋原地转
     // 成单人接着打（ui/scoreboard.ts 的 goSolo），分归他自己。从前是不管打没

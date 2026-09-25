@@ -4432,6 +4432,25 @@ body.is-room-host::after {
   align-content: flex-start;
 }
 .mp-wait-rows .mp-player { flex: 0 0 auto; }
+/*
+ * 榜单这一屏的高度上限。
+ *
+ * 上面 `.mp-wait-rows` 那句 `flex: 1; min-height: 0; overflow-y: auto` 是对的，但它
+ * **只有在外面这一层有高度上限时才生效**：`.overlay` 是横向弹性盒，`.start-stage`
+ * 上那句 `flex: 1` 管的是宽不是高，于是这一层照内容长。
+ *
+ * 八个人的时候看不出来，二十个人（竞赛屋，玩家 2026-09 定的「上限 20 人」）当场
+ * 露馅：实测榜单盒子长到 1322px 塞在 844px 的屏幕里，整块被挤出去——顶边到了
+ * −138，**滚都滚不回去**，而名单自己一格都不滚（scrollHeight == clientHeight）。
+ * 主持人看着的正是这一屏，等于开了竞赛就看不全榜。
+ *
+ * 40px 是 `.overlay` 自己那圈 padding（上下各 20）。两行 vh/svh 是全站的写法
+ * （见 `.slot-page`）：老内核不认 svh，前一行兜住。
+ */
+.overlay--wait .mp-wait-stage {
+  max-height: calc(100vh - 40px);
+  max-height: calc(100svh - 40px);
+}
 .overlay--wait .start-actions { flex: 0 0 auto; }
 .overlay--wait .start-act { width: auto; padding: 10px 22px; }
 

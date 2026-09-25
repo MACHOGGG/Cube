@@ -360,6 +360,17 @@ export function renderMultiplayerPage(
           <span>${s.mpCreate}</span>
           ${geniusLogoTag(40, 'genius-logo--cta')}
         </button>
+        <!-- 《开竞赛》。玩家 2026-09：「增加一个《竞赛》的入口在多人小屋里，点击
+             后是上限 20 人、发起人不参加游戏单独看到实时榜单情况的版本」。
+             和《开小屋》同一颗键的样子——它们是同一件事的两个档，不是两件事；
+             差别由底下那一行小字讲，而那一行是**必须有字**的地方：不写的话玩家按
+             下去会发现自己没有棋盘，那正是「意料之外的界面」。 -->
+        <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpContest">
+          ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
+          <span>${s.mpContest}</span>
+          ${geniusLogoTag(40, 'genius-logo--cta')}
+        </button>
+        <p class="auth-hint auth-hint--center">${s.mpContestHint}</p>
         <!-- 上面是「自己开一间」，下面是「进别人开的」。这条线把两件事分开——
              底下那句《加入 Slides 天才搭建的小屋》说的其实是下半段的事，
              所以线画在按钮和它中间，而不是画在它下面。 -->
@@ -436,7 +447,14 @@ export function renderMultiplayerPage(
     // 一次只发一个请求：连点两下《开小屋》会开出两间（第一间就此没人管，二十
     // 分钟后才过期）；连点两下那扇门会进两次。请求在路上的时候，再按不算数。
     let busy = false;
-    container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', async () => {
+    /**
+     * 《开小屋》和《开竞赛》走的是同一条路，只差 `contest` 这一位——座位数和
+     * 「主持人不参赛」两件事都由服务器按它定（api/room.js 的 seatsFor /
+     * isSpectator）。两颗键各写一遍的话，往后改这条路要记得改两处。
+     *
+     * `busy` 是两颗键**共用**的：连点《开小屋》再点《开竞赛》，也只该开出一间。
+     */
+    const openRoom = async (contest: boolean) => {
       // Checked here as well as on the server, so the answer is the paywall
       // rather than an error message.
       if (!isGenius()) return handlers.onNeedGenius();
@@ -444,7 +462,7 @@ export function renderMultiplayerPage(
       busy = true;
       remember();
       msg.textContent = s.workingLabel;
-      const made = await createRoom(myName(), avatar);
+      const made = await createRoom(myName(), avatar, contest);
       busy = false;
       if (dead) return;
       if (!made.ok) {
@@ -478,7 +496,9 @@ export function renderMultiplayerPage(
       }
       keepAssignedName(made.value);
       renderLobby(made.value);
-    });
+    };
+    container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', () => openRoom(false));
+    container.querySelector<HTMLButtonElement>('#mpContest')!.addEventListener('click', () => openRoom(true));
 
     container.querySelector<HTMLButtonElement>('#mpJoin')!.addEventListener('click', async () => {
       const code = codeBox.value.trim();
@@ -571,7 +591,12 @@ export function renderMultiplayerPage(
      */
     const sideline = (st: RoomState) => {
       const phase = roomPhase(st);
-      const benched = (phase === 'countdown' || phase === 'playing') && st.round <= playedRound;
+      /**
+       * 竞赛屋的主持人**每一局**都在这一屏上——他不参赛（服务端的 isSpectator 是同
+       * 一句话），所以「这一局我不在局里」对他永远成立，不必等 playedRound 追上。
+       */
+      const refereeing = Boolean(st.contest) && iAmHost;
+      const benched = (phase === 'countdown' || phase === 'playing') && (refereeing || st.round <= playedRound);
       if (!benched) {
         sideWait?.remove();
         sideWait = null;
@@ -584,6 +609,9 @@ export function renderMultiplayerPage(
           meId,
           code: st.code,
           onLeave: () => confirmLeaveRoom(lang, leave),
+          // 主持人看的就是这一屏：榜上不列他自己（列进去就是一行恒定 0 分挂在最后
+          // 一名），那颗键上的字也该是《解散小屋》——他按下去做的就是那件事。
+          ...(refereeing ? { hideId: meId, leaveLabel: s.mpDisbandRoom } : {}),
         });
       }
       sideWait.update(st);
@@ -666,6 +694,24 @@ export function renderMultiplayerPage(
           // phase 是 playing 就意味着「没挂起、开赛时刻已经过去」——正是下面
           // 那段注释里说的两件事，不用再各问一遍 learnHold。startAt 到这儿一定
           // 有值（没有的话 phase 是 lobby），`?? 0` 只是让类型看得出来。
+          /**
+           * 竞赛屋的主持人不参赛：这一局不给他开棋盘，改坐到实时榜单上
+           * （和中途进来的人同一张脸，见上面的 sideline）。
+           *
+           * 这一道要放在「我会不会规则」那三道关**之前**：他不下场，问他会不会这
+           * 个玩法就是白问一句，而那一问会把服务器那头的他标成「在学」，全屋等他。
+           */
+          if (next.contest && iAmHost && next.round > 0) {
+            // 也记成打过：万一哪一刻 contest 这一位没读到（老回包、字段掉了），
+            // 上面 sideline 里 `st.round <= playedRound` 那一半照样把他留在榜上，
+            // 不会突然给他起一盘棋。
+            if (next.round > playedRound) {
+              markRoundPlayed(next.round);
+              playedRound = next.round;
+            }
+            sideline(next);
+            return;
+          }
           const startAt = next.startAt ?? 0;
           if (!launched && phase === 'playing' && startAt + LATE_MS < serverTime()) {
             markRoundPlayed(next.round);

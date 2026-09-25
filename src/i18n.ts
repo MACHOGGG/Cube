@@ -273,6 +273,8 @@ export interface I18nStrings {
   mpTitle: string;
   mpIntro: string;
   mpCreate: string;
+  mpContest: string;
+  mpContestHint: string;
   mpJoin: string;
   mpNameLabel: string;
   mpNamePlaceholder: string;
@@ -690,6 +692,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpTitle: 'Multiplayer',
     mpIntro: 'Put up a little room, one and the same board, and race.',
     mpCreate: 'Open a room',
+    mpContest: 'Open a contest',
+    mpContestHint: 'Up to 20 · you host and watch the standings, you do not play',
     mpJoin: 'Join a room',
     mpNameLabel: 'Your name',
     mpNamePlaceholder: 'Pick a name',
@@ -1005,6 +1009,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpTitle: 'Multijoueur',
     mpIntro: 'Montez une petite salle, un seul et même plateau, et faites la course.',
     mpCreate: 'Ouvrir une salle',
+    mpContest: 'Ouvrir un concours',
+    mpContestHint: 'Jusqu’à 20 · vous arbitrez et suivez le classement, vous ne jouez pas',
     mpJoin: 'Rejoindre une salle',
     mpNameLabel: 'Votre nom',
     mpNamePlaceholder: 'Choisissez un nom',
@@ -1320,6 +1326,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpTitle: '多人遊玩',
     mpIntro: '蓋起一個小屋，同樣的棋盤，與大家競賽',
     mpCreate: '開小屋',
+    mpContest: '開競賽',
+    mpContestHint: '最多 20 人 · 你主持、看即時榜單，不下場',
     mpJoin: '加入小屋',
     mpNameLabel: '你的名字',
     mpNamePlaceholder: '起個名字',
@@ -1635,6 +1643,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpTitle: '多人游玩',
     mpIntro: '盖起一个小屋，同样的棋盘，与大家竞赛',
     mpCreate: '开小屋',
+    mpContest: '开竞赛',
+    mpContestHint: '最多 20 人 · 你主持、看实时榜单，不下场',
     mpJoin: '加入小屋',
     mpNameLabel: '你的名字',
     mpNamePlaceholder: '起个名字',
