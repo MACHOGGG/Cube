@@ -169,6 +169,14 @@ jobs:
         run: |
           npx esbuild src/engine/room.ts --bundle --format=esm --platform=neutral --outfile=/tmp/mproom.mjs
           node scripts/check-room-start-once.mjs /tmp/mproom.mjs
+      # 屋主出状况时谁该被叫停、谁该接着打。`hostTroubleIn` 回 'gone' 的后果比它看
+      # 起来重：scoreboard 的 roomOver 拿它当「小屋散了」，一判散场就把正在打的人
+      # 就地转成单人局，那一局的分再也回不到榜上。而 'gone' 里含着「90 秒没心跳」
+      # ——竞赛屋的主持人不下场、盯着榜单不碰手机，锁屏过 90 秒是常态。于是原先是
+      # 「主持人一锁屏，满屋选手全被踢出比赛」。纯逻辑、几十毫秒。
+      - name: 屋主不见了，谁该接着打
+        run: |
+          node scripts/check-host-trouble.mjs /tmp/mproom.mjs
 
       # 服务端：权限、战绩与排行榜、兑换码的竞态。都用内存里的 Redis 替身，
       # 不连任何外部服务。

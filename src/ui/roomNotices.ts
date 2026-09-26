@@ -22,7 +22,7 @@
  */
 import { STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
-import { avatarSvg, type RoomPlayer, type RoomState } from '../engine/room';
+import { avatarSvg, type HostTrouble, type RoomPlayer, type RoomState } from '../engine/room';
 import { modeBadges } from './startStage';
 import { gameIcon } from './homeIcons';
 import { custom } from './customIcons';
@@ -176,7 +176,7 @@ export function showWaitPanel(
  * 《ok》送人回主菜单；屋主只是卡住了，那就没什么可「知道」的，只能等——所以
  * 那一块没有确认键，只有一颗《退出》给等不下去的人。
  */
-export type HostTrouble = 'gone' | 'away';
+
 
 export interface HostNotice {
   /** 现在该显示哪一种，或者什么都不显示。重复调用同一种不会重画。 */
@@ -230,28 +230,3 @@ export function hostNotice(
   };
 }
 
-/**
- * 这一刻屋主出了什么事，从一份房间状态里读出来。
- *
- * 「走了」和「卡住了」在数据上是两回事：走了的人座位已经从房间里删掉，名单
- * 里根本没有他；卡住的人还在名单上，只是服务器有一阵子没听见他的动静了
- * （away，见 api/room.js）。房间已经正式散场（ended）不算这里的事——那条路
- * 有自己的总战绩页。
- */
-export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): HostTrouble | null {
-  if (!state || state.ended || iAmTheHost || !state.host) return null;
-  const host = state.players.find((p) => p.id === state.host);
-  // 座位不在了，或者座位还在但人已经交回去了（left）——对屋里其他人来说
-  // 是同一件事：这间小屋再也开不出下一局。名单上留着走掉的人是为了排名
-  // （见 api/room.js 的 leave），不是为了假装他还在。
-  // 屋主把网页关掉了，也是同一件事：他的终端没了，这间屋子开不出下一局。
-  // closed 只有 bye 那条路会置上（pagehide 且不进 bfcache），切应用、锁屏都
-  // 不算——那些仍然走下面的 away，屋里等他回来。刷新一次页面发的也是 bye，
-  // 但服务器要过了宽限期还没再听见他才置这个位（api/room.js 的
-  // BYE_GRACE_MS）：屋主刷新的那几秒里，屋里看到的是 away（等一下就来），
-  // 不是这一条。
-  // 太久没动静（gone，服务器的 ABSENT_MS）也算走了：屋主离家出走，小屋暂时
-  // 解散——屋主身份不换人，屋里的人各自散去，等他回来再开一间。
-  if (!host || host.left || host.closed || host.gone) return 'gone';
-  return host.away ? 'away' : null;
-}

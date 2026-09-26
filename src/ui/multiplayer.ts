@@ -5,7 +5,7 @@ import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { drawPair, type Family, type TargetPattern } from '../engine/targets';
 import { cardOrNull } from '../shapes/registry';
 import { random as seededRandom, seedRandom } from '../engine/rng';
-import { hostNotice, hostTroubleIn, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
+import { hostNotice, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { pushLayer, setScreenBack } from '../engine/backNav';
 import { PLAYER_NAME_KEY } from '../engine/cloudScores';
@@ -27,6 +27,7 @@ import {
   endRoom,
   fetchState,
   forgetRoom,
+  hostTroubleIn,
   iAmHost,
   joinRoom,
   lastPlayedRound,

@@ -4,12 +4,13 @@ import { stashRoomLeftover } from './roomLeftover';
 import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { pushLayer } from '../engine/backNav';
-import { hostNotice, hostTroubleIn, showWaitPanel, tickFor } from './roomNotices';
+import { hostNotice, showWaitPanel, tickFor } from './roomNotices';
 import { liveTotal } from './roomCard';
 import { standingsWindow } from '../engine/standingsWindow';
 import {
   avatarSvg,
   currentRoom,
+  hostTroubleIn,
   leaveRoom,
   iAmHost,
   lastPlayedRound,
