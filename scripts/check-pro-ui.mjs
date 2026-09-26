@@ -61,15 +61,14 @@ async function play(p, card) {
 const look = (p) =>
   p.evaluate(() => {
     const flavor = [...document.querySelectorAll('.tile[data-face="flavor"], .ball[data-face="flavor"], .tri[data-face="flavor"]')];
-    const rings = document.querySelectorAll('.pro-square, .pro-tri').length;
-    let css = 0, sameColor = 0, pairs = 0;
+    const rings = document.querySelectorAll('.pro-square, .pro-circle, .pro-tri').length;
+    let dashed = 0, sameColor = 0, pairs = 0;
     for (const el of flavor) {
-      const after = getComputedStyle(el, '::after');
-      const w = parseFloat(after.borderTopWidth) || 0;
-      if (w > 0 && after.borderTopStyle !== 'none') css++;
-      const ring = el.classList.contains('ball')
-        ? after.borderTopColor
-        : (el.querySelector('.pro-square rect, .pro-tri path')?.getAttribute('stroke') ?? '');
+      const line = el.querySelector('.pro-square rect, .pro-circle circle, .pro-tri path');
+      // 三族都得是**虚线**（玩家 2026-09：「小球的外边不是虚线的，需要和我上传的设计
+      // 图一样」「也没用按照设计图上的版本制作虚线」）。
+      if (line && (line.getAttribute('stroke-dasharray') || '').trim()) dashed++;
+      const ring = line?.getAttribute('stroke') ?? '';
       const own = el.classList.contains('tri')
         ? getComputedStyle(el.querySelector('.fill') ?? el).backgroundColor
         : getComputedStyle(el).backgroundColor;
@@ -83,7 +82,22 @@ const look = (p) =>
         if (hex(ring) === hex(own)) sameColor++;
       }
     }
-    return { flavor: flavor.length, rings, css, sameColor, pairs, dataPro: document.documentElement.getAttribute('data-pro') };
+    // 两枚挨着的棋子，它们的线之间还看不看得见底板（玩家：「方块的贴合的太近了以至
+    // 于没有缝隙看不清两个边框」）。量的是同一行相邻两枚之间的空当减去一个线宽——线
+    // 压在各自的轮廓上，每枚只吃掉半个。
+    let gapLeft = null;
+    if (flavor.length >= 2) {
+      const boxes = flavor.map((e) => e.getBoundingClientRect()).sort((a, b) => a.top - b.top || a.left - b.left);
+      for (let i = 1; i < boxes.length; i++) {
+        if (Math.abs(boxes[i].top - boxes[i - 1].top) < 2 && boxes[i].left > boxes[i - 1].right) {
+          const w = parseFloat(document.querySelector('.pro-square rect, .pro-circle circle, .pro-tri path')?.getAttribute('stroke-width') ?? '0');
+          gapLeft = +(boxes[i].left - boxes[i - 1].right - w).toFixed(2);
+          break;
+        }
+      }
+    }
+    return { flavor: flavor.length, rings, dashed, sameColor, pairs, gapLeft,
+             dataPro: document.documentElement.getAttribute('data-pro') };
   });
 
 // ---- 1. 默认是关的：一条多余的线都没有 ----------------------------------
@@ -94,7 +108,7 @@ const look = (p) =>
     await play(p, card);
     const v = await look(p);
     check(`[${card}] 没开 Pro 的时候，棋盘上一条提示都没有`,
-      v.flavor > 0 && v.rings === 0 && v.css === 0, JSON.stringify(v));
+      v.flavor > 0 && v.rings === 0 && v.dashed === 0, JSON.stringify(v));
     await p.goto(BASE, { waitUntil: 'load' });
     await p.waitForSelector('.home-icon-btn', { timeout: 20000 });
   }
@@ -116,12 +130,33 @@ const look = (p) =>
 // ---- 2. 开着的时候：三族各画各的，而且不是描的自己 -----------------------
 {
   const { ctx, p } = await fresh(true);
-  const want = { 方块: 'svg', 圆球: 'css', 三角: 'svg' };
   for (const card of ['方块', '圆球', '三角']) {
     await play(p, card);
     const v = await look(p);
-    const drawn = want[card] === 'css' ? v.css : v.rings;
-    check(`[${card}] 每一枚正面的棋子都描上了`, v.flavor > 0 && drawn === v.flavor, JSON.stringify(v));
+    check(`[${card}] 每一枚正面的棋子都描上了`, v.flavor > 0 && v.rings === v.flavor, JSON.stringify(v));
+    // 三族都是虚线，一个不落（小球那一版从前是整整一圈实线，玩家指出来了）。
+    check(`[${card}] 描的是虚线，不是整整一圈`, v.dashed === v.flavor, `${v.dashed}/${v.flavor}`);
+    if (card === '三角') {
+      // 三角没有「同一行里并排两枚」这回事：它们是互相咬合的，上下交错铺满，谁的右
+      // 边都紧挨着另一枚的斜边。所以这一副量的是另一件事——**线描了两倍宽**：三角的
+      // 棋子被 clip-path 剪着，外面那一半会被剪掉，露出来的正好是一个线宽。少了这个
+      // 两倍，屏幕上那条线就只有说好的一半粗。
+      const tri = await p.evaluate(() => {
+        const path = document.querySelector('.pro-tri path');
+        const el = path?.closest('.tri');
+        return { w: Number(path?.getAttribute('stroke-width')), box: el ? Math.round(el.getBoundingClientRect().width) : 0 };
+      });
+      // proHintWidth：棋子的 3%，上限 2px。三角一条边一百来像素，所以是 2 × 2 = 4。
+      const want = Math.min(2, Math.max(1.2, Math.round(tri.box * 0.03 * 10) / 10)) * 2;
+      check('[三角] 线描了两倍宽（外面那一半会被剪掉）',
+        Math.abs(tri.w - want) < 0.01, `stroke-width ${tri.w}，按 ${tri.box}px 的棋子该是 ${want}`);
+      check('[三角] 它没有「并排两枚」这回事（所以上面那条不适用）', v.gapLeft === null, String(v.gapLeft));
+    } else {
+      // 两枚挨着的棋子，线和线之间还看得见底板。2px 是「看得出是两条线」的下限（方块
+      // 之间的缝一共才 4px）。
+      check(`[${card}] 两枚之间还留得下缝（看得出是两条线）`,
+        v.gapLeft !== null && v.gapLeft >= 2, `剩 ${v.gapLeft}px`);
+    }
     // 描的是「将来那一颗」：和棋子自己现在的颜色重合的只能是零星几枚（两面同色是
     // 可能的），绝不能是一片。描成自己那一色的话，这里会是 100%。
     check(`[${card}] 描的不是它自己现在那一色`,

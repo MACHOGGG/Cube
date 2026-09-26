@@ -60,7 +60,7 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 {
   const BOARDS = {
     square: 'proSquareRing', squareDiamond: 'proSquareRing',
-    circle: 'setProHint', circleHex: 'setProHint', circleSeven: 'setProHint',
+    circle: 'proCircleRing', circleHex: 'proCircleRing', circleSeven: 'proCircleRing',
     triangle: 'proTriRing', triangleBig: 'proTriRing', triangleAdvanced: 'proTriRing',
   };
   let wired = 0;
@@ -80,19 +80,17 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   check('八副棋盘一副都没落下', wired === 8, `${wired}/8`);
 }
 
-// ---- ⑤ 真画进 DOM 的那几副，拨开关要重画 --------------------------------
+// ---- ⑤ 八副都是真画进 DOM 的，所以拨开关都要重画 ------------------------
 {
-  // 方块和三角那一圈是真节点（虚线的节奏、三角的轮廓都不是 CSS 画得出来的），所以它
-  // 们只在开着 Pro 的时候建——那就必须接上 onProChange，不然拨了开关要等下一步棋才
-  // 看得见。小球那一圈纯 CSS，不需要。
-  for (const name of ['square', 'squareDiamond', 'triangle', 'triangleBig', 'triangleAdvanced']) {
+  // 三族的那一圈都是 SVG 描边（虚线的节奏 CSS 的 border-style: dashed 定不了，见
+  // proHint.ts 开头那段），所以它们只在开着 Pro 的时候建——那就必须接上 onProChange，
+  // 不然拨了开关要等下一步棋才看得见，而开关就摆在暂停面板里，拨完一抬头正是棋盘。
+  for (const name of Object.keys({
+    square: 1, squareDiamond: 1, circle: 1, circleHex: 1, circleSeven: 1,
+    triangle: 1, triangleBig: 1, triangleAdvanced: 1,
+  })) {
     const src = read(`src/shapes/${name}.ts`);
     check(`[${name}] 拨开关当场重画`, /onProChange\(\(\) => \{[\s\S]{0,120}render\(\)/.test(src) && /stopPro\(\)/.test(src));
-  }
-  for (const name of ['circle', 'circleHex', 'circleSeven']) {
-    const src = read(`src/shapes/${name}.ts`);
-    // 小球那一版不许接：接了等于白重画一遍棋盘（CSS 已经跟着 data-pro 变了）。
-    check(`[${name}] 小球那一版不用重画（纯 CSS）`, !src.includes('onProChange'));
   }
 }
 
@@ -106,6 +104,49 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   check('线宽是棋子的 2%–4%', ratio >= 0.02 && ratio <= 0.04, String(ratio));
   check('再细也不低于 1px（低于就等于没画）', min >= 1 && min <= 2, String(min));
   check('线宽跟着棋子大小走，不是写死的像素', /Math\.max\(W_MIN, .*size \* W_RATIO/.test(hint));
+  const max = Number(/const W_MAX = ([\d.]+)/.exec(hint)?.[1]);
+  // 玩家 2026-09：「三角的边框太粗」。三角的棋子比另外两族大得多（一条边一百来像
+  // 素），按比例算会到 3px 以上——这条上限把三族拉到同一个观感。
+  check('有上限，再大的棋子也不会描粗', max >= 1.5 && max <= 2.5, String(max));
+}
+
+// ---- ⑦ 虚线的节奏：三族各一副，都是照设计图量出来的 ---------------------
+{
+  const hint = read('src/engine/proHint.ts');
+  const dash = (name) => /([\d.]+) ([\d.]+)/.exec(new RegExp(`const ${name} = '([^']+)'`).exec(hint)?.[1] ?? '');
+  // 玩家 2026-09：「严格参考设计图上虚线在边上呈现的线段数量和位置」。三族的段数是
+  // 量出来的：方块一条边两段（四条边共八段，角上那几段跨过拐角）、小球两段（缺口在
+  // 正上和正下）、三角一条边一段。写成 pathLength=100 上的份数之后，「几段」就是
+  // 100 ÷（段+缺）——这一条算给它看，翻新节奏的时候不至于把段数改飞。
+  for (const [name, want] of [['SQUARE_DASH', 8], ['CIRCLE_DASH', 2], ['TRI_DASH', 3]]) {
+    const m = dash(name);
+    const n = m ? 100 / (Number(m[1]) + Number(m[2])) : 0;
+    check(`${name} 排出来是 ${want} 段`, Math.abs(n - want) < 0.1, m ? `段 ${m[1]} 缺 ${m[2]} → ${n.toFixed(2)} 段` : '没找到');
+  }
+  check('三族都写了 pathLength（份数和棋子大小无关）', /pathLength', '100'/.test(hint));
+  check('三族都是虚线（有 dasharray）', /stroke-dasharray/.test(hint));
+}
+
+// ---- ⑧ 得分图示那一圈描边：浅色描黑、深色描白 ---------------------------
+{
+  /*
+   * 玩家 2026-09：「在浅色模式的时候得分图案的边框需要是黑色的，在深色模式的时候才是
+   * 白色的。」那正是 :root 上 --mark-edge 的定义。
+   *
+   * 这一条守在这儿，是因为它正是被这一轮改动碰坏过的：上一版为了去掉「不该出现的黑
+   * 边」，把棋盘上方那一排图示的 --mark-edge 改成了底色——描出来是一道看不见的缝，玩
+   * 家要的黑边没了。真正该去掉的黑边是另外两处（翻成星星的棋子留下的幽灵边、iOS 上
+   * 合成出来的方框），各自修在别处。
+   */
+  const css = read('src/style.css');
+  check('浅色那一套描的是深色', /^ {2}--mark-edge: #2E2430;$/m.test(css));
+  const darkHits = (css.match(/--mark-edge: #FFFFFF;/g) ?? []).length;
+  check('深色那几套描的是白色', darkHits >= 2, `${darkHits} 处`);
+  // 不许再有人把它按到底色上（那等于没画）。老虎机那一窗例外：它的底是白的，而且玩
+  // 家点名要「同样的圆角黑边」，所以它自己写死了一个深色。
+  const overrides = (css.match(/--mark-edge: var\(--(?:play-)?bg\)|--mark-edge: var\(--surface\)/g) ?? []);
+  check('没有人把它按成底色（那等于没画）', overrides.length === 0, overrides.join(' '));
+  check('老虎机那一窗照旧自己写死深色（玩家点名要的）', /\.slot-reel \{[\s\S]{0,400}--mark-edge: #2E2430;/.test(css));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全过');

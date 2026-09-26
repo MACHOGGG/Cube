@@ -9,7 +9,8 @@ import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palet
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
-import { setProHint } from '../engine/proHint';
+import { proCircleRing, proHintWidth } from '../engine/proHint';
+import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
@@ -615,9 +616,12 @@ export function createCircleGame(): ShapeGame {
         // 那条路和这一句再也没有关系了。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         // Pro 模式那一圈：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。只有
-        // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。挂的只是两个
-        // 自定义属性，画不画由 <html> 上的 data-pro 决定，所以拨开关不用重画棋盘。
-        setProHint(el, isBlank(tile) || tile.face !== 'flavor' ? null : COLORS[tile.dotColor], size);
+        // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。
+        // 虚线的节奏得自己定（CSS 的 dashed 定不了，见 proHint.ts），所以这是真画进去
+        // 的一层，只在开着 Pro 的时候建；拨开关那一下由 onProChange 重画。
+        if (proOn() && !isBlank(tile) && tile.face === 'flavor') {
+          el.appendChild(proCircleRing(size, COLORS[tile.dotColor], proHintWidth(size)));
+        }
         return el;
       }
 
@@ -1264,6 +1268,7 @@ export function createCircleGame(): ShapeGame {
         drag = null;
         controller.destroy();
         stopColorblind();
+        stopPro();
         detachDrag();
         stopResize();
       }
@@ -1289,6 +1294,10 @@ export function createCircleGame(): ShapeGame {
       const stopColorblind = onColorblindChange(() => {
         COLORS = pickPalette();
         renderLegend();
+        if (controller.started) render();
+      });
+      // Pro 那一圈虚线是真画进 DOM 的（见 proCircleRing），所以拨开关要重画一遍棋盘。
+      const stopPro = onProChange(() => {
         if (controller.started) render();
       });
 

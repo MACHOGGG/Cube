@@ -10,12 +10,14 @@
  *   · 方块——**虚线**（玩家：「方块只参考最上第一行」，那一行画的是虚线）；
  *   · 小球——整整一圈实线；
  *   · 三角——贴着三条边的一条细线。
- * 前两样纯靠 CSS 画（见 shapes/square.css、shapes/circle.css）：这个模块只把颜色和线
- * 宽写成两个自定义属性挂在棋子上，开没开 Pro 由 <html> 上那个 data-pro 说了算——**所
- * 以拨开关不用重画棋盘**。
- * 三角那一族是另一回事：它的棋子是一个被 clip-path 剪成三角的方盒子，剪刀连子元素一
- * 起剪，描在外面的一圈会被剪掉。所以它那一圈是真画进去的一段 SVG 描边，压在轮廓线上
- * ——外面那一半被剪掉，剩下贴着边的一条，正好是参考图上那个样子。
+ * 三族都是一段 SVG 描边，不是 CSS 的边框：**虚线的节奏得自己定**，而 CSS 的
+ * `border-style: dashed` 只会按线宽排一串小段（一条边上十来段，整幅棋盘成了一张网格
+ * 布）。SVG 的 `pathLength="100"` 把整条轮廓归一化成 100 份，于是「一条边上几段、落
+ * 在哪儿」写出来就是几个数，和棋子多大无关——照着参考图量出来的那几个数见下面。
+ *
+ * 线压在棋子自己的轮廓上（一半在里、一半在外）。三角那一族例外地描两倍宽：它的棋子是
+ * 一个被 clip-path 剪成三角的方盒子，剪刀连子元素一起剪，外面那一半会被剪掉，露出来的
+ * 正好是一个线宽。
  */
 import { roundTriPath } from './roundTri';
 
@@ -23,26 +25,74 @@ import { roundTriPath } from './roundTri';
 const W_RATIO = 0.03;
 /** 再细就看不见了。 */
 const W_MIN = 1.2;
+/**
+ * 再粗就不是「次要信息」了（玩家 2026-09：「三角的边框太粗」）。
+ * 三角那一族的棋子比方块、小球都大（一条边一百来像素），按比例算会到 3px 以上，比旁
+ * 边两族的线粗一半——这条上限把三族拉到同一个观感。
+ */
+const W_MAX = 2;
 
 /** 方块的圆角，和 shapes/square.css 里 `.tile` 的 border-radius 必须是同一个数。 */
 export const TILE_RADIUS = 8;
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * 虚线的节奏，三族各一套，全是照玩家那三张参考图量出来的。写成 `pathLength="100"` 上
+ * 的份数，所以和棋子多大、那条边多长都没关系——同一副节奏在任何屏幕上都一样。
+ *
+ *   · 方块：一条边上两段（参考图那一行数出来的），四条边共八段 → 段 8.5、缺 4；
+ *     整体挪半段，让四个角落在缺口里（角上那一段弧最不该被描）。
+ *   · 小球：两段，缺口在正上和正下（量到缺口 ≈ 50°、每段 ≈ 130°）→ 段 36、缺 14，
+ *     再整体挪 32（`<circle>` 从三点钟起步顺时针走，十二点在 75、六点在 25）。
+ *   · 三角：一条边一段，三段（参考图上那一段从尖角往下约 11%–35% 的位置）→ 段 8、
+ *     缺 25.33（三份正好 100），再挪 4 让它落在拐过角之后。
+ */
+const SQUARE_DASH = '8.5 4';
+const SQUARE_OFFSET = -6;
+const CIRCLE_DASH = '36 14';
+const CIRCLE_OFFSET = -32;
+const TRI_DASH = '8 25.33';
+const TRI_OFFSET = -4;
+
+/** 一张盖住棋子、边上不裁的透明画布。 */
+function blankSvg(size: number, cls: string): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.classList.add(cls);
+  return svg;
+}
+
+/** 三族共用的描边写法：一条颜色、一个线宽、一副节奏。 */
+function dash(el: SVGElement, color: string, width: number, pattern: string, offset: number): void {
+  el.setAttribute('fill', 'none');
+  el.setAttribute('stroke', color);
+  el.setAttribute('stroke-width', String(width));
+  el.setAttribute('stroke-linecap', 'round');
+  el.setAttribute('stroke-linejoin', 'round');
+  el.setAttribute('pathLength', '100');
+  el.setAttribute('stroke-dasharray', pattern);
+  el.setAttribute('stroke-dashoffset', String(offset));
+}
+
 export function proHintWidth(size: number): number {
-  return Math.max(W_MIN, Math.round(size * W_RATIO * 10) / 10);
+  return Math.min(W_MAX, Math.max(W_MIN, Math.round(size * W_RATIO * 10) / 10));
 }
 
 /**
- * 小球：把颜色和线宽挂上去，剩下的交给 CSS（shapes/circle.css 那条 ::after）。
+ * 三族共用的一条规矩：**这条线压在棋子自己的轮廓上**（一半在里、一半在外），不是整条
+ * 描在外面。
  *
- * `color` 给 null 就什么都不挂（翻过面的、空位的棋子没有「将来会变成什么」可说）。
- * 不管开没开 Pro 都挂：这两个属性不画任何东西，画不画由 `html[data-pro='1']` 决定，
- * 于是拨开关那一下是纯样式的事，棋盘一帧都不用重画。
+ * 玩家 2026-09：「方块的贴合的太近了以至于没有缝隙看不清两个边框」。算一下就知道躲不
+ * 过：方块之间的缝是 4px（square.ts 里 `size = cell - 4`），上一版整条描在外面、还离
+ * 棋子半个线宽，一枚就吃掉 1.5 个线宽 ≈ 2.7px，两枚挨着是 5.4px——比那道缝还宽，两条
+ * 线于是糊在一起。压在轮廓上只吃掉半个线宽，两枚之间还剩 4 − 1.8 = 2.2px 的底板，看
+ * 得出是两条线。小球那边同理：缝是 0.14R ≈ 3.4px，剩 2px。
+ * 三角是另一回事：它的棋子被 clip-path 剪着，外面那一半会被剪掉，所以线要描两倍宽，
+ * 露出来的正好是一个线宽（见 proTriRing）。
  */
-export function setProHint(el: HTMLElement, color: string | null, size: number): void {
-  if (!color) return;
-  el.style.setProperty('--pro-next', color);
-  el.style.setProperty('--pro-w', proHintWidth(size) + 'px');
-}
 
 /**
  * 方块：套在棋子外面的一圈**虚线**（玩家：「方块只参考最上第一行」，那一行是虚线）。
@@ -54,28 +104,35 @@ export function setProHint(el: HTMLElement, color: string | null, size: number):
  * 就是「占整圈的百分之几」，和棋子多大无关——一圈九段，一条边上两段多一点。
  */
 export function proSquareRing(size: number, radius: number, color: string, width: number): SVGSVGElement {
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-  svg.setAttribute('width', String(size));
-  svg.setAttribute('height', String(size));
-  svg.classList.add('pro-square');
-  const rect = document.createElementNS(svgNS, 'rect');
-  // 描在棋子**外面**：矩形的中线落在棋子边缘外半个线宽处，所以整条线都在棋子之外，
-  // 棋子自己的颜色一个像素没被盖住。圆角跟着一起往外让，两条弧才是同心的。
-  const off = width;
-  rect.setAttribute('x', String(-off));
-  rect.setAttribute('y', String(-off));
-  rect.setAttribute('width', String(size + off * 2));
-  rect.setAttribute('height', String(size + off * 2));
-  rect.setAttribute('rx', String(radius + off));
-  rect.setAttribute('fill', 'none');
-  rect.setAttribute('stroke', color);
-  rect.setAttribute('stroke-width', String(width));
-  rect.setAttribute('pathLength', '100');
-  rect.setAttribute('stroke-dasharray', '7.1 4');
-  rect.setAttribute('stroke-linecap', 'round');
+  const svg = blankSvg(size, 'pro-square');
+  const rect = document.createElementNS(SVG_NS, 'rect');
+  // 压在棋子自己的边上（见上面那段）：矩形就是棋子的那一圈，线的中线落在边上。
+  rect.setAttribute('x', '0');
+  rect.setAttribute('y', '0');
+  rect.setAttribute('width', String(size));
+  rect.setAttribute('height', String(size));
+  rect.setAttribute('rx', String(radius));
+  dash(rect, color, width, SQUARE_DASH, SQUARE_OFFSET);
   svg.appendChild(rect);
+  return svg;
+}
+
+/**
+ * 小球：压在球边上的一圈虚线。
+ *
+ * 参考图上量出来的是**两段**：左边一段、右边一段，缺口在正上和正下（顶上那颗球量到
+ * 的缺口约 50°，两段各约 130°）。`<circle>` 的路径从三点钟出发顺时针走，pathLength
+ * 归一化成 100 之后：三点 0、六点 25、九点 50、十二点 75。要把两个缺口摆在 25 和 75，
+ * 就是「段 36、缺 14」再整体挪 32——下面那两个常数就是这么来的。
+ */
+export function proCircleRing(size: number, color: string, width: number): SVGSVGElement {
+  const svg = blankSvg(size, 'pro-circle');
+  const circle = document.createElementNS(SVG_NS, 'circle');
+  circle.setAttribute('cx', String(size / 2));
+  circle.setAttribute('cy', String(size / 2));
+  circle.setAttribute('r', String(size / 2));
+  dash(circle, color, width, CIRCLE_DASH, CIRCLE_OFFSET);
+  svg.appendChild(circle);
   return svg;
 }
 
@@ -91,22 +148,19 @@ export function proTriRing(
   color: string,
   width: number,
 ): SVGSVGElement {
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
+  const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.classList.add('pro-tri');
-  const path = document.createElementNS(svgNS, 'path');
+  const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute(
     'd',
     roundTriPath(
       pts.map(([x, y]) => [((x - box.minX) / box.w) * 100, ((y - box.minY) / box.h) * 100] as [number, number]),
     ),
   );
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', color);
-  path.setAttribute('stroke-width', String(width * 2));
-  path.setAttribute('stroke-linejoin', 'round');
+  // 两倍宽：外面那一半被 clip-path 剪掉，露出来的正好是一个线宽（见上面那段）。
+  dash(path, color, width * 2, TRI_DASH, TRI_OFFSET);
   path.setAttribute('vector-effect', 'non-scaling-stroke');
   svg.appendChild(path);
   return svg;
