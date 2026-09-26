@@ -250,7 +250,12 @@ const tally = (arr) => {
     check(`${name}：拆弹走 hitBomb（两下才拆）`, s.includes('if (!hitBomb(t)) continue;'));
     check(`${name}：挨过一下的画裂纹`,
       s.includes('if (isCrackedBomb(tile)) el.appendChild(crackLayer('));
-    check(`${name}：存档键换到新版本`, s.includes("bestKey + '_bomb2'"));
+    // 存档键的后缀不许在棋盘里手写——它带着规则版本号，而版本升过两次，两次都是
+    // 这儿的字面量没跟着改（见 src/engine/runKey.ts 开头那段）。这一条拦的不是某
+    // 一次的错字，是「又有人在棋盘里手写后缀」这件事本身。
+    check(`${name}：存档后缀走 suffixFor，不手写`,
+      s.includes('suffixFor(') && !/'_bomb\d*'|'_flip\d*'/.test(s),
+      (s.match(/'_bomb\d*'|'_flip\d*'/g) || []).join(' ') || 'ok');
   }
 
   const gc = read('src/engine/gameController.ts');

@@ -7,6 +7,8 @@ import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
+import { suffixFor } from './engine/runKey';
+import { moveRuns } from './engine/persistence';
 import { BOMB_RULES_VERSION } from './engine/bomb';
 import { FLIP_RULES_VERSION } from './engine/scoring';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
@@ -149,26 +151,29 @@ const homeLayout: HomeLayout = {
 
 // Every game/mode pairing the records page can show a stored best score for,
 // keyed the same way each shape's own mount() saves it.
+// 后缀一个都不手写，全走 engine/runKey.ts 的 suffixFor——它按规则版本常量生成，
+// 所以这一张表永远和棋盘存进去的键一致。从前这儿写死着现行版本的后缀、棋盘那头
+// 写死着上一版的，两头分了家：现行规则的局存进了旧归档，于是既不在记录页上出现，
+// 也没被算进累计得分（这一页的累计得分就是这张表几个键的总和）。
 const recordSources: RecordSource[] = [
   ...games.map((g) => ({ card: g.card, suffix: '', mode: '' })),
-  ...games.map((g) => ({ card: g.card, suffix: '_timed', mode: ' · 60s' })),
-  ...games.map((g) => ({ card: g.card, suffix: '_bomb3', mode: ' · 💥' })),
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('timed'), mode: ' · 60s' })),
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · 💥' })),
   ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
-  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: '_bomb3', mode: ' · + 💥' })),
+  ...bombLayoutGames.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · + 💥' })),
   // 《无限反转》只有基础方块和小球有。
-  // 后缀跟着规则版本走（和上面炸弹那两行写 '_bomb2' 同一个道理）：封顶之前那些局
-  // 留在 '_flip' 那张榜上归档，记录页只摆现行规则这一张。
-  ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: '_flip2', mode: ' · ∞' })),
+  // 后缀跟着规则版本走：封顶之前那些局留在旧那张榜上归档，记录页只摆现行规则这一张。
+  ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: suffixFor('flip'), mode: ' · ∞' })),
   // 《真正解密 · 步步为营》三个基础玩法都有。三角这一栏用 triangleGame 变量，
   // 不按文件名推——菜单上的「三角」由 triangleBig.ts 造（见文件开头那几行）。
-  ...[squareGame, circleGame, triangleGame].map((g) => ({ card: g.card, suffix: '_puzzle', mode: ' · 步' })),
+  ...[squareGame, circleGame, triangleGame].map((g) => ({ card: g.card, suffix: suffixFor('puzzle'), mode: ' · 步' })),
 ];
 
 /**
  * 一局归到哪个本地存档键下——从云上取回战绩时要按这个把每一局放回原处。
  *
  * 存的时候用的是「这副棋盘的 bestKey + 模式后缀」（见各个 shapes 文件末尾那
- * 一行），这里照同一条式子倒推回去。炸弹压过计时：定时炸弹存的也是 _bomb2。
+ * 一行），这里**调同一个函数**倒推回去。炸弹压过计时：定时炸弹存的也是炸弹那张榜。
  *
  * 炸弹还要看规则版本：2026-09 之前打的那些局（bombRules 是 undefined）是六枚
  * 炸弹的老规则，认回老的 _bomb 键——那个键《记录与排名》已经不显示了，等于原样
@@ -177,22 +182,14 @@ const recordSources: RecordSource[] = [
 const runKeyFor: RunKeyFor = (data) => {
   const card = recordSources.find((src) => src.card.id === data.shapeId)?.card;
   if (!card) return null;
-  const mk = data.modeKey;
-  // 三档：没有 bombRules 的老档是第 1 版，2 是留一枚永久炸弹那一版，3 起是现行规则。
-  const bombRules = data.bombRules ?? 1;
-  const bombSuffix = bombRules >= BOMB_RULES_VERSION ? '_bomb3' : bombRules >= 2 ? '_bomb2' : '_bomb';
-  // 无限反转同理：连击封顶（scoring.ts 的 FLIP_STREAK_CAP）之前那些局能打出的分高
-  // 一个量级，放一起比就是把老局钉死在榜首。老档没有 flipRules，是第一版。
-  const flipSuffix = (data.flipRules ?? 1) >= FLIP_RULES_VERSION ? '_flip2' : '_flip';
-  // 步步为营排在最前面：它和炸弹、计时不会同时出现（这一局没有钟也没有炸弹），
-  // 摆在哪儿都不冲突，摆最前面是为了读起来一眼能看见「这一局另算一张榜」。
-  const suffix =
-    mk === 'puzzle' ? '_puzzle'
-    : mk === 'flip' ? flipSuffix
-    : mk === 'bomb' || mk === 'bombTimed' ? bombSuffix
-    : mk === 'timed' ? '_timed'
-    : '';
-  return card.bestKey + suffix;
+  // 后缀由 engine/runKey.ts 的 suffixFor 算，**和棋盘存新局时走的是同一个函数**。
+  // 从前这儿自己推一遍、棋盘那头手写一遍，两次升版本之后两头就分了家（见那个文件
+  // 开头那段）。这一局自己带着规则版本号，老档没带就是第 1 版——旧局认回旧键，
+  // 原样归档，不和新规则的分混在一起比。
+  return (
+    card.bestKey +
+    suffixFor(data.modeKey ?? 'base', { bomb: data.bombRules ?? 1, flip: data.flipRules ?? 1 })
+  );
 };
 
 /** 《无限反转》一局多长：玩家定的 60 秒（原来 120 秒）。 */
@@ -1367,9 +1364,47 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
   mountNow();
 }
 
+/**
+ * 开机跑一次：把存错了键的炸弹局和无限反转局挪回现行那张榜。
+ *
+ * 那段时间里棋盘手写着上一版的后缀存局（见 engine/runKey.ts 开头那段），于是新规
+ * 则的局落进了旧规则的归档：记录页上不出现、也没被算进累计得分。没登录的玩家这
+ * 些局只存在本机，不挪就永远找不回来。
+ *
+ * **必须排在 restoreCloudRuns 之前。** 云上那份是按 runKeyFor 往下落的，落的是新
+ * 键；先挪完再接云，两边最后并在同一个键里（mergeRuns 按局的编号去重，接两遍也不
+ * 会多出一局）。
+ *
+ * 跑过就记一笔，不再跑：这件事只需要做一次，而每次开机都扫一遍存档是白费。哪天再
+ * 有一次类似的错位，就换一个新的哨兵键（v2），别把这一次的重跑一遍。
+ */
+const MISFILED_FIX_KEY = 'slides_runkey_fix_v1';
+function migrateMisfiledRuns(): void {
+  try {
+    if (localStorage.getItem(MISFILED_FIX_KEY)) return;
+    let moved = 0;
+    for (const game of everyGame) {
+      const base = game.card.bestKey;
+      // 炸弹：第 3 版起的局本该在 suffixFor('bomb') 那个键下，却写进了第 2 版那个。
+      // 两头都按版本号生成，所以下一次升版本这两行不用改，只有哨兵键要换。
+      moved += moveRuns(base + suffixFor('bomb', { bomb: 2 }), base + suffixFor('bomb'),
+        (r) => (r.data.bombRules ?? 1) >= BOMB_RULES_VERSION);
+      // 无限反转同理：第 2 版起的局写进了第 1 版那个键。
+      moved += moveRuns(base + suffixFor('flip', { flip: 1 }), base + suffixFor('flip'),
+        (r) => (r.data.flipRules ?? 1) >= FLIP_RULES_VERSION);
+    }
+    localStorage.setItem(MISFILED_FIX_KEY, '1');
+    if (moved) console.info('[slides] 挪回存错键的局：' + moved + ' 局');
+  } catch {
+    // 无痕模式之类读写不了的：这些局继续躺在旧键下，不该连带把开机拦住。
+  }
+}
+
 function boot() {
   // 返回键那套（见 backNav.ts）先立好：底下一条根、上面一条哨兵。
   installBackNav();
+  // 先把存错键的局挪回来，再去接云上那份——两件事落的是同一个键（见上面那段）。
+  migrateMisfiledRuns();
   // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。
   void restoreCloudRuns(runKeyFor);
   const savedLang = loadLang();

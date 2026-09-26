@@ -18,7 +18,7 @@ import { compactScore } from '../engine/compactScore';
  *  read and which glyph belongs to a stored run's shape id. */
 export interface RecordSource {
   card: ShapeCardMeta;
-  /** Suffix on the persisted best-score key — '' base, '_timed', '_bomb2'. */
+  /** Suffix on the persisted best-score key — '' base, '_timed', 炸弹那几档带规则版本号（由 engine/runKey.ts 的 suffixFor 生成，别手写）。 */
   suffix: string;
   mode: string;
 }

@@ -27,6 +27,7 @@ import {
   hexBallXY,
 } from '../engine/ballLattice';
 import type { ShapeGame, ShapeGameOpts } from './types';
+import { modeKeyOf, suffixFor } from '../engine/runKey';
 
 // A hex-cropped version of the ball board (37 cells: rows of 4/5/6/7/6/5/4
 // instead of the base game's 28-cell triangle) with a permanent blank ball
@@ -231,6 +232,11 @@ export function createCircleHexGame(): ShapeGame {
     },
     mount(container, onBack, opts?: ShapeGameOpts) {
       const isBomb = !!opts?.bomb;
+      // 这一局记成什么模式、存进哪个键——两样都由 engine/runKey.ts 推。
+      // 存档键的后缀带着规则版本号。从前这儿手写着上一版的后缀：炸弹升到第 3 版、
+      // 无限反转升到第 2 版，读的那一头跟着常量走了，这儿的字面量没人记得改，于是
+      // 新规则的局落进了旧规则的归档（那个文件开头写着后果）。
+      const modeKey = modeKeyOf({ bomb: isBomb, timed: !!opts?.timeLimitSec });
       /**
        * 这一枚此刻是不是一颗**活**炸弹（判四连、闪三连预警、数活棋子都问它）。
        *
@@ -859,10 +865,10 @@ export function createCircleHexGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
-        bestKey: isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: bestKey + suffixFor(modeKey),
         shapeName: shapeName(lang, 'circleHex', '六边圆球'),
         shapeId: 'circleHex',
-        modeKey: isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey,
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         coachTip: opts?.coachTip,

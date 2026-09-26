@@ -22,6 +22,7 @@ import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
+import { modeKeyOf, suffixFor } from '../engine/runKey';
 
 // The V-shaped advanced triangle board: 49 triangles in two arms that meet
 // along one continuous bottom row, 7 colors x 7 tiles, and the same back-face
@@ -787,10 +788,13 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const controller = createGameController(refs, {
         lang,
         practice: !!opts?.practice,
-        bestKey: opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        // 模式名和存档键后缀都由 engine/runKey.ts 推。这副棋盘只有「有钟／没钟」
+        // 两档、没有带版本号的后缀，可照样走同一条路：八副棋盘各写一遍三元链，
+        // 正是炸弹和无限反转那两次升版本漏掉六处的原因（见那个文件）。
+        bestKey: bestKey + suffixFor(modeKeyOf({ timed: !!opts?.timeLimitSec })),
         shapeName: shapeName(lang, 'triangleAdvanced', '进阶三角'),
         shapeId: 'triangleAdvanced',
-        modeKey: opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey: modeKeyOf({ timed: !!opts?.timeLimitSec }),
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         coachTip: opts?.coachTip,

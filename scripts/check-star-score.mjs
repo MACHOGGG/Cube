@@ -284,16 +284,32 @@ check('空组是 0 分', groupPoints([], () => null) === 0);
   );
 
   // 这句话认的是那个**中文原文当钥匙**：引擎 endGame 传一个中文字符串，runRecord
-  // 拿它去查该说哪一句。两边必须是同一个字符串，而它同时又是玩家存档里存着的那
-  // 个（本地和云端的战绩都记它），所以只改一边不会崩、不会报错——只会让所有旧
-  // 记录在《记录与排名》里显示成一行生硬的中文。这一条把两边钉在一起。
+  // 拿它去查该说哪一句，而它同时又是玩家存档里存着的那个（本地和云端的战绩都记
+  // 它）。只改一边不会崩、不会报错——只会让所有旧记录在《记录与排名》里显示成一
+  // 行生硬的中文；现在还多一件：结算页上那枚通关章不出现（engine/kinetics.ts 的
+  // endCheckEligible 认的也是它）。
+  //
+  // 两边从前各写一遍字面量，这一条就是钉住「两遍一模一样」。现在提成了一个常量，
+  // 所以钉的东西换了：**谁都不许再手写它**，两头都 import 同一个常量——那样它们
+  // 连分家的可能都没有。常量自己的那个值仍旧要钉死：它印在每一份既有存档里，改
+  // 一个字就等于把所有旧记录的终局原因作废。
   const KEY = '全部方块已翻成点面';
   const ctrl = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
   const rec = readFileSync(new URL('../src/engine/runRecord.ts', import.meta.url), 'utf8');
+  const kin = readFileSync(new URL('../src/engine/kinetics.ts', import.meta.url), 'utf8');
   check(
-    '引擎传的那把钥匙和 runRecord 查的是同一个字符串',
-    ctrl.includes(`endGame('${KEY}')`) && new RegExp(`^\\s*${KEY}: 'allFlippedReason',$`, 'm').test(rec),
-    `gameController ${ctrl.includes(`endGame('${KEY}')`) ? '有' : '没有'} · runRecord ${rec.includes(KEY) ? '有' : '没有'}`,
+    '那把钥匙只有一处写着，而且还是原来那个字符串',
+    kin.includes(`export const ALL_FLIPPED_REASON = '${KEY}'`),
+    kin.includes(KEY) ? 'kinetics.ts 里有' : 'kinetics.ts 里没有',
+  );
+  check(
+    '引擎和 runRecord 都引那个常量，谁都不手写',
+    ctrl.includes('endGame(ALL_FLIPPED_REASON)') &&
+      !ctrl.includes(`'${KEY}'`) &&
+      rec.includes('[ALL_FLIPPED_REASON]:') &&
+      !rec.includes(`${KEY}:`),
+    `gameController ${ctrl.includes('endGame(ALL_FLIPPED_REASON)') ? '引' : '没引'}` +
+      ` · runRecord ${rec.includes('[ALL_FLIPPED_REASON]:') ? '引' : '没引'}`,
   );
 
   // 六条规则里的第 5 条讲的就是结束条件，它也跟着改过（原话「全部变成星星，这

@@ -24,6 +24,7 @@ import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, h
 import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
+import { modeKeyOf, suffixFor } from '../engine/runKey';
 
 // The colorblind set is 4 hues picked from the Okabe–Ito palette for maximum
 // separation (vermillion/yellow/bluish-green/blue) rather than just the
@@ -226,6 +227,11 @@ export function createCircleGame(): ShapeGame {
       const flipMode = !!opts?.flip;
       /** 步步为营（见 ShapeGameOpts.steps 与 engine/puzzleScore.ts）：手里 8 步，没有钟。 */
       const puzzleMode = !!opts?.steps;
+      // 这一局记成什么模式、存进哪个键——两样都由 engine/runKey.ts 推。
+      // 存档键的后缀带着规则版本号。从前这儿手写着上一版的后缀：炸弹升到第 3 版、
+      // 无限反转升到第 2 版，读的那一头跟着常量走了，这儿的字面量没人记得改，于是
+      // 新规则的局落进了旧规则的归档（那个文件开头写着后果）。
+      const modeKey = modeKeyOf({ bomb: isBomb, flip: flipMode, steps: puzzleMode, timed: !!opts?.timeLimitSec });
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那几个。
       const targets = opts?.targets?.length ? opts.targets : null;
@@ -933,10 +939,10 @@ export function createCircleGame(): ShapeGame {
         flip: flipMode,
         puzzle: puzzleMode,
         puzzleTally,
-        bestKey: puzzleMode ? bestKey + '_puzzle' : flipMode ? bestKey + '_flip' : isBomb ? bestKey + '_bomb2' : opts?.timeLimitSec ? bestKey + '_timed' : bestKey,
+        bestKey: bestKey + suffixFor(modeKey),
         shapeName: shapeName(lang, 'circle', '圆球'),
         shapeId: 'circle',
-        modeKey: puzzleMode ? 'puzzle' : flipMode ? 'flip' : isBomb ? (opts?.timeLimitSec ? 'bombTimed' : 'bomb') : opts?.timeLimitSec ? 'timed' : 'base',
+        modeKey,
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
         coachArt: opts?.coachArt,

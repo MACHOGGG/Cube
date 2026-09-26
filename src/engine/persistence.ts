@@ -89,6 +89,46 @@ export function mergeRuns(bestKey: string, incoming: readonly StoredRun[]): numb
 
 
 /**
+ * 把存错了键的局挪回它该在的那个键下。
+ *
+ * 为什么会存错：棋盘存新局时手写着旧版本的后缀，而读的那一头跟着版本常量走
+ * （见 engine/runKey.ts 开头那段）。于是那段时间里打的炸弹局和无限反转局，全都
+ * 落进了**上一版规则的归档**里——记录页只摆现行那张榜，所以它们既不在记录页上
+ * 出现，也没被算进累计得分。没登录的玩家这些局只存在本机，不挪就永远找不回来。
+ *
+ * 分得清是因为每一局自己带着规则版本号（RunData 的 bombRules / flipRules），而
+ * persistence 从来只剥快照、不删局，所以挪得准也挪得全。
+ *
+ * **只往上抬，不往下削**：
+ *   · 新键的「本机最佳」取「它本来的」和「挪过来这几局里最高的」中的大者；
+ *   · **旧键的那个数一个字不动**。它可能被一局新规则的分顶高过，但旧键此刻已经
+ *     是纯归档（记录页那张表里没有它），一个偏高的归档数字只是不好看；而按剩下
+ *     的局重算就可能把一条真纪录抹掉——存档只留最近 40 局，更早的那条纪录的局
+ *     早就被收走了，重算出来的数比它低。两害相权，不动。
+ *
+ * 返回挪了几局，给调用方打一行日志用；异常一概吞掉——迁移失败只是这些局继续躺在
+ * 旧键下，不该连带把开机拦住。
+ */
+export function moveRuns(from: string, to: string, belongs: (run: StoredRun) => boolean): number {
+  try {
+    const stay: StoredRun[] = [];
+    const move: StoredRun[] = [];
+    for (const run of loadRuns(from)) {
+      (run?.data && belongs(run) ? move : stay).push(run);
+    }
+    if (!move.length) return 0;
+    const added = mergeRuns(to, move);
+    // 新键的最佳跟着抬上去。挪过来的局里最高的那个分，本该一直是它的最佳。
+    const top = move.reduce((m, r) => Math.max(m, r.data?.totalScore || 0), 0);
+    if (top > 0) saveBestIfHigher(to, top);
+    localStorage.setItem(from + RUNS_SUFFIX, JSON.stringify(trim(stay)));
+    return added;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Every archived run on this device, newest first. The records panel lists
  * these directly and 累计得分 is their sum — one source of truth, so the
  * total can never drift from the list under it.

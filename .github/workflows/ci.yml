@@ -117,6 +117,15 @@ jobs:
         run: |
           npx esbuild src/engine/kinetics.ts --bundle --format=esm --outfile=/tmp/kinetics.mjs
           node scripts/check-kinetics.mjs /tmp/kinetics.mjs
+      # 存档键的后缀带着规则版本号，而它已经错过两次：规则升版本、写存档那一头的
+      # 字面量没跟着改，于是新规则的局落进上一版规则的归档——记录页上不出现、累计
+      # 得分里不算、结算页那个「本机最佳」还钉在一个现行规则下打不出来的旧数字上。
+      # 全程不报错。这道门量两件事：后缀必须由版本常量生成，以及八副棋盘和 main.ts
+      # 里谁都不许再手写后缀（后一半才是真保险——它拦的是这件事本身，不是某次错字）。
+      - name: 存档键跟着规则版本走
+        run: |
+          npx esbuild src/engine/runKey.ts --bundle --format=esm --outfile=/tmp/runkey.mjs
+          node scripts/check-run-key.mjs /tmp/runkey.mjs
       # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
       # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
       # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。
