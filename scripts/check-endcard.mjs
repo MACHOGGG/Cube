@@ -63,6 +63,15 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
     const ov = document.getElementById('endOverlay');
     ov.classList.add('show');
     document.getElementById('endScore').textContent = '1,286';
+    // 通关那枚章也摆上：它和总分排一行（.end-score-row），量的就是「多了这 34px
+    // 之后这一窗还装不装得下」。只有「全部翻成点面」那一种终局才有它，而那一种
+    // 正是这一窗最挤的时候——不摆上去，下面那两条量的是较松的那一版。
+    document.getElementById('endStamp').innerHTML =
+      '<svg viewBox="0 0 40 40" aria-hidden="true">' +
+      '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="#5C8A72" stroke-width="3"/>' +
+      '<path class="end-stamp-tick" d="M12 20.5 L17.5 26 L28 14" fill="none" stroke="#5C8A72"' +
+      ' stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    document.getElementById('endStamp').classList.add('end-stamp--drawn');
     document.getElementById('endAvg').textContent = '这个玩法你平均 940 分';
     document.getElementById('endBreakdown').innerHTML =
       '<div class="end-row"><span>基础得分</span><span>612</span></div>' +
@@ -87,6 +96,38 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
   });
   check(`${tag} · 结算页：整窗装得进屏幕`, end.over <= 0, `超出 ${end.over}px`);
   check(`${tag} · 结算页：不用下滑`, !end.scroll);
+  // 那枚章不许把总分那一行顶高：它是「分数旁边的一枚章」，不是新的一行。
+  const stamp = await page.evaluate(() => {
+    const row = document.querySelector('.end-score-row')?.getBoundingClientRect();
+    const sc = document.getElementById('endScore')?.getBoundingClientRect();
+    const st = document.getElementById('endStamp')?.getBoundingClientRect();
+    if (!row || !sc || !st) return null;
+    // 总分自己带着 margin: 4px 0 6px，而它是这一行的弹性子项——那 10px 算进
+    // 行高里。所以「没把行顶高」量的是「行高 = 总分的外框高」，不是「行高 =
+    // 总分的内框高」：照后者量出来永远差 10px，那是总分自己的边距，不是章加的。
+    const cs = getComputedStyle(document.getElementById('endScore'));
+    const mv = parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+    return {
+      rowH: Math.round(row.height),
+      scoreOuterH: Math.round(sc.height + mv),
+      stampH: Math.round(st.height),
+      stampW: Math.round(st.width),
+      inRow: st.top >= row.top - 1 && st.bottom <= row.bottom + 1,
+    };
+  });
+  check(`${tag} · 结算页：通关章真的画出来了`, stamp && stamp.stampW >= 28, JSON.stringify(stamp));
+  check(
+    `${tag} · 结算页：章和总分同一行，没把行顶高`,
+    stamp && stamp.inRow && stamp.rowH <= stamp.scoreOuterH + 2,
+    JSON.stringify(stamp),
+  );
+  // 这一条才让上面那条有意义：章确实比总分矮（34px vs 48px），所以它不可能是
+  // 撑高这一行的那个——万一哪天章被调大到超过总分，上面那条会红。
+  check(
+    `${tag} · 结算页：章比总分矮，撑不起这一行`,
+    stamp && stamp.stampH < stamp.rowH,
+    JSON.stringify(stamp),
+  );
   const endBtns = await page.evaluate(REACH, ['endBackBtn', 'shareBtn', 'restartBtn']);
   for (const [id, state] of Object.entries(endBtns)) {
     check(`${tag} · 结算页：《${id}》按得到`, state === 'ok', state);

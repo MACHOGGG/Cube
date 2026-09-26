@@ -110,6 +110,13 @@ jobs:
           npx esbuild src/engine/axisMotion.ts --bundle --format=esm --outfile=/tmp/axismotion.mjs
           npx esbuild src/engine/spring.ts --bundle --format=esm --outfile=/tmp/spring.mjs
           node scripts/check-axis-motion.mjs /tmp/axismotion.mjs /tmp/spring.mjs
+      # Kinetics 那一批手感件里三条纯判定：通关章盖在哪一种终局上、粘贴进来的码
+      # 怎么洗、六段完成度表填几段。三条都是「错了不报错」——章会盖在被炸出去的
+      # 那一局上，对的码会被说成不对，第七段会画到框外面。纯逻辑、几十毫秒。
+      - name: 手感件的三条判定
+        run: |
+          npx esbuild src/engine/kinetics.ts --bundle --format=esm --outfile=/tmp/kinetics.mjs
+          node scripts/check-kinetics.mjs /tmp/kinetics.mjs
       # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
       # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
       # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。

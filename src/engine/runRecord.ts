@@ -1,5 +1,6 @@
 import { countPhrase, STRINGS, type Lang, type I18nStrings } from '../i18n';
 import { BOMB_HAZARD_REASON } from './bomb';
+import { ALL_FLIPPED_REASON } from './kinetics';
 import {
   PUZZLE_CLEARED_POINTS,
   PUZZLE_STAR_POINTS,
@@ -119,7 +120,7 @@ export const MANUAL_END_REASON = '手动结束';
 // are the only place they become words.
 const REASON_LABEL_KEY: Partial<Record<string, keyof I18nStrings>> = {
   时间到: 'timeUpReason',
-  全部方块已翻成点面: 'allFlippedReason',
+  [ALL_FLIPPED_REASON]: 'allFlippedReason',
   无法继续匹配: 'noMoreMatchesReason',
   [MANUAL_END_REASON]: 'manualEndReason',
   [BOMB_HAZARD_REASON]: 'bombHazardReason',

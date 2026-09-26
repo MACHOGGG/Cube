@@ -44,14 +44,21 @@ page.on('request', (r) => {
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('#navRecords', { timeout: 20000 });
 
+// 上一行那几颗母标签，照 ui/leaderboard.ts 的 boardGroups 顺序。
+// 《步步为营》是后来加的那一档——这一行漏了它，于是这三条「上一行一个不少」从
+// 那时候起一直是红的。它们不在 CI 的 browser 那一档里（那儿只收四道），所以红了
+// 没人看见：门自己过期了比没有门更糟，它会教人「这道门本来就红」。
+const ALL_TOP = '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转 步步为营';
+
 // ---- 还没登录：榜上说的是「登录之后才会上榜」，不是一句「敬请期待」 ------
 await page.click('#navRecords');
 await page.waitForTimeout(400);
 await page.click('#ranksPanel');
 await page.waitForSelector('.rank-tab', { timeout: 8000 });
 const tabs = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
-check('最外面一排：总榜加六个母标签',
-  tabs.join(' ') === '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转', tabs.join(' '));
+// 这一排和下面的 ALL_TOP 是同一份，只是这时候还没登录。写成同一个常量：从前是
+// 两处各抄一遍字面量，《步步为营》加进来的时候两处一起过期。
+check('最外面一排：总榜加七个母标签', tabs.join(' ') === ALL_TOP, tabs.join(' '));
 check('没登录时说的是「登录之后，你的成绩才会上榜」',
   (await page.$eval('#rankBody', (e) => e.textContent.trim())) === '登录之后，你的成绩才会上榜',
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
@@ -108,6 +115,30 @@ await page.$eval('#pauseFinishBtn', (el) => el.click());
 await page.waitForSelector('#endOverlay.show', { timeout: 10000 });
 await page.waitForTimeout(1200);
 
+// ---- 结算页：总分是滚筒，而这一种终局没有通关章 ------------------------
+//
+// 这一局是按《结束游戏》收的（手动结束），不是「全部翻成点面」。所以那枚章
+// **不该存在**——不是存在而藏着：一枚藏着的「完成」章迟早会因为某一条 CSS 露出
+// 来，而它露出来说的是假话（见 engine/kinetics.ts 的 endCheckEligible）。
+const endBits = await page.evaluate(() => {
+  const score = document.getElementById('endScore');
+  const stamp = document.getElementById('endStamp');
+  return {
+    rolls: !!score && score.classList.contains('odometer'),
+    boxes: score ? score.querySelectorAll('.digit-box').length : 0,
+    strips: score ? score.querySelectorAll('.digit-strip span').length : 0,
+    readable: score?.dataset.score ?? null,
+    stampSvgs: stamp ? stamp.querySelectorAll('svg').length : -1,
+  };
+});
+check('结算页的总分是滚筒（一位一格、每格十个数字）',
+  endBits.rolls && endBits.boxes >= 1 && endBits.strips === endBits.boxes * 10,
+  JSON.stringify(endBits));
+check('滚筒留下了读得出来的那一份（dataset.score）',
+  /^\d+$/.test(endBits.readable ?? ''), String(endBits.readable));
+check('手动结束这一局：结算页里根本没有那枚通关章的 SVG',
+  endBits.stampSvgs === 0, `svg × ${endBits.stampSvgs}`);
+
 const push = pushes.find((b) => b.action === 'push');
 check('结算的时候真的往云上报了一条', Boolean(push), JSON.stringify(pushes.map((b) => b.action)));
 if (push) {
@@ -138,10 +169,34 @@ await page.waitForSelector('.rank-row', { timeout: 10000 });
 const rows = await page.$$eval('.records-panel--big .rank-row', (els) =>
   els.map((e) => ({
     name: e.querySelector('.rank-name')?.textContent.trim(),
-    score: e.querySelector('.rank-score')?.textContent.trim(),
+    // 自己那一行的分数是滚筒（engine/odometer.ts）——十条 0–9 竖排，textContent
+    // 说明不了任何事。滚筒把读得出来的那一份留在 dataset.score 上（和 HUD 那一路
+    // 同一个约定）。
+    score: (() => {
+      const el = e.querySelector('.rank-score');
+      return el ? (el.dataset.score ?? el.textContent.trim()) : undefined;
+    })(),
     me: e.classList.contains('rank-row--me'),
   })));
 check('总榜上有我这一行', rows.length === 1 && rows[0].name === '甲', JSON.stringify(rows));
+// §2 的落点只有两处：结算页的总分，和排行榜上**自己**那一行。别人那几行不滚——
+// 它们就在眼前，能直接比，整表一起滚只是噪音。
+const rollScope = await page.evaluate(() => {
+  const panel = document.querySelector('.records-panel--big');
+  const all = Array.from(panel?.querySelectorAll('.rank-row') ?? []);
+  const scoreOf = (row) => row.querySelector('.rank-score');
+  return {
+    rows: all.length,
+    mineRolls: all.some((r) => r.classList.contains('rank-row--me') && scoreOf(r)?.classList.contains('odometer')),
+    others: all.filter((r) => !r.classList.contains('rank-row--me')).length,
+    othersRolling: all.filter((r) => !r.classList.contains('rank-row--me') && scoreOf(r)?.classList.contains('odometer')).length,
+  };
+});
+check('自己那一行的分数在滚', rollScope.mineRolls, JSON.stringify(rollScope));
+// 这一条的量程要说清楚：这张榜上现在只有他自己（others = 0），所以「别人不滚」
+// 此刻是空判——数字照实印出来，哪天这个 mock 里多了人，它就有牙了。
+check(`别人那几行不滚（这张榜上另有 ${rollScope.others} 人）`,
+  rollScope.othersRolling === 0, JSON.stringify(rollScope));
 // ---- 弹窗底下那颗《返回》圆盘 --------------------------------------------
 // 玩家的原话：「在成绩点开后的弹窗下方加入一个“<”作为退出到上一页的按钮，注意
 // 不要遮蔽任何内容（后面个人主页和成绩与排名可以在此时隐藏）」。量的是位置：
@@ -176,11 +231,10 @@ const clickTab = (label) =>
   }, label);
 const rowText = (sel) =>
   page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.textContent.trim()).join(' '));
-const ALL_TOP = '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转';
 await clickTab('基础');
 await page.waitForTimeout(400);
 // 玩家点名改的：点开一个母标签之后，别的母标签不撤，上一行原样留着。
-check('点开《基础》：上一行七个一个不少',
+check('点开《基础》：上一行八个一个不少',
   (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
 check('那颗《＜》已经不存在了',
   (await page.$$eval('.rank-tab--back', (e) => e.length)) === 0);
@@ -209,18 +263,20 @@ check('没打过的玩法，榜是空的，而且明说「这个玩法你还没�
 // 上一行一直在，所以换一类直接横着跳，不用先退回去。
 await clickTab('炸弹');
 await page.waitForTimeout(400);
-check('横着跳到《炸弹》：上一行还是那七个',
+check('横着跳到《炸弹》：上一行还是那八个',
   (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
 // 比的是 data-mode 不是字面：炸弹旗下那三张的名字和基础旗下那三张一模一样
 // （都是方块 / 圆球 / 三角），只有 mode 里的后缀不同。这也正是「上一行不能
 // 撤」的理由——光看下一行分不出自己在哪一类里。
 const rowModes = (sel) =>
   page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.dataset.mode).join(' '));
-// bomb2 是炸弹规则的第二版（api/scores.js 的 BOMB_KIND）——2026-09 改成「一局只
-// 剩一枚永久炸弹」之后开的新榜。这里连版本号一起对，就是防着「客户端点开的还是
-// 老榜、新局全报去了新榜」这种两头对不上的错。
+// bomb3 是炸弹规则的第三版（api/scores.js 的 BOMB_KIND、engine/bomb.ts 的
+// BOMB_RULES_VERSION）——2026-09 取消那一枚永久炸弹之后开的新榜。这里连版本号一起
+// 对，就是防着「客户端点开的还是老榜、新局全报去了新榜」这种两头对不上的错。
+// 这一条自己也栽过一次：规则升到第 3 版的那一次改了 leaderboard.ts，却漏了这道
+// 门，于是它钉着的正是那个「两头对不上」的旧值。
 check('下一行换成了炸弹旗下那几张',
-  (await rowModes('#rankSubTabs')) === 'square:bomb2 circle:bomb2 triangle:bomb2' &&
+  (await rowModes('#rankSubTabs')) === 'square:bomb3 circle:bomb3 triangle:bomb3' &&
     (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false,
   await rowModes('#rankSubTabs'));
 check('高亮跟着跳到《炸弹》',
@@ -231,7 +287,7 @@ await clickTab('总榜');
 await page.waitForTimeout(400);
 check('点《总榜》把下一行收起来',
   (await page.$eval('#rankSubTabs', (e) => e.hidden)) === true);
-check('收起来之后上一行还是那七个',
+check('收起来之后上一行还是那八个',
   (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
 
 // 按那颗《返回》：弹窗关掉，底排导航回来。

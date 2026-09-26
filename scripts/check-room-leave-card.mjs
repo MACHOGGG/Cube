@@ -208,7 +208,10 @@ const code = await openRoom(A.page, '甲');
         roomRows: block ? block.querySelectorAll('.mp-player').length : 0,
         roomImg: !!img && (img.getAttribute('src') || '').startsWith('data:image'),
         roomTop: block && score ? block.getBoundingClientRect().top < score.getBoundingClientRect().top : false,
-        soloScore: score?.textContent ?? '',
+        // 总分是滚筒（engine/odometer.ts），textContent 是十条 0–9 竖排拼起来的
+        // 一长串——照它判「还在不在」永远是真的，那这一条就成了假绿。读滚筒留
+        // 下的那份可读副本。
+        soloScore: score?.dataset.score ?? score?.textContent ?? '',
         soloShare: !!shareBtn && !shareBtn.hidden,
       };
     });

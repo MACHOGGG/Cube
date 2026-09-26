@@ -115,6 +115,8 @@ export interface ShellRefs {
   endHazardBgEl: HTMLElement;
   endTitleEl: HTMLElement;
   endScoreEl: HTMLElement;
+  /** 总分旁边那枚通关章的落脚处。平时是空的。 */
+  endStampEl: HTMLElement;
   endAvgEl: HTMLElement;
   endBreakdownEl: HTMLElement;
   /** 结算页上那张战绩图。开局那一刻还是空的，一局打完由 endGame 填上。 */
@@ -429,7 +431,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <div class="end-room" id="endRoomBlock" hidden></div>
         <h2 id="endTitle">${s.endTitleDefault}</h2>
         <div class="end-score-label">${s.compositeScoreLabel}</div>
-        <div class="big-score" id="endScore">0</div>
+        <!-- 总分和它旁边那枚章排一行。章只在「全部翻成点面」那一种终局出现，别的
+             终局这个 span 是空的，而空的它自己不占位（style.css 的 .end-stamp:empty）
+             ——不是画了再藏，是根本不画（见 engine/kinetics.ts 的 endCheckEligible）。 -->
+        <div class="end-score-row">
+          <div class="big-score" id="endScore">0</div>
+          <span class="end-stamp" id="endStamp" aria-hidden="true"></span>
+        </div>
         <!-- What this run was worth, set against what this mode is usually
              worth to this player — the one number that says whether it was a
              good run, without them having to remember their own history. -->
@@ -716,6 +724,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     endHazardBgEl: req('endHazardBg'),
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),
+    endStampEl: req('endStamp'),
     endBreakdownEl: req('endBreakdown'),
     endShareImgEl: req<HTMLImageElement>('endShareImg'),
     shareOverlay: req('shareOverlay'),

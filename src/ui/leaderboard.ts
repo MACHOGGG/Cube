@@ -1,6 +1,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { fetchBoard, type BoardPage, type BoardResult } from '../engine/cloudScores';
 import { shapeName } from './shapeLabels';
+import { rollOdometer } from '../engine/odometer';
 import { gameIcon } from './homeIcons';
 import { compactScore } from '../engine/compactScore';
 
@@ -190,9 +191,27 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   /** 换得比回包快的时候，别让旧的那一份盖住新的。 */
   let generation = 0;
 
+  /**
+   * 自己那一行的分数滚过了没有。
+   *
+   * 「进来那一次」滚，不是每次画榜都滚：这一页有十几个标签，来回点的时候每次都
+   * 从 0 滚到自己的分，那就从「一处安静的确认」变成了满页在动。别人的行不滚——
+   * 它们就在眼前，能直接比，整表一起滚只是噪音。
+   */
+  let rolledMine = false;
+
   const paint = (result: BoardResult) => {
     if (result.ok) {
       body.innerHTML = rowsHtml(result.page, opts.lang);
+      if (!rolledMine) {
+        const mineScore = body.querySelector<HTMLElement>('.rank-row--me .rank-score');
+        // 只在这张榜上真有自己那一行的时候算「滚过了」——头一张榜里没有他的时候，
+        // 这一下要留给真的有他的那一张。
+        if (mineScore) {
+          rolledMine = true;
+          rollOdometer(mineScore, Number(mineScore.textContent));
+        }
+      }
       return;
     }
     if (result.reason === 'geniusOnly') {

@@ -5,6 +5,8 @@ import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
+import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
+import { rollDuration, rollOdometer } from './odometer';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
 import { trackGameStart, trackGameEnd, trackShare } from './analytics';
 import {
@@ -22,7 +24,7 @@ import { leaderboardName, pushRun } from './cloudScores';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
-import { playScore, playFlip, playClear, playError, playSettle, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
+import { playScore, playFlip, playClear, playError, playFinish, playSettle, reducedMotion, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import {
   createStepBank, puzzleComposite, stepLedgerText, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
@@ -543,6 +545,49 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
   }
 
+  /** 章画完之前留出的那 50ms：分数落定和盖章之间要有一道缝，不然读起来是同时发生。 */
+  const STAMP_GAP_MS = 50;
+
+  /**
+   * 「全部方块已翻成点面」那一枚章。
+   *
+   * **只有真通关才有这个节点。** 别的终局这儿一个 SVG 都不建——不是建了再 hidden：
+   * 一枚藏着的「完成」章迟早会因为某一条 CSS 而露出来，而它露出来说的是假话。
+   * 判定在 engine/kinetics.ts 的 endCheckEligible（纯函数，门钉着它对每一种终局
+   * 的映射）。
+   *
+   * 落在分数后面：滚筒滚完（rollDuration 把错峰算进去了）再等 50ms 才开始描。
+   */
+  function stampEndCheck(reason: string, total: number): void {
+    const host = refs.endStampEl;
+    host.textContent = '';
+    host.classList.remove('end-stamp--drawn');
+    if (!endCheckEligible(reason)) return;
+    // 描的是同一个 --accent-2（整线奖励那支绿）：全站「这件事成了」都是它。
+    host.innerHTML =
+      '<svg viewBox="0 0 40 40" aria-hidden="true">' +
+      '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none"' +
+      ' stroke="var(--accent-2)" stroke-width="3"/>' +
+      '<path class="end-stamp-tick" d="M12 20.5 L17.5 26 L28 14" fill="none"' +
+      ' stroke="var(--accent-2)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>';
+    if (reducedMotion()) {
+      // 直接就是画完的样子（那两条 transition 在 reduced-motion 下是 none）。
+      host.classList.add('end-stamp--drawn');
+      return;
+    }
+    const wait = rollDuration(total) + STAMP_GAP_MS;
+    window.setTimeout(() => {
+      // 这中间他可能已经按了《再来一局》或《首页》——那时候这个节点早被下一局的
+      // stampEndCheck 清空了，或者整页换掉了。不在文档里就不画。
+      if (!host.isConnected || !host.firstChild) return;
+      host.classList.add('end-stamp--drawn');
+      // 里程碑那一声，摆在勾这一边。结算页开场那一下是 playSettle（每一局都有），
+      // 这一声只有真通关才有——最少见、最好的那一种结局值得一句单独的话。
+      playFinish();
+    }, wait);
+  }
+
   function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = s.defaultPenaltyLabel) {
     if (hooks.practice) {
       // 练习盘没有「结束」这回事：翻完了、死局了，就静静再发一盘接着玩。
@@ -663,7 +708,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     refs.endHazardBgEl.classList.toggle('show', hazardEnd);
     refs.endTitleEl.textContent = s.endTitleDefault;
-    refs.endScoreEl.textContent = String(total);
+    // 总分一位一位滚上去（engine/odometer.ts）。局内那一套滚筒不动——两套数数
+    // 系统不并存，这一套只管结算页和排行榜自己那一行。
+    rollOdometer(refs.endScoreEl, total);
     // This run measured against this player's own history in this exact mode.
     // Read before the archive is written just below, so this run is counted
     // once — by hand — rather than twice.
@@ -737,6 +784,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // player pressed 结束, ran the clock out, or hit a dead end.
     if (hazardEnd) playError();
     else playSettle();
+    // 真通关那一枚章。顺序是刻意的：**分数先落定，再盖章**——读出来是「这一局
+    // 值这么多分 → 而且是通关」，一件事接着另一件。同时出现的话两样东西抢同一
+    // 眼，谁也没看清。
+    stampEndCheck(reason, total);
 
     // Archive the run so the 记录 panel can re-open the very same card.
     saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
@@ -943,7 +994,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // 这个字符串是**存档里的那一个**（见 runRecord 的 REASON_LABEL_KEY）：它的
         // 名字是星星消除上线之前留下的（那时候终局是「全翻成星星」），现在这条路
         // 的意思是「一枚不剩」。名字没改，因为玩家早先的记录里存的就是它。
-        endGame('全部方块已翻成点面');
+        endGame(ALL_FLIPPED_REASON);
         return;
       }
       /**

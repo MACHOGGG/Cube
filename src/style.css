@@ -402,7 +402,9 @@ h1 {
    （gameShell 的 req('scoreReel')），而且结算和战绩图还要用同一套读数。 */
 .score-cell--hold .score-reel { display: none; }
 .score-hold { color: var(--ink-faint); }
-.digit-box { position: relative; height: var(--reel-step); width: 0.64em; overflow: hidden; }
+/* 一位多宽。写成变量带兜底：HUD 那一路（Fraunces）保持原来的 0.64em 不变，
+   排行榜那一行是 JetBrains Mono，字身窄一些，由 .rank-score 自己覆盖。 */
+.digit-box { position: relative; height: var(--reel-step); width: var(--reel-w, 0.64em); overflow: hidden; }
 .digit-strip {
   position: absolute; left: 0; top: 0; width: 100%;
   transition: transform .5s cubic-bezier(.22,1,.36,1);
@@ -799,6 +801,63 @@ h1 {
 .modal h2 { font-family: 'Fraunces', Georgia, serif; margin: 0 0 8px; font-size: 1.5rem; }
 .modal p { color: var(--ink-soft); margin: 0 0 20px; font-size: 0.95rem; }
 .modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
+/* 结算页：总分和它旁边那枚通关章排一行。
+   :empty 那一条是关键——没资格盖章的终局里这个 span 是空的，空的它连位子都不占，
+   所以那几种终局的结算页和从前一个像素不差（否则 gap 会留出 10px 的空缝）。 */
+.end-score-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.end-stamp { flex: none; width: 34px; height: 34px; display: block; }
+.end-stamp:empty { display: none; }
+.end-stamp > svg { width: 100%; height: 100%; display: block; }
+/* 圈和勾都靠 stroke-dashoffset 描出来：先画圈 300ms，圈画完再画勾 200ms。
+   dashoffset 过渡是老技术，Chrome 61 早就支持（小红书那一版也走这条壳）。
+   dasharray 的数是量出来的周长／路径长：圈 2π·17 ≈ 107，勾那两段 ≈ 24。 */
+.end-stamp-ring {
+  stroke-dasharray: 107; stroke-dashoffset: 107;
+  transition: stroke-dashoffset 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.end-stamp-tick {
+  stroke-dasharray: 24; stroke-dashoffset: 24;
+  transition: stroke-dashoffset 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.end-stamp--drawn .end-stamp-ring { stroke-dashoffset: 0; }
+.end-stamp--drawn .end-stamp-tick { stroke-dashoffset: 0; transition-delay: 300ms; }
+@media (prefers-reduced-motion: reduce) {
+  /* 不描画，直接是画完的样子。章是一条信息（这一局是真通关），不是一段动画。 */
+  .end-stamp-ring, .end-stamp-tick { transition: none; }
+  .end-stamp--drawn .end-stamp-tick { transition-delay: 0s; }
+}
+/* 结算页那个总分的滚筒。--reel-step 必须在这儿再声明一遍：它原本只写在
+   .score-reel 上（HUD 那一路），而 .digit-box 的高度读的就是它——不写的话
+   var() 落空，整排数字高度塌成 0，屏幕上一个数字都看不见。 */
+.odometer { display: inline-flex; --reel-step: 1.1em; }
+/* 排行榜自己那一行滚起来的时候：JetBrains Mono 的字身是 0.6em，照 0.64em 画会
+   比别人那几行宽出几个像素，而这一行本来就该和别人一模一样、只是数字在滚。 */
+.rank-score.odometer { --reel-w: 0.6em; --reel-step: 1.25em; }
+/* 战绩图是这一窗唯一的内容，其他都是它的说明文字。所以这一窗按图的尺寸来定：
+   比一般的弹窗宽得多，左右的留白也收窄——420px 的窗减去 24px 的内边距，图只
+   剩 372px 宽，一张 720 宽的图缩到这个份上，棋盘上的点面基本看不清了。
+   min() 保证在窄屏上它退回整屏宽，不会横着溢出去。 */
+.share-modal { max-width: min(620px, 100%); padding: 22px 14px; }
+/* 宽度吃满这一窗，但高度不许超过屏幕的七成——窗变宽之后，一张竖长的战绩图
+   在矮屏幕上会把《关闭》顶到看不见的地方。两个上限都给，宽高都写 auto，浏览
+   器自己按原比例取小的那一边，不会压扁。 */
+.share-modal img {
+  display: block; margin: 4px auto 12px;
+  width: auto; height: auto; max-width: 100%; max-height: 70vh;
+  border-radius: var(--r-sm); box-shadow: var(--shadow);
+}
+.share-modal .hint { margin: 0 0 16px; }
+/* 装战绩图的那层遮罩自己也让开一点：一般的弹窗四周留 20px 是舒服的，
+   一张要看清的图留 20px 就是白白削掉 40px 的宽度。 */
+.overlay--wide { padding: 10px; }
+/* 屋主散场，而这一局这个人自己接不下去（天才特供的棋盘）——结算页最上面
+   先说一句为什么，再说分数。它在 h2 之前，因为「这局为什么停在这儿」比
+   「这局打了多少」更急着回答。 */
+.end-gone-note {
+  margin: 0 0 12px; padding: 8px 12px;
+  background: var(--score-wash); border-radius: var(--r-sm);
+  color: var(--ink-soft); font-size: 0.88rem; line-height: 1.45;
+}
 .end-score-label {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
   color: var(--ink-faint); margin-top: 4px;
