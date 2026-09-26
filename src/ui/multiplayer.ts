@@ -338,13 +338,36 @@ export function renderMultiplayerPage(
     // 变的只有那把锁：还没开通的人才看得到它，按下去弹订阅那一页；开通了的
     // 人只剩招牌，按下去直接开房。
     const needsGenius = !isGenius();
+
+    /**
+     * 那颗键上的字，拆成「不动的」和「要换的」两截。
+     *
+     * 拨开 Pro 之后**只换中间那一段**（玩家 2026-09：「Open a room 中只有 room 一词动态
+     * 被替换成了 contest」）：动词留在原地，换的是宾语，所以屏幕上动的正好是变了的那一
+     * 件事。整句换掉的话是一整行字跳一下，看不出变的是哪个词。
+     *
+     * 找不到那一段（翻译改了一半，i18n 那两条铁律断了）就退回从前的做法——整句换。**退
+     * 回去而不是抛**：这颗键是这一页唯一的出口，为了一行字的动画把它弄哑不值得。
+     * check-room-word.mjs 在 CI 里盯着那两条铁律，所以这条退路平时用不上。
+     */
+    const nounAt = s.mpCreate.indexOf(s.mpCreateNoun);
+    const createLabelHtml = nounAt < 0
+      ? esc(s.mpCreate)
+      : esc(s.mpCreate.slice(0, nounAt))
+        + `<span class="mp-swap" id="mpCreateWord">${esc(s.mpCreateNoun)}</span>`
+        + esc(s.mpCreate.slice(nounAt + s.mpCreateNoun.length));
+
     container.innerHTML = `
       <div class="app mp-page mp-page--home">
         <!-- 这一页整个按玩家 2026-09 给的设计稿重排（「开小屋的界面按照我的设计来，字体
              保留现有的，其他的全按照我的效果、间距、颜色来设置」）。字体一个没换，动的
              是排布、间距和颜色。 -->
+        <!-- 招牌沿用网页端正式那一块（玩家 2026-09：「title 板块沿用 web 端正式的样式，
+             保留同样位置和形式」）。先前这一页按设计稿把它涂成了一块实心暖橙，于是全站
+             只有这一页的招牌长得不一样——同一块招牌在不同页里换皮，玩家读到的是「我是不
+             是走错地方了」。位置和形式一个没动，动的只是那层皮：回到 .home-head-glass。 -->
         <header class="home-head mp-head">
-          <div class="home-head-glass mp-head-card">
+          <div class="home-head-glass">
             <h1 class="home-title">Slides</h1>
             <p class="home-sub">${s.mpTitle}</p>
           </div>
@@ -360,12 +383,17 @@ export function renderMultiplayerPage(
           <button class="mp-mark" id="mpShuffle" aria-label="${s.mpShuffle}">
             <span class="mp-avatar" id="mpAvatar">${avatarSvg(avatar)}</span>
           </button>
-          <!-- input 在前、标签在后：浮动标签靠相邻兄弟选择器，而那只能往后看
-               （见 subscribe.ts 的 field()，这一页手写的两处跟它同一个顺序）。 -->
+          <!-- **这一格只有一层字**：占位那句《起个名字》。
+               先前这儿照全站表单的样子挂了一个浮动标签《你的名字》，而这一页又把占位字
+               改成了一直看得见（设计稿上那格里就写着一句浅色的字）——两条规矩各自都对，
+               凑在一起就是两行字**叠印在同一处**，玩家 2026-09 拍到的那张「严重的覆盖、
+               穿模」正是它。
+               留下的是占位那一句（它说的是「该你填」，标签那句《你的名字》只是重复了一
+               遍这格是什么）。名字没丢：它移进 aria-label，读屏软件照旧念得到。 -->
           <label class="auth-field mp-name-field">
             <input id="mpName" type="text" maxlength="12" autocomplete="nickname"
+                   aria-label="${esc(s.mpNameLabel)}"
                    placeholder="${s.mpNamePlaceholder}" value="${esc(savedName)}" />
-            <span>${s.mpNameLabel}</span>
           </label>
         </div>
 
@@ -377,18 +405,28 @@ export function renderMultiplayerPage(
           <div class="mp-open-row">
             <button class="mp-create${needsGenius ? ' mp-create--locked' : ''}" id="mpCreate">
               ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
-              <span id="mpCreateLabel">${s.mpCreate}</span>
+              <span id="mpCreateLabel">${createLabelHtml}</span>
               ${geniusLogoTag(38, 'genius-logo--cta')}
             </button>
+            <!-- 开关上写的是《Pro》（设计稿上就是这个词）。它是四种语言共用的一个词，所
+                 以那根条子不用为「竞赛」两个字在四种语言里各有多长留地方——先前写的是整
+                 句《开竞赛》，英文那句在 54px 宽的条子里折成两行，把白点挤出了条子外。
+                 它说的是哪一件事由 aria-label 和底下那行小字负责，不由这个词负责。 -->
             <button class="mp-contest-pill" id="mpContest" role="switch" aria-checked="false"
                     aria-label="${s.mpContest}">
               <span class="mp-contest-knob" aria-hidden="true"></span>
-              <span class="mp-contest-tag" aria-hidden="true">${s.mpContest}</span>
+              <span class="mp-contest-tag" aria-hidden="true">Pro</span>
             </button>
           </div>
-          <!-- 设计稿上没有这一行，但它**必须有字**：拨过去的人按下那颗键会发现自己没有
-               棋盘（主持人不下场），那正是「意料之外的界面」。所以留一行最轻的，摆在设计
-               稿本来就空着的地方；四种语言都一行装得下（见 check-overlap）。 -->
+          <!-- 这一行**只在拨开 Pro 的时候出现**（玩家 2026-09：「只有在打开了 Pro 的时
+               候在现在的位置和形式出现《up to 20…》的字样，不开的时候没有」）。
+               它必须有字：拨过去的人按下那颗键会发现自己没有棋盘（主持人不下场），那正
+               是「意料之外的界面」；而没拨的人跟这条规矩不相干，摆在那儿只是多一行要读
+               的字。
+               收的是 visibility 不是 display：那一行的高度**始终留着**，所以拨开关的时
+               候底下那四根条子一个像素都不挪（玩家要的是「在现在的位置出现」，不是「出
+               现的时候把下面顶下去」）。visibility: hidden 同时也把它从读屏软件那棵树上
+               摘掉，所以没拨的人也不会听到它。 -->
           <p class="mp-contest-hint">${s.mpContestHint}</p>
         </div>
 
@@ -510,23 +548,37 @@ export function renderMultiplayerPage(
       renderLobby(made.value);
     };
     /**
-     * 《竞赛》那颗开关。
+     * 《Pro》那颗开关。
      *
-     * 状态只存在这一位上，而**屏幕上有两处在说它**：开关自己的位置和颜色（那是不用读
-     * 字就看得出的那一半），以及底下那颗键的字面——拨过去它就写《开竞赛》。第二处是要
-     * 紧的：按下去之后这一屋子的规矩不一样（20 名选手、发起人不下场），而按键上写着什
-     * 么是玩家按之前最后看的一样东西。
+     * 状态只存在这一位上（aria-checked），而**屏幕上有三处在说它**：开关自己的位置和
+     * 颜色（那是不用读字就看得出的那一半）、那颗键上换掉的那个词、以及底下那一行小字
+     * ——后两处是要紧的：按下去之后这一屋子的规矩不一样（20 名选手、发起人不下场），
+     * 而按键上写着什么是玩家按之前最后看的一样东西。
      *
-     * 键上换的只有那行字，招牌和锁一个没动——它仍旧是同一颗键、同一条路
-     * （openRoom），只差 contest 这一位。
+     * 键上换的只有那**一个词**（room → contest，见上面 createLabelHtml 的说明），招牌
+     * 和锁一个没动——它仍旧是同一颗键、同一条路（openRoom），只差 contest 这一位。
      */
     const contestSw = container.querySelector<HTMLButtonElement>('#mpContest')!;
     const createLabel = container.querySelector<HTMLElement>('#mpCreateLabel')!;
+    const createWord = container.querySelector<HTMLElement>('#mpCreateWord');
+    const openBlock = container.querySelector<HTMLElement>('.mp-open')!;
     const contestOn = () => contestSw.getAttribute('aria-checked') === 'true';
     contestSw.addEventListener('click', () => {
       const next = !contestOn();
       contestSw.setAttribute('aria-checked', String(next));
-      createLabel.textContent = next ? s.mpContest : s.mpCreate;
+      // 那一行小字：拨开了才看得见（位置一直留着，所以底下那四根条子不挪）。
+      openBlock.classList.toggle('mp-open--contest', next);
+      if (!createWord) {
+        // 退路：i18n 那两条铁律断了的时候整句换（见 createLabelHtml）。
+        createLabel.textContent = next ? s.mpContest : s.mpCreate;
+        return;
+      }
+      createWord.textContent = next ? s.mpContestNoun : s.mpCreateNoun;
+      // 换上去的那个词自己淡进来一下——「动的是这个词」这件事，动画说得比字本身清楚。
+      // 先摘再挂、中间逼一次重排（和格子那一鼓同一手），连拨两下第二下才盖得掉第一下。
+      createWord.classList.remove('mp-swap--in');
+      void createWord.offsetWidth;
+      createWord.classList.add('mp-swap--in');
     });
     // 一颗键，两个档。拨到哪一档由开关说，走的是同一条路（见 openRoom 的说明）。
     container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', () => openRoom(contestOn()));

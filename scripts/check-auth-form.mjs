@@ -76,13 +76,26 @@ const MUST_KEEP = [
     // 没给 placeholder 的字段要自动补一个空格：`:placeholder-shown` 要有它才成立。
     check('没 placeholder 的字段自动补一个空格', body.includes('placeholder=" "'), '');
   }
-  // 手写 .auth-field 的那两处（多人页）也得是同一个顺序，否则那两个框的标签不浮。
+  // 多人页那两个手写的 .auth-field。**它们现在不是同一种框了**，所以分开量：
   const mp = read('src/ui/multiplayer.ts');
-  for (const [name, id] of [['名字', 'mpName'], ['屋号', 'mpCode']]) {
-    const blk = mp.match(new RegExp(`<label class="auth-field[^"]*">[\\s\\S]{0,400}?</label>`, 'g'))
-      ?.find((b) => b.includes(`id="${id}"`));
-    const ok = blk && blk.indexOf('<input') < blk.indexOf('<span>');
-    check(`多人页那个${name}框也是 input 在前`, Boolean(ok), blk ? '' : '找不到这一块');
+  const blockOf = (id) => mp.match(/<label class="auth-field[\s\S]{0,500}?<\/label>/g)
+    ?.find((b) => b.includes(`id="${id}"`));
+  // 屋号那个框照旧是浮动标签那一套：input 在前、span 在后（相邻兄弟只能往后看）。
+  {
+    const blk = blockOf('mpCode');
+    check('多人页那个屋号框是 input 在前',
+      Boolean(blk && blk.indexOf('<input') < blk.indexOf('<span>')), blk ? '' : '找不到这一块');
+  }
+  // 名字那个框**一层字都不许多**：设计稿上那格里就写着一句浅色的占位字，而这一页又把
+  // 占位字改成一直看得见——再挂一个浮动标签，两行字就叠印在同一处（玩家 2026-09 拍到
+  // 的「严重的覆盖、穿模」）。所以这儿量的是「没有那一层」，不是「顺序对不对」：
+  // 标签那句话移进了 aria-label，看不见屏幕的人照旧听得到。
+  {
+    const blk = blockOf('mpName');
+    check('多人页那个名字框只有一层字（没有浮动标签那个 span）',
+      Boolean(blk && !blk.includes('<span')), blk ? blk.replace(/\s+/g, ' ').slice(0, 90) : '找不到这一块');
+    check('名字那句话没丢，挂在 aria-label 上',
+      Boolean(blk && /aria-label="\$\{esc\(s\.mpNameLabel\)\}"/.test(blk)), '');
   }
   // CSS 那一头：两条相邻兄弟选择器都在，而且没有用 :has()（Chrome 61 不认识它，
   // 整条规则会连着作废——这仓库为此栽过一次）。

@@ -252,6 +252,14 @@ jobs:
       # check-room-contest-ui.mjs。
       - name: 小屋：竞赛屋的规矩
         run: node scripts/check-room-contest.mjs
+      # 拨开 Pro 之后，《开小屋》那颗键上**只换中间那一段字**（玩家 2026-09：「Open a
+      # room 中只有 room 一词动态被替换成了 contest」）。i18n 里因此多了一对
+      # mpCreateNoun / mpContestNoun，和原来那两整句之间有两条咬死的关系：换得出来、
+      # 换完一字不差。断掉不会崩也不会红——找不到那一段就悄悄退回整句换，换出来对不上
+      # 则是屏幕上多出一句谁也没写过的话（法文只换名词不换冠词就是「Ouvrir une un
+      # concours」）。四种语言各写各的，而翻译往往一次只改一处。读源码、不打包。
+      - name: 小屋：那颗键上只换一个词
+        run: node scripts/check-room-word.mjs
       # 八副棋盘「归哪一族、按哪一套规则讲」。从前四个函数各按 id 前缀猜一遍，而且对
       # 不认识的 id 给出三种不同的静默默认值（'square' / null / 'triangle'）——新棋盘的
       # id 只要不以 square / circle / triangle 开头，就会在三个地方被分进三个不同的家

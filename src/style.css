@@ -4415,7 +4415,15 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 /* 再矮一档（360×640 那类小安卓，或者装了大字体的机器）：招牌和图形再收一档。
    量过：坐满 4 个人时，这一档要再挤出 100px 才够——所以这里动的是最大的那
    两块，而不是把哪一行藏起来。 */
+/* 四根长条是这一页最高的一块（168px）。屏幕矮下来先收它，不是把它藏起来：
+   两档下来是 132 / 104，比例还在（分别是 1.88 和 1.48 倍宽），仍旧是长条。 */
+@media (max-height: 760px) {
+  .mp-page .mp-code-field .pin-cell { height: 132px; }
+  .mp-page .mp-join-block { margin: 6px auto 28px; }
+}
 @media (max-height: 680px) {
+  .mp-page .mp-code-field .pin-cell { height: 104px; }
+  .mp-page .mp-join-block { margin: 4px auto 14px; }
   .mp-page { gap: 4px; }
   .mp-page .home-head { margin-bottom: 4px; padding-top: 0; }
   .mp-page .mp-code-card .auth-hint { margin: 0; line-height: 1.3; }
@@ -4461,17 +4469,10 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    蓝：这一页上的蓝和棋盘上的蓝是同一个蓝，整套颜色才收得住。 */
 .mp-page { --mp-blue: #4C68B0; --mp-warm: #B0A695; }
 
-/* 抬头那块牌子：设计稿上是一块实心的暖橙，不是别处那块半透明玻璃。
-   只在这一页覆盖（.mp-head-card），主菜单和另外两页那块玻璃一个像素没动。 */
-.mp-page .mp-head-card {
-  background: #E9A97E;
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
-}
-.mp-page .mp-head-card .home-title { color: #FFFFFF; }
-.mp-page .mp-head-card .home-sub { color: rgba(255, 255, 255, 0.92); }
-/* 招牌底下那条细线在暖橙上要改成白的，不然看不见。 */
-.mp-page .mp-head-card .home-title::after { background: rgba(255, 255, 255, 0.7); }
+/* 抬头那块牌子这一页**一条覆盖都不写**：它就是全站那块 .home-head-glass。
+   先前照设计稿把它涂成了一块实心暖橙，于是全站只有这一页的招牌长得不一样——玩家
+   2026-09：「title 板块沿用 web 端正式的样式，保留同样位置和形式」。位置和形式本来就
+   是同一份（同一段 markup、同一个 .home-head），所以这儿删掉那几条颜色覆盖就到位了。 */
 
 /* ---- 一行两样：图形 ＋ 昵称 ---- */
 .mp-page .mp-me { align-items: stretch; gap: 12px; max-width: 320px; }
@@ -4486,16 +4487,23 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-page .mp-mark:active { transform: scale(0.97); }
 .mp-page .mp-mark:hover { filter: brightness(1.04); }
 .mp-page .mp-mark .mp-avatar { width: 46px; height: 46px; }
-/* 昵称那一格：同一支暖灰，圆角同一档，标签浮在里面（和全站那一套一样）。 */
+/* 昵称那一格：同一支暖灰，圆角同一档，**格子里只有一层字**。
+   全站表单那一套是「标签浮在框里 ＋ 占位字只在有焦点时现身」（见 .auth-field），而这一
+   页照设计稿要那句占位字一直看得见——两条凑在一起就是《你的名字》和《起个名字》叠印在
+   同一处（玩家 2026-09 拍到的「严重的覆盖、穿模」）。现在这一格没有标签那一层了
+   （multiplayer.ts 里删了那个 span，名字移进 aria-label），留下的是占位那一句。
+   上下内边距因此改回对称：没有浮标签要让位，字就该待在格子正中；横向居中是照设计稿
+   （那格里那句浅色的字画在正中间）。 */
 .mp-page .mp-name-field { flex: 1; margin: 0; }
 .mp-page .mp-name-field input {
   height: 100%; background: var(--mp-warm); border: none; border-radius: var(--r-md);
   color: #FFFFFF; font-size: 1.05rem;
+  padding: 0 14px; text-align: center;
 }
-.mp-page .mp-name-field input::placeholder { color: rgba(255, 255, 255, 0.62); }
-.mp-page .mp-name-field > span { color: rgba(255, 255, 255, 0.72); }
-.mp-page .mp-name-field > input:focus + span,
-.mp-page .mp-name-field > input:not(:placeholder-shown) + span { color: #FFFFFF; }
+/* 这一条是有意压过 .auth-field input:not(:focus)::placeholder 的（那边把占位字藏到有
+   焦点才露）——这一格的占位字就是它唯一的一层字，藏掉就成了一个空盒子。 */
+.mp-page .mp-name-field input::placeholder,
+.mp-page .mp-name-field input:not(:focus)::placeholder { color: rgba(255, 255, 255, 0.72); }
 
 /* ---- 一行两样：《开小屋》 ＋ 竖着的《竞赛》开关 ---- */
 .mp-open-row { display: flex; align-items: stretch; gap: 10px; }
@@ -4515,40 +4523,76 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    票」写在票口上（和主菜单上锁着的玩法同一手）。 */
 .mp-create--locked .cta-lock { width: 17px; height: 17px; flex: none; }
 
-/* 《竞赛》那根竖条。玩家先前定的是「一个开关（同色盲友好模式）在角落」，这一版设计稿
-   把它画成贴着大键右边的一根竖条——同一颗开关，换了个样子：白点在上是关、滑到下是开，
-   位置和颜色一起说话，不用读字（这一页四种语言，而「竞赛」两个字各写各的）。 */
+/* 《Pro》那根竖条。玩家先前定的是「一个开关（同色盲友好模式）在角落」，这一版设计稿
+   把它画成贴着大键右边的一根细竖条——同一颗开关，换了个样子：白点在上是关、滑到下是
+   开，位置和颜色一起说话，不用读字。
+
+   **白点和那个词都是绝对定位的，位置由这根条子自己的高度算出来**，这是上一版那个
+   「白点完全跑出开关区域」（玩家 2026-09 拍到）的修法。上一版两样都排在流里，拨开时
+   那个词靠 order: -1 跳到上面——白点于是先被重排往下推了一整个词的高度（词高 ＋ 间
+   距），然后**又**加上 translateY(26px)，两下叠起来直接冲出条子外 16px。
+   现在换成 top：关是 top: 4px，开是 top: calc(100% - 30px)，两头都咬着条子自己的边，
+   条子多高都算得对，冲不出去。过冲那一下（.32s 那条曲线）最多越界 9%——白点走 37px，
+   越界约 3.3px，留的边是 4px，所以弹到最高点也还在条子里面。
+   transform 不用独立的 translate 属性——Chrome 61 不认识后者（那一处栽过一次）。 */
 .mp-contest-pill {
-  flex: 0 0 auto; width: 54px; padding: 8px 0 10px; border: none; cursor: pointer;
+  position: relative;
+  flex: 0 0 auto; width: 34px; padding: 0; border: none; cursor: pointer;
   border-radius: var(--r-full); background: var(--mp-blue);
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 200ms ease;
 }
 .mp-contest-knob {
-  flex: none; width: 26px; height: 26px; border-radius: 50%; background: #FFFFFF;
+  position: absolute; left: 4px; top: 4px;
+  width: 26px; height: 26px; border-radius: 50%; background: #FFFFFF;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
   /* 和别处那颗开关同一条过冲曲线（style.css 的 .pill-switch-knob）：弹一下再落定，
-     所以「拨过去了」这件事不用读字也看得出。transform 不用独立的 translate 属性——
-     Chrome 61 不认识后者（那一处栽过一次）。 */
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+     所以「拨过去了」这件事不用读字也看得出。 */
+  transition: top 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+/* 那个词贴着白点没去的那一头。它不跟着动画走——一个词跳过去就够了，两样东西同时在
+   动反而看不清是哪一样在说话。 */
 .mp-contest-tag {
-  font-size: 0.66rem; line-height: 1.1; color: rgba(255, 255, 255, 0.92);
-  letter-spacing: 0.02em; text-align: center; padding: 0 2px;
+  position: absolute; left: 0; right: 0; bottom: 7px;
+  font-size: 0.68rem; line-height: 1.1; color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.02em; text-align: center;
+  font-family: 'Fraunces', Georgia, serif;
 }
-/* 拨开：整根条子换成强调色，白点滑到底下。 */
-.mp-contest-pill[aria-checked='true'] { background: var(--accent); }
-.mp-contest-pill[aria-checked='true'] .mp-contest-knob { transform: translateY(26px); }
-.mp-contest-pill[aria-checked='true'] .mp-contest-tag { order: -1; }
+/* 拨开：白点滑到底下，那个词让到上面，整根条子换个颜色。
+   换的是**绿**不是那支强调色：强调色就是旁边那颗大键的红——上一版拨开之后条子和大键
+   成了同一块红，白点吊在下面像掉出来的零件（玩家那张截图）。绿是这套色板里本来就有的
+   第二支（--accent-2），和红、和条子那支蓝都分得开。颜色之外位置也在说话（白点在下、
+   词在上），所以色觉受限的人不靠颜色也读得出。 */
+.mp-contest-pill[aria-checked='true'] { background: var(--accent-2); }
+.mp-contest-pill[aria-checked='true'] .mp-contest-knob { top: calc(100% - 30px); }
+.mp-contest-pill[aria-checked='true'] .mp-contest-tag { bottom: auto; top: 8px; }
 .mp-contest-pill:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   .mp-contest-pill, .mp-contest-knob { transition: none; }
 }
-/* 设计稿上没有这一行，但它必须有字（见 multiplayer.ts 那段注释）。最轻的一档。 */
+/* 那一行小字：**只有拨开了 Pro 才看得见**（玩家 2026-09：「只有在打开了 Pro 的时候在
+   现在的位置和形式出现《up to 20…》的字样，不开的时候没有」）。
+   藏的是 visibility 不是 display：高度一直留着，所以拨开关的时候底下那四根条子一个像
+   素都不挪——玩家要的是「在现在的位置出现」。visibility: hidden 同时把它从读屏软件那
+   棵树上摘掉，所以没拨的人也不会听到它。 */
 .mp-contest-hint {
   margin: 6px 0 0; text-align: center; font-size: 0.72rem; color: var(--ink-faint);
   line-height: 1.3;
+  visibility: hidden;
+}
+.mp-open--contest .mp-contest-hint { visibility: visible; }
+
+/* 那颗键上被换掉的那个词（room ↔ contest）。淡进来一下，所以「动的是这个词」看得出。
+   inline-block 是要的：transform 对纯 inline 元素不起作用。 */
+.mp-swap { display: inline-block; }
+.mp-swap--in { animation: mp-swap-in 260ms ease; }
+@keyframes mp-swap-in {
+  0% { opacity: 0; transform: translateY(-5px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 词照换（那是信息），只是不动。 */
+  .mp-swap--in { animation: none; }
 }
 
 /* ---- 四根长条：屋号那四位，打满直接进屋 ---- */
@@ -4559,9 +4603,14 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
 }
-.mp-page .mp-code-field .pin-row { gap: 10px; }
+/* 条子的**比例照设计稿量出来的那个数**：稿上一根 120 宽 286 高，1 : 2.38（玩家
+   2026-09：「下方的四个四位数 code 部分要和设计图一样的位置和比例」）。上一版是
+   72×92 的矮方块，玩家一眼就看出不是那张图——稿上画的是四根**长条**。
+   这儿定的是缝（13px）和高（168px），宽由那一列的 320px 自己分：(320−39)/4 = 70.25，
+   168 / 70.25 = 2.39，和稿上那个 2.38 对得上。缝和宽的比也照稿（22/120 ≈ 0.18）。 */
+.mp-page .mp-code-field .pin-row { gap: 13px; }
 .mp-page .mp-code-field .pin-cell {
-  height: 92px; border: none; border-radius: var(--r-md);
+  height: 168px; border: none; border-radius: var(--r-md);
   background: var(--mp-blue); color: #FFFFFF;
   font-family: 'Fraunces', Georgia, serif; font-size: 1.9rem; font-weight: 600;
 }
@@ -4589,29 +4638,20 @@ html.is-room-home .home-nav { display: none; }
    宽度跟 .mp-join-block 一样 320px：上下两块（开／进）左右对齐，读起来才是两块，
    而不是一堆居中的东西。 */
 .mp-open { width: 100%; max-width: 320px; margin: 0 auto; }
-/* 开关那一行靠右，就是「角落」。
-   text-align 不管用（它是 flex 子项里的 flex 容器），用 margin-left: auto。 */
-.mp-contest-row {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 0 2px auto; padding: 2px 2px 2px 8px;
-  border: none; background: none; cursor: pointer;
-  color: var(--ink-soft); font: inherit; font-size: 0.8rem; letter-spacing: 0.02em;
-  -webkit-tap-highlight-color: transparent;
-}
-.mp-contest-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
-/* 拨过去的时候那两个字也跟着醒一档：开关自己的颜色和位置是主要那一半，这一档只是
-   让「哪一行在说话」更明显，所以只动颜色，不动字号（动字号整行会跳）。 */
-.mp-contest-row[aria-checked='true'] { color: var(--accent-ink); }
-/* 这一颗开关的轨道底色：关着的时候走通用的 --line（和别处一样），打开是
-   --accent-2。不像 #cvdRow 那样写死一个橙——那一颗是界面稿上单独调的色。 */
 /* 键本身居中，外边距归 .genius-cta 自己管（它是 width: fit-content + auto 居中）。 */
 .mp-open .genius-cta { margin-top: 0; margin-bottom: 4px; }
-/* 那一行解释：贴着它解释的那个开关，不要再撑开一层行距。 */
-.mp-contest-hint { margin: 0 0 2px; }
+/* 这儿从前还有一段 .mp-contest-row（上一版那颗「贴在右上角」的开关）和一条
+   `.mp-contest-hint { margin: 0 0 2px }`。元素在这一版换成了那根竖条，规则却留着——
+   而那条 margin 正好压在上面新写的那条上（同样的 specificity，后写的赢），四根条子
+   上面那道缝因此少了 7px。一起删掉：屏幕上不存在的元素，样式表里也不该有。 */
 
 .mp-join-block { width: 100%; max-width: 320px; margin: 0 auto; }
 .mp-join-block .mp-code-field { margin: 0 0 10px; }
 .mp-join-block .mp-code-field span { text-align: center; }
+/* 四根条子上下两道缝，也是照设计稿量的：上面离那颗大键 38px，下面离《返回》那颗圆盘
+   72px（稿上换算到 390 宽的屏幕）。上面那一道里坐着 Pro 那行小字——它平时看不见，位置
+   一直留着（见 .mp-contest-hint）。 */
+.mp-page .mp-join-block { margin: 11px auto 50px; }
 /* 屋号那一格自己就是个「大号的格子」：2rem、居中、拉开字距。浮动标签那一套在这儿要
    让路——标签不压在数字上，它就挂在框的上沿，一直挂着（这个框只有四位数字，没有「空
    着像占位提示」那个需求）。 */

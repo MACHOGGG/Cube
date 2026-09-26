@@ -276,6 +276,22 @@ export interface I18nStrings {
   mpIntro: string;
   mpCreate: string;
   mpContest: string;
+  /**
+   * 《开小屋》里被换掉的那一段，和它换成的那一段。
+   *
+   * 拨开 Pro 之后那颗键上**只有这一段字在动**（玩家 2026-09：「在打开 pro 的开关后，
+   * Open a room 中只有 room 一词动态被替换成了 contest」）——动词留在原地，换的是宾语。
+   * 整句换掉的话，屏幕上是一整行字跳了一下，看不出「变的是哪一件事」。
+   *
+   * 所以每种语言在这儿各记**自己那一段最小的、换完还通顺的**：英文是一个词（room →
+   * contest），法文必须连冠词一起换（une salle → un concours，阴阳性不同），中文是那
+   * 两个字（小屋 → 竞赛）。
+   *
+   * 铁律：`mpCreate` 里必须找得到 `mpCreateNoun`，换完必须**一字不差等于** `mpContest`
+   * ——这两条由 scripts/check-room-word.mjs 钉着，翻译改一半就当场红。
+   */
+  mpCreateNoun: string;
+  mpContestNoun: string;
   mpContestHint: string;
   mpJoin: string;
   mpNameLabel: string;
@@ -700,6 +716,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpIntro: 'Put up a little room, one and the same board, and race.',
     mpCreate: 'Open a room',
     mpContest: 'Open a contest',
+    mpCreateNoun: 'room',
+    mpContestNoun: 'contest',
     mpContestHint: 'Up to 20 · you watch, you don’t play',
     mpJoin: 'Join a room',
     mpNameLabel: 'Your name',
@@ -1020,6 +1038,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpIntro: 'Montez une petite salle, un seul et même plateau, et faites la course.',
     mpCreate: 'Ouvrir une salle',
     mpContest: 'Ouvrir un concours',
+    mpCreateNoun: 'une salle',
+    mpContestNoun: 'un concours',
     mpContestHint: 'Jusqu’à 20 · vous regardez, sans jouer',
     mpJoin: 'Rejoindre une salle',
     mpNameLabel: 'Votre nom',
@@ -1340,6 +1360,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpIntro: '蓋起一個小屋，同樣的棋盤，與大家競賽',
     mpCreate: '開小屋',
     mpContest: '開競賽',
+    mpCreateNoun: '小屋',
+    mpContestNoun: '競賽',
     mpContestHint: '最多 20 人 · 你主持、看即時榜單，不下場',
     mpJoin: '加入小屋',
     mpNameLabel: '你的名字',
@@ -1660,6 +1682,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpIntro: '盖起一个小屋，同样的棋盘，与大家竞赛',
     mpCreate: '开小屋',
     mpContest: '开竞赛',
+    mpCreateNoun: '小屋',
+    mpContestNoun: '竞赛',
     mpContestHint: '最多 20 人 · 你主持、看实时榜单，不下场',
     mpJoin: '加入小屋',
     mpNameLabel: '你的名字',

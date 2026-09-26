@@ -109,6 +109,33 @@ const { ctx, p } = await hostPage();
       label: c?.getAttribute('aria-label') ?? '',
       ctaLabel: document.querySelector('#mpCreateLabel')?.textContent?.trim() ?? '',
       hint: document.querySelector('.mp-contest-hint')?.textContent?.trim() ?? '',
+      // 白点有没有待在条子里（关着的时候）。负数＝探出去了。
+      knobIn: (() => {
+        const k = c?.querySelector('.mp-contest-knob');
+        if (!c || !k) return null;
+        const a = c.getBoundingClientRect(), b = k.getBoundingClientRect();
+        return { top: Math.round(b.top - a.top), bottom: Math.round(a.bottom - b.bottom) };
+      })(),
+      hintVisible: (() => {
+        const h = document.querySelector('.mp-contest-hint');
+        return !!h && getComputedStyle(h).visibility === 'visible';
+      })(),
+      hintBox: (() => { const h = document.querySelector('.mp-contest-hint'); return h ? box(h) : null; })(),
+      pinBox: (() => { const r = document.querySelector('.mp-code-field .pin-row'); return r ? box(r) : null; })(),
+      // 昵称那一格屏幕上有几层字：占位一句，加上（从前那个）浮动标签。
+      nameLayers: (() => {
+        const f = document.querySelector('.mp-name-field');
+        if (!f) return null;
+        const input = f.querySelector('input');
+        const ph = input?.getAttribute('placeholder') ?? '';
+        const phShown = !!ph && getComputedStyle(input, '::placeholder').color !== 'rgba(0, 0, 0, 0)';
+        const spans = [...f.querySelectorAll('span')]
+          .filter((e) => (e.textContent || '').trim() && getComputedStyle(e).visibility !== 'hidden'
+                         && getComputedStyle(e).display !== 'none');
+        return { ph, phShown, spans: spans.map((e) => e.textContent.trim()) };
+      })(),
+      // 四根条子：稿上是长条（120 × 286，1 : 2.38），不是矮方块。
+      cell: (() => { const e = document.querySelector('.mp-code-field .pin-cell'); return e ? box(e) : null; })(),
       overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       // 设计稿上这一页只有一颗大键。
       creates: document.querySelectorAll('.mp-page--home .mp-create').length,
@@ -136,6 +163,25 @@ const { ctx, p } = await hostPage();
     look.contest.w < look.create.w * 0.4, `开关 ${look.contest.w}px / 键 ${look.create.w}px`);
   check('底下那一行说清了「20 人」和「你不下场」（必须有字的地方）',
     /20/.test(look.hint) && /不下场|不参|主持/.test(look.hint), look.hint);
+  // 玩家 2026-09：「只有在打开了 Pro 的时候……出现《up to 20…》的字样，不开的时候没有」。
+  check('没拨的时候那一行看不见', look.hintVisible === false, look.hintVisible ? '还在屏幕上' : '收起来了');
+  // **上一版那个 bug**：白点拨过去之后整颗吊在条子外面（玩家拍到）。两个状态都量，
+  // 而且量的是四条边的相对位置——「滑到底下」和「掉出条子」在纵坐标上只差这一点。
+  check('关着的时候白点在条子里',
+    look.knobIn && look.knobIn.top >= 0 && look.knobIn.bottom >= 0, JSON.stringify(look.knobIn));
+  // 昵称那一格只准有一层字（占位那一句）。上一版标签和占位叠印在同一处——玩家那张
+  // 截图上《你的名字》和《起个名字》糊成一团。
+  check('昵称那一格只有一层字',
+    look.nameLayers && look.nameLayers.phShown && look.nameLayers.spans.length === 0,
+    JSON.stringify(look.nameLayers));
+  // 四根条子的比例照设计稿（1 : 2.38）。上一版是 72×92 的矮方块，玩家一眼看出不是那张
+  // 图。留一档宽松（2.0–2.8），矮屏幕那两档收过高度，但条子还是条子。
+  check('屋号那四格是长条，比例和设计稿对得上',
+    look.cell && look.cell.h / look.cell.w >= 2.0 && look.cell.h / look.cell.w <= 2.8,
+    look.cell ? `${look.cell.w}×${look.cell.h} = 1 : ${(look.cell.h / look.cell.w).toFixed(2)}` : '没找到');
+  check('那四格和上面那一块左右对齐（同一列）',
+    look.cell && look.row && Math.abs(look.pinBox.x - look.row.x) <= 2,
+    look.pinBox && look.row ? `条子 x=${look.pinBox.x} / 那一行 x=${look.row.x}` : '没找到');
   check('设置页没有被撑出横向滚动', look.overflowX === 0, `${look.overflowX}px`);
   check('这一页不摆底排（个人主页 / 记录与排名）', !look.navShown, look.navShown ? '还在' : '收起来了');
 
@@ -150,19 +196,60 @@ const { ctx, p } = await hostPage();
   const after = await p.evaluate(() => {
     const c = document.querySelector('#mpContest');
     const k = c?.querySelector('.mp-contest-knob');
+    const box = (e) => { const r = e.getBoundingClientRect();
+      return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; };
     return {
       checked: c?.getAttribute('aria-checked'),
       ctaLabel: document.querySelector('#mpCreateLabel')?.textContent?.trim() ?? '',
+      word: document.querySelector('#mpCreateWord')?.textContent?.trim() ?? '',
       knobY: c && k ? Math.round(k.getBoundingClientRect().top - c.getBoundingClientRect().top) : null,
+      knobIn: (() => {
+        if (!c || !k) return null;
+        const a = c.getBoundingClientRect(), b = k.getBoundingClientRect();
+        return { top: Math.round(b.top - a.top), bottom: Math.round(a.bottom - b.bottom) };
+      })(),
+      hintVisible: (() => {
+        const h = document.querySelector('.mp-contest-hint');
+        return !!h && getComputedStyle(h).visibility === 'visible';
+      })(),
+      hintBox: (() => { const h = document.querySelector('.mp-contest-hint'); return h ? box(h) : null; })(),
+      pinBox: (() => { const r = document.querySelector('.mp-code-field .pin-row'); return r ? box(r) : null; })(),
     };
   });
   check('拨过去：开关记住了', after.checked === 'true', String(after.checked));
   check('拨过去：那颗键的字换成了《开竞赛》',
     after.ctaLabel !== before && after.ctaLabel.length > 0, `${before} → ${after.ctaLabel}`);
-  // 白点真的滑到了下面。这一条钉的是它走 transform（不是那个 Chrome 61 不认识的独立
+  // 玩家 2026-09：「Open a room 中只有 room 一词动态被替换成了 contest」。所以键上除了
+  // 那一个词，**其余一个字都不许动**——整句换掉也能让上面那条成立，这一条才咬得住。
+  // （逐语种的那两条铁律由 check-room-word.mjs 在 CI 里盯着，这儿量的是真 DOM。）
+  // 「只换了一段」怎么量：掐掉两头**一模一样**的部分，剩下中间那一截就是换掉的。
+  // 不按空格切词——这道门跑的是中文（「开小屋」→「开竞赛」里一个空格都没有）。
+  const head = (() => { let i = 0; while (i < before.length && before[i] === after.ctaLabel[i]) i++; return i; })();
+  const tail = (() => {
+    let i = 0;
+    while (i < before.length - head && i < after.ctaLabel.length - head
+           && before[before.length - 1 - i] === after.ctaLabel[after.ctaLabel.length - 1 - i]) i++;
+    return i;
+  })();
+  const changedTo = after.ctaLabel.slice(head, after.ctaLabel.length - tail);
+  check('拨过去：键上只换了那一个词，其余一个字没动',
+    after.word.length > 0 && head + tail > 0 && changedTo === after.word,
+    `「${before}」→「${after.ctaLabel}」：没动的有 ${head + tail} 个字，换掉的那一截是「${changedTo}」，` +
+    `键上那个词是「${after.word}」`);
+  // 白点真的滑到了下面。这一条钉的是它走 top（不是那个 Chrome 61 不认识的独立
   // translate 属性）——不走的话拨过去白点一动不动。
   check('拨过去：白点滑到了下面（不是原地不动）', after.knobY !== null && after.knobY >= 26,
     `白点离顶 ${after.knobY}px`);
+  // **而且还在条子里**。上一版正是在这一步掉出去的：重排把它往下推了一整个词的高度，
+  // 再加上那一下位移，整颗吊在条子外面 16px。
+  check('拨过去：白点还在条子里（没掉出去）',
+    after.knobIn && after.knobIn.top >= 0 && after.knobIn.bottom >= 0, JSON.stringify(after.knobIn));
+  check('拨过去：那一行现身了', after.hintVisible === true, String(after.hintVisible));
+  // 「在现在的位置出现」——出现的时候位置不动，底下那四根条子也不许被顶下去。
+  check('拨过去：那一行还在原处，四根条子一个像素没挪',
+    look.hintBox && after.hintBox && look.pinBox && after.pinBox &&
+      look.hintBox.y === after.hintBox.y && look.pinBox.y === after.pinBox.y,
+    `那一行 ${look.hintBox?.y} → ${after.hintBox?.y} · 条子 ${look.pinBox?.y} → ${after.pinBox?.y}`);
 }
 
 // ---- 2. 二十个人的竞赛屋：主持人没有棋盘，榜上没有他自己，而且摆得下 ------
