@@ -53,6 +53,7 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
+const { readFileSync } = await import('node:fs');
 const room = (await import('../api/room.js')).default;
 const { saveAccount, newAccount } = await import('../api/_accounts.js');
 
@@ -763,6 +764,95 @@ async function agePast(code, playerId) {
       held?.meta?.learnHold === true && after?.meta?.learnHold === false,
       `挂起 ${held?.meta?.learnHold} → ${after?.meta?.learnHold}`,
     );
+  }
+
+  // ---- ⑮ 挂起那一半也要有保险，而且不许把倒数锁死 ----------------------
+  //
+  // ⑭ 补的是**放行**那一半。挂起那一半（learn 里「这一局第一次有人去学」）原先自己
+  // 一句 hset，把进函数时读到的整份 meta 写回去——和放行那一半是同一个毛病，只是没
+  // 人补：中间 end() 写进的 endedAt、start() 换上的 round，都会被它抹掉。
+  //
+  // 修法只有一条路走得通：挂起也过 patchMeta，但**用自己那一格锁**。takeRoomLock
+  // 抢到就不还（一局里「放行」只许发生一次，这是故意的），所以挂起要是和放行共用
+  // lh:N，顺序就成了「挂起抢走 → 他学完了 → 放行抢不到 → 倒数永远不放行，全屋干等
+  // 到锁过期」。那比原来那个 bug 严重得多：原来是零点几秒的窗口里偶尔撞上，这个是
+  // 每次有人说「不会」都必然发生。所以这一节两条都要量。
+  {
+    // ① 挂起撞散场：endedAt 不许被抹掉。
+    let worstHeldEnd = null;
+    for (const n of OFFSETS) {
+      const { code, host, guest } = await openRoom();
+      await ageStart(code);
+      const [, ] = await Promise.all([
+        call({ action: 'end', code, ...host }),
+        ticks(n).then(() => call({ action: 'learn', code, ...guest, learning: true })),
+      ]);
+      const after = await hgetall(roomKey(code));
+      if (!after?.meta?.endedAt) { worstHeldEnd = `错位 ${n}：endedAt 被抹了`; break; }
+    }
+    check('⑮ 挂起撞散场：endedAt 不许被抹掉', worstHeldEnd === null, worstHeldEnd || `${OFFSETS.length} 档都扫过`);
+
+    // ② 挂起撞开新局：round 不许被拉回上一局。
+    let worstHeldRound = null;
+    for (const n of OFFSETS) {
+      const { code, host, guest } = await openRoom();
+      await ageStart(code);
+      const before = (await hgetall(roomKey(code)))?.meta?.round ?? 0;
+      await Promise.all([
+        call({ action: 'start', code, ...host, mode: 'square' }),
+        ticks(n).then(() => call({ action: 'learn', code, ...guest, learning: true })),
+      ]);
+      const after = (await hgetall(roomKey(code)))?.meta?.round ?? 0;
+      if (after < before) { worstHeldRound = `错位 ${n}：局次 ${before} → ${after}`; break; }
+    }
+    check('⑮ 挂起撞开新局：局次不许被拉回上一局', worstHeldRound === null, worstHeldRound || `${OFFSETS.length} 档都扫过`);
+
+    // ③ **同一局里，挂起之后放行必须成功。** 这一条防的是上面说的那个死锁——两把锁
+    //    共用一格的话它必然红，而 ①② 两条在那种写法下**照样是绿的**（挂起写成功了，
+    //    只是之后再也放不行）。所以缺了这一条，那个更严重的毛病会从门底下溜过去。
+    {
+      const { code, host, guest } = await openRoom();
+      await call({ action: 'learn', code, ...guest, learning: true });
+      const held = (await hgetall(roomKey(code)))?.meta?.learnHold;
+      // 学完了说一声：走 releaseHold。
+      await call({ action: 'learn', code, ...guest, learning: false });
+      const after = (await hgetall(roomKey(code)))?.meta?.learnHold;
+      check(
+        '⑮ 同一局里，挂起之后放行必须成功（两把锁不许共用一格）',
+        held === true && after === false,
+        `挂起 ${held} → 放行后 ${after}`,
+      );
+      void host;
+    }
+  }
+
+  // ---- ⑯ 直接写 meta 的地方只许有三处 --------------------------------------
+  //
+  // 上面 ⑭⑮ 补的是两个具体的调用点。这一条防的是**第四个悄悄长出来**：读整份 meta、
+  // 改两个字段、整份写回去，这个写法本身就是那个 bug，下一个人照旁边抄一遍就又来一次。
+  //
+  // 三处是允许的：patchMeta 自己（它就是那套保险）、start() 和 end()——那两个要跑几十
+  // 趟库才写到 meta，各自有更重的一次性锁，硬塞进 patchMeta 只会把两套锁搅在一起。
+  {
+    const src = readFileSync(new URL('../api/room.js', import.meta.url), 'utf8');
+    const lines = src.split('\n');
+    /** 某一行落在哪个 function 里——从它往上找最近的一行 `function 名字(`。 */
+    const ownerOf = (idx) => {
+      for (let i = idx; i >= 0; i--) {
+        const m = lines[i].match(/^(?:async )?function ([A-Za-z0-9_]+)\s*\(/);
+        if (m) return m[1];
+      }
+      return '(顶层)';
+    };
+    const writers = lines
+      .map((l, i) => (l.includes("hset(roomKey(code), 'meta'") ? ownerOf(i) : null))
+      .filter(Boolean);
+    const allowed = ['patchMeta', 'start', 'end'];
+    const stray = writers.filter((w) => !allowed.includes(w));
+    check('⑯ 直接写 meta 的只有 patchMeta / start / end', stray.length === 0, `写 meta 的是：${writers.join('、')}`);
+    // 量程：上面那句要真的找得到几处写入。一处都没找到（正则失配、文件改了写法）
+    // 的话 stray 也是空的，这一条会变成空判——那是最难发现的一种假绿。
+    check('⑯ 量程：真的找到了三处写 meta', writers.length === 3, `${writers.length} 处`);
   }
 }
 

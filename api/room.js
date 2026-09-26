@@ -676,6 +676,18 @@ const END_LOCK = 'le:end';
  */
 const holdLockKey = (round) => 'lh:' + String(round);
 /**
+ * 「把这一局的开赛挂起」那一格锁——和上面那把**必须是两格**。
+ *
+ * takeRoomLock 抢到就不还（除非过了 LOCK_STALE_MS），这是故意的：一局里「放行」只
+ * 许发生一次。所以挂起要是和放行共用 `lh:N`，顺序就成了：有人说「我不会玩」→ 挂起
+ * 抢走了 lh:N → 他学完了 → releaseHold 抢不到 → **倒数永远不会被放行，全屋干等到
+ * 锁过期（20 秒）**。那比它要修的那个 bug 严重得多：原来是零点几秒的窗口里偶尔撞
+ * 上，这个是每次有人说「不会」都必然发生。
+ *
+ * 挂起和放行在同一局里各自只发生一次，所以正好各用一把自己的一次性锁。
+ */
+const holdSetLockKey = (round) => 'lhs:' + String(round);
+/**
  * 一把锁「多久没动静就算是废的」。
  *
  * 锁本身带来一个新毛病：抢锁和把结果写进 meta 之间隔着一整段记账循环（20 个
@@ -1276,6 +1288,10 @@ async function join(res, body) {
  * 的：一把 Promise.all 同时发两条是绿的（两条读到同一份快照，写回去的值一样），
  * 只有把轮询那条往后推到恰好落在 end() 写完 meta 之后，才量得出来。
  *
+ * `lockField` 是「这一次锁哪一格」。同一局里各做一次的事，各用各的锁——挂起和放行都
+ * 只发生一次，但它们是**两件**事，共用一把一次性的锁会让后一件永远抢不到（见
+ * holdSetLockKey 那段：倒数会被锁死 20 秒）。
+ *
  * 三道保险，缺一不可：
  *   ① 抢一格一次性的锁——两条同时看到「学的人不见了」（轮询每秒一次、屋里几
  *      个人就有几条）只许一条动手；
@@ -1284,8 +1300,8 @@ async function join(res, body) {
  *   ③ 重读一遍，往**刚读到的那份**上盖，并且散了/换局了/别人已经放行过了都
  *      直接回头。
  */
-async function patchMeta(code, round, patch) {
-  if (!(await takeRoomLock(code, holdLockKey(round)))) return null;
+async function patchMeta(code, round, lockField, patch) {
+  if (!(await takeRoomLock(code, lockField))) return null;
   const live = await readRoom(code);
   if (!live) return null;
   const meta = live.meta || {};
@@ -1312,7 +1328,7 @@ async function patchMeta(code, round, patch) {
  */
 async function releaseHold(code, meta) {
   const round = Number(meta.round) || 0;
-  const released = await patchMeta(code, round, (live) => ({
+  const released = await patchMeta(code, round, holdLockKey(round), (live) => ({
     learnHold: false,
     startAt: Date.now() + countdownMsFor(live.mode),
     countFrom: countFromFor(live.mode),
@@ -1515,7 +1531,16 @@ async function start(res, body) {
   // 变，大家一起数到 0；答「不会」走 learn 那条路，整屋等他。
   const family = familyOf(body.mode);
   const novice = Object.entries(hash).some(
-    ([f, seat]) => f.startsWith('p:') && seat && !seat.left && !(seat.seen || []).includes(family),
+    ([f, seat]) =>
+      f.startsWith('p:') &&
+      seat &&
+      !seat.left &&
+      // 竞赛屋的主持人不参赛（见 isSpectator），所以他会不会玩这一族跟这一局没关系。
+      // 不排掉他的话：他那台设备从来不打，`seen` 里永远是空的，于是**每一局**都被判
+      // 「屋里可能有新手」——全屋的倒数一直从 8 数起（横屏 9），而那四秒是留给一个
+      // 压根不下场的人的。那四秒还会连着把「问他会不会」那一屏弹到他脸上。
+      !isSpectator(hash.meta, f.slice(2)) &&
+      !(seat.seen || []).includes(family),
   );
   const meta = {
     ...hash.meta,
@@ -1881,7 +1906,21 @@ async function learn(res, body) {
     // 这一局第一次有人去学：把开赛挂起。同一局只挂一次——被放行之后（学完、
     // 走了、二十秒没动静）再来的「我在学」不再把大家拦住：他们已经在打了。
     if (meta.round && meta.heldRound !== meta.round) {
-      await hset(roomKey(code), 'meta', { ...meta, learnHold: true, heldRound: meta.round });
+      // 走 patchMeta，不自己 hset：原先这一处拿进函数时读到的**整份** meta 写回去，
+      // 中间只要 end() 写进了 endedAt、或者 start() 换了 round，这一写就把它们整个
+      // 抹掉。玩家看到的是：屋主明明按了《解散小屋》，还在等的人却看到「等屋主开下
+      // 一局」，要干等到 90 秒外的「房间被取消」，而不是当场那张该出现的战绩卡。
+      //
+      // patchMeta 那三道保险（抢锁、start/end 正在办事就不写、重读之后只往最新那份
+      // 上盖）这一边全部原样继承。锁用的是自己那一格（holdSetLockKey）——和放行共用
+      // 一把会把倒数锁死，见那个常量的说明。
+      // heldRound 取**重读之后那一份**的 round（patch 收到的就是它），不取进函数时
+      // 读到的那个。两者此刻一定相等（patchMeta 第三道保险就是「局次对不上直接回
+      // 头」），写成 live.round 只是让这一行不必依赖那个前提。
+      await patchMeta(code, meta.round, holdSetLockKey(meta.round), (live) => ({
+        learnHold: true,
+        heldRound: live.round,
+      }));
       fresh = await freshRoom(code);
     }
   } else if (meta.learnHold && !anyoneLearning(fresh)) {

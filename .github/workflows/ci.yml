@@ -372,3 +372,32 @@ jobs:
           # 盲等出来的是偶发红，而偶发红最后一定会被人加 continue-on-error。
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8814/ && break; sleep 0.25; done
           node scripts/check-board-fit.mjs http://localhost:8814/
+      # 下面这三道，和上面四道是同一轮（1be498a）修好的——那一轮一口气修了五道
+      # 崩在选择器上、崩了还 exit 0 的门，可只有 check-menu / check-overlap 两道进了
+      # CI。另外三道为什么没进，当时没写；重新看过一遍，没有理由不收：都只要一台
+      # dev-server、端口本来就各不相同，也都不带先前就存在的红（小红书那几道还是暂
+      # 时不收，check-oldcss 带着一条横屏红，见那一轮的提交说明）。写法照上面四道：
+      # nohup + 有界的 curl 就绪循环。
+      - name: 天才特供那几页
+        run: |
+          nohup node scripts/dev-server.mjs 8815 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8815/ && break; sleep 0.25; done
+          node scripts/check-perk-pages.mjs http://localhost:8815/
+      # 新手拦截底下那颗《我会玩》：按下去立刻跳过引导，但**每个玩法头一回进去自带
+      # 的教学照旧**。第二条最容易被顺手做掉（把跳过实现成「所有 firstTimeIn 都记成
+      # 看过」就一次性把教学条也关了，不报错、不白屏，只是新人从此没人教）。
+      # 只喂网页那一端：小红书那一半要先出预览页（npm run preview:xhs），那是另一
+      # 条路，手跑的时候带上第三个参数就连着验。
+      - name: 《我会玩》跳过引导，但不跳过教学
+        run: |
+          nohup node scripts/dev-server.mjs 8953 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8953/ && break; sleep 0.25; done
+          node scripts/check-knowhow.mjs http://localhost:8953/
+      # 收单方审核会照着网站上的陈述逐条核——「网站陈述与实际不符」被直接归为 false
+      # information，比缺一份文档严重。这一道就是那份自查：五张法务静态页、价格、
+      # 订阅入口，按审核看得到的样子走一遍。
+      - name: 收单方审核看得到的那几页
+        run: |
+          nohup node scripts/dev-server.mjs 8818 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8818/ && break; sleep 0.25; done
+          node scripts/check-creem-review.mjs http://localhost:8818/

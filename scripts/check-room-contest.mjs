@@ -234,5 +234,44 @@ const seatOf = (st, id) => (st.players || []).find((p) => p.id === id) || {};
     `${me.total}+${me.score} / ${me.rounds} 局`);
 }
 
+// ---- ⑥ 「屋里可能有新手」不算主持人 ---------------------------------------
+//
+// 开局时如果屋里有人没看过这一族的教学，全屋的倒数多留四秒（ASK_MS），而那个人的
+// 设备会问他「会不会玩」。竞赛屋的主持人**不参赛**（见 isSpectator），所以他会不会
+// 玩这一族跟这一局没关系。
+//
+// 不排掉他的话：他那台设备从来不打，`seen` 里永远是空的，于是**每一局**都被判「可能
+// 有新手」——倒数一直从 8 数起、每一局都白等四秒，而那四秒是留给一个压根不下场的人
+// 的；那一屏「你会玩吗」也会弹到他脸上。屏幕上不报错，只是每局都慢四秒。
+//
+// 量的是 countFrom：没有新手就是 4（横屏玩法 5），有新手就 +4。
+{
+  const { code, host } = await open(true);
+  const a = await join(code, '甲');
+  const b = await join(code, '乙');
+  // 两名选手都说自己看过方块这一族了；主持人什么都没说（他不下场）。
+  await call({ action: 'learn', code, ...a, learning: false, seen: ['square'] });
+  await call({ action: 'learn', code, ...b, learning: false, seen: ['square'] });
+  const st = await call({ action: 'start', code, ...host, mode: 'square' });
+  check(
+    '⑥ 竞赛屋：两名选手都看过教学 → 倒数不多留那四秒（主持人不算新手）',
+    st.body.countFrom === 4,
+    `countFrom=${st.body.countFrom}`,
+  );
+  // 尺子：这一条得真的量到了「多留四秒」这件事，不然上面那条在一个永远回 4 的实现
+  // 里也是绿的。让一名选手变回「没看过」，倒数必须变长。
+  const { code: c2, host: h2 } = await open(true);
+  const a2 = await join(c2, '甲');
+  const b2 = await join(c2, '乙');
+  await call({ action: 'learn', code: c2, ...a2, learning: false, seen: ['square'] });
+  void b2; // 乙一句没说 = 没看过
+  const st2 = await call({ action: 'start', code: c2, ...h2, mode: 'square' });
+  check(
+    '⑥ 尺子：真有一名选手没看过 → 倒数确实多留四秒',
+    st2.body.countFrom === 8,
+    `countFrom=${st2.body.countFrom}`,
+  );
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

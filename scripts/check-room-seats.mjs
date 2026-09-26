@@ -131,7 +131,16 @@ const proof = { email: granted.email, accountToken: granted.token, holderCode: g
 const plain = await api({ action: 'create', name: '普通', avatar: { shape: 'circle', hue: 300 }, seen: [], ...proof });
 check('不说是竞赛：开出来的是普通小屋，8 把椅子', plain.status === 200 && plain.body.state.seats === 8, `${plain.status} · ${plain.body.state?.seats}`);
 const arena = await api({ action: 'create', name: '竞赛', avatar: { shape: 'circle', hue: 320 }, seen: [], contest: true, ...proof });
-check('说是竞赛：开出来的是 20 把椅子', arena.status === 200 && arena.body.state.seats === 20, `${arena.status} · ${arena.body.state?.seats}`);
+// 21 把椅子、上限 20 名选手——这两个数**故意不一样**，而这一条就是钉住这一点。
+// 玩家拍的板是「要 20 名选手（连主持人 21 人）」：主持人不参赛，但座位就是身份
+// （s:0…s:N-1 原子占位），他也要占一把。所以 seats 是 21，而屏幕上那行「几/几」
+// 数的是选手（playerSeats = 20）——照椅子数会写成「21/21」，和旁边那句「最多 20
+// 人」对不上，那就是「意料之外的界面」。
+// （这一条原先钉的是 20：座位数改成 21 的那一次没跟着改，于是这道门一直是红的。
+//   它不在 CI 里，所以红了没人看见。）
+check('说是竞赛：开出来的是 21 把椅子（20 名选手 + 主持人）',
+  arena.status === 200 && arena.body.state.seats === 21, `${arena.status} · ${arena.body.state?.seats}`);
+check('而屏幕上那一对数的是选手，上限 20', arena.body.state?.playerSeats === 20, String(arena.body.state?.playerSeats));
 {
   // 竞赛屋真的坐得下第 9 个——上面那间普通屋第 9 个是「满了」。
   const arenaCode = arena.body.code;
@@ -141,7 +150,8 @@ check('说是竞赛：开出来的是 20 把椅子', arena.status === 200 && are
   const seated = many.filter((r) => r.status === 200).length;
   check('竞赛屋坐得下十个客人（屋主 + 10 = 11 > 8）', seated === 10, `${seated}/10`);
   const st = (await api({ action: 'state', code: arenaCode, playerId: arena.body.playerId, playerToken: arena.body.playerToken })).body;
-  check('竞赛屋的 state 一直报 20', st.seats === 20, String(st.seats));
+  check('竞赛屋的 state 一直报 21 把椅子', st.seats === 21, String(st.seats));
+  check('而那一对一直是选手数（上限 20）', st.playerSeats === 20, String(st.playerSeats));
   check('竞赛屋里正好 11 个人', st.players.filter((p) => !p.left).length === 11, String(st.players.length));
 }
 
@@ -184,7 +194,16 @@ await G.page.fill('#mpName', '乙'); await G.page.fill('#mpCode', code2); await 
 await G.page.waitForSelector('.mp-code', { timeout: 10000 });
 await H.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 await H.page.click('#mpPick'); await H.page.waitForSelector('#roomPickBar', { timeout: 8000 });
-await H.page.click('.home-icon-btn[aria-label="无限反转"]'); await H.page.waitForSelector('.flip-page', { timeout: 8000 });
+// $eval 直接在那张卡上派发 click，不走 page.click()。
+//
+// 主菜单换成鱼眼轴之后，不在焦点那一站的卡是缩小、模糊、而且可能整张在视口外的，
+// 过不了 Playwright 的「visible, enabled and stable」那道检查——page.click() 会一直
+// 等到超时（这道门就是这么红的）。真人是滑到它再按；这道门要量的不是「滑得到吗」
+// （那是 check-mode-axis 的事），而是「屋主挑了无限反转之后，那一局怎么走」，所以
+// 直接派发一次真实的 DOM click 就够了。check-first-play 对轴上的卡走的也是这条路。
+await H.page.waitForSelector('.home-icon-btn[aria-label="无限反转"]', { state: 'attached', timeout: 10000 });
+await H.page.$eval('.home-icon-btn[aria-label="无限反转"]', (e) => e.click());
+await H.page.waitForSelector('.flip-page', { timeout: 8000 });
 await H.page.click('.flip-page .slot-pick-opt[data-family="square"]');
 await G.page.waitForSelector('#leaveRoomBtn', { timeout: 25000 });
 await G.page.waitForFunction(() => !document.querySelector('#startOverlay')?.classList.contains('show'), { timeout: 20000 });
