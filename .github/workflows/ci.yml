@@ -126,6 +126,12 @@ jobs:
         run: |
           npx esbuild src/engine/runKey.ts --bundle --format=esm --outfile=/tmp/runkey.mjs
           node scripts/check-run-key.mjs /tmp/runkey.mjs
+      # 登录／改密那几扇窗的表单件。三件事各盯一个「错了不报错」：给密码管理器的那一串
+      # name/autocomplete/type 标注一个都没被动过（改掉之后不报错，只是管理器从此不提示
+      # 保存）、field() 的 DOM 顺序是 input 在前（浮动标签靠相邻兄弟，只能往后看）、六段
+      # 完成度表只挂在设新密码那几处而不是登录页。读源码、几十毫秒。
+      - name: 登录表单那几个零件
+        run: node scripts/check-auth-form.mjs
       # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
       # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
       # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。

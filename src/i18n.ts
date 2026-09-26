@@ -179,6 +179,8 @@ export interface I18nStrings {
   passwordPlaceholder: string;
   /** On the log-in tab, where a passcode is only for code-made accounts. */
   passwordAny: string;
+  /** 密码框底下那六小段的实时文案（给读屏软件）。{n} 是已经打进去的位数。 */
+  pwMeterSay: string;
   /** 付款回来后立刻弹出的设密码窗口。 */
   setPwTitle: string;
   setPwHint: string;
@@ -373,6 +375,10 @@ export interface I18nStrings {
    *  照搬过去是吓唬人——他走了别人接着玩，所以只问要不要走。 */
   mpGuestLeaveWarn: string;
   mpLeaveAnyway: string;
+  /** 《离开小屋》那颗键改成按住生效之后，键上那行字。 */
+  mpLeaveHold: string;
+  /** 长按对开关设备不可达，所以辅助文案里写明还有一条直接的路。 */
+  mpLeaveHoldHint: string;
   mpStay: string;
   /** 房间局里按下《完成》时问的那一句。问的这段时间钟停着、牌也盖上。 */
   mpFinishConfirm: string;
@@ -628,6 +634,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: 'Passcode (6 characters)',
     passwordPlaceholder: '6 letters or digits',
     passwordAny: 'Passcode',
+    pwMeterSay: '6-digit passcode · {n} entered',
     setPwTitle: 'Choose a passcode',
     setPwHint: 'You are a Slides Genius. Set a passcode so this subscription comes back on your other devices — your email address and this passcode are all it takes.',
     setPwLabel: 'Passcode (exactly 6 letters or digits)',
@@ -748,6 +755,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostLeaveWarn: 'Close the room?',
     mpGuestLeaveWarn: 'Leave?',
     mpLeaveAnyway: 'Leave anyway',
+    mpLeaveHold: 'Hold to leave',
+    mpLeaveHoldHint: 'Hold the button, or press Enter',
     mpStay: 'Stay',
     mpFinishConfirm: 'Done?',
     mpRoomCancelled: 'The host has wandered off — the room is closed for now',
@@ -945,6 +954,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: 'Code secret (6 caractères)',
     passwordPlaceholder: '6 lettres ou chiffres',
     passwordAny: 'Code secret',
+    pwMeterSay: 'Code secret à 6 caractères · {n} saisis',
     setPwTitle: 'Choisissez un code secret',
     setPwHint: 'Vous êtes un Slides Génie. Définissez un code secret pour retrouver cet abonnement sur vos autres appareils — votre adresse et ce code secret suffisent.',
     setPwLabel: 'Code secret (exactement 6 lettres ou chiffres)',
@@ -1065,6 +1075,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostLeaveWarn: 'Dissoudre la salle ?',
     mpGuestLeaveWarn: 'Partir ?',
     mpLeaveAnyway: 'Partir quand même',
+    mpLeaveHold: 'Maintenir pour partir',
+    mpLeaveHoldHint: 'Maintenez le bouton, ou appuyez sur Entrée',
     mpStay: 'Rester',
     mpFinishConfirm: 'Terminé ?',
     mpRoomCancelled: 'L’hôte est parti — la salle est fermée pour l’instant',
@@ -1262,6 +1274,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: '密碼（6 位字元）',
     passwordPlaceholder: '6 位數字或字母',
     passwordAny: '密碼',
+    pwMeterSay: '6 位密碼，已輸入 {n} 位',
     setPwTitle: '設定密碼',
     setPwHint: '你已經是 Slides 天才了。設一組密碼，換手機或換電腦時就能把訂閱取回來——只要電子郵件加這組密碼。',
     setPwLabel: '密碼（正好 6 位，數字或字母）',
@@ -1382,6 +1395,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostLeaveWarn: '解散小屋？',
     mpGuestLeaveWarn: '是否離開？',
     mpLeaveAnyway: '還是離開',
+    mpLeaveHold: '按住離開',
+    mpLeaveHoldHint: '按住這顆鍵，或按 Enter',
     mpStay: '留下',
     mpFinishConfirm: '完成了嗎？',
     mpRoomCancelled: '屋主離家出走了，小屋暫時解散',
@@ -1579,6 +1594,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: '密码（6 位字符）',
     passwordPlaceholder: '6 位数字或字母',
     passwordAny: '密码',
+    pwMeterSay: '6 位密码，已输入 {n} 位',
     setPwTitle: '设置密码',
     setPwHint: '你已经是 Slides 天才了。设一组密码，换手机或换电脑时就能把订阅取回来——只要邮箱加这组密码。',
     setPwLabel: '密码（正好 6 位，数字或字母）',
@@ -1699,6 +1715,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpHostLeaveWarn: '解散小屋？',
     mpGuestLeaveWarn: '是否离开？',
     mpLeaveAnyway: '还是离开',
+    mpLeaveHold: '按住离开',
+    mpLeaveHoldHint: '按住这颗键，或按 Enter',
     mpStay: '留下',
     mpFinishConfirm: '完成了吗？',
     mpRoomCancelled: '屋主离家出走了，小屋暂时解散',

@@ -630,6 +630,56 @@ h1 {
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   animation-fill-mode: forwards;
 }
+/* ---- 《还是离开》改成按住生效（ui/confirmLeaveRoom.ts） -------------------
+   这颗键的后果不可逆（座位交回去了，这一局的分也就没了），而它紧挨着《留下》——手指滑
+   一下就按到另一颗。按住这 600ms 里圆环一点点填满，松手 .15s 退回零，所以「我按错了」
+   永远来得及收手。
+
+   填满走 stroke-dashoffset 的 transition，linear：进度条要匀速，用缓动曲线的话中段看着
+   像卡住了。dasharray 是量出来的周长：2π·9 ≈ 56.5。 */
+.leave-hold { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.leave-ring { width: 18px; height: 18px; flex: none; display: block; }
+.leave-ring-track { stroke: var(--line); }
+.leave-ring-fill {
+  stroke: var(--accent);
+  stroke-dasharray: 56.5; stroke-dashoffset: 56.5; stroke-linecap: round;
+  /* 从十二点钟方向开始画，不是三点钟。transform-origin 用百分比，SVG 里那是 viewBox
+     的坐标系——这个 viewBox 是 22×22，所以 50% 就是圆心。 */
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  transition: stroke-dashoffset 150ms linear;
+}
+/* 按住的时候：600ms 匀速填满。松开时这个类被摘掉，回落用上面那条 .15s。 */
+.leave-hold--on .leave-ring-fill { stroke-dashoffset: 0; transition-duration: 600ms; }
+/* 键上那行辅助文案。**必须有字**：一颗只能长按的键，对开关设备的玩家等于一扇锁死的
+   门，所以要写明还有 Enter 这条直接的路（见那个文件开头的说明）。 */
+.leave-hold-hint { margin: 8px 0 0; font-size: 0.74rem; color: var(--ink-faint); }
+
+/* ---- 「不对」那一下（engine/juice.ts 的 shakeReject） ---------------------
+   一处共用的 keyframes，加在 PIN 那一行格子上、或者登录那张卡上。衰减式：−10、8、
+   −6、4、−2，一次 450ms，读起来是「撞了一下然后停住」，不是「一直在抖」。
+   只动 transform，Chrome 61 认得（这颗只在网页端出现，但样式和别的住在一起）。 */
+.err-shake { animation: err-shake 450ms ease-in-out; }
+@keyframes err-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-10px); }
+  30% { transform: translateX(8px); }
+  45% { transform: translateX(-6px); }
+  62% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 不抖。「不对」这件事照样要说出来，所以换成描边闪一次——shakeReject 在这一档
+     直接挂 .err-flash（而不是让这条 keyframes 变成 none），因为一个被 animation:
+     none 掉的类什么都不会发生，那就等于这一下没有任何反馈。 */
+  .err-shake { animation: none; }
+}
+/* 描边闪一次：颜色过渡，不是位移。两头都是 0 宽的环，中间鼓一下。 */
+.err-flash { animation: err-flash 600ms ease-out; }
+@keyframes err-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(190, 87, 98, 0); }
+  20%, 60% { box-shadow: 0 0 0 3px var(--accent); }
+}
+
 /* 教学看完那一把粒子住的那一层（ui/storyTutorial.ts 的 celebrate）。
    浮在整页之上、不挡点击、自己活到粒子死掉为止——因为按下《完成》的同一下就
    要换页，撒在页内的粒子会跟着那一页一起消失。四条边分开写不用 inset 简写：
@@ -3233,15 +3283,49 @@ body:has(.slot-page) .home-nav { display: none; }
   color: var(--accent); border-bottom-color: currentColor;
 }
 .modal .auth-msg { color: var(--accent-ink); font-size: 0.85rem; margin: 0 0 12px; min-height: 1.2em; }
-.auth-field { display: block; text-align: left; margin: 0 0 12px; }
+/* ---- 会浮起来的标签（subscribe.ts 的 field()） --------------------------
+   空着没点的时候，标签就坐在框里、在字该出现的位置上——读起来像一句占位提示。一点
+   进去它浮到框的上沿、缩小、转成 rose 色，把位置让给要打的字。
+
+   两件事因此成立：空着的框只有一层字（不是「标签 ＋ 占位提示」两层），而有内容的框
+   上头始终挂着它是什么——那一行从此不会因为填了字就消失。
+
+   DOM 顺序是 input 在前、span 在后（见 field() 的说明）：相邻兄弟选择器只能往后看，
+   而倒过来是唯一不引 `:has()` 的写法——`:has()` 在这仓库里栽过一次（Chrome 61 不认识
+   它，整条规则连着作废，不报错也不白屏）。 */
+.auth-field { position: relative; display: block; text-align: left; margin: 0 0 12px; }
 /* 注册 hides the field rather than removing it, and a class that sets
    display has to say so, or [hidden] loses to it. */
 .auth-field[hidden] { display: none; }
-.auth-field span { display: block; font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 5px; }
+.auth-field > span {
+  position: absolute; left: 15px; top: 13px;
+  font-size: 0.95rem; color: var(--ink-faint);
+  pointer-events: none;
+  transform-origin: left top;
+  transition: transform 180ms ease, color 180ms ease;
+}
+.auth-field > input:focus + span,
+.auth-field > input:not(:placeholder-shown) + span {
+  transform: translateY(-9px) scale(0.72);
+  color: var(--accent-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 直接跳位。浮起来这件事是「这个框有内容了」的说明，不是一段动画。 */
+  .auth-field > span { transition: none; }
+}
+/* 上内边距留给浮上去的标签，下内边距相应收窄——**上下之和不变**，所以框的高度和从前
+   一个像素不差（这一页和多人页都按那个高度排过版，见 check-overlap）。 */
 .auth-field input {
   width: 100%; box-sizing: border-box; color: var(--ink); font-size: 0.95rem;
-  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 14px;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 17px 14px 5px;
 }
+/* 真正的 placeholder 只在获得焦点时才现身。
+   没点的时候它和坐在同一处的标签会两层字叠在一起；而那几句 placeholder 是**有信息**
+   的（`you@example.com`、`6 位数字或字母`），标签替不了它们——所以不是删掉，是等他点
+   进来、标签浮走之后再给他看。
+   没给 placeholder 的字段由 field() 补一个空格（`:placeholder-shown` 要有它才成立），
+   那种框这条规则等于没有作用。 */
+.auth-field input:not(:focus)::placeholder { color: transparent; }
 .auth-field input:focus { outline: none; border-color: var(--accent); }
 /* A quiet way out of a window that is mostly about something else —
    「有内部码？」 under the plans, and under the log-in form. */
@@ -3252,6 +3336,67 @@ body:has(.slot-page) .home-nav { display: none; }
 }
 .modal .link-btn:hover { filter: brightness(1.15); }
 .auth-field input[readonly] { color: var(--ink-faint); }
+
+/* ---- 六段完成度表（ui/authBits.ts 的 mountPwMeter） ----------------------
+   打一位填一段。**不是强度表**——密码正好六位，定长的东西谈不上强弱；它回答的是唯一
+   还没答案的那个问题：「我打了几位了？」（六位密码没有回显，手机上按错一下就少一位。）
+   满六段时整排轻轻鼓一下，那一下就是「够了」。 */
+.pw-meter { display: flex; gap: 4px; margin: -6px 0 4px; }
+.pw-meter-seg {
+  flex: 1; height: 4px; border-radius: var(--r-full);
+  background: var(--line);
+  transition: background-color 250ms ease;
+}
+.pw-meter-seg.on { background: var(--accent); }
+/* 鼓那一下走过冲曲线（和开关旋钮同一条）。transform-origin 居中，所以两头一起鼓。 */
+.pw-meter--full { animation: pw-meter-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes pw-meter-pop {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 段照样填满（那是信息），只是不鼓。 */
+  .pw-meter--full { animation: none; }
+}
+/* 那一行实时文案给读屏软件念——六小段对看不见屏幕的人等于不存在。屏幕上它也在，只是
+   很轻：一位一位数出来的那句话，看得见的人扫一眼六小段就够了。 */
+.pw-meter-say { margin: 0 0 10px; font-size: 0.72rem; color: var(--ink-faint); }
+
+/* ---- 六格验证码（ui/authBits.ts 的 mountPin） ---------------------------
+   格子只管显示，底下那个真输入框盖在它们上面（opacity: 0、占满整行）——焦点、粘贴、
+   输入法、iOS 短信自动填充全走原生那一套。六个各自独立的 input 是这类控件最常见也最
+   常出问题的做法（粘贴只进第一格、退格跳不回去、自动填充全部失灵），这儿一格都没新建。
+   输入框排在格子**后面**，所以它天然压在上头，不用 z-index 打架。 */
+.auth-field--pin { position: relative; }
+.auth-field--pin > input {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  padding: 0; border: none; background: none; opacity: 0;
+  /* 光标也藏掉：位置由格子那一圈描边说，一根跑在格子之间的光标只会对不上。 */
+  color: transparent; caret-color: transparent;
+}
+/* 标签浮不浮由格子说，不由 placeholder 说——这个框整个是透明的。 */
+.auth-field--pin > input + span { transform: translateY(-9px) scale(0.72); color: var(--accent-ink); }
+.pin-row { display: flex; gap: 8px; }
+.pin-cell {
+  flex: 1; min-width: 0; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+  font-size: 1.3rem; font-weight: 600; color: var(--accent-ink); font-style: normal;
+  transition: border-color 180ms ease;
+}
+/* 当前那一位：描一圈 rose。只在框有焦点的时候描——没点进来的时候描一圈会像「这一格出
+   了错」。 */
+.pin-row--on .pin-cell--at { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.pin-cell--pop { animation: pin-pop 120ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes pin-pop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 不鼓，其余全同：数字照样出现在格子里。 */
+  .pin-cell--pop { animation: none; }
+}
 /* The address a subscription will hang on, shown whole. A one-line readonly
    input cuts a long address off at its right edge, and this is the one thing
    on the window that has to be checked before the password below it is set. */
@@ -4286,15 +4431,58 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-join-door { --door-gap: var(--pill-bg); display: flex; justify-content: center; padding: 8px 18px; }
 .mp-join-door > svg { width: auto; height: 30px; display: block; }
 
+/* ---- 「开一间」那一块：一颗键 ＋ 右上角一个开关 -------------------------
+   玩家 2026-09：这一页「太杂而无序了，信息太多没有主次」，并且「《开竞赛》应该是一个
+   开关（同色盲友好模式）在角落」。
+
+   原先是两颗一模一样的大键并排（《开小屋》《开竞赛》）——两颗长得一样的键放在一起，
+   屏幕上就没有主次了，而它们本来是同一件事的两个档。现在这一块自己就是那个层级：
+   一颗主键居中，开关贴在它右上角，一行小字在底下解释那个开关。
+
+   宽度跟 .mp-join-block 一样 320px：上下两块（开／进）左右对齐，读起来才是两块，
+   而不是一堆居中的东西。 */
+.mp-open { width: 100%; max-width: 320px; margin: 0 auto; }
+/* 开关那一行靠右，就是「角落」。
+   text-align 不管用（它是 flex 子项里的 flex 容器），用 margin-left: auto。 */
+.mp-contest-row {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 2px auto; padding: 2px 2px 2px 8px;
+  border: none; background: none; cursor: pointer;
+  color: var(--ink-soft); font: inherit; font-size: 0.8rem; letter-spacing: 0.02em;
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-contest-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+/* 拨过去的时候那两个字也跟着醒一档：开关自己的颜色和位置是主要那一半，这一档只是
+   让「哪一行在说话」更明显，所以只动颜色，不动字号（动字号整行会跳）。 */
+.mp-contest-row[aria-checked='true'] { color: var(--accent-ink); }
+/* 这一颗开关的轨道底色：关着的时候走通用的 --line（和别处一样），打开是
+   --accent-2。不像 #cvdRow 那样写死一个橙——那一颗是界面稿上单独调的色。 */
+/* 键本身居中，外边距归 .genius-cta 自己管（它是 width: fit-content + auto 居中）。 */
+.mp-open .genius-cta { margin-top: 0; margin-bottom: 4px; }
+/* 那一行解释：贴着它解释的那个开关，不要再撑开一层行距。 */
+.mp-contest-hint { margin: 0 0 2px; }
+
 .mp-join-block { width: 100%; max-width: 320px; margin: 0 auto; }
 .mp-join-block .mp-code-field { margin: 0 0 10px; }
 .mp-join-block .mp-code-field span { text-align: center; }
+/* 屋号那一格自己就是个「大号的格子」：2rem、居中、拉开字距。浮动标签那一套在这儿要
+   让路——标签不压在数字上，它就挂在框的上沿，一直挂着（这个框只有四位数字，没有「空
+   着像占位提示」那个需求）。 */
 .mp-code-field input {
   font-family: 'Fraunces', Georgia, serif;
   font-variant-numeric: tabular-nums; letter-spacing: 0.5em; text-indent: 0.5em;
-  text-align: center; font-size: 2rem; font-weight: 600; padding: 12px 10px;
+  text-align: center; font-size: 2rem; font-weight: 600; padding: 20px 10px 8px;
   color: var(--accent-ink);
 }
+.mp-code-field > span {
+  left: 0; right: 0; top: 5px; text-align: center;
+  font-size: 0.72rem; transform: none;
+}
+.mp-code-field > input:focus + span,
+.mp-code-field > input:not(:placeholder-shown) + span { transform: none; }
+/* 这个框的 placeholder（「四位数字」）照旧一直看得见：它和那个一直挂着的标签不在同
+   一处（一个在框里居中，一个在上沿），不会叠字。 */
+.mp-code-field input:not(:focus)::placeholder { color: var(--ink-faint); }
 .mp-code-field input::placeholder {
   font-family: 'Karla', system-ui, sans-serif;
   font-size: 0.9rem; font-weight: 500; letter-spacing: 0.04em; color: var(--ink-faint);

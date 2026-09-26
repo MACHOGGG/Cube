@@ -345,7 +345,11 @@ export function renderMultiplayerPage(
             <p class="home-sub">${s.mpTitle}</p>
           </div>
         </header>
-        <p class="tag-line">${s.mpIntro}</p>
+        <!-- 《盖起一个小屋，同样的棋盘，与大家竞赛》那一句撤了（玩家 2026-09：这一页
+             「太杂而无序了，信息太多没有主次」）。抬头上那行小字写的就是《多人游玩》，
+             而底下摆着的东西自己会说明这一页在做什么——一句重复页名的话正是那些「没有
+             主次」里最先该去掉的一条。i18n 的 mpIntro 留着没删：它是一句写好的文案，
+             哪天别处要用直接取。 -->
 
         <!-- 换一个图形的按钮，就贴着那个图形——它换的是它，摆在名字另一头
              的时候没人看得出这两样东西是一回事。 -->
@@ -354,40 +358,42 @@ export function renderMultiplayerPage(
             <span class="mp-avatar" id="mpAvatar">${avatarSvg(avatar)}</span>
             <button class="mp-shuffle" id="mpShuffle" aria-label="${s.mpShuffle}">&#8635;</button>
           </div>
+          <!-- input 在前、标签在后：浮动标签靠相邻兄弟选择器，而那只能往后看
+               （见 subscribe.ts 的 field()，这一页手写的两处跟它同一个顺序）。 -->
           <label class="auth-field mp-name-field">
-            <span>${s.mpNameLabel}</span>
             <input id="mpName" type="text" maxlength="12" autocomplete="nickname"
                    placeholder="${s.mpNamePlaceholder}" value="${esc(savedName)}" />
+            <span>${s.mpNameLabel}</span>
           </label>
         </div>
 
         <p class="auth-msg" id="mpMsg" role="status">${message}</p>
 
-        <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpCreate">
-          ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
-          <span>${s.mpCreate}</span>
-          ${geniusLogoTag(40, 'genius-logo--cta')}
-        </button>
-        <!-- 《开竞赛》。玩家 2026-09：「增加一个《竞赛》的入口在多人小屋里，点击
-             后是上限 20 人、发起人不参加游戏单独看到实时榜单情况的版本」。
-             和《开小屋》同一颗键的样子——它们是同一件事的两个档，不是两件事；
-             差别由底下那一行小字讲，而那一行是**必须有字**的地方：不写的话玩家按
-             下去会发现自己没有棋盘，那正是「意料之外的界面」。
-
-             那一行**必须一行装得下**（四种语言都要）。这一页整页只有一屏的高度
-             （check-overlap 的「多人游玩：一屏装得下，不用滚」），而加了这颗键和这
-             一行之后，英文和中文刚好卡在 844 上、一点余量都没有——头一版法语那句长
-             到折成两行，整页高出 5px，那道门当场红。所以英法两句写得比中文短：
-             「你主持、看实时榜单」那半句的意思由这一屏自己说（他看到的就是榜单）。 -->
-        <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpContest">
-          ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
-          <span>${s.mpContest}</span>
-          ${geniusLogoTag(40, 'genius-logo--cta')}
-        </button>
-        <p class="auth-hint auth-hint--center">${s.mpContestHint}</p>
-        <!-- 上面是「自己开一间」，下面是「进别人开的」。这条线把两件事分开——
-             底下那句《加入 Slides 天才搭建的小屋》说的其实是下半段的事，
-             所以线画在按钮和它中间，而不是画在它下面。 -->
+        <!-- 「开一间」是一件事，不是两件。
+             原先这儿摆着两颗一模一样的大键（《开小屋》《开竞赛》），玩家的话是「太杂
+             而无序、信息太多没有主次」——两颗长得一样的键并排，屏幕上就没有主次了，而
+             它们本来是同一件事的两个档。
+             现在一颗键 ＋ 右上角一个开关（玩家定的：「《开竞赛》应该是一个开关（同色盲
+             友好模式）在角落」），用的就是色盲友好那一个零件（.pill-switch）。
+             开关摆在这一块的角上、紧贴着它改的那颗键，不摆在整页的角上：这一页自己就
+             有过同样的取舍——「换一个图形的按钮，就贴着那个图形，摆在名字另一头的时候
+             没人看得出这两样东西是一回事」（见上面 .mp-me 那段）。 -->
+        <div class="mp-open">
+          <button class="mp-contest-row" id="mpContest" role="switch" aria-checked="false">
+            <span>${s.mpContest}</span>
+            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+          </button>
+          <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpCreate">
+            ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
+            <span id="mpCreateLabel">${s.mpCreate}</span>
+            ${geniusLogoTag(40, 'genius-logo--cta')}
+          </button>
+          <!-- 这一行**必须有字**，而且四种语言都必须一行装得下（这一页只有一屏的高度，
+               见 check-overlap 的「多人游玩：一屏装得下，不用滚」）。不写的话，把开关拨
+               过去的人按下键会发现自己没有棋盘——那正是「意料之外的界面」。
+               一直摆着，不跟着开关出现／消失：那样每拨一下整页跳一次。 -->
+          <p class="auth-hint auth-hint--center mp-contest-hint">${s.mpContestHint}</p>
+        </div>
         <hr class="mp-rule" />
         <p class="auth-hint auth-hint--center">${s.mpNeedGenius}</p>
 
@@ -396,9 +402,9 @@ export function renderMultiplayerPage(
              checked at a glance against the phone being read from. -->
         <div class="mp-join-block">
           <label class="auth-field mp-code-field">
-            <span>${s.mpCodeLabel}</span>
             <input id="mpCode" type="text" inputmode="numeric" maxlength="4"
                    autocomplete="off" placeholder="${s.mpCodePlaceholder}" />
+            <span>${s.mpCodeLabel}</span>
           </label>
           <!-- 《加入小屋》不写字了，就摆主菜单上那扇门的纯白版——玩家的
                原话：「《加入小屋》改称一个白色小门的标识」。名字留在
@@ -511,8 +517,27 @@ export function renderMultiplayerPage(
       keepAssignedName(made.value);
       renderLobby(made.value);
     };
-    container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', () => openRoom(false));
-    container.querySelector<HTMLButtonElement>('#mpContest')!.addEventListener('click', () => openRoom(true));
+    /**
+     * 《竞赛》那颗开关。
+     *
+     * 状态只存在这一位上，而**屏幕上有两处在说它**：开关自己的位置和颜色（那是不用读
+     * 字就看得出的那一半），以及底下那颗键的字面——拨过去它就写《开竞赛》。第二处是要
+     * 紧的：按下去之后这一屋子的规矩不一样（20 名选手、发起人不下场），而按键上写着什
+     * 么是玩家按之前最后看的一样东西。
+     *
+     * 键上换的只有那行字，招牌和锁一个没动——它仍旧是同一颗键、同一条路
+     * （openRoom），只差 contest 这一位。
+     */
+    const contestSw = container.querySelector<HTMLButtonElement>('#mpContest')!;
+    const createLabel = container.querySelector<HTMLElement>('#mpCreateLabel')!;
+    const contestOn = () => contestSw.getAttribute('aria-checked') === 'true';
+    contestSw.addEventListener('click', () => {
+      const next = !contestOn();
+      contestSw.setAttribute('aria-checked', String(next));
+      createLabel.textContent = next ? s.mpContest : s.mpCreate;
+    });
+    // 一颗键，两个档。拨到哪一档由开关说，走的是同一条路（见 openRoom 的说明）。
+    container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', () => openRoom(contestOn()));
 
     container.querySelector<HTMLButtonElement>('#mpJoin')!.addEventListener('click', async () => {
       const code = codeBox.value.trim();

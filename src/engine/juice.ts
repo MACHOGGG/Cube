@@ -141,6 +141,26 @@ export function spawnParticles(container: HTMLElement, x: number, y: number, opt
   }
 }
 
+/**
+ * 「不对」那一下，元素自己抖一抖。
+ *
+ * 一处共用的 keyframes（style.css 的 err-shake），衰减式、450ms、只抖一次。加在 PIN
+ * 那一行格子上、或者登录那张卡上——**它抖的是「你刚填的那一样东西」**，不是整页。
+ *
+ * 配一声拒绝音（cuelume 的 error，和被炸弹炸出去那一声同一颗）：这两处说的是同一件
+ * 事——「刚才那一下不算」。
+ *
+ * 借 retrigger 重播：连着错两次，第二次要能盖掉还没抖完的第一次（不强制重排的话第二
+ * 次一动不动，玩家会以为「按了没反应」）。
+ *
+ * reduced-motion 下不抖，换一圈错误描边闪一次（样式在那条 keyframes 旁边）——「不对」
+ * 这件事得照样说出来，抖动只是它的说法。
+ */
+export function shakeReject(el: HTMLElement): void {
+  retrigger(el, reducedMotion() ? 'err-flash' : 'err-shake');
+  playError();
+}
+
 /** One-shot punch/overshoot pop on el (a score digit strip, a gain badge, ...). */
 export function punch(el: HTMLElement): void {
   if (reducedMotion()) return;

@@ -92,30 +92,79 @@ const { ctx, p } = await hostPage();
   const look = await p.evaluate(() => {
     const c = document.querySelector('#mpContest');
     const o = document.querySelector('#mpCreate');
-    const box = (e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+    const blk = document.querySelector('.mp-open');
+    const box = (e) => {
+      const r = e.getBoundingClientRect();
+      return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height),
+               right: Math.round(r.right), bottom: Math.round(r.bottom) };
+    };
     return {
       has: Boolean(c),
+      isSwitch: c?.getAttribute('role') === 'switch',
+      checked: c?.getAttribute('aria-checked'),
+      knob: Boolean(c?.querySelector('.pill-switch .pill-switch-knob')),
       contest: c ? box(c) : null,
       create: o ? box(o) : null,
+      block: blk ? box(blk) : null,
       label: c?.textContent?.trim() ?? '',
+      ctaLabel: document.querySelector('#mpCreateLabel')?.textContent?.trim() ?? '',
       hints: [...document.querySelectorAll('.auth-hint--center')].map((e) => e.textContent.trim()),
       overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      // 原先这一页摆着两颗一模一样的大键。现在只该有一颗。
+      ctas: document.querySelectorAll('.mp-page .genius-cta').length,
     };
   });
   check('多人设置页上有《开竞赛》', look.has, look.label);
-  check('它看得见，而且和《开小屋》一样大（是同一件事的两个档）',
-    look.contest && look.contest.w > 40 && look.contest.h > 20
-      && Math.abs(look.contest.w - look.create.w) <= 1 && Math.abs(look.contest.h - look.create.h) <= 1,
-    `${JSON.stringify(look.contest)} / ${JSON.stringify(look.create)}`);
+  // 玩家定的：它是一个开关（同色盲友好模式那一个零件），不是第二颗大键。
+  check('它是一个开关，不是第二颗大键',
+    look.isSwitch && look.knob && look.checked === 'false', `role=switch:${look.isSwitch} knob:${look.knob} checked:${look.checked}`);
+  check('这一页只有一颗大键了（原先是两颗一模一样的）', look.ctas === 1, `${look.ctas} 颗`);
+  // 「在角落」：贴在「开一间」那一块的右上角——靠上、靠右，而且在那颗键的上方。
+  check('开关在「开一间」那一块的右上角',
+    look.block && look.contest
+      && look.contest.right >= look.block.right - 4
+      && look.contest.y <= look.block.y + 4
+      && look.contest.bottom <= look.create.y + 1,
+    `开关 ${JSON.stringify(look.contest)} / 块 ${JSON.stringify(look.block)} / 键 y=${look.create?.y}`);
+  // 开关比那颗键小得多——这就是「主次」：主键是主角，开关是它的一个档。
+  check('开关比那颗主键矮（这一页有主次了）',
+    look.contest.h < look.create.h, `开关 ${look.contest.h}px / 键 ${look.create.h}px`);
   check('底下那一行说清了「20 人」和「你不下场」（必须有字的地方）',
     look.hints.some((h) => /20/.test(h) && /不下场|不参|主持/.test(h)),
     look.hints.join(' / '));
   check('设置页没有被撑出横向滚动', look.overflowX === 0, `${look.overflowX}px`);
+
+  // 拨一下：开关自己变，那颗键的字也跟着变成《开竞赛》。
+  // 第二处是要紧的——按下去之后这一屋子的规矩不一样，而按键上写着什么是玩家按之前
+  // 最后看的一样东西。
+  const before = look.ctaLabel;
+  await p.click('#mpContest');
+  // 等那一下弹完再量旋钮。旋钮走的是 .32s 的过冲曲线（style.css 的
+  // .pill-switch-knob），click() 一回来它才刚起步——头一版就是这么红的，量到的是
+  // 静止位置 3px，而那和「根本没动」一模一样。450ms 留出过冲回落的余量。
+  await p.waitForTimeout(450);
+  const after = await p.evaluate(() => ({
+    checked: document.querySelector('#mpContest')?.getAttribute('aria-checked'),
+    ctaLabel: document.querySelector('#mpCreateLabel')?.textContent?.trim() ?? '',
+    knobX: (() => {
+      const k = document.querySelector('#mpContest .pill-switch-knob');
+      const t = document.querySelector('#mpContest .pill-switch');
+      if (!k || !t) return null;
+      return Math.round(k.getBoundingClientRect().left - t.getBoundingClientRect().left);
+    })(),
+  }));
+  check('拨过去：开关记住了', after.checked === 'true', String(after.checked));
+  check('拨过去：那颗键的字换成了《开竞赛》',
+    after.ctaLabel !== before && after.ctaLabel.length > 0, `${before} → ${after.ctaLabel}`);
+  // 旋钮真的滑到了右边。这一条钉的是 .pill-switch-knob 走 transform（不是那个
+  // Chrome 61 不认识的独立 translate 属性）——不走的话开关拨过去旋钮一动不动。
+  check('拨过去：旋钮滑到了右边（不是原地不动）', after.knobX !== null && after.knobX >= 12, `旋钮左移 ${after.knobX}px`);
 }
 
 // ---- 2. 二十个人的竞赛屋：主持人没有棋盘，榜上没有他自己，而且摆得下 ------
 {
-  await p.click('#mpContest');
+  // 开关上面已经拨过去了，所以按那颗主键开出来的就是竞赛屋（一颗键两个档）。
+  await p.click('#mpCreate');
   await p.waitForSelector('#mpPick', { timeout: 15000 });
   const code = await p.evaluate(() => document.body.textContent.match(/\b\d{4}\b/)?.[0]);
   check('竞赛屋开出来了，屋号在屏幕上', /^\d{4}$/.test(code || ''), String(code));

@@ -1,6 +1,7 @@
 import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
 import { playCopied } from '../engine/juice';
+import { mountPin, mountPwMeter } from './authBits';
 import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
@@ -181,11 +182,30 @@ const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
  */
 const isPin = (value: string) => /^[A-Za-z0-9]{6}$/.test(value);
 
-/** One labelled input, in the shape the auth windows all use. */
+/**
+ * One labelled input, in the shape the auth windows all use.
+ *
+ * **顺序是 input 在前、label 在后**，而屏幕上看到的仍旧是「标签在上、框在下」——
+ * 标签由 CSS 绝对定位摆回去（style.css 的 .auth-field）。为什么要这么倒过来：浮动
+ * 标签靠的是 `input:focus + span` 和 `input:not(:placeholder-shown) + span` 两条相邻
+ * 兄弟选择器，而「相邻兄弟」只能往后看。倒过来是唯一不引 `:has()` 的写法，而 `:has()`
+ * 在这仓库里栽过一次（Chrome 61 不认识它，整条规则连着作废，不报错、不白屏，只是样式
+ * 不生效——见 ui/coachBar.ts 的 paintPeek 那段）。
+ *
+ * **没给 placeholder 的字段自动补一个空格。** `:placeholder-shown` 要有 placeholder
+ * 才成立；补一个空格，「框是空的」这件事就有了纯 CSS 的判据。已经有 placeholder 的字段
+ * 原样留着——那几句是有信息的（`you@example.com`、`6 位数字或字母`），标签替不了它们。
+ * 那几句只在获得焦点时才显现（见 style.css 的 `input:not(:focus)::placeholder`），所以
+ * 空着没点的时候屏幕上只有标签一层字，不会两层叠在一起。
+ *
+ * **那一串 name / autocomplete / type 一个字都不许动**：这张表是为密码管理器精心标注
+ * 过的（见 credentialForm 和 openPortalWindow 上面的注释），这儿加的只是视觉层。
+ */
 function field(id: string, label: string, attrs: string): string {
+  const withPlaceholder = /\bplaceholder\s*=/.test(attrs) ? attrs : `${attrs} placeholder=" "`;
   return `<label class="auth-field">
+      <input id="${id}" ${withPlaceholder} />
       <span>${label}</span>
-      <input id="${id}" ${attrs} />
     </label>`;
 }
 
@@ -349,6 +369,8 @@ export function openSetPasswordWindow(
 
   const form = overlay.querySelector<HTMLFormElement>('#pwForm')!;
   const input = overlay.querySelector<HTMLInputElement>('#pwNew')!;
+  // 六段完成度表：设新密码的三处都挂，登录那张表不挂（见 authBits 的 mountPwMeter）。
+  mountPwMeter(input, lang);
   const msg = overlay.querySelector<HTMLElement>('#pwMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#pwGo')!;
 
@@ -845,6 +867,10 @@ export function openChangePasswordWindow(
 
   const oldPw = overlay.querySelector<HTMLInputElement>('#cpwOld')!;
   const newPw = overlay.querySelector<HTMLInputElement>('#cpwNew')!;
+  // 只挂在**新**密码上。旧密码那一格是凭据，不是要填满的东西——给它挂一块完成度表等于
+  // 在提示「你还差几位」，而他要打的是一个自己早就知道的密码。
+  // 顺带：这一处原先漏了 maxlength="6"（另两处都写着），mountPwMeter 一并补上。
+  mountPwMeter(newPw, lang);
   const msg = overlay.querySelector<HTMLElement>('#cpwMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#cpwGo')!;
   const form = overlay.querySelector<HTMLFormElement>('#cpwForm')!;
@@ -924,6 +950,7 @@ export function openChangeEmailWindow(
   const wanted = overlay.querySelector<HTMLInputElement>('#cemNew')!;
   const step2 = overlay.querySelector<HTMLElement>('#cemStep2')!;
   const codeInput = overlay.querySelector<HTMLInputElement>('#cemCode')!;
+  const cemPin = mountPin(codeInput);
   const msg = overlay.querySelector<HTMLElement>('#cemMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#cemGo')!;
   let sent = false;
@@ -957,6 +984,8 @@ export function openChangeEmailWindow(
     go.disabled = false;
     if (!done.ok) {
       msg.textContent = accountFailText(done.reason, lang);
+      // 和解锁那扇窗同一条规矩：只在说的确实是那六位的时候抖格子。
+      if (done.reason === 'wrongCode' || done.reason === 'expired') cemPin.reject();
       return;
     }
     // 搬完了。本机这份要跟着换——不换的话它还拿旧地址去问权益，服务器那边已
@@ -1278,6 +1307,10 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
   const step2 = overlay.querySelector<HTMLElement>('#unlockStep2')!;
   const codeBox = overlay.querySelector<HTMLInputElement>('#unlockCode')!;
   const pwBox = overlay.querySelector<HTMLInputElement>('#unlockPw')!;
+  // 六格验证码 ＋ 新密码那块完成度表。格子只管显示，真输入框还是它自己（连
+  // autocomplete="one-time-code" 都在原处），所以 iOS 的短信自动填充照旧能用。
+  const codePin = mountPin(codeBox);
+  mountPwMeter(pwBox, lang);
   const msg = overlay.querySelector<HTMLElement>('#unlockMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#unlockGo')!;
   let sent = false;
@@ -1334,6 +1367,10 @@ export function openUnlockWindow(lang: Lang, email: string, onChanged: () => voi
       return;
     }
     msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
+    // 码不对：格子行抖一下 ＋ 拒绝音 ＋ 清空 ＋ 回到第一格（authBits 的 reject）。
+    // **只在说的确实是那六位的时候抖**，不是一律抖：新密码不合规、发信没配好、被限流，
+    // 说的都不是「你这六位打错了」，抖格子会把人的注意力引到一个没问题的地方去。
+    if (result.reason === 'wrongCode' || result.reason === 'expired') codePin.reject();
   };
 
   for (const box of [address, codeBox, pwBox]) {
