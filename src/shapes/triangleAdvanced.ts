@@ -9,6 +9,8 @@ import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palet
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { proHintWidth, proTriRing } from '../engine/proHint';
+import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine } from '../engine/matchGrowth';
 import { roundTriClip, roundTriPath, triRingPath, TRI_RING_INSET } from '../engine/roundTri';
@@ -583,6 +585,15 @@ export function createTriangleAdvancedGame(): ShapeGame {
         // 本来就必填的 `CascadeConfig.tileAt(r, c).face`（少实现一副当场编译不过），
         // 那条路和这一句再也没有关系了。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
+        // Pro 模式那一条：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。
+        //
+        // 三角这一族只能真画进去：它的棋子是一个被 clip-path 剪成三角的方盒子，剪刀连
+        // 子元素一起剪，所以描在外面的一圈会被整个剪掉。这一条压在轮廓线上，外面那一半
+        // 剪掉，剩下贴着边的一条——正是玩家那张参考图上的样子。
+        // 因为是真节点，所以只在开着 Pro 的时候建（拨开关那一下由 onProChange 重画）。
+        if (proOn() && !isBlank(tile) && tile.face === 'flavor') {
+          el.appendChild(proTriRing(pts, { minX, minY, w, h }, COLORS[tile.dotColor], proHintWidth(w)));
+        }
         return el;
       }
 
@@ -1068,6 +1079,7 @@ export function createTriangleAdvancedGame(): ShapeGame {
         drag = null;
         controller.destroy();
         stopColorblind();
+        stopPro();
         detachDrag();
         stopResize();
       }
@@ -1093,6 +1105,11 @@ export function createTriangleAdvancedGame(): ShapeGame {
       const stopColorblind = onColorblindChange(() => {
         COLORS = pickPalette();
         renderLegend();
+        if (controller.started) render();
+      });
+      // Pro 那一圈是真画进 DOM 的（见上面 proTriRing 那段），所以拨开关要重画一遍棋盘。
+      // 方块和小球不用：它们那一圈纯靠 CSS，data-pro 一变就跟着变。
+      const stopPro = onProChange(() => {
         if (controller.started) render();
       });
 

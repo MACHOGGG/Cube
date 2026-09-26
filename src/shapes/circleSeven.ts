@@ -9,6 +9,7 @@ import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palet
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { setProHint } from '../engine/proHint';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
@@ -479,6 +480,10 @@ export function createCircleSevenGame(): ShapeGame {
         // 本来就必填的 `CascadeConfig.tileAt(r, c).face`（少实现一副当场编译不过），
         // 那条路和这一句再也没有关系了。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
+        // Pro 模式那一圈：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。只有
+        // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。挂的只是两个
+        // 自定义属性，画不画由 <html> 上的 data-pro 决定，所以拨开关不用重画棋盘。
+        setProHint(el, isBlank(tile) || tile.face !== 'flavor' ? null : COLORS[tile.dotColor], size);
         return el;
       }
 

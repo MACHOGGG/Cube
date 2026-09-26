@@ -8,3 +8,13 @@
 }
 /* 同上：翻成星星的那一枚不留描边（data-face 挂在 .tri 上，底色那一层是 .fill）。 */
 .tri[data-face='dot'] .fill { box-shadow: none; }
+
+/* ---- Pro：这一枚得分之后会变成什么颜色 ----------------------------------
+   三角这一族画的是一段贴着轮廓的 SVG 描边（engine/proHint.ts 的 proTriRing），不是
+   CSS 的边框：棋子是一个被 clip-path 剪成三角的方盒子，剪刀连子元素一起剪，描在外面
+   的一圈会被整个剪掉。描边压在轮廓线上，外面那一半被剪掉，剩下贴着边的一条。
+   这一层只在开着 Pro 的时候才建出来，所以这儿不用再管显示不显示。 */
+.pro-tri {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none;
+}

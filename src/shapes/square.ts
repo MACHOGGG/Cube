@@ -9,6 +9,8 @@ import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palet
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { TILE_RADIUS, proHintWidth, proSquareRing } from '../engine/proHint';
+import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
@@ -509,6 +511,13 @@ export function createSquareGame(): ShapeGame {
         // 本来就必填的 `CascadeConfig.tileAt(r, c).face`（少实现一副当场编译不过），
         // 那条路和这一句再也没有关系了。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
+        // Pro 模式那一圈：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。只有
+        // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。
+        // 方块那一版是虚线，虚线的节奏得自己定（见 proSquareRing 的说明），所以是真画
+        // 进去的一层，只在开着 Pro 的时候建；拨开关那一下由 onProChange 重画。
+        if (proOn() && !isBlank(tile) && tile.face === 'flavor') {
+          el.appendChild(proSquareRing(size, TILE_RADIUS, COLORS[tile.dotColor], proHintWidth(size)));
+        }
         return el;
       }
 
@@ -1297,12 +1306,17 @@ export function createSquareGame(): ShapeGame {
         renderLegend();
         if (controller.started) render();
       });
+      // Pro 那一圈虚线是真画进 DOM 的（见 proSquareRing），所以拨开关要重画一遍棋盘。
+      const stopPro = onProChange(() => {
+        if (controller.started) render();
+      });
 
       function destroy() {
         drag?.chain?.stop();
         drag = null;
         controller.destroy();
         stopColorblind();
+        stopPro();
         detachDrag();
         stopResize();
       }

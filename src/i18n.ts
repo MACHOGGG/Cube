@@ -516,6 +516,13 @@ export interface I18nStrings {
   shareQrCaption: string;
   // ---- shared shape UI ----
   colorblindBtn: string;
+  /**
+   * 《Pro》那颗开关的名字。四种语言写的都是同一个词——玩家 2026-09 点名要这个词
+   * （「加入《Pro》按钮开关」），而它在四种语言里都读得通，翻译反而会让同一个设置在
+   * 不同语言里成了不同的东西。摆在色盲友好那一条旁边，两处（个人主页、暂停面板）同
+   * 一个说法。
+   */
+  proBtn: string;
   shapeNameSquare: string;
   shapeNameCircle: string;
   shapeNameTriangle: string;
@@ -858,6 +865,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareAllCleared: 'Board cleared',
     shareFooterHint: 'Drag a whole row, column, or diagonal to match same-colour patterns',
     colorblindBtn: 'Colourblind-friendly palette',
+    proBtn: 'Pro',
     shapeNameSquare: 'Square',
     shapeNameCircle: 'Circle',
     shapeNameTriangle: 'Triangle',
@@ -1180,6 +1188,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareAllCleared: 'Plateau vidé',
     shareFooterHint: 'Faites glisser une ligne, colonne ou diagonale entière pour assortir les couleurs',
     colorblindBtn: 'Palette adaptée aux daltoniens',
+    proBtn: 'Pro',
     shapeNameSquare: 'Carré',
     shapeNameCircle: 'Cercle',
     shapeNameTriangle: 'Triangle',
@@ -1502,6 +1511,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareAllCleared: '全部消除',
     shareFooterHint: '拖動整行整列或整條斜線，拼出同色圖案',
     colorblindBtn: '色盲友好配色',
+    proBtn: 'Pro',
     shapeNameSquare: '方塊',
     shapeNameCircle: '圓球',
     shapeNameTriangle: '三角',
@@ -1824,6 +1834,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareAllCleared: '全部消除',
     shareFooterHint: '拖动整行整列或整条斜线，拼出同色图案',
     colorblindBtn: '色盲友好配色',
+    proBtn: 'Pro',
     shapeNameSquare: '方块',
     shapeNameCircle: '圆球',
     shapeNameTriangle: '三角',

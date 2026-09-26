@@ -268,6 +268,13 @@ jobs:
       # 文件再回去按前缀猜。读源码、不打包，几十毫秒。
       - name: 八副棋盘的家族与规则归属
         run: node scripts/check-shape-registry.mjs
+      # 《Pro》那个开关，以及它在棋盘上画的那一圈「这一枚得分之后会变成什么颜色」。
+      # 要害是八副棋盘会不会有一副写错：描成 tile.color（它现在的颜色）不报错、不白
+      # 屏，屏幕上一样是一圈彩色的线，只是它说的成了一句所有人一眼就看得见的废话。
+      # 读源码、不打包。界面那一半（真画出来没有、拨开关灵不灵）要开浏览器，留在本地
+      # 手跑：check-pro-ui.mjs。
+      - name: Pro：那一圈描的是得分之后的颜色
+        run: node scripts/check-pro.mjs
       # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
       # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
       # check-store 要一份真的 Redis 凭证。两个都得本地跑。

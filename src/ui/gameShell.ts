@@ -3,6 +3,7 @@ import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons'
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { proOn, setPro } from '../engine/proMode';
 import { openRulesModal, type ExtraTipView } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
@@ -413,6 +414,14 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
           </button>
         </div>
+        <!-- 《Pro》和它并排：一个正在下的人想看「这一枚会变成什么颜色」，不该为此退出
+             这一局（和上面那条色盲友好同一个道理，同一副样子）。 -->
+        <div class="btn-row">
+          <button class="icon-btn pause-switch" id="proBtn" role="switch" aria-checked="false">
+            <span>${s.proBtn}</span>
+            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+          </button>
+        </div>
         ${extraButtonsHtml ? `<div class="btn-row pause-extras">${extraButtonsHtml}</div>` : ''}
         <div class="btn-row pause-exits">
           <button class="secondary" id="pauseRestartBtn">${s.restartRunBtn}</button>
@@ -546,6 +555,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       showCvd();
     });
   }
+
+  // 《Pro》那颗开关（暂停面板里）。小屋局按不了暂停，所以它只有这一颗——底排那条控制
+  // 条上没有它：那儿的位置是给「这一局的事」留的（离开小屋、交卷），而 Pro 是这个人
+  // 的长期设置。
+  const proBtn = container.querySelector<HTMLButtonElement>('#proBtn');
+  const showPro = () => proBtn?.setAttribute('aria-checked', String(proOn()));
+  showPro();
+  proBtn?.addEventListener('click', () => {
+    setPro(!proOn());
+    showPro();
+  });
 
   // 暂停面板里的《怎么玩》：开的是全站同一屏六条规则（ui/rulesModal.ts）。有
   // 没有三角那一列由整包说了算（网页版有，小红书版在自己的 main.ts 里关

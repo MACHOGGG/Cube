@@ -11,3 +11,14 @@
    棋盘从它自己的轮廓里透出来，本来就没有边可分。留着的话，深色棋盘上每一颗星星外面
    都套着一圈黑环（玩家 2026-09 拍到的「不应该出现的黑色边框」，一屏上有几十个）。 */
 .tile[data-face='dot'] { --tile-ring: inset 0 0 0 0 transparent; box-shadow: none; }
+
+/* ---- Pro：这一枚得分之后会变成什么颜色 ----------------------------------
+   玩家 2026-09 给的参考图里，方块那一版画的是**虚线**（「方块只参考最上第一行」，那
+   一行就是虚线；底下几行是实线，他点名不要）。
+   虚线的节奏得自己定，CSS 的 `border-style: dashed` 定不了（它按线宽排，2px 的边描出
+   来一条边上十来小段，整幅棋盘成了一张网格布）。所以这一圈是一段 SVG，画在棋子外面，
+   一圈九段——见 engine/proHint.ts 的 proSquareRing。 */
+.pro-square {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none;
+}

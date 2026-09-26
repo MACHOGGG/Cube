@@ -29,6 +29,7 @@ import {
   type PieceVariant,
   variantSwatch,
 } from '../engine/palettePref';
+import { proOn, setPro } from '../engine/proMode';
 import { pickedTheme, setTheme } from '../engine/themePref';
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
@@ -167,6 +168,14 @@ export function renderAccountPage(
       <button class="profile-pill profile-pill--wide profile-pill--switch" id="cvdRow"
               role="switch" aria-checked="${colorblindOn()}">
         <span>${s.colorblindBtn}</span>
+        <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+      </button>
+      <!-- 《Pro》：和色盲友好同一副样子、同一处位置（玩家 2026-09：「开启的形式和情况
+           和现在的色盲友好模式一样」）。它眼下管的是棋盘上那一圈「这一枚得分之后会变
+           成什么颜色」（见 engine/proMode.ts）。 -->
+      <button class="profile-pill profile-pill--wide profile-pill--switch" id="proRow"
+              role="switch" aria-checked="${proOn()}">
+        <span>${s.proBtn}</span>
         <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
       </button>
 
@@ -659,6 +668,10 @@ export function renderAccountPage(
     container.querySelector('#themeRow')?.setAttribute('aria-checked', String(dark));
   });
   on('flipRow', openFlipSpeedPicker);
+  on('proRow', () => {
+    setPro(!proOn());
+    container.querySelector<HTMLButtonElement>('#proRow')?.setAttribute('aria-checked', String(proOn()));
+  });
   on('cvdRow', () => {
     setColorblind(!colorblindOn());
     const row = container.querySelector<HTMLButtonElement>('#cvdRow');
