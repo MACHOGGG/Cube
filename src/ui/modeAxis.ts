@@ -46,13 +46,13 @@
  * （门：scripts/check-axis-motion.mjs）。这个文件只做三件事：把卡片摆到算出来的
  * 位置上、把手指的位移换成焦点、在该出声的时候出声。
  */
-import { fisheye, hitTest, influence, SIGMA, type FisheyeParams } from '../engine/fisheye';
+import { fisheye, hitTest, influence, type FisheyeParams } from '../engine/fisheye';
 import { createSpring, snapSpring, springAtRest, stepSpring, type SpringState } from '../engine/spring';
-import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, damp, rubber, skewFor } from '../engine/axisMotion';
+import { tune, tuneFlag } from '../engine/axisTune';
+import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, AXIS_LERP, blurFor, damp, flatFor, rubber, skewFor } from '../engine/axisMotion';
 import { reducedMotion } from '../engine/reducedMotion';
 import { motionTier } from '../engine/frameTier';
 import { playAxisTick } from '../engine/juice';
-import { vibrate } from '../engine/haptics';
 
 /**
  * 一张卡的「站位」有多高，以及聚焦时能长到多大。
@@ -76,7 +76,7 @@ import { vibrate } from '../engine/haptics';
  *     会挪的鱼眼菜单，选取反而更慢）。
  */
 const PARAMS: FisheyeParams = {
-  sigma: SIGMA,
+  sigma: tune('sigma', 0.95),
   // 玩家 2026-09 第三轮：「鱼眼的放大和缩小要更明显」。原先是 1 → 1.26（远处的
   // 卡就是原大，近处胀 26%），一眼扫过去几乎看不出哪张被选中。现在两头都拉开：
   // 远处缩到 0.80、焦点胀到 1.40，一大一小差 1.75 倍。
@@ -94,11 +94,11 @@ const PARAMS: FisheyeParams = {
   // 23 = 135）：焦点半高 135×1.60/2 = 108.0，邻居 scale 1.195 半高 80.7，合
   // 188.7；那一段的间距是 150 + 60×0.857 = 201.4，留 12.7px。门 check-mode-axis
   // 逐对量这件事，改这几个数之前先跑它。
-  minScale: 0.72,
-  maxScale: 1.6,
-  minGap: 150,
-  maxGap: 210,
-  lockRadius: 0.22,
+  minScale: tune('minScale', 0.68),
+  maxScale: tune('maxScale', 1.6),
+  minGap: tune('minGap', 150),
+  maxGap: tune('maxGap', 210),
+  lockRadius: tune('lock', 0.28),
 };
 
 /** reduced-motion 下用的那一套：一把没有弹性的尺子，位置照旧跟手，但不形变。 */
@@ -123,9 +123,9 @@ const RIGID: FisheyeParams = {
  * 不会跳一下。（第四轮之后这两个数是**快滑**那一档的倍率，慢慢拖要再打折——见
  * 下面 SLOW_K。）
  */
-const GAIN = 2;
-const GAIN_FAR = 5;
-const GAIN_KNEE = 130;
+const GAIN = tune('gain', 0.9);
+const GAIN_FAR = tune('gainFar', 4);
+const GAIN_KNEE = tune('knee', 130);
 /**
  * 快慢分档：**同样的手指位移，滑得越快走得越多**。
  *
@@ -141,7 +141,7 @@ const GAIN_KNEE = 130;
  * 焦点会当场跳一下）。改成**逐段累加**：每来一条 pointermove，把这一小段位移按
  * 当时的倍率折算成轴上的像素加进去。见 onMove。
  */
-const SLOW_K = 0.75;
+const SLOW_K = tune('slowK', 0.45);
 /**
  * 两档的分界线，2026-09 第五轮重新标过。
  *
@@ -152,9 +152,9 @@ const SLOW_K = 0.75;
  * 现在 0.22 / 0.85：轻轻一甩就到顶。而且顶上那一档不再只是「不打折」，是 FAST_K
  * 倍——同样的位移，甩过去要比慢慢拖多走六成，差别才摆得出来。
  */
-const V_SLOW = 0.22;
-const V_FAST = 0.85;
-const FAST_K = 1.6;
+const V_SLOW = tune('vSlow', 0.22);
+const V_FAST = tune('vFast', 0.85);
+const FAST_K = tune('fastK', 1.1);
 /**
  * 速度要先过一道低通再拿去挑档。
  *
@@ -163,7 +163,7 @@ const FAST_K = 1.6;
  * 它挑档，倍率在一次滑动里来回跳，手上的感觉是「一顿一顿的」。这道一阶低通认的是
  * 「这一下大概多快」，不是「这一条事件多快」。
  */
-const V_SMOOTH = 0.45;
+const V_SMOOTH = tune('vSmooth', 0.45);
 /**
  * **两个控件，不是一个控件两档倍率。**
  *
@@ -227,20 +227,22 @@ const CARD_K = 0.8;
  *   · 手指在松手前已经停住（超过 FLING_STALE 没有新的 move）就不投影——那是
  *     「放下」，不是「甩出去」。
  */
-const FLING_MS = 18;
-const FLING_MAX = 2;
-const FLING_MIN = 0.2;
-const FLING_CARRY = 0.3;
-const FLING_VMAX = 6;
-const FLING_STALE = 80;
-/**
- * 每滑过一项的那一下「咔」。
+const FLING_MS = tune('flingMs', 56);
+const FLING_MAX = tune('flingMax', 2);
+const FLING_MIN = tune('flingMin', 0.1);
+const FLING_CARRY = tune('carry', 0.15);
+const FLING_VMAX = tune('vmax', 3);
+const FLING_STALE = tune('stale', 70);
+/*
+ * **这条轴上没有震动。**
  *
- * 玩家第三轮：「每一经过一个玩法都有一点经过每一小卡的感觉」。声音本来就有（滑
- * 过一项出一声 scan），这儿再补一记极短的震动——两样加上焦点锁定那个死区（见
- * fisheye 的 lockRadius），滑过每一张卡就有一记轻轻的顿挫。
+ * 曾经有过：第三轮玩家要「每一经过一个玩法都有一点经过每一小卡的感觉」，于是在声音
+ * 旁边补了一记 8ms 的震动。第五轮他在调参模拟台上把震动两档（拖动中、定格时）都调成
+ * 了 0——「轴上零震动」是调定的结论，所以常量和调用一并删掉，不是留着传 0。
+ *
+ * 那一记顿挫感现在由两样撑着：每过一项一声 scan，加上焦点锁定那个死区（fisheye 的
+ * lockRadius，调到了 0.28）。
  */
-const DETENT_MS = 8;
 /**
  * 上下两头那一点**模糊**。
  *
@@ -253,8 +255,9 @@ const DETENT_MS = 8;
  * 写：`filter` 一改就要软件光栅化那一张，量化之后一次滑动里每张卡只写那么几次，
  * 不是每帧都写（§5.4 那条「不许逐帧改 filter」说的就是这个）。
  */
-const BLUR_EDGE = 150;
-const BLUR_MAX = 2.5;
+/** 虚化总开关和焦点豁免开关（模拟台的 `blur` / `blurExempt`，两个都调定为开）。 */
+const BLUR_ON = tuneFlag('blur', true);
+const BLUR_EXEMPT_ON = tuneFlag('blurExempt', true);
 /**
  * 两侧那两条点点轴（玩家给的效果图上，左右两边各一列小圆点）。
  *
@@ -265,7 +268,6 @@ const BLUR_MAX = 2.5;
 const RAIL_PITCH = 13;
 const RAIL_DOT_MIN = 4;
 const RAIL_DOT_MAX = 9;
-const RAIL_SPAN = 4.6;
 /** 按下那一刻合成的尺子往两边各排几格（见 localRuler）。 */
 const RULER_SPAN = 8;
 /** 位移超过这么多像素就算「拖」，不算「点」——否则滑一下手会误开一个玩法。 */
@@ -276,8 +278,11 @@ const TAP_SLOP = 10;
  * 玩家 2026-09 第十二轮：「把主菜单中的两侧的点点快捷滑动（包括中线）和鱼眼转盘
  * 整体上移屏幕的 1/5 大概」。挪的是**中心那条线**——所有挂在它上面的东西一起走，
  * 所以只有这一个数（见 style.css 里 `--axis-shift` 那段）。
+ *
+ * 那一轮拍的是 1/5（0.2）。后来他在调参模拟台上把它调到了 **0.05**——中线落在屏高
+ * 45%，比正中略高一点点。0.2 那一版顶得太高，轴的下半截空了一大块。
  */
-const SHIFT_FRAC = 0.2;
+const SHIFT_FRAC = tune('shift', 0.05);
 
 export interface ModeAxisOpts {
   /** 轴上的卡，按顺序。menu.ts 造好了原样交过来——美术内容一个字都不改。 */
@@ -438,11 +443,35 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 真实 dt（MAX_DT_MS 截断、4ms 子步，切后台回来那一下也兜得住），只有这一个
    * 调用方写死了。
    */
+  /**
+   * 扁平化系数，1 = 形变全开。每帧往目标值走一步（时间常数约 100ms），不直接跳——直接
+   * 跳的话手速一抖形变就跟着抖，那比不做还糟。
+   */
+  let flatF = 1;
   let lastLoopTs = 0;
   let lastNearest = Math.round(focus);
   let destroyed = false;
 
-  const params = () => (reducedMotion() ? RIGID : PARAMS);
+  /**
+   * 这一帧用哪一套鱼眼参数。
+   *
+   * `flatF`（速度耦合的扁平化，见 axisMotion 的 flatFor）乘在**展宽**上，不乘在底
+   * 上——`minScale + (maxScale − minScale) × inf × flatF` 等价于把 maxScale 往
+   * minScale 收 flatF 那么多，间距同理。这么写只动参数这一处，fisheye 那个纯函数一个
+   * 字不用改。
+   *
+   * reduced-motion 那一套（RIGID）本来 maxScale 就等于 minScale、maxGap 等于 minGap，
+   * 乘什么都是同一个结果——所以那一档直接原样返回，连乘法都不做。
+   */
+  const params = (): FisheyeParams => {
+    if (reducedMotion()) return RIGID;
+    if (flatF >= 1) return PARAMS;
+    return {
+      ...PARAMS,
+      maxScale: PARAMS.minScale + (PARAMS.maxScale - PARAMS.minScale) * flatF,
+      maxGap: PARAMS.minGap + (PARAMS.maxGap - PARAMS.minGap) * flatF,
+    };
+  };
 
   /**
    * 轴占**整块屏幕**：上沿贴视口顶，高度就是视口高。
@@ -679,12 +708,12 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 量的是「这张卡的中心离最近的那条屏幕边还有多远」——轴的盒子就是视口，所
        * 以 `半高 − |位移|` 正好是这个距离。写之前量化成 0.5px 一档，理由同上。
        */
+      // **焦点豁免**（v1.1 §3，随这一批落地）：影响度高的那几张一律不虚。只按离屏幕边
+      // 多远算的话，把轴拖到两端、焦点那张自己贴着屏幕边的时候，正被选中的那张是最模
+      // 糊的一张——玩家盯着看的恰好看不清。判定抽成了纯函数（axisMotion 的 blurFor，
+      // 门钉着它），这儿只管把两个量喂进去。
       const room = edgeOf(s.at) - far;
-      const raw =
-        !still || room >= BLUR_EDGE
-          ? 0
-          : BLUR_MAX * Math.min(1, (BLUR_EDGE - room) / BLUR_EDGE);
-      const q = Math.round(raw * 2) / 2;
+      const q = still && BLUR_ON ? blurFor(room, s.inf, BLUR_EXEMPT_ON) : 0;
       const f = q > 0 ? `blur(${q}px)` : '';
       if (f !== prev.f) { el.style.filter = f; prev.f = f; }
 
@@ -697,10 +726,21 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 版 28 次——排版是整棵树的事，比画 13 张卡还贵。scale 只走合成，一行都不
        * 重排。点子在 CSS 里就是最大的那个尺寸（RAIL_DOT_MAX），这儿只往下缩。
        */
+      /**
+       * **十四颗点全程都在。**
+       *
+       * 原先这儿多乘一个「可见窗口」因子：离焦点超过 RAIL_SPAN（4.6 项）的点被淡到 0，
+       * 所以整条轨任何时刻只看得见焦点附近八九颗。玩家的话是「只展示了几个很莫名其
+       * 妙」——这条轨存在的全部意义是「我在这十四项的哪儿、后面还有多少」，而一条只显示
+       * 一段的进度条答不了后半个问题。窗口因子和 RAIL_SPAN 一起删掉了。
+       *
+       * 大小和亮度照旧随各自的影响度起伏（中间大而亮、两头小而淡），乘上同一份 flatF
+       * ——高速时轨和卡一起收，不然两者的呼吸对不上。
+       */
       const k = s.index - L.lockedFocus;
-      const dotA = Math.max(0, Math.min(1, (RAIL_SPAN - Math.abs(k)) / 1.6)) *
-        (0.28 + 0.72 * s.inf);
-      const size = RAIL_DOT_MIN + (RAIL_DOT_MAX - RAIL_DOT_MIN) * s.inf;
+      const inf = s.inf * flatF;
+      const dotA = 0.25 + 0.75 * inf;
+      const size = RAIL_DOT_MIN + (RAIL_DOT_MAX - RAIL_DOT_MIN) * inf;
       const dt =
         `translate3d(-50%,-50%,0) translateY(${(k * RAIL_PITCH).toFixed(2)}px)` +
         ` scale(${(size / RAIL_DOT_MAX).toFixed(3)})`;
@@ -722,13 +762,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // reduced-motion 下拖动途中一声不出，只在松手定格那一下出——玩家原话：
       // 「只在最后选中一个图标停下来的那一刻出声，快速滑过的时候不播」。
       //
-      // 震动和声音同一个时机：玩家第四轮要的「每一经过一个玩法都有一点经过每一
-      // 小卡的感觉」，就是这一声加这一下，再加上焦点锁定那个死区（lockRadius）
-      // ——三样凑起来，滑过每一张卡手上都有一记轻轻的顿挫。
-      if (!reducedMotion()) {
-        tick();
-        vibrate(DETENT_MS);
-      }
+      // 只出声，不震动（见上面 DETENT 那一段：玩家调定「轴上零震动」）。顿挫感由
+      // 这一声加焦点锁定那个死区（lockRadius）撑着。
+      if (!reducedMotion()) tick();
     }
   }
 
@@ -788,7 +824,18 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // （见 AXIS_SETTLE_LAMBDA）。lastT 是最后一条 move 的时刻，和 rAF 的时间戳
       // 同一条时间线。
       const stalled = now - lastT > FLING_STALE;
-      focus = rail
+      /**
+       * **卡片那条路现在也一比一贴着手指**（AXIS_LERP = 1，玩家在模拟台上调到顶）。
+       *
+       * 所以三条路合成了同一条：点点贴手指、卡片贴手指、两者严格 1:1 互为镜像。
+       * 「停住还差半拍」那件事随之不存在，AXIS_SETTLE_LAMBDA 在这一档是无穷大、不
+       * 起作用（那个常量自己的注释里记着它当初为什么必须有）。
+       *
+       * 追赶那条路**留着**，因为 lerp 是可调的：把 `slides.axisTune` 的 `lerp` 调回
+       * 小于 1，下面那一支连同 damp、连同停住追赶一起回来。写成 `>= 1` 而不是
+       * `=== 1`：钳制上界就是 1，但一个浮点等号在这种地方不值得依赖。
+       */
+      focus = rail || AXIS_LERP >= 1
         ? aimFocus
         : damp(focus, aimFocus, dt, stalled ? AXIS_SETTLE_LAMBDA : AXIS_LAMBDA);
       // 追到头就贴上去。差得比一个千分位还少的时候，再追也只是每帧重画同一张
@@ -796,6 +843,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // 循环重新点起来，那时 lastLoopTs 已清零，从 60Hz 重新起算。
       if (Math.abs(aimFocus - focus) < 1e-4) focus = aimFocus;
       vRender = dt > 0 ? ((focus - prev) / dt) * 1000 : 0;
+      stepFlat(dt);
       paint();
       if (focus !== aimFocus || vRender !== 0) schedule();
       else lastLoopTs = 0;
@@ -824,10 +872,25 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
         // 去当上一帧——那会让新弹簧的第一帧 dt 是几百毫秒，一步跳到位。
         lastLoopTs = 0;
       }
+      stepFlat(dt);
       paint();
       if (springing) schedule();
       else settled();
     }
+  }
+
+  /**
+   * 这一帧把 flatF 往目标值挪一步。时间常数约 100ms（`1 − e^(−12·dt)`，dt 以秒计）。
+   *
+   * 两条路（拖动、弹簧）都要调它，所以单独一个函数：漏掉一条的话那一段的形变会僵在
+   * 上一段留下的值上，而那不报错、只是手感对不上。
+   */
+  function stepFlat(dt: number): void {
+    if (reducedMotion()) { flatF = 1; return; }
+    const ft = flatFor(vRender);
+    flatF += (ft - flatF) * (1 - Math.exp((-12 * Math.min(dt, 64)) / 1000));
+    // 贴到头就贴上：差一个千分位以下再挪也只是每帧重算同一套参数。
+    if (Math.abs(ft - flatF) < 1e-3) flatF = ft;
   }
 
   function schedule(): void {
@@ -842,6 +905,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    */
   function settled(): void {
     if (reducedMotion()) tick();
+    // 停稳了，形变要回到满的。弹簧最后那一帧的 vRender 已经是 0，但 flatF 是逐帧追过去
+    // 的，那一刻可能还差一点点——而这是**静止**的一帧，差的那一点会一直留在屏幕上。
+    flatF = 1;
     paint();
   }
 

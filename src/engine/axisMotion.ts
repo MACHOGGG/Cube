@@ -26,17 +26,29 @@
  * 也还是同样的 46.9%。
  */
 
+import { tune } from './axisTune';
+
 /**
  * 每帧追赶的强度，按「60Hz 下每帧走完剩下的多少」来标。
  *
- * 0.1 是 Lenis 的默认值——玩家点名参照的就是它（「拖动中始终慢半拍、恒定、
- * 可预期」）。内容页那层阻尼（engine/smoothScroll.ts）用的也是这个数，两边
- * 手感一致。
+ * **现在是 1：无滞后直贴。** 玩家 2026-09 在调参模拟台上把它拉到了顶——画面每帧直接
+ * 等于手指的目标，没有追赶曲线。数学上 `1 − e^(−λ·dt)` 要等于 1，λ 就是无穷大；语义
+ * 上那正是「不追，直接到」。
+ *
+ * 0.1（Lenis 的默认值，「拖动中始终慢半拍、恒定、可预期」）是上一版拍的数，现在作为
+ * 历史留在这儿：把 `slides.axisTune` 的 `lerp` 调回 0.1，追赶那条路会原样回来（见
+ * modeAxis 的 loop，两条路都还在）。内容页那层阻尼（engine/smoothScroll.ts）仍旧是
+ * 0.1，它是另一件事。
  */
-export const AXIS_LERP = 0.1;
+export const AXIS_LERP = tune('lerp', 1);
 
-/** 换算成按时间计的衰减率（1/秒）。60Hz 下正好等于 AXIS_LERP，换到别的帧率也不走样。 */
-export const AXIS_LAMBDA = -Math.log(1 - AXIS_LERP) * 60;
+/**
+ * 换算成按时间计的衰减率（1/秒）。60Hz 下正好等于 AXIS_LERP，换到别的帧率也不走样。
+ *
+ * lerp = 1 的时候这个数是 **Infinity**，而那是对的：`1 − e^(−∞)` 就是 1，一帧追满。
+ * damp() 照样能用（它自己算出来就是 target），所以下游不必为这一档写分支。
+ */
+export const AXIS_LAMBDA = AXIS_LERP >= 1 ? Infinity : -Math.log(1 - AXIS_LERP) * 60;
 
 /**
  * 手指**停住之后**的追赶强度（AXIS_LAMBDA 的 8 倍，时间常数约 20ms）。
@@ -47,11 +59,16 @@ export const AXIS_LAMBDA = -Math.log(1 - AXIS_LERP) * 60;
  * 项」）。实测过：只按 AXIS_LERP 追，停住 150ms 只追回 61%，松手那一刻画面在
  * 4.92、落点在 7，差两张卡。
  *
- * 所以停住就把画面追齐。「停住」沿用 FLING_STALE（80ms，和「这是放下、不是甩出
- * 去」同一个阈值，不另立一个数）；追齐大约再要 60ms，眼睛看到的是「跟上来了」，
- * 不是「跳了一下」——而且那会儿画面本来就在减速，接上去是顺的。
+ * 所以停住就把画面追齐。「停住」沿用 FLING_STALE（和「这是放下、不是甩出去」同一个
+ * 阈值，不另立一个数）；追齐大约再要 60ms，眼睛看到的是「跟上来了」，不是「跳了一
+ * 下」——而且那会儿画面本来就在减速，接上去是顺的。
+ *
+ * **lerp = 1（现在的默认）之下这个数是无穷大，也就是不起作用**——无滞后就没有「停住
+ * 还差半拍」这件事可追。上面那一整段连同「停住 150ms 只追回 61%、差两张卡」的实测，
+ * 现在是**历史记录**：它记的是 lerp = 0.1 那一版为什么必须有这个常量。把 `lerp` 调回
+ * 小于 1，那一版连同这个常量一起回来。倍数由 `chase` 覆盖（模拟台里那个键）。
  */
-export const AXIS_SETTLE_LAMBDA = AXIS_LAMBDA * 8;
+export const AXIS_SETTLE_LAMBDA = AXIS_LAMBDA * tune('chase', 8);
 
 /**
  * 从 current 往 target 追 dtMs 毫秒。**帧率无关。**
@@ -62,6 +79,58 @@ export const AXIS_SETTLE_LAMBDA = AXIS_LAMBDA * 8;
 export function damp(current: number, target: number, dtMs: number, lambda = AXIS_LAMBDA): number {
   const dt = Math.min(Math.max(dtMs, 0), 64);
   return current + (target - current) * (1 - Math.exp((-lambda * dt) / 1000));
+}
+
+/**
+ * 速度耦合的**扁平化**：滑得越快，鱼眼的变形越收。
+ *
+ * 快速扫过一条形变很大的轴，眼睛读到的是一片糊动的大小变化；把变形收一点，高速那一段
+ * 就安静下来，而慢慢挑的时候形变照旧是满的（那才是鱼眼要帮的忙）。
+ *
+ * 幅度按玩家在模拟台上调定的值——FLAT_MAX = 0.1，**只收一成**。很轻是有意的：这一项是
+ * 「高速时别晃眼」，不是一个看得见的特效。照实实现，不自作主张加大。
+ *
+ * 死区 FLAT_DEAD（0.5 项/秒）以下恒为 1：慢慢挑的时候一点都不收。FLAT_VMAX（6 项/秒）
+ * 以上吃满。
+ *
+ * 返回值乘在**缩放和间距的展宽**上（等效 `influence × flatF`），卡片和点点轨共用同一
+ * 份。reduced-motion 那一套（RIGID）本来就关掉了鱼眼，那一档 flatF 恒 1。
+ */
+export const FLAT_MAX = tune('flatMax', 0.1);
+export const FLAT_DEAD = tune('flatDead', 0.5);
+export const FLAT_VMAX = tune('flatVmax', 6);
+
+export function flatFor(v: number): number {
+  const sp = Math.abs(v);
+  const span = FLAT_VMAX - FLAT_DEAD;
+  const t = span > 0 ? (sp - FLAT_DEAD) / span : sp > FLAT_DEAD ? 1 : 0;
+  return 1 - FLAT_MAX * Math.max(0, Math.min(1, t));
+}
+
+/**
+ * 上下两头那一点**虚**给多少（px）。
+ *
+ * 两个输入：`room` 是这张卡的中心离最近那条屏幕边还有多远，`inf` 是它的鱼眼影响度
+ * （1 = 正焦点，0 = 远处）。
+ *
+ * **焦点豁免是这个函数存在的理由。** 只按离屏幕边多远算的话，把轴拖到两端、焦点那张
+ * 自己贴着屏幕边的时候，**正被选中的那张卡是虚的**——玩家盯着看的恰好是最模糊的一
+ * 张。这一条不报错、不白屏，只是「到了顶那一张看不清」。所以 `inf` 超过
+ * BLUR_EXEMPT 的卡一律不虚：它是当下的主角，景深不该落在主角身上。
+ *
+ * 量化成 0.5px 一档再返回：`filter` 一改就要把那张卡连同里面那张 SVG 重新栅格化，
+ * 量化之后一次滑动里每张卡只写那么几次，不是每帧都写。
+ */
+export const BLUR_EDGE = 150;
+export const BLUR_MAX = 2.5;
+/** 影响度超过这个数的卡不虚（焦点及其紧邻）。 */
+export const BLUR_EXEMPT = 0.3;
+
+export function blurFor(room: number, inf: number, exempt = true): number {
+  if (exempt && inf > BLUR_EXEMPT) return 0;
+  if (!(room < BLUR_EDGE)) return 0;
+  const raw = BLUR_MAX * Math.min(1, (BLUR_EDGE - Math.max(0, room)) / BLUR_EDGE);
+  return Math.round(raw * 2) / 2;
 }
 
 /**

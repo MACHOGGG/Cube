@@ -19,7 +19,8 @@ if (!motionSrc || !springSrc) {
   console.error('用法: node scripts/check-axis-motion.mjs <打包好的 axisMotion.mjs> <打包好的 spring.mjs>');
   process.exit(2);
 }
-const { damp, AXIS_LERP, AXIS_LAMBDA, rubber, RUBBER_D, skewFor, SKEW_DEAD, SKEW_MAX } = await import(motionSrc);
+const { damp, AXIS_LERP, AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, blurFor, BLUR_EDGE, BLUR_MAX, BLUR_EXEMPT,
+  flatFor, FLAT_MAX, FLAT_DEAD, FLAT_VMAX, rubber, RUBBER_D, skewFor, SKEW_DEAD, SKEW_MAX } = await import(motionSrc);
 const { createSpring, stepSpring } = await import(springSrc);
 
 let fail = 0;
@@ -61,15 +62,37 @@ const check = (name, ok, extra = '') => {
   );
 }
 
-// ── 追赶：同一段真实时间，帧率不同追到的地方要一样 ──────────────────
+// ── 无滞后直贴：AXIS_LERP 现在是 1 ─────────────────────────────────
+//
+// 玩家在调参模拟台上把它拉到了顶（附录 A：`"lerp":1`），语义是「画面每帧直接等于手指
+// 的目标，没有追赶曲线」。数学上 λ 就是无穷大——这一段量的是那一档真的成立，而且**下游
+// 不必为它写分支**：damp 自己算出来就是 target。
+{
+  check(`AXIS_LERP 是 1（无滞后直贴）`, AXIS_LERP === 1, String(AXIS_LERP));
+  check('λ 因此是 Infinity', AXIS_LAMBDA === Infinity, String(AXIS_LAMBDA));
+  check('停住追赶那个常量也跟着失效（无滞后就没有「还差半拍」）',
+    AXIS_SETTLE_LAMBDA === Infinity, String(AXIS_SETTLE_LAMBDA));
+  // 一帧就到，任何 dt 都一样——包括被截断的那一档。
+  const spots = [1000 / 120, 1000 / 60, 1000 / 30, 5000].map((dt) => damp(0.3, 7, dt));
+  check('λ = ∞ 下 damp 一帧到位（dt 多少都一样）',
+    spots.every((v) => v === 7), spots.join(' '));
+}
+
+// ── 追赶那条路本身：同一段真实时间，帧率不同追到的地方要一样 ────────
 //
 // 这是 damp 存在的全部理由。写成 `x += (target - x) * 0.1` 的话，同样 100ms 里
 // 30Hz 只追回 27.1%、60Hz 46.9%、120Hz 71.8%——开发机上调好的那一点「慢半拍」，
 // 到低电量模式的 iPhone 上是拖泥带水，到 120Hz 上几乎不慢。
+//
+// **λ 显式传进去**，不走默认值：默认值现在是 ∞（一帧到位），那一档量不到帧率无关这件
+// 事。追赶那条路仍旧活着——`slides.axisTune` 把 `lerp` 调回小于 1，modeAxis 的 loop 就
+// 又走它（见那个文件里 `AXIS_LERP >= 1` 那一支）。这一段量的就是那条路。
 {
+  /** lerp = 0.1 对应的 λ，也就是这条路从前的默认值。 */
+  const LAMBDA_01 = -Math.log(1 - 0.1) * 60;
   const run = (dtMs, steps) => {
     let x = 0;
-    for (let i = 0; i < steps; i++) x = damp(x, 1, dtMs);
+    for (let i = 0; i < steps; i++) x = damp(x, 1, dtMs, LAMBDA_01);
     return x;
   };
   // 都走满 100ms 真实时间，只是帧数不同。
@@ -85,18 +108,18 @@ const check = (name, ok, extra = '') => {
     spread / vals[1] < 0.005,
     at.map(([n, v]) => `${n} ${(v * 100).toFixed(2)}%`).join(' / '),
   );
-  // 60Hz 那一档必须正好等于 AXIS_LERP：这是「λ 由 0.1 反推」那句话的验算。数对
-  // 不上的话，参照 Lenis 的那个 0.1 就名存实亡了。
+  // 60Hz 那一档必须正好等于那个 lerp：这是「λ 由 0.1 反推」那句话的验算。
   check(
-    `60Hz 下每帧正好追 AXIS_LERP（${AXIS_LERP}）`,
-    Math.abs(damp(0, 1, 1000 / 60) - AXIS_LERP) < 1e-6,
-    `${damp(0, 1, 1000 / 60).toFixed(8)}，λ = ${AXIS_LAMBDA.toFixed(6)}`,
+    '60Hz 下每帧正好追 0.1（λ 由它反推）',
+    Math.abs(damp(0, 1, 1000 / 60, LAMBDA_01) - 0.1) < 1e-6,
+    `${damp(0, 1, 1000 / 60, LAMBDA_01).toFixed(8)}，λ = ${LAMBDA_01.toFixed(6)}`,
   );
   // 切后台回来那一下 dt 可能是几秒：截断到 64ms，不能一帧贴到目标上。
   check(
     'dt 再大也截断在 64ms（切后台回来不会一帧跳到位）',
-    Math.abs(damp(0, 1, 5000) - damp(0, 1, 64)) < 1e-12 && damp(0, 1, 5000) < 0.4,
-    `dt=5000ms 追了 ${(damp(0, 1, 5000) * 100).toFixed(2)}%`,
+    Math.abs(damp(0, 1, 5000, LAMBDA_01) - damp(0, 1, 64, LAMBDA_01)) < 1e-12 &&
+      damp(0, 1, 5000, LAMBDA_01) < 0.4,
+    `dt=5000ms 追了 ${(damp(0, 1, 5000, LAMBDA_01) * 100).toFixed(2)}%`,
   );
 }
 
@@ -157,6 +180,61 @@ const check = (name, ok, extra = '') => {
     skewFor(SKEW_DEAD + 0.01) < 0.05 && skewFor(SKEW_DEAD + 0.01) > 0,
     `${skewFor(SKEW_DEAD + 0.01).toFixed(4)}°`,
   );
+}
+
+// ── 速度耦合的扁平化（flatFor）─────────────────────────────────────
+//
+// 滑得越快，鱼眼的变形越收。幅度是玩家在模拟台上调定的 FLAT_MAX = 0.1——**只收一成**。
+// 很轻是有意的：这一项是「高速时别晃眼」，不是一个看得见的特效。所以这一段除了量形状，
+// 还要量**它确实很轻**：一旦有人把它当特效加大，最小值那一条会红。
+{
+  check('慢慢挑的时候一点都不收（死区内恒为 1）',
+    [0, 0.1, FLAT_DEAD].every((v) => flatFor(v) === 1),
+    [0, 0.1, FLAT_DEAD].map((v) => `${v}→${flatFor(v)}`).join(' '));
+  // 单调不增：速度越大，收得越多（或者一样），不许中间反弹。
+  let mono = true;
+  let prev = flatFor(0);
+  for (let v = 0; v <= 12; v += 0.1) {
+    const cur = flatFor(v);
+    if (cur > prev + 1e-12) { mono = false; break; }
+    prev = cur;
+  }
+  check('速度越大收得越多，单调不增', mono);
+  check(`最小值就是 1 − FLAT_MAX（${(1 - FLAT_MAX).toFixed(2)}），不许更狠`,
+    Math.abs(flatFor(1e6) - (1 - FLAT_MAX)) < 1e-12, flatFor(1e6).toFixed(4));
+  check('到 FLAT_VMAX 就吃满', Math.abs(flatFor(FLAT_VMAX) - (1 - FLAT_MAX)) < 1e-12,
+    `${FLAT_VMAX} → ${flatFor(FLAT_VMAX).toFixed(4)}`);
+  check('左右对称（往哪个方向滑都一样）',
+    flatFor(3) === flatFor(-3) && flatFor(9) === flatFor(-9), `${flatFor(3)} / ${flatFor(-3)}`);
+  // 死区刚出来那一下是连续的，不是台阶——台阶会让形变在某个手速上「啪」地收一下。
+  const justOut = flatFor(FLAT_DEAD + 1e-6);
+  check('刚出死区是连续的（不是台阶）', justOut < 1 && 1 - justOut < 1e-5, (1 - justOut).toExponential(2));
+}
+
+// ── 两头那一点虚，和焦点豁免（blurFor）───────────────────────────
+//
+// 焦点豁免是这个函数存在的理由：只按离屏幕边多远算的话，把轴拖到两端、焦点那张自己贴着
+// 屏幕边的时候，**正被选中的那张卡是虚的**——玩家盯着看的恰好是最模糊的一张。不报错、不
+// 白屏，只是「到了顶那一张看不清」。
+{
+  // 正例：一张远处的卡贴着屏幕边，该虚。
+  check('远处的卡贴着屏幕边：虚', blurFor(0, 0) > 0, String(blurFor(0, 0)));
+  check('离边够远：不虚', blurFor(BLUR_EDGE, 0) === 0, String(blurFor(BLUR_EDGE, 0)));
+  check('越靠边越虚（单调不减）',
+    blurFor(0, 0) >= blurFor(50, 0) && blurFor(50, 0) >= blurFor(120, 0),
+    `${blurFor(0, 0)} ${blurFor(50, 0)} ${blurFor(120, 0)}`);
+  check(`最多 ${BLUR_MAX}px`, blurFor(-999, 0) === BLUR_MAX, String(blurFor(-999, 0)));
+  // 豁免：影响度高的那几张一律不虚，哪怕贴在边上。
+  check('焦点贴着屏幕边也不虚（豁免）', blurFor(0, 1) === 0, String(blurFor(0, 1)));
+  check('刚过豁免线就不虚了', blurFor(0, BLUR_EXEMPT + 0.01) === 0, String(blurFor(0, BLUR_EXEMPT + 0.01)));
+  // 尺子：豁免线**以下**的还是要虚，不然「豁免」就等于「整个关掉虚化」。
+  check('豁免线以下照旧虚（尺子：不是把虚化整个关掉）',
+    blurFor(0, BLUR_EXEMPT - 0.01) > 0, String(blurFor(0, BLUR_EXEMPT - 0.01)));
+  // 关掉豁免这一档也要能走（模拟台的 blurExempt 是个开关）。
+  check('豁免关掉时，焦点照旧按距离虚', blurFor(0, 1, false) > 0, String(blurFor(0, 1, false)));
+  // 量化成 0.5px 一档：filter 一改就要重新栅格化那张卡，量化之后一次滑动只写几次。
+  const qs = [0, 20, 40, 60, 80, 100, 130].map((r) => blurFor(r, 0));
+  check('量化成 0.5px 一档', qs.every((v) => Math.abs(v * 2 - Math.round(v * 2)) < 1e-9), qs.join(' '));
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);

@@ -512,17 +512,21 @@ let page = await menuPage({ slides_played_square: '1' });
    * 滑动（包括中线）和鱼眼转盘整体上移屏幕的 1/5 大概」——三样东西挂在同一条线
    * 上，一起挪才叫「整体」，挪了卡片没挪点点就是错位。
    *
-   * 量的是**画出来的绝对位置**（该在 0.3 屏高处），不是 `--axis-shift` 这个变量
-   * 本身：照着那个变量量等于拿尺子量尺子——SHIFT_FRAC 改回 0，上面那几条用
-   * hostCy 的断言会跟着一起挪、照样全绿，只有这一条会红。
+   * 量的是**画出来的绝对位置**，不是 `--axis-shift` 这个变量本身：照着那个变量量等于
+   * 拿尺子量尺子——SHIFT_FRAC 改回 0，上面那几条用 hostCy 的断言会跟着一起挪、照样全
+   * 绿，只有这一条会红。
+   *
+   * 那一轮拍的是 1/5（0.2），后来玩家在调参模拟台上把它调到了 **0.05**——中线落在屏高
+   * 45%，比正中略高一点点。0.2 那一版顶得太高，轴的下半截空了一大块。
    */
-  const wantCy = rail.vh / 2 - rail.vh / 5;
+  const SHIFT = 0.05;
+  const wantCy = rail.vh / 2 - rail.vh * SHIFT;
   const movedAll =
     Math.abs(rail.cardCy - wantCy) < 6 &&
     rail.dots.every((d) => Math.abs(d.reduce((a, b) => (b.w > a.w ? b : a)).cy - wantCy) < 6) &&
     (rail.dividerCy === null || Math.abs(rail.dividerCy - wantCy) < 6);
   check(
-    '卡片、两侧点点、中线一起上移了屏幕的 1/5（该在 ' + wantCy.toFixed(0) + 'px）',
+    `卡片、两侧点点、中线一起上移了屏高的 ${SHIFT}（该在 ${wantCy.toFixed(0)}px）`,
     movedAll,
     `卡 ${rail.cardCy.toFixed(0)} / 点 ${rail.dots.map((d) => d.reduce((a, b) => (b.w > a.w ? b : a)).cy.toFixed(0)).join(' ')} / 中线 ${rail.dividerCy === null ? '无' : rail.dividerCy.toFixed(0)}`,
   );
@@ -598,7 +602,14 @@ let page = await menuPage({ slides_played_square: '1' });
   };
   const slow = await stroke(20, 30);
   const fast = await stroke(5, 0);
-  check('慢拖也走得动（不是推不动）', slow >= 2, `慢拖 200px 走了 ${slow} 项`);
+  /**
+   * 玩家 2026-09 在调参模拟台上把灵敏度整体调低了一档：gain 2 → 0.9、slowK 0.75 →
+   * 0.45。慢拖 200px 从前走两三项，现在走一项——**这是调定的手感**，不是回归。
+   *
+   * 所以这一条守的是它**没有变成推不动**（≥1 项），以及下面那一条「快甩比慢拖远」。
+   * 两档灵敏度这件事由后者量，不由绝对项数量。
+   */
+  check('慢拖也走得动（不是推不动）', slow >= 1, `慢拖 200px 走了 ${slow} 项`);
   check('同样 200px，快甩走得比慢拖远', fast > slow, `慢 ${slow} 项 / 快 ${fast} 项`);
   check('快甩也没飞到底（还停得住）', fast < 13, `${fast} 项`);
   await p5.close();
@@ -628,8 +639,21 @@ let page = await menuPage({ slides_played_square: '1' });
   await p6.mouse.up();
   await p6.waitForTimeout(500);
   const vib = await p6.evaluate(() => window.__vib);
-  check('滑过好几项就震好几下（一项一记）', vib.length >= 3, `震了 ${vib.length} 下`);
-  check('每一记都很短（8ms，不是嗡一声）', vib.length > 0 && vib.every((v) => v === 8), [...new Set(vib)].join('/'));
+  /**
+   * **这条轴上不许有震动。**
+   *
+   * 曾经有过：第三轮玩家要「每一经过一个玩法都有一点经过每一小卡的感觉」，于是在声音旁
+   * 边补了一记 8ms 的震动。第五轮他在调参模拟台上把震动两档（拖动中、定格时）都调成了
+   * 0——「轴上零震动」是调定的结论。
+   *
+   * 这一条从「震了几下」翻成「一下都不许震」。翻过来而不是删掉：一条被删掉的断言拦不住
+   * 「哪天有人顺手把 vibrate 加回来」，而那一下不报错、不白屏，只是每滑一项手机就抖一
+   * 记——恰恰是玩家调掉的那件事。
+   */
+  check('轴上一下都不震（玩家调定「零震动」）', vib.length === 0, `震了 ${vib.length} 下：${[...new Set(vib)].join('/')}`);
+  // 尺子：这一段真的滑动过、也真的换过聚焦项——不然「没震」只是因为什么都没发生。
+  const passed = await p6.evaluate(() => document.querySelectorAll('.mode-axis > .home-icon-btn').length);
+  check('尺子：这一段真的在轴上滑过（十四张卡都在）', passed === 14, `${passed} 张`);
   await p6.close();
 }
 
@@ -811,9 +835,17 @@ let page = await menuPage({ slides_played_square: '1' });
     fling.final - put.final >= 1,
     `甩 ${fling.final.toFixed(0)} / 放 ${put.final.toFixed(0)}（松手时都在 ${fling.atUp.toFixed(2)}）`,
   );
+  /**
+   * 滑行的封顶。玩家把 FLING_MS 从 18 调到了 **56**（松手那一下多滑三倍远），于是它现在
+   * 稳稳地顶在 FLING_MAX（2 项）上——从前是顶不到的。
+   *
+   * 所以这一条钉的是 **FLING_MAX 那道闸还在**，而不是「多走了不到两项」：闸没了的话一
+   * 甩就飞过半条轴，而那正是玩家早先点名修掉的事。容差给 0.05 项：`put.final` 落在整项
+   * 上、`fling.final` 也落在整项上，但两者之间还隔着一次锁定（lockRadius）的取整。
+   */
   check(
-    '但也只多滑一点，不会自己飞走好几项',
-    fling.final - put.final <= 2,
+    '但也只多滑一点，不会自己飞走好几项（顶在 FLING_MAX = 2 项上）',
+    fling.final - put.final <= 2.05,
     `多走 ${(fling.final - put.final).toFixed(2)} 项`,
   );
   check(
@@ -1049,7 +1081,15 @@ let page = await menuPage({ slides_played_square: '1' });
     await p10.mouse.move(midX, y);
     await p10.mouse.down();
     let f = await p10.evaluate(() => window.__focus());
-    for (let guard = 0; guard < 160; guard++) {
+    /**
+     * 步数上限。玩家 2026-09 把灵敏度调低了一档（gain 2 → 0.9、slowK 0.75 → 0.45），
+     * 同样一步 20px 走的项数只有从前的四成左右——160 步到不了第 13 项了（实测停在 12，
+     * 于是这一条红，红的是尺子不是代码）。
+     *
+     * 每一步带 120ms 等待，所以这个数直接决定这一段的墙上时间。到了目标就 break，所以
+     * 抬高它只在真的需要的时候才花时间。
+     */
+    for (let guard = 0; guard < 420; guard++) {
       if (dir < 0 ? f >= k - 0.12 : f <= k + 0.12) break;
       y += dir * 20;
       if (y < 210 || y > 700) {
@@ -1106,13 +1146,42 @@ let page = await menuPage({ slides_played_square: '1' });
     Math.abs(railShot.after - (railShot.before + 4)) < 0.15,
     `两帧之后 ${railShot.after.toFixed(2)}（该 ${(railShot.before + 4).toFixed(2)}）`,
   );
-  const cardShot = await oneShot(midX, 4 * 13);
-  // 反证：同样的一把，中间那条路两帧之内**只走一小截**，追齐之后才走到。两条都
-  // 瞬间到位的话，说明追赶压根没生效，上面那条就是假绿。
+  /**
+   * 卡片那一把用 200px，不是上面那 52px。
+   *
+   * 52px 是照**点点**那条路量的：它是绝对映射，13px 就是一项，四颗点正好 52px。卡片那条
+   * 路要过 gain / speedK 两道折（现在 0.9 × 0.45），52px 只值 0.14 项——而锁定半径是
+   * 0.28，比它还大，所以画面一格都不动（头一版这么写，量出来「走了 0.00 项」）。
+   *
+   * 两条路的**像素→项**换算本来就不同，这一段量的也不是它：量的是**时间**——两帧之内到
+   * 没到位。所以卡片这一把只要大到能过锁定半径就行。
+   */
+  const cardShot = await oneShot(midX, 200);
+  /**
+   * **卡片那条路现在也一比一跟手。**
+   *
+   * 这一条从前是反证：「同样一把，中间那条路两帧之内只走一小截，追齐之后才到」——那时
+   * 卡片是慢半拍的（AXIS_LERP = 0.1 的追赶），所以两条路不一样才说明追赶真的生效了。
+   *
+   * 玩家 2026-09 在调参模拟台上把 lerp 拉到了 1（无滞后直贴），于是三条路合成了同一
+   * 条：点点贴手指、卡片贴手指、两者严格 1:1 互为镜像。所以这一条**翻过来**：两帧之内
+   * 就该到位，和追齐之后一样远。
+   *
+   * 翻过来而不是删掉：删掉就没人守着「直贴」这件事了，而把它改回追赶不报错、不白屏，
+   * 只是手感回到玩家调之前那一版。
+   *
+   * 走了多远不钉死（灵敏度是可调的），钉的是**两帧之后已经等于最终位置**。
+   */
   check(
-    '拖卡片是慢半拍的（同样一把，两帧之内只走一小截，追齐之后才到）',
-    cardShot.settled - cardShot.before > 0.5 && cardShot.after - cardShot.before < (cardShot.settled - cardShot.before) * 0.5,
-    `两帧后走了 ${(cardShot.after - cardShot.before).toFixed(2)} 项，追齐之后 ${(cardShot.settled - cardShot.before).toFixed(2)} 项`,
+    '拖卡片也一比一跟手：两帧之内就到位，不再慢半拍',
+    Math.abs(cardShot.after - cardShot.settled) < 0.05,
+    `两帧后 ${cardShot.after.toFixed(2)} / 追齐之后 ${cardShot.settled.toFixed(2)}`,
+  );
+  // 尺子：这一把真的把轴拖动了，不然上面那条在「两个都没动」时也是绿的。
+  check(
+    '尺子：这一把真的走了（不是两个都没动）',
+    Math.abs(cardShot.settled - cardShot.before) > 0.3,
+    `走了 ${(cardShot.settled - cardShot.before).toFixed(2)} 项`,
   );
   /**
    * 橡皮筋：越拉越难拉，但**没有墙**。
@@ -1267,14 +1336,18 @@ let page = await menuPage({ slides_played_square: '1' });
     const settle = () => new Promise((r) => setTimeout(r, 250));
     const y0 = 600;
     /**
-     * 一段 60px，两段合起来 120px——**故意留在 GAIN_KNEE（130px）以内**。
+     * 一段 120px，两段合起来 240px。
      *
-     * 那一档是「按下以来的总行程超过 130px 就从 2 倍换成 5 倍」（modeAxis 的
-     * stepGain，玩家要的「一次长滑能扫过大半条轴」）。头一版两段各 120px，第二段
-     * 正好跨过拐点，量出「后半段 5.13 项 / 前半段 1.75 项」——那是设计如此，不是
-     * 第二根手指的错。两段都待在同一档里，「同样输入同样输出」才比得上。
+     * **「两段都留在 GAIN_KNEE（130px）以内」那条前提已经不成立了**，所以这一段的量法
+     * 换了（见下面那两条断言）。原因是玩家 2026-09 调定的那组值：gain 2 → 0.9、
+     * slowK 0.75 → 0.45、lockRadius 0.22 → **0.28**。拐点以内一共 130px，而这点像素现
+     * 在只值 0.26 项——**比一个锁定半径还小**，于是画面上一格都不动（实测前半段恰好
+     * 0.00 项）。一条量不到东西的断言不是「严格」，是假绿的温床。
+     *
+     * 换成两段各 120px：第二段跨过拐点，两段本来就**不该**一样远了，所以「同样输入同样
+     * 输出」这条比较改成拿一次不被打扰的同样手势作对照（见下面）。
      */
-    const seg = 10;
+    const seg = 20;
     const start = window.__focus();
     // 第一根手指：按住，往上拖 60px（分六小段，像真手指）
     ev('pointerdown', { pointerId: 1, isPrimary: true, clientX: x, clientY: y0 });
@@ -1315,17 +1388,107 @@ let page = await menuPage({ slides_played_square: '1' });
     Math.abs(out.afterTap - out.afterTouch) < 0.05,
     `${out.afterTouch.toFixed(3)} → ${out.afterTap.toFixed(3)}`,
   );
-  // 最要紧的一条：第一根手指接着拖，还要跟手，而且走的距离和前半段一样。
+  /**
+   * 最要紧的一条：第二根手指碰那一下，**整把手势的结果一点没变**。
+   *
+   * 量法换了。从前是拿「后半段走了多远」和「前半段走了多远」比——那要求两段落在同一个
+   * 增益档里，而调参之后一个档的宽度（130px）已经不值一个锁定半径（见上面 `seg` 那段）。
+   *
+   * 现在直接跑一次**不被打扰的同样手势**当对照：同样的起点、同样十二小段、同样的等待，
+   * 只是中间不碰第二根手指。两次的终点必须一样——这比原来那条严格，而且不受灵敏度、
+   * 拐点、锁定半径的影响（两次都走同一条路）。
+   */
   const moved2 = out.afterMore - out.afterTap;
-  // 容差留得比「一模一样」宽一点：手速那一档（speedK）会认停顿——第二段头一条
-  // move 的 dt 是那 250ms，算出来的手速比第一段低一档。量的是「还跟手、方向没
-  // 反、量级没变」，不是两个数相等。
+  // 对照那一把要从**同一个起点**跑，所以照 startAt 的做法：写一下 sessionStorage 再刷新
+  // （那是这道门里唯一一条可靠的「把轴摆回第 0 项」）。
+  await p12.evaluate(() => {
+    try { sessionStorage.setItem('slides_axis_focus', '0'); } catch { /* 无痕 */ }
+  });
+  await p12.reload({ waitUntil: 'load' });
+  await p12.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+  await p12.waitForTimeout(500);
+  await installFocus(p12);
+  const solo = await p12.evaluate(async () => {
+    const host = document.querySelector('.mode-axis');
+    const rect = host.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const ev = (t, d) => host.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerType: 'touch', button: 0, ...d }));
+    const settle = () => new Promise((r) => setTimeout(r, 250));
+    const y0 = 600;
+    const seg = 20;
+    const start = window.__focus();
+    ev('pointerdown', { pointerId: 3, isPrimary: true, clientX: x, clientY: y0 });
+    for (let k = 1; k <= 6; k++) ev('pointermove', { pointerId: 3, isPrimary: true, clientX: x, clientY: y0 - k * seg });
+    // 这三段等待对着有干扰那一路的三次 settle()，一次不少：手速那一档（speedK）会认停
+    // 顿，少等一次算出来的手速就不在同一档上，两次就不可比了。
+    await settle();
+    await settle();
+    await settle();
+    for (let k = 7; k <= 12; k++) ev('pointermove', { pointerId: 3, isPrimary: true, clientX: x, clientY: y0 - k * seg });
+    await settle();
+    const end = window.__focus();
+    ev('pointerup', { pointerId: 3, isPrimary: true, clientX: x, clientY: y0 - 12 * seg });
+    return end - start;
+  });
+  const withTap = out.afterMore - out.start;
   check(
-    '第一根手指接着拖，照旧跟手（同样 60px 走同样远）',
-    moved2 > moved1 * 0.5 && moved2 < moved1 * 1.8,
-    `前半段 ${moved1.toFixed(2)} 项 / 后半段 ${moved2.toFixed(2)} 项`,
+    '第二根手指碰过一下，整把手势走的还是同样远（拿一次没被打扰的同样手势作对照）',
+    Math.abs(withTap - solo) < 0.35,
+    `被打扰 ${withTap.toFixed(2)} 项 / 没打扰 ${solo.toFixed(2)} 项（后半段 ${moved2.toFixed(2)}）`,
   );
+  // 尺子：对照那一把真的走了，不然「两个一样」只是「两个都没动」。
+  check('尺子：对照那一把真的走了', Math.abs(solo) > 0.5, `${solo.toFixed(2)} 项`);
   await p12.close();
+}
+
+// ── 4h. 点点轨：十四颗全程都看得见 ──────────────────────────────────
+//
+// 玩家 2026-09：两侧那条点点轨「只展示了几个很莫名其妙」。根因是一个**可见窗口**——
+// 不透明度上乘着 `(RAIL_SPAN − |k|) / 1.6`，RAIL_SPAN 是 4.6 项，于是离焦点超过四五项
+// 的点被淡到 0，整条轨任何时刻只看得见焦点附近八九颗。
+//
+// 这条轨存在的全部意义是「我在这十四项的哪儿、后面还有多少」，而一条只显示一段的进度条
+// 答不了后半个问题。窗口因子和 RAIL_SPAN 一起删掉了，不透明度改成 `0.25 + 0.75 × inf`
+// ——最淡的也有四分之一，看得见。
+//
+// 量三个焦点位置（头、中、尾）：窗口是**跟着焦点走**的，只量一处的话把窗口改小一半也照
+// 样绿。
+{
+  const p13 = await menuPage({ slides_played_square: '1' });
+  const worst = [];
+  for (const at of [0, 6, 13]) {
+    await p13.evaluate((i) => {
+      try { sessionStorage.setItem('slides_axis_focus', String(i)); } catch { /* 无痕 */ }
+    }, at);
+    await p13.reload({ waitUntil: 'load' });
+    await p13.waitForSelector('.axis-rail--l .axis-dot', { timeout: 20000 });
+    await p13.waitForTimeout(600); // 等停稳：不透明度是 paint 里写的
+    const got = await p13.evaluate(() => {
+      const dots = [...document.querySelectorAll('.axis-rail--l .axis-dot')];
+      return {
+        n: dots.length,
+        a: dots.map((d) => Number(getComputedStyle(d).opacity)),
+        // 位置也量一下：十四颗的总跨度 (n−1)×13 ≈ 169px，两头都该落在屏内（容器是
+        // overflow: clip 的，切掉就白做了）。
+        top: Math.min(...dots.map((d) => d.getBoundingClientRect().top)),
+        bottom: Math.max(...dots.map((d) => d.getBoundingClientRect().bottom)),
+        vh: innerHeight,
+      };
+    });
+    worst.push({ at, min: Math.min(...got.a), n: got.n, top: got.top, bottom: got.bottom, vh: got.vh });
+  }
+  check('两条轨各十四颗点（下面几条才有意义）', worst.every((w) => w.n === 14), worst.map((w) => w.n).join('/'));
+  check(
+    '任意焦点下，十四颗点的不透明度都 ≥ 0.25（可见窗口确已删除）',
+    worst.every((w) => w.min >= 0.24),
+    worst.map((w) => `焦点 ${w.at}：最淡 ${w.min.toFixed(3)}`).join(' / '),
+  );
+  check(
+    '十四颗全在屏内（容器没把远端那几颗切掉）',
+    worst.every((w) => w.top >= -1 && w.bottom <= w.vh + 1),
+    worst.map((w) => `焦点 ${w.at}：${w.top.toFixed(0)}–${w.bottom.toFixed(0)} / 屏高 ${w.vh}`).join(' / '),
+  );
+  await p13.close();
 }
 
 // ── 5. 点一下就开，滑一下不开 ────────────────────────────────────────

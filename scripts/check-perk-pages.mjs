@@ -61,10 +61,22 @@ check('《世界排名和好友排名》改叫《世界排名》，不再敬请�
   rows.rank === '世界排名' && !rows.oldRank && !rows.soon.includes('世界排名'), `${rows.rank}`);
 check('没开通：做好了的五行行首都挂着锁',
   rows.randomLock && rows.targetsLock && rows.layoutsLock && rows.rankLock && rows.modesLock);
-check('《更多玩法》点得开了，右边写着里面那两个玩法',
-  rows.modes === '更多玩法' && /老虎机模式/.test(rows.modesValue) && /无限反转/.test(rows.modesValue) &&
-    /步步为营/.test(rows.modesValue),
-  `${rows.modes} · ${rows.modesValue}`);
+/**
+ * 《更多玩法》右边**只有那个「〉」**，不再列里面那几个玩法的名字。
+ *
+ * 玩家 2026-09：「《更多玩法》后面的文字太多了，去除掉《老虎机模式……》恢复排版」。三个
+ * 名字连起来是「老虎机模式 · 无限反转 · 真正解密 · 步步为营」——比它左边那个标题还长，于
+ * 是这一行和上下几行对不齐，整段的排版被它一行撑歪。
+ *
+ * 这一条从「写着那几个玩法」翻成「一个玩法名都不写」。翻过来而不是删掉：删掉就没人守着
+ * 这件事了，而把名字加回去不报错、不白屏，只是那一行又把排版撑歪一次。
+ * 那三个名字点进去第一屏就是（下面第 2 节量的就是那一屏）。
+ */
+check('《更多玩法》点得开了，而且右边只剩那个「〉」',
+  rows.modes === '更多玩法' &&
+    !/老虎机|无限反转|步步为营/.test(rows.modesValue) &&
+    rows.modesValue.replace(/[\s\u00a0]/g, '') === '\u203a',
+  `${rows.modes} · 右边「${rows.modesValue}」`);
 check('还在敬请期待的只剩三行', rows.soon.length === 3, rows.soon.join(' / '));
 
 // ---- 2. 三页，和《退出》回原位 -------------------------------------------

@@ -264,11 +264,16 @@ export function renderAccountPage(
           <span class="profile-row-label">${privileges[6]}</span>
           <span class="profile-row-value">&rsaquo;</span>
         </button>
-        <!-- 《更多玩法》里现在有《老虎机模式》和《无限反转》两个。 -->
+        <!-- 《更多玩法》里现在装着三个：老虎机、无限反转、步步为营。
+             右边只留那个「〉」，不再把三个玩法的名字列出来（玩家 2026-09：「《更多
+             玩法》后面的文字太多了，去除掉《老虎机模式……》恢复排版」）。
+             三个名字连起来是「老虎机模式 · 无限反转 · 真正解密 · 步步为营」——比它
+             左边那个标题还长，于是这一行和上下几行对不齐，整段的排版被它一行撑歪。
+             那三个名字点进去第一屏就是，不必在门口先念一遍。 -->
         <button class="profile-row" id="moreModesRow">
           ${lockGlyph}
           <span class="profile-row-label">${privileges[4]}</span>
-          <span class="profile-row-value">${s.randomTargetTitle} · ${s.flipModeTitle} · ${s.puzzleModeTitle}&nbsp;&rsaquo;</span>
+          <span class="profile-row-value">&rsaquo;</span>
         </button>
         <!-- 还没做的才写「敬请期待」：更多关卡、更多竞赛、Apple Watch。 -->
         ${[privileges[1], privileges[5], privileges[7]].map(lockedRow).join('')}

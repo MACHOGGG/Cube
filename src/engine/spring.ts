@@ -1,3 +1,5 @@
+import { tune } from './axisTune';
+
 /**
  * 一个弹簧积分器：给当前值、速度和目标值，往前走一帧。
  *
@@ -35,7 +37,14 @@ export interface SpringParams {
  * 250–350ms」正中间。第一版拍了 k=370，门量出来只有 184ms——快得多，手感会比
  * 规格设计的更急；照着门给的数调回来的。zeta 见文件头。
  */
-export const SETTLE_SPRING: SpringParams = { tension: 150, zeta: 0.78 };
+/**
+ * 松手之后收尾那把弹簧（只有主菜单那条轴用它）。
+ *
+ * 玩家 2026-09 在调参模拟台上把它调软了：k 150 → **90**、ζ 0.78 → **0.90**。软一档、
+ * 阻尼更足，落定得更稳——配合同一轮定下的「无滞后直贴」（拖动中一比一跟手），松手那一
+ * 下的过冲才不会显得突然。
+ */
+export const SETTLE_SPRING: SpringParams = { tension: tune('springK', 90), zeta: tune('zeta', 0.9) };
 
 /** 一次积分最多认多长的一帧：切到后台再回来那一下 dt 可能是几秒，认了就炸。 */
 const MAX_DT_MS = 64;
