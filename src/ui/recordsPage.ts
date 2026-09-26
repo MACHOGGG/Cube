@@ -12,6 +12,7 @@ import { mountBoardThumb, mountBoardView } from './leaderboard';
 // 累计得分没有上限，而它那张卡是页面上一个固定的格子——数字长到装不下就缩写，
 // 点开的放大版再写全每一位。排行榜缩略牌用的是同一份（见 engine/compactScore）。
 import { compactScore } from '../engine/compactScore';
+import { rollOdometer } from '../engine/odometer';
 
 /** One playable game+mode combination, so the page knows which archives to
  *  read and which glyph belongs to a stored run's shape id. */
@@ -40,6 +41,32 @@ function scoreFontSize(text: string, big: boolean): string {
   const scale = big ? 1 : 0.72;
   const rem = n <= 7 ? 3.2 : n <= 10 ? 2.6 : n <= 13 ? 2.1 : n <= 17 ? 1.7 : 1.35;
   return (rem * scale).toFixed(2) + 'rem';
+}
+
+/**
+ * 上一次在这台设备上看到的累计得分。
+ *
+ * 只为了回答一个问题：「这个数和他上次看到的一样吗？」——一样就不滚（见下面那一段）。
+ * 存不下就当没看过：读回来是 null，于是不滚。这是个纯粹的表现问题，丢了不影响任何
+ * 成绩。
+ */
+const TOTAL_SEEN_KEY = 'slides_total_seen';
+function lastSeenTotal(): number | null {
+  try {
+    const raw = localStorage.getItem(TOTAL_SEEN_KEY);
+    if (raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+function rememberTotal(total: number): void {
+  try {
+    localStorage.setItem(TOTAL_SEEN_KEY, String(total));
+  } catch {
+    // 存不下就算了：下次进来照样不滚，安静那一头是安全的。
+  }
 }
 
 /**
@@ -173,7 +200,22 @@ export function renderRecordsPage(
   });
 
   const valueEl = container.querySelector<HTMLElement>('#totalValue');
-  if (valueEl) valueEl.style.fontSize = scoreFontSize(valueEl.textContent ?? '', false);
+  if (valueEl) {
+    const shownText = compactScore(total, lang);
+    valueEl.style.fontSize = scoreFontSize(shownText, false);
+    const seen = lastSeenTotal();
+    // **变了才滚**（玩家 2026-09：「Total score 的地方，每次打开的时候都是从上一次打开
+    // 时的数字按照动画刷新」——他要的是「只有数字变了才滚」）。
+    //
+    // 和上次看到的一样就一个像素都不动：这一页一打开就是最终那个数。真的涨了才滚一
+    // 遍，那一下于是成了「你多了多少分」的提示，而不是每次打开都放一遍的开场动画。
+    //
+    // 头一次看（本机还没记过）也不滚：那一下没有任何东西可说。存不下（无痕模式、存
+    // 储满了）的时候 lastSeenTotal() 永远是 null，于是永远不滚——宁可安静，不要每次
+    // 都动。
+    if (seen !== null && seen !== total) rollOdometer(valueEl, total, shownText);
+    rememberTotal(total);
+  }
 
   const totalCard = container.querySelector<HTMLButtonElement>('#totalCard');
   totalCard?.addEventListener('click', () => {

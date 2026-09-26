@@ -416,6 +416,9 @@ h1 {
 .digit-strip span {
   display: block; height: var(--reel-step); line-height: var(--reel-step); text-align: center;
 }
+/* 缩写里那几个不是数字的字符（`.` `万` `K`）：没有十个面可以转，摆一个静止的格子，
+   高度和行高跟着同一个 --reel-step，所以它和旁边转着的数字在同一条线上。 */
+.digit-sep { display: block; height: var(--reel-step); line-height: var(--reel-step); }
 
 /* Anchors a stack of independent per-action "+N" popups above the score;
    each .gain-pop child animates and removes itself on its own, so several
