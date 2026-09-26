@@ -1,7 +1,8 @@
 import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
 import { CTL_FINISH, CTL_NEXT, CTL_PREV, CTL_REPLAY } from './ctlIcons';
-import { playMove, playScore, playFlip, playClear, seatEls } from '../engine/juice';
+import { playMove, playScore, playFlip, playClear, reducedMotion, seatEls, spawnParticles } from '../engine/juice';
+import { colorblindOn, cvdSwatch, cvdVariant, pieceVariant, variantSwatch } from '../engine/palettePref';
 import { createDragChain } from '../engine/dragChain';
 import { plankFlipEl, flipMs, flipStaggerMs } from '../engine/plankFlip';
 import { roundTriPath } from '../engine/roundTri';
@@ -178,6 +179,76 @@ const CHECK_SVG = (color: string) =>
   `<svg viewBox="0 0 60 60"><path d="M12 32 L26 47 L50 12" fill="none" stroke="${color}"` +
   ` stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
+/**
+ * 同屏最多一个东西在呼吸。
+ *
+ * 教学放到最后一格就停住了：屏幕上一切静止，出去的唯一一条路是按《完成》，而
+ * 在此之前没有任何东西指过它。这颗呼吸就是那一指。
+ *
+ * 三条规矩写成代码，因为这三条正是「引导」和「装饰」的分界：
+ *
+ *   ① **单例。** 挂新的之前先摘旧的。两处同时呼吸就不是指路了，是闪；玩家还得
+ *      先决定看哪一个。
+ *   ② **被操作了就停。** 他按下去的那一刻这一指的任务已经完成，再呼吸就是在指
+ *      一件已经做过的事。
+ *   ③ **不导出。** 这个函数**只**归这一层用，故意不加 export——它是「指向下一步
+ *      操作」的机制，不是「让某个东西好看一点」的开关。想拿它当环境装饰的话，
+ *      得先把这行注释删掉，那就是一次需要解释的改动。
+ *
+ * reduced-motion 下不动，换一圈静态描边（样式在 style.css 的 .is-breathing）——
+ * 指的还是同一颗键，少的只是动画。
+ */
+let breathing: HTMLElement | null = null;
+function setBreathing(el: HTMLElement | null): void {
+  if (breathing === el) return;
+  breathing?.classList.remove('is-breathing');
+  breathing = el;
+  el?.classList.add('is-breathing');
+}
+
+/**
+ * 教学真的看完了那一下，撒一把自家的粒子。
+ *
+ * 用 juice 的 spawnParticles，不另写一套纸屑：那套已经管着 reduced-motion 和
+ * 「这台机器跑不跑得动」两道闸（见它自己），另写一套就是把这两道闸再实现一遍，
+ * 而第二遍一定会漏。
+ *
+ * 数量按现有最重的那一档（整线 16 颗）加一倍，颜色取当前棋盘那套色板里的几支
+ * 轮着来——一色的一圈读起来像「又得了一次分」，这一下要说的是「整件事结束了」。
+ * 落点是棋盘的正中，不是那颗键：庆祝的是他看完的这一课，不是他按的这一下。
+ */
+const BURST_MS = 900;
+function celebrate(stage: HTMLElement): void {
+  if (reducedMotion()) return; // 连那一层都不建。spawnParticles 自己也拦，这儿是省下建层。
+  const swatch = colorblindOn() ? cvdSwatch(cvdVariant()) : variantSwatch(pieceVariant());
+  // 粒子撒在一层浮在整页之上的壳里，不撒在教学那一屏里。
+  //
+  // 因为按下《完成》的同一下就要离开这一屏（onDone 把整块内容换成下一页），撒在
+  // 屏内的粒子会和那一屏一起被换掉——屏幕上什么都看不到。这一层挂在 body 上、
+  // 自己活到粒子死掉为止，所以这一把是**跨过页面切换**看得见的。
+  // top/left/right/bottom 四条分开写，不用 inset 简写：小红书那一版的 Chrome 61
+  // 不认识 inset，整条规则会连着作废（那就成了一层撑满不了的壳）。
+  const layer = document.createElement('div');
+  layer.className = 'juice-burst-layer';
+  layer.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(layer);
+  const box = stage.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  // 分几簇发，每簇一个颜色：spawnParticles 一次只收一支色，而它自己会按机器档位
+  // 减半，所以总量仍然受那道闸管。
+  const clusters = Math.min(4, swatch.length);
+  for (let i = 0; i < clusters; i++) {
+    spawnParticles(layer, x, y, {
+      color: swatch[i % swatch.length],
+      count: Math.round(32 / clusters),
+      spread: 96,
+      life: BURST_MS,
+    });
+  }
+  window.setTimeout(() => layer.remove(), BURST_MS + 120);
+}
+
 export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: StorySpec, onDone: () => void): void {
   const s = STRINGS[lang];
   container.innerHTML = `
@@ -190,7 +261,9 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
         <button class="icon-btn story-ctl" id="stPrev" aria-label="${s.prev}">${CTL_PREV}</button>
         <button class="icon-btn story-ctl" id="stReplay" aria-label="${s.replay}">${CTL_REPLAY}</button>
         <button class="icon-btn story-ctl" id="stNext" aria-label="${s.next}">${CTL_NEXT}</button>
-        <button class="icon-btn story-ctl" id="stFinish" aria-label="${s.finishBtn}">${CTL_FINISH}</button>
+        <!-- 《完成》多一层包裹：最后一格播完之后它要呼吸（setBreathing），而呼吸
+             是 transform 动画，直接加在键上会压掉键自己的按压 transform。 -->
+        <span class="story-ctl-hold" id="stFinishHold"><button class="icon-btn story-ctl" id="stFinish" aria-label="${s.finishBtn}">${CTL_FINISH}</button></span>
       </div>
     </div>
   `;
@@ -201,6 +274,7 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   const bReplay = container.querySelector<HTMLButtonElement>('#stReplay')!;
   const bNext = container.querySelector<HTMLButtonElement>('#stNext')!;
   const bFinish = container.querySelector<HTMLButtonElement>('#stFinish')!;
+  const finishHold = container.querySelector<HTMLElement>('#stFinishHold')!;
 
   // Playback progress, Instagram-story style: one equal-width segment per
   // beat, the active one's dark fill sweeping left to right.
@@ -474,6 +548,10 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   async function play(i: number) {
     const my = ++gen;
     beat = i;
+    // 换格子就把呼吸摘掉：他从最后一格按《上一条》回去看，那颗《完成》就不再是
+    // 「下一步」了（这一格播完自己会往下走）。单例的那一条规矩靠这儿和 pointerdown
+    // 两处一起兜住。
+    setBreathing(null);
     sync();
     runProgress(i);
     board.style.opacity = '1';
@@ -484,7 +562,12 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
     // The tutorial runs itself: watching it through shouldn't need a tap
     // between every card. The buttons stay for going back or replaying, and
     // any of them bumps `gen`, which cancels this hand-off.
-    if (i >= spec.beats.length - 1) return;
+    if (i >= spec.beats.length - 1) {
+      // 最后一格播完：这一屏从此静止，出去的唯一一条路是那颗《完成》。指一下它。
+      // 别的格子都会自己往下走，所以只有这一格该呼吸。
+      setBreathing(finishHold);
+      return;
+    }
     await sleepRaw(AUTO_ADVANCE_MS);
     if (gen !== my) return;
     void play(i + 1);
@@ -499,12 +582,23 @@ export function renderStoryTutorial(container: HTMLElement, lang: Lang, spec: St
   bPrev.addEventListener('click', () => beat > 0 && play(beat - 1));
   bNext.addEventListener('click', () => beat < spec.beats.length - 1 && play(beat + 1));
   bReplay.addEventListener('click', () => play(beat));
+  // 被操作了就停呼吸。用 pointerdown 而不是 click：指的这件事在手指落下的那一刻
+  // 就已经完成了，等到 click 才停会在按下和抬起之间又呼吸一下。
+  bFinish.addEventListener('pointerdown', () => setBreathing(null));
   bFinish.addEventListener('click', () => {
     gen++;
     window.removeEventListener('resize', layout);
     // The button is the only way out, and it reads 完成 only on the last beat
     // — so "was the player on the last beat" is exactly "did they finish".
-    trackTutorialEnd(spec.id, beat === spec.beats.length - 1, beat + 1, spec.beats.length);
+    const finished = beat === spec.beats.length - 1;
+    trackTutorialEnd(spec.id, finished, beat + 1, spec.beats.length);
+    // 真的看完了才庆祝。中途按出去的那次不是「完成」，撒粒子等于夸他跳过了教学。
+    // 里程碑那一声不在这儿放：`#stFinish` 早就挂在 juice 的 CUE_OVERRIDES 上，
+    // 按下去就是 playFinish（success 音色）。这儿再调一次就是同一颗音重两遍。
+    if (finished) {
+      setBreathing(null);
+      celebrate(stage);
+    }
     onDone();
   });
 

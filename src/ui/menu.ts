@@ -9,6 +9,7 @@ import { openCenterPicker, type PickerOption } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
 import { mountModeAxis } from './modeAxis';
+import { typeTagline } from './typeTagline';
 
 import {
   ICON_BASE_SQUARE,
@@ -222,7 +223,11 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
-          <p class="home-sub">${s.homeTagline}</p>
+          <!-- 空的：这一行由 typeTagline 打出来（见那个文件）。模板里先写上整句
+               的话，第一帧会把整句闪一下、下一帧才被清空——那一闪比不打字更显眼。
+               reduced-motion 和「这次已经打过了」两种情况下它也是由那个函数一次
+               填满的，所以这儿永远不该有字。 -->
+          <p class="home-sub"></p>
         </div>
       </header>
       <div class="home-grid" id="homeGrid"></div>
@@ -253,6 +258,11 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
 
   const grid = container.querySelector<HTMLElement>('#homeGrid');
   if (!grid) throw new Error('menu: missing #homeGrid');
+
+  // 副标题打字机。只有主菜单这一处调它——同一句话在别的页面直接显示（见
+  // ui/typeTagline.ts 开头）。「只打一次」由那个模块自己守，这儿每次重绘都照调。
+  const sub = container.querySelector<HTMLElement>('.home-sub');
+  if (sub) typeTagline(sub, s.homeTagline);
 
   // 窄屏（手机竖着）的顺序，玩家定的：能玩的先摆，天才特供的四张收在最后。
   //

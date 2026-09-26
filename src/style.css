@@ -628,6 +628,14 @@ h1 {
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   animation-fill-mode: forwards;
 }
+/* 教学看完那一把粒子住的那一层（ui/storyTutorial.ts 的 celebrate）。
+   浮在整页之上、不挡点击、自己活到粒子死掉为止——因为按下《完成》的同一下就
+   要换页，撒在页内的粒子会跟着那一页一起消失。四条边分开写不用 inset 简写：
+   Chrome 61 不认识 inset，整条规则会连着作废。 */
+.juice-burst-layer {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 200;
+}
 @keyframes juice-particle-burst {
   0%   { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
   100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3) rotate(200deg); opacity: 0; }
@@ -791,31 +799,6 @@ h1 {
 .modal h2 { font-family: 'Fraunces', Georgia, serif; margin: 0 0 8px; font-size: 1.5rem; }
 .modal p { color: var(--ink-soft); margin: 0 0 20px; font-size: 0.95rem; }
 .modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
-/* 战绩图是这一窗唯一的内容，其他都是它的说明文字。所以这一窗按图的尺寸来定：
-   比一般的弹窗宽得多，左右的留白也收窄——420px 的窗减去 24px 的内边距，图只
-   剩 372px 宽，一张 720 宽的图缩到这个份上，棋盘上的点面基本看不清了。
-   min() 保证在窄屏上它退回整屏宽，不会横着溢出去。 */
-.share-modal { max-width: min(620px, 100%); padding: 22px 14px; }
-/* 宽度吃满这一窗，但高度不许超过屏幕的七成——窗变宽之后，一张竖长的战绩图
-   在矮屏幕上会把《关闭》顶到看不见的地方。两个上限都给，宽高都写 auto，浏览
-   器自己按原比例取小的那一边，不会压扁。 */
-.share-modal img {
-  display: block; margin: 4px auto 12px;
-  width: auto; height: auto; max-width: 100%; max-height: 70vh;
-  border-radius: var(--r-sm); box-shadow: var(--shadow);
-}
-.share-modal .hint { margin: 0 0 16px; }
-/* 装战绩图的那层遮罩自己也让开一点：一般的弹窗四周留 20px 是舒服的，
-   一张要看清的图留 20px 就是白白削掉 40px 的宽度。 */
-.overlay--wide { padding: 10px; }
-/* 屋主散场，而这一局这个人自己接不下去（天才特供的棋盘）——结算页最上面
-   先说一句为什么，再说分数。它在 h2 之前，因为「这局为什么停在这儿」比
-   「这局打了多少」更急着回答。 */
-.end-gone-note {
-  margin: 0 0 12px; padding: 8px 12px;
-  background: var(--score-wash); border-radius: var(--r-sm);
-  color: var(--ink-soft); font-size: 0.88rem; line-height: 1.45;
-}
 .end-score-label {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
   color: var(--ink-faint); margin-top: 4px;
@@ -1187,7 +1170,22 @@ button:hover { filter: brightness(1.05); }
   margin: 0 0 2px; letter-spacing: 0.01em;
   display: inline-block; border-bottom: 3px solid var(--accent-soft); padding: 0 10px 4px;
 }
-.home-sub { margin: 6px 0 0; color: var(--ink-soft); font-size: 0.82rem; letter-spacing: 0.08em; }
+/* min-height 是给打字机留的位（ui/typeTagline.ts）：开打那一刻这一行是空的，
+   没有它整块抬头会先缩一截、打完再顶回去，主菜单一进来就跳一下。1.3em 跟着
+   font-size 走，所以宽屏那一档改了字号也不用另写。 */
+.home-sub { margin: 6px 0 0; color: var(--ink-soft); font-size: 0.82rem; letter-spacing: 0.08em; min-height: 1.3em; }
+/* 打字机的光标：1px 竖线，闪到打完为止。keyframes + opacity，Chrome 61 认得。 */
+.home-sub-caret {
+  display: inline-block; width: 1px; height: 0.95em; margin-left: 2px;
+  vertical-align: -0.1em; background: currentColor;
+  animation: sub-caret 1s step-end infinite;
+}
+@keyframes sub-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+/* 打完淡出。不是直接删：一下消失比淡出更显眼，而这一行整个的意思是「安静」。 */
+.home-sub-caret--out { animation: none; opacity: 0; transition: opacity 300ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .home-sub-caret { animation: none; }
+}
 
 /* 几排居中的东西，不是一张死板的网格。宽屏三排（三张 / 五张 / 五张），窄屏
    五排（一排最多三张）——顺序是同一条链，只是断在不同的地方。每张一样大，
@@ -2936,14 +2934,21 @@ body:has(.slot-page) .home-nav { display: none; }
   background: var(--line); position: relative;
   transition: background-color 200ms ease;
 }
+/* 旋钮走 transform，不走独立的 translate 属性——两个原因，都真的咬过人：
+   · 独立 `translate:` 是 2022 年才有的属性，小红书那一版要兼容的 Chrome 61
+     根本不认识它。整条规则连着作废，不白屏也不报错：开关拨过去了（aria-checked
+     变了、设置也生效了），只是旋钮一动不动。玩家在那一版上看到的是「按了没反应」。
+   · transform 有过冲曲线可用。位移用 .32s 的 cubic-bezier(.34,1.56,.64,1)——
+     和 juice 的 punch 同一条，弹一下再落定，所以「拨过去了」这件事不用读字也看得出。
+   轨道底色仍旧 .2s 线性交叉：两条时长故意不同，颜色先到、旋钮后落定。 */
 .pill-switch-knob {
   position: absolute; top: 3px; left: 3px; width: 21px; height: 21px;
   border-radius: 50%; background: var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
-  transition: translate 200ms cubic-bezier(0.24, 1.2, 0.36, 1);
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 [aria-checked='true'] .pill-switch { background: var(--accent-2); }
-[aria-checked='true'] .pill-switch-knob { translate: 19px 0; }
+[aria-checked='true'] .pill-switch-knob { transform: translateX(19px); }
 @media (prefers-reduced-motion: reduce) {
   .pill-switch, .pill-switch-knob { transition: none; }
 }
@@ -3333,7 +3338,11 @@ body:has(.slot-page) .home-nav { display: none; }
 .story-prog-seg { flex: 1 1 0; height: 5px; border-radius: var(--r-full); background: var(--line); }
 .story-prog-fill { display: block; width: 0; height: 100%; border-radius: var(--r-full); background: var(--ink-soft); }
 
-.story-stage { width: 100%; display: flex; justify-content: center; overflow: hidden; margin-top: 6vh; }
+/* position: relative 是给教学看完那一下的粒子留的落脚点（storyTutorial 的
+   celebrate）——粒子是 position: absolute，没有它会跑到最近的定位祖先上去，
+   也就是整块 .app。不挂在 .story-board 上：那一块自己带 scale，粒子会跟着被
+   缩放，缩小的棋盘上粒子也跟着变小。 */
+.story-stage { width: 100%; display: flex; justify-content: center; overflow: hidden; margin-top: 6vh; position: relative; }
 /* The tutorial is a screen you watch, not one you browse: the dock has
    nothing to do here, and the room it reserves is room the example could be
    using. */
@@ -4716,6 +4725,23 @@ body.is-room-host::after {
 .story-controls .icon-btn.story-ctl svg { width: 100%; height: 100%; display: block; }
 .story-controls .icon-btn.story-ctl:active { transform: scale(0.94); }
 .story-controls .icon-btn.story-ctl:disabled { opacity: 0.38; }
+/* 最后一格播完之后那颗《完成》的呼吸（ui/storyTutorial.ts 的 setBreathing）。
+   教学是自己往下播的，播到最后一格就停住不动了——出去的唯一一条路是按它，可
+   在此之前屏幕上没有任何东西指过它。玩家坐在一屏静止的棋盘前等下一格，那是
+   「意料之外的疏漏操作」。
+
+   类加在外面这一层包裹，不加在按钮上：按钮自己的 :active 是 scale(0.94)，而
+   动画期间动画的 transform 压过普通声明——直接加在按钮上，呼吸的这颗键按下去
+   不会陷下去了。一层 span 就把两个 transform 分开了。 */
+.story-ctl-hold { display: flex; flex: 0 0 auto; }
+.is-breathing { animation: coach-breath 2.4s ease-in-out infinite; }
+@keyframes coach-breath { 50% { transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) {
+  /* 不呼吸，改成一圈静态描边：要指的还是同一颗键，只是不动。
+     box-shadow 而不是 outline——这颗键是圆的，outline 在部分内核上仍画方框。 */
+  .is-breathing { animation: none; }
+  .is-breathing > .story-ctl { box-shadow: 0 0 0 2px var(--accent); border-radius: 50%; }
+}
 
 /* ---------- 教学挑选页：三条大按钮 + 六条规则，一屏装下 ---------- */
 /* 整页的高就是屏幕减去底排导航那一条；里面按弹性分，谁都不许把页撑长。 */
