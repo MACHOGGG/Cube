@@ -1,4 +1,13 @@
 .tile {
   position: absolute; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+  /* 写成变量，是因为得分那一下的动画也要摆这一圈（style.css 的 score-pulse-glow）：
+     动画里的 box-shadow 会盖过这儿的，写死的话翻成星星的那一枚在那 2.5 秒里会重新长
+     出一圈黑框。 */
+  --tile-ring: inset 0 0 0 1px rgba(0,0,0,0.08);
+  box-shadow: var(--tile-ring);
 }
+/* 翻成星星的那一枚**不留描边**。
+   那一圈 inset 阴影的活是「把挨着的两枚分开」，而翻过面之后这一枚的底色是透明的——
+   棋盘从它自己的轮廓里透出来，本来就没有边可分。留着的话，深色棋盘上每一颗星星外面
+   都套着一圈黑环（玩家 2026-09 拍到的「不应该出现的黑色边框」，一屏上有几十个）。 */
+.tile[data-face='dot'] { --tile-ring: inset 0 0 0 0 transparent; box-shadow: none; }

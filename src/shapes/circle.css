@@ -2,3 +2,8 @@
   position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
 }
+/* 翻成星星的那一枚**不留描边**。
+   那一圈 inset 阴影的活是「把挨着的两枚分开」，而翻过面之后这一枚的底色是透明的——
+   棋盘从它自己的轮廓里透出来，本来就没有边可分。留着的话，深色棋盘上每一颗星星外面
+   都套着一圈黑环（玩家 2026-09 拍到的「不应该出现的黑色边框」，一屏上有几十个）。 */
+.ball[data-face='dot'] { box-shadow: none; }

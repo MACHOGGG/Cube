@@ -715,8 +715,13 @@ h1 {
   border: 3px solid transparent;
   animation: score-outline-flash 2.5s ease-in-out 1 both;
 }
+/* 模糊半径和扩散一整段都钉死，只有颜色在明灭——和三角那一版（score-outline-stroke-
+   flash）、以及「全站唯一那一套呼吸的光」同一个理由：半径一变，这一层每帧的绘制区域
+   都跟着变，**iOS 的 Safari 会把它按不透明的方框来画**。玩家 2026-09 拍到的那张图上，
+   得过分的那几枚棋子上压着一圈圈套起来的直角亮边，就是这么来的。
+   那几帧的颜色本来就是全透明的，钉住半径看不出任何差别。 */
 @keyframes score-outline-flash {
-  0%, 100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; background: transparent; }
+  0%, 100% { border-color: transparent; box-shadow: 0 0 18px 4px transparent; background: transparent; }
   4%, 13%  { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
   37%, 46% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
   70%, 79% { border-color: var(--ink); box-shadow: 0 0 18px 4px var(--score-glow); background: var(--score-wash); }
@@ -807,14 +812,19 @@ h1 {
    own existing inset border, so the tile itself visibly lights up rather
    than something being framed on top of it. */
 .score-pulse-glow { animation: score-pulse-glow 2.5s ease-in-out 1 both; }
+/* 同上，两处都改了：
+   · 外面那圈光的**半径钉死**，只让颜色明灭（iOS 会把变半径的那一层画成一个方块）。
+   · 里面那圈描边不再写死，改走棋子自己那支 --tile-ring——翻成星星的那一枚把它设成
+     透明（见 shapes/square.css）。写死的话，一枚刚得分、刚翻成星星的方块会在这 2.5 秒
+     里重新长出一圈黑框，正好是 .tile[data-face='dot'] 那条规则想去掉的东西。 */
 @keyframes score-pulse-glow {
-  0%, 100% { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
-  4%       { transform: scale(1.07); filter: brightness(1.22); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 16px 3px var(--score-glow); }
-  13%      { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
-  37%      { transform: scale(1.07); filter: brightness(1.22); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 16px 3px var(--score-glow); }
-  46%      { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
-  70%      { transform: scale(1.07); filter: brightness(1.22); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 16px 3px var(--score-glow); }
-  79%      { transform: scale(1); filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 0 0 0 transparent; }
+  0%, 100% { transform: scale(1); filter: brightness(1); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px transparent; }
+  4%       { transform: scale(1.07); filter: brightness(1.22); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px var(--score-glow); }
+  13%      { transform: scale(1); filter: brightness(1); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px transparent; }
+  37%      { transform: scale(1.07); filter: brightness(1.22); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px var(--score-glow); }
+  46%      { transform: scale(1); filter: brightness(1); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px transparent; }
+  70%      { transform: scale(1.07); filter: brightness(1.22); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px var(--score-glow); }
+  79%      { transform: scale(1); filter: brightness(1); box-shadow: var(--tile-ring, inset 0 0 0 1px rgba(0,0,0,0.08)), 0 0 16px 3px transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
   .score-pulse-glow { animation: none; }
@@ -3878,6 +3888,18 @@ html.is-playing body { background: var(--play-bg); }
   color: var(--play-mark);
 }
 .app--game .pattern-icon { gap: 0; color: inherit; }
+/* **这一排图示不描黑边，描的是底色。**
+   玩家 2026-09 拍到：「很多不应该出现的黑色边框出现在游戏中」——最扎眼的就是这一排，
+   每一颗蓝球外面套着一圈近黑的粗环（描边宽 2，而一枚图形只有 10 宽，那是它直径的两
+   成）。
+   病根在上一次修它的时候：这一圈描边本来写死白色，在深色底上两个活干得都漂亮（把并
+   排的两枚分开、给蓝色的图形一道边）；底色改成跟主题走之后白描白等于没画，于是改成
+   了「浅底描深、深底描白」——可「深」在米白底上就是一圈黑框。
+   现在只留下**分开相邻两枚**这一个活，颜色取这一排自己坐着的底（--play-bg）：两颗挨
+   着的球之间是一道底色的缝，而不是两圈黑环。深浅主题都对，因为它跟着底色走。
+   （老虎机那一窗不在这儿：它的底是白的，而且玩家点名要「同样的圆角黑边」，见
+   .slot-reel 上那一条自己的 --mark-edge。） */
+.app--game .pattern-hint { --mark-edge: var(--play-bg); }
 /* 一枚图形就是 1em，所以整排的大小只由这一句定。
    用 vmin 不用 vh：vmin 取宽高里小的那个，同一台手机横过来和竖着算出来是
    同一个数，所以「横屏和竖屏一样大」这件事不用两处各写一遍——玩家点名要的
@@ -5423,6 +5445,10 @@ body.is-room-host::after {
    进度。文字和配图都是六条规则那一份原件（.tut-rule-art 的画法直接借过来），
    所以这里只管盒子，不管里面怎么画。 */
 .coach-bar {
+  /* 这块条子里也会摆得分图示（老虎机那几张靶子，见 ui/modeTips 的 tip-targets）。
+     和棋盘上方那一排同一个道理：描边只负责把挨着的两枚分开，颜色取它坐着的底（这块
+     条子是白的），不是一圈黑环。 */
+  --mark-edge: var(--surface);
   width: 100%; max-width: 420px; margin: 0 auto;
   background: var(--surface); border-radius: var(--r-md);
   padding: 8px 12px 10px;
