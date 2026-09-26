@@ -3331,8 +3331,14 @@ body:has(.slot-page) .home-nav { display: none; }
 }
 /* 上内边距留给浮上去的标签，下内边距相应收窄——**上下之和不变**，所以框的高度和从前
    一个像素不差（这一页和多人页都按那个高度排过版，见 check-overlap）。 */
+/* 字号**不许低于 16px**。低于 16px 的输入框在 iOS 上一获得焦点，整页就被自动放大
+   （Safari 和 Capacitor 那层 WebView 都这样），而装成 App 之后**退出输入也不缩回去**
+   ——玩家 2026-09：「每次在文字框输入之后回到的界面就自动放大了」。这儿原先是 0.95rem
+   ＝ 15.2px，差的就是那 0.8px。
+   这是 iOS 唯一认的开关：viewport 上写 maximum-scale 挡不住（iOS 10 起忽略它），JS 也
+   收不回已经放大的页面。所以全站凡是能点进去打字的框，字号都从这一档起步。 */
 .auth-field input {
-  width: 100%; box-sizing: border-box; color: var(--ink); font-size: 0.95rem;
+  width: 100%; box-sizing: border-box; color: var(--ink); font-size: 1rem;
   background: var(--board-bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 17px 14px 5px;
 }
 /* 真正的 placeholder 只在获得焦点时才现身。
@@ -3387,6 +3393,10 @@ body:has(.slot-page) .home-nav { display: none; }
 .auth-field--pin > input {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   padding: 0; border: none; background: none; opacity: 0;
+  /* 看不见也要够大：iOS 看的是**焦点落在哪个框上、那个框的字号是多少**，透不透明它不
+     管。这个框整个是 opacity: 0 的，字号要是继承了 15.2px，点一下六格验证码照样把整页
+     放大一截（见上面 .auth-field input 那段）。 */
+  font-size: 16px;
   /* 光标也藏掉：位置由格子那一圈描边说，一根跑在格子之间的光标只会对不上。 */
   color: transparent; caret-color: transparent;
 }
@@ -4559,7 +4569,10 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
   position: absolute; left: 0; right: 0; bottom: 7px;
   font-size: 0.68rem; line-height: 1.1; color: rgba(255, 255, 255, 0.92);
   letter-spacing: 0.02em; text-align: center;
-  font-family: 'Fraunces', Georgia, serif;
+  /* 字体跟着全站走（玩家 2026-09：「《Pro》的字体与其他整体同步，和 Open a room 同
+     步」）——先前这儿单写了一支 Fraunces，屏幕上同一行里两种字体并排。inherit 拿到的
+     就是那颗大键上那一支（Karla），字重也跟它一样。 */
+  font-family: inherit; font-weight: 700;
   visibility: hidden;
 }
 .mp-contest-pill[aria-checked='true'] .mp-contest-tag { visibility: visible; }
@@ -4605,7 +4618,13 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    之间（那儿本来就有 8px 的缝，宽一点看不出来），而不是塞进《Open a》和那个词中间——
    短词居中的话句子里会多出小半个空格的洞，读起来像排版坏了。 */
 .mp-swap { display: inline-block; text-align: left; white-space: nowrap; }
-.mp-swap::after {
+/* 影子排在**前面**（::before），不是后面。
+   inline-block 的基线取的是它**最后一行**的基线（CSS 2.1 §10.8.1）。影子排在后面时，
+   最后一行是那行看不见的影子，于是真正的那个词被顶得比旁边的《Open a》高出一截——玩家
+   2026-09 拍到的「contest/room 明显与这一行文字没有对齐」就是它。排到前面之后，最后一
+   行又是那个词自己，基线回到该在的地方。
+   影子本身照旧是 0 高、裁掉、不可见，只留宽度。 */
+.mp-swap::before {
   content: attr(data-alt);
   display: block; height: 0; overflow: hidden; visibility: hidden;
 }

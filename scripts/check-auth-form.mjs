@@ -140,5 +140,44 @@ const MUST_KEEP = [
   }
 }
 
+// ── ⑤ 能打字的框，字号不许低于 16px（iOS 一点就放大）──────────────
+{
+  /*
+   * 玩家 2026-09：「每次在文字框输入之后回到的界面就自动放大了。」
+   *
+   * 那不是我们画的界面，是 iOS 自己放的：**焦点落在字号小于 16px 的输入框上，整页就
+   * 被放大一截**（Safari 和 Capacitor 那层 WebView 都这样），而装成 App 之后退出输入
+   * 也不缩回去。原先 .auth-field input 是 0.95rem ＝ 15.2px，差的就是那 0.8px。
+   *
+   * 这是 iOS 唯一认的开关：viewport 上写 maximum-scale 挡不住（iOS 10 起忽略它），JS
+   * 也收不回已经放大的页面。所以规矩只能钉在字号上，而且要连**看不见的那个框**一起钉
+   * ——六格验证码底下那个框是 opacity: 0 的，iOS 照样按它的字号放大。
+   *
+   * 量的是样式表里所有「选到输入框」的规则。::placeholder 那几条不算：iOS 看的是框自
+   * 己的字号，占位字多大它不管。
+   */
+  const RULES = [...css.matchAll(/([^{}]*)\{([^}]*)\}/g)]
+    .map(([, sel, body]) => ({ sel: sel.split('*/').pop().trim().replace(/\s+/g, ' '), body }))
+    .filter((r) => /\binput\b/.test(r.sel) && !/::placeholder/.test(r.sel))
+    .filter((r) => !/\[type=['"]?(?:range|checkbox|radio|button|submit)/.test(r.sel));
+  const px = (v) => {
+    const m = /^([\d.]+)(rem|em|px)$/.exec(v.trim());
+    if (!m) return null;
+    return m[2] === 'px' ? Number(m[1]) : Number(m[1]) * 16;
+  };
+  const sized = RULES
+    .map((r) => ({ sel: r.sel, fs: (/font-size:\s*([^;]+);/.exec(r.body) || [])[1] }))
+    .filter((r) => r.fs);
+  // 尺子：真的挑出了几条（挑不到的话下面那一条等于没量）。
+  check('样式表里找得到给输入框定字号的规则', sized.length >= 2, `${sized.length} 条`);
+  const small = sized.filter((r) => { const v = px(r.fs); return v === null || v < 16; });
+  check('能打字的框字号都不低于 16px（低了 iOS 一点就放大整页）',
+    small.length === 0, small.map((r) => `${r.sel} → ${r.fs}`).join(' · ') || sized.map((r) => r.fs).join(' / '));
+  // 那个透明的框单独点名：它最容易被漏掉，因为屏幕上看不见它。
+  const pin = sized.find((r) => /auth-field--pin\s*>\s*input/.test(r.sel));
+  check('六格底下那个透明框自己写了字号（不继承小字号）',
+    Boolean(pin) && px(pin.fs) >= 16, pin ? `${pin.fs}` : '没写');
+}
+
 console.log(fail ? `\n${fail} 条没过（共 ${ran} 条）` : `\n全部通过（${ran} 条）`);
 process.exit(fail ? 1 : 0);

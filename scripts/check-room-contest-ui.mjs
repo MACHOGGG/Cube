@@ -131,6 +131,32 @@ const { ctx, p } = await hostPage();
       labelBox: (() => { const e = document.querySelector('#mpCreateLabel'); return e ? box(e) : null; })(),
       logoBox: (() => { const e = document.querySelector('#mpCreate .genius-logo--cta'); return e ? box(e) : null; })(),
       word: document.querySelector('#mpCreateWord')?.textContent?.trim() ?? '',
+      // 条子上那个词和那颗键上的字是不是同一支字体（先前那儿单写了一支 Fraunces）。
+      fonts: (() => {
+        const tag = document.querySelector('.mp-contest-tag');
+        const label = document.querySelector('#mpCreateLabel');
+        const one = (e) => (e ? getComputedStyle(e).fontFamily.split(',')[0].replace(/["']/g, '').trim() : '');
+        return { tag: one(tag), label: one(label) };
+      })(),
+      // 换掉的那个词有没有和这一行字对齐：拿 Range 量《Open a》那段文字自己的行盒，
+      // 和那个词的盒子比上下边。inline-block 的基线取自它最后一行，先前那个撑宽度用
+      // 的影子排在后面，于是最后一行是影子的，那个词整个被顶高了一截。
+      wordAlign: (() => {
+        const label = document.querySelector('#mpCreateLabel');
+        const word = document.querySelector('#mpCreateWord');
+        if (!label || !word) return null;
+        const head = [...label.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+        if (!head) return null;
+        const r = document.createRange();
+        r.selectNode(head);
+        const a = r.getBoundingClientRect(), b = word.getBoundingClientRect();
+        return {
+          // 比的是**两个盒子的中线**，不是上下边：中文那一行的行盒比拉丁文高 4px
+          // （23 vs 19），上下各多出 2px——那是字体的事，不是没对齐。挪位才是要抓的。
+          center: +(((b.top + b.bottom) / 2) - ((a.top + a.bottom) / 2)).toFixed(2),
+          top: +(b.top - a.top).toFixed(2), bottom: +(b.bottom - a.bottom).toFixed(2),
+        };
+      })(),
       // 昵称那一格屏幕上有几层字：占位一句，加上（从前那个）浮动标签。
       nameLayers: (() => {
         const f = document.querySelector('.mp-name-field');
@@ -176,6 +202,18 @@ const { ctx, p } = await hostPage();
   check('没拨的时候那一行看不见', look.hintVisible === false, look.hintVisible ? '还在屏幕上' : '收起来了');
   // 玩家 2026-09：「Pro 的开关只在打开的时候显示《Pro》，关闭的时候什么都不显示。」
   check('没拨的时候条子上不显示《Pro》', look.tagVisible === false, look.tagVisible ? '还写着' : '只剩一颗白点');
+  // 玩家 2026-09：「《Pro》的字体与其他整体同步（和 Open a room）同步。」同一行里两种
+  // 字体并排，看着就像有一块是别处贴过来的。
+  check('《Pro》和那颗键上的字是同一支字体',
+    look.fonts.tag.length > 0 && look.fonts.tag === look.fonts.label,
+    `Pro=${look.fonts.tag} / 键=${look.fonts.label}`);
+  // 玩家 2026-09：「现在 contest/room 明显与这一行文字没有对齐。」上下边都量：只量一
+  // 边的话，整块平移过去照样算「对齐」。
+  // 修之前量到的是 −4px（英文）／−6px（中文），修之后三种语言都是 0，所以 1px 这道线
+  // 两边都离得远：不会因为字体差一点就误报，也漏不掉那一跳。
+  check('换掉的那个词和这一行字对齐',
+    look.wordAlign && Math.abs(look.wordAlign.center) <= 1,
+    JSON.stringify(look.wordAlign));
   // **上一版那个 bug**：白点拨过去之后整颗吊在条子外面（玩家拍到）。两个状态都量，
   // 而且量的是四条边的相对位置——「滑到底下」和「掉出条子」在纵坐标上只差这一点。
   check('关着的时候白点在条子里',

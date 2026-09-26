@@ -90,8 +90,8 @@ check('拨开关时 data-alt 跟着换成刚换下来的那个词',
   /setAttribute\('data-alt', next \? s\.mpCreateNoun : s\.mpContestNoun\)/.test(mp));
 const css = read('src/style.css');
 check('CSS 那头真的用 data-alt 排了一遍再藏掉',
-  /\.mp-swap::after\s*\{[^}]*content:\s*attr\(data-alt\)[^}]*\}/.test(css) &&
-  /\.mp-swap::after\s*\{[^}]*visibility:\s*hidden[^}]*\}/.test(css));
+  /\.mp-swap::before\s*\{[^}]*content:\s*attr\(data-alt\)[^}]*\}/.test(css) &&
+  /\.mp-swap::before\s*\{[^}]*visibility:\s*hidden[^}]*\}/.test(css));
 // 退路还在：找不到那一段就整句换（翻译改了一半的时候这颗键不能变哑）。
 check('找不到那一段时退回整句换（这颗键不会变哑）',
   /if \(!createWord\)/.test(mp) && /createLabel\.textContent = next \? s\.mpContest : s\.mpCreate/.test(mp));
