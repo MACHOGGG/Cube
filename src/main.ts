@@ -758,6 +758,11 @@ function syncScreenClass() {
   // 小屋的 4-3-2-1 那一幕也不留底排——玩家的原话：「4-3-2-1 的画面下方去除掉
   // 个人主页和成绩的选择」。
   cl.toggle('is-counting', !!root.querySelector('.mp-countdown-page'));
+  // 开小屋那一页也不留底排（玩家 2026-09 的设计稿：「下方也去除掉个人主页和排名与信息
+  // 栏的板块」）。理由和上面两屏一样：这一页上要做的事只有三件（取名、开一间、打屋号进
+  // 别人那一间），底排那两颗是**离开**这一页的路，摆在这儿只会被误按。
+  // 出路没少：手机返回键照旧（setScreenBack），页面自己那颗蓝圆盘也在。
+  cl.toggle('is-room-home', !!root.querySelector('.mp-page--home'));
 }
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
@@ -1201,7 +1206,6 @@ function showRecordsPage() {
   renderRecordsPage(
     root,
     recordSources,
-    showMenu,
     currentLang,
     () => openGeniusWindow(currentLang, showRecordsPage),
     () => openAuthWindow(currentLang, 'login', showRecordsPage),

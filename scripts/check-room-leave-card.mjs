@@ -75,7 +75,8 @@ const joinRoom = async (page, name, code) => {
   await page.waitForSelector('#mpCreate');
   await page.fill('#mpName', name);
   await page.fill('#mpCode', code);
-  await page.click('#mpJoin');
+  // 四位打满自动进屋，没有《加入》那颗键了（玩家 2026-09 的设计稿；见 ui/multiplayer.ts
+  // 的 joinNow）。所以上面那句 fill 本身就是「进屋」——这儿不再有一次点击。
   await page.waitForSelector('.mp-code', { timeout: 10000 });
 };
 /** 屋主给全屋挑一个玩法，开一局。 */

@@ -78,12 +78,14 @@ check('屋主一个人：写着 1/8', /1\/8/.test(await playersLabel(A)), await 
 const B = await newPlayer('guest1');
 await B.page.click('#navProfile'); await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCode', { timeout: 10000 });
-await B.page.fill('#mpCode', code); await B.page.click('#mpJoin');
+// 四位打满自动进屋，没有《加入》那颗键了（玩家 2026-09 的设计稿；见 ui/multiplayer.ts
+// 的 joinNow）。所以上面那句 fill 本身就是「进屋」——这儿不再有一次点击。
+await B.page.fill('#mpCode', code);
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 const C = await newPlayer('guest2');
 await C.page.click('#navProfile'); await C.page.click('#multiRow');
 await C.page.waitForSelector('#mpCode', { timeout: 10000 });
-await C.page.fill('#mpCode', code); await C.page.click('#mpJoin');
+await C.page.fill('#mpCode', code);
 await C.page.waitForSelector('.mp-code', { timeout: 10000 });
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 3, { timeout: 8000 });
 check('三个人：写着 3/8', /3\/8/.test(await playersLabel(A)), await playersLabel(A));
@@ -190,7 +192,7 @@ const code2 = await H.page.$eval('.mp-code', (e) => e.textContent.trim());
 const G = await newPlayer('guest-free');
 await G.page.click('#navProfile'); await G.page.click('#multiRow');
 await G.page.waitForSelector('#mpCode', { timeout: 10000 });
-await G.page.fill('#mpName', '乙'); await G.page.fill('#mpCode', code2); await G.page.click('#mpJoin');
+await G.page.fill('#mpName', '乙'); await G.page.fill('#mpCode', code2);
 await G.page.waitForSelector('.mp-code', { timeout: 10000 });
 await H.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 await H.page.click('#mpPick'); await H.page.waitForSelector('#roomPickBar', { timeout: 8000 });
@@ -211,9 +213,21 @@ await H.page.waitForSelector('#leaveRoomBtn', { timeout: 25000 });
 await H.page.waitForTimeout(1500);
 // 屋主中途解散（局中那颗《解散小屋》→ 确认）
 await H.page.$eval('#leaveRoomBtn', (el) => el.click());
-await H.page.waitForSelector('#confirmLeaveYes, #mpLeaveYes, .confirm-leave .primary', { timeout: 5000 }).catch(() => {});
-const yes = await H.page.$('#confirmLeaveYes') || await H.page.$('#mpLeaveYes') || await H.page.$('.confirm-leave .primary');
-if (yes) await yes.click();
+await H.page.waitForSelector('#mpLeaveYes', { timeout: 5000 });
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 750ms 再松手。
+//
+// 这一处从前写着三个候选选择器 ＋ `if (yes)`：那等于「找不到就悄悄跳过」，而一旦真的
+// 跳过，下面那几条量的就不是「屋主解散了之后」的事。现在直接钉 #mpLeaveYes，找不到就
+// 让它红在这儿。
+const yesBox = await H.page.$eval('#mpLeaveYes', (e) => {
+  const r = e.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+await H.page.mouse.move(yesBox.x, yesBox.y);
+await H.page.mouse.down();
+await H.page.waitForTimeout(750);
+await H.page.mouse.up();
 const lockedShown = await G.page.waitForSelector('#roomLockedOut', { timeout: 15000 }).then(() => true).catch(() => false);
 check('没权限的客人：弹出《屋主离开，小屋暂时解散，等一会再来？》', lockedShown);
 const lockedText = await G.page.$eval('#roomLockedOut .tag-line', (el) => el.textContent.trim()).catch(() => '');

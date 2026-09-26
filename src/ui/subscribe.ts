@@ -497,7 +497,24 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     PRIVILEGES[lang][6],
     `${PRIVILEGES[lang][4]} · ${s.flipModeTitle} · ${s.puzzleModeTitle}`,
   ];
-  const soonList = [1, 5, 7].map((i) => PRIVILEGES[lang][i]);
+  /**
+   * 这一窗**只列头几条，剩下的收成一个「……」**（玩家 2026-09：这一窗太长了，要
+   * 完整显示得出来）。
+   *
+   * 原先十条「订阅后立刻解锁」＋ 三条「敬请期待」，一共十三行——加上价目、收款方、
+   * 三条法务链接和底下那排键，整窗七百多像素。手机上算掉浏览器自己的地址栏工具栏
+   * 常常只剩六百出头，于是最底下那排键落在屏幕外；在小红书那种内嵌浏览器里，可视
+   * 区还被上下两条自己的栏再夹一道，连滚都滚不到。
+   *
+   * 列表本身没删：完整那一份在个人主页的《Slides 天才特供》那一段（accountPage），
+   * 那一页是可以往下滚的，而这一窗是一次性的决定窗——它要回答的是「多少钱、谁收
+   * 钱、值不值」，不是把货架整个搬出来。
+   *
+   * 「敬请期待」那三条在这一窗里整段撤掉：付款窗上摆着还没做出来的东西，既占地方，
+   * 又是这个仓库一向躲着的那种陈述（见 CLAUDE.md 里法务文本那一段）。个人主页上那
+   * 三行照旧写着「敬请期待」。
+   */
+  const PERKS_SHOWN = 4;
   const priceRows = plans()
     .map(
       (plan) => `
@@ -531,9 +548,17 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     <p class="auth-msg" id="geniusMsg" role="status"></p>
     <div class="genius-perks">
       <div class="menu-section-label">${s.geniusNowTitle}</div>
-      ${nowList.map((p) => `<div class="genius-perk">${esc(p)}</div>`).join('')}
-      <div class="menu-section-label">${s.geniusSoonTitle}</div>
-      ${soonList.map((p) => `<div class="genius-perk genius-perk--soon">${p}</div>`).join('')}
+      ${nowList
+        .slice(0, PERKS_SHOWN)
+        .map((p) => `<div class="genius-perk">${esc(p)}</div>`)
+        .join('')}
+      ${
+        // 剩下的收成一行淡的「……」。它不点、不展开——要看全的去个人主页那一段
+        // （见上面 PERKS_SHOWN 那段说明）。
+        nowList.length > PERKS_SHOWN
+          ? `<div class="genius-perk genius-perk--more" aria-label="${esc(s.geniusNowTitle)}">……</div>`
+          : ''
+      }
     </div>
     <div class="btn-row">
       <!-- 登录 is the accented one. Someone who already subscribed and is

@@ -13,6 +13,24 @@
  */
 import { chromium } from 'playwright';
 
+/**
+ * 按住那颗《还是离开》。
+ *
+ * 它是按住 600ms 才生效的（ui/confirmLeaveRoom.ts）：点一下什么都不会发生。这个仓库里
+ * 十来处门都要散场／离开，所以写一遍。
+ */
+async function holdLeave(pg) {
+  const box = await pg.$eval('#mpLeaveYes', (e) => {
+    const r = e.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await pg.mouse.move(box.x, box.y);
+  await pg.mouse.down();
+  await pg.waitForTimeout(750);
+  await pg.mouse.up();
+}
+
+
 const BASE = process.argv[2] || 'http://localhost:8902/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
@@ -66,7 +84,14 @@ await A.page.reload({ waitUntil: 'load' });
 await A.page.waitForSelector('#navProfile', { timeout: 20000 });
 
 // ---- 开通了的人：老虎机卡 → 挑图形页 → 返回 → 主菜单 --------------------------------
-await A.page.click('[aria-label^="老虎机模式"]');
+// $eval 直接在那张卡上派发 click，不走 page.click()。
+//
+// 主菜单换成鱼眼轴之后，不在焦点那一站的卡是缩小、模糊、而且可能整张在视口外的，过不了
+// Playwright 的「visible, enabled and stable」那道检查——page.click() 会一直等到超时。
+// 这道门要量的不是「滑得到吗」（那是 check-mode-axis 的事），而是「按了老虎机之后那条路
+// 怎么走」，所以直接派发一次真实的 DOM click 就够了（check-first-play 走的也是这条路）。
+await A.page.waitForSelector('[aria-label^="老虎机模式"]', { state: 'attached', timeout: 10000 });
+await A.page.$eval('[aria-label^="老虎机模式"]', (e) => e.click());
 await A.page.waitForFunction(() => !document.querySelector('.home-page'), { timeout: 8000 });
 await back(A.page);
 check('主菜单老虎机卡进的挑图形页按返回 → 主菜单', await has(A.page, '.home-page'));
@@ -96,7 +121,8 @@ await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCode', { timeout: 8000 });
 await B.page.fill('#mpName', '乙');
 await B.page.fill('#mpCode', code);
-await B.page.click('#mpJoin');
+// 四位打满自动进屋，没有《加入》那颗键了（玩家 2026-09 的设计稿；见 ui/multiplayer.ts
+// 的 joinNow）。所以上面那句 fill 本身就是「进屋」——这儿不再有一次点击。
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 check('客人进了屋', (await B.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
 
@@ -159,7 +185,11 @@ check('一局打完两边都回到小屋页', true);
 // 屋主解散 → 战绩卡 → 返回 → 多人设置页；客人那边也是战绩卡 → 返回 → 多人设置页
 await A.page.click('#mpLeave');
 await A.page.waitForSelector('#mpLeaveYes', { timeout: 5000 });
-await A.page.click('#mpLeaveYes');
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+// 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+// 的是手指那条主路。
+await holdLeave(A.page);
 await A.page.waitForSelector('#mpFinalDone', { timeout: 15000 });
 await back(A.page);
 check('屋主看战绩卡时按返回 → 多人设置页', await has(A.page, '#mpCreate'));

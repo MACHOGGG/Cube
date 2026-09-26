@@ -6,10 +6,11 @@ import { drawPair, type Family, type TargetPattern } from '../engine/targets';
 import { cardOrNull } from '../shapes/registry';
 import { random as seededRandom, seedRandom } from '../engine/rng';
 import { hostNotice, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
+import { mountPin } from './authBits';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { pushLayer, setScreenBack } from '../engine/backNav';
 import { PLAYER_NAME_KEY } from '../engine/cloudScores';
-import { ICON_DOOR_WHITE, ICON_LOCK } from './homeIcons';
+import { ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { createNudgeSoak, type NudgeSoak } from './nudgeRain';
@@ -338,26 +339,27 @@ export function renderMultiplayerPage(
     // 人只剩招牌，按下去直接开房。
     const needsGenius = !isGenius();
     container.innerHTML = `
-      <div class="app mp-page">
-        <header class="home-head">
-          <div class="home-head-glass">
+      <div class="app mp-page mp-page--home">
+        <!-- 这一页整个按玩家 2026-09 给的设计稿重排（「开小屋的界面按照我的设计来，字体
+             保留现有的，其他的全按照我的效果、间距、颜色来设置」）。字体一个没换，动的
+             是排布、间距和颜色。 -->
+        <header class="home-head mp-head">
+          <div class="home-head-glass mp-head-card">
             <h1 class="home-title">Slides</h1>
             <p class="home-sub">${s.mpTitle}</p>
           </div>
         </header>
-        <!-- 《盖起一个小屋，同样的棋盘，与大家竞赛》那一句撤了（玩家 2026-09：这一页
-             「太杂而无序了，信息太多没有主次」）。抬头上那行小字写的就是《多人游玩》，
-             而底下摆着的东西自己会说明这一页在做什么——一句重复页名的话正是那些「没有
-             主次」里最先该去掉的一条。i18n 的 mpIntro 留着没删：它是一句写好的文案，
-             哪天别处要用直接取。 -->
 
-        <!-- 换一个图形的按钮，就贴着那个图形——它换的是它，摆在名字另一头
-             的时候没人看得出这两样东西是一回事。 -->
+        <p class="auth-msg" id="mpMsg" role="status">${message}</p>
+
+        <!-- 一行两样：图形 ＋ 昵称。
+             设计稿上图形那一块就是一整块方砖，没有单独的「换一个」小键——所以**整块砖
+             自己就是那颗键**。这比从前那个贴在旁边的 ↻ 更合「换的是它」：手指落在图形
+             上，换的就是图形。名字留在 aria-label 里给读屏软件。 -->
         <div class="mp-me">
-          <div class="mp-mark">
+          <button class="mp-mark" id="mpShuffle" aria-label="${s.mpShuffle}">
             <span class="mp-avatar" id="mpAvatar">${avatarSvg(avatar)}</span>
-            <button class="mp-shuffle" id="mpShuffle" aria-label="${s.mpShuffle}">&#8635;</button>
-          </div>
+          </button>
           <!-- input 在前、标签在后：浮动标签靠相邻兄弟选择器，而那只能往后看
                （见 subscribe.ts 的 field()，这一页手写的两处跟它同一个顺序）。 -->
           <label class="auth-field mp-name-field">
@@ -367,53 +369,43 @@ export function renderMultiplayerPage(
           </label>
         </div>
 
-        <p class="auth-msg" id="mpMsg" role="status">${message}</p>
-
-        <!-- 「开一间」是一件事，不是两件。
-             原先这儿摆着两颗一模一样的大键（《开小屋》《开竞赛》），玩家的话是「太杂
-             而无序、信息太多没有主次」——两颗长得一样的键并排，屏幕上就没有主次了，而
-             它们本来是同一件事的两个档。
-             现在一颗键 ＋ 右上角一个开关（玩家定的：「《开竞赛》应该是一个开关（同色盲
-             友好模式）在角落」），用的就是色盲友好那一个零件（.pill-switch）。
-             开关摆在这一块的角上、紧贴着它改的那颗键，不摆在整页的角上：这一页自己就
-             有过同样的取舍——「换一个图形的按钮，就贴着那个图形，摆在名字另一头的时候
-             没人看得出这两样东西是一回事」（见上面 .mp-me 那段）。 -->
+        <!-- 一行两样：《开小屋》那颗大键 ＋ 右边那根竖着的《竞赛》开关。
+             玩家先前定的是「《开竞赛》应该是一个开关（同色盲友好模式）在角落」，这一版
+             设计稿把它画成了贴着大键右边的一根竖条——同一颗开关，换了个样子。
+             它仍旧是 role="switch"：拨过去，那颗键上的字就换成《开竞赛》（见下面的接线）。 -->
         <div class="mp-open">
-          <button class="mp-contest-row" id="mpContest" role="switch" aria-checked="false">
-            <span>${s.mpContest}</span>
-            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
-          </button>
-          <button class="genius-cta genius-cta--crest${needsGenius ? ' genius-cta--locked' : ''}" id="mpCreate">
-            ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
-            <span id="mpCreateLabel">${s.mpCreate}</span>
-            ${geniusLogoTag(40, 'genius-logo--cta')}
-          </button>
-          <!-- 这一行**必须有字**，而且四种语言都必须一行装得下（这一页只有一屏的高度，
-               见 check-overlap 的「多人游玩：一屏装得下，不用滚」）。不写的话，把开关拨
-               过去的人按下键会发现自己没有棋盘——那正是「意料之外的界面」。
-               一直摆着，不跟着开关出现／消失：那样每拨一下整页跳一次。 -->
-          <p class="auth-hint auth-hint--center mp-contest-hint">${s.mpContestHint}</p>
+          <div class="mp-open-row">
+            <button class="mp-create${needsGenius ? ' mp-create--locked' : ''}" id="mpCreate">
+              ${needsGenius ? `<span class="cta-lock">${ICON_LOCK}</span>` : ''}
+              <span id="mpCreateLabel">${s.mpCreate}</span>
+              ${geniusLogoTag(38, 'genius-logo--cta')}
+            </button>
+            <button class="mp-contest-pill" id="mpContest" role="switch" aria-checked="false"
+                    aria-label="${s.mpContest}">
+              <span class="mp-contest-knob" aria-hidden="true"></span>
+              <span class="mp-contest-tag" aria-hidden="true">${s.mpContest}</span>
+            </button>
+          </div>
+          <!-- 设计稿上没有这一行，但它**必须有字**：拨过去的人按下那颗键会发现自己没有
+               棋盘（主持人不下场），那正是「意料之外的界面」。所以留一行最轻的，摆在设计
+               稿本来就空着的地方；四种语言都一行装得下（见 check-overlap）。 -->
+          <p class="mp-contest-hint">${s.mpContestHint}</p>
         </div>
-        <hr class="mp-rule" />
-        <p class="auth-hint auth-hint--center">${s.mpNeedGenius}</p>
 
-        <!-- Four digits read off someone else's screen deserve the room the
-             room code itself gets: its own line, at a size that can be
-             checked at a glance against the phone being read from. -->
+        <!-- 四根长条就是屋号那四位。**打满四位直接进屋**，没有另一颗《加入》键
+             （玩家：「下方的四个长条是小屋 code 的输入栏，输入后直接进入房间」）。
+             用的是表单那套六格验证码同一个零件（ui/authBits 的 mountPin），格数按
+             maxlength 来——这儿是四格。 -->
         <div class="mp-join-block">
           <label class="auth-field mp-code-field">
             <input id="mpCode" type="text" inputmode="numeric" maxlength="4"
                    autocomplete="off" placeholder="${s.mpCodePlaceholder}" />
             <span>${s.mpCodeLabel}</span>
           </label>
-          <!-- 《加入小屋》不写字了，就摆主菜单上那扇门的纯白版——玩家的
-               原话：「《加入小屋》改称一个白色小门的标识」。名字留在
-               aria-label 里给读屏软件。 -->
-          <button class="profile-pill mp-join-door" id="mpJoin" aria-label="${s.mpJoin}">${ICON_DOOR_WHITE}</button>
         </div>
 
-        <!-- 全站的《返回》都是同一颗圆盘（见 ui/ctlIcons.ts）。 -->
-        <div class="page-back-row"><button class="icon-btn page-back" id="mpBack" aria-label="${s.back}">${CTL_BACK}</button></div>
+        <!-- 全站的《返回》都是同一颗圆盘（见 ui/ctlIcons.ts），这一页按设计稿换成蓝的。 -->
+        <div class="page-back-row"><button class="icon-btn page-back mp-back" id="mpBack" aria-label="${s.back}">${CTL_BACK}</button></div>
       </div>
     `;
 
@@ -539,7 +531,17 @@ export function renderMultiplayerPage(
     // 一颗键，两个档。拨到哪一档由开关说，走的是同一条路（见 openRoom 的说明）。
     container.querySelector<HTMLButtonElement>('#mpCreate')!.addEventListener('click', () => openRoom(contestOn()));
 
-    container.querySelector<HTMLButtonElement>('#mpJoin')!.addEventListener('click', async () => {
+    /**
+     * 四位打满就进屋——**没有另一颗《加入》键**（玩家 2026-09：「下方的四个长条是小屋
+     * code 的输入栏，输入后直接进入房间」）。
+     *
+     * 屋号只有四位、而且是从别人屏幕上读来的，打完就是「我要进」，不存在「打完了再想想」
+     * 那一步。多一颗键就是多一次一定会按的确认。
+     *
+     * `busy` 和开小屋那条路共用（连点两下只办一件事）；进不去的时候（码不对、满了）格子
+     * 抖一下、清空、回到第一格，他接着打下一个——见下面 pin.reject()。
+     */
+    const joinNow = async () => {
       const code = codeBox.value.trim();
       if (!/^\d{4}$/.test(code)) return void (msg.textContent = s.mpErrNoRoom);
       if (busy) return;
@@ -549,7 +551,13 @@ export function renderMultiplayerPage(
       const joined = await joinRoom(code, myName(), avatar);
       busy = false;
       if (dead) return;
-      if (!joined.ok) return void (msg.textContent = errorText(joined.reason, lang));
+      if (!joined.ok) {
+        msg.textContent = errorText(joined.reason, lang);
+        // 没进去：四格抖一下、清空、回到第一格（和验证码那两处同一个零件）。不清空的话
+        // 他得先一个个退格才能重打，而这四位本来就是重读一遍别人屏幕的事。
+        pin.reject();
+        return;
+      }
       keepAssignedName(joined.value);
       // 一局正打到一半进来的（服务器现在放人进来了）：这一局不是我的，先记
       // 成「打过了」，免得轮询把我扔进一块别人打了一半的棋盘；下一局开始时
@@ -557,7 +565,7 @@ export function renderMultiplayerPage(
       if (joined.value.round && !joined.value.roundOver) markRoundPlayed(joined.value.round);
       playedRound = Math.max(playedRound, lastPlayedRound());
       renderLobby(joined.value);
-    });
+    };
 
     // Digits only, so a stray letter never sits in the box looking like a
     // room that does not exist.
@@ -565,8 +573,14 @@ export function renderMultiplayerPage(
       const digits = codeBox.value.replace(/\D/g, '').slice(0, 4);
       if (digits !== codeBox.value) codeBox.value = digits;
     });
+    // 四根长条：表单那套验证码格子同一个零件，格数按 maxlength（这儿是四格）。打满就进
+    // 屋。**挂在数字过滤那一条之后**：过滤是 input 事件里改 value 的，先挂的先跑，不然
+    // 打满那一下 mountPin 读到的还是没过滤的那一份。
+    const pin = mountPin(codeBox, () => void joinNow());
+    // 键盘上按 Enter 也算一次「我打完了」——四位都打了却按了 Enter 的人，多半是还在等一
+    // 颗键。没打满就照旧提示。
     codeBox.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') container.querySelector<HTMLButtonElement>('#mpJoin')?.click();
+      if (e.key === 'Enter') void joinNow();
     });
     container.querySelector<HTMLButtonElement>('#mpBack')!.addEventListener('click', handlers.onBack);
     // 手机的返回键：等同这颗《返回》。

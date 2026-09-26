@@ -14,6 +14,24 @@
  */
 import { chromium } from 'playwright';
 
+/**
+ * 按住那颗《还是离开》。
+ *
+ * 它是按住 600ms 才生效的（ui/confirmLeaveRoom.ts）：点一下什么都不会发生。这个仓库里
+ * 十来处门都要散场／离开，所以写一遍。
+ */
+async function holdLeave(pg) {
+  const box = await pg.$eval('#mpLeaveYes', (e) => {
+    const r = e.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await pg.mouse.move(box.x, box.y);
+  await pg.mouse.down();
+  await pg.waitForTimeout(750);
+  await pg.mouse.up();
+}
+
+
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
@@ -41,7 +59,8 @@ async function joinAs(P, name, code) {
   await P.page.waitForSelector('#mpCode', { timeout: 10000 });
   await P.page.fill('#mpName', name);
   await P.page.fill('#mpCode', code);
-  await P.page.click('#mpJoin');
+  // 四位打满自动进屋，没有《加入》那颗键了（玩家 2026-09 的设计稿；见 ui/multiplayer.ts
+  // 的 joinNow）。所以上面那句 fill 本身就是「进屋」——这儿不再有一次点击。
 }
 const hasBoard = (P) => P.page.evaluate(() => document.querySelectorAll('#boardWrap .tile').length > 0);
 const waitBoard = (P) =>
@@ -113,7 +132,11 @@ const cPlays = await waitBoard(C).then(() => true).catch(() => false);
 check('下一局开始，丙入局', cPlays);
 await B.page.click('#leaveRoomBtn');
 await B.page.waitForSelector('#mpLeaveYes', { timeout: 5000 });
-await B.page.click('#mpLeaveYes');
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+// 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+// 的是手指那条主路。
+await holdLeave(B.page);
 await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 });
 await B.ctx.close();
 // 换一台浏览器，还叫乙。

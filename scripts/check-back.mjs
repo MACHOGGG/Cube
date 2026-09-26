@@ -14,6 +14,24 @@
  */
 import { chromium } from 'playwright';
 
+/**
+ * 按住那颗《还是离开》。
+ *
+ * 它是按住 600ms 才生效的（ui/confirmLeaveRoom.ts）：点一下什么都不会发生。这个仓库里
+ * 十来处门都要散场／离开，所以写一遍。
+ */
+async function holdLeave(pg) {
+  const box = await pg.$eval('#mpLeaveYes', (e) => {
+    const r = e.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await pg.mouse.move(box.x, box.y);
+  await pg.mouse.down();
+  await pg.waitForTimeout(750);
+  await pg.mouse.up();
+}
+
+
 const BASE = process.argv[2] || 'http://localhost:8901/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
@@ -219,7 +237,11 @@ await P.ctx.close();
   // 真的走：按键 → 问 → 是 → 多人设置页
   await page.click('#mpLeave');
   await page.waitForSelector('#mpLeaveYes', { timeout: 5000 });
-  await page.click('#mpLeaveYes');
+  // 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+  // 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+  // 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+  // 的是手指那条主路。
+  await holdLeave(page);
   await page.waitForSelector('#mpCreate', { timeout: 10000 });
   check('解散之后回到多人设置页，返回键接着回个人主页', true);
   await back(page);

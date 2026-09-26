@@ -36,7 +36,9 @@ check('连点三下《开小屋》只发了一次建屋请求', creates.length =
 const code = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
 // ---- 客人进屋
 await B.page.click('#navProfile'); await B.page.click('#multiRow'); await B.page.waitForSelector('#mpCreate');
-await B.page.fill('#mpName', '乙'); await B.page.fill('#mpCode', code); await B.page.click('#mpJoin'); await B.page.waitForSelector('.mp-code');
+// 四位打满自动进屋，没有《加入》那颗键了（玩家 2026-09 的设计稿；见 ui/multiplayer.ts
+// 的 joinNow）。所以上面那句 fill 本身就是「进屋」——这儿不再有一次点击。
+await B.page.fill('#mpName', '乙'); await B.page.fill('#mpCode', code); await B.page.waitForSelector('.mp-code');
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2);
 // ---- 屋主开局；客人在倒数时刷新
 await A.page.click('#mpPick'); await A.page.waitForSelector('#roomPickBar');
@@ -67,7 +69,22 @@ check('这一局打完，等待页放下，回到小屋页', back);
 // ---- 小屋没了（屋主解散）之后客人页面上的样子
 await A.page.waitForFunction(() => !document.querySelector('#mpWait') && !!document.querySelector('#mpLeave'), { timeout: 30000 });
 await A.page.click('#mpLeave'); await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
-await A.page.$$eval('#leaveRoomConfirm button', (els) => els.find((e) => /还是离开|离开/.test(e.textContent)).click());
+// 那颗确认键现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）：
+// 一次 `.click()` 什么都不会发生，于是屋主根本没散场，下面那一条量到的是「客人还在小屋
+// 页」——红的是这把尺子，不是代码。按住 750ms 再松手。
+// 顺带把「按文字找那颗键」改成按 id 找：键上的字已经从《还是离开》换成了《按住离开》，
+// 靠文字认迟早会认错人。
+await A.page.waitForSelector('#mpLeaveYes', { timeout: 5000 });
+{
+  const b = await A.page.$eval('#mpLeaveYes', (e) => {
+    const r = e.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await A.page.mouse.move(b.x, b.y);
+  await A.page.mouse.down();
+  await A.page.waitForTimeout(750);
+  await A.page.mouse.up();
+}
 const gone = await B.page.waitForFunction(() => !!document.querySelector('#roomCancelled') || !!document.querySelector('.mp-final, .room-final, #mpFinalDone') || (document.querySelector('#mpCreate') && !document.querySelector('.mp-code')), { timeout: 20000 }).then(() => true).catch(() => false);
 check('屋主解散后，客人看到通知或战绩，不再留在旧小屋页', gone, await B.page.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 120)));
 console.log(fail ? `${fail} 项失败` : '全部通过');

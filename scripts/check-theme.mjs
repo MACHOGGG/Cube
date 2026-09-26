@@ -120,7 +120,7 @@ const sw = (p) =>
 {
   const p = await page();
   const l = await look(p);
-  check('系统深色模式下，默认还是米白那一套', l.attr === 'light' && /FAF6EC/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
+  check('系统深色模式下，默认还是米白那一套', l.attr === 'light' && /F5EDDA/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
   check('底色真的画成了米白（不是只有属性对）', l.bodyBg === 'rgb(250, 246, 236)', l.bodyBg);
   // 这一条是「属性真的在挡系统偏好」的反证：属性一摘，深色那块媒体查询就该接管。
   const off = await p.evaluate(() => {
@@ -191,7 +191,7 @@ const sw = (p) =>
   await p.evaluate(() => document.querySelector('#themeRow').click());
   await p.waitForTimeout(350);
   l = await look(p);
-  check('再拨一下回到米白', l.attr === 'light' && /FAF6EC/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
+  check('再拨一下回到米白', l.attr === 'light' && /F5EDDA/i.test(l.bg), `data-theme=${l.attr} --bg=${l.bg}`);
   await p.evaluate(() => document.querySelector('#themeRow').click());
   await p.waitForTimeout(350);
   await p.reload({ waitUntil: 'load' });

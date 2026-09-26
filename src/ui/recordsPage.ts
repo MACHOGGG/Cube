@@ -9,7 +9,6 @@ import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
 import { isGenius } from '../engine/subscription';
 import { mountBoardThumb, mountBoardView } from './leaderboard';
-import { CTL_BACK } from './ctlIcons';
 // 累计得分没有上限，而它那张卡是页面上一个固定的格子——数字长到装不下就缩写，
 // 点开的放大版再写全每一位。排行榜缩略牌用的是同一份（见 engine/compactScore）。
 import { compactScore } from '../engine/compactScore';
@@ -57,7 +56,9 @@ function scoreFontSize(text: string, big: boolean): string {
 export function renderRecordsPage(
   container: HTMLElement,
   sources: RecordSource[],
-  onBack: () => void,
+  // 这一页底下那颗《返回》圆盘撤掉之后，这个参数也就没人用了（见下面那段注释）。
+  // 参数留着占位会让下一个人以为它还接着什么，所以一并去掉——回主菜单的两条路
+  // （底排那颗亮着的图标、手机返回键）都在 main.ts 那头，不在这一页里。
   lang: Lang,
   /** 锁着的排行榜上那颗《成为 Slides 天才》按下去以后去哪儿。 */
   onWantGenius: () => void = () => {},
@@ -93,7 +94,13 @@ export function renderRecordsPage(
         <button class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></button>
         <button class="records-panel records-panel--ranks" id="ranksPanel" aria-label="${s.rankingsTitle}"></button>
       </div>
-      <div class="page-back-row"><button class="icon-btn page-back" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button></div>
+      <!-- 这一页底下那颗《返回》圆盘撤掉了（玩家 2026-09）。
+           它不是唯一的出路，所以撤掉不会把人关在这一页：底排导航上《记录与排名》
+           那颗图标此刻是亮着的，再点一下就回主菜单（见 main.ts 的 relocalizeChrome
+           里那句「Tapping the icon of the page you are already on closes it」），
+           手机的返回键也照旧（backNav）。
+           两条路都通，而屏幕上那颗圆盘是第三条——这一页本来就只有两块牌子，底下再
+           吊一颗圆盘，反倒像是还有什么东西没摆完。 -->
     </div>
   `;
 
@@ -180,7 +187,6 @@ export function renderRecordsPage(
     openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big', back: s.back });
   });
 
-  container.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', onBack);
 }
 
 /**

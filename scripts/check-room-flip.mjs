@@ -70,7 +70,9 @@ await A.page.waitForSelector('.mp-code', { timeout: 10000 });
 const code = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
 await B.page.click('#navProfile'); await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCode', { timeout: 10000 });
-await B.page.fill('#mpName', '乙'); await B.page.fill('#mpCode', code); await B.page.click('#mpJoin');
+// 四位打满自动进屋，没有《加入》那颗键了（玩家 2026-09 的设计稿；见 ui/multiplayer.ts
+// 的 joinNow）。所以上面那句 fill 本身就是「进屋」——这儿不再有一次点击。
+await B.page.fill('#mpName', '乙'); await B.page.fill('#mpCode', code);
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 

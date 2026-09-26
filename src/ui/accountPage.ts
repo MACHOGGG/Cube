@@ -178,7 +178,6 @@ export function renderAccountPage(
         <button class="genius-cta" id="becomeGeniusBtn">${
           subscribed ? s.subscribedTitle : s.becomeGenius
         }</button>
-        <div class="menu-section-label">${s.geniusSpecialTitle}</div>
         <!-- A code is its own way in, not a footnote to the paywall: it was
              buried behind 「有内部码？」 inside the subscribe window, which is
              the one place someone holding a code has no reason to open. -->
@@ -201,6 +200,12 @@ export function renderAccountPage(
         <!-- 这条线底下是「设置」：调完了合上窗，游戏就照你调的来。上面两条
              不是设置，是两个去处（一个是兑码，一个是开小屋）。以后再有可调
              的东西也排进这一段，玩家不用满页找。 -->
+        <!-- 《SLIDES 天才特供》这一行原先在最上面、紧挨着那颗《成为 Slides 天才》。
+             玩家 2026-09 要它挪到这条横线上面——它标的本来就是**线底下那一段**：上面
+             两行（内部码、多人游玩）是两个去处，线底下才是一串「开通了才有」的东西。
+             标签压在整段最上头的时候，它像是在给那两个去处也贴标签。
+             字号和样式一个字没改（还是同一个 .menu-section-label）。 -->
+        <div class="menu-section-label">${s.geniusSpecialTitle}</div>
         <hr class="genius-rule" />
         <!-- 《解锁更多配色》两种人都点得开。
              天才点开是挑颜色；没开通的点开是看看有什么——三套配色照样画出来，

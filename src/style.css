@@ -1,12 +1,16 @@
 :root {
-  /* 米白往米黄挪了一点点（#FAF8F6 → #FAF6EC）。这一支同时也是游戏页的
-     底色（见 --play-bg），所以它得是一个「久看不累、又压得住棋盘」的颜色，
-     不只是首页好看就行。 */
-  --bg: #FAF6EC;
+  /* 米白往米黄挪。两步：#FAF8F6 → #FAF6EC → **#F5EDDA**（玩家 2026-09：「整体淡色的
+     背景按照我上传的来调整，略微再暗黄一点」）。
+     这一支同时也是游戏页的底色（见 --play-bg），所以它得是一个「久看不累、又压得住
+     棋盘」的颜色，不只是首页好看就行——所以是往设计稿那个方向挪一档，不是一步挪到位。
+     深色那一套不受影响（它在下面重新定义这两支）。 */
+  --bg: #F5EDDA;
   /* The bottom dock sits directly on the page, so it needs to be a clear
      step darker than it — content scrolls underneath and the dock has to
      stay legible over whatever passes below. */
-  --nav-dock: #EAE3DB;
+  /* 底色暖了一档，这一条跟着暖同一档：不跟的话底排会泛出一层灰紫，压在米黄上很脏。
+     暗度差保持原样（约 5%），那是上面那句「clear step darker」要的。 */
+  --nav-dock: #E9DFC6;
   --surface: #FFFFFF;
   --ink: #2E2430;
   --ink-soft: #6E5F6D;
@@ -80,7 +84,7 @@
   /* 得分图示那圈描边。
      它有两个活：把并排的两枚图示分开，以及给蓝色的图形一道边，让它在底色
      上「浮」着。以前写死白色——在深色底上两个活都干得漂亮，可这一页的底色
-     是跟着主题走的（--play-bg 就是 --bg），米白 #FAF6EC 上白描白等于没画，
+     是跟着主题走的（--play-bg 就是 --bg），米白 #F5EDDA 上白描白等于没画，
      色盲那套的近白 #F4F4F4 更是一点都看不见（白对白的对比度 1.05）。所以
      它跟着主题走：浅底描深，深底描白。转角本来就是圆的（图示的 svg 写着
      stroke-linejoin="round"）。 */
@@ -826,6 +830,18 @@ h1 {
 .overlay {
   position: fixed; inset: 0; background: rgba(30,24,32,0.5); display: flex; align-items: center; justify-content: center;
   padding: 20px; opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 90;
+  /* 高度按**动态**视口算，不按 inset: 0 那一份。
+     `inset: 0` 量的是布局视口，而内嵌浏览器（小红书、微信那一类）会把自己的地址栏和
+     底部工具栏画在布局视口**里面**——于是这一层的下沿落在工具栏底下，那一段既看不见
+     也滚不到。玩家 2026-09 报的「结算弹窗下方的退出按钮甚至划不到」就是这一处。
+     三行按顺序退：不认识 dvh 的老内核落到 vh，再老的落到上面那句 inset。
+     `min-height` 一起写：内容比屏幕高的时候这一层要跟着长，才有得滚。 */
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* 底部安全区（iPhone 那条横杠、内嵌浏览器的工具栏）：内容不许压在它底下。 */
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   /* 窗比屏幕高的时候要能滚。没有这一条时，弹性盒的居中会把上下同时切掉，
      而且切掉的部分没有任何办法够到——《成为 Slides 天才》那一窗高约 700px，
      手机上算掉浏览器自己的地址栏工具栏，可视高度常常只剩六百出头，于是最
@@ -3514,6 +3530,12 @@ body:has(.slot-page) .home-nav { display: none; }
    so a buyer can tell at a glance which half they get today. */
 .genius-perk--soon { opacity: 0.58; }
 .genius-perk--soon::before { color: var(--ink-soft); }
+/* 「剩下的还有」那一行：淡一档，而且不挂前面那个「·」——它代表的是一串条目，不是
+   其中一条。字距拉开一点，六个点才看得出是省略号而不是一条虚线。 */
+.genius-perk--more {
+  opacity: 0.5; padding-left: 16px; letter-spacing: 0.18em;
+}
+.genius-perk--more::before { content: none; }
 /* 登录那扇窗的正文：一摞东西，自上而下。
    从前这里是 flex 的默认方向——横排。它当初只装一件东西（一张表单），横排
    竖排看不出区别，居中是它真正要的。后来这块地方陆续多了几件：一句说明、一
@@ -4430,6 +4452,131 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    三块板不会糊成一片（见 homeIcons.ts 的 whiteDoor）。 */
 .mp-join-door { --door-gap: var(--pill-bg); display: flex; justify-content: center; padding: 8px 18px; }
 .mp-join-door > svg { width: auto; height: 30px; display: block; }
+
+/* ================= 开小屋那一页：按玩家给的设计稿 =========================
+   玩家 2026-09：「开小屋的界面按照我的设计来，字体保留现有的，其他的全按照我的效果、
+   间距、颜色来设置。」字体一个没换（Fraunces / Karla 照旧），动的是排布、间距、颜色。
+
+   蓝色取的是棋子色板里本来就有的那一支（#4C68B0，PIECE_NOW 的第四色）——不新造一个
+   蓝：这一页上的蓝和棋盘上的蓝是同一个蓝，整套颜色才收得住。 */
+.mp-page { --mp-blue: #4C68B0; --mp-warm: #B0A695; }
+
+/* 抬头那块牌子：设计稿上是一块实心的暖橙，不是别处那块半透明玻璃。
+   只在这一页覆盖（.mp-head-card），主菜单和另外两页那块玻璃一个像素没动。 */
+.mp-page .mp-head-card {
+  background: #E9A97E;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+}
+.mp-page .mp-head-card .home-title { color: #FFFFFF; }
+.mp-page .mp-head-card .home-sub { color: rgba(255, 255, 255, 0.92); }
+/* 招牌底下那条细线在暖橙上要改成白的，不然看不见。 */
+.mp-page .mp-head-card .home-title::after { background: rgba(255, 255, 255, 0.7); }
+
+/* ---- 一行两样：图形 ＋ 昵称 ---- */
+.mp-page .mp-me { align-items: stretch; gap: 12px; max-width: 320px; }
+/* 图形那一块整块就是「换一个」那颗键（设计稿上没有单独的小键）。 */
+.mp-page .mp-mark {
+  flex: 0 0 auto; width: 76px; padding: 0; border: none; cursor: pointer;
+  background: var(--mp-warm); border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: none; -webkit-tap-highlight-color: transparent;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+.mp-page .mp-mark:active { transform: scale(0.97); }
+.mp-page .mp-mark:hover { filter: brightness(1.04); }
+.mp-page .mp-mark .mp-avatar { width: 46px; height: 46px; }
+/* 昵称那一格：同一支暖灰，圆角同一档，标签浮在里面（和全站那一套一样）。 */
+.mp-page .mp-name-field { flex: 1; margin: 0; }
+.mp-page .mp-name-field input {
+  height: 100%; background: var(--mp-warm); border: none; border-radius: var(--r-md);
+  color: #FFFFFF; font-size: 1.05rem;
+}
+.mp-page .mp-name-field input::placeholder { color: rgba(255, 255, 255, 0.62); }
+.mp-page .mp-name-field > span { color: rgba(255, 255, 255, 0.72); }
+.mp-page .mp-name-field > input:focus + span,
+.mp-page .mp-name-field > input:not(:placeholder-shown) + span { color: #FFFFFF; }
+
+/* ---- 一行两样：《开小屋》 ＋ 竖着的《竞赛》开关 ---- */
+.mp-open-row { display: flex; align-items: stretch; gap: 10px; }
+/* 那颗大键：设计稿上是一块暗玫瑰的实心砖，招牌压在右边。 */
+.mp-create {
+  flex: 1; min-width: 0; border: none; border-radius: var(--r-md); cursor: pointer;
+  background: #B4635E; color: #FFFFFF;
+  font-family: inherit; font-weight: 700; font-size: 1.05rem; letter-spacing: 0.02em;
+  padding: 16px 14px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+.mp-create:hover { filter: brightness(1.05); }
+.mp-create:active { transform: translateY(1px) scale(0.99); }
+/* 还没开通的人多一把锁：按下去照样弹订阅那一页——锁不是把路堵死，是把「这条路要先买
+   票」写在票口上（和主菜单上锁着的玩法同一手）。 */
+.mp-create--locked .cta-lock { width: 17px; height: 17px; flex: none; }
+
+/* 《竞赛》那根竖条。玩家先前定的是「一个开关（同色盲友好模式）在角落」，这一版设计稿
+   把它画成贴着大键右边的一根竖条——同一颗开关，换了个样子：白点在上是关、滑到下是开，
+   位置和颜色一起说话，不用读字（这一页四种语言，而「竞赛」两个字各写各的）。 */
+.mp-contest-pill {
+  flex: 0 0 auto; width: 54px; padding: 8px 0 10px; border: none; cursor: pointer;
+  border-radius: var(--r-full); background: var(--mp-blue);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 200ms ease;
+}
+.mp-contest-knob {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+  /* 和别处那颗开关同一条过冲曲线（style.css 的 .pill-switch-knob）：弹一下再落定，
+     所以「拨过去了」这件事不用读字也看得出。transform 不用独立的 translate 属性——
+     Chrome 61 不认识后者（那一处栽过一次）。 */
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mp-contest-tag {
+  font-size: 0.66rem; line-height: 1.1; color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.02em; text-align: center; padding: 0 2px;
+}
+/* 拨开：整根条子换成强调色，白点滑到底下。 */
+.mp-contest-pill[aria-checked='true'] { background: var(--accent); }
+.mp-contest-pill[aria-checked='true'] .mp-contest-knob { transform: translateY(26px); }
+.mp-contest-pill[aria-checked='true'] .mp-contest-tag { order: -1; }
+.mp-contest-pill:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .mp-contest-pill, .mp-contest-knob { transition: none; }
+}
+/* 设计稿上没有这一行，但它必须有字（见 multiplayer.ts 那段注释）。最轻的一档。 */
+.mp-contest-hint {
+  margin: 6px 0 0; text-align: center; font-size: 0.72rem; color: var(--ink-faint);
+  line-height: 1.3;
+}
+
+/* ---- 四根长条：屋号那四位，打满直接进屋 ---- */
+.mp-page .mp-code-field { margin: 0; }
+/* 标签收起来：四根条子本身就说明了「这儿填四位」，而设计稿上没有这一行字。留在 DOM 里
+   给读屏软件（所以是 clip 而不是 display: none）。 */
+.mp-page .mp-code-field > span {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.mp-page .mp-code-field .pin-row { gap: 10px; }
+.mp-page .mp-code-field .pin-cell {
+  height: 92px; border: none; border-radius: var(--r-md);
+  background: var(--mp-blue); color: #FFFFFF;
+  font-family: 'Fraunces', Georgia, serif; font-size: 1.9rem; font-weight: 600;
+}
+.mp-page .mp-code-field .pin-row--on .pin-cell--at {
+  box-shadow: 0 0 0 3px var(--accent-soft); border-color: transparent;
+}
+
+/* ---- 那颗《返回》：设计稿上是蓝的实心圆盘 ---- */
+.mp-page .mp-back { --ctl-disc: var(--mp-blue); --ctl-mark: #FFFFFF; }
+
+/* ---- 这一页不摆底排（玩家：「下方也去除掉个人主页和排名与信息栏的板块」）----
+   两种写法都留着，和小屋里那几屏同一个道理：:has() 在新内核上够用，老内核落到 JS 盖上
+   去的那个类（main.ts 的 syncBodyFlags）。 */
+body:has(.mp-page--home) .home-nav { display: none; }
+html.is-room-home .home-nav { display: none; }
 
 /* ---- 「开一间」那一块：一颗键 ＋ 右上角一个开关 -------------------------
    玩家 2026-09：这一页「太杂而无序了，信息太多没有主次」，并且「《开竞赛》应该是一个

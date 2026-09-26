@@ -13,6 +13,24 @@
  */
 import { chromium } from 'playwright';
 
+/**
+ * 按住那颗《还是离开》。
+ *
+ * 它是按住 600ms 才生效的（ui/confirmLeaveRoom.ts）：点一下什么都不会发生。这个仓库里
+ * 十来处门都要散场／离开，所以写一遍。
+ */
+async function holdLeave(pg) {
+  const box = await pg.$eval('#mpLeaveYes', (e) => {
+    const r = e.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await pg.mouse.move(box.x, box.y);
+  await pg.mouse.down();
+  await pg.waitForTimeout(750);
+  await pg.mouse.up();
+}
+
+
 const BASE = process.argv[2];
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
@@ -100,7 +118,9 @@ const gate = await B.page.$eval('#mpCreate', (el) => {
     const e = el.querySelector(sel);
     return e ? Math.round(e.getBoundingClientRect().height) : 0;
   };
-  return { locked: el.classList.contains('genius-cta--locked'), lock: size('.cta-lock'), crest: size('.genius-logo') };
+  // 类名跟着设计稿换了（.genius-cta--locked → .mp-create--locked）：这一页的大键现在是
+  // 它自己那一颗（.mp-create），不再借订阅窗那颗 .genius-cta 的样子。
+  return { locked: el.classList.contains('mp-create--locked'), lock: size('.cta-lock'), crest: size('.genius-logo') };
 });
 check('没订阅的人，《开房间》上挂着锁和天才招牌', gate.locked && gate.lock > 0 && gate.crest > 0,
   JSON.stringify(gate));
@@ -131,18 +151,39 @@ check('屋主开出房间，拿到四位房号', /^\d{4}$/.test(code), code);
 
 // ---- the guest joins ----------------------------------------------------
 await B.page.fill('#mpName', '乙');
+// **先只打三位。** 打满第四位就自动进屋了（没有《加入》键了），那之后这一页就没了，
+// 下面那几条一个都量不到——这不是「宽松」，是量了个空。
+await B.page.fill('#mpCode', code.slice(0, 3));
+// 那四位要读得回来，而且要真的在框里——从前那一排把按钮给了 width:100%，输入框只剩
+// 30px，打进去的字在那儿、但看不见。
+//
+// **量的东西换了地方**：玩家 2026-09 的设计稿把这个框改成了四根长条（ui/authBits 的
+// mountPin），真输入框盖在上面、是透明的。所以「够不够大、看不看得见」现在要问那四格，
+// 不能再问那个框的字号——问它量到的是一个 opacity: 0 的东西，那是一条永远说不出真话的
+// 断言。
+const codeBox = await B.page.$eval('.mp-code-field', (box) => {
+  const cells = [...box.querySelectorAll('.pin-cell')];
+  const input = box.querySelector('input');
+  return {
+    n: cells.length,
+    w: Math.round(box.getBoundingClientRect().width),
+    cellW: Math.round(cells[0]?.getBoundingClientRect().width || 0),
+    cellH: Math.round(cells[0]?.getBoundingClientRect().height || 0),
+    size: Math.round(parseFloat(getComputedStyle(cells[0] || box).fontSize)),
+    shown: cells.map((c) => c.textContent.trim()).join(''),
+    value: input?.value ?? '',
+    filled: cells.filter((c) => c.classList.contains('on')).length,
+  };
+});
+check('屋号是四根长条', codeBox.n === 4, `${codeBox.n} 格`);
+check('四格够大，读得回那四位',
+  codeBox.w >= 200 && codeBox.cellW >= 40 && codeBox.cellH >= 60 && codeBox.size >= 20,
+  `整排 ${codeBox.w}px · 每格 ${codeBox.cellW}×${codeBox.cellH}px · 字号 ${codeBox.size}px`);
+check('打进去的几位真的显示在格子里（这会儿是前三位）',
+  codeBox.shown === code.slice(0, 3) && codeBox.value === code.slice(0, 3) && codeBox.filled === 3,
+  `格子里「${codeBox.shown}」· 框里「${codeBox.value}」· 填了 ${codeBox.filled} 格`);
+// 打满第四位——**这一下本身就是「进屋」**，不再有一次点击。
 await B.page.fill('#mpCode', code);
-// The box has to be big enough to read four digits back off, and they have
-// to actually be in it — the old row gave the button width:100% and left
-// the input 30px, so what you typed was there and invisible.
-const codeBox = await B.page.$eval('#mpCode', (e) => ({
-  w: Math.round(e.getBoundingClientRect().width),
-  size: Math.round(parseFloat(getComputedStyle(e).fontSize)),
-  value: e.value,
-}));
-check('房号输入框够大且显示已输入的四位', codeBox.w >= 200 && codeBox.size >= 20 && codeBox.value === code,
-  `宽 ${codeBox.w}px · 字号 ${codeBox.size}px · 内容「${codeBox.value}」`);
-await B.page.click('#mpJoin');
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 check('客人凭房号进来了', (await B.page.$eval('.mp-code', (e) => e.textContent.trim())) === code);
 
@@ -554,7 +595,11 @@ await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
 check('屋主打到一半按离开，问的是《解散小屋？》',
   (await A.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim())) === '解散小屋？',
   await A.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim()));
-await A.page.click('#mpLeaveYes');
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+// 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+// 的是手指那条主路。
+await holdLeave(A.page);
 check('屋主离开也出一张竞赛排名',
   await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 }).then(() => true).catch(() => false));
 
@@ -624,7 +669,6 @@ await B.page.click('#navProfile');
 await B.page.click('#multiRow');
 await B.page.waitForSelector('#mpCode', { timeout: 10000 });
 await B.page.fill('#mpCode', code2);
-await B.page.click('#mpJoin');
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 await A.page.waitForSelector('#mpPick', { timeout: 12000 });
 check('一局都还没打，房间页上就还没有《散场》', (await A.page.$('#mpEnd')) === null);
@@ -667,7 +711,11 @@ await B.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
 check('客人打到一半按离开，问的是《是否离开？》',
   (await B.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim())) === '是否离开？',
   await B.page.$eval('#leaveRoomConfirm .tag-line', (e) => e.textContent.trim()));
-await B.page.click('#mpLeaveYes');
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+// 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+// 的是手指那条主路。
+await holdLeave(B.page);
 const rankPage = await B.page.waitForSelector('#mpFinalCard', { timeout: 12000 })
   .then(() => true).catch(() => false);
 check('离开房间后出竞赛排名', rankPage);
@@ -721,7 +769,11 @@ check('客人走了，人还在名单上，只是标成走了', marked,
 // A 这会儿还坐在第二间的局里（客人刚走，他没走），先让他散场。
 await A.page.click('#leaveRoomBtn');
 await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
-await A.page.click('#mpLeaveYes');
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+// 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+// 的是手指那条主路。
+await holdLeave(A.page);
 await A.page.waitForSelector('#mpFinalCard', { timeout: 12000 });
 await A.page.click('#mpFinalDone');
 // 看完战绩卡直接回到多人设置页（见上一段的断言），不用再绕主菜单。
@@ -733,7 +785,6 @@ const code3 = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
 await B.page.click('#mpFinalDone').catch(() => {});
 await B.page.waitForSelector('#mpCode', { timeout: 10000 });
 await B.page.fill('#mpCode', code3);
-await B.page.click('#mpJoin');
 await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 await A.page.waitForSelector('#mpPick', { timeout: 12000 });
 await A.page.click('#mpPick');
@@ -745,7 +796,11 @@ await Promise.all([A, B].map((P) => P.page.waitForFunction(
   () => document.querySelectorAll('#boardWrap .ball').length > 0, { timeout: 25000 })));
 await A.page.click('#leaveRoomBtn');
 await A.page.waitForSelector('#leaveRoomConfirm', { timeout: 5000 });
-await A.page.click('#mpLeaveYes');
+// 《还是离开》现在是**按住 600ms** 才生效（ui/confirmLeaveRoom.ts 的 §13 长按确认）。
+// 点一下什么都不会发生——所以这儿按住 700ms 再松手。
+// 走真实的 pointer 序列，不走 Enter：Enter 是留给开关设备的无障碍备用道，这道门要量
+// 的是手指那条主路。
+await holdLeave(A.page);
 // 玩不了这块棋盘的人：不结算、不存档，一句话，按下去回主页（玩家定的）。
 const locked = await B.page.waitForSelector('#roomLockedOut', { timeout: 20000 })
   .then(() => true).catch(() => false);
