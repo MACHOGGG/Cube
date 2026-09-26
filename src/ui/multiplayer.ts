@@ -346,6 +346,13 @@ export function renderMultiplayerPage(
      * 被替换成了 contest」）：动词留在原地，换的是宾语，所以屏幕上动的正好是变了的那一
      * 件事。整句换掉的话是一整行字跳一下，看不出变的是哪个词。
      *
+     * `data-alt` 上挂的是**另一个**词。那一格的宽度按「两个词里较宽的那个」预留（CSS 那
+     * 头用 ::after 把它排一遍再藏掉，见 .mp-swap），所以换词的时候格子宽度一个像素都
+     * 不变——玩家 2026-09：「《Open a ___》前面 Open a 的部分和后面 logo 的部分固定位
+     * 置，不要随着左右迁移。这点需要把间距提前设置好。」
+     * 预留而不是现量：字体是网页字体，量宽度要等它加载完，量早了就是拿备用字体的宽度
+     * 钉死一个错数；让浏览器自己排一遍那个词，字体换上来的时候它跟着重排，永远是对的。
+     *
      * 找不到那一段（翻译改了一半，i18n 那两条铁律断了）就退回从前的做法——整句换。**退
      * 回去而不是抛**：这颗键是这一页唯一的出口，为了一行字的动画把它弄哑不值得。
      * check-room-word.mjs 在 CI 里盯着那两条铁律，所以这条退路平时用不上。
@@ -354,7 +361,8 @@ export function renderMultiplayerPage(
     const createLabelHtml = nounAt < 0
       ? esc(s.mpCreate)
       : esc(s.mpCreate.slice(0, nounAt))
-        + `<span class="mp-swap" id="mpCreateWord">${esc(s.mpCreateNoun)}</span>`
+        + `<span class="mp-swap" id="mpCreateWord" data-alt="${esc(s.mpContestNoun)}"`
+          + `>${esc(s.mpCreateNoun)}</span>`
         + esc(s.mpCreate.slice(nounAt + s.mpCreateNoun.length));
 
     container.innerHTML = `
@@ -574,6 +582,9 @@ export function renderMultiplayerPage(
         return;
       }
       createWord.textContent = next ? s.mpContestNoun : s.mpCreateNoun;
+      // 另一个词跟着换到 data-alt 上。不换的话预留的宽度就变成「当前这个词」自己的宽
+      // 度，格子会缩——两个词哪个更宽各语言不一样，缩起来照样是左右迁移。
+      createWord.setAttribute('data-alt', next ? s.mpCreateNoun : s.mpContestNoun);
       // 换上去的那个词自己淡进来一下——「动的是这个词」这件事，动画说得比字本身清楚。
       // 先摘再挂、中间逼一次重排（和格子那一鼓同一手），连拨两下第二下才盖得掉第一下。
       createWord.classList.remove('mp-swap--in');

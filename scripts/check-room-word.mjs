@@ -80,6 +80,18 @@ check('那颗键的字是拆开渲染的（有 #mpCreateWord 这一截）',
   /id="mpCreateWord"/.test(mp) && /createLabelHtml/.test(mp));
 check('拨开关换的是那一截的字，不是整句',
   /createWord\.textContent\s*=\s*next\s*\?\s*s\.mpContestNoun\s*:\s*s\.mpCreateNoun/.test(mp));
+// 那一格的宽度按「两个词里较宽的那个」预留（CSS 那头用 ::after 把 data-alt 排一遍再藏
+// 掉），所以换词的时候《Open a》和右边那枚招牌一个像素都不挪。data-alt 上挂的必须一直
+// 是**另一个**词：不换的话预留宽度就变成当前这个词自己的宽度，格子会缩——两个词哪个更
+// 宽各语言不一样，缩起来照样是左右迁移。
+check('那一格按另一个词预留宽度（data-alt 挂着它）',
+  /data-alt="\$\{esc\(s\.mpContestNoun\)\}"/.test(mp));
+check('拨开关时 data-alt 跟着换成刚换下来的那个词',
+  /setAttribute\('data-alt', next \? s\.mpCreateNoun : s\.mpContestNoun\)/.test(mp));
+const css = read('src/style.css');
+check('CSS 那头真的用 data-alt 排了一遍再藏掉',
+  /\.mp-swap::after\s*\{[^}]*content:\s*attr\(data-alt\)[^}]*\}/.test(css) &&
+  /\.mp-swap::after\s*\{[^}]*visibility:\s*hidden[^}]*\}/.test(css));
 // 退路还在：找不到那一段就整句换（翻译改了一半的时候这颗键不能变哑）。
 check('找不到那一段时退回整句换（这颗键不会变哑）',
   /if \(!createWord\)/.test(mp) && /createLabel\.textContent = next \? s\.mpContest : s\.mpCreate/.test(mp));

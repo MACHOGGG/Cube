@@ -122,6 +122,15 @@ const { ctx, p } = await hostPage();
       })(),
       hintBox: (() => { const h = document.querySelector('.mp-contest-hint'); return h ? box(h) : null; })(),
       pinBox: (() => { const r = document.querySelector('.mp-code-field .pin-row'); return r ? box(r) : null; })(),
+      // 条子上那个词只在拨开的时候出现（关着的时候这根条子上只有一颗白点）。
+      tagVisible: (() => {
+        const t = document.querySelector('.mp-contest-tag');
+        return !!t && getComputedStyle(t).visibility === 'visible';
+      })(),
+      // 键上那三样的位置：句子头（连着那一格）、锁、招牌。换词的时候一个都不许挪。
+      labelBox: (() => { const e = document.querySelector('#mpCreateLabel'); return e ? box(e) : null; })(),
+      logoBox: (() => { const e = document.querySelector('#mpCreate .genius-logo--cta'); return e ? box(e) : null; })(),
+      word: document.querySelector('#mpCreateWord')?.textContent?.trim() ?? '',
       // 昵称那一格屏幕上有几层字：占位一句，加上（从前那个）浮动标签。
       nameLayers: (() => {
         const f = document.querySelector('.mp-name-field');
@@ -165,6 +174,8 @@ const { ctx, p } = await hostPage();
     /20/.test(look.hint) && /不下场|不参|主持/.test(look.hint), look.hint);
   // 玩家 2026-09：「只有在打开了 Pro 的时候……出现《up to 20…》的字样，不开的时候没有」。
   check('没拨的时候那一行看不见', look.hintVisible === false, look.hintVisible ? '还在屏幕上' : '收起来了');
+  // 玩家 2026-09：「Pro 的开关只在打开的时候显示《Pro》，关闭的时候什么都不显示。」
+  check('没拨的时候条子上不显示《Pro》', look.tagVisible === false, look.tagVisible ? '还写着' : '只剩一颗白点');
   // **上一版那个 bug**：白点拨过去之后整颗吊在条子外面（玩家拍到）。两个状态都量，
   // 而且量的是四条边的相对位置——「滑到底下」和「掉出条子」在纵坐标上只差这一点。
   check('关着的时候白点在条子里',
@@ -214,6 +225,15 @@ const { ctx, p } = await hostPage();
       })(),
       hintBox: (() => { const h = document.querySelector('.mp-contest-hint'); return h ? box(h) : null; })(),
       pinBox: (() => { const r = document.querySelector('.mp-code-field .pin-row'); return r ? box(r) : null; })(),
+      // 条子上那个词只在拨开的时候出现（关着的时候这根条子上只有一颗白点）。
+      tagVisible: (() => {
+        const t = document.querySelector('.mp-contest-tag');
+        return !!t && getComputedStyle(t).visibility === 'visible';
+      })(),
+      // 键上那三样的位置：句子头（连着那一格）、锁、招牌。换词的时候一个都不许挪。
+      labelBox: (() => { const e = document.querySelector('#mpCreateLabel'); return e ? box(e) : null; })(),
+      logoBox: (() => { const e = document.querySelector('#mpCreate .genius-logo--cta'); return e ? box(e) : null; })(),
+      alt: document.querySelector('#mpCreateWord')?.getAttribute('data-alt') ?? '',
     };
   });
   check('拨过去：开关记住了', after.checked === 'true', String(after.checked));
@@ -245,6 +265,26 @@ const { ctx, p } = await hostPage();
   check('拨过去：白点还在条子里（没掉出去）',
     after.knobIn && after.knobIn.top >= 0 && after.knobIn.bottom >= 0, JSON.stringify(after.knobIn));
   check('拨过去：那一行现身了', after.hintVisible === true, String(after.hintVisible));
+  check('拨过去：条子上这才写出《Pro》', after.tagVisible === true, String(after.tagVisible));
+  // **换词的时候键上别的东西一个像素都不许挪**（玩家 2026-09：「前面 Open a 的部分和后
+  // 面 logo 的部分固定位置，不要随着左右迁移」）。两个词宽度不一样，整行字会在那颗居中
+  // 的键里重新居中一次——句子头和招牌于是各往外挪十几个像素。修法是那一格按两个词里较
+  // 宽的那个预留宽度（style.css 里 .mp-swap 的 ::after），所以这儿量「宽度没变」和「位
+  // 置没动」两样。
+  const same = (u, v) => Boolean(u && v && u.x === v.x && u.w === v.w);
+  check('拨过去：句子头那一段没挪，宽度也没变',
+    same(look.labelBox, after.labelBox),
+    `${JSON.stringify(look.labelBox)} → ${JSON.stringify(after.labelBox)}`);
+  check('拨过去：右边那枚招牌没挪',
+    same(look.logoBox, after.logoBox),
+    `${JSON.stringify(look.logoBox)} → ${JSON.stringify(after.logoBox)}`);
+  // 那把锁不量：它只长在**没开通**的设备上，而这道门这台是兑过码的（开屋要天才身份）。
+  // 它和句子头在同一行、同一个居中的 flex 里，所以句子头那一条不动，它就不会动。
+  // 预留的那个宽度靠 data-alt 上挂着**另一个**词。拨过去之后它必须换成刚换下来的那个
+  // ——不换的话预留宽度变成当前这个词自己的宽度，格子会缩，照样是左右迁移。
+  check('拨过去：data-alt 换成了刚换下来的那个词',
+    after.alt.length > 0 && after.alt === look.word && after.alt !== after.word,
+    `data-alt=「${after.alt}」，换下来的那个词是「${look.word}」，现在写着「${after.word}」`);
   // 「在现在的位置出现」——出现的时候位置不动，底下那四根条子也不许被顶下去。
   check('拨过去：那一行还在原处，四根条子一个像素没挪',
     look.hintBox && after.hintBox && look.pinBox && after.pinBox &&
