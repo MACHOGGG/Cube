@@ -1,5 +1,6 @@
 import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
+import { playCopied } from '../engine/juice';
 import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
@@ -739,7 +740,14 @@ function giftBlock(gifts: GiftCode[], lang: Lang): string {
           ${
             gift.spent
               ? ''
-              : `<button class="gift-copy" data-copy="${esc(gift.code)}">${esc(s.copyBtn)}</button>`
+              : // 两层字叠在一块，交叉淡化：文字换掉的同时右边多一个绿勾。
+                // 不是「换 textContent」——那样宽度会跳一下，一排码里跳的那一个
+                // 看起来像出了错。两层都在，宽度取两者里宽的那一个。
+                `<button class="gift-copy" data-copy="${esc(gift.code)}">` +
+                `<span class="gift-copy-face gift-copy-face--idle">${esc(s.copyBtn)}</span>` +
+                `<span class="gift-copy-face gift-copy-face--done">` +
+                `<span class="gift-copy-tick" aria-hidden="true">✓</span>${esc(s.copiedLabel)}</span>` +
+                `</button>`
           }
         </div>`;
       })
@@ -747,20 +755,39 @@ function giftBlock(gifts: GiftCode[], lang: Lang): string {
   </div>`;
 }
 
-/** Copy, with the button saying so for a moment — the whole feedback. */
+/** 复制成功之后那句「已复制」停多久。 */
+const COPIED_MS = 1400;
+
+/**
+ * 复制，按钮自己说一声——这颗键没有别的确认通道，所以这一声是全部。
+ *
+ * **只有真的成了才说「已复制」。** 这一条是这段代码唯一要紧的事：剪贴板可能没
+ * 权限（浏览器设置、非安全上下文、某些内嵌容器），那时候 writeText 是 reject 的。
+ * 从前这儿 catch 里退回去选中文本，但**外面那句 setTimeout 无论成败都把文案改回
+ * 去**——也就是说失败那一路它压根没说过「已复制」，这是对的；现在多了个绿勾，更
+ * 得守住这一条：一句假的「已复制」比按了没反应糟得多，他会直接去粘贴，粘出来的
+ * 是上一次剪贴板里的东西。
+ *
+ * 失败那一路的行为一个字没改：把码选中，他自己长按复制。
+ */
 function wireCopyButtons(overlay: HTMLElement, lang: Lang): void {
-  const s = STRINGS[lang];
+  void lang; // 文案现在印在两层 span 里（见 giftBlock），这儿只管状态
   for (const btn of Array.from(overlay.querySelectorAll<HTMLButtonElement>('.gift-copy'))) {
+    let revert = 0;
     btn.addEventListener('click', async () => {
       const code = btn.dataset.copy ?? '';
-      const was = btn.textContent;
+      // 连点节流：已经在「已复制」里了，再点不重播那一下淡化（重播看起来像又
+      // 复制了一次，而剪贴板里本来就已经是它了）。这一颗键按两下是常事——人会
+      // 怀疑自己第一下按没按到。
+      if (btn.classList.contains('is-copied')) return;
+      let ok = false;
       try {
         await navigator.clipboard.writeText(code);
-        btn.textContent = s.copiedLabel;
+        ok = true;
       } catch {
         // No clipboard permission: select it instead, so it can still be
         // copied by hand rather than the button doing nothing at all.
-        const node = btn.previousElementSibling?.previousElementSibling;
+        const node = btn.parentElement?.querySelector('.gift-code');
         if (node) {
           const range = document.createRange();
           range.selectNodeContents(node);
@@ -769,7 +796,12 @@ function wireCopyButtons(overlay: HTMLElement, lang: Lang): void {
           sel?.addRange(range);
         }
       }
-      window.setTimeout(() => (btn.textContent = was), 1400);
+      if (!ok) return; // 停在 idle。屏幕上是一段选中的码，那句话本来就该由他自己完成。
+      btn.classList.add('is-copied');
+      // 没有别的确认通道的动作配一声（cuelume 现有的 tick，和拖动过一格是同一颗）。
+      playCopied();
+      if (revert) window.clearTimeout(revert);
+      revert = window.setTimeout(() => btn.classList.remove('is-copied'), COPIED_MS);
     });
   }
 }

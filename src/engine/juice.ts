@@ -196,6 +196,14 @@ const CUE = {
    * 低一档：暂停一局只响一次，这一颗一次滑动会连响好几下，同样响度会吵。
    */
   axis: { name: 'scan', vol: 0.38 },
+  /**
+   * 复制成功那一下。
+   *
+   * 和拖动过一格是同一颗 tick——两处说的是同一件事：「刚才那一下成了」。这颗键
+   * 没有别的确认通道（剪贴板里有什么东西，屏幕上看不出来），所以按声音纪律它该
+   * 有一声；音量比拖动那一颗低一档，因为它是一次性的、而且紧跟在一次按压后面。
+   */
+  copied: { name: 'tick', vol: 0.3 },
 } as const;
 
 /**
@@ -295,6 +303,11 @@ export function playArrive(): void {
 /** The end-of-run settlement panel. */
 export function playSettle(): void {
   cue(CUE.settle.name, CUE.settle.vol);
+}
+
+/** 复制成功。见 CUE.copied——这颗键没有别的确认通道。 */
+export function playCopied(): void {
+  cue(CUE.copied.name, CUE.copied.vol);
 }
 
 /** A window, panel or overlay coming up. */

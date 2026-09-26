@@ -3313,10 +3313,32 @@ body:has(.slot-page) .home-nav { display: none; }
   letter-spacing: 0.14em; color: var(--accent-ink);
 }
 .gift-note { flex: 1; font-size: 0.76rem; color: var(--ink-faint); }
+/* 复制那颗键的两张脸叠在一块，交叉淡化。
+   为什么叠而不是换字：换 textContent 的话按钮宽度会跟着跳一下，而一排码里只跳
+   的那一个看起来像出了错。两层都在，按钮的宽度取两者里宽的那一个，从头到尾不动。
+   只有 opacity + transform 在动，Chrome 61 认得（这颗键在小红书那一版不出现，但
+   这条规则和别的一起住在 style.css 里）。 */
 .gift-copy {
   flex: 0 0 auto; border: none; border-radius: var(--r-full); cursor: pointer;
   background: var(--accent-soft); color: var(--accent-ink);
   font: inherit; font-size: 0.78rem; font-weight: 600; padding: 5px 12px;
+  position: relative; display: inline-grid;
+}
+/* 两张脸压在同一个格子里（inline-grid 的同一格），所以谁都不撑大谁。 */
+.gift-copy-face {
+  grid-area: 1 / 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+  white-space: nowrap;
+  transition: opacity 250ms ease, transform 250ms ease;
+}
+.gift-copy-face--done { opacity: 0; transform: translateY(4px); }
+.gift-copy.is-copied .gift-copy-face--idle { opacity: 0; transform: translateY(-4px); }
+.gift-copy.is-copied .gift-copy-face--done { opacity: 1; transform: none; }
+/* 勾用 --accent-2：全站「这件事成了」都是它。 */
+.gift-copy-tick { color: var(--accent-2); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  /* 直接换，不淡化。换的是「复制成了没有」这条信息，淡化只是它的说法。 */
+  .gift-copy-face { transition: none; }
+  .gift-copy-face--done, .gift-copy.is-copied .gift-copy-face--idle { transform: none; }
 }
 /* Spent, not gone: a code that vanished the day a friend used it would read
    as one we took back. */
