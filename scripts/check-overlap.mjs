@@ -420,6 +420,118 @@ for (const size of SIZES) {
   await ctx.close();
 }
 
+// ---------------------------------------------------------------------------
+// 电脑端的个人主页：一条 760 的中栏，栏内条目两两成对
+// ---------------------------------------------------------------------------
+//
+// 2026-09 加的（style.css 里 min-width:1000px 那一段，玩家：「更合理地使用左右空
+// 间」）。上面那一圈量的是「有没有东西被家具压住、够不着」，量不到这套新排法自己
+// 会坏的三种样子，所以单列一节：
+//
+//   · 两列**互相压上**——grid 的行优先流一旦被哪条 grid-column 打乱就会这样；
+//   · 排不满的那一条孤零零贴在左边（`:last-child:nth-child(odd)` 那条规则落空）；
+//   · 栏宽放开之后整页**横向溢出**。
+//
+// 门槛两边各量一次：1440 要变，999 必须**一个像素都不变**。只量右边那半截等于没
+// 量断点——写死一个断点最容易出的事，就是它悄悄漫到手机上。
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_intro_seen', '1');
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle']) localStorage.setItem(k, '1');
+  });
+  const read = async (w, h) => {
+    const page = await ctx.newPage();
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(BASE, { waitUntil: 'load' });
+    await page.waitForSelector('#navProfile', { timeout: 25000 });
+    await page.click('#navProfile');
+    await page.waitForSelector('.profile-page', { timeout: 10000 });
+    await page.waitForTimeout(600);
+    const m = await page.evaluate(() => {
+      const app = document.querySelector('.app.profile-page');
+      const panel = document.querySelector('.genius-panel');
+      const pr = panel.getBoundingClientRect();
+      const rows = [...panel.children].filter((e) => e.classList.contains('profile-row'));
+      const boxes = rows.map((e) => e.getBoundingClientRect());
+      let overlap = null;
+      for (let i = 0; i < boxes.length && !overlap; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i];
+          const b = boxes[j];
+          if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) {
+            overlap = `${rows[i].textContent.trim().slice(0, 8)} × ${rows[j].textContent.trim().slice(0, 8)}`;
+            break;
+          }
+        }
+      }
+      const last = boxes[boxes.length - 1];
+      // 几条一行 = **同一个 top 上最多挤了几条**。
+      //
+      // 不数「有几个不同的左边界」：排不满那一条是 justify-self:center 的，左边界
+      // 和两列都不一样，于是两列的盘面会被数成 3 列——这道门第一版就是这么红的，
+      // 红的是尺子不是排版。
+      const byTop = new Map();
+      for (const b of boxes) {
+        const k = Math.round(b.top);
+        byTop.set(k, (byTop.get(k) || 0) + 1);
+      }
+      const cols = Math.max(...byTop.values());
+      const legal = [...document.querySelectorAll('.legal-rows .profile-row')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return { y: Math.round(r.top), mid: Math.round(r.left + r.width / 2) };
+      });
+      const lastY = Math.max(...legal.map((g) => g.y));
+      const tail = legal.filter((g) => g.y === lastY).map((g) => g.mid);
+      return {
+        col: Math.round(app.getBoundingClientRect().width),
+        pageH: Math.round(document.documentElement.scrollHeight),
+        cols,
+        overlap,
+        lastMid: Math.round(last.left + last.width / 2),
+        panelMid: Math.round(pr.left + pr.width / 2),
+        lastHalf: last.width < pr.width * 0.7,
+        legalRows: new Set(legal.map((g) => g.y)).size,
+        tailMid: tail.length === 1 ? tail[0] : Math.round((Math.min(...tail) + Math.max(...tail)) / 2),
+        hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        back: (() => {
+          const r = document.querySelector('.page-back-row').getBoundingClientRect();
+          return { top: Math.round(r.top + window.scrollY), h: Math.round(r.height) };
+        })(),
+      };
+    });
+    await page.close();
+    return m;
+  };
+
+  const wide = await read(1440, 900);
+  check('电脑 1440：中栏收成 760', wide.col === 760, `${wide.col}px`);
+  check('电脑 1440：天才特供排成两列', wide.cols === 2, `量到 ${wide.cols} 列`);
+  check('电脑 1440：两列没有互相压上', wide.overlap === null, wide.overlap || '干净');
+  check('电脑 1440：排不满的那一条居中（中线对上面板中线）',
+    wide.lastMid === wide.panelMid && wide.lastHalf,
+    `条中 ${wide.lastMid} / 面板中 ${wide.panelMid}${wide.lastHalf ? '' : '（而且它占满了整行）'}`);
+  check('电脑 1440：法务五条排成两行（3 + 2）', wide.legalRows === 2, `${wide.legalRows} 行`);
+  check('电脑 1440：第二行那两条也居中', wide.tailMid === wide.panelMid, `${wide.tailMid} / ${wide.panelMid}`);
+  check('电脑 1440：整页不横向溢出', wide.hscroll === 0, `${wide.hscroll}px`);
+  check('电脑 1440：《返回》在页面里（不是被挤出去）', wide.back.top > 0 && wide.back.h > 0,
+    `top ${wide.back.top} · 高 ${wide.back.h}`);
+
+  // 断点以下：整页必须回到改之前的样子，一列、原来的高度。
+  const narrow = await read(999, 900);
+  const phone = await read(390, 844);
+  check('999：中栏回到 460（断点以下一个像素都不变）', narrow.col === 460, `${narrow.col}px`);
+  check('999：天才特供回到一列', narrow.cols === 1, `量到 ${narrow.cols} 列`);
+  check('999：法务五条回到竖排', narrow.legalRows === 5, `${narrow.legalRows} 行`);
+  check('手机 390：和 999 一样高（这一段完全够不到手机）', phone.pageH === narrow.pageH,
+    `手机 ${phone.pageH} / 999 ${narrow.pageH}`);
+  check('手机 390：一列、竖排、不横向溢出',
+    phone.cols === 1 && phone.legalRows === 5 && phone.hscroll === 0,
+    `${phone.cols} 列 · ${phone.legalRows} 行 · 溢出 ${phone.hscroll}px`);
+  await ctx.close();
+}
+
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

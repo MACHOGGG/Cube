@@ -3312,6 +3312,60 @@ body:has(.slot-page) .home-nav { display: none; }
 /* The five published documents sit at the foot of 个人主页 as ordinary rows,
    so they add a block without changing anything above them. */
 .legal-rows { display: flex; flex-direction: column; width: 100%; }
+
+/* ---------- 电脑端的个人主页：一条加宽的中栏，栏内条目两两成对 ----------
+
+   起因和游戏页那一段（文件末尾 min-width:1000px 那一节）一样，玩家的话：「更合
+   理地使用左右空间」。这一页从前和别的页一样是屏幕中间一条 460px 的柱子（.app
+   的 max-width）：1440 上两侧各空 490，整页 1852px 要滚两屏。收成 760 之后两侧各
+   空 340，页高 1377。
+
+   为什么是加宽一条栏、不是分左右两栏：手机和电脑仍是同一条柱子、同一颗键，只是
+   宽一档、条目成对——分栏会让同一颗键在两端长成两个样子。
+
+   **DOM 一个字没动，也没加任何包裹元素。** 两列走的是 grid 的行优先流（左 → 右
+   → 下一行），所以 Tab 顺序和眼睛看到的顺序一致。不用 order 重排——那会让焦点顺
+   序和视觉顺序脱节。
+
+   门槛 1000px，不是全站那个 720：760 的栏宽加上页边，720 上放不下。999px 以下整
+   页原样回到现状，手机端一个像素不受影响。
+
+   这一段**不碰任何颜色**：面板底色、Pro 那颗、色盲档那几个色号一个都没出现在下
+   面。 */
+@media (min-width: 1000px) {
+  .app.profile-page { max-width: 760px; }
+  /* 268 是给一条 460 的窄栏定的，宽栏之后放开一档——但不放任它长满，不然同一颗
+     键在手机和电脑上像两件东西。 */
+  .profile-page .profile-pill-row,
+  .profile-page .profile-pill--wide { max-width: 380px; }
+
+  /* 天才特供：两列。整块的招牌、那颗键、小标签和横线横跨两列。 */
+  .profile-page > .genius-panel {
+    display: grid; grid-template-columns: 1fr 1fr;
+    column-gap: 14px; row-gap: 10px; align-content: start;
+  }
+  .profile-page > .genius-panel > .genius-crest,
+  .profile-page > .genius-panel > .genius-cta,
+  .profile-page > .genius-panel > .menu-section-label,
+  .profile-page > .genius-panel > .genius-rule { grid-column: 1 / -1; }
+  /* 两列排不满的那一条：跨两列、只占一半宽、居中。不这么写它会孤零零贴在左边。
+     `:last-child:nth-child(odd)` 自己跟着条数走——横线以上正好占掉 6 格（招牌、
+     那颗键、两条去处、小标签、横线），所以「横线以下是奇数条」和「最后一条在奇
+     数位」是同一件事。以后加一条特供变成偶数，这条规则自动不生效，不用回来改。 */
+  .profile-page > .genius-panel > .profile-row:last-child:nth-child(odd) {
+    grid-column: 1 / -1; justify-self: center; width: calc((100% - 14px) / 2);
+  }
+
+  /* 法务：三列。用 flex 不用 grid——最后一行只有两条，grid 的三等分格没法把它们
+     挪到中间，flex 的 justify-content:center 天生就是这件事。
+     flex-direction 一定要写出来：.legal-rows 本体是 flex-direction:column（见上
+     面那一条），只改 display 的话 flex-basis 会去管高度，五条会竖着堆回去。 */
+  .profile-page > .legal-rows {
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    justify-content: center; gap: 8px;
+  }
+  .profile-page > .legal-rows > .profile-row { flex: 0 1 calc((100% - 16px) / 3); }
+}
 /* The lead-in above a document's clauses: same voice as the rows below it,
    just not one of them. */
 .legal-intro {
