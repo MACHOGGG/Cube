@@ -33,6 +33,14 @@ export interface I18nStrings {
   flipModeTitle: string;
   flipModeTagline: string;
   /**
+   * 《计时挑战》挑图形那一屏，图底下那一句。
+   *
+   * 和 MODE_TIPS.timed（「限时60s，能得多少分呢？」）是两件事，两句并存：这一句是
+   * **挑形状那一屏**的标语，那一句是**局中**棋盘底下那条教学。MODE_TIPS 里 timed
+   * 和 layout 两条是玩家逐字点的名，中文一个字都不要动（见那一段的说明）。
+   */
+  timedModeTagline: string;
+  /**
    * 小屋里开无限反转那一局时，等待屏上那一句：这一局和别的局差在哪儿。
    *
    * 从前写的是「连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励」——《侵蚀阶梯》
@@ -639,6 +647,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
     flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 60 s',
+    timedModeTagline: '60-second challenge',
     flipScoringHint: 'The scoring shape stays at four pieces all game · no move factor',
     puzzleModeTitle: 'Puzzle · Step by step',
     puzzleModeTagline: 'Eight moves in hand · a move costs 1, a scoring move pays 1 back; +1 if it follows another score, +1 if it clears a line · no clock',
@@ -973,6 +982,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
     flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 60 s',
+    timedModeTagline: 'Défi de 60 secondes',
     flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de facteur de coups',
     puzzleModeTitle: 'Énigme · Pas à pas',
     puzzleModeTagline: 'Huit coups en main · un coup coûte 1, un coup qui marque en rend 1 ; +1 s’il enchaîne, +1 s’il efface une ligne · sans chronomètre',
@@ -1307,6 +1317,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
     flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，60 秒',
+    timedModeTagline: '60s 挑戰',
     flipScoringHint: '得分圖案整局都是 4 枚 · 不乘步數係數',
     puzzleModeTitle: '真正解密 · 步步為營',
     puzzleModeTagline: '手裡 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整線再退 1 · 沒有時間限制',
@@ -1641,6 +1652,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
     flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，60 秒',
+    timedModeTagline: '60s 挑战',
     flipScoringHint: '得分图案整局都是 4 枚 · 不乘步数系数',
     puzzleModeTitle: '真正解密 · 步步为营',
     puzzleModeTagline: '手里 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整线再退 1 · 没有时间限制',

@@ -119,12 +119,21 @@ async function commonRounds(tag, viewport) {
   check(`${tag} 记录页按返回 → 主菜单`, await has(page, '.home-page'));
 
   // 主菜单上的炸弹挑图形弹窗 → 返回只关弹窗
-  await page.click('[data-reopen="bomb"]');
+  //
+  // 用 el.click() 而不是 page.click(选择器)。手机竖屏的主菜单是一条鱼眼轴
+  // （ui/modeAxis.ts）：焦点附近那几张卡才看得见，远处的卡**在视口外**——炸弹那
+  // 张量出来在 top 1008，而屏幕只有 844 高。page.click 会先把元素滚进视口，滚不
+  // 动就一直重试到超时（"element is outside of the viewport"，30 秒）。真玩家是
+  // 先把轴滑到那张卡上再点的；这道门量的是返回键，不是主菜单点不点得着（那是
+  // check-mode-axis 的活），所以直接叫它自己的 click()。
+  // check-howto.mjs 里有一段同样的说明，同一个坑。
+  const openBomb = () => page.$$eval('[data-reopen="bomb"]', (els) => els[0].click());
+  await openBomb();
   await page.waitForSelector('.center-pick--in', { timeout: 5000 });
   await back(page, 900);
   check(`${tag} 炸弹挑图形弹窗按返回 → 只关弹窗，还在主菜单`, !(await has(page, '.center-pick')) && (await has(page, '.home-page')));
   // 弹窗自己关掉（点外面）之后，主菜单上的哨兵也该撤——下一下返回就是退出。
-  await page.click('[data-reopen="bomb"]');
+  await openBomb();
   await page.waitForSelector('.center-pick--in', { timeout: 5000 });
   check(`${tag} 主菜单开着弹窗：哨兵在`, await guardUp(page));
   await page.mouse.click(8, 8);

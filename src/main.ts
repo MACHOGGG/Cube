@@ -58,6 +58,7 @@ import {
 } from './engine/firstPlay';
 import { bombTip, flipTip, layoutTip, slotTip, timedTip, puzzleTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
+import { renderTimedModePage } from './ui/timedMode';
 import { renderPuzzleModePage } from './ui/puzzleMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawPair, type Family, type TargetPattern } from './engine/targets';
@@ -655,21 +656,6 @@ function showMenu() {
       const game = layoutGames.find((g) => g.card.id === id);
       if (game) showGame(game, tipFor('layout', () => layoutTip(currentLang)), undefined, reopenKey);
     },
-    onTimedFor: (id, reopenKey) => {
-      // Rooms deal one plain board from one seed. A clock or a bomb layer on
-      // top of that is a different game and is not one of the eight the
-      // server will accept, so the host is told rather than left guessing.
-      if (pickingForRoom) return void notAMultiplayerBoard();
-      const game = games.find((g) => g.card.id === id);
-      if (game) {
-        showGame(
-          game,
-          { timeLimitSec: 60, ...tipFor('timed', () => timedTip(currentLang)) },
-          undefined,
-          reopenKey,
-        );
-      }
-    },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     /**
      * 这三张（老虎机 / 无限反转 / 步步为营）按下去进的是**整页**，所以在这儿
@@ -683,6 +669,10 @@ function showMenu() {
     // 屋主替整屋挑玩法时按到它也进挑图形那一屏：挑完不开单人局，而是把这一
     // 族交给小屋（见 showFlipMode 的 room）。
     onFlipMode: () => softSwap(showFlipMode),
+    // 计时 2026-09 从居中挑选窗改成一整页（ui/timedMode.ts）。屋主替整屋挑玩法时
+    // 按到它的拦截挪进了 showTimedMode：从前拦在这儿，是因为那扇窗一弹出来就已经
+    // 在选形状了；现在先进一整页，拦截要发生在**按下形状之前**。
+    onTimedMode: () => softSwap(showTimedMode),
     // 步步为营不进小屋（见 showPuzzleMode）：屋主替整屋挑玩法时按到它，只提示
     // 一句「不是小屋玩法」，和计时、炸弹同一条路——绝不能让他一个人开起来，
     // 那样整屋还等着他。
@@ -848,6 +838,39 @@ function showSlotIntro() {
  * 屋主在为整屋挑玩法时也走这一屏：挑完不开单人局，而是把这一族连同「无限反
  * 转」的标记交给小屋，全屋一起倒数、一起打 60 秒（api/room.js 的 FLIP_MODES）。
  */
+/**
+ * 《计时挑战》挑图形那一整页（ui/timedMode.ts）。
+ *
+ * 从前这一步是主菜单上那只沙漏弹出来的居中挑选窗（menu.ts 的 timedOptions +
+ * openCenterPicker）。2026-09 改成一整页，和《无限反转》《老虎机模式》同一套；
+ * 那段「沙漏飞到屏幕中间、落定时裂成几只」的动效不再保留。
+ */
+function showTimedMode() {
+  teardown();
+  trackScreen('timed-mode');
+  renderTimedModePage(root, currentLang, {
+    onBack: showMenu,
+    onStart: (family) => {
+      // 小屋发的是一副干净棋盘、一个种子。上面再加一层钟就是另一个玩法，不在服务
+      // 器认的那几个里头——所以屋主替整屋挑玩法时按到形状，告诉他一句，而不是让他
+      // 一个人开起来、整屋还等着他。
+      //
+      // 这一拦从前在 menu.ts 的 onTimedFor 里（那扇窗一弹出来就已经在选形状了）；
+      // 现在先进一整页，拦截就得挪到**按下形状之后**这一步。
+      if (pickingForRoom) return void notAMultiplayerBoard();
+      const game = family === 'square' ? squareGame : circleGame;
+      // 第三个参数是《返回》去哪：回挑形状那一屏再选一个，和《无限反转》一样（玩
+      // 家 2026-09 拍的板）。整页取代了那扇窗，reopen 那条路一并撤掉——它本来就是
+      // 给窗设计的。
+      showGame(game, { timeLimitSec: 60, ...tipFor('timed', () => timedTip(currentLang)) }, showTimedMode);
+    },
+  });
+  wireHomeTitle();
+  repaintIcons();
+  setScreenBack(showMenu);
+  toTop();
+}
+
 function showFlipMode() {
   teardown();
   trackScreen('flip-mode');

@@ -71,35 +71,65 @@ const blank = await page.$$eval('.home-icon-btn', (btns) =>
 );
 check('主菜单每颗图标都真的画出了东西', blank.length === 0, blank.join(' / '));
 
-// ---- 2. 计时那三只秒表：一样大，挨在一起 ----------------------------------
+// ---- 2. 计时：一整页，两张图 + 一句「60s 挑战」-----------------------------
+//
+// 2026-09 之前这儿是一个居中的挑选窗（沙漏飞到屏幕中间、落定时裂成几只），量的
+// 是 `.center-pick-opt`。玩家定了改成一整页，和《无限反转》《老虎机模式》同一
+// 套，那段动效不再保留——所以这一节整节重写，量的是那一整页。
+//
+// 两张图不是三张：三角那副基础棋盘 2026-09 删了（《侵蚀阶梯》v1.2 PR-6），基础
+// 玩法就剩方块和小球，menu.ts 的 SHAPES 是同一个事实。
 await page.$$eval('.home-icon-btn--timed', (els) => els[0].click());
-await page.waitForSelector('.center-pick-opt', { timeout: 8000 });
-await page.waitForTimeout(1000); // 等飞入和散开都停下来
-const boxes = await page.$$eval('.center-pick-opt', (els) =>
-  els.map((e) => {
+await page.waitForSelector('.timed-page', { timeout: 8000 });
+await page.waitForTimeout(700); // 等换屏那一拍走完
+const timed = await page.evaluate(() => {
+  const opts = [...document.querySelectorAll('.timed-page .slot-pick-opt')].map((e) => {
     const r = e.getBoundingClientRect();
-    return { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom) };
-  }),
-);
-// 两只，不是三只：三角那副基础棋盘 2026-09 删了（《侵蚀阶梯》v1.2 PR-6），计时
-// 这一档跟着只剩方块和小球。
-check('计时弹窗里是两只表', boxes.length === 2, `看到 ${boxes.length} 个`);
-check('两只一样大，而且是方的',
-  boxes.every((b) => b.w === boxes[0].w && Math.abs(b.h - b.w) <= 1),
-  JSON.stringify(boxes.map((b) => `${b.w}×${b.h}`)));
-const span = Math.max(...boxes.map((b) => b.bottom)) - Math.min(...boxes.map((b) => b.top));
-check('两只挨在一起，没散开一屏', span <= boxes[0].h * 2 + 40, `上下共 ${span}px`);
+    return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left + r.width / 2) };
+  });
+  const tag = document.querySelector('.timed-page .slot-tagline');
+  const row = document.querySelector('.timed-page .slot-pick-row');
+  const rr = row?.getBoundingClientRect();
+  const tr = tag?.getBoundingClientRect();
+  return {
+    opts,
+    mid: Math.round(document.documentElement.clientWidth / 2),
+    rowMid: rr ? Math.round(rr.left + rr.width / 2) : null,
+    tagText: tag?.textContent.trim() || '',
+    tagLines: tr && tag ? Math.round(tr.height / parseFloat(getComputedStyle(tag).fontSize)) : 0,
+    tagBelowRow: tr && rr ? Math.round(tr.top - rr.bottom) : null,
+    acts: document.querySelectorAll('.timed-page .start-act').length,
+    nav: getComputedStyle(document.querySelector('.home-nav')).display,
+    lock: document.querySelectorAll('.timed-page .slot-pick-lock').length,
+    wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  };
+});
+check('计时是一整页，两张图', timed.opts.length === 2, `${timed.opts.length} 张`);
+check('两张一样宽，整排左右居中',
+  timed.opts.every((o) => o.w === timed.opts[0].w) && Math.abs(timed.rowMid - timed.mid) <= 1,
+  JSON.stringify(timed.opts) + ` 行中 ${timed.rowMid} / 屏中 ${timed.mid}`);
+check('图底下那句是「60s 挑战」', timed.tagText === '60s 挑战', timed.tagText);
+check('那一句在图正下方、不折行', timed.tagBelowRow > 0 && timed.tagLines <= 1,
+  `底下 ${timed.tagBelowRow}px · ${timed.tagLines} 行`);
+// 计时是免费的（主菜单上它走 iconButton，不是 geniusCard），所以这一页不该有锁。
+check('这一页没有锁（计时不是天才特供）', timed.lock === 0, `${timed.lock} 枚`);
+check('底下只有一颗键', timed.acts === 1, `${timed.acts} 颗`);
+check('这一屏不留底排导航', timed.nav === 'none', timed.nav);
+check('整页不横向溢出', !timed.wide);
 
-// ---- 3. 点在不是选项的地方 = 不选了 ---------------------------------------
-await page.mouse.click(195, 800);
+// ---- 3. 按《退出》回主菜单 -------------------------------------------------
+//
+// 从前这儿量的是「点空白处窗口关掉」——整页上没有「窗外」这个东西，改成量那颗
+// 《退出》。
+await page.click('.timed-page .start-act');
 await page.waitForTimeout(700);
 const afterTap = await page.evaluate(() => ({
-  picker: !!document.querySelector('.center-pick'),
+  page: !!document.querySelector('.timed-page'),
   menu: !!document.querySelector('.home-page'),
   game: !!document.querySelector('.app--game'),
   dimmed: !!document.querySelector('.home-dimmed'),
 }));
-check('点空白处窗口关掉，回到主菜单', afterTap.picker === false && afterTap.menu === true, JSON.stringify(afterTap));
+check('按《退出》回到主菜单', afterTap.page === false && afterTap.menu === true, JSON.stringify(afterTap));
 check('而且没有顺手开起一局来', afterTap.game === false);
 check('背景的淡化也一并撤掉', afterTap.dimmed === false);
 
@@ -353,12 +383,15 @@ check('棋盘那块还是 none（手指在上面拖不滚页面）', boardTA ===
 await tctx.close();
 
 /**
- * 老虎机 / 无限反转 / 步步为营：按下去不是硬切。
+ * 老虎机 / 无限反转 / 步步为营 / 计时：按下去不是硬切。
  *
  * 玩家 2026-09 第七轮：「这几个版本，在点击主菜单 icon 到进入选择图形的过程做一
- * 个轻微的转化，而不是直接硬生生地切到下一个画面」。炸弹和计时本来就有（开的是
- * 居中挑选窗，从按到的那张卡飞到屏幕正中）；这三个进的是整页，整页从前是一次
- * DOM 替换——上一帧主菜单，下一帧另一屏。
+ * 个轻微的转化，而不是直接硬生生地切到下一个画面」。炸弹本来就有（开的是居中挑
+ * 选窗，从按到的那张卡飞到屏幕正中）；这几个进的是整页，整页从前是一次 DOM 替换
+ * ——上一帧主菜单，下一帧另一屏。
+ *
+ * 计时 2026-09 也从那个居中挑选窗改成了一整页，所以它现在归这一条管：整页那条路
+ * 要经过 softSwap，不然它会是这四个里唯一一个硬切的。
  *
  * 量的是**过场真的演了**：旧页先挂上退场那一拍（.app--leave），新页带着入场那一
  * 拍（.app--enter）出来，然后两个类都撤掉。逐帧记下来，不是事后看一眼——事后那
@@ -395,7 +428,7 @@ await tctx.close();
     };
     requestAnimationFrame(tick);
   };
-  for (const label of ['老虎机', '无限反转', '步步为营']) {
+  for (const label of ['老虎机', '无限反转', '步步为营', '计时']) {
     const sp = await sctx.newPage();
     await sp.addInitScript(watch);
     await sp.goto(BASE, { waitUntil: 'load' });

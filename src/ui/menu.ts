@@ -5,7 +5,7 @@ import { GENIUS_LAYOUTS, isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { shapeName } from './shapeLabels';
 import { menuTag } from './menuTags';
-import { openCenterPicker, type PickerOption } from './centerPicker';
+import { openCenterPicker } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
 import { mountModeAxis } from './modeAxis';
@@ -22,7 +22,6 @@ import {
   ICON_MULTIPLAYER,
   layoutIcon,
   layoutIconIsWide,
-  timedOption,
   type BaseShape,
   ICON_FLIP_MODE,
   ICON_PUZZLE_MODE,
@@ -38,7 +37,6 @@ export interface MenuHandlers {
   /** A 「+」 board that 「Slides 天才」 unlocks, tapped by someone who has not
    *  bought it — the picker shows what it is, and this opens the paywall. */
   onLockedLayout: () => void;
-  onTimedFor: (id: string, reopenKey?: string) => void;
   onBombFor: (tier: BombTier, id: string, reopenKey?: string) => void;
   /** 多人游玩，从主菜单直接进——进去就是房间设置那一页。 */
   onMultiplayer: () => void;
@@ -46,6 +44,8 @@ export interface MenuHandlers {
   onRandomTarget: () => void;
   /** 《无限反转》：挑方块或小球，得分翻面来回翻，120 秒。 */
   onFlipMode: () => void;
+  /** 《计时挑战》：挑方块或小球，60 秒。整页，不是从前那个居中挑选窗。 */
+  onTimedMode: () => void;
   onPuzzleMode: () => void;
   /**
    * 哪几张基础卡要镶一圈光（engine/firstPlay.ts 的 glowingBasics）。
@@ -409,22 +409,17 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   }
 
   // ---- 计时 · 炸弹 --------------------------------------------------------
-  const timedOptions = (): PickerOption[] =>
-    SHAPES.map((shape) => ({
-      glyph: timedOption(shape),
-      label: shapeName(lang, layout.base[shape].id, layout.base[shape].name),
-      onPick: () => handlers.onTimedFor(layout.base[shape].id, 'timed'),
-    }));
-
-  // 一只沙漏代表三个，点下去飞到屏幕中间、落定时裂成三只。宽屏窄屏同一颗：
-  // 计时占的是一张的位置，不是三张——同一个板块在笔记本上和在手机上不该长
-  // 成两个样子。
+  // 一只沙漏代表整个计时档。宽屏窄屏同一颗：计时占的是一张的位置，不是两张——同
+  // 一个板块在笔记本上和在手机上不该长成两个样子。
+  //
+  // 按下去开的是**一整页**（ui/timedMode.ts），不再是那个居中的挑选窗。从前那颗
+  // 沙漏点下去会飞到屏幕中间、落定时裂成几只，那段动效 2026-09 玩家定了不再保
+  // 留；跟着撤掉的还有 `dataset.reopen = 'timed'`——reopen 那条路本来就是给挑选
+  // 窗设计的（打完一局回来把那扇窗重新弹出来），整页版的《返回》直接回挑形状那
+  // 一屏，和《无限反转》一样。
   const timedRow = wide ? newRow() : null;
   const timedBtn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed', tag('timed'));
-  timedBtn.dataset.reopen = 'timed';
-  timedBtn.addEventListener('click', () =>
-    openCenterPicker({ originEl: timedBtn, title: s.sectionTimed, options: timedOptions(), split: true }),
-  );
+  timedBtn.addEventListener('click', handlers.onTimedMode);
   if (timedRow) timedRow.appendChild(timedBtn);
   else place(timedBtn);
 
