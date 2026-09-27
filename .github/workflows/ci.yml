@@ -332,6 +332,13 @@ jobs:
         run: |
           npx esbuild src/engine/erosion.ts --bundle --format=esm --outfile=/tmp/erosion.mjs
           node scripts/check-erosion.mjs /tmp/erosion.mjs
+      # 外边族消除（§3）：只削此刻最外面的那一条线。守两件真会出事的事——别从中间
+      # 掏空（掏空会把穿过它的每条线截成两段，那副盘就再也滑不动了），以及三角形那
+      # 三个一枚的尖角不许让棋盘缩不动。纯 node，不开浏览器。
+      - name: 外边族消除：只削最外边
+        run: |
+          npx esbuild src/engine/outerEdge.ts --bundle --format=esm --outfile=/tmp/edge.mjs
+          node scripts/check-line-clear.mjs /tmp/edge.mjs
 
   # 要开真浏览器的那一批。和上面那个 job 并行，所以它慢几分钟不拖累谁。
   #

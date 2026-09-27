@@ -13,6 +13,7 @@ import { proHintWidth, proTriRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
+import { assignOffsets, outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
 import { roundTriClip, roundTriPath, triRingPath, TRI_RING_INSET } from '../engine/roundTri';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
@@ -45,7 +46,12 @@ const ROW_LENS = [7, 9, 11, 11, 9, 7];
 const LEFT_TRIM = [0, 0, 0, 1, 3, 5]; // maps local col -> global position p = c + LEFT_TRIM[r]
 const GLOBAL_ROW_OFFSET = 3; // local row r -> global big-triangle row i = r+3
 const PER_COLOR = 9;
-const MIN_LINE_BONUS_LEN = 3;
+/*
+ * 这儿原先有一个 `MIN_LINE_BONUS_LEN = 3`：「整条线至少几枚才给整线奖励」，那时候
+ * **任意**一整条同色星星都能消。《侵蚀阶梯》v1.2 §3 之后只削**此刻最外面的那一
+ * 条**，门槛由 engine/outerEdge.ts 的 EDGE_MIN / EDGE_MIN_ENDGAME 两个常量说了算
+ * （常态 3，收尾放开后 1），所以这个数没有自己的位置了。
+ */
 // Slot order is row-major over ROW_LENS, matching boardFromDeck's own walk —
 // so this indexes the deck directly. A slot points up when its global
 // position p is even (see triGeom).
@@ -100,6 +106,14 @@ const PATTERNS: PatternDef[] = [
 
 interface Line {
   fam: 'A' | 'B' | 'R';
+  /**
+   * 这条线在族法向上的偏移（《侵蚀阶梯》v1.2 §3 的「最外边」要它）。
+   *
+   * 这一副**没有现成的整数**：两个斜向族是按「共边的邻居」并查集拼出来的链，链上
+   * 正反三角交替。所以下面 allLines() 末尾统一调 assignOffsets 按几何算——拿每条线
+   * 两端定方向、法向上取平均投影，平行的线自然排得出前后（见 engine/outerEdge.ts）。
+   */
+  offset: number;
   cells: Cell[];
 }
 
@@ -186,7 +200,7 @@ function buildDiagonalFamily(fam: 'A' | 'B'): Line[] {
       seen.add(cellKey(next[0], next[1]));
       cur = next;
     }
-    lines.push({ fam, cells: ordered });
+    lines.push({ fam, offset: 0, cells: ordered });
   }
   return lines;
 }
@@ -200,13 +214,23 @@ function globalPosPure(r: number, c: number) {
 
 function allLines(): Line[] {
   const lines: Line[] = [...buildDiagonalFamily('A'), ...buildDiagonalFamily('B')];
+  // R 族的 offset 就是行号，下面那个循环里带上；两个斜向族在末尾统一算（见 Line.offset）。
   // Third axis: a full horizontal row (up- and down-pointing triangles
   // interleaved). Adjacent triangles in a row are edge-sharing neighbors, so
   // this is a real third slide direction alongside the two diagonals, not
   // just a row/column convenience like the square board's.
   for (let r = 0; r < ROW_LENS.length; r++) {
-    lines.push({ fam: 'R', cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
+    lines.push({ fam: 'R', offset: r, cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
   }
+  // 三角格阵上，一枚三角的「中心」按 globalPosPure 那一套（i 是全局行、p 是行内位
+  // 置）。正反三角的中心在行内差半格，所以 x 取 p / 2——同一族里的线因此才真的平行。
+  assignOffsets(
+    lines.filter((l) => l.fam !== 'R'),
+    (r, c) => {
+      const { i, p } = globalPosPure(r, c);
+      return [p / 2, i] as const;
+    },
+  );
   return lines;
 }
 const LINES = allLines();
@@ -858,6 +882,10 @@ export function createTriangleGame(): ShapeGame {
         const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
+            // 离场的格子一律不画（《侵蚀阶梯》v1.2 §3「格子离场」）。从前削掉的
+            // 棋子留在原地画成一枚暗的空位、还跟着整条线滑——现在它是真的不在了，
+            // 棋盘一圈圈往里缩。淡出那一帧另有人管（playBlankTransition）。
+            if (isBlank(grid[r][c])) continue;
             const key = cellKey(r, c);
             const el = makeTriEl(grid[r][c], r, c, undefined, undefined, !!warnKeys?.has(key));
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
@@ -937,23 +965,67 @@ export function createTriangleGame(): ShapeGame {
         return cells.every(([r, c]) => grid[r][c].dotColor === c0);
       }
 
-      function findWholeLineBonuses(): Cell[][] {
+      /**
+       * 这副棋盘交给「最外边」算法的那一份视图（engine/outerEdge.ts）。
+       *
+       * `isLive` 问的是**这一格还在不在盘上**：离场的格子（削掉的那些，`color` 打成
+       * 了 BLANK）不算。**不看正反面**——一枚色块也是活格，只是它凑不成「整条同色
+       * 星星」，颜色那一半在下面判。
+       */
+      const edgeBoard: EdgeBoard = {
+        lines: LINES,
+        isLive: (r, c) => !isBlank(grid[r][c]),
+      };
+
+      /**
+       * 收尾放开（《侵蚀阶梯》v1.2 §3）：无边可削、又没有色块可翻的时候置上，门槛
+       * 从 3 降到 1，一局之内**不回退**。
+       *
+       * 不放开的话每一局都以「盘上还剩几枚、怎么滑都没用」收场——削到最后剩下的那一
+       * 小圈，每条边都短过常态门槛。
+       */
+      let endgameOpen = false;
+      const edgeThreshold = () => (endgameOpen ? EDGE_MIN_ENDGAME : EDGE_MIN);
+
+      function collectEdges(threshold: number): Cell[][] {
         const found: Cell[][] = [];
-        for (const line of LINES) {
-          if (line.cells.length < MIN_LINE_BONUS_LEN) continue;
-          // A line with any already-blanked cell can never qualify again —
-          // a blank has no color to agree with the rest of the line.
-          if (anyBlank(line.cells)) continue;
-          if (!isFullDotMatch(line.cells)) continue;
-          const sig = line.cells
+        for (const { live } of outerEdges(edgeBoard, threshold)) {
+          if (!isFullDotMatch(live)) continue;
+          const sig = live
             .map(([r, c]) => grid[r][c].id)
             .sort((a, b) => a - b)
             .join(',');
           if (bonusedSignatures.has(sig)) continue;
           bonusedSignatures.add(sig);
-          found.push(line.cells);
+          found.push(live);
         }
         return found;
+      }
+
+      /**
+       * 此刻能削的那几条外边——**只削最外面的**（《侵蚀阶梯》v1.2 §3）。
+       *
+       * 两半：几何那一半问 outerEdges（这一族里最靠外、活格够门槛、削掉之后每条线
+       * 剩下的活格还连着）；颜色那一半在这儿判（整条同色星星）。
+       *
+       * 从前是「**任意**一整条同色星星都能消」。那条规则会从盘子中间掏出一条线来，
+       * 穿过它的每条线当场断成两段——而滑动是在一条连续的活格上做循环移位，断了就
+       * 再也滑不动了。
+       */
+      function findWholeLineBonuses(): Cell[][] {
+        const found = collectEdges(edgeThreshold());
+        if (found.length || endgameOpen) return found;
+        /*
+         * **收尾放开**（§3）：一条边都削不动、而且这盘子已经怎么滑都翻不动一枚色块
+         * 了，就把门槛降到 1，这一拍接着削。连锁本来就是一拍一拍问下来的，所以放开
+         * 之后它会自己一路削到底（每条照星星数² 计分，1 枚就是 1 分）。
+         *
+         * 判「翻不动了」用的是卡死判定本身，不是「这一步没得分」——大多数步本来就
+         * 不得分，照那个判会在开局第二步就放开，整盘当场被削光。
+         */
+        if (!stuckAt(edgeThreshold()).length) return found;
+        endgameOpen = true;
+        return collectEdges(EDGE_MIN_ENDGAME);
       }
 
       // Flips the bonused line's tiles to their dot face (matching what the
@@ -1022,11 +1094,37 @@ export function createTriangleGame(): ShapeGame {
         return live;
       }
 
+      /**
+       * 这盘子在某个外边门槛下是不是已经走不动了。
+       *
+       * 两个门槛都是**现问**的，不写死：
+       *   · 图案要几枚 —— 侵蚀阶梯此刻是第几级（4→3→2→1，见 engine/erosion.ts）。
+       *     写死 4 的后果不是判得松，是判得太狠：图案已经降到 2 枚、盘上明明还凑得
+       *     出，却被当成死局——而死局没有任何按钮拦得住，1.4 秒后直接结算。
+       *   · 星星自己那条路 —— **此刻最短的那条可削外边**。一条都削不动时给一个够不
+       *     着的大数：星星现在只有「填满一条外边」这一条活路了（§1.1 之后，全是星星
+       *     的图案不给分也不消除），给 0 会被 stalemate 那头夹成 1，等于永远判活。
+       */
+      function stuckAt(threshold: number): Cell[][] {
+        const edge = shortestEdge(edgeBoard, threshold);
+        return findStuckColorGroups(liveTiles(), controller.matchLen(), edge || NO_EDGE);
+      }
+
+      /**
+       * 一条线上此刻**还在盘上**的那几格，按线上的顺序。
+       *
+       * 滑动是在这一串上做循环移位（见 applyDrag）。削掉的格子离场之后就不在这串里
+       * 了，所以整条线变短、剩下的棋子照样首尾相接——这正是《侵蚀阶梯》v1.2 §3 的
+       * endsAll 要保证的那件事：削完每条线剩下的活格还连着，不会被掏成两段。
+       */
+      function liveOnLine(cells: readonly Cell[]): Cell[] {
+        return cells.filter(([r, c]) => !isBlank(grid[r][c])).map(([r, c]) => [r, c] as Cell);
+      }
+
       function findStuckGroups(): Cell[][] {
-        // 传进去的是这副棋盘最短的整线枚数（3 枚，见 findWholeLineBonuses）。星星自己
-        // 得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate 取
-        // 两者中小的那个当门槛，见那儿的 starNeed。
-        return findStuckColorGroups(liveTiles(), undefined, MIN_LINE_BONUS_LEN);
+        // 这一副没有《无限反转》（那一档只在基础方块和小球上），所以不必像那两副
+        // 一样先把「翻过去还能翻回来」摘出去。
+        return stuckAt(edgeThreshold());
       }
 
       function countRemainingTiles() {
@@ -1039,6 +1137,9 @@ export function createTriangleGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const tile = grid[r][c];
+            // 离场的格子不进分享卡：它们已经不在盘上了（《侵蚀阶梯》v1.2 §3），
+            // 卡上该是玩家最后看见的那副缩小了的棋盘，不是原来那一圈打了洞。
+            if (isBlank(tile)) continue;
             const { i, p } = globalPos(r, c);
             const up = p % 2 === 0;
             const j = up ? p / 2 : (p - 1) / 2;
@@ -1049,9 +1150,9 @@ export function createTriangleGame(): ShapeGame {
             raw.push({
               kind: 'poly',
               points,
-              face: isBlank(tile) ? 'blank' : tile.face,
+              face: tile.face,
               color: COLORS[effColor(tile)],
-              hazard: isBomb && !isBlank(tile) && liveBomb(tile),
+              hazard: isBomb && liveBomb(tile),
             });
           }
         return packSnapshot(raw);
@@ -1250,7 +1351,7 @@ export function createTriangleGame(): ShapeGame {
         render();
         const d = drag;
         if (!d || !d.fam || !d.line) return;
-        const cells = d.line.cells;
+        const cells = liveOnLine(d.line.cells);
         const n = cells.length;
         // Magnetize toward the nearest EVEN step (halve, snap, double) so
         // the "moving unit" only ever settles at an orientation-preserving
@@ -1351,7 +1452,7 @@ export function createTriangleGame(): ShapeGame {
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
-        const cells = d.line.cells;
+        const cells = liveOnLine(d.line.cells);
         const n = cells.length;
         // Same even-rounding as the preview (magnetizeRawDist's contract —
         // Math.round(magnetize(x)) === Math.round(x) — holds identically
@@ -1416,9 +1517,10 @@ export function createTriangleGame(): ShapeGame {
               .sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
-            const grabbed = drag.line.cells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
+            const liveCells = liveOnLine(drag.line.cells);
+            const grabbed = liveCells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
             drag.chain = createDragChain({
-              n: Math.max(1, Math.ceil(drag.line.cells.length / 2)),
+              n: Math.max(1, Math.ceil(liveCells.length / 2)),
               grabbed: Math.max(0, Math.floor(Math.max(0, grabbed) / 2)),
               force: BOARD_FORCE,
               onFrame: renderDragPreview,

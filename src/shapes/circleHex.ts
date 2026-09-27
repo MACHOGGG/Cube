@@ -13,6 +13,7 @@ import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
+import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -48,7 +49,12 @@ const PALETTES = {
 const N = 3; // hex radius: rows of 2N+1-|z| for z=-N..N -> 4/5/6/7/6/5/4 = 37 cells
 const ROW_LENS = [4, 5, 6, 7, 6, 5, 4];
 const PER_COLOR = 6;
-const MIN_LINE_BONUS_LEN = 3;
+/*
+ * 这儿原先有一个 `MIN_LINE_BONUS_LEN = 3`：「整条线至少几枚才给整线奖励」，那时候
+ * **任意**一整条同色星星都能消。《侵蚀阶梯》v1.2 §3 之后只削**此刻最外面的那一
+ * 条**，门槛由 engine/outerEdge.ts 的 EDGE_MIN / EDGE_MIN_ENDGAME 两个常量说了算
+ * （常态 3，收尾放开后 1），所以这个数没有自己的位置了。
+ */
 const CENTER_CELL: Cell = [3, 3]; // row 3 (z=0), col 3 -> cube (0,0,0), the hex's true center
 
 // Bomb mode reuses the exact same 6-color, 6-per-color deck as the base
@@ -96,6 +102,12 @@ const PATTERNS: PatternDef[] = [
 type Fam = 'X' | 'Y' | 'Z';
 interface Line {
   fam: Fam;
+  /**
+   * 这条线在族法向上的偏移，同一族内唯一且单调（《侵蚀阶梯》v1.2 §3 的「最外边」
+   * 要它，见 engine/outerEdge.ts）。同一族里的线互相平行，所以这个数对整条线是
+   * 同一个。
+   */
+  offset: number;
   cells: Cell[];
 }
 
@@ -119,14 +131,15 @@ function cubeToLocal(x: number, z: number): Cell | null {
 
 function allLines(): Line[] {
   const lines: Line[] = [];
-  for (let r = 0; r < ROW_LENS.length; r++) lines.push({ fam: 'Z', cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
+  // 三个族的 offset 就是立方坐标那三个轴的定值（z = r − N、x、y），天生单调。
+  for (let r = 0; r < ROW_LENS.length; r++) lines.push({ fam: 'Z', offset: r, cells: Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c] as Cell) });
   for (let x = -N; x <= N; x++) {
     const cells: Cell[] = [];
     for (let z = -N; z <= N; z++) {
       const cell = cubeToLocal(x, z);
       if (cell) cells.push(cell);
     }
-    if (cells.length) lines.push({ fam: 'X', cells });
+    if (cells.length) lines.push({ fam: 'X', offset: x, cells });
   }
   for (let y = -N; y <= N; y++) {
     const cells: Cell[] = [];
@@ -134,7 +147,7 @@ function allLines(): Line[] {
       const cell = cubeToLocal(-y - z, z);
       if (cell) cells.push(cell);
     }
-    if (cells.length) lines.push({ fam: 'Y', cells });
+    if (cells.length) lines.push({ fam: 'Y', offset: y, cells });
   }
   return lines;
 }
@@ -641,6 +654,10 @@ export function createCircleHexGame(): ShapeGame {
         const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
+            // 离场的格子一律不画（《侵蚀阶梯》v1.2 §3「格子离场」）。从前削掉的
+            // 棋子留在原地画成一枚暗的空位、还跟着整条线滑——现在它是真的不在了，
+            // 棋盘一圈圈往里缩。淡出那一帧另有人管（playBlankTransition）。
+            if (isBlank(grid[r][c])) continue;
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
@@ -711,9 +728,12 @@ export function createCircleHexGame(): ShapeGame {
         return matches;
       }
 
-      function isCenter(r: number, c: number): boolean {
-        return r === CENTER_CELL[0] && c === CENTER_CELL[1];
-      }
+      /*
+       * 这儿原先有一个 `isCenter(r, c)`（按坐标认中心那个永久空位），只有整线奖励
+       * 那一处在用。它从 2026-09 「格子离场」之后没人调了——中心空位和削掉的格子在
+       * 代码里本来就是同一件事（`color === BLANK`），问 isBlank 就够，而且不依赖
+       * 「那一枚恰好还在 [3,3]」这个巧合（见 edgeBoard.isLive 那一段）。
+       */
 
       function isFullDotMatch(cells: Cell[]): boolean {
         if (cells.some(([r, c]) => grid[r][c].face !== 'dot')) return false;
@@ -730,22 +750,75 @@ export function createCircleHexGame(): ShapeGame {
       // apart from a spent bonus cell — both just read color === BLANK)
       // lets those 3 lines bonus on their remaining real cells instead of
       // being permanently unscoreable.
-      function findWholeLineBonuses(): Cell[][] {
+      /**
+       * 这副棋盘交给「最外边」算法的那一份视图（engine/outerEdge.ts）。
+       *
+       * `isLive` 问的是**这一格还在不在盘上**：离场的格子（削掉的那些，`color` 打成
+       * 了 BLANK）不算。**不看正反面**——一枚色块也是活格，只是它凑不成「整条同色
+       * 星星」，颜色那一半在下面判。
+       */
+      const edgeBoard: EdgeBoard = {
+        lines: LINES,
+        // 中心那个永久空位和削掉的格子在这儿是**同一回事**：都不在盘上。两者都是
+        // `color === BLANK`，所以问 isBlank 就够了。
+        //
+        // 从前这儿是按坐标豁免中心（isCenter）——那在「空球会跟着线一起滑」的年代
+        // 就已经错了：滑过一次中间那一行，空球就不在 [3,3] 了，豁免豁在了一枚真球
+        // 身上。《侵蚀阶梯》v1.2 §3「格子离场」之后空位不再跟着滑（liveOnLine 把它
+        // 排除在循环移位之外），中心那一枚于是真的钉在中心——两种写法这才等价，而
+        // 问 isBlank 的那一种不依赖这个巧合。
+        isLive: (r, c) => !isBlank(grid[r][c]),
+      };
+
+      /**
+       * 收尾放开（《侵蚀阶梯》v1.2 §3）：无边可削、又没有色块可翻的时候置上，门槛
+       * 从 3 降到 1，一局之内**不回退**。
+       *
+       * 不放开的话每一局都以「盘上还剩几枚、怎么滑都没用」收场——削到最后剩下的那一
+       * 小圈，每条边都短过常态门槛。
+       */
+      let endgameOpen = false;
+      const edgeThreshold = () => (endgameOpen ? EDGE_MIN_ENDGAME : EDGE_MIN);
+
+      function collectEdges(threshold: number): Cell[][] {
         const found: Cell[][] = [];
-        for (const line of LINES) {
-          const cells = line.cells.filter(([r, c]) => !isCenter(r, c));
-          if (cells.length < MIN_LINE_BONUS_LEN) continue;
-          if (anyBlank(cells)) continue;
-          if (!isFullDotMatch(cells)) continue;
-          const sig = cells
+        for (const { live } of outerEdges(edgeBoard, threshold)) {
+          if (!isFullDotMatch(live)) continue;
+          const sig = live
             .map(([r, c]) => grid[r][c].id)
             .sort((a, b) => a - b)
             .join(',');
           if (bonusedSignatures.has(sig)) continue;
           bonusedSignatures.add(sig);
-          found.push(cells);
+          found.push(live);
         }
         return found;
+      }
+
+      /**
+       * 此刻能削的那几条外边——**只削最外面的**（《侵蚀阶梯》v1.2 §3）。
+       *
+       * 两半：几何那一半问 outerEdges（这一族里最靠外、活格够门槛、削掉之后每条线
+       * 剩下的活格还连着）；颜色那一半在这儿判（整条同色星星）。
+       *
+       * 从前是「**任意**一整条同色星星都能消」。那条规则会从盘子中间掏出一条线来，
+       * 穿过它的每条线当场断成两段——而滑动是在一条连续的活格上做循环移位，断了就
+       * 再也滑不动了。
+       */
+      function findWholeLineBonuses(): Cell[][] {
+        const found = collectEdges(edgeThreshold());
+        if (found.length || endgameOpen) return found;
+        /*
+         * **收尾放开**（§3）：一条边都削不动、而且这盘子已经怎么滑都翻不动一枚色块
+         * 了，就把门槛降到 1，这一拍接着削。连锁本来就是一拍一拍问下来的，所以放开
+         * 之后它会自己一路削到底（每条照星星数² 计分，1 枚就是 1 分）。
+         *
+         * 判「翻不动了」用的是卡死判定本身，不是「这一步没得分」——大多数步本来就
+         * 不得分，照那个判会在开局第二步就放开，整盘当场被削光。
+         */
+        if (!stuckAt(edgeThreshold()).length) return found;
+        endgameOpen = true;
+        return collectEdges(EDGE_MIN_ENDGAME);
       }
 
       function applyLineBonus(groups: Cell[][]) {
@@ -809,11 +882,37 @@ export function createCircleHexGame(): ShapeGame {
         return live;
       }
 
+      /**
+       * 这盘子在某个外边门槛下是不是已经走不动了。
+       *
+       * 两个门槛都是**现问**的，不写死：
+       *   · 图案要几枚 —— 侵蚀阶梯此刻是第几级（4→3→2→1，见 engine/erosion.ts）。
+       *     写死 4 的后果不是判得松，是判得太狠：图案已经降到 2 枚、盘上明明还凑得
+       *     出，却被当成死局——而死局没有任何按钮拦得住，1.4 秒后直接结算。
+       *   · 星星自己那条路 —— **此刻最短的那条可削外边**。一条都削不动时给一个够不
+       *     着的大数：星星现在只有「填满一条外边」这一条活路了（§1.1 之后，全是星星
+       *     的图案不给分也不消除），给 0 会被 stalemate 那头夹成 1，等于永远判活。
+       */
+      function stuckAt(threshold: number): Cell[][] {
+        const edge = shortestEdge(edgeBoard, threshold);
+        return findStuckColorGroups(liveTiles(), controller.matchLen(), edge || NO_EDGE);
+      }
+
+      /**
+       * 一条线上此刻**还在盘上**的那几格，按线上的顺序。
+       *
+       * 滑动是在这一串上做循环移位（见 applyDrag）。削掉的格子离场之后就不在这串里
+       * 了，所以整条线变短、剩下的棋子照样首尾相接——这正是《侵蚀阶梯》v1.2 §3 的
+       * endsAll 要保证的那件事：削完每条线剩下的活格还连着，不会被掏成两段。
+       */
+      function liveOnLine(cells: readonly Cell[]): Cell[] {
+        return cells.filter(([r, c]) => !isBlank(grid[r][c])).map(([r, c]) => [r, c] as Cell);
+      }
+
       function findStuckGroups(): Cell[][] {
-        // 传进去的是这副棋盘最短的整线枚数（3 枚，见 findWholeLineBonuses）。星星自己
-        // 得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate 取
-        // 两者中小的那个当门槛，见那儿的 starNeed。
-        return findStuckColorGroups(liveTiles(), undefined, MIN_LINE_BONUS_LEN);
+        // 这一副没有《无限反转》（那一档只在基础方块和小球上），所以不必像那两副
+        // 一样先把「翻过去还能翻回来」摘出去。
+        return stuckAt(edgeThreshold());
       }
 
       function countRemainingTiles() {
@@ -826,13 +925,16 @@ export function createCircleHexGame(): ShapeGame {
         for (let r = 0; r < ROW_LENS.length; r++)
           for (let c = 0; c < ROW_LENS[r]; c++) {
             const t = grid[r][c];
+            // 离场的格子不进分享卡：它们已经不在盘上了（《侵蚀阶梯》v1.2 §3），
+            // 卡上该是玩家最后看见的那副缩小了的棋盘，不是原来那一圈打了洞。
+            if (isBlank(t)) continue;
             const { x, z } = localToCube(r, c);
             raw.push({
               kind: 'circle',
               cx: 2 * x + z,
               cy: rowH * z,
               r: 0.95,
-              face: isBlank(t) ? 'blank' : t.face,
+              face: t.face,
               color: COLORS[effColor(t)],
               hazard: isBomb && !isBlank(t) && liveBomb(t),
             });
@@ -941,7 +1043,7 @@ export function createCircleHexGame(): ShapeGame {
         render();
         const d = drag;
         if (!d || !d.fam || !d.line || !d.chain) return;
-        const cells = d.line.cells;
+        const cells = liveOnLine(d.line.cells);
         const n = cells.length;
         const size = d.R * 1.86;
         const [dirX, dirY] = famVector(d.fam, d.R, d.rowH);
@@ -1031,7 +1133,7 @@ export function createCircleHexGame(): ShapeGame {
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
-        const cells = d.line.cells;
+        const cells = liveOnLine(d.line.cells);
         const n = cells.length;
         const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH));
         if (((shift % n) + n) % n === 0) return false;
@@ -1095,9 +1197,10 @@ export function createCircleHexGame(): ShapeGame {
             candidates.sort((a, b) => b.proj - a.proj);
             drag.fam = candidates[0].fam;
             drag.line = candidates[0].line;
-            const grabbed = drag.line.cells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
+            const liveCells = liveOnLine(drag.line.cells);
+            const grabbed = liveCells.findIndex(([r, c]) => r === drag!.r && c === drag!.c);
             drag.chain = createDragChain({
-              n: drag.line.cells.length,
+              n: liveCells.length,
               grabbed: Math.max(0, grabbed),
               force: BOARD_FORCE,
               onFrame: renderDragPreview,

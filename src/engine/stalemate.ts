@@ -45,13 +45,14 @@ export interface LiveTile {
  *
  * On top of that, dot faces keep the run alive on their own — they already
  * show the colour they will always show and they still slide, so they can be
- * walked together however dead every front colour is. Since 2026-09 they have
- * two ways to score that way: a whole line (lineMin) and, new with star
- * clearing, a pattern made only of stars (minMatch, paid as the star count
- * squared and then cleared — see clearStars in scoring.ts). Whichever comes
- * first keeps the run alive, so the threshold here is min(minMatch, lineMin),
- * counted on the dot faces alone: the reachability walk above mixes fronts
- * into its per-colour totals and asks a different question.
+ * walked together however dead every front colour is. **They now have exactly
+ * one way to do it**: fill a clearable line (lineMin). 《侵蚀阶梯》v1.2 §1.1 把
+ * 「整组星星自己凑图案」那条路撤了（图案里至少要有一枚色块，全是星星的线无事发
+ * 生），所以这儿的门槛就是 lineMin，不再取 min(minMatch, lineMin)。
+ *
+ * lineMin 是**此刻**那条路要几枚：方块取当前行列里较短的那个边长；外边族棋盘取
+ * 此刻最短的那条可削外边（一条都削不动时给 outerEdge.ts 的 NO_EDGE，意思是这条路
+ * 现在走不通）。写死一个数的后果在两头都出过事，见下面那个参数的注释。
  *
  * Bomb modes need no special case here: their shapes already leave the
  * hazard colour out of the liveTiles they pass in.
@@ -82,17 +83,16 @@ export function findStuckColorGroups(
   const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
 
   /**
-   * 星星自己能得分的门槛。
+   * 星星自己能得分的门槛——**只剩一条路**：填满一条可消的线。
    *
-   * 2026-09 星星消除上线之前，星星只有「连成整线消掉」这一条路，所以这儿用的是
-   * lineNeed。现在它多了一条：**整组星星自己就能凑图案**，按枚数平方得分，然后
-   * 从棋盘上消除（scoring.ts 的 clearStars）。两条路哪条先够得着就算还活着，所
-   * 以取两者中小的那个。
+   * 2026-09 有过一阵「整组星星自己也能凑图案」（按枚数平方得分再消除），那时候这
+   * 儿取的是 min(need, lineNeed)。《侵蚀阶梯》v1.2 §1.1 把那条路撤了：图案里至少
+   * 要有一枚色块，全是星星的线无事发生。所以现在就是 lineNeed。
    *
-   * 照旧用 lineNeed 的后果是判得太松：玩家报过一次，结算页写着「全部已变成星
-   * 星」，盘面上还躺着四颗同色蓝星——凑得出图案，可 isGameOver 先把局结了。
+   * 取 min 的后果是判得太松：外边族棋盘上一条边都削不动的时候，四颗同色星星会被
+   * 当成「还能凑出 4 枚图案」而判活，玩家眼看着怎么滑都不得分，局却不结束。
    */
-  const starNeed = Math.min(need, lineNeed);
+  const starNeed = lineNeed;
   const dotCount = new Map<number, number>();
   for (const lt of liveTiles) {
     if (lt.tile.face !== 'dot') continue;
