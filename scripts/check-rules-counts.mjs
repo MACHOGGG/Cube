@@ -1,5 +1,7 @@
 /**
- * 《游戏规则》里写的枚数，要和棋盘真的有几枚一致。
+ * 《游戏规则》（src/rules.ts）写的东西，要和引擎真的在做的事一致。
+ *
+ * 两件事：**枚数**对不对得上棋盘，**通用那五条**有没有跟着规则改。
  *
  *   node scripts/check-rules-counts.mjs
  *
@@ -70,11 +72,12 @@ const countOf = (file) => {
 // 表的保险——哪天谁改了措辞，这道门会红，而不是悄悄跳过不查。
 const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
 const TERMS = {
-  triangle:      { zhHans: '三角',     zhHant: '三角',     en: 'Triangles',        fr: 'Triangles' },
   triangleBig:   { zhHans: '大三角',   zhHant: '大三角',   en: 'Big triangle',     fr: 'Grand triangle' },
   circleHex:     { zhHans: '六边圆球', zhHant: '六邊圓球', en: 'Hex balls',        fr: 'Billes hexagonales' },
-  triangleAdvanced: { zhHans: '进阶三角', zhHant: '進階三角', en: 'Advanced triangle', fr: 'Triangle avancé' },
 };
+// 删掉的那两副（原《三角》id `triangle`、V 形 `triangleAdvanced`）从表里也撤了：
+// 上面那条断言已经钉住「它们不在 main.ts 的清单里」，这张表再留着两行，读的人会
+// 以为《游戏规则》里还该有那两条。
 
 const rules = read('src/rules.ts');
 /** 一条 body 里第一个数字——就是枚数那个。 */
@@ -105,5 +108,118 @@ for (const [id, file] of Object.entries(ID_FILE)) {
   }
 }
 console.log(`\n量到 ${measured} 条；ROW_LENS 量不到、没查的：${skipped.join(' ') || '（无）'}`);
+
+// ── 通用那五条：规则改了，这本书得跟着改 ──────────────────────────────
+//
+// 这一节量的不是枚数，是**这本书还在不在讲现在这套规则**。
+//
+// 它守的是一次真事故的形状：《侵蚀阶梯》v1.2 把计分整套换掉（1×N 图案会一路变小、
+// 每翻一枚 +2、综合分只剩步数系数一个乘数），而 rules.ts 里整本还写着上一套——连击
+// 倍率、时间系数、2×2 块状图案、0.95^未翻面。那些字不会崩、不会红，只会让每个点开
+// 《游戏规则》的玩家读到假话，而支付审核把「网站陈述与实际不符」直接归为 false
+// information。四种语言一起量：上一次挂反的那回，也是四种语言全错。
+//
+// 正反两把尺子都要：只禁退役的词，把整段删空也能过；只查新词在不在，旧词留在旁边
+// 照样过。
+const BLOCK = (lang) => {
+  const i = rules.indexOf(`\n  ${lang}: {`);
+  if (i < 0) return '';
+  const j = rules.indexOf('\n  },', i);
+  return rules.slice(i, j < 0 ? rules.length : j);
+};
+/** 一段语言块里 general/modes 各有几条。 */
+const countItems = (block, key) => {
+  const i = block.indexOf(`${key}: [`);
+  if (i < 0) return -1;
+  const j = block.indexOf('\n    ],', i);
+  return (block.slice(i, j).match(/\{ term: /g) || []).length;
+};
+const generalOf = (block) => {
+  const i = block.indexOf('general: [');
+  const j = block.indexOf('\n    ],', i);
+  return i < 0 ? '' : block.slice(i, j);
+};
+
+// 退役的说法，一个都不许留在通用那五条里。('有效得分率' 不在其中——步步为营那一
+// 档的公式里它还真在用，只是不在通用规则里了，所以只禁 general 段。)
+const GONE = {
+  zhHans: ['连击', '时间系数', '0.95', '2×2', '整组都是星星'],
+  zhHant: ['連擊', '時間係數', '0.95', '2×2', '整組都是星星'],
+  en: ['Streak', 'time factor', '0.95', '2×2', 'made only of stars'],
+  fr: ['Série', 'facteur temps', '0,95', '2×2', 'entièrement fait d'],
+};
+// 现在这套规则的三件事：每枚 +2、图案一路降到 1、综合分那唯一一个乘数。
+const MUST = {
+  zhHans: ['2 分', '4 → 3 → 2 → 1', '步数系数'],
+  zhHant: ['2 分', '4 → 3 → 2 → 1', '步數係數'],
+  en: ['2 points', '4 → 3 → 2 → 1', 'move factor'],
+  fr: ['2 points', '4 → 3 → 2 → 1', 'facteur de coups'],
+};
+const counts = {};
+for (const lang of LANGS) {
+  const block = BLOCK(lang);
+  check(`${lang}：读得到这一段`, block.length > 200, `${block.length} 字符`);
+  const g = countItems(block, 'general');
+  const m = countItems(block, 'modes');
+  counts[lang] = { g, m };
+  check(`${lang}：通用规则正好五条`, g === 5, `${g} 条`);
+  const gen = generalOf(block);
+  const left = GONE[lang].filter((w) => gen.includes(w));
+  check(`${lang}：通用五条里没有退役的说法`, left.length === 0, left.join(' / ') || '干净');
+  const missing = MUST[lang].filter((w) => !gen.includes(w));
+  check(`${lang}：通用五条讲到了现在这套的三件事`, missing.length === 0, missing.join(' / ') || '都讲到了');
+}
+// 四种语言条数一致——少译一条是这本书的老毛病，而少的那一条屏幕上只是「短一截」。
+const gs = LANGS.map((l) => counts[l].g).join(',');
+const ms = LANGS.map((l) => counts[l].m).join(',');
+check('四种语言条数一致（通用）', new Set(LANGS.map((l) => counts[l].g)).size === 1, gs);
+check('四种语言条数一致（各玩法）', new Set(LANGS.map((l) => counts[l].m)).size === 1, ms);
+
+// ── 这本书是直接塞进 innerHTML 的，所以正文里不能有标记 ─────────────────
+//
+// ui/accountPage.ts 的 openRules 把 body 原样拼进 innerHTML，没有 Markdown、也没有
+// 转义。写一个 ** 想加粗，屏幕上就是两个星号；写一个 < 会当标签吃掉后面一截。
+// 这一版写初稿时真的用 ** 圈了几个重点，截图之前没人看得出来。
+{
+  const bodies = [...rules.matchAll(/body: '((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
+  check('读得到每一条的正文（下面两条才有意义）', bodies.length >= 50, `${bodies.length} 条`);
+  const marked = bodies.filter((b) => b.includes('**'));
+  check('正文里没有 Markdown 的 **（渲染器不认，屏幕上就是两个星号）', marked.length === 0,
+    marked.map((b) => b.slice(0, 20)).join(' / ') || '干净');
+  const tagged = bodies.filter((b) => /[<>]/.test(b));
+  check('正文里没有尖括号（直接进 innerHTML，会被当标签）', tagged.length === 0,
+    tagged.map((b) => b.slice(0, 20)).join(' / ') || '干净');
+}
+
+// ── i18n 那一头：退役的说法不许留着，也不许回来 ────────────────────────
+//
+// rules.ts 干净了，界面上照样可能挂着上一套的字。两条：
+//
+// ① 五个退役的键不许回来。它们描述的东西这一版里不存在了（2×2 / 1-2-1 / 大三角那
+//    三种块状图案、HUD 上的《行动有效率》），可四种语言都是现成的，下一个人拿
+//    labelBlock22 去标一个凑不出来的图案时，看着完全像是对的。
+// ② 小屋里那句 flipScoringHint。它从前写着「连击加成减弱 · 没有时间奖励」——这一版
+//    连击整个没有了，时间奖励**谁都没有**，说一个别人有、你没有的东西比不说更糟。
+const i18n = read('src/i18n.ts');
+const DEAD_KEYS = ['labelRun4', 'labelBlock22', 'label121', 'labelBigTriangle', 'perfLabel'];
+// 只认**真的声明或读取**，不认注释里提到的名字：i18n.ts 里正写着一段注释解释这
+// 五个为什么删了（「下一个人会拿 labelBlock22 去标一个凑不出来的图案」）。按
+// \bkey\b 去找，那段注释自己就会把门顶红——一条一上来就红的门，最后一定会被人
+// 加 continue-on-error。
+const declaredOrUsed = (src, k) =>
+  new RegExp(`^[ \\t]*${k}\\??:`, 'm').test(src) || new RegExp(`\\.${k}\\b`).test(src);
+const back = DEAD_KEYS.filter((k) => declaredOrUsed(i18n, k));
+check('退役的五个 i18n 键没回来', back.length === 0, back.join(' / ') || '干净');
+// 非空的尺子：拿一个还在用的键验一下，证明上面那个匹配器认得出「用着的键」。
+check('（尺子）还在用的那个键查得到', declaredOrUsed(i18n, 'labelRunN'), 'labelRunN');
+// 反过来的尺子：注释里提到的名字不算数——这正是上一行差点误伤的那件事。
+check('（尺子）注释里提到不算「回来了」', !declaredOrUsed('// 拿 labelBlock22 去标\n', 'labelBlock22'));
+
+const hints = [...i18n.matchAll(/flipScoringHint: '((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
+check('flipScoringHint 四种语言都在', hints.length === 4, `${hints.length} 条`);
+const STALE = /连击|連擊|Streak|streak|时间|時間|time bonus|bonus de temps|série/;
+const bad = hints.filter((h) => STALE.test(h));
+check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.join(' / ') || '干净');
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

@@ -32,7 +32,15 @@ export interface I18nStrings {
   /** 《无限反转》：名字，和挑图形那一屏底下那句规矩。 */
   flipModeTitle: string;
   flipModeTagline: string;
-  /** 无限反转开局页上那一句：连击加成减弱、没有时间奖励。 */
+  /**
+   * 小屋里开无限反转那一局时，等待屏上那一句：这一局和别的局差在哪儿。
+   *
+   * 从前写的是「连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励」——《侵蚀阶梯》
+   * v1.2 之后这句话两头都错了：连击倍率整个没有了，时间奖励**谁都没有**（时间不
+   * 再计分）。说一个别人有、你没有的东西，比不说更糟。
+   *
+   * 现在说的是这一局真正的两处不同：图案不吃侵蚀（整局 4 枚），不乘步数系数。
+   */
   flipScoringHint: string;
   /** 《真正解密 · 步步为营》：名字，和挑图形那一屏底下那句规矩。 */
   puzzleModeTitle: string;
@@ -440,7 +448,6 @@ export interface I18nStrings {
   endRunYes: string;
   endRunNo: string;
   scoreLabel: string;
-  perfLabel: string;
   timeLabel: string;
   /** 教学条第 1 步：到点还一次分都没得，换上这一句更具体的。 */
   coachNudge: string;
@@ -482,12 +489,14 @@ export interface I18nStrings {
   /**
    * 得分气泡上那一句「几连」。**枚数是变的**（《侵蚀阶梯》v1.2 §2：图案 4→3→2→1），
    * 所以这一句带一个 {n}，不再是写死的「4连」。
+   *
+   * 这一族从前有五个：labelRun4 / labelBlock22 / label121 / labelBigTriangle，外加
+   * HUD 上那个 perfLabel（《行动有效率》）。得分图案 2026-09 之后只剩 1×N 一种，
+   * 《行动有效率》在任何界面都不存在了（PR-7），那五个于是一个用它的地方都没有。
+   * 留着比删掉危险：下一个人会拿 labelBlock22 去标一个这版里凑不出来的图案，四种
+   * 语言都现成的，看着完全像是对的。
    */
   labelRunN: string;
-  labelRun4: string;
-  labelBlock22: string;
-  label121: string;
-  labelBigTriangle: string;
   labelPattern: string;
   labelWholeLine: string;
   // ---- game controller (dynamic end-of-run text) ----
@@ -617,7 +626,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
     flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 60 s',
-    flipScoringHint: 'Streak bonus toned down: each consecutive score ×1.5 · no time bonus',
+    flipScoringHint: 'The scoring shape stays at four pieces all game · no move factor',
     puzzleModeTitle: 'Puzzle · Step by step',
     puzzleModeTagline: 'Eight moves in hand · a move costs 1, a scoring move pays 1 back; +1 if it follows another score, +1 if it clears a line · no clock',
     stepsLeftLabel: 'Moves left',
@@ -855,7 +864,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunYes: 'Yes',
     endRunNo: 'No',
     scoreLabel: 'Score',
-    perfLabel: 'Hit rate',
     timeLabel: 'Time',
     coachNudge: 'Try sliding four of one colour into a line',
     startBtn: 'Start',
@@ -885,10 +893,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     iconPill: 'Icon',
     iconTitle: 'App icon',
     labelRunN: 'Run of {n}',
-    labelRun4: 'Run of 4',
-    labelBlock22: '2x2',
-    label121: '1-2-1',
-    labelBigTriangle: 'Big triangle',
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
     endTipComposite: 'Final score = build score \u00d7 move multiplier. Fewer moves, bigger multiplier \u2014 it never drops below \u00d71.00.',
@@ -955,7 +959,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
     flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 60 s',
-    flipScoringHint: 'Bonus de série réduit : chaque score consécutif ×1,5 · pas de bonus de temps',
+    flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de facteur de coups',
     puzzleModeTitle: 'Énigme · Pas à pas',
     puzzleModeTagline: 'Huit coups en main · un coup coûte 1, un coup qui marque en rend 1 ; +1 s’il enchaîne, +1 s’il efface une ligne · sans chronomètre',
     stepsLeftLabel: 'Coups',
@@ -1193,7 +1197,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunYes: 'Oui',
     endRunNo: 'Non',
     scoreLabel: 'Score',
-    perfLabel: 'Taux de réussite',
     timeLabel: 'Temps',
     coachNudge: 'Essayez d’aligner quatre pièces d’une même couleur',
     startBtn: 'Commencer',
@@ -1223,10 +1226,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     iconPill: 'Icône',
     iconTitle: 'Icône de l’app',
     labelRunN: 'Suite de {n}',
-    labelRun4: 'Suite de 4',
-    labelBlock22: '2x2',
-    label121: '1-2-1',
-    labelBigTriangle: 'Grand triangle',
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
     endTipComposite: 'Score final = score de jeu \u00d7 coefficient de coups. Moins de coups, plus gros coefficient \u2014 jamais sous \u00d71,00.',
@@ -1293,7 +1292,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
     flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，60 秒',
-    flipScoringHint: '連擊加成減弱：連續得分每次 ×1.5 · 沒有時間獎勵',
+    flipScoringHint: '得分圖案整局都是 4 枚 · 不乘步數係數',
     puzzleModeTitle: '真正解密 · 步步為營',
     puzzleModeTagline: '手裡 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整線再退 1 · 沒有時間限制',
     stepsLeftLabel: '餘步',
@@ -1531,7 +1530,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunYes: '是',
     endRunNo: '否',
     scoreLabel: '得分',
-    perfLabel: '有效得分率',
     timeLabel: '用時',
     coachNudge: '把同色的四個滑到一條線上試試',
     startBtn: '開始',
@@ -1561,10 +1559,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     iconPill: '圖示',
     iconTitle: '更換圖示',
     labelRunN: '{n}連',
-    labelRun4: '4連',
-    labelBlock22: '2×2',
-    label121: '121',
-    labelBigTriangle: '大三角',
     labelPattern: '圖案',
     labelWholeLine: '整線',
     endTipComposite: '綜合分 = 拼出分 × 步數係數。步數越少係數越高，最低 ×1.00，只加不減。',
@@ -1631,7 +1625,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
     flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，60 秒',
-    flipScoringHint: '连击加成减弱：连续得分每次 ×1.5 · 没有时间奖励',
+    flipScoringHint: '得分图案整局都是 4 枚 · 不乘步数系数',
     puzzleModeTitle: '真正解密 · 步步为营',
     puzzleModeTagline: '手里 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整线再退 1 · 没有时间限制',
     stepsLeftLabel: '余步',
@@ -1869,7 +1863,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunYes: '是',
     endRunNo: '否',
     scoreLabel: '得分',
-    perfLabel: '有效得分率',
     timeLabel: '用时',
     coachNudge: '把同色的四个滑到一条线上试试',
     startBtn: '开始',
@@ -1899,10 +1892,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     iconPill: '图标',
     iconTitle: '更换图标',
     labelRunN: '{n}连',
-    labelRun4: '4连',
-    labelBlock22: '2×2',
-    label121: '121',
-    labelBigTriangle: '大三角',
     labelPattern: '图案',
     labelWholeLine: '整线',
     endTipComposite: '综合分 = 拼出分 × 步数系数。步数越少系数越高，最低 ×1.00，只加不减。',
