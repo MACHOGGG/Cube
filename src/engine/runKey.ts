@@ -24,7 +24,7 @@
  * 下次升版本只改 bomb.ts / scoring.ts 里那个数。
  */
 import { BOMB_RULES_VERSION } from './bomb';
-import { FLIP_RULES_VERSION } from './scoring';
+import { FLIP_RULES_VERSION, SCORING_RULES_VERSION } from './scoring';
 import type { ModeKey } from './runRecord';
 
 /**
@@ -68,7 +68,11 @@ export function modeKeyOf(f: ModeFlags): ModeKey {
 const versioned = (base: string, v: number) => (v >= 2 ? base + v : base);
 
 /**
- * 存档键的后缀。
+ * 存档键的后缀：**玩法那一截 + 计分规则的版本号**。
+ *
+ * 《侵蚀阶梯》v1.2 §6 之后每个键都多一截 `_ero1`（scoring.ts 的
+ * `SCORING_RULES_VERSION`）——那一版把得分图案、翻面分、整线消除、综合分全换了，
+ * 旧局和新局不是一把尺子量的，混在一张榜上比就是把老局钉死在榜首。
  *
  * 版本号有默认值（现行规则），棋盘存新局时不必传；从云上取回旧局时传那一局自己
  * 带的版本号（`RunData.bombRules` / `flipRules`，老档没有就是第 1 版），这样旧局
@@ -85,10 +89,22 @@ const versioned = (base: string, v: number) => (v >= 2 ? base + v : base);
  * 局都不动，而且不报错。具名之后这种错写不出来。
  */
 export function suffixFor(mk: ModeKey, rules?: RuleVersions): string {
+  return modeSuffix(mk, rules) + '_' + SCORING_RULES_VERSION;
+}
+
+/**
+ * 只有玩法那一截的后缀，**不带计分规则的版本号**。
+ *
+ * 一次性清档要它：清的是《侵蚀阶梯》之前那一套键（`…_bomb3`、`…_timed`、没有后缀
+ * 的基础局），而现行的键全部多一截 `_ero1`。两头共用同一个函数，清档就不会漏掉哪
+ * 一个玩法——从前那种「常量改了、六副棋盘里写死的后缀没人记得」的事，就是各写各的
+ * 招来的（见文件开头）。
+ */
+export function modeSuffix(mk: ModeKey, rules?: RuleVersions): string {
   const bombRules = rules?.bomb ?? BOMB_RULES_VERSION;
   const flipRules = rules?.flip ?? FLIP_RULES_VERSION;
   // 步步为营排最前面：它和炸弹、计时不会同时出现，摆最前面是为了读起来一眼看见
-  // 「这一局另算一张榜」。它没有版本号——规则没改过。
+  // 「这一局另算一张榜」。它没有自己的版本号——那个玩法的规则没单独改过。
   if (mk === 'puzzle') return '_puzzle';
   if (mk === 'flip') return versioned('_flip', flipRules);
   // 炸弹压过计时：定时炸弹存的也是炸弹那张榜。

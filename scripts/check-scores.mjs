@@ -22,14 +22,40 @@ const { default: handler } = await import('../api/scores.js');
 const accounts = await import('../api/_accounts.js');
 const store = await import('../api/_store.js');
 
+import { readFileSync } from 'node:fs';
+
 let fail = 0;
+
 const check = (name, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + extra : ''}`);
   if (!ok) fail++;
 };
 
-/** 叫一次接口，把状态码和回包一起拿回来。 */
+/**
+ * 现行的计分规则版本，从 `src/engine/scoring.ts` 现读。
+ *
+ * 服务端**手抄**了一份（`api/` 是纯 .js、import 不进 ts），下面有一条断言专门钉
+ * 「两处一个字不差」——漏改一处的后果是全站没有一局入得了榜，而屏幕上一个字的错都
+ * 没有。
+ */
+const SCORING_V = (() => {
+  const src = readFileSync(new URL('../src/engine/scoring.ts', import.meta.url), 'utf8');
+  const m = /export const SCORING_RULES_VERSION = '([^']+)'/.exec(src);
+  if (!m) throw new Error('读不到 SCORING_RULES_VERSION');
+  return m[1];
+})();
+
+/**
+ * 叫一次接口，把状态码和回包一起拿回来。
+ *
+ * **交卷那一路自动补上现行的规则版本**：服务端只收现行这一版（《侵蚀阶梯》v1.2
+ * §6），而这道门测的是交卷、排榜、存档那一整套，不是版本闸。版本闸另有一条断言，
+ * 那一条故意不补。
+ */
 async function call(body) {
+  if (body?.action === 'push' && !body.__raw) {
+    body = { ...body, data: { ...(body.data || {}), rules: SCORING_V } };
+  }
   const req = { method: 'POST', body };
   const res = {
     code: 200,
@@ -356,6 +382,42 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   const stillGone = await call({ action: 'mine', ...F });
   check('第二次之后无限反转还是空的', stillGone.payload?.best?.['square:flip'] === undefined);
   delete process.env.ADMIN_TOKEN;
+}
+
+// ---- 计分规则版本闸（《侵蚀阶梯》v1.2 §6）-------------------------------
+//
+// 服务端只收现行这一版打出来的局：那一版把得分图案、翻面分、整线消除、综合分全换
+// 了一套，旧局和新局不是一把尺子量的，混在一张榜上比就是把老局钉死在榜首。
+{
+  // 服务端那份常量是**手抄**的（api/ 是纯 .js，import 不进 src 里的 ts）。漏改一
+  // 处的后果是全站没有一局入得了榜，而屏幕上一个字的错都没有——所以钉死它。
+  const api = readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
+  const apiV = /const SCORING_RULES = '([^']+)'/.exec(api)?.[1];
+  check('服务端抄的那份规则版本和 src 里的一个字不差', apiV === SCORING_V, `api: ${apiV} / src: ${SCORING_V}`);
+
+  const E = await makePlayer('e@example.com');
+  // __raw：绕过 call() 那个自动补版本号的便利，这一条要的正是「没带版本号」。
+  const old1 = await call({
+    __raw: true, action: 'push', ...E, runId: 'e1', mode: 'square', score: 4242, name: '戊',
+    data: { shapeId: 'square', totalScore: 4242 },
+  });
+  check('旧规则的局：收下但不入库（200 + stored:false，不是报错）',
+    old1.status === 200 && old1.payload?.stored === false && old1.payload?.reason === 'rules',
+    `${old1.status} ${JSON.stringify(old1.payload)}`);
+  const old2 = await call({
+    __raw: true, action: 'push', ...E, runId: 'e2', mode: 'square', score: 4242,
+    data: { shapeId: 'square', totalScore: 4242, rules: 'nope' },
+  });
+  check('版本对不上的也一样', old2.payload?.stored === false, JSON.stringify(old2.payload));
+  const mineE = await call({ action: 'mine', ...E });
+  check('这两局一局都没进存档，总分还是 0',
+    mineE.payload?.total === 0 && mineE.payload?.archive?.length === 0,
+    JSON.stringify(mineE.payload));
+  // 反向对照：同一个人带上现行版本号交一局，照收不误——上面那两条红不是因为
+  // 「这个账号交不上」。
+  const good = await call({ action: 'push', ...E, runId: 'e3', mode: 'square', score: 77, name: '戊' });
+  check('带着现行版本号的局照收不误（反向对照）', good.payload?.ok === true && good.payload?.total === 77,
+    JSON.stringify(good.payload));
 }
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

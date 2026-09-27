@@ -58,6 +58,22 @@ export function flipStreakDelta(points: number, chain: number, base = FLIP_STREA
   return Math.round(points * base ** Math.min(Math.max(0, chain), FLIP_STREAK_CAP));
 }
 
+/**
+ * 这一局按第几版**计分规则**打的——《侵蚀阶梯》v1.2 §6。
+ *
+ * 和 `BOMB_RULES_VERSION` / `FLIP_RULES_VERSION` 那两个不同：那两个各管一个玩法，
+ * 这一个管**全站所有玩法**。《侵蚀阶梯》把得分图案、翻面分、整线消除、综合分全换
+ * 了一套，旧局和新局根本不是一把尺子量出来的，所以存档键和排行榜都要按它分开。
+ *
+ * 写成字符串不是数字：本地键长 `_ero1`、云端榜长 `:ero1`，一眼看得出是哪一版，而
+ * `_2` 那样的后缀和炸弹那几版的数字混在一起认不出来。
+ *
+ * 换规则时怎么做：改这个常量 → 本地那一次性清档跟着换钥匙（main.ts 的
+ * `slides_wipe_*`）→ 服务端跑一次清档脚本 → `api/scores.js` 那一行改成收新的。
+ * 四样缺一样就会出现「新分进了旧榜」或者「新分谁也看不见」。
+ */
+export const SCORING_RULES_VERSION = 'ero1';
+
 export interface CascadeConfig {
   tileAt(r: number, c: number): Tile;
   /** Groups of cells that now qualify for a whole-line color bonus; shape is responsible for not re-offering a line already bonused this game. */

@@ -23,7 +23,7 @@ const check = (n, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await ctx.addInitScript(() => {
-  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle'])
     localStorage.setItem(k, '1');
   localStorage.setItem('slides_lang', 'zhHans');
 });
@@ -58,11 +58,26 @@ const BOMB_RULES = Number(
   /export const BOMB_RULES_VERSION = (\d+)/.exec(readFileSync(new URL('../src/engine/bomb.ts', import.meta.url), 'utf8'))?.[1],
 );
 if (!Number.isFinite(BOMB_RULES)) { console.log('FAIL  读不到 BOMB_RULES_VERSION'); process.exit(1); }
+/**
+ * 现行的**计分规则**版本（《侵蚀阶梯》v1.2 §6）。同样从源码现读，理由同上。
+ *
+ * 服务端只收带着它的局；不带的（上一套规则打的）连存档都进不去，自然也取不回来。
+ * 第四局种的就是这一种——它现在是这道门最有力的那一条：清档之后从云上取回来的东
+ * 西里，**一局旧规则的都没有**。
+ */
+const SCORING_V = /export const SCORING_RULES_VERSION = '([^']+)'/.exec(
+  readFileSync(new URL('../src/engine/scoring.ts', import.meta.url), 'utf8'),
+)?.[1];
+if (!SCORING_V) { console.log('FAIL  读不到 SCORING_RULES_VERSION'); process.exit(1); }
+// 棋盘 id 用的是**还在的那几副**：原《三角》2026-09 删了（《侵蚀阶梯》v1.2 PR-6），
+// 拿它当夹具的话，取回来的局在 recordSources 里查不到卡，runKeyFor 直接回 null，
+// 这道门会红在一个和它要守的事情无关的地方。
 const RUNS = [
-  { at: 1_700_000_001_000, shapeId: 'square', modeKey: 'base', totalScore: 1234 },
-  { at: 1_700_000_002_000, shapeId: 'circle', modeKey: 'timed', totalScore: 777 },
-  { at: 1_700_000_003_000, shapeId: 'triangle', modeKey: 'bomb', totalScore: 88, bombRules: BOMB_RULES },
-  { at: 1_700_000_004_000, shapeId: 'triangle', modeKey: 'bomb', totalScore: 50_000 },
+  { at: 1_700_000_001_000, shapeId: 'square', modeKey: 'base', totalScore: 1234, rules: SCORING_V },
+  { at: 1_700_000_002_000, shapeId: 'circle', modeKey: 'timed', totalScore: 777, rules: SCORING_V },
+  { at: 1_700_000_003_000, shapeId: 'squareDiamond', modeKey: 'bomb', totalScore: 88, bombRules: BOMB_RULES, rules: SCORING_V },
+  // 上一套计分规则打的（没有 rules）：服务端不收，所以它连存档都进不去。
+  { at: 1_700_000_004_000, shapeId: 'squareDiamond', modeKey: 'bomb', totalScore: 50_000 },
 ];
 const pushed = await page.evaluate(async ({ who, runs }) => {
   const out = [];
@@ -80,7 +95,9 @@ const pushed = await page.evaluate(async ({ who, runs }) => {
   }
   return out;
 }, { who: auth, runs: RUNS });
-check('四局都报上去了', pushed.every(Boolean), JSON.stringify(pushed));
+// 前三局收下了；第四局（旧规则）服务端回的是 200 + stored:false，所以它的 ok 是
+// true 但没入库——这道门下面那条「老规则那局没混进来」量的就是这件事的结果。
+check('四局都报上去了（第四局收下但不入库）', pushed.every(Boolean), JSON.stringify(pushed));
 
 // ---- 把这台设备的存储清空：等于换了台手机 / 从桌面图标打开 --------------------
 await page.evaluate(() => localStorage.clear());
@@ -93,7 +110,7 @@ check('存储清空之后，本地一局都不剩', emptied === 0, `${emptied} �
 // ---- 带着同一个账号回来 -------------------------------------------------------
 await page.evaluate((rec) => {
   localStorage.setItem('slides_lang', 'zhHans');
-  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle'])
     localStorage.setItem(k, '1');
   localStorage.setItem('slides_genius', JSON.stringify(rec));
 }, auth);
@@ -117,7 +134,7 @@ const back = await page.waitForFunction(
 check('登录之后，累计得分回来了', back !== null, String(back));
 const rows = await page.$$eval('.records-row-score', (els) => els.map((e) => Number(e.textContent.trim())));
 check('三局记录都回来了', rows.length >= 3 && [1234, 777, 88].every((n) => rows.includes(n)), JSON.stringify(rows));
-check('老规则那局炸弹没混进来', !rows.includes(50_000), JSON.stringify(rows));
+check('上一套计分规则那一局没混进来', !rows.includes(50_000), JSON.stringify(rows));
 check('累计得分是这三局的和（2099）', back === '2099', String(back));
 
 // ---- 累计得分：变了才滚，没变不滚 ---------------------------------------------

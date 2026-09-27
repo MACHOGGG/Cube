@@ -25,6 +25,51 @@ export interface StoredRun {
 }
 
 const RUNS_SUFFIX = '::runs';
+
+/**
+ * 把一个存档键连同它的归档一起删掉，回报「本来有没有东西」。
+ *
+ * 换一版计分规则时要用（《侵蚀阶梯》v1.2 §6 的一次性清档）：旧尺子量出来的分不能
+ * 和新的混在一起比，所以旧键整个抹掉，而不是留在那儿等人翻出来。
+ */
+/**
+ * 换规则那一次性清档的哨兵键，和「这台设备真的被清过东西没有」。
+ *
+ * 两种值分得开：`'1'` 是「跑过了，本来就没东西可清」（新装的设备走这条），
+ * `'wiped'` 是「真清掉过存档」。记录页只在后一种情况下说那句「战绩从这里重新开
+ * 始」——对一台从没打过的新设备说这句话，是一句没头没脑的话，属于「意料之外的
+ * 界面」。
+ */
+export const wipeKeyFor = (version: string): string => 'slides_wipe_' + version;
+
+export function markWiped(version: string, dropped: number): void {
+  try {
+    localStorage.setItem(wipeKeyFor(version), dropped > 0 ? 'wiped' : '1');
+  } catch {
+    /* 无痕模式：这一次会重跑一遍清档，清的还是那几个不存在的键，没有副作用 */
+  }
+}
+
+/** 这台设备在换到这一版规则时真的被清掉过存档。 */
+export function wasWiped(version: string): boolean {
+  try {
+    return localStorage.getItem(wipeKeyFor(version)) === 'wiped';
+  } catch {
+    return false;
+  }
+}
+
+export function dropKey(bestKey: string): boolean {
+  try {
+    const had = localStorage.getItem(bestKey) !== null || localStorage.getItem(bestKey + RUNS_SUFFIX) !== null;
+    localStorage.removeItem(bestKey);
+    localStorage.removeItem(bestKey + RUNS_SUFFIX);
+    return had;
+  } catch {
+    // 无痕模式之类：删不掉就当没有，不该连带把开机拦住。
+    return false;
+  }
+}
 /**
  * 一个玩法留几局。
  *

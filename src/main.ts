@@ -7,10 +7,10 @@ import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
-import { suffixFor } from './engine/runKey';
-import { moveRuns } from './engine/persistence';
+import { modeSuffix, suffixFor } from './engine/runKey';
+import { dropKey, markWiped, moveRuns, wipeKeyFor } from './engine/persistence';
 import { BOMB_RULES_VERSION } from './engine/bomb';
-import { FLIP_RULES_VERSION } from './engine/scoring';
+import { FLIP_RULES_VERSION, SCORING_RULES_VERSION } from './engine/scoring';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
 import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 // 只为它的副作用引进来：模块一加载就把玩家挑的那一套（米白 / 深紫）盖到
@@ -161,10 +161,15 @@ const homeLayout: HomeLayout = {
 // 写死着上一版的，两头分了家：现行规则的局存进了旧归档，于是既不在记录页上出现，
 // 也没被算进累计得分（这一页的累计得分就是这张表几个键的总和）。
 const recordSources: RecordSource[] = [
-  ...games.map((g) => ({ card: g.card, suffix: '', mode: '' })),
+  // ⚠️ 基础那两行的后缀也要走 `suffixFor('base')`，**不许手写空串**。它从前一直
+  // 是空串，因为基础局那时候真的没有后缀；《侵蚀阶梯》v1.2 §6 给每个键都加了一截
+  // `_ero1`（scoring.ts 的 SCORING_RULES_VERSION）之后，手写的空串就和棋盘真正存
+  // 进去的键分了家：记录页按空串那个键去找，找不到——基础局和布局局**在记录页上
+  // 整片消失，也没被算进累计得分**，而且不报任何错。check-restore 当场逮到。
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('base'), mode: '' })),
   ...games.map((g) => ({ card: g.card, suffix: suffixFor('timed'), mode: ' · 60s' })),
   ...games.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · 💥' })),
-  ...layoutGames.map((g) => ({ card: g.card, suffix: '', mode: ' · +' })),
+  ...layoutGames.map((g) => ({ card: g.card, suffix: suffixFor('base'), mode: ' · +' })),
   ...bombLayoutGames.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · + 💥' })),
   // 《无限反转》只有基础方块和小球有。
   // 后缀跟着规则版本走：封顶之前那些局留在旧那张榜上归档，记录页只摆现行规则这一张。
@@ -184,6 +189,13 @@ const recordSources: RecordSource[] = [
  * 归档。少了这一步，从云端取回来的老局会写进新键，和新规则的分混在一起比。
  */
 const runKeyFor: RunKeyFor = (data) => {
+  // 上一套计分规则打的局**一律不接回来**（《侵蚀阶梯》v1.2 §6）。
+  //
+  // 不写这一行的后果最隐蔽：本地那一次性清档（wipeOldRules）把旧局删干净了，可云
+  // 上那份还在；`suffixFor` 现在给每个键都加了 `_ero1`，于是从云上取回的旧局会落
+  // 进**新键**，和新规则的分并在同一张记录、同一个累计得分里——清了个寂寞，而且两
+  // 套尺子的分混着比。
+  if ((data.rules ?? '') !== SCORING_RULES_VERSION) return null;
   const card = recordSources.find((src) => src.card.id === data.shapeId)?.card;
   if (!card) return null;
   // 后缀由 engine/runKey.ts 的 suffixFor 算，**和棋盘存新局时走的是同一个函数**。
@@ -1411,9 +1423,56 @@ function migrateMisfiledRuns(): void {
   }
 }
 
+/**
+ * 《侵蚀阶梯》上线：**本地旧战绩一次性清空**（v1.2 §6，玩家拍的板）。
+ *
+ * 为什么是清空而不是归档：这一版把得分图案、翻面分、整线消除、综合分全换了一套，
+ * 旧局和新局根本不是一把尺子量出来的。留着归档的话，记录页上那个「累计得分」是两
+ * 套规则的和，结算页那个「本机最佳」还钉在一个现行规则下打不出来的旧数字上——无限
+ * 反转封顶那次就是这么咬人的（见 engine/runKey.ts 开头）。
+ *
+ * 清的是**《侵蚀阶梯》之前那一套键**：`modeSuffix` 给的是玩法那一截，不带
+ * `_ero1`；现行的键全部多那一截，所以新局一个都不会被误删。每个玩法、每个已知的
+ * 规则版本都枚举一遍——漏掉哪一个，那几局会在下一次有人按那个键去找的时候冒出来。
+ *
+ * 跑过就记一笔，不再跑。下次换规则版本时换一个新的哨兵键（跟着
+ * SCORING_RULES_VERSION 走），别把这一次的重跑一遍。
+ */
+const WIPE_KEY = wipeKeyFor(SCORING_RULES_VERSION);
+function wipeOldRules(): void {
+  try {
+    if (localStorage.getItem(WIPE_KEY)) return;
+    /** 每个玩法在《侵蚀阶梯》之前可能用过的所有旧键后缀。 */
+    const oldSuffixes = new Set<string>();
+    for (const mk of ['base', 'timed', 'bomb', 'bombTimed', 'flip', 'puzzle'] as const) {
+      // 规则版本从 1 数到现行版本 + 2：多数两版是留给「哪天有人先升了版本、这段没
+      // 跟上」的余量——多删两个不存在的键不花什么，漏掉一个就会漏掉一批局。
+      for (let v = 1; v <= Math.max(BOMB_RULES_VERSION, FLIP_RULES_VERSION) + 2; v++) {
+        oldSuffixes.add(modeSuffix(mk, { bomb: v, flip: v }));
+      }
+    }
+    let dropped = 0;
+    for (const game of everyGame) {
+      for (const suffix of oldSuffixes) {
+        if (dropKey(game.card.bestKey + suffix)) dropped++;
+      }
+    }
+    // 记一笔「跑过了」，并且记清楚**有没有真的清掉东西**：记录页的空态只在真清过
+    // 的那种情况下换那一句话（见 persistence.ts 的 wipeKeyFor）。
+    markWiped(SCORING_RULES_VERSION, dropped);
+    if (dropped) console.info('[slides] 《侵蚀阶梯》上线：清掉旧规则的存档 ' + dropped + ' 档');
+  } catch {
+    // 无痕模式之类读写不了的：清不掉也别把开机拦住。反正新局落的是新键，
+    // 旧键在那儿也进不了记录页（记录页只按 recordSources 里那几个键去找）。
+  }
+}
+
 function boot() {
   // 返回键那套（见 backNav.ts）先立好：底下一条根、上面一条哨兵。
   installBackNav();
+  // 先清掉旧规则那一套存档（《侵蚀阶梯》上线，见上面那段），再挪、再接云。
+  // 顺序要紧：清在前，挪和接在后——反过来会把刚接回来的新局连着旧键一起删掉。
+  wipeOldRules();
   // 先把存错键的局挪回来，再去接云上那份——两件事落的是同一个键（见上面那段）。
   migrateMisfiledRuns();
   // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。

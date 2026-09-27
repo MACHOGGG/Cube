@@ -123,6 +123,15 @@ const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig
  * rebuild 里那段注释，check-scores 逮到的那条）。所以单列一张表，下面拼进要撤的清单。
  */
 const RETIRED_BOARDS = ['triangle', 'triangleAdvanced'];
+/**
+ * 现行的计分规则版本——**要和 `src/engine/scoring.ts` 的 `SCORING_RULES_VERSION`
+ * 一模一样**。
+ *
+ * 这一行是手抄的：`api/` 是纯 .js、不过 tsc，import 不进 src 里的 ts。改规则版本时
+ * 两处一起改，漏一处的后果是全站没有一局入得了榜（服务端认不出客户端报的版本），
+ * 而屏幕上一个字的错都没有。
+ */
+const SCORING_RULES = 'ero1';
 /** 炸弹这一档现在叫什么。改规则就往上加一版，老的那个名字留着当归档榜。 */
 const BOMB_KIND = 'bomb3';
 /**
@@ -293,6 +302,21 @@ async function push(res, body, who) {
   const mode = cleanMode(body?.mode);
   const score = num(body?.score);
   if (!runId || !mode) return send(res, 400, { error: 'run' });
+
+  /*
+   * **只收现行这一版计分规则打出来的局**（《侵蚀阶梯》v1.2 §6）。
+   *
+   * 那一版把得分图案、翻面分、整线消除、综合分全换了一套，旧局和新局不是一把尺子
+   * 量出来的——混在一张榜上比，就是把老局钉死在榜首（无限反转封顶那次的原话）。
+   *
+   * 回的是 **200 + stored: false**，不是 4xx：在途的旧客户端（没刷新的那个标签页、
+   * 装着旧包的 App）打完那一局，他的结算页照常给他看，只是不入榜——给个错误码只会
+   * 让他看见一句「上传失败」，而那一局本来就不该入榜，不是他的错。客户端那头照
+   * `stored` 在结算页上注一句「本局不入榜」。
+   */
+  if (String(body?.data?.rules || '') !== SCORING_RULES) {
+    return send(res, 200, { ok: true, stored: false, reason: 'rules' });
+  }
 
   // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
   const boardId = boardIdOf(mode, body?.data);
@@ -584,6 +608,11 @@ async function rebuild(req, res, body) {
         for (const run of runs) {
           const mode = cleanMode(run?.mode);
           if (!mode) continue;
+          // 上一套计分规则打的局不再上榜（《侵蚀阶梯》v1.2 §6）。存档里留着它们
+          // ——那是这个人的历史，没必要毁掉——但重建的时候一律跳过，否则每点一次
+          // 《重建榜单》都会把旧尺子量出来的分请回榜上（`flip` → `flip2` 那次踩
+          // 过一模一样的一脚，见下面那段）。
+          if (String(run?.data?.rules || '') !== SCORING_RULES) continue;
           if (drop.has(kindOf(run?.data))) continue;
           const boardId = boardIdOf(mode, run?.data);
           const score = num(run.score);

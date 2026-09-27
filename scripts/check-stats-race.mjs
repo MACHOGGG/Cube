@@ -44,6 +44,8 @@
  * 一档一档都跑，是因为这种洞只在某几档上现形：k=0（还没读存档）和 k 很大（早
  * 写完了）都是安全的，危险的是中间那一段。只试一个 k 的门是一道假门。
  */
+import { readFileSync } from 'node:fs';
+
 process.env.ALLOW_MEMORY_STORE = '1';
 process.env.ADMIN_TOKEN = 'x'.repeat(32);
 
@@ -69,7 +71,23 @@ const check = (name, ok, extra = '') => {
 let ipN = 0;
 const nextIp = () => `198.18.${(ipN >> 8) & 255}.${ipN++ & 255}`;
 
+/**
+ * 现行的计分规则版本（《侵蚀阶梯》v1.2 §6），从源码现读。
+ *
+ * 服务端只收带着它的局。这道门测的是并发下的账（交卷和重建互相盖不盖），不是版本
+ * 闸，所以交卷那一路自动补上——版本闸自己那几条断言在 check-scores 里。
+ */
+const SCORING_V = (() => {
+  const src = readFileSync(new URL('../src/engine/scoring.ts', import.meta.url), 'utf8');
+  const m = /export const SCORING_RULES_VERSION = '([^']+)'/.exec(src);
+  if (!m) throw new Error('读不到 SCORING_RULES_VERSION');
+  return m[1];
+})();
+
 async function call(body) {
+  if (body?.action === 'push') {
+    body = { ...body, data: { ...(body.data || {}), rules: SCORING_V } };
+  }
   const req = { method: 'POST', headers: { 'x-vercel-forwarded-for': nextIp() }, body };
   const res = {
     code: 200,

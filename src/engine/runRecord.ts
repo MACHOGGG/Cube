@@ -65,6 +65,15 @@ export interface RunData {
    */
   flipRules?: number;
   /**
+   * 这一局按第几版**计分规则**打的（见 scoring.ts 的 `SCORING_RULES_VERSION`）。
+   *
+   * 上面那两个各管一个玩法，这一个管**全站**：《侵蚀阶梯》v1.2 把得分图案、翻面
+   * 分、整线消除、综合分全换了一套，旧局和新局不是一把尺子量的。服务端照它收不收
+   * 这一局（`api/scores.js` 只认现行那一版）；老档没有这一项，读出来是 undefined，
+   * 那就是《侵蚀阶梯》之前的局。
+   */
+  rules?: string;
+  /**
    * 《真正解密 · 步步为营》这一局的账（见 engine/puzzleScore.ts）。老档没有这
    * 一项，读出来是 undefined，照旧走老分支。
    *

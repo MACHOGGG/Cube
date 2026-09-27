@@ -1,4 +1,5 @@
-import { loadAllRuns, totalScoreOf, type StoredRun } from '../engine/persistence';
+import { loadAllRuns, totalScoreOf, wasWiped, type StoredRun } from '../engine/persistence';
+import { SCORING_RULES_VERSION } from '../engine/scoring';
 import { pushLayer } from '../engine/backNav';
 import { renderShareCard } from '../engine/shareCard';
 import { buildShareInfo, formatRunTime, modeLabel } from '../engine/runRecord';
@@ -162,9 +163,13 @@ export function renderRecordsPage(
     host.innerHTML = '';
     const shown = limit === null ? runs : runs.slice(0, limit);
     if (!shown.length) {
+      // 换规则那一次把本机的旧战绩清空了（《侵蚀阶梯》v1.2 §6），空态换一句话说
+      // 清楚为什么空——不然玩家打开记录页看见的是「尚无成绩」，而他昨天明明还有。
+      // 只对真被清过的设备说（见 engine/persistence.ts 的 wipeKeyFor）。
+      const emptyLine = wasWiped(SCORING_RULES_VERSION) ? s.recordsResetByRules : s.noRecordsYet;
       host.innerHTML =
         Array.from({ length: PLACEHOLDER_ROWS }, () => '<div class="records-rule"></div>').join('') +
-        `<p class="records-locked">${s.noRecordsYet}</p>`;
+        `<p class="records-locked">${emptyLine}</p>`;
       return;
     }
     for (const run of shown) host.appendChild(recordRow(run, compact));

@@ -4,7 +4,7 @@ import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFli
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createErosion, tableFor, type Erosion } from './erosion';
-import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
+import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
 import { rollDuration, rollOdometer } from './odometer';
@@ -729,6 +729,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 无限反转同理（见 scoring.ts 的 FLIP_RULES_VERSION）：连击封顶前后的分不是
       // 一把尺子量的。非反转局不写。
       flipRules: hooks.modeKey === 'flip' ? FLIP_RULES_VERSION : undefined,
+      // 这一局按第几版**计分规则**打的（《侵蚀阶梯》v1.2 §6）。上面那两个各管一
+      // 个玩法，这一个管全站——服务端照它收不收这一局（`api/scores.js` 只认现行
+      // 那一版），旧客户端在途打完的局照常给他看结算页，只是不入榜。
+      rules: SCORING_RULES_VERSION,
       at: Date.now(),
     };
 

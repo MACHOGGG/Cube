@@ -19,6 +19,13 @@ export interface I18nStrings {
   navProfile: string;
   navRecords: string;
   noRecordsYet: string;
+  /**
+   * 记录页空态**换规则那一次**专用的一句（《侵蚀阶梯》v1.2 §6）。
+   *
+   * 只对「本机真被清掉过存档」的人说；新装的设备照旧说 noRecordsYet——对一台从没
+   * 打过的设备说「战绩从这里重新开始」，是一句没头没脑的话。
+   */
+  recordsResetByRules: string;
   switchLanguage: string;
   // ---- home page ----
   sectionTimed: string;
@@ -572,6 +579,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navProfile: 'Profile',
     navRecords: 'Records & rankings',
     noRecordsYet: 'No score yet',
+    recordsResetByRules: 'New rules are live — your record starts fresh here',
     switchLanguage: 'Language',
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
@@ -896,6 +904,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navProfile: 'Profil',
     navRecords: 'Historique et classements',
     noRecordsYet: 'Pas encore de score',
+    recordsResetByRules: 'Nouvelles règles en ligne — votre palmarès repart d\'ici',
     switchLanguage: 'Langue',
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
@@ -1220,6 +1229,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navProfile: '個人主頁',
     navRecords: '記錄與排名',
     noRecordsYet: '尚無成績',
+    recordsResetByRules: '新規則上線，戰績從這裡重新開始',
     switchLanguage: '語言',
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
@@ -1544,6 +1554,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navProfile: '个人主页',
     navRecords: '记录与排名',
     noRecordsYet: '尚无成绩',
+    recordsResetByRules: '新规则《侵蚀阶梯》上线，战绩从这里重新开始',
     switchLanguage: '语言',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
