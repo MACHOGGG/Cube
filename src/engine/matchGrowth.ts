@@ -1,4 +1,13 @@
 import type { Cell } from './types';
+import { STRINGS, type Lang } from '../i18n';
+
+/**
+ * 得分气泡上那一句「几连」。**枚数是变的**（《侵蚀阶梯》v1.2 §2：图案 4→3→2→1），
+ * 所以这一句现算，不再是写死的「4连」。八副棋盘共用这一处。
+ */
+export function runLabel(lang: Lang, n: number): string {
+  return STRINGS[lang].labelRunN.replace('{n}', String(n));
+}
 
 /**
  * Two shared "grow a qualifying seed match, but only along its own regular
@@ -46,54 +55,12 @@ export function extendRunInLine(
   return lineCells.slice(lo, hi + 1);
 }
 
-/**
- * Extends a "2x2-family" seed — a parallelogram spanned by two directions
- * from an anchor cell (anchor, anchor+u, anchor+v, anchor+u+v — exactly
- * what a square 2x2 block or a triangular/hex board's rhombus cluster
- * already is) into the largest same-color parallelogram sharing those same
- * two directions. `positionAt(u, v)` maps the seed's own local (u, v)
- * lattice (anchor is (0, 0)) to a real board cell, or null if that lattice
- * point falls outside the board — a plain `(r0+u*dr1+v*dr2, c0+u*dc1+v*dc2)`
- * closure for a shape whose grid is simple addition (square, circle,
- * squareDiamond), or a cube-coordinate lookup for one that isn't (circleHex,
- * whose row-trimmed hex crop makes a flat (r, c) step vector wrong). Growth
- * is one *entire* extra row or column (in the seed's own u/v lattice) at a
- * time — "22" -> "33" (widen) or "222" (add a full extra row) both qualify,
- * but "221" (a partial extra row) doesn't, since that row fails the
- * all-cells-match-and-in-bounds check and growth stops right there.
+/*
+ * `growParallelogram`（2×2 那一族图案的「长大」）**已经删掉**——《侵蚀阶梯》v1.2
+ * §1.1：得分图案只剩同色 1×N 连线，2×2 / 2+2 / 1-2-1 / 大三角全部退役，连带它们
+ * 各自的扩张规则。剩下的扩张只有一条：同一条线上往两头接着长（上面那个
+ * extendRunInLine）。
  */
-export function growParallelogram(
-  positionAt: (u: number, v: number) => Cell | null,
-  effColorAt: (r: number, c: number) => number,
-  isLive: (r: number, c: number) => boolean,
-): Cell[] {
-  const anchor = positionAt(0, 0)!;
-  const color = effColorAt(anchor[0], anchor[1]);
-  const lineMatches = (fixedAxis: 'u' | 'v', fixedVal: number, otherLo: number, otherHi: number): boolean => {
-    for (let k = otherLo; k <= otherHi; k++) {
-      const cell = fixedAxis === 'u' ? positionAt(fixedVal, k) : positionAt(k, fixedVal);
-      if (!cell) return false;
-      const [r, c] = cell;
-      if (!isLive(r, c) || effColorAt(r, c) !== color) return false;
-    }
-    return true;
-  };
-  let u0 = 0;
-  let u1 = 1;
-  let v0 = 0;
-  let v1 = 1;
-  let grew = true;
-  while (grew) {
-    grew = false;
-    if (lineMatches('u', u0 - 1, v0, v1)) { u0--; grew = true; }
-    if (lineMatches('u', u1 + 1, v0, v1)) { u1++; grew = true; }
-    if (lineMatches('v', v0 - 1, u0, u1)) { v0--; grew = true; }
-    if (lineMatches('v', v1 + 1, u0, u1)) { v1++; grew = true; }
-  }
-  const cells: Cell[] = [];
-  for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) cells.push(positionAt(u, v)!);
-  return cells;
-}
 
 /**
  * 方块那副棋盘「一片得分区域能长多大」的三条规矩。
@@ -143,34 +110,14 @@ export function squareGrowth(view: SquareGrowthView) {
     return cells;
   }
 
-  function rowSpanMatches(r: number, c0: number, c1: number, color: number): boolean {
-    for (let c = c0; c <= c1; c++) if (effColorAt(r, c) !== color) return false;
-    return true;
-  }
-  function colSpanMatches(c: number, r0: number, r1: number, color: number): boolean {
-    for (let r = r0; r <= r1; r++) if (effColorAt(r, c) !== color) return false;
-    return true;
-  }
-
-  /**
-   * 一个 2×2，一次长一整行或一整列——歪在旁边的同色进不来。
+  /*
+   * `extendRect`（一个 2×2 一次长一整行 / 一整列）连着它那两个跨度判断
+   * （rowSpanMatches / colSpanMatches）一起删了——《侵蚀阶梯》v1.2 §1.1 把 2×2
+   * 这一族图案退役了，方块那副现在只找同色 1×N 连线，没人再调它。
+   *
+   * 留着不会编译报错（它是工厂返回的一个字段，noUnusedLocals 管不到），但会骗
+   * 下一个人：照着它以为 2×2 还在算分。
    */
-  function extendRect(r0: number, c0: number, r1: number, c1: number): Cell[] {
-    const color = effColorAt(r0, c0);
-    const rows = view.rows();
-    const cols = view.cols();
-    let grew = true;
-    while (grew) {
-      grew = false;
-      if (r0 - 1 >= 0 && rowSpanMatches(r0 - 1, c0, c1, color)) { r0--; grew = true; }
-      if (r1 + 1 < rows && rowSpanMatches(r1 + 1, c0, c1, color)) { r1++; grew = true; }
-      if (c0 - 1 >= 0 && colSpanMatches(c0 - 1, r0, r1, color)) { c0--; grew = true; }
-      if (c1 + 1 < cols && colSpanMatches(c1 + 1, r0, r1, color)) { c1++; grew = true; }
-    }
-    const cells: Cell[] = [];
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push([r, c]);
-    return cells;
-  }
 
-  return { extendRunHoriz, extendRunVert, extendRect };
+  return { extendRunHoriz, extendRunVert };
 }

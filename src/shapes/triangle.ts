@@ -12,7 +12,7 @@ import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI
 import { proHintWidth, proTriRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { extendRunInLine } from '../engine/matchGrowth';
+import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { roundTriClip, roundTriPath, triRingPath, TRI_RING_INSET } from '../engine/roundTri';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
@@ -23,7 +23,7 @@ import { shuffle } from '../engine/rng';
 import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 import { modeKeyOf, suffixFor } from '../engine/runKey';
@@ -84,15 +84,17 @@ function iconTri(i: number, p: number): [number, number][] {
     ? [[xBase, i * ICON_H], [xBase - 0.5, (i + 1) * ICON_H], [xBase + 0.5, (i + 1) * ICON_H]]
     : [[xBase + 0.5, (i + 1) * ICON_H], [xBase, i * ICON_H], [xBase + 1, i * ICON_H]];
 }
+/**
+ * 这副棋盘的得分图案——**只剩一种**：同色 1×N 连线（《侵蚀阶梯》v1.2 §1.1）。
+ * 2×2 / 2+2 / 1-2-1 / 大三角那几种全部退役。
+ *
+ * 这儿画的是开局那一级（1×4）。图案会随侵蚀变短（4→3→2→1），HUD 上那一块按当前
+ * 级数现画（见 PR-7 的《得分图案》块）。
+ */
 const PATTERNS: PatternDef[] = [
   {
     label: '1×4',
     cells: [0, 1, 2, 3].map((p) => ({ kind: 'poly' as const, points: iconTri(0, p) })),
-  },
-  {
-    label: '大三角',
-    labelKey: 'labelBigTriangle',
-    cells: [[0, 0], [1, 0], [1, 1], [1, 2]].map(([i, p]) => ({ kind: 'poly' as const, points: iconTri(i, p) })),
   },
 ];
 
@@ -246,6 +248,11 @@ function allBigTriangles(): Cell[][] {
     }
   return groups;
 }
+/**
+ * 发牌时用的「一坨同色」表，**不是得分图案**——大三角在《侵蚀阶梯》v1.2 §1.1 里
+ * 退役了。留着它只为一件事：开局盘面上别自带一坨同色（见 hasInitialClump），那看
+ * 着像「这局已经解过一半了」。
+ */
 const BIG_TRIANGLES = allBigTriangles();
 
 function lineFor(fam: 'A' | 'B' | 'R', r: number, c: number): Line {
@@ -897,19 +904,25 @@ export function createTriangleGame(): ShapeGame {
       }
 
       // ---------- matching engine ----------
+      /** 这一局的「几连」怎么念（枚数是变的，见 engine/matchGrowth 的 runLabel）。 */
+      const runLabel = (n: number) => runLabelOf(lang, n);
+
+      /**
+       * 得分图案**只剩同色 1×N 连线**（《侵蚀阶梯》v1.2 §1.1）：大三角那一族连同方块
+       * 的 2×2、小球的 2+2 / 1-2-1 一起删了。N 现问控制器（侵蚀阶梯会把它从 4 降到 1）。
+       */
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
+        const n = controller.matchLen();
+        const label = runLabel(n);
         for (const line of LINES) {
           const cells = line.cells;
-          for (let i = 0; i + 3 < cells.length; i++) {
-            const seed = cells.slice(i, i + 4);
+          for (let i = 0; i + n <= cells.length; i++) {
+            const seed = cells.slice(i, i + n);
             if (!qualifies(seed, mask)) continue;
-            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
+            const region = extendRunInLine(cells, i, i + n - 1, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label });
           }
-        }
-        for (const cells of BIG_TRIANGLES) {
-          if (qualifies(cells, mask)) matches.push({ cells, points: 4, label: MATCH_LABELS[lang].labelBigTriangle });
         }
         return matches;
       }
@@ -972,15 +985,6 @@ export function createTriangleGame(): ShapeGame {
        * 这个「消除」同时是这条规则的防刷分闸：星星从盘上没了，同一批星星凑不回
        * 同一个形状。
        */
-      function clearStarGroup(cells: Cell[]) {
-        for (const [r, c] of cells) {
-          const t = grid[r][c];
-          if (isBlank(t)) continue;
-          pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
-          t.color = BLANK;
-          t.dotColor = BLANK;
-        }
-      }
 
       function buildCascadeConfig(): CascadeConfig {
         return {
@@ -990,7 +994,6 @@ export function createTriangleGame(): ShapeGame {
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
-          clearStars: clearStarGroup,
           resetMaskOnLineBonus: false,
         };
       }
@@ -1066,6 +1069,10 @@ export function createTriangleGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：六边三角 54×6（id 是 triangleBig）。
+        // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        boardTiles: PER_COLOR * PALETTES.standard.length,
+        boardColors: PALETTES.standard.length,
         lang,
         practice: !!opts?.practice,
         bestKey: bestKey + suffixFor(modeKey),

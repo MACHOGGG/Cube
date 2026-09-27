@@ -12,7 +12,7 @@ import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP
 import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
+import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -20,7 +20,7 @@ import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import {
   HEX_DIAMOND_121_OFFSETS,
@@ -67,32 +67,27 @@ const BOMB_PALETTES = {
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="6.5" r="4.5" fill="#B23A3A"/><circle cx="25" cy="11" r="4.5" fill="#D89B1E"/><circle cx="25" cy="21" r="4.5" fill="#4C68B0"/><circle cx="16" cy="25.5" r="4.5" fill="#2F9E52"/><circle cx="7" cy="21" r="4.5" fill="#9B958D"/><circle cx="7" cy="11" r="4.5" fill="#2F8A96"/></svg>`;
 
-// The board's 3 seed patterns (see findRunMatches/CLUSTERS below), drawn
-// with the same cube-coordinate transform snapshotBoard() uses, as blank
-// outlines for the in-HUD pattern hint. Offsets are the same (dz,dx) pairs
-// as RHOMBUS_B_OFFSETS/RHOMBUS_A_OFFSETS/DIAMOND_121_OFFSETS above.
+// 得分图案的示意图：位置用的是 snapshotBoard() 那一套立方坐标变换，画成空心轮
+// 廓摆在 HUD 里。
+//
+// 现在只剩 1×N 那一张（《侵蚀阶梯》v1.2 §1.1）。下面那张 CLUSTERS 表（还有它引
+// 的 RHOMBUS_B / RHOMBUS_A / DIAMOND_121 三份偏移）**不再是得分图案**——只剩一个
+// 用处：发牌时别让开局盘面自带一坨同色（hasInitialClump）。
 function iconPos(dz: number, dx: number): [number, number] {
   return [2 * dx + dz, dz * Math.sqrt(3)];
 }
+/**
+ * 这副棋盘的得分图案——**只剩一种**：同色 1×N 连线（《侵蚀阶梯》v1.2 §1.1）。
+ * 2×2 / 2+2 / 1-2-1 / 大三角那几种全部退役。
+ *
+ * 这儿画的是开局那一级（1×4）。图案会随侵蚀变短（4→3→2→1），HUD 上那一块按当前
+ * 级数现画（见 PR-7 的《得分图案》块）。
+ */
 const PATTERNS: PatternDef[] = [
   {
     label: '1×4',
     cells: [0, 1, 2, 3].map((dx) => {
       const [cx, cy] = iconPos(0, dx);
-      return { kind: 'circle' as const, cx, cy, r: 0.95 };
-    }),
-  },
-  {
-    label: '2+2',
-    cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([dz, dx]) => {
-      const [cx, cy] = iconPos(dz, dx);
-      return { kind: 'circle' as const, cx, cy, r: 0.95 };
-    }),
-  },
-  {
-    label: '1-2-1',
-    cells: ([[0, 0], [1, -1], [1, 0], [2, -1]] as const).map(([dz, dx]) => {
-      const [cx, cy] = iconPos(dz, dx);
       return { kind: 'circle' as const, cx, cy, r: 0.95 };
     }),
   },
@@ -186,6 +181,11 @@ function allClusters(): Cell[][] {
     }
   return groups;
 }
+/**
+ * 发牌时用的「一坨同色」表，**不是得分图案**——2×2 那一族在《侵蚀阶梯》v1.2 §1.1
+ * 里退役了。留着它只为一件事：开局盘面上别自带一坨同色（见 hasInitialClump），
+ * 那看着像「这局已经解过一半了」。
+ */
 const CLUSTERS = allClusters();
 
 function famVector(fam: Fam, R: number, rowH: number): [number, number] {
@@ -685,39 +685,29 @@ export function createCircleHexGame(): ShapeGame {
         return true;
       }
 
+      /** 这一局的「几连」怎么念（枚数是变的，见 engine/matchGrowth 的 runLabel）。 */
+      const runLabel = (n: number) => runLabelOf(lang, n);
+
+      /**
+       * 得分图案**只剩同色 1×N 连线**（《侵蚀阶梯》v1.2 §1.1）：2+2、1-2-1 那几种
+       * 连同方块的 2×2、三角的大三角一起删了。
+       *
+       * N 不是写死的 4，是**现问**控制器（`matchLen()`）——侵蚀阶梯会在一步之内把它
+       * 从 4 降到 3、2、1（§2），缓存一份就会慢一拍。
+       */
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
+        const n = controller.matchLen();
+        const label = runLabel(n);
         for (const line of LINES) {
           const cells = line.cells;
-          for (let i = 0; i + 3 < cells.length; i++) {
-            const seed = cells.slice(i, i + 4);
+          for (let i = 0; i + n <= cells.length; i++) {
+            const seed = cells.slice(i, i + n);
             if (!qualifies(seed, mask)) continue;
-            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
+            const region = extendRunInLine(cells, i, i + n - 1, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label });
           }
         }
-        for (let r = 0; r < ROW_LENS.length; r++)
-          for (let c = 0; c < ROW_LENS[r]; c++) {
-            const { x: x0, z: z0 } = localToCube(r, c);
-            const b = clusterFromCube(x0, z0, RHOMBUS_B_OFFSETS);
-            if (b && qualifies(b, mask)) {
-              // RHOMBUS_B_OFFSETS's (dz, dx) pairs are u*(dz=0,dx=1) + v*(dz=1,dx=0).
-              const positionAt = (u: number, v: number): Cell | null => cubeToLocal(x0 + u, z0 + v);
-              const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
-            }
-            const a = clusterFromCube(x0, z0, RHOMBUS_A_OFFSETS);
-            if (a && qualifies(a, mask)) {
-              // RHOMBUS_A_OFFSETS's (dz, dx) pairs are u*(dz=0,dx=1) + v*(dz=1,dx=-1).
-              const positionAt = (u: number, v: number): Cell | null => cubeToLocal(x0 + u - v, z0 + v);
-              const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
-            }
-            const d = clusterFromCube(x0, z0, DIAMOND_121_OFFSETS);
-            if (d && qualifies(d, mask)) {
-              matches.push({ cells: d, points: 4, label: MATCH_LABELS[lang].label121 });
-            }
-          }
         return matches;
       }
 
@@ -782,15 +772,6 @@ export function createCircleHexGame(): ShapeGame {
        * 这个「消除」同时是这条规则的防刷分闸：星星从盘上没了，同一批星星凑不回
        * 同一个形状。
        */
-      function clearStarGroup(cells: Cell[]) {
-        for (const [r, c] of cells) {
-          const t = grid[r][c];
-          if (isBlank(t)) continue;
-          pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
-          t.color = BLANK;
-          t.dotColor = BLANK;
-        }
-      }
 
       function buildCascadeConfig(): CascadeConfig {
         return {
@@ -800,7 +781,6 @@ export function createCircleHexGame(): ShapeGame {
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
-          clearStars: clearStarGroup,
           resetMaskOnLineBonus: false,
         };
       }
@@ -872,6 +852,10 @@ export function createCircleHexGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：六边圆球 36（可用）×6。
+        // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        boardTiles: PER_COLOR * PALETTES.standard.length,
+        boardColors: PALETTES.standard.length,
         lang,
         practice: !!opts?.practice,
         bestKey: bestKey + suffixFor(modeKey),

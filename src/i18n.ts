@@ -472,6 +472,11 @@ export interface I18nStrings {
   iconPill: string;
   iconTitle: string;
   // ---- gain-bubble source labels (which pattern just paid out) ----
+  /**
+   * 得分气泡上那一句「几连」。**枚数是变的**（《侵蚀阶梯》v1.2 §2：图案 4→3→2→1），
+   * 所以这一句带一个 {n}，不再是写死的「4连」。
+   */
+  labelRunN: string;
   labelRun4: string;
   labelBlock22: string;
   label121: string;
@@ -838,6 +843,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: 'How to play',
     iconPill: 'Icon',
     iconTitle: 'App icon',
+    labelRunN: 'Run of {n}',
     labelRun4: 'Run of 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -1161,6 +1167,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: 'Règles du jeu',
     iconPill: 'Icône',
     iconTitle: 'Icône de l’app',
+    labelRunN: 'Suite de {n}',
     labelRun4: 'Suite de 4',
     labelBlock22: '2x2',
     label121: '1-2-1',
@@ -1484,6 +1491,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: '遊戲規則',
     iconPill: '圖示',
     iconTitle: '更換圖示',
+    labelRunN: '{n}連',
     labelRun4: '4連',
     labelBlock22: '2×2',
     label121: '121',
@@ -1807,6 +1815,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rulesPill: '游戏规则',
     iconPill: '图标',
     iconTitle: '更换图标',
+    labelRunN: '{n}连',
     labelRun4: '4连',
     labelBlock22: '2×2',
     label121: '121',

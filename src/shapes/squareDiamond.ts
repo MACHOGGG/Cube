@@ -12,7 +12,7 @@ import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } fr
 import { TILE_RADIUS, proHintWidth, proSquareRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
+import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
@@ -21,7 +21,7 @@ import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 import { modeKeyOf, suffixFor } from '../engine/runKey';
@@ -83,43 +83,22 @@ function iconPos(r: number, c: number): [number, number] {
 const ICON_HALF = 0.5;
 const ICON_EXTENT = 4; // the widest pattern (1x4) spans 3 units plus a tile
 
-/**
- * 1-2-1, as one list of offsets that both the scoring rule and its hint icon
- * read from.
- *
- * They used to be written out twice. When the rule was tightened to this
- * compact 2x2 the icon kept the old, looser shape — so the HUD spent three
- * days showing players a pattern that no longer scored. One definition is
- * the only way that stays fixed.
- *
- * In (r, c) it is a 2x2 block; on screen, where this board is the same
- * lattice turned 45 degrees (iconPos below), it comes out as the diamond the
- * name describes: one tile, then two, then one.
- */
-const DIAMOND_121: readonly (readonly [number, number])[] = [[0, 0], [0, 1], [1, 0], [1, 1]];
 const iconTile = (r: number, c: number) => {
   const [cx, cy] = iconPos(r, c);
   return { kind: 'rect' as const, cx, cy, half: ICON_HALF };
 };
+/**
+ * 这副棋盘的得分图案——**只剩一种**：同色 1×N 连线（《侵蚀阶梯》v1.2 §1.1）。
+ * 2×2 / 2+2 / 1-2-1 / 大三角那几种全部退役。
+ *
+ * 这儿画的是开局那一级（1×4）。图案会随侵蚀变短（4→3→2→1），HUD 上那一块按当前
+ * 级数现画（见 PR-7 的《得分图案》块）。
+ */
 const PATTERNS: PatternDef[] = [
   {
     label: '1×4',
     extent: ICON_EXTENT,
     cells: [0, 1, 2, 3].map((c) => iconTile(0, c)),
-  },
-  {
-    label: '2+2',
-    extent: ICON_EXTENT,
-    // The right-hand parallelogram of TWO_PLUS_TWO_BASES, cell for cell:
-    // two neighbours on one screen row, two more half a tile to the right
-    // on the next.
-    cells: ([[0, 1], [0, 2], [1, 0], [1, 1]] as const).map(([r, c]) => iconTile(r, c)),
-  },
-  {
-    label: '1-2-1',
-    extent: ICON_EXTENT,
-    // Straight from DIAMOND_121, so the hint is the rule.
-    cells: DIAMOND_121.map(([r, c]) => iconTile(r, c)),
   },
 ];
 
@@ -142,11 +121,6 @@ function buildLines(): Line[] {
 }
 const LINES = buildLines();
 
-// The two mirrored "2+2" parallelograms — see findRunMatches.
-const TWO_PLUS_TWO_BASES: readonly [[number, number], [number, number]][] = [
-  [[0, 1], [1, -1]],
-  [[1, -1], [1, 0]],
-];
 
 // The board's "121" bonus shape: one tile, then two on the row below it,
 // then one on the row below that — three *touching* screen rows, symmetric
@@ -165,10 +139,6 @@ const TWO_PLUS_TWO_BASES: readonly [[number, number], [number, number]][] = [
 // "1-2-1".
 function inBounds(r: number, c: number): boolean {
   return r >= 0 && r < BOARD_DIM && c >= 0 && c < BOARD_DIM;
-}
-function diamond121(r: number, c: number): Cell[] | null {
-  const cells: Cell[] = DIAMOND_121.map(([dr, dc]) => [r + dr, c + dc] as Cell);
-  return cells.every(([rr, cc]) => inBounds(rr, cc)) ? cells : null;
 }
 function lineFor(fam: Fam, r: number, c: number): Line {
   const line = LINES.find((l) => l.fam === fam && l.cells.some(([rr, cc]) => rr === r && cc === c));
@@ -323,6 +293,14 @@ export function createSquareDiamondGame(): ShapeGame {
         return g;
       }
 
+      /**
+       * 开局盘面上别自带一坨同色——发牌时重摇，最多 500 次。
+       *
+       * 底下那个 2×2 的判断**不是**「已经能得分了」：2×2 那一族图案在《侵蚀阶梯》
+       * v1.2 §1.1 里退役了，现在只有同色 1×N 算分（上面那一段查的就是它）。留着
+       * 2×2 是为了一眼的观感：开局摆着一块实心的四方色块，看着像「这局已经解过一
+       * 半了」。
+       */
       function hasInitialClump(g: Tile[][]): boolean {
         for (const line of LINES) {
           const colors = line.cells.map(([r, c]) => g[r][c].color);
@@ -641,52 +619,28 @@ export function createSquareDiamondGame(): ShapeGame {
         if (mask && !seed.some(([r, c]) => mask.has(cellKey(r, c)))) return false;
         return true;
       }
-      // The 4 cells of the unit parallelogram at (r,c) spanned by du/dv.
-      function parallelogramCells(r: number, c: number, du: [number, number], dv: [number, number]): Cell[] {
-        return ([[0, 0], [1, 0], [0, 1], [1, 1]] as const).map(
-          ([u, v]) => [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]] as Cell,
-        );
-      }
 
-      function boundedPositionAt(r: number, c: number, du: [number, number], dv: [number, number]) {
-        return (u: number, v: number): Cell | null => {
-          const cell: Cell = [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]];
-          return inBounds(cell[0], cell[1]) ? cell : null;
-        };
-      }
 
+      /** 这一局的「几连」怎么念（枚数是变的，见 engine/matchGrowth 的 runLabel）。 */
+      const runLabel = (n: number) => runLabelOf(lang, n);
+
+      /**
+       * 得分图案**只剩同色 1×N 连线**（《侵蚀阶梯》v1.2 §1.1）：2+2、1-2-1 连同方块
+       * 的 2×2、三角的大三角一起删了。N 现问控制器（侵蚀阶梯会把它从 4 降到 1）。
+       */
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
+        const n = controller.matchLen();
+        const label = runLabel(n);
         for (const line of LINES) {
           const cells = line.cells;
-          for (let i = 0; i + 3 < cells.length; i++) {
-            const seed = cells.slice(i, i + 4);
+          for (let i = 0; i + n <= cells.length; i++) {
+            const seed = cells.slice(i, i + n);
             if (!qualifies(seed, mask)) continue;
-            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
+            const region = extendRunInLine(cells, i, i + n - 1, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label });
           }
         }
-        for (let r = 0; r < BOARD_DIM; r++)
-          for (let c = 0; c < BOARD_DIM; c++) {
-            // "2+2": two neighbours in one screen row, plus two more in the
-            // next row offset half a tile — mirrored left and right. Both
-            // are parallelograms on this lattice (basis [0,1]/[1,-1] and
-            // [1,-1]/[1,0]), so they grow the same way a run or a block
-            // does. Note this is *not* the compact grid 2x2, which this
-            // board's 45deg mapping draws as a 1-2-1 diamond rather than
-            // anything a player would read as "two rows of two".
-            for (const [du, dv] of TWO_PLUS_TWO_BASES) {
-              const seed = parallelogramCells(r, c, du, dv);
-              if (seed.every(([rr, cc]) => inBounds(rr, cc)) && qualifies(seed, mask)) {
-                const region = growParallelogram(boundedPositionAt(r, c, du, dv), effColorAt, isLiveCell);
-                matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
-              }
-            }
-            const d = diamond121(r, c);
-            if (d && qualifies(d, mask)) {
-              matches.push({ cells: d, points: 4, label: MATCH_LABELS[lang].label121 });
-            }
-          }
         return matches;
       }
 
@@ -737,15 +691,6 @@ export function createSquareDiamondGame(): ShapeGame {
        * 这个「消除」同时是这条规则的防刷分闸：星星从盘上没了，同一批星星凑不回
        * 同一个形状。
        */
-      function clearStarGroup(cells: Cell[]) {
-        for (const [r, c] of cells) {
-          const t = grid[r][c];
-          if (isBlank(t)) continue;
-          pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
-          t.color = BLANK;
-          t.dotColor = BLANK;
-        }
-      }
 
       function buildCascadeConfig(): CascadeConfig {
         return {
@@ -755,7 +700,6 @@ export function createSquareDiamondGame(): ShapeGame {
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
-          clearStars: clearStarGroup,
           resetMaskOnLineBonus: false,
         };
       }
@@ -827,6 +771,10 @@ export function createSquareDiamondGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：菱形方块 36×6。
+        // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        boardTiles: BOARD_DIM * BOARD_DIM,
+        boardColors: PALETTES.standard.length,
         lang,
         practice: !!opts?.practice,
         bestKey: bestKey + suffixFor(modeKey),

@@ -221,8 +221,11 @@ const tally = (arr) => {
     return beats;
   };
 
-  check('并进遮罩之后，拆弹旁边新成的图案当场就给分', JSON.stringify(run(true)) === '[4,4]', JSON.stringify(run(true)));
-  check('不并的话它就漏掉了（这正是要防的那一幕）', JSON.stringify(run(false)) === '[4]', JSON.stringify(run(false)));
+  // 一拍 8 分 = 四枚色块 × 每枚 2 分（《侵蚀阶梯》v1.2 §1.2）。这两条量的是**拍
+  // 数**：并了遮罩是两拍，不并只有一拍——那一组要等以后某次滑动碰巧碰到它才给
+  // 分，玩家看见的是「图案拼好了却没给分，过了几步又莫名其妙给了」。
+  check('并进遮罩之后，拆弹旁边新成的图案当场就给分', JSON.stringify(run(true)) === '[8,8]', JSON.stringify(run(true)));
+  check('不并的话它就漏掉了（这正是要防的那一幕）', JSON.stringify(run(false)) === '[8]', JSON.stringify(run(false)));
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,8 @@ import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
-import { createStreakTracker, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
+import { createErosion, tableFor, type Erosion } from './erosion';
+import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, type CascadeConfig } from './scoring';
 import { createScoreReel } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
 import { rollDuration, rollOdometer } from './odometer';
@@ -103,6 +104,17 @@ export interface GameControllerHooks {
   practice?: boolean;
   /** 老虎机那一局（见 RunData.slot）：排行榜靠它把这一局单独排一张榜。 */
   slot?: boolean;
+  /**
+   * 这副棋盘一共有几个可用格、几种颜色——侵蚀阶梯的段数与基准按它查表
+   * （engine/erosion.ts 的 tableFor，《侵蚀阶梯》v1.2 §2）。
+   *
+   * 由棋盘自己报，而不是在 erosion.ts 里按 id 硬编一份：六边圆球中心那个永久空
+   * 位算不算「可用」这种事只有棋盘自己知道，表里那几行也正是照它填的。
+   */
+  boardTiles: number;
+  boardColors: number;
+  /** 图案降了一级（4→3→2→1）。棋盘拿它重画提示，HUD 拿它演那一下熄灭（PR-7）。 */
+  onErosion?: (level: number) => void;
   /**
    * 无限反转（见 ShapeGameOpts.flip）。这一局的计分和别的局不同：
    *   · 没有用时系数——综合得分里那一项恒为 1；
@@ -274,6 +286,13 @@ export interface GameController {
   finish(): void;
   /** Call after applying a confirmed drag with the set of cells it touched. */
   resolveMove(mask: Set<string>, moveDirDeg?: number): void;
+  /**
+   * 此刻的得分图案是几枚（4→3→2→1，《侵蚀阶梯》v1.2 §2）。棋盘的 findMatches
+   * 每次都现问——图案会在一步之内变小，把它缓存下来就会慢一拍。
+   */
+  matchLen(): number;
+  /** 这一级还剩几段 / 一共几段 / 到过 1 枚没有：HUD 的《得分图案》块要它们。 */
+  erosionView(): { level: number; segLeft: number; segTotal: number; unlocked: boolean; par: number };
   /** Ends the run immediately with a custom reason and an optional flat score penalty (e.g. a bomb-mode hazard cluster) — shown as its own breakdown row, subtracted the same way as the other end-of-run penalties. */
   forceEnd(reason: string, penalty?: number, penaltyLabel?: string): void;
   /** Stops timers when navigating away without ending the run. */
@@ -293,6 +312,15 @@ const escHtml = (t: string) =>
 export function createGameController(refs: ShellRefs, hooks: GameControllerHooks): GameController {
   const s = STRINGS[hooks.lang];
 
+  /**
+   * 侵蚀阶梯（《侵蚀阶梯》v1.2 §2）。无限反转传 frozen：那一局段照扣，图案不降级
+   * （玩家 2026-09-27 拍板）。
+   */
+  const erosion: Erosion = createErosion(
+    tableFor(hooks.shapeId, hooks.boardTiles, hooks.boardColors),
+    !!hooks.flip,
+  );
+
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   const perf = createPerformanceGauge();
   const timer = createTimer((sec) => {
@@ -308,7 +336,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
     refs.hudTimeEl.textContent = formatClock(sec);
   });
-  const streak = createStreakTracker();
   /**
    * 这一局的帧时采样（engine/frameTier.ts）。量到连续两秒都跑不到 45fps 就
    * 把粒子和震屏降一档，之后不再量。只在局中挂着：主菜单的帧时说明不了棋盘
@@ -504,7 +531,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       window.clearTimeout(pendingBeat.id);
       pendingBeat = null;
     }
-    streak.reset();
     flipChain = 0;
     flipLedger?.reset();
     bank?.reset();
@@ -927,10 +953,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       { pattern: s.labelPattern, line: s.labelWholeLine },
       flipLedger ?? undefined,
     );
-    // 步步为营没有连击倍率（玩家原话：「没有连击机制」）。这一局的「连续得分」
-    // 退的是**步数**，不是分数——两样都给就成了双份奖励，而且分数那一份还会把
-    // 「连着得分」的回报藏进一个玩家算不出来的乘数里。
-    const multiplier = hooks.puzzle ? 1 : streak.currentMultiplier();
+    /**
+     * 跨步连击和同一步之内的连锁倍率**都退役了**（《侵蚀阶梯》v1.2 §1.5：「拼出
+     * 分 = 翻面分（含拆除）+ 削线分，无任何过程系数」）。
+     *
+     * 这两个常量留着写成 1，是因为底下十几处（气泡上印的倍率、音效的档、震动的
+     * 档、连锁第几拍的判断）都在读它们：留一个恒 1 的值比把那十几处各删一遍安
+     * 全，也留得住「这一步是这次连锁的第几拍」那个信息（tierComboMult 只是不再
+     * 影响分数）。无限反转不受影响，它走自己的 1.5ⁿ。
+     */
+    const multiplier = 1;
     // A chain reaction within *this* move is rewarded on top of (not instead
     // of) the cross-move streak above: that streak's own multiplier is fixed
     // for the whole move (captured once, just above), so without this a
@@ -944,8 +976,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // but every additional step *within the same move* compounds faster than
     // spreading the same steps across separate moves ever could.
     let comboMult = 1;
-    // 同上：步步为营连同一步之内的连锁也不加倍（恒 1）。
-    const CASCADE_COMBO_FACTOR = hooks.puzzle ? 1 : 3;
+    const CASCADE_COMBO_FACTOR = 1;
     let totalRaw = 0;
     let moveWeight = 0;
     /**
@@ -975,7 +1006,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // to reveal (a shift that didn't score) — every earlier return path
       // out of step() already rendered at least once on its own.
       if (!totalRaw) hooks.render();
-      streak.apply(totalRaw); // advances/resets the streak level; its delta was already distributed live below
       if (!totalRaw) flipChain = 0;
       perf.onMove(moveWeight);
       updatePerfDisplay();
@@ -1129,7 +1159,27 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // pose never depends on it (see plankFlip.ts).
         const flipCells = s.matchGroups.flat();
         const faceSnaps = flipCells.length ? snapFlipFaces(refs.boardEl, flipCells) : null;
-        s.commit();
+        const committed = s.commit();
+        /**
+         * 棋盘顺手拆掉的炸弹：**拆除那一下按一次翻面计**（§1.3），所以既要补
+         * +2/枚，也要一起扣段。它们不在这一拍报出去的 points 里（afterCommit 要
+         * 等 commit 才跑），所以在这儿按差额补。
+         * 无限反转没有炸弹局，也不按翻面计分，所以那一局这儿恒 0。
+         */
+        const defused = Math.max(0, committed - s.flips);
+        if (defused > 0 && !hooks.flip) {
+          const bombPoints = POINTS_PER_FLIP * defused;
+          score += bombPoints;
+          totalRaw += bombPoints;
+          patternPoints += bombPoints;
+          scoreReel.setValue(score);
+        }
+        // 这一拍翻了几枚，侵蚀就扣几段（整线消除那一拍是 0）。降级了就重画一遍
+        // 棋盘：图案变小之后能凑成的组跟着变，棋盘上那几处提示也要跟着换。
+        if (committed > 0) {
+          const step = erosion.spend(committed);
+          if (step.dropped > 0) hooks.onErosion?.(step.level);
+        }
         // commit() is what actually turns the matched pieces over — a bonus
         // step's commit is a no-op, so this is exactly the flip moment.
         if (s.matchGroups.length) playFlip();
@@ -1385,6 +1435,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resume: doResume,
     finish: doFinish,
     resolveMove,
+    matchLen: () => erosion.level(),
+    erosionView: () => ({
+      level: erosion.level(),
+      segLeft: erosion.segLeft(),
+      segTotal: erosion.segTotal(),
+      unlocked: erosion.unlocked(),
+      par: erosion.par(),
+    }),
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();

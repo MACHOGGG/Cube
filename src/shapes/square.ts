@@ -17,14 +17,14 @@ import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreOf, sizeOf } from '../engine/targets';
 import { findTargets, type BoardView } from '../engine/targetMatch';
 import { targetPatternDefs } from '../engine/targetIcon';
-import { squareGrowth } from '../engine/matchGrowth';
+import { runLabel as runLabelOf, squareGrowth } from '../engine/matchGrowth';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
-import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
 import { modeKeyOf, suffixFor } from '../engine/runKey';
@@ -75,6 +75,13 @@ const GLYPH = `<svg viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12"
 
 // The board's two seed patterns (see findMatches below) — a 2x2 block and a
 // straight run of 4 — drawn as blank outlines for the in-HUD pattern hint.
+/**
+ * 这副棋盘的得分图案——**只剩一种**：同色 1×N 连线（《侵蚀阶梯》v1.2 §1.1）。
+ * 2×2 / 2+2 / 1-2-1 / 大三角那几种全部退役。
+ *
+ * 这儿画的是开局那一级（1×4）。图案会随侵蚀变短（4→3→2→1），HUD 上那一块按当前
+ * 级数现画（见 PR-7 的《得分图案》块）。
+ */
 const PATTERNS: PatternDef[] = [
   {
     label: '1×4',
@@ -83,15 +90,6 @@ const PATTERNS: PatternDef[] = [
       { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
       { kind: 'rect', cx: 2, cy: 0, half: 0.42 },
       { kind: 'rect', cx: 3, cy: 0, half: 0.42 },
-    ],
-  },
-  {
-    label: '2×2',
-    cells: [
-      { kind: 'rect', cx: 0, cy: 0, half: 0.42 },
-      { kind: 'rect', cx: 1, cy: 0, half: 0.42 },
-      { kind: 'rect', cx: 0, cy: 1, half: 0.42 },
-      { kind: 'rect', cx: 1, cy: 1, half: 0.42 },
     ],
   },
 ];
@@ -240,6 +238,13 @@ export function createSquareGame(): ShapeGame {
         return g;
       }
 
+      /**
+       * 开局盘面上别自带一坨同色——发牌时重摇，最多 500 次。
+       *
+       * 这里比「已经能得分了」严：它连三连、2×2、斜着三颗都拦掉，而《侵蚀阶梯》
+       * v1.2 §1.1 之后能得分的只有同色 1×N（开局那一级是 4 枚），方块这副还根本
+       * 不按斜线算分。留着这几条是为了一眼的观感，不是为了防白送分。
+       */
       function hasInitialClump(g: Tile[][]): boolean {
         const R = g.length,
           C = g[0].length;
@@ -591,7 +596,7 @@ export function createSquareGame(): ShapeGame {
       // 三条长大的规矩在 engine/matchGrowth.ts（squareGrowth），和别的七副的放
       // 在一处；体检脚本量的就是那一份真件。
       // rows/cols 传的是函数：消掉整行整列时棋盘会当场变小。
-      const { extendRunHoriz, extendRunVert, extendRect } = squareGrowth({
+      const { extendRunHoriz, extendRunVert } = squareGrowth({
         rows: () => rows,
         cols: () => cols,
         effColorAt,
@@ -624,29 +629,36 @@ export function createSquareGame(): ShapeGame {
         return out;
       }
 
+      /** 这一局的「几连」怎么念（枚数是变的，见 engine/matchGrowth 的 runLabel）。 */
+      const runLabel = (n: number) => runLabelOf(lang, n);
+
+      /**
+       * 得分图案**只剩同色 1×N 连线**（《侵蚀阶梯》v1.2 §1.1）：2×2 那一种连同小球的
+       * 2+2、1-2-1、三角的大三角一起删了。
+       *
+       * N 不是写死的 4，是**现问**控制器（`matchLen()`）——侵蚀阶梯会在一步之内把它
+       * 从 4 降到 3、2、1（§2），缓存一份就会慢一拍。
+       */
       function findMatches(mask: Set<string> | null): Match[] {
         if (targets) return findTargetMatches(mask);
         const matches: Match[] = [];
-        for (let r = 0; r < rows - 1; r++)
-          for (let c = 0; c < cols - 1; c++) {
-            const seed: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
-            if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
-            const region = extendRect(r, c, r + 1, c + 1);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
-          }
+        const n = controller.matchLen();
+        const label = runLabel(n);
         for (let r = 0; r < rows; r++)
-          for (let c = 0; c <= cols - 4; c++) {
-            const seed: Cell[] = [[r, c], [r, c + 1], [r, c + 2], [r, c + 3]];
+          for (let c = 0; c + n <= cols; c++) {
+            const seed: Cell[] = [];
+            for (let k = 0; k < n; k++) seed.push([r, c + k]);
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
-            const region = extendRunHoriz(r, c, c + 3);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
+            const region = extendRunHoriz(r, c, c + n - 1);
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label });
           }
         for (let c = 0; c < cols; c++)
-          for (let r = 0; r <= rows - 4; r++) {
-            const seed: Cell[] = [[r, c], [r + 1, c], [r + 2, c], [r + 3, c]];
+          for (let r = 0; r + n <= rows; r++) {
+            const seed: Cell[] = [];
+            for (let k = 0; k < n; k++) seed.push([r + k, c]);
             if (!cellsSameColor(seed) || !touches(seed, mask)) continue;
-            const region = extendRunVert(c, r, r + 3);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
+            const region = extendRunVert(c, r, r + n - 1);
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label });
           }
         return matches;
       }
@@ -726,15 +738,6 @@ export function createSquareGame(): ShapeGame {
        * 靠它画「消失前长什么样」那一帧，见 playBlankTransition），再把 color 和
        * dotColor 都打成 BLANK，于是 isBlank 那几处自动全都认得它。
        */
-      function clearStarGroup(cells: Cell[]) {
-        for (const [r, c] of cells) {
-          const t = grid[r][c];
-          if (isBlank(t)) continue;
-          pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
-          t.color = BLANK;
-          t.dotColor = BLANK;
-        }
-      }
 
       function buildCascadeConfig(): CascadeConfig {
         return {
@@ -746,7 +749,6 @@ export function createSquareGame(): ShapeGame {
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
-          clearStars: clearStarGroup,
           resetMaskOnLineBonus: true,
           isTerminalAfterLineBonus: () => rows === 0 || cols === 0,
         };
@@ -858,6 +860,10 @@ export function createSquareGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：方块 36×6。
+        // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        boardTiles: BOARD_DIM * BOARD_DIM,
+        boardColors: PALETTES.standard.length,
         lang,
         practice: !!opts?.practice,
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。

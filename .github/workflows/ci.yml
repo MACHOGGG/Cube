@@ -317,16 +317,21 @@ jobs:
         run: |
           npx esbuild xhs/src/oldKernel.ts --bundle --format=esm --outfile=/tmp/oldkernel.mjs
           node scripts/check-downlevel.mjs /tmp/oldkernel.mjs
-      # 一组图案值几分。这条规则原先在八副棋盘里各抄一遍，一共十六处——星星要单
-      # 独一套算法，十六处各改一遍必漏，而漏掉的那一副不会崩、不会白屏，只会安静
-      # 地按旧尺子给分，最后混进同一张排行榜。所以规则收成了
-      # src/engine/groupScore.ts 一处，这道门量两件事：那几个拍板过的数算得对，
-      # 而且**没有哪副棋盘又抄了一份** Math.max(4, …)。第二条是重点——这个仓库
-      # 已经栽过三次「门只认字面量、不认成效」的跟头。
-      - name: 一组图案值几分
+      # 计分：**每翻一枚 +2**（《侵蚀阶梯》v1.2 §1）。这一道接替了 check-star-score
+      # （《星星跟随色块消除》连同「纯星星组＝枚数²＋消除」整条路一起退役）。量的
+      # 是成效不是字面量：两组共用的那一枚只算一次、混合组按翻面枚数算、全是星星的
+      # 线无事发生、拆掉的炸弹在 commit 的回报里多出一枚。
+      - name: 计分：每翻一枚 +2
         run: |
-          npx esbuild src/engine/groupScore.ts --bundle --format=esm --outfile=/tmp/group.mjs
-          node scripts/check-star-score.mjs /tmp/group.mjs
+          npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
+          node scripts/check-flip-score.mjs /tmp/scoring.mjs
+      # 侵蚀阶梯（§2）：段数合计＝全盘枚数、通式复算＝字面表、结转、基准 par。
+      # 「合计对得上」是整套规则的地基——对不上就会出现「图案已经到 1 枚，盘上还剩
+      # 几枚没翻」那种说不清的尾巴，而它不崩也不报错。
+      - name: 侵蚀阶梯：段数与基准
+        run: |
+          npx esbuild src/engine/erosion.ts --bundle --format=esm --outfile=/tmp/erosion.mjs
+          node scripts/check-erosion.mjs /tmp/erosion.mjs
 
   # 要开真浏览器的那一批。和上面那个 job 并行，所以它慢几分钟不拖累谁。
   #

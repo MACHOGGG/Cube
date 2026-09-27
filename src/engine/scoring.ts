@@ -8,46 +8,15 @@ export interface CascadeLabels {
   line: string;
 }
 
-export interface StreakTracker {
-  /** Feeds one move's raw (un-multiplied) points in; returns the score delta to add (0 if the move scored nothing, which also resets the streak). */
-  apply(points: number): number;
-  /** The multiplier the *next* scoring move would receive if it scores right now. */
-  currentMultiplier(): number;
-  reset(): void;
-}
-
 /**
- * Consecutive scoring moves step the multiplier up by half each time: the
- * 1st move in a streak keeps its own points as-is (×1), the 2nd is ×1.5, the
- * 3rd ×2, the 4th ×2.5 — each move's *own* raw points, not a running sum.
- * Any move that scores nothing resets the streak for the next one.
+ * 跨步连击（×1 / 1.5 / 2 / 2.5）**已经退役**——《侵蚀阶梯》v1.2 §1.5：
+ * 「拼出分 = 翻面分（含拆除）+ 削线分，无任何过程系数」。
  *
- * Additive rather than doubling on purpose: a long streak should be worth
- * chasing without letting one lucky run dwarf every other score.
+ * 一起退役的还有：同一步之内每拍 ×3 的连锁倍率、结算时的时间系数、有效得分率系
+ * 数、以及 0.95^未翻面。留下的只有两样乘数，各有各的理由：无限反转自己那条
+ * 1.5ⁿ（下面 flipStreakDelta，那一局不吃侵蚀、也不乘步数系数），和结算页上那个
+ * **步数系数**（§5，算在拼出分之外，对局中不显示）。
  */
-export function createStreakTracker(): StreakTracker {
-  let streakLevel = 0; // 0 = no active streak yet; k = the k-th consecutive scoring move just applied
-
-  function reset() {
-    streakLevel = 0;
-  }
-
-  function currentMultiplier(): number {
-    return 1 + 0.5 * streakLevel;
-  }
-
-  function apply(points: number): number {
-    if (points <= 0) {
-      reset();
-      return 0;
-    }
-    const delta = points * currentMultiplier();
-    streakLevel++;
-    return delta;
-  }
-
-  return { apply, currentMultiplier, reset };
-}
 
 /**
  * 无限反转的连击：连续第 n 次得分 = 单次得分 × base^(n−1)，每次四舍五入取整。
@@ -132,23 +101,16 @@ export interface CascadeConfig {
    * weight 也不记（这个回调不碰分数），所以计分和「有效得分率」的口径不变。
    */
   afterCommit?(scored: Cell[]): Cell[];
-  /**
-   * 一组**整组都是星星**的图案得分了——把这几格从棋盘上拿掉（留空位）。
-   *
-   * 这是《星星跟随色块消除》里唯一的新机制。普通的一组（里头有色块）照旧：色块
-   * 翻成星星，星星留在原地，分也照旧是 max(4, 整组枚数)。只有整组都是星星的那一
-   * 种按星星枚数平方给分，然后**消除**。
-   *
-   * 「消除」这件事同时也是这条规则的防刷分闸：星星从棋盘上没了，同一批星星就凑
-   * 不回同一个形状，所以不需要另记一本账（对比 createToggleLedger——无限反转翻过
-   * 去还能翻回来，那边才需要账本）。
-   *
-   * 不实现这个回调 = 这副棋盘不开「星星单独成图案」，整组星星照旧不给分。八副
-   * 棋盘现在都实现了；留成可选是为了让「没实现就退回老行为」这件事在类型上成立，
-   * 而不是靠记性。
-   */
-  clearStars?(cells: Cell[]): void;
 }
+
+/**
+ * 每翻一枚色块 +2（《侵蚀阶梯》v1.2 §1.2）。
+ *
+ * 算的是**这一拍真的翻了几枚**，不是各组的枚数之和：两组共用一枚（十字路口那一
+ * 枚同时属于横竖两条线）时那一枚只算一次——§1.2「同一步同一枚只算一次」。混合组
+ * 按翻面枚数算，所以 3 色块 + 1 星星的 1×4 是 +6，不是 +8。
+ */
+export const POINTS_PER_FLIP = 2;
 
 /** 无限反转里同一组棋子最多连着给几次分：正面一次、翻过去反面一次。 */
 export const TOGGLE_SCORES_PER_GROUP = 2;
@@ -226,7 +188,18 @@ export interface CascadeStep {
   /** What paid out, for the gain bubble ("4连", "整线"…). */
   label: string;
   /** Applies this step's mutation: flips matchGroups' cells to their dot face (a no-op for a bonus step, whose cells are already dot-faced and already removed by the time next() returns). Call once, after showing the pre-flip highlight, before requesting the next step. */
-  commit(): void;
+  /**
+   * 这一拍**图案本身**要翻几枚（去重之后）。分就是按它算的（每枚 +2）。
+   * 棋盘顺手拆掉的炸弹不在里头——那要等 commit 跑完才知道，见下面。
+   */
+  flips: number;
+  /**
+   * 真正把这一拍的翻面落到棋盘上，**并回报这一拍一共翻了几枚**——`flips` 加上棋盘
+   * 顺手拆掉的炸弹（§1.3：「拆除那一下按一次翻面计：+2 分、消耗一段侵蚀」）。
+   * 多出来的那几枚的分由控制器补上；侵蚀阶梯扣的是这个总数。
+   * 整线消除那一拍返回 0：那条线上全是星星，一枚都没翻。
+   */
+  commit(): number;
 }
 
 export interface CascadeStepper {
@@ -321,73 +294,73 @@ export function createCascadeStepper(
         lineBonusGroups: lineBonuses,
         weight: 3 * lineBonuses.length,
         label: labels.line,
-        commit() {},
+        flips: 0,
+        // 整线消除不翻任何东西（那条线上全是星星），所以不扣段。
+        commit: () => 0,
       };
     }
 
     const nextMask = new Set<string>();
     const idsOf = (m: Match) => m.cells.map(([r, c]) => cfg.tileAt(r, c).id);
-    /** 整组都是星星（一枚色块都没有）。这一种走消除那条路。 */
-    const allStars = (m: Match) => m.cells.every(([r, c]) => cfg.tileAt(r, c).face === 'dot');
     /**
-     * 整组星星能不能得分。两个条件都要：
+     * 一组要算数，里头至少得有一枚色块（《侵蚀阶梯》v1.2 §1.1：「图案里至少要有
+     * 一枚色块；全是星星的线无事发生」）。
      *
-     *  · 这副棋盘认得「消除」（实现了 clearStars）；
-     *  · **不是无限反转**。那一局翻过去还能翻回来，「消除」和它的本意打架
-     *    （玩家的原话是「无限反转维持原样」），所以那一局照旧只认「组里至少有一
-     *    枚正面」。
+     * 这一条同时也是防刷分的全部：一组已经翻过的棋子再怎么滑回同一个形状也不会
+     * 再得分，因为里头没有可翻的了。无限反转是例外（翻过去还能翻回来），所以那
+     * 一局另带一本账（ledger）。
      */
-    const starsScore = !cfg.toggleOnMatch && Boolean(cfg.clearStars);
     const matches = dedupe(
-      cfg
-        .findMatches(mask)
-        .filter(
-          (m) =>
-            m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor') ||
-            (starsScore && allStars(m)),
-        ),
+      cfg.findMatches(mask).filter((m) => m.cells.some(([r, c]) => cfg.tileAt(r, c).face === 'flavor')),
     ).filter((m) => !ledger || ledger.allows(idsOf(m)));
     if (matches.length) {
-      let points = 0;
       const toFlip = new Set<string>();
-      /** 整组都是星星的那几组：commit 里走消除，不走翻面。 */
-      const toClear: Cell[][] = [];
       for (const m of matches) {
         ledger?.note(idsOf(m));
-        points += m.points;
-        const clearing = starsScore && allStars(m);
-        if (clearing) toClear.push(m.cells);
         for (const [r, c] of m.cells) {
           nextMask.add(cellKey(r, c));
-          // 要消除的那一组一枚都不翻——它们马上就不在盘上了，翻了也是白翻，而且
-          // 翻一下会让淡出动画从「星星变色块」那一帧开始，看着像出了错。
-          if (clearing) continue;
           // 普通规则只翻正面；无限反转一组里每一枚都翻（反面翻回正面）。
           if (cfg.toggleOnMatch || cfg.tileAt(r, c).face === 'flavor') toFlip.add(cellKey(r, c));
         }
       }
+      /**
+       * 这一拍值几分。
+       *
+       * 普通规则（《侵蚀阶梯》v1.2 §1.2）：**每翻一枚 +2**，按这一拍去重之后真的
+       * 要翻的那个集合算——两组共用的那一枚只算一次。各组自己的 `points` 在这条路
+       * 上没人看。
+       *
+       * 无限反转照旧按组给分（玩家 2026-09-27：「图案跟着变 1×N，但不吃侵蚀，计分
+       * 保留它自己那一套」）：那一局翻过去还能翻回来，按翻面枚数算就成了来回翻刷
+       * 分。它外面还要再乘 1.5ⁿ，在 gameController 里。
+       */
+      const points = cfg.toggleOnMatch
+        ? matches.reduce((sum, m) => sum + m.points, 0)
+        : POINTS_PER_FLIP * toFlip.size;
       mask = nextMask;
       return {
         points,
         matchGroups: matches.map((m) => m.cells),
         lineBonusGroups: [],
-        // A pattern that grew past its 4-cell seed is worth two actions.
+        // A pattern that grew past its seed is worth two actions.
         weight: matches.reduce((sum, m) => sum + (m.cells.length > 4 ? 2 : 1), 0),
         label: matches.map((m) => m.label ?? labels.pattern).join(' · '),
+        flips: toFlip.size,
         commit() {
           for (const key of toFlip) {
             const [r, c] = key.split(',').map(Number);
             const t = cfg.tileAt(r, c);
             t.face = cfg.toggleOnMatch && t.face === 'dot' ? 'flavor' : 'dot';
           }
-          // 消除放在翻面之后：两件事不会落在同一格（一组要么整组星星、要么带色
-          // 块），但顺序固定下来，将来加别的机制时不用重新想。
-          for (const cells of toClear) cfg.clearStars?.(cells);
           // 棋盘顺手动的那几格（炸弹被连带拆掉）也算进下一拍的遮罩。
           // 这会儿 mask 已经是 nextMask 了（上面那一行），而 commit 一定在
           // 下一次 next() 之前跑，所以直接往里加就是加进下一拍。
           const also = cfg.afterCommit?.(matches.flatMap((m) => m.cells)) ?? [];
           for (const [r, c] of also) mask?.add(cellKey(r, c));
+          // 拆掉的炸弹**也算一次翻面**（§1.3）。它的 +2 不在上面那个 points 里
+          // ——afterCommit 要等 commit 才跑，那时候分已经报出去了——所以控制器按
+          // 「回报数 − flips」把差额补上（见 gameController）。
+          return toFlip.size + also.length;
         },
       };
     }

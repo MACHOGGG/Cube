@@ -12,13 +12,13 @@ import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP
 import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
-import { extendRunInLine, growParallelogram } from '../engine/matchGrowth';
+import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
-import { STRINGS as MATCH_LABELS, STRINGS as SHELL } from '../i18n';
+import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import { SEVEN_RHOMBI, sevenBallXY } from '../engine/ballLattice';
 import type { ShapeGame, ShapeGameOpts } from './types';
@@ -46,31 +46,27 @@ const MIN_LINE_BONUS_LEN = 3;
 
 const GLYPH = `<svg viewBox="0 0 32 32"><circle cx="16" cy="4" r="4" fill="#B23A3A"/><circle cx="8" cy="12" r="4" fill="#D89B1E"/><circle cx="24" cy="12" r="4" fill="#4C68B0"/><circle cx="16" cy="20" r="4" fill="#2F9E52"/><circle cx="8" cy="28" r="4" fill="#8067A8"/><circle cx="24" cy="28" r="4" fill="#2F8A96"/></svg>`;
 
-// The board's 3 seed patterns (see findRunMatches/CLUSTERS below), positioned
-// with the exact same (r,c) -> screen transform the live board uses, drawn
-// as blank outlines for the in-HUD pattern hint.
+// 得分图案的示意图：位置用的是真棋盘那一套 (r,c) → 屏幕坐标的变换，画成空心轮
+// 廓摆在 HUD 里。
+//
+// 现在只剩 1×N 那一张（《侵蚀阶梯》v1.2 §1.1）。下面那张 CLUSTERS 表（SEVEN_RHOMBI
+// 那三个朝向）**不再是得分图案**——只剩一个用处：发牌时别让开局盘面自带一坨同色
+// （hasInitialClump）。
 function iconPos(r: number, c: number): [number, number] {
   return [(c - r) * 1, (c + r) * Math.sqrt(3)];
 }
+/**
+ * 这副棋盘的得分图案——**只剩一种**：同色 1×N 连线（《侵蚀阶梯》v1.2 §1.1）。
+ * 2×2 / 2+2 / 1-2-1 / 大三角那几种全部退役。
+ *
+ * 这儿画的是开局那一级（1×4）。图案会随侵蚀变短（4→3→2→1），HUD 上那一块按当前
+ * 级数现画（见 PR-7 的《得分图案》块）。
+ */
 const PATTERNS: PatternDef[] = [
   {
     label: '1×4',
     cells: [0, 1, 2, 3].map((c) => {
       const [cx, cy] = iconPos(0, c);
-      return { kind: 'circle' as const, cx, cy, r: 0.95 };
-    }),
-  },
-  {
-    label: '2+2',
-    cells: ([[0, 0], [0, 1], [1, -1], [1, 0]] as const).map(([r, c]) => {
-      const [cx, cy] = iconPos(r, c);
-      return { kind: 'circle' as const, cx, cy, r: 0.95 };
-    }),
-  },
-  {
-    label: '1-2-1',
-    cells: ([[0, 0], [0, 1], [1, 0], [1, 1]] as const).map(([r, c]) => {
-      const [cx, cy] = iconPos(r, c);
       return { kind: 'circle' as const, cx, cy, r: 0.95 };
     }),
   },
@@ -153,6 +149,11 @@ function allClusters(): Cell[][] {
       }
   return groups;
 }
+/**
+ * 发牌时用的「一坨同色」表，**不是得分图案**——2×2 那一族在《侵蚀阶梯》v1.2 §1.1
+ * 里退役了。留着它只为一件事：开局盘面上别自带一坨同色（见 hasInitialClump），
+ * 那看着像「这局已经解过一半了」。
+ */
 const CLUSTERS = allClusters();
 
 // Each family's vector must equal the actual on-screen delta caused by
@@ -547,29 +548,29 @@ export function createCircleSevenGame(): ShapeGame {
         return true;
       }
 
+      /** 这一局的「几连」怎么念（枚数是变的，见 engine/matchGrowth 的 runLabel）。 */
+      const runLabel = (n: number) => runLabelOf(lang, n);
+
+      /**
+       * 得分图案**只剩同色 1×N 连线**（《侵蚀阶梯》v1.2 §1.1）：2+2、1-2-1 那几种
+       * 连同方块的 2×2、三角的大三角一起删了。
+       *
+       * N 不是写死的 4，是**现问**控制器（`matchLen()`）——侵蚀阶梯会在一步之内把它
+       * 从 4 降到 3、2、1（§2），缓存一份就会慢一拍。
+       */
       function findRunMatches(mask: Set<string> | null): Match[] {
         const matches: Match[] = [];
+        const n = controller.matchLen();
+        const label = runLabel(n);
         for (const line of LINES) {
           const cells = line.cells;
-          for (let i = 0; i + 3 < cells.length; i++) {
-            const seed = cells.slice(i, i + 4);
+          for (let i = 0; i + n <= cells.length; i++) {
+            const seed = cells.slice(i, i + n);
             if (!qualifies(seed, mask)) continue;
-            const region = extendRunInLine(cells, i, i + 3, effColorAt, isLiveCell);
-            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelRun4 });
+            const region = extendRunInLine(cells, i, i + n - 1, effColorAt, isLiveCell);
+            matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label });
           }
         }
-        for (let r = 0; r < DIM; r++)
-          for (let c = 0; c < DIM; c++)
-            for (const [du, dv] of RHOMBI) {
-              const seed = rhombusCells(r, c, du, dv);
-              if (!seed || !qualifies(seed, mask)) continue;
-              const positionAt = (u: number, v: number): Cell | null => {
-                const cell: Cell = [r + u * du[0] + v * dv[0], c + u * du[1] + v * dv[1]];
-                return cellValid(cell[0], cell[1]) ? cell : null;
-              };
-              const region = growParallelogram(positionAt, effColorAt, isLiveCell);
-              matches.push({ cells: region, points: groupPoints(region, (r, c) => grid[r][c]), label: MATCH_LABELS[lang].labelBlock22 });
-            }
         return matches;
       }
 
@@ -620,15 +621,6 @@ export function createCircleSevenGame(): ShapeGame {
        * 这个「消除」同时是这条规则的防刷分闸：星星从盘上没了，同一批星星凑不回
        * 同一个形状。
        */
-      function clearStarGroup(cells: Cell[]) {
-        for (const [r, c] of cells) {
-          const t = grid[r][c];
-          if (isBlank(t)) continue;
-          pendingBlankSnapshot.set(cellKey(r, c), t.dotColor);
-          t.color = BLANK;
-          t.dotColor = BLANK;
-        }
-      }
 
       function buildCascadeConfig(): CascadeConfig {
         return {
@@ -636,7 +628,6 @@ export function createCircleSevenGame(): ShapeGame {
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
           onLineBonus: applyLineBonus,
-          clearStars: clearStarGroup,
           resetMaskOnLineBonus: false,
         };
       }
@@ -703,6 +694,10 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       const controller = createGameController(refs, {
+        // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：七色圆球 49×7。
+        // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        boardTiles: PER_COLOR * PALETTES.standard.length,
+        boardColors: PALETTES.standard.length,
         lang,
         practice: !!opts?.practice,
         // 模式名和存档键后缀都由 engine/runKey.ts 推。这副棋盘只有「有钟／没钟」
