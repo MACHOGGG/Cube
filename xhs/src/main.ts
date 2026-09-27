@@ -43,6 +43,8 @@ import { installBackNav, setScreenBack } from '../../src/engine/backNav';
 import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
+import { suffixFor } from '../../src/engine/runKey';
+import { registerCards } from '../../src/shapes/registry';
 
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
@@ -66,6 +68,21 @@ const FLIP_SECONDS = 60;
 const root = document.getElementById('app') as HTMLElement;
 const squareGame = createSquareGame();
 const circleGame = createCircleGame();
+
+/**
+ * 把这一版这两副棋盘的名片交给那张表（shapes/registry.ts）。
+ *
+ * ⚠️ **这一句不喊，这一版当场就崩。** `cardOf(id)` 查不到会直接抛（那是它的本意
+ * ——从前四处按 id 前缀猜、猜错不报错，见 registry.ts 文件头），而 gameShell 每开
+ * 一局都要查一次。网页版在 src/main.ts 建好六个游戏之后喊了这一句；2026-09 加这套
+ * 注册的时候只改了网页那一头，这一端**漏了**，于是老虎机那一局开不起来，报
+ * 「不认识的玩法 id：square」。check-vsweb 逮到的。
+ *
+ * 为什么不在 registry.ts 里直接 import 工厂：每一副棋盘都 import gameShell，而
+ * gameShell 要用 cardOf，反过来 import 就成环，那张表会在第一次被查的时候还是空的。
+ * 所以**每一个入口自己注册它真的建了哪几副**——这一版只有两副。
+ */
+registerCards([squareGame.card, circleGame.card]);
 /**
  * 这一版只有方块和小球两副棋盘。
  *
@@ -88,17 +105,27 @@ function startWith(family: Family, opts: ShapeGameOpts, back: () => void): void 
 /**
  * 成绩那一页要翻的六本存档：两个玩法 × 三种模式。
  *
- * 键名问玩法自己要（card.bestKey）再接后缀，和网页版存的时候用的是同一条
- * 算法（见 square.ts 结尾那句 `flipMode ? bestKey + '_flip' : ...`）。老虎
- * 机没有自己的后缀——它换的只是得分图案，记在基础那本上，和网页版一致。
+ * 键名问玩法自己要（card.bestKey）再接后缀，而后缀**一律走 engine/runKey.ts 的
+ * `suffixFor`**，和棋盘真正存进去时调的是同一个函数。
+ *
+ * ⚠️ 这六行从前是手写的字面量（`''` / `'_bomb2'` / `'_flip'`）。手写的那一版
+ * 2026-09 静悄悄地全错了：《侵蚀阶梯》v1.2 §6 给每个键都加了一截 `_ero1`
+ * （scoring.ts 的 SCORING_RULES_VERSION），炸弹那一版也早升到了第 3 版——于是这
+ * 一页按三个不存在的键去找，**成绩页上一条记录都没有，累计得分永远是 0**，而且
+ * 不报任何错。check-vsweb 逮到的：网页版那一栏有一行，这一版是空的。
+ *
+ * 网页版的 `recordSources`（src/main.ts）因为同一件事修过一次，那边的说明写得更
+ * 长。两处现在调的是同一个函数，下一次升版本两边一起跟着走。
+ *
+ * 老虎机没有自己的后缀——它换的只是得分图案，记在基础那本上，和网页版一致。
  */
 const BOOKS: Book[] = [
-  { card: squareGame.card, suffix: '' },
-  { card: circleGame.card, suffix: '' },
-  { card: squareGame.card, suffix: '_bomb2' },
-  { card: circleGame.card, suffix: '_bomb2' },
-  { card: squareGame.card, suffix: '_flip' },
-  { card: circleGame.card, suffix: '_flip' },
+  { card: squareGame.card, suffix: suffixFor('base') },
+  { card: circleGame.card, suffix: suffixFor('base') },
+  { card: squareGame.card, suffix: suffixFor('bomb') },
+  { card: circleGame.card, suffix: suffixFor('bomb') },
+  { card: squareGame.card, suffix: suffixFor('flip') },
+  { card: circleGame.card, suffix: suffixFor('flip') },
 ];
 
 /** 上一屏留下来要拆的东西（一局游戏挂了一堆监听，换屏前得让它自己收拾）。 */
@@ -143,6 +170,7 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
     // 钉在这儿而不是函数开头：教学那一屏不是棋盘，它要能上下滑、底色也照旧。
     document.documentElement.classList.add('is-playing');
     enhanceShareOverlay();
+    dropProSwitch();
     setScreenBack(onBack);
   };
 
@@ -214,6 +242,23 @@ function showTutorial(after?: () => void, onStory?: (fam: StoryFamily) => void) 
 function enhanceShareOverlay() {
   swapHintForActions(root.querySelector<HTMLImageElement>('#endShareImg'), '.end-share');
   swapHintForActions(root.querySelector<HTMLImageElement>('#shareImage'), '.share-modal');
+}
+
+/**
+ * 暂停面板里那颗《Pro》，这一版不要。
+ *
+ * 玩家定的：这一版**没有 Pro 模式**。Pro 是「在棋盘上描出这一枚得分之后会变成什么
+ * 颜色」的开关，属于完整版；留在这儿，玩家拨得动、也真的会生效，于是这一版就凭空
+ * 多了一个完整版才有的东西。
+ *
+ * 和上面换分享键同一条路：**挂完之后改 DOM**，不去动 src/ui/gameShell.ts——那个文
+ * 件是网页版正在跑的东西，这一版的规矩是只读不写。
+ *
+ * 整行一起摘（不是只藏那颗键）：`.btn-row` 是个 flex，光把按钮 display:none 掉会
+ * 留下一条空行的外边距，面板上多一道说不清的缝。
+ */
+function dropProSwitch() {
+  root.querySelector('#proBtn')?.closest('.btn-row')?.remove();
 }
 
 /**

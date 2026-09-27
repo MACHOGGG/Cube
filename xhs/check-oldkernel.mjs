@@ -244,14 +244,24 @@ for (const key of list) {
   }
   say(errs.length === before, '拖了十下没抛错', errs.slice(before, before + 2).join(' | '));
 
-  // 顶上那三个读数：拖过之后至少得分/有效得分率/用时有一个动了，
-  // 说明这十下真的走进了游戏逻辑，不只是没抛错而已。
-  const hud = await p.evaluate(() => ({
-    score: document.querySelector('.score-cell')?.textContent.trim().replace(/\s+/g, ' ') || '',
-    perf: document.querySelector('#hud-perf')?.textContent.trim() || '',
-    time: document.querySelector('#hud-time')?.textContent.trim() || '',
+  // 顶上那两块：拖过之后《拼出得分》或《得分图案》里得有一个动了，说明这十下真
+  // 的走进了游戏逻辑，不只是没抛错而已。
+  //
+  // 这一条原先读的是 `#hud-perf` 和 `#hud-time`，还拿「用时不是 0:00」当尺子。那
+  // 两个东西 2026-09 都没有了（《侵蚀阶梯》v1.2 PR-7：顶排从三格变两块，《行动有
+  // 效率》在任何界面都不存在，钟只有计时那一档才画、摆在暂停键上方）。于是这一条
+  // 量的是两个查不到的选择器，**永远红**，而红的不是它守的那件事。
+  //
+  // 现在量的是这一版真有的两样：刻度环的段数（每翻一枚熄一段，engine/erosion.ts）
+  // 和《拼出得分》那个数。两个里有一个动了就算走进去了。
+  const hudAfter = await p.evaluate(() => ({
+    score: document.querySelector('#scoreReel')?.textContent.trim() || '',
+    // 刻度环上还亮着几段：熄掉的那些 class 里带 --off
+    lit: document.querySelectorAll('#patternBlock [class*="tick"]:not([class*="off"])').length,
+    block: !!document.querySelector('#patternBlock'),
   }));
-  say(hud.time !== '' && hud.time !== '0:00', '这十下真的进了游戏（读数在走）', JSON.stringify(hud));
+  say(hudAfter.block && (hudAfter.score !== '' && hudAfter.score !== '0'),
+    '这十下真的进了游戏（读数在走）', JSON.stringify(hudAfter));
 
   // 转横屏，看棋盘会不会跟着重排（ResizeObserver 补丁的正戏）
   await p.setViewportSize({ width: 844, height: 390 });
@@ -366,19 +376,24 @@ for (const key of list) {
       }
     }
 
-    // ③ 《怎么玩》那一屏（六条规则 + 配图）
+    // ③ 《怎么玩》那一屏（五条规则 + 配图）
     if (await p.$('.xhs-how')) {
       await p.click('.xhs-how');
       await p.waitForTimeout(1000);
     }
     const how = await p.evaluate(() => ({
       modal: !!document.querySelector('.howto-modal, .howto-ov'),
-      rules: document.querySelectorAll('.howto-ov .tut-rule, .howto-list .tut-rule').length,
-      arts: document.querySelectorAll('.howto-ov .tut-rule-art').length,
+      // 要排掉 .tut-rule--extra：那是五条底下另起的一节（炸弹、无限反转各一条附
+      // 注），不是规则本身。从前这儿没排，而上面那一条写的是 `>= 5`——五条加两条
+      // 附注是 7，照样 ≥ 5，于是这个选择器松了也没人发现。
+      rules: document.querySelectorAll('.howto-ov .tut-rule:not(.tut-rule--extra), .howto-list .tut-rule:not(.tut-rule--extra)').length,
+      arts: document.querySelectorAll('.howto-ov .tut-rule:not(.tut-rule--extra) .tut-rule-art').length,
       story: document.querySelectorAll('.howto-story').length,
     }));
-    say(how.modal && how.rules >= 5 && how.arts >= 5,
-      '《怎么玩》六条规则连配图都画出来了', JSON.stringify(how));
+    // 五条，不是六条（教学 2026-09 改成玩家亲笔的五条）。这儿量的是「每一条都配了
+    // 图」，所以条数和幅数要**相等**，不是各自 ≥5——错位的时候两个数都还 ≥5。
+    say(how.modal && how.rules === 5 && how.arts === 5,
+      '《怎么玩》五条规则连配图都画出来了', JSON.stringify(how));
 
     // ④ 分镜动画——这一版唯一一屏「不是我画的、也不是棋盘」的界面
     if (how.story >= 1) {

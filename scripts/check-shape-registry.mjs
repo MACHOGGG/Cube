@@ -138,5 +138,36 @@ check('删掉的那两个 id 不在任何一副棋盘的名片上',
     !/createTriangleBigGame|createTriangleAdvancedGame/.test(main));
 }
 
+// ⑥ **每一个建棋盘的入口，都得自己喊一声 registerCards。**
+//
+// 这张表由入口注册，不由 registry.ts 直接 import 工厂（成环，见那个文件头）。代价
+// 是：多一个入口就多一处要记得喊，而漏喊**不是编译错，是运行时抛**——`cardOf` 查
+// 不到就扔，gameShell 每开一局查一次。
+//
+// 真出过：2026-09 加这套注册时只改了 src/main.ts，小红书那个入口（xhs/src/main.ts，
+// 它自己 createSquareGame() / createCircleGame()）漏了，于是那一版一开局就报「不认
+// 识的玩法 id：square」。check-vsweb 逮到，可那是一道要开浏览器、跑十几分钟的门；
+// 这一条是静态扫描，几毫秒，进得了快档。
+{
+  /** 去掉 // 行注释和 /* *\/ 块注释——只看真的会跑的那些字。 */
+  const stripComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const ENTRIES = ['src/main.ts', 'xhs/src/main.ts'];
+  let scanned = 0;
+  for (const f of ENTRIES) {
+    if (!existsSync(f)) { check(`${f} 在`, false, '入口清单该跟着改了'); continue; }
+    // 先把注释剥掉再找。第一版没剥，于是把那一句整行注释掉之后这道门照样绿——
+    // 反控当场把它照出来了：`// registerCards([` 里也有这个词。
+    const src = stripComments(readFileSync(f, 'utf8'));
+    const builds = [...src.matchAll(/\bcreate\w*Game\(\)/g)].length;
+    if (!builds) continue;   // 这个入口不建棋盘，不归这一条管
+    scanned++;
+    const ok = /\bregisterCards\s*\(/.test(src);
+    check(`${f} 建了 ${builds} 副棋盘，也喊了 registerCards`, ok,
+      ok ? '' : '漏了——这一版一开局就会抛「不认识的玩法 id」');
+  }
+  // 非空的尺子：清单里至少要有两个入口真的在建棋盘，不然上面那个循环一圈都不转。
+  check('扫到的入口不止一个（不然上面那一条是空的）', scanned >= 2, `${scanned} 个`);
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);
