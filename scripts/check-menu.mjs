@@ -81,12 +81,14 @@ const boxes = await page.$$eval('.center-pick-opt', (els) =>
     return { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom) };
   }),
 );
-check('计时弹窗里是三只表', boxes.length === 3, `看到 ${boxes.length} 个`);
-check('三只一样大，而且是方的',
+// 两只，不是三只：三角那副基础棋盘 2026-09 删了（《侵蚀阶梯》v1.2 PR-6），计时
+// 这一档跟着只剩方块和小球。
+check('计时弹窗里是两只表', boxes.length === 2, `看到 ${boxes.length} 个`);
+check('两只一样大，而且是方的',
   boxes.every((b) => b.w === boxes[0].w && Math.abs(b.h - b.w) <= 1),
   JSON.stringify(boxes.map((b) => `${b.w}×${b.h}`)));
 const span = Math.max(...boxes.map((b) => b.bottom)) - Math.min(...boxes.map((b) => b.top));
-check('三只挨在一起，没散开一屏', span <= boxes[0].h * 2 + 40, `上下共 ${span}px`);
+check('两只挨在一起，没散开一屏', span <= boxes[0].h * 2 + 40, `上下共 ${span}px`);
 
 // ---- 3. 点在不是选项的地方 = 不选了 ---------------------------------------
 await page.mouse.click(195, 800);
@@ -237,28 +239,37 @@ async function cardWidths(width, height) {
 for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
+  /*
+   * 锁着的五张：老虎机、无限反转、步步为营、七色圆球、大三角。
+   *
+   * **大三角（六边蜂窝 54）2026-09 换上了锁**（《侵蚀阶梯》v1.2 PR-6 把它挪进
+   * GENIUS_LAYOUTS），顶掉的是删掉的 V 型三角。张数没变，名字变了——所以下面
+   * 那张 WANT 表才是真正量得到这件事的地方。
+   */
   check(`${label}：五张锁着的卡都在`, cards.length === 5, brief);
-  // 玩家点名的顺序，宽屏三排、窄屏五排——同一条链，断在不同的地方。
+  // 玩家点名的顺序，宽屏三排、窄屏几排——同一条链，断在不同的地方。
   const wide = w >= 720 || (w > h && w >= 560);
   const got = await menuOrder(w, h);
   const WANT = wide
     ? [
-        ['方块', '圆球', '三角'],
+        // 基础只剩两张（三角那一副删了）。第二排还是六张，所以 --home-card-cap
+        // 那道公式的除数一个字没动。
+        ['方块', '圆球'],
         ['计时挑战', '基础炸弹', '多人游玩', '老虎机模式', '无限反转', '步步为营'],
-        ['菱形方块', '六边圆球', '七色圆球', '大三角', '进阶三角'],
+        // 《更多布局》四张：三角那一栏只剩六边蜂窝（大三角）一张。
+        // ⚠️ 这一条同时守着一个真出过的 bug：《更多布局》那一圈要走三族
+        // （menu.ts 的 LAYOUT_SHAPES），走两族的话大三角会凭空消失，而且不报错。
+        ['菱形方块', '六边圆球', '七色圆球', '大三角'],
       ]
     : [
-        // 窄屏：一排两张摆完为止，能玩的先摆，天才特供那四张（老虎机、无限
-        // 反转、七色圆球、V 型三角）收在最后——玩家点的。
+        // 窄屏：一排两张摆完为止，能玩的先摆，天才特供那五张（老虎机、无限
+        // 反转、步步为营、七色圆球、大三角）收在最后——玩家点的。
         ['方块', '圆球'],
-        ['三角', '多人游玩'],
-        ['计时挑战', '基础炸弹'],
-        ['菱形方块', '六边圆球'],
-        ['大三角', '老虎机模式'],
-        // 两张都是竖长条的图，视觉分量相当。加上这一张之后窄屏正好排满七排，
-        // 从前那张孤零零的「进阶三角」没有了。
+        ['多人游玩', '计时挑战'],
+        ['基础炸弹', '菱形方块'],
+        ['六边圆球', '老虎机模式'],
         ['无限反转', '步步为营'],
-        ['七色圆球', '进阶三角'],
+        ['七色圆球', '大三角'],
       ];
   if (got.kind === 'rows') {
     const rows = got.items;
@@ -268,13 +279,14 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
     check(`${label}：每一排的顺序都对`,
       JSON.stringify(rows) === JSON.stringify(WANT),
       rows.map((r) => r.join(' · ')).join('  |  '));
-    // 十四张一样大：张数少的那几排不能因为人少就长得比别人大。
-    // ⚠️ 宽屏第二排从五张变六张之后（menu.ts 的 WIDE_PER_ROW），这一条是
-    // --home-card-cap 那道公式的岗哨：公式里少了「一排站得下几张」那一项，第二
-    // 排的六张就会被挤得比第三排的五张窄，这里立刻红。
+    // 十二张一样大：张数少的那几排不能因为人少就长得比别人大。
+    // ⚠️ 宽屏第二排是六张（menu.ts 的 WIDE_PER_ROW），这一条是 --home-card-cap
+    // 那道公式的岗哨：公式里少了「一排站得下几张」那一项，第二排的六张就会被挤
+    // 得比别的排窄，这里立刻红。
     const sizes = await cardWidths(w, h);
     const span = Math.max(...sizes) - Math.min(...sizes);
-    check(`${label}：十四张图标一样大`, span <= 2, `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
+    check(`${label}：${WANT.flat().length} 张图标一样大`, span <= 2,
+      `${Math.min(...sizes)}–${Math.max(...sizes)}px`);
   } else {
     // 轴上没有「排」，只有一条链。摆的次序还是窄屏那一条（玩家点名的顺序），
     // 所以把 WANT 摊平了比——次序要是散了，这儿立刻红。
@@ -288,7 +300,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
       got.items.join(' · '));
   }
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
-  check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
+  check(`${label}：五把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
   check(`${label}：招牌收在卡片里`, cards.every((c) => c.inside));
 }

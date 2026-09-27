@@ -200,13 +200,23 @@ const seatClosed = (seat) => {
 };
 
 /** The boards a host may choose. Anything else is not a mode we ship. */
+/**
+ * 主持人能摆上来的棋盘。
+ *
+ * 2026-09（《侵蚀阶梯》v1.2 PR-6）删了两副三角：原《三角》（整块大三角）和 V 形
+ * `triangleAdvanced`。这张表跟着收成六个——留着已经不存在的 id 只会让一屋子人开局
+ * 之后集体被弹回主页（客户端按 id 找不到那副棋盘就退回主菜单）。
+ *
+ * `triangleBig` 是六边蜂窝 54，删剩的唯一一副三角，天才特供。
+ */
 const MODES = new Set([
-  'square', 'circle', 'triangle',
-  'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced',
+  'square', 'circle',
+  'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig',
 ]);
+// 头像那三个形状和棋盘无关，别跟着一起改。
 const AVATAR_SHAPES = new Set(['circle', 'triangle', 'square']);
-/** 随机得分目标能开在哪几副棋盘上——就是三个基础玩法。 */
-const SLOT_MODES = new Set(['square', 'circle', 'triangle']);
+/** 随机得分目标能开在哪几副棋盘上——就是两个基础玩法（三角那一副删了）。 */
+const SLOT_MODES = new Set(['square', 'circle']);
 /** 无限反转能开在哪几副棋盘上——基础方块和小球（玩家定的）。 */
 const FLIP_MODES = new Set(['square', 'circle']);
 /** Control characters, which a player's name has no business containing. */

@@ -134,7 +134,7 @@ export interface I18nStrings {
    * 就够了，这里是要让一个还没付钱的人看懂他买到的是什么。
    */
   geniusNowCircleSeven: string;
-  geniusNowTriangleAdvanced: string;
+  geniusNowTriangleBig: string;
   /** 开多人房间——GENIUS_LAYOUTS 之外唯一一件订阅立刻拿到的东西。 */
   geniusHostRooms: string;
   // ---- subscription: the paywall, and the web's e-mail sign-in ----
@@ -633,7 +633,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides Genius Exclusives',
     geniusNowTitle: 'Unlocked the moment you subscribe',
     geniusNowCircleSeven: 'Seven-colour diamond ball board',
-    geniusNowTriangleAdvanced: 'Advanced V-shaped triangle board',
+    geniusNowTriangleBig: 'Hexagonal triangle board, 54 tiles',
     geniusSoonTitle: 'Coming soon',
     geniusHostRooms: 'Put up a room and race your friends online',
     subscribeTitle: 'Become a Slides Genius',
@@ -957,7 +957,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Exclusivités Slides Génie',
     geniusNowTitle: 'Débloqué dès votre abonnement',
     geniusNowCircleSeven: 'Plateau losange à sept couleurs',
-    geniusNowTriangleAdvanced: 'Plateau triangle avancé en V',
+    geniusNowTriangleBig: 'Plateau triangle hexagonal, 54 pièces',
     geniusSoonTitle: 'Bientôt disponible',
     geniusHostRooms: 'Montez une salle et faites la course en ligne',
     subscribeTitle: 'Devenir un Slides Génie',
@@ -1282,7 +1282,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     subscribeTitle: '成為 Slides 天才',
     geniusNowTitle: '訂閱後立刻解鎖',
     geniusNowCircleSeven: '七色菱形小球棋盤',
-    geniusNowTriangleAdvanced: '進階V型三角棋盤',
+    geniusNowTriangleBig: '六邊三角棋盤，54 枚',
     geniusSoonTitle: '敬請期待',
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
     subscribeIntro: '立刻解鎖更多，不定時更新，隨時取消',
@@ -1606,7 +1606,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     subscribeTitle: '成为 Slides 天才',
     geniusNowTitle: '订阅后立刻解锁',
     geniusNowCircleSeven: '七色菱形小球棋盘',
-    geniusNowTriangleAdvanced: '进阶V型三角棋盘',
+    geniusNowTriangleBig: '六边三角棋盘，54 枚',
     geniusSoonTitle: '敬请期待',
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
     subscribeIntro: '立刻解锁更多，不定时更新，随时取消',
@@ -2130,11 +2130,18 @@ export function detectLang(): Lang {
   return 'en';
 }
 
-export type TutorialShape = 'square' | 'circle' | 'triangle';
+/**
+ * 有分镜教学的那几族——**两族**（《侵蚀阶梯》v1.2 PR-6）。
+ *
+ * 三角那一族的基础棋盘删了，只剩六边蜂窝 54 那副天才特供的布局；布局本来就没有
+ * 自己的分镜教学（只有基础那几副有），所以这一族现在一段也没有。
+ * `slides_tutorial_seen_triangle` 那把旧钥匙留在玩家本地没人读了——不删是因为删它
+ * 得写一段迁移，而它占的那几个字节不值得。
+ */
+export type TutorialShape = 'square' | 'circle';
 const TUTORIAL_SEEN_KEYS: Record<TutorialShape, string> = {
   square: TUTORIAL_SEEN_KEY,
   circle: 'slides_tutorial_seen_circle',
-  triangle: 'slides_tutorial_seen_triangle',
 };
 
 export function hasSeenTutorial(shape: TutorialShape = 'square'): boolean {
@@ -2176,7 +2183,7 @@ export function markFirstRunDone(): void {
 
 /** 这台设备看过哪几族的教学。进小屋时报给服务器，开局前它据此判「可不可能有新手」。 */
 export function seenTutorials(): TutorialShape[] {
-  return (['square', 'circle', 'triangle'] as TutorialShape[]).filter((s) => {
+  return (['square', 'circle'] as TutorialShape[]).filter((s) => {
     try {
       return hasSeenTutorial(s);
     } catch {

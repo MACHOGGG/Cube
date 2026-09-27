@@ -11,12 +11,16 @@
  *
  * **这道门必须自己解开那个陷阱**（CLAUDE.md《家族按 id 前缀认，但有一个陷阱》）：
  * 两个三角文件在 2026-09 对调过内容，所以 main.ts 里是
- *   const triangleGame     = createTriangleBigGame();   // 菜单「三角」  ← triangleBig.ts
- *   const triangleBigGame  = createTriangleGame();      // 菜单「大三角」← triangle.ts
- * 照文件名推断会正好推反，所以下面从 main.ts 现读这层映射，不写死。
+ *   const triangleBigGame = createTriangleGame();      // 菜单「大三角」← triangle.ts
+ * 照文件名推断会正好推反（文件叫 triangle.ts，菜单上的名字是《大三角》，card id 是
+ * `triangleBig`），所以下面从 main.ts 现读这层映射，不写死。
  *
- * 只量声明了 ROW_LENS 的那几副（三角两副、六边小球、进阶三角）——方块和小球是
- * 规则的网格，不走 ROW_LENS。量不到的那几副会打印出来，不假装查过。
+ * 另外两副三角 2026-09 删了（《侵蚀阶梯》v1.2 PR-6：原《三角》id `triangle`，代码在
+ * triangleBig.ts；V 形 `triangleAdvanced`），所以「对调」现在只剩半边——下面那一条
+ * 断言跟着改成「留下的这一副的名实仍然是交叉的」。
+ *
+ * 只量声明了 ROW_LENS 的那几副（六边三角、六边小球）——方块和小球是规则的网格，不走
+ * ROW_LENS。量不到的那几副会打印出来，不假装查过。
  */
 import { readFileSync } from 'node:fs';
 
@@ -40,9 +44,16 @@ for (const m of main.matchAll(/const (\w+)Game = (create\w+Game)\(\)/g)) {
 }
 check('从 main.ts 读出了菜单 id 到实现文件的映射', Object.keys(ID_FILE).length >= 6,
   JSON.stringify(ID_FILE));
-check('那个对调的陷阱还在（菜单「三角」跑的是 triangleBig.ts）',
-  ID_FILE.triangle === 'triangleBig' && ID_FILE.triangleBig === 'triangle',
-  `triangle→${ID_FILE.triangle} / triangleBig→${ID_FILE.triangleBig}`);
+// 名实交叉的那一半还在：card id `triangleBig`（菜单上的《大三角》，六边蜂窝 54）跑
+// 的是 shapes/triangle.ts。下面按文件名查 ROW_LENS，查错文件就会去核错一副棋盘的枚数
+// ——那正是这道门当年逮到的事故。
+check('留下的那一副三角，名实仍然是交叉的（id triangleBig ← triangle.ts）',
+  ID_FILE.triangleBig === 'triangle',
+  `triangleBig→${ID_FILE.triangleBig}`);
+// 删掉的那两副不许回来（和 check-shape-registry 那一条对照着看）。
+check('删掉的那两副三角不在 main.ts 的清单里',
+  ID_FILE.triangle === undefined && ID_FILE.triangleAdvanced === undefined,
+  `triangle→${ID_FILE.triangle} / triangleAdvanced→${ID_FILE.triangleAdvanced}`);
 
 // ── 文件 → 枚数（ROW_LENS 求和）──────────────────────────────────────
 const countOf = (file) => {

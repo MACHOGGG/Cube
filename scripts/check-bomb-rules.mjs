@@ -229,10 +229,22 @@ const tally = (arr) => {
 }
 
 // ---------------------------------------------------------------------------
-// 4. 接线：六副棋盘 + 两个引擎文件
+// 4. 接线：接了炸弹的那几副棋盘 + 两个引擎文件
 // ---------------------------------------------------------------------------
 {
-  const SHAPES = ['square', 'circle', 'triangle', 'squareDiamond', 'circleHex', 'triangleBig'];
+  /*
+   * 按**文件名**列，不按 card id——这个仓库里两者是交叉的（`shapes/triangle.ts` 的
+   * card id 是 `triangleBig`，六边蜂窝 54）。
+   *
+   * 2026-09（《侵蚀阶梯》v1.2 PR-6）删了两副三角：原《三角》（代码在 triangleBig.ts）
+   * 和 V 形（triangleAdvanced.ts），所以这张表从六个收到五个。
+   *
+   * 六边蜂窝那一副**留在表里**：它的炸弹机制一行没动，只是主菜单上的进阶炸弹那一排
+   * 不再offer它（main.ts 的 bombLayoutGames 收成两副）。机制还在就照样要守——哪天它
+   * 又被摆回那一排，这几条断言是现成的。
+   * 七色圆球没接红球机制，从来不在这张表里。
+   */
+  const SHAPES = ['square', 'circle', 'squareDiamond', 'circleHex', 'triangle'];
   for (const name of SHAPES) {
     const s = read(`src/shapes/${name}.ts`);
     check(`${name}：炸弹反面走 dealBombBacks`, s.includes('dealBombBacks('));
@@ -300,7 +312,9 @@ const tally = (arr) => {
   const board = read('src/ui/leaderboard.ts');
   // 这一处最容易漏：改了服务端的 KIND 却没改客户端，玩家点开的是归档榜，新分一个都
   // 看不见。反转那一版（flip → flip2）第一遍就漏了，是这条的姊妹检查逮到的。
-  check('客户端点开的也是新榜', board.includes("named(BASE_THREE, 'bomb3')"));
+  // BASE_TWO：基础只剩方块和小球（《侵蚀阶梯》v1.2 PR-6 删了三角那一副），
+  // leaderboard.ts 里那个常量跟着从 BASE_THREE 改名了。
+  check('客户端点开的也是新榜', board.includes("named(BASE_TWO, 'bomb3')"));
   check('客户端的无限反转也点在新榜上', board.includes("named(['square', 'circle'], 'flip2')"));
 
   check('版本号本身是 3', BOMB_RULES_VERSION === 3, String(BOMB_RULES_VERSION));

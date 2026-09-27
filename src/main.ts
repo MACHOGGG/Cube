@@ -20,7 +20,6 @@ import './engine/themePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
-import { renderTriangleTutorial } from './ui/triangleTutorial';
 import { loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
@@ -68,9 +67,7 @@ import { createTriangleGame } from './shapes/triangle';
 import { createCircleGame } from './shapes/circle';
 import { createCircleHexGame } from './shapes/circleHex';
 import { createSquareDiamondGame } from './shapes/squareDiamond';
-import { createTriangleBigGame } from './shapes/triangleBig';
 import { createCircleSevenGame } from './shapes/circleSeven';
-import { createTriangleAdvancedGame } from './shapes/triangleAdvanced';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 import { reducedMotion } from './engine/reducedMotion';
 import * as smoothScroll from './engine/smoothScroll';
@@ -99,53 +96,61 @@ const root: HTMLElement = rootEl;
 
 const squareGame = createSquareGame();
 const circleGame = createCircleGame();
-// 变量按「身份」命名，不按文件命名——这两行是有意交叉的。
-// 2026-09 把两个三角的棋盘对调了：主菜单上的《三角》后面装整块大三角
-// （triangleBig.ts 画的那块，上手容易得多），《更多布局》里的《大三角》
-// 后面装六边蜂窝（triangle.ts 画的那块）。身份本身在各自文件里已经换过，
-// 所以这里只要按新身份接上，main.ts 底下所有排布、记录、多人白名单都不
-// 用动，图标也照旧（图标是按 id 查的）。
-const triangleGame = createTriangleBigGame();
 const circleHexGame = createCircleHexGame();
 const squareDiamondGame = createSquareDiamondGame();
+/**
+ * 《大三角》——六边蜂窝 54 格，**天才特供**（GENIUS_LAYOUTS）。
+ *
+ * 变量名和文件名是交叉的，这一行是有意的：2026-09 把两个三角的棋盘对调过，
+ * `shapes/triangle.ts` 里画的是六边蜂窝、它的 card id 是 `triangleBig`。
+ * 《侵蚀阶梯》v1.2 PR-6 把另外两副三角删了（原《三角》整块大三角，代码在
+ * triangleBig.ts；以及 V 形 triangleAdvanced.ts），只剩这一副。
+ * 删的时候差点删错文件——认 id 不认文件名，这是这个仓库最老的一个坑。
+ */
 const triangleBigGame = createTriangleGame();
 const circleSevenGame = createCircleSevenGame();
-const triangleAdvancedGame = createTriangleAdvancedGame();
 /**
- * 把八张名片登记进 shapes/registry.ts。
+ * 把六张名片登记进 shapes/registry.ts。
  *
  * 「这一副归哪一族、按哪一套规则讲」从前是四处各猜一遍（按 id 前缀），对不认识的 id
  * 还给出三种不同的静默默认值——理由和那张对照表在 registry.ts 的文件头。现在由棋盘
  * 自己在 card 里声明，这儿只是把它们交给那张表。
  *
- * **为什么注册在这儿、不在 registry.ts 里直接 import 八个工厂**：八副棋盘每一副都
+ * **为什么注册在这儿、不在 registry.ts 里直接 import 六个工厂**：每一副棋盘都
  * import gameShell，而 gameShell 要用 registry 的 cardOf——反过来 import 就成环，模块
  * 初始化的顺序会让那张表在第一次被查的时候还是空的。main.ts 是整张图的顶点，而且这
- * 八个实例本来就建在这儿，所以登记放在这一行：早于任何界面跑起来。
+ * 几个实例本来就建在这儿，所以登记放在这一行：早于任何界面跑起来。
  */
 registerCards([
-  squareGame, circleGame, triangleGame, circleHexGame,
-  squareDiamondGame, triangleBigGame, circleSevenGame, triangleAdvancedGame,
+  squareGame, circleGame, circleHexGame,
+  squareDiamondGame, triangleBigGame, circleSevenGame,
 ].map((g) => g.card));
 
-const games: ShapeGame[] = [squareGame, circleGame, triangleGame];
-// The 3 layouts bomb mode actually supports (进阶炸弹's own shape pool) —
-// kept separate from the full "更多布局" list below since 七色圆球 doesn't
-// have the red-hazard mechanic wired in.
-const bombLayoutGames: ShapeGame[] = [circleHexGame, squareDiamondGame, triangleBigGame];
-const layoutGames: ShapeGame[] = [...bombLayoutGames, circleSevenGame, triangleAdvancedGame];
-// Every board a multiplayer host can put in front of the room — the same
-// eight ids api/room.js will accept.
+/**
+ * 基础玩法**两张**：方块、小球（《侵蚀阶梯》v1.2 PR-6）。
+ *
+ * 从前是方块 / 小球 / 三角三张。三角那一副（整块大三角）删了，六边蜂窝 54 挪进
+ * 《更多布局》里的天才特供——所以「基础」这一排、计时那一排、炸弹那几排现在都是
+ * 两项。每一处「三个基础形状」的清单都跟着变成两个，一处没跟上就会去查一张不存
+ * 在的名片（cardOf 查不到直接抛）。
+ */
+const games: ShapeGame[] = [squareGame, circleGame];
+// 进阶炸弹支持的布局（七色圆球没接红球机制，所以和下面《更多布局》那张全表分开）。
+const bombLayoutGames: ShapeGame[] = [circleHexGame, squareDiamondGame];
+const layoutGames: ShapeGame[] = [...bombLayoutGames, circleSevenGame, triangleBigGame];
+// 小屋主持人能摆上来的每一副棋盘——和 api/room.js 认的那几个 id 是同一份。
 const everyGame: ShapeGame[] = [...games, ...layoutGames];
 // Everything on the home page, bucketed by the three base shapes the design
 // is organised around — see HomeLayout in ui/menu.ts.
 const homeLayout: HomeLayout = {
-  base: { square: squareGame.card, circle: circleGame.card, triangle: triangleGame.card },
-  advancedBomb: { square: squareDiamondGame.card, circle: circleHexGame.card, triangle: triangleBigGame.card },
+  base: { square: squareGame.card, circle: circleGame.card },
+  advancedBomb: { square: squareDiamondGame.card, circle: circleHexGame.card },
+  // 三角这一栏只剩六边蜂窝 54 一张（天才特供）。《更多布局》按「它是哪一族的变
+  // 体」分组，所以这一栏还在——只是里头从两张变成一张。
   moreLayouts: {
     square: [squareDiamondGame.card],
     circle: [circleHexGame.card, circleSevenGame.card],
-    triangle: [triangleBigGame.card, triangleAdvancedGame.card],
+    triangle: [triangleBigGame.card],
   },
 };
 
@@ -164,9 +169,8 @@ const recordSources: RecordSource[] = [
   // 《无限反转》只有基础方块和小球有。
   // 后缀跟着规则版本走：封顶之前那些局留在旧那张榜上归档，记录页只摆现行规则这一张。
   ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: suffixFor('flip'), mode: ' · ∞' })),
-  // 《真正解密 · 步步为营》三个基础玩法都有。三角这一栏用 triangleGame 变量，
-  // 不按文件名推——菜单上的「三角」由 triangleBig.ts 造（见文件开头那几行）。
-  ...[squareGame, circleGame, triangleGame].map((g) => ({ card: g.card, suffix: suffixFor('puzzle'), mode: ' · 步' })),
+  // 《真正解密 · 步步为营》两个基础玩法都有。
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('puzzle'), mode: ' · 步' })),
 ];
 
 /**
@@ -590,18 +594,17 @@ function tipFor(kind: PlayKey, make: () => { text: string; art: string }): Shape
  *     手走四步讲完。方块、小球、三角哪一张都走这一路——条子上的字和图跟着这
  *     一局的图形走，讲方块就画方块。
  *   · 已经打过别的基础玩法 → 'second'。前几条他上一局跟着走过一遍了，这一局
- *     只讲第 4 条：这一族消掉之后是留下一个空图形（小球、三角），还是拿走不
- *     再出现（方块）。这块条子先不出声，等他自己打出三次得分再开口。
+ *     只讲第 4 条：这一族消掉之后是留下一个空图形（小球），还是拿走不再出现
+ *     （方块）。这块条子先不出声，等他自己打出三次得分再开口。
  *
  * 第 3 条（星星和色块同色也能一起凑）是个例外：上一局要是没真的做到，
  * coachBar 会在 'second' 这一路前面补讲一次（见它的 mixedTaught）。
  *
- * 头一回打开的玩家只能点方块和小球两张（engine/firstPlay.ts 的
- * lockedForFirstPlay），所以三角走到这儿时必定是 'second'。
+ * 基础玩法**现在就只有方块和小球两张**（《侵蚀阶梯》v1.2 PR-6 删了三角那一副），
+ * 而头一回打开的玩家本来也只能点这两张（engine/firstPlay.ts 的 lockedForFirstPlay）。
  */
 function basicCoach(id: string): ShapeGameOpts {
-  const key: PlayKey | null =
-    id === 'square' ? 'square' : id === 'circle' ? 'circle' : id === 'triangle' ? 'triangle' : null;
+  const key: 'square' | 'circle' | null = id === 'square' ? 'square' : id === 'circle' ? 'circle' : null;
   if (!key || !firstTimeIn(key)) return {};
   // 先记下来再开局：这一局打到一半退出去，主菜单上这张卡也该熄了——他已经
   // 进去看过一遍了，光该让给还没点过的那一张。
@@ -865,12 +868,10 @@ function showFlipMode() {
 }
 
 /**
- * 《真正解密 · 步步为营》：挑方块、小球还是三角。天才特供，只从主菜单那张卡进来。
+ * 《真正解密 · 步步为营》：挑方块还是小球。天才特供，只从主菜单那张卡进来。
  *
- * 三角那一栏用的是 **triangleGame 这个变量**，不是按文件名找的：这个仓库里
- * `const triangleGame = createTriangleBigGame()`——菜单上的「三角」由
- * triangleBig.ts 造，两个三角文件在 2026-09 对调过内容，照文件名推会正好推反
- * （见 CLAUDE.md《家族按 id 前缀认，但有一个陷阱》）。
+ * 三角那一栏 2026-09（《侵蚀阶梯》PR-6）撤了——整块大三角那副棋盘删了，只剩的
+ * 六边蜂窝 54 是天才特供的布局，不在基础这一档里。
  *
  * 没有 room 入口：这一局不比时间，和小屋「同一段时间里谁分高」凑不到一起。
  */
@@ -883,7 +884,7 @@ function showPuzzleMode() {
     {
       onBack: showMenu,
       onStart: (family) => {
-        const game = family === 'square' ? squareGame : family === 'circle' ? circleGame : triangleGame;
+        const game = family === 'square' ? squareGame : circleGame;
         showGame(
           game,
           { steps: true, ...tipFor('puzzle', () => puzzleTip(currentLang)) },
@@ -930,7 +931,7 @@ function showLayoutsShowcase() {
   trackScreen('more-layouts');
   renderLayoutsShowcase(root, currentLang, backToProfile, [
     { id: circleSevenGame.card.id, shape: 'circle' },
-    { id: triangleAdvancedGame.card.id, shape: 'triangle' },
+    { id: triangleBigGame.card.id, shape: 'triangle' },
   ]);
   setNavTab(null);
   wireHomeTitle();
@@ -1225,8 +1226,7 @@ function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void, on
   teardown();
   trackScreen('tutorial');
   if (shape === 'square') renderTutorial(root, currentLang, onDone);
-  else if (shape === 'circle') renderCircleTutorial(root, currentLang, onDone);
-  else renderTriangleTutorial(root, currentLang, onDone);
+  else renderCircleTutorial(root, currentLang, onDone);
   setScreenBack(onBack);
 }
 
@@ -1301,11 +1301,18 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
  */
 const slotFamilyOf = (mode: string): Family => familyFromName(mode);
 
-/** 这一族对应的基础玩法。三角那一档是主菜单上《三角》后面那块整三角。 */
+/**
+ * 这一族对应的棋盘。
+ *
+ * 三角那一档**客户端已经走不到了**：老虎机那一屏只剩方块和小球两族
+ * （ui/slotMachine.ts 的 SLOT_SHAPES），`api/room.js` 的 SLOT_MODES 也收成两个。
+ * 留着这一支是给「服务器发来的 mode」兜底——小屋那一局的 mode 是服务器给的，部署
+ * 前开出来的屋里可能还躺着一个 'triangle'。回的是六边蜂窝 54，删剩的唯一一副三角。
+ */
 function randomTargetGame(family: Family): ShapeGame {
   if (family === 'square') return squareGame;
   if (family === 'circle') return circleGame;
-  return triangleGame;
+  return triangleBigGame;
 }
 
 

@@ -93,17 +93,19 @@ export function startStageHtml(o: StartStageOpts): string {
 export const COUNT_STEP_MS = 1000;
 
 /**
- * 建议横着玩的那两个玩法——七色圆球的菱形要转四分之一圈才躺得下，进阶三角
- * 是个横着张开的 V。开局页会请人把手机转过来，可是既要看清是哪一副棋盘、
- * 又要把手机转过来，这两件事挤在同样长的一段时间里谁也做不好。所以这两个
- * 玩法比别人多数一个：多出来的那一秒不是拖时间，它就是转手机那一下。
+ * 建议横着玩的玩法——七色圆球的菱形要转四分之一圈才躺得下。开局页会请人把手机
+ * 转过来，可是既要看清是哪一副棋盘、又要把手机转过来，这两件事挤在同样长的一段
+ * 时间里谁也做不好。所以它比别人多数一个：多出来的那一秒不是拖时间，它就是转手
+ * 机那一下。
  *
- * 这份名单要和 shape 文件里的 `landscape: true` 对得上（circleSeven.ts、
- * triangleAdvanced.ts）——那边决定要不要请人转手机，这边决定给不给他时间转，
- * 两边说的是同一件事。多人局的服务器提前量也跟着这份名单走，见 api/room.js
- * 里的 WIDE_MODES。
+ * 从前还有一个进阶三角（横着张开的 V），那副棋盘 2026-09 删了（《侵蚀阶梯》v1.2
+ * PR-6）。
+ *
+ * 这份名单要和 shape 文件里的 `landscape: true` 对得上（circleSeven.ts）——那边决
+ * 定要不要请人转手机，这边决定给不给他时间转，两边说的是同一件事。多人局的服务器
+ * 提前量也跟着这份名单走，见 api/room.js 里的 WIDE_MODES。
  */
-const LANDSCAPE_MODES = new Set(['circleSeven', 'triangleAdvanced']);
+const LANDSCAPE_MODES = new Set(['circleSeven']);
 
 /** 这个玩法的倒数从几数起。 */
 export const countFrom = (shapeId: string): number => (LANDSCAPE_MODES.has(shapeId) ? 5 : 4);

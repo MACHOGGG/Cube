@@ -9,7 +9,6 @@
 import { STRINGS, TUTORIAL_RULES, type Lang, type TutorialShape } from '../i18n';
 import { CTL_BACK } from './ctlIcons';
 import { RULE_ART } from './ruleArt';
-import { roundTriPath } from '../engine/roundTri';
 import { shapeName } from './shapeLabels';
 
 export interface TutorialPickerHandlers {
@@ -17,24 +16,23 @@ export interface TutorialPickerHandlers {
   onBack: () => void;
 }
 
-/** 棋子的那套标准色，和 titleRain 用的是同一份。 */
+/** 棋子的那套标准色，和 titleRain 用的是同一份。（蓝色那一个跟着三角那个入口一起
+ *  撤了，见下面。） */
 const GREEN = '#2F9E52';
 const RED = '#B23A3A';
-const BLUE = '#4C68B0';
 
-/** 三个入口：绿方块、红小球、蓝三角。 */
+/** 两个入口：绿方块、红小球。蓝三角那一个 2026-09 撤了——那副基础棋盘删了
+ *  （《侵蚀阶梯》v1.2 PR-6），它那段分镜也跟着删了。 */
 const SHAPE_GLYPH: Record<TutorialShape, string> = {
   square: `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="8" y="8" width="84" height="84" rx="22" fill="${GREEN}"/></svg>`,
   circle: `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="${RED}"/></svg>`,
-  // 圆角走 roundTri.ts 那一条，和棋盘、教学分镜、规则配图里的三角同一个形状；
-  // 同色的描边留着，是为了不改这枚图形原来的大小。
-  triangle: `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${roundTriPath([[50, 9], [94, 86], [6, 86]])}" fill="${BLUE}" stroke="${BLUE}" stroke-width="10" stroke-linejoin="round"/></svg>`,
 };
 
 export function renderTutorialPicker(root: HTMLElement, lang: Lang, handlers: TutorialPickerHandlers): void {
   const s = STRINGS[lang];
   const rules = TUTORIAL_RULES[lang];
-  const shapes: TutorialShape[] = ['square', 'circle', 'triangle'];
+  // 两个（三角那副基础棋盘 2026-09 删了，见《侵蚀阶梯》v1.2 PR-6）。
+  const shapes: TutorialShape[] = ['square', 'circle'];
   const name = (shape: TutorialShape) => shapeName(lang, shape, shape);
   root.innerHTML = `
     <div class="app tut-pick">

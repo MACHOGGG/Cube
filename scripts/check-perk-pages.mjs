@@ -106,14 +106,17 @@ async function backToProfile(before, label, backSel = '#backBtn') {
     cells: document.querySelectorAll('.tgt-cell').length,
     drawn: [...document.querySelectorAll('.tgt-cell')].every((c) => c.querySelector('.pattern-icon svg')),
     heads: document.querySelectorAll('.tgt-col-head svg').length,
-    // 三列并排，不是叠着。
+    // 并排，不是叠着。
     sameRow: (() => {
       const tops = [...document.querySelectorAll('.tgt-col')].map((c) => Math.round(c.getBoundingClientRect().top));
-      return tops.length === 3 && tops.every((t) => t === tops[0]);
+      return tops.length === 2 && tops.every((t) => t === tops[0]);
     })(),
   }));
-  check('更多得分目标：方块 / 小球 / 三角三列并排', t.sameRow && t.cols.join(',') === 'square:8,circle:7,triangle:5', t.cols.join(' '));
-  check('更多得分目标：二十个图案都画出来了', t.cells === 20 && t.drawn && t.heads === 3, `${t.cells} 格`);
+  // **两列，不是三列**（《侵蚀阶梯》v1.2 PR-6）：老虎机只开在方块和小球两族上了
+  // ——三角那副基础棋盘删了。三角那一族的目标数据在 engine/targets.ts 里留着没删
+  // （PR-8：永不被抽到），所以这一页少一列，那边一个字没动。
+  check('更多得分目标：方块 / 小球两列并排', t.sameRow && t.cols.join(',') === 'square:8,circle:7', t.cols.join(' '));
+  check('更多得分目标：十五个图案都画出来了', t.cells === 15 && t.drawn && t.heads === 2, `${t.cells} 格`);
   await backToProfile(before, '更多得分目标');
 }
 // 更多布局
@@ -134,9 +137,12 @@ async function backToProfile(before, label, backSel = '#backBtn') {
   check('更多布局：两张并排（不换行）',
     Math.abs((l.cards[0]?.top ?? 0) - (l.cards[1]?.top ?? 0)) <= 1,
     `${l.cards[0]?.top} / ${l.cards[1]?.top}`);
-  check('更多布局：是菱形七色小球和 V 形三角',
-    l.cards.map((c) => c.id).join(',') === 'circleSeven,triangleAdvanced' &&
-      /七色圆球/.test(l.cards[0]?.name || '') && /进阶三角/.test(l.cards[1]?.name || ''),
+  // 天才特供换了一位：V 形三角那副棋盘删了，六边蜂窝 54（菜单上的《大三角》，
+  // card id `triangleBig`）接上它的位置（《侵蚀阶梯》v1.2 PR-6 + geniusContent.ts
+  // 的 GENIUS_LAYOUTS）。
+  check('更多布局：是菱形七色小球和六边三角',
+    l.cards.map((c) => c.id).join(',') === 'circleSeven,triangleBig' &&
+      /七色圆球/.test(l.cards[0]?.name || '') && /大三角/.test(l.cards[1]?.name || ''),
     l.cards.map((c) => c.name).join(' / '));
   await backToProfile(before, '更多布局');
 }
@@ -252,7 +258,9 @@ async function pickerAt(width, height) {
       shapes: [...document.querySelectorAll('.tut-shape-btn')].map((b) => b.dataset.shape),
       stacked: (() => {
         const xs = [...document.querySelectorAll('.tut-shape-btn')].map((b) => { const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top)]; });
-        return xs.length === 3 && xs.every((x) => x[0] === xs[0][0]) && xs[0][1] < xs[1][1] && xs[1][1] < xs[2][1];
+        // 上下排着：横向中心都对齐，纵向一个比一个低（几个都成立，不写死张数）。
+        return xs.length >= 2 && xs.every((x) => x[0] === xs[0][0]) &&
+          xs.every((x, i) => i === 0 || xs[i - 1][1] < x[1]);
       })(),
       rules: rules.length,
       arts: rules.filter((r) => r.querySelector('.tut-rule-art .ra-tile, .tut-rule-art svg')).length,
@@ -275,7 +283,7 @@ async function pickerAt(width, height) {
       bigBtns: (() => {
         const page = document.querySelector('.tut-pick').getBoundingClientRect();
         const btns = [...document.querySelectorAll('.tut-shape-btn')];
-        return btns.length === 3 && btns.every((b) => {
+        return btns.length === 2 && btns.every((b) => {
           const r = b.getBoundingClientRect(); const cs = getComputedStyle(b);
           const kids = [...b.querySelectorAll('svg')].map((k) => k.getBoundingClientRect());
           const left = Math.min(...kids.map((k) => k.left));
@@ -303,10 +311,12 @@ async function pickerAt(width, height) {
 }
 for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   const m = await pickerAt(w, h);
-  check(`${label} · 教学挑选页：三个图形上下排着（方块、小球、三角）`, m.shapes.join(',') === 'square,circle,triangle' && m.stacked, m.shapes.join(','));
+  // 两个，不是三个：三角那副基础棋盘删了，它那段分镜也跟着删了（《侵蚀阶梯》
+  // v1.2 PR-6）。
+  check(`${label} · 教学挑选页：两个图形上下排着（方块、小球）`, m.shapes.join(',') === 'square,circle' && m.stacked, m.shapes.join(','));
   check(`${label} · 六条规则，每条配图`, m.rules === 6 && m.arts === 6 && m.texts.every((n) => n > 8), `${m.rules} 条 · ${m.arts} 幅`);
   check(`${label} · 六幅配图都在动`, m.animated === 6, `${m.animated} 幅`);
-  check(`${label} · 三个入口是横向的大圆角矩形按钮，图形和播放标志居中`, m.bigBtns);
+  check(`${label} · 两个入口是横向的大圆角矩形按钮，图形和播放标志居中`, m.bigBtns);
   check(`${label} · 没有《如何滑……重新观看》那两行字`, !m.oldTitle);
   check(`${label} · 《返回》是「<」的图示，在最下面，不压底排`, m.backGlyph && m.backText === '' && m.backIsLast && m.backBottomOk);
   check(`${label} · 整页一屏装下，不用滚`, !m.scrolls);

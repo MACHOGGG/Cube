@@ -18,9 +18,9 @@ export interface ExtraControl {
   label: string;
 }
 
-/** 横屏里得分图示留在棋盘上方那一条的两个玩法：它们横过来是宽度吃满的，
- *  两边没有空当可用（菱形躺着的七色圆球、张开的 V 形进阶三角）。 */
-const PATTERNS_ON_TOP = new Set(['circleSeven', 'triangleAdvanced']);
+/** 横屏里得分图示留在棋盘上方那一条的玩法：它横过来是宽度吃满的，两边没有空当
+ *  可用（菱形躺着的七色圆球）。另一副原本在这儿的 V 形进阶三角 2026-09 删了。 */
+const PATTERNS_ON_TOP = new Set(['circleSeven']);
 
 export interface ShellMeta {
   title: string;

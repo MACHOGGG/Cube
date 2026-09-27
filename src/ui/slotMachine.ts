@@ -16,18 +16,21 @@
  */
 import { STRINGS, type Lang } from '../i18n';
 import { drawPair, type Family, type TargetPattern } from '../engine/targets';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_BASE_TRIANGLE, ICON_LOCK } from './homeIcons';
+import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
 
-/** 三个基础玩法，和它们在主菜单上的那张图。 */
+/**
+ * 老虎机开在哪几族上，和它们在主菜单上的那张图。
+ *
+ * **两族，不是三族**（《侵蚀阶梯》v1.2 PR-6）：三角那副基础棋盘删了，剩下的六边
+ * 蜂窝 54 是天才特供的布局，不进这一屏。三角那一族的目标数据在 engine/targets.ts
+ * 里留着没删（PR-8：永不被抽到）——这一屏抽不到它，是因为这张表里没有它。
+ * `api/room.js` 的 SLOT_MODES 也跟着收成两个，两头要一致。
+ */
 const FAMILIES: { family: Family; shapeId: string; icon: string }[] = [
   { family: 'square', shapeId: 'square', icon: ICON_BASE_SQUARE },
   { family: 'circle', shapeId: 'circle', icon: ICON_BASE_CIRCLE },
-  // 主菜单上的《三角》后面装的是 triangleBig.ts 画的那块整三角，它自己的 id
-  // 就叫 'triangle'（两个三角的内容 2026-09 对调过，各自的身份也跟着换了，
-  // 见 main.ts 那段注释）。这里要的是玩家看到的那个名字，所以用它。
-  { family: 'triangle', shapeId: 'triangle', icon: ICON_BASE_TRIANGLE },
 ];
 
 export interface RandomTargetHandlers {

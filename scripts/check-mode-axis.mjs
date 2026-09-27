@@ -17,8 +17,7 @@
  *     下聚焦、再点一下开」，全站最常用的那一下就变成两下。反过来，滑动的尾巴被
  *     当成点击就会把人扔进一个他没想玩的玩法。
  *   · **滑不出两端。** 不循环是玩家定的，所以最后一张之后不能再滑出新东西。
- *   · **首玩期轴上只有两张。** 也是玩家定的；按了《我会玩》当场长成 14 张。
- *     （14 不是 13——menu.ts 那句「十三张」的注释漏算了后来加的步步为营。）
+ *   · **首玩期轴上只有两张。** 也是玩家定的；按了《我会玩》当场长成 CARDS 张。
  *   · **法务那五条链接和底排导航都不被压住。** 轴占满整屏，卡片从底排底下滑过
  *     ——所以量的不是「轴够不着底排」，是底排那两颗照样点得着、照样画在上面。
  *   · **轴从屏幕最顶铺到最底。** 玩家第四轮点名的（「鱼眼转盘的范围一直从头到尾
@@ -28,6 +27,17 @@
  */
 import { chromium } from 'playwright';
 const BASE = process.argv[2] || 'http://localhost:8958/';
+/**
+ * 轴上一共几站。
+ *
+ * 2026-09（《侵蚀阶梯》v1.2 PR-6）从 14 收到 12：三角那副基础棋盘和 V 形三角都删了。
+ * 写成一个常量而不是散在二十几处字面量里——从前就是散着的，删两副棋盘之后这道门有
+ * 十四条一起红，每一条都要人去认「这个 14 是张数还是别的什么」。
+ *
+ * 张数本身仍然**钉死**（不是从页面上数出来的）：数出来的话，哪天有一张卡悄悄不见了，
+ * 这道门只会跟着变小，一声不响。
+ */
+const CARDS = 12;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -39,7 +49,7 @@ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, is
 const errs = [];
 ctx.on('page', (p) => p.on('pageerror', (e) => errs.push(e.message)));
 
-/** 一台打过一局的手机（锁撤了，14 张卡都在轴上）。 */
+/** 一台打过一局的手机（锁撤了，CARDS 张卡都在轴上）。 */
 async function menuPage(extra = {}) {
   const page = await ctx.newPage();
   await page.addInitScript((ex) => {
@@ -158,7 +168,7 @@ const recordSkew = (pg) => pg.evaluate(() => {
 let page = await menuPage({ slides_played_square: '1' });
 {
   const s = await shot(page);
-  check('轴上有 14 张卡', s.cards.length === 14, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
+  check(`轴上有 ${CARDS} 张卡`, s.cards.length === CARDS, `${s.cards.length} 张：${s.cards.map((c) => c.name).join(' ')}`);
   /**
    * 卡片底下那行小字缩过一档（玩家第九轮：「主菜单的文字整体缩小字号」）。
    *
@@ -198,7 +208,7 @@ let page = await menuPage({ slides_played_square: '1' });
    */
   const hs = s.cards.filter((c) => c.h > 0).map((c) => c.h / (c.scale || 1));
   const spread = Math.max(...hs) - Math.min(...hs);
-  check('每一站等高（十四张的版面高度一致，差 < 2px）', spread < 2, `${Math.min(...hs).toFixed(1)}–${Math.max(...hs).toFixed(1)}px，共 ${hs.length} 张`);
+  check(`每一站等高（${CARDS} 张的版面高度一致，差 < 2px）`, spread < 2, `${Math.min(...hs).toFixed(1)}–${Math.max(...hs).toFixed(1)}px，共 ${hs.length} 张`);
 
   // 聚焦那张：正对选中线（容器正中），而且是最大的一张。
   const focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
@@ -213,14 +223,14 @@ let page = await menuPage({ slides_played_square: '1' });
   check(
     '画出来的东西不溢出自己的格子（量墨不量盒）',
     spill.length === 0,
-    spill.length ? spill.map((c) => `${c.name} 溢出 ${c.ink.dw.toFixed(0)}×${c.ink.dh.toFixed(0)}`).join('；') : '14 张全部在格子里',
+    spill.length ? spill.map((c) => `${c.name} 溢出 ${c.ink.dw.toFixed(0)}×${c.ink.dh.toFixed(0)}`).join('；') : `${CARDS} 张全部在格子里`,
   );
 }
 
 // ── 2. 逐对量「不相撞」：焦点扫过整条轴 ──────────────────────────────
 {
   let worst = { gap: 999, at: '' };
-  for (let target = 0; target < 14; target++) {
+  for (let target = 0; target < CARDS; target++) {
     // 直接把焦点设过去（不经手势），一次一项地量。
     await page.evaluate((i) => {
       const cards = [...document.querySelector('.mode-axis').children].filter((e) =>
@@ -326,7 +336,7 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.waitForTimeout(900);
   s = await shot(page);
   focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  check('往下滑到头就停在最后一张', focused.i === 13, `停在 ${focused.name}`);
+  check('往下滑到头就停在最后一张', focused.i === CARDS - 1, `停在 ${focused.name}`);
 }
 
 // ── 4b. 上下两头**什么都不盖**：从招牌和底排底下滑过去 ──────────────
@@ -500,7 +510,7 @@ let page = await menuPage({ slides_played_square: '1' });
     };
   });
   check('左右各一条点点轴', rail.rails === 2, `${rail.rails} 条`);
-  check('每条轴上一项一颗点', rail.dots.every((d) => d.length === 14), rail.dots.map((d) => d.length).join(' / '));
+  check('每条轴上一项一颗点', rail.dots.every((d) => d.length === CARDS), rail.dots.map((d) => d.length).join(' / '));
   const widest = rail.dots[0].reduce((a, b) => (b.w > a.w ? b : a));
   const smallest = rail.dots[0].reduce((a, b) => (b.w < a.w ? b : a));
   check('最大那颗明显比最小那颗大（有大小梯度）', widest.w - smallest.w > 2, `${smallest.w} → ${widest.w}px`);
@@ -611,7 +621,7 @@ let page = await menuPage({ slides_played_square: '1' });
    */
   check('慢拖也走得动（不是推不动）', slow >= 1, `慢拖 200px 走了 ${slow} 项`);
   check('同样 200px，快甩走得比慢拖远', fast > slow, `慢 ${slow} 项 / 快 ${fast} 项`);
-  check('快甩也没飞到底（还停得住）', fast < 13, `${fast} 项`);
+  check('快甩也没飞到底（还停得住）', fast < CARDS - 1, `${fast} 项`);
   await p5.close();
 }
 
@@ -653,7 +663,7 @@ let page = await menuPage({ slides_played_square: '1' });
   check('轴上一下都不震（玩家调定「零震动」）', vib.length === 0, `震了 ${vib.length} 下：${[...new Set(vib)].join('/')}`);
   // 尺子：这一段真的滑动过、也真的换过聚焦项——不然「没震」只是因为什么都没发生。
   const passed = await p6.evaluate(() => document.querySelectorAll('.mode-axis > .home-icon-btn').length);
-  check('尺子：这一段真的在轴上滑过（十四张卡都在）', passed === 14, `${passed} 张`);
+  check(`尺子：这一段真的在轴上滑过（${CARDS} 张卡都在）`, passed === CARDS, `${passed} 张`);
   await p6.close();
 }
 
@@ -870,17 +880,27 @@ let page = await menuPage({ slides_played_square: '1' });
     if (!mini) return null;
     const panel = mini.querySelector('.bomb-panel') || mini;
     const pr = panel.getBoundingClientRect();
-    const rows = [...panel.querySelectorAll('.bomb-row')].map((r) => r.getBoundingClientRect());
-    const chips = [...panel.querySelectorAll('.bomb-chip')].map((c) => c.getBoundingClientRect());
+    const rowEls = [...panel.querySelectorAll('.bomb-row')];
+    const rows = rowEls.map((r) => r.getBoundingClientRect());
+    const chipEls = [...panel.querySelectorAll('.bomb-chip')];
     const burst = panel.querySelector('.bomb-90s')?.getBoundingClientRect();
     return {
       rows: rows.map((r) => ({ h: r.height, top: r.top - pr.top, bottom: pr.bottom - r.bottom })),
       panelH: pr.height,
-      // 小片顶出自己那一层多少（负数＝还在层里）。前三颗在第一层，后三颗在第三层。
-      chipOut: chips.length
-        ? Math.max(...chips.map((c, i) => {
-            const r = rows[i < 3 ? 0 : 2];
-            return Math.max(r.top - c.top, c.bottom - r.bottom);
+      chipCount: chipEls.length,
+      /*
+       * 小片顶出自己那一层多少（负数＝还在层里）。
+       *
+       * 每一颗都和**它自己那一层**（DOM 上的父节点）比，不按「前几颗在第一层」数。
+       * 从前是写死的「前三颗、后三颗」：炸弹这一档 2026-09 从三颗变两颗（三角那副棋
+       * 盘删了，《侵蚀阶梯》v1.2 PR-6），第三颗于是被拿去和第一层比，量出来「顶出去
+       * 43px」——红的是尺子不是代码。
+       */
+      chipOut: chipEls.length
+        ? Math.max(...chipEls.map((c) => {
+            const cr = c.getBoundingClientRect();
+            const r = c.closest('.bomb-row').getBoundingClientRect();
+            return Math.max(r.top - cr.top, cr.bottom - r.bottom);
           }))
         : null,
       burstPos: burst ? getComputedStyle(panel.querySelector('.bomb-90s')).position : null,
@@ -915,6 +935,8 @@ let page = await menuPage({ slides_played_square: '1' });
      * 上，量不到那种差异。所以量的是「有没有留出余量」和「星芒在不在流里」：这
      * 两样一旦回到老写法，Chromium 上也立刻看得见。
      */
+    // 尺子：这三层里真的有小片可量（炸弹这一档现在是两档各两颗，中间那层是星芒）。
+    check('炸弹缩图里量到了小片（下面那一条才有意义）', m.chipCount === 4, `${m.chipCount} 颗`);
     check(
       '小片整个待在自己那一层里（留着余量，不是刚好卡住）',
       m.chipOut !== null && m.chipOut < -0.02 * m.panelH,
@@ -958,22 +980,45 @@ let page = await menuPage({ slides_played_square: '1' });
     return { i: idx, name: best.getAttribute('aria-label') };
   });
   /**
-   * 往下挪几项：**拨侧边那条点点**，不是拖中间的卡片。
+   * 这一段要滑到哪一项：**第一张「按下去真的会换一页」的卡**（下标 ≥ 1）。
+   *
+   * 不是随便滑几项就行。轴上的卡按下去分三种去处，只有一种会离开主菜单：
+   *   · 基础棋盘 / 多人游玩 / 布局 → 换一页（这一段要的就是它）；
+   *   · 计时、炸弹 → 就地弹一个居中的选择窗（`data-reopen`），主菜单还在；
+   *   · 锁着的那几张 → 弹订阅窗，主菜单也还在。
+   * 从前这儿是「滑 42px，点焦点上那一张」，落在下标 3 上，而那时候下标 3 恰好是
+   * 多人游玩。2026-09 删了三角那副基础棋盘（《侵蚀阶梯》v1.2 PR-6），整条链往前挪
+   * 了一位，下标 3 变成计时挑战——点下去弹的是选择窗，「离开了主菜单」当场红，红的
+   * 是尺子不是代码。所以改成**按去处找**，不按下标数。
+   */
+  const navIdx = await p9.evaluate(() => {
+    const cards = [...document.querySelectorAll('.mode-axis > .home-icon-btn')];
+    return cards.findIndex(
+      (el, i) => i >= 1 && !el.classList.contains('home-icon-btn--locked') && !el.dataset.reopen,
+    );
+  });
+  check('轴上找得到一张「按下去会换一页」的卡（下面几条才有意义）', navIdx >= 1, `第 ${navIdx} 项`);
+  /**
+   * 往下挪到它：**拨侧边那条点点**，不是拖中间的卡片。
    *
    * 从前这儿拖的是卡片，一把 54px、拨三把。第七轮把两条路分开之后，卡片那条
    * 明显钝了（玩家要的「灵敏度稍微低一点」），54px 一项都不走——这一段于是停在
    * 第 0 项，后面「退回来还在原处」就成了空话（停在 0 怎么退都在 0）。
-   * 滚轮一把 40px 正好三项，稳当，也顺带证明了滚轮真的在工作。
+   * 点点那条是一比一的（一项 13px，见 4j 那一节），所以直接按项数算像素。
    */
+  const RAIL_PITCH = 13;
   await p9.mouse.move(6, 620);
   await p9.mouse.down();
-  for (let k = 1; k <= 6; k++) { await p9.mouse.move(6, 620 - k * 7); await p9.waitForTimeout(30); }
+  const px = navIdx * RAIL_PITCH;
+  for (let k = 1; k <= 6; k++) { await p9.mouse.move(6, 620 - (k * px) / 6); await p9.waitForTimeout(30); }
   await p9.waitForTimeout(160);
   await p9.mouse.up();
   await p9.waitForTimeout(600);
   const left = await focusedNow();
-  // 先立前提：真的挪开了。停在第 0 项的话，下面两条「还在原处」自己就成立了。
-  check('先滑开几项（下面两条才有意义）', left && left.i > 0, `停在第 ${left?.i} 项 ${left?.name}`);
+  // 先立前提：真的挪开了，而且停在那张会换页的卡上。停在第 0 项的话，下面两条
+  // 「还在原处」自己就成立了。
+  check('先滑到那一项（下面几条才有意义）', left && left.i === navIdx,
+    `停在第 ${left?.i} 项 ${left?.name}（该是第 ${navIdx} 项）`);
   await p9.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
@@ -1083,7 +1128,7 @@ let page = await menuPage({ slides_played_square: '1' });
     let f = await p10.evaluate(() => window.__focus());
     /**
      * 步数上限。玩家 2026-09 把灵敏度调低了一档（gain 2 → 0.9、slowK 0.75 → 0.45），
-     * 同样一步 20px 走的项数只有从前的四成左右——160 步到不了第 13 项了（实测停在 12，
+     * 同样一步 20px 走的项数只有从前的四成左右——160 步到不了最后一项了（实测差一项，
      * 于是这一条红，红的是尺子不是代码）。
      *
      * 每一步带 120ms 等待，所以这个数直接决定这一段的墙上时间。到了目标就 break，所以
@@ -1112,7 +1157,8 @@ let page = await menuPage({ slides_played_square: '1' });
     const final = await p10.evaluate(() => window.__focus());
     return { seen, final };
   };
-  for (const [from, k, label] of [[0, 7, '中间那张'], [0, 13, '最后一张'], [13, 0, '第一张']]) {
+  const LAST = CARDS - 1;
+  for (const [from, k, label] of [[0, Math.floor(CARDS / 2), '中间那张'], [0, LAST, '最后一张'], [LAST, 0, '第一张']]) {
     const r = await slowTo(from, k);
     check(
       `慢慢拖到${label}（第 ${k} 项）、停住、松手，就停在那一张`,
@@ -1477,14 +1523,14 @@ let page = await menuPage({ slides_played_square: '1' });
     });
     worst.push({ at, min: Math.min(...got.a), n: got.n, top: got.top, bottom: got.bottom, vh: got.vh });
   }
-  check('两条轨各十四颗点（下面几条才有意义）', worst.every((w) => w.n === 14), worst.map((w) => w.n).join('/'));
+  check(`两条轨各 ${CARDS} 颗点（下面几条才有意义）`, worst.every((w) => w.n === CARDS), worst.map((w) => w.n).join('/'));
   check(
-    '任意焦点下，十四颗点的不透明度都 ≥ 0.25（可见窗口确已删除）',
+    `任意焦点下，${CARDS} 颗点的不透明度都 ≥ 0.25（可见窗口确已删除）`,
     worst.every((w) => w.min >= 0.24),
     worst.map((w) => `焦点 ${w.at}：最淡 ${w.min.toFixed(3)}`).join(' / '),
   );
   check(
-    '十四颗全在屏内（容器没把远端那几颗切掉）',
+    `${CARDS} 颗全在屏内（容器没把远端那几颗切掉）`,
     worst.every((w) => w.top >= -1 && w.bottom <= w.vh + 1),
     worst.map((w) => `焦点 ${w.at}：${w.top.toFixed(0)}–${w.bottom.toFixed(0)} / 屏高 ${w.vh}`).join(' / '),
   );
@@ -1533,7 +1579,7 @@ await page.close();
 {
   const p2 = await menuPage();
   const s = await shot(p2);
-  check('首玩期十四张全在轴上', s.cards.length === 14, `${s.cards.length} 张`);
+  check(`首玩期 ${CARDS} 张全在轴上`, s.cards.length === CARDS, `${s.cards.length} 张`);
   const shape = await p2.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
@@ -1567,14 +1613,15 @@ await page.close();
    * 事：**轴还是十四站**（它没占位），**画出来正好落在第 2 张和第 3 张之间**。
    * 前者是玩家那句话的直接翻译，后者保证它还在分该分的那条缝。
    */
-  check('轴上还是十四站（《我会玩》没占掉一站）', order.length === 14, `${order.length} 站`);
+  check(`轴上还是 ${CARDS} 站（《我会玩》没占掉一站）`, order.length === CARDS, `${order.length} 站`);
   check('有那条分界线', shape.hasDiv);
   check(
     '分界线落在两张基础卡和锁着的那些之间',
     shape.divAbove === 2,
     `线上头有 ${shape.divAbove} 张（该是 方块 圆球 两张）`,
   );
-  check('其余十二张都锁着', order.filter((o) => o.locked).length === 12, `锁着 ${order.filter((o) => o.locked).length} 张`);
+  check(`其余 ${CARDS - 2} 张都锁着`, order.filter((o) => o.locked).length === CARDS - 2,
+    `锁着 ${order.filter((o) => o.locked).length} 张`);
   /**
    * 锁着的那张**按不动**。
    *
@@ -1628,7 +1675,7 @@ await page.close();
   await p2.evaluate(() => document.querySelector('.know-how-btn').click());
   await p2.waitForTimeout(800);
   const s2 = await shot(p2);
-  check('按了《我会玩》轴上还是 14 项', s2.cards.length === 14, `${s2.cards.length} 张`);
+  check(`按了《我会玩》轴上还是 ${CARDS} 项`, s2.cards.length === CARDS, `${s2.cards.length} 张`);
   const after = await p2.evaluate(() => ({
     locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
     skip: !!document.querySelector('.axis-know-how'),
@@ -1913,8 +1960,8 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
 
   const withArt = art.rows.filter((r) => r.hasArt);
   check(
-    `${label}：十四张卡都量到图了（下面三条才有意义）`,
-    art.rows.length === 14 && withArt.length === 14 && art.token > 0,
+    `${label}：${CARDS} 张卡都量到图了（下面三条才有意义）`,
+    art.rows.length === CARDS && withArt.length === CARDS && art.token > 0,
     `${art.rows.length} 张卡 / ${withArt.length} 张有图 / token ${art.token}px`,
   );
 

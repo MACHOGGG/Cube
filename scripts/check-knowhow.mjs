@@ -27,6 +27,15 @@ const BASE = process.argv[2] || 'http://localhost:8953/';
 const XHS = process.argv[3] || '';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
+/**
+ * 轴 / 带子上一共几站。
+ *
+ * 2026-09（《侵蚀阶梯》v1.2 PR-6）从 14 收到 12：三角那副基础棋盘和 V 形三角都删了。
+ * 和 check-mode-axis.mjs 里那个 CARDS 是同一个数，两处要一起改——张数钉死而不是从页
+ * 面上数出来，就是为了「哪天一张卡悄悄不见了」这道门会红。
+ */
+const CARDS = 12;
+
 const check = (n, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
   if (!ok) fail++;
@@ -166,12 +175,12 @@ let page = await freshPage(ctx);
   check('它下面那些玩法这会儿都锁着', order?.afterLocked === true);
   if (order?.onStrip) {
     check('带子那一路：它就排在带子里（跟着一起滑）', order?.inStrip === true);
-    // 一份里十四张卡：分界线不算一站。
-    check('带子上还是十四项', order?.stations === 14, `${order?.stations} 项`);
+    // 一份里 CARDS 张卡：分界线不算一站。
+    check(`带子上还是 ${CARDS} 项`, order?.stations === CARDS, `${order?.stations} 项`);
   }
   if (order?.onAxis) {
-    // 轴上十四张卡（分界线不算一站）。少一张就是首玩期那一组锁没摆全。
-    check('轴上还是十四项', order?.stations === 14, `${order?.stations} 项`);
+    // 轴上 CARDS 张卡（分界线不算一站）。少一张就是首玩期那一组锁没摆全。
+    check(`轴上还是 ${CARDS} 项`, order?.stations === CARDS, `${order?.stations} 项`);
   }
 
   /**

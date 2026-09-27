@@ -58,9 +58,16 @@ function page(pageClass: string, label: string, body: string, lang: Lang): strin
 const wireBack = (root: HTMLElement, onBack: () => void) =>
   root.querySelector<HTMLButtonElement>('#backBtn')?.addEventListener('click', onBack);
 
-/** 《更多得分目标》：三列，每列先是这一族的图形，底下是它的全部得分图案。 */
+/**
+ * 《更多得分目标》：每列先是这一族的图形，底下是它的全部得分图案。
+ *
+ * **两列，不是三列**（《侵蚀阶梯》v1.2 PR-6）：老虎机只开在方块和小球两族上了
+ * ——三角那副基础棋盘删了，剩下的六边蜂窝 54 是天才特供的布局，不进老虎机。
+ * 三角那一族的目标数据在 engine/targets.ts 里**留着没删**（PR-8：永不被抽到），
+ * 所以这一屏摆不摆它是这儿一句话的事，不是那边的事。
+ */
 export function renderTargetsShowcase(root: HTMLElement, lang: Lang, onBack: () => void): void {
-  const families: Family[] = ['square', 'circle', 'triangle'];
+  const families: Family[] = ['square', 'circle'];
   const columns = families
     .map((family) => {
       const cells = targetsOf(family)

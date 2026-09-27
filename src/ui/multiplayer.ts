@@ -138,9 +138,14 @@ export interface MultiplayerHandlers {
  * 这儿用 `cardOrNull` 而不是 `cardOf`：`mode` 是**服务器发来的**，不在我们手里。
  * 拿一条脏数据去抛异常，等于让它把玩家的小屋界面整个打掉；认不出来就当「没有对应的
  * 教学」，和从前返回 null 是同一个意思，调用方本来就处理得了。
+ *
+ * 三角那一族**现在也回 null**：那一族的基础棋盘 2026-09 删了（《侵蚀阶梯》v1.2
+ * PR-6），只剩的六边蜂窝 54 是布局，布局从来没有自己的分镜教学。所以问的是
+ * 「这一族有没有教学」，不是「这一族叫什么」。
  */
 function tutorialFamilyOf(mode: string): TutorialShape | null {
-  return cardOrNull(mode)?.family ?? null;
+  const fam = cardOrNull(mode)?.family;
+  return fam === 'square' || fam === 'circle' ? fam : null;
 }
 
 /** 问「会不会规则」给多久。到点没人按，就当他会。 */

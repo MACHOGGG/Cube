@@ -21,7 +21,6 @@ import { hasSeenTutorial } from '../i18n';
 export type PlayKey =
   | 'square'
   | 'circle'
-  | 'triangle'
   | 'bomb'
   | 'slot'
   | 'flip'
@@ -32,8 +31,9 @@ export type PlayKey =
   | 'totaltip'
   | 'howhint';
 
-/** 三个基础玩法。「这是不是他打的第一个」按这三张算（见 main.ts 的 basicCoach）。 */
-export const BASIC_KEYS = ['square', 'circle', 'triangle'] as const;
+/** 两个基础玩法（三角那一副 2026-09 删了，见《侵蚀阶梯》v1.2 PR-6）。「这是不是他
+ *  打的第一个」按这两张算（见 main.ts 的 basicCoach）。 */
+export const BASIC_KEYS = ['square', 'circle'] as const;
 
 const KEY = (k: PlayKey) => `slides_played_${k}`;
 
@@ -90,7 +90,7 @@ export function claimKnowsHow(): void {
  * 法的必经之路，看过就等于打开过。
  */
 function playedBefore(k: PlayKey): boolean {
-  if (k === 'square' || k === 'circle' || k === 'triangle') return hasSeenTutorial(k);
+  if (k === 'square' || k === 'circle') return hasSeenTutorial(k);
   // endcard 故意**不**在这里认旧钥匙。试过一版用「看过分镜没有」来认老玩
   // 家，结果是死的：现在头一回点开那两张发光的卡就会把分镜记成看过（见
   // main.ts 的 basicCoach），等这一局打完要判结算页时，新人已经被当成老玩

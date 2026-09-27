@@ -56,12 +56,17 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   check('接口里声明了 proBtn', /^ {2}proBtn: string;$/m.test(i18n));
 }
 
-// ---- ④ 八副棋盘描的都是「将来那一颗星星」的颜色 -------------------------
+// ---- ④ 每副棋盘描的都是「将来那一颗星星」的颜色 -------------------------
 {
+  /*
+   * 键是**文件名**，不是 card id——这个仓库里两者是交叉的（`shapes/triangle.ts` 的
+   * card id 是 `triangleBig`）。2026-09（《侵蚀阶梯》v1.2 PR-6）删了两副三角，所以从
+   * 八副收到六副。
+   */
   const BOARDS = {
     square: 'proSquareRing', squareDiamond: 'proSquareRing',
     circle: 'proCircleRing', circleHex: 'proCircleRing', circleSeven: 'proCircleRing',
-    triangle: 'proTriRing', triangleBig: 'proTriRing', triangleAdvanced: 'proTriRing',
+    triangle: 'proTriRing',
   };
   let wired = 0;
   for (const [name, fn] of Object.entries(BOARDS)) {
@@ -76,18 +81,18 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
       `调用:${called} dotColor:${usesDot} 没用 color:${notNow} 只描正面:${onlyFlavor}`);
     if (called && usesDot && notNow && onlyFlavor) wired++;
   }
-  // 尺子：八副一副都不能少（少一副的那一副在屏幕上只是「没有提示」，不报错）。
-  check('八副棋盘一副都没落下', wired === 8, `${wired}/8`);
+  // 尺子：六副一副都不能少（少一副的那一副在屏幕上只是「没有提示」，不报错）。
+  const N = Object.keys(BOARDS).length;
+  check('每副棋盘一副都没落下', wired === N, `${wired}/${N}`);
 }
 
-// ---- ⑤ 八副都是真画进 DOM 的，所以拨开关都要重画 ------------------------
+// ---- ⑤ 六副都是真画进 DOM 的，所以拨开关都要重画 ------------------------
 {
   // 三族的那一圈都是 SVG 描边（虚线的节奏 CSS 的 border-style: dashed 定不了，见
   // proHint.ts 开头那段），所以它们只在开着 Pro 的时候建——那就必须接上 onProChange，
   // 不然拨了开关要等下一步棋才看得见，而开关就摆在暂停面板里，拨完一抬头正是棋盘。
   for (const name of Object.keys({
-    square: 1, squareDiamond: 1, circle: 1, circleHex: 1, circleSeven: 1,
-    triangle: 1, triangleBig: 1, triangleAdvanced: 1,
+    square: 1, squareDiamond: 1, circle: 1, circleHex: 1, circleSeven: 1, triangle: 1,
   })) {
     const src = read(`src/shapes/${name}.ts`);
     check(`[${name}] 拨开关当场重画`, /onProChange\(\(\) => \{[\s\S]{0,120}render\(\)/.test(src) && /stopPro\(\)/.test(src));

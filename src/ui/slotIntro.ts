@@ -16,7 +16,9 @@ import { drawPair, targetsOf, type Family } from '../engine/targets';
 import { planFor, slotMachineHtml, spinSlotHeld, type ReelPlan, type SpinHandle } from './slotReels';
 import { CTL_BACK } from './ctlIcons';
 
-const FAMILIES: readonly Family[] = ['square', 'circle', 'triangle'];
+/** 两族（三角那副基础棋盘 2026-09 删了，见《侵蚀阶梯》v1.2 PR-6）。这一屏摆几台
+ *  老虎机就看它，要和 ui/slotMachine.ts 的 FAMILIES 对得上。 */
+const FAMILIES: readonly Family[] = ['square', 'circle'];
 
 /** 按下 STOP 之后，第 k 台机器的两个轮子各在多少毫秒后停稳：逐台、逐轮。 */
 const stopDelays = (k: number): number[] => [700 + k * 1100, 1200 + k * 1100];

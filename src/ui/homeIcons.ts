@@ -62,11 +62,14 @@ function svg(inner: string): string {
   return `<svg viewBox="0 0 100 100" aria-hidden="true">${inner}</svg>`;
 }
 
-/** For a glyph that isn't square — the V board's two arms need a 2:1 box so
- *  each arm can be drawn at the same size as 大三角's single triangle. */
-function svgWide(w: number, inner: string): string {
-  return `<svg viewBox="0 0 ${w} 100" aria-hidden="true">${inner}</svg>`;
-}
+/*
+ * 这儿原先还有一个 `svgWide(w, inner)`，给不是正方的图开一个 w:100 的框——唯一用它
+ * 的是 V 形进阶三角那张（两条臂各画得和大三角一样大）。那副棋盘 2026-09 删了
+ * （《侵蚀阶梯》v1.2 PR-6），这个函数也就没人调了。
+ *
+ * 删掉而不是留着：留着编译报错（noUnusedLocals），而且下一张宽图来了照这两行重写
+ * 一遍比猜它当年为什么在那儿容易。WIDE_LAYOUT_ICONS 那张表留着（见下面）。
+ */
 
 // ---------------------------------------------------------------------------
 // base games — a gray silhouette holding a miniature of that game's own board
@@ -437,33 +440,16 @@ const TRI_ARM = (fills: string[]) => TRI_BODY + TRI_TILES(fills);
 /** 大三角 — one big triangle of tiles. */
 const ICON_TRIANGLE_BIG = svg(TRI_ARM(TRI_FILLS));
 
-/** 进阶三角 — the V board's two independent arms, each the full size of
- *  大三角's. They are not two triangles set side by side: on the real board
- *  the arms share their innermost bottom tile, which is exactly why its
- *  bottom row has one cell more than the rows above it. So the right arm is
- *  slid left by one tile of triRows' own lattice, and its bottom-left tile
- *  lands on top of the left arm's bottom-right one — the V's joint, drawn
- *  rather than implied.
- *
- *  Both silhouettes go down before either arm's tiles, so the overlap is
- *  the one shared tile and nothing else: drawn arm-by-arm, the right arm's
- *  periwinkle body would paint over the left arm's whole lower corner and
- *  leave a sliver of tile sticking out from under it. */
-const TILE = (2 * 40) / 3; // one small triangle of triRows(50, 12, 40, 3)
-const TRI_TILE_SPAN = 2 * 40; // the tiles' own span, x = 10..90
-const TRI_ARM_STEP = TRI_TILE_SPAN - TILE; // 53.33 — overlapping by one tile
-const TRI_ADVANCED_W = Math.round(90 + TRI_ARM_STEP + 10); // both silhouettes, plus their margins
-const SHIFT_RIGHT = `translate(${TRI_ARM_STEP.toFixed(2)},0)`;
-const ICON_TRIANGLE_ADVANCED = svgWide(
-  TRI_ADVANCED_W,
-  TRI_BODY +
-    `<g transform="${SHIFT_RIGHT}">${TRI_BODY}</g>` +
-    TRI_TILES(TRI_FILLS) +
-    `<g transform="${SHIFT_RIGHT}">${TRI_TILES([...TRI_FILLS].reverse())}</g>`,
-);
+/*
+ * 进阶三角（V 形）那张图连着它那几个算宽度的常数一起删了——那副棋盘 2026-09 删了
+ * （《侵蚀阶梯》v1.2 PR-6）。它是唯一一张 2:1 的宽图，所以下面那张「哪些图要宽格
+ * 子」的表现在是空的。
+ */
 
-/** Glyphs that need a 2:1 box rather than the usual square one. */
-const WIDE_LAYOUT_ICONS = new Set(['triangleAdvanced']);
+/** 要 2:1 宽格子的图，不是平常那种正方的。
+ *  **眼下一张都没有**：唯一那张（V 形进阶三角）随棋盘一起删了。机制留着——挑布局
+ *  那一屏给宽图双倍宽的槽、装不下就换行，下一张宽图来了直接填这张表就行。 */
+const WIDE_LAYOUT_ICONS = new Set<string>();
 
 /** Whether this variant's icon is the wide (2:1) kind — the picker gives it
  *  a double-width slot, and wraps to a second line when that no longer fits
@@ -478,7 +464,6 @@ const LAYOUT_ICONS: Record<string, string> = {
   circleHex: ICON_CIRCLE_HEX,
   circleSeven: ICON_CIRCLE_SEVEN,
   triangleBig: ICON_TRIANGLE_BIG,
-  triangleAdvanced: ICON_TRIANGLE_ADVANCED,
 };
 
 /** The icon for one layout variant, falling back to its family's plus-card

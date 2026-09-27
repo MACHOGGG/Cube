@@ -76,22 +76,37 @@ export interface MenuHandlers {
 }
 
 /**
- * Everything the home page needs, already bucketed by the three base shapes
- * the whole design is organised around — every row on the page (base play,
- * timed, each bomb tier, "more layouts") is the same square/circle/triangle
- * trio, so a player can track one shape straight down the page.
+ * 主菜单要的东西，已经按基础形状分好组：页面上每一排（基础、计时、两档炸弹、
+ * 更多布局）都是同一组形状同一个次序，所以一个玩家可以顺着一列一路往下看。
+ *
+ * **每排两张，不是三张**（《侵蚀阶梯》v1.2 PR-6）：三角那副基础棋盘删了，剩下的
+ * 六边蜂窝 54 是天才特供的布局。所以 `base` 和 `advancedBomb` 只剩方块、小球两个
+ * 键——它们是「这一排摆哪几张」，没有棋盘的格子不该留一个空位。
+ *
+ * `moreLayouts` 的三个键都还在：那一排按「它是哪一族的变体」分组，六边蜂窝仍然
+ * 归三角那一族。
  */
 export interface HomeLayout {
-  /** The three base games. */
-  base: Record<BaseShape, ShapeCardMeta>;
-  /** The 3 layouts the advanced bomb tier supports, in base-shape slots. */
-  advancedBomb: Record<BaseShape, ShapeCardMeta>;
-  /** "More layouts" grouped under the base shape each one is a variant of —
-   *  square has one, circle and triangle have two apiece. */
+  /** 两副基础棋盘。 */
+  base: Record<RowShape, ShapeCardMeta>;
+  /** 进阶炸弹支持的两副布局，摆在同样的两个槽里。 */
+  advancedBomb: Record<RowShape, ShapeCardMeta>;
+  /** 《更多布局》，按「它是哪一族的变体」分组——方块一张、小球两张、三角一张。 */
   moreLayouts: Record<BaseShape, ShapeCardMeta[]>;
 }
 
-const SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
+/**
+ * 整排摆出来的那几个形状。
+ *
+ * 和 `BaseShape`（方块 / 小球 / 三角三族）分开：族还是三族（六边蜂窝归三角族，
+ * 图标、《更多布局》的分组、老虎机的目标都还按族走），但**整排摆出来的只有两个**。
+ * 混成一个类型的话，删掉三角那一排之后每一处 `Record<BaseShape, …>` 都会要求一个
+ * 不存在的三角棋盘。
+ */
+export type RowShape = 'square' | 'circle';
+const SHAPES: RowShape[] = ['square', 'circle'];
+/** 《更多布局》那一排按族分组，三族都要走到（六边三角归三角族）。 */
+const LAYOUT_SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
 /** 这副棋盘是不是天才特供的——按内容问，不按这个人开没开通（isLayoutLocked
  *  问的是后者）。窄屏的顺序要用前者：菜单的排布不该因为身份而变。 */
 const isGeniusLayout = (cardId: string): boolean => GENIUS_LAYOUTS.includes(cardId);
@@ -102,10 +117,14 @@ const isGeniusLayout = (cardId: string): boolean => GENIUS_LAYOUTS.includes(card
  *  项算的就是「一排站得下几张」。不跟着改的后果是横屏手机上整页横向溢出。 */
 const WIDE_PER_ROW = 6;
 const NARROW_PER_ROW = 2;
-/** The bomb panel's own order — the reference sheet lines its chips up
- *  square/triangle/circle rather than the square/circle/triangle the full-
- *  width rows above it use. */
-const BOMB_SHAPES: BaseShape[] = ['square', 'triangle', 'circle'];
+/**
+ * 炸弹板块自己的次序。
+ *
+ * 从前设计图上是方块 / 三角 / 小球（和上面整排的方块 / 小球 / 三角故意不同）。三角
+ * 那一副 2026-09 删了（《侵蚀阶梯》v1.2 PR-6），于是这三行都只剩两颗，两颗居中——
+ * 「三角在中间」那个次序上的讲究也跟着没了意义。
+ */
+const BOMB_SHAPES: RowShape[] = ['square', 'circle'];
 /**
  * 鱼眼轴上次停在哪一项。
  *
@@ -518,13 +537,18 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 玩家一眼就知道有哪些棋盘，少一层点击。
   //
   // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起：菱形方块、六边
-  // 圆球、七色圆球、六边形三角、V 型三角。宽屏五张自成一排。
+  // 圆球、七色圆球、六边三角。宽屏四张自成一排。
   //
-  // 窄屏在这个次序上再分一道：能玩的三副（菱形方块、六边圆球、六边形三角）
-  // 顺着链往下摆，天才特供的两副（七色圆球、V 型三角）收进最后那一段，排在
-  // 老虎机和无限反转后面。两副之间的先后不变。
+  // 窄屏在这个次序上再分一道：能玩的两副（菱形方块、六边圆球）顺着链往下摆，
+  // 天才特供的两副（七色圆球、六边三角）收进最后那一段，排在老虎机和无限反转
+  // 后面。两副之间的先后不变。
+  //
+  // ⚠️ 这一圈走的是 **LAYOUT_SHAPES（三族）**，不是上面那个 SHAPES（两族）。
+  // 《更多布局》按「它是哪一族的变体」分组，而六边三角仍然归三角族——拿 SHAPES
+  // 来循环的话，三角那一栏整个不会被走到，六边三角在菜单上凭空消失，而且不报
+  // 任何错（check-menu 第一遍就是这么红的）。
   const ordered: { card: ShapeCardMeta; shape: BaseShape }[] = [];
-  for (const shape of SHAPES) {
+  for (const shape of LAYOUT_SHAPES) {
     for (const card of layout.moreLayouts[shape]) ordered.push({ card, shape });
   }
 

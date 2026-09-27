@@ -45,8 +45,9 @@ export interface BoardGroup extends BoardTab {
   children: BoardTab[];
 }
 
-const BASE_THREE = ['square', 'circle', 'triangle'] as const;
-const LAYOUTS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'] as const;
+/** 基础那两副（三角那一副 2026-09 删了，见《侵蚀阶梯》v1.2 PR-6）。 */
+const BASE_TWO = ['square', 'circle'] as const;
+const LAYOUTS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'] as const;
 
 /**
  * 排行榜的六个母标签，和它们旗下的榜。
@@ -63,8 +64,8 @@ export function boardGroups(lang: Lang): BoardGroup[] {
   const named = (ids: readonly string[], kind: string): BoardTab[] =>
     ids.map((id) => ({ mode: kind ? `${id}:${kind}` : id, label: shapeName(lang, id, id) }));
   return [
-    { mode: 'g:base', label: s.rankTabBase, children: named(BASE_THREE, 'base') },
-    { mode: 'g:timed', label: s.rankTabTimed, children: named(BASE_THREE, 'timed') },
+    { mode: 'g:base', label: s.rankTabBase, children: named(BASE_TWO, 'base') },
+    { mode: 'g:timed', label: s.rankTabTimed, children: named(BASE_TWO, 'timed') },
     // 'bomb3' 是炸弹规则的第三版（见 api/scores.js 的 BOMB_KIND）：2026-09 改
     // 成「炸弹会被拆成星星」之后开过 bomb2，再取消那一枚永久炸弹之后开的这一张；
     // 老的 square:bomb / square:bomb2 归档，不再露面。
@@ -72,13 +73,13 @@ export function boardGroups(lang: Lang): BoardGroup[] {
     // 没封顶那一版能打出的分高一个量级，放一起比就是把老局钉死在榜首。
     // **这两处最容易漏**：改了服务端的 KIND 却没改这儿，客户端点开的是归档榜，
     // 新分一个都看不见（反转那一版第一遍就漏了，check-bomb-rules 逮到的）。
-    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_THREE, 'bomb3') },
+    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_TWO, 'bomb3') },
     { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
-    { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_THREE, 'slot') },
+    { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_TWO, 'slot') },
     { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip2') },
     // 步步为营三个基础玩法都有。这是**新开**的一张榜，没有旧局要归档，所以没
     // 有 bomb2 那样的版本后缀（见 api/scores.js 里那段注释）。
-    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_THREE, 'puzzle') },
+    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_TWO, 'puzzle') },
   ];
 }
 

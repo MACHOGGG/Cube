@@ -15,16 +15,17 @@
  * 入口。
  */
 import { STRINGS, type Lang } from '../i18n';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_BASE_TRIANGLE, ICON_LOCK } from './homeIcons';
+import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
 
-export type PuzzleFamily = 'square' | 'circle' | 'triangle';
+/** 步步为营开在哪几族上——两族（三角那副基础棋盘 2026-09 删了，见《侵蚀阶梯》
+ *  v1.2 PR-6）。 */
+export type PuzzleFamily = 'square' | 'circle';
 
 const FAMILIES: { family: PuzzleFamily; icon: string }[] = [
   { family: 'square', icon: ICON_BASE_SQUARE },
   { family: 'circle', icon: ICON_BASE_CIRCLE },
-  { family: 'triangle', icon: ICON_BASE_TRIANGLE },
 ];
 
 export interface PuzzleModeHandlers {

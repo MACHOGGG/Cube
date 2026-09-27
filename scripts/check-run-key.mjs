@@ -95,7 +95,8 @@ const check = (name, ok, extra = '') => {
 {
   const dir = new URL('../src/shapes/', import.meta.url);
   const boards = readdirSync(dir).filter((f) => f.endsWith('.ts') && f !== 'types.ts' && f !== 'registry.ts');
-  check('八副棋盘都在（下面几条才有意义）', boards.length === 8, boards.join(' '));
+  // 六副（《侵蚀阶梯》v1.2 PR-6 删了原《三角》和 V 形三角两副）。
+  check('六副棋盘都在（下面几条才有意义）', boards.length === 6, boards.join(' '));
   const handwritten = [];
   const notUsing = [];
   for (const f of boards) {
@@ -104,7 +105,7 @@ const check = (name, ok, extra = '') => {
     if (!s.includes('suffixFor(')) notUsing.push(f);
   }
   check('没有一副棋盘手写存档后缀', handwritten.length === 0, handwritten.join(' '));
-  check('八副棋盘都走 suffixFor', notUsing.length === 0, notUsing.join(' '));
+  check('六副棋盘都走 suffixFor', notUsing.length === 0, notUsing.join(' '));
 }
 
 // ── 四、读的那两头也不手写 ──────────────────────────────────────────

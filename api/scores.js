@@ -109,8 +109,20 @@ const TOTAL_MODE = 'lb:total:mode';
  * 归档——它们不在 ALL_BOARDS 里，重建时不撤人，存档里那些老局照旧算回自己那张榜
  * （见 kindOf）；除非 `drop` 点名，那时候连归档榜一起撤（见 droppedBoards）。
  */
-const BASE_SHAPES = ['square', 'circle', 'triangle'];
-const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'];
+const BASE_SHAPES = ['square', 'circle'];
+const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'];
+/**
+ * 已经删掉的棋盘。
+ *
+ * 2026-09（《侵蚀阶梯》v1.2 PR-6）删了两副三角：原《三角》（id `triangle`）和 V 形
+ * （`triangleAdvanced`）。它们从 BASE_SHAPES / LAYOUT_BOARDS 里摘掉了，所以新的一局
+ * 再也进不了这几张榜。
+ *
+ * **但重建时还得撤人**：从 ALL_BOARDS 里摘掉的后果是 rebuild 再也不碰那几张榜，榜上
+ * 按旧棋盘打出来的分就永远留在那儿——《无限反转》改版时踩过一模一样的一脚（见下面
+ * rebuild 里那段注释，check-scores 逮到的那条）。所以单列一张表，下面拼进要撤的清单。
+ */
+const RETIRED_BOARDS = ['triangle', 'triangleAdvanced'];
 /** 炸弹这一档现在叫什么。改规则就往上加一版，老的那个名字留着当归档榜。 */
 const BOMB_KIND = 'bomb3';
 /**
@@ -159,7 +171,9 @@ const ALL_BOARDS = [
   ...LAYOUT_BOARDS,
 ];
 /** 老版本那一套：一块棋盘一张榜，不分玩法。重建时顺手撤掉。 */
-const LEGACY_BOARDS = [...BASE_SHAPES, ...LAYOUT_BOARDS];
+const LEGACY_BOARDS = [...BASE_SHAPES, ...LAYOUT_BOARDS, ...RETIRED_BOARDS];
+/** 删掉的那几副棋盘在每一种玩法下的榜，重建时也要撤干净。 */
+const RETIRED_BOARD_KEYS = RETIRED_BOARDS.flatMap((shape) => KINDS.map((kind) => `${shape}:${kind}`));
 
 /**
  * 母标签旗下的几张榜。点《基础》看到的是它们合起来的样子——每个人取自己在
@@ -579,7 +593,7 @@ async function rebuild(req, res, body) {
 
       let rows = 0;
       // 先撤干净：新榜、老榜都撤，没算出成绩的那几张就此空着。
-      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS, ...droppedBoards]) {
+      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS, ...RETIRED_BOARD_KEYS, ...droppedBoards]) {
         if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
       }
       for (const [boardId, score] of Object.entries(best)) {

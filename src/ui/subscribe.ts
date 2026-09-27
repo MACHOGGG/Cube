@@ -45,7 +45,7 @@ import { CONTACT_EMAIL, LEGAL, LEGAL_PATH, type LegalKey } from '../legal';
 function geniusBoardBlurb(id: string, lang: Lang): string {
   const s = STRINGS[lang];
   if (id === 'circleSeven') return s.geniusNowCircleSeven;
-  if (id === 'triangleAdvanced') return s.geniusNowTriangleAdvanced;
+  if (id === 'triangleBig') return s.geniusNowTriangleBig;
   return shapeName(lang, id, id);
 }
 
