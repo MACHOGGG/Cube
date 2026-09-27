@@ -13,6 +13,8 @@ import { trackGameStart, trackGameEnd, trackShare } from './analytics';
 import {
   MANUAL_END_REASON,
   buildShareInfo,
+  isSumRow,
+  runBadges,
   runBreakdown,
   type ModeKey,
   type RunData,
@@ -32,6 +34,7 @@ import {
 } from './puzzleScore';
 import { claimFirstHowToHint } from './firstPlay';
 import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
+import { stepCoefFor } from './stepCoef';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -82,6 +85,7 @@ export const TIME_GAIN = 1.5;
 
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
+
 import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
 
 export interface GameControllerHooks {
@@ -113,6 +117,14 @@ export interface GameControllerHooks {
    */
   boardTiles: number;
   boardColors: number;
+  /**
+   * 此刻盘上还剩几枚**可用格**（离场的不算，中间那个永久空位本来就不算）。
+   *
+   * 结算页那个步数系数要它：「已清格数」＝ `boardTiles − tilesLeft()`
+   * （《侵蚀阶梯》v1.2 §5）。由棋盘自己数，因为「离场」在各副棋盘里长得不一样
+   * ——方块是把行列从网格里摘掉，别的五副是把格子打成空位。
+   */
+  tilesLeft(): number;
   /** 图案降了一级（4→3→2→1）。棋盘拿它重画提示，HUD 拿它演那一下熄灭（PR-7）。 */
   onErosion?: (level: number) => void;
   /**
@@ -426,6 +438,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let patternPoints = 0;
   let linePoints = 0;
   let comboBonusPoints = 0;
+  /**
+   * 结算页那几行要的三个数（《侵蚀阶梯》v1.2 §5 的行序）。
+   *
+   * 这一局一共翻了几枚（`flipsTotal`，**含拆掉的炸弹**）、其中拆弹占几枚
+   * （`defusedTotal`）、削掉了几条线（`lineCount`）。分是按翻面枚数算的，所以结
+   * 算页那一行说的是「翻面 n 枚 ×2」——n 必须是真数出来的，不是拿分除以 2 倒推：
+   * 无限反转那一局不按翻面计分，倒推出来的数会是个假的。
+   */
+  let flipsTotal = 0;
+  let defusedTotal = 0;
+  let lineCount = 0;
+  /** 这一局到过 1 枚图案没有（「解锁 1 枚」徽章，§2）。 */
+  let unlockedOne = false;
   // 一局里 findStuckGroups 点过名的每一组格子。一种颜色一旦真的死了就只会一
   // 直死着（见 stalemate.ts：没有什么能让它翻回来），所以这个集合只会变大。
   let startSnapshot: BoardSnapshot | null = null;
@@ -637,11 +662,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const bonusMult = 1 + statusPercent / 100;
     // 单人和小屋同一条时间曲线（见 TIME_GAIN）。房间的实时排名比的仍然是原始
     // 得分（那时这一局还没走完，综合得分还不存在），这里算的是走完之后的综合
-    // 得分。
-    // 无限反转没有用时系数（玩家的原话：「用时系数要取消」）——一局本来就是
-    // 固定的 60 秒，快慢没有意义。
-    // 步步为营连钟都没有，「快」根本不是一种本事，所以同样是 1。
-    const timeMult = hooks.flip || hooks.puzzle ? 1 : timeMultiplierFor(elapsed);
+    /**
+     * **用时系数退役了**（《侵蚀阶梯》v1.2 §5）。综合分那一头现在只剩一个乘数：
+     * 步数系数。用时只在结算页上以一行小字出现，写明「不计分」。
+     *
+     * 这一行留着是因为 `RunData.timeMult` 还在（旧档里有这个字段，记录页翻开老局
+     * 时照它重讲一遍）；新局一律 1，结算页也不摆那一行。
+     */
+    const timeMult = 1;
+    /**
+     * 这一档乘不乘步数系数（§5「适用：基础、更多布局、计时、炸弹、小屋终榜。
+     * 不适用：老虎机、步步为营、无限反转」）。
+     */
+    const usesStepCoef = !hooks.flip && !hooks.puzzle && !hooks.slot;
     // Leaving tiles face-up costs the same either way — walking away early
     // and running the board into a genuine dead end are charged alike, so
     // "stop now" is never a way to dodge the cost of an unfinished board.
@@ -668,9 +701,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const penalty = hooks.puzzle ? 0 : extraPenalty;
     /** 这一局的终局盘面（每副棋盘自己数，见 hooks.puzzleTally）。 */
     const tally = hooks.puzzle ? (hooks.puzzleTally?.() ?? { cleared: 0, stars: 0 }) : null;
+    /** 已清格数：开局有几枚，现在还剩几枚，差就是清掉的（§5）。 */
+    const cleared = Math.max(0, hooks.boardTiles - hooks.tilesLeft());
+    const swept = cleared >= hooks.boardTiles;
+    const par = erosion.par();
+    const stepCoef = stepCoefFor({ par, cleared, tiles: hooks.boardTiles, moves, apply: usesStepCoef });
     const total = tally
       ? puzzleComposite({ cleared: tally.cleared, stars: tally.stars, ratePercent: statusPercent })
-      : Math.max(0, Math.round(score * timeMult * bonusMult * unflippedScale) - penalty);
+      : Math.max(0, Math.round(score * stepCoef) - penalty);
 
     const best = saveBestIfHigher(hooks.bestKey, total);
 
@@ -733,6 +771,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 个玩法，这一个管全站——服务端照它收不收这一局（`api/scores.js` 只认现行
       // 那一版），旧客户端在途打完的局照常给他看结算页，只是不入榜。
       rules: SCORING_RULES_VERSION,
+      // 结算页那几行（《侵蚀阶梯》v1.2 §5 的固定行序）。
+      flips: flipsTotal,
+      defused: defusedTotal,
+      lines: lineCount,
+      // 不乘步数系数的那三档（老虎机、步步为营、无限反转）**不写 par**：结算页
+      // 照 par 在不在来决定摆不摆那一行。摆一行「×1.00」等于告诉玩家有这回事。
+      par: usesStepCoef ? par : undefined,
+      stepCoef,
+      cleared,
+      boardTiles: hooks.boardTiles,
+      swept,
+      unlockedOne,
       at: Date.now(),
     };
 
@@ -749,10 +799,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       (past.reduce((sum, r) => sum + (r.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
     );
     refs.endAvgEl.textContent = `${s.avgScoreLabel} = ${avg}`;
+    /**
+     * 徽章那一排（《侵蚀阶梯》v1.2 §5：清盘、解锁 1 枚）。
+     *
+     * 一个都没有就整条不摆——摆一行空的等于告诉玩家「这儿本来该有东西」。
+     */
+    const badges = runBadges(lastRun, hooks.lang);
     refs.endBreakdownEl.innerHTML =
       runBreakdown(lastRun, hooks.lang)
-        .map(([label, value]) => `<div class="end-row"><span>${label}</span><span>${value}</span></div>`)
+        .map(([label, value]) =>
+          `<div class="end-row${isSumRow(label, hooks.lang) ? ' end-row--sum' : ''}">` +
+          `<span>${label}</span><span>${value}</span></div>`)
         .join('') +
+      (badges.length
+        ? `<div class="end-badges">${badges.map((b) => `<span class="end-badge">${escHtml(b)}</span>`).join('')}</div>`
+        : '') +
       // 六条规矩的最后一条（时间越短、步数越少、得分越高，综合得分越高）摆在
       // 这儿，只摆头一回。
       //
@@ -772,11 +833,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endOverlay.dataset.seconds = String(Math.round(elapsed));
     // 交卷时报给房间的那个数。
     //
-    // 打的过程中，比分板报的是 HUD 上的原始得分——那会儿这一局还没走完，综合
-    // 得分并不存在。可一局结束之后再按原始得分排名次，就等于说「谁滑得多谁
-    // 赢」：同一副牌上多花五分钟总能多滑出几分来。名次要认的是综合得分——里
-    // 面有时间系数（房间里还放大了一倍半），也有有效得分率和没翻完的那些块。
-    // 和上面那行秒数一样，放在这里是为了让 scoreboard 自己来取：八个玩法谁也
+    // 打的过程中，比分板报的是 HUD 上那个**拼出分**——那会儿这一局还没走完，综合
+    // 分并不存在（它要等「一共走了几步、清了几枚」都定下来才算得出来）。可一局
+    // 结束之后再按拼出分排名次，就等于说「谁滑得多谁赢」：同一副牌上多滑几十步
+    // 总能多拼出几分来。名次要认的是**综合分** ＝ 拼出分 × 步数系数
+    // （《侵蚀阶梯》v1.2 §5）——少走一步才是这一局真正的本事。
+    // 和上面那行秒数一样，放在这里是为了让 scoreboard 自己来取：每副棋盘谁也
     // 不用知道房间这回事。
     refs.endOverlay.dataset.total = String(total);
     // 终局的盘面，和照着它画出来的战绩图。
@@ -1098,6 +1160,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // whole-line bonus, and everything the streak/chain multipliers added.
       if (s.lineBonusGroups.length) linePoints += s.points;
       else patternPoints += s.points;
+      lineCount += s.lineBonusGroups.length;
       // 步步为营的「消边」：一步引发的连锁里**任意一拍**是整线奖励就算，所以
       // 这儿只置真、不置假（后面的拍子没消线，不该把前面那一拍的功劳抹掉）。
       if (s.lineBonusGroups.length) hadLineBonus = true;
@@ -1178,11 +1241,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           patternPoints += bombPoints;
           scoreReel.setValue(score);
         }
+        // 结算页那一行要的两个数：这一局一共翻了几枚、其中拆弹占几枚。
+        flipsTotal += committed;
+        defusedTotal += defused;
         // 这一拍翻了几枚，侵蚀就扣几段（整线消除那一拍是 0）。降级了就重画一遍
         // 棋盘：图案变小之后能凑成的组跟着变，棋盘上那几处提示也要跟着换。
         if (committed > 0) {
           const step = erosion.spend(committed);
           if (step.dropped > 0) hooks.onErosion?.(step.level);
+          if (step.unlocked) unlockedOne = true;
         }
         // commit() is what actually turns the matched pieces over — a bonus
         // step's commit is a no-op, so this is exactly the flip moment.

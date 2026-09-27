@@ -862,6 +862,14 @@ export function createSquareGame(): ShapeGame {
       const controller = createGameController(refs, {
         // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：方块 36×6。
         // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        /**
+         * 盘上还剩几枚可用格——结算页那个步数系数要的「已清格数」按它算
+         * （《侵蚀阶梯》v1.2 §5：已清 = boardTiles − 这个数）。
+         *
+         * 方块这一副的整线消除是把整行整列从网格里**摘掉**（removeLines），所以
+         * 剩几枚就是此刻的 rows × cols。
+         */
+        tilesLeft: () => rows * cols,
         boardTiles: BOARD_DIM * BOARD_DIM,
         boardColors: PALETTES.standard.length,
         lang,

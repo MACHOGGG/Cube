@@ -6,6 +6,7 @@ import {
   PUZZLE_STAR_POINTS,
   PUZZLE_STEPS_OUT_REASON,
 } from './puzzleScore';
+import { POINTS_PER_FLIP } from './scoring';
 import type { ShareCardInfo } from './shareCard';
 
 /**
@@ -73,6 +74,28 @@ export interface RunData {
    * 那就是《侵蚀阶梯》之前的局。
    */
   rules?: string;
+  /**
+   * 《侵蚀阶梯》v1.2 §5 的结算页要的那几个数。老档没有，读出来是 undefined——
+   * 记录页翻开旧局时走的还是老那几行（见 runBreakdown）。
+   */
+  /** 这一局一共翻了几枚，**含拆掉的炸弹**。每枚 2 分。 */
+  flips?: number;
+  /** 上面那个数里，拆炸弹占几枚。 */
+  defused?: number;
+  /** 削掉了几条线。 */
+  lines?: number;
+  /** 这副棋盘的基准步数（engine/erosion.ts 的表）。 */
+  par?: number;
+  /** 步数系数 = max(1, (par × 已清 ÷ 全盘) ÷ 步数)²。不乘那几档恒 1。 */
+  stepCoef?: number;
+  /** 清掉了几枚。 */
+  cleared?: number;
+  /** 全盘一共几枚。 */
+  boardTiles?: number;
+  /** 清盘了（一枚不剩）。 */
+  swept?: boolean;
+  /** 这一局到过 1 枚图案（「解锁 1 枚」徽章，§2）。 */
+  unlockedOne?: boolean;
   /**
    * 《真正解密 · 步步为营》这一局的账（见 engine/puzzleScore.ts）。老档没有这
    * 一项，读出来是 undefined，照旧走老分支。
@@ -161,17 +184,55 @@ export function formatRunTime(at: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/**
+ * 这一局是不是按《侵蚀阶梯》那一套结算的。
+ *
+ * 认的是 `flips`——那几个字段是 v1.2 一起加上的，老档一个都没有。老档翻开时走老
+ * 那几行（图案分 / 连击加成 / 用时系数……），照它当时那套规则重讲一遍；那正是
+ * RunData 存数字不存句子的理由。
+ */
+const isErosionRun = (d: RunData): boolean => d.flips !== undefined;
+
 /** The one-line summary under the score, in the reader's language. */
 export function runDetailLine(d: RunData, lang: Lang): string {
   const s = STRINGS[lang];
   return (
     displayReason(d.reason, lang) +
     ' · ' + countPhrase(s.stepsPhrase, d.moves, lang) +
-    // 步步为营这一局不比时间（没有钟，也没有用时系数），印出来只会让玩家以为
-    // 快慢算数。别的玩法照旧。
-    (d.puzzle ? '' : ' · ' + s.timeLabel + ' ' + formatClock(d.elapsedSec)) +
+    // 用时这一句：《侵蚀阶梯》之后它**不计分**（§5），所以写明白，免得玩家以为
+    // 快慢还算数。步步为营连钟都没有，整句不印。
+    (d.puzzle
+      ? ''
+      : ' · ' +
+        (isErosionRun(d)
+          ? s.timeNotScoredLabel.replace('{t}', formatClock(d.elapsedSec))
+          : s.timeLabel + ' ' + formatClock(d.elapsedSec))) +
     ' · ' + s.bestPhrase.replace('{n}', String(d.best))
   );
+}
+
+/**
+ * 明细里哪两行是**主数**（拼出分、综合分）——结算页给它们加一点字重。
+ *
+ * 按文案认，不按行号认：行数随这一局有没有削线、有没有惩罚而变，写死第几行迟早
+ * 会指到别的行上去。
+ */
+export function isSumRow(label: string, lang: Lang): boolean {
+  const s = STRINGS[lang];
+  return label === s.builtScoreLabel || label === s.compositeLabel;
+}
+
+/**
+ * 这一局拿到的徽章（《侵蚀阶梯》v1.2 §5 的排法：清盘、解锁 1 枚）。
+ *
+ * 没有就是空数组——结算页那一行整条不摆，而不是摆一行空的。
+ */
+export function runBadges(d: RunData, lang: Lang): string[] {
+  const s = STRINGS[lang];
+  const out: string[] = [];
+  if (d.swept) out.push(s.badgeSwept);
+  if (d.unlockedOne) out.push(s.badgeUnlockedOne);
+  return out;
 }
 
 /** The score breakdown rows, in the reader's language. */
@@ -204,6 +265,41 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
       ],
     ];
   }
+  /**
+   * 《侵蚀阶梯》v1.2 §5 的固定行序：
+   *   翻面 n 枚 ×2（含拆除 k 枚） → 削线 m 条（星星数²） → **拼出分**
+   *   → 步数系数（p 步 · 基准 par · ×C.CC） → **综合分**
+   *
+   * 摆的是「这分是怎么来的」，每一行都能在盘面上对上号。退役的那几行一行不留：
+   * 连击加成、有效得分率、用时系数、0.95^未翻面——它们在这一版里恒 1 或者不存在，
+   * 摆一行「×1.00」等于告诉玩家有这回事。
+   */
+  if (isErosionRun(d)) {
+    const flips = d.flips ?? 0;
+    const defused = d.defused ?? 0;
+    const lines = d.lines ?? 0;
+    const flipLabel =
+      s.flipRowLabel.replace('{n}', String(flips)) +
+      (defused > 0 ? ' ' + s.flipRowDefused.replace('{k}', String(defused)) : '');
+    const out: [string, string][] = [[flipLabel, String(flips * POINTS_PER_FLIP)]];
+    if (lines > 0) out.push([s.lineRowLabel.replace('{m}', String(lines)), '+' + Math.round(d.linePoints)]);
+    out.push([s.builtScoreLabel, String(d.score)]);
+    // 步数系数那一行只在真的乘了它的那几档摆。不乘的那三档（老虎机、步步为营、
+    // 无限反转）结算时干脆不写 par，所以这儿按「par 在不在」判——摆一行「×1.00」
+    // 又是在讲一件没发生的事。
+    if (d.par !== undefined) {
+      out.push([
+        `${s.stepCoefLabel}（${s.stepCoefDetail.replace('{p}', String(d.moves)).replace('{par}', String(d.par))}）`,
+        '×' + (d.stepCoef ?? 1).toFixed(2),
+      ]);
+    }
+    if (d.extraPenalty > 0) {
+      out.push([displayPenaltyLabel(d.extraPenaltyReason, lang), '−' + d.extraPenalty]);
+    }
+    out.push([s.compositeLabel, String(d.totalScore)]);
+    return out;
+  }
+
   const rows: [string, string][] = [[s.patternPointsLabel, String(Math.round(d.patternPoints))]];
   if (d.comboBonusPoints > 0) rows.push([s.comboBonusLabel, '+' + Math.round(d.comboBonusPoints)]);
   if (d.linePoints > 0) rows.push([s.linePointsLabel, '+' + Math.round(d.linePoints)]);

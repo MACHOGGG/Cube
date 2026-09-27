@@ -983,6 +983,22 @@ h1 {
    会被连着丢掉。 */
 .end-share .hint { margin: 0; }
 .end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
+/* 明细里的两行主数（拼出分、综合分）比别的行重一点：它们是这一页真正要说的两
+   个数，别的行是「它们怎么来的」。靠 :nth-last-child 认不行——行数随这一局有没
+   有削线、有没有惩罚而变——所以由 gameController 挑出来加类。 */
+.end-breakdown .end-row--sum { color: var(--ink); font-weight: 600; }
+/* 徽章那一排（清盘 / 解锁 1 枚）。一个都没有时整块不出现，见 gameController。 */
+.end-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.end-badge {
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  background: var(--accent-2-soft);
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  /* 和别的行一样不选中：结算页整张是给人看的，不是给人抄的。 */
+  user-select: none;
+}
 #endOverlay .modal { position: relative; overflow: hidden; }
 .end-hazard-bg {
   position: absolute;

@@ -491,6 +491,28 @@ export interface I18nStrings {
   labelPattern: string;
   labelWholeLine: string;
   // ---- game controller (dynamic end-of-run text) ----
+  /**
+   * 《侵蚀阶梯》v1.2 §5 结算页那几行的文案。行序是固定的：
+   * 翻面 → 削线 → 拼出分 → 步数系数 → 综合分。
+   */
+  /** 「翻面 {n} 枚 ×2」；带拆弹时另接一句 flipRowDefused。 */
+  flipRowLabel: string;
+  /** 「（含拆除 {k} 枚）」。 */
+  flipRowDefused: string;
+  /** 「削线 {m} 条（星星数²）」。 */
+  lineRowLabel: string;
+  /** 「拼出分」——翻面分 + 削线分，无任何过程系数。 */
+  builtScoreLabel: string;
+  /** 「步数系数」；副标「{p} 步 · 基准 {par}」。 */
+  stepCoefLabel: string;
+  stepCoefDetail: string;
+  /** 「综合分」——拼出分 × 步数系数。 */
+  compositeLabel: string;
+  /** 「用时 {t}（不计分）」——结算页那一行小字。 */
+  timeNotScoredLabel: string;
+  /** 徽章：清盘 / 解锁 1 枚。 */
+  badgeSwept: string;
+  badgeUnlockedOne: string;
   patternPointsLabel: string;
   comboBonusLabel: string;
   linePointsLabel: string;
@@ -858,6 +880,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: 'Big triangle',
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
+    flipRowLabel: 'Flipped {n} ×2',
+    flipRowDefused: '(incl. {k} defused)',
+    lineRowLabel: 'Lines cleared {m} (stars²)',
+    builtScoreLabel: 'Build score',
+    stepCoefLabel: 'Move multiplier',
+    stepCoefDetail: '{p} moves · par {par}',
+    compositeLabel: 'Final score',
+    timeNotScoredLabel: 'Time {t} (not scored)',
+    badgeSwept: 'Board cleared',
+    badgeUnlockedOne: 'Unlocked 1-tile',
     patternPointsLabel: 'Pattern points',
     comboBonusLabel: 'Streak & chain bonus',
     linePointsLabel: 'Whole-line bonus',
@@ -1183,6 +1215,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: 'Grand triangle',
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
+    flipRowLabel: '{n} retournées ×2',
+    flipRowDefused: '(dont {k} désamorcées)',
+    lineRowLabel: '{m} lignes effacées (étoiles²)',
+    builtScoreLabel: 'Score de jeu',
+    stepCoefLabel: 'Coefficient de coups',
+    stepCoefDetail: '{p} coups · référence {par}',
+    compositeLabel: 'Score final',
+    timeNotScoredLabel: 'Temps {t} (hors score)',
+    badgeSwept: 'Plateau vidé',
+    badgeUnlockedOne: 'Motif à 1 pièce',
     patternPointsLabel: 'Points de motifs',
     comboBonusLabel: 'Bonus de série',
     linePointsLabel: 'Bonus de ligne',
@@ -1508,6 +1550,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: '大三角',
     labelPattern: '圖案',
     labelWholeLine: '整線',
+    flipRowLabel: '翻面 {n} 枚 ×2',
+    flipRowDefused: '（含拆除 {k} 枚）',
+    lineRowLabel: '削線 {m} 條（星星數²）',
+    builtScoreLabel: '拼出分',
+    stepCoefLabel: '步數係數',
+    stepCoefDetail: '{p} 步 · 基準 {par}',
+    compositeLabel: '綜合分',
+    timeNotScoredLabel: '用時 {t}（不計分）',
+    badgeSwept: '清盤',
+    badgeUnlockedOne: '解鎖 1 枚',
     patternPointsLabel: '圖案分',
     comboBonusLabel: '連擊加成',
     linePointsLabel: '整線獎勵',
@@ -1833,6 +1885,16 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: '大三角',
     labelPattern: '图案',
     labelWholeLine: '整线',
+    flipRowLabel: '翻面 {n} 枚 ×2',
+    flipRowDefused: '（含拆除 {k} 枚）',
+    lineRowLabel: '削线 {m} 条（星星数²）',
+    builtScoreLabel: '拼出分',
+    stepCoefLabel: '步数系数',
+    stepCoefDetail: '{p} 步 · 基准 {par}',
+    compositeLabel: '综合分',
+    timeNotScoredLabel: '用时 {t}（不计分）',
+    badgeSwept: '清盘',
+    badgeUnlockedOne: '解锁 1 枚',
     patternPointsLabel: '图案分',
     comboBonusLabel: '连击加成',
     linePointsLabel: '整线奖励',

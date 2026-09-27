@@ -1172,6 +1172,18 @@ export function createTriangleGame(): ShapeGame {
       const controller = createGameController(refs, {
         // 侵蚀阶梯要的两个数（《侵蚀阶梯》v1.2 §2）：六边三角 54×6（id 是 triangleBig）。
         // 一枚棋子一段，所以「可用格数」＝ 发牌时每色几枚 × 几色。
+        /**
+         * 盘上还剩几枚可用格——结算页那个步数系数要的「已清格数」按它算
+         * （《侵蚀阶梯》v1.2 §5：已清 = boardTiles − 这个数）。
+         *
+         * 数的是「不是空位的格子」：削掉离场的、以及中间那个永久空位（如果有），
+         * 都不在里头。所以开局这个数正好等于 boardTiles。
+         */
+        tilesLeft: () => {
+          let n = 0;
+          for (const row of grid) for (const t of row) if (!isBlank(t)) n++;
+          return n;
+        },
         boardTiles: PER_COLOR * PALETTES.standard.length,
         boardColors: PALETTES.standard.length,
         lang,
