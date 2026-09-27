@@ -51,7 +51,7 @@ import { STRINGS, tutorialRules, type Lang } from '../i18n';
 import { buildRuleArt } from './ruleArt';
 
 /** 玩家做了什么。gameController 在它已经知道的那几个点上报进来。 */
-export type CoachSignal = 'move' | 'match' | 'mixed' | 'line';
+export type CoachSignal = 'move' | 'match' | 'mixed' | 'line' | 'erosion';
 /** 这一局玩的是哪种图形。三角没有自己那套配图，用通稿那份。 */
 export type CoachShape = 'square' | 'circle' | 'triangle';
 /** 哪一种排法，见文件开头。 */
@@ -60,29 +60,32 @@ export type CoachPlan = 'first' | 'second';
 /**
  * 「第 3 条他真的做到过没有」记在这儿。
  *
- * 玩家 2026-09 定的：「把『讲过就算讲过』改成『做到过才算讲过』」——第 3 条
- * （星星和色块同色也能一起凑）是这个游戏最独特、也最容易被误解的一条（会以为
- * 星星只能配星星），偏偏一局里未必凑得出来。从前它靠保底自己跳过去，跳过等
- * 于没讲；现在跳过去的那一次不记账，下一个基础玩法开局时补讲一次。
+ * 玩家 2026-09 定的：「把『讲过就算讲过』改成『做到过才算讲过』」——第 3 条最容易
+ * 被误解，偏偏一局里未必真的发生。从前它靠保底自己跳过去，跳过等于没讲；现在跳过
+ * 去的那一次不记账，下一个基础玩法开局时补讲一次。
+ *
+ * **这一条 2026-09 换了内容**（《侵蚀阶梯》v1.2）：从前是「星星和色块同色也能一起
+ * 凑」，现在是「得分图案会随着游戏解锁而变化」——阶梯降一级他才算真见过。键名跟着
+ * 换（`…_ero`），不然升上来的老玩家会被当成「已经见过」，而那是另一件事。
  *
  * 键名由各端自己定（网页 slides_*，小红书 slides.xhs.*）——玩家的第一条要求是
  * 两边存档完全分开。存不进去（无痕窗口）就当讲过：宁可少补一次，也不要每一局
  * 都从第 3 条讲起。
  */
-let mixedKey = 'slides_coach_mixed';
+let seenKey = 'slides_coach_ero';
 export function setCoachStoreKey(k: string): void {
-  mixedKey = k;
+  seenKey = k;
 }
-export function mixedTaught(): boolean {
+export function erosionTaught(): boolean {
   try {
-    return localStorage.getItem(mixedKey) === '1';
+    return localStorage.getItem(seenKey) === '1';
   } catch {
     return true;
   }
 }
-function markMixedTaught(): void {
+function markErosionTaught(): void {
   try {
-    localStorage.setItem(mixedKey, '1');
+    localStorage.setItem(seenKey, '1');
   } catch {
     /* 存不进去就下次再补讲一遍，不是什么大事 */
   }
@@ -110,14 +113,25 @@ interface Step {
    * 话看满一分钟，什么也没发生——偏偏这里正是学习成本最高的地方，最不该沉默。
    */
   readonly nudge?: boolean;
-  /** 这一步是靠玩家**做到**才走的话，走的时候记一格（见 mixedTaught）。 */
-  readonly teaches?: 'mixed';
+  /** 这一步是靠玩家**做到**才走的话，走的时候记一格（见 erosionTaught）。 */
+  readonly teaches?: 'erosion';
 }
 
-/** 他玩的第一个基础玩法：四步，六条里的前五条。 */
+/**
+ * 他玩的第一个基础玩法：**四步，五条**（《侵蚀阶梯》v1.2 PR-7）。
+ *
+ *   第 1+2 条 拼出图案得分翻面 / 星星还能再用 → 得两次分才走
+ *   第 3 条   得分图案会随着解锁而变化        → **阶梯真的降了一级**才走
+ *   第 4 条   同色星星在外边会得分并消除      → 他真的削掉一条边
+ *   第 5 条   尝试全部消除吧～                → 最后一步，留到这一局结束
+ *
+ * 第 3 条那一步等的是 `'erosion'`——屏幕上右上角那一块的图案真的从 4 枚变成 3 枚，
+ * 话和实物同时发生。从前这一条等的是「用星星凑出一组」（`'mixed'`），那条规则随上
+ * 一版规则一起退役了。
+ */
 const PLAN_FIRST: readonly Step[] = [
   { rules: [0, 1], by: 'match', times: 2, ms: 8000, nudge: true },
-  { rules: [2], by: 'mixed', teaches: 'mixed' },
+  { rules: [2], by: 'erosion', teaches: 'erosion' },
   { rules: [3], by: 'line' },
   { rules: [4] },
 ];
@@ -134,8 +148,8 @@ const PLAN_FIRST: readonly Step[] = [
  */
 const PLAN_SECOND: readonly Step[] = [{ rules: [3] }];
 
-/** 第 3 条那一局没做到的话，补讲一次，摆在第 4 条前面。 */
-const MAKEUP_MIXED: Step = { rules: [2], by: 'mixed', teaches: 'mixed' };
+/** 第 3 条那一局没做到的话（阶梯一级都没降），补讲一次，摆在第 4 条前面。 */
+const MAKEUP_EROSION: Step = { rules: [2], by: 'erosion', teaches: 'erosion' };
 
 /**
  * 第二个基础玩法：打出这么多次得分之后，条子才开口。
@@ -256,10 +270,10 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const steps: readonly Step[] =
     plan === 'first'
       ? PLAN_FIRST
-      : // 上一局第 3 条没做到就补讲一次，摆在这一族那条前面（见 mixedTaught）。
-        mixedTaught()
+      : // 上一局第 3 条没做到就补讲一次，摆在这一族那条前面（见 erosionTaught）。
+        erosionTaught()
         ? PLAN_SECOND
-        : [MAKEUP_MIXED, ...PLAN_SECOND];
+        : [MAKEUP_EROSION, ...PLAN_SECOND];
   const lastStep = steps.length - 1;
   /** 一步里最多摆几行——骨架按这个数一次画够，换步时只改内容不重建。 */
   const rows = Math.max(...steps.map((st) => st.rules.length));
@@ -469,7 +483,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       const need = step.times ?? 1;
       if (++done >= need) {
         // 「做到过才算讲过」：只有真的做到才记账，保底跳过去的那一次不算。
-        if (step.teaches === 'mixed') markMixedTaught();
+        if (step.teaches === 'erosion') markErosionTaught();
         return later(AFTER_MS, () => show(at + 1));
       }
       // 还差几次，但这一步给了个宽限：第一次做到之后再等这么久，没凑够也走。

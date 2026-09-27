@@ -442,6 +442,24 @@ jobs:
           nohup node scripts/dev-server.mjs 8953 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8953/ && break; sleep 0.25; done
           node scripts/check-knowhow.mjs http://localhost:8953/
+      # 教学那五条的配图（ui/ruleArt.ts）。要 Chromium，但**不要服务器**——它自己
+      # setContent 一页出来，把 CSS 动画的时间轴拨到指定那一刻再量，几秒钟就完。
+      #
+      # 收它是因为这五幅图是玩家学规矩的地方，而它坏掉不报错：一段 CSS 动画照样跑
+      # 得好好的，只是教的规矩是错的。2026-09 教学从六条改成五条，五幅图整体重排，
+      # 下标错一个就会「第 3 条配上第 2 条那幅画」——屏幕上看不出是错位。
+      - name: 教学五条的配图
+        run: |
+          npx esbuild src/ui/ruleArt.ts --bundle --format=esm --outfile=/tmp/ruleart.mjs
+          node scripts/check-rule-art.mjs /tmp/ruleart.mjs
+      # 暂停里那颗《怎么玩》：每个玩法只讲自己那一局的事，五条的用词和条数都钉死。
+      # 它要兑一张 TESTMONTH，所以必须**一台自己的服务器**（一个 dev-server 进程里
+      # 一张码只兑得动一次，两道门共用一台，后跑的那道会莫名其妙红）。
+      - name: 《怎么玩》那一屏
+        run: |
+          nohup node scripts/dev-server.mjs 8941 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8941/ && break; sleep 0.25; done
+          node scripts/check-howto.mjs http://localhost:8941/
       # 收单方审核会照着网站上的陈述逐条核——「网站陈述与实际不符」被直接归为 false
       # information，比缺一份文档严重。这一道就是那份自查：五张法务静态页、价格、
       # 订阅入口，按审核看得到的样子走一遍。

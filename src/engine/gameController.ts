@@ -33,7 +33,7 @@ import {
   createStepBank, puzzleComposite, stepLedgerText, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
 } from './puzzleScore';
 import { claimFirstHowToHint } from './firstPlay';
-import { STRINGS, type Lang, TUTORIAL_RULES } from '../i18n';
+import { STRINGS, type Lang } from '../i18n';
 import { stepCoefFor } from './stepCoef';
 import type { Cell } from './types';
 
@@ -857,15 +857,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       (badges.length
         ? `<div class="end-badges">${badges.map((b) => `<span class="end-badge">${escHtml(b)}</span>`).join('')}</div>`
         : '') +
-      // 六条规矩的最后一条（时间越短、步数越少、得分越高，综合得分越高）摆在
-      // 这儿，只摆头一回。
+      // 「综合分是怎么来的」摆在这儿，只摆头一回。
       //
-      // 玩家 2026-09 定的：从前它在棋盘底下那块教学条上，和「这一局怎么结
-      // 束」并成最后一步——可那是他正专心滑的时候，讲的却是结算页才用得着的
-      // 知识，在他最忙的时候讲最不急的事。挪到这儿，上面那几行明细就是实物，
-      // 指着实物讲。
+      // 玩家 2026-09 定的：从前它在棋盘底下那块教学条上，和「这一局怎么结束」并成
+      // 最后一步——可那是他正专心滑的时候，讲的却是结算页才用得着的知识，在他最忙
+      // 的时候讲最不急的事。挪到这儿，上面那几行明细就是实物，指着实物讲。
+      //
+      // ⚠️ 用的是自己的键（endTipComposite），不再借教学那几条的下标。从前借的是
+      // 第 6 条，而教学 2026-09 收成了五条——借下标的写法当场就指空了，屏幕上是一
+      // 行空白，不报错。
       (hooks.shouldTeachTotal?.()
-        ? `<div class="end-row end-row--tip"><span>${escHtml(TUTORIAL_RULES[hooks.lang][5] ?? '')}</span></div>`
+        ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipComposite)}</span></div>`
         : '');
     // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
     // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
@@ -1291,7 +1293,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // 棋盘：图案变小之后能凑成的组跟着变，棋盘上那几处提示也要跟着换。
         if (committed > 0) {
           const step = erosion.spend(committed);
-          if (step.dropped > 0) hooks.onErosion?.(step.level);
+          if (step.dropped > 0) {
+            hooks.onErosion?.(step.level);
+            // 教学条第 3 步等的就是这一下：屏幕右上角那一块的图案真的少了一枚，
+            // 话和实物同时发生（见 ui/coachBar.ts 的 PLAN_FIRST）。
+            coach?.signal('erosion');
+          }
           if (step.unlocked) unlockedOne = true;
           // 每翻一枚都要重画：段熄一格、末位那枚跟着再淡一点。降级那一下由
           // patternBlock 自己认出来（它记着上次画的是几枚）并闪一下。

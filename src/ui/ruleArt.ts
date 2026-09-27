@@ -1,9 +1,20 @@
 /**
- * 教学挑选页六条规则的配图。
+ * 教学挑选页那**五条**规则的配图。
+ *
+ * 《侵蚀阶梯》v1.2（2026-09）把规则从六条改成五条，这五幅图跟着一条一条重新
+ * 对过。对不上的后果不是「图不好看」——`rulesModal.ts` 是按下标取图的
+ * （`art[i]`），文字改了、图没动，第 3 条就会配上第 2 条那幅画，而屏幕上看不出
+ * 是错位，只看得出「这幅图和这句话没关系」。
+ *
+ * 退役的两幅：从前第 1 条那幅「每个图形都有正反两面」（方块/小球/三角并排），
+ * 和从前第 6 条那幅「时间短、步数少 → 综合得分高」（秒表＋奖杯）。前者是因为
+ * 「翻面/正反面」这套中间概念玩家 2026-09 就定下不再讲了；后者是因为时间这一
+ * 项不再进分（综合分 = 拼出分 × 步数系数，见 engine/stepCoef.ts），那幅画里的
+ * 秒表是一句假话。
  *
  * 每条是一段循环的小动画，画法借自基础教学的分镜（storyTutorial / tutorial.ts）：
- * 圆角方块是正面，暗底一颗点是反面（和棋盘上一样），白箭头拉一下是「这一列
- * 要滑」，白色对勾闪几下是「得分了」，消掉的格子留一个虚线空位闪两下。玩家
+ * 圆角方块是色块，暗底一颗「＊」是星星（和棋盘上同一个记号，见 dotFaceMark.ts），
+ * 白箭头拉一下是「这一列要滑」，白色对勾闪几下是「得分了」，消掉的格子缩小淡出。玩家
  * 的原话：「检查教学内容下面的文字配套的图/动画，要能够清晰地展示对应的教学
  * 内容。可以根据前面制作的基础教学动画内容采取局部作为样式」。
  *
@@ -12,7 +23,7 @@
  * 永远按这个顺序来；循环时整幅图淡出再从头开始。
  */
 
-import { roundTriPath } from '../engine/roundTri';
+import { ASTERISK_SEGS, ASTERISK_STROKE } from './dotFaceMark';
 
 // 方块教学分镜用的那套颜色（tutorial.ts）。
 const O = '#EE8A2E'; // 橙（正面）
@@ -24,17 +35,33 @@ const R = '#B34D2B'; // 红（点）
 const T = '#2F8A96'; // 青（点）
 
 /**
- * 一枚棋子：正面一块实色（--f），反面暗底一颗点（--d）。
- *   ra-back  一开始就露着反面
- *   ra-flip  得分之后翻过去
- *   ra-peek  翻过去露一下再翻回来
+ * 星星那一面上的记号：和棋盘上是同一个三笔的「＊」（ui/dotFaceMark.ts）。
+ *
+ * 从前这儿画的是一颗实心小圆——那是 2026-09 统一之前方块的反面记号。玩家那次定
+ * 的是「把正方形和三角形的反面后变成和小球一样的星星标记『*』」，棋盘上改了，教
+ * 学配图没跟上；等到教学文案 2026-09 改成五条、五条里说了五次「星星」之后，这颗
+ * 圆点就成了「字说星星、图画圆点」，一眼看不出说的是同一样东西。
+ *
+ * 线段表从 dotFaceMark 引，不在这儿抄一份：抄一份的下场就是上一次那样——一处改
+ * 了另一处没改，而两处看上去都还是「对的」。
+ */
+const STAR_MARK =
+  `<svg class="ra-mark" viewBox="0 0 24 24" stroke-width="${ASTERISK_STROKE}" aria-hidden="true">` +
+  ASTERISK_SEGS.map(([[x1, y1], [x2, y2]]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`).join('') +
+  `</svg>`;
+
+/**
+ * 一枚棋子：正面一块实色（--f），反面暗底一颗星（--d）。
+ *   ra-back  一开始就露着星星那一面
+ *   ra-flip  得分之后翻成星星
  *   ra-clear 得分之后整枚消掉
- *   ra-f0…7  一枚接一枚翻（第 5 条）
+ *   ra-lad1…3  第 3 条：得分图案降到 1/2/3 枚时，这一枚退场
+ *   ra-w0…7    第 5 条：一枚接一枚消掉
  */
 function tile(front: string, dot: string, cls = ''): string {
   return (
     `<span class="ra-tile${cls ? ' ' + cls : ''}" style="--f:${front};--d:${dot}">` +
-    `<span class="ra-f"></span><span class="ra-b"><span></span></span></span>`
+    `<span class="ra-f"></span><span class="ra-b">${STAR_MARK}</span></span>`
   );
 }
 
@@ -53,8 +80,9 @@ const star100 = (cx: number, cy: number, d: string, k = 1) =>
   `transform="translate(${cx} ${cy}) scale(${k}) translate(-50 -50)">` +
   `<line x1="50" y1="23" x2="50" y2="77"/>` +
   `<line x1="27" y1="36.5" x2="73" y2="63.5"/><line x1="27" y1="63.5" x2="73" y2="36.5"/></g>`;
-const sqFront = (c: string) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${c}"/></svg>`;
+// sqFront / triFront / triBack 跟着退役的第 1 幅（「每个图形都有正反两面」，三族
+// 并排）一起删了——noUnusedLocals 不留没人用的东西，而且留着会让人以为还有一幅
+// 三族并排的图在某处用着。sqBack / ballBack 留着：炸弹那幅提示图还在用。
 const sqBack = (d: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5"/>` +
   star100(50, 50, d) +
@@ -64,19 +92,6 @@ const ballFront = (c: string) =>
 const ballBack = (d: string) =>
   `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5"/>` +
   star100(50, 50, d) +
-  `</svg>`;
-// 圆角和棋盘上、教学分镜里的三角是同一条轮廓（roundTri.ts），三处一起改，
-// 玩家在哪儿看熟的形状，换个地方还是那个形状。
-const TRI_OUT = roundTriPath([[50, 6], [96, 92], [4, 92]]);
-const triFront = (c: string) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${TRI_OUT}" fill="${c}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/></svg>`;
-// 三角这一枚：星星摆在重心上（外框的正中在三角里偏空），比另外两个小一号
-// ——三角是斜的，同样大的星会顶出斜边去。0.8 是「装得下，又还认得出是同一
-// 个记号」之间取的：它的内切圆半径只有 27.6，照小球那个比例算会小到 0.61，
-// 三幅小图并排时那一颗就像另一种东西了。
-const triBack = (d: string) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${TRI_OUT}" fill="${PAPER}" stroke="#9A9A9A" stroke-width="3.5" stroke-linejoin="round"/>` +
-  star100(50, 63.3, d, 0.8) +
   `</svg>`;
 
 /** 一枚正反面都是 SVG 的棋子（小球、三角，还有第 1 条里的方块）。 */
@@ -127,54 +142,24 @@ const checksAt = (from: number): string =>
   check(from, 0) + check(from + 1, 0) + check(from + 2, 0) + check(from + 3, 0);
 const checksRow0 = checksAt(0);
 
-/** 第 5 条最后出的那个「完成」：白底绿勾。 */
+/** 第 5 条最后出的那个「完成」：白底绿勾。棋盘清空之后才冒出来。 */
 const endMark =
   `<svg class="ra-end" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#fff"/>` +
   `<path d="M29 52 L44 66 L72 36" fill="none" stroke="${G}" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-// 第 6 条用的几个符号：秒表（针会走）、滑动、星星（会闪）、等号、奖杯（会亮）。
-const symStopwatch =
-  `<svg class="ra-sym" viewBox="0 0 100 100" aria-hidden="true">` +
-  `<circle cx="50" cy="56" r="34" fill="none" stroke="currentColor" stroke-width="9"/>` +
-  `<path d="M40 12 H60 M50 12 V22" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>` +
-  `<line class="ra-hand" x1="50" y1="56" x2="50" y2="34" stroke="currentColor" stroke-width="9" stroke-linecap="round"/></svg>`;
-const symMoves =
-  `<svg class="ra-sym" viewBox="0 0 100 100" aria-hidden="true">` +
-  `<path d="M14 50 H86 M30 32 L12 50 L30 68 M70 32 L88 50 L70 68" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const symStar =
-  `<svg class="ra-sym" viewBox="0 0 100 100" aria-hidden="true">` +
-  `<path class="ra-star" d="M50 8 L62 36 L92 38 L69 58 L76 88 L50 72 L24 88 L31 58 L8 38 L38 36 Z" fill="#D89B1E"/></svg>`;
-const symEq =
-  `<svg class="ra-sym ra-sym--eq" viewBox="0 0 60 100" aria-hidden="true">` +
-  `<path d="M12 40 H48 M12 60 H48" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/></svg>`;
-const symTrophy =
-  `<svg class="ra-sym ra-trophy" viewBox="0 0 100 100" aria-hidden="true">` +
-  `<path d="M28 10 H72 V40 A22 22 0 0 1 28 40 Z" fill="#D89B1E"/>` +
-  `<path d="M28 18 H14 V28 A14 14 0 0 0 28 42 M72 18 H86 V28 A14 14 0 0 1 72 42" fill="none" stroke="#D89B1E" stroke-width="8" stroke-linecap="round"/>` +
-  `<path d="M50 62 V74" fill="none" stroke="#D89B1E" stroke-width="10" stroke-linecap="round"/>` +
-  `<rect x="32" y="76" width="36" height="14" rx="5" fill="#D89B1E"/></svg>`;
 
 /** 小球的一枚棋子：正面实色球，反面浅球面 + 星标（和棋盘上一个样）。 */
 const ball = (front: string, dot: string, cls = ''): string =>
   svgTile(ballFront(front), ballBack(dot), cls);
 
-/**
- * 消掉之后留下的那颗空球。
+/*
+ * 这儿原先有一对 ballVoid / ballClears：消掉之后底下留一颗淡灰的空球，因为从前
+ * 小球消行是「原地留空位」。
  *
- * 棋盘上它是一枚淡到 35% 的实心灰球（circle.ts 的 `--ink-faint` 那一支），
- * 这儿照抄——第 4 条讲的正是「小球消掉后留下空球」，配图里要真的留下这颗，
- * 不然那句话没有落点。
+ * 《侵蚀阶梯》v1.2 §3 之后不是了——削掉的那条外边**整条离场**，格子不在盘上了
+ * （circle.ts 的 render 直接跳过它们）。再画一颗空球就是在教一件不发生的事：玩
+ * 家会以为那个位置还能滑进东西去。所以第 4 条的小球版和方块版现在一样，四颗淡
+ * 出之后底下什么都不剩。
  */
-const ballVoid = `<span class="ra-void"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#8A7F79" opacity="0.35"/></svg></span>`;
-
-/**
- * 第 4 条里会消掉的那一格：空球一直摆着，上面压一颗反面的球，到时候淡出。
- *
- * 分成两层是因为淡出得动在外面（见 ra-gone 上的说明），而且「消掉后留下空
- * 球」本来就是两样东西——底下那颗是留下的，上面那颗是走掉的。
- */
-const ballClears = (dot: string): string =>
-  `<span class="ra-cell">${ballVoid}<span class="ra-gone">${ball(B, dot, 'ra-back')}</span></span>`;
 
 /** 一行六颗小球，第二行整体往右挪半格——棋盘上小球就是这样交错排的。 */
 const STAG = 'ra-stag';
@@ -220,12 +205,15 @@ const ballRow2 = (cls = STAG): string =>
   ball(G, T, cls) + ball(M, R, cls) + ball(Y, G, cls) + ball(B, M, cls) + ball(O, R, cls) + ball(G, B, cls);
 
 /**
- * 第 2–5 条的小球版：上下两行各六颗，下面那行错开半格。
+ * 五条的小球版：上下两行各六颗，下面那行错开半格。
  *
  * 玩家的原话：「把逐步教学的图形从方块改为小球，除了第一条以外……两行小球
  * 然后交叉排列比如上面 6 颗下面 6 颗，教学的内容一样你只是把图形、反面样式
- * 更改」。所以讲的还是那四件事，只是棋子换成小球、反面换成星标、消除换成留
- * 空球，节奏（滑 → 对勾 → 翻面）一拍不改。
+ * 更改」。讲的还是那五件事，只是棋子换成小球、星星换成星标的球，节奏（滑 →
+ * 对勾 → 翻面）一拍不改。
+ *
+ * 「除了第一条以外」那一句指的是**当年的**第 1 条（三族并排的正反面图）——那一
+ * 幅 2026-09 退役了，所以现在五条全都有小球版，一条不落。
  */
 function ballArt(): string[] {
   const b = (inner: string) => board(inner, 'ra-board--stag', 6);
@@ -233,8 +221,8 @@ function ballArt(): string[] {
   // 画出来的六颗在窗口里面。
   const blankRow = blank + blank + blank + blank + blank + blank;
   return [
-    // 2. 同色凑成图案：整行往左滑一格，最左边那颗橙的绕回右头，和原先挤在右
-    //    头的三颗凑成四连 → 对勾 → 四颗翻面（反面各是不同的颜色）。
+    // 1. 色块拼出得分图案：整行往左滑一格，最左边那颗橙的绕回右头，和原先挤在
+    //    右头的三颗凑成四连 → 对勾 → 四颗翻成星星（星星各是不同的颜色）。
     b(
       blankRow + ballRow2() +
         slidingRow([
@@ -243,8 +231,8 @@ function ballArt(): string[] {
         ]) +
         arrowLeft(2, 0) + checksAt(2),
     ),
-    // 3. 反面和正面同色：两颗绿点的反面，和两颗绿正面凑成一行照样得分；只有
-    //    正面那两颗翻过去。滑法和上一条一样，绕回右头的是那颗绿正面。
+    // 2. 星星和色块一同再拼一次：两颗绿星星，和两颗绿色块凑成一线照样得分；只有
+    //    色块那两颗翻过去。滑法和上一条一样，绕回右头的是那颗绿色块。
     b(
       blankRow + ballRow2() +
         slidingRow([
@@ -254,88 +242,112 @@ function ballArt(): string[] {
         ]) +
         arrowLeft(2, 0) + checksAt(2),
     ),
-    // 4. 反面同色连成一行：四颗蓝点排在一行 → 对勾 → 四颗淡出，底下露出空球。
+    // 3. 得分图案会变小：横着一条橙的，4 → 3 → 2 → 1，末位那颗一颗一颗退场。
+    ladderArt(ball),
+    // 4. 同色星星在外边得分并消除：最上面那一条四颗蓝星星 → 对勾 → 四颗一起淡出，
+    //    底下什么都不剩（削掉的外边整条离场，见上面那段说明）。
     b(
-      ballClears(B) + ballClears(B) + ballClears(B) + ballClears(B) + ball(O, R) + ball(M, G) +
+      gone(ball(B, B, 'ra-back')) + gone(ball(B, B, 'ra-back')) +
+        gone(ball(B, B, 'ra-back')) + gone(ball(B, B, 'ra-back')) + ball(O, R) + ball(M, G) +
         ballRow2() + checksRow0,
     ),
-    // 5. 经典结束：十二颗一颗接一颗翻到反面，全翻完了出「完成」。
+    // 5. 尝试全部消除：十二颗星星一颗接一颗消掉，一颗不剩了才出「完成」。
+    //    两行错开一拍（下排比上排晚两格），扫过去像一道斜的波。
     b(
-      ball(B, R, 'ra-g0') + ball(O, G, 'ra-g1') + ball(M, T, 'ra-g2') +
-        ball(Y, R, 'ra-g3') + ball(G, M, 'ra-g4') + ball(B, O, 'ra-g5') +
-        ball(O, T, 'ra-g6 ' + STAG) + ball(M, G, 'ra-g7 ' + STAG) + ball(G, R, 'ra-g8 ' + STAG) +
-        ball(B, Y, 'ra-g9 ' + STAG) + ball(Y, B, 'ra-g10 ' + STAG) + ball(O, M, 'ra-g11 ' + STAG) +
+      sweep(ball(B, R, 'ra-back'), 0) + sweep(ball(O, G, 'ra-back'), 1) + sweep(ball(M, T, 'ra-back'), 2) +
+        sweep(ball(Y, R, 'ra-back'), 3) + sweep(ball(G, M, 'ra-back'), 4) + sweep(ball(B, O, 'ra-back'), 5) +
+        sweep(ball(O, T, 'ra-back'), 2, STAG) + sweep(ball(M, G, 'ra-back'), 3, STAG) +
+        sweep(ball(G, R, 'ra-back'), 4, STAG) + sweep(ball(B, Y, 'ra-back'), 5, STAG) +
+        sweep(ball(Y, B, 'ra-back'), 6, STAG) + sweep(ball(O, M, 'ra-back'), 7, STAG) +
         endMark,
     ),
   ];
 }
 
 /**
- * 这六幅图，可以要三角，也可以不要。
+ * 第 5 条那道波里的一枚：到了自己那一拍就缩小消失。
  *
- * 只有第 1 幅认得出三角——它画的是「每个图形都有正反两面」，方块、小球、三角
- * 各一列。别的五幅画的是规矩本身（凑图案、翻面、连成一行、结束、综合得分），
- * 用的都是方块和小球，本来就没有三角。
- *
- * 小红书那一版整块没有三角（玩家定的），所以那一版把它摘掉，剩两列；网页版
- * 三角是真玩法，照旧三列。摘掉的是一整列（正面那一枚和它底下的反面那一枚一
- * 起走），不是只藏一枚——只藏一枚会剩下一个空位，看起来像画错了。
+ * 外面这一层和 `gone()` 是同一件事（淡出必须动在棋子外面，见 ra-gone 上的说
+ * 明），只是把节奏换成第 k 拍——`.ra-gone` 的简写里带着 animation-name: ra-clear，
+ * `.ra-w0…7` 在样式表里排在它后面，同特指度、后来居上，只改名字不改盒子。
  */
-export function buildRuleArt(opts: { triangle?: boolean; shape?: 'square' | 'circle' } = {}): string[] {
-  const withTri = opts.triangle !== false;
-  const cols = withTri ? 3 : 2;
-  // 第 2–5 条可以换成小球那一套画法（ballArt）。第 1 条不换：它讲的是「每个
-  // 图形都有正反两面」，本来就要把几种图形并排摆出来。第 6 条是几个符号，
-  // 和图形无关。
+const sweep = (inner: string, k: number, extra = ''): string =>
+  `<span class="ra-gone ra-w${k}${extra ? ' ' + extra : ''}">${inner}</span>`;
+
+/**
+ * 第 3 条：得分图案 4 → 3 → 2 → 1。
+ *
+ * 画的就是 HUD 上那块《得分图案》讲的同一件事（ui/patternBlock.ts）——横着一条
+ * 同色的，每降一级末位那枚退场。所以这幅图不画棋盘上的事，它画的是「要凑的那个
+ * 东西本身在缩短」。
+ *
+ * 退场顺序是从右往左（末位先走），和 HUD 上那块一致：那儿末位那枚的不透明度随
+ * 本级剩余段数往下掉，掉到底就是这一枚消失。两处不一样的话，玩家会以为是两件事。
+ */
+function ladderArt(piece: (front: string, dot: string, cls?: string) => string): string {
+  return board(
+    piece(O, R) +
+      `<span class="ra-gone ra-lad1">${piece(O, G)}</span>` +
+      `<span class="ra-gone ra-lad2">${piece(O, M)}</span>` +
+      `<span class="ra-gone ra-lad3">${piece(O, T)}</span>`,
+    '',
+    4,
+  );
+}
+
+/**
+ * 教学那五条的配图，一条一幅，下标就是条号减一。
+ *
+ * `shape: 'circle'` 时整套换成小球那一版（ballArt）——玩家的原话：「把逐步教学
+ * 的图形从方块改为小球……教学的内容一样你只是把图形、反面样式更改」。三角没有
+ * 自己的一套，走方块那一份。
+ *
+ * 从前这个函数还收一个 `triangle`，因为退役的第 1 幅要把方块/小球/三角并排画出
+ * 来，小红书那一版得把三角那一列摘掉。那一幅没了，这个参数也就没有了意义——留
+ * 着一个「传了也不起作用」的开关比删掉更难查。
+ */
+export function buildRuleArt(opts: { shape?: 'square' | 'circle' } = {}): string[] {
   const balls = opts.shape === 'circle' ? ballArt() : null;
+  if (balls) return balls;
   return [
-  // 1. 正反两面：方块、小球、三角各一列——上排正面，下排它的反面。上排的
-  //    几枚轮流翻过去露一下反面再翻回来，翻出来的正是底下那一枚（玩家的原话：
-  //    「各展示一个正面和反面……用户需要看明白正-反关系，能用图示的尽量不要
-  //    文字」）。正面用的就是上面几颗入口键的颜色。
-  board(
-    svgTile(sqFront('#2F9E52'), sqBack(O), 'ra-peek') +
-      svgTile(ballFront('#B23A3A'), ballBack('#4C68B0'), 'ra-peek', 'animation-delay:0.5s') +
-      (withTri ? svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-peek', 'animation-delay:1s') : '') +
-      svgTile(sqFront('#2F9E52'), sqBack(O), 'ra-back') +
-      svgTile(ballFront('#B23A3A'), ballBack('#4C68B0'), 'ra-back') +
-      (withTri ? svgTile(triFront('#4C68B0'), triBack('#B23A3A'), 'ra-back') : ''),
-    'ra-still',
-    cols,
-  ),
-  // 2. 同色凑成图案：最右那列往上滑一格，橙色凑满一行 → 对勾 → 四枚翻面，反面各是不同的颜色。
-  balls ? balls[0] :
-  board(
-    tile(O, R, 'ra-flip') + tile(O, G, 'ra-flip') + tile(O, Y, 'ra-flip') + blank +
-      tile(G, T) + tile(M, R) + tile(Y, G) + blank +
-      slidingCol(tile(B, T), tile(O, M, 'ra-flip'), tile(B, T)) +
-      arrowUp(3) + checksRow0,
-  ),
-  // 3. 反面和正面同色：两枚绿点的反面 + 两枚绿正面凑成一行照样得分；只有正面的那两枚翻过去。
-  balls ? balls[1] :
-  board(
-    tile(G, G, 'ra-back') + tile(G, G, 'ra-back') + tile(G, R, 'ra-flip') + blank +
-      tile(B, O) + tile(M, R) + tile(Y, G) + blank +
-      slidingCol(tile(B, T), tile(G, T, 'ra-flip'), tile(B, T)) +
-      arrowUp(3) + checksRow0,
-  ),
-  // 4. 反面同色连成一行：四颗蓝点排成一行 → 对勾 → 四颗一起缩小消失（玩家的
-  //    原话：「四个点然后消失消除的动画」）。
-  balls ? balls[2] :
-  board(
-    gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) +
-      tile(O, R) + tile(M, G) + tile(G, T) + tile(Y, M) +
-      checksRow0,
-  ),
-  // 5. 经典结束：八枚一枚接一枚翻到反面，全翻完了就出「完成」。
-  balls ? balls[3] :
-  board(
-    tile(B, R, 'ra-f0') + tile(O, G, 'ra-f1') + tile(M, T, 'ra-f2') + tile(Y, R, 'ra-f3') +
-      tile(G, M, 'ra-f4') + tile(B, O, 'ra-f5') + tile(O, R, 'ra-f6') + tile(M, G, 'ra-f7') +
-      endMark,
-  ),
-  // 6. 时间短、步数少、得分多 → 综合得分高：秒表、滑动、星星，等号右边是奖杯。
-  symStopwatch + symMoves + symStar + symEq + symTrophy,
+    // 1. 色块拼出得分图案会得分翻面：最右那列往上滑一格，橙色凑满一线 → 对勾 →
+    //    四枚翻成星星，星星各是不同的颜色。
+    board(
+      tile(O, R, 'ra-flip') + tile(O, G, 'ra-flip') + tile(O, Y, 'ra-flip') + blank +
+        tile(G, T) + tile(M, R) + tile(Y, G) + blank +
+        slidingCol(tile(B, T), tile(O, M, 'ra-flip'), tile(B, T)) +
+        arrowUp(3) + checksRow0,
+    ),
+    // 2. 星星可以和色块一同再拼一次：两枚绿星星 + 两枚绿色块凑成一线照样得分；
+    //    只有色块那两枚翻过去。
+    board(
+      tile(G, G, 'ra-back') + tile(G, G, 'ra-back') + tile(G, R, 'ra-flip') + blank +
+        tile(B, O) + tile(M, R) + tile(Y, G) + blank +
+        slidingCol(tile(B, T), tile(G, T, 'ra-flip'), tile(B, T)) +
+        arrowUp(3) + checksRow0,
+    ),
+    // 3. 得分图案会随着游戏解锁而变化：横着一条橙的，4 → 3 → 2 → 1。
+    ladderArt(tile),
+    // 4. 同色星星在外边得分并消除：四枚蓝星星排成一线 → 对勾 → 四枚一起缩小消失
+    //    （玩家的原话：「四个点然后消失消除的动画」）。
+    board(
+      gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) + gone(tile(B, B, 'ra-back')) +
+        tile(O, R) + tile(M, G) + tile(G, T) + tile(Y, M) +
+        checksRow0,
+    ),
+    // 5. 尝试全部消除：八枚星星一枚接一枚消掉，一枚不剩了才出「完成」。
+    //
+    //    从前这一幅画的是「八枚一枚接一枚**翻到反面**，全翻完出完成」——那是上一
+    //    套规则里的终局。现在终局是一枚不剩（八副棋盘的 isGameOver），画翻面就是
+    //    在教一个到不了的结束条件；玩家撞过一次同源的事故：结算页写着「全部已變
+    //    成星星」，盘面上还躺着四颗同色蓝星。
+    board(
+      sweep(tile(B, R, 'ra-back'), 0) + sweep(tile(O, G, 'ra-back'), 1) +
+        sweep(tile(M, T, 'ra-back'), 2) + sweep(tile(Y, R, 'ra-back'), 3) +
+        sweep(tile(G, M, 'ra-back'), 4) + sweep(tile(B, O, 'ra-back'), 5) +
+        sweep(tile(O, R, 'ra-back'), 6) + sweep(tile(M, G, 'ra-back'), 7) +
+        endMark,
+    ),
   ];
 }
 

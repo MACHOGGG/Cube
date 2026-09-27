@@ -497,6 +497,13 @@ export interface I18nStrings {
    */
   /** 「翻面 {n} 枚 ×2」；带拆弹时另接一句 flipRowDefused。 */
   /** HUD《得分图案》那一块的读屏播报：「得分图案变成 {n} 枚」。 */
+  /**
+   * 结算页底下那一句（只摆头一回）：综合分是怎么来的。
+   *
+   * 从前这儿借的是教学第 6 条（「时间越短、步数越少……」）。《侵蚀阶梯》v1.2 §5
+   * 之后时间不计分，教学也收成五条——借下标的写法当场就指空了。所以单给一个键。
+   */
+  endTipComposite: string;
   patternNowLabel: string;
   /** HUD 左边那一块的标题：拼出得分。 */
   builtScoreHudLabel: string;
@@ -884,6 +891,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: 'Big triangle',
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
+    endTipComposite: 'Final score = build score \u00d7 move multiplier. Fewer moves, bigger multiplier \u2014 it never drops below \u00d71.00.',
     patternNowLabel: 'Pattern is now {n} tiles',
     builtScoreHudLabel: 'Build score',
     flipRowLabel: 'Flipped {n} ×2',
@@ -1221,6 +1229,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: 'Grand triangle',
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
+    endTipComposite: 'Score final = score de jeu \u00d7 coefficient de coups. Moins de coups, plus gros coefficient \u2014 jamais sous \u00d71,00.',
     patternNowLabel: 'Le motif passe à {n} pièces',
     builtScoreHudLabel: 'Score de jeu',
     flipRowLabel: '{n} retournées ×2',
@@ -1558,6 +1567,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: '大三角',
     labelPattern: '圖案',
     labelWholeLine: '整線',
+    endTipComposite: '綜合分 = 拼出分 × 步數係數。步數越少係數越高，最低 ×1.00，只加不減。',
     patternNowLabel: '得分圖案變成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
@@ -1895,6 +1905,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: '大三角',
     labelPattern: '图案',
     labelWholeLine: '整线',
+    endTipComposite: '综合分 = 拼出分 × 步数系数。步数越少系数越高，最低 ×1.00，只加不减。',
     patternNowLabel: '得分图案变成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
@@ -1998,121 +2009,120 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  *
  * 例外只有一处：《无限反转》是玩法的名字，不是描述动作的词，照旧叫它。
  */
+/**
+ * 教学那**五条**——玩家 2026-09 逐字定的（《侵蚀阶梯》v1.2 上线那一版）。
+ *
+ * 五条对着新规则的五件事：翻面得分 → 星星还能再用 → 图案会变小 → 外边消除 →
+ * 目标是清盘。从前那六条讲的是上一套规则（2×2 那一族图案、整组星星按平方算、
+ * 时间越短分越高），每一条在这一版里都成了假话。
+ *
+ * 第 3 条「得分图案会随着游戏解锁而变化」说的就是侵蚀阶梯（§2）：图案从 4 枚一路
+ * 降到 1 枚。屏幕上那一块《得分图案》画的是同一件事（ui/patternBlock.ts），所以这
+ * 句话指得到实物。
+ *
+ * 第 4 条按棋盘分两套（见下面 TUTORIAL_RULE4）：外边族说「最外面的一条线」，方块
+ * 说「任意整行整列」。
+ */
 export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
-    'A piece that scores turns into a star. Which colour the star gets is random.',
-    'Line up pieces of one colour into a scoring shape and you score.',
-    'A star of that same colour counts too, and scores again. A shape made only of stars scores as well — the star count squared, so 4 stars are worth 16 — and those stars then vanish.',
-    'Stars of one colour filling a whole row or column score and clear. Balls need at least 3 and leave empty balls behind; squares clear at any count and are gone for good.',
-    'The game ends when every piece has been cleared — or when no scoring shape is left to make.',
-    'Less time, fewer moves, more points: a higher total score.',
+    'A piece that completes a scoring shape scores and flips into a star of another colour.',
+    'Stars can join coloured pieces to make another scoring shape.',
+    'The scoring shape gets shorter as the game unlocks.',
+    'Stars of one colour along the board\u2019s outer edge score and clear.',
+    'Try to clear the whole board.',
   ],
   fr: [
-    'Une pièce qui marque devient une étoile. Sa couleur est tirée au hasard.',
-    'Alignez des pièces d’une même couleur en un motif : vous marquez.',
-    'Une étoile de cette même couleur compte aussi et marque à nouveau. Un motif fait uniquement d’étoiles marque également — le nombre d’étoiles au carré, donc 4 étoiles valent 16 — puis ces étoiles disparaissent.',
-    'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent. Les billes : au moins 3, elles laissent des billes vides ; les carrés : n’importe quel nombre, et ils partent pour de bon.',
-    'La partie s’arrête quand toutes les pièces ont disparu — ou quand plus aucun motif ne peut être formé.',
-    'Moins de temps, moins de coups, plus de points : meilleur score total.',
+    'Une pi\u00e8ce qui compl\u00e8te un motif marque et se retourne en \u00e9toile d\u2019une autre couleur.',
+    'Les \u00e9toiles peuvent compl\u00e9ter un motif avec les pi\u00e8ces color\u00e9es.',
+    'Le motif \u00e0 former raccourcit \u00e0 mesure que la partie se d\u00e9bloque.',
+    'Des \u00e9toiles de m\u00eame couleur sur le bord ext\u00e9rieur marquent et disparaissent.',
+    'Essayez de tout faire dispara\u00eetre.',
   ],
   zhHant: [
-    '色塊得分後會變成星星；星星是什麼顏色，隨機。',
-    '同色湊成得分圖案就得分。',
-    '星星和色塊顏色一樣時，也能一起湊圖案，再得一次分。整組都是星星也能得分——按星星個數的平方算，4 顆就是 16 分，那幾顆隨後消失。',
-    '星星同色連成一行或一列，得分並消除。小球最少 3 個，消掉後留下空球；方塊幾個都行，消掉就不再出現。',
-    '全部消完，這一局結束；再也湊不出得分圖案，也結束。',
-    '時間越短、步數越少、得分越高，綜合得分越高。',
+    '色塊拼出得分圖案會得分翻面，變成其他顏色的星星。',
+    '星星可以與色塊一同再次拼出得分圖案。',
+    '得分圖案會隨著遊戲解鎖而變化。',
+    '同色星星在整體的外邊會得分並消除。',
+    '嘗試全部消除吧～',
   ],
   zhHans: [
-    '色块得分后会变成星星；星星是什么颜色，随机。',
-    '同色凑成得分图案就得分。',
-    '星星和色块颜色一样时，也能一起凑图案，再得一次分。整组都是星星也能得分——按星星个数的平方算，4 颗就是 16 分，那几颗随后消失。',
-    '星星同色连成一行或一列，得分并消除。小球最少 3 个，消掉后留下空球；方块几个都行，消掉就不再出现。',
-    '全部消完，这一局结束；再也凑不出得分图案，也结束。',
-    '时间越短、步数越少、得分越高，综合得分越高。',
+    '色块拼出得分图案会得分翻面，变成其他颜色的星星。',
+    '星星可以与色块一同再次拼出得分图案。',
+    '得分图案会随着游戏解锁而变化。',
+    '同色星星在整体的外边会得分并消除。',
+    '尝试全部消除吧～',
   ],
 };
 
 /**
- * 第 4 条按形状分两句。
+ * 第 4 条按棋盘分两套。
  *
- * 上面那一份是「两种图形都讲」的通稿，教学挑选页、暂停面板、《怎么玩》那一
- * 屏用它——那几处玩家还没挑玩法，两边都得说。
+ * 上面那一份是通稿，教学挑选页、暂停面板、《怎么玩》那一屏用它——那几处玩家还没挑
+ * 玩法，两套都得说得过去。
  *
- * 但棋盘底下那块教学条（ui/coachBar.ts）是在**某一局里**讲的：他眼前只有小
- * 球，或者只有方块。这时候再讲另一种图形的规矩，是在他手上这一局里插进一段
- * 用不上的话。玩家的原话——小球那一局「在文字内容中也去除所有与方块有关的
- * 内容」，方块那一局「只讲方块连成一行/列后会完全消除」。
+ * 棋盘底下那块教学条（ui/coachBar.ts）是在**某一局里**讲的：他眼前只有一副棋盘。
+ * 这时候再讲另一种棋盘的规矩，是在他手上这一局里插进一段用不上的话。玩家的原话
+ * ——小球那一局「在文字内容中也去除所有与方块有关的内容」。
  *
- * 只有第 4 条要分：别的五条讲的是正反面、凑图案、结束、综合得分，几种图形
- * 一个样。
+ * **《侵蚀阶梯》v1.2 §3 之后两套是这样分的**：
+ *   · 方块 36 —— 任意一整行 / 一整列全是同色星星就消掉，棋盘合拢；
+ *   · 其余五副（外边族）—— 只削**此刻最外面的那一条线**，至少 3 枚，棋盘一圈圈变
+ *     小。托盘上那条浅色带标出的就是这一圈（ui/edgeBand.ts），所以这句话指得到实物。
  *
- * 三角这一句是后补的（玩家的原话：「在每个游戏界面里的暂停里的怎么玩？教学
- * 中 都是针对这个玩法的内容」）——局中那一屏认得出自己是哪一族，就不该再念
- * 别人的规矩。三角的行为和小球一样：最少 3 个，消掉之后原地留下一个空三角
- * （见 shapes/triangle.ts 的 MIN_LINE_BONUS_LEN 与 applyLineBonus，那里把格子
- * 涂成 BLANK 而不是拿走）。只有方块是真的拿走不再出现。
- */
-/** 第 4 条按族分。三副棋盘各有各的说法，别的五条通用。 */
-/**
- * 《怎么玩》第 4 条按哪一套讲。
- *
- * 它不是「棋子长什么样」，是「消行之后那一格会怎样」——所以菱形方块自己单独
- * 算一档：它长得是方块，可它消掉之后是**原地留一个空位**（最少 3 个），和小
- * 球、三角一路，跟基础方块的「整块拿走、不再出现」正好相反。
- * 见 shapes/squareDiamond.ts 的 MIN_LINE_BONUS_LEN 与文件头那段说明。
+ * 菱形方块归外边族：它长得是方块，规则却和小球一路（见 shapes/squareDiamond.ts 文件
+ * 头那段——按方块那套算，实测清盘率从 23–27/30 跌到 2–6/30）。
  */
 export type RuleShape = 'circle' | 'square' | 'squareDiamond' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
-    circle: 'Stars of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty balls behind.',
-    square: 'Stars of one colour filling a whole row or column score and clear away for good.',
-    squareDiamond: 'Stars of one colour filling a whole row or column score and clear — at least 3 of them, and they leave empty squares behind.',
-    triangle: 'Stars of one colour filling a whole line score and clear — at least 3 of them, and they leave empty triangles behind.',
+    circle: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and the board shrinks a ring.',
+    square: 'Stars of one colour filling a whole row or column score and clear, and the board closes up.',
+    squareDiamond: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and the board shrinks a ring.',
+    triangle: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and the board shrinks a ring.',
   },
   fr: {
-    circle: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et elles laissent des billes vides.',
-    square: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent définitivement.',
-    squareDiamond: 'Des étoiles de même couleur sur toute une ligne ou colonne marquent et disparaissent — au moins 3, et elles laissent des cases vides.',
-    triangle: 'Des étoiles de même couleur sur toute une ligne marquent et disparaissent — au moins 3, et elles laissent des triangles vides.',
+    circle: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et le plateau r\u00e9tr\u00e9cit d\u2019un cran.',
+    square: 'Des \u00e9toiles de m\u00eame couleur sur toute une ligne ou colonne marquent et disparaissent, et le plateau se referme.',
+    squareDiamond: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et le plateau r\u00e9tr\u00e9cit d\u2019un cran.',
+    triangle: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et le plateau r\u00e9tr\u00e9cit d\u2019un cran.',
   },
   zhHant: {
-    circle: '星星同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空球。',
-    square: '星星同色連成一行或一列，方塊就完全消除，不再出現。',
-    squareDiamond: '星星同色連成一行或一列，得分並消除；最少 3 個，消掉後留下空位。',
-    triangle: '星星同色連成一整條線，得分並消除；最少 3 個，消掉後留下空三角。',
+    circle: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，棋盤一圈圈變小。',
+    square: '同色星星連滿整行或整列，就得分並消除，棋盤合攏。',
+    squareDiamond: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，棋盤一圈圈變小。',
+    triangle: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，棋盤一圈圈變小。',
   },
   zhHans: {
-    circle: '星星同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空球。',
-    square: '星星同色连成一行或一列，方块就完全消除，不再出现。',
-    squareDiamond: '星星同色连成一行或一列，得分并消除；最少 3 个，消掉后留下空位。',
-    triangle: '星星同色连成一整条线，得分并消除；最少 3 个，消掉后留下空三角。',
+    circle: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，棋盘一圈圈变小。',
+    square: '同色星星连满整行或整列，就得分并消除，棋盘合拢。',
+    squareDiamond: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，棋盘一圈圈变小。',
+    triangle: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，棋盘一圈圈变小。',
   },
 };
 
 /**
  * 《无限反转》那一局的第 3 条。
  *
- * 那一局 toggleOnMatch 开着：得分只是把这一组来回翻，星星同色**不**消除，纯
- * 星星的图案也不得分（engine/scoring.ts 的 starsScore 要求 !toggleOnMatch）。
- * 所以通稿第 3 条后半句「整组都是星星也能得分」在那一局是假话，换成这一条
- * ——它正是 2026-09 之前全站通用的那句。
+ * 通稿第 3 条说「得分图案会随着游戏解锁而变化」——那一局**不吃侵蚀**（玩家
+ * 2026-09-27 拍板，E15：翻过去还能翻回来，吃侵蚀的话几步就降到 1×1、随便一枚都得
+ * 分，玩法当场塌了）。图案永远停在开局那一级，所以通稿那一句在那一局是假话。
  *
- * 第 4、5 条那一局整条抽掉（ui/rulesModal.ts 的 omitRules），这一条不能抽：
- * 星星和色块一起凑图案在那一局照样成立，抽掉他就不知道星星还算数。
+ * 第 4、5 条那一局整条抽掉（ui/rulesModal.ts 的 omitRules）：外边消除在那一局不发
+ * 生，也没有「全部消除」这个目标（它是固定 60 秒）。这一条不能抽——不讲的话他不知
+ * 道图案是几枚。
  */
 export const TUTORIAL_RULE3_FLIP: Record<Lang, string> = {
-  en: 'A star of that same colour counts too, and scores again — but a shape must always hold at least one coloured piece.',
-  fr: 'Une étoile de cette même couleur compte aussi et marque à nouveau — mais un motif doit toujours contenir au moins une pièce colorée.',
-  zhHant: '星星和色塊顏色一樣時，也能一起湊圖案，再得一次分；但圖案裡至少要有一個色塊。',
-  zhHans: '星星和色块颜色一样时，也能一起凑图案，再得一次分；但图案里至少要有一个色块。',
+  en: 'In Endless Flip the scoring shape never shrinks \u2014 it stays four pieces all game.',
+  fr: 'Dans Retournement infini, le motif ne raccourcit jamais : il reste \u00e0 quatre pi\u00e8ces.',
+  zhHant: '《無限反轉》裡得分圖案不會變小，整局都是 4 枚。',
+  zhHans: '《无限反转》里得分图案不会变小，整局都是 4 枚。',
 };
 
 /**
- * 教学条那一局要念的六条：第 4 条换成这个形状自己那一句，其余照通稿。
+ * 教学条那一局要念的五条：第 4 条换成这副棋盘自己那一句，其余照通稿。
  *
- * flip = 《无限反转》：第 3 条也要换（见 TUTORIAL_RULE3_FLIP）。教学条本身走
- * 不到这一路（那一局摆的是一句 MODE_TIPS，不是六条），用它的是《怎么玩》。
+ * flip = 《无限反转》：第 3 条也要换（见 TUTORIAL_RULE3_FLIP）。教学条本身走不到这
+ * 一路（那一局摆的是一句 MODE_TIPS，不是五条），用它的是《怎么玩》。
  */
 export function tutorialRules(lang: Lang, shape: RuleShape, flip = false): string[] {
   const base = TUTORIAL_RULES[lang] ?? TUTORIAL_RULES.zhHans;

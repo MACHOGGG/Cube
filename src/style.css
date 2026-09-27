@@ -5972,8 +5972,9 @@ body.is-room-host::after {
 }
 .ra-board.ra-still { animation: none; }
 @keyframes ra-cycle { 0%, 94% { opacity: 1; } 97%, 100% { opacity: 0; } }
-/* 一枚棋子：正面一块实色（--f），反面是深褐的一块、中间一颗点（--d）——和
-   棋盘上翻过去的棋子一个样子；底浅了，深块反而更显眼，正反一眼分得开。 */
+/* 一枚棋子：正面一块实色（--f），星星那一面是深褐的一块、中间一颗「＊」（--d）
+   ——和棋盘上那一面同一个记号（ui/dotFaceMark.ts）；底浅了，深块反而更显眼，
+   色块和星星一眼分得开。 */
 .ra-tile { position: relative; display: block; width: 1em; height: 1em; transform-style: preserve-3d; }
 .ra-tile.ra-blank { visibility: hidden; }
 .ra-f, .ra-b { position: absolute; inset: 0; border-radius: 22%; backface-visibility: hidden; }
@@ -5982,7 +5983,12 @@ body.is-room-host::after {
   background: var(--play-panel, #3D3128); transform: rotateY(180deg); box-shadow: inset 0 0 0 0.06em rgba(255, 255, 255, 0.14);
   display: flex; align-items: center; justify-content: center;
 }
-.ra-b > span { width: 46%; height: 46%; border-radius: 50%; background: var(--d); }
+/* 那颗「＊」：三笔线段（stroke-width 写在标签上，和 dotFaceMark 的 24 坐标系同
+   一个数），占格子的 95%——棋盘上给它的也是格子的 0.95，两处一样大。 */
+.ra-b > .ra-mark {
+  width: 95%; height: 95%; display: block;
+  fill: none; stroke: var(--d); stroke-linecap: round;
+}
 /* 正反面都是整幅 SVG 的棋子（小球、三角）：两面都不要底色，图自己画满。 */
 .ra-tile--svg .ra-f, .ra-tile--svg .ra-b { background: none; box-shadow: none; border-radius: 0; display: block; }
 .ra-tile--svg svg { width: 100%; height: 100%; display: block; }
@@ -6022,30 +6028,43 @@ body.is-room-host::after {
 /* 得分之后翻面：对勾停了再翻。 */
 .ra-flip { animation: ra-flip var(--T) ease-in-out infinite; }
 @keyframes ra-flip { 0%, 66% { transform: rotateY(0); } 74%, 100% { transform: rotateY(180deg); } }
-/* 第 1 条：一枚翻过去露一下反面，再翻回来。 */
-.ra-peek { animation: ra-peek var(--T) ease-in-out infinite; }
-@keyframes ra-peek { 0%, 26% { transform: rotateY(0); } 34%, 58% { transform: rotateY(180deg); } 66%, 100% { transform: rotateY(0); } }
-/* 第 4 条：四颗同色点面排成一行，得分后一起缩小消失。淡出动在外面那一层
+/* ra-peek（一枚翻过去露一下反面再翻回来）随着「每个图形都有正反两面」那一幅
+   一起退役了——教学 2026-09 改成五条，那一幅不在里面（见 ui/ruleArt.ts 文件头）。 */
+/* 第 4 条：四颗同色星星排成一线，得分后一起缩小消失。淡出动在外面那一层
    （ra-gone）——opacity 一动元素就被压平，压在棋子上它的反面就翻不出来了。 */
 .ra-gone { display: block; width: 1em; height: 1em; animation: ra-clear var(--T) ease-in infinite; }
 @keyframes ra-clear { 0%, 70% { opacity: 1; transform: scale(1); } 76%, 100% { opacity: 0; transform: scale(0.5); } }
-/* 第 5 条：八枚一枚接一枚翻到反面，全翻完了出一个「完成」。 */
-.ra-f0 { animation: ra-f0 var(--T) ease-in-out infinite; }
-.ra-f1 { animation: ra-f1 var(--T) ease-in-out infinite; }
-.ra-f2 { animation: ra-f2 var(--T) ease-in-out infinite; }
-.ra-f3 { animation: ra-f3 var(--T) ease-in-out infinite; }
-.ra-f4 { animation: ra-f4 var(--T) ease-in-out infinite; }
-.ra-f5 { animation: ra-f5 var(--T) ease-in-out infinite; }
-.ra-f6 { animation: ra-f6 var(--T) ease-in-out infinite; }
-.ra-f7 { animation: ra-f7 var(--T) ease-in-out infinite; }
-@keyframes ra-f0 { 0%, 8% { transform: rotateY(0); } 14%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f1 { 0%, 17% { transform: rotateY(0); } 23%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f2 { 0%, 26% { transform: rotateY(0); } 32%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f3 { 0%, 35% { transform: rotateY(0); } 41%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f4 { 0%, 44% { transform: rotateY(0); } 50%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f5 { 0%, 53% { transform: rotateY(0); } 59%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f6 { 0%, 62% { transform: rotateY(0); } 68%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-f7 { 0%, 71% { transform: rotateY(0); } 77%, 100% { transform: rotateY(180deg); } }
+/* 第 3 条：得分图案 4 → 3 → 2 → 1，末位那枚先走。
+   和 HUD 上那块《得分图案》讲的是同一件事（ui/patternBlock.ts 里末位那枚的
+   不透明度随本级剩余段数往下掉，掉到底就是这儿的「消失」）。 */
+.ra-lad3 { animation-name: ra-lad3; }
+.ra-lad2 { animation-name: ra-lad2; }
+.ra-lad1 { animation-name: ra-lad1; }
+@keyframes ra-lad3 { 0%, 22% { opacity: 1; transform: scale(1); } 28%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-lad2 { 0%, 48% { opacity: 1; transform: scale(1); } 54%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-lad1 { 0%, 74% { opacity: 1; transform: scale(1); } 80%, 100% { opacity: 0; transform: scale(0.5); } }
+/* 第 5 条：一枚接一枚**消掉**，一枚不剩了才出「完成」。
+   从前这儿是 ra-f0…7「一枚接一枚翻到反面」——那是上一套规则里的终局。现在终局
+   是一枚不剩（八副棋盘的 isGameOver），画翻面就是在教一个到不了的结束条件。
+   这两组（ra-lad*、ra-w*）都只改 animation-name：盒子、时长、缓动全从 .ra-gone
+   那条简写来，它在上面几行，同特指度、这儿后来居上。八拍排到 75%，正好给 80%
+   才冒出来的「完成」（.ra-end）留出空档。 */
+.ra-w0 { animation-name: ra-w0; }
+.ra-w1 { animation-name: ra-w1; }
+.ra-w2 { animation-name: ra-w2; }
+.ra-w3 { animation-name: ra-w3; }
+.ra-w4 { animation-name: ra-w4; }
+.ra-w5 { animation-name: ra-w5; }
+.ra-w6 { animation-name: ra-w6; }
+.ra-w7 { animation-name: ra-w7; }
+@keyframes ra-w0 { 0%, 4% { opacity: 1; transform: scale(1); } 10%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w1 { 0%, 13% { opacity: 1; transform: scale(1); } 19%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w2 { 0%, 22% { opacity: 1; transform: scale(1); } 28%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w3 { 0%, 31% { opacity: 1; transform: scale(1); } 37%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w4 { 0%, 40% { opacity: 1; transform: scale(1); } 46%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w5 { 0%, 49% { opacity: 1; transform: scale(1); } 55%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w6 { 0%, 58% { opacity: 1; transform: scale(1); } 64%, 100% { opacity: 0; transform: scale(0.5); } }
+@keyframes ra-w7 { 0%, 67% { opacity: 1; transform: scale(1); } 73%, 100% { opacity: 0; transform: scale(0.5); } }
 .ra-end {
   position: absolute; left: 50%; top: 50%; width: 1.3em; height: 1.3em;
   transform: translate(-50%, -50%) scale(0); animation: ra-end var(--T) ease-out infinite;
@@ -6061,12 +6080,8 @@ body.is-room-host::after {
   padding-right: calc(var(--pad) + 0.5em + var(--gap) / 2);
 }
 .ra-stag { margin-left: calc(0.5em + var(--gap) / 2); }
-/* 第 4 条：消掉之后留下的那颗空球。底下那颗一直摆着，上面那颗反面的球淡出
-   （.ra-gone）之后就露出来——和棋盘上「小球消掉留下空球」是同一回事。 */
-.ra-cell { position: relative; display: block; width: 1em; height: 1em; }
-.ra-cell > .ra-void,
-.ra-cell > .ra-gone { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
-.ra-void > svg { display: block; width: 100%; height: 100%; }
+/* .ra-cell / .ra-void（消掉之后留下的那颗空球）退役了：《侵蚀阶梯》v1.2 §3 之后
+   削掉的外边**整条离场**，格子不在盘上了，底下不留空球。 */
 /* 横着滑的窗口：盖住**整整一行**（--w 格），里面比它多一颗（--n 格）左右排
    着，整条向左滑一格，挤出左边的那颗从右边补回来。小球在棋盘上滑的就是整
    行，竖着滑那一套在交错排布里对不上格。
@@ -6100,32 +6115,8 @@ body.is-room-host::after {
   11% { transform: translateX(2%) scaleX(0.94); }
   14%, 100% { transform: none; }
 }
-/* 第 5 条的小球版：十二颗一颗接一颗翻到反面，74% 处翻完，正好给「完成」
-   （ra-end，80% 起）留出冒出来的时间。 */
-.ra-g0 { animation: ra-g0 var(--T) ease-in-out infinite; }
-.ra-g1 { animation: ra-g1 var(--T) ease-in-out infinite; }
-.ra-g2 { animation: ra-g2 var(--T) ease-in-out infinite; }
-.ra-g3 { animation: ra-g3 var(--T) ease-in-out infinite; }
-.ra-g4 { animation: ra-g4 var(--T) ease-in-out infinite; }
-.ra-g5 { animation: ra-g5 var(--T) ease-in-out infinite; }
-.ra-g6 { animation: ra-g6 var(--T) ease-in-out infinite; }
-.ra-g7 { animation: ra-g7 var(--T) ease-in-out infinite; }
-.ra-g8 { animation: ra-g8 var(--T) ease-in-out infinite; }
-.ra-g9 { animation: ra-g9 var(--T) ease-in-out infinite; }
-.ra-g10 { animation: ra-g10 var(--T) ease-in-out infinite; }
-.ra-g11 { animation: ra-g11 var(--T) ease-in-out infinite; }
-@keyframes ra-g0 { 0%, 2% { transform: rotateY(0); } 8%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g1 { 0%, 8% { transform: rotateY(0); } 14%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g2 { 0%, 14% { transform: rotateY(0); } 20%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g3 { 0%, 20% { transform: rotateY(0); } 26%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g4 { 0%, 26% { transform: rotateY(0); } 32%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g5 { 0%, 32% { transform: rotateY(0); } 38%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g6 { 0%, 38% { transform: rotateY(0); } 44%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g7 { 0%, 44% { transform: rotateY(0); } 50%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g8 { 0%, 50% { transform: rotateY(0); } 56%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g9 { 0%, 56% { transform: rotateY(0); } 62%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g10 { 0%, 62% { transform: rotateY(0); } 68%, 100% { transform: rotateY(180deg); } }
-@keyframes ra-g11 { 0%, 68% { transform: rotateY(0); } 74%, 100% { transform: rotateY(180deg); } }
+/* 小球版的第 5 条不再另起一套（从前是 ra-g0…11，十二颗一颗接一颗翻到反面）：
+   现在两版共用上面那八拍 ra-w0…7，下排整体晚两拍，扫过去是一道斜的波。 */
 
 /* ---- 炸弹 / 无限反转 那两句提示的配图（bombTipArt / flipTipArt）---------
    炸开的那一下：位置和节奏跟第 5 条的「完成」同一支（.ra-end），只是大一圈。 */
@@ -6139,20 +6130,9 @@ body.is-room-host::after {
   50%, 94% { transform: rotateY(180deg); }
   100% { transform: rotateY(0); }
 }
-/* 第 6 条：秒表的针走一圈、星星闪一下，等号右边的奖杯亮起来。 */
-.ra-sym { width: 1.1em; height: 1.1em; flex: none; }
-.ra-sym--eq { width: 0.66em; }
-.ra-hand { transform-box: view-box; transform-origin: 50px 56px; animation: ra-hand var(--T) linear infinite; }
-@keyframes ra-hand { 0% { transform: rotate(0); } 55%, 100% { transform: rotate(320deg); } }
-.ra-star { transform-box: fill-box; transform-origin: center; animation: ra-star var(--T) ease-in-out infinite; }
-@keyframes ra-star { 0%, 58% { transform: scale(1); } 64% { transform: scale(1.28); } 70%, 100% { transform: scale(1); } }
-.ra-trophy { animation: ra-trophy var(--T) ease-in-out infinite; }
-/* 半径两头一样（理由同 glow-pulse：滤镜区域别每帧都变，见 style.css 里
-   「全站唯一的那一套呼吸的光」那一段），亮起来的是颜色不是半径。 */
-@keyframes ra-trophy {
-  0%, 70% { filter: drop-shadow(0 0 0.28em rgba(216, 155, 30, 0)); }
-  82%, 100% { filter: drop-shadow(0 0 0.28em rgba(216, 155, 30, 0.9)); }
-}
+/* 从前第 6 条那几个符号（秒表、滑动、星星、等号、奖杯）连同 .ra-sym / .ra-hand /
+   .ra-star / .ra-trophy 一起退役了：时间这一项不再进分（综合分 = 拼出分 × 步数
+   系数，见 engine/stepCoef.ts），那只会走的秒表画的是一句假话。 */
 @media (prefers-reduced-motion: reduce) {
   .tut-rule-art, .tut-rule-art * { animation: none !important; }
 }

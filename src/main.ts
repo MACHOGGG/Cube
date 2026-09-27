@@ -610,7 +610,7 @@ function tipFor(kind: PlayKey, make: () => { text: string; art: string }): Shape
  *     （方块）。这块条子先不出声，等他自己打出三次得分再开口。
  *
  * 第 3 条（星星和色块同色也能一起凑）是个例外：上一局要是没真的做到，
- * coachBar 会在 'second' 这一路前面补讲一次（见它的 mixedTaught）。
+ * coachBar 会在 'second' 这一路前面补讲一次（见它的 erosionTaught）。
  *
  * 基础玩法**现在就只有方块和小球两张**（《侵蚀阶梯》v1.2 PR-6 删了三角那一副），
  * 而头一回打开的玩家本来也只能点这两张（engine/firstPlay.ts 的 lockedForFirstPlay）。

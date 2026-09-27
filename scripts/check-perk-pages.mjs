@@ -233,7 +233,7 @@ check('没开通：颜色不压暗（整行不透明度 1）', pal.every((p) => 
 check('没开通：锁着的行字色不是浏览器的灰', pal.every((p) => !/rgba\(16, 16, 16/.test(p.ink)), pal[0]?.ink);
 await page.click('#palClose');
 
-// ---- 4. 教学挑选页：三个图形、六条规则、一颗《返回》，一屏装下 --------------
+// ---- 4. 教学挑选页：两个图形、五条规则、一颗《返回》，一屏装下 --------------
 async function pickerAt(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
   await c.addInitScript(() => {
@@ -264,7 +264,8 @@ async function pickerAt(width, height) {
       })(),
       rules: rules.length,
       arts: rules.filter((r) => r.querySelector('.tut-rule-art .ra-tile, .tut-rule-art svg')).length,
-      // 玩家的原话：「六条规则的配图……要能够清晰地展示对应的教学内容」——每幅都
+      // 玩家的原话：「教学内容下面的文字配套的图/动画，要能够清晰地展示对应的教学
+      // 内容」——每幅都
       // 得是会动的（有 CSS 动画在跑），不是一张静图。
       animated: rules.filter((r) => [...r.querySelectorAll('.tut-rule-art *')].some((e) => getComputedStyle(e).animationName !== 'none')).length,
       // 三个入口是横向的大圆角矩形按钮（有底、有圆角、比图形宽得多），里面那
@@ -314,8 +315,14 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   // 两个，不是三个：三角那副基础棋盘删了，它那段分镜也跟着删了（《侵蚀阶梯》
   // v1.2 PR-6）。
   check(`${label} · 教学挑选页：两个图形上下排着（方块、小球）`, m.shapes.join(',') === 'square,circle' && m.stacked, m.shapes.join(','));
-  check(`${label} · 六条规则，每条配图`, m.rules === 6 && m.arts === 6 && m.texts.every((n) => n > 8), `${m.rules} 条 · ${m.arts} 幅`);
-  check(`${label} · 六幅配图都在动`, m.animated === 6, `${m.animated} 幅`);
+  // 五条，不是六条：教学 2026-09 改成玩家亲笔的五条（《侵蚀阶梯》v1.2）。这个数
+  // 写死是有意的——配图是按下标取的（rulesModal 的 art[i]），条数和幅数一旦对不
+  // 上，屏幕上看不出是错位，只看得出「这幅图和这句话没关系」。
+  // 每条的字数只是一条「不是空的」的尺子，从前写的是 > 8。玩家 2026-09-27 亲笔
+  // 的第 5 条是「尝试全部消除吧～」，正好 8 个字——门当场红了，而红的不是代码，是
+  // 玩家的句子。尺子要能认出空字符串，不该顺带规定他一句话得写多长。
+  check(`${label} · 五条规则，每条配图`, m.rules === 5 && m.arts === 5 && m.texts.every((n) => n > 4), `${m.rules} 条 · ${m.arts} 幅 · 字数 ${m.texts.join('/')}`);
+  check(`${label} · 五幅配图都在动`, m.animated === 5, `${m.animated} 幅`);
   check(`${label} · 两个入口是横向的大圆角矩形按钮，图形和播放标志居中`, m.bigBtns);
   check(`${label} · 没有《如何滑……重新观看》那两行字`, !m.oldTitle);
   check(`${label} · 《返回》是「<」的图示，在最下面，不压底排`, m.backGlyph && m.backText === '' && m.backIsLast && m.backBottomOk);
@@ -398,9 +405,16 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   const started = await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 }).then(() => true).catch(() => false);
   check('开通了：挑方块就开了一局', started);
   await p.waitForTimeout(300);
-  const t1 = await p.$eval('#hud-time', (e) => e.textContent.trim());
+  // 钟从 2026-09 起不在顶排了（《侵蚀阶梯》v1.2 PR-7 把它挪到暂停药丸正上方那块
+  // .timer-pill）。这一条同时是那次搬家的看门人：搬完头一版把条件写成
+  // `meta.timed && !meta.flip`，无限反转那 60 秒的硬上限于是没了读数——时间到了
+  // 棋盘直接结算，玩家不知道为什么。所以这儿量的不只是「数字在走」，还有「这一局
+  // 屏幕上真的有一个钟」。
+  const has = await p.$('#timerPill');
+  check('无限反转：这一局有钟（60 秒是硬上限，不能不给读数）', !!has);
+  const t1 = await p.$eval('#timerPill', (e) => e.textContent.trim());
   await p.waitForTimeout(2200);
-  const t2 = await p.$eval('#hud-time', (e) => e.textContent.trim());
+  const t2 = await p.$eval('#timerPill', (e) => e.textContent.trim());
   const sec = (t) => { const m = t.match(/(\d+):(\d+)/); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
   check('无限反转：钟从 1:00 往下数', sec(t1) <= 60 && sec(t1) >= 55 && sec(t2) < sec(t1), `${t1} → ${t2}`);
   await c.close();

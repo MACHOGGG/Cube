@@ -28,9 +28,11 @@
  * 还有一层：无限反转局用 omitRules 把第 4、5 条整条抽掉——那两条讲的事在那一
  * 局根本不会发生。
  *
- * 唯一的分歧是三角：网页版有三角玩法，第 1 幅配图就要三列；小红书版整块没有
- * 三角，讲一个玩家在那儿见不到的图形只会让人以为自己漏了什么。这件事按整包
- * 记一次（setRulesTriangle），不是每次打开都判一遍。
+ * 从前这儿还有一条分歧：第 1 幅配图把方块/小球/三角并排画出来，网页版三列、
+ * 小红书版两列，按整包记一次（`setRulesTriangle`）。那一幅 2026-09 随着教学改成
+ * 五条退役了（见 ruleArt.ts 的文件头），五幅新图里没有一幅认得出三角——于是那个
+ * 开关连同它那条 `triangle` 参数一起删了。留着一个「传了也不起作用」的开关比删掉
+ * 更难查：小红书那边还会照旧喊一声关掉它，然后以为自己关掉了什么。
  *
  * 这一屏**不会自己跳出来**，只有玩家自己按了才走到这儿。
  */
@@ -43,26 +45,14 @@ import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE } from './homeIcons';
 /** 会放分镜动画的两族。三角那一段不摆在这一屏上（它有自己的入口）。 */
 export type StoryFamily = 'square' | 'circle';
 
-/**
- * 这一版有没有三角玩法。
- *
- * 是个「整包只有一个答案」的事实，不是某一次打开这一屏时的选择——所以摆成一
- * 个开机时喊一声的开关，而不是从八个形状模块一路往下传的参数。网页版有三
- * 角，默认就是 true；小红书版在 main.ts 里喊一声关掉。
- */
-let hasTriangle = true;
-export function setRulesTriangle(v: boolean): void {
-  hasTriangle = v;
-}
-
 /** 配图一族画一次就够了，两处轮流开关这一屏不必每次重画。 */
 const ART_CACHE = new Map<string, string[]>();
-function ruleArt(triangle: boolean, shape?: RuleShape): string[] {
-  const key = `${triangle}|${shape ?? ''}`;
+function ruleArt(shape?: RuleShape): string[] {
+  const key = shape ?? '';
   let art = ART_CACHE.get(key);
   if (!art) {
     // buildRuleArt 只认得方块和小球两套画法（三角没有自己的一套，用通稿那套）。
-    art = buildRuleArt({ triangle, shape: shape === 'circle' ? 'circle' : undefined });
+    art = buildRuleArt({ shape: shape === 'circle' ? 'circle' : undefined });
     ART_CACHE.set(key, art);
   }
   return art;
@@ -109,11 +99,6 @@ const esc = (t: string) =>
 
 export interface RulesModalOptions {
   lang: Lang;
-  /**
-   * 这一版有没有三角玩法。不给就按整包那一个答案来（见 setRulesTriangle）
-   * ——绝大多数调用方都不该关心这件事。
-   */
-  triangle?: boolean;
   /**
    * 正在打的是哪一族棋盘。给了就把第 4 条换成这一族自己那一句（小球留空球、
    * 方块拿走不再出现、三角留空三角），配图也跟着换成这一族的画法。
@@ -171,10 +156,9 @@ export interface RulesModalOptions {
  */
 export function openRulesModal(opts: RulesModalOptions): () => void {
   const { lang, onClose, onStory, shape } = opts;
-  const triangle = opts.triangle ?? hasTriangle;
   const tips = opts.tips ?? ALL_TIPS;
   const s = STRINGS[lang];
-  const art = ruleArt(triangle, shape);
+  const art = ruleArt(shape);
   const omit = new Set(opts.omitRules ?? []);
   // 先配好图再筛：配图是按**原来的**条号排的（第 3 条那幅画的就是第 3 条的
   // 事），筛完再按下标去取就会错位。

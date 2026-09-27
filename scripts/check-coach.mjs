@@ -1,5 +1,5 @@
 /**
- * 棋盘底下那块教学条：六条规矩真的跟着玩家的手走完，而不是靠保底一条条熬过去。
+ * 棋盘底下那块教学条：五条规矩真的跟着玩家的手走完，而不是靠保底一条条熬过去。
  *
  *   npx esbuild src/ui/coachBar.ts --bundle --format=esm --outfile=/tmp/coach.mjs
  *   npx esbuild src/i18n.ts        --bundle --format=esm --outfile=/tmp/i18n.mjs
@@ -8,8 +8,8 @@
  * 为什么要有这道门：这块条子是新玩家**唯一**会读到的说明书，而它坏掉的方式
  * 是**静悄悄**的。
  *
- * 它靠 gameController 在四个点上报进来的四个信号往下走（'move' 'match'
- * 'mixed' 'line'）。哪一步等的那个信号没人报，这一步就只剩 STUCK_MS 的保底：
+ * 它靠 gameController 在几个点上报进来的信号往下走（'move' 'match' 'erosion'
+ * 'line'）。哪一步等的那个信号没人报，这一步就只剩 STUCK_MS 的保底：
  * 屏幕上那句话一动不动地挂满四十秒，然后自己翻篇。没有报错、没有白屏，玩家
  * 看到的是「提示卡住了」，而那一条规矩等于没讲。
  *
@@ -200,7 +200,7 @@ globalThis.localStorage = {
   clear: () => memStore.clear(),
 };
 
-const { mountCoachBar, setCoachStoreKey, mixedTaught } = await import(coachBundle);
+const { mountCoachBar, setCoachStoreKey, erosionTaught } = await import(coachBundle);
 const { tutorialRules } = await import(i18nBundle);
 
 // ===========================================================================
@@ -264,7 +264,7 @@ const LANG = 'zhHans';
 const SHAPE = 'circle';
 const TEXTS = tutorialRules(LANG, SHAPE);
 
-/** 这一刻条子上摆着六条里的哪几条。 */
+/** 这一刻条子上摆着五条里的哪几条。 */
 function shownRules(host) {
   return host
     .querySelectorAll('.coach-row')
@@ -275,7 +275,7 @@ function shownRules(host) {
 
 /**
  * 挂一块新条子。taught = 存档里那格「第 3 条做到过」事先填不填——它决定第二
- * 个玩法那一路要不要先补讲一次（见 coachBar 的 MAKEUP_MIXED）。
+ * 个玩法那一路要不要先补讲一次（见 coachBar 的 MAKEUP_EROSION）。
  */
 function mount(plan, storeKey, taught = false) {
   resetClock();
@@ -337,7 +337,7 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
   check('每一步等的都是它自己声明的那个信号',
     path.every((p) => !p.by || vocab.includes(p.by)),
     path.map((p) => `[${p.rules.join('+')}]${p.by ? '←' + p.by + (p.times > 1 ? '×' + p.times : '') : '（摆着）'}`).join(' '));
-  check('第 3 条真的做到了，记了账（下一局不用补讲）', mixedTaught() === true);
+  check('第 3 条真的做到了，记了账（下一局不用补讲）', erosionTaught() === true);
   bar.destroy();
 }
 
@@ -350,7 +350,7 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
   advance(STUCK_MS * (segs + 1) + 1000);
   const at = host.querySelector('.coach-prog').children.filter((c) => c._cls.has('on')).length - 1;
   check('一个信号都不报，靠保底也走得到最后一步', at === segs - 1, `走到第 ${at + 1} / ${segs} 步`);
-  check('靠保底跳过去的那一次**不**记账（下一局要补讲第 3 条）', mixedTaught() === false);
+  check('靠保底跳过去的那一次**不**记账（下一局要补讲第 3 条）', erosionTaught() === false);
   bar.destroy();
 }
 
@@ -386,10 +386,10 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
   advance(AFTER_MS + 5);
   check('补讲的第一条是第 3 条（上一局没做到的那条）',
     shownRules(host).join(',') === '2', shownRules(host).join(','));
-  bar.signal('mixed');
+  bar.signal('erosion');
   advance(AFTER_MS + 5);
   check('补讲做到之后才轮到第 4 条', shownRules(host).join(',') === '3', shownRules(host).join(','));
-  check('补讲这一次也记了账', mixedTaught() === true);
+  check('补讲这一次也记了账', erosionTaught() === true);
   bar.destroy();
 }
 

@@ -44,7 +44,6 @@ import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 
-import { setRulesTriangle } from '../../src/ui/rulesModal';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
@@ -548,14 +547,13 @@ function showRun(run: StoredRun) {
 // 不用动，网页版的深色主题照旧。
 document.documentElement.setAttribute('data-theme', 'light');
 
-// 这一版整块没有三角玩法。局中按暂停、面板里那颗《怎么玩》是网页版外壳自带
-// 的（gameShell 的 #howBtn），它开的那一屏默认按网页版来、六幅配图的第 1 幅
-// 有三角那一列——在这儿讲一个玩家见不到的图形，只会让人以为自己漏了什么。
-// 开机时喊这一声，那一屏就跟着这一版走（见 src/ui/rulesModal.ts）。
-setRulesTriangle(false);
+// 从前这儿还喊一声 setRulesTriangle(false)：《怎么玩》那一屏的第 1 幅配图把
+// 方块/小球/三角并排画出来，这一版整块没有三角，讲一个玩家见不到的图形只会
+// 让人以为自己漏了什么。那一幅 2026-09 随教学改成五条退役了，五幅新图里没有
+// 一幅认得出三角，那个开关也就跟着删了（见 src/ui/rulesModal.ts 的文件头）。
 // 教学条那一格「第 3 条做到过没有」也分开存：玩家的第一条要求是两边存档完全
 // 分离（见 ui/coachBar.ts 的 setCoachStoreKey）。
-setCoachStoreKey('slides.xhs.coach.mixed');
+setCoachStoreKey('slides.xhs.coach.ero');
 // 《我会玩》那把钥匙也换成这一版自己的：容器里两版可能共用一个域名下的存档，
 // 一版按过不该把另一版的引导也关掉（整套 slides.xhs. 前缀就是为这件事）。
 setKnowHowKey('slides.xhs.knowHow');

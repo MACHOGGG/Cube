@@ -31,16 +31,16 @@ import { buildRuleArt } from '../../src/ui/ruleArt';
 import { openRulesModal, type StoryFamily } from '../../src/ui/rulesModal';
 
 /**
- * 这一版的六幅配图：摘掉三角那一列。
+ * 这一版的五幅配图，和网页版是同一份。
  *
- * 只有第 1 幅有三角（它画的是「每个图形都有正反两面」，网页版是方块、小球、
- * 三角各一列），这一版剩方块和小球两列——这一版整块没有三角，讲一个玩家在
- * 这儿见不到的图形，只会让人以为自己漏了什么。别的五幅本来就只有方块和小球。
+ * 从前这儿传一个 `{ triangle: false }`：第 1 幅画的是「每个图形都有正反两面」，
+ * 网页版方块、小球、三角各一列，这一版要摘掉三角那一列。那一幅 2026-09 随教学
+ * 改成五条退役了，五幅新图里没有一幅认得出三角，参数也就没有了。
  *
- * 导出去是因为头一局那块教学条（ui/coachBar.ts）要的是同一份——两处画的是
- * 同样六条规矩，配图不能一处有三角、另一处没有。
+ * 导出去是因为头一局那块教学条（ui/coachBar.ts）要的是同一份——两处画的是同样
+ * 五条规矩，配图不能两处不一样。
  */
-export const RULE_ART = buildRuleArt({ triangle: false });
+export const RULE_ART = buildRuleArt();
 
 /**
  * 教学条在一局里用的那两份：讲小球那一局画小球，讲方块那一局画方块。
@@ -48,10 +48,10 @@ export const RULE_ART = buildRuleArt({ triangle: false });
  * 上面那一份（RULE_ART）是《怎么玩》整页用的通稿——那一页玩家还没挑玩法，
  * 两种图形都要照顾到。棋盘底下那块条子不一样：他眼前只有一种图形，画另一
  * 种是在他手上这一局里插一段用不上的画（玩家定的：「把逐步教学的图形从方
- * 块改为小球，除了第一条以外」）。第 1 条两份都一样——它讲的正是「每个图形
- * 都有正反两面」，本来就要并排摆几种。
+ * 块改为小球，除了第一条以外」）。那句「除了第一条以外」指的是当年那幅三族
+ * 并排的图，它已经退役了，所以现在五幅**全都**跟着图形走，一幅不落。
  */
-export const RULE_ART_CIRCLE = buildRuleArt({ triangle: false, shape: 'circle' });
+export const RULE_ART_CIRCLE = buildRuleArt({ shape: 'circle' });
 export const RULE_ART_SQUARE = RULE_ART;
 
 /** 会放分镜动画的两族。三角整块不做，所以只有这两个。 */
@@ -94,7 +94,7 @@ export function markStorySeen(fam: StoryFamily): void {
  *
  * 只有玩家自己按了才会走到这儿——这一屏不自动跳出来。
  *
- * @param onStory 给了就在六条规则上头摆两颗键（方块 / 小球），按下去放那一族的
+ * @param onStory 给了就在五条规则上头摆两颗键（方块 / 小球），按下去放那一族的
  *   分镜动画。只有成绩与说明页那个入口会给——分镜不再自己弹出来（玩家定的），
  *   想看的人从那儿自己点。局中按暂停开的这一屏不给：他正在玩，不该在这儿被
  *   一段动画接走。
@@ -104,7 +104,8 @@ export function openTutorial(
   onClose?: () => void,
   onStory?: (fam: StoryFamily) => void,
 ): () => void {
-  // triangle: false 是这一版和网页版唯一的分歧——这一版整块没有三角，讲一个
-  // 玩家在这儿见不到的图形只会让人以为自己漏了什么。
-  return openRulesModal({ lang, triangle: false, onClose, onStory });
+  // 从前这儿多传一个 triangle: false，是这一版和网页版唯一的分歧——第 1 幅配图
+  // 把方块/小球/三角并排画出来，这一版整块没有三角。那一幅 2026-09 随教学改成五
+  // 条退役了，五幅新图里没有一幅认得出三角，参数也就跟着删了。
+  return openRulesModal({ lang, onClose, onStory });
 }
