@@ -56,7 +56,7 @@ const REELS = () =>
     };
   });
 
-/** 个人主页 → 《老虎机模式》那一行 → 介绍页（三台转着的机器）。 */
+/** 个人主页 → 《老虎机模式》那一行 → 介绍页（一族一台，转着的机器）。 */
 async function openIntro(page) {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('#navProfile', { timeout: 20000 });
@@ -69,9 +69,14 @@ async function openIntro(page) {
 
 // ---- 没开通：看得见，但开不了局 ------------------------------------------
 //
-// 介绍页：三台机器上下排着、都在转，底下一颗红色 STOP；按下去三台从上到下一
+// 介绍页：一族一台机器，上下排着、都在转，底下一颗红色 STOP；按下去从上到下一
 // 台一台停稳，键变成绿色的《开始》，再按又转起来。没开通的人没有右下角那颗
 // 《开始 〉》——看得见这一幕，开不了局。
+//
+// **台数不写死。** 这儿原先写的是「三台机器、六个轮子」，2026-09 删掉三角那副基础
+// 棋盘之后（《侵蚀阶梯》v1.2 PR-6）就只剩两台，这道门从那天起一直红着，而红的不是
+// 它守的那件事。现在按「页面上有几台」往下量，另加一条下限（至少两台）挡住「一台
+// 都没渲染出来也算过」。每台几个轮子同理从页面上取：PR-8 要把两个滚筒收成一个。
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(seed, false);
@@ -87,26 +92,35 @@ async function openIntro(page) {
     go: Boolean(document.getElementById('slotGo')),
     icons: document.querySelectorAll('.slot-pick-opt').length,
     nav: getComputedStyle(document.querySelector('.home-nav')).display,
-    // 三台一样宽、上下等距、左右居中。
+    // 每台一样宽、上下等距、左右居中。
     boxes: [...document.querySelectorAll('.slot-intro-item')].map((e) => {
       const r = e.getBoundingClientRect();
       return { x: Math.round(r.left + r.width / 2), w: Math.round(r.width), t: Math.round(r.top), b: Math.round(r.bottom) };
     }),
     mid: Math.round(document.documentElement.clientWidth / 2),
   }));
-  check('没开通：三台机器、六个轮子', m.machines === 3 && m.reels === 6, `${m.machines} 台 · ${m.reels} 个轮子`);
+  const N = m.machines;
+  const PER = N ? m.reels / N : 0;
+  check('没开通：至少两台机器，每台的轮子数一样', N >= 2 && Number.isInteger(PER) && PER >= 1,
+    `${N} 台 · ${m.reels} 个轮子 · 每台 ${PER}`);
   check('没开通：进来就都在转', m.spinning && m.set === 0, `停稳 ${m.set} 个`);
-  check('没开通：三台一样宽、左右居中',
-    m.boxes.every((b) => b.w === m.boxes[0].w && Math.abs(b.x - m.mid) <= 1), JSON.stringify(m.boxes));
-  check('没开通：上下等距',
-    m.boxes.length === 3 && Math.abs((m.boxes[1].t - m.boxes[0].b) - (m.boxes[2].t - m.boxes[1].b)) <= 1,
-    `${m.boxes[1]?.t - m.boxes[0]?.b} / ${m.boxes[2]?.t - m.boxes[1]?.b}`);
+  check('没开通：每台一样宽、左右居中',
+    m.boxes.length === N && m.boxes.every((b) => b.w === m.boxes[0].w && Math.abs(b.x - m.mid) <= 1),
+    JSON.stringify(m.boxes));
+  // 上下等距：两台只有一个间隔，没什么可比的，这一条要三台起才有意义——说出来，
+  // 不假装查过。
+  const gaps = m.boxes.slice(1).map((b, i) => b.t - m.boxes[i].b);
+  check(
+    gaps.length >= 2 ? '没开通：上下等距' : '没开通：只有一个间隔，等距这一条跳过（不假装查过）',
+    gaps.length < 2 || gaps.every((g) => Math.abs(g - gaps[0]) <= 1),
+    gaps.join(' / ') || '（没有间隔）',
+  );
   check('没开通：底下一颗红色 STOP', m.btn === 'STOP' && m.red, `${m.btn} · ${m.red ? '红' : '不红'}`);
   check('没开通：没有右下角那颗《开始 〉》', !m.go);
-  check('这一屏上没有三张图（那是下一屏的事）', m.icons === 0, `${m.icons} 张`);
+  check('这一屏上没有那几张图（那是下一屏的事）', m.icons === 0, `${m.icons} 张`);
   check('这一屏不留底排导航', m.nav === 'none', m.nav);
 
-  // 按 STOP：三台从上到下一台一台停。记下每台「两个轮子都停稳」的先后。
+  // 按 STOP：从上到下一台一台停。记下每台「轮子全停稳」的先后。
   await page.evaluate(() => {
     const w = window;
     w.__order = [];
@@ -125,13 +139,18 @@ async function openIntro(page) {
     red: Boolean(document.getElementById('slotDemoBtn')?.classList.contains('slot-demo-btn--stop')),
   }));
   check('按下 STOP 的头半秒：还没有一个停稳，键还是 STOP', mid.set === 0 && mid.red, `停稳 ${mid.set} 个`);
-  await page.waitForFunction(() => document.querySelectorAll('.slot-intro-item .slot-reel--set').length === 6, { timeout: 9000 });
+  await page.waitForFunction(
+    (want) => document.querySelectorAll('.slot-intro-item .slot-reel--set').length === want,
+    m.reels,
+    { timeout: 9000 },
+  );
   const after = await page.evaluate(() => ({
     order: window.__order,
     btn: document.getElementById('slotDemoBtn')?.textContent.trim(),
     green: Boolean(document.getElementById('slotDemoBtn')?.classList.contains('slot-demo-btn--start')),
   }));
-  check('三台从上到下一台一台停', JSON.stringify(after.order) === '[0,1,2]', JSON.stringify(after.order));
+  check('从上到下一台一台停', JSON.stringify(after.order) === JSON.stringify([...Array(N).keys()]),
+    JSON.stringify(after.order));
   check('全停稳了，STOP 变成绿色的《开始》', after.btn === '开始' && after.green, `${after.btn} · ${after.green ? '绿' : '不绿'}`);
   await page.click('#slotDemoBtn');
   await page.waitForTimeout(400);

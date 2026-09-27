@@ -6137,11 +6137,15 @@ body.is-room-host::after {
   .tut-rule-art, .tut-rule-art * { animation: none !important; }
 }
 
-/* ---------- 《无限反转》挑图形那一屏：两张图 + 一句规矩 ---------- */
-.flip-tagline { margin: clamp(12px, 3vh, 26px) 0 0; text-align: center; }
-/* 这一页借的 .start-count 是横着排的（开局页里图和数字并排），两张图那一行和
-   底下那句规矩得竖着叠，否则句子会跑到图的右边去。 */
-.flip-page .slot-pick-area { flex-direction: column; }
+/* ---------- 挑图形那两屏：几张图 + 一句话 ---------- */
+/* 《无限反转》一直是这样；《老虎机》2026-09 也补了同样位置的一句（从前那一屏一
+   个字都没有），所以这两条各扩一档，不另写一套。 */
+.flip-tagline,
+.slot-tagline { margin: clamp(12px, 3vh, 26px) 0 0; text-align: center; }
+/* 这两页借的 .start-count 是横着排的（开局页里图和数字并排），图那一行和底下
+   那句话得竖着叠，否则句子会跑到图的右边去。 */
+.flip-page .slot-pick-area,
+.slot-page .slot-pick-area { flex-direction: column; }
 
 /* ---- 有教学条的那几局：把地方让给棋盘 ---------------------------------
 

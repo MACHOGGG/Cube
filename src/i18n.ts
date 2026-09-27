@@ -65,6 +65,19 @@ export interface I18nStrings {
   bombTimedTitle: string;
   bombAdvancedTitle: string;
   randomTargetTitle: string;
+  /**
+   * 老虎机挑图形那一屏，三张图底下那一句。
+   *
+   * 这一屏从前一个字都没有（玩家当时的原话是「不需要任何文字指示」），可三张图
+   * 只说得出「选哪一族」，说不出「这一局的得分图案是随机抽的」——而那正是这个玩
+   * 法和基础玩法唯一的区别。
+   *
+   * 和 MODE_TIPS.slot 是两件事，别混：这一句是**挑形状那一屏**的标语（对应
+   * flipModeTagline），MODE_TIPS.slot 是**局中**棋盘底下那句教学。《无限反转》
+   * 那三层——菜单标题 / 选择页标语 / 局中教学——本来就是分开的，这一句补上之后
+   * 两个玩法的结构才对齐。
+   */
+  randomTargetTagline: string;
   /** 小屋里的随机得分目标：全屋同一对图案，还是各转各的。 */
   slotShareCaption: string;
   slotSameLabel: string;
@@ -639,6 +652,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
     randomTargetTitle: 'Slot machine mode',
+    randomTargetTagline: 'Scoring shapes drawn at random',
     slotShareCaption: 'Patterns for the room',
     slotSameLabel: 'Same',
     slotOwnLabel: 'Different',
@@ -972,6 +986,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
     randomTargetTitle: 'Mode machine à sous',
+    randomTargetTagline: 'Motifs gagnants tirés au hasard',
     slotShareCaption: 'Motifs pour la salle',
     slotSameLabel: 'Identiques',
     slotOwnLabel: 'Différents',
@@ -1305,6 +1320,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
     randomTargetTitle: '老虎機模式',
+    randomTargetTagline: '隨機得分圖案',
     slotShareCaption: '全屋的得分圖案',
     slotSameLabel: '相同',
     slotOwnLabel: '不同',
@@ -1638,6 +1654,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
     randomTargetTitle: '老虎机模式',
+    randomTargetTagline: '随机得分图案',
     slotShareCaption: '全屋的得分图案',
     slotSameLabel: '相同',
     slotOwnLabel: '不同',
