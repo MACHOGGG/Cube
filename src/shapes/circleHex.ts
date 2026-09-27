@@ -13,6 +13,7 @@ import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
+import { buildEdgeBand } from '../ui/edgeBand';
 import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
@@ -668,6 +669,16 @@ export function createCircleHexGame(): ShapeGame {
         }
         refs.boardEl.innerHTML = '';
         refs.boardEl.appendChild(frag);
+        // 外边指引 · 方案 B「双色托盘」（《侵蚀阶梯》v1.2 PR-7）：沿此刻削得动的
+        // 那几条外边，在**棋子底下**描一条粗带。塞在最前面，所以它在所有棋子之下。
+        const band = buildEdgeBand({
+          edges: outerEdges(edgeBoard, edgeThreshold()).map((e) => e.live),
+          centerOf: ballCenter,
+          pieceSize: R * 1.86,
+          width: refs.boardEl.clientWidth,
+          height: refs.boardEl.clientHeight,
+        });
+        if (band) refs.boardEl.insertBefore(band, refs.boardEl.firstChild);
         flipInCells = new Set();
         const size = R * 1.86;
         for (const { cells, elapsedMs } of outlineEntries) {

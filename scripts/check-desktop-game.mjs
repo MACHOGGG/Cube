@@ -108,17 +108,17 @@ const MEASURE = () => {
   };
   return {
     hud: box('.app--game .hud'),
-    cell: box('.app--game .hud-cell'),
+    cell: box('.app--game .hud-block'),
     wrap: box('#boardWrap'),
     coach: box('.app--game .coach-bar'),
     ctl: box('.app--game .controls'),
     btn: box('#stopBtn'),
-    hint: box('.app--game .pattern-hint--a'),
-    // 图示「一样大」说的是一枚图标多大（字号），不是这一条多高——菱形方块的斜
-    // 向图案本来就占四行，比方块的两行高，那是图案自己的事。真正要钉住的是
-    // ①每枚图标一样大 ②这一条占的行高不变（所以棋盘的上沿不动）。
+    // 《得分图案》那一块（顶排右边那块宽的）。棋盘上方那条图示带 2026-09 整条退
+    // 役了（《侵蚀阶梯》v1.2 PR-7），图案现在长在 HUD 上，按当前级数现画。
+    hint: box('.app--game .hud-block--pattern'),
+    // 图标「一样大」说的是一枚图标多大（字号）。换个玩法只换形状，不换大小。
     hintFont: (() => {
-      const el = document.querySelector('.app--game .pattern-hint--a');
+      const el = document.querySelector('.app--game .pat-icon');
       return el ? getComputedStyle(el).fontSize : '';
     })(),
     vw: window.innerWidth,
@@ -292,18 +292,17 @@ for (const vp of VPS) {
     if (fonts.length > 1) {
       diff.push(`图示字号 ${sameVp.map((x) => `${x.name} ${x.m.hintFont}`).join(' / ')}`);
     }
-    // 图示那一条的**下沿**不动 = 那一行的高度钉住了，而且这一条离棋盘的距离不
-    // 变（④ 那次就是这一行被撑高，棋盘跟着往下长，压住了底下那排键）。
+    // 《得分图案》那一块的**下沿**不动 = 顶排那一行的高度钉住了，而且它离棋盘的
+    // 距离不变（④ 那次就是这一行被撑高，棋盘跟着往下长，压住了底下那排键）。
     //
-    // 比下沿，不比上沿也不比中线：图案几行是各副棋盘自己的事（方块两行 82px，
-    // 菱形方块的斜向图案四行 133px），而这一条是**贴着行底**站的
-    // （style.css 里 `.app--game > .pattern-hint--a { margin-top: auto }`），所以
-    // 高的那条往上长、离棋盘的距离一分不差。玩家看的就是这段距离。
+    // 现在这一块的高度和左边那块读数是同一个（两块同高，见 style.css 的
+    // `.app--game .hud-block`），所以换个玩法它本来就不该动——这一条守的是那件事
+    // 没被哪个玩法的图标撑破。
     //
     // 也不比棋盘的上沿：地板是贴着棋盘收的（boardResize 的 fitFloor），七色圆球
     // 的地板本来就比方块矮一截，在这一行里居中，上沿当然低一些。那是地板的形
     // 状，不是排版在跳。
-    cmp('图示下沿', (m) => (m.hint ? { b: m.hint.y + m.hint.h } : null), ['b']);
+    cmp('得分图案块下沿', (m) => (m.hint ? { b: m.hint.y + m.hint.h } : null), ['b']);
     cmp('读数格', (m) => m.cell, ['w', 'h']);
     // 读数这一条只比**宽**，不比左沿。
     //

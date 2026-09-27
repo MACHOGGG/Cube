@@ -178,3 +178,66 @@ export function renderPatternHintIcons(patterns: PatternDef[], lang: Lang): stri
   });
 }
 
+
+/**
+ * 当前这一级的得分图案：**同色 1×N 连线**，画成这一族棋子的样子。
+ *
+ * 《侵蚀阶梯》v1.2 §1.1 之后图案只剩这一种，而 N 会在一局里从 4 一路降到 1
+ * （§2）。HUD 上那一块每降一级就重画一次，所以这儿收的是 N，不是一张写死的表。
+ *
+ * 三族各画各的形状，和棋盘上、教学里那几枚是同一个形（三角走 roundTri 那条磨圆的
+ * 轮廓，见上面 renderPatternIconSvg）：
+ *
+ *   · 方块 —— 一排圆角方块；
+ *   · 小球 —— 一排圆；
+ *   · 三角 —— 一排**正反交替**的三角。真棋盘上一条线就是这样：相邻两枚共边、朝向
+ *     相反。画成一排同向的三角好看，但那不是玩家要凑的东西。
+ */
+export function runPatternDef(family: 'square' | 'circle' | 'triangle', n: number): PatternDef {
+  const count = Math.max(1, Math.round(n));
+  const label = `1×${count}`;
+  if (family === 'circle') {
+    return {
+      label,
+      cells: Array.from({ length: count }, (_, i) => ({
+        kind: 'circle' as const,
+        cx: i * 2,
+        cy: 0,
+        // 0.82 不是 0.95：一枚的中心距是 2，半径 0.95 只剩 0.1 的缝，一排球在
+        // HUD 那一块的尺寸上会糊成一条。棋盘上棋子之间是看得见缝的。
+        r: 0.82,
+      })),
+    };
+  }
+  if (family === 'square') {
+    return {
+      label,
+      cells: Array.from({ length: count }, (_, i) => ({
+        kind: 'rect' as const,
+        cx: i * 2,
+        cy: 0,
+        // 同上：半边 0.92 只剩 0.16 的缝，收到 0.78 才看得出是四枚。
+        half: 0.78,
+      })),
+    };
+  }
+  // 三角：正反交替，共边。一枚的宽是 2（和上面两族一样），所以第 i 枚的左边界
+  // 是 i，正立的顶点在中间、底边在下，倒立的反过来。
+  const H = Math.sqrt(3);
+  return {
+    label,
+    cells: Array.from({ length: count }, (_, i) => {
+      const x = i;
+      const up = i % 2 === 0;
+      const points: [number, number][] = up
+        ? [[x + 1, 0], [x, H], [x + 2, H]]
+        : [[x, 0], [x + 2, 0], [x + 1, H]];
+      return { kind: 'poly' as const, points };
+    }),
+  };
+}
+
+/** 一枚图案图标的 SVG（不带外面那层 span）——HUD 上那一块自己包。 */
+export function patternIconSvg(def: PatternDef): string {
+  return renderPatternIconSvg(def.cells, def.extent, def.hatched, def.extentY);
+}

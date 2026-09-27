@@ -412,6 +412,15 @@ jobs:
           # 盲等出来的是偶发红，而偶发红最后一定会被人加 continue-on-error。
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8814/ && break; sleep 0.25; done
           node scripts/check-board-fit.mjs http://localhost:8814/
+      # 外边指引那条带子（§PR-7）：五副外边族画、方块 36 不画、在棋子**之下**、
+      # 只动明度不动色相。它是这一版唯一一处「盘面现在什么样」的视觉提示，而它能
+      # 坏的四种样子都不报错。一门一台服务器、一人一个端口。
+      - name: 起服务器（外边指引）
+        run: |
+          nohup node scripts/dev-server.mjs 8819 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8819/ && break; sleep 0.5; done
+      - name: 外边指引：双色托盘
+        run: node scripts/check-edge-band.mjs http://localhost:8819/
       # 下面这三道，和上面四道是同一轮（1be498a）修好的——那一轮一口气修了五道
       # 崩在选择器上、崩了还 exit 0 的门，可只有 check-menu / check-overlap 两道进了
       # CI。另外三道为什么没进，当时没写；重新看过一遍，没有理由不收：都只要一台

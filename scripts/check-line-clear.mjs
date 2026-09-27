@@ -30,8 +30,7 @@ if (!src) {
   console.error('用法: node scripts/check-line-clear.mjs <打包好的 outerEdge.mjs>');
   process.exit(2);
 }
-const { outerEdges, shortestEdge, endsAll, atSegmentEnd, liveOn, EDGE_MIN, EDGE_MIN_ENDGAME } =
-  await import(src);
+const { outerEdges, shortestEdge, endsAll, liveOn, EDGE_MIN, EDGE_MIN_ENDGAME } = await import(src);
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -221,22 +220,24 @@ function allLinesContiguous(board) {
   check('六边圆球：穿过中心的那一行被空位截成两段', liveOn(board, midRow).length === 6,
     `${liveOn(board, midRow).length} 枚`);
   /*
-   * 空位挡不挡 endsAll，就看 atSegmentEnd 这一处——直接量它。
+   * **中心那个永久空位不挡 endsAll。**
    *
-   * Z=0 那一行的格子是 (-3,0) … (3,0)，中间 (0,0) 是永久空位。紧贴空位的 (-1,0)：
-   * 按「自己那一段」算它贴着端（左边 (-2,0) 活、右边是空位），按「整条线的活格清
-   * 单」算它的下标是 2（清单共 6 枚），会被判成在中间。两种读法在这一格上给出相
-   * 反的答案，所以这一条断言正好把它们分开。
+   * Z=0 那一行的格子是 (-3,0) … (3,0)，中间 (0,0) 是永久空位，所以这一行削边前就
+   * 已经是两段了。endsAll 量的是「削掉之后段数有没有**变多**」——两段还是两段，不
+   * 算断，所以它挡不住任何一条边。
    *
    * 写错的代价不在屏幕上：只是穿过中心那三条线永远削不动，玩家只觉得「这盘运气
-   * 差」。
+   * 差」。所以正反各钉一条。
    */
-  check('六边圆球：紧贴中心空位的那一枚算「贴着自己那一段的端」（空位不挡 endsAll）',
-    atSegmentEnd(board, midRow, [-1, 0]) === true);
-  check('六边圆球：再往外一枚 (-2,0) 两边都是活格，不算贴端（反向对照）',
-    atSegmentEnd(board, midRow, [-2, 0]) === false);
-  check('六边圆球：那一行两头 (-3,0) 照旧算贴端',
-    atSegmentEnd(board, midRow, [-3, 0]) === true);
+  check('六边圆球：削掉一条外边，穿过中心那一行的段数没有变多（空位不挡 endsAll）',
+    endsAll(board, edges[0].line, edges[0].live) === true,
+    `${edges[0].line.fam}${edges[0].line.offset}`);
+  // 反向：从中间掏一刀就要被拦下——不然上面那条绿成了「endsAll 永远回真」。
+  {
+    const midX = lines.find((l) => l.fam === 'X' && l.offset === 0);
+    check('六边圆球：中间那条线（X0）削不得——它会把穿过它的线截成两段',
+      endsAll(board, midX, liveOn(board, midX)) === false);
+  }
 
   // 削掉一条边之后，剩下的还得是连着的（空位那三条线本来就是两段，不算断）。
   for (const [x, z] of edges[0].live) gone.add(key(x, z));

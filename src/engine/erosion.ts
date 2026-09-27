@@ -91,6 +91,8 @@ export interface Erosion {
   unlocked(): boolean;
   /** 翻了 n 枚（含拆除）：扣段、必要时降级，多出来的结转。 */
   spend(n: number): ErosionSpend;
+  /** 新的一局：回到 4 枚、第一级的段数满格、徽章清掉。 */
+  reset(): void;
 }
 
 /**
@@ -140,5 +142,11 @@ export function createErosion(table: ErosionTable, frozen = false): Erosion {
     par: () => table.par,
     unlocked: () => everUnlocked,
     spend,
+    reset() {
+      level = 4;
+      idx = 0;
+      left = table.seg[0];
+      everUnlocked = false;
+    },
   };
 }

@@ -12,7 +12,7 @@ const REEL_STEP = 1.1;
 /** The slot-machine digit roll + floating "+N" gain popups shared by every board's HUD. */
 export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): ScoreReel {
   let boxes: { box: HTMLElement; strip: HTMLElement }[] = [];
-  const scoreCell = reelEl.closest<HTMLElement>('.score-cell');
+  const scoreCell = reelEl.closest<HTMLElement>('.hud-block--score');
   /**
    * 得分那一下，整块地板也亮一次（玩家：「得分的时候得分的版图闪烁一次呼吸感的
    * 光明，不要太过抢眼」）。

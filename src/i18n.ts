@@ -496,6 +496,10 @@ export interface I18nStrings {
    * 翻面 → 削线 → 拼出分 → 步数系数 → 综合分。
    */
   /** 「翻面 {n} 枚 ×2」；带拆弹时另接一句 flipRowDefused。 */
+  /** HUD《得分图案》那一块的读屏播报：「得分图案变成 {n} 枚」。 */
+  patternNowLabel: string;
+  /** HUD 左边那一块的标题：拼出得分。 */
+  builtScoreHudLabel: string;
   flipRowLabel: string;
   /** 「（含拆除 {k} 枚）」。 */
   flipRowDefused: string;
@@ -880,6 +884,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: 'Big triangle',
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
+    patternNowLabel: 'Pattern is now {n} tiles',
+    builtScoreHudLabel: 'Build score',
     flipRowLabel: 'Flipped {n} ×2',
     flipRowDefused: '(incl. {k} defused)',
     lineRowLabel: 'Lines cleared {m} (stars²)',
@@ -1215,6 +1221,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: 'Grand triangle',
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
+    patternNowLabel: 'Le motif passe à {n} pièces',
+    builtScoreHudLabel: 'Score de jeu',
     flipRowLabel: '{n} retournées ×2',
     flipRowDefused: '(dont {k} désamorcées)',
     lineRowLabel: '{m} lignes effacées (étoiles²)',
@@ -1550,6 +1558,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: '大三角',
     labelPattern: '圖案',
     labelWholeLine: '整線',
+    patternNowLabel: '得分圖案變成 {n} 枚',
+    builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
     flipRowDefused: '（含拆除 {k} 枚）',
     lineRowLabel: '削線 {m} 條（星星數²）',
@@ -1885,6 +1895,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelBigTriangle: '大三角',
     labelPattern: '图案',
     labelWholeLine: '整线',
+    patternNowLabel: '得分图案变成 {n} 枚',
+    builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
     flipRowDefused: '（含拆除 {k} 枚）',
     lineRowLabel: '削线 {m} 条（星星数²）',

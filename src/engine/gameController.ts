@@ -87,6 +87,8 @@ export const TIME_GAIN = 1.5;
 const UNFLIPPED_SCALE = 0.95;
 
 import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
+import { mountPatternBlock } from '../ui/patternBlock';
+import { cardOrNull } from '../shapes/registry';
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -335,18 +337,27 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   const perf = createPerformanceGauge();
+  /** 倒数进最后这么多秒就转警示色（§PR-7）。 */
+  const TIMER_LOW_SEC = 10;
   const timer = createTimer((sec) => {
-    // 步步为营那一格印的是余步，不是时间。计时器**照常走**——结算档案里的
-    // elapsedSec 还要用（记录页、云端、战绩图都读它），只是不往 HUD 上画：
-    // 一写就把余步那个读数盖掉了。
+    // 计时器**照常走**，不管屏幕上画不画它：结算档案里的 elapsedSec 还要用
+    // （记录页、云端、战绩图都读它）。
+    //
+    // 顶排从 2026-09 起没有钟了（《侵蚀阶梯》v1.2 PR-7）：时间不再计分，所以只有
+    // 计时那一档还需要一个读数，它摆在暂停药丸正上方那一块小的上。别的档屏幕上
+    // 干脆不显示时间——留一个一直在涨、却不算分的数，只会让人以为快慢有用。
     if (hooks.puzzle) return;
+    const el = refs.timerEl;
     if (hooks.timeLimitSec !== undefined) {
       const remaining = Math.max(0, hooks.timeLimitSec - sec);
-      refs.hudTimeEl.textContent = formatClock(remaining);
+      if (el) {
+        el.textContent = formatClock(remaining);
+        el.classList.toggle('timer-pill--low', remaining <= TIMER_LOW_SEC);
+      }
       if (remaining <= 0 && !gameOver) endGame('时间到');
       return;
     }
-    refs.hudTimeEl.textContent = formatClock(sec);
+    if (el) el.textContent = formatClock(sec);
   });
   /**
    * 这一局的帧时采样（engine/frameTier.ts）。量到连续两秒都跑不到 45fps 就
@@ -354,6 +365,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 跑不跑得动，而一条永远在转的 rAF 会让手机没法休眠。
    */
   const stopFrameWatch = watchFrames();
+  /**
+   * HUD 右边那一块《得分图案》（ui/patternBlock.ts）。
+   *
+   * 它归控制器管、不归棋盘管：图案是几枚、这一级还剩几段，都是侵蚀阶梯的状态，
+   * 而阶梯活在这儿。棋盘只报自己归哪一族（画成方块、小球还是三角）。
+   */
+  const patternBlock = mountPatternBlock(
+    refs.patternBlockEl,
+    // 认不出来就当方块：这一处画的是**图标长什么样**，猜错只影响好不好看，
+    // 而 hooks.shapeId 在练习盘、小屋那几条路上不一定查得到（cardOrNull 的用意）。
+    cardOrNull(hooks.shapeId)?.family ?? 'square',
+    hooks.lang,
+  );
+  const paintPattern = () =>
+    patternBlock.update({ level: erosion.level(), segLeft: erosion.segLeft(), segTotal: erosion.segTotal() });
   /** 无限反转的连锁账本（见 scoring.ts 的 createToggleLedger）；别的局没有。 */
   const flipLedger = hooks.flip ? createToggleLedger() : null;
   /** 步步为营手里那几步（见 engine/puzzleScore.ts）；别的局没有。 */
@@ -362,10 +388,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   /** 余步 ≤ 2 就把那一格点红。这一局没有钟，紧张感全在这个数上。 */
   const STEPS_LOW = 2;
   function paintSteps(left: number) {
-    refs.hudTimeEl.textContent = String(left);
-    // 照 perf-cell.hot 的做法用 --accent，不写死一个红：色盲友好开关会把
-    // --accent 换成蓝色，写死的红在那一套配色下反而是最不该出现的颜色。
-    refs.hudTimeEl.parentElement?.classList.toggle('low', left <= STEPS_LOW);
+    // 只有步步为营那一档有这个读数（顶排左边那一块印的是余步，不是分数）；
+    // 别的档它是 null。
+    const el = refs.hudTimeEl;
+    if (!el) return;
+    el.textContent = String(left);
+    // 用 --accent 而不是写死一个红：色盲友好开关会把 --accent 换成蓝色，写死的
+    // 红在那一套配色下反而是最不该出现的颜色。
+    el.closest<HTMLElement>('.hud-block')?.classList.toggle('low', left <= STEPS_LOW);
   }
   /**
    * 那一格上冒一下「−1」「−1 +1」「−1 +2」「−1 +3」。
@@ -387,14 +417,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     host.appendChild(pop);
     window.setTimeout(() => pop.remove(), 1400);
     // 从前这下轻弹打在分数格上（得分了就该有反馈）。这一局分数不在局中露面
-    // 了，反馈就跟着搬到真正在变的那一格来。
-    punch(refs.hudTimeEl);
+    // 了，反馈就跟着搬到真正在变的那一格来（顶排左边那一块印的是余步）。
+    if (refs.hudTimeEl) punch(refs.hudTimeEl);
   }
-  const HOT_THRESHOLD = 60;
+  /*
+   * 《行动有效率》那个读数**在任何界面都不存在了**（《侵蚀阶梯》v1.2 PR-7）。
+   *
+   * §5 之后它不参与任何计分：综合分那一头只剩步数系数。留一个不算分的百分比在
+   * 屏幕上，玩家只会照着它打——那是一条会误导人的读数。
+   *
+   * `perf` 那份统计**没删**：步步为营的终局公式还在用它（engine/puzzleScore.ts
+   * 的 ratePercent）。所以这儿撤掉的只是「把它印出来」这一件事。
+   */
   function updatePerfDisplay() {
-    const value = perf.valuePercent();
-    refs.hudPerfEl.textContent = value + '%';
-    refs.hudPerfEl.parentElement?.classList.toggle('hot', value >= HOT_THRESHOLD);
+    /* 不再上屏。留着这个函数是因为它的调用点散在得分、消线、结束好几处，
+       删掉要动七八个地方，而那几处将来可能还要挂别的即时反馈。 */
   }
 
   let score = 0;
@@ -565,6 +602,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     patternPoints = 0;
     linePoints = 0;
     comboBonusPoints = 0;
+    flipsTotal = 0;
+    defusedTotal = 0;
+    lineCount = 0;
+    unlockedOne = false;
+    erosion.reset();
+    paintPattern();
     updatePerfDisplay();
     timer.start();
     hooks.render();
@@ -1250,6 +1293,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           const step = erosion.spend(committed);
           if (step.dropped > 0) hooks.onErosion?.(step.level);
           if (step.unlocked) unlockedOne = true;
+          // 每翻一枚都要重画：段熄一格、末位那枚跟着再淡一点。降级那一下由
+          // patternBlock 自己认出来（它记着上次画的是几枚）并闪一下。
+          paintPattern();
         }
         // commit() is what actually turns the matched pieces over — a bonus
         // step's commit is a no-op, so this is exactly the flip moment.
@@ -1518,6 +1564,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     destroy() {
       timer.stop();
       stopFrameWatch();
+      patternBlock.destroy();
       coach?.destroy();
       coach = null;
       coachTip?.destroy();

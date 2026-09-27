@@ -13,6 +13,7 @@ import { proHintWidth, proTriRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
+import { buildEdgeBand } from '../ui/edgeBand';
 import { assignOffsets, outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
 import { roundTriClip, roundTriPath, triRingPath, TRI_RING_INSET } from '../engine/roundTri';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
@@ -895,6 +896,33 @@ export function createTriangleGame(): ShapeGame {
         }
         refs.boardEl.innerHTML = '';
         refs.boardEl.appendChild(frag);
+        // 外边指引 · 方案 B「双色托盘」（《侵蚀阶梯》v1.2 PR-7）：沿此刻削得动的
+        // 那几条外边，在**棋子底下**描一条粗带。塞在最前面，所以它在所有棋子之下。
+        //
+        // 一枚三角的「中心」取三个顶点的重心（正反三角的重心不在同一高度，这正是
+        // 玩家看见的那条带子该有的锯齿——带子走的是棋子，不是一条直线）。
+        const band = buildEdgeBand({
+          edges: outerEdges(edgeBoard, edgeThreshold()).map((e) => e.live),
+          centerOf: (r, c) => {
+            const pts = triGeometry(r, c).pts.map(toScreen);
+            return [
+              (pts[0][0] + pts[1][0] + pts[2][0]) / 3,
+              (pts[0][1] + pts[1][1] + pts[2][1]) / 3,
+            ];
+          },
+          /*
+           * 一枚三角的「直径」取它的**高**（H = S·√3/2），不是边长 S。
+           *
+           * 带子是沿着一排棋子走的，玩家看见的「这一排有多厚」就是三角的高；按边
+           * 长算会宽出一截（S 比 H 大 15%），带子就从「托盘上的提示」变成了「压在
+           * 棋盘上的一条粗杠」。圆和方块那三副的外接框宽高相等，所以它们直接用格
+           * 径——这儿差别只出在三角上。
+           */
+          pieceSize: H,
+          width: refs.boardEl.clientWidth,
+          height: refs.boardEl.clientHeight,
+        });
+        if (band) refs.boardEl.insertBefore(band, refs.boardEl.firstChild);
         flipInCells = new Set();
         // One triangle-shaped outline per tile, not a bounding rectangle
         // around the whole group — adjacent tiles here alternate up/down

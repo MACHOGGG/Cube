@@ -18,9 +18,11 @@ export interface ExtraControl {
   label: string;
 }
 
-/** 横屏里得分图示留在棋盘上方那一条的玩法：它横过来是宽度吃满的，两边没有空当
- *  可用（菱形躺着的七色圆球）。另一副原本在这儿的 V 形进阶三角 2026-09 删了。 */
-const PATTERNS_ON_TOP = new Set(['circleSeven']);
+/*
+ * 这儿原先有一张 `PATTERNS_ON_TOP`：横屏里得分图示带留在棋盘上方的那几个玩法。
+ * 那条图示带 2026-09 整条退役了（《侵蚀阶梯》v1.2 PR-7，见下面 `sides` 那一段），
+ * 所以「摆上面还是摆两边」这件事本身没有了。
+ */
 
 export interface ShellMeta {
   title: string;
@@ -104,10 +106,20 @@ export interface ShellRefs {
   legendEl: HTMLElement;
   /** 头一局那块教学条的壳子；meta.coach 没开时是 null（那一局根本没画它）。 */
   coachEl: HTMLElement | null;
-  hudTimeEl: HTMLElement;
+  /**
+   * 步步为营那一块上的余步读数。**别的档是 null**：顶排从 2026-09 起没有钟了
+   * （《侵蚀阶梯》v1.2 PR-7），计时那一档的倒数在下面 timerEl 上。
+   */
+  hudTimeEl: HTMLElement | null;
   /** 步步为营那一格上冒「+2 / −1」的壳子；别的玩法没画它，是 null。 */
   stepsBadgeEl: HTMLElement | null;
-  hudPerfEl: HTMLElement;
+  /**
+   * 《得分图案》那一块的壳子（HUD 右边那一块宽的）。内容由 ui/patternBlock.ts
+   * 填——它要跟着侵蚀阶梯一级一级变，不是画一次就完了。
+   */
+  patternBlockEl: HTMLElement;
+  /** 计时那一档的倒数块（暂停药丸正上方）；别的档没画它，是 null。 */
+  timerEl: HTMLElement | null;
   scoreReelEl: HTMLElement;
   gainBadgeEl: HTMLElement;
   startOverlay: HTMLElement;
@@ -242,32 +254,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     .map((b) => `<button class="icon-btn" id="${b.id}">${b.label}</button>`)
     .join('');
 
-  /**
-   * 得分图示摆在哪儿。
+  /*
+   * 棋盘上方那条**得分图示带退役了**（《侵蚀阶梯》v1.2 PR-7）。
    *
-   * 竖屏：一条，在读数和棋盘中间，上下居中在那段空当里。
-   * 横屏：劈成两半贴到棋盘左右两边，竖着排、上下居中——横屏里棋盘是被高度
-   *   卡住的，图示占着上面那条就等于把棋盘压小一圈，而两边的空当反正也没
-   *   人用。玩家自己定的：「这样游戏版图和游戏内的布局都可以放更大」。
+   * 它当年要解决的事是「玩家不知道该凑什么」，摆的是这副棋盘那几张写死的图案。
+   * §1.1 之后图案只剩一种（同色 1×N），而 N 会在一局里从 4 降到 1——写死的图示
+   * 于是从「提示」变成了「假话」。现在由 HUD 右边那一块按当前级数现画，连外面那
+   * 圈刻度一起（见 ui/patternBlock.ts）。
    *
-   * 两个例外，七色圆球和进阶三角：它们横过来是宽度吃满的（菱形躺着、V 形
-   * 张开），两边根本没有空当，图示还得留在上面那条。
-   *
-   * 劈法是「前一半 + 后一半」，而且后一半在 DOM 里出现两次：一次在左边那
-   * 条里（竖屏时它是完整的一条），一次单独作为右边那一条。谁露谁藏由 CSS
-   * 决定——用 display:none 藏，所以读屏软件在任何一种排布下都只会念到一遍，
-   * 不会重。这样劈的位置不用给 CSS，也就不用管每个玩法有几枚。
+   * 连着退役的还有横屏那套「劈成两半贴到棋盘左右」的排布（`.pattern-sides`）：
+   * 只有一块牌，它跟着读数那一块待在顶排。
    */
-  const icons = meta.patternIcons ?? [];
-  const half = Math.ceil(icons.length / 2);
-  const sides = icons.length > 1 && !PATTERNS_ON_TOP.has(meta.shapeId);
-  const patternHtml = icons.length
-    ? `<div class="pattern-hint pattern-hint--a">` +
-      `<span class="ph-part">${icons.slice(0, half).join('')}</span>` +
-      `<span class="ph-part ph-part--tail">${icons.slice(half).join('')}</span>` +
-      `</div>` +
-      (sides ? `<div class="pattern-hint pattern-hint--b">${icons.slice(half).join('')}</div>` : '')
-    : '';
 
   // The landscape layout is one grid — readouts | board | buttons — and the
   // portrait one is the column it has always been. Both are the same DOM in
@@ -275,41 +272,41 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // pieces, so nothing re-renders when the phone turns.
   container.innerHTML = `
     <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}${
-      sides ? ' pattern-sides' : ''
-    }${meta.practice ? ' app--practice' : ''}${meta.coach ? ' has-coach' : ''}" data-shape="${meta.shapeId}">
+      meta.practice ? ' app--practice' : ''
+    }${meta.coach ? ' has-coach' : ''}" data-shape="${meta.shapeId}">
       <h1>${meta.title}</h1>
       <p class="tag-line">${meta.tagline}</p>
 
-      <div class="hud">
-        <div class="hud-cell score-cell${meta.steps ? ' score-cell--hold' : ''}">
-          <span class="gain-badge" id="gainBadge"></span>
-          <div class="k">${s.scoreLabel}</div>
-          <div class="v">${
-            // 步步为营：这一格在局中印一个破折号，分数到结算页才揭晓。
-            //
-            // 这一局的分数不是一路攒的，而是「终局这副盘面值多少分」（消掉的
-            // ×10 ＋ 星星 ×5，再乘有效得分率）。可玩家分辨不出这两种数：屏幕上
-            // 只要有一个数在涨，他就当那是得分的回报——而这一局真正的回报是步
-            // 数。玩家报的原话是「得分现在还是加分不是加步数」。
-            //
-            // 为什么不干脆冻在 0：那是撒谎。得分确实把棋子翻成了星星，盘面确实
-            // 值钱了，印 0 等于告诉他「这一步白走了」。破折号说的是「还没揭晓」，
-            // 那是实话。
-            //
-            // 读数格仍然留着、不删：三格的 HUD 宽度是按三格调出来的（见上面
-            // ShellMeta.steps），删一格整条读数带要重新排。
-            meta.steps ? '<span class="score-hold" aria-hidden="true">—</span>' : ''
-          }<span class="score-reel" id="scoreReel"></span></div>
-        </div>
-        <div class="hud-cell perf-cell"><div class="k">${s.perfLabel}</div><div class="v" id="hud-perf">0%</div></div>
-        <div class="hud-cell${meta.steps ? ' steps-cell' : ''}">${
-          meta.steps ? '<span class="gain-badge steps-badge" id="stepsBadge"></span>' : ''
-        }<div class="k">${meta.steps ? s.stepsLeftLabel : s.timeLabel}</div><div class="v" id="hud-time">${
-          meta.steps ? String(PUZZLE_START_STEPS) : '0:00'
-        }</div></div>
-      </div>
+      <!--
+        顶排**恒两块**（《侵蚀阶梯》v1.2 PR-7）：左边窄的是读数，右边宽的是
+        《得分图案》。同高、同圆角，和屏幕两边、彼此之间等距。
 
-      ${patternHtml}
+        从前是三格（得分 / 行动有效率 / 时间）外加棋盘上方一条图示带。三样都退役
+        了：**《行动有效率》在任何界面都不存在**（§5 之后它不参与计分，留着就是一
+        个只会让人误会的读数）；时间不再计分，所以挪到暂停键正上方那一块小的去
+        （见 controls 那一段）；图示带上那几张写死的图案，现在由右边这一块按当前
+        级数现画。
+      -->
+      <div class="hud hud--ero">
+        <div class="hud-block hud-block--score${meta.steps ? ' score-cell--hold' : ''}${
+          meta.steps ? ' steps-cell' : ''
+        }">
+          <span class="gain-badge" id="gainBadge"></span>
+          ${meta.steps ? '<span class="gain-badge steps-badge" id="stepsBadge"></span>' : ''}
+          <div class="k">${meta.steps ? s.stepsLeftLabel : s.builtScoreHudLabel}</div>
+          <div class="v">${
+            // 步步为营：这一块在局中印的是**余步**，不是分数。
+            //
+            // 这一局的分数不是一路攒的，而是「终局这副盘面值多少分」。可玩家分辨
+            // 不出这两种数：屏幕上只要有一个数在涨，他就当那是得分的回报——而这一
+            // 局真正的回报是步数。玩家报的原话是「得分现在还是加分不是加步数」。
+            meta.steps
+              ? `<span id="hud-time">${PUZZLE_START_STEPS}</span>`
+              : '<span class="score-reel" id="scoreReel"></span>'
+          }</div>
+        </div>
+        <div class="hud-block hud-block--pattern" id="patternBlock"></div>
+      </div>
 
       <div class="board-wrap" id="boardWrap">
         <div class="board" id="board"></div>
@@ -330,6 +327,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
            友好、离开小屋、完成。《暂停》在这儿没有意义（一场同步竞赛停不下
            来，别人的钟不会跟着停），所以那一层里的《色盲友好》够不着，得在
            这一排上单摆一颗。 -->
+      <!--
+        《计时器》（《侵蚀阶梯》v1.2 PR-7）：顶排不再有钟，计时那一档的倒数摆在
+        暂停药丸**正上方**，同一套圆角块的样子，居中。
+
+        为什么挪下来：时间不再计分（§5，用时只在结算页上以一行小字出现）。留在顶
+        排的话，它和《拼出得分》《得分图案》并排，看着像第三个同等重要的东西；摆
+        在暂停键上方，它就是「这一局还剩多久」那一件事，挨着结束这一局的那颗键。
+        ≤10 秒转警示色（.timer-pill--low）。
+      -->
+      ${meta.timed && !meta.flip ? '<div class="timer-pill" id="timerPill" aria-live="off">0:00</div>' : ''}
+
       <div class="controls${inRoom ? ' controls--room' : ' controls--solo'}">
         ${inRoom
           ? `<div class="mp-rank" id="mpRank" aria-live="polite"></div>
@@ -731,10 +739,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     boardEl: req('board'),
     legendEl: req('legend'),
     coachEl: container.querySelector<HTMLElement>('#coachBar'),
-    hudTimeEl: req('hud-time'),
+    hudTimeEl: container.querySelector<HTMLElement>('#hud-time'),
     // query 不是 req：只有步步为营那一局画了它。
     stepsBadgeEl: container.querySelector<HTMLElement>('#stepsBadge'),
-    hudPerfEl: req('hud-perf'),
+    patternBlockEl: req('patternBlock'),
+    timerEl: container.querySelector<HTMLElement>('#timerPill'),
     scoreReelEl: req('scoreReel'),
     gainBadgeEl: req('gainBadge'),
     startOverlay: req('startOverlay'),

@@ -77,42 +77,61 @@ export interface OuterEdge {
   live: Cell[];
 }
 
-const same = (a: Cell, b: Cell) => a[0] === b[0] && a[1] === b[1];
-
 /** 这条线此刻的活格，按线上的顺序。 */
 export function liveOn(board: EdgeBoard, line: EdgeLine): Cell[] {
   return line.cells.filter(([r, c]) => board.isLive(r, c)).map(([r, c]) => [r, c] as Cell);
 }
 
-/**
- * 这一格贴着自己那一段连续活格的某一端吗。
+/*
+ * 这儿原先有一个 `atSegmentEnd(board, line, cell)`：「这一格贴着自己那一段连续活格
+ * 的某一端吗」，endsAll 拿它逐格问。那条写法在三角格阵上是错的——斜向线是正反三角
+ * 交替的锯齿链，会在同一行里连着吃掉两枚，靠里的那一枚永远不贴端，于是六边蜂窝 54
+ * **一条边都削不动**（check-edge-band 逮到的）。
  *
- * 「自己那一段」而不是「整条线的活格清单」：六边圆球中心那个永久空位把三条线各
- * 截成两段，按整条清单算的话，紧贴空位的那两枚会被判成「在中间」（在活格清单里
- * 它们的下标是 2 和 3，不是 0 和 5），那三条线就永远削不掉了。
- *
- * 导出是给门用的（check-line-clear.mjs 直接量这一条）：空位挡不挡 endsAll 是整个
- * §3 里最容易写错、又最不容易在屏幕上看出来的一处——写错了只是某几条边永远削不
- * 动，玩家只觉得「这盘运气差」。
+ * 现在 endsAll 量的是「削掉之后每条线的段数有没有变多」，直接说的就是它要保证的那
+ * 件事，也不必再逐格问贴不贴端。
  */
-export function atSegmentEnd(board: EdgeBoard, line: EdgeLine, cell: Cell): boolean {
-  const i = line.cells.findIndex((c) => same(c, cell));
-  if (i < 0) return true; // 不在这条线上：与它无关
-  const prevLive = i > 0 && board.isLive(line.cells[i - 1][0], line.cells[i - 1][1]);
-  const nextLive =
-    i + 1 < line.cells.length && board.isLive(line.cells[i + 1][0], line.cells[i + 1][1]);
-  return !prevLive || !nextLive;
+
+/** 一条线上活格分成几段（段与段之间夹着不在盘上的格子）。 */
+function runCount(cells: readonly Cell[], isLive: (r: number, c: number) => boolean): number {
+  let runs = 0;
+  let prev = false;
+  for (const [r, c] of cells) {
+    const now = isLive(r, c);
+    if (now && !prev) runs++;
+    prev = now;
+  }
+  return runs;
 }
 
-/** §3 的 endsAll：削掉这条线之后，每一条线剩下的活格还连着。 */
+/**
+ * §3 的 endsAll：**削掉这条线之后，每一条线剩下的活格还和削之前一样连**。
+ *
+ * 量的是「段数有没有变多」，不是「每个格子是不是贴着端」。两种写法在规整的格阵上
+ * 给出同样的答案，但在**三角格阵上不一样**，而那才是真棋盘：
+ *
+ * 六边蜂窝 54 的斜向线是一条正反三角交替的锯齿链，它会在同一行里连着吃掉两枚。按
+ * 「贴着端」算的话，那一对里靠里的那一枚永远不贴端——于是这副棋盘**一条边都削不
+ * 动**，整局打到最后谁也消不掉，而且一个字的错都不报。（第一版就是这么写的，
+ * check-edge-band 当场逮到：五副外边族里只有它画不出带子。）
+ *
+ * 按段数算就对了：那一对是链的**头两枚**，拿掉之后链还是一整段。真正要拦的是「从
+ * 中间掏一刀」——那一刀会把某条线从一段变成两段，段数立刻多一。
+ *
+ * 顺带也把六边圆球中心那个永久空位处理干净了：它本来就把三条线各截成两段，削边前
+ * 后都是两段，段数没变，所以它不挡任何边。
+ */
 export function endsAll(board: EdgeBoard, line: EdgeLine, live: Cell[]): boolean {
-  for (const cell of live) {
-    for (const other of board.lines) {
-      // 同族的线互不相交，不必问。
-      if (other.fam === line.fam) continue;
-      if (!other.cells.some((c) => same(c, cell))) continue;
-      if (!atSegmentEnd(board, other, cell)) return false;
-    }
+  const gone = new Set(live.map(([r, c]) => `${r},${c}`));
+  const after = (r: number, c: number) => board.isLive(r, c) && !gone.has(`${r},${c}`);
+  for (const other of board.lines) {
+    // 这条线自己整条要没，不用问它连不连。
+    if (other === line) continue;
+    const before = runCount(other.cells, board.isLive);
+    if (before === 0) continue;
+    const now = runCount(other.cells, after);
+    // 整条都被削掉了也行（比如只剩一枚、正好在这条边上）——那不叫断成两段。
+    if (now > before) return false;
   }
   return true;
 }
