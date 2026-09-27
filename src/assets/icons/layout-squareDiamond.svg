@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="382px" height="382px" viewBox="0 0 382 382" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>编组</title>
+<svg width="150px" height="150px" viewBox="0 0 150 150" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组 2</title>
     <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-        <g id="画框-5" transform="translate(-7588, -7306)">
-            <g id="编组" transform="translate(7587.9188, 7305.9188)">
-                <rect id="矩形-2" fill-opacity="0.98" fill="#47975F" transform="translate(191, 191) rotate(45) translate(-191, -191)" x="56" y="56" width="270" height="270" rx="22"></rect>
-                <g transform="translate(56, 56)" id="矩形-3" stroke="#FFFFFF" stroke-width="10">
-                    <rect fill="#008802" x="95" y="5" width="80" height="81" rx="21"></rect>
-                    <rect fill="#BE411A" x="185" y="96" width="80" height="81" rx="21"></rect>
-                    <rect fill="#4461B8" x="5" y="96" width="80" height="81" rx="21"></rect>
-                    <rect fill="#F9980C" x="95" y="178" width="80" height="81" rx="21"></rect>
-                </g>
+        <g id="画框-5" transform="translate(-30564, -5006)">
+            <g id="编组" transform="translate(30564.0061, 5006)">
+                <path d="M79.9497475,4.94974747 L145.050253,70.0502525 C147.783923,72.7839226 147.783923,77.2160774 145.050253,79.9497475 L79.9497475,145.050253 C77.2160774,147.783923 72.7839226,147.783923 70.0502525,145.050253 L4.94974747,79.9497475 C2.21607743,77.2160774 2.21607743,72.7839226 4.94974747,70.0502525 L70.0502525,4.94974747 C72.7839226,2.21607743 77.2160774,2.21607743 79.9497475,4.94974747 Z" id="矩形-2" fill="color(display-p3 0.298 0.298 0.298)"></path>
+                <rect id="矩形-3" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="4" fill="color(display-p3 0.082 0.522 0.141)" x="57.6724146" y="22.9910748" width="34.6551707" height="35.042086" rx="9"></rect>
+                <rect id="矩形-3" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="4" fill="color(display-p3 0.702 0.380 0.373)" x="91.3275854" y="57.0331608" width="34.6551707" height="35.042086" rx="9"></rect>
+                <rect id="矩形-3" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="4" fill="color(display-p3 0.290 0.376 0.698)" x="23.0172439" y="57.0331608" width="34.6551707" height="35.042086" rx="9"></rect>
+                <rect id="矩形-3" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="4" fill="color(display-p3 0.910 0.533 0.227)" x="57.6724146" y="92.2139416" width="34.6551707" height="35.042086" rx="9"></rect>
             </g>
         </g>
     </g>

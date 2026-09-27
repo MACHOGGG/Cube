@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="139px" height="87px" viewBox="0 0 139 87" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>编组</title>
+<svg width="134px" height="83px" viewBox="0 0 134 83" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组 2</title>
     <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-        <g id="画框-5" transform="translate(-7709, -8084)">
-            <g id="编组" transform="translate(7709.9188, 8084.9188)">
-                <polygon id="菱形" fill="#848484" points="69 0 138 43 69 86 0 43"></polygon>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#F9980C" cx="123" cy="42.8582303" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#F9980C" cx="41" cy="58.7142597" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#BE411A" cx="15" cy="42.786245" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#4461B8" cx="99" cy="24.786245" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#BE411A" cx="69" cy="17.8582303" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#008802" cx="97" cy="58.786245" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#008802" cx="39" cy="24.8582303" rx="13.5" ry="13.45847"></ellipse>
-                <ellipse id="椭圆形-2" stroke="#FFFFFF" stroke-width="3" fill="#4461B8" cx="69" cy="69.7142597" rx="13.5" ry="13.45847"></ellipse>
+        <g id="画框-5" transform="translate(-30766, -4821)">
+            <g id="编组" transform="translate(30764.9962, 4820.2784)">
+                <path d="M71.2683033,3.29501299 L113.310793,29.4148997 C116.594637,31.4550649 117.602838,35.7710269 115.562672,39.0548707 C114.285475,41.1106431 112.036961,42.3608247 109.616747,42.3608247 L25.5317674,42.3608247 C21.6657742,42.3608247 18.5317674,39.226818 18.5317674,35.3608247 C18.5317674,32.9406114 19.7819491,30.6920967 21.8377215,29.4148997 L63.8802115,3.29501299 C66.1423926,1.88957973 69.0061223,1.88957973 71.2683033,3.29501299 Z" id="三角形-2" fill="color(display-p3 0.517 0.517 0.517)"></path>
+                <path d="M71.2683033,44.6558377 L113.310793,70.7757244 C116.594637,72.8158897 117.602838,77.1318517 115.562672,80.4156954 C114.285475,82.4714678 112.036961,83.7216495 109.616747,83.7216495 L25.5317674,83.7216495 C21.6657742,83.7216495 18.5317674,80.5876427 18.5317674,76.7216495 C18.5317674,74.3014362 19.7819491,72.0529214 21.8377215,70.7757244 L63.8802115,44.6558377 C66.1423926,43.2504045 69.0061223,43.2504045 71.2683033,44.6558377 Z" id="三角形-2" fill="color(display-p3 0.517 0.517 0.517)" transform="translate(67.5743, 63.0412) rotate(180) translate(-67.5743, -63.0412)"></path>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.910 0.533 0.227)" cx="119.67585" cy="42.2244593" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.910 0.533 0.227)" cx="40.5586167" cy="57.4760513" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.702 0.380 0.373)" cx="15.4726647" cy="42.1552182" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.290 0.376 0.698)" cx="96.5195867" cy="24.8413845" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.702 0.380 0.373)" cx="67.5742574" cy="18.1774682" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.082 0.522 0.141)" cx="94.5898981" cy="57.5452925" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.082 0.522 0.141)" cx="38.6289281" cy="24.9106257" rx="12.9726647" ry="12.8882479"></ellipse>
+                <ellipse id="椭圆形-2" stroke="color(display-p3 1.000 1.000 1.000)" stroke-width="3" fill="color(display-p3 0.290 0.376 0.698)" cx="67.5742574" cy="68.0567274" rx="12.9726647" ry="12.8882479"></ellipse>
             </g>
         </g>
     </g>
