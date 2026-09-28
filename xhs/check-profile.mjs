@@ -22,13 +22,37 @@
  *
  * 存档是自己塞进去的九局假记录：不塞就永远是「还没有记录」那一屏，
  * 「只摆 5 场」这条根本量不到。
+ *
+ * ── 塞进去的那两个键不许手写 ──────────────────────────────────────
+ *
+ * 这两个键从前是写死的字面量（`sugarcube_best::runs`）。《侵蚀阶梯》v1.2 §6 给每
+ * 个存档键都加了一截规则版本号（`_ero1`，engine/scoring.ts 的
+ * SCORING_RULES_VERSION）之后，应用去读的是带版本号的那个键，这道门塞的还是不带
+ * 的——于是它塞了九局、页面上一条都没有，三条断言一起红，而红的不是它守的那件
+ * 事。**和这一版 BOOKS 那六行手写后缀是同一个毛病，同一天一起修的。**
+ *
+ * 现在后缀由 `engine/runKey.ts` 的 `suffixFor` 现算：开跑前 esbuild 打一份出来再
+ * import，和应用调的是同一个函数。多花约半秒，换的是「下一次升版本这道门自己跟
+ * 着走」。
  */
 import { chromium } from 'playwright';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PAGE = pathToFileURL(join(here, 'preview.html')).href;
+
+/** 现算出来的基础档后缀——和棋盘存新局时走的是同一个函数。 */
+const BASE_SUFFIX = await (async () => {
+  const out = join(mkdtempSync(join(tmpdir(), 'slides-runkey-')), 'runKey.mjs');
+  execFileSync('npx', ['esbuild', join(here, '..', 'src', 'engine', 'runKey.ts'),
+    '--bundle', '--format=esm', '--outfile=' + out], { stdio: 'ignore' });
+  const { suffixFor } = await import(pathToFileURL(out).href);
+  return suffixFor('base');
+})();
 let fails = 0;
 const say = (ok, t, x = '') => { if (!ok) fails++; console.log((ok ? '  PASS  ' : '  FAIL  ') + t + (x ? '  ' + x : '')); };
 
@@ -38,25 +62,26 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 async function open(old = false) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   if (old) await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((sfx) => {
     try {
       // 跳过「头一回打开」那一局，直接是主菜单。
       localStorage.setItem('slides.xhs.firstRun', '1');
       localStorage.setItem('slides.xhs.story.circle', '1');
-      // 九局假记录，摊在两本存档里（键名见 shapes/*.ts 的 bestKey，
-      // 后缀见 engine/persistence.ts 的 RUNS_SUFFIX）。
+      // 九局假记录，摊在两本存档里。键 = 这副棋盘的 bestKey（见 shapes/*.ts）
+      // + 模式后缀（现算的，见文件头）+ ::runs（engine/persistence.ts 的
+      // RUNS_SUFFIX）。
       const mk = (i, id) => {
         const at = Date.now() - i * 86400000;
         return { at, data: { shapeId: id, shapeFallback: id, modeKey: '', totalScore: 900 - i * 37, at } };
       };
       const a = [], b = [];
       for (let i = 0; i < 9; i++) (i % 2 ? b : a).push(mk(i, i % 2 ? 'square' : 'circle'));
-      localStorage.setItem('sugarcube_circles_best::runs', JSON.stringify(a));
-      localStorage.setItem('sugarcube_best::runs', JSON.stringify(b));
+      localStorage.setItem('sugarcube_circles_best' + sfx + '::runs', JSON.stringify(a));
+      localStorage.setItem('sugarcube_best' + sfx + '::runs', JSON.stringify(b));
     } catch {
       /* 存不进去这一台就量不成，下面自己会红 */
     }
-  });
+  }, BASE_SUFFIX);
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
