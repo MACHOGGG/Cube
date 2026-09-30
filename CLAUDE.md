@@ -84,6 +84,27 @@ CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**：
 
 要等真实超时的（`check-room-total` 那种 sleep 95 秒的）仍然只在本地手跑。
 
+**`scripts/bot-selfcheck.mjs` 是自检机器人，也只在本地手跑。** 它真开一局、真滑，用
+一步贪心（要看第二层）一直打到这一局自己收场，只读屏幕上有的东西（每一枚的位置 / 面 /
+颜色、HUD 那一块画着几枚、分数、结算页写了什么）——**不认几何、不靠 data-id**：线是从
+画面上按「垂距在半个格子之内」取的，所以换一副新棋盘进来它一个字都不用改（`data-id`
+只有方块挂，别的五副都没有，靠它学置换的那一版在小球上全程瞎走）。
+
+```bash
+node scripts/dev-server.mjs 8971 dist &
+node scripts/bot-selfcheck.mjs http://localhost:8971/                     # 抽检：两副各两局
+node scripts/bot-selfcheck.mjs http://localhost:8971/ --soak              # 方案那一档：每副 20 局
+node scripts/bot-selfcheck.mjs http://localhost:8971/ --boards=圆球 --runs=1 --budget=200
+BOT_DEBUG=1 …    # 每一手印一行；BOT_DEBUG2=1 印「以为要得分、实际没得」的那几格
+```
+
+四条硬断言：结束时盘上不该还摆着一个得分组（H1）、不该卡死（H2）、段数只减不增（降级
+那一拍除外，H3）、炸弹拆一枚就 +2 分并熄一段（H4）。**「图案真的降到 1 枚」只在
+`--soak` 断言**：阶梯第一级就有三十几段，降一级要先翻掉三十几枚，而机器人每十步左右才
+翻一枚、还很看开局那副牌——同样 300 步，有一局降到 1 枚，有一局一级都没降。骑在边界上
+的断言就是偶发红。一步约 0.48 秒（它自己开 reduced-motion），八副打满一个多小时，所以
+不进 CI。
+
 **CI 之外那一批要开浏览器的没有 npm 脚本串起来**（没有 `check:browser`），全靠手
 跑。改了主菜单的摆位、图标尺寸、style.css 里任何一条 `.mode-axis` 的规则，**或者
 `src/engine/axisMotion.ts` / `modeAxis.ts` 里任何一个跟手感有关的数**，手跑这
