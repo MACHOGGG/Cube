@@ -48,11 +48,20 @@ export interface RunData {
   /** 在小屋里打的。老档没有这一项，读出来是 undefined，当 false 用。 */
   room?: boolean;
   /**
-   * 老虎机那一局：这一局认的两个得分图案是转出来的，不是这个玩法自己那几个。
+   * 老虎机那一局：这一局认的得分图案是转出来的，不是这个玩法自己那几个。
    * modeKey 说不出这件事（老虎机局的 modeKey 还是 'base'），而排行榜要按它
    * 单独排一张榜，所以单记一个标记。老档没有，当 false 用。
    */
   slot?: boolean;
+  /**
+   * 转出来的那个目标的编号（`engine/targets.ts` 的 `TargetPattern.id`，《侵蚀阶
+   * 梯》v1.2 PR-8）。分享卡和记录行照它把那张小图画出来。
+   *
+   * 存**编号**不存画好的图形：图案表以后改了，旧档翻开画的是现在这张表里的同一个
+   * 编号，而不是当年那串坐标——和这个文件顶上那条「存数字不存句子」是同一个道理。
+   * 老档（一局两个图案那阵子的）没有这一项，读出来是 undefined，卡上就不画图。
+   */
+  targetId?: string;
   /**
    * 这一局的炸弹按第几版规则打的（见 bomb.ts 的 BOMB_RULES_VERSION）。老档
    * 没有这一项，读出来是 undefined，就是第一版。存档键和排行榜都按它分开——
@@ -328,5 +337,8 @@ export function buildShareInfo(d: RunData, shapeDisplayName: string, lang: Lang)
     // 炸弹局的标志跟着这一局的模式走，不跟着结局走：安然打完的炸弹局也是炸弹
     // 局，翻回记录里的那张图上照样挂着它。
     bomb: d.modeKey === 'bomb' || d.modeKey === 'bombTimed',
+    // 老虎机那一局：这一局在拼哪个图案。modeKey 是 'base'，玩法名那一行说不出
+    // 来，所以卡上把它画出来（见 shareCard.ts 的 drawTargetMark）。
+    targetId: d.targetId,
   };
 }

@@ -39,16 +39,18 @@ export function flipTip(lang: Lang, shape: CoachShape): ModeTip {
 }
 
 /**
- * 老虎机：配图就是这一局转出来的那两个得分图案。
+ * 老虎机：配图就是这一局转出来的那**一个**得分目标（《侵蚀阶梯》v1.2 PR-8）。
  *
- * 用的是读数条上那两个图标同一份画法（patternIcon 的 renderPatternHintIcons），
- * 所以提示里指的和他抬头就能看见的是同两个图——换一张图重画一遍，等于让他自
- * 己去对。
+ * 用的是 HUD 右边那一块上同一份画法（patternIcon 的那套），所以提示里指的和他抬头
+ * 就能看见的是同一个图——换一张图重画一遍，等于让他自己去对。
+ *
+ * 画的是**整个**目标，不是它此刻侵蚀到的那几枚：这块条子只在头一回进来时摆一局，
+ * 那会儿图案还一枚没少。
  */
-export function slotTip(lang: Lang, targets: readonly TargetPattern[]): ModeTip {
+export function slotTip(lang: Lang, target: TargetPattern): ModeTip {
   return {
     text: MODE_TIPS[lang].slot,
-    art: `<span class="tip-targets">${renderPatternHintIcons(targetPatternDefs(targets), lang).join('')}</span>`,
+    art: `<span class="tip-targets">${renderPatternHintIcons(targetPatternDefs([target]), lang).join('')}</span>`,
   };
 }
 

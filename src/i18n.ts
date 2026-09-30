@@ -2168,7 +2168,7 @@ export const MODE_TIPS: Record<
   en: {
     bomb: 'Same sliding, scoring and clearing as before — but red is the bomb colour. Four reds touching blow up! Any four that touch will set it off. A bomb next to a scoring pattern gets defused.',
     flip: 'Score and a piece turns into a star. In Endless Flip a star that scores turns straight back into a coloured piece — same-colour stars never clear. 60 seconds. Off you go!',
-    slot: 'In Slot Machine the two scoring shapes are drawn at random: build those two, score, and they turn into stars. Clearing works exactly as before. Give it a go!',
+    slot: 'In Slot Machine the scoring shape is drawn at random — this one shape is the only thing that scores. Build it and it turns into stars. It shrinks as well: one piece fewer each time the ladder drops, down to a single piece, and from then on any still-joined part of it counts. Clearing works exactly as before. Give it a go!',
     timed: '60 seconds on the clock — how many points can you get?',
     layout: 'Same rules, different board. Fancy the challenge?',
     puzzle: 'Eight moves to start. Every move costs 1; every pattern you score — every star you make — pays 1 back. How high can you score?',
@@ -2176,7 +2176,7 @@ export const MODE_TIPS: Record<
   fr: {
     bomb: 'Même glissement, mêmes points, mêmes disparitions — mais le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent ! N’importe lesquels, du moment qu’ils se touchent. Une bombe voisine d’une figure qui marque se désamorce.',
     flip: 'Marquez et la pièce devient une étoile. Dans Retournement infini, une étoile qui marque redevient aussitôt une pièce colorée — les étoiles de même couleur ne disparaissent jamais. 60 secondes. C’est parti !',
-    slot: 'En mode Machine à sous, les deux motifs gagnants sont tirés au hasard : formez ces deux-là, marquez, elles deviennent des étoiles. Les disparitions ne changent pas. À vous !',
+    slot: 'En mode Machine à sous, la figure gagnante est tirée au hasard : cette seule figure compte. Formez-la, elle devient des étoiles. Elle rétrécit aussi : une pièce de moins à chaque palier, jusqu’à une seule, et toute partie encore reliée compte alors. Les disparitions ne changent pas. À vous !',
     timed: '60 secondes au compteur — combien de points allez-vous marquer ?',
     layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
     puzzle: 'Huit coups pour commencer. Chaque coup en coûte 1 ; chaque figure réussie, chaque étoile, en rend 1. Quel score allez-vous atteindre ?',
@@ -2184,7 +2184,7 @@ export const MODE_TIPS: Record<
   zhHant: {
     bomb: '在滑動、得分、消除的基礎上，紅色作為炸彈色，四個相連會爆炸！注意，任何接觸的四個相連都會引爆。在得分圖案旁邊的炸彈會被拆掉。',
     flip: '得分後變成星星。在《無限反轉》中，星星得分會再變回色塊，星星同色不會消除。限時 60 秒，開始吧！',
-    slot: '老虎機玩法中，隨機得到什麼得分圖案，就要根據這兩個圖案拼湊圖形、得分並變成星星；消除規則不變。快挑戰一下吧！',
+    slot: '老虎機玩法中，得分圖案是轉出來的那一個，這一局只有它算分：拼出它就得分、變成星星。它也會變小——每降一級少一枚，最少剩一枚；少了之後，它任意還連著的那幾枚都算。消除規則不變。快挑戰一下吧！',
     timed: '限時60s，能得多少分呢？',
     layout: '規則相同，佈局不同，你能挑戰麼？',
     puzzle: '起始 8 步，每次行動消耗 1，每次得分圖案／消除星星得到 1，你能得多少分？',
@@ -2192,7 +2192,7 @@ export const MODE_TIPS: Record<
   zhHans: {
     bomb: '在滑动、得分、消除的基础上，红色作为炸弹色，四个相连会爆炸！注意，任何接触的四个相连都会引爆。在得分图案旁边的炸弹会被拆掉。',
     flip: '得分后变成星星。在《无限反转》中，星星得分会再变回色块，星星同色不会消除。限时 60 秒，开始吧！',
-    slot: '老虎机玩法中，随机得到什么得分图案，就要根据这两个图案拼凑图形、得分并变成星星；消除规则不变。快挑战一下吧！',
+    slot: '老虎机玩法中，得分图案是转出来的那一个，这一局只有它算分：拼出它就得分、变成星星。它也会变小——每降一级少一枚，最少剩一枚；少了之后，它任意还连着的那几枚都算。消除规则不变。快挑战一下吧！',
     timed: '限时60s，能得多少分呢？',
     layout: '规则相同，布局不同，你能挑战么？',
     puzzle: '起始 8 步，每次行动消耗 1，每次得分图案／消除星星得到 1，你能得多少分？',

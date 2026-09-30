@@ -1,5 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
-import { patternIconSvg, runPatternDef } from '../engine/patternIcon';
+import { patternIconSvg, runPatternDef, type PatternDef } from '../engine/patternIcon';
 import { reducedMotion } from '../engine/reducedMotion';
 import type { Family } from '../engine/targets';
 
@@ -65,8 +65,17 @@ export function tickDash(segTotal: number, segLeft: number): string {
 /**
  * @param host   这一块的容器（`.hud-block--pattern`）
  * @param family 这副棋盘归哪一族——图标画成它那一族棋子的样子
+ * @param faceFor 图标怎么画。不给就是基础玩法那一条 1×N。老虎机那一局给的是「这一
+ *   级的目标子形」（《侵蚀阶梯》v1.2 PR-8）——刻度环、熄段、末位淡出、变级闪一下
+ *   全都照旧共用，换掉的只有中间画什么。所以这一块不认识「老虎机」这件事，它只
+ *   认「第几级该画什么」。
  */
-export function mountPatternBlock(host: HTMLElement, family: Family, lang: Lang): PatternBlock {
+export function mountPatternBlock(
+  host: HTMLElement,
+  family: Family,
+  lang: Lang,
+  faceFor?: (level: number) => PatternDef,
+): PatternBlock {
   const s = STRINGS[lang];
   host.setAttribute('aria-live', 'polite');
   host.innerHTML =
@@ -89,6 +98,11 @@ export function mountPatternBlock(host: HTMLElement, family: Family, lang: Lang)
     ' fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="butt"/>' +
     '</svg>' +
     '<span class="pat-icon" id="patIcon"></span>';
+  // 老虎机那一局的目标可能是两三行高的（方块 35 是竖着三格），塞不进这块扁牌
+  // 子里的固定 em 尺寸——挂一个身份类，让 CSS 把它按整块的大小缩进去（见
+  // style.css 的 .pat-block--target）。基础玩法那一条 1×N 永远是一行，尺寸是玩
+  // 家定过的，一个字都不动。
+  if (faceFor) host.classList.add('pat-block--target');
   const dim = host.querySelector<SVGRectElement>('.pat-ring-dim')!;
   const lit = host.querySelector<SVGRectElement>('.pat-ring-lit')!;
   const icon = host.querySelector<HTMLElement>('.pat-icon')!;
@@ -128,7 +142,7 @@ export function mountPatternBlock(host: HTMLElement, family: Family, lang: Lang)
   ro?.observe(host);
 
   function paintIcon(level: number, tailAlpha: number): void {
-    icon.innerHTML = patternIconSvg(runPatternDef(family, level));
+    icon.innerHTML = patternIconSvg(faceFor ? faceFor(level) : runPatternDef(family, level));
     // 末位那一枚单独淡：SVG 里最后一个图形就是它（runPatternDef 按顺序生成）。
     const marks = icon.querySelectorAll<SVGElement>('svg > *');
     const last = marks[marks.length - 1];

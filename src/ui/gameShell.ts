@@ -83,14 +83,13 @@ export interface ShellMeta {
    */
   flip?: boolean;
   /**
-   * 随机得分目标那一局转出来的两个图案。
+   * 随机得分目标那一局转出来的那**一个**图案（《侵蚀阶梯》v1.2 PR-8，从前是一对）。
    *
-   * 给了它，开局页就换一副样子：上半屏是那台老虎机，三个滚筒当场从左到右
-   * 转出这两个图案（外加最右边那个转出你挑的图形）；倒数从 5 数起，多出来
-   * 的那一秒就是让轮子停完；底下只留《退出》——一场正在开的老虎机没有「暂
-   * 停」这回事。见 ui/slotReels.ts。
+   * 给了它，开局页就换一副样子：上半屏是那台老虎机，两个滚筒当场从左到右先后
+   * 停在这一个图案上；倒数从 5 数起，多出来的那一秒就是让轮子停完；底下只留
+   * 《退出》——一场正在开的老虎机没有「暂停」这回事。见 ui/slotReels.ts。
    */
-  slotTargets?: readonly TargetPattern[];
+  slotTarget?: TargetPattern;
   /**
    * 头一局那块教学条（见 ui/coachBar.ts）。只有玩家头一回打开、被直接按进
    * 的那一局基础小球才给——棋盘底下多一块小圆角矩形，把六条规则一条一条摆
@@ -376,7 +375,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         timed: meta.timed && !meta.flip,
         room: !!currentRoom(),
         countId: 'startCount',
-        emblem: meta.slotTargets ? slotMachineHtml() : undefined,
+        emblem: meta.slotTarget ? slotMachineHtml() : undefined,
         // 无限反转这一屏不再解释计分怎么算（玩家定的）。4-3-2-1 数完就开打，
         // 上半屏那张图已经说清「你选的是这个玩法」；连击底数、有没有时间奖
         // 励，是打完看结算页的事，不是站在开局线上要读的。
@@ -387,7 +386,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 而这一幕本来就只有五秒。玩家的原话：「下面还是只有那个《退出》」。
         actions:
           `<button class="icon-btn start-act" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` +
-          (meta.slotTargets
+          (meta.slotTarget
             ? ''
             : `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`),
       })}
@@ -603,10 +602,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     const tips: ExtraTipView[] = [];
     if (meta.bomb) tips.push({ key: 'bomb' });
     if (meta.flip) tips.push({ key: 'flip' });
-    // 老虎机那一幅是当局现抽的两个得分图案，和读数条上那两个是同一份画法
+    // 老虎机那一幅是当局现抽的那个得分图案，和 HUD 右边那一块上的是同一份画法
     // ——换一张重画，等于让他自己去对。
-    if (meta.slotTargets?.length) {
-      tips.push({ key: 'slot', art: slotTip(meta.lang, meta.slotTargets).art });
+    if (meta.slotTarget) {
+      tips.push({ key: 'slot', art: slotTip(meta.lang, meta.slotTarget).art });
     }
     // 无限反转也是 60 秒，可它那一条自己就带着「限时 60 秒」，不必再摆一条计时
     //（头上那个读数的显隐用的也是这同一个判断）。
@@ -675,7 +674,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
         startBtnEl.click();
         // 老虎机那一局多数一个（5-4-3-2-1）——玩家定的。
-      }, countFrom(meta.shapeId) + (meta.slotTargets ? 1 : 0));
+      }, countFrom(meta.shapeId) + (meta.slotTarget ? 1 : 0));
     };
     container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
       cancelCount?.();
@@ -694,7 +693,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       cancelCount?.();
       cancelCount = null;
     });
-    if (meta.slotTargets?.length) {
+    if (meta.slotTarget) {
       countWin.classList.add('cd-window--waiting');
       startCounting = runCount;
     } else {
@@ -704,13 +703,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
   // ---- 老虎机：开局页那台机器真的在转 -----------------------------------
   //
-  // 结果在进这一页之前就抽好了（slotMachine.ts 的 drawPair），这里转的是给
-  // 人看的那几秒：三个轮子从左到右先后停住，最后一个停完时倒数还剩一秒多，
+  // 结果在进这一页之前就抽好了（slotMachine.ts 的 drawOne），这里转的是给
+  // 人看的那几秒：两个轮子从左到右先后停住，最后一个停完时倒数还剩一秒多，
   // 刚好够看清转出了什么。按《退出》就别转了——这块 DOM 马上要被换掉。
-  if (meta.slotTargets?.length) {
+  if (meta.slotTarget) {
     const stage = container.querySelector<HTMLElement>('#startOverlay');
     if (stage) {
-      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTargets, meta.lang), () => {
+      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTarget, meta.lang), () => {
         // 第二个轮子停稳了：这时候倒数才露面、才开始数。人已经离开这一页
         // 的话什么都不做。
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;

@@ -6,7 +6,20 @@
  * 只要显示区还在同一个地方，这里一行都不用动；真挪了，也只用改那几个数。
  *
  * 两个滚筒从左到右先后停住，不是一起定住——玩家的原话：「从左到右先停一个
- * 再停第二个」。停的是这一局的两个得分目标：左一个、右一个。
+ * 再停第二个」。
+ *
+ * ── 一局一个目标，可是**两个窗口都停在它上面**（PR-8）──────
+ *
+ * 《侵蚀阶梯》v1.2 PR-8 把一局两个得分图案收成一个。窗口没有跟着收成一个，
+ * 两个理由，都不是省事：
+ *
+ *   · 那张图上的显示区本来就是两格——中间一道 20 像素宽的黑弧把它分开（见
+ *     WINDOWS 那段）。收成一个窗口就得铺白铺过整块面板，把那道弧盖掉；图是
+ *     玩家给的，「一个像素都没改」不该由这里破。
+ *   · 「从左到右先停一个再停第二个」是玩家点名要的那一下。只剩一个轮子就没
+ *     有先后可言了。
+ *
+ * 两格停同一张，在老虎机的语言里正是「中了」。
  */
 import { custom } from './customIcons';
 import { renderPatternHintIcons } from '../engine/patternIcon';
@@ -251,15 +264,15 @@ const facesOf = (pool: readonly TargetPattern[], lang: Lang): string[] =>
 /**
  * 两个滚筒各转什么、各停在哪一张、第几毫秒停。
  *
- * 左右各一个——就是这一局的两个得分图案。倒数不和转动叠在一起：第二个轮子
- * 停稳了（2.6 秒）才开始 5-4-3-2-1。
+ * 两个都停在**同一张**——这一局唯一的那个得分目标（见文件顶上那段）。倒数不和
+ * 转动叠在一起：第二个轮子停稳了（2.6 秒）才开始 5-4-3-2-1。
  */
-export function planFor(family: Family, pair: readonly TargetPattern[], lang: Lang): ReelPlan[] {
+export function planFor(family: Family, target: TargetPattern, lang: Lang): ReelPlan[] {
   const pool = targetsOf(family);
   const faces = facesOf(pool, lang);
-  const at = (p: TargetPattern) => Math.max(0, pool.findIndex((q) => q.id === p.id));
+  const land = Math.max(0, pool.findIndex((q) => q.id === target.id));
   return [
-    { faces, land: at(pair[0]), stopAt: 1500 },
-    { faces, land: at(pair[1] ?? pair[0]), stopAt: 2600 },
+    { faces, land, stopAt: 1500 },
+    { faces, land, stopAt: 2600 },
   ];
 }

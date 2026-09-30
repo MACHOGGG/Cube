@@ -349,7 +349,7 @@ jobs:
 
   # 要开真浏览器的那一批。和上面那个 job 并行，所以它慢几分钟不拖累谁。
   #
-  # **为什么先只收这四道**：都是最近真的拦下过回归的。
+  # **为什么先只收这几道**：都是最近真的拦下过回归的。
   #   · check-mode-axis  —— 主菜单那条鱼眼轴。第 9 节那五条断言是为「炸弹那张图被撑
   #     开」补的（玩家报过两轮、修好过一次、又回来过）。
   #   · check-menu       —— 换回鱼眼轴那天起它就一直崩在等 .mode-strip 上，**后面 39
@@ -468,3 +468,30 @@ jobs:
           nohup node scripts/dev-server.mjs 8818 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8818/ && break; sleep 0.25; done
           node scripts/check-creem-review.mjs http://localhost:8818/
+      # 老虎机这一条线（《侵蚀阶梯》v1.2 PR-8：一局只认**一个**得分目标）。
+      #
+      # 两道一起收，因为它们各守这条线的一半，而且都刚从「假绿」里捞出来：两道原先
+      # 读的都是棋盘上方那条得分图示带，而 PR-7 把那条带子退役了——读到的是空集合，
+      # 于是「盘上认的就是转出来的」变成「空等于空」，一直绿着。现在读的是 HUD 右边
+      # 那一块《得分图案》，并且各带一条尺子（那一块必须真的画出了东西、必须挂着只有
+      # 老虎机局才有的身份类），空过就红。
+      #
+      #   · check-random-target —— 单人那一条：挑图形 → 两个滚筒从左到右先后停在同一
+      #     张上 → 倒数 → 开局，HUD 那一块画的必须正是轮子上停下来的那一个。
+      #   · check-room-slot     —— 小屋那一条：《相同》全屋同一个图案，《不同》各转各
+      #     的，而两档都要「每台设备认的正是它自己那台机器上停下来的那一个」。'own'
+      #     全靠这一条：少了它，棋盘那边会用本机的 Math.random 再抽一次，玩家眼睁睁
+      #     看着轮子停在 A、进去要凑的却是 B。
+      #
+      # **check-room-slot 必须一台自己的服务器**：它兑一张 TESTMONTH，而一个
+      # dev-server 进程里一张码只兑得动一次（CLAUDE.md 那四个坑里的第一个）。
+      - name: 老虎机：转出来的那一个真的到了盘上
+        run: |
+          nohup node scripts/dev-server.mjs 8861 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8861/ && break; sleep 0.25; done
+          node scripts/check-random-target.mjs http://localhost:8861/
+      - name: 老虎机：小屋里的《相同 / 不同》
+        run: |
+          nohup node scripts/dev-server.mjs 8862 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8862/ && break; sleep 0.25; done
+          node scripts/check-room-slot.mjs http://localhost:8862/

@@ -242,6 +242,9 @@ function drawSnapshot(ctx: CanvasRenderingContext2D, snap: BoardSnapshot, x: num
 import { STRINGS, type Lang } from '../i18n';
 import { QR_MATRIX, QR_QUIET_MODULES } from './qrSlides';
 import { ICON_BOMB_BADGE, ICON_MULTIPLAYER } from '../ui/homeIcons';
+import { targetIconCells } from './targetIcon';
+import { targetById } from './targets';
+import type { IconCell } from './patternIcon';
 
 /**
  * 战绩图上那两个小标志（炸弹局、多人竞赛）。
@@ -275,6 +278,70 @@ function badgeImage(svg: string): HTMLImageElement | null {
 const BADGE_BOMB = badgeImage(ICON_BOMB_BADGE);
 const BADGE_ROOM = badgeImage(ICON_MULTIPLAYER);
 
+/**
+ * 老虎机那一局在拼的那个得分图案，画在玩法名右边（《侵蚀阶梯》v1.2 PR-8）。
+ *
+ * **现画，不走 badgeImage 那条路。** 那两个标志（炸弹、小门）是两张固定的 SVG，所
+ * 以在模块加载时就解码好放着；目标是这一局才抽出来的，临时去解码一张 SVG 是异步的，
+ * 而这张卡是同步出图的——等不到就少画一块，而这一块恰恰是「这一局在拼什么」。图案
+ * 的每一枚本来就只有圆 / 方 / 三角三种（targetIcon 的 targetIconCells），画布上三
+ * 笔就画完了。
+ *
+ * 画的是**整个**目标，不是它侵蚀之后剩下的那几枚：卡上说的是「这一局转到的是哪个
+ * 图案」，而侵蚀到最后每一局都会剩一枚，画那一枚等于每张卡都一样。
+ *
+ * @returns 画了多宽（0 = 没画）。右边的标志接着往后排。
+ */
+function drawTargetMark(
+  ctx: CanvasRenderingContext2D,
+  id: string,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+): number {
+  const pattern = targetById(id);
+  if (!pattern) return 0;
+  const cells = targetIconCells(pattern);
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const c of cells) {
+    if (c.kind === 'circle') xs.push(c.cx - c.r, c.cx + c.r), ys.push(c.cy - c.r, c.cy + c.r);
+    else if (c.kind === 'rect') xs.push(c.cx - c.half, c.cx + c.half), ys.push(c.cy - c.half, c.cy + c.half);
+    else for (const [px, py] of c.points) xs.push(px), ys.push(py);
+  }
+  const w = Math.max(...xs) - Math.min(...xs) || 1;
+  const h = Math.max(...ys) - Math.min(...ys) || 1;
+  // 长边铺满给的那个方框，短边居中——横着的四连和竖着的三格于是一样大，不会
+  // 因为「铺满自己的框」把一条长线画成一排小点。
+  const k = size / Math.max(w, h);
+  const ox = x + (size - w * k) / 2 - Math.min(...xs) * k;
+  const oy = y + (size - h * k) / 2 - Math.min(...ys) * k;
+  ctx.save();
+  ctx.fillStyle = color;
+  for (const c of cells) {
+    ctx.beginPath();
+    if (c.kind === 'circle') {
+      ctx.arc(ox + c.cx * k, oy + c.cy * k, c.r * k, 0, Math.PI * 2);
+    } else if (c.kind === 'rect') {
+      const half = c.half * k;
+      const r = half * 0.3;
+      roundRect(ctx, ox + c.cx * k - half, oy + c.cy * k - half, half * 2, half * 2, r);
+    } else {
+      (c as Extract<IconCell, { kind: 'poly' }>).points.forEach(([px, py], i) => {
+        const X = ox + px * k;
+        const Y = oy + py * k;
+        if (i === 0) ctx.moveTo(X, Y);
+        else ctx.lineTo(X, Y);
+      });
+      ctx.closePath();
+    }
+    ctx.fill();
+  }
+  ctx.restore();
+  return size;
+}
+
 /** 画在标题右边的一排小标志。画不出来的那张就跳过，其余照排。 */
 function drawModeBadges(
   ctx: CanvasRenderingContext2D,
@@ -305,6 +372,12 @@ export interface ShareCardInfo {
   bomb?: boolean;
   /** 多人竞赛的一局。不写就看有没有名次表。 */
   room?: boolean;
+  /**
+   * 老虎机那一局转出来的那个目标的编号（见 RunData.targetId）。给了就在玩法名右
+   * 边画出这个图案——这一局和同一副棋盘的别的局唯一的不同就在这儿，卡上不画，
+   * 那张卡就说不出它在拼什么。
+   */
+  targetId?: string;
   lang: Lang;
   /**
    * The room, when this run was one board out of four people's evening.
@@ -517,10 +590,14 @@ export function renderShareCard(
   ctx.fillText(info.shapeName, PAD, 108);
   // 这一局是哪一种局，挂在玩法名右边：炸弹局一颗炸弹，多人竞赛一扇门。开局页
   // 上挂的是同样这两个，同一局的两张画面因此对得上。
+  const badgeX = PAD + ctx.measureText(info.shapeName).width + 14;
+  // 老虎机那个图案排在最前面：它说的是「这一局在拼什么」，比「这一局有炸弹」
+  // 更靠近玩法名要回答的那个问题。
+  const targetW = info.targetId ? drawTargetMark(ctx, info.targetId, badgeX, 84, 32, '#5b5650') : 0;
   drawModeBadges(
     ctx,
     [info.bomb ? BADGE_BOMB : null, (info.room ?? standings.length > 0) ? BADGE_ROOM : null],
-    PAD + ctx.measureText(info.shapeName).width + 14,
+    badgeX + (targetW ? targetW + 10 : 0),
     84,
     32,
   );

@@ -280,3 +280,153 @@ function dedupe(groups: Cell[][]): Cell[][] {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// 侵蚀：目标少一枚之后认什么（《侵蚀阶梯》v1.2 PR-8）
+// ---------------------------------------------------------------------------
+//
+// 规矩一句话：目标侵蚀到 k 枚时，**它的任意仍相连 k 子形**都算。
+//
+// 「仍相连」是这条规矩的全部重量。不要它的话，五枚的目标掉到三枚就等于「这五格
+// 里随便三格」——盘上到处都是，玩法当场塌成基础三连。要它，掉下来的是一个真的
+// 形状：目标缺一个角、缺一条腿，玩家认得出那还是同一个图案。
+//
+// 相邻＝**挨着**，三族各有各的算法：
+//
+//   方块：上下左右**加四个斜角**。斜角这一路不是顺手放宽的——图案 31 是
+//         `[[0,0],[0,2],[1,1],[1,3]]`，四枚两两之间一条边都不共，全靠斜角相碰
+//         （玩家画的就是这么一个斜着走的图案）。只认共边的话，31 一侵蚀就再也凑
+//         不出任何 k 子形，这一局的老虎机从那一刻起**永远不得分**，而屏幕上什么
+//         异常都没有：HUD 上照样画着一个图案，玩家照样在拼，就是一分不给。
+//         放宽到斜角不影响别的图案——一排里隔着一格的两枚（36 的第 1、3 枚）
+//         斜着也不挨着，仍然判断开。
+//   小球：(行, 半径列) 里，同一行差 2，相邻行差 1——六角密堆的六个邻居，正好
+//         就是「真的碰在一起」的那六颗，没有斜角这回事。
+//   三角：**只认共边**。按行内序号 p 算（p 的奇偶就是朝向，见上面 place() 那一
+//         段）：朝上的那枚 (i, p) 共边的是 (i, p−1)、(i, p+1) 和 (i+1, p+1)；朝
+//         下的是 (i, p−1)、(i, p+1) 和 (i−1, p−1)。这三条是拿顶点坐标验出来的
+//         （两枚共边等于共两个顶点），不是照图数的。
+//         三角这儿绝不能放宽到「碰一个尖」：两枚只在一个尖上碰一下的三角不是图
+//         案，上面 findTargetAt 那段注释里写着这件事从前是怎么白给过分的。
+
+/** 这一族里，图案坐标上的一格换成「算邻居用的那套坐标」。 */
+function lattice(family: Family, cells: readonly TargetCell[]): [number, number][] {
+  const [r0, c0, f0] = cells[0];
+  if (family === 'triangle') {
+    // i = 行，p = 行内第几枚。起手那一枚的朝向定 p0，后面每一枚跟着走。
+    const p0 = f0 === 'D' ? 1 : 0;
+    return cells.map(([r, c]) => [r, p0 + (c - c0) + (r - r0)]);
+  }
+  return cells.map(([r, c]) => [r - r0, c - c0]);
+}
+
+function adjacent(family: Family, a: [number, number], b: [number, number]): boolean {
+  const dr = b[0] - a[0];
+  const dc = b[1] - a[1];
+  // 方块：八邻（见上面那段——图案 31 全靠斜角连着）。
+  if (family === 'square') return Math.max(Math.abs(dr), Math.abs(dc)) === 1;
+  if (family === 'circle') return (dr === 0 && Math.abs(dc) === 2) || (Math.abs(dr) === 1 && Math.abs(dc) === 1);
+  // 三角：横着的两个邻居，加上朝向决定的那第三个。
+  if (dr === 0) return Math.abs(dc) === 1;
+  const up = (((a[1] % 2) + 2) % 2) === 0;
+  return up ? dr === 1 && dc === 1 : dr === -1 && dc === -1;
+}
+
+/** 这几格连成一片吗（「挨着」按上面那段各族的算法，方块含斜角）。 */
+function connected(family: Family, pts: [number, number][]): boolean {
+  if (pts.length <= 1) return true;
+  const seen = new Set<number>([0]);
+  const queue = [0];
+  while (queue.length) {
+    const i = queue.pop()!;
+    for (let j = 0; j < pts.length; j++) {
+      if (seen.has(j) || !adjacent(family, pts[i], pts[j])) continue;
+      seen.add(j);
+      queue.push(j);
+    }
+  }
+  return seen.size === pts.length;
+}
+
+/** 一个图案转一转翻一翻之后最小的那个写法——两个图案是不是同一个形状，比这个。 */
+function congruenceKey(pattern: TargetPattern): string {
+  return orientationsOf(pattern)
+    .map((v) => v.cells.map(([r, c, f]) => `${r},${c},${f ?? ''}`).join('|'))
+    .sort()[0];
+}
+
+const erodedCache = new Map<string, TargetPattern[]>();
+
+/**
+ * 目标侵蚀到 k 枚时认的那些形状：它的全部**仍相连** k 子形，形状一样的只留一份。
+ *
+ * k ≥ 目标枚数时就是目标本身（开局那一级）。返回的每一个都是一个正经
+ * `TargetPattern`，id 带着来路（`36/3#0`）——`orientationsOf` 按 id 缓存摆法，
+ * 重名会让两个不同的子形共用同一份摆法表。
+ */
+export function erodedShapes(target: TargetPattern, k: number): TargetPattern[] {
+  const size = target.cells.length;
+  const want = Math.max(1, Math.min(size, Math.round(k)));
+  const cacheKey = `${target.family}:${target.id}:${want}`;
+  const hit = erodedCache.get(cacheKey);
+  if (hit) return hit;
+  if (want === size) {
+    erodedCache.set(cacheKey, [target]);
+    return [target];
+  }
+  const pts = lattice(target.family, target.cells);
+  const out: TargetPattern[] = [];
+  const seen = new Set<string>();
+  // 枚举全部 C(size, want) 个子集：目标最多六枚，最多二十个子集，一局只算一次。
+  for (let bits = 0; bits < 1 << size; bits++) {
+    const idx: number[] = [];
+    for (let i = 0; i < size; i++) if (bits & (1 << i)) idx.push(i);
+    if (idx.length !== want) continue;
+    if (!connected(target.family, idx.map((i) => pts[i]))) continue;
+    // id 里那个数是**位掩码**，不是「第几个留下来的」。看着一样，差别要命：
+    // `orientationsOf` 按 `family:id` 缓存摆法表，而被去重扔掉的那些子形也已经
+    // 问过它一次了——用「第几个留下来的」当编号，被扔掉的那个和后面某个留下来
+    // 的会撞上同一个 id，于是后者拿到的是**前者**的摆法表。结果是「两个不同的
+    // 形状被判成同形」或者反过来，而且不报错：屏幕上只是某一级少认或多认一个
+    // 形状。位掩码天然一个子集一个，撞不上。
+    const sub: TargetPattern = {
+      id: `${target.id}/${want}#${bits}`,
+      family: target.family,
+      cells: idx.map((i) => target.cells[i]),
+    };
+    const key = congruenceKey(sub);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(sub);
+  }
+  erodedCache.set(cacheKey, out);
+  return out;
+}
+
+/**
+ * 侵蚀到 k 枚的时候，HUD 那一块上画哪一个。
+ *
+ * 画的是**一个**子形，而认的是全部——和基础玩法那一块画一条 1×N、而横竖斜怎么
+ * 摆都算是同一回事：这一块说的是「图案现在是几枚、长什么样」，从来不说「在哪
+ * 儿」。挑法定死：从后往前拆，拆掉一枚之后剩下的还连着就拆它。于是屏幕上看到
+ * 的是「同一个图案缺了个角」，而不是每降一级换一个陌生形状。
+ */
+export function erodedFace(target: TargetPattern, k: number): TargetPattern {
+  const want = Math.max(1, Math.min(target.cells.length, Math.round(k)));
+  let cells = [...target.cells];
+  while (cells.length > want) {
+    let dropped = -1;
+    for (let i = cells.length - 1; i >= 0; i--) {
+      const rest = cells.filter((_, j) => j !== i);
+      if (connected(target.family, lattice(target.family, rest))) {
+        dropped = i;
+        cells = rest;
+        break;
+      }
+    }
+    // 拆哪一枚都会断开——只有一种形状会这样（一个环），二十个图案里没有。真碰
+    // 上了就砍掉最后一枚，别死在这个循环里。
+    if (dropped < 0) cells = cells.slice(0, -1);
+  }
+  return { id: `${target.id}/${want}`, family: target.family, cells };
+}

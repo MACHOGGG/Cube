@@ -2,7 +2,7 @@ import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
-import { drawPair, type Family, type TargetPattern } from '../engine/targets';
+import { drawOne, type Family, type TargetPattern } from '../engine/targets';
 import { cardOrNull } from '../shapes/registry';
 import { random as seededRandom, seedRandom } from '../engine/rng';
 import { hostNotice, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
@@ -78,14 +78,14 @@ export interface MatchStart {
   /** 无限反转那一局：60 秒，得分翻面来回翻。 */
   flip?: boolean;
   /**
-   * 老虎机那一局转出来的两个图案。
+   * 老虎机那一局转出来的那个图案（《侵蚀阶梯》v1.2 PR-8，从前是一对）。
    *
-   * 倒数那一屏上滚筒已经转过一遍了，转出来的就是这一对——所以它得跟着走到
-   * 棋盘上去，不能让棋盘再抽一次。'own' 那一档尤其要紧：各转各的，用的是本
-   * 机的 Math.random，再抽一次抽到的是另一对，玩家眼睁睁看着轮子停在 A，进
-   * 去要凑的却是 B。
+   * 倒数那一屏上滚筒已经转过一遍了，转出来的就是它——所以它得跟着走到棋盘
+   * 上去，不能让棋盘再抽一次。'own' 那一档尤其要紧：各转各的，用的是本机的
+   * Math.random，再抽一次抽到的是另一个，玩家眼睁睁看着轮子停在 A，进去要凑
+   * 的却是 B。
    */
-  targets?: readonly TargetPattern[];
+  target?: TargetPattern;
 }
 
 export interface MultiplayerHandlers {
@@ -1206,18 +1206,18 @@ export function renderMultiplayerPage(
      * 有 4.5 秒（WIDE_MODES 5.5 秒，可能有新手的局 8–9 秒）。
      *
      * 'same' 和 'own' 在这儿都抽一次，抽法和棋盘那边完全一样（同一份
-     * drawPair、同一个种子）：'same' 从刚种下的那条流里抽，全屋抽出同一对；
-     * 'own' 用本机的 Math.random，各转各的。抽出来的这一对跟着 onMatchStart
+     * drawOne、同一个种子）：'same' 从刚种下的那条流里抽，全屋抽出同一个；
+     * 'own' 用本机的 Math.random，各转各的。抽出来的这一个跟着 onMatchStart
      * 走到棋盘上去，屏幕上停的就是手里要凑的。
      */
     const family: Family =
       mode === 'square' ? 'square' : mode === 'circle' ? 'circle' : 'triangle';
-    let spun: readonly TargetPattern[] | undefined;
+    let spun: TargetPattern | undefined;
     if (state.slot) {
       // 'same' 要先把那条共享的流种上——棋盘那边开局时会再种一次同一个种
       // 子，所以这儿先抽一次不会把牌抽乱。
       if (state.slot === 'same') seedRandom(seed);
-      spun = drawPair(family, state.slot === 'same' ? seededRandom : Math.random) ?? undefined;
+      spun = drawOne(family, state.slot === 'same' ? seededRandom : Math.random) ?? undefined;
     }
 
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
@@ -1261,7 +1261,7 @@ export function renderMultiplayerPage(
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
         playedRound = round;
-        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null, flip: state.flip, targets: spun });
+        if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null, flip: state.flip, target: spun });
         return;
       }
       // 服务器留的是四秒半（建议横着玩的玩法五秒半），多出来的半秒都算在第一

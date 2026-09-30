@@ -14,9 +14,8 @@ import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
-import { scoreOf, sizeOf } from '../engine/targets';
-import { findTargets, type BoardView } from '../engine/targetMatch';
-import { targetPatternDefs } from '../engine/targetIcon';
+import { scoreForSize, sizeAtLevel } from '../engine/targets';
+import { erodedShapes, findTargets, type BoardView } from '../engine/targetMatch';
 import { runLabel as runLabelOf, squareGrowth } from '../engine/matchGrowth';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
@@ -138,10 +137,17 @@ export function createSquareGame(): ShapeGame {
       // 新规则的局落进了旧规则的归档（那个文件开头写着后果）。
       const modeKey = modeKeyOf({ bomb: isBomb, flip: flipMode, steps: puzzleMode, timed: !!opts?.timeLimitSec });
       const lang = opts?.lang ?? 'zhHans';
-      // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那两个。
-      const targets = opts?.targets?.length ? opts.targets : null;
-      /** 这一局最少几枚才可能算分——死局判定拿它当门槛。 */
-      const minMatchSize = targets ? Math.min(...targets.map(sizeOf)) : undefined;
+      // 随机得分目标：这一局认哪个图案。没给就是这个玩法自己那一套 1×N。
+      const target = opts?.target ?? null;
+      /**
+       * 此刻这一局要凑几枚（《侵蚀阶梯》v1.2 PR-8）。
+       *
+       * **现问，不缓存。** 老虎机那一局的目标跟着侵蚀阶梯一级一级变小（每降一级
+       * 少一枚，下限 1），而一步之内可以连降两级；开局算一次存下来的话，死局判定
+       * 和判分会各按一个过时的门槛走——门槛偏大那一头最凶：图案已经降到 2 枚、盘
+       * 上明明还凑得出，却被当成死局，而死局没有任何按钮拦得住（1.4 秒后直接结算）。
+       */
+      const targetNeed = () => (target ? sizeAtLevel(target, controller.matchLen()) : 0);
       const refs = buildShell(container, {
         lang,
         practice: !!opts?.practice,
@@ -153,9 +159,9 @@ export function createSquareGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'square', '方块')}`,
         tagline: isBomb ? SHELL[lang].taglineRowCol + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineRowCol,
         startBody: SHELL[lang].shellStartBody,
-        patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
-        // 随机得分目标：开局页换成那台老虎机，当场把这两个转出来。
-        slotTargets: targets ?? undefined,
+        patternIcons: renderPatternHintIcons(PATTERNS, lang),
+        // 随机得分目标：开局页换成那台老虎机，当场把它转出来。
+        slotTarget: target ?? undefined,
         // 棋盘底下那块教学条（见 ui/coachBar.ts）。方块这边只有两种局给：头
         // 一回玩方块（先不出声，见 coachPlan），和炸弹 / 无限反转 / 老虎机头
         // 一回进来时的那一句提示（coachTip）。
@@ -618,12 +624,21 @@ export function createSquareGame(): ShapeGame {
         },
       };
 
+      /**
+       * 老虎机那一局的判分：目标此刻是 k 枚，**它的任意仍相连 k 子形**都算
+       * （《侵蚀阶梯》v1.2 PR-8）。
+       *
+       * 分按拼成的那几枚算（⌈k²/2⌉），不按目标原来有几枚——不然图案侵蚀到 1 枚之
+       * 后，随便一枚同色都能拿到五枚图案那一档的分。
+       */
       function findTargetMatches(mask: Set<string> | null): Match[] {
         const out: Match[] = [];
-        for (const p of targets!) {
+        const need = targetNeed();
+        const points = scoreForSize(need);
+        for (const p of erodedShapes(target!, need)) {
           for (const cells of findTargets(targetView, p)) {
             if (!touches(cells, mask)) continue;
-            out.push({ cells, points: scoreOf(p), label: p.id });
+            out.push({ cells, points, label: target!.id });
           }
         }
         return out;
@@ -640,7 +655,7 @@ export function createSquareGame(): ShapeGame {
        * 从 4 降到 3、2、1（§2），缓存一份就会慢一拍。
        */
       function findMatches(mask: Set<string> | null): Match[] {
-        if (targets) return findTargetMatches(mask);
+        if (target) return findTargetMatches(mask);
         const matches: Match[] = [];
         const n = controller.matchLen();
         const label = runLabel(n);
@@ -792,13 +807,13 @@ export function createSquareGame(): ShapeGame {
       function findStuckGroups(): Cell[][] {
         // 无限反转：反面还会翻回来，「再也翻不动」这件事不成立。
         if (flipMode) return [];
-        // 随机得分目标：门槛是这一局转出来的两个图案里枚数较小的那个。写死
+        // 随机得分目标：门槛是目标此刻还有几枚（targetNeed，跟着侵蚀走）。写死
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
         // 传进去的是当前较短的那条边长：整行 / 整列会随消除变短，门槛得跟着走。星星
         // 自己得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate
         // 取两者中小的那个当门槛，见那儿的 starNeed。
-        return findStuckColorGroups(liveTiles(), minMatchSize, Math.min(rows, cols));
+        return findStuckColorGroups(liveTiles(), target ? targetNeed() : undefined, Math.min(rows, cols));
       }
 
       function countRemainingTiles() {
@@ -875,7 +890,8 @@ export function createSquareGame(): ShapeGame {
         lang,
         practice: !!opts?.practice,
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
-        slot: !!targets,
+        slot: !!target,
+        slotTarget: target ?? undefined,
         flip: flipMode,
         puzzle: puzzleMode,
         puzzleTally,

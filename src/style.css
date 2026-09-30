@@ -2659,6 +2659,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .records-panels .records-row-mode,
+.records-panels .records-row-target,
 .records-panels .records-row-time { display: none; }
 .records-panels .records-row-score { font-size: 0.78rem; }
 .records-panels .records-rule { height: 6px; }
@@ -3857,6 +3858,18 @@ html.is-tutorial .home-nav { display: none; }
 .records-row-glyph svg { width: 100%; height: 100%; }
 .records-row-name { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
 .records-row-time { color: #7A5C48; font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+/* 老虎机那一局在拼的那个图案，画在玩法名后面（《侵蚀阶梯》v1.2 PR-8）。
+   这一局的 modeKey 是 'base'，所以玩法名右边那点小字（.records-row-mode）是空的
+   ——一整行里没有任何东西说得出「这一局是老虎机」。一张小图就说完了，而且不占那
+   一行的字数（站点原则：少文字）。 */
+.records-row-target { display: inline-flex; align-items: center; margin-left: 6px; vertical-align: middle; color: #7A5C48; }
+.records-row-target > svg {
+  height: 15px; width: auto; max-width: 42px; display: block;
+  /* 描边描的是**药丸自己的底色**，不是主题墨色：小球那几个图案里棋子是相切的
+     （targetIcon 用的半径是 0.95），不描边两颗就糊成一颗；而这颗药丸的底是写死的
+     近白（见 .records-row 上面那段），所以用白描出来的是一道缝，不是一道边。 */
+  stroke: #fff; stroke-width: 1.2;
+}
 .records-panel--big {
   width: min(560px, 92vw); max-height: 76vh; overflow-y: auto; overscroll-behavior: contain;
   cursor: default;
@@ -4099,6 +4112,27 @@ html.is-playing body { background: var(--play-bg); }
      viewBox 单位、一枚棋子才 10 个——每边胖一成，四枚挨着的方块就被描边连成了一
      条黑杠，数不出是几枚。 */
   stroke: none;
+}
+
+/* 老虎机那一局：这一块里画的是这一局转到的那个**目标**（《侵蚀阶梯》v1.2 PR-8），
+   不是基础玩法那条 1×N。区别在形状能有多高——方块 35 是竖着三格、小球 24 / 26 是
+   三行，按上面那个「一枚就是 1em」的固定尺寸画出来有七十多像素高，而这块牌子内高
+   只有五十几，`overflow: hidden` 会把它齐齐切掉一截（切掉的那一截不报错，屏幕上就
+   是「图案好像少了一排」——比画小一点糟得多）。
+   所以只有这一档改成「按整块的大小缩进去」：1×N 那一条的尺寸是玩家定过的，一个字
+   不动。
+   同一个目标在一局里的框是不变的（engine/targetIcon.ts 的 targetHudDef 按**整个**
+   目标定 extent/extentY），所以侵蚀掉一枚之后棋子还是那么大，图只是少了一枚——框
+   跟着剩下那几枚走的话，屏幕上看到的是图案变大，正好和玩法说的反过来。 */
+.app--game .hud-block--pattern.pat-block--target .pat-icon {
+  /* 5px / 10px 不是随手写的：刻度环那道描边宽 3px、压在这一块的边上（往里占 0–3px，
+     见 patternBlock 的 layoutRing），所以竖着至少要让出 3px；再多让 2px 当余量。
+     360×640 上这一块内高只有 44px，让多一点就直接吃掉图案的一行——量过：inset 从
+     8px 收到 5px，三行的目标每行从 8px 长到 11px。 */
+  position: absolute; inset: 5px 10px;
+}
+.app--game .hud-block--pattern.pat-block--target .pat-icon > svg {
+  width: 100%; height: 100%;
 }
 
 /* The board's panel — the green field the pieces sit on — takes whatever is

@@ -45,14 +45,19 @@ export interface ShapeGameOpts {
   /** Localizes the shell chrome and dynamic end-of-run text; falls back to 'zhHans' if omitted. */
   lang?: Lang;
   /**
-   * 随机得分目标：这一局老虎机转出来的那两个图案。
+   * 随机得分目标：这一局老虎机转出来的那**一个**图案（《侵蚀阶梯》v1.2 PR-8，
+   * 从前是一对）。
    *
    * 给了就换掉这个玩法自己那套得分图案——别的都不动（还是同一副棋盘、同样
-   * 的滑法、同样的整行奖励），只有「拼成什么算分」变了，分数按
-   * targets.ts 的 scoreOf 算。玩家的原话：「玩法就是三个基础图形的玩法只是
-   * 得分的图形不同而已」。
+   * 的滑法、同样的整行奖励），只有「拼成什么算分」变了：拼成一次翻面 +2/枚，
+   * 另加 `scoreForSize(枚数)` = ⌈枚数²/2⌉。玩家的原话：「玩法就是三个基础图形
+   * 的玩法只是得分的图形不同而已」。
+   *
+   * 这一局的图案也吃侵蚀：每降一级少一枚（下限 1），认的是「目标的任意仍相连
+   * k 子形」——枚举在 engine/targetMatch.ts 的 erodedShapes，级数照旧问控制器
+   * 的 matchLen()，所以**不要**把子形缓存成一份：一步之内可以连降两级。
    */
-  targets?: readonly TargetPattern[];
+  target?: TargetPattern;
   /**
    * 练习盘：小屋里等人看教学的那一屏底下摆的那块棋盘。真的棋盘、真的规
    * 则，只是不结算——打完了（翻完、死局）就静静再来一盘，不存档、不上榜、

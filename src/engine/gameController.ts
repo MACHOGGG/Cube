@@ -88,6 +88,9 @@ const UNFLIPPED_SCALE = 0.95;
 
 import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
 import { mountPatternBlock } from '../ui/patternBlock';
+import { sizeAtLevel, type TargetPattern } from './targets';
+import { targetHudDef } from './targetIcon';
+import { erodedFace } from './targetMatch';
 import { cardOrNull } from '../shapes/registry';
 
 export interface GameControllerHooks {
@@ -110,6 +113,14 @@ export interface GameControllerHooks {
   practice?: boolean;
   /** 老虎机那一局（见 RunData.slot）：排行榜靠它把这一局单独排一张榜。 */
   slot?: boolean;
+  /**
+   * 老虎机那一局转出来的**那一个**目标（《侵蚀阶梯》v1.2 PR-8）。
+   *
+   * 控制器只拿它做两件事：HUD 那一块画这个目标（而不是基础玩法的 1×N），以及往
+   * 这一局的档里记一个 `targetId`——分享卡和记录行照它画那张小图。「拼成了算几
+   * 分」不在这儿，在棋盘自己的 findMatches 里（它要知道此刻认哪些子形）。
+   */
+  slotTarget?: TargetPattern;
   /**
    * 这副棋盘一共有几个可用格、几种颜色——侵蚀阶梯的段数与基准按它查表
    * （engine/erosion.ts 的 tableFor，《侵蚀阶梯》v1.2 §2）。
@@ -377,6 +388,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 而 hooks.shapeId 在练习盘、小屋那几条路上不一定查得到（cardOrNull 的用意）。
     cardOrNull(hooks.shapeId)?.family ?? 'square',
     hooks.lang,
+    // 老虎机那一局画的是这一级的目标子形，别的局画 1×N。挑哪一个子形来画由
+    // erodedFace 定死（见那儿：从后往前拆，剩下的还连着就拆它），所以同一个目标
+    // 每次降级都是「同一个图案缺了个角」，不是每级换一个陌生形状。
+    hooks.slotTarget
+      ? (level) =>
+          targetHudDef(
+            hooks.slotTarget!,
+            erodedFace(hooks.slotTarget!, sizeAtLevel(hooks.slotTarget!, level)),
+          )
+      : undefined,
   );
   const paintPattern = () =>
     patternBlock.update({ level: erosion.level(), segLeft: erosion.segLeft(), segTotal: erosion.segTotal() });
@@ -803,6 +824,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 是同一套计分了，可「和谁一起打的」仍然是这一局的一部分。
       room: Boolean(currentRoom()),
       slot: Boolean(hooks.slot),
+      // 这一局认的是哪个得分目标（《侵蚀阶梯》v1.2 PR-8）。分享卡和记录行照它画
+      // 那张小图——从前一局认两个、屏幕上有一整排图示，档里于是不必记；现在只有
+      // 一个，而它是这一局**唯一**和别的局不同的地方，不记下来那张卡就说不出这一
+      // 局在拼什么。非老虎机局不写这一项。
+      targetId: hooks.slotTarget?.id,
       // 炸弹局带上规则版本号：存档键和排行榜靠它把新旧两套规则的局分开（见
       // bomb.ts 的 BOMB_RULES_VERSION）。非炸弹局不写，省得每一局都多一个字段。
       bombRules:

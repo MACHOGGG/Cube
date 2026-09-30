@@ -12,15 +12,16 @@
  * 置的一句（flipModeTagline），两屏于是也对齐了。
  *
  * 挑完就直接开局——第二幕（滚筒真的转起来、5-4-3-2-1）长在游戏外壳的开局页
- * 上，见 gameShell 的 slotTargets 和 ui/slotReels.ts。这里只负责抽出这一局
- * 认哪两个图案，抽的规矩在 targets.ts：有些图案互相包含（拼出大的就白送一个
- * 小的），有些是玩家点名不许同时出现的，drawPair 只从合得来的对子里抽。
+ * 上，见 gameShell 的 slotTarget 和 ui/slotReels.ts。这里只负责抽出这一局认
+ * 哪**一个**图案：drawOne 在该族里等概率抽（《侵蚀阶梯》v1.2 PR-8——一局两个
+ * 图案那阵子还有一张互斥表，一个图案之后「不能同时出现」无从发生，那一套连
+ * 同 drawPair 一起退役了）。
  *
  * 玩法本身没有新东西：挑完什么就是那个基础玩法，同一副棋盘、同样的滑法、同
  * 样的整行奖励，只有「拼成什么算分」变了。
  */
 import { STRINGS, type Lang } from '../i18n';
-import { drawPair, type Family, type TargetPattern } from '../engine/targets';
+import { drawOne, type Family, type TargetPattern } from '../engine/targets';
 import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
@@ -30,7 +31,8 @@ import { CTL_BACK } from './ctlIcons';
  *
  * **两族，不是三族**（《侵蚀阶梯》v1.2 PR-6）：三角那副基础棋盘删了，剩下的六边
  * 蜂窝 54 是天才特供的布局，不进这一屏。三角那一族的目标数据在 engine/targets.ts
- * 里留着没删（PR-8：永不被抽到）——这一屏抽不到它，是因为这张表里没有它。
+ * 里留着没删（PR-8 明文「保留不删、永不被抽到」）——这一屏抽不到它，是因为这张
+ * 表里没有它。
  * `api/room.js` 的 SLOT_MODES 也跟着收成两个，两头要一致。
  */
 const FAMILIES: { family: Family; shapeId: string; icon: string }[] = [
@@ -40,13 +42,13 @@ const FAMILIES: { family: Family; shapeId: string; icon: string }[] = [
 
 export interface RandomTargetHandlers {
   onBack: () => void;
-  /** 挑好了，开这一局：这个 family 的基础玩法，认这两个图案。 */
-  onStart: (family: Family, targets: TargetPattern[]) => void;
+  /** 挑好了，开这一局：这个 family 的基础玩法，认这一个图案。 */
+  onStart: (family: Family, target: TargetPattern) => void;
   /** 没开通的人点了那三张图里的任意一张。 */
   onGenius: () => void;
   /**
    * 屋主在为整屋挑玩法。给了它，这一屏多一个《相同 / 不同》开关：相同＝全
-   * 屋转出同一对得分图案，不同＝各转各的（棋盘两种情况都一样）。挑完不开单
+   * 屋转出同一个得分图案，不同＝各转各的（棋盘两种情况都一样）。挑完不开单
    * 人局，把这一族和开关交回去，全屋一起倒数。
    */
   room?: { onStart: (family: Family, slot: 'same' | 'own') => void };
@@ -119,11 +121,11 @@ export function renderRandomTargetPage(
       // 屋主替整屋挑：图案不在这儿抽——'same' 要从小屋的种子里抽才能人人一
       // 样，'own' 各自在开局那一刻抽。这里只把族和开关交回去。
       if (handlers.room) return handlers.room.onStart(btn.dataset.family as Family, slot);
-      const pair = drawPair(btn.dataset.family as Family);
-      // 这一族没有能同时成立的两个——不会发生，check-targets 每次都验（真发
-      // 生了也不该把人卡在一张按不动的页面上，所以退回上一页）。
-      if (!pair) return handlers.onBack();
-      handlers.onStart(btn.dataset.family as Family, pair);
+      const target = drawOne(btn.dataset.family as Family);
+      // 这一族一个图案都没有——不会发生，check-targets 每次都验（真发生了也不
+      // 该把人卡在一张按不动的页面上，所以退回上一页）。
+      if (!target) return handlers.onBack();
+      handlers.onStart(btn.dataset.family as Family, target);
     });
   }
   root.querySelector<HTMLButtonElement>('#slotBack')!.addEventListener('click', handlers.onBack);

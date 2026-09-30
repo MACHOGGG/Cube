@@ -17,9 +17,8 @@ import { buildEdgeBand } from '../ui/edgeBand';
 import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
-import { scoreOf, sizeOf } from '../engine/targets';
-import { findTargets, type BoardView } from '../engine/targetMatch';
-import { targetPatternDefs } from '../engine/targetIcon';
+import { scoreForSize, sizeAtLevel } from '../engine/targets';
+import { erodedShapes, findTargets, type BoardView } from '../engine/targetMatch';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { shuffle } from '../engine/rng';
@@ -249,10 +248,17 @@ export function createCircleGame(): ShapeGame {
       // 新规则的局落进了旧规则的归档（那个文件开头写着后果）。
       const modeKey = modeKeyOf({ bomb: isBomb, flip: flipMode, steps: puzzleMode, timed: !!opts?.timeLimitSec });
       const lang = opts?.lang ?? 'zhHans';
-      // 随机得分目标：这一局认哪两个图案。没给就是这个玩法自己那几个。
-      const targets = opts?.targets?.length ? opts.targets : null;
-      /** 这一局最少几枚才可能算分——死局判定拿它当门槛。 */
-      const minMatchSize = targets ? Math.min(...targets.map(sizeOf)) : undefined;
+      // 随机得分目标：这一局认哪个图案。没给就是这个玩法自己那一套 1×N。
+      const target = opts?.target ?? null;
+      /**
+       * 此刻这一局要凑几枚（《侵蚀阶梯》v1.2 PR-8）。
+       *
+       * **现问，不缓存。** 老虎机那一局的目标跟着侵蚀阶梯一级一级变小（每降一级
+       * 少一枚，下限 1），而一步之内可以连降两级；开局算一次存下来的话，死局判定
+       * 和判分会各按一个过时的门槛走——门槛偏大那一头最凶（下面 stuckAt 那段注释
+       * 写了后果）。
+       */
+      const targetNeed = () => (target ? sizeAtLevel(target, controller.matchLen()) : 0);
       const refs = buildShell(container, {
         lang,
         practice: !!opts?.practice,
@@ -264,9 +270,9 @@ export function createCircleGame(): ShapeGame {
         title: `Slides · ${shapeName(lang, 'circle', '圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,
-        patternIcons: renderPatternHintIcons(targets ? targetPatternDefs(targets) : PATTERNS, lang),
+        patternIcons: renderPatternHintIcons(PATTERNS, lang),
         // 随机得分目标：开局页换成那台老虎机，当场把这两个转出来。
-        slotTargets: targets ?? undefined,
+        slotTarget: target ?? undefined,
         // 头一局那块教学条（见 ui/coachBar.ts）。只有头一回进来的那一局有。
         coach: !!opts?.coach,
         noCountdown: !!opts?.noCountdown,
@@ -742,12 +748,21 @@ export function createCircleGame(): ShapeGame {
         },
       };
 
+      /**
+       * 老虎机那一局的判分：目标此刻是 k 枚，**它的任意仍相连 k 子形**都算
+       * （《侵蚀阶梯》v1.2 PR-8）。
+       *
+       * 分按拼成的那几枚算（⌈k²/2⌉），不按目标原来有几枚——不然图案侵蚀到 1 枚之
+       * 后，随便一枚同色都能拿到六枚图案那一档的分。
+       */
       function findTargetMatches(mask: Set<string> | null): Match[] {
         const out: Match[] = [];
-        for (const p of targets!) {
+        const need = targetNeed();
+        const points = scoreForSize(need);
+        for (const p of erodedShapes(target!, need)) {
           for (const cells of findTargets(targetView, p)) {
             if (mask && !cells.some(([r, c]) => mask.has(cellKey(r, c)))) continue;
-            out.push({ cells, points: scoreOf(p), label: p.id });
+            out.push({ cells, points, label: target!.id });
           }
         }
         return out;
@@ -764,7 +779,7 @@ export function createCircleGame(): ShapeGame {
        * 从 4 降到 3、2、1（§2），缓存一份就会慢一拍。
        */
       function findRunMatches(mask: Set<string> | null): Match[] {
-        if (targets) return findTargetMatches(mask);
+        if (target) return findTargetMatches(mask);
         const matches: Match[] = [];
         const n = controller.matchLen();
         const label = runLabel(n);
@@ -941,7 +956,7 @@ export function createCircleGame(): ShapeGame {
        */
       function stuckAt(threshold: number): Cell[][] {
         const edge = shortestEdge(edgeBoard, threshold);
-        const need = targets ? minMatchSize : controller.matchLen();
+        const need = target ? targetNeed() : controller.matchLen();
         return findStuckColorGroups(liveTiles(), need, edge || NO_EDGE);
       }
 
@@ -1028,7 +1043,8 @@ export function createCircleGame(): ShapeGame {
         lang,
         practice: !!opts?.practice,
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
-        slot: !!targets,
+        slot: !!target,
+        slotTarget: target ?? undefined,
         flip: flipMode,
         puzzle: puzzleMode,
         puzzleTally,

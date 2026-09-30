@@ -10,7 +10,7 @@
  *   基础方块   createSquareGame().mount(root, back, {})
  *   基础小球   createCircleGame().mount(root, back, {})
  *   炸弹       { bomb: true }
- *   老虎机     { targets: 转出来的两个图案 }
+ *   老虎机     { target: 转出来的那个图案 }
  *   无限反转   { flip: true, timeLimitSec: 60 }
  *
  * 棋盘、滑动手感、得分判定、连锁节拍、翻面动画、结算、战绩图——一律走网页
@@ -482,7 +482,7 @@ function showSquare(): void {
  * 定的）。第二回再进来就没有了——同一句话说两遍就成了噪音。
  *
  * 配图跟着他刚挑的图形走（炸弹、无限反转），老虎机那幅直接用这一局转出来的
- * 那两个得分图案——就是他抬头在读数条上看见的同两个。
+ * 那个得分图案——就是他抬头在 HUD 右边那一块上看见的同一个。
  *
  * 返回的是 ShapeGameOpts 的一小撮字段，摊进开局那个大 opts 里；不是头一回就
  * 返回空对象，什么也不加。
@@ -490,9 +490,13 @@ function showSquare(): void {
 function tipFor(
   kind: 'bomb' | 'slot' | 'flip',
   family: Family,
-  targets?: readonly TargetPattern[],
+  target?: TargetPattern,
 ): ShapeGameOpts {
   if (!firstTimeIn(kind)) return {};
+  // 老虎机那一句要有个目标才画得出配图（《侵蚀阶梯》v1.2 PR-8 之后是一个，不是一
+  // 对）。走到这儿一定有——showSlot 那边抽好了才开局。真没有就当这一回不算「头
+  // 一回」：先检查再 markOpened，不然那面旗子被烧掉了，条子却一次都没摆过。
+  if (kind === 'slot' && !target) return {};
   markOpened(kind);
   // 这一版只有方块和小球，三角整块不做；真来了个别的就当方块画。
   const shape = family === 'circle' ? 'circle' : 'square';
@@ -501,7 +505,7 @@ function tipFor(
       ? bombTip(LANG, shape)
       : kind === 'flip'
         ? flipTip(LANG, shape)
-        : slotTip(LANG, targets ?? []);
+        : slotTip(LANG, target!);
   return { coach: true, coachTip: tip };
 }
 
@@ -517,7 +521,15 @@ function showBombPick() {
   setScreenBack(showMenu);
 }
 
-/** 老虎机：网页版那一屏原样搬过来——挑图形、转滚筒、抽出这一局的得分图案。 */
+/**
+ * 老虎机：网页版那一屏原样搬过来——挑图形、转滚筒、抽出这一局的得分图案。
+ *
+ * 从前这儿画完还要 `root.querySelector('.slot-pick-opt[data-family="triangle"]')
+ * ?.remove()`——那会儿网页版那一屏摆的是三个图形，这一版只有两个。《侵蚀阶梯》
+ * v1.2 PR-6 把三角那副基础棋盘删了之后，网页版自己也只剩两个，那一句从此摘的是
+ * 一个不存在的节点：不报错，只是在骗后来看代码的人「这一版和网页版的清单不一
+ * 样」。清单现在两头同一份，所以那一句连着它的注释一起删掉。
+ */
 function showSlot() {
   teardown();
   renderRandomTargetPage(
@@ -525,20 +537,13 @@ function showSlot() {
     LANG,
     {
       onBack: showMenu,
-      onStart: (family: Family, targets: TargetPattern[]) =>
-        startWith(family, { targets, ...tipFor('slot', family, targets) }, showSlot),
+      onStart: (family: Family, target: TargetPattern) =>
+        startWith(family, { target, ...tipFor('slot', family, target) }, showSlot),
       // 这一版全部免费，没有「没开通」这条岔路；给个空函数只是接口要它。
       onGenius: () => {},
     },
     false,
   );
-  // 这一版只有方块和小球——三角整块不做（见 xhs/README.md）。网页版那一屏
-  // 摆的是三个，所以画完把三角那颗摘掉。
-  //
-  // 不去改 src/ui/slotMachine.ts 的 FAMILIES：那是网页版正在用的清单，动它
-  // 等于动网页版。摘一颗按钮是这一版自己的事，就在这一版里做。
-  // 剩下两颗自己会重新居中（.slot-pick-row 是 justify-content: center）。
-  root.querySelector('.slot-pick-opt[data-family="triangle"]')?.remove();
   setScreenBack(showMenu);
 }
 

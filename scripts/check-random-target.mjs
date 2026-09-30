@@ -1,15 +1,21 @@
 /**
  * 《随机得分目标》：挑图形 → 老虎机在开局页上转 → 5-4-3-2-1 → 开局，认的
- * 就是轮子上停下来的那两个。
+ * 就是轮子上停下来的那一个。
  *
  *   npm run build
  *   node scripts/dev-server.mjs 8817 dist
  *   node scripts/check-random-target.mjs http://localhost:8817/
  *
  * 这条线最容易出的毛病是「转是转了，盘上还是老一套」——转盘那一幕看着完全
- * 正常，进了局才发现得分图示还是这个玩法自己那两三个。所以这里量两件事：
- * 轮子停下来的那两张，和开局之后棋盘上那一排——它们必须是同两个；而且要
- * 和「直接从主菜单开同一个玩法」的那一排不一样，一样就是根本没接上。
+ * 正常，进了局才发现认的还是这个玩法自己那条 1×N。所以这里量两件事：轮子停
+ * 下来的那一张，和开局之后 HUD 右边那一块《得分图案》里画的——它们必须是同
+ * 一个；而且要和「直接从主菜单开同一个玩法」的那一块不一样，一样就是根本没
+ * 接上。
+ *
+ * **量的是 HUD 那一块，不是棋盘上方那条图示带。**《侵蚀阶梯》v1.2 PR-7 把那条带
+ * 子退役了（现在两块 HUD：左《拼出得分》、右《得分图案》），这道门那两条从那天
+ * 起一直读着一个不存在的选择器、拿空数组去比空数组——两条**假绿**。PR-8 把它们
+ * 改成读 HUD 那一块，并且立了一条尺子：那一块里必须真的画出了东西。
  *
  * 另外看住没开通的那一份：页面照样打得开、图形照样画出来，只是按下去开的是
  * 订阅那扇窗，不是一局游戏——这是玩家自己定的规矩（做好了的东西谁都点得进
@@ -37,12 +43,68 @@ const seed = (genius) => {
   }
 };
 
-/** 棋盘上那一排得分图示，按它们的编号取指纹。 */
-const LEGEND = () =>
-  [...document.querySelectorAll('.pattern-hint--a .ph-part .pattern-icon')]
-    .map((e) => e.getAttribute('aria-label') || '');
+/**
+ * 页面里那把尺子：一张图案 svg 的**形状指纹**——几个图形，以及它们彼此的相对位置。
+ *
+ * 不读 aria-label、不读 svg 的尺寸：滚筒里那一张和 HUD 那一块里那一张是同一个图案
+ * 的两份画法（同一套 cellsOf 换算，只是外框 extent 不一样，见
+ * engine/targetIcon.ts），所以能比的只有「形状」本身——把各个图形的中心按它们自己
+ * 那一圈的包围盒归一化（长边为 1，两轴同一个尺度，不然比例会被拉歪）。
+ *
+ * 这把尺子于是既认得出「两边是同一个图案」，也认得出「这不是 1×N」——1×N 的 N 个
+ * 图形全在一条水平线上，y 一律是 0。
+ *
+ * 装成 addInitScript：page.evaluate 传进去的函数是**序列化**过去的，引用不到这个文
+ * 件里的任何东西，所以尺子本身必须活在页面里。
+ */
+const installProbe = () => {
+  const fp = (svg) => {
+    if (!svg) return null;
+    const marks = [...svg.children].filter((e) => e.tagName !== 'defs');
+    if (!marks.length) return null;
+    const boxes = marks.map((m) => m.getBoundingClientRect());
+    const cx = boxes.map((b) => b.left + b.width / 2);
+    const cy = boxes.map((b) => b.top + b.height / 2);
+    const minX = Math.min(...cx);
+    const minY = Math.min(...cy);
+    const scale = Math.max(Math.max(...cx) - minX, Math.max(...cy) - minY) || 1;
+    return {
+      n: marks.length,
+      tag: marks[0].tagName,
+      pts: marks
+        .map((_, i) => [
+          Math.round(((cx[i] - minX) / scale) * 100),
+          Math.round(((cy[i] - minY) / scale) * 100),
+        ])
+        .sort((p, q) => p[1] - q[1] || p[0] - q[0]),
+    };
+  };
+  window.__probe = {
+    /** HUD 右边那一块《得分图案》里此刻画的是什么。 */
+    hud() {
+      const f = fp(document.querySelector('.hud-block--pattern .pat-icon > svg'));
+      // 老虎机那一局给这一块挂了身份类（patternBlock 的 pat-block--target）。
+      return f && { ...f, target: Boolean(document.querySelector('.hud-block--pattern.pat-block--target')) };
+    },
+    /** 第 i 个滚筒此刻正对着窗口的那一张图案，取同一把指纹。 */
+    reel(i) {
+      const r = document.querySelectorAll('.slot-reel')[i];
+      if (!r) return null;
+      const strip = r.querySelector('.slot-strip');
+      const cell = r.getBoundingClientRect().height || 1;
+      const y = Math.abs(parseFloat((strip.style.transform.match(/-?[\d.]+/) || [0])[0])) || 0;
+      return fp(strip.children[Math.round(y / cell)]?.querySelector('svg'));
+    },
+  };
+};
 
-/** 三个轮子当前正对着窗口的那一张（transform 走了几格就是第几张）。 */
+/** 两个指纹是不是同一个形状（每个图形的位置差在 ±3% 以内）。 */
+const SAME = (a, b) =>
+  Boolean(a && b) && a.n === b.n && a.pts.every((p, i) => Math.abs(p[0] - b.pts[i][0]) <= 3 && Math.abs(p[1] - b.pts[i][1]) <= 3);
+
+const FMT = (fp) => (fp ? `${fp.n} 个 ${fp.tag} ${fp.pts.map((p) => p.join(':')).join(' ')}` : '（空）');
+
+/** 两个轮子当前正对着窗口的那一张（transform 走了几格就是第几张）。 */
 const REELS = () =>
   [...document.querySelectorAll('.slot-reel')].map((r) => {
     const strip = r.querySelector('.slot-strip');
@@ -76,10 +138,16 @@ async function openIntro(page) {
 // **台数不写死。** 这儿原先写的是「三台机器、六个轮子」，2026-09 删掉三角那副基础
 // 棋盘之后（《侵蚀阶梯》v1.2 PR-6）就只剩两台，这道门从那天起一直红着，而红的不是
 // 它守的那件事。现在按「页面上有几台」往下量，另加一条下限（至少两台）挡住「一台
-// 都没渲染出来也算过」。每台几个轮子同理从页面上取：PR-8 要把两个滚筒收成一个。
+// 都没渲染出来也算过」。每台几个轮子同理从页面上取。
+//
+// （这儿曾经留过一句「PR-8 要把两个滚筒收成一个」——猜错了。PR-8 把一局两个得分
+// 图案收成一个，窗口还是两个：那张图的显示区本来就被一道黑弧分成两格，收成一个
+// 就得铺白把弧盖掉；而「从左到右先停一个再停第二个」是玩家点名要的。两格停同一
+// 张，见 src/ui/slotReels.ts 顶上那段。）
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(seed, false);
+  await ctx.addInitScript(installProbe);
   const page = await ctx.newPage();
   await openIntro(page);
   const m = await page.evaluate(() => ({
@@ -166,15 +234,19 @@ async function openIntro(page) {
   await ctx.close();
 }
 
-// ---- 天才：三个族各走一遍 -------------------------------------------------
+// ---- 天才：两个族各走一遍 -------------------------------------------------
+//
+// **两族，不是三族。**《侵蚀阶梯》v1.2 PR-6 删掉了三角那副基础棋盘，挑图形那一屏
+// 上从此只有方块和小球（ui/slotMachine.ts 的 FAMILIES）。这儿原先还写着三族，走
+// 到三角那一轮 click 一个不存在的按钮、整道门超时崩掉。
 const FAMILIES = [
   { key: 'square', name: '方块' },
   { key: 'circle', name: '圆球' },
-  { key: 'triangle', name: '三角' },
 ];
 for (const fam of FAMILIES) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(seed, true);
+  await ctx.addInitScript(installProbe);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -188,7 +260,10 @@ for (const fam of FAMILIES) {
     () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball, #boardWrap .tri').length > 0,
     { timeout: 25000 });
   await page.waitForTimeout(700);
-  const plain = await page.evaluate(LEGEND);
+  const plain = await page.evaluate(() => window.__probe.hud());
+  check(`${fam.name}：基础局的《得分图案》块真的画了东西（尺子）`,
+    Boolean(plain) && plain.n >= 2 && !plain.target,
+    plain ? `${plain.n} 个 ${plain.tag} · ${plain.target ? '挂着目标类' : '没挂目标类'}` : '（那一块是空的）');
 
   // 乙、走一遍老虎机：介绍页右下角的《开始 〉》→ 挑图形 → 转。
   await openIntro(page);
@@ -245,21 +320,40 @@ for (const fam of FAMILIES) {
     `左 → 右相隔 ${Math.round(gap)}ms`);
   const reels = await page.evaluate(REELS);
   const spun = [reels[0].label, reels[1].label];
-  check(`${fam.name}：左边两个转出两个不同的图案`,
-    spun[0] && spun[1] && spun[0] !== spun[1], spun.join(' / ') || '（空）');
+  const spunFp = await page.evaluate(() => window.__probe.reel(0));
+  // 一局只有一个得分目标（PR-8），两个窗口停的是**同一张**——那张图上的显示区被
+  // 一道黑弧分成两格，收成一个窗口就得铺白盖掉它（见 src/ui/slotReels.ts）。
+  check(`${fam.name}：两个窗口停在同一个图案上`,
+    Boolean(spun[0]) && spun[0] === spun[1], spun.join(' / ') || '（空）');
 
   // 开局：倒数完自己会把局叫起来。
   await page.waitForFunction(
     () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball, #boardWrap .tri').length > 0,
     { timeout: 30000 });
   await page.waitForTimeout(700);
-  const drawn = await page.evaluate(LEGEND);
-  check(`${fam.name}：盘上认的就是轮子上停下来的那两个`,
-    drawn.length === 2 && drawn.slice().sort().join('|') === spun.slice().sort().join('|'),
-    `盘上 ${drawn.join('/')} · 轮子 ${spun.join('/')}`);
-  check(`${fam.name}：不是这个玩法自己那一套`,
-    drawn.join('|') !== plain.join('|'),
-    `转出来 ${drawn.length} 个 · 原本 ${plain.length} 个`);
+  const drawn = await page.evaluate(() => window.__probe.hud());
+  // 轮子停在编号 spun[0] 上；HUD 那一块该画的就是这个编号的图案。两边不比图形
+  // 本身（一个是滚筒里的整族图示、一个是 HUD 里的单张），比的是「那一块画出来
+  // 的形状，正好等于把这个编号单独画一遍」——所以在页面里按编号现画一张来比。
+  check(`${fam.name}：HUD 那一块真的画出了东西，而且挂着「目标」那个身份类`,
+    Boolean(drawn) && drawn.n >= 1 && drawn.target,
+    drawn ? `${drawn.n} 个 ${drawn.tag} · ${drawn.target ? '挂着' : '没挂'}` : '（那一块是空的）');
+  check(`${fam.name}：盘上认的就是轮子上停下来的那一个`,
+    SAME(drawn, spunFp),
+    `HUD ${FMT(drawn)} · 轮子 ${FMT(spunFp)}`);
+  // 「和直接开这个玩法那一套不一样」——**只在能判断的时候判断。** 抽到的目标是随
+  // 机的，而二十个图案里有几个本身就是一条直线（方块 36 就是 1×4、38 是 1×5，小球
+  // 27 是一排四颗），抽到那几个的时候 HUD 上画的和基础局画的本来就同形，「换没换
+  // 掉」这件事从形状上看不出来。写死一条「必须不一样」的话，这道门会看抽签结果偶
+  // 发红——而偶发红最后一定会被人加 continue-on-error。
+  // 换不换掉这件事另有两条钉住它：上面那条「HUD＝轮子」，和那个只有老虎机局才挂
+  // 的身份类。
+  if (SAME(drawn, plain)) {
+    check(`${fam.name}：这一局抽到的图案本身就是一条直线，和基础那一条同形——这一条无从判断（不假装查过）`,
+      true, `HUD ${FMT(drawn)}`);
+  } else {
+    check(`${fam.name}：不是这个玩法自己那一套 1×N`, true, `HUD ${FMT(drawn)} · 基础 ${FMT(plain)}`);
+  }
   check(`${fam.name}：一路没报错`, errors.length === 0, errors[0] || '');
   await ctx.close();
 }

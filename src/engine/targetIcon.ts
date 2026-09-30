@@ -25,6 +25,11 @@ function triPoints(i: number, p: number): [number, number][] {
     : [[x + 0.5, (i + 1) * TRI_H], [x, i * TRI_H], [x + 1, i * TRI_H]];
 }
 
+/** 一个图案的每一枚画成什么（圆 / 方 / 三角），坐标以第一枚为原点。 */
+export function targetIconCells(pattern: TargetPattern): IconCell[] {
+  return cellsOf(pattern);
+}
+
 function cellsOf(pattern: TargetPattern): IconCell[] {
   const [br, bg] = pattern.cells[0];
   if (pattern.family === 'square') {
@@ -83,13 +88,27 @@ export function slotFaceDefs(pool: readonly TargetPattern[]): PatternDef[] {
 }
 
 /**
- * 这一局抽中的那几个图案，画成棋盘上那一排小图示。
+ * 这一局抽中的图案，画成小图示（教学条那一句的配图用它）。
  *
- * 两枚共用一个 extent，所以铺得开的那一枚看起来就是「摊得更开」，而不是
+ * 几枚共用一个 extent，所以铺得开的那一枚看起来就是「摊得更开」，而不是
  * 「同一个形状画小了」——这一条是 patternIcon 里定的规矩，这里照着给。
  */
 export function targetPatternDefs(targets: readonly TargetPattern[]): PatternDef[] {
   const drawn = targets.map(cellsOf);
   const extent = Math.max(1, ...drawn.map(span)) + 0.6;
   return targets.map((t, i) => ({ label: t.id, cells: drawn[i], extent }));
+}
+
+/**
+ * HUD 那一块《得分图案》里的目标（《侵蚀阶梯》v1.2 PR-8）。
+ *
+ * 收两个：**整个**目标和**此刻要画的那个子形**。框按整个目标的跨度给，画的却只
+ * 有子形——所以侵蚀掉一枚之后，棋子还是那么大，图只是少了一枚。
+ *
+ * 少了这一条（框跟着子形自己走）的话，每少一枚剩下的就重新铺满这一块：屏幕上看
+ * 到的是图案**变大**，而玩法说的是它变小了，正好说反。
+ */
+export function targetHudDef(full: TargetPattern, shown: TargetPattern): PatternDef {
+  const [w, h] = spanXY(cellsOf(full));
+  return { label: shown.id, cells: cellsOf(shown), extent: w + 0.6, extentY: h + 0.6 };
 }

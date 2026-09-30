@@ -1,18 +1,19 @@
 /**
  * 《老虎机模式》从个人主页点进来的那一页。
  *
- * 三台机器（方块、小球、三角）上下居中、等距排着，进来就都转着；底下一颗红色
- * 的 STOP，按下去三台从上到下一台一台停稳，键随即变成绿色的《开始》，再按又
- * 转起来。玩家的原话：「居中等距的竖着排列三个老虎机……下面有一个《stop》红色
- * 按钮，按下的时候三个老虎机逐步停下，然后 stop 改为开始（绿色）然后可以再继
- * 续转动」。
+ * 两台机器（方块、小球）上下居中、等距排着，进来就都转着；底下一颗红色
+ * 的 STOP，按下去从上到下一台一台停稳，键随即变成绿色的《开始》，再按又转起
+ * 来。玩家的原话：「居中等距的竖着排列三个老虎机……下面有一个《stop》红色按
+ * 钮，按下的时候三个老虎机逐步停下，然后 stop 改为开始（绿色）然后可以再继续
+ * 转动」——他当时说的是三台，因为那会儿有三副基础棋盘；台数跟着 FAMILIES 走
+ * （《侵蚀阶梯》v1.2 PR-6 删掉三角之后是两台），「逐台停」那一条不变。
  *
  * 没开通的人看到的就是这一幕，玩不了；开通了的人右下角多一颗《开始 〉》，去
- * 挑图形那一屏（ui/slotMachine.ts）。三台机器和开局页上那台是同一台（同一张
+ * 挑图形那一屏（ui/slotMachine.ts）。这几台机器和开局页上那台是同一台（同一张
  * 图、同一套滚筒，见 ui/slotReels.ts），只是这里的转停由这颗键说了算。
  */
 import { STRINGS, type Lang } from '../i18n';
-import { drawPair, targetsOf, type Family } from '../engine/targets';
+import { drawOne, targetsOf, type Family } from '../engine/targets';
 import { planFor, slotMachineHtml, spinSlotHeld, type ReelPlan, type SpinHandle } from './slotReels';
 import { CTL_BACK } from './ctlIcons';
 
@@ -31,7 +32,7 @@ export interface SlotIntroHandlers {
 
 /**
  * @param locked 没开通 Slides 天才：没有那颗《开始 〉》，其余一样。
- * @returns 拆页面时叫一声，把三台机器的动画停掉。
+ * @returns 拆页面时叫一声，把这几台机器的动画停掉。
  */
 export function renderSlotIntroPage(
   root: HTMLElement,
@@ -84,12 +85,12 @@ export function renderSlotIntroPage(
     paintButton();
     handles = items.map((el, k) => {
       const family = el.dataset.family as Family;
-      // drawPair 只从合得来的对子里抽（有些图案互相包含、有些不许同时出现）。
-      // 一族抽不出来是不会发生的事（check-targets 每次都验）；真发生了就拿头
-      // 两个顶上，别让这一页空着。
-      const pair = drawPair(family) ?? targetsOf(family).slice(0, 2);
+      // 这一屏只是演示：随手抽一个，两个轮子都停在它上面（《侵蚀阶梯》v1.2
+      // PR-8，见 slotReels.ts 顶上那段）。一族抽不出来是不会发生的事
+      // （check-targets 每次都验）；真发生了就拿头一个顶上，别让这一页空着。
+      const target = drawOne(family) ?? targetsOf(family)[0];
       const prev = plans[k];
-      const next = planFor(family, pair, lang).map((p, i) => ({ ...p, from: prev[i]?.land ?? 0 }));
+      const next = planFor(family, target, lang).map((p, i) => ({ ...p, from: prev[i]?.land ?? 0 }));
       plans[k] = next;
       return spinSlotHeld(el, next, () => {
         settled++;
@@ -103,7 +104,7 @@ export function renderSlotIntroPage(
   btn.addEventListener('click', () => {
     if (phase === 'stopping') return;
     if (phase === 'spinning') {
-      // 逐台停：第一台先停，第二台、第三台跟上。
+      // 逐台停：第一台先停，后面的跟上。
       phase = 'stopping';
       handles.forEach((h, k) => h.stop(stopDelays(k)));
       return;

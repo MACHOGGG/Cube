@@ -58,6 +58,9 @@ async function openHowto() {
     const extras = [...document.querySelectorAll('.howto-list .tut-rule--extra')].map((e) => ({
       tag: e.querySelector('.tut-rule-num--word')?.textContent || '',
       art: !!e.querySelector('.tut-rule-art'),
+      // 配图里画了几枚图案。只问「有没有配图」的话，一对改成一个那一步漏改也是绿的
+      // （屏幕上两张图，「有没有」照样 true）——所以数出来。
+      artIcons: e.querySelectorAll('.tut-rule-art .pattern-icon').length,
       text: (e.querySelector('.tut-rule-text')?.textContent || '').slice(0, 24),
     }));
     return { nums, texts, extras };
@@ -173,7 +176,12 @@ await startFrom('老虎机', async () => {
 });
 r = await openHowto();
 check('老虎机：底下有《老虎机》那一条', r.extras.some((e) => e.tag === '老虎机'), JSON.stringify(r.extras));
-check('老虎机：那一条配着当局的两个图案', r.extras.find((e) => e.tag === '老虎机')?.art === true, '');
+// 一局只认**一个**得分目标（《侵蚀阶梯》v1.2 PR-8，从前是一对），所以那一条底下
+// 配的图也只该有一枚。数出来，不只问「有没有配图」——从一对改成一个的时候，配图那
+// 一头要是漏改，屏幕上是两张图，而「有没有」照样是 true。
+check('老虎机：那一条配着当局的那一个图案（正好一枚）',
+  r.extras.find((e) => e.tag === '老虎机')?.artIcons === 1,
+  `${r.extras.find((e) => e.tag === '老虎机')?.artIcons} 枚`);
 await closeAll();
 
 // ── 4. 计时挑战 ──────────────────────────────────────────────────────

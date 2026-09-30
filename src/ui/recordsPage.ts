@@ -13,6 +13,9 @@ import { mountBoardThumb, mountBoardView } from './leaderboard';
 // 累计得分没有上限，而它那张卡是页面上一个固定的格子——数字长到装不下就缩写，
 // 点开的放大版再写全每一位。排行榜缩略牌用的是同一份（见 engine/compactScore）。
 import { compactScore } from '../engine/compactScore';
+import { patternIconSvg } from '../engine/patternIcon';
+import { targetHudDef } from '../engine/targetIcon';
+import { targetById } from '../engine/targets';
 import { rollOdometer } from '../engine/odometer';
 
 /** One playable game+mode combination, so the page knows which archives to
@@ -132,6 +135,25 @@ export function renderRecordsPage(
     </div>
   `;
 
+  /**
+   * 老虎机那一局在拼的那个得分图案（《侵蚀阶梯》v1.2 PR-8）。
+   *
+   * 这一局的 modeKey 是 'base'，玩法名那一行说不出它和同一副棋盘的基础局有什么不
+   * 同——不同就在这一个图案上，所以把它画出来。
+   *
+   * 编号查不到就不画（图案表以后改了，旧档里的编号可能不在表里了）：这一行的正
+   * 事是「哪副棋盘、多少分」，一张查不到的图不该把它拖崩。
+   */
+  function targetMark(id?: string): string {
+    const pattern = id ? targetById(id) : undefined;
+    if (!pattern) return '';
+    return (
+      `<span class="records-row-target" role="img" aria-label="${s.randomTargetTitle}">` +
+      patternIconSvg(targetHudDef(pattern, pattern)) +
+      '</span>'
+    );
+  }
+
   /** One record line: which shape, which mode, when it finished, what it
    *  scored. Tapping it goes straight to that run's share card. */
   function recordRow(run: StoredRun, compact: boolean): HTMLElement {
@@ -143,6 +165,7 @@ export function renderRecordsPage(
     row.innerHTML =
       `<span class="records-row-glyph">${glyphOf.get(d.shapeId) ?? ''}</span>` +
       `<span class="records-row-name">${name}${mode ? `<span class="records-row-mode">${mode}</span>` : ''}` +
+      targetMark(d.targetId) +
       `<span class="records-row-time">${formatRunTime(d.at)}</span></span>` +
       `<span class="records-row-score">${compact ? compactScore(d.totalScore, lang) : d.totalScore}</span>`;
     row.addEventListener('click', (e) => {
