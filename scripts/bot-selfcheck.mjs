@@ -170,7 +170,39 @@ const installProbe = () => {
     }
     return '';
   };
+  /**
+   * 变级那一下的演出（v1.3.1 PR-14 §3）：棋盘上方那条「得分图案变成 N 枚」。
+   *
+   * 它只活一秒六，而且只在降级那一拍出现——手跑的时候十有八九错过。所以挂个
+   * MutationObserver 记下每一次：出现过几回、当时那块牌子多大、有没有顶出屏幕。
+   */
+  const toasts = [];
+  const watchToasts = () => new MutationObserver((recs) => {
+    for (const rec of recs) {
+      for (const n of rec.addedNodes) {
+        if (!(n instanceof HTMLElement) || !n.classList.contains('pat-toast')) continue;
+        const r = n.getBoundingClientRect();
+        toasts.push({
+          text: (n.textContent || '').trim(),
+          w: Math.round(r.width), h: Math.round(r.height),
+          x: Math.round(r.left), y: Math.round(r.top),
+          // 顶出屏幕没有（两侧、上边）。它是 pointer-events: none，压住棋盘不要紧，
+          // 但跑到屏幕外面就等于没说这句话。
+          out: r.left < -0.5 || r.right > document.documentElement.clientWidth + 0.5 || r.top < -0.5,
+        });
+      }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  // **现挂，挂不上就等 DOM 起来再挂。** addInitScript 跑在页面脚本之前，那会儿
+  // documentElement 可能还不存在——直接 observe 会抛，而抛出去的后果是 window.__bot 整个
+  // 没被定义，报出来的错是「Cannot read properties of undefined (reading 'snap')」，看着
+  // 像选择器写错了（这个文件里同一个坑踩过两次，见 canon 上面那段）。
+  if (document.documentElement) watchToasts();
+  else document.addEventListener('DOMContentLoaded', watchToasts, { once: true });
+
   window.__bot = {
+    /** 这一局到此为止冒过几条「得分图案变成 N 枚」，以及它们的样子。 */
+    toasts: () => toasts.slice(),
     /** 盘面此刻的样子。 */
     snap() {
       return [...document.querySelectorAll(PIECES)].map((e) => {
@@ -187,6 +219,12 @@ const installProbe = () => {
           w: Math.round(r.width),
         };
       });
+    },
+    /** 盘面上此刻有几颗星星、还活着几枚。算「累计翻了几枚」用（见 H5）。 */
+    tally() {
+      const all = [...document.querySelectorAll(PIECES)];
+      const alive = all.filter((e) => e.dataset.face !== 'blank');
+      return { alive: alive.length, stars: alive.filter((e) => e.dataset.face === 'dot').length };
     },
     /** 屏幕上的读数：分数、HUD 那一块画着几枚、亮着几段。 */
     hud() {
@@ -281,6 +319,33 @@ function resolveSim(snap, lines, need) {
     }
   }
   return { board: out, flipped };
+}
+
+/**
+ * 《侵蚀阶梯》§2 那张段数表的字面值，这道门自己抄一份（和
+ * `scripts/check-pattern-level.mjs` 同一份）。
+ *
+ * 抄一份而不是 import：H5 要问的正是「屏幕上那一块画的级数对不对」，读同一个常量就成了
+ * 「它说它是对的」。键是主菜单上那张卡的名字——这个机器人认的就是那个名字。
+ */
+const LADDER_BY_BOARD = {
+  方块: [31, 3, 2],
+  菱形方块: [31, 3, 2],
+  圆球: [25, 2, 1],
+  六边圆球: [31, 3, 2],
+  七色圆球: [42, 4, 3],
+  大三角: [45, 5, 4],
+  // 基础炸弹那一档开的是方块或小球（BOMB_SHAPES），开哪一副由那一屏第一个 chip 定。
+  // 两副的第一级差得远（31 vs 25），推错了会冤枉游戏，所以**炸弹局不做 H5**。
+};
+
+/** 翻了 n 枚之后，按 §2 那张表该是第几枚级。 */
+function levelFromFlips(seg, n) {
+  const [s4, s3, s2] = seg;
+  if (n < s4) return 4;
+  if (n < s4 + s3) return 3;
+  if (n < s4 + s3 + s2) return 2;
+  return 1;
 }
 
 /** 方案里那个局面分：已消格×1000 + 星星×20 + 聚边度×300 + 得分×0.01。 */
@@ -393,9 +458,16 @@ function applyPerm(snap, perm) {
  *   各自的结论（由调用方汇总，这儿只报事实）。
  */
 async function playOne(page, label, opts) {
+  /**
+   * 这一副棋盘的段数表。查不到（炸弹局、或者新加的棋盘）就**不做 H5**，并在汇总里说出
+   * 来——不假装查过。
+   */
+  const ladder = opts.bomb ? null : LADDER_BY_BOARD[label.split(' #')[0]] ?? null;
   const probe = (fn, ...a) => page.evaluate(fn, ...a);
   const snap = () => probe(() => window.__bot.snap());
   const hud = () => probe(() => window.__bot.hud());
+  const tally = () => probe(() => window.__bot.tally());
+  const toasts = () => probe(() => window.__bot.toasts());
   const ended = () => probe(() => window.__bot.ended());
 
   /** 等这一步真的走完：枚数和 id 布局连着两次一样为止（连锁、消行都算完）。 */
@@ -431,6 +503,23 @@ async function playOne(page, label, opts) {
   let flips = 0;
   /** 段数变多、而枚数没少的次数（不该发生，见下面那一段）。 */
   let segsGrewOddly = 0;
+  /**
+   * H5：画的枚数和**累计翻面数推出来的级数**对不上的次数（v1.3.1 的 E25）。
+   *
+   * 玩家实测报过「这一块显示的是解锁之后那一级，不是当前这一级」。纯函数那一头有
+   * check-pattern-level.mjs 逐级逐枚验过（erosion 的级数、runPatternDef 的图形数、老虎机
+   * 那一路的 sizeAtLevel/erodedFace 全对），剩下唯一验不到的是**时序**：屏幕上那一拍画
+   * 的是扣段前还是扣段后的视图。那一条只有真打一局才看得见，所以在这儿。
+   *
+   * 「当前该是第几级」这道门自己从盘面推，不问游戏：
+   *
+   *     累计翻面枚数 = 此刻的星星数 + 已经离场的枚数
+   *
+   * 每翻一枚就多一颗星星，而消掉的那些格子带着星星一起离场（§3）——两项加起来就是这一
+   * 局一共翻了多少枚。再按 §2 那张段数表折成级数。**这一路和 erosion 一个字都不共用。**
+   */
+  let levelMismatch = 0;
+  let levelMismatchNote = '';
   let bombDefuseChecked = 0;
   let bombDefuseBad = 0;
   /** 连着几步盘面一个字都没变。 */
@@ -628,6 +717,19 @@ async function playOne(page, label, opts) {
     // 同一级里段数少了几段就是翻了几枚；跨级那一下段数会跳回满格，那一拍按「这一级
     // 本来剩几段」算不准，所以只数同级的减量，宁可少算不多算。
     if (after.segs < beforeHud.segs) flips += beforeHud.segs - after.segs;
+    // ── H5：画的枚数 == 按累计翻面推出来的级数 ──────────────
+    if (ladder && after.marks !== null) {
+      const t = await tally();
+      const cum = t.stars + (startTiles - t.alive);
+      const want = levelFromFlips(ladder, cum);
+      if (after.marks !== want) {
+        levelMismatch++;
+        if (!levelMismatchNote) {
+          levelMismatchNote = `第 ${moves} 手：累计翻 ${cum} 枚（星 ${t.stars} + 离场 ${startTiles - t.alive}）`
+            + ` → 该画 ${want} 枚，实际画了 ${after.marks} 枚`;
+        }
+      }
+    }
     // **段数只减不增，除了降级那一拍。** 这是侵蚀阶梯的不变式，而且和预算无关：段变多
     // 只该发生在「这一级扣光了、换下一级的满格」那一下，那一下枚数必定同时少一枚。
     // 段凭空长回去的话，屏幕上是「刚才快扣完了，怎么又满了」——玩家读不出规则，而不是
@@ -677,6 +779,7 @@ async function playOne(page, label, opts) {
     if (frozen >= 12) break;
   }
 
+  const seenToasts = await toasts();
   const finalBoard = board;
   const finalHud = lastHud;
   const alive = finalBoard.filter((p) => p.face !== 'blank');
@@ -690,6 +793,10 @@ async function playOne(page, label, opts) {
     ladderMoved,
     flips,
     segsGrewOddly,
+    levelMismatch,
+    levelMismatchNote,
+    ladderKnown: Boolean(ladder),
+    toasts: seenToasts,
     card,
     frozen,
     budgetOut: moves >= BUDGET,
@@ -811,6 +918,26 @@ for (const [i, job] of jobs.entries()) {
     !(r.frozen >= 12 && !r.card) && !(r.aliveLeft === 0 && !r.card),
     r.frozen >= 12 && !r.card ? `连着 ${r.frozen} 步一个格子都没动，局还活着`
       : r.aliveLeft === 0 && !r.card ? '盘已经空了，结算页没出来' : '');
+  // ── H5：图案块画的级数 ──────────────────────────────────
+  if (r.ladderKnown) {
+    check(`${label} · H5：这一块画的枚数 == 按累计翻面推出来的级数`, r.levelMismatch === 0,
+      r.levelMismatchNote || `核了 ${r.moves} 手`);
+  } else {
+    note(`${label} · H5：这一副的段数表不在门里那张表上，这一条跳过（不假装查过）`);
+  }
+  // ── H6：变级那一下真的说了一句话，而且摆得下 ───────────
+  //
+  // 降级是一局里最重要的一次规则变化（要凑的东西少了一枚）。PR-14 给它补了棋盘上方那条
+  // 「得分图案变成 N 枚」——它只活一秒六，手跑十有八九错过，所以在这儿钉住。
+  if (r.ladderMoved) {
+    check(`${label} · H6：降级那一下冒了「得分图案变成 N 枚」`, r.toasts.length > 0,
+      `降到过 ${r.levelLow} 枚，冒了 ${r.toasts.length} 条`);
+    const outside = r.toasts.filter((t) => t.out);
+    check(`${label} · H6：那句话没顶出屏幕`, outside.length === 0,
+      outside.length ? JSON.stringify(outside[0]) : r.toasts.map((t) => `${t.text}(${t.w}×${t.h})`).join(' '));
+  } else {
+    note(`${label} · H6：这一局没降过级，那句话无从判断（不假装查过）`);
+  }
   // ── H4：炸弹 ────────────────────────────────────────────
   if (job.bomb && r.bombDefuseChecked) {
     check(`${label} · H4：拆一枚就 +2 分、熄一段`, r.bombDefuseBad === 0,

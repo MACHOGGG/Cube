@@ -1,4 +1,24 @@
 :root {
+  /* ── 《色卡》：玩家给的那一套固用色（E23–E26 附）────────────────────────
+     取样值写在 `侵蚀阶梯决策.md` §10，那儿也记着每一个现在用在哪儿。
+
+     **它们不随深浅主题翻转**，所以放在这儿、和下面那一套主题色分开：炸弹选择页那三行
+     行色在浅色和深色下是同一个颜色（PR-20），教学条③那一下变形的底色也是（E24）。写成
+     token 而不是就地写死，是因为这是「一整套」——哪天要用第四个颜色，值在这儿，不要另
+     取一个近似色。
+
+     没在用的那几支也留着，理由同上：玩家定的是这一套的值，不是「只定了在用的那三个」。
+     （不用的 token 不会进产物的体积账——CSS 自定义属性不像 JS 的死代码，它本来就是靠
+     被引用才生效的。） */
+  --card-rose: #C05B5C;
+  --card-green: #008703;
+  --card-blue: #4461B8;
+  --card-orange: #F7821B;
+  --card-purple: #725AAF;
+  --card-gray: #4C4C4C;
+  --card-red: #BE411A;
+  --card-cream: #F6E2C0;
+
   /* 米白往米黄挪。两步：#FAF8F6 → #FAF6EC → **#F5EDDA**（玩家 2026-09：「整体淡色的
      背景按照我上传的来调整，略微再暗黄一点」）。
      这一支同时也是游戏页的底色（见 --play-bg），所以它得是一个「久看不累、又压得住
@@ -377,14 +397,49 @@ h1 {
    拉伸、四角始终贴着块的圆角），图标在它上面居中。 */
 .hud-block--pattern { padding: 8px 10px; color: var(--ink-faint); overflow: hidden; }
 .pat-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.pat-ring-dim { opacity: 0.22; }
-.pat-ring-lit { color: var(--accent); stroke: currentColor; }
+/* 刻度环双色（v1.3.1 PR-14 §3）：**已熄**的那几段是 --line（就是这一块边框的颜色，所以
+   熄掉的段读起来是「边框本来的样子」），**未熄**的是 --accent-2。
+   原先两圈同一个色、靠 opacity 0.22 区分——那在琥珀牌面上几乎看不出来，而这一块存在的
+   全部意义是「还差几下」，数不出来就等于没有。两个不同的颜色比两个不同的透明度好数。 */
+.pat-ring-dim { color: var(--line); stroke: currentColor; opacity: 1; }
+.pat-ring-lit { color: var(--accent-2); stroke: currentColor; }
 .pat-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
 /* 图标用的是主题墨色，不是那一圈刻度的强调色：它画的是「棋子长什么样」，
    不是「还剩几段」。两样东西同色的话，一块牌上读不出两件事。 */
 .pat-icon > svg { color: var(--ink); }
 /* 变级那一下：两个 120ms 的亮度脉冲。 */
 .hud-block--flash { animation: pat-flash 240ms steps(1, end) 1; }
+/* 变级时整块弹一下（v1.3.1 PR-14 §3）。和那两下亮度脉冲一起跑：亮度说「这儿变了」，
+   位移说「变了一档」——两个一起才拽得住正盯着棋盘中间的那双眼睛。
+   transform 而不是 width/height：这一块是 grid 的一格，改尺寸会把左边那块也推一下。 */
+.hud-block--punch { animation: pat-punch 320ms cubic-bezier(.34, 1.56, .64, 1) 1; }
+@keyframes pat-punch {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+/* 棋盘上方居中那条「得分图案变成 N 枚」。
+   变级是一局里最重要的一次规则变化（要凑的东西少了一枚），而它原先只在右上角那一小块
+   里闪两下——玩家正盯着棋盘中间，很容易整个错过，然后按旧的枚数去凑。所以话说在他看着
+   的地方。
+   `pointer-events: none`：它压在棋盘上方，绝不能吃掉一次拖动。 */
+.pat-toast {
+  position: absolute; left: 50%; top: 0; transform: translate(-50%, 0);
+  z-index: 6; pointer-events: none;
+  padding: 7px 14px; border-radius: var(--r-full);
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--ink); font-family: 'Karla', sans-serif; font-weight: 700; font-size: 0.84rem;
+  white-space: nowrap; box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.45);
+  animation: pat-toast-in 1600ms ease forwards;
+}
+@keyframes pat-toast-in {
+  0% { opacity: 0; transform: translate(-50%, -6px); }
+  10%, 72% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}
+/* 摆在哪儿由 JS 现量（patternBlock 的 toast）：竖屏是顶排底下、棋盘上方那条缝，横屏
+   顶排变成左边一条竖的，那条缝就在棋盘正上方。两种情况都用**棋盘自己的位置**算，不写死
+   一个「顶排多高」——那个数随视口和玩法变（步步为营那一块多一行余步）。 */
 @keyframes pat-flash {
   0%, 100% { filter: none; }
   25% { filter: brightness(1.45); }
@@ -394,6 +449,10 @@ h1 {
 /* reduced-motion：不闪，边框加粗 300ms 代替。同样说明「刚刚变了」，但不靠亮度。 */
 @media (prefers-reduced-motion: reduce) {
   .hud-block--flash { animation: none; }
+  .hud-block--punch { animation: none; }
+  /* toast 不做进出，只是**在那儿**——而且停得更久（2.5s，见 patternBlock 的
+     TOAST_MS_STILL）：没有动效帮着提醒，就靠多站一会儿。 */
+  .pat-toast { animation: none; opacity: 1; transform: translate(-50%, 0); }
 }
 .hud-block--thick { border-color: var(--accent); border-width: 2px; padding: 9px 9px; }
 

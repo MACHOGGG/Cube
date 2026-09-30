@@ -18,14 +18,30 @@ import type { Family } from '../engine/targets';
  * 上那一枚已经在淡出了——**降级不是突然发生的**，它有一个能看见的过程。
  */
 
-/** 末位那枚淡到最低多少（不是 0——彻底看不见的话，「它还在」这件事就没了）。 */
-const TAIL_MIN_OPACITY = 0.15;
+/**
+ * 末位那枚淡到最低多少。
+ *
+ * **0.45，不是 0.15**（v1.3.1 的 E24）。0.15 那一版玩家读成了 off-by-one：「这一块显示的
+ * 是解锁之后那一级，不是当前这一级」。查下来级数本身一点没错（`check-pattern-level.mjs`
+ * 把 erosion 的级数、`runPatternDef` 的图形数、老虎机那一路的 `sizeAtLevel`/`erodedFace`
+ * 逐级逐枚验了一遍，全对）——错的是**看起来**：段快扣完的时候末位那一枚淡到 0.15，一排
+ * 四枚在屏幕上读起来就是三枚，而玩家于是照三枚去凑，凑好了不给分。
+ *
+ * 所以这个数的下限不是审美，是「还看得出它在」这件事的门槛。0.45 仍然明显比前几枚淡
+ * （「降级不是突然发生的」那个意思还在），但数得出来是四枚。
+ */
+const TAIL_MIN_OPACITY = 0.45;
 /** 段数超过这个数就每 5 段画一根长刻度，不然一圈碎线数不清。 */
 const LONG_TICK_AFTER = 12;
 /** 变级时那两下亮度脉冲各多长。 */
 const FLASH_MS = 120;
 /** reduced-motion 那一路：不闪，改成把边框加粗这么久。 */
 const THICKEN_MS = 300;
+/** 变级时整块弹一下（scale 1→1.12→1）多长。 */
+const PUNCH_MS = 320;
+/** 棋盘上方那条「得分图案 → 1×3」停多久。reduced-motion 停久一点（没有动效帮着提醒）。 */
+const TOAST_MS = 1600;
+const TOAST_MS_STILL = 2500;
 
 export interface ErosionView {
   level: number;
@@ -149,20 +165,54 @@ export function mountPatternBlock(
     if (last) last.style.opacity = String(tailAlpha);
   }
 
+  /**
+   * 棋盘上方居中那条「得分图案 → 1×3」（v1.3.1 PR-14 §3）。
+   *
+   * 为什么要它：变级是这一局里**最重要的一次规则变化**（要凑的东西少了一枚），而它原先
+   * 只在右上角那一小块里闪两下——玩家正盯着棋盘中间，很容易整个错过，然后按旧的枚数去
+   * 凑。所以话要说在他看着的地方，而且要说清「变成几枚了」。
+   *
+   * 挂在棋盘外层（`.app--game`）上而不是这一块里：这一块只有两百多像素宽，一句话摆不
+   * 下，而且它就在视野边上。
+   */
+  function toast(level: number): void {
+    const stage = host.closest('.app--game') ?? host.parentElement;
+    if (!stage) return;
+    const el = document.createElement('div');
+    el.className = 'pat-toast';
+    // 用的是同一句 i18n（patternNowLabel：「得分图案变成 N 枚」），不另起一句——两处说
+    // 同一件事，用词不一样只会让人以为是两件事。
+    el.textContent = s.patternNowLabel.replace('{n}', String(level));
+    // 摆在棋盘正上方那条缝里，横竖屏都对：位置**现量棋盘**，不按「顶排多高」去算——
+    // 顶排的高随视口和玩法变（步步为营那一块多一行余步），而横屏顶排根本不在上面。
+    const board = stage.querySelector<HTMLElement>('#boardWrap');
+    if (board) {
+      el.style.top = `${Math.max(4, board.offsetTop + 4)}px`;
+      el.style.left = `${board.offsetLeft + board.offsetWidth / 2}px`;
+    }
+    stage.appendChild(el);
+    const hold = reducedMotion() ? TOAST_MS_STILL : TOAST_MS;
+    window.setTimeout(() => el.remove(), hold);
+  }
+
   function flash(level: number): void {
     host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(level)));
+    toast(level);
     if (reducedMotion()) {
-      // 不闪：边框加粗一下，同样说明「刚刚变了」，但不用亮度脉冲。
+      // 不闪、不弹：边框加粗一下，同样说明「刚刚变了」，但不用亮度和位移。
       host.classList.add('hud-block--thick');
       window.clearTimeout(flashTimer);
       flashTimer = window.setTimeout(() => host.classList.remove('hud-block--thick'), THICKEN_MS);
       return;
     }
-    host.classList.remove('hud-block--flash');
+    host.classList.remove('hud-block--flash', 'hud-block--punch');
     void host.offsetWidth; // 连着降两级时，让这一拍重新起跳
-    host.classList.add('hud-block--flash');
+    host.classList.add('hud-block--flash', 'hud-block--punch');
     window.clearTimeout(flashTimer);
-    flashTimer = window.setTimeout(() => host.classList.remove('hud-block--flash'), FLASH_MS * 2 + 40);
+    flashTimer = window.setTimeout(
+      () => host.classList.remove('hud-block--flash', 'hud-block--punch'),
+      Math.max(FLASH_MS * 2 + 40, PUNCH_MS + 40),
+    );
   }
 
   function update(view: ErosionView): void {

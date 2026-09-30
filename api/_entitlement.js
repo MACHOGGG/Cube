@@ -21,7 +21,61 @@ import {
   loadAccount,
   normalizeEmail,
   tokenValid,
+  updateAccount,
 } from './_accounts.js';
+
+/**
+ * 「终身」记成哪一天。
+ *
+ * 不另立一个 `lifetime: true` 字段，而是把 `until` 推到一个远得没有意义的日子：
+ * 全站所有「还在有效期里吗」的判断都是 `until > Date.now()`（ownGrantLive、
+ * entitlementOf、客户端的 subscription.ts），多立一个字段就意味着**每一处都要
+ * 记得同时看两样**，而漏看一处的后果是「他明明是终身，那一处说他过期了」。
+ * 一个数，所有老代码自动认。
+ */
+export const LIFETIME_UNTIL = Date.UTC(2099, 0, 1);
+
+/**
+ * 窗口期开着吗——「注册登录即享终身 Slides 天才」（《侵蚀阶梯》v1.2 PR-12）。
+ *
+ * **开关在服务端，不在客户端**（方案 E11：客户端只读 entitlement）。将来重开
+ * creem 就把这个环境变量置 0 或者删掉，授予立刻停；**已经授予的不回收**——那是一
+ * 份已经给出去的权益，收回来比不给更糟。
+ *
+ * 默认关着：环境变量没填的时候这一整条路一步都不走，行为和从前一个字不差。
+ */
+export const grantWindowOpen = () => process.env.GENIUS_GRANT_WINDOW === '1';
+
+/**
+ * 窗口期里，给这个**已经证明过自己**的账号写一份终身天才。
+ *
+ * 调用的位置只有一处规矩：**必须在「这个人是这个邮箱的主人」已经成立之后**
+ * （验过密码、或者验过登录令牌）。邮箱地址本身不是证据——它印在收据上，谁都知
+ * 道得到（CLAUDE.md 那条铁律）。所以这个函数自己不做任何身份判断，它只写；判
+ * 断在调用方。
+ *
+ * 幂等：已经有一份不短于终身的授予就原地返回，不重写、不刷新 grantedAt——那个时
+ * 间戳记的是「什么时候送出去的」，将来要按它对账，重写一次就丢一次。
+ *
+ * 刷卡订阅者也会被写上。这不是「动了他们的权益」：终身比他们买的那一段长，一分
+ * 没少。写上之后 resolveEntitlement 会从本地那一份答（ownGrantLive 先短路），不
+ * 再每次去问 Creem——对玩家来说是同一件事「你是天才」，而且少一跳网络。
+ *
+ * @returns 写过了就返回新的账号快照，没写就返回原样那一份。
+ */
+export async function grantLifetimeIfWindow(address, account) {
+  if (!grantWindowOpen() || !account) return account;
+  if ((account.until || 0) >= LIFETIME_UNTIL) return account;
+  const saved = await updateAccount(address, (a) => {
+    if ((a.until || 0) >= LIFETIME_UNTIL) return;
+    a.until = LIFETIME_UNTIL;
+    // 什么时候送出去的。将来重开 creem 要按它认出「这一份是窗口期送的」。
+    a.grantedAt = Date.now();
+  });
+  // 抢不到锁（busy）就这一次不写：下一次登录还会再走一遍这儿，而「这一次少送一
+  // 份」远好过把别处刚写的东西（兑码加的时长、后台发的收件箱）整份盖回去。
+  return saved.ok ? saved.account : account;
+}
 
 /**
  * 认出「你是谁」，并且证明得了。

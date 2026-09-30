@@ -1,0 +1,164 @@
+/**
+ * HUD 那一块《得分图案》画的枚数，必须等于**此刻**的级数——不是解锁之后那一级。
+ *
+ *   npx esbuild src/engine/erosion.ts --bundle --format=esm --outfile=/tmp/erosion.mjs
+ *   npx esbuild src/engine/patternIcon.ts --bundle --format=esm --outfile=/tmp/paticon.mjs
+ *   npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
+ *   npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
+ *   node scripts/check-pattern-level.mjs /tmp/erosion.mjs /tmp/paticon.mjs /tmp/targets.mjs /tmp/match.mjs
+ *
+ * 起因是玩家实测的一条（v1.3.1 的 E25）：**这一块显示的是「解锁之后」那一级，不是当前
+ * 这一级**。屏幕上看不出是 off-by-one——四枚和三枚都是一排同色的小方块，差一枚要数才数
+ * 得出来，而玩家读到的是「我该凑三枚」，实际规则还要四枚，于是「明明凑好了却不给分」。
+ * 方案点名要「以回归测试驱动修复」，这道门就是那个测试。
+ *
+ * ── 这道门怎么判「当前这一级」是哪一级 ────────────────────────
+ *
+ * **不问 erosion 自己**，那样就成了「它说它是对的」。改成从**累计翻面枚数**推：《侵蚀
+ * 阶梯》§2 那张表写死了三级的段数（方块 [31,3,2]），而「每翻一枚扣一段、段尽降一级」是
+ * 规则原文——所以
+ *
+ *     翻了 0…s₄−1 枚 → 4 枚级
+ *     翻了 s₄…s₄+s₃−1 枚 → 3 枚级
+ *     翻了 s₄+s₃…s₄+s₃+s₂−1 枚 → 2 枚级
+ *     翻满 s₄+s₃+s₂（= 全盘枚数）枚 → 1 枚级
+ *
+ * 这张表这道门自己写一份（就是 §2 的字面值），不从 erosion 读——两边对不上就是有一头
+ * 错了，而这正是要问的。（表本身对不对由 check-erosion.mjs 逐行复算，它在 CI 里。）
+ *
+ * ── 量三样，因为嫌疑有三个 ─────────────────────────────────
+ *
+ * ① `erosion.spend()` 一枚一枚喂到底：每一枚之后的 level 必须等于上面那张表说的。
+ * ② `runPatternDef(family, level)` 画出来的图形个数必须**正好等于 level**。基础玩法那一
+ *    块画的就是它——这一头错一枚，屏幕上就是少一枚或多一枚。
+ * ③ 老虎机那一路（`sizeAtLevel` + `erodedFace`）：第 4 级必须是目标本身，往下每级少一
+ *    枚、下限 1，而且 `erodedFace` 吐出来的格子数必须等于 `sizeAtLevel`。两个函数各算一
+ *    遍「几枚」，对不上就是画的和判的不是同一件事。
+ *
+ * 末位那一枚的淡出下限也在这儿钉住（E24 把 0.15 提到 0.45）：0.15 的时候那一枚几乎看不
+ * 见，四枚读起来就是三枚——这是同一个 bug 的另一半，而且是**看起来**的那一半。
+ */
+const E = await import(process.argv[2]);
+const P = await import(process.argv[3]);
+const T = await import(process.argv[4]);
+const M = await import(process.argv[5]);
+
+let fail = 0;
+const check = (n, ok, extra = '') => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
+  if (!ok) fail++;
+};
+
+/**
+ * 《侵蚀阶梯》v1.2 §2 那张表的字面值，这道门自己抄一份。
+ *
+ * 抄一份而不是 import，是这道门成立的前提：它要问的就是「erosion 那边的级数和规则说的
+ * 对不对得上」，两边读同一个常量的话这一问就没有了。
+ */
+const LADDER = {
+  square: [31, 3, 2],
+  circle: [25, 2, 1],
+  squareDiamond: [31, 3, 2],
+  triangleBig: [45, 5, 4],
+  circleHex: [31, 3, 2],
+  circleSeven: [42, 4, 3],
+};
+const TILES = { square: 36, circle: 28, squareDiamond: 36, triangleBig: 54, circleHex: 36, circleSeven: 49 };
+
+/** 翻了 n 枚之后，按规则原文该是第几枚级。 */
+function levelAfter(seg, n) {
+  const [s4, s3, s2] = seg;
+  if (n < s4) return 4;
+  if (n < s4 + s3) return 3;
+  if (n < s4 + s3 + s2) return 2;
+  return 1;
+}
+
+// ---- ① erosion 的级数 = 规则说的级数 -----------------------------------
+for (const [id, seg] of Object.entries(LADDER)) {
+  const total = TILES[id];
+  check(`${id}：段数合计 = 全盘枚数（尺子，对不上下面全是空的）`,
+    seg[0] + seg[1] + seg[2] === total, `${seg.join('+')} = ${seg[0] + seg[1] + seg[2]} / ${total}`);
+  const ero = E.createErosion({ seg, par: 1 });
+  const bad = [];
+  check(`${id}：一枚没翻的时候是 4 枚级`, ero.level() === 4, String(ero.level()));
+  for (let n = 1; n <= total; n++) {
+    ero.spend(1);
+    const want = levelAfter(seg, n);
+    if (ero.level() !== want) bad.push(`翻满 ${n} 枚：erosion 说 ${ero.level()}，规则说 ${want}`);
+  }
+  check(`${id}：一枚一枚翻到底，每一步的级数都和规则对得上`, bad.length === 0, bad.slice(0, 3).join(' · '));
+  // 反面尺子：这个循环真的跨过了每一级，不然上面那一条只验了「一直是 4 枚」。
+  const ero2 = E.createErosion({ seg, par: 1 });
+  const seen = new Set([ero2.level()]);
+  for (let n = 1; n <= total; n++) { ero2.spend(1); seen.add(ero2.level()); }
+  check(`${id}：这一趟真的跨过了四个级别（尺子）`,
+    [4, 3, 2, 1].every((l) => seen.has(l)), [...seen].join(','));
+}
+
+// 一步翻好几枚（结转）也要落在同一张表上——玩家最容易撞到 off-by-one 的正是这一下。
+for (const [id, seg] of Object.entries(LADDER)) {
+  const total = TILES[id];
+  for (const step of [2, 3, 5, 7]) {
+    const ero = E.createErosion({ seg, par: 1 });
+    let n = 0;
+    let bad = null;
+    while (n < total) {
+      const take = Math.min(step, total - n);
+      ero.spend(take);
+      n += take;
+      const want = levelAfter(seg, n);
+      if (ero.level() !== want && !bad) bad = `翻满 ${n} 枚（每步 ${take}）：${ero.level()} vs ${want}`;
+    }
+    check(`${id}：每步翻 ${step} 枚（走结转）级数照样对`, bad === null, bad || '');
+  }
+}
+
+// ---- ② 基础玩法那一块画几枚 --------------------------------------------
+{
+  const bad = [];
+  for (const family of ['square', 'circle', 'triangle']) {
+    for (const level of [4, 3, 2, 1]) {
+      const def = P.runPatternDef(family, level);
+      if (def.cells.length !== level) bad.push(`${family} 第 ${level} 枚级画了 ${def.cells.length} 个`);
+      if (def.label !== `1×${level}`) bad.push(`${family} 第 ${level} 枚级的名字是 ${def.label}`);
+    }
+  }
+  check('1×N 图标：画出来的图形个数正好等于级数（三族 × 四级）', bad.length === 0, bad.join(' · '));
+  // 反面尺子：拿一个错的级数问，它就该画出别的个数——不然上面那一条是恒真的。
+  check('（尺子）问第 5 枚级就画 5 个', P.runPatternDef('square', 5).cells.length === 5);
+}
+
+// ---- ③ 老虎机那一路：sizeAtLevel 和 erodedFace 说的是同一件事 ------------
+{
+  const bad = [];
+  for (const t of T.TARGETS) {
+    const n = t.cells.length;
+    for (const level of [4, 3, 2, 1]) {
+      const want = Math.max(1, n - (4 - level));
+      const size = T.sizeAtLevel(t, level);
+      if (size !== want) bad.push(`${t.id} 第 ${level} 级：sizeAtLevel ${size}，该是 ${want}`);
+      const face = M.erodedFace(t, size);
+      if (face.cells.length !== size) bad.push(`${t.id} 第 ${level} 级：画了 ${face.cells.length} 枚，该 ${size} 枚`);
+    }
+    if (T.sizeAtLevel(t, 4) !== n) bad.push(`${t.id}：第 4 级不是目标本身`);
+  }
+  check('老虎机：sizeAtLevel 和 erodedFace 每一级都说同一个枚数', bad.length === 0, bad.slice(0, 3).join(' · '));
+}
+
+// ---- 末位淡出的下限（E24：0.15 → 0.45）---------------------------------
+//
+// 这一条量的是**源码里的常量**，不是行为：它是「看起来少一枚」那一半的病根，而行为上
+// 那一枚确实还在，任何喂函数的测试都抓不到。0.15 的时候末位那一枚几乎看不见，一排四枚
+// 读起来就是三枚——和 off-by-one 在屏幕上长得一模一样。
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/ui/patternBlock.ts', import.meta.url), 'utf8');
+  const m = src.match(/TAIL_MIN_OPACITY\s*=\s*([\d.]+)/);
+  check('patternBlock 里读得到末位淡出的下限（尺子）', Boolean(m), m ? m[1] : '（找不到那个常量）');
+  check('末位淡出下限 ≥ 0.45（E24：0.15 太淡，四枚读起来像三枚）',
+    Boolean(m) && Number(m[1]) >= 0.45, m ? m[1] : '');
+}
+
+console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);
+process.exit(fail ? 1 : 0);
