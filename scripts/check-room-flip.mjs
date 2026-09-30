@@ -77,13 +77,20 @@ await B.page.waitForSelector('.mp-code', { timeout: 10000 });
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 
 const FLIP_CARD = '.home-icon-btn[aria-label="无限反转"]';
+/**
+ * 主菜单那张卡要**在页面里**自己 click()。主菜单换成鱼眼滚轴之后，离焦点远的卡是真
+ * 的坐在视口外面的（那是它的样子，不是 bug），而 page.click 会先滚到可见再等「稳
+ * 定」，滚不进来就重试到超时——这道门从前就是这么红的，红在第一步，后面整场比赛一
+ * 条都没跑过，而红的原因和被测的东西（全屋一起打无限反转）毫无关系。
+ */
+const tapCard = (pg, sel) => pg.$eval(sel, (el) => el.click());
 
 /** 屋主走一趟：为大家挑 → 主菜单上的无限反转卡 → 挑图形。 */
 async function hostPicksFlip(family) {
   await A.page.click('#mpPick');
   await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
   check(`屋主挑玩法：主菜单上有无限反转那张卡`, await A.page.$(FLIP_CARD).then(Boolean));
-  await A.page.click(FLIP_CARD);
+  await tapCard(A.page, FLIP_CARD);
   await A.page.waitForSelector('.flip-page', { timeout: 8000 });
   check('按下去进的是挑图形页（不是「不是小屋玩法」的提示）', await A.page.$('.flip-page').then(Boolean));
   check('挑图形页上小屋那圈粉边还在（body.is-room-host）', await A.page.evaluate(() => document.body.classList.contains('is-room-host')));
@@ -99,7 +106,16 @@ async function playRound(n, family) {
   check(`第 ${n} 局：服务器记的是 ${family} + 无限反转`, st && st.mode === family && st.flip === true && st.slot === null, JSON.stringify({ mode: st?.mode, flip: st?.flip, slot: st?.slot }));
   for (const P of [A, B]) {
     const hint = await P.page.$eval('.mp-countdown-page .flip-hint-copy', (el) => el.textContent.trim()).catch(() => '');
-    check(`第 ${n} 局 ${P.label}：倒数页底下有那块说明`, hint.includes('×1.5') && hint.includes('时间'), hint);
+    // 这块说明的内容在《侵蚀阶梯》PR-9 里换过：从前写的是「×1.5 连击 · 时间……」，
+    // 现在是 i18n 的 flipScoringHint（「得分图案整局都是 4 枚 · 不乘步数系数」）——
+    // 那两件才是这一局真正和别的局不一样的地方。这一条一直按旧文案对，于是四条一起
+    // 红着，红的原因和被测的东西无关。**两件都点名比 includes 一个词稳**：只查
+    // 「时间」的话，换成任何带「时间」的句子都照样绿。
+    check(
+      `第 ${n} 局 ${P.label}：倒数页底下有那块说明`,
+      hint.includes('4 枚') && hint.includes('不乘步数系数'),
+      hint,
+    );
     check(`第 ${n} 局 ${P.label}：倒数页的图是 ${family}`, await P.page.$eval('.mp-countdown-page .start-marks', (el) => el.innerHTML).then((h) => h.includes(`base-${family}`)));
   }
   // 开打
@@ -109,8 +125,9 @@ async function playRound(n, family) {
   await B.page.waitForFunction(() => !document.querySelector('#startOverlay')?.classList.contains('show'), { timeout: 20000 });
   await A.page.waitForTimeout(400);
   for (const P of [A, B]) {
-    const clock = await P.page.$eval('#hud-time', (el) => el.textContent.trim());
-    check(`第 ${n} 局 ${P.label}：钟从 1:00 往下数`, /^(1:00|0:5\d)$/.test(clock), clock);
+    // 顶排那个 hud-time 的 id 在 PR-7 之后不存在了（钟挪到 #timerPill）——照旧读它当场抛。
+    const clock = await P.page.$eval('#timerPill', (el) => el.textContent.trim());
+    check(`第 ${n} 局 ${P.label}：钟从 1:40 往下数`, /^1:(40|3\d)$/.test(clock), clock);
     check(`第 ${n} 局 ${P.label}：棋盘是 ${family}`, await P.page.$eval('.app--game', (el) => el.dataset.shape) === family);
   }
   const sa = await boardSignature(A.page);
