@@ -75,7 +75,7 @@ export interface MatchStart {
   seed: string;
   /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的。 */
   slot?: 'same' | 'own' | null;
-  /** 无限反转那一局：60 秒，得分翻面来回翻。 */
+  /** 无限反转那一局：100 秒，得分翻面来回翻。 */
   flip?: boolean;
   /**
    * 老虎机那一局转出来的那个图案（《侵蚀阶梯》v1.2 PR-8，从前是一对）。

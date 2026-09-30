@@ -42,9 +42,9 @@ export interface MenuHandlers {
   onMultiplayer: () => void;
   /** 《随机得分目标》：挑图形、转出这一局的得分图案，然后开局。 */
   onRandomTarget: () => void;
-  /** 《无限反转》：挑方块或小球，得分翻面来回翻，120 秒。 */
+  /** 《无限反转》：挑方块或小球，得分翻面来回翻，100 秒。 */
   onFlipMode: () => void;
-  /** 《计时挑战》：挑方块或小球，60 秒。整页，不是从前那个居中挑选窗。 */
+  /** 《计时挑战》：挑方块或小球，100 秒。整页，不是从前那个居中挑选窗。 */
   onTimedMode: () => void;
   onPuzzleMode: () => void;
   /**
@@ -449,7 +449,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     }
     panel.appendChild(basicRow);
 
-    // The 90s tier has no shape of its own on the reference sheet — it is one
+    // The timed tier has no shape of its own on the reference sheet — it is one
     // wide bar between the other two rows. Tapping it swaps that bar for its
     // own three shapes in place, so the tier stays reachable without adding a
     // row the design doesn't have.

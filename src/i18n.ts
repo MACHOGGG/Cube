@@ -35,7 +35,7 @@ export interface I18nStrings {
   /**
    * 《计时挑战》挑图形那一屏，图底下那一句。
    *
-   * 和 MODE_TIPS.timed（「限时60s，能得多少分呢？」）是两件事，两句并存：这一句是
+   * 和 MODE_TIPS.timed（「限时100s，能得多少分呢？」）是两件事，两句并存：这一句是
    * **挑形状那一屏**的标语，那一句是**局中**棋盘底下那条教学。MODE_TIPS 里 timed
    * 和 layout 两条是玩家逐字点的名，中文一个字都不要动（见那一段的说明）。
    */
@@ -646,8 +646,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     switchLanguage: 'Language',
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
-    flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 60 s',
-    timedModeTagline: '60-second challenge',
+    flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 100 s',
+    timedModeTagline: '100-second challenge',
     flipScoringHint: 'The scoring shape stays at four pieces all game · no move factor',
     puzzleModeTitle: 'Puzzle · Step by step',
     puzzleModeTagline: 'Eight moves in hand · a move costs 1, a scoring move pays 1 back; +1 if it follows another score, +1 if it clears a line · no clock',
@@ -981,8 +981,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     switchLanguage: 'Langue',
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
-    flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 60 s',
-    timedModeTagline: 'Défi de 60 secondes',
+    flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 100 s',
+    timedModeTagline: 'Défi de 100 secondes',
     flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de facteur de coups',
     puzzleModeTitle: 'Énigme · Pas à pas',
     puzzleModeTagline: 'Huit coups en main · un coup coûte 1, un coup qui marque en rend 1 ; +1 s’il enchaîne, +1 s’il efface une ligne · sans chronomètre',
@@ -1316,8 +1316,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     switchLanguage: '語言',
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
-    flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，60 秒',
-    timedModeTagline: '60s 挑戰',
+    flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，100 秒',
+    timedModeTagline: '100s 挑戰',
     flipScoringHint: '得分圖案整局都是 4 枚 · 不乘步數係數',
     puzzleModeTitle: '真正解密 · 步步為營',
     puzzleModeTagline: '手裡 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整線再退 1 · 沒有時間限制',
@@ -1651,8 +1651,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     switchLanguage: '语言',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
-    flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，60 秒',
-    timedModeTagline: '60s 挑战',
+    flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，100 秒',
+    timedModeTagline: '100s 挑战',
     flipScoringHint: '得分图案整局都是 4 枚 · 不乘步数系数',
     puzzleModeTitle: '真正解密 · 步步为营',
     puzzleModeTagline: '手里 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整线再退 1 · 没有时间限制',
@@ -2126,7 +2126,7 @@ export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
  * 分，玩法当场塌了）。图案永远停在开局那一级，所以通稿那一句在那一局是假话。
  *
  * 第 4、5 条那一局整条抽掉（ui/rulesModal.ts 的 omitRules）：外边消除在那一局不发
- * 生，也没有「全部消除」这个目标（它是固定 60 秒）。这一条不能抽——不讲的话他不知
+ * 生，也没有「全部消除」这个目标（它是固定 100 秒）。这一条不能抽——不讲的话他不知
  * 道图案是几枚。
  */
 export const TUTORIAL_RULE3_FLIP: Record<Lang, string> = {
@@ -2167,33 +2167,33 @@ export const MODE_TIPS: Record<
 > = {
   en: {
     bomb: 'Same sliding, scoring and clearing as before — but red is the bomb colour. Four reds touching blow up! Any four that touch will set it off. A bomb next to a scoring pattern gets defused.',
-    flip: 'Score and a piece turns into a star. In Endless Flip a star that scores turns straight back into a coloured piece — same-colour stars never clear. 60 seconds. Off you go!',
+    flip: 'Score and a piece turns into a star. In Endless Flip a star that scores turns straight back into a coloured piece — same-colour stars never clear. 100 seconds. Off you go!',
     slot: 'In Slot Machine the scoring shape is drawn at random — this one shape is the only thing that scores. Build it and it turns into stars. It shrinks as well: one piece fewer each time the ladder drops, down to a single piece, and from then on any still-joined part of it counts. Clearing works exactly as before. Give it a go!',
-    timed: '60 seconds on the clock — how many points can you get?',
+    timed: '100 seconds on the clock — how many points can you get?',
     layout: 'Same rules, different board. Fancy the challenge?',
     puzzle: 'Eight moves to start. Every move costs 1; every pattern you score — every star you make — pays 1 back. How high can you score?',
   },
   fr: {
     bomb: 'Même glissement, mêmes points, mêmes disparitions — mais le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent ! N’importe lesquels, du moment qu’ils se touchent. Une bombe voisine d’une figure qui marque se désamorce.',
-    flip: 'Marquez et la pièce devient une étoile. Dans Retournement infini, une étoile qui marque redevient aussitôt une pièce colorée — les étoiles de même couleur ne disparaissent jamais. 60 secondes. C’est parti !',
+    flip: 'Marquez et la pièce devient une étoile. Dans Retournement infini, une étoile qui marque redevient aussitôt une pièce colorée — les étoiles de même couleur ne disparaissent jamais. 100 secondes. C’est parti !',
     slot: 'En mode Machine à sous, la figure gagnante est tirée au hasard : cette seule figure compte. Formez-la, elle devient des étoiles. Elle rétrécit aussi : une pièce de moins à chaque palier, jusqu’à une seule, et toute partie encore reliée compte alors. Les disparitions ne changent pas. À vous !',
-    timed: '60 secondes au compteur — combien de points allez-vous marquer ?',
+    timed: '100 secondes au compteur — combien de points allez-vous marquer ?',
     layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
     puzzle: 'Huit coups pour commencer. Chaque coup en coûte 1 ; chaque figure réussie, chaque étoile, en rend 1. Quel score allez-vous atteindre ?',
   },
   zhHant: {
     bomb: '在滑動、得分、消除的基礎上，紅色作為炸彈色，四個相連會爆炸！注意，任何接觸的四個相連都會引爆。在得分圖案旁邊的炸彈會被拆掉。',
-    flip: '得分後變成星星。在《無限反轉》中，星星得分會再變回色塊，星星同色不會消除。限時 60 秒，開始吧！',
+    flip: '得分後變成星星。在《無限反轉》中，星星得分會再變回色塊，星星同色不會消除。限時 100 秒，開始吧！',
     slot: '老虎機玩法中，得分圖案是轉出來的那一個，這一局只有它算分：拼出它就得分、變成星星。它也會變小——每降一級少一枚，最少剩一枚；少了之後，它任意還連著的那幾枚都算。消除規則不變。快挑戰一下吧！',
-    timed: '限時60s，能得多少分呢？',
+    timed: '限時100s，能得多少分呢？',
     layout: '規則相同，佈局不同，你能挑戰麼？',
     puzzle: '起始 8 步，每次行動消耗 1，每次得分圖案／消除星星得到 1，你能得多少分？',
   },
   zhHans: {
     bomb: '在滑动、得分、消除的基础上，红色作为炸弹色，四个相连会爆炸！注意，任何接触的四个相连都会引爆。在得分图案旁边的炸弹会被拆掉。',
-    flip: '得分后变成星星。在《无限反转》中，星星得分会再变回色块，星星同色不会消除。限时 60 秒，开始吧！',
+    flip: '得分后变成星星。在《无限反转》中，星星得分会再变回色块，星星同色不会消除。限时 100 秒，开始吧！',
     slot: '老虎机玩法中，得分图案是转出来的那一个，这一局只有它算分：拼出它就得分、变成星星。它也会变小——每降一级少一枚，最少剩一枚；少了之后，它任意还连着的那几枚都算。消除规则不变。快挑战一下吧！',
-    timed: '限时60s，能得多少分呢？',
+    timed: '限时100s，能得多少分呢？',
     layout: '规则相同，布局不同，你能挑战么？',
     puzzle: '起始 8 步，每次行动消耗 1，每次得分图案／消除星星得到 1，你能得多少分？',
   },

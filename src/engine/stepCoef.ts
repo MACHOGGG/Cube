@@ -39,7 +39,7 @@ export interface StepCoefInput {
  *   round(分 × Infinity) 是 NaN，结算页上是一片空白。
  *
  * 不乘的三档（`apply` 为假）各有各的理由：老虎机按「完成几次目标」给奖励，步步为
- * 营的步数**本来就是它的资源**（再乘一次等于罚两遍），无限反转一局固定 60 秒、步
+ * 营的步数**本来就是它的资源**（再乘一次等于罚两遍），无限反转一局固定 100 秒、步
  * 数多少不说明什么。
  */
 export function stepCoefFor({ par, cleared, tiles, moves, apply }: StepCoefInput): number {

@@ -338,6 +338,16 @@ jobs:
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
           npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
           node scripts/check-pattern-level.mjs /tmp/erosion.mjs /tmp/paticon.mjs /tmp/targets.mjs /tmp/match.mjs
+      # 三个带钟的玩法一个时长（§7：统一 100 秒）。它盯的是「生效的那个数」和「屏幕上
+      # 写着的那些数」分家——真出过：《无限反转》120→60 那一次，小红书那一份是手抄的，
+      # 落后过一版；而「60s 挑战」和炸弹图标上那枚「90s」一直是手写的字，和生效的秒数
+      # 没有任何关系。改一头忘一头，屏幕上写着一个数、局里跑着另一个数，玩家没法发现。
+      # 这道门自己抄一份 100（不从常量读，不然只证明「大家抄的是同一个数」）。纯逻辑。
+      - name: 三个时长统一 100 秒
+        run: |
+          npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
+          npx esbuild src/rules.ts --bundle --format=esm --outfile=/tmp/rules.mjs
+          node scripts/check-mode-clock.mjs /tmp/i18n.mjs /tmp/rules.mjs
       # 侵蚀阶梯（§2）：段数合计＝全盘枚数、通式复算＝字面表、结转、基准 par。
       # 「合计对得上」是整套规则的地基——对不上就会出现「图案已经到 1 枚，盘上还剩
       # 几枚没翻」那种说不清的尾巴，而它不崩也不报错。

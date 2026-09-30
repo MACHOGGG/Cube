@@ -67,7 +67,7 @@ export interface RoomState {
   mode: string | null;
   /** 随机得分目标那一局：'same' 全屋同一对图案，'own' 各转各的；别的局 null。 */
   slot: 'same' | 'own' | null;
-  /** 这一局是无限反转：60 秒，得分翻面来回翻（只开在方块和小球上）。 */
+  /** 这一局是无限反转：100 秒，得分翻面来回翻（只开在方块和小球上）。 */
   flip: boolean;
   /** What every device deals the board from. Null before the match starts. */
   seed: string | null;

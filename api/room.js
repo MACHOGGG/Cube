@@ -495,7 +495,7 @@ function publicState(code, hash) {
     host: meta.host ?? null,
     mode: meta.mode ?? null,
     slot: meta.slot ?? null,
-    /** 这一局是无限反转（60 秒、得分翻面来回翻）。 */
+    /** 这一局是无限反转（100 秒、得分翻面来回翻）。 */
     flip: Boolean(meta.flip),
     seed: meta.seed ?? null,
     startAt: meta.startAt ?? null,
@@ -1465,7 +1465,7 @@ async function start(res, body) {
   // 问的是「下场比的有几个」，不是「屋里有几个」：竞赛屋的主持人不参赛，
   // 「屋主 + 一个人」开出来是一个人自己跟自己比（见 playerCount）。
   if (playerCount(hash) < MIN_PLAYERS) return send(res, 409, { error: 'tooFew' });
-  // 无限反转：只开在方块和小球上，60 秒，得分翻面来回翻——客户端按这个标记
+  // 无限反转：只开在方块和小球上，100 秒，得分翻面来回翻——客户端按这个标记
   // 挂上那套规则；棋盘照旧从 seed 发，所以全屋仍是同一副牌。
   const flip = body.flip === true && FLIP_MODES.has(body.mode);
   // 随机得分目标只开在三个基础棋盘上。'same'：全屋从同一个种子里抽同一对

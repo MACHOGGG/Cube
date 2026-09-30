@@ -71,7 +71,7 @@ const blank = await page.$$eval('.home-icon-btn', (btns) =>
 );
 check('主菜单每颗图标都真的画出了东西', blank.length === 0, blank.join(' / '));
 
-// ---- 2. 计时：一整页，两张图 + 一句「60s 挑战」-----------------------------
+// ---- 2. 计时：一整页，两张图 + 一句「100s 挑战」----------------------------
 //
 // 2026-09 之前这儿是一个居中的挑选窗（沙漏飞到屏幕中间、落定时裂成几只），量的
 // 是 `.center-pick-opt`。玩家定了改成一整页，和《无限反转》《老虎机模式》同一
@@ -108,7 +108,7 @@ check('计时是一整页，两张图', timed.opts.length === 2, `${timed.opts.l
 check('两张一样宽，整排左右居中',
   timed.opts.every((o) => o.w === timed.opts[0].w) && Math.abs(timed.rowMid - timed.mid) <= 1,
   JSON.stringify(timed.opts) + ` 行中 ${timed.rowMid} / 屏中 ${timed.mid}`);
-check('图底下那句是「60s 挑战」', timed.tagText === '60s 挑战', timed.tagText);
+check('图底下那句是「100s 挑战」', timed.tagText === '100s 挑战', timed.tagText);
 check('那一句在图正下方、不折行', timed.tagBelowRow > 0 && timed.tagLines <= 1,
   `底下 ${timed.tagBelowRow}px · ${timed.tagLines} 行`);
 // 计时是免费的（主菜单上它走 iconButton，不是 geniusCard），所以这一页不该有锁。

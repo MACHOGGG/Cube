@@ -67,7 +67,7 @@ export interface ProfileHandlers {
   onMoreLayouts: () => void;
   /** 《世界排名》——整页只有那张榜。 */
   onWorldRank: () => void;
-  /** 《更多玩法》——现在装的是《无限反转》：挑方块或小球，120 秒。 */
+  /** 《更多玩法》——现在装的是《无限反转》：挑方块或小球，100 秒。 */
   onMoreModes: () => void;
 }
 

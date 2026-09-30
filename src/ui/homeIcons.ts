@@ -15,6 +15,7 @@
  * 换一个图标，删掉文件就变回来，代码不用动。
  */
 import { custom, customAny } from './customIcons';
+import { MODE_SECONDS } from '../engine/modeClock';
 
 export const HOME_COLORS = {
   gray: '#A8A8A8',
@@ -289,7 +290,7 @@ function burstStar(cx: number, cy: number, R: number, fill: string): string {
 }
 
 /** A single option chip inside the bomb panel: an orange piece for the basic
- *  tier, a green piece (the base-square icon's green) for the 90s timed tier,
+ *  tier, a green piece (the base-square icon's green) for the timed tier,
  *  a purple "+" piece for the advanced (more-layouts) tier. */
 export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced'): string {
   // 三档各画一套就放 bomb-basic-square.svg 这样的九个；三档共用一套形状就
@@ -311,16 +312,25 @@ export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced')
   return svg(body + plus);
 }
 
-/** The 90s timed-bomb tier's own marker — a wide burst with the label on top.
+/** The timed-bomb tier's own marker — a wide burst with the label on top.
  *  Its own viewBox is wider than tall and it is allowed to overflow its row,
  *  so the star spills into the tiers above and below exactly as the sheet
- *  has it, instead of being boxed inside the middle bar. */
+ *  has it, instead of being boxed inside the middle bar.
+ *
+ *  **这枚徽记上写的就是真正生效的时长**，从前不是：它手写着 90s，而那一档跑的是
+ *  `main.ts` 里另一个手写的 90——两个数各自独立，改一头忘一头，屏幕上就写着一个数
+ *  跑着另一个数。现在数字从 `engine/modeClock.ts` 那个常量来（三个带钟的玩法统一
+ *  100 秒），门 `check-mode-clock.mjs` 盯着它们别再分家。
+ *
+ *  名字、CSS 类、可替换的素材文件名都还叫 `bomb-90s`：它们是**标识符**，不是给玩
+ *  家看的字，而 style.css 里五条规则、check-mode-axis 那道门、素材 README 都按这个
+ *  名字对齐。PR-20 会整块重做这一页，到那时一起改名，不在这儿拆成两半。 */
 export const ICON_BOMB_90S =
   custom('bomb-90s') ??
   '<svg viewBox="0 0 260 100" overflow="visible" aria-hidden="true">' +
   burstStar(130, 50, 88, C.white) +
   `<text x="130" y="64" text-anchor="middle" font-family="Karla, sans-serif" font-size="40"
-      font-weight="700" fill="#3A3733">90s</text>` +
+      font-weight="700" fill="#3A3733">${MODE_SECONDS}s</text>` +
   '</svg>';
 
 // ---------------------------------------------------------------------------

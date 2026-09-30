@@ -62,6 +62,7 @@ import { renderTimedModePage } from './ui/timedMode';
 import { renderPuzzleModePage } from './ui/puzzleMode';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawOne, type Family, type TargetPattern } from './engine/targets';
+import { MODE_SECONDS } from './engine/modeClock';
 import { createSquareGame } from './shapes/square';
 import { cardOf, familyFromName, registerCards } from './shapes/registry';
 import { createTriangleGame } from './shapes/triangle';
@@ -168,7 +169,10 @@ const recordSources: RecordSource[] = [
   // 进去的键分了家：记录页按空串那个键去找，找不到——基础局和布局局**在记录页上
   // 整片消失，也没被算进累计得分**，而且不报任何错。check-restore 当场逮到。
   ...games.map((g) => ({ card: g.card, suffix: suffixFor('base'), mode: '' })),
-  ...games.map((g) => ({ card: g.card, suffix: suffixFor('timed'), mode: ' · 60s' })),
+    // 这一格的字是**给玩家看的时长**，所以从常量来，不手写：从前它写死 ' · 60s'，
+  // 而真正生效的秒数在另外一处；改一头忘一头，记录页上就标着一个数、局里跑着
+  // 另一个数，而两张榜的键是同一个，玩家没法分辨自己那条是哪一版打的。
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('timed'), mode: ` · ${MODE_SECONDS}s` })),
   ...games.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · 💥' })),
   ...layoutGames.map((g) => ({ card: g.card, suffix: suffixFor('base'), mode: ' · +' })),
   ...bombLayoutGames.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · + 💥' })),
@@ -209,8 +213,11 @@ const runKeyFor: RunKeyFor = (data) => {
   );
 };
 
-/** 《无限反转》一局多长：玩家定的 60 秒（原来 120 秒）。 */
-const FLIP_SECONDS = 60;
+/**
+ * 《无限反转》一局多长。**不再是自己的数**——玩家 2026-09 把带钟的三个玩法统一成
+ * 100 秒，所以这里只是给那个常量起了个本地名字（见 engine/modeClock.ts）。
+ */
+const FLIP_SECONDS = MODE_SECONDS;
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -699,7 +706,7 @@ function showMenu() {
           game,
           {
             bomb: true,
-            timeLimitSec: tier === 'timed' ? 90 : undefined,
+            timeLimitSec: tier === 'timed' ? MODE_SECONDS : undefined,
             ...tipFor('bomb', () => bombTip(currentLang, tipShape(id))),
           },
           undefined,
@@ -828,7 +835,7 @@ function showSlotIntro() {
 }
 
 /**
- * 《无限反转》：挑方块还是小球，60 秒，得分翻面来回翻。天才特供的一档——
+ * 《无限反转》：挑方块还是小球，100 秒，得分翻面来回翻。天才特供的一档——
  * 没开通的人看得见那一屏，按下去是订阅那扇窗。
  *
  * 只从主菜单那张卡进来（个人主页里《更多玩法》那一行是陈列页，见
@@ -836,7 +843,7 @@ function showSlotIntro() {
  * 从主菜单进来的人开局前一退就被送到了个人主页。
  *
  * 屋主在为整屋挑玩法时也走这一屏：挑完不开单人局，而是把这一族连同「无限反
- * 转」的标记交给小屋，全屋一起倒数、一起打 60 秒（api/room.js 的 FLIP_MODES）。
+ * 转」的标记交给小屋，全屋一起倒数、一起打 100 秒（api/room.js 的 FLIP_MODES）。
  */
 /**
  * 《计时挑战》挑图形那一整页（ui/timedMode.ts）。
@@ -862,7 +869,7 @@ function showTimedMode() {
       // 第三个参数是《返回》去哪：回挑形状那一屏再选一个，和《无限反转》一样（玩
       // 家 2026-09 拍的板）。整页取代了那扇窗，reopen 那条路一并撤掉——它本来就是
       // 给窗设计的。
-      showGame(game, { timeLimitSec: 60, ...tipFor('timed', () => timedTip(currentLang)) }, showTimedMode);
+      showGame(game, { timeLimitSec: MODE_SECONDS, ...tipFor('timed', () => timedTip(currentLang)) }, showTimedMode);
     },
   });
   wireHomeTitle();
@@ -1118,7 +1125,7 @@ function startMultiplayerRun(match: MatchStart) {
     ? drawOne(slotFamilyOf(match.mode), match.slot === 'same' ? seededRandom : Math.random) ?? undefined
     : undefined;
   const target = match.target ?? dealt;
-  // 无限反转那一局：和单人那一局同一套规则（flip + 60 秒），只是全屋同一副牌。
+  // 无限反转那一局：和单人那一局同一套规则（flip + 100 秒），只是全屋同一副牌。
   const flip = !!match.flip;
   // A finished round goes back to the room, not to the home page: the scores
   // are still up there and the host has another board to pick. Only a device

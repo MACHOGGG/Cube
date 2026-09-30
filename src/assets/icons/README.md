@@ -52,7 +52,7 @@ HEX**，`ui/customIcons.ts` 的 `sRGBOnly()` 在打包时替你换掉了（走 P
 | `timed-combined.svg` | 手机主菜单上那支计时图标（现在是沙漏，从前画的是合体秒表） |
 | `timed-square.svg` `timed-circle.svg` `timed-triangle.svg` | 电脑端和弹窗里的三支秒表 |
 | `timed.svg` | 偷懒写法：三支一起换成同一张 |
-| `bomb-90s.svg` | 90s 星爆。**画布是 260×100，不是正方形** |
+| `bomb-90s.svg` | 时长徽记星爆（内置那张上面的秒数从 engine/modeClock.ts 来）。**画布是 260×100，不是正方形** |
 | `bomb-basic-*.svg` `bomb-timed-*.svg` `bomb-advanced-*.svg` | 炸弹卡片里的九个小图标（`*` 是 square/circle/triangle） |
 | `bomb-square.svg` 等三个 | 偷懒写法：三档共用同一套形状 |
 | `more-square.svg` `more-circle.svg` `more-triangle.svg` | 「更多布局」的三张「+」卡 |

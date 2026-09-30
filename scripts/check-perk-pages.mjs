@@ -362,7 +362,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   await c.close();
 }
 
-// ---- 4b. 开通了的人：主菜单那张卡进挑图形页，真开得了局，钟从 1:00 往下数 ------
+// ---- 4b. 开通了的人：主菜单那张卡进挑图形页，真开得了局，钟从 1:40 往下数 ------
 {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await c.addInitScript(() => {
@@ -407,16 +407,16 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   await p.waitForTimeout(300);
   // 钟从 2026-09 起不在顶排了（《侵蚀阶梯》v1.2 PR-7 把它挪到暂停药丸正上方那块
   // .timer-pill）。这一条同时是那次搬家的看门人：搬完头一版把条件写成
-  // `meta.timed && !meta.flip`，无限反转那 60 秒的硬上限于是没了读数——时间到了
+  // `meta.timed && !meta.flip`，无限反转那 100 秒的硬上限于是没了读数——时间到了
   // 棋盘直接结算，玩家不知道为什么。所以这儿量的不只是「数字在走」，还有「这一局
   // 屏幕上真的有一个钟」。
   const has = await p.$('#timerPill');
-  check('无限反转：这一局有钟（60 秒是硬上限，不能不给读数）', !!has);
+  check('无限反转：这一局有钟（100 秒是硬上限，不能不给读数）', !!has);
   const t1 = await p.$eval('#timerPill', (e) => e.textContent.trim());
   await p.waitForTimeout(2200);
   const t2 = await p.$eval('#timerPill', (e) => e.textContent.trim());
   const sec = (t) => { const m = t.match(/(\d+):(\d+)/); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
-  check('无限反转：钟从 1:00 往下数', sec(t1) <= 60 && sec(t1) >= 55 && sec(t2) < sec(t1), `${t1} → ${t2}`);
+  check('无限反转：钟从 1:40 往下数', sec(t1) <= 100 && sec(t1) >= 95 && sec(t2) < sec(t1), `${t1} → ${t2}`);
   await c.close();
 }
 

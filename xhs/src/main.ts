@@ -11,7 +11,7 @@
  *   基础小球   createCircleGame().mount(root, back, {})
  *   炸弹       { bomb: true }
  *   老虎机     { target: 转出来的那个图案 }
- *   无限反转   { flip: true, timeLimitSec: 60 }
+ *   无限反转   { flip: true, timeLimitSec: MODE_SECONDS }  // 100 秒
  *
  * 棋盘、滑动手感、得分判定、连锁节拍、翻面动画、结算、战绩图——一律走网页
  * 版那一份，这里一个字都不改。玩家定的：选出来的玩法要「完全复刻一样」。
@@ -44,6 +44,7 @@ import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 import { suffixFor } from '../../src/engine/runKey';
+import { MODE_SECONDS } from '../../src/engine/modeClock';
 import { registerCards } from '../../src/shapes/registry';
 
 import { installOldKernel } from './oldKernel';
@@ -62,8 +63,12 @@ import type { StoredRun } from '../../src/engine/persistence';
 
 /** 小红书是中文平台，这一版固定简体中文——没有语言选择页。 */
 const LANG: Lang = 'zhHans';
-/** 无限反转一局多长。和网页版同一个数（src/main.ts 的 FLIP_SECONDS）。 */
-const FLIP_SECONDS = 60;
+/**
+ * 无限反转一局多长。**从前这里手抄网页版那个数**，靠一句注释「和网页版同一个数」
+ * 维持同步——注释维持不了任何东西：网页端 120→60 那一次，这一份就落后过一版。
+ * 现在两端读同一个常量（src/engine/modeClock.ts），抄不歪。
+ */
+const FLIP_SECONDS = MODE_SECONDS;
 
 const root = document.getElementById('app') as HTMLElement;
 const squareGame = createSquareGame();

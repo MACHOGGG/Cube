@@ -57,7 +57,7 @@ const GROUPS = [
     ...SHAPES.map((sh) => [`timed-${sh}`, H.timedCard(sh), `电脑端 / 弹窗里的 ${sh}`]),
   ]],
   ['炸弹挑战', [
-    ['bomb-90s', H.ICON_BOMB_90S, '90s 星爆（画布是 260×100，不是正方形）'],
+    ['bomb-90s', H.ICON_BOMB_90S, '时长徽记星爆（画布是 260×100，不是正方形）'],
     ...TIERS.flatMap((t) => SHAPES.map((sh) => [`bomb-${t}-${sh}`, H.bombChip(sh, t), `${t} · ${sh}`])),
   ]],
   ['更多布局', [

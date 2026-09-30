@@ -337,9 +337,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
         条件只有 meta.timed 一个，**不带 && !meta.flip**（这段注释在模板字符串里，所以
         不敢写反引号）。timed 的意思就是「这一局有时间上限」——各个 shape 里它是
-        !!opts?.timeLimitSec，无限反转那 60 秒也算在内。这一行头一版跟着旁边那两处一起
+        !!opts?.timeLimitSec，无限反转那 100 秒也算在内。这一行头一版跟着旁边那两处一起
         写了 && !meta.flip：那两处是对的（开局页摆他挑的图形而不是秒表、《计时》那条附
-        注不该出现在反转局里），这一处照抄过来就成了「无限反转有 60 秒硬上限，屏幕上却
+        注不该出现在反转局里），这一处照抄过来就成了「无限反转有 100 秒硬上限，屏幕上却
         没有钟」——时间到了棋盘直接结算，玩家不知道为什么。从前顶排那一格是每一局都画
         的，所以这个毛病是这次搬家搬出来的。
       -->
@@ -607,7 +607,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     if (meta.slotTarget) {
       tips.push({ key: 'slot', art: slotTip(meta.lang, meta.slotTarget).art });
     }
-    // 无限反转也是 60 秒，可它那一条自己就带着「限时 60 秒」，不必再摆一条计时
+    // 无限反转也是 100 秒，可它那一条自己就带着「限时 100 秒」，不必再摆一条计时
     //（头上那个读数的显隐用的也是这同一个判断）。
     if (meta.timed && !meta.flip) tips.push({ key: 'timed' });
     // 特殊布局没有自己的那张卡，左边那个词就用这副棋盘自己的名字。
