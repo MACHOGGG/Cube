@@ -17,7 +17,7 @@
  * 看得见的东西抓下来对。
  *
  * 抓什么：
- *   · 得分图案（.pattern-hint 里那几枚 SVG）——玩家点名要核的
+ *   · 得分图案（HUD 右边那一块 `.hud-block--pattern` 里那张 SVG）——玩家点名要核的
  *   · 三个读数的名字（得分 / 有效得分率 / 时间）
  *   · 底下两颗键的图标和读屏名
  *   · 标题、副标题、开局页、暂停面板、结算页上的字
@@ -143,6 +143,9 @@ const SNAP = (spec) => {
     else if (kind === 'count') out[key] = nodes.length;
     else if (kind === 'class')
       out[key] = live.map((e) => e.tagName.toLowerCase() + '.' + e.className.toString().trim().split(/\s+/).join('.'));
+    // 认不出的 kind 当场炸掉，别静悄悄留一个 undefined——两边都是 undefined 就「一
+    // 致」了，而那一项其实一个字都没量。
+    else throw new Error('check-vsweb: 不认识的 kind ' + kind + '（' + key + '）');
   }
   return out;
 };
@@ -263,9 +266,12 @@ async function tapWebTag(p, text) {
 const GAME_SNAP = {
   标题: { sel: '.app--game > h1', kind: 'text' },
   副标题: { sel: '.app--game > .tag-line', kind: 'text' },
-  读数名: { sel: '.app--game .hud-cell .k', kind: 'text' },
-  得分图案: { sel: '.pattern-hint--a .ph-part svg', kind: 'svg' },
-  得分图案枚数: { sel: '.pattern-hint--a .ph-part svg', kind: 'count' },
+  // 顶排 2026-09 换了（《侵蚀阶梯》v1.2 PR-7）：三格 HUD 变成两块（`.hud-cell` →
+  // `.hud-block`），棋盘上方那条得分图示带退役、图案挪进右边那一块。旧选择器一个都匹
+  // 配不到，于是这三项一直在拿空的比空的——而「得分图案」正是玩家点名要核的那一项。
+  读数名: { sel: '.app--game .hud-block .k', kind: 'text' },
+  得分图案: { sel: '.hud-block--pattern .pat-icon > svg', kind: 'svg' },
+  得分图案枚数: { sel: '.hud-block--pattern .pat-icon > svg > *', kind: 'count' },
   底排按键: { sel: '.controls .icon-btn', kind: 'label' },
   底排按键图标: { sel: '.controls .icon-btn svg', kind: 'svg' },
   棋子数: { sel: '#boardWrap .tile, #boardWrap .ball', kind: 'count' },
@@ -459,7 +465,19 @@ const SCREENS = [
       delete s.得分图案;
       return s;
     })(),
-    expect: '得分图案本身是随机抽的，两边不会一样；这里只核枚数和别的部件',
+    expect: '得分图案是随机抽的，两边不会一样；枚数也不会一样（见下面 accept）',
+    // **枚数也不能比。**《侵蚀阶梯》v1.2 PR-8 之后一局只转**一个**目标，而二十个图案
+    // 的枚数是 2 到 6 枚不等——两端各转各的，枚数自然对不上。PR-8 之前一局转一对、屏
+    // 幕上那条图示带永远是两张，所以这一项从前碰巧总是相等。
+    //
+    // 放过的只有这两项，而且要求两边都**真的画出了东西**（枚数 ≥ 1）：两边都空的时候
+    // 不许放过——那才是「这一块坏了」，和「各转各的」是两件事。
+    accept: (k, web, xhs) => {
+      if (k !== '得分图案' && k !== '得分图案枚数') return null;
+      const n = (v) => (Array.isArray(v) ? v.length : Number(v) || 0);
+      if (n(web) < 1 || n(xhs) < 1) return null;
+      return '一局一个随机目标（PR-8），两端各转各的，图形和枚数都不会一样；两边都真的画出来了';
+    },
   },
   {
     name: '无限反转（方块）· 开局页',
@@ -509,6 +527,16 @@ const SCREENS = [
     snap: {
       面板文字: { sel: '#pauseOverlay .modal h2, #pauseOverlay .modal p', kind: 'text' },
       面板按键: { sel: '#pauseOverlay .modal button', kind: 'label' },
+    },
+    // 说好的差别，只有一处：**这一版没有 Pro 开关**（玩家定的「无 pro 模式」，
+    // xhs/src/main.ts 的 dropProSwitch 把那一行摘掉）。除掉那一颗之后，剩下的按键必须
+    // 一个不差、次序也一样——所以这儿不是「放过整项」，是拿网页版那一串减掉 Pro 再比。
+    accept: (k, web, xhs) => {
+      if (k !== '面板按键') return null;
+      const want = web.filter((t) => t !== 'Pro');
+      return JSON.stringify(want) === JSON.stringify(xhs)
+        ? '这一版没有 Pro 开关（玩家定的），其余五颗一个不差、次序一样'
+        : null;
     },
   },
   {
@@ -648,9 +676,11 @@ const SCREENS = [
   },
 
   {
-    // 横屏的得分图案是劈成两半贴在棋盘左右的（gameShell.ts 的 pattern-hint--a
-    // / --b）。竖屏那一遍量不到这件事，所以这里单独走一趟横屏：两半各有几枚、
-    // 是不是同样那几枚。
+    // 横屏那一遍单独走：横过来之后顶排那两块变成左边一条竖的（style.css 那段横屏规则
+    // 把 `.hud` 改成 flex 竖排），而《得分图案》那一块里的图要按整块缩进去才不会被
+    // 裁掉——两端的缩法必须一样，不然小红书那一端会切掉一截。
+    //
+    // （这儿原先量的是「劈成两半贴在棋盘左右」的那条图示带，PR-7 之后没有那回事了。）
     name: '基础方块 · 局中（横屏）',
     view: 'land',
     async web(p) {
@@ -664,8 +694,7 @@ const SCREENS = [
     },
     snap: {
       ...GAME_SNAP,
-      左半图案: { sel: '.pattern-hint--a .ph-part:not(.ph-part--tail) svg', kind: 'svg' },
-      右半图案: { sel: '.pattern-hint--b svg', kind: 'svg' },
+      竖排的两块: { sel: '.app--game > .hud .hud-block', kind: 'class' },
     },
   },
   {

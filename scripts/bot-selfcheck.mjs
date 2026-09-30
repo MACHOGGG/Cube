@@ -138,7 +138,18 @@ const installProbe = () => {
     probeEl.style.color = raw;
     return getComputedStyle(probeEl).color || raw;
   };
-  /** 这一枚露在外面的那一面是什么颜色。 */
+  const CLEAR = (c) => !c || c === 'transparent' || /rgba\(0, 0, 0, 0\)/.test(c);
+  /**
+   * 这一枚露在外面的那一面是什么颜色。
+   *
+   * **不能只看这一枚自己的 backgroundColor。** 各副棋盘把颜色画在哪儿并不一致：方块和
+   * 小球画在棋子元素自己的底色上，**三角画在里面那一层**（shapes/triangle.ts 的
+   * `fill.style.background`），外面那层是透明的。只读外层的那一版在六边三角上**每一枚
+   * 都是同一个透明色**——于是机器人看不出盘面动过没有：拖了十二下都判成「一个格子都没
+   * 动」，H2 当场报「卡住了」。而那不是游戏卡住，是这把尺子瞎了（拿手拖过，189px 也
+   * 「没动」；换成往里找一层，第一下就动了）。**这种假红比假绿更坏**：它会让人去查一个
+   * 不存在的 bug。
+   */
   const colorOf = (el) => {
     if (el.dataset.face === 'dot') {
       // dataset.dotColor 是方块那边写的，别的棋盘不一定有，所以两条路都走。
@@ -149,7 +160,15 @@ const installProbe = () => {
         '',
       );
     }
-    return canon(getComputedStyle(el).backgroundColor);
+    const own = getComputedStyle(el).backgroundColor;
+    if (!CLEAR(own)) return canon(own);
+    for (const kid of el.querySelectorAll('*')) {
+      const bg = getComputedStyle(kid).backgroundColor;
+      if (!CLEAR(bg)) return canon(bg);
+      const f = kid.getAttribute && kid.getAttribute('fill');
+      if (f && f !== 'none' && !CLEAR(f)) return canon(f);
+    }
+    return '';
   };
   window.__bot = {
     /** 盘面此刻的样子。 */

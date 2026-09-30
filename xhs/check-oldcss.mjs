@@ -75,7 +75,9 @@ const MEASURE = (sels) => {
  * 所以只放宽这几个壳自己的宽高，位置（x / y）仍然严格。
  */
 const WRAP_HOSTS = [
-  '.app--game .pattern-hint',
+  // 这儿原先第一个是 `.app--game .pattern-hint`——棋盘上方那条得分图示带。《侵蚀阶梯》
+  // v1.2 PR-7 把它退役了（现在是顶排两块 HUD，一个两列的 grid，不折行），所以这一行
+  // 连着放宽都不需要了。
   '.app--game .controls',
   '.xhs-share-bar',
   '.slot-pick-row',
@@ -145,6 +147,11 @@ function compare(label, a, b, tol) {
     say(false, `${label}：一个盒子都没量到（选择器没匹配上，或者没走到这一屏）`);
     return;
   }
+  // **逐条也要量到。** 上面那一条只管「整屏一个盒子都没量到」，管不住「九个受测元素
+  // 里有三个是空的」——那三个照旧算「一致」，而屏幕上它们根本不存在。PR-7 换掉顶排
+  // 那几个选择器之后，这一屏就是这么绿了一整个版本的。
+  const dead = Object.keys(a).filter((k) => a[k].length === 0 && (b[k] ?? []).length === 0);
+  if (dead.length) say(false, `${label}：这几个选择器两边都一个也没匹配到（过期了？）`, dead.join(' '));
   say(worst === 0, `${label}：两边排版一致（量了 ${seen} 个盒子）`, worst ? `最大差 ${worst}px @ ${where}` : '');
   if (worst) all.slice(0, 12).forEach((l) => console.log('           ' + l));
 }
@@ -227,7 +234,10 @@ const SCREENS = [
       await p.$$eval('.home-icon-btn', (e) => e[3].click());
       await p.waitForTimeout(900);
     },
-    sels: ['.slot-page', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.home-head-glass'],
+    // `.home-head-glass` 撤了：这一屏上没有招牌（挑图形那一页只有图和一句标语，
+    // 见 src/ui/slotMachine.ts），那个选择器两边都一个也匹配不到——量的是空气。
+    // 换成这一屏真有的那一句标语和底下那颗《退出》。
+    sels: ['.slot-page', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.slot-tagline', '.icon-btn.start-act'],
   },
   {
     name: '无限反转开局页',
@@ -250,10 +260,16 @@ const SCREENS = [
     async go(p) {
       await toBoard(p, 0);
     },
+    // 顶排那几个选择器 2026-09 全换了（《侵蚀阶梯》v1.2 PR-7）：三格 HUD（`.hud-cell`）
+    // 变成两块（`.hud-block`），棋盘上方那条图示带（`.pattern-hint` / `.pattern-icon`）
+    // 退役、图案挪进右边那一块（`.hud-block--pattern` 里的 `.pat-icon`）。旧选择器一个
+    // 都匹配不到，于是这一屏九个受测元素里有三个在**量空气**——而量空气看起来和「两边
+    // 完全一致」一模一样。
     sels: [
-      '.app--game', '.app--game .hud', '.app--game .hud-cell',
+      '.app--game', '.app--game .hud', '.app--game .hud-block',
+      '.app--game .hud-block--score', '.app--game .hud-block--pattern',
       '.app--game .controls', '.app--game .controls .icon-btn',
-      '.app--game .pattern-hint', '.app--game .pattern-icon', '.board-wrap', '.board',
+      '.app--game .pat-icon', '.board-wrap', '.board',
     ],
   },
   {
