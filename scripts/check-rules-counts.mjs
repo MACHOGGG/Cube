@@ -175,6 +175,45 @@ const ms = LANGS.map((l) => counts[l].m).join(',');
 check('四种语言条数一致（通用）', new Set(LANGS.map((l) => counts[l].g)).size === 1, gs);
 check('四种语言条数一致（各玩法）', new Set(LANGS.map((l) => counts[l].m)).size === 1, ms);
 
+// ── 每一个玩法都得在书里有一条（四种语言都要）──────────────────────────
+//
+// **上面那条「四种语言条数一致」拦不住少一个玩法**：四种语言一起少，它照样绿。
+// 这不是假想——《侵蚀阶梯》v1.2 那一轮整本重写，老虎机那一条四种语言一起漏掉了，
+// 一直到玩家问起来才发现。「一致」只说明四个译本互相对得上，不说明它们对得上游戏。
+//
+// 所以这儿钉住**名单**，不只是数目。表只能手写（这本书的措辞和主菜单上的卡片名从
+// 来不是同一句，见上面 TERMS 那段的理由）；加一个玩法就得回来加一行，而这正是要
+// 的效果——门会说出缺的是哪一个，而不是悄悄放过。
+const MODE_TERMS = [
+  ['方块', '方塊', 'Squares', 'Carrés'],
+  ['菱形方块', '菱形方塊', 'Diamond squares', 'Carrés en losange'],
+  ['圆球', '圓球', 'Balls', 'Billes'],
+  ['六边圆球', '六邊圓球', 'Hex balls', 'Billes hexagonales'],
+  ['七色圆球', '七色圓球', 'Seven-colour balls', 'Billes sept couleurs'],
+  ['大三角', '大三角', 'Big triangle', 'Grand triangle'],
+  ['炸弹玩法', '炸彈玩法', 'Bomb modes', 'Modes bombe'],
+  ['计时挑战', '計時挑戰', 'Timed modes', 'Modes chronométrés'],
+  ['老虎机模式', '老虎機模式', 'Slot machine mode', 'Mode machine à sous'],
+  ['无限反转', '無限反轉', 'Endless flip', 'Retournement infini'],
+  ['真正解密 · 步步为营', '真正解密 · 步步為營', 'Puzzle · Step by step', 'Énigme · Pas à pas'],
+];
+{
+  const hasTerm = (block, name) => block.includes(`{ term: '${name}',`);
+  const missing = [];
+  for (const row of MODE_TERMS) {
+    LANGS.forEach((lang, i) => {
+      if (!hasTerm(BLOCK(lang), row[i])) missing.push(`${lang}:${row[i]}`);
+    });
+  }
+  check('每个玩法在四种语言里都有一条', missing.length === 0, missing.join(' ') || `${MODE_TERMS.length} 个玩法 × 4 语`);
+  // 名单的长度要和真的条数对得上：表里少列一个，上面那一条照样全绿。
+  check('这张表列全了（条数 = 表的行数）',
+    LANGS.every((l) => counts[l].m === MODE_TERMS.length),
+    `书里 ${ms} / 表里 ${MODE_TERMS.length}`);
+  // 尺子：一个不存在的名字必须查不到，不然上面两条是空的。
+  check('（尺子）书里没有的名字查不到', !hasTerm(BLOCK('zhHans'), '老虎机模式（不存在）'));
+}
+
 // ── 这本书是直接塞进 innerHTML 的，所以正文里不能有标记 ─────────────────
 //
 // ui/accountPage.ts 的 openRules 把 body 原样拼进 innerHTML，没有 Markdown、也没有
