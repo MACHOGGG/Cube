@@ -24,7 +24,7 @@
  *
  *   ① 板子外一圈（原来那一格之内）按下去，落在地板上，而且真的能拖动棋子；
  *   ② 那一圈压不住别人——它是个 position: absolute 的东西，没有 z-index 的话会
- *      盖在没定位的兄弟（那排《暂停》、得分图示）上面，按键当场按不动。
+ *      盖在没定位的兄弟（底下那颗《暂停》、顶上那两块 HUD）上面，按键当场按不动。
  *
  * 反例试过的结果，照实记：
  *   · 拿掉 `.app--game` 上的 isolation: isolate → ①当场红六行：那一圈跑到这一页
@@ -49,7 +49,16 @@ const VPS = [
  * 方块的地板本来就和棋盘一样大，收不掉——那一圈余量是 0，这一条量的是「没收的
  * 时候也不许出事」。
  */
-const BOARDS = ['进阶三角', '七色圆球', '方块'];
+/**
+ * 探哪几副：一副**收得最狠**的、一副中等的、一副一点没收的（方块的地板本来就是正方
+ * 形，收不掉，留着当对照——「不用探」那几行说明这道门认得出哪几边该探）。
+ *
+ * 原先第一位是《进阶三角》（V 形）：它是收得最狠的一副（1920 上上下各空 234px），
+ * 可《侵蚀阶梯》v1.2 PR-6 把它删了，这一行从那天起一直红着两条「主菜单上没有《进阶
+ * 三角》」——红的不是它守的那件事。收得最狠的现在是《大三角》（六边蜂窝 54，它是天才
+ * 特供，上面已经种过权益）。
+ */
+const BOARDS = ['大三角', '七色圆球', '方块'];
 
 /** 往板子外面探这么远。比这个再远就不是「落偏了」而是「按到别处去了」。 */
 const REACH = 24;
@@ -115,7 +124,13 @@ for (const vp of VPS) {
         return el.id ? '#' + el.id : el.getAttribute('class') || el.tagName;
       };
       const btn = document.querySelector('#stopBtn')?.getBoundingClientRect();
-      const hint = document.querySelector('.pattern-hint--a')?.getBoundingClientRect();
+      // **量的是 HUD 右边那一块《得分图案》，不是棋盘上方那条得分图示带。**
+      // 那条带子《侵蚀阶梯》v1.2 PR-7 退役了，这儿原先找的 `.pattern-hint--a` 从那天
+      // 起一直取不到——于是这一条走的是「这一局没有图示」那一支，**永远绿着**。
+      // 而它守的那件事一点没变：地板补回来的那一圈是个 position: absolute 的东西，
+      // 没有 z-index 就会盖在没定位的兄弟上面。棋盘上方现在坐着的正是那两块 HUD。
+      const hintEl = document.querySelector('.hud-block--pattern');
+      const hint = hintEl?.getBoundingClientRect();
       const trimY = parseFloat(getComputedStyle(wrap).getPropertyValue('--floor-trim-y')) || 0;
       const trimX = parseFloat(getComputedStyle(wrap).getPropertyValue('--floor-trim-x')) || 0;
       const cx = b.x + b.width / 2;
@@ -132,9 +147,9 @@ for (const vp of VPS) {
         onHint: hint && hint.width > 0
           ? (() => {
               const el = document.elementFromPoint(hint.x + hint.width / 2, hint.y + hint.height / 2);
-              return el && el.closest('.pattern-hint') ? '得分图示' : hit(hint.x + hint.width / 2, hint.y + hint.height / 2);
+              return el && el.closest('.hud-block--pattern') ? '得分图案块' : hit(hint.x + hint.width / 2, hint.y + hint.height / 2);
             })()
-          : '这一局没有图示',
+          : '这一屏没有那一块',
         box: { x: b.x, y: b.y, w: b.width, h: b.height },
         trimYpx: trimY,
       };
@@ -148,10 +163,15 @@ for (const vp of VPS) {
       `${m.floor} ${m.trim} → ${outside.join(' / ')}`,
     );
 
+    // 尺子：那两个都得真的量到。找不到《得分图案》那一块就说明选择器又过期了
+    // ——这一条上一次就是这么空绿了一整个版本的。
+    check(`${lead}：《暂停》和《得分图案》那一块都在屏幕上（尺子）`,
+      m.onBtn !== '没这颗键' && m.onHint !== '这一屏没有那一块',
+      `暂停 → ${m.onBtn}；图案块 → ${m.onHint}`);
     check(
-      `${lead}：那一圈没挡住《暂停》和得分图示`,
-      m.onBtn === '暂停键' && (m.onHint === '得分图示' || m.onHint === '这一局没有图示'),
-      `暂停 → ${m.onBtn}；图示 → ${m.onHint}`,
+      `${lead}：那一圈没挡住《暂停》和《得分图案》那一块`,
+      m.onBtn === '暂停键' && m.onHint === '得分图案块',
+      `暂停 → ${m.onBtn}；图案块 → ${m.onHint}`,
     );
 
     // 真按下去拖一把。只有确实收掉了一圈的棋盘才试得着——没收的（方块）板子外面
