@@ -25,11 +25,23 @@ const FONTS = [
   ['JetBrains Mono', '100 800', 'src/assets/fonts/jetbrains-mono-latin-var.woff2'],
 ];
 
-/** 开一局：从主菜单点第 n 个基础玩法，等棋盘出来。
+/** 开一局：从主菜单点名字叫这个的那张卡，等棋盘出来。
+ *
+ *  **认名字，不认第几个。** 原先是按下标点（`els[n]`），而主菜单的排布 2026-09 动
+ *  过好几轮（换鱼眼轴、删两副三角、天才特供那几张挪位置）。下标一移，抓出来的图
+ *  还叫原来那个名字——「游戏中 · 三角」那一屏抓到的其实是别的棋盘，而这份 JSON 是
+ *  喂给界面模拟器和商店截图的，错了没人看得出来。
+ *
  *  开局页现在是 3、2、1 数完自己开局的，那颗 #startBtn 藏在后面不给点——抓图
  *  不必陪着等三秒，直接替它按下去。 */
-const play = (n) => async (page) => {
-  await page.$$eval('.home-icon-btn', (els, i) => els[i].click(), n);
+const play = (name) => async (page) => {
+  const hit = await page.$$eval('.home-icon-btn', (els, want) => {
+    const el = els.find((e) => (e.getAttribute('aria-label') || '').trim() === want);
+    if (!el) return false;
+    el.click();
+    return true;
+  }, name);
+  if (!hit) throw new Error(`主菜单上没有《${name}》这张卡`);
   await page.waitForSelector('#startBtn', { timeout: 15000, state: 'attached' });
   await page.$eval('#startBtn', (el) => el.click());
   await page.waitForFunction(
@@ -57,23 +69,26 @@ const SCREENS = [
     await p.click('#navRecords'); await p.waitForTimeout(700);
   } },
 
-  { id: 'gameSquare', name: '游戏中 · 方块', group: '玩', w: 390, h: 844, go: play(0) },
-  { id: 'gameCircle', name: '游戏中 · 圆球', group: '玩', w: 390, h: 844, go: play(1) },
-  { id: 'gameTriangle', name: '游戏中 · 三角', group: '玩', w: 390, h: 844, go: play(2) },
-  { id: 'gameLandscape', name: '游戏中 · 横屏', group: '玩', w: 844, h: 390, go: play(0) },
+  { id: 'gameSquare', name: '游戏中 · 方块', group: '玩', w: 390, h: 844, go: play('方块') },
+  { id: 'gameCircle', name: '游戏中 · 圆球', group: '玩', w: 390, h: 844, go: play('圆球') },
+  // 三角那一屏撤了：《侵蚀阶梯》v1.2 PR-6 删掉了两副三角基础棋盘。留下的《大三角》
+  // （六边蜂窝 54）是**天才限定**的布局，所以它这一屏单独一档、名字里写明这件事
+  // ——商店截图和界面模拟器上都得看得出「这一副不是人人都能玩的」。
+  { id: 'gameHexTriangle', name: '游戏中 · 六边三角（天才限定）', group: '玩', w: 390, h: 844, go: play('大三角') },
+  { id: 'gameLandscape', name: '游戏中 · 横屏', group: '玩', w: 844, h: 390, go: play('方块') },
   { id: 'gameStart', name: '开局页', group: '玩', w: 390, h: 844, go: async (p) => {
-    await p.$$eval('.home-icon-btn', (els) => els[0].click());
+    await p.$$eval('.home-icon-btn', (els) => els.find((e) => (e.getAttribute('aria-label') || '').trim() === '方块')?.click());
     await p.waitForSelector('#startOverlay.show', { timeout: 15000 });
     await p.waitForTimeout(600);
   } },
   { id: 'gamePause', name: '暂停', group: '玩', w: 390, h: 844, go: async (p) => {
-    await play(0)(p);
+    await play('方块')(p);
     await p.click('#stopBtn');
     await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
     await p.waitForTimeout(500);
   } },
   { id: 'gameEnd', name: '结算', group: '玩', w: 390, h: 844, go: async (p) => {
-    await play(0)(p);
+    await play('方块')(p);
     // 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
     await p.click('#stopBtn');
     await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
@@ -82,7 +97,7 @@ const SCREENS = [
     await p.waitForTimeout(1200);
   } },
   { id: 'gameShare', name: '分享战绩', group: '玩', w: 390, h: 844, go: async (p) => {
-    await play(0)(p);
+    await play('方块')(p);
     await p.click('#stopBtn');
     await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
     await p.click('#pauseFinishBtn');
@@ -203,6 +218,13 @@ for (const screen of SCREENS) {
     localStorage.setItem('slides_tutorial_seen', '1');
     localStorage.setItem('slides_tutorial_seen_circle', '1');
     localStorage.setItem('slides_tutorial_seen_triangle', '1');
+    // 六边三角（《大三角》）是天才限定的布局，没开通点开是订阅墙、抓不到棋盘。照
+    // 「兑过一张长期内部码的玩家」原样摆一份：channel 必须是 'code'（别的柜台会被
+    // read() 整份丢成 NOBODY），而内部码没过期时 refreshEntitlement 原地掉头，一个
+    // 请求都不发。这不是绕过付费墙，是摆一份真实玩家的状态。
+    localStorage.setItem('slides_genius', JSON.stringify({
+      active: true, channel: 'code', until: Date.now() + 365 * 864e5,
+    }));
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`  [${screen.id} 报错] ${e.message}`));

@@ -337,7 +337,7 @@ const SHAPES = {
   // src/shapes/square.ts — PALETTES.standard; .tile is an 8px-radius box and
   // the dot face is a transparent box holding an 86% disc.
   square: {
-    label: '方块', note: '方角 · 8px 圆角 · 反面是内嵌圆点',
+    label: '方块', note: '方角 · 8px 圆角 · 反面是三笔交叉的星号',
     palette: ['#C46A4E', '#9C8A3D', '#4A9573', '#4C7EAD', '#8067A8', '#AD5C82'],
     pitch: 1.12, aspect: 1,
     front: (z, f) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
@@ -362,7 +362,7 @@ const SHAPES = {
   // src/shapes/triangle.ts — PALETTES.standard; a clip-path silhouette, and
   // the dot face is the same triangle shrunk to 0.6 with a dark stroke.
   triangle: {
-    label: '三角', note: '斜边 · 上下交替 · 反面是缩小的同向三角',
+    label: '三角', note: '斜边 · 上下交替 · 反面是三笔交叉的星号',
     palette: ['#3C4452', '#B23A3A', '#D89B1E', '#4C68B0', '#2F9E52', '#9B958D'],
     pitch: 1.06, aspect: 0.866, alternates: true,
     front: (z, f, size, up) => `<div class="face" style="transform:translateZ(${z}px);background:${f};` +
@@ -375,6 +375,9 @@ const SHAPES = {
     cast: 'left:14%;right:14%;top:34%;bottom:8%',
   },
 };
+// 三族的反面 2026-09 统一成同一个记号了：三笔交叉的星号（玩家定的，见
+// src/ui/dotFaceMark.ts）。上面那三条 note 原先写着「方块是内嵌圆点、三角是缩小的同向
+// 三角」——那是统一之前的画法，这台子照着它画出来的反面和真棋盘上的不是一回事。
 const ORDER = ['square', 'circle', 'triangle'];
 
 /* ── the cycle ───────────────────────────────────────────────────────────
