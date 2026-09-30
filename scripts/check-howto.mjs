@@ -177,8 +177,14 @@ check('老虎机：那一条配着当局的两个图案', r.extras.find((e) => e
 await closeAll();
 
 // ── 4. 计时挑战 ──────────────────────────────────────────────────────
+//
+// 挑形状这一步走的是**整页**那一套（ui/timedMode.ts 的 #timedShapes 里两颗
+// `.slot-pick-opt`），不是居中弹窗。2026-09 的「改动二」把这一屏从 `.center-pick`
+// 换成了和《无限反转》《老虎机》同一副骨架，这儿原先还点着 `.center-pick-opt`，于是
+// 这道门在这一步 30 秒超时、整个进程抛异常挂掉——**后面菱形方块那五条一条都没跑
+// 过**，而它们正是「第 4 条按 ruleShape 讲对了没有」那一组。
 await startFrom('计时挑战', async () => {
-  await page.click('.center-pick-opt[aria-label="方块"]');
+  await page.click('#timedShapes .slot-pick-opt[data-family="square"]');
   await page.waitForTimeout(900);
 });
 r = await openHowto();
