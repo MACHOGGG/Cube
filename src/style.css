@@ -4114,25 +4114,28 @@ html.is-playing body { background: var(--play-bg); }
   stroke: none;
 }
 
-/* 老虎机那一局：这一块里画的是这一局转到的那个**目标**（《侵蚀阶梯》v1.2 PR-8），
-   不是基础玩法那条 1×N。区别在形状能有多高——方块 35 是竖着三格、小球 24 / 26 是
-   三行，按上面那个「一枚就是 1em」的固定尺寸画出来有七十多像素高，而这块牌子内高
-   只有五十几，`overflow: hidden` 会把它齐齐切掉一截（切掉的那一截不报错，屏幕上就
-   是「图案好像少了一排」——比画小一点糟得多）。
-   所以只有这一档改成「按整块的大小缩进去」：1×N 那一条的尺寸是玩家定过的，一个字
-   不动。
-   同一个目标在一局里的框是不变的（engine/targetIcon.ts 的 targetHudDef 按**整个**
-   目标定 extent/extentY），所以侵蚀掉一枚之后棋子还是那么大，图只是少了一枚——框
-   跟着剩下那几枚走的话，屏幕上看到的是图案变大，正好和玩法说的反过来。 */
-.app--game .hud-block--pattern.pat-block--target .pat-icon {
-  /* 5px / 10px 不是随手写的：刻度环那道描边宽 3px、压在这一块的边上（往里占 0–3px，
-     见 patternBlock 的 layoutRing），所以竖着至少要让出 3px；再多让 2px 当余量。
-     360×640 上这一块内高只有 44px，让多一点就直接吃掉图案的一行——量过：inset 从
-     8px 收到 5px，三行的目标每行从 8px 长到 11px。 */
+/* **这一块里的图，永远不许超出这一块。**
+   这一块 `overflow: hidden`，超出去的那一截不报错、不白屏，屏幕上只是「图案好像少了
+   一排」或者「四连看着像一枚半」——比画小一点糟得多，因为它说的是假话。而它有三种会
+   超出去的情形，各自的来路不同：
+     · 老虎机那一档画的是转到的那个目标（PR-8），形状能有两三行高（方块 35 是竖着
+       三格，小球 24 / 26 是三行）；
+     · 横屏那条槽只有 66px 宽，而一条 1×4 按「一枚 1em」算出来有八十多；
+     · 宽而矮的视口（量过 1024×600）走的还是竖屏那套两列排布，右边这块只有 121px，
+       图标 167px。
+   三种一条规则一起收：给 `.pat-icon` 一个**确定的盒子**（绝对定位 + inset，不然
+   百分比的高没有参照物会算成 none），再让图**最大**铺满这个盒子——`max-*` 而不是
+   `width: 100%`，所以装得下的时候尺寸一个字不变（1×N 那个 em 尺寸是玩家定过的）。
+   inset 的 5px 是让给刻度环的：那道描边宽 3px、压在这一块的边上往里占 0–3px（见
+   patternBlock 的 layoutRing），再留 2px 余量。360×640 上这一块内高只有 44px，让多
+   一点就直接吃掉图案的一行。
+   （`.pat-block--target` 那个类现在不带样式了，但留着：patternBlock 只给老虎机那一
+   局挂它，check-random-target 靠它认出「这一块画的是目标，不是 1×N」。） */
+.app--game .hud-block--pattern .pat-icon {
   position: absolute; inset: 5px 10px;
 }
-.app--game .hud-block--pattern.pat-block--target .pat-icon > svg {
-  width: 100%; height: 100%;
+.app--game .hud-block--pattern .pat-icon > svg {
+  width: auto; height: auto; max-width: 100%; max-height: 100%;
 }
 
 /* The board's panel — the green field the pieces sit on — takes whatever is
@@ -4395,6 +4398,14 @@ html.is-playing body { background: var(--play-bg); }
   }
   .app.app--game > .hud {
     grid-column: 1; grid-row: 1 / -1;
+    /* **display: flex 这一句是必须的，不是顺手写的。**
+       竖屏的 .hud 是个两列的 grid（`grid-template-columns: 1fr 1.6fr`，见上面那条基础
+       规则）。横过来之后这一段本来想把它竖排，可 `flex-direction` 对 grid 容器一个字
+       都不起作用——于是两块牌子照旧并排，一起挤进左边那条 66px 的槽里：读数那块只剩
+       22px 宽，《得分图案》那块 34px，而那块里的 1×4 图标是 131px。`overflow: hidden`
+       把它齐齐切掉四分之三，横屏玩家看到的是「一枚半」，也就是**根本读不出这一局要凑
+       几枚**。下面 `.hud-block { flex: 1 }` 那一条也是照 flex 写的，同样一直没生效。 */
+    display: flex;
     flex-direction: column; gap: clamp(8px, 2.6vh, 22px);
     height: 100%;
     /* min-width: 0 because a grid item's automatic minimum is its content,
@@ -4427,6 +4438,10 @@ html.is-playing body { background: var(--play-bg); }
      sizes as before, re-expressed against the viewport. */
   .app.app--game > .hud .hud-block { font-size: min(2.35vw, 6vh); }
   .app.app--game > .controls .icon-btn { font-size: min(4.38vw, 7.5vh); line-height: 1.1; }
+  /* 横屏那条槽只有 66px 宽，一条 1×4 装不下——不过这件事上面那条通用规则已经收了
+     （`.app--game .hud-block--pattern .pat-icon`：给它一个确定的盒子，图最大铺满），
+     所以这儿只把左右两边的 inset 收窄一点，槽窄，10px 让得太多。 */
+  .app.app--game > .hud .hud-block--pattern .pat-icon { inset: 5px 4px; }
 
   /* 横过来之后，那一排变成右边一条竖的：《离开房间》站在最上面（column-reverse
      把 DOM 里在后的那个放到顶上），名单接在它下面，把这条竖槽剩下的都占满。
