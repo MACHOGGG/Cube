@@ -7,10 +7,15 @@
  */
 import { meterFill, splitPastedCode } from '../engine/kinetics';
 import { shakeReject } from '../engine/juice';
+import { reducedMotion } from '../engine/reducedMotion';
 import { STRINGS, type Lang } from '../i18n';
 
 /** 密码正好六位（api/_accounts.js 和 subscribe.ts 的 isPin 是同一条规矩）。 */
 const PW_LEN = 6;
+
+/** 绿框级联：一格晚多少毫秒、一圈画多久。和 style.css 里那两条数字是一对。 */
+const OK_STEP_MS = 45;
+const OK_DRAW_MS = 260;
 
 /**
  * 输入框底下六小段，打一位填一段。
@@ -81,32 +86,73 @@ export function mountPwMeter(input: HTMLInputElement, lang: Lang): void {
  * 信自动填充全部失灵）。这儿一格都没新建 input，`autocomplete="one-time-code"` 那一位
  * 也原样留在它本来的框上。
  *
- * 格子只做三件事：显示已经打进去的那几位、给当前那一位描一圈、新填一位时鼓一下。
+ * 格子做的事：显示已经打进去的那几位、给当前那一位描一圈、新填一位时那个字从下面升上
+ * 来、对了绿描边逐格级联（accept）、错了抖一下 ＋ 红环（reject）。
  *
  * 粘贴走纯函数 splitPastedCode（去掉非数字、取前 n 位）：码是从聊天软件复制来的，带着
  * 空格、连字符、甚至「验证码：」三个字，人肉挑数字正是这个框存在的全部意义的反面。
+ *
+ * ── E19 那份 OTP 规格里有一条没照做 ──────────────────────────
+ *
+ * 玩家给的那个 React 组件用的是**四个各自独立的 input**。这儿一个都不新建，理由就是上
+ * 面那一段：粘贴只进第一格、退格跳不回去、输入法上屏丢字、短信自动填充失灵。而且那份
+ * 规格自己列的行为里有两条——「点击越过空档一律落到第一个空格」、「Backspace 空格退到
+ * 上一格」——恰恰是四个 input 才会有的毛病，在一个框上它们本来就不存在。
+ * `scripts/check-auth-form.mjs` 有一条门钉着这件事（「六格一个 input 都没新建」），照那
+ * 份规格改要先把那道门删掉。其余每一条行为都逐条对齐了。
  */
 export interface PinBox {
-  /** 填错了：格子行抖一下 ＋ 拒绝音 ＋ 清空 ＋ 回到第一格。 */
+  /** 填错了：格子行抖一下 ＋ 红环 ＋ 拒绝音 ＋ 清空 ＋ 回到第一格。 */
   reject(): void;
+  /**
+   * 对了：每格绿描边逐格级联画一遍（45ms 一格）。**等它画完才 resolve。**
+   *
+   * 「对了」也要有回执。屋号打满四位是**直接进屋**的（没有《加入》键），所以成功那一
+   * 下屏幕上只是忽然换了一页——他分不清是自己打对了，还是自己手滑按到了别的东西。
+   * 这四圈绿框是那句「对了」，在换页之前就说完。
+   *
+   * 所以它返回一个 Promise，调用方要 await：进屋那一下是 `container.innerHTML = …`，
+   * 整排格子连着被换掉——不等的话这几圈绿框在**同一拍**里就没了，一帧都画不出来，写了
+   * 等于没写。reduced-motion 下没有过程，立刻 resolve。
+   */
+  accept(): Promise<void>;
   destroy(): void;
 }
 
 export function mountPin(input: HTMLInputElement, onFull?: (code: string) => void): PinBox {
   const len = Number(input.getAttribute('maxlength')) || PW_LEN;
   const field = input.closest<HTMLElement>('.auth-field');
-  if (!field) return { reject: () => {}, destroy: () => {} };
+  if (!field) return { reject: () => {}, accept: () => Promise.resolve(), destroy: () => {} };
 
   field.classList.add('auth-field--pin');
   const row = document.createElement('div');
   row.className = 'pin-row';
   row.setAttribute('aria-hidden', 'true');
   const cells: HTMLElement[] = [];
+  /** 格子里的数字**自己一个元素**，不是格子的 textContent。 */
+  const glyphs: HTMLElement[] = [];
   for (let i = 0; i < len; i++) {
     const cell = document.createElement('i');
     cell.className = 'pin-cell';
+    // 描边那一圈是真的 SVG 描边（`pathLength` ＋ dashoffset），和结算页那枚 ✅ 章同
+    // 一套做法：一个 box-shadow 只能「整圈一起亮」，画不出「一笔画过去」。平时
+    // opacity: 0，只有 accept() 那一下才露面。
+    cell.insertAdjacentHTML(
+      'beforeend',
+      // 故意**不写 viewBox**：写了就得 preserveAspectRatio="none" 去拉满格子，而那一拉
+      // 会把 rx 的圆角拉成椭圆（小屋那四格是 70×168，圆角会竖着抽长一倍多）。没有
+      // viewBox 时 width="100%" 按 SVG 自己的盒子算，rx 就是实打实的 CSS 像素。
+      '<svg class="pin-ring" aria-hidden="true">' +
+        '<rect x="0" y="0" width="100%" height="100%" rx="10" pathLength="100" /></svg>',
+    );
+    // 数字进场是「从下面升上来」（E19 的规格），升的必须是**字**。挂在格子上的话升起
+    // 来的是整根蓝长条，四根条子一根根往上跳，那是另一个动画。
+    const glyph = document.createElement('b');
+    glyph.className = 'pin-glyph';
+    cell.appendChild(glyph);
     row.appendChild(cell);
     cells.push(cell);
+    glyphs.push(glyph);
   }
   // 格子排在真输入框**前面**，输入框靠 CSS 盖在它上面（见 style.css 的
   // .auth-field--pin input）。不用 z-index 打架：后面的元素本来就压在前面的上头。
@@ -117,7 +163,7 @@ export function mountPin(input: HTMLInputElement, onFull?: (code: string) => voi
   const paint = () => {
     const v = input.value;
     cells.forEach((cell, i) => {
-      cell.textContent = v[i] ?? '';
+      glyphs[i].textContent = v[i] ?? '';
       cell.classList.toggle('on', i < v.length);
       // 当前那一位：下一个要填的格子。满了就不描——没有「下一位」了。
       cell.classList.toggle('pin-cell--at', i === v.length && v.length < len);
@@ -148,15 +194,49 @@ export function mountPin(input: HTMLInputElement, onFull?: (code: string) => voi
   input.addEventListener('blur', () => row.classList.remove('pin-row--on'));
   paint();
 
+  let okTimer = 0;
+  /** 上一次 accept / reject 留下的类，下一次动手之前先擦掉（不然第二下不重播）。 */
+  const clearMarks = () => {
+    window.clearTimeout(okTimer);
+    row.classList.remove('pin-row--bad');
+    cells.forEach((cell) => {
+      cell.classList.remove('pin-cell--ok');
+      cell.style.removeProperty('--pin-ok-delay');
+    });
+  };
+
   return {
     reject() {
+      clearMarks();
+      // 抖那一下先发生，红环晚 150ms 压上来（延迟写在 keyframes 里）。两样同时上，
+      // 屏幕上是一团糊，分不出「它动了」和「它红了」是两句话。
+      void row.offsetWidth;
+      row.classList.add('pin-row--bad');
       shakeReject(row);
       input.value = '';
       was = 0;
       paint();
       input.focus();
     },
+    accept() {
+      clearMarks();
+      void row.offsetWidth;
+      cells.forEach((cell, i) => {
+        // 逐格 45ms：四圈一起亮读起来是「亮了一下」，一格一格画过去读起来是「一、
+        // 二、三、四，对」。
+        cell.style.setProperty('--pin-ok-delay', i * OK_STEP_MS + 'ms');
+        cell.classList.add('pin-cell--ok');
+      });
+      // 最后一格的延迟 ＋ 画一圈的时长，再留一点余量。这两个数和 style.css 里那两条
+      // （--pin-ok-delay 的步长、stroke-dashoffset 的 260ms）是一对，改一处要改两处。
+      const ms = reducedMotion() ? 0 : (len - 1) * OK_STEP_MS + OK_DRAW_MS + 40;
+      return new Promise<void>((done) => {
+        window.clearTimeout(okTimer);
+        okTimer = window.setTimeout(done, ms);
+      });
+    },
     destroy() {
+      window.clearTimeout(okTimer);
       input.removeEventListener('input', onInput);
       input.removeEventListener('paste', onPaste);
       row.remove();

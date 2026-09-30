@@ -518,3 +518,18 @@ jobs:
           nohup node scripts/dev-server.mjs 8862 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8862/ && break; sleep 0.25; done
           node scripts/check-room-slot.mjs http://localhost:8862/
+      # 屋号那四格（PR-19 / E19）。四位打满是**直接进屋**的，没有《加入》那颗键——所以
+      # 「我按下去了」这一下的回执只长在这四格上：还剩几位（空格的下横线）、下一下落在
+      # 哪儿（闪烁的光标条）、打错了（抖 ＋ 每格一圈红）、打对了（每格一圈绿逐格画）。
+      #
+      # 收它是因为它当场拦下了一个「写了等于没写」：进屋那一下是 innerHTML 整片换掉，
+      # 绿框如果不等它画完就换页，四圈和换页在**同一拍**里发生，一帧都画不出来——代码
+      # 里明明有、屏幕上永远看不见，而且不报任何错。这道门在换页之前截一帧来量。
+      #
+      # **一台自己的服务器**：它开一间真屋（兑一张 TESTMONTH），而一个 dev-server 进程
+      # 里一张码只兑得动一次。
+      - name: 屋号四格：横线、光标、打错、打对
+        run: |
+          nohup node scripts/dev-server.mjs 8863 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8863/ && break; sleep 0.25; done
+          node scripts/check-room-code.mjs http://localhost:8863/

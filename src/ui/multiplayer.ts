@@ -626,6 +626,13 @@ export function renderMultiplayerPage(
         pin.reject();
         return;
       }
+      // 对了：四格绿描边逐格级联。这一下必须在换页**之前**发出去——四位打满是直接进
+      // 屋的（没有《加入》键），成功那一刻屏幕上只是忽然换了一页，他分不清是自己打对
+      // 了还是手滑按到了别的东西。级联本身不拦路，下面照旧立刻进屋。
+      // 等那几圈画完再换页：进屋那一下整排格子连着被 innerHTML 换掉，不等的话绿框一
+      // 帧都画不出来。约 400ms，reduced-motion 下是 0。
+      await pin.accept();
+      if (dead) return;
       keepAssignedName(joined.value);
       // 一局正打到一半进来的（服务器现在放人进来了）：这一局不是我的，先记
       // 成「打过了」，免得轮询把我扔进一块别人打了一半的棋盘；下一局开始时
