@@ -137,6 +137,84 @@ for (const [w, h] of [[320, 568], [360, 640], [375, 667], [390, 844]]) {
   await ctx.close();
 }
 
+// ---------------------------------------------------------------------------
+// ③ 战绩图真的变大了（E28），而且**没把横屏那一档压坏**
+//
+// 三条 CSS 是一起的：弹窗放宽到 460、图突破那 24px 的左右内边距、高度上限改成自限
+// 公式。手机上这张图是被**宽度**卡住的，所以只放开高度没有用。
+//
+// 最后那一条是这一节真正的看门人：那三条必须写在 `.end-share` 那一段**后面**，不能
+// 挪到文件末尾——横屏那一块（`.overlay--end` 在 landscape+max-height:560 里）自己定了
+// `max-width: min(680px, 100%)`，靠源码顺序盖回来。挪到末尾的话 460 反过来压住 680，
+// 横屏那张图从 38% 掉到 23%，比不改还差。那种错不崩不报错，只是「另一个方向变难看
+// 了」，而没人会为了改竖屏去横过来看一眼。
+// ---------------------------------------------------------------------------
+for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
+  const { ctx, p } = await newPage(w, h);
+  await p.$$eval('.home-icon-btn', (els) => {
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    (it || els[0]).click();
+  });
+  await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+  await p.$eval('#startBtn', (e) => e.click());
+  await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 20000 });
+  await p.waitForTimeout(400);
+  await p.click('#stopBtn');
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await p.click('#pauseFinishBtn');
+  await p.waitForSelector('#endOverlay.show', { timeout: 8000 });
+  await p.waitForTimeout(900);
+  const r = await p.evaluate(() => {
+    const img = document.querySelector('#endShareImg');
+    const m = document.querySelector('#endOverlay .modal');
+    const rr = img?.getBoundingClientRect();
+    return {
+      有图: !!rr && rr.height > 0,
+      占屏: rr ? +((rr.height / innerHeight) * 100).toFixed(1) : 0,
+      图宽: rr ? Math.round(rr.width) : 0,
+      窗宽: Math.round(m.getBoundingClientRect().width),
+      出血: (() => {
+        const f = document.querySelector('#endOverlay .end-share');
+        const cs = f ? getComputedStyle(f) : null;
+        return cs ? [cs.marginLeft, cs.marginRight].join(' ') : '';
+      })(),
+    };
+  });
+  check(`${w}×${h}：战绩图画出来了（尺子）`, r.有图, JSON.stringify(r));
+  check(`${w}×${h}：战绩图占屏高 ≥ ${下限}%（E28 之前是 33–41%）`, r.占屏 >= 下限, `${r.占屏}%`);
+  // 出血那一条量的是**那条规则本身**（左右各 −24px），不是「图有没有撑到那么宽」。
+  // 手机上图是被宽度卡住的，撑得满；电脑上它被高度卡住（44svh），撑不满——拿「图比
+  // 窗宽」去判，电脑那一档会红，而那不是坏事。
+  check(`${w}×${h}：图突破了弹窗的左右内边距（各 −24px）`, r.出血 === '-24px -24px', r.出血);
+  await ctx.close();
+}
+{
+  // 横屏那一档：弹窗必须还是 680，不是被 460 压过去。
+  const { ctx, p } = await newPage(844, 390);
+  await p.$$eval('.home-icon-btn', (els) => {
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    (it || els[0]).click();
+  });
+  await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+  await p.$eval('#startBtn', (e) => e.click());
+  await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 20000 });
+  await p.waitForTimeout(400);
+  await p.click('#stopBtn');
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await p.click('#pauseFinishBtn');
+  await p.waitForSelector('#endOverlay.show', { timeout: 8000 });
+  await p.waitForTimeout(900);
+  const r = await p.evaluate(() => {
+    const img = document.querySelector('#endShareImg');
+    const m = document.querySelector('#endOverlay .modal');
+    const rr = img?.getBoundingClientRect();
+    return { 窗宽: Math.round(m.getBoundingClientRect().width), 占屏: rr ? +((rr.height / innerHeight) * 100).toFixed(1) : 0 };
+  });
+  check('844×390 横屏：弹窗还是 680 宽（那三条没被挪到文件末尾）', r.窗宽 >= 600, `${r.窗宽}px`);
+  check('844×390 横屏：图没有变小（E28 之前是 38%）', r.占屏 >= 35, `${r.占屏}%`);
+  await ctx.close();
+}
+
 await browser.close();
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);
 process.exit(fail ? 1 : 0);

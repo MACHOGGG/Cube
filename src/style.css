@@ -1099,6 +1099,41 @@ h1 {
    开关——不用 :has，老内核（Chrome 61，小红书那一版的底线）不认它，整条规则
    会被连着丢掉。 */
 .end-share .hint { margin: 0; }
+
+/* ---- 战绩图放大（E28）-------------------------------------------------
+ *
+ * 玩家：战绩图在手机上太小。三条一起，缺一条都不成立：
+ *
+ *   · 弹窗放宽到 460（原先跟着 `.modal` 的 340）；
+ *   · 图**突破弹窗那 24px 的左右内边距**——手机上这张图是被**宽度**卡住的，不是
+ *     高度，所以放开高度上限单独没用；
+ *   · 高度上限改成自限公式（见下）。
+ *
+ * ⚠️ **这一段必须写在这儿，不能挪到文件末尾。** 横屏那一块（`.overlay--end` 在
+ * `orientation: landscape and max-height: 560px` 里）自己定了 `max-width: min(680px,
+ * 100%)` 和 `.end-share { margin: 0 }`，靠的是**源码顺序**盖回来。挪到末尾的话，
+ * 下面这条 460 会反过来压住横屏那条 680——实测横屏那张图从 38% 掉到 23%，比不改
+ * 还差。
+ */
+.overlay--end .modal { max-width: 460px; }
+/* 写 margin-left/right，不写 margin-inline：小红书那一端的基线是 Chrome 61，逻辑属性
+   那一条会被整条丢掉，两端就不一样了。
+   −24 这个数是量出来的：全仓库只有两处给这个弹窗设横向内边距——全局那条 24px，和横屏
+   ≤560px 那条 22px；而横屏那一块自己把 `.end-share` 的 margin 清成 0，所以这道出血只
+   在 24px 那一档生效。 */
+.overlay--end .end-share { margin-left: -24px; margin-right: -24px; }
+/* 三行逐级退，和这份样式表里每一处 svh 一个规矩：Chrome 61 停在第一行的 34vh，认得
+   svh 的用第二行，认得 min/max/calc 的用第三行。
+   第三行是**自限**的：`max(34svh, …)` 保证永不低于今天的 34svh；`min(44svh, 100svh −
+   440px)` 保证永不把《主页 / 分享 / 再来》顶出屏幕——440 是弹窗里图以外那些东西加上
+   三颗键的高度，量出来的。
+   实测：390×844 从 40% → 49%，414×896 41% → 52%，1440×900 电脑 41% → 53%；
+   320×568 这种矮屏算出来还是 34svh 那一档，一分不少。 */
+.overlay--end .end-share img {
+  max-height: 34vh;
+  max-height: 34svh;
+  max-height: max(34svh, min(44svh, calc(100svh - 440px)));
+}
 .end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
 /* 明细里的两行主数（拼出分、综合分）比别的行重一点：它们是这一页真正要说的两
    个数，别的行是「它们怎么来的」。靠 :nth-last-child 认不行——行数随这一局有没

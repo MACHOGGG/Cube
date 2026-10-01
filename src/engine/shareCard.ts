@@ -443,7 +443,7 @@ export function drawQr(
     }
   }
   if (caption) {
-    ctx.font = '500 13px "Karla", sans-serif';
+    ctx.font = '500 16px "Karla", sans-serif';
     ctx.fillStyle = '#5b5650';
     ctx.textAlign = 'center';
     ctx.fillText(caption, x + size / 2, y + size + 18);
@@ -499,28 +499,28 @@ function measureHead(
   // 分数本身（位数多了会很宽）和它底下那行「综合得分」。
   ctx.font = '700 88px "JetBrains Mono", monospace';
   const scoreW = ctx.measureText(String(info.totalScore)).width;
-  ctx.font = karla(15);
+  ctx.font = karla(19);
   const labelW = ctx.measureText(s.compositeScoreLabel).width;
   const leftEdge = PAD + Math.max(scoreW, labelW);
   const roomForRows = CARD_W - PAD - leftEdge - 24;
 
   // 缩到几号得看最宽的那一行——不是最后一行。法语里最宽的常常是中间那条
   // 「有效得分率 (43%)」，照最后一行缩，最宽的那条照样伸出去。
-  ctx.font = mono(15);
+  ctx.font = mono(19);
   let widestLine = '';
   let widest = 0;
   for (const line of rows) {
     const w = ctx.measureText(line).width;
     if (w > widest) { widest = w; widestLine = line; }
   }
-  const rowPx = widest <= roomForRows ? 15 : fitPx(ctx, widestLine, roomForRows, mono, 15, 11);
+  const rowPx = widest <= roomForRows ? 19 : fitPx(ctx, widestLine, roomForRows, mono, 19, 14);
   // 行距跟着字号走，不然缩了字号行还是那么疏，白缩。
   const rowStep = Math.round(rowPx * 1.47);
 
   const rowsBottom = rows.length ? ROWS_TOP + (rows.length - 1) * rowStep : ROWS_TOP - rowStep;
   // 那一句摆在左右两栏里低的那个下面，两边都不压。
   const detailY = Math.max(LEFT_HEAD_BOTTOM, rowsBottom) + 36;
-  const detailPx = fitPx(ctx, info.detail, CARD_W - PAD * 2, karla, 13, 10);
+  const detailPx = fitPx(ctx, info.detail, CARD_W - PAD * 2, karla, 16, 12);
 
   return { rows, rowPx, rowStep, detailY, detailPx, bottom: detailY };
 }
@@ -585,7 +585,7 @@ export function renderShareCard(
   ctx.font = '700 40px "Fraunces", serif';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText('Slides', PAD, 76);
-  ctx.font = '600 22px "Karla", sans-serif';
+  ctx.font = '600 27px "Karla", sans-serif';
   ctx.fillStyle = '#5b5650';
   ctx.fillText(info.shapeName, PAD, 108);
   // 这一局是哪一种局，挂在玩法名右边：炸弹局一颗炸弹，多人竞赛一扇门。开局页
@@ -610,7 +610,7 @@ export function renderShareCard(
   ctx.font = '700 88px "JetBrains Mono", monospace';
   ctx.fillStyle = '#BE5762';
   ctx.fillText(String(info.totalScore), PAD, 210);
-  ctx.font = '500 15px "Karla", sans-serif';
+  ctx.font = '500 19px "Karla", sans-serif';
   ctx.fillStyle = '#5b5650';
   ctx.fillText(s.compositeScoreLabel, PAD + 2, 232);
 
@@ -650,7 +650,7 @@ export function renderShareCard(
     } else if (snap) {
       // 一枚不剩。空着不写字的话，这一格看着像是没画出来。
       ctx.save();
-      ctx.font = '700 22px Fraunces, Georgia, serif';
+      ctx.font = '700 27px Fraunces, Georgia, serif';
       ctx.fillStyle = '#8b8680';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -659,7 +659,7 @@ export function renderShareCard(
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     }
-    ctx.font = '600 15px "Karla", sans-serif';
+    ctx.font = '600 19px "Karla", sans-serif';
     ctx.fillStyle = '#5b5650';
     ctx.textAlign = 'center';
     ctx.fillText(label, x + panel / 2, boardY + panel + 30);
@@ -677,7 +677,7 @@ export function renderShareCard(
     drawStandings(ctx, standings, listX, boardY, CARD_W - PAD - listX, s.mpRoundResult, rowH);
   }
 
-  ctx.font = '500 13px "Karla", sans-serif';
+  ctx.font = '500 16px "Karla", sans-serif';
   ctx.fillStyle = '#a39e97';
   ctx.textAlign = 'center';
   ctx.fillText(s.shareFooterHint, CARD_W / 2, cardH - 30);
@@ -743,7 +743,7 @@ export function drawStandings(
   /** 名次旁边加王冠——整房的排名图要，单局那一列不要。 */
   crowns = false,
 ) {
-  ctx.font = '600 14px "Karla", sans-serif';
+  ctx.font = '600 17px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
   ctx.textAlign = 'left';
   ctx.fillText(title, x, y + 4);
@@ -759,12 +759,12 @@ export function drawStandings(
     // First place is the accent; everyone else is ordinary ink, so the
     // winner is findable without reading a single name.
     ctx.fillStyle = i === 0 ? '#BE5762' : '#8b8680';
-    ctx.font = '700 15px "JetBrains Mono", monospace';
+    ctx.font = '700 19px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(String(i + 1), x, mid);
 
     ctx.fillStyle = row.me ? '#BE5762' : '#141413';
-    ctx.font = `${row.me ? 700 : 500} 15px "Karla", sans-serif`;
+    ctx.font = `${row.me ? 700 : 500} 19px "Karla", sans-serif`;
     const crown = crowns ? crownFor(i, rows.length) : null;
     // 王冠占的位置要先从名字能用的宽度里扣掉，否则一个长名字会把冠推到
     // 分数上面去。
@@ -774,7 +774,7 @@ export function drawStandings(
     if (crown) drawCrown(ctx, x + 20 + ctx.measureText(name).width + 5, mid - 13, 15, crown);
 
     ctx.fillStyle = i === 0 ? '#BE5762' : '#5b5650';
-    ctx.font = '600 15px "JetBrains Mono", monospace';
+    ctx.font = '600 19px "JetBrains Mono", monospace';
     ctx.textAlign = 'right';
     ctx.fillText(String(row.score), x + width - 6, mid);
     ctx.textAlign = 'left';
