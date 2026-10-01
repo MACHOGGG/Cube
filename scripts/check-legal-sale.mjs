@@ -30,7 +30,7 @@ if (!src) {
   console.error('  npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs');
   process.exit(2);
 }
-const { LEGAL, LEGAL_UPDATED } = await import(src);
+const { LEGAL, LEGAL_ORDER, LEGAL_UPDATED } = await import(src);
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -145,6 +145,28 @@ for (const lang of LANGS) {
 
 // 停售这件事发生在 2026-10，文档的「最后更新」不许还停在那之前。
 check('最后更新日期跟上了（不早于 2026-10-01）', String(LEGAL_UPDATED) >= '2026-10-01', String(LEGAL_UPDATED));
+
+
+// ── 发出去的只剩隐私政策（E42） ───────────────────────────────────────────
+//
+// 2026-10-02：价格 / 条款 / 退款 / 联系四份不再发布——它们是为「在卖东西」写的，而那一轮改
+// 制把付费整个撤了。`LEGAL_ORDER` 决定个人主页底部摆哪几行，也决定 `build-legal.mjs` 出哪
+// 几张静态页。
+//
+// ⚠️ **`LEGAL` 那张表里的条目照旧都在**，只是不在这个数组里：`src/legal.store.ts` 还引着
+// 它们（`check-iap-copy.mjs` 钉着那一条），而且哪天重开订阅那几份文本还要用。所以这一节
+// 只量 `LEGAL_ORDER`，上面那几节照旧量 `LEGAL` 里的正文——两件事分开。
+{
+  check('LEGAL_ORDER 只剩隐私政策', JSON.stringify(LEGAL_ORDER) === '["privacy"]', JSON.stringify(LEGAL_ORDER));
+  for (const gone of ['pricing', 'terms', 'refund', 'contact']) {
+    check(`  ${gone} 不在发布清单里`, !LEGAL_ORDER.includes(gone));
+  }
+  // 尺子：那几份条目本身还在表里（不然上面那几节在量空气）。
+  for (const lang of ['zhHans', 'zhHant', 'en', 'fr']) {
+    const kept = ['pricing', 'terms', 'refund', 'contact'].filter((k) => LEGAL[lang]?.[k]?.items?.length);
+    check(`（尺子）${lang}：那四份条目照旧留在 LEGAL 表里`, kept.length === 4, kept.join(' '));
+  }
+}
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

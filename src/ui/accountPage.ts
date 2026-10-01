@@ -31,7 +31,8 @@ import {
 } from '../engine/palettePref';
 import { proOn, setPro } from '../engine/proMode';
 import { pickedTheme, setTheme } from '../engine/themePref';
-import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
+import { CONTACT_EMAIL, LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
+import { THANKS } from '../thanks';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
 import { isGenius, signedInEmail } from '../engine/subscription';
@@ -285,17 +286,29 @@ export function renderAccountPage(
         ${[privileges[1], privileges[5], privileges[7]].map(lockedRow).join('')}
       </section>
 
-      <!-- Tarifs, terms, refunds, privacy, contact — the five documents a
-           paid service has to publish. Plain rows in the same style as the
-           two above them, so they sit at the foot of the page without
-           changing anything about it. -->
-      <section class="legal-rows">
+      <!--
+        底部那几行法务。原先是五份（价格 / 条款 / 退款 / 隐私 / 联系）——一个收费服务必须
+        公布的那五份。2026-10 的改制把付费整个撤了（注册即免费解锁），前三份因此没有对
+        象，LEGAL_ORDER 只留隐私（E42）。
+
+        所以这儿现在是**两行**：《隐私政策》＋《联系与特别感谢》。位置、.legal-rows 的
+        形式、.profile-row 的样式全照旧，只把尺寸收一档（见 style.css 的
+        .legal-rows--slim）——两行占着五行的地方会显得空。
+
+        《联系与特别感谢》不是 LEGAL 表里的一份：它不是法务文档，是一句话加一份名单
+        （src/thanks.ts）。所以它单独摆一行，不走上面那个 map。
+      -->
+      <section class="legal-rows legal-rows--slim">
         ${LEGAL_ORDER.map(
           (k) => `<button class="profile-row" data-legal="${k}">
             <span class="profile-row-label">${LEGAL[lang][k].title}</span>
             <span class="profile-row-value">›</span>
           </button>`,
         ).join('')}
+        <button class="profile-row" id="contactThanksRow">
+          <span class="profile-row-label">${s.contactThanksTitle}</span>
+          <span class="profile-row-value">›</span>
+        </button>
       </section>
       <div class="page-back-row"><button class="icon-btn page-back" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button></div>
     </div>
@@ -337,6 +350,54 @@ export function renderAccountPage(
     const close = () => overlay.remove();
     pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#rulesClose')!.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  }
+
+  /**
+   * 《联系与特别感谢》——和 `openLegal` 同一种弹窗，两段。
+   *
+   * ```
+   * 联系
+   *   欢迎遇到任何问题附上截图联络我…（玩家自己写的那一段）
+   *   support@play-slides.com          ← 可点 mailto，字号比正文大一档
+   *
+   * 特别感谢
+   *   Zoey Kang · Sichuang Fan · 林衍竹 · Apple Chen · Dray
+   *   等诸多测试并提出珍贵建议的朋友
+   * ```
+   *
+   * 那句话排在**邮箱上方**（玩家定的顺序）：先说「欢迎来找我」，再给地址——反过来是一张
+   * 名片，而这一段要说的是「有人在看」。
+   *
+   * 邮箱读的是 `src/legal.ts` 的 `CONTACT_EMAIL` 一个常量，全站引它。名单读
+   * `src/thanks.ts`——加人只改那一个数组。
+   */
+  function openContactThanks() {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay show';
+    overlay.innerHTML = `
+      <div class="modal rules-modal">
+        <h2>${s.contactThanksTitle}</h2>
+        <div class="rules-body">
+          <div class="rule-item">
+            <b>${s.contactTitle}</b>
+            <span>${s.contactInvite}</span>
+          </div>
+          <p class="contact-mail"><a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
+          <div class="rule-item">
+            <b>${s.thanksTitle}</b>
+            <span>${THANKS.join(' · ')}<br />${s.thanksTail}</span>
+          </div>
+        </div>
+        <div class="btn-row"><button class="primary" id="thanksClose">${s.closeBtn}</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    pushLayer(close, overlay);
+    overlay.querySelector<HTMLButtonElement>('#thanksClose')!.addEventListener('click', close);
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });
@@ -690,6 +751,9 @@ export function renderAccountPage(
   on('worldRankRow', handlers.onWorldRank);
   on('moreModesRow', handlers.onMoreModes);
   on('becomeGeniusBtn', () => openGeniusWindow(lang, refresh));
+  // 《联系与特别感谢》那一行。它不在 LEGAL 表里（不是法务文档），所以不走下面那个
+  // `[data-legal]` 循环。
+  container.querySelector<HTMLButtonElement>('#contactThanksRow')?.addEventListener('click', openContactThanks);
   for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {
     btn.addEventListener('click', () => openLegal(btn.dataset.legal as LegalKey));
   }

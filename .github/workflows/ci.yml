@@ -397,6 +397,15 @@ jobs:
         run: |
           npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
           node scripts/check-legal-sale.mjs /tmp/legal.mjs
+
+      # 隐私政策说的，是这套代码此刻真做的那件事（E52）。2026-10 的改制换掉了身份本身
+      # （没有密码、没有订阅、多了一种连邮箱都没有的账号），所以那份文档是**逐条重写**的
+      # ——只加一节的话新旧两段会在同一页上互相打脸，而「网站陈述与实际不符」比缺一份文档
+      # 严重。这一道钉「撤掉的说法不在、新的事实写到了、四种语言一个都没漏」。
+      - name: 隐私政策和代码对得上
+        run: |
+          npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
+          node scripts/check-privacy-truth.mjs /tmp/legal.mjs
       # 残局穷举的**接线层**：六副棋盘把自己的线和格子交给搜索件，编码错一点它就在算另
       # 一副棋盘，而且会言之凿凿地答 'dead'——那一侧会把一局还能打的棋盘 1.4 秒直接结
       # 算。三件真会接错的事各有一条：空白和活炸弹要进盘面（它们跟着线一起滑，而
@@ -718,6 +727,19 @@ jobs:
           done
           curl -sf http://localhost:8834/ > /dev/null
           node scripts/check-signin-ui.mjs http://localhost:8834/
+
+      # 《联系与特别感谢》那扇窗（E42）。个人主页底部从五行法务收成两行，这一扇是第二
+      # 行。要开浏览器：点得开、玩家自己写的那一段逐字在、邮箱是 mailto 而且和
+      # CONTACT_EMAIL 那个常量一致、名字数对得上 src/thanks.ts。
+      - name: 联系与特别感谢那扇窗
+        run: |
+          node scripts/dev-server.mjs 8873 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8873/ > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8873/ > /dev/null
+          node scripts/check-contact-thanks.mjs http://localhost:8873/
       - name: 电脑端游戏页：五块牌的位置、大小、色
         run: |
           nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &

@@ -38,9 +38,17 @@ const SUPPORT = 'support@play-slides.com';
  * 后门，而这道门要拦的就正是「包里混进了另一个真地址」。
  */
 const PLACEHOLDERS = new Set(['you@example.com', 'vous@exemple.com']);
-const LEGAL = ['/pricing', '/terms', '/refund', '/privacy', '/contact'];
-/** 付款那一屏至少要摆出的三份。 */
-const BEFORE_PAYING = ['/pricing', '/refund', '/terms'];
+/**
+ * 站上还在的那几张法务静态页。
+ *
+ * **2026-10-02 只剩一张**（E42）。价格 / 条款 / 退款 / 联系四份是为「在卖东西」写的，而
+ * 那一轮改制把付费整个撤了（注册即免费解锁）。`LEGAL_ORDER` 只留隐私，而
+ * `scripts/build-legal.mjs` 按它出页，所以另外四个网址现在是 404——站外登记过它们的地方
+ * （比如 Creem 商户后台）要一并更新。
+ *
+ * 《联系与特别感谢》不在这儿：它不是法务文档，不出静态页，只在个人主页上是一扇窗。
+ */
+const LEGAL = ['/privacy'];
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -144,14 +152,21 @@ const openProfile = async (page) => {
   const rows = await page.$$eval('[data-legal]', (bs) =>
     bs.map((b) => ({ key: b.dataset.legal, w: b.getBoundingClientRect().width })),
   );
-  check('个人主页最底下摆着五份文档', rows.length === 5, rows.map((r) => r.key).join(' '));
-  check('五个都看得见（不是摆在那儿高度为 0）', rows.length === 5 && rows.every((r) => r.w > 0),
+  // 2026-10-02：五行收成两行（E42）。`[data-legal]` 只认法务文档那一行（隐私），
+  // 《联系与特别感谢》是另一行、另一个 id——下面单独量。
+  check('个人主页最底下摆着那一份法务文档', rows.length === 1, rows.map((r) => r.key).join(' '));
+  check('它看得见（不是摆在那儿高度为 0）', rows.length === 1 && rows.every((r) => r.w > 0),
     rows.map((r) => `${r.key}:${r.w.toFixed(0)}px`).join(' '));
+  const thanks = await page.$eval('#contactThanksRow', (b) => ({
+    text: b.textContent.replace(/\s+/g, ' ').trim(), w: b.getBoundingClientRect().width,
+  })).catch(() => null);
+  check('旁边那一行是《联系与特别感谢》，而且看得见', Boolean(thanks && thanks.w > 0),
+    thanks ? `${thanks.text} / ${thanks.w.toFixed(0)}px` : '（这一行不在）');
   // 点开第一行，弹窗真的出得来——只量「按钮在」的话，绑事件那一步断掉也是绿的。
   await page.click('[data-legal]');
   const opened = await page.waitForSelector('.legal-intro', { timeout: 8000 }).then(() => true).catch(() => false);
   check('点一行，文档弹窗真的开出来', opened);
-  // 五个真网址（收单方后台填的就是它们）。
+  // 还在的那个真网址。
   for (const href of LEGAL) check(`  ${href} 点得开`, Boolean(await resolves(href)));
   await ctx.close();
 }
@@ -194,21 +209,29 @@ const openProfile = async (page) => {
     hints.join(' | ') || '（一句都没有）',
   );
 
-  // 尺子：这一屏真的开出来了、而且真的说了「停了」。少了这一条，上面三句「什么都没
-  // 有」在**窗根本没打开**的时候也全是真的——那是这个仓库最常见的那种假绿。
+  /*
+   * 尺子：这一屏真的开出来了，而且开头那句话**说对了现在这件事**。少了它，上面三句
+   * 「什么都没有」在窗根本没打开的时候也全是真的——那是这个仓库最常见的那种假绿。
+   *
+   * 这一条的内容 2026-10-02 换过一次：原先认的是「订阅已经停止 / closed / fermé」，那是
+   * 停售那一轮的口径；改制定下来之后那一屏说的是「注册后免费立即解锁全部内容」（E40），
+   * 而「停止」这个词反而不该再出现——站上不是「暂时不卖」，是不卖了。
+   */
   const tag = await page.$eval('.genius-modal .tag-line', (e) => e.textContent.trim()).catch(() => '');
-  check('（尺子）这一屏开着，而且开头那句说的是「订阅已经停止」',
-    /停止|closed|fermé/i.test(tag), tag || '（一个字都没有）');
+  check('（尺子）这一屏开着，而且开头那句说的是「注册就免费解锁」',
+    /注册后免费|sign up|Créez un compte|註冊後免費/i.test(tag), tag || '（一个字都没有）');
+  check('不许再写「订阅停止 / closed」那一类旧口径',
+    !/停止|closed|fermé/i.test(tag), tag);
 
-  const links = await page.$$eval('.genius-legal a', (as) =>
-    as.map((a) => ({ href: a.getAttribute('href'), target: a.getAttribute('target'), w: a.getBoundingClientRect().width })),
-  );
-  check(
-    '价格 / 退款 / 条款三份照旧摆在这一屏上（停售不等于撤掉规矩）',
-    BEFORE_PAYING.every((p) => links.some((l) => l.href === p)),
-    links.map((l) => l.href).join(' '),
-  );
-  check('三个都看得见、都点得开', links.length > 0 && links.every((l) => l.w > 0));
+  /*
+   * **那三条法务链接撤了**（E42）。
+   *
+   * 这一条原先钉的是「价格 / 退款 / 条款三份照旧摆在这一屏上（停售不等于撤掉规矩）」。改
+   * 制定下来之后那三份文档本身从 `LEGAL_ORDER` 里撤了，链过去就是 404——而一条通向 404
+   * 的法务链接，比不链更糟。所以现在反过来钉：**这一屏上一条法务链接都不许有。**
+   */
+  const links = await page.$$eval('.genius-legal a', (as) => as.map((a) => a.getAttribute('href')));
+  check('这一屏上一条法务链接都没有（那三份撤了，链过去是 404）', links.length === 0, links.join(' ') || '（没有）');
   for (const l of links) check(`  ${l.href} 点得开`, Boolean(await resolves(l.href)));
   check('新标签打开，这扇付款窗不会被顶掉', links.every((l) => l.target === '_blank'));
 

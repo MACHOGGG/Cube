@@ -256,6 +256,25 @@ export interface I18nStrings {
   pairFirstLabel: string;
   /** 《账户》那一屏身份那一行的标签。`pairFirstLabel` 是表单上的长说明，摆进一行里太长。 */
   pairFirstShort: string;
+
+  /**
+   * 《联系与特别感谢》那扇窗（E42/3.2）。
+   *
+   * 个人主页底部从五行法务收成两行：《隐私政策》和这一扇。那三份（价格 / 条款 / 退款）
+   * 是为「在卖东西」写的，而 2026-10 的改制把付费整个撤了。
+   *
+   * `contactInvite` 那一段是玩家自己写的原话，四语都照它的三个意思来：出了问题来找我 /
+   * 没出问题也欢迎来 / 我本人看本人回。英法把原长句拆成三短句——中文靠逗号串得住，英法
+   * 一逗到底读不下来。
+   *
+   * 名单本身不在这儿，在 `src/thanks.ts`（名字不翻译，四语共用一份）。
+   */
+  contactThanksTitle: string;
+  /** 那扇窗里两段各自的小标题。 */
+  contactTitle: string;
+  thanksTitle: string;
+  contactInvite: string;
+  thanksTail: string;
   pairSecondLabel: string;
   pairWarning: string;
   pairSaveBtn: string;
@@ -756,6 +775,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: 'Sign up / in without an address',
     pairFirstLabel: 'First string — 8+ letters and digits, case matters',
     pairFirstShort: 'First string',
+    contactThanksTitle: 'Contact & thanks',
+    contactTitle: 'Contact',
+    thanksTitle: 'Special thanks',
+    contactInvite: 'If something goes wrong, write to me and attach a screenshot. And if nothing has gone wrong, write to me anyway — I read and answer every message myself. Thank you for your support.',
+    thanksTail: 'and the many friends who played, tested, and told me what to fix',
     pairSecondLabel: 'Second string — 8+ letters and digits, case matters',
     pairWarning: 'The first string is your key. Tell no one: whoever knows it can reset the second one.',
     pairSaveBtn: 'Save',
@@ -1074,6 +1098,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: 'Compte sans adresse e-mail',
     pairFirstLabel: 'Première chaîne — 8 caractères minimum, lettres et chiffres, casse respectée',
     pairFirstShort: 'Première chaîne',
+    contactThanksTitle: 'Contact et remerciements',
+    contactTitle: 'Contact',
+    thanksTitle: 'Remerciements',
+    contactInvite: 'Si quelque chose ne va pas, écrivez-moi en joignant une capture d’écran. Et si tout va bien, écrivez-moi quand même — je lis et réponds à chaque message personnellement. Merci de votre soutien.',
+    thanksTail: 'et les nombreux amis qui ont joué, testé et dit ce qu’il fallait corriger',
     pairSecondLabel: 'Deuxième chaîne — 8 caractères minimum, lettres et chiffres, casse respectée',
     pairWarning: 'La première chaîne est votre clé. Ne la donnez à personne : qui la connaît peut redéfinir la seconde.',
     pairSaveBtn: 'Enregistrer',
@@ -1392,6 +1421,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: '免電子郵件註冊 / 登入',
     pairFirstLabel: '第一串：8 位以上，字母 + 數字，區分大小寫',
     pairFirstShort: '第一串',
+    contactThanksTitle: '聯絡與特別感謝',
+    contactTitle: '聯絡',
+    thanksTitle: '特別感謝',
+    contactInvite: '歡迎遇到任何問題附上截圖聯絡我，也歡迎您在沒有遇到問題的情況下聯絡我，我都會本人查看回覆，感謝您的支持',
+    thanksTail: '等諸多測試並提出珍貴建議的朋友',
     pairSecondLabel: '第二串：8 位以上，字母 + 數字，區分大小寫',
     pairWarning: '第一串是你的鑰匙，別告訴任何人——知道它的人可以重設第二串。',
     pairSaveBtn: '儲存',
@@ -1710,6 +1744,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: '免邮箱注册 / 登录',
     pairFirstLabel: '第一串：8 位以上，字母 + 数字，区分大小写',
     pairFirstShort: '第一串',
+    contactThanksTitle: '联系与特别感谢',
+    contactTitle: '联系',
+    thanksTitle: '特别感谢',
+    contactInvite: '欢迎遇到任何问题附上截图联络我，也欢迎您在没有遇到问题的情况下联络我，我都会本人查看回复，感谢您的支持',
+    thanksTail: '等诸多测试并提出珍贵建议的朋友',
     pairSecondLabel: '第二串：8 位以上，字母 + 数字，区分大小写',
     pairWarning: '第一串是你的钥匙，别告诉任何人——知道它的人可以重设第二串。',
     pairSaveBtn: '保存',

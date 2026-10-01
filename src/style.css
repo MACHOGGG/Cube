@@ -3441,6 +3441,22 @@ body:has(.slot-page) .home-nav { display: none; }
 /* The five published documents sit at the foot of 个人主页 as ordinary rows,
    so they add a block without changing anything above them. */
 .legal-rows { display: flex; flex-direction: column; width: 100%; }
+/* 底部那几行法务收成两行之后，尺寸收一档（E42）。
+   原先五行，现在《隐私政策》＋《联系与特别感谢》两行——照五行的尺寸摆两行，页脚会空出
+   一大块。字号、行高、上下留白各收一档，位置和形式一个字没动。 */
+.legal-rows--slim > .profile-row {
+  padding-top: 9px; padding-bottom: 9px;
+  font-size: 0.88rem;
+}
+.legal-rows--slim > .profile-row .profile-row-label { line-height: 1.35; }
+
+/* 《联系与特别感谢》里那一行邮箱：单独一行、可点、比正文大一档（玩家定的）。 */
+.contact-mail {
+  margin: 10px 0 18px; text-align: left;
+  font-size: 1.05rem; font-weight: 600; letter-spacing: 0.01em;
+}
+.contact-mail a { color: var(--accent); text-decoration: none; }
+.contact-mail a:hover, .contact-mail a:focus-visible { text-decoration: underline; }
 
 /* ---------- 电脑端的个人主页：一条加宽的中栏，栏内条目两两成对 ----------
 

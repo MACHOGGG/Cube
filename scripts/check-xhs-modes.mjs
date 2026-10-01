@@ -294,6 +294,53 @@ for (const [file, src] of [
   );
 }
 
+// ── ⑧ 介绍页那句「开放几个玩法」要和 XhsMode 对得上 ───────────────────────
+//
+// 这一条是数出来的，不是抄的。它从前是漏的：`XhsMode` 补上《步步为营》之后，介绍页上那
+// 句还写着「开放五个单机玩法」，而屏幕上不报任何错——只有玩家自己数一遍才知道。笔记正文
+// （shareActions.ts 的 noteContent）会把同一类说法发到小红书上，传得比站内说明远得多，
+// 所以这几处都值得钉住。
+//
+// 中文数字写法照代码里的来：现在是「六个」。哪天模式数再变，这一条会红在「数不对」上，
+// 而改法是改那句话，不是改这一条。
+{
+  const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const want = CN[MODES.length] ?? String(MODES.length);
+  const profileSrc = read('xhs/src/profile.ts');
+  const shareSrc = read('xhs/src/shareActions.ts');
+  const readme = read('xhs/README.md');
+
+  say(MODES.length >= 5 && MODES.length <= 10, `（尺子）数得出 XhsMode 有几个：${MODES.length}`);
+  // 介绍页那一句：只认「开放<数字>个」这个形状，别被别处的数字骗了。
+  const onProfile = /开放([零一二三四五六七八九十\d]+)个单机玩法/.exec(profileSrc);
+  say(Boolean(onProfile), '（尺子）介绍页上找得到那句「开放 N 个单机玩法」');
+  if (onProfile) {
+    say(onProfile[1] === want, `介绍页写的是「${onProfile[1]}个」，XhsMode 是 ${MODES.length} 个（要「${want}个」）`);
+  }
+  // 那三处「特供」的旧口径：2026-10 之后天才不是买的了（E45/E46），这几处不许再写「特
+  // 供」——那是在说一件已经不成立的事，而笔记正文那一处会发到站外。
+  /*
+   * ⚠️ **先把注释剥掉再查。** 这个仓库的注释里经常原样引着那句旧口径（「『Slides 天才特
+   * 供』这个说法 2026-10 改了口径……」），照字面查会被自己的注释红一下——第一版就是这样。
+   * 剥的是三种：HTML 注释（模板字符串里那种）、`/* *\/` 和整行 `//`。
+   */
+  const stripComments = (src) =>
+    src
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+  for (const [name, src] of [['介绍页', profileSrc], ['笔记正文', shareSrc], ['README', readme]]) {
+    const code = stripComments(src);
+    say(!/天才特供/.test(code), `${name} 里没有「天才特供」这个旧口径`);
+    // 尺子：剥注释没把整份剥空（不然上面那条永远绿）。
+    say(code.trim().length > src.length / 4, `（尺子）${name} 剥掉注释之后还剩大半`);
+  }
+  // README 里那几处玩法数。
+  say(!/五个玩法|五组开关/.test(readme), 'README 里没有「五个玩法 / 五组开关」这种旧数字');
+}
+
 // ── 收尾 ───────────────────────────────────────────────────────────────────
 console.log('');
 if (fails) {

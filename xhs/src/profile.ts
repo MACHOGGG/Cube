@@ -201,9 +201,17 @@ export function renderProfilePage(
     <button class="records-panel records-panel--records" id="xhsRuns" aria-label="${esc(s.navRecords)}"></button>
 
     <div class="records-panel xhs-about">
-      <p class="xhs-about-line">这里是 Slides 的小红书版，开放五个单机玩法。</p>
+      <!-- 玩法数**跟着 XhsMode 走**（menu.ts 那个联合类型，现在六个：方块 / 圆球 /
+           炸弹 / 老虎机 / 无限反转 / 步步为营）。这儿原先写「五个」——补上《步步为营》
+           之后就错了一轮，而这种错屏幕上不报，只有玩家数一遍才知道。
+           门：scripts/check-xhs-modes.mjs 那一条「介绍页那句玩法数要和 XhsMode 对得
+           上」。 -->
+      <p class="xhs-about-line">这里是 Slides 的小红书版，开放六个单机玩法。</p>
       <p class="xhs-about-line">Slides 是一款原创的滑动补偿拼图游戏。滑动、得分、消除，一步步解开它。它上手极其简单，可是想要取得高分却不容易，考验玩家的高智商，需要在最少的行动、最短的时间里得到最多的分数。</p>
-      <p class="xhs-about-line">完整版有多人小屋在线对战、Slides 天才特供玩法、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！</p>
+      <!-- 「Slides 天才特供」这个说法 2026-10 改了口径（E45/E46）：那一档还叫「Slides
+           天才」，但它不再是买的——注册就免费解锁。这一行于是从「特供」改成「注册就
+           解锁」，不然它在说一件已经不成立的事。 -->
+      <p class="xhs-about-line">完整版有多人小屋在线对战、注册即免费解锁的 Slides 天才玩法、全球排行榜、计时挑战、以及更多玩法和布局供你挑战！</p>
       <p class="xhs-about-line">后续可能推出 APP 版，敬请期待。</p>
       <!-- 摆在最末一行，玩家 2026-09 点名要的：「在信息栏底部的内容中加入《完整
            版搜寻Play-slides获得》」。
