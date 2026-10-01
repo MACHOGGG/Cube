@@ -354,7 +354,7 @@ export function buildRuleArt(opts: { shape?: 'square' | 'circle' } = {}): string
 /**
  * 炸弹 / 无限反转 那两句首玩提示的配图（见 ui/modeTips.ts）。
  *
- * 和上面六条那一套是同一批零件（同一块小棋盘、同一种棋子、同一个周期），所以
+ * 和上面五条那一套是同一批零件（同一块小棋盘、同一种棋子、同一个周期），所以
  * 玩家在教学条里看熟的画法，换到这三个玩法的提示里还是那一套。
  */
 /** 炸弹色。和棋盘上那一枚是同一个红（circle.ts / square.ts 的 BOMB_PALETTES）。 */

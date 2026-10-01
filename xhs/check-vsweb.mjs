@@ -738,9 +738,9 @@ const SCREENS = [
   },
 
   {
-    name: '六条规则',
+    name: '五条规则',
     async web(p) {
-      // 网页版这六条在教学挑选页下半截。走个人主页 → 教学。
+      // 网页版这五条在教学挑选页下半截。走个人主页 → 教学。
       await p.evaluate(() => {
         const b = document.querySelector('.home-nav-btn');
         if (b) b.click();
@@ -755,7 +755,7 @@ const SCREENS = [
       await p.click('.xhs-how');
       await p.waitForTimeout(900);
     },
-    // 只核前六条。这一版的《怎么玩》底下还多两条——炸弹和无限反转各自加的
+    // 只核前五条。这一版的《怎么玩》底下还多两条——炸弹和无限反转各自加的
     // 那一层，隔着一道圆角黑线单列（玩家定的：那两句要能随时回头看）。网页
     // 版没有这一节，它们不该被当成「和网页版不一致」。
     snap: {

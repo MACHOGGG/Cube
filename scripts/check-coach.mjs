@@ -37,8 +37,7 @@
  * classList 标进度、textContent 填字。所以这里自己搭一份够用的——比起开一个
  * Chromium 跑一局真游戏，这一版几十毫秒、跑得进 CI，而且能把时钟拨快。
  */
-import { readFileSync } from 'node:fs';
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -290,6 +289,39 @@ check('词表里没有哪一步在等的词，都在这儿列着（不是错，�
     const n = tutorialRules(lang, 'circle').length;
     check(`${lang} 也是五条`, n === 5, `${n} 条`);
   }
+}
+
+// ===========================================================================
+// 源码里不许再写「六条」（E23 之前那一版的条数）
+// ===========================================================================
+//
+// 教学 2026-09 从六条改成五条（《侵蚀阶梯》v1.2），可**注释跟了半年都没跟上**：
+// 2026-10 清的时候，`src/` 和 `xhs/src/` 底下还有二十来处写着「六条规则 / 六条规矩」，
+// 分散在十二个文件里。
+//
+// 这不是吹毛求疵。这个仓库的注释是**当真的**——「棋盘底下那块教学条把六条规矩一条一条
+// 讲完」是下一个人判断「这块条子该走几步」的依据，而它是错的。一条说错了的注释比没有
+// 注释贵：没有注释的人会去读代码，读到错注释的人直接照着做。
+//
+// 只拦这两个固定说法，不拦所有「六条」：讲历史的那两处（ruleArt 的「把规则从六条改成
+// 五条」、i18n 的「从前那六条讲的是上一套规则」）是对的，不该被拦。
+{
+  const walk = (dir) => {
+    const out = [];
+    for (const e of readdirSync(join(root, dir), { withFileTypes: true })) {
+      if (e.isDirectory()) out.push(...walk(join(dir, e.name)));
+      else if (e.name.endsWith('.ts')) out.push(join(dir, e.name));
+    }
+    return out;
+  };
+  const files = [...walk('src'), ...walk('xhs/src')];
+  check('（尺子）扫到了源码', files.length > 40, `${files.length} 个 .ts`);
+  const stale = files.filter((f) => /六条规则|六条规矩/.test(readFileSync(join(root, f), 'utf8')));
+  check('源码里没有哪处还写着「六条规则 / 六条规矩」（现在是五条）',
+    stale.length === 0, stale.join(' '));
+  // 反面尺子：那两处讲历史的「六条」还在（这一条不是把「六条」两个字赶尽杀绝）。
+  const hist = files.filter((f) => /从六条改成五条|从前那六条/.test(readFileSync(join(root, f), 'utf8')));
+  check('（尺子）讲历史的那两处「六条」没被误伤', hist.length >= 2, hist.join(' '));
 }
 
 // ===========================================================================

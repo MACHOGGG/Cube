@@ -92,7 +92,7 @@ export interface ShellMeta {
   slotTarget?: TargetPattern;
   /**
    * 头一局那块教学条（见 ui/coachBar.ts）。只有玩家头一回打开、被直接按进
-   * 的那一局基础小球才给——棋盘底下多一块小圆角矩形，把六条规则一条一条摆
+   * 的那一局基础小球才给——棋盘底下多一块小圆角矩形，把五条规则一条一条摆
    * 出来。别的局一律没有：这块条子是给还没上手的人的。
    */
   coach?: boolean;
@@ -420,7 +420,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     <div class="overlay opaque" id="pauseOverlay">
       <div class="modal">
         <h2>${s.pausedTitle}</h2>
-        <!-- 局中也进得去的那一屏六条规则：和个人主页 / 小红书版《怎么玩》是
+        <!-- 局中也进得去的那一屏五条规则：和个人主页 / 小红书版《怎么玩》是
              同一份（ui/rulesModal.ts）。规则记不清的人不该为了看一眼而丢掉
              手上这一局。 -->
         <div class="btn-row">
@@ -624,7 +624,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     showPro();
   });
 
-  // 暂停面板里的《怎么玩》：开的是全站同一屏六条规则（ui/rulesModal.ts）。有
+  // 暂停面板里的《怎么玩》：开的是全站同一屏五条规则（ui/rulesModal.ts）。有
   // 没有三角那一列由整包说了算（网页版有，小红书版在自己的 main.ts 里关
   // 掉），这儿不写死。关掉之后什么也不做——这一层还压在暂停面板上，玩家回到
   // 的正是他刚才那一屏。

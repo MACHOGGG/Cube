@@ -162,7 +162,7 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
 
   // 分镜动画唯一的入口：五条规则上头那两颗键（方块 / 小球）。
   const stories = await p.$$eval('.howto-story', (e) => e.map((b) => b.getAttribute('aria-label') || ''));
-  say(stories.length === 2, '六条上头摆着两颗分镜键', stories.join(' / '));
+  say(stories.length === 2, '五条上头摆着两颗分镜键', stories.join(' / '));
   await p.click('.howto-story[data-fam="square"]');
   await p.waitForTimeout(1600);
   say(await has(p, '.story-tut'), '点《方块》→ 分镜动画放出来了');

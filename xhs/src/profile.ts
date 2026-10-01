@@ -36,7 +36,7 @@ export interface ProfileHandlers {
   onBack: () => void;
   /** 点开某一局，去看那一张战绩图（runSheet.ts）。 */
   onOpenRun: (run: StoredRun) => void;
-  /** 打开那六条规则（tutorial.ts）。第一次进游戏会自动弹一次，这儿是随时重看的入口。 */
+  /** 打开那五条规则（tutorial.ts）。第一次进游戏会自动弹一次，这儿是随时重看的入口。 */
   onHowToPlay: () => void;
 }
 

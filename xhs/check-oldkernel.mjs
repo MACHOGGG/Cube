@@ -135,7 +135,7 @@ for (const key of list) {
     hasTouch: true,
   });
   await ctx.addInitScript(STRIP);
-  // 两台体检台都先把「教学看过了」这一格填上：第一次进游戏会自动弹那六条
+  // 两台体检台都先把「教学看过了」这一格填上：第一次进游戏会自动弹那五条
   // 规则（xhs/src/tutorial.ts），弹出来就挡住棋盘，后面的拖动和量尺寸全做
   // 不了。这一屏本身单独测（check-oldcss 的「怎么玩」那一屏，和
   // 教学那支专门的脚本），不靠这里顺带。

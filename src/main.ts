@@ -611,7 +611,7 @@ function tipFor(kind: PlayKey, make: () => { text: string; art: string }): Shape
  * 玩家 2026-09 定的：「玩家玩的第一个，我们尽量教学」——所以看的是「这是不是
  * 他打的第一个基础玩法」，不是「这是哪一张卡」：
  *
- *   · 三张里他一张都没打过 → 'first'。六条里的前五条从第 1 条讲起，跟着他的
+ *   · 三张里他一张都没打过 → 'first'。五条从第 1 条讲起，跟着他的
  *     手走四步讲完。方块、小球、三角哪一张都走这一路——条子上的字和图跟着这
  *     一局的图形走，讲方块就画方块。
  *   · 已经打过别的基础玩法 → 'second'。前几条他上一局跟着走过一遍了，这一局
@@ -1275,7 +1275,7 @@ function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void, on
 function showTutorialPicker() {
   teardown();
   trackScreen('tutorial_picker');
-  // 三个图形、六条规则、一颗《返回》，一屏装下——见 ui/tutorialPicker.ts。
+  // 三个图形、五条规则、一颗《返回》，一屏装下——见 ui/tutorialPicker.ts。
   //
   // 《返回》回个人主页，不是主菜单：这一页只有一个入口，就是个人主页里的
   // 《如何滑？》那一行（accountPage 的 howToRow）。从那儿进来、退出去却落在

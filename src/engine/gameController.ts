@@ -152,7 +152,7 @@ export interface GameControllerHooks {
   flip?: boolean;
   /**
    * 头一局那块教学条（见 ui/coachBar.ts）。开着的话，棋盘底下那块壳子里会
-   * 一条一条摆出六条规则，玩家做到了哪一条就换到下一条。只有玩家头一回打
+   * 一条一条摆出五条规则，玩家做到了哪一条就换到下一条。只有玩家头一回打
    * 开被直接按进的那一局基础小球才开。
    */
   coach?: boolean;
@@ -166,8 +166,8 @@ export interface GameControllerHooks {
    * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示。
    *
    * 给了就用同一块条子摆这一句（没有六段进度、不跟着玩家走），15 秒后自己
-   * 走掉；给了它就不摆六条规则——这三个玩法是在基础规则上加一层，能玩到这
-   * 儿的人六条早听过了，要说的只有加的那一层。
+   * 走掉；给了它就不摆五条规则——这三个玩法是在基础规则上加一层，能玩到这
+   * 儿的人五条早听过了，要说的只有加的那一层。
    */
   coachTip?: { text: string; art: string };
 
@@ -330,7 +330,7 @@ export interface GameController {
  * persistence. Shapes plug in board setup/render/end-condition/cascade-config
  * and call resolveMove() once they've applied a confirmed drag to their grid.
  */
-/** 往 HTML 里塞一句话之前先转义。这一句是六条规矩里的原文，不含标记。 */
+/** 往 HTML 里塞一句话之前先转义。这一句是五条规矩里的原文，不含标记。 */
 const escHtml = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -1429,7 +1429,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 头一回按下暂停：让《怎么玩》那一行描一次呼吸的边。
    *
    * 那一屏是全站唯一「打到一半还能把规则再看一遍」的地方，可它和下面那条色
-   * 盲开关长得一模一样——不点一下，新玩家没有任何理由知道它通向六条规则。
+   * 盲开关长得一模一样——不点一下，新玩家没有任何理由知道它通向五条规则。
    * 巡检的原话是「不要假设玩家会自己发现」。
    *
    * 一次就一次（firstPlay.ts 的 claimFirstHowToHint 记在本机），而且写在这

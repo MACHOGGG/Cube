@@ -12,7 +12,7 @@
  *   · 教学条——他玩的第一个基础玩法从第 1 条讲起，四段进度，第 1 条说的是
  *     「色块得分后会变成星星」。
  *
- *     四段不是五段：六条规则里，第 6 条（综合得分）挪去了结算页，第 1、2 条
+ *     四段不是五段：规则改成五条之前那六条里，第 6 条（综合得分）挪去了结算页，第 1、2 条
  *     按玩家的要求并成了一步（「第一第二条教学内容在进度条上合并为一条」，
  *     下面那条断言验的就是这一步摆着两条）。进度条一段一步，不是一段一条。
  *   · 三角——得分变成星星之后，那圈灰色圆角边框一直在（和消掉之后的空三角
@@ -111,9 +111,28 @@ const coach = await page.evaluate(() => ({
 }));
 check('教学条：四段进度（一段一步，不是一段一条）', coach.segs === 4, String(coach.segs));
 check('第 1 步摆的是前两条', coach.rows.length === 2, JSON.stringify(coach.rows.map((t) => t.slice(0, 12))));
-check('第 1 条讲的是色块变星星', (coach.rows[0] || '').includes('变成星星'), coach.rows[0]);
+/**
+ * 第 1 条就是玩家原话那一句，逐字对。
+ *
+ * 原先这儿找的是子串「变成星星」——而 2026-09 规则改成五条之后，第 1 条的原话是「色块
+ * 拼出得分图案会得分翻面，**变成其他颜色的星星**」，中间多了四个字，这条断言从那天起
+ * 就一直红着（这道门不在 CI 里，所以没人看见）。
+ *
+ * 换成逐字比而不是换一个新子串：子串改一次就要跟一次，而这五句是玩家亲笔、改一个字都
+ * 要回决策文档 §8 的（check-coach 那头也是逐字钉的）。
+ */
+check('第 1 条就是玩家原话那一句',
+  coach.rows[0] === '色块拼出得分图案会得分翻面，变成其他颜色的星星。', coach.rows[0]);
 
 // ── 三角那圈灰边 ──────────────────────────────────────────────────────
+//
+// ⚠️ 这一节 2026-10 修过一次量法，记在这儿：原先点的是 `aria-label="三角"` 那张卡，而
+// **基础三角 2026-09 就删掉了**（《侵蚀阶梯》v1.2 PR-6：「删三角、六边三角天才化」）。
+// 于是这道门从那天起每一次都崩在 `page.$eval` 上——崩在断言跑完之前，所以它上面那十几
+// 条看着全绿，而这三条一次都没跑过。一道会崩的门比没有门更糟：它看着像在守着。
+//
+// 现在点的是《大三角》。它是天才限定，所以先兑一张 TESTMONTH——**一台 dev-server 里一
+// 张码只兑得动一次**（CLAUDE.md 那几个坑的第一个），这道门因此要一台自己的服务器。
 await page.evaluate(() => {
   localStorage.clear();
   localStorage.setItem('slides_lang', 'zhHans');
@@ -121,7 +140,26 @@ await page.evaluate(() => {
 });
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.$eval('.home-icon-btn[aria-label="三角"]', (e) => e.click());
+await page.evaluate(async () => {
+  const r = await fetch('/api/redeem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: 'TESTMONTH' }),
+  }).then((x) => x.json());
+  localStorage.setItem('slides_genius', JSON.stringify({
+    active: true, period: r.period, until: r.until, channel: 'code', email: r.email, token: r.token, code: r.code,
+  }));
+});
+await page.reload({ waitUntil: 'load' });
+await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+const triCard = await page.$('.home-icon-btn[aria-label="大三角"]');
+check('（尺子）菜单上找得到那张三角的卡', !!triCard, triCard ? '大三角' : '一张都没有');
+if (!triCard) {
+  console.log('\n没有三角那张卡，下面三条就没有意义——先看 ui/menu.ts 摆了哪几张。');
+  await browser.close();
+  process.exit(1);
+}
+await page.$eval('.home-icon-btn[aria-label="大三角"]', (e) => e.click());
 await page.waitForTimeout(600);
 if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
 await page.waitForFunction(() => document.querySelectorAll('.tri').length > 0, { timeout: 25000 });

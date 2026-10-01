@@ -340,7 +340,7 @@ const SCREENS = [
     name: '方块分镜动画',
     async go(p) {
       // 分镜不再自己弹（玩家定的，见 xhs/src/main.ts 的 showGame）。现在唯一
-      // 的入口是成绩与说明页那颗《怎么玩》，六条规则上头摆着方块和小球两颗
+      // 的入口是成绩与说明页那颗《怎么玩》，五条规则上头摆着方块和小球两颗
       // 键——这一屏就从那儿进去量。
       await p.click('#xhsProfile');
       await p.waitForTimeout(900);
@@ -389,7 +389,7 @@ async function run(browser, view, screen, old) {
     hasTouch: true,
   });
   if (old) await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
-  // 两台体检台都先把「教学看过了」这一格填上：第一次进游戏会自动弹那六条
+  // 两台体检台都先把「教学看过了」这一格填上：第一次进游戏会自动弹那五条
   // 规则（xhs/src/tutorial.ts），弹出来就挡住棋盘，后面的拖动和量尺寸全做
   // 不了。这一屏本身单独测（check-oldcss 的「怎么玩」那一屏，和
   // 教学那支专门的脚本），不靠这里顺带。

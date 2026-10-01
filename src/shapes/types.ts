@@ -83,7 +83,7 @@ export interface ShapeGameOpts {
    */
   steps?: boolean;
   /**
-   * 头一局那块教学条（见 ui/coachBar.ts）：棋盘底下一块小圆角矩形，把六条
+   * 头一局那块教学条（见 ui/coachBar.ts）：棋盘底下一块小圆角矩形，把五条
    * 规则一条一条摆出来，玩家做到了哪一条就换下一条。
    *
    * 只有玩家头一回打开、被直接按进的那一局基础小球才给（main.ts 的
@@ -108,7 +108,7 @@ export interface ShapeGameOpts {
   coachPlan?: CoachPlan;
   /**
    * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示：同一块条子，一句话加
-   * 一幅图，15 秒后自己走掉。给了它就不摆六条规则。
+   * 一幅图，15 秒后自己走掉。给了它就不摆五条规则。
    */
   coachTip?: { text: string; art: string };
 
@@ -126,7 +126,7 @@ export interface ShapeGameOpts {
   shouldLeadOut?: () => boolean;
   /**
    * 头一回看见结算页时，明细底下补一句「综合得分怎么算」（见 engine/firstPlay.ts
-   * 的 claimFirstTotalTip）。六条规矩的最后一条从棋盘底下挪到了那儿。
+   * 的 claimFirstTotalTip）。五条规矩的最后一条从棋盘底下挪到了那儿。
    */
   shouldTeachTotal?: () => boolean;
 }
