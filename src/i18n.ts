@@ -185,6 +185,15 @@ export interface I18nStrings {
    * 一种情形下变成假话——而这一窗上的每一句都要和《价格与订阅》对得上。
    */
   subscribeClosed: string;
+  /**
+   * 停售期间那一屏的正文：注册就解锁全部功能（玩家 2026-10 原话，点名「不要添加过度复杂
+   * 内容」，所以就这一句，不列条款、不讲机制）。
+   */
+  registerUnlocks: string;
+  /** 「还剩 {n} 个名额」。`{n}` 由服务端的真实计数填（engine/geniusSlots.ts）。 */
+  slotsLeft: string;
+  /** 注册那颗键。 */
+  registerBtn: string;
   /** The two billing periods, as a price is labelled: "每月" / "每年". */
   planMonthly: string;
   planYearly: string;
@@ -719,7 +728,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusHostRooms: 'Put up a room and race your friends online',
     subscribeTitle: 'Become a Slides Genius',
     subscribeIntro: 'More unlocked right away, more added now and then, cancel any time.',
-    subscribeClosed: 'The subscription is closed — it is no longer sold, and the ones that were running have been cancelled.',
+    subscribeClosed: 'The subscription is closed for now.',
+    registerUnlocks: 'Sign up and everything unlocks — free, for good.',
+    slotsLeft: '{n} places left',
+    registerBtn: 'Sign up',
     planMonthly: 'per month',
     planYearly: 'per year',
     subscribeBtn: 'Subscribe',
@@ -1055,7 +1067,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusHostRooms: 'Montez une salle et faites la course en ligne',
     subscribeTitle: 'Devenir un Slides Génie',
     subscribeIntro: 'Plus de jeux tout de suite, d’autres de temps en temps, résiliable à tout moment.',
-    subscribeClosed: 'L’abonnement est fermé : il n’est plus vendu, et ceux qui étaient en cours ont été résiliés.',
+    subscribeClosed: 'L’abonnement est fermé pour le moment.',
+    registerUnlocks: 'Créez un compte et tout se débloque — gratuitement, pour toujours.',
+    slotsLeft: 'encore {n} places',
+    registerBtn: 'Créer un compte',
     planMonthly: 'par mois',
     planYearly: 'par an',
     subscribeBtn: 'S’abonner',
@@ -1391,7 +1406,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSoonTitle: '敬請期待',
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
     subscribeIntro: '立刻解鎖更多，不定時更新，隨時取消',
-    subscribeClosed: '訂閱已經停止：不再出售，此前在續的也已經一併取消。',
+    subscribeClosed: '訂閱目前不開放。',
+    registerUnlocks: '註冊就解鎖全部功能，永久免費。',
+    slotsLeft: '還剩 {n} 個名額',
+    registerBtn: '註冊',
     planMonthly: '每月',
     planYearly: '每年',
     subscribeBtn: '訂閱',
@@ -1727,7 +1745,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSoonTitle: '敬请期待',
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
     subscribeIntro: '立刻解锁更多，不定时更新，随时取消',
-    subscribeClosed: '订阅已经停止：不再出售，此前在续的也已经一并取消。',
+    subscribeClosed: '订阅目前不开放。',
+    registerUnlocks: '注册就解锁全部功能，永久免费。',
+    slotsLeft: '还剩 {n} 个名额',
+    registerBtn: '注册',
     planMonthly: '每月',
     planYearly: '每年',
     subscribeBtn: '订阅',

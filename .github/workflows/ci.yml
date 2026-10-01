@@ -625,6 +625,15 @@ jobs:
           nohup node scripts/dev-server.mjs 8865 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8865/ && break; sleep 0.25; done
           node scripts/check-endcard-reach.mjs http://localhost:8865/
+      # 停售期间那一屏：引导到注册，而且**服务端说得出才说**。最容易出的事不是排版，是
+      # 印出一句兑现不了的话——授予窗口还没打开、名额已经满了、服务端只回了半份答复，
+      # 屏幕上却已经写着「注册就解锁」。各种答复用路由拦截喂一遍（真实那一路由第 ① 节
+      # 守着，它走的是服务器自己的答复）。
+      - name: 停售期：注册引导，服务端说得出才说
+        run: |
+          nohup node scripts/dev-server.mjs 8866 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8866/ && break; sleep 0.25; done
+          node scripts/check-register-guide.mjs http://localhost:8866/
       - name: 电脑端游戏页：五块牌的位置、大小、色
         run: |
           nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &

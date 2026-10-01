@@ -12,6 +12,7 @@
  * 「客户端说一句话就白嫖」。
  */
 import { NOBODY, answer, configured as creemConfigured, findSubscription, periodOf } from './_creem.js';
+import { hget, hincrby } from './_store.js';
 import {
   LIFETIME_UNTIL,
   codeHolder,
@@ -57,6 +58,34 @@ export { LIFETIME_UNTIL };
 export const grantWindowOpen = () => process.env.GENIUS_GRANT_WINDOW === '1';
 
 /**
+ * 第一批放出去几个名额（玩家 2026-10：「第一批开放 100 个名额」）。
+ *
+ * 放环境变量里，是因为这个数**会改**：第一批满了之后玩家要么抬这个数放第二批，要么重开
+ * 订阅。写死在代码里就意味着为了改一个数发一次版。
+ *
+ * 填得不像个数（空的、0、负的、写错字）一律回落到 100，而不是回落到「不限」——
+ * 屏幕上印着「还剩 N 个名额」，兜底成无限就等于那一行在说假话。
+ */
+export const GENIUS_GRANT_LIMIT = () => {
+  const n = Number(process.env.GENIUS_GRANT_LIMIT);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 100;
+};
+
+/** 名额计数住在一个 hash 的一个字段里（见下面 grantLifetimeIfWindow 为什么要 hash）。 */
+const GRANTS_KEY = 'genius:grants';
+const GRANTS_FIELD = 'n';
+
+/** 已经送出去几份。 */
+export async function grantsUsed() {
+  return Number(await hget(GRANTS_KEY, GRANTS_FIELD)) || 0;
+}
+
+/** 还剩几个名额。永远不是负数——屏幕上要印它。 */
+export async function slotsLeft() {
+  return Math.max(0, GENIUS_GRANT_LIMIT() - (await grantsUsed()));
+}
+
+/**
  * 窗口期里，给这个**已经证明过自己**的账号写一份终身天才。
  *
  * 调用的位置只有一处规矩：**必须在「这个人是这个邮箱的主人」已经成立之后**
@@ -65,7 +94,21 @@ export const grantWindowOpen = () => process.env.GENIUS_GRANT_WINDOW === '1';
  * 断在调用方。
  *
  * 幂等：已经有一份不短于终身的授予就原地返回，不重写、不刷新 grantedAt——那个时
- * 间戳记的是「什么时候送出去的」，将来要按它对账，重写一次就丢一次。
+ * 间戳记的是「什么时候送出去的」，将来要按它对账，重写一次就丢一次。**也不占名额**：
+ * 同一个人每次开机都会走到这儿，一人占一个号才是对的。
+ *
+ * ── 名额怎么数（玩家 2026-10：第一批 100 个，「满了就不再送」）────────
+ *
+ * 屏幕上印着「还剩 N 个名额」，所以那个数必须是实话：满了就真的不送，不是把数字停在 0
+ * 而照送不误。
+ *
+ * **先取号，再写账。** `hincrby` 是 Redis 自己那一步（加一并把新值带回来），所以两个人
+ * 同时登录时各拿到一个属于自己的号；超号的当场退回去（−1），比对根本轮不上。反过来写
+ * 成「先读再判再写」，两个人会读到同一个数，双双放行——第 101 个人也拿到了终身，而屏幕
+ * 上写着 0。
+ *
+ * 用 hash 而不是普通的 INCR，只因为 `_store.js` 导出的是 `hincrby` 这一个能**往回减**的
+ * 原语（`bump` 只加不减），而退号这一步必须有。
  *
  * 刷卡订阅者也会被写上。这不是「动了他们的权益」：终身比他们买的那一段长，一分
  * 没少。写上之后 resolveEntitlement 会从本地那一份答（ownGrantLive 先短路），不
@@ -76,15 +119,31 @@ export const grantWindowOpen = () => process.env.GENIUS_GRANT_WINDOW === '1';
 export async function grantLifetimeIfWindow(address, account) {
   if (!grantWindowOpen() || !account) return account;
   if ((account.until || 0) >= LIFETIME_UNTIL) return account;
+
+  // 取号。超了就退回去，这个人这一次拿不到——屏幕上那个 0 是实话。
+  const ticket = await hincrby(GRANTS_KEY, GRANTS_FIELD, 1);
+  if (ticket > GENIUS_GRANT_LIMIT()) {
+    await hincrby(GRANTS_KEY, GRANTS_FIELD, -1);
+    return account;
+  }
+
+  // 锁里那一道门和外面那一道判的是两份快照：外面看手里这份，这儿看库里此刻那份。
+  // 并发时真会出现「手里是旧的、库里已经送过了」——那一次不写，号也要退回去。
+  let wrote = false;
   const saved = await updateAccount(address, (a) => {
     if ((a.until || 0) >= LIFETIME_UNTIL) return;
     a.until = LIFETIME_UNTIL;
     // 什么时候送出去的。将来重开 creem 要按它认出「这一份是窗口期送的」。
     a.grantedAt = Date.now();
+    wrote = true;
   });
   // 抢不到锁（busy）就这一次不写：下一次登录还会再走一遍这儿，而「这一次少送一
   // 份」远好过把别处刚写的东西（兑码加的时长、后台发的收件箱）整份盖回去。
-  return saved.ok ? saved.account : account;
+  if (!saved.ok || !wrote) {
+    await hincrby(GRANTS_KEY, GRANTS_FIELD, -1);
+    return saved.ok ? saved.account : account;
+  }
+  return saved.account;
 }
 
 /**

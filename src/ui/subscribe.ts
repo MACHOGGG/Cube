@@ -6,6 +6,7 @@ import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
 import { webSaleOpen } from '../engine/saleWindow';
+import { geniusSlots } from '../engine/geniusSlots';
 import { formatPrice, plans, type PlanPeriod } from '../engine/pricing';
 import {
   attachAccount,
@@ -557,7 +558,16 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     'genius-modal',
     `
     <h2>${s.subscribeTitle}</h2>
-    <p class="tag-line">${webClosed ? s.subscribeClosed : s.subscribeIntro}</p>
+    <!--
+      停售期间这一屏改成**注册引导**（玩家 2026-10：「把网页中现在引导到订阅的部分改为
+      引导到注册……改为注册就会有解锁所有的功能，而且上面会显示出来还有多少个名额还开
+      放」，并点名「不要添加过度复杂内容」——所以就一句话加一行名额，不列条款）。
+
+      先摆中性的那一句（subscribeClosed），问到服务端的真实名额之后再换成那句承诺。
+      **顺序不能反**：先摆承诺再去问，问不到就留着一句兑现不了的话。服务端说得出才说。
+    -->
+    <p class="tag-line" id="geniusTag">${webClosed ? s.subscribeClosed : s.subscribeIntro}</p>
+    <p class="auth-hint" id="geniusSlots" hidden></p>
     ${priceRows ? `<div class="plan-list">${priceRows}</div>` : ''}
     ${
       // The store has something worth saying here — no sign-up, never leaves
@@ -599,11 +609,33 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
            that is signing in, not closing the window. -->
       <button class="btn-quiet" id="geniusClose">${s.closeBtn}</button>
       <button class="primary" id="geniusRestore">${
-        isStoreChannel() ? s.restoreBtn : s.signInBtn
+        isStoreChannel() ? s.restoreBtn : webClosed ? s.registerBtn : s.signInBtn
       }</button>
     </div>
   `,
   );
+
+  /*
+   * 停售期间：问一声服务端还剩几个名额，问到了才把那句承诺摆上去。
+   *
+   * **说得出才说。** 服务端答不出（窗口没开、没有库可数、名额已满、网络不通）时，
+   * `geniusSlots()` 回 null，这一段什么都不做——屏幕上留着的还是那句中性的「订阅目前不
+   * 开放」。所以在 `GENIUS_GRANT_WINDOW` 填上之前，「注册就解锁」这句话根本不会出现，
+   * 而不是先印出来再等服务端兑现。
+   *
+   * 窗可能在答复回来之前就被关掉，所以先确认那两个节点还在文档里。
+   */
+  if (webClosed) {
+    void geniusSlots().then((slots) => {
+      if (!slots) return;
+      const tagEl = overlay.querySelector<HTMLElement>('#geniusTag');
+      const slotEl = overlay.querySelector<HTMLElement>('#geniusSlots');
+      if (!tagEl || !slotEl || !tagEl.isConnected) return;
+      tagEl.textContent = s.registerUnlocks;
+      slotEl.textContent = s.slotsLeft.replace('{n}', String(slots.left));
+      slotEl.hidden = false;
+    });
+  }
 
   const msg = overlay.querySelector<HTMLElement>('#geniusMsg')!;
   const rows = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.plan-row'));
@@ -636,7 +668,9 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
   overlay.querySelector<HTMLButtonElement>('#geniusRestore')!.addEventListener('click', () => {
     close();
     if (isStoreChannel()) runStoreRestore(lang, onChanged);
-    else openAuthWindow(lang, 'login', onChanged);
+    // 停售期间这颗键是《注册》，所以开的是注册那一档。已经有账号的人走底下那颗
+    // 《有兑换码》旁边的路，或者在注册屏上切到登录——那一屏本来就有两档。
+    else openAuthWindow(lang, webClosed ? 'register' : 'login', onChanged);
   });
   overlay.querySelector<HTMLButtonElement>('#geniusClose')!.addEventListener('click', close);
 }

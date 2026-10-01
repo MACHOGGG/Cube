@@ -184,6 +184,129 @@ console.log('');
   else process.env.GENIUS_GRANT_WINDOW = before;
 }
 
+// ---- 名额：屏幕上印「还剩 N 个」，那个数就得是实话 ------------------------------
+/*
+ * 玩家 2026-10：第一批开放 100 个名额，**「满了就不再送」**。所以这一节钉的不是「数字会
+ * 减」，而是**满了之后真的拿不到终身**——数字停在 0 而照送不误，那一行字就是假话。
+ */
+console.log('');
+{
+  const ent = await import('../api/_entitlement.js');
+  const accounts = await import('../api/_accounts.js');
+  const keepWin = process.env.GENIUS_GRANT_WINDOW;
+  const keepLim = process.env.GENIUS_GRANT_LIMIT;
+
+  // 填得不像个数一律回落到 100，**不是回落到「不限」**——印着名额却无限送是假话。
+  for (const bad of ['', '0', '-5', 'abc']) {
+    process.env.GENIUS_GRANT_LIMIT = bad;
+    check(`名额填「${bad}」→ 回落到 100（不是不限）`, ent.GENIUS_GRANT_LIMIT() === 100,
+      String(ent.GENIUS_GRANT_LIMIT()));
+  }
+  delete process.env.GENIUS_GRANT_LIMIT;
+  check('没填也是 100（玩家定的第一批）', ent.GENIUS_GRANT_LIMIT() === 100);
+  process.env.GENIUS_GRANT_LIMIT = '2.9';
+  check('小数往下取整', ent.GENIUS_GRANT_LIMIT() === 2, String(ent.GENIUS_GRANT_LIMIT()));
+
+  process.env.GENIUS_GRANT_WINDOW = '1';
+  process.env.GENIUS_GRANT_LIMIT = '2';
+  const used0 = await ent.grantsUsed();
+  check('（尺子）开局数得出已用了几个', Number.isFinite(used0), String(used0));
+  const left0 = await ent.slotsLeft();
+  check('开局还剩 = 总数 − 已用', left0 === 2 - used0, `${left0}`);
+
+  const mk = async (addr) => {
+    await accounts.createAccount(addr, { until: 0 });
+    return accounts.loadAccount(addr);
+  };
+  // 第一个人：拿到终身，名额 −1。
+  {
+    const a = await mk('slot1@example.com');
+    const out = await ent.grantLifetimeIfWindow('slot1@example.com', a);
+    check('第 1 个人拿到终身', accounts.isLifetime(out) === true);
+    check('名额跟着减一', (await ent.slotsLeft()) === left0 - 1, String(await ent.slotsLeft()));
+  }
+  // 同一个人再来：不重复占号（每次开机都会走到这儿）。
+  {
+    const again = await accounts.loadAccount('slot1@example.com');
+    const before = await ent.slotsLeft();
+    await ent.grantLifetimeIfWindow('slot1@example.com', again);
+    check('同一个人再登录不再占名额', (await ent.slotsLeft()) === before, String(await ent.slotsLeft()));
+  }
+  // 拿旧快照再来：锁里那道门拦住，**号也要退回去**（不然名额被白白吃掉一个）。
+  {
+    const before = await ent.slotsLeft();
+    const stale = { until: 0 };
+    await ent.grantLifetimeIfWindow('slot1@example.com', stale);
+    check('拿旧快照再来：没写成，号退回去了', (await ent.slotsLeft()) === before,
+      String(await ent.slotsLeft()));
+  }
+  // 把剩下的名额用光。
+  {
+    let guard = 0;
+    while ((await ent.slotsLeft()) > 0 && guard < 10) {
+      const addr = `fill${guard}@example.com`;
+      await ent.grantLifetimeIfWindow(addr, await mk(addr));
+      guard++;
+    }
+    check('（尺子）真的把名额用光了', (await ent.slotsLeft()) === 0, String(await ent.slotsLeft()));
+  }
+  // 满了之后：**真的拿不到**。这一条是整节的要害。
+  {
+    const addr = 'toolate@example.com';
+    const a = await mk(addr);
+    const out = await ent.grantLifetimeIfWindow(addr, a);
+    check('满了之后再来的人拿不到终身（不是只把数字停住）',
+      accounts.isLifetime(out) === false, String(out && out.until));
+    const fresh = await accounts.loadAccount(addr);
+    check('库里那一份也没被写上', !accounts.isLifetime(fresh), String(fresh && fresh.until));
+    check('名额不会变成负数', (await ent.slotsLeft()) === 0, String(await ent.slotsLeft()));
+    // 退号那一步真的做了：满了之后再来几个人，「已用」不许继续往上爬。爬上去的话
+    // 下次抬高总数（放第二批）时，那些白白吃掉的号会把新名额直接啃掉一截。
+    const usedNow = await ent.grantsUsed();
+    for (const who of ['late1@example.com', 'late2@example.com', 'late3@example.com']) {
+      await ent.grantLifetimeIfWindow(who, await mk(who));
+    }
+    check('满了之后再来的人不会把「已用」顶上去（号退回去了）',
+      (await ent.grantsUsed()) === usedNow, `${await ent.grantsUsed()} vs ${usedNow}`);
+  }
+  /*
+   * **同时来一堆人。** 这一条验的是「先取号再写账」那个次序。
+   *
+   * 写成「先读再判再写」的话，同时进来的几个请求会读到同一个数、双双放行——第 N+1 个人
+   * 也拿到了终身，而屏幕上写着 0。那种 bug 单线程一个一个试是试不出来的。
+   */
+  {
+    process.env.GENIUS_GRANT_LIMIT = '3';
+    // 换一个干净的计数：上面那一轮已经把号用掉了，这儿要从「还剩 3 个」起步。
+    const room = await ent.slotsLeft();
+    check('（尺子）这一轮确实还有名额可抢', room > 0, String(room));
+    const who = [];
+    for (let i = 0; i < room + 4; i++) {
+      const addr = `race${i}@example.com`;
+      who.push([addr, await mk(addr)]);
+    }
+    await Promise.all(who.map(([addr, acct]) => ent.grantLifetimeIfWindow(addr, acct)));
+    let got = 0;
+    for (const [addr] of who) if (accounts.isLifetime(await accounts.loadAccount(addr))) got++;
+    check('同时来 ' + who.length + ' 个人，正好 ' + room + ' 个拿到（一个都不多）',
+      got === room, `拿到 ${got} / 名额 ${room}`);
+    check('之后名额归零', (await ent.slotsLeft()) === 0, String(await ent.slotsLeft()));
+  }
+  // 窗口关着的时候一个号都不许占。
+  {
+    delete process.env.GENIUS_GRANT_WINDOW;
+    const before = await ent.grantsUsed();
+    const addr = 'closedwin@example.com';
+    await ent.grantLifetimeIfWindow(addr, await mk(addr));
+    check('窗口关着：一个号都没占', (await ent.grantsUsed()) === before, String(await ent.grantsUsed()));
+  }
+
+  if (keepWin === undefined) delete process.env.GENIUS_GRANT_WINDOW;
+  else process.env.GENIUS_GRANT_WINDOW = keepWin;
+  if (keepLim === undefined) delete process.env.GENIUS_GRANT_LIMIT;
+  else process.env.GENIUS_GRANT_LIMIT = keepLim;
+}
+
 if (useOld) rmSync(OLD, { force: true });
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);
 process.exit(fail ? 1 : 0);
