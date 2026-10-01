@@ -38,6 +38,16 @@ const BASE = process.argv[2] || 'http://localhost:8958/';
  * 这道门只会跟着变小，一声不响。
  */
 const CARDS = 12;
+/**
+ * 一排两张，所以轴上是 6 **站**，不是 12 站（E18：「两列鱼眼滚轴（对齐排，聚焦一排
+ * 两张同倍率）」）。
+ *
+ * 这道门里凡是「第几项 / 相邻两项 / 一项一颗点」说的都是**排**；只有图的格子、溢出、
+ * 小字那几条说的是**卡**。两个单位在这儿分家，别处不许再换算一次——混用过的后果在
+ * modeAxis.ts 的 COLS 那一段。
+ */
+const COLS = 2;
+const ROWS = Math.ceil(CARDS / COLS);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -120,7 +130,34 @@ const shot = (page) =>
      * 数的那天这道门会红在**尺子**上而不是代码上。
      */
     const SH = (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
-    return { host: { top: hr.top, bottom: hr.bottom, h: hr.height, cy: hr.top + hr.height / 2 - SH, shift: SH }, cards };
+    /**
+     * 按**排**归一份（E18）。
+     *
+     * 一排两张拿的是逐字相同的 transform，所以按 cy 分组就是分排——这比按 DOM 下标
+     * 除以二更值钱：它量的是**画出来的结果**。哪天两张卡真的没对齐（「对齐排」破
+     * 功），这儿会多分出一排来，下面那些「6 站」的断言当场红，而不是悄悄按下标把它
+     * 们算成一排。
+     */
+    const byRow = new Map();
+    for (const c of cards) {
+      const key = Math.round(c.cy * 2) / 2;
+      if (!byRow.has(key)) byRow.set(key, []);
+      byRow.get(key).push(c);
+    }
+    const rows = [...byRow.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([cy, cs], i) => ({
+        i,
+        cy,
+        top: Math.min(...cs.map((c) => c.top)),
+        bottom: Math.max(...cs.map((c) => c.bottom)),
+        h: Math.max(...cs.map((c) => c.h)),
+        scale: Math.max(...cs.map((c) => c.scale)),
+        vis: cs.some((c) => c.vis),
+        names: cs.map((c) => c.name),
+        cards: cs,
+      }));
+    return { host: { top: hr.top, bottom: hr.bottom, h: hr.height, cy: hr.top + hr.height / 2 - SH, shift: SH }, cards, rows };
   });
 
 /**
@@ -131,13 +168,40 @@ const shot = (page) =>
  * 画面和手指是两个数，见 modeAxis 的 aimFocus）。
  */
 const installFocus = (pg) => pg.evaluate(() => {
+  /**
+   * 每一**排**的中心 y，从上往下（E18）。
+   *
+   * 一排两张的 cy 一模一样，所以去重就是分排。好几处量「一项有多高」的地方要用它：
+   * 按卡取「头两张的间距」会取到同一排的那两张，差是 0，于是算出来是 Infinity——
+   * 量法坏了而断言照样跑，正是这道门最怕的那种红。
+   */
+  window.__rowCys = () => {
+    const host = document.querySelector('.mode-axis');
+    const seen = new Set();
+    const out = [];
+    for (const el of [...host.children].filter((e) => e.classList.contains('home-icon-btn'))) {
+      const r = el.getBoundingClientRect();
+      const cy = r.top + r.height / 2;
+      const key = Math.round(cy * 2) / 2;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(cy);
+    }
+    return out.sort((a, b) => a - b);
+  };
   window.__focus = () => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
     const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
-    const cs = [...host.children]
-      .filter((e) => e.classList.contains('home-icon-btn'))
-      .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
+    // 按**排**读（E18）：一排两张的 cy 一模一样，去重之后 i 就是排号。
+    const seen = new Map();
+    for (const el of [...host.children].filter((e) => e.classList.contains('home-icon-btn'))) {
+      const r = el.getBoundingClientRect();
+      const cy = r.top + r.height / 2;
+      const key = Math.round(cy * 2) / 2;
+      if (!seen.has(key)) seen.set(key, cy - mid);
+    }
+    const cs = [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([, d], i) => ({ i, d }));
     for (let k = 1; k < cs.length; k++) {
       const a = cs[k - 1], b = cs[k];
       if (a.d <= 0 && b.d >= 0) return a.i + (a.d === b.d ? 0 : -a.d / (b.d - a.d));
@@ -228,9 +292,13 @@ let page = await menuPage({ slides_played_square: '1' });
 }
 
 // ── 2. 逐对量「不相撞」：焦点扫过整条轴 ──────────────────────────────
+//
+// 量的是**排与排**之间（E18）。按卡量的话同一排那两张会被当成「相邻两项」，而它们
+// 本来就并排、纵向完全重叠——第一次跑出来是 −155.7px，看着像天塌了，其实是尺子拿错
+// 了单位。排与排的间距才是鱼眼要守的那个数。
 {
   let worst = { gap: 999, at: '' };
-  for (let target = 0; target < CARDS; target++) {
+  for (let target = 0; target < CARDS; target += COLS) {
     // 直接把焦点设过去（不经手势），一次一项地量。
     await page.evaluate((i) => {
       const cards = [...document.querySelector('.mode-axis').children].filter((e) =>
@@ -240,13 +308,15 @@ let page = await menuPage({ slides_played_square: '1' });
     }, target);
     await page.waitForTimeout(420);
     const s = await shot(page);
-    const vis = s.cards.filter((c) => c.vis).sort((a, b) => a.top - b.top);
+    const vis = s.rows.filter((r) => r.vis).sort((a, b) => a.top - b.top);
     for (let k = 0; k + 1 < vis.length; k++) {
       const gap = vis[k + 1].top - vis[k].bottom;
-      if (gap < worst.gap) worst = { gap, at: `焦点在第 ${target} 项时，${vis[k].name} 与 ${vis[k + 1].name} 之间` };
+      if (gap < worst.gap) {
+        worst = { gap, at: `焦点在第 ${target / COLS} 排时，${vis[k].names.join('/')} 与 ${vis[k + 1].names.join('/')} 之间` };
+      }
     }
   }
-  check('相邻两张永不相撞（整条轴扫一遍）', worst.gap > 0, `最紧一对剩 ${worst.gap.toFixed(1)}px —— ${worst.at}`);
+  check('相邻两排永不相撞（整条轴扫一遍）', worst.gap > 0, `最紧一对剩 ${worst.gap.toFixed(1)}px —— ${worst.at}`);
   check('最紧的一对也还留得下缝（> 4px）', worst.gap > 4, `${worst.gap.toFixed(1)}px`);
 }
 
@@ -275,7 +345,10 @@ let page = await menuPage({ slides_played_square: '1' });
   const focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
   check('拖动换得了聚焦项', focused.name !== before, `${before} → ${focused.name}`);
   check('松手定格在整项上（聚焦那张正对选中线）', Math.abs(focused.cy - s.host.cy) < 2, `偏差 ${Math.abs(focused.cy - s.host.cy).toFixed(2)}px`);
-  check('松手后只有一张是放大的（没停在两项中间）', s.cards.filter((c) => c.scale > 1.24).length === 1, `${s.cards.filter((c) => c.scale > 1.24).length} 张`);
+  // 「放大的那一档」跟着 maxScale 走（两列之后是 1.22，见 modeAxis 的 PARAMS）：门槛
+  // 取邻居那一档（约 0.98）和焦点之间，1.1 两边都够远。按**排**数，不按卡——一排两张
+  // 同倍率，按卡数永远是 2。
+  check('松手后只有一排是放大的（没停在两排中间）', s.rows.filter((r) => r.scale > 1.1).length === 1, `${s.rows.filter((r) => r.scale > 1.1).length} 排`);
 }
 
 // ── 4. 滑到底就停，两头各留一点空白 ────────────────────────────────
@@ -335,8 +408,8 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.mouse.up();
   await page.waitForTimeout(900);
   s = await shot(page);
-  focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  check('往下滑到头就停在最后一张', focused.i === CARDS - 1, `停在 ${focused.name}`);
+  const lastRow = s.rows.reduce((a, b) => (b.scale > a.scale ? b : a));
+  check('往下滑到头就停在最后一排', lastRow.i === ROWS - 1, `停在 ${lastRow.names.join('/')}`);
 }
 
 // ── 4b. 上下两头**什么都不盖**：从招牌和底排底下滑过去 ──────────────
@@ -510,7 +583,9 @@ let page = await menuPage({ slides_played_square: '1' });
     };
   });
   check('左右各一条点点轴', rail.rails === 2, `${rail.rails} 条`);
-  check('每条轴上一项一颗点', rail.dots.every((d) => d.length === CARDS), rail.dots.map((d) => d.length).join(' / '));
+  // 一**排**一颗（E18）。按卡给点的话 12 颗对着 6 排，拨一格走两颗——这条轨存在的
+  // 全部意义就是「我在第几排」，读不出来就等于没有。
+  check('每条轴上一排一颗点', rail.dots.every((d) => d.length === ROWS), rail.dots.map((d) => d.length).join(' / '));
   const widest = rail.dots[0].reduce((a, b) => (b.w > a.w ? b : a));
   const smallest = rail.dots[0].reduce((a, b) => (b.w < a.w ? b : a));
   check('最大那颗明显比最小那颗大（有大小梯度）', widest.w - smallest.w > 2, `${smallest.w} → ${widest.w}px`);
@@ -574,17 +649,21 @@ let page = await menuPage({ slides_played_square: '1' });
     const r = document.querySelector('.mode-axis').getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   });
+  // 哪一**排**对着选中线（E18：按卡数出来的数是它的两倍，「走了几项」于是全错一倍）。
   const focusedIndex = () => p5.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const hr = host.getBoundingClientRect();
     const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
-    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const seen = new Map();
+    for (const el of [...host.children].filter((e) => e.classList.contains('home-icon-btn'))) {
+      const r = el.getBoundingClientRect();
+      const cy = r.top + r.height / 2;
+      const key = Math.round(cy * 2) / 2;
+      if (!seen.has(key)) seen.set(key, cy);
+    }
+    const cys = [...seen.values()].sort((a, b) => a - b);
     let best = -1, bd = 1e9;
-    cards.forEach((e, i) => {
-      const r = e.getBoundingClientRect();
-      const d = Math.abs(r.top + r.height / 2 - mid);
-      if (d < bd) { bd = d; best = i; }
-    });
+    cys.forEach((cy, i) => { const d = Math.abs(cy - mid); if (d < bd) { bd = d; best = i; } });
     return best;
   });
   const toFirst = async () => {
@@ -621,7 +700,7 @@ let page = await menuPage({ slides_played_square: '1' });
    */
   check('慢拖也走得动（不是推不动）', slow >= 1, `慢拖 200px 走了 ${slow} 项`);
   check('同样 200px，快甩走得比慢拖远', fast > slow, `慢 ${slow} 项 / 快 ${fast} 项`);
-  check('快甩也没飞到底（还停得住）', fast < CARDS - 1, `${fast} 项`);
+  check('快甩也没飞到底（还停得住）', fast < ROWS - 1, `${fast} 排`);
   await p5.close();
 }
 
@@ -687,26 +766,23 @@ let page = await menuPage({ slides_played_square: '1' });
 //     是惯性本身，不掺别的。
 {
   const p7 = await menuPage({ slides_played_square: '1' });
-  /** 每次刷新之后都要重装一遍（刷新会把这两样一起清掉）。 */
-  const install = () => p7.evaluate(() => {
-    /** 连续的焦点：哪一项的中心正落在选中线上（跨线的两张之间线性插值）。 */
-    window.__focus = () => {
-      const host = document.querySelector('.mode-axis');
-      const hr = host.getBoundingClientRect();
-      const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
-      const cs = [...host.children]
-        .filter((e) => e.classList.contains('home-icon-btn'))
-        .map((el, i) => { const r = el.getBoundingClientRect(); return { i, d: r.top + r.height / 2 - mid }; });
-      for (let k = 1; k < cs.length; k++) {
-        const a = cs[k - 1], b = cs[k];
-        if (a.d <= 0 && b.d >= 0) return a.i + (a.d === b.d ? 0 : -a.d / (b.d - a.d));
-      }
-      return cs[0] && cs[0].d > 0 ? cs[0].i : cs.length - 1;
-    };
-    // 松手**那一刻**的焦点：拿 window 的捕获阶段记，它比轴自己的 pointerup 先到。
-    // 事后再用 evaluate 去问就晚了——那会儿弹簧已经在走，量到的是终点不是起点。
-    addEventListener('pointerup', () => { window.__atUp = window.__focus(); }, true);
-  });
+  /**
+   * 每次刷新之后都要重装一遍（刷新会把这两样一起清掉）。
+   *
+   * **`__focus` 用上面那一份（installFocus），不在这儿再抄一遍。** 这儿原先抄过一份
+   * 按**卡**插值的——两列之后同一排那两张的 cy 一模一样，那份插值跨的是「同一排的左
+   * 张和右张」，读出来的数既不是排也不是卡（实测松手时读成 1.43，而画面在第 0.43
+   * 排）。于是「停下来再松手就停在眼睛看着的那一项」红了一条，红的是这把尺子。
+   * 两份一样的东西放两处，迟早只改一处——所以这儿只留 __atUp 那个监听。
+   */
+  const install = async () => {
+    await installFocus(p7);
+    await p7.evaluate(() => {
+      // 松手**那一刻**的焦点：拿 window 的捕获阶段记，它比轴自己的 pointerup 先到。
+      // 事后再用 evaluate 去问就晚了——那会儿弹簧已经在走，量到的是终点不是起点。
+      addEventListener('pointerup', () => { window.__atUp = window.__focus(); }, true);
+    });
+  };
   await install();
   /**
    * 从头上拖一把：x 决定走哪一档（靠边＝拨点点），hold 是松手前停多久。
@@ -780,19 +856,27 @@ let page = await menuPage({ slides_played_square: '1' });
   const trip = await (async () => {
     const y0 = 620;
     const from = await p7.evaluate(() => window.__focus());
+    /**
+     * 一把 52px ＝ 四排（点点那条是一比一，一排 13px，见 4j）。
+     *
+     * E18 之前这儿是 120px：那时候轴有 12 站，拨九项还在轴上。两列之后只有 6 站，同样
+     * 120px 拨到第九排——轴上没有第九排，于是整把手势落在**橡皮筋**里，而橡皮筋当然不
+     * 可逆（拉出去 0.9 项、退回来只收 0.9 项的一部分）。量出来是「退回来差一项」，看着
+     * 像位置映射坏了，其实是这把手势根本没在量位置映射。
+     */
     await p7.mouse.move(6, y0);
     await p7.mouse.down();
-    for (let k = 1; k <= 10; k++) { await p7.mouse.move(6, y0 - k * 12); await p7.waitForTimeout(16); }
+    for (let k = 1; k <= 10; k++) { await p7.mouse.move(6, y0 - Math.round(k * 5.2)); await p7.waitForTimeout(16); }
     const far = await p7.evaluate(() => window.__focus());
     const lit = await p7.evaluate(() => document.querySelector('.mode-axis').classList.contains('mode-axis--rail'));
-    for (let k = 9; k >= 0; k--) { await p7.mouse.move(6, y0 - k * 12); await p7.waitForTimeout(16); }
+    for (let k = 9; k >= 0; k--) { await p7.mouse.move(6, y0 - Math.round(k * 5.2)); await p7.waitForTimeout(16); }
     const home = await p7.evaluate(() => window.__focus());
     await p7.mouse.up();
     await p7.waitForTimeout(500);
     const off = await p7.evaluate(() => document.querySelector('.mode-axis').classList.contains('mode-axis--rail'));
     return { from, far, home, lit, off };
   })();
-  check('滚轮拨得出去（下面那条才有意义）', trip.far - trip.from >= 5, `从 ${trip.from.toFixed(2)} 拨到 ${trip.far.toFixed(2)} 项`);
+  check('滚轮拨得出去（下面那条才有意义）', trip.far - trip.from >= 3, `从 ${trip.from.toFixed(2)} 拨到 ${trip.far.toFixed(2)} 排`);
   check(
     '滚轮是位置映射：手指原路退回去，轴也回到原处',
     Math.abs(trip.home - trip.from) < 0.05,
@@ -815,34 +899,53 @@ let page = await menuPage({ slides_played_square: '1' });
     return lit;
   })();
   check('拖中间的卡片不点亮点点（亮着就是「你抓的是滚轮」）', cardLit === false);
-  // 点点还在老地方：`.home-page` 内容框左边 + 6（轨）+ 7（半个轨宽）。
+  /**
+   * 点点贴**屏幕边**：离视口 6（轨）+ 7（半个轨宽）＝ 13px。
+   *
+   * E18 之前这一条量的是另一个位置——「`.home-page` 内容框左边 + 13」（390 的屏上 35）：
+   * 轴为了「屏幕最边上那两条也能拖」横向撑到视口，点点再用 `--axis-bleed-*` 缩回来，于
+   * 是画在正文那一栏的边上。一排两张之后那个位置被左右两列占了（左列的图放大到 1.22
+   * 倍从 x 26.6 起，360 的屏），点子只能退到真正的屏幕边。见 style.css 的 `.axis-rail--l`。
+   *
+   * 两条一起量：位置对，而且**没有因此撑出横向滚动**。
+   */
   const dots = await p7.evaluate(() => {
-    const page = document.querySelector('.home-page');
-    const pr = page.getBoundingClientRect();
-    const cs = getComputedStyle(page);
-    const l = pr.left + parseFloat(cs.paddingLeft);
-    const r = pr.right - parseFloat(cs.paddingRight);
     const dl = document.querySelector('.axis-rail--l .axis-dot').getBoundingClientRect();
     const dr = document.querySelector('.axis-rail--r .axis-dot').getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
     return {
-      left: dl.left + dl.width / 2, want: l + 13,
-      right: dr.left + dr.width / 2, wantR: r - 13,
+      left: dl.left + dl.width / 2, want: 13,
+      right: dr.left + dr.width / 2, wantR: vw - 13,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     };
   });
   check(
-    '点点还在页面内容框里，没被推到屏幕边上',
+    '点点退到屏幕边上，给两列让出地方（E18）',
     Math.abs(dots.left - dots.want) <= 1.5 && Math.abs(dots.right - dots.wantR) <= 1.5,
     `左 ${dots.left.toFixed(1)}（该在 ${dots.want.toFixed(1)}）/ 右 ${dots.right.toFixed(1)}（该在 ${dots.wantR.toFixed(1)}）`,
   );
   check('轴撑到视口也没撑出横向滚动', dots.overflow === 0, `多出 ${dots.overflow}px`);
 
-  // 惯性：同一把手势，一遍松手时手还在动，一遍停 150ms 再松。
-  const fling = await swipe(mid, { steps: 6, wait: 6 });
-  const put = await swipe(mid, { steps: 6, wait: 6, hold: 150 });
+  /**
+   * 惯性：同一把手势，一遍松手时手还在动，一遍停 150ms 再松。
+   *
+   * 行程从 240px（默认）缩到 180px，因为两列之后轴只有 6 站。实测这四档：
+   *
+   *   120px → 甩 1 / 放 0（差 1，顶着下面那条的门槛，亚像素噪声就能让它红）
+   *   180px → 甩 3 / 放 2（差 1，都没到端点 —— 用这一档）
+   *   240px → 甩 5 / 放 3（甩**撞在最后一排上**：差看着是 2，其实是橡皮筋夹出来的。
+   *            封顶那条于是变成假绿 —— 闸没了也照样停在 5）
+   *   300px → 甩 5 / 放 5（两遍都到底，差 0）
+   *
+   * 所以挑的是「两遍都没碰到端点」的那一档：量到的差才真的是惯性本身。
+   */
+  const fling = await swipe(mid, { dist: 180, steps: 6, wait: 6 });
+  const put = await swipe(mid, { dist: 180, steps: 6, wait: 6, hold: 150 });
   check(
     '手还在动的时候松开，会比「停下来再松」多滑一点（这就是那点物理动感）',
-    fling.final - put.final >= 1,
+    // 0.95 不是 1：两个读数都是按**真实像素位置**插出来的，停在同一排上也可能差出
+    // 几个千分位（亚像素）。门槛卡在整数上，等于让它掷硬币。
+    fling.final - put.final >= 0.95,
     `甩 ${fling.final.toFixed(0)} / 放 ${put.final.toFixed(0)}（松手时都在 ${fling.atUp.toFixed(2)}）`,
   );
   /**
@@ -861,7 +964,7 @@ let page = await menuPage({ slides_played_square: '1' });
   check(
     '停下来再松手，就停在眼睛看着的那一项（不会凭空跳一格）',
     Math.abs(put.final - Math.round(put.atUp)) < 0.01,
-    `松手时 ${put.atUp.toFixed(2)} → 停在 ${put.final.toFixed(0)}`,
+    `出发 ${put.from.toFixed(2)} 松手时 ${put.atUp.toFixed(2)} → 停在 ${put.final.toFixed(2)}；甩那把 出发 ${fling.from.toFixed(2)} 松手 ${fling.atUp.toFixed(2)} → ${fling.final.toFixed(2)}`,
   );
   await p7.close();
 }
@@ -967,20 +1070,25 @@ let page = await menuPage({ slides_played_square: '1' });
 // localStorage 就是为了这个——隔天再来还停在第九张上是另一种「意料之外的界面」。
 {
   const p9 = await menuPage({ slides_played_square: '1' });
+  // 停在**哪一排**（E18）。一排两张都在焦点上，所以顺带把这一排的名字一起报出来。
   const focusedNow = () => p9.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     if (!host) return null;
     const hr = host.getBoundingClientRect();
     const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
-    let best = null, bd = 1e9, idx = -1, i = -1;
+    const byRow = new Map();
     for (const el of [...host.children]) {
       if (!el.classList.contains('home-icon-btn')) continue;
-      i++;
       const r = el.getBoundingClientRect();
-      const d = Math.abs(r.top + r.height / 2 - mid);
-      if (d < bd) { bd = d; best = el; idx = i; }
+      const cy = r.top + r.height / 2;
+      const key = Math.round(cy * 2) / 2;
+      if (!byRow.has(key)) byRow.set(key, { cy, names: [] });
+      byRow.get(key).names.push(el.getAttribute('aria-label'));
     }
-    return { i: idx, name: best.getAttribute('aria-label') };
+    const rows = [...byRow.values()].sort((a, b) => a.cy - b.cy);
+    let best = -1, bd = 1e9;
+    rows.forEach((r, i) => { const d = Math.abs(r.cy - mid); if (d < bd) { bd = d; best = i; } });
+    return { i: best, name: rows[best] ? rows[best].names.join(' / ') : null };
   });
   /**
    * 这一段要滑到哪一项：**第一张「按下去真的会换一页」的卡**（下标 ≥ 1）。
@@ -994,13 +1102,18 @@ let page = await menuPage({ slides_played_square: '1' });
    * 了一位，下标 3 变成计时挑战——点下去弹的是选择窗，「离开了主菜单」当场红，红的
    * 是尺子不是代码。所以改成**按去处找**，不按下标数。
    */
-  const navIdx = await p9.evaluate(() => {
+  //
+  // 两列之后还多一条（E18）：这张卡得在**第 0 排以外**（`i >= COLS`）。轴一开始就停在
+  // 第 0 排，挑中同一排的卡就等于没挪——下面「退回来还在原处」于是自己成立（停在第 0
+  // 排怎么退都在第 0 排），一条空绿。
+  const navIdx = await p9.evaluate((cols) => {
     const cards = [...document.querySelectorAll('.mode-axis > .home-icon-btn')];
     return cards.findIndex(
-      (el, i) => i >= 1 && !el.classList.contains('home-icon-btn--locked') && !el.dataset.reopen,
+      (el, i) => i >= cols && !el.classList.contains('home-icon-btn--locked') && !el.dataset.reopen,
     );
-  });
-  check('轴上找得到一张「按下去会换一页」的卡（下面几条才有意义）', navIdx >= 1, `第 ${navIdx} 项`);
+  }, COLS);
+  const navRow = Math.floor(navIdx / COLS);
+  check('第 0 排之外找得到一张「按下去会换一页」的卡（下面几条才有意义）', navIdx >= COLS, `第 ${navIdx} 张，第 ${navRow} 排`);
   /**
    * 往下挪到它：**拨侧边那条点点**，不是拖中间的卡片。
    *
@@ -1012,7 +1125,7 @@ let page = await menuPage({ slides_played_square: '1' });
   const RAIL_PITCH = 13;
   await p9.mouse.move(6, 620);
   await p9.mouse.down();
-  const px = navIdx * RAIL_PITCH;
+  const px = navRow * RAIL_PITCH;
   for (let k = 1; k <= 6; k++) { await p9.mouse.move(6, 620 - (k * px) / 6); await p9.waitForTimeout(30); }
   await p9.waitForTimeout(160);
   await p9.mouse.up();
@@ -1020,21 +1133,13 @@ let page = await menuPage({ slides_played_square: '1' });
   const left = await focusedNow();
   // 先立前提：真的挪开了，而且停在那张会换页的卡上。停在第 0 项的话，下面两条
   // 「还在原处」自己就成立了。
-  check('先滑到那一项（下面几条才有意义）', left && left.i === navIdx,
-    `停在第 ${left?.i} 项 ${left?.name}（该是第 ${navIdx} 项）`);
-  await p9.evaluate(() => {
-    const host = document.querySelector('.mode-axis');
-    const hr = host.getBoundingClientRect();
-    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);  // 选中线，见 shot 里那段
-    let best = null, bd = 1e9;
-    for (const el of [...host.children]) {
-      if (!el.classList.contains('home-icon-btn')) continue;
-      const r = el.getBoundingClientRect();
-      const d = Math.abs(r.top + r.height / 2 - mid);
-      if (d < bd) { bd = d; best = el; }
-    }
-    best.click();
-  });
+  check('先滑到那一排（下面几条才有意义）', left && left.i === navRow,
+    `停在第 ${left?.i} 排 ${left?.name}（该是第 ${navRow} 排）`);
+  // 点**那一张**，不是「离选中线最近的那张」：一排两张离选中线一样近，取最近的会挑到
+  // 同排的另一张——而那一张可能是弹选择窗的（计时、炸弹），于是「离开了主菜单」当场红。
+  await p9.evaluate((i) => {
+    [...document.querySelectorAll('.mode-axis > .home-icon-btn')][i].click();
+  }, navIdx);
   await p9.waitForTimeout(1200);
   check('点进去了（离开了主菜单）', !(await p9.$('.mode-axis')));
   await p9.evaluate(() => history.back());
@@ -1042,9 +1147,9 @@ let page = await menuPage({ slides_played_square: '1' });
   await p9.waitForTimeout(700);
   const back = await focusedNow();
   check(
-    '退回主菜单：还停在他离开时那一项',
+    '退回主菜单：还停在他离开时那一排',
     back && left && back.i === left.i,
-    `走的时候 ${left?.name}（第 ${left?.i} 项）/ 回来 ${back?.name}（第 ${back?.i} 项）`,
+    `走的时候 ${left?.name}（第 ${left?.i} 排）/ 回来 ${back?.name}（第 ${back?.i} 排）`,
   );
   // iPhone 把标签页丢掉重载的那条路。
   await p9.reload({ waitUntil: 'load' });
@@ -1160,11 +1265,13 @@ let page = await menuPage({ slides_played_square: '1' });
     const final = await p10.evaluate(() => window.__focus());
     return { seen, final };
   };
-  const LAST = CARDS - 1;
-  for (const [from, k, label] of [[0, Math.floor(CARDS / 2), '中间那张'], [0, LAST, '最后一张'], [LAST, 0, '第一张']]) {
+  // 单位是**排**（E18）：__focus 读的是排，目标也得按排给，不然「拖到第 11 项」在一条
+  // 只有 6 排的轴上永远到不了，红的是尺子不是代码。
+  const LAST = ROWS - 1;
+  for (const [from, k, label] of [[0, Math.floor(ROWS / 2), '中间那排'], [0, LAST, '最后一排'], [LAST, 0, '第一排']]) {
     const r = await slowTo(from, k);
     check(
-      `慢慢拖到${label}（第 ${k} 项）、停住、松手，就停在那一张`,
+      `慢慢拖到${label}（第 ${k} 排）、停住、松手，就停在那一排`,
       Math.abs(r.final - k) < 0.01 && Math.abs(r.seen - k) < 0.35,
       `松手时画面在 ${r.seen.toFixed(2)} → 停在 ${r.final.toFixed(2)}`,
     );
@@ -1254,10 +1361,9 @@ let page = await menuPage({ slides_played_square: '1' });
       const host = document.querySelector('.mode-axis');
       const hr = host.getBoundingClientRect();
       const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
-      const cs = [...host.children]
-        .filter((e) => e.classList.contains('home-icon-btn'))
-        .map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
-      // 「露出了几项」＝ 第一张离选中线多远，除以当时最上面两张的间距。
+      // 按**排**取（E18）：按卡取会取到同一排那两张，间距 0，算出来是 Infinity。
+      const cs = window.__rowCys();
+      // 「露出了几排」＝ 第一排离选中线多远，除以当时最上面两排的间距。
       return { out: (cs[0] - mid) / Math.abs(cs[1] - cs[0]) };
     });
     await p10.mouse.up();
@@ -1526,14 +1632,14 @@ let page = await menuPage({ slides_played_square: '1' });
     });
     worst.push({ at, min: Math.min(...got.a), n: got.n, top: got.top, bottom: got.bottom, vh: got.vh });
   }
-  check(`两条轨各 ${CARDS} 颗点（下面几条才有意义）`, worst.every((w) => w.n === CARDS), worst.map((w) => w.n).join('/'));
+  check(`两条轨各 ${ROWS} 颗点（下面几条才有意义）`, worst.every((w) => w.n === ROWS), worst.map((w) => w.n).join('/'));
   check(
-    `任意焦点下，${CARDS} 颗点的不透明度都 ≥ 0.25（可见窗口确已删除）`,
+    `任意焦点下，${ROWS} 颗点的不透明度都 ≥ 0.25（可见窗口确已删除）`,
     worst.every((w) => w.min >= 0.24),
     worst.map((w) => `焦点 ${w.at}：最淡 ${w.min.toFixed(3)}`).join(' / '),
   );
   check(
-    `${CARDS} 颗全在屏内（容器没把远端那几颗切掉）`,
+    `${ROWS} 颗全在屏内（容器没把远端那几颗切掉）`,
     worst.every((w) => w.top >= -1 && w.bottom <= w.vh + 1),
     worst.map((w) => `焦点 ${w.at}：${w.top.toFixed(0)}–${w.bottom.toFixed(0)} / 屏高 ${w.vh}`).join(' / '),
   );
@@ -1613,13 +1719,26 @@ await page.close();
    * ——上下各空出一大截。
    *
    * 所以这儿量的不再是「它排第几项」（那是旧设计的尺子），而是两件现在才成立的
-   * 事：**轴还是十四站**（它没占位），**画出来正好落在第 2 张和第 3 张之间**。
+   * 事：**轴还是 12 张 / 6 站**（它没占位），**画出来正好落在第 2 张和第 3 张之间**。
    * 前者是玩家那句话的直接翻译，后者保证它还在分该分的那条缝。
+   *
+   * 两列之后「没占掉一站」要两条一起量（E18）：张数对、**排数也对**。只量张数的话，
+   * 把它当成一张卡塞回 entries 里，12 张会变成 13 张——那条红得到；可要是有人让它顶掉
+   * 半排（比如占住某一排的右半格），张数一个不少，只有排数会变。
    */
-  check(`轴上还是 ${CARDS} 站（《我会玩》没占掉一站）`, order.length === CARDS, `${order.length} 站`);
+  check(`轴上还是 ${CARDS} 张（《我会玩》没占掉一站）`, order.length === CARDS, `${order.length} 张`);
+  check(`轴上还是 ${ROWS} 站`, (await shot(p2)).rows.length === ROWS, `${(await shot(p2)).rows.length} 站`);
   check('有那条分界线', shape.hasDiv);
+  /**
+   * 两列之后这一条顺带守住了另一件事：**分界线落在排与排之间，不切开一排**。
+   *
+   * 线上头正好 2 张 ＝ 第 0 排那两张，也正是上面刚验过「没锁」的那两张。要是哪天能玩的
+   * 卡变成三张（分界线于是落在某一排中间），这儿会读出 3 或 4——两个数都不是 2，当场红。
+   * modeAxis 的 paintDivider 把线摆在 `rowOf(after)` 和下一排之间，靠的就是「after 是它
+   * 那一排的最后一张」这个前提，而这一条就是那个前提的门。
+   */
   check(
-    '分界线落在两张基础卡和锁着的那些之间',
+    '分界线落在第 0 排那两张基础卡和锁着的那些之间（没切开一排）',
     shape.divAbove === 2,
     `线上头有 ${shape.divAbove} 张（该是 方块 圆球 两张）`,
   );
@@ -1815,11 +1934,13 @@ await page.close();
   const s = await shot(p4);
   const scales = s.cards.map((c) => c.scale);
   check('reduced-motion 下一张都不放大（§5.1 退化成离散翻页）', Math.max(...scales) <= 1.001, `最大 scale ${Math.max(...scales)}`);
-  check('reduced-motion 下站距均匀', (() => {
-    const vis = s.cards.filter((c) => c.vis).sort((a, b) => a.cy - b.cy);
-    const gaps = vis.slice(1).map((c, i) => c.cy - vis[i].cy);
-    return Math.max(...gaps) - Math.min(...gaps) < 1;
-  })(), '');
+  // 按**排**量（E18）：按卡量的话同一排那两张的 cy 一模一样，间距里混进一堆 0，
+  // 「均匀」永远不成立——而那不是不均匀，是尺子拿错了单位。
+  check('reduced-motion 下排距均匀', (() => {
+    const vis = s.rows.filter((r) => r.vis).sort((a, b) => a.cy - b.cy);
+    const gaps = vis.slice(1).map((r, i) => r.cy - vis[i].cy);
+    return gaps.length >= 2 && Math.max(...gaps) - Math.min(...gaps) < 1;
+  })(), `${s.rows.length} 排`);
   // 拖完立刻就位，不等弹簧
   const box = await p4.evaluate(() => {
     const r = document.querySelector('.mode-axis').getBoundingClientRect();
@@ -1875,7 +1996,7 @@ await page.close();
  * 三种视口都过一遍。568×320 走的是宽版排布（没有轴），那一台会明说跳过——
  * **跳过要说出来**，免得「没量」被当成「量过了，没问题」。
  */
-for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [568, 320, '568×320']]) {
+for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [320, 568, '320×568'], [568, 320, '568×320']]) {
   const c = await browser.newContext({ viewport: { width: vw, height: vh }, isMobile: true, hasTouch: true });
   const pg = await c.newPage();
   pg.on('pageerror', (e) => errs.push(`${label}: ${e.message}`));
@@ -1927,6 +2048,13 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
             ? Math.max(ar.left - kr.left, kr.right - ar.right, ar.top - kr.top, kr.bottom - ar.bottom)
             : 0,
           offX: er.left + er.width / 2 - midX,
+          // 两列那几条要用的（E18）
+          col: (el.className.match(/axis-col--(\S+)/) || [, '?'])[1],
+          cy: +(er.top + er.height / 2).toFixed(1),
+          scale: +(er.width / (el.offsetWidth || 1)).toFixed(3),
+          // 图**画出来**的左右沿（带 scale），不是版面盒子。
+          artL: ar ? ar.left : 0,
+          artR: ar ? ar.right : 0,
         };
       });
     /*
@@ -1947,7 +2075,14 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
         }
       }
     }
-    return { token, rows, hostW: host.clientWidth, bombRule: bombRule.trim() };
+    // 两条点点轨的内沿：左边那颗的右沿、右边那颗的左沿。图不许压过去（见下面 ⑥）。
+    const dl = document.querySelector('.axis-rail--l .axis-dot');
+    const dr = document.querySelector('.axis-rail--r .axis-dot');
+    return {
+      token, rows, hostW: host.clientWidth, bombRule: bombRule.trim(),
+      midX, vw: document.documentElement.clientWidth,
+      dotIn: dl && dr ? { l: dl.getBoundingClientRect().right, r: dr.getBoundingClientRect().left } : null,
+    };
   });
 
   // ④ 一张表：出问题时一眼看得见是哪张，不用猜
@@ -1979,22 +2114,27 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
   );
 
   /**
-   * ①b **每张卡本身是整幅宽。**
+   * ①b **每张卡本身正好是半幅宽**（E18 之前是整幅）。
    *
    * 这一条才是真正抳住 157px 那次事故的。反向验过：把
    * `.home-page:not(.home-page--wide) .home-icon-btn { max-width: 157px }` 注回去，
    * **上面那两条纹丝不动**——因为这一版的格子是 `width/height: var(--axis-art)`
    * 写死的，卡变窄根本不影响格子（当年那个 bug 就是从这一层堆死的）。但卡
-   * 本身会被压成 157，而它应该是整幅宽——图在卡里自己居中靠的就是这一点。
+   * 本身会被压成 157，而它应该是半幅宽——图在卡里自己居中靠的就是这一点。
    * 所以量卡宽：压回去立刻红。
+   *
+   * 「半幅」同时也是热区那一条：卡的版面盒子正好铺满自己那一列，不多不少，所以左半
+   * 边屏幕一定点到左边那张。整幅（两张盒子完全重叠）会让点击落到 z-index 高的那张上
+   * ——看着点的是左边那个玩法，开出来的是右边那个。
    */
-  const narrow = art.rows.filter((r) => Math.abs(r.cardW - art.hostW) > 1);
+  const want = art.hostW / COLS;
+  const narrow = art.rows.filter((r) => Math.abs(r.cardW - want) > 1);
   check(
-    `${label}：每张卡都是整幅宽（没被外面的 max-width 压住）`,
+    `${label}：每张卡正好半幅宽（一排两张，热区不重叠）`,
     narrow.length === 0,
     narrow.length
-      ? narrow.map((r) => `${r.name} 卡宽 ${r.cardW} ≠ 轴宽 ${art.hostW}（max-width ${r.cardMaxW}）`).join(' / ')
-      : `卡宽 ${art.hostW}`,
+      ? narrow.map((r) => `${r.name} 卡宽 ${r.cardW} ≠ 半幅 ${want}（max-width ${r.cardMaxW}）`).join(' / ')
+      : `卡宽 ${want}`,
   );
 
   // ② 图完整落在格子里（炸弹那张就靠这条）
@@ -2005,12 +2145,93 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     spill.length ? spill.map((r) => `${r.name}（${r.kind}）溢出 ${r.over.toFixed(1)}px`).join(' / ') : '',
   );
 
-  // ③ 水平中心对准中线
-  const off = art.rows.filter((r) => Math.abs(r.offX) > 1);
+  /**
+   * ③ 两列：左列在中线左边四分之一处、右列在右边，**偏移量一模一样**（E18「对齐排」）。
+   *
+   * 从前这一条是「每张卡都对准中线」——那是一列时代的写法，两列之后它必红。换成对称：
+   * 左右两列各自偏 ±hostW/4，而且两边的绝对值相等（差 < 1px）。
+   */
+  const quarter = art.hostW / 4;
+  const badCol = art.rows.filter((r) => {
+    if (r.col === 'solo') return Math.abs(r.offX) > 1;
+    const sign = r.col === '0' ? -1 : 1;
+    return Math.abs(r.offX - sign * quarter) > 1;
+  });
   check(
-    `${label}：每张卡的水平中心都对准中线（容差 1px）`,
-    off.length === 0,
-    off.length ? off.map((r) => `${r.name} 偏 ${r.offX.toFixed(1)}px`).join(' / ') : '',
+    `${label}：左列偏 −${quarter.toFixed(1)}、右列偏 +${quarter.toFixed(1)}（容差 1px）`,
+    badCol.length === 0,
+    badCol.length ? badCol.map((r) => `${r.name}（${r.col}）偏 ${r.offX.toFixed(1)}px`).join(' / ') : '',
+  );
+
+  /**
+   * ⑤ **一排两张：同一条水平线、同一个倍率。**
+   *
+   * E18 的原话是「对齐排，聚焦一排两张同倍率」，这一条就是那半句。按 cy 分组之后，每
+   * 组该正好两张（卡片数是奇数时最后一组一张），而且两张的 scale 要相等。
+   *
+   * 它拦的是「横向用 translateX 摆」那条路：那样两张卡各自算各自的 transform，哪天有人
+   * 把 col 也喂进鱼眼（比如按卡片序号算 inf），同一排两张就会一大一小——屏幕上像是
+   * 「右边那张没选中」，而实际上两张都在焦点上。
+   */
+  const rowMap = new Map();
+  for (const r of art.rows) {
+    const key = Math.round(r.cy * 2) / 2;
+    if (!rowMap.has(key)) rowMap.set(key, []);
+    rowMap.get(key).push(r);
+  }
+  const grouped = [...rowMap.values()];
+  check(
+    `${label}：${CARDS} 张卡正好排成 ${ROWS} 排`,
+    grouped.length === ROWS,
+    `${grouped.length} 排：${grouped.map((g) => g.length).join('+')}`,
+  );
+  const badPair = grouped.filter((g, i) => (i < ROWS - 1 || CARDS % COLS === 0 ? g.length !== COLS : g.length !== 1));
+  check(
+    `${label}：每一排都是两张（最后一排可以落单）`,
+    badPair.length === 0,
+    badPair.map((g) => g.map((r) => r.name).join('/')).join(' | '),
+  );
+  const badScale = grouped.filter((g) => Math.max(...g.map((r) => r.scale)) - Math.min(...g.map((r) => r.scale)) > 0.005);
+  check(
+    `${label}：同一排两张同倍率（E18 的「同倍率」）`,
+    badScale.length === 0,
+    badScale.map((g) => g.map((r) => `${r.name} ${r.scale}`).join(' vs ')).join(' | '),
+  );
+
+  /**
+   * ⑥ **放大之后也不过中线、也不压点点轨。**
+   *
+   * 两列最容易坏的就是这一样，而它坏了不报错：
+   *   · 过中线 → 左右两张图叠在一起，两张卡的热区重合，点错；
+   *   · 压点点 → 卡片 z-index 10–100、轨是 2，图直接盖掉那六颗点，而那是「我在第几排」
+   *     的唯一提示（玩家为这件事提过两轮）。
+   *
+   * 这两件事的账算在 modeAxis 的 PARAMS（maxScale 1.22）和 style.css 的两档
+   * `--axis-art` 上。这一条按**画出来的图**量，所以哪一头被改动了它都认得出来。
+   */
+  const over = art.rows.filter((r) => (r.col === '0' ? r.artR > art.midX - 6 : r.artL < art.midX + 6));
+  check(
+    `${label}：放大到头也不过中线（两列之间留得下 12px）`,
+    over.length === 0,
+    over.length
+      ? over.map((r) => `${r.name} 图 ${r.artL.toFixed(1)}..${r.artR.toFixed(1)}，中线 ${art.midX}`).join(' / ')
+      : `中线 ${art.midX}`,
+  );
+  //
+  // 留 **6px** 而不是 4px，是为了让它拦得住「把 `--axis-art` 那两档窄屏步进撤掉」：撤掉
+  // 之后 360 的屏上图从 21.7 起、点子内沿 17.5，只差 4.2px——4px 的门槛放它过去（差
+  // 0.2px），6px 当场红。门槛要比「坏掉之后的值」宽出一截，才拦得住那件事本身。
+  const onRail = art.dotIn
+    ? art.rows.filter((r) => r.artL < art.dotIn.l + 6 || r.artR > art.dotIn.r - 6)
+    : [];
+  check(
+    `${label}：放大到头也不压两侧的点点轨（留得下 6px）`,
+    !!art.dotIn && onRail.length === 0,
+    art.dotIn
+      ? (onRail.length
+        ? onRail.map((r) => `${r.name} 图 ${r.artL.toFixed(1)}..${r.artR.toFixed(1)}`).join(' / ')
+        : `点子内沿 ${art.dotIn.l.toFixed(1)} / ${art.dotIn.r.toFixed(1)}`)
+      : '（没找到点点）',
   );
   /**
    * ⑤ **轴上那条 `.bomb-panel` 规则里，宽高一个 auto 都不能留。**

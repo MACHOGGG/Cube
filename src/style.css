@@ -1583,8 +1583,8 @@ button:hover { filter: brightness(1.05); }
    */
   --axis-shift: 0px;
   /* 一站那个**正方格**有多大。图一律装进这个格子里（下面那条），所以它同时是
-     「最小」和「最大」的基准：十四张图在轴上占的地方一样大，差别只由鱼眼的
-     scale 给（0.72–1.60，见 ui/modeAxis.ts 的 PARAMS）。
+     「最小」和「最大」的基准：十二张图在轴上占的地方一样大，差别只由鱼眼的
+     scale 给（0.68–1.22，见 ui/modeAxis.ts 的 PARAMS）。
      2026-09 第二轮从 112 收到 100，第五轮又回到 112——玩家要「整体大小差异再大
      一点，中线那张再放大一些」。 */
   --axis-art: 112px;
@@ -1648,10 +1648,24 @@ button:hover { filter: brightness(1.05); }
   color: var(--ink-faint, currentColor);
   z-index: 2;
 }
-/* 那 `--axis-bleed-*` 是 modeAxis 的 measure 喂进来的：轴横着撑到了视口边上（好
-   让屏幕最边上那两条也能拖），点点用同样的量缩回来，位置一个像素都不变。 */
-.axis-rail--l { left: calc(6px + var(--axis-bleed-l, 0px)); }
-.axis-rail--r { right: calc(6px + var(--axis-bleed-r, 0px)); }
+/*
+ * 贴**真正的屏幕边**（轴横着就撑到了视口边上，所以这儿的 6px 是离屏幕 6px）。
+ *
+ * 从前这两句是 `calc(6px + var(--axis-bleed-l))`：轴为了「屏幕最边上那两条也能拖」
+ * 横向撑到视口，点点再用同样的量缩回来，于是点子画在**正文那一栏的边上**（390 的屏
+ * 上 x 30.5–39.5），位置和撑开之前一个像素都不差。
+ *
+ * 一排两张之后（E18）那个位置被占了：左列那张图放大到 1.22 倍时从 x 21.7 起（360 的
+ * 屏），正好压在 30.5–39.5 上——而卡片的 z-index 是 10–100、轨是 2，图是盖在上面的。
+ * 盖掉的东西是「我在第几排」的唯一提示，而玩家为这件事提过两轮（第七轮要真滚轮，又一
+ * 轮点名「只展示了几个很莫名其妙」）。
+ *
+ * 所以把 `--axis-bleed-*` 那一截让出来：点子退到 8.5–17.5，正是两列铺开之后空出来的
+ * 那条边。**`--axis-bleed-*` 两个变量没有删**——measure() 还在喂，别处也还认它，撤掉
+ * 等于给下一个人留一个「变量在、但没人用」的谜。
+ */
+.axis-rail--l { left: 6px; }
+.axis-rail--r { right: 6px; }
 /*
  * 手指按在这一带拖的时候，整列点子变成强调色（modeAxis 的 onDown 挂的类）。
  *
@@ -1740,13 +1754,24 @@ button:hover { filter: brightness(1.05); }
    V 型三角那三张宽画布的图（193/179/200）溢出去压住左右。 */
 .home-page:not(.home-page--wide) .mode-axis > .home-icon-btn {
   position: absolute;
-  /* **整幅宽**，不是 left:50% 的收缩盒。
-     `left: 50%` 的绝对定位元素可用宽度只剩半屏（173px），于是宽画布的那几张图
-     （老虎机 193、七色圆球 179、进阶三角 200）被挤到 157，多出来的部分溢到卡
-     外面，压在左右两边。整幅宽之后，图在卡里自己居中，要多宽有多宽。 */
-  left: 0;
-  right: 0;
-  width: 100%;
+  /*
+   * **半幅宽**：一排两张（E18「两列鱼眼滚轴」）。左右由下面那三个 `axis-col--*` 摆。
+   *
+   * ⚠️ 这儿从前写的是整幅宽（`left: 0; right: 0; width: 100%`），理由记在这儿，因为
+   * 它**现在不成立了，而当时是对的**：那时候图的宽度随图形比例走（`width: auto`），
+   * `left: 50%` 的收缩盒把可用宽压到半屏 173px，于是宽画布的那几张（老虎机 193、七色
+   * 圆球 179、进阶三角 200）被挤到 157，多出来的部分溢到卡外面压住左右两边。
+   *
+   * 第五轮之后每张图都住在一个 `--axis-art` 的**正方格**里（112px 定数，见下面那条
+   * `.home-icon-art`）——宽度不再是 auto，也就没有「被可用宽压扁」这回事了。半幅在
+   * 360 的屏上是 180px，比 112 宽得多，图照旧原尺寸，只是居中的位置从屏幕中线挪到了
+   * 半幅的中线。
+   *
+   * 为什么不是「整幅宽 ＋ JS 每帧 translateX 半格」：那样两张卡的**版面盒子**完全重
+   * 叠，点屏幕左半边会打到右边那张（谁 z-index 高听谁的）——看着点的是「经典方块」，
+   * 开出来的是「圆球」。见 modeAxis.ts 的 mount。
+   */
+  width: 50%;
   top: calc(50% - var(--axis-shift, 0px));
   /* 轴上的位置是**每帧算出来的**，不能再被 CSS 平滑一遍。
      全局那条 `button { transition: transform .1s ease }`（style.css 顶上）会把
@@ -1773,6 +1798,40 @@ button:hover { filter: brightness(1.05); }
      scale() 绕中心一放大，左半截直接推出屏幕。 */
   text-align: center;
 }
+/*
+ * 一排两张，各占半幅（E18）。
+ *
+ * `left` 用百分比而不是 `right: 50%`，因为盒子已经是 `width: 50%` 了——两头都写会让
+ * 宽度被算两遍。`.axis-col--solo` 是卡片数为奇数时最后那一排落单的那张：摆在正中，
+ * 不是靠左（靠左会被看成「右边那张没加载出来」）。
+ *
+ * 选择器跟着上面那条一起带 `.home-page:not(.home-page--wide)`：窄屏那条
+ * `.home-page:not(.home-page--wide) .home-icon-btn { max-width: … }` 是 0,3,0，不带
+ * 的话这三条（0,2,0）压不过它，和上面那条一个道理。
+ */
+/*
+ * 窄屏上图的格子要跟着**横向预算**走（E18 之后才有这件事）。
+ *
+ * 预算是这么算的：一列占半幅，图在半幅里居中，所以放大之后它从 `vw/4 − 0.61×格子`
+ * 起（0.61 = maxScale 1.22 的一半）。左边 x ≤ 17.5 是点点轨（上面那条），留 6px 气
+ * 口，于是 `vw/4 − 0.61×格子 ≥ 23.5`：
+ *
+ *   390 的屏  →  112 够用（图从 29.2 起，离轨 11.7）
+ *   360 的屏  →  112 只剩 4.2，退到 104（26.6 起，离轨 9.1）
+ *   320 的屏  →  104 会压上去（−5.8），退到 88（26.3 起，离轨 8.8）
+ *
+ * 两道槛按**真机宽度**切，不按算出来的临界值：360 是安卓那一档、320 是 iPhone SE 那
+ * 一档。切在临界值上的话，359 的屏会落在「刚好够用」的那一侧，离轨只剩 0.6px。
+ *
+ * 为什么不写成 `min(112px, 28vw)` 一行了事：自定义属性里不许藏新函数——小红书那一端
+ * 跑在 Chrome 61 上，算不动 `min()`，整条声明被丢掉，`--axis-art` 于是没有值，图的格
+ * 子塌成 0。门 check-css-fallbacks 专门守这件事。分档写死，两个内核算出来一模一样。
+ */
+@media (max-width: 389px) { .home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-art: 104px; } }
+@media (max-width: 359px) { .home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-art: 88px; } }
+.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--0 { left: 0; }
+.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--1 { left: 50%; }
+.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--solo { left: 25%; }
 /*
  * 轴上每张图都住在**同一个正方格**里。
  *
@@ -1824,10 +1883,12 @@ button:hover { filter: brightness(1.05); }
  * 轴上那行小字要按**它被放大之后**有多大来定，不是按 CSS 里写的那个数。
  *
  * 这一条 2026-09 才单列出来。上面那份通稿给的是 clamp(0.58rem, 2.7vw, 0.72rem)，
- * 在 390 的屏上是 10.5px——看着是个小字号，可轴上聚焦那张卡整个带着 scale(1.6)
- * （PARAMS.maxScale），乘完是 **16.9px，和正文一样大**；430 的屏上 18.4px，比正文
- * 还大。于是「经典方块」四个字读起来像个标题，而它要的是一行轻注释。玩家的原话：
- * 「移动端主菜单的玩法名称文字太大了要缩小，符合轻微注释的设计感」。
+ * 在 390 的屏上是 10.5px——看着是个小字号，可轴上聚焦那张卡整个带着 scale（当时的
+ * PARAMS.maxScale 是 1.6），乘完是 **16.9px，和正文一样大**；430 的屏上 18.4px，比
+ * 正文还大。于是「经典方块」四个字读起来像个标题，而它要的是一行轻注释。玩家的原
+ * 话：「移动端主菜单的玩法名称文字太大了要缩小，符合轻微注释的设计感」。
+ * （两列之后 maxScale 收到 1.22，同一行字乘完是 8.8px——这一条于是更宽裕了，不用
+ * 跟着调。）
  *
  * 所以这儿把三个数一起按 1/1.6 收：clamp(0.4rem, 1.85vw, 0.5rem)，390 上 7.2px ×
  * 1.6 = 11.5px，360 上 10.7px，430 上 12.7px——比正文小一档，落在说明文字那一档。
@@ -3560,11 +3621,13 @@ body:has(.slot-page) .home-nav { display: none; }
   .profile-page > .genius-panel > .genius-cta,
   .profile-page > .genius-panel > .menu-section-label,
   .profile-page > .genius-panel > .genius-rule { grid-column: 1 / -1; }
-  /* 两列排不满的那一条：跨两列、只占一半宽、居中。不这么写它会孤零零贴在左边。
-     `:last-child:nth-child(odd)` 自己跟着条数走——横线以上正好占掉 6 格（招牌、
-     那颗键、两条去处、小标签、横线），所以「横线以下是奇数条」和「最后一条在奇
-     数位」是同一件事。以后加一条特供变成偶数，这条规则自动不生效，不用回来改。 */
-  .profile-page > .genius-panel > .profile-row:last-child:nth-child(odd) {
+  /* 两列排不满的那一条：跨两列、只占一半宽、居中。不这么写它会孤零零贴在左边，
+     右边空一格，看着就是「这一页没排好」。
+     谁落单由 JS 打记号（ui/accountPage.ts 的 `profile-row--alone`），不再用
+     `:last-child:nth-child(odd)` 那个奇偶推论——那个推论 2026-10 撤掉内部码之后当场
+     失效（子元素 17 → 16），而且它从来够不着「夹在两段中间」那一条（《多人游玩》上下
+     都是跨满整行的东西，它独占一行的左半边）。那一段注释在 accountPage.ts 里。 */
+  .profile-page > .genius-panel > .profile-row--alone {
     grid-column: 1 / -1; justify-self: center; width: calc((100% - 14px) / 2);
   }
 

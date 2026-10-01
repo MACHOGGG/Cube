@@ -314,6 +314,36 @@ export function renderAccountPage(
     </div>
   `;
 
+  /**
+   * 电脑端那两列里**排不满的那一条**：找出来，打个记号，CSS 把它居中。
+   *
+   * 这件事原先是纯 CSS：`.profile-row:last-child:nth-child(odd)`，靠的是「跨两列的那
+   * 几样各占偶数格，所以最后一条在奇数位 ⟺ 它落单」。那个推论有两个前提，而两个都已
+   * 经不成立了：
+   *
+   *   · **跨两列的那几样中间会断行。** 《多人游玩》上面是那颗键、下面是小标签，两边都
+   *     跨满整行——于是它自己独占一行的左半边，右半边空着。它不在末尾，`:last-child`
+   *     够不着它。
+   *   · **条数一改，奇偶就翻。** 2026-10 撤掉内部码那一条之后（账号改制推送 2），面板
+   *     的子元素从 17 个变成 16 个，这条规则当场失效：最后那条《Apple Watch》贴在左边，
+   *     右边空一格。屏幕上看着就是「这一页没排好」，而 CSS 一声不响。
+   *
+   * 所以改成按**真实的分段**算：跨两列的那几样把 `.profile-row` 切成几段，哪一段的条数
+   * 是奇数，这一段的最后一条就落单。加一条、撤一条都不用回来改这儿。
+   */
+  for (const panel of container.querySelectorAll('.genius-panel')) {
+    let run: Element[] = [];
+    const close = () => {
+      if (run.length % 2 === 1) run[run.length - 1].classList.add('profile-row--alone');
+      run = [];
+    };
+    for (const kid of panel.children) {
+      if (kid.classList.contains('profile-row')) run.push(kid);
+      else close();
+    }
+    close();
+  }
+
   /** Buying, restoring or signing out all change what this page should say,
    *  so each of them re-draws it. The palette is re-applied by hand because
    *  the page's glyphs are literal SVG, and only a repaint carries the

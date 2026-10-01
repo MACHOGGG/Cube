@@ -466,6 +466,27 @@ for (const size of SIZES) {
           }
         }
       }
+      /**
+       * 「排不满的那一条」现在可能有好几条，而且不一定在末尾。
+       *
+       * 跨两列的那几样（招牌、那颗键、小标签、横线）把 .profile-row 切成几段，哪一段的
+       * 条数是奇数，那一段的最后一条就落单——2026-10 撤掉内部码之后，《多人游玩》就是夹
+       * 在两段中间落单的那一条。所以这儿按**分段**找，逐条量它有没有居中。
+       */
+      const runs = [];
+      let run = [];
+      for (const kid of panel.children) {
+        if (kid.classList.contains('profile-row')) run.push(kid);
+        else { if (run.length) runs.push(run); run = []; }
+      }
+      if (run.length) runs.push(run);
+      const alone = runs.filter((r) => r.length % 2 === 1).map((r) => r[r.length - 1]);
+      const aloneBad = alone
+        .map((e) => {
+          const r = e.getBoundingClientRect();
+          return { t: e.textContent.trim().slice(0, 8), mid: Math.round(r.left + r.width / 2), half: r.width < pr.width * 0.7 };
+        })
+        .filter((a) => a.mid !== Math.round(pr.left + pr.width / 2) || !a.half);
       const last = boxes[boxes.length - 1];
       // 几条一行 = **同一个 top 上最多挤了几条**。
       //
@@ -493,6 +514,9 @@ for (const size of SIZES) {
         panelMid: Math.round(pr.left + pr.width / 2),
         lastHalf: last.width < pr.width * 0.7,
         legalRows: new Set(legal.map((g) => g.y)).size,
+        legalN: legal.length,
+        aloneN: alone.length,
+        aloneBad: aloneBad.map((a) => `${a.t} 中 ${a.mid}${a.half ? '' : '（占满整行）'}`).join('；'),
         tailMid: tail.length === 1 ? tail[0] : Math.round((Math.min(...tail) + Math.max(...tail)) / 2),
         hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         back: (() => {
@@ -509,11 +533,24 @@ for (const size of SIZES) {
   check('电脑 1440：中栏收成 760', wide.col === 760, `${wide.col}px`);
   check('电脑 1440：天才特供排成两列', wide.cols === 2, `量到 ${wide.cols} 列`);
   check('电脑 1440：两列没有互相压上', wide.overlap === null, wide.overlap || '干净');
-  check('电脑 1440：排不满的那一条居中（中线对上面板中线）',
-    wide.lastMid === wide.panelMid && wide.lastHalf,
-    `条中 ${wide.lastMid} / 面板中 ${wide.panelMid}${wide.lastHalf ? '' : '（而且它占满了整行）'}`);
-  check('电脑 1440：法务五条排成两行（3 + 2）', wide.legalRows === 2, `${wide.legalRows} 行`);
-  check('电脑 1440：第二行那两条也居中', wide.tailMid === wide.panelMid, `${wide.tailMid} / ${wide.panelMid}`);
+  /**
+   * 排不满的那一条要居中——**每一段都要**，不只是最后那一段。
+   *
+   * 先立尺子：真的存在落单的那一条。2026-10 这一页有两条（《多人游玩》和末尾那条
+   * 《Apple Watch》）；哪天条数都凑成偶数，`aloneN` 会是 0，这一条就成了空绿，所以把它
+   * 单独报出来。
+   */
+  check('电脑 1440：（尺子）真有排不满的那一条', wide.aloneN > 0, `${wide.aloneN} 条落单`);
+  check('电脑 1440：排不满的那几条都居中（中线对上面板中线）',
+    wide.aloneBad === '', wide.aloneBad || `${wide.aloneN} 条，都对着 ${wide.panelMid}`);
+  /**
+   * 法务那一段 2026-10 从五条收到**两条**（账号改制推送 3：价格/条款/退款/联系四张静态
+   * 页撤了，只留隐私政策，外加《联系与特别感谢》）。所以这儿量的是「两条并排一行」，
+   * 不再是「五条排成 3 + 2」。
+   */
+  check('电脑 1440：（尺子）法务那一段是两条', wide.legalN === 2, `${wide.legalN} 条`);
+  check('电脑 1440：法务两条并排一行', wide.legalRows === 1, `${wide.legalRows} 行`);
+  check('电脑 1440：那一行整体居中', wide.tailMid === wide.panelMid, `${wide.tailMid} / ${wide.panelMid}`);
   check('电脑 1440：整页不横向溢出', wide.hscroll === 0, `${wide.hscroll}px`);
   check('电脑 1440：《返回》在页面里（不是被挤出去）', wide.back.top > 0 && wide.back.h > 0,
     `top ${wide.back.top} · 高 ${wide.back.h}`);
@@ -523,12 +560,12 @@ for (const size of SIZES) {
   const phone = await read(390, 844);
   check('999：中栏回到 460（断点以下一个像素都不变）', narrow.col === 460, `${narrow.col}px`);
   check('999：天才特供回到一列', narrow.cols === 1, `量到 ${narrow.cols} 列`);
-  check('999：法务五条回到竖排', narrow.legalRows === 5, `${narrow.legalRows} 行`);
+  check('999：法务两条回到竖排', narrow.legalRows === narrow.legalN && narrow.legalN === 2, `${narrow.legalRows} 行 / ${narrow.legalN} 条`);
   check('手机 390：和 999 一样高（这一段完全够不到手机）', phone.pageH === narrow.pageH,
     `手机 ${phone.pageH} / 999 ${narrow.pageH}`);
   check('手机 390：一列、竖排、不横向溢出',
-    phone.cols === 1 && phone.legalRows === 5 && phone.hscroll === 0,
-    `${phone.cols} 列 · ${phone.legalRows} 行 · 溢出 ${phone.hscroll}px`);
+    phone.cols === 1 && phone.legalRows === phone.legalN && phone.legalN === 2 && phone.hscroll === 0,
+    `${phone.cols} 列 · 法务 ${phone.legalRows} 行 / ${phone.legalN} 条 · 溢出 ${phone.hscroll}px`);
   await ctx.close();
 }
 

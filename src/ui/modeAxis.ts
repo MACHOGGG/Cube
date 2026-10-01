@@ -6,6 +6,16 @@
  * 距离连续隆起——被聚焦的那张卡最大，左右各一张跟着变，第三张起回到基准态；间距
  * 也一起变，所以整条轴像一块有弹性的材质被按住，不是一个孤立的图标在自己胀大。
  *
+ * **2026-09-30（E18）：轴上一站从「一张卡」改成「一排两张」。** 玩家原话是「两列
+ * 鱼眼滚轴（对齐排，聚焦一排两张同倍率）」——也就是把两列那张网格的**排布**要回
+ * 来，但鱼眼那一套手感一个字不改。于是这个文件里多了一层换算：对外说卡片序号，对
+ * 内一律按排算（见 mountModeAxis 里 COLS 那一段，两个单位混用过一次的后果也记在
+ * 那儿）。横向位置全在 CSS（`axis-col--*`），这边只管纵向和倍率——所以同一排那两张
+ * 拿的是逐字相同的 transform，「同倍率」是这么来的，不是算两遍算巧了。
+ *
+ * 这一改动唯一牵动的手感数是 `maxScale`（1.60 → 1.22）：横向预算减半，1.60 的图会
+ * 压到对面那一列和点点轨上。那不是调手感，是算出来的，账在 PARAMS 里。
+ *
  * 玩家 2026-09 拍板的几条，都在这儿：
  *   · **全摊平**：13 张卡各占轴上一站，没有「点开再挑」的分组。（炸弹的三档三
  *     形、计时挑形状仍然保留——那是进了玩法之后的选择，不是菜单条目。）
@@ -94,8 +104,36 @@ const PARAMS: FisheyeParams = {
   // 23 = 135）：焦点半高 135×1.60/2 = 108.0，邻居 scale 1.195 半高 80.7，合
   // 188.7；那一段的间距是 150 + 60×0.857 = 201.4，留 12.7px。门 check-mode-axis
   // 逐对量这件事，改这几个数之前先跑它。
+  //
+  // ---- 两列之后 maxScale 从 1.60 收到 1.22（E18）----------------------------
+  //
+  // 这一条不是手感调出来的，是**算出来的**：一排摆两张，横向的预算当场减半，1.60
+  // 放不下。按最窄的那一台（门量的 360×640）算：
+  //
+  //   半幅 180，图是 112 的正方格居中 → 左列那张图的中心在 x = 90；
+  //   放大 s 之后图的半宽是 56s，于是它从 90 − 56s 伸到 90 + 56s。
+  //
+  // 两头各有一个硬界：
+  //
+  //   · **中线那道缝**：90 + 56s 要留在 180 以内，不然左右两张图叠在一起（叠上的后果
+  //     不是难看，是两张卡的热区重合——点错）。
+  //   · **点点轨**：轨画在离屏幕边 6px 处、宽 14px、点子 9px（见 style.css 的
+  //     `.axis-rail`），所以点子占住 x ∈ [8.5, 17.5]，而卡片的 z-index 是 10–100、
+  //     轨是 2 —— 图压过去就把它整条盖掉，而那是「我在第几排」的唯一提示。
+  //
+  // 取 s = 1.22：半宽 68.3，左列图落在 [21.7, 158.3] —— 离点子 4.2px，离中线 21.7px
+  // （两张图之间 43.4px 的缝）。390 的屏上更宽松（半幅 195，中心 97.5，图落在
+  // [29.2, 165.8]）。再往上一档 1.26 就只剩 1.9px 盖到点子上了。
+  //
+  // minScale **一个字没动**：横向的界管的是最大那一档，最小那一档不受影响，而玩家两
+  // 轮都在要「大小差异再大一点」——能留的落差一分都不让。1.22/0.68 = 1.79 倍，比从前
+  // 的 2.35 小，但一排两张一起胀，整排的变化比一张卡明显得多。
+  //
+  // 竖向反过来宽松了（焦点那张矮了）：按最紧那一对重算，焦点半高 135×1.22/2 = 82.4，
+  // 邻居 scale 0.982 半高 66.3，合 148.7，而那一段的间距照旧 201.4 —— 留 52.7px。所以
+  // minGap / maxGap 不动。
   minScale: tune('minScale', 0.68),
-  maxScale: tune('maxScale', 1.6),
+  maxScale: tune('maxScale', 1.22),
   minGap: tune('minGap', 150),
   maxGap: tune('maxGap', 210),
   lockRadius: tune('lock', 0.28),
@@ -323,9 +361,45 @@ export interface ModeAxis {
 export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   const cards = opts.cards.slice();
   const n = cards.length;
+  /**
+   * **一排两张**（E18：「两列鱼眼滚轴（对齐排，聚焦一排两张同倍率）」）。
+   *
+   * 轴上一站从此是**一排**，不是一张卡。所以这个文件里有两个单位，不能混：
+   *
+   *   · 对外（`opts.initial` / `onFocus` / `focusTo` / `focused`）一律是**卡片序
+   *     号**——menu.ts 记的是「他上次停在哪个玩法上」，那是一张卡，不是一排。
+   *   · 对内（`focus` / `aimFocus` / `spring` / `fisheye` / 点点）一律是**排号**。
+   *
+   * 两边在 `rowOf()` 这一处换算，别处不许再换一遍。混用过一次的代价很具体：轴有
+   * 12 张卡 6 排，拿卡片序号当排号去夹上界（`n - 1`），橡皮筋的端点就落在第 11
+   * 排——而轴只有 6 排，于是「滑到底」之后还能再往下拉五排的空白，松手也不弹回
+   * 来，屏幕上一张卡都没有。
+   */
+  const COLS = 2;
+  /** 轴上几站（＝几排）。最后一排可能只摆了一张。 */
+  const rows = Math.max(1, Math.ceil(n / COLS));
+  /** 这张卡在第几排。 */
+  const rowOf = (i: number) => Math.floor(Math.min(Math.max(i, 0), Math.max(n - 1, 0)) / COLS);
   host.classList.add('mode-axis');
   host.innerHTML = '';
-  for (const c of cards) host.appendChild(c);
+  for (let i = 0; i < n; i++) {
+    const c = cards[i];
+    /**
+     * 左半还是右半，由这个类说，位置写在 style.css 里（`left: 0` / `left: 50%`）。
+     *
+     * 为什么不是 JS 每帧 `translateX`：那样卡的**版面盒子**仍然是整幅宽，两张卡的
+     * 盒子完全重叠——点屏幕左半边会打到右边那张（谁 z-index 高听谁的）。看着点的
+     * 是「经典方块」，开出来的是「圆球」，而且一声不响。站点原则里那条「不要让玩
+     * 家出现意料之外的疏漏操作」说的就是这个。
+     *
+     * 落单的那一张（卡片数是奇数时的最后一排）摆在正中，不是靠左——靠左会看成
+     * 「右边那张没加载出来」。
+     */
+    const solo = rowOf(i) === rows - 1 && n % COLS === 1;
+    c.classList.remove('axis-col--0', 'axis-col--1', 'axis-col--solo');
+    c.classList.add(solo ? 'axis-col--solo' : `axis-col--${i % COLS}`);
+    host.appendChild(c);
+  }
   // 分界线也住进轴里：和卡片同一个定位参照，才好摆到「两站中间」。
   if (opts.divider) host.appendChild(opts.divider.el);
 
@@ -340,7 +414,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     rail.className = `axis-rail axis-rail--${side}`;
     rail.setAttribute('aria-hidden', 'true');
     const dots: HTMLElement[] = [];
-    for (let i = 0; i < n; i++) {
+    // 一排一颗，不是一张卡一颗——它量的是「我在这 6 排的哪一排」。
+    for (let i = 0; i < rows; i++) {
       const d = document.createElement('i');
       d.className = 'axis-dot';
       rail.appendChild(d);
@@ -352,8 +427,11 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   const railL = makeRail('l');
   const railR = makeRail('r');
 
-  /** 焦点：一个实数，2.4 就是第 2 张和第 3 张之间。 */
-  let focus = Math.min(Math.max(opts.initial ?? 0, 0), Math.max(n - 1, 0));
+  /**
+   * 焦点：一个实数，2.4 就是第 2 排和第 3 排之间。**单位是排**（见 COLS 那一段）。
+   * 进来的 `opts.initial` 是卡片序号，所以要换算一次。
+   */
+  let focus = Math.min(Math.max(rowOf(opts.initial ?? 0), 0), rows - 1);
   let hostH = 0;
   /** 中线离视口正中往上挪了多少（见 SHIFT_FRAC）。measure() 里算。 */
   let shift = 0;
@@ -576,7 +654,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * opacity。这儿记住上一帧的值，变了才写。
    */
   const lastPaint = cards.map(() => ({ t: '', o: '', z: 0, pe: '', f: '' }));
-  const lastDot = cards.map(() => '');
+  /** 一排一颗点（见 makeRail），所以这份缓存按**排**存，不按卡。 */
+  const lastDot = Array.from({ length: rows }, () => '');
   let lastDivider = '';
 
   /**
@@ -589,8 +668,19 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   function paintDivider(L: ReturnType<typeof fisheye>): void {
     const d = opts.divider;
     if (!d) return;
-    const a = L.slots.find((s) => s.index === d.after);
-    const b = L.slots.find((s) => s.index === d.after + 1);
+    /**
+     * `d.after` 是**卡片序号**，而轴上一站是一排——所以线落在「这张卡那一排」和
+     * 「下一排」之间。
+     *
+     * 两列之后这件事有个前提：`after` 得是它那一排的**最后一张**，否则同一排里会有
+     * 一张在线上面、一张在线下面，而线只有一条。眼下成立（能玩的是方块和圆球，正好
+     * 是第 0 排那两张），menu.ts 那头也是按「最后一张能玩的」算出来的。排不满的那天
+     * 会看出来：门 check-mode-axis 那一节量的是「线上头正好两张，而且正是那两张能玩
+     * 的」，能玩的变成三张、线于是切开一排的话，那个数就不是 2 了，当场红。
+     */
+    const ra = rowOf(d.after);
+    const a = L.slots.find((s) => s.index === ra);
+    const b = L.slots.find((s) => s.index === ra + 1);
     if (!a || !b) {
       if (lastDivider !== 'off') {
         lastDivider = 'off';
@@ -623,7 +713,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
 
   function paint(): void {
     if (destroyed || n === 0) return;
-    const L = fisheye(n, focus, params());
+    const L = fisheye(rows, focus, params());
     /**
      * 中心到屏幕**那一头**还有多远。
      *
@@ -648,21 +738,34 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      */
     const sk = reducedMotion() || motionTier() === 'lite' ? 0 : skewFor(vRender);
     for (const s of L.slots) {
-      const el = cards[s.index];
-      const prev = lastPaint[s.index];
+      /**
+       * 一站是**一排**，这一排上那两张卡拿的是同一个 `at`、同一个 `scale`
+       * ——E18 的「对齐排，聚焦一排两张同倍率」就是这两个「同」。
+       *
+       * 横向位置不在这儿写：那是 CSS 的 `axis-col--*` 管的（见 mount 那一段，为什么
+       * 不能用 translateX 也写在那儿）。所以这个循环里的每一行对两张卡是逐字相同
+       * 的，只有 `lastPaint` 的下标不同。
+       */
       // 逐帧只动 transform / opacity（§5.4：不许逐帧改 box-shadow / filter，那要
-      // 软件光栅化）。卡片是整幅宽的（见 style.css 的 .mode-axis > .home-icon-btn），
-      // 所以横向不用再 -50%，只把纵向拉回自己的一半高，再叠上这一帧的偏移。
+      // 软件光栅化）。卡片的版面盒子是半幅宽、左右由 CSS 摆好的（见 style.css 的
+      // `.axis-col--*`），所以横向不用再 translate，只把纵向拉回自己的一半高，再
+      // 叠上这一帧的偏移。
       // translate3d 打头是为了让它整张进合成层——`will-change: transform` 由 CSS
       // 常设（不再逐帧开关），两样配起来，滑动时不再每帧重新栅格化那张大 SVG。
       const t =
         `translate3d(0,-50%,0) translateY(${s.at.toFixed(2)}px) scale(${s.scale.toFixed(4)})` +
         ` skewY(${sk.toFixed(2)}deg)`;
-      if (t !== prev.t) { el.style.transform = t; prev.t = t; }
-      // 聚焦那张压在上面：形变之后相邻两张的边距只剩十来个像素，层序错了会看见
+      // 聚焦那一排压在上面：形变之后相邻两排的边距只剩十来个像素，层序错了会看见
       // 大的那张被小的压住一条边。
       const z = 10 + Math.round(s.inf * 90);
-      if (z !== prev.z) { el.style.zIndex = String(z); prev.z = z; }
+      for (let col = 0; col < COLS; col++) {
+        const at = s.index * COLS + col;
+        // 最后一排可能只摆了一张（卡片数是奇数）。
+        if (at >= n) break;
+        const el = cards[at];
+        const prev = lastPaint[at];
+        if (t !== prev.t) { el.style.transform = t; prev.t = t; }
+        if (z !== prev.z) { el.style.zIndex = String(z); prev.z = z; }
       /**
        * **一张都不淡**：玩家 2026-09 第三轮——「上方和下方仍然有渐变的覆盖，完全
        * 去除」。所以这儿不再按距离算透明度，卡片从头到尾都是实的，越过轴的上下
@@ -672,66 +775,70 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        * 这一行留着不是多余：上一版给这些卡写过内联的 opacity，不清掉的话它会一直
        * 挂在 style 上。写成空串就退回 CSS。
        */
-      if (prev.o !== '') { el.style.opacity = ''; prev.o = ''; }
-      /**
-       * 离轴太远的就别挡手。
-       *
-       * 它们现在是**看得见**的（从板子底下滑过去），但轴外面那一带上面盖着底排
-       * 导航和招牌——手指落在那儿本该点到底排，不该被一张飘到那儿的卡截走。界线
-       * 取「轴的半高 + 一张半卡」：屏幕上看得见的那几张都在界内，再远的只剩画面，
-       * 不吃手势。
-       *
-       * 挡法用 pointer-events，**不是 visibility: hidden**：后者键盘聚焦不到，于
-       * 是 Tab 只走得到眼前那四五张，剩下九张玩法用键盘永远到不了。
-       *
-       * 轴占满整屏之后这一条挡的是**画到 clip-margin 那一圈里去的那几张**：页面
-       * 往下滑一点，轴的下沿就抬进屏幕里，而 clip-margin 让它外面 220px 照样画得
-       * 出来、也照样点得到——那一带底下是底排，手指落在那儿本该点到底排。
-       */
-      const far = Math.abs(s.at);
-      const pe = far > edgeOf(s.at) + stationH * 1.5 ? 'none' : '';
-      if (pe !== prev.pe) { el.style.pointerEvents = pe; prev.pe = pe; }
-      /**
-       * 上下两头那一点**虚**（出处和两个数在 BLUR_EDGE 上面）——**只在停稳之后
-       * 给，手指一碰就全撤掉**。
-       *
-       * 第四轮是一直给着的，玩家第五轮报「滑动转盘不够丝滑现在还是卡卡的」。
-       * `filter: blur()` 是这条轴上最贵的一样东西：每变一次就要把那张卡连同里面
-       * 那张 SVG 重新栅格化一遍，手机上一次滑动里有四五张卡在虚着，每张又要改好
-       * 几档——帧全花在这儿了。
-       *
-       * 而它本来就是给「停着看」的一个交代（两头不是被切掉，是化开了）。滑动中
-       * 那一眼没人盯着两头，所以这一版：`dragging || springing` 的时候一律清空，
-       * 停稳那一刻再补一次 paint 把它加回来（见 settled）。滑动时一次 filter 都
-       * 不写。
-       *
-       * 量的是「这张卡的中心离最近的那条屏幕边还有多远」——轴的盒子就是视口，所
-       * 以 `半高 − |位移|` 正好是这个距离。写之前量化成 0.5px 一档，理由同上。
-       */
-      // **焦点豁免**（v1.1 §3，随这一批落地）：影响度高的那几张一律不虚。只按离屏幕边
-      // 多远算的话，把轴拖到两端、焦点那张自己贴着屏幕边的时候，正被选中的那张是最模
-      // 糊的一张——玩家盯着看的恰好看不清。判定抽成了纯函数（axisMotion 的 blurFor，
-      // 门钉着它），这儿只管把两个量喂进去。
-      const room = edgeOf(s.at) - far;
-      const q = still && BLUR_ON ? blurFor(room, s.inf, BLUR_EXEMPT_ON) : 0;
-      const f = q > 0 ? `blur(${q}px)` : '';
-      if (f !== prev.f) { el.style.filter = f; prev.f = f; }
+        if (prev.o !== '') { el.style.opacity = ''; prev.o = ''; }
+        /**
+         * 离轴太远的就别挡手。
+         *
+         * 它们现在是**看得见**的（从板子底下滑过去），但轴外面那一带上面盖着底排
+         * 导航和招牌——手指落在那儿本该点到底排，不该被一张飘到那儿的卡截走。界线
+         * 取「轴的半高 + 一张半卡」：屏幕上看得见的那几张都在界内，再远的只剩画面，
+         * 不吃手势。
+         *
+         * 挡法用 pointer-events，**不是 visibility: hidden**：后者键盘聚焦不到，于
+         * 是 Tab 只走得到眼前那四五张，剩下九张玩法用键盘永远到不了。
+         *
+         * 轴占满整屏之后这一条挡的是**画到 clip-margin 那一圈里去的那几张**：页面
+         * 往下滑一点，轴的下沿就抬进屏幕里，而 clip-margin 让它外面 220px 照样画得
+         * 出来、也照样点得到——那一带底下是底排，手指落在那儿本该点到底排。
+         */
+        const far = Math.abs(s.at);
+        const pe = far > edgeOf(s.at) + stationH * 1.5 ? 'none' : '';
+        if (pe !== prev.pe) { el.style.pointerEvents = pe; prev.pe = pe; }
+        /**
+         * 上下两头那一点**虚**（出处和两个数在 BLUR_EDGE 上面）——**只在停稳之后
+         * 给，手指一碰就全撤掉**。
+         *
+         * 第四轮是一直给着的，玩家第五轮报「滑动转盘不够丝滑现在还是卡卡的」。
+         * `filter: blur()` 是这条轴上最贵的一样东西：每变一次就要把那张卡连同里面
+         * 那张 SVG 重新栅格化一遍，手机上一次滑动里有四五张卡在虚着，每张又要改好
+         * 几档——帧全花在这儿了。
+         *
+         * 而它本来就是给「停着看」的一个交代（两头不是被切掉，是化开了）。滑动中
+         * 那一眼没人盯着两头，所以这一版：`dragging || springing` 的时候一律清空，
+         * 停稳那一刻再补一次 paint 把它加回来（见 settled）。滑动时一次 filter 都
+         * 不写。
+         *
+         * 量的是「这张卡的中心离最近的那条屏幕边还有多远」——轴的盒子就是视口，所
+         * 以 `半高 − |位移|` 正好是这个距离。写之前量化成 0.5px 一档，理由同上。
+         */
+        // **焦点豁免**（v1.1 §3，随这一批落地）：影响度高的那几张一律不虚。只按离屏幕边
+        // 多远算的话，把轴拖到两端、焦点那张自己贴着屏幕边的时候，正被选中的那张是最模
+        // 糊的一张——玩家盯着看的恰好看不清。判定抽成了纯函数（axisMotion 的 blurFor，
+        // 门钉着它），这儿只管把两个量喂进去。
+        const room = edgeOf(s.at) - far;
+        const q = still && BLUR_ON ? blurFor(room, s.inf, BLUR_EXEMPT_ON) : 0;
+        const f = q > 0 ? `blur(${q}px)` : '';
+        if (f !== prev.f) { el.style.filter = f; prev.f = f; }
+      }
 
       /**
-       * 点点轴：按**项**等距排，不跟着卡片的形变走——它量的是「第几项」，中间那
-       * 颗永远对着当前选中的那张。
+       * 点点轴：**一排一颗**，等距排，不跟着卡片的形变走——它量的是「第几排」，中间
+       * 那颗永远对着当前选中的那一排。
+       *
+       * 两列之后它数的是排，不是卡（E18）。数卡的话十二颗点对着六排，拨一格点子走两
+       * 颗——「我在哪儿」立刻读不出来了，而这条轨存在的全部意义就是读出这个。
        *
        * 大小用 `transform: scale()`，**不改 width/height**。这是第五轮那条「还是
-       * 卡卡的」的另一半：两条轴一共 28 颗点，逐帧改宽高就是逐帧让浏览器重新排
-       * 版 28 次——排版是整棵树的事，比画 13 张卡还贵。scale 只走合成，一行都不
-       * 重排。点子在 CSS 里就是最大的那个尺寸（RAIL_DOT_MAX），这儿只往下缩。
+       * 卡卡的」的另一半：两条轴一共十来颗点，逐帧改宽高就是逐帧让浏览器重新排版十
+       * 来次——排版是整棵树的事，比画十二张卡还贵。scale 只走合成，一行都不重排。点子
+       * 在 CSS 里就是最大的那个尺寸（RAIL_DOT_MAX），这儿只往下缩。
        */
       /**
-       * **十四颗点全程都在。**
+       * **每一排都有一颗，全程都在。**
        *
        * 原先这儿多乘一个「可见窗口」因子：离焦点超过 RAIL_SPAN（4.6 项）的点被淡到 0，
        * 所以整条轨任何时刻只看得见焦点附近八九颗。玩家的话是「只展示了几个很莫名其
-       * 妙」——这条轨存在的全部意义是「我在这十四项的哪儿、后面还有多少」，而一条只显示
+       * 妙」——这条轨存在的全部意义是「我在这几排的哪儿、后面还有多少」，而一条只显示
        * 一段的进度条答不了后半个问题。窗口因子和 RAIL_SPAN 一起删掉了。
        *
        * 大小和亮度照旧随各自的影响度起伏（中间大而亮、两头小而淡），乘上同一份 flatF
@@ -757,7 +864,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     const near = L.nearest;
     if (near !== lastNearest) {
       lastNearest = near;
-      opts.onFocus?.(near);
+      // near 是**排号**，对外报的是卡片序号（见 focused()）。
+      opts.onFocus?.(near * COLS);
       // §5.2：只在「聚焦项换了」这一个离散事件上出一声，不跟着连续的形变播。
       // reduced-motion 下拖动途中一声不出，只在松手定格那一下出——玩家原话：
       // 「只在最后选中一个图标停下来的那一刻出声，快速滑过的时候不播」。
@@ -963,7 +1071,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   /** 轴上走了这么多像素之后，焦点落在第几项（可以是小数）。 */
   function focusFromAxis(want: number): number {
     const L = ruler;
-    if (!L || n < 2) return startFocus;
+    if (!L || rows < 2) return startFocus;
     // 落在两格之间就线性插值；出了尺子的范围按基准间距外推（成环之后可以一直滑
     // 下去，所以外推这条路是常走的，不是兜底）。
     if (want <= L[0].at) return startFocus + L[0].k + (want - L[0].at) / PARAMS.minGap;
@@ -991,12 +1099,15 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 两端的橡皮筋。曲线和那两个参数在 engine/axisMotion.ts 的 rubber 上面，
    * 连同「为什么不再是一堵墙」和实算出来的对照表。
    *
-   * 这儿只负责把它按到两头去。松手之后照旧夹回 [0, n−1]（见 onUp 的 target），
+   * 这儿只负责把它按到两头去。松手之后照旧夹回 [0, rows−1]（见 onUp 的 target），
    * 所以从过冲处松手仍然弹回端点——去掉的只是那堵墙，不是「不循环」。
+   *
+   * 上界是**排数**减一，不是卡片数减一（见 COLS 那一段：拿卡片数当上界，端点会
+   * 落在第 11 排，而轴只有 6 排）。
    */
   function clampRubber(f: number): number {
     if (f < 0) return -rubber(-f);
-    const max = n - 1;
+    const max = rows - 1;
     if (f > max) return max + rubber(f - max);
     return f;
   }
@@ -1127,10 +1238,10 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      * 就会在「慢慢拖到某一张、停住、松手」的时候停到上一张去——那正是玩家最怕的
      * 「选不准」。目标值是手指指着的那一项，落点从此和追赶无关。
      */
-    const target = Math.min(Math.max(Math.round(aimFocus + glide), 0), n - 1);
+    const target = Math.min(Math.max(Math.round(aimFocus + glide), 0), rows - 1);
     if (reducedMotion()) {
       // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。也不投影：那是动画。
-      const near = Math.min(Math.max(Math.round(aimFocus), 0), n - 1);
+      const near = Math.min(Math.max(Math.round(aimFocus), 0), rows - 1);
       focus = near;
       aimFocus = near;
       springTarget = near;
@@ -1205,11 +1316,14 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      */
     if (dragging) return;
     const i = cards.indexOf((e.target as HTMLElement)?.closest?.('.home-icon-btn') as HTMLElement);
-    if (i >= 0 && Math.round(focus) !== i) focusTo(i, !reducedMotion());
+    // 比的是**排**：同一排那两张本来就都在焦点上，Tab 从左边那张跳到右边那张不该让
+    // 整条轴动一下（动了就是「意料之外的界面」，而且那一跳还会打断他的 Tab 节奏）。
+    if (i >= 0 && Math.round(focus) !== rowOf(i)) focusTo(i, !reducedMotion());
   }
 
+  /** `index` 是**卡片序号**（对外的单位），换成排号再送进去。 */
   function focusTo(index: number, animate = true): void {
-    const target = Math.min(Math.max(index, 0), Math.max(n - 1, 0));
+    const target = Math.min(Math.max(rowOf(index), 0), rows - 1);
     if (!animate || reducedMotion()) {
       focus = target;
       snapSpring(spring, target);
@@ -1260,8 +1374,14 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   paint();
 
   return {
-    // focus 在回弹区里会短暂越界（-0.55 ~ n-1+0.55），对外报的必须是「第几项」。
-    focused: () => Math.min(Math.max(Math.round(focus), 0), Math.max(n - 1, 0)),
+    /**
+     * focus 在回弹区里会短暂越界（-0.55 ~ rows-1+0.55），对外报的必须是「第几张卡」。
+     *
+     * 一排两张同倍率，所以「现在聚焦的是哪一张」本来就没有唯一答案——报这一排的头
+     * 一张。menu.ts 拿它只做一件事：下次回主菜单停在这儿（focusTo 又会换回排号），
+     * 所以报哪一张都落回同一排。
+     */
+    focused: () => Math.min(Math.max(Math.round(focus), 0), rows - 1) * COLS,
     focusTo,
     destroy() {
       destroyed = true;
