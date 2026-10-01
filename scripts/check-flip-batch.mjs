@@ -184,6 +184,14 @@ check(
 // 无限反转不乘步数系数（§5），所以那一行不许摆——runRecord.ts 按「par 在不在」判，
 // 这儿从屏幕上再问一遍。
 check('无限反转：不摆步数系数那一行', !bodyRows.some((r) => r.includes('步数系数')), bodyRows.join(' | '));
+// 那句注解（`.end-row--tip`「综合分 = 拼出分 × 步数系数……」）在这一档也不许讲。
+//
+// 它从前只问「头一回吗」，不问「这一档乘不乘」：于是头一局打无限反转的人，上面三行
+// 明细里**连系数那一行都没有**（对的），底下却摆着一句解释那一乘的话——他照着往上
+// 看，找不到那个系数。比摆一行「×1.00」更糟：那只是摆出一个不起作用的数，这一句是
+// 讲一件这一局没发生的事。
+check('无限反转：那句「综合分 = 拼出分 × 步数系数」也不讲',
+  !(await has(page, '#endBreakdown .end-row--tip')), '');
 await page.evaluate(() => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
   document.dispatchEvent(new Event('visibilitychange'));
@@ -199,6 +207,33 @@ check('结算页《主页》→ 挑图形页（从哪儿来回哪儿）', await 
 await page.click('#flipBack');
 await page.waitForTimeout(300);
 check('再《退出》→ 主菜单', await has(page, '.home-page'));
+
+// 4b. 反面尺子：那句注解在**乘系数**的那一档照旧要讲。
+//
+// 少了这一条，上面那句「反转局不讲」就是恒真的——把注解整个删掉它也绿。
+// 顺带钉住一件更细的事：反转局那一局**不许把这一次性的教学烧掉**。
+// `claimFirstTotalTip()` 一问就记账，所以 gameController 那儿写的是
+// `usesStepCoef && hooks.shouldTeachTotal?.()`——左边先判。右边先跑的话，这个人的
+// 「头一回」用在了一局根本不显示它的反转局上，他从此再也看不到这句话。这儿正是
+// 同一个浏览器上下文里的第二局，所以它真能验出那个顺序。
+await tapCard(page, '.home-icon-btn[aria-label="方块"]');
+await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+await page.$eval('#startBtn', (e) => e.click());
+await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });
+await page.waitForTimeout(400);
+await page.click('#stopBtn');
+await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+await page.click('#pauseFinishBtn');
+await page.waitForSelector('#endOverlay.show', { timeout: 8000 });
+const baseRows = await page.$$eval('#endBreakdown .end-row', (els) =>
+  els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+);
+check('基础方块：那句注解讲了（尺子：不然上面那条是恒真的）',
+  await has(page, '#endBreakdown .end-row--tip'), baseRows.join(' | '));
+check('基础方块：步数系数那一行也在（它真的乘了）',
+  baseRows.some((r) => r.includes('步数系数')), baseRows.join(' | '));
+await page.click('#endBackBtn');
+await page.waitForTimeout(300);
 
 // 5. 屋主替小屋挑玩法：按到无限反转进挑图形页（小屋那圈粉边还在），《退出》回主菜单，横幅还在
 //    （挑完真开局的那条路在 check-room-flip.mjs 里，那儿有两台浏览器）

@@ -892,7 +892,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // ⚠️ 用的是自己的键（endTipComposite），不再借教学那几条的下标。从前借的是
       // 第 6 条，而教学 2026-09 收成了五条——借下标的写法当场就指空了，屏幕上是一
       // 行空白，不报错。
-      (hooks.shouldTeachTotal?.()
+      //
+      // **只在真的乘了步数系数的那几档讲。** 这句话解释的是「综合分 = 拼出分 × 步数
+      // 系数」，而不乘的那三档（老虎机、步步为营、无限反转）压根没有这一乘：上面那几
+      // 行明细里连系数那一行都不摆（按 par 在不在判，理由见下面 lastRun 那段——「摆一
+      // 行『×1.00』等于告诉玩家有这回事」）。注解比那一行更糟：那一行只是摆出一个不
+      // 起作用的数，这一句是**讲一件这一局没发生的事**，而且就讲在「指着实物讲」的位
+      // 置上——他照着往上看，明细里找不到那个系数。
+      //
+      // `usesStepCoef` 写在 `&&` 左边是要紧的：`shouldTeachTotal()` 一问就**记账**
+      // （firstPlay 的 claimFirstTotalTip 调 markOpened），右边先跑的话这一次性的教学
+      // 会白白烧在一局根本不显示它的反转局上，他从此再也看不到这句话。
+      (usesStepCoef && hooks.shouldTeachTotal?.()
         ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipComposite)}</span></div>`
         : '');
     // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
