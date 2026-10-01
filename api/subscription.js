@@ -10,7 +10,7 @@ import {
   tokenValid,
   updateAccount,
 } from './_accounts.js';
-import { resolveEntitlement } from './_entitlement.js';
+import { grantLifetimeIfWindow, resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
 
@@ -211,6 +211,20 @@ async function fromEmail(req, res, rawEmail, password, token) {
     }
     burnGuess(String(password));
   }
+
+  /**
+   * 窗口期：登录成功即送终身天才（《侵蚀阶梯》E11 / PR-12）。
+   *
+   * 必须在身份证明成立之后——上面两条路一条验过登录令牌、一条验过密码，走到这一行
+   * `issued` 有值就等于「这个人是这个邮箱的主人」。邮箱地址本身不是证据，它印在收据
+   * 上，谁都知道得到（CLAUDE.md 那条铁律）。
+   *
+   * 摆在 resolveEntitlement 之前：写完再问权益，这一次登录就能看到自己是天才；
+   * 反过来要等下一次启动，而玩家会以为没生效。
+   *
+   * 窗口没开时这一句是 no-op（grantWindowOpen() 为假，函数第一行原地返回）。
+   */
+  if (account && issued) account = await grantLifetimeIfWindow(address, account);
 
   // 两条路各归各，只写一遍（api/_entitlement.js 的 resolveEntitlement）：内部码
   // 账号看我们自己记的到期日，刷卡订阅去问 Creem。这儿凭刚验过的密码 / 令牌

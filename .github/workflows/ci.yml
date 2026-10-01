@@ -188,6 +188,14 @@ jobs:
       # 不连任何外部服务。
       - name: 谁算天才（权限）
         run: node scripts/check-entitlement.mjs
+
+      # 终身授予那一句挂在哪儿。读源码，不跑行为——它的四个要害全在「写在第几行」
+      # 上：没 import 就用（登录接口运行时 ReferenceError，全站登不进去，而
+      # `node --check` 和 typecheck 都查不出来——api/ 是纯 .js，不过 tsc）、排在
+      # resolveEntitlement 后面（这一次登录看不到自己是天才）、丢了 issued 那一半守卫
+      # （身份没证明就送权益）、不把结果赋回 account（库里写了、手上那份还是旧的）。
+      - name: 终身授予那一句的位置
+        run: node scripts/check-grant-callsite.mjs
       - name: 战绩与排行榜
         run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
       # 玩家交卷的那一瞬间管理员点了《重建榜单》：重建读出整份 stats（total /
