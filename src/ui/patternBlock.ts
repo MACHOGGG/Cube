@@ -14,23 +14,10 @@ import type { Family } from '../engine/targets';
  * 为什么是刻度环而不是一根进度条：玩家要读的不是「百分之多少」，是「还差几下」。
  * 一段一段熄下去数得出来，而一根越来越短的条只看得出「快了」。
  *
- * 末位那一枚的不透明度跟着本级剩余段数线性下降（1 → 0.15）：段快扣完的时候，图案
- * 上那一枚已经在淡出了——**降级不是突然发生的**，它有一个能看见的过程。
+ * 末位那一枚**不淡出**：要么整枚在，要么整枚没了。玩家 2026-10 的原话——「切换的时候
+ * 逐一取出就好」。见下面 `paintIcon` 那段。
  */
 
-/**
- * 末位那枚淡到最低多少。
- *
- * **0.45，不是 0.15**（v1.3.1 的 E24）。0.15 那一版玩家读成了 off-by-one：「这一块显示的
- * 是解锁之后那一级，不是当前这一级」。查下来级数本身一点没错（`check-pattern-level.mjs`
- * 把 erosion 的级数、`runPatternDef` 的图形数、老虎机那一路的 `sizeAtLevel`/`erodedFace`
- * 逐级逐枚验了一遍，全对）——错的是**看起来**：段快扣完的时候末位那一枚淡到 0.15，一排
- * 四枚在屏幕上读起来就是三枚，而玩家于是照三枚去凑，凑好了不给分。
- *
- * 所以这个数的下限不是审美，是「还看得出它在」这件事的门槛。0.45 仍然明显比前几枚淡
- * （「降级不是突然发生的」那个意思还在），但数得出来是四枚。
- */
-const TAIL_MIN_OPACITY = 0.45;
 /** 段数超过这个数就每 5 段画一根长刻度，不然一圈碎线数不清。 */
 const LONG_TICK_AFTER = 12;
 /** 变级时那两下亮度脉冲各多长。 */
@@ -157,12 +144,23 @@ export function mountPatternBlock(
     : null;
   ro?.observe(host);
 
-  function paintIcon(level: number, tailAlpha: number): void {
+  /**
+   * 画这一级的图标。**每一枚都是满的**，没有半透明的那一枚。
+   *
+   * 从前末位那一枚跟着本级剩余段数线性淡下去（1 → 0.15，后来抬到 0.45），本意是
+   * 「降级不是突然发生的，它有一个能看见的过程」。那个过程把这一块变成了一道算术
+   * 题：玩家报过一次 off-by-one——「这一块显示的是解锁之后那一级，不是当前这一
+   * 级」。查下来级数一个字没错（`check-pattern-level.mjs` 把 erosion 的级数、
+   * `runPatternDef` 的图形数、老虎机那一路的 `sizeAtLevel`/`erodedFace` 逐级逐枚
+   * 验过），错的是**看起来**：淡到一半的那一枚，一排四枚读起来就是三枚，于是他照
+   * 三枚去凑，凑好了不给分。抬到 0.45 只是让那一枚淡得没那么狠，题还在。
+   *
+   * 玩家 2026-10 直接拍了板：「切换的时候逐一取出就好」。要么整枚在，要么整枚没
+   * 了——数得出来的东西不再需要被读出来。降级那一下另有三样东西在说（整块弹一
+   * 下、刻度环闪两下、棋盘上方那条「得分图案 → 1×3」），不靠这一枚的透明度。
+   */
+  function paintIcon(level: number): void {
     icon.innerHTML = patternIconSvg(faceFor ? faceFor(level) : runPatternDef(family, level));
-    // 末位那一枚单独淡：SVG 里最后一个图形就是它（runPatternDef 按顺序生成）。
-    const marks = icon.querySelectorAll<SVGElement>('svg > *');
-    const last = marks[marks.length - 1];
-    if (last) last.style.opacity = String(tailAlpha);
   }
 
   /**
@@ -225,8 +223,7 @@ export function mountPatternBlock(
     lit.setAttribute('stroke-dasharray', tickDash(total, left));
     // 到 1 枚之后没有下一级了，段数环整圈熄掉——再翻也不会更小（§2）。
     dim.style.opacity = view.level <= 1 ? '0.25' : '';
-    const tail = view.level <= 1 ? 1 : TAIL_MIN_OPACITY + (1 - TAIL_MIN_OPACITY) * (left / total);
-    paintIcon(view.level, tail);
+    paintIcon(view.level);
     if (view.level !== shownLevel) {
       if (shownLevel !== -1) flash(view.level);
       else host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(view.level)));

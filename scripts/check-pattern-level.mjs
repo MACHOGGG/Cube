@@ -146,18 +146,27 @@ for (const [id, seg] of Object.entries(LADDER)) {
   check('老虎机：sizeAtLevel 和 erodedFace 每一级都说同一个枚数', bad.length === 0, bad.slice(0, 3).join(' · '));
 }
 
-// ---- 末位淡出的下限（E24：0.15 → 0.45）---------------------------------
+// ---- 末位那一枚：**整枚在，或者整枚没了** -------------------------------
 //
-// 这一条量的是**源码里的常量**，不是行为：它是「看起来少一枚」那一半的病根，而行为上
-// 那一枚确实还在，任何喂函数的测试都抓不到。0.15 的时候末位那一枚几乎看不见，一排四枚
-// 读起来就是三枚——和 off-by-one 在屏幕上长得一模一样。
+// 这一条量的是**源码**，不是行为：那一枚确实一直在（级数是对的，上面逐级验过），错的
+// 是「看起来」——任何喂函数的测试都抓不到。
+//
+// 历史：原先末位那一枚跟着本级剩余段数线性淡下去（1 → 0.15），玩家读成了 off-by-one
+// （「显示的是解锁之后那一级」）；E24 把下限抬到 0.45，淡得没那么狠，但题还在——一排
+// 四枚里有一枚是半透明的，数出来是几枚仍然要想一下。玩家 2026-10 直接拍板：「切换的时
+// 候逐一取出就好」。
+//
+// 所以现在钉的是反面：`paintIcon` 里**不许再有逐枚设透明度那段**。只要那段回来，这一
+// 条就红。
 {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/ui/patternBlock.ts', import.meta.url), 'utf8');
-  const m = src.match(/TAIL_MIN_OPACITY\s*=\s*([\d.]+)/);
-  check('patternBlock 里读得到末位淡出的下限（尺子）', Boolean(m), m ? m[1] : '（找不到那个常量）');
-  check('末位淡出下限 ≥ 0.45（E24：0.15 太淡，四枚读起来像三枚）',
-    Boolean(m) && Number(m[1]) >= 0.45, m ? m[1] : '');
+  const paint = src.match(/function paintIcon\([\s\S]*?\n  \}/);
+  check('patternBlock 里读得到 paintIcon（尺子：读不到下面那条是恒真的）', Boolean(paint),
+    paint ? `${paint[0].split('\n').length} 行` : '（找不到）');
+  check('paintIcon 不再逐枚设透明度（「逐一取出」：整枚在，或者整枚没了）',
+    Boolean(paint) && !/opacity/.test(paint[0]), paint ? (paint[0].match(/.*opacity.*/) || [''])[0].trim() : '');
+  check('整个文件里也没剩下末位淡出的那个常量', !/TAIL_MIN_OPACITY/.test(src));
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);

@@ -533,3 +533,16 @@ jobs:
           nohup node scripts/dev-server.mjs 8863 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8863/ && break; sleep 0.25; done
           node scripts/check-room-code.mjs http://localhost:8863/
+      # 电脑端游戏页的五块牌（玩家 2026-10 那张效果图）：各在哪儿、多大、什么色。
+      #
+      # 收它是因为这一页全靠一张栅格摆着，而栅格最爱做的一件事是**把没安排的东西塞进
+      # 第一个空格子**——计时那颗药丸就这么在左上角待过一版（量出来 14, 96），而
+      # PR-7 说的是「暂停药丸正上方」。这种错不崩、不报错，只是摆错了地方。
+      # 「上下居中」也一样容易被一条不对称的留白悄悄破坏。
+      #
+      # 最后一节是反面尺子：**手机端一个像素都不许跟着变**（玩家这一轮改的是电脑端）。
+      - name: 电脑端游戏页：五块牌的位置、大小、色
+        run: |
+          nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8864/ && break; sleep 0.25; done
+          node scripts/check-game-desktop.mjs http://localhost:8864/
