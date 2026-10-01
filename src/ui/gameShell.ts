@@ -299,8 +299,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             // 这一局的分数不是一路攒的，而是「终局这副盘面值多少分」。可玩家分辨
             // 不出这两种数：屏幕上只要有一个数在涨，他就当那是得分的回报——而这一
             // 局真正的回报是步数。玩家报的原话是「得分现在还是加分不是加步数」。
+            // ⚠️ 两种情形都要有 `#scoreReel`。步步为营那一档**看不见**它（下面
+            // `.steps-cell .score-reel { display: none }`），但它必须存在：
+            // `gameShell` 下面那句 `scoreReelEl: req('scoreReel')` 是 `req()`，
+            // 取不到就**抛**。从前这个三目只在非步步为营那一路画它，于是这一档
+            // 进去就炸——实测：挑完形状按下开局，棋盘一枚都不画，控制台一句
+            // `gameShell: missing #scoreReel`，而屏幕上既不白屏也不报错，看着就
+            // 是「这个玩法打不开」。（余步那个读数走的是同一个 id 家族里的
+            // `#hud-time`，见上面那段。）
             meta.steps
-              ? `<span id="hud-time">${PUZZLE_START_STEPS}</span>`
+              ? `<span id="hud-time">${PUZZLE_START_STEPS}</span>` +
+                '<span class="score-reel" id="scoreReel" hidden></span>'
               : '<span class="score-reel" id="scoreReel"></span>'
           }</div>
         </div>

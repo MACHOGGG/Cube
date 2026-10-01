@@ -206,13 +206,17 @@ export async function attachAccount(
   /** 他们在建账号那一刻勾没勾「愿意收 Slides 的邮件」。这个答案随账号一起
    *  存下来（连同时间），因为「能证明当初确实同意过」本身就是要求之一。 */
   news = false,
-): Promise<'ok' | 'exists' | 'unavailable' | 'failed'> {
+): Promise<'ok' | 'exists' | 'unavailable' | 'weak' | 'failed'> {
   const creem = await import('./creem');
   const result =
     pending.kind === 'checkout'
       ? await creem.setWebPasscode(pending.id, password, news)
       : await creem.bindCode(pending.code, pending.token, email ?? '', password, news);
   if (result === 'unavailable') return 'unavailable';
+  // 密码不合规矩，和「网络出错」是两回事。从前它和别的失败一起落进下面那句
+  // `if (!result) return 'failed'`，屏幕上写的是「网络出错」——玩家刚付完钱、密码
+  // 打了六位（只是夹了个符号），而界面告诉他网络有问题。
+  if (result === 'weak') return 'weak';
   // 'exists' is the server refusing to overwrite a password this address
   // already has. Nothing is wrong and nothing is left to do here, so the
   // pending checkout goes too — asking again every launch would be a bug.

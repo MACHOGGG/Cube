@@ -485,6 +485,19 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     pendingBeat = { id, run, at: Date.now(), ms };
   }
 
+  /**
+   * 把还没到点的那一拍**撤掉**（不留着回来跑）。
+   *
+   * 「把引用置空」和「撤掉定时器」是两件事。`armBeat` 排下的那个 setTimeout 只认自己
+   * 的 id，到点照样跑 `run()`——置空只是让这边不再认得它，拦不住它。于是这一局都结束
+   * 了（endGame），连锁的下一拍还会在结算页盖上之后落下来：往一副已经结清的盘上接着
+   * 翻、接着记分、接着判死局。不崩、不报错。
+   */
+  function cancelBeat(): void {
+    if (pendingBeat) window.clearTimeout(pendingBeat.id);
+    pendingBeat = null;
+  }
+
   /** 把还没到点的那一拍收起来（暂停用）。 */
   function holdBeat(): void {
     if (!pendingBeat) return;
@@ -713,6 +726,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
     gameOver = true;
     resolving = false;
+    // 连锁的下一拍要**撤掉**，不是置空（见 cancelBeat 那段）。从前这儿一句都没有，
+    // 排着的那一拍会在结算页盖上之后照样落下来。
+    cancelBeat();
     timer.stop();
     // 单人局的《结束游戏》就长在暂停面板上，所以这一局多半是从那一层按下来
     // 的——不撤掉的话，暂停那一层会一直亮着躺在结算页底下：按结算页的《主页》
@@ -1082,7 +1098,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     moves++;
     coach?.signal('move');
     resolving = true;
-    pendingBeat = null;
+    // 同上：撤掉，不是置空。
+    cancelBeat();
     heldBeat = null;
     /** The next beat of the reveal, held so hurry() can bring it forward. */
     const beat = armBeat;

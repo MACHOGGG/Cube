@@ -380,7 +380,11 @@ export function openSetPasswordWindow(
     const address = user.value.trim();
     if (fromCode && !isEmail(address)) return void (msg.textContent = s.emailInvalid);
     const password = input.value;
-    if (password.length !== 6) return void (msg.textContent = s.setPwShort);
+    // 用 `isPin`（和服务端 api/_accounts.js 的 PASS_RE 同一条规矩：六位**字母数字**），
+    // 不是只数长度。从前这儿是 `password.length !== 6`，于是 `abc-12` 这种过得了客户端、
+    // 被服务端 400 'weak' 打回来，而那条错一路被压成「网络出错」——玩家刚付完钱，界面
+    // 告诉他网络有问题。两头都改了：这儿前置挡住，底下那条路也认得出 'weak'。
+    if (!isPin(password)) return void (msg.textContent = s.setPwShort);
     go.disabled = true;
     msg.textContent = s.workingLabel;
     const done = await attachAccount(pending, password, address, news.checked);
@@ -398,7 +402,8 @@ export function openSetPasswordWindow(
     // password, the window vanished, and nothing had been saved — a failure
     // wearing the exact face of success.
     if (done !== 'ok') {
-      msg.textContent = done === 'unavailable' ? s.serverBusy : s.purchaseNetwork;
+      msg.textContent =
+        done === 'unavailable' ? s.serverBusy : done === 'weak' ? s.setPwShort : s.purchaseNetwork;
       return;
     }
     // Saved on the server; now let the phone keep a copy too.

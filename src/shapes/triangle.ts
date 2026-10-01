@@ -1195,6 +1195,12 @@ export function createTriangleGame(): ShapeGame {
         bonusedSignatures = new Set();
         outlineTracker.reset();
         stuckKeys = null;
+        // 收尾放开**不许跨局**。这一句从前没有，于是上一局一旦触发过放开
+        // （endgameOpen = true，一局之内不回退，见上面那段），`newGame` 调
+        // `resetBoard` 重发一副牌时它还留在闭包里——下一局从第一步起就带着
+        // 「最短边门槛 1」，而玩家看到的是一副全新的棋盘。不崩、不报错，只是
+        // 这一局的消除规则悄悄比规则书写的松。
+        endgameOpen = false;
       }
 
       const controller = createGameController(refs, {

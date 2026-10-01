@@ -1116,7 +1116,21 @@ h1 {
   /* 和别的行一样不选中：结算页整张是给人看的，不是给人抄的。 */
   user-select: none;
 }
-#endOverlay .modal { position: relative; overflow: hidden; }
+/*
+ * ⚠️ `overflow-x` / `overflow-y` 分开写，**不要用 `overflow` 简写**。
+ *
+ * 这条是 id 选择器（1-1-0），压得过上面那条 `.overlay--end .modal`（0-2-0）里的
+ * `overflow-y: auto`——而简写 `overflow: hidden` 会把两个轴一起写死，于是那句
+ * 「结算弹窗要能滚」整个失效。实测（修之前）：
+ *
+ *     320×568  内容被裁 118px，三颗键在屏下 56px，而且滚不动 → 打完一局卡死
+ *     360×640  内容被裁  80px，三颗键在屏下 13px，滚不动
+ *     375×667  内容被裁  65px
+ *
+ * 横轴仍然要 hidden：`.end-hazard-bg` 那个 💥 是 `inset: 0` 的绝对定位层，放开横轴
+ * 会多出一条横向滚动条。`position: relative` 也是它要的（它按这一层定位）。
+ */
+#endOverlay .modal { position: relative; overflow-x: hidden; overflow-y: auto; }
 .end-hazard-bg {
   position: absolute;
   inset: 0;

@@ -1,14 +1,32 @@
 import type { BoardSnapshot } from './shareCard';
 import type { RunData } from './runRecord';
 
+/**
+ * 这一档的本机最佳。
+ *
+ * 和这个文件里别的每一个函数一样包着 try/catch——从前这两个是**仅有的两个裸调**
+ * localStorage 的。它们看着无害，可唯一的生产调用点在 `gameController` 的 `endGame`
+ * 里（`saveBestIfHigher(hooks.bestKey, total)`），而且在 `lastRun` 赋值**之前**：无痕
+ * 模式、站点数据被禁、配额满——任何一种让 localStorage 抛的情形，都会把 `endGame` 从
+ * 中间打断。症状不是白屏，是**最后一下之后界面停在棋盘上，结算页永远不弹出来**。
+ */
 export function loadBest(key: string): number {
-  return parseInt(localStorage.getItem(key) || '0', 10) || 0;
+  try {
+    return parseInt(localStorage.getItem(key) || '0', 10) || 0;
+  } catch {
+    // 读不到就当还没有纪录。这一局照样结算，只是不显示「本机最佳」。
+    return 0;
+  }
 }
 
 /** Saves score under key if it beats the stored best, returning the (possibly unchanged) best. */
 export function saveBestIfHigher(key: string, score: number): number {
   const best = Math.max(score, loadBest(key));
-  localStorage.setItem(key, String(best));
+  try {
+    localStorage.setItem(key, String(best));
+  } catch {
+    // 存不进去就下次再说——绝不能因此把这一局的结算页拦下来。
+  }
   return best;
 }
 

@@ -148,7 +148,7 @@ export async function setWebPasscode(
   checkoutId: string,
   password: string,
   news = false,
-): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | null> {
+): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | 'weak' | null> {
   try {
     const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
       checkoutId,
@@ -163,6 +163,13 @@ export async function setWebPasscode(
     const code = String(err).replace('Error: ', '');
     if (code === '503') return 'unavailable';
     if (code === '409') return 'exists';
+    // 400 'weak'：密码不合规矩（服务端 api/_accounts.js 的 PASS_RE，六位字母数字）。
+    // **认的是服务端送回来的那个 error 串**，不是光看状态码——400 还有别的来路，
+    // 一律说成「密码太短」会把人支到改不动的地方去。
+    // 从前这一支和别的失败一起落到 null，再被 attachAccount 压成 'failed'，屏幕上
+    // 于是写「网络出错」：玩家刚付完钱、密码打了六位（只是夹了个符号），而界面告诉
+    // 他网络有问题。
+    if (err instanceof HttpError && err.code === 'weak') return 'weak';
     return null;
   }
 }
@@ -178,7 +185,7 @@ export async function bindCode(
   email: string,
   password: string,
   news = false,
-): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | null> {
+): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | 'weak' | null> {
   try {
     const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
       code,
@@ -192,6 +199,8 @@ export async function bindCode(
     const status = String(err).replace('Error: ', '');
     if (status === '503') return 'unavailable';
     if (status === '409') return 'exists';
+    // 同 setWebPasscode：400 'weak' 要单独认出来，别和「网络出错」混在一起。
+    if (err instanceof HttpError && err.code === 'weak') return 'weak';
     return null;
   }
 }

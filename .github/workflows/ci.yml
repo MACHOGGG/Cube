@@ -290,6 +290,12 @@ jobs:
       # 《游戏规则》写的枚数要和棋盘真的有几枚一致。起因是「三角」和「大三角」
       # 两条 body 整段挂反了，四种语言全错——不崩、不红，只有玩家读到假话。这道
       # 门自己解开那个对调的陷阱（main.ts 里 triangle 跑的是 triangleBig.ts）。
+      # 一局结束、下一局开始，中间不许漏东西过去。读源码，不打包也不开浏览器——这几
+      # 件事全都没有可以从外面量的症状：不崩、不白屏、不报错，只是下一局的规则悄悄
+      # 变了（收尾放开跨局），或者结算页干脆不弹（persistence 裸调 localStorage 抛在
+      # endGame 中间），或者排着的那一拍落到一副已经结清的盘上。
+      - name: 一局与下一局之间
+        run: node scripts/check-run-lifecycle.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白
@@ -541,6 +547,16 @@ jobs:
       # 「上下居中」也一样容易被一条不对称的留白悄悄破坏。
       #
       # 最后一节是反面尺子：**手机端一个像素都不许跟着变**（玩家这一轮改的是电脑端）。
+      # 两件「打不开 / 按不到」：《步步为营》整档进不去（gameShell 那个三目不画
+      # #scoreReel，而 req() 取不到就抛——棋盘一枚不画，控制台一句错，玩家看到的是
+      # 「这个玩法打不开」）；结算页那三颗键在矮屏上够不着（id 选择器那条
+      # `overflow: hidden` 简写压掉了 `overflow-y: auto`，320×568 打完一局卡死）。
+      # **一台自己的服务器**：它兑一张 TESTMONTH 开《步步为营》。
+      - name: 步步为营打得开、结算页那三颗键够得着
+        run: |
+          nohup node scripts/dev-server.mjs 8865 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8865/ && break; sleep 0.25; done
+          node scripts/check-endcard-reach.mjs http://localhost:8865/
       - name: 电脑端游戏页：五块牌的位置、大小、色
         run: |
           nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &
