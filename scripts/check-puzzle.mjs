@@ -10,9 +10,14 @@
  *   · **步数这本账**：起手 8，走一步扣 1，得分退 1，上一步也得分再退 1，这一
  *     步消了边再退 1，不封顶。所以孤立的一次得分只够回本（净 0），手里的步数
  *     只能靠「连得上」和「消边」长出来。
- *   · **综合得分**：(被消除 × 10 + 星星 × 5) × (1 + 有效得分率/100)。别的玩法
- *     那条四项连乘里的时间系数和未翻面惩罚在这儿是有意去掉的（理由写在
- *     puzzleScore.ts 里），这道门顺便把「没有偷偷混进来」也一起钉住。
+ *   · **综合得分**：被消除 × 10 + 星星 × 5，**就这两项**。别的玩法那条四项连乘
+ *     在这儿一项都不剩：时间系数（没有钟）、0.95^未翻面（步数耗尽是常态）早就
+ *     去掉了，有效得分率那一乘 2026-10 也撤了（玩家拍的板，见 puzzleScore.ts）。
+ *     这道门把「一项都没有偷偷混回来」钉住。
+ *   · **《怎么玩》那一条**（第 7 节）：四种语言里讲的必须是同一个公式。这一条是
+ *     补上来的——2026-10 撤掉那一乘时，代码改了、`src/rules.ts` 四语**一个字都没
+ *     改**，于是线上那本规则书对着玩家念了一个已经不存在的公式，而没有任何门看着
+ *     它。规则书是「对代码实际行为的陈述」（rules.ts 开头那段），说错就是假话。
  *
  * ⚠️ 这道门在 2026-09 整段重写过。旧的那一版钉的是 3/1/2 那一套，里头有一条
  * 「得分率正好一半时不进不退」——**新规则下 50% 是会死的**（第 4 节量出来是 15
@@ -37,6 +42,7 @@ const {
   PUZZLE_CLEARED_POINTS,
   PUZZLE_STAR_POINTS,
 } = await import(src);
+const { readFileSync } = await import('node:fs');
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -292,6 +298,79 @@ const refundOf = (bank, scored, edge) => {
 // 成本那一段用的是 U+2212 减号，不是连字符（U+002D）：它和「+」等宽，两种字
 // 并排在那一格里才对得齐。抄成连字符肉眼看不出来，屏幕上会歪。
 check('减号是 U+2212，不是连字符', stepLedgerText(0).charCodeAt(0) === 0x2212, `U+${stepLedgerText(0).charCodeAt(0).toString(16).toUpperCase()}`);
+
+// ---------------------------------------------------------------------------
+// 【7】《怎么玩》里那一条，四种语言都要和上面这些常数说同一件事
+//
+// 读 `src/rules.ts` 的源码文本，不打包：这本书就是四段字面量，而要查的正是「字面
+// 上写了什么」。
+//
+// 为什么非要有这一节：2026-10 撤掉有效得分率那一乘的时候，`puzzleScore.ts` 改了、
+// 这道门的前六节也跟着改了，**四种语言的规则书一个字都没动**——于是线上那本书对着
+// 玩家念 `(被消除 × 10 + 星星 × 5) × (1 + 有效得分率)`，一个已经不存在的公式。前六
+// 节全绿，因为它们只问引擎。
+console.log('\n【7】《怎么玩》那一条（四语）');
+const rulesSrc = readFileSync(new URL('../src/rules.ts', import.meta.url), 'utf8');
+check('（尺子）rules.ts 读到了', rulesSrc.length > 2000, `${rulesSrc.length} 字`);
+
+/** 四种语言里这一条的抬头。写出来而不是按下标取：下标会随着加玩法而挪。 */
+const PUZZLE_TERMS = [
+  ['zhHans', '真正解密 · 步步为营'],
+  ['zhHant', '真正解密 · 步步為營'],
+  ['en', 'Puzzle · Step by step'],
+  ['fr', 'Énigme · Pas à pas'],
+];
+/**
+ * 英语和法语把起手那个数**拼成单词**（eight moves / huit coups），中文写阿拉伯数字。
+ * 所以这两语要认两种写法——第一版只认数字，当场把两条好文案判成红了。
+ *
+ * 表里查不到那个数就报红并说清要补什么，而不是静静放过：下一次有人把起手改成 6，
+ * 这儿要么拦住他去改四段字，要么告诉他来补一个词，两种都比空绿好。
+ */
+const NUM_WORD = {
+  en: { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' },
+  fr: { 1: 'un', 2: 'deux', 3: 'trois', 4: 'quatre', 5: 'cinq', 6: 'six', 7: 'sept', 8: 'huit', 9: 'neuf', 10: 'dix' },
+};
+/** 这一语的正文里有没有把 n 说出来（数字或者拼出来的词）。 */
+function saysNumber(lang, body, n) {
+  if (body.includes(String(n))) return { ok: true, how: `数字 ${n}` };
+  const word = NUM_WORD[lang]?.[n];
+  if (word && new RegExp(`\\b${word}\\b`, 'i').test(body)) return { ok: true, how: `拼成 ${word}` };
+  return { ok: false, how: word ? `既没有 ${n} 也没有 ${word}` : `没有 ${n}，而 NUM_WORD.${lang} 里也没有 ${n} 这个词——先把它补上` };
+}
+
+for (const [lang, term] of PUZZLE_TERMS) {
+  // `{ term: '<抬头>', body: '<正文>' }` —— 正文里不会出现没转义的单引号。
+  const re = new RegExp("term: '" + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "', body: '([^']*)'");
+  const m = rulesSrc.match(re);
+  // 尺子先行：抬头改了名字、或者这一条整段没了，下面每一句都会变成恒真。
+  check(`${lang}（尺子）找到了这一条，而且正文不短`, Boolean(m) && m[1].length > 80, m ? `${m[1].length} 字` : '没找到');
+  if (!m) continue;
+  const body = m[1];
+  // ① 两个每枚分值和起手步数都要印在书上——玩家照它算分。
+  {
+    const r = saysNumber(lang, body, PUZZLE_START_STEPS);
+    check(`${lang}：书上写着起手 ${PUZZLE_START_STEPS} 步`, r.ok, r.how);
+  }
+  check(`${lang}：书上写着被消除 × ${PUZZLE_CLEARED_POINTS}`, body.includes(String(PUZZLE_CLEARED_POINTS)));
+  check(`${lang}：书上写着星星 × ${PUZZLE_STAR_POINTS}`, body.includes(String(PUZZLE_STAR_POINTS)));
+  // ② **不许再出现 `× (1 + …)`**。这就是 2026-10 那次漏掉的那一句，四种语言的写法
+  //    不同（半角括号、全角括号、法语那个窄空格），所以三种都拦。
+  const mult = body.match(/×\s*[(（]\s*1\s*\+/);
+  check(`${lang}：没有「× (1 + …)」那一乘了`, !mult, mult ? mult[0] : '');
+  // ③ 消边退几步，书上那个数要和常数一致。
+  //    这一条偏弱（只问「那个数字出现过没有」），可它正是 2026-10 真漏的那一类：
+  //    常数从 1 改成 2 而四段字没动，这儿当场红。
+  {
+    const r = saysNumber(lang, body, PUZZLE_EDGE_BONUS);
+    check(`${lang}：消边退 ${PUZZLE_EDGE_BONUS} 步，书上说得出这个数`, r.ok, r.how);
+  }
+}
+// 反面尺子：这一节真的在拦东西——把那条正则喂一句旧文案，必须抓得到。
+{
+  const stale = '用它自己那套公式（被消除 × 10 + 星星 × 5）×（1 + 有效得分率），不乘步数系数。';
+  check('（反面尺子）旧那句话喂进来会被抓住', /×\s*[(（]\s*1\s*\+/.test(stale));
+}
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
