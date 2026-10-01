@@ -13,6 +13,7 @@
  */
 import { NOBODY, answer, configured as creemConfigured, findSubscription, periodOf } from './_creem.js';
 import {
+  LIFETIME_UNTIL,
   codeHolder,
   ensureGiftCodes,
   entitlementOf,
@@ -25,15 +26,24 @@ import {
 } from './_accounts.js';
 
 /**
- * 「终身」记成哪一天。
+ * 「终身」记成哪一天——**问 `_accounts.js` 要，这儿不自己定**。
  *
  * 不另立一个 `lifetime: true` 字段，而是把 `until` 推到一个远得没有意义的日子：
  * 全站所有「还在有效期里吗」的判断都是 `until > Date.now()`（ownGrantLive、
  * entitlementOf、客户端的 subscription.ts），多立一个字段就意味着**每一处都要
  * 记得同时看两样**，而漏看一处的后果是「他明明是终身，那一处说他过期了」。
- * 一个数，所有老代码自动认。
+ *
+ * ⚠️ 这儿**原先自己写了一个 `Date.UTC(2099, 0, 1)`**，而 `_accounts.js` 那一份是
+ * `Date.UTC(2999, 0, 1)`——两个数不一样，于是窗口期送出去的那一份会出现这种事：
+ * `ownGrantLive` 认（2099 还没到，他是天才），可 `isLifetime()` 和订阅窗口那一行问
+ * 的是 `>= 2999`，两边都不认——屏幕上写「有效期至 2099/1/1」，不是「永久」。客户端
+ * 那一份（`src/ui/subscribe.ts`）的注释甚至写着「as the server writes it
+ * (api/_accounts.js LIFETIME_UNTIL)」，指的就是 2999 那一个。
+ *
+ * 所以这儿不再自己定，import 过来再原样转出去（别处可能从这儿引）。一个数，三处共
+ * 用。门：`check-entitlement.mjs` 第「终身只有一个数」那一节。
  */
-export const LIFETIME_UNTIL = Date.UTC(2099, 0, 1);
+export { LIFETIME_UNTIL };
 
 /**
  * 窗口期开着吗——「注册登录即享终身 Slides 天才」（《侵蚀阶梯》v1.2 PR-12）。

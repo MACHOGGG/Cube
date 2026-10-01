@@ -78,6 +78,112 @@ check('光说一句「我是商店买的」，不算（商店版上线前接收�
   (await isGenius({ storeClaim: true })) === false);
 check('说这句也不去问 Creem', asked === 0, `问了 ${asked} 次`);
 
+// ---- 「终身」只许有一个数 ---------------------------------------------------
+/*
+ * 这一节守的是 2026-10 查出来的那件事：`api/_entitlement.js` 自己写了一个
+ * `LIFETIME_UNTIL = Date.UTC(2099, 0, 1)`，而 `api/_accounts.js` 那一份是
+ * `Date.UTC(2999, 0, 1)`。两个数不一样，后果是**窗口期送出去的那一份没人认得是终身**：
+ * `ownGrantLive` 认（2099 还没到，他是天才），可 `isLifetime()` 和订阅窗口那一行问的
+ * 是 `>= 2999`——屏幕上于是写「有效期至 2099/1/1」，不是「永久」。
+ *
+ * 客户端那一份（`src/ui/subscribe.ts`）也抄了一个常量，注释还写着「as the server
+ * writes it (api/_accounts.js LIFETIME_UNTIL)」——所以三处必须是同一个数，而且后两处
+ * 要能认出第一处写进去的那个值。
+ */
+console.log('');
+{
+  const accounts = await import('../api/_accounts.js');
+  const ent = await import('../api/_entitlement.js');
+  // 尺子先行：两处都真的导出了这个常量，否则下面每一句都是恒真的。
+  check('（尺子）两个服务端模块都导出了 LIFETIME_UNTIL',
+    Number.isFinite(accounts.LIFETIME_UNTIL) && Number.isFinite(ent.LIFETIME_UNTIL),
+    `${accounts.LIFETIME_UNTIL} / ${ent.LIFETIME_UNTIL}`);
+  check('服务端两处是同一个数',
+    accounts.LIFETIME_UNTIL === ent.LIFETIME_UNTIL,
+    `${accounts.LIFETIME_UNTIL} vs ${ent.LIFETIME_UNTIL}`);
+  // 真正要紧的是**行为**：窗口期写进去的那个值，isLifetime 必须认得。
+  check('窗口期写的那个 until，isLifetime() 认得是终身',
+    accounts.isLifetime({ until: ent.LIFETIME_UNTIL }) === true);
+  check('而且它确实还没到期（ownGrantLive 那一头也认）',
+    ent.LIFETIME_UNTIL > Date.now());
+
+  // 客户端那一份：读源码文本，不打包（它是 .ts，而这道门是纯 node 的）。
+  const { readFileSync } = await import('node:fs');
+  const ui = readFileSync(new URL('../src/ui/subscribe.ts', import.meta.url), 'utf8');
+  const m = ui.match(/const LIFETIME_UNTIL = Date\.UTC\((\d+), (\d+), (\d+)\);/);
+  check('（尺子）客户端那一份也找得到', Boolean(m), m ? m[0] : '没找到');
+  if (m) {
+    const uiVal = Date.UTC(Number(m[1]), Number(m[2]), Number(m[3]));
+    check('客户端那一份和服务端是同一个数', uiVal === accounts.LIFETIME_UNTIL,
+      `${uiVal} vs ${accounts.LIFETIME_UNTIL}`);
+  }
+  // `_entitlement.js` 不许再自己定一个——转出去可以，自己写一个字面量不行。
+  const entSrc = readFileSync(new URL('../api/_entitlement.js', import.meta.url), 'utf8');
+  check('_entitlement.js 里没有自己写死的那个日期',
+    !/const LIFETIME_UNTIL = Date\.UTC\(/.test(entSrc));
+}
+
+// ---- 窗口期授予：开关默认关着，关着的时候一步都不走 --------------------------
+{
+  const ent = await import('../api/_entitlement.js');
+  const accounts = await import('../api/_accounts.js');
+  const before = process.env.GENIUS_GRANT_WINDOW;
+
+  delete process.env.GENIUS_GRANT_WINDOW;
+  check('没填环境变量时窗口是关的', ent.grantWindowOpen() === false);
+  {
+    /*
+     * 拿一个**库里真有的**账号来试。
+     *
+     * 头一版这儿喂的是一个凭空造的对象、而且那个邮箱库里根本没有——于是把那道
+     * `if (!grantWindowOpen())` 整个删掉，`updateAccount` 也只是答 missing、什么都没
+     * 写，断言照样绿。反面对照当场把这条空绿掀出来了。要验「关着就不写」，就得让它
+     * 在开着的时候**真的写得进去**。
+     */
+    const addr = 'closed@example.com';
+    await accounts.createAccount(addr, { until: 0 });
+    const snap = await accounts.loadAccount(addr);
+    await ent.grantLifetimeIfWindow(addr, snap);
+    const after = await accounts.loadAccount(addr);
+    check('窗口关着：库里那一份一个字都没动',
+      !after.until && !after.grantedAt, JSON.stringify(after));
+  }
+  process.env.GENIUS_GRANT_WINDOW = '0';
+  check('填 0 也是关的', ent.grantWindowOpen() === false);
+  process.env.GENIUS_GRANT_WINDOW = '1';
+  check('填 1 才是开的', ent.grantWindowOpen() === true);
+  // 开着的时候写进去的那一份，必须是上面那个「大家都认得」的数。
+  {
+    const addr = 'grantme@example.com';
+    // 最小的一份账号：这一节只关心 until / grantedAt 两位，别的字段不参与判定。
+    await accounts.createAccount(addr, { until: 0 });
+    const acct = await accounts.loadAccount(addr);
+    const out = await ent.grantLifetimeIfWindow(addr, acct);
+    check('窗口开着：写进去的是终身，而且 isLifetime 认得',
+      accounts.isLifetime(out) === true, String(out && out.until));
+    check('记了一笔什么时候送出去的（grantedAt）', Number.isFinite(out && out.grantedAt));
+    /*
+     * 幂等：再叫一次不许刷新那个时间戳（将来重开 creem 要按它对账）。
+     *
+     * **两道门，要分开验。** 外面那一道看的是手里这份快照（`account.until` 已经是终身
+     * 就原地返回）；锁里那一道看的是**库里此刻那一份**。只验外面那道是不够的——头一版
+     * 就只验了它，于是把锁里那一句删掉，断言照样绿。
+     */
+    const stamp = out.grantedAt;
+    const again = await ent.grantLifetimeIfWindow(addr, out);
+    check('再叫一次（快照是新的）：外面那道门拦住，grantedAt 没动', again.grantedAt === stamp);
+    // 并发时真会发生的那一种：别处刚送过，手里这份快照还是旧的。外面那道门看不出来，
+    // 拦住重写的只剩锁里那一道。
+    const stale = { ...out, until: 0, grantedAt: undefined };
+    await ent.grantLifetimeIfWindow(addr, stale);
+    const re = await accounts.loadAccount(addr);
+    check('拿旧快照再叫一次：锁里那道门拦住，grantedAt 还是原来那个',
+      re.grantedAt === stamp, `${re.grantedAt} vs ${stamp}`);
+  }
+  if (before === undefined) delete process.env.GENIUS_GRANT_WINDOW;
+  else process.env.GENIUS_GRANT_WINDOW = before;
+}
+
 if (useOld) rmSync(OLD, { force: true });
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);
 process.exit(fail ? 1 : 0);
