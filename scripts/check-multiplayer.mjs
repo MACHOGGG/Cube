@@ -339,13 +339,34 @@ await A.page.waitForSelector('#finishConfirm', { timeout: 6000 });
 const asked = await A.page.evaluate(() => ({
   q: document.querySelector('#finishConfirm .tag-line')?.textContent.trim(),
   opaque: document.querySelector('#finishConfirm')?.classList.contains('opaque'),
-  clock: document.getElementById('hud-time')?.textContent,
+  // 顶排那个 `#hud-time` 还在不在。**这一条是尺子，不是读数**——见下面那段。
+  legacyClock: document.getElementById('hud-time') !== null,
 }));
 check('按《完成》先问一句《完成了吗？》', asked.q === '完成了吗？', asked.q);
 check('问的时候牌是盖上的（这一层不透明）', asked.opaque === true);
 await A.page.waitForTimeout(2200);
-const stillHeld = await A.page.evaluate(() => document.getElementById('hud-time')?.textContent);
-check('犹豫的这段时间不计入用时', stillHeld === asked.clock, `${asked.clock} → ${stillHeld}`);
+/*
+ * 「犹豫的这段时间不计入用时」这一条**从这儿撤了**，撤的理由写在这儿，免得下一个人
+ * 以为是漏掉的。
+ *
+ * 它从前读两次 `document.getElementById('hud-time')?.textContent` 再比一下。PR-7
+ * 之后顶排没有钟了，那个 id 只在步步为营那一档生成（印的是余步）——小屋这一局里它
+ * 根本不存在，两次都读到 `undefined`，于是 `undefined === undefined` 恒真。那一条**空
+ * 绿了一整版**，而整道门报 ALL PASS，谁也看不出少量了一样东西。
+ *
+ * 为什么不改读 `#timerPill` 了事：小屋这一局是基础规则，屏幕上**本来就没有**时间读
+ * 数（玩家定的，「留一个一直在涨、却不算分的数，只会让人以为快慢有用」，见
+ * gameController 那段注释）。在这一屏上没有任何诚实的读法。
+ *
+ * 那件事本身仍然有门守着，而且现在是真的在量：`scripts/check-pause-freeze.mjs` 在
+ * 《计时挑战》那一档（全站唯一有时间读数的一档）量「暂停中表不走」「《继续》之后
+ * 没把暂停那几秒补算进来」——引擎那一层是同一套 beat，小屋这一局走的也是它。
+ *
+ * 留下的这条尺子不许那个 id 悄悄回来：哪天顶排又有了钟，这一条会红，看的人就会回到
+ * 这段话，然后把上面那条断言按新的读法补回来。
+ */
+check('小屋这一局屏幕上没有时间读数（尺子：顶排那个 hud-time 不许悄悄回来）',
+  asked.legacyClock === false, asked.legacyClock ? '它回来了——把上面撤掉的那条断言补回来' : '');
 await A.page.click('#mpFinishNo');
 await A.page.waitForFunction(() => !document.getElementById('finishConfirm'), { timeout: 5000 });
 check('选《否》回到牌局，什么都没交出去',

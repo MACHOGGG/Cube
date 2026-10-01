@@ -159,6 +159,12 @@ const SNAP = (spec) => {
  *
  * 这么分是有用的——说好的差别写在代码里、每次都跑，哪天网页版改了别处、
  * 或者这一版不小心多漏了一样，它立刻从「说好的」里掉出来变成没过。
+ *
+ * ⚠️ **diff 只报「不一样」，报不出「两边都是空的」。** 选择器过期之后两端各读到一个
+ * 空集合，`JSON.stringify([]) === JSON.stringify([])`，这一项就恒过——屏幕上那样东西
+ * 没了也照样绿。真这么空绿过一版：反转局那两屏的「倒计时」读的是退役的 `#hud-time`。
+ * 所以每一屏可以写一份 `require: [键名…]`，列进去的键**两端都必须真的读到东西**，由
+ * 下面主循环单独验一条。
  */
 function diff(a, b, accept) {
   const bad = [];
@@ -507,7 +513,11 @@ const SCREENS = [
       await p.waitForTimeout(900);
       await pressStart(p);
     },
-    snap: { ...GAME_SNAP, 倒计时: { sel: '#hud-time', kind: 'text' } },
+    // 读的是暂停药丸正上方那块（`#timerPill`）。从前写的是顶排那个 `#hud-time`——
+    // PR-7 之后那个 id 只在步步为营那一档生成（印的是余步），在反转局里**两端都读
+    // 不到**，于是这一项比的是 `[]` 和 `[]`，恒等、恒过。`require` 就是为这个加的。
+    snap: { ...GAME_SNAP, 倒计时: { sel: '#timerPill', kind: 'text' } },
+    require: ['倒计时'],
   },
   {
     name: '暂停面板',
@@ -714,7 +724,11 @@ const SCREENS = [
       await p.waitForTimeout(900);
       await pressStart(p);
     },
-    snap: { ...GAME_SNAP, 倒计时: { sel: '#hud-time', kind: 'text' } },
+    // 读的是暂停药丸正上方那块（`#timerPill`）。从前写的是顶排那个 `#hud-time`——
+    // PR-7 之后那个 id 只在步步为营那一档生成（印的是余步），在反转局里**两端都读
+    // 不到**，于是这一项比的是 `[]` 和 `[]`，恒等、恒过。`require` 就是为这个加的。
+    snap: { ...GAME_SNAP, 倒计时: { sel: '#timerPill', kind: 'text' } },
+    require: ['倒计时'],
   },
 
   {
@@ -843,6 +857,13 @@ for (const screen of list) {
       const a = await web.p.evaluate(SNAP, screen.snap);
       const b = await xhs.p.evaluate(SNAP, screen.snap);
       const { bad, known } = diff(a, b, screen.accept);
+      // 非空尺子（见 diff 上面那段）：列进 require 的键，两端都要真的读到东西。
+      const isEmpty = (v) => v == null || (Array.isArray(v) && v.length === 0) || v === '';
+      for (const k of screen.require || []) {
+        const miss = [isEmpty(a[k]) ? '网页版' : null, isEmpty(b[k]) ? '这一版' : null].filter(Boolean);
+        say(miss.length === 0, `${screen.name}：${k} 两端都真的读到了（尺子）`,
+          miss.length ? `${miss.join(' / ')}读到的是空——选择器多半过期了，这一项正在空绿` : '');
+      }
       say(
         bad.length === 0,
         `${screen.name}：内容和网页版一致（核了 ${Object.keys(screen.snap).length} 项${
