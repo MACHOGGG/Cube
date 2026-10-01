@@ -28,6 +28,15 @@
  *    真的非空、真的含数字——键名改了名字就该当场红，而不是空绿。
  * ④ 规则书里《计时挑战》和《无限反转》那两条，四种语言都说 100、不说 60/90。
  */
+// 缺参数时说一句人话再退场。不加这一句的话 node 抛的是
+// `Cannot find package 'undefined'`——手跑的人第一反应是「这道门坏了」，而不是
+// 「我忘了先 esbuild」。
+if (!process.argv[2] || !process.argv[3]) {
+  console.error('用法: node scripts/check-mode-clock.mjs <打包好的 i18n.mjs> <打包好的 rules.mjs>');
+  console.error('  npx esbuild src/i18n.ts  --bundle --format=esm --outfile=/tmp/i18n.mjs');
+  console.error('  npx esbuild src/rules.ts --bundle --format=esm --outfile=/tmp/rules.mjs');
+  process.exit(2);
+}
 const I = await import(process.argv[2]);
 const R = await import(process.argv[3]);
 const { readFileSync } = await import('node:fs');

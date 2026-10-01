@@ -1,8 +1,8 @@
 /**
- * 小红书版的主菜单——只有玩家点名的那五个玩法。
+ * 小红书版的主菜单——只有玩家点名的那几个玩法（2026-10 加《步步为营》之后是六个）。
  *
  * 为什么不复用网页版的 renderMenu：那一个是照「方块 / 小球 / 三角三列，每列
- * 基础 + 计时 + 炸弹 + 更多布局」的骨架长出来的，十三张卡；这一版只有五张，
+ * 基础 + 计时 + 炸弹 + 更多布局」的骨架长出来的，十三张卡；这一版只有六张，
  * 而且没有三角、没有多人、没有锁。硬塞进去要改 src/ui/menu.ts——那就动到网
  * 页版了，玩家的第一条要求正是「完全分离」。
  *
@@ -17,13 +17,14 @@ import {
   ICON_BASE_SQUARE,
   ICON_BOMB_BADGE,
   ICON_FLIP_MODE,
+  ICON_PUZZLE_MODE,
   ICON_SLOT_MACHINE,
 } from '../../src/ui/homeIcons';
 import { ICON_NAV_ME } from './icons';
 import { STRINGS, type Lang } from '../../src/i18n';
 
-/** 五个玩法。炸弹 / 老虎机 / 无限反转点开先挑方块还是小球。 */
-export type XhsMode = 'square' | 'circle' | 'bomb' | 'slot' | 'flip';
+/** 六个玩法。炸弹 / 老虎机 / 无限反转 / 步步为营点开先挑方块还是小球。 */
+export type XhsMode = 'square' | 'circle' | 'bomb' | 'slot' | 'flip' | 'puzzle';
 
 export interface XhsMenuHandlers {
   onPlay: (mode: XhsMode) => void;
@@ -32,7 +33,7 @@ export interface XhsMenuHandlers {
   /**
    * 这几张卡要发光——「下一张点这儿」。
    *
-   * 头一局小球打完退回主菜单时，五张卡摊在眼前，他还是不知道该点哪一张；给
+   * 头一局小球打完退回主菜单时，那几张卡摊在眼前，他还是不知道该点哪一张；给
    * 《基础方块》镶一圈会呼吸的光，路就只有一条了。玩过一次方块之后这圈光就
    * 撤掉（main.ts 记的那把钥匙），不再打扰他。
    */
@@ -56,14 +57,14 @@ export interface XhsMenuHandlers {
   /**
    * 按了《我会玩》：引导的路标（发光 + 压暗）全撤，主菜单重画一遍。
    *
-   * 这一版的「新手检测拦截」不是锁——五张卡一直都点得开，压暗只是路标（见上面
+   * 这一版的「新手检测拦截」不是锁——每张卡一直都点得开，压暗只是路标（见上面
    * dim 那段）。玩家要的按钮是同一颗，撤掉的东西按各端自己有的算：网页版撤锁和
    * 光，这一版撤压暗和光。
    */
   onKnowHow?: () => void;
 }
 
-/** 宽屏（电脑、手机横屏）一排摆得下五张；窄屏一排两张。同网页版的分界。 */
+/** 宽屏（电脑、手机横屏）一排摆得下六张；窄屏一排两张。同网页版的分界。 */
 const WIDE_QUERY = '(min-width: 720px), (orientation: landscape) and (min-width: 560px)';
 
 const CARDS: { mode: XhsMode; icon: string; tag: string }[] = [
@@ -72,7 +73,27 @@ const CARDS: { mode: XhsMode; icon: string; tag: string }[] = [
   { mode: 'bomb', icon: ICON_BOMB_BADGE, tag: 'bomb' },
   { mode: 'slot', icon: ICON_SLOT_MACHINE, tag: 'slot' },
   { mode: 'flip', icon: ICON_FLIP_MODE, tag: 'flip' },
+  // 《步步为营》2026-10 补进来（决策 §10 的 E20：「小红书版……加《步步为营》」）。
+  // 网页端那一张走 geniusCard（天才特供），这一端没有天才这回事——整个是免费的，
+  // 所以它和别的几张一样摆着，不加锁也不加徽记。
+  { mode: 'puzzle', icon: ICON_PUZZLE_MODE, tag: 'puzzle' },
 ];
+
+/** 基础那两副。主菜单上只有这两张正常亮（玩家定的「基础的两个玩法是明亮的」）。 */
+export const XHS_BASIC_MODES = ['square', 'circle'] as const;
+
+/**
+ * 「进阶」那几档 ＝ `CARDS` 里除了基础那两张的全部。`soon`（那块「进阶入口」牌子）
+ * 和 `dim`（头几局的路标）都收它。
+ *
+ * **算出来的，不手写。** 从前 `main.ts` 里那两行各手写一份
+ * `['bomb', 'slot', 'flip']`，2026-10 往菜单补《步步为营》时**两处都漏了**：六张卡里
+ * 只有它一张既不暗、也没牌子——四个兄弟都有、它没有，看上去像「这张才是正式的」。
+ * 少的不是功能，是一屏卡说不到一块去。从 CARDS 里算，加卡就自动跟上。
+ */
+export const XHS_ADVANCED_MODES: readonly XhsMode[] = CARDS.map((c) => c.mode).filter(
+  (m) => !(XHS_BASIC_MODES as readonly XhsMode[]).includes(m),
+);
 
 /** 一张卡：上面一格方的图，底下一行小字。和网页版的 iconButton 同一个形状。 */
 function card(
@@ -98,8 +119,8 @@ function card(
   //
   // 摆在图和名字**中间**，不压在图上（玩家定的）。原先是绝对定位贴在图的下
   // 沿：老虎机那张图是横的、下面本来就空着一截，牌子正好落在缝里；方块、炸
-  // 弹那几张图是填满整格的，同一块牌子就盖在图案身上了。同一块牌子在五张卡
-  // 上长得不一样，看着就像是没对齐。改成自己占一行，五张一致；卡因此高出一
+  // 弹那几张图是填满整格的，同一块牌子就盖在图案身上了。同一块牌子在几张卡
+  // 上长得不一样，看着就像是没对齐。改成自己占一行，张张一致；卡因此高出一
   // 截，menuFit 会把卡缩回来（它现量现算，见 menuFit.ts）。
   if (soon) {
     const tag = document.createElement('span');
@@ -182,8 +203,10 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
   `;
 
   const grid = page.querySelector<HTMLElement>('#xhsGrid')!;
-  // 宽屏五张一排；窄屏两张一排，最后一排只有一张。
-  const perRow = wide ? 5 : 2;
+  // 六张：宽屏一排摆完，窄屏三排各两张（排数和五张那一版一样，所以 menuFit 量出来的
+  // 高度没变）。从前宽屏那个数写的是 5——补上第六张之后它会排成 5 + 1，最后一张孤
+  // 零零吊在下面一行。
+  const perRow = wide ? 6 : 2;
   for (let i = 0; i < CARDS.length; i += perRow) {
     const row = document.createElement('div');
     row.className = 'home-row';

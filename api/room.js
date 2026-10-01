@@ -98,8 +98,14 @@ const COUNTDOWN_MS = 4500;
  *
  * 这份名单要和客户端 src/ui/startStage.ts 里的 LANDSCAPE_MODES 对得上：那边
  * 决定屏幕上从几数起，这边决定服务器留多长，两个数字必须是同一个。
+ *
+ * 这边从前多一个 `triangleAdvanced`。那一副在《侵蚀阶梯》PR-6 里删掉了，于是它成了
+ * 死值：进不了 `MODES`（见下面那张表），`start()` 那头根本收不到这个 mode，
+ * `countdownMsFor` 永远不会按它算。咬不到人，可上面那句「两个数字必须是同一个」就不
+ * 再是真的了——而这段注释的全部用处就是让下一个人相信这句话。所以 2026-10 把它拿
+ * 掉，两边现在都只有 `circleSeven` 一个。
  */
-const WIDE_MODES = new Set(['circleSeven', 'triangleAdvanced']);
+const WIDE_MODES = new Set(['circleSeven']);
 const countdownMsFor = (mode) => (WIDE_MODES.has(mode) ? COUNTDOWN_MS + 1000 : COUNTDOWN_MS);
 /**
  * How long a player who has stopped reporting holds the round open.
@@ -287,6 +293,13 @@ const id = (bytes) => randomBytes(bytes).toString('hex');
  * 4 × 3600 = 14400 次；给得松（比如 40000）等于让扫号脚本把整个房号空间来
  * 回扫四遍。十秒窗口两件事一起成立：八个人满座挤在一个 IP 后面是 80 次/十
  * 秒，300 留了两倍半的余量；而一秒一千次的脚本三百次就被关在门外。
+ *
+ * ⚠️ 上面那笔「80 次/十秒」是按**八座位**（`OPEN_SEATS`）算的，而竞赛屋是 21 座
+ * （`CONTEST_SEATS`，已经上线：`#mpContest` 那颗键 → `createRoom(…, contest)`）。21
+ * 个人满座挤在同一个 IP 后面是 210 次/十秒——**还不到 429**（上限 300），但余量从
+ * 3.75 倍掉到 1.43 倍。所以这个 300 现在是「刚够」，不是「两倍半的余量」：谁要再往
+ * 轮询里加一跳、或者把轮询调快一点，先回来重算这个数。一屋人打到一半集体断线，而屏
+ * 幕上写的是「连不上网络」，他们会去查路由器。
  *
  * join / create 是一次性动作（进一次屋、开一间屋），一小时几十次绰绰有余，
  * 短窗口反而会在网络抖动连点几下时误伤，所以这两个照 redeem.js 的写法。

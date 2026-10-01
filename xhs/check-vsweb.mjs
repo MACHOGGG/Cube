@@ -1,5 +1,5 @@
 /**
- * 逐屏对着网页版核内容——这一版和 play-slides.com 上那五个玩法长得一样吗？
+ * 逐屏对着网页版核内容——这一版和 play-slides.com 上那几个玩法长得一样吗？
  *
  *   npm run build && npm run build:xhs && node xhs/preview.mjs
  *   node xhs/check-vsweb.mjs            # 全部
@@ -242,8 +242,14 @@ async function tapByText(p, sel, re, what) {
 // 每一屏两条路：web 那条从网页版主菜单走，xhs 那条从这一版主菜单走；
 // snap 是要抓的东西，两边用同一份。
 
-/** 五个玩法在这一版主菜单上的次序（menu.ts 的 CARDS）。 */
-const XHS_CARD = { square: 0, circle: 1, bomb: 2, slot: 3, flip: 4 };
+/**
+ * 各玩法在这一版主菜单上的次序（menu.ts 的 CARDS）。
+ *
+ * 2026-10 加《步步为营》时多了第六位。**这张表是按下标点卡的**，所以 CARDS 里插卡
+ * 要跟着改——插在中间而这儿没动，底下每一屏点开的都是隔壁那个玩法，而且全程不报错。
+ * `scripts/check-xhs-modes.mjs` 钉的是「两张表的次序一致」。
+ */
+const XHS_CARD = { square: 0, circle: 1, bomb: 2, slot: 3, flip: 4, puzzle: 5 };
 
 const tapXhsCard = (p, mode) =>
   p.$$eval('.home-icon-btn', (e, i) => e[i].click(), XHS_CARD[mode]);
@@ -299,10 +305,10 @@ const PICK_SNAP = {
 
 const SCREENS = [
   {
-    name: '主菜单：五张卡的图与小字',
+    name: '主菜单：六张卡的图与小字',
     async web(p) {},
     async xhs(p) {},
-    // 网页版主菜单上有十三张卡，这一版只留五张。比的是「这五张在两边长得一
+    // 网页版主菜单上有十三张卡，这一版只留六张。比的是「这六张在两边长得一
     // 样吗」，所以按小字配对，一张一张比图。
     custom: async (webPage, xhsPage) => {
       const grab = (p) =>
@@ -356,7 +362,7 @@ const SCREENS = [
         // 模式」），卡底下那行小字另有一套（「经典方块」……）；这一版两处
         // 都念小字。
         //
-        // 让它们一致，是因为这一版一屏只有五张卡，看得见的字和听得见的字对
+        // 让它们一致，是因为这一版一屏只有六张卡，看得见的字和听得见的字对
         // 不上没有好处。「基础炸弹」那一个还会主动误导——「基础」是相对于
         // 90 秒和进阶说的，那两档这一版没有。
         //

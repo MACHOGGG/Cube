@@ -33,7 +33,8 @@ play-slides.com 就变了，没有预发环境，没有中间确认。所以：
 ```bash
 npm run dev          # vite 开发服务器（不带 api/）
 npm run build        # tsc -b && vite build && 生成五张法务静态页
-npm run typecheck    # 只验类型
+npm run typecheck    # 只验类型。**管不到 `xhs/`**——那一端走 xhs/tsconfig.json
+npx tsc -p xhs/tsconfig.json   # 小红书端的类型（npm run build:xhs 开头也跑它）
 
 # 网页端要跑 api/ 的时候（多人小屋、兑换码、登录都要）
 node scripts/dev-server.mjs 8815 dist    # 内置 api/ + 内存版 store
@@ -53,7 +54,7 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 没有 npm test，也没有测试框架。**这些门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
-数目：`scripts/` 下 110 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
+数目：`scripts/` 下 111 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
 在涨，所以别在别处再抄一遍——要用就当场 `ls scripts/check-*.mjs | wc -l`。
 
 三类，跑法不同：

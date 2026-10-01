@@ -263,7 +263,8 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
     return [
       [s.puzzleClearedLabel.replace('{n}', String(PUZZLE_CLEARED_POINTS)), String(p.cleared * PUZZLE_CLEARED_POINTS)],
       [s.puzzleStarsLabel.replace('{n}', String(PUZZLE_STAR_POINTS)), '+' + p.stars * PUZZLE_STAR_POINTS],
-      [`${s.perfBonusLabel} (${d.ratePercent}%)`, '×' + d.bonusMult.toFixed(2)],
+      // 《有效得分率》那一行撤了（玩家 2026-10）：这一档的综合得分不再乘它，摆一行
+      // 不起作用的乘数，和「摆一行 ×1.00」是同一种假话。
       [
         s.puzzleStepsLabel.replace('{n}', String(p.spent)).replace('{k}', String(p.scoredMoves)),
         s.puzzleRefundsLabel

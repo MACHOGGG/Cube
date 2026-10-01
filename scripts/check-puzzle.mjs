@@ -187,14 +187,25 @@ check(
   '0 消除、8 星星、得分率 0：8 × 5 = 40',
   puzzleComposite({ cleared: 0, stars: 8, ratePercent: 0 }) === 40,
 );
+// 有效得分率那一乘**撤了**（玩家 2026-10）。这两条从前钉的是「仍然乘」：
+//   6 消除 + 8 星星、得分率 50% → (60+40) × 1.5 = 150
+//   得分率 100% 正好翻一倍 → 200
+// 现在钉反面：**同一副盘面，得分率给什么值都算出同一个数**。
 check(
-  '6 消除 + 8 星星，得分率 50%：(60 + 40) × 1.5 = 150',
-  puzzleComposite({ cleared: 6, stars: 8, ratePercent: 50 }) === 150,
+  '6 消除 + 8 星星：60 + 40 = 100（不再乘得分率）',
+  puzzleComposite({ cleared: 6, stars: 8, ratePercent: 50 }) === 100,
   String(puzzleComposite({ cleared: 6, stars: 8, ratePercent: 50 })),
 );
 check(
-  '得分率 100% 正好翻一倍：(60 + 40) × 2 = 200',
-  puzzleComposite({ cleared: 6, stars: 8, ratePercent: 100 }) === 200,
+  '得分率给 0 / 50 / 100 都是同一个数',
+  [0, 50, 100].every((r) => puzzleComposite({ cleared: 6, stars: 8, ratePercent: r }) === 100),
+  [0, 50, 100].map((r) => puzzleComposite({ cleared: 6, stars: 8, ratePercent: r })).join(' '),
+);
+// 尺子：盘面本身还是算数的，不是把这个函数整个压成了常数。
+check(
+  '（尺子）盘面变了分就变',
+  puzzleComposite({ cleared: 7, stars: 8, ratePercent: 0 }) === 110,
+  String(puzzleComposite({ cleared: 7, stars: 8, ratePercent: 0 })),
 );
 check('四舍五入取整，不带小数', Number.isInteger(puzzleComposite({ cleared: 1, stars: 1, ratePercent: 33 })));
 check(
@@ -208,7 +219,8 @@ check(
 {
   const plain = puzzleComposite({ cleared: 2, stars: 3, ratePercent: 40 });
   const withPile = puzzleComposite({ cleared: 2, stars: 3, ratePercent: 40, neverFlipped: 29 });
-  check('盘上剩 29 枚没翻的，一分不扣', plain === withPile && plain === 49, `${plain} vs ${withPile}`);
+  // 35 = 2×10 + 3×5。从前这儿写的是 49（35 × 1.4，得分率那一乘还在的时候）。
+  check('盘上剩 29 枚没翻的，一分不扣', plain === withPile && plain === 35, `${plain} vs ${withPile}`);
 }
 // 没有钟，所以也不许有时间系数。同上，真喂一个进去看它动不动分。
 {

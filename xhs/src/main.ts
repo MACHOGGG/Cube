@@ -4,7 +4,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  * 这个文件只做「哪一屏」，不做「怎么玩」
  *
- * 五个玩法全部是网页版同一个入口的五组开关（src/shapes/types.ts 的
+ * 六个玩法全部是网页版同一个入口的六组开关（src/shapes/types.ts 的
  * ShapeGameOpts）：
  *
  *   基础方块   createSquareGame().mount(root, back, {})
@@ -22,7 +22,7 @@
  * 头摆着方块和小球两颗键；局中按暂停，面板里还有一颗。见 showShapeStory 与
  * ./tutorial.ts 开头那段。
  *
- * 这一版自己的东西只有四件：主菜单（五张卡）、本机游玩历史、介绍页、以及
+ * 这一版自己的东西只有四件：主菜单（六张卡）、本机游玩历史、介绍页、以及
  * Chrome 61 的基线样式层。多人小屋、排行榜、登录订阅、语言选择整块不做
  * （见 xhs/README.md）。
  * ─────────────────────────────────────────────────────────────────────────
@@ -37,6 +37,7 @@ import type { ShapeGame, ShapeGameOpts } from '../../src/shapes/types';
 import type { Family, TargetPattern } from '../../src/engine/targets';
 import { renderRandomTargetPage } from '../../src/ui/slotMachine';
 import { renderFlipModePage } from '../../src/ui/flipMode';
+import { renderPuzzleModePage } from '../../src/ui/puzzleMode';
 import { renderTutorial } from '../../src/ui/tutorial';
 import { renderCircleTutorial } from '../../src/ui/circleTutorial';
 import { installBackNav, setScreenBack } from '../../src/engine/backNav';
@@ -44,6 +45,7 @@ import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 import { suffixFor } from '../../src/engine/runKey';
+import { wipeOldRules } from '../../src/engine/wipeOldRules';
 import { MODE_SECONDS } from '../../src/engine/modeClock';
 import { registerCards } from '../../src/shapes/registry';
 
@@ -53,8 +55,8 @@ import { installMenuFit, scheduleFitMenu } from './menuFit';
 import { setCoachStoreKey } from '../../src/ui/coachBar';
 import { knowsHow, setKnowHowKey } from '../../src/engine/firstPlay';
 import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
-import { bombTip, flipTip, slotTip } from '../../src/ui/modeTips';
-import { renderXhsMenu, type XhsMode } from './menu';
+import { bombTip, flipTip, puzzleTip, slotTip } from '../../src/ui/modeTips';
+import { renderXhsMenu, XHS_ADVANCED_MODES, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
 import { renderRunSheet } from './runSheet';
 import { renderShapePick } from './shapePick';
@@ -108,12 +110,12 @@ function startWith(family: Family, opts: ShapeGameOpts, back: () => void): void 
 }
 
 /**
- * 成绩那一页要翻的六本存档：两个玩法 × 三种模式。
+ * 成绩那一页要翻的八本存档：两副棋盘 × 四种模式（2026-10 加《步步为营》之前是六本）。
  *
  * 键名问玩法自己要（card.bestKey）再接后缀，而后缀**一律走 engine/runKey.ts 的
  * `suffixFor`**，和棋盘真正存进去时调的是同一个函数。
  *
- * ⚠️ 这六行从前是手写的字面量（`''` / `'_bomb2'` / `'_flip'`）。手写的那一版
+ * ⚠️ 这几行从前是手写的字面量（`''` / `'_bomb2'` / `'_flip'`）。手写的那一版
  * 2026-09 静悄悄地全错了：《侵蚀阶梯》v1.2 §6 给每个键都加了一截 `_ero1`
  * （scoring.ts 的 SCORING_RULES_VERSION），炸弹那一版也早升到了第 3 版——于是这
  * 一页按三个不存在的键去找，**成绩页上一条记录都没有，累计得分永远是 0**，而且
@@ -131,6 +133,10 @@ const BOOKS: Book[] = [
   { card: circleGame.card, suffix: suffixFor('bomb') },
   { card: squareGame.card, suffix: suffixFor('flip') },
   { card: circleGame.card, suffix: suffixFor('flip') },
+  // 《步步为营》2026-10 补进来（决策 §10 的 E20）。少了这两本，这一档打完的局在成绩页上
+  // **整片不存在**，而且不报任何错——和上面那段说的是同一个毛病。
+  { card: squareGame.card, suffix: suffixFor('puzzle') },
+  { card: circleGame.card, suffix: suffixFor('puzzle') },
 ];
 
 /** 上一屏留下来要拆的东西（一局游戏挂了一堆监听，换屏前得让它自己收拾）。 */
@@ -317,7 +323,7 @@ function refreshLastRun() {
 /**
  * 头一回打开这个小工具时的第一屏。
  *
- * 不是主菜单，是直接开一局《基础小球》——五张卡摊在眼前，刚点进来的人不知
+ * 不是主菜单，是直接开一局《基础小球》——那几张卡摊在眼前，刚点进来的人不知
  * 道先按哪一张。showGame 自己那道教学闸口会先放小球的分镜动画（和点开那张
  * 卡看到的是同一段），学完就在同一屏里打，打完按《退出》才第一次见到主菜
  * 单。往后每次进来都直接是主菜单。和网页版同一条（src/main.ts 的 isFirstRun）。
@@ -335,13 +341,19 @@ const FIRST_RUN_KEY = 'slides.xhs.firstRun';
  *   square          头一回点开《基础方块》：棋盘底下那块教学条按 'square' 那
  *                   一路走（先不出声，见 ui/coachBar.ts）；在他开过之前，主菜
  *                   单上那张卡一直镶着一圈光。
- *   bomb/slot/flip  头一回进去：棋盘底下摆一句话说清加的那一层规矩，15 秒自
- *                   己走掉（ui/modeTips.ts）。
+ *   bomb/slot/flip/ 头一回进去：棋盘底下摆一句话说清加的那一层规矩，15 秒自
+ *   puzzle          己走掉（ui/modeTips.ts）。
  *
  * 存不进 localStorage（容器把它关了）就当「已经开过」——宁可少招待一次，也
  * 不要每一局都重来一遍：一句每次都冒出来的提示比没有还烦。
+ *
+ * **这张表和 `src/engine/firstPlay.ts` 的 `PlayKey` 是两张**（这一端的键带
+ * `slides.xhs.` 前缀，玩家定的「两边存档完全分开」）。所以主菜单加一档玩法要
+ * **两边都加**：2026-10 补《步步为营》时只加了 `PlayKey` 那一张，于是
+ * `npm run build:xhs` 当场编译不过——`npm run typecheck`（`tsc -b`）**管不到
+ * `xhs/`**，它用的是 `xhs/tsconfig.json`。
  */
-type FirstKey = 'square' | 'bomb' | 'slot' | 'flip' | 'endcard';
+type FirstKey = 'square' | 'bomb' | 'slot' | 'flip' | 'puzzle' | 'endcard';
 const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
 
 /** 小球和方块都打过一遍了没有——主菜单要不要再压暗别的玩法，看这个。 */
@@ -431,24 +443,46 @@ function firstScreen(): void {
 function showMenu() {
   teardown();
   renderXhsMenu(root, LANG, {
-    // 主菜单不再单独点亮某一张：基础那两个正常亮，其余三个调暗一档（玩家
+    // 主菜单不再单独点亮某一张：基础那两个正常亮，其余几个调暗一档（玩家
     // 定的「基础的两个玩法是明亮的，剩下的轻微暗淡」，见 menu.ts 的 soon）。
     glow: [],
-    // 炸弹 / 老虎机 / 无限反转：完整版里还有更进阶的玩法，这儿标一块牌子当预告。
-    // 这一版它们照样免费——牌子不拦手，点开就能玩。牌子是常驻的。
-    soon: ['bomb', 'slot', 'flip'],
+    /**
+     * 炸弹 / 老虎机 / 无限反转 / 步步为营：完整版里还有更进阶的玩法，这儿标一块牌子
+     * 当预告。这一版它们照样免费——牌子不拦手，点开就能玩。牌子是常驻的。
+     *
+     * ⚠️ 这一行和下面那一行是**按玩法逐个点名的**，所以主菜单加一档就要一起加。
+     * 2026-10 补《步步为营》时漏过：六张卡里只有它一张既不暗也没牌子——四个兄弟都
+     * 有、它没有，看上去像是「这张才是正式的」，而玩家定的是「基础的两个明亮，剩下
+     * 的轻微暗淡」。少的不是功能，是一屏卡说不到一块去。
+     */
+    soon: XHS_ADVANCED_MODES,
     // 暗淡只在头几局当路标：小球和方块都打过一遍之后就撤掉（玩家定的）。
     // 那时候路他自己认得了，再压着别的玩法只剩「这几个不太重要」这一层意
     // 思，不是我们想说的。
-    dim: basicsDone() ? [] : (['bomb', 'slot', 'flip'] as const),
+    dim: basicsDone() ? [] : XHS_ADVANCED_MODES,
     // 按了《我会玩》就地重画：上面那三样（glow / soon / dim）都由 basicsDone 算。
     onKnowHow: showMenu,
     onPlay: (mode: XhsMode) => {
-      if (mode === 'square') return showSquare();
-      if (mode === 'circle') return showGame(circleGame, {}, showMenu);
-      if (mode === 'bomb') return showBombPick();
-      if (mode === 'slot') return showSlot();
-      return showFlip();
+      // 一档一条，**不留落空的默认分支**。从前最后一档写的是 `return showFlip()`
+      // 兜底：补《步步为营》那天，这一句的意思就从「flip 走这儿」悄悄变成了「凡是
+      // 没列到的都走无限反转」——接错一整屏，编译器一声不响。改成穷举 switch 之
+      // 后，`XhsMode` 再加一档而这儿漏了，`never` 那一行当场编译不过。
+      switch (mode) {
+        case 'square':
+          return showSquare();
+        case 'circle':
+          return showGame(circleGame, {}, showMenu);
+        case 'bomb':
+          return showBombPick();
+        case 'slot':
+          return showSlot();
+        case 'flip':
+          return showFlip();
+        case 'puzzle':
+          return showPuzzle();
+      }
+      const missed: never = mode;
+      return missed;
     },
     onProfile: showProfile,
   });
@@ -493,7 +527,7 @@ function showSquare(): void {
  * 返回空对象，什么也不加。
  */
 function tipFor(
-  kind: 'bomb' | 'slot' | 'flip',
+  kind: 'bomb' | 'slot' | 'flip' | 'puzzle',
   family: Family,
   target?: TargetPattern,
 ): ShapeGameOpts {
@@ -510,7 +544,9 @@ function tipFor(
       ? bombTip(LANG, shape)
       : kind === 'flip'
         ? flipTip(LANG, shape)
-        : slotTip(LANG, target!);
+        : kind === 'puzzle'
+          ? puzzleTip(LANG)
+          : slotTip(LANG, target!);
   return { coach: true, coachTip: tip };
 }
 
@@ -562,6 +598,29 @@ function showFlip() {
       onBack: showMenu,
       onStart: (family) =>
         startWith(family, { flip: true, timeLimitSec: FLIP_SECONDS, ...tipFor('flip', family) }, showFlip),
+      onGenius: () => {},
+    },
+    false,
+  );
+  setScreenBack(showMenu);
+}
+
+/**
+ * 步步为营：网页版那一屏，挑方块或小球（决策 §10 的 E20）。
+ *
+ * 最后那个 `false` 是「挂不挂锁」。网页端这一档是天才特供，所以那边传的是
+ * `!isGenius()`；这一端整个是免费的，没有天才这回事，一律不挂锁——和炸弹、老虎机、
+ * 无限反转那三屏一样。
+ */
+function showPuzzle() {
+  teardown();
+  renderPuzzleModePage(
+    root,
+    LANG,
+    {
+      onBack: showMenu,
+      onStart: (family) =>
+        startWith(family, { steps: true, ...tipFor('puzzle', family) }, showPuzzle),
       onGenius: () => {},
     },
     false,
@@ -632,9 +691,20 @@ installOldKernel();
 // 再给小红书自己那排按钮（退出 / 分享 / 用户）让开上面那道——它压在页面上，
 // 不让就正好盖住主菜单的标题。见 topInset.ts 开头那段。
 installTopInset();
-// 主菜单那五张卡按屏幕算大小，别压到底排上。见 menuFit.ts。
+// 主菜单那几张卡按屏幕算大小，别压到底排上。见 menuFit.ts。
 installMenuFit();
 
 installBackNav();
+/*
+ * 《侵蚀阶梯》上线那一次性的清档，这一端从前**一次都没跑过**。
+ *
+ * 它原先是 `src/main.ts` 里的一个私有函数，只有网页端调；而两端用的是同一组
+ * `sugarcube_*` 键名，所以这一端的旧局（按旧规则打的，和新规则不是一把尺子）一直躺
+ * 在本机上，成绩页的累计得分是两套规则的和，哨兵键 `slides_wipe_ero1` 也永远不写
+ * 入。现在它是 `engine/wipeOldRules.ts`，两端各调一次。
+ *
+ * 传的是这一端有的那两副棋盘——多传几个不存在的键不花什么，少传一个就会漏掉一批局。
+ */
+wipeOldRules([squareGame.card.bestKey, circleGame.card.bestKey]);
 // 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进第一屏。
 void showLoadingScreen().then(firstScreen);

@@ -7,8 +7,9 @@ import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage, type AuthTab } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
-import { modeSuffix, suffixFor } from './engine/runKey';
-import { dropKey, markWiped, moveRuns, wipeKeyFor } from './engine/persistence';
+import { suffixFor } from './engine/runKey';
+import { wipeOldRules } from './engine/wipeOldRules';
+import { moveRuns } from './engine/persistence';
 import { BOMB_RULES_VERSION } from './engine/bomb';
 import { FLIP_RULES_VERSION, SCORING_RULES_VERSION } from './engine/scoring';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
@@ -1454,55 +1455,19 @@ function migrateMisfiledRuns(): void {
 }
 
 /**
- * 《侵蚀阶梯》上线：**本地旧战绩一次性清空**（v1.2 §6，玩家拍的板）。
+ * 《侵蚀阶梯》上线那一次性的清档，搬到了 `engine/wipeOldRules.ts`——**两端共用**。
  *
- * 为什么是清空而不是归档：这一版把得分图案、翻面分、整线消除、综合分全换了一套，
- * 旧局和新局根本不是一把尺子量出来的。留着归档的话，记录页上那个「累计得分」是两
- * 套规则的和，结算页那个「本机最佳」还钉在一个现行规则下打不出来的旧数字上——无限
- * 反转封顶那次就是这么咬人的（见 engine/runKey.ts 开头）。
- *
- * 清的是**《侵蚀阶梯》之前那一套键**：`modeSuffix` 给的是玩法那一截，不带
- * `_ero1`；现行的键全部多那一截，所以新局一个都不会被误删。每个玩法、每个已知的
- * 规则版本都枚举一遍——漏掉哪一个，那几局会在下一次有人按那个键去找的时候冒出来。
- *
- * 跑过就记一笔，不再跑。下次换规则版本时换一个新的哨兵键（跟着
- * SCORING_RULES_VERSION 走），别把这一次的重跑一遍。
+ * 它从前是这个文件里的一个私有函数，于是只有网页端跑过；小红书那一端用的是同一组
+ * `sugarcube_*` 键名，旧局却一直躺在本机上，哨兵键也永远不写入。搬成模块之后两端
+ * 各调一次（这儿一次，xhs/src/main.ts 一次）。
  */
-const WIPE_KEY = wipeKeyFor(SCORING_RULES_VERSION);
-function wipeOldRules(): void {
-  try {
-    if (localStorage.getItem(WIPE_KEY)) return;
-    /** 每个玩法在《侵蚀阶梯》之前可能用过的所有旧键后缀。 */
-    const oldSuffixes = new Set<string>();
-    for (const mk of ['base', 'timed', 'bomb', 'bombTimed', 'flip', 'puzzle'] as const) {
-      // 规则版本从 1 数到现行版本 + 2：多数两版是留给「哪天有人先升了版本、这段没
-      // 跟上」的余量——多删两个不存在的键不花什么，漏掉一个就会漏掉一批局。
-      for (let v = 1; v <= Math.max(BOMB_RULES_VERSION, FLIP_RULES_VERSION) + 2; v++) {
-        oldSuffixes.add(modeSuffix(mk, { bomb: v, flip: v }));
-      }
-    }
-    let dropped = 0;
-    for (const game of everyGame) {
-      for (const suffix of oldSuffixes) {
-        if (dropKey(game.card.bestKey + suffix)) dropped++;
-      }
-    }
-    // 记一笔「跑过了」，并且记清楚**有没有真的清掉东西**：记录页的空态只在真清过
-    // 的那种情况下换那一句话（见 persistence.ts 的 wipeKeyFor）。
-    markWiped(SCORING_RULES_VERSION, dropped);
-    if (dropped) console.info('[slides] 《侵蚀阶梯》上线：清掉旧规则的存档 ' + dropped + ' 档');
-  } catch {
-    // 无痕模式之类读写不了的：清不掉也别把开机拦住。反正新局落的是新键，
-    // 旧键在那儿也进不了记录页（记录页只按 recordSources 里那几个键去找）。
-  }
-}
 
 function boot() {
   // 返回键那套（见 backNav.ts）先立好：底下一条根、上面一条哨兵。
   installBackNav();
   // 先清掉旧规则那一套存档（《侵蚀阶梯》上线，见上面那段），再挪、再接云。
   // 顺序要紧：清在前，挪和接在后——反过来会把刚接回来的新局连着旧键一起删掉。
-  wipeOldRules();
+  wipeOldRules(everyGame.map((g) => g.card.bestKey));
   // 先把存错键的局挪回来，再去接云上那份——两件事落的是同一个键（见上面那段）。
   migrateMisfiledRuns();
   // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。

@@ -305,6 +305,18 @@ jobs:
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
           npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
           node scripts/check-slot-rules.mjs /tmp/scoring.mjs /tmp/targets.mjs /tmp/match.mjs
+      # 小红书那一端的玩法表有七张（XhsMode / CARDS / perRow / onPlay 分派 /
+      # FirstKey ＋ BOOKS / soon ＋ dim / check-vsweb 的 XHS_CARD）。加一档玩法要七张
+      # 都动，而漏掉其中任何一张**都不会当场报错**：点《步步为营》打开的是无限反转
+      # （兜底分支）、这一档打完的局在成绩页上整片不存在（BOOKS）、六张卡里只有它一张
+      # 既不暗也没牌子（soon/dim）、check-vsweb 按下标点卡于是整道门在比错的两屏。顺带
+      # 钉住「一次性清档两端各调一次」——它从前是 src/main.ts 的私有函数，小红书端一次
+      # 都没跑过。读源码，不打包。
+      #
+      # 另外记一笔：`npm run typecheck`（tsc -b）**管不到 xhs/**，那一端走
+      # xhs/tsconfig.json，所以上面「小红书端的类型」那一步不能省。
+      - name: 小红书端的玩法表：七张要一起动
+        run: node scripts/check-xhs-modes.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白

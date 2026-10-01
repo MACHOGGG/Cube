@@ -65,12 +65,19 @@ export function flipStreakDelta(points: number, chain: number, base = FLIP_STREA
  * 这一个管**全站所有玩法**。《侵蚀阶梯》把得分图案、翻面分、整线消除、综合分全换
  * 了一套，旧局和新局根本不是一把尺子量出来的，所以存档键和排行榜都要按它分开。
  *
- * 写成字符串不是数字：本地键长 `_ero1`、云端榜长 `:ero1`，一眼看得出是哪一版，而
- * `_2` 那样的后缀和炸弹那几版的数字混在一起认不出来。
+ * 写成字符串不是数字：本地键长 `_ero1`，一眼看得出是哪一版，而 `_2` 那样的后缀和炸
+ * 弹那几版的数字混在一起认不出来。
  *
- * 换规则时怎么做：改这个常量 → 本地那一次性清档跟着换钥匙（main.ts 的
- * `slides_wipe_*`）→ 服务端跑一次清档脚本 → `api/scores.js` 那一行改成收新的。
- * 四样缺一样就会出现「新分进了旧榜」或者「新分谁也看不见」。
+ * ⚠️ **云端榜上没有这一截。** 榜 id 由 `api/scores.js` 的 `boardIdOf` 生成，里头没有版
+ * 本段（实际长 `square:base` 这样）。云端是**按 `rules` 字段过滤**的：上报时
+ * `rules !== 'ero1'` 回 200 + `stored:false`，重建时跳过——不是另开一张榜。这儿从前写着
+ * 「云端榜长 `:ero1`」，是假的。
+ *
+ * 换规则时怎么做：改这个常量 → 本地那一次性清档跟着换钥匙（`engine/wipeOldRules.ts`
+ * 的 `slides_wipe_*`，两端各调一次）→ 服务端跑一次**管理员的 `rebuild`**（`api/scores.js`
+ * 的 `rebuild` 路由，带 `wipeAll`；**没有清档脚本**，要人手 POST，`ADMIN_TOKEN` 保护）
+ * → `api/scores.js` 那一行改成收新的。四样缺一样就会出现「新分进了旧榜」或者「新分谁
+ * 也看不见」。
  */
 export const SCORING_RULES_VERSION = 'ero1';
 
