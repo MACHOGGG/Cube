@@ -25,6 +25,15 @@
  * 部 HTTP 各用一个假 fetch 顶掉——顺便把验证码从那封假邮件里读出来。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
+/*
+ * **显式清掉授予开关**（E48）。
+ *
+ * 这道门有一条断言是「订阅过期的人登得上，而且如实说不是天才」。`GENIUS_GRANT_WINDOW`
+ * 一开，登录那一下就会把这个账号写成终身天才（api/subscription.js 的调用点），那条断言
+ * 当场红——而红的不是代码，是环境。它从外面漏进来过一次（本地手跑时 shell 里带着），所
+ * 以在这儿写死：这道门跑在「开关关着」那一侧。
+ */
+delete process.env.GENIUS_GRANT_WINDOW;
 process.env.RESEND_API_KEY = 're_stub';
 process.env.MAIL_FROM = 'Slides <noreply@example.com>';
 // Creem 配着、也答得出话——答的是「这个人没有订阅」。这正是「有账号、但订阅
@@ -141,34 +150,26 @@ check('两台设备的令牌都还在，兑一次码没把谁挤下线',
 check('没有生出和账户无关的孤儿账号（acct:code:GATE02）',
   !(await loadAccount('code:GATE02')) && !(await get('acct:code:GATE02')));
 
-// ---- ③ 换密码：旧密码是唯一凭据，换完别的设备下线 --------------------------
+// ---- ③ 换密码那条路撤了 ----------------------------------------------------
+/*
+ * 这儿原先有一整节（约 25 行）量「改密码」：旧密码是唯一凭据、新密码要合规矩、换完别的
+ * 设备下线、内部码换来的时长不被抹掉。2026-10 的改制（E37）把密码整个取消了，
+ * `api/passcode.js` 的 `change` 支随之撤掉——邮箱账号没有密码可改（登录走验证码），免邮
+ * 箱账号要换第二串走 `api/handle.js` 的 `reset`（那条路由 check-handle-auth.mjs 守着）。
+ *
+ * 留一条反面尺子：那一支不许悄悄回来，而且认不出来的请求要**明确**答 400，不是落到某一
+ * 支上去。
+ */
+{
+  const gone = await callOn(passcode, { email: EMAIL, password: PW, newPassword: 'bbb222' });
+  check('改密码那一支撤了：答 400 action，不是悄悄落到别处',
+    gone.status === 400 && gone.body?.error === 'action', `${gone.status} ${JSON.stringify(gone.body)}`);
+  // 尺子：密码本身还好使（`bind` 那条路还要设六位密码）——上面那条红的不是「账号坏了」。
+  check('（尺子）账号和密码都还好着', (await checkPin(EMAIL, PW, await loadAccount(EMAIL))) === 'ok');
+}
 
-const twoDevices = await loadAccount(EMAIL);
-twoDevices.tokens = [...(twoDevices.tokens || []), { t: 'OTHER-DEVICE', at: Date.now() }];
-await saveAccount(EMAIL, twoDevices);
-
-const wrongOld = await callOn(passcode, { email: EMAIL, password: 'zzz999', newPassword: 'bbb222' });
-check('旧密码不对就改不了', wrongOld.status === 401, String(wrongOld.status));
-
-const tooWeak = await callOn(passcode, { email: EMAIL, password: PW, newPassword: '12' });
-check('新密码不合规矩（不是正好 6 位）也改不了', tooWeak.status === 400, String(tooWeak.status));
-
-const changed = await callOn(passcode, { email: EMAIL, password: PW, newPassword: 'bbb222' });
-check('旧密码对了才换得成', changed.status === 200 && changed.body.ok === true, String(changed.status));
-check('回了一把新令牌给这台设备',
-  typeof changed.body.token === 'string' && changed.body.token.length > 0,
-  JSON.stringify(changed.body));
-const afterPw = await loadAccount(EMAIL);
-check('新密码好使', (await checkPin(EMAIL, 'bbb222', afterPw)) === 'ok');
-check('旧密码不好使了', (await checkPin(EMAIL, PW, await loadAccount(EMAIL))) !== 'ok');
-check('别的设备被撤下线，只留刚改完这一台',
-  afterPw.tokens.length === 1 && afterPw.tokens[0].t === changed.body.token,
-  `${afterPw.tokens.length} 台`);
-check('内部码换来的那段时间没被改密码抹掉',
-  (afterPw.until || 0) > Date.now(),
-  String(afterPw.until));
-
-const live = changed.body.token;
+// 下面 ④ 要一把活令牌。从前用的是改密码回来那一把，现在用登录拿到的这一把。
+const live = token;
 
 // ---- ④ 换邮箱：码寄给**新**地址 --------------------------------------------
 
@@ -203,7 +204,8 @@ check('令牌一把没动——换的是门牌不是钥匙', moved.body.token ==
 
 const atNew = await loadAccount(NEXT);
 check('新地址底下有账号了', Boolean(atNew));
-check('密码还是那一把', atNew && (await checkPin(NEXT, 'bbb222', atNew)) === 'ok');
+// 密码从头到尾没换过（改密码那一支撤了），所以这儿认的是最初那一把。
+check('密码还是那一把', atNew && (await checkPin(NEXT, PW, atNew)) === 'ok');
 check('内部码那段时间跟着过来了', (atNew?.until || 0) > Date.now());
 check('旧地址底下清干净了', !(await loadAccount(EMAIL)));
 
@@ -215,7 +217,7 @@ check('排行榜上旧地址撤了', (await zscore('lb:square', EMAIL)) === null
   String(await zscore('lb:square', EMAIL)));
 
 // 换完之后，新地址真的登得上——这一条是「搬家搬活了」的收尾。
-const reSignIn = await callOn(subscription, { email: NEXT, password: 'bbb222' });
+const reSignIn = await callOn(subscription, { email: NEXT, password: PW });
 check('新邮箱登得上', reSignIn.status === 200 && reSignIn.body.email === NEXT, String(reSignIn.status));
 check('而且还是天才（内部码那段时间还在）', reSignIn.body.active === true);
 

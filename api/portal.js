@@ -1,5 +1,5 @@
 import { configured, creem, readBody, send } from './_creem.js';
-import { SECRET_RE, burnGuess, checkPin, loadAccount, normalizeEmail } from './_accounts.js';
+import { loadAccount, normalizeEmail, tokenValid } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
 
@@ -15,10 +15,19 @@ import { storeConfigured } from './_store.js';
  * The App Store and Google Play builds never call this: those subscriptions
  * are cancelled in the store's own account settings, as the stores require.
  *
- * The password is checked here for the same reason it is checked on sign-in,
- * and it matters more: behind this link are the card's last four digits, the
- * payment history and the cancel button. An address alone opening it would
- * let anyone who knows a subscriber's email cancel their subscription.
+ * 身份用**登录令牌**证明，不是密码（E44）。
+ *
+ * 这件事非证明不可：这个链接后面是卡号后四位、付款记录和那颗退订键，光凭一个邮箱就
+ * 打得开的话，知道某人邮箱的人就能把他的订阅退掉。
+ *
+ * 从前验的是密码。2026-10 的改制（E37）把密码整个取消了——登录改成邮箱验证码
+ * （api/signin.js）或者两串免邮箱凭据（api/handle.js），两条路都只留下一样东西可以在
+ * 之后的请求里拿出来用：那把登录令牌。它是**同样强的**证明（`issueToken` 发的是 24 字
+ * 节随机，比六位密码难猜得多），而且是**唯一还存在的**证明。
+ *
+ * 顺带少了一个麻烦：验密码那条路会累计「错了几次」并在第 4 次锁账号 4 小时，于是它同
+ * 时是一把递给陌生人的锁——知道你邮箱的人发四次乱填的请求就能把你关在门外。令牌对不上
+ * 不计数，因为它不是人记得住、会打错的东西。
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
@@ -26,29 +35,20 @@ export default async function handler(req, res) {
 
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
-  const { email, password } = readBody(req);
+  const { email, token } = readBody(req);
   const address = normalizeEmail(email);
   if (!address) return send(res, 400, { error: 'missing' });
 
-  // 按来路再数一道。理由和 passcode.js 的 change 一模一样：账号那头的锁定计
-  // 数（错 4 次锁 4 小时）挡得住猜密码的人，可它同时也是一把递给陌生人的
-  // 锁——知道你邮箱的人发四次乱填的请求就能把你关在自己的账号外面四小时。
-  if (storeConfigured() && (await tooMany('portal', callerId(req), 20, 3600))) {
+  // 按来路数一道。令牌本身不值得猜（24 字节随机），这一道挡的是「拿一份地址名单挨个
+  // 来问」——每问一次我们都要往 Creem 打两次 HTTP。
+  if (await tooMany('portal', callerId(req), 20, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
 
-  // Same proof as signing in. An account that does not exist and a wrong
-  // password get the same answer, so this cannot be used to find subscribers.
+  // 没有这个账号、和令牌对不上，答同一句话——否则这一支就成了一个「谁在订阅」的查询
+  // 接口。`tokenValid` 自己过期和多设备那串钥匙都管了（_accounts.js 的 tokenRing）。
   const account = await loadAccount(address);
-  if (!account || !SECRET_RE.test(String(password || ''))) {
-    // 连花掉的时间也对齐，别让快慢把「这个地址有没有账号」说出去。
-    burnGuess(password);
-    return send(res, 401, { error: 'wrong' });
-  }
-  const verdict = await checkPin(address, String(password), account);
-  if (verdict === 'blocked') return send(res, 423, { error: 'blocked' });
-  if (verdict === 'locked') return send(res, 423, { error: 'locked' });
-  if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
+  if (!account || !tokenValid(account, token)) return send(res, 401, { error: 'wrong' });
 
   try {
     const customer = await creem('/v1/customers', { query: { email: address } });

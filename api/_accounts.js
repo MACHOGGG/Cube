@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
 import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce, withLock } from './_store.js';
 
@@ -65,6 +65,56 @@ export const PASS_RE = /^[A-Za-z0-9]{6}$/;
  */
 export const SECRET_RE = /^.{4,128}$/;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * 免邮箱凭据那两串：大小写敏感的字母 + 数字，8 到 64 位（E38）。
+ *
+ * 没有邮箱的人也该进得来。两串自己取：第一串全站唯一（当账号 id），第二串随意
+ * （当密码）。8 位是下限而不是定值——`PASS_RE` 那种「正好 6 位」是密码框的规矩，
+ * 这两串是玩家自己记在纸上的东西，不该替他定长度。
+ */
+export const PAIR_RE = /^[A-Za-z0-9]{8,64}$/;
+
+/**
+ * 第一串 → 存储里的 id。**算 sha256，不是原样拿来用。**
+ *
+ * ⚠️ 两个理由，都踩过：
+ *
+ * ① **大小写会丢。** `normalizeEmail`（下面）会 `.toLowerCase()`，而 `accountKey`、
+ *    `acctLockKey`、`_entitlement.js` 的 `identify` 全走它。直接把第一串当 id，
+ *    `'Abc12345'` / `'abc12345'` / `'ABC12345'` 当场撞成同一个 key——而这两串明文写着
+ *    「区分大小写」。sha256 的输出是小写 hex，`toLowerCase()` 对它无损，而不同大小写
+ *    的输入算出不同的 hex。
+ *
+ * ② **服务端不需要还原它，所以不该存得回来。** 排行榜回包不含 member
+ *    （`api/scores.js` 的 rows 只有 rank/score/name/avatar）、后台名单不收非邮箱账号
+ *    （`saveAccount` / `createAccount` 里那道 `EMAIL_RE` 闸）、界面上要显示的是客户端
+ *    自己存的那份原文（`Entitlement.handle`）。一份谁都不读的明文留在库里只有坏处。
+ *
+ * 前缀 `hdl:` 让它和另外两种 id 永不相交：邮箱带 `@`，寄存码是 `code:` 开头且全大写，
+ * 而 sha256 的 hex 只有 `0-9a-f`。门：`check-key-space.mjs`。
+ */
+export const pairKey = (first) =>
+  'hdl:' + createHash('sha256').update(String(first ?? ''), 'utf8').digest('hex');
+
+/** `pairKey` 算出来的那种 id 长什么样。只认这一个形状，别处不许自己拼前缀。 */
+export const PAIR_KEY_RE = /^hdl:[0-9a-f]{64}$/;
+
+/**
+ * 这是一个「我们认得的账号 id」吗——邮箱，或者免邮箱凭据算出来的那把 key。
+ *
+ * 从前这个判断就是 `EMAIL_RE.test(address)`，散在两处闸上（`passcode.js` 的 bind、
+ * `redeem.js` 认「他登着没有」那一句）。免邮箱账号（E38）的 id 不是邮箱，于是那两处会
+ * 把他当成「没登录」——兑一张内部码，那个月落到码自己名下而不是他账号上，他换台设备就
+ * 找不着了，**而屏幕上写的是「兑换成功」**。
+ *
+ * 收成一处，是因为这种「认不出就当没登录」的闸还会再多：每多一处就多一次漏掉这一种账
+ * 号的机会，而每一次都不报错。
+ *
+ * ⚠️ 这一句回答的是「形状对不对」，**不是「这个账号存不存在」**，更不是「这个人是他自
+ * 己」。后两件事照旧要 `loadAccount` 和 `tokenValid`。
+ */
+export const accountId = (id) => EMAIL_RE.test(id) || PAIR_KEY_RE.test(id);
 
 /**
  * Wrong tries are counted cumulatively and only a correct passcode clears
@@ -383,8 +433,23 @@ async function patchCounters(email, account) {
  * 'ok' | 'wrong' | 'locked' | 'blocked'. Callers must give the same answer
  * for 'wrong' as for an address with no account at all, so that this cannot
  * be used to find out who has one.
+ *
+ * `{ block: false }` —— **不许走到封号那一档**（见下面 BLOCK_AFTER）。免邮箱凭据账号
+ * （`api/handle.js`，E38）传它：封号是一道只有「拿邮箱证明自己」才解得开的门
+ * （`api/unlock.js`），而那种账号压根没有邮箱。
+ *
+ * 关掉之后它只到 `LOCK_AFTER`：错 4 次锁 4 小时，锁自己会开。锁着的时候下面第一句就
+ * 原地返回 'locked'，**连计数都不走**，所以锁期内怎么试都不动；锁开了之后再错一次，
+ * 那 4 小时就重新算（`tries` 还在 24 小时的计数键里，一进来就 ≥ LOCK_AFTER）。换算下
+ * 来是「锁开之后每 4 小时一次机会」，而第二串是 ≥8 位的大小写敏感字母数字
+ * （62⁸ ≈ 2.2×10¹⁴）——靠猜连门缝都摸不到。
+ *
+ * 真忘了第二串的人不必等：走 `handle.js` 的 `reset`，凭第一串重设，顺手把锁也开掉。
+ *
+ * 而那也正是为什么封号在这种账号上既没有用、也只会伤到本人：知道第一串的人随时能
+ * `reset`，封号挡不住他；本人被封之后却没有任何别的出路。
  */
-export async function checkPin(email, pin, account) {
+export async function checkPin(email, pin, account, { block = true } = {}) {
   const now = Date.now();
   if (account.blocked) return 'blocked';
   if (account.lockUntil && account.lockUntil > now) return 'locked';
@@ -407,7 +472,7 @@ export async function checkPin(email, pin, account) {
   // 求各自读了一份账号对象，谁最后存回去谁说了算：号小的那个存回去时带着
   // 「才错了 2 次、没封」，能把号大的那个刚写下的「封了」盖掉。所以真正说了
   // 算的是这个号，不是账号对象上那面旗；顺手把被盖掉的旗子重新立上。
-  if (tries > BLOCK_AFTER) {
+  if (block && tries > BLOCK_AFTER) {
     if (!account.blocked || onRecord < tries) {
       account.blocked = true;
       account.fails = Math.max(onRecord, tries);
@@ -435,10 +500,14 @@ export async function checkPin(email, pin, account) {
   // 不会把已经攒下的次数抹回去。答给调用方的话按 tries 说——那是这次真正的
   // 号，不受别人存回去的影响。
   account.fails = Math.max(onRecord, tries);
-  if (tries >= BLOCK_AFTER) account.blocked = true;
+  // `block: false` 的那一支（免邮箱账号）永远不立 blocked 那面旗，超过封号线也只是
+  // 继续锁——而且每错一次就把那 4 小时重新往后推，所以它不会变成「锁过一次就白送 4
+  // 次」。
+  if (block && tries >= BLOCK_AFTER) account.blocked = true;
   else if (tries >= LOCK_AFTER) account.lockUntil = Math.max(account.lockUntil || 0, now + LOCK_MS);
   await patchCounters(email, account);
-  return tries >= BLOCK_AFTER ? 'blocked' : tries >= LOCK_AFTER ? 'locked' : 'wrong';
+  if (block && tries >= BLOCK_AFTER) return 'blocked';
+  return tries >= LOCK_AFTER ? 'locked' : 'wrong';
 }
 
 /**

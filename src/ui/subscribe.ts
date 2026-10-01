@@ -6,7 +6,6 @@ import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
 import { webSaleOpen } from '../engine/saleWindow';
-import { geniusSlots } from '../engine/geniusSlots';
 import { formatPrice, plans, type PlanPeriod } from '../engine/pricing';
 import {
   attachAccount,
@@ -560,15 +559,18 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     `
     <h2>${s.subscribeTitle}</h2>
     <!--
-      停售期间这一屏改成**注册引导**（玩家 2026-10：「把网页中现在引导到订阅的部分改为
-      引导到注册……改为注册就会有解锁所有的功能，而且上面会显示出来还有多少个名额还开
-      放」，并点名「不要添加过度复杂内容」——所以就一句话加一行名额，不列条款）。
+      这一屏是**注册引导**（E40）。这一句话写死，不再问服务端。
 
-      先摆中性的那一句（subscribeClosed），问到服务端的真实名额之后再换成那句承诺。
-      **顺序不能反**：先摆承诺再去问，问不到就留着一句兑现不了的话。服务端说得出才说。
+      它从前分两步：先摆中性的「订阅目前不开放」，问到 /api/slots 的真实名额之后再换成
+      那句承诺——因为那时名额有限（第一批 100 个），而「还剩几个」只有服务端数得清。
+      2026-10-02 名额整个撤了（E39，不限人数），没有可问的了，于是也没有「说得出才说」
+      这回事：这句话什么时候都成立。
+
+      ⚠️ 但它成立有一个前提：服务端的 GENIUS_GRANT_WINDOW 开着。那个开关和这句话之间
+      已经没有任何自动的联系了，所以要关它必须先回来改这句话——api/_entitlement.js
+      的 grantWindowOpen 旁边钉着同一条（E54）。
     -->
-    <p class="tag-line" id="geniusTag">${webClosed ? s.subscribeClosed : s.subscribeIntro}</p>
-    <p class="auth-hint" id="geniusSlots" hidden></p>
+    <p class="tag-line" id="geniusTag">${s.registerUnlocks}</p>
     ${priceRows ? `<div class="plan-list">${priceRows}</div>` : ''}
     ${
       // The store has something worth saying here — no sign-up, never leaves
@@ -615,28 +617,6 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     </div>
   `,
   );
-
-  /*
-   * 停售期间：问一声服务端还剩几个名额，问到了才把那句承诺摆上去。
-   *
-   * **说得出才说。** 服务端答不出（窗口没开、没有库可数、名额已满、网络不通）时，
-   * `geniusSlots()` 回 null，这一段什么都不做——屏幕上留着的还是那句中性的「订阅目前不
-   * 开放」。所以在 `GENIUS_GRANT_WINDOW` 填上之前，「注册就解锁」这句话根本不会出现，
-   * 而不是先印出来再等服务端兑现。
-   *
-   * 窗可能在答复回来之前就被关掉，所以先确认那两个节点还在文档里。
-   */
-  if (webClosed) {
-    void geniusSlots().then((slots) => {
-      if (!slots) return;
-      const tagEl = overlay.querySelector<HTMLElement>('#geniusTag');
-      const slotEl = overlay.querySelector<HTMLElement>('#geniusSlots');
-      if (!tagEl || !slotEl || !tagEl.isConnected) return;
-      tagEl.textContent = s.registerUnlocks;
-      slotEl.textContent = s.slotsLeft.replace('{n}', String(slots.left));
-      slotEl.hidden = false;
-    });
-  }
 
   const msg = overlay.querySelector<HTMLElement>('#geniusMsg')!;
   const rows = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.plan-row'));

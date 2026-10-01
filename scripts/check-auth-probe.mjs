@@ -118,43 +118,68 @@ const paid = await callOn(subscription, { email: PAID_NO_PASS, password: 'aaa111
 check('订阅活着但没设过密码：仍然答 needsPasscode，送他去设一个',
   paid.status === 200 && paid.body.needsPasscode === true, `${paid.status} ${paid.raw}`);
 
-// ── ② 改密码：按来路限速 ────────────────────────────────────────────────
+// ── ② 两条新路也不许当查号机 ────────────────────────────────────────────
 //
-// 挨个换邮箱打，所以账号那头的锁定计数一次都数不上——原先这一处就完全没有
-// 第二道闸，一台机器可以一直打下去。
+// 原先这一节量的是「改密码按来路限速」。改密码那一支 2026-10 撤了（E37，密码取消），所
+// 以这一节换成那两条**新**路同一个主题的那一面：它们也不该告诉外面的人「这个地址 / 这一
+// 串有没有人用」。
+//
+// ⚠️ 有一处是**故意泄露**的，写在这儿免得以后有人来「堵」它：`api/handle.js` 的
+// `register` 撞名时答 409 taken。那是不得不说的——第一串必须唯一，玩家撞上了就得换一
+// 串。代价（第一串可被枚举、而 reset 凭它就能重设第二串）玩家 2026-10-01 知情拍板，界面
+// 上如实告知。所以这一节量的是 `signin` 那一支，不是 `register`。
+{
+  const signinApi = (await import('../api/signin.js')).default;
+  const handleApi = (await import('../api/handle.js')).default;
 
-const MANY = '203.0.113.77';
-const pwTries = [];
-for (let i = 0; i < 20; i++) {
-  pwTries.push((await callOn(passcode,
-    { email: `victim${i}@example.com`, password: 'zzz999', newPassword: 'bbb222' }, MANY)).status);
+  // signin 的 request：有账号 / 没账号，一字不差（它给谁都发信，所以本来就没什么可藏，
+  // 但回包一旦不一样，这条路就成了查号机）。
+  const { createAccount, newAccount, pairKey } = await import('../api/_accounts.js');
+  await createAccount('probe-has@example.com', newAccount('', 'code'));
+  const had = await callOn(signinApi, { email: 'probe-has@example.com' }, '203.0.113.70');
+  const hadnt = await callOn(signinApi, { email: 'probe-none@example.com' }, '203.0.113.71');
+  check('验证码那一支：有账号 / 没账号，回包一字不差',
+    had.status === hadnt.status && had.raw === hadnt.raw, `${had.raw} / ${hadnt.raw}`);
+
+  // handle 的 signin：这一串没人用过，和第二串打错了，答同一句。
+  await createAccount(pairKey('ProbePair1'), newAccount('rightpass', 'code'));
+  const wrongSecond = await callOn(handleApi, { first: 'ProbePair1', second: 'wrongpass' }, '203.0.113.72');
+  const noSuchFirst = await callOn(handleApi, { first: 'NoSuchPair', second: 'wrongpass' }, '203.0.113.72');
+  check('免邮箱那一支：第一串没人用过 / 第二串打错，答同一句',
+    wrongSecond.status === noSuchFirst.status && wrongSecond.raw === noSuchFirst.raw,
+    `${wrongSecond.status}:${wrongSecond.raw} / ${noSuchFirst.status}:${noSuchFirst.raw}`);
+  // 尺子：真对上了是另一句——不然上面那条在「这个接口对谁都答 401」时也绿。
+  const right = await callOn(handleApi, { first: 'ProbePair1', second: 'rightpass' }, '203.0.113.72');
+  check('（尺子）两串都对就进得去（不是对谁都答 401）', right.status === 200, String(right.status));
 }
-check('改密码：前 20 次照常答「密码不对」', pwTries.every((c) => c === 401),
-  [...new Set(pwTries)].join(','));
-const pwStopped = await callOn(passcode,
-  { email: 'victim99@example.com', password: 'zzz999', newPassword: 'bbb222' }, MANY);
-check('改密码：第 21 次被来源限速挡下',
-  pwStopped.status === 429 && pwStopped.body.error === 'tooMany',
-  `${pwStopped.status} ${pwStopped.raw}`);
-const pwOther = await callOn(passcode,
-  { email: 'victim99@example.com', password: 'zzz999', newPassword: 'bbb222' }, '203.0.113.78');
-check('改密码：换一个来源不受牵连', pwOther.status === 401, String(pwOther.status));
 
 // ── ③ 账号中心（Creem 客户门户）：同一把尺子 ────────────────────────────
 
+// 这一支 2026-10 改成验**登录令牌**（E44，密码取消了，令牌是唯一还存在的证明）。
+// 限速照旧：令牌本身不值得猜，挡的是「拿一份地址名单挨个来问」——每问一次我们都要往
+// Creem 打两次 HTTP。
 const PORTAL = '203.0.113.88';
 const poTries = [];
 for (let i = 0; i < 20; i++) {
-  poTries.push((await callOn(portal, { email: `target${i}@example.com`, password: 'zzz999' }, PORTAL)).status);
+  poTries.push((await callOn(portal, { email: `target${i}@example.com`, token: 'NOT-A-TOKEN' }, PORTAL)).status);
 }
-check('账号中心：前 20 次照常答「密码不对」', poTries.every((c) => c === 401),
+check('账号中心：前 20 次照常答「不对」', poTries.every((c) => c === 401),
   [...new Set(poTries)].join(','));
-const poStopped = await callOn(portal, { email: 'target99@example.com', password: 'zzz999' }, PORTAL);
+const poStopped = await callOn(portal, { email: 'target99@example.com', token: 'NOT-A-TOKEN' }, PORTAL);
 check('账号中心：第 21 次被来源限速挡下',
   poStopped.status === 429 && poStopped.body.error === 'tooMany',
   `${poStopped.status} ${poStopped.raw}`);
-const poOther = await callOn(portal, { email: 'target99@example.com', password: 'zzz999' }, '203.0.113.89');
+const poOther = await callOn(portal, { email: 'target99@example.com', token: 'NOT-A-TOKEN' }, '203.0.113.89');
 check('账号中心：换一个来源不受牵连', poOther.status === 401, String(poOther.status));
+// 没有这个账号、和令牌对不上，必须是同一句——否则这一支成了「谁在订阅」的查询接口。
+{
+  const { createAccount, newAccount } = await import('../api/_accounts.js');
+  await createAccount('portal-probe@example.com', newAccount('', 'code'));
+  const exists = await callOn(portal, { email: 'portal-probe@example.com', token: 'NOT-A-TOKEN' }, '203.0.113.90');
+  const nope = await callOn(portal, { email: 'portal-none@example.com', token: 'NOT-A-TOKEN' }, '203.0.113.90');
+  check('账号中心：有账号 / 没账号，答同一句',
+    exists.status === nope.status && exists.raw === nope.raw, `${exists.raw} / ${nope.raw}`);
+}
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

@@ -37,7 +37,7 @@
  * 份临时模块再 import 进来跑，所以它永远不过期。写成 `git show HEAD:…` 的话，这次一提
  * 交 HEAD 就是修好的那一版，对照当场变成空绿。
  */
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 
 process.env.ALLOW_MEMORY_STORE = '1';
 // 这道门整个跑在「Creem 没配」那一侧。**删掉而不是假设它没设**——机器上真有这个变量
@@ -50,14 +50,44 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-// ── ① 源码：那个 'card' 兜底没了 ───────────────────────────────
+// ── ① 源码：整个 api/ 里不许有「默认 card」这种写法 ────────────
+//
+// 这一条原先只盯 `api/passcode.js` 的那一行（`change` 支里的
+// `newAccount(..., account.kind || 'card')`）。2026-10 的改制（E37）把密码取消了，`change`
+// 整支撤掉，那一行随之消失——于是那条断言变成了「检查一个不存在的东西」，而配它的尺子当场
+// 红了（它找的正是那一行）。
+//
+// 所以改成按**整个 api/ 目录**查一遍。要守的本来就不是某一行，而是那条规矩：**除了「一笔
+// Creem 确认付过款的结账」，没有任何路径可以造出 kind:'card' 的账号。** 那种账号在 Creem
+// 没配的时候会吃 503，而 503 不带令牌——那个人登不进自己的账号。
 {
-  const pass = readFileSync(new URL('../api/passcode.js', import.meta.url), 'utf8');
-  check("passcode.js 里不再有 `|| 'card'` 这个兜底", !pass.includes("|| 'card'"));
-  // 尺子：那一行还在，而且兜底换成了 'code'。少了这一条，上面那句在「有人把整行删
-  // 掉了」的时候也会绿。
-  check("（尺子）兜底换成了 'code'，不是整行没了",
-    /newAccount\(String\(newPassword\), account\.kind \|\| 'code'\)/.test(pass));
+  const files = readdirSync(new URL('../api/', import.meta.url))
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => [f, readFileSync(new URL('../api/' + f, import.meta.url), 'utf8')]);
+  check('（尺子）读到了 api/ 下的那一批文件', files.length >= 10, `${files.length} 个`);
+
+  const bad = files.filter(([, src]) => src.includes("|| 'card'")).map(([f]) => f);
+  check("api/ 里一处 `|| 'card'` 都没有", bad.length === 0, bad.join(' '));
+
+  /*
+   * 更要紧的那一条：**造出 kind:'card' 账号的地方只许有一处**。
+   *
+   * 按文件名列白名单意义不大（`mint.js` 里那个 `row.kind === 'card'` 是**读**，
+   * `_entitlement.js` 和 `_accounts.js` 里是判据和字段说明）。真正要钉的是「写」：
+   * `newAccount(..., 'card')` 这个调用只许出现在 `passcode.js` 的 `create` 里——那一支要
+   * 一笔 Creem 确认付过款的结账才走得到。别处多一处，就等于多一条「没付款也能造出刷卡账
+   * 号」的路，而那种账号在 Creem 没配时吃 503、登不进去。
+   */
+  const makers = files
+    .filter(([, src]) => /newAccount\([^;]*'card'/.test(src))
+    .map(([f]) => f);
+  check("造 kind:'card' 账号的只有 passcode.js 一处", makers.join(' ') === 'passcode.js', makers.join(' ') || '（一处都没有）');
+  const pass = files.find(([f]) => f === 'passcode.js')[1];
+  const inCreate = pass.slice(pass.indexOf('async function create('));
+  check("而且在 passcode.js 里只在 create 那一支（要一笔付过款的结账）",
+    /newAccount\([^;]*'card'/.test(inCreate)
+      && (pass.match(/newAccount\([^;]*'card'/g) || []).length === 1,
+    String((pass.match(/newAccount\([^;]*'card'/g) || []).length));
 }
 
 // ── 真跑一遍 resolveEntitlement ────────────────────────────────

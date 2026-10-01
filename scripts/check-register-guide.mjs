@@ -7,21 +7,18 @@
  * ─────────────────────────────────────────────────────────────────────────
  * 守的是哪件事
  *
- * 玩家 2026-10 把 Creem 的两个订阅商品暂时关掉，那一屏改成「注册就解锁全部功能」，上面印
- * 一行「还剩 N 个名额」（第一批 100 个，满了真的不再送）。
+ * 《Slides 天才》那一屏现在是**注册引导**（E40）：一句「注册后免费立即解锁全部内容」，
+ * 一颗《注册》键，一个价钱都不摆。
  *
- * 这一屏最容易出的事不是排版，是**印出一句兑现不了的话**：
+ * 这一屏最容易出的事不是排版，是**那句话和服务端对不上**。它从前是两步走的：先摆中性的
+ * 「订阅目前不开放」，问到 `/api/slots` 的真实名额之后才换成那句承诺——因为那时名额有限
+ * （第一批 100 个），而「还剩几个」只有服务端数得清。2026-10-02 名额整个撤了（E39，不限
+ * 人数），`/api/slots` 和 `geniusSlots.ts` 都删了，那句话于是**写死在 i18n 里**。
  *
- *   · 服务端的授予窗口还没打开（`GENIUS_GRANT_WINDOW` 没填），屏幕上却已经写着「注册就
- *     解锁」——那是在替服务端许一个它还不会兑现的承诺；
- *   · 名额满了，屏幕上还写着「还剩 N 个」；
- *   · 服务端半份答复（只回了 open，没回数字），前端自己凑一个数出来。
- *
- * 所以这道门把**各种答复**都喂一遍，钉的只有一句话：**服务端说得出才说，说不出就只留那
- * 句中性的「订阅目前不开放」。**
- *
- * 答复用路由拦截喂，不为每种状态各起一台服务器：那样既慢，又没法构造「半份答复」「500」
- * 这类真实服务器不会主动给的情形。真实那一路由第 ① 节守着（它走的是服务器自己的答复）。
+ * ⚠️ 所以现在要守的是另一件事：那句话和 `GENIUS_GRANT_WINDOW` 之间**已经没有任何自动的
+ * 联系**。开关一关，玩家照着那句话去注册，注册得成、却不是天才，而屏幕上什么都不报
+ * （E54）。代码里钉了两处注释（`api/_entitlement.js` 的 grantWindowOpen、`subscribe.ts`
+ * 那段 HTML 注释），这道门钉的是屏幕上那一面：**话在、价钱不在、键是《注册》**。
  */
 import { chromium } from 'playwright';
 
@@ -40,17 +37,10 @@ const head = (t) => console.log('\n' + t);
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
-/** 开一张干净的页面，走到那一屏。`stub` 不给就用服务器自己的答复。 */
-async function openGeniusWindow(stub) {
+/** 开一张干净的页面，走到那一屏。 */
+async function openGeniusWindow() {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 820 } });
   const page = await ctx.newPage();
-  if (stub) {
-    await page.route('**/api/slots*', (route) =>
-      stub.status
-        ? route.fulfill({ status: stub.status, body: 'boom' })
-        : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(stub.body) }),
-    );
-  }
   await page.goto(base);
   await page.evaluate(() => {
     localStorage.setItem('slides_lang', 'zhHans');
@@ -77,7 +67,7 @@ async function openGeniusWindow(stub) {
   const seen = await page.evaluate(() => ({
     opened: Boolean(document.querySelector('.genius-modal')),
     tag: document.querySelector('#geniusTag')?.textContent?.trim() || '',
-    slotsHidden: document.querySelector('#geniusSlots')?.hidden !== false,
+    slotsEl: Boolean(document.querySelector('#geniusSlots')),
     slots: document.querySelector('#geniusSlots')?.textContent?.trim() || '',
     planRows: document.querySelectorAll('.plan-row').length,
     primary: document.querySelector('#geniusRestore')?.textContent?.trim() || '',
@@ -87,43 +77,53 @@ async function openGeniusWindow(stub) {
   return seen;
 }
 
-const PROMISE = /注册就解锁全部功能/;
-const NEUTRAL = /订阅目前不开放/;
+const PROMISE = /注册后免费立即解锁全部内容/;
+/** 撤掉的那些字样，一个都不许回来。 */
+const GONE = [/订阅目前不开放/, /还剩\s*\d+\s*个名额/];
 
 // ---------------------------------------------------------------------------
-head('① 真服务器，授予窗口没开（今天线上就是这个状态）');
+head('那一屏：话在、价钱不在、键是《注册》');
 {
   const s = await openGeniusWindow(null);
   // 尺子先行：窗真的开出来了。少了它，下面每一句「没有 X」在窗根本没开时全是真的。
   check('（尺子）那一屏真的开出来了', s.opened && s.tag.length > 0, s.tag || '（一个字都没有）');
-  check('只摆中性的那一句，不许出现「注册就解锁」', NEUTRAL.test(s.tag) && !PROMISE.test(s.tag), s.tag);
-  check('名额那一行藏着（服务端说不出，就不印数）', s.slotsHidden, s.slots || '（藏着）');
+  check('那句承诺就在那儿，不再等服务端', PROMISE.test(s.tag), s.tag);
+  for (const re of GONE) {
+    check(`撤掉的字样没回来：${re.source}`, !re.test(s.tag + ' ' + s.slots), s.tag + ' | ' + s.slots);
+  }
+  check('名额那一行整个没了（元素都不在）', s.slotsEl === false, String(s.slotsEl));
   check('一个价钱都不摆', s.planRows === 0, String(s.planRows));
   check('收款方那句话也不在', s.creemHint === false);
   check('主键是《注册》，不是《登录》', s.primary === '注册', s.primary);
 }
 
 // ---------------------------------------------------------------------------
-head('② 服务端说「还剩 42 个」');
+head('不再问 /api/slots —— 那个接口已经删了');
 {
-  const s = await openGeniusWindow({ body: { open: true, left: 42, total: 100 } });
-  check('换成那句承诺', PROMISE.test(s.tag), s.tag);
-  check('名额那一行露出来，数字就是服务端给的那个', !s.slotsHidden && /42/.test(s.slots), s.slots);
-  check('还是一个价钱都不摆（停售不因为开了名额就回来）', s.planRows === 0, String(s.planRows));
-}
-
-// ---------------------------------------------------------------------------
-head('③ 服务端说不出的那几种，一律退回中性那一句');
-for (const [name, stub] of [
-  ['窗口没开 / 名额满了（open: false）', { body: { open: false } }],
-  ['半份答复：只说 open，没给数字', { body: { open: true } }],
-  ['数字不像话：left 是 0', { body: { open: true, left: 0, total: 100 } }],
-  ['数字不像话：left 是字符串', { body: { open: true, left: 'many', total: 100 } }],
-  ['服务器 500', { status: 500 }],
-]) {
-  const s = await openGeniusWindow(stub);
-  check(`${name} → 不许出现那句承诺`, !PROMISE.test(s.tag) && NEUTRAL.test(s.tag), s.tag);
-  check(`${name} → 名额那一行不许露出来`, s.slotsHidden, s.slots || '（藏着）');
+  // 页面上一次都不该去打它。它删了，所以每一次请求都会是 404，而「界面照旧去问一个 404」
+  // 就是一处没清干净的残留：下一个人看日志会以为服务端坏了。
+  const ctx = await browser.newContext({ viewport: { width: 420, height: 820 } });
+  const page = await ctx.newPage();
+  let asked = 0;
+  page.on('request', (r) => { if (r.url().includes('/api/slots')) asked++; });
+  await page.goto(base);
+  await page.evaluate(() => {
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_know_how', '1');
+  });
+  await page.reload();
+  await page.waitForSelector('.home-nav-btn', { timeout: 20000 });
+  await page.evaluate(() => {
+    const els = [...document.querySelectorAll('.home-nav-btn')];
+    const me = els.find((e) => /成绩|个人|我的/.test(e.getAttribute('aria-label') || e.textContent || ''));
+    (me || els[0])?.click();
+  });
+  await page.waitForSelector('.genius-cta', { timeout: 20000 });
+  await page.evaluate(() => document.querySelector('.genius-cta')?.click());
+  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  await page.waitForTimeout(1200);
+  check('开那一屏一次都没去问 /api/slots', asked === 0, `${asked} 次`);
+  await ctx.close();
 }
 
 await browser.close();

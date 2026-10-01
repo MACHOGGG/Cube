@@ -1,6 +1,6 @@
 import { send, readBody } from './_creem.js';
 import {
-  EMAIL_RE,
+  accountId,
   codeHolder,
   entitlementOf,
   extend,
@@ -64,7 +64,10 @@ export default async function handler(req, res) {
   // 换台设备就找不着了。
   const address = normalizeEmail(email);
   let account = null;
-  if (EMAIL_RE.test(address) && token) {
+  // accountId 而不是 EMAIL_RE：免邮箱凭据账号（E38）的 id 不是邮箱。只认邮箱的话这一句
+  // 会把他判成「没登录」，而下面那条路会把这个月记到码自己名下——他换台设备就找不着了，
+  // **屏幕上却写着「兑换成功」**。见 _accounts.js 的 accountId。
+  if (accountId(address) && token) {
     const found = await loadAccount(address);
     if (tokenValid(found, token)) account = found;
   }

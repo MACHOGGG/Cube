@@ -1,7 +1,6 @@
 import { configured, creem, emailOf, entitled, periodOf, readBody, send } from './_creem.js';
 import {
-  burnGuess,
-  checkPin,
+  accountId,
   codeHolder,
   createAccount,
   EMAIL_RE,
@@ -11,10 +10,8 @@ import {
   normalizeEmail,
   PASS_RE,
   saveAccount,
-  SECRET_RE,
   setNews,
   takeAccount,
-  updateAccount,
 } from './_accounts.js';
 import { grantLifetimeIfWindow } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -66,7 +63,7 @@ export default async function handler(req, res) {
   // would evaporate and lock the player out of what they just bought.
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
-  const { checkoutId, code, token, email, password, newPassword, news, register } = readBody(req);
+  const { checkoutId, code, token, email, password, news, register } = readBody(req);
   // 建账号的两条路都顺手带着「愿不愿意收信」。改密码那条不带——那不是回答这
   // 个问题的地方，顺手改掉别人的订阅偏好是不对的。
   if (checkoutId) return create(res, String(checkoutId), password, news === true);
@@ -75,7 +72,9 @@ export default async function handler(req, res) {
   // 和改密码那一支只差一个字段，哪天改密码的请求漏发了 newPassword，就会被当成
   // 注册，答回来一句「这个地址已经有人了」——而他要改的正是自己的密码。
   if (register === true) return signUp(req, res, email, password, news === true);
-  return change(req, res, email, password, newPassword);
+  // 兜底那一支从前是 change（改密码）。密码取消之后它撤了（见文件末尾那段），所以认不
+  // 出来的请求就是认不出来——而不是悄悄落到某一支上去。
+  return send(res, 400, { error: 'action' });
 }
 
 /**
@@ -94,7 +93,9 @@ export default async function handler(req, res) {
  */
 async function bind(res, rawCode, token, email, password, news) {
   const address = normalizeEmail(email);
-  if (!EMAIL_RE.test(address)) return send(res, 400, { error: 'invalid' });
+  // 认 accountId 而不是 EMAIL_RE：免邮箱凭据账号（E38）的 id 不是邮箱，而他一样该绑得了
+  // 一张内部码（见 _accounts.js 的 accountId）。
+  if (!accountId(address)) return send(res, 400, { error: 'invalid' });
   if (!PASS_RE.test(String(password || ''))) return send(res, 400, { error: 'weak' });
 
   const holder = codeHolder(rawCode);
@@ -271,107 +272,14 @@ async function create(res, checkoutId, password, news) {
   });
 }
 
-/** Changing a password, proven by the one it replaces. */
-async function change(req, res, email, password, newPassword) {
-  const address = normalizeEmail(email);
-  if (!EMAIL_RE.test(address) || !SECRET_RE.test(String(password || ''))) {
-    return send(res, 400, { error: 'invalid' });
-  }
-  if (!PASS_RE.test(String(newPassword || ''))) return send(res, 400, { error: 'weak' });
-
-  /**
-   * 按**来路**再数一道，不只按账号。
-   *
-   * 账号那头的计数（checkPin）是按账号数的：错 4 次锁 4 小时，错 6 次封号。
-   * 那道闸挡的是「有人在猜我的密码」，可它同时也是一把递到陌生人手里的锁：
-   * 只要知道你的邮箱——这不难——发四次乱填的请求就能把你关在门外四个小时，
-   * 而你自己一次都没输错过。《忘记密码》那条路解得开，可界面不会主动告诉被
-   * 锁的人「这不是你的错，走那条路」。
-   *
-   * 登录那一支早就按来路数了（subscription.js 的 subpw），改密码和账号中心
-   * 这两处一直没有。数一样多：真人改一次密码按一两下，脚本一小时二十次立刻
-   * 见底。storeConfigured() 那半句和别处一个道理——没有库就没有计数器，不能
-   * 因为数不了就把人全挡在外面。
-   */
-  if (storeConfigured() && (await tooMany('pwchange', callerId(req), 20, 3600))) {
-    return send(res, 429, { error: 'tooMany' });
-  }
-
-  const account = await loadAccount(address);
-  // Same answer for "no such account" as for "wrong password", so this
-  // cannot be used to find out who has one. 时间也一样：有账号的那一路会真
-  // 算一次 scrypt，这一路也烧同一份。
-  if (!account) {
-    burnGuess(password);
-    return send(res, 401, { error: 'wrong' });
-  }
-
-  const verdict = await checkPin(address, String(password), account);
-  if (verdict === 'blocked') return send(res, 423, { error: 'blocked' });
-  if (verdict === 'locked') return send(res, 423, { error: 'locked' });
-  if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
-
-  /**
-   * 兜底是 **'code'**，不是 'card'。
-   *
-   * 这一行是全站**唯一**一条能在没有任何付款凭据的情况下造出 'card' 账号的路——另外
-   * 那一处（上面的 create）要一笔 Creem 确认付过款的结账才走得到。
-   *
-   * 兜底写成 'card' 的后果：一个**没有 `kind` 字段的老账号**，改一次密码就被打成刷卡
-   * 用户；而刷卡账号的权益按定义记在 Creem 那边，于是 `_entitlement.js` 那两处在
-   * Creem 没配的时候（而那三个环境变量正要清掉）对他答 503，503 不带令牌——他从此登
-   * 不进自己的账号。他做的只是改了个密码。
-   *
-   * 'code' 也正是 `newAccount` 自己的默认值（`_accounts.js:302`），所以这个兜底和
-   * 「不传第二个参数」是同一个意思。有 `kind` 的照原样带过去，这一行只管缺的那种。
-   */
-  const fresh = newAccount(String(newPassword), account.kind || 'code');
-  // A change keeps everything the account is worth — a redeemed code's
-  // remaining time included — and replaces only the secret and its salt.
-  // A change keeps what the account is worth and retires every token, so a
-  // device someone else still holds stops working the moment you change it.
-  //
-  // 显式带过去的这几样，是 fresh 里有同名字段、会被它的出厂值盖掉的：
-  //   until / plan  这个账号值多少钱——内部码剩下的时间、订阅的档位。
-  //   news / newsAt 他愿不愿意收邮件，以及什么时候说的。改一把钥匙不该顺手
-  //                 把这个意愿清成「不愿意」——_accounts.js 里那段注释讲得很
-  //                 清楚：真被问起来，要拿得出「谁、什么时候、对什么说的同
-  //                 意」。改密码把 newsAt 抹掉，那份底就没了。
-  //   createdAt     注册时间。不带过去的话，一个老玩家改一次密码，发码页上
-  //                 看就成了「今天刚注册」。
-  //
-  // 没带过去的是故意的：salt / hash / token / tokens 就是这次要换的东西（换
-  // 钥匙，并把别人手上还留着的设备一起撤掉）；fails / lockUntil 归零也是对
-  // 的——他刚用旧密码证明过自己是本人。blocked 走不到这儿（checkPin 判 blocked
-  // 会先 423 返回），所以它取 fresh 的 false 不影响任何账号。
-  //
-  // 带锁的读—改—写（updateAccount），不是朴素的整份覆盖。上面那份 account 是
-  // 进函数时读的快照，而这一句写回去的是整份账号：同一瞬间他在别处兑了一张码
-  // （redeem 加时长）、或者后台给他发了码（mint 加收件箱），都会被 `until:
-  // account.until` 这样的「显式带过去」按旧值盖回去——玩家刚兑上的一个月，因为
-  // 他紧接着改了一次密码，就没了。
-  //
-  // 锁里那一份 a 就是库里此刻的样子，所以「要带过去的」不再是从 account 抄，而
-  // 是**原地不动**：Object.assign(a, fresh, keep) 和原来那个 {...account,
-  // ...fresh, ...keep} 展开出来一模一样，只是基准换成了新读的那一份。
-  //
-  // fresh 留在锁外面算是故意的：newAccount 要跑一次 scrypt（几十毫秒），不该占
-  // 着锁烧。它带的 kind 来自 account 那份快照，和原来一样。
-  const saved = await updateAccount(address, (a) => {
-    const keep = {
-      until: a.until,
-      plan: a.plan,
-      news: a.news,
-      newsAt: a.newsAt,
-      createdAt: a.createdAt,
-    };
-    Object.assign(a, fresh, keep);
-  });
-  if (!saved.ok) {
-    // 和这个文件里别处同一条规矩：不因为失败的种类不同而说不一样的话。busy 例
-    // 外——它和「密码不对」不是一回事，说错了玩家会去改密码，而他该做的是过一
-    // 会儿再试。
-    return send(res, saved.busy ? 503 : 401, { error: saved.busy ? 'busy' : 'wrong' });
-  }
-  return send(res, 200, { ok: true, email: address, token: saved.account.token });
-}
+/*
+ * **改密码那一支撤了**（E37，2026-10 的改制）。
+ *
+ * 密码整个取消了：登录改成邮箱验证码（api/signin.js）或者两串免邮箱凭据
+ * （api/handle.js），于是「改密码」这件事无从谈起——邮箱账号没有密码可改，免邮箱账号
+ * 要换第二串走的是 handle.js 的 reset（凭第一串）。
+ *
+ * 撤的是这一支和它的分发，连同只有它在用的那四样 import（burnGuess / checkPin /
+ * SECRET_RE / updateAccount）。`bind` / `create` 两支留着（老账号、在途标签页），所以
+ * `PASS_RE` 还在用——`bind` 那条路还要设六位密码。
+ */

@@ -190,7 +190,13 @@ export interface I18nStrings {
    * 内容」，所以就这一句，不列条款、不讲机制）。
    */
   registerUnlocks: string;
-  /** 「还剩 {n} 个名额」。`{n}` 由服务端的真实计数填（engine/geniusSlots.ts）。 */
+  /**
+   * 「还剩 {n} 个名额」。
+   *
+   * ⚠️ **2026-10-02 起没人用它了**（E39：名额整个撤掉，不限人数）。摆在这儿是因为撤
+   * 一个 key 要动四语四处，和撤那一整套前端是同一件事，一并留给那一轮
+   * （推送 2 的 i18n 清理）。
+   */
   slotsLeft: string;
   /** 注册那颗键。 */
   registerBtn: string;
@@ -736,7 +742,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     subscribeTitle: 'Become a Slides Genius',
     subscribeIntro: 'More unlocked right away, more added now and then, cancel any time.',
     subscribeClosed: 'The subscription is closed for now.',
-    registerUnlocks: 'Sign up and everything unlocks — free, for good.',
+    registerUnlocks: 'Sign up and everything unlocks right away — free.',
     slotsLeft: '{n} places left',
     registerBtn: 'Sign up',
     planMonthly: 'per month',
@@ -1075,7 +1081,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     subscribeTitle: 'Devenir un Slides Génie',
     subscribeIntro: 'Plus de jeux tout de suite, d’autres de temps en temps, résiliable à tout moment.',
     subscribeClosed: 'L’abonnement est fermé pour le moment.',
-    registerUnlocks: 'Créez un compte et tout se débloque — gratuitement, pour toujours.',
+    registerUnlocks: 'Créez un compte et tout se débloque aussitôt — gratuitement.',
     slotsLeft: 'encore {n} places',
     registerBtn: 'Créer un compte',
     planMonthly: 'par mois',
@@ -1414,7 +1420,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
     subscribeIntro: '立刻解鎖更多，不定時更新，隨時取消',
     subscribeClosed: '訂閱目前不開放。',
-    registerUnlocks: '註冊就解鎖全部功能，永久免費。',
+    registerUnlocks: '註冊後免費立即解鎖全部內容',
     slotsLeft: '還剩 {n} 個名額',
     registerBtn: '註冊',
     planMonthly: '每月',
@@ -1753,7 +1759,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
     subscribeIntro: '立刻解锁更多，不定时更新，随时取消',
     subscribeClosed: '订阅目前不开放。',
-    registerUnlocks: '注册就解锁全部功能，永久免费。',
+    registerUnlocks: '注册后免费立即解锁全部内容',
     slotsLeft: '还剩 {n} 个名额',
     registerBtn: '注册',
     planMonthly: '每月',

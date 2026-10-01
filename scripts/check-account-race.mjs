@@ -139,10 +139,11 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
   check('③ 留下的正是开成那一份，没被另一份盖掉', acct?.token === kept.token);
 }
 
-// ---- ④ 兑码撞登录 / 撞改密码：加上去的时长不许被盖掉 ------------------------
+// ---- ④ 兑码撞登录 / 撞 reset：加上去的时长不许被盖掉 ------------------------
 //
-// 登录（subscription.js）和改密码（passcode.js）都只想改一样小东西——登录添一
-// 把令牌，改密码换一把钥匙——可它们写回去的是**整份账号**。从前两处都是朴素的
+// 登录（subscription.js）和重设凭据（handle.js 的 reset，从前是 passcode.js 的改密码）
+// 都只想改一样小东西——登录添一把令牌，reset 换一把钥匙——可它们写回去的是**整份账号**。
+// 从前两处都是朴素的
 // 「loadAccount → 改 → saveAccount」，于是同一瞬间的兑码（redeem 走 updateAccount
 // 加时长）会被它们按进函数那一刻读到的旧 until 盖回去：码真的被吃掉了、两边都
 // 说成功，而账号上一天都没多。玩家自己查不出来，客服也查不出来（码已经从库里
@@ -171,16 +172,37 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
   check('④ 兑码撞登录：那一个月还在（没被登录写回去的旧到期日盖掉）',
     after - before > 20 * 86400e3, `到期日多了 ${Math.round((after - before) / 86400e3)} 天`);
 
+  /*
+   * 第二对原先是「兑码撞改密码」。改密码那一支 2026-10 撤了（E37，密码取消），而它守的那
+   * 件事换了一条路：免邮箱凭据账号（E38）的 `reset`——同样是「只想换一把钥匙，写回去的却
+   * 是整份账号」。
+   *
+   * 这一对还顺手量了另一件事：**兑码认得出免邮箱账号**。`redeem.js` 那一句从前只认
+   * `EMAIL_RE`，于是这种账号被判成「没登录」，码落到码自己名下而不是他账号上——他换台设
+   * 备就找不着了，**而屏幕上写着「兑换成功」**。现在认的是 `accountId`。
+   */
+  const handleApi = (await import('../api/handle.js')).default;
+  const FIRST = 'RaceHandle1';
+  const madeH = await call(handleApi, { action: 'register', first: FIRST, second: 'firstpass' });
+  check('（尺子）免邮箱账号注册成了', madeH.status === 200, String(madeH.status));
+  const hid = madeH.body.id;
+  // 先给它五天，好看出那一个月有没有被盖掉。
+  await A.updateAccount(hid, (a) => { a.until = Date.now() + 5 * 86400e3; });
+  const beforeH = (await A.loadAccount(hid))?.until || 0;
+
   await set('code:EEEE55', { plan: 'month' });
-  const [rRedeem2, rChange] = await Promise.all([
-    call(redeem, { code: 'EEEE55', email: mail, token: acct.token }),
-    call(passcode, { action: 'change', email: mail, password: 'old111', newPassword: 'new222' }),
+  const [rRedeem2, rReset] = await Promise.all([
+    call(redeem, { code: 'EEEE55', email: hid, token: madeH.body.token }),
+    call(handleApi, { action: 'reset', first: FIRST, newSecond: 'secondpas' }),
   ]);
-  check('④ 兑码撞改密码：两条都办成了', rRedeem2.status === 200 && rChange.status === 200,
-    `兑码 ${rRedeem2.status} / 改密码 ${rChange.status}`);
-  const after2 = (await A.loadAccount(mail))?.until || 0;
-  check('④ 兑码撞改密码：那一个月还在（没被改密码显式带过去的旧 until 盖掉）',
-    after2 - after > 20 * 86400e3, `到期日又多了 ${Math.round((after2 - after) / 86400e3)} 天`);
+  check('④ 兑码撞 reset：两条都办成了', rRedeem2.status === 200 && rReset.status === 200,
+    `兑码 ${rRedeem2.status} / reset ${rReset.status}`);
+  const afterH = (await A.loadAccount(hid))?.until || 0;
+  check('④ 兑码撞 reset：那一个月还在（没被 reset 按旧快照盖掉）',
+    afterH - beforeH > 20 * 86400e3, `到期日多了 ${Math.round((afterH - beforeH) / 86400e3)} 天`);
+  // 尺子：那个月是真的记在**他账号**上，不是落到码自己名下（那就是 accountId 要解决的事）。
+  check('④（尺子）兑码认得出免邮箱账号：时长记在他账号上',
+    afterH > Date.now() + 25 * 86400e3, String(Math.round((afterH - Date.now()) / 86400e3)) + ' 天');
 }
 
 // ---- ⑤ 密码打错一次，不许顺手抹掉这期间别处写进去的东西 -----------------

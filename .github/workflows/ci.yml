@@ -204,21 +204,42 @@ jobs:
       - name: 缺 kind 的老账号算哪一种
         run: node scripts/check-kind-default.mjs
 
+      # 注册 / 登录那条新路：一个邮箱，一张六位验证码（E37）。纯 node——直接 import
+      # handler，账号库用内存那份，Resend 那一次 HTTP 用假 fetch 顶掉（而且能让它失败，
+      # 那正是 E51 那一支要量的）。在进程里跑是**非这样不行**的：验证码只存在库里和那封
+      # 信里，起服务器的话这道门读不到码，只能去断言「回了 200」。
+      - name: 验证码注册 / 登录
+        run: node scripts/check-signin-otp.mjs
+
+      # 免邮箱凭据那条路（E38）。最要紧的一条是「大小写真的分得开」：normalizeEmail 会
+      # toLowerCase，第一串直接当 id 的话 Abc12345 / abc12345 / ABC12345 当场撞成一个，
+      # 而界面上明写着区分大小写。解法是 sha256（pairKey）。
+      - name: 免邮箱凭据注册 / 登录 / 重设
+        run: node scripts/check-handle-auth.mjs
+
+      # 三种账号 id 的键空间永不相交（acct:邮箱 / acct:code:大写 / acct:hdl:sha256）。
+      # 撞了就是两个人共用一个账号，而且静默。
+      - name: 三种账号 id 的键空间
+        run: node scripts/check-key-space.mjs
+
+      # 排行榜每一行不许带身份。榜里存的 member 是账号 id：邮箱账号就是那个邮箱，免邮箱
+      # 账号是 hdl:<sha256>——前者是别人的私事，后者是一把能直接用在别处的钥匙。
+      - name: 排行榜不许漏身份
+        run: node scripts/check-board-no-id.mjs
+
       # 注册那条路：从「填邮箱 + 六位密码」一直走到「用同一组凭据登录回来」。
       #
       # 要起 dev-server（内存版 store），但**不要浏览器**——服务端那半用 fetch 直接打，
       # 客户端那半读源码。所以它留在这个快 job 里，不去 browser 那一条。
       #
-      # 两个环境变量都要带。`GENIUS_GRANT_LIMIT=2` 是为了量「名额满了会怎么样」：第一
-      # 批是 100 个，真注册 100 次就不是一道门而是一次压测了。门开头先验这个前提
-      # （/api/slots 必须答 total:2），没验上当场红——前提没成立而断言还在跑就是空绿。
+      # 环境变量只要一个。名额那一套 2026-10-02 撤了（E39），所以不再压 GENIUS_GRANT_LIMIT。
       #
       # 一个门一台服务器、一人一个端口（CLAUDE.md 那条规矩）。起完用一个有界的 curl
       # 循环等它真的起来；盲等固定秒数在 CI 上会出偶发红，而偶发红最后一定会被人加
       # continue-on-error。
       - name: 注册 → 登录 → 终身授予
         run: |
-          GENIUS_GRANT_WINDOW=1 GENIUS_GRANT_LIMIT=2 node scripts/dev-server.mjs 8993 dist &
+          GENIUS_GRANT_WINDOW=1 node scripts/dev-server.mjs 8993 dist &
           for i in $(seq 1 60); do
             curl -sf http://localhost:8993/api/slots > /dev/null && break
             sleep 0.5
