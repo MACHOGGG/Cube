@@ -3509,6 +3509,42 @@ body:has(.slot-page) .home-nav { display: none; }
    这一段**不碰任何颜色**：面板底色、Pro 那颗、色盲档那几个色号一个都没出现在下
    面。 */
 @media (min-width: 1000px) {
+  /* ---------- 电脑端的成绩页：三栏并排（PR-18 / E27）----------
+   *
+   * 玩家的话和个人主页那一段是同一句：「更合理地使用左右空间」。这一页在电脑上从前是屏幕
+   * 中间一条 460px 的窄栏，自上而下三块：《累计得分》整幅一张，底下《记录》《排行榜》各占
+   * 一半。三块加起来只有 460px 宽，而屏幕上剩下的地方全是空的；更糟的是**要往下滑**才看得
+   * 全——而这一页只有三块东西。
+   *
+   * 并成一排之后一屏全在。三栏等宽，而不是「累计得分窄一点」：三块是并列的三件事（我一共
+   * 多少分 / 我打过哪些局 / 我排第几），没有哪一块更次要。
+   *
+   * ⚠️ `.app` 本体是 flex 柱（`display: flex; flex-direction: column`）。这儿把它换成
+   * grid，所以**招牌那一块要显式跨满整行**——不写的话它会缩进第一格去，和《累计得分》并排
+   * 挤成两列，而那是整页唯一一处「上面一行」。
+   *
+   * 三道 `minmax(0, …)`：`1fr` 的真身是 `minmax(auto, 1fr)`，而那个 auto 的下限是内容的最
+   * 小宽度——榜上出现一个十位数的分数（等宽字体、不折行、不省略号）时，那一栏会按它撑开，
+   * 把另两栏挤扁再把整页顶出屏幕。玩家 2026-09 实拍到过（榜首 1000000000）。这条坑在
+   * `.records-panels` 上已经记过一次，三栏之后同一条照旧要写。
+   */
+  .app.records-page {
+    max-width: 1000px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 24px; row-gap: 16px;
+    align-items: start;
+  }
+  .records-page > .home-head { grid-column: 1 / -1; }
+  /* 《累计得分》不再整幅：它是三栏里的第一栏，高度跟着另两栏一起撑起来。 */
+  .records-page > .total-card { grid-column: 1; align-self: stretch; justify-content: center; }
+  /* 《记录》《排行榜》占后两栏。`.records-panels` 自己是两列 grid，所以让它跨两栏、
+     并把它自己那道 gap 对齐这一层的 column-gap——两道缝不一样宽会看出来。 */
+  .records-page > .records-panels { grid-column: 2 / -1; gap: 24px; }
+  /* 三栏之后每一栏约 300px，比半幅时的 194 宽得多，所以缩略牌可以高一档：
+     这一页三块等高才像一排，而两块面板的 260px 下限会把《累计得分》拖矮。 */
+  .records-page .records-panels .records-panel { min-height: 300px; }
+
   .app.profile-page { max-width: 760px; }
   /* 268 是给一条 460 的窄栏定的，宽栏之后放开一档——但不放任它长满，不然同一颗
      键在手机和电脑上像两件东西。 */

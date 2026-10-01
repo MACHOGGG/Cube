@@ -760,3 +760,15 @@ jobs:
           nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8864/ && break; sleep 0.25; done
           node scripts/check-game-desktop.mjs http://localhost:8864/
+      # 电脑端的成绩页三栏（PR-18 / E27）。要开浏览器——整条都是「摆在哪儿、多宽、多高」，
+      # 而栅格坏掉的样子一律不报错：招牌不显式跨满整行就缩进第一格去（`.app` 本体是 flex
+      # 柱，换成 grid 之后那一行不会自己跨），三道 `minmax(0, …)` 少一道就在榜首出现十位数
+      # 分数时把整页顶出屏幕。
+      #
+      # 最后一节是反面尺子：**999px 以下一个像素都不许跟着变**（玩家这一轮改的是电脑端），
+      # 并且在量完之后往两处分数里塞一个十位数再量一遍——那条坑玩家 2026-09 实拍过。
+      - name: 电脑端成绩页：三栏等宽等高，一屏全在
+        run: |
+          nohup node scripts/dev-server.mjs 8877 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8877/ && break; sleep 0.25; done
+          node scripts/check-records-desktop.mjs http://localhost:8877/
