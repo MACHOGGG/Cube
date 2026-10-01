@@ -117,6 +117,16 @@ export interface CascadeConfig {
    * weight 也不记（这个回调不碰分数），所以计分和「有效得分率」的口径不变。
    */
   afterCommit?(scored: Cell[]): Cell[];
+  /**
+   * 老虎机：除了「每翻一枚 +2」，**再加上每一组自己的 `points`**——目标拼成一次的
+   * 完成奖励 `⌈枚数²/2⌉`（engine/targets.ts 的 `scoreForSize`：2 枚 +2、3 枚 +5、
+   * 4 枚 +8、5 枚 +13、6 枚 +18）。
+   *
+   * ⚠️ **不能无条件相加。** 基础玩法那条路（`findRunMatches`）也往 `Match.points` 里
+   * 写东西（各 shape 里的 `groupPoints`），一直加的话那一档会**双算**：每枚 +2 之外
+   * 又把按组算的那一份加一遍。所以这是一个显式开关，只有真的有目标的那一局才开。
+   */
+  bonusOnMatch?: boolean;
 }
 
 /**
@@ -350,9 +360,17 @@ export function createCascadeStepper(
        * 保留它自己那一套」）：那一局翻过去还能翻回来，按翻面枚数算就成了来回翻刷
        * 分。它外面还要再乘 1.5ⁿ，在 gameController 里。
        */
+      const flipPoints = POINTS_PER_FLIP * toFlip.size;
+      /**
+       * 老虎机的完成奖励（§7）：拼成一次，除了翻面那几枚的 +2，再给 `⌈枚数²/2⌉`。
+       *
+       * 从前这一行没有，于是「完成奖励」整条规则在盘上**一分都没有生效过**——各组的
+       * `points` 里算好的那个数被这条路原样丢掉了，而规则书和结算页都在讲它。
+       */
+      const bonus = cfg.bonusOnMatch ? matches.reduce((sum, m) => sum + m.points, 0) : 0;
       const points = cfg.toggleOnMatch
         ? matches.reduce((sum, m) => sum + m.points, 0)
-        : POINTS_PER_FLIP * toFlip.size;
+        : flipPoints + bonus;
       mask = nextMask;
       return {
         points,

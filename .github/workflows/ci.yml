@@ -296,6 +296,15 @@ jobs:
       # endGame 中间），或者排着的那一拍落到一副已经结清的盘上。
       - name: 一局与下一局之间
         run: node scripts/check-run-lifecycle.mjs
+      # 老虎机那一局的四件：完成奖励真的加上去（从前算好的那个数被计分那条路原样丢
+      # 掉，一分都没生效过）、侵蚀先拆哪一枚按几何不按书写次序、降级那句话报的是真实
+      # 枚数不是侵蚀级数（二十个目标里十个对不上）、八副棋盘的卡死门槛没有哪一副写死。
+      - name: 老虎机：奖励、拆法、报数、门槛
+        run: |
+          npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
+          npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
+          npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
+          node scripts/check-slot-rules.mjs /tmp/scoring.mjs /tmp/targets.mjs /tmp/match.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白

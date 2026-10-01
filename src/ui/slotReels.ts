@@ -5,8 +5,10 @@
  * 个窗口，位置按图自己的 viewBox 量出来（见 WINDOWS）。所以以后换一张图，
  * 只要显示区还在同一个地方，这里一行都不用动；真挪了，也只用改那几个数。
  *
- * 两个滚筒从左到右先后停住，不是一起定住——玩家的原话：「从左到右先停一个
- * 再停第二个」。
+ * 两个滚筒**同时停住**（玩家 2026-10 的 E30）。先前是「从左到右先停一个再停第二
+ * 个」，也是玩家定的（原话：「从左到右先停一个再停第二个」）——这一轮改掉了：PR-8
+ * 之后一局只有一个目标，两个窗口停的本来就是**同一张**，先后停于是只是在同一个答案
+ * 上多等 1.1 秒，看着像还有第二个悬念，其实没有。
  *
  * ── 一局一个目标，可是**两个窗口都停在它上面**（PR-8）──────
  *
@@ -261,18 +263,23 @@ function backOut(t: number): number {
 const facesOf = (pool: readonly TargetPattern[], lang: Lang): string[] =>
   renderPatternHintIcons(slotFaceDefs(pool), lang).map((icon) => `<span class="slot-face">${icon}</span>`);
 
+/** 两个轮子都在第几毫秒停。**一个数**——它们同时停（E30）。 */
+const STOP_AT_MS = 1500;
+
 /**
  * 两个滚筒各转什么、各停在哪一张、第几毫秒停。
  *
- * 两个都停在**同一张**——这一局唯一的那个得分目标（见文件顶上那段）。倒数不和
- * 转动叠在一起：第二个轮子停稳了（2.6 秒）才开始 5-4-3-2-1。
+ * 两个都停在**同一张**——这一局唯一的那个得分目标（见文件顶上那段）——而且**同时**
+ * 停。从前是 1500 / 2600 两个数，于是右边那个轮子又多转了 1.1 秒才落在和左边一模一
+ * 样的那张图上。倒数仍然不和转动叠在一起：轮子停稳了才开始 5-4-3-2-1，只是那一刻从
+ * 2.6 秒提前到了 1.5 秒。
  */
 export function planFor(family: Family, target: TargetPattern, lang: Lang): ReelPlan[] {
   const pool = targetsOf(family);
   const faces = facesOf(pool, lang);
   const land = Math.max(0, pool.findIndex((q) => q.id === target.id));
   return [
-    { faces, land, stopAt: 1500 },
-    { faces, land, stopAt: 2600 },
+    { faces, land, stopAt: STOP_AT_MS },
+    { faces, land, stopAt: STOP_AT_MS },
   ];
 }

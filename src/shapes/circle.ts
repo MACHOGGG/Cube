@@ -910,6 +910,9 @@ export function createCircleGame(): ShapeGame {
           // 无限反转：反面同色连成一行 / 列不消除，也就不再找整线奖励。
           findLineBonuses: flipMode ? () => [] : findWholeLineBonuses,
           toggleOnMatch: flipMode,
+          // 老虎机：开完成奖励（⌈枚数²/2⌉）。**只有真有目标的那一局才开**——基础玩法
+          // 那条路也往 Match.points 里写东西，一直开着会双算。
+          bonusOnMatch: Boolean(target),
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,

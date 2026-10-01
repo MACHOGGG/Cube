@@ -761,6 +761,9 @@ export function createSquareGame(): ShapeGame {
           // 无限反转：反面同色连成一行 / 列不消除，也就不再找整线奖励。
           findLineBonuses: flipMode ? () => [] : findLineBonusGroups,
           toggleOnMatch: flipMode,
+          // 老虎机：开完成奖励（⌈枚数²/2⌉）。**只有真有目标的那一局才开**——基础玩法
+          // 那条路也往 Match.points 里写东西，一直开着会双算。
+          bonusOnMatch: Boolean(target),
           // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
           afterCommit: isBomb ? defuseAround : undefined,
           onLineBonus: applyLineBonus,
@@ -813,7 +816,16 @@ export function createSquareGame(): ShapeGame {
         // 传进去的是当前较短的那条边长：整行 / 整列会随消除变短，门槛得跟着走。星星
         // 自己得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate
         // 取两者中小的那个当门槛，见那儿的 starNeed。
-        return findStuckColorGroups(liveTiles(), target ? targetNeed() : undefined, Math.min(rows, cols));
+        // 没有目标的那几档，门槛是**这一级的 1×N 要几枚**（controller.matchLen()），
+        // 不是 `undefined`。传 undefined 会落到 stalemate 的默认值 4，而侵蚀把图案降到
+        // 1×3 之后盘上剩 3 枚同色是**还能凑的**——按 4 判就成了死局，而死局没有任何按钮
+        // 拦得住，1.4 秒后直接结算。八副棋盘里只有这一副是这么写的，其余五副都问
+        // controller.matchLen()。
+        return findStuckColorGroups(
+          liveTiles(),
+          target ? targetNeed() : controller.matchLen(),
+          Math.min(rows, cols),
+        );
       }
 
       function countRemainingTiles() {

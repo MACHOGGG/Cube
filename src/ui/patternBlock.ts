@@ -173,14 +173,29 @@ export function mountPatternBlock(
    * 挂在棋盘外层（`.app--game`）上而不是这一块里：这一块只有两百多像素宽，一句话摆不
    * 下，而且它就在视野边上。
    */
-  function toast(level: number): void {
+  /**
+   * 这一级屏幕上**真的画了几枚**。
+   *
+   * 基础玩法里它就等于级数（`runPatternDef(family, level)` 画 level 枚）。老虎机那一
+   * 局不是：图标走 `faceFor(level)` → `sizeAtLevel`（engine/targets.ts），一个 6 枚的
+   * 目标在第 3 级画的是 **5** 枚，不是 3 枚。
+   *
+   * 从前报数的地方（toast、读屏的 aria-label）一律拿 `view.level` 去填那句「得分图案
+   * 变成 {n} 枚」，于是**二十个目标里有十个报的是假话**：图标画 5 枚、判定也要 5 枚，
+   * 而屏幕上那句话写着 3 枚。图标和判定一直是一致的（`targetNeed()` 走的也是
+   * `sizeAtLevel`），错的只有文案。
+   */
+  const shownCount = (level: number): number =>
+    faceFor ? faceFor(level).cells.length : Math.max(1, Math.round(level));
+
+  function toast(n: number): void {
     const stage = host.closest('.app--game') ?? host.parentElement;
     if (!stage) return;
     const el = document.createElement('div');
     el.className = 'pat-toast';
     // 用的是同一句 i18n（patternNowLabel：「得分图案变成 N 枚」），不另起一句——两处说
     // 同一件事，用词不一样只会让人以为是两件事。
-    el.textContent = s.patternNowLabel.replace('{n}', String(level));
+    el.textContent = s.patternNowLabel.replace('{n}', String(n));
     // 摆在棋盘正上方那条缝里，横竖屏都对：位置**现量棋盘**，不按「顶排多高」去算——
     // 顶排的高随视口和玩法变（步步为营那一块多一行余步），而横屏顶排根本不在上面。
     const board = stage.querySelector<HTMLElement>('#boardWrap');
@@ -194,8 +209,9 @@ export function mountPatternBlock(
   }
 
   function flash(level: number): void {
-    host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(level)));
-    toast(level);
+    const n = shownCount(level);
+    host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(n)));
+    toast(n);
     if (reducedMotion()) {
       // 不闪、不弹：边框加粗一下，同样说明「刚刚变了」，但不用亮度和位移。
       host.classList.add('hud-block--thick');
@@ -226,7 +242,7 @@ export function mountPatternBlock(
     paintIcon(view.level);
     if (view.level !== shownLevel) {
       if (shownLevel !== -1) flash(view.level);
-      else host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(view.level)));
+      else host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(shownCount(view.level))));
       shownLevel = view.level;
     }
   }

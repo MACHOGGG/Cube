@@ -313,11 +313,13 @@ for (const fam of FAMILIES) {
   check(`${fam.name}：停稳之后倒数才露面，从 5 起`, first.digit === '5' && first.shown, first.digit || '（没数）');
 
   await page.waitForFunction(() => document.querySelectorAll('.slot-reel--set').length === 2, { timeout: 6000 });
-  // 从左到右先后停：左边那个停稳的时刻要早于右边那个，中间隔得开。
+  // **两个轮子同时停**（E30）。从前这一条要的是反过来的事——「从左到右一个一个停，
+  // 中间隔得开（>400ms）」，那也是玩家定过的；这一轮改了：PR-8 之后两个窗口停的本来
+  // 就是同一张图，先后停只是在同一个答案上多等 1.1 秒。
   const stops = await page.evaluate(() => window.__stops.slice().sort((a, b) => a[0] - b[0]));
-  const gap = stops.length === 2 ? stops[1][1] - stops[0][1] : NaN;
-  check(`${fam.name}：从左到右一个一个停`, stops.length === 2 && stops[0][0] === 0 && gap > 400,
-    `左 → 右相隔 ${Math.round(gap)}ms`);
+  const gap = stops.length === 2 ? Math.abs(stops[1][1] - stops[0][1]) : NaN;
+  check(`${fam.name}：两个轮子同时停`, stops.length === 2 && stops[0][0] === 0 && gap < 120,
+    `两边相隔 ${Math.round(gap)}ms`);
   const reels = await page.evaluate(REELS);
   const spun = [reels[0].label, reels[1].label];
   const spunFp = await page.evaluate(() => window.__probe.reel(0));

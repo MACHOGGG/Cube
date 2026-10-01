@@ -408,15 +408,32 @@ export function erodedShapes(target: TargetPattern, k: number): TargetPattern[] 
  *
  * 画的是**一个**子形，而认的是全部——和基础玩法那一块画一条 1×N、而横竖斜怎么
  * 摆都算是同一回事：这一块说的是「图案现在是几枚、长什么样」，从来不说「在哪
- * 儿」。挑法定死：从后往前拆，拆掉一枚之后剩下的还连着就拆它。于是屏幕上看到
- * 的是「同一个图案缺了个角」，而不是每降一级换一个陌生形状。
+ * 儿」。于是屏幕上看到的是「同一个图案缺了个角」，而不是每降一级换一个陌生形状。
+ *
+ * ── 先拆哪一枚：**先右先上**（玩家 2026-10 的 E32）──────────
+ *
+ * 从前是「按数组下标从后往前拆」。那个顺序取决于 `TARGETS` 里这个图案是**按什么次
+ * 序写下来的**，和它长什么样没有关系——同一个形状换个写法就换一个拆法，而玩家看的
+ * 是图，不是源码。
+ *
+ * 现在按几何排：照**未旋转的那张展示图**，列降序、行升序——也就是从最右那一列开始，
+ * 同一列里从上往下。玩家举的 2-1-2 那个例子按这个顺序得到 211 → 21 → 2 → 1。
+ *
+ * `lattice()` 对方块/小球回 `[r−r0, c−c0]`，对三角回 `[r, p0+(c−c0)+(r−r0)]`，所以
+ * 下标 `[1]` 那一位在三族里都是**水平轴**，`[0]` 是行。
  */
 export function erodedFace(target: TargetPattern, k: number): TargetPattern {
   const want = Math.max(1, Math.min(target.cells.length, Math.round(k)));
   let cells = [...target.cells];
   while (cells.length > want) {
     let dropped = -1;
-    for (let i = cells.length - 1; i >= 0; i--) {
+    // 按几何定先后：最右那一列先拆，同一列里最上面那一枚先拆。连通性仍然是硬条
+    // 件——排在前面的那一枚要是拆了会把图案断开，就让给下一枚。
+    const pts = lattice(target.family, cells);
+    const order = cells
+      .map((_, i) => i)
+      .sort((a, b) => pts[b][1] - pts[a][1] || pts[a][0] - pts[b][0]);
+    for (const i of order) {
       const rest = cells.filter((_, j) => j !== i);
       if (connected(target.family, lattice(target.family, rest))) {
         dropped = i;
