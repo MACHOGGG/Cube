@@ -175,6 +175,50 @@ export async function setWebPasscode(
 }
 
 /**
+ * 注册：开一个账号，不带任何凭据。
+ *
+ * 和上面两支的区别在于**它不证明什么**。setWebPasscode 拿的是一笔付过款的结账、
+ * bindCode 拿的是兑码返回的令牌；这一支手上什么都没有，因为这一步要回答的只是
+ * 「这个地址还空着吗」，而服务端那头问这一句和写进去是同一步（SET NX）。
+ *
+ * 2026-10 补的这条路：Creem 的两个订阅商品暂时关掉，网页端改成「注册就解锁全部
+ * 功能」。在那之前「注册」等于「订阅」，邮箱是 Creem 的结账页替我们收的，所以
+ * 「只有邮箱和密码」这条路从来不存在。
+ *
+ * **它不回答「是不是天才」**。那一问交给紧接着的那一次登录（/api/subscription）：
+ * 名额可能正好在这一瞬间满了，而只有服务端数得清。这儿多答一句就是多一份会走样
+ * 的副本。
+ */
+export async function webRegister(
+  email: string,
+  password: string,
+  news = false,
+): Promise<{ email: string; token: string } | 'exists' | 'unavailable' | 'weak' | 'tooMany' | null> {
+  try {
+    const reply = await postJson<{ email?: string; token?: string }>('/api/passcode', {
+      register: true,
+      email,
+      password,
+      news,
+    });
+    return reply.token ? { email: reply.email ?? email, token: reply.token } : null;
+  } catch (err) {
+    const status = String(err).replace('Error: ', '');
+    // 503：还没有地方存账号（没配 Redis）。玩家什么都做不了，照实说，不要说成
+    // 「网络出错」把他支到自己的 WiFi 上去。
+    if (status === '503') return 'unavailable';
+    // 409：这个地址已经有账号了。这不是失败，是「走另一扇门」——界面据此让他去登录。
+    if (status === '409') return 'exists';
+    if (status === '429') return 'tooMany';
+    // 400 'weak'：密码不合六位字母数字那条规矩。**认服务端送回来的那个 error 串**，
+    // 不是光看状态码——400 还有别的来路（'invalid' 是邮箱不合格），一律说成「密码太
+    // 短」会把人支到改不动的地方去。同一个坑在 setWebPasscode 上踩过一次。
+    if (err instanceof HttpError && err.code === 'weak') return 'weak';
+    return null;
+  }
+}
+
+/**
  * Attaching an address to what a code granted. Same window and same shape of
  * answer as setWebPasscode — only the proof differs, and 'exists' here means
  * the address is already taken rather than the job already done.

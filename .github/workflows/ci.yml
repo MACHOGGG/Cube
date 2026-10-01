@@ -196,6 +196,28 @@ jobs:
       # （身份没证明就送权益）、不把结果赋回 account（库里写了、手上那份还是旧的）。
       - name: 终身授予那一句的位置
         run: node scripts/check-grant-callsite.mjs
+
+      # 注册那条路：从「填邮箱 + 六位密码」一直走到「用同一组凭据登录回来」。
+      #
+      # 要起 dev-server（内存版 store），但**不要浏览器**——服务端那半用 fetch 直接打，
+      # 客户端那半读源码。所以它留在这个快 job 里，不去 browser 那一条。
+      #
+      # 两个环境变量都要带。`GENIUS_GRANT_LIMIT=2` 是为了量「名额满了会怎么样」：第一
+      # 批是 100 个，真注册 100 次就不是一道门而是一次压测了。门开头先验这个前提
+      # （/api/slots 必须答 total:2），没验上当场红——前提没成立而断言还在跑就是空绿。
+      #
+      # 一个门一台服务器、一人一个端口（CLAUDE.md 那条规矩）。起完用一个有界的 curl
+      # 循环等它真的起来；盲等固定秒数在 CI 上会出偶发红，而偶发红最后一定会被人加
+      # continue-on-error。
+      - name: 注册 → 登录 → 终身授予
+        run: |
+          GENIUS_GRANT_WINDOW=1 GENIUS_GRANT_LIMIT=2 node scripts/dev-server.mjs 8993 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8993/api/slots > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8993/api/slots > /dev/null
+          node scripts/check-register.mjs http://localhost:8993/
       - name: 战绩与排行榜
         run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
       # 玩家交卷的那一瞬间管理员点了《重建榜单》：重建读出整份 stats（total /

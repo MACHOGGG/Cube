@@ -16,6 +16,7 @@ import {
   takeAccount,
   updateAccount,
 } from './_accounts.js';
+import { grantLifetimeIfWindow } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
 
@@ -40,6 +41,17 @@ import { storeConfigured } from './_store.js';
  *     month or year travels to the player's next phone instead of living
  *     and dying in one browser.
  *
+ *   { register: true, email, password }  — nothing at all.
+ *     注册。它不证明任何事，因为**没什么可证明的**：这一步是开一个还不存在的
+ *     账号，而「这个地址上还没有人」本身就是唯一的前提（createAccount 的 SET NX
+ *     就是在问这一句）。所以它和上面三条不一样，归它管的不是「谁可以要」，而是
+ *     「这个地址还空着吗」。
+ *
+ *     为什么会有这条路：2026-10 把 Creem 的两个订阅商品暂时关掉，网页端改成
+ *     「注册就解锁全部功能」（E11 / PR-12）。在那之前「注册」等于「订阅」——邮箱
+ *     是 Creem 的结账页替我们收的，所以「只有邮箱和密码」这条路从来不存在，而
+ *     界面上那颗《注册》键按下去是转回天才窗口，一个死圈。
+ *
  *   { email, password, newPassword }    — the current password.
  *     Changing one already set. Nothing else can authorise this; a fresh
  *     checkout id will not overwrite an account that already has a password,
@@ -54,11 +66,15 @@ export default async function handler(req, res) {
   // would evaporate and lock the player out of what they just bought.
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
-  const { checkoutId, code, token, email, password, newPassword, news } = readBody(req);
+  const { checkoutId, code, token, email, password, newPassword, news, register } = readBody(req);
   // 建账号的两条路都顺手带着「愿不愿意收信」。改密码那条不带——那不是回答这
   // 个问题的地方，顺手改掉别人的订阅偏好是不对的。
   if (checkoutId) return create(res, String(checkoutId), password, news === true);
   if (code) return bind(res, String(code), String(token || ''), email, password, news === true);
+  // 注册那一支**认一个显式的旗子**，不认「有邮箱有密码、没有 newPassword」。后者
+  // 和改密码那一支只差一个字段，哪天改密码的请求漏发了 newPassword，就会被当成
+  // 注册，答回来一句「这个地址已经有人了」——而他要改的正是自己的密码。
+  if (register === true) return signUp(req, res, email, password, news === true);
   return change(req, res, email, password, newPassword);
 }
 
@@ -136,6 +152,72 @@ async function bind(res, rawCode, token, email, password, news) {
     await giveBack();
     return send(res, 409, { error: 'exists' });
   }
+
+  return send(res, 200, { ok: true, email: address, token: account.token });
+}
+
+/**
+ * 注册：开一个账号，顺手把窗口期那份终身天才领走。
+ *
+ * ── 为什么不要任何凭据 ────────────────────────────────────────
+ *
+ * 另外三支都在回答「谁可以要」，这一支回答的是「这个地址还空着吗」——而那一问和写入
+ * 是同一步（`createAccount` 的 SET NX）。所以这里没有令牌、没有结账 id、没有码可验，
+ * 也不该假装有。
+ *
+ * 代价是它是整个 api/ 里唯一一个**不要凭据就能写库**的接口，所以限速是它唯一的门：
+ * 按调用方记，一小时 10 次。10 而不是别处那个 20，是因为这一支还会消耗一样**全局稀
+ * 缺**的东西（第一批 100 个名额）——按地址限速在这儿帮不上忙，每次注册本来就是一个
+ * 新地址。10 对真人绰绰有余（一个人一辈子注册一次），对想一口气占掉一半名额的人则
+ * 不够用。
+ *
+ * ── 先建账号，再领名额 ──────────────────────────────────────
+ *
+ * 顺序不能反。反过来是「先领号、再建账号」，而建账号可能输掉 SET NX（这个地址刚被
+ * 别人占了），那个号就白烧了——第一批 100 个名额里凭空少一个，谁也查不出来去哪了。
+ *
+ * 领不到名额**不是失败**：账号照样开出来，只是不是天才。这是 CLAUDE.md 那条
+ * 「『登着』和『是天才』是两件事」的直接后果——云端战绩、别人寄给他的内部码、改密
+ * 码，全都挂在账号上，和权益无关。名额满了就回头去报错，等于把一个本来有用的账号
+ * 也一起拒掉。
+ *
+ * 也因此这里不先问一句 `slotsLeft() > 0`：那是一次 check-then-act，和真正的领号之
+ * 间隔着一次网络往返，问出来的数到动手时可能已经不是那个数了。`grantLifetimeIfWindow`
+ * 自己是原子的（hincrby 领号、超了退号），让它去判，答案才算数。
+ *
+ * ── kind 必须是 'code' ─────────────────────────────────────
+ *
+ * 不是 'card'。权益记在我们自己库里的 `until` 上，正是这一支要写的那样东西。写成
+ * 'card' 的后果在 `_entitlement.js:236` 那一支：Creem 没配的时候（而我们正要把那三
+ * 个环境变量清掉）它对非 'code' 账号一律答 503，而 503 不带令牌——那个人从此登不进
+ * 自己的账号。
+ */
+async function signUp(req, res, email, password, news) {
+  const address = normalizeEmail(email);
+  if (!EMAIL_RE.test(address)) return send(res, 400, { error: 'invalid' });
+  // 六位字母数字（_accounts.js 的 PASS_RE）。界面上那个框也写了 minlength/maxlength，
+  // 但那只是提示，说了算的是这一行。
+  if (!PASS_RE.test(String(password || ''))) return send(res, 400, { error: 'weak' });
+  if (await tooMany('signup', callerId(req), 10, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+
+  const account = newAccount(String(password), 'code');
+  setNews(account, news);
+  if (!(await createAccount(address, account))) {
+    // 已经有人了。**不合并**，理由和 bind 那一支一样：往一个已经存在的账号上做事，
+    // 唯一诚实的前提是先证明那个账号是你的，而这个请求什么都没证明。答得和别的错不
+    // 一样是故意的——界面要据此说「这个邮箱已经有账号了，去登录」，而不是让他对着
+    // 一句含糊的失败反复试。
+    //
+    // 这句话确实透露了「这个地址有账号」，和任何一个《忘记密码》表单透露的是同一
+    // 件事（见文件顶上那段），而含糊化的代价是把一个注册不了的人永久卡在门外。
+    return send(res, 409, { error: 'exists' });
+  }
+
+  // 领名额。窗口没开、或者名额已经满了，它原地把这份账号还回来——上面说过，那不是
+  // 失败。客户端接着会拿同一组凭据登录一次，那一次问到的权益才是屏幕上印的那个。
+  await grantLifetimeIfWindow(address, account);
 
   return send(res, 200, { ok: true, email: address, token: account.token });
 }

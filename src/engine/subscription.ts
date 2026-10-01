@@ -241,6 +241,31 @@ export async function attachAccount(
   return 'ok';
 }
 
+/**
+ * 注册：开一个账号。
+ *
+ * 和 attachAccount 并列，只是手上没有任何凭据可交（见 creem.ts 的 webRegister）。
+ *
+ * **它不定权益**。写进来的只有 email 和 token，`active` 原样留着——「是不是天才」
+ * 由紧接着那一次 `restore(email, password)` 问出来，那一问打的是
+ * /api/subscription，而窗口期的终身授予就挂在那条路上（api/subscription.js）。
+ * 在这儿顺手写一个 `active: true` 会多出一份会走样的副本：名额可能正好在这一瞬间
+ * 满了，而屏幕上那句话必须是服务端数出来的那个答案。
+ */
+export async function registerAccount(
+  email: string,
+  password: string,
+  /** 建账号那一刻勾没勾「愿意收 Slides 的邮件」，和另外两条路同一个规矩。 */
+  news = false,
+): Promise<'ok' | 'exists' | 'unavailable' | 'weak' | 'tooMany' | 'failed'> {
+  const creem = await import('./creem');
+  const result = await creem.webRegister(email, password, news);
+  if (typeof result === 'string') return result;
+  if (!result) return 'failed';
+  setEntitlement({ ...entitlement(), email: result.email, token: result.token });
+  return 'ok';
+}
+
 const NOBODY: Entitlement = { active: false, channel: salesChannel() };
 
 let cached: Entitlement | null = null;

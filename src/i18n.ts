@@ -208,11 +208,18 @@ export interface I18nStrings {
   /**
    * 注册这一栏说的是什么。
    *
-   * 取代了原来那句「刷卡订阅只需要电子邮件，不用设密码」——在「注册即
-   * 订阅、邮箱 + 六位密码」之后它就不成立了，而且会和玩家付完款紧接着
-   * 看到的设密码窗口正面打架。
+   * 两度取代：先是「刷卡订阅只需要电子邮件，不用设密码」，接着是
+   * 「注册就是订阅。先付款，再……」。后面那一句在 2026-10 之后不成立
+   * 了——Creem 的两个订阅商品暂时关掉，注册不再经过任何结账页，这一屏
+   * 自己收邮箱和密码（E11 / PR-12）。
+   *
+   * 现在这一句**只说这张表要填什么**，不带任何承诺。「注册就解锁全部
+   * 功能、还剩几个名额」那句话印在天才那一屏上，而那一句是服务端
+   * （/api/slots）说得出才摆出来的——名额满了它自己就不见了。把承诺挪
+   * 到这儿来，就等于让界面自己猜，而猜出来的承诺正是这个仓库躲着的那
+   * 种东西。
    */
-  registerIsSubscribe: string;
+  registerHint: string;
   signInHint: string;
   /** Carries {store} — "App Store" or "Google Play", per platform. */
   storeNoAccountHint: string;
@@ -741,7 +748,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: 'Email',
     emailPlaceholder: 'you@example.com',
     emailInvalid: 'That does not look like an email address.',
-    registerIsSubscribe: 'Registering is subscribing. Pay first, then set a six-character passcode for this address — the two of them bring your subscription back on any device.',
+    registerHint: 'Your address and a six-character passcode. Those two bring your account back on any device.',
     signInHint: 'Your email address and the passcode you set.',
     storeNoAccountHint: 'Bought with your {store} account — no sign-up, and you never leave the app.',
     subscribedTitle: 'You are a Slides Genius',
@@ -1080,7 +1087,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: 'E-mail',
     emailPlaceholder: 'vous@exemple.com',
     emailInvalid: 'Cette adresse ne semble pas valide.',
-    registerIsSubscribe: 'S’inscrire, c’est s’abonner. Payez d’abord, puis choisissez un code secret de six caractères pour cette adresse — à eux deux, ils rouvrent votre abonnement sur n’importe quel appareil.',
+    registerHint: 'Votre adresse et un code secret de six caractères. À eux deux, ils rouvrent votre compte sur n’importe quel appareil.',
     signInHint: 'Votre adresse et le code secret que vous avez défini.',
     storeNoAccountHint: 'Acheté avec votre compte {store} — sans inscription, sans quitter l’application.',
     subscribedTitle: 'Vous êtes un Slides Génie',
@@ -1419,7 +1426,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: '電子郵件',
     emailPlaceholder: 'you@example.com',
     emailInvalid: '這個電子郵件看起來不太對。',
-    registerIsSubscribe: '註冊就是訂閱。先付款，再為這個電子郵件設一個 6 位密碼——之後在任何裝置上，用這兩樣就能找回你的訂閱。',
+    registerHint: '留一個電子郵件，設一個 6 位密碼。換裝置就靠這兩樣。',
     signInHint: '你的電子郵件，加上你設的密碼。',
     storeNoAccountHint: '用你的 {store} 帳號購買，不必註冊，也不用離開 App。',
     subscribedTitle: '你已經是 Slides 天才',
@@ -1758,7 +1765,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailLabel: '邮箱',
     emailPlaceholder: 'you@example.com',
     emailInvalid: '这个邮箱地址看起来不太对。',
-    registerIsSubscribe: '注册就是订阅。先付款，再为这个邮箱设一个 6 位密码——之后在任何设备上，用这两样就能找回你的订阅。',
+    registerHint: '留一个邮箱，设一个 6 位密码。换设备就靠这两样。',
     signInHint: '你的邮箱，加上你设的密码。',
     storeNoAccountHint: '用你的 {store} 账号购买，不用注册，也不用离开 App。',
     subscribedTitle: '你已经是 Slides 天才',

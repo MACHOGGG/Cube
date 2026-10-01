@@ -15,6 +15,7 @@ import {
   isGenius,
   pendingAccount,
   purchase,
+  registerAccount,
   rememberPending,
   restore,
   setEntitlement,
@@ -1101,10 +1102,17 @@ export function openChangeEmailWindow(
 }
 
 /**
- * 注册 / 登录 — the site only. Registering is subscribing: there is no
- * password anywhere in this flow, so an account with no subscription behind
- * it would be an empty thing to have. Logging in is naming the address the
- * subscription was bought with and letting Creem confirm it.
+ * 注册 / 登录 — the site only.
+ *
+ * **两栏现在收的东西一模一样**（邮箱 + 六位密码），区别只在服务端走哪一支：注册是
+ * 开一个还不存在的账号（/api/passcode 的 register），登录是拿这两样去证明账号是他
+ * 的（/api/subscription）。
+ *
+ * 从前不是这样：「注册就是订阅」——这一栏连密码框都是隐藏的，因为邮箱是 Creem 的
+ * 结账页替我们收的，按下去只是把人送去付款。2026-10 把那两个订阅商品暂时关掉之后
+ * （E11 / PR-12），那条路成了一个**死圈**：天才那一屏的《注册》开这扇窗，这扇窗的
+ * 《注册》又转回天才那一屏，而玩家照着「注册就解锁全部功能」去做，一个账号也开不
+ * 出来。这一屏自己收邮箱和密码，就是为了把那个圈打开。
  */
 export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void): void {
   const s = STRINGS[lang];
@@ -1168,21 +1176,37 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     current = next;
     for (const el of tabs) el.classList.toggle('active', el.dataset.tab === next);
     msg.textContent = '';
-    hint.textContent = next === 'register' ? s.registerIsSubscribe : s.signInHint;
-    // Registering asks for nothing: Creem's checkout collects the address
-    // itself, and one form is better than two asking for the same thing.
-    // 没有密码栏的那一屏上，《忘记密码？》无从谈起，一并收起来。
-    fields.hidden = next === 'register';
+    hint.textContent = next === 'register' ? s.registerHint : s.signInHint;
+    // 两栏都要填，所以这张表一直摆着——从前 register 那一栏整个 fields 是 hidden 的
+    // （邮箱由 Creem 的结账页去收）。
+    fields.hidden = false;
+    // 《忘记密码？》只在登录那一栏有意义：注册这一刻他还没有密码可忘，而那扇窗会往
+    // 一个还不存在的账号寄解锁码，只能答「没有这个账号」——一条通向死胡同的出路比没
+    // 有出路更糟。
     forgot.hidden = next === 'register';
-    go.textContent = next === 'register' ? s.subscribeBtn : s.signInBtn;
+    go.textContent = next === 'register' ? s.registerBtn : s.signInBtn;
+    /**
+     * 同一个密码框，两栏两套标注——这是给密码管理器看的，填错了不报错，只是它从此
+     * 不再提示保存（或者拿一个旧密码去填一个新账号）。
+     *
+     *   注册：new-password + 正好六位。管理器据此**发明**一个新密码、并提示存下来。
+     *   登录：current-password，不设长度。管理器拿它已经有的那个来填；长度不设是故
+     *         意的——服务端登录那一支收的是宽松的 SECRET_RE，在这儿卡死六位就等于
+     *         告诉外面的人「这个站的密码都是六位」。
+     *
+     * `minlength` 对**空值不生效**（HTML 就这么定的），所以提交那头还得自己拦一次空。
+     */
+    pwInput.autocomplete = next === 'register' ? 'new-password' : 'current-password';
+    if (next === 'register') {
+      pwInput.setAttribute('minlength', '6');
+      pwInput.setAttribute('maxlength', '6');
+    } else {
+      pwInput.removeAttribute('minlength');
+      pwInput.removeAttribute('maxlength');
+    }
   };
 
   const submit = async () => {
-    if (current === 'register') {
-      close();
-      openGeniusWindow(lang, onChanged);
-      return;
-    }
     const email = input.value.trim();
     if (!isEmail(email)) {
       msg.textContent = s.emailInvalid;
@@ -1190,6 +1214,47 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     }
     const password = pwInput.value;
     if (!password) return void (msg.textContent = s.pwWrong);
+
+    /**
+     * 注册：先把账号开出来，**然后原样走下面登录那一段**。
+     *
+     * 不在这儿另写一遍「成了之后怎么样」，因为「他是不是天才」只有
+     * /api/subscription 答得准——窗口期那份终身授予就挂在那条路上
+     * （api/subscription.js），而名额可能正好在这一瞬间满了。在这儿顺手写一句
+     * 「你是天才」就是多一份会走样的副本。
+     *
+     * 名额满了不是失败：账号照样开出来，只是不是天才，于是下面那一支会答
+     * `active: false`，屏幕上写「登上了，但这个账号现在没有权限」。这正是
+     * CLAUDE.md 那条「『登着』和『是天才』是两件事」——云端战绩、别人寄给他的
+     * 内部码、改密码，都挂在账号上，和权益无关。
+     */
+    if (current === 'register') {
+      // 和服务端 PASS_RE 同一条规矩（六位字母数字），前置挡住，省一次往返；
+      // 也挡住 `minlength` 管不到的那个空值。
+      if (!isPin(password)) return void (msg.textContent = s.setPwShort);
+      go.disabled = true;
+      msg.textContent = s.workingLabel;
+      const made = await registerAccount(email, password);
+      if (made !== 'ok') {
+        go.disabled = false;
+        msg.textContent =
+          made === 'exists'
+            ? s.emailTaken
+            : made === 'weak'
+              ? s.setPwShort
+              : made === 'unavailable'
+                ? s.serverBusy
+                : made === 'tooMany'
+                  ? s.tooManyTries
+                  : s.purchaseNetwork;
+        return;
+      }
+      // 开出来了，让这台设备也存一份（管理器那一下），再接着往下走登录。
+      // 键不放开、那句「处理中」也不擦掉：下面紧接着就是同一次操作的后半段，
+      // 中间闪一下「可以按了」会让人以为完事了，于是他按第二次。
+      await offerToSave(email, password);
+    }
+
     go.disabled = true;
     msg.textContent = s.workingLabel;
 
@@ -1254,7 +1319,10 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
     e.preventDefault();
     void submit();
   });
-  go.addEventListener('click', () => (current === 'register' ? submit() : form.requestSubmit()));
+  // 两栏都走表单自己的 submit（从前 register 那一栏是直接叫 submit()，因为那一栏
+  // 没有任何输入框）。走表单这一下是手机上的密码管理器认出「这是一次登录或注册」
+  // 的唯一凭据，绕过去它就不提示保存。
+  go.addEventListener('click', () => form.requestSubmit());
   overlay.querySelector<HTMLButtonElement>('#authRedeem')!.addEventListener('click', () => {
     close();
     openRedeemWindow(lang, onChanged);

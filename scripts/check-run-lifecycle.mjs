@@ -93,8 +93,31 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
     /if \(!isPin\(password\)\)/.test(ui) && !/if \(password\.length !== 6\)/.test(ui));
   check('attachAccount 答得出 weak', /'unavailable' \| 'weak' \| 'failed'/.test(engine));
   check('weak 不再被压成 failed', /result === 'weak'\) return 'weak'/.test(engine));
-  check('creem 那两处 catch 认得出服务端送回来的 weak',
-    (creem.match(/err\.code === 'weak'\) return 'weak'/g) || []).length === 2);
+  /**
+   * **每一个**往 /api/passcode 发请求的函数都要认得出 'weak'，不是「恰好两处」。
+   *
+   * 这一条原先写的是「出现次数 === 2」，钉的是当时那两处（setWebPasscode / bindCode）。
+   * 2026-10 补了第三条路（webRegister，注册），这道门于是红了一次——而它红的不是漏，
+   * 是**多**：三处都认得出 weak，只是数字对不上。那种红比不设断言更坏，因为下一个人
+   * 会去改数字而不是去想这条断言在问什么。
+   *
+   * 现在按函数数：谁 post 到 /api/passcode，谁就得在自己的 catch 里认出 weak。少一处
+   * 的后果是老样子——玩家的密码夹了个符号，被服务端 400 'weak' 打回来，而界面告诉他
+   * 网络有问题。
+   */
+  {
+    const fns = creem
+      .split(/\nexport (?:async )?function /)
+      .slice(1)
+      .map((b) => ({ name: b.slice(0, b.indexOf('(')), body: b }))
+      .filter((f) => f.body.includes("'/api/passcode'"));
+    const missing = fns.filter((f) => !/err\.code === 'weak'\) return 'weak'/.test(f.body));
+    check('（尺子）认得出哪几个函数发 /api/passcode', fns.length >= 3,
+      fns.map((f) => f.name).join(' '));
+    check('发 /api/passcode 的每一个都认得出服务端送回来的 weak',
+      fns.length >= 3 && missing.length === 0,
+      missing.length ? '少了：' + missing.map((f) => f.name).join(' ') : '');
+  }
   check('界面把 weak 说成「密码不合规矩」，不是「网络出错」',
     /done === 'weak' \? s\.setPwShort/.test(ui));
 }
