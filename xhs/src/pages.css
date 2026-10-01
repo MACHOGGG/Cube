@@ -285,3 +285,34 @@
 
    写成 var(--xhs-title, …)：算不出来或者用不上的时候，原样还是 2.4rem。 */
 .home-page:not(.home-page--wide) .home-title { font-size: var(--xhs-title, 2.4rem); }
+
+
+/* ---- 挑形状那几屏：整块上移（E20）--------------------------------------
+   玩家 2026-09-30 定的三条里的第二条：「选形状屏上移」。
+
+   这一端有四屏是「先挑方块还是小球」：炸弹（xhs/src/shapePick.ts）、老虎机、无限
+   反转、步步为营（后三屏直接用网页版那几个页面）。四屏的骨架是同一套
+   `.app.slot-page > .start-stage > .start-count.slot-pick-area`。
+
+   为什么原先落在那个位置：`.start-count` 是 `flex: 1 1 0` ＋ 上下居中（见
+   src/style.css），而这几屏**没有上半那块 `.start-emblem`**——于是它一个人吃掉从
+   招牌下沿到底排之间的全部高度（390×844 上是 122–726），内容就被摆在这 604px 的
+   正中。量出来两张图落在 314–480，上面空着整整 314px，而底下那颗《退出》还在 726。
+   屏幕上看就是「都沉在下半截」。
+
+   改法是把这一块从「居中」换成「贴着上面排，再让出一截」。10vh 是按同一家族的开局
+   倒数页定的：那一页有上下两块，图那一块的中心落在屏高的 1/4 上下；这几屏只有一块，
+   10vh 之后两张图落在 206–362，中心 284 ＝ 屏高的 34%，和那一页看着是同一种摆法。
+
+   ⚠️ **只在竖屏**。横屏（844×390）那一档走的是 src/style.css 里
+   `orientation: landscape and max-height: 560px` 那一套：`.start-stage` 变成横向排
+   列，`.start-count` 的高度收成内容高（实测 157–320，内容正好填满），一点富余都没
+   有——那一档再加 10vh 的上内边距，底下那行标语会被顶出去。
+
+   门：xhs/check-pickup.mjs（四屏各量一遍，竖屏横屏都量）。 */
+@media (orientation: portrait) {
+  .app.slot-page .slot-pick-area {
+    justify-content: flex-start;
+    padding-top: 10vh;
+  }
+}

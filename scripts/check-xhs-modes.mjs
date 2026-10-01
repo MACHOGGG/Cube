@@ -45,7 +45,7 @@
  * 没有尺子的话，正则改一个字就得到一张空表，而「空表里的每一项都对」恒真——这个
  * 仓库里的假绿多半是这么来的。
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -339,6 +339,46 @@ for (const [file, src] of [
   }
   // README 里那几处玩法数。
   say(!/五个玩法|五组开关/.test(readme), 'README 里没有「五个玩法 / 五组开关」这种旧数字');
+}
+
+// ── ⑧ 主菜单排布**冻结**（E20）────────────────────────────────────────────
+//
+// 玩家 2026-09-30 定的三条里的第一条：「小红书版主菜单排布**冻结**（主站排布改动不下
+// 发）」。眼下它成立是因为这一端的主菜单是**自己一套**（xhs/src/menu.ts 的
+// renderXhsMenu），而网页端那一页是 src/ui/menu.ts 的 renderMenu 加鱼眼轴。
+//
+// 但「成立」和「守得住」是两回事。网页端这一页 2026-09 一个月里改了十三轮（鱼眼轴），
+// 2026-10 又整个换成两列（E18 / PR-21）。哪天有人图省事，把这一端接到 renderMenu 上
+// ——「少维护一份」听起来总是对的——冻结就当场破了，而屏幕上不报任何错：这一端的菜单
+// 会跟着主站一起变，玩家下次打开看到的是另一副样子。
+//
+// 所以这儿钉死：**xhs/src/ 里谁都不许 import 网页端那一页的排版件**。
+{
+  const LAYOUT = [
+    { from: '../../src/ui/menu', what: '网页端主菜单（renderMenu）' },
+    { from: '../../src/ui/modeAxis', what: '鱼眼轴（mountModeAxis）' },
+    { from: '../../src/ui/modeStrip', what: '那条带子（mountModeStrip）' },
+    { from: '../../src/ui/homeIcons', what: null }, // 图标是美术件，允许
+  ];
+  const srcDir = join(repo, 'xhs', 'src');
+  const files = readdirSync(srcDir).filter((f) => f.endsWith('.ts'));
+  say(files.length >= 10, `（尺子）xhs/src 下扫到 ${files.length} 个 .ts`);
+  const bad = [];
+  for (const f of files) {
+    const code = readFileSync(join(srcDir, f), 'utf8');
+    for (const l of LAYOUT) {
+      if (!l.what) continue;
+      // 只看 import 那一行，不看注释——menu.ts 开头正写着「为什么不复用网页版的
+      // renderMenu」，照字面查会被这个仓库自己的注释红一下。
+      const re = new RegExp(`^\\s*import[^;]*from\\s*['"]${l.from.replace(/\//g, '\\/')}['"]`, 'm');
+      if (re.test(code)) bad.push(`${f} ← ${l.what}`);
+    }
+  }
+  say(bad.length === 0, '主菜单排布冻结：xhs/src 里没人 import 网页端那一页的排版件', bad.join('；'));
+  // 反面：这一端真的有自己那一份（上面那条不是因为「一个菜单都没有」才绿的）。
+  const own = readFileSync(join(srcDir, 'menu.ts'), 'utf8');
+  say(/export function renderXhsMenu/.test(own), '（尺子）这一端有自己的 renderXhsMenu');
+  say(/class="home-row"|home-row/.test(own), '（尺子）排布也是自己摆的（menu.ts 里自己拼 .home-row）');
 }
 
 // ── 收尾 ───────────────────────────────────────────────────────────────────

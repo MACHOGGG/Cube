@@ -54,7 +54,7 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 没有 npm test，也没有测试框架。**这些门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
-数目：`scripts/` 下 111 个，`xhs/` 下另有 6 个（小红书那一版专用）。这个数一直
+数目：`scripts/` 下 126 个，`xhs/` 下另有 7 个（小红书那一版专用）。这个数一直
 在涨，所以别在别处再抄一遍——要用就当场 `ls scripts/check-*.mjs | wc -l`。
 
 三类，跑法不同：
@@ -156,12 +156,13 @@ JSON 原样贴进来就能在真机上复核。
   `dist/app.js` 里早就有了。**改完 CSS 要看效果，跑 `npm run preview:xhs`**
   （出包和出预览两步已经串在一条脚本里）。
   **门这一头已经不用操心了**：`check-oldkernel` / `check-oldcss` / `check-story` /
-  `check-vsweb` 四道开头各调一次 `xhs/ensurePreview.mjs`——预览页比 `src/`、
+  `check-vsweb` / `check-pickup` 五道开头各调一次 `xhs/ensurePreview.mjs`——预览页比 `src/`、
   `xhs/src/`、两个生成脚本里任何一样旧，就自己重出一次（约 5 秒）并打印一行。
   自动重出而不是报错退出：这个文件从不提交，门自己保证它是新的没有副作用。
   （`check-profile` 还没接，它连自己的 npm 脚本都没有——手跑它之前先
   `npm run preview:xhs`。）
-  （`check:xhs` / `check:vsweb` / `check:story` 也已经串好，不用补；单跑
+  （`check:xhs` / `check:vsweb` / `check:story` 也已经串好，不用补；`check-pickup`
+  串在 `check:xhs:all` 里，单跑它不用先出包（它自己调 ensurePreview）；单跑
   `build:xhs` 和 `check:submit` 没有串，`check-profile` 连自己的 npm 脚本都
   没有——手跑它之前先 `npm run preview:xhs`。）
 
