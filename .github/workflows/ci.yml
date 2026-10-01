@@ -317,6 +317,16 @@ jobs:
       # xhs/tsconfig.json，所以上面「小红书端的类型」那一步不能省。
       - name: 小红书端的玩法表：七张要一起动
         run: node scripts/check-xhs-modes.mjs
+      # 残局穷举兜底（v1.3.1 PR-15）。`stalemate.ts` 的判活只做计数，从不看几何，所以
+      # 「数量够、摆法永远到不了」的残局被一直判活——玩家报过：剩几枚怎么滑都不得分，
+      # 局却不结束。这一支守两头：三副真死局要答 dead（每一副都配一条「计数那层说活」
+      # 的对照尺子，证明复现的就是那个 bug），而预算算不完的时候**一律 unknown、绝不是
+      # dead**——判死那一侧错了会把还能打的局掐掉，比不结束更糟。读模块、不开浏览器。
+      - name: 残局穷举：该结束的要结束，算不完一律当活
+        run: |
+          npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs
+          npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs
+          node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白
