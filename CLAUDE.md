@@ -168,6 +168,14 @@ JSON 原样贴进来就能在真机上复核。
 Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写这个），
 不要跑 `playwright install`。
 
+**这个路径是写死在六十多道门里的**，而它只在开发容器里成立。GitHub 的 runner 上
+`playwright install` 装到 `~/.cache/ms-playwright/…`，所以 `browser` 那一条 CI **从建起来
+那天到 2026-10-01 一直整条红**：第一道门 1 秒就
+`Failed to launch chromium because executable doesn't exist`，后面二十来道全被跳过——一条
+跑不起来的流水线看着像在守着，其实一行代码都没验过。现在 ci.yml 里有一步把那个路径做出来
+（装完之后 `ln -s` 到 `playwright` 自己报的 `executablePath()`，再真启一次确认），所以两边
+都认。要彻底不依赖它，得抽一个 `scripts/pwChromium.mjs` 让那六十三处 import 它——还没做。
+
 ## 架构：需要读好几个文件才看得出来的那些
 
 ### 八副棋盘，一个循环

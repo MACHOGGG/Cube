@@ -424,6 +424,31 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # 六十多道开浏览器的门都写死 `executablePath: '/opt/pw-browsers/chromium'`
+      # ——那是**开发容器里**的路径（CLAUDE.md 也是这么记的）。GitHub 的 runner 上
+      # `playwright install` 装到 ~/.cache/ms-playwright/…，于是每一道门第一句就
+      # `Failed to launch chromium because executable doesn't exist`，browser 这一条
+      # **从建起来那天到 e2df336 一直整条红**：第一道门 1 秒就挂，后面二十来道全被
+      # 跳过。跑不起来的门比没有门更坏——它看着像在守着，其实一行代码都没验过。
+      #
+      # 这儿把那个路径做出来，而不是去改那六十多个文件：那条路径在开发容器里是真的，
+      # 改成「两处都认」要动六十三个文件，和这一推无关。等那一笔单独做（抽一个
+      # scripts/pwChromium.mjs，六十三处 import 它）。
+      - name: 把 chromium 摆到门写死的那个路径上
+        run: |
+          # 已经在那儿了（开发容器就是这样）就不动它。
+          if [ ! -x /opt/pw-browsers/chromium ]; then
+            real=$(node -e "console.log(require('playwright').chromium.executablePath())")
+            test -x "$real" || { echo "::error::playwright 报的 chromium 不可执行：$real"; exit 1; }
+            sudo mkdir -p /opt/pw-browsers
+            sudo ln -sfn "$real" /opt/pw-browsers/chromium
+            echo "/opt/pw-browsers/chromium -> $real"
+          else
+            echo "/opt/pw-browsers/chromium 本来就在"
+          fi
+          # 尺子：不止「链子建好了」，而是**真的启得动**。少了这一句，链子指到一个
+          # 坏文件上也会「成功」，然后二十道门一起红，而红的话说的是别的事。
+          node -e "const {chromium}=require('playwright');chromium.launch({executablePath:'/opt/pw-browsers/chromium'}).then(b=>b.close()).then(()=>console.log('起得动')).catch(e=>{console.error(e);process.exit(1)})"
       - name: 出一份产物（门读的是 dist）
         run: npm run build
       - name: 主菜单：鱼眼轴
