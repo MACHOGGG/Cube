@@ -50,13 +50,25 @@ const C = {
 };
 const near = (a, b, tol = 2) => Math.abs(a - b) <= tol;
 
-async function open(w, h, pick) {
+/**
+ * 开一局。`新人: true` 的那一路**什么键都不预设**。
+ *
+ * ⚠️ 这儿有一个坑，真坑过人：预设 `slides_tutorial_seen` 会把这台浏览器变成「老玩
+ * 家」，头一局那块教学条于是整个不出现。它不是 bug——`engine/firstPlay.ts` 的
+ * `firstTimeIn` 先问 `playedBefore`，而方块/小球那两条认的正是这把**旧钥匙**（那段分
+ * 镜动画从前是进这个玩法的必经之路，看过就等于打开过）。预设它本来是为了跳过分镜，
+ * 可分镜从 2026-09 起本来就不自动弹了（见 main.ts 的 showGame），所以这个预设如今
+ * 只剩副作用：它悄悄关掉了被测的那样东西，而屏幕上什么都不报。
+ */
+async function open(w, h, pick, 新人 = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
-  await ctx.addInitScript(() => {
-    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');
+  await ctx.addInitScript(([新人]) => {
+    if (!新人) {
+      for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');
+    }
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
-  });
+  }, [新人]);
   const p = await ctx.newPage();
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
@@ -71,9 +83,6 @@ async function open(w, h, pick) {
 const tapSquare = (p) => p.$$eval('.home-icon-btn', (els) => {
   const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
   (it || els[0]).click();
-});
-const tapBomb = (p) => p.$$eval('.home-icon-btn', (els) => {
-  els.find((e) => (e.getAttribute('aria-label') || '') === '基础炸弹 · 方块')?.click();
 });
 
 const SNAP = () => {
@@ -147,12 +156,15 @@ const SNAP = () => {
 
 // ---------------------------------------------------------------------------
 // ② 教学那一栏：右边，和左边那张分数牌关于中线对称
+//
+// 走的是**真·头一回打方块**那条路（`新人: true`，什么键都不预设），不是炸弹那条提示
+// 路——头一局那块教学条才是这一栏最容易被弄丢的东西，见 open() 上面那段。
 // ---------------------------------------------------------------------------
 {
-  const { ctx, p } = await open(1500, 970, tapBomb);
-  await p.waitForTimeout(900);
+  const { ctx, p } = await open(1500, 970, tapSquare, true);
+  await p.waitForTimeout(1200);
   const s = await p.evaluate(SNAP);
-  check('头一回打炸弹：右栏那块教学在', !!s.coach, s.coach ? `${s.coach.w}×${s.coach.h}` : '（没有）');
+  check('真·头一回打方块：右栏那块教学在', !!s.coach, s.coach ? `${s.coach.w}×${s.coach.h}` : '（没有——多半是谁又预设了 slides_tutorial_seen）');
   if (s.coach) {
     check('教学栏竖直居中在屏幕上', near(s.coach.cy, s.vh / 2, 3), `${s.coach.cy} / ${s.vh / 2}`);
     check('教学栏在棋盘**右边**', s.coach.x >= s.board.x + s.board.w, `${s.coach.x} ≥ ${s.board.x + s.board.w}`);
