@@ -197,6 +197,13 @@ jobs:
       - name: 终身授予那一句的位置
         run: node scripts/check-grant-callsite.mjs
 
+      # 缺 `kind` 字段的老账号不许被判成刷卡用户。纯 node，内存版 store，整道门跑在
+      # 「Creem 没配」那一侧——而三个 CREEM_* 环境变量清掉之后，那就是每一次登录都要
+      # 走的那一支，判错的代价是 503 不带令牌、那个人登不进自己的账号。
+      # 反向尺子在内存里把判据改回 `=== 'code'` 再 import 一次，所以它不会随 HEAD 过期。
+      - name: 缺 kind 的老账号算哪一种
+        run: node scripts/check-kind-default.mjs
+
       # 注册那条路：从「填邮箱 + 六位密码」一直走到「用同一组凭据登录回来」。
       #
       # 要起 dev-server（内存版 store），但**不要浏览器**——服务端那半用 fetch 直接打，

@@ -229,14 +229,24 @@ export async function resolveEntitlement(address, account, issued) {
   /** Creem 那头没有这个人时的兜底：内部码账号仍按本地那份如实答。
    *
    *  不能直接答 NOBODY——信箱（收到的内部码）、赠码和令牌都在本地那份里，
-   *  「去问了一趟 Creem」不该把它们弄丢。答出去的 active 本来就是 false。 */
+   *  「去问了一趟 Creem」不该把它们弄丢。答出去的 active 本来就是 false。
+   *
+   *  判据是 **`!== 'card'`**，不是 `=== 'code'`。这一行真正问的是「权益是不是记在
+   *  我们自己库里」，而**缺 `kind` 字段的老账号正是这一类**——`=== 'code'` 把它判到
+   *  了另一侧，于是他的信箱、赠码和令牌被一句 NOBODY 抹掉。只有 'card' 那一种的权
+   *  益在别人家里，所以只把它排除掉。 */
   const noCreemSub = () =>
-    account && account.kind === 'code' ? localAnswer() : { status: 200, body: NOBODY };
+    account && account.kind !== 'card' ? localAnswer() : { status: 200, body: NOBODY };
 
   if (!creemConfigured()) {
     // 问不了。刷卡那一支这是「答不上来」（503，应用说稍后再试）；内部码账号
     // 的答案本来就在我们自己库里，如实说比 503 准确。
-    return account && account.kind === 'code'
+    //
+    // 同上一处：判据是 `!== 'card'`。这一行从前写 `=== 'code'`，而一个**缺 `kind`
+    // 字段的老账号**因此落在 503 那一侧——503 不带令牌，他登不进自己的账号，而
+    // 2026-10 之后这不是个边角：Creem 的三个环境变量清掉之后，`creemConfigured()`
+    // 永远是假，这一支就是每一次登录都要走的那一支。
+    return account && account.kind !== 'card'
       ? localAnswer()
       : { status: 503, body: { error: 'notConfigured' } };
   }

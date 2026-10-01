@@ -311,7 +311,21 @@ async function change(req, res, email, password, newPassword) {
   if (verdict === 'locked') return send(res, 423, { error: 'locked' });
   if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
 
-  const fresh = newAccount(String(newPassword), account.kind || 'card');
+  /**
+   * 兜底是 **'code'**，不是 'card'。
+   *
+   * 这一行是全站**唯一**一条能在没有任何付款凭据的情况下造出 'card' 账号的路——另外
+   * 那一处（上面的 create）要一笔 Creem 确认付过款的结账才走得到。
+   *
+   * 兜底写成 'card' 的后果：一个**没有 `kind` 字段的老账号**，改一次密码就被打成刷卡
+   * 用户；而刷卡账号的权益按定义记在 Creem 那边，于是 `_entitlement.js` 那两处在
+   * Creem 没配的时候（而那三个环境变量正要清掉）对他答 503，503 不带令牌——他从此登
+   * 不进自己的账号。他做的只是改了个密码。
+   *
+   * 'code' 也正是 `newAccount` 自己的默认值（`_accounts.js:302`），所以这个兜底和
+   * 「不传第二个参数」是同一个意思。有 `kind` 的照原样带过去，这一行只管缺的那种。
+   */
+  const fresh = newAccount(String(newPassword), account.kind || 'code');
   // A change keeps everything the account is worth — a redeemed code's
   // remaining time included — and replaces only the secret and its salt.
   // A change keeps what the account is worth and retires every token, so a
