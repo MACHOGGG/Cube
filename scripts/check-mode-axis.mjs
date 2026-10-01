@@ -883,11 +883,12 @@ let page = await menuPage({ slides_played_square: '1' });
     const rowEls = [...panel.querySelectorAll('.bomb-row')];
     const rows = rowEls.map((r) => r.getBoundingClientRect());
     const chipEls = [...panel.querySelectorAll('.bomb-chip')];
-    const burst = panel.querySelector('.bomb-90s')?.getBoundingClientRect();
     return {
       rows: rows.map((r) => ({ h: r.height, top: r.top - pr.top, bottom: pr.bottom - r.bottom })),
       panelH: pr.height,
       chipCount: chipEls.length,
+      /** 每一层各几枚。三层都该是 2（PR-20）。 */
+      perRow: rowEls.map((r) => r.querySelectorAll('.bomb-chip').length),
       /*
        * 小片顶出自己那一层多少（负数＝还在层里）。
        *
@@ -903,13 +904,8 @@ let page = await menuPage({ slides_played_square: '1' });
             return Math.max(r.top - cr.top, cr.bottom - r.bottom);
           }))
         : null,
-      burstPos: burst ? getComputedStyle(panel.querySelector('.bomb-90s')).position : null,
-      burstOff: burst
-        ? Math.max(
-            Math.abs(burst.left + burst.width / 2 - (pr.left + pr.width / 2)),
-            Math.abs(burst.top + burst.height / 2 - (pr.top + pr.height / 2)),
-          )
-        : null,
+      // 那枚星爆徽记（.bomb-90s）撤了（PR-20）：三行现在各两枚，一点就开。所以不再量它
+      // 的定位，改成量「六枚全在、而且每一枚都在自己那一层里」。
     };
   });
   check('炸弹缩图找得到（下面几条才有意义）', !!m && m.rows.length === 3, m ? `${m.rows.length} 层` : '没找到');
@@ -935,18 +931,25 @@ let page = await menuPage({ slides_played_square: '1' });
      * 上，量不到那种差异。所以量的是「有没有留出余量」和「星芒在不在流里」：这
      * 两样一旦回到老写法，Chromium 上也立刻看得见。
      */
-    // 尺子：这三层里真的有小片可量（炸弹这一档现在是两档各两颗，中间那层是星芒）。
-    check('炸弹缩图里量到了小片（下面那一条才有意义）', m.chipCount === 4, `${m.chipCount} 颗`);
+    /*
+     * 尺子：这三层里真的有小片可量。
+     *
+     * **这个数 2026-10 从 4 变成 6**（PR-20）：中间那一层原先是一枚星爆徽记（点一下才换
+     * 成两枚棋盘），现在和上下两层一样是两枚，所以三层各两枚、一共六枚。
+     */
+    check('炸弹缩图里量到了小片（下面那一条才有意义）', m.chipCount === 6, `${m.chipCount} 颗`);
     check(
       '小片整个待在自己那一层里（留着余量，不是刚好卡住）',
       m.chipOut !== null && m.chipOut < -0.02 * m.panelH,
       `离层边还有 ${(-m.chipOut).toFixed(1)}px`,
     );
-    check(
-      '星芒不参与分高（绝对定位，钉在板正中）',
-      m.burstPos === 'absolute' && m.burstOff < 1,
-      `position: ${m.burstPos} / 偏离板心 ${m.burstOff?.toFixed(1)}px`,
-    );
+    /*
+     * 这一条原先是「星芒不参与分高（绝对定位，钉在板正中）」。星芒撤了（PR-20），而它守
+     * 的那件事换了个说法继续守：**三层每一层都是两枚，一枚都不许少。** 少一枚的后果是那
+     * 一档在屏幕上打不开，而屏幕上不报任何错——从前中间那一层就是「看着在、点一下才出
+     * 来」，而那正是被撤掉的理由。
+     */
+    check('三层各两枚，一枚不少', m.perRow.join(' ') === '2 2 2', m.perRow.join(' '));
   }
   await p8.close();
 }

@@ -740,6 +740,21 @@ jobs:
           done
           curl -sf http://localhost:8873/ > /dev/null
           node scripts/check-contact-thanks.mjs http://localhost:8873/
+
+      # 炸弹那一页：三行、一行两枚、一点就开（PR-20 / E17+E26）。要开浏览器——三档靠颜色
+      # 和徽记分开，而「颜色」和「点一下有没有反应」都只在跑起来之后才量得到。
+      #
+      # 最要紧的一条是**逐枚点进去**：只量「有六枚」的话，中间那一层回到「点一下才换成两
+      # 枚」那个老写法照样绿（那一版屏幕上也是三行，只是中间那行点下去不开局）。
+      - name: 炸弹那一页
+        run: |
+          node scripts/dev-server.mjs 8876 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8876/ > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8876/ > /dev/null
+          node scripts/check-bomb-panel.mjs http://localhost:8876/
       - name: 电脑端游戏页：五块牌的位置、大小、色
         run: |
           nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &

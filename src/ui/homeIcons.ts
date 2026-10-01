@@ -29,6 +29,16 @@ export const HOME_COLORS = {
   green: '#2E8B32',
   red: '#B0432A',
   amber: '#E9A53C',
+  /**
+   * 炸弹那一页三档各自的颜色（PR-20 / E17+E26，玩家 2026-10 给的三个值）。
+   *
+   * 从前三档借的是别处的颜色：基础用 amber、定时用 green、进阶用 purple——而 purple 是
+   * 「更多布局」那一族的颜色，于是进阶炸弹和布局卡在屏幕上长得像一家。现在三个值是这一页
+   * 自己的，不跟别人共用，改一个也不会牵动别处。
+   */
+  bombBasic: '#008703',
+  bombTimed: '#F7821B',
+  bombAdv: '#BE411A',
   white: '#FFFFFF',
   moreSquare: '#3AA45C',
   /* the "more layouts" boards, tinted per the design sheet */
@@ -289,49 +299,73 @@ function burstStar(cx: number, cy: number, R: number, fill: string): string {
   return `<polygon points="${pts.join(' ')}" fill="${fill}"/>`;
 }
 
-/** A single option chip inside the bomb panel: an orange piece for the basic
- *  tier, a green piece (the base-square icon's green) for the timed tier,
- *  a purple "+" piece for the advanced (more-layouts) tier. */
+/**
+ * 炸弹那一页上的一枚选项（PR-20 / E17+E26）。
+ *
+ * 三行，一行一档，每行两枚（方块 / 圆球）。**行与行只靠颜色和徽记分开，一个字都不写**
+ * （玩家定的「少文字」）：
+ *
+ *   基础  绿   #008703   没有徽记
+ *   定时  橙   #F7821B   徽记「100s」——数字从 `MODE_SECONDS` 来，不手写
+ *   进阶  砖红 #BE411A   徽记「+++」
+ *
+ * ⚠️ **徽记上那个秒数不许手写。** 从前那枚星爆徽记上写着 90s，而那一档实际跑的是
+ * `main.ts` 里另一个手写的 90——两个数各自独立，改一头忘一头，屏幕上就写着一个数跑着另一
+ * 个数。现在它和三个带钟的玩法共用 `engine/modeClock.ts` 那一个常量，门
+ * `check-mode-clock.mjs` 盯着它们别再分家。
+ *
+ * 进阶那一档从前画的是一个「+」。改成「+++」是玩家点的：一个加号和「更多布局」那张卡上
+ * 的加号长得一样，而这两件事不一样。
+ */
 export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced'): string {
   // 三档各画一套就放 bomb-basic-square.svg 这样的九个；三档共用一套形状就
   // 只放 bomb-square.svg 三个。两个都放时，带档次的那个赢。
   const drawn = customAny(`bomb-${tier}-${shape}`, `bomb-${shape}`);
   if (drawn) return drawn;
-  const fill = tier === 'basic' ? C.amber : tier === 'timed' ? C.green : C.purple;
+  const fill = tier === 'basic' ? C.bombBasic : tier === 'timed' ? C.bombTimed : C.bombAdv;
   const body =
     shape === 'square'
       ? `<rect x="22" y="22" width="56" height="56" rx="12" fill="${fill}"/>`
       : shape === 'triangle'
         ? `<path d="M50 16 A8 8 0 0 1 57 20 L88 74 A8 8 0 0 1 81 85 H19 A8 8 0 0 1 12 74 L43 20 A8 8 0 0 1 50 16 Z" fill="${fill}"/>`
         : `<circle cx="50" cy="50" r="29" fill="${fill}"/>`;
-  const plus =
-    tier === 'advanced'
-      ? `<path d="M50 ${shape === 'triangle' ? 46 : 38} V${shape === 'triangle' ? 70 : 62} M38 ${shape === 'triangle' ? 58 : 50} H62"
-           stroke="#fff" stroke-width="8" stroke-linecap="round"/>`
-      : '';
-  return svg(body + plus);
+  /*
+   * 徽记压在形状中间，不是角上。
+   *
+   * 角上那一版在缩图里（`.home-bomb-mini` 那张 23% 宽的小方格）只剩几个像素，等于没有；
+   * 而这一页**全靠**徽记分「定时」和「进阶」。压中间字就能跟着形状一起缩放。
+   *
+   * 「100s」比「+++」窄一档：四个字符要塞进 56px 宽的方块里，和三个加号同一个字号会出边。
+   */
+  const mark =
+    tier === 'timed'
+      ? `<text x="50" y="${shape === 'triangle' ? 64 : 58}" text-anchor="middle"
+           font-family="Karla, sans-serif" font-size="21" font-weight="700" fill="#fff"
+           letter-spacing="-0.5">${MODE_SECONDS}s</text>`
+      : tier === 'advanced'
+        ? `<text x="50" y="${shape === 'triangle' ? 66 : 60}" text-anchor="middle"
+             font-family="Karla, sans-serif" font-size="30" font-weight="700" fill="#fff"
+             letter-spacing="-1">+++</text>`
+        : '';
+  return svg(body + mark);
 }
 
-/** The timed-bomb tier's own marker — a wide burst with the label on top.
- *  Its own viewBox is wider than tall and it is allowed to overflow its row,
- *  so the star spills into the tiers above and below exactly as the sheet
- *  has it, instead of being boxed inside the middle bar.
+/*
+ * **那枚星爆时长徽记（ICON_BOMB_90S）撤了**（PR-20 / E17+E26）。
  *
- *  **这枚徽记上写的就是真正生效的时长**，从前不是：它手写着 90s，而那一档跑的是
- *  `main.ts` 里另一个手写的 90——两个数各自独立，改一头忘一头，屏幕上就写着一个数
- *  跑着另一个数。现在数字从 `engine/modeClock.ts` 那个常量来（三个带钟的玩法统一
- *  100 秒），门 `check-mode-clock.mjs` 盯着它们别再分家。
+ * 它是炸弹那一页中间那条宽的横杠：一枚画着「100s」的爆炸星，点一下才换成两枚棋盘。两件
+ * 事让它退场：
  *
- *  名字、CSS 类、可替换的素材文件名都还叫 `bomb-90s`：它们是**标识符**，不是给玩
- *  家看的字，而 style.css 里五条规则、check-mode-axis 那道门、素材 README 都按这个
- *  名字对齐。PR-20 会整块重做这一页，到那时一起改名，不在这儿拆成两半。 */
-export const ICON_BOMB_90S =
-  custom('bomb-90s') ??
-  '<svg viewBox="0 0 260 100" overflow="visible" aria-hidden="true">' +
-  burstStar(130, 50, 88, C.white) +
-  `<text x="130" y="64" text-anchor="middle" font-family="Karla, sans-serif" font-size="40"
-      font-weight="700" fill="#3A3733">${MODE_SECONDS}s</text>` +
-  '</svg>';
+ *   · **两次点击才开得了一局**，而上下两行都是一次。同一页上三行长得像、行为不一样，正
+ *     是玩家定的「不要让玩家出现意料之外的疏漏操作」那一条。
+ *   · 时长现在印在棋盘那两枚自己身上（`bombChip` 的徽记），所以也不缺那条信息。
+ *
+ * 它带走的那几样一起撤了：`style.css` 的 `.bomb-90s` / `.bomb-row--90s` /
+ * `.bomb-row--open` 五条规则、`scripts/icon-sheet.mjs` 那一行、`check-mode-axis.mjs` 里量
+ * 它位置的那几条断言。
+ *
+ * `burstStar()` 留着——「炸弹」那一族的主图标（ICON_BOMB）还在用它。
+ */
 
 // ---------------------------------------------------------------------------
 // more layouts — a brush-stroke plus

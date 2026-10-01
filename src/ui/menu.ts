@@ -16,7 +16,6 @@ import {
   ICON_BASE_CIRCLE,
   ICON_BASE_TRIANGLE,
   ICON_TIMED_COMBINED,
-  ICON_BOMB_90S,
   bombChip,
   ICON_LOCK,
   ICON_MULTIPLAYER,
@@ -449,29 +448,27 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     }
     panel.appendChild(basicRow);
 
-    // The timed tier has no shape of its own on the reference sheet — it is one
-    // wide bar between the other two rows. Tapping it swaps that bar for its
-    // own three shapes in place, so the tier stays reachable without adding a
-    // row the design doesn't have.
+    /*
+     * 定时那一档：**一行两枚，点一下就开**（PR-20 / E17+E26）。
+     *
+     * 从前这一行是一条宽的星爆徽记（ICON_BOMB_90S），点它才换成两枚棋盘。那就是**两次
+     * 点击**才开得了一局，而上下两行都是一次——同一页上三行长得像、行为不一样，正是玩
+     * 家定的「不要让玩家出现意料之外的疏漏操作」那一条。
+     *
+     * 时长现在印在棋盘那两枚自己身上（bombChip 的徽记「100s」），所以也不缺那条信息。
+     */
     const timedRow = document.createElement('div');
-    timedRow.className = 'bomb-row bomb-row--90s';
-    const badge = iconButton(ICON_BOMB_90S, s.bombTimedTitle, 'bomb-90s');
-    badge.addEventListener('click', (e) => {
-      e.stopPropagation();
-      timedRow.innerHTML = '';
-      timedRow.classList.add('bomb-row--open');
-      for (const shape of BOMB_SHAPES) {
-        const card = layout.base[shape];
-        const chip = iconButton(bombChip(shape, 'timed'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
-        chip.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          onLaunch?.();
-          handlers.onBombFor('timed', card.id, reopenKey);
-        });
-        timedRow.appendChild(chip);
-      }
-    });
-    timedRow.appendChild(badge);
+    timedRow.className = 'bomb-row';
+    for (const shape of BOMB_SHAPES) {
+      const card = layout.base[shape];
+      const chip = iconButton(bombChip(shape, 'timed'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onLaunch?.();
+        handlers.onBombFor('timed', card.id, reopenKey);
+      });
+      timedRow.appendChild(chip);
+    }
     panel.appendChild(timedRow);
 
     const advRow = document.createElement('div');

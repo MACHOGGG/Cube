@@ -2443,15 +2443,11 @@ button:hover { filter: brightness(1.05); }
   background: rgba(255, 255, 255, 0.14); border-radius: var(--r-sm); padding: 4% 5%;
 }
 .bomb-chip { max-width: none; width: 27%; flex: none; }
-/* The 90s burst is wider than its bar and deliberately spills into the tiers
-   above and below, the way the sheet draws it. */
-.bomb-90s { width: 82%; max-width: none; aspect-ratio: 2.6; flex: none; overflow: visible; }
-.bomb-90s > svg { overflow: visible; }
-.bomb-row--90s { overflow: visible; }
-.bomb-row--open .bomb-chip { width: 27%; }
+/* 这儿原先还有五条给那枚星爆时长徽记的规则（.bomb-90s / .bomb-row--90s /
+   .bomb-row--open）：它比自己那一行宽，故意溢出到上下两档里去。徽记撤了（PR-20，见
+   ui/homeIcons.ts 那段），三行现在长得一样、行为也一样，所以这几条一起撤。 */
 
-/* The blown-up copy in the centre picker: same proportions, bigger hit
-   targets, and enough room for the 90s row to open into three chips. */
+/* The blown-up copy in the centre picker: same proportions, bigger hit targets. */
 .bomb-panel--big { width: min(78vw, 360px); border-radius: var(--r-xl); }
 
 /* Desktop only: the panel is itself one card at the head of the bottom row,
@@ -2468,7 +2464,7 @@ button:hover { filter: brightness(1.05); }
    必（也不能）再写一遍宽度。 */
 /* Phone only: the collapsed panel is itself the button that opens the big one. */
 .home-bomb-mini { max-width: 252px; }
-.home-bomb-mini .bomb-chip, .home-bomb-mini .bomb-90s { pointer-events: none; }
+.home-bomb-mini .bomb-chip { pointer-events: none; }
 /*
  * 手机上那张**缩图**：三层等高，而且整个装得进那个方格。
  *
@@ -2510,15 +2506,6 @@ button:hover { filter: brightness(1.05); }
   width: 23%;
   height: auto;
   aspect-ratio: 1;
-}
-.home-bomb-mini .bomb-90s {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 77%;
-  height: auto;
-  aspect-ratio: 2.6;
 }
 
 /* Desktop only: every icon lifts a touch under the pointer, so a mouse gets
