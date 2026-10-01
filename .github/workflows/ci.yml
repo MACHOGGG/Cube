@@ -772,3 +772,17 @@ jobs:
           nohup node scripts/dev-server.mjs 8877 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8877/ && break; sleep 0.25; done
           node scripts/check-records-desktop.mjs http://localhost:8877/
+      # 教学期间那盏呼吸灯（PR-13 / E23）。要开浏览器，因为这一道管的是假 DOM 量不到的
+      # 两件事：类挂上之后那个元素**真的在动画**（要问 getComputedStyle，需要真 CSS），
+      # 以及**绝不拦操作**——它真的拖一枚棋子，拖完看盘面变没变。
+      #
+      # 灯做成一层盖在棋盘上的蒙版也能「亮」，而那一层会把手指吃掉：教学期间棋子拖不动，
+      # 一个错都不报。反证验过：给带子加上 pointer-events: auto + z-index，这一道当场红两条。
+      #
+      # ⚠️ 它**什么键都不预设**（除了语言）——预设 slides_tutorial_seen 会把被测的教学条
+      # 整个关掉（CLAUDE.md 那五个坑的第四个）。
+      - name: 教学的呼吸灯：指对地方，且不拦操作
+        run: |
+          nohup node scripts/dev-server.mjs 8878 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8878/ && break; sleep 0.25; done
+          node scripts/check-coach-aim.mjs http://localhost:8878/

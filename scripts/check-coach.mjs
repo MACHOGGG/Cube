@@ -258,6 +258,41 @@ check('词表里没有哪一步在等的词，都在这儿列着（不是错，�
   idle.length ? `${idle.join(',')} —— 只记进 hit，没有哪一步以它为条件` : '没有');
 
 // ===========================================================================
+// 五条文案：玩家的原话，一个字不许动（E23）
+// ===========================================================================
+//
+// 《侵蚀阶梯决策》§8「教学（玩家 2026-09-27 定稿五条）」逐字抄在下面。这五句是**玩家
+// 自己写的**，不是我们润色过的说法——E23 把这一条单独点了名（「五条玩家原话文案」）。
+//
+// 为什么要钉死：这几句读起来「不太像文案」（「尝试全部消除吧～」带着一个波浪号），下
+// 一个人很容易顺手改成更书面的说法，而那正是玩家不要的。改一个字，这儿当场红。
+// 要改先回决策文档改 §8，两边一起动。
+{
+  const SAID = [
+    '色块拼出得分图案会得分翻面，变成其他颜色的星星。',
+    '星星可以与色块一同再次拼出得分图案。',
+    '得分图案会随着游戏解锁而变化。',
+    '同色星星在整体的外边会得分并消除。',
+    '尝试全部消除吧～',
+  ];
+  // 第 4 条按棋盘换一句（i18n 的 TUTORIAL_RULE4），所以这儿用通稿那一份：
+  // tutorialRules 的第 4 条只有在知道 shape 的时候才替换，而 SAID 记的是底稿。
+  const base = tutorialRules('zhHans', 'circle');
+  check('（尺子）中文那一份正好五条', base.length === 5, `${base.length} 条`);
+  for (let i = 0; i < SAID.length; i++) {
+    // 第 4 条（下标 3）按棋盘换过，这儿只比另外四条逐字；它自己那四副棋盘的说法由
+    // check-howto 和 ruleArt 那两道门管。
+    if (i === 3) continue;
+    check(`第 ${i + 1} 条和玩家原话逐字一致`, base[i] === SAID[i], `「${base[i]}」`);
+  }
+  // 四种语言条数都要对得上：少一条的话，那一种语言的玩家会少学一条规矩，而且不报错。
+  for (const lang of ['en', 'fr', 'zhHans', 'zhHant']) {
+    const n = tutorialRules(lang, 'circle').length;
+    check(`${lang} 也是五条`, n === 5, `${n} 条`);
+  }
+}
+
+// ===========================================================================
 // 跑起来那一半
 // ===========================================================================
 const LANG = 'zhHans';
@@ -287,8 +322,12 @@ function mount(plan, storeKey, taught = false) {
   const host = makeEl('div');
   host.parent = stage;
   stage.childNodes.push(host);
-  return { host, bar: mountCoachBar(host, { lang: LANG, shape: SHAPE, plan }) };
+  return { host, stage, bar: mountCoachBar(host, { lang: LANG, shape: SHAPE, plan }) };
 }
+
+/** 这一刻呼吸灯打在哪样东西上（E23）。 */
+const aimNow = (stage) =>
+  stage._cls.has('coach-aim--edge') ? 'edge' : stage._cls.has('coach-aim') ? 'pattern' : null;
 
 // 这几个数要和 coachBar.ts 里的常量对得上；对不上就是那边改了，这里要跟。
 const num = (name) => Number((src.match(new RegExp(`const ${name} = (\\d+)`)) || [])[1]);
@@ -300,7 +339,7 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
 // ① 头一局：整条线靠信号走完，一次保底都不用
 // ---------------------------------------------------------------------------
 {
-  const { host, bar } = mount('first', 'gate_first');
+  const { host, stage, bar } = mount('first', 'gate_first');
   const segs = host.querySelector('.coach-prog').children.length;
   check('头一局画得出进度条（一步一格）', segs >= 4, `${segs} 格`);
 
@@ -317,7 +356,7 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
     if (!step) break;
     const by = step[2];
     const times = Number(step[3] || 1);
-    path.push({ at, rules, by, times });
+    path.push({ at, rules, by, times, aim: aimNow(stage) });
     if (!by) break; // 没有可做的事的那一步（最后一步就是这样）
     const before = now;
     for (let k = 0; k < times; k++) bar.signal(by);
@@ -338,7 +377,37 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
     path.every((p) => !p.by || vocab.includes(p.by)),
     path.map((p) => `[${p.rules.join('+')}]${p.by ? '←' + p.by + (p.times > 1 ? '×' + p.times : '') : '（摆着）'}`).join(' '));
   check('第 3 条真的做到了，记了账（下一局不用补讲）', erosionTaught() === true);
+
+  /**
+   * **呼吸灯指的是这一步讲的那样东西**（E23「呼吸灯自适应指引」）。
+   *
+   * 一张表，逐步对：讲「得分图案」（下标 0–2）点 HUD 那块《得分图案》（`coach-aim`）；
+   * 讲「整体的外边」（下标 3）点托盘上那条外边指引带子（`coach-aim--edge`）；最后那条
+   * 「尝试全部消除吧～」没有特定的那样东西，不点。
+   *
+   * 两条尺子立在前面，免得这一条变成空绿：三种情形**每一种都真的走到过**。只对
+   * 「没有哪一步点错」的话，一条灯都不点的实现照样全绿。
+   */
+  const want = (rules) => (rules.some((r) => r <= 2) ? 'pattern' : rules.includes(3) ? 'edge' : null);
+  const kinds = new Set(path.map((p) => want(p.rules)));
+  check('（尺子）三种情形都走到过：点《得分图案》/ 点外边带子 / 不点',
+    kinds.has('pattern') && kinds.has('edge') && kinds.has(null),
+    [...kinds].map((k) => k ?? '不点').join('、'));
+  const wrong = path.filter((p) => p.aim !== want(p.rules));
+  check('每一步的呼吸灯都打在它讲的那样东西上',
+    wrong.length === 0,
+    wrong.length
+      ? wrong.map((p) => `第 ${p.at + 1} 步[${p.rules.join('+')}] 该 ${want(p.rules) ?? '不点'}、实际 ${p.aim ?? '不点'}`).join('；')
+      : path.map((p) => `[${p.rules.join('+')}]→${p.aim ?? '不点'}`).join(' '));
+  // 两支灯互斥：同时亮着的话，屏幕上两处一起呼吸，指引就不叫指引了。
+  check('两支灯任何时候最多亮一支',
+    !path.some((p) => p.aim === 'edge' && p.aim === 'pattern'),
+    '');
   bar.destroy();
+  // 条子拆掉之后灯要全灭——不灭的话这一局结束了棋盘还在那儿一闪一闪。
+  check('destroy 之后两支灯都灭了',
+    !stage._cls.has('coach-aim') && !stage._cls.has('coach-aim--edge'),
+    [...stage._cls].join(' '));
 }
 
 // ---------------------------------------------------------------------------

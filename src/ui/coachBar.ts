@@ -18,9 +18,10 @@
  * 最后两条同理——都是「这一局怎么算完」，一起摆完事。并了之后条子高一截，所
  * 以这两步整体压扁一点（.coach-bar--pair），别把棋盘挤小。
  *
- * 这一路还会让棋盘上方那排得分目标一起慢慢发光（.coach-aim，样式在
- * style.css 的 glow-pulse）：第 2 条说的「同色凑成得分图案」是哪几个图案，
- * 答案本来就挂在他头顶上，只是没人指过。
+ * 这一路还会点一盏呼吸灯，**跟着这一步讲的是什么挪地方**（E23「呼吸灯自适应指
+ * 引」，样式在 style.css 的 glow-pulse）：讲「得分图案」就点亮他头顶上那块
+ * 《得分图案》，讲「整体的外边」就点亮托盘上那条外边指引带子，最后那条没有特定的
+ * 那样东西就不点。灯只动 `filter`，一个像素的热区都不加——见下面 aimOf 那一段。
  *
  * **二、头一回玩方块（plan: 'second'）**——他刚打完那一局小球，六条已经听过
  * 一遍了，所以这块条子先不出声，等他自己打出三次得分再开口，讲三步：
@@ -294,15 +295,43 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   frame(host, segs, rows);
 
   /**
-   * 讲到第 2、3 条的时候，棋盘上方那排得分目标跟着微微发光。
+   * **呼吸灯指哪儿，跟着这一步讲的是什么走**（E23「呼吸灯自适应指引」）。
    *
-   * 这两条说的都是「同色凑成得分图案」——是哪几个图案，答案本来就挂在他头顶
-   * 上，只是从来没人指过。讲完这两条就把光撤了：再亮下去就成了噪音（玩家
-   * 定的：「在播放到第二条和第三条教学的时候，上方的得分目标图案微微闪烁」）。
+   * 玩家 2026-09 定的那一条照旧：「在播放到第二条和第三条教学的时候，上方的得分目标
+   * 图案微微闪烁」——这两条说的都是「同色凑成得分图案」，是哪几个图案，答案本来就挂
+   * 在他头顶上，只是从来没人指过。
+   *
+   * 这一轮把它从「只有那两条、只有那一处」推开成一张表：**每一条都把灯打在它句子里
+   * 那样东西上**。
+   *
+   *   第 1–3 条（下标 0、1、2）  「得分图案」是这三句的主语  → HUD 那块《得分图案》
+   *   第 4 条  （下标 3）        「整体的外边」画的就是它    → 托盘上那条外边指引带子
+   *   第 5 条  （下标 4）        「尝试全部消除吧～」没有特定的那样东西 → 不点灯
+   *
+   * 两条规矩，都来自玩家的话：
+   *
+   *   · **讲完就撤。** 「再亮下去就成了噪音」——所以这是 toggle，不是 add。
+   *   · **指的那样东西不在，就不点灯**，不另找一个凑数。方块 36 没有外边指引带子
+   *     （它是任意整行整列都能消，没有「最外边」这回事，见 ui/edgeBand.ts），而第 4
+   *     条在方块那一局讲的本来也不是外边（i18n 的 TUTORIAL_RULE4 按图形换过一句）。
+   *     做法上不用判断棋盘：类挂在舞台上，CSS 那条选择器只认 `.edge-band`——带子不在
+   *     就什么都没亮，自动是对的。
+   *
+   * ⚠️ **灯只能是 filter，不能是盖上去的一层。** 这是 E23 另一半「绝不拦操作」的实现
+   * 面：`glow-pulse` 动的是 `filter: drop-shadow`，画在元素自己身上，一个像素的热区都
+   * 不增加；外边指引那条带子本来就是 `pointer-events: none`（style.css）。往棋盘上盖
+   * 一层「指引蒙版」的做法看着更直观，代价是教学期间手指点到的是蒙版——那正是玩家点
+   * 名不要的事。门 check-coach-aim 真拖一下棋子来证明这件事。
    */
   const stage = host.closest('.app--game');
-  /** 这一步里有没有第 2 条或第 3 条（下标 1、2）。 */
-  const aims = (step: Step) => step.rules.some((r) => r === 1 || r === 2);
+  /** 这一步该把灯打在哪样东西上。一步摆两条时，取头一条有指向的那一条。 */
+  const aimOf = (step: Step): 'pattern' | 'edge' | null => {
+    for (const r of step.rules) {
+      if (r <= 2) return 'pattern';
+      if (r === 3) return 'edge';
+    }
+    return null;
+  };
 
   const progEl = host.querySelector<HTMLElement>('.coach-prog');
   const rowEls = Array.from(host.querySelectorAll<HTMLElement>('.coach-row'));
@@ -358,7 +387,11 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     // 读，而现在这一条才是他手上要做的事——留在过去等于漏掉一条。
     peeking = false;
     paintStep(i);
-    stage?.classList.toggle('coach-aim', aims(steps[i]));
+    const aim = aimOf(steps[i]);
+    // `coach-aim` 这一个类名留着不动：style.css 里那条「HUD 那块《得分图案》发光」认的
+    // 就是它，而那是玩家逐字定过的行为。新来的 `--edge` 是另一支，各点各的。
+    stage?.classList.toggle('coach-aim', aim === 'pattern');
+    stage?.classList.toggle('coach-aim--edge', aim === 'edge');
     const cells = progEl?.children ?? [];
     for (let k = 0; k < cells.length; k++) cells[k].classList.toggle('on', k <= i);
     paintPeek();
@@ -504,6 +537,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       if (peekTimer) window.clearTimeout(peekTimer);
       peekTimer = 0;
       stage?.classList.remove('coach-aim');
+      stage?.classList.remove('coach-aim--edge');
       host.hidden = true;
       host.innerHTML = '';
     },

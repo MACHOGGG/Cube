@@ -2436,7 +2436,8 @@ button:hover { filter: brightness(1.05); }
      · 结算页的《分享》和《首页》（ui/scoreboard.ts） */
 .glow-pulse,
 .home-icon-btn--glow .home-icon-art > svg,
-.app--game.coach-aim .hud-block--pattern {
+.app--game.coach-aim .hud-block--pattern,
+.app--game.coach-aim--edge .edge-band {
   animation: glow-pulse 2.2s ease-in-out infinite;
   /* 见上面那段：各占一块画布，别让 Safari 把挨着的两张并成一块方框。 */
   will-change: filter;
@@ -2444,11 +2445,31 @@ button:hover { filter: brightness(1.05); }
 @media (prefers-reduced-motion: reduce) {
   .glow-pulse,
   .home-icon-btn--glow .home-icon-art > svg,
-  .app--game.coach-aim .hud-block--pattern {
+  .app--game.coach-aim .hud-block--pattern,
+  .app--game.coach-aim--edge .edge-band {
     animation: none;
     filter: drop-shadow(0 0 7px var(--glow));
   }
 }
+/*
+ * 第 4 条（「同色星星在整体的外边会得分并消除」）点的是**托盘上那条外边指引带子**
+ * ——句子里的「整体的外边」画的就是它（E23 的「呼吸灯自适应指引」）。
+ *
+ * 用 filter 不另画一层：带子在棋子**之下**（ui/edgeBand.ts），而 drop-shadow 的光晕
+ * 从带子两侧溢出来，棋子压不住——所以一个像素的热区都不加也看得见。带子本身
+ * `pointer-events: none`（上面 .edge-band 那一条），这一条于是满足 E23 的另一半
+ * 「绝不拦操作」：教学期间手指落在棋盘上，碰到的仍然是棋子。
+ *
+ * 光色就地换一支：带子自己「只动明度不动色相」（见 .edge-band 那一大段），而
+ * --glow 在浅色主题下偏红——那会让人以为这条带子忽然有了颜色语义。换成《色卡》里
+ * 那支奶油（--card-cream），和游戏页那块暗托盘（--play-panel: #3D3128）是同一组配色
+ * 里的亮色，看着只是「这一圈亮了一下」。它是玩家定的固用色，不随主题翻转，而游戏页
+ * 的托盘本来也是两种主题同一个暗色——两边对得上。
+ *
+ * 方块 36 没有这条带子（它任意整行整列都能消，没有「最外边」这回事），这条选择器于是
+ * 一个元素都匹配不到——不点灯，自动是对的，不用在 JS 那头判断棋盘。
+ */
+.app--game.coach-aim--edge .edge-band { --glow: var(--card-cream); }
 /* ---- 头一回打开时的那道软锁（ui/menu.ts 的 armFirstPlayLock）----------
    按到方块和小球以外的卡：那两张抖一下、光更亮一档，别的什么也不发生。不写
    字——两张亮着的卡本身就是答案（玩家定的「少文字」）。
