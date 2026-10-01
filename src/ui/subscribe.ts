@@ -520,7 +520,25 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
    * 三行照旧写着「敬请期待」。
    */
   const PERKS_SHOWN = 4;
-  const priceRows = plans()
+  /**
+   * **网页端停售**（《侵蚀阶梯》E11 / PR-12，玩家 2026-10 在 Creem 后台把两个商品
+   * archive 掉了，在续的订阅也一并取消了）。
+   *
+   * 所以这一窗在网页端不再摆价钱、也不再有任何一条通向结账的路。不是「禁用那两颗
+   * 键」——留着一颗按不动的价钱键，玩家只会一直去按它，那正是「意料之外的界面」。
+   *
+   * 只收网页这一端：商店渠道（App Store / Google Play）那一套走的是另一条路
+   * （`iap.ts`），而且还没上线，这一轮不碰它。判法和全站一致，问 `isStoreChannel()`。
+   *
+   * ⚠️ 商品归档之后，结账接口拿不到商品会答 404 → `/api/checkout` 转成 502 → 屏幕上
+   * 写「服务器出了点问题」。把入口撤掉之后玩家根本走不到那一步，可**后台那三个
+   * `CREEM_*` 环境变量也该清掉**：清了之后 `configured()` 为假，接口答的是 503
+   * 「订阅尚未开放」，而不是一句听着像我们服务器坏了的话。
+   */
+  const webClosed = !isStoreChannel();
+  const priceRows = webClosed
+    ? ''
+    : plans()
     .map(
       (plan) => `
       <button class="plan-row" data-period="${plan.period}">
@@ -534,8 +552,8 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
     'genius-modal',
     `
     <h2>${s.subscribeTitle}</h2>
-    <p class="tag-line">${s.subscribeIntro}</p>
-    <div class="plan-list">${priceRows}</div>
+    <p class="tag-line">${webClosed ? s.subscribeClosed : s.subscribeIntro}</p>
+    ${priceRows ? `<div class="plan-list">${priceRows}</div>` : ''}
     ${
       // The store has something worth saying here — no sign-up, never leaves
       // the app. Paying by card no longer does: what used to sit here said
@@ -544,10 +562,15 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
         ? `<p class="auth-hint">${s.storeNoAccountHint.replace('{store}', store)}</p>`
         : ''
     }
-    <!-- 钱是谁收的，要在他按下那一行价钱之前就说清楚——按下去就直接去结账
-         页了，这儿是最后一处还来得及说的地方。三个渠道各有各的收款方，名字
-         由 payeeName() 给（网页 Creem，应用里 App Store / Google Play）。 -->
-    <p class="auth-hint">${s.merchantNote.replace('{store}', store)}</p>
+    ${
+      // 钱是谁收的，要在他按下那一行价钱之前就说清楚——按下去就直接去结账页了，
+      // 这儿是最后一处还来得及说的地方。三个渠道各有各的收款方，名字由 payeeName()
+      // 给（网页 Creem，应用里 App Store / Google Play）。
+      //
+      // 停售之后这一句整条撤掉：没有在收的款，却摆着一句「{store} 以记录商户身份
+      // 收款」，是这一页上唯一还在说「这儿能付钱」的话。
+      webClosed ? '' : `<p class="auth-hint">${s.merchantNote.replace('{store}', store)}</p>`
+    }
     ${paywallLegalLinks(lang)}
     <button class="link-btn" id="geniusRedeem">${s.haveCode}</button>
     <p class="auth-msg" id="geniusMsg" role="status"></p>

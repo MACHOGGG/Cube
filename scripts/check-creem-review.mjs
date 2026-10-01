@@ -167,21 +167,44 @@ const openProfile = async (page) => {
   });
   await page.waitForSelector('.genius-modal', { timeout: 10000 });
 
+  /*
+   * ⚠️ 这两条 2026-10 **翻了面**。
+   *
+   * 原先钉的是「付款屏上是真价钱，不是『敬请期待』」和「按下价钱之前就说清了钱是谁
+   * 收的」——两条都是收单方审核清单上的要求，在**卖订阅**的时候一字不差地成立。玩家
+   * 2026-10 在 Creem 后台把两个商品 archive 了、在续的订阅也一并取消（E11 / PR-12），
+   * 于是这两条反过来成了「这一屏在说假话」的证据：摆着价钱却按不动，摆着「Creem 以
+   * 记录商户身份收款」却没有在收的款。
+   *
+   * 所以现在钉的是停售之后的真相：网页端**一个价钱都不许有**、收款方那句话**不许
+   * 在**，而且那句「订阅已经停止」要真的印在屏幕上。
+   *
+   * 商店渠道（App Store / Google Play）走的是另一条路，这一轮没动，也还没上线——
+   * 这道门跑的是网页端，判的就是网页端。
+   */
   const prices = await page.$$eval('.plan-row .plan-price', (els) => els.map((e) => e.textContent.trim()));
-  check('付款屏上是真价钱，不是「敬请期待」', prices.length >= 2 && prices.every((p) => /\d/.test(p)), prices.join(' / '));
+  check('网页端停售：一个价钱都不摆（不是摆一个按不动的）', prices.length === 0, prices.join(' / ') || '（没有）');
+  const planRows = await page.$$eval('.plan-row', (els) => els.length);
+  check('连那两行价钱的按钮本身也不在', planRows === 0, String(planRows));
 
   const hints = await page.$$eval('.genius-modal .auth-hint', (els) => els.map((e) => e.textContent.trim()));
   check(
-    '按下价钱之前就说清了钱是谁收的',
-    hints.some((h) => h.includes('Creem')),
+    '收款方那句话也撤了（没有在收的款，就不许说谁在收）',
+    !hints.some((h) => h.includes('Creem')),
     hints.join(' | ') || '（一句都没有）',
   );
+
+  // 尺子：这一屏真的开出来了、而且真的说了「停了」。少了这一条，上面三句「什么都没
+  // 有」在**窗根本没打开**的时候也全是真的——那是这个仓库最常见的那种假绿。
+  const tag = await page.$eval('.genius-modal .tag-line', (e) => e.textContent.trim()).catch(() => '');
+  check('（尺子）这一屏开着，而且开头那句说的是「订阅已经停止」',
+    /停止|closed|fermé/i.test(tag), tag || '（一个字都没有）');
 
   const links = await page.$$eval('.genius-legal a', (as) =>
     as.map((a) => ({ href: a.getAttribute('href'), target: a.getAttribute('target'), w: a.getBoundingClientRect().width })),
   );
   check(
-    '价格 / 退款 / 条款三份就摆在价钱底下',
+    '价格 / 退款 / 条款三份照旧摆在这一屏上（停售不等于撤掉规矩）',
     BEFORE_PAYING.every((p) => links.some((l) => l.href === p)),
     links.map((l) => l.href).join(' '),
   );

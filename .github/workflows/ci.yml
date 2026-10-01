@@ -327,6 +327,18 @@ jobs:
           npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs
           npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs
           node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs
+      # 法务文本有没有在说「订阅还在卖」。CLAUDE.md：「支付审核把『网站陈述与实际不
+      # 符』直接归为 false information，比缺一份文档严重。」这件事两头都咬过——先是
+      # 「订阅开放后……」在早就开卖之后成了假话（Creem 审核原样引了回来），这一轮是反
+      # 过来：2026-10 停售了，四种语言的《价格与订阅》还写着「目前是 1.99 美元／月」
+      # 「每期结束会自动续期扣款」。四语四份文档，从前一道门都没有。
+      #
+      # 这道门跟着状态翻面（脚本里那个 SELLING）：重开订阅时把它改成 true，它钉的就是
+      # 反过来那一套——**而不是把这道门删掉**。
+      - name: 法务文本：现在到底卖不卖
+        run: |
+          npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
+          node scripts/check-legal-sale.mjs /tmp/legal.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白

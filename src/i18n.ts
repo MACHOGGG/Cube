@@ -177,6 +177,14 @@ export interface I18nStrings {
   /** Title of the window the 成为 Slides 天才 button opens. */
   subscribeTitle: string;
   subscribeIntro: string;
+  /**
+   * 停售之后那一窗开头那句话（《侵蚀阶梯》PR-12 / E11，2026-10）。
+   *
+   * 和 `notOnSaleYet` 不是一回事：那一句说的是「还没开」（结账接口答 503 时用），
+   * 这一句说的是「开过，现在停了」。两句话指向两种完全不同的状态，共用一句会在其中
+   * 一种情形下变成假话——而这一窗上的每一句都要和《价格与订阅》对得上。
+   */
+  subscribeClosed: string;
   /** The two billing periods, as a price is labelled: "每月" / "每年". */
   planMonthly: string;
   planYearly: string;
@@ -711,6 +719,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusHostRooms: 'Put up a room and race your friends online',
     subscribeTitle: 'Become a Slides Genius',
     subscribeIntro: 'More unlocked right away, more added now and then, cancel any time.',
+    subscribeClosed: 'The subscription is closed — it is no longer sold, and the ones that were running have been cancelled.',
     planMonthly: 'per month',
     planYearly: 'per year',
     subscribeBtn: 'Subscribe',
@@ -1046,6 +1055,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusHostRooms: 'Montez une salle et faites la course en ligne',
     subscribeTitle: 'Devenir un Slides Génie',
     subscribeIntro: 'Plus de jeux tout de suite, d’autres de temps en temps, résiliable à tout moment.',
+    subscribeClosed: 'L’abonnement est fermé : il n’est plus vendu, et ceux qui étaient en cours ont été résiliés.',
     planMonthly: 'par mois',
     planYearly: 'par an',
     subscribeBtn: 'S’abonner',
@@ -1381,6 +1391,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSoonTitle: '敬請期待',
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
     subscribeIntro: '立刻解鎖更多，不定時更新，隨時取消',
+    subscribeClosed: '訂閱已經停止：不再出售，此前在續的也已經一併取消。',
     planMonthly: '每月',
     planYearly: '每年',
     subscribeBtn: '訂閱',
@@ -1716,6 +1727,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSoonTitle: '敬请期待',
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
     subscribeIntro: '立刻解锁更多，不定时更新，随时取消',
+    subscribeClosed: '订阅已经停止：不再出售，此前在续的也已经一并取消。',
     planMonthly: '每月',
     planYearly: '每年',
     subscribeBtn: '订阅',

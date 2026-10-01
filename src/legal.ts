@@ -22,7 +22,7 @@ import { isStoreChannel, payeeName } from './engine/channel';
  *  （「Use a branded support email … not a generic address」）。信箱本身是
  *  ImprovMX 转发到人在读的那个邮箱，域名这半边才是这里要的。 */
 export const CONTACT_EMAIL = 'support@play-slides.com';
-export const LEGAL_UPDATED = '2026-09-01';
+export const LEGAL_UPDATED = '2026-10-01';
 
 export interface LegalItem {
   term: string;
@@ -99,15 +99,15 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   zhHans: {
     pricing: {
       title: '价格与订阅',
-      intro: 'Slides 的全部玩法都免费。「Slides 天才」是可选订阅，用来解锁额外内容。以下是它的条款。',
+      intro: 'Slides 的全部玩法都免费。「Slides 天才」是解锁额外内容的那一档。订阅已于 2026 年 10 月停止销售：不再接受新的订阅，此前在续的也已经一并取消。下面写明现在是什么状态，以及此前订阅过的人该怎么办。',
       items: [
         { term: '免费的部分', body: '方块、圆球两种基础玩法，以及计时挑战、炸弹挑战、多人游玩，全部免费，无广告，不需要注册。特殊布局里的菱形方块和六边圆球也是免费的；另外两副（七色圆球、大三角）属于订阅，在主菜单上挂着锁，点开看得到是什么。' },
-        { term: '价格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最终金额以结账页上显示的为准——它可能因你所在地区的定价和当地税费而不同。价格会调整，调整只影响之后的新订阅；已经在续的那一档变动前会先通知你。', only: 'web' },
+        { term: '价格', body: '现在不出售。停售之前是 1.99 美元／月、4.99 美元／年；结账入口已经撤下。此前已经付过的款，按《退款政策》处理。', only: 'web' },
         { term: '订阅周期', body: '按你选的周期计费：月订阅每 1 个月一期，年订阅每 12 个月一期，都从付款当天起算。' },
-        { term: '自动续费', body: '每期结束时会自动续期并按当时的价格扣款，直到你取消为止。续期提醒和收据由收款方 Creem 发出。', only: 'web' },
-        { term: '怎么取消', body: '随时可以在「订阅状态」里打开管理页面取消，取消后不再产生新的扣款。已经付过费的当期会用到期末，不会立刻中断。', only: 'web' },
+        { term: '自动续费', body: '已经停止。此前在续的订阅我们已经一并取消，不会再产生任何新的扣款。', only: 'web' },
+        { term: '还要不要取消', body: '不用了——此前在续的订阅已经由我们一并取消，不会再有新的扣款。已经付过费的当期用到期末，不会立刻中断。', only: 'web' },
         { term: '退款', body: '见《退款政策》：首次订阅 14 天内可以无理由全额退款。', only: 'web' },
-        { term: '谁在收款', body: '由 Creem 作为记录商户（Merchant of Record）销售、收款并开具收据。我们不接触、也不保存你的银行卡信息。', only: 'web' },
+        { term: '谁收的款', body: '停售之前由 Creem 作为记录商户（Merchant of Record）销售、收款并开具收据。我们不接触、也不保存你的银行卡信息。现在没有在收的款。', only: 'web' },
       ],
     },
     terms: {
@@ -115,7 +115,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: `这些条款适用于 play-slides.com 与 Slides 的相关应用。使用即表示你接受这些条款。最后更新：${LEGAL_UPDATED}。`,
       items: [
         { term: '谁在运营', body: `本站由一位居住在法国的独立开发者以个人身份运营，没有注册公司。联系邮箱：${E}。` },
-        { term: '服务内容', body: 'Slides 是一款滑动益智游戏。基础玩法免费提供，「Slides 天才」是可选订阅。' },
+        { term: '服务内容', body: 'Slides 是一款滑动益智游戏。基础玩法免费提供。「Slides 天才」此前是可选订阅，已于 2026 年 10 月停止销售（见《价格与订阅》）。' },
         { term: '账号', body: '基础玩法不需要账号。用银行卡在网页版订阅的，付完款要为这个邮箱设一组 6 位密码——邮箱加密码就是你的账号，换台设备用这两样取回订阅。' , only: 'web' },
         { term: '内部码开通的账号', body: '用内部码开通时会留下邮箱和一组 6 位密码；刷卡订阅之后设的密码也是一样，两条路留下的是同一种账号（存了什么见隐私政策）。密码请自己记好——被锁住的是这个账号，不是那张码：密码连续输错 4 次，账号锁 4 小时；错到 6 次就一直锁着，要通过邮箱验证才能重新开启并设置新密码。' },
         { term: '年龄', body: '本服务面向 13 岁及以上用户。未满所在地法定年龄的，请在监护人同意下使用。' },
@@ -176,15 +176,15 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   zhHant: {
     pricing: {
       title: '價格與訂閱',
-      intro: 'Slides 的全部玩法都免費。「Slides 天才」是選配訂閱，用來解鎖額外內容。以下是它的條款。',
+      intro: 'Slides 的全部玩法都免費。「Slides 天才」是解鎖額外內容的那一檔。訂閱已於 2026 年 10 月停止銷售：不再接受新的訂閱，此前在續的也已經一併取消。下面寫明現在是什麼狀態，以及此前訂閱過的人該怎麼辦。',
       items: [
         { term: '免費的部分', body: '方塊、圓球兩種基礎玩法，以及計時挑戰、炸彈挑戰、多人遊玩，全部免費，無廣告，不需要註冊。特殊版面裡的菱形方塊和六邊圓球也是免費的；另外兩副（七色圓球、大三角）屬於訂閱，在主選單上掛著鎖，點開看得到是什麼。' },
-        { term: '價格', body: '目前是 1.99 美元／月，或 4.99 美元／年。最終金額以結帳頁上顯示的為準——它可能因你所在地區的定價和當地稅費而不同。價格會調整，調整只影響之後的新訂閱；已經在續的那一檔變動前會先通知你。', only: 'web' },
+        { term: '價格', body: '現在不出售。停售之前是 1.99 美元／月、4.99 美元／年；結帳入口已經撤下。此前已經付過的款，按《退款政策》處理。', only: 'web' },
         { term: '訂閱週期', body: '按你選的週期計費：月訂閱每 1 個月一期，年訂閱每 12 個月一期，都從付款當天起算。' },
-        { term: '自動續費', body: '每期結束時會自動續期並按當時的價格扣款，直到你取消為止。續期提醒和收據由收款方 Creem 寄出。', only: 'web' },
-        { term: '怎麼取消', body: '隨時可以在「訂閱狀態」裡打開管理頁面取消，取消後不再產生新的扣款。已經付過費的當期會用到期末，不會立刻中斷。', only: 'web' },
+        { term: '自動續費', body: '已經停止。此前在續的訂閱我們已經一併取消，不會再產生任何新的扣款。', only: 'web' },
+        { term: '還要不要取消', body: '不用了——此前在續的訂閱已經由我們一併取消，不會再有新的扣款。已經付過費的當期用到期末，不會立刻中斷。', only: 'web' },
         { term: '退款', body: '見《退款政策》：首次訂閱 14 天內可以無理由全額退款。', only: 'web' },
-        { term: '誰在收款', body: '由 Creem 作為記錄商戶（Merchant of Record）銷售、收款並開立收據。我們不接觸、也不保存你的信用卡資訊。', only: 'web' },
+        { term: '誰收的款', body: '停售之前由 Creem 作為記錄商戶（Merchant of Record）銷售、收款並開立收據。我們不接觸、也不保存你的信用卡資訊。現在沒有在收的款。', only: 'web' },
       ],
     },
     terms: {
@@ -192,7 +192,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: `這些條款適用於 play-slides.com 與 Slides 的相關應用。使用即表示你接受這些條款。最後更新：${LEGAL_UPDATED}。`,
       items: [
         { term: '誰在營運', body: `本站由一位居住在法國的獨立開發者以個人身分營運，沒有註冊公司。聯絡信箱：${E}。` },
-        { term: '服務內容', body: 'Slides 是一款滑動益智遊戲。基礎玩法免費提供，「Slides 天才」是選配訂閱。' },
+        { term: '服務內容', body: 'Slides 是一款滑動益智遊戲。基礎玩法免費提供。「Slides 天才」此前是選配訂閱，已於 2026 年 10 月停止銷售（見《價格與訂閱》）。' },
         { term: '帳號', body: '基礎玩法不需要帳號。用信用卡在網頁版訂閱的，付完款要為這個信箱設一組 6 位密碼——信箱加密碼就是你的帳號，換台裝置用這兩樣取回訂閱。', only: 'web' },
         { term: '內部碼開通的帳號', body: '用內部碼開通時會留下信箱和一組 6 位密碼；刷卡訂閱之後設的密碼也是一樣，兩條路留下的是同一種帳號（存了什麼見隱私政策）。密碼請自己記好——被鎖住的是這個帳號，不是那張碼：密碼連續輸錯 4 次，帳號鎖 4 小時；錯到 6 次就一直鎖著，要透過電子郵件驗證才能重新開啟並設定新密碼。' },
         { term: '年齡', body: '本服務面向 13 歲以上使用者。未滿所在地法定年齡的，請在監護人同意下使用。' },
@@ -253,15 +253,15 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   en: {
     pricing: {
       title: 'Pricing & subscription',
-      intro: 'Every game mode in Slides is free. "Slides Genius" is an optional subscription that unlocks extra content. These are the terms it is sold on.',
+      intro: 'Every game mode in Slides is free. "Slides Genius" is the tier that unlocks extra content. The subscription was withdrawn from sale in October 2026: no new subscriptions are taken, and the ones that were running have been cancelled as well. Below is where that leaves things, and what it means if you subscribed before.',
       items: [
         { term: "What's free", body: 'Both base games — squares and balls — plus the timed challenge, the bomb challenge and multiplayer. No ads, no account needed. Among the extra layouts, diamond squares and hex balls are free as well; the remaining two (seven-colour balls and the big triangle) belong to the subscription and carry a lock on the home screen.' },
-        { term: 'Price', body: 'Currently US$1.99 per month, or US$4.99 per year. The final amount is the one shown at checkout — it can differ with the pricing for your region and with local tax. Prices change; a change applies to new subscriptions only, and you are told before the rate on a running subscription moves.', only: 'web' },
+        { term: 'Price', body: 'Not on sale. Until it was withdrawn it was US$1.99 per month or US$4.99 per year; the checkout has been taken down. Anything already paid is handled under the refund policy.', only: 'web' },
         { term: 'Billing period', body: 'You are billed for the period you pick: a monthly subscription renews every 1 month, a yearly one every 12 months, counted from the day you pay.' },
-        { term: 'Automatic renewal', body: 'The subscription renews automatically at the end of each period and is charged at the price current at that time, until you cancel. Creem, which takes the payment, sends the renewal notices and the receipts.', only: 'web' },
-        { term: 'Cancelling', body: 'Cancel whenever you like, from the manage page behind Subscription: no further charges are made. The period you have already paid for runs to its end — nothing is cut off early.', only: 'web' },
+        { term: 'Automatic renewal', body: 'Stopped. The subscriptions that were still running have been cancelled by us, so no further charge will be made.', only: 'web' },
+        { term: 'Do you still need to cancel', body: 'No — the subscriptions that were still running have already been cancelled by us, so nothing more will be charged. A period you have already paid for runs to its end; nothing is cut off early.', only: 'web' },
         { term: 'Refunds', body: 'See the refund policy: a full, no-questions refund within 14 days of your first purchase.', only: 'web' },
-        { term: 'Who takes the payment', body: 'Creem sells it as merchant of record and handles payment and receipts. We never see or store your card details.', only: 'web' },
+        { term: 'Who took the payment', body: 'Until it was withdrawn, Creem sold it as merchant of record and handled payment and receipts. We never see or store your card details. Nothing is being charged now.', only: 'web' },
       ],
     },
     terms: {
@@ -269,7 +269,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: `These terms cover play-slides.com and the Slides apps. Using the service means you accept them. Last updated ${LEGAL_UPDATED}.`,
       items: [
         { term: 'Who runs this', body: `Slides is run by an independent developer based in France, acting as an individual — there is no registered company. Contact: ${E}.` },
-        { term: 'What the service is', body: 'Slides is a sliding puzzle game. The base games are free; "Slides Genius" is an optional subscription.' },
+        { term: 'What the service is', body: 'Slides is a sliding puzzle game. The base games are free. "Slides Genius" was an optional subscription and was withdrawn from sale in October 2026 (see Pricing & subscription).' },
         { term: 'Accounts', body: 'The base games need no account. For a subscription bought by card on the site, you set a six-character passcode for that address after paying — the address and the passcode together are your account, and the two of them bring the subscription back on another device.', only: 'web' },
         { term: 'Accounts made by a code', body: 'Redeeming a code leaves an email address and a six-character passcode with us; so does the passcode you set after paying by card — both routes leave the same kind of account (the privacy policy says what it holds). Remember it: what gets locked is the account, not the code. Four wrong tries lock the account for four hours; six leave it locked until you verify by email and set a new passcode.' },
         { term: 'Age', body: 'The service is for people aged 13 and over. Below the age of majority where you live, use it with a guardian’s consent.' },
@@ -330,15 +330,15 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
   fr: {
     pricing: {
       title: 'Tarifs et abonnement',
-      intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est un abonnement facultatif qui débloque du contenu supplémentaire. Voici les conditions qui s’y appliquent.',
+      intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est la formule qui débloque du contenu supplémentaire. L’abonnement a été retiré de la vente en octobre 2026 : aucun nouvel abonnement n’est accepté, et ceux qui étaient en cours ont également été résiliés. Voici l’état actuel des choses et ce qu’il en est si vous vous êtes abonné auparavant.',
       items: [
         { term: 'Ce qui est gratuit', body: 'Les deux jeux de base — carrés et billes — ainsi que le défi chronométré, le défi bombe et le multijoueur. Sans publicité et sans compte. Parmi les dispositions supplémentaires, les carrés en losange et les billes hexagonales sont gratuits eux aussi ; les deux autres (billes sept couleurs et grand triangle) relèvent de l’abonnement et portent un cadenas sur l’écran d’accueil.' },
-        { term: 'Prix', body: 'Actuellement 1,99 $US par mois, ou 4,99 $US par an. Le montant final est celui affiché au paiement — il peut varier selon la tarification de votre région et la taxe locale. Les prix évoluent ; un changement ne vaut que pour les nouveaux abonnements, et vous êtes prévenu avant que le tarif d’un abonnement en cours ne change.', only: 'web' },
+        { term: 'Prix', body: 'Plus en vente. Avant le retrait, c’était 1,99 $US par mois ou 4,99 $US par an ; la page de paiement a été retirée. Ce qui a déjà été payé relève de la politique de remboursement.', only: 'web' },
         { term: 'Période de facturation', body: 'Vous êtes facturé pour la période choisie : un abonnement mensuel se renouvelle tous les mois, un abonnement annuel tous les 12 mois, à compter du jour du paiement.' },
-        { term: 'Renouvellement automatique', body: 'L’abonnement se renouvelle automatiquement à la fin de chaque période, au tarif alors en vigueur, jusqu’à ce que vous résiliiez. Les avis de renouvellement et les reçus sont envoyés par Creem, qui encaisse le paiement.', only: 'web' },
-        { term: 'Résiliation', body: 'Vous pouvez résilier quand vous voulez, depuis la page de gestion derrière « Abonnement » : aucun nouveau prélèvement n’a lieu. La période déjà payée va jusqu’à son terme, rien n’est coupé avant.', only: 'web' },
+        { term: 'Renouvellement automatique', body: 'Arrêté. Les abonnements encore en cours ont été résiliés par nos soins ; aucun nouveau prélèvement n’aura lieu.', only: 'web' },
+        { term: 'Faut-il encore résilier', body: 'Non — les abonnements encore en cours ont déjà été résiliés par nos soins, plus rien ne sera prélevé. La période déjà payée va jusqu’à son terme, rien n’est coupé avant.', only: 'web' },
         { term: 'Remboursement', body: 'Voir la politique de remboursement : remboursement intégral et sans motif dans les 14 jours suivant le premier achat.', only: 'web' },
-        { term: 'Qui encaisse', body: 'Creem le vend en tant que marchand officiel (merchant of record) et gère le paiement et les reçus. Nous ne voyons ni ne conservons jamais vos données bancaires.', only: 'web' },
+        { term: 'Qui a encaissé', body: 'Jusqu’au retrait, Creem le vendait en tant que marchand officiel (merchant of record) et gérait le paiement et les reçus. Nous ne voyons ni ne conservons jamais vos données bancaires. Rien n’est encaissé aujourd’hui.', only: 'web' },
       ],
     },
     terms: {
@@ -346,7 +346,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       intro: `Ces conditions couvrent play-slides.com et les applications Slides. Utiliser le service vaut acceptation. Dernière mise à jour : ${LEGAL_UPDATED}.`,
       items: [
         { term: 'Qui édite ce site', body: `Slides est édité à titre individuel par un développeur indépendant résidant en France ; il n’existe pas de société enregistrée. Contact : ${E}.` },
-        { term: 'Le service', body: 'Slides est un jeu de puzzle à glissement. Les jeux de base sont gratuits ; « Slides Génie » est un abonnement facultatif.' },
+        { term: 'Le service', body: 'Slides est un jeu de puzzle à glissement. Les jeux de base sont gratuits. « Slides Génie » était un abonnement facultatif, retiré de la vente en octobre 2026 (voir Tarifs et abonnement).' },
         { term: 'Comptes', body: 'Les jeux de base ne demandent aucun compte. Pour un abonnement payé par carte sur le site, vous choisissez après le paiement un mot de passe de six caractères pour cette adresse — l’adresse et le mot de passe forment votre compte, et à eux deux ils rouvrent l’abonnement sur un autre appareil.', only: 'web' },
         { term: 'Comptes créés par un code', body: 'Utiliser un code laisse chez nous une adresse courriel et un mot de passe de six caractères ; le mot de passe défini après un paiement par carte fait de même — les deux chemins laissent le même type de compte (la politique de confidentialité dit ce qu’il contient). Retenez-le : ce qui se verrouille est le compte, pas le code. Quatre erreurs verrouillent le compte pendant quatre heures ; six le laissent verrouillé jusqu’à une vérification par courriel et la définition d’un nouveau mot de passe.' },
         { term: 'Âge', body: 'Le service s’adresse aux personnes de 13 ans et plus. En dessous de la majorité de votre pays, utilisez-le avec l’accord d’un responsable légal.' },
