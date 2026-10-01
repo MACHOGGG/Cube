@@ -38,7 +38,8 @@ const check = (n, ok, extra = '') => {
   console.log((ok ? 'PASS  ' : 'FAIL  ') + n + (extra ? '  ' + extra : ''));
 };
 
-/** 此刻卖不卖。2026-10 起：不卖（E11 / PR-12）。重开订阅时把它改成 true。 */
+/** 此刻卖不卖。2026-10 起：不卖（E11 / PR-12）。**和 `src/engine/saleWindow.ts` 的
+ *  `WEB_SALE_OPEN` 必须一致**，下面有一条专门对这件事。重开订阅时两个一起翻成 true。 */
 const SELLING = false;
 
 const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
@@ -49,12 +50,19 @@ const PRESENT_PRICE = [
   /Currently US\$1\.99/i, /Currently US\$4\.99/i,
   /Actuellement\s*1,99/i, /Actuellement\s*4,99/i,
 ];
-/** 「停了」那种说法。四种语言各一组。 */
+/**
+ * 「此刻不开放」那种说法。四种语言各一组。
+ *
+ * ⚠️ 这张表钉的是**事实**，不是某一句措辞。2026-10 头一版写的是「停止销售 / withdrawn
+ * from sale」，玩家看过之后改成「暂时不开放」——因为 Creem 那边是**暂时**关掉的，而
+ * 「withdrawn」读起来是永久下架。措辞一改，这张表当场全红：那是它该有的反应（文本和
+ * 门必须一起动），但也说明表里要收的是「这一句在说不开放」的各种讲法，而不是一句原话。
+ */
 const SAYS_STOPPED = {
-  zhHans: [/停止销售/, /不再接受新的订阅/, /现在不出售/],
-  zhHant: [/停止銷售/, /不再接受新的訂閱/, /現在不出售/],
-  en: [/withdrawn from sale/i, /no new subscriptions are taken/i, /Not on sale/i],
-  fr: [/retiré de la vente/i, /aucun nouvel abonnement/i, /Plus en vente/i],
+  zhHans: [/目前不开放/, /不再接受新的订阅/, /目前不出售/, /暂时不出售/],
+  zhHant: [/目前不開放/, /不再接受新的訂閱/, /目前不出售/, /暫時不出售/],
+  en: [/currently closed/i, /not selling it at the moment/i, /Not on sale at the moment/i],
+  fr: [/actuellement fermé/i, /ne le vendons pas pour le moment/i, /Pas en vente pour le moment/i],
 };
 /** 「还会自动续期扣款」那种说法——在续的都取消了，一句都不许留。 */
 const SAYS_RENEWS = {
@@ -100,10 +108,38 @@ for (const lang of LANGS) {
   const tText = terms ? terms.items.map((i) => `${i.term} ${i.body}`).join('\n') : '';
   check(`${lang}（尺子）《服务条款》读到了`, tText.length > 300, `${tText.length} 字`);
   if (!SELLING && tText) {
-    const present = [/「Slides 天才」是可选订阅/, /「Slides 天才」是選配訂閱/,
-                     /"Slides Genius" is an optional subscription/i,
-                     /« Slides Génie » est un abonnement facultatif/i].filter((re) => re.test(tText));
-    check(`${lang}：《服务条款》里不再说「是可选订阅」（现在时）`, present.length === 0, present.join(' '));
+    /*
+     * 《服务条款》里那句「『Slides 天才』是可选订阅」本身没错——它**是**可选订阅，只是
+     * 此刻不开放。所以这儿钉的不是「不许提订阅」（头一版就是这么写的，于是把一句完全正
+     * 确的话判成了红），而是**提了就得把此刻的状态一起说出来**。
+     */
+    const mentions = [/「Slides 天才」/, /「Slides 天才」/, /"Slides Genius"/i, /« Slides Génie »/i]
+      .some((re) => re.test(tText));
+    const closed = (SAYS_STOPPED[lang] || []).some((re) => re.test(tText));
+    check(`${lang}：《服务条款》提到这一档时，同时说清了此刻不开放`, !mentions || closed,
+      mentions ? (closed ? '' : '提了，但没说状态') : '（没提）');
+  }
+}
+
+/*
+ * **两个开关必须同时翻面。**
+ *
+ * 代码那一头是 `src/engine/saleWindow.ts` 的 `WEB_SALE_OPEN`（订阅窗要不要摆价钱、走不走
+ * 结账），文本这一头是上面那个 `SELLING`。玩家点名要「将来容易改回来」，而「容易」最怕
+ * 的就是改了一头忘了另一头——界面上重新卖起来了，《价格与订阅》还写着「目前不开放」，那
+ * 正是收单方会直接引回来的那种自相矛盾。
+ *
+ * 所以这儿读源码对一遍。改回开售时：把 `WEB_SALE_OPEN` 和 `SELLING` 一起翻成 true，再按
+ * `saleWindow.ts` 那段注释人手把那几条散文改回来——这一条会一直红到两边都对上为止。
+ */
+{
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../src/engine/saleWindow.ts', import.meta.url), 'utf8');
+  const m = sw.match(/export const WEB_SALE_OPEN = (true|false);/);
+  check('（尺子）saleWindow.ts 里找得到那个开关', Boolean(m), m ? m[0] : '没找到');
+  if (m) {
+    check('代码那个开关和这道门的 SELLING 一致',
+      (m[1] === 'true') === SELLING, `WEB_SALE_OPEN=${m[1]} / SELLING=${SELLING}`);
   }
 }
 
