@@ -455,26 +455,44 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
     </div>
 
+    <!--
+      结算弹窗分三段（E21）：**头部固定 · 明细滚动 · 按钮常驻**。
+
+      从前整个 .modal 一起滚（max-height: 88svh 加 overflow-y: auto），于是玩家报的那件事
+      发生了：「结算弹窗下方的退出按钮甚至划不到」——内容一长（小屋那一份摞在上面、或者一
+      张战绩图），底下那排键就被推到滚动区的最下面，而他在一块会滚的东西里找一颗键。
+
+      三段之后：总分和那枚章**一直在眼前**（滚明细的时候也看得见自己打了多少），底下三颗
+      键**钉在窗底**，中间那一段才滚。
+
+      ⚠️ **小屋那一份（#endRoomBlock）摆进滚动段的最上面**，不在固定头部里。它是另一张榜
+      加一张战绩图，塞进头部会把头部顶到半屏高——那就等于没有固定头部。代价是它从前排在
+      标题**上面**，现在排在标题下面；换来的是那排键一直在。
+    -->
     <div class="overlay overlay--end" id="endOverlay">
       <div class="modal">
         <div class="end-hazard-bg" id="endHazardBg" aria-hidden="true">💥</div>
+        <div class="end-head">
+          <h2 id="endTitle">${s.endTitleDefault}</h2>
+          <div class="end-score-label">${s.compositeScoreLabel}</div>
+          <div class="big-score" id="endScore">0</div>
+          <!-- 那枚通关章：**自己一行、居中、放大到 72px**（E21）。
+               从前它 34px、挤在总分右边——一局真通关是这一页上最该被看见的那件事，而
+               34px 的勾在总分那 2.4rem 的数字旁边像个标点。
+               章只在「全部翻成点面」那一种终局出现，别的终局这个 span 是空的，而空的它
+               自己不占位（style.css 的 .end-stamp:empty）——不是画了再藏，是根本不画
+               （见 engine/kinetics.ts 的 endCheckEligible）。 -->
+          <span class="end-stamp" id="endStamp" aria-hidden="true"></span>
+          <!-- What this run was worth, set against what this mode is usually
+               worth to this player — the one number that says whether it was a
+               good run, without them having to remember their own history. -->
+          <div class="end-avg" id="endAvg"></div>
+        </div>
+        <div class="end-scroll">
         <!-- 屋主中途散场、这一局转成单人接着打完的时候，小屋那份成绩摆在这
              儿：总排行和它的战绩图在上，底下才是这一局单人的结算和它自己那
              张图。平时是空的、藏着的（见 roomLeftover.ts）。 -->
         <div class="end-room" id="endRoomBlock" hidden></div>
-        <h2 id="endTitle">${s.endTitleDefault}</h2>
-        <div class="end-score-label">${s.compositeScoreLabel}</div>
-        <!-- 总分和它旁边那枚章排一行。章只在「全部翻成点面」那一种终局出现，别的
-             终局这个 span 是空的，而空的它自己不占位（style.css 的 .end-stamp:empty）
-             ——不是画了再藏，是根本不画（见 engine/kinetics.ts 的 endCheckEligible）。 -->
-        <div class="end-score-row">
-          <div class="big-score" id="endScore">0</div>
-          <span class="end-stamp" id="endStamp" aria-hidden="true"></span>
-        </div>
-        <!-- What this run was worth, set against what this mode is usually
-             worth to this player — the one number that says whether it was a
-             good run, without them having to remember their own history. -->
-        <div class="end-avg" id="endAvg"></div>
         <div class="end-rule" aria-hidden="true"></div>
         <div class="end-breakdown" id="endBreakdown"></div>
         <!-- 这一局的战绩图，就摆在这儿——玩家定的：「整合分享和结算两部分」。
@@ -487,10 +505,25 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
              下。底下那句「长按或右键保存」是给网页版的；小红书版的容器把长按
              禁掉了，那一句在那儿是假话，由 xhs/src/main.ts 换成《发笔记》
              《存相册》两颗键。 -->
+        <!--
+          战绩图**在滚动段里**，排在明细后面。
+
+          它必须在里面：竖屏上这张图是自限高的（那条 max(34svh, min(44svh, 100svh − 500px))
+          公式），可就算取下限 287px，加上头部 222、三颗键 58、内边距 56、明细 154，也还是
+          塞不进 390×844 的那 743px——所以这一页本来就非滚不可，而该滚的正是「明细 + 图」这
+          一段。放到滚动段外面试过一次：图把滚动段挤成 4px 高，明细等于看不见。
+
+          ⚠️ 横屏那一块（style.css 里 orientation: landscape and max-height: 560px）把这张
+          图**绝对定位**到右边，不是靠 grid——grid 要它是 .modal 的直接子项，而它在这儿是孙
+          子。摊平那两层包装要 display: contents，Chrome 61（小红书那一端的底线）不认它。
+          绝对定位的参照是 .modal（它有 position: relative），所以 .end-scroll 的 overflow
+          不会把它裁掉。
+        -->
         <figure class="end-share" id="endShare" hidden>
           <img id="endShareImg" alt="${s.shareImgAlt}" />
           <figcaption class="hint" id="endShareHint">${s.shareHint}</figcaption>
         </figure>
+        </div>
         <div class="btn-row">
           <button class="secondary" id="endBackBtn">${s.homeBtn}</button>
           <button class="secondary" id="shareBtn">${s.shareBtn}</button>

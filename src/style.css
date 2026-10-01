@@ -229,8 +229,43 @@
 .end-room-rows { margin: 8px 0 10px; gap: 4px; }
 .end-room-rows .mp-player { padding: 4px 8px; }
 .end-room-card { width: 100%; max-width: 300px; margin: 0 auto 10px; display: block; border-radius: var(--r-md); }
-/* 两份摞在一起比一份高，结算弹窗要能滚——不滚就有一半够不着。 */
-.overlay--end .modal { max-height: 88svh; overflow-y: auto; }
+/*
+ * 结算弹窗分三段（E21 / PR-16）：**头部固定 · 明细滚动 · 按钮常驻**。
+ *
+ * 这儿原先是 `.overlay--end .modal { max-height: 88svh; overflow-y: auto; }` ——整个窗一
+ * 起滚。玩家报的那件事就出在这一行上：「结算弹窗下方的退出按钮甚至划不到」。内容一长（小
+ * 屋那一份摞在上面、或者一张战绩图落下来），底下那排键就被推到滚动区的最下面，而他要在一
+ * 块会滚的东西里找一颗键。
+ *
+ * 现在窗本身**不滚**（overflow: hidden），它是一根 flex 柱子：头部和底排键各占自己的高
+ * 度，中间 `.end-scroll` 吃掉剩下的并自己滚。
+ *
+ * ⚠️ `min-height: 0` 那一行**不能省**：flex 子项的默认 min-height 是 auto，内容多高它就
+ * 多高，于是 `flex: 1` 根本压不住它——整窗照旧被顶长，而 overflow: hidden 把底排键直接裁
+ * 掉（比从前更糟：从前至少滚得到）。这一脚在 `.mp-wait-rows` 上踩过一次（竞赛屋二十人那
+ * 回），所以这儿写明。
+ */
+.overlay--end .modal {
+  max-height: 88svh;
+  overflow: hidden;
+  display: flex; flex-direction: column; gap: 0;
+}
+.overlay--end .end-head { flex: none; }
+.overlay--end .end-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* 滚到一半时上下各留一道透明边，让「这里还能滚」看得出来。 */
+  padding: 2px 0;
+}
+/* 底排键钉在窗底。它本来就是最后一个子项，这儿只是把它从 flex 的伸缩里摘出来，
+   并和滚动段之间留一道线——不然滚到底的时候明细会贴着键。 */
+.overlay--end .btn-row {
+  flex: none;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
 
 /* touch-action: manipulation 关掉的是「同一个地方连点两下就放大」——手机浏览
    器的默认手势。玩家在这个网站上连点是常事（连着按同一个玩法、在选择窗口里
@@ -997,11 +1032,16 @@ h1 {
 .modal h2 { font-family: 'Fraunces', Georgia, serif; margin: 0 0 8px; font-size: 1.5rem; }
 .modal p { color: var(--ink-soft); margin: 0 0 20px; font-size: 0.95rem; }
 .modal .big-score { font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600; color: var(--accent-ink); margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
-/* 结算页：总分和它旁边那枚通关章排一行。
-   :empty 那一条是关键——没资格盖章的终局里这个 span 是空的，空的它连位子都不占，
-   所以那几种终局的结算页和从前一个像素不差（否则 gap 会留出 10px 的空缝）。 */
-.end-score-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
-.end-stamp { flex: none; width: 34px; height: 34px; display: block; }
+/*
+ * 结算页那枚通关章：**自己一行、居中、72px**（E21 / PR-16）。
+ *
+ * 它原先 34px、挤在总分右边（那时还有一个 `.end-score-row` 把两样排成一行）。一局真通关
+ * 是这一页上最该被看见的那件事，而 34px 的勾在总分那 2.4rem 的数字旁边像个标点。
+ *
+ * `:empty` 那一条照旧是关键——没资格盖章的终局里这个 span 是空的，空的它连位子都不占，所
+ * 以那几种终局的结算页和从前一个像素不差（否则会凭空多出 72px 的空缝）。
+ */
+.end-stamp { width: 72px; height: 72px; display: block; margin: 6px auto 2px; }
 .end-stamp:empty { display: none; }
 .end-stamp > svg { width: 100%; height: 100%; display: block; }
 /* 圈和勾都靠 stroke-dashoffset 描出来：先画圈 300ms，圈画完再画勾 200ms。
@@ -1152,20 +1192,24 @@ h1 {
   user-select: none;
 }
 /*
- * ⚠️ `overflow-x` / `overflow-y` 分开写，**不要用 `overflow` 简写**。
+ * ⚠️ 这条是 id 选择器（1-1-0），压得过上面那条 `.overlay--end .modal`（0-2-0）——两边
+ * 必须说同一件事，不然谁也不知道哪条在管。
  *
- * 这条是 id 选择器（1-1-0），压得过上面那条 `.overlay--end .modal`（0-2-0）里的
- * `overflow-y: auto`——而简写 `overflow: hidden` 会把两个轴一起写死，于是那句
- * 「结算弹窗要能滚」整个失效。实测（修之前）：
+ * **两个轴现在都 hidden**（E21 / PR-16）。从前纵轴是 `auto`：那时整个窗一起滚，而这条规
+ * 则写成 `overflow: hidden` 简写的话会把那条滚动写死，实测（那一次修之前）：
  *
  *     320×568  内容被裁 118px，三颗键在屏下 56px，而且滚不动 → 打完一局卡死
  *     360×640  内容被裁  80px，三颗键在屏下 13px，滚不动
  *     375×667  内容被裁  65px
  *
- * 横轴仍然要 hidden：`.end-hazard-bg` 那个 💥 是 `inset: 0` 的绝对定位层，放开横轴
- * 会多出一条横向滚动条。`position: relative` 也是它要的（它按这一层定位）。
+ * 2026-10 窗分三段之后滚的是**里面那一段**（`.end-scroll`），窗本身不该滚——它要是也滚，
+ * 「头部固定、按钮常驻」就都不成立了（整根柱子一起往上走）。上面那段三段式的注释里写了
+ * 为什么。两条规则改成一致，并且留着这段话，免得下一个人照旧改回 auto。
+ *
+ * 横轴照旧 hidden：`.end-hazard-bg` 那个 💥 是 `inset: 0` 的绝对定位层，放开横轴会多出一
+ * 条横向滚动条。`position: relative` 也是它要的（它按这一层定位）。
  */
-#endOverlay .modal { position: relative; overflow-x: hidden; overflow-y: auto; }
+#endOverlay .modal { position: relative; overflow-x: hidden; overflow-y: hidden; }
 .end-hazard-bg {
   position: absolute;
   inset: 0;
@@ -4663,36 +4707,46 @@ html.is-playing body { background: var(--play-bg); }
   .overlay--end .end-avg { font-size: 0.92rem; margin: 0 0 6px; }
   .overlay--end .end-rule { margin: 0 auto 7px; }
   .overlay--end .end-breakdown { gap: 1px; margin: 0 0 7px; }
-  /* 横屏的战绩图挪到右边一列，占满这一窗的高度。
-     竖着排的时候图在分数下面、三颗键上面——横过来只剩三百多像素高，图夹在
-     中间，《主页 / 分享 / 再来》就正好掉到看不见的地方（量过：内容 411px、
-     窗口 343px）。把图摆到侧边，两件事都成立：图能吃满这一屏的高度，三颗键
-     始终在。和分享窗横屏那一套是同一个办法（见下面 .share-modal）。 */
+  /*
+   * 横屏的战绩图挪到右边，占满这一窗的高度。
+   *
+   * 竖着排的时候图在明细后面、三颗键上面——横过来只剩三百多像素高，图夹在中间，
+   * 《主页 / 分享 / 再来》就正好掉到看不见的地方（量过：内容 411px、窗口 343px）。把图摆到
+   * 侧边，两件事都成立：图能吃满这一屏的高度，三颗键始终在。和分享窗横屏那一套是同一个办
+   * 法（见下面 .share-modal）。
+   *
+   * ⚠️ **用绝对定位，不用两列 grid**（2026-10 / E21 换的）。
+   *
+   * 原先这儿是 `.modal { display: grid }` 加 `.end-share { grid-column: 2 }`。结算弹窗分三
+   * 段之后（头部固定 / 明细滚动 / 按钮常驻），这张图住在滚动段 `.end-scroll` 里面——于是它
+   * 是 .modal 的**孙子**，`grid-column` 不认它。把那两层包装摊平要 `display: contents`，而
+   * Chrome 61（小红书那一端的底线）不认它，整条规则会被连着丢掉。
+   *
+   * 绝对定位没有这个问题：参照的是 .modal（它有 position: relative，见那条 #endOverlay 的
+   * 规则），所以 `.end-scroll` 的 overflow **不会**把它裁掉——会被裁的只有「包含块在溢出盒
+   * 子里面」的那种后代。
+   *
+   * 左边那一列靠 `padding-right` 让出地方：32vw 是图的宽度上限，38px 是它和文字之间那道
+   * 缝加上窗自己的右内边距。
+   */
   .overlay--end .modal {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start; column-gap: 16px;
-    /* 宽度得先定下来，1fr 才算得出来：minmax(0, 1fr) 对「按内容撑开」这件事
-       贡献的是 0，而这一窗本来是 max-width: 340px、宽度由内容决定的——两下
-       一凑，整窗缩到只剩右边那张图那么宽，左半边被挤成一列竖着的字（量出来
-       10px）。给个确定的宽度就没这回事了。 */
-    /* max-width 写两遍：老内核算不了 min()，带 min() 那行整条丢掉，这一窗就退
-       回 .modal 的 340px 上限——正是上面那段注释里说的「左半边被挤成一列竖着
-       的字」。前一行和后一行其实等价：width 已经是 100%，那个 100% 本来就封不
-       住什么，真正管事的只有 680。 */
+    padding-right: calc(32vw + 38px);
+    /* 宽度得先定下来，不然左边那一列被 padding-right 压成一条窄柱。
+       max-width 写两遍：老内核算不了 min()，带 min() 那行整条丢掉，这一窗就退回上面那条
+       460px——而 460 减掉 32vw 的内边距在横屏上只剩一百多像素，左半边会挤成一列竖着的字
+       （那一幕真出过）。前一行和后一行其实等价：width 已经是 100%。 */
     width: 100%; max-width: 680px; max-width: min(680px, 100%);
   }
-  /* 别的东西一律走左边那一列，按原来的顺序一行一行排下去。 */
-  .overlay--end .modal > * { grid-column: 1; }
-  /* span 30 而不是 1 / -1：这一窗的行是隐式的（有几行看这一局摆了什么，小屋
-     那一块平时藏着），而 -1 指的是**显式**网格的最后一条线——没有显式行时它
-     就是第 1 条，图于是只占一行、把别的东西往下顶。 */
+  /* 横屏里上下留白已经收到最紧，那道分隔线和它的 14px 只会再吃掉一行的高度。 */
+  .overlay--end .btn-row { margin-top: 6px; padding-top: 6px; }
   .overlay--end .end-share {
-    grid-column: 2; grid-row: 1 / span 30; align-self: center; margin: 0;
+    position: absolute;
+    top: 50%; right: 22px;
+    transform: translateY(-50%);
+    width: 32vw; margin: 0;
   }
-  /* 两个上限都写死成看得见的尺寸，不用 max-width: 100%——右边这一列是 auto，
-     宽度由图撑出来，而图又拿这一列当 100% 的基准：循环了，浏览器会把整列让
-     给图，左边那半挤成一列竖着的字（真出过这一幕）。 */
+  /* 两个上限都写死成看得见的尺寸，不用 max-width: 100%——这一块的宽度自己定了 32vw，
+     而图又拿它当 100% 的基准：循环了。 */
   .overlay--end .end-share img { max-height: 74vh; max-height: 74svh; max-width: 32vw; margin-bottom: 4px; }
   .overlay--end .modal p { margin: 0 0 9px; font-size: 0.85rem; }
   .overlay--end .end-gone-note { margin: 0 0 7px; padding: 6px 10px; font-size: 0.8rem; }

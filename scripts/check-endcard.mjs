@@ -63,9 +63,9 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
     const ov = document.getElementById('endOverlay');
     ov.classList.add('show');
     document.getElementById('endScore').textContent = '1,286';
-    // 通关那枚章也摆上：它和总分排一行（.end-score-row），量的就是「多了这 34px
-    // 之后这一窗还装不装得下」。只有「全部翻成点面」那一种终局才有它，而那一种
-    // 正是这一窗最挤的时候——不摆上去，下面那两条量的是较松的那一版。
+    // 通关那枚章也摆上：它现在自己一行、72px（E21），量的就是「多了这 72px 之后这一窗
+    // 还装不装得下」。只有「全部翻成点面」那一种终局才有它，而那一种正是这一窗最挤的时
+    // 候——不摆上去，下面那几条量的是较松的那一版。
     document.getElementById('endStamp').innerHTML =
       '<svg viewBox="0 0 40 40" aria-hidden="true">' +
       '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="#5C8A72" stroke-width="3"/>' +
@@ -95,39 +95,88 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
     return { over: Math.round(Math.max(-m.top, m.bottom - innerHeight)), scroll: ov.scrollHeight > ov.clientHeight + 1 };
   });
   check(`${tag} · 结算页：整窗装得进屏幕`, end.over <= 0, `超出 ${end.over}px`);
-  check(`${tag} · 结算页：不用下滑`, !end.scroll);
-  // 那枚章不许把总分那一行顶高：它是「分数旁边的一枚章」，不是新的一行。
+  /*
+   * **「不用下滑」那一条翻了面**（E21 / PR-16）。
+   *
+   * 这一页从前是整窗一起滚，所以那时要守的是「别滚起来」——滚起来底下那排键就被推进滚动
+   * 区的最下面，而玩家报的正是「结算弹窗下方的退出按钮甚至划不到」。
+   *
+   * 现在窗分三段：头部固定、中间 `.end-scroll` 滚、底排键钉在窗底。所以**中间那一段就是
+   * 该滚的**（摆上一张 720×940 的战绩图之后必然滚），而要守的三件事换成：
+   *   · 整窗不滚（外层 overflow: hidden，滚的是里面那一段）；
+   *   · 头部不随着滚走（滚到底，总分还在原处）；
+   *   · 底排键一直在屏幕里、而且点得着（下面那一组 REACH）。
+   */
+  const three = await page.evaluate(async () => {
+    const m = document.querySelector('#endOverlay .modal');
+    const sc = m.querySelector('.end-scroll');
+    /*
+     * **先往明细里塞到一定会溢出，再滚。**
+     *
+     * 第一版直接滚、直接量「滚得动吗」，于是横屏那一档红了：那一档的明细本来就短
+     * （六行），滚动段装得下，`scrollTop` 自然是 0——红的是尺子不是代码。而「装得下就不
+     * 滚」恰恰是对的。
+     *
+     * 要量的是「长到装不下的时候，滚的是中间那一段，而不是整窗」。所以先把它撑长：这样两
+     * 档屏幕上这条断言都量得出东西，也不会在哪天明细变短时变成空绿。
+     */
+    const bd = document.getElementById('endBreakdown');
+    const keep = bd.innerHTML;
+    bd.innerHTML = keep + Array.from({ length: 30 },
+      (_, i) => `<div class="end-row"><span>撑长 ${i}</span><span>${i}</span></div>`).join('');
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const scoreBefore = document.getElementById('endScore').getBoundingClientRect().top;
+    const btnBefore = m.querySelector('.btn-row').getBoundingClientRect().top;
+    const modalBefore = m.getBoundingClientRect();
+    sc.scrollTop = sc.scrollHeight;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const out = {
+      modalScrolls: m.scrollHeight > m.clientHeight + 1,
+      innerScrolls: sc.scrollHeight > sc.clientHeight + 1,
+      scrolledBy: Math.round(sc.scrollTop),
+      scoreMoved: Math.round(Math.abs(document.getElementById('endScore').getBoundingClientRect().top - scoreBefore)),
+      btnMoved: Math.round(Math.abs(m.querySelector('.btn-row').getBoundingClientRect().top - btnBefore)),
+      // 撑长 30 行之后整窗还在屏幕里吗（底排键是不是又被顶出去了）。
+      modalOver: Math.round(Math.max(-modalBefore.top, modalBefore.bottom - innerHeight)),
+      btnBottomOver: Math.round(m.querySelector('.btn-row').getBoundingClientRect().bottom - innerHeight),
+    };
+    bd.innerHTML = keep;
+    return out;
+  });
+  check(`${tag} · 结算页：明细撑长 30 行，中间那一段真的滚得动（尺子）`,
+    three.innerScrolls && three.scrolledBy > 10, JSON.stringify(three));
+  check(`${tag} · 结算页：整窗自己不滚（滚的是中间那一段）`, !three.modalScrolls, JSON.stringify(three));
+  check(`${tag} · 结算页：滚到底，总分还钉在原处`, three.scoreMoved <= 1, `挪了 ${three.scoreMoved}px`);
+  check(`${tag} · 结算页：滚到底，那排键也还钉在原处`, three.btnMoved <= 1, `挪了 ${three.btnMoved}px`);
+  check(`${tag} · 结算页：明细再长，整窗也不长出屏幕`, three.modalOver <= 0, `超出 ${three.modalOver}px`);
+  check(`${tag} · 结算页：明细再长，那排键也还在屏幕里`, three.btnBottomOver <= 0, `超出 ${three.btnBottomOver}px`);
+
+  /*
+   * 那枚通关章：**自己一行、居中、72px**（E21）。
+   *
+   * 这三条原先是反过来的（「和总分同一行」「没把行顶高」「比总分矮」）——那是 34px 挤在分
+   * 数旁边那一版。一局真通关是这一页上最该被看见的那件事，而 34px 的勾在 2.4rem 的数字旁
+   * 边像个标点。
+   */
   const stamp = await page.evaluate(() => {
-    const row = document.querySelector('.end-score-row')?.getBoundingClientRect();
-    const sc = document.getElementById('endScore')?.getBoundingClientRect();
     const st = document.getElementById('endStamp')?.getBoundingClientRect();
-    if (!row || !sc || !st) return null;
-    // 总分自己带着 margin: 4px 0 6px，而它是这一行的弹性子项——那 10px 算进
-    // 行高里。所以「没把行顶高」量的是「行高 = 总分的外框高」，不是「行高 =
-    // 总分的内框高」：照后者量出来永远差 10px，那是总分自己的边距，不是章加的。
-    const cs = getComputedStyle(document.getElementById('endScore'));
-    const mv = parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+    const sc = document.getElementById('endScore')?.getBoundingClientRect();
+    const head = document.querySelector('#endOverlay .end-head')?.getBoundingClientRect();
+    if (!st || !sc || !head) return null;
     return {
-      rowH: Math.round(row.height),
-      scoreOuterH: Math.round(sc.height + mv),
-      stampH: Math.round(st.height),
-      stampW: Math.round(st.width),
-      inRow: st.top >= row.top - 1 && st.bottom <= row.bottom + 1,
+      w: Math.round(st.width), h: Math.round(st.height),
+      belowScore: st.top >= sc.bottom - 1,
+      // 居中：章的中线和头部的中线对齐。
+      offCenter: Math.round(Math.abs(st.left + st.width / 2 - (head.left + head.width / 2))),
+      inHead: st.top >= head.top - 1 && st.bottom <= head.bottom + 1,
     };
   });
-  check(`${tag} · 结算页：通关章真的画出来了`, stamp && stamp.stampW >= 28, JSON.stringify(stamp));
-  check(
-    `${tag} · 结算页：章和总分同一行，没把行顶高`,
-    stamp && stamp.inRow && stamp.rowH <= stamp.scoreOuterH + 2,
-    JSON.stringify(stamp),
-  );
-  // 这一条才让上面那条有意义：章确实比总分矮（34px vs 48px），所以它不可能是
-  // 撑高这一行的那个——万一哪天章被调大到超过总分，上面那条会红。
-  check(
-    `${tag} · 结算页：章比总分矮，撑不起这一行`,
-    stamp && stamp.stampH < stamp.rowH,
-    JSON.stringify(stamp),
-  );
+  check(`${tag} · 结算页：章放大到 72px`, stamp && stamp.w === 72 && stamp.h === 72, JSON.stringify(stamp));
+  check(`${tag} · 结算页：章自己一行，排在总分下面`, stamp && stamp.belowScore, JSON.stringify(stamp));
+  check(`${tag} · 结算页：章居中（偏离中线 ≤ 1px）`, stamp && stamp.offCenter <= 1, JSON.stringify(stamp));
+  check(`${tag} · 结算页：章在固定头部里（滚不走）`, stamp && stamp.inHead, JSON.stringify(stamp));
+
   const endBtns = await page.evaluate(REACH, ['endBackBtn', 'shareBtn', 'restartBtn']);
   for (const [id, state] of Object.entries(endBtns)) {
     check(`${tag} · 结算页：《${id}》按得到`, state === 'ok', state);
