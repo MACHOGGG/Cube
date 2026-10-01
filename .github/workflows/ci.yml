@@ -701,6 +701,23 @@ jobs:
           nohup node scripts/dev-server.mjs 8866 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8866/ && break; sleep 0.25; done
           node scripts/check-register-guide.mjs http://localhost:8866/
+
+      # 《注册 / 登录》那扇窗的三态（E37/E38）。真开浏览器，因为要守的全是「点下去之后变
+      # 成什么样」：三态切换、六格、那句「第一串是你的钥匙」在不在、mailDown 时停在哪一
+      # 屏、免邮箱账号的《账户》窗没有《更换邮箱》，以及两档屏幕上底排键都在屏内。
+      #
+      # ⚠️ 服务器**故意不配 Resend**：要码那一步于是必然答 mailDown，而那正是 E51 要守的
+      # 那一支——顺便让这道门不依赖任何外部服务。免邮箱那条路不发信，所以它能一路走到真
+      # 注册出一个账号。
+      - name: 注册 / 登录那扇窗的三态
+        run: |
+          GENIUS_GRANT_WINDOW=1 node scripts/dev-server.mjs 8834 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8834/ > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8834/ > /dev/null
+          node scripts/check-signin-ui.mjs http://localhost:8834/
       - name: 电脑端游戏页：五块牌的位置、大小、色
         run: |
           nohup node scripts/dev-server.mjs 8864 dist >/dev/null 2>&1 &

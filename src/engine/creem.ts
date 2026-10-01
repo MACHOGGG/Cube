@@ -175,6 +175,100 @@ export async function setWebPasscode(
 }
 
 /**
+ * 身份 2026-10 换了一套（E37/E38）：没有密码了。
+ *
+ * 两条路，各自一个接口：
+ *
+ *   /api/signin  —— 邮箱 + 六位验证码。注册和登录是同一条路，服务端用 `created` 告诉我们
+ *                   这一次是哪一种（那一位决定要不要问「愿不愿意收更新邮件」）。
+ *   /api/handle  —— 两串自己取的凭据，给没有邮箱、或者不想留邮箱的人。
+ *
+ * 下面这五个函数只做一件事：把接口的回包翻译成界面认得的那几个词。**不碰 entitlement**
+ * ——写缓存那一步在 subscription.ts 里（那边才是管状态的地方）。
+ */
+
+/** 这一屏认得的失败。都是服务端 error 串的原样，没有一个是前端猜的。 */
+export type CodeFailure = 'mailDown' | 'tooMany' | 'badEmail' | 'wrongCode' | 'codeStale' | 'unavailable' | 'failed';
+export type PairFailure = 'taken' | 'badPair' | 'wrong' | 'locked' | 'tooMany' | 'unavailable' | 'failed';
+
+/** 回包里我们用得到的那几样（服务端还会多带 entitlement 那几位，原样往上传）。 */
+export interface AuthReply extends SubscriptionReply {
+  /** 邮箱那条路：这个地址上本来没有账号，刚建的。 */
+  created?: boolean;
+  /** 免邮箱那条路：服务端认人的那把 id（`hdl:` 加 sha256）。 */
+  id?: string;
+}
+
+/**
+ * 要一张验证码。
+ *
+ * **发不出去也是 200**（`{ sent: false, reason: 'mailDown' }`，服务端 E51）：Resend 的额
+ * 度一满或者域名验证掉了，所有人都收不到码——如实回报，界面据此把人引到免邮箱那条路。所
+ * 以这儿不是 catch 里认那一条，而是在成功的回包里认。
+ */
+export async function webRequestCode(email: string, lang: string): Promise<true | CodeFailure> {
+  try {
+    const reply = await postJson<{ sent?: boolean; reason?: string }>('/api/signin', { email, lang });
+    if (reply.sent === true) return true;
+    return reply.reason === 'mailDown' ? 'mailDown' : 'failed';
+  } catch (err) {
+    return codeFailure(err);
+  }
+}
+
+/** 把验证码交上去。成了就带回完整的 entitlement 回包（含 `created`）。 */
+export async function webConfirmCode(
+  email: string,
+  code: string,
+  news: boolean,
+): Promise<AuthReply | CodeFailure> {
+  try {
+    const reply = await postJson<AuthReply>('/api/signin', { action: 'confirm', email, code, news });
+    return reply.token ? reply : 'failed';
+  } catch (err) {
+    return codeFailure(err);
+  }
+}
+
+function codeFailure(err: unknown): CodeFailure {
+  if (!(err instanceof HttpError)) return 'failed';
+  if (err.status === 503) return 'unavailable';
+  if (err.status === 429) return err.code === 'expired' ? 'codeStale' : 'tooMany';
+  // 400 有两种来路：'email'（地址不合格）和 'expired'（码过期 / 压根没发过）。
+  // **认服务端送回来的那个串**，不是光看状态码——两件事玩家要做的动作完全不一样。
+  if (err.code === 'email') return 'badEmail';
+  if (err.code === 'expired') return 'codeStale';
+  if (err.code === 'wrongCode') return 'wrongCode';
+  return 'failed';
+}
+
+/** 免邮箱：注册（第一串必须没人用过）。 */
+export const webPairRegister = (first: string, second: string) =>
+  pairCall({ action: 'register', first, second });
+
+/** 免邮箱：登录。 */
+export const webPairSignIn = (first: string, second: string) => pairCall({ first, second });
+
+/** 免邮箱：忘了第二串，凭第一串重设。**别的设备会全部下线**（服务端 revokeTokens）。 */
+export const webPairReset = (first: string, newSecond: string) =>
+  pairCall({ action: 'reset', first, newSecond });
+
+async function pairCall(body: Record<string, string>): Promise<AuthReply | PairFailure> {
+  try {
+    const reply = await postJson<AuthReply>('/api/handle', body);
+    return reply.token ? reply : 'failed';
+  } catch (err) {
+    if (!(err instanceof HttpError)) return 'failed';
+    if (err.status === 503) return 'unavailable';
+    if (err.status === 429) return 'tooMany';
+    if (err.status === 409) return 'taken';
+    if (err.status === 423) return 'locked';
+    if (err.code === 'badPair') return 'badPair';
+    return 'wrong';
+  }
+}
+
+/**
  * 注册：开一个账号，不带任何凭据。
  *
  * 和上面两支的区别在于**它不证明什么**。setWebPasscode 拿的是一笔付过款的结账、
@@ -348,9 +442,10 @@ export async function webRefresh(email: string, token: string): Promise<Entitlem
  * Creem's own page. Returns false when there is nothing to open, so the
  * caller can say so rather than leaving a button that does nothing.
  */
-export async function webPortal(email: string, password: string): Promise<boolean> {
+export async function webPortal(email: string, token: string): Promise<boolean> {
   try {
-    const { url } = await postJson<{ url?: string }>('/api/portal', { email, password });
+    // 身份用**登录令牌**，不是密码（E44）。密码 2026-10 取消了，令牌是唯一还存在的证明。
+    const { url } = await postJson<{ url?: string }>('/api/portal', { email, token });
     if (!url) return false;
     window.open(url, '_blank', 'noopener');
     return true;

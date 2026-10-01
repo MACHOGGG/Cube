@@ -70,11 +70,51 @@ async function openGeniusWindow() {
     slotsEl: Boolean(document.querySelector('#geniusSlots')),
     slots: document.querySelector('#geniusSlots')?.textContent?.trim() || '',
     planRows: document.querySelectorAll('.plan-row').length,
+    title: document.querySelector('.genius-modal h2')?.textContent?.trim() || '',
+    legalLinks: document.querySelectorAll('.genius-legal a').length,
+    redeem: Boolean(document.querySelector('#geniusRedeem')),
+    perks: document.querySelectorAll('.genius-perk').length,
+    more: document.querySelectorAll('.genius-perk--more').length,
     primary: document.querySelector('#geniusRestore')?.textContent?.trim() || '',
     creemHint: [...document.querySelectorAll('.auth-hint')].some((e) => /Creem/.test(e.textContent || '')),
   }));
   await ctx.close();
   return seen;
+}
+
+/** 在某一档屏幕上开那一屏，量底排键的位置、以及它是不是真的点得着。 */
+async function fitAt(width, height) {
+  const ctx = await browser.newContext({ viewport: { width, height } });
+  const page = await ctx.newPage();
+  await page.goto(base);
+  await page.evaluate(() => {
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_know_how', '1');
+  });
+  await page.reload();
+  await page.waitForSelector('.home-nav-btn', { timeout: 25000 });
+  await page.evaluate(() => {
+    const els = [...document.querySelectorAll('.home-nav-btn')];
+    const me = els.find((e) => /成绩|个人|我的/.test(e.getAttribute('aria-label') || e.textContent || ''));
+    (me || els[0])?.click();
+  });
+  await page.waitForSelector('.genius-cta', { timeout: 20000 });
+  await page.evaluate(() => document.querySelector('.genius-cta')?.click());
+  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  await page.waitForTimeout(400);
+  const r = await page.evaluate(() => {
+    const btn = document.querySelector('#geniusRestore');
+    const b = btn.getBoundingClientRect();
+    const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    return {
+      bottom: Math.round(b.bottom),
+      vh: window.innerHeight,
+      hitOk: btn === hit || btn.contains(hit),
+      perks: document.querySelectorAll('.genius-perk').length,
+    };
+  });
+  await ctx.close();
+  return r;
 }
 
 const PROMISE = /注册后免费立即解锁全部内容/;
@@ -95,6 +135,31 @@ head('那一屏：话在、价钱不在、键是《注册》');
   check('一个价钱都不摆', s.planRows === 0, String(s.planRows));
   check('收款方那句话也不在', s.creemHint === false);
   check('主键是《注册》，不是《登录》', s.primary === '注册', s.primary);
+  // E40 的另外三样
+  check('抬头说的是「注册就免费」，不是「成为天才」', /仅需注册/.test(s.title), s.title);
+  check('一条法务链接都不摆（那三份文档撤了，链过去是 404）', s.legalLinks === 0, String(s.legalLinks));
+  check('没有《有兑换码》那一行（E41：内部码前端全撤）', s.redeem === false);
+  /*
+   * **十条全摆，一条都不许收进「……」里**（E40）。
+   *
+   * 这一条和下面那两档屏幕是一对：十条会把窗撑长，而这一屏的底排键从前就为这个掉出过屏
+   * 幕（原注释记着：十条＋三条「敬请期待」＋价目＋收款方＋三条法务链接，整窗七百多像
+   * 素，手机上最底下那排键落在屏外，内嵌浏览器里连滚都滚不到）。
+   *
+   * 所以两件事都要量：摆满十条，而且摆满之后键还在屏内。只量前者会在某天悄悄把键挤出
+   * 去，只量后者会在某天悄悄把列表收回四条。
+   */
+  check('十条功能全摆', s.perks === 10, String(s.perks));
+  check('没有那一行省略号', s.more === 0, String(s.more));
+}
+
+// ---------------------------------------------------------------------------
+head('十条摆满之后，底排键在两档屏幕上都还在屏内');
+for (const [w, h] of [[360, 640], [390, 844]]) {
+  const r = await fitAt(w, h);
+  check(`天才屏 ${w}×${h}：底排键在屏内`, r.bottom <= r.vh, `${r.bottom} / ${r.vh}`);
+  check(`天才屏 ${w}×${h}：那颗键真点得着（没被别的盖住）`, r.hitOk === true);
+  check(`天才屏 ${w}×${h}：十条都在`, r.perks === 10, String(r.perks));
 }
 
 // ---------------------------------------------------------------------------

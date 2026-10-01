@@ -3882,6 +3882,14 @@ body:has(.slot-page) .home-nav { display: none; }
   color: var(--ink-soft); font-size: 0.8rem; line-height: 1.4;
 }
 .auth-optin input { flex: 0 0 auto; width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--accent); }
+/* 免邮箱凭据那一屏上那句警告（E38）：第一串是钥匙，知道它的人能重设第二串。
+   做得比正文**重**一档——它不是补充说明，是玩家按下《保存》之前必须读到的一句。所以
+   带左边一道竖线、字不缩小，和 .auth-optin 那种「顺便问一句」刻意相反。 */
+.auth-warn {
+  margin: 10px 2px 4px; padding: 8px 0 8px 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--ink); font-size: 0.85rem; line-height: 1.5; text-align: left;
+}
 .auth-body .tag-line { margin: 0; }
 
 /* ---------- language-switch popup ---------- */

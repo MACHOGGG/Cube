@@ -44,6 +44,15 @@ export function leaderboardName(): string {
   } catch {
     /* 私密模式：往下走，用邮箱那一截。 */
   }
+  /*
+   * 自己没取名字的时候榜上印什么。
+   *
+   * **第一串优先**（E38）：免邮箱凭据账号的 `email` 里放的是服务端那把 id
+   * （`hdl:` 加 64 位 hex），`split('@')[0]` 对它不起作用——整串 hex 会原样印到榜上。
+   * 那一串既难看又是一把钥匙（identify 认的就是它），不该出现在一张公开的榜上。
+   */
+  const handle = entitlement().handle;
+  if (handle) return handle.slice(0, 12);
   return (signedInEmail() || '').split('@')[0].slice(0, 12);
 }
 

@@ -34,11 +34,10 @@ import { pickedTheme, setTheme } from '../engine/themePref';
 import { LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
-import { entitlement, isGenius, signedInEmail } from '../engine/subscription';
+import { isGenius, signedInEmail } from '../engine/subscription';
 import {
   openAuthWindow,
   openGeniusWindow,
-  openRedeemWindow,
   openStatusWindow,
   runStoreRestore,
 } from './subscribe';
@@ -50,8 +49,6 @@ const DEMO_BALLS = 6;
 
 /** 「原本」那一套的代表色——就是三角/六边圆球在用的那六支的前五支。 */
 
-export type { AuthTab } from './subscribe';
-import type { AuthTab } from './subscribe';
 
 export interface ProfileHandlers {
   onBack: () => void;
@@ -83,7 +80,6 @@ export interface ProfileHandlers {
  */
 export function renderAccountPage(
   container: HTMLElement,
-  initialTab: AuthTab,
   handlers: ProfileHandlers,
   lang: Lang,
 ) {
@@ -118,8 +114,6 @@ export function renderAccountPage(
    * 不代表有权限」，这一行就是那句话在代码里的样子。
    */
   const signedIn = Boolean(signedInEmail());
-  /** 权益是内部码换来的（不是刷卡、也不是商店）——那一行右边挂个对勾。 */
-  const byCode = subscribed && entitlement().channel === 'code';
   const gatewayLabel = subscribed
     ? s.geniusStatus
     : signedIn
@@ -187,19 +181,17 @@ export function renderAccountPage(
         <button class="genius-cta" id="becomeGeniusBtn">${
           subscribed ? s.subscribedTitle : s.becomeGenius
         }</button>
-        <!-- A code is its own way in, not a footnote to the paywall: it was
-             buried behind 「有内部码？」 inside the subscribe window, which is
-             the one place someone holding a code has no reason to open. -->
-        <!-- 兑上了就在这一行右边挂一个对勾。兑换那一刻只有一闪而过的窗口，
-             之后再想确认「我到底兑上没有」就没有地方看了——尤其是记账那一笔
-             万一没写上、玩家收到过一句「网络错误」的时候（见 api/redeem.js
-             的 noteUsed）。 -->
-        <button class="profile-row" id="insiderRow">
-          <span class="profile-row-label">${s.insiderCode}</span>
-          <span class="profile-row-value">${
-            byCode ? `<span class="profile-row-tick" role="img" aria-label="${s.insiderRedeemed}">✓</span> ›` : '›'
-          }</span>
-        </button>
+        <!--
+          **《内部码》那一行撤了**（E41，2026-10 的改制）。
+
+          它原先在这儿是有道理的：「一张码是它自己的入口，不是付款墙的脚注」——而它从前确
+          实被埋在订阅窗里一句「有内部码？」后面，那是一个拿着码的人最没有理由打开的地
+          方。右边还挂一个对勾，好让他之后能确认「我到底兑上没有」。
+
+          现在整条路在界面上撤掉：注册就免费解锁全部内容，一张「开通一个月」的码没有意义
+          了，留着入口只会让人以为还有什么要另外换。**后端 api/redeem.js 一行没动**，已经
+          发出去的码照旧兑得了。
+        -->
         <!-- 做好的排在上面，没做的排在下面：内部码、多人游玩，一条线，然后是
              设置和几个做好了的去处；「敬请期待」的那几行垫底。 -->
         <button class="profile-row" id="multiRow">
@@ -314,7 +306,7 @@ export function renderAccountPage(
    *  the page's glyphs are literal SVG, and only a repaint carries the
    *  colourblind setting into freshly written markup. */
   const refresh = () => {
-    renderAccountPage(container, initialTab, handlers, lang);
+    renderAccountPage(container, handlers, lang);
     applyPaletteToTree(container);
   };
 
@@ -645,7 +637,7 @@ export function renderAccountPage(
     // 认「登着没登着」，不认「是不是天才」——理由见上面 signedIn 那一段。
     if (signedInEmail()) openStatusWindow(lang, refresh);
     else if (isStoreChannel()) runStoreRestore(lang, refresh);
-    else openAuthWindow(lang, initialTab, refresh);
+    else openAuthWindow(lang, refresh);
   });
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
@@ -698,7 +690,6 @@ export function renderAccountPage(
   on('worldRankRow', handlers.onWorldRank);
   on('moreModesRow', handlers.onMoreModes);
   on('becomeGeniusBtn', () => openGeniusWindow(lang, refresh));
-  on('insiderRow', () => openRedeemWindow(lang, refresh));
   for (const btn of Array.from(container.querySelectorAll<HTMLElement>('[data-legal]'))) {
     btn.addEventListener('click', () => openLegal(btn.dataset.legal as LegalKey));
   }

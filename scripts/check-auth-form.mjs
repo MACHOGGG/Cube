@@ -37,14 +37,21 @@ const check = (name, ok, extra = '') => {
 // 这几条是逐字抄下来的现状。它们不是「好看的写法」，是**试出来的**组合：Safari 只从表
 // 单结构推断、Chromium 可以被直接告知，而 readonly 的那个地址必须留在表单里（哪怕是隐
 // 藏的），否则密码管理器压根不提示保存。
+/*
+ * **四条密码相关的撤了**（E37，2026-10：密码整个取消）。
+ *
+ * 原先这张表里还有：登录那个 current-password、设新密码那个
+ * `new-password minlength="6" maxlength="6"`、改密码那两个（current-password + new-password）。
+ * 四扇用它们的窗全撤了（《设置密码》《改密码》《忘记密码》，以及登录窗里那个密码框），
+ * 所以那四条钉的是不存在的字符串。
+ *
+ * 留下的两条照旧要紧：
+ *   · `username` —— 管理器靠它把一份凭据存到「哪个账号」底下。免邮箱凭据那两串
+ *     （E38）走的也是它（offerToSave 把第一串当 id）。
+ *   · `one-time-code` —— iOS 的短信 / 邮件验证码自动填充要它，而现在**登录全靠验证码**，
+ *     这一条比从前更要紧。
+ */
 const MUST_KEEP = [
-  // 登录：current-password，管理器会拿它已经有的那个去填，而不是发明一个新的
-  `type="password" name="password" autocomplete="current-password"`,
-  // 设新密码：new-password + 正好六位
-  `type="password" name="password" autocomplete="new-password" minlength="6" maxlength="6"`,
-  // 改密码：旧的是凭据（current-password），新的是 new-password
-  `type="password" name="current-password" autocomplete="current-password"`,
-  `type="password" name="new-password" autocomplete="new-password"`,
   // 账号那一头：username，管理器靠它把密码存到「哪个账号」底下
   `type="email" name="username" autocomplete="username"`,
   // 验证码：one-time-code，iOS 的短信自动填充要它
@@ -53,14 +60,16 @@ const MUST_KEEP = [
 {
   const missing = MUST_KEEP.filter((frag) => !sub.includes(frag));
   check(
-    `密码管理器那一串标注一个都没少（${MUST_KEEP.length} 条）`,
+    `给密码管理器那几条标注一个都没少（${MUST_KEEP.length} 条）`,
     missing.length === 0,
     missing.length ? '少了：' + missing.join(' | ') : '',
   );
-  // 那个隐藏的 username 输入框也必须还在——注释里写明了「管理器不会提示保存，除非表单
-  // 里带着一个 autocomplete="username" 的字段」。
-  check('隐藏的那个 username 字段还在（不然管理器不提示保存）',
-    /id="pwUser"[\s\S]{0,200}autocomplete="username"/.test(sub));
+  // 那个 `#pwUser` 只读邮箱框属于 credentialForm（《设置密码》《改密码》两扇窗用它），
+  // 两扇窗和那个函数一起撤了（E37）。现在要紧的是**还有一个** username 字段在，而且它
+  // 和真输入框在同一个表单里——那是管理器提示保存的前提。
+  // 认的是 field() 的调用（id 是 field() 自己拼的，源码里没有 id="authEmail" 这个串）。
+  check('username 那个字段还在，而且是可见的真输入框（隐藏的管理器不信）',
+    /field\('authEmail'[\s\S]{0,240}autocomplete="username"/.test(sub));
 }
 
 // ── ② field() 的顺序 ───────────────────────────────────────────────
@@ -106,38 +115,34 @@ const MUST_KEEP = [
   check('.auth-field 那一段里没有 :has()', hasInAuth.length === 0, hasInAuth.join(' '));
 }
 
-// ── ③ 完成度表挂在哪、没挂在哪 ─────────────────────────────────────
+// ── ③ 完成度表撤了，六格挂在哪 ────────────────────────────────────
 {
+  /*
+   * **完成度表（mountPwMeter）一处都不许再挂**（E37）。
+   *
+   * 它是「你这个新密码还差几位」那一小截进度条，挂在三处设新密码的框上。密码整个取消之
+   * 后那三扇窗都撤了，所以这儿从「恰好三处」翻成「零处」——而**不是把这一条删掉**：删了
+   * 的话哪天有人把那个函数重新挂到一个框上（最省事的「让这个框看起来专业点」的办法），
+   * 这儿不会红，而屏幕上会多出一条量着一件不存在的事的进度条。
+   */
   const mounted = [...sub.matchAll(/mountPwMeter\((\w+), lang\)/g)].map((m) => m[1]);
-  // 设新密码的三处：注册/设密码（pwNew → 变量 input）、改密（cpwNew → newPw）、
-  // 解锁（unlockPw → pwBox）。
-  check('设新密码那三处都挂了完成度表', mounted.length === 3, mounted.join(' '));
-  // 登录那几个框一个都不许挂。这几个 id 是 current-password 那一路。
-  const loginBoxes = ['portalPw', 'authPw', 'cpwOld'];
-  const wrong = loginBoxes.filter((id) => new RegExp(`mountPwMeter\\([^)]*${id}`).test(sub));
-  check('登录／旧密码那几个框没挂', wrong.length === 0, wrong.join(' '));
-  // 六格验证码挂在两处验证码框上（解锁、换邮箱），一处都不许挂到密码框上。
-  const pins = [...sub.matchAll(/mountPin\((\w+)\)/g)].map((m) => m[1]);
-  check('两处验证码框都换成了六格', pins.length === 2, pins.join(' '));
-  check('六格没挂到密码框上', !pins.some((v) => /pw|Pw/.test(v)), pins.join(' '));
-}
+  check('完成度表一处都没挂（密码取消了）', mounted.length === 0, mounted.join(' '));
+  check('（尺子）那个函数也不再 import 进来', !/mountPwMeter/.test(sub.split('\n')[3] ?? ''));
 
-// ── ④ 两个零件本身的分寸 ───────────────────────────────────────────
-{
-  // 完成度表的段数由纯函数 meterFill 算（它自己的钳制和线性由 check-kinetics 钉着）。
-  check('完成度表的段数走 meterFill，不自己算', bits.includes('meterFill(input.value.length)'));
-  // 粘贴走 splitPastedCode，不自己写正则——码是从聊天软件复制来的，带空格、连字符。
-  check('粘贴分格走 splitPastedCode', bits.includes('splitPastedCode(raw, len)'));
-  // 六格**不新建 input**：焦点、粘贴、输入法、iOS 短信自动填充全走原生那一个框。
-  // 六个各自独立的 input 是这类控件最常见也最常出问题的做法。
-  check('六格一个 input 都没新建（只建 i 元素当格子）',
-    !/createElement\('input'\)/.test(bits), '');
-  // reduced-motion 下每一样都要有交代：段照样填、格子照样出字、只是不弹。
-  for (const cls of ['pw-meter--full', 'pin-cell--pop', 'err-shake']) {
-    const at = css.indexOf('.' + cls);
-    const reduced = css.slice(at).indexOf('prefers-reduced-motion');
-    check(`${cls} 接了 reduced-motion`, at > 0 && reduced > 0 && reduced < 1600, `距离 ${reduced}`);
-  }
+  /*
+   * 六格验证码：现在是**三处**。
+   *
+   *   · 换邮箱确认那一张（cemCode）
+   *   · 登录 / 注册那一张（authCode）—— 2026-10 新增，而且是全站最要紧的那一张：
+   *     登录从此全靠它。
+   *   · 小屋房号那四格走的是另一条路（ui/multiplayer.ts），不在这个文件里。
+   *
+   * 从前是两处（换邮箱、解锁）。解锁那扇窗撤了，登录那一张补上。
+   */
+  const pins = [...sub.matchAll(/mountPin\((\w+)/g)].map((m) => m[1]);
+  check('验证码框都换成了六格（换邮箱 + 登录）', pins.length === 2, pins.join(' '));
+  check('（尺子）登录那一张在里头', pins.includes('codeInput'), pins.join(' '));
+
 }
 
 // ── ⑤ 能打字的框，字号不许低于 16px（iOS 一点就放大）──────────────

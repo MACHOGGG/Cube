@@ -87,10 +87,25 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   const ui = read('src/ui/subscribe.ts');
   const engine = read('src/engine/subscription.ts');
   const creem = read('src/engine/creem.ts');
-  check('设密码那一屏用 isPin 前置校验，不是只数长度',
-    // 反面那一半认的是**那条语句**（），不是「文件里出现过
-    // 这几个字」——上面那段注释里就原样引着它，照字面查会被自己的注释红一下。
-    /if \(!isPin\(password\)\)/.test(ui) && !/if \(password\.length !== 6\)/.test(ui));
+  /*
+   * **「设密码那一屏」撤了**（E37，2026-10：密码取消）。这一条换成它的继承者。
+   *
+   * 要守的那条规矩没变：**前置校验必须和服务端同一条，而且认的是形状不是长度。**
+   * 从前是 `password.length !== 6` 放过了 `abc-12`，被服务端 400 'weak' 打回来、一路压成
+   * 「网络出错」——玩家刚付完钱，界面告诉他网络有问题。
+   *
+   * 现在那条规矩落在免邮箱凭据那两串上（E38）：客户端 `PAIR_RE` 必须和服务端
+   * `api/_accounts.js` 的 `PAIR_RE` 一字不差，否则同一个坑换个地方再踩一次。
+   */
+  const uiPair = /const PAIR_RE = \/\^\[A-Za-z0-9\]\{8,64\}\$\//.exec(ui);
+  check('客户端有 PAIR_RE，而且形状是「8 到 64 位字母数字」', Boolean(uiPair), String(uiPair?.[0]));
+  const srvPair = /export const PAIR_RE = (\/[^\n]+\/);/.exec(read('api/_accounts.js'));
+  check('（尺子）服务端那一条读得到', Boolean(srvPair), String(srvPair?.[1]));
+  check('两边的 PAIR_RE 一字不差',
+    Boolean(uiPair && srvPair) && uiPair[0].replace('const PAIR_RE = ', '') === srvPair[1],
+    `${uiPair?.[0]} vs ${srvPair?.[1]}`);
+  // 而且提交那一头真的用它拦了一次（光定义不用等于没有）。
+  check('提交之前真的用 PAIR_RE 拦过', /if \(!PAIR_RE\.test\(first\) \|\| !PAIR_RE\.test\(second\)\)/.test(ui));
   check('attachAccount 答得出 weak', /'unavailable' \| 'weak' \| 'failed'/.test(engine));
   check('weak 不再被压成 failed', /result === 'weak'\) return 'weak'/.test(engine));
   /**
@@ -118,8 +133,18 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
       fns.length >= 3 && missing.length === 0,
       missing.length ? '少了：' + missing.map((f) => f.name).join(' ') : '');
   }
-  check('界面把 weak 说成「密码不合规矩」，不是「网络出错」',
-    /done === 'weak' \? s\.setPwShort/.test(ui));
+  /*
+   * 界面要把每一种失败说成它自己那一句，不是一律「网络出错」。
+   *
+   * 这一条原先盯的是 `done === 'weak' ? s.setPwShort`（设密码那一屏）。那一屏撤了，继承它
+   * 的是《注册 / 登录》那扇窗里的 `say()`：它把服务端送回来的每一个 error 串翻成一句话。
+   * 少一种就会落到最后那句兜底「网络出错」上——而那正是这一条一直在防的事。
+   */
+  const says = ['mailDown', 'tooMany', 'badEmail', 'wrongCode', 'codeStale', 'taken', 'badPair', 'wrong', 'locked', 'unavailable'];
+  const missed = says.filter((r) => !new RegExp(`reason === '${r}'`).test(ui));
+  check('每一种失败都有自己的一句话（不许落到「网络出错」兜底上）',
+    missed.length === 0, missed.length ? '少了：' + missed.join(' ') : `${says.length} 种`);
+  check('（尺子）兜底那一句还在（不是把兜底删了才全绿）', /: s\.purchaseNetwork;/.test(ui));
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);

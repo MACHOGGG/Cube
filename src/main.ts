@@ -4,7 +4,7 @@ import { applyAppIcon } from './ui/appIcons';
 import { showLoadingScreen } from './ui/loadingScreen';
 import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
 import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
-import { renderAccountPage, type AuthTab } from './ui/accountPage';
+import { renderAccountPage } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
 import { suffixFor } from './engine/runKey';
@@ -23,7 +23,7 @@ import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
 import { loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
-import { openAuthWindow, openGeniusWindow, promptPasswordIfJustPaid } from './ui/subscribe';
+import { openAuthWindow, openGeniusWindow } from './ui/subscribe';
 import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
@@ -352,7 +352,7 @@ function restoreProfileScroll() {
   keepScrollAt(profileScrollY, onProfilePage);
 }
 /** 从个人主页点进去的那些页，按《退出》回来走的这条。 */
-const backToProfile = () => showAccountPage('login', true);
+const backToProfile = () => showAccountPage(true);
 /** 屋主在主菜单上替整屋挑玩法时，返回键等于横幅上那颗《回小屋》。 */
 const backToRoomFromPick = () => {
   setPickingForRoom(null);
@@ -784,14 +784,13 @@ syncScreenClass();
  * @param restore 从它自己的某一页《退出》回来：落回刚才看的位置。从底排导航
  *   点开的，照旧从最上面开始。
  */
-function showAccountPage(tab: AuthTab, restore = false) {
+function showAccountPage(restore = false) {
   teardown();
   trackScreen('profile');
   // 刚登录完最常落在这一页：顺手把云上那份战绩接回这台设备。
   void restoreCloudRuns(runKeyFor);
   renderAccountPage(
     root,
-    tab,
     {
       onBack: showMenu,
       onSwitchLanguage: () => showLangSwitchModal(currentLang, onLanguageSwitched),
@@ -991,7 +990,7 @@ function showWorldRankPage() {
     lang: currentLang,
     onBack: backToProfile,
     onWantGenius: () => openGeniusWindow(currentLang, showWorldRankPage),
-    onReLogin: () => openAuthWindow(currentLang, 'login', showWorldRankPage),
+    onReLogin: () => openAuthWindow(currentLang, showWorldRankPage),
   });
   setNavTab(null);
   wireHomeTitle();
@@ -1046,7 +1045,7 @@ function showMultiplayer() {
       // 人多半已经付过钱，缺的只是重登一次；走 openGeniusWindow 会因为本机缓
       // 存还以为自己是天才而拐进《账户》窗，那里没有登录入口。世界排行榜那
       // 一处（onReLogin）走的就是这一句。
-      onSessionGone: () => openAuthWindow(currentLang, 'login', showMultiplayer),
+      onSessionGone: () => openAuthWindow(currentLang, showMultiplayer),
       // Off to the home page, where all eight boards live with their icons.
       onPickMode: (code) => {
         setPickingForRoom(code);
@@ -1252,7 +1251,7 @@ function showRecordsPage() {
     recordSources,
     currentLang,
     () => openGeniusWindow(currentLang, showRecordsPage),
-    () => openAuthWindow(currentLang, 'login', showRecordsPage),
+    () => openAuthWindow(currentLang, showRecordsPage),
   );
   setNavTab('records');
   wireHomeTitle();
@@ -1499,7 +1498,7 @@ function relocalizeChrome(lang: Lang) {
   mountBottomNav(
     {
       // Tapping the icon of the page you are already on closes it.
-      onProfile: () => leaveGame(() => (navTab === 'profile' ? showMenu() : showAccountPage('login'))),
+      onProfile: () => leaveGame(() => (navTab === 'profile' ? showMenu() : showAccountPage())),
       onRecords: () => leaveGame(() => (navTab === 'records' ? showMenu() : showRecordsPage())),
     },
     lang,
@@ -1552,7 +1551,7 @@ function onLanguageSwitched(lang: Lang) {
   saveLang(lang);
   trackLanguage(lang, 'switch');
   relocalizeChrome(lang);
-  showAccountPage('login', true);
+  showAccountPage(true);
 }
 
 // 个人主页 is written from the subscription as it stood when it rendered, so
@@ -1563,7 +1562,7 @@ onGeniusChange(() => {
   // Both pages say something different once the subscription is live: 个人
   // 主页 changes what its pill and 天才 button offer, and the home page drops
   // the padlocks from the two 「+」 boards that just became playable.
-  if (navTab === 'profile') showAccountPage('login');
+  if (navTab === 'profile') showAccountPage();
   else if (root.querySelector('.home-page')) showMenu();
   // 多人那一页的《开房间》上挂着锁和天才招牌，那是照 isGenius() 画的。只在
   // 它自己那一屏上重画：房间里、倒数中的时候重画等于把轮询打断一次，而那两
@@ -1580,17 +1579,18 @@ void splash.then(boot);
 // is waiting through. It settles a checkout the player has just come back
 // from, re-reads the store receipt, and otherwise leaves the cached answer
 // exactly as it was — offline, this does nothing at all.
-const settled = refreshEntitlement();
+// 不再有人 await 它（等它落地才弹的那扇窗撤了，见下面），但这一趟照旧要发：它会把
+// 商店收据重读一遍、把缓存里的权益顺一次。
+void refreshEntitlement();
 
-// If a checkout is still waiting for a password, that window is the first
-// thing the player sees — the boards are already unlocked behind it, and this
-// is the step that makes the subscription theirs rather than this browser's.
-//
-// It waits on both promises, and the splash is the one that matters here:
-// `currentLang` starts as the module's default and only becomes the player's
-// own inside boot(). Opening as soon as the network answered — which is often
-// well before the splash ends — asked a French player for a password in
-// Chinese, at the one moment they are least inclined to forgive it.
-void Promise.all([splash, settled]).then(() =>
-  promptPasswordIfJustPaid(currentLang, showMenu),
-);
+/*
+ * **开场时「刚付过款就追问密码」那一下撤了**（E37，2026-10 的改制）。
+ *
+ * 它等开场动画和那次权益查询都落地之后，看有没有一笔刚结完账、还没设密码，有就弹《设置
+ * 密码》那扇窗。两样东西都没了：没有结账了，密码也取消了（登录改成邮箱验证码或两串免邮
+ * 箱凭据）。`ui/subscribe.ts` 那扇窗和这个函数一起撤。
+ *
+ * 那段注释里记着一次事故，留在这儿免得重犯：这一下原先摆在 boot() 里、网络一答就弹，而
+ * 那常常比开场动画结束早得多——于是它在一个法语玩家最不肯原谅的时刻，用中文问他要密码。
+ * 以后任何「开场之后弹一扇窗」的东西，都要等 splash 和那次查询都落地。
+ */

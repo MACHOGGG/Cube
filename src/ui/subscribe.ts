@@ -1,39 +1,29 @@
 import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
 import { playCopied } from '../engine/juice';
-import { mountPin, mountPwMeter } from './authBits';
+import { mountPin } from './authBits';
 import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
-import { webSaleOpen } from '../engine/saleWindow';
-import { formatPrice, plans, type PlanPeriod } from '../engine/pricing';
 import {
-  attachAccount,
   clearEntitlement,
   entitlement,
   isGenius,
-  pendingAccount,
-  purchase,
-  registerAccount,
-  rememberPending,
+  askForCode,
+  pairAuth,
   restore,
   setEntitlement,
-  signedInEmail,
+  signInWithCode,
   type Entitlement,
   type GiftCode,
-  type PendingAccount,
   type PurchaseFailure,
 } from '../engine/subscription';
 import {
-  changePasscode,
   confirmEmailChange,
-  confirmUnlock,
-  redeemCode,
   requestEmailChange,
-  requestUnlock,
   type AccountFailure,
 } from '../engine/account';
-import { CONTACT_EMAIL, LEGAL, LEGAL_PATH, type LegalKey } from '../legal';
+import { CONTACT_EMAIL } from '../legal';
 
 /**
  * How the paywall describes each board the subscription unlocks.
@@ -68,7 +58,6 @@ function geniusBoardBlurb(id: string, lang: Lang): string {
  * in the markup below for a currency to be chosen by mistake.
  */
 
-export type AuthTab = 'register' | 'login';
 
 const LOCALES: Record<Lang, string> = {
   en: 'en',
@@ -182,7 +171,25 @@ const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
  * 之后被告知「必须正好 6 位」。四种语言都是这样。现在四处（标签、提示、报错、
  * 这条校验）说的是同一句话，服务器那头也是同一条正则。
  */
-const isPin = (value: string) => /^[A-Za-z0-9]{6}$/.test(value);
+/**
+ * 这是一个免邮箱凭据账号吗——是的话返回要显示的那一串（E38/E53）。
+ *
+ * 只写一遍。屏幕上「你是谁」那一行、以及「摆不摆《更换邮箱》」都问它：那两处判错了都不
+ * 报错，只是前者印出一串 64 位 hex，后者给出一行点下去必是 400 的路。
+ *
+ * 判据是 `handle` 这一位在不在，**不是**去看 `email` 长得像不像 hdl: ——那种长相判断会在
+ * 哪天 id 的形状变一下的时候静默失效。`handle` 只有 pairAuth 那条路会写（engine/
+ * subscription.ts）。
+ */
+const handleOf = (e: Entitlement): string | undefined => e.handle;
+/**
+ * 免邮箱凭据那两串（E38）：大小写敏感的字母 + 数字，8 到 64 位。
+ *
+ * **和服务端 api/_accounts.js 的 PAIR_RE 必须是同一条**。前置挡一下只为了省一次往返，说
+ * 了算的还是服务端那一条——所以两边不一致的后果是「客户端放过、服务端打回」，而那条错一
+ * 路压成「网络出错」。同一个坑在六位密码上踩过一次（见 attachAccount 那段注释）。
+ */
+const PAIR_RE = /^[A-Za-z0-9]{8,64}$/;
 
 /**
  * One labelled input, in the shape the auth windows all use.
@@ -212,108 +219,37 @@ function field(id: string, label: string, attrs: string): string {
 }
 
 /**
- * The password, asked once more before the billing page opens.
+ * 去 Creem 自己的账单页（退订、换卡、拿收据）。
  *
- * `current-password` rather than `new-password` here, so a manager offers to
- * fill the one it already has rather than to invent another.
+ * **这儿原先是一扇窗**：把邮箱只读地摆着、再问一次密码，理由是「这个链接后面是卡号后四
+ * 位、付款记录和那颗退订键」。2026-10 密码取消了（E37），身份改用登录令牌证明（E44）
+ * ——而令牌这台设备手上就有，所以**没有东西要问了，窗也就不必存在**。
+ *
+ * 少一扇窗不只是少几行代码：那扇窗上「再输一次密码」这件事本身，对一个刚刚用验证码登进
+ * 来的人是说不通的（他压根没有密码）。
+ *
+ * 开不出来就在《账户》那一屏上说一句。不新开一扇窗来报错——玩家按的是一行「管理订阅」，
+ * 他要的结果是一个页面，不是一扇窗。
  */
-export function openPortalWindow(lang: Lang, email: string): void {
+async function openPortal(lang: Lang, onChanged: () => void): Promise<void> {
   const s = STRINGS[lang];
-  const { overlay, close } = openModal(
-    'auth-modal',
-    `
-    <h2>${s.manageSubscription}</h2>
-    <form id="portalForm" class="auth-body" autocomplete="on">
-      ${field('portalUser', s.emailLabel,
-        `type="email" name="username" autocomplete="username" readonly value="${esc(email)}"`)}
-      ${field('portalPw', s.passwordAny,
-        `type="password" name="password" autocomplete="current-password"`)}
-      <button type="submit" hidden></button>
-    </form>
-    <p class="auth-msg" id="portalMsg" role="status"></p>
-    <div class="btn-row">
-      <button class="btn-quiet" id="portalClose">${s.closeBtn}</button>
-      <button class="primary" id="portalGo">${s.manageSubscription}</button>
-    </div>
-  `,
-  );
-  const form = overlay.querySelector<HTMLFormElement>('#portalForm')!;
-  const pw = overlay.querySelector<HTMLInputElement>('#portalPw')!;
-  const msg = overlay.querySelector<HTMLElement>('#portalMsg')!;
-  const go = overlay.querySelector<HTMLButtonElement>('#portalGo')!;
-
-  const submit = async () => {
-    if (!pw.value) return void (msg.textContent = s.pwWrong);
-    go.disabled = true;
-    msg.textContent = s.workingLabel;
-    const { webPortal } = await import('../engine/creem');
-    const opened = await webPortal(email, pw.value);
-    go.disabled = false;
-    if (opened) return close();
-    msg.textContent = s.pwWrong;
-  };
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    void submit();
-  });
-  go.addEventListener('click', () => form.requestSubmit());
-  overlay.querySelector<HTMLButtonElement>('#portalClose')!.addEventListener('click', close);
-  pw.focus();
+  const current = entitlement();
+  const { webPortal } = await import('../engine/creem');
+  const opened = await webPortal(current.email ?? '', current.token ?? '');
+  // 开不出来：回到《账户》并在那一屏上带一句话（它的第三个参数就是这个用处）。
+  if (!opened) openStatusWindow(lang, onChanged, s.serverBusy);
 }
 
-/**
- * A form that a phone's password manager will recognise.
+/*
+ * **credentialForm() 撤了**（E37）。
  *
- * Both platforms decide whether to offer "save this password?" by looking at
- * the shape of the markup, not by being asked, and both want the same three
- * things: a real <form>, an identifying field marked `username`, and the
- * password field marked `new-password` when one is being chosen. The username
- * here is the address the player already paid with, so it is shown read-only
- * rather than asked for again — visible, because a hidden field is exactly
- * what a manager is trained to distrust.
+ * 它拼的是一张「密码管理器认得出来」的表单：真 <form>、一个标着 username 的只读邮箱、一
+ * 个标着 new-password 的密码框。两扇用它的窗（《设置密码》《改密码》）都撤了，而新的
+ * 《注册 / 登录》不收密码——没有密码可存，这张表也就没有对象了。
+ *
+ * 它底下那个 offerToSave() **留着**：免邮箱凭据那两串（E38）正好是一对「账号 + 密码」，
+ * 存进管理器比让玩家自己截图可靠得多。
  */
-function credentialForm(
-  email: string,
-  emailLabel: string,
-  label: string,
-  placeholder: string,
-  readOnly: boolean,
-  newsLabel: string,
-): string {
-  // An address we already know is shown, not put in a box. A readonly input
-  // is one line wide and quietly cuts a long address off at the edge — and
-  // this is the address the whole subscription will hang on, so it is worth
-  // being able to read all of it before choosing the password underneath.
-  // The input stays, hidden, because a password manager will not offer to
-  // save anything unless the form carries an autocomplete="username" field.
-  const known = readOnly
-    ? `<div class="auth-account">
-         <span class="auth-account-label">${esc(emailLabel)}</span>
-         <span class="auth-account-value">${esc(email)}</span>
-       </div>
-       <input id="pwUser" type="email" name="username" autocomplete="username"
-              value="${esc(email)}" hidden readonly />`
-    : field('pwUser', emailLabel,
-        `type="email" name="username" autocomplete="username" inputmode="email" value="${esc(email)}"`);
-  // Its own class, not .auth-body: that one is a centring flex *row*, built
-  // to hold a single child, and it laid the address and the password box
-  // side by side — half a window each, and the address cut off. Here they
-  // are stacked, which is also what the window is meant to say: this is your
-  // account, and this is the password you are choosing for it.
-  return `<form id="pwForm" class="pw-form" autocomplete="on">
-      ${known}
-      ${field('pwNew', label,
-        `type="password" name="password" autocomplete="new-password" minlength="6" maxlength="6" placeholder="${esc(placeholder)}"`)}
-      <!-- 这是账号建起来的那一刻，也是唯一一次能在给出邮箱的当下问一句「要不要
-           收信」的机会。默认不勾：同意得是主动给的，预先替人勾上的不算同意
-           （GDPR 明确不认），所以这个框出厂就是空的。 -->
-      <label class="auth-optin">
-        <input type="checkbox" id="pwNews" />
-        <span>${esc(newsLabel)}</span>
-      </label>
-      <button type="submit" hidden></button>
-    </form>`;
-}
 
 /** Chromium can be told outright; Safari only ever infers it from the form. */
 async function offerToSave(email: string, password: string): Promise<void> {
@@ -329,152 +265,33 @@ async function offerToSave(email: string, password: string): Promise<void> {
   }
 }
 
-/**
- * Choosing the password, the moment the player lands back from Creem.
+/*
+ * **《设置密码》那扇窗撤了**（E37）。
  *
- * They are already a subscriber when this opens — the boards are unlocked
- * behind it — so nothing here is a gate. It is the one step that makes the
- * subscription theirs rather than this browser's: without it, the only way
- * back in on another phone would be to name an address anyone could guess.
- */
-export function openSetPasswordWindow(
-  lang: Lang,
-  pending: PendingAccount,
-  email: string,
-  onChanged: () => void,
-): void {
-  const s = STRINGS[lang];
-  // A card checkout already knows the address — Creem collected it, and it is
-  // shown rather than asked for. A code knows nothing about who typed it, so
-  // here the field is theirs to fill in.
-  const fromCode = pending.kind === 'code';
-  const { overlay, close } = openModal(
-    'auth-modal',
-    `
-    <h2>${fromCode ? s.bindTitle : s.setPwTitle}</h2>
-    <p class="auth-hint">${fromCode ? s.bindHint : s.setPwHint}</p>
-    ${credentialForm(email, s.emailLabel, s.setPwLabel, s.setPwPlaceholder, !fromCode, s.newsOptIn)}
-    <p class="auth-msg" id="pwMsg" role="status"></p>
-    <div class="btn-row">
-      ${fromCode ? `<button class="btn-quiet" id="pwLater">${s.bindLater}</button>` : ''}
-      <button class="primary" id="pwGo">${fromCode ? s.bindTitle : s.setPwTitle}</button>
-    </div>
-  `,
-    // 刷卡的那扇不能点掉：刚付了钱、还没设密码的人，手上的订阅只活在这一个
-    // 浏览器里，永远搬不走；所有不是「设一个」的出路都通向那儿。
-    // 内部码的那扇能点掉：码一输进去权益就已经生效了，绑不绑账号是他自己的
-    // 事——这里只是建议（玩家的原话：「改为建议注册，不要一直弹窗然后不注
-    // 册就不能玩」）。以后想绑，状态窗里有《绑定到账户》。
-    fromCode,
-  );
-  overlay.querySelector<HTMLButtonElement>('#pwLater')?.addEventListener('click', close);
-
-  const form = overlay.querySelector<HTMLFormElement>('#pwForm')!;
-  const input = overlay.querySelector<HTMLInputElement>('#pwNew')!;
-  // 六段完成度表：设新密码的三处都挂，登录那张表不挂（见 authBits 的 mountPwMeter）。
-  mountPwMeter(input, lang);
-  const msg = overlay.querySelector<HTMLElement>('#pwMsg')!;
-  const go = overlay.querySelector<HTMLButtonElement>('#pwGo')!;
-
-  const user = overlay.querySelector<HTMLInputElement>('#pwUser')!;
-  const news = overlay.querySelector<HTMLInputElement>('#pwNews')!;
-  const submit = async () => {
-    const address = user.value.trim();
-    if (fromCode && !isEmail(address)) return void (msg.textContent = s.emailInvalid);
-    const password = input.value;
-    // 用 `isPin`（和服务端 api/_accounts.js 的 PASS_RE 同一条规矩：六位**字母数字**），
-    // 不是只数长度。从前这儿是 `password.length !== 6`，于是 `abc-12` 这种过得了客户端、
-    // 被服务端 400 'weak' 打回来，而那条错一路被压成「网络出错」——玩家刚付完钱，界面
-    // 告诉他网络有问题。两头都改了：这儿前置挡住，底下那条路也认得出 'weak'。
-    if (!isPin(password)) return void (msg.textContent = s.setPwShort);
-    go.disabled = true;
-    msg.textContent = s.workingLabel;
-    const done = await attachAccount(pending, password, address, news.checked);
-    go.disabled = false;
-    // For a checkout, 'exists' means the address already had a password and
-    // there is nothing left to do. For a code it is the opposite: this is the
-    // wrong address to attach it to, and another one will work.
-    if (done === 'exists') {
-      if (!fromCode) return close();
-      msg.textContent = s.bindTaken;
-      return;
-    }
-    // Both remaining failures say so and leave the window open. Closing
-    // quietly on the server's 503 was worse than useless: the player typed a
-    // password, the window vanished, and nothing had been saved — a failure
-    // wearing the exact face of success.
-    if (done !== 'ok') {
-      msg.textContent =
-        done === 'unavailable' ? s.serverBusy : done === 'weak' ? s.setPwShort : s.purchaseNetwork;
-      return;
-    }
-    // Saved on the server; now let the phone keep a copy too.
-    await offerToSave(address || email, password);
-    close();
-    onChanged();
-  };
-
-  // A real submit is what the password manager watches for, so let the form
-  // fire one and stop only the navigation.
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    void submit();
-  });
-  go.addEventListener('click', () => form.requestSubmit());
-  // No opt-out button and no way to tap it away: one field, and it is the
-  // whole of what makes this subscription theirs rather than this browser's.
-  // Force-quitting is not an escape either — the checkout is remembered, so
-  // the window is the first thing the next launch puts up.
-  input.focus();
-}
-
-/**
- * Called once at boot: if a checkout is still waiting for a password — this
- * launch's, or one from a launch where it never got set — that window is the
- * first thing the player sees. It keeps coming back until the password
- * exists, because that password is the only way a subscription bought on one
- * device is ever reachable from another.
- */
-export function promptPasswordIfJustPaid(lang: Lang, onChanged: () => void): void {
-  const pending = pendingAccount();
-  // 只追刷卡的。内部码兑换后的绑定是建议，不在每次打开时再弹一遍。
-  if (!pending || pending.kind === 'code') return;
-  // 而且要真付过。刷卡这一路的窗是关不掉的（openSetPasswordWindow 的
-  // dismissable 只对兑码开——设密码是他把这份订阅带走的唯一办法，那扇窗没有
-  // 《以后再说》），所以它只能在权益确实到手之后弹。
-  //
-  // 一个 checkout id 本身不是付过钱的证明：地址栏里随手写一个 ?checkout_id=
-  // 就有一个，而现在这个 id 会被记下来、下次打开还接着问。没有这道闸，那样
-  // 一个网址能把人锁在一扇关不掉的窗后面，重开也还在。
-  if (!isGenius()) return;
-  openSetPasswordWindow(lang, pending, signedInEmail() ?? '', onChanged);
-}
-
-/**
- * 付款前一定要能读到的那三份：多少钱、怎么退、按什么条款卖。
+ * 它是「刚从 Creem 结账页回来，设一把密码」那一屏。密码整个取消之后它没有对象了：注册和
+ * 登录都走邮箱验证码（api/signin.js）或者两串免邮箱凭据（api/handle.js）。
  *
- * 五份里只摆这三份。隐私政策和联系方式跟「这一笔要不要付」无关，而这扇窗
- * 底下已经排着一长串权益——每多一行，真正该被读到的那三行就更容易被略过。
- * 另外两份在个人主页的法务那一段里，一直都在。
+ * 后端 `api/passcode.js` 的 `create` 支留着（在途的标签页、老账号），只是前端不再开这扇
+ * 窗——走到那一步的人现在从《注册 / 登录》那一扇进来。
  */
-const PAYWALL_LEGAL: LegalKey[] = ['pricing', 'refund', 'terms'];
 
-/**
- * 那三份的入口，只在网页版摆。
+/*
+ * **「刚付过款就追问密码」那一下撤了**（E37）。
  *
- * 摆的是真链接（新标签打开，这扇窗不会被顶掉）。应用里不摆：那几个网址靠
- * Vercel 的 cleanUrls 才解析得开（/pricing → pricing.html，见 vercel.json），
- * 装进 WebView 之后没人做这一步转换，摆上去就是三条点不开的链接——比不摆
- * 更糟。应用里那五份在个人主页的法务那一段，点开是弹窗，不用走网络。
+ * 它是开场时检查「有没有一笔刚结完账、还没设密码」，有就弹上面那扇窗。两样东西都没了：
+ * 没有结账了，也没有密码了。`src/main.ts` 里那一句调用一并撤掉。
  */
-function paywallLegalLinks(lang: Lang): string {
-  if (isStoreChannel()) return '';
-  const links = PAYWALL_LEGAL.map(
-    (k) =>
-      `<a href="${LEGAL_PATH[k]}" target="_blank" rel="noopener">${LEGAL[lang][k].title}</a>`,
-  ).join('');
-  return `<div class="genius-legal">${links}</div>`;
-}
+
+/*
+ * **付款墙上那三条法务链接撤了**（E42）。
+ *
+ * 这儿原先是 `paywallLegalLinks()`：在价目行底下摆《价格与订阅》《条款》《退款》三条，
+ * 理由是「按下那一行价钱就直接去结账页了，这儿是最后一处还来得及说的地方」。
+ *
+ * 2026-10 不卖了，那三份文档本身也从 `LEGAL_ORDER` 里撤了（`build-legal.mjs` 按它出静态
+ * 页，所以 /pricing /terms /refund 三个网址会 404）。链一条通向 404 的法务链接，比不链更
+ * 糟。个人主页底部留着《隐私政策》和《联系与特别感谢》两行。
+ */
 
 /**
  * The window behind 成为 Slides 天才. Already a subscriber? Then it is the
@@ -521,7 +338,21 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
    * 又是这个仓库一向躲着的那种陈述（见 CLAUDE.md 里法务文本那一段）。个人主页上那
    * 三行照旧写着「敬请期待」。
    */
-  const PERKS_SHOWN = 4;
+  /**
+   * **十条全摆**（E40，玩家 2026-10-02）。
+   *
+   * 这儿原先只摆 4 条、剩下的收成一行「……」，理由是那一窗太长：十条「立刻解锁」＋三条
+   * 「敬请期待」＋价目＋收款方＋三条法务链接＋底下那排键，整窗七百多像素，手机上最底下
+   * 那排键落在屏幕外。
+   *
+   * 现在撑长的那几样全撤了（价钱、收款方、法务链接、内部码那一行，E40/E41/E42），腾出
+   * 来的地方正好摆满十条——而这一屏要回答的问题也换了：从前是「多少钱、谁收钱、值不
+   * 值」，现在是「注册能换到什么」，那就该把货列全。
+   *
+   * ⚠️ **十条照旧会把窗撑长。** 门里必须在 360×640 和 390×844 两档各量一次底排键还在
+   * 屏内（check-register-guide.mjs）——超了就退回省略号版，别靠眼睛看一眼就算了。
+   */
+  const PERKS_SHOWN = nowList.length;
   /**
    * **网页端停售**（《侵蚀阶梯》E11 / PR-12，玩家 2026-10 在 Creem 后台把两个商品
    * archive 掉了，在续的订阅也一并取消了）。
@@ -541,19 +372,17 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
    * `CREEM_*` 环境变量也该清掉**：清了之后 `configured()` 为假，接口答的是 503
    * 「订阅尚未开放」，而不是一句听着像我们服务器坏了的话。
    */
-  const webClosed = !isStoreChannel() && !webSaleOpen();
-  const priceRows = webClosed
-    ? ''
-    : plans()
-    .map(
-      (plan) => `
-      <button class="plan-row" data-period="${plan.period}">
-        <span class="plan-period">${plan.period === 'yearly' ? s.planYearly : s.planMonthly}</span>
-        <span class="plan-price">${esc(formatPrice(plan, lang))}</span>
-      </button>`,
-    )
-    .join('');
-
+  /*
+   * **价钱整段撤了**（E40）。
+   *
+   * 2026-10 的改制把「付钱解锁」换成「注册解锁」，所以这一屏不再是付款窗。原先这儿有
+   * `webClosed` 一个布尔 + 一段 `plans().map()` 生成价目行，留着是为了「有一天改回来方
+   * 便」——现在改制已经定了，留一段走不到的生成器只会让下一个人以为这一屏还会卖东西。
+   *
+   * **跟 Creem 之间的机制一行没动**：`engine/pricing.ts` 的 plans() / formatPrice()、
+   * `api/checkout.js`、`api/portal.js`、`engine/saleWindow.ts` 那个布尔全在原处。要重开
+   * 订阅，回来在这儿摆回价目行就是；那时也必须同时改掉上面那句写死的承诺（E54）。
+   */
   const { overlay, close } = openModal(
     'genius-modal',
     `
@@ -571,26 +400,23 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
       的 grantWindowOpen 旁边钉着同一条（E54）。
     -->
     <p class="tag-line" id="geniusTag">${s.registerUnlocks}</p>
-    ${priceRows ? `<div class="plan-list">${priceRows}</div>` : ''}
     ${
-      // The store has something worth saying here — no sign-up, never leaves
-      // the app. Paying by card no longer does: what used to sit here said
-      // there was no password to set, which the very next window disproves.
+      // 商店那一端还有一句值得说的：不用注册、不离开 App。网页端没有对应的话——它要说的
+      // 本来是「刷卡不用设密码」，而密码整个取消之后那句话连对象都没有了。
       isStoreChannel()
         ? `<p class="auth-hint">${s.storeNoAccountHint.replace('{store}', store)}</p>`
         : ''
     }
-    ${
-      // 钱是谁收的，要在他按下那一行价钱之前就说清楚——按下去就直接去结账页了，
-      // 这儿是最后一处还来得及说的地方。三个渠道各有各的收款方，名字由 payeeName()
-      // 给（网页 Creem，应用里 App Store / Google Play）。
-      //
-      // 停售之后这一句整条撤掉：没有在收的款，却摆着一句「{store} 以记录商户身份
-      // 收款」，是这一页上唯一还在说「这儿能付钱」的话。
-      webClosed ? '' : `<p class="auth-hint">${s.merchantNote.replace('{store}', store)}</p>`
-    }
-    ${paywallLegalLinks(lang)}
-    <button class="link-btn" id="geniusRedeem">${s.haveCode}</button>
+    <!--
+      这儿原先还有三样，2026-10 全撤（E40/E41/E42）：
+
+      · 收款方那一句（merchantNote）——没有在收的款，它是这一页上唯一还在说「这儿能付
+        钱」的话；
+      · 三条法务链接（paywallLegalLinks：价格 / 条款 / 退款）——那三份文档本身也撤了，
+        LEGAL_ORDER 只留隐私（E42），链过去就是 404；
+      · 《有兑换码》那一行（geniusRedeem）——内部码的前端全撤（E41）。后端
+        api/redeem.js 一行没动，码还能用，只是不在界面上招手了。
+    -->
     <p class="auth-msg" id="geniusMsg" role="status"></p>
     <div class="genius-perks">
       <div class="menu-section-label">${s.geniusNowTitle}</div>
@@ -612,46 +438,18 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
            that is signing in, not closing the window. -->
       <button class="btn-quiet" id="geniusClose">${s.closeBtn}</button>
       <button class="primary" id="geniusRestore">${
-        isStoreChannel() ? s.restoreBtn : webClosed ? s.registerBtn : s.signInBtn
+        isStoreChannel() ? s.restoreBtn : s.registerBtn
       }</button>
     </div>
   `,
   );
 
-  const msg = overlay.querySelector<HTMLElement>('#geniusMsg')!;
-  const rows = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.plan-row'));
-  const setBusy = (busy: boolean) => {
-    for (const row of rows) row.disabled = busy;
-    msg.textContent = busy ? s.workingLabel : '';
-  };
-
-  for (const row of rows) {
-    row.addEventListener('click', async () => {
-      setBusy(true);
-      const outcome = await purchase(row.dataset.period as PlanPeriod);
-      // The web hands the tab to Creem; there is no result to show here.
-      if (outcome.ok === 'redirecting') return;
-      setBusy(false);
-      if (outcome.ok === true) {
-        close();
-        onChanged();
-        openStatusWindow(lang, onChanged);
-        return;
-      }
-      msg.textContent = failureText(outcome.reason, lang);
-    });
-  }
-
-  overlay.querySelector<HTMLButtonElement>('#geniusRedeem')!.addEventListener('click', () => {
-    close();
-    openRedeemWindow(lang, onChanged);
-  });
   overlay.querySelector<HTMLButtonElement>('#geniusRestore')!.addEventListener('click', () => {
     close();
     if (isStoreChannel()) runStoreRestore(lang, onChanged);
-    // 停售期间这颗键是《注册》，所以开的是注册那一档。已经有账号的人走底下那颗
-    // 《有兑换码》旁边的路，或者在注册屏上切到登录——那一屏本来就有两档。
-    else openAuthWindow(lang, webClosed ? 'register' : 'login', onChanged);
+    // 网页端这颗键是《注册》，开的就是那一扇窗——而注册和登录在那扇窗里是同一条路
+    // （服务端自己知道这个地址上有没有账号），所以已经有账号的人按它也对。
+    else openAuthWindow(lang, onChanged);
   });
   overlay.querySelector<HTMLButtonElement>('#geniusClose')!.addEventListener('click', close);
 }
@@ -693,15 +491,17 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
     ${giftBlock(current.gifts ?? [], lang)}
     <p class="auth-msg" id="statusMsg" role="status">${esc(notice)}</p>
     <div class="menu-section-label acct-label">${s.accountActions}</div>
+    <!--
+      这一列 2026-10 瘦了三行（E43）：改密码（密码取消了）、兑内部码（前端全撤，E41）、
+      绑定（它开的是《设置密码》那扇窗，一起撤了）。
+
+      ⚠️ **免邮箱凭据账号不摆《更换邮箱》**（E53）。api/email.js 要求「现在这个地址」
+      过 EMAIL_RE，而这种账号的 id 是 hdl: 加一串 hex——点下去必是 400，而屏幕上只会
+      写一句含糊的失败。一条走不通的路比没有这条路更糟。
+      他的「第二串」也不显示：服务端只有哈希，客户端也不存，**显示不出来**，这是设计。
+    -->
     <div class="acct-rows">
-      ${row('statusChangePw', s.changePwRow)}
-      ${row('statusChangeEmail', s.changeEmailRow)}
-      ${
-        // 没有在续的订阅：兑一张内部码就是他此刻最该走的那条路，所以它排在
-        // 这里，而不是只藏在登录窗的一行小字后面。
-        isGenius() ? '' : row('statusRedeem', s.insiderCode)
-      }
-      ${pendingAccount()?.kind === 'code' ? row('statusBind', s.bindNow) : ''}
+      ${handleOf(current) ? '' : row('statusChangeEmail', s.changeEmailRow)}
       ${hasPortal ? row('statusManage', s.manageSubscription) : ''}
       ${isStoreChannel() ? '' : row('statusSignOut', s.signOutBtn)}
     </div>
@@ -723,37 +523,21 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
   `,
   );
 
-  // 换密码 / 换邮箱：各自一扇小窗，关掉之后回到这一扇（refresh），这样玩家
-  // 改完能当场看见改成了什么，不用自己再点回来。
+  // 换邮箱：一扇小窗，关掉之后回到这一扇（back），这样玩家改完能当场看见改成了什么，
+  // 不用自己再点回来。
   const back = (notice = '') => openStatusWindow(lang, onChanged, notice);
-  overlay.querySelector<HTMLButtonElement>('#statusChangePw')?.addEventListener('click', () => {
-    close();
-    openChangePasswordWindow(lang, onChanged, back);
-  });
   overlay.querySelector<HTMLButtonElement>('#statusChangeEmail')?.addEventListener('click', () => {
     close();
     openChangeEmailWindow(lang, onChanged, back);
-  });
-  overlay.querySelector<HTMLButtonElement>('#statusRedeem')?.addEventListener('click', () => {
-    close();
-    openRedeemWindow(lang, onChanged);
-  });
-
-  // 内部码还只跟着这台设备走：想让它跟着自己走，从这儿绑到一个邮箱。
-  overlay.querySelector<HTMLButtonElement>('#statusBind')?.addEventListener('click', () => {
-    const pending = pendingAccount();
-    close();
-    if (pending) openSetPasswordWindow(lang, pending, '', onChanged);
   });
 
   // Cancelling a web subscription happens on Creem's own portal page — they
   // hold the billing record, so it is never something this app pretends to do.
   overlay.querySelector<HTMLButtonElement>('#statusManage')?.addEventListener('click', () => {
-    // Behind this link are the card's last four digits, the payment history
-    // and the cancel button, so it asks for the password again even though
-    // this device is signed in — the same re-check a bank does.
+    // 这个链接后面是卡号后四位、付款记录和那颗退订键。身份用**登录令牌**证明（E44）——
+    // 密码取消之后它是唯一还存在的证明，而且是同样强的那一种（24 字节随机）。
     close();
-    openPortalWindow(lang, signedInEmail() ?? '');
+    void openPortal(lang, onChanged);
   });
   // Signing out only forgets the address on this device: it cancels nothing,
   // and naming the address again brings the subscription straight back.
@@ -778,8 +562,28 @@ function orderBlock(current: Entitlement, lang: Lang): string {
   const s = STRINGS[lang];
   const lifetime = Boolean(current.until && current.until >= LIFETIME_UNTIL);
   const rows: [string, string][] = [];
-  if (current.email) rows.push([s.emailLabel, current.email]);
-  if (current.period) {
+  /*
+   * 「你是谁」那一行（E53）。
+   *
+   * 免邮箱凭据账号（E38）的 `email` 里放的是服务端认人的那把 id（`hdl:` 加 64 位 hex），
+   * **那一串不能印给人看**——而服务端也印不出来，它只存第一串的 sha256。所以这种账号印的
+   * 是客户端自己留的那份原文（`handle`），标签也跟着换成「第一串」。
+   *
+   * 第二串一个字都不显示：服务端只有 scrypt 哈希，客户端也不存。这是设计，不是漏了。
+   */
+  const handle = handleOf(current);
+  if (handle) rows.push([s.pairFirstShort, handle]);
+  else if (current.email) rows.push([s.emailLabel, current.email]);
+  /*
+   * 「哪一档」这一行**只有真买过的人才有**。
+   *
+   * `entitlementOf`（api/_accounts.js）里 `period` 是从 `plan` 推出来的，而它**总有值**
+   * （不是 'month' 就按 'yearly' 答）。于是 2026-10 之后每一个注册进来的人都会看到一行
+   * 「年付」——而他一分钱没付，站上也没有在卖。那一行是假话。
+   *
+   * 终身（免费期授予的那一份）这儿就不摆档位：底下那一行已经写着「永久」，说清了。
+   */
+  if (current.period && !lifetime) {
     rows.push([s.orderPlanLabel, current.period === 'monthly' ? s.planMonthly : s.planYearly]);
   }
   if (lifetime) rows.push([s.orderUntilLabel, s.orderLifetime]);
@@ -901,86 +705,13 @@ function wireCopyButtons(overlay: HTMLElement, lang: Lang): void {
   }
 }
 
-/**
- * 更换密码。旧密码是唯一的凭据——不是「登着就能改」。
+/*
+ * **《改密码》那扇窗撤了**（E37）。
  *
- * 一台没锁屏的手机被人拿去，如果登着就能改密码，那台手机的主人当场就丢了账
- * 号（新密码是拿手机的人设的，真主人反而进不去）。多问一次旧密码，挡的正是
- * 这一种；真主人不过是多打六个字符。
- *
- * 改完服务端会把所有设备的令牌一并作废（换了钥匙，别人手上那把就该不好使），
- * 再发一把新的给这台。那把新的一定要存下来，不然刚改完密码的人自己先掉线。
+ * 后端那一支也撤了（`api/passcode.js` 的 change，见那个文件末尾）。邮箱账号没有密码可
+ * 改；免邮箱账号要换第二串，走《注册 / 登录》那扇窗里的《忘了第二串？》（api/handle.js
+ * 的 reset，凭第一串）。
  */
-export function openChangePasswordWindow(
-  lang: Lang,
-  onChanged: () => void,
-  onBack: (notice?: string) => void,
-): void {
-  const s = STRINGS[lang];
-  const email = signedInEmail() ?? '';
-  const { overlay, close } = openModal(
-    'auth-modal',
-    `
-    <h2>${s.changePwRow}</h2>
-    <p class="auth-hint">${esc(email)}</p>
-    <form id="cpwForm" autocomplete="on">
-      <input type="email" name="username" autocomplete="username" value="${esc(email)}" hidden readonly />
-      ${field('cpwOld', s.oldPwLabel, `type="password" name="current-password" autocomplete="current-password"`)}
-      ${field('cpwNew', s.newPwLabel,
-        `type="password" name="new-password" autocomplete="new-password" placeholder="${esc(s.setPwPlaceholder)}"`)}
-      <button type="submit" hidden></button>
-    </form>
-    <p class="auth-msg" id="cpwMsg" role="status"></p>
-    <div class="btn-row">
-      <button class="btn-quiet" id="cpwClose">${s.closeBtn}</button>
-      <button class="primary" id="cpwGo">${s.confirmBtn}</button>
-    </div>
-  `,
-  );
-
-  const oldPw = overlay.querySelector<HTMLInputElement>('#cpwOld')!;
-  const newPw = overlay.querySelector<HTMLInputElement>('#cpwNew')!;
-  // 只挂在**新**密码上。旧密码那一格是凭据，不是要填满的东西——给它挂一块完成度表等于
-  // 在提示「你还差几位」，而他要打的是一个自己早就知道的密码。
-  // 顺带：这一处原先漏了 maxlength="6"（另两处都写着），mountPwMeter 一并补上。
-  mountPwMeter(newPw, lang);
-  const msg = overlay.querySelector<HTMLElement>('#cpwMsg')!;
-  const go = overlay.querySelector<HTMLButtonElement>('#cpwGo')!;
-  const form = overlay.querySelector<HTMLFormElement>('#cpwForm')!;
-
-  const submit = async () => {
-    if (!oldPw.value) return void (msg.textContent = s.pwWrong);
-    // 和服务器同一条规矩（PASS_RE：正好 6 位，数字或字母）。先在这儿说一遍，
-    // 省一趟往返，也省得玩家把「不合格」读成「旧密码错了」。
-    if (!isPin(newPw.value)) return void (msg.textContent = s.setPwShort);
-    go.disabled = true;
-    msg.textContent = s.workingLabel;
-    const done = await changePasscode(email, oldPw.value, newPw.value);
-    go.disabled = false;
-    if (!done.ok) {
-      msg.textContent = accountFailText(done.reason, lang);
-      return;
-    }
-    // 旧的那些令牌已经在服务端作废了，这一把是刚发给这台设备的。不接住的话，
-    // 这台设备下一次去看排行榜就会被告知「请重新登录」——刚改完密码的人被自
-    // 己的改动踢下线，是说不通的。
-    setEntitlement({ ...entitlement(), token: done.token });
-    void offerToSave(email, newPw.value);
-    onChanged();
-    close();
-    onBack(s.pwChanged);
-  };
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    void submit();
-  });
-  go.addEventListener('click', () => form.requestSubmit());
-  overlay.querySelector<HTMLButtonElement>('#cpwClose')!.addEventListener('click', () => {
-    close();
-    onBack();
-  });
-}
 
 /**
  * 更换邮箱。两步，一屏——不另开一扇窗，因为这是同一件事的上下半段。
@@ -1009,7 +740,7 @@ export function openChangeEmailWindow(
     ${field('cemNew', s.newEmailLabel,
       `type="email" autocomplete="off" inputmode="email" placeholder="${esc(s.emailPlaceholder)}"`)}
     <div id="cemStep2" hidden>
-      ${field('cemCode', s.unlockCodeLabel,
+      ${field('cemCode', s.codeFieldLabel,
         `type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6"`)}
     </div>
     <p class="auth-msg" id="cemMsg" role="status"></p>
@@ -1082,41 +813,73 @@ export function openChangeEmailWindow(
 }
 
 /**
- * 注册 / 登录 — the site only.
+ * 注册 / 登录 —— the site only。**一扇窗，三态同屏**（E37/E38）。
  *
- * **两栏现在收的东西一模一样**（邮箱 + 六位密码），区别只在服务端走哪一支：注册是
- * 开一个还不存在的账号（/api/passcode 的 register），登录是拿这两样去证明账号是他
- * 的（/api/subscription）。
+ * ```
+ * ① 邮箱态（默认）     [ 邮箱 ] [→]        《免邮箱注册 / 登录》
+ * ② 验证码态           「验证码已寄到 …」 六格  ☐ 更新邮件（只有新账号才问）  《换个邮箱》
+ * ③ 免邮箱态           [ 第一串 ] [ 第二串 ]  那句警告  [ 保存 ]  《忘了第二串？》《改用邮箱》
+ * ```
  *
- * 从前不是这样：「注册就是订阅」——这一栏连密码框都是隐藏的，因为邮箱是 Creem 的
- * 结账页替我们收的，按下去只是把人送去付款。2026-10 把那两个订阅商品暂时关掉之后
- * （E11 / PR-12），那条路成了一个**死圈**：天才那一屏的《注册》开这扇窗，这扇窗的
- * 《注册》又转回天才那一屏，而玩家照着「注册就解锁全部功能」去做，一个账号也开不
- * 出来。这一屏自己收邮箱和密码，就是为了把那个圈打开。
+ * ── 从前是什么样 ────────────────────────────────────────────
+ *
+ * 两栏：《注册》和《登录》，各收邮箱 + 六位密码，底下常驻《忘记密码？》和《有兑换码》。
+ * 2026-10 的改制（E37）把密码整个取消了——身份改成「一张寄到邮箱的六位验证码」，于是：
+ *
+ *   · **两栏并成一条路。** 这个地址上有没有账号，服务端自己知道（`created`），玩家分不
+ *     出、也不该要他分。所以没有 tab 了。
+ *   · **《忘记密码？》没了。** 没有密码可忘，而那扇窗（openUnlockWindow）整个撤了。
+ *   · **《有兑换码》没了**（E41）。前端全撤，后端 api/redeem.js 一行没动。
+ *
+ * ── 为什么三态在同一扇窗里，不是三扇 ──────────────────────
+ *
+ * 玩家定的站点原则有一条「不要出现意料之外的界面」。②是①的下一拍（码刚寄出去，他还在
+ * 等），③是①的另一条路（邮箱这条走不通的时候）——三样都是「我要进去」这一件事的不同时
+ * 刻，分成三扇窗就会出现「刚才那扇哪儿去了」。
+ *
+ * 一个具体的好处：收到 `mailDown`（E51，Resend 发不出信）时**不进②**，留在①上添一句提
+ * 示。玩家手里那一步没动，他看到的是「这条路暂时不通，旁边还有一条」。
  */
-export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void): void {
+export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   const s = STRINGS[lang];
   const { overlay, close } = openModal(
     'auth-modal',
     `
-    <div class="auth-tabs">
-      <button class="auth-tab" data-tab="register">${s.tabRegister}</button>
-      <button class="auth-tab" data-tab="login">${s.tabLogin}</button>
-    </div>
     <div class="auth-body">
       <p class="auth-hint" id="authHint"></p>
-      <form id="authForm" autocomplete="on">
-        <div id="authFields">
-          ${field('authEmail', s.emailLabel,
-            `type="email" name="username" autocomplete="username" inputmode="email" placeholder="${s.emailPlaceholder}"`)}
-          ${field('authPw', s.passwordAny,
-            `type="password" name="password" autocomplete="current-password"`)}
-        </div>
+
+      <!-- ① 邮箱态。一个框一颗箭头，不写字（玩家定的「少文字」）。 -->
+      <form id="authMailForm" autocomplete="on">
+        ${field('authEmail', s.emailLabel,
+          `type="email" name="username" autocomplete="username" inputmode="email" placeholder="${s.emailPlaceholder}"`)}
         <button type="submit" hidden></button>
       </form>
+
+      <!-- ② 验证码态。六格由 mountPin 画（style.css 的 .pin-row / .pin-cell 已有三
+           态），这儿只摆那个真输入框。 -->
+      <form id="authCodeForm" autocomplete="on" hidden>
+        ${field('authCode', s.codeFieldLabel,
+          'type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"')}
+        <label class="auth-optin" id="authNewsRow" hidden>
+          <input type="checkbox" id="authNews" />
+          <span>${s.newsOptIn}</span>
+        </label>
+        <button type="submit" hidden></button>
+      </form>
+
+      <!-- ③ 免邮箱态。两个框都是**明文**：玩家要抄下来的东西，遮住反而抄错。 -->
+      <form id="authPairForm" autocomplete="off" hidden>
+        ${field('authFirst', s.pairFirstLabel,
+          'type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"')}
+        ${field('authSecond', s.pairSecondLabel,
+          'type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"')}
+        <p class="auth-warn" id="authPairWarn">${s.pairWarning}</p>
+        <button type="submit" hidden></button>
+      </form>
+
       <p class="auth-msg" id="authMsg" role="status"></p>
-      <button class="link-btn" id="authForgot">${s.forgotPw}</button>
-      <button class="link-btn" id="authRedeem">${s.haveCode}</button>
+      <button class="link-btn" id="authAlt"></button>
+      <button class="link-btn" id="authPairForgot" hidden>${s.pairForgot}</button>
     </div>
     <div class="btn-row">
       <button class="btn-quiet" id="authClose">${s.closeBtn}</button>
@@ -1126,189 +889,259 @@ export function openAuthWindow(lang: Lang, tab: AuthTab, onChanged: () => void):
   );
 
   const hint = overlay.querySelector<HTMLElement>('#authHint')!;
-  const fields = overlay.querySelector<HTMLElement>('#authFields')!;
-  const input = overlay.querySelector<HTMLInputElement>('#authEmail')!;
-  const pwInput = overlay.querySelector<HTMLInputElement>('#authPw')!;
   const msg = overlay.querySelector<HTMLElement>('#authMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#authGo')!;
-  const tabs = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.auth-tab'));
-  const forgot = overlay.querySelector<HTMLButtonElement>('#authForgot')!;
-  let current: AuthTab = tab;
+  const alt = overlay.querySelector<HTMLButtonElement>('#authAlt')!;
+  const pairForgot = overlay.querySelector<HTMLButtonElement>('#authPairForgot')!;
+  const mailForm = overlay.querySelector<HTMLFormElement>('#authMailForm')!;
+  const codeForm = overlay.querySelector<HTMLFormElement>('#authCodeForm')!;
+  const pairForm = overlay.querySelector<HTMLFormElement>('#authPairForm')!;
+  const mailInput = overlay.querySelector<HTMLInputElement>('#authEmail')!;
+  const codeInput = overlay.querySelector<HTMLInputElement>('#authCode')!;
+  const newsRow = overlay.querySelector<HTMLElement>('#authNewsRow')!;
+  const newsBox = overlay.querySelector<HTMLInputElement>('#authNews')!;
+  const firstInput = overlay.querySelector<HTMLInputElement>('#authFirst')!;
+  const secondInput = overlay.querySelector<HTMLInputElement>('#authSecond')!;
+  const warn = overlay.querySelector<HTMLElement>('#authPairWarn')!;
 
-  /**
-   * 《忘记密码？》——常驻，不是等出事了才冒出来。
-   *
-   * 原先这一行只在登录被答「blocked」（连输错六次，账号锁死）之后才摆出来，
-   * 而服务器那头也只给锁死的账号发码。合起来的意思是：一个老老实实「我忘了
-   * 密码」的人根本没有入口——除非他自己想到「故意连错六次把自己锁死」，而没
-   * 有人会这么想。两头一起改（见 api/unlock.js）。
-   *
-   * 锁死那一支因此不必再单独摆一行：这一行本来就在他眼前，摆第二个一模一样
-   * 的按钮只会让人以为那是两件不同的事。
-   */
-  forgot.addEventListener('click', () => {
-    const address = input.value.trim();
-    close();
-    openUnlockWindow(lang, address, onChanged);
-  });
+  /** 六格那一排。`mountPin` 自己管格子、粘贴分格、三态动画（ui/authBits.ts）。 */
+  const pin = mountPin(codeInput, () => void submit());
 
-  const setTab = (next: AuthTab) => {
-    current = next;
-    for (const el of tabs) el.classList.toggle('active', el.dataset.tab === next);
+  type Stage = 'mail' | 'code' | 'pair';
+  let stage: Stage = 'mail';
+  /** ②③ 要记住上一步填的东西：②要知道码寄给了谁，③的「重设」要知道第一串。 */
+  let sentTo = '';
+  /** ③ 有两档：取一对新的（register）还是重设第二串（reset）。 */
+  let pairMode: 'register' | 'reset' = 'register';
+
+  const show = (next: Stage) => {
+    stage = next;
     msg.textContent = '';
-    hint.textContent = next === 'register' ? s.registerHint : s.signInHint;
-    // 两栏都要填，所以这张表一直摆着——从前 register 那一栏整个 fields 是 hidden 的
-    // （邮箱由 Creem 的结账页去收）。
-    fields.hidden = false;
-    // 《忘记密码？》只在登录那一栏有意义：注册这一刻他还没有密码可忘，而那扇窗会往
-    // 一个还不存在的账号寄解锁码，只能答「没有这个账号」——一条通向死胡同的出路比没
-    // 有出路更糟。
-    forgot.hidden = next === 'register';
-    go.textContent = next === 'register' ? s.registerBtn : s.signInBtn;
-    /**
-     * 同一个密码框，两栏两套标注——这是给密码管理器看的，填错了不报错，只是它从此
-     * 不再提示保存（或者拿一个旧密码去填一个新账号）。
+    mailForm.hidden = next !== 'mail';
+    codeForm.hidden = next !== 'code';
+    /*
+     * 「愿不愿意收 Slides 的更新邮件」摆在②上，**对谁都摆**，出厂不勾。
      *
-     *   注册：new-password + 正好六位。管理器据此**发明**一个新密码、并提示存下来。
-     *   登录：current-password，不设长度。管理器拿它已经有的那个来填；长度不设是故
-     *         意的——服务端登录那一支收的是宽松的 SECRET_RE，在这儿卡死六位就等于
-     *         告诉外面的人「这个站的密码都是六位」。
+     * 方案里写的是「仅 created=true 时出现」，可那一位要到码验过之后才知道（服务端的
+     * `created`）——而要在**发码之前**知道，这个接口就得先回答「这个地址有没有账号」，那
+     * 正是它刻意不肯回答的那一问（api/signin.js 顶上那段：有号没号回包一字不差）。两者
+     * 不能同时成立，所以选了不开那个洞。
      *
-     * `minlength` 对**空值不生效**（HTML 就这么定的），所以提交那头还得自己拦一次空。
+     * 代价很小：服务端只在建账号那一刻读这一位（`createAccount` 那一支），已经有账号的人
+     * 传什么都不动他当初的选择。所以老玩家看到这个框、不勾它，他原来勾过的意愿一个字都不
+     * 会变。
      */
-    pwInput.autocomplete = next === 'register' ? 'new-password' : 'current-password';
-    if (next === 'register') {
-      pwInput.setAttribute('minlength', '6');
-      pwInput.setAttribute('maxlength', '6');
-    } else {
-      pwInput.removeAttribute('minlength');
-      pwInput.removeAttribute('maxlength');
-    }
+    newsRow.hidden = next !== 'code';
+    pairForm.hidden = next !== 'pair';
+    pairForgot.hidden = next !== 'pair' || pairMode === 'reset';
+    // ③ 的「重设」那一档只填第一串和新的第二串，那句警告照旧要在（它说的是第一串）。
+    warn.hidden = false;
+    hint.textContent =
+      next === 'mail'
+        ? s.signInHint
+        : next === 'code'
+          ? s.codeSentTo.replace('{email}', sentTo)
+          : pairMode === 'reset'
+            ? s.pairWarning
+            : s.pairlessEntry;
+    // ③ 重设那一档：第二串的标签要说「新的」，而那句话就是 pairResetBtn 的意思，所以
+    // 用按钮文案去说，标签不动——多一句话不如换一颗键上的字。
+    /*
+     * ① 那颗键是**一枚箭头**，不是字（玩家定的「少文字」，方案 ① 那一行写的就是
+     * `[ 邮箱 ] [→]`）。
+     *
+     * 从前这儿摆 `s.signInBtn`（「登录」），而那是错的：按《注册》进来的人看到一颗写着
+     * 「登录」的键，会以为自己点错了。箭头没有这个问题——它说的是「接着往下」，而往下
+     * 到底是注册还是登录，服务端自己知道（`created`），不必在这颗键上替他分。
+     *
+     * `aria-label` 照旧给一句话，读屏的人要听得懂。
+     */
+    go.textContent = next === 'mail' ? '→' : next === 'code' ? s.signInBtn : pairMode === 'reset' ? s.pairResetBtn : s.pairSaveBtn;
+    go.setAttribute(
+      'aria-label',
+      next === 'mail' ? s.signInBtn : (go.textContent ?? ''),
+    );
+    alt.textContent = next === 'mail' ? s.pairlessEntry : next === 'code' ? s.useAnotherEmail : s.useEmailInstead;
+    alt.hidden = false;
+    (next === 'mail' ? mailInput : next === 'code' ? codeInput : firstInput).focus();
+  };
+
+  /** 把一次失败翻译成屏幕上那一句。认的是服务端送回来的那个词，不是状态码。 */
+  const say = (reason: string) => {
+    msg.textContent =
+      reason === 'mailDown'
+        ? s.mailDownHint
+        : reason === 'tooMany'
+          ? s.tooManyTries
+          : reason === 'badEmail'
+            ? s.emailInvalid
+            : reason === 'wrongCode'
+              ? s.codeWrong
+              : reason === 'codeStale'
+                ? s.codeStale
+                : reason === 'taken'
+                  ? s.pairTaken
+                  : reason === 'badPair'
+                    ? s.pairBad
+                    : reason === 'wrong'
+                      ? s.pairWrong
+                      : reason === 'locked'
+                        ? s.pwLocked.replace('{hours}', '4')
+                        : reason === 'unavailable'
+                          ? s.serverBusy
+                          : s.purchaseNetwork;
+  };
+
+  /** 登进去了：缓存已经由 engine 那边写好，这儿只管关窗和把背后那一页刷新。 */
+  const landed = () => {
+    onChanged();
+    close();
+    openStatusWindow(lang, onChanged);
   };
 
   const submit = async () => {
-    const email = input.value.trim();
-    if (!isEmail(email)) {
-      msg.textContent = s.emailInvalid;
-      return;
-    }
-    const password = pwInput.value;
-    if (!password) return void (msg.textContent = s.pwWrong);
-
-    /**
-     * 注册：先把账号开出来，**然后原样走下面登录那一段**。
-     *
-     * 不在这儿另写一遍「成了之后怎么样」，因为「他是不是天才」只有
-     * /api/subscription 答得准——窗口期那份终身授予就挂在那条路上
-     * （api/subscription.js），而名额可能正好在这一瞬间满了。在这儿顺手写一句
-     * 「你是天才」就是多一份会走样的副本。
-     *
-     * 名额满了不是失败：账号照样开出来，只是不是天才，于是下面那一支会答
-     * `active: false`，屏幕上写「登上了，但这个账号现在没有权限」。这正是
-     * CLAUDE.md 那条「『登着』和『是天才』是两件事」——云端战绩、别人寄给他的
-     * 内部码、改密码，都挂在账号上，和权益无关。
-     */
-    if (current === 'register') {
-      // 和服务端 PASS_RE 同一条规矩（六位字母数字），前置挡住，省一次往返；
-      // 也挡住 `minlength` 管不到的那个空值。
-      if (!isPin(password)) return void (msg.textContent = s.setPwShort);
+    if (stage === 'mail') {
+      const email = mailInput.value.trim();
+      if (!isEmail(email)) return void (msg.textContent = s.emailInvalid);
       go.disabled = true;
       msg.textContent = s.workingLabel;
-      const made = await registerAccount(email, password);
-      if (made !== 'ok') {
-        go.disabled = false;
-        msg.textContent =
-          made === 'exists'
-            ? s.emailTaken
-            : made === 'weak'
-              ? s.setPwShort
-              : made === 'unavailable'
-                ? s.serverBusy
-                : made === 'tooMany'
-                  ? s.tooManyTries
-                  : s.purchaseNetwork;
+      const asked = await askForCode(email, lang);
+      go.disabled = false;
+      if (asked !== true) {
+        // mailDown 时**留在这一屏**（E51）：他手里那一步没动，旁边就是另一条路。
+        say(asked);
         return;
       }
-      // 开出来了，让这台设备也存一份（管理器那一下），再接着往下走登录。
-      // 键不放开、那句「处理中」也不擦掉：下面紧接着就是同一次操作的后半段，
-      // 中间闪一下「可以按了」会让人以为完事了，于是他按第二次。
-      await offerToSave(email, password);
+      sentTo = email;
+      codeInput.value = '';
+      show('code');
+      msg.textContent = s.codeSentNote;
+      return;
     }
 
+    if (stage === 'code') {
+      const code = codeInput.value.trim();
+      if (!/^\d{6}$/.test(code)) return void (msg.textContent = s.codeWrong);
+      go.disabled = true;
+      msg.textContent = s.workingLabel;
+      const done = await signInWithCode(sentTo, code, newsBox.checked);
+      go.disabled = false;
+      if (!done.ok) {
+        pin.reject();
+        say(done.reason);
+        return;
+      }
+      await pin.accept();
+      landed();
+      return;
+    }
+
+    // ③ 免邮箱
+    const first = firstInput.value.trim();
+    const second = secondInput.value.trim();
+    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void (msg.textContent = s.pairBad);
     go.disabled = true;
     msg.textContent = s.workingLabel;
-
-    // One call for both kinds of subscriber. Which one this address is, the
-    // server knows and the browser cannot: a card password of six digits and
-    // a redeemed code's six-digit passcode are the same string.
-    const outcome = await restore(email, password);
+    const done = await pairAuth(pairMode === 'reset' ? 'reset' : 'register', first, second);
     go.disabled = false;
-    if (outcome.ok === true) {
-      onChanged();
-      // 登上了，可这个账号此刻没有在续的订阅——《订单情况》那一屏抬头写着
-      // 「已订阅」，开给他看是说假话。就地说一句，《关闭》让他自己走；他确实
-      // 已经登录了，背后那一页（onChanged）已经跟着变了。
-      if (!outcome.entitlement.active) {
-        msg.textContent = s.signedInNoSub;
-        return;
-      }
-      close();
-      openStatusWindow(lang, onChanged);
+    if (!done.ok) {
+      // 注册撞名（taken）时**自动改成登录试一次**是不对的：第一串撞上了，第二串几乎不
+      // 可能正好也是人家那一串，于是那一次会答「对不上」，而屏幕上写的是两句互相矛盾
+      // 的话。如实说「这一串有人用了」，让他换一串。
+      say(done.reason);
       return;
     }
-    if (outcome.ok === false && outcome.reason === 'needsPasscode') {
-      msg.textContent = s.needsPwHint;
-      return;
-    }
-    if (outcome.ok === false && outcome.reason === 'wrong') {
-      msg.textContent = s.pwWrong;
-      return;
-    }
-    // Two different locks, two different things to say — and only one of
-    // them has anything the player can press.
-    //
-    //   locked  — four wrong tries; it opens by itself, and the server has
-    //             already worked out when. Saying "check your email" here
-    //             sent people looking for a message that is never sent.
-    //   blocked — six; the address itself has to vouch for them, which is
-    //             exactly what openUnlockWindow does——而那扇窗现在有一行常驻
-    //             的《忘记密码？》通着，不必等锁死了才现身。
-    if (outcome.ok === false && outcome.reason === 'locked') {
-      msg.textContent = s.pwLocked.replace(
-        '{hours}',
-        String(Math.max(1, Math.ceil((outcome.retryInMs ?? 0) / 3600e3))),
-      );
-      return;
-    }
-    if (outcome.ok === false && outcome.reason === 'blocked') {
-      // 出路那一行（《忘记密码？》）一直就在下面，不用再补一个。
-      msg.textContent = s.pwBlocked;
-      return;
-    }
-    msg.textContent =
-      outcome.ok === false && outcome.reason === 'none'
-        ? s.signInNotFound
-        : failureText(outcome.ok === false ? outcome.reason : 'network', lang);
+    // 先让这台设备的密码管理器存一份（这两串正好是一对「账号 + 密码」），再提醒他截
+    // 图——这两串**只有他自己有**：服务端存的是第一串的 sha256，还原不出来，客服也帮不
+    // 了他。两样都做，因为管理器可能压根不在（无痕窗口、某些内嵌浏览器）。
+    await offerToSave(first, second);
+    msg.textContent = s.pairSavedHint;
+    // 让那句话在屏幕上留一拍再关窗。reduced-motion 下也一样——这不是动画，是读字的时间。
+    await new Promise((r) => setTimeout(r, 1400));
+    landed();
   };
 
-  for (const el of tabs) el.addEventListener('click', () => setTab(el.dataset.tab as AuthTab));
-  // Going through the form's own submit is what lets a phone's password
-  // manager recognise this as a sign-in and offer to fill or update it.
-  const form = overlay.querySelector<HTMLFormElement>('#authForm')!;
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    void submit();
+  /**
+   * ③ 的登录和注册是**同一颗键**。
+   *
+   * 服务端那两支分得很清（register 要求第一串没人用过，signin 要求两串都对），可玩家手里
+   * 只有两串字，他不知道自己算哪一种——**他自己也不该要知道**。所以这颗键先试「登录」，
+   * 对不上再试「注册」：
+   *
+   *   · 两串都对            → 登进去（老用户）
+   *   · 第一串没人用过      → 注册出来（新用户）
+   *   · 第一串有人、第二串错 → 如实说「对不上」
+   *
+   * 次序不能反。先注册的话，老用户每次回来都会撞一个 409「已被占用」——而那正是他自己的
+   * 账号。
+   */
+  const pairSubmit = async () => {
+    const first = firstInput.value.trim();
+    const second = secondInput.value.trim();
+    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void (msg.textContent = s.pairBad);
+    go.disabled = true;
+    msg.textContent = s.workingLabel;
+    const signedIn = await pairAuth('signin', first, second);
+    if (signedIn.ok) {
+      go.disabled = false;
+      landed();
+      return;
+    }
+    // 'wrong' 既是「第一串没人用过」也是「第二串不对」——服务端故意答同一句（不然
+    // signin 也成了一个枚举接口）。所以这儿只能试一次注册，由它的 409 来分开。
+    if (signedIn.reason !== 'wrong') {
+      go.disabled = false;
+      say(signedIn.reason);
+      return;
+    }
+    const made = await pairAuth('register', first, second);
+    go.disabled = false;
+    if (!made.ok) {
+      // 409 taken 在这一步的意思很明确：第一串有人用，而上面那次登录说两串对不上——
+      // 所以是第二串错了。说「对不上」比说「已被占用」准。
+      say(made.reason === 'taken' ? 'wrong' : made.reason);
+      return;
+    }
+    await offerToSave(first, second);
+    msg.textContent = s.pairSavedHint;
+    await new Promise((r) => setTimeout(r, 1400));
+    landed();
+  };
+
+  for (const form of [mailForm, codeForm, pairForm]) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void (stage === 'pair' && pairMode === 'register' ? pairSubmit() : submit());
+    });
+  }
+  // 走表单自己的 submit，不直接叫 submit()：那一下是手机上的密码管理器认出「这是一次登
+  // 录」的唯一凭据，绕过去它就不提示保存。
+  go.addEventListener('click', () => {
+    (stage === 'mail' ? mailForm : stage === 'code' ? codeForm : pairForm).requestSubmit();
   });
-  // 两栏都走表单自己的 submit（从前 register 那一栏是直接叫 submit()，因为那一栏
-  // 没有任何输入框）。走表单这一下是手机上的密码管理器认出「这是一次登录或注册」
-  // 的唯一凭据，绕过去它就不提示保存。
-  go.addEventListener('click', () => form.requestSubmit());
-  overlay.querySelector<HTMLButtonElement>('#authRedeem')!.addEventListener('click', () => {
+
+  alt.addEventListener('click', () => {
+    if (stage === 'mail') {
+      pairMode = 'register';
+      show('pair');
+      return;
+    }
+    // ②的《换个邮箱》和③的《改用邮箱》都回①。②那一下**不清掉已经寄出的那张码**：
+    // 他可能只是打错了一个字母，回去改完还是同一个地址。
+    show('mail');
+  });
+
+  pairForgot.addEventListener('click', () => {
+    pairMode = 'reset';
+    secondInput.value = '';
+    show('pair');
+  });
+
+  overlay.querySelector<HTMLButtonElement>('#authClose')!.addEventListener('click', () => {
+    pin.destroy();
     close();
-    openRedeemWindow(lang, onChanged);
   });
-  overlay.querySelector<HTMLButtonElement>('#authClose')!.addEventListener('click', close);
-  setTab(tab);
+  show('mail');
 }
 
 /**
@@ -1338,186 +1171,24 @@ export async function runStoreRestore(lang: Lang, onChanged: () => void): Promis
   if (msg) msg.textContent = failureText(outcome.ok === false ? outcome.reason : 'network', lang);
 }
 
-/**
- * Spending a code. One field, and it is the code.
+/*
+ * **《有兑换码》那扇窗撤了**（E41）。
  *
- * It used to ask for an address and a passcode in the same window, which
- * turned a gift into a registration form and buried the one field that
- * mattered between two that did not. A code is a thing that unlocks, so it
- * unlocks the moment it is typed; attaching an address so it survives a new
- * phone is worth doing and is the very next question, asked on its own.
+ * 内部码的**前端**全撤：这扇窗、天才那一屏上那一行、《账户》里那一行、个人主页上那一
+ * 行。**后端 `api/redeem.js` 和 `api/passcode.js` 的 bind 支一行没动**——已经发出去的码
+ * 照旧兑得了，玩家手里那张纸没作废，只是界面上不再招手。
+ *
+ * 为什么连窗一起撤：「注册就免费解锁全部内容」之后，一张「开通一个月」的码没有任何意
+ * 义。留着入口只会让人以为还有什么是要另外换的。
  */
-export function openRedeemWindow(lang: Lang, onChanged: () => void): void {
-  const s = STRINGS[lang];
-  const { overlay, close } = openModal(
-    'auth-modal',
-    `
-    <h2>${s.redeemTitle}</h2>
-    ${field('redeemCode', s.redeemCodeLabel,
-      `type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(s.redeemCodePlaceholder)}"`)}
-    <p class="auth-msg" id="redeemMsg" role="status"></p>
-    <div class="btn-row">
-      <button class="btn-quiet" id="redeemClose">${s.closeBtn}</button>
-      <button class="primary" id="redeemGo">${s.redeemBtn}</button>
-    </div>
-  `,
-  );
 
-  const code = overlay.querySelector<HTMLInputElement>('#redeemCode')!;
-  const msg = overlay.querySelector<HTMLElement>('#redeemMsg')!;
-  const go = overlay.querySelector<HTMLButtonElement>('#redeemGo')!;
-
-  const submit = async () => {
-    const ticket = code.value.trim();
-    if (!ticket) return void (msg.textContent = s.redeemBadCode);
-    // Spending a code on top of a subscription that is still running throws
-    // most of it away. The check is here rather than on the server because
-    // this is where the answer is known, and because the only person a
-    // bypass costs is the one who burned their own gift early.
-    if (isGenius()) return void (msg.textContent = s.alreadyActive);
-    go.disabled = true;
-    msg.textContent = s.workingLabel;
-    const held = entitlement();
-    const result = await redeemCode(ticket, signedInEmail() ?? undefined, held.token);
-    go.disabled = false;
-    if (!result.ok) {
-      msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
-      return;
-    }
-    // Unlocked. What it granted lives under the code until an address is
-    // attached, and that is remembered so the question survives a closed
-    // window or a reload — otherwise one dismissal would strand a gift in
-    // this browser forever.
-    setEntitlement(result.entitlement);
-    // The server attached it to a signed-in account, so there is nobody left
-    // to ask about: `code` comes back only when it is still held by the code.
-    if (result.entitlement.token && result.code) {
-      rememberPending({
-        kind: 'code',
-        code: ticket.toUpperCase().replace(/[^0-9A-Z]/g, ''),
-        token: result.entitlement.token,
-      });
-    }
-    close();
-    onChanged();
-    const pending = pendingAccount();
-    if (pending) openSetPasswordWindow(lang, pending, '', onChanged);
-    else openStatusWindow(lang, onChanged);
-  };
-
-  code.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') submit();
-  });
-  go.addEventListener('click', submit);
-  overlay.querySelector<HTMLButtonElement>('#redeemClose')!.addEventListener('click', close);
-}
-
-/**
- * The way back into an account that has been shut after six wrong
- * passcodes. Six wrong guesses out of ten thousand is not someone breaking
- * in; it is someone who has forgotten which four digits they picked — so
- * this ends by setting a new passcode rather than merely lifting the lock,
- * which would hand them back the same door they were already stuck at.
+/*
+ * **《忘记密码》那扇窗撤了**（E37）。
+ *
+ * 它是「拿邮箱证明这个账号是自己的，然后设一把新密码」。没有密码了，所以这条路的终点不
+ * 存在了；而「拿邮箱证明自己」这件事现在就是**登录本身**（一张寄到邮箱的验证码），忘不
+ * 忘无所谓。
+ *
+ * **后端 `api/unlock.js` 一行没动**：它还守着老账号那条路（在途的标签页、装着旧包的
+ * App）。前端不再开这扇窗而已。
  */
-export function openUnlockWindow(lang: Lang, email: string, onChanged: () => void): void {
-  const s = STRINGS[lang];
-  const { overlay, close } = openModal(
-    'auth-modal',
-    `
-    <h2>${s.unlockTitle}</h2>
-    <p class="auth-hint">${s.unlockIntro}</p>
-    ${field('unlockEmail', s.emailLabel,
-      `type="email" autocomplete="email" inputmode="email" value="${esc(email)}"`)}
-    <div id="unlockStep2" hidden>
-      ${field('unlockCode', s.unlockCodeLabel, 'type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"')}
-      ${field('unlockPw', s.unlockNewPw,
-        `type="password" minlength="6" maxlength="6" autocomplete="new-password" placeholder="${s.passwordPlaceholder}"`)}
-    </div>
-    <p class="auth-msg" id="unlockMsg" role="status"></p>
-    <div class="btn-row">
-      <button class="btn-quiet" id="unlockClose">${s.closeBtn}</button>
-      <button class="primary" id="unlockGo">${s.unlockSendBtn}</button>
-    </div>
-  `,
-  );
-
-  const address = overlay.querySelector<HTMLInputElement>('#unlockEmail')!;
-  const intro = overlay.querySelector<HTMLElement>('.auth-hint')!;
-  const mailRow = address.closest('label') ?? address.parentElement!;
-  const step2 = overlay.querySelector<HTMLElement>('#unlockStep2')!;
-  const codeBox = overlay.querySelector<HTMLInputElement>('#unlockCode')!;
-  const pwBox = overlay.querySelector<HTMLInputElement>('#unlockPw')!;
-  // 六格验证码 ＋ 新密码那块完成度表。格子只管显示，真输入框还是它自己（连
-  // autocomplete="one-time-code" 都在原处），所以 iOS 的短信自动填充照旧能用。
-  const codePin = mountPin(codeBox);
-  mountPwMeter(pwBox, lang);
-  const msg = overlay.querySelector<HTMLElement>('#unlockMsg')!;
-  const go = overlay.querySelector<HTMLButtonElement>('#unlockGo')!;
-  let sent = false;
-
-  const submit = async () => {
-    const mail = address.value.trim();
-    if (!isEmail(mail)) return void (msg.textContent = s.emailInvalid);
-    go.disabled = true;
-    msg.textContent = s.workingLabel;
-
-    if (!sent) {
-      const asked = await requestUnlock(mail, lang);
-      go.disabled = false;
-      if (!asked.sent) {
-        msg.textContent = accountFailText(asked.reason, lang);
-        return;
-      }
-      sent = true;
-      step2.hidden = false;
-      address.readOnly = true;
-      go.textContent = s.unlockConfirmBtn;
-      msg.textContent = s.unlockSent;
-      codeBox.focus();
-      return;
-    }
-
-    const pin = pwBox.value.trim();
-    if (!isPin(pin)) {
-      go.disabled = false;
-      msg.textContent = s.passwordLabel;
-      return;
-    }
-    const result = await confirmUnlock(mail, codeBox.value.trim(), pin);
-    go.disabled = false;
-    if (result.ok) {
-      setEntitlement(result.entitlement);
-      onChanged();
-      // 密码换好了，可这个账号此刻没有在续的订阅——《订单情况》那一屏的抬头
-      // 写着「已订阅」，开给他看就是说了句假话，而且他还会以为自己刚才什么
-      // 也没改成。就地说一句「新密码已经设好」，留着《关闭》让他自己走。
-      if (!result.entitlement.active) {
-        // 说完「新密码已经设好」，这一屏上就不该再留着「我们会寄一组六位数
-        // 验证码到你的信箱」——那句话是给还没开始的人看的，码早就寄过、用过
-        // 了。同一屏里一句说要寄、一句说已经设好，读起来是自相矛盾的。
-        intro.hidden = true;
-        mailRow.hidden = true;
-        step2.hidden = true;
-        go.hidden = true;
-        msg.textContent = s.pwReset;
-        return;
-      }
-      close();
-      openStatusWindow(lang, onChanged);
-      return;
-    }
-    msg.textContent = accountFailText(result.reason, lang, result.retryInMs);
-    // 码不对：格子行抖一下 ＋ 拒绝音 ＋ 清空 ＋ 回到第一格（authBits 的 reject）。
-    // **只在说的确实是那六位的时候抖**，不是一律抖：新密码不合规、发信没配好、被限流，
-    // 说的都不是「你这六位打错了」，抖格子会把人的注意力引到一个没问题的地方去。
-    if (result.reason === 'wrongCode' || result.reason === 'expired') codePin.reject();
-  };
-
-  for (const box of [address, codeBox, pwBox]) {
-    box.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-    });
-  }
-  go.addEventListener('click', submit);
-  overlay.querySelector<HTMLButtonElement>('#unlockClose')!.addEventListener('click', close);
-}

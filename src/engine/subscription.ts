@@ -1,6 +1,8 @@
 import { report } from './analytics';
 import { salesChannel, type SalesChannel } from './channel';
 import type { PlanPeriod } from './pricing';
+// 只借两个失败类型（纯类型 import，不会把 creem.ts 拉进启动包——别处都是 await import）。
+import type { CodeFailure, PairFailure } from './creem';
 
 /**
  * Whether this player is a 「Slides 天才」, and the one door through which
@@ -48,6 +50,20 @@ export interface Entitlement {
   channel: SalesChannel | 'code';
   /** The address a web subscription is attached to. Unused in the app. */
   email?: string;
+  /**
+   * 免邮箱凭据账号（E38）的**第一串原文**，只用来在屏幕上显示「你是谁」。
+   *
+   * 这种账号的 `email` 里放的是 `pairKey(first)` 算出来的那把 id（`hdl:` 加 64 位
+   * hex）——那是服务端认人的那一位，`identify`、`cloudScores` 的 auth()、
+   * `api/scores.js`、`api/room.js` 全链路照着它走，一行都不用改。
+   *
+   * 可那一串 hex 不能印给人看。**而服务端也印不出来**：它只存第一串的 sha256，
+   * 还原不回去（见 api/_accounts.js 的 pairKey 为什么这么做）。所以原文只能由这台
+   * 设备自己留着，就留在这儿。
+   *
+   * 邮箱账号没有这一位。清了它只影响屏幕上那一行字，不影响登录。
+   */
+  handle?: string;
   /**
    * 年付赠码 — two one-month codes a yearly subscriber can hand to friends.
    *
@@ -264,6 +280,73 @@ export async function registerAccount(
   if (!result) return 'failed';
   setEntitlement({ ...entitlement(), email: result.email, token: result.token });
   return 'ok';
+}
+
+/**
+ * 身份 2026-10 换了一套（E37/E38）：没有密码了。两条路的「写进缓存」都走这儿。
+ *
+ * 和 `registerAccount` / `restore` 并列。它们各自从一个接口拿回一份 entitlement 回包，
+ * 这一层只管同一件事：**把那份回包原样写进缓存，不自己加工**。
+ *
+ * ⚠️ `active` 照抄服务端，不写死 true。登录成功和「是天才」是两件事（CLAUDE.md 那条），
+ * 混用过一次，代价是玩家进不去自己的账号。
+ */
+export async function signInWithCode(
+  email: string,
+  code: string,
+  news: boolean,
+): Promise<{ ok: true; created: boolean } | { ok: false; reason: CodeFailure }> {
+  const creem = await import('./creem');
+  const reply = await creem.webConfirmCode(email, code, news);
+  if (typeof reply === 'string') return { ok: false, reason: reply };
+  setEntitlement({
+    active: Boolean(reply.active),
+    period: reply.period,
+    until: reply.until,
+    channel: 'code',
+    email: reply.email ?? email,
+    ...(reply.token ? { token: reply.token } : {}),
+    ...(reply.gifts?.length ? { gifts: reply.gifts } : {}),
+  });
+  return { ok: true, created: reply.created === true };
+}
+
+/** 要一张验证码。不碰缓存——这一步还没有任何身份可写。 */
+export async function askForCode(email: string, lang: string): Promise<true | CodeFailure> {
+  return (await import('./creem')).webRequestCode(email, lang);
+}
+
+/**
+ * 免邮箱凭据那条路：注册 / 登录 / 重设第二串（E38）。
+ *
+ * **`email` 里存的是服务端那把 id（`hdl:` 加 sha256），`handle` 里存第一串原文。**
+ * 前者是全链路认人的那一位（identify、cloudScores 的 auth()、scores.js、room.js），后者
+ * 只用来在屏幕上显示——而且只有这台设备有，服务端还原不出来。
+ */
+export async function pairAuth(
+  kind: 'register' | 'signin' | 'reset',
+  first: string,
+  second: string,
+): Promise<{ ok: true } | { ok: false; reason: PairFailure }> {
+  const creem = await import('./creem');
+  const reply =
+    kind === 'register'
+      ? await creem.webPairRegister(first, second)
+      : kind === 'reset'
+        ? await creem.webPairReset(first, second)
+        : await creem.webPairSignIn(first, second);
+  if (typeof reply === 'string') return { ok: false, reason: reply };
+  setEntitlement({
+    active: Boolean(reply.active),
+    period: reply.period,
+    until: reply.until,
+    channel: 'code',
+    email: reply.id ?? reply.email ?? '',
+    handle: first,
+    ...(reply.token ? { token: reply.token } : {}),
+    ...(reply.gifts?.length ? { gifts: reply.gifts } : {}),
+  });
+  return { ok: true };
 }
 
 const NOBODY: Entitlement = { active: false, channel: salesChannel() };

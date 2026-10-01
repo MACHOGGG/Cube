@@ -147,8 +147,6 @@ export interface I18nStrings {
    * 才，由窗里那一段《订单情况》如实回答。
    */
   accountTitle: string;
-  tabRegister: string;
-  tabLogin: string;
   loginGateway: string;
   tutorialShort: string;
   becomeGenius: string;
@@ -176,7 +174,6 @@ export interface I18nStrings {
   // ---- subscription: the paywall, and the web's e-mail sign-in ----
   /** Title of the window the 成为 Slides 天才 button opens. */
   subscribeTitle: string;
-  subscribeIntro: string;
   /**
    * 停售之后那一窗开头那句话（《侵蚀阶梯》PR-12 / E11，2026-10）。
    *
@@ -184,7 +181,6 @@ export interface I18nStrings {
    * 这一句说的是「开过，现在停了」。两句话指向两种完全不同的状态，共用一句会在其中
    * 一种情形下变成假话——而这一窗上的每一句都要和《价格与订阅》对得上。
    */
-  subscribeClosed: string;
   /**
    * 停售期间那一屏的正文：注册就解锁全部功能（玩家 2026-10 原话，点名「不要添加过度复杂
    * 内容」，所以就这一句，不列条款、不讲机制）。
@@ -197,13 +193,11 @@ export interface I18nStrings {
    * 一个 key 要动四语四处，和撤那一整套前端是同一件事，一并留给那一轮
    * （推送 2 的 i18n 清理）。
    */
-  slotsLeft: string;
   /** 注册那颗键。 */
   registerBtn: string;
   /** The two billing periods, as a price is labelled: "每月" / "每年". */
   planMonthly: string;
   planYearly: string;
-  subscribeBtn: string;
   restoreBtn: string;
   signInBtn: string;
   signOutBtn: string;
@@ -225,7 +219,6 @@ export interface I18nStrings {
    * 到这儿来，就等于让界面自己猜，而猜出来的承诺正是这个仓库躲着的那
    * 种东西。
    */
-  registerHint: string;
   signInHint: string;
   /** Carries {store} — "App Store" or "Google Play", per platform. */
   storeNoAccountHint: string;
@@ -237,32 +230,46 @@ export interface I18nStrings {
   /** Badge on a 「+」 board that the subscription unlocks. */
   geniusOnly: string;
   // ---- redeem codes, and the account one creates ----
-  haveCode: string;
-  redeemTitle: string;
-  redeemCodeLabel: string;
-  redeemBtn: string;
   passwordLabel: string;
-  passwordPlaceholder: string;
   /** On the log-in tab, where a passcode is only for code-made accounts. */
-  passwordAny: string;
   /** 密码框底下那六小段的实时文案（给读屏软件）。{n} 是已经打进去的位数。 */
   pwMeterSay: string;
   /** 付款回来后立刻弹出的设密码窗口。 */
-  setPwTitle: string;
-  setPwHint: string;
-  setPwLabel: string;
-  setPwPlaceholder: string;
   setPwShort: string;
   /** 注册时那一行勾选：要不要收 Slides 的邮件。默认不勾——同意得是主动给的。 */
   newsOptIn: string;
+
+  /**
+   * 注册 / 登录那扇窗的三态（E37/E38）。
+   *
+   * 身份 2026-10 换掉了：没有密码了。一条路是邮箱 + 六位验证码，另一条是两串自己取的
+   * 凭据（给没有邮箱、或者不想留邮箱的人）。两条都在同一扇窗里，不是两扇。
+   *
+   * ⚠️ `pairWarning` 那一句**不能省**。那条路的真正钥匙是第一串：它必须唯一，所以撞名
+   * 时服务端会如实答「已被占用」，于是它是最容易被外人知道的那一串；而「忘了第二串」凭
+   * 它就能重设。玩家 2026-10-01 在知情的前提下拍的板——条件是界面上如实告知。
+   */
+  codeSentTo: string;
+  useAnotherEmail: string;
+  mailDownHint: string;
+  pairlessEntry: string;
+  pairFirstLabel: string;
+  /** 《账户》那一屏身份那一行的标签。`pairFirstLabel` 是表单上的长说明，摆进一行里太长。 */
+  pairFirstShort: string;
+  pairSecondLabel: string;
+  pairWarning: string;
+  pairSaveBtn: string;
+  pairSavedHint: string;
+  pairForgot: string;
+  pairResetBtn: string;
+  useEmailInstead: string;
+  pairTaken: string;
+  pairBad: string;
+  pairWrong: string;
+  codeWrong: string;
+  codeStale: string;
   /** 内部码换来的东西，绑到一个邮箱上，好换设备时取回。 */
-  bindTitle: string;
-  bindHint: string;
   /** 内部码兑换后的绑定窗：这一颗是「以后再说」；状态窗里那一颗是「绑定到账号」。 */
-  bindLater: string;
-  bindNow: string;
-  bindTaken: string;
-  redeemCodePlaceholder: string;
   /** 内部码本身过了使用期限。 */
   codeExpired: string;
   /** 短时间内试得太多——防止有人枚举内部码。 */
@@ -270,9 +277,7 @@ export interface I18nStrings {
   /** 还在订阅期内，这张码留着更值。 */
   alreadyActive: string;
   /** 个人主页上的内部码入口。 */
-  insiderCode: string;
   /** 内部码已经兑上了——个人主页那一行右边那个对勾的说明。 */
-  insiderRedeemed: string;
   /** 订单情况 — what a signed-in player is shown about what they bought. */
   orderTitle: string;
   orderPlanLabel: string;
@@ -287,24 +292,17 @@ export interface I18nStrings {
   copyBtn: string;
   copiedLabel: string;
   /** 已订阅但从没设过密码的人，在登录时看到的指引。 */
-  needsPwHint: string;
   redeemBadCode: string;
   pwWrong: string;
   /** Carries {hours}. */
   pwLocked: string;
   pwBlocked: string;
-  unlockTitle: string;
   /** 锁死之后那个真的能按的按钮。 */
-  forgotPw: string;
-  unlockIntro: string;
   unlockSendBtn: string;
-  unlockSent: string;
-  unlockCodeLabel: string;
-  unlockNewPw: string;
+  codeSentNote: string;
+  codeFieldLabel: string;
   /** 密码换好了，但这个账号此刻没有在续的订阅——说清楚哪一半成了。 */
-  pwReset: string;
   /** 登录成功，但这个账号此刻没有在续的订阅。同样是「哪一半成了」。 */
-  signedInNoSub: string;
   // ---- 已登录：《账号》那一扇窗，以及窗里那两件事 ----
   /** 窗里那一段小标签：底下几行都是「对这个账号做的事」。 */
   accountActions: string;
@@ -314,13 +312,8 @@ export interface I18nStrings {
   /** 付款前那一句：钱是谁收的、对账单上会写谁。三个渠道都有一个 merchant of
    *  record（网页是 Creem，应用里是 App Store / Google Play），所以这句话
    *  四处通用，只换名字。 */
-  merchantNote: string;
-  changePwRow: string;
   changeEmailRow: string;
   /** 改密码：先证明你是本人。 */
-  oldPwLabel: string;
-  newPwLabel: string;
-  pwChanged: string;
   /** 换邮箱：码寄到**新**地址——谁收得到，那个地址就是谁的。 */
   newEmailLabel: string;
   emailCodeSent: string;
@@ -332,7 +325,6 @@ export interface I18nStrings {
   confirmBtn: string;
   /** 这台设备手里的令牌不作数了（在别处改过密码、或者过期）。 */
   sessionGone: string;
-  unlockConfirmBtn: string;
   unlockBadCode: string;
   unlockExpired: string;
   /** Carries {email} — the support address, when no mail can be sent. */
@@ -491,7 +483,6 @@ export interface I18nStrings {
    *  一个网络正常的人去查网络，只会让他白折腾。 */
   serverBusy: string;
   restoreNothing: string;
-  signInNotFound: string;
   workingLabel: string;
   // ---- game shell (shared HUD/overlays across every shape) ----
   pauseBtn: string;
@@ -728,98 +719,79 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rotateHint: 'Turn your phone sideways — this board is a wide one',
     back: 'Back',
     accountTitle: 'Account',
-    tabRegister: 'Sign up',
-    tabLogin: 'Sign in',
     loginGateway: 'Sign in',
     tutorialShort: 'Tutorial',
     becomeGenius: 'Become a Slides Genius',
     geniusSpecialTitle: 'Slides Genius Exclusives',
-    geniusNowTitle: 'Unlocked the moment you subscribe',
+    geniusNowTitle: 'Unlocked the moment you sign up',
     geniusNowCircleSeven: 'Seven-colour diamond ball board',
     geniusNowTriangleBig: 'Hexagonal triangle board, 54 tiles',
     geniusSoonTitle: 'Coming soon',
     geniusHostRooms: 'Put up a room and race your friends online',
-    subscribeTitle: 'Become a Slides Genius',
-    subscribeIntro: 'More unlocked right away, more added now and then, cancel any time.',
-    subscribeClosed: 'The subscription is closed for now.',
+    subscribeTitle: 'Sign up — Slides Genius, free',
     registerUnlocks: 'Sign up and everything unlocks right away — free.',
-    slotsLeft: '{n} places left',
     registerBtn: 'Sign up',
     planMonthly: 'per month',
     planYearly: 'per year',
-    subscribeBtn: 'Subscribe',
     restoreBtn: 'Restore purchase',
     signInBtn: 'Sign in',
     signOutBtn: 'Sign out',
     emailLabel: 'Email',
     emailPlaceholder: 'you@example.com',
     emailInvalid: 'That does not look like an email address.',
-    registerHint: 'Your address and a six-character passcode. Those two bring your account back on any device.',
-    signInHint: 'Your email address and the passcode you set.',
+    signInHint: 'Your address, and a six-digit code we email you. No password to remember.',
     storeNoAccountHint: 'Bought with your {store} account — no sign-up, and you never leave the app.',
     subscribedTitle: 'You are a Slides Genius',
     manageSubscription: 'Manage subscription',
     manageOnStore: 'Cancel or change it in your {store} account settings.',
-    geniusStatus: 'Subscription',
+    geniusStatus: 'Account',
     geniusOnly: 'Genius only',
-    haveCode: 'Have an insider code?',
-    redeemTitle: 'Slides Genius insider code',
-    redeemCodeLabel: 'Insider code',
-    redeemBtn: 'Unlock',
     passwordLabel: 'Passcode (6 characters)',
-    passwordPlaceholder: '6 letters or digits',
-    passwordAny: 'Passcode',
     pwMeterSay: '6-digit passcode · {n} entered',
-    setPwTitle: 'Choose a passcode',
-    setPwHint: 'You are a Slides Genius. Set a passcode so this subscription comes back on your other devices — your email address and this passcode are all it takes.',
-    setPwLabel: 'Passcode (exactly 6 letters or digits)',
-    setPwPlaceholder: '6 letters or digits',
     setPwShort: 'Use exactly six letters or digits.',
     newsOptIn: 'Email me about new Slides boards and updates. Unsubscribe anytime.',
-    bindTitle: 'Save it to an address',
-    bindHint: 'Your insider code is redeemed and the boards are open. Give an email address and a passcode and it comes back on your other devices too — without them it lives in this browser alone.',
-    bindLater: 'Later',
-    bindNow: 'Save it to an address',
-    bindTaken: 'That address already has an account. Use another one, or write to us.',
-    redeemCodePlaceholder: 'e.g. K7M2QD',
+    codeSentTo: 'A code is on its way to {email}.',
+    useAnotherEmail: 'Use another address',
+    mailDownHint: 'Mail is not going out right now. You can sign up without an address instead.',
+    pairlessEntry: 'Sign up / in without an address',
+    pairFirstLabel: 'First string — 8+ letters and digits, case matters',
+    pairFirstShort: 'First string',
+    pairSecondLabel: 'Second string — 8+ letters and digits, case matters',
+    pairWarning: 'The first string is your key. Tell no one: whoever knows it can reset the second one.',
+    pairSaveBtn: 'Save',
+    pairSavedHint: 'Saved. Take a screenshot so you keep both strings.',
+    pairForgot: 'Forgot the second string?',
+    pairResetBtn: 'Set a new second string',
+    useEmailInstead: 'Use an email address',
+    pairTaken: 'That first string is taken. Pick another one.',
+    pairBad: 'Both strings need 8 or more letters and digits, nothing else.',
+    pairWrong: 'Those two strings do not match an account.',
+    codeWrong: 'That code is not right.',
+    codeStale: 'That code has expired. Ask for a new one.',
     codeExpired: 'That insider code has passed its use-by date.',
     tooManyTries: 'Too many tries from here. Try again later.',
     alreadyActive: 'Your subscription is still running. Keep this insider code for later, or pass it on — it is only spent once.',
-    insiderCode: 'Slides Genius insider code',
-    insiderRedeemed: 'Redeemed',
-    orderTitle: 'Your subscription',
+    orderTitle: 'Your account',
     orderPlanLabel: 'Plan',
-    orderUntilLabel: 'Paid up to',
+    orderUntilLabel: 'Good until',
     orderLifetime: 'Lifetime',
-    orderLapsed: 'This account has no running subscription.',
+    orderLapsed: 'This account does not have access right now.',
     giftTitle: 'Two months to give away',
     giftHint: 'Yours for subscribing by the year. Send one to a friend — each unlocks one month, once.',
     giftUsed: 'used',
     giftExpires: 'use by {date}',
     copyBtn: 'Copy',
     copiedLabel: 'Copied',
-    needsPwHint: 'This subscription has no passcode yet. Open it from the device you paid on to set one.',
     redeemBadCode: 'That insider code is not valid, or it has already been used.',
     pwWrong: 'That passcode is not right.',
     pwLocked: 'Too many wrong tries. Opens again in about {hours} h.',
     pwBlocked: 'Locked after too many wrong tries. Open it by email.',
-    unlockTitle: 'Reset your passcode',
-    forgotPw: 'Forgot your passcode?',
-    unlockIntro: 'We will send a six-digit code to your address. It lets you set a new passcode.',
     unlockSendBtn: 'Send the code',
-    unlockSent: 'Sent. The code is good for 30 minutes.',
-    unlockCodeLabel: 'The 6-digit code from the email',
-    unlockNewPw: 'New passcode (6 characters)',
-    pwReset: 'Your new passcode is set — sign in with it.',
-    signedInNoSub: 'Signed in. This account has no subscription running right now.',
+    codeSentNote: 'Sent. The code is good for 30 minutes.',
+    codeFieldLabel: 'The 6-digit code from the email',
     accountActions: 'Account settings',
     supportLine: 'A question, a refund, anything at all — write to {email}.',
-    merchantNote: '{store} takes the payment as merchant of record, and is the name on your statement.',
-    changePwRow: 'Change passcode',
     changeEmailRow: 'Change email',
-    oldPwLabel: 'Current passcode',
-    newPwLabel: 'New passcode (exactly 6 letters or digits)',
-    pwChanged: 'Passcode changed. Your other devices will need it to sign in again.',
     newEmailLabel: 'New email',
     emailCodeSent: 'We sent a 6-digit code to the new address. Enter it to finish.',
     emailChanged: 'Done — your account is on the new address.',
@@ -827,7 +799,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: 'That is the address you are already on.',
     confirmBtn: 'Confirm',
     sessionGone: 'This device is no longer signed in. Please sign in again.',
-    unlockConfirmBtn: 'Unlock and set passcode',
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
     unlockNoMail: 'We cannot send mail automatically yet. Write to {email} and we will open it for you.',
@@ -914,7 +885,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseNetwork: 'No connection. Please try again in a moment.',
     serverBusy: 'Something went wrong on our side, not with your connection. Please try again in a moment.',
     restoreNothing: 'No subscription found to restore.',
-    signInNotFound: 'No active subscription under that address.',
     workingLabel: 'Working…',
     pauseBtn: 'Pause',
     finishBtn: 'Finish',
@@ -1067,98 +1037,79 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rotateHint: 'Tournez votre téléphone — ce plateau est large',
     back: 'Retour',
     accountTitle: 'Compte',
-    tabRegister: "S'inscrire",
-    tabLogin: 'Se connecter',
     loginGateway: 'Connexion',
     tutorialShort: 'Tutoriel',
     becomeGenius: 'Devenir un Slides Génie',
     geniusSpecialTitle: 'Exclusivités Slides Génie',
-    geniusNowTitle: 'Débloqué dès votre abonnement',
+    geniusNowTitle: 'Débloqué dès votre inscription',
     geniusNowCircleSeven: 'Plateau losange à sept couleurs',
     geniusNowTriangleBig: 'Plateau triangle hexagonal, 54 pièces',
     geniusSoonTitle: 'Bientôt disponible',
     geniusHostRooms: 'Montez une salle et faites la course en ligne',
-    subscribeTitle: 'Devenir un Slides Génie',
-    subscribeIntro: 'Plus de jeux tout de suite, d’autres de temps en temps, résiliable à tout moment.',
-    subscribeClosed: 'L’abonnement est fermé pour le moment.',
+    subscribeTitle: 'Inscrivez-vous — Slides Génie, gratuit',
     registerUnlocks: 'Créez un compte et tout se débloque aussitôt — gratuitement.',
-    slotsLeft: 'encore {n} places',
     registerBtn: 'Créer un compte',
     planMonthly: 'par mois',
     planYearly: 'par an',
-    subscribeBtn: 'S’abonner',
     restoreBtn: 'Restaurer l’achat',
     signInBtn: 'Se connecter',
     signOutBtn: 'Se déconnecter',
     emailLabel: 'E-mail',
     emailPlaceholder: 'vous@exemple.com',
     emailInvalid: 'Cette adresse ne semble pas valide.',
-    registerHint: 'Votre adresse et un code secret de six caractères. À eux deux, ils rouvrent votre compte sur n’importe quel appareil.',
-    signInHint: 'Votre adresse et le code secret que vous avez défini.',
+    signInHint: 'Votre adresse, et un code à six chiffres envoyé par e-mail. Aucun mot de passe à retenir.',
     storeNoAccountHint: 'Acheté avec votre compte {store} — sans inscription, sans quitter l’application.',
     subscribedTitle: 'Vous êtes un Slides Génie',
     manageSubscription: 'Gérer l’abonnement',
     manageOnStore: 'Résiliez ou modifiez dans les réglages de votre compte {store}.',
-    geniusStatus: 'Abonnement',
+    geniusStatus: 'Compte',
     geniusOnly: 'Réservé aux Génies',
-    haveCode: 'Vous avez un code Génie ?',
-    redeemTitle: 'Code Slides Génie',
-    redeemCodeLabel: 'Code Génie',
-    redeemBtn: 'Débloquer',
     passwordLabel: 'Code secret (6 caractères)',
-    passwordPlaceholder: '6 lettres ou chiffres',
-    passwordAny: 'Code secret',
     pwMeterSay: 'Code secret à 6 caractères · {n} saisis',
-    setPwTitle: 'Choisissez un code secret',
-    setPwHint: 'Vous êtes un Slides Génie. Définissez un code secret pour retrouver cet abonnement sur vos autres appareils — votre adresse et ce code secret suffisent.',
-    setPwLabel: 'Code secret (exactement 6 lettres ou chiffres)',
-    setPwPlaceholder: '6 lettres ou chiffres',
     setPwShort: 'Exactement six lettres ou chiffres.',
     newsOptIn: 'M’envoyer les nouveautés Slides par e-mail. Désinscription à tout moment.',
-    bindTitle: 'Rattachez-le à une adresse',
-    bindHint: 'Votre code Génie est utilisé et les plateaux sont ouverts. Donnez une adresse e-mail et un code secret et il vous suivra sur vos autres appareils — sans eux, il ne vit que dans ce navigateur.',
-    bindLater: 'Plus tard',
-    bindNow: 'Rattacher à une adresse',
-    bindTaken: 'Cette adresse a déjà un compte. Utilisez-en une autre, ou écrivez-nous.',
-    redeemCodePlaceholder: 'ex. K7M2QD',
+    codeSentTo: 'Un code part vers {email}.',
+    useAnotherEmail: 'Changer d’adresse',
+    mailDownHint: 'Les e-mails ne partent pas pour le moment. Vous pouvez créer un compte sans adresse.',
+    pairlessEntry: 'Compte sans adresse e-mail',
+    pairFirstLabel: 'Première chaîne — 8 caractères minimum, lettres et chiffres, casse respectée',
+    pairFirstShort: 'Première chaîne',
+    pairSecondLabel: 'Deuxième chaîne — 8 caractères minimum, lettres et chiffres, casse respectée',
+    pairWarning: 'La première chaîne est votre clé. Ne la donnez à personne : qui la connaît peut redéfinir la seconde.',
+    pairSaveBtn: 'Enregistrer',
+    pairSavedHint: 'Enregistré. Faites une capture d’écran pour garder les deux chaînes.',
+    pairForgot: 'Deuxième chaîne oubliée ?',
+    pairResetBtn: 'Définir une nouvelle deuxième chaîne',
+    useEmailInstead: 'Utiliser une adresse e-mail',
+    pairTaken: 'Cette première chaîne est déjà prise. Choisissez-en une autre.',
+    pairBad: 'Les deux chaînes doivent faire 8 caractères ou plus, lettres et chiffres uniquement.',
+    pairWrong: 'Ces deux chaînes ne correspondent à aucun compte.',
+    codeWrong: 'Ce code n’est pas le bon.',
+    codeStale: 'Ce code a expiré. Demandez-en un nouveau.',
     codeExpired: 'Ce code Génie a dépassé sa date limite.',
     tooManyTries: 'Trop de tentatives depuis cet appareil. Réessayez plus tard.',
     alreadyActive: 'Votre abonnement court toujours. Gardez ce code Génie pour plus tard, ou offrez-le — il ne sert qu’une fois.',
-    insiderCode: 'Code Slides Génie',
-    insiderRedeemed: 'Code utilisé',
-    orderTitle: 'Votre abonnement',
+    orderTitle: 'Votre compte',
     orderPlanLabel: 'Formule',
-    orderUntilLabel: 'Payé jusqu’au',
+    orderUntilLabel: 'Valable jusqu’au',
     orderLifetime: 'À vie',
-    orderLapsed: 'Ce compte n’a pas d’abonnement en cours.',
+    orderLapsed: 'Ce compte n’a pas d’accès pour le moment.',
     giftTitle: 'Deux mois à offrir',
     giftHint: 'Pour votre abonnement à l’année. Offrez-en un — chacun débloque un mois, une seule fois.',
     giftUsed: 'utilisé',
     giftExpires: 'à utiliser avant le {date}',
     copyBtn: 'Copier',
     copiedLabel: 'Copié',
-    needsPwHint: 'Cet abonnement n’a pas encore de code secret. Ouvrez-le depuis l’appareil du paiement pour en définir un.',
     redeemBadCode: 'Ce code Génie n’est pas valide, ou il a déjà été utilisé.',
     pwWrong: 'Ce code secret n’est pas le bon.',
     pwLocked: 'Trop d’essais. Se rouvre dans environ {hours} h.',
     pwBlocked: 'Verrouillé après trop d’essais. Rouvrez-le par e-mail.',
-    unlockTitle: 'Réinitialiser le code secret',
-    forgotPw: 'Code secret oublié ?',
-    unlockIntro: 'Nous envoyons un code à six chiffres à votre adresse. Il permet de définir un nouveau code secret.',
     unlockSendBtn: 'Envoyer le code',
-    unlockSent: 'Envoyé. Le code est valable 30 minutes.',
-    unlockCodeLabel: 'Le code à 6 chiffres reçu par e-mail',
-    unlockNewPw: 'Nouveau code secret (6 caractères)',
-    pwReset: 'Votre nouveau code secret est enregistré — connectez-vous avec.',
-    signedInNoSub: 'Connecté. Ce compte n’a pas d’abonnement en cours.',
+    codeSentNote: 'Envoyé. Le code est valable 30 minutes.',
+    codeFieldLabel: 'Le code à 6 chiffres reçu par e-mail',
     accountActions: 'Réglages du compte',
     supportLine: 'Une question, un remboursement, quoi que ce soit — écrivez à {email}.',
-    merchantNote: '{store} encaisse le paiement en tant que revendeur officiel, et figure sous ce nom sur votre relevé.',
-    changePwRow: 'Changer le code secret',
     changeEmailRow: 'Changer d’adresse',
-    oldPwLabel: 'Code secret actuel',
-    newPwLabel: 'Nouveau code secret (6 lettres ou chiffres)',
-    pwChanged: 'Code secret modifié. Vos autres appareils devront se reconnecter.',
     newEmailLabel: 'Nouvelle adresse',
     emailCodeSent: 'Un code à 6 chiffres est parti vers la nouvelle adresse. Saisissez-le pour terminer.',
     emailChanged: 'C’est fait — votre compte est sur la nouvelle adresse.',
@@ -1166,7 +1117,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: 'C’est déjà votre adresse actuelle.',
     confirmBtn: 'Confirmer',
     sessionGone: 'Cet appareil n’est plus connecté. Reconnectez-vous.',
-    unlockConfirmBtn: 'Déverrouiller et enregistrer',
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
     unlockNoMail: 'Nous ne pouvons pas encore envoyer d’e-mail automatiquement. Écrivez à {email} et nous le rouvrirons.',
@@ -1253,7 +1203,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseNetwork: 'Pas de connexion. Réessayez dans un instant.',
     serverBusy: 'Un problème de notre côté, pas avec votre connexion. Réessayez dans un instant.',
     restoreNothing: 'Aucun abonnement à restaurer.',
-    signInNotFound: 'Aucun abonnement actif à cette adresse.',
     workingLabel: 'En cours…',
     pauseBtn: 'Pause',
     finishBtn: 'Terminer',
@@ -1406,98 +1355,79 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rotateHint: '這個棋盤很寬，把手機橫過來玩',
     back: '返回',
     accountTitle: '帳號',
-    tabRegister: '註冊',
-    tabLogin: '登入',
     loginGateway: '登入',
     tutorialShort: '教學',
     becomeGenius: '成為 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
-    subscribeTitle: '成為 Slides 天才',
-    geniusNowTitle: '訂閱後立刻解鎖',
+    subscribeTitle: '僅需註冊即可免費成為 Slides 天才',
+    geniusNowTitle: '註冊後立即解鎖',
     geniusNowCircleSeven: '七色菱形小球棋盤',
     geniusNowTriangleBig: '六邊三角棋盤，54 枚',
     geniusSoonTitle: '敬請期待',
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
-    subscribeIntro: '立刻解鎖更多，不定時更新，隨時取消',
-    subscribeClosed: '訂閱目前不開放。',
     registerUnlocks: '註冊後免費立即解鎖全部內容',
-    slotsLeft: '還剩 {n} 個名額',
     registerBtn: '註冊',
     planMonthly: '每月',
     planYearly: '每年',
-    subscribeBtn: '訂閱',
     restoreBtn: '恢復購買',
     signInBtn: '登入',
     signOutBtn: '登出',
     emailLabel: '電子郵件',
     emailPlaceholder: 'you@example.com',
     emailInvalid: '這個電子郵件看起來不太對。',
-    registerHint: '留一個電子郵件，設一個 6 位密碼。換裝置就靠這兩樣。',
-    signInHint: '你的電子郵件，加上你設的密碼。',
+    signInHint: '留一個電子郵件，我們寄一組 6 位驗證碼過去。沒有密碼要記。',
     storeNoAccountHint: '用你的 {store} 帳號購買，不必註冊，也不用離開 App。',
     subscribedTitle: '你已經是 Slides 天才',
     manageSubscription: '管理訂閱',
     manageOnStore: '到 {store} 的帳號設定裡取消或更改。',
-    geniusStatus: '訂閱狀態',
+    geniusStatus: '帳號狀態',
     geniusOnly: '天才特供',
-    haveCode: '有內部碼？',
-    redeemTitle: 'Slides 天才內部碼',
-    redeemCodeLabel: '內部碼',
-    redeemBtn: '解鎖',
     passwordLabel: '密碼（6 位字元）',
-    passwordPlaceholder: '6 位數字或字母',
-    passwordAny: '密碼',
     pwMeterSay: '6 位密碼，已輸入 {n} 位',
-    setPwTitle: '設定密碼',
-    setPwHint: '你已經是 Slides 天才了。設一組密碼，換手機或換電腦時就能把訂閱取回來——只要電子郵件加這組密碼。',
-    setPwLabel: '密碼（正好 6 位，數字或字母）',
-    setPwPlaceholder: '6 位數字或字母',
     setPwShort: '密碼要正好 6 位，數字或字母。',
     newsOptIn: '想收到 Slides 的新玩法與更新郵件。可隨時退訂。',
-    bindTitle: '綁定到一個電子郵件',
-    bindHint: '內部碼已經生效，棋盤都開了。留一個電子郵件和密碼，換手機或換電腦時就能把它取回來——不留的話，它只活在這個瀏覽器裡。',
-    bindLater: '以後再說',
-    bindNow: '綁定到帳號',
-    bindTaken: '這個電子郵件已經有帳號了。換一個，或者寫信給我們。',
-    redeemCodePlaceholder: '例如 K7M2QD',
+    codeSentTo: '驗證碼已寄到 {email}',
+    useAnotherEmail: '換一個電子郵件',
+    mailDownHint: '郵件暫時寄不出去，可以先用《免電子郵件註冊 / 登入》。',
+    pairlessEntry: '免電子郵件註冊 / 登入',
+    pairFirstLabel: '第一串：8 位以上，字母 + 數字，區分大小寫',
+    pairFirstShort: '第一串',
+    pairSecondLabel: '第二串：8 位以上，字母 + 數字，區分大小寫',
+    pairWarning: '第一串是你的鑰匙，別告訴任何人——知道它的人可以重設第二串。',
+    pairSaveBtn: '儲存',
+    pairSavedHint: '存好了。截個圖把兩串都留下來。',
+    pairForgot: '忘了第二串？',
+    pairResetBtn: '重設第二串',
+    useEmailInstead: '改用電子郵件',
+    pairTaken: '這一串已經有人在用了，換一串。',
+    pairBad: '兩串都要 8 位以上，只能用字母和數字。',
+    pairWrong: '這兩串對不上。',
+    codeWrong: '驗證碼不對。',
+    codeStale: '驗證碼過期了，重新要一張。',
     codeExpired: '這個內部碼已經過了使用期限。',
     tooManyTries: '這裡試得太多了，請稍後再試。',
     alreadyActive: '你的訂閱還在有效期內。這張碼留著以後用，或者送人——它只能用一次。',
-    insiderCode: 'Slides 天才內部碼',
-    insiderRedeemed: '已兌換',
-    orderTitle: '你的訂閱',
+    orderTitle: '你的帳號',
     orderPlanLabel: '方案',
-    orderUntilLabel: '已付到',
+    orderUntilLabel: '有效期至',
     orderLifetime: '終身',
-    orderLapsed: '這個帳號目前沒有進行中的訂閱。',
+    orderLapsed: '這個帳號目前沒有權限。',
     giftTitle: '兩個月，送給朋友',
     giftHint: '訂了一年才有的。發一張給朋友——每張解鎖一個月，只能用一次。',
     giftUsed: '已使用',
     giftExpires: '{date} 前有效',
     copyBtn: '複製',
     copiedLabel: '已複製',
-    needsPwHint: '這個訂閱還沒設密碼。請在付款的那台裝置上打開，設一組。',
     redeemBadCode: '這個內部碼無效，或已經被使用過了。',
     pwWrong: '密碼不對。',
     pwLocked: '錯太多次了，約 {hours} 小時後自動解開。',
     pwBlocked: '錯太多次，已鎖住。用電子郵件解開。',
-    unlockTitle: '重設密碼',
-    forgotPw: '忘記密碼？',
-    unlockIntro: '我們會寄一組六位數驗證碼到你的電子郵件，用它可以設定新密碼。',
     unlockSendBtn: '寄出驗證碼',
-    unlockSent: '已寄出，驗證碼 30 分鐘內有效。',
-    unlockCodeLabel: '信件裡的 6 位數驗證碼',
-    unlockNewPw: '新密碼（6 位字元）',
-    pwReset: '新密碼已經設好，用它登入就行。',
-    signedInNoSub: '已登入。這個帳號目前沒有在續的訂閱。',
+    codeSentNote: '已寄出，驗證碼 30 分鐘內有效。',
+    codeFieldLabel: '信件裡的 6 位數驗證碼',
     accountActions: '帳號設定',
     supportLine: '有問題、要退款，什麼事都可以寫信到 {email}。',
-    merchantNote: '款項由 {store} 以商戶身分收取，對帳單上寫的也是它。',
-    changePwRow: '更換密碼',
     changeEmailRow: '更換電子郵件',
-    oldPwLabel: '目前的密碼',
-    newPwLabel: '新密碼（6 位數字或字母）',
-    pwChanged: '密碼換好了。其他裝置要用新密碼重新登入。',
     newEmailLabel: '新的電子郵件',
     emailCodeSent: '驗證碼已經寄到新的電子郵件，填進來就換好。',
     emailChanged: '換好了——帳號已經在新的電子郵件底下。',
@@ -1505,7 +1435,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: '這就是你現在用的電子郵件。',
     confirmBtn: '確認',
     sessionGone: '這台裝置的登入已經失效，請重新登入。',
-    unlockConfirmBtn: '解鎖並設定新密碼',
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
     unlockNoMail: '目前還無法自動寄信。請寫信到 {email}，我們幫你開啟。',
@@ -1592,7 +1521,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseNetwork: '連不上網路，請稍後再試。',
     serverBusy: '伺服器暫時出錯，請稍後再試。這不是你的網路問題。',
     restoreNothing: '沒有找到可以恢復的訂閱。',
-    signInNotFound: '這個電子郵件名下沒有有效的訂閱。',
     workingLabel: '處理中…',
     pauseBtn: '暫停',
     finishBtn: '完成',
@@ -1745,98 +1673,79 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rotateHint: '这个棋盘很宽，把手机横过来玩',
     back: '返回',
     accountTitle: '账号',
-    tabRegister: '注册',
-    tabLogin: '登录',
     loginGateway: '登录',
     tutorialShort: '教学',
     becomeGenius: '成为 Slides 天才',
     geniusSpecialTitle: 'Slides 天才特供',
-    subscribeTitle: '成为 Slides 天才',
-    geniusNowTitle: '订阅后立刻解锁',
+    subscribeTitle: '仅需注册即可免费成为 Slides 天才',
+    geniusNowTitle: '注册后立即解锁',
     geniusNowCircleSeven: '七色菱形小球棋盘',
     geniusNowTriangleBig: '六边三角棋盘，54 枚',
     geniusSoonTitle: '敬请期待',
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
-    subscribeIntro: '立刻解锁更多，不定时更新，随时取消',
-    subscribeClosed: '订阅目前不开放。',
     registerUnlocks: '注册后免费立即解锁全部内容',
-    slotsLeft: '还剩 {n} 个名额',
     registerBtn: '注册',
     planMonthly: '每月',
     planYearly: '每年',
-    subscribeBtn: '订阅',
     restoreBtn: '恢复购买',
     signInBtn: '登录',
     signOutBtn: '退出登录',
     emailLabel: '邮箱',
     emailPlaceholder: 'you@example.com',
     emailInvalid: '这个邮箱地址看起来不太对。',
-    registerHint: '留一个邮箱，设一个 6 位密码。换设备就靠这两样。',
-    signInHint: '你的邮箱，加上你设的密码。',
+    signInHint: '留一个邮箱，我们寄一组 6 位验证码过去。没有密码要记。',
     storeNoAccountHint: '用你的 {store} 账号购买，不用注册，也不用离开 App。',
     subscribedTitle: '你已经是 Slides 天才',
     manageSubscription: '管理订阅',
     manageOnStore: '到 {store} 的账号设置里取消或更改。',
-    geniusStatus: '订阅状态',
+    geniusStatus: '账号状态',
     geniusOnly: '天才特供',
-    haveCode: '有内部码？',
-    redeemTitle: 'Slides 天才内部码',
-    redeemCodeLabel: '内部码',
-    redeemBtn: '解锁',
     passwordLabel: '密码（6 位字符）',
-    passwordPlaceholder: '6 位数字或字母',
-    passwordAny: '密码',
     pwMeterSay: '6 位密码，已输入 {n} 位',
-    setPwTitle: '设置密码',
-    setPwHint: '你已经是 Slides 天才了。设一组密码，换手机或换电脑时就能把订阅取回来——只要邮箱加这组密码。',
-    setPwLabel: '密码（正好 6 位，数字或字母）',
-    setPwPlaceholder: '6 位数字或字母',
     setPwShort: '密码要正好 6 位，数字或字母。',
     newsOptIn: '想收到 Slides 的新玩法与更新邮件。可随时退订。',
-    bindTitle: '绑定到一个邮箱',
-    bindHint: '内部码已经生效，棋盘都开了。留一个邮箱和密码，换手机或换电脑时就能把它取回来——不留的话，它只活在这个浏览器里。',
-    bindLater: '以后再说',
-    bindNow: '绑定到账号',
-    bindTaken: '这个邮箱已经有账号了。换一个，或者写信给我们。',
-    redeemCodePlaceholder: '例如 K7M2QD',
+    codeSentTo: '验证码已寄到 {email}',
+    useAnotherEmail: '换个邮箱',
+    mailDownHint: '邮件暂时发不出去，可以先用《免邮箱注册 / 登录》。',
+    pairlessEntry: '免邮箱注册 / 登录',
+    pairFirstLabel: '第一串：8 位以上，字母 + 数字，区分大小写',
+    pairFirstShort: '第一串',
+    pairSecondLabel: '第二串：8 位以上，字母 + 数字，区分大小写',
+    pairWarning: '第一串是你的钥匙，别告诉任何人——知道它的人可以重设第二串。',
+    pairSaveBtn: '保存',
+    pairSavedHint: '存好了。截个图把两串都留下来。',
+    pairForgot: '忘了第二串？',
+    pairResetBtn: '重设第二串',
+    useEmailInstead: '改用邮箱',
+    pairTaken: '这一串已经有人在用了，换一串。',
+    pairBad: '两串都要 8 位以上，只能用字母和数字。',
+    pairWrong: '这两串对不上。',
+    codeWrong: '验证码不对。',
+    codeStale: '验证码过期了，重新要一张。',
     codeExpired: '这个内部码已经过了使用期限。',
     tooManyTries: '这里试得太多了，请稍后再试。',
     alreadyActive: '你的订阅还在有效期内。这张码留着以后用，或者送人——它只能用一次。',
-    insiderCode: 'Slides 天才内部码',
-    insiderRedeemed: '已兑换',
-    orderTitle: '你的订阅',
+    orderTitle: '你的账号',
     orderPlanLabel: '方案',
-    orderUntilLabel: '已付到',
+    orderUntilLabel: '有效期至',
     orderLifetime: '终身',
-    orderLapsed: '这个账号目前没有进行中的订阅。',
+    orderLapsed: '这个账号目前没有权限。',
     giftTitle: '两个月，送给朋友',
     giftHint: '订了一年才有的。发一张给朋友——每张解锁一个月，只能用一次。',
     giftUsed: '已使用',
     giftExpires: '{date} 前有效',
     copyBtn: '复制',
     copiedLabel: '已复制',
-    needsPwHint: '这个订阅还没设密码。请在付款的那台设备上打开，设一组。',
     redeemBadCode: '这个内部码无效，或者已经被用过了。',
     pwWrong: '密码不对。',
     pwLocked: '错太多次了，约 {hours} 小时后自动解开。',
     pwBlocked: '错太多次，已锁住。用邮箱解开。',
-    unlockTitle: '重设密码',
-    forgotPw: '忘记密码？',
-    unlockIntro: '我们会发一组六位数验证码到你的邮箱，用它可以设置新密码。',
     unlockSendBtn: '发送验证码',
-    unlockSent: '已发送，验证码 30 分钟内有效。',
-    unlockCodeLabel: '邮件里的 6 位验证码',
-    unlockNewPw: '新密码（6 位字符）',
-    pwReset: '新密码已经设好，用它登录就行。',
-    signedInNoSub: '已登录。这个账号目前没有在续的订阅。',
+    codeSentNote: '已发送，验证码 30 分钟内有效。',
+    codeFieldLabel: '邮件里的 6 位验证码',
     accountActions: '账号设置',
     supportLine: '有问题、要退款，什么事都可以写信到 {email}。',
-    merchantNote: '款项由 {store} 以商户身份收取，对账单上写的也是它。',
-    changePwRow: '更换密码',
     changeEmailRow: '更换邮箱',
-    oldPwLabel: '现在的密码',
-    newPwLabel: '新密码（6 位数字或字母）',
-    pwChanged: '密码换好了。其他设备要用新密码重新登录。',
     newEmailLabel: '新的邮箱',
     emailCodeSent: '验证码已经寄到新邮箱，填进来就换好。',
     emailChanged: '换好了——账号已经在新的邮箱底下。',
@@ -1844,7 +1753,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: '这就是你现在用的邮箱。',
     confirmBtn: '确认',
     sessionGone: '这台设备的登录已经失效，请重新登录。',
-    unlockConfirmBtn: '解锁并设置新密码',
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',
     unlockNoMail: '目前还无法自动发信。请写信到 {email}，我们帮你开启。',
@@ -1931,7 +1839,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     purchaseNetwork: '连不上网络，请稍后再试。',
     serverBusy: '服务器暂时出错，请稍后再试。这不是你的网络问题。',
     restoreNothing: '没有找到可以恢复的订阅。',
-    signInNotFound: '这个邮箱名下没有有效的订阅。',
     workingLabel: '处理中…',
     pauseBtn: '暂停',
     finishBtn: '完成',
