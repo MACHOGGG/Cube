@@ -12,6 +12,8 @@ import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } fr
 import { TILE_RADIUS, proHintWidth, proSquareRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
+import { stuckGroupsOf } from '../engine/stalemate';
+import { RESIDUE_MAX_TILES, gridResidue } from '../engine/residueBoard';
 import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreForSize, sizeAtLevel } from '../engine/targets';
@@ -821,11 +823,32 @@ export function createSquareGame(): ShapeGame {
         // 1×3 之后盘上剩 3 枚同色是**还能凑的**——按 4 判就成了死局，而死局没有任何按钮
         // 拦得住，1.4 秒后直接结算。八副棋盘里只有这一副是这么写的，其余五副都问
         // controller.matchLen()。
-        return findStuckColorGroups(
-          liveTiles(),
-          target ? targetNeed() : controller.matchLen(),
-          Math.min(rows, cols),
-        );
+        const need = target ? targetNeed() : controller.matchLen();
+        const live = liveTiles();
+        const counted = findStuckColorGroups(live, need, Math.min(rows, cols));
+        // 计数那一层已经说死了就不用再算——它只会偏松（说活），不会偏紧。
+        if (counted.length) return counted;
+        /*
+         * 计数说活，**可它从不看几何**（engine/stalemate.ts 开头那段）：「数量够、摆法
+         * 永远到不了」的残局会被一直判活，玩家报过——剩几枚怎么滑都不得分，局却不结束。
+         *
+         * 所以盘子小到一定程度之后，再花一点力气真的穷举一遍（§4 的「可用 ≤16 枚 BFS
+         * 穷举」，见 engine/residueSearch.ts）。算不完一律当活，所以这一段只会**多**判
+         * 出死局，不会把还能打的局掐掉。
+         *
+         * 方块这一副的线就是**此刻**的每一行每一列：整行整列消掉之后盘子真的变小
+         * （removeLines 把它们从网格里摘掉、两侧收拢），所以 rows/cols 现问，不写死 6。
+         */
+        if (live.length > RESIDUE_MAX_TILES) return [];
+        const residueAt = (r: number, c: number) => {
+          const t = grid[r]?.[c];
+          if (!t) return null;
+          // 空位和活炸弹**跟着整行整列一起滑**，所以一格不少地算进去，只是编成
+          // 「配不上任何颜色」。`liveTiles()` 那一份把它们排除在外，不能拿来当盘面。
+          if (isBlank(t) || liveBomb(t)) return 'blank' as const;
+          return { color: effColor(t), dot: t.face === 'dot' };
+        };
+        return gridResidue(rows, cols, residueAt, need) === 'dead' ? stuckGroupsOf(live) : [];
       }
 
       function countRemainingTiles() {

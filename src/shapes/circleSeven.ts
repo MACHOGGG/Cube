@@ -12,6 +12,8 @@ import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP
 import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
+import { stuckGroupsOf } from '../engine/stalemate';
+import { RESIDUE_MAX_TILES, edgeResidue } from '../engine/residueBoard';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { buildEdgeBand } from '../ui/edgeBand';
 import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
@@ -737,9 +739,39 @@ export function createCircleSevenGame(): ShapeGame {
        *     着的大数：星星现在只有「填满一条外边」这一条活路了（§1.1 之后，全是星星
        *     的图案不给分也不消除），给 0 会被 stalemate 那头夹成 1，等于永远判活。
        */
+
+      /**
+       * 残局穷举要的那一份盘面（engine/residueBoard.ts）。
+       *
+       * 和 `liveTiles()` **不是同一份**，这一点最容易接错：那一份把空白和活炸弹排除在外
+       * （它是给计分和计数用的），可这两样都是**跟着线一起滑**的——漏掉它们，穷举算的就
+       * 是另一副棋盘。所以这儿一格不少，只是把它们编成「配不上任何颜色」。
+       */
+      const residueAt = (r: number, c: number) => {
+        const t = grid[r]?.[c];
+        if (!t) return null;
+        if (isBlank(t)) return 'blank' as const;
+        return { color: effColor(t), dot: t.face === 'dot' };
+      };
+
       function stuckAt(threshold: number): Cell[][] {
         const edge = shortestEdge(edgeBoard, threshold);
-        return findStuckColorGroups(liveTiles(), controller.matchLen(), edge || NO_EDGE);
+        const need = controller.matchLen();
+        const live = liveTiles();
+        const counted = findStuckColorGroups(live, need, edge || NO_EDGE);
+        // 计数那一层已经说死了就不用再算——它只会偏松（说活），不会偏紧。
+        if (counted.length) return counted;
+        /*
+         * 计数说活，**可它从不看几何**（engine/stalemate.ts 开头那段）：「数量够、摆法
+         * 永远到不了」的残局会被一直判活，玩家报过——剩几枚怎么滑都不得分，局却不结束。
+         *
+         * 所以盘子小到一定程度之后，再花一点力气真的穷举一遍（§4 的「可用 ≤16 枚 BFS
+         * 穷举」，见 engine/residueSearch.ts）。算不完一律当活，所以这一段只会**多**判
+         * 出死局，不会把还能打的局掐掉。
+         */
+        if (live.length > RESIDUE_MAX_TILES) return [];
+        const verdict = edgeResidue(edgeBoard, residueAt, need, threshold);
+        return verdict === 'dead' ? stuckGroupsOf(live) : [];
       }
 
       /**

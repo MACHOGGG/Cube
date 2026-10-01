@@ -339,6 +339,15 @@ jobs:
         run: |
           npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
           node scripts/check-legal-sale.mjs /tmp/legal.mjs
+      # 残局穷举的**接线层**：六副棋盘把自己的线和格子交给搜索件，编码错一点它就在算另
+      # 一副棋盘，而且会言之凿凿地答 'dead'——那一侧会把一局还能打的棋盘 1.4 秒直接结
+      # 算。三件真会接错的事各有一条：空白和活炸弹要进盘面（它们跟着线一起滑，而
+      # liveTiles() 把它们排除在外）、不在盘上的格子不许占位、「可用 ≤16 枚」数的是非空
+      # 白那几枚（按总格数数的话这个兜底在五副外边族上永远不会触发）。
+      - name: 残局穷举：喂进去的那副盘面对不对
+        run: |
+          npx esbuild src/engine/residueBoard.ts --bundle --format=esm --outfile=/tmp/resboard.mjs
+          node scripts/check-residue-board.mjs /tmp/resboard.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白

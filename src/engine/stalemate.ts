@@ -146,11 +146,26 @@ export function findStuckColorGroups(
 
   for (const color of frontCount.keys()) if (reachable.has(color)) return [];
 
+  return stuckGroupsOf(liveTiles);
+}
+
+/**
+ * 判死之后，把「你自己看，这几枚再也配不上」那几组摆出来，按颜色分。
+ *
+ * 盘上还有色块就摆色块（那才是他还能指望翻的东西）；一枚色块都不剩就摆星星本身。
+ *
+ * 抽出来是因为**现在有两条路会判死**：上面这一条按计数判的，和 `engine/residueSearch.ts`
+ * 那条真的穷举过一遍的。两条路判出来的死局，摆给玩家看的东西必须长得一样——各写一份，迟
+ * 早会出现「同样是死局，两次高亮的不是同几枚」。
+ */
+export function stuckGroupsOf(liveTiles: LiveTile[]): Cell[][] {
+  const fronts = liveTiles.filter((lt) => lt.tile.face === 'flavor');
   const byColor = new Map<number, Cell[]>();
-  for (const lt of fronts) {
-    const arr = byColor.get(lt.tile.color);
+  for (const lt of fronts.length ? fronts : liveTiles) {
+    const color = lt.tile.face === 'dot' ? lt.tile.dotColor : lt.tile.color;
+    const arr = byColor.get(color);
     if (arr) arr.push(lt.cell);
-    else byColor.set(lt.tile.color, [lt.cell]);
+    else byColor.set(color, [lt.cell]);
   }
   return [...byColor.values()];
 }
