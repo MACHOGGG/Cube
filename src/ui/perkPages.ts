@@ -104,8 +104,10 @@ export function renderLayoutsShowcase(
   wireBack(root, onBack);
 }
 
-/** 《更多玩法》：老虎机和无限反转并排陈列，各装在一个圆角矩形框里，和《更多
- *  布局》同一副样子。只是陈列——真要玩还是回主菜单，那两张卡就在第二排。 */
+/** 《更多玩法》：老虎机、无限反转、步步为营三张并排陈列，各装在一个圆角矩形框里，
+ *  和《更多布局》同一副样子。只是陈列——真要玩还是回主菜单，那几张卡就在第二排。
+ *  （这句话从前写着「老虎机和无限反转」两张，而底下的数组早就是三条——`check-flip-batch`
+ *  那条「两张卡并排」也跟着过期红了一版。） */
 export function renderModesShowcase(root: HTMLElement, lang: Lang, onBack: () => void): void {
   const s = STRINGS[lang];
   // 三张图一横两竖（老虎机 897×521，无限反转 252×519，步步为营 225×472），所
