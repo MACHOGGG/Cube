@@ -830,18 +830,6 @@ export function createSquareGame(): ShapeGame {
         // 计数那一层已经说死了就不用再算——它只会偏松（说活），不会偏紧。
         if (counted.length) return counted;
         /*
-         * ⚠️ **老虎机那一局先不走穷举**（2026-10-02）。
-         *
-         * 穷举件判的是「有没有办法凑出一条同色 1×N」（engine/residueSearch.ts 的
-         * `matchLen` + `bonusLines`），而老虎机要凑的是**转出来的那个形状**——两件事。拿
-         * 1×N 那把尺子去量一局老虎机，它会说「凑不出 1×N」，于是把一局明明还能打的棋判
-         * 死：玩家正要去拼那个形状，局自己结束了。
-         *
-         * 所以这一局只留计数那一层（它的门槛已经按 `targetNeed()` 收过了）。等穷举件也认得
-         * 目标形状之后再放开——那是下一推（E33）的事。
-         */
-        if (target) return [];
-        /*
          * 计数说活，**可它从不看几何**（engine/stalemate.ts 开头那段）：「数量够、摆法
          * 永远到不了」的残局会被一直判活，玩家报过——剩几枚怎么滑都不得分，局却不结束。
          *
@@ -861,7 +849,16 @@ export function createSquareGame(): ShapeGame {
           if (isBlank(t) || liveBomb(t)) return 'blank' as const;
           return { color: effColor(t), dot: t.face === 'dot' };
         };
-        return gridResidue(rows, cols, residueAt, need) === 'dead' ? stuckGroupsOf(live) : [];
+        /*
+         * 老虎机那一局**也走这一层**（E33，2026-10-02 放开）：得分算不算看的是转出来那
+         * 个形状的当前级子形，不是同色 1×N，所以把形状和它此刻要几枚一起交下去。上一推
+         * 这儿是 `if (target) return [];`（穷举层那时只会量 1×N，拿它量老虎机会把还拼得
+         * 出形状的棋判死），代价是那一局根本没有几何兜底。
+         *
+         * `need` 和上面计数层那一处共用一个——两层的门槛必须是同一个数。
+         */
+        const verdict = gridResidue(rows, cols, residueAt, need, target ? { target, need } : undefined);
+        return verdict === 'dead' ? stuckGroupsOf(live) : [];
       }
 
       function countRemainingTiles() {

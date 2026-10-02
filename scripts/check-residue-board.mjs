@@ -203,7 +203,7 @@ head('【6】六边三角 54 那套重排（只许偶数步）');
 // 抄一遍而不是 import：那三个函数住在 createCircleGame 的闭包里，外面拿不到。所以【7】第一
 // 条先验「搭出来的和真的一样」——21 条线、各族长度对得上，搭错了当场红。
 if (searchSrc) {
-  const { scoresNow, cyclicShuffles, encodeTile, RESIDUE_BLANK, RESIDUE_MAX_STATES } =
+  const { scoresNow, cyclicShuffles, encodeTile, colorOf, isFront, RESIDUE_BLANK, RESIDUE_MAX_STATES } =
     await import(searchSrc);
 
   // ── 真的小球线 ────────────────────────────────────────────────
@@ -270,6 +270,66 @@ if (searchSrc) {
     return 'dead';
   }
 
+  /** 一条线上「活格连成几段」。`outerEdge.ts` 的 runCount 同胞。 */
+  const runCountOn = (cells, isLive) => {
+    let runs = 0;
+    let prev = false;
+    for (const [r, c] of cells) {
+      const now = isLive(r, c);
+      if (now && !prev) runs++;
+      prev = now;
+    }
+    return runs;
+  };
+
+  /**
+   * 此刻能削的外边——**照 `outerEdge.ts` 那三条重写一遍**：
+   *
+   *   ① 同族里 offset 最小 / 最大的那几条（只算还有活格的线）；
+   *   ② 活格数 ≥ threshold；
+   *   ③ `endsAll`：削掉它不会把别的线从一段切成两段。
+   *
+   * ⚠️ 这儿原先是个粗办法——「一条线上**全是**活格、而且长度 ≥ threshold」，旁边还写着
+   * 「残局上这两者是同一回事」。那句话是错的，而且错得要命：真盘上一条 7 格的线只剩 3 格
+   * 活着也照样是可削外边（削掉的是**活格**，不是整条线）。于是这把对照尺子**少看见一整条
+   * 得分的路**：120 副里 20 副被测说 scores、对照说 dead，而真相是被测对的。
+   *
+   * 上面【8】那一节用的也是它，所以那条「死局检出率」的分母一直虚高——一批本来就不死的盘
+   * 面被算进了「该判死」。假绿就是这么来的：两边**一起**偏，那条断言看着是绿的。
+   */
+  const edgesOf = (live, threshold) => {
+    const map = new Set(live.map(([r, c]) => r + ',' + c));
+    const isLive = (r, c) => map.has(r + ',' + c);
+    const byFam = new Map();
+    for (const l of LINES) {
+      const lv = l.cells.filter(([r, c]) => isLive(r, c));
+      if (!lv.length) continue;
+      const bucket = byFam.get(l.fam);
+      if (bucket) bucket.push({ l, lv });
+      else byFam.set(l.fam, [{ l, lv }]);
+    }
+    const out = [];
+    for (const bucket of byFam.values()) {
+      const lo = Math.min(...bucket.map((e) => e.l.offset));
+      const hi = Math.max(...bucket.map((e) => e.l.offset));
+      for (const e of bucket) {
+        if (e.l.offset !== lo && e.l.offset !== hi) continue;
+        if (e.lv.length < threshold) continue;
+        const gone = new Set(e.lv.map(([r, c]) => r + ',' + c));
+        const after = (r, c) => isLive(r, c) && !gone.has(r + ',' + c);
+        let ok = true;
+        for (const other of LINES) {
+          if (other === e.l) continue;
+          const before = runCountOn(other.cells, isLive);
+          if (before === 0) continue;
+          if (runCountOn(other.cells, after) > before) { ok = false; break; }
+        }
+        if (ok) out.push({ cells: e.lv });
+      }
+    }
+    return out;
+  };
+
   /**
    * 把一副残局编成搜索件认得的样子——和 `residueBoard.ts` 的 `build()` 同一套规则（空白不
    * 进线、少于 2 格的线丢掉），这样精确搜索和被测那一个看的是同一副盘。
@@ -295,14 +355,11 @@ if (searchSrc) {
       }
       if (row.length >= 2) lines.push(row);
     }
-    // 能削的外边：这儿用一个和 outerEdge.ts 等价的粗办法——一条线上**全是**活格、而且
-    // 长度 ≥ threshold。残局上（大半格子空着）这两者是同一回事。
-    const bonus = [];
-    for (const l of LINES) {
-      const ids = l.cells.map(([r, c]) => index.get(r + ',' + c)).filter((x) => x !== undefined);
-      if (ids.length === l.cells.length && ids.length >= threshold) bonus.push({ cells: ids, need: threshold });
-    }
-    return { start: Uint16Array.from(codes), lines, bonus };
+    const bonus = edgesOf(live, threshold).map((e) => ({
+      cells: e.cells.map(([r, c]) => index.get(r + ',' + c)),
+      need: threshold,
+    }));
+    return { start: Uint16Array.from(codes), lines, bonus, index };
   }
 
   head('【7】真的小球线上，一副四枚的残局要判**死**，不是「算不完」');
@@ -402,6 +459,315 @@ if (searchSrc) {
     console.log(`      （顺带：${unknowns} 副答了 unknown，那是安全的一侧——当活）`);
     check('（尺子）RESIDUE_BLANK 还是 0（编码没换）', RESIDUE_BLANK === 0, String(RESIDUE_BLANK));
   }
+
+  // ── 老虎机那一局，在真的小球线上 ──────────────────────────────
+  //
+  // 形状 '23' 落到小球的行列上是 {(r,c), (r+1,c), (r+1,c+1)}——由 `place('circle', …)` 那
+  // 条「dg + dr 必须是偶数、列号只挪一半」算出来的（见 targetMatch.ts 顶上那段）。
+  const TRI = { id: '23', family: 'circle', cells: [[0, 1], [1, 0], [1, 2]] };
+  /** 格号 → 行列（`encodeResidue` 交出来的 index 是反过来的那一张）。 */
+  const cellsOf = (enc) => {
+    const out = [];
+    for (const [k, id] of enc.index) out[id] = k.split(',').map(Number);
+    return out;
+  };
+  /**
+   * 对照尺子：这个盘面上有没有那个小三角。
+   *
+   * **手写的、和 `targetMatch.ts` 那个通用匹配器两条路**——对照就是要独立。
+   *
+   * 写法上绕了一下：不去枚举「这个形状的几种摆法」，而是说出它**是什么**——三枚球**两两
+   * 相邻**。小球盘上 (r, c) 的几何位置是 (r, 2c − r)（半径为单位，见 targetMatch.ts 顶上
+   * 那段），相邻就是差 (0, ±2) 或 (±1, ±1)。形状 '23' 的三个点 (0,1) (1,0) (1,2) 正是两两
+   * 相邻，而任何三枚两两相邻的球都和它全等——横的竖的、转过去的、照镜子的，一网打尽。
+   *
+   * ⚠️ 第一版只认 {(r,c), (r+1,c), (r+1,c+1)} 这**一种**摆法，于是 120 副里有 20 副被测那
+   * 一个说 scores、尺子说 dead——`findTargets` 认的是**所有**摆法（「图案怎么摆都算」，见
+   * 它上面那段注释）。红的是尺子，不是代码。按「是什么」写就不会漏，按「长什么样」写会。
+   *
+   * 另外两条照旧：三枚同色、至少一枚是色块（§1.1）。
+   */
+  const triOnBoard = (state, cellsById) => {
+    const pts = [];
+    for (let i = 0; i < cellsById.length; i++) {
+      const code = state[i];
+      if (code === RESIDUE_BLANK) continue;
+      const [r, c] = cellsById[i];
+      pts.push({ y: r, x: 2 * c - r, color: colorOf(code), front: isFront(code) });
+    }
+    const near = (a, b) => {
+      const dy = Math.abs(a.y - b.y);
+      const dx = Math.abs(a.x - b.x);
+      return (dy === 0 && dx === 2) || (dy === 1 && dx === 1);
+    };
+    for (let i = 0; i < pts.length; i++)
+      for (let j = i + 1; j < pts.length; j++)
+        for (let k = j + 1; k < pts.length; k++) {
+          const t = [pts[i], pts[j], pts[k]];
+          if (t[0].color !== t[1].color || t[1].color !== t[2].color) continue;
+          if (!t.some((q) => q.front)) continue;
+          if (near(t[0], t[1]) && near(t[1], t[2]) && near(t[0], t[2])) return true;
+        }
+    return false;
+  };
+
+  head('【11】小球的小三角：1×3 拼不出，形状此刻就在盘上');
+  {
+    /*
+     * 三枚同色（一枚色块两枚星星）正好摆成那个小三角：(3,1) (4,1) (4,2)。
+     *
+     *   · 1×3 那条路走不通：空白不进线，这三枚所在的三条线去掉空白之后**都只剩两格**
+     *     （A2、B1、R4），门槛 3 永远够不着。
+     *   · 整线消除那条路也走不通：门槛 3，而每一族两端那几条线的活格都不到 3 枚，
+     *     `outerEdges` 一条都不给——所以这一副**只剩形状这一条路**。
+     */
+    const live = [[3, 1, 1, false], [4, 1, 1, true], [4, 2, 1, true]];
+    const { board, at } = residueBoard(live);
+    const noSlot = edgeResidue(board, at, 3, 3);
+    check('不给形状（只量 1×3）→ dead', noSlot === 'dead', noSlot);
+    const withSlot = edgeResidue(board, at, 3, 3, false, { target: TRI, need: 3 });
+    check('给了那个形状 → scores', withSlot === 'scores', withSlot);
+    // 手写尺子也要说「在」——两条路对上了，才说明上面那个 scores 不是别的原因给的。
+    const enc = encodeResidue(live, 3);
+    check('（尺子）手写那把尺子也说这三枚就是那个小三角',
+      triOnBoard(enc.start, cellsOf(enc)) === true);
+    check('（尺子）这一副一条可削外边都没有（所以只剩形状那条路）', enc.bonus.length === 0,
+      `${enc.bonus.length} 条`);
+  }
+
+  head('【11】老虎机随机对照：活局误判 0');
+  {
+    /*
+     * 和【8】同一个套路，只是判「得不得分」换成了**形状**那一套：
+     *
+     *   对照 = 不设预算的闭包 ＋ 「手写的小三角尺子 或 整线消除」。
+     *   整线消除那一半直接用 `scoresNow(state, lines, 0, bonus)`——`matchLen` 给 0，那条
+     *   1×N 扫描整个不走（老虎机那一局它本来就不该走），剩下的正好是 (b)。
+     *
+     * 要紧的只有一个方向：**活局不许被判死**。反过来漏掉一些死局只是「兜底没兜住」，
+     * 而判错一个活局是把人家还能打的棋 1.4 秒掐掉。
+     */
+    let seed = 20261003;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    const CELLS = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c <= r; c++) CELLS.push([r, c]);
+
+    const exactSlot = (enc) => {
+      const cells = cellsOf(enc);
+      const hit = (st) => triOnBoard(st, cells) || scoresNow(st, enc.lines, 0, enc.bonus);
+      const moves = cyclicShuffles(enc.lines);
+      if (hit(enc.start)) return 'scores';
+      if (!moves.length) return 'dead';
+      const keyOf = (st) => st.join(',');
+      const seen = new Set([keyOf(enc.start)]);
+      let frontier = [enc.start];
+      while (frontier.length) {
+        const next = [];
+        for (const st of frontier) {
+          for (const { cells, src: from } of moves) {
+            const child = Uint16Array.from(st);
+            for (let i = 0; i < cells.length; i++) child[cells[i]] = st[cells[from[i]]];
+            const k = keyOf(child);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            if (hit(child)) return 'scores';
+            next.push(child);
+          }
+        }
+        frontier = next;
+      }
+      return 'dead';
+    };
+
+    let aliveWronglyDead = 0;
+    let deadTotal = 0;
+    let deadCaught = 0;
+    let aliveTotal = 0;
+    let unknowns = 0;
+    const contradictions = [];
+    const ROUNDS = 120;
+    for (let i = 0; i < ROUNDS; i++) {
+      const n = 3 + Math.floor(rnd() * 5);
+      const pool = [...CELLS];
+      const live = [];
+      for (let k = 0; k < n; k++) {
+        const pick = Math.floor(rnd() * pool.length);
+        const [r, c] = pool.splice(pick, 1)[0];
+        // 颜色**偏向一个**（七成）：两色等概率的话 120 副里活局不到十副，那条「这一批里
+        // 真有活局」的尺子就骑在边界上——而骑在边界上的断言就是偶发红。
+        live.push([r, c, rnd() < 0.7 ? 1 : 2, rnd() < 0.5]);
+      }
+      const { board, at } = residueBoard(live);
+      const got = edgeResidue(board, at, 3, 3, false, { target: TRI, need: 3 });
+      const want = exactSlot(encodeResidue(live, 3));
+      if (got === 'unknown') unknowns++;
+      if (want === 'scores') {
+        aliveTotal++;
+        if (got === 'dead') aliveWronglyDead++;
+      } else {
+        deadTotal++;
+        if (got === 'dead') deadCaught++;
+        // 对照说「怎么滑都拼不出」，被测却说 scores——那不是「偏安全」，那是两边对形状的
+        // 认法真的不一样，必须查。第一版红在这儿，而红的是尺子（只认一种摆法）。
+        if (got === 'scores') contradictions.push(JSON.stringify(live));
+      }
+    }
+    check(`活局一个都没被判死（${ROUNDS} 副，老虎机那一档）`, aliveWronglyDead === 0,
+      `误判 ${aliveWronglyDead} 副`);
+    check('对照说死、被测说活：一副都没有（两边对形状的认法一致）', contradictions.length === 0,
+      contradictions.slice(0, 2).join(' | '));
+    check('（尺子）这一批里真有活局，也真有死局', aliveTotal >= 10 && deadTotal >= 10,
+      `活 ${aliveTotal} 副 / 死 ${deadTotal} 副`);
+    const rate = deadTotal ? deadCaught / deadTotal : 0;
+    check('死局检出率 ≥ 80%', rate >= 0.8, `${deadCaught}/${deadTotal} = ${(rate * 100).toFixed(0)}%`);
+    console.log(`      （顺带：${unknowns} 副答了 unknown，那是安全的一侧——当活）`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 【10】外边那条路：**所有**可削外边都要看，不是只看最短那一条（E33 的 (b)）
+// ══════════════════════════════════════════════════════════════════════════
+//
+// 计数那一层（stalemate.ts）问的是 `shortestEdge`——**此刻最短的那条可削外边**。那是对的：
+// 它只数「某色星星够不够填满一条边」，取最短的那条等于取最宽松的门槛，而计数层只许偏松。
+//
+// 可穷举这一层不一样：它要的是「有没有**某一条**边填得满」。只看最短那条的话，
+// 「只有较长那条边填得满」的残局会被判**死**——而盘上明明还摆着一条填得满的边，玩家一眼
+// 就看得见。E33 明文「看**所有**外边」。
+head('【10】只有较长那条外边填得满的残局 → 判活');
+{
+  /*
+   * 同一族两条线（所以两条都是极值、两条都是可削外边），外加一条**只碰长边**的跨线：
+   *
+   *   R0（3 格，族 row，offset 0）：三枚**色块** 色2，而且**谁也碰不到它**（没有跨线经过）
+   *   R1（5 格，族 row，offset 1）：星星色1 ×4 ＋ 一枚星星色2（插在 [1,2]）
+   *   C （2 格，族 col）：把 R1 的 [1,2] 和一枚在边外的星星色1（[2,0]）接起来
+   *
+   * 滑 C 一格（两格的线，一步就是对换）→ [1,2] 换成星星色1 → 五枚同色星星填满 R1 → 整线
+   * 消除 → 活。
+   *
+   * 而 R0 **永远**填不满：它和外界不通，三格里的东西只会在它自己身上转圈，而那三枚是色块。
+   * ⚠️ 第一版把那条跨线接在 R0 上，于是 R0 里的色块能被换出去、星星能换进来——R0 也填得满
+   * 了，下面那条尺子当场红。两格的跨线是**双向**的，接上哪条边，那条边就不再封闭。
+   */
+  const R0 = { fam: 'row', offset: 0, cells: [[0, 0], [0, 1], [0, 2]] };
+  const R1 = { fam: 'row', offset: 1, cells: [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]] };
+  const C = { fam: 'col', offset: 0, cells: [[1, 2], [2, 0]] };
+  const board = { lines: [R0, R1, C], isLive: () => true };
+  const cells = new Map([
+    ['0,0', { color: 2, dot: false }], ['0,1', { color: 2, dot: false }], ['0,2', { color: 2, dot: false }],
+    ['1,0', { color: 1, dot: true }], ['1,1', { color: 1, dot: true }], ['1,2', { color: 2, dot: true }],
+    ['1,3', { color: 1, dot: true }], ['1,4', { color: 1, dot: true }],
+    ['2,0', { color: 1, dot: true }],
+  ]);
+  const at = (r, c) => cells.get(r + ',' + c) ?? null;
+  // 图案那条路关掉（最长的线才 5 格），只留整线消除——这一节量的就是它。
+  const got = edgeResidue(board, at, 9, 3);
+  check('滑一下让五枚同色星星填满较长那条边 → scores', got === 'scores', got);
+  /*
+   * 这一条才是上面那条的意义所在：**只把最短那条边交下去**，同一副盘就答 dead。
+   * 也就是说这个 fixture 真的区分得开两种接法——不是随便一副盘都 scores。
+   */
+  const onlyShort = residueVerdict({
+    lines: [R0.cells, R1.cells, C.cells], at, matchLen: 9,
+    bonusLines: [{ cells: R0.cells, need: 3 }],
+  });
+  check('（尺子）只交最短那条边 → dead（所以这一副真的只靠长边活）', onlyShort === 'dead', onlyShort);
+  const bothEdges = residueVerdict({
+    lines: [R0.cells, R1.cells, C.cells], at, matchLen: 9,
+    bonusLines: [{ cells: R0.cells, need: 3 }, { cells: R1.cells, need: 3 }],
+  });
+  check('（尺子）两条都交 → scores', bothEdges === 'scores', bothEdges);
+}
+
+head('【10】星星够数、可一条外边都滑不进去 → 判死');
+{
+  /*
+   * 三枚同色星星（色1），门槛 3——**计数那一层一定说活**（它只数「某色星星 ≥ 门槛」）。
+   * 可几何上永远凑不到一条边上：两条线不相交（没有跨线），而
+   *
+   *   R0（3 格）：星星 色1、星星 色1、色块 色2   → 转一圈还是两星一块，填不满
+   *   R1（5 格）：星星 色1、色块 色2 ×4          → 一枚星星，填不满
+   *
+   * 图案那条路也走不通：门槛 5，而 R1 上最长的同色连续段是四枚色2。
+   */
+  const R0 = { fam: 'row', offset: 0, cells: [[0, 0], [0, 1], [0, 2]] };
+  const R1 = { fam: 'row', offset: 1, cells: [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]] };
+  const board = { lines: [R0, R1], isLive: () => true };
+  const cells = new Map([
+    ['0,0', { color: 1, dot: true }], ['0,1', { color: 1, dot: true }], ['0,2', { color: 2, dot: false }],
+    ['1,0', { color: 1, dot: true }], ['1,1', { color: 2, dot: false }], ['1,2', { color: 2, dot: false }],
+    ['1,3', { color: 2, dot: false }], ['1,4', { color: 2, dot: false }],
+  ]);
+  const at = (r, c) => cells.get(r + ',' + c) ?? null;
+  const got = edgeResidue(board, at, 5, 3);
+  check('星星够三枚、却一条边都填不满 → dead', got === 'dead', got);
+  /*
+   * 两条反面尺子，证明这个 dead 不是「这个函数在这副盘上恒 dead」：
+   *   · 把 R0 那枚色块也换成色1星星 → R0 三枚同色星星，满了 → scores。
+   *   · 门槛（图案那条路）降到 4 → R1 上四枚色2连着，成图案 → scores。
+   */
+  const cells2 = new Map(cells);
+  cells2.set('0,2', { color: 1, dot: true });
+  const at2 = (r, c) => cells2.get(r + ',' + c) ?? null;
+  check('（尺子）R0 那枚色块换成同色星星 → scores', edgeResidue(board, at2, 5, 3) === 'scores');
+  check('（尺子）图案门槛降到 4 → scores（R1 上四枚色块连着）',
+    edgeResidue(board, at, 4, 3) === 'scores', edgeResidue(board, at, 4, 3));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 【11】老虎机那一局：认的是**转出来那个形状**，不是 1×N（E33 的 (a)）
+// ══════════════════════════════════════════════════════════════════════════
+//
+// 上一推（2026-10-02）这两副棋盘在有目标时直接 `return []`——穷举那时只会量同色 1×N，拿它
+// 去量一局老虎机会把明明还拼得出形状的棋判死。代价是老虎机那一局**根本没有几何兜底**。
+//
+// 现在形状跟着传下去（`ResidueSlot`），由 `patternHitFor` 拿 `findTargetAt`（屏幕上真的给
+// 不给分那把尺子）逐个盘面问一遍。这一节的每一条都是一**对**：同一副盘，不给形状答 dead、
+// 给了形状答 scores。一对才说明「形状真的被认出来了」，而不是这副盘本来就 scores。
+//
+// 两个形状的字面值和 src/engine/targets.ts 那张表一字不差（下面【9】有一条源码断言盯着
+// 它：表改了而这儿没跟着改，量的就是一个已经不存在的形状）。
+const SQ_2x2 = { id: '37', family: 'square', cells: [[0, 0], [0, 1], [1, 0], [1, 1]] };
+const CIRCLE_TRI = { id: '23', family: 'circle', cells: [[0, 1], [1, 0], [1, 2]] };
+
+head('【11】方块 2×2：1×4 拼不出，形状拼得出');
+{
+  /*
+   * 2×2 的小盘，四枚同色（三枚色块、一枚星星）：
+   *
+   *   · 线最长 2 格 → 同色 1×4 **永远**拼不出，所以不给形状就是 dead。
+   *   · 整行整列那条路也不通：整线消除要**整条都是同色星星**，而每行每列都带着色块。
+   *   · 可 2×2 那个形状此刻就摆在盘上（四枚同色、至少一枚色块）→ 给了形状就是 scores。
+   */
+  const b = boardFrom(['AA', 'Aa']);
+  const noSlot = gridResidue(2, 2, b.at, 4);
+  check('不给形状（只量 1×4）→ dead', noSlot === 'dead', noSlot);
+  const withSlot = gridResidue(2, 2, b.at, 4, { target: SQ_2x2, need: 4 });
+  check('给了 2×2 那个形状 → scores', withSlot === 'scores', withSlot);
+  /*
+   * 再一对：把四枚改成**两色各两枚**，2×2 就拼不成了（形状要四枚同色），而 1×4 本来也不
+   * 成——所以给不给形状都该是 dead。这一条防的是「给了 slot 就恒 scores」。
+   */
+  const mixed = boardFrom(['AB', 'Ba']);
+  check('两色各两枚：给了形状还是 dead（不是恒 scores）',
+    gridResidue(2, 2, mixed.at, 4, { target: SQ_2x2, need: 4 }) === 'dead',
+    gridResidue(2, 2, mixed.at, 4, { target: SQ_2x2, need: 4 }));
+  /*
+   * 第三对：**一盘全是空位**。它们一个也配不上颜色（`RESIDUE_BLANK`），所以不许被当成
+   * 「四枚同色拼成了 2×2」——circle.ts 那处 targetView 旁边写着同一句话：空位要当「没有这
+   * 一枚」，不是「一枚灰色的」，不然一排空球会被当成同色拼图。
+   *
+   * 这一条是**行为上**守着它的：形状判定里少写那一句 `if (code === RESIDUE_BLANK) return
+   * null;`，四个空位就都成了「颜色 −1 的色块」，四枚同色、至少一枚色块，当场 scores。
+   */
+  const allBlank = boardFrom(['..', '..']);
+  check('一盘全是空位：不许算成四枚同色拼成了 2×2',
+    gridResidue(2, 2, allBlank.at, 4, { target: SQ_2x2, need: 4 }) === 'dead',
+    gridResidue(2, 2, allBlank.at, 4, { target: SQ_2x2, need: 4 }));
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -447,16 +813,68 @@ if (searchSrc) {
       body.replace(/\s+/g, ' ').slice(0, 140));
   }
 
-  head('【9】老虎机那一局不走穷举（方块、小球两处）');
+  /*
+   * 老虎机那两副（方块、小球）：形状要真的传下去。
+   *
+   * 这一节 2026-10-02 之前钉的是**反过来那件事**——`if (target) return [];`，「老虎机那一局
+   * 不走穷举」。那是上一推的临时办法（穷举那时只会量 1×N），E33 把它换掉了。所以这儿有一条
+   * 「那句话不许再回来」：它一回来，老虎机那一局的几何兜底就又没了，而屏幕上什么都不报。
+   */
+  head('【9】老虎机那一局：形状传下去了（方块、小球两处）');
   for (const f of ['circle.ts', 'square.ts']) {
     const src = strip(read(f));
-    check(`${f}：有「有目标就不穷举」那一句`, /if \(target\) return \[\];/.test(src));
-    // 位置也要对：在计数那一层**之后**（计数说死就该照说），在 residueAt / 穷举**之前**。
-    const counted = src.indexOf('if (counted.length) return counted;');
-    const guard = src.indexOf('if (target) return [];');
-    const search = src.search(/edgeResidue\(|gridResidue\(/);
-    check(`${f}：排在「计数说死」之后`, counted > 0 && guard > counted, `${counted} / ${guard}`);
-    check(`${f}：排在穷举之前`, search > 0 && guard < search, `${guard} / ${search}`);
+    check(`${f}：**不许**再有「有目标就不穷举」那一句`, !/if \(target\) return \[\];/.test(src));
+    check(`${f}：形状和枚数一起交给穷举层`, /target \? \{ target, need \} : undefined/.test(src),
+      (src.match(/target \? \{[^}]*\} : undefined/) || ['(没找到)'])[0]);
+    // 两层的门槛必须是同一个 `need`：计数那一层收它，穷举这一层的形状枚数也收它。
+    check(`${f}：计数那一层收的也是同一个 need`,
+      /findStuckColorGroups\(live, need,/.test(src),
+      (src.match(/findStuckColorGroups\([^)]*\)/) || ['(没找到)'])[0]);
+  }
+
+  /*
+   * 判「拼成了没有」用的必须是**屏幕上真的给不给分那把尺子**（`findTargetAt`）。
+   *
+   * 另写一份的后果是这个仓库最熟的那一种：两份一起活着，改一处漏一处，而漏了的那一份只在
+   * 「穷举说死、玩家明明还拼得出」的时候才看得见——1.4 秒直接结算。
+   */
+  head('【9】形状判定没有第二份实现');
+  {
+    const src = readFileSync(new URL('../src/engine/residueBoard.ts', import.meta.url), 'utf8');
+    const body = strip(src);
+    check('residueBoard 用的是 targetMatch 的 findTargetAt', /findTargetAt\(view, variant, anchor\)/.test(body));
+    check('形状表在**开搜前**摊平（搜索中不变）',
+      /for \(const p of erodedShapes\(slot\.target, slot\.need\)\) variants\.push\(\.\.\.orientationsOf\(p\)\);/.test(body));
+    // 起手格就是「此刻还在盘上的那些」，而且**真的被用来起手**——第一版这一条只钉了
+    // `cells: () => built.cells` 那一行，可那一行当时没人读（循环里直接写的 built.cells），
+    // 于是把它改成 `() => []` 门一声不响。钉的要是**用它的那一句**。
+    check('起手格只用此刻还在盘上的那些', /const anchors = view\.cells\(\);/.test(body));
+    check('而且起手就是从那一份里起', /for \(const anchor of anchors\)/.test(body));
+    /*
+     * 配不上颜色的那一格（活炸弹 / 方块的空位）当「没有这一枚」，不是「一枚灰色的」。
+     *
+     * ⚠️ 这儿**有两道闸**，`has` 和 `tileAt` 各一道，而且任意一道单独就挡得住——所以上面
+     * 【11】那副「一盘全是空位」的盘只拆一道是量不出来的（拆 tileAt 那一道，has 照样回
+     * false，照旧 dead）。行为上的那一条留着（它守的是「两道都在」这个结果），而两道各自
+     * 还在不在，由这两条源码断言分别钉住。
+     */
+    check('RESIDUE_BLANK 那一格：tileAt 回「没有这一枚」',
+      /if \(code === RESIDUE_BLANK\) return null;/.test(body));
+    check('RESIDUE_BLANK 那一格：has 也说「不在盘上」',
+      /return id !== undefined && cur\[id\] !== RESIDUE_BLANK;/.test(body));
+  }
+
+  /*
+   * 上面【11】那两个形状的字面值，是从 `targets.ts` 那张表抄下来的。表改了而这儿没跟着改，
+   * 量的就是一个**已经不存在的形状**——门还是绿的，可它什么都没验。
+   */
+  head('【9】【11】用的那两个形状还在表上');
+  {
+    const src = readFileSync(new URL('../src/engine/targets.ts', import.meta.url), 'utf8');
+    check("targets.ts 里 '37' 还是方块 2×2",
+      /T\('37', 'square', \[\[0, 0\], \[0, 1\], \[1, 0\], \[1, 1\]\]\)/.test(src));
+    check("targets.ts 里 '23' 还是小球那个小三角",
+      /T\('23', 'circle', \[\[0, 1\], \[1, 0\], \[1, 2\]\]\)/.test(src));
   }
 }
 

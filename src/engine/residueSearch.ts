@@ -84,6 +84,19 @@ export interface ResidueInput {
   scanLines: readonly (readonly number[])[];
   /** 得分图案此刻要几枚。 */
   matchLen: number;
+  /**
+   * 老虎机那一局：这个盘面上有没有拼成**当前侵蚀级的那个目标形状**（E33 的 (a)）。
+   *
+   * 给了就**整个取代** `matchLen` 那条 1×N 扫描，不是叠加——那一局里一条同色 1×N 什么
+   * 都不发生（`findRunMatches` 在有目标时直接转去 `findTargetMatches`），叠加等于把一
+   * 件不会发生的事当成「还活着」的证据，于是该结束的局不结束。
+   *
+   * 为什么收一个函数而不是收图案：形状落到行列上是**按族**算的（方块、小球、三角三套，
+   * 见 `targetMatch.ts` 的 `place`），而这个文件从头到尾不认几何（文件头那段）。谁认几
+   * 何谁来判——`residueBoard.ts` 拿 `findTargetAt` 现成的那把尺子包一层传进来，和屏幕上
+   * 真的给不给分用的是同一个判定，不另抄一份。
+   */
+  patternHit?: (state: Uint16Array) => boolean;
   /** 能被整线消除的线（一条都消不动就给空数组）。 */
   bonusLines: readonly BonusLine[];
   /** 最多展开几个盘面。默认 20000（v1.3.1 §4 字面值）。 */
@@ -107,6 +120,8 @@ export const RESIDUE_BUDGET_MS = 250;
  *
  *   · **得分图案**：同一条线上连续 `matchLen` 格同色，而且**至少一枚是色块**
  *     （§1.1：全是星星的线无事发生）。空白格不同色，天然断开一条连续段。
+ *     老虎机那一局这条换成 `patternHit`——那一局认的是转出来那个形状的子形（E33 的
+ *     (a)），1×N 在那一局什么都不发生。
  *   · **整线消除**：某条 `bonusLines` 上的线整条都是同色星星，且枚数 ≥ 它的 `need`。
  *
  * 导出给门用，也给下面的 BFS 用——门拿它当尺子，而不是再抄一份判定。
@@ -116,8 +131,13 @@ export function scoresNow(
   scanLines: readonly (readonly number[])[],
   matchLen: number,
   bonusLines: readonly BonusLine[],
+  patternHit?: (state: Uint16Array) => boolean,
 ): boolean {
-  if (matchLen >= 1) {
+  if (patternHit) {
+    // 老虎机那一局：认的是**转出来那个形状的子形**，不是 1×N。所以这一支取代下面那条扫
+    // 描，不和它并列（见 ResidueInput.patternHit 上面那段）。
+    if (patternHit(state)) return true;
+  } else if (matchLen >= 1) {
     for (const line of scanLines) {
       let run = 0;
       let runColor = -2;
@@ -184,13 +204,14 @@ export function residueSearch(input: ResidueInput): ResidueVerdict {
     moves,
     scanLines,
     matchLen,
+    patternHit,
     bonusLines,
     maxStates = RESIDUE_MAX_STATES,
     budgetMs = RESIDUE_BUDGET_MS,
     now = () => Date.now(),
   } = input;
 
-  if (scoresNow(start, scanLines, matchLen, bonusLines)) return 'scores';
+  if (scoresNow(start, scanLines, matchLen, bonusLines, patternHit)) return 'scores';
   if (!moves.length) return 'dead';
   const deadline = now() + budgetMs;
   const seen = new Set<string>([keyOf(start)]);
@@ -209,7 +230,7 @@ export function residueSearch(input: ResidueInput): ResidueVerdict {
         const key = keyOf(child);
         if (seen.has(key)) continue;
         seen.add(key);
-        if (scoresNow(child, scanLines, matchLen, bonusLines)) return 'scores';
+        if (scoresNow(child, scanLines, matchLen, bonusLines, patternHit)) return 'scores';
         next.push(child);
       }
     }

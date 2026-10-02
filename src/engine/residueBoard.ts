@@ -35,13 +35,17 @@
  * 看不见的墙，把本来连得上的一段截断——那会让搜索件少看见一些得分，往「判死」那一侧偏，
  * 而那是最不能偏的方向。
  */
-import type { Cell } from './types';
+import type { Cell, Tile } from './types';
 import { EDGE_MIN, outerEdges, type EdgeBoard } from './outerEdge';
+import { erodedShapes, findTargetAt, orientationsOf, type BoardView } from './targetMatch';
+import type { TargetPattern } from './targets';
 import {
   RESIDUE_BLANK,
+  colorOf,
   cyclicShuffles,
   encodeTile,
   fillerAwareShuffles,
+  isDot,
   residueSearch,
   type BonusLine,
   type ResidueVerdict,
@@ -55,6 +59,8 @@ export const RESIDUE_MAX_TILES = 16;
 
 interface Built {
   index: Map<string, number>;
+  /** 反过来：格号 → 它的行列。老虎机那一支要用它当「从哪儿起手试这个形状」。 */
+  cells: Cell[];
   start: Uint16Array;
   lines: number[][];
 }
@@ -64,6 +70,7 @@ const key = (r: number, c: number) => r + ',' + c;
 /** 把线和格子编成号。不在盘上的格子直接不进线。 */
 function build(lines: readonly (readonly Cell[])[], at: ResidueCellAt): Built {
   const index = new Map<string, number>();
+  const cells: Cell[] = [];
   const codes: number[] = [];
   const out: number[][] = [];
   for (const line of lines) {
@@ -76,13 +83,14 @@ function build(lines: readonly (readonly Cell[])[], at: ResidueCellAt): Built {
       if (id === undefined) {
         id = codes.length;
         index.set(k, id);
+        cells.push([r, c]);
         codes.push(got === 'blank' ? RESIDUE_BLANK : encodeTile(got.color, got.dot));
       }
       row.push(id);
     }
     if (row.length >= 2) out.push(row);
   }
-  return { index, start: Uint16Array.from(codes), lines: out };
+  return { index, cells, start: Uint16Array.from(codes), lines: out };
 }
 
 function toBonus(
@@ -101,11 +109,88 @@ function toBonus(
   return out;
 }
 
+/**
+ * 老虎机那一局认的得分形状（E33 的 (a)）。
+ *
+ * 只有方块和小球开老虎机，所以只有这两副会给它。
+ */
+export interface ResidueSlot {
+  /** 这一局转出来的那个图案。 */
+  target: TargetPattern;
+  /**
+   * 当前侵蚀级要几枚——`sizeAtLevel(target, level)`，也就是 HUD 那一块此刻画着的那个数
+   * （`patternBlock.ts` 的 `shownCount`）。棋盘那头现成的 `targetNeed()` 就是它。
+   *
+   * ⚠️ 这个数和计数那一层的门槛**必须是同一个**（棋盘那头两处都传 `need`）。给不同的数，
+   * 两层判的就是两副不同的棋盘：计数层按 3 枚说活、穷举层按 4 枚说死，结果取后者。
+   */
+  need: number;
+}
+
+/**
+ * 老虎机那一局的 (a)：这个盘面上拼成了当前级那个形状没有。
+ *
+ * **拿的是屏幕上真的给不给分那把尺子**（`targetMatch.ts` 的 `findTargetAt`），不另抄一
+ * 份——「同一件事写两遍、改一处漏一处」这个仓库栽过不止一次，而这一处漏了的后果是「穷举
+ * 说死、玩家明明还拼得出」，1.4 秒直接结算。
+ *
+ * 两样在**开搜之前**就算定（E33 明文「外边、目标、门槛在开搜前算好，搜索中不变」）：
+ *
+ *   · 形状表摊平成一张 `variants`。`erodedShapes` 和 `orientationsOf` 各自带缓存，可那
+ *     是「每调一次查一次 Map」，而这一问每个盘面都要问一遍（最多两万个）。
+ *   · 起手格就是 `built.cells`，**只含此刻还在盘上的格子**。丢掉不在盘上的那些不会漏掉
+ *     任何一处匹配：图案第一枚落的正是起手那一格（`place()` 对 cells[0] 的位移是 0），
+ *     起手格不在盘上，`findTargetAt` 第一问就回 null。
+ */
+function patternHitFor(built: Built, slot: ResidueSlot): (state: Uint16Array) => boolean {
+  const variants: TargetPattern[] = [];
+  for (const p of erodedShapes(slot.target, slot.need)) variants.push(...orientationsOf(p));
+
+  // 这把 view 是**跟着当前盘面走**的一层壳：每问一个盘面就换一次 `cur`，而不是每个盘面
+  // 新建一个 BoardView（两万个盘面 × 一个对象，白白给垃圾回收添活）。
+  let cur: Uint16Array = built.start;
+  const idAt = (r: number, c: number) => built.index.get(key(r, c));
+  const view: BoardView = {
+    has: (r, c) => {
+      const id = idAt(r, c);
+      return id !== undefined && cur[id] !== RESIDUE_BLANK;
+    },
+    tileAt: (r, c) => {
+      const id = idAt(r, c);
+      if (id === undefined) return null;
+      const code = cur[id];
+      // 配不上任何颜色的那一格（活炸弹、方块消过的空位）当「没有这一枚」，不是「一枚灰
+      // 色的」——不然一片空位会被当成同色拼成了图案。和两副棋盘真的那份 targetView 一
+      // 个口径（见 circle.ts 那一处的注释）。
+      if (code === RESIDUE_BLANK) return null;
+      const color = colorOf(code);
+      // 假棋子：`findTargetAt` 只问 `effColor` 和 `face` 两样。正反两面都填同一个颜色，
+      // 于是 effColor 怎么走都对。
+      const tile: Tile = { id: 0, color, dotColor: color, face: isDot(code) ? 'dot' : 'flavor' };
+      return tile;
+    },
+    cells: () => built.cells,
+  };
+  const anchors = view.cells();
+
+  return (state: Uint16Array) => {
+    cur = state;
+    for (const variant of variants) {
+      for (const anchor of anchors) {
+        if (findTargetAt(view, variant, anchor)) return true;
+      }
+    }
+    return false;
+  };
+}
+
 export interface ResidueOpts {
   lines: readonly (readonly Cell[])[];
   at: ResidueCellAt;
   matchLen: number;
   bonusLines: readonly { cells: readonly Cell[]; need: number }[];
+  /** 老虎机那一局：给了就按转出来那个形状判，`matchLen` 那条 1×N 整个不走。 */
+  slot?: ResidueSlot;
   /** 六边三角 54 那一套（只许偶数步 + filler 配对交换）。 */
   filler?: boolean;
 }
@@ -133,6 +218,7 @@ export function residueVerdict(opts: ResidueOpts): ResidueVerdict {
     moves: opts.filler ? fillerAwareShuffles(built.lines) : cyclicShuffles(built.lines),
     scanLines: built.lines,
     matchLen: opts.matchLen,
+    patternHit: opts.slot ? patternHitFor(built, opts.slot) : undefined,
     bonusLines: toBonus(built, opts.bonusLines),
   });
 }
@@ -149,11 +235,12 @@ export function edgeResidue(
   matchLen: number,
   threshold: number = EDGE_MIN,
   filler = false,
+  slot?: ResidueSlot,
 ): ResidueVerdict {
   const bonus = outerEdges(board, threshold).map((e) => ({ cells: e.live, need: threshold }));
   // `EdgeLine` 比一串格子多带两位（族名、法向偏移），穷举这头只要格子。
   const lines = board.lines.map((l) => l.cells);
-  return residueVerdict({ lines, at, matchLen, bonusLines: bonus, filler });
+  return residueVerdict({ lines, at, matchLen, bonusLines: bonus, filler, slot });
 }
 
 /**
@@ -167,10 +254,11 @@ export function gridResidue(
   cols: number,
   at: ResidueCellAt,
   matchLen: number,
+  slot?: ResidueSlot,
 ): ResidueVerdict {
   const lines: Cell[][] = [];
   for (let r = 0; r < rows; r++) lines.push(Array.from({ length: cols }, (_, c) => [r, c] as Cell));
   for (let c = 0; c < cols; c++) lines.push(Array.from({ length: rows }, (_, r) => [r, c] as Cell));
   const bonus = lines.map((cells) => ({ cells, need: cells.length }));
-  return residueVerdict({ lines, at, matchLen, bonusLines: bonus });
+  return residueVerdict({ lines, at, matchLen, bonusLines: bonus, slot });
 }
