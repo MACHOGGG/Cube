@@ -48,7 +48,6 @@ const check = (n, ok, extra = '') => {
 const passcode = (await import('../api/passcode.js')).default;
 const emailApi = (await import('../api/email.js')).default;
 const redeem = (await import('../api/redeem.js')).default;
-const subscription = (await import('../api/subscription.js')).default;
 const A = await import('../api/_accounts.js');
 const { set } = await import('../api/_store.js');
 
@@ -141,28 +140,34 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
 
 // ---- ④ 兑码撞登录 / 撞 reset：加上去的时长不许被盖掉 ------------------------
 //
-// 登录（subscription.js）和重设凭据（handle.js 的 reset，从前是 passcode.js 的改密码）
-// 都只想改一样小东西——登录添一把令牌，reset 换一把钥匙——可它们写回去的是**整份账号**。
-// 从前两处都是朴素的
-// 「loadAccount → 改 → saveAccount」，于是同一瞬间的兑码（redeem 走 updateAccount
-// 加时长）会被它们按进函数那一刻读到的旧 until 盖回去：码真的被吃掉了、两边都
-// 说成功，而账号上一天都没多。玩家自己查不出来，客服也查不出来（码已经从库里
-// 拿走了）。
+// 登录和重设凭据都只想改一样小东西——登录添一把令牌，reset 换一把钥匙——可它们写回去的
+// 是**整份账号**。从前两处都是朴素的「loadAccount → 改 → saveAccount」，于是同一瞬间的
+// 兑码（redeem 走 updateAccount 加时长）会被它们按进函数那一刻读到的旧 until 盖回去：
+// 码真的被吃掉了、两边都说成功，而账号上一天都没多。玩家自己查不出来，客服也查不出来
+// （码已经从库里拿走了）。
 //
-// 现在两处都走 updateAccount，和兑码抢同一把 acctlock:<邮箱>。
+// 现在两处都走 updateAccount，和兑码抢同一把 acctlock:<id>。
+//
+// ⚠️ **第一对换了被测的那条登录路（2026-10-02）。** 原先是「兑码撞 /api/subscription 拿
+// 密码登录」，而那一支随 E37 撤了（那个文件里记着为什么），而且撤掉之后那条路**一个字都
+// 不写库**，再也撞不出任何东西。现在撞的是 `api/handle.js` 的 signin（免邮箱凭据登录）
+// ——它正是眼下「登录添一把令牌」那件事的落处，而它在 2026-10-02 之前也还是朴素的
+// `issueToken` + `saveAccount`，和原先那一支一模一样的毛病。
 {
-  const mail = 'racer@example.com';
-  const acct = A.newAccount('old111', 'code');
-  acct.until = Date.now() + 5 * 86400e3;   // 先有五天
-  await A.saveAccount(mail, acct);
-  const before = acct.until;
+  const handleFirst = (await import('../api/handle.js')).default;
+  const FIRST4 = 'RaceSignin1';
+  const made4 = await call(handleFirst, { action: 'register', first: FIRST4, second: 'loginpass' });
+  check('（尺子）免邮箱账号注册成了', made4.status === 200, String(made4.status));
+  const mail = made4.body.id;
+  await A.updateAccount(mail, (a) => { a.until = Date.now() + 5 * 86400e3; });   // 先有五天
+  const before = (await A.loadAccount(mail))?.until || 0;
 
   // redeem 读的是码本身那张票（code:XXXXXX，takeOnce 取走），不是上面 mint()
   // 那个「绑码用的寄存处」（acct:code:XXXXXX）。两者是两条路，别搞混。
   await set('code:DDDD44', { plan: 'month' });
   const [rRedeem, rLogin] = await Promise.all([
-    call(redeem, { code: 'DDDD44', email: mail, token: acct.token }),
-    call(subscription, { email: mail, password: 'old111' }),
+    call(redeem, { code: 'DDDD44', email: mail, token: made4.body.token }),
+    call(handleFirst, { first: FIRST4, second: 'loginpass' }),
   ]);
   check('④ 兑码撞登录：两条都办成了', rRedeem.status === 200 && rLogin.status === 200,
     `兑码 ${rRedeem.status} / 登录 ${rLogin.status}`);
@@ -171,6 +176,9 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
   // 张码真的加上去了、没被登录那一笔按旧值盖回去。
   check('④ 兑码撞登录：那一个月还在（没被登录写回去的旧到期日盖掉）',
     after - before > 20 * 86400e3, `到期日多了 ${Math.round((after - before) / 86400e3)} 天`);
+  // 而登录发出去的那把令牌也要真的落在库里——不然是反过来被兑码那一笔盖掉了。
+  check('④ 兑码撞登录：登录那把令牌也在（没被兑码那一笔盖回去）',
+    A.tokenValid(await A.loadAccount(mail), rLogin.body.token), String(rLogin.body.token).slice(0, 8));
 
   /*
    * 第二对原先是「兑码撞改密码」。改密码那一支 2026-10 撤了（E37，密码取消），而它守的那
@@ -260,25 +268,31 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
 // ---- ⑥ 同一形状，吞的是令牌：新设备刚登录，这台手滑一次 -------------------
 //
 // 令牌环和到期日在同一份 JSON 里，所以同一笔整份覆盖两样都吞。玩家看到的是：
-// 手机上刚登录好，电脑上手滑输错一次密码，手机那台下次去看排行榜被告知「请重新
+// 手机上刚登录好，电脑上手滑输错一次凭据，手机那台下次去看排行榜被告知「请重新
 // 登录」——而两边都没有任何报错。
+//
+// 被测的登录路和 ④ 一样换成了 handle.js 的 signin（理由见 ④ 那条 ⚠️）。手滑那一下照旧
+// 直接叫 `checkPin`，而且**故意喂一份过期的快照**——那正是「进门时读的那一份」。
 {
-  const mail = 'twodevice@example.com';
-  const acct = A.newAccount('good22', 'code');
-  acct.until = Date.now() + 40 * 86400e3;
-  await A.saveAccount(mail, acct);
+  const handleSix = (await import('../api/handle.js')).default;
+  const FIRST6 = 'RaceTwoDev1';
+  const made6 = await call(handleSix, { action: 'register', first: FIRST6, second: 'good2222' });
+  check('（尺子）免邮箱账号注册成了', made6.status === 200, String(made6.status));
+  const mail = made6.body.id;
+  await A.updateAccount(mail, (a) => { a.until = Date.now() + 40 * 86400e3; });
+  const firstToken = made6.body.token;
 
   const stale = await A.loadAccount(mail);            // 电脑那台进门时的快照
-  const rLogin = await call(subscription, { email: mail, password: 'good22' });
+  const rLogin = await call(handleSix, { first: FIRST6, second: 'good2222' });
   const fresh = await A.loadAccount(mail);
   check('⑥ 新设备登录拿到一把新令牌', rLogin.status === 200 && Boolean(rLogin.body.token)
     && A.tokenValid(fresh, rLogin.body.token), String(rLogin.status));
-  await A.checkPin(mail, 'nope88', stale);            // 电脑那台手滑
+  await A.checkPin(mail, 'nope8888', stale, { block: false });   // 电脑那台手滑
   const later = await A.loadAccount(mail);
   check('⑥ 新设备那把令牌还有效（没被打错那一笔顶下线）',
     A.tokenValid(later, rLogin.body.token));
   // 原来那把也不许丢——他自己这台还在用着。
-  check('⑥ 原来那把也还在（两台各拿各的）', A.tokenValid(later, acct.token));
+  check('⑥ 原来那把也还在（两台各拿各的）', A.tokenValid(later, firstToken));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

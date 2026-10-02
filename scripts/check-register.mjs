@@ -1,41 +1,43 @@
 /**
- * 注册那条路：从「填邮箱 + 六位密码」一直走到「用同一组凭据登录回来」。
+ * 开账号 → 登录 → 终身授予，真起服务器走一遍。
  *
  *   GENIUS_GRANT_WINDOW=1 node scripts/dev-server.mjs 8993 dist &
  *   node scripts/check-register.mjs http://localhost:8993/
  *
- * 环境变量只要一个。原先还要 `GENIUS_GRANT_LIMIT=2`，因为那时名额有限（第一批 100 个），
- * 这道门要量「满了会怎么样」——把上限压到 2，第三个人就撞在边界上。2026-10-02 名额整个撤
- * 了（E39，玩家：「不限人数」），那几节随之撤掉，`/api/slots` 也删了。
+ * ⚠️ **这道门 2026-10-02 换了被测的那条路，原因有两条，都值得记下来。**
  *
- * ⚠️ **这条路是过渡期留下的**：邮箱 + 六位密码的注册（`api/passcode.js` 的 signUp）。
- * 2026-10 的改制（E37）把身份换成了邮箱验证码（`api/signin.js`）和免邮箱凭据
- * （`api/handle.js`），两条新路各有自己的门（check-signin-otp / check-handle-auth）。这
- * 一支留着是为了老账号和在途的标签页，所以这道门也留着——它量的那条路一天没撤，就一天不
- * 该没人看着。
+ * ── 一、它量的那条路撤了 ──────────────────────────────────────
  *
- * ── 这条路从前是个死圈 ─────────────────────────────────────────
+ * 原先量的是「邮箱 + 六位密码」那种注册（`api/passcode.js` 的 `signUp`）。那一支是个**抢
+ * 注接口**：不要任何凭据就能在任意一个邮箱上开出账号，而且账号带着一把它自己设的密码
+ * （passcode.js 末尾那段把后果写全了）。撤了之后这道门的正向断言全部失效，于是它反过来
+ * 量那一支**真的关着**，正向那几条换到眼下活着的那条路上：
  *
- * 2026-10 把 Creem 的两个订阅商品暂时关掉，网页端改成「注册就解锁全部功能」。可在那之前
- * 「注册」等于「订阅」——邮箱是 Creem 的结账页替我们收的，所以服务端 `api/passcode.js` 只
- * 有三支（结账 id / 兑码令牌 / 改密码），「只有邮箱和密码」这条路**不存在**；而界面上那颗
- * 《注册》键按下去是 `close(); openGeniusWindow(...)`，转回天才那一屏。玩家照着那句承诺去
- * 做，两屏之间来回转，一个账号也开不出来——而屏幕上什么都不报。
+ *   免邮箱凭据（`api/handle.js`，E38）——两串自己取的字符串，注册、登录、重设都在那一个
+ *   接口里。另一条活路是邮箱验证码（`api/signin.js`），它过不来：验证码只在那封信里，而
+ *   这道门不收信（那一条由 check-signin-otp.mjs 在进程内驱动，它拿得到码）。
+ *
+ * ── 二、它在 CI 里从来没真跑过 ────────────────────────────────
+ *
+ * ci.yml 里那一步起完服务器之后探的是 `/api/slots`，而那个接口随名额一起删了（E39）——于
+ * 是 `curl -sf` 永远 404，等待循环空转 30 秒，后面那句硬探必败，整步在跑到这个文件之前就
+ * 红了。**一条跑不起来的流水线看着像在守着，其实一行代码都没验过。** 探活改成探首页
+ * （不会被删的那样东西），这个文件才第一次真的被执行。
  *
  * ── 量的是什么 ────────────────────────────────────────────────
  *
- * 服务端（真起 dev-server，真发请求）：
- *   ① 注册成了，而且是**真的**一个账号——拿同一组凭据登录回来，拿到令牌；
- *   ② 窗口期里注册完就是天才（until 推到 LIFETIME_UNTIL）；
- *   ③ 同一个地址再注册答 409，**不静默合并**（理由见 passcode.js 的 signUp）；
- *   ④ 邮箱不合格 400 invalid、密码不合六位字母数字 400 weak，两条错分得开。
+ *   ① 老的注册那一支撤了：带 `register: true` 答 400 `action`，不是悄悄落到某一支上去。
+ *      改密码那一支（也撤了）同一句话。
+ *   ② 免邮箱凭据：注册拿到 id 和令牌；拿同一对登录回来；第二串打错 401。
+ *   ③ 窗口期里注册那一下就是天才（until 推到 LIFETIME_UNTIL）。
+ *   ④ 不限人数：接着来的几个人一个都不许落空。
+ *   ⑤ 第一串撞名答 409 `taken`，而且**没动**原来那个账号（旧第二串还登得上）。
+ *   ⑥ 按来路限速（`pairin`，30 次/小时）：第 31 次挡下来，换个来路不受牵连。
+ *   ⑦ **同一个 IPv6 /64 共用一个桶。** 家宽标配分到的是一整个 /64，换一个源地址不花一分
+ *      钱——按单个地址分桶等于不限速（见 api/_ratelimit.js 的 bucketOf）。
  *
- * 客户端（读源码）：那个死圈真的拆了，而且密码框在注册那一栏放得出来、标注对得上。
- *
- * 每条断言旁边配了尺子或反向对照。源码那一半每条都有反向对照：把源码按那一条的反面改坏
- * 一次，这道门必须跟着红。
+ * 每一节自带一个来路（`x-forwarded-for`），所以上面几节不会把 ⑥⑦ 的配额吃掉。
  */
-import { readFileSync } from 'node:fs';
 
 const base = (process.argv[2] || '').replace(/\/+$/, '');
 if (!base) {
@@ -52,12 +54,13 @@ const check = (n, ok, extra = '') => {
 
 const LIFETIME_UNTIL = Date.UTC(2999, 0, 1);
 const stamp = Date.now().toString(36);
-const addr = (tag) => `reg-${tag}-${stamp}@example.com`;
+/** 第一串：大小写敏感的字母数字，8 到 64 位（_accounts.js 的 PAIR_RE）。 */
+const first = (tag) => `Reg${tag}${stamp}`;
 
-async function post(path, body) {
+async function post(path, body, ip = '203.0.113.1') {
   const res = await fetch(base + path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
     body: JSON.stringify(body),
   });
   let json = null;
@@ -68,165 +71,150 @@ async function post(path, body) {
   }
   return { status: res.status, body: json };
 }
-const register = (email, password) => post('/api/passcode', { register: true, email, password });
-const login = (email, password) => post('/api/subscription', { email, password });
 
-// ── ① 注册 → 登录回来 ───────────────────────────────────────────
-const A = addr('a');
-const PW_A = 'abc123';
+// ── ① 两条撤掉的路：答得明确，不许悄悄落到别处 ─────────────────
 {
-  const made = await register(A, PW_A);
-  check('第一个人注册成了', made.status === 200 && made.body?.ok === true, `${made.status} ${JSON.stringify(made.body)}`);
-  check('注册这一下就给了令牌（这台设备当场就是登着的）', typeof made.body?.token === 'string' && made.body.token.length > 0);
+  const IP = '198.51.100.11';
+  const reg = await post('/api/passcode',
+    { register: true, email: `reg-old-${stamp}@example.com`, password: 'abc123' }, IP);
+  check('① 老的注册那一支撤了 → 400 action',
+    reg.status === 400 && reg.body?.error === 'action', `${reg.status} ${JSON.stringify(reg.body)}`);
 
-  const back = await login(A, PW_A);
-  check('用同一组凭据登录回来', back.status === 200 && typeof back.body?.token === 'string', `${back.status}`);
-  check('② 窗口期第一个人就是天才', back.body?.active === true, `active=${back.body?.active}`);
-  check('「终身」记的是那个一千年后的日子', (back.body?.until || 0) >= LIFETIME_UNTIL, String(back.body?.until));
+  const chg = await post('/api/passcode',
+    { email: `reg-old-${stamp}@example.com`, password: 'abc123', newPassword: 'xyz789' }, IP);
+  check('① 改密码那一支也还是撤着的 → 400 action',
+    chg.status === 400 && chg.body?.error === 'action', `${chg.status} ${JSON.stringify(chg.body)}`);
 
-  // 尺子：密码真的被当成凭据了。少了这一条，上面那句「登录回来」可能只是
+  // 尺子：这个接口本身没死——`bind`（内部码绑邮箱）那一支还在，拿一张不存在的码去绑，
+  // 它答的是**自己那条路上的错**，不是 400 `action`。
+  //
+  // ⚠️ `code` 要给个**真值**：分发那一句是 `if (code)`，空串落不到 bind 上，于是这条尺子
+  // 会和上面两条一样收到 400 action——看着红的是尺子，其实是尺子自己写错了。
+  const bind = await post('/api/passcode',
+    { code: 'NOSUCH', token: 'x', email: `bind-${stamp}@example.com`, password: 'abc123' }, IP);
+  check('（尺子）接口本身还活着：bind 那一支照旧答得出自己的错',
+    bind.body?.error !== 'action', `${bind.status} ${JSON.stringify(bind.body)}`);
+}
+
+// ── ②③ 注册 → 登录回来 → 窗口期就是天才 ────────────────────────
+const A = first('A');
+const A_SECOND = 'firstpass';
+{
+  const IP = '198.51.100.12';
+  const made = await post('/api/handle', { action: 'register', first: A, second: A_SECOND }, IP);
+  check('② 注册成了', made.status === 200 && made.body?.ok === true,
+    `${made.status} ${JSON.stringify(made.body)}`);
+  check('② 回了账号 id（hdl:<sha256>，第一串的原文不在回包里）',
+    /^hdl:[0-9a-f]{64}$/.test(String(made.body?.id)), String(made.body?.id));
+  check('② 第一串的原文不在回包里', !JSON.stringify(made.body ?? {}).includes(A));
+  check('② 注册这一下就给了令牌（这台设备当场就是登着的）',
+    typeof made.body?.token === 'string' && made.body.token.length > 0);
+  check('③ 窗口期第一个人就是天才', made.body?.active === true, `active=${made.body?.active}`);
+  check('③ 「终身」记的是那个一千年后的日子',
+    (made.body?.until || 0) >= LIFETIME_UNTIL, String(made.body?.until));
+
+  const back = await post('/api/handle', { first: A, second: A_SECOND }, IP);
+  check('② 拿同一对登录回来', back.status === 200 && typeof back.body?.token === 'string',
+    `${back.status}`);
+  check('② 登录拿到的是**另一把**令牌，而不是把注册那把换掉',
+    back.body?.token && back.body.token !== made.body?.token);
+  check('② 登录回来照样是天才', back.body?.active === true, `active=${back.body?.active}`);
+
+  // 尺子：第二串真的被当成凭据了。少了这一条，上面那句「登录回来」可能只是
   // 「这个接口对谁都发令牌」。
-  const wrong = await login(A, 'zzz999');
-  check('（尺子）密码打错进不去', wrong.status === 401, `${wrong.status} ${JSON.stringify(wrong.body)}`);
+  const wrong = await post('/api/handle', { first: A, second: 'nottherigh' }, IP);
+  check('（尺子）第二串打错进不去', wrong.status === 401,
+    `${wrong.status} ${JSON.stringify(wrong.body)}`);
 }
 
-// ── ③ 同一个地址再注册：409，不合并 ────────────────────────────
+// ── ⑤ 第一串撞名：409，而且不许动原来那个账号 ───────────────────
 {
-  const again = await register(A, 'xyz789');
-  check('③ 同一个地址再注册答 409', again.status === 409 && again.body?.error === 'exists', `${again.status} ${JSON.stringify(again.body)}`);
-  // 尺子：旧密码还好着——「不合并」必须是真的没动那份账号，而不是只回了个错。
-  const still = await login(A, PW_A);
-  check('（尺子）旧密码还是那一个（账号没被覆盖）', still.status === 200 && typeof still.body?.token === 'string');
+  const IP = '198.51.100.13';
+  const again = await post('/api/handle', { action: 'register', first: A, second: 'otherpass' }, IP);
+  check('⑤ 同一个第一串再注册答 409 taken',
+    again.status === 409 && again.body?.error === 'taken', `${again.status} ${JSON.stringify(again.body)}`);
+  // 尺子：旧的第二串还好着——「不覆盖」必须是真的没动那份账号，而不是只回了个错。
+  const still = await post('/api/handle', { first: A, second: A_SECOND }, IP);
+  check('（尺子）旧的第二串还是那一个（账号没被覆盖）',
+    still.status === 200 && typeof still.body?.token === 'string', String(still.status));
+  // 而刚才那一串**没有**变成第二串。
+  const notNew = await post('/api/handle', { first: A, second: 'otherpass' }, IP);
+  check('（尺子）撞名那一次填的第二串没被写进去', notNew.status === 401, String(notNew.status));
 }
 
-// ── ④ 两条错分得开 ────────────────────────────────────────────
-{
-  const bad = await register('not-an-email', 'abc123');
-  check('④ 邮箱不合格 → 400 invalid', bad.status === 400 && bad.body?.error === 'invalid', `${bad.status} ${JSON.stringify(bad.body)}`);
-  const weak = await register(addr('w'), 'abc-12');
-  check('④ 密码夹了符号 → 400 weak（不是 invalid）', weak.status === 400 && weak.body?.error === 'weak', `${weak.status} ${JSON.stringify(weak.body)}`);
-  const short = await register(addr('s'), 'abc12');
-  check('④ 密码只有五位 → 400 weak', short.status === 400 && short.body?.error === 'weak', `${short.status}`);
-  const empty = await register(addr('e'), '');
-  check('④ 密码空着 → 400 weak', empty.status === 400 && empty.body?.error === 'weak', `${empty.status}`);
-}
-
-// ── 不限人数：第三、第四个人照样是天才 ────────────────────────
+// ── ④ 不限人数：接着来的几个人一个都不许落空 ────────────────────
 //
-// 这一节原先量的是「名额满了会怎么样」（账号照样开出来、只是不是天才）。名额撤了（E39），
-// 所以反过来量：**接着注册的人不许有任何一个落空**。
-//
-// 为什么还值得量：撤掉计数是一次删代码，而删代码最容易留下半截——比如幂等那道短路顺手也
-// 被删了（于是每次登录都重写一遍 grantedAt），或者某个判断还留着一个写死的上限。这一节
-// 多造几个人走一遍，落空一个就红。
+// 这一节原先量的是「名额满了会怎么样」。名额撤了（E39，玩家：「不限人数」），所以反过来
+// 量。为什么还值得量：撤掉计数是一次删代码，而删代码最容易留下半截——比如幂等那道短路顺
+// 手也被删了（于是每次登录都重写一遍 grantedAt），或者某个判断还留着一个写死的上限。
 {
+  const IP = '198.51.100.14';
   for (let i = 0; i < 4; i++) {
-    const who = addr(`bulk${i}`);
-    const made = await register(who, `bulk${i}a`);
-    check(`第 ${i + 3} 个人注册成了`, made.status === 200 && made.body?.ok === true,
+    const who = first(`B${i}`);
+    const made = await post('/api/handle', { action: 'register', first: who, second: `bulk${i}aaa` }, IP);
+    check(`④ 第 ${i + 2} 个人注册成了`, made.status === 200 && made.body?.ok === true,
       `${made.status} ${JSON.stringify(made.body)}`);
-    const back = await login(who, `bulk${i}a`);
-    check(`第 ${i + 3} 个人也是天才（没有上限了）`, back.body?.active === true, `active=${back.body?.active}`);
+    check(`④ 第 ${i + 2} 个人也是天才（没有上限了）`, made.body?.active === true,
+      `active=${made.body?.active}`);
   }
 }
 
-// ── 客户端那一半：死圈真的拆了 ────────────────────────────────
-const sub = readFileSync(new URL('../src/ui/subscribe.ts', import.meta.url), 'utf8');
-const i18n = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
-
-/** 只看 openAuthWindow 那一段，别被别处同名的东西骗了。 */
-function authWindow(src) {
-  const at = src.indexOf('export function openAuthWindow');
-  return at < 0 ? '' : src.slice(at);
-}
-
-/** 判这一份 subscribe.ts 的几条，返回红了的那几条。做成纯函数，下面好喂改坏的源码。 */
-function judgeUi(src) {
-  const w = authWindow(src);
-  const bad = [];
-  // 死圈：注册那一支不许再转回天才窗口。
-  const sub2 = w.slice(w.indexOf('const submit = async () =>'));
-  const body = sub2.slice(0, sub2.indexOf('\n  };'));
-  if (/openGeniusWindow/.test(body)) bad.push('noCircle');
-  // 真提交。
-  if (!/registerAccount\(/.test(body)) bad.push('callsRegister');
-  // 密码栏放出来：不许再有 `fields.hidden = next === 'register'`。
-  if (!/fields\.hidden\s*=\s*false/.test(w)) bad.push('fieldsShown');
-  // 《忘记密码？》只在登录那一栏。
-  if (!/forgot\.hidden\s*=\s*next === 'register'/.test(w)) bad.push('forgotHidden');
-  // 按钮文案换成注册用的那一句，不再写「订阅」。
-  if (!/go\.textContent\s*=\s*next === 'register' \? s\.registerBtn/.test(w)) bad.push('registerBtnText');
-  // 给密码管理器的两套标注。
-  if (!/pwInput\.autocomplete\s*=\s*next === 'register' \? 'new-password'/.test(w)) bad.push('newPassword');
-  if (!/setAttribute\('minlength', '6'\)/.test(w) || !/setAttribute\('maxlength', '6'\)/.test(w)) {
-    bad.push('sixChars');
-  }
-  // 两栏都走表单自己的 submit（管理器靠这一下认出「这是一次注册」）。
-  if (/current === 'register' \? submit\(\) :/.test(w)) bad.push('viaForm');
-  return bad;
-}
-
+// ── ⑥ 按来路限速：第 31 次挡下来 ────────────────────────────────
+//
+// 它挡的不是「猜某一个账号的第二串」（那件事由 checkPin 按账号计数管），而是**拿着一份第
+// 一串的名单挨个去把别人锁掉**：对任意一个第一串连错 4 次，那个账号就锁 4 小时。见
+// api/handle.js 的 PAIR_CALLS_PER_HOUR。
+//
+// 这一节打的都是**没人用过**的第一串，所以不会把谁的账号真锁上（loadAccount 回 null，在
+// checkPin 之前就 401 了）。
 {
-  const got = judgeUi(sub);
-  check('subscribe.ts：注册那一栏（死圈拆了、真提交、标注对得上）', got.length === 0, got.length ? `红了：${got.join(' ')}` : '');
-}
-
-// 四语文案：旧那句不许还在，新那句四种都要有。
-{
-  check('旧那句「注册就是订阅」四语都清掉了', !i18n.includes('registerIsSubscribe'));
-  const n = (i18n.match(/registerHint:/g) || []).length;
-  check('registerHint 一处声明 + 四种语言', n === 5, `${n} 处`);
-  check('新那句里不再有「订阅 / subscri / abonne」那样的承诺',
-    !/registerHint: '[^']*(订阅|訂閱|subscri|abonn)/i.test(i18n));
-}
-
-// ── 反向对照：源码那几条每一条都要量得出坏 ────────────────────
-const CONTROLS = [
-  ['把注册那一支改回「转回天才窗口」', 'noCircle',
-    (s) => s.replace('      const made = await registerAccount(email, password);',
-                     '      close(); openGeniusWindow(lang, onChanged); return;')],
-  ['密码栏又藏起来', 'fieldsShown',
-    (s) => s.replace('    fields.hidden = false;', "    fields.hidden = next === 'register';")],
-  ['《忘记密码？》两栏都摆', 'forgotHidden',
-    (s) => s.replace("    forgot.hidden = next === 'register';", '    forgot.hidden = false;')],
-  ['按钮文案改回「订阅」', 'registerBtnText',
-    (s) => s.replace("next === 'register' ? s.registerBtn : s.signInBtn",
-                     "next === 'register' ? s.subscribeBtn : s.signInBtn")],
-  ['密码管理器那套标注不换', 'newPassword',
-    (s) => s.replace("    pwInput.autocomplete = next === 'register' ? 'new-password' : 'current-password';", '')],
-  ['六位那两个属性去掉', 'sixChars',
-    (s) => s.replace("      pwInput.setAttribute('minlength', '6');", '')],
-  ['注册绕开表单自己的 submit', 'viaForm',
-    (s) => s.replace("  go.addEventListener('click', () => form.requestSubmit());",
-                     "  go.addEventListener('click', () => (current === 'register' ? submit() : form.requestSubmit()));")],
-];
-
-/**
- * 改坏**只能改在 openAuthWindow 那一段里**。
- *
- * 这一条是踩出来的：`go.addEventListener('click', () => form.requestSubmit());` 这一行
- * 在 subscribe.ts 里有四处一模一样的（四扇窗各一处），而 `String.replace` 配字符串只
- * 换第一处——于是那条反向对照把**另一扇窗**改坏了，被测的那一行一个字没动，断言理所当
- * 然地全绿。对照「确实改了点东西」和「改的是被测那处」是两件事。
- */
-function inAuthWindow(src, fn) {
-  const at = src.indexOf('export function openAuthWindow');
-  if (at < 0) return src;
-  const head = src.slice(0, at);
-  const tail = src.slice(at);
-  const next = fn(tail);
-  return next === tail ? src : head + next;
-}
-
-for (const [name, want, fn] of CONTROLS) {
-  const broken = inAuthWindow(sub, fn);
-  if (broken === sub) {
-    check(`反向对照：${name}`, false, '没改动 openAuthWindow 那一段（对照本身失效了）');
-    continue;
+  const IP = '198.51.100.21';
+  const codes = [];
+  for (let i = 0; i < 31; i++) {
+    const r = await post('/api/handle', { first: `Sweep${stamp}${String(i).padStart(2, '0')}`, second: 'whatever1' }, IP);
+    codes.push(r.status);
   }
-  const bad = judgeUi(broken);
-  check(`反向对照：${name} → 要红在 ${want}`, bad.includes(want),
-    bad.length ? `实际红了：${bad.join(' ')}` : '实际全绿（空绿）');
+  const first30 = codes.slice(0, 30);
+  check('⑥ 前 30 次照常答 401（没人用过这一串）', first30.every((c) => c === 401),
+    [...new Set(first30)].join(','));
+  check('⑥ 第 31 次被来路限速挡下 → 429', codes[30] === 429, String(codes[30]));
+
+  const other = await post('/api/handle', { first: `Else${stamp}0001`, second: 'whatever1' }, '198.51.100.22');
+  check('⑥ 换一个来路不受牵连', other.status === 401, String(other.status));
+}
+
+// ── ⑦ 同一个 IPv6 /64 共用一个桶 ────────────────────────────────
+//
+// 这是 ⑥ 那道限速成不成立的前提。IPv4 时代换地址有成本（重拨、买代理），IPv6 下家宽标配
+// 分到的是一整个 /64（1.8×10¹⁹ 个地址），一行 `ip -6 addr add` 就是一个全新的桶——按单个
+// 地址分桶的话 ⑥ 那一节在真机上等于不存在，而它看着还在工作（日志里确实有键在涨）。
+{
+  const SAME_A = '2001:db8:aa:bb:1111:2222:3333:4444';
+  const SAME_B = '2001:db8:aa:bb:9999:8888:7777:6666';   // 同一个 /64，后 64 位全不一样
+  const OTHER_64 = '2001:db8:aa:cc:1111:2222:3333:4444'; // 第四组不同 → 另一个 /64
+  const hit = async (ip, n) => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const r = await post('/api/handle',
+        { first: `V6${stamp}${Math.random().toString(36).slice(2, 10)}`, second: 'whatever1' }, ip);
+      out.push(r.status);
+    }
+    return out;
+  };
+
+  const half1 = await hit(SAME_A, 16);
+  check('⑦ 前 16 次（第一个地址）照常 401', half1.every((c) => c === 401), [...new Set(half1)].join(','));
+  const half2 = await hit(SAME_B, 15);
+  check('⑦ 换成同一个 /64 里的另一个地址，第 15 次（总第 31 次）被挡下',
+    half2.slice(0, 14).every((c) => c === 401) && half2[14] === 429,
+    `${[...new Set(half2.slice(0, 14))].join(',')} 然后 ${half2[14]}`);
+
+  const elsewhere = await hit(OTHER_64, 1);
+  check('⑦ 另一个 /64 不受牵连（没把所有人归进同一个桶）', elsewhere[0] === 401, String(elsewhere[0]));
+
+  // 带方括号和端口的写法要归到同一个桶里——不剥的话每次连接一个新桶。
+  const bracketed = await hit(`[${SAME_A}]:54321`, 1);
+  check('⑦ `[addr]:port` 归的是同一个桶（照旧 429）', bracketed[0] === 429, String(bracketed[0]));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

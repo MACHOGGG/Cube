@@ -61,5 +61,109 @@ export function callerId(req) {
   // 人归进同一个桶——比不限速更糟，因为它看起来还在工作。
   const fwd = headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'];
   const first = String(fwd || '').split(',')[0].trim();
-  return first || headers['x-real-ip'] || 'unknown';
+  return bucketOf(first) || bucketOf(String(headers['x-real-ip'] ?? '')) || 'unknown';
+}
+
+/**
+ * 一个人一个桶——而 IPv6 下「一个地址」不等于「一个人」。
+ *
+ * ── 原先是什么样 ──────────────────────────────────────────────
+ *
+ * 上面那一行直接把拿到的字符串当桶名。IPv4 时代这是对的：一条宽带一个地址，换地址
+ * 要么重拨要么买代理，都有成本，所以「一小时 10 次」真的是一小时 10 次。
+ *
+ * IPv6 下这个前提整个没了。家宽标配分到的是一整个 /64 网段（18446744073709551616 个地
+ * 址），而且是**自己随便用**的：换一个源地址不用重拨、不用代理、不花一分钱，一行
+ * `ip -6 addr add` 就是一个全新的桶。于是「注册一小时 10 个」变成「一小时想开多少
+ * 个开多少个」，兑换码那道 `tooMany` 也一样——而那两道正是这个仓库里最值钱的门。
+ *
+ * 这不是理论上的：Vercel 的边缘默认就给 IPv6 客户端写 IPv6 的 `x-forwarded-for`，
+ * 所以今天任何一个 IPv6 玩家本来就落在一个独占的桶里。限速那一侧看着在工作（日志
+ * 里确实有 `rl:signup:2001:...` 这种键在涨），只是永远拦不住人——又一次假绿。
+ *
+ * ── 收到 /64，不是 /48、不是 /128 ────────────────────────────
+ *
+ * /64 是「一个家、一个手机的蜂窝连接」这个级别的分配单位，也是 RFC 要求的最小
+ * 分配。往粗收（/48、/32）会把整个小区、整家运营商归进一个桶，那是另一个方向的
+ * 错——上面写过，「把所有人归进同一个桶比不限速更糟，因为它看起来还在工作」。
+ *
+ * 顺带收掉三种写法上的坑，三种都真的会从头里出来：
+ *
+ *   · `[2001:db8::1]:443` —— 带方括号和端口。不剥的话端口号成了桶名的一部分，
+ *     每次连接一个新桶。
+ *   · `::ffff:1.2.3.4` —— IPv4 映射地址。同一个人可能这一次被写成映射形式、下一
+ *     次被写成 `1.2.3.4`，两个桶。拆回 IPv4 才归得到一处。
+ *   · `fe80::1%eth0` —— 带 zone。只会出现在内网/本机调试，但它同样会把一个人拆成
+ *     两个桶（有 zone 和没 zone）。
+ *
+ * 认不出来的东西**原样返回**，不丢掉：`unknown`（本地起服务器、测试里手搭的 req）
+ * 照旧落在同一个桶里，这正是我们要的——让门在本地也真的能拦住。
+ */
+function bucketOf(raw) {
+  let s = String(raw ?? '').trim();
+  if (!s) return '';
+  // `[addr]` 或 `[addr]:port`
+  const bracket = /^\[([^\]]+)\](?::\d+)?$/.exec(s);
+  if (bracket) s = bracket[1];
+  // zone（`%eth0`）不参与身份。
+  const pct = s.indexOf('%');
+  if (pct >= 0) s = s.slice(0, pct);
+  // `1.2.3.4:443`：只有一个冒号、而且前半是 IPv4，才当成「带端口的 IPv4」。
+  // IPv6 至少两个冒号，所以这一条不会误伤它。
+  const one = s.indexOf(':');
+  if (one >= 0 && s.indexOf(':', one + 1) < 0 && IPV4_RE.test(s.slice(0, one))) {
+    return s.slice(0, one);
+  }
+  if (s.indexOf(':') < 0) return s; // IPv4 或者认不出来的东西，原样。
+  const groups = expand6(s);
+  if (!groups) return s; // 看着像 IPv6 但解不开——原样，别悄悄归并。
+  // `::ffff:a.b.c.d` 这一族（前 80 位 0、第 6 组 ffff）拆回 IPv4。
+  if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
+    const [a, b] = [groups[6], groups[7]];
+    return [a >> 8, a & 255, b >> 8, b & 255].join('.');
+  }
+  // 收到 /64：只留前四组，后面写死 ::，这样桶名一眼看得出是个网段不是个地址。
+  return groups.slice(0, 4).map((g) => g.toString(16)).join(':') + '::/64';
+}
+
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+/** IPv6 → 八个数（0…65535）。解不开回 null，绝不猜。 */
+function expand6(text) {
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 ? (halves[1] ? halves[1].split(':') : []) : null;
+  const parts = tail === null ? head : [...head, ...tail];
+  // 末尾可以是一个 IPv4（`::ffff:1.2.3.4`，也包括 `2001:db8::1.2.3.4` 这种少见写法），
+  // 它顶两组。
+  const last = parts[parts.length - 1];
+  const dotted = last && IPV4_RE.exec(last);
+  let extra = [];
+  if (dotted) {
+    const n = dotted.slice(1).map(Number);
+    if (n.some((x) => x > 255)) return null;
+    extra = [(n[0] << 8) | n[1], (n[2] << 8) | n[3]];
+    if (tail === null) head.pop();
+    else tail.pop();
+  }
+  const fixed = tail === null ? [...head, ...extra] : null;
+  const groups =
+    fixed ??
+    (() => {
+      const fill = 8 - head.length - tail.length - extra.length;
+      if (fill < 0) return null;
+      return [...head, ...Array(fill).fill('0'), ...tail, ...extra];
+    })();
+  if (!groups || groups.length !== 8) return null;
+  const out = [];
+  for (const g of groups) {
+    if (typeof g === 'number') {
+      out.push(g);
+      continue;
+    }
+    if (!/^[0-9a-fA-F]{1,4}$/.test(g)) return null;
+    out.push(parseInt(g, 16));
+  }
+  return out;
 }

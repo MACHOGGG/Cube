@@ -11,8 +11,15 @@
  *      `npm run typecheck` 也管不到 api/（纯 .js，不过 tsc）。
  *   ② 排在 `resolveEntitlement` **后面** —— 权益先算完再写授予，这一次登录屏幕上还是
  *      「不是天才」，要等下一次启动才认。玩家会以为没生效。
- *   ③ 丢了 `issued` 那一半守卫 —— 身份还没证明就送权益。邮箱地址本身不是证据，它印在
- *      收据上，谁都知道得到（CLAUDE.md 那条铁律）。
+ *   ③ 身份那道闸没了、或者排在授予后面 —— 身份还没证明就送权益。邮箱地址本身不是证
+ *      据，它印在收据上，谁都知道得到（CLAUDE.md 那条铁律）。
+ *
+ *      ⚠️ 这一条 2026-10-02 改过形状：从前那一句写成 `if (account && issued) account =
+ *      await grant…`，守卫是**行内的那个 `issued`**，而 `issued` 是「密码验过了」的产
+ *      物。密码那一支随 E37 撤了，现在这一路只认登录令牌，守卫也跟着变成**一道提前返
+ *      回**（`if (!tokenValid(account, token)) return send(res, 401, …)`）。所以这道门
+ *      现在量的是「授予那一句排在那道闸的后面」，而不再是「那一句里有没有 issued」——
+ *      照旧量的是同一件事：**走到那一行时身份必须已经成立**。
  *   ④ 不把结果赋回 `account` —— 库里写进去了，可手上这份还是旧的，`resolveEntitlement`
  *      照旧答「不是天才」。症状和 ② 一模一样，而且更难看出来。
  *
@@ -74,23 +81,23 @@ function judge(raw) {
   const resolveAt = at('await resolveEntitlement(');
   if (callAt < 0 || resolveAt < 0 || callAt > resolveAt) bad.push('beforeResolve');
 
-  // ④ 守卫里有 issued——身份证明成立之后才送。
-  if (!call.includes('issued')) bad.push('guardedByIssued');
+  // ④ 那道身份闸还在。认的是**整句**，不是「出现过 tokenValid」：换成 `if (!token)`
+  //    这种「只看带没带」的写法，形状上还很像，可它谁都放进来。
+  const guardAt = at("if (!tokenValid(account, token)) return send(res, 401");
+  if (guardAt < 0) bad.push('proofGuard');
 
   // ⑤ 结果赋回 account，不然手上这份还是旧的。
   if (!/\baccount\s*=\s*await\s+grantLifetimeIfWindow\(/.test(call)) bad.push('assignedBack');
 
-  // ⑥ 排在密码那一支验完之后。`issued = issueToken(` 是「密码对了」那一刻，调用必须在
-  //    它后面——挪到 loadAccount 边上虽然 ③④⑤ 都还成立，身份却还没证明。
-  const provenAt = at('issued = issueToken(');
-  if (provenAt < 0 || callAt < provenAt) bad.push('afterProof');
+  // ⑥ 排在那道闸后面。挪到 loadAccount 边上虽然 ③⑤ 都还成立，身份却还没证明。
+  if (guardAt < 0 || callAt < guardAt) bad.push('afterProof');
 
   return bad;
 }
 
 const real = readFileSync(SRC_PATH, 'utf8');
 
-// —— 正向：真源码六条全过 ————————————————————————————————
+// —— 正向：真源码五条全过 ————————————————————————————————
 const got = judge(real);
 check(`${SRC_PATH}：那一句的位置和形状`, got.length === 0, got.length ? `红了：${got.join(' ')}` : '');
 
@@ -136,17 +143,22 @@ const CONTROLS = [
     },
   ],
   [
-    '丢掉 issued 那一半守卫',
-    'guardedByIssued',
-    (s) => s.replace('if (account && issued) account = await', 'if (account) account = await'),
+    // 真实的写错法：以为「带了令牌」就等于「令牌是对的」。
+    '把那道闸换成只看带没带令牌',
+    'proofGuard',
+    (s) =>
+      s.replace(
+        "if (!tokenValid(account, token)) return send(res, 401",
+        "if (!token) return send(res, 401",
+      ),
   ],
   [
     '不把结果赋回 account',
     'assignedBack',
     (s) =>
       s.replace(
-        'if (account && issued) account = await grantLifetimeIfWindow(',
-        'if (account && issued) await grantLifetimeIfWindow(',
+        'account = await grantLifetimeIfWindow(',
+        'await grantLifetimeIfWindow(',
       ),
   ],
   [

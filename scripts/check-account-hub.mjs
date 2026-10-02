@@ -23,6 +23,12 @@
  *
  * 不起服务器、不连 Redis、不真发信也不真问 Creem：库用进程内的那份，两个外
  * 部 HTTP 各用一个假 fetch 顶掉——顺便把验证码从那封假邮件里读出来。
+ *
+ * ⚠️ **凭据换了（2026-10-02）。** 这道门原先靠「拿密码打 /api/subscription」去换一把令
+ * 牌，而那一支随 E37 撤了（那个文件里记着为什么）。现在的办法是**直接把令牌种进账号
+ * 里**（`account.tokens`）——它和真实的登录给出来的东西一模一样（signin.js / handle.js
+ * 发的就是这个），而且少一层依赖：这道门要量的是「账户窗背后那三条路」，不是登录本身
+ * 怎么走（那一头由 check-signin-otp / check-handle-auth 守着）。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 /*
@@ -82,15 +88,25 @@ const callOn = async (handler, body) => {
 
 const EMAIL = 'lapsed@example.com';
 const PW = 'aaa111';
+const DEVICE = 'DEVICE-ONE-TOKEN';
 
-// 一个订阅早就过期的老玩家：账号还在，我们自己库里没有到期日（刷卡的那一
-// 支，权益在 Creem 那边，而 Creem 答的是查无此人）。
-await saveAccount(EMAIL, newAccount(PW, 'card'));
+/**
+ * 一个订阅早就过期的老玩家：账号还在，我们自己库里没有到期日（刷卡的那一支，权益在
+ * Creem 那边，而 Creem 答的是查无此人）。他那台设备上登着——令牌直接种进去（见文件顶
+ * 上那条 ⚠️）。
+ *
+ * 密码照旧设着：下面 ③⑤ 还拿 `checkPin` 当尺子（「账号没坏」「搬家没把它弄丢」），而
+ * 这种老账号在库里本来就带着一把密码。它只是**再也不能当登录凭据**，那一条由 ③ 反着量。
+ */
+const lapsedAcct = newAccount(PW, 'card');
+lapsedAcct.tokens = [{ t: DEVICE, at: Date.now() }];
+lapsedAcct.token = DEVICE;
+await saveAccount(EMAIL, lapsedAcct);
 
 // ---- ① 登得上，而且如实说没有权限 ------------------------------------------
 
-const signedIn = await callOn(subscription, { email: EMAIL, password: PW });
-check('订阅过期的人，密码对了就登得上', signedIn.status === 200, String(signedIn.status));
+const signedIn = await callOn(subscription, { email: EMAIL, token: DEVICE });
+check('订阅过期的人，令牌对了就登得上', signedIn.status === 200, String(signedIn.status));
 check('回了邮箱和令牌——前端拿这两样认「我是谁」',
   signedIn.body.email === EMAIL && typeof signedIn.body.token === 'string' && signedIn.body.token,
   JSON.stringify(signedIn.body));
@@ -127,12 +143,19 @@ check('码从库里没了', (await get('code:GATE01')) === null || (await get('c
 
 const TWO = 'twodevices@example.com';
 const TWO_PW = 'ccc111';
-await saveAccount(TWO, newAccount(TWO_PW, 'card'));
+const PHONE = 'PHONE-TOKEN';
+const LAPTOP = 'LAPTOP-TOKEN';
+const twoAcct = newAccount(TWO_PW, 'card');
+// 手机先登、电脑后登：account.token 是后登那一把，而两把都还在那一串里。
+twoAcct.tokens = [{ t: PHONE, at: Date.now() - 1000 }, { t: LAPTOP, at: Date.now() }];
+twoAcct.token = LAPTOP;
+await saveAccount(TWO, twoAcct);
 
-const phone = await callOn(subscription, { email: TWO, password: TWO_PW });
-const laptop = await callOn(subscription, { email: TWO, password: TWO_PW });
-check('两台设备各拿到一把不同的令牌',
-  phone.body.token && laptop.body.token && phone.body.token !== laptop.body.token);
+const phone = await callOn(subscription, { email: TWO, token: PHONE });
+const laptop = await callOn(subscription, { email: TWO, token: LAPTOP });
+check('两台设备各报各的那一把，服务器原样回给它（不是一律回最新签发的那一把）',
+  phone.body.token === PHONE && laptop.body.token === LAPTOP,
+  `${phone.body.token} / ${laptop.body.token}`);
 
 await set('code:GATE02', { plan: 'month' });
 const oldDevice = await callOn(redeem, { code: 'GATE02', email: TWO, token: phone.body.token });
@@ -150,6 +173,45 @@ check('两台设备的令牌都还在，兑一次码没把谁挤下线',
 check('没有生出和账户无关的孤儿账号（acct:code:GATE02）',
   !(await loadAccount('code:GATE02')) && !(await get('acct:code:GATE02')));
 
+// ---- ②″ 已经是终身天才的人兑码：那张码一个字都不许动 ----------------------
+//
+// `extend()` 对终身账号是个 no-op（_accounts.js：「Adding time to forever is not an error,
+// it is simply nothing」），而 `redeem.js` 开头那一步 `takeOnce` 是 GETDEL——码从库里拿走
+// 了。两件事合起来就是：**码烧掉、账上什么都没多、屏幕上写着「兑换成功」**。玩家下次想把它
+// 送给朋友时才发现它没了，而那时谁也查不出发生过什么。
+//
+// 这不是边角情况：窗口期里「登录成功即送终身天才」（E11 / PR-12），所以开着那个开关时**每
+// 一个登着的人都是终身**，每一张内部码兑到自己账号上都会这样消失一张。
+{
+  const LIFER = 'lifer@example.com';
+  const LIFE_TOKEN = 'LIFER-DEVICE';
+  const lifer = newAccount('zzz111', 'card');
+  lifer.until = Date.UTC(2999, 0, 1);          // LIFETIME_UNTIL
+  lifer.plan = 'life';
+  lifer.tokens = [{ t: LIFE_TOKEN, at: Date.now() }];
+  lifer.token = LIFE_TOKEN;
+  await saveAccount(LIFER, lifer);
+
+  await set('code:GATE03', { plan: 'year' });
+  const tried = await callOn(redeem, { code: 'GATE03', email: LIFER, token: LIFE_TOKEN });
+  check("②″ 答 409 active（界面上那句话早就写好了：「这张码留着以后用，或者送人」）",
+    tried.status === 409 && tried.body.error === 'active', `${tried.status} ${JSON.stringify(tried.body)}`);
+  check("②″ **码还在库里**（他可以原样送人）", Boolean(await get('code:GATE03')),
+    JSON.stringify(await get('code:GATE03')));
+  // 尺子：这张码本来是兑得掉的——换一个不是终身的人来，它照样到账。少了这一条，上面两条
+  // 可能只是「这张码压根兑不了」。
+  const MORTAL = 'mortal@example.com';
+  const MORTAL_TOKEN = 'MORTAL-DEVICE';
+  const mortal = newAccount('yyy111', 'card');
+  mortal.tokens = [{ t: MORTAL_TOKEN, at: Date.now() }];
+  mortal.token = MORTAL_TOKEN;
+  await saveAccount(MORTAL, mortal);
+  const ok = await callOn(redeem, { code: 'GATE03', email: MORTAL, token: MORTAL_TOKEN });
+  check("②″（尺子）同一张码给一个不是终身的人，照样兑得上",
+    ok.status === 200 && ok.body.email === MORTAL, `${ok.status} ${JSON.stringify(ok.body)}`);
+  check("②″（尺子）这一次码才从库里拿走", !(await get('code:GATE03')));
+}
+
 // ---- ③ 换密码那条路撤了 ----------------------------------------------------
 /*
  * 这儿原先有一整节（约 25 行）量「改密码」：旧密码是唯一凭据、新密码要合规矩、换完别的
@@ -164,7 +226,21 @@ check('没有生出和账户无关的孤儿账号（acct:code:GATE02）',
   const gone = await callOn(passcode, { email: EMAIL, password: PW, newPassword: 'bbb222' });
   check('改密码那一支撤了：答 400 action，不是悄悄落到别处',
     gone.status === 400 && gone.body?.error === 'action', `${gone.status} ${JSON.stringify(gone.body)}`);
-  // 尺子：密码本身还好使（`bind` 那条路还要设六位密码）——上面那条红的不是「账号坏了」。
+
+  // 注册那一支也撤了（2026-10-02）。它是个抢注接口：不要任何凭据就能在别人的邮箱上开出
+  // 账号、还带着一把自己设的密码（api/passcode.js 末尾那段）。同一把尺子——不许悄悄回来。
+  const reg = await callOn(passcode, { register: true, email: 'brand-new@example.com', password: 'zzz999' });
+  check('注册那一支撤了：答 400 action',
+    reg.status === 400 && reg.body?.error === 'action', `${reg.status} ${JSON.stringify(reg.body)}`);
+  check('而且真的没在那个地址上开出账号来', !(await loadAccount('brand-new@example.com')));
+
+  // 拿密码去登录也不行了（那一支在 api/subscription.js 里撤了）。
+  const pwLogin = await callOn(subscription, { email: EMAIL, password: PW });
+  check('拿密码登录那一支撤了：真密码也答 401',
+    pwLogin.status === 401, `${pwLogin.status} ${JSON.stringify(pwLogin.body)}`);
+
+  // 尺子：密码本身还在、还对得上（`bind` 那条路还要设六位密码）——上面那三条红的不是
+  // 「账号坏了」，而是那几条路真的关了。
   check('（尺子）账号和密码都还好着', (await checkPin(EMAIL, PW, await loadAccount(EMAIL))) === 'ok');
 }
 
@@ -217,7 +293,8 @@ check('排行榜上旧地址撤了', (await zscore('lb:square', EMAIL)) === null
   String(await zscore('lb:square', EMAIL)));
 
 // 换完之后，新地址真的登得上——这一条是「搬家搬活了」的收尾。
-const reSignIn = await callOn(subscription, { email: NEXT, password: PW });
+// 令牌一把没动（上面刚量过），所以还是手里这一把。
+const reSignIn = await callOn(subscription, { email: NEXT, token: live });
 check('新邮箱登得上', reSignIn.status === 200 && reSignIn.body.email === NEXT, String(reSignIn.status));
 check('而且还是天才（内部码那段时间还在）', reSignIn.body.active === true);
 
@@ -289,6 +366,84 @@ const swarmed = await Promise.all(
 );
 const compared = swarmed.filter((r) => r.status !== 429).length;
 check('50 次并发，只有 5 次摸得到那张码', compared === 5, `摸到 ${compared} 次`);
+
+// ---- ⑧ 搬家那段的**形状**：回滚只许守「改名之前」那一步 --------------------
+//
+// 这一节读源码，不量行为——因为量不了：要走到那条路上，得让 `renameScoreOwner` 成功而紧接着
+// 的 `deleteAccount` 失败，而进程内那份 store 的 `del` 不会抛。没有缝可以注入，而这件事又太
+// 贵，所以钉它的形状（和 check-grant-callsite.mjs 同一个路子：位置本身就是正确性）。
+//
+// ⚠️ **那条路真的弄坏过东西。** 原先那个 try 把四步打扫也一起包着：
+//
+//     try { 改名; 删旧账号; 清计数; 删码; 删猜测计数 } catch { 删掉新地址的账号; throw }
+//
+// 于是「改名成功了、删旧账号摔了」这一种，catch 照旧把刚占住的新地址删掉——可榜上那些行已经
+// 改名成新地址了。结果是：账号还在旧地址（删失败了），战绩和排行榜上的成员名却指着一个**没
+// 有账号的地址**。玩家那边看到「出错了，重试」，重来一次 `renameScoreOwner(旧, 新)` 在旧地址
+// 底下什么也找不着——他的云端战绩和榜上的位置就这么没了，而两边都不报错。
+//
+// 所以回滚只守「改名之前」那一段。改名一旦成了，这次搬家就算成了，后面那几步只是打扫：每一
+// 步摔了都只记一笔日志，绝不回滚、绝不抛。
+{
+  const strip = (src) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+
+  /** 判一份 email.js 的五条，返回红了的那几条。纯函数，好喂下面那几份改坏的。 */
+  function judgeMove(raw) {
+    const src = strip(raw);
+    const bad = [];
+    const at = src.indexOf('createAccount(wanted, account)');
+    if (at < 0) return ['noClaim'];
+    const rest = src.slice(at);
+    const tryAt = rest.indexOf('try {');
+    const catchAt = rest.indexOf('} catch (err) {');
+    const sweepAt = rest.indexOf('const sweep = [');
+    if (tryAt < 0 || catchAt < 0 || sweepAt < 0) return ['noShape'];
+    const guarded = rest.slice(tryAt, catchAt);       // 回滚守着的那一段
+    const rescue = rest.slice(catchAt, sweepAt);      // catch 那一段
+    const sweep = rest.slice(sweepAt);                // 打扫那一段
+
+    // ① 守着的那一段里只有改名。
+    if (!guarded.includes('renameScoreOwner(')) bad.push('guardsRename');
+    // ② 而且**只有**它：删旧账号、清计数、删码都不许在里面。
+    if (/deleteAccount\(|clearFails\(|\bdel\(/.test(guarded)) bad.push('tryTooWide');
+    // ③ catch 里退回新地址（那是回滚的全部内容）。
+    if (!rescue.includes('deleteAccount(wanted)')) bad.push('rollsBack');
+    // ④ 打扫那一段真的在删旧地址。
+    if (!sweep.includes('deleteAccount(address)')) bad.push('sweepsOld');
+    // ⑤ 打扫那一段**绝不**碰新地址的账号。
+    if (sweep.includes('deleteAccount(wanted)')) bad.push('sweepTouchesNew');
+    return bad;
+  }
+
+  const { readFileSync } = await import('node:fs');
+  const real = readFileSync(new URL('../api/email.js', import.meta.url), 'utf8');
+  const got = judgeMove(real);
+  check('⑧ api/email.js：搬家那段的位置和形状', got.length === 0, got.join(' '));
+
+  const CONTROLS = [
+    ['把「删旧账号」放回那个 try 里', 'tryTooWide',
+      (t) => t.replace('    await renameScoreOwner(address, wanted);',
+                       '    await renameScoreOwner(address, wanted);\n    await deleteAccount(address);')],
+    ['打扫那一段顺手把新地址也删了', 'sweepTouchesNew',
+      (t) => t.replace("['旧地址上的账号没删掉（玩家已经搬好了，这一份要手删）', () => deleteAccount(address)],",
+                       "['旧地址上的账号没删掉（玩家已经搬好了，这一份要手删）', () => deleteAccount(wanted)],")],
+    ['catch 里不退回新地址（于是重来一次被自己的半成品拦死）', 'rollsBack',
+      (t) => t.replace('    await deleteAccount(wanted).catch(() => {});', '')],
+    ['改名压根不在那个 try 里（摔了也不回滚）', 'guardsRename',
+      (t) => t.replace('    await renameScoreOwner(address, wanted);', '    // 挪走了')],
+  ];
+  for (const [name, want, fn] of CONTROLS) {
+    const broken = fn(real);
+    if (broken === real) {
+      check(`⑧ 反向对照：${name}`, false, '没改动任何东西（对照本身失效了）');
+      continue;
+    }
+    const bad = judgeMove(broken);
+    check(`⑧ 反向对照：${name} → 要红在 ${want}`, bad.includes(want),
+      bad.length ? `实际红了：${bad.join(' ')}` : '实际全绿（空绿）');
+  }
+}
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

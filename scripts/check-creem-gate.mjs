@@ -14,8 +14,12 @@
  * 所以这里同时起两台 dev-server，一台不给密钥、一台给个假的，验证：
  *   · 没密钥时，内部码账号照常登录（它本来就不该问 Creem）
  *   · 没密钥时，要问 Creem 的那条路回 503「答不上来」，不是 200「没订阅」
- *   · 库里没有的地址，和「密码不对」答同一句（别把这个接口变成查号机）
+ *   · 库里没有的地址，和「令牌不对」答同一句（别把这个接口变成查号机）
  *   · 有密钥时，一切照旧
+ *
+ * ⚠️ 凭据是**登录令牌**，不是密码（2026-10-02）。拿密码登录那一支随 E37 撤了，而
+ * `/api/passcode` 的 bind（内部码绑邮箱）那一趟会把一把令牌一起回来——这道门用的就是
+ * 那一把。
  */
 import { spawn } from 'node:child_process';
 
@@ -62,7 +66,8 @@ async function codeAccount(base, code, email) {
     code: spent.body.code, token: spent.body.token, email, password: '123456',
   });
   if (bound.status !== 200) throw new Error(`绑定失败 ${bound.status} ${JSON.stringify(bound.body)}`);
-  return email;
+  if (!bound.body.token) throw new Error(`绑定没回令牌：${JSON.stringify(bound.body)}`);
+  return { email, token: bound.body.token };
 }
 
 const noKey = await serve(8831, '');
@@ -73,7 +78,7 @@ try {
   console.log('— 没配 Creem 密钥 —');
   const holder = await codeAccount(noKey.base, 'TESTLIFE', 'code-user@test.com');
 
-  const inCode = await post(noKey.base, '/api/subscription', { email: holder, password: '123456' });
+  const inCode = await post(noKey.base, '/api/subscription', { email: holder.email, token: holder.token });
   check('内部码账号照常登录（这一条就是修的那个 bug）',
     inCode.status === 200 && inCode.body.active === true && inCode.body.kind === 'code',
     `${inCode.status} active=${inCode.body.active}`);
@@ -82,16 +87,16 @@ try {
   //
   // 这一条原先验的是 503「答不上来」。后来堵账号枚举那一处改了它（见
   // api/subscription.js 的 fromEmail、scripts/check-auth-probe.mjs）：没有账
-  // 号的地址一律和「密码不对」答同一句，否则拿一份邮箱名单挨个打过来就能筛
+  // 号的地址一律和「令牌不对」答同一句，否则拿一份邮箱名单挨个打过来就能筛
   // 出谁是本站用户。
   //
   // 这条门要守的东西一个字没变——**绝不能静默地答 200「你没订阅」**。401 离
   // 那句话比 503 还远：它说的是「这把钥匙不对」，不是「你的码失效了」。真正
-  // 「要问 Creem 却问不了」的那条路是**有账号、密码也对**的刷卡用户，那一路
+  // 「要问 Creem 却问不了」的那条路是**有账号、令牌也对**的刷卡用户，那一路
   // 仍然是 503（resolveEntitlement 里 kind !== 'code' 那一支），另外它下面
   // 「刚付完款回来」那条也还钉着同一件事。
-  const stranger = await post(noKey.base, '/api/subscription', { email: 'nobody@test.com', password: '123456' });
-  check('库里没有的地址：和「密码不对」同一句，既不是 200「你没订阅」，也不说有没有账号',
+  const stranger = await post(noKey.base, '/api/subscription', { email: 'nobody@test.com', token: 'NOT-A-TOKEN' });
+  check('库里没有的地址：和「令牌不对」同一句，既不是 200「你没订阅」，也不说有没有账号',
     stranger.status === 401 && stranger.body.error === 'wrong',
     `${stranger.status} ${JSON.stringify(stranger.body)}`);
 
@@ -100,14 +105,18 @@ try {
     settle.status === 503 && settle.body.error === 'notConfigured',
     `${settle.status} ${JSON.stringify(settle.body)}`);
 
-  const wrong = await post(noKey.base, '/api/subscription', { email: holder, password: '999999' });
-  check('密码错还是 401（凭证判断仍然排在 Creem 前面）',
+  const wrong = await post(noKey.base, '/api/subscription', { email: holder.email, token: 'NOT-A-TOKEN' });
+  check('令牌不对还是 401（凭证判断仍然排在 Creem 前面）',
     wrong.status === 401, String(wrong.status));
+  // 密码那一支撤了：真密码也进不去。
+  const withPw = await post(noKey.base, '/api/subscription', { email: holder.email, password: '123456' });
+  check('拿密码登录那一支撤了——真密码也 401', withPw.status === 401,
+    `${withPw.status} ${JSON.stringify(withPw.body)}`);
 
   // ---- 配了密钥的那一台：确认没把正常的路改坏 ------------------------------
   console.log('\n— 配了密钥 —');
   const holder2 = await codeAccount(dummy.base, 'TESTLIFE', 'code-user@test.com');
-  const inCode2 = await post(dummy.base, '/api/subscription', { email: holder2, password: '123456' });
+  const inCode2 = await post(dummy.base, '/api/subscription', { email: holder2.email, token: holder2.token });
   check('内部码账号一样能登录', inCode2.status === 200 && inCode2.body.active === true,
     `${inCode2.status} active=${inCode2.body.active}`);
 

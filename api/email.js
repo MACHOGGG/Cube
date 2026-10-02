@@ -11,6 +11,7 @@ import {
 } from './_accounts.js';
 import { compose, mailConfigured, mailLang, sendMail } from './_mail.js';
 import { callerId, tooMany } from './_ratelimit.js';
+import { redact } from './_redact.js';
 import { renameScoreOwner } from './scores.js';
 import { bump, del, get, set, storeConfigured } from './_store.js';
 
@@ -163,7 +164,7 @@ async function confirm(res, address, wanted, account, { code, token }) {
    * 门——不好看，但他什么都没丢）。反过来先删旧的，摔在中间就是账号连同战绩
    * 一起消失。同 redeem.js 那次「码烧掉却没到账」。
    *
-   * **但「再走一遍就好」这句话曾经是假的，所以下面那两步套了补偿。**
+   * **但「再走一遍就好」这句话曾经是假的，所以第一步套了补偿。**
    *
    * createAccount 用的是 SET ... NX：它一成功，新地址就被占住了。假如紧接着
    * renameScoreOwner 或 deleteAccount 摔了（Redis 抖一下就够），玩家看到的是
@@ -185,19 +186,53 @@ async function confirm(res, address, wanted, account, { code, token }) {
   // 挡在搬家的第一步，所以拦下来的时候旧地址一个字都还没动：他的账号、战绩、
   // 榜上的名字全在原处，重来一次就好。
   if (!(await createAccount(wanted, account))) return send(res, 409, { error: 'taken' });
+
+  /**
+   * ⚠️ **退回新地址，只在这一步之内。**
+   *
+   * 原先这个 try 把下面那四步也一起包着，于是有一条路会真的弄坏东西：
+   * `renameScoreOwner` **成功了**、紧接着 `deleteAccount(address)` 摔了（Redis 抖一
+   * 下就够），catch 照旧把刚占住的新地址删掉——可榜上那些行已经改名成新地址了。结果
+   * 是：账号还在旧地址（删失败了），战绩和排行榜上的成员名却指着一个**没有账号的地
+   * 址**。玩家那边看到「出错了，重试」，重来一次 `renameScoreOwner(旧, 新)` 在旧地址
+   * 底下什么也找不着——他的云端战绩和榜上的位置就这么没了，而两边都不报错。
+   *
+   * 所以回滚只守「改名之前」这一段：改名没成，新地址退回去，玩家重来一次，旧地址一个
+   * 字都没动。改名一旦成了，**这次搬家就算成了**，后面那几步只是打扫。
+   */
   try {
     await renameScoreOwner(address, wanted);
-    await deleteAccount(address);
-    // 旧地址上那些跟着地址走的零碎：输错密码的计数、这张换邮箱的码。
-    await clearFails(address);
-    await del(key(address));
-    await del(triesKey(address));
   } catch (err) {
-    // 把刚占住的新地址退回去（理由见上面那段）。这一步本身再摔就没办法了，
-    // 所以它不许把原来那个错误盖掉——玩家要看到的是「出错了，重试」，而不是
-    // 一个来自收尾动作的第二个错误。
+    // 这一步本身再摔就没办法了，所以它不许把原来那个错误盖掉——玩家要看到的是
+    // 「出错了，重试」，而不是一个来自收尾动作的第二个错误。
     await deleteAccount(wanted).catch(() => {});
     throw err;
+  }
+
+  /**
+   * 从这一行起**绝不回滚、绝不抛**。
+   *
+   * 要搬的两样（账号、战绩）都已经在新地址上了，玩家这一趟是成功的。下面四步是打扫旧
+   * 地址，每一步摔了的后果都只是「多一份、不好看」，而把这一趟说成失败的后果是他重来
+   * 一遍、被自己上一次的半成品拦死（见上面那段 409 `taken`）。
+   *
+   * 账号没删掉的那一种要记一笔：旧地址底下会留着一份同样令牌的账号，谁在那个地址上登
+   * 进去就拿得到他的权益和收件箱。后台没有「删账号」这个动作（mint.js 只有 list 和
+   * grant），只能照着这行日志进 Upstash 手删一个键——所以这一行写的是**能删的那个键**，
+   * 邮箱本身按 _redact.js 的规矩打成指纹。
+   */
+  const sweep = [
+    ['旧地址上的账号没删掉（玩家已经搬好了，这一份要手删）', () => deleteAccount(address)],
+    ['旧地址的失败计数没清掉', () => clearFails(address)],
+    ['旧地址的换邮箱码没删掉', () => del(key(address))],
+    ['旧地址的换邮箱猜测计数没删掉', () => del(triesKey(address))],
+  ];
+  for (const [what, step] of sweep) {
+    try {
+      await step();
+    } catch (err) {
+      console.error('换邮箱收尾：' + what, redact(address), err);
+    }
   }
 
   // 令牌一把都没动：换的是门牌，不是钥匙，他这台设备照旧登着，别的设备也是。

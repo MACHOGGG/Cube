@@ -10,7 +10,6 @@ import {
   PAIR_RE,
   pairKey,
   revokeTokens,
-  saveAccount,
   unblock,
   updateAccount,
 } from './_accounts.js';
@@ -53,13 +52,35 @@ import { storeConfigured } from './_store.js';
 /** 限速复用注册那个桶：两条路都是「不要任何凭据就能写库」，该共享一个上限。 */
 const SIGNUP_PER_HOUR = 10;
 
+/**
+ * 整个接口按来路的上限，三支共享。
+ *
+ * 它挡的**不是**「猜某一个账号的第二串」——那件事由 `checkPin` 按账号计数管着（见
+ * `signin` 那一段），按来路数在那上面帮不上忙。它挡的是另一件：**拿着一份第一串的名单
+ * 挨个去把别人锁掉**。
+ *
+ * 文件顶上写过，第一串是可以枚举的（注册撞名如实答 409）。而对任意一个第一串连错 4
+ * 次，那个账号就锁 4 小时。所以不限速的话，一台机器可以用很小的代价把所有已知的第一
+ * 串**一起**锁掉——主人打不开，而他看到的只是「锁了，4 小时后再试」，根本不知道为什
+ * 么。30 次/小时换算过来是「一小时最多能骚扰 7 个账号」，而真人一小时按不到 30 次
+ * （登一次 1 下，忘了第二串重设再 2 下）。
+ *
+ * 和 `SIGNUP_PER_HOUR` 是两个桶，不是一个：那一个数的是「写库」（注册、重设），这一个
+ * 数的是「敲门」，连登录一起数。两个都要过。
+ */
+const PAIR_CALLS_PER_HOUR = 30;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
   const body = readBody(req);
   const first = String(body.first ?? '');
+  // 形状先验，再记账：一个连格式都不对的请求不该吃掉配额，而这一步不花钞（纯正则）。
   if (!PAIR_RE.test(first)) return send(res, 400, { error: 'badPair' });
+  if (await tooMany('pairin', callerId(req), PAIR_CALLS_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
 
   if (body.action === 'register') return register(req, res, first, body);
   if (body.action === 'reset') return reset(req, res, first, body);
@@ -86,8 +107,12 @@ async function register(req, res, first, { second }) {
 }
 
 async function signin(res, first, { second }) {
-  // 这一支不限速：`checkPin` 自己按账号计数（错 4 次锁 4 小时），比按来路限速准——
-  // 真正要挡的是「一直猜某一个账号的第二串」，而那个计数就挂在那个账号上。
+  // 这一支不进 `signup` 那个桶：它不写库，而「一直猜某一个账号的第二串」由 `checkPin`
+  // 按账号计数管着（错 4 次锁 4 小时，而且一个锁期只放一个请求去比对——见 _accounts.js
+  // 的 pinWinKey），比按来路数准得多。
+  //
+  // 处理器顶上那道 `pairin` 它照样要过，挡的是另一件事（把别人挨个锁掉），理由写在
+  // PAIR_CALLS_PER_HOUR 上。
   const id = pairKey(first);
   const account = await loadAccount(id);
   // 这一串没人用过。答得和「第二串不对」一样——否则这一支也成了一个枚举接口，而注册
@@ -100,10 +125,27 @@ async function signin(res, first, { second }) {
   }
   if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
 
-  // 添一把，不作废别的：手机上登一次不该把平板上那一把弄掉。
-  const issued = issueToken(account);
-  await saveAccount(id, account);
-  const after = (await grantLifetimeIfWindow(id, account)) || account;
+  /**
+   * 添一把，不作废别的：手机上登一次不该把平板上那一把弄掉。
+   *
+   * 带锁的读—改—写（`updateAccount`），不是 `saveAccount` 那样整份覆盖。这一句看着只是
+   * 往令牌环里加一项，写回去的却是**整份账号**，而它和别处的写是并发的：后台这一瞬间
+   * 往他收件箱里塞一张码（mint.js 的 addToInbox）、他自己在另一台设备上兑了一张码
+   * （redeem.js 加时长），都会被这一份「登录那一刻读到的」旧快照盖回去——**而两边都答
+   * 成功**。这个坑在 redeem.js 和 subscription.js 上都记着，照同一套来。
+   *
+   * 上面 `checkPin` 已经把失败计数那几个字段写进库了（patchCounters），所以这儿锁里重
+   * 新读的那一份是最新的，不会把刚归零的 fails 又顶回去。
+   */
+  let issued;
+  const locked = await updateAccount(id, (a) => {
+    issued = issueToken(a);
+  });
+  if (!locked.ok) {
+    // 到这一行令牌还没发出去，什么不可逆的事都没做，照实说一句让他再按一次。
+    return send(res, locked.busy ? 503 : 401, { error: locked.busy ? 'busy' : 'wrong' });
+  }
+  const after = (await grantLifetimeIfWindow(id, locked.account)) || locked.account;
   return answer(res, id, after, issued);
 }
 

@@ -4,6 +4,7 @@ import {
   codeHolder,
   entitlementOf,
   extend,
+  isLifetime,
   loadAccount,
   newAccount,
   normalizeEmail,
@@ -12,6 +13,7 @@ import {
   updateAccount,
 } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
+import { redact } from './_redact.js';
 import { set, storeConfigured, takeOnce } from './_store.js';
 
 /** Uppercase, and dashes or spaces the player typed are not part of it. */
@@ -72,6 +74,28 @@ export default async function handler(req, res) {
     if (tokenValid(found, token)) account = found;
   }
 
+  /**
+   * ⚠️ **已经是终身天才的人，这张码一个字都不许动。**
+   *
+   * `extend()` 对终身账号是个 no-op（_accounts.js：「Adding time to forever is not an
+   * error, it is simply nothing」），而上面那一步 `takeOnce` 是 GETDEL——码从库里拿走
+   * 了。两件事合起来就是：**码烧掉、账上什么都没多、屏幕上写着「兑换成功」**。玩家下
+   * 次想把它送给朋友时才发现它没了，而那时谁也查不出发生过什么。
+   *
+   * 这不是个边角情况：窗口期里「登录成功即送终身天才」（E11 / PR-12），所以**此刻每一
+   * 个登着的人都是终身**，每一张内部码兑到自己账号上都会这样消失一张。
+   *
+   * 挡在 `takeOnce` **之前**，所以码还在库里，原样留着送人。答 409 `active` 而不是自造
+   * 一个新词：界面上那句话早就写好了（i18n 的 `alreadyActive`：「你的订阅还在有效期内。
+   * 这张码留着以后用，或者送人——它只能用一次」），而那正是要说的话。
+   *
+   * 文件顶上写着「A player who is *currently* subscribed is told to keep the code …
+   * that check is on the device … a courtesy rather than a defence」——那句话仍然成立，
+   * 这一道不是为了防谁，是为了**不把玩家的东西弄丢**。设备那一侧的提醒照旧留着（它答
+   * 得更快、也更客气），这一道是兜底。
+   */
+  if (account && isLifetime(account)) return send(res, 409, { error: 'active' });
+
   const ticketDoc = await takeOnce('code:' + ticket);
   if (!ticketDoc) return send(res, 404, { error: 'code' });
 
@@ -99,6 +123,10 @@ export default async function handler(req, res) {
     try {
       await set('code:' + ticket, ticketDoc);
     } catch (err) {
+      // ⚠️ **这一行有意写码的原文**，别「顺手」改成指纹（_redact.js 里也记着这件事）。
+      // 走到这儿意味着码已经从库里拿走、又没放回去：谁都兑不了它，而有个玩家刚刚
+      // 看到一句「这张码不存在或已经用过」。这一行是我们唯一还能凭它把那张码手工
+      // 补给他的东西，指纹补不回来。码本身也不是个人信息。
       console.error('兑换码放不回去了', ticket, err);
     }
   };
@@ -123,7 +151,9 @@ export default async function handler(req, res) {
     try {
       await set('codeused:' + ticket, { at: Date.now(), plan, ...extra });
     } catch (err) {
-      console.error('兑换记录没写上（权益已经到账，不影响玩家）', ticket, err);
+      // 这一处相反，记指纹就够：权益已经写进账户了，没有谁在等人工补偿，而这张码
+      // 到这一步还活着（它是刚被兑掉的那一张，`code:` 键没了、`codeused:` 键没写上）。
+      console.error('兑换记录没写上（权益已经到账，不影响玩家）', redact(ticket), err);
     }
   };
 
@@ -133,8 +163,18 @@ export default async function handler(req, res) {
     // 一次加的时长整个盖掉——两张码都吃掉了、两次都说成功，账号上却只多了一
     // 个月。见 _accounts.js 的 updateAccount。
     let saved;
+    // 锁里那一份才是库里此刻的样子。上面那道终身闸看的是 takeOnce **之前**读到的快照，
+    // 而这两步之间他完全可能刚在另一台设备上登录、刚被送了终身（grantLifetimeIfWindow）。
+    // 不再看一眼的话，那一张码还是会无声无息地烧掉。
+    let lifetime = false;
     try {
-      saved = await updateAccount(address, (acct) => extend(acct, plan));
+      saved = await updateAccount(address, (acct) => {
+        if (isLifetime(acct)) {
+          lifetime = true;
+          return;
+        }
+        extend(acct, plan);
+      });
     } catch (err) {
       await giveBack();
       throw err;
@@ -143,6 +183,11 @@ export default async function handler(req, res) {
       // 没加上就得把码放回去，不然玩家白丢一张。放回去之后重试一次就成了。
       await giveBack();
       throw new Error(saved.busy ? '账号正忙，这一次没加上（码已放回）' : '账号不见了（码已放回）');
+    }
+    if (lifetime) {
+      // 和上面那道闸同一句话。码放回去——它一分钱的价值都没损失，而玩家可以送人。
+      await giveBack();
+      return send(res, 409, { error: 'active' });
     }
     account = saved.account;
     await noteUsed({ email: address });

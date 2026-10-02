@@ -115,10 +115,14 @@ function toResult(status: number, reply: Reply): AccountResult {
       },
     };
   }
+  // ⚠️ 这张名单漏一个词，那个词就**悄悄变成 'network'**——屏幕上写「连不上网络」，而
+  // 服务器其实答得明明白白。`'active'` 漏了很久：`src/ui/subscribe.ts` 那边一直认得它
+  // （→ `alreadyActive`「这张码留着以后用，或者送人」），只是永远收不到。api/redeem.js
+  // 从 2026-10-02 起真的会答它（已经是终身天才的人兑码，码不动，原样留着）。
   const known: AccountFailure[] = [
     'wrong', 'locked', 'blocked', 'code', 'email', 'password',
     'wrongCode', 'expired', 'notConfigured', 'noMail', 'tooMany',
-    'taken', 'sameEmail', 'weak', 'auth',
+    'taken', 'sameEmail', 'weak', 'auth', 'active',
   ];
   // The server calls it 'expired' on its own endpoint; here it has to be
   // told apart from the unlock mail's expiry, which shares the word.

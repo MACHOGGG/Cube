@@ -60,9 +60,11 @@ check('不会两个都失败（码没有凭空蒸发）', won.length >= 1);
 // ---- 赢的那个账号真的能登录 --------------------------------------------
 if (won.length === 1) {
   const winner = won[0].body.email;
-  const back = await post('/api/subscription', { email: winner, password: '123456' });
-  check('赢的那个账号能用邮箱+密码登录', back.status === 200 && back.body.active === true,
-    `${winner} → ${back.status}`);
+  // 凭据是绑定那一趟回来的那把**令牌**，不是密码：拿密码登录那一支随 E37 撤了
+  // （api/subscription.js 里记着为什么）。
+  const back = await post('/api/subscription', { email: winner, token: won[0].body.token });
+  check('赢的那个账号拿它那把令牌登得上', back.status === 200 && back.body.active === true,
+    `${winner} → ${back.status} ${JSON.stringify(back.body.error || '')}`);
 }
 
 // ---- 抢不到的时候，码不能被弄丢 ----------------------------------------

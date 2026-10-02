@@ -1,5 +1,6 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
+import { redact } from './_redact.js';
 import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce, withLock } from './_store.js';
 
 /**
@@ -62,8 +63,14 @@ export const PASS_RE = /^[A-Za-z0-9]{6}$/;
  * looking at. Deliberately loose: the stored hash is what actually decides,
  * and rejecting a shape here early would tell a stranger which kind of
  * account an address has.
+ *
+ * ⚠️ **眼下没有调用方**（2026-10-02）。唯一在用它的是 `api/subscription.js` 那条拿密
+ * 码登录的路，而那一支随密码一起撤了（E37，那个文件里记着为什么）。留着不删：它和
+ * `burnGuess` 是一对，说的是「不许从答复的形状/快慢里看出这个地址有没有账号」这条
+ * 规矩——哪天再冒出一条要验某种自选凭据的路，照这一对来，别从头发明一遍。
  */
 export const SECRET_RE = /^.{4,128}$/;
+
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
@@ -155,6 +162,32 @@ const failKey = (email) => 'pinfail:' + email;
  */
 const FAIL_TTL_S = 24 * 3600;
 
+/**
+ * 「这个锁期里，谁有资格真的比对一次」——一个锁期只发一张。
+ *
+ * ── 它补的是一个真的漏 ────────────────────────────────────────
+ *
+ * `checkPin` 开头那句 `account.lockUntil > now` 判的是**调用方手里那份快照**，而它和
+ * 「把新的 lockUntil 写回去」之间隔着好几次网络往返。于是同一瞬间打进来的一批请求全
+ * 都读到「锁已经开了」，全都过了那一关，全都去比对一次——`block: true` 那一支还有
+ * `tries > BLOCK_AFTER` 当硬闸（最多漏 6 次就彻底封），而 `block: false` 那一支
+ * （免邮箱凭据账号，api/handle.js）**没有任何上闸**：一次并发就是一万次比对，锁开一
+ * 次又是一万次。
+ *
+ * 要紧的是那段注释原先写的是「锁开之后每 4 小时一次机会」——那句话不成立，而屏幕上、
+ * 日志里什么都看不出来。又一个看着在守的假门。
+ *
+ * ── 为什么是 SET NX，而不是再加一道计数 ───────────────────────
+ *
+ * 要的正是「只有一个」，而 SET NX 一步就回答这件事（和 createAccount、takeOnce 同一
+ * 个路子）。计数再怎么准也只能说「这是第几个」，而第 5 个和第 5000 个在这儿都该被拦
+ * ——拦的理由不是次数多，是这个锁期已经有人用掉了。
+ *
+ * TTL 就是锁的时长（LOCK_MS）：键自己过期，和锁自己开是同一刻。猜对的人把它删掉
+ * （见 checkPin 的 ok 那一支），所以本人不会被自己上一次的手误罚 4 小时。
+ */
+const pinWinKey = (email) => 'pinwin:' + email;
+
 export const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
 /**
@@ -204,7 +237,7 @@ export async function deleteAccount(email) {
   try {
     await hdel(INDEX_KEY, normalizeEmail(email));
   } catch (err) {
-    console.error('名单没删掉', email, err);
+    console.error('名单没删掉', redact(email), err);
   }
 }
 
@@ -224,7 +257,7 @@ export async function saveAccount(email, account) {
   try {
     await hset(INDEX_KEY, address, indexRow(account));
   } catch (err) {
-    console.error('名单没记上', address, err);
+    console.error('名单没记上', redact(address), err);
   }
 }
 
@@ -255,7 +288,7 @@ export async function createAccount(email, account) {
   try {
     await hset(INDEX_KEY, address, indexRow(account));
   } catch (err) {
-    console.error('名单没记上', address, err);
+    console.error('名单没记上', redact(address), err);
   }
   return true;
 }
@@ -321,7 +354,7 @@ export async function takeAccount(email) {
   try {
     await hdel(INDEX_KEY, normalizeEmail(email));
   } catch (err) {
-    console.error('名单没删掉', email, err);
+    console.error('名单没删掉', redact(email), err);
   }
   return gone;
 }
@@ -344,6 +377,10 @@ const DECOY_SALT = randomBytes(16).toString('hex');
  * 这是把差距压下去，不是把它证明为零：网络抖动本来就比这点毫秒大得多，而
  * 存储那一次读也只在有账号时才有回包。真要彻底消掉，得让两条路读一样多的
  * 东西——那是另一件事，不值得为它把每个接口都改成假读一次。
+ *
+ * ⚠️ **眼下没有调用方**（2026-10-02），和 SECRET_RE 同一个原因：subscription.js 那条
+ * 拿密码登录的路撤了，而撤掉之后那边的三种情况（没账号 / 没带令牌 / 令牌不对）走的
+ * 本来就是同一行代码、同一次读库，天然一样快，不需要诱饵。留着是为了那条规矩本身。
  */
 export function burnGuess(secret) {
   hash(String(secret ?? ''), DECOY_SALT);
@@ -425,7 +462,7 @@ async function patchCounters(email, account) {
     if (lockUntil === 0) fresh.lockUntil = 0;
     else fresh.lockUntil = Math.max(Number(fresh.lockUntil || 0), lockUntil);
   });
-  if (!got.ok && got.busy) console.error('这次尝试没记到账号上（锁忙，计数器那边已经记下了）', email);
+  if (!got.ok && got.busy) console.error('这次尝试没记到账号上（锁忙，计数器那边已经记下了）', redact(email));
 }
 
 /**
@@ -443,6 +480,10 @@ async function patchCounters(email, account) {
  * 那 4 小时就重新算（`tries` 还在 24 小时的计数键里，一进来就 ≥ LOCK_AFTER）。换算下
  * 来是「锁开之后每 4 小时一次机会」，而第二串是 ≥8 位的大小写敏感字母数字
  * （62⁸ ≈ 2.2×10¹⁴）——靠猜连门缝都摸不到。
+ *
+ * ⚠️ 「每 4 小时一次机会」这句话从前**是假的**：那句 lockUntil 判的是调用方手里的快
+ * 照，一次并发就能让成千上万个请求同时越过它，而这一支没有封号那道硬闸。现在靠
+ * `pinWinKey` 那张 SET NX 的票把它坐实了（见下面比对之前那一段）。
  *
  * 真忘了第二串的人不必等：走 `handle.js` 的 `reset`，凭第一串重设，顺手把锁也开掉。
  *
@@ -481,6 +522,16 @@ export async function checkPin(email, pin, account, { block = true } = {}) {
     return 'blocked';
   }
 
+  // 过了锁线之后，这一个锁期里只许**一个**请求真的去比对。见 pinWinKey 那一段：
+  // `block: false` 那一支没有封号那道硬闸，不加这一道的话「每 4 小时一次机会」是假的。
+  //
+  // 输掉的那些**一个字都不写**就回 'locked'：真要挡的是一次上万的并发，而让每一个都去
+  // 跑一趟 patchCounters（带锁的读—改—写）等于替攻击方把我们自己的存储打满。赢的那一
+  // 个答错时照旧把 lockUntil 往后推 4 小时，账号上那份记录不会因此落下。
+  if (!block && tries > LOCK_AFTER) {
+    if (!(await setnx(pinWinKey(email), tries, Math.floor(LOCK_MS / 1000)))) return 'locked';
+  }
+
   const attempt = Buffer.from(hash(pin, account.salt), 'hex');
   const known = Buffer.from(account.hash, 'hex');
   const ok = attempt.length === known.length && timingSafeEqual(attempt, known);
@@ -488,6 +539,9 @@ export async function checkPin(email, pin, account, { block = true } = {}) {
   if (ok) {
     // Only getting it right clears the count.
     await del(failKey(email));
+    // 猜对的人不该被自己上一次的手误罚满 4 小时——那张「这个锁期的比对资格」也一起
+    // 还回去（只有 block: false 那一支会发它）。
+    if (!block) await del(pinWinKey(email));
     if (account.fails || account.lockUntil) {
       account.fails = 0;
       account.lockUntil = 0;
@@ -531,6 +585,26 @@ export function unblock(account, newPin) {
   account.blocked = false;
   return account;
 }
+
+/**
+ * 这个账号上到底有没有**一把真的密码**。
+ *
+ * 判法是「拿空串算一遍，看是不是就等于存着的那份哈希」。验证码开出来的账号传给
+ * `newAccount` 的密钥正是空串（api/signin.js），所以这一问分得出两类账号：
+ *
+ *   · 空串 —— 从来没有人给它设过密码。它的令牌都是「收到过一张寄到这个地址的码」
+ *     换来的，那是本人。
+ *   · 非空 —— 有人设过。设的人只证明了「我手里有一个结账 id / 一张内部码的令牌」，
+ *     **没有**证明这个邮箱是他的（CLAUDE.md：「邮箱地址本身不是证据」）。
+ *
+ * 第二类是 api/signin.js 里那段抢注清理的目标。为什么不直接看 `kind`：'code' 这一位
+ * 既是验证码账号也是内部码账号，分不开；而密码在不在，正好就是「有没有人以这个地
+ * 址的名义设过凭据」这一问本身。
+ *
+ * ⚠️ 它要跑一次 scrypt（几十毫秒），所以只在真要判的那一刻叫，别放进热路径。
+ */
+export const hasSecret = (account) =>
+  Boolean(account?.salt) && account.hash !== hash('', account.salt);
 
 /** 把「错了几次」那个计数键清掉。解锁重设密码之后要叫一次。 */
 export const clearFails = (email) => del(failKey(email));

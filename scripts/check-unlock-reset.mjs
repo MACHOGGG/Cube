@@ -22,11 +22,15 @@
  *
  * 和 redeem.js 那次「码烧掉却没到账」（scripts 里那条 giveBack）是同一种病。
  *
- * 登录那一支（api/subscription.js）也犯了同一个错，而且更狠：密码验过了、令
+ * 登录那一支（api/subscription.js）也犯了同一个错，而且更狠：身份验过了、令
  * 牌也签发了，可因为这个账号此刻没有在续的订阅，答的是 NOBODY——身上既没有
  * token 也没有 email。前端于是报「这个邮箱名下没有有效的订阅」，把人挡在他
  * 自己的账号外面。那个账号里有他的云端战绩、有寄给他的内部码；进不去还会连
  * 环，因为兑码要令牌。⑥ 盯的就是这一条。
+ *
+ * ⚠️ ⑥ 2026-10-02 换了凭据：原先它拿**密码**去 /api/subscription 登录，而那一支随 E37
+ * 撤了（那个文件里记着为什么）。现在拿的是解锁这一趟刚发回来的**令牌**——那正是这个门
+ * 要守的那件事本身：解锁答 200 时给出去的那把令牌，必须真的能当身份用。
  *
  * 不起服务器、不连 Redis、不真发信也不真问 Creem：库用进程内的那份，两个外
  * 部 HTTP 各用一个假 fetch 顶掉——顺便把验证码从那封假邮件里读出来。
@@ -149,22 +153,47 @@ check('reset 照样是 true', noCreem.body.reset === true, JSON.stringify(noCree
 const after2 = await loadAccount(EMAIL2);
 check('密码确实换了', (await checkPin(EMAIL2, NEW_PW, after2)) === 'ok');
 
-// ---- ⑥ 登录：密码对了就是登上了，哪怕这个账号没有在续的订阅 ----------------
+// ---- ⑥ 登录：令牌对了就是登上了，哪怕这个账号没有在续的订阅 ----------------
+//
+// 凭据是**解锁这一趟刚发回来的那把令牌**（见文件顶上那条 ⚠️）：解锁答 200 就等于「这个
+// 地址证明过自己了」，那把令牌从这一刻起必须当得了身份。拿它去 /api/subscription 问一
+// 句，答回来的必须既有 email 又有 token——哪怕 active 是 false。
 
 process.env.CREEM_API_KEY = 'creem_test_stub';
 const EMAIL3 = 'lapsed@example.com';
 await saveAccount(EMAIL3, newAccount(OLD_PW, 'card'));
+mails = 0;
+sentCode = null;
+await call({ email: EMAIL3 });
+const reset3 = await call({ action: 'confirm', email: EMAIL3, code: sentCode, password: NEW_PW });
+check('解锁那一趟先得成（否则下面量的是别的事）', reset3.status === 200, String(reset3.status));
+const freshToken = reset3.body.token;
 
-const signedIn = await callOn(subscription, { email: EMAIL3, password: OLD_PW });
-check('订阅过期的人，密码对了就该登得上', signedIn.status === 200, String(signedIn.status));
+const signedIn = await callOn(subscription, { email: EMAIL3, token: freshToken });
+check('订阅过期的人，令牌对了就该登得上', signedIn.status === 200, String(signedIn.status));
 check('回了令牌——没有它前端就当没登上',
   typeof signedIn.body.token === 'string' && signedIn.body.token.length > 0,
   JSON.stringify(signedIn.body));
+check('回的正是这台设备自己那一把（没被换掉）', signedIn.body.token === freshToken);
 check('也回了邮箱（前端拿它认「我是谁」）', signedIn.body.email === EMAIL3);
 check('同时如实说不是天才', signedIn.body.active !== true);
 
-const wrongPw = await callOn(subscription, { email: EMAIL3, password: 'zzz999' });
-check('密码不对照旧进不来', wrongPw.status === 401, String(wrongPw.status));
+// 三种「不是他」答的是同一句，走的也是同一行代码（api/subscription.js 的 fromEmail）。
+const wrongTok = await callOn(subscription, { email: EMAIL3, token: 'NOPE-NOPE-NOPE' });
+check('令牌不对进不来', wrongTok.status === 401, String(wrongTok.status));
+const noTok = await callOn(subscription, { email: EMAIL3 });
+check('不带令牌进不来，而且是同一句话', noTok.status === 401 && noTok.body.error === 'wrong',
+  `${noTok.status}:${JSON.stringify(noTok.body)}`);
+const noAcct = await callOn(subscription, { email: 'nobody-here@example.com', token: freshToken });
+check('压根没这个账号——答的还是同一句（不许当查号机）',
+  noAcct.status === 401 && noAcct.body.error === 'wrong',
+  `${noAcct.status}:${JSON.stringify(noAcct.body)}`);
+
+// ⚠️ 密码**不再是**一条进得去的路。这一条是反着量的：拿真密码去登，必须被拒。
+// 哪天有人「顺手」把那一支加回来（它看起来只是少了一条方便的路），这一行当场红。
+const withPw = await callOn(subscription, { email: EMAIL3, password: NEW_PW });
+check('拿密码登录那一支撤了——真密码也进不去', withPw.status === 401,
+  `${withPw.status}:${JSON.stringify(withPw.body)}`);
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

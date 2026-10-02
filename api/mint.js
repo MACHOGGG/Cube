@@ -3,6 +3,7 @@ import { send, readBody } from './_creem.js';
 import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, updateAccount } from './_accounts.js';
 import { codeKey, mintCodes } from './_codes.js';
 import { del, storeConfigured } from './_store.js';
+import { redact } from './_redact.js';
 import { callerId, tooMany } from './_ratelimit.js';
 
 /**
@@ -127,7 +128,20 @@ export default async function handler(req, res) {
             try {
               await del(codeKey(code));
             } catch (err) {
-              console.error('这张码撤不回去了（留在库里没人知道归谁）', code, err);
+              // 只记指纹，不记原文：撤不掉说明这张码**还活在库里**，谁看到原文谁就能
+              // 兑。日志不是个安全的地方（Vercel 后台留 30 天，出错时人还最爱整段
+              // 往外贴），一行日志换一张免费年卡太贵了。
+              //
+              // 这一处和 redeem.js 的 giveBack() 相反，那边**有意**记原文：那张码已经
+              // 烧掉了（放不回去＝谁都兑不了），而有个玩家正等着我们凭它手工补给他。
+              // 这边没有谁在等这一张：这一批的结果在 `sent` 里如实回了后台，重发一批
+              // 就是。
+              //
+              // 代价说明白：这张孤儿码就永远留在库里了（`expiresInDays` 不填就不设
+              // 到期，而且这边没有「扫一遍所有 code: 键」的本事），指纹也找不回它。
+              // 两害相权还是留它：一张谁都不知道的码等人撞上 1/1.07e9，一张写在日志
+              // 里的码等人翻一次后台。
+              console.error('这张码撤不回去了（留在库里没人知道归谁）', redact(code), err);
             }
           }),
         );

@@ -237,14 +237,18 @@ jobs:
       # 一个门一台服务器、一人一个端口（CLAUDE.md 那条规矩）。起完用一个有界的 curl
       # 循环等它真的起来；盲等固定秒数在 CI 上会出偶发红，而偶发红最后一定会被人加
       # continue-on-error。
+      #
+      # ⚠️ 探的是 **/**（首页），不是某个接口。原先探的是 `/api/slots`，而那个接口在
+      # 2026-10-02 随名额一起删了（E39）——于是那个 curl 永远 404，循环每次都空等满 30
+      # 秒，后面那句硬探必败，整步红。**探活要探一样不会被删的东西**，首页就是那样东西。
       - name: 注册 → 登录 → 终身授予
         run: |
           GENIUS_GRANT_WINDOW=1 node scripts/dev-server.mjs 8993 dist &
           for i in $(seq 1 60); do
-            curl -sf http://localhost:8993/api/slots > /dev/null && break
+            curl -sf http://localhost:8993/ > /dev/null && break
             sleep 0.5
           done
-          curl -sf http://localhost:8993/api/slots > /dev/null
+          curl -sf http://localhost:8993/ > /dev/null
           node scripts/check-register.mjs http://localhost:8993/
       - name: 战绩与排行榜
         run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
@@ -283,9 +287,45 @@ jobs:
       # 起发；一条一条发的版本永远是绿的。
       - name: 开账号：两个人抢同一个邮箱
         run: node scripts/check-account-race.mjs
-      # 从外面看这几扇门：登录接口不能当查号机，改密码和账号中心要按来路限速。
+      # 从外面看这几扇门：登录接口不能当查号机（有号没号、带没带令牌、令牌对不对，三种答
+      # 的是同一句，而且走同一行代码），账号中心要按来路限速。改密码那一支 2026-10 撤了。
       - name: 认证：查号机与来路限速
         run: node scripts/check-auth-probe.mjs
+
+      # 抢注：别人先用你的邮箱开了账号，而你一个字都看不出来。
+      #
+      # 旧的 `register: true` 那一支不要任何凭据就能在任意邮箱上开出账号，还带着一把它自己
+      # 设的密码。真正的主人将来拿验证码登录时，从前只是「添一把令牌」——两个人从此都进得
+      # 去，而屏幕上什么都不报。那一支撤了，而已经被抢注的地址靠 signin.js 的 confirm 收场
+      # （第一次验成功时把旧凭据整个清掉）。
+      #
+      # 这一条两个方向都会出错、而且症状相反（清不够 / 清过头），所以门里每条断言都有一条
+      # 反着的在盯。十种改坏法都真的试过一遍。
+      - name: 抢注：第一次验成功要把旧凭据清掉
+        run: node scripts/check-preclaim.mjs
+
+      # 锁开之后「每 4 小时一次机会」——这句话从前是假的：checkPin 开头那句 lockUntil 判的
+      # 是调用方手里的快照，一次并发就能让成千上万个请求同时越过它，而免邮箱账号那一支没有
+      # 封号那道硬闸。现在靠一张 SET NX 的票坐实了。
+      - name: 一个锁期只许比对一次
+        run: node scripts/check-pin-window.mjs
+
+      # 限速的桶名。IPv6 下家宽标配分到的是一整个 /64，换一个源地址不花一分钱——按单个地址
+      # 分桶等于不限速，而限速那一侧看着还在工作。收到 /64；同时**不许**收得更粗。
+      - name: 限速按谁分桶
+        run: node scripts/check-ratelimit-bucket.mjs
+
+      # 运维日志里不许躺着玩家的邮箱。那份日志在后台留 30 天，而出错时人最爱整段往外贴。
+      # 顺带钉住唯一一处**有意**写原文的例外（redeem 的 giveBack），免得有人去「修」它。
+      - name: 日志里不许写身份
+        run: node scripts/check-log-redact.mjs
+
+      # `.env.example` 是唯一一份「这个项目要配哪几样」的清单（.env 是 gitignore 的）。配漏
+      # 一样的后果 CLAUDE.md 里每一条都真的发生过；而 GENIUS_GRANT_WINDOW 从来就没写进模板，
+      # 于是新开一份部署默认是关的——玩家照着界面上那句写死的承诺去登录，登得进、却不是天
+      # 才，屏幕上什么都不报。
+      - name: 环境变量清单和代码对得上
+        run: node scripts/check-env-example.mjs
       # 小屋里两件「谁写谁赢」的事：催屋主不能把刚开的一局抹掉，关了网页的人
       # 不该让全屋再等九十秒。直接叫 api/room.js 的 handler，不起服务器。
       - name: 小屋：催促与开局抢数据、关了网页的座位

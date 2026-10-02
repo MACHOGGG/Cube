@@ -12,15 +12,20 @@
  *    阅」。两句不一样的话摆在一起，拿一份邮箱名单挨个打过来，哪些是本站用
  *    户一目了然。
  *
- *    唯一允许不一样的是**订阅还活着、却从没设过密码**那一种（付完款那一下
- *    标签页就关了）：那一句 needsPasscode 是故意要说的，不说这个人就被永久
- *    挡在他已经付过钱的东西外面。④ 守着这一条别被「堵漏」顺手堵死。
+ *    从前这里有一个**允许不一样**的口子：订阅还活着、却从没设过密码那一种
+ *    （付完款那一下标签页就关了）答 needsPasscode，送他去设一个。它 2026-10-02
+ *    随密码一起没了，而且**不留任何人在门外**——那种人现在拿验证码登录，账号
+ *    当场开出来（api/signin.js 的 confirm），Creem 照旧被问一次，于是他立刻就
+ *    是天才。④ 因此反过来量：那个地址答的必须和「压根没有账号」一字不差。
+ *    这比从前更严——needsPasscode 本身就是在说「这个地址是订户」。
  *
  * ② **改密码和账号中心要按来路限速。** 账号那头的计数（_accounts.js 的
  *    checkPin）是按账号数的：错 4 次锁 4 小时。那道闸挡的是「有人在猜我的
  *    密码」，可它同时也是一把递到陌生人手里的锁——知道你邮箱的人发四次乱
- *    填的请求就能把你关在门外四个小时。登录那一支早就按来路数了
- *    （subscription.js 的 subpw），这两处一直没有。
+ *    填的请求就能把你关在门外四个小时。所以凡是「拿一样可猜的东西来验」的入口都要再
+ *    按来路数一道：`api/handle.js` 顶上那个 `pairin`（30 次/小时）就是为此（2026-10-02
+ *    补的）。从前登录那一支也有一个（`subpw`），它随密码那一支一起撤了——那一路现在
+ *    只认 24 字节随机令牌，没有「撞」这回事可挡。
  *
  *    注意这道限速**不能**把 ② 那种骚扰彻底消掉（四次还是发得出来，而二十
  *    次的上限拦不住四次）。它挡的是「一台机器拿一份名单把所有人挨个锁一
@@ -81,7 +86,13 @@ const callOn = async (handler, body, ip = '203.0.113.1') => {
 const HAS = 'has-account@example.com';
 const NONE = 'no-such-account@example.com';
 const PW = 'aaa111';
-await saveAccount(HAS, newAccount(PW, 'card'));
+const LIVE_TOKEN = 'LIVE-DEVICE-TOKEN';
+// 密码照旧设着（库里的老账号就是这样），但它**只是个摆设**：下面那一条反着量它进不去。
+// 能当身份的是种进去的这把令牌，和 signin.js / handle.js 真发出来的那一种一模一样。
+const hasAcct = newAccount(PW, 'card');
+hasAcct.tokens = [{ t: LIVE_TOKEN, at: Date.now() }];
+hasAcct.token = LIVE_TOKEN;
+await saveAccount(HAS, hasAcct);
 
 const mineWrong = await callOn(subscription, { email: HAS, password: 'zzz999' }, '198.51.100.1');
 const theirs = await callOn(subscription, { email: NONE, password: 'zzz999' }, '198.51.100.2');
@@ -106,17 +117,29 @@ check('乱给令牌时，两条路也是同一句',
   mineTok.status === theirTok.status && mineTok.raw === theirTok.raw,
   `${mineTok.status}:${mineTok.raw} / ${theirTok.status}:${theirTok.raw}`);
 
-// 没误伤：真密码照样登得上。
-const good = await callOn(subscription, { email: HAS, password: PW }, '198.51.100.7');
-check('真密码照样登得上，还是拿得到令牌',
-  good.status === 200 && good.body.email === HAS && typeof good.body.token === 'string',
+// 没误伤：真令牌照样登得上。这一条是整节的尺子——上面那几条「一律 401」要是靠「对谁都
+// 答 401」混过去的，它当场红。
+const good = await callOn(subscription, { email: HAS, token: LIVE_TOKEN }, '198.51.100.7');
+check('真令牌照样登得上，还是拿得到令牌',
+  good.status === 200 && good.body.email === HAS && good.body.token === LIVE_TOKEN,
   `${good.status} ${JSON.stringify(good.body.email)}`);
 
-// ── ④ 「订着、却还没设过密码」那一句不能被顺手堵死 ───────────────────────
+// 拿**真密码**登录那一支撤了（E37）。它不许悄悄回来：回来一次，上面那一整节
+// 「有账号 / 没账号答同一句」就又多出一条不一样的路。
+const withPw = await callOn(subscription, { email: HAS, password: PW }, '198.51.100.9');
+check('拿密码登录那一支撤了——真密码也答 401', withPw.status === 401,
+  `${withPw.status} ${withPw.raw}`);
 
-const paid = await callOn(subscription, { email: PAID_NO_PASS, password: 'aaa111' }, '198.51.100.8');
-check('订阅活着但没设过密码：仍然答 needsPasscode，送他去设一个',
-  paid.status === 200 && paid.body.needsPasscode === true, `${paid.status} ${paid.raw}`);
+// ── ④ 「订着、却没有账号」也不许答得不一样 ───────────────────────────────
+//
+// 见文件顶上 ① 那段：needsPasscode 没了，这个地址必须和「压根没有账号」一字不差。
+// 它在 Creem 那头有一份**活着的订阅**（上面那个假 fetch 只认它），所以这一条量的正是
+// 「别拿订阅状态当查号机」。
+
+const paid = await callOn(subscription, { email: PAID_NO_PASS, token: 'NOT-A-TOKEN' }, '198.51.100.8');
+const plain = await callOn(subscription, { email: NONE, token: 'NOT-A-TOKEN' }, '198.51.100.10');
+check('订阅活着但没有账号：和「压根没这个人」一字不差（不再有 needsPasscode）',
+  paid.status === 401 && paid.raw === plain.raw, `${paid.status}:${paid.raw} / ${plain.raw}`);
 
 // ── ② 两条新路也不许当查号机 ────────────────────────────────────────────
 //
