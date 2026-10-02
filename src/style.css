@@ -1586,8 +1586,11 @@ button:hover { filter: brightness(1.05); }
      「最小」和「最大」的基准：十二张图在轴上占的地方一样大，差别只由鱼眼的
      scale 给（0.68–1.22，见 ui/modeAxis.ts 的 PARAMS）。
      2026-09 第二轮从 112 收到 100，第五轮又回到 112——玩家要「整体大小差异再大
-     一点，中线那张再放大一些」。 */
-  --axis-art: 112px;
+     一点，中线那张再放大一些」。
+     2026-10：112 → 130，同时两列各往里挪 2.3%（下面 `axis-col--*` 那三条）。玩家原
+     话是「整体两列再靠近，然后 icon 再放大」。横向的预算就那么多，两件事吃的是同一
+     份（见下面那段算），所以是四组渲染出来让玩家挑的，选的是「放大多、靠近少」。 */
+  --axis-art: 130px;
   position: relative;
   /* 覆盖 .home-grid 的 flex 列：卡片是绝对定位的，容器不需要排它们。 */
   display: block;
@@ -1812,25 +1815,49 @@ button:hover { filter: brightness(1.05); }
 /*
  * 窄屏上图的格子要跟着**横向预算**走（E18 之后才有这件事）。
  *
- * 预算是这么算的：一列占半幅，图在半幅里居中，所以放大之后它从 `vw/4 − 0.61×格子`
- * 起（0.61 = maxScale 1.22 的一半）。左边 x ≤ 17.5 是点点轨（上面那条），留 6px 气
- * 口，于是 `vw/4 − 0.61×格子 ≥ 23.5`：
+ * 预算是这么算的：一列占半幅、再往里挪 `--axis-pinch`，图在那半幅里居中，所以放大之后
+ * 它从 `vw/4 + pinch − 0.61×格子` 起（0.61 = maxScale 1.22 的一半）。左边 x ≤ 17.5 是
+ * 点点轨（上面那条），留 6px 气口，于是 `vw/4 + pinch − 0.61×格子 ≥ 23.5`。
  *
- *   390 的屏  →  112 够用（图从 29.2 起，离轨 11.7）
- *   360 的屏  →  112 只剩 4.2，退到 104（26.6 起，离轨 9.1）
- *   320 的屏  →  104 会压上去（−5.8），退到 88（26.3 起，离轨 8.8）
+ * 还有第二道界，2026-10 之前不紧、现在是**最紧的那一道**：两张聚焦的图之间要留得下缝，
+ * 不然热区叠在一起——点的是左边那张，开出来的是右边那个玩法。`vw/2 − 2×pinch ≥
+ * 1.22×格子 + 缝`。
+ *
+ * pinch = 2.3%（390 屏上 9.0px）那一档，三台机器：
+ *
+ *   390 的屏  →  130（图从 27.2 起，离轨 9.7；两张之间 18.5）
+ *   360 的屏  →  130 的话两张只剩 5.8 的缝，退到 119（25.7 起，离轨 8.2；缝 18.2）
+ *   320 的屏  →  119 会直接叠上（−5.2），退到 101（25.8 起，离轨 8.3；缝 22.1）
  *
  * 两道槛按**真机宽度**切，不按算出来的临界值：360 是安卓那一档、320 是 iPhone SE 那
- * 一档。切在临界值上的话，359 的屏会落在「刚好够用」的那一侧，离轨只剩 0.6px。
+ * 一档。切在临界值上的话，359 的屏会落在「刚好够用」的那一侧。
+ *
+ * ⚠️ **这三个数和 pinch 是一套，别单独动一个。** 它们吃的是同一份横向预算：图放大一分，
+ * 两列之间就少一分；两列靠近一分，图能放大的上限也少一分。玩家 2026-10 挑的是「放大多、
+ * 靠近少」那一组（四组真机渲染里选的）。改之前先把这几条算一遍，然后跑 check-mode-axis。
  *
  * 为什么不写成 `min(112px, 28vw)` 一行了事：自定义属性里不许藏新函数——小红书那一端
  * 跑在 Chrome 61 上，算不动 `min()`，整条声明被丢掉，`--axis-art` 于是没有值，图的格
  * 子塌成 0。门 check-css-fallbacks 专门守这件事。分档写死，两个内核算出来一模一样。
  */
-@media (max-width: 389px) { .home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-art: 104px; } }
-@media (max-width: 359px) { .home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-art: 88px; } }
-.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--0 { left: 0; }
-.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--1 { left: 50%; }
+@media (max-width: 389px) { .home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-art: 119px; } }
+@media (max-width: 359px) { .home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-art: 101px; } }
+/*
+ * 两列各往里挪 `--axis-pinch`（2026-10，玩家：「整体两列再靠近，然后 icon 再放大」）。
+ *
+ * 盒子还是半幅宽，只是左边那半往右挪、右边那半往左挪，于是两张图的中心从相距 vw/2 收到
+ * vw/2 − 2×pinch。落单那张照旧摆正中。
+ *
+ * **用 `left` 挪，不许用 `transform`**：轴上这几张卡的 transform 是 modeAxis 每一帧写进
+ * 内联样式的（鱼眼的位置和 scale），这儿再写一个会被它整个顶掉。
+ *
+ * ⚠️ `calc()` 可以，`min()` / `max()` 不行——小红书那一端跑在 Chrome 61 上（见上面
+ * `--axis-art` 那段和门 check-css-fallbacks）。`calc()` 从 Chrome 26 就有，百分比混着算
+ * 也没问题：两个百分比都是对同一个容器算的。
+ */
+.home-page:not(.home-page--wide) .home-grid.mode-axis { --axis-pinch: 2.3%; }
+.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--0 { left: var(--axis-pinch); }
+.home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--1 { left: calc(50% - var(--axis-pinch)); }
 .home-page:not(.home-page--wide) .mode-axis > .home-icon-btn.axis-col--solo { left: 25%; }
 /*
  * 轴上每张图都住在**同一个正方格**里。

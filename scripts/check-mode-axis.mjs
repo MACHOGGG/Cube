@@ -2019,6 +2019,9 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
   const art = await pg.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const token = parseFloat(getComputedStyle(host).getPropertyValue('--axis-art')) || 0;
+    // 两列各往里挪多少（2026-10 那一轮加的，见 style.css 的 --axis-pinch）。写成百分比，
+    // 所以要拿 host 的宽换算成 px。读不到就当 0——那是这一条加进来之前的样子。
+    const pinchRaw = getComputedStyle(host).getPropertyValue('--axis-pinch').trim();
     const hr = host.getBoundingClientRect();
     const midX = hr.left + hr.width / 2;
     // 直接子元素，不是后代：炸弹那张卡里嵌着九颗也顶着 .home-icon-btn 的小片
@@ -2080,6 +2083,9 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     const dr = document.querySelector('.axis-rail--r .axis-dot');
     return {
       token, rows, hostW: host.clientWidth, bombRule: bombRule.trim(),
+      pinch: pinchRaw.endsWith('%')
+        ? (parseFloat(pinchRaw) / 100) * host.clientWidth
+        : parseFloat(pinchRaw) || 0,
       midX, vw: document.documentElement.clientWidth,
       dotIn: dl && dr ? { l: dl.getBoundingClientRect().right, r: dr.getBoundingClientRect().left } : null,
     };
@@ -2146,22 +2152,35 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
   );
 
   /**
-   * ③ 两列：左列在中线左边四分之一处、右列在右边，**偏移量一模一样**（E18「对齐排」）。
+   * ③ 两列：左列在中线左边、右列在右边，**偏移量一模一样**（E18「对齐排」）。
    *
-   * 从前这一条是「每张卡都对准中线」——那是一列时代的写法，两列之后它必红。换成对称：
-   * 左右两列各自偏 ±hostW/4，而且两边的绝对值相等（差 < 1px）。
+   * 从前这一条是「每张卡都对准中线」——那是一列时代的写法，两列之后它必红。换成对称。
+   *
+   * 偏多少**不写死**，按 `--axis-pinch` 现算：`hostW/4 − pinch`。
+   *
+   * ⚠️ 2026-10 之前这儿写死的是 `hostW/4`（半幅的正中）。玩家那一轮要「整体两列再靠近，
+   * 然后 icon 再放大」，两列各往里挪了 2.3%，这一条当场红——**它红得对**，可要是照着现象
+   * 把容差放大到 80px，这一条就再也拦不住「两列偷偷跑偏」了。所以改成读同一个自定义属性：
+   * CSS 改一个数，门跟着走；而「左右对称」「落单那张在正中」两件事照旧钉死。
    */
-  const quarter = art.hostW / 4;
+  const pinchPx = art.pinch;
+  const half = art.hostW / 4 - pinchPx;
   const badCol = art.rows.filter((r) => {
     if (r.col === 'solo') return Math.abs(r.offX) > 1;
     const sign = r.col === '0' ? -1 : 1;
-    return Math.abs(r.offX - sign * quarter) > 1;
+    return Math.abs(r.offX - sign * half) > 1;
   });
   check(
-    `${label}：左列偏 −${quarter.toFixed(1)}、右列偏 +${quarter.toFixed(1)}（容差 1px）`,
+    `${label}：左列偏 −${half.toFixed(1)}、右列偏 +${half.toFixed(1)}（pinch ${pinchPx.toFixed(1)}px，容差 1px）`,
     badCol.length === 0,
     badCol.length ? badCol.map((r) => `${r.name}（${r.col}）偏 ${r.offX.toFixed(1)}px`).join(' / ') : '',
   );
+  /*
+   * 「两张图会不会叠在一起」**不在这儿再写一遍**：下面 ⑥ 已经按画出来的图逐张量过中线
+   * （每一张都要离中线 6px，于是两列之间至少 12px），而且它量的是**所有**排，不只聚焦那
+   * 一排。2026-10 这一轮差点在这儿补一条一模一样的——两份一样的东西放两处，迟早只改一
+   * 处，这个文件上面那段注释刚为同一件事写过（见 install 里 `__focus` 那一段）。
+   */
 
   /**
    * ⑤ **一排两张：同一条水平线、同一个倍率。**
