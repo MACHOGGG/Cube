@@ -404,6 +404,58 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
     JSON.stringify(twice.payload));
   const stillGone = await call({ action: 'mine', ...F });
   check('第二次之后无限反转还是空的', stillGone.payload?.best?.['square:flip'] === undefined);
+
+  /*
+   * ── `scrubNames: true`：把库里那些长得像凭据的旧名字清掉（#2，2026-10-02）──
+   *
+   * 那些条目是旧客户端存进去的（`leaderboardName()` 从前在玩家没取名字时拿他的登录凭据
+   * 顶上）。读榜那一头已经在过滤它们了（`shownName`，门在 check-board-no-id），所以这一
+   * 步不是为了「榜上别印」——那已经做到了——而是为了**库里别留着**。一份存着的凭据和一
+   * 份印出来的凭据，前者只是还没被人看见。
+   *
+   * ⚠️ 要紧的那一条在最后：**回包里一个名字都不许有。** 这个接口的回包是会被贴进工单、
+   * 贴进对话的（它就是给人看的那种维护接口），而要清的东西恰恰是凭据——把它们列出来等
+   * 于把这次清理本身变成一次泄露。
+   */
+  {
+    const { hgetall, hset } = await import('../api/_store.js');
+    const NAMES = 'lbnames';
+    // 三条：一条像第一串（旧，该删）、一条像邮箱（旧，该删）、一条是玩家自己敲的（带
+    // v，不许动，哪怕它也长得像第一串）。
+    const HDL_OLD = 'hdl:' + 'a'.repeat(64);
+    const HDL_NEW = 'hdl:' + 'b'.repeat(64);
+    await hset(NAMES, HDL_OLD, { name: 'Abcdefghij', avatar: null });
+    await hset(NAMES, 'scrubme@example.com', { name: 'scrubme', avatar: null });
+    await hset(NAMES, HDL_NEW, { name: 'Zyxwvutsrq', avatar: null, v: 2 });
+
+    const scrubbed = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN, scrubNames: true });
+    check('清名字：答 200，而且报了删了几条',
+      scrubbed.payload?.ok === true && scrubbed.payload?.namesDropped === 2,
+      JSON.stringify(scrubbed.payload));
+
+    const left = await hgetall(NAMES);
+    check('清名字：像第一串的那条删了', !left[HDL_OLD], JSON.stringify(left[HDL_OLD] ?? null));
+    check('清名字：像邮箱的那条删了', !left['scrubme@example.com'],
+      JSON.stringify(left['scrubme@example.com'] ?? null));
+    check('清名字：玩家自己敲的那条（带 v）**没动**', left[HDL_NEW]?.name === 'Zyxwvutsrq',
+      JSON.stringify(left[HDL_NEW] ?? null));
+    // 上面那几个人的真昵称（甲乙丙…）也不许被顺手删掉。
+    check('清名字：别人的好名字一个都没少',
+      Object.values(left).some((row) => row?.name === '庚'), JSON.stringify(Object.values(left).map((r) => r?.name)));
+
+    const text = JSON.stringify(scrubbed.payload);
+    for (const leaked of ['Abcdefghij', 'scrubme', 'Zyxwvutsrq', '庚']) {
+      check(`清名字：回包里找不到「${leaked}」`, !text.includes(leaked), text.slice(0, 160));
+    }
+
+    // 不勾那个旗子就什么都不清——它是一次性的维护动作，不许变成每次重建的副作用。
+    await hset(NAMES, 'scrubme@example.com', { name: 'scrubme', avatar: null });
+    const plain = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN });
+    check('不勾 scrubNames：一条都不清（namesDropped 是 0）', plain.payload?.namesDropped === 0,
+      JSON.stringify(plain.payload));
+    check('不勾 scrubNames：那条旧的还在（反面尺子）',
+      Boolean((await hgetall(NAMES))['scrubme@example.com']));
+  }
   delete process.env.ADMIN_TOKEN;
 }
 

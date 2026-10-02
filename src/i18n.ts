@@ -111,6 +111,8 @@ export interface I18nStrings {
   rankLockedCta: string;
   rankSignedOut: string;
   rankEmpty: string;
+  /** 榜上没取过名字的那一行。见 engine/cloudScores.ts 的 leaderboardName。 */
+  rankAnon: string;
   rankLoading: string;
   rankExpired: string;
   rankReLogin: string;
@@ -722,6 +724,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: 'Become a Slides Genius',
     rankSignedOut: 'Sign in and your runs go on the board',
     rankEmpty: 'Nobody on this board yet',
+    rankAnon: 'Anonymous player',
     rankLoading: 'Loading…',
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
     rankReLogin: 'Sign in again',
@@ -1045,6 +1048,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: 'Devenir un Slides Génie',
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
     rankEmpty: 'Personne à ce classement pour l’instant',
+    rankAnon: 'Joueur anonyme',
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
@@ -1368,6 +1372,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: '成為 Slides 天才',
     rankSignedOut: '登入之後，你的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
+    rankAnon: '匿名玩家',
     rankLoading: '載入中…',
     rankExpired: '登入已過期，重新登入後成績才會上榜',
     rankReLogin: '重新登入',
@@ -1691,6 +1696,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: '成为 Slides 天才',
     rankSignedOut: '登录之后，你的成绩才会上榜',
     rankEmpty: '这张榜上还没有人',
+    rankAnon: '匿名玩家',
     rankLoading: '加载中…',
     rankExpired: '登录已过期，重新登录后成绩才会上榜',
     rankReLogin: '重新登录',

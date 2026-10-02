@@ -219,7 +219,14 @@ export function renderRecordsPage(
   // 六个母标签和它们旗下的子标签，而站在这儿的人想知道的也就「榜上头几个是
   // 谁」。点开才是完整的那几张榜。
   mountBoardThumb(ranks, lang);
-  // 排行榜是活的：每次点开都重新去问，而不是把上一次的结果留在手上。
+  /*
+   * 排行榜是活的：每次点开都重新去问。
+   *
+   * 「重新去问」从 2026-10-02 起多了两层，都在 ui/leaderboard.ts 里（那个文件顶上写了为
+   * 什么）：手上有一份十秒内的就先画出来再去拉（来回点标签不闪），看着这一屏的时候每三
+   * 十秒自己拉一次。缓存只在内存里，关掉标签页就没了——一张榜是别人的东西，不该留到下次
+   * 打开网页。
+   */
   ranks.addEventListener('click', () => {
     const big = document.createElement('div');
     big.className = 'records-panel records-panel--ranks records-panel--big';

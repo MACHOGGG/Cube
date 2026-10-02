@@ -238,6 +238,71 @@ const cleanBoard = (v) => (BOARD_RE.test(String(v || '')) ? String(v) : '');
 const CTRL_RE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\u202a-\u202e\ufeff]/g;
 const cleanName = (v) => String(v ?? '').replace(CTRL_RE, '').trim().slice(0, 12);
 
+/**
+ * 名字这件事的版本号。客户端跟着每一局报上来（`nameV`，见 engine/cloudScores.ts 的
+ * NAME_V）：到了 2 就表示「这个名字是玩家自己敲的」，而不是从他的凭据里猜出来的。
+ */
+const NAME_V = 2;
+
+/** 第一串被截成 12 位之后长什么样。PAIR_RE 是 8–64 位字母数字，截完就是 8–12 位。 */
+const HANDLE_SHAPED = /^[A-Za-z0-9]{8,12}$/;
+
+/**
+ * 这个名字**长得像一份凭据**吗（#2，2026-10-02）。
+ *
+ * ── 那次泄露 ──────────────────────────────────────────────────
+ *
+ * `engine/cloudScores.ts` 的 `leaderboardName()` 从前在玩家没取名字时拿他的登录凭据
+ * 顶上：免邮箱账号印第一串的前 12 位，邮箱账号印 `邮箱.split('@')[0]` 的前 12 位。两样
+ * 都被摆到一张**公开**的榜上，而玩家没做任何选择、也完全不知道。
+ *
+ * 第一串那一种更糟：它**就是那把钥匙**（api/handle.js 顶上写着，知道第一串的人凭
+ * `reset` 就能接管那个账号）。所以那不只是隐私，是把账号挂了出去。
+ *
+ * ── 为什么服务端也要判一遍 ────────────────────────────────────
+ *
+ * 客户端那一头已经改了（只报玩家自己敲的名字），可**旧版本的包还在外面跑**：装着旧
+ * App 的手机、没刷新的那个标签页、小红书里那一份。它们照旧会把凭据报上来，而那一份名
+ * 字会被存进 `lbnames`、然后出现在每一张榜上。所以这儿不信客户端：
+ *
+ *   · `nameV >= 2` —— 新客户端报的，玩家真敲过。**照存**（哪怕它正好长得像第一串：
+ *     那是他自己取的名字）。
+ *   · 没有 nameV —— 旧客户端。名字长得像凭据就**不存、也不显示**。
+ *
+ * ── 认哪两种形状 ──────────────────────────────────────────────
+ *
+ *   · `hdl:` 开头的 id（免邮箱账号）＋ 名字是 8–12 位字母数字 → 像第一串。
+ *   · 名字正好等于这个邮箱 @ 前面那一截的前 12 位 → 像邮箱。
+ *
+ * 两条都会误伤一些**真的**昵称（一个邮箱叫 `panda@x.com`、昵称也取 `panda` 的人，名
+ * 字会被当成泄露）。这是故意选的方向：误删一个昵称的代价是榜上那一行变成「匿名玩家」，
+ * 而漏掉一个的代价是把一把钥匙挂在公开页面上。而且新客户端报上来的那一份带着 `nameV`，
+ * 不受这两条管——所以那个人下次打一局，他的昵称就回来了。
+ */
+function leakShaped(id, name) {
+  const who = String(id || '');
+  const n = String(name || '');
+  if (!n) return false;
+  if (who.startsWith('hdl:') && HANDLE_SHAPED.test(n)) return true;
+  const at = who.indexOf('@');
+  if (at > 0 && n === who.slice(0, at).slice(0, 12)) return true;
+  return false;
+}
+
+/**
+ * 这一行榜上该印的名字。
+ *
+ * 读的时候再过一遍 `leakShaped`，不只在写的时候拦——因为**库里躺着的旧条目要到管理员
+ * 跑一次 `rebuild { scrubNames: true }` 才清掉**，而那是手动的一次操作。在那之前每一张
+ * 榜都在把它们印出来。两头都拦，才是「从这一刻起榜上看不到」。
+ */
+function shownName(id, row) {
+  const name = String(row?.name || '');
+  if (!name) return '';
+  if (Number(row?.v) >= NAME_V) return name;
+  return leakShaped(id, name) ? '' : name;
+}
+
 const num = (v, cap = MAX_SCORE) => {
   const n = Math.round(Number(v) || 0);
   return n > 0 ? Math.min(n, cap) : 0;
@@ -352,7 +417,14 @@ async function push(res, body, who) {
     list.unshift({ runId, mode, score, at: Date.now(), data: body?.data ?? null });
     await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
 
-    if (name) await hset(NAMES, who.id, { name, avatar: body?.avatar ?? null });
+    /*
+     * 名字：新客户端报的照存，旧客户端报的要先不像一份凭据（见 leakShaped 那一段）。
+     * 存下来的一律带 `v`，意思是「这一条过过闸」——读的时候靠它短路，免得每画一张榜都
+     * 把两条正则跑五十遍。
+     */
+    if (name && (Number(body?.nameV) >= NAME_V || !leakShaped(who.id, name))) {
+      await hset(NAMES, who.id, { name, avatar: body?.avatar ?? null, v: NAME_V });
+    }
 
     // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
     // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
@@ -465,7 +537,7 @@ async function board(res, body, who, claim) {
       rows: rows.slice(0, TOP_N).map((row, i) => ({
         rank: i + 1,
         score: row.score,
-        name: names[row.member]?.name || '',
+        name: shownName(row.member, names[row.member]),
         avatar: names[row.member]?.avatar ?? null,
         me: row.member === who.id,
         // 母榜上几块棋盘混在一起，所以每一行也画个小图形说明是哪一块。
@@ -492,7 +564,7 @@ async function board(res, body, who, claim) {
   const rows = top.map((row, i) => ({
     rank: i + 1,
     score: row.score,
-    name: names[row.member]?.name || '',
+    name: shownName(row.member, names[row.member]),
     avatar: names[row.member]?.avatar ?? null,
     me: row.member === who.id,
     // 总榜每一行是哪块棋盘的那一局（单局榜不用说，就是这一块）。存的是榜的
@@ -587,6 +659,20 @@ async function rebuild(req, res, body) {
    */
   const wipeAll = body?.all === true;
   /**
+   * 把库里那些**长得像凭据**的旧名字清掉（#2，见 leakShaped）。
+   *
+   * 这件事只有管理员手动跑一次：那些条目是旧客户端存进去的，没有任何自动的时机能认出
+   * 「该清了」。读榜那一头已经在过滤它们了（`shownName`），所以这一步不是为了「榜上别
+   * 印」——那已经做到了——而是为了**库里别留着**。一份存着的凭据和一份印出来的凭据，前
+   * 者只是还没被人看见。
+   *
+   * ⚠️ **回包里一个名字都不许有，只回删了几条。** 这个接口的回包是会被贴进工单、贴进对
+   * 话的（它就是给人看的那种维护接口），而要清的东西恰恰是凭据——把它们列出来等于把这
+   * 次清理变成一次泄露。`v >= NAME_V` 的那些不动：那是玩家自己敲的昵称，哪怕它正好长得
+   * 像第一串。
+   */
+  const scrubNames = body?.scrubNames === true;
+  /**
    * 点名要 drop 的那几种，**它们的榜也要撤干净——包括已经归档的那几张**。
    *
    * `ALL_BOARDS` 只有现行的 kind（`KINDS`），而改过规则的老档位（`…:bomb`、
@@ -603,6 +689,16 @@ async function rebuild(req, res, body) {
   // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
   const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
   const ids = new Set([...ranked.map((row) => row.member), ...Object.keys(names || {})]);
+
+  let namesDropped = 0;
+  if (scrubNames) {
+    for (const [id, row] of Object.entries(names || {})) {
+      if (!row || Number(row.v) >= NAME_V) continue;
+      if (!leakShaped(id, row.name)) continue;
+      await hdel(NAMES, id);
+      namesDropped++;
+    }
+  }
 
   let players = 0;
   let rowsWritten = 0;
@@ -672,6 +768,8 @@ async function rebuild(req, res, body) {
     skipped: skipped.length,
     dropped: [...drop],
     wiped: wipeAll,
+    // 只有一个数（理由见 scrubNames 那一段：这个回包不许带名字）。
+    namesDropped,
   });
 }
 

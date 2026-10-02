@@ -1,5 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
-import { fetchBoard, type BoardPage, type BoardResult } from '../engine/cloudScores';
+import { cachedBoard, fetchBoard, waitForPush, type BoardPage, type BoardResult } from '../engine/cloudScores';
 import { shapeName } from './shapeLabels';
 import { rollOdometer } from '../engine/odometer';
 import { gameIcon } from './homeIcons';
@@ -84,6 +84,17 @@ export function boardGroups(lang: Lang): BoardGroup[] {
 }
 
 /** 一张榜画成的行。自己那一行会被标出来。 */
+/**
+ * 一行一行画出来。
+ *
+ * **名字可以是空的**，而且空是常态：玩家没在小屋里取过名字就没有名字
+ * （engine/cloudScores.ts 的 `leaderboardName`），服务端还会把「长得像凭据」的旧名字
+ * 过滤成空（api/scores.js 的 `shownName`，#2 那次泄露）。空的那一行印「匿名玩家」。
+ *
+ * ⚠️ **不许拿「玩家 + 随机编号」之类的东西填**（玩家 2026-10-02 点名）：那种名字看起来
+ * 像一个人，其实只是一个占位，而同一个人每次刷新可能换一个号——榜上于是多出一堆不存在
+ * 的人。一句「匿名玩家」说的就是实情。
+ */
 function rowsHtml(page: BoardPage, lang: Lang, compact = false): string {
   const s = STRINGS[lang];
   if (!page.rows.length) return `<p class="rank-empty">${s.rankEmpty}</p>`;
@@ -95,7 +106,7 @@ function rowsHtml(page: BoardPage, lang: Lang, compact = false): string {
       (r) => `<div class="rank-row${r.me ? ' rank-row--me' : ''}">
         <span class="rank-place">${r.rank}</span>
         ${r.mode ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.mode, r.mode))}">${gameIcon(r.mode)}</span>` : ''}
-        <span class="rank-name">${esc(r.name)}</span>
+        <span class="rank-name">${esc(r.name || s.rankAnon)}</span>
         <span class="rank-score">${compact ? compactScore(r.score, lang) : r.score}</span>
       </div>`,
     )
@@ -165,11 +176,25 @@ export interface BoardViewOpts {
   onReLogin: () => void;
 }
 
+/** 看着这一屏的时候，隔多久自己去拉一次。 */
+const POLL_MS = 30_000;
+
 /**
  * 把一整块排行榜挂进 host：上面一排玩法切页，下面是榜。
  *
- * 每换一张榜都重新去问服务器——一张榜是活的，缓存下来只会让人看到别人半分钟
- * 前的名次。请求本身很小（前五十行）。
+ * ── 三件和「新不新」有关的事（2026-10-02）────────────────────
+ *
+ * ① **换标签不闪。** 从前每点一下都把列表清成一句「加载中」再等一个网络往返，来回点两
+ *    三下那一屏看着就是在闪。现在手上有一份十秒内的就先画出来，再在后台拉新的盖上去
+ *    （缓存在 engine/cloudScores.ts 的 `cachedBoard`）。头一次点那个标签还是要等——那时
+ *    候屏幕上没有任何**真**的东西可留，拿另一张榜的行顶着更糟。
+ *
+ * ② **看着它的时候每三十秒自己拉一次**，切到后台就停。一张榜是活的，而玩家盯着它看的时
+ *    候恰恰最在意名次有没有变。切到后台停：没人看的那一屏不该一直打服务器
+ *    （Upstash 那边是按次计费的）。
+ *
+ * ③ 这一屏一关就停。靠的是 `host.isConnected`——这块 DOM 被 openCenterPicker 整个移掉的
+ *    那一刻它就是 false，不用往上层接一个 teardown 回调（接了就一定有人忘了调）。
  */
 export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   const s = STRINGS[opts.lang];
@@ -237,11 +262,49 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   const load = async (mode: string) => {
     current = mode;
     const mine = ++generation;
-    body.innerHTML = `<p class="rank-empty">${s.rankLoading}</p>`;
+    // 手上有一份还新鲜的就先画出来（①）。没有才摆「加载中」。
+    const had = cachedBoard(mode || undefined);
+    if (had) paint({ ok: true, page: had });
+    else body.innerHTML = `<p class="rank-empty">${s.rankLoading}</p>`;
     const result = await fetchBoard(mode || undefined);
     if (mine !== generation) return;
+    // 后台这一拉失败了、而屏幕上已经有一张真的榜：**留着它**。把一张看得见的榜换成一句
+    // 「取不到」是在拿一个更差的东西覆盖一个还算对的东西。
+    if (!result.ok && had) return;
     paint(result);
   };
+
+  /**
+   * 定时那一拉（②）。
+   *
+   * 和 `load` 分开写，因为它不许动屏幕上已经有的东西，除非真拿到了新的一份：定时刷新撞
+   * 上一次网络抖动，不该让玩家眼前那张榜变成一句错误。
+   */
+  const poll = async () => {
+    if (!host.isConnected) return;
+    if (document.visibilityState !== 'visible') return;
+    const mode = current;
+    const mine = generation;
+    const result = await fetchBoard(mode || undefined);
+    // 这期间他换了标签、或者这一屏关了：这一份已经不是他在看的那张榜了。
+    if (!host.isConnected || mine !== generation || mode !== current) return;
+    if (result.ok) paint(result);
+  };
+
+  const timer = window.setInterval(() => {
+    // 这一屏被移掉了（openCenterPicker 关掉的那一下）：收摊。
+    if (!host.isConnected) {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onShow);
+      return;
+    }
+    void poll();
+  }, POLL_MS);
+  /** 从后台切回来：别等满三十秒，当场拉一次。 */
+  function onShow(): void {
+    if (document.visibilityState === 'visible') void poll();
+  }
+  document.addEventListener('visibilitychange', onShow);
 
   /** 现在看的这张榜归哪个母标签——退回外面那一排时，高亮的是它。 */
   const ownerOf = (mode: string): BoardGroup | null =>
@@ -297,7 +360,17 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   }
 
   paintTabs();
-  void load('');
+  /**
+   * 开头那一拉**先等刚打完那一局上报落地**，最多两秒（engine/cloudScores.ts 的
+   * `waitForPush`）。
+   *
+   * 不等的话会撞上这一幕：玩家刚刷新了自己的最高分，兴冲冲点开排行榜，上面还是旧名次
+   * ——而那一趟上报多半就在半秒之内落地。屏幕上这期间摆的是「加载中」（这一块的初始
+   * HTML 就是它），所以不多一次闪。
+   *
+   * 没打过局、或者那一趟早就落地了，`waitForPush` 当场返回，这一行什么都不耽误。
+   */
+  void waitForPush().then(() => load(''));
 }
 
 /**
@@ -308,9 +381,16 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
  */
 export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
   const s = STRINGS[lang];
-  host.innerHTML = `<p class="rank-empty">${s.rankLoading}</p>`;
-  void fetchBoard().then((result) => {
+  /** 手上有一份还新鲜的就先画出来，别让这半块牌空着闪一下。 */
+  const had = cachedBoard();
+  host.innerHTML = had
+    ? rowsHtml({ ...had, rows: had.rows.slice(0, THUMB_ROWS) }, lang, true)
+    : `<p class="rank-empty">${s.rankLoading}</p>`;
+  // 和整屏那一块同一个道理：先等刚打完那一局上报落地（最多两秒），再拉。
+  void waitForPush().then(() => fetchBoard()).then((result) => {
     if (!result.ok) {
+      // 拉不到、而牌上已经有一张真的（缓存那一份）：留着它，别换成一句错误。
+      if (had) return;
       if (result.reason === 'geniusOnly') {
         // 灰杠的宽度在 45/60/75 三档里轮着来。原先写的是 45 + i*15，三行的时候
         // 刚好停在 75；现在摆五行，第五行会算成 105%，那条杠要顶出牌子。
