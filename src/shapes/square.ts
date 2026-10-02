@@ -1,4 +1,5 @@
 import { buildShell } from '../ui/gameShell';
+import { applyDevDeal, devDealFor } from '../engine/devDeal';
 import { createGameController } from '../engine/gameController';
 import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
@@ -829,6 +830,18 @@ export function createSquareGame(): ShapeGame {
         // 计数那一层已经说死了就不用再算——它只会偏松（说活），不会偏紧。
         if (counted.length) return counted;
         /*
+         * ⚠️ **老虎机那一局先不走穷举**（2026-10-02）。
+         *
+         * 穷举件判的是「有没有办法凑出一条同色 1×N」（engine/residueSearch.ts 的
+         * `matchLen` + `bonusLines`），而老虎机要凑的是**转出来的那个形状**——两件事。拿
+         * 1×N 那把尺子去量一局老虎机，它会说「凑不出 1×N」，于是把一局明明还能打的棋判
+         * 死：玩家正要去拼那个形状，局自己结束了。
+         *
+         * 所以这一局只留计数那一层（它的门槛已经按 `targetNeed()` 收过了）。等穷举件也认得
+         * 目标形状之后再放开——那是下一推（E33）的事。
+         */
+        if (target) return [];
+        /*
          * 计数说活，**可它从不看几何**（engine/stalemate.ts 开头那段）：「数量够、摆法
          * 永远到不了」的残局会被一直判活，玩家报过——剩几枚怎么滑都不得分，局却不结束。
          *
@@ -905,6 +918,16 @@ export function createSquareGame(): ShapeGame {
         rows = BOARD_DIM;
         cols = BOARD_DIM;
         grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
+        /*
+         * 开发时手摆的那副牌（`engine/devDeal.ts`）。**正式包里这一句整段不存在**
+         * （`import.meta.env.DEV` 是构建时常量，Vite 把它摇掉）。
+         *
+         * 摆在 `generateCleanBoard()` **之后**：发牌那一套该跑的照旧跑一遍（颜色配额、
+         * 开局不许有现成的得分组、三角那一副的朝向配平……），手摆的只是盖在上面。少
+         * 写的那几格原样留着发出来的牌，所以一副写一半的 devDeal 不会把棋盘弄坏。
+         */
+        const dealt = devDealFor('square');
+        if (dealt) applyDevDeal(grid, dealt, BLANK);
         outlineTracker.reset();
         stuckKeys = null;
       }

@@ -466,13 +466,21 @@ jobs:
           node scripts/check-privacy-truth.mjs /tmp/legal.mjs
       # 残局穷举的**接线层**：六副棋盘把自己的线和格子交给搜索件，编码错一点它就在算另
       # 一副棋盘，而且会言之凿凿地答 'dead'——那一侧会把一局还能打的棋盘 1.4 秒直接结
-      # 算。三件真会接错的事各有一条：空白和活炸弹要进盘面（它们跟着线一起滑，而
-      # liveTiles() 把它们排除在外）、不在盘上的格子不许占位、「可用 ≤16 枚」数的是非空
-      # 白那几枚（按总格数数的话这个兜底在五副外边族上永远不会触发）。
+      # 算。三件真会接错的事各有一条：活炸弹要进盘面（它占着一格、跟着线一起滑，而
+      # liveTiles() 把它排除在外）、不在盘上的格子不许占位、「可用 ≤16 枚」数的是非
+      # RESIDUE_BLANK 那几枚。
+      # ⚠️ 这段话 2026-10-02 之前写的是「空白也跟着线一起滑」。那是星星消除那个年代的事：
+      # 外边族自 PR-3 起是「削掉的格子离场」，空白压根不进线，而那句错着的注释底下躺了一
+      # 个多月的错接线（五副棋盘的 residueAt 把空白编成「跟着滑的无色球」），每一道门都
+      # 绿。
+      # 第二份打包是给【7】【8】用的：那两节拿**真的小球线**做 fixture，再用一个不设预算的
+      # 精确搜索当对照（活局误判必须是 0，死局检出 ≥ 80%）。判「这个盘面得不得分」用的是
+      # residueSearch.ts 自己导出的 scoresNow——门拿它当尺子，不另抄一份判定。
       - name: 残局穷举：喂进去的那副盘面对不对
         run: |
-          npx esbuild src/engine/residueBoard.ts --bundle --format=esm --outfile=/tmp/resboard.mjs
-          node scripts/check-residue-board.mjs /tmp/resboard.mjs
+          npx esbuild src/engine/residueBoard.ts  --bundle --format=esm --outfile=/tmp/resboard.mjs
+          npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/ressearch.mjs
+          node scripts/check-residue-board.mjs /tmp/resboard.mjs /tmp/ressearch.mjs
       # 上面两道守的都是**零件**（搜索件答得对不对、喂进去的盘面对不对），没有人守**调用
       # 点**——而调用点是同一段话抄了五遍（五副外边族棋盘），这个仓库为「同一件事手写了
       # 十六遍」写过一整篇文件头注释，知道这种东西怎么烂：改一处、漏四处，全都不报错。

@@ -54,7 +54,7 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 没有 npm test，也没有测试框架。**这些门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
-数目：`scripts/` 下 133 个，`xhs/` 下另有 7 个（小红书那一版专用）。这个数一直
+数目：`scripts/` 下 136 个，`xhs/` 下另有 7 个（小红书那一版专用）。这个数一直
 在涨，所以别在别处再抄一遍——要用就当场 `ls scripts/check-*.mjs | wc -l`。
 
 三类，跑法不同：
@@ -80,14 +80,27 @@ CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**：
   器，所以留在这一条里。⚠️ 起完之后那句探活要探 **/**，不要探某个接口：原先探的是
   `/api/slots`，而那个接口随名额一起删了（E39），于是 `curl -sf` 永远 404、循环空等 30
   秒、后面那句硬探必败——**整步在跑到被测的那个门之前就红了，而它红了一个多月没人发现**。
-- `browser` —— 装 Chromium、起 dev-server，目前收四道：`check-mode-axis`、
-  `check-menu`、`check-overlap`、`check-board-fit`。都是最近真的拦下过回归的。
+- `browser` —— 装 Chromium、起 dev-server，目前收 21 道（主菜单那几屏、棋子在不在
+  底板里、天才特供页、教学配图、两扇窗的三态、电脑端那两页……）。这个数和上面那个
+  一样在涨，**别在这儿抄名单**，要看就读 ci.yml 里 `browser` 那个 job。每一道都是
+  真的拦下过回归的。
   一门一台服务器、一人一个端口，起完用一个有界的 curl 循环等它真的起来（盲等固定
   秒数在 CI 上会出偶发红，而偶发红最后一定会被人加 `continue-on-error`）。
   **小红书那几道还没收**：`check-oldcss` 有一条先前就存在的横屏红（横屏 844×390 的
   主菜单走 `.home-row` 宽版排布，降级层那边盒子差 69px）。带着一条红进 CI 比不收更糟。
 
 要等真实超时的（`check-room-total` 那种 sleep 95 秒的）仍然只在本地手跑。
+
+**`scripts/check-residue-live.mjs` 要的是 `npx vite` 的开发服务器，不是 `dist`**，所以它也
+只能手跑（CI 里那几道浏览器门起的都是 `node scripts/dev-server.mjs … dist`）。它手摆一副残
+局，量「该结算的真的结算了、该活的没被掐掉」——手摆那个入口藏在 `import.meta.env.DEV` 后
+面，正式包里整段被摇掉（见 `src/engine/devDeal.ts`：一个能手摆盘面的入口在线上等于一个作
+弊器，而排行榜是真的）。
+
+```bash
+npx vite --port 8951 --strictPort &
+node scripts/check-residue-live.mjs http://localhost:8951/
+```
 
 **`scripts/bot-selfcheck.mjs` 是自检机器人，也只在本地手跑。** 它真开一局、真滑，用
 一步贪心（要看第二层）一直打到这一局自己收场，只读屏幕上有的东西（每一枚的位置 / 面 /

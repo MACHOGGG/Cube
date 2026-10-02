@@ -1,4 +1,5 @@
 import { buildShell } from '../ui/gameShell';
+import { applyDevDeal, devDealFor } from '../engine/devDeal';
 import { createGameController } from '../engine/gameController';
 import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
@@ -961,16 +962,32 @@ export function createCircleGame(): ShapeGame {
        */
 
       /**
-       * 残局穷举要的那一份盘面（engine/residueBoard.ts）。
+       * 这一格此刻是什么，喂给残局穷举（engine/residueBoard.ts）。
        *
-       * 和 `liveTiles()` **不是同一份**，这一点最容易接错：那一份把空白和活炸弹排除在外
-       * （它是给计分和计数用的），可这两样都是**跟着线一起滑**的——漏掉它们，穷举算的就
-       * 是另一副棋盘。所以这儿一格不少，只是把它们编成「配不上任何颜色」。
+       * 和 `liveTiles()` **不是同一份**，这一点最容易接错：那一份把空白和活炸弹都排除在外
+       * （它是给计分和计数用的）。可**这两样在这儿的待遇不一样**，下面两段分别说。
+       *
+       * ⚠️ **空白回 `null`，不是 `'blank'`**（2026-10-02 修）。
+       *
+       * `null` 的意思是「不在盘上：不占位置、不参与滑动」，而这正是外边族消掉的格子此刻的
+       * 样子——滑动是在 `liveOnLine()` 那一串上做循环移位（见 applyDrag），**被削掉的格子
+       * 已经不在那串里了**，剩下的球首尾相接，整条线变短。
+       *
+       * 从前这儿回 `'blank'`（「占着位置、跟着线一起滑的无色球」）。那是星星消除那个年代的
+       * 事：那时候消掉的球原地变成一枚无色球，确实照样滑。《侵蚀阶梯》PR-3 把外边族改成
+       * 「削掉的格子离场」之后，这一句就在**拿一副不存在的棋盘喂给穷举**——线长不对，循环
+       * 位移算出来的排列整个不对。于是它既会算出真实棋盘到不了的得分（该判死的判活），也会
+       * 漏掉真实棋盘到得了的（该判活的判死），而两种都只是「局不结束」或者「局突然结束」，
+       * 屏幕上一个字都不报。
+       *
+       * **活炸弹照旧回 `'blank'`**：它真的占着一格、真的跟着线滑，只是配不上任何颜色。
+       * 漏掉它（像 `liveTiles()` 那样）穷举算的就又是另一副棋盘了。
        */
       const residueAt = (r: number, c: number) => {
         const t = grid[r]?.[c];
         if (!t) return null;
-        if (isBlank(t) || liveBomb(t)) return 'blank' as const;
+        if (isBlank(t)) return null;
+        if (liveBomb(t)) return 'blank' as const;
         return { color: effColor(t), dot: t.face === 'dot' };
       };
 
@@ -981,6 +998,18 @@ export function createCircleGame(): ShapeGame {
         const counted = findStuckColorGroups(live, need, edge || NO_EDGE);
         // 计数那一层已经说死了就不用再算——它只会偏松（说活），不会偏紧。
         if (counted.length) return counted;
+        /*
+         * ⚠️ **老虎机那一局先不走穷举**（2026-10-02）。
+         *
+         * 穷举件判的是「有没有办法凑出一条同色 1×N」（engine/residueSearch.ts 的
+         * `matchLen` + `bonusLines`），而老虎机要凑的是**转出来的那个形状**——两件事。拿
+         * 1×N 那把尺子去量一局老虎机，它会说「凑不出 1×N」，于是把一局明明还能打的棋判
+         * 死：玩家正要去拼那个形状，局自己结束了。
+         *
+         * 所以这一局只留计数那一层（它的门槛已经按 `targetNeed()` 收过了）。等穷举件也认得
+         * 目标形状之后再放开——那是下一推（E33）的事。
+         */
+        if (target) return [];
         /*
          * 计数说活，**可它从不看几何**（engine/stalemate.ts 开头那段）：「数量够、摆法
          * 永远到不了」的残局会被一直判活，玩家报过——剩几枚怎么滑都不得分，局却不结束。
@@ -1052,6 +1081,16 @@ export function createCircleGame(): ShapeGame {
 
       function resetBoard() {
         grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
+        /*
+         * 开发时手摆的那副牌（`engine/devDeal.ts`）。**正式包里这一句整段不存在**
+         * （`import.meta.env.DEV` 是构建时常量，Vite 把它摇掉）。
+         *
+         * 摆在 `generateCleanBoard()` **之后**：发牌那一套该跑的照旧跑一遍（颜色配额、
+         * 开局不许有现成的得分组、三角那一副的朝向配平……），手摆的只是盖在上面。少
+         * 写的那几格原样留着发出来的牌，所以一副写一半的 devDeal 不会把棋盘弄坏。
+         */
+        const dealt = devDealFor('circle');
+        if (dealt) applyDevDeal(grid, dealt, BLANK);
         bonusedSignatures = new Set();
         outlineTracker.reset();
         stuckKeys = null;

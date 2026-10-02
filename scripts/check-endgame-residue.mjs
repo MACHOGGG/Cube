@@ -175,19 +175,22 @@ function countingSaysAlive(tiles, minMatch, lineMin) {
   check('②（对照尺子）计数那一层说活', alive === true, String(alive));
 }
 
-// ③ 同色星星够填一条 3 枚的外边，可那条线上永远混着一枚空白球（消过的那一枚，
-//    它照样滑，所以永远赶不走）。
+// ③ 同色星星够填一条 3 枚的外边，可那条线上永远混着一枚 RESIDUE_BLANK——现实里那是一枚
+//    **活炸弹**（它占着一格、跟着线滑，可配不上任何颜色，所以永远赶不走）。
+//    ⚠️ 这儿从前写的是「一枚消过的空白球」。2026-10-02 起外边族的空白**压根不进线**（见
+//    residueSearch.ts 顶上 RESIDUE_BLANK 那段），所以这副盘面现实里的来处换成了活炸弹。
+//    被测的东西一个字没动：线上插着一枚配不上色的格子时，整线消除走不通。
 {
   const lines = [[0, 1, 2, 3]];
   const start = u16([Ad, Ad, Ad, RESIDUE_BLANK]);
   const v = residueSearch({
     start, moves: cyclicShuffles(lines), scanLines: lines, matchLen: 4,
-    // 这条线此刻的**活格**是三枚星星（空白球不算活格，见 outerEdge 的 isLive）——
+    // 这条线此刻的**活格**是三枚星星（配不上色的那一格不算活格，见 outerEdge 的 isLive）——
     // 可它们在线上不连续，整线消除要的是「这条线上的活格整条同色星星」，
-    // 而那枚空白永远插在中间某处。
+    // 而那一枚永远插在中间某处。
     bonusLines: [{ cells: [0, 1, 2, 3], need: 3 }],
   });
-  check('③ 三颗同色星星 + 一枚赶不走的空白球：穷举说死', v === 'dead', v);
+  check('③ 三颗同色星星 + 一枚赶不走的活炸弹：穷举说死', v === 'dead', v);
   const alive = countingSaysAlive(
     [{ color: 1, dot: true }, { color: 1, dot: true }, { color: 1, dot: true }],
     4, 3,

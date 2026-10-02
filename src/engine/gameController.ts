@@ -366,7 +366,28 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         el.textContent = formatClock(remaining);
         el.classList.toggle('timer-pill--low', remaining <= TIMER_LOW_SEC);
       }
-      if (remaining <= 0 && !gameOver) endGame('时间到');
+      /*
+       * 钟响的那一刻，**连锁可能还在一拍一拍地走**（#18）。
+       *
+       * 从前这儿直接 `endGame`，于是那几拍再也不会跑：玩家最后一滑引出的那串消除、它带的
+       * 分、它可能引出的降级，全都停在半空中。结算页上写的是「时间到」加一个比他眼睛看到
+       * 的要小的数——而他明明看见那串消除正在发生。更难看的一种：最后一滑刚好把盘清空，本
+       * 该是「全部消完了」，结果被判成「时间到」。
+       *
+       * 所以先 `hurry()` 把剩下的拍子一次跑完（它自己是有界的，见那个函数），再结算。
+       *
+       * ⚠️ **第二道 `!gameOver` 不能省。** `hurry()` 跑的那几拍自己就会结算——盘清空了、或
+       * 者判出死局。省掉的话这一局会被结算两遍，而第二遍写的是「时间到」，把第一遍那个正确
+       * 的理由盖掉。
+       *
+       * ⚠️ **也不要把 `hurry()` 挪进 `endGame()`。** `endGame` 正是那几拍自己会调的东西，
+       * 挪进去就是 `endGame → hurry → 某一拍 → endGame`，一个会把栈打穿的环。这一句只属于
+       * 「钟响了」这一条路：它是唯一一个**从外面**打断连锁的结算理由。
+       */
+      if (remaining <= 0 && !gameOver) {
+        hurry();
+        if (!gameOver) endGame('时间到');
+      }
       return;
     }
     if (el) el.textContent = formatClock(sec);
