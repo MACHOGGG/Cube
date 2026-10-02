@@ -14,6 +14,14 @@
  * The window listeners stay as a backstop for the browsers without one and
  * for changes that don't resize the panel at all.
  */
+/**
+ * 最后一次 `fitFloor` 给这块地板压上的尺寸。
+ *
+ * `observeBoardSize` 要它来认出「这一次尺寸变化是我们自己干的」——见那儿那段 ⚠️。
+ * 用 WeakMap 而不是 dataset：这是两个函数之间的私事，不该挂到 DOM 上让别人读到。
+ */
+const imposed = new WeakMap<HTMLElement, { w: number; h: number }>();
+
 export function observeBoardSize(el: HTMLElement, redraw: () => void): () => void {
   // 装地板的那一格。它的高宽是屏幕定的（.app--game 是 min-height 和
   // max-height 都写死 100dvh 的一整屏），所以它变了就是屏幕变了，而且它不会
@@ -50,6 +58,37 @@ export function observeBoardSize(el: HTMLElement, redraw: () => void): () => voi
       nvw === vw &&
       nvh === vh
     ) {
+      return;
+    }
+    /*
+     * ⚠️ **地板自己的尺寸变了，而那一格和屏幕都没动——那就是我们自己刚压上去的。**
+     *
+     * 排完版 `fitFloor` 会把地板钉成贴着棋盘的那个框。要是这一轮排版**不是这个
+     * ResizeObserver 叫起来的**（方块消掉一行、外边族削掉一条，都是连锁那条路直接调
+     * `render()`），基准线就没人更新，于是下一帧 ResizeObserver 认为「尺寸变了」，白白
+     * 再排一遍版。
+     *
+     * 白排一遍不只是浪费：**它会把刚挂上去的动画整个拆掉**。方块消行那段收拢
+     * （`playCollapseTransition`）是在 `render()` 之后给每一枚挂 transform 和替身的，多
+     * 出来的这一次 `render()` 把它们连根拔了——屏幕上就是「棋子不滑，直接吸附过去」。玩家
+     * 报过这件事，而它只在**消掉的那一行让地板换了形状**时出现（6×6 → 6×5 那一下地板从
+     * 362×362 收成 362×302），所以一直看着像偶发。
+     *
+     * 认法是精确的，不是猜的：只有和 `fitFloor` 上一次压上去的那个尺寸**一模一样**才算我
+     * 们自己干的。别人改地板（样式变了、字体加载完）照旧重排。
+     */
+    const mine = imposed.get(el);
+    if (
+      mine &&
+      Math.abs(r.width - mine.w) < 0.5 &&
+      Math.abs(r.height - mine.h) < 0.5 &&
+      Math.abs(ncw - cw) < 0.5 &&
+      Math.abs(nch - ch) < 0.5 &&
+      nvw === vw &&
+      nvh === vh
+    ) {
+      w = r.width;
+      h = r.height;
       return;
     }
     cw = ncw;
@@ -337,6 +376,9 @@ export function fitFloor(wrap: HTMLElement, boardW: number, boardH: number): voi
   wrap.style.height = h + 'px';
   wrap.style.flex = '0 0 auto';
   wrap.style.margin = 'auto';
+  // 记下来：ResizeObserver 下一帧会看到这个尺寸，得认出它是我们自己压的，别再排一遍版
+  // （那一遍会把刚挂上的消行动画拆掉，见 observeBoardSize 里那段 ⚠️）。
+  imposed.set(wrap, { w, h });
   // 收掉的那一圈，告诉样式表：地板缩了，可按的地方不能跟着缩。
   //
   // 拖拽是听在地板这个元素上的（engine/drag.ts 的 attachDrag(refs.boardWrap)），

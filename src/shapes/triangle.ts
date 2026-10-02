@@ -6,6 +6,8 @@ import { attachDrag, magnetizeFollow } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
+import { fitLive, type Fit, type FitBox } from '../engine/liveFit';
+import { createBoardZoom } from '../ui/boardZoom';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -369,6 +371,11 @@ export function createTriangleGame(): ShapeGame {
         H = 0,
         originX = 0,
         originY = 0;
+      /** 这一帧的「放大多少、锚在哪儿」（`engine/liveFit.ts`）。 */
+      let fit: Fit = { zoom: 1, unit: 0, originX: 0, originY: 0 };
+      /** 「剩下的部分长大了」那一下动画（`ui/boardZoom.ts`，五副外边族共用）。 */
+      const zoom = createBoardZoom(refs.boardEl, () =>
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
@@ -628,34 +635,101 @@ export function createTriangleGame(): ShapeGame {
         return { i: r + GLOBAL_ROW_OFFSET, p: c + LEFT_TRIM[r] };
       }
 
-      function triGeometry(r: number, c: number): { up: boolean; pts: [number, number][] } {
+      /**
+       * 一枚三角的三个顶点。**边长和行高收成参数**，不是直接读闭包里的 `S` / `H`。
+       *
+       * 抽出来只为一件事：外接框要按「一个 S」这把尺算一遍（放大那一套要它，见
+       * engine/liveFit.ts），而那时候的 `S` 是这一帧真正要用的那个，不能拿来当尺。
+       */
+      function triGeometryAt(
+        r: number, c: number, s: number, h: number,
+      ): { up: boolean; pts: [number, number][] } {
         const { i, p } = globalPos(r, c);
         const up = p % 2 === 0;
         const j = up ? p / 2 : (p - 1) / 2;
-        const xBase = (-i * S) / 2 + j * S;
+        const xBase = (-i * s) / 2 + j * s;
         if (up) {
-          const A: [number, number] = [xBase, i * H];
-          const B: [number, number] = [xBase - S / 2, (i + 1) * H];
-          const C: [number, number] = [xBase + S / 2, (i + 1) * H];
+          const A: [number, number] = [xBase, i * h];
+          const B: [number, number] = [xBase - s / 2, (i + 1) * h];
+          const C: [number, number] = [xBase + s / 2, (i + 1) * h];
           return { up: true, pts: [A, B, C] };
         }
-        const A: [number, number] = [xBase + S / 2, (i + 1) * H];
-        const B: [number, number] = [xBase, i * H];
-        const C: [number, number] = [xBase + S, i * H];
+        const A: [number, number] = [xBase + s / 2, (i + 1) * h];
+        const B: [number, number] = [xBase, i * h];
+        const C: [number, number] = [xBase + s, i * h];
         return { up: false, pts: [A, B, C] };
+      }
+
+      function triGeometry(r: number, c: number): { up: boolean; pts: [number, number][] } {
+        return triGeometryAt(r, c, S, H);
+      }
+
+      /*
+       * ── 「换算成一个 S」之后，一枚三角占哪一块 ─────────────────────
+       *
+       * 别的四副收的是「中心 ± 半个棋子」，这一副直接收**三个顶点**——三角的外接框和中心
+       * 差着一截（朝上朝下还不一样），按中心加减半格算会差半格，而半格在这副盘上看得见。
+       */
+      function boxOf(cells: readonly Cell[]): FitBox | null {
+        if (!cells.length) return null;
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const [r, c] of cells) {
+          for (const [x, y] of triGeometryAt(r, c, 1, Math.sqrt(3) / 2).pts) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { x: { min: x0, max: x1 }, y: { min: y0, max: y1 } };
       }
 
       function centroid(pts: [number, number][]): [number, number] {
         return [(pts[0][0] + pts[1][0] + pts[2][0]) / 3, (pts[0][1] + pts[1][1] + pts[2][1]) / 3];
       }
 
+      /** 整副棋盘（每一格都还在）的外接框——zoom 的基准，开局 zoom 正好 1。 */
+      const FULL_BOX = (() => {
+        const all: Cell[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) all.push([r, c]);
+        return boxOf(all)!;
+      })();
+      /** 此刻还在盘上的那些格子（削掉离场的不算，《侵蚀阶梯》v1.2 §3）。 */
+      function liveBox(): FitBox | null {
+        const cells: Cell[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++)
+            if (grid[r]?.[c] && !isBlank(grid[r][c])) cells.push([r, c]);
+        return boxOf(cells);
+      }
+
       function layoutBoard() {
         const rect = floorBox(refs.boardWrap);
         const boardSize = Math.min(rect.width, rect.height);
-        S = boardSize / 6.4;
+        // 手上压着的放大变换是按上一套数算的，底板或者活格框一变就不作数了。
+        zoom.cancel();
+        /*
+         * 消除之后剩下的部分整体放大（玩家 2026-10 推翻 PR-3 的「棋盘一圈圈变小」，见
+         * engine/liveFit.ts）。
+         *
+         * ⚠️ 老式那两行原样留着当锚点，**`GLOBAL_ROW_OFFSET * H` 那一项也在里头**。那是
+         * 这副棋盘有意偏的半格（局部 7 行只占大三角的中间一截），照底板居中会把它抹掉，
+         * 而 `fitLive` 收老锚点正是为了这个。
+         */
+        const S0 = boardSize / 6.4;
+        const H0 = (S0 * Math.sqrt(3)) / 2;
+        fit = fitLive({
+          full: FULL_BOX,
+          live: liveBox(),
+          unit0: S0,
+          originX0: boardSize / 2,
+          originY0: (boardSize - 6 * H0) / 2 - GLOBAL_ROW_OFFSET * H0,
+        });
+        S = fit.unit;
         H = (S * Math.sqrt(3)) / 2;
-        originX = boardSize / 2;
-        originY = (boardSize - 6 * H) / 2 - GLOBAL_ROW_OFFSET * H;
+        originX = fit.originX;
+        originY = fit.originY;
         refs.boardEl.style.width = boardSize + 'px';
         refs.boardEl.style.height = boardSize + 'px';
              // 图形已经按整格算满了，地板收成正方形不会动到它。
@@ -1307,7 +1381,11 @@ export function createTriangleGame(): ShapeGame {
         // — played in onCascadeStepRendered since the ghost must be
         // appended *after* this step's own render() or that render() would
         // wipe it.
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
+        onCascadeStep: ({ matchGroups }) => {
+          // 这一拍还没 render()，`fit` 还是玩家此刻看到的那一帧——记下来（见 ui/boardZoom.ts）。
+          zoom.mark(fit);
+          outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS);
+        },
         // 按快照有没有东西判断，不按「这一拍有没有整行奖励」——整组星星得分也会
         // 往快照里塞东西，而它走的是 matchGroups 那条路。两个列表都传进去，
         // playBlankTransition 自己会跳过快照里没有的格子。
@@ -1316,6 +1394,9 @@ export function createTriangleGame(): ShapeGame {
             playBlankTransition([...lineBonusGroups, ...matchGroups], pendingBlankSnapshot);
             pendingBlankSnapshot = new Map();
           }
+          // 这一拍削掉了格子的话，先倒回上一帧的样子，停一下，再长过来。没削掉的那些拍
+          // zoom.play 自己什么都不做。
+          zoom.play(fit);
         },
         onCommit: (matchGroups) => {
           for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
@@ -1578,11 +1659,37 @@ export function createTriangleGame(): ShapeGame {
         return true;
       }
 
+      /**
+       * 手指落下那一刻，棋盘上要是正压着放大动画的那个变换，落点就要往回换算一道。
+       *
+       * `engine/drag.ts` 量的是 `clientX − boardEl.getBoundingClientRect().left`，而那个
+       * rect 是在 `onBeforeStart` **之后**读的——我们在那儿已经把变换摘掉了，于是量出来的是
+       * 「没有变换时的板内坐标」。可玩家按的是**变换之后**画在那儿的那一枚：
+       *
+       *   板内看到的位置 = ax + s × 没有变换时的位置
+       *
+       * 所以反过来除一道。不修的话，放大 2 倍的时候他按哪儿抓到的都是另一枚——而屏幕上只
+       * 看出「这游戏点不准」。
+       */
+      let dragFix: { ax: number; ay: number; s: number } | null = null;
+      const unfix = (x: number, y: number): [number, number] =>
+        dragFix ? [(x - dragFix.ax) / dragFix.s, (y - dragFix.ay) / dragFix.s] : [x, y];
+
       const detachDrag = attachDrag(refs.boardWrap, {
         origin: refs.boardEl,
         // A touch arriving mid-reveal runs the rest of it now rather than
         // being turned away — see GameController.hurry().
-        onBeforeStart: () => controller.hurry(),
+        onBeforeStart: () => {
+          // 先取消（拿到取消那一刻压着的那个变换），再 hurry。次序不能换：hurry 会把剩下
+          // 那几拍一次跑完，那几拍自己又会 render → layoutBoard → cancel。
+          const snap = zoom.cancel();
+          const before = fit;
+          controller.hurry();
+          // hurry 真的又走了几拍的话，连「没有变换时的位置」都变了，这个修正量就不作数了。
+          const moved = fit.unit !== before.unit
+            || fit.originX !== before.originX || fit.originY !== before.originY;
+          dragFix = moved ? null : snap;
+        },
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
@@ -1592,9 +1699,13 @@ export function createTriangleGame(): ShapeGame {
           drag?.chain?.flush();
           if (controller.resolving) {
             drag = null;
+            dragFix = null;
             return;
           }
-          const [r, c] = cellAt(x, y);
+          // 修正只对**落下那一下**成立：到了 onRegrab 那会儿变换早就摘掉了。
+          const [px, py] = unfix(x, y);
+          dragFix = null;
+          const [r, c] = cellAt(px, py);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1666,6 +1777,7 @@ export function createTriangleGame(): ShapeGame {
         stopPro();
         detachDrag();
         stopResize();
+        zoom.dispose();
       }
 
       refs.buttons.back?.addEventListener('click', () => {

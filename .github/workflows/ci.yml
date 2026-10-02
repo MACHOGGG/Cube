@@ -476,6 +476,19 @@ jobs:
       # 第二份打包是给【7】【8】用的：那两节拿**真的小球线**做 fixture，再用一个不设预算的
       # 精确搜索当对照（活局误判必须是 0，死局检出 ≥ 80%）。判「这个盘面得不得分」用的是
       # residueSearch.ts 自己导出的 scoresNow——门拿它当尺子，不另抄一份判定。
+      # 「消除之后剩下的部分整体放大」那一点算术（玩家 2026-10 推翻 PR-3 的「棋盘一圈
+      # 圈变小」）。三件真会出的事故各有一条：**开局不许动**（基准取成底板的话小球那副开
+      # 局就被放大 1.01 倍，每一枚都挪一两个像素，而屏幕上只看出「和昨天不一样」）、zoom
+      # 只增不减（棋子突然缩回去，玩家以为自己点错了什么）、放大之后不许出界（看不见的棋
+      # 子玩家只会当成卡死）。
+      #
+      # 还有一条是**量不出来的那种洞**补上的：有意偏着摆的那一副（六边三角那个
+      # GLOBAL_ROW_OFFSET）要把偏移原样带着走。小球那副的老锚点恰好就在底板正中，所以单
+      # 拿它量，「照老锚点」和「照底板居中」两种写法答案一模一样——写错了照旧全绿。
+      - name: 消除之后整体放大那一点算术
+        run: |
+          npx esbuild src/engine/liveFit.ts --bundle --format=esm --outfile=/tmp/livefit.mjs
+          node scripts/check-live-fit.mjs /tmp/livefit.mjs
       - name: 残局穷举：喂进去的那副盘面对不对
         run: |
           npx esbuild src/engine/residueBoard.ts  --bundle --format=esm --outfile=/tmp/resboard.mjs

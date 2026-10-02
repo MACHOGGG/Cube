@@ -6,6 +6,8 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
+import { fitLive, type Fit, type FitBox } from '../engine/liveFit';
+import { createBoardZoom } from '../ui/boardZoom';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -292,6 +294,16 @@ export function createCircleGame(): ShapeGame {
         rowH = 0,
         boardTop = 0,
         boardLeft = 0;
+      /**
+       * 这一帧的「放大多少、锚在哪儿」（`engine/liveFit.ts`）。
+       *
+       * `layoutBoard()` 每次重算它，`R` / `boardTop` / `boardLeft` 都是从它来的。动画那一头
+       * 也要读它（拿上一帧和这一帧比，才知道该不该长一下）。
+       */
+      let fit: Fit = { zoom: 1, unit: 0, originX: 0, originY: 0 };
+      /** 「剩下的部分长大了」那一下动画（`ui/boardZoom.ts`，五副外边族共用）。 */
+      const zoom = createBoardZoom(refs.boardEl, () =>
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
@@ -551,14 +563,81 @@ export function createCircleGame(): ShapeGame {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
       }
 
+      /*
+       * ── 「换算成一个 R」之后，一枚球落在哪儿 ───────────────────────
+       *
+       * `ballCenter` 那两行摊开就是：
+       *
+       *   cx = boardLeft + R·(2c − r)        cy = boardTop + R·(1 + r√3)
+       *
+       * 所以 (2c − r, 1 + r√3) 就是这副棋盘在「一个 R」这把尺上的坐标，而球的直径是
+       * 1.86R——轮廓往外各 0.93R。`engine/liveFit.ts` 收的正是这把尺上的外接框。
+       */
+      const BALL_HALF = 0.93;
+      const unitX = (r: number, c: number) => 2 * c - r;
+      const unitY = (r: number) => 1 + r * Math.sqrt(3);
+      function boxOf(cells: readonly Cell[]): FitBox | null {
+        if (!cells.length) return null;
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const [r, c] of cells) {
+          const x = unitX(r, c);
+          const y = unitY(r);
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+        return {
+          x: { min: x0 - BALL_HALF, max: x1 + BALL_HALF },
+          y: { min: y0 - BALL_HALF, max: y1 + BALL_HALF },
+        };
+      }
+      /** 整副棋盘（每一格都还在）的外接框——那是 zoom 的基准，开局时 zoom 正好 1。 */
+      const FULL_BOX = (() => {
+        const all: Cell[] = [];
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c <= r; c++) all.push([r, c]);
+        return boxOf(all)!;
+      })();
+      /** 此刻还在盘上的那些格子。削掉离场的不算（《侵蚀阶梯》v1.2 §3）。 */
+      function liveBox(): FitBox | null {
+        const cells: Cell[] = [];
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c <= r; c++) if (grid[r]?.[c] && !isBlank(grid[r][c])) cells.push([r, c]);
+        return boxOf(cells);
+      }
+
       function layoutBoard() {
         const rect = floorBox(refs.boardWrap);
         const S = Math.min(rect.width, rect.height);
-        R = S / 14;
+        /*
+         * 手上要是还压着一个放大动画，这儿先把它取消掉：它是按**上一套**数算出来的变换，
+         * 底板尺寸或者活格框一变，留着它只会把新这一帧推到一个莫名的位置上。
+         */
+        zoom.cancel();
+        /*
+         * 消除之后剩下的部分整体放大（玩家 2026-10 推翻 PR-3 的「棋盘一圈圈变小」）。
+         *
+         * 开局 `liveBox() === FULL_BOX`，所以 zoom 恒等于 1，`R` 还是 S/14、锚点还是
+         * 「横向居中、竖向按整副棋盘居中」——和放大这件事落地之前**一个像素都不差**（门
+         * `check-live-fit.mjs` 拿旧那两行逐颗球对过）。
+         *
+         * 《无限反转》不吃这一条：那一局一格都不离场。
+         */
+        // 老式那两行原样留着——`fitLive` 收它当锚点，于是开局一个像素都不动。
+        const R0 = S / 14;
+        const totalH = (ROWS - 1) * R0 * Math.sqrt(3) + 2 * R0;
+        fit = fitLive({
+          full: FULL_BOX,
+          live: liveBox(),
+          unit0: R0,
+          originX0: S / 2, // center x, per-row offset applied in position calc
+          originY0: (S - totalH) / 2,
+          frozen: flipMode,
+        });
+        R = fit.unit;
         rowH = R * Math.sqrt(3);
-        const totalH = (ROWS - 1) * rowH + 2 * R;
-        boardTop = (S - totalH) / 2;
-        boardLeft = S / 2; // center x, per-row offset applied in position calc
+        boardTop = fit.originY;
+        boardLeft = fit.originX;
         refs.boardEl.style.width = S + 'px';
         refs.boardEl.style.height = S + 'px';
              // 图形已经按整格算满了，地板收成正方形不会动到它。
@@ -1161,7 +1240,12 @@ export function createCircleGame(): ShapeGame {
         // — played in onCascadeStepRendered since the ghost must be
         // appended *after* this step's own render() or that render() would
         // wipe it.
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
+        onCascadeStep: ({ matchGroups }) => {
+          // 这一拍还没 render()，所以 `fit` 还是玩家此刻看到的那一帧——记下来，等下面那个
+          // 钩子拿它和放大之后的比（见 ui/boardZoom.ts）。
+          zoom.mark(fit);
+          outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS);
+        },
         // 按快照有没有东西判断，不按「这一拍有没有整行奖励」——整组星星得分也会
         // 往快照里塞东西，而它走的是 matchGroups 那条路。两个列表都传进去，
         // playBlankTransition 自己会跳过快照里没有的格子。
@@ -1170,6 +1254,9 @@ export function createCircleGame(): ShapeGame {
             playBlankTransition([...lineBonusGroups, ...matchGroups], pendingBlankSnapshot);
             pendingBlankSnapshot = new Map();
           }
+          // 这一拍削掉了格子的话，盘面已经按新的 fit 画好了：先倒回上一帧的样子，停一下，
+          // 再长过来。没削掉格子的那些拍，zoom.play 自己就什么都不做。
+          zoom.play(fit);
         },
         onCommit: (matchGroups) => {
           for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
@@ -1360,11 +1447,42 @@ export function createCircleGame(): ShapeGame {
         return true;
       }
 
+      /**
+       * 手指落下那一刻，棋盘上要是正压着放大动画的那个变换，落点就要往回换算一道。
+       *
+       * `engine/drag.ts` 量的是 `clientX − boardEl.getBoundingClientRect().left`，而那个
+       * rect 是在 `onBeforeStart` **之后**读的——我们在那儿已经把变换摘掉了，于是量出来的是
+       * 「没有变换时的板内坐标」。可玩家按的是**变换之后**画在那儿的那一枚：
+       *
+       *   板内看到的位置 = ax + s × 没有变换时的位置
+       *
+       * 所以反过来除一道。不修的话，放大 2 倍的时候他按哪儿抓到的都是另一枚——而屏幕上只
+       * 看出「这游戏点不准」。
+       */
+      let dragFix: { ax: number; ay: number; s: number } | null = null;
+      const unfix = (x: number, y: number): [number, number] =>
+        dragFix ? [(x - dragFix.ax) / dragFix.s, (y - dragFix.ay) / dragFix.s] : [x, y];
+
       const detachDrag = attachDrag(refs.boardWrap, {
         origin: refs.boardEl,
         // A touch arriving mid-reveal runs the rest of it now rather than
         // being turned away — see GameController.hurry().
-        onBeforeStart: () => controller.hurry(),
+        onBeforeStart: () => {
+          // 先取消（拿到取消那一刻压着的那个变换），再 hurry。次序不能换：hurry 会把剩下
+          // 那几拍一次跑完，那几拍自己又会 render → layoutBoard → cancel，等它跑完再问就
+          // 什么都问不到了。
+          const snap = zoom.cancel();
+          const before = fit;
+          controller.hurry();
+          /*
+           * ⚠️ hurry 真的又走了几拍的话（格子继续离场），**连「没有变换时的位置」都变
+           * 了**——这个修正量按的是旧那一套数，用上去比不修还糟。那种情况下落点就按新盘面
+           * 直接算（和 hurry 从前的行为一样：手指落在哪儿就是哪儿）。
+           */
+          const moved = fit.unit !== before.unit
+            || fit.originX !== before.originX || fit.originY !== before.originY;
+          dragFix = moved ? null : snap;
+        },
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
@@ -1374,12 +1492,20 @@ export function createCircleGame(): ShapeGame {
           drag?.chain?.flush();
           if (controller.resolving) {
             drag = null;
+            dragFix = null;
             return;
           }
-          const [r, c] = cellAt(x, y);
+          // 修正只对**落下那一下**成立：到了 onRegrab 那会儿变换早就摘掉了，手指底下
+          // 画的就是没有变换的那副盘，再修一次就修反了。
+          const [px, py] = unfix(x, y);
+          dragFix = null;
+          const [r, c] = cellAt(px, py);
           // 手指落在一个已经离场的格子上：那儿什么都没有，这一下就什么都不做。
-          // （盘子缩小之后，原来那一圈的位置还留在取景框里——见 §3「取景框按整副
-          // 棋盘固定」。按一片空地没有反应，正是玩家预期的那件事。）
+          //
+          // 这一句**比从前更少碰得到了**：剩下的部分整体放大之后（玩家 2026-10 推翻
+          // PR-3 的「棋盘一圈圈变小」，见 engine/liveFit.ts），活格框被撑满整块底板，
+          // 空出来的那一圈不再占着取景框。可中间仍然可能有洞（削掉的那几条不一定挨
+          // 着边），按一片空地没有反应正是玩家预期的那件事，所以这一句留着。
           if (isBlank(grid[r][c])) {
             drag = null;
             return;
@@ -1477,6 +1603,7 @@ export function createCircleGame(): ShapeGame {
         stopPro();
         detachDrag();
         stopResize();
+        zoom.dispose();
       }
 
       refs.buttons.back?.addEventListener('click', () => {

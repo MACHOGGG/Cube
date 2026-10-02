@@ -2091,28 +2091,28 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
 export type RuleShape = 'circle' | 'square' | 'squareDiamond' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
-    circle: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and the board shrinks a ring.',
+    circle: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and what is left grows to fill the board.',
     square: 'Stars of one colour filling a whole row or column score and clear, and the board closes up.',
-    squareDiamond: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and the board shrinks a ring.',
-    triangle: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and the board shrinks a ring.',
+    squareDiamond: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and what is left grows to fill the board.',
+    triangle: 'Stars of one colour filling the outermost line \u2014 at least 3 \u2014 score and clear, and what is left grows to fill the board.',
   },
   fr: {
-    circle: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et le plateau r\u00e9tr\u00e9cit d\u2019un cran.',
+    circle: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et ce qui reste s\u2019agrandit pour remplir le plateau.',
     square: 'Des \u00e9toiles de m\u00eame couleur sur toute une ligne ou colonne marquent et disparaissent, et le plateau se referme.',
-    squareDiamond: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et le plateau r\u00e9tr\u00e9cit d\u2019un cran.',
-    triangle: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et le plateau r\u00e9tr\u00e9cit d\u2019un cran.',
+    squareDiamond: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et ce qui reste s\u2019agrandit pour remplir le plateau.',
+    triangle: 'Des \u00e9toiles de m\u00eame couleur sur la ligne la plus externe \u2014 au moins 3 \u2014 marquent et disparaissent, et ce qui reste s\u2019agrandit pour remplir le plateau.',
   },
   zhHant: {
-    circle: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，棋盤一圈圈變小。',
+    circle: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，剩下的部分整體放大。',
     square: '同色星星連滿整行或整列，就得分並消除，棋盤合攏。',
-    squareDiamond: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，棋盤一圈圈變小。',
-    triangle: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，棋盤一圈圈變小。',
+    squareDiamond: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，剩下的部分整體放大。',
+    triangle: '同色星星連滿此刻最外面的一條線（最少 3 枚），就得分並消除，剩下的部分整體放大。',
   },
   zhHans: {
-    circle: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，棋盘一圈圈变小。',
+    circle: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，剩下的部分整体放大。',
     square: '同色星星连满整行或整列，就得分并消除，棋盘合拢。',
-    squareDiamond: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，棋盘一圈圈变小。',
-    triangle: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，棋盘一圈圈变小。',
+    squareDiamond: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，剩下的部分整体放大。',
+    triangle: '同色星星连满此刻最外面的一条线（最少 3 枚），就得分并消除，剩下的部分整体放大。',
   },
 };
 

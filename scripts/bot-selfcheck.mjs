@@ -457,6 +457,79 @@ function applyPerm(snap, perm) {
  * @returns 这一局的账：走了几步、清了几枚、图案降到几枚、怎么收场的，以及硬断言
  *   各自的结论（由调用方汇总，这儿只报事实）。
  */
+/**
+ * H7 甲：此刻每一枚活棋子都**整个待在底板里**。
+ *
+ * 「消除之后剩下的部分整体放大」（第 6 推，engine/liveFit.ts）之后，这一条是最容易出事的
+ * 那一条：放大倍数算错一点，剩下那几枚就会有一半垂在深褐色的空地板外面——而那种画面玩家只
+ * 会当成「这游戏没做完」。
+ *
+ * `check-board-fit` 量的是**开局**那一帧 × 八副 × 两个方向；这儿量的是**一局里每隔几手**，
+ * 也就是放大真的发生之后。两道合起来才覆盖得住。
+ */
+async function piecesInsideFloor(page) {
+  return page.evaluate(() => {
+    const wrap = document.querySelector('.board-wrap');
+    if (!wrap) return '';
+    const f = wrap.getBoundingClientRect();
+    for (const el of wrap.querySelectorAll('.tile, .ball, .tri')) {
+      if (el.classList.contains('ghost')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (r.left < f.left - 0.5 || r.top < f.top - 0.5
+        || r.right > f.right + 0.5 || r.bottom > f.bottom + 0.5) {
+        return `(${el.dataset.r},${el.dataset.c}) 戳出底板`
+          + ` ${Math.round(r.left - f.left)},${Math.round(r.top - f.top)}`
+          + ` ${Math.round(r.width)}px / 底板 ${Math.round(f.width)}×${Math.round(f.height)}`;
+      }
+    }
+    return '';
+  });
+}
+
+/**
+ * H7 乙：**按住一枚棋子的正中，抓到的就是它。**
+ *
+ * 按下去 `engine/drag.ts` 会给抓到的那一枚挂上 `piece-grabbed`，所以问一句「谁挂着这个类」
+ * 就知道抓到了谁。按完原地松手——还在死区里，什么都不会发生（见 drag.ts 的 `up`）。
+ *
+ * 为什么非量这一条：放大是靠**算**的（不是 CSS transform 留在那儿），而拖拽那一头量的是
+ * 「手指落点换算成行列」。两头有一处没跟上，屏幕上就是「这游戏点不准」——按哪儿都抓到隔
+ * 壁那一枚，而没有任何报错。这种毛病在截图里看不出来，只能这么按一遍。
+ */
+async function grabHitsSelf(page, howMany = 3) {
+  const spots = await page.evaluate((n) => {
+    const wrap = document.querySelector('.board-wrap');
+    if (!wrap) return [];
+    const live = [...wrap.querySelectorAll('.tile, .ball, .tri')].filter((el) => {
+      if (el.classList.contains('ghost')) return false;
+      if (el.dataset.face === 'blank') return false;
+      const r = el.getBoundingClientRect();
+      return r.width >= 1 && el.dataset.r !== undefined;
+    });
+    // 头、中、尾各挑一枚：三枚够看出「整体错位」和「只有边上错位」两种。
+    const pick = [];
+    for (const i of [0, Math.floor(live.length / 2), live.length - 1]) {
+      if (live[i] && !pick.includes(live[i])) pick.push(live[i]);
+    }
+    return pick.slice(0, n).map((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, at: `${el.dataset.r},${el.dataset.c}` };
+    });
+  }, howMany);
+  for (const sp of spots) {
+    await page.mouse.move(sp.x, sp.y);
+    await page.mouse.down();
+    const got = await page.evaluate(() => {
+      const el = document.querySelector('.piece-grabbed');
+      return el ? `${el.dataset.r},${el.dataset.c}` : '(没抓到)';
+    });
+    await page.mouse.up();
+    if (got !== sp.at) return `按 (${sp.at}) 的正中，抓到的是 ${got}`;
+  }
+  return '';
+}
+
 async function playOne(page, label, opts) {
   /**
    * 这一副棋盘的段数表。查不到（炸弹局、或者新加的棋盘）就**不做 H5**，并在汇总里说出
@@ -520,6 +593,13 @@ async function playOne(page, label, opts) {
    */
   let levelMismatch = 0;
   let levelMismatchNote = '';
+  /** H7：这一局里量到几次「棋子戳出底板」「按哪一枚抓到的是另一枚」。 */
+  let fitOut = 0;
+  let fitNote = '';
+  let grabMiss = 0;
+  let grabNote = '';
+  /** H7 真的被问过几次（量了 0 次的话那两条是空绿，要说出来）。 */
+  let fitChecks = 0;
   let bombDefuseChecked = 0;
   let bombDefuseBad = 0;
   /** 连着几步盘面一个字都没变。 */
@@ -709,6 +789,24 @@ async function playOne(page, label, opts) {
       if (!dirSign.has(dk) && dirDead(d)) dirSign.set(dk, 0);
     }
 
+    // ── H7：放大之后棋子还在底板里，而且按哪一枚就抓到哪一枚 ──
+    //
+    // 每 8 手量一次，不是每一手：两条都要问 DOM，每手问一遍会把一局从 2 分钟拖到 4 分钟
+    // 多，而这一条要抓的毛病（放大算错）一旦出现就会一直在，隔几手也一定撞上。
+    if (moves % 8 === 0) {
+      fitChecks++;
+      const out = await piecesInsideFloor(page);
+      if (out) {
+        fitOut++;
+        if (!fitNote) fitNote = `第 ${moves} 手：${out}`;
+      }
+      const miss = await grabHitsSelf(page);
+      if (miss) {
+        grabMiss++;
+        if (!grabNote) grabNote = `第 ${moves} 手：${miss}`;
+      }
+    }
+
     // ── H3：阶梯推得动 ──────────────────────────────────────
     if (after.marks !== null) {
       levelLow = Math.min(levelLow, after.marks);
@@ -795,6 +893,11 @@ async function playOne(page, label, opts) {
     segsGrewOddly,
     levelMismatch,
     levelMismatchNote,
+    fitOut,
+    fitNote,
+    grabMiss,
+    grabNote,
+    fitChecks,
     ladderKnown: Boolean(ladder),
     toasts: seenToasts,
     card,
@@ -937,6 +1040,17 @@ for (const [i, job] of jobs.entries()) {
       outside.length ? JSON.stringify(outside[0]) : r.toasts.map((t) => `${t.text}(${t.w}×${t.h})`).join(' '));
   } else {
     note(`${label} · H6：这一局没降过级，那句话无从判断（不假装查过）`);
+  }
+  // ── H7：放大之后棋子还在底板里，而且按哪一枚就抓到哪一枚 ──────
+  //
+  // 第 6 推（「消除之后剩下的部分整体放大」）带来的两件最容易出事的事。两条都量不到的局
+  // （一手都没走满 8 手）要说出来，不假装查过。
+  if (r.fitChecks > 0) {
+    check(`${label} · H7：每一枚都还在底板里（量了 ${r.fitChecks} 次）`, r.fitOut === 0,
+      r.fitNote || `${r.fitOut} 次`);
+    check(`${label} · H7：按哪一枚就抓到哪一枚`, r.grabMiss === 0, r.grabNote || `${r.grabMiss} 次`);
+  } else {
+    note(`${label} · H7：这一局没走满 8 手，这两条无从判断（不假装查过）`);
   }
   // ── H4：炸弹 ────────────────────────────────────────────
   if (job.bomb && r.bombDefuseChecked) {

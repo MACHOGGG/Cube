@@ -6,6 +6,8 @@ import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
+import { fitLive, type Fit, type FitBox } from '../engine/liveFit';
+import { createBoardZoom } from '../ui/boardZoom';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
@@ -290,6 +292,11 @@ export function createCircleHexGame(): ShapeGame {
         rowH = 0,
         boardLeft = 0,
         boardTop = 0;
+      /** 这一帧的「放大多少、锚在哪儿」（`engine/liveFit.ts`）。 */
+      let fit: Fit = { zoom: 1, unit: 0, originX: 0, originY: 0 };
+      /** 「剩下的部分长大了」那一下动画（`ui/boardZoom.ts`，五副外边族共用）。 */
+      const zoom = createBoardZoom(refs.boardEl, () =>
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
@@ -549,13 +556,75 @@ export function createCircleHexGame(): ShapeGame {
       // comment for how this was derived and verified against the 3 unit
       // step directions) — already centered on (0,0) by the hex's own
       // symmetry, so boardLeft/boardTop alone place the origin.
+      /*
+       * ── 「换算成一个 R」之后，一枚球落在哪儿 ───────────────────────
+       *
+       * `ballCenter` 走的是 `hexBallXY(x, z, R, rowH) = [2R·x + R·z, rowH·z]`，而
+       * rowH = R√3，所以这把尺上的坐标就是 (2x + z, √3·z)——(x, z) 是立方坐标。球的直径
+       * 1.86R，轮廓往外各 0.93R。`engine/liveFit.ts` 收的正是这把尺上的外接框。
+       */
+      const BALL_HALF = 0.93;
+      function unitXY(r: number, c: number): [number, number] {
+        const { x, z } = localToCube(r, c);
+        return [2 * x + z, Math.sqrt(3) * z];
+      }
+      function boxOf(cells: readonly Cell[]): FitBox | null {
+        if (!cells.length) return null;
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const [r, c] of cells) {
+          const [x, y] = unitXY(r, c);
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+        return {
+          x: { min: x0 - BALL_HALF, max: x1 + BALL_HALF },
+          y: { min: y0 - BALL_HALF, max: y1 + BALL_HALF },
+        };
+      }
+      /** 整副棋盘（每一格都还在）的外接框——zoom 的基准，开局 zoom 正好 1。 */
+      const FULL_BOX = (() => {
+        const all: Cell[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++) all.push([r, c]);
+        return boxOf(all)!;
+      })();
+      /**
+       * 此刻还在盘上的那些格子。
+       *
+       * 中心那个**永久空位**也归 `isBlank`（见那一处注释：它和削掉的格子在这儿是同一回
+       * 事），所以它不进框——而它本来就在正中间，框一点不受影响。
+       */
+      function liveBox(): FitBox | null {
+        const cells: Cell[] = [];
+        for (let r = 0; r < ROW_LENS.length; r++)
+          for (let c = 0; c < ROW_LENS[r]; c++)
+            if (grid[r]?.[c] && !isBlank(grid[r][c])) cells.push([r, c]);
+        return boxOf(cells);
+      }
+
       function layoutBoard() {
         const rect = floorBox(refs.boardWrap);
         const S = Math.min(rect.width, rect.height);
-        R = S / 14;
+        // 手上压着的放大变换是按上一套数算的，底板或者活格框一变就不作数了。
+        zoom.cancel();
+        /*
+         * 消除之后剩下的部分整体放大（玩家 2026-10 推翻 PR-3 的「棋盘一圈圈变小」，见
+         * engine/liveFit.ts）。老式那两行原样留着当锚点，所以开局一个像素都不动。
+         */
+        fit = fitLive({
+          full: FULL_BOX,
+          live: liveBox(),
+          unit0: S / 14,
+          originX0: S / 2,
+          originY0: S / 2,
+          // 这一副没有《无限反转》那一档（只有方块和小球有），所以不传 frozen。
+        });
+        R = fit.unit;
         rowH = R * Math.sqrt(3);
-        boardLeft = S / 2;
-        boardTop = S / 2;
+        boardLeft = fit.originX;
+        boardTop = fit.originY;
         refs.boardEl.style.width = S + 'px';
         refs.boardEl.style.height = S + 'px';
              // 图形已经按整格算满了，地板收成正方形不会动到它。
@@ -1066,7 +1135,11 @@ export function createCircleHexGame(): ShapeGame {
         countRemainingTiles,
         snapshotBoard,
         highlightStuck,
-        onCascadeStep: ({ matchGroups }) => outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS),
+        onCascadeStep: ({ matchGroups }) => {
+          // 这一拍还没 render()，`fit` 还是玩家此刻看到的那一帧——记下来（见 ui/boardZoom.ts）。
+          zoom.mark(fit);
+          outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS);
+        },
         // 按快照有没有东西判断，不按「这一拍有没有整行奖励」——整组星星得分也会
         // 往快照里塞东西，而它走的是 matchGroups 那条路。两个列表都传进去，
         // playBlankTransition 自己会跳过快照里没有的格子。
@@ -1075,6 +1148,9 @@ export function createCircleHexGame(): ShapeGame {
             playBlankTransition([...lineBonusGroups, ...matchGroups], pendingBlankSnapshot);
             pendingBlankSnapshot = new Map();
           }
+          // 这一拍削掉了格子的话，先倒回上一帧的样子，停一下，再长过来。没削掉的那些拍
+          // zoom.play 自己什么都不做。
+          zoom.play(fit);
         },
         onCommit: (matchGroups) => {
           for (const cells of matchGroups) for (const [r, c] of cells) flipInCells.add(cellKey(r, c));
@@ -1238,11 +1314,37 @@ export function createCircleHexGame(): ShapeGame {
         return true;
       }
 
+      /**
+       * 手指落下那一刻，棋盘上要是正压着放大动画的那个变换，落点就要往回换算一道。
+       *
+       * `engine/drag.ts` 量的是 `clientX − boardEl.getBoundingClientRect().left`，而那个
+       * rect 是在 `onBeforeStart` **之后**读的——我们在那儿已经把变换摘掉了，于是量出来的是
+       * 「没有变换时的板内坐标」。可玩家按的是**变换之后**画在那儿的那一枚：
+       *
+       *   板内看到的位置 = ax + s × 没有变换时的位置
+       *
+       * 所以反过来除一道。不修的话，放大 2 倍的时候他按哪儿抓到的都是另一枚——而屏幕上只
+       * 看出「这游戏点不准」。
+       */
+      let dragFix: { ax: number; ay: number; s: number } | null = null;
+      const unfix = (x: number, y: number): [number, number] =>
+        dragFix ? [(x - dragFix.ax) / dragFix.s, (y - dragFix.ay) / dragFix.s] : [x, y];
+
       const detachDrag = attachDrag(refs.boardWrap, {
         origin: refs.boardEl,
         // A touch arriving mid-reveal runs the rest of it now rather than
         // being turned away — see GameController.hurry().
-        onBeforeStart: () => controller.hurry(),
+        onBeforeStart: () => {
+          // 先取消（拿到取消那一刻压着的那个变换），再 hurry。次序不能换：hurry 会把剩下
+          // 那几拍一次跑完，那几拍自己又会 render → layoutBoard → cancel。
+          const snap = zoom.cancel();
+          const before = fit;
+          controller.hurry();
+          // hurry 真的又走了几拍的话，连「没有变换时的位置」都变了，这个修正量就不作数了。
+          const moved = fit.unit !== before.unit
+            || fit.originX !== before.originX || fit.originY !== before.originY;
+          dragFix = moved ? null : snap;
+        },
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
@@ -1252,9 +1354,13 @@ export function createCircleHexGame(): ShapeGame {
           drag?.chain?.flush();
           if (controller.resolving) {
             drag = null;
+            dragFix = null;
             return;
           }
-          const [r, c] = cellAt(x, y);
+          // 修正只对**落下那一下**成立：到了 onRegrab 那会儿变换早就摘掉了。
+          const [px, py] = unfix(x, y);
+          dragFix = null;
+          const [r, c] = cellAt(px, py);
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, R, rowH, lastShift: 0, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1335,6 +1441,7 @@ export function createCircleHexGame(): ShapeGame {
         stopPro();
         detachDrag();
         stopResize();
+        zoom.dispose();
       }
 
       refs.buttons.back?.addEventListener('click', () => {
