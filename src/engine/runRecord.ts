@@ -75,6 +75,13 @@ export interface RunData {
    */
   flipRules?: number;
   /**
+   * 这一局的步步为营按第几版规则打的（见 puzzleScore.ts 的 `PUZZLE_RULES_VERSION`）。
+   * 老档没有这一项，读出来是 undefined，就是第一版（消线只退一步）。存档键和排行榜
+   * 都按它分开——消线的回报翻倍之后，一局能走多久、终局盘面长什么样整条都变了。
+   * 非步步为营的局不写这一项。
+   */
+  puzzleRules?: number;
+  /**
    * 这一局按第几版**计分规则**打的（见 scoring.ts 的 `SCORING_RULES_VERSION`）。
    *
    * 上面那两个各管一个玩法，这一个管**全站**：《侵蚀阶梯》v1.2 把得分图案、翻面

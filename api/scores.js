@@ -135,13 +135,19 @@ const SCORING_RULES = 'ero1';
 /** 炸弹这一档现在叫什么。改规则就往上加一版，老的那个名字留着当归档榜。 */
 const BOMB_KIND = 'bomb3';
 /**
- * 步步为营这一档。
+ * 步步为营这一档现在叫什么。
  *
- * **它没有版本后缀**（不是 'puzzle1'），因为这是新开的一张榜，没有旧局要归档
- * ——不是忘了。将来《外边消除》改了消除规则、这一局的分不再是同一把尺子量出
- * 来的时候，再照 bomb → bomb2 那条路往上加一版，把这一张留着当归档榜。
+ * 2026-10-02 消线奖励从「退一步」改成「退两步」（`src/engine/puzzleScore.ts` 的
+ * `PUZZLE_EDGE_BONUS`，底稿 §7 / E14 一直写的就是 +2，代码落错了半年）。它退的是步
+ * 数不是分数，可一局能走多久直接决定终局盘上有多少枚被消除、多少枚翻成星星，而综合
+ * 分就是按终局盘面算的——两版打出来的分不是一把尺子量的。
+ *
+ * 所以照 bomb → bomb2 那条路往上加一版，老的 `square:puzzle` 原样归档（它不在
+ * ALL_BOARDS 里，重建时不撤人，存档里那些老局照旧算回它自己那张榜，见 kindOf）。
+ * 这一步上面那一版注释里本来就预告过：「将来……再照 bomb → bomb2 那条路往上加一版，
+ * 把这一张留着当归档榜。」
  */
-const PUZZLE_KIND = 'puzzle';
+const PUZZLE_KIND = 'puzzle2';
 /**
  * 无限反转这一档现在叫什么。
  *
@@ -159,7 +165,12 @@ function kindOf(data) {
   const mk = String(data?.modeKey || 'base');
   // 排在 timed 前面：步步为营这一局没有钟，modeKey 也不会是 'timed'，可顺序照
   // 规矩摆——一局只归一档，越专的档越先问。
-  if (mk === PUZZLE_KIND) return PUZZLE_KIND;
+  //
+  // ⚠️ 比的是 **modeKey 那个字面量 `'puzzle'`**，不是 PUZZLE_KIND。两者从 2026-10-02
+  // 起不是同一个字符串了（榜叫 'puzzle2'，而存档里 modeKey 永远是 'puzzle'）——照旧写
+  // `mk === PUZZLE_KIND` 的话，每一局步步为营都会掉到最后一行去，归进 base 那张榜。
+  // 老档没有 puzzleRules，读出来是 undefined，那是消线只退一步那一版，归老榜。
+  if (mk === 'puzzle') return Number(data?.puzzleRules) >= 2 ? PUZZLE_KIND : 'puzzle';
   // 老档没有 flipRules，读出来是 undefined——那是没封顶那一版，归老榜。
   if (mk === 'flip') return Number(data?.flipRules) >= 2 ? FLIP_KIND : 'flip';
   // 老档没有 bombRules，读出来是 undefined——那是第一版规则，归老榜。

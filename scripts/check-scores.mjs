@@ -319,6 +319,29 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   check('《炸弹》母榜看的是现行那张',
     (bombGroup.payload?.rows ?? []).map((r) => `${r.score}`).join() === '1500',
     JSON.stringify(bombGroup.payload?.rows));
+
+  /*
+   * 步步为营 2026-10-02 起也分两版（`puzzleRules` 说了算）：
+   *   第 1 版（老档没有 puzzleRules）—— 消线只退一步 → `square:puzzle`
+   *   第 2 版（现行）—— 消线退两步，底稿 §7 / E14  → `square:puzzle2`
+   * 消线的回报翻倍，一局能走多久、终局盘上有多少枚被消除整条都变了，所以两版不能
+   * 放一起比。这儿顺带钉住一个**只在这一档会犯的错**：`kindOf` 里那一行从前写的是
+   * `mk === PUZZLE_KIND`，而常量从 'puzzle' 改成 'puzzle2' 之后，存档里的 modeKey
+   * 永远还是 'puzzle'——照旧那么写的话每一局步步为营都会掉进 base 那张榜，而且不报错。
+   */
+  await call({ action: 'push', ...H, runId: 'h7', mode: 'square', score: 320,
+    data: { shapeId: 'square', modeKey: 'puzzle', totalScore: 320 } });
+  await call({ action: 'push', ...H, runId: 'h8', mode: 'square', score: 640,
+    data: { shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, totalScore: 640 } });
+  const minePuzzle = await call({ action: 'mine', ...H });
+  check('消线退一步那一版留在老榜 square:puzzle 上',
+    minePuzzle.payload?.best?.['square:puzzle'] === 320, JSON.stringify(minePuzzle.payload?.best));
+  check('现行那一版记在 square:puzzle2 上',
+    minePuzzle.payload?.best?.['square:puzzle2'] === 640, JSON.stringify(minePuzzle.payload?.best));
+  // 反面：两局步步为营**一局都不许掉进 base 那张榜**（上面那个 kindOf 的坑）。
+  check('步步为营没有一局掉进 base 榜',
+    minePuzzle.payload?.best?.['square:base'] !== 320 && minePuzzle.payload?.best?.['square:base'] !== 640,
+    JSON.stringify(minePuzzle.payload?.best?.['square:base']));
 }
 
 // ---- 管理员维护：照存档重建所有榜，顺手清掉《无限反转》 ----------------------

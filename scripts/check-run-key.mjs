@@ -32,6 +32,7 @@ const numOf = (file, name) => {
 };
 const BOMB_V = numOf('src/engine/bomb.ts', 'BOMB_RULES_VERSION');
 const FLIP_V = numOf('src/engine/scoring.ts', 'FLIP_RULES_VERSION');
+const PUZZLE_V = numOf('src/engine/puzzleScore.ts', 'PUZZLE_RULES_VERSION');
 /** 计分规则那一版（《侵蚀阶梯》v1.2 §6）。同样从源码里读，理由见上。 */
 const SCORING_V = (() => {
   const m = /export const SCORING_RULES_VERSION = '([^']+)'/.exec(read('src/engine/scoring.ts'));
@@ -85,24 +86,36 @@ const check = (name, ok, extra = '') => {
   check('定时炸弹和炸弹同一个后缀', suffixFor('bombTimed') === suffixFor('bomb'));
   check('无限反转后缀跟着 FLIP_RULES_VERSION 走',
     suffixFor('flip') === full('_flip' + FLIP_V), `${suffixFor('flip')} / 版本 ${FLIP_V}`);
+  // 步步为营 2026-10-02 起也有自己的版本号（消线奖励 1 → 2，见 puzzleScore.ts 的
+  // PUZZLE_RULES_VERSION）。这一行从前是写死的 `'_puzzle'`——而写死的后缀正是这个仓库
+  // 为之写了一整篇文件头注释的那次事故的形状。
+  check('步步为营后缀跟着 PUZZLE_RULES_VERSION 走',
+    suffixFor('puzzle') === full('_puzzle' + PUZZLE_V), `${suffixFor('puzzle')} / 版本 ${PUZZLE_V}`);
   // 第 1 版不带数字——这条规律不是新定的，是现有那几个键本来就长这样。写错这一条
   // 的后果是所有那一版的局一夜之间「消失」（它们还在，只是没人再按那个键去找）。
-  check('第 1 版不带数字', suffixFor('bomb', { bomb: 1 }) === full('_bomb') && suffixFor('flip', { flip: 1 }) === full('_flip'));
+  check('第 1 版不带数字',
+    suffixFor('bomb', { bomb: 1 }) === full('_bomb')
+    && suffixFor('flip', { flip: 1 }) === full('_flip')
+    && suffixFor('puzzle', { puzzle: 1 }) === full('_puzzle'));
   check('第 2 版起带上版本号', suffixFor('bomb', { bomb: 2 }) === full('_bomb2') && suffixFor('bomb', { bomb: 7 }) === full('_bomb7'));
-  check('没有版本号的两档照旧', suffixFor('timed') === full('_timed') && suffixFor('puzzle') === full('_puzzle'));
+  check('计时那一档照旧没有版本号', suffixFor('timed') === full('_timed'), suffixFor('timed'));
   check('基础那一档只有计分规则那一截', suffixFor('base') === full(''));
   // 版本号是具名的，所以「给炸弹的版本号」影响不到无限反转，反之亦然。位置参数那
   // 一版正是在这儿栽的：suffixFor('flip', 1) 把 1 填给了炸弹，反转仍取现行版本，于
   // 是迁移那段「把第 1 版挪到第 2 版」变成了从自己挪到自己，一局都不动、也不报错。
-  check('两个版本号互不串台',
-    suffixFor('flip', { bomb: 1 }) === full('_flip' + FLIP_V) && suffixFor('bomb', { flip: 1 }) === full('_bomb' + BOMB_V),
-    `${suffixFor('flip', { bomb: 1 })} / ${suffixFor('bomb', { flip: 1 })}`);
+  check('三个版本号互不串台',
+    suffixFor('flip', { bomb: 1, puzzle: 1 }) === full('_flip' + FLIP_V)
+    && suffixFor('bomb', { flip: 1, puzzle: 1 }) === full('_bomb' + BOMB_V)
+    && suffixFor('puzzle', { bomb: 1, flip: 1 }) === full('_puzzle' + PUZZLE_V),
+    `${suffixFor('flip', { bomb: 1 })} / ${suffixFor('bomb', { flip: 1 })} / ${suffixFor('puzzle', { bomb: 1 })}`);
   // 读的那一头从前写的是 `bombRules >= 现行版本 ? '_bomb3' : …`——把当前版本的后缀
   // 写死在条件里。等版本升到第 4 版，第 3 版的旧局会掉进第 2 版那一档。这一条量的
   // 就是那个坑补上了没有。
   check('每一版旧局都认回自己那个键（不会掉进上一档）',
-    [1, 2, 3, 4, 5].every((v) => suffixFor('bomb', { bomb: v }) === full(v >= 2 ? '_bomb' + v : '_bomb')),
-    [1, 2, 3, 4, 5].map((v) => suffixFor('bomb', { bomb: v })).join(' '));
+    [1, 2, 3, 4, 5].every((v) => suffixFor('bomb', { bomb: v }) === full(v >= 2 ? '_bomb' + v : '_bomb'))
+    && [1, 2, 3, 4, 5].every((v) => suffixFor('puzzle', { puzzle: v }) === full(v >= 2 ? '_puzzle' + v : '_puzzle')),
+    [1, 2, 3, 4, 5].map((v) => suffixFor('bomb', { bomb: v })).join(' ')
+    + ' ｜ ' + [1, 2, 3, 4, 5].map((v) => suffixFor('puzzle', { puzzle: v })).join(' '));
 }
 
 // ── 三、八副棋盘里谁都不许再手写后缀 ────────────────────────────────

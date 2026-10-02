@@ -57,7 +57,10 @@ check('起手 8 步', PUZZLE_START_STEPS === 8, String(PUZZLE_START_STEPS));
 check('走一步扣 1', PUZZLE_STEP_COST === 1, String(PUZZLE_STEP_COST));
 check('得分退 1', PUZZLE_STEP_REWARD === 1, String(PUZZLE_STEP_REWARD));
 check('上一步也得分，再退 1', PUZZLE_STREAK_BONUS === 1, String(PUZZLE_STREAK_BONUS));
-check('这一步消了边，再退 1', PUZZLE_EDGE_BONUS === 1, String(PUZZLE_EDGE_BONUS));
+// 底稿 §7 第 118 行那张表和 E14 写的一直是「消线 **+2**」，而代码从落地起给的是 1，
+// 两边对不上了半年（2026-10-02 改回来）。这一条逐字钉死那个 2：它不报错、不白屏，只是
+// 让「凑一整条线」这件最难的事回报少一半。
+check('这一步消了边，再退 2（底稿 §7 / E14）', PUZZLE_EDGE_BONUS === 2, String(PUZZLE_EDGE_BONUS));
 check('被消除的一枚 10 分', PUZZLE_CLEARED_POINTS === 10, String(PUZZLE_CLEARED_POINTS));
 check('星星一枚 5 分', PUZZLE_STAR_POINTS === 5, String(PUZZLE_STAR_POINTS));
 // 扣 1 退 1 就是「孤立得分只够回本」这条骨架。它一动，整个玩法的支点就挪了
@@ -78,18 +81,19 @@ check('扣 1 退 1：孤立的一次得分净变化是 0', PUZZLE_STEP_REWARD ==
   const bank = createStepBank();
   check('孤立得分：8 → 8（1 − 1 + 1，净 0）', bank.spend(true) === 8, String(bank.left()));
   check('接着再得分（连上了）：8 → 9（净 +1）', bank.spend(true) === 9, String(bank.left()));
-  check('接着得分且消边：9 → 11（净 +2）', bank.spend(true, { edge: true }) === 11, String(bank.left()));
-  check('接着空走：11 → 10', bank.spend(false) === 10, String(bank.left()));
-  check('再得分（上一步没得分，链断了）：10 → 10（净 0）', bank.spend(true) === 10, String(bank.left()));
+  // −1 成本 +1 得分 +1 连上 +2 消线 = 净 +3（消线那一笔 2026-10-02 从 1 改成 2）。
+  check('接着得分且消边：9 → 12（净 +3）', bank.spend(true, { edge: true }) === 12, String(bank.left()));
+  check('接着空走：12 → 11', bank.spend(false) === 11, String(bank.left()));
+  check('再得分（上一步没得分，链断了）：11 → 11（净 0）', bank.spend(true) === 11, String(bank.left()));
   // 结算页那句「最多攒到 X 步」读的是这个，不是最后剩下的那个数。
-  check('峰值记的是攒到过最多的那一下（11），不是收尾的 10', bank.peak() === 11, String(bank.peak()));
+  check('峰值记的是攒到过最多的那一下（12），不是收尾的 11', bank.peak() === 12, String(bank.peak()));
   check('走过五步，其中四步得分', bank.spent() === 5 && bank.scoredMoves() === 4,
     `${bank.spent()} 步 / ${bank.scoredMoves()} 步得分`);
 }
 {
   const bank = createStepBank();
-  check('首步就得分且消边：8 → 9（首步没有「上一步」，只有消边那一下）',
-    bank.spend(true, { edge: true }) === 9, String(bank.left()));
+  check('首步就得分且消边：8 → 10（首步没有「上一步」，只有消边那两步）',
+    bank.spend(true, { edge: true }) === 10, String(bank.left()));
 }
 {
   // 手里只剩一步时得分：先扣后退，不该出现负数的中间态。
@@ -281,13 +285,13 @@ const refundOf = (bank, scored, edge) => {
   const b = createStepBank();
   b.spend(true);
   const txt = stepLedgerText(refundOf(b, true, true));
-  check('连续得分又消了边：退 3', txt === '−1 +3', txt);
+  check('连续得分又消了边：退 4（1 得分 + 1 连上 + 2 消线）', txt === '−1 +4', txt);
 }
 {
   const b = createStepBank();
   b.spend(false);
   const txt = stepLedgerText(refundOf(b, true, true));
-  check('孤立得分但消了边：退 2', txt === '−1 +2', txt);
+  check('孤立得分但消了边：退 3（1 得分 + 2 消线）', txt === '−1 +3', txt);
 }
 // 哨兵：这四种情况在屏幕上必须是四行不一样的字。少一种能分辨的，玩家就少一
 // 条能学会的规律——而「连着得分才涨」正是这一局的全部意思。

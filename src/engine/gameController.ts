@@ -30,7 +30,8 @@ import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playFinish, playSettle, reducedMotion, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import {
-  createStepBank, puzzleComposite, stepLedgerText, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
+  createStepBank, puzzleComposite, stepLedgerText,
+  PUZZLE_RULES_VERSION, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
 } from './puzzleScore';
 import { claimFirstHowToHint } from './firstPlay';
 import { STRINGS, type Lang } from '../i18n';
@@ -852,6 +853,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 无限反转同理（见 scoring.ts 的 FLIP_RULES_VERSION）：连击封顶前后的分不是
       // 一把尺子量的。非反转局不写。
       flipRules: hooks.modeKey === 'flip' ? FLIP_RULES_VERSION : undefined,
+      // 步步为营同理（见 puzzleScore.ts 的 PUZZLE_RULES_VERSION）：2026-10-02 消线奖励
+      // 从退一步改成退两步，一局能走多久、终局盘面长什么样整条都变了。非这一档不写。
+      puzzleRules: hooks.modeKey === 'puzzle' ? PUZZLE_RULES_VERSION : undefined,
       // 这一局按第几版**计分规则**打的（《侵蚀阶梯》v1.2 §6）。上面那两个各管一
       // 个玩法，这一个管全站——服务端照它收不收这一局（`api/scores.js` 只认现行
       // 那一版），旧客户端在途打完的局照常给他看结算页，只是不入榜。

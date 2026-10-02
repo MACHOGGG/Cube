@@ -210,7 +210,12 @@ const runKeyFor: RunKeyFor = (data) => {
   // 原样归档，不和新规则的分混在一起比。
   return (
     card.bestKey +
-    suffixFor(data.modeKey ?? 'base', { bomb: data.bombRules ?? 1, flip: data.flipRules ?? 1 })
+    suffixFor(data.modeKey ?? 'base', {
+      bomb: data.bombRules ?? 1,
+      flip: data.flipRules ?? 1,
+      // 老档没有 puzzleRules，读出来是 undefined——那是消线只退一步那一版，归老榜。
+      puzzle: data.puzzleRules ?? 1,
+    })
   );
 };
 

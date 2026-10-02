@@ -24,6 +24,7 @@
  * 下次升版本只改 bomb.ts / scoring.ts 里那个数。
  */
 import { BOMB_RULES_VERSION } from './bomb';
+import { PUZZLE_RULES_VERSION } from './puzzleScore';
 import { FLIP_RULES_VERSION, SCORING_RULES_VERSION } from './scoring';
 import type { ModeKey } from './runRecord';
 
@@ -43,6 +44,7 @@ import type { ModeKey } from './runRecord';
 export interface RuleVersions {
   bomb?: number;
   flip?: number;
+  puzzle?: number;
 }
 
 export interface ModeFlags {
@@ -103,9 +105,14 @@ export function suffixFor(mk: ModeKey, rules?: RuleVersions): string {
 export function modeSuffix(mk: ModeKey, rules?: RuleVersions): string {
   const bombRules = rules?.bomb ?? BOMB_RULES_VERSION;
   const flipRules = rules?.flip ?? FLIP_RULES_VERSION;
+  const puzzleRules = rules?.puzzle ?? PUZZLE_RULES_VERSION;
   // 步步为营排最前面：它和炸弹、计时不会同时出现，摆最前面是为了读起来一眼看见
-  // 「这一局另算一张榜」。它没有自己的版本号——那个玩法的规则没单独改过。
-  if (mk === 'puzzle') return '_puzzle';
+  // 「这一局另算一张榜」。
+  //
+  // 2026-10-02 它有自己的版本号了（消线奖励 1 → 2，见 puzzleScore.ts 的
+  // PUZZLE_RULES_VERSION）。这一行从前写死 `'_puzzle'`，旁边还注着「那个玩法的规则没单
+  // 独改过」——改过了，而写死的后缀正是这个文件开头记的那次事故的形状。
+  if (mk === 'puzzle') return versioned('_puzzle', puzzleRules);
   if (mk === 'flip') return versioned('_flip', flipRules);
   // 炸弹压过计时：定时炸弹存的也是炸弹那张榜。
   if (mk === 'bomb' || mk === 'bombTimed') return versioned('_bomb', bombRules);
