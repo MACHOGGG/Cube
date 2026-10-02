@@ -260,5 +260,69 @@ const STALE = /连击|連擊|Streak|streak|时间|時間|time bonus|bonus de tem
 const bad = hints.filter((h) => STALE.test(h));
 check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.join(' / ') || '干净');
 
+/**
+ * ---- 计时那一档**真的乘步数系数**，书上不许写反 --------------------------
+ *
+ * `usesStepCoef = !flip && !puzzle && !slot`（engine/gameController.ts）——计时不在
+ * 那三个里头，所以它**乘**。可《怎么玩》里那一条写的是「这一档不乘步数系数」，四种语
+ * 言都写了，而且还替它编了个理由（「一局的长短由钟说了算」）。
+ *
+ * 规则书是「对代码实际行为的陈述」（rules.ts 开头那段）：玩家照着它以为计时局多走几步
+ * 不要紧，而结算页那一行白纸黑字写着 ×0.几。说错就是假话，比没写更糟。
+ *
+ * 量法是两头对：**代码那头**现读 `usesStepCoef` 那一行（计时不许被排进去），**书那头**
+ * 四条计时条目里不许出现「不乘」。
+ */
+{
+  const gc = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
+  const line = (gc.match(/const usesStepCoef = [^;]+;/) || [''])[0];
+  check('（尺子）读到了 usesStepCoef 那一行', line.length > 0, line);
+  check('计时不在「不乘步数系数」那几档里', line.length > 0 && !/timed/.test(line), line);
+
+  // 四种语言里「计时」那一条。按 term 认，不按下标——条目的次序改过不止一次。
+  const TIMED_TERM = /(计时挑战|計時挑戰|Timed modes|Modes chronom\u00e9tr\u00e9s|Modes chronométrés)/;
+  const items = [...rules.matchAll(/\{ term: '([^']+)', body: '((?:[^'\\]|\\.)*)' \}/g)]
+    .filter((m) => TIMED_TERM.test(m[1]));
+  check('（尺子）四种语言的「计时」那一条都找到了', items.length === 4, `${items.length} 条：${items.map((m) => m[1]).join(' / ')}`);
+  const NOT_MULT = /不乘步数系数|不乘步數係數|take no move factor|n\u2019ont pas de facteur de coups|n’ont pas de facteur de coups/;
+  const liars = items.filter((m) => NOT_MULT.test(m[2]));
+  check('计时那一条不再说「不乘步数系数」', liars.length === 0, liars.map((m) => m[1]).join(' / ') || '干净');
+  // 反面尺子：把那句旧话喂进同一条正则，必须抓得到——不然上面那条是空绿。
+  check('（反面尺子）旧那句话喂进来会被抓住', NOT_MULT.test('这一档不乘步数系数——一局的长短由钟说了算。'));
+}
+
+/**
+ * ---- 暂停面板那颗键念的是 `endRunBtn` -----------------------------------
+ *
+ * 玩家定的名字是《结束游戏》。写死一句中文的话，另外三种语言会在暂停面板里撞见一句中
+ * 文；而借别的键（比如《退出》）会让他以为按下去只是离开这一页，分数还在——其实这一局
+ * 当场结算。
+ */
+{
+  const shell = readFileSync(new URL('../src/ui/gameShell.ts', import.meta.url), 'utf8');
+  const btn = (shell.match(/id="pauseFinishBtn"[^>]*>\$\{([^}]+)\}/) || [, ''])[1];
+  check('暂停面板那颗键念的是 i18n 的 endRunBtn', btn.trim() === 's.endRunBtn', btn || '（没找到那颗键）');
+  const names = [...i18n.matchAll(/endRunBtn: '((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
+  check('endRunBtn 四种语言都在', names.length === 4, names.join(' / '));
+}
+
+/**
+ * ---- 玩家看得见的文案里不许出现「／」 -----------------------------------
+ *
+ * 玩家 2026-10 第二轮：「带『／』的句子和长句全部改成一句讲一件事」。那个全角斜杠是写
+ * 的人图快的记法（「得分图案／消除星星」），读的人要自己拆——而这几句恰恰是讲规则的。
+ *
+ * 只看**字符串字面量**，不看注释：这个文件里的注释照旧可以用它（上面那一句就在用）。
+ */
+{
+  const strings = [...i18n.matchAll(/^\s{4}(\w+): '((?:[^'\\]|\\.)*)',$/gm)];
+  check('（尺子）扫到了一堆文案', strings.length > 400, `${strings.length} 条`);
+  const slashed = strings.filter((m) => m[2].includes('／'));
+  check('玩家看得见的文案里没有「／」', slashed.length === 0,
+    slashed.slice(0, 4).map((m) => `${m[1]}: ${m[2].slice(0, 28)}`).join(' / ') || '干净');
+  // 反面尺子：喂一句带「／」的进来，必须抓得到。
+  check('（反面尺子）带「／」的句子喂进来会被抓住', '起始 8 步，每次得分图案／消除星星得到 1'.includes('／'));
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

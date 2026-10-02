@@ -111,6 +111,96 @@ check('头一步点的是《得分图案》那一块', first.cls.includes('coach
   first.cls.join(' ') || '（一个都没挂）');
 check('而且它**真的在亮**（算出来的样式里有动画或光晕）', first.pattern !== 'none', first.pattern);
 
+// ── ①′ 那道光**真的看得见**：逐帧量亮度 ───────────────────────────
+//
+// 上面那一条只问「算出来的样式里有没有动画」——动画在跑，但光可能淡到看不见。玩家
+// 2026-10 第二轮报的正是这件事：呼吸灯看不清。原因不是节奏也不是半径，是**对比**：
+// `--glow` 在浅色主题下是 rgba(179, 57, 43, 0.55)，而那块牌是琥珀色、页底是米色，半透
+// 明的砖红糊在暖色上，10px 一圈淡出去，离远一点只剩「那一块好像有点毛边」。
+//
+// 所以这一条量**像素**：把那条动画停在最暗的一帧（0%）和最亮的一帧（50%），各截一张，
+// 算两张的平均差。差太小就是「在跑，但看不见」——那正是上一条拦不住的那种假绿。
+//
+// 截的是那一块外扩 26px 的一圈：光是 drop-shadow，画在元素**外面**，只截那一块本身量
+// 到的几乎全是没变的牌面。
+{
+  const clip = await page.evaluate(() => {
+    const el = document.querySelector('.hud-block--pattern');
+    const r = el.getBoundingClientRect();
+    const M = 26;
+    return {
+      x: Math.max(0, Math.round(r.left - M)),
+      y: Math.max(0, Math.round(r.top - M)),
+      width: Math.round(r.width + M * 2),
+      height: Math.round(r.height + M * 2),
+    };
+  });
+  /** 把那条光的动画停在 t 毫秒处（0 = 最暗，一半 = 最亮）。 */
+  const seek = (t) => page.evaluate((ms) => {
+    const el = document.querySelector('.hud-block--pattern');
+    const anims = el.getAnimations ? el.getAnimations() : [];
+    if (!anims.length) return null;
+    const a = anims[0];
+    a.pause();
+    a.currentTime = ms === null ? (a.effect.getTiming().duration || 2200) / 2 : ms;
+    return { name: a.animationName || '(unnamed)', dur: a.effect.getTiming().duration };
+  }, t);
+  const info = await seek(0);
+  check('（尺子）抓得到那条光的动画，停得住', !!info, info ? `${info.name} / ${info.dur}ms` : '（没抓到）');
+  const dark = (await page.screenshot({ clip })).toString('base64');
+  await seek(null);
+  const bright = (await page.screenshot({ clip })).toString('base64');
+  /** 两张图的平均通道差（0–255）。在页面里用 canvas 解，不另装 PNG 解码器。 */
+  const delta = await page.evaluate(async ([a, b, w, h]) => {
+    const load = (b64) => new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = rej;
+      img.src = 'data:image/png;base64,' + b64;
+    });
+    const [ia, ib] = await Promise.all([load(a), load(b)]);
+    const px = (img) => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    };
+    const da = px(ia), db = px(ib);
+    if (da.length !== db.length) return -1;
+    let sum = 0, n = 0, worst = 0;
+    for (let i = 0; i < da.length; i += 4) {
+      for (let k = 0; k < 3; k++) {
+        const d = Math.abs(da[i + k] - db[i + k]);
+        sum += d; n++;
+        if (d > worst) worst = d;
+      }
+    }
+    return { mean: sum / n, worst, w, h };
+  }, [dark, bright, clip.width, clip.height]);
+  /*
+   * 门槛 **12**（平均每个通道差 12 级）。这个数是在这台 390×844 上**两头都量过**的：
+   *
+   *   · 现在这版（叠三层 7 / 13 / 22）：平均 20.9，最大 115；
+   *   · 从前那版（单层 10px，玩家说「看不清」的那一版）：平均 5.6，最大 48。
+   *
+   * ⚠️ 第一版门槛写的是 3.0，而坏掉那一版量出来是 5.6——**门槛压在坏值底下，它一条都
+   * 拦不住**：那正是这道门要补的那个洞，差点原样复刻一遍。门槛要卡在两者中间，而且离
+   * 坏值宽出一截（check-mode-axis 里那条 6px 的说明写的是同一件事）。
+   *
+   * 这个数跟着截图的那一圈（外扩 26px）走：那一圈改大改小，平均值会跟着变，门槛也要重
+   * 新两头量一遍，不要照着现在这个数挪。
+   */
+  const MEAN_MIN = 12;
+  check(`那道光真的看得见（最暗 ↔ 最亮，平均每通道差 ≥ ${MEAN_MIN}）`,
+    !!delta && delta.mean >= MEAN_MIN,
+    delta && delta.mean !== undefined ? `平均 ${delta.mean.toFixed(2)} / 最大 ${delta.worst}（量了 ${delta.w}×${delta.h}）` : String(delta));
+  // 量完把动画放回去，后面几条按正常的样子跑。
+  await page.evaluate(() => {
+    const el = document.querySelector('.hud-block--pattern');
+    for (const a of (el.getAnimations ? el.getAnimations() : [])) a.play();
+  });
+}
+
 // ── ② 绝不拦操作：条子亮着的时候，真的拖一枚棋子 ──────────────────
 //
 // 量的是**盘面变没变**，不是「拖动事件有没有发出去」。事件照常发得出去，而被一层蒙版
@@ -227,6 +317,82 @@ if (edge.has) {
 const moved2 = await dragUntilMoved();
 check('带子亮着的时候，棋子也照样拖得动', moved2.moved,
   moved2.moved ? `第 ${moved2.n} 枚拖动了` : '挨个试过都没动');
+
+// ── ③′ 方块那一局的第 4 条：点亮**一整行和一整列** ────────────────
+//
+// 第 4 条在方块那一局讲的是「任意一整行或一整列全是同色星星就消掉」（i18n 的
+// TUTORIAL_RULE4 按图形换过一句）。而呼吸灯那张表里第 4 条指的是**托盘上那条外边指引带
+// 子**——方块 36 没有那条带子（它没有「最外边」这回事），于是这一局**整条第 4 条一盏灯都
+// 不点**：唯一一句指得到实物的话，偏偏在最需要指的那副棋盘上指了个空。
+//
+// 这一节另开一页、换方块那一局来量。两件事：那一行一列真的在亮；亮着照旧不吃手势。
+{
+  const sq = await ctx.newPage();
+  sq.on('pageerror', (e) => errs.push('方块：' + e.message));
+  await sq.goto(BASE, { waitUntil: 'load' });
+  await sq.waitForSelector('.mode-axis .home-icon-btn', { timeout: 30000 });
+  await sq.waitForTimeout(800);
+  // 轴上第 0 张是方块（首玩期只有方块和小球按得开，见 check-first-play）。
+  await sq.evaluate(() => document.querySelectorAll('.mode-axis > .home-icon-btn')[0].click());
+  await sq.waitForTimeout(1200);
+  if (await sq.$('#startBtn')) await sq.$eval('#startBtn', (el) => el.click());
+  await sq.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });
+  await sq.waitForTimeout(900);
+
+  const lit = await sq.evaluate(() => {
+    const stage = document.querySelector('.app--game');
+    stage.classList.remove('coach-aim');
+    stage.classList.add('coach-aim--edge');
+    const anim = (el) => {
+      const cs = getComputedStyle(el);
+      return cs.animationName !== 'none' ? cs.animationName : (cs.filter !== 'none' ? 'filter:' + cs.filter : 'none');
+    };
+    const all = [...document.querySelectorAll('#boardWrap .tile')];
+    const on = all.filter((e) => anim(e) !== 'none');
+    const want = all.filter((e) => e.dataset.r === '2' || e.dataset.c === '2');
+    return {
+      shape: stage.getAttribute('data-shape'),
+      hasBand: !!document.querySelector('.edge-band'),
+      tiles: all.length,
+      want: want.length,
+      onCount: on.length,
+      // 亮着的那几枚，正好就是第 3 行和第 3 列那几枚？
+      exact: on.length === want.length && on.every((e) => want.includes(e)),
+      name: on.length ? anim(on[0]) : 'none',
+    };
+  });
+  check('（尺子）这一局真的是方块，而且盘上有棋子', lit.shape === 'square' && lit.tiles > 0, `${lit.shape} / ${lit.tiles} 枚`);
+  check('（尺子）方块这一局没有外边指引带子（所以才要这一条）', lit.hasBand === false);
+  check('（尺子）第 3 行第 3 列那几枚真的在盘上', lit.want > 0, `${lit.want} 枚`);
+  check('方块的第 4 条点亮了一整行和一整列', lit.exact && lit.onCount > 0,
+    `亮着 ${lit.onCount} 枚 / 该亮 ${lit.want} 枚（${lit.name}）`);
+
+  // 亮着照旧不吃手势：E23 那一半在这一支上也要成立。换着棋子试，有一枚动了就算过。
+  const fp = () => sq.evaluate(() =>
+    [...document.querySelectorAll('#boardWrap .tile')]
+      .map((e) => { const r = e.getBoundingClientRect(); return `${Math.round(r.left)},${Math.round(r.top)}:${getComputedStyle(e).backgroundColor}`; })
+      .join('|'));
+  const was = await fp();
+  let moved = false;
+  for (const n of [14, 8, 20, 2, 26]) {
+    const at = await sq.evaluate((k) => {
+      const all = [...document.querySelectorAll('#boardWrap .tile')];
+      const el = all[Math.min(k, all.length - 1)];
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, step: r.width };
+    }, n);
+    if (!at) continue;
+    await sq.mouse.move(at.x, at.y);
+    await sq.mouse.down();
+    for (let k = 1; k <= 10; k++) await sq.mouse.move(at.x + (k * at.step * 2) / 10, at.y);
+    await sq.mouse.up();
+    await sq.waitForTimeout(700);
+    if ((await fp()) !== was) { moved = true; break; }
+  }
+  check('那一行一列亮着的时候，棋子照样拖得动（E23「绝不拦操作」）', moved);
+  await sq.close();
+}
 
 // ── ④ 两支灯互斥，而且条子底下那一块不在棋盘上 ────────────────────
 const geom = await page.evaluate(() => {

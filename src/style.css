@@ -2568,6 +2568,82 @@ button:hover { filter: brightness(1.05); }
  * 一个元素都匹配不到——不点灯，自动是对的，不用在 JS 那头判断棋盘。
  */
 .app--game.coach-aim--edge .edge-band { --glow: var(--card-cream); }
+/*
+ * ---- 教学那两盏灯要**更亮一档** ----------------------------------------
+ *
+ * 玩家 2026-10 第二轮：呼吸灯看不清。量出来的原因不是节奏也不是半径，是**对比**：
+ * `--glow` 在浅色主题下是 `rgba(179, 57, 43, 0.55)`，而《得分图案》那块牌是琥珀色
+ * （`--play-chip: #D2952F`）、页底是米色（`--bg: #F5EDDA`）——半透明的砖红糊在暖色
+ * 上，10px 一圈淡出去，离远一点就只剩「那一块好像有点毛边」。
+ *
+ * 治法是**叠三层**，不是换一支颜色：
+ *
+ *   · 叠加会把同一支半透明色乘上去（0.55 叠三次 ≈ 0.91），于是光更实；
+ *   · 三个半径 7 / 13 / 22 一层比一层散，外圈于是伸得更远，远看也认得出是一团光；
+ *   · **颜色仍然是 `var(--glow)`**，所以深色主题那支白光自动跟着走——换一支写死的
+ *     深红会在深色主题（页底 `#1E1820`）上变成一团看不见的东西。
+ *
+ * ⚠️ **三个半径在整段动画里一个都不许变**，明灭只由颜色（`transparent` ↔ `--glow`）给。
+ * 理由见上面 glow-pulse 那一大段：半径一变，滤镜区域每帧重算，iOS 的 Safari 会把挨着的
+ * 两块并进同一块画布按不透明处理，那圈光于是贴着一个方框——玩家实拍到过。
+ *
+ * ⚠️ `@keyframes` 里的 `var()`：小红书那一端跑在 Chrome 61 上。自定义属性是 Chrome 49
+ * 起就有的，而上面那条 `glow-pulse` 从落地起就是这么写的，`check-oldcss` / `check-oldkernel`
+ * 一直是绿的——这儿照它写，不另开一条写死颜色的路（两份颜色迟早只改一处）。
+ */
+@keyframes glow-pulse-coach {
+  0%, 100% {
+    filter: drop-shadow(0 0 7px transparent) drop-shadow(0 0 13px transparent) drop-shadow(0 0 22px transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
+  }
+}
+.app--game.coach-aim .hud-block--pattern,
+.app--game.coach-aim--edge .edge-band,
+.app--game[data-shape="square"].coach-aim--edge .board .tile[data-r="2"]:not(.piece-grabbed),
+.app--game[data-shape="square"].coach-aim--edge .board .tile[data-c="2"]:not(.piece-grabbed) {
+  /* 写整条 `animation`，不是只换 `animation-name`：底下那一行一列的棋子不在上面
+     `.glow-pulse, …` 那条里，只给名字的话时长是 0，动画一帧都不跑（而且不报错）。 */
+  animation: glow-pulse-coach 2.2s ease-in-out infinite;
+  will-change: filter;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app--game.coach-aim .hud-block--pattern,
+  .app--game.coach-aim--edge .edge-band,
+  .app--game[data-shape="square"].coach-aim--edge .board .tile[data-r="2"]:not(.piece-grabbed),
+  .app--game[data-shape="square"].coach-aim--edge .board .tile[data-c="2"]:not(.piece-grabbed) {
+    animation: none;
+    filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
+  }
+}
+/*
+ * ---- 方块那一局的第 4 条：点亮**一整行和一整列** ------------------------
+ *
+ * 第 4 条在方块那一局讲的是「任意一整行或一整列全是同色星星就消掉」（i18n 的
+ * TUTORIAL_RULE4 按图形换过一句）。而呼吸灯那张表里，第 4 条指的是**托盘上那条外边指引
+ * 带子**——方块 36 没有那条带子（它没有「最外边」这回事），于是这一局**整条第 4 条一盏灯
+ * 都不点**：唯一一句指得到实物的话，偏偏在最需要指的那一副棋盘上指了个空。
+ *
+ * 现在就地点亮一行一列。做法仍然只动 `filter`，画在棋子**自己**身上（E23 的另一半「绝不
+ * 拦操作」：一个像素的热区都不加，手指照旧落在棋子上）。
+ *
+ * **为什么是第 3 行第 3 列（下标 2）**：
+ *   · 不能挑第 0 行第 0 列——那是棋盘的上沿和左沿，一眼看过去像在讲「最外边」，而那正是
+ *     这一局**不是**的那条规则（外边族才削最外边）。
+ *   · 下标 2 在开局的 6×6 上偏中间，读起来就是「随便哪一行、随便哪一列」。
+ *   · 棋盘消到不足 3×3 时这条选择器一个元素都匹配不到——不点灯，和「指的那样东西不在就
+ *     不点灯」是同一条规矩，不用在 JS 那头判断。
+ *
+ * 选择器带 `[data-shape="square"]`：菱形方块也是 `.tile` 也有 data-r/data-c，可它是外边
+ * 族、有带子（见 shapes/squareDiamond.ts 文件头），在它身上点一行一列是讲错规则。
+ *
+ * 还带 `:not(.piece-grabbed)`：手指按住的那一枚有自己的一道 `filter`（`.piece-grabbed`），
+ * 被这条动画盖掉的话，教学期间按住这一行的棋子会「没有反应」——而那正是 E23 最不许发生的
+ * 那件事的近亲。
+ *
+ * 规则本身写在上面那条 `animation` 里（和另外两盏灯同一条），这儿只留这段说明。
+ */
 /* ---- 头一回打开时的那道软锁（ui/menu.ts 的 armFirstPlayLock）----------
    按到方块和小球以外的卡：那两张抖一下、光更亮一档，别的什么也不发生。不写
    字——两张亮着的卡本身就是答案（玩家定的「少文字」）。
@@ -4412,6 +4488,17 @@ html.is-playing body { background: var(--play-bg); }
    页面的 --ink（那在琥珀上几乎看不见）。 */
 .app--game .hud-block--pattern { color: var(--play-chip-ink); padding: 6px 10px; }
 .app--game .pat-icon > svg { color: var(--play-chip-ink); }
+/*
+ * 教学第 3 条那一下演示（E24，见 ui/patternBlock.ts 的 demo）：这一块换一支显眼的颜色，
+ * 图标在四枚和三枚之间慢慢来回。
+ *
+ * 颜色是《色卡》里那支红（`--card-red` #BE411A，玩家指定）。它压的是上面那条牌面墨色
+ * ——两条特指度一样（0,3,1），靠**写在后面**赢；这是有意的，不是没算过：牌面墨色是常
+ * 态，演示是一时的，常态写在前面读起来才顺。
+ *
+ * 只换颜色，不碰大小和位置：这一块的尺寸是玩家定过的，演示不该顺手把它改了。
+ */
+.app--game .pat-block--demo .pat-icon > svg { color: var(--card-red); }
 .app--game .pat-ring-lit { color: var(--play-chip-ink); }
 .app--game .pat-ring-dim { opacity: 0.3; }
 .app--game .controls .icon-btn {

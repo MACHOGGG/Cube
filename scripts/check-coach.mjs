@@ -237,6 +237,27 @@ console.log(`steps 表里出现的 by：${bys.join(' ')}`);
 console.log(`有调用点的：${[...called.keys()].join(' ')}`);
 console.log('');
 
+/**
+ * **头一局那条线：五步，一步一条，顺着第 1 条讲到第 5 条。**
+ *
+ * 玩家 2026-10 第二轮点名要的（「教学拆成 5 步、进度条 5 格」）。这一条读的是 PLAN_FIRST
+ * 的源文本，不是运行时的 steps——下面那半边的「走到第 5 / 5 步」拿的就是 steps 自己的长
+ * 度，**自己量自己永远相等**，谁把五步改回四步它照样绿。
+ *
+ * 一步一条这件事本身也要钉住：从前第 1、2 条合在一步里摆两行，而那一步等的是「得两次
+ * 分」——第二次得分完全可能一颗星都没碰到，于是屏幕上说着「星星可以和色块一起再拼一
+ * 次」，他做的却是又拼了一组纯色块。
+ */
+{
+  const plan = (src.match(/const PLAN_FIRST: readonly Step\[\] = \[([\s\S]*?)\n\];/) || [, ''])[1];
+  const rules = [...plan.matchAll(/rules:\s*\[([^\]]*)\]/g)].map((m) => m[1].split(',').map((x) => Number(x.trim())));
+  check('（尺子）切出了 PLAN_FIRST', rules.length > 0, `${rules.length} 步`);
+  check('头一局是五步', rules.length === 5, JSON.stringify(rules));
+  check('一步一条，顺着第 1 条讲到第 5 条',
+    rules.every((r, i) => r.length === 1 && r[0] === i),
+    JSON.stringify(rules));
+}
+
 check('每一步等的那个信号都在词表里', bys.every((b) => vocab.includes(b)),
   bys.filter((b) => !vocab.includes(b)).join(',') || '');
 check('每一处 signal() 报的都是词表里的词（没有把字符串写错的）',
@@ -354,7 +375,10 @@ function mount(plan, storeKey, taught = false) {
   const host = makeEl('div');
   host.parent = stage;
   stage.childNodes.push(host);
-  return { host, stage, bar: mountCoachBar(host, { lang: LANG, shape: SHAPE, plan }) };
+  /** E24 那一下演示：条子每换一步都报一次 on/off，记下来给下面那一节对。 */
+  const demo = [];
+  const bar = mountCoachBar(host, { lang: LANG, shape: SHAPE, plan, onDemo: (on) => demo.push(on) });
+  return { host, stage, bar, demo };
 }
 
 /** 这一刻呼吸灯打在哪样东西上（E23）。 */
@@ -373,7 +397,9 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
 {
   const { host, stage, bar } = mount('first', 'gate_first');
   const segs = host.querySelector('.coach-prog').children.length;
-  check('头一局画得出进度条（一步一格）', segs >= 4, `${segs} 格`);
+  // 钉死 5，不写 `>= 4`：玩家 2026-10 第二轮点名要五格，而「一步一格」那条规矩在上面已
+  // 经按源码钉过一遍——两头都钉住，少一格或者多一格都当场红。
+  check('头一局的进度条正好五格（一步一格）', segs === 5, `${segs} 格`);
 
   const path = []; // 走过的每一步：摆了哪几条、靠什么走掉的
   let guard = 0;
@@ -409,6 +435,69 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
     path.every((p) => !p.by || vocab.includes(p.by)),
     path.map((p) => `[${p.rules.join('+')}]${p.by ? '←' + p.by + (p.times > 1 ? '×' + p.times : '') : '（摆着）'}`).join(' '));
   check('第 3 条真的做到了，记了账（下一局不用补讲）', erosionTaught() === true);
+  // 顺带记一笔：有没有调用 onDemo（E24 那一下演示）。下面另有一节单独验它。
+}
+
+/**
+ * **第 3 步不吃「他早就做过了」那条捷径**（Step.fresh）。
+ *
+ * 这一步等的是 `'match'`，而 `'match'` 从第 1 步起就在 `hit` 里了。`arm` 里那条捷径的
+ * 道理是「新东西他已经会了，亮一下算个招呼」——可第 3 步要他做的本来就不是新东西，它在
+ * 那儿是为了让《得分图案》那一块把「会变小」演给他看（E24）。吃了捷径的话这一步 6 秒后
+ * 自己跳过去，**而跳过去的那一次不记账**：下一副棋盘人人都要补讲一遍第 3 条。
+ *
+ * 量法：走到第 3 步，什么都不报，把假时钟推过 ALREADY_READ_MS——不许动。再报一次
+ * `'match'`，这才该走。
+ */
+{
+  const ALREADY_READ_MS = num('ALREADY_READ_MS');
+  check('读得到 ALREADY_READ_MS', ALREADY_READ_MS > 0, String(ALREADY_READ_MS));
+  const { host, bar } = mount('first', 'gate_fresh');
+  const atNow = () => host.querySelector('.coach-prog').children.filter((c) => c._cls.has('on')).length - 1;
+  // 第 1 步 ← match，第 2 步 ← mixed，走到第 3 步。
+  bar.signal('match');
+  advance(AFTER_MS + 5);
+  bar.signal('mixed');
+  advance(AFTER_MS + 5);
+  check('（尺子）走到了第 3 步', atNow() === 2, `在第 ${atNow() + 1} 步`);
+  advance(ALREADY_READ_MS + 200);
+  check('第 3 步不吃「早就做过了」那条捷径（光等不动）', atNow() === 2, `在第 ${atNow() + 1} 步`);
+  bar.signal('match');
+  advance(AFTER_MS + 5);
+  check('再得一次分才走到第 4 步', atNow() === 3, `在第 ${atNow() + 1} 步`);
+  check('而且这一次记了账（下一副棋盘不用补讲）', erosionTaught() === true);
+}
+
+/**
+ * **第 3 条那一步才演「四枚变三枚」**（E24，ui/patternBlock.ts 的 demo）。
+ *
+ * 这一下是第 3 条唯一指得到的实物：开局那会儿《得分图案》一动不动，一排四枚摆在那儿，
+ * 句子里的「变化」没有任何东西对应。所以「哪一步开、哪一步关」本身就是那条规则——开错
+ * 一步，屏幕上就是一块红着的牌子在那儿来回闪，而讲的是别的事。
+ *
+ * 认的是**这一步讲的是哪一条**，不是第几步：补讲那一路（MAKEUP_EROSION）摆的也是第 3
+ * 条，它也该演。
+ */
+{
+  const { host, stage, bar, demo } = mount('first', 'gate_aim2');
+  const path = [];
+  let guard = 0;
+  for (;;) {
+    if (++guard > 20) break;
+    const at = host.querySelector('.coach-prog').children.filter((c) => c._cls.has('on')).length - 1;
+    const rules = shownRules(host);
+    const rec = [...src.matchAll(/\{ rules: \[([^\]]*)\](?:, by: '([a-z]+)')?(?:, times: (\d+))?/g)];
+    const step = rec[at];
+    if (!step) break;
+    const by = step[2];
+    const times = Number(step[3] || 1);
+    path.push({ at, rules, by, times, aim: aimNow(stage) });
+    if (!by) break;
+    for (let k = 0; k < times; k++) bar.signal(by);
+    advance(AFTER_MS + 5);
+    const next = host.querySelector('.coach-prog').children.filter((c) => c._cls.has('on')).length - 1;
+    if (next === at) break;
+  }
 
   /**
    * **呼吸灯指的是这一步讲的那样东西**（E23「呼吸灯自适应指引」）。
@@ -420,6 +509,16 @@ check('读得到 STUCK_MS / AFTER_MS', STUCK_MS > 0 && AFTER_MS > 0, `${STUCK_MS
    * 两条尺子立在前面，免得这一条变成空绿：三种情形**每一种都真的走到过**。只对
    * 「没有哪一步点错」的话，一条灯都不点的实现照样全绿。
    */
+  // E24：每换一步报一次，报的 on/off 要和「这一步讲不讲第 3 条」一一对上。
+  check('（尺子）每一步都报了一次演示的开关', demo.length === path.length, `${demo.length} 次 / ${path.length} 步`);
+  const demoWant = path.map((p) => p.rules.includes(2));
+  check('只有第 3 条那一步在演「四枚变三枚」（E24）',
+    demo.length === demoWant.length && demo.every((v, i) => v === demoWant[i]),
+    `报的 ${demo.map((v) => (v ? '演' : '停')).join('')} / 该是 ${demoWant.map((v) => (v ? '演' : '停')).join('')}`);
+  bar.destroy();
+  check('destroy 之后演示也停了（不然那一块会一直红着来回闪）', demo[demo.length - 1] === false,
+    demo.map((v) => (v ? '演' : '停')).join(''));
+
   const want = (rules) => (rules.some((r) => r <= 2) ? 'pattern' : rules.includes(3) ? 'edge' : null);
   const kinds = new Set(path.map((p) => want(p.rules)));
   check('（尺子）三种情形都走到过：点《得分图案》/ 点外边带子 / 不点',

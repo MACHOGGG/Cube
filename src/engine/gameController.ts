@@ -690,6 +690,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           shape: hooks.coachShape ?? 'circle',
           plan: hooks.coachPlan,
           art: hooks.coachArt,
+          // 第 3 条那一步让《得分图案》那一块把「会变小」演一遍（E24）。两样都在这儿
+          // 手上，所以由这儿接线——条子不该伸手进 HUD 去摸元素。
+          onDemo: (on) => patternBlock.demo(on),
         });
       }
     }

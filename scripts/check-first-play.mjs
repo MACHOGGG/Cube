@@ -9,7 +9,8 @@
  *   · 软锁——一局都没打过时，主菜单上只有《基础方块》和《基础小球》按得开；
  *     按到别的卡，那两张抖一下、光更亮一档，靠下的还会冒一个上滑箭头。打完
  *     第一局锁就永远撤掉。
- *   · 教学条——他玩的第一个基础玩法从第 1 条讲起，四段进度，第 1 条说的是
+ *   · 教学条——他玩的第一个基础玩法从第 1 条讲起，五段进度（2026-10 第二轮从四段改
+ *     的，一步一条），第 1 条说的是
  *     「色块得分后会变成星星」。
  *
  *     四段不是五段：规则改成五条之前那六条里，第 6 条（综合得分）挪去了结算页，第 1、2 条
@@ -109,8 +110,19 @@ const coach = await page.evaluate(() => ({
   segs: document.querySelectorAll('.coach-seg').length,
   rows: [...document.querySelectorAll('.coach-row:not([hidden]) .coach-text')].map((e) => e.textContent.trim()),
 }));
-check('教学条：四段进度（一段一步，不是一段一条）', coach.segs === 4, String(coach.segs));
-check('第 1 步摆的是前两条', coach.rows.length === 2, JSON.stringify(coach.rows.map((t) => t.slice(0, 12))));
+/*
+ * 2026-10 第二轮：**五段，一步一条**（玩家点名）。
+ *
+ * 上一版是四段、第 1 步摆两条——这两条断言钉的就是那个样子，所以那一轮改完它们当场红，
+ * 而**红得对**。拆开的理由记在 ui/coachBar.ts 的 PLAN_FIRST 上：第 2 条讲的「星星还能再
+ * 用」合着的时候没有自己的那一下可做，两条共用「得两次分」，而第二次得分完全可能一颗
+ * 星都没碰到。
+ *
+ * 「一段一步」那条规矩一个字没改，只是步数从四变成五；所以这儿照旧钉死一个数，不写
+ * `>= 4`——数字本身就是玩家要的那件事。
+ */
+check('教学条：五段进度（一段一步）', coach.segs === 5, String(coach.segs));
+check('第 1 步只摆第 1 条（一步一条）', coach.rows.length === 1, JSON.stringify(coach.rows.map((t) => t.slice(0, 12))));
 /**
  * 第 1 条就是玩家原话那一句，逐字对。
  *

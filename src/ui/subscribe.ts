@@ -145,8 +145,17 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
       return s.tooManyTries;
     case 'active':
       return s.alreadyActive;
+    /*
+     * 帐号那一头答 `notConfigured`，说的是**服务器没配好**（没有 Redis，见 api/_store.js
+     * 那条「这个功能还没开」），不是「订阅还没开卖」。
+     *
+     * 从前这儿借了订阅那句 `notOnSaleYet`（「订阅尚未开放」）：玩家在**登录窗**里打完两
+     * 串按下去，屏幕上答的是一句和登录毫不相干的话——他会以为自己走错了地方，而其实是我
+     * 们这头的后台掉了。订阅那条路照旧用 `notOnSaleYet`（failureText 那一支），两句话各
+     * 回各的事。
+     */
     case 'notConfigured':
-      return s.notOnSaleYet;
+      return s.serverBusy;
     case 'taken':
       return s.emailTaken;
     case 'sameEmail':
