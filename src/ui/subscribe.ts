@@ -911,6 +911,16 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   let stage: Stage = 'mail';
   /** ②③ 要记住上一步填的东西：②要知道码寄给了谁，③的「重设」要知道第一串。 */
   let sentTo = '';
+  /**
+   * ② 还要记住**那张票**（服务端的 `challenge`）：码和「猜了几次」都存在它底下。
+   *
+   * 它只回给要码的这台设备，所以外人替你要一次码、或者拿你的地址乱猜，动的都是他自己那
+   * 一张（见 api/signin.js 顶上那段）。它只活在这个闭包里：不进 localStorage，也不进
+   * entitlement——码本来就只在这一屏里用一次，存下来只会多一个会泄露的地方。
+   *
+   * 代价说明白：这一屏关掉再开，票就没了，他得重新要一张（一小时三封）。
+   */
+  let sentTicket = '';
   /** ③ 有两档：取一对新的（register）还是重设第二串（reset）。 */
   let pairMode: 'register' | 'reset' = 'register';
 
@@ -1007,12 +1017,13 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       msg.textContent = s.workingLabel;
       const asked = await askForCode(email, lang);
       go.disabled = false;
-      if (asked !== true) {
+      if (typeof asked === 'string') {
         // mailDown 时**留在这一屏**（E51）：他手里那一步没动，旁边就是另一条路。
         say(asked);
         return;
       }
       sentTo = email;
+      sentTicket = asked.challenge;
       codeInput.value = '';
       show('code');
       msg.textContent = s.codeSentNote;
@@ -1024,7 +1035,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       if (!/^\d{6}$/.test(code)) return void (msg.textContent = s.codeWrong);
       go.disabled = true;
       msg.textContent = s.workingLabel;
-      const done = await signInWithCode(sentTo, code, newsBox.checked);
+      const done = await signInWithCode(sentTo, code, newsBox.checked, sentTicket);
       go.disabled = false;
       if (!done.ok) {
         pin.reject();

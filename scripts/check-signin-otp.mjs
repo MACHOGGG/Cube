@@ -25,6 +25,11 @@
  * ⑥ 码过期 / 根本没发过码 → 400 expired；
  * ⑦ **登录不踢别的设备**——`issueToken` 只添一把。这一条错了不报错，只是玩家在手机上
  *    登一次，平板上那台悄悄掉线。
+ *
+ * ⚠️ 2026-10-02 起每一次要码都带回**一张票**（`challenge`），码和计数都存在那张票底下
+ * （见 api/signin.js 顶上那段「为什么要有票」）。所以这道门里每一次 `confirm` 都要把票递
+ * 回去，读库也要带着票。票本身那一套性质（外人破坏不了别人那一张、冒号地址被拒……）另有
+ * 一道门：`check-signin-challenge.mjs`。
  */
 import { get } from '../api/_store.js';
 
@@ -78,10 +83,23 @@ async function call(body) {
 let ipSeq = 0;
 const freshIp = () => { fromIp = `10.0.${++ipSeq}.1`; };
 
-const ask = (email, extra = {}) => call({ email, ...extra });
-const confirm = (email, code, extra = {}) => call({ action: 'confirm', email, code, ...extra });
-/** 库里那张码。门能读到它，是这道门能量出东西的前提。 */
-const codeFor = async (email) => (await get('signin:' + email))?.code;
+/** 要一张码。回包里那张票（`challenge`）单独摆出来，下面每一步都要用它。 */
+const ask = async (email, extra = {}) => {
+  const r = await call({ email, ...extra });
+  return { ...r, ticket: String(r.body?.challenge ?? '') };
+};
+const confirm = (email, code, ticket, extra = {}) =>
+  call({ action: 'confirm', email, code, challenge: ticket, ...extra });
+/** 库里那张码。门能读到它，是这道门能量出东西的前提。键里带着票。 */
+const codeFor = async (email, ticket) => (await get('signin:' + email + ':' + ticket))?.code;
+/**
+ * 比两个回包时把票抹掉。
+ *
+ * 票是随机的，所以两次要码的回包**必然**不一样——要量的是「除它以外一个字都不差」。不抹
+ * 的话 ③④ 那两条永远红，而红的是门自己。
+ */
+const masked = (r) =>
+  JSON.stringify({ status: r.status, body: { ...r.body, challenge: '<票>' } });
 
 freshIp();
 const FRESH = 'fresh@example.com';
@@ -91,26 +109,27 @@ const SECOND = 'second@example.com';
 {
   const asked = await ask(FRESH);
   check('① 要码：200 sent', asked.status === 200 && asked.body?.sent === true, JSON.stringify(asked.body));
-  const code = await codeFor(FRESH);
+  check('① 回包里有一张 16 位十六进制的票', /^[0-9a-f]{16}$/.test(asked.ticket), asked.ticket);
+  const code = await codeFor(FRESH, asked.ticket);
   check('（尺子）库里真有一张六位码', /^\d{6}$/.test(String(code)), String(code));
   check('（尺子）信真的发给了这个地址', sentTo.includes(FRESH), sentTo.join(' '));
 
-  const bad = await confirm(FRESH, '000000' === code ? '111111' : '000000');
+  const bad = await confirm(FRESH, '000000' === code ? '111111' : '000000', asked.ticket);
   check('码不对 → 401 wrongCode', bad.status === 401 && bad.body?.error === 'wrongCode', JSON.stringify(bad.body));
 
-  const ok = await confirm(FRESH, code, { news: true });
+  const ok = await confirm(FRESH, code, asked.ticket, { news: true });
   check('码对了 → 200 并拿到令牌', ok.status === 200 && typeof ok.body?.token === 'string' && ok.body.token.length > 0,
     `${ok.status} ${JSON.stringify(ok.body).slice(0, 90)}`);
   check('② 新地址 created: true', ok.body?.created === true, String(ok.body?.created));
   check('窗口开着，这一下就是天才', ok.body?.active === true, String(ok.body?.active));
-  check('码用掉就没了（同一张不能再用）', (await codeFor(FRESH)) === undefined);
+  check('码用掉就没了（同一张不能再用）', (await codeFor(FRESH, asked.ticket)) === undefined);
 }
 
 // ── ② 老地址再来一次：created 必须是 false ─────────────────────
 {
   freshIp();
-  await ask(FRESH);
-  const again = await confirm(FRESH, await codeFor(FRESH));
+  const re = await ask(FRESH);
+  const again = await confirm(FRESH, await codeFor(FRESH, re.ticket), re.ticket);
   check('② 老地址 created: false', again.body?.created === false, String(again.body?.created));
   check('（尺子）还是登得进去，拿得到令牌', again.status === 200 && typeof again.body?.token === 'string');
 }
@@ -123,22 +142,24 @@ const SECOND = 'second@example.com';
 {
   freshIp();
   const HAS = 'has-account@example.com';
-  await ask(HAS);
-  await confirm(HAS, await codeFor(HAS));
+  const first = await ask(HAS);
+  await confirm(HAS, await codeFor(HAS, first.ticket), first.ticket);
 
   mailOk = true;
   const had = await ask(HAS);
   const hadnt = await ask('no-account@example.com');
-  check('③ 有账号 / 没账号，要码的回包一字不差',
-    JSON.stringify(had) === JSON.stringify(hadnt), `${JSON.stringify(had.body)} vs ${JSON.stringify(hadnt.body)}`);
+  check('③ 有账号 / 没账号，要码的回包一字不差（票除外，它本来就该每次不同）',
+    masked(had) === masked(hadnt), `${JSON.stringify(had.body)} vs ${JSON.stringify(hadnt.body)}`);
+  check('（反面尺子）两张票确实不一样（不是发了同一张给所有人）',
+    had.ticket !== hadnt.ticket && had.ticket.length === 16);
   check('（尺子）两边都真发了信（不是都没发）',
     sentTo.includes(HAS) && sentTo.includes('no-account@example.com'));
 }
 {
   freshIp();
   const HAS2 = 'has-account-2@example.com';
-  await ask(HAS2);
-  await confirm(HAS2, await codeFor(HAS2));
+  const seed = await ask(HAS2);
+  await confirm(HAS2, await codeFor(HAS2, seed.ticket), seed.ticket);
 
   mailOk = false;
   const downHad = await ask(HAS2);
@@ -146,10 +167,13 @@ const SECOND = 'second@example.com';
   check('④ 发信失败 → 200 { sent: false, reason: mailDown }',
     downHad.status === 200 && downHad.body?.sent === false && downHad.body?.reason === 'mailDown',
     JSON.stringify(downHad.body));
-  check('④ 失败时两种地址也一字不差',
-    JSON.stringify(downHad) === JSON.stringify(downNew), `${JSON.stringify(downHad.body)} vs ${JSON.stringify(downNew.body)}`);
+  check('④ 失败时两种地址也一字不差（票除外）',
+    masked(downHad) === masked(downNew), `${JSON.stringify(downHad.body)} vs ${JSON.stringify(downNew.body)}`);
   // 信没发出去，码照旧留在库里——真实情况里「Resend 回了错但信其实寄到了」是有的。
-  check('④ 发信失败也把码留着（万一那封信其实到了）', /^\d{6}$/.test(String(await codeFor('third@example.com'))));
+  check('④ 发信失败也把码留着（万一那封信其实到了）',
+    /^\d{6}$/.test(String(await codeFor('third@example.com', downNew.ticket))));
+  // 而票也照旧回给他：码可能在他手上，那把能用它的钥匙就不该被我们弄丢。
+  check('④ 发信失败也把票回给他', /^[0-9a-f]{16}$/.test(downNew.ticket), downNew.ticket);
   mailOk = true;
 }
 
@@ -180,22 +204,22 @@ const SECOND = 'second@example.com';
 {
   freshIp();
   const VICTIM = 'victim@example.com';
-  await ask(VICTIM);
-  const real = await codeFor(VICTIM);
+  const t = (await ask(VICTIM)).ticket;
+  const real = await codeFor(VICTIM, t);
   const wrong = real === '000000' ? '111111' : '000000';
   const seen = [];
-  for (let i = 1; i <= 6; i++) seen.push((await confirm(VICTIM, wrong)).status);
+  for (let i = 1; i <= 6; i++) seen.push((await confirm(VICTIM, wrong, t)).status);
   check('⑤ 前 5 次是 401，第 6 次是 429', seen.slice(0, 5).every((s) => s === 401) && seen[5] === 429, seen.join(' '));
   // 第 6 次把码一起作废了，所以就算这时打对的那一张也进不去——这是对的：
   // 一张被猜过 5 次的码不该还有效。
-  const after = await confirm(VICTIM, real);
+  const after = await confirm(VICTIM, real, t);
   check('⑤ 挡住之后连正确的码也不好使了', after.status === 400 && after.body?.error === 'expired', JSON.stringify(after.body));
 }
 
 // ── ⑥ 没发过码 ────────────────────────────────────────────────
 {
   freshIp();
-  const none = await confirm('nobody@example.com', '123456');
+  const none = await confirm('nobody@example.com', '123456', 'a1b2c3d4e5f60718');
   check('⑥ 压根没发过码 → 400 expired', none.status === 400 && none.body?.error === 'expired', JSON.stringify(none.body));
 }
 
@@ -203,11 +227,12 @@ const SECOND = 'second@example.com';
 {
   freshIp();
   const TWO = 'twodevices@example.com';
-  await ask(TWO);
-  const first = await confirm(TWO, await codeFor(TWO));
-  await ask(TWO);
-  const second = await confirm(TWO, await codeFor(TWO));
+  const t1 = (await ask(TWO)).ticket;
+  const first = await confirm(TWO, await codeFor(TWO, t1), t1);
+  const t2 = (await ask(TWO)).ticket;
+  const second = await confirm(TWO, await codeFor(TWO, t2), t2);
   check('（尺子）两台设备拿到的是两把不同的令牌', first.body.token !== second.body.token);
+  check('（尺子）两台设备用的是两张不同的票', t1 !== t2);
 
   const { loadAccount, tokenValid } = await import('../api/_accounts.js');
   const account = await loadAccount(TWO);

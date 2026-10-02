@@ -295,9 +295,10 @@ export async function signInWithCode(
   email: string,
   code: string,
   news: boolean,
+  challenge: string,
 ): Promise<{ ok: true; created: boolean } | { ok: false; reason: CodeFailure }> {
   const creem = await import('./creem');
-  const reply = await creem.webConfirmCode(email, code, news);
+  const reply = await creem.webConfirmCode(email, code, news, challenge);
   if (typeof reply === 'string') return { ok: false, reason: reply };
   setEntitlement({
     active: Boolean(reply.active),
@@ -311,8 +312,16 @@ export async function signInWithCode(
   return { ok: true, created: reply.created === true };
 }
 
-/** 要一张验证码。不碰缓存——这一步还没有任何身份可写。 */
-export async function askForCode(email: string, lang: string): Promise<true | CodeFailure> {
+/**
+ * 要一张验证码。不碰缓存——这一步还没有任何身份可写。
+ *
+ * 成了回的是 `{ challenge }`：那张票要一路带到 `signInWithCode`。见 creem.ts 的
+ * `webRequestCode`，以及 api/signin.js 顶上那段「为什么要有票」。
+ */
+export async function askForCode(
+  email: string,
+  lang: string,
+): Promise<{ challenge: string } | CodeFailure> {
   return (await import('./creem')).webRequestCode(email, lang);
 }
 

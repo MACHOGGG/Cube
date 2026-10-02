@@ -96,13 +96,21 @@ const callOn = async (handler, body, ip = '203.0.113.1') => {
   return { status, raw: text || '{}', body: JSON.parse(text || '{}') };
 };
 
-/** 要一张码，然后把它打进去。返回 confirm 那一趟的回包。 */
+/**
+ * 要一张码，然后把它打进去。返回 confirm 那一趟的回包。
+ *
+ * ⚠️ 要码那一趟会回一张**票**（`challenge`，2026-10-02 起），码存在那张票底下，交码时要原
+ * 样递回去——见 api/signin.js 顶上那段。这道门不关心票本身（那是
+ * `check-signin-challenge.mjs` 的事），只负责一路把它带着。
+ */
 async function otpSignIn(email, ip = '203.0.113.1') {
   sentCode = null;
   const asked = await callOn(signin, { email }, ip);
   if (asked.status !== 200) throw new Error(`要码失败 ${asked.status} ${asked.raw}`);
   if (!sentCode) throw new Error('假邮件里没读出码');
-  return callOn(signin, { action: 'confirm', email, code: sentCode }, ip);
+  const challenge = String(asked.body.challenge ?? '');
+  if (!/^[0-9a-f]{16}$/.test(challenge)) throw new Error('要码没回票：' + asked.raw);
+  return callOn(signin, { action: 'confirm', email, code: sentCode, challenge }, ip);
 }
 
 // ── ①② 被抢注的地址：主人第一次验成功 ──────────────────────────
@@ -229,25 +237,29 @@ const ATTACK_TOKEN = 'ATTACKER-DEVICE-TOKEN';
   await A.createAccount(BUSY, (() => { const a = A.newAccount('', 'code'); a.emailVerifiedAt = Date.now(); return a; })());
 
   sentCode = null;
-  await callOn(signin, { email: BUSY }, '198.51.100.9');
+  const asked = await callOn(signin, { email: BUSY }, '198.51.100.9');
   const code = sentCode;
-  check('（尺子）码要到了', /^\d{6}$/.test(String(code)), String(code));
+  const ticket = String(asked.body.challenge ?? '');
+  check('（尺子）码和票都要到了', /^\d{6}$/.test(String(code)) && ticket.length === 16,
+    `${code} / ${ticket}`);
 
   // 把那把账号锁先占住。键名和 _accounts.js 的 acctLockKey 一样（'acctlock:' + 邮箱）。
   // withLock 会等 30 × 60ms 才认输，所以这一条慢两秒。
   const LOCK = 'acctlock:' + BUSY;
   check('（尺子）锁占住了', await setnx(LOCK, { at: Date.now() }, 30));
 
-  const busy = await callOn(signin, { action: 'confirm', email: BUSY, code }, '198.51.100.10');
+  const busy = await callOn(signin,
+    { action: 'confirm', email: BUSY, code, challenge: ticket }, '198.51.100.10');
   check('⑦ 抢不到锁：答 503 busy，不是 200 也不是「码过期」',
     busy.status === 503 && busy.body.error === 'busy', `${busy.status} ${busy.raw}`);
-  check('⑦ **码还在库里**（他重输一次就该成）', Boolean(await get('signin:' + BUSY)));
+  check('⑦ **码还在库里**（他重输一次就该成）', Boolean(await get(`signin:${BUSY}:${ticket}`)));
 
   await del(LOCK);
-  const retry = await callOn(signin, { action: 'confirm', email: BUSY, code }, '198.51.100.11');
+  const retry = await callOn(signin,
+    { action: 'confirm', email: BUSY, code, challenge: ticket }, '198.51.100.11');
   check('⑦ 锁放开之后，同一张码照样好使', retry.status === 200 && Boolean(retry.body.token),
     `${retry.status} ${retry.raw}`);
-  check('⑦ 这一趟之后码才删掉', !(await get('signin:' + BUSY)));
+  check('⑦ 这一趟之后码才删掉', !(await get(`signin:${BUSY}:${ticket}`)));
 }
 
 // ── ⑦′ 验过之后又设了一把密码：不许再清一遍 ────────────────────

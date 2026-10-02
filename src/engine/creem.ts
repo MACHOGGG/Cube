@@ -200,30 +200,53 @@ export interface AuthReply extends SubscriptionReply {
 }
 
 /**
- * 要一张验证码。
+ * 要一张验证码。成了就带回**那张票**（服务端的 `challenge`），交码那一步要原样递回去。
+ *
+ * ⚠️ **票一定要收好。** 码和「猜了几次」都存在这张票底下，而票只回给要码的这台设备——所
+ * 以外人替你要一次码、或者拿你的地址乱猜，动的都是他自己那一张（见 api/signin.js 顶上那
+ * 段）。丢了票就只能重新要一张，而要码那道限速是一小时三封。
  *
  * **发不出去也是 200**（`{ sent: false, reason: 'mailDown' }`，服务端 E51）：Resend 的额
  * 度一满或者域名验证掉了，所有人都收不到码——如实回报，界面据此把人引到免邮箱那条路。所
  * 以这儿不是 catch 里认那一条，而是在成功的回包里认。
  */
-export async function webRequestCode(email: string, lang: string): Promise<true | CodeFailure> {
+export async function webRequestCode(
+  email: string,
+  lang: string,
+): Promise<{ challenge: string } | CodeFailure> {
   try {
-    const reply = await postJson<{ sent?: boolean; reason?: string }>('/api/signin', { email, lang });
-    if (reply.sent === true) return true;
+    const reply = await postJson<{ sent?: boolean; reason?: string; challenge?: string }>(
+      '/api/signin',
+      { email, lang },
+    );
+    if (reply.sent === true) return { challenge: String(reply.challenge ?? '') };
     return reply.reason === 'mailDown' ? 'mailDown' : 'failed';
   } catch (err) {
     return codeFailure(err);
   }
 }
 
-/** 把验证码交上去。成了就带回完整的 entitlement 回包（含 `created`）。 */
+/**
+ * 把验证码交上去。成了就带回完整的 entitlement 回包（含 `created`）。
+ *
+ * `challenge` 就是上一步拿回来的那张票。**空串也发得出去**：服务端把「不带票」当成上线之
+ * 前发出去的那些老码（那条过渡路自己 30 分钟后消失），所以一个正好卡在上线那一刻的标签页
+ * 不会被判成失败。
+ */
 export async function webConfirmCode(
   email: string,
   code: string,
   news: boolean,
+  challenge: string,
 ): Promise<AuthReply | CodeFailure> {
   try {
-    const reply = await postJson<AuthReply>('/api/signin', { action: 'confirm', email, code, news });
+    const reply = await postJson<AuthReply>('/api/signin', {
+      action: 'confirm',
+      email,
+      code,
+      news,
+      challenge,
+    });
     return reply.token ? reply : 'failed';
   } catch (err) {
     return codeFailure(err);

@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import {
   clearFails,
@@ -56,7 +56,45 @@ import { compose, mailLang, sendMail } from './_mail.js';
 
 const CODE_TTL_S = 30 * 60;
 const MAX_TRIES = 5;
-const key = (email) => 'signin:' + email;
+
+/**
+ * 一张票（`challenge`）：这一次要码的人自己的凭据。
+ *
+ * ── 原先是什么样 ──────────────────────────────────────────────
+ *
+ * 码存在 `signin:<邮箱>` 底下，猜测次数存在 `signin:tries:<邮箱>` 底下——**按地址，不按
+ * 这一次**。而这个接口对谁都发信（它是注册兼登录，没有「这个地址有没有号」可藏）。两件
+ * 事合起来，任何知道某人邮箱的人都能把他挡在门外，而且不需要任何凭据：
+ *
+ *   ① 他正在读信的时候，外人替他要一张新码——`set` 把他那张**覆盖**掉。他照着信上那六
+ *      位数打进来，得到「验证码不对」。
+ *   ② 或者外人拿他的地址乱猜 5 次：`tries > MAX_TRIES` 那一支会**把码删掉**。他手里那张
+ *      当场作废，答的是「验证码已过期」。
+ *   ③ 他回头再要一张，而要码那道限速是一小时三封——外人也在用同一个桶。
+ *
+ * 全程他看不出任何异常，只会觉得「这个网站的验证码是坏的」。
+ *
+ * ── 现在 ────────────────────────────────────────────────────
+ *
+ * 要码那一趟当场发一张票（8 字节随机数，16 位十六进制），码和计数都存在**这张票**底下，
+ * 而票只回给要码的那台设备。外人于是只能破坏自己那一张：
+ *
+ *   signin:<邮箱>:<票>          这一张码
+ *   signin:tries:<邮箱>:<票>    这一张猜了几次
+ *
+ * ⚠️ **票绝不能带冒号，邮箱也不能**（`EMAIL_RE` 从 2026-10-02 起禁止冒号）。不然
+ * `signin:` + 邮箱 拼出来的键会和别的键撞上——比如一个叫 `tries:受害者@x.com` 的地址，
+ * `signin:tries:受害者@x.com` 正好是受害者那个计数键。门里有一条专钉这件事。
+ *
+ * ⚠️ 不带票的那条路**留着**，但只对「这一次上线之前就发出去的码」有用：那些码存在老键
+ * （`signin:<邮箱>`）底下，而从这一刻起没有任何地方再往老键里写。它们自己 30 分钟后过
+ * 期，于是这条过渡路自己就消失了——不用记一个「上线时间 + 30 分钟」的常数（那种常数一定
+ * 会被忘在代码里）。过渡期里它和从前一样可被破坏，那是这条路的全部代价。
+ */
+const CHALLENGE_RE = /^[0-9a-f]{16}$/;
+const newChallenge = () => randomBytes(8).toString('hex');
+
+const key = (email, ticket) => 'signin:' + email + (ticket ? ':' + ticket : '');
 /**
  * 猜了几次，单独存一个键，用 INCR（见 _store.js 的 bump）。
  *
@@ -64,7 +102,21 @@ const key = (email) => 'signin:' + email;
  * 隔着两次网络往返；同一瞬间打进来的几十个请求都会读到「才猜了 0 次」，于是整批只被
  * 记成一次——5 次上限形同虚设。这个坑在 unlock.js 上记着，照同一套来。
  */
-const triesKey = (email) => 'signin:tries:' + email;
+const triesKey = (email, ticket) => 'signin:tries:' + email + (ticket ? ':' + ticket : '');
+
+/**
+ * 两道只管 `confirm` 的限速。
+ *
+ * `GUESS_PER_HOUR` 按**邮箱**数，而且只数「真有码可猜」的那几次（见 confirm 里的次序）。
+ * 15 不是随手挑的：要码那道限速是一小时三封，每张票 5 次，3 × 5 = 15——它把「这个地址一
+ * 小时里总共能被猜多少次」这个本来是推出来的数写明白了。只数真实猜测这一点要紧：否则外
+ * 人拿一个**编的**票打 15 次，就把受害者这一小时的额度用光了，而那正是这一推要修的病。
+ *
+ * `TRY_PER_CALLER` 按来路数，挡的是我们自己的资源（每次 confirm 都要读一次库）。它无条件
+ * 地数，编的票也算——那种请求除了耗我们一次往返什么也做不到，而这一道正是用来限它的。
+ */
+const GUESS_PER_HOUR = 15;
+const TRY_PER_CALLER = 30;
 
 /**
  * 验证码那封信，四种语言。挑哪一种、以及「非英文时英文永远附一份」，见 _mail.js 的
@@ -109,7 +161,7 @@ export default async function handler(req, res) {
   if (!EMAIL_RE.test(address)) return send(res, 400, { error: 'email' });
 
   return body.action === 'confirm'
-    ? confirm(res, address, body)
+    ? confirm(res, req, address, body)
     : request(res, req, address, body.lang);
 }
 
@@ -131,9 +183,16 @@ async function request(res, req, address, wantLang) {
   }
 
   const code = String(randomInt(0, 1e6)).padStart(6, '0');
-  await set(key(address), { code }, CODE_TTL_S);
-  // 新码新账：上一张码猜掉的次数不跟着过来。
-  await del(triesKey(address));
+  const ticket = newChallenge();
+  await set(key(address, ticket), { code }, CODE_TTL_S);
+  /*
+   * 这儿原先还有一句 `del(triesKey(address))`——「新码新账：上一张码猜掉的次数不跟着
+   * 过来」。**那一句现在不能有，而且本来就是上面说的那条破坏路的一半**：它按地址清，于
+   * 是任何人替别人要一次码，就把那个人已经攒下的猜测次数抹掉了。
+   *
+   * 换成按票之后它也不必要了：这张票是刚生出来的，它自己那个计数键还不存在，`bump` 从
+   * 1 开始数（见 _store.js）。别的票的计数一个都不许动。
+   */
 
   /**
    * 发不出去就说发不出去（E51）。
@@ -146,22 +205,54 @@ async function request(res, req, address, wantLang) {
    * 实寄到了」是有的，删掉码的话那张寄到的码反而成了废纸。多留 30 分钟不花钞。
    */
   const sent = await sendMail({ to: address, ...compose(MAIL, lang, code) });
-  return send(res, 200, sent ? { sent: true } : { sent: false, reason: 'mailDown' });
+  /*
+   * 票**两种情况都回**，连发信失败那一种。
+   *
+   * 理由和上面那段 ⚠️ 一样：Resend 回了错而信其实寄到了，是真会发生的事，所以码照旧留在
+   * 库里。既然码可能在他手上，那把能用它的钥匙也得在他手上——不然那张寄到的码成了废纸。
+   * 界面此刻留在填邮箱那一屏（E51），用不上它；它只是不该被我们弄丢。
+   */
+  return send(res, 200, sent
+    ? { sent: true, challenge: ticket }
+    : { sent: false, reason: 'mailDown', challenge: ticket });
 }
 
-async function confirm(res, address, { code, news }) {
-  // 先占掉一次机会，再去比对——次序反过来就是那道假门：几十个并发请求会一起通过
-  // 「还没到 5 次」这一关，然后一起猜。占号是原子的，所以第 6 个请求拿到的就是 6，
-  // 它连码是多少都不会去读（照 unlock.js 那一段）。
-  const tries = await bump(triesKey(address), CODE_TTL_S);
+async function confirm(res, req, address, { code, news, challenge }) {
+  /**
+   * 下面几步的**次序是这道门的全部内容**，每一步往后挪一位都会把某个人的东西弄坏：
+   *
+   *   ① 票的形状。编得不对就是这张票不存在，和「码过期」同一句话——不另给一个错，免得
+   *      外面的人能从回包里分出「票对不对」和「码对不对」。空着是另一回事（过渡路）。
+   *   ② 按来路限速。挡我们自己的资源，所以要在读库之前，而且编的票也算。
+   *   ③ 占掉这张票的一次机会（`bump`，原子）。**先占号再比对**——次序反过来就是那道假
+   *      门：几十个并发请求会一起通过「还没到 5 次」这一关，然后一起猜（照 unlock.js）。
+   *   ④ 把码读出来。没有就是这张票不存在或者过期了。
+   *   ⑤ 到这儿才按邮箱记一次「真的猜了一回」。摆在 ④ 后面是有意的，理由写在
+   *      GUESS_PER_HOUR 上：摆在前面的话，外人拿编的票就能把受害者这一小时的额度用光。
+   *   ⑥ 比对。
+   */
+  const ticket = String(challenge ?? '');
+  if (ticket && !CHALLENGE_RE.test(ticket)) return send(res, 400, { error: 'expired' });
+
+  if (await tooMany('signin:try', callerId(req), TRY_PER_CALLER, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+
+  const tries = await bump(triesKey(address, ticket), CODE_TTL_S);
   if (tries > MAX_TRIES) {
-    await del(key(address));
-    await del(triesKey(address));
+    // 删的是**这一张**票的码和计数，别人那几张一个字都不动。
+    await del(key(address, ticket));
+    await del(triesKey(address, ticket));
     return send(res, 429, { error: 'expired' });
   }
 
-  const pending = await get(key(address));
+  const pending = await get(key(address, ticket));
   if (!pending) return send(res, 400, { error: 'expired' });
+
+  if (await tooMany('signin:guess', address, GUESS_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+
   if (String(code || '').trim() !== pending.code) {
     return send(res, 401, { error: 'wrongCode' });
   }
@@ -188,7 +279,7 @@ async function confirm(res, address, { code, news }) {
     // ——而赢家那一份已经带着 emailVerifiedAt，所以 `claimed` 不会误判成抢注。
     if (await createAccount(address, fresh)) {
       // newAccount 自己就发了第一把令牌（tokens 里正是那一把），不用再 issueToken。
-      return finish(res, address, fresh, fresh.token, true);
+      return finish(res, address, fresh, fresh.token, true, ticket);
     }
   }
 
@@ -269,7 +360,7 @@ async function confirm(res, address, { code, news }) {
   // （见 _accounts.js 的 failKey）。不清的话下一次输错会接着旧的次数往上数。
   if (claimed) await clearFails(address);
 
-  return finish(res, address, got.account, issued, created);
+  return finish(res, address, got.account, issued, created, ticket);
 }
 
 /**
@@ -278,9 +369,12 @@ async function confirm(res, address, { code, news }) {
  * `created` 由调用方说，不在这儿算：它的意思是「这一趟是不是第一次」，而界面拿它决定
  * 要不要摆那个「愿不愿意收更新邮件」的勾选框（见文件顶上那段）。
  */
-async function finish(res, address, account, issued, created) {
-  await del(key(address));
-  await del(triesKey(address));
+async function finish(res, address, account, issued, created, ticket) {
+  // 只删**这一张**票。同一个人连点两下《寄给我》会有两张票，另一张照旧有效到 30 分钟
+  // 过期——两张码都是寄给他的，谁也没多拿什么。而且这儿也没法枚举别的票（库里没有
+  // SCAN），所以「顺手都清掉」压根做不到，不是没想。
+  await del(key(address, ticket));
+  await del(triesKey(address, ticket));
 
   /**
    * 身份已经成立（这张码是寄到这个地址的），所以这儿才写得了那份终身天才。

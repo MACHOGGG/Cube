@@ -161,8 +161,14 @@ check('订阅活着但没有账号：和「压根没这个人」一字不差（�
   await createAccount('probe-has@example.com', newAccount('', 'code'));
   const had = await callOn(signinApi, { email: 'probe-has@example.com' }, '203.0.113.70');
   const hadnt = await callOn(signinApi, { email: 'probe-none@example.com' }, '203.0.113.71');
-  check('验证码那一支：有账号 / 没账号，回包一字不差',
-    had.status === hadnt.status && had.raw === hadnt.raw, `${had.raw} / ${hadnt.raw}`);
+  // 回包里那张票（`challenge`，2026-10-02 起）每次都是新的随机数，所以比之前先把它抹掉
+  // ——要量的是「除它以外一个字都不差」。不抹的话这一条永远红，而红的是门自己。
+  const noTicket = (r) => r.raw.replace(/"challenge":"[0-9a-f]{16}"/, '"challenge":"<票>"');
+  check('验证码那一支：有账号 / 没账号，回包一字不差（票除外，它本来就该每次不同）',
+    had.status === hadnt.status && noTicket(had) === noTicket(hadnt), `${had.raw} / ${hadnt.raw}`);
+  check('（反面尺子）两张票确实不一样（不是发了同一张给所有人）',
+    had.body.challenge && had.body.challenge !== hadnt.body.challenge,
+    `${had.body.challenge} / ${hadnt.body.challenge}`);
 
   // handle 的 signin：这一串没人用过，和第二串打错了，答同一句。
   await createAccount(pairKey('ProbePair1'), newAccount('rightpass', 'code'));
