@@ -1665,11 +1665,41 @@ let page = await menuPage({ slides_played_square: '1' });
   await page.mouse.up();
   await page.waitForTimeout(900);
   check('滑一下不会误开玩法', await page.evaluate(() => !!document.querySelector('.mode-axis')));
-  // ② 点聚焦那张：一下就进
+  /*
+   * ② 点聚焦那张：一下就进。
+   *
+   * 点的是**那张图的正中**，不是屏幕中线。2026-10 第二轮之前这儿写的是 `box.x`（轴盒子
+   * 的横向正中），而那一点落在两张图之间那条缝里——热区改成「跟着画出来的图走」之后那儿
+   * 什么都没有（见 style.css 那段 `pointer-events`）。它从前能过，靠的恰恰是要修掉的那件
+   * 事：两张卡的版面盒子在中线上叠着六十来像素，这一按被右边那张收了下去。
+   *
+   * 顺手先用 `elementFromPoint` 问一句「这一点属于谁」——点不中的时候这句话会说出是谁收
+   * 了，不然下面那条只会报「没进玩法」，查起来得从头量一遍。
+   */
   await page.waitForTimeout(400);
   const s = await shot(page);
   const focused = s.cards.reduce((a, b) => (b.scale > a.scale ? b : a));
-  await page.mouse.click(box.x, focused.cy);
+  const aim = await page.evaluate((idx) => {
+    const host = document.querySelector('.mode-axis');
+    const el = [...host.children].filter((e) => e.classList.contains('home-icon-btn'))[idx];
+    const a = el && el.querySelector(':scope > .home-icon-art');
+    if (!a) return null;
+    const r = a.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    const owner = hit && hit.closest('.mode-axis > .home-icon-btn');
+    return {
+      x, y, own: owner === el,
+      got: owner ? (owner.getAttribute('aria-label') || '').split(' ·')[0] : (hit ? '（不是卡）' : '（空）'),
+    };
+  }, focused.i);
+  check(
+    '按在聚焦那张图的正中，收下这一按的就是它自己',
+    !!aim && aim.own,
+    aim ? `图心 (${aim.x.toFixed(0)}, ${aim.y.toFixed(0)}) → ${aim.got}，该是 ${focused.name}` : '（没量到图）',
+  );
+  await page.mouse.click(aim.x, aim.y);
   await page.waitForTimeout(1200);
   const gone = await page.evaluate(
     () => !document.querySelector('.mode-axis') || !!document.querySelector('#startBtn') || !!document.querySelector('.center-pick'),
@@ -2129,14 +2159,17 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
    * 本身会被压成 157，而它应该是半幅宽——图在卡里自己居中靠的就是这一点。
    * 所以量卡宽：压回去立刻红。
    *
-   * 「半幅」同时也是热区那一条：卡的版面盒子正好铺满自己那一列，不多不少，所以左半
-   * 边屏幕一定点到左边那张。整幅（两张盒子完全重叠）会让点击落到 z-index 高的那张上
-   * ——看着点的是左边那个玩法，开出来的是右边那个。
+   * ⚠️ **「半幅」不等于「热区不重叠」，别再把这两件事写成一件。** 这一行从前就是那么注的，
+   * 而它是错的：卡连盒子一起被 maxScale 放大，半幅的盒子放大之后在屏幕中间叠出六十来像素
+   * ——于是 2026-10 第一轮把图放大之后，左边那张图右边的 21px 被右边那张收了，看着点的是
+   * 「经典方块」，开出来的是圆球。热区现在跟着**画出来的图**走（style.css 那段
+   * `pointer-events`），由下面 ⑦ 按一遍来量。这一条量的只是「卡没被外面那条 max-width 压
+   * 窄」——图在卡里自己居中靠的是这一点。
    */
   const want = art.hostW / COLS;
   const narrow = art.rows.filter((r) => Math.abs(r.cardW - want) > 1);
   check(
-    `${label}：每张卡正好半幅宽（一排两张，热区不重叠）`,
+    `${label}：每张卡正好半幅宽（没被外面那条 max-width 压窄）`,
     narrow.length === 0,
     narrow.length
       ? narrow.map((r) => `${r.name} 卡宽 ${r.cardW} ≠ 半幅 ${want}（max-width ${r.cardMaxW}）`).join(' / ')
@@ -2252,6 +2285,133 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
         : `点子内沿 ${art.dotIn.l.toFixed(1)} / ${art.dotIn.r.toFixed(1)}`)
       : '（没找到点点）',
   );
+  /**
+   * ⑦ **热区 ≡ 画出来的那张图（加底下那行小字）。**
+   *
+   * 上面 ⑥ 量的是「图画在哪儿」，这一条量的是「按下去谁收」。**两件事从前不是一件，而第
+   * 二件没有门，所以坏了整整一个版本没人发现。**
+   *
+   * 怎么坏的：卡片的版面盒子是半幅宽，聚焦时整张卡连盒子一起被 maxScale 放大，于是两张卡
+   * 的盒子在屏幕中间叠出一条六十来像素宽的带（两张**图**之间明明还留着十几像素的缝）。那
+   * 条带里两张的 z-index 都是 100，听 DOM 次序，右边那张永远赢。2026-10 第一轮把图从 112
+   * 放到 130，这条带就吃进了左边那张图右边的 21px——手指按在「经典方块」那张图上，开出来
+   * 的是圆球。⑥ 一条都不红：图画在哪儿是对的。
+   *
+   * 所以这一条按**画出来的东西**取点，再问 `elementFromPoint`「这一点属于谁」：图的正中、
+   * 四条边各往里 2%、小字的正中，一张卡六个点。判定只有一条——**绝不许落到另一张卡上**。
+   *
+   * 落到「不是卡」的东西上不算错，而且必须允许：轴从 Slides 招牌和底排那两块板子**底下**
+   * 滑过去（玩家 2026-09 第三轮定的），所以靠上靠下那几排的点本来就被板子收着；离轴中心远
+   * 的那几排整排在屏外。两样都记成状态打出来，不当失败。
+   *
+   * **非空尺子**：聚焦那一排（最宽、也正是会叠的那一排）两张卡的**每一个点**都要落在自己
+   * 身上。只写「没有落到别人身上」是一句空话——十二张卡全滚出屏幕它也成立。
+   */
+  const hit = await pg.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const hostRect = host.getBoundingClientRect();
+    const out = [];
+    cards.forEach((el, i) => {
+      const name = (el.getAttribute('aria-label') || '').split(' ·')[0];
+      const art = el.querySelector(':scope > .home-icon-art');
+      const tag = el.querySelector(':scope > .home-icon-tag');
+      const scale = Number((el.style.transform.match(/scale\(([\d.]+)\)/) || [0, '1'])[1]);
+      const pts = [
+        ['图心', art, 0.5, 0.5], ['图左', art, 0.02, 0.5], ['图右', art, 0.98, 0.5],
+        ['图上', art, 0.5, 0.02], ['图下', art, 0.5, 0.98], ['小字', tag, 0.5, 0.5],
+      ];
+      for (const [what, node, fx, fy] of pts) {
+        if (!node) { out.push({ i, name, scale, what, state: '没有这一块' }); continue; }
+        const r = node.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) { out.push({ i, name, scale, what, state: '没有这一块' }); continue; }
+        const x = r.left + r.width * fx;
+        const y = r.top + r.height * fy;
+        if (x < 1 || y < 1 || x > vw - 1 || y > vh - 1) { out.push({ i, name, scale, what, state: '屏外' }); continue; }
+        const got = document.elementFromPoint(x, y);
+        // `.mode-axis > .home-icon-btn` 而不是 `.home-icon-btn`：炸弹那张卡里嵌着九颗也顶着
+        // .home-icon-btn 的小片（pointer-events: none，是画不是控件），用后一个会把那九颗
+        // 当成「另一张卡」。
+        const owner = got && got.closest('.mode-axis > .home-icon-btn');
+        out.push({
+          i, name, scale, what,
+          state: !got ? '空' : owner === el ? '自己' : owner ? '别人' : '被别的东西盖着',
+          other: owner && owner !== el ? (owner.getAttribute('aria-label') || '').split(' ·')[0] : '',
+          cover: got && !owner ? (got.className || got.tagName || '').toString().trim().slice(0, 40) : '',
+        });
+      }
+    });
+    const top = cards.length ? Math.max(...cards.map((el) => Number((el.style.transform.match(/scale\(([\d.]+)\)/) || [0, '1'])[1]))) : 0;
+    /*
+     * 还要反过来问一遍：**中线上那条线，一张卡都不许收下。**
+     *
+     * 上面那六个点是「按在我的东西上，收下的是我」；这一条是「两边都不该伸到中线上来」。
+     * 少了它，上面那六个点是**量不出小字那一层的**：`.home-icon-tag` 从前是 `display:
+     * block`，盒子半幅宽、伸过中线，可它的**正中**仍然是自己那张卡的正中——取点取在正中，
+     * 两种写法答案一模一样。反向验证时就是这么发现的（撤掉 `display: inline-block`，上面
+     * 那六个点一个都不红）。
+     *
+     * 落单那张（卡片数为奇数时）本来就摆在正中，中线归它——那一排整排跳过。
+     */
+    const mid = hostRect.left + hostRect.width / 2;
+    const cross = [];
+    const byRow = new Map();
+    for (const el of cards) {
+      const r = el.getBoundingClientRect();
+      const key = Math.round((r.top + r.height / 2) * 2) / 2;
+      if (!byRow.has(key)) byRow.set(key, []);
+      byRow.get(key).push({ el, r });
+    }
+    for (const [, group] of byRow) {
+      if (group.some((g) => g.el.classList.contains('axis-col--solo'))) continue;
+      const t = Math.min(...group.map((g) => g.r.top));
+      const b = Math.max(...group.map((g) => g.r.bottom));
+      for (const f of [0.08, 0.25, 0.5, 0.75, 0.92]) {
+        const y = t + (b - t) * f;
+        if (y < 1 || y > vh - 1) continue;
+        const got = document.elementFromPoint(mid, y);
+        const owner = got && got.closest('.mode-axis > .home-icon-btn');
+        cross.push({
+          y: +y.toFixed(1),
+          who: owner ? (owner.getAttribute('aria-label') || '').split(' ·')[0] : '',
+          scale: owner ? Number((owner.style.transform.match(/scale\(([\d.]+)\)/) || [0, '1'])[1]) : 0,
+        });
+      }
+    }
+    return { out, top, cross };
+  });
+
+  const stolen = hit.out.filter((h) => h.state === '别人');
+  check(
+    `${label}：没有一个点落到另一张卡上（热区 ≡ 画出来的图）`,
+    stolen.length === 0,
+    stolen.length
+      ? stolen.map((h) => `${h.name} 的「${h.what}」被 ${h.other} 收了`).join(' / ')
+      : `量了 ${hit.out.length} 个点：自己 ${hit.out.filter((h) => h.state === '自己').length}，` +
+        `被板子盖着 ${hit.out.filter((h) => h.state === '被别的东西盖着').length}，` +
+        `屏外 ${hit.out.filter((h) => h.state === '屏外').length}`,
+  );
+  const crossed = hit.cross.filter((c) => c.who);
+  check(
+    `${label}：中线上一条线从上按到下，一张卡都没收下（没有一张伸过中线）`,
+    hit.cross.length >= 5 && crossed.length === 0,
+    crossed.length
+      ? crossed.slice(0, 4).map((c) => `y=${c.y} 被 ${c.who}（scale ${c.scale}）收了`).join(' / ')
+      : `按了 ${hit.cross.length} 下`,
+  );
+  // 非空尺子：聚焦那一排两张，六个点一个不少都要落在自己身上。
+  const focusHits = hit.out.filter((h) => Math.abs(h.scale - hit.top) < 0.005);
+  const focusBad = focusHits.filter((h) => h.state !== '自己');
+  check(
+    `${label}：聚焦那一排（scale ${hit.top.toFixed(3)}）每一个点都落在自己身上`,
+    focusHits.length >= 2 * 6 && focusBad.length === 0,
+    focusBad.length
+      ? focusBad.map((h) => `${h.name}「${h.what}」→ ${h.state}${h.other || h.cover}`).join(' / ')
+      : `${focusHits.length} 个点`,
+  );
+
   /**
    * ⑤ **轴上那条 `.bomb-panel` 规则里，宽高一个 auto 都不能留。**
    *
