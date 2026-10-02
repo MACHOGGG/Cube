@@ -415,6 +415,17 @@ jobs:
         run: |
           npx esbuild src/engine/residueBoard.ts --bundle --format=esm --outfile=/tmp/resboard.mjs
           node scripts/check-residue-board.mjs /tmp/resboard.mjs
+      # 上面两道守的都是**零件**（搜索件答得对不对、喂进去的盘面对不对），没有人守**调用
+      # 点**——而调用点是同一段话抄了五遍（五副外边族棋盘），这个仓库为「同一件事手写了
+      # 十六遍」写过一整篇文件头注释，知道这种东西怎么烂：改一处、漏四处，全都不报错。
+      #
+      # 这一段里最要命的一行是「只有 'dead' 才判死」：写成 `verdict !== 'scores'` 的话，
+      # `'unknown'`（预算用完、算不出来）会被当成死局，**把一局还能打的棋盘 1.4 秒直接结
+      # 算**——而 residueSearch 的文件头写着「算不完一律当活」。另外三条：计数说死就直接
+      # 回、≤16 枚那道守卫、三角要多传「只许偶数步」。外加控制器那一头真的会结算、而且是
+      # §4 写的那 1.4 秒。六个反证逐条验过。
+      - name: 残局穷举：五副棋盘的接线一处都没断
+        run: node scripts/check-residue-wiring.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
       # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白
