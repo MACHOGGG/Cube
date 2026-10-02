@@ -1203,6 +1203,32 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         resolving = false;
         return;
       }
+      /**
+       * **先记账，再判这一局到没到头。**
+       *
+       * 这一步真的走了——不管它之后盘面是清空了、炸掉了，还是步数正好见底。所以
+       * 账要先记上：`spend` 是「走了一步」这件事唯一的记录处，结算页那几行、分享
+       * 卡、记录页读的都是它。
+       *
+       * ⚠️ **从前它排在 isGameOver 后面，于是清盘那一局的最后一步整步漏掉**：把盘
+       * 面打到一枚不剩的那一下不计入「走了 N 步」，结算页和分享卡一起少一步。少的
+       * 偏偏是最漂亮的那一局——打到清盘的人才会遇上。屏幕上什么都不报，数字看着也
+       * 像那么回事。
+       *
+       * **只是记账挪了位置，哪种结局优先一个字没动**：炸弹 > 盘面清空 > 步数见底。
+       * 这个次序是玩家定的——「盘面真的走完了就该报『都消完了』，不该报『步数用完
+       * 了』」，后者会让他以为自己输了，而他其实是赢到了头。所以下面三个 if 的先
+       * 后仍然照旧，`left <= 0` 排在最后。
+       */
+      let left = -1;
+      if (bank) {
+        left = bank.spend(totalRaw > 0, { edge: hadLineBonus });
+        paintSteps(left);
+        // 退回来了几步 = 现在剩的 − 走之前剩的 + 那一步的成本。要的是「退了几
+        // 步」而不是净变化：孤立得分净变化是 0，可屏幕上必须看得见「付了 1、
+        // 退回 1」——那正是这一局要教的那句话（见 stepLedgerText）。
+        bumpSteps(Math.max(0, left - beforeLeft + PUZZLE_STEP_COST));
+      }
       // 炸弹四连炸在**这一步结束时**的盘面上判（见 checkHazard 上面那段）。
       // 排在 isGameOver 前面：被炸掉的那一局不该同时报「盘面清空了」。
       if (hooks.checkHazard?.()) {
@@ -1217,28 +1243,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         endGame(ALL_FLIPPED_REASON);
         return;
       }
-      /**
-       * 扣步，放在最后。
-       *
-       * 顺序是玩家定的那一条：**盘面真的走完了，就该报「都消完了」，不该报
-       * 「步数用完了」**——后者会让玩家以为自己输了，而他其实是赢到了头。所以
-       * isGameOver() 排在这前面，走到这儿才轮到步数说话。
-       *
-       * 同理它也排在 checkHazard 后面（这一局没炸弹，恒 false，但顺序照规矩摆，
-       * 将来真给它配上炸弹时不用重新想一遍）。
-       */
-      if (bank) {
-        const left = bank.spend(totalRaw > 0, { edge: hadLineBonus });
-        paintSteps(left);
-        // 退回来了几步 = 现在剩的 − 走之前剩的 + 那一步的成本。要的是「退了几
-        // 步」而不是净变化：孤立得分净变化是 0，可屏幕上必须看得见「付了 1、
-        // 退回 1」——那正是这一局要教的那句话（见 stepLedgerText）。
-        bumpSteps(Math.max(0, left - beforeLeft + PUZZLE_STEP_COST));
-        if (left <= 0) {
-          resolving = false;
-          endGame(PUZZLE_STEPS_OUT_REASON);
-          return;
-        }
+      if (bank && left <= 0) {
+        resolving = false;
+        endGame(PUZZLE_STEPS_OUT_REASON);
+        return;
       }
       updateStuckState(hooks.findStuckGroups?.() ?? []);
       resolving = false;

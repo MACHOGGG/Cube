@@ -376,5 +376,60 @@ for (const [lang, term] of PUZZLE_TERMS) {
   check('（反面尺子）旧那句话喂进来会被抓住', /×\s*[(（]\s*1\s*\+/.test(stale));
 }
 
+// ── 6. 最后那一步也要记上（读 gameController 的源码，不打包）────────────────
+//
+// 一局的最后一步是**记在账上的**还是**漏掉的**，取决于 `finish()` 里三件事的先后：
+//
+//     bank.spend(…)            ← 走了一步，这是唯一的记录处
+//     if (checkHazard) …       ← 炸掉了
+//     if (isGameOver()) …      ← 盘面清空了
+//     if (left <= 0) …         ← 步数见底
+//
+// 从前 `spend` 排在最后，于是**清盘那一局的最后一步整步漏掉**：把盘面打到一枚不剩的那
+// 一下不计入「走了 N 步」，结算页和分享卡一起少一步。少的偏偏是最漂亮的那一局——打到清
+// 盘的人才会遇上，而屏幕上什么都不报，数字看着也像那么回事。
+//
+// ⚠️ 这一条**读的是源码的次序**，不是跑一局量出来的。真正的端到端要手摆一副「一步就能
+// 清空」的牌（devDeal 只在 dev 下存在，见 engine/devDeal.ts），而那副牌要连「门自己看得
+// 出这一步真的走了」都成立——盘上只剩同色同面的几枚时，循环位移前后屏幕一模一样，门分
+// 不出「走了一步」和「没走动」。所以这儿照 check-residue-wiring 的办法钉次序：这四行的
+// 先后本身就是那条规则，而它们在同一个函数里，一眼看得完。
+//
+// 后三行的**先后一个字都不许动**：炸弹 > 盘面清空 > 步数见底。这是玩家定的——「盘面真
+// 的走完了就该报『都消完了』，不该报『步数用完了』」，后者会让他以为自己输了，而他其实
+// 是赢到了头。
+{
+  const gc = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
+  const m = gc.match(/const finish = \(\) => \{[\s\S]*?\n    \};/);
+  check('（尺子）切出了 gameController 的 finish()', Boolean(m), m ? `${m[0].length} 字` : '没切到');
+  const body = m ? m[0] : '';
+  const at = (re) => body.search(re);
+  const iSpend = at(/bank\.spend\(/);
+  const iHazard = at(/hooks\.checkHazard\?\.\(\)/);
+  const iOver = at(/hooks\.isGameOver\(\)/);
+  const iAll = at(/endGame\(ALL_FLIPPED_REASON\)/);
+  const iOut = at(/endGame\(PUZZLE_STEPS_OUT_REASON\)/);
+  check('（尺子）四样都在这个函数里找得到',
+    iSpend >= 0 && iHazard >= 0 && iOver >= 0 && iAll >= 0 && iOut >= 0,
+    `spend@${iSpend} hazard@${iHazard} over@${iOver} all@${iAll} out@${iOut}`);
+  check('记账排在「这一局到没到头」之前（最后一步不会漏）',
+    iSpend >= 0 && iSpend < iHazard && iSpend < iOver,
+    `spend@${iSpend} < hazard@${iHazard} / over@${iOver}`);
+  check('结局的优先次序没动：炸弹 > 盘面清空 > 步数见底',
+    iHazard < iOver && iAll < iOut,
+    `hazard@${iHazard} < over@${iOver}，清空@${iAll} < 见底@${iOut}`);
+  // 反面尺子：把旧那个次序（先判到没到头、再记账）喂进同一套判据，必须抓得到。
+  {
+    const stale = `const finish = () => {
+      if (hooks.checkHazard?.()) { return; }
+      if (hooks.isGameOver()) { endGame(ALL_FLIPPED_REASON); return; }
+      if (bank) { const left = bank.spend(true, {}); if (left <= 0) { endGame(PUZZLE_STEPS_OUT_REASON); return; } }
+    };`;
+    const sSpend = stale.search(/bank\.spend\(/);
+    const sOver = stale.search(/hooks\.isGameOver\(\)/);
+    check('（反面尺子）旧那个次序喂进来会被抓住', !(sSpend < sOver), `spend@${sSpend} over@${sOver}`);
+  }
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

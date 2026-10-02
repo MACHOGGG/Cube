@@ -58,17 +58,26 @@ export interface I18nStrings {
   /** 步步为营的结束理由（engine/puzzleScore.ts 的 PUZZLE_STEPS_OUT_REASON）。 */
   stepsOutReason: string;
   /**
-   * 步步为营结算页那四行（见 engine/runRecord.ts 的 runBreakdown）。
+   * 步步为营结算页那六行（见 engine/runRecord.ts 的 runBreakdown）。
    *
    * {n} 是每一枚值多少分——从 puzzleScore.ts 的常数填进来，不写死在文案里：
-   * 10 和 5 是暂定值，改常数的时候这两句要跟着改口，而不是变成假话。
+   * 10 和 5 是暂定值，改常数的时候这两句要跟着改口，而不是变成假话。{c} 是枚数。
+   *
+   * ⚠️ **一行讲一件事。** 从前是四行，最后一行的**值**是一整句「连续多退 m · 消边多退
+   * e · 剩 l（最多攒到 p）」——右边那一栏本来只容得下一个数，法语里那一句有七十多个字
+   * 符，于是它要么压住左边的抬头，要么被结算页那块板子裁掉。分享卡更糟：那一栏是按最
+   * 宽的一行缩字号的，一句话把整张卡的明细全带小了一圈。
    */
   puzzleClearedLabel: string;
   puzzleStarsLabel: string;
-  /** 第四行的抬头：{n} 走了几步、{k} 其中几步得分。 */
+  /** 「走了 {n} 步（得分 {k} 步）」——右边不摆数，整句就是它自己。 */
   puzzleStepsLabel: string;
-  /** 第四行的值：{m} 连续多退、{e} 消边多退、{l} 最后剩几步、{p} 最多攒到过几步。 */
-  puzzleRefundsLabel: string;
+  /** 「连续多退」，右边是 +{m}。 */
+  puzzleStreakLabel: string;
+  /** 「消边多退」，右边是 +{e}。 */
+  puzzleEdgeLabel: string;
+  /** 「剩 {l}（最多攒到 {p}）」——右边不摆数。 */
+  puzzleLeftLabel: string;
   bombBasicTitle: string;
   bombTimedTitle: string;
   bombAdvancedTitle: string;
@@ -584,6 +593,14 @@ export interface I18nStrings {
   flipRowDefused: string;
   /** 「削线 {m} 条（星星数²）」。 */
   lineRowLabel: string;
+  /**
+   * 「完成奖励」——老虎机拼成一次，除了翻面那几枚的 +2，再给 ⌈枚数²/2⌉
+   * （《侵蚀阶梯》v1.2 §7，engine/targets.ts 的 scoreForSize）。
+   *
+   * 这一行从前不摆，于是老虎机那一局的明细**加起来对不上拼出分**——规则书和挑图形页
+   * 都在讲这个奖励，结算页上却找不到它去了哪儿。
+   */
+  slotBonusLabel: string;
   /** 「拼出分」——翻面分 + 削线分，无任何过程系数。 */
   builtScoreLabel: string;
   /** 「步数系数」；副标「{p} 步 · 基准 {par}」。 */
@@ -695,10 +712,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     puzzleModeTagline: 'Eight moves in hand · a move costs 1, a scoring move pays 1 back; +1 if it follows another score, +2 if it clears a line · no clock',
     stepsLeftLabel: 'Moves left',
     stepsOutReason: 'Out of moves',
-    puzzleClearedLabel: 'Cleared × {n}',
-    puzzleStarsLabel: 'Stars × {n}',
-    puzzleStepsLabel: '{n} moves · {k} scored',
-    puzzleRefundsLabel: '+{m} streak · +{e} lines · {l} left (peak {p})',
+    puzzleClearedLabel: 'Cleared {c} × {n}',
+    puzzleStarsLabel: 'Stars {c} × {n}',
+    puzzleStepsLabel: '{n} moves ({k} scored)',
+    puzzleStreakLabel: 'Streak refunds',
+    puzzleEdgeLabel: 'Line refunds',
+    puzzleLeftLabel: '{l} left (peak {p})',
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
@@ -955,6 +974,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipRowLabel: 'Flipped {n} ×2',
     flipRowDefused: '(incl. {k} defused)',
     lineRowLabel: 'Lines cleared {m} (stars²)',
+    slotBonusLabel: 'Completion bonus',
     builtScoreLabel: 'Build score',
     stepCoefLabel: 'Move multiplier',
     stepCoefDetail: '{p} moves · par {par}',
@@ -1019,10 +1039,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     puzzleModeTagline: 'Huit coups en main · un coup coûte 1, un coup qui marque en rend 1 ; +1 s’il enchaîne, +2 s’il efface une ligne · sans chronomètre',
     stepsLeftLabel: 'Coups',
     stepsOutReason: 'Plus de coups',
-    puzzleClearedLabel: 'Effacées × {n}',
-    puzzleStarsLabel: 'Étoiles × {n}',
-    puzzleStepsLabel: '{n} coups · {k} ont marqué',
-    puzzleRefundsLabel: '+{m} enchaînés · +{e} lignes · {l} restants (max {p})',
+    puzzleClearedLabel: 'Effacées {c} × {n}',
+    puzzleStarsLabel: 'Étoiles {c} × {n}',
+    puzzleStepsLabel: '{n} coups ({k} ont marqué)',
+    puzzleStreakLabel: 'Coups rendus · enchaînés',
+    puzzleEdgeLabel: 'Coups rendus · lignes',
+    puzzleLeftLabel: '{l} restants (max {p})',
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
@@ -1279,6 +1301,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipRowLabel: '{n} retournées ×2',
     flipRowDefused: '(dont {k} désamorcées)',
     lineRowLabel: '{m} lignes effacées (étoiles²)',
+    slotBonusLabel: 'Prime de réussite',
     builtScoreLabel: 'Score de jeu',
     stepCoefLabel: 'Coefficient de coups',
     stepCoefDetail: '{p} coups · référence {par}',
@@ -1343,10 +1366,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     puzzleModeTagline: '手裡 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整線再退 2 · 沒有時間限制',
     stepsLeftLabel: '餘步',
     stepsOutReason: '步數用完了',
-    puzzleClearedLabel: '被消除 × {n}',
-    puzzleStarsLabel: '星星 × {n}',
-    puzzleStepsLabel: '走了 {n} 步 · 得分 {k} 步',
-    puzzleRefundsLabel: '連續多退 {m} · 消邊多退 {e} · 剩 {l}（最多攢到 {p}）',
+    puzzleClearedLabel: '被消除 {c} 枚 × {n}',
+    puzzleStarsLabel: '星星 {c} 顆 × {n}',
+    puzzleStepsLabel: '走了 {n} 步（得分 {k} 步）',
+    puzzleStreakLabel: '連續多退',
+    puzzleEdgeLabel: '消邊多退',
+    puzzleLeftLabel: '剩 {l}（最多攢到 {p}）',
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
@@ -1603,6 +1628,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipRowLabel: '翻面 {n} 枚 ×2',
     flipRowDefused: '（含拆除 {k} 枚）',
     lineRowLabel: '削線 {m} 條（星星數²）',
+    slotBonusLabel: '完成獎勵',
     builtScoreLabel: '拼出分',
     stepCoefLabel: '步數係數',
     stepCoefDetail: '{p} 步 · 基準 {par}',
@@ -1667,10 +1693,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     puzzleModeTagline: '手里 8 步 · 走一步扣 1，得分退 1；上一步也得分再退 1，消掉整线再退 2 · 没有时间限制',
     stepsLeftLabel: '余步',
     stepsOutReason: '步数用完了',
-    puzzleClearedLabel: '被消除 × {n}',
-    puzzleStarsLabel: '星星 × {n}',
-    puzzleStepsLabel: '走了 {n} 步 · 得分 {k} 步',
-    puzzleRefundsLabel: '连续多退 {m} · 消边多退 {e} · 剩 {l}（最多攒到 {p}）',
+    puzzleClearedLabel: '被消除 {c} 枚 × {n}',
+    puzzleStarsLabel: '星星 {c} 颗 × {n}',
+    puzzleStepsLabel: '走了 {n} 步（得分 {k} 步）',
+    puzzleStreakLabel: '连续多退',
+    puzzleEdgeLabel: '消边多退',
+    puzzleLeftLabel: '剩 {l}（最多攒到 {p}）',
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
@@ -1927,6 +1955,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipRowLabel: '翻面 {n} 枚 ×2',
     flipRowDefused: '（含拆除 {k} 枚）',
     lineRowLabel: '削线 {m} 条（星星数²）',
+    slotBonusLabel: '完成奖励',
     builtScoreLabel: '拼出分',
     stepCoefLabel: '步数系数',
     stepCoefDetail: '{p} 步 · 基准 {par}',

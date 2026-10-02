@@ -1174,7 +1174,28 @@ h1 {
   max-height: 34svh;
   max-height: max(34svh, min(44svh, calc(100svh - 440px)));
 }
-.end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
+/*
+ * 明细一行：抬头靠左、数靠右，两头都不许越界。
+ *
+ * 三条都是**防御**，不是排版偏好——这一块的内容是四种语言拼出来的，长度没有上限：
+ *
+ *   · `text-align: left` —— 外面那块板子（.overlay--end .modal）是居中的，而 `text-align`
+ *     会继承下来。抬头一旦长到换行，第二行就缩在中间，读起来像另起了一段。
+ *   · 右边那一栏 `flex: 0 0 auto` —— 不许被抬头挤扁。默认的 `flex-shrink: 1` 会先压它，
+ *     而它是这一行唯一要紧的那个数（「+120」被压成「+1\n20」）。
+ *   · 但也给它 `max-width: 60%` —— 不缩不等于能无限长。万一哪天右边又塞进一句话（步步
+ *     为营从前就是，见 runRecord 的 puzzle 分支），封住它，让它换行而不是把抬头顶出去。
+ *
+ * 抬头那一栏要 `min-width: 0`：flex 项的 `min-width` 默认是 auto（min-content），法语里
+ * 一个长单词就能把这一行撑过板子的宽度，而 CJK 逐字折行反而看不出这件事——只在法语上坏。
+ *
+ * ⚠️ 右边那条要带 `:not(:first-child)`。`.end-row--tip`（「综合分是怎么来的」那一句）整行
+ * **只有一个 span**，不排除的话它既是 first 又是 last，于是那一整句被按进 60% 宽里再右对
+ * 齐——一句说明文字缩成右边一条。
+ */
+.end-breakdown .end-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); text-align: left; }
+.end-breakdown .end-row > span:first-child { min-width: 0; }
+.end-breakdown .end-row > span:last-child:not(:first-child) { flex: 0 0 auto; max-width: 60%; text-align: right; }
 /* 明细里的两行主数（拼出分、综合分）比别的行重一点：它们是这一页真正要说的两
    个数，别的行是「它们怎么来的」。靠 :nth-last-child 认不行——行数随这一局有没
    有削线、有没有惩罚而变——所以由 gameController 挑出来加类。 */

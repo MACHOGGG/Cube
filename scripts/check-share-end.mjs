@@ -15,6 +15,7 @@
  *
  * 量像素而不是量代码：这张图是画出来的，画错位置代码照样跑得通。
  */
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
@@ -26,8 +27,24 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-// 方块那一档的存档键，和 square.ts 里写的是同一个。
-const BEST_KEY = 'sugarcube_best';
+/**
+ * 方块那一档的存档键。
+ *
+ * ⚠️ **后缀是读出来的，不写死。** 《侵蚀阶梯》v1.2 §6 之后每个键都多一截计分规则的版本号
+ * （`engine/runKey.ts` 的 `suffixFor`，基础局是 `_` + `SCORING_RULES_VERSION`）。这一行从前
+ * 写的是光秃秃的 `sugarcube_best`，于是造好的那份记录落在一个**没有人读的键**上：战绩页
+ * 一条记录都列不出来，这道门三条全卡在「等那一行出现」上，30 秒超时。
+ *
+ * 它不在 CI 里（要开浏览器），所以这条红从 `_ero1` 落地那天起一直没人看见——又一次「门在，
+ * 但它量不到被测的东西」。读源码取版本号，下次升版本它自己跟着走。
+ */
+const SCORING_VER = (readFileSync(new URL('../src/engine/scoring.ts', import.meta.url), 'utf8')
+  .match(/SCORING_RULES_VERSION\s*=\s*'([^']+)'/) || [, ''])[1];
+if (!SCORING_VER) {
+  console.error('读不出 SCORING_RULES_VERSION——这道门的存档键会落空，先修这儿。');
+  process.exit(2);
+}
+const BEST_KEY = 'sugarcube_best_' + SCORING_VER;
 const MARK = '#B23A3A'; // 造的那几枚用这一支，好在图里认出来
 
 /** 一份 6×6 的方块结局：alive 里的格子是活的，其余全是消掉的空框。 */

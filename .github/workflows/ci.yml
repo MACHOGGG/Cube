@@ -77,6 +77,14 @@ jobs:
         run: |
           npx esbuild src/engine/puzzleScore.ts --bundle --format=esm --outfile=/tmp/puzzle.mjs
           node scripts/check-puzzle.mjs /tmp/puzzle.mjs
+      # 结算页那几行明细「加起来要对得上」。两档悄悄对不上过很久：老虎机的完成奖
+      # 励（⌈枚数²/2⌉）压根没摆出来，那一截凭空消失在拼出分里；无限反转走错了分
+      # 支，摆着一行「翻面 n 枚 ×2」而那个数和它的得分毫无关系。两样都不报错、不
+      # 白屏，只是数字不对——而数字正是这一页唯一的内容。纯逻辑、几十毫秒。
+      - name: 结算页明细加起来对得上
+        run: |
+          npx esbuild src/engine/runRecord.ts --bundle --format=esm --outfile=/tmp/runrecord.mjs
+          node scripts/check-breakdown.mjs /tmp/runrecord.mjs
       - name: 局中实时排名摆哪几行
         run: |
           npx esbuild src/engine/standingsWindow.ts --bundle --format=esm --outfile=/tmp/window.mjs

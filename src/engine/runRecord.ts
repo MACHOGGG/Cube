@@ -267,19 +267,35 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
    */
   if (d.puzzle) {
     const p = d.puzzle;
+    /*
+     * **一行讲一件事。** 从前是四行，最后一行的*值*是一整句「连续多退 m · 消边多退 e ·
+     * 剩 l（最多攒到 p）」——而右边那一栏本来只容得下一个数：法语那一句七十多个字符，在
+     * 结算页上要么压住左边的抬头、要么被板子裁掉；分享卡更糟，那一栏是按**最宽的一行**缩
+     * 字号的，一句话能把整张卡的明细全带小一圈。
+     *
+     * 拆开之后右边永远只有一个数（或者空着），宽度由此封顶。
+     */
     return [
-      [s.puzzleClearedLabel.replace('{n}', String(PUZZLE_CLEARED_POINTS)), String(p.cleared * PUZZLE_CLEARED_POINTS)],
-      [s.puzzleStarsLabel.replace('{n}', String(PUZZLE_STAR_POINTS)), '+' + p.stars * PUZZLE_STAR_POINTS],
+      [
+        s.puzzleClearedLabel
+          .replace('{c}', String(p.cleared))
+          .replace('{n}', String(PUZZLE_CLEARED_POINTS)),
+        String(p.cleared * PUZZLE_CLEARED_POINTS),
+      ],
+      [
+        s.puzzleStarsLabel.replace('{c}', String(p.stars)).replace('{n}', String(PUZZLE_STAR_POINTS)),
+        '+' + p.stars * PUZZLE_STAR_POINTS,
+      ],
       // 《有效得分率》那一行撤了（玩家 2026-10）：这一档的综合得分不再乘它，摆一行
       // 不起作用的乘数，和「摆一行 ×1.00」是同一种假话。
-      [
-        s.puzzleStepsLabel.replace('{n}', String(p.spent)).replace('{k}', String(p.scoredMoves)),
-        s.puzzleRefundsLabel
-          .replace('{m}', String(p.streakRefunds))
-          .replace('{e}', String(p.edgeRefunds))
-          .replace('{l}', String(p.left))
-          .replace('{p}', String(p.peak)),
-      ],
+      //
+      // 下面这四行是**步数那本账**，不是分数：它们加起来不等于上面两行，也不该等于。
+      // 右边空着的那两行（走了几步、剩几步）整句就是左边那一句——它们报的是一段经过，
+      // 不是一个加数，硬给个数反而会被当成分数读。
+      [s.puzzleStepsLabel.replace('{n}', String(p.spent)).replace('{k}', String(p.scoredMoves)), ''],
+      [s.puzzleStreakLabel, '+' + p.streakRefunds],
+      [s.puzzleEdgeLabel, '+' + p.edgeRefunds],
+      [s.puzzleLeftLabel.replace('{l}', String(p.left)).replace('{p}', String(p.peak)), ''],
     ];
   }
   /**
@@ -295,11 +311,50 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
     const flips = d.flips ?? 0;
     const defused = d.defused ?? 0;
     const lines = d.lines ?? 0;
+    const lineRow = (): [string, string] => [
+      s.lineRowLabel.replace('{m}', String(lines)),
+      '+' + Math.round(d.linePoints),
+    ];
+    /**
+     * **无限反转不按「翻一枚 +2」算分**，所以它不走下面那几行。
+     *
+     * 那一局翻过去还能翻回来（`toggleOnMatch`），按翻面枚数给分就成了来回翻刷分——所以
+     * 它照旧按**图案**给分，外面再乘 1.5ⁿ 的连锁（见 engine/scoring.ts 和
+     * gameController 的 flipChain）。可它的 `flips` 字段照样有数（HUD 要显示翻了几枚），
+     * 于是 `isErosionRun` 认了它，结算页上摆出一行「翻面 n 枚 ×2 → n×2」——**那个数和这
+     * 一局的得分没有任何关系**，而且底下几行加起来对不上拼出分。
+     *
+     * 摆的改成这一局真正的两个来源：图案分、连锁加成。两者加上削线分正好是拼出分
+     * （score = Σdelta = Σ图案 + Σ(delta − 图案) + Σ削线，见 gameController 那三个累加）。
+     */
+    if (d.modeKey === 'flip') {
+      const flipOut: [string, string][] = [[s.patternPointsLabel, String(Math.round(d.patternPoints))]];
+      if (d.comboBonusPoints > 0) flipOut.push([s.comboBonusLabel, '+' + Math.round(d.comboBonusPoints)]);
+      if (lines > 0) flipOut.push(lineRow());
+      flipOut.push([s.builtScoreLabel, String(d.score)]);
+      flipOut.push([s.compositeLabel, String(d.totalScore)]);
+      return flipOut;
+    }
     const flipLabel =
       s.flipRowLabel.replace('{n}', String(flips)) +
       (defused > 0 ? ' ' + s.flipRowDefused.replace('{k}', String(defused)) : '');
     const out: [string, string][] = [[flipLabel, String(flips * POINTS_PER_FLIP)]];
-    if (lines > 0) out.push([s.lineRowLabel.replace('{m}', String(lines)), '+' + Math.round(d.linePoints)]);
+    if (lines > 0) out.push(lineRow());
+    /**
+     * 老虎机的完成奖励（§7：拼成一次，除了翻面那几枚的 +2，再给 ⌈枚数²/2⌉）。
+     *
+     * **认 `d.slot`，不认 modeKey**：老虎机开在基础棋盘上，它那一局的 modeKey 就是
+     * `'base'`——拿 modeKey 分支的话，这一行要么漏在老虎机局上，要么错摆到普通基础局上。
+     *
+     * 减出来而不是另存一个字段：拼出分 = 翻面分 + 完成奖励 + 削线分（见 scoring.ts 的
+     * `points = flipPoints + bonus`），所以剩下的那一截就是它。这一行不摆的话，明细加起
+     * 来对不上拼出分，而规则书和挑图形页都在讲这个奖励——玩家会以为它没生效（它真的有
+     * 一阵没生效过，见 scoring.ts 那段注释）。
+     */
+    if (d.slot) {
+      const bonus = Math.round(d.score - flips * POINTS_PER_FLIP - d.linePoints);
+      if (bonus > 0) out.push([s.slotBonusLabel, '+' + bonus]);
+    }
     out.push([s.builtScoreLabel, String(d.score)]);
     // 步数系数那一行只在真的乘了它的那几档摆。不乘的那三档（老虎机、步步为营、
     // 无限反转）结算时干脆不写 par，所以这儿按「par 在不在」判——摆一行「×1.00」

@@ -490,7 +490,17 @@ function measureHead(
   ctx: CanvasRenderingContext2D,
   info: ShareCardInfo,
   s: { compositeScoreLabel: string },
-): { rows: string[]; rowPx: number; rowStep: number; detailY: number; detailPx: number; bottom: number } {
+): {
+  rows: string[];
+  rowPx: number;
+  rowStep: number;
+  rowsTop: number;
+  /** 明细摆在左栏**下方**（整幅宽、靠左），不是右上角那一栏。见下面 `below`。 */
+  rowsBelow: boolean;
+  detailY: number;
+  detailPx: number;
+  bottom: number;
+} {
   const mono = (px: number) => `500 ${px}px "JetBrains Mono", monospace`;
   const karla = (px: number) => `500 ${px}px "Karla", sans-serif`;
   const rows = info.scoreRows.map(([label, value]) => `${label} ${value}`);
@@ -514,15 +524,31 @@ function measureHead(
     if (w > widest) { widest = w; widestLine = line; }
   }
   const rowPx = widest <= roomForRows ? 19 : fitPx(ctx, widestLine, roomForRows, mono, 19, 14);
-  // 行距跟着字号走，不然缩了字号行还是那么疏，白缩。
-  const rowStep = Math.round(rowPx * 1.47);
 
-  const rowsBottom = rows.length ? ROWS_TOP + (rows.length - 1) * rowStep : ROWS_TOP - rowStep;
+  /**
+   * **缩到 14 还放不下，就别缩了——整块挪到左栏下面去。**
+   *
+   * `fitPx` 的下界是 14（再小就看不清了，那是它自己定的），所以它会「认了」：返回 14
+   * 并让那一行**照旧画在右上角那一栏里**，于是最宽的那一行向左伸进大分数那一块，两段字
+   * 叠在一起——分享卡是一张图，叠上就是永久的，玩家发出去的就是叠着的那张。
+   *
+   * 这条路在四种语言里不是假设：法语的抬头比中文长一倍，而步步为营那几行里还带着括号。
+   * 挪下去之后右边那条宽度上限整个不存在了（整幅宽），字号也能回到 19。
+   */
+  ctx.font = mono(rowPx);
+  const below = ctx.measureText(widestLine).width > roomForRows + 0.5;
+  const finalPx = below ? fitPx(ctx, widestLine, CARD_W - PAD * 2, mono, 19, 14) : rowPx;
+  // 行距跟着字号走，不然缩了字号行还是那么疏，白缩。
+  const rowStep = Math.round(finalPx * 1.47);
+  // 挪下去时从左栏底下起（二维码那一栏管不着它了）；不挪就还是右上角那个老位置。
+  const rowsTop = below ? LEFT_HEAD_BOTTOM + 34 : ROWS_TOP;
+
+  const rowsBottom = rows.length ? rowsTop + (rows.length - 1) * rowStep : rowsTop - rowStep;
   // 那一句摆在左右两栏里低的那个下面，两边都不压。
   const detailY = Math.max(LEFT_HEAD_BOTTOM, rowsBottom) + 36;
   const detailPx = fitPx(ctx, info.detail, CARD_W - PAD * 2, karla, 16, 12);
 
-  return { rows, rowPx, rowStep, detailY, detailPx, bottom: detailY };
+  return { rows, rowPx: finalPx, rowStep, rowsTop, rowsBelow: below, detailY, detailPx, bottom: detailY };
 }
 
 /**
@@ -616,9 +642,11 @@ export function renderShareCard(
 
   ctx.font = `500 ${head.rowPx}px "JetBrains Mono", monospace`;
   ctx.fillStyle = '#8b8680';
-  ctx.textAlign = 'right';
+  // 右上角那一栏时靠右画（和二维码对齐）；挪到左栏下面时靠左画（和分数、玩法名对齐）。
+  ctx.textAlign = head.rowsBelow ? 'left' : 'right';
+  const rowsX = head.rowsBelow ? PAD : CARD_W - PAD;
   head.rows.forEach((line, i) => {
-    ctx.fillText(line, CARD_W - PAD, ROWS_TOP + i * head.rowStep);
+    ctx.fillText(line, rowsX, head.rowsTop + i * head.rowStep);
   });
   ctx.textAlign = 'left';
   ctx.font = `500 ${head.detailPx}px "Karla", sans-serif`;
