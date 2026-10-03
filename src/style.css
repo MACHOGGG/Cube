@@ -1719,6 +1719,17 @@ button:hover { filter: brightness(1.05); }
   z-index: 0;
   /* 轴自己吃掉竖向手势：不写这一条，手指一滑页面跟着滚，轴只走一半。 */
   touch-action: none;
+  /*
+   * 轴上也不许选字。用鼠标拖轴，浏览器同时把这一把当成「划选文字」：Chrome 151 上
+   * 往下拖一把，每日挑战那张卡底下的「每日挑战」四个字就被选中了（141 只留下一个
+   * 光标，所以本机一直是绿的）。下一把正好按在选区上，浏览器改成「把选中的字拖
+   * 走」——派一条 pointercancel，轴一动不动，之后每一把都这样，鼠标再也拖不动这
+   * 条轴。第 19 推上线后 GitHub CI 上 check-mode-axis「慢慢拖到第一排」红在这儿：
+   * 重新按下十次，十次都被 cancel 掉。
+   * Safari / iOS 到 26.x 仍然只认 `-webkit-user-select`（iPad 接鼠标拖轴是同一回事）：
+   * 不用手写，出包时自动补上前缀，和 .board-wrap 那一条一样。
+   */
+  user-select: none;
 }
 
 /*

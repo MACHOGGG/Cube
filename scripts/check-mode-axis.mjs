@@ -1174,9 +1174,11 @@ let page = await menuPage({ slides_played_square: '1' });
     await p10.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
     await p10.waitForTimeout(500);
     await install();
-    // 诊断（第 19 推，CI 的 Chrome 151 上「拖回第一排」卡在第 2 排、本地 141 上从来不卡）：
-    // 只数轴收到了哪些指针事件、按下去的是谁、焦点在谁身上——一个行为都不改，红的时候
-    // 才打印出来。
+    // 数轴收到了哪些指针事件、按下去的是谁、焦点在谁身上——一个行为都不改，红的时候
+    // 打印出来。第 19 推上线后 CI 的 Chrome 151 上「拖回第一排」卡在第 2 排（本机 141
+    // 从来不卡），就是靠它看出来的：第一把之后每按一次都只来两条 move 就是一条
+    // pointercancel——浏览器把这一把收走、改成拖字了（见下面那两条和 style.css 的
+    // .mode-axis）。cancel 那个数现在也是一条断言。
     await p10.evaluate(() => {
       const host = document.querySelector('.mode-axis');
       const n = { down: 0, move: 0, up: 0, cancel: 0, lost: 0, got: 0 };
@@ -1253,13 +1255,15 @@ let page = await menuPage({ slides_played_square: '1' });
     await p10.mouse.up();
     await p10.waitForTimeout(900);
     const final = await p10.evaluate(() => window.__focus());
-    return { seen, final, trail };
+    return { seen, final, trail, cancel: (await ptrNow()).cancel ?? 0 };
   };
   // 单位是**排**（E18）：__focus 读的是排，目标也得按排给，不然「拖到第 11 项」在一条
   // 只有 6 排的轴上永远到不了，红的是尺子不是代码。
   const LAST = ROWS - 1;
+  let cancels = 0;
   for (const [from, k, label] of [[0, Math.floor(ROWS / 2), '中间那排'], [0, LAST, '最后一排'], [LAST, 0, '第一排']]) {
     const r = await slowTo(from, k);
+    cancels += r.cancel;
     const ok = Math.abs(r.final - k) < 0.01 && Math.abs(r.seen - k) < 0.35;
     check(
       `慢慢拖到${label}（第 ${k} 排）、停住、松手，就停在那一排`,
@@ -1268,6 +1272,18 @@ let page = await menuPage({ slides_played_square: '1' });
     );
     if (!ok) for (const line of r.trail) console.log('      诊断  ' + line);
   }
+  /**
+   * 上面三把为什么到得了：鼠标拖轴不会顺手选中字。
+   *
+   * 第 19 推上线后 CI 上红过一次：Chrome 151 上往下拖一把，把每日挑战那张卡底下的
+   * 「每日挑战」四个字选中了；之后每一把都按在选区上，浏览器改成「拖字」、派一条
+   * pointercancel，轴再也拖不动。本机的 141 只留一个光标，所以那一条在本机一直是绿
+   * 的——**第一条不看浏览器版本**，CSS 那一句被删掉在哪儿都红；第二条量的是后果，
+   * 哪个版本把手势收走都算。
+   */
+  const axisUserSelect = await p10.evaluate(() => getComputedStyle(document.querySelector('.mode-axis')).userSelect);
+  check('轴上选不了字（user-select: none——不然鼠标拖一把就选中卡底下的字，下一把成了拖字）', axisUserSelect === 'none', axisUserSelect);
+  check('鼠标在轴上拖了这么多把，浏览器一次都没把手势收走（pointercancel 0 次）', cancels === 0, `${cancels} 次`);
   /**
    * 点点那条路：一帧之内就到位，一点都不慢。
    *
