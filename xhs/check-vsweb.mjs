@@ -683,7 +683,9 @@ const SCREENS = [
       await p.waitForTimeout(1400);
     },
     snap: {
-      累计得分标题: { sel: '.total-card .total-card-title', kind: 'text' },
+      // 累计得分卡上只剩那个数（第 18 推第 4 条，两端都改）：卡里只有一枚 .total-card-value。
+      // 这一项从前比的是卡上那行标题的字，标题挪到点开之后了。
+      累计得分卡的结构: { sel: '.total-card > span', kind: 'class' },
       记录行结构: { sel: '.records-row > span', kind: 'class' },
       记录行文字: { sel: '.records-row .records-row-name', kind: 'text' },
       玩法小图: { sel: '.records-row .records-row-glyph svg', kind: 'svg' },

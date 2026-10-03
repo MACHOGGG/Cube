@@ -58,9 +58,7 @@ export function renderPuzzleModePage(
           </div>
           <p class="tag-line flip-tagline">${s.puzzleModeTagline}</p>
         </div>
-        <div class="start-actions">
-          <button class="icon-btn start-act" id="puzzleBack" aria-label="${s.back}">${CTL_BACK}</button>
-        </div>
+        <button class="icon-btn page-exit" id="puzzleBack" aria-label="${s.back}">${CTL_BACK}</button>
       </div>
     </div>
   `;

@@ -59,9 +59,7 @@ export function renderFlipModePage(
           </div>
           <p class="tag-line flip-tagline">${s.flipModeTagline}</p>
         </div>
-        <div class="start-actions">
-          <button class="icon-btn start-act" id="flipBack" aria-label="${s.back}">${CTL_BACK}</button>
-        </div>
+        <button class="icon-btn page-exit" id="flipBack" aria-label="${s.back}">${CTL_BACK}</button>
       </div>
     </div>
   `;

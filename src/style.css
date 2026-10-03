@@ -32,6 +32,12 @@
      里不许有写死的颜色（门：check-redesign-fit）。 */
   --card-silver-edge: #8C8C8C;
   --card-rule: #979797;        /* 下划线：帐号窗的字段、邀请窗的标题 */
+  /* ── 炸弹选择页（第 18 推第 2 条）：面板是陶土色，第一排那两格的底板是浅灰。和上面几支
+     一样不随主题翻、色盲模式下也不换。#A7A7A7 正是基础方块 / 基础小球那两张图标文件自己
+     底板的颜色（文件里写的是 display-p3 0.656，换成 sRGB 一个数不差），所以第一排看上去就
+     是「原样的基础棋盘」，第二、三排换了底板的颜色。 */
+  --card-terracotta: #CA6039;  /* 炸弹选择页的面板 */
+  --card-ash: #A7A7A7;         /* 炸弹选择页「基础」那一排的底板 */
   /* 压在这些卡片上的字和图标。卡片不翻，所以字也不能翻——
      · **白**：给棕、紫红、灰褐、砖红、蓝这几张卡上的字和全部图标。不能借 --on-accent，
        那一支在深色主题里翻成近黑。
@@ -237,14 +243,16 @@
 }
 
 /* The handful of surfaces painted with a literal colour rather than a
-   custom property — the bomb panel and the multiplayer page's 开房间 key.
+   custom property — the multiplayer page's 开房间 key.
    Under the colourblind palette they take their hue from the same
    Okabe–Ito set as everything else. */
 /* 四页改版（第 17 推）那几张卡——累计分卡、最近战绩、排名、个人主页那几颗药丸和天才面
    板——原先也在这张单子上，色盲一开就各换一个 Okabe–Ito 的颜色。方案点名撤掉：「色盲模
    式下这几张卡片的颜色不变」。它们本来就不靠颜色区分：每一张都有自己的标题、自己的位
-   置、自己的内容，色盲配色要管的是**棋子**——棋子之间只剩颜色一样东西可分。 */
-:root[data-cvd='1'] .bomb-panel { background: #8A3D00; }
+   置、自己的内容，色盲配色要管的是**棋子**——棋子之间只剩颜色一样东西可分。
+   炸弹选择页那块面板（.bomb-panel，从前色盲下换成 #8A3D00）第 18 推照同一个理由撤了：
+   方案原话「色盲模式颜色不变，删掉 .bomb-panel 的色盲覆盖」。三排靠左边那三个字分，不靠
+   颜色。 */
 :root[data-cvd='1'] .genius-cta { background: #B26A00; }
 
 /* 结算页顶上那一块：屋主中途散场、这一局转成单人打完之后，小屋那份成绩摆
@@ -2010,9 +2018,11 @@ button:hover { filter: brightness(1.05); }
   margin: 0 auto;
   aspect-ratio: auto;
 }
-/* 格子是定数，里面这两样就都铺满它，一个 auto 都不留（上面那段说了为什么：
-   auto 在这儿是一道循环，Safari 和 Chromium 解得不一样）。 */
-.mode-axis > .home-icon-btn > .home-icon-art > .bomb-panel,
+/* 格子是定数，里面的图铺满它，一个 auto 都不留（上面那段说了为什么：
+   auto 在这儿是一道循环，Safari 和 Chromium 解得不一样）。
+   这条从前还管着 `.bomb-panel`——炸弹那张卡在轴上画的是整块面板缩小，正是那道循环出事的
+   地方。第 18 推第 3 条把它换成了炸弹图标（一枚 svg，和别的卡一样），轴上不再有面板，那
+   一半选择器跟着撤（门 check-mode-axis 第 9 节 ⑤ 守着「轴上没有面板」）。 */
 .mode-axis > .home-icon-btn > .home-icon-art > svg {
   width: 100%;
   height: 100%;
@@ -2175,7 +2185,6 @@ button:hover { filter: brightness(1.05); }
   margin: 0 auto;
   aspect-ratio: auto;
 }
-.mode-strip .home-icon-btn > .home-icon-art > .bomb-panel,
 .mode-strip .home-icon-btn > .home-icon-art > svg {
   width: 100%;
   height: 100%;
@@ -2528,8 +2537,7 @@ button:hover { filter: brightness(1.05); }
    意探到上下两层去），本来就比一张方卡片高一截。所以它那一格不摆方框——一
    摆方框，里面按百分比算高度的那几层就全跟着变，整块板凭空长高一截，电脑端
    三排立刻装不进一屏。 */
-.home-bomb-card .home-icon-art,
-.home-bomb-mini .home-icon-art { aspect-ratio: auto; }
+.home-bomb-card .home-icon-art { aspect-ratio: auto; }
 .home-icon-art > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
    空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：
@@ -2745,24 +2753,116 @@ button:hover { filter: brightness(1.05); }
 @media (prefers-reduced-motion: reduce) { .home-tap { animation: none; } }
 
 /* ---------- bomb panel (its three tiers) ---------- */
-/* Same markup inline on the home grid, blown up in the centre of a phone, or
-   sitting beside the burst on a desktop — only the surrounding size changes. */
+/*
+ * 炸弹选择页（第 18 推第 2 条，按设计图）：一块陶土色的面板，正中一颗白色八角星，三排两格。
+ *
+ *   排     底板             方块格      小球格
+ *   基础   浅灰 #A7A7A7     基础方块    基础小球
+ *   计时   --card-orange    基础方块    基础小球
+ *   进阶   --card-gray      菱形方块    六边形小球
+ *
+ * 一格就是那副棋盘自己的图标，「底板」是图里最底下那一块（方块的圆角方、小球的圆、菱形、六
+ * 边形）——它由这儿上色（.bomb-plate，homeIcons.ts 的 bombBoard 给它挂的类），所以一排一
+ * 个颜色，而棋子照旧是棋子的颜色。从前三排是三种颜色的「形状 ＋ 徽记」（绿 / 橙 / 砖红，
+ * 定时那两枚印着「100s」、进阶那两枚印着「+++」，PR-20 / E26），一个字都不写；现在三排靠面
+ * 板左边那三个字分（「基础 / 计时 / 进阶」，见 .bomb-tiers），格子上不再印徽记。
+ *
+ * 色盲模式下颜色不变（方案原话）：从前这块面板在色盲下换成 #8A3D00，那一条撤了。
+ *
+ * 新 CSS 都按 Chrome 61 能认的写（方案总规则）：间距用 margin 不用 flex 的 gap，正方的格子
+ * 用 padding-top: 100% 撑，不用 aspect-ratio；面板宽度写成 width ＋ max-width，不用 min()。
+ */
 .bomb-panel {
-  width: 100%; aspect-ratio: 1; box-sizing: border-box;
-  background: #A5412C; border-radius: var(--r-lg); padding: 7%;
-  display: flex; flex-direction: column; justify-content: space-between; gap: 6%;
+  position: relative; width: 100%; box-sizing: border-box;
+  background: var(--card-terracotta); border-radius: var(--r-lg);
+  padding: 14px 10px;
+  display: flex; flex-direction: column;
 }
+/* 正中那颗白色八角星（burstStar，aria-hidden）：压在三排格子底下，从格与格之间的缝里露出
+   来。和主菜单上那枚炸弹图标是同一个意思——陶土色的底、一颗白色的爆炸星——这一页就是那枚
+   图标放大、在上面摆上六副棋盘。 */
+.bomb-star {
+  position: absolute; left: 50%; top: 50%; width: 86%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.bomb-star > svg { display: block; width: 100%; height: auto; }
 .bomb-row {
-  flex: 1; display: flex; align-items: center; justify-content: space-evenly; gap: 4%;
-  background: rgba(255, 255, 255, 0.14); border-radius: var(--r-sm); padding: 4% 5%;
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: space-around;
 }
-.bomb-chip { max-width: none; width: 27%; flex: none; }
+.bomb-row + .bomb-row { margin-top: 10px; }
+.bomb-row--basic { --bomb-plate: var(--card-ash); }
+.bomb-row--timed { --bomb-plate: var(--card-orange); }
+.bomb-row--advanced { --bomb-plate: var(--card-gray); }
+/* 一格：正方的，宽是这一排的 38%。它是一颗键，先把全局 button 那一套（flex: 1、内边距、
+   圆角、底色）甩掉。 */
+.bomb-chip {
+  position: relative; display: block; flex: none; width: 38%;
+  padding: 0; margin: 0; border: none; border-radius: 0; background: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 140ms ease;
+}
+.bomb-chip::before { content: ''; display: block; padding-top: 100%; }
+.bomb-chip > svg {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  /* 底板描边的时候，白边有一半在底板外面——底板贴着画布边，不放开就被裁掉一半。 */
+  overflow: visible;
+}
+.bomb-chip .bomb-plate { fill: var(--bomb-plate); transition: fill 140ms ease; }
+/*
+ * 鼠标经过、按下、键盘聚焦（方案原话）：底板变 --card-red，加一圈 3px 的白边，整格放大到
+ * 1.04；减弱动态效果时不放大。
+ *
+ * 白边画成底板自己的描边，不是按钮的 border：底板是圆、菱形、六边形，按钮的框是方的。
+ * non-scaling-stroke 让「3px」是屏幕上的 3px，不跟着图标缩放。
+ *
+ * 三种状态各写一条，不并成一个选择器列表：老内核不认 :focus-visible，并在一起的话整条规
+ * 则作废，连 :hover 也一起没了。全局 button:hover 那层 brightness 在这儿不要——底板已经
+ * 换了颜色，再提亮一层是两个反馈叠在一起。
+ */
+.bomb-chip:hover { filter: none; transform: scale(1.04); }
+.bomb-chip:active { transform: scale(1.04); }
+.bomb-chip:focus-visible { outline: none; transform: scale(1.04); }
+.bomb-chip:hover .bomb-plate { fill: var(--card-red); stroke: var(--card-white); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.bomb-chip:active .bomb-plate { fill: var(--card-red); stroke: var(--card-white); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.bomb-chip:focus-visible .bomb-plate { fill: var(--card-red); stroke: var(--card-white); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+@media (prefers-reduced-motion: reduce) {
+  .bomb-chip { transition: none; }
+  .bomb-chip:hover, .bomb-chip:active { transform: none; }
+  .bomb-chip:focus-visible { transform: none; }
+}
 /* 这儿原先还有五条给那枚星爆时长徽记的规则（.bomb-90s / .bomb-row--90s /
    .bomb-row--open）：它比自己那一行宽，故意溢出到上下两档里去。徽记撤了（PR-20，见
    ui/homeIcons.ts 那段），三行现在长得一样、行为也一样，所以这几条一起撤。 */
 
-/* The blown-up copy in the centre picker: same proportions, bigger hit targets. */
-.bomb-panel--big { width: min(78vw, 360px); border-radius: var(--r-xl); }
+/*
+ * 挑选窗里那一张：面板左边外面一列字「基础 / 计时 / 进阶」，每个字和自己那一排上下居中
+ * （方案原话），--ink-soft。
+ *
+ * 对齐靠的是**两列同一套竖向尺寸**：字那一列和面板一样高（横排的 flex 默认拉齐），上下内
+ * 边距一样（14px）、行与行之间的空一样（10px）、三格都是 flex: 1 1 0 均分——于是字那一列
+ * 的三格和面板里的三排是同一组竖向轨道，字在格里上下居中就正好对着那一排的中线。面板里那
+ * 三排本来就一样高（格子都是正方的、一样宽），所以它们自己也是均分的。
+ *
+ * 面板宽 64vw、最多 300：留出左边那列字的位置（最宽的是英文的 Advanced），四种语言在 360
+ * 宽的屏上都装得下。
+ */
+.bomb-pick { display: flex; align-items: stretch; justify-content: center; }
+.bomb-tiers {
+  display: flex; flex-direction: column; flex: none;
+  padding: 14px 0; margin-right: 12px;
+}
+.bomb-tier {
+  flex: 1 1 0; display: flex; align-items: center; justify-content: flex-end;
+  color: var(--ink-soft); font-weight: 700; font-size: 0.95rem; white-space: nowrap;
+  /* 挑选窗后面不是一层遮罩，是淡下去的主菜单（centerPicker 的 home-dimmed）——这三个字底
+     下常常正好压着一张淡掉的彩色卡片。一圈页面底色的晕把字从后面那张卡上托出来，字本身还
+     是 --ink-soft。 */
+  text-shadow: 0 0 3px var(--bg), 0 0 8px var(--bg), 0 0 12px var(--bg);
+}
+.bomb-tier + .bomb-tier { margin-top: 10px; }
+.bomb-panel--big { width: 64vw; max-width: 300px; flex: none; border-radius: var(--r-xl); }
 
 /* Desktop only: the panel is itself one card at the head of the bottom row,
    with every tier's chips directly clickable. */
@@ -2776,51 +2876,14 @@ button:hover { filter: brightness(1.05); }
 }
 /* 宽屏上炸弹和它旁边的计时一样大：谁也不比谁矮一截——上面那条 --home-card-cap 同时管着这三张，所以这里不
    必（也不能）再写一遍宽度。 */
-/* Phone only: the collapsed panel is itself the button that opens the big one. */
-.home-bomb-mini { max-width: 252px; }
-.home-bomb-mini .bomb-chip { pointer-events: none; }
-/*
- * 手机上那张**缩图**：三层等高，而且整个装得进那个方格。
- *
- * 玩家 2026-09 报的：「三个小的圆角矩形上下空间不等距，最下面那个的一部分被卡
- * 走了」。量出来正是这么回事——一层 31.1 + 一层 35（中间那层里 90s 那道星芒比
- * 别人高）+ 一层 31.1，加上两道缝，一共 97.2，而格子里只有 82.9 可用。`.bomb-row`
- * 是 `flex: 1` 但 `min-height: auto`，缩不下去，于是第三层被挤出格子底下 4.6px，
- * 让轴那一格的 overflow 一刀切掉。上下也就不等距了：顶上是正经的内边距，底下是
- * 溢出。
- *
- * 这儿只改**手机上这张缩图**（.home-bomb-mini），不碰点开之后那张大的
- * （.bomb-panel--big）——那一张是按真实的触控热区逐个调出来的，动它等于重调那
- * 一屏。
- *
- * 三条合起来才成立，而且**三条都只认宽度**：
- *
- *   · `flex: 1 1 0` + `min-height: 0`：三层严格等高，而且缩得下去。（`min-height`
- *     的默认值 `auto` 正是「缩不下去」的那一条，改 0 是标准写法。）
- *   · 小片按**板宽**定大小（width: 23% + 1:1），不按层高。头一版写的是
- *     `height: 72%`——在 Chromium 上量着没问题，但那是「flex 分出来的高度」的百
- *     分比，正是 Safari 历来最容易算不准的一种；这张卡上一次出事（整张溢到屏幕
- *     外）也只在 iPhone 上复现得出来。宽度在哪个内核上都是确定值，所以一律走宽
- *     度：23% × 层内宽 ≈ 20px，而层高 ≈ 27.6px，留着三成余量，怎么算都顶不出去。
- *   · 90s 那道星芒**绝对定位**，钉在整块板的正中。它本来就比自己那一层高（探进
- *     上下两层是效果图的画法），留在流里就会把中间那层顶高——头一版靠「给它
- *     118% 的高」压着，同样是拿层高算的。脱离文档流之后它根本不参与分高，中间那
- *     层于是和另外两层一样高；它画多大只由 `width` 和 1:2.6 决定。
- */
-.home-bomb-mini .bomb-panel {
-  /* 星芒的定位基准（下面那条 absolute）。 */
-  position: relative;
-}
-.home-bomb-mini .bomb-row {
-  flex: 1 1 0;
-  min-height: 0;
-  padding: 0 5%;
-}
-.home-bomb-mini .bomb-chip {
-  width: 23%;
-  height: auto;
-  aspect-ratio: 1;
-}
+/* 手机上那张炸弹卡（.home-bomb-mini）从前是整块炸弹板缩小的样子，这儿有一整段专门给它的规
+   矩（三层等高、小片按板宽定大小、星芒绝对定位……）。第 18 推第 3 条换成了炸弹图标——一张方
+   图，和别的玩法卡一模一样，那一段整个用不着了。 */
+/* 电脑端那张卡里还是整块面板的缩图（第 18 推只换手机端的图标）。格子收到 27%（和改版前那
+   几枚一样宽），整块面板于是差不多是方的——14 ＋ 3 × 27% × (宽 − 20) ＋ 2 × 10 ＋ 14，在
+   150–200 这一档宽度上和宽相差不过几个像素，和旁边计时那张一样高。挑选窗里那一张格子大
+   （38%），面板比宽高一截，那儿没有「和旁边一样高」这回事。 */
+.home-bomb-card .bomb-chip { width: 27%; }
 
 /* Desktop only: every icon lifts a touch under the pointer, so a mouse gets
    the same "this is live" feedback a tap gets from .home-tap. Gated on a
@@ -2861,21 +2924,23 @@ button:hover { filter: brightness(1.05); }
   padding: 24px; opacity: 0; transition: opacity 200ms ease;
 }
 .center-pick--in { opacity: 1; }
-/* 底下带《返回》圆盘的那一种（记录与排名点开的三块）：整层改成上下两段，面
-   板在上、圆盘在下；面板的高度上限扣掉圆盘那一截，谁也不压谁。底排导航这时
-   候收起来——那一行位置正是圆盘站的地方。
-   padding-bottom 写两遍，前一行不带 max()：老内核（Chrome 61）算不了带 var()
-   的 max()，带 max() 那一行在它那儿被**整条丢掉**，圆盘就只剩 .center-pick 那
-   条简写给的 24px。写明白比靠另一个选择器的简写兜着好——那条简写哪天改了，
-   这儿会跟着悄悄变。24 正是这道式子在安全区报 0 时的结果。 */
-.center-pick--back { flex-direction: column; gap: 14px; padding-bottom: 24px; padding-bottom: max(24px, calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))); }
+/* 底下带《退出》的那一种（记录与排名点开的三块、炸弹挑选窗）。
+   《退出》是全站统一的那颗 .page-exit（第 18 推），钉在屏幕上、和二级页那几颗同一个位置；
+   这一层只要把底下那一截让给它：下内边距 ＝ 它离底的距离 ＋ 78px（62 的键 ＋ 16 的空），
+   面板在上面剩下的那一块里居中，谁也不压谁。从前圆盘自己在流里占一行
+   （.center-pick-foot），离底多远跟着面板多高走，换一扇窗就换一个位置。
+   底排导航这时候照旧收起来。
+   padding-bottom 写两遍，前一行不带 max()：老内核（Chrome 61）算不了带 var() 的
+   max()，带 max() 那一行在它那儿被**整条丢掉**——194 正是这道式子在安全区报 0 时的
+   结果，和 .page-exit 那两行 bottom 同一个写法。
+   面板的高度上限跟着扣：上面 24 ＋ 下面那一截。 */
+.center-pick--back { flex-direction: column; padding-bottom: 194px; padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 .center-pick--back .center-pick-body { min-height: 0; }
 .center-pick--back .records-panel--big,
 .center-pick--back .total-card--big {
-  max-height: min(76vh, calc(100vh - 150px));
-  max-height: min(76vh, calc(100dvh - 150px));
+  max-height: min(76vh, calc(100vh - 218px));
+  max-height: min(76vh, calc(100dvh - 204px - max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)));
 }
-.center-pick-foot { flex: none; display: flex; justify-content: center; }
 body:has(.center-pick--back) .home-nav { display: none; }
 .center-pick-body { display: flex; align-items: center; justify-content: center; }
 /* Wraps, so a wide option (进阶三角's two arms) that no longer fits beside
@@ -3044,6 +3109,62 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .profile-page, .records-page:not(.xhs-profile) {
   padding-bottom: 116px;
   padding-bottom: calc(102px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
+}
+/* 成绩页底下多了那颗《退出》（第 18 推，.page-exit：站在底排上面 16px），所以这一页的页
+   底留白再加它那一截——它离底的距离 ＋ 78px（62 的键 ＋ 16 的空）。个人主页没有这颗键，
+   照旧是上面那一条。 */
+.records-page:not(.xhs-profile) {
+  padding-bottom: 194px;
+  padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
+}
+/*
+ * 手机上的成绩页（第 18 推第 5 条）：**一屏装下，不用滑**，两块面板把剩下的高度吃满。
+ *
+ * 方案原话：「两块面板至少加高到 1.5 倍，下方放统一退出按钮。优先级：退出按钮完整露出 >
+ * 1.5 倍；矮屏上面板自动缩短，页面不需要滑动。」
+ *
+ * 做法是整页至少一屏高（min-height 100svh，前一行 100vh 给不认 svh 的老浏览器），面板那一
+ * 层 flex: 1——招牌、累计分卡、页底那一截（留给《退出》和底排）都是定数，剩下的全给两块
+ * 面板。屏幕高就长高，屏幕矮就缩短，《退出》的位置不跟着动，所以它永远完整露出来。
+ *
+ * 量出来的账（安全区报 0）：页底那一截是 194，招牌和累计分卡一共吃到 239 左右，所以面板能
+ * 有的高度是「屏高 − 433」：
+ *   430×932 → 约 500（原高 299 的 1.67 倍）
+ *   390×844 → 约 410（原高 317 的 1.3 倍）
+ *   360×740 → 约 307（原高 317 的 0.97 倍）
+ * 后两种够不到 1.5 倍——那是几何上就放不下，不是没写对：退出键的位置是全站统一的（底排上
+ * 面 16px），它上面只剩这么多。方案给了优先级，照它来：退出完整露出、页面不滑，面板拿走剩
+ * 下的全部。门（check-page-exit）在放得下 1.5 倍的尺寸上量 1.5 倍，放不下的尺寸上量「面板
+ * 下沿正好贴到退出键上沿 16px」——也就是剩下的高度一个像素都没浪费。
+ *
+ * 面板里那六格不跟着变高（六格一样高是第 17 推定的），多出来的高度均摊到格与格之间：
+ * space-between，和电脑端右栏那块排名同一个写法（方案原话「等距排列」）。
+ *
+ * **两块并排时还得一行对一行**（第 17 推定的）。面板底下那句话两边不一样长——「尚无成绩」
+ * 一行，「登录之后，你的成绩才会上榜」两行，法文要三行——它要是留在流里一起分高度，两边多
+ * 出来的空就不一样，六格就上下错开。所以这句话钉在面板底边（absolute），两块面板底下各留
+ * 同样一截（三行字那么高，法文那句最长），六格只在上面那一截里摊开：两块一样高、六格一样
+ * 高、留的一样多，摊出来就是同一组位置。
+ *
+ * 门槛 999px：电脑端那套两栏（min-width: 1000px）不动。
+ */
+@media (max-width: 999px) {
+  .app.records-page:not(.xhs-profile) { min-height: 100vh; min-height: 100svh; }
+  .records-page:not(.xhs-profile) > .records-panels { flex: 1 1 auto; min-height: 0; }
+  .records-page:not(.xhs-profile) .records-panels .records-panel {
+    position: relative; justify-content: space-between;
+    /* 底下那句话最多三行（0.72rem × 1.5 × 3 ≈ 52）＋ 它离底的 16。 */
+    padding-bottom: 68px;
+    /* 六格之间最少 6px（原来是 10）：360×740 上面板只有 307 高，六格 ＋ 留给那句话的一截 ＋
+       五道 10px 的缝要 316，装不下就整页往下多出 13px——方案要的是「页面不需要滑动」。缝
+       只是下限，屏幕高一点 space-between 就把它们拉开。 */
+    gap: 6px;
+  }
+  .records-page:not(.xhs-profile) .records-panels .records-locked,
+  .records-page:not(.xhs-profile) .records-panels .rank-foot,
+  .records-page:not(.xhs-profile) .records-panels .rank-empty {
+    position: absolute; left: 12px; right: 12px; bottom: 16px; margin: 0;
+  }
 }
 /* 手机上也左右各一半。竖着叠的时候一屏只装得下《记录》那一块，《排行榜》
    得往下滑才露头；并排之后两块一眼都在。窄了就装不下整行字，所以面板里
@@ -3393,9 +3514,12 @@ body:has(.center-pick--back) .home-nav { display: none; }
    《退出》，按大的那个排版，工具条一露面就把它压掉半个（iPhone 11 上量到
    的）。前面那行 100vh 是给不认识 svh 的老浏览器兜底。 */
 .slot-page { min-height: 100vh; min-height: 100svh; padding: 0; gap: 0; max-width: none; }
-.slot-page .start-stage { padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 22px); }
-/* 同上：普通浏览器里安全区报 0，这颗键就只剩 22px，贴着工具条。给个下限。 */
-.slot-page .start-stage { padding-bottom: calc(max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px) + 22px); }
+/* 底下那一截留给《退出》（第 18 推第 1 条）：它不在内容流里了，钉在屏幕上（.page-exit），
+   这一截就是「它离底的距离 ＋ 78px」——内容最多画到它上沿再往上 16px。从前这儿是 22px ＋
+   安全区，那会儿那颗键自己在流里占着地方。两行的道理和 .page-exit 那两行 bottom 一样：
+   前一行是老内核算不了 max() 时的兜底（安全区报 0 时的值）。 */
+.slot-page .start-stage { padding-bottom: 194px; }
+.slot-page .start-stage { padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 /* 和开局页一样是整屏的一幕，底下那一排导航在这儿只会挡住《退出》。 */
 body:has(.slot-page) .home-nav { display: none; }
 /* 三张图占的是开局页放倒数窗口的那一格，所以横着摊开、上下居中。 */
@@ -3911,6 +4035,72 @@ body:has(.slot-page) .home-nav { display: none; }
 .page-back.icon-btn > svg { width: 100%; height: 100%; display: block; }
 .page-back.icon-btn:active { transform: scale(0.94); }
 
+/*
+ * 统一的《退出》（第 18 推第 1 条）：计时、老虎机、无限反转、步步为营、炸弹挑选窗、多人小
+ * 屋、成绩与排名，和小红书那几张二级页，全是这一颗，**站在同一个地方**。
+ *
+ * 从前每页各摆各的：挑图形那四页是一颗 73–99px 的圆盘，跟着屏幕宽度缩放，摆在内容流的最
+ * 底下；小屋那颗被拉成整行宽（见 .mp-page .mp-back 那条 flex: none）；成绩页没有；炸弹挑
+ * 选窗也没有。同一个动作在七页上七个样子、七个位置，手指得每页重新找一回。
+ *
+ * 现在：62px、白底深红（和全站《返回》圆盘同一副 CTL_BACK：--ctl-disc 是 --surface，
+ * --ctl-mark 是 --accent-ink——浅色主题下正是 #FFFFFF / #7A2E37；深色主题跟着主题走，
+ * 和别的圆盘一样），钉在屏幕上（position: fixed），水平居中，离底 =「底排的高度 ＋ 16px」：
+ * 底排整块是 86px ＋ max(安全区, 14px)，所以这儿是 102px ＋ 同一个 max()。有底排的那一
+ * 页（成绩与排名）它正好站在底排上面 16px；没有底排的页站在同一个高度——换页的时候它一个
+ * 像素都不挪。
+ *
+ * 两行 bottom：前一行 116px 是给算不了 max() 的老内核（小红书那一版跑的 Chrome 61）兜
+ * 底的，正好是安全区报 0 时的值——和 .home-nav、.records-page 那两处同一个写法。
+ *
+ * 居中用 left: 50% ＋ 负的半个宽度，不用 transform：按下去那一下的 scale(0.94) 也写在
+ * transform 上，两个写在一起就得每一处都记着把 translate 带上，漏一处按下去就跳到右边。
+ * 也不用单独的 translate 属性——Chrome 61 不认得它。
+ *
+ * **每一页的底部留白要 ≥ 按钮离底的距离 ＋ 78px**（62 的按钮 ＋ 16 的空）：内容最多画到
+ * 按钮上沿再往上 16px，谁也不压谁。那个数各页写在各页自己的规则里（都是 194px ＋ 同一
+ * 个 max() 那一对，搜「180px + max」）。门：scripts/check-page-exit.mjs。
+ */
+.page-exit.icon-btn {
+  position: fixed; z-index: 61;
+  left: 50%; margin-left: -31px;
+  bottom: 116px;
+  bottom: calc(102px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
+  width: 62px; height: 62px; padding: 0; flex: none;
+  border: none; background: none; border-radius: 50%; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  --ctl-disc: var(--surface); --ctl-mark: var(--accent-ink);
+}
+.page-exit.icon-btn > svg { width: 100%; height: 100%; display: block; }
+.page-exit.icon-btn:active { transform: scale(0.94); }
+/*
+ * 手机横过来（矮于 560 的横屏）：挑图形那几页和炸弹挑选窗的《退出》挪到右边、上下居中。
+ *
+ * 横屏只有 390 高。按上面那个位置（离底 116 起），这几页底下要让出 194，内容只剩 180 不到——
+ * 两张图 132 高再加一行标语就挤不下了：小红书那一端量到整页被撑长 89px，没滑之前《退出》正
+ * 好压在标语和图上。这几页在横屏下本来就是「内容一行、键在右边」的排法（改版前那颗键排在图
+ * 的右边，见 .start-stage 横屏那一段），所以《退出》照那个样子站到右边，页底那一截也不用让。
+ * 竖屏、电脑上一个像素都不动；成绩页、小屋这两张能往下滑的页不走这一条（底下照旧留着那一截）。
+ * 门：小红书 check-pickup 的横屏那几条。
+ */
+@media (orientation: landscape) and (max-height: 560px) {
+  /* 离右边 16px（页面那道边距），刘海那一侧再让出安全区（老内核不认 env()，留下前一行）。
+     第一版是 24px：步步为营那一句标语最长，844 宽的横屏上它的右沿离键只剩 15px。不去收标语的
+     宽——收了它就折行，整块往上挪，横屏那个老位置就变了。 */
+  .slot-page .page-exit.icon-btn,
+  .center-pick--back .page-exit.icon-btn {
+    left: auto; right: 16px; top: 50%; bottom: auto; margin: -31px 0 0 0;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+  }
+  .slot-page .start-stage { padding-bottom: 36px; }
+  .slot-page .start-stage { padding-bottom: calc(22px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+  .center-pick--back { padding-bottom: 24px; }
+  /* 老虎机介绍页那颗《开始 〉》：竖屏时它和《退出》同一行；横屏《退出》挪到右边正中，它回
+     到右下角那个老位置，两颗不叠。 */
+  .slot-intro-stage .slot-go { bottom: 44px; }
+  .slot-intro-stage .slot-go { bottom: calc(30px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+}
+
 /* 「这张码已经兑上了」——个人主页那一行右边的对勾。绿色，因为它说的是一件
    已经成了的事，不是一个能点的去处。 */
 /* 锁着的那颗开关（现在只有天才特供里的《深色界面》）：拨不动，就别装成拨得动。
@@ -3989,6 +4179,15 @@ body:has(.slot-page) .home-nav { display: none; }
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     column-gap: var(--gap-lg); align-items: start;
   }
+}
+
+/* 电脑端矮窗口（1000×700 那一档）：成绩页底下多了《退出》（第 18 推，离底 116 起，页底留
+   194），三块东西照原来的行距排到 530，再加那一截就是 724——比 700 高，要往下滑 24px，而这
+   一页「只有三块东西，要滑就是排版没做到」（check-records-desktop ③）。窗口矮的时候把招牌
+   底下那 22px 和两道 16px 的行距收一收（一共省 26px），三块的大小一个像素都不动。 */
+@media (min-width: 1000px) and (max-height: 760px) {
+  .records-page:not(.xhs-profile) > .home-head { margin-bottom: 0; }
+  .app.records-page:not(.xhs-profile) { row-gap: 14px; }
 }
 /* The lead-in above a document's clauses: same voice as the rows below it,
    just not one of them. */
@@ -5623,8 +5822,17 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
   .mp-page .mp-code-field .pin-row--on .pin-cell--at::after { animation: none; opacity: 1; }
 }
 
-/* ---- 那颗《返回》：设计稿上是蓝的实心圆盘 ---- */
-.mp-page .mp-back { --ctl-disc: var(--mp-blue); --ctl-mark: #FFFFFF; }
+/* ---- 那颗《返回》：设计稿上是蓝的实心圆盘 ----
+   第 18 推起它是全站统一的那颗 .page-exit（钉在屏幕上、和别的二级页同一个位置），只有颜
+   色留着这一页自己的蓝。
+   flex: none 是方案点名要的，修的是一个真出过的毛病：从前它坐在 .page-back-row 那一行里，
+   全局的 `button { flex: 1 }` 把它拉成整行宽（390 宽的屏上量到 358px）——圆盘还是画在正
+   中那 62px 里，可**整行都是它的点击区**，手指在那一行上随便落一下就退出小屋了。现在它
+   不在流里，flex 本来已经管不着它；这一句写在这儿，是让它哪天再被放回一行里也不会被拉宽。 */
+.mp-page .mp-back { --ctl-disc: var(--mp-blue); --ctl-mark: #FFFFFF; flex: none; }
+/* 底下那一截留给《退出》：它离底的距离 ＋ 78px（见 .page-exit）。前一行是老内核的兜底。 */
+.mp-page--home { padding-bottom: 194px; }
+.mp-page--home { padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 
 /* ---- 这一页不摆底排（玩家：「下方也去除掉个人主页和排名与信息栏的板块」）----
    两种写法都留着，和小屋里那几屏同一个道理：:has() 在新内核上够用，老内核落到 JS 盖上
@@ -6069,12 +6277,19 @@ body.is-room-host::after {
 .slot-demo-btn:active { transform: scale(0.96); }
 .slot-demo-btn--stop { background: #C8402F; }
 .slot-demo-btn--start { background: #3E9A5A; }
-/* 开通了的人右下角那颗《开始 〉》：去挑图形那一屏。 */
+/* 开通了的人右下角那颗《开始 〉》：去挑图形那一屏。
+   第 18 推起它和那颗统一的《退出》（.page-exit）站在同一行：中线对齐，一个在正中、一个靠
+   右。从前它离底 30px，比《退出》还低——底下那一截现在整个留给《退出》（离底 116 起），这
+   颗键要是还待在 30px，就成了一颗落在《退出》底下的孤零零的键。
+   高度写死 42，才算得准「中线对齐」：《退出》的中线离底 102 ＋ max(安全区, 14) ＋ 31，这颗
+   的底边就是那条线再往下 21。两行 bottom 的道理和 .page-exit 那两行一样（老内核兜底）。 */
 .slot-go {
   position: absolute; right: clamp(14px, 4vw, 28px);
-  bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 30px);
+  bottom: 126px;
+  bottom: calc(112px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 10px 14px 10px 20px; border: none; border-radius: var(--r-full);
+  height: 42px; box-sizing: border-box;
+  padding: 0 14px 0 20px; border: none; border-radius: var(--r-full);
   background: var(--accent); color: #FFFFFF; font: inherit; font-weight: 700; font-size: 16px;
   cursor: pointer; box-shadow: var(--shadow);
 }

@@ -21,7 +21,6 @@ import path from 'node:path';
 
 const OUT = 'design/icons';
 const SHAPES = ['square', 'circle', 'triangle'];
-const TIERS = ['basic', 'timed', 'advanced'];
 const LAYOUTS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig', 'triangleAdvanced'];
 
 const tmp = path.resolve('node_modules/.cache/icon-sheet');
@@ -57,7 +56,10 @@ const GROUPS = [
     ...SHAPES.map((sh) => [`timed-${sh}`, H.timedCard(sh), `电脑端 / 弹窗里的 ${sh}`]),
   ]],
   ['炸弹挑战', [
-    ...TIERS.flatMap((t) => SHAPES.map((sh) => [`bomb-${t}-${sh}`, H.bombChip(sh, t), `${t} · ${sh}`])),
+    // 第 18 推：炸弹选择页那六格就是棋盘自己的图标（底板由样式上色），不再单独画；
+    // 这一组留主菜单上那枚炸弹图标和面板正中那颗星。
+    ['bomb-badge', H.ICON_BOMB_BADGE, '主菜单上的炸弹图标'],
+    ['bomb-star', H.bombPanelStar(), '炸弹选择页面板正中那颗星（白色，底下垫一块深色看）'],
   ]],
   ['更多布局', [
     ...SHAPES.map((sh) => [`more-${sh}`, H.moreLayoutCard(sh), `${sh} 的「+」卡`]),

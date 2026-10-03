@@ -969,90 +969,46 @@ let page = await menuPage({ slides_played_square: '1' });
   await p7.close();
 }
 
-// ── 4h. 炸弹那张缩图：三层等高，整个装得进格子 ──────────────────────
+// ── 4h. 炸弹那张卡：轴上是那枚炸弹图标，不再是整块面板缩小 ──────────
 //
-// 玩家 2026-09 报的：「点开前缩图里三个小的圆角矩形上下空间不等距，最下面那个的一
-// 部分被卡走了」。根子是 `.bomb-row` 的 `flex: 1` 配上默认的 `min-height: auto`：
-// 中间那层里 90s 那道星芒比别人高，整块内容 97 > 格子里的 83，第三层于是被挤到格
-// 子外面，让轴那一格的 overflow 一刀切掉——上下也就不等距了（顶上是内边距，底下是
-// 溢出）。量的是比例，不是像素：这张卡在轴上随时被 scale 着，像素每帧都不一样。
+// 第 18 推第 3 条：手机主菜单上那张炸弹卡换成玩家给的图标（src/assets/icons/bomb-badge.svg：
+// 砖红圆角方块里一颗白色星芒）。从前这一格画的是整块炸弹面板缩小（.home-bomb-mini 里一块
+// .bomb-panel，六枚小片挤在一格里，每枚不到 20px），这一节量的是那块缩图「三层等高、整个
+// 装得进格子」——玩家 2026-09 报过最下面那层被卡掉一半。缩图撤了，那几条一起撤；换成量这
+// 张卡现在画的是不是那枚图标：
+//   · 格子里是一枚 svg，不是 .bomb-panel，里面也没有一颗 .bomb-chip（按下去开的是挑选窗，
+//     卡上不该有能单独被按到的小片）；
+//   · 是玩家那一枚：一个圆角方块（rect 带 rx）＋ 一颗星（polygon），两个颜色——白和砖红
+//     #BE411A（文件里写的是 display-p3，customIcons 的 sRGBOnly 换算出来正是这个值）；
+//   · 没有 <title>（不然悬停会冒出「编组」两个字，读屏也念它）。
 {
   const p8 = await menuPage({ slides_played_square: '1' });
   const m = await p8.evaluate(() => {
     const mini = document.querySelector('.mode-axis .home-bomb-mini');
     if (!mini) return null;
-    const panel = mini.querySelector('.bomb-panel') || mini;
-    const pr = panel.getBoundingClientRect();
-    const rowEls = [...panel.querySelectorAll('.bomb-row')];
-    const rows = rowEls.map((r) => r.getBoundingClientRect());
-    const chipEls = [...panel.querySelectorAll('.bomb-chip')];
+    const art = mini.querySelector(':scope > .home-icon-art');
+    const kid = art && art.firstElementChild;
+    const fills = kid ? [...kid.querySelectorAll('[fill]')].map((e) => e.getAttribute('fill').toLowerCase()).filter((f) => f !== 'none') : [];
     return {
-      rows: rows.map((r) => ({ h: r.height, top: r.top - pr.top, bottom: pr.bottom - r.bottom })),
-      panelH: pr.height,
-      chipCount: chipEls.length,
-      /** 每一层各几枚。三层都该是 2（PR-20）。 */
-      perRow: rowEls.map((r) => r.querySelectorAll('.bomb-chip').length),
-      /*
-       * 小片顶出自己那一层多少（负数＝还在层里）。
-       *
-       * 每一颗都和**它自己那一层**（DOM 上的父节点）比，不按「前几颗在第一层」数。
-       * 从前是写死的「前三颗、后三颗」：炸弹这一档 2026-09 从三颗变两颗（三角那副棋
-       * 盘删了，《侵蚀阶梯》v1.2 PR-6），第三颗于是被拿去和第一层比，量出来「顶出去
-       * 43px」——红的是尺子不是代码。
-       */
-      chipOut: chipEls.length
-        ? Math.max(...chipEls.map((c) => {
-            const cr = c.getBoundingClientRect();
-            const r = c.closest('.bomb-row').getBoundingClientRect();
-            return Math.max(r.top - cr.top, cr.bottom - r.bottom);
-          }))
-        : null,
-      // 那枚星爆徽记（.bomb-90s）撤了（PR-20）：三行现在各两枚，一点就开。所以不再量它
-      // 的定位，改成量「六枚全在、而且每一枚都在自己那一层里」。
+      kind: kid ? kid.tagName.toLowerCase() : '（空）',
+      panels: mini.querySelectorAll('.bomb-panel').length,
+      chips: mini.querySelectorAll('.bomb-chip').length,
+      roundRect: kid ? [...kid.querySelectorAll('rect')].some((r) => Number(r.getAttribute('rx')) > 0) : false,
+      star: kid ? kid.querySelectorAll('polygon').length : 0,
+      fills: [...new Set(fills)],
+      title: kid ? kid.querySelectorAll('title').length : -1,
+      label: mini.getAttribute('aria-label') || '',
     };
   });
-  check('炸弹缩图找得到（下面几条才有意义）', !!m && m.rows.length === 3, m ? `${m.rows.length} 层` : '没找到');
-  if (m && m.rows.length === 3) {
-    const hs = m.rows.map((r) => r.h);
-    const spread = (Math.max(...hs) - Math.min(...hs)) / m.panelH;
-    check('三层等高（差不到整块的 2%）', spread < 0.02, `${hs.map((h) => h.toFixed(1)).join(' / ')}px`);
-    const padTop = m.rows[0].top;
-    const padBottom = m.rows[2].bottom;
-    check(
-      '上下等距（最下面那层没有被卡掉）',
-      Math.abs(padTop - padBottom) / m.panelH < 0.02 && padBottom > -0.5,
-      `顶上 ${padTop.toFixed(1)}px / 底下 ${padBottom.toFixed(1)}px`,
-    );
-    const gaps = [m.rows[1].top - (m.rows[0].top + hs[0]), m.rows[2].top - (m.rows[1].top + hs[1])];
-    check('三层之间两道缝也一样宽', Math.abs(gaps[0] - gaps[1]) / m.panelH < 0.02, `${gaps.map((g) => g.toFixed(1)).join(' / ')}px`);
-    /**
-     * 下面两条守的是**那三条为什么成立**，不是它们成立没有。
-     *
-     * 小片改成按板宽定大小（不按 flex 分出来的层高）、星芒改成绝对定位（不参与
-     * 分高），为的是别再踩「百分比高度在 Safari 上算不准」那一脚——这张卡上一次
-     * 出事（整张溢到屏幕外）就只在 iPhone 上复现得出来，而这儿的门跑在 Chromium
-     * 上，量不到那种差异。所以量的是「有没有留出余量」和「星芒在不在流里」：这
-     * 两样一旦回到老写法，Chromium 上也立刻看得见。
-     */
-    /*
-     * 尺子：这三层里真的有小片可量。
-     *
-     * **这个数 2026-10 从 4 变成 6**（PR-20）：中间那一层原先是一枚星爆徽记（点一下才换
-     * 成两枚棋盘），现在和上下两层一样是两枚，所以三层各两枚、一共六枚。
-     */
-    check('炸弹缩图里量到了小片（下面那一条才有意义）', m.chipCount === 6, `${m.chipCount} 颗`);
-    check(
-      '小片整个待在自己那一层里（留着余量，不是刚好卡住）',
-      m.chipOut !== null && m.chipOut < -0.02 * m.panelH,
-      `离层边还有 ${(-m.chipOut).toFixed(1)}px`,
-    );
-    /*
-     * 这一条原先是「星芒不参与分高（绝对定位，钉在板正中）」。星芒撤了（PR-20），而它守
-     * 的那件事换了个说法继续守：**三层每一层都是两枚，一枚都不许少。** 少一枚的后果是那
-     * 一档在屏幕上打不开，而屏幕上不报任何错——从前中间那一层就是「看着在、点一下才出
-     * 来」，而那正是被撤掉的理由。
-     */
-    check('三层各两枚，一枚不少', m.perRow.join(' ') === '2 2 2', m.perRow.join(' '));
+  check('炸弹那张卡找得到（下面几条才有意义）', !!m, m ? m.kind : '没找到');
+  if (m) {
+    check('卡里画的是一枚 svg（不再是整块面板缩小）', m.kind === 'svg' && m.panels === 0, `${m.kind}，面板 ${m.panels} 块`);
+    check('卡上没有能单独被按到的小片', m.chips === 0, `${m.chips} 枚`);
+    check('是玩家给的那一枚：圆角方块 ＋ 一颗星', m.roundRect && m.star === 1, `圆角方块 ${m.roundRect}，星 ${m.star} 颗`);
+    check('两个颜色：白和砖红 #BE411A（p3 换算之后）',
+      m.fills.length === 2 && m.fills.includes('#ffffff') && m.fills.includes('#be411a'), m.fills.join(' / '));
+    check('没有 <title>（悬停不冒「编组」，读屏不念它）', m.title === 0, String(m.title));
+    check('读屏名照旧是「基础炸弹」那一档的名字', m.label.length > 0, m.label);
   }
   await p8.close();
 }
@@ -2090,29 +2046,13 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
           artR: ar ? ar.right : 0,
         };
       });
-    /*
-     * 把轴上那条 `.bomb-panel` 规则的**源文本**读出来。
-     *
-     * 不能读 computed style：那边 `width: auto` 会被解成一个具体的 px 值，看不出来。
-     * 而这一条要守的恰恰是「源码里一个 auto 都不能留」——因为 auto 在这儿是一道
-     * 循环，Chromium 解成 112、**Safari 解成整幅可用宽**。开 Chromium 的门看不见那个
-     * 内核差异，只看得见「有没有留下那个循环」。
-     */
-    let bombRule = '';
-    for (const sh of document.styleSheets) {
-      let rules;
-      try { rules = sh.cssRules; } catch { continue; }
-      for (const r of rules || []) {
-        if (r.selectorText && /\.mode-axis[^,{]*\.bomb-panel/.test(r.selectorText)) {
-          bombRule += r.style.cssText + ' ';
-        }
-      }
-    }
+    // 轴上还有没有面板缩图（见下面 ⑤）：第 18 推之后一块都不该有。
+    const axisPanels = host.querySelectorAll('.bomb-panel').length;
     // 两条点点轨的内沿：左边那颗的右沿、右边那颗的左沿。图不许压过去（见下面 ⑥）。
     const dl = document.querySelector('.axis-rail--l .axis-dot');
     const dr = document.querySelector('.axis-rail--r .axis-dot');
     return {
-      token, rows, hostW: host.clientWidth, bombRule: bombRule.trim(),
+      token, rows, hostW: host.clientWidth, axisPanels,
       pinch: pinchRaw.endsWith('%')
         ? (parseFloat(pinchRaw) / 100) * host.clientWidth
         : parseFloat(pinchRaw) || 0,
@@ -2179,7 +2119,7 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
   // ② 图完整落在格子里（炸弹那张就靠这条）
   const spill = art.rows.filter((r) => r.over > 0.6);
   check(
-    `${label}：每张图都完整落在格子里（炸弹那张的 .bomb-panel 就靠这条）`,
+    `${label}：每张图都完整落在格子里`,
     spill.length === 0,
     spill.length ? spill.map((r) => `${r.name}（${r.kind}）溢出 ${r.over.toFixed(1)}px`).join(' / ') : '',
   );
@@ -2413,23 +2353,25 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
   );
 
   /**
-   * ⑤ **轴上那条 `.bomb-panel` 规则里，宽高一个 auto 都不能留。**
+   * ⑤ **轴上没有 `.bomb-panel`，炸弹那张画的是一枚 svg。**
    *
-   * modeAxis 那段注释记着：炸弹那张的「图」不是 svg，是一块 `.bomb-panel`
-   * （block + aspect-ratio）。给它 `width: auto; height: 100%` 的话，块级元素的
-   * `width: auto` 在「收缩到内容」的盒子里是一道循环：Chromium 按 aspect-ratio
-   * 解成 112，**Safari 解成整幅可用宽**，那块红板子于是撑成三百多像素宽、从
-   * 112 的格子里往左溢出去半个屏幕。玩家为这个 bug 报过两轮。
+   * 这一条从前是「轴上那条 `.bomb-panel` 规则里，宽高一个 auto 都不能留」：炸弹那张的「图」
+   * 那时不是 svg，是一块 `.bomb-panel`（block + aspect-ratio），给它 `width: auto` 的话，块
+   * 级元素的 `width: auto` 在「收缩到内容」的盒子里是一道循环——Chromium 按 aspect-ratio 解
+   * 成 112，**Safari 解成整幅可用宽**，那块红板子撑成三百多像素宽、从格子里往左溢出去半个
+   * 屏幕。玩家为这个 bug 报过两轮。这道门跑的是 Chromium，看不见 Safari 那个解法，所以当
+   * 年量的是「源码里还有没有留下那个循环」。
    *
-   * **这道门跑的是 Chromium，看不见 Safari 那个解法。** 上面那几条量的是渲染结
-   * 果，在 Chromium 上永远是 112——反向验证过，把 auto 注回去它们一条都不红。所
-   * 以这一条量的不是结果，是**源码里还有没有留下那个循环**——唯一一个开
-   * Chromium 也能守住的角度。
+   * 第 18 推第 3 条把那块缩图换成了炸弹图标（一枚 svg，和别的卡一样铺满格子），那道循环
+   * 连同那条规则一起没了。这一条改守**它别回来**：轴上一块 `.bomb-panel` 都不许有、炸弹那
+   * 张画的是 svg。哪天有人把面板缩图放回轴上，这一条先红——那时候要连 Safari 那道防线一起
+   * 补回来。
    */
+  const bombRow = art.rows.find((r) => r.name === '基础炸弹');
   check(
-    `${label}：炸弹那块板子的宽高都写死了（一个 auto 都没留 — Safari 专用防线）`,
-    art.bombRule.length > 0 && !/\b(width|height)\s*:\s*auto/.test(art.bombRule),
-    art.bombRule || '（根本没找到这条规则）',
+    `${label}：轴上没有面板缩图，炸弹那张画的是一枚 svg（Safari 那道循环不会回来）`,
+    !!bombRow && bombRow.kind === 'svg' && art.axisPanels === 0,
+    bombRow ? `炸弹那张：${bombRow.kind}；轴上面板 ${art.axisPanels} 块` : '（没找到炸弹那张）',
   );
   await c.close();
 }

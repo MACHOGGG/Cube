@@ -119,18 +119,20 @@ export function openCenterPicker(opts: CenterPickerOpts): () => void {
   overlay.appendChild(body);
   if (opts.back) {
     overlay.classList.add('center-pick--back');
-    const foot = document.createElement('div');
-    foot.className = 'center-pick-foot';
+    // 全站统一的那颗《退出》（.page-exit，第 18 推）：钉在屏幕上，和二级页那几颗站在同
+    // 一个地方。从前它坐在面板底下一行自己的 .center-pick-foot 里，离底多远跟着面板多高
+    // 走——同一个动作换一扇窗就换一个位置。面板留出它那一截靠的是 .center-pick--back
+    // 的下内边距（style.css）。.center-pick-back 那个类留着，门（check-leaderboard、
+    // 小红书的 check-profile）按它找这颗键。
     const backBtn = document.createElement('button');
-    backBtn.className = 'icon-btn page-back center-pick-back';
+    backBtn.className = 'icon-btn page-exit center-pick-back';
     backBtn.setAttribute('aria-label', opts.back);
     backBtn.innerHTML = CTL_BACK;
     backBtn.addEventListener('click', () => {
       vibrate(12);
       close();
     });
-    foot.appendChild(backBtn);
-    overlay.appendChild(foot);
+    overlay.appendChild(backBtn);
   }
   document.body.appendChild(overlay);
   // 手机的返回键：先关这一层，不退页（见 backNav.ts）。

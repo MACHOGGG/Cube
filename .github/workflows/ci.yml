@@ -1101,3 +1101,13 @@ jobs:
           nohup node scripts/dev-server.mjs 8962 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8962/ && break; sleep 0.25; done
           node scripts/check-nickname-head.mjs http://localhost:8962/
+
+      # 统一的《退出》（第 18 推）：计时、老虎机两页、无限反转、步步为营、炸弹挑选窗、多人小屋、成绩与排名
+      # 八页，360×740 / 390×844 / 430×932 / 1512×982 四个尺寸——62px、位置各页一致（≤1px）、完整可见、
+      # 不压内容、页底留够、按下去回对地方；手机战绩页一屏不滑、面板吃满剩下的高度、两块六格一行对一行；
+      # 累计得分卡只剩那个数、点开才有标题和同步提示。
+      - name: 统一的《退出》和手机战绩页
+        run: |
+          nohup node scripts/dev-server.mjs 8964 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8964/ && break; sleep 0.25; done
+          node scripts/check-page-exit.mjs http://localhost:8964/

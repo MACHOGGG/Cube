@@ -16,7 +16,9 @@ import {
   ICON_BASE_CIRCLE,
   ICON_BASE_TRIANGLE,
   ICON_TIMED_COMBINED,
-  bombChip,
+  ICON_BOMB_BADGE,
+  bombBoard,
+  bombPanelStar,
   ICON_LOCK,
   ICON_MULTIPLAYER,
   layoutIcon,
@@ -430,61 +432,75 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // `onLaunch` runs just before a chip starts its game — the mobile centre
   // picker passes its own close() here, so the blown-up bomb window retires
   // the moment a challenge is picked, exactly like the timed picker does.
+  /*
+   * 三排两格（第 18 推第 2 条，按设计图）：一格就是那副棋盘自己的图标，底板一排一个颜色
+   * （bombBoard，颜色在 style.css 的 .bomb-row--*）。基础、计时两排是基础方块 / 基础小球，
+   * 进阶那排是菱形方块 / 六边形小球（layout.advancedBomb）。
+   *
+   * **一点就开**（PR-20 / E17+E26 定下的，这一版照旧）：每一格都是一颗键，按下去直接开
+   * 那一局，没有哪一排要先点一下才展开。
+   *
+   * 格子不用 iconButton()：那条路会挂上主菜单卡片那段「按下去抖一下」的动画（.home-tap，
+   * 一段 transform 关键帧），而这一页按下去的样子是方案点名的——底板变红、加白边、放大到
+   * 1.04。两段 transform 叠在一起，抖动会整个顶掉那 1.04。
+   */
+  const BOMB_TIERS: { tier: BombTier; title: string; cards: Record<RowShape, ShapeCardMeta> }[] = [
+    { tier: 'basic', title: s.bombBasicTitle, cards: layout.base },
+    { tier: 'timed', title: s.bombTimedTitle, cards: layout.base },
+    { tier: 'advanced', title: s.bombAdvancedTitle, cards: layout.advancedBomb },
+  ];
   function buildBombPanel(reopenKey?: string, onLaunch?: () => void): HTMLElement {
     const panel = document.createElement('div');
     panel.className = 'bomb-panel';
-
-    const basicRow = document.createElement('div');
-    basicRow.className = 'bomb-row';
-    for (const shape of BOMB_SHAPES) {
-      const card = layout.base[shape];
-      const chip = iconButton(bombChip(shape, 'basic'), `${s.bombBasicTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onLaunch?.();
-        handlers.onBombFor('basic', card.id, reopenKey);
-      });
-      basicRow.appendChild(chip);
+    // 正中那颗白色八角星：装饰，读屏不念；压在三排底下（style.css 的 .bomb-star）。
+    panel.innerHTML = `<span class="bomb-star" aria-hidden="true">${bombPanelStar()}</span>`;
+    for (const t of BOMB_TIERS) {
+      const row = document.createElement('div');
+      row.className = `bomb-row bomb-row--${t.tier}`;
+      for (const shape of BOMB_SHAPES) {
+        const card = t.cards[shape];
+        const glyph = t.tier === 'advanced' ? layoutIcon(card.id, shape) : BASE_ICON[shape];
+        const chip = document.createElement('button');
+        chip.className = 'bomb-chip';
+        chip.setAttribute('aria-label', `${t.title} · ${shapeName(lang, card.id, card.name)}`);
+        chip.innerHTML = bombBoard(glyph);
+        chip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onLaunch?.();
+          handlers.onBombFor(t.tier, card.id, reopenKey);
+        });
+        row.appendChild(chip);
+      }
+      panel.appendChild(row);
     }
-    panel.appendChild(basicRow);
-
-    /*
-     * 定时那一档：**一行两枚，点一下就开**（PR-20 / E17+E26）。
-     *
-     * 从前这一行是一条宽的星爆徽记（ICON_BOMB_90S），点它才换成两枚棋盘。那就是**两次
-     * 点击**才开得了一局，而上下两行都是一次——同一页上三行长得像、行为不一样，正是玩
-     * 家定的「不要让玩家出现意料之外的疏漏操作」那一条。
-     *
-     * 时长现在印在棋盘那两枚自己身上（bombChip 的徽记「100s」），所以也不缺那条信息。
-     */
-    const timedRow = document.createElement('div');
-    timedRow.className = 'bomb-row';
-    for (const shape of BOMB_SHAPES) {
-      const card = layout.base[shape];
-      const chip = iconButton(bombChip(shape, 'timed'), `${s.bombTimedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onLaunch?.();
-        handlers.onBombFor('timed', card.id, reopenKey);
-      });
-      timedRow.appendChild(chip);
-    }
-    panel.appendChild(timedRow);
-
-    const advRow = document.createElement('div');
-    advRow.className = 'bomb-row';
-    for (const shape of BOMB_SHAPES) {
-      const card = layout.advancedBomb[shape];
-      const chip = iconButton(bombChip(shape, 'advanced'), `${s.bombAdvancedTitle} · ${shapeName(lang, card.id, card.name)}`, 'bomb-chip');
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onLaunch?.();
-        handlers.onBombFor('advanced', card.id, reopenKey);
-      });
-      advRow.appendChild(chip);
-    }
-    panel.appendChild(advRow);
     return panel;
+  }
+
+  /**
+   * 挑选窗里那一张：面板左边外面一列字「基础 / 计时 / 进阶」，每个字和自己那一排上下居中
+   * （第 18 推第 2 条）。对齐的道理在 style.css 的 .bomb-pick 那段。
+   *
+   * 这一列字 aria-hidden：每一格自己的读屏名里已经带着这一档（「定时炸弹 · 方块」），字
+   * 再念一遍就是同一件事说两次。主菜单电脑端那张卡里的缩图不带这一列——那是一张卡，不是这
+   * 一页。
+   */
+  function buildBombPick(panel: HTMLElement): HTMLElement {
+    const pick = document.createElement('div');
+    pick.className = 'bomb-pick';
+    const tiers = document.createElement('div');
+    tiers.className = 'bomb-tiers';
+    tiers.setAttribute('aria-hidden', 'true');
+    for (const label of [s.bombTierBasic, s.bombTierTimed, s.bombTierAdvanced]) {
+      const el = document.createElement('span');
+      el.className = 'bomb-tier';
+      el.textContent = label;
+      tiers.appendChild(el);
+    }
+    // 大的那一号：openCenterPicker 只给它收到的那一层挂类，面板自己的那个类在这儿挂上。
+    panel.classList.add('bomb-panel--big');
+    pick.appendChild(tiers);
+    pick.appendChild(panel);
+    return pick;
   }
 
   // 炸弹接在计时后面，同一排。不论宽窄，这个板块都是一颗会飞到屏幕中间、
@@ -494,15 +510,26 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   bombBtn.className = wide ? 'home-bomb-card' : 'home-icon-btn home-bomb-mini';
   bombBtn.setAttribute('aria-label', s.bombBasicTitle);
   bombBtn.dataset.reopen = 'bomb';
-  // The panel inside the button is a picture of the section, not a control:
-  // its chips would otherwise swallow the tap (they stopPropagation so they
-  // can launch a game from inside the *picker*) and the section would never
-  // open. Only the copy built for the picker below is live.
-  const preview = buildBombPanel();
-  preview.style.pointerEvents = 'none';
   const bombArt = document.createElement('span');
   bombArt.className = 'home-icon-art';
-  bombArt.appendChild(preview);
+  if (wide) {
+    // The panel inside the button is a picture of the section, not a control:
+    // its chips would otherwise swallow the tap (they stopPropagation so they
+    // can launch a game from inside the *picker*) and the section would never
+    // open. Only the copy built for the picker below is live.
+    const preview = buildBombPanel();
+    preview.style.pointerEvents = 'none';
+    bombArt.appendChild(preview);
+  } else {
+    /*
+     * 手机上这张卡换成炸弹的图标（第 18 推第 3 条，玩家给的那枚：砖红圆角方块里一颗白色
+     * 星芒，src/assets/icons/bomb-badge.svg）。从前这儿摆的是整块炸弹板缩小的样子——六颗
+     * 小片挤在轴上一格里，每颗不到 20px，看不出是什么，而且它是轴上唯一一张不是方的卡，
+     * 鱼眼轴为它单独算过好几回高度（check-mode-axis 4h 那一节）。现在和别的玩法一样是一张
+     * 方图；点开之后那块大板照旧。电脑宽版那一张照旧是整块板（方案只换手机端）。
+     */
+    bombArt.innerHTML = ICON_BOMB_BADGE;
+  }
   bombBtn.appendChild(bombArt);
   const bombTag = tag('bomb');
   if (bombTag) bombBtn.appendChild(tagEl(bombTag));
@@ -511,8 +538,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     // The close handle only exists once the picker is open, but the panel
     // has to be built first — so the chips call it through this box.
     let close: (() => void) | undefined;
-    const panel = buildBombPanel('bomb', () => close?.());
-    close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel });
+    const panel = buildBombPick(buildBombPanel('bomb', () => close?.()));
+    // back：底下那颗全站统一的《退出》（第 18 推第 1 条）。从前这扇窗没有它——只能点空处
+    // 或按手机返回键关掉，而别的二级页都有一颗看得见的键。
+    close = openCenterPicker({ originEl: bombBtn, title: s.bombBasicTitle, panel, panelClass: 'bomb-pick--big', back: s.back });
   });
   if (timedRow) {
     timedRow.appendChild(bombBtn);

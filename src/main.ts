@@ -1275,6 +1275,8 @@ function showRecordsPage() {
     root,
     recordSources,
     currentLang,
+    // 底下那颗《退出》（第 18 推）：回主菜单，和底排那颗亮着的图标、手机返回键同一个去处。
+    showMenu,
     () => openGeniusWindow(currentLang, showRecordsPage),
     () => openAuthWindow(currentLang, showRecordsPage),
   );

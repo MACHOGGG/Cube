@@ -490,8 +490,9 @@ export function renderMultiplayerPage(
           </label>
         </div>
 
-        <!-- 全站的《返回》都是同一颗圆盘（见 ui/ctlIcons.ts），这一页按设计稿换成蓝的。 -->
-        <div class="page-back-row"><button class="icon-btn page-back mp-back" id="mpBack" aria-label="${s.back}">${CTL_BACK}</button></div>
+        <!-- 全站统一的那颗《退出》（.page-exit，第 18 推）：钉在屏幕上，和别的二级页站在同一
+             个地方。这一页按设计稿换成蓝的（.mp-page .mp-back）。 -->
+        <button class="icon-btn page-exit mp-back" id="mpBack" aria-label="${s.back}">${CTL_BACK}</button>
       </div>
     `;
 

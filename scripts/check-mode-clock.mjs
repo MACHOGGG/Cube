@@ -78,10 +78,13 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   check('《定时炸弹》那一档走常量', /tier === 'timed' \? MODE_SECONDS/.test(web));
   check('《无限反转》走常量（网页）', /FLIP_SECONDS = MODE_SECONDS/.test(web));
   check('《无限反转》走常量（小红书，从前是手抄的）', /FLIP_SECONDS = MODE_SECONDS/.test(xhs));
-  // 炸弹图标上那枚徽记：数字必须是插值进去的，不是画死的。
+  // 炸弹那一页从前在定时那两枚上印着「100s」（PR-20），这一条量的是「那个数是插值进去的，
+  // 不是画死的」。第 18 推那一页换成棋盘图标 ＋ 左边三个字（「计时」），徽记撤了，不再印秒
+  // 数。剩下的那半照旧守着：图标里不许出现画死的秒数——哪天谁再把秒数画回图标上，必须插值
+  // MODE_SECONDS，写死一个数这一条就红。
   const icons = read('src/ui/homeIcons.ts');
   const painted = icons.match(/>\s*\d+s\s*</);
-  check('炸弹那枚徽记上的秒数是插值进去的', /\$\{MODE_SECONDS\}s</.test(icons) && !painted,
+  check('图标里没有画死的秒数（要印就插值 MODE_SECONDS）', !painted,
     painted ? `画死了：${painted[0]}` : '');
 }
 

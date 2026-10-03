@@ -52,9 +52,7 @@ export function renderSlotIntroPage(
         <div class="slot-intro-actions">
           <button class="slot-demo-btn slot-demo-btn--stop" id="slotDemoBtn">${s.slotDemoStop}</button>
         </div>
-        <div class="start-actions">
-          <button class="icon-btn start-act" id="slotBack" aria-label="${s.back}">${CTL_BACK}</button>
-        </div>
+        <button class="icon-btn page-exit" id="slotBack" aria-label="${s.back}">${CTL_BACK}</button>
         ${
           locked
             ? ''

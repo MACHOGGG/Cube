@@ -6,6 +6,7 @@ import { buildShareInfo, formatRunTime, modeLabel } from '../engine/runRecord';
 import { STRINGS, type Lang } from '../i18n';
 import { shapeName } from './shapeLabels';
 import { openCenterPicker } from './centerPicker';
+import { CTL_BACK } from './ctlIcons';
 import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
 import { isGenius } from '../engine/subscription';
@@ -94,10 +95,9 @@ function rememberTotal(total: number): void {
 export function renderRecordsPage(
   container: HTMLElement,
   sources: RecordSource[],
-  // 这一页底下那颗《返回》圆盘撤掉之后，这个参数也就没人用了（见下面那段注释）。
-  // 参数留着占位会让下一个人以为它还接着什么，所以一并去掉——回主菜单的两条路
-  // （底排那颗亮着的图标、手机返回键）都在 main.ts 那头，不在这一页里。
   lang: Lang,
+  /** 底下那颗《退出》（第 18 推）按下去回哪儿——主菜单。 */
+  onBack: () => void,
   /** 锁着的排行榜上那颗《成为 Slides 天才》按下去以后去哪儿。 */
   onWantGenius: () => void = () => {},
   /** 登录过期那一屏上那颗《重新登录》按下去以后去哪儿——个人主页。 */
@@ -122,7 +122,7 @@ export function renderRecordsPage(
 
   // 一句只对还没订阅的人有意义的话：成绩留在这台手机里，除非你是 Slides 天才。
   // 已经是天才的人，这句话没有任何东西可以告诉他——所以整句消失，只剩
-  //《累计得分》和那个数。
+  //《累计得分》和那个数。第 18 推起它只出现在点开之后的那张大卡上（卡上只有数）。
   const syncNote = isGenius() ? '' : `<span class="total-card-sub">${s.totalScoreSync}</span>`;
 
   container.innerHTML = `
@@ -133,24 +133,25 @@ export function renderRecordsPage(
           <p class="home-sub">${s.homeTagline}</p>
         </div>
       </header>
-      <button class="total-card" id="totalCard">
-        <span class="total-card-title">${s.totalScoreTitle}</span>
+      <!-- 累计得分卡上只有那个数（第 18 推第 4 条）：标题和那句同步提示挪到点开之后。字体
+           没动。读屏软件读整颗键的 aria-label「累计得分 N」——卡上不写标题，光念一个数谁
+           也不知道它是什么。 -->
+      <button class="total-card" id="totalCard" aria-label="${s.totalScoreTitle} ${total}">
         <span class="total-card-value" id="totalValue">${compactScore(total, lang)}</span>
-        ${syncNote}
       </button>
       <div class="records-panels">
         <button class="records-panel records-panel--records" id="recordsPanel" aria-label="${s.navRecords}"></button>
         <button class="records-panel records-panel--ranks" id="ranksPanel" aria-label="${s.rankingsTitle}"></button>
       </div>
-      <!-- 这一页底下那颗《返回》圆盘撤掉了（玩家 2026-09）。
-           它不是唯一的出路，所以撤掉不会把人关在这一页：底排导航上《记录与排名》
-           那颗图标此刻是亮着的，再点一下就回主菜单（见 main.ts 的 relocalizeChrome
-           里那句「Tapping the icon of the page you are already on closes it」），
-           手机的返回键也照旧（backNav）。
-           两条路都通，而屏幕上那颗圆盘是第三条——这一页本来就只有两块牌子，底下再
-           吊一颗圆盘，反倒像是还有什么东西没摆完。 -->
+      <!-- 《退出》回来了（第 18 推第 1、5 条，方案原话「下方放统一退出按钮」）。
+           2026-09 玩家撤过这一页的圆盘，理由是「底排那颗亮着的图标再点一下就回主菜单、手机
+           返回键也照旧，屏幕上那颗是第三条路」。这一次方案点名把它放回来，而且换了身份：它
+           不再是这一页自己吊在两块牌子底下的一颗圆盘，是七张二级页共用的那一颗
+           （.page-exit），钉在同一个位置——在这一页上它正好站在底排上面 16px。 -->
+      <button class="icon-btn page-exit" id="recordsBack" aria-label="${s.back}">${CTL_BACK}</button>
     </div>
   `;
+  container.querySelector<HTMLButtonElement>('#recordsBack')!.addEventListener('click', onBack);
 
   /**
    * 老虎机那一局在拼的那个得分图案（《侵蚀阶梯》v1.2 PR-8）。

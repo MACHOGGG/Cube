@@ -197,10 +197,12 @@ export function renderProfilePage(
       </div>
     </header>
 
-    <div class="total-card xhs-total">
-      <span class="total-card-title">${esc(s.totalScoreTitle)}</span>
+    <!-- 卡上只有那个数（第 18 推第 4 条，「所有版本」——这一端也一样）：标题挪到点开之后。
+         字体没动。读屏念整颗键的 aria-label「累计得分 N」。这一端没有帐号、没有云端，所以
+         点开之后也没有那句同步提示。 -->
+    <button class="total-card xhs-total" id="xhsTotal" aria-label="${esc(s.totalScoreTitle)} ${total}">
       <span class="total-card-value">${total}</span>
-    </div>
+    </button>
 
     <div class="xhs-setting-row" id="xhsSettings"></div>
 
@@ -229,6 +231,24 @@ export function renderProfilePage(
     </div>
 
   `;
+
+  // 点开那张卡：飞到屏幕中间，写着「累计得分」和完整的数（和网页版同一扇窗）。
+  const totalCard = page.querySelector<HTMLButtonElement>('#xhsTotal')!;
+  totalCard.addEventListener('click', () => {
+    const big = document.createElement('div');
+    big.className = 'total-card total-card--big';
+    big.innerHTML =
+      `<span class="total-card-title">${esc(s.totalScoreTitle)}</span>` +
+      `<span class="total-card-value">${total}</span>`;
+    keepNavClear();
+    openCenterPicker({
+      originEl: totalCard,
+      title: s.totalScoreTitle,
+      panel: big,
+      panelClass: 'total-card--big',
+      back: s.back,
+    });
+  });
 
   const settings = page.querySelector<HTMLElement>('#xhsSettings')!;
   settings.appendChild(cvdSwitch(lang));

@@ -22,6 +22,10 @@
  *
  * 所以这一道量三件事：竖屏真的上去了、四屏一样高、横屏一个像素都没动。
  *
+ * 第 18 推：《退出》换成全站统一的那颗（.page-exit，钉在屏幕上、离底 116）。量它的那几条跟
+ * 着改——竖屏多量一条「是统一的那一颗」；横屏那条「还在屏高 57.2% 那个老位置」换成「整块
+ * 在《退出》上面、不压它」（老位置是《退出》还在流里、排在图右边时的位置）。
+ *
  * 跑之前要先出一次包和预览页（读的是 xhs/preview.html，那是构建产物，不在仓库里）：
  *
  *   npm run build:xhs && node xhs/preview.mjs
@@ -71,7 +75,8 @@ async function measure(browser, w, h, idx) {
       const e = document.querySelector(s);
       if (!e) return null;
       const r = e.getBoundingClientRect();
-      return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right),
+        w: r.width, h: r.height };
     };
     const area = document.querySelector('.slot-pick-area');
     return {
@@ -84,7 +89,10 @@ async function measure(browser, w, h, idx) {
       opts: document.querySelectorAll('.slot-pick-opt').length,
       row: box('.slot-pick-row'),
       tag: box('.tag-line') || box('.slot-tagline'),
-      acts: box('.start-actions'),
+      // 《退出》第 18 推起是全站统一的那颗 .page-exit：钉在屏幕上，不在内容流里（从前是
+      // 流里最底下那一行 .start-actions）。
+      acts: box('.page-exit'),
+      vw: window.innerWidth,
       stage: box('.start-stage'),
     };
   });
@@ -117,9 +125,14 @@ for (const pick of PICKS) {
   say(m.row.top > m.stage.top + 20,
     `${pick.name}：没贴到顶上去（和 .start-stage 的上沿还隔着一道）`,
     `图顶 ${m.row.top} / 舞台顶 ${m.stage.top}`);
-  say(m.tag.bottom < m.acts.top - 40,
+  say(!!m.acts && m.tag.bottom < m.acts.top - 40,
     `${pick.name}：标语和底下那颗《退出》之间留得下 40px`,
-    `标语底 ${m.tag.bottom} / 键顶 ${m.acts.top}`);
+    m.acts ? `标语底 ${m.tag.bottom} / 键顶 ${m.acts.top}` : '没有《退出》');
+  // 第 18 推：那颗《退出》是全站统一的那一颗——62px、水平正中、离底 116（安全区报 0 时）。
+  say(!!m.acts && Math.abs(m.acts.w - 62) <= 0.5 && Math.abs(m.acts.h - 62) <= 0.5 &&
+      Math.abs((m.acts.left + m.acts.right) / 2 - m.vw / 2) <= 1 && Math.abs(m.vh - m.acts.bottom - 116) <= 1,
+    `${pick.name}：《退出》是统一的那一颗（62px、正中、离底 116）`,
+    m.acts ? `${m.acts.w.toFixed(1)}×${m.acts.h.toFixed(1)}，中心 x ${((m.acts.left + m.acts.right) / 2).toFixed(1)}，离底 ${m.vh - m.acts.bottom}` : '没有');
   // 10vh ＝ 84px（844 高）。给 ±4px 的余量，别钉死一个像素。
   say(Math.abs(m.padTop - m.vh * 0.1) <= 4,
     `${pick.name}：上内边距就是那 10vh`, `${m.padTop}px（10vh ＝ ${Math.round(m.vh * 0.1)}px）`);
@@ -155,6 +168,17 @@ for (const pick of PICKS) {
   say(Math.abs(mid / m.vh - 0.572) < 0.025,
     `${pick.name}：还是横屏那个老位置（屏高的 57.2%）`,
     `中心 ${Math.round(mid)} / ${m.vh} ＝ ${(mid / m.vh * 100).toFixed(1)}%`);
+  /*
+   * 第 18 推：《退出》换成全站统一的那颗之后，横屏不能照竖屏的位置摆（离底 116 起，页底
+   * 让出 194——390 高的横屏里两张图和标语就挤不下了，第一版量到整页被撑长 89px、《退出》
+   * 压在标语和图上）。横屏它站到右边、上下居中（和改版前那颗键排在图右边是同一个排法）。
+   * 量的是：它在右边、上下居中、和两张图、标语一个像素都不相交（左右还隔着 16px）。
+   */
+  const contentRight = Math.max(m.row.right, m.tag.right);
+  say(!!m.acts && m.acts.left >= contentRight + 16 && Math.abs((m.acts.top + m.acts.bottom) / 2 - m.vh / 2) <= 1,
+    `${pick.name}：横屏《退出》在右边、上下居中，不压两张图和标语`,
+    m.acts ? `键 ${m.acts.left}–${m.acts.right} × ${m.acts.top}–${m.acts.bottom} / 内容右沿 ${contentRight}` : '没有《退出》');
+  say(m.vh >= m.stage.bottom, `${pick.name}：横屏一屏装下（舞台底 ≤ 屏高）`, `${m.stage.bottom} / ${m.vh}`);
 }
 
 await browser.close();

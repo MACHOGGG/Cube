@@ -226,7 +226,9 @@ const SCREENS = [
       await p.$$eval('.home-icon-btn', (e) => e[2].click());
       await p.waitForTimeout(900);
     },
-    sels: ['.app', '.start-stage', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.start-actions', '.icon-btn.start-act'],
+    // 底下那颗《退出》第 18 推起是统一的 `.page-exit`（固定在屏幕底部、不进流），原先那一排
+    // `.start-actions` 连同里面的 `.start-act` 都撤了——两个旧选择器两边都一个也匹配不到。
+    sels: ['.app', '.start-stage', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.page-exit'],
   },
   {
     name: '老虎机转前',
@@ -237,7 +239,7 @@ const SCREENS = [
     // `.home-head-glass` 撤了：这一屏上没有招牌（挑图形那一页只有图和一句标语，
     // 见 src/ui/slotMachine.ts），那个选择器两边都一个也匹配不到——量的是空气。
     // 换成这一屏真有的那一句标语和底下那颗《退出》。
-    sels: ['.slot-page', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.slot-tagline', '.icon-btn.start-act'],
+    sels: ['.slot-page', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.slot-tagline', '.page-exit'],
   },
   {
     name: '无限反转开局页',
@@ -245,7 +247,9 @@ const SCREENS = [
       await p.$$eval('.home-icon-btn', (e) => e[4].click());
       await p.waitForTimeout(900);
     },
-    sels: ['.app', '.start-stage', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.start-actions', '.icon-btn.start-act'],
+    // 底下那颗《退出》第 18 推起是统一的 `.page-exit`（固定在屏幕底部、不进流），原先那一排
+    // `.start-actions` 连同里面的 `.start-act` 都撤了——两个旧选择器两边都一个也匹配不到。
+    sels: ['.app', '.start-stage', '.slot-pick-area', '.slot-pick-row', '.slot-pick-opt', '.slot-pick-opt > svg', '.page-exit'],
   },
   {
     name: '开局倒数页',
@@ -449,7 +453,8 @@ const SCREENS = [
       if (rows.length) await rows[0].click();
       await p.waitForTimeout(1800);
     },
-    sels: ['.xhs-run-sheet', '.xhs-run-body', '.xhs-run-img', '.xhs-share-bar', '.xhs-share-btn', '.page-back-row'],
+    // 《返回》那一行（`.page-back-row`）第 18 推换成了统一的 `.page-exit`。
+    sels: ['.xhs-run-sheet', '.xhs-run-body', '.xhs-run-img', '.xhs-share-bar', '.xhs-share-btn', '.page-exit'],
   },
 ];
 

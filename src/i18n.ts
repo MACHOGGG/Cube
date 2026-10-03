@@ -87,6 +87,10 @@ export interface I18nStrings {
   bombBasicTitle: string;
   bombTimedTitle: string;
   bombAdvancedTitle: string;
+  /** 炸弹选择页面板左边那三个字（第 18 推）：一排一档。 */
+  bombTierBasic: string;
+  bombTierTimed: string;
+  bombTierAdvanced: string;
   randomTargetTitle: string;
   /**
    * 老虎机挑图形那一屏，三张图底下那一句。
@@ -782,6 +786,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: 'Basic bomb',
     bombTimedTitle: 'Timed bomb',
     bombAdvancedTitle: 'Advanced bomb',
+    bombTierBasic: 'Basic',
+    bombTierTimed: 'Timed',
+    bombTierAdvanced: 'Advanced',
     randomTargetTitle: 'Slot machine mode',
     randomTargetTagline: 'Scoring shapes drawn at random',
     slotShareCaption: 'Patterns for the room',
@@ -1123,6 +1130,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: 'Bombe de base',
     bombTimedTitle: 'Bombe chronométrée',
     bombAdvancedTitle: 'Bombe avancée',
+    bombTierBasic: 'Base',
+    bombTierTimed: 'Chrono',
+    bombTierAdvanced: 'Avancée',
     randomTargetTitle: 'Mode machine à sous',
     randomTargetTagline: 'Motifs gagnants tirés au hasard',
     slotShareCaption: 'Motifs pour la salle',
@@ -1464,6 +1474,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: '基礎炸彈',
     bombTimedTitle: '定時炸彈',
     bombAdvancedTitle: '進階炸彈',
+    bombTierBasic: '基礎',
+    bombTierTimed: '計時',
+    bombTierAdvanced: '進階',
     randomTargetTitle: '老虎機模式',
     randomTargetTagline: '隨機得分圖案',
     slotShareCaption: '全屋的得分圖案',
@@ -1805,6 +1818,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bombBasicTitle: '基础炸弹',
     bombTimedTitle: '定时炸弹',
     bombAdvancedTitle: '进阶炸弹',
+    bombTierBasic: '基础',
+    bombTierTimed: '计时',
+    bombTierAdvanced: '进阶',
     randomTargetTitle: '老虎机模式',
     randomTargetTagline: '随机得分图案',
     slotShareCaption: '全屋的得分图案',

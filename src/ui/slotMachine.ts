@@ -95,9 +95,7 @@ export function renderRandomTargetPage(
                </div>`
             : ''
         }
-        <div class="start-actions">
-          <button class="icon-btn start-act" id="slotBack" aria-label="${s.back}">${CTL_BACK}</button>
-        </div>
+        <button class="icon-btn page-exit" id="slotBack" aria-label="${s.back}">${CTL_BACK}</button>
       </div>
     </div>
   `;

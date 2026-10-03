@@ -15,7 +15,6 @@
  * 换一个图标，删掉文件就变回来，代码不用动。
  */
 import { custom, customAny } from './customIcons';
-import { MODE_SECONDS } from '../engine/modeClock';
 
 export const HOME_COLORS = {
   gray: '#A8A8A8',
@@ -29,16 +28,9 @@ export const HOME_COLORS = {
   green: '#2E8B32',
   red: '#B0432A',
   amber: '#E9A53C',
-  /**
-   * 炸弹那一页三档各自的颜色（PR-20 / E17+E26，玩家 2026-10 给的三个值）。
-   *
-   * 从前三档借的是别处的颜色：基础用 amber、定时用 green、进阶用 purple——而 purple 是
-   * 「更多布局」那一族的颜色，于是进阶炸弹和布局卡在屏幕上长得像一家。现在三个值是这一页
-   * 自己的，不跟别人共用，改一个也不会牵动别处。
-   */
-  bombBasic: '#008703',
-  bombTimed: '#F7821B',
-  bombAdv: '#BE411A',
+  /* 炸弹那一页三档各自的颜色（bombBasic / bombTimed / bombAdv，PR-20）从前在这儿。第 18 推
+     那一页换成了「棋盘图标 ＋ 一排一种底板颜色」，颜色挪到 style.css 的 .bomb-row--*（色卡
+     token），这三支没人用了，一起撤。 */
   white: '#FFFFFF',
   moreSquare: '#3AA45C',
   /* the "more layouts" boards, tinted per the design sheet */
@@ -300,54 +292,33 @@ function burstStar(cx: number, cy: number, R: number, fill: string): string {
 }
 
 /**
- * 炸弹那一页上的一枚选项（PR-20 / E17+E26）。
+ * 炸弹选择页上的一格（第 18 推第 2 条，按设计图）：**那副棋盘自己的图标**，只是把「底板」
+ * ——图里第一笔画的那一块：方块的圆角方、小球的圆、菱形方块的菱形、六边形小球的六边形——
+ * 交给这一页的 CSS 上色（`.bomb-plate`，见 style.css 的 .bomb-row--*）：
  *
- * 三行，一行一档，每行两枚（方块 / 圆球）。**行与行只靠颜色和徽记分开，一个字都不写**
- * （玩家定的「少文字」）：
+ *   基础  底板浅灰 #A7A7A7（正是这两张图标文件自己底板的颜色，所以第一排就是原样的图标）
+ *   计时  底板 --card-orange
+ *   进阶  底板 --card-gray（菱形方块 / 六边形小球）
  *
- *   基础  绿   #008703   没有徽记
- *   定时  橙   #F7821B   徽记「100s」——数字从 `MODE_SECONDS` 来，不手写
- *   进阶  砖红 #BE411A   徽记「+++」
+ * 鼠标经过、按下、键盘聚焦时底板变 --card-red 加一圈白边，也是那条 CSS 的事。
  *
- * ⚠️ **徽记上那个秒数不许手写。** 从前那枚星爆徽记上写着 90s，而那一档实际跑的是
- * `main.ts` 里另一个手写的 90——两个数各自独立，改一头忘一头，屏幕上就写着一个数跑着另一
- * 个数。现在它和三个带钟的玩法共用 `engine/modeClock.ts` 那一个常量，门
- * `check-mode-clock.mjs` 盯着它们别再分家。
+ * 做法：把图标里第一个带 fill 的形状的 fill 换成 class="bomb-plate"。表现属性 fill 的优先
+ * 级比任何一条 CSS 都低，按说留着也盖得住；拿掉是为了别让它在 CSS 没加载上的那一下闪出另
+ * 一个颜色，也让「这一块归 CSS 管」一眼看得出来。文件版（src/assets/icons/ 里那几个）和代
+ * 码兜底那版都是先画底板、再画棋子，所以「第一个」就是底板——门 check-bomb-panel 量的就是
+ * 这一块真的上了那一排的颜色。
  *
- * 进阶那一档从前画的是一个「+」。改成「+++」是玩家点的：一个加号和「更多布局」那张卡上
- * 的加号长得一样，而这两件事不一样。
+ * 从前这一格是 `bombChip()`：一个纯色的方块或圆，定时那两枚印「100s」、进阶那两枚印
+ * 「+++」（PR-20 / E26，「一个字都不写」）。第 18 推的设计图换成了棋盘图标 ＋ 面板左边三个
+ * 字，徽记就不印了——三排靠那三个字分，不再靠格子上的徽记。
  */
-export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced'): string {
-  // 三档各画一套就放 bomb-basic-square.svg 这样的九个；三档共用一套形状就
-  // 只放 bomb-square.svg 三个。两个都放时，带档次的那个赢。
-  const drawn = customAny(`bomb-${tier}-${shape}`, `bomb-${shape}`);
-  if (drawn) return drawn;
-  const fill = tier === 'basic' ? C.bombBasic : tier === 'timed' ? C.bombTimed : C.bombAdv;
-  const body =
-    shape === 'square'
-      ? `<rect x="22" y="22" width="56" height="56" rx="12" fill="${fill}"/>`
-      : shape === 'triangle'
-        ? `<path d="M50 16 A8 8 0 0 1 57 20 L88 74 A8 8 0 0 1 81 85 H19 A8 8 0 0 1 12 74 L43 20 A8 8 0 0 1 50 16 Z" fill="${fill}"/>`
-        : `<circle cx="50" cy="50" r="29" fill="${fill}"/>`;
-  /*
-   * 徽记压在形状中间，不是角上。
-   *
-   * 角上那一版在缩图里（`.home-bomb-mini` 那张 23% 宽的小方格）只剩几个像素，等于没有；
-   * 而这一页**全靠**徽记分「定时」和「进阶」。压中间字就能跟着形状一起缩放。
-   *
-   * 「100s」比「+++」窄一档：四个字符要塞进 56px 宽的方块里，和三个加号同一个字号会出边。
-   */
-  const mark =
-    tier === 'timed'
-      ? `<text x="50" y="${shape === 'triangle' ? 64 : 58}" text-anchor="middle"
-           font-family="Karla, sans-serif" font-size="21" font-weight="700" fill="#fff"
-           letter-spacing="-0.5">${MODE_SECONDS}s</text>`
-      : tier === 'advanced'
-        ? `<text x="50" y="${shape === 'triangle' ? 66 : 60}" text-anchor="middle"
-             font-family="Karla, sans-serif" font-size="30" font-weight="700" fill="#fff"
-             letter-spacing="-1">+++</text>`
-        : '';
-  return svg(body + mark);
+export function bombBoard(glyph: string): string {
+  return glyph.replace(/<(rect|circle|ellipse|path|polygon)\b([^>]*?)\sfill="[^"]*"/, '<$1$2 class="bomb-plate"');
+}
+
+/** 炸弹选择页面板正中那颗白色八角星（第 18 推第 2 条）。装饰，aria-hidden。 */
+export function bombPanelStar(): string {
+  return svg(burstStar(50, 50, 48, C.white));
 }
 
 /*
@@ -364,7 +335,8 @@ export function bombChip(shape: BaseShape, tier: 'basic' | 'timed' | 'advanced')
  * `.bomb-row--open` 五条规则、`scripts/icon-sheet.mjs` 那一行、`check-mode-axis.mjs` 里量
  * 它位置的那几条断言。
  *
- * `burstStar()` 留着——「炸弹」那一族的主图标（ICON_BOMB）还在用它。
+ * `burstStar()` 留着——「炸弹」那一族的主图标（ICON_BOMB）和炸弹选择页面板正中那颗星
+ * （`bombPanelStar`，第 18 推）都在用它。
  */
 
 // ---------------------------------------------------------------------------

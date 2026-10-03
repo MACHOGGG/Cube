@@ -16,6 +16,8 @@
  *     绍被顶得很远，要一直滑才看得见。（原先是 5 场；第 17 推方案把网页版和这一
  *     版一起改成 6 行——「PLACEHOLDER_ROWS 和 THUMB_ROWS 都改成 6，小红书的也改」。）
  *
+ * 第 18 推加一节：累计得分卡上只有那个数，点开才写「累计得分」（「所有版本」）。
+ *
  * 外加一条只有老内核上才出事的：点开成绩那一层时底排要收起来。网页版靠
  * `body:has(.center-pick--back) .home-nav` 让位，而 **Chrome 61 不认得
  * :has()**，整条会被丢掉——《返回》圆盘和那颗橙色的键就叠在一起了。所以这
@@ -158,6 +160,40 @@ for (const old of [false, true]) {
   await p.$eval('.center-pick .records-row', (e) => e.click());
   await p.waitForTimeout(900);
   say(!(await p.$('.center-pick')), `点一行看那一局：那一层先关掉了${tag}`);
+  say(errs.length === 0, `这一路零报错${tag}`, errs.slice(0, 2).join(' | '));
+  await ctx.close();
+}
+
+// ---- 3. 累计得分卡：卡上只有那个数，点开才写「累计得分」（第 18 推第 4 条）----
+// 九局假记录的总分是现成的：900 − 37 × (0 + 1 + … + 8) ＝ 900 × 9 − 37 × 36。
+for (const old of [false, true]) {
+  const tag = old ? '（强制降级层）' : '';
+  const { ctx, p, errs } = await open(old);
+  await p.click('#xhsProfile');
+  await p.waitForTimeout(900);
+  const want = 900 * 9 - 37 * 36;
+  const card = await p.$eval('.xhs-total', (e) => ({
+    tag: e.tagName.toLowerCase(),
+    text: e.textContent.replace(/\s+/g, ' ').trim(),
+    title: !!e.querySelector('.total-card-title'),
+    label: e.getAttribute('aria-label') || '',
+  }));
+  say(card.text === String(want) && !card.title, `卡上只有那个数，没有「累计得分」那行${tag}`, `「${card.text}」`);
+  say(card.tag === 'button', `它是一颗键（点得开）${tag}`, card.tag);
+  say(card.label === `累计得分 ${want}`, `读屏念「累计得分 ${want}」${tag}`, card.label);
+  await p.$eval('.xhs-total', (e) => e.click());
+  await p.waitForTimeout(800);
+  const big = await p.evaluate(() => {
+    const b = document.querySelector('.center-pick .total-card--big');
+    return b
+      ? { title: (b.querySelector('.total-card-title') || {}).textContent || '', value: (b.querySelector('.total-card-value') || {}).textContent || '' }
+      : null;
+  });
+  say(!!big && big.title === '累计得分' && big.value === String(want), `点开之后：「累计得分」＋那个数${tag}`, JSON.stringify(big));
+  say((await p.$eval('.home-nav', (e) => getComputedStyle(e).display)) === 'none', `那一层开着的时候底排收起来${tag}`);
+  await p.$eval('.center-pick-back', (e) => e.click());
+  await p.waitForTimeout(700);
+  say(!(await p.$('.center-pick')), `《退出》关掉那一层${tag}`);
   say(errs.length === 0, `这一路零报错${tag}`, errs.slice(0, 2).join(' | '));
   await ctx.close();
 }

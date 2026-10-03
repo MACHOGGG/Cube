@@ -98,7 +98,8 @@ const timed = await page.evaluate(() => {
     tagText: tag?.textContent.trim() || '',
     tagLines: tr && tag ? Math.round(tr.height / parseFloat(getComputedStyle(tag).fontSize)) : 0,
     tagBelowRow: tr && rr ? Math.round(tr.top - rr.bottom) : null,
-    acts: document.querySelectorAll('.timed-page .start-act').length,
+    // 第 18 推起底下那颗是全站统一的《退出》（.page-exit），不再是 .start-act。
+    acts: document.querySelectorAll('.timed-page .page-exit').length,
     nav: getComputedStyle(document.querySelector('.home-nav')).display,
     lock: document.querySelectorAll('.timed-page .slot-pick-lock').length,
     wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -121,7 +122,7 @@ check('整页不横向溢出', !timed.wide);
 //
 // 从前这儿量的是「点空白处窗口关掉」——整页上没有「窗外」这个东西，改成量那颗
 // 《退出》。
-await page.click('.timed-page .start-act');
+await page.click('.timed-page .page-exit');
 await page.waitForTimeout(700);
 const afterTap = await page.evaluate(() => ({
   page: !!document.querySelector('.timed-page'),

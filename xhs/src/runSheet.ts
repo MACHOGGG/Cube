@@ -45,9 +45,7 @@ export function renderRunSheet(
       </div>
     </header>
     <div class="xhs-run-body" id="runBody"></div>
-    <div class="page-back-row">
-      <button class="icon-btn page-back" id="runBack" aria-label="${esc(s.back)}">${CTL_BACK}</button>
-    </div>
+    <button class="icon-btn page-exit" id="runBack" aria-label="${esc(s.back)}">${CTL_BACK}</button>
   `;
 
   const body = page.querySelector<HTMLElement>('#runBody')!;

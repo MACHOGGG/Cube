@@ -52,9 +52,7 @@ export function renderTimedModePage(root: HTMLElement, lang: Lang, handlers: Tim
           </div>
           <p class="tag-line slot-tagline">${s.timedModeTagline}</p>
         </div>
-        <div class="start-actions">
-          <button class="icon-btn start-act" id="timedBack" aria-label="${s.back}">${CTL_BACK}</button>
-        </div>
+        <button class="icon-btn page-exit" id="timedBack" aria-label="${s.back}">${CTL_BACK}</button>
       </div>
     </div>
   `;

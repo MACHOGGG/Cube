@@ -91,6 +91,11 @@
 
 /* ---- 战绩详情：一张图 + 两颗键 ---------------------------------------- */
 .xhs-run-sheet { gap: 14px; }
+/* 《退出》是全站统一的那颗 .page-exit（第 18 推）：钉在屏幕上，不在流里。页底留出它那一截
+   ——它离底的距离 ＋ 78px，滑到底时最后那颗键离它上沿还有 16px。只写一行定数：这一端
+   跑在 Chrome 61 上，带 max() 的那种写法它整条丢掉，而这一端的安全区由容器报，116 ＋ 78
+   正是报 0 时的值（网页那边写的是两行，见 src/style.css 的 .page-exit）。 */
+.xhs-run-sheet { padding-bottom: 194px; }
 .xhs-run-body { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .xhs-run-img {
   width: 100%; max-width: 420px; height: auto; display: block;
@@ -357,4 +362,23 @@
     display: flex;
     max-width: 460px;
   }
+}
+
+/* ---- 炸弹挑形状那两张：按下去变红（第 18 推第 2 条）--------------------------
+   方案原话：「小红书 shapePick.ts 的两个选项同样变红」——和网页版炸弹选择页那六格同一个样
+   子：底板（图标里最底下那块浅灰）变 --card-red，加一圈 3px 的白边，整张放大到 1.04；减
+   弱动态效果时不放大。底板由 bombBoard() 挂上 .bomb-plate 这个类，颜色从这儿来。
+   这一端跑在 Chrome 61 上：三种状态各写一条（它不认 :focus-visible，并成一个选择器列表的
+   话整条作废，:hover 和 :active 也跟着没了）；白边是底板自己的描边，不是 border——底板
+   一个是圆角方、一个是圆。 */
+.xhs-bomb-pick .bomb-plate { fill: var(--card-ash); }
+.xhs-bomb-pick .slot-pick-opt > svg { overflow: visible; }
+.xhs-bomb-pick .slot-pick-opt:hover { transform: scale(1.04); }
+.xhs-bomb-pick .slot-pick-opt:active { transform: scale(1.04); }
+.xhs-bomb-pick .slot-pick-opt:focus-visible { outline: none; transform: scale(1.04); }
+.xhs-bomb-pick .slot-pick-opt:hover .bomb-plate { fill: var(--card-red); stroke: var(--card-white); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.xhs-bomb-pick .slot-pick-opt:active .bomb-plate { fill: var(--card-red); stroke: var(--card-white); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.xhs-bomb-pick .slot-pick-opt:focus-visible .bomb-plate { fill: var(--card-red); stroke: var(--card-white); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+@media (prefers-reduced-motion: reduce) {
+  .xhs-bomb-pick .slot-pick-opt:hover, .xhs-bomb-pick .slot-pick-opt:active { transform: none; }
 }
