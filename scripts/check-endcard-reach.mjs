@@ -215,6 +215,72 @@ for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
   await ctx.close();
 }
 
+// ---------------------------------------------------------------------------
+// ④ 横屏三档：那张战绩图整块都在弹窗里，一点都没被裁掉
+//
+// 横屏的战绩图是**绝对定位**在窗子右半边的（`.overlay--end .end-share`），而
+// `#endOverlay .modal` 两个轴都是 `overflow: hidden`——溢出去的部分不是「滚得到」，
+// 是**看不见**。
+//
+// 原先那一版用 `top: 50%` ＋ `translateY(-50%)` 居中，高度由里头的东西自己撑。
+//
+// ⚠️ **真出事的是小红书那一端，不是网页端。** 那一版图底下不是一行「长按或右键保存」，
+// 而是两颗键加一句说明（高出七十来像素，见 xhs/src/pages.css）——844×390 上量出来整块
+// 354 高，而这一窗只有 315：上下各顶出 38px，于是图的顶上被切掉一截、那两颗键整条不见。
+// 网页端那一行字只有二十来像素，恰好塞得下，所以**这几条在网页端从一开始就是绿的**：
+// 它们守的是「别哪天在这边也裁起来」，而那次真事是 xhs/check-oldcss 的「`.end-share`
+// 整个在弹窗里面」逮到的（修之前量出来「出界 上38 下38」）。写明白，免得下一个人以为
+// 这一节是那次的现场。
+//
+// 三档都是真机上常见的横屏尺寸（844×390 是 iPhone 14/15 横过来，740×360 是常见安卓，
+// 667×375 是 iPhone SE/8）。量的是**整块**（`.end-share`，不只是那张图）：被裁掉的恰恰
+// 是图以外的那几样。
+// ---------------------------------------------------------------------------
+for (const [w, h] of [[844, 390], [740, 360], [667, 375]]) {
+  const { ctx, p } = await newPage(w, h);
+  await p.$$eval('.home-icon-btn', (els) => {
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    (it || els[0]).click();
+  });
+  await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+  await p.$eval('#startBtn', (e) => e.click());
+  await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 20000 });
+  await p.waitForTimeout(400);
+  await p.click('#stopBtn');
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await p.click('#pauseFinishBtn');
+  await p.waitForSelector('#endOverlay.show', { timeout: 8000 });
+  await p.waitForTimeout(900);
+  const r = await p.evaluate(() => {
+    const m = document.querySelector('#endOverlay .modal');
+    const share = document.querySelector('#endOverlay .end-share');
+    const img = document.querySelector('#endShareImg');
+    if (!m || !share) return null;
+    const mb = m.getBoundingClientRect();
+    const sb = share.getBoundingClientRect();
+    const ib = img && img.getBoundingClientRect();
+    const out = (b) => ({
+      上: Math.round(mb.top - b.top),
+      下: Math.round(b.bottom - mb.bottom),
+      左: Math.round(mb.left - b.left),
+      右: Math.round(b.right - mb.right),
+    });
+    return {
+      卡: out(sb),
+      图: ib ? out(ib) : null,
+      图大小: ib ? [Math.round(ib.width), Math.round(ib.height)] : null,
+      有图: Boolean(img && img.getAttribute('src')),
+      窗高: Math.round(mb.height),
+    };
+  });
+  check(`${w}×${h} 横屏：战绩图真的画出来了（尺子）`, Boolean(r && r.有图 && r.图大小[1] > 0),
+    r ? JSON.stringify(r.图大小) : '(没有弹窗)');
+  const 最多出 = r ? Math.max(r.卡.上, r.卡.下, r.卡.左, r.卡.右) : 999;
+  check(`${w}×${h} 横屏：那一整块都在弹窗里（没有被裁）`, 最多出 <= 1,
+    r ? `出界 上${r.卡.上} 下${r.卡.下} 左${r.卡.左} 右${r.卡.右}（窗高 ${r.窗高}）` : '');
+  await ctx.close();
+}
+
 await browser.close();
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);
 process.exit(fail ? 1 : 0);

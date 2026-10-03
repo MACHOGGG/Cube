@@ -316,3 +316,27 @@
     padding-top: 10vh;
   }
 }
+
+/* ---- 宽屏（≥1000px）：这一页不跟着网页版去站三栏 ------------------------
+ *
+ * 网页版的成绩页在 `min-width: 1000px` 下把 `.app.records-page` **换成一张三列
+ * grid**（PR-18 的「电脑端成绩页：三栏并排」），并且按那三块的名字分格：招牌跨满
+ * 整行、`.total-card` 在第一格、`.records-panels` 跨后两格。
+ *
+ * 这一版借的是同一个类名（`app records-page xhs-profile`），可里头的东西不是那三
+ * 块：招牌、累计得分、设置那一行、战绩那一块、介绍那一块，**五个**。于是在宽屏上
+ * 它们被那张 grid 自动分格：设置那一行和战绩面板并排站到第二、三列，介绍块掉到下
+ * 一行第一列去——谁也没设计过这个排布，而小工具的容器在平板上就是这个宽度。
+ *
+ * 所以这儿把它掰回它本来的样子：一条 460px 的窄栏，从上到下一块接一块（`#app` 自己
+ * 是 `justify-content: center`，所以封了宽度就自动居中）。`display: flex` 要显式写
+ * 一遍——`.app` 本体的 `flex-direction: column` 还在，换回 flex 就还是那一条柱子。
+ *
+ * ⚠️ 两个选择器**同样重**（都是两个类），所以靠的是「这个文件排在 src/style.css 之
+ * 后 import」（见文件开头那句）。哪天 import 顺序倒过来，这一段会安静地失效。 */
+@media (min-width: 1000px) {
+  .records-page.xhs-profile {
+    display: flex;
+    max-width: 460px;
+  }
+}

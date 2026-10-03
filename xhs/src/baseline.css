@@ -286,3 +286,46 @@ html.no-clamp .share-modal {
 @media (orientation: landscape) and (max-height: 560px) {
   html.no-clamp .share-modal { max-width: 760px; }
 }
+
+/* 4. 倒数那个窗口（开局页那一屏，`src/ui/startStage.ts` 的 `.cd-window`）。
+ *
+ *    源样式：width: min(38vw, 26vh, 190px); aspect-ratio: 4 / 5;
+ *            里头的数字是 `position: absolute; inset: 0` 的一层。
+ *
+ *    **三条全是新写法，于是 Chrome 61 上这个窗口是个 0×0 的盒子**：宽度那条
+ *    `min()` 算得掉（运行时换成 px），可比例那条没了就没有高度——而里头的数字是绝对
+ *    定位的，一个字也撑不起父级。玩家看到的是「开局页上根本没有倒数」，然后牌桌自己
+ *    开了。屏幕上不报任何错。
+ *
+ *    `inset: 0` 是 Chrome 87 才有的，所以数字那一层也要摊成四条。
+ *
+ *    高度照比例手写：宽 38vw → 高 47.5vw（4:5），再给那道 190px 的上限配一个
+ *    237px（190 × 5/4）。竖屏手机上 `min()` 的三项里取到的本来就是 38vw
+ *    （390 宽算出来 148，而 26vh 是 219、上限是 190），所以这一对和源样式算出来是同一
+ *    个数。26vh 那一项只在很扁的屏上才会当家，而那种屏走下面横屏那一档。 */
+html.no-ratio .cd-window,
+html.no-minmax .cd-window {
+  aspect-ratio: auto;
+  width: 38vw;
+  height: 47.5vw;
+  max-width: 190px;
+  max-height: 237px;
+}
+html.no-inset .cd-digit {
+  inset: auto;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+/* 横屏那一档源样式自己换了宽度（`min(20vw, 46vh, 150px)`），比例照旧 4:5。
+   844×390 上三项取到的是那道 150px 的上限，所以这儿把上限写在前面、vw 兜底。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  html.no-ratio .cd-window,
+  html.no-minmax .cd-window {
+    width: 20vw;
+    height: 25vw;
+    max-width: 150px;
+    max-height: 187px;
+  }
+}

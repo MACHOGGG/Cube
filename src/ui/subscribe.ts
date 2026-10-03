@@ -1,4 +1,4 @@
-import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
+import { HTML_LANG, PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
 import { playCopied } from '../engine/juice';
 import { mountPin } from './authBits';
@@ -58,13 +58,6 @@ function geniusBoardBlurb(id: string, lang: Lang): string {
  * in the markup below for a currency to be chosen by mistake.
  */
 
-
-const LOCALES: Record<Lang, string> = {
-  en: 'en',
-  fr: 'fr',
-  zhHant: 'zh-Hant',
-  zhHans: 'zh-Hans',
-};
 
 /** The same overlay the rules and icon windows use. */
 function openModal(className: string, html: string, dismissable = true) {
@@ -626,7 +619,7 @@ function orderBlock(current: Entitlement, lang: Lang): string {
   }
   if (lifetime) rows.push([s.orderUntilLabel, s.orderLifetime]);
   else if (current.until) {
-    rows.push([s.orderUntilLabel, new Date(current.until).toLocaleDateString(LOCALES[lang])]);
+    rows.push([s.orderUntilLabel, new Date(current.until).toLocaleDateString(HTML_LANG[lang])]);
   }
   /**
    * 没有在续的订阅，就明说这一句。
@@ -669,7 +662,7 @@ function giftBlock(gifts: GiftCode[], lang: Lang): string {
     ${gifts
       .map((gift) => {
         const by = gift.expiresAt
-          ? s.giftExpires.replace('{date}', new Date(gift.expiresAt).toLocaleDateString(LOCALES[lang]))
+          ? s.giftExpires.replace('{date}', new Date(gift.expiresAt).toLocaleDateString(HTML_LANG[lang]))
           : '';
         return `<div class="gift-row${gift.spent ? ' gift-row--spent' : ''}">
           <span class="gift-code">${esc(gift.code)}</span>

@@ -21,7 +21,7 @@ import './engine/themePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { renderTutorial } from './ui/tutorial';
 import { renderCircleTutorial } from './ui/circleTutorial';
-import { loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { applyHtmlLang, loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow } from './ui/subscribe';
 import { errorText, renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
@@ -1502,6 +1502,10 @@ function boot() {
  */
 function relocalizeChrome(lang: Lang) {
   currentLang = lang;
+  // `<html lang>` 跟着一起改。这儿是唯一的落点：开场定下语言（afterLangChosen，刷新回
+  // 来那一路也走它）和原地换语言（onLanguageSwitched）都经过这个函数，而这个页面从不
+  // 整页跳转——漏在其中一条路上，那一位就一直停在 index.html 里写死的 zh-CN。
+  applyHtmlLang(lang);
   mountBottomNav(
     {
       // Tapping the icon of the page you are already on closes it.

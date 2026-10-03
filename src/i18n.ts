@@ -2272,6 +2272,35 @@ export function saveLang(lang: Lang): void {
 }
 
 /**
+ * 我们这四个语言名 → 浏览器认的那个标签（BCP-47）。
+ *
+ * 两处在用：`<html lang>`（见 applyHtmlLang），和算日期那几行
+ * （`toLocaleDateString`，ui/subscribe.ts）。**一张表，不要抄第二份**——抄出来的那一份
+ * 迟早和这一份走样，而走样的后果是「某一种语言下日期格式对、读屏念错」这种没人会去
+ * 对照的事。
+ */
+export const HTML_LANG: Record<Lang, string> = {
+  en: 'en',
+  fr: 'fr',
+  zhHans: 'zh-Hans',
+  zhHant: 'zh-Hant',
+};
+
+/**
+ * 把当前语言写到 `<html lang>` 上。
+ *
+ * `index.html` 里那一位是写死的 `zh-CN`，而这个页面从不整页跳转（换语言是原地重画，
+ * 见 main.ts 的 onLanguageSwitched），所以**从头到尾它就一直是 zh-CN**：一个把站点
+ * 切成法文的人，读屏会用中文嗓子去念那些法文句子，字也按中文的断行规则断。
+ *
+ * 四个地方真的在读这一位：读屏挑嗓子、浏览器挑字体和断行、`:lang()` 选择器、以及
+ * 「翻译这一页吗」那个提示。它们都不看界面上写的是什么字，只看这一位。
+ */
+export function applyHtmlLang(lang: Lang): void {
+  document.documentElement.lang = HTML_LANG[lang];
+}
+
+/**
  * The language to open in when this browser has never chosen one.
  *
  * Read from the browser's own accept-language list rather than from the

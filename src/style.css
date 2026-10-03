@@ -601,7 +601,12 @@ h1 {
    it rather than the two printing on top of each other — the number you see
    next is the new one. */
 .app--game .hud-block--score .v { transition: opacity 140ms ease; }
-.app--game .hud-block--score:has(.gain-pop) .v { opacity: 0; }
+/* ⚠️ 这一句从前写的是 `:has(.gain-pop)`，而 `:has()` 是 Chrome 105 才有的——**小红书
+   那一端跑在 Chrome 61 上**，整条规则被丢掉，于是那边每得一次分，「+8」就原地压在分
+   数上糊成一团（这块牌是 `overflow: hidden` 的小盒子，两个数都居中）。降级层补不了
+   「里头有没有那个孩子」这件事，所以改由塞「+N」的那一头挂一个类（engine/scoreReel.ts
+   的 syncGainState，两处塞的地方都调它）。新旧内核同一个写法。 */
+.app--game .hud-block--score.has-gain .v { opacity: 0; }
 @keyframes gain-pop-inside {
   0%   { opacity: 0; transform: translateY(40%) scale(0.8); }
   22%  { opacity: 1; transform: translateY(0) scale(1.08); }
@@ -5112,15 +5117,38 @@ html.is-playing body { background: var(--play-bg); }
   }
   /* 横屏里上下留白已经收到最紧，那道分隔线和它的 14px 只会再吃掉一行的高度。 */
   .overlay--end .btn-row { margin-top: 6px; padding-top: 6px; }
+  /*
+   * ⚠️ **上下两头钉住，不是居中**（2026-10-03 改的）。
+   *
+   * 原先是 `top: 50%` ＋ `translateY(-50%)`，高度由里头的东西自己撑——而这一块装的不止那
+   * 张图，底下还跟着东西。**真出事的是小红书那一端**：那边图底下不是网页端这一行「长按
+   * 或右键保存」（二十来像素），而是两颗键加一句说明（高出七十来像素，见
+   * xhs/src/pages.css）。横屏 844×390 上量出来整块 354 高，而这一窗只有 315——上下各顶出
+   * 38px，而 `#endOverlay .modal` 两个轴都是 `overflow: hidden`（见那条 id 规则），于是
+   * **图的顶上被切掉一截，那两颗键整条不见**。网页端那一行字恰好塞得下（整块 289），所
+   * 以这件事在网页上看不出来——而两端共用的就是这一段。
+   *
+   * 钉住上下两头之后，这一块的高度 ＝ 这一窗的高度减去 20px，图在剩下的地方里自己缩
+   * （下面那条 `flex: 0 1 auto` ＋ `min-height: 0`）。`justify-content: center` 让它看起来
+   * 仍然是居中的，但**再也溢不出去**。
+   */
   .overlay--end .end-share {
     position: absolute;
-    top: 50%; right: 22px;
-    transform: translateY(-50%);
+    top: 10px; bottom: 10px; right: 22px;
+    transform: none;
     width: 32vw; margin: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
-  /* 两个上限都写死成看得见的尺寸，不用 max-width: 100%——这一块的宽度自己定了 32vw，
-     而图又拿它当 100% 的基准：循环了。 */
-  .overlay--end .end-share img { max-height: 74vh; max-height: 74svh; max-width: 32vw; margin-bottom: 4px; }
+  /* 宽度那道上限写死成看得见的尺寸，不用 max-width: 100%——这一块的宽度自己定了 32vw，
+     而图又拿它当 100% 的基准：循环了。
+     高度那道从 74vh 改成 100%：现在外面那一层已经有确定的高度（上下都钉住了），由它来
+     封顶比按视口算准——按视口算的那一版不知道底下还有一行字要站（就是上面那次裁切）。
+     `min-height: 0` ＋ `flex: 0 1 auto`：弹性项默认不肯缩到内容以下，不写这一对的话图
+     照旧把这一块撑高，只是这回撑出去的是弹性盒而不是绝对定位盒。 */
+  .overlay--end .end-share img {
+    max-height: 100%; max-width: 32vw; margin-bottom: 4px;
+    min-height: 0; flex: 0 1 auto; object-fit: contain;
+  }
   .overlay--end .modal p { margin: 0 0 9px; font-size: 0.85rem; }
   .overlay--end .end-gone-note { margin: 0 0 7px; padding: 6px 10px; font-size: 0.8rem; }
 }

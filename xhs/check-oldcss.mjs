@@ -253,12 +253,89 @@ const SCREENS = [
       await p.$$eval('.home-icon-btn', (e) => e[0].click());
       await p.waitForTimeout(900);
     },
-    sels: ['.start-stage', '.start-marks', '.start-mark', '.start-actions', '.icon-btn.start-act'],
+    // ⚠️ `.cd-window` / `.cd-digit` 2026-10-03 才加进来——在那之前这一屏**从没量过倒数窗**，
+    // 而它在 Chrome 61 上是个 0×0 的盒子（`aspect-ratio` 撑的高度，见 baseline.css 第 4 条）：
+    // 那一端的开局页上压根没有倒数，牌桌自己就开了，门却一直全绿。
+    sels: ['.start-stage', '.start-marks', '.start-mark', '.start-actions', '.icon-btn.start-act', '.cd-window'],
+    // ⚠️ `.cd-digit` **不进 sels**，只进 nonzero：那个数字是荡进荡出的（`cd-swing` 带
+    // `translateY(±118%)` ＋ `rotate(±15deg)`），而 `getBoundingClientRect` 量的是变换**之
+    // 后**的盒子——两遍各自采到动画的哪一拍全看运气，差值能差两百多像素。那是偶发红，而
+    // 偶发红最后一定会被人加 `continue-on-error`。它该被量的事情是「它到底画出来了没有」，
+    // nonzero 正好量这个。
+    //
+    // 同理这儿**不钉「数字在窗口里」**：那个窗口是 `overflow: hidden` 的，数字从上面荡进
+    // 来、从下面荡出去，越界的那一拍正是设计本身（见 style.css 的 .cd-window 那段注释）。
+    nonzero: ['.cd-window', '.cd-digit'],
   },
   {
     name: '游戏页',
     async go(p) {
       await toBoard(p, 0);
+    },
+    /*
+     * 「+N」冒出来的那一刻，分数要让一让。
+     *
+     * 这颗「+N」是**落在分数那块牌里面**的（`.app--game .gain-badge` 整块铺满、居中），所
+     * 以同一个小盒子里两个数会原地叠在一起。让路那一句从前写的是
+     * `.hud-block--score:has(.gain-pop) .v { opacity: 0 }`——而 `:has()` 是 Chrome 105 才
+     * 有的，**小红书这一端跑在 Chrome 61 上**：整条规则被丢掉，于是那边每得一次分，
+     * 「+8」就压在分数上糊成一团。现在改成由塞「+N」的那一头挂一个类
+     * （engine/scoreReel.ts 的 syncGainState），新旧内核同一个写法。
+     *
+     * 这一条必须在**两遍**里都量：降级那一遍才是 Chrome 61 的样子（这台对照台会把
+     * `:has()` 的规则整块剥掉，见 stripModernCss）。
+     *
+     * ⚠️ **「+N」是手摆进去的，不是打出来的。** 这个游戏里得一次分要么拼出图案、要么翻一
+     * 枚，而随机拖十下常常一分不得（实测拖 30 下还是 0 分——机器人要用一步贪心才打得出
+     * 分，见 bot-selfcheck）。等运气的门就是偶发红，而偶发红最后一定会被人加
+     * `continue-on-error`。所以这儿把那两件事分开量：
+     *
+     *   · **样式**（这一句）：真的往那块牌里塞一个 `.gain-pop`，照 syncGainState 的做法挂
+     *     上类，然后量分数那个读数的透明度——那正是 `:has()` 砸掉的那一半。
+     *   · **接线**（下一句）：读源码，钉住「每一处塞 `.gain-pop` 的地方旁边都调了
+     *     syncGainState」。两处在塞（scoreReel 的 showGain、gameController 的 bumpSteps）。
+     *
+     * 读完要等一拍：那个读数上有 `transition: opacity 140ms`，马上去问拿到的是 0.05 这种
+     * 过渡中的值（第一版就这么红过一次）。
+     */
+    async probe(p, tag) {
+      const r = await p.evaluate(async () => {
+        const cell = document.querySelector('.app--game .hud-block--score');
+        const badge = cell && cell.querySelector('.gain-badge');
+        const v = cell && cell.querySelector('.v');
+        if (!cell || !badge || !v) return null;
+        const pop = document.createElement('span');
+        pop.className = 'gain-pop';
+        pop.textContent = '+8';
+        badge.appendChild(pop);
+        // 和 engine/scoreReel.ts 的 syncGainState 一个字一样：照 DOM 现数。
+        cell.classList.toggle('has-gain', Boolean(cell.querySelector('.gain-pop')));
+        await new Promise((done) => setTimeout(done, 260));
+        const vb = v.getBoundingClientRect();
+        const pb = pop.getBoundingClientRect();
+        const 叠 = !(pb.right < vb.left || pb.left > vb.right || pb.bottom < vb.top || pb.top > vb.bottom);
+        return { 透明度: getComputedStyle(v).opacity, 叠在一起: 叠, 牌: [Math.round(cell.getBoundingClientRect().width), Math.round(cell.getBoundingClientRect().height)] };
+      });
+      say(Boolean(r), `${tag}：游戏页上找得到分数那块牌和它的 .gain-badge（尺子）`, r ? JSON.stringify(r.牌) : '(找不到)');
+      if (!r) return;
+      // 量程：这颗「+N」确实落在读数**身上**。哪天它被挪到牌外面去，让路这件事就不必要
+      // 了，而这一条会提醒人回来重新想一遍，而不是留着一句没用的规则。
+      say(r.叠在一起, `${tag}：「+N」确实压在读数那块地方（所以才要让路）`, String(r.叠在一起));
+      say(r.透明度 === '0', `${tag}：「+N」在的时候分数的透明度是 0（不叠在一起）`, r.透明度);
+      if (tag !== '正常') return;
+      // 接线（只读一遍源码，两遍跑没有区别）
+      const { readFileSync } = await import('node:fs');
+      const src = (f) => readFileSync(new URL('../src/engine/' + f, import.meta.url), 'utf8');
+      const 两处 = [
+        ['scoreReel.ts', src('scoreReel.ts')],
+        ['gameController.ts', src('gameController.ts')],
+      ];
+      for (const [name, text] of 两处) {
+        const 塞 = (text.match(/className = 'gain-pop'/g) || []).length;
+        const 同步 = (text.match(/syncGainState\(/g) || []).length;
+        say(塞 > 0, `接线：${name} 里真的有往牌里塞 .gain-pop 的地方（尺子）`, `${塞} 处`);
+        say(同步 >= 2, `接线：${name} 里塞和清都调了 syncGainState`, `${同步} 次`);
+      }
     },
     // 顶排那几个选择器 2026-09 全换了（《侵蚀阶梯》v1.2 PR-7）：三格 HUD（`.hud-cell`）
     // 变成两块（`.hud-block`），棋盘上方那条图示带（`.pattern-hint` / `.pattern-icon`）
@@ -287,7 +364,12 @@ const SCREENS = [
       await toBoard(p, 0);
       await playAndFinish(p);
     },
-    sels: ['.overlay--end', '.overlay--end .modal', '.end-rule', '.end-breakdown', '.btn-row', '.btn-row button'],
+    // ⚠️ `.end-share` 同理，2026-10-03 才量：横屏那一版把战绩图绝对定位到窗子右半边
+    // （`top: 50%` ＋ `translateY(-50%)` ＋ `width: 32vw`），而这一块从前一个选择器都没进
+    // 来——图被裁掉半截也没人看得见。
+    sels: ['.overlay--end', '.overlay--end .modal', '.end-rule', '.end-breakdown', '.btn-row', '.btn-row button', '.end-share', '.end-share img'],
+    nonzero: ['.end-share img'],
+    inside: [['.end-share', '.overlay--end .modal']],
   },
   {
     name: '分享窗口',
@@ -381,6 +463,62 @@ const SCREENS = [
 
 // ---- 跑 ---------------------------------------------------------------------
 
+/**
+ * 降级那一遍，把三样**这台浏览器认得、而 Chrome 61 不认**的东西从样式表里真的剥掉。
+ *
+ * ── 为什么非剥不可 ──────────────────────────────────────────────
+ *
+ * 这台对照台的办法是「假装所有能力都缺」（`window.__SLIDES_OLD_KERNEL__`），而那个后门
+ * 管得住的只有**我们自己写的那条降级路径**：它让 oldKernel.ts 去挂 `no-ratio` / `no-inset`
+ * / `no-has` 那几个类、去把算得出来的 clamp/min 换成 px。管不住的是浏览器自己——这台
+ * Chromium 照旧认 `aspect-ratio`、`inset`、`:has()`。
+ *
+ * 于是降级那一遍跑出来的其实是「降级层 ＋ 新内核」：源样式里那几条新写法照样生效，**正好
+ * 把降级层漏掉的地方盖住了**。两遍量出来一模一样，门全绿，而真机上是坏的。两件真事就是这
+ * 么躲过去的：
+ *
+ *   · 倒数那个窗口（`.cd-window`）全靠 `aspect-ratio: 4/5` 撑高度，Chrome 61 上高度是 0
+ *     ——整个倒数在那一端从来没出现过；
+ *   · 游戏页那句「+N 出来的时候分数让一让」写的是 `:has(.gain-pop)`，Chrome 61 上整条丢
+ *     掉，于是「+8」原地压在分数上。
+ *
+ * 剥的办法是直接改那两份内联样式的文本（`#slides-styles` / `#xhs-styles` 就是整个样式
+ * 表）：`aspect-ratio` 和 `inset` 的声明整条删掉（连降级层自己写的 `: auto` 一起删——那两
+ * 句本来就只在新内核上才有意义），带 `:has(` 的规则整块删掉。
+ *
+ * ⚠️ 只删 `inset:` 这个**简写**，`inset-inline` 之类不碰（现在一条都没有，但别让这把刀越
+ * 切越宽）。
+ */
+async function stripModernCss(p) {
+  const got = await p.evaluate(() => {
+    const out = { ratio: 0, inset: 0, has: 0 };
+    for (const id of ['slides-styles', 'xhs-styles']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      let css = el.textContent || '';
+      css = css.replace(/(^|[;{\s])aspect-ratio\s*:[^;}]*;?/g, (m, lead) => {
+        out.ratio++;
+        return lead;
+      });
+      css = css.replace(/(^|[;{\s])inset\s*:[^;}]*;?/g, (m, lead) => {
+        out.inset++;
+        return lead;
+      });
+      // 带 `:has(` 的规则整块删掉。按「选择器 { 声明 }」切——这份样式表里没有嵌套规则，
+      // 只有 @media 那一层，而 @media 的头里不会出现 `:has(`。
+      css = css.replace(/([^{}]*:has\([^{}]*\{[^{}]*\})/g, (m) => {
+        out.has++;
+        return '';
+      });
+      el.textContent = css;
+    }
+    return out;
+  });
+  // 量程：三样都要真的剥到了。哪一样数成 0，就说明正则和源样式对不上了（比如有人把
+  // `aspect-ratio` 写成了别的形式）——那时候这一遍又变回「降级层 ＋ 新内核」，而门会全绿。
+  return got;
+}
+
 async function run(browser, view, screen, old) {
   const ctx = await browser.newContext({
     viewport: { width: view.w, height: view.h },
@@ -405,8 +543,52 @@ async function run(browser, view, screen, old) {
   p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(PAGE);
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
+  const stripped = old ? await stripModernCss(p) : null;
   await p.waitForTimeout(700);
   await screen.go(p);
+
+  const tag = old ? '降级' : '正常';
+  /*
+   * `nonzero`：这几个盒子**必须真的画出来了**。
+   *
+   * 为什么不靠上面那套「两遍比几何」：比的是差值，而两遍**都是 0** 的时候差值也是 0
+   * ——门全绿，屏幕上那样东西却压根不存在。倒数那个窗口就是这么躲过去的：它从前连
+   * `sels` 都不在里头（谁都没量它），而 Chrome 61 上它是个 0×0 的盒子。
+   */
+  for (const sel of screen.nonzero || []) {
+    const r = await p
+      .$eval(sel, (el) => {
+        const b = el.getBoundingClientRect();
+        return { w: Math.round(b.width), h: Math.round(b.height) };
+      })
+      .catch(() => null);
+    say(Boolean(r && r.w > 0 && r.h > 0), `${tag}：${sel} 真的画出来了（宽高都 > 0）`, r ? `${r.w}×${r.h}` : '(这一屏上找不到它)');
+  }
+  /** `inside`：这个盒子要整个待在那个盒子里面（四边都不许出去）。 */
+  for (const [child, parent] of screen.inside || []) {
+    const r = await p
+      .evaluate(([c, pa]) => {
+        const ce = document.querySelector(c);
+        const pe = document.querySelector(pa);
+        if (!ce || !pe) return null;
+        const cb = ce.getBoundingClientRect();
+        const pb = pe.getBoundingClientRect();
+        return {
+          上: Math.round(pb.top - cb.top),
+          下: Math.round(cb.bottom - pb.bottom),
+          左: Math.round(pb.left - cb.left),
+          右: Math.round(cb.right - pb.right),
+          子: [Math.round(cb.width), Math.round(cb.height)],
+        };
+      }, [child, parent])
+      .catch(() => null);
+    const 出去了 = r && Math.max(r.上, r.下, r.左, r.右) > 1;
+    say(Boolean(r) && !出去了, `${tag}：${child} 整个在 ${parent} 里面`,
+      r ? `出界 上${r.上} 下${r.下} 左${r.左} 右${r.右}（子 ${r.子.join('×')}）` : '(找不到其中一个)');
+  }
+
+  /** `probe`：这一屏自己的额外几条（要操作页面才量得到的那种）。两遍各跑一次。 */
+  if (screen.probe) await screen.probe(p, tag);
 
   const boxes = await p.evaluate(MEASURE, screen.sels);
 
@@ -447,7 +629,7 @@ async function run(browser, view, screen, old) {
     path: join(here, '..', '.tmp-oldcss', `${view.w}-${screen.name}-${old ? 'old' : 'new'}.png`),
   }).catch(() => {});
   await ctx.close();
-  return { boxes, errs, spill, left };
+  return { boxes, errs, spill, left, stripped };
 }
 
 const only = process.argv[2];
@@ -469,6 +651,13 @@ for (const view of [
     const fresh = await run(browser, view, screen, false);
     const old = await run(browser, view, screen, true);
     say(old.errs.length === 0, '降级层跑起来零报错', old.errs.slice(0, 2).join(' | '));
+    // 量程：那三样真的从样式表里剥掉了（见 stripModernCss）。有一样数成 0，这一遍就又
+    // 变回「降级层 ＋ 新内核」——而那时候下面每一条都会全绿，正是最难发现的那种假绿。
+    say(
+      old.stripped.ratio > 0 && old.stripped.inset > 0 && old.stripped.has > 0,
+      '量程：aspect-ratio / inset / :has() 真的剥掉了',
+      `ratio ${old.stripped.ratio} · inset ${old.stripped.inset} · has ${old.stripped.has}`,
+    );
     compare(screen.name, fresh.boxes, old.boxes, 2);
     const newSpill = fresh.spill.join(' | ');
   say(

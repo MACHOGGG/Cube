@@ -5,7 +5,7 @@ import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createErosion, tableFor, type Erosion } from './erosion';
 import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
-import { createScoreReel } from './scoreReel';
+import { createScoreReel, syncGainState } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
 import { rollDuration, rollOdometer } from './odometer';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
@@ -458,7 +458,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     pop.className = 'gain-pop';
     pop.textContent = stepLedgerText(refund);
     host.appendChild(pop);
-    window.setTimeout(() => pop.remove(), 1400);
+    // 和 showGain 那一头同一件事：牌里有「−1」在飘的时候，读数让一让（那个类由
+    // syncGainState 挂，理由见它自己那段注释——`:has()` 在 Chrome 61 上整条被丢）。
+    const stepsCell = host.closest<HTMLElement>('.hud-block--score');
+    syncGainState(stepsCell);
+    window.setTimeout(() => {
+      pop.remove();
+      syncGainState(stepsCell);
+    }, 1400);
     // 从前这下轻弹打在分数格上（得分了就该有反馈）。这一局分数不在局中露面
     // 了，反馈就跟着搬到真正在变的那一格来（顶排左边那一块印的是余步）。
     if (refs.hudTimeEl) punch(refs.hudTimeEl);

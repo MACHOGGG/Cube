@@ -62,11 +62,37 @@ jobs:
       - name: 小红书产物必须能由源码重现
         run: |
           npm run build:xhs
-          if ! git diff --quiet -- public/xhs; then
-            echo "::error::public/xhs/ 落后于源码。本地跑一次 npm run preview:xhs，把 public/xhs/ 和 xhs/slides-minitool.zip 一起提交。"
+          # ⚠️ 用 `git status --porcelain`，不用 `git diff --quiet`。
+          #
+          # `git diff` 只看**已跟踪**的文件：产物里**新多出来一个文件**（加了一张字体、
+          # 拆出一个 chunk）它一个字都不报，而那正是「产物和源码对不上」最常见的一种
+          # ——漏提交一个新文件，线上那一端加载它会 404。porcelain 连未跟踪的一起报
+          # （`??` 开头那几行）。
+          DIRTY=$(git status --porcelain -- public/xhs)
+          if [ -n "$DIRTY" ]; then
+            echo "::error::public/xhs/ 和源码对不上。本地跑一次 npm run preview:xhs，把 public/xhs/ 和 xhs/slides-minitool.zip 一起提交。"
+            echo "$DIRTY"
             git diff --stat -- public/xhs
             exit 1
           fi
+      # zip 里装的必须和 xhs/dist 一模一样——**逐个文件比**，不比 zip 的整体字节。
+      #
+      # 那份 zip 是真正传进 Builder Hub 的东西，而上一步只管 public/xhs。两边是同一次构建
+      # 出来的，可中间隔着「压进 zip」这一步：少打一个文件、把目录结构多包一层（解压出来
+      # 是 `dist/index.html` 而不是 `index.html`，容器就打不开首页），zip 的大小看着还挺正
+      # 常。整体字节比不了（zip 头里存了 mtime，每次都不同，见上一步那段），所以比的是
+      # 「有哪些文件」和「每个文件的 sha256」。
+      - name: zip 里装的和 dist 一模一样
+        run: |
+          rm -rf /tmp/zipcheck && mkdir -p /tmp/zipcheck
+          unzip -q xhs/slides-minitool.zip -d /tmp/zipcheck
+          ( cd xhs/dist && find . -type f | sort | xargs sha256sum ) > /tmp/dist.sha
+          ( cd /tmp/zipcheck && find . -type f | sort | xargs sha256sum ) > /tmp/zip.sha
+          if ! diff -u /tmp/dist.sha /tmp/zip.sha; then
+            echo "::error::xhs/slides-minitool.zip 和 xhs/dist 对不上（上面是逐个文件的 sha256 差异）。"
+            exit 1
+          fi
+          echo "zip 和 dist 逐个文件一致（$(wc -l < /tmp/dist.sha) 个文件）"
 
       # 纯逻辑，不碰 DOM：得分连锁、图案表与判定、死局门槛。
       - name: 计分连锁
@@ -937,6 +963,19 @@ jobs:
       #
       # ⚠️ 它**什么键都不预设**（除了语言）——预设 slides_tutorial_seen 会把被测的教学条
       # 整个关掉（CLAUDE.md 那五个坑的第四个）。
+      # 小红书那一端的**样式降级层**：每一屏量两遍（浏览器自己认 clamp/aspect-ratio 的那
+      # 一遍，和强制走降级路径的那一遍），逐个盒子比坐标和尺寸。
+      #
+      # ⚠️ 降级那一遍还会把 `aspect-ratio` / `inset` / `:has()` 从样式表里**真的剥掉**
+      # （stripModernCss）：这台 Chromium 认得它们，不剥的话跑出来的是「降级层 ＋ 新内核」
+      # ——源样式里那几条新写法正好把降级层漏掉的地方盖住，两遍量出来一模一样、门全绿，而
+      # 真机上是坏的。两件真事就是这么躲过去的：倒数窗在 Chrome 61 上高度是 0（整个倒数那
+      # 一端从来没出现过），以及「+N」原地压在分数上。
+      #
+      # 这一条慢（两个视口 × 十来屏 × 两遍，十分钟上下），所以摆在 browser 这一条的末尾，
+      # 不进 check 那一条——那边的节奏不许被拖慢。
+      - name: 小红书：样式降级层两遍对照
+        run: node xhs/check-oldcss.mjs
       - name: 教学的呼吸灯：指对地方，且不拦操作
         run: |
           nohup node scripts/dev-server.mjs 8878 dist >/dev/null 2>&1 &

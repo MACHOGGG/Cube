@@ -6,6 +6,33 @@ export interface ScoreReel {
 }
 
 const GAIN_POP_MS = 1400;
+
+/**
+ * 这一块牌上此刻有没有「+N / −1」在飘——照 DOM 现数，不记账。
+ *
+ * ── 为什么要这个函数 ────────────────────────────────────────────
+ *
+ * 游戏页里那颗「+N」是**落在分数那块牌里面**的（见 style.css 的
+ * `.app--game .gain-badge`：整块铺满、居中），所以同一个小盒子里两个数会原地叠在
+ * 一起。办法是「+N」在的时候让读数让一让，而那一句从前写的是：
+ *
+ *   .app--game .hud-block--score:has(.gain-pop) .v { opacity: 0 }
+ *
+ * `:has()` 是 Chrome 105 才有的。**小红书那一端跑在 Chrome 61 上**，整条规则被丢
+ * 掉——于是那边每得一次分，「+8」就压在分数上糊成一团，而屏幕上不报任何错。降级层
+ * （xhs/src/baseline.css）也补不了：它只能换写法，补不出「里头有没有那个孩子」这件
+ * 事。所以改成一个类，由塞「+N」的那一头自己挂：新旧内核一个写法，两边都真的生效。
+ *
+ * **照 DOM 现数，不用计数器**：往这块牌里塞 `.gain-pop` 的有**两处**（这个文件的
+ * showGain，和 gameController 的 bumpSteps——步步为营那一局每走一步都冒「−1」），
+ * 而它们各自 setTimeout 各自 remove。两头各记一个数迟早对不上（一头多减一次，读数
+ * 就永久隐身，而那是一块空白的牌）。现数最多多跑一次 querySelector，而这一下一局里
+ * 只有几十次。
+ */
+export function syncGainState(cell: HTMLElement | null | undefined): void {
+  if (!cell) return;
+  cell.classList.toggle('has-gain', Boolean(cell.querySelector('.gain-pop')));
+}
 /** 数字轮转一格多高（em）。和 style.css 的 --reel-step 必须一致。 */
 const REEL_STEP = 1.1;
 
@@ -82,7 +109,11 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
       pop.appendChild(tag);
     }
     gainBadgeEl.appendChild(pop);
-    window.setTimeout(() => pop.remove(), GAIN_POP_MS);
+    syncGainState(scoreCell);
+    window.setTimeout(() => {
+      pop.remove();
+      syncGainState(scoreCell);
+    }, GAIN_POP_MS);
 
     if (scoreCell) {
       scoreCell.classList.remove('score-flash');
@@ -100,6 +131,9 @@ export function createScoreReel(reelEl: HTMLElement, gainBadgeEl: HTMLElement): 
 
   function reset() {
     gainBadgeEl.replaceChildren();
+    // 清空之后也要同步一次：这一局结束时牌上还飘着一个「+N」的话，那个类会留在
+    // 元素上，而读数就一直是透明的——下一局开局那一屏于是是一块空白的牌。
+    syncGainState(scoreCell);
     scoreCell?.classList.remove('score-flash');
     floor?.classList.remove('floor-pulse');
     boxes.forEach((b) => b.box.remove());
