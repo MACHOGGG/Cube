@@ -201,18 +201,21 @@ jobs:
           npx esbuild src/engine/bomb.ts --bundle --format=esm --outfile=/tmp/bomb.mjs
           npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
           node scripts/check-bomb-rules.mjs /tmp/bomb.mjs /tmp/scoring.mjs
-      # 棋盘底下那块教学条：六条规矩靠玩家的动作往下走，靠的是 gameController
-      # 在四个点上报进来的四个信号。哪一步等的信号没人报，这一条就只剩四十秒的
-      # 保底——屏幕上一句话挂着不动，然后自己翻篇，规矩等于没讲，而且不报错、不
-      # 白屏。这个仓库已经栽过一次同一形状的事故（anyDotFace 只有 circle.ts 挂
-      # 了 data-face，玩方块的新人第 2 条永远等保底）。这道门用假时钟把整条线走
-      # 一遍（全程三秒多，保底一次就要四十秒），再静态扫一遍「每个 by 都有人
-      # 报」。自带一个够用的小 DOM，不开浏览器。
-      - name: 教学条走得完，不靠保底
+      # 棋盘底下那块教学条（第 15 推重写）：五条各等它自己说的那件事在盘面上真的出现
+      # ——开局 12 秒、紧跟、段数 ≤ 4、某色星星 ≥ 最短外边、第一次消掉外边。这道门用模拟
+      # 盘面（真的侵蚀阶梯、真的外边几何、棋盘真用的那个数法）把五个时机依次走一遍，差
+      # 一枚、差一毫秒都不许换条；再验呼吸灯的零件：一层穷举走法是不是残局穷举那一套、
+      # 组有没有映射回此刻的位置（要滑过去的那一枚在里面）、超 8ms 是不是真的放弃、挑组
+      # 是不是「保留 → 最近 → 熄灭」。假时钟、自带小 DOM，不开浏览器，几十毫秒。
+      - name: 教学条：五条的时机，呼吸灯的零件
         run: |
           npx esbuild src/ui/coachBar.ts --bundle --format=esm --outfile=/tmp/coach.mjs
           npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
-          node scripts/check-coach.mjs /tmp/coach.mjs /tmp/i18n.mjs
+          npx esbuild src/engine/coachHint.ts --bundle --format=esm --outfile=/tmp/coachhint.mjs
+          npx esbuild src/engine/outerEdge.ts --bundle --format=esm --outfile=/tmp/outeredge.mjs
+          npx esbuild src/engine/erosion.ts --bundle --format=esm --outfile=/tmp/erosion.mjs
+          npx esbuild src/engine/residueBoard.ts --bundle --format=esm --outfile=/tmp/resboard.mjs
+          node scripts/check-coach.mjs /tmp/coach.mjs /tmp/i18n.mjs /tmp/coachhint.mjs /tmp/outeredge.mjs /tmp/erosion.mjs /tmp/resboard.mjs
       # 跑不动的机器上自动把粒子和震屏降一档。判错的两种后果不对称：该降没降
       # 只是继续卡，**不该降却降了**是一台好手机上特效突然少一半、而且这一局回
       # 不去。所以这里喂四种帧流，三种是「不该降」（开局那阵子、切后台那一帧、
@@ -1019,7 +1022,11 @@ jobs:
       # 不进 check 那一条——那边的节奏不许被拖慢。
       - name: 小红书：样式降级层两遍对照
         run: node xhs/check-oldcss.mjs
-      - name: 教学的呼吸灯：指对地方，且不拦操作
+      # 教学的呼吸灯（第 15 推）：亮的正好是「再走一步就能完成这一条」的那一组——门里自带
+      # 一份独立的对照（从屏幕上读每一枚的位置、正反面、颜色，自己走一层），小球、方块各
+      # 随机真滑二十几步，每一步结算完对一次；真的拖那一步，灯不拦手；手机端字号两倍、最
+      # 多两行、换条时条子不变高、不压棋盘。六七分钟。
+      - name: 教学的呼吸灯：亮对那一组，且不拦操作
         run: |
           nohup node scripts/dev-server.mjs 8878 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8878/ && break; sleep 0.25; done

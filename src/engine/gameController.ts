@@ -88,6 +88,7 @@ export const TIME_GAIN = 1.5;
 const UNFLIPPED_SCALE = 0.95;
 
 import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
+import type { CoachHint } from './coachHint';
 import { mountPatternBlock } from '../ui/patternBlock';
 import { sizeAtLevel, type TargetPattern } from './targets';
 import { targetHudDef } from './targetIcon';
@@ -171,6 +172,20 @@ export interface GameControllerHooks {
    * 儿的人五条早听过了，要说的只有加的那一层。
    */
   coachTip?: { text: string; art: string };
+  /**
+   * 教学的呼吸灯（第 15 推，engine/coachHint.ts）：这一步该亮哪一种组，棋盘自己一层穷举、
+   * 自己挑那一组、自己挂 `coach-glow`。`null` = 熄灯（一步正在结算、这一条不亮、这一局完
+   * 了）。只有带五条教学的那两副基础棋盘（方块、小球）实现。
+   *
+   * 回 false = 这一次算超了 8ms、跳过了（灯熄着）；控制器过一会儿再试一次（见
+   * refreshCoachGlow）。
+   */
+  coachGlow?(kind: CoachHint | null): boolean;
+  /**
+   * 教学第 4 条的条件：此刻某一种颜色的星星枚数 ≥ 最短外边的长度（方块用较短那条边）。
+   * 「最短外边」只有棋盘自己知道，所以由它数。
+   */
+  coachStarsReachEdge?(): boolean;
 
   /**
    * 结算页上那对轮流发光的键（《分享》→《首页》）要不要亮。
@@ -622,32 +637,48 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   /**
-   * 得分的这一组里有没有反面（教学第 3 条：反面和正面一起凑）。
+   * 教学的呼吸灯重算一次（第 15 推）。
    *
-   * **问数据，不问画面。** 时序是对的：这儿离翻面还有一步（`s.commit()` 在
-   * `proceed()` 里，比这儿晚一拍，而 CascadeStep.commit 的契约写着「flips
-   * matchGroups' cells to their dot face … Call once, after showing the pre-flip
-   * highlight」），所以此刻 `tileAt(r, c).face` 还是它进这一组时的那一面——正是要问
-   * 的那件事。
-   *
-   * 从前这儿是拿 `boardEl.querySelector('[data-r][data-c]').dataset.face` 读 DOM 的，
-   * 而那个属性**只有 circle.ts 挂过**：别的七副棋盘上这个函数永远回 false，第 3 条
-   * 的演示于是只能等保底计时器，方块、三角上从来触发不了。那件事在星星消除 PR-2
-   * （4fffbb4）里按「八副都补上 el.dataset.face」修掉了，但病根没动：**控制器在读画
-   * 面来推断数据**——八副棋盘必须各自记得挂同一个属性，少挂一副就回到老 bug，而且
-   * 没有任何门守着这一条。
-   *
-   * 现在走的是共享契约里本来就有、而且**必填**的那个读法：`CascadeConfig.tileAt`
-   * （scoring.ts）。少实现一副 TypeScript 当场编译不过——这比「记得挂属性」硬得多。
-   * 各棋盘上的 `el.dataset.face` 保留（样式和翻面动画还在用），但**控制器不再靠它**。
+   * 两个人会喊它：一步结算完（finish），和教学条换了一条（onChange）。两件事常常在同一
+   * 拍里一起发生（结算完、条子顺手换到下一条），所以合并成一次——推到这一拍的末尾
+   * （Promise 的微任务；`queueMicrotask` 小红书那台 Chrome 61 没有）再算，算之前问一句「是
+   * 不是又开始结算了」：结算期间灯是熄的，等 finish 再点。
    */
-  function anyDotFace(cfg: CascadeConfig, groups: readonly Cell[][]): boolean {
-    for (const g of groups) {
-      for (const [r, c] of g) {
-        if (cfg.tileAt(r, c).face === 'dot') return true;
-      }
+  let glowQueued = false;
+  /**
+   * 超了 8ms 跳过之后，隔多久再试一次、最多试几次。
+   *
+   * 跳过是玩家定的（「单次超过 8ms 就跳过这一次」），可**第一次算往往是最慢的那一次**：开
+   * 局那一下认组的那几个函数还一次都没跑过，浏览器还没把它们编译成快的那一版。不再试的
+   * 话，最该亮的那一刻（开局讲第 1 条）在慢一点的手机上反而一盏都不亮，要等他自己滑完第
+   * 一步才有。再试一次的时候它们已经热了。每一次照样守着 8ms。
+   */
+  const GLOW_RETRY_MS = 300;
+  const GLOW_RETRIES = 2;
+  let glowRetryTimer = 0;
+  let glowRetriesLeft = GLOW_RETRIES;
+  function refreshCoachGlow(retry = false): void {
+    // 不在这儿问 coach 在不在：条子开口那一下（mountCoachBar 里 show(0) → onChange）就会喊
+    // 它，那时候 `coach = mountCoachBar(…)` 还没赋上值。到微任务里再问。
+    if (!hooks.coachGlow || glowQueued) return;
+    if (!retry) {
+      window.clearTimeout(glowRetryTimer);
+      glowRetryTimer = 0;
+      glowRetriesLeft = GLOW_RETRIES;
     }
-    return false;
+    glowQueued = true;
+    void Promise.resolve().then(() => {
+      glowQueued = false;
+      if (!coach || resolving || gameOver || !started) return;
+      const done = hooks.coachGlow?.(coach.hint()) ?? true;
+      if (!done && glowRetriesLeft > 0) {
+        glowRetriesLeft--;
+        glowRetryTimer = window.setTimeout(() => {
+          glowRetryTimer = 0;
+          refreshCoachGlow(true);
+        }, GLOW_RETRY_MS);
+      }
+    });
   }
 
   function newGame() {
@@ -711,9 +742,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           shape: hooks.coachShape ?? 'circle',
           plan: hooks.coachPlan,
           art: hooks.coachArt,
-          // 第 3 条那一步让《得分图案》那一块把「会变小」演一遍（E24）。两样都在这儿
-          // 手上，所以由这儿接线——条子不该伸手进 HUD 去摸元素。
-          onDemo: (on) => patternBlock.demo(on),
+          // 换了一条，呼吸灯亮哪一种组跟着换（第 15 推）。条子不认识棋子、棋盘不认识条子，
+          // 两样都在这儿手上，所以由这儿接线。
+          onChange: () => refreshCoachGlow(),
         });
       }
     }
@@ -772,6 +803,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
     gameOver = true;
     resolving = false;
+    // 这一局完了，教学的呼吸灯一起熄（结算页底下那副棋盘还看得见一角）。
+    if (coach) hooks.coachGlow?.(null);
     // 连锁的下一拍要**撤掉**，不是置空（见 cancelBeat 那段）。从前这儿一句都没有，
     // 排着的那一拍会在结算页盖上之后照样落下来。
     cancelBeat();
@@ -1145,8 +1178,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   function resolveMove(mask: Set<string>, moveDirDeg = 0) {
     if (gameOver || paused || resolving) return;
     moves++;
-    coach?.signal('move');
     resolving = true;
+    // 教学的呼吸灯：这一步结算期间熄着，结算完（finish）再按新盘面点——亮着的那几枚多半
+    // 正要翻面或者挪地方，灯跟着它们走一路只会添乱。
+    if (coach) hooks.coachGlow?.(null);
     // 同上：撤掉，不是置空。
     cancelBeat();
     heldBeat = null;
@@ -1155,11 +1190,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     vibrate(8); // a light tick confirming the drag itself landed, win or not
 
     flipLedger?.beginMove(moves);
-    /**
-     * 这一步的棋盘读法。接住它是为了让 `anyDotFace` 问**数据**而不是问 DOM
-     * （见那个函数上面那段）——它本来就是每副棋盘必须实现的那份契约
-     * （`CascadeConfig.tileAt`），不用新造字段。
-     */
     const cascade = hooks.buildCascadeConfig();
     const stepper = createCascadeStepper(
       cascade,
@@ -1274,6 +1304,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       }
       updateStuckState(hooks.findStuckGroups?.() ?? []);
       resolving = false;
+      // 教学条（第 15 推）：一步结算完，看一眼盘面——第 3、4 条等的都是盘面上的事。看完重算
+      // 呼吸灯（这一步之前熄掉的，见 resolveMove 开头）。
+      if (coach) {
+        coach.observe({ segLeft: erosion.segLeft(), starsReachEdge: hooks.coachStarsReachEdge?.() ?? false });
+        refreshCoachGlow();
+      }
     };
 
     const step = () => {
@@ -1329,15 +1365,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       comboMult *= CASCADE_COMBO_FACTOR;
       const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
-      // 教学条要的三件事都在这一拍里：得分了、这一组里有反面、消掉了一整行。
-      // 报在翻面之前——anyDotFace 问的正是「翻之前它是哪一面」。
-      if (coach) {
-        if (s.matchGroups.length) {
-          coach.signal('match');
-          if (anyDotFace(cascade, s.matchGroups)) coach.signal('mixed');
-        }
-        if (isBonus) coach.signal('line');
-      }
+      // 教学第 5 条等的就是这一下：第一次真的消掉一条外边（第 15 推）。条子只记下，等这一
+      // 步结算完（finish 里的 observe）才换条——别抢在消除动画前面。
+      if (isBonus) coach?.signal('line');
       // A bonus (the whole-line, 36-point event) gets its own distinct
       // double-pulse — it's the bigger moment — while an ordinary match gets
       // one light buzz, right as its highlight appears.
@@ -1407,8 +1437,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           const step = erosion.spend(committed);
           if (step.dropped > 0) {
             hooks.onErosion?.(step.level);
-            // 教学条第 3 步等的就是这一下：屏幕右上角那一块的图案真的少了一枚，
-            // 话和实物同时发生（见 ui/coachBar.ts 的 PLAN_FIRST）。
+            // 教学第 3 条「剩下的段数 ≤ 4」可能在一步之内整个被跨过去（一步翻了八枚，降级
+            // 之后新的一级是满格）——结算之后再看段数就看不出来了，所以降级这一下单报一声。
             coach?.signal('erosion');
           }
           if (step.unlocked) unlockedOne = true;
@@ -1688,6 +1718,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       patternBlock.destroy();
       coach?.destroy();
       coach = null;
+      window.clearTimeout(glowRetryTimer);
       coachTip?.destroy();
       stopLeading();
       coachTip = null;

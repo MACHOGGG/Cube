@@ -683,6 +683,30 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .edge-band { transition: none; }
 }
+/*
+ * 小球那一副的外边带子：轻微闪烁（第 15 推，玩家原话：「改成轻微闪烁，透明度只在 0.85
+ * 到 1 之间慢慢变化」）。
+ *
+ * 只动 opacity、幅度只有 15%：带子本来就是「只动明度不动色相」的次要信息（上面那一段），
+ * 看得出它在呼吸就够了，不能和棋子抢。从前教学讲到第 4 条时它会整条发光（E23 的
+ * `.coach-aim--edge`）；第 15 推起它不再参与教学亮灯，改成一直这样轻轻地呼吸。
+ *
+ * 只给小球（`[data-shape="circle"]`）：玩家点名的是小球这一副。另外四副外边族的同一条带
+ * 子照旧不动。
+ *
+ * 时长和 ui/edgeBand.ts 的 BAND_BREATHE_MS 是同一个数（那头按墙上的钟给负的
+ * animation-delay，免得每走一步重画时从头起跳），两处一起改。
+ *
+ * 减弱动态效果时不闪，停在 1。
+ */
+.app--game[data-shape="circle"] .edge-band { animation: edge-band-breathe 3.2s ease-in-out infinite; }
+@keyframes edge-band-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app--game[data-shape="circle"] .edge-band { animation: none; }
+}
 
 
 .board-wrap {
@@ -2562,66 +2586,58 @@ button:hover { filter: brightness(1.05); }
    行，节奏和浓淡还是这一套。
 
      · 主菜单那张该点的卡（光挂在图上，不是那一格方盒子上——图标未必填满它）
-     · 头一局 HUD 上那一块《得分图案》（.coach-aim，见 ui/coachBar.ts）
-     · 结算页的《分享》和《首页》（ui/scoreboard.ts） */
+     · 结算页的《分享》和《首页》（ui/scoreboard.ts）
+     · 教学那几枚棋子用的是下面那条加亮一档的 glow-pulse-coach（.coach-glow）
+
+   从前这儿还有 HUD 那一块《得分图案》和托盘上那条外边带子（.coach-aim /
+   .coach-aim--edge）：教学讲到哪一条就点亮句子里那样东西（E23）。第 15 推起它们不
+   再参与教学亮灯（玩家原话），灯改成亮在「再走一步就能完成这一条」的那几枚棋子上。 */
 .glow-pulse,
-.home-icon-btn--glow .home-icon-art > svg,
-.app--game.coach-aim .hud-block--pattern,
-.app--game.coach-aim--edge .edge-band {
+.home-icon-btn--glow .home-icon-art > svg {
   animation: glow-pulse 2.2s ease-in-out infinite;
   /* 见上面那段：各占一块画布，别让 Safari 把挨着的两张并成一块方框。 */
   will-change: filter;
 }
 @media (prefers-reduced-motion: reduce) {
   .glow-pulse,
-  .home-icon-btn--glow .home-icon-art > svg,
-  .app--game.coach-aim .hud-block--pattern,
-  .app--game.coach-aim--edge .edge-band {
+  .home-icon-btn--glow .home-icon-art > svg {
     animation: none;
     filter: drop-shadow(0 0 7px var(--glow));
   }
 }
 /*
- * 第 4 条（「同色星星在整体的外边会得分并消除」）点的是**托盘上那条外边指引带子**
- * ——句子里的「整体的外边」画的就是它（E23 的「呼吸灯自适应指引」）。
+ * ---- 教学的呼吸灯：一步就能凑成的那几枚棋子（第 15 推）------------------
  *
- * 用 filter 不另画一层：带子在棋子**之下**（ui/edgeBand.ts），而 drop-shadow 的光晕
- * 从带子两侧溢出来，棋子压不住——所以一个像素的热区都不加也看得见。带子本身
- * `pointer-events: none`（上面 .edge-band 那一条），这一条于是满足 E23 的另一半
- * 「绝不拦操作」：教学期间手指落在棋盘上，碰到的仍然是棋子。
+ * 玩家 2026-10-03 定的：同一时间只亮一种颜色；只在「再走一步就能完成这一条」时亮，只亮
+ * 会参与的那几枚（包括要滑过去的那一枚）；只动 `filter: drop-shadow`，不加任何热区；减弱
+ * 动态效果时用静止光晕。亮哪几枚由 engine/coachHint.ts 挑，棋盘自己挂 `.coach-glow`。
  *
- * 光色就地换一支：带子自己「只动明度不动色相」（见 .edge-band 那一大段），而
- * --glow 在浅色主题下偏红——那会让人以为这条带子忽然有了颜色语义。换成《色卡》里
- * 那支奶油（--card-cream），和游戏页那块暗托盘（--play-panel: #3D3128）是同一组配色
- * 里的亮色，看着只是「这一圈亮了一下」。它是玩家定的固用色，不随主题翻转，而游戏页
- * 的托盘本来也是两种主题同一个暗色——两边对得上。
+ * ── 为什么是这条加亮一档的 glow-pulse-coach ──
  *
- * 方块 36 没有这条带子（它任意整行整列都能消，没有「最外边」这回事），这条选择器于是
- * 一个元素都匹配不到——不点灯，自动是对的，不用在 JS 那头判断棋盘。
- */
-.app--game.coach-aim--edge .edge-band { --glow: var(--card-cream); }
-/*
- * ---- 教学那两盏灯要**更亮一档** ----------------------------------------
+ * 玩家 2026-10 第二轮：呼吸灯看不清。量出来的原因不是节奏也不是半径，是**对比**——半
+ * 透明的一圈 10px 糊在暖色上，离远一点就只剩「好像有点毛边」。治法是**叠三层**（7 / 13 /
+ * 22），不是换一支颜色：叠加把同一支半透明色乘上去（0.55 叠三次 ≈ 0.91），外圈又伸得
+ * 更远。那一轮是给 HUD 那块《得分图案》调的，现在灯落在棋子上，同一个理由照样成立：棋
+ * 子更小，一圈 10px 更容易被看成「棋子边上有点脏」。
  *
- * 玩家 2026-10 第二轮：呼吸灯看不清。量出来的原因不是节奏也不是半径，是**对比**：
- * `--glow` 在浅色主题下是 `rgba(179, 57, 43, 0.55)`，而《得分图案》那块牌是琥珀色
- * （`--play-chip: #D2952F`）、页底是米色（`--bg: #F5EDDA`）——半透明的砖红糊在暖色
- * 上，10px 一圈淡出去，离远一点就只剩「那一块好像有点毛边」。
- *
- * 治法是**叠三层**，不是换一支颜色：
- *
- *   · 叠加会把同一支半透明色乘上去（0.55 叠三次 ≈ 0.91），于是光更实；
- *   · 三个半径 7 / 13 / 22 一层比一层散，外圈于是伸得更远，远看也认得出是一团光；
- *   · **颜色仍然是 `var(--glow)`**，所以深色主题那支白光自动跟着走——换一支写死的
- *     深红会在深色主题（页底 `#1E1820`）上变成一团看不见的东西。
+ * 光色就地换成《色卡》那支奶油（`--card-cream`）：棋子摆在游戏页那块暗托盘上
+ * （`--play-panel: #3D3128`，两种主题同一个暗色），`--glow` 在浅色主题下那支微红糊在暗
+ * 托盘上几乎看不见；奶油是这一组配色里的亮色，看着只是「这几枚亮了一下」，不带颜色语
+ * 义——灯说的是「滑这几枚」，不是「这几枚是红的」。（从前外边带子那盏灯用的是同一支，
+ * 理由一样。）
  *
  * ⚠️ **三个半径在整段动画里一个都不许变**，明灭只由颜色（`transparent` ↔ `--glow`）给。
  * 理由见上面 glow-pulse 那一大段：半径一变，滤镜区域每帧重算，iOS 的 Safari 会把挨着的
- * 两块并进同一块画布按不透明处理，那圈光于是贴着一个方框——玩家实拍到过。
+ * 两块并进同一块画布按不透明处理，那圈光于是贴着一个方框——玩家实拍到过。而这一回亮的
+ * 正是**挨着的几枚**。
  *
  * ⚠️ `@keyframes` 里的 `var()`：小红书那一端跑在 Chrome 61 上。自定义属性是 Chrome 49
- * 起就有的，而上面那条 `glow-pulse` 从落地起就是这么写的，`check-oldcss` / `check-oldkernel`
+ * 起就有的，上面那条 `glow-pulse` 从落地起就是这么写的，`check-oldcss` / `check-oldkernel`
  * 一直是绿的——这儿照它写，不另开一条写死颜色的路（两份颜色迟早只改一处）。
+ *
+ * 还带 `:not(.piece-grabbed)`：手指按住的那一枚有自己的一道 `filter`（`.piece-grabbed`），
+ * 被这条动画盖掉的话，按住它会「没有反应」——而那正是 E23「绝不拦操作」最不许发生的那
+ * 件事的近亲。
  */
 @keyframes glow-pulse-coach {
   0%, 100% {
@@ -2631,51 +2647,17 @@ button:hover { filter: brightness(1.05); }
     filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
   }
 }
-.app--game.coach-aim .hud-block--pattern,
-.app--game.coach-aim--edge .edge-band,
-.app--game[data-shape="square"].coach-aim--edge .board .tile[data-r="2"]:not(.piece-grabbed),
-.app--game[data-shape="square"].coach-aim--edge .board .tile[data-c="2"]:not(.piece-grabbed) {
-  /* 写整条 `animation`，不是只换 `animation-name`：底下那一行一列的棋子不在上面
-     `.glow-pulse, …` 那条里，只给名字的话时长是 0，动画一帧都不跑（而且不报错）。 */
+.app--game .board .coach-glow:not(.piece-grabbed) {
+  --glow: var(--card-cream);
   animation: glow-pulse-coach 2.2s ease-in-out infinite;
   will-change: filter;
 }
 @media (prefers-reduced-motion: reduce) {
-  .app--game.coach-aim .hud-block--pattern,
-  .app--game.coach-aim--edge .edge-band,
-  .app--game[data-shape="square"].coach-aim--edge .board .tile[data-r="2"]:not(.piece-grabbed),
-  .app--game[data-shape="square"].coach-aim--edge .board .tile[data-c="2"]:not(.piece-grabbed) {
+  .app--game .board .coach-glow:not(.piece-grabbed) {
     animation: none;
     filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
   }
 }
-/*
- * ---- 方块那一局的第 4 条：点亮**一整行和一整列** ------------------------
- *
- * 第 4 条在方块那一局讲的是「任意一整行或一整列全是同色星星就消掉」（i18n 的
- * TUTORIAL_RULE4 按图形换过一句）。而呼吸灯那张表里，第 4 条指的是**托盘上那条外边指引
- * 带子**——方块 36 没有那条带子（它没有「最外边」这回事），于是这一局**整条第 4 条一盏灯
- * 都不点**：唯一一句指得到实物的话，偏偏在最需要指的那一副棋盘上指了个空。
- *
- * 现在就地点亮一行一列。做法仍然只动 `filter`，画在棋子**自己**身上（E23 的另一半「绝不
- * 拦操作」：一个像素的热区都不加，手指照旧落在棋子上）。
- *
- * **为什么是第 3 行第 3 列（下标 2）**：
- *   · 不能挑第 0 行第 0 列——那是棋盘的上沿和左沿，一眼看过去像在讲「最外边」，而那正是
- *     这一局**不是**的那条规则（外边族才削最外边）。
- *   · 下标 2 在开局的 6×6 上偏中间，读起来就是「随便哪一行、随便哪一列」。
- *   · 棋盘消到不足 3×3 时这条选择器一个元素都匹配不到——不点灯，和「指的那样东西不在就
- *     不点灯」是同一条规矩，不用在 JS 那头判断。
- *
- * 选择器带 `[data-shape="square"]`：菱形方块也是 `.tile` 也有 data-r/data-c，可它是外边
- * 族、有带子（见 shapes/squareDiamond.ts 文件头），在它身上点一行一列是讲错规则。
- *
- * 还带 `:not(.piece-grabbed)`：手指按住的那一枚有自己的一道 `filter`（`.piece-grabbed`），
- * 被这条动画盖掉的话，教学期间按住这一行的棋子会「没有反应」——而那正是 E23 最不许发生的
- * 那件事的近亲。
- *
- * 规则本身写在上面那条 `animation` 里（和另外两盏灯同一条），这儿只留这段说明。
- */
 /* ---- 头一回打开时的那道软锁（ui/menu.ts 的 armFirstPlayLock）----------
    按到方块和小球以外的卡：那两张抖一下、光更亮一档，别的什么也不发生。不写
    字——两张亮着的卡本身就是答案（玩家定的「少文字」）。
@@ -4656,17 +4638,6 @@ html.is-playing body { background: var(--play-bg); }
    页面的 --ink（那在琥珀上几乎看不见）。 */
 .app--game .hud-block--pattern { color: var(--play-chip-ink); padding: 6px 10px; }
 .app--game .pat-icon > svg { color: var(--play-chip-ink); }
-/*
- * 教学第 3 条那一下演示（E24，见 ui/patternBlock.ts 的 demo）：这一块换一支显眼的颜色，
- * 图标在四枚和三枚之间慢慢来回。
- *
- * 颜色是《色卡》里那支红（`--card-red` #BE411A，玩家指定）。它压的是上面那条牌面墨色
- * ——两条特指度一样（0,3,1），靠**写在后面**赢；这是有意的，不是没算过：牌面墨色是常
- * 态，演示是一时的，常态写在前面读起来才顺。
- *
- * 只换颜色，不碰大小和位置：这一块的尺寸是玩家定过的，演示不该顺手把它改了。
- */
-.app--game .pat-block--demo .pat-icon > svg { color: var(--card-red); }
 .app--game .pat-ring-lit { color: var(--play-chip-ink); }
 .app--game .pat-ring-dim { opacity: 0.3; }
 .app--game .controls .icon-btn {
@@ -6329,18 +6300,9 @@ body.is-room-host::after {
 }
 .coach-seg.on { background: var(--accent); }
 .coach-row { display: flex; align-items: center; gap: 10px; }
-/* 一步摆两条的时候（头一局的第 1+2 条）整体压扁一点：缝、内边距、行距各收
-   一档，字和图只小半档——玩家的原话是「稍微上下压缩一下」，压的是空白，不是
-   内容。多出来的那点高度全从棋盘身上出，能省一点是一点。 */
-.coach-bar--pair { gap: 3px; padding: 6px 12px 7px; }
-.coach-bar--pair .coach-row { gap: 8px; }
-/* 两条并排时给配图一个统一的宽度：两幅图本来一宽一窄（第 1 条两列、第 2 条
-   六列），不统一的话两行文字的左边对不齐，看着像两件不相干的东西而不是一份
-   清单。窄的那幅在这个宽度里居中（.tut-rule-art 本来就是居中的）。 */
-.coach-bar--pair .coach-art { font-size: clamp(11px, 1.75vh, 15px); min-width: 6.5em; }
-/* 再收半档：统一了配图宽度之后，第 1 条那句正好差一个字换行，末行只剩「面。」
-   两个字。收到 13.5px 它就回到一行了（外语长句照样会折，那没办法，也不难看）。 */
-.coach-bar--pair .coach-text { font-size: clamp(11px, 1.62vh, 13.5px); line-height: 1.3; }
+/* 从前这儿还有一档 `.coach-bar--pair`：头一局有一步把第 1、2 条摆在一起，整块压扁一
+   点。2026-10 第二轮拆成一步一条，第 15 推定了「一次只显示一条」，那一档连同电脑端、文
+   件末尾的两处一起拆了。 */
 .coach-row[hidden] { display: none; }
 /* 配图不许被旁边的文字挤：它是几幅按 em 定死大小的小棋盘，挤一下就漫出底板。
    文字那边是 flex: 1，剩多少占多少。 */
@@ -6731,15 +6693,6 @@ body.is-room-host::after {
   .app.app--game.has-coach > .coach-bar .coach-peek {
     width: 38px; height: 38px; font-size: 29px; margin: -9px -7px -9px 0;
   }
-  /* 一步摆两条时（头一局的第 1+2 条）在这块牌子上不必再压扁——压扁是为了把高度
-     还给棋盘，而这儿的高度是白送的。中间加一道分隔，两条才不像一段话。 */
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair { padding: 22px 24px 24px; gap: 16px; }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row { gap: 14px; }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-row + .coach-row {
-    border-top: 1px solid var(--line); padding-top: 16px;
-  }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-art { font-size: clamp(18px, 2.9vh, 28px); }
-  .app.app--game.has-coach > .coach-bar.coach-bar--pair .coach-text { font-size: clamp(16px, 2.3vh, 20px); }
 
   /* =========================================================================
      电脑端游戏页 · 照玩家 2026-10 那张效果图重排（下面简称「稿」）
@@ -7206,12 +7159,80 @@ body.is-room-host::after {
   }
 }
 /* 条子里的字跟着大一档：这一局他要读的就是这几行。
-   摆两条的那一步单写一份：它本来就为了不挤棋盘压扁过一档，拿一条通用规则
-   盖上去会把那一档还回去——量出来条子一下高 27px，棋盘反而没多几个像素。 */
-.coach-bar:not(.coach-bar--pair) .coach-text { font-size: clamp(12.5px, 1.95vh, 15px); }
-.coach-bar:not(.coach-bar--pair) .coach-art { font-size: clamp(13px, 2.2vh, 18px); }
-.coach-bar--pair .coach-text { font-size: clamp(11.5px, 1.72vh, 14px); }
-.coach-bar--pair .coach-art { font-size: clamp(11.5px, 1.82vh, 15.5px); }
+   选择器写成三层（0,3,0）而不是两层：从前这一条是 `.coach-bar:not(.coach-bar--pair)`，
+   特指度就是三层；那一档拆了之后照原样留着这个分量，免得别处哪条两层的规则悄悄压过它。 */
+.coach-bar .coach-row .coach-text { font-size: clamp(12.5px, 1.95vh, 15px); }
+.coach-bar .coach-row .coach-art { font-size: clamp(13px, 2.2vh, 18px); }
+
+/* ---- 手机端（≤999px）教学五条：字号两倍，最多两行，不压棋盘（第 15 推）----------
+ *
+ * 玩家原话：「手机端（≤999px）教学文字：字号放大到现在的 2 倍以上，最多两行，不能压住
+ * 棋盘。」
+ *
+ *   · 两倍：竖屏现在是上面那条 clamp(12.5px, 1.95vh, 15px)，横屏（矮于 560）是那一档的
+ *     clamp(11.5px, 2.9vh, 14px)——这儿把两条的三个数各乘 2。不写 calc(2 * clamp(…))：
+ *     小红书那台 Chrome 61 不认识 clamp()，降级层（xhs/src/oldKernel.ts）是把 clamp 算成
+ *     px 的，套一层 calc 它认不出来。
+ *   · 最多两行：`--coach-lines: 2` 交给 ui/coachBar.ts 的 fitCoachText——两倍摆不进两行
+ *     的那几句，一次收 1px，收到平时那一档为止（CSS 自己数不了行）。
+ *   · 不压棋盘：条子本来就在棋盘底下自己那一格里（竖屏是一列里的一段，横屏是网格的最后
+ *     一行），字大了是条子变高、棋盘让一点，不是盖上去。门：check-coach-aim 的手机端那
+ *     一节。
+ *   · 配图在这一档收起来：量过（390×844 / 360×640 / 375×667 / 430×932），两倍的字配上
+ *     旁边那幅图，连中文第 1 条（24 个字）都要三行——字和图只能留一样，玩家点名要的是字。
+ *
+ * 只认 `.coach-bar--rules`（五条那一块，ui/coachBar.ts 盖的）：炸弹、无限反转这几个玩法
+ * 头一回进来的那一句提示（mountCoachTip）不在这一条里。
+ *
+ * 选择器把 `.app.app--game.has-coach > .coach-bar` 整串带上：横屏那一档的字号写的就是这
+ * 一串（0,5,0），短了压不过它。
+ */
+@media (max-width: 999.98px) {
+  .app.app--game.has-coach > .coach-bar.coach-bar--rules .coach-text {
+    font-size: clamp(25px, 3.9vh, 30px); line-height: 1.3;
+    --coach-lines: 2;
+    /*
+     * **不管这一条是一行还是两行，条子都占两行那么高**（2 × 1.3 × 上面那个字号）。
+     *
+     * 棋盘的大小是开局量一次、钉成像素的（engine/boardResize.ts 的 fitFloor），之后只在
+     * 屏幕或那一格变了的时候才重量——条子自己变高变矮，它不知道。两倍的字之下一行和两行
+     * 差 30–39px：从一行的第 3 条换到两行的第 4 条，横屏上条子会往上长进棋盘里，压住最
+     * 底下那一排（门 check-coach-aim 当场量到过：压了 10px）。所以把高度先占满：换条的时
+     * 候条子一个像素都不动，棋盘也就一直是开局那个大小。
+     *
+     * 一行的那几句在这两行里竖着居中（display: flex + align-items）。两行都摆不下、只能
+     * 收到平时那一档还要三行的外语长句（见 fitCoachText）会比这个高——那是方案里两条要
+     * 求打架的那几句，报给玩家拍板了。
+     */
+    min-height: clamp(65px, 10.14vh, 78px);
+    display: flex; align-items: center;
+  }
+  .app.app--game.has-coach > .coach-bar.coach-bar--rules .coach-art { display: none; }
+}
+/*
+ * 竖屏：条子往两边的留白里伸 8px，自己的内边距从 12 收到 8。
+ *
+ * 量出来的账：390×844（最常见的那一档 iPhone）上两倍是 30px，第 1 条和方块的第 4 条都是
+ * 24 个字，两行就要每行 12 个字 = 360px；而条子跟着棋盘那一列走，字只剩 338px 宽——差
+ * 22px，于是只能收到 28px（1.87 倍），达不到「2 倍以上」。往外伸这一点之后是 362px，正好
+ * 放得下。别的几档（360×640、375×667、414×896、430×932）本来就放得下，伸出去只是更松。
+ *
+ * 只在竖屏：横屏那一档条子站在网格的最后一行里，左右另有安排（见上面 max-height: 560px
+ * 那一段），伸出去会顶到两边的读数和按键。
+ */
+@media (max-width: 999.98px) and (orientation: portrait) {
+  .app.app--game.has-coach > .coach-bar.coach-bar--rules {
+    width: calc(100% + 16px); max-width: none;
+    margin-left: -8px; margin-right: -8px;
+    padding-left: 8px; padding-right: 8px;
+  }
+}
+@media (max-width: 999.98px) and (orientation: landscape) and (max-height: 560px) {
+  .app.app--game.has-coach > .coach-bar.coach-bar--rules .coach-text {
+    font-size: clamp(23px, 5.8vh, 28px);
+    min-height: clamp(59.8px, 15.08vh, 72.8px);
+  }
+}
 
 /* 挨过一下、还没拆的炸弹身上那道裂纹（画在 ui/bombCrack.ts）。和「！」同一个
    摆法：铺满整枚棋子、自己居中，所以棋子那层 flex 有几个孩子都不影响它，两者

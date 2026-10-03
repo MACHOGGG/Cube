@@ -48,6 +48,7 @@ import {
   isDot,
   residueSearch,
   type BonusLine,
+  type LineShuffle,
   type ResidueVerdict,
 } from './residueSearch';
 
@@ -256,9 +257,38 @@ export function gridResidue(
   matchLen: number,
   slot?: ResidueSlot,
 ): ResidueVerdict {
+  const lines = gridLines(rows, cols);
+  const bonus = lines.map((cells) => ({ cells, need: cells.length }));
+  return residueVerdict({ lines, at, matchLen, bonusLines: bonus, slot });
+}
+
+/** 方块那一副此刻的线：每一行、每一列（消掉整行整列之后盘子变小，所以现给行列数）。 */
+export function gridLines(rows: number, cols: number): Cell[][] {
   const lines: Cell[][] = [];
   for (let r = 0; r < rows; r++) lines.push(Array.from({ length: cols }, (_, c) => [r, c] as Cell));
   for (let c = 0; c < cols; c++) lines.push(Array.from({ length: rows }, (_, r) => [r, c] as Cell));
-  const bonus = lines.map((cells) => ({ cells, need: cells.length }));
-  return residueVerdict({ lines, at, matchLen, bonusLines: bonus, slot });
+  return lines;
+}
+
+/**
+ * 一步之内能走到的每一个盘面——**只给走法，不判分**（第 15 推，教学的呼吸灯）。
+ *
+ * 呼吸灯要回答「再走一步就能完成这一条的是哪几枚」，那就得把一步之内的每一种滑法都试一
+ * 遍。滑法用的就是上面穷举那一套（同一个 `build`、同一个 `cyclicShuffles` /
+ * `fillerAwareShuffles`），不另抄：两份滑法一旦走样，灯就会亮在一组**玩家滑不出来**的棋
+ * 子上——那比不亮还糟，他照着灯去滑，什么都不发生。
+ *
+ * 和穷举那头的差别只有一处：这儿不编码颜色（判分交还给棋盘自己的 findMatches，见
+ * engine/coachHint.ts），所以 `isOn` 只问「这一格在不在线上」——口径和 `ResidueCellAt`
+ * 回不回 `null` 一样：不在盘上的格子不进线。
+ *
+ * @returns `cells[k]` 是格号 k 的行列；每一步 `moves[i]` 的 `cells` / `src` 都是格号。
+ */
+export function oneStepMoves(
+  lines: readonly (readonly Cell[])[],
+  isOn: (r: number, c: number) => boolean,
+  filler = false,
+): { cells: Cell[]; moves: LineShuffle[] } {
+  const built = build(lines, (r, c) => (isOn(r, c) ? 'blank' : null));
+  return { cells: built.cells, moves: filler ? fillerAwareShuffles(built.lines) : cyclicShuffles(built.lines) };
 }

@@ -14,7 +14,8 @@ import { TILE_RADIUS, proHintWidth, proSquareRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
-import { RESIDUE_MAX_TILES, gridResidue } from '../engine/residueBoard';
+import { RESIDUE_MAX_TILES, gridLines, gridResidue, oneStepMoves } from '../engine/residueBoard';
+import { createCoachGlow, matchKind, starsReach } from '../engine/coachHint';
 import { packSnapshot, type BoardSnapshot, type SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreForSize, sizeAtLevel } from '../engine/targets';
@@ -476,9 +477,9 @@ export function createSquareGame(): ShapeGame {
         // circle.ts 挂了它——于是头一局玩方块、三角的人，第 3 条哪怕真的做对了也
         // 感知不到，只能干等超时跳过。星星消除 PR-2（4fffbb4）给八副都补上了这一
         // 句，但病根是「控制器在读画面来推断数据」：八副必须各自记得挂同一个属性，
-        // 少挂一副就回到老 bug，而且没有门守着。现在 anyDotFace 问的是共享契约里
-        // 本来就必填的 `CascadeConfig.tileAt(r, c).face`（少实现一副当场编译不过），
-        // 那条路和这一句再也没有关系了。
+        // 少挂一副就回到老 bug，而且没有门守着。现在控制器连这个问题都不问了：第 15 推起
+        // 教学条不再等「这一组里有反面」这个信号（第 2 条的灯由棋盘自己认组，见
+        // engine/coachHint.ts），anyDotFace 跟着删了，这一句和控制器再也没有关系。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         // Pro 模式那一圈：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。只有
         // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。
@@ -512,6 +513,7 @@ export function createSquareGame(): ShapeGame {
             const el = makeTileEl(grid[r][c], r, c, CELL);
             applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
+            if (glow.lit(grid[r][c].id)) el.classList.add('coach-glow');
             if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             frag.appendChild(el);
           }
@@ -646,7 +648,13 @@ export function createSquareGame(): ShapeGame {
         return tiles.every((t) => t.dotColor === c0);
       }
 
-      function findLineBonusGroups(): Cell[][] {
+      /**
+       * 此刻整行 / 整列全是同色星星的那几行、几列。
+       *
+       * 整线消除认的就是它；教学的呼吸灯（第 15 推）也要问它「走一步之后有没有」，所以单拎
+       * 出来——两处问的是同一把尺子，不是各写一份。
+       */
+      function fullDotLines(): { rowClears: number[]; colClears: number[]; groups: Cell[][] } {
         const rowClears: number[] = [];
         for (let r = 0; r < rows; r++) {
           if (isFullDotMatch(grid[r])) rowClears.push(r);
@@ -656,11 +664,15 @@ export function createSquareGame(): ShapeGame {
           const column = grid.map((row) => row[c]);
           if (isFullDotMatch(column)) colClears.push(c);
         }
-        pendingRowClears = rowClears;
-        pendingColClears = colClears;
         const groups: Cell[][] = [];
         for (const r of rowClears) groups.push(Array.from({ length: cols }, (_, c) => [r, c] as Cell));
         for (const c of colClears) groups.push(Array.from({ length: rows }, (_, r) => [r, c] as Cell));
+        return { rowClears, colClears, groups };
+      }
+      function findLineBonusGroups(): Cell[][] {
+        const { rowClears, colClears, groups } = fullDotLines();
+        pendingRowClears = rowClears;
+        pendingColClears = colClears;
         return groups;
       }
 
@@ -885,6 +897,65 @@ export function createSquareGame(): ShapeGame {
         if (dealt) applyDevDeal(grid, dealt, BLANK);
         outlineTracker.reset();
         stuckKeys = null;
+        glow.reset();
+      }
+
+      // ---------- 教学的呼吸灯（第 15 推，engine/coachHint.ts） ----------
+      /**
+       * 在一副**走过一步**的盘面上认组：把 grid 临时换成那一副，问这一局真正结算用的那几个
+       * 判定，问完换回来。
+       *
+       * 为什么换 grid，而不是把 findMatches 改成收一个盘面参数：灯要回答的正是「这一步它
+       * 会不会给分」，答案只能来自结算用的那一份——另写一份收参数的，两份迟早走样，灯就亮
+       * 在一组凑不成的棋子上。整段同步跑完、不让出控制权，中间不会有一次 render 读到那副假
+       * 盘面。
+       */
+      function withGrid<R>(g: Tile[][], run: () => R): R {
+        const real = grid;
+        grid = g;
+        try {
+          return run();
+        } finally {
+          grid = real;
+        }
+      }
+      const glow = createCoachGlow<Tile>({
+        grid: () => grid,
+        // 方块的一步：任意一行或一列整条转几格。空位和活炸弹跟着整行整列一起滑，所以每一格
+        // 都在线上（和残局穷举那头 residueAt 的口径一样）。
+        moves: () => oneStepMoves(gridLines(rows, cols), (r, c) => !!grid[r]?.[c]),
+        groupsFor: (kind) =>
+          kind === 'edge'
+            ? (trial) => withGrid(trial, () => fullDotLines().groups)
+            : (trial, moved) =>
+                withGrid(trial, () =>
+                  findMatches(moved)
+                    .map((m) => m.cells)
+                    .filter((cells) => matchKind(cells.map(([r, c]) => grid[r][c].face)) === kind),
+                ),
+        centerOf: ([r, c]) => [c * CELL + CELL / 2, r * CELL + CELL / 2],
+        boardCenter: () => [(cols * CELL) / 2, (rows * CELL) / 2],
+      });
+      /** 手指落下的位置（板内坐标）——松开时加上拖过的那一段，报给 glow 当「上一次手指位置」。 */
+      let fingerAt: [number, number] | null = null;
+      /**
+       * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空
+       * 中翻的那几块牌拆掉（gameController 的 plankFlipCells），而灯是在连锁收尾那一刻点
+       * 的，最后一拍的翻面可能还没落地。
+       */
+      function paintCoachGlow() {
+        for (const el of refs.boardEl.querySelectorAll<HTMLElement>('.tile[data-r][data-c]')) {
+          const t = grid[Number(el.dataset.r)]?.[Number(el.dataset.c)];
+          el.classList.toggle('coach-glow', !!t && glow.lit(t.id));
+        }
+      }
+      /**
+       * 教学第 4 条的条件（第 15 推）：某一种颜色的星星枚数 ≥ 最短外边的长度。方块没有「最外
+       * 边」这回事，玩家定的是「方块用较短那条边」——整行整列要的正是这么多枚。消掉整行整列
+       * 之后盘子变小，所以现问 rows / cols。
+       */
+      function coachStarsReachEdge(): boolean {
+        return starsReach(grid, Math.min(rows, cols), (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t));
       }
 
       const controller = createGameController(refs, {
@@ -918,6 +989,12 @@ export function createSquareGame(): ShapeGame {
         coachShape: 'square',
         coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
+        coachGlow: (kind) => {
+          const done = glow.update(kind);
+          paintCoachGlow();
+          return done;
+        },
+        coachStarsReachEdge,
         shouldLeadOut: opts?.shouldLeadOut,
         shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
@@ -1273,6 +1350,7 @@ export function createSquareGame(): ShapeGame {
           // column.
           const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
+          fingerAt = [x, y];
           drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1315,6 +1393,9 @@ export function createSquareGame(): ShapeGame {
         },
         onEnd(dx, dy) {
           const d = drag;
+          // 教学的呼吸灯认「离上一次手指位置最近的一组」：手指落下的地方加上拖过的那一段，
+          // 就是他松手的地方。
+          if (fingerAt) glow.touch(fingerAt[0] + dx, fingerAt[1] + dy);
           if (!d || !d.axis || !d.chain) {
             drag = null;
             if (!controller.resolving) render();

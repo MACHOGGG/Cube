@@ -29,6 +29,17 @@ export const BAND_RATIO = 1.15;
 /** 这一层的类名——CSS 那头按它上色、做过渡。 */
 export const BAND_CLASS = 'edge-band';
 
+/**
+ * 小球那一副的带子一呼一吸要多久（毫秒）——**和 style.css 里 `edge-band-breathe` 那条
+ * `animation` 的时长是同一个数**，两处一起改（第 15 推）。
+ *
+ * 为什么 JS 这头也要知道它：这一层每次 render 都是新建的（棋盘每走一步重画一次，小球那一
+ * 副拖动时每一帧都重画），新建的元素动画从 0% 起跳——不处理的话，带子每走一步就从「正
+ * 暗着」一下跳回「最亮」，一条本该慢慢呼吸的带子变成一跳一跳的。所以按墙上的钟给它一个负
+ * 的 animation-delay：不管哪一刻新建，都接着同一个相位往下走。
+ */
+export const BAND_BREATHE_MS = 3200;
+
 export interface EdgeBandOpts {
   /** 这几条边此刻削得动（每条是它自己的活格，按线上的顺序）。 */
   edges: readonly (readonly Cell[])[];
@@ -57,6 +68,9 @@ export function buildEdgeBand(opts: EdgeBandOpts): SVGSVGElement | null {
   svg.setAttribute('width', String(width));
   svg.setAttribute('height', String(height));
   svg.setAttribute('aria-hidden', 'true');
+  // 接着墙上的钟往下呼吸（见 BAND_BREATHE_MS）。别的四副外边族没有这条动画，这一句对它们
+  // 什么都不做。
+  svg.style.animationDelay = `${-(Date.now() % BAND_BREATHE_MS)}ms`;
   const w = Math.max(1, pieceSize * BAND_RATIO);
   for (const cells of edges) {
     if (!cells.length) continue;

@@ -49,7 +49,6 @@ import { registerCards } from '../../src/shapes/registry';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
-import { setCoachStoreKey } from '../../src/ui/coachBar';
 import { knowsHow, setKnowHowKey } from '../../src/engine/firstPlay';
 import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE } from './tutorial';
 import { bombTip, flipTip, puzzleTip, slotTip } from '../../src/ui/modeTips';
@@ -478,15 +477,15 @@ function showMenu() {
 }
 
 /**
- * 基础方块。头一回点开时棋盘底下也给一块教学条，但走的是另一路。
+ * 基础方块。头一回点开时棋盘底下也给一块教学条，但走的是另一路（'second'）。
  *
- * 他刚打完那一局小球，五条已经跟着走过一遍了，所以这块条子先不出声：10 秒
- * 之内自己得了分就不用教，把第 2 条亮一下算个招呼，剩下的一条接一条播完；
- * 10 秒还没得过分才把第 2 条摆出来——卡住的人缺的正是那一句（见
- * ui/coachBar.ts 的 'square' 那一路）。配图和文字都换成方块那一份。
+ * 他刚打完那一局小球，五条已经跟着走过一遍了，所以这块条子只讲第 4 条——方块
+ * 自己的那一条（任意整行整列，不是最外边）；条件和头一局一样：盘上第一次出现
+ * 「某一种颜色的星星 ≥ 较短那条边」时才开口，之前不出声（第 15 推，见
+ * src/ui/coachBar.ts 的文件头）。配图和文字都换成方块那一份。
  *
- * 分镜动画照旧放（showGame 里那道闸口）：玩家定的「等到这局完成之后如果再点
- * 开方块时播放方块的那个动画」。
+ * 分镜动画不放了：那两段第 14 推整个下线（还在教旧规则），开局也不再自动放（见
+ * showGame）。
  */
 function showSquare(): void {
   const first = firstTimeIn('square');
@@ -648,9 +647,9 @@ document.documentElement.setAttribute('data-theme', 'light');
 // 方块/小球/三角并排画出来，这一版整块没有三角，讲一个玩家见不到的图形只会
 // 让人以为自己漏了什么。那一幅 2026-09 随教学改成五条退役了，五幅新图里没有
 // 一幅认得出三角，那个开关也就跟着删了（见 src/ui/rulesModal.ts 的文件头）。
-// 教学条那一格「第 3 条做到过没有」也分开存：玩家的第一条要求是两边存档完全
-// 分离（见 ui/coachBar.ts 的 setCoachStoreKey）。
-setCoachStoreKey('slides.xhs.coach.ero');
+// 从前这儿还有一句 setCoachStoreKey('slides.xhs.coach.ero')：教学条那一格「第 3 条做到
+// 过没有」分开存。第 15 推那一格整个拆了（第二副棋盘只讲第 4 条，不再补讲第 3 条，见
+// src/ui/coachBar.ts 的文件头），这一句跟着删。
 // 《我会玩》那把钥匙也换成这一版自己的：容器里两版可能共用一个域名下的存档，
 // 一版按过不该把另一版的引导也关掉（整套 slides.xhs. 前缀就是为这件事）。
 setKnowHowKey('slides.xhs.knowHow');

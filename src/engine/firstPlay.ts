@@ -54,8 +54,7 @@ const KEY = (k: PlayKey) => `slides_played_${k}`;
  * 要的墙——他想玩老虎机，屏幕只让他点方块。指路和挡路之间只差一个「他要不要」，
  * 所以把这个选择交给他。
  *
- * 小红书那一版的存档键不一样（那边整套键都带 slides.xhs. 前缀），所以键名可换
- * ——和 ui/coachBar.ts 的 setCoachStoreKey 同一个路子。
+ * 小红书那一版的存档键不一样（那边整套键都带 slides.xhs. 前缀），所以键名可换。
  */
 let knowHowKey = 'slides_know_how';
 

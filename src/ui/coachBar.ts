@@ -1,242 +1,148 @@
 /**
  * 棋盘底下那块教学条。
  *
- * 五条规矩不摊开给他读，跟着他的手走：讲完一件事，等他真的做到，再讲下一
- * 件。两种排法，都是这一块条子。
+ * **第 15 推（玩家 2026-10-03）把「什么时候讲哪一条」整个换了个方向。**
  *
- * **一、头一局小球（plan: 'first'）**——玩家头一回打开就被直接按进的那一局
- * （main.ts 的 isFirstRun）。分镜动画不放了，五条全靠这块条子讲，走四步：
+ * 从前每一条都等玩家**做到**那件事才往下走：得一次分、凑一组带星星的、削掉一条边。听着
+ * 很对，落到一局里却处处别扭——第 3 条「得分图案会随着游戏解锁而变化」要等阶梯真的降一
+ * 级，头几分钟根本见不到，只好让《得分图案》那一块当场演一遍「四枚变三枚」（E24）；第 4
+ * 条常常在他早就消过边之后才姗姗来迟。现在反过来：**每一条等它说的那件事在盘面上真的出
+ * 现**，出现了才讲：
  *
- *   第 1+2 条 正反两面 / 同色凑成图案就得分 → 得两次分才走（或者第一次得分
- *                                              之后 8 秒还没有第二次，也走）
- *   第 3 条   反面也能一起凑                → 他真的用反面凑出一组
- *   第 4 条   反面同色连成一行就消          → 他真的消掉一行 / 一列
- *   第 5+6 条 怎么结束 / 综合得分怎么算     → 最后一步，一直留到这一局结束
+ *   第 1 条「色块拼出得分图案会得分翻面，变成其他颜色的星星」  开局就讲，12 秒后换下一条
+ *   第 2 条「星星可以与色块一同再次拼出得分图案」              紧跟第 1 条
+ *   第 3 条「得分图案会随着游戏解锁而变化」                    当前一级剩下的段数 ≤ 4 时
+ *   第 4 条「同色星星在整体的外边会得分并消除」                场上第一次出现「某一种颜色的星星
+ *                                                              枚数 ≥ 最短外边的长度」时
+ *   第 5 条「尝试全部消除吧～」                                第一次真的消掉一条外边之后，一直
+ *                                                              留到这一局结束
  *
- * 第 1、2 条并成一步（玩家定的）：第 1 条讲「图形有两面」，本身没有可做的
- * 事，单独占一屏只能干等；和第 2 条摆在一起，他一边读一边就能去凑那一组。
- * 最后两条同理——都是「这一局怎么算完」，一起摆完事。并了之后条子高一截，所
- * 以这两步整体压扁一点（.coach-bar--pair），别把棋盘挤小。
+ * 一次只摆一条，按顺序；轮到某一条时如果它的条件早就满足了，立刻摆。进度条五格。
  *
- * 这一路还会点一盏呼吸灯，**跟着这一步讲的是什么挪地方**（E23「呼吸灯自适应指
- * 引」，样式在 style.css 的 glow-pulse）：讲「得分图案」就点亮他头顶上那块
- * 《得分图案》，讲「整体的外边」就点亮托盘上那条外边指引带子，最后那条没有特定的
- * 那样东西就不点。灯只动 `filter`，一个像素的热区都不加——见下面 aimOf 那一段。
+ * 「立刻」有一个下限：**上一条要读得完**（MIN_READ_MS）。第 3 条的条件完全可能在第 1 条还
+ * 摆着的时候就满足了，那时候第 2 条一露面就被换掉，等于没讲。
  *
- * **二、头一回玩方块（plan: 'second'）**——他刚打完那一局小球，五条已经听过
- * 一遍了，所以这块条子先不出声，等他自己打出三次得分再开口，讲三步：
+ * **第二副基础棋盘（plan: 'second'）只讲第 4 条，触发条件同上。** 他刚打完一局别的，前几条
+ * 跟着走过一遍了；只有「外边怎么消」是这一族自己的事（小球是最外面的一条线，方块是任意整
+ * 行整列，见 i18n 的 TUTORIAL_RULE4）。条件没到之前这块条子不出声。
  *
- *   第 4 条   反面同色连成一行/列就消除，方块消掉不再出现 → 他真的消掉一行
- *   第 5 条   全部翻到反面这一局就结束                    → 摆 8 秒
- *   第 5+6 条 加上综合得分怎么算                          → 到这一局结束
+ * ── 呼吸灯 ────────────────────────────────────────────────────────────
  *
- * 玩家的原话：「只有到了出现了三次得分后出现，关于反面同色连起来消除的教
- * 学，然后消除后引发下一条教学内容……然后播放 8s 之后就是……最后那两条教学一
- * 起直到游戏结束」。
+ * 条子还说了算「此刻该亮哪一种组」（`hint()`，表在 HINT_OF）：只在**再走一步就能完成这一
+ * 条**的时候亮，只亮会参与的那几枚。认组、挑组、画灯不在这儿——挑组在
+ * engine/coachHint.ts，认组是棋盘自己的判定，画灯是棋盘的 render（`coach-glow`）。条子只
+ * 在换了一条时喊一声（`onChange`），让控制器重算。
  *
- * 两路共通的三条规矩，把它和一个「读不完就卡住」的东西分开：
+ * 从前那盏灯（E23）打在「这一条句子里那样东西」上：HUD 那块《得分图案》、托盘上那条外边带
+ * 子。它指得出**名词**，指不出**下一步**——玩家看着一块发光的牌子，仍然不知道该滑哪一枚。
+ * 那两处第 15 推起不再参与教学亮灯（玩家原话：「得分图案块和外边指引带不再参与教学亮
+ * 灯」）。
  *
- *   · **提前做到的记下来。** 玩家可能第一步就消掉一行——那时候条子还停在第 1
- *     条。不能跳过（跳过等于没讲），也不能装作没发生，所以记在 hit 里；轮到那
- *     一条时只停 ALREADY_READ_MS——不等他再做一次，但话要读得完。
- *   · **谁也不许卡死。** 第 3 条要「反面和正面凑一组」，一局里未必凑得出来。
- *     每一步都压着 STUCK_MS 的保底，到点自己往下走——一块永远不动的提示比讲
- *     错还糟。方块那一路「等三次得分」也压着同一道保底。
- *   · **最后一步不走。** 玩家自己定的：「最后一条一直显示到游戏结束」。
+ * ── 第 15 推一起拆掉的几样 ────────────────────────────────────────────
  *
- * 文字和配图跟着这一局的图形走（见 i18n 的 tutorialRules、ruleArt 的
- * buildRuleArt）：小球那一局讲小球、画小球，方块那一局讲方块、画方块——他
- * 眼前只有一种图形，讲另一种是在他手上这一局里插一段用不上的话。
+ *   · E24 的演示（`onDemo` → patternBlock 的 demo，变红、四枚↔三枚来回）：第 3 条现在等
+ *     图案**真的**快变了才讲，用不着演。
+ *   · 「做到过才算讲过」那格存档（erosionTaught / setCoachStoreKey / MAKEUP_EROSION）：第
+ *     二副棋盘只讲第 4 条，不再补讲第 3 条。
+ *   · 第 1 步 22 秒后换一句更具体的（coachNudge）、每一步 40 秒的保底（STUCK_MS）、第二副
+ *     棋盘「得三次分才开口」：每一条什么时候出来，现在由它自己的条件说了算。
+ *
+ * 文字和配图跟着这一局的图形走（见 i18n 的 tutorialRules、ruleArt 的 buildRuleArt）：小球
+ * 那一局讲小球、画小球，方块那一局讲方块、画方块。
  */
 import { STRINGS, tutorialRules, type Lang } from '../i18n';
+import type { CoachHint } from '../engine/coachHint';
 import { buildRuleArt } from './ruleArt';
 
-/** 玩家做了什么。gameController 在它已经知道的那几个点上报进来。 */
-export type CoachSignal = 'move' | 'match' | 'mixed' | 'line' | 'erosion';
+export type { CoachHint };
+
+/**
+ * 连锁里发生过的两件事。gameController 在那一拍里报进来；条子**只记下**，等这一步结算完
+ * （observe）再看——话要等那一下的动画演完再换，别抢在消除动画前面。
+ *
+ *   line     真的消掉了一条外边（方块：一整行 / 一整列）——第 5 条等它
+ *   erosion  阶梯降了一级——第 3 条的「剩下的段数 ≤ 4」可能在一步之内整个被跨过去（一步
+ *            翻了八枚，从 6 段直接降级、新的一级满格），结算之后再看段数就看不出来了
+ */
+export type CoachSignal = 'line' | 'erosion';
 /** 这一局玩的是哪种图形。三角没有自己那套配图，用通稿那份。 */
 export type CoachShape = 'square' | 'circle' | 'triangle';
 /** 哪一种排法，见文件开头。 */
 export type CoachPlan = 'first' | 'second';
 
-/**
- * 「第 3 条他真的做到过没有」记在这儿。
- *
- * 玩家 2026-09 定的：「把『讲过就算讲过』改成『做到过才算讲过』」——第 3 条最容易
- * 被误解，偏偏一局里未必真的发生。从前它靠保底自己跳过去，跳过等于没讲；现在跳过
- * 去的那一次不记账，下一个基础玩法开局时补讲一次。
- *
- * **这一条 2026-09 换了内容**（《侵蚀阶梯》v1.2）：从前是「星星和色块同色也能一起
- * 凑」，现在是「得分图案会随着游戏解锁而变化」——阶梯降一级他才算真见过。键名跟着
- * 换（`…_ero`），不然升上来的老玩家会被当成「已经见过」，而那是另一件事。
- *
- * 键名由各端自己定（网页 slides_*，小红书 slides.xhs.*）——玩家的第一条要求是
- * 两边存档完全分开。存不进去（无痕窗口）就当讲过：宁可少补一次，也不要每一局
- * 都从第 3 条讲起。
- */
-let seenKey = 'slides_coach_ero';
-export function setCoachStoreKey(k: string): void {
-  seenKey = k;
-}
-export function erosionTaught(): boolean {
-  try {
-    return localStorage.getItem(seenKey) === '1';
-  } catch {
-    return true;
-  }
-}
-function markErosionTaught(): void {
-  try {
-    localStorage.setItem(seenKey, '1');
-  } catch {
-    /* 存不进去就下次再补讲一遍，不是什么大事 */
-  }
+/** 每一步结算（连锁跑完）之后，盘面此刻的样子。gameController 问齐了交进来。 */
+export interface CoachView {
+  /** 当前这一级还剩几段（engine/erosion.ts；段数＝翻面枚数）。 */
+  segLeft: number;
+  /**
+   * 某一种颜色的星星枚数 ≥ 最短外边的长度（方块用较短那条边）。
+   *
+   * 由棋盘自己数（`coachStarsReachEdge`）：「最短外边」只有棋盘自己知道——小球那副是此刻
+   * 削得动的最短那条外边，方块是此刻较短的那条边，消掉整行整列之后都会变。
+   */
+  starsReachEdge: boolean;
 }
 
-/** 一步：摆哪几条，靠什么走到下一步。 */
-interface Step {
-  /** 摆出来的那几条（tutorialRules 的下标）。 */
-  readonly rules: readonly number[];
-  /** 要玩家做到的那个动作。留空 = 没有可做的事，摆够 ms 就走。 */
-  readonly by?: CoachSignal;
-  /** 要做到几次，默认一次。 */
-  readonly times?: number;
-  /**
-   * by 留空时：摆够这么久就走。
-   * by 有值而 times > 1 时：做到第一次之后再等这么久，没凑够次数也走——他已
-   * 经会了，别为了凑一个数把他扣在这一条上。
-   */
-  readonly ms?: number;
-  /**
-   * 到点还没做到，就把这一步的话换成更具体的那一句（不往下走）。
-   *
-   * 只有第 1 步用得上：一个完全没玩过的人，第一次得分可能要三四十秒，而这一
-   * 步的门槛是「得两次分」。从前它只有一分钟的保底，最糟的一幕是他盯着同一句
-   * 话看满一分钟，什么也没发生——偏偏这里正是学习成本最高的地方，最不该沉默。
-   */
-  readonly nudge?: boolean;
-  /** 这一步是靠玩家**做到**才走的话，走的时候记一格（见 erosionTaught）。 */
-  readonly teaches?: 'erosion';
-  /**
-   * 不吃「这件事他早就做过了」那条捷径（见 arm 里 `hit.has` 那一行）：这一步要的是
-   * **从现在起**再做一次。
-   *
-   * 只有第 3 步用得上。那条捷径的道理是「新东西他已经会了，亮一下算个招呼」，而第 3
-   * 步要他做的不是新东西（还是得分），它在那儿是为了让《得分图案》那一块把「会变小」
-   * 演给他看（E24）。不加这一位的话：`hit` 里从第 1 步起就有 `'match'`，这一步进来当
-   * 场走捷径，6 秒后自己跳过去——**而跳过去的那一次不记账**，于是下一副棋盘人人都要补
-   * 讲一遍第 3 条。
-   */
-  readonly fresh?: boolean;
+/** 第 3 条：当前一级剩下的段数 ≤ 这个数时讲（再翻最多 4 枚，图案就少一枚）。 */
+const NEAR_SEGS = 4;
+
+/** 盘面上出现过什么——「场上第一次出现」，所以记下来就不再忘（一局之内）。 */
+interface Seen {
+  /** 第 3 条：段数到过 ≤ NEAR_SEGS，或者已经降过一级。 */
+  near: boolean;
+  /** 第 4 条：某色星星到过 ≥ 最短外边。 */
+  reach: boolean;
+  /** 第 5 条：真的消掉过一条外边。 */
+  line: boolean;
 }
 
-/**
- * 他玩的第一个基础玩法：**五步，五条，一步讲一条**（2026-10 第二轮）。
- *
- *   第 1 条  色块拼出图案会得分、变成星星  → 他真的得一次分
- *   第 2 条  星星可以和色块一起再拼一次    → 他真的拼出一组**带星星的**
- *   第 3 条  得分图案会随着解锁而变化      → 演一遍给他看，再得一次分就走
- *   第 4 条  同色星星在外边会得分并消除    → 他真的削掉一条边
- *   第 5 条  尝试全部消除吧～              → 最后一步，留到这一局结束
- *
- * **每一步都等他真的做到那件事**，而不是等一个计时器——话和实物同时发生，这是这块条
- * 子唯一的本事。第 2 步等的 `'mixed'` 就是「这一组里有星星」（gameController 在报
- * `'match'` 的同一拍里报它，翻面之前问的），正是第 2 条那句话说的事。
- *
- * ⚠️ **第 3 步是个例外，而且是有意的。** 它等的从前是 `'erosion'`——阶梯真的降一级。那
- * 一下确实是「话和实物同时发生」，可降一级要先翻掉三十几枚：一局头几分钟根本见不到，玩
- * 家盯着一句看不懂的话干等，最后靠保底跳过去，而保底跳过去的那一次**不记账**，下一副棋
- * 盘还要再补讲一遍（MAKEUP_EROSION）。
- *
- * 2026-10 第二轮换了个法子：实物由《得分图案》那一块**当场演**（`onDemo` → patternBlock
- * 的 `demo`，E24：换成 #BE411A，图标在四枚和三枚之间来回），这一步只等「再得一次分」。
- * 于是话和实物照旧同时发生，只是实物是演的，不必等盘面真走到那儿。`teaches: 'erosion'`
- * 留着：这一条确实讲到了，下一副棋盘不用补讲。
- *
- * ⚠️ 上一版是**四步**：第 1、2 条合在一步里摆两行，一起等「得两次分」。改成一步一条的
- * 两个理由：
- *
- *   · 第 2 条讲的「星星还能再用」**有自己的那一下**可做，而合在一起时它没有——两条共用
- *     「得两次分」这个条件，而第二次得分完全可能一颗星都没碰到。于是屏幕上说着「星星可
- *     以和色块一起再拼一次」，他做的却是又拼了一组纯色块，话和实物对不上。
- *   · 第 1 条那一步从「得两次分」收成「得一次分」：第一次得分就是第 1 条讲的全部内容，
- *     多等一次只是让他多站一会儿。
- *
- * 进度条跟着成了**五格**（玩家 2026-10 第二轮点名要的）。从前那条「第一第二条在进度条
- * 上合并为一条」是这一版之前的事，而它的理由是「两条摆在同一屏上，进度却走两格」——现
- * 在它们各占一屏，一步一格仍然成立，只是步数从四变成了五。
- */
-const PLAN_FIRST: readonly Step[] = [
-  { rules: [0], by: 'match', nudge: true },
-  { rules: [1], by: 'mixed' },
-  { rules: [2], by: 'match', fresh: true, teaches: 'erosion' },
-  { rules: [3], by: 'line' },
-  { rules: [4] },
+/** 第 i 条（tutorialRules 的下标）什么时候能出来。 */
+const READY: readonly ((s: Seen) => boolean)[] = [
+  () => true, // 第 1 条：开局就讲
+  () => true, // 第 2 条：紧跟第 1 条
+  (s) => s.near,
+  (s) => s.reach,
+  (s) => s.line,
 ];
 
 /**
- * 之后再玩另一族棋盘：只讲第 4 条。
+ * 第 i 条该亮哪一种组（engine/coachHint.ts 的 CoachHint）。玩家的原话一一对应：
  *
- * 玩家 2026-09 定的：「玩家玩的第一个，我们尽量教学……然后等玩家之后玩到小球
- * 或者三角的时候，小球只有第四条」。前三条他上一局已经跟着走过一遍了，只有第
- * 4 条是这一族自己的事——小球和三角消掉之后留下一个空图形还能继续滑，方块是
- * 真的拿走不再出现（见 i18n 的 TUTORIAL_RULE4）。
- *
- * 开口之前还有一道门槛，见 SECOND_OPEN。
+ *   第 1、3 条  一步就能拼出当前级 1×N 的那几枚**色块**（不亮星星）
+ *   第 2 条     一步就能拼出的、同时含星星和色块的那一组
+ *   第 4 条     一步就能填满一条可消除外边的那几颗同色星星
+ *   第 5 条     不亮
  */
-const PLAN_SECOND: readonly Step[] = [{ rules: [3] }];
+export const HINT_OF: readonly (CoachHint | null)[] = ['front', 'mixed', 'front', 'edge', null];
 
-/** 第 3 条那一局没做到的话（阶梯一级都没降），补讲一次，摆在第 4 条前面。 */
-const MAKEUP_EROSION: Step = { rules: [2], by: 'erosion', teaches: 'erosion' };
+/** 两种排法各讲哪几条、按什么顺序（tutorialRules 的下标）。 */
+const PLAN_STEPS: Record<CoachPlan, readonly number[]> = {
+  first: [0, 1, 2, 3, 4],
+  second: [3],
+};
+
+/** 第 1 条摆多久（玩家定的：「开局显示，12 秒后自动换下一条」）。 */
+const RULE1_MS = 12000;
 
 /**
- * 第二个基础玩法：打出这么多次得分之后，条子才开口。
+ * 别的每一条至少摆这么久，下一条才能接上——哪怕下一条的条件早就满足了。
  *
- * 他刚打完一局别的，规矩听过一遍了。先让他自己打，打顺了（三次得分）再补那
- * 一条这一族自己的。
+ * 一句话加一幅图，读一遍要五六秒。从前那条「提前做过的只亮 2.6 秒」量出来就是读不完：第
+ * 4 条经常一闪而过，玩家等于没看见（后来改成 6 秒，见 git 历史里的 ALREADY_READ_MS）。
  */
-const SECOND_OPEN: { by: CoachSignal; times: number } = { by: 'match', times: 3 };
-
-/** 做到之后隔多久换下一条：让那一下的动画先演完，别抢在得分动画前面。 */
-const AFTER_MS = 1100;
-
-/** 没有动作可做的那几步，默认摆多久。 */
-const READ_MS = 8000;
-
-/**
- * 保底。这么久还没做到，就当这一局凑不出来，自己往下走。
- *
- * 一块永远不动的提示比讲错还糟——玩家会以为它坏了，或者以为自己漏了什么。
- *
- * 原先是 60 秒，而且第 1 步的 22 秒（nudge）是**加在它前面**的，于是最坏情况
- * 下：第 1 步 22+60 = 82 秒，第 2 步再 60 秒——玩家要等两分二十秒才轮得到第 4
- * 条（「反面同色连成一行就消」）。而头一局小球本来就未必打得到那么久，于是
- * 玩家报「第四条教学好像没有在第一次游玩的过程中出现」。
- *
- * 现在 40 秒，而且 nudge 只是换一句话、不再重新起算（见 arm）：最坏情况下第
- * 4 条在第 80 秒登场，一局小球（28 颗）通常打得到。
- */
-const STUCK_MS = 40000;
-
-/** 第 1 步：到这个点还一次分都没得，就把话换成更具体的那一句（见 Step.nudge）。 */
-const NUDGE_MS = 22000;
+const MIN_READ_MS = 6000;
 
 /** 回头看上一条，最多停这么久，然后自己回到现在（见 peek）。 */
 const PEEK_MS = 12000;
 
-/**
- * 这一条他提前就做过了：亮一下算个招呼。
- *
- * 原先 2.6 秒。太短了——一句话加一幅图，2.6 秒读不完，而「提前做过」在头一局
- * 里很常见（消掉一行往往发生在条子还停在第 1 条的时候），于是第 4 条经常是
- * 一闪而过，玩家等于没看见。现在给够读一遍的时间，只是仍然比正常那一步短：
- * 他确实已经会了，不必再等他做一次。
- */
-const ALREADY_READ_MS = 6000;
-
 export interface CoachBar {
-  /** 玩家做了一件事。不认识的、已经走过的，静静吞掉。 */
+  /** 一步结算完了（连锁跑完）：看一眼盘面，该换哪一条就换。 */
+  observe(view: CoachView): void;
+  /** 连锁里发生了一件事（见 CoachSignal）。只记下，不当场换条。 */
   signal(sig: CoachSignal): void;
-  /** 重开一局：回到起点，做到过的也一并忘掉。 */
+  /** 此刻这一条该亮哪一种组；不该亮（第 5 条、条子还没开口）回 null。 */
+  hint(): CoachHint | null;
+  /** 重开一局：回到起点，见过的也一并忘掉。 */
   reset(): void;
   destroy(): void;
 }
@@ -245,23 +151,18 @@ export interface CoachOpts {
   lang: Lang;
   shape: CoachShape;
   plan?: CoachPlan;
-  /** 六幅配图。不给就按 shape 现算——网页版三种图形都在，小红书版另给一份。 */
+  /** 五幅配图。不给就按 shape 现算——网页版三种图形都在，小红书版另给一份。 */
   art?: readonly string[];
   /**
-   * 第 3 条那一步进来 / 出去（E24）。
+   * 换了一条（含开口、重开）。呼吸灯亮哪一种组跟着条走，所以控制器要在这时候重算一次。
    *
-   * 给的是《得分图案》那一块的 `demo(on)`：第 3 条说「得分图案会随着游戏解锁而变化」，
-   * 而开局那会儿它一动不动，一排四枚摆在那儿——句子里的「变化」没有任何实物对应。这一
-   * 下把它当场演一遍（见 ui/patternBlock.ts 的 demo）。
-   *
-   * 由外面传进来而不是这个文件自己去找那一块：条子只认 `.app--game` 这一层和两个类名
-   * （见 aimOf 那一段），伸手进 HUD 里摸一个元素是把两处的结构粘在一起。调用方
-   * （gameController）两样都在手上。
+   * 由外面传进来，而不是条子自己去摸棋盘：条子不认识棋子，棋盘不认识条子，两样都在
+   * gameController 手上。
    */
-  onDemo?: (on: boolean) => void;
+  onChange?: () => void;
 }
 
-/** 按形状算出来的那份配图只算一次：一局里要用六回，每回重画一遍是白费。 */
+/** 按形状算出来的那份配图只算一次：一局里要用好几回，每回重画一遍是白费。 */
 const ART_CACHE = new Map<CoachShape, string[]>();
 function artFor(shape: CoachShape): string[] {
   let a = ART_CACHE.get(shape);
@@ -275,17 +176,20 @@ function artFor(shape: CoachShape): string[] {
 }
 
 /**
- * 条子的骨架：顶上几段进度，底下摆几行「一幅图 + 一句话」，左边一颗《<》。
+ * 条子的骨架：顶上几段进度，底下一行「一幅图 + 一句话」，右边一颗《<》。
  *
  * 那颗《<》是玩家要的：「给第一次打开基础玩法的玩家，加入一个『<』查看上一
- * 条」。条子是跟着他的手自己往下走的，走过去就没了——可他很可能正低头滑棋
- * 子，一抬头上一条已经换掉了。
+ * 条」。条子是自己往下走的，走过去就没了——可他很可能正低头滑棋子，一抬头上
+ * 一条已经换掉了。
  *
  * 它翻的是「看」，不是「进度」：按下去只是把上一条的图文摆回来，这一步在等
  * 的事一件没变、计时一秒没停（见 peek）。所以它不会让人卡在过去，也不会因
  * 为回头看一眼就漏掉正在讲的这一条。
+ *
+ * 只有一行：第 15 推之前头一局有一步摆两条（第 1+2 条并在一起，`coach-bar--pair`），
+ * 2026-10 第二轮拆成了一步一条，第 15 推又定了「一次只显示一条」，那一档就整个拆了。
  */
-function frame(host: HTMLElement, segs: number, rows: number): void {
+function frame(host: HTMLElement, segs: number): void {
   host.hidden = false;
   host.innerHTML =
     `<div class="coach-head">` +
@@ -293,9 +197,7 @@ function frame(host: HTMLElement, segs: number, rows: number): void {
       ? `<div class="coach-prog" aria-hidden="true">${'<span class="coach-seg"></span>'.repeat(segs)}</div>`
       : '<span class="coach-prog"></span>') +
     `<button class="coach-peek" type="button" hidden></button></div>` +
-    `<div class="coach-row"><span class="coach-art tut-rule-art"></span><p class="coach-text"></p></div>`.repeat(
-      rows,
-    );
+    `<div class="coach-row"><span class="coach-art tut-rule-art"></span><p class="coach-text"></p></div>`;
   // 换条子是自己换的，不是玩家点出来的——读屏软件要主动念出来，不然对看不见
   // 屏幕的人这块条子等于不存在。polite：等他手上这句话读完再插进去。
   host.setAttribute('aria-live', 'polite');
@@ -310,95 +212,99 @@ function fadeIn(host: HTMLElement): void {
 }
 
 /**
+ * 手机端那一档：字号是平时的两倍，最多两行（第 15 推，玩家原话「字号放大到现在的 2 倍以
+ * 上，最多两行，不能压住棋盘」）。
+ *
+ * 两倍是 CSS 给的（style.css 里 `.coach-bar--rules .coach-text` 那一档，同时给一个
+ * `--coach-lines: 2`）。这儿只管一件 CSS 做不到的事：**两倍摆不进两行的那几句往回收**，一
+ * 次收 1px，收到平时那一档（两倍的一半）为止——再小就比改之前还小了。
+ *
+ * ⚠️ 量过（390×844 / 360×640 / 375×667 / 430×932）：中文五条里只有小球那一局的第 4 条
+ * （46 个字，i18n 的 TUTORIAL_RULE4）两倍摆不进两行，收到约 1.1 倍；英、法两种语言的句子本
+ * 来就长，多数条收在 1.1–1.9 倍之间，小球第 4 条的法文收到平时那一档还要三行多。这是方
+ * 案里「两倍」和「最多两行」两条在长句上的冲突，已经报给玩家拍板；在拍板之前，两行优先
+ * （不压棋盘是硬的），字号能大多少大多少。
+ *
+ * 只认 `--coach-lines`：电脑端三栏那一档不给，这儿就什么都不做。
+ */
+export function fitCoachText(el: HTMLElement): void {
+  el.style.fontSize = '';
+  if (typeof getComputedStyle !== 'function') return;
+  const cs = getComputedStyle(el);
+  const lines = parseFloat(cs.getPropertyValue('--coach-lines'));
+  if (!(lines > 0)) return;
+  const big = parseFloat(cs.fontSize);
+  if (!(big > 0)) return;
+  const floor = big / 2;
+  let size = big;
+  for (let guard = 0; guard < 40; guard++) {
+    const n = lineCount(el);
+    // 0 行 = 条子这会儿是藏着的（第二副棋盘还没开口）。开口的时候 paint 会再量一次。
+    if (n === 0 || n <= lines || size <= floor) return;
+    size = Math.max(floor, size - 1);
+    el.style.fontSize = size + 'px';
+  }
+}
+
+/**
+ * 这一段字此刻折成了几行。
+ *
+ * **数的是字，不是盒子**：手机端那一档给这一格垫了两行的最小高度（style.css，为了换条时
+ * 条子不变高），拿盒子的高度除以行高，一行的字也会量成两行，两行的字收小一号之后还是量成
+ * 「两行多」——第一版就是这么一路收到底的。所以用 Range 拿每一行的那一段字的框，按纵坐标
+ * 数有几排（中英混排时同一行会拆成好几段，纵坐标挨得近的算一排）。
+ */
+function lineCount(el: HTMLElement): number {
+  if (typeof document === 'undefined' || !document.createRange) return 0;
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const rects = range.getClientRects();
+  const tops: number[] = [];
+  for (let i = 0; i < rects.length; i++) if (rects[i].width > 0) tops.push(rects[i].top);
+  tops.sort((a, b) => a - b);
+  const half = (parseFloat(getComputedStyle(el).fontSize) || 16) / 2;
+  let n = 0;
+  let last = -Infinity;
+  for (const t of tops) {
+    if (t - last > half) n++;
+    last = t;
+  }
+  return n;
+}
+
+/**
  * @param host 外壳里那块 `.coach-bar`（gameShell 只有 meta.coach 时才画它）。
  */
 export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const plan: CoachPlan = opts.plan ?? 'first';
   const texts = tutorialRules(opts.lang, opts.shape);
   const art = opts.art ?? artFor(opts.shape);
-  const steps: readonly Step[] =
-    plan === 'first'
-      ? PLAN_FIRST
-      : // 上一局第 3 条没做到就补讲一次，摆在这一族那条前面（见 erosionTaught）。
-        erosionTaught()
-        ? PLAN_SECOND
-        : [MAKEUP_EROSION, ...PLAN_SECOND];
+  const steps = PLAN_STEPS[plan];
   const lastStep = steps.length - 1;
-  /** 一步里最多摆几行——骨架按这个数一次画够，换步时只改内容不重建。 */
-  const rows = Math.max(...steps.map((st) => st.rules.length));
   /**
-   * 进度条按「步」算，不按「条」：**走一格，屏幕上换一屏**。
-   *
-   * 这一条的出处是玩家那句「第一第二条教学内容在进度条上合并为一条」——那会儿这两条
-   * 摆在同一屏上，而进度条按**规矩的条数**画五格，于是屏幕上摆着一屏、进度却走了两
-   * 格，看起来像漏掉了一条。治的是「对不上」，不是「要几格」。
-   *
-   * 2026-10 第二轮把第 1、2 条拆成了两步（各占一屏，见 PLAN_FIRST），于是同一条规矩
-   * 算出来就是**五格**——也正是玩家那一轮点名要的数。规矩一个字没改。
-   *
-   * 只有从第 1 条讲起的那一路才画这条进度——第二个玩法只讲一两条，画一条走到
-   * 头的进度条只会让人以为自己漏了前面几条。
+   * 进度条按「步」算：**走一格，屏幕上换一屏**。只有从第 1 条讲起的那一路才画——第二副
+   * 棋盘只讲一条，画一条走到头的进度条只会让人以为自己漏了前面几条。
    */
-  const covered = steps.flatMap((st) => st.rules);
-  const segs = Math.min(...covered) === 0 ? steps.length : 0;
+  const segs = steps[0] === 0 ? steps.length : 0;
 
-  frame(host, segs, rows);
-
-  /**
-   * **呼吸灯指哪儿，跟着这一步讲的是什么走**（E23「呼吸灯自适应指引」）。
-   *
-   * 玩家 2026-09 定的那一条照旧：「在播放到第二条和第三条教学的时候，上方的得分目标
-   * 图案微微闪烁」——这两条说的都是「同色凑成得分图案」，是哪几个图案，答案本来就挂
-   * 在他头顶上，只是从来没人指过。
-   *
-   * 这一轮把它从「只有那两条、只有那一处」推开成一张表：**每一条都把灯打在它句子里
-   * 那样东西上**。
-   *
-   *   第 1–3 条（下标 0、1、2）  「得分图案」是这三句的主语  → HUD 那块《得分图案》
-   *   第 4 条  （下标 3）        「整体的外边」画的就是它    → 托盘上那条外边指引带子
-   *   第 5 条  （下标 4）        「尝试全部消除吧～」没有特定的那样东西 → 不点灯
-   *
-   * 两条规矩，都来自玩家的话：
-   *
-   *   · **讲完就撤。** 「再亮下去就成了噪音」——所以这是 toggle，不是 add。
-   *   · **指的那样东西不在，就不点灯**，不另找一个凑数。方块 36 没有外边指引带子
-   *     （它是任意整行整列都能消，没有「最外边」这回事，见 ui/edgeBand.ts），而第 4
-   *     条在方块那一局讲的本来也不是外边（i18n 的 TUTORIAL_RULE4 按图形换过一句）。
-   *     做法上不用判断棋盘：类挂在舞台上，CSS 那条选择器只认 `.edge-band`——带子不在
-   *     就什么都没亮，自动是对的。
-   *
-   * ⚠️ **灯只能是 filter，不能是盖上去的一层。** 这是 E23 另一半「绝不拦操作」的实现
-   * 面：`glow-pulse` 动的是 `filter: drop-shadow`，画在元素自己身上，一个像素的热区都
-   * 不增加；外边指引那条带子本来就是 `pointer-events: none`（style.css）。往棋盘上盖
-   * 一层「指引蒙版」的做法看着更直观，代价是教学期间手指点到的是蒙版——那正是玩家点
-   * 名不要的事。门 check-coach-aim 真拖一下棋子来证明这件事。
-   */
-  const stage = host.closest('.app--game');
-  /** 这一步该把灯打在哪样东西上。一步摆两条时，取头一条有指向的那一条。 */
-  const aimOf = (step: Step): 'pattern' | 'edge' | null => {
-    for (const r of step.rules) {
-      if (r <= 2) return 'pattern';
-      if (r === 3) return 'edge';
-    }
-    return null;
-  };
+  frame(host, segs);
+  // 这一块摆的是五条规则（不是那几个玩法头一回进来的一句提示）：手机端两倍字号只认它，
+  // 见 style.css 的 `.coach-bar--rules`。
+  host.classList.add('coach-bar--rules');
 
   const progEl = host.querySelector<HTMLElement>('.coach-prog');
-  const rowEls = Array.from(host.querySelectorAll<HTMLElement>('.coach-row'));
+  const artEl = host.querySelector<HTMLElement>('.coach-art')!;
+  const textEl = host.querySelector<HTMLElement>('.coach-text')!;
+  const peekEl = host.querySelector<HTMLButtonElement>('.coach-peek');
 
+  /** 正在摆第几步（steps 的下标）；-1 = 还没开口（第二副棋盘那一路）。 */
   let at = -1;
+  /** 这一步读够了没有：够了，下一条的条件一满足就接上。 */
+  let readDone = true;
+  let seen: Seen = { near: false, reach: false, line: false };
   /** 正在回头看上一条（见 peek）。 */
   let peeking = false;
   let peekTimer = 0;
-  const peekEl = host.querySelector<HTMLButtonElement>('.coach-peek');
-  /** 整局里他做到过哪些事——用来认「这一条我提前就做过了」。 */
-  let hit = new Set<CoachSignal>();
-  /** 当前这一步里，要等的那个动作做到了几次。 */
-  let done = 0;
-  /** 条子开口了没有。方块那一路要等够 SQUARE_OPEN 才开口。 */
-  let open = plan === 'first';
-  /** 方块那一路：开口之前数他得了几次分。 */
-  let opening = 0;
   let timer = 0;
   let dead = false;
 
@@ -406,60 +312,60 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     if (timer) window.clearTimeout(timer);
     timer = 0;
   };
-  const later = (ms: number, run: () => void) => {
-    clear();
-    timer = window.setTimeout(run, ms);
-  };
 
   /** 把第 i 步的图文摆上去。只管画，不动进度、不动计时。 */
   function paintStep(i: number) {
-    const step = steps[i];
+    const rule = steps[i];
     host.hidden = false;
-    // 用满的那几行填内容，多出来的收起来——行是一次画够的，来回增删会把
-    // 淡入动画打断，也会让读屏软件把整块条子当成新的再念一遍。
-    rowEls.forEach((row, k) => {
-      const rule = step.rules[k];
-      row.hidden = rule === undefined;
-      if (rule === undefined) return;
-      (row.querySelector('.coach-art') as HTMLElement).innerHTML = art[rule] ?? '';
-      (row.querySelector('.coach-text') as HTMLElement).textContent = texts[rule] ?? '';
-    });
-    // 这一步摆两条的时候整体压扁一点，别把棋盘挤小。
-    host.classList.toggle('coach-bar--pair', step.rules.length > 1);
+    artEl.innerHTML = art[rule] ?? '';
+    textEl.textContent = texts[rule] ?? '';
     fadeIn(host);
+    fitCoachText(textEl);
   }
 
   function show(i: number) {
     if (dead) return;
     at = i;
-    done = 0;
-    // 正在回头看的时候这一步走掉了：把他拉回现在。走掉的那一条他刚刚还在
-    // 读，而现在这一条才是他手上要做的事——留在过去等于漏掉一条。
+    // 正在回头看的时候这一步走掉了：把他拉回现在。走掉的那一条他刚刚还在读，而现在这一
+    // 条才是他手上要做的事——留在过去等于漏掉一条。
     peeking = false;
+    if (peekTimer) window.clearTimeout(peekTimer);
+    peekTimer = 0;
     paintStep(i);
-    const aim = aimOf(steps[i]);
-    // `coach-aim` 这一个类名留着不动：style.css 里那条「HUD 那块《得分图案》发光」认的
-    // 就是它，而那是玩家逐字定过的行为。新来的 `--edge` 是另一支，各点各的。
-    stage?.classList.toggle('coach-aim', aim === 'pattern');
-    stage?.classList.toggle('coach-aim--edge', aim === 'edge');
-    // 第 3 条那一步才演「四枚变三枚」（E24）。认的是**这一步讲的是哪一条**，不是第几
-    // 步——补讲那一路（MAKEUP_EROSION）摆的也是第 3 条，它也该演。
-    opts.onDemo?.(steps[i].rules.includes(2));
     const cells = progEl?.children ?? [];
     for (let k = 0; k < cells.length; k++) cells[k].classList.toggle('on', k <= i);
     paintPeek();
-    arm(i);
+    clear();
+    // 最后一步不走（「一直保留到这一局结束」）。
+    if (i < lastStep) {
+      readDone = false;
+      timer = window.setTimeout(() => {
+        timer = 0;
+        readDone = true;
+        tryAdvance();
+      }, plan === 'first' && i === 0 ? RULE1_MS : MIN_READ_MS);
+    }
+    opts.onChange?.();
+  }
+
+  /** 下一条能不能接上：这一条读够了，而且下一条的条件满足了。 */
+  function tryAdvance() {
+    if (dead) return;
+    const next = at + 1;
+    if (next > lastStep || !readDone) return;
+    if (!READY[steps[next]](seen)) return;
+    show(next);
   }
 
   /**
    * 《<》：把上一条摆回来看一眼。
    *
-   * 翻的只是「看」——这一步在等的那件事一件没变，计时一秒没停（arm 的定时器
-   * 跟 peek 完全无关）。所以回头看不会让他卡在过去：这一步一走完，show() 把
-   * 他拉回现在；他自己按《>》也能立刻回来；什么都不按，PEEK_MS 之后自动回。
+   * 翻的只是「看」——这一步在等的那件事一件没变，计时一秒没停（show 里那个定时器跟 peek
+   * 完全无关）。所以回头看不会让他卡在过去：这一步一走完，show() 把他拉回现在；他自己按
+   * 《>》也能立刻回来；什么都不按，PEEK_MS 之后自动回。
    *
-   * 三道保险都留着，是因为这一颗键的风险正是「看着看着忘了回来」——那就成了
-   * 「意料之外的疏漏操作」。
+   * 三道保险都留着，是因为这一颗键的风险正是「看着看着忘了回来」——那就成了「意料之外的
+   * 疏漏操作」。
    */
   function peek(on: boolean) {
     if (dead) return;
@@ -473,126 +379,74 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   /** 那颗键此刻是《<》、《>》，还是根本不该有。 */
   function paintPeek() {
     if (!peekEl) return;
-    // 「正在回头看」这件事盖在条子本身上，让 CSS 换底色时按类去认。
-    //
-    // 原先 CSS 那一条写的是 .coach-bar:has(.coach-peek--fwd)。:has() 在小红书
-    // 那台要兼容的内核（Chrome 61）上根本不认识，整条规则连同它一起作废——
-    // 不白屏、不报错，就是底色不变：玩家按了《<》，屏幕上没有任何东西告诉他
-    // 「这是上一条」。而且这一类「构建得出来、运行时静默失效」的事，仓库里那
-    // 个兼容体检台按设计也验不出来。项目里已经有一处栽过同样的坑并写下了做
-    // 法（style.css 里 body:has(.app--game) 那一段）：状态由脚本盖成类，CSS
-    // 按类认。这儿照办。
+    // 「正在回头看」这件事盖在条子本身上，让 CSS 换底色时按类去认——不用 :has()：小红书
+    // 那台要兼容的内核（Chrome 61）不认识它，整条规则会连同它一起作废，不白屏、不报错，
+    // 就是底色不变（同 style.css 里 body:has(.app--game) 那一段栽过的坑）。
     host.classList.toggle('coach-bar--peek', peeking);
-    // 第一步没有「上一条」；方块那一路只讲一两条，也不必有。
+    // 第一步没有「上一条」；第二副棋盘那一路只讲一条，也不必有。
     const usable = steps.length > 1 && (at > 0 || peeking);
     peekEl.hidden = !usable;
     if (!usable) return;
-    peekEl.textContent = peeking ? '\u203A' : '\u2039';
+    peekEl.textContent = peeking ? '›' : '‹';
     peekEl.setAttribute('aria-label', peeking ? STRINGS[opts.lang].next : STRINGS[opts.lang].back);
     peekEl.classList.toggle('coach-peek--fwd', peeking);
   }
 
-  /**
-   * 到点还一次都没做到：不往下走，把话换成更具体的那一句。
-   *
-   * 换的是「说法」，不是「进度」——这一步的条件一个没变，他照样要**真的得一次分**才
-   * 走。摆的是第 2 条那幅图（同色凑成一条线的那一幅），因为要他做的正是这件事。
-   */
-  function nudge(): void {
-    rowEls.forEach((row, k) => {
-      row.hidden = k > 0;
-      if (k > 0) return;
-      (row.querySelector('.coach-art') as HTMLElement).innerHTML = art[1] ?? '';
-      (row.querySelector('.coach-text') as HTMLElement).textContent = STRINGS[opts.lang].coachNudge;
-    });
-    host.classList.remove('coach-bar--pair');
-    host.classList.remove('coach-bar--peek');
-    fadeIn(host);
-  }
-
-  /** 摆好这一步之后，安排它怎么走到下一步。 */
-  function arm(i: number) {
-    if (i >= lastStep) return clear(); // 最后一步不走
-    const step = steps[i];
-    // 没有可做的事：摆够读一遍的时间。
-    if (!step.by) return later(step.ms ?? READ_MS, () => show(i + 1));
-    // 这一条要做的事他早就做过了：亮一下算个招呼。次数要求不止一次的那一步
-    // 不走这条捷径——「得两次分」本来就是让他多做一次，提前做过不算数。
-    if (!step.fresh && (step.times ?? 1) === 1 && hit.has(step.by)) {
-      return later(ALREADY_READ_MS, () => show(i + 1));
-    }
-    // 第 1 步：中途换一句更具体的，但**保底是同一个**——换说法不是重新起算。
-    // 从前这儿是 NUDGE_MS 之后再压一整个 STUCK_MS，两段相加把第 1 步拖到 82
-    // 秒，后面几条就排不进这一局了（见 STUCK_MS 的说明）。
-    if (step.nudge && !hit.has(step.by)) {
-      return later(NUDGE_MS, () => {
-        if (done === 0) nudge();
-        later(Math.max(0, STUCK_MS - NUDGE_MS), () => show(i + 1));
-      });
-    }
-    later(STUCK_MS, () => show(i + 1));
-  }
-
   function start() {
+    clear();
     at = -1;
-    done = 0;
-    opening = 0;
-    open = plan === 'first';
-    if (open) return show(0);
-    // 第二个玩法那一路：先不出声，等他自己打出三次得分。一分钟还没打出来也
-    // 开口，免得这块条子一整局都不见人。
+    readDone = true;
+    if (plan === 'first') return show(0);
+    // 第二副棋盘：条件到之前不出声（observe 里 tryAdvance 接上第 0 步）。
     host.hidden = true;
-    later(STUCK_MS, () => {
-      open = true;
-      show(0);
-    });
+    opts.onChange?.();
   }
+
+  /**
+   * 窗口一变（转屏、拖窗口），手机端那一档的字号跟着变（它按 vh 算），两行摆不摆得下要重
+   * 量一次。字体晚到也一样：量的时候用的是兜底字体，换上正式字体之后宽度会变。
+   */
+  const refit = () => {
+    if (!dead && !host.hidden) fitCoachText(textEl);
+  };
+  window.addEventListener?.('resize', refit);
+  if (typeof document !== 'undefined') void document.fonts?.ready.then(refit);
 
   peekEl?.addEventListener('click', () => peek(!peeking));
 
   start();
 
   return {
+    observe(view) {
+      if (dead) return;
+      if (view.segLeft <= NEAR_SEGS) seen.near = true;
+      if (view.starsReachEdge) seen.reach = true;
+      tryAdvance();
+    },
     signal(sig) {
       if (dead) return;
-      hit.add(sig);
-      // 还没开口：数够那几次得分就开讲。
-      if (!open) {
-        if (sig !== SECOND_OPEN.by) return;
-        if (++opening < SECOND_OPEN.times) return;
-        open = true;
-        return later(AFTER_MS, () => show(0));
-      }
-      if (at < 0 || at >= lastStep) return;
-      const step = steps[at];
-      if (step.by !== sig) return;
-      const need = step.times ?? 1;
-      if (++done >= need) {
-        // 「做到过才算讲过」：只有真的做到才记账，保底跳过去的那一次不算。
-        if (step.teaches === 'erosion') markErosionTaught();
-        return later(AFTER_MS, () => show(at + 1));
-      }
-      // 还差几次，但这一步给了个宽限：第一次做到之后再等这么久，没凑够也走。
-      if (done === 1 && step.ms) later(step.ms, () => show(at + 1));
+      if (sig === 'line') seen.line = true;
+      if (sig === 'erosion') seen.near = true;
+    },
+    hint() {
+      if (dead || at < 0) return null;
+      return HINT_OF[steps[at]] ?? null;
     },
     reset() {
       if (dead) return;
-      hit = new Set();
+      seen = { near: false, reach: false, line: false };
       peeking = false;
       if (peekTimer) window.clearTimeout(peekTimer);
       peekTimer = 0;
-      clear();
       start();
     },
     destroy() {
       dead = true;
-      // 条子没了，演示也得停——不然那一块会一直红着、一直在两级之间来回。
-      opts.onDemo?.(false);
       clear();
       if (peekTimer) window.clearTimeout(peekTimer);
       peekTimer = 0;
-      stage?.classList.remove('coach-aim');
-      stage?.classList.remove('coach-aim--edge');
+      window.removeEventListener?.('resize', refit);
+      host.classList.remove('coach-bar--rules');
       host.hidden = true;
       host.innerHTML = '';
     },
@@ -602,16 +456,19 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
 /**
  * 炸弹 / 无限反转 / 老虎机头一回进来时的那一句提示。
  *
- * 和上面那块是同一条子、同一个盒子，但没有六段进度、不跟着玩家走——就一句
- * 话加一幅图。这三个玩法是在基础规则上加一层，加的是哪一层一句话说得完。
+ * 和上面那块是同一条子、同一个盒子，但没有进度、不跟着玩家走——就一句话加一幅图。这几个
+ * 玩法是在基础规则上加一层，加的是哪一层一句话说得完。
  *
  * 摆一整局，不定时走掉（玩家定的）。原先是 15 秒自己消失，问题是这一句正是
  * 他这一局要用的那条规矩——炸弹为什么炸、反面为什么又翻回来——读完还得能回
  * 头再看一眼。而且它只在头一回进这个玩法时出现，之后想看去《暂停》和信息栏
  * 的《教学》里找（见 ui/tutorialPicker.ts）。
+ *
+ * 手机端那一档两倍字号**不管这一句**（它没有 `coach-bar--rules`）：第 15 推说的是那五条，
+ * 而这几句本来就是三四个短句连着，两倍之下没有一句摆得进两行。
  */
 export function mountCoachTip(host: HTMLElement, text: string, art: string): { destroy(): void } {
-  frame(host, 0, 1);
+  frame(host, 0);
   const artEl = host.querySelector('.coach-art') as HTMLElement;
   // 有几句是没有配图的（计时、特殊布局）：空着的那个格子会留下一道说不清的
   // 缝，索性收掉，让那一句自己占满这块条子。

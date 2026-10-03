@@ -568,8 +568,6 @@ export interface I18nStrings {
   endRunNo: string;
   scoreLabel: string;
   timeLabel: string;
-  /** 教学条第 1 步：到点还一次分都没得，换上这一句更具体的。 */
-  coachNudge: string;
   startBtn: string;
   pausedTitle: string;
   /** 暂停面板里那一颗《怎么玩》，也是那一屏自己的标题。 */
@@ -992,7 +990,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunNo: 'No',
     scoreLabel: 'Score',
     timeLabel: 'Time',
-    coachNudge: 'Try sliding four of one colour into a line',
     startBtn: 'Start',
     pausedTitle: 'Paused',
     howToPlayBtn: 'How to play',
@@ -1326,7 +1323,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunNo: 'Non',
     scoreLabel: 'Score',
     timeLabel: 'Temps',
-    coachNudge: 'Essayez d’aligner quatre pièces d’une même couleur',
     startBtn: 'Commencer',
     pausedTitle: 'En pause',
     howToPlayBtn: 'Comment jouer',
@@ -1660,7 +1656,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunNo: '否',
     scoreLabel: '得分',
     timeLabel: '用時',
-    coachNudge: '把同色的四個滑到一條線上試試',
     startBtn: '開始',
     pausedTitle: '已暫停',
     howToPlayBtn: '怎麼玩',
@@ -1994,7 +1989,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endRunNo: '否',
     scoreLabel: '得分',
     timeLabel: '用时',
-    coachNudge: '把同色的四个滑到一条线上试试',
     startBtn: '开始',
     pausedTitle: '已暂停',
     howToPlayBtn: '怎么玩',

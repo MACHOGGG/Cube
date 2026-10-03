@@ -665,9 +665,9 @@ export function createCircleHexGame(): ShapeGame {
         // circle.ts 挂了它——于是头一局玩方块、三角的人，第 3 条哪怕真的做对了也
         // 感知不到，只能干等超时跳过。星星消除 PR-2（4fffbb4）给八副都补上了这一
         // 句，但病根是「控制器在读画面来推断数据」：八副必须各自记得挂同一个属性，
-        // 少挂一副就回到老 bug，而且没有门守着。现在 anyDotFace 问的是共享契约里
-        // 本来就必填的 `CascadeConfig.tileAt(r, c).face`（少实现一副当场编译不过），
-        // 那条路和这一句再也没有关系了。
+        // 少挂一副就回到老 bug，而且没有门守着。现在控制器连这个问题都不问了：第 15 推起
+        // 教学条不再等「这一组里有反面」这个信号（第 2 条的灯由棋盘自己认组，见
+        // engine/coachHint.ts），anyDotFace 跟着删了，这一句和控制器再也没有关系。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
         // Pro 模式那一圈：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。只有
         // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。

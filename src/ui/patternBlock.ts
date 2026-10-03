@@ -39,22 +39,6 @@ export interface ErosionView {
 export interface PatternBlock {
   /** 盘面变了：重画图标、重描刻度、该闪就闪。 */
   update(view: ErosionView): void;
-  /**
-   * 教学第 3 条那一步：**把「图案会变小」这件事当场演一遍**（E24）。
-   *
-   * 第 3 条说的是「得分图案会随着游戏解锁而变化」，而这句话指的那样东西就在他头顶上
-   * ——可开局那会儿它一动不动，一排四枚摆在那儿，句子里的「变化」没有任何实物对应。
-   * 从前这一步等的是**真的**降一级，而降一级要先翻掉三十几枚：一局头几分钟根本见不
-   * 到，玩家盯着一句看不懂的话干等，最后靠保底跳过去。
-   *
-   * 所以这一下是**演示**，不是读数：开着的时候这一块换一支显眼的颜色（《色卡》的
-   * `--card-red` #BE411A），图标在「四枚」和「三枚」之间慢慢来回——话和实物同时发生，
-   * 而且不必等盘面真的走到那儿。
-   *
-   * 演的时候真实读数**照旧更新**（刻度环、aria-label、降级那一下的闪和弹都不受影响），
-   * 只有图标这一处被借去演示；`demo(false)` 之后立刻按最后一次 `update` 的数重画。
-   */
-  demo(on: boolean): void;
   destroy(): void;
 }
 
@@ -129,9 +113,6 @@ export function mountPatternBlock(
   let shownLevel = -1;
   let flashTimer = 0;
   let last: ErosionView = { level: 4, segLeft: 0, segTotal: 1 };
-  /** 教学那一下演示（见 PatternBlock.demo）正在跑。 */
-  let demoTimer = 0;
-  let demoing = false;
 
   /** 把那两个矩形按这一块此刻的真实像素尺寸重摆一遍。 */
   function layoutRing(): void {
@@ -180,43 +161,6 @@ export function mountPatternBlock(
    */
   function paintIcon(level: number): void {
     icon.innerHTML = patternIconSvg(faceFor ? faceFor(level) : runPatternDef(family, level));
-  }
-
-  /** 演示那两级：开局那一级（四枚）和它的下一级（三枚）。 */
-  const DEMO_FROM = 4;
-  const DEMO_TO = 3;
-  /** 两枚之间停多久。慢一点——这一下是讲给人看的，不是动效。 */
-  const DEMO_STEP_MS = 1100;
-
-  function demo(on: boolean): void {
-    window.clearTimeout(demoTimer);
-    demoTimer = 0;
-    if (!on) {
-      if (!demoing) return;
-      demoing = false;
-      host.classList.remove('pat-block--demo');
-      // 借走的只有图标这一处，所以回来的时候按最后一次真实读数重画就够了。
-      paintIcon(last.level);
-      return;
-    }
-    demoing = true;
-    host.classList.add('pat-block--demo');
-    /*
-     * reduced-motion 那一路**只摆结果**，不来回换：这一块在屏幕角上，而「每隔一秒换一
-     * 次」对关掉动效的人就是那种最难受的闪烁。摆成少一枚的那一级，颜色照旧换——「它会
-     * 变小」这件事照样说得出来，只是不演过程。
-     */
-    if (reducedMotion()) {
-      paintIcon(DEMO_TO);
-      return;
-    }
-    let big = true;
-    const tick = (): void => {
-      paintIcon(big ? DEMO_FROM : DEMO_TO);
-      big = !big;
-      demoTimer = window.setTimeout(tick, DEMO_STEP_MS);
-    };
-    tick();
   }
 
   /**
@@ -295,8 +239,7 @@ export function mountPatternBlock(
     lit.setAttribute('stroke-dasharray', tickDash(total, left));
     // 到 1 枚之后没有下一级了，段数环整圈熄掉——再翻也不会更小（§2）。
     dim.style.opacity = view.level <= 1 ? '0.25' : '';
-    // 演示借走的只有图标这一处：刻度环、aria-label、降级那一下的闪和弹照旧走下面几行。
-    if (!demoing) paintIcon(view.level);
+    paintIcon(view.level);
     if (view.level !== shownLevel) {
       if (shownLevel !== -1) flash(view.level);
       else host.setAttribute('aria-label', countPhrase(s.patternNowLabel, shownCount(view.level), lang));
@@ -307,10 +250,8 @@ export function mountPatternBlock(
   layoutRing();
   return {
     update,
-    demo,
     destroy() {
       window.clearTimeout(flashTimer);
-      window.clearTimeout(demoTimer);
       ro?.disconnect();
     },
   };
