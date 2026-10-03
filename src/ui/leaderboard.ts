@@ -1,4 +1,4 @@
-import { STRINGS, type Lang } from '../i18n';
+import { STRINGS, countPhrase, type Lang } from '../i18n';
 import { cachedBoard, fetchBoard, waitForPush, type BoardPage, type BoardResult } from '../engine/cloudScores';
 import { shapeName } from './shapeLabels';
 import { rollOdometer } from '../engine/odometer';
@@ -81,9 +81,11 @@ export function boardGroups(lang: Lang): BoardGroup[] {
     { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
     { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_TWO, 'slot') },
     { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip2') },
-    // 步步为营三个基础玩法都有。这是**新开**的一张榜，没有旧局要归档，所以没
-    // 有 bomb2 那样的版本后缀（见 api/scores.js 里那段注释）。
-    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_TWO, 'puzzle') },
+    // 步步为营：'puzzle2' 是第二版规则那张榜（消线奖励从退一步改成退两步，见 api/scores.js
+    // 的 PUZZLE_KIND）。原先这儿还写着 'puzzle'——服务端开了 puzzle2 之后新局全记在新榜上，
+    // 客户端点开的却是归档的老榜，新分一个都看不见（巡检 2026-10-03，第 14 推）。这正是上面
+    // 那段说的「最容易漏」的那一处，check-bomb-rules 现在拿服务端那个常量来对它。
+    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_TWO, 'puzzle2') },
   ];
 }
 
@@ -116,6 +118,12 @@ function rowList(page: BoardPage, lang: Lang, compact: boolean): string[] {
         <span class="rank-place">${r.rank}</span>
         ${r.mode ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.mode, r.mode))}">${gameIcon(r.mode)}</span>` : ''}
         <span class="rank-name">${esc(r.name || s.rankAnon)}</span>
+        ${
+          // 步步为营清盘的那一局：「剩 N 步」（第 14 推）。同分时就是靠它排的先后，不印出
+          // 来的话两行一样的分数一前一后，看着像排错了。缩略牌上不印——那半块屏幕连名字都
+          // 要省略号，再塞一句只会把分数挤掉；点开整页就看得到。
+          r.left && !compact ? `<span class="rank-left">${countPhrase(s.puzzleLeftSteps, r.left, lang)}</span>` : ''
+        }
         <span class="rank-score">${compact ? compactScore(r.score, lang) : r.score}</span>
       </div>`,
   );

@@ -1,4 +1,4 @@
-import { STRINGS, type Lang } from '../i18n';
+import { countPhrase, STRINGS, type Lang } from '../i18n';
 import { patternIconSvg, runPatternDef, type PatternDef } from '../engine/patternIcon';
 import { reducedMotion } from '../engine/reducedMotion';
 import type { Family } from '../engine/targets';
@@ -251,7 +251,7 @@ export function mountPatternBlock(
     el.className = 'pat-toast';
     // 用的是同一句 i18n（patternNowLabel：「得分图案变成 N 枚」），不另起一句——两处说
     // 同一件事，用词不一样只会让人以为是两件事。
-    el.textContent = s.patternNowLabel.replace('{n}', String(n));
+    el.textContent = countPhrase(s.patternNowLabel, n, lang);
     // 摆在棋盘正上方那条缝里，横竖屏都对：位置**现量棋盘**，不按「顶排多高」去算——
     // 顶排的高随视口和玩法变（步步为营那一块多一行余步），而横屏顶排根本不在上面。
     const board = stage.querySelector<HTMLElement>('#boardWrap');
@@ -266,7 +266,7 @@ export function mountPatternBlock(
 
   function flash(level: number): void {
     const n = shownCount(level);
-    host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(n)));
+    host.setAttribute('aria-label', countPhrase(s.patternNowLabel, n, lang));
     toast(n);
     if (reducedMotion()) {
       // 不闪、不弹：边框加粗一下，同样说明「刚刚变了」，但不用亮度和位移。
@@ -299,7 +299,7 @@ export function mountPatternBlock(
     if (!demoing) paintIcon(view.level);
     if (view.level !== shownLevel) {
       if (shownLevel !== -1) flash(view.level);
-      else host.setAttribute('aria-label', s.patternNowLabel.replace('{n}', String(shownCount(view.level))));
+      else host.setAttribute('aria-label', countPhrase(s.patternNowLabel, shownCount(view.level), lang));
       shownLevel = view.level;
     }
   }

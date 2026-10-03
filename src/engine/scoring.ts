@@ -54,8 +54,19 @@ export const FLIP_STREAK_CAP = 10;
  * 照 `bomb.ts` 的 `BOMB_RULES_VERSION` 那条路走（`_flip` → `_flip2`）。
  */
 export const FLIP_RULES_VERSION = 2;
+/**
+ * 连续第 chain+1 次得分的那个倍率：1.5^chain，封顶在 FLIP_STREAK_CAP。
+ *
+ * 单列出来（第 14 推）：加分（flipStreakDelta）和加分气泡上印的那个「×N」都从这儿拿。原先
+ * 气泡自己算一遍 `1.5 ** chain`，**没套封顶**——连击过了十次，气泡上的倍率还在往上翻，屏
+ * 幕上的「×86.5」乘以分数，和真正加上去的那个数对不上。一处算，两处用，就不会再岔开。
+ */
+export function flipStreakMult(chain: number, base = FLIP_STREAK_BASE): number {
+  return base ** Math.min(Math.max(0, chain), FLIP_STREAK_CAP);
+}
+
 export function flipStreakDelta(points: number, chain: number, base = FLIP_STREAK_BASE): number {
-  return Math.round(points * base ** Math.min(Math.max(0, chain), FLIP_STREAK_CAP));
+  return Math.round(points * flipStreakMult(chain, base));
 }
 
 /**

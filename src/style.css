@@ -3219,6 +3219,9 @@ body:has(.center-pick--back) .home-nav { display: none; }
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
   font-weight: 700; font-size: 0.9rem;
 }
+/* 步步为营清盘那一局的「剩 N 步」（第 14 推）：挨着分数，小一号、淡一档——它是分数的
+   注脚（同分时靠它排先后），不是第二个分数。颜色和行首名次那一格是同一支。 */
+.rank-left { flex: none; font-size: 0.74rem; color: var(--ink-soft); white-space: nowrap; }
 /* 直接写在蓝紫面板上的那句话。白字在蓝紫上只有 2.4:1——用不翻的深墨（6.2:1）。 */
 .rank-foot, .rank-empty {
   margin: 6px 0 0; text-align: center; color: var(--card-ink);
@@ -6171,7 +6174,7 @@ body.is-room-host::after {
   .is-breathing > .story-ctl { box-shadow: 0 0 0 2px var(--accent); border-radius: 50%; }
 }
 
-/* ---------- 教学挑选页：三条大按钮 + 六条规则，一屏装下 ---------- */
+/* ---------- 《如何滑？》那一页：五条规则 + 《返回》，一屏装下 ---------- */
 /* 整页的高就是屏幕减去底排导航那一条；里面按弹性分，谁都不许把页撑长。 */
 .tut-pick {
   height: calc(100vh - 106px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
@@ -6179,42 +6182,8 @@ body.is-room-host::after {
   min-height: 0; padding: clamp(8px, 1.6vh, 16px) 16px 0; gap: clamp(6px, 1.2vh, 12px);
   display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
 }
-/* 三个入口是三条横向的大圆角矩形按钮（和从前带文字那一版的卡片 .shape-card
-   一个底），里面只居中一个图形。玩家的原话：「三个横向的大按钮（就像上一版
-   未修改之前有文字版的那样圆角矩形作为按钮）现在只是只有居中的图案了而已」。 */
-.tut-pick-shapes {
-  display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.4vh, 12px);
-  flex: none; width: 100%;
-}
-.tut-shape-btn {
-  --h: clamp(44px, 7vh, 62px);
-  /* 同上，两行写法。 */
-  width: 100%; width: min(100%, 420px); height: var(--h); padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
-  cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: transform 120ms ease, border-color 150ms ease;
-}
-.tut-shape-btn:hover { border-color: var(--accent); }
-.tut-shape-btn:active { transform: scale(0.98); }
-/* 图形按按钮的高定大小（写死成 px，不用百分比——按钮是 flex 盒，百分比高在这儿靠不住）。 */
-.tut-shape-btn svg { width: calc(var(--h) * 0.72); height: calc(var(--h) * 0.72); display: block; }
-/*
- * 图形旁边那个播放标志。
- *
- * 这三颗按钮原先只是三个纯色图形，和棋盘上的棋子长得一样——玩家看不出点下
- * 去会放一段教学动画（他的原话：「上方的三个图形看不出是教学内容」）。这一
- * 站的规矩是少文字，所以不写字，压一个谁都认识的播放三角。
- *
- * 它比图形小一圈：主角仍是那个图形（他要挑的是「学哪一种」），播放标志只回
- * 答「点下去会发生什么」。颜色走 --ink / --surface 两个主题变量，深色下自己
- * 就反过来了。
- */
-.tut-shape-btn { gap: calc(var(--h) * 0.18); }
-.tut-shape-play { display: flex; flex: none; }
-.tut-shape-btn .tut-shape-play svg {
-  width: calc(var(--h) * 0.40); height: calc(var(--h) * 0.40);
-}
+/* 五条上头那几颗分镜键（.tut-shape-btn，绿方块 / 红小球压一个播放标志）第 14 推撤
+   了：那两段分镜还在教旧规则，方案定的是「直接下线入口，不重做」。 */
 /* 六条在剩下的高度里匀开：高屏幕上不至于挤成一团、上面空一大块。 */
 .tut-rules {
   display: flex; flex-direction: column; justify-content: space-evenly; gap: clamp(4px, 1vh, 10px);
@@ -6250,40 +6219,7 @@ body.is-room-host::after {
 .howto-modal { width: 100%; max-width: 460px; text-align: left; }
 .howto-modal h2 { text-align: center; }
 
-/* ---- 六条规则上头那两颗分镜键 -------------------------------------------
-   分镜动画不再自己弹出来（玩家定的），只有成绩与说明页那个入口进来的这一
-   屏摆着它俩：一颗方块、一颗小球，按下去放对应的那一段。局中按暂停开的同
-   一屏不摆——他正在玩，不该在这儿被一段动画接走（见 rulesModal.ts 的 onStory）。
-
-   照网页版教学挑选页的样子：图在上、名字在下，两颗一样宽。不用 gap，老内
-   核（Chrome 61）没有它；靠一左一右的外边距分开。 */
-.howto-stories {
-  display: flex;
-  margin: 2px 2px 12px;
-}
-.howto-story {
-  flex: 1 1 0%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: 0 4px;
-  padding: 10px 6px 8px;
-  border: 0;
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.05);
-  color: inherit;
-  font: inherit;
-  font-size: 0.82rem;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.howto-story:active { background: rgba(0, 0, 0, 0.1); }
-.howto-story > svg {
-  width: 54px;
-  height: 54px;
-  margin-bottom: 6px;
-  display: block;
-}
+/* 五条上头那两颗分镜键（.howto-story）第 14 推撤了，样式跟着删（见 rulesModal.ts）。 */
 .howto-list {
   /* 六条在窄屏上摞起来会比一屏高，让它自己滚，别把《知道了》顶出去。 */
   max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
@@ -6327,21 +6263,18 @@ body.is-room-host::after {
   white-space: nowrap;
 }
 
-/* 横屏一屏太矮，装不下六条：改成左边三条按钮、右边六条规则的两栏，页可以
-   往下滚，底下给底排导航留出位置。 */
+/* 横屏一屏太矮，装不下五条：页改成可以往下滚，底下给底排导航留出位置。
+   从前是左边三条分镜按钮、右边规则的两栏；那几颗按钮第 14 推撤了，左栏只剩一颗
+   《返回》挂在半空——所以收成一栏：五条规则，底下《返回》。 */
 @media (orientation: landscape) and (max-height: 560px) {
   .tut-pick {
     height: auto; min-height: calc(100dvh - 106px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); overflow: visible;
-    display: grid; grid-template-columns: minmax(150px, 2fr) 3fr; grid-template-rows: auto auto;
-    column-gap: 20px; row-gap: 8px; padding: 8px 16px calc(106px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    padding: 8px 16px calc(106px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
-  .tut-pick-shapes { grid-column: 1; grid-row: 1; justify-content: center; }
-  .tut-shape-btn { --h: 44px; }
-  .tut-rules { grid-column: 2; grid-row: 1 / 3; gap: 5px; }
+  .tut-rules { gap: 5px; }
   .tut-rule-art { font-size: 11.5px; }
   .tut-rule-text { font-size: 11px; -webkit-line-clamp: 4; }
-  /* 《返回》放在左栏三条按钮底下，右栏六条规则就能整个露在底排上面。 */
-  .tut-pick .page-back-row { grid-column: 1; grid-row: 2; margin-top: 2px; }
+  .tut-pick .page-back-row { margin-top: 2px; }
 }
 
 /* ---- 头一局那块教学条（ui/coachBar.ts）--------------------------------

@@ -94,18 +94,13 @@ export function markStorySeen(fam: StoryFamily): void {
  *
  * 只有玩家自己按了才会走到这儿——这一屏不自动跳出来。
  *
- * @param onStory 给了就在五条规则上头摆两颗键（方块 / 小球），按下去放那一族的
- *   分镜动画。只有成绩与说明页那个入口会给——分镜不再自己弹出来（玩家定的），
- *   想看的人从那儿自己点。局中按暂停开的这一屏不给：他正在玩，不该在这儿被
- *   一段动画接走。
+ * 从前还有第三个参数 onStory：给了就在五条规则上头摆两颗分镜键（方块 / 小球）。
+ * 第 14 推连同那两段分镜一起下线了——它们还在教旧规则，方案定的是「直接下线入口，
+ * 不重做」。
  */
-export function openTutorial(
-  lang: Lang,
-  onClose?: () => void,
-  onStory?: (fam: StoryFamily) => void,
-): () => void {
+export function openTutorial(lang: Lang, onClose?: () => void): () => void {
   // 从前这儿多传一个 triangle: false，是这一版和网页版唯一的分歧——第 1 幅配图
   // 把方块/小球/三角并排画出来，这一版整块没有三角。那一幅 2026-09 随教学改成五
   // 条退役了，五幅新图里没有一幅认得出三角，参数也就跟着删了。
-  return openRulesModal({ lang, onClose, onStory });
+  return openRulesModal({ lang, onClose });
 }

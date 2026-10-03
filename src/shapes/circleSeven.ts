@@ -24,6 +24,7 @@ import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareC
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
+import { slideLine } from '../engine/slideLine';
 import { shuffle } from '../engine/rng';
 import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
@@ -1120,11 +1121,10 @@ export function createCircleSevenGame(): ShapeGame {
       function applyDrag(): boolean {
         const d = drag;
         if (!d || !d.fam) return false;
-        const n = d.cells.length;
         const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.R, d.rowH, d.land));
-        if (((shift % n) + n) % n === 0) return false;
-        const vals = d.cells.map(([r, c]) => grid[r][c]);
-        const shifted = vals.map((_, i) => vals[(((i - shift) % n) + n) % n]);
+        // 活格不到两枚、转了整圈、算出来的不是排列：这一下不算一步（engine/slideLine.ts）。
+        const shifted = slideLine(d.cells.map(([r, c]) => grid[r][c]), shift);
+        if (!shifted) return false;
         d.cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
@@ -1183,6 +1183,13 @@ export function createCircleSevenGame(): ShapeGame {
           const [px, py] = unfix(x, y);
           dragFix = null;
           const [r, c] = cellAt(px, py);
+          // 手指落在一个已经离场的格子上：那儿什么都没有，这一下就什么都不做（和小球那一副
+          // 同一句，第 14 推）。从前这几副不拦，于是抓着一条可能只剩一枚、甚至一枚活格都没
+          // 有的线滑出去——什么都没动，步数照扣。
+          if (isBlank(grid[r][c])) {
+            drag = null;
+            return;
+          }
           drag = { r, c, fam: null, cells: [], dx: 0, dy: 0, R, rowH, lastShift: 0, land: lying, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1196,6 +1203,8 @@ export function createCircleSevenGame(): ShapeGame {
         onRegrab(x, y) {
           if (!drag) return null;
           const [r, c] = cellAt(x, y);
+          // 改抓的时候也一样：挪到一片空地上就维持原来抓的那一颗，不要抓空。
+          if (isBlank(grid[r][c])) return null;
           drag.r = r;
           drag.c = c;
           return { r, c };

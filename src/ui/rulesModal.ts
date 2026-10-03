@@ -39,10 +39,12 @@
 import { MODE_TIPS, STRINGS, TUTORIAL_RULES, tutorialRules, type Lang, type RuleShape } from '../i18n';
 import { bombTipArt, buildRuleArt, flipTipArt } from './ruleArt';
 import { menuTag } from './menuTags';
-import { shapeName } from './shapeLabels';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE } from './homeIcons';
 
-/** 会放分镜动画的两族。三角那一段不摆在这一屏上（它有自己的入口）。 */
+/**
+ * 有过分镜动画的两族。那两段第 14 推下线了，这个类型留着是因为小红书那边还按它记
+ * 「这一族看过没有」（xhs/src/tutorial.ts 的 storySeen / markStorySeen）——头一局那条路
+ * 认的就是这两把钥匙。
+ */
 export type StoryFamily = 'square' | 'circle';
 
 /** 配图一族画一次就够了，两处轮流开关这一屏不必每次重画。 */
@@ -137,14 +139,9 @@ export interface RulesModalOptions {
   flip?: boolean;
   /** 关掉之后回哪儿。 */
   onClose?: () => void;
-  /**
-   * 给了就在五条上头摆两颗键（方块 / 小球），按下去放那一族的分镜动画。
-   *
-   * 只有从个人主页 / 成绩页进来的那个入口会给——分镜不再自己弹出来（玩家
-   * 定的），想看的人从那儿自己点。局中按暂停开的这一屏不给：他正在玩，不该
-   * 在这儿被一段动画接走。
-   */
-  onStory?: (fam: StoryFamily) => void;
+  // 从前这儿还有一个 onStory：给了就在五条上头摆两颗键（方块 / 小球），按下去放
+  // 那一族的分镜动画。第 14 推连同那两颗键一起撤了——那两段还在教旧规则，方案
+  // 定的是「直接下线入口，不重做」。
 }
 
 /**
@@ -155,7 +152,7 @@ export interface RulesModalOptions {
  * 各端自己那套 backNav 接）。
  */
 export function openRulesModal(opts: RulesModalOptions): () => void {
-  const { lang, onClose, onStory, shape } = opts;
+  const { lang, onClose, shape } = opts;
   const tips = opts.tips ?? ALL_TIPS;
   const s = STRINGS[lang];
   const art = ruleArt(shape);
@@ -165,13 +162,6 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   const rules = (shape ? tutorialRules(lang, shape, opts.flip) : TUTORIAL_RULES[lang])
     .map((text, i) => ({ text, art: art[i] ?? '' }))
     .filter((_, i) => !omit.has(i + 1));
-  // 两颗分镜键上的字。图从前带着设计软件留下的 <title>编组</title>，光靠里面的文
-  // 字读出来会是「编组方块」。那一行 2026-10 从所有图标文件里清掉了（第 17 推），
-  // 可这里照旧把名字自己写一遍、图那半边设成 aria-hidden：图是什么由文件决定，下
-  // 一个导出的文件再带进来一行别的什么，这颗键念出来的还是它自己的名字。
-  const sq = shapeName(lang, 'square', '方块');
-  const ci = shapeName(lang, 'circle', '小球');
-
   const overlay = document.createElement('div');
   // 不加 opaque：这一屏多半是压在棋盘上弹出来的，半透明的遮罩才看得出「这是
   // 一层临时的窗」，不透明的会像是整个换了一屏。
@@ -179,18 +169,6 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   overlay.innerHTML = `
     <div class="modal howto-modal" role="dialog" aria-modal="true" aria-label="${esc(s.howToPlayBtn)}">
       <h2>${esc(s.howToPlayBtn)}</h2>
-      ${
-        onStory
-          ? `<div class="howto-stories">
-               <button class="howto-story" type="button" data-fam="square" aria-label="${esc(
-                 sq,
-               )}">${ICON_BASE_SQUARE}<span aria-hidden="true">${esc(sq)}</span></button>
-               <button class="howto-story" type="button" data-fam="circle" aria-label="${esc(
-                 ci,
-               )}">${ICON_BASE_CIRCLE}<span aria-hidden="true">${esc(ci)}</span></button>
-             </div>`
-          : ''
-      }
       <div class="tut-rules howto-list">
         ${rules
           .map(
@@ -235,16 +213,6 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   }
 
   overlay.querySelector<HTMLButtonElement>('#howtoOkBtn')?.addEventListener('click', close);
-  // 两颗分镜键：先关掉这一屏再放，不然动画会盖在这层遮罩底下。走的是 drop
-  // 不是 close——接下来去哪儿由 onStory 说了算，不该再回一次 onClose。
-  for (const b of Array.from(overlay.querySelectorAll<HTMLButtonElement>('.howto-story'))) {
-    b.addEventListener('click', () => {
-      if (closed) return;
-      const fam: StoryFamily = b.getAttribute('data-fam') === 'circle' ? 'circle' : 'square';
-      drop();
-      onStory?.(fam);
-    });
-  }
   // 点窗外也关：和全站别处的弹窗一个规矩（「弹窗外点击一律返回」）。
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();

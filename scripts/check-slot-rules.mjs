@@ -142,10 +142,11 @@ const check = (n, ok, extra = '') => {
     /shownCount[\s\S]{0,180}faceFor \? faceFor\(level\)\.cells\.length/.test(src));
   check('flash / aria-label / toast 报的都是 shownCount',
     /const n = shownCount\(level\);[\s\S]{0,200}toast\(n\)/.test(src) &&
-    /patternNowLabel\.replace\('\{n\}', String\(shownCount\(view\.level\)\)\)/.test(src));
+    /countPhrase\(s\.patternNowLabel, shownCount\(view\.level\), lang\)/.test(src));
+  // 第 14 推起这句话走 countPhrase（英法文分单复数），两种写法都不许拿级数去填。
   check('再没有谁拿级数去填那句话',
-    !/patternNowLabel\.replace\('\{n\}', String\(level\)\)/.test(src) &&
-    !/patternNowLabel\.replace\('\{n\}', String\(view\.level\)\)/.test(src));
+    !/patternNowLabel\.replace\('\{n\}', String\((view\.)?level\)\)/.test(src) &&
+    !/countPhrase\(s\.patternNowLabel, (view\.)?level, lang\)/.test(src));
 }
 
 // ---- ④ 八副棋盘的卡死门槛，没有哪一副写死 --------------------------------

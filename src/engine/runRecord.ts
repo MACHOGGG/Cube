@@ -1,6 +1,6 @@
 import { countPhrase, STRINGS, type Lang, type I18nStrings } from '../i18n';
 import { BOMB_HAZARD_REASON } from './bomb';
-import { ALL_FLIPPED_REASON } from './kinetics';
+import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
 import {
   PUZZLE_CLEARED_POINTS,
   PUZZLE_STAR_POINTS,
@@ -214,6 +214,12 @@ export function runDetailLine(d: RunData, lang: Lang): string {
   const s = STRINGS[lang];
   return (
     displayReason(d.reason, lang) +
+    // 步步为营清盘的那一局：「全部消完了 · 剩 N 步」（第 14 推）。排行榜上同分时就是按这
+    // 个数排的，结算页、分享卡、记录页（都是这一张战绩图）上也得看得见。没清盘的局不印——
+    // 那时手里剩的步数多半是 0，而且它不参与排名。
+    (d.puzzle && endCheckEligible(d.reason) && d.puzzle.left > 0
+      ? ' · ' + countPhrase(s.puzzleLeftSteps, d.puzzle.left, lang)
+      : '') +
     ' · ' + countPhrase(s.stepsPhrase, d.moves, lang) +
     // 用时这一句：《侵蚀阶梯》之后它**不计分**（§5），所以写明白，免得玩家以为
     // 快慢还算数。步步为营连钟都没有，整句不印。
@@ -292,7 +298,7 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
       // 下面这四行是**步数那本账**，不是分数：它们加起来不等于上面两行，也不该等于。
       // 右边空着的那两行（走了几步、剩几步）整句就是左边那一句——它们报的是一段经过，
       // 不是一个加数，硬给个数反而会被当成分数读。
-      [s.puzzleStepsLabel.replace('{n}', String(p.spent)).replace('{k}', String(p.scoredMoves)), ''],
+      [countPhrase(s.puzzleStepsLabel, p.spent, lang).replace('{k}', String(p.scoredMoves)), ''],
       [s.puzzleStreakLabel, '+' + p.streakRefunds],
       [s.puzzleEdgeLabel, '+' + p.edgeRefunds],
       [s.puzzleLeftLabel.replace('{l}', String(p.left)).replace('{p}', String(p.peak)), ''],
@@ -312,7 +318,7 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
     const defused = d.defused ?? 0;
     const lines = d.lines ?? 0;
     const lineRow = (): [string, string] => [
-      s.lineRowLabel.replace('{m}', String(lines)),
+      countPhrase(s.lineRowLabel, lines, lang),
       '+' + Math.round(d.linePoints),
     ];
     /**
@@ -336,8 +342,8 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
       return flipOut;
     }
     const flipLabel =
-      s.flipRowLabel.replace('{n}', String(flips)) +
-      (defused > 0 ? ' ' + s.flipRowDefused.replace('{k}', String(defused)) : '');
+      countPhrase(s.flipRowLabel, flips, lang) +
+      (defused > 0 ? ' ' + countPhrase(s.flipRowDefused, defused, lang) : '');
     const out: [string, string][] = [[flipLabel, String(flips * POINTS_PER_FLIP)]];
     if (lines > 0) out.push(lineRow());
     /**

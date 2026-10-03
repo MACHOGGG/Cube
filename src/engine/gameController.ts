@@ -4,7 +4,7 @@ import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFli
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createErosion, tableFor, type Erosion } from './erosion';
-import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, FLIP_RULES_VERSION, FLIP_STREAK_BASE, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
+import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, flipStreakMult, FLIP_RULES_VERSION, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
 import { createScoreReel, syncGainState } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
 import { rollDuration, rollOdometer } from './odometer';
@@ -562,6 +562,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    */
   let lastCardUrl: string | null = null;
 
+  /**
+   * 「全死」那一下排下的收尾（1.4 秒后出结算页）的定时器（第 14 推）。
+   *
+   * 原先是一个没人记得的 setTimeout：死局亮红的那 1.4 秒里按了《再来一局》（或者离开这
+   * 一页），它照样会响——那时 gameOver 已经是**新的那一局**的 false，于是新的一局刚开就被
+   * 「无法继续匹配」收掉。新开一局、拆掉这一页都要先把它撤了。
+   */
+  let stuckTimer = 0;
+
   function updateStuckState(groups: Cell[][]) {
     hooks.highlightStuck?.(groups.length ? groups.flat() : null);
     // findStuckGroups 现在只报「全死」——场上没有任何一种正面颜色还能再得分。
@@ -574,7 +583,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 找一个不存在的东西（《游戏规则》里那句话当时也一起改了）。
     if (groups.length && !gameOver) {
       hooks.render();
-      window.setTimeout(() => {
+      window.clearTimeout(stuckTimer);
+      stuckTimer = window.setTimeout(() => {
+        stuckTimer = 0;
         if (!gameOver) endGame('无法继续匹配');
       }, 1400);
     }
@@ -640,6 +651,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   function newGame() {
+    // 上一局「全死」排下的收尾不许落到这一局头上（见 stuckTimer）。
+    window.clearTimeout(stuckTimer);
+    stuckTimer = 0;
     hooks.resetBoard();
     score = 0;
     moves = 0;
@@ -1294,9 +1308,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
        * 在这里算、而不是在下面 proceed 里：flipChain 下一行就自增了，到那时
        * 已经是**下一次**的连击数（同 tierComboMult 那一处的道理）。
        */
-      const shownMult = hooks.flip
-        ? FLIP_STREAK_BASE ** Math.max(0, flipChain)
-        : multiplier * comboMult;
+      //
+      // 倍率从 scoring.ts 的 flipStreakMult 拿（第 14 推）：原先这儿自己算 `1.5 ** flipChain`，
+      // 没套 FLIP_STREAK_CAP——连击过了十次，加分已经封顶，气泡上的倍率还在往上翻。
+      const shownMult = hooks.flip ? flipStreakMult(flipChain) : multiplier * comboMult;
       if (hooks.flip) flipChain++;
       // Split for the end-of-run breakdown: the pattern's own points, the
       // whole-line bonus, and everything the streak/chain multipliers added.
@@ -1667,6 +1682,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();
+      window.clearTimeout(stuckTimer);
+      stuckTimer = 0;
       stopFrameWatch();
       patternBlock.destroy();
       coach?.destroy();

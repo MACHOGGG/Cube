@@ -19,9 +19,7 @@ import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 // 个人主页那边本来也会引它，但那是换到那一页才发生的事——首页就该是对的。
 import './engine/themePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
-import { renderTutorial } from './ui/tutorial';
-import { renderCircleTutorial } from './ui/circleTutorial';
-import { applyHtmlLang, loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
+import { applyHtmlLang, loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow } from './ui/subscribe';
 import { errorText, renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
@@ -62,7 +60,8 @@ import { renderFlipModePage } from './ui/flipMode';
 import { renderTimedModePage } from './ui/timedMode';
 import { renderPuzzleModePage } from './ui/puzzleMode';
 import { armNewVersionPill, syncNewVersionPill } from './ui/newVersionPill';
-import { installBackNav, setScreenBack } from './engine/backNav';
+import { installBackNav, pushLayer, setScreenBack } from './engine/backNav';
+import { openRulesModal, type ExtraTipView } from './ui/rulesModal';
 import { drawOne, type Family, type TargetPattern } from './engine/targets';
 import { MODE_SECONDS } from './engine/modeClock';
 import { createSquareGame } from './shapes/square';
@@ -1066,27 +1065,42 @@ function showMultiplayer() {
         showMenu();
       },
       onRoomEnded: showRoomFinal,
-      // 他说他不会这个玩法：放这一族的教学给他看。教学会把整页占掉（连同
-      // 小屋页的轮询），所以看完之后走 showMultiplayer 那条「已经在屋里就
-      // 接着往下走」的路回来——那一刻服务器已经把开赛时刻重新盖过了，
-      // 于是全屋一起从 4 数起。
-      onLearnTutorial: (shape) => {
-        markTutorialSeen(shape);
-        // 看教学的这几分钟里，每点一下都向小屋报一声「我还在学」；二十秒一下
-        // 都没点，小屋那边就不再等他（api/room.js 的 LEARN_IDLE_MS）。
+      // 他说他不会这个玩法：开那一屏规则给他看（和局中暂停里那颗《怎么玩》同一屏，
+      // 照这一局的玩法摆）。
+      //
+      // 从前放的是那一族的分镜动画，而那两段还在教旧规则——第 14 推「直接下线入口，
+      // 不重做」。规则窗盖在小屋页上（小屋页的轮询在 goLearn 里已经停了），关掉之后走
+      // showMultiplayer 那条「已经在屋里就接着往下走」的路回来——那一刻服务器已经把开
+      // 赛时刻重新盖过了，于是全屋一起从 4 数起。
+      onLearnTutorial: ({ family, rules, flip, slot }) => {
+        markTutorialSeen(family);
+        // 看规则的这几分钟里，每点一下都向小屋报一声「我还在学」；二十秒一下都没
+        // 点，小屋那边就不再等他（api/room.js 的 LEARN_IDLE_MS）。
         const stopBeat = learnHeartbeat();
-        renderShapeTutorialByShape(shape, () => {
-          stopBeat();
-          void setLearning(false, seenTutorials()).then((st) => {
-            // 学完的时候这一局已经开了（小屋没等他——他走神太久，或者早就
-            // 放行了）：这一局不是他的了，坐等待页看排行，下一局再入。开赛
-            // 时刻还在前面的，才是「大家等到了他」，一起从 4 数起。
-            if (st && st.round && !st.roundOver && st.startAt && st.startAt <= st.serverNow) {
-              markRoundPlayed(st.round);
-            }
-            showMultiplayer();
-          });
+        const tips: ExtraTipView[] = flip ? [{ key: 'flip' }] : slot ? [{ key: 'slot' }] : [];
+        const close = openRulesModal({
+          lang: currentLang,
+          shape: rules,
+          tips,
+          // 无限反转那一局：第 4、5 条讲的事不会发生，整条抽掉（和局中那一屏同一个规矩）。
+          omitRules: flip ? [4, 5] : undefined,
+          flip,
+          onClose: () => {
+            stopBeat();
+            void setLearning(false, seenTutorials()).then((st) => {
+              // 学完的时候这一局已经开了（小屋没等他——他走神太久，或者早就
+              // 放行了）：这一局不是他的了，坐等待页看排行，下一局再入。开赛
+              // 时刻还在前面的，才是「大家等到了他」，一起从 4 数起。
+              if (st && st.round && !st.roundOver && st.startAt && st.startAt <= st.serverNow) {
+                markRoundPlayed(st.round);
+              }
+              showMultiplayer();
+            });
+          },
         });
+        // 手机的返回键：等于按《知道了》——关窗、回小屋。
+        const ov = document.body.querySelector<HTMLElement>('.howto-ov');
+        if (ov) pushLayer(close, ov);
       },
       // 等人学教学那一屏底下的练习盘：这一局的玩法，练习模式（不结算）。
       onPractice: (host, mode, flip) => {
@@ -1274,31 +1288,17 @@ function showRecordsPage() {
   toTop();
 }
 
-/**
- * @param onBack 教学里按返回键去哪儿。不给就等同按《完成》（onDone）；开局前自动弹
- *   出的那一段例外——返回该回主菜单，不该把人送进那一局。
- */
-function renderShapeTutorialByShape(shape: TutorialShape, onDone: () => void, onBack: () => void = onDone) {
-  teardown();
-  trackScreen('tutorial');
-  if (shape === 'square') renderTutorial(root, currentLang, onDone);
-  else renderCircleTutorial(root, currentLang, onDone);
-  setScreenBack(onBack);
-}
-
 function showTutorialPicker() {
   teardown();
   trackScreen('tutorial_picker');
-  // 三个图形、五条规则、一颗《返回》，一屏装下——见 ui/tutorialPicker.ts。
+  // 五条规则、一颗《返回》，一屏装下——见 ui/tutorialPicker.ts（上头那两颗分镜键
+  // 第 14 推撤了：那两段还在教旧规则）。
   //
   // 《返回》回个人主页，不是主菜单：这一页只有一个入口，就是个人主页里的
   // 《如何滑？》那一行（accountPage 的 howToRow）。从那儿进来、退出去却落在
   // 主菜单，等于把人从他原来待的地方赶走了——和天才特供各页一样，退出要落
   // 回刚才那一页的原位置（backToProfile 的 restore）。
-  renderTutorialPicker(root, currentLang, {
-    onPick: (shape) => renderShapeTutorialByShape(shape, showTutorialPicker),
-    onBack: backToProfile,
-  });
+  renderTutorialPicker(root, currentLang, { onBack: backToProfile });
   repaintIcons();
   setScreenBack(backToProfile);
   toTop();
@@ -1425,9 +1425,8 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
   // 哪一条就等他真的做到那一条，做到了才往下走，中间得分目标一直亮着（见
   // ui/coachBar.ts 和 basicCoach）。
   //
-  // 分镜本身没有删：想看的人自己去个人主页那一行《如何滑？》点开（教学挑选
-  // 页，showTutorialPicker）。小屋里那条也留着——那不是自动弹，是玩家自己回
-  // 答了「我不会这个玩法」才放的（onLearnTutorial）。
+  // 分镜那两段第 14 推整个下线了（还在教旧规则）：个人主页那一行《如何滑？》
+  // 现在是五条规则，小屋里答「我不会」开的也是规则窗（onLearnTutorial）。
   mountNow();
 }
 

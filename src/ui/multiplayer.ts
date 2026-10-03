@@ -1,5 +1,6 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
+import { countdownDigit } from '../engine/clockSync';
 import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { drawOne, type Family, type TargetPattern } from '../engine/targets';
@@ -16,8 +17,8 @@ import { geniusLogoTag } from './geniusLogo';
 import { createNudgeSoak, type NudgeSoak } from './nudgeRain';
 import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
-import { rankRoom } from './roomCard';
-import { hasSeenTutorial, type TutorialShape } from '../i18n';
+import { contestants, rankRoom } from './roomCard';
+import { hasSeenTutorial, type RuleShape, type TutorialShape } from '../i18n';
 import {
   type Avatar,
   type RoomError,
@@ -121,7 +122,11 @@ export interface MultiplayerHandlers {
    * 教学会把整页占掉，所以这一页（连同它的轮询）就此拆掉——回来走的是
    * showMultiplayer 那条「已经在屋里就接着往下走」的路。
    */
-  onLearnTutorial: (shape: TutorialShape) => void;
+  /**
+   * 他说他不会这个玩法：开那一屏规则（第 14 推起不再放分镜动画，见 main.ts）。
+   * 带着这一局的玩法——菱形方块念菱形那一句、无限反转抽掉那一局不会发生的两条。
+   */
+  onLearnTutorial: (learn: RoomLearn) => void;
   /**
    * 等人学教学那一屏底下的练习盘：把这个玩法的棋盘（练习模式）挂到 host
    * 里，回来的是拆它的函数。玩法都长在 main.ts 里，所以由它来挂。
@@ -143,6 +148,14 @@ export interface MultiplayerHandlers {
  * PR-6），只剩的六边蜂窝 54 是布局，布局从来没有自己的分镜教学。所以问的是
  * 「这一族有没有教学」，不是「这一族叫什么」。
  */
+/** 「我不会」那一下要讲哪一套规则：这一族、这一副棋盘的规则、这一局是不是无限反转 / 老虎机。 */
+export interface RoomLearn {
+  family: TutorialShape;
+  rules: RuleShape;
+  flip: boolean;
+  slot: boolean;
+}
+
 function tutorialFamilyOf(mode: string): TutorialShape | null {
   const fam = cardOrNull(mode)?.family;
   return fam === 'square' || fam === 'circle' ? fam : null;
@@ -207,6 +220,12 @@ export function errorText(reason: RoomError, lang: Lang): string {
     // 而这恰恰是玩家最不该去查的地方——他的网好得很。
     case 'tooMany':
       return s.mpErrTooMany;
+    // 这两句原先也落进 default（第 14 推）：屋主以外的人按了只有屋主能按的东西，或者服务
+    // 端不认这一局的玩法——两件都和网络无关，写「连不上网络」只会让人去查一个好好的网。
+    case 'notHost':
+      return s.mpErrNotHost;
+    case 'mode':
+      return s.mpErrMode;
     default:
       return s.purchaseNetwork;
   }
@@ -1043,7 +1062,8 @@ export function renderMultiplayerPage(
   function standingsStrip(state: RoomState): string {
     // 名次只有一处算法（roomCard.ts 的 rankRoom），这儿照调——原先这里自己
     // 又排了一遍，并列时和服务器那头不是同一个顺序。
-    const ranked = rankRoom(state.players);
+    // 竞赛屋的主持人不上这张榜（第 14 推，见 roomCard.ts 的 contestants）。
+    const ranked = rankRoom(contestants(state));
     if (state.round < 1 || !ranked.some((p) => p.total + p.score > 0)) return '';
     const meId = currentRoom()?.playerId;
     const rows = ranked
@@ -1120,7 +1140,12 @@ export function renderMultiplayerPage(
     box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
     box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
       close();
-      void goLearn(family);
+      void goLearn({
+        family,
+        rules: cardOrNull(state.mode ?? '')?.ruleShape ?? family,
+        flip: state.flip,
+        slot: state.slot !== null,
+      });
     });
 
     const until = Date.now() + KNOW_ASK_MS;
@@ -1136,14 +1161,14 @@ export function renderMultiplayerPage(
   }
 
   /**
-   * 去看教学。先告诉服务器「我在学」——别人那边立刻看到「有人在学习，稍等」，
+   * 去看规则。先告诉服务器「我在学」——别人那边立刻看到「有人在学习，稍等」，
    * 开赛时刻等我学完再重新盖一遍。
    */
-  async function goLearn(family: TutorialShape) {
+  async function goLearn(learn: RoomLearn) {
     await setLearning(true);
     if (dead) return;
     stopAll();
-    handlers.onLearnTutorial(family);
+    handlers.onLearnTutorial(learn);
   }
 
   /**
@@ -1285,7 +1310,9 @@ export function renderMultiplayerPage(
       // 服务器留的是四秒半（建议横着玩的玩法五秒半），多出来的半秒都算在第一
       // 个数字上——看起来和单人那一幕一模一样：几个数字就几秒，只有头一个站
       // 得久一点。
-      const n = Math.min(first, Math.ceil(left / 1000));
+      // 只减不增（第 14 推，engine/clockSync.ts 的 countdownDigit）：估出来的钟哪天往回挪
+      // 了一下，这个数字最多多站一会儿，不会「3 → 2 → 3」地往回跳。
+      const n = countdownDigit(shown, Math.ceil(left / 1000), first);
       if (n !== shown) {
         shown = n;
         pushDigit(tickEl, n);

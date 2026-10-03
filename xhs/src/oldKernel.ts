@@ -18,6 +18,10 @@
  *   env()           13 处  (69)
  *   :has()           9 处  (105，整条规则)
  *
+ * 另有一样不在样式表里、在 JS 里：各棋盘拖动时写的 `el.style.translate` /
+ * `el.style.scale`（104）。老内核上那只是往 JS 对象上挂了个没人读的字段，见下面
+ * installTransformShim。
+ *
  * ===========================================================================
  * 分两路补
  *
@@ -66,6 +70,8 @@ export interface KernelSupport {
   inset: boolean;
   has: boolean;
   colormix: boolean;
+  /** `el.style.translate` / `el.style.scale` 这两个 JS 属性在不在（Chrome 104）。 */
+  transformProps: boolean;
 }
 
 const supportsDecl = (prop: string, value: string): boolean => {
@@ -121,7 +127,20 @@ export function probeKernel(): KernelSupport {
     inset: supportsDecl('inset', '0px'),
     has: supportsSelector(':has(*)'),
     colormix: supportsDecl('color', 'color-mix(in srgb, red, blue)'),
+    transformProps: probeTransformProps(),
   };
+}
+
+/**
+ * 问的是 **JS 这一头**：`el.style` 上有没有 translate / scale 这两个属性。
+ *
+ * 不用 CSS.supports：棋盘是从 JS 写这两个值的，要紧的是赋值有没有人接——老内核上
+ * `'translate' in el.style` 是 false，赋值只是挂了个普通字段。
+ */
+function probeTransformProps(): boolean {
+  if (typeof document === 'undefined') return true;
+  const st = document.documentElement.style as unknown as Record<string, unknown>;
+  return 'translate' in st && 'scale' in st;
 }
 
 /** 把探测结果钉成 <html> 上的类，给 baseline.css 当开关。 */
@@ -339,6 +358,9 @@ function matchParen(text: string, pos: number): number {
 export function downlevel(css: string, s: KernelSupport): string {
   let out = css;
   if (!s.gap) out = markGaps(out);
+  // inset 展开成四个方向。排在 clamp/min/max 之前：`inset: max(…)` 抄成四份之后，
+  // 每一份照样在下面被算掉。
+  if (!s.inset) out = expandInset(out);
   if (!s.svh) {
     // 100svh / 100dvh / 50lvh 都换成 vh 那一套：视口单位的三个变体老内核不认。
     out = out.replace(/(\d[\d.]*)(s|d|l)(vh|vw|vmin|vmax)\b/g, '$1$3');
@@ -367,6 +389,144 @@ export function downlevel(css: string, s: KernelSupport): string {
     out = resolveFns(out, rootFont);
   }
   return out;
+}
+
+// ---- inset：展开成 top / right / bottom / left ----------------------------------
+//
+// `inset` 是 Chrome 87 才认的简写。老内核遇到它整条丢掉——`position: absolute;
+// inset: 0` 的那一层于是没有了四条边，宽高都是 0：遮罩不盖满屏幕、翻面那一下
+// （`.plank-turn`，engine/plankFlip.ts）两面都是 0×0，整枚棋子在翻的那半秒里不见了。
+//
+// ⚠️ 今天出的包里，这件事**多半已经在出包时办掉了**：xhs/vite.config.ts 的 target 是
+// chrome61，esbuild 压样式的时候顺手把 `inset: 0` 拆成了四条边（出好的包里 `.plank-turn`
+// 本来就是四条边，第 14 推查过）。没拆的只有 `inset: auto`（baseline.css 里那几条）。
+// 这一步是第二层：出包目标哪天被改掉、或者哪段样式绕开了出包，那时候不会有任何一处报
+// 错，只有老手机上翻面那一下整枚棋子不见——所以不靠出包那一层的好意，这里再展开一遍。
+//
+// 规矩照简写来：一个值四边都是它，两个值是上下 / 左右，三个值是上 / 左右 / 下，四个照
+// 抄。原地展开，不挪位置——同一条规则里写在它后面的 `top: 12px` 照样压得住它。
+//
+// 注释里的不碰：注释里常常抄着一段 `position: absolute; inset: 0` 当例子，按声明展开
+// 的话会把后面的字一起抄四遍，抄过注释的结尾就成了真的样式。
+
+/** 按最外层的空白切开一个值：`calc(50% - 4px) auto` 是两段，不是四段。 */
+function splitTopLevel(value: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/.test(c)) {
+      if (cur) out.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += c;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+export function expandInset(css: string): string {
+  return css
+    .split(/(\/\*[\s\S]*?\*\/)/)
+    .map((part, i) =>
+      i % 2
+        ? part
+        : part.replace(
+            /(^|[;{])(\s*)inset\s*:\s*([^;{}]+?)\s*(?=[;}]|$)/g,
+            (all: string, pre: string, ws: string, raw: string) => {
+              const imp = /!important$/i.test(raw) ? ' !important' : '';
+              const v = splitTopLevel(raw.replace(/\s*!important$/i, ''));
+              if (v.length < 1 || v.length > 4) return all;
+              const [t, r = t, b = t, l = r] = v;
+              return `${pre}${ws}top:${t}${imp};right:${r}${imp};bottom:${b}${imp};left:${l}${imp}`;
+            },
+          ),
+    )
+    .join('');
+}
+
+// ---- 单独的 translate / scale：合进 transform ----------------------------------
+//
+// 拖一行的时候，被拖的那一行每一枚挂一个「压扁」的 `el.style.scale`，两边的行按速度
+// 挂 `el.style.translate`（src/shapes/ 下每副棋盘的拖动那一段；plankFlip.ts 和开场
+// 动画的影子也用 scale）。这两个属性 Chrome 104 才有——61 上 `el.style.scale = …`
+// 只是往 JS 对象上挂了个没人读的字段：不报错、不生效，拖起来那一行是硬的，两边纹丝
+// 不动。
+//
+// 补法：在 CSSStyleDeclaration.prototype 上补两个同名的属性，值记下来，再和这个元素
+// 自己的 transform 合成一句写回去：`translate(…) scale(…) <原来的 transform>`。顺序
+// 照规范——单独的 translate、scale 先于 transform 作用——合成出来的矩阵和新内核上
+// 一模一样。
+//
+// 「原来的 transform」不靠拦 transform 的赋值：老内核认得 transform，赋值根本不经过
+// 原型（走的是 CSSStyleDeclaration 自己的命名属性拦截），拦不住。改成每次写之前看一
+// 眼：现在的 transform 和我们上次写下去的不一样，就是代码（或者 cssText）后来改过
+// 它，那一份就是新的底。
+
+interface TransformParts {
+  translate: string;
+  scale: string;
+  /** 这个元素自己的 transform（代码写的那一份，不含我们合进去的）。 */
+  base: string;
+  /** 我们上一次写下去之后，浏览器读回来的样子。 */
+  wrote: string;
+}
+const TRANSFORM_PARTS = new WeakMap<CSSStyleDeclaration, TransformParts>();
+
+/** `3px 4px` → `translate(3px, 4px)`；空的、`none` 回空串。 */
+function asTransformFn(fn: 'translate' | 'scale', value: string): string {
+  const v = value.trim();
+  if (!v || v === 'none') return '';
+  const parts = splitTopLevel(v);
+  return parts.length === 3 ? `${fn}3d(${parts.join(', ')})` : `${fn}(${parts.join(', ')})`;
+}
+
+function writeTransformPart(d: CSSStyleDeclaration, key: 'translate' | 'scale', value: unknown): void {
+  const now = d.getPropertyValue('transform');
+  let st = TRANSFORM_PARTS.get(d);
+  if (!st) {
+    st = { translate: '', scale: '', base: now, wrote: now };
+    TRANSFORM_PARTS.set(d, st);
+  } else if (now !== st.wrote) {
+    st.base = now;
+  }
+  st[key] = value === null || value === undefined ? '' : String(value);
+  const out = [
+    asTransformFn('translate', st.translate),
+    asTransformFn('scale', st.scale),
+    st.base === 'none' ? '' : st.base,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (out) d.setProperty('transform', out);
+  else d.removeProperty('transform');
+  st.wrote = d.getPropertyValue('transform');
+}
+
+/**
+ * 补上 `el.style.translate` / `el.style.scale`。只在这两个属性不在的内核上装
+ * （和测试那个后门，见 forced）；新内核上一个字节都不动。
+ */
+export function installTransformShim(): void {
+  if (typeof CSSStyleDeclaration === 'undefined') return;
+  const proto = CSSStyleDeclaration.prototype;
+  for (const key of ['translate', 'scale'] as const) {
+    Object.defineProperty(proto, key, {
+      configurable: true,
+      enumerable: true,
+      get(this: CSSStyleDeclaration) {
+        const st = TRANSFORM_PARTS.get(this);
+        return st ? st[key] : '';
+      },
+      set(this: CSSStyleDeclaration, v: unknown) {
+        writeTransformPart(this, key, v);
+      },
+    });
+  }
 }
 
 // ---- gap：改成子项的外边距 --------------------------------------------------
@@ -763,8 +923,10 @@ const SHEETS = ['slides-styles', 'xhs-styles'];
 export function installOldKernel(): KernelSupport {
   const s = forced() || probeKernel();
   stampKernel(s);
+  // JS 那一头和样式表无关，先装：棋盘还没画出来，第一次拖动之前就得接得住。
+  if (!s.transformProps) installTransformShim();
 
-  const allOk = s.clamp && s.minmax && s.svh && s.env && s.gap;
+  const allOk = s.clamp && s.minmax && s.svh && s.env && s.gap && s.inset;
   // 全都认得就什么也不做——一次字符串扫描都不值当。
   if (allOk) return s;
 
@@ -829,5 +991,6 @@ function forced(): KernelSupport | null {
   return {
     gap: false, clamp: false, minmax: false, ratio: false,
     svh: false, env: false, inset: false, has: false, colormix: false,
+    transformProps: false,
   };
 }

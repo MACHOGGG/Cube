@@ -574,29 +574,33 @@ if (rulesAsked) {
     });
     check('练习盘上没有读数、按键和开局页', !bare.hud && !bare.controls && !bare.overlay, JSON.stringify(bare));
   }
-  check('学的人这会儿在教学里', await B.page.$('.story-tut, .tut-stage, .app') !== null);
+  // 学的人这会儿开着的是《怎么玩》那一屏（第 14 推）。从前放的是那一族的分镜动画，
+  // 而那两段还在教旧规则——入口下线了，改开规则窗，照这一局的玩法摆：圆球那一副，
+  // 第 4 条是「最外面的一条线」那一句，不是方块的「整行或整列」，也不是两边都讲的通稿。
+  const learnModal = await B.page.waitForSelector('.howto-ov.show', { timeout: 8000 })
+    .then(() => true).catch(() => false);
+  check('学的人这会儿开着的是规则窗，不是分镜动画（第 14 推）', learnModal && !(await B.page.$('.story-tut')));
+  const learnRules = learnModal
+    ? await B.page.$$eval('.howto-ov .tut-rule:not(.tut-rule--extra) .tut-rule-text', (e) => e.map((x) => x.textContent.trim()))
+    : [];
+  check('五条规则都在，第 4 条讲的是这一局（圆球）那一句',
+    learnRules.length === 5 && learnRules[3] === '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',
+    `${learnRules.length} 条 · 第 4 条：${(learnRules[3] || '').slice(0, 24)}`);
 
-  // 学完了：服务器把开赛时刻重新盖一遍，全屋一起从 4 数起。
-  // 这里直接替这台设备说一声「学完了」，省掉真把整段教学放完的两分钟——
-  // 走的是和教学结束时同一个接口、同一份身份。
-  await B.page.evaluate(async () => {
-    // 座位存在 localStorage 里（见 src/engine/room.ts 的 loadSeat：装成 App
-    // 之后 sessionStorage 一关就空，屋主回来会变成自己小屋里的客人）。
-    const seat = JSON.parse(
-      localStorage.getItem('slides_mp_seat') ?? sessionStorage.getItem('slides_mp_seat'),
-    );
-    await fetch('/api/room', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // 学完了顺手带上「看过哪几族」——客户端就是这么发的，下一局不再多留四秒。
-      body: JSON.stringify({ action: 'learn', learning: false, seen: ['square', 'circle', 'triangle'], ...seat }),
-    });
-  });
+  // 学完了：按《知道了》关窗——走的就是玩家那条路（关窗时报「学完了」、回小屋），
+  // 服务器把开赛时刻重新盖一遍，全屋一起从 4 数起。从前这里替它直接打接口，省掉真
+  // 把整段分镜放完的两分钟；规则窗一按就关，不用再省。
+  if (learnModal) await B.page.click('#howtoOkBtn');
   const resumed = await A.page.waitForFunction(
     () => !!document.querySelector('.mp-countdown-page .cd-window') && !document.querySelector('.mp-learn-spin'),
     { timeout: 20000 },
   ).then(() => true).catch(() => false);
   check('学完了，等的人回到 4-3-2-1', resumed);
+  const backInRoom = await B.page.waitForFunction(
+    () => !document.querySelector('.howto-ov') && !!document.querySelector('.mp-countdown-page, .app--game, #boardWrap'),
+    { timeout: 20000 },
+  ).then(() => true).catch(() => false);
+  check('学的人关了窗，回到小屋这一局（不是掉回主菜单）', backInRoom);
 }
 
 const intoNextRound = (p) =>

@@ -5,7 +5,7 @@ import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { pushLayer } from '../engine/backNav';
 import { hostNotice, showWaitPanel, tickFor } from './roomNotices';
-import { liveTotal } from './roomCard';
+import { contestants, liveTotal } from './roomCard';
 import { standingsWindow } from '../engine/standingsWindow';
 import {
   avatarSvg,
@@ -250,8 +250,11 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
      * 有两件事：冠军现在多少分（还差多远），我前面那个多少分（够不够得着）。
      * 全场名单是大屏那一端的事。
      */
-    const meIndex = state.players.findIndex((p) => p.id === seat.playerId);
-    const win = standingsWindow(state.players.length, meIndex);
+    // 竞赛屋的主持人不在这块板上（第 14 推，见 roomCard.ts 的 contestants）：他不参赛，
+    // 列进来就是一行永远 0 分的人，还占掉「第一名 / 我前面那一名」那两行里的一行。
+    const players = contestants(state);
+    const meIndex = players.findIndex((p) => p.id === seat.playerId);
+    const win = standingsWindow(players.length, meIndex);
     // 名单按**摆出来的行数**分行高（不是屋里的人数）：两个人就两行大字，收
     // 成三行之后就按三四行算，整块的高度自始至终不变——它是那一排里的一块，
     // 和右边那颗键一样高，不能随人数长个儿。
@@ -264,7 +267,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
         if (row.kind === 'gap') {
           return '<div class="mp-board-row mp-board-row--gap" aria-hidden="true">···</div>';
         }
-        const p = state.players[row.index];
+        const p = players[row.index];
         const me = p.id === seat.playerId;
         // 印的是**累计总分**（前几局加上这一局），不是刚打的这一局。
         //

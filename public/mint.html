@@ -123,9 +123,17 @@
       从榜上清掉的时候用它。<strong>只动榜</strong>：玩家自己的存档、累计得分一个字不改。
     </p>
     <div class="check">
-      <input id="dropFlip" type="checkbox" checked />
+      <!-- 默认不勾（第 14 推）：那张旧榜早就清过了，平时重建用不着它；勾着是默认值的话，
+           每一次例行重建都顺手把它清一遍，点的人未必知道自己清了什么。 -->
+      <input id="dropFlip" type="checkbox" />
       <label for="dropFlip" style="margin:0;font-weight:400">
         顺手清空《无限反转》的旧榜（它早先那版计分打得出七位数，和现在不是一把尺子）
+      </label>
+    </div>
+    <div class="check">
+      <input id="scrubNames" type="checkbox" />
+      <label for="scrubNames" style="margin:0;font-weight:400">
+        <strong>清理旧名字</strong>：把库里那些长得像登录凭据的旧榜名删掉（旧版本存进去的；榜上早就不印了，这一下是让库里也别留着）。只删，不列出来。
       </label>
     </div>
     <div class="check">
@@ -213,6 +221,10 @@
       $('rebuildMsg').className = 'msg ' + (kind || '');
     };
     if (!token) return sayR('网址里没有令牌，见上面。', 'bad');
+    // 全清是一键清掉所有榜：先问一句（第 14 推）。存档不动、可以重建回来，可那要再点一次
+    // 不勾全清的重建——手滑点了它的人，多半不知道还有这一步。
+    if ($('wipeAll').checked && !confirm('确定清空所有排行榜吗？')) return;
+    const scrub = $('scrubNames').checked;
     $('rebuild').disabled = true;
     sayR('正在重算…（人多的话要等十几秒）');
     try {
@@ -224,6 +236,7 @@
           token,
           drop: $('dropFlip').checked ? ['flip'] : [],
           all: $('wipeAll').checked,
+          scrubNames: scrub,
         }),
       });
       const reply = await res.json().catch(() => ({}));
@@ -236,7 +249,10 @@
       const skipped = reply.skipped
         ? `，跳过 ${reply.skipped} 个正在打的人（过一会再点一次就补上）`
         : '';
-      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}${skipped}。`, 'good');
+      // 勾了「清理旧名字」才报这个数，零也报：他问了，「一条都没有」本身就是答案。服务器
+      // 只回一个数，不回名字（那些名字恰恰是要清的凭据，列出来就成了一次泄露）。
+      const scrubbed = scrub ? `，删掉了 ${Number(reply.namesDropped) || 0} 条旧名字` : '';
+      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}${scrubbed}${skipped}。`, 'good');
     } catch {
       $('rebuild').disabled = false;
       sayR('连不上服务器。', 'bad');

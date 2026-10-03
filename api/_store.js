@@ -17,6 +17,7 @@
  * of a single JSON document would drop most of them; writing only your own
  * field cannot lose anyone else's.
  */
+import { redact } from './_redact.js';
 
 const url = () =>
   process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
@@ -291,7 +292,9 @@ export async function withLock(lockKey, run) {
         try {
           await del(lockKey);
         } catch (err) {
-          console.error('锁没放掉（十秒后自己过期）', lockKey, err);
+          // 锁的名字里带着账号 id（statsLockKey 那一类就是「前缀 + 邮箱」），原样写进日志就
+          // 是一行明文邮箱（第 14 推）。写指纹：要对账时把同一把锁的名字算一遍去 grep。
+          console.error('锁没放掉（十秒后自己过期）', redact(lockKey), err);
         }
       }
     }

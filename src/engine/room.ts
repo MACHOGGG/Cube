@@ -1,5 +1,6 @@
 import { entitlement, isGenius } from './subscription';
 import { isStoreChannel } from './channel';
+import { clockSample, keepBetter, type ClockSample } from './clockSync';
 import { seenTutorials } from '../i18n';
 
 /**
@@ -387,6 +388,12 @@ let session: Session | null = loadSeat();
 /** serverNow minus our own clock, so we can count down to the right instant. */
 let clockOffset = 0;
 /**
+ * 量出 clockOffset 的那个样本：这一间屋子里往返最短的那一份回包（第 14 推，见
+ * engine/clockSync.ts）。开屋、进屋之前清掉——换了一间屋（多半也换了网络），上一间留下的
+ * 「最短往返」不该还压着这一间的钟。
+ */
+let bestClock: ClockSample | null = null;
+/**
  * The room as of the last reply that described one.
  *
  * The standings on the share card are the standings at the moment the run
@@ -426,6 +433,7 @@ const KNOWN: RoomError[] = [
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
   try {
+    const t0 = Date.now();
     const res = await fetch('/api/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -437,9 +445,15 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
       serverNow?: number;
       state?: { serverNow?: number };
     };
-    // Every reply is a chance to re-measure the gap between the clocks.
+    // Every reply is a chance to re-measure the gap between the clocks——但只有往返最短的那
+    // 一份拿来改钟（第 14 推，见 engine/clockSync.ts）。原先是 `stamp − 收到那一刻`：整段往
+    // 返都被当成「服务器之后才过去的时间」，一份走得慢的回包就把钟往回拨几百毫秒，倒数的
+    // 数字跟着往回跳。
     const stamp = reply.serverNow ?? reply.state?.serverNow;
-    if (typeof stamp === 'number') clockOffset = stamp - Date.now();
+    if (typeof stamp === 'number') {
+      bestClock = keepBetter(bestClock, clockSample(stamp, t0, Date.now()));
+      clockOffset = bestClock.offset;
+    }
     // …and to remember the room, whether it came back on its own or wrapped
     // in the reply to create/join.
     const described = (reply.state ?? reply) as unknown as RoomState;
@@ -500,6 +514,7 @@ export async function createRoom(
   avatar: Avatar,
   contest = false,
 ): Promise<RoomResult<RoomState>> {
+  bestClock = null;
   const made = await post<{ code: string; playerId: string; playerToken: string; state: RoomState }>({
     action: 'create',
     name,
@@ -524,6 +539,7 @@ export async function joinRoom(
   name: string,
   avatar: Avatar,
 ): Promise<RoomResult<RoomState>> {
+  bestClock = null;
   const joined = await post<{ playerId: string; playerToken: string; state: RoomState }>({
     action: 'join',
     code: code.trim(),

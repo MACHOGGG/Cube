@@ -238,6 +238,58 @@ const GROUPS = {
 /** 合并一张母榜时，每张子榜先取前多少名。 */
 const GROUP_SCAN = 200;
 
+/*
+ * ── 步步为营那几张榜上存的数：分数 ×1000，清盘的局再加剩下的步数（第 14 推）──────
+ *
+ * 玩家要的是「分数相同时，剩得多的排前面」。一张有序集合只有一个数可排，所以把两样拼进一
+ * 个数里：`分数 × 1000 + 剩下的步数`。读的时候拆开（`decodeBoard`），榜上印的照旧是原
+ * 综合分，清盘的局另外带一个 `left`。
+ *
+ * **没清盘的局也乘 1000**（只是不加步数）。方案原话是「清完全盘的局存 score×1000 +
+ * min(left,999)」「没清盘的局排法不变」——要是没清盘的局还存原分，清盘的一局 300 分会排
+ * 在没清盘的一局 3000 分前面（×1000 之后谁都比不过它），那就不是「分数相同时」才比剩几
+ * 步了。全榜同一把尺子，没清盘的局之间的先后才真的一点没变。
+ *
+ * `stats.best` **不跟着乘**：它是原分，总榜（bestOverall）和母榜以外的地方都从它算，乘了
+ * 总榜就被步步为营一档霸占。只有这几张榜上的那个数是拼起来的。
+ *
+ * 清盘认的是存档里那句与语言无关的终局原因（`src/engine/kinetics.ts` 的
+ * `ALL_FLIPPED_REASON`，手抄过来，理由同 SCORING_RULES）。剩几步读 `data.puzzle.left`。
+ *
+ * **还没重建过的老数**：上线之前存进去的是原分（没乘 1000）。步步为营一局最多「枚数 ×
+ * 10」分（方块 36 枚 → 360，小球 28 枚 → 280，见 push 里那道上限），所以榜上一个不到
+ * 1000 的数只可能是老的原分，照原分读。管理员重建一次之后榜上就全是新写法了；在那之前这
+ * 一条让老数照旧读得对，不会显示成 0 分。
+ */
+const PUZZLE_SCALE = 1000;
+const ALL_FLIPPED_REASON = '全部方块已翻成点面';
+const isPuzzleBoard = (boardId) => String(boardId).endsWith(`:${PUZZLE_KIND}`);
+/** 清盘的局剩几步（封到 999，放得进那三位）；没清盘就是 0。 */
+function puzzleLeft(data) {
+  if (String(data?.reason || '') !== ALL_FLIPPED_REASON) return 0;
+  const n = Math.floor(Number(data?.puzzle?.left));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, PUZZLE_SCALE - 1) : 0;
+}
+/** 这一局在这张榜上该存的那个数。不是步步为营的榜就是分数本身。 */
+function boardValue(boardId, score, data) {
+  return isPuzzleBoard(boardId) ? score * PUZZLE_SCALE + puzzleLeft(data) : score;
+}
+/** 榜上那个数 → 印出来的分数（＋ 清盘的局剩几步）。 */
+function decodeBoard(boardId, v) {
+  const n = Number(v) || 0;
+  if (!isPuzzleBoard(boardId) || n < PUZZLE_SCALE) return { score: n };
+  const left = n % PUZZLE_SCALE;
+  const score = Math.floor(n / PUZZLE_SCALE);
+  return left > 0 ? { score, left } : { score };
+}
+/**
+ * 步步为营每副棋盘一共几枚。push 拿它给「分数不能超过枚数 × 10」那道上限封顶：客户端
+ * 报的 `data.boardTiles` 只能往小里信，不能往大里信（报一个 999 枚就能把上限抬上天）。
+ * 手抄的（`src/shapes/square.ts` 的 BOARD_DIM²、`circle.ts` 的 PER_COLOR × 4 色），哪天
+ * 改了棋盘大小两处一起改；漏改的后果是那副棋盘的步步为营打满分时被拦，check-scores 量这件事。
+ */
+const PUZZLE_TILES = { square: 36, circle: 28 };
+
 /** 一个账号有史以来最高的那一局：分数和玩法。一局都没有就是 null。 */
 function bestOverall(stats) {
   let top = null;
@@ -477,6 +529,20 @@ async function push(res, body, who) {
     return send(res, 400, { error: 'tooBig' });
   }
   /*
+   * ③ **步步为营的分数不能超过「枚数 × 10」**（第 14 推）。这一档的综合分是「被消除的枚
+   *    数 × 10 + 星星 × 5」（src/engine/puzzleScore.ts），满打满算就是一盘全消掉。超过这
+   *    个数的只可能是手搓的请求——而且它会撞坏上面 PUZZLE_SCALE 那套拼法（分数一过 1000
+   *    就分不清新老写法了）。枚数取客户端报的和服务端自己知道的那一个里**小的**。
+   */
+  if (String(data.modeKey || '') === 'puzzle') {
+    const reported = Math.floor(Number(data.boardTiles));
+    const known = PUZZLE_TILES[mode];
+    const tiles = Math.min(reported > 0 ? reported : Infinity, known ?? Infinity);
+    if (!Number.isFinite(tiles) || score > tiles * 10) {
+      return send(res, 400, { error: 'score' });
+    }
+  }
+  /*
    * **上限这件事先只记一笔，不拦。**
    *
    * `num()` 早就把存下来的数封在 MAX_SCORE 以内（文件头「关于作弊」），所以榜的刻度
@@ -520,14 +586,23 @@ async function push(res, body, who) {
      * 存下来的一律带 `v`，意思是「这一条过过闸」——读的时候靠它短路，免得每画一张榜都
      * 把两条正则跑五十遍。
      */
+    // **不再存头像**（第 14 推）：客户端从来没有画过它，存着只是替一个谁都看不见的字段
+    // 多留一份别人塞进来的东西。
     if (name && (Number(body?.nameV) >= NAME_V || !leakShaped(who.id, name))) {
-      await hset(NAMES, who.id, { name, avatar: body?.avatar ?? null, v: NAME_V });
+      await hset(NAMES, who.id, { name, v: NAME_V });
     }
 
     // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
     // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
     // 顺手把它改正。
-    await zaddIfHigher(boardKey(boardId), stats.best[boardId], who.id);
+    //
+    // 步步为营那几张榜上是拼起来的数（boardValue）：这一局自己的那个数，和「历史最高分、
+    // 不算步数」那个数，取大的。GT 会留住两者里更高的那一个，所以同分剩得多的那一局会顶
+    // 掉剩得少的，老写法（原分）的那一行也在这个人下一次交卷时被换成新写法。
+    const onBoard = isPuzzleBoard(boardId)
+      ? Math.max(boardValue(boardId, score, data), stats.best[boardId] * PUZZLE_SCALE)
+      : stats.best[boardId];
+    await zaddIfHigher(boardKey(boardId), onBoard, who.id);
     const top = bestOverall(stats);
     if (top) {
       await zadd(TOTAL_BOARD, top.score, who.id);
@@ -634,15 +709,16 @@ async function board(res, body, who, claim) {
       mode,
       rows: rows.slice(0, TOP_N).map((row, i) => ({
         rank: i + 1,
-        score: row.score,
+        // 步步为营那几张榜上是拼起来的数，这儿拆开（decodeBoard）：印的是原综合分，清
+        // 盘的局多一个 left。别的母榜上 decodeBoard 原样返回。
+        ...decodeBoard(row.board, row.score),
         name: shownName(row.member, names[row.member]),
-        avatar: names[row.member]?.avatar ?? null,
         me: row.member === who.id,
         // 母榜上几块棋盘混在一起，所以每一行也画个小图形说明是哪一块。
         mode: row.board.split(':')[0],
       })),
       players: rows.length,
-      me: mine < 0 ? null : { rank: mine + 1, score: rows[mine].score },
+      me: mine < 0 ? null : { rank: mine + 1, score: decodeBoard(rows[mine].board, rows[mine].score).score },
     });
   }
   const key = mode ? boardKey(mode) : TOTAL_BOARD;
@@ -661,9 +737,9 @@ async function board(res, body, who, claim) {
 
   const rows = top.map((row, i) => ({
     rank: i + 1,
-    score: row.score,
+    // 步步为营的单张榜同样要拆（见 decodeBoard）；总榜和别的榜原样。
+    ...(mode ? decodeBoard(mode, row.score) : { score: row.score }),
     name: shownName(row.member, names[row.member]),
-    avatar: names[row.member]?.avatar ?? null,
     me: row.member === who.id,
     // 总榜每一行是哪块棋盘的那一局（单局榜不用说，就是这一块）。存的是榜的
     // id（square:flip），画图形只要棋盘那一截。
@@ -678,7 +754,10 @@ async function board(res, body, who, claim) {
     rows,
     players: size,
     // 没打过这个玩法就没有名次，这里就是 null——别拿 0 冒充「第一名」。
-    me: myScore === null ? null : { rank: (myRank ?? 0) + 1, score: myScore },
+    me:
+      myScore === null
+        ? null
+        : { rank: (myRank ?? 0) + 1, score: mode ? decodeBoard(mode, myScore).score : myScore },
   });
 }
 
@@ -808,6 +887,12 @@ async function rebuild(req, res, body) {
       const runs = Array.isArray(archive) ? archive : [];
 
       const best = {};
+      /*
+       * 榜上该写的那个数。多数榜就是 best；步步为营那几张是拼起来的数（boardValue：分数 ×
+       * 1000，清盘的局加剩下的步数），要按每一局单独算再取最大——同分的两局，剩得多的那
+       * 一局才是该上榜的。这一步也是老写法（原分）换成新写法的那一次（见 PUZZLE_SCALE）。
+       */
+      const onBoard = {};
       // 全清那一路直接跳过：best 空着，下面每张榜都走 zrem。
       if (!wipeAll) {
         for (const run of runs) {
@@ -822,6 +907,10 @@ async function rebuild(req, res, body) {
           const boardId = boardIdOf(mode, run?.data);
           const score = num(run.score);
           if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
+          if (score > 0) {
+            const v = boardValue(boardId, score, run?.data);
+            if (v > (onBoard[boardId] || 0)) onBoard[boardId] = v;
+          }
         }
       }
 
@@ -830,9 +919,9 @@ async function rebuild(req, res, body) {
       for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS, ...RETIRED_BOARD_KEYS, ...droppedBoards]) {
         if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
       }
-      for (const [boardId, score] of Object.entries(best)) {
+      for (const boardId of Object.keys(best)) {
         // zadd 而不是 zaddIfHigher：这一次要的正是把它改成重算出来的那个数。
-        await zadd(boardKey(boardId), score, id);
+        await zadd(boardKey(boardId), onBoard[boardId], id);
         rows++;
       }
 
@@ -914,11 +1003,16 @@ async function moveScores(from, to) {
 
   // 每一张他上过的榜。zadd 而不是 zaddIfHigher：新 id 上本来就该是这个数，
   // 而不是「和已有的比一比」——新邮箱按规矩是个没有账号的地址，榜上不该有它。
+  //
+  // 抄的是**榜上现在那个数**，不是 stats.best：步步为营那几张榜上存的是拼起来的数（分数
+  // × 1000 + 剩下的步数，见 PUZZLE_SCALE），照 best（原分）抄过去，搬一次家他在那张榜上
+  // 就从 300000 掉成 300。榜上没有他（还没上过榜、或者被清过）才退回 best。
   const best = (stats && typeof stats.best === 'object' && stats.best) || {};
   for (const [boardId, score] of Object.entries(best)) {
     const n = Number(score) || 0;
     if (n <= 0) continue;
-    await zadd(boardKey(boardId), n, to);
+    const there = await zscore(boardKey(boardId), from);
+    await zadd(boardKey(boardId), there === null ? boardValue(boardId, n, null) : there, to);
     await zrem(boardKey(boardId), from);
   }
 

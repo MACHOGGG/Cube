@@ -142,6 +142,11 @@ export interface BoardRow {
   me: boolean;
   /** 总榜上这一行是哪个玩法的那一局（单局榜没有这个字段）。 */
   mode?: string;
+  /**
+   * 步步为营**清盘**的那一局还剩几步（第 14 推，api/scores.js 的 decodeBoard）。只有清盘的
+   * 局才有；同分的两局，剩得多的排在前面。
+   */
+  left?: number;
 }
 
 export interface BoardPage {

@@ -127,7 +127,16 @@ for (const name of WIRED) {
     check('结算之前先重画一次（那几枚要先红起来）', /hooks\.render\(\);/.test(body), '');
     // 空集合不许结算：findStuckGroups 回 [] 是「还活着」。
     check('只有报了组才结算（空集合是「还活着」）', /if \(groups\.length && !gameOver\)/.test(body), '');
+    // 第 14 推：那 1.4 秒的定时器要撤得掉。原先是一个没人记得的 setTimeout——亮红的那 1.4
+    // 秒里按了《再来一局》，它照样响，把**新的那一局**以「无法继续匹配」收掉。
+    check('那个定时器记在 stuckTimer 上（撤得掉）', /stuckTimer = window\.setTimeout\(/.test(body), '');
   }
+  const newGame = gc.match(/function newGame\(\) \{[\s\S]*?hooks\.resetBoard\(\);/);
+  check('新开一局之前先撤掉它（不然会收掉新的那一局）',
+    Boolean(newGame) && /window\.clearTimeout\(stuckTimer\)/.test(newGame[0]), newGame ? '' : '没切出 newGame 的开头');
+  const destroy = gc.match(/destroy\(\) \{[\s\S]*?\n    \},/);
+  check('拆掉这一页时也撤掉它', Boolean(destroy) && /window\.clearTimeout\(stuckTimer\)/.test(destroy[0]),
+    destroy ? '' : '没切出 destroy');
   check('棋盘报上来的结果真的喂进了 updateStuckState',
     /updateStuckState\(hooks\.findStuckGroups\?\.\(\) \?\? \[\]\)/.test(gc), '');
 }

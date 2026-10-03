@@ -144,5 +144,32 @@ const dupes = (list) => list.filter((v, i) => list.indexOf(v) !== i);
   check('一个一个进，还是 A、B、C', got.join(',') === 'A,B,C', got.join(' / '));
 }
 
+// ---------------------------------------------------------------------------
+// 5. 离开 → 满员 → 重进得 409 full → 空出座位 → 再重进成功（第 14 推）
+// ---------------------------------------------------------------------------
+//
+// 走了的人回来，走的是「认领原来那个座位」那条路：先抢一把认领锁（claimKey），再占一把椅
+// 子。椅子满了的时候，原先锁没还回去——他等到有人起身、再按一次《加入》，撞上的是自己上
+// 一次留下的那把锁，答的是 claimed，而且这间屋子活着一天就一直是 claimed。
+{
+  const code = await freshRoom();
+  const x = await call({ action: 'join', code, name: '回来的人', avatar: AVATAR });
+  check('（尺子）回来的人先进得来', x.status === 200, String(x.status));
+  await call({ action: 'leave', code, playerId: x.payload.playerId, playerToken: x.payload.playerToken });
+  // 屋主一把 + 七个人，八把椅子坐满。
+  const others = [];
+  for (let i = 1; i <= 7; i++) others.push(await call({ action: 'join', code, name: '客' + i, avatar: AVATAR }));
+  check('（尺子）另外七个人都进来了，屋里坐满', others.every((r) => r.status === 200), others.map((r) => r.status).join('/'));
+  const full = await call({ action: 'join', code, name: '回来的人', avatar: AVATAR });
+  check('满员时回来：409 full（不是 claimed）', full.status === 409 && full.payload?.error === 'full',
+    `${full.status} ${JSON.stringify(full.payload)}`);
+  const seven = others[6].payload;
+  await call({ action: 'leave', code, playerId: seven.playerId, playerToken: seven.playerToken });
+  const back = await call({ action: 'join', code, name: '回来的人', avatar: AVATAR });
+  check('空出一把椅子之后再回来：进得来', back.status === 200, `${back.status} ${back.payload?.error ?? ''}`);
+  check('而且回的是原来那个座位（同一个 playerId）', back.payload?.playerId === x.payload.playerId,
+    `${back.payload?.playerId} / ${x.payload.playerId}`);
+}
+
 console.log(fail ? `\n${fail} 项没过。` : '\n全部通过。');
 process.exit(fail ? 1 : 0);

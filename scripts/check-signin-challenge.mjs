@@ -306,10 +306,40 @@ const tryCode = (email, code, challenge, ip) =>
   check('⑦（反面）15 次真实猜测都数上了：没有一次是 429',
     seen.every((c) => c === 401 || c === 429) && seen.filter((c) => c === 429).length === 0,
     seen.join(' '));
-  // 第 4 张票要不到了（要码那道限速是一小时三封），所以拿第 3 张票再猜一次——
-  // 它会先撞上「这张票已经猜满 5 次」那一道（429 expired），这正是两道闸各管一段的证据。
+  // 第 4 张票：第 14 推起要码那道限速按「邮箱 + 来路」各算三封（见 ⑧），换一个来路照样要
+  // 得到。原先这一条断言的是「第 4 封被挡下」——那正是外人能耗光别人额度的那条路：谁都能
+  // 替这个地址要三封，真正的主人这一小时就一封都要不到了。
   const fourth = await askCode(CAP, freshIp());
-  check('⑦ 第 4 封被要码那道限速挡下（一小时三封）', fourth.status === 429, String(fourth.status));
+  check('⑦ 第 4 封从另一个来路照样要得到（要码按「邮箱 + 来路」算）', fourth.status === 200, String(fourth.status));
+  // 而猜的那一道还是按邮箱数：拿这张新票猜第 16 次，挡下。两道闸各管一段。
+  const sixteenth = await tryCode(CAP, '000000', fourth.ticket, freshIp());
+  check('⑦ 第 16 次真实猜测被按邮箱那道挡下（一小时十五次）', sixteenth.status === 429, String(sixteenth.status));
+}
+
+// ── ⑧ 要码的额度：外人耗不光别人的（第 14 推）──────────────────────
+//
+// 原先按邮箱一小时三封：谁都能替一个地址连要三封，主人这一小时就一封都要不到了——不用猜
+// 码，只要知道他的邮箱。改成按「邮箱 + 来路」各三封，另给同一个邮箱一个一小时十封的总上限
+// （挡的是一个人换着来路往同一个信箱里灌信）。
+{
+  const X = 'quota-two-ips@example.com';
+  const A = freshIp();
+  const fromA = [];
+  for (let i = 0; i < 4; i++) fromA.push((await askCode(X, A)).status);
+  check('⑧ 来路 A 替 X 要了三封，第 4 封挡下', fromA.slice(0, 3).every((c) => c === 200) && fromA[3] === 429, fromA.join(' '));
+  const B = freshIp();
+  const fromB = await askCode(X, B);
+  check('⑧ 来路 B 给 X 要码仍得 200（A 耗不光 X 的额度）', fromB.status === 200 && Boolean(fromB.ticket),
+    `${fromB.status} ${fromB.raw}`);
+  const signIn = await tryCode(X, fromB.code, fromB.ticket, B);
+  check('⑧ 而且那一封真能登进去', signIn.status === 200 && Boolean(signIn.body.token), `${signIn.status} ${signIn.raw}`);
+
+  // 同一个邮箱的总上限：一小时十封，换多少个来路都一样。
+  const Y = 'quota-total@example.com';
+  const seen = [];
+  for (let i = 0; i < 11; i++) seen.push((await askCode(Y, freshIp())).status);
+  check('⑧ 同一个邮箱换十一个来路：前十封放过，第十一封挡下',
+    seen.slice(0, 10).every((c) => c === 200) && seen[10] === 429, seen.join(' '));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

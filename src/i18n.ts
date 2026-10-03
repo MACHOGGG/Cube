@@ -70,7 +70,13 @@ export interface I18nStrings {
    */
   puzzleClearedLabel: string;
   puzzleStarsLabel: string;
-  /** 「走了 {n} 步（得分 {k} 步）」——右边不摆数，整句就是它自己。 */
+  /**
+   * 「走了 {n} 步（得分 {k} 步）」——右边不摆数，整句就是它自己。
+   *
+   * 英法文用 `|` 分单复数（走 countPhrase，看的是 {n}）。{k} 那一截没有第二套单复数可
+   * 挑，所以法文写成不随数变的说法（« avec points »）——原先的 « ({k} ont marqué) »
+   * 在 k=1 时是 « 1 ont marqué »，和「1 coups」是同一种错。
+   */
   puzzleStepsLabel: string;
   /** 「连续多退」，右边是 +{m}。 */
   puzzleStreakLabel: string;
@@ -122,6 +128,11 @@ export interface I18nStrings {
   rankEmpty: string;
   /** 榜上没取过名字的那一行。见 engine/cloudScores.ts 的 leaderboardName。 */
   rankAnon: string;
+  /**
+   * 步步为营清盘的那一局还剩几步（第 14 推）：排行榜那一行、战绩图上「全部消完了」后面。
+   * 「单数|复数」两种写法，走 countPhrase。
+   */
+  puzzleLeftSteps: string;
   rankLoading: string;
   rankExpired: string;
   rankReLogin: string;
@@ -537,6 +548,10 @@ export interface I18nStrings {
   mpErrNotOpen: string;
   /** 服务器的限速把这一下挡住了（api/room.js 的 RATE）。 */
   mpErrTooMany: string;
+  /** 只有屋主能做的事，别人按了（第 14 推）。原先落进 default，屏幕上写「连不上网络」。 */
+  mpErrNotHost: string;
+  /** 服务端不认这一局的玩法（多半是这台设备上的包太旧）（第 14 推）。原先同样写「连不上网络」。 */
+  mpErrMode: string;
   notOnSaleYet: string;
   purchaseUnavailable: string;
   purchaseCancelled: string;
@@ -621,9 +636,9 @@ export interface I18nStrings {
   /** HUD 左边那一块的标题：拼出得分。 */
   builtScoreHudLabel: string;
   flipRowLabel: string;
-  /** 「（含拆除 {k} 枚）」。 */
+  /** 「（含拆除 {n} 枚）」——和上面那一句同一行，法文同样分单复数。 */
   flipRowDefused: string;
-  /** 「削线 {m} 条（星星数²）」。 */
+  /** 「削线 {n} 条（星星数²）」。 */
   lineRowLabel: string;
   /**
    * 「完成奖励」——老虎机拼成一次，除了翻面那几枚的 +2，再给 ⌈枚数²/2⌉
@@ -746,7 +761,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsOutReason: 'Out of moves',
     puzzleClearedLabel: 'Cleared {c} × {n}',
     puzzleStarsLabel: 'Stars {c} × {n}',
-    puzzleStepsLabel: '{n} moves ({k} scored)',
+    puzzleStepsLabel: '{n} move ({k} scored)|{n} moves ({k} scored)',
     puzzleStreakLabel: 'Streak refunds',
     puzzleEdgeLabel: 'Line refunds',
     puzzleLeftLabel: '{l} left (peak {p})',
@@ -776,6 +791,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Sign in and your runs go on the board',
     rankEmpty: 'Nobody on this board yet',
     rankAnon: 'Anonymous player',
+    puzzleLeftSteps: '{n} move left|{n} moves left',
     rankLoading: 'Loading…',
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
     rankReLogin: 'Sign in again',
@@ -961,6 +977,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrTooFew: 'Two players at least.',
     mpErrNotOpen: 'Multiplayer is not open yet.',
     mpErrTooMany: 'Too many requests from your network just now. Wait a few seconds and try again — this is not your connection.',
+    mpErrNotHost: 'Only the host can do this.',
+    mpErrMode: 'This mode can’t open a room right now. Refresh and try again.',
     notOnSaleYet: 'The subscription is not open yet.',
     purchaseUnavailable: 'This device cannot complete the purchase yet.',
     purchaseCancelled: 'Cancelled — you have not been charged.',
@@ -1005,11 +1023,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
     endTipComposite: 'Final score = build score \u00d7 move multiplier. Fewer moves, bigger multiplier \u2014 it never drops below \u00d71.00.',
-    patternNowLabel: 'Pattern is now {n} tiles',
+    patternNowLabel: 'Pattern is now {n} tile|Pattern is now {n} tiles',
     builtScoreHudLabel: 'Build score',
     flipRowLabel: 'Flipped {n} ×2',
-    flipRowDefused: '(incl. {k} defused)',
-    lineRowLabel: 'Lines cleared {m} (stars²)',
+    flipRowDefused: '(incl. {n} defused)',
+    lineRowLabel: '{n} line cleared (stars²)|{n} lines cleared (stars²)',
     slotBonusLabel: 'Completion bonus',
     builtScoreLabel: 'Build score',
     stepCoefLabel: 'Move multiplier',
@@ -1077,7 +1095,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsOutReason: 'Plus de coups',
     puzzleClearedLabel: 'Effacées {c} × {n}',
     puzzleStarsLabel: 'Étoiles {c} × {n}',
-    puzzleStepsLabel: '{n} coups ({k} ont marqué)',
+    puzzleStepsLabel: '{n} coup ({k} avec points)|{n} coups ({k} avec points)',
     puzzleStreakLabel: 'Coups rendus · enchaînés',
     puzzleEdgeLabel: 'Coups rendus · lignes',
     puzzleLeftLabel: '{l} restants (max {p})',
@@ -1107,6 +1125,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
     rankEmpty: 'Personne à ce classement pour l’instant',
     rankAnon: 'Joueur anonyme',
+    puzzleLeftSteps: '{n} coup restant|{n} coups restants',
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
@@ -1292,6 +1311,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrTooFew: 'Il faut au moins deux joueurs.',
     mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
     mpErrTooMany: 'Trop de requêtes depuis votre réseau à l’instant. Attendez quelques secondes et réessayez — ce n’est pas votre connexion.',
+    mpErrNotHost: 'Seul l’hôte peut faire cela.',
+    mpErrMode: 'Ce mode ne peut pas ouvrir de salle pour l’instant. Actualisez et réessayez.',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
     purchaseUnavailable: 'Cet appareil ne peut pas encore finaliser l’achat.',
     purchaseCancelled: 'Annulé — vous n’avez pas été débité.',
@@ -1336,11 +1357,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
     endTipComposite: 'Score final = score de jeu \u00d7 coefficient de coups. Moins de coups, plus gros coefficient \u2014 jamais sous \u00d71,00.',
-    patternNowLabel: 'Le motif passe à {n} pièces',
+    patternNowLabel: 'Le motif passe à {n} pièce|Le motif passe à {n} pièces',
     builtScoreHudLabel: 'Score de jeu',
-    flipRowLabel: '{n} retournées ×2',
-    flipRowDefused: '(dont {k} désamorcées)',
-    lineRowLabel: '{m} lignes effacées (étoiles²)',
+    flipRowLabel: '{n} retournée ×2|{n} retournées ×2',
+    flipRowDefused: '(dont {n} désamorcée)|(dont {n} désamorcées)',
+    lineRowLabel: '{n} ligne effacée (étoiles²)|{n} lignes effacées (étoiles²)',
     slotBonusLabel: 'Prime de réussite',
     builtScoreLabel: 'Score de jeu',
     stepCoefLabel: 'Coefficient de coups',
@@ -1438,6 +1459,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登入之後，你的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
     rankAnon: '匿名玩家',
+    puzzleLeftSteps: '剩 {n} 步',
     rankLoading: '載入中…',
     rankExpired: '登入已過期，重新登入後成績才會上榜',
     rankReLogin: '重新登入',
@@ -1623,6 +1645,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrTooFew: '至少要兩個人。',
     mpErrNotOpen: '多人遊玩尚未開放。',
     mpErrTooMany: '剛才你這個網路發來的請求太多了，等幾秒再試一次。這不是你的網路問題。',
+    mpErrNotHost: '只有屋主能這樣做。',
+    mpErrMode: '這個玩法暫時進不了小屋，重新整理頁面再試。',
     notOnSaleYet: '訂閱尚未開放。',
     purchaseUnavailable: '這台裝置目前還無法完成購買。',
     purchaseCancelled: '已取消，沒有扣款。',
@@ -1670,8 +1694,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     patternNowLabel: '得分圖案變成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
-    flipRowDefused: '（含拆除 {k} 枚）',
-    lineRowLabel: '削線 {m} 條（星星數²）',
+    flipRowDefused: '（含拆除 {n} 枚）',
+    lineRowLabel: '削線 {n} 條（星星數²）',
     slotBonusLabel: '完成獎勵',
     builtScoreLabel: '拼出分',
     stepCoefLabel: '步數係數',
@@ -1769,6 +1793,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登录之后，你的成绩才会上榜',
     rankEmpty: '这张榜上还没有人',
     rankAnon: '匿名玩家',
+    puzzleLeftSteps: '剩 {n} 步',
     rankLoading: '加载中…',
     rankExpired: '登录已过期，重新登录后成绩才会上榜',
     rankReLogin: '重新登录',
@@ -1954,6 +1979,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrTooFew: '至少要两个人。',
     mpErrNotOpen: '多人游玩尚未开放。',
     mpErrTooMany: '刚才你这个网络发来的请求太多了，等几秒再试一次。这不是你的网络问题。',
+    mpErrNotHost: '只有屋主能这样做。',
+    mpErrMode: '这个玩法暂时进不了小屋，刷新页面再试。',
     notOnSaleYet: '订阅尚未开放。',
     purchaseUnavailable: '这台设备暂时还无法完成购买。',
     purchaseCancelled: '已取消，没有扣款。',
@@ -2001,8 +2028,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     patternNowLabel: '得分图案变成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
-    flipRowDefused: '（含拆除 {k} 枚）',
-    lineRowLabel: '削线 {m} 条（星星数²）',
+    flipRowDefused: '（含拆除 {n} 枚）',
+    lineRowLabel: '削线 {n} 条（星星数²）',
     slotBonusLabel: '完成奖励',
     builtScoreLabel: '拼出分',
     stepCoefLabel: '步数系数',

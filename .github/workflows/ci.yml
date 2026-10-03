@@ -111,10 +111,30 @@ jobs:
         run: |
           npx esbuild src/engine/runRecord.ts --bundle --format=esm --outfile=/tmp/runrecord.mjs
           node scripts/check-breakdown.mjs /tmp/runrecord.mjs
+      # 英法文单复数（第 14 推）：结算页、HUD 上那几句带数字的话，1 的时候不念成复数。原
+      # 先每句只有一份复数形，走了一步的人看见「1 moves」、降到 1 枚的时候冒「1 tiles」。
+      - name: 英法文单复数
+        run: |
+          npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
+          npx esbuild src/engine/runRecord.ts --bundle --format=esm --outfile=/tmp/runrecord.mjs
+          node scripts/check-plurals.mjs /tmp/i18n.mjs /tmp/runrecord.mjs
+      # 设计软件导出的 SVG 带一行 <title>编组</title>，嵌进页面就是悬停提示「编组」、读屏也念它
+      # （第 14 推）。图标和天才标志两条路都在嵌进去之前统一去掉；样本是玩家给的炸弹图标原件。
+      - name: 图标里的 <title> 去掉了
+        run: |
+          npx esbuild src/ui/svgTitle.ts --bundle --format=esm --outfile=/tmp/svgtitle.mjs
+          node scripts/check-svg-title.mjs /tmp/svgtitle.mjs
       - name: 局中实时排名摆哪几行
         run: |
           npx esbuild src/engine/standingsWindow.ts --bundle --format=esm --outfile=/tmp/window.mjs
           node scripts/check-standings-window.mjs /tmp/window.mjs
+      # 小屋倒数的钟（第 14 推）：偏差取往返最短那一份回包的中点，倒数数字只减不增。喂的是模
+      # 拟回包（已知真偏差），每一条都带「原先那样会怎样」的尺子——原先那种写法同一组回包会
+      # 估歪 850ms、会数出「4 3 2 3 2 1」。
+      - name: 小屋倒数的钟
+        run: |
+          npx esbuild src/engine/clockSync.ts --bundle --format=esm --outfile=/tmp/clocksync.mjs
+          node scripts/check-clock-sync.mjs /tmp/clocksync.mjs
       - name: 随机得分目标的图案与判定
         run: |
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
@@ -530,7 +550,21 @@ jobs:
         run: |
           npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs
           npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs
-          node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs
+          npx esbuild src/engine/slideLine.ts     --bundle --format=esm --outfile=/tmp/slideline.mjs
+          node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs /tmp/slideline.mjs
+      # 滑一条线、炸弹连没连上（第 14 推）：五副外边族棋盘共用 engine/slideLine.ts 和
+      # engine/bomb.ts 那几样。活格不到两枚的线拖了不算一步（从前白扣一步），大三角长滑不
+      # 复制、不丢棋子（从前奇数长的线滑过 n−1 格会），每副棋盘每种线长、步数 −3n…3n 遍历。
+      # 还在教旧规则的分镜动画（第 14 推）：入口全下线了。从网页和小红书两个入口顺着
+      # import 走一遍，分镜那三个模块一个都不许在路上——只删按钮不断接线，哪天按钮加回来
+      # 它就又活了。读源码、不打包。
+      - name: 旧规则的分镜动画走不到了
+        run: node scripts/check-story-retired.mjs
+      - name: 滑一条线不复制、不丢、空线不扣步
+        run: |
+          npx esbuild src/engine/slideLine.ts --bundle --format=esm --outfile=/tmp/slideline.mjs
+          npx esbuild src/engine/bomb.ts      --bundle --format=esm --outfile=/tmp/bomb.mjs
+          node scripts/check-slide-line.mjs /tmp/slideline.mjs /tmp/bomb.mjs
       # 法务文本有没有在说「订阅还在卖」。CLAUDE.md：「支付审核把『网站陈述与实际不
       # 符』直接归为 false information，比缺一份文档严重。」这件事两头都咬过——先是
       # 「订阅开放后……」在早就开卖之后成了假话（Creem 审核原样引了回来），这一轮是反
@@ -1030,3 +1064,11 @@ jobs:
           nohup node scripts/dev-server.mjs 8981 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8981/ && break; sleep 0.25; done
           node scripts/check-redesign-fit.mjs http://localhost:8981/
+      # 管理员页《重建榜单》（第 14 推）：三个勾默认都不勾（「清空无限反转」从前默认勾着，
+      # 每一次例行重建都顺手清一遍），勾了全清要先确认、点取消一个请求都不发，「清理旧名
+      # 字」发 scrubNames 并把删了几条写到页上。/api/scores 在浏览器里拦下来，不碰真的榜。
+      - name: 管理员页《重建榜单》那三个勾
+        run: |
+          nohup node scripts/dev-server.mjs 8983 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8983/ && break; sleep 0.25; done
+          node scripts/check-mint-rebuild.mjs http://localhost:8983/

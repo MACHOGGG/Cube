@@ -16,11 +16,11 @@
  *     是把人从他自己的节奏里拽出来。这一条更隐蔽：功能都是好的，只是烦。
  *
  * 所以每一条都用一个全新的浏览器上下文跑（localStorage 是空的），一条一条
- * 点过去。顺带核三件事：这一屏确实**一个字都没有**（玩家定的「纯动画」）、
- * 下面那四颗键和网页版一样、五条规则那一屏没有跟着自动跳出来。
+ * 点过去，顺带核五条规则那一屏没有跟着自动跳出来。
  *
- * 最后在强制降级层下再跑一遍——这一屏是网页版原件，不是我画的，它在
- * Chrome 61 上塌不塌得看过才算数。
+ * 第 14 推起分镜动画整个下线了（那两段还在教旧规则）：这一台从「该弹的弹」变成
+ * 「哪儿都不弹、连手动的入口也没有」——《怎么玩》上不再摆分镜键。最后在强制降级层
+ * 下再走一遍《怎么玩》，看那一屏在 Chrome 61 上立不立得起来。
  *
  * 跑之前要先出一次包和预览页：
  *
@@ -82,7 +82,7 @@ const has = (p, sel) => p.$(sel).then((e) => !!e);
 //
 // 玩家定的：网页端和小红书端都不再主动播放这段动画。它是一段没有互动的片
 // 子，把刚决定要玩的人挡在门外；规矩改由棋盘底下那块教学条一条一条讲。片子
-// 本身没删，挪到成绩与说明页那颗《怎么玩》里，想看的人自己点（见段 5）。
+// 后来连手动入口也撤了（第 14 推：还在教旧规则，见段 5）。
 {
   const { ctx, p, errs } = await open();
   await card(p, 0);
@@ -134,7 +134,7 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   await ctx.close();
 }
 
-// ---- 5. 两个手动入口还在 ----
+// ---- 5. 《怎么玩》还在，分镜那个手动入口撤了 ----
 {
   const { ctx, p } = await open();
   await p.click('#xhsProfile');
@@ -160,27 +160,15 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   );
   say(await has(p, '.howto-ov .howto-split'), '中间隔着那道圆角黑线');
 
-  // 分镜动画唯一的入口：五条规则上头那两颗键（方块 / 小球）。
-  const stories = await p.$$eval('.howto-story', (e) => e.map((b) => b.getAttribute('aria-label') || ''));
-  say(stories.length === 2, '五条上头摆着两颗分镜键', stories.join(' / '));
-  await p.click('.howto-story[data-fam="square"]');
-  await p.waitForTimeout(1600);
-  say(await has(p, '.story-tut'), '点《方块》→ 分镜动画放出来了');
-  const ctl = await p.$$eval('.story-controls .story-ctl', (e) => e.map((b) => b.getAttribute('aria-label')));
-  say(JSON.stringify(ctl) === '["上一条","再一次","下一条","完成"]', '下方四颗键和网页版一样', JSON.stringify(ctl));
-  const segs = await p.$$eval('.story-prog-seg', (e) => e.length);
-  say(segs > 0, '顶上的分段进度条在', segs + ' 段');
-  const sq = await p.$$eval('.story-board .story-cell svg rect', (e) => e.length);
-  const ci0 = await p.$$eval('.story-board .story-cell svg circle', (e) => e.length);
-  // 方块那一段里也会出现两个圆——最后一条消除之后换的是「小球消失」那一帧
-  // （网页版有意为之）。所以判据是「方块占压倒多数」，不是「一个圆都没有」。
-  say(sq > 0 && sq > ci0 * 3, '放的是方块那一段（棋盘上画的是圆角方块）', `方块 ${sq} 个 / 圆 ${ci0} 个`);
-  const words = await p.$eval('.story-tut', (e) => (e.textContent || '').trim());
-  say(words === '', '这一屏没有一个字（纯动画）', words ? `出现了「${words.slice(0, 30)}」` : '');
-  // 看完退回成绩页，不是把人丢进一局里。
-  await p.click('#stFinish');
-  await p.waitForTimeout(1200);
-  say(await has(p, '.xhs-how'), '按《完成》回成绩与说明页，不是掉进一局里');
+  // 五条规则上头从前摆着两颗分镜键（方块 / 小球），那是分镜动画唯一的入口。第 14 推
+  // 那两段下线了（还在教旧规则，方案定的是「直接下线入口，不重做」），所以这里量的是
+  // 「一颗都没有」，而且按《知道了》就回成绩与说明页。
+  const stories = await p.$$eval('.howto-story', (e) => e.length);
+  say(stories === 0, '五条上头不再摆分镜键（第 14 推下线）', stories + ' 颗');
+  await p.click('#howtoOkBtn');
+  await p.waitForTimeout(800);
+  say(!(await has(p, '.howto-ov')) && (await has(p, '.xhs-how')), '按《知道了》回成绩与说明页');
+  say(!(await has(p, '.story-tut')), '一路上分镜动画一次都没出现');
   await ctx.close();
 }
 {
@@ -255,28 +243,26 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
 }
 
 // ---- 6. 老内核上也跑得起来 ----
+//
+// 从前这一段从《怎么玩》点进分镜、量它在 Chrome 61 上塌不塌。分镜第 14 推下线了，
+// 老内核这一趟改量它现在唯一剩下的东西：《怎么玩》那一屏五条规则连配图（老内核
+// 上的逐盒对照在 check-oldcss 里，这里只管「立得起来、没有分镜键、零报错」）。
 {
   const { ctx, p, errs } = await open(true);
-  // 分镜不再自己弹（段 1），所以老内核这一趟也得从成绩与说明页那颗《怎么玩》
-  // 走进去——那是它现在唯一的入口。
   await p.click('#xhsProfile');
   await p.waitForTimeout(1000);
   await p.click('.xhs-how');
   await p.waitForTimeout(900);
-  await p.click('.howto-story[data-fam="square"]');
-  await p.waitForTimeout(2000);
-  say(await has(p, '.story-tut'), '强制降级层：分镜动画照样放得出来');
-  const box = await p.$eval('.story-tut', (e) => {
-    const r = e.getBoundingClientRect();
-    return { w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right) };
-  });
-  say(box.right <= 391, '没有横着顶出屏幕', JSON.stringify(box));
-  const bd = await p.$eval('.story-board', (e) => {
-    const r = e.getBoundingClientRect();
-    return { w: Math.round(r.width), h: Math.round(r.height) };
-  }).catch(() => ({ w: 0, h: 0 }));
-  say(bd.w > 40 && bd.h > 40, '棋盘画出来了（不是塌成 0）', JSON.stringify(bd));
-  await p.waitForTimeout(3000);
+  const how = await p.evaluate(() => ({
+    rules: document.querySelectorAll('.howto-ov .tut-rule:not(.tut-rule--extra)').length,
+    arts: document.querySelectorAll('.howto-ov .tut-rule:not(.tut-rule--extra) .tut-rule-art').length,
+    story: document.querySelectorAll('.howto-story').length,
+    right: Math.round((document.querySelector('.howto-modal') || document.body).getBoundingClientRect().right),
+  }));
+  say(how.rules === 5 && how.arts === 5, '强制降级层：《怎么玩》五条规则连配图都在', JSON.stringify(how));
+  say(how.story === 0, '强制降级层：也没有分镜键');
+  say(how.right <= 391, '没有横着顶出屏幕', String(how.right));
+  await p.waitForTimeout(1500);
   say(errs.length === 0, '老内核上零报错', errs.slice(0, 2).join(' | '));
   await ctx.close();
 }

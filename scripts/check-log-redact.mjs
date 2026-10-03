@@ -81,7 +81,9 @@ function consoleCalls(src) {
 }
 
 /** 这些名字在 api/ 里装的都是一个人的地址。`ticket`（码）不在里面——见 ③。 */
-const IDENTITY = ['email', 'address', 'wanted', 'who'];
+// lockKey（第 14 推）：锁的名字里带着账号 id（statsLockKey 那一类就是「前缀 + 邮箱」），
+// _store.js 那句「锁没放掉」原先把它原样写进日志。
+const IDENTITY = ['email', 'address', 'wanted', 'who', 'lockKey'];
 
 /** 判一份源码：返回「裸着出现在 console 里」的那几处。 */
 function judge(name, src) {
@@ -145,6 +147,10 @@ const files = readdirSync(dir).filter((f) => f.endsWith('.js')).sort();
     ['跨行写的 console 也要抓得住', true,
       () => judge('_accounts.js', accounts.replace("export const loadAccount = (email) => get(accountKey(email));",
         "export const loadAccount = (email) => {\n  console.error(\n    '读账号',\n    email,\n  );\n  return get(accountKey(email));\n};"))],
+    ['锁的名字裸着写进日志（第 14 推那一处改回去）', true,
+      () => judge('_store.js', readFileSync(new URL('_store.js', dir), 'utf8').replace(
+        "console.error('锁没放掉（十秒后自己过期）', redact(lockKey), err);",
+        "console.error('锁没放掉（十秒后自己过期）', lockKey, err);"))],
     ['套在 redact 里就不算（这一条必须**不**红）', false,
       () => judge('_accounts.js', accounts.replace("export const loadAccount = (email) => get(accountKey(email));",
         "export const loadAccount = (email) => { console.error('读账号', redact(email)); return get(accountKey(email)); };"))],

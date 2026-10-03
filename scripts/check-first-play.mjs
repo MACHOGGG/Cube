@@ -3,6 +3,10 @@
  *
  *   node scripts/dev-server.mjs 8976 dist
  *   node scripts/check-first-play.mjs http://localhost:8976/
+ *   node scripts/check-first-play.mjs http://localhost:8977/ 1440x900   ← 电脑宽屏整套再跑一遍
+ *
+ * （两遍各要一台自己的服务器：三角那一节要兑一张 TESTMONTH，一台服务器里一张码只兑得动
+ * 一次。）
  *
  * 盯着玩家 2026-09 点名的四件事：
  *
@@ -30,10 +34,17 @@
  */
 import { chromium } from 'playwright';
 const BASE = process.argv[2] || 'http://localhost:8976/';
+/**
+ * 屏幕多大。默认手机竖屏；给 `1440x900` 就整套在电脑宽屏上跑一遍（第 14 推：宽屏那一
+ * 版的炸弹卡漏了首玩锁，而这道门从前只在手机上跑，量不到）。
+ */
+const [VW, VH] = (process.argv[3] || '390x844').split('x').map(Number);
+const WIDE = VW >= 1000;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
 const check = (n, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`); if (!ok) fail++; };
-const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+console.log(`（${VW}×${VH}${WIDE ? '，电脑宽屏' : ''}）`);
+const ctx = await browser.newContext({ viewport: { width: VW, height: VH }, isMobile: !WIDE, hasTouch: !WIDE });
 const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
@@ -88,6 +99,32 @@ check(
   JSON.stringify(arrow),
 );
 
+// ── 炸弹那一块（第 14 推）──────────────────────────────────────────────
+//
+// 宽版（电脑、横屏）上它不是 .home-icon-btn，是一整块 .home-bomb-card；首玩锁那道拦截
+// 从前只认前者，于是电脑上一局都没打过的人照样点得开炸弹的档位窗。窄版上它是
+// .home-icon-btn.home-bomb-mini，本来就拦得住——两种都量：哪一种在这块屏幕上就点哪一种。
+{
+  const kind = await page.evaluate(() =>
+    document.querySelector('.home-bomb-card') ? 'card' : document.querySelector('.home-bomb-mini') ? 'mini' : null);
+  check(`（尺子）这块屏幕上的炸弹是${WIDE ? '宽版那一整块（.home-bomb-card）' : '窄版那一颗'}`,
+    WIDE ? kind === 'card' : kind === 'mini', String(kind));
+  // 先把上面按老虎机那一下留下的抖动摘掉——不摘的话「抖起来了」量到的是上一下的，
+  // 锁没拦住也照样是 2（反证时真这么绿过一次）。
+  await page.evaluate(() => {
+    for (const b of document.querySelectorAll('.home-icon-btn--nudge')) b.classList.remove('home-icon-btn--nudge');
+  });
+  await page.$eval('.home-bomb-card, .home-bomb-mini', (e) => e.click());
+  await page.waitForTimeout(400);
+  const bomb = await page.evaluate(() => ({
+    onMenu: !!document.querySelector('.home-page'),
+    picker: !!document.querySelector('.center-pick'),
+    nudging: document.querySelectorAll('.home-icon-btn--nudge').length,
+  }));
+  check('按炸弹：档位窗没开，人还在主菜单（锁拦住了）', bomb.onMenu && !bomb.picker, JSON.stringify(bomb));
+  check('按炸弹：两张基础卡也抖起来了', bomb.nudging >= 2, String(bomb.nudging));
+}
+
 // 玩过一局之后锁就没了
 await page.evaluate(() => localStorage.setItem('slides_played_circle', '1'));
 await page.reload({ waitUntil: 'load' });
@@ -96,6 +133,13 @@ await page.$eval('.home-icon-btn[aria-label="菱形方块"]', (e) => e.click());
 await page.waitForTimeout(800);
 check('打过一局之后：锁撤了，点得进去', !(await page.$('.home-page')), '还在主菜单就是没撤');
 check('也不再抖了', (await page.$$('.home-icon-btn--nudge')).length === 0);
+// 尺子：锁撤了之后，同一下按炸弹真的开得出档位窗——上面那条「没开」才是锁拦的，不是
+// 这一下本来就点不着。
+await page.goto(BASE, { waitUntil: 'load' });
+await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+await page.$eval('.home-bomb-card, .home-bomb-mini', (e) => e.click());
+await page.waitForTimeout(700);
+check('（尺子）锁撤了之后，按炸弹开得出档位窗', !!(await page.$('.center-pick')));
 
 // ── 头一局的教学条 ────────────────────────────────────────────────────
 await page.evaluate(() => { localStorage.clear(); localStorage.setItem('slides_lang', 'zhHans'); });

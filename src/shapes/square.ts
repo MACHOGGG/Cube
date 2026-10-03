@@ -15,7 +15,7 @@ import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, gridResidue } from '../engine/residueBoard';
-import type { BoardSnapshot, SnapshotCell } from '../engine/shareCard';
+import { packSnapshot, type BoardSnapshot, type SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreForSize, sizeAtLevel } from '../engine/targets';
 import { erodedShapes, findTargets, type BoardView } from '../engine/targetMatch';
@@ -25,7 +25,7 @@ import { cellKey, effColor } from '../engine/types';
 import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb, generateCleanBombBoard, hasRedCluster, redClusterKeys, GRID_ADJACENCY, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
@@ -401,56 +401,11 @@ export function createSquareGame(): ShapeGame {
         return hit;
       }
 
-      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
-        const found = new Set<string>();
-        const R = g.length,
-          C = g[0].length;
-        const seen = new Set<string>();
-        for (let r = 0; r < R; r++)
-          for (let c = 0; c < C; c++) {
-            if (!liveBomb(g[r][c])) continue;
-            const startKey = cellKey(r, c);
-            if (seen.has(startKey)) continue;
-            const comp: string[] = [];
-            const stack: Cell[] = [[r, c]];
-            seen.add(startKey);
-            while (stack.length) {
-              const [cr, cc] = stack.pop()!;
-              comp.push(cellKey(cr, cc));
-              const neighbors: Cell[] = [
-                [cr - 1, cc],
-                [cr + 1, cc],
-                [cr, cc - 1],
-                [cr, cc + 1],
-              ];
-              for (const [nr, nc] of neighbors) {
-                if (nr < 0 || nr >= R || nc < 0 || nc >= C) continue;
-                const key = cellKey(nr, nc);
-                if (seen.has(key) || !liveBomb(g[nr][nc])) continue;
-                seen.add(key);
-                stack.push([nr, nc]);
-              }
-            }
-            if (comp.length >= minSize) for (const k of comp) found.add(k);
-          }
-        return found;
-      }
-
+      // 炸弹那三样（四连判爆、三连预警、发一副干净的开局）在 engine/bomb.ts（第 14 推从
+      // 五副棋盘里抽出来，规矩只写一遍）；这儿只交代这一副盘「有哪些格、谁挨着谁」。
       // A 4-cluster ends the run outright; a 3-cluster is one drag away
       // from it, so render() pulses those tiles as an early warning.
-      function hasRedCluster(g: Tile[][]): boolean {
-        return redClusterKeys(g, 4).size > 0;
-      }
-
-      function generateCleanBombBoard(): Tile[][] {
-        let g: Tile[][];
-        let tries = 0;
-        do {
-          g = boardFromBombDeck(shuffledDeck());
-          tries++;
-        } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
-        return g;
-      }
+      const BOMB_ADJ: BombAdjacency = GRID_ADJACENCY;
 
       function renderLegend() {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
@@ -550,7 +505,7 @@ export function createSquareGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
-        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
+        const warnKeys = isBomb ? redClusterKeys(grid, 3, BOMB_ADJ, liveBomb) : null;
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             const key = cellKey(r, c);
@@ -908,13 +863,16 @@ export function createSquareGame(): ShapeGame {
               hazard: isBomb && liveBomb(t),
             });
           }
-        return { cells };
+        // 交给 packSnapshot 摆正、放大（第 14 推，别的五副棋盘本来就是这样）。原先原样返回
+        // ——格子位置按整块 6 × 6 的底板算，消掉几行几列之后剩下的那一块缩在图的左上角，
+        // 右边和下面空着一大片：玩家分享出去的终局图像是没画完。
+        return packSnapshot(cells);
       }
 
       function resetBoard() {
         rows = BOARD_DIM;
         cols = BOARD_DIM;
-        grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
+        grid = isBomb ? generateCleanBombBoard(() => boardFromBombDeck(shuffledDeck()), hasInitialClump, BOMB_ADJ, liveBomb) : generateCleanBoard();
         /*
          * 开发时手摆的那副牌（`engine/devDeal.ts`）。**正式包里这一句整段不存在**
          * （`import.meta.env.DEV` 是构建时常量，Vite 把它摇掉）。
@@ -1257,7 +1215,7 @@ export function createSquareGame(): ShapeGame {
       // 查，会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查
       // 又会让同一堆红块报两遍。所以只在盘面安定下来之后查这一次。
       function checkBombHazard(): boolean {
-        if (!isBomb || !hasRedCluster(grid)) return false;
+        if (!isBomb || !hasRedCluster(grid, BOMB_ADJ, liveBomb)) return false;
         render();
         controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;

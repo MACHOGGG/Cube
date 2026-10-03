@@ -101,19 +101,23 @@ export interface RoomCardOpts {
  * `meId` 同理——画这张图的时候座位可能已经交回去了。
  */
 /**
- * 卡上要列的人：**竞赛屋的主持人不算**。
+ * 要列出来的人：**竞赛屋的主持人不算**。
  *
  * 他不参赛（api/room.js 的 isSpectator 已经保证账上一分都没有），所以列进来就是
  * 一行 0 分 0 局挂在最后一名，还会把「全屋总分」和名次都算歪。普通小屋原样返回
  * state.players，这一条一个字都不影响八人屋。
+ *
+ * 导出（第 14 推）：原先只有这张卡在过滤，局中那块计分板（ui/scoreboard.ts）、倒数那一屏
+ * 的榜（ui/multiplayer.ts 的 standingsStrip）、终局面板和它的全屋总分（ui/roomLeftover.ts）
+ * 都直接拿 state.players——同一个主持人，卡上没有他，另外三处他都以 0 分挂在最后。
  */
-const onCard = (state: RoomState): RoomState['players'] =>
+export const contestants = (state: RoomState): RoomState['players'] =>
   state.contest && state.host ? state.players.filter((p) => p.id !== state.host) : state.players;
 
 export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts = {}): string {
   const s = STRINGS[lang];
   const meId = opts.meId ?? currentRoom()?.playerId;
-  const ranked = rankRoom(onCard(state));
+  const ranked = rankRoom(contestants(state));
   const rows: Standing[] = ranked.map((p) => ({
     name: p.name,
     score: liveTotal(p),
@@ -153,7 +157,7 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   // 最大的那个数字是全屋总分——这一整晚，所有人、所有局，加起来打了多少。
   // 原先这里印的是小屋号码：那是一串只在当晚有效、发出去之后对谁都没有意义
   // 的数字，却占着整张图上最大的字号。房号留在小屋页面里够用了。
-  const roomTotal = onCard(state).reduce((sum, p) => sum + liveTotal(p), 0);
+  const roomTotal = contestants(state).reduce((sum, p) => sum + liveTotal(p), 0);
   ctx.font = '700 56px "Fraunces", serif';
   ctx.fillStyle = '#BE5762';
   ctx.fillText(String(roomTotal), PAD, 178);
@@ -166,8 +170,8 @@ export function renderRoomCard(state: RoomState, lang: Lang, opts: RoomCardOpts 
   );
 
   // 两条并排在大数字下面，各占半边——左边《单局最高》，右边《最快完成》。
-  const best = bestRoundOf(onCard(state));
-  const fastest = fastestOf(onCard(state));
+  const best = bestRoundOf(contestants(state));
+  const fastest = fastestOf(contestants(state));
   const half = (CARD_W - PAD * 2) / 2;
   ctx.font = '500 14px "Karla", sans-serif';
   ctx.fillStyle = '#8b8680';
@@ -200,9 +204,9 @@ export function showRoomCard(
 ): void {
   const s = STRINGS[lang];
   const meId = opts.meId ?? currentRoom()?.playerId;
-  const ranked = rankRoom(onCard(state));
+  const ranked = rankRoom(contestants(state));
   // 单局最高和单局最快这一页上不再用文字说——它们写在战绩图里（drawCard）。
-  const roomTotal = onCard(state).reduce((sum, p) => sum + liveTotal(p), 0);
+  const roomTotal = contestants(state).reduce((sum, p) => sum + liveTotal(p), 0);
 
   container.innerHTML = `
     <div class="app mp-page">

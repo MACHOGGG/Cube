@@ -316,6 +316,17 @@ const tally = (arr) => {
   // leaderboard.ts 里那个常量跟着从 BASE_THREE 改名了。
   check('客户端点开的也是新榜', board.includes("named(BASE_TWO, 'bomb3')"));
   check('客户端的无限反转也点在新榜上', board.includes("named(['square', 'circle'], 'flip2')"));
+  /*
+   * 步步为营的子榜也用新榜（第 14 推）。服务端 2026-10-02 开了 'puzzle2'，客户端这一处却
+   * 一直写着 'puzzle'——新局全记在新榜上，玩家点开的是归档的老榜。
+   *
+   * 这一条**不抄字面量**：值从服务端那个常量里读出来，再去客户端找。下回 PUZZLE_KIND 再升
+   * 一版（puzzle3），只改了一头这一条就红，不用有人记得回来改门。
+   */
+  const puzzleKind = (scores.match(/const PUZZLE_KIND = '([^']+)'/) || [])[1];
+  check('（尺子）服务端的步步为营榜键读得出来', Boolean(puzzleKind), String(puzzleKind));
+  check('步步为营的子榜也用新榜（和服务端的 PUZZLE_KIND 是同一个）',
+    Boolean(puzzleKind) && board.includes(`named(BASE_TWO, '${puzzleKind}')`), String(puzzleKind));
 
   check('版本号本身是 3', BOMB_RULES_VERSION === 3, String(BOMB_RULES_VERSION));
 }

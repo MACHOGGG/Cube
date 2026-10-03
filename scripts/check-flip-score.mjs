@@ -21,7 +21,7 @@ if (!src) {
   console.error('用法: node scripts/check-flip-score.mjs <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { createCascadeStepper, POINTS_PER_FLIP } = await import(src);
+const { createCascadeStepper, POINTS_PER_FLIP, flipStreakMult, flipStreakDelta, FLIP_STREAK_CAP } = await import(src);
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -141,6 +141,33 @@ check('POINTS_PER_FLIP 是 2', POINTS_PER_FLIP === 2, String(POINTS_PER_FLIP));
   const s = st.next();
   check('五枚的整线得 25 分（星星数²）', s.points === 25, String(s?.points));
   check('整线那一拍一枚都没翻', s.flips === 0 && s.commit() === 0);
+}
+
+// ── 无限反转的加分气泡：印的倍率 × 分 = 真正加上去的分（第 14 推）──────────────
+//
+// 气泡上那个「×N」原先自己算 `1.5 ** 连击数`，没套 FLIP_STREAK_CAP：连击过了十次，加分
+// 早就封顶了，气泡上的倍率还在往上翻。现在两处都从 flipStreakMult 拿；这儿把连击 0–20
+// 挨个对一遍（方案点名的那个区间，一半在封顶前、一半在封顶后）。
+{
+  check('（尺子）封顶那一档是 10', FLIP_STREAK_CAP === 10, String(FLIP_STREAK_CAP));
+  const bad = [];
+  for (let chain = 0; chain <= 20; chain++) {
+    for (const points of [1, 2, 4, 6, 9, 12, 16, 25]) {
+      const shown = Math.round(points * flipStreakMult(chain));
+      const added = flipStreakDelta(points, chain);
+      if (shown !== added) bad.push(`连击 ${chain} · ${points} 分：气泡算 ${shown}，实际 ${added}`);
+    }
+  }
+  check('连击 0–20：气泡倍率 × 分 = 实际加分', bad.length === 0, bad.slice(0, 3).join(' / ') || '168 组对上');
+  check('过了封顶，倍率不再往上翻（连击 20 和 10 一样）', flipStreakMult(20) === flipStreakMult(10),
+    `${flipStreakMult(10)} / ${flipStreakMult(20)}`);
+  check('封顶之前照常往上翻（连击 9 < 连击 10）', flipStreakMult(9) < flipStreakMult(10));
+
+  // 气泡那一处真的在用 flipStreakMult（它在 gameController 的闭包里，单独叫不出来）。
+  const { readFileSync } = await import('node:fs');
+  const gc = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
+  check('加分气泡的倍率从 flipStreakMult 拿（不再自己算 1.5 的几次方）',
+    /const shownMult = hooks\.flip \? flipStreakMult\(flipChain\)/.test(gc) && !/FLIP_STREAK_BASE \*\* /.test(gc));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全过');

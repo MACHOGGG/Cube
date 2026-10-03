@@ -14,6 +14,8 @@
  * 再去下载任何东西，也没有多一次网络请求；文件夹是空的就一个字节都不占。
  */
 
+import { stripSvgTitle } from './svgTitle';
+
 /** 打包时读进来的全部图标文件，键是 '../assets/icons/base-square.svg'。 */
 const FILES = import.meta.glob('../assets/icons/*.svg', {
   query: '?raw',
@@ -42,9 +44,13 @@ function uniqueIds(svg: string, key: string): string {
   return out;
 }
 
-/** XML 声明、注释、DOCTYPE：导出的文件里常有，嵌进 innerHTML 里没用。 */
+/**
+ * XML 声明、注释、DOCTYPE、`<title>`：导出的文件里常有，嵌进 innerHTML 里没用。
+ *
+ * `<title>` 不只是没用——它会变成悬停提示和读屏念的名字（「编组」），见 svgTitle.ts。
+ */
 function trim(svg: string): string {
-  return svg
+  return stripSvgTitle(svg)
     .replace(/<\?xml[\s\S]*?\?>/g, '')
     .replace(/<!DOCTYPE[\s\S]*?>/g, '')
     .replace(/<!--[\s\S]*?-->/g, '')

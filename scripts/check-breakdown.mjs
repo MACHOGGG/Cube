@@ -274,5 +274,29 @@ for (const c of CASES) {
   check('分享卡那一份行和结算页逐字一样', diff.length === 0 && same > 15, diff.length ? diff.join(' ') : `${same} 组对过`);
 }
 
+// ── 8. 清盘那一局：战绩图那一行写着剩几步（第 14 推）──────────────────────────
+//
+// 「全部消完了 · 剩 N 步」。结算页、分享卡、记录页上是同一张战绩图，那一行字都是
+// `buildShareInfo(...).detail`（runRecord 的 runDetailLine），所以量这一处就是量三处。
+// 排行榜上同分时就按这个数排，图上看不见的话两行一样的分一前一后像是排错了。
+{
+  const CLEAR = '全部方块已翻成点面'; // engine/kinetics.ts 的 ALL_FLIPPED_REASON
+  const pz = (reason, left) => base({
+    modeKey: 'puzzle', totalScore: 90, reason,
+    puzzle: { cleared: 7, stars: 4, spent: 12, scoredMoves: 5, streakRefunds: 2, edgeRefunds: 4, left, peak: 9 },
+  });
+  const line = (d, lang) => buildShareInfo(d, d.shapeFallback, lang).detail;
+  const zh = line(pz(CLEAR, 3), 'zhHans');
+  check('清盘的局：「全部消完了」后面接「· 剩 3 步」', zh.startsWith('全部消完了 · 剩 3 步'), zh);
+  check('英文：3 moves left', line(pz(CLEAR, 3), 'en').includes('· 3 moves left'), line(pz(CLEAR, 3), 'en'));
+  check('英文单数：1 move left（不是 1 moves）', line(pz(CLEAR, 1), 'en').includes('· 1 move left'), line(pz(CLEAR, 1), 'en'));
+  check('法文：3 coups restants', line(pz(CLEAR, 3), 'fr').includes('· 3 coups restants'), line(pz(CLEAR, 3), 'fr'));
+  check('繁体：剩 3 步', line(pz(CLEAR, 3), 'zhHant').includes('· 剩 3 步'), line(pz(CLEAR, 3), 'zhHant'));
+  const notClear = line(pz('步数用尽', 0), 'zhHans');
+  check('没清盘的局不印剩几步（反向对照）', !notClear.includes('剩'), notClear);
+  const notPuzzle = line(base({ reason: CLEAR }), 'zhHans');
+  check('别的玩法清盘也不印（只有步步为营有步数这本账）', !notPuzzle.includes('剩'), notPuzzle);
+}
+
 console.log(fail ? `\n${fail} 条没过` : '\n全绿');
 process.exit(fail ? 1 : 0);

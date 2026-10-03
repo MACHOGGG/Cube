@@ -88,6 +88,65 @@ const STRIP = `
 })();
 `;
 
+/**
+ * Chrome 61 没有 `el.style.translate` / `el.style.scale`（104）：赋值只是往 JS 对象上挂一个
+ * 没人读的字段，不报错、不生效。
+ *
+ * 这两样没法像上面那些接口一样「删掉」：新内核上它们是浏览器自己拦下来的命名属性，不
+ * 在原型上，`delete` 删不着（试过：删完 `'translate' in el.style` 还是 true，赋值照样生
+ * 效）。所以给 `el.style` 套一层 Proxy——对它来说这两个名字不存在：原型链上有人补了（降
+ * 级层的 installTransformShim）就交给那个人，没人补就和 61 一样只挂个字段。别的属性原
+ * 样透过去。`rotate` 一起藏起来，它没人补，正好当尺子：赋了值，样式里什么都没有。
+ *
+ * 少了这一层，拖动时那一行的「压扁」和两边的晃动在这台体检台上照样画得出来——用的是新
+ * 内核自己的 translate / scale，而老手机上它们一下都不动，门却是绿的。
+ */
+const HIDE_TRANSFORM_PROPS = `
+(() => {
+  const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style');
+  if (!desc || !desc.get) return;
+  const HIDE = { translate: 1, scale: 1, rotate: 1 };
+  const shimOf = (k) => Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, k);
+  const cache = new WeakMap();
+  Object.defineProperty(HTMLElement.prototype, 'style', {
+    configurable: true,
+    enumerable: desc.enumerable,
+    get() {
+      const real = desc.get.call(this);
+      let px = cache.get(real);
+      if (px) return px;
+      const expando = {};
+      px = new Proxy(real, {
+        get(t, k) {
+          if (typeof k === 'string' && HIDE[k]) {
+            const acc = shimOf(k);
+            return acc && acc.get ? acc.get.call(t) : expando[k];
+          }
+          const v = Reflect.get(t, k, t);
+          return typeof v === 'function' ? v.bind(t) : v;
+        },
+        set(t, k, v) {
+          if (typeof k === 'string' && HIDE[k]) {
+            const acc = shimOf(k);
+            if (acc && acc.set) acc.set.call(t, v);
+            else expando[k] = v;
+            return true;
+          }
+          return Reflect.set(t, k, v, t);
+        },
+        has(t, k) {
+          if (typeof k === 'string' && HIDE[k]) return Boolean(shimOf(k));
+          return Reflect.has(t, k);
+        },
+      });
+      cache.set(real, px);
+      return px;
+    },
+    set: desc.set,
+  });
+})();
+`;
+
 const MODES = {
   square: { name: '基础方块', card: 0 },
   circle: { name: '基础小球', card: 1 },
@@ -96,7 +155,7 @@ const MODES = {
   flip: { name: '无限反转', card: 4, pick: true },
   /**
    * 最后这一档不是玩法，是**不是棋盘的那几屏**：成绩与说明页 → 战绩详情 →
-   * 《怎么玩》→ 分镜动画。
+   * 《怎么玩》（分镜动画第 14 推下线了，那一屏不再走）。
    *
    * 补这一档的理由：这台体检台原先只走五个游戏局面，那三四屏一次都没在「接口
    * 被摘掉」的状态下画出来过。今天它们碰巧没事（用到的接口补丁层都补上了），
@@ -108,7 +167,7 @@ const MODES = {
    * 写进 localStorage 的。所以这一档先照 card 0 打一局（和 square 那一档一模
    * 一样的走法），打完从结算页退回主菜单，再往那几屏走。
    */
-  screens: { name: '成绩页 → 战绩详情 → 怎么玩 → 分镜动画', card: 0, screens: true },
+  screens: { name: '成绩页 → 战绩详情 → 怎么玩', card: 0, screens: true },
 };
 
 const only = process.argv[2];
@@ -135,6 +194,7 @@ for (const key of list) {
     hasTouch: true,
   });
   await ctx.addInitScript(STRIP);
+  await ctx.addInitScript(HIDE_TRANSFORM_PROPS);
   // 两台体检台都先把「教学看过了」这一格填上：第一次进游戏会自动弹那五条
   // 规则（xhs/src/tutorial.ts），弹出来就挡住棋盘，后面的拖动和量尺寸全做
   // 不了。这一屏本身单独测（check-oldcss 的「怎么玩」那一屏，和
@@ -171,6 +231,13 @@ for (const key of list) {
     // 这几个没补，应该还是缺的（说明删的动作生效了）
     fromEntries: typeof Object.fromEntries === 'function',
     replaceAll: typeof ''.replaceAll === 'function',
+    // translate / scale：降级层的垫片补上了（第 14 推）；rotate 没人补，赋值不进样式
+    xfShim: 'translate' in document.body.style && 'scale' in document.body.style,
+    rotateGone: (() => {
+      const el = document.createElement('div');
+      el.style.rotate = '5deg';
+      return !/rotate/.test(el.getAttribute('style') || '');
+    })(),
   }));
   say(
     stripped.at && stripped.flat && stripped.matchAll && stripped.trimStart &&
@@ -179,6 +246,8 @@ for (const key of list) {
     JSON.stringify(stripped),
   );
   say(!stripped.fromEntries && !stripped.replaceAll, '没补的仍然缺着（说明删干净了）');
+  say(stripped.rotateGone, '（尺子）el.style 上那几个单独的变换属性真的藏起来了（rotate 赋值进不了样式）');
+  say(stripped.xfShim, 'el.style.translate / scale 降级层补上了（第 14 推）');
 
   // 主菜单
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
@@ -234,6 +303,34 @@ for (const key of list) {
     return { x: r.x, y: r.y, w: r.width, h: r.height };
   });
   const before = errs.length;
+  // 拖的时候记下棋子身上每一次样式变化：被拖那一行的「压扁」、两边的晃动，在老内核上
+  // 只能走 transform（第 14 推的垫片）。记的是 style 属性的变化，不是某一拍的截面——
+  // 晃动是弹簧，手一停就回去了，截面要看运气。
+  await p.evaluate(() => {
+    const rec = { writes: 0, xf: 0, squash: 0, indiv: 0, els: new Set() };
+    const host = document.querySelector('#boardWrap');
+    const mo = new MutationObserver((list) => {
+      for (const m of list) {
+        const el = m.target;
+        if (!el.matches || !el.matches('.tile, .ball')) continue;
+        rec.writes++;
+        const css = el.getAttribute('style') || '';
+        if (/(^|;)\s*transform\s*:[^;]*(translate|scale)/.test(css)) {
+          rec.xf++;
+          rec.els.add(el);
+        }
+        // scale( 只有拖动那一下的「压扁」会写（消行后的滑动写的是 translate），所以它
+        // 单独数：方块那一副消一次行也会写 transform，光数 transform 分不出是谁写的。
+        if (/(^|;)\s*transform\s*:[^;]*scale\(/.test(css)) rec.squash++;
+        if (/(^|;)\s*(translate|scale)\s*:/.test(css)) rec.indiv++;
+      }
+    });
+    mo.observe(host, { attributes: true, attributeFilter: ['style'], subtree: true });
+    window.__xfStop = () => {
+      mo.disconnect();
+      return { writes: rec.writes, xf: rec.xf, squash: rec.squash, els: rec.els.size, indiv: rec.indiv };
+    };
+  });
   for (let i = 0; i < 10; i++) {
     const row = 0.12 + (i % 6) * 0.15;
     await p.mouse.move(box.x + box.w * 0.5, box.y + box.h * row);
@@ -243,6 +340,14 @@ for (const key of list) {
     await p.waitForTimeout(280);
   }
   say(errs.length === before, '拖了十下没抛错', errs.slice(before, before + 2).join(' | '));
+  await p.waitForTimeout(1500);
+  // 「手松开之后清得掉」不在这儿量：每一步落定棋盘都整个重画，旧的那些棋子连同身上的
+  // 变换一起扔掉了——故意让垫片永远不清，这里照样全绿（试过）。清不清得掉在
+  // scripts/check-downlevel.mjs 第 9 节拿假的 CSSStyleDeclaration 量。
+  const xf = await p.evaluate(() => (window.__xfStop ? window.__xfStop() : null));
+  say(Boolean(xf) && xf.writes > 20, '（尺子）拖的时候棋子身上的样式真的在变', JSON.stringify(xf));
+  say(Boolean(xf) && xf.squash > 0 && xf.els >= 3 && xf.indiv === 0,
+    '拖动时的压扁 / 晃动在老内核上照样画出来（走 transform，第 14 推）', JSON.stringify(xf));
 
   // 顶上那两块：拖过之后《拼出得分》或《得分图案》里得有一个动了，说明这十下真
   // 的走进了游戏逻辑，不只是没抛错而已。
@@ -305,6 +410,13 @@ for (const key of list) {
   const endUp = await p.$eval('#endOverlay', (e) => e.classList.contains('show')).catch(() => false);
   const shareBtn = endUp ? await p.$('#shareBtn') : null;
   say(endUp && !!shareBtn, '打得完，结算页出来了', (ended ? '（这一局自己打完了，没按《结束游戏》）' : '') + (endUp ? '' : ' 结算页没盖上来：' + errs.slice(-2).join(' | ')));
+  // 结算页那一句「综合得分怎么算」：只摆头一回，而这一档是新开的上下文——这是它这辈子
+  // 第一张结算页。这一版从前没接 shouldTeachTotal（第 14 推），这一句一次都没摆过。
+  // 只在基础方块那一档量：老虎机、无限反转不乘步数系数，本来就不讲这一句。
+  if (endUp && key === 'square') {
+    const tip = await p.$eval('#endOverlay', (e) => (e.querySelector('.end-row--tip') || {}).textContent || '').catch(() => '');
+    say(tip.trim().length > 0, '头一回的结算页上摆着「综合得分怎么算」那一句（第 14 推）', tip.trim().slice(0, 40));
+  }
   if (shareBtn) {
     await shareBtn.click();
     await p.waitForTimeout(2000);
@@ -319,7 +431,7 @@ for (const key of list) {
   //
   // 一路按下去，每一屏都**量它真的立起来了**，不是「DOM 里有这么个节点」：
   // 老内核上这几屏出事的样子是「JS 抛错 → 这一屏半张脸」，节点在不在说明不了
-  // 问题。所以战绩详情量那张图解码出来没有、分镜动画量棋盘格子画出来没有。
+  // 问题。所以战绩详情量那张图解码出来没有、《怎么玩》量五条规则连配图画出来没有。
   if (mode.screens) {
     // 结算页那会儿分享窗口还盖着（上面点过《分享》），先收起来再退。
     if (await p.$('#shareCloseBtn')) {
@@ -395,24 +507,9 @@ for (const key of list) {
     say(how.modal && how.rules === 5 && how.arts === 5,
       '《怎么玩》五条规则连配图都画出来了', JSON.stringify(how));
 
-    // ④ 分镜动画——这一版唯一一屏「不是我画的、也不是棋盘」的界面
-    if (how.story >= 1) {
-      await p.click('.howto-story[data-fam="square"]');
-      const up = await p
-        .waitForSelector('.story-board .story-cell', { timeout: 20000 })
-        .then(() => true)
-        .catch(() => false);
-      await p.waitForTimeout(1800);
-      const story = await p.evaluate(() => ({
-        cells: document.querySelectorAll('.story-board .story-cell').length,
-        segs: document.querySelectorAll('.story-prog-seg').length,
-        ctl: document.querySelectorAll('.story-controls .story-ctl').length,
-      }));
-      say(up && story.cells > 0 && story.segs > 0 && story.ctl >= 3,
-        '分镜动画立起来了（棋盘格子 + 进度条 + 四颗键）', JSON.stringify(story));
-    } else {
-      say(false, '《怎么玩》里没有进分镜的入口', JSON.stringify(how));
-    }
+    // ④ 分镜动画：从前这儿接着点一颗分镜键、量它立没立起来。第 14 推那两段下线了
+    // （还在教旧规则），《怎么玩》上不该再有进去的键。
+    say(how.story === 0, '《怎么玩》上不再摆分镜键（第 14 推下线）', JSON.stringify(how));
   }
 
   say(errs.length === 0, '全程零报错', errs.slice(0, 3).join(' | '));

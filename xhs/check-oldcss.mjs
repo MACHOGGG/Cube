@@ -369,7 +369,23 @@ const SCREENS = [
     // 来——图被裁掉半截也没人看得见。
     sels: ['.overlay--end', '.overlay--end .modal', '.end-rule', '.end-breakdown', '.btn-row', '.btn-row button', '.end-share', '.end-share img'],
     nonzero: ['.end-share img'],
-    inside: [['.end-share', '.overlay--end .modal']],
+    /*
+     * 「整块在窗里」只在**横屏**量（第 14 推起）。
+     *
+     * 这一条是为横屏那一版加的：那儿战绩图是绝对定位到窗子右半边的，参照是 .modal，滚动段
+     * 的 overflow 管不到它——出了窗框就是被裁掉，没有别的办法看见。竖屏不一样：图在滚动段
+     * 里（gameShell.ts 那段注释：「这一页本来就非滚不可，而该滚的正是『明细 + 图』这一
+     * 段」），滚动段里的东西超出窗框是设计本身，滚就看得到。
+     *
+     * 第 14 推这一端接上了「综合得分怎么算」那一句（头一回的结算页多一行，34px），竖屏上
+     * 「图 + 发笔记 / 存相册两颗键」那一整块的下沿于是超出窗框 20px——那两颗键本来就在折叠
+     * 线下面要滚才看得到，网页端头一回的结算页也是同样的几何（图的下沿同样在滚动段下面
+     * 24px）。所以竖屏改量**图本身**没被窗框裁掉：图要是被顶出了窗框，那才是滚也滚不全。
+     */
+    inside: [
+      ['.end-share', '.overlay--end .modal', 'landscape'],
+      ['.end-share img', '.overlay--end .modal', 'portrait'],
+    ],
   },
   {
     name: '分享窗口',
@@ -412,32 +428,8 @@ const SCREENS = [
     },
     sels: ['.howto-modal', '.howto-list', '.howto-ov .tut-rule', '.howto-ov .tut-rule-art', '.howto-ov .btn-row', '#howtoOkBtn'],
   },
-  {
-    // 第一次点开方块弹的那一段分镜动画（网页版原件）。它是这一版唯一一屏
-    // 「不是我画的、也不是棋盘」的界面，降级层照样要管得住：进度条那一排、
-    // 舞台、底下四颗键。
-    //
-    // 别的屏在 run() 里先把「看过了」填上了（否则走不到棋盘），这一屏要的
-    // 正是没看过的状态，所以先把那一格擦掉再刷新。
-    name: '方块分镜动画',
-    async go(p) {
-      // 分镜不再自己弹（玩家定的，见 xhs/src/main.ts 的 showGame）。现在唯一
-      // 的入口是成绩与说明页那颗《怎么玩》，五条规则上头摆着方块和小球两颗
-      // 键——这一屏就从那儿进去量。
-      await p.click('#xhsProfile');
-      await p.waitForTimeout(900);
-      await p.click('.xhs-how');
-      await p.waitForSelector('.howto-story[data-fam="square"]', { timeout: 20000 });
-      await p.click('.howto-story[data-fam="square"]');
-      // 等这一屏真的立起来再量，别量到一半的骨架。
-      await p.waitForSelector('.story-board .story-cell', { timeout: 20000 });
-      await p.waitForTimeout(1800);
-    },
-    sels: [
-      '.story-tut', '.story-prog', '.story-prog-seg', '.story-stage', '.story-board',
-      '.story-controls', '.story-controls .story-ctl',
-    ],
-  },
+  // 「方块分镜动画」那一屏从这张表里撤了（第 14 推）：那两段分镜还在教旧规则，入口
+  // 下线了，这一屏已经走不到。《怎么玩》那一屏本身（五条规则 + 配图）照旧在表里。
   {
     name: '战绩详情页',
     async go(p) {
@@ -489,7 +481,29 @@ const SCREENS = [
  * ⚠️ 只删 `inset:` 这个**简写**，`inset-inline` 之类不碰（现在一条都没有，但别让这把刀越
  * 切越宽）。
  */
+/**
+ * 两张表里还有几条 `inset` 声明（注释里抄的不算）。
+ *
+ * 降级那一遍在剥之前数，数的是降级层留下来的——第 14 推起降级层把每一条都展开成四个方
+ * 向，所以应该是 0：剩一条，就是 Chrome 61 上整条丢掉的一条。
+ *
+ * 出好的包里本来就剩得不多：出包目标是 chrome61，esbuild 已经把 `inset: 0` 那些拆成了四
+ * 条边，没拆的只有 `inset: auto`（正常那一遍数出来是 2）。源样式表里有多少条、展开得对不
+ * 对，由 scripts/check-downlevel.mjs 第 8 节拿源文件量。
+ */
+const COUNT_INSET = () => {
+  let n = 0;
+  for (const id of ['slides-styles', 'xhs-styles']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const css = (el.textContent || '').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    n += (css.match(/(^|[;{])\s*inset\s*:/g) || []).length;
+  }
+  return n;
+};
+
 async function stripModernCss(p) {
+  const insetLeft = await p.evaluate(COUNT_INSET);
   const got = await p.evaluate(() => {
     const out = { ratio: 0, inset: 0, has: 0 };
     for (const id of ['slides-styles', 'xhs-styles']) {
@@ -516,8 +530,40 @@ async function stripModernCss(p) {
   });
   // 量程：三样都要真的剥到了。哪一样数成 0，就说明正则和源样式对不上了（比如有人把
   // `aspect-ratio` 写成了别的形式）——那时候这一遍又变回「降级层 ＋ 新内核」，而门会全绿。
-  return got;
+  return { ...got, insetLeft };
 }
+
+/**
+ * 翻面那一层（`.plank-turn` 和它的两面，engine/plankFlip.ts）塞进一个 50×40 的盒子里量。
+ *
+ * 它们全靠 `position: absolute; inset: 0` 撑开，而翻面只在得分那一下才出现——这台对照台
+ * 拖十下常常一分不得，等运气的门就是偶发红。所以不等它自己出现：照它的类名造一个，量它
+ * 铺不铺满。降级那一遍 inset 已经剥掉了，铺得满全靠降级层展开的那四条边。
+ */
+const PROBE_PLANK = () => {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:7px;top:7px;width:50px;height:40px;pointer-events:none;';
+  const turn = document.createElement('div');
+  turn.className = 'plank-turn';
+  const face = document.createElement('div');
+  face.className = 'plank-turn-face';
+  turn.appendChild(face);
+  box.appendChild(turn);
+  document.body.appendChild(box);
+  // 尺子：同样摆法、但没有任何规则撑它的一层——量得出塌（0×0），上面那两个数才有意义。
+  const bare = document.createElement('div');
+  bare.style.position = 'absolute';
+  box.appendChild(bare);
+  const t = turn.getBoundingClientRect();
+  const f = face.getBoundingClientRect();
+  const z = bare.getBoundingClientRect();
+  box.remove();
+  return {
+    turn: [Math.round(t.width), Math.round(t.height)],
+    face: [Math.round(f.width), Math.round(f.height)],
+    bare: [Math.round(z.width), Math.round(z.height)],
+  };
+};
 
 async function run(browser, view, screen, old) {
   const ctx = await browser.newContext({
@@ -543,7 +589,9 @@ async function run(browser, view, screen, old) {
   p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(PAGE);
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
+  const insetSrc = old ? null : await p.evaluate(COUNT_INSET);
   const stripped = old ? await stripModernCss(p) : null;
+  const plank = await p.evaluate(PROBE_PLANK);
   await p.waitForTimeout(700);
   await screen.go(p);
 
@@ -564,8 +612,12 @@ async function run(browser, view, screen, old) {
       .catch(() => null);
     say(Boolean(r && r.w > 0 && r.h > 0), `${tag}：${sel} 真的画出来了（宽高都 > 0）`, r ? `${r.w}×${r.h}` : '(这一屏上找不到它)');
   }
-  /** `inside`：这个盒子要整个待在那个盒子里面（四边都不许出去）。 */
-  for (const [child, parent] of screen.inside || []) {
+  /**
+   * `inside`：这个盒子要整个待在那个盒子里面（四边都不许出去）。第三项给了就只在那一种
+   * 朝向上量（'portrait' / 'landscape'）。
+   */
+  for (const [child, parent, only] of screen.inside || []) {
+    if (only && only !== (view.w > view.h ? 'landscape' : 'portrait')) continue;
     const r = await p
       .evaluate(([c, pa]) => {
         const ce = document.querySelector(c);
@@ -629,7 +681,7 @@ async function run(browser, view, screen, old) {
     path: join(here, '..', '.tmp-oldcss', `${view.w}-${screen.name}-${old ? 'old' : 'new'}.png`),
   }).catch(() => {});
   await ctx.close();
-  return { boxes, errs, spill, left, stripped };
+  return { boxes, errs, spill, left, stripped, insetSrc, plank };
 }
 
 const only = process.argv[2];
@@ -653,10 +705,22 @@ for (const view of [
     say(old.errs.length === 0, '降级层跑起来零报错', old.errs.slice(0, 2).join(' | '));
     // 量程：那三样真的从样式表里剥掉了（见 stripModernCss）。有一样数成 0，这一遍就又
     // 变回「降级层 ＋ 新内核」——而那时候下面每一条都会全绿，正是最难发现的那种假绿。
+    //
+    // inset 不在这一条里了：第 14 推起降级层自己把它展开成四个方向，剥的时候已经一条不
+    // 剩（剩下的那几个数是注释里的字，不算数）。它改由下面那一条量。
     say(
-      old.stripped.ratio > 0 && old.stripped.inset > 0 && old.stripped.has > 0,
-      '量程：aspect-ratio / inset / :has() 真的剥掉了',
-      `ratio ${old.stripped.ratio} · inset ${old.stripped.inset} · has ${old.stripped.has}`,
+      old.stripped.ratio > 0 && old.stripped.has > 0,
+      '量程：aspect-ratio / :has() 真的剥掉了',
+      `ratio ${old.stripped.ratio} · has ${old.stripped.has}`,
+    );
+    // inset（第 14 推）：降级层一条不留地展开了，翻面那一层在剥掉 inset 之后照样铺满。
+    const full = (r) => r.turn[0] === 50 && r.turn[1] === 40 && r.face[0] === 50 && r.face[1] === 40;
+    say(old.plank.bare[0] === 0 && old.plank.bare[1] === 0,
+      '（尺子）没有规则撑着的一层量出来是 0×0（量得出塌）', JSON.stringify(old.plank.bare));
+    say(
+      old.stripped.insetLeft === 0 && full(fresh.plank) && full(old.plank),
+      'inset 降级层全部展开了，翻面那一层（.plank-turn）照样铺满',
+      `包里 ${fresh.insetSrc} 条 → 降级后剩 ${old.stripped.insetLeft} 条 · 翻面层 正常 ${JSON.stringify(fresh.plank)} / 降级 ${JSON.stringify(old.plank)}`,
     );
     compare(screen.name, fresh.boxes, old.boxes, 2);
     const newSpill = fresh.spill.join(' | ');

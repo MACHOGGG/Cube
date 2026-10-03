@@ -17,10 +17,9 @@
  * 版那一份，这里一个字都不改。玩家定的：选出来的玩法要「完全复刻一样」。
  *
  * 教学也是网页版那一份，而且**一次都不自己跳出来**（玩家定的，网页版同一条）：
- * 分镜动画（src/ui/tutorial.ts、src/ui/circleTutorial.ts，连 2.25 倍速都是网页版
- * 的）和五条规则那一屏，都得玩家自己按——成绩与说明页那颗《怎么玩》，五条规则上
- * 头摆着方块和小球两颗键；局中按暂停，面板里还有一颗。见 showShapeStory 与
- * ./tutorial.ts 开头那段。
+ * 五条规则那一屏得玩家自己按——成绩与说明页那颗《怎么玩》；局中按暂停，面板里还
+ * 有一颗。见 ./tutorial.ts 开头那段。从前五条上头还摆着方块和小球两颗分镜键（网页版
+ * 那两段分镜动画），第 14 推下线了：那两段还在教旧规则。
  *
  * 这一版自己的东西只有四件：主菜单（六张卡）、本机游玩历史、介绍页、以及
  * Chrome 61 的基线样式层。多人小屋、排行榜、登录订阅、语言选择整块不做
@@ -38,8 +37,6 @@ import type { Family, TargetPattern } from '../../src/engine/targets';
 import { renderRandomTargetPage } from '../../src/ui/slotMachine';
 import { renderFlipModePage } from '../../src/ui/flipMode';
 import { renderPuzzleModePage } from '../../src/ui/puzzleMode';
-import { renderTutorial } from '../../src/ui/tutorial';
-import { renderCircleTutorial } from '../../src/ui/circleTutorial';
 import { installBackNav, setScreenBack } from '../../src/engine/backNav';
 import { loadAllRuns } from '../../src/engine/persistence';
 import { showLoadingScreen } from '../../src/ui/loadingScreen';
@@ -54,7 +51,7 @@ import { installTopInset } from './topInset';
 import { installMenuFit, scheduleFitMenu } from './menuFit';
 import { setCoachStoreKey } from '../../src/ui/coachBar';
 import { knowsHow, setKnowHowKey } from '../../src/engine/firstPlay';
-import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE, type StoryFamily } from './tutorial';
+import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE } from './tutorial';
 import { bombTip, flipTip, puzzleTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, XHS_ADVANCED_MODES, type XhsMode } from './menu';
 import { renderProfilePage, type Book } from './profile';
@@ -155,7 +152,7 @@ function teardown() {
  * 开一局。除了 lang，选项原样交给网页版那个 mount。
  *
  * **开局前不放分镜动画**（玩家定的，网页版同一条）：点哪个玩法就直接落进棋盘。
- * 想看那一段的人去成绩与说明页点《怎么玩》，那是它唯一的入口（见 showProfile）。
+ * 那一段第 14 推整个下线了（还在教旧规则），连成绩与说明页那个入口也撤了。
  *
  * 这段说明以前写的是反的（「第一次开基础方块 / 基础小球时先放一段，放完才真的
  * 进局」），那是上一版的行为。照着它去「修」代码，就会把玩家否掉的自动播放加
@@ -167,8 +164,10 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   const mountNow = () => {
     // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
     // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
+    // shouldTeachTotal 同理：结算页那一句「综合得分怎么算」，也只摆头一回。
     activeDestroy = game.mount(root, onBack, {
       shouldLeadOut: claimFirstEndcard,
+      shouldTeachTotal: claimFirstTotalTip,
       ...opts,
       lang: LANG,
     });
@@ -185,53 +184,24 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
     setScreenBack(onBack);
   };
 
-  // 开局前不再自己放分镜动画（玩家定的，网页版同一条）。想看的人去成绩与说
-  // 明页那一颗《怎么玩》，五条规则上头摆着方块和小球两颗键。
+  // 开局前不再自己放分镜动画（玩家定的，网页版同一条）。那两段第 14 推整个下线
+  // 了（还在教旧规则）；规矩看成绩与说明页那一颗《怎么玩》，五条规则。
   mountNow();
 }
 
-/**
- * 放一段分镜动画。用的是网页版那两个原件，一个字没改：
- *
- *   方块  src/ui/tutorial.ts       renderTutorial
- *   小球  src/ui/circleTutorial.ts renderCircleTutorial
- *
- * 连播放速度都是网页版的（storyTutorial.ts 里那个 `SPEED = 2.25`）——玩家定的
- * 「这两个都照网页版的加速」。下面那四颗键（上一条 / 再一次 / 下一条 / 完成）
- * 也是原件自带的，这一版不加不减不改。
- *
- * 这一屏是**纯动画、没有一个字**：要看字的人去成绩与说明页点《怎么玩》，或者
- * 局中按暂停——那两处是五条规则加配图的详细版（见 tutorial.ts）。
- *
- * 返回键在这一屏按下去回主菜单，不是进这一局：人是在「还没开始」的地方，退
- * 出该退回他来的地方。和网页版那句注释同一个意思（renderShapeTutorialByShape
- * 的 onBack 参数）。
- */
-function showShapeStory(fam: StoryFamily, onDone: () => void, onBack: () => void) {
-  teardown();
-  markStorySeen(fam);
-  if (fam === 'square') renderTutorial(root, LANG, onDone);
-  else renderCircleTutorial(root, LANG, onDone);
-  setScreenBack(onBack);
-}
+// 从前这儿有一个 showShapeStory：放一段分镜动画（网页版 src/ui/tutorial.ts 和
+// circleTutorial.ts 那两个原件）。第 14 推下线了——那两段还在教旧规则，方案定的是
+// 「直接下线入口，不重做」。《怎么玩》那一屏现在只有五条规则。
 
 /** 教学窗开着的话，关掉它的那只手。换屏时要用（见 teardown）。 */
 let closeTutorial: (() => void) | null = null;
 
-function showTutorial(after?: () => void, onStory?: (fam: StoryFamily) => void) {
+function showTutorial(after?: () => void) {
   closeTutorial?.();
-  closeTutorial = openTutorial(
-    LANG,
-    () => {
-      closeTutorial = null;
-      after?.();
-    },
-    onStory &&
-      ((fam) => {
-        closeTutorial = null;
-        onStory(fam);
-      }),
-  );
+  closeTutorial = openTutorial(LANG, () => {
+    closeTutorial = null;
+    after?.();
+  });
 }
 
 /**
@@ -353,7 +323,7 @@ const FIRST_RUN_KEY = 'slides.xhs.firstRun';
  * `npm run build:xhs` 当场编译不过——`npm run typecheck`（`tsc -b`）**管不到
  * `xhs/`**，它用的是 `xhs/tsconfig.json`。
  */
-type FirstKey = 'square' | 'bomb' | 'slot' | 'flip' | 'puzzle' | 'endcard';
+type FirstKey = 'square' | 'bomb' | 'slot' | 'flip' | 'puzzle' | 'endcard' | 'totaltip';
 const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
 
 /** 小球和方块都打过一遍了没有——主菜单要不要再压暗别的玩法，看这个。 */
@@ -399,6 +369,20 @@ function markOpened(k: FirstKey): void {
 function claimFirstEndcard(): boolean {
   if (!firstTimeIn('endcard')) return false;
   markOpened('endcard');
+  return true;
+}
+
+/**
+ * 结算页那一句「综合得分怎么算」该不该摆（只摆头一回）。
+ *
+ * 网页版是 src/engine/firstPlay.ts 的 claimFirstTotalTip，这一版从前**没接**：mount
+ * 只传了 shouldLeadOut，没传 shouldTeachTotal（第 14 推），于是五条规矩的最后一条——
+ * 从棋盘底下挪到结算页上的那一句——在小红书这边一次都没摆过。钥匙和上面那颗光一样
+ * 存在这一版自己的命名空间里，各记各的。
+ */
+function claimFirstTotalTip(): boolean {
+  if (!firstTimeIn('totaltip')) return false;
+  markOpened('totaltip');
   return true;
 }
 
@@ -634,9 +618,8 @@ function showProfile() {
   renderProfilePage(root, BOOKS, LANG, {
     onBack: showMenu,
     onOpenRun: showRun,
-    // 分镜动画只有这一条路能走到（玩家定的）。看完、按返回，都回成绩页。
-    onHowToPlay: () =>
-      showTutorial(undefined, (fam) => showShapeStory(fam, showProfile, showProfile)),
+    // 《怎么玩》：五条规则。上头那两颗分镜键第 14 推撤了（那两段还在教旧规则）。
+    onHowToPlay: () => showTutorial(),
   });
   setScreenBack(showMenu);
 }

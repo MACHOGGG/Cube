@@ -71,7 +71,9 @@ check('② 开局失败那一处调的是 errorText', main.includes('errorText(b
   check('③ 量程：那个 switch 真的读出来了', cased.length >= 8, `${cased.length} 句：${cased.join(' ')}`);
 
   /** 明知落在 default（「连不上网络」）上的几种。 */
-  const KNOWN_DEFAULT = ['notHost', 'mode', 'network'];
+  // 第 14 推给 notHost 和 mode 写了话（四语各一句），从单子上划掉了；剩下的 network 本
+  // 来就该落 default（那一句就是「连不上网络」）。
+  const KNOWN_DEFAULT = ['network'];
   const forgotten = members.filter((m) => !cased.includes(m) && !KNOWN_DEFAULT.includes(m));
   check('③ 没有哪一种 RoomError 是没想过的', forgotten.length === 0, forgotten.join('、'));
   // 反过来：单子上的也不许凭空长出来——`notHost` 哪天接上了话，就该从单子里划掉，

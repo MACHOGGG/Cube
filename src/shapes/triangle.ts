@@ -25,11 +25,12 @@ import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareC
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
+import { clampOddShift, fillerAwareSource, slideLine } from '../engine/slideLine';
 import { asteriskGroup, triCentroid, triInradius, TRI_STAR_OF_INRADIUS } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
 import { crackLayer } from '../ui/bombCrack';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb, generateCleanBombBoard, hasRedCluster, redClusterKeys, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
@@ -584,47 +585,16 @@ export function createTriangleGame(): ShapeGame {
         return hit;
       }
 
-      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
-        const found = new Set<string>();
-        const seen = new Set<string>();
-        for (let r = 0; r < ROW_LENS.length; r++)
-          for (let c = 0; c < ROW_LENS[r]; c++) {
-            if (!liveBomb(g[r][c])) continue;
-            const startKey = cellKey(r, c);
-            if (seen.has(startKey)) continue;
-            const comp: string[] = [];
-            const stack: Cell[] = [[r, c]];
-            seen.add(startKey);
-            while (stack.length) {
-              const [cr, cc] = stack.pop()!;
-              comp.push(cellKey(cr, cc));
-              for (const [nr, nc] of triangleAdjacency(cr, cc)) {
-                const key = cellKey(nr, nc);
-                if (seen.has(key) || !liveBomb(g[nr][nc])) continue;
-                seen.add(key);
-                stack.push([nr, nc]);
-              }
-            }
-            if (comp.length >= minSize) for (const k of comp) found.add(k);
-          }
-        return found;
-      }
-
+      // 炸弹那三样（四连判爆、三连预警、发一副干净的开局）在 engine/bomb.ts（第 14 推从
+      // 五副棋盘里抽出来，规矩只写一遍）；这儿只交代这一副盘「有哪些格、谁挨着谁」。
       // A 4-cluster ends the run outright; a 3-cluster is one drag away
       // from it, so render() pulses those tiles as an early warning.
-      function hasRedCluster(g: Tile[][]): boolean {
-        return redClusterKeys(g, 4).size > 0;
-      }
-
-      function generateCleanBombBoard(): Tile[][] {
-        let g: Tile[][];
-        let tries = 0;
-        do {
-          g = boardFromBombDeck(shuffledDeck());
-          tries++;
-        } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
-        return g;
-      }
+      const BOMB_ADJ: BombAdjacency = {
+        *cells() {
+          for (let r = 0; r < ROW_LENS.length; r++) for (let c = 0; c < ROW_LENS[r]; c++) yield [r, c] as const;
+        },
+        neighbors: (r, c) => triangleAdjacency(r, c),
+      };
 
       function renderLegend() {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
@@ -957,7 +927,7 @@ export function createTriangleGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
-        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
+        const warnKeys = isBomb ? redClusterKeys(grid, 3, BOMB_ADJ, liveBomb) : null;
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             // 离场的格子一律不画（《侵蚀阶梯》v1.2 §3「格子离场」）。从前削掉的
@@ -1314,7 +1284,7 @@ export function createTriangleGame(): ShapeGame {
       }
 
       function resetBoard() {
-        grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
+        grid = isBomb ? generateCleanBombBoard(() => boardFromBombDeck(shuffledDeck()), hasInitialClump, BOMB_ADJ, liveBomb) : generateCleanBoard();
         /*
          * 开发时手摆的那副牌（`engine/devDeal.ts`）。**正式包里这一句整段不存在**
          * （`import.meta.env.DEV` 是构建时常量，Vite 把它摇掉）。
@@ -1519,17 +1489,9 @@ export function createTriangleGame(): ShapeGame {
       // of filler slots gets which tile's content exactly cancels that
       // mismatch. The filler region's size always equals the (even) shift,
       // so it always splits into whole pairs with nothing left over.
-      function fillerAwareSource(idx: number, shift: number, n: number): number {
-        const plain = (((idx - shift) % n) + n) % n;
-        if (shift === 0) return plain;
-        const fillerSize = Math.abs(shift);
-        const regionStart = shift > 0 ? 0 : n - fillerSize;
-        const inFiller = shift > 0 ? idx < fillerSize : idx >= regionStart;
-        if (!inFiller) return plain;
-        const localIdx = idx - regionStart;
-        const partnerIdx = regionStart + (localIdx % 2 === 0 ? localIdx + 1 : localIdx - 1);
-        return (((partnerIdx - shift) % n) + n) % n;
-      }
+      // fillerAwareSource 本体搬到了 engine/slideLine.ts（第 14 推）：applyDrag 要把它当参数
+      // 交给 slideLine，残局穷举（engine/residueSearch.ts）也要用同一个——从前那边抄了一份，
+      // 因为这一个在闭包里拿不到。上面这一大段讲的就是它。
 
       const FILLER_OPACITY = 0.55;
 
@@ -1547,7 +1509,8 @@ export function createTriangleGame(): ShapeGame {
         // as far apart, so the same curve would otherwise pull noticeably
         // harder over that longer stretch and feel forced rather than guided).
         const half = magnetizeFollow(projectedSteps(d.fam, d.dx, d.dy) / 2, MAGNET_POWER, MAGNET_BLEND);
-        const shift = 2 * Math.round(half);
+        // 夹紧和 applyDrag 那一处同一句：预览画出来的，必须正是松手之后落定的那一副。
+        const shift = clampOddShift(2 * Math.round(half), n);
         // A light tick each time the drag crosses into a new suitable
         // (even) configuration — the discrete, physical "click" of passing
         // a detent, felt (haptics) and not just inferred from the drag's
@@ -1629,7 +1592,7 @@ export function createTriangleGame(): ShapeGame {
       // 查，会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查
       // 又会让同一堆红块报两遍。所以只在盘面安定下来之后查这一次。
       function checkBombHazard(): boolean {
-        if (!isBomb || !hasRedCluster(grid)) return false;
+        if (!isBomb || !hasRedCluster(grid, BOMB_ADJ, liveBomb)) return false;
         render();
         controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;
@@ -1644,10 +1607,13 @@ export function createTriangleGame(): ShapeGame {
         // Math.round(magnetize(x)) === Math.round(x) — holds identically
         // when applied to x/2, so the plain, unmagnetized value already
         // agrees with whatever the preview last displayed).
-        const shift = 2 * Math.round(projectedSteps(d.fam, d.dx, d.dy) / 2);
-        if (((shift % n) + n) % n === 0) return false;
-        const vals = cells.map(([r, c]) => grid[r][c]);
-        const shifted = vals.map((_, i) => vals[fillerAwareSource(i, shift, n)]);
+        //
+        // 夹在 ±(n − 1) 以内，和预览那一处同一句（第 14 推）：奇数长的线滑过 n − 1 格，
+        // fillerAwareSource 会把同一枚分给两格、另一枚凭空消失（「长滑会复制或丢棋子」）。
+        const shift = clampOddShift(2 * Math.round(projectedSteps(d.fam, d.dx, d.dy) / 2), n);
+        // 活格不到两枚、转了整圈、算出来的不是排列：这一下不算一步（engine/slideLine.ts）。
+        const shifted = slideLine(cells.map(([r, c]) => grid[r][c]), shift, fillerAwareSource);
+        if (!shifted) return false;
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
@@ -1706,6 +1672,13 @@ export function createTriangleGame(): ShapeGame {
           const [px, py] = unfix(x, y);
           dragFix = null;
           const [r, c] = cellAt(px, py);
+          // 手指落在一个已经离场的格子上：那儿什么都没有，这一下就什么都不做（和小球那一副
+          // 同一句，第 14 推）。从前这几副不拦，于是抓着一条可能只剩一枚、甚至一枚活格都没
+          // 有的线滑出去——什么都没动，步数照扣。
+          if (isBlank(grid[r][c])) {
+            drag = null;
+            return;
+          }
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, lastShift: 0, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1719,6 +1692,8 @@ export function createTriangleGame(): ShapeGame {
         onRegrab(x, y) {
           if (!drag) return null;
           const [r, c] = cellAt(x, y);
+          // 改抓的时候也一样：挪到一片空地上就维持原来抓的那一颗，不要抓空。
+          if (isBlank(grid[r][c])) return null;
           drag.r = r;
           drag.c = c;
           return { r, c };

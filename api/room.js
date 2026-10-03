@@ -1215,6 +1215,11 @@ async function create(res, body) {
   for (let attempt = 0; attempt < 12; attempt++) {
     const code = String(randomInt(0, 10000)).padStart(4, '0');
     if (!(await hsetnx(roomKey(code), 'meta', meta))) continue;
+    // **抢到房号的下一步就是给它定期限**（第 14 推）。原先 EXPIRE 排在后面两次写入之后：
+    // 那两次里任何一次摔了（库忙、超时），这把房号就成了一个没有期限的键——永远占着，
+    // 一万个房号就少一个，而且没有任何东西会去清它。期限先压上，后面摔了也只是一间二十
+    // 分钟后自己消失的空屋。check-room-race 钉着这个先后。
+    await expire(roomKey(code), ROOM_TTL_S);
     await hset(roomKey(code), 's:0', playerId);
     await hset(roomKey(code), 'p:' + playerId, {
       token,
@@ -1227,7 +1232,6 @@ async function create(res, body) {
       slot: 0,
       seen: cleanSeen(body.seen),
     });
-    await expire(roomKey(code), ROOM_TTL_S);
     return send(res, 200, {
       code,
       playerId,
@@ -1286,7 +1290,13 @@ async function join(res, body) {
     let slot = seat.slot;
     if (seat.left || slot === undefined) {
       slot = await claimSeat(code, field.slice(2), hash);
-      if (slot < 0) return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
+      if (slot < 0) {
+        // 满了：先把刚抢的那把认领锁还回去，再答 full（第 14 推）。原先锁留在那儿——他等
+        // 到有人起身、再按一次《加入》，撞上的是自己上一次留下的锁，答的是 claimed，而且
+        // 这间屋子活着一天就一直是 claimed：他再也回不到自己那个座位上。
+        await hdel(roomKey(code), claimKey(field.slice(2), seat.token));
+        return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
+      }
     }
     const next = {
       ...seat,

@@ -347,16 +347,18 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
    */
   await call({ action: 'push', ...H, runId: 'h7', mode: 'square', score: 320,
     data: { shapeId: 'square', modeKey: 'puzzle', totalScore: 320 } });
-  await call({ action: 'push', ...H, runId: 'h8', mode: 'square', score: 640,
-    data: { shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, totalScore: 640 } });
+  // 340 而不是原先的 640：方块一盘 36 枚，步步为营满打满算 360 分（第 14 推起服务端拦超过
+  // 「枚数 × 10」的分），640 是一局打不出来的数。
+  await call({ action: 'push', ...H, runId: 'h8', mode: 'square', score: 340,
+    data: { shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, totalScore: 340 } });
   const minePuzzle = await call({ action: 'mine', ...H });
   check('消线退一步那一版留在老榜 square:puzzle 上',
     minePuzzle.payload?.best?.['square:puzzle'] === 320, JSON.stringify(minePuzzle.payload?.best));
   check('现行那一版记在 square:puzzle2 上',
-    minePuzzle.payload?.best?.['square:puzzle2'] === 640, JSON.stringify(minePuzzle.payload?.best));
+    minePuzzle.payload?.best?.['square:puzzle2'] === 340, JSON.stringify(minePuzzle.payload?.best));
   // 反面：两局步步为营**一局都不许掉进 base 那张榜**（上面那个 kindOf 的坑）。
   check('步步为营没有一局掉进 base 榜',
-    minePuzzle.payload?.best?.['square:base'] !== 320 && minePuzzle.payload?.best?.['square:base'] !== 640,
+    minePuzzle.payload?.best?.['square:base'] !== 320 && minePuzzle.payload?.best?.['square:base'] !== 340,
     JSON.stringify(minePuzzle.payload?.best?.['square:base']));
 }
 
@@ -472,6 +474,129 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
     check('不勾 scrubNames：那条旧的还在（反面尺子）',
       Boolean((await hgetall(NAMES))['scrubme@example.com']));
   }
+  delete process.env.ADMIN_TOKEN;
+}
+
+// ---- 步步为营：清盘剩几步（第 14 推）---------------------------------------
+//
+// 同分的两局，剩得多的排前面；榜上印的照旧是原综合分；没清盘的局没有 left。存的是拼起来
+// 的数（分数 × 1000 ＋ 清盘时剩的步数，见 api/scores.js 的 PUZZLE_SCALE），这几条量的是
+// 「拼起来、拆开、排对、搬家和重建都不丢」。
+{
+  // 重建要管理员令牌（上面那一节用完删掉了）。
+  process.env.ADMIN_TOKEN = 'x'.repeat(32);
+  const CLEAR = '全部方块已翻成点面';
+  const pz = (score, left, cleared = true, extra = {}) => ({
+    shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36, totalScore: score,
+    reason: cleared ? CLEAR : '步数用尽',
+    puzzle: { cleared: 0, stars: 0, spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left, peak: 9 },
+    ...extra,
+  });
+  // 名字也是故意挑的：并列时内存替身按成员名**正序**破平（pz-a… 在 pz-z… 前面）。清三是
+  // pz-a、清七是 pz-z，同分不加步数的话清三就排到前面去——那一条只有真的按步数排了才过。
+  const P = await makePlayer('pz-z7@example.com');
+  const Q = await makePlayer('pz-a3@example.com');
+  const R = await makePlayer('pz-r@example.com');
+  const S = await makePlayer('pz-s@example.com');
+  const T = await makePlayer('pz-t@example.com');
+  await call({ action: 'push', ...Q, runId: 'q1', mode: 'square', score: 300, name: '清三', data: pz(300, 3) });
+  await call({ action: 'push', ...P, runId: 'p1', mode: 'square', score: 300, name: '清七', data: pz(300, 7) });
+  await call({ action: 'push', ...R, runId: 'r1', mode: 'square', score: 300, name: '没清', data: pz(300, 0, false) });
+  await call({ action: 'push', ...S, runId: 's1', mode: 'square', score: 250, name: '没清二', data: pz(250, 0, false) });
+  await call({ action: 'push', ...T, runId: 't1', mode: 'square', score: 200, name: '清九', data: pz(200, 9) });
+
+  // 上面那一节的「辛」也在这张榜上（340，没清盘）。这儿只看这一节自己的五个人，排序也只
+  // 比他们之间的先后。
+  const OURS = new Set(['清七', '清三', '没清', '没清二', '清九']);
+  const one = await call({ action: 'board', ...P, mode: 'square:puzzle2' });
+  const rows = (one.payload?.rows ?? []).filter((r) => OURS.has(r.name));
+  const seen = rows.map((r) => `${r.name}:${r.score}${r.left !== undefined ? '/' + r.left : ''}`).join(' ');
+  check('（尺子）步步为营那张榜上五个人都在', rows.length === 5, seen);
+  check('清盘剩 7 步的排在剩 3 步的前面', rows.findIndex((r) => r.name === '清七') < rows.findIndex((r) => r.name === '清三'), seen);
+  check('同分时清盘的排在没清盘的前面（剩下的步数只在同分时起作用）',
+    rows.findIndex((r) => r.name === '清三') < rows.findIndex((r) => r.name === '没清'), seen);
+  check('分数照旧是第一位：没清盘的 250 排在清盘剩 9 步的 200 前面',
+    rows.findIndex((r) => r.name === '没清二') < rows.findIndex((r) => r.name === '清九'), seen);
+  check('显示的分数等于原综合分（不是拼起来的那个数）',
+    rows.map((r) => r.score).join() === '300,300,300,250,200', seen);
+  check('清盘的局带着剩几步', rows.find((r) => r.name === '清七')?.left === 7 && rows.find((r) => r.name === '清九')?.left === 9, seen);
+  check('没清盘的局没有 left', rows.filter((r) => r.name.startsWith('没清')).every((r) => !('left' in r)), seen);
+  const myPlace = (one.payload?.rows ?? []).findIndex((r) => r.name === '清七') + 1;
+  check('「我排第几」那一格的分数也拆开了', one.payload?.me?.score === 300 && one.payload?.me?.rank === myPlace,
+    JSON.stringify(one.payload?.me));
+
+  const group = await call({ action: 'board', ...P, mode: 'g:puzzle' });
+  const g = (group.payload?.rows ?? []).filter((r) => OURS.has(r.name))
+    .map((r) => `${r.name}:${r.score}${r.left !== undefined ? '/' + r.left : ''}`).join(' ');
+  check('《步步为营》母榜上同样拆开、同样排', g.startsWith('清七:300/7 清三:300/3 没清:300 没清二:250 清九:200/9'), g);
+
+  // 总榜不受拼法影响：它照 stats.best（原分）算。
+  const total = await call({ action: 'board', ...P });
+  const mineRow = (total.payload?.rows ?? []).find((r) => r.name === '清七');
+  check('总榜上还是原分 300（stats.best 不跟着乘 1000）', mineRow?.score === 300, JSON.stringify(mineRow));
+
+  // 同一个人再打一局同分、剩得更多：榜上换成新那一局；剩得少：不动。
+  await call({ action: 'push', ...Q, runId: 'q2', mode: 'square', score: 300, data: pz(300, 8) });
+  await call({ action: 'push', ...Q, runId: 'q3', mode: 'square', score: 300, data: pz(300, 1) });
+  const q = (await call({ action: 'board', ...Q, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.name === '清三');
+  check('同分剩得更多的那一局顶掉旧的，剩得少的不往回拉', q?.left === 8, JSON.stringify(q));
+
+  // 老写法（原分）的那一行：上线之前存进去的。重建之前照原分读，不显示成 0。
+  // 真的老玩家总榜上一定有他（交过卷就有），重建就是照总榜和名字表找人的——夹具照这个样子摆。
+  const L = await makePlayer('pz-legacy@example.com');
+  await store.zadd('lb:square:puzzle2', 280, L.email);
+  await store.zadd('lb:total', 280, L.email);
+  const legacy = (await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.score === 280);
+  check('还没重建的老数照原分读（280，不是 0）', Boolean(legacy) && !('left' in legacy), JSON.stringify(legacy));
+
+  // 上限：步步为营的分数不能超过「枚数 × 10」。用另一个人交——拿清九交的话他的最高分变成
+  // 360，排到两位没清盘的前面去，下面「重建之后排法不变」那一条就量不出没清盘的局有没有
+  // 被写错（它们本来就在最底下了）。
+  const U = await makePlayer('pz-cap@example.com');
+  const capOk = await call({ action: 'push', ...U, runId: 't2', mode: 'square', score: 360, data: pz(360, 2) });
+  check('满打满算 36 × 10 = 360 收下', capOk.status === 200 && capOk.payload?.ok === true, `${capOk.status} ${JSON.stringify(capOk.payload)}`);
+  const capBad = await call({ action: 'push', ...U, runId: 't3', mode: 'square', score: 361, data: pz(361, 2) });
+  check('361 超过枚数 × 10，拒收', capBad.status === 400 && capBad.payload?.error === 'score', `${capBad.status} ${JSON.stringify(capBad.payload)}`);
+  const capLie = await call({ action: 'push', ...U, runId: 't4', mode: 'square', score: 900, data: pz(900, 2, true, { boardTiles: 999 }) });
+  check('报一个 999 枚也抬不高上限（方块就是 36 枚）', capLie.status === 400 && capLie.payload?.error === 'score',
+    `${capLie.status} ${JSON.stringify(capLie.payload)}`);
+  const notPz = await call({ action: 'push', ...U, runId: 't5', mode: 'square', score: 900, data: { shapeId: 'square', modeKey: 'base', boardTiles: 36 } });
+  check('别的玩法不受这道上限（反向对照）', notPz.status === 200 && notPz.payload?.ok === true, `${notPz.status} ${JSON.stringify(notPz.payload)}`);
+
+  // 头像不再存。
+  await call({ action: 'push', ...S, runId: 's2', mode: 'square', score: 10, name: '没清二', avatar: { x: 1 }, data: pz(10, 0, false) });
+  const nameRow = await store.hget('lbnames', S.email);
+  check('（尺子）名字照存', nameRow?.name === '没清二', JSON.stringify(nameRow));
+  check('头像不再存', nameRow && !('avatar' in nameRow), JSON.stringify(nameRow));
+  check('榜上那一行也不再带 avatar', (one.payload?.rows ?? []).every((r) => !('avatar' in r)), JSON.stringify(rows[0]));
+
+  // 重建：照存档重算，步步为营那几张写回拼起来的数（老写法那一行也换成新写法）。
+  await store.set('runs:' + L.email, [{ runId: 'l1', mode: 'square', score: 280, at: Date.now(), data: { ...pz(280, 4), rules: SCORING_V } }]);
+  await store.set('stats:' + L.email, { total: 280, runs: 1, best: { 'square:puzzle2': 280 }, seen: ['l1'] });
+  const order = async () => ((await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows ?? [])
+    .filter((r) => OURS.has(r.name)).map((r) => `${r.name}:${r.score}${r.left !== undefined ? '/' + r.left : ''}`).join(' ');
+  const beforeRebuild = await order();
+  const rb = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN });
+  check('（尺子）重建跑通了', rb.status === 200 && rb.payload?.ok === true, JSON.stringify(rb.payload));
+  check('重建之后清七那一行存的是 300 × 1000 + 7', (await store.zscore('lb:square:puzzle2', P.email)) === 300007,
+    String(await store.zscore('lb:square:puzzle2', P.email)));
+  check('老写法那一行重建成了新写法（280 × 1000 + 4）', (await store.zscore('lb:square:puzzle2', L.email)) === 280004,
+    String(await store.zscore('lb:square:puzzle2', L.email)));
+  // 重建是照存档把每张榜重写一遍——写法要和交卷时一模一样，不然重建一次排法就变了（比如
+  // 没清盘的局重建成原分，就全掉到清盘的局底下去了）。交卷那一路有「和历史最高分 × 1000
+  // 取大」兜着，这种错只在重建之后才露出来，所以单量这一条。
+  check('重建之后排法一点没变', (await order()) === beforeRebuild, `${beforeRebuild}  →  ${await order()}`);
+  const after = (await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows ?? [];
+  check('重建之后印出来的还是原分和剩几步',
+    after.find((r) => r.name === '清七')?.score === 300 && after.find((r) => r.name === '清七')?.left === 7,
+    JSON.stringify(after.find((r) => r.name === '清七')));
+
+  // 换邮箱搬家：抄的是榜上那个拼起来的数，不是 stats.best 的原分。
+  const { renameScoreOwner } = await import('../api/scores.js');
+  await renameScoreOwner(P.email, 'pz-p2@example.com');
+  check('换邮箱之后新地址上还是 300 × 1000 + 7', (await store.zscore('lb:square:puzzle2', 'pz-p2@example.com')) === 300007,
+    String(await store.zscore('lb:square:puzzle2', 'pz-p2@example.com')));
+  check('旧地址撤干净了', (await store.zscore('lb:square:puzzle2', P.email)) === null);
   delete process.env.ADMIN_TOKEN;
 }
 

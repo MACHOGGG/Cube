@@ -3,7 +3,8 @@
  *
  *   npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs
  *   npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs
- *   node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs
+ *   npx esbuild src/engine/slideLine.ts     --bundle --format=esm --outfile=/tmp/slideline.mjs
+ *   node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs /tmp/slideline.mjs
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 这道门守的是哪次事故
@@ -23,15 +24,17 @@
  *
  * 纯算术，不开浏览器，进得了 CI。
  */
-const [residueSrc, stalemateSrc] = process.argv.slice(2);
-if (!residueSrc || !stalemateSrc) {
-  console.error('用法: node scripts/check-endgame-residue.mjs <residueSearch.mjs> <stalemate.mjs>');
+const [residueSrc, stalemateSrc, slideSrc] = process.argv.slice(2);
+if (!residueSrc || !stalemateSrc || !slideSrc) {
+  console.error('用法: node scripts/check-endgame-residue.mjs <residueSearch.mjs> <stalemate.mjs> <slideLine.mjs>');
   console.error('  npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs');
   console.error('  npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs');
+  console.error('  npx esbuild src/engine/slideLine.ts     --bundle --format=esm --outfile=/tmp/slideline.mjs');
   process.exit(2);
 }
 const R = await import(residueSrc);
 const S = await import(stalemateSrc);
+const L = await import(slideSrc);
 const { readFileSync } = await import('node:fs');
 
 let fail = 0;
@@ -277,38 +280,61 @@ function isPermutation(src) {
 }
 
 // ---------------------------------------------------------------------------
-head('【6】尺子：fillerAwareSource 和 triangle.ts 里那一份一字不差');
+head('【6】fillerAwareSource 只剩一份：engine/slideLine.ts（棋盘和穷举用的是同一个）');
 {
-  const tri = readFileSync(new URL('../src/shapes/triangle.ts', import.meta.url), 'utf8');
-  const grab = (text) => {
-    const i = text.indexOf('fillerAwareSource(idx: number, shift: number, n: number): number {');
-    if (i < 0) return null;
-    const open = text.indexOf('{', i);
-    let depth = 0;
-    for (let j = open; j < text.length; j++) {
-      if (text[j] === '{') depth++;
-      else if (text[j] === '}') { depth--; if (!depth) return text.slice(open, j + 1); }
-    }
-    return null;
-  };
-  const here = readFileSync(new URL('../src/engine/residueSearch.ts', import.meta.url), 'utf8');
-  const a = grab(tri);
-  const b = grab(here);
-  // 尺子先行：两边都真的找到了，否则下面那一句是恒真的。
-  check('（尺子）两个文件里都找到了这个函数体', Boolean(a) && Boolean(b),
-    `${a ? a.length : 0} / ${b ? b.length : 0} 字`);
-  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  check('两份函数体一字不差（六边三角 54 只允许偶数步 + filler 配对交换）',
-    Boolean(a) && norm(a) === norm(b),
-    norm(a) === norm(b) ? '' : `\n  triangle.ts: ${norm(a).slice(0, 110)}\n  residue:     ${norm(b).slice(0, 110)}`);
-  // 行为上也对一遍：同一组输入，两边输出必须一样。光比文本不够——有人把两份一起
-  // 改错，文本还是一样的。
+  // 从前这儿钉的是「triangle.ts 闭包里那一份和 residueSearch.ts 抄的那一份一字不差」——原件
+  // 在闭包里拿不到，只能抄。第 14 推原件搬进了 engine/slideLine.ts（大三角的 applyDrag 要把
+  // 它交给 slideLine），两边都改成 import。所以现在钉的是：只有一份函数体，两边都从它来。
+  const read = (f) => readFileSync(new URL(f, import.meta.url), 'utf8');
+  const tri = read('../src/shapes/triangle.ts');
+  const here = read('../src/engine/residueSearch.ts');
+  const lib = read('../src/engine/slideLine.ts');
+  const BODY = 'fillerAwareSource(idx: number, shift: number, n: number): number {';
+  check('（尺子）engine/slideLine.ts 里有这个函数体', lib.includes(BODY));
+  check('triangle.ts、residueSearch.ts 自己都不再留一份', !tri.includes(BODY) && !here.includes(BODY));
+  check('两边都从 engine/slideLine 拿',
+    /import \{[^}]*\bfillerAwareSource\b[^}]*\} from '\.\.\/engine\/slideLine'/.test(tri) &&
+    /import \{[^}]*\bfillerAwareSource\b[^}]*\} from '\.\/slideLine'/.test(here));
+  // 行为上也对一遍：穷举那一头转出去的，和 slideLine 那一个是同一个函数。
   let same = true;
-  for (let n = 2; n <= 10; n++) for (let s = -n + 1; s < n; s++) for (let i = 0; i < n; i++) {
+  let onLine = true;
+  for (let n = 2; n <= 11; n++) for (let s = -n + 1; s < n; s++) for (let i = 0; i < n; i++) {
     const got = fillerAwareSource(i, s, n);
-    if (!(got >= 0 && got < n)) same = false;     // 永远落在线上
+    if (got !== L.fillerAwareSource(i, s, n)) same = false;
+    if (!(got >= 0 && got < n)) onLine = false;     // 永远落在线上
   }
-  check('fillerAwareSource 的返回永远落在这条线上', same);
+  check('穷举转出去的那一个，和 slideLine 的输出一模一样', same);
+  check('fillerAwareSource 的返回永远落在这条线上', onLine);
+}
+
+// ---------------------------------------------------------------------------
+head('【7】大三角长滑不复制、不丢棋子（第 14 推）：n = 1…11、步数 −40…40，每一下都是排列');
+{
+  // 照 triangle.ts 的 applyDrag 原样走一遍：拖出来的步数先取偶数，再夹在 ±(n − 1) 以内，
+  // 然后按 fillerAwareSource 换。直接问来源函数，**不经过** slideLine 的排列校验——夹紧
+  // 这一步本身就得够；排列校验是第二层，不能拿它来盖住第一层的错。
+  const perm = (n, shift) => L.isPermutation(Array.from({ length: n }, (_, i) => L.fillerAwareSource(i, shift, n)), n);
+  const raw = [];
+  const bad = [];
+  let moved = 0;
+  let total = 0;
+  for (let n = 1; n <= 11; n++) {
+    for (let steps = -40; steps <= 40; steps++) {
+      total++;
+      const even = 2 * Math.round(steps / 2);
+      if (!perm(n, even)) raw.push(`n=${n} 步数 ${even}`);
+      const shift = L.clampOddShift(even, n);
+      if (!perm(n, shift)) bad.push(`n=${n} 拖 ${steps} → ${shift}`);
+      if (L.slideSources(n, shift, L.fillerAwareSource)) moved++;
+    }
+  }
+  check('（尺子）不夹紧的话，同一批输入里真有复制 / 丢棋子的', raw.length > 0, `${raw.length} 处，例：${raw[0] ?? '（无）'}`);
+  check('夹紧之后每一下都是排列', bad.length === 0, bad.slice(0, 3).join(' · '));
+  check('（尺子）大多数真的滑动了（不是全被当成「不算一步」拦掉）', moved > total / 2, `${moved} / ${total}`);
+  // 拿真的东西滑一遍：十一枚滑满 40 步，出来的还是那十一枚，一枚不多一枚不少。
+  const line = 'ABCDEFGHIJK'.split('');
+  const out = L.slideLine(line, L.clampOddShift(40, line.length), L.fillerAwareSource);
+  check('十一枚拖出 40 步：出来的还是那十一枚', Boolean(out) && [...out].sort().join('') === line.join(''), out ? out.join('') : 'null');
 }
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');

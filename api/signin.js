@@ -168,17 +168,25 @@ export default async function handler(req, res) {
 async function request(res, req, address, wantLang) {
   const lang = mailLang(wantLang);
 
-  // 两道限速，挡的是两件不一样的事（和 unlock.js 同一组参数）：
+  // 三道限速，挡的是三件不一样的事：
   //
-  //   by address —— 知道某人邮箱的人，否则可以拿这个接口往他信箱里一直塞验证码。
-  //     一小时三封，比一个真的没收到信的人需要的还多。
+  //   by address + caller —— 一个来路替同一个邮箱一小时最多要三封，比一个真的没收到信的
+  //     人需要的还多。**按「邮箱 + 来路」数，不按邮箱数**（第 14 推）：原先按邮箱一小时
+  //     三封，谁都能替一个地址连要三封，主人这一小时就一封都要不到了——不用猜码，只要知
+  //     道他的邮箱。现在外人耗光的只是他自己那一份。
+  //   by address —— 同一个邮箱一小时总共十封，换多少个来路都一样。挡的是一个人换着来路
+  //     往别人信箱里一直灌验证码。
   //   by caller  —— 一台机器也不许拿着一份地址名单挨个来要码。
   //
-  // 两道都答 429 而不是假装发了：真在等信的人有权知道为什么什么都没来。
-  if (await tooMany('signin:to', address, 3, 3600)) {
+  // 都答 429 而不是假装发了：真在等信的人有权知道为什么什么都没来。
+  const caller = callerId(req);
+  if (await tooMany('signin:to', `${address}|${caller}`, 3, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (await tooMany('signin:from', callerId(req), 10, 3600)) {
+  if (await tooMany('signin:toAll', address, 10, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+  if (await tooMany('signin:from', caller, 10, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
 

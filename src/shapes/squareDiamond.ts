@@ -24,10 +24,11 @@ import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareC
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
+import { slideLine } from '../engine/slideLine';
 import { asteriskSvg } from '../ui/dotFaceMark';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb, generateCleanBombBoard, hasRedCluster, redClusterKeys, GRID_ADJACENCY, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import type { ShapeGame, ShapeGameOpts } from './types';
@@ -459,49 +460,11 @@ export function createSquareDiamondGame(): ShapeGame {
         return hit;
       }
 
-      function redClusterKeys(g: Tile[][], minSize: number): Set<string> {
-        const found = new Set<string>();
-        const seen = new Set<string>();
-        for (let r = 0; r < BOARD_DIM; r++)
-          for (let c = 0; c < BOARD_DIM; c++) {
-            if (!liveBomb(g[r][c])) continue;
-            const startKey = cellKey(r, c);
-            if (seen.has(startKey)) continue;
-            const comp: string[] = [];
-            const stack: Cell[] = [[r, c]];
-            seen.add(startKey);
-            while (stack.length) {
-              const [cr, cc] = stack.pop()!;
-              comp.push(cellKey(cr, cc));
-              const neighbors: Cell[] = [[cr - 1, cc], [cr + 1, cc], [cr, cc - 1], [cr, cc + 1]];
-              for (const [nr, nc] of neighbors) {
-                if (!inBounds(nr, nc)) continue;
-                const key = cellKey(nr, nc);
-                if (seen.has(key) || !liveBomb(g[nr][nc])) continue;
-                seen.add(key);
-                stack.push([nr, nc]);
-              }
-            }
-            if (comp.length >= minSize) for (const k of comp) found.add(k);
-          }
-        return found;
-      }
-
+      // 炸弹那三样（四连判爆、三连预警、发一副干净的开局）在 engine/bomb.ts（第 14 推从
+      // 五副棋盘里抽出来，规矩只写一遍）；这儿只交代这一副盘「有哪些格、谁挨着谁」。
       // A 4-cluster ends the run outright; a 3-cluster is one drag away
       // from it, so render() pulses those tiles as an early warning.
-      function hasRedCluster(g: Tile[][]): boolean {
-        return redClusterKeys(g, 4).size > 0;
-      }
-
-      function generateCleanBombBoard(): Tile[][] {
-        let g: Tile[][];
-        let tries = 0;
-        do {
-          g = boardFromBombDeck(shuffledDeck());
-          tries++;
-        } while ((hasInitialClump(g) || hasRedCluster(g)) && tries < 500);
-        return g;
-      }
+      const BOMB_ADJ: BombAdjacency = GRID_ADJACENCY;
 
       function renderLegend() {
         refs.legendEl.innerHTML = COLORS.map((hex) => `<span class="swatch" style="background:${hex}"></span>`).join('');
@@ -663,7 +626,7 @@ export function createSquareDiamondGame(): ShapeGame {
         for (const { cells, elapsedMs } of outlineEntries) {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
-        const warnKeys = isBomb ? redClusterKeys(grid, 3) : null;
+        const warnKeys = isBomb ? redClusterKeys(grid, 3, BOMB_ADJ, liveBomb) : null;
         for (let r = 0; r < BOARD_DIM; r++) {
           for (let c = 0; c < BOARD_DIM; c++) {
             // 离场的格子一律不画（《侵蚀阶梯》v1.2 §3「格子离场」）。从前削掉的
@@ -980,7 +943,7 @@ export function createSquareDiamondGame(): ShapeGame {
       }
 
       function resetBoard() {
-        grid = isBomb ? generateCleanBombBoard() : generateCleanBoard();
+        grid = isBomb ? generateCleanBombBoard(() => boardFromBombDeck(shuffledDeck()), hasInitialClump, BOMB_ADJ, liveBomb) : generateCleanBoard();
         /*
          * 开发时手摆的那副牌（`engine/devDeal.ts`）。**正式包里这一句整段不存在**
          * （`import.meta.env.DEV` 是构建时常量，Vite 把它摇掉）。
@@ -1188,7 +1151,7 @@ export function createSquareDiamondGame(): ShapeGame {
       // 查，会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查
       // 又会让同一堆红块报两遍。所以只在盘面安定下来之后查这一次。
       function checkBombHazard(): boolean {
-        if (!isBomb || !hasRedCluster(grid)) return false;
+        if (!isBomb || !hasRedCluster(grid, BOMB_ADJ, liveBomb)) return false;
         render();
         controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
         return true;
@@ -1198,11 +1161,10 @@ export function createSquareDiamondGame(): ShapeGame {
         const d = drag;
         if (!d || !d.fam || !d.line) return false;
         const cells = liveOnLine(d.line.cells);
-        const n = cells.length;
         const shift = Math.round(projectedSteps(d.fam, d.dx, d.dy, d.k));
-        if (((shift % n) + n) % n === 0) return false;
-        const vals = cells.map(([r, c]) => grid[r][c]);
-        const shifted = vals.map((_, i) => vals[(((i - shift) % n) + n) % n]);
+        // 活格不到两枚、转了整圈、算出来的不是排列：这一下不算一步（engine/slideLine.ts）。
+        const shifted = slideLine(cells.map(([r, c]) => grid[r][c]), shift);
+        if (!shifted) return false;
         cells.forEach(([r, c], i) => {
           grid[r][c] = shifted[i];
         });
@@ -1261,6 +1223,13 @@ export function createSquareDiamondGame(): ShapeGame {
           const [px, py] = unfix(x, y);
           dragFix = null;
           const [r, c] = cellAt(px, py);
+          // 手指落在一个已经离场的格子上：那儿什么都没有，这一下就什么都不做（和小球那一副
+          // 同一句，第 14 推）。从前这几副不拦，于是抓着一条可能只剩一枚、甚至一枚活格都没
+          // 有的线滑出去——什么都没动，步数照扣。
+          if (isBlank(grid[r][c])) {
+            drag = null;
+            return;
+          }
           drag = { r, c, fam: null, line: null, dx: 0, dy: 0, k, lastShift: 0, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1274,6 +1243,8 @@ export function createSquareDiamondGame(): ShapeGame {
         onRegrab(x, y) {
           if (!drag) return null;
           const [r, c] = cellAt(x, y);
+          // 改抓的时候也一样：挪到一片空地上就维持原来抓的那一颗，不要抓空。
+          if (isBlank(grid[r][c])) return null;
           drag.r = r;
           drag.c = c;
           return { r, c };

@@ -693,7 +693,10 @@ function armFirstPlayLock(grid: HTMLElement, given?: HTMLElement[]): void {
   grid.addEventListener(
     'click',
     (e) => {
-      const btn = (e.target as HTMLElement | null)?.closest?.('.home-icon-btn') as HTMLElement | null;
+      // 炸弹那一块在宽版（电脑、横屏）上不是 .home-icon-btn，是 .home-bomb-card（menu.ts 上面
+      // 造它的那一句：窄版才是 home-icon-btn home-bomb-mini）。从前这儿只认前者，于是电脑上
+      // 一局都没打过的人照样点得开炸弹——锁在宽屏上漏了这一张（第 14 推）。
+      const btn = (e.target as HTMLElement | null)?.closest?.('.home-icon-btn, .home-bomb-card') as HTMLElement | null;
       if (!btn || basics.includes(btn)) return;
       e.stopPropagation();
       e.preventDefault();

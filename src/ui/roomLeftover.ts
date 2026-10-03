@@ -23,7 +23,7 @@
  */
 import { countPhrase, STRINGS, type Lang } from '../i18n';
 import { avatarSvg, type RoomState } from '../engine/room';
-import { liveTotal, rankRoom, renderRoomCard } from './roomCard';
+import { contestants, liveTotal, rankRoom, renderRoomCard } from './roomCard';
 
 const esc = (v: string) =>
   v.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
@@ -62,8 +62,10 @@ export function mountRoomLeftover(host: HTMLElement | null, lang: Lang): void {
   }
   const s = STRINGS[lang];
   const { state, meId } = held;
-  const ranked = rankRoom(state.players);
-  const roomTotal = state.players.reduce((sum, p) => sum + liveTotal(p), 0);
+  // 竞赛屋的主持人不在名单上，也不算进全屋总分（第 14 推，见 roomCard.ts 的 contestants）。
+  const players = contestants(state);
+  const ranked = rankRoom(players);
+  const roomTotal = players.reduce((sum, p) => sum + liveTotal(p), 0);
   host.innerHTML = `
     <div class="end-room-head">
       <div class="end-score-label">${s.mpRoomTotal}</div>

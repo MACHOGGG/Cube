@@ -15,6 +15,8 @@
  *   · 画布是 257×233，不是正方形。下面按这个比例定尺寸，免得被压扁或者
  *     四周留一圈空白。
  */
+import { stripSvgTitle } from './svgTitle';
+
 /** 原件的画布比例，用来把方形的尺寸参数换算成不失真的宽高。 */
 const ASPECT = 257 / 233;
 export const GENIUS_LOGO = `<svg width="257px" height="233px" viewBox="0 0 257 233" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -33,6 +35,14 @@ export const GENIUS_LOGO = `<svg width="257px" height="233px" viewBox="0 0 257 2
     </g>
 </svg>`;
 
+/**
+ * 真正嵌进页面的那一份：去掉了 `<title>`（第 14 推）。
+ *
+ * 上面那段照「整个换掉」的办法换成新导出的文件时，多半会带一行 `<title>编组</title>`——
+ * 鼠标停在标志上就冒「编组」。原件一个字节不动，去掉这一行的事在这儿做（见 svgTitle.ts）。
+ */
+const LOGO = stripSvgTitle(GENIUS_LOGO);
+
 /** 换成你的 SVG 之前，三个位置都安静地空着。 */
 export const hasGeniusLogo = (): boolean => GENIUS_LOGO.trim().length > 0;
 
@@ -48,7 +58,7 @@ export function geniusLogoTag(size = 20, className = ''): string {
   // SVG 会自己居中留白，看着像是标志缩小了一圈。
   const w = Math.round(size * ASPECT);
   return `<span class="genius-logo ${className}" aria-hidden="true"
-                style="width:${w}px;height:${size}px">${GENIUS_LOGO}</span>`;
+                style="width:${w}px;height:${size}px">${LOGO}</span>`;
 }
 
 /**
@@ -60,5 +70,5 @@ export function geniusLogoTag(size = 20, className = ''): string {
 export function geniusLogoFluid(className = ''): string {
   if (!hasGeniusLogo()) return '';
   return `<span class="genius-logo genius-logo--fluid ${className}" aria-hidden="true"
-                style="aspect-ratio:${ASPECT}">${GENIUS_LOGO}</span>`;
+                style="aspect-ratio:${ASPECT}">${LOGO}</span>`;
 }

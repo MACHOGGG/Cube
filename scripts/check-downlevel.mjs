@@ -452,5 +452,93 @@ for (const [w, h, name] of [[568, 320, '老横屏'], [390, 844, '竖屏'], [844,
   );
 }
 
+// ---- 8. inset 展开成四个方向（第 14 推）--------------------------------------
+//
+// Chrome 87 才认 `inset`。从前靠 baseline.css 按选择器手抄几条，没抄到的（翻面那一
+// 下的 `.plank-turn`）在老内核上就是 0×0。现在 downlevel 把每一条都展开。
+{
+  stubWindow(390, 844);
+  const { expandInset } = await import(pathToFileURL(mod).href);
+  const cases = [
+    ['一个值', '.a{position:absolute;inset:0}', '.a{position:absolute;top:0;right:0;bottom:0;left:0}'],
+    ['两个值：上下 / 左右', '.a{inset: 5px 10px;}', '.a{top:5px;right:10px;bottom:5px;left:10px;}'],
+    ['三个值：上 / 左右 / 下', '.a{inset:1px 2px 3px}', '.a{top:1px;right:2px;bottom:3px;left:2px}'],
+    ['四个值照抄', '.a{inset:1px 2px 3px 4px}', '.a{top:1px;right:2px;bottom:3px;left:4px}'],
+    ['带括号的值不拆开', '.a{inset:calc(50% - 4px) auto}', '.a{top:calc(50% - 4px);right:auto;bottom:calc(50% - 4px);left:auto}'],
+    ['!important 每一条都带上', '.a{inset:0 !important}', '.a{top:0 !important;right:0 !important;bottom:0 !important;left:0 !important}'],
+    ['原地展开：后面写的 top 照样压得住', '.a{inset:0; top: 12px}', '.a{top:0;right:0;bottom:0;left:0; top: 12px}'],
+  ];
+  for (const [name, input, want] of cases) {
+    const got = expandInset(input);
+    check(`inset 展开 · ${name}`, got === want, got);
+  }
+  // 不误伤：box-shadow 的 inset 关键字、变量值里的 inset、注释里抄着的例子。
+  const keep = [
+    '.t{box-shadow: inset 0 0 0 1px rgba(0,0,0,.1)}',
+    '.t{--tile-ring: inset 0 0 0 1px rgba(0,0,0,0.08);}',
+    '/* 里头的数字是 `position: absolute; inset: 0` 的一层。\n * 下一行 */ .t{color:red}',
+    // 注释夹在规则里头、而且后面还跟着一条声明：照声明展开的话，`0 */ width: 1px` 会被当
+    // 成四个值抄成四条，注释的结尾跟着被抄走，后面那条 width 就成了坏样式。
+    '.t{color:red; /* 原来写的是 left:0; inset: 0 */ width: 1px;}',
+    '@supports (inset: 0) { .t{color:red} }',
+  ];
+  for (const k of keep) check(`inset 展开 · 不该动的没动：${oneLine(k, 40)}`, expandInset(k) === k, expandInset(k));
+
+  // 整份样式表：降级之后一条 inset 声明都不剩（棋盘、开场动画那几份一起算）。
+  const SHEETS = ['../src/style.css', '../src/shapes/square.css', '../src/shapes/circle.css',
+    '../src/shapes/triangle.css', '../src/ui/loadingScreen.css', '../xhs/src/baseline.css']
+    .map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))
+    .join('\n');
+  const insetDecls = (css) => declarations(css).filter((d) => d.prop === 'inset').length;
+  const before = insetDecls(SHEETS);
+  const after = insetDecls(downlevel(SHEETS, OLD));
+  check('inset 展开 · （尺子）源样式表里真有一批 inset 声明', before >= 20, `${before} 条`);
+  check('inset 展开 · 降级之后一条都不剩', after === 0, `剩 ${after} 条`);
+  const plank = declarations(downlevel(SHEETS, OLD)).filter((d) => d.sel === '.plank-turn');
+  const sides = Object.fromEntries(plank.filter((d) => ['top', 'right', 'bottom', 'left'].includes(d.prop)).map((d) => [d.prop, d.value]));
+  check('inset 展开 · 翻面那一层 .plank-turn 四边都是 0', ['top', 'right', 'bottom', 'left'].every((k) => sides[k] === '0'), JSON.stringify(sides));
+  check('inset 展开 · 新内核上一个字都不改', downlevel(SHEETS, NEW) === SHEETS);
+}
+
+// ---- 9. el.style.translate / scale 合进 transform（第 14 推）------------------
+//
+// 老内核上这两个 JS 属性不存在，棋盘拖动时的「压扁」和两边的晃动全没了。垫片把它们
+// 合进 transform：`translate(…) scale(…) <元素自己的 transform>`。这儿拿一个假的
+// CSSStyleDeclaration 量合成那一步；真浏览器上的那一条在 xhs/check-oldkernel.mjs。
+{
+  class FakeDecl {
+    constructor() { this.m = new Map(); }
+    getPropertyValue(k) { return this.m.get(k) ?? ''; }
+    setProperty(k, v) { if (v) this.m.set(k, String(v)); else this.m.delete(k); }
+    removeProperty(k) { this.m.delete(k); }
+  }
+  globalThis.CSSStyleDeclaration = FakeDecl;
+  const { installTransformShim } = await import(pathToFileURL(mod).href);
+  installTransformShim();
+  const d = new FakeDecl();
+  d.scale = '0.950 1.000';
+  check('垫片 · scale 两个数 → scale(a, b)', d.getPropertyValue('transform') === 'scale(0.950, 1.000)', d.getPropertyValue('transform'));
+  d.translate = '3px 4px';
+  check('垫片 · translate 排在 scale 前面（和规范的作用顺序一致）', d.getPropertyValue('transform') === 'translate(3px, 4px) scale(0.950, 1.000)', d.getPropertyValue('transform'));
+  check('垫片 · 读回来是写进去的那个值', d.translate === '3px 4px' && d.scale === '0.950 1.000', `${d.translate} / ${d.scale}`);
+  d.scale = '';
+  d.translate = '';
+  check('垫片 · 两个都清掉，transform 也清掉（不留一个单位矩阵）', d.getPropertyValue('transform') === '', JSON.stringify(d.getPropertyValue('transform')));
+  // 代码自己写了 transform（方块消行后那一下滑动就是）：合进去，不顶掉它。
+  const e = new FakeDecl();
+  e.setProperty('transform', 'translate(10px, 0px)');
+  e.translate = '0 2px';
+  check('垫片 · 元素自己的 transform 留着，排在最后', e.getPropertyValue('transform') === 'translate(0, 2px) translate(10px, 0px)', e.getPropertyValue('transform'));
+  e.setProperty('transform', 'rotate(5deg)');
+  e.translate = '0 3px';
+  check('垫片 · 代码后来改了 transform：那一份成了新的底', e.getPropertyValue('transform') === 'translate(0, 3px) rotate(5deg)', e.getPropertyValue('transform'));
+  e.translate = '';
+  check('垫片 · 清掉 translate 之后，底还在', e.getPropertyValue('transform') === 'rotate(5deg)', e.getPropertyValue('transform'));
+  const f = new FakeDecl();
+  f.translate = '1px 2px 3px';
+  check('垫片 · 三个值走 3d', f.getPropertyValue('transform') === 'translate3d(1px, 2px, 3px)', f.getPropertyValue('transform'));
+  delete globalThis.CSSStyleDeclaration;
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

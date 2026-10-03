@@ -255,45 +255,15 @@ async function pickerAt(width, height) {
     const back = document.getElementById('backBtn')?.getBoundingClientRect();
     const rules = [...document.querySelectorAll('.tut-rule')];
     return {
-      shapes: [...document.querySelectorAll('.tut-shape-btn')].map((b) => b.dataset.shape),
-      stacked: (() => {
-        const xs = [...document.querySelectorAll('.tut-shape-btn')].map((b) => { const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top)]; });
-        // 上下排着：横向中心都对齐，纵向一个比一个低（几个都成立，不写死张数）。
-        return xs.length >= 2 && xs.every((x) => x[0] === xs[0][0]) &&
-          xs.every((x, i) => i === 0 || xs[i - 1][1] < x[1]);
-      })(),
+      // 五条上头从前摆着两颗分镜键（.tut-shape-btn）。第 14 推撤了：那两段分镜还在教旧
+      // 规则（入口下线，不重做）。所以这里量的是「一颗都没有」。
+      shapeBtns: document.querySelectorAll('.tut-shape-btn, .tut-pick-shapes').length,
       rules: rules.length,
       arts: rules.filter((r) => r.querySelector('.tut-rule-art .ra-tile, .tut-rule-art svg')).length,
       // 玩家的原话：「教学内容下面的文字配套的图/动画，要能够清晰地展示对应的教学
       // 内容」——每幅都
       // 得是会动的（有 CSS 动画在跑），不是一张静图。
       animated: rules.filter((r) => [...r.querySelectorAll('.tut-rule-art *')].some((e) => getComputedStyle(e).animationName !== 'none')).length,
-      // 三个入口是横向的大圆角矩形按钮（有底、有圆角、比图形宽得多），里面那
-      // 一对图示居中。
-      //
-      // 这儿原先写的是 b.querySelector('svg')——只取第一幅，也就是棋子那幅，
-      // 然后拿它的中点和按钮中点比，容差 2px。后来按玩家的话（「上方的三个
-      // 图形看不出是教学内容」）在棋子旁边压了一枚播放标志，按钮里于是有两
-      // 幅图：CSS 是 justify-content: center + gap，居中的是「这一对」，棋子
-      // 自己就必然偏左——390×844 上偏 17.1px，375×667 上偏 13.5px，都远超
-      // 2px。页面是对的，是这道门从那天起一直红着。
-      //
-      // 所以改成量两幅图合起来那一段的中点。kids.length >= 2 这一句别省：它
-      // 顺带把「播放标志还在不在」也钉住了——门要守住的是那个设计决定（这一
-      // 页少文字，靠一枚播放标志说明点下去会放动画），不只是几何。
-      bigBtns: (() => {
-        const page = document.querySelector('.tut-pick').getBoundingClientRect();
-        const btns = [...document.querySelectorAll('.tut-shape-btn')];
-        return btns.length === 2 && btns.every((b) => {
-          const r = b.getBoundingClientRect(); const cs = getComputedStyle(b);
-          const kids = [...b.querySelectorAll('svg')].map((k) => k.getBoundingClientRect());
-          const left = Math.min(...kids.map((k) => k.left));
-          const right = Math.max(...kids.map((k) => k.right));
-          const centred = kids.length >= 2 && Math.abs((left + right) / 2 - (r.left + r.width / 2)) <= 2;
-          const boxed = parseFloat(cs.borderTopLeftRadius) >= 8 && (cs.borderTopStyle !== 'none' || cs.backgroundColor !== 'rgba(0, 0, 0, 0)');
-          return r.width >= page.width * 0.6 && r.width > r.height * 2 && centred && boxed;
-        });
-      })(),
       texts: rules.map((r) => r.querySelector('.tut-rule-text')?.textContent.trim().length || 0),
       oldTitle: /如何滑|重新观看/.test(document.body.textContent),
       backGlyph: Boolean(document.querySelector('#backBtn svg')),
@@ -312,9 +282,7 @@ async function pickerAt(width, height) {
 }
 for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   const m = await pickerAt(w, h);
-  // 两个，不是三个：三角那副基础棋盘删了，它那段分镜也跟着删了（《侵蚀阶梯》
-  // v1.2 PR-6）。
-  check(`${label} · 教学挑选页：两个图形上下排着（方块、小球）`, m.shapes.join(',') === 'square,circle' && m.stacked, m.shapes.join(','));
+  check(`${label} · 《如何滑？》那一页：分镜键撤了（第 14 推）`, m.shapeBtns === 0, `${m.shapeBtns} 个`);
   // 五条，不是六条：教学 2026-09 改成玩家亲笔的五条（《侵蚀阶梯》v1.2）。这个数
   // 写死是有意的——配图是按下标取的（rulesModal 的 art[i]），条数和幅数一旦对不
   // 上，屏幕上看不出是错位，只看得出「这幅图和这句话没关系」。
@@ -323,12 +291,15 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   // 玩家的句子。尺子要能认出空字符串，不该顺带规定他一句话得写多长。
   check(`${label} · 五条规则，每条配图`, m.rules === 5 && m.arts === 5 && m.texts.every((n) => n > 4), `${m.rules} 条 · ${m.arts} 幅 · 字数 ${m.texts.join('/')}`);
   check(`${label} · 五幅配图都在动`, m.animated === 5, `${m.animated} 幅`);
-  check(`${label} · 两个入口是横向的大圆角矩形按钮，图形和播放标志居中`, m.bigBtns);
   check(`${label} · 没有《如何滑……重新观看》那两行字`, !m.oldTitle);
   check(`${label} · 《返回》是「<」的图示，在最下面，不压底排`, m.backGlyph && m.backText === '' && m.backIsLast && m.backBottomOk);
   check(`${label} · 整页一屏装下，不用滚`, !m.scrolls);
 }
-// 教学里的四颗键：全是图示，不写字。
+// 《如何滑？》那一页的《返回》和系统返回键。
+//
+// 从前这一段先点一颗分镜键、量分镜里那四颗图示键，再在分镜里按返回回挑选页。分镜
+// 第 14 推下线了（还在教旧规则），那四颗键所在的那一屏已经走不到——剩下的是这一页自
+// 己的两条退路。
 {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await c.addInitScript(() => { localStorage.setItem('slides_lang', 'zhHans'); localStorage.setItem('slides_tutorial_seen', '1'); localStorage.setItem('slides_tutorial_seen_circle', '1'); localStorage.setItem('slides_tutorial_seen_triangle', '1'); });
@@ -336,17 +307,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForSelector('#navProfile', { timeout: 20000 });
   await p.click('#navProfile'); await p.click('#howToRow');
-  await p.waitForSelector('.tut-shape-btn', { timeout: 10000 });
-  await p.click('.tut-shape-btn[data-shape="square"]');
-  await p.waitForSelector('.story-controls', { timeout: 10000 });
-  const keys = await p.$$eval('.story-controls .icon-btn', (els) => els.map((e) => ({ id: e.id, svg: Boolean(e.querySelector('svg')), text: e.textContent.trim(), label: e.getAttribute('aria-label') })));
-  check('教学四颗键都是图示（上一条 / 再一次 / 下一条 / 完成）',
-    keys.length === 4 && keys.every((k) => k.svg && k.text === '' && k.label) && keys.map((k) => k.id).join(',') === 'stPrev,stReplay,stNext,stFinish',
-    JSON.stringify(keys));
-  // 教学里按返回：回教学挑选页，不是主菜单。
-  await p.goBack();
-  await p.waitForTimeout(600);
-  check('教学里按返回，回到教学挑选页', Boolean(await p.$('.tut-shape-btn')));
+  await p.waitForSelector('.tut-pick #backBtn', { timeout: 10000 });
   // 挑选页按《返回》：回刚才那个个人主页，不是主菜单——这一页只有个人主页
   // 一个入口，退到主菜单等于把人从他原来待的地方赶走。
   await p.click('#backBtn');

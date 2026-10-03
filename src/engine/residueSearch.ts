@@ -24,9 +24,9 @@
  * ── 为什么不认几何 ──────────────────────────────────────────────────────
  *
  * 六副棋盘的滑动**不是同一个置换**：方块、小球、菱形方块、六边圆球、七色圆球是老老实
- * 实的循环位移（各自的 `grid[r].map((_, i) => vals[(((i - shift) % n) + n) % n])`），可
- * 六边三角 54 不是——它的格子正反交替朝向，所以只允许**偶数步**，而且绕回来那一段要
- * 按相邻两格配对交换（`triangle.ts` 的 `fillerAwareSource`）。
+ * 实的循环位移（engine/slideLine.ts 的 `rotateSource`），可六边三角 54 不是——它的格子
+ * 正反交替朝向，所以只允许**偶数步**，而且绕回来那一段要按相邻两格配对交换（同一个文件
+ * 的 `fillerAwareSource`）。
  *
  * 所以这个模块收的不是「线 + 位移量」，而是**算好的重排**：一步就是「这条线上的新第
  * i 格，内容来自旧第 src[i] 格」。棋盘自己最清楚它怎么滑，这儿只负责走遍。拿不准的几
@@ -35,6 +35,7 @@
  * 纯算术、不碰 DOM、不认 Tile 类型——所以 `scripts/check-endgame-residue.mjs` 能把它单
  * 独拎出来验，进得了 CI。
  */
+import { fillerAwareSource } from './slideLine';
 
 /**
  * 一格的编码。
@@ -262,13 +263,17 @@ export function cyclicShuffles(lines: readonly (readonly number[])[]): LineShuff
 /**
  * 六边三角 54 那一副的一步集合。
  *
- * 和 `triangle.ts` 的 `fillerAwareSource` 一字对一字：**只允许偶数步**（格子正反交替
- * 朝向，奇数步会把朝向搞错），而绕回来那一段（filler）要按相邻两格配对交换，正好把那
- * 一步的朝向错位抵消掉。
+ * 用的就是棋盘自己那一个 `fillerAwareSource`（engine/slideLine.ts）：**只允许偶数步**
+ * （格子正反交替朝向，奇数步会把朝向搞错），而绕回来那一段（filler）要按相邻两格配对交
+ * 换，正好把那一步的朝向错位抵消掉。
  *
- * 抄一份而不是 import：那一份在 `src/shapes/triangle.ts` 的闭包里，不导出。两份一旦
- * 走样，这儿就会穷举一个玩家滑不出来的盘面——所以 `check-endgame-residue.mjs` 里有一
- * 条尺子，拿同一组输入把两边的输出对一遍。
+ * 从前这儿抄了一份：原件在 `src/shapes/triangle.ts` 的闭包里，拿不到。两份一旦走样，这
+ * 儿就会穷举一个玩家滑不出来的盘面——所以 `check-endgame-residue.mjs` 里有一条尺子盯着
+ * 两份一字不差。第 14 推原件搬进了 engine/slideLine.ts（大三角的 applyDrag 要把它交给
+ * slideLine），这儿改成直接 import，那条尺子改成盯着「只剩一份」。
+ *
+ * 步数只穷举 2…n−1：棋盘那一头把步数夹在 ±(n − 1) 以内（clampOddShift），这里本来就不
+ * 越界。
  */
 export function fillerAwareShuffles(lines: readonly (readonly number[])[]): LineShuffle[] {
   const out: LineShuffle[] = [];
@@ -284,15 +289,5 @@ export function fillerAwareShuffles(lines: readonly (readonly number[])[]): Line
   return out;
 }
 
-/** `triangle.ts` 那一个的同胞。改任何一边都要改另一边，门里有尺子对着。 */
-export function fillerAwareSource(idx: number, shift: number, n: number): number {
-  const plain = (((idx - shift) % n) + n) % n;
-  if (shift === 0) return plain;
-  const fillerSize = Math.abs(shift);
-  const regionStart = shift > 0 ? 0 : n - fillerSize;
-  const inFiller = shift > 0 ? idx < fillerSize : idx >= regionStart;
-  if (!inFiller) return plain;
-  const localIdx = idx - regionStart;
-  const partnerIdx = regionStart + (localIdx % 2 === 0 ? localIdx + 1 : localIdx - 1);
-  return (((partnerIdx - shift) % n) + n) % n;
-}
+/** 棋盘那一个，原样转出去（门里拿它对穷举的一步集合）。 */
+export { fillerAwareSource };

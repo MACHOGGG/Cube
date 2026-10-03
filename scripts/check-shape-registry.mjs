@@ -169,5 +169,27 @@ check('删掉的那两个 id 不在任何一副棋盘的名片上',
   check('扫到的入口不止一个（不然上面那一条是空的）', scanned >= 2, `${scanned} 个`);
 }
 
+// ---- 每副棋盘的终局快照都经 packSnapshot 摆正（第 14 推）---------------------
+//
+// 分享卡、结算页、记录页上那张终局图是 snapshotBoard() 的产物。方块那一副原先原样返回：格
+// 子位置按整块 6 × 6 的底板算，消掉几行几列之后剩下的那一块缩在图的左上角，右边和下面空着
+// 一大片。别的五副从来都是交给 engine/shareCard.ts 的 packSnapshot 摆正、放大。这一条钉住
+// 「六副都是」——下回新加一副棋盘忘了这一步，这儿就红。
+{
+  const FILES = ['square', 'squareDiamond', 'circle', 'circleHex', 'circleSeven', 'triangle'];
+  const bad = [];
+  let seen = 0;
+  for (const f of FILES) {
+    const src = readFileSync(`src/shapes/${f}.ts`, 'utf8');
+    const at = src.indexOf('function snapshotBoard(');
+    if (at < 0) continue;
+    seen++;
+    const body = src.slice(at, src.indexOf('\n      }\n', at));
+    if (!/return packSnapshot\(/.test(body)) bad.push(f);
+  }
+  check('（尺子）六副棋盘的 snapshotBoard 都找得到', seen === FILES.length, `${seen} 副`);
+  check('每副棋盘的终局快照都经 packSnapshot 摆正（方块那一副原先缩在左上角）', bad.length === 0, bad.join('、'));
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

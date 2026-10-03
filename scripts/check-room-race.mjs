@@ -161,5 +161,20 @@ const tenth = await call({ action: 'join', code, name: 'LATER' });
 check('十个人就真的满了', tenth.status === 409 && tenth.body.error === 'full',
   `${tenth.status} ${JSON.stringify(tenth.body)}`);
 
+// ---- 开房：抢到房号的下一步就是给它定期限（第 14 推）------------------------
+//
+// 原先 EXPIRE 排在抢到房号之后的两次写入后面：那两次里任何一次摔了（库忙、超时），这把房
+// 号就成了一个没有期限的键，永远占着。这件事从外面造不出来（要让库恰好在那两次写入之间
+// 出错），所以这儿钉的是**先后**：create() 里抢到房号那一句之后，下一次碰库就是 expire。
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../api/room.js', import.meta.url), 'utf8');
+  const body = src.slice(src.indexOf('async function create('), src.indexOf('\n}\n', src.indexOf('async function create(')));
+  const claim = body.indexOf("hsetnx(roomKey(code), 'meta', meta)");
+  check('（尺子）create() 里找得到抢房号那一句', claim > 0);
+  const nextAwait = body.slice(claim).match(/\n\s*await (\w+)\(/);
+  check('抢到房号之后第一次碰库就是 expire', nextAwait?.[1] === 'expire', nextAwait ? nextAwait[1] : '没找到');
+}
+
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

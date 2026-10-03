@@ -1,3 +1,5 @@
+import { cellKey } from './types';
+
 export type BombTier = 'basic' | 'timed' | 'advanced';
 
 /** Shared across every bomb-mode shape so the hazard reads as "the same red" everywhere. */
@@ -135,4 +137,111 @@ export function dealBombBacks(
   // count−1 次。取消它之后两处一起改：不再塞红，循环走满 count。少改一处就是「六
   // 枚炸弹只发五个反面」，最后那一枚的反面是 undefined。）
   return shuffle(backs);
+}
+
+// ── 四连判爆、三连预警、发一副干净的开局（第 14 推从五副棋盘里抽出来）──────────
+//
+// 方块、小球、六边小球、菱形方块、大三角各抄过一遍这三样，三十来行一字不差，差的只有两
+// 件事：盘上有哪些格、一格的邻居是谁（方块和菱形是上下左右，小球、六边小球、三角各有各
+// 的邻接）。抄五份的毛病是改一处漏四处——「挨着」的定义要是哪天改了（比如斜角也算），
+// 改到第三副就会有人忘了第四副，而那一副的炸弹从此按另一种规矩爆。现在那两件事作参数，
+// 规矩只写这一遍。
+
+/** 一格：[行, 列]。 */
+export type BombCell = readonly [number, number];
+/** 一副盘：行优先，每行长短可以不一样（小球、三角那几副是阶梯形的）。 */
+export type BombGrid<T> = readonly (readonly T[])[];
+
+/**
+ * 一副棋盘的「哪些格、谁挨着谁」。
+ *
+ * 都收着这一副盘本身：方块那一副的尺寸跟着盘走（不是写死的 6×6），按盘去量最稳；别的几
+ * 副不看它。
+ */
+export interface BombAdjacency {
+  /** 盘上每一格（离场的也在里头——活不活由 isLive 判）。 */
+  cells(g: BombGrid<unknown>): Iterable<BombCell>;
+  /** 这一格的邻居，已经裁在盘内。 */
+  neighbors(r: number, c: number, g: BombGrid<unknown>): Iterable<BombCell>;
+}
+
+/** 方块、菱形方块：上下左右四个邻居，盘多大按这一副盘算。 */
+export const GRID_ADJACENCY: BombAdjacency = {
+  *cells(g) {
+    for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) yield [r, c] as const;
+  },
+  *neighbors(r, c, g) {
+    const near: BombCell[] = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+    for (const [nr, nc] of near) if (nr >= 0 && nr < g.length && nc >= 0 && nc < g[nr].length) yield [nr, nc] as const;
+  },
+};
+
+/** 四连就炸：这一局到此为止。三连只是预警（render 那一圈闪）。 */
+export const BOMB_CLUSTER_SIZE = 4;
+
+/**
+ * 活炸弹连成 minSize 枚以上的那些格（`cellKey` 的 `r,c`）。四连判爆、三连预警各问一次。
+ *
+ * 只认**活**炸弹（isLive 由棋盘给：`isBomb && isLiveBomb(t, RED_IDX)`）——拆成星星的那
+ * 几枚就算还是红的，也不连（见上面 isLiveBomb 那一段）。
+ */
+export function redClusterKeys<T>(
+  g: BombGrid<T>,
+  minSize: number,
+  adj: BombAdjacency,
+  isLive: (t: T) => boolean,
+): Set<string> {
+  const found = new Set<string>();
+  const seen = new Set<string>();
+  for (const [r, c] of adj.cells(g)) {
+    if (!isLive(g[r][c])) continue;
+    const startKey = cellKey(r, c);
+    if (seen.has(startKey)) continue;
+    const comp: string[] = [];
+    const stack: BombCell[] = [[r, c]];
+    seen.add(startKey);
+    while (stack.length) {
+      const [cr, cc] = stack.pop() as BombCell;
+      comp.push(cellKey(cr, cc));
+      for (const [nr, nc] of adj.neighbors(cr, cc, g)) {
+        const key = cellKey(nr, nc);
+        if (seen.has(key) || !isLive(g[nr][nc])) continue;
+        seen.add(key);
+        stack.push([nr, nc]);
+      }
+    }
+    if (comp.length >= minSize) for (const k of comp) found.add(k);
+  }
+  return found;
+}
+
+/** 盘上有没有一团四连的活炸弹。 */
+export function hasRedCluster<T>(g: BombGrid<T>, adj: BombAdjacency, isLive: (t: T) => boolean): boolean {
+  return redClusterKeys(g, BOMB_CLUSTER_SIZE, adj, isLive).size > 0;
+}
+
+/** 发一副干净开局最多重发几次。五百次还发不出来，就用最后那一副（不卡死开局）。 */
+export const CLEAN_BOMB_DEAL_TRIES = 500;
+
+/**
+ * 发一副干净的炸弹开局：开局就成团（hasInitialClump，各副自己的「同色挨太多」）、开局
+ * 就有四连炸弹的，重发。
+ *
+ * `deal` 每调一次就是完整的一次发牌（洗牌 + 摆盘）——随机数照原来的顺序消耗，同一个种子
+ * 发出来的还是同一副（种子码、小屋、门里那几台确定性的体检都靠这一条）。
+ */
+export function generateCleanBombBoard<T>(
+  deal: () => T[][],
+  hasInitialClump: (g: T[][]) => boolean,
+  adj: BombAdjacency,
+  isLive: (t: T) => boolean,
+  maxTries = CLEAN_BOMB_DEAL_TRIES,
+): T[][] {
+  let g: T[][];
+  let tries = 0;
+  do {
+    g = deal();
+    tries++;
+  } while ((hasInitialClump(g) || hasRedCluster(g, adj, isLive)) && tries < maxTries);
+  return g;
 }

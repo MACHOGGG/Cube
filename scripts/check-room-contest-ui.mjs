@@ -86,6 +86,31 @@ async function pickSquare(p) {
   });
 }
 
+/**
+ * 一台选手的手机：拿一个已经坐进屋里的座位（打接口进来的那二十个之一）回到小屋页。
+ *
+ * 座位存在 localStorage 的 slides_mp_seat 里（engine/room.ts 的 rememberSeat），小屋页一
+ * 打开就照它回到屋里——和玩家刷新一下页面是同一条路。
+ */
+async function contestantPage(code, seat) {
+  const cctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const c = await cctx.newPage();
+  c.on('pageerror', (e) => errs.push(e.message));
+  await c.addInitScript(([code, seat]) => {
+    for (const [k, v] of Object.entries({
+      slides_lang: 'zhHans', slides_intro_seen: '1', slides_played_square: '1',
+      slides_tutorial_seen: '1', slides_tutorial_seen_circle: '1', slides_tutorial_seen_triangle: '1',
+    })) localStorage.setItem(k, v);
+    localStorage.setItem('slides_mp_seat', JSON.stringify({ code, playerId: seat.playerId, playerToken: seat.playerToken, at: Date.now() }));
+  }, [code, seat]);
+  await c.goto(BASE, { waitUntil: 'load' });
+  await c.waitForSelector('#navProfile', { timeout: 20000 });
+  await c.click('#navProfile');
+  await c.waitForSelector('#multiRow', { timeout: 10000 });
+  await c.click('#multiRow');
+  return { cctx, c };
+}
+
 // ---- 1. 设置页：《开竞赛》和它底下那一行 ---------------------------------
 const { ctx, p } = await hostPage();
 {
@@ -362,6 +387,17 @@ const { ctx, p } = await hostPage();
     `${roster.rows} 行 · ${roster.seats}`);
   check('小屋页没有被撑出横向滚动', roster.overflowX === 0, `${roster.overflowX}px`);
 
+  // 主持人叫什么——下面几条量的就是「选手那边的屏幕上没有这个名字」。
+  const hostName = await p.evaluate(async (code) => {
+    const k = window.__keys[0];
+    const st = await fetch('/api/room', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'state', code, ...k }),
+    }).then((x) => x.json());
+    return (st.players || []).find((pl) => pl.isHost)?.name ?? null;
+  }, code);
+  check('（尺子）主持人的名字拿得到', Boolean(hostName), String(hostName));
+
   await pickSquare(p);
   const onPanel = await p.waitForSelector('#mpWait', { timeout: 25000 }).then(() => true).catch(() => false);
   check('主持人被送上实时榜单（不是棋盘）', onPanel);
@@ -411,8 +447,95 @@ const { ctx, p } = await hostPage();
   check('《解散小屋》没被挤出屏幕', panel.leaveOnScreen);
   check('一行都没有横向溢出，整页也没有', panel.rowOverflowX === 0 && panel.overflowX === 0,
     `行 ${panel.rowOverflowX}px / 页 ${panel.overflowX}px`);
+
+  // 第二局的倒数那一屏：上一局的总分榜（ui/multiplayer.ts 的 standingsStrip）列的是**全部**
+  // 选手，所以主持人在不在这张榜上一眼就看得见（第 14 推）。另一台选手的手机（选手06）回到
+  // 屋里，主持人从接口开第二局。
+  const D = await contestantPage(code, (await p.evaluate(() => window.__keys[5])));
+  await D.c.waitForTimeout(1500);
+  const started = await p.evaluate(async (code) => {
+    const seat = JSON.parse(localStorage.getItem('slides_mp_seat') || '{}');
+    const r = await fetch('/api/room', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'start', code, playerId: seat.playerId, playerToken: seat.playerToken, mode: 'square' }),
+    });
+    return r.status;
+  }, code);
+  check('（尺子）第二局开起来了', started === 200, String(started));
+  const strip = await D.c.waitForSelector('.mp-cd-row', { timeout: 20000 }).then(() => true).catch(() => false);
+  check('（尺子）选手那台的倒数页上摆出了上一局的总分榜', strip);
+  const cd = await D.c.evaluate(() => [...document.querySelectorAll('.mp-cd-row .mp-cd-name')].map((e) => e.textContent.trim()));
+  check('倒数那一屏的总分榜：二十名选手，没有主持人（第 14 推）', cd.length === 20 && !cd.includes(hostName),
+    `${cd.length} 行 · ${cd.includes(hostName) ? '主持人在榜上' : '没有主持人'}`);
+  await D.cctx.close();
 }
 await ctx.close();
+
+// ---- 2a. 选手那台的局中计分板上没有主持人（第 14 推）----------------------------
+//
+// 另开一间小的竞赛屋（三名选手打接口进来，一名开着真页面），主持人从接口开第一局。开局时人
+// 人都是 0 分，主持人坐的是 0 号椅子——没过滤的话，他就是那块板上的「第一名」（反证量过：
+// 板上写的是「A / 选手01」）。
+//
+// 不放在上面那间二十人的屋里：一台真在打的选手页面会改变那一局收尾时主持人那边的走向（全
+// 屋交完卷时他被送回小屋页），上面那几条量榜单的就量不到了。
+{
+  const { ctx: c3, p: p3 } = await hostPage('TESTHALF');
+  await p3.click('#mpContest');
+  await p3.click('#mpCreate');
+  await p3.waitForSelector('#mpPick', { timeout: 15000 });
+  const code3 = await p3.evaluate(() => document.body.textContent.match(/\b\d{4}\b/)?.[0]);
+  const keys3 = await p3.evaluate(async (code) => {
+    const keys = [];
+    for (let i = 1; i <= 3; i++) {
+      const r = await fetch('/api/room', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'join', code, name: '选手' + String(i).padStart(2, '0'), seen: ['square', 'circle', 'triangle'] }),
+      }).then((x) => x.json());
+      if (r.playerToken) keys.push({ playerId: r.playerId, playerToken: r.playerToken });
+    }
+    return keys;
+  }, code3);
+  check('（尺子）小竞赛屋：三名选手都进来了', keys3.length === 3, `${keys3.length} 个`);
+  const host3 = await p3.evaluate(async ([code, k]) => {
+    const st = await fetch('/api/room', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'state', code, ...k }),
+    }).then((x) => x.json());
+    return (st.players || []).find((pl) => pl.isHost)?.name ?? null;
+  }, [code3, keys3[0]]);
+  const C = await contestantPage(code3, keys3[0]);
+  await C.c.waitForTimeout(1500);
+  const started3 = await p3.evaluate(async (code) => {
+    const seat = JSON.parse(localStorage.getItem('slides_mp_seat') || '{}');
+    const r = await fetch('/api/room', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'start', code, playerId: seat.playerId, playerToken: seat.playerToken, mode: 'square' }),
+    });
+    return r.status;
+  }, code3);
+  check('（尺子）小竞赛屋：第一局开起来了', started3 === 200, String(started3));
+  const board = await C.c.waitForSelector('.mp-board-row .mp-board-name', { timeout: 30000 }).then(() => true).catch(() => false);
+  check('（尺子）选手那台进了棋盘，局中计分板画出来了', board);
+  const boardNames = await C.c.evaluate(() => [...document.querySelectorAll('.mp-board-row .mp-board-name')].map((e) => e.textContent.trim()));
+  check('选手局中那块计分板上没有主持人（第 14 推）', boardNames.length > 0 && !boardNames.includes(host3),
+    `${boardNames.join(' / ')}（主持人：${host3}）`);
+  await C.cctx.close();
+  await c3.close();
+}
+
+// ---- 2b. 终局面板（屋主散场、选手原地转单人之后结算页上那一块）也走同一道过滤 ----
+//
+// 那一块（ui/roomLeftover.ts）只在「屋主中途散场、这一局转成单人打完」时才出现，要在真界面
+// 上走到那儿得把一整局打完。它和上面几处用的是同一个函数（roomCard.ts 的 contestants），
+// 所以这儿读源码钉住「名单和全屋总分都从 contestants 来」。
+{
+  const { readFileSync } = await import('node:fs');
+  const left = readFileSync(new URL('../src/ui/roomLeftover.ts', import.meta.url), 'utf8');
+  check('终局面板的名单和全屋总分都只算选手（contestants）',
+    /const players = contestants\(state\);/.test(left) && /rankRoom\(players\)/.test(left) &&
+      /players\.reduce\(/.test(left) && !/state\.players\.reduce\(/.test(left) && !/rankRoom\(state\.players\)/.test(left));
+}
 
 // ---- 3. 对照：普通八人屋照旧，屋主拿得到棋盘 ------------------------------
 //
