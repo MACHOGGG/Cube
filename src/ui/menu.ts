@@ -9,6 +9,8 @@ import { openCenterPicker } from './centerPicker';
 import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
 import { mountModeAxis } from './modeAxis';
+import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
+import { dayIndexOf } from '../engine/seedCode';
 import { typeTagline } from './typeTagline';
 
 import {
@@ -31,6 +33,17 @@ import {
 
 export interface MenuHandlers {
   onSelectBase: (id: string) => void;
+  /**
+   * 《每日挑战》那张卡（第 19 推）：进每日挑战那一页（ui/dailyMode.ts）。
+   *
+   * 这张卡三端都摆在**最上面单独一行、居中**（方案原话），首玩期间也是亮的（`firstPlayable`）。
+   */
+  onDaily: () => void;
+  /**
+   * 「现在」——今天是哪一天、那张卡画星期几、压哪个日期，全从它算（网页端是服务器的钟，见
+   * engine/dailyClock.ts）。不给就用本机的钟。
+   */
+  now?: () => number;
   /** `reopenKey`, when present, is the `data-reopen` value of the card whose
    *  pop-up picker launched this game — main.ts hands it back to showMenu()
    *  so "back" from that game re-opens the same picker. */
@@ -143,6 +156,11 @@ const BOMB_SHAPES: RowShape[] = ['square', 'circle'];
  * 门就该是熟悉的那张基础方块。
  */
 const AXIS_KEY = 'slides_axis_focus';
+/**
+ * 上一次画主菜单时给《每日挑战》那张卡排的「零点换图」（dailyArt.ts 的 watchDay）。主菜单每次都
+ * 是整个重画的，旧的那一个不撤的话，回一次主菜单就多挂一个定时器——重画前先撤掉上一个。
+ */
+let stopDailyWatch: (() => void) | null = null;
 let axisFocus = readAxisFocus();
 
 function readAxisFocus(): number {
@@ -352,6 +370,36 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const later = (btn: HTMLElement): void => {
     geniusTail.push(btn);
   };
+
+  // ---- 每日挑战（第 19 推）-------------------------------------------------
+  /**
+   * 三端一致：**最上面单独一行、居中**（方案原话）。宽版是 grid 里的第一排、只有这一张；窄版
+   * （鱼眼轴）是轴上的第一站、只有这一张（mountModeAxis 的 leadSolo），打开菜单默认就停在这一
+   * 站——一个新会话的默认焦点本来就是第 0 项（readAxisFocus），所以不用另写一句。
+   *
+   * 图按北京时间的星期几换、日期压在上面（dailyArt.ts），到北京零点自动换、切回前台时重算。
+   * 读屏念「每日挑战，10 月 3 日」；卡底下那行小字是「每日挑战」。首玩期间也亮着
+   * （`firstPlayable`）：今天这一局谁都能打。
+   */
+  const now = handlers.now ?? Date.now;
+  const today = dayIndexOf(now());
+  const dailyBtn = iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle);
+  dailyBtn.dataset.firstPlayable = '1';
+  dailyBtn.addEventListener('click', () => handlers.onDaily());
+  stopDailyWatch?.();
+  stopDailyWatch = watchDay(now, (d) => {
+    // 主菜单已经被换掉了：这个钟没有用处了，撤掉（下一次画主菜单会另排一个）。
+    if (!dailyBtn.isConnected) {
+      stopDailyWatch?.();
+      stopDailyWatch = null;
+      return;
+    }
+    const art = dailyBtn.querySelector<HTMLElement>('.home-icon-art');
+    if (art) art.innerHTML = dailyArtHtml(d);
+    dailyBtn.setAttribute('aria-label', dailyAria(lang, d));
+  });
+  if (wide) newRow().appendChild(dailyBtn);
+  else axisCards.push(dailyBtn);
 
   // ---- 方块 · 小球 · 三角 ------------------------------------------------
   const baseRow = wide ? newRow() : null;
@@ -684,6 +732,8 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       initial: axisFocus,
       onFocus: saveAxisFocus,
       divider: divider ? { el: divider, after: dividerAfter } : undefined,
+      // 第一站只有《每日挑战》一张（第 19 推，见上面造它的那一段）。
+      leadSolo: true,
     });
   }
 }

@@ -226,8 +226,11 @@ for (const vp of VIEWPORTS) {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 
+  // 《每日挑战》那张（第 19 推）记成空名字，下面那一句 `if (!label …) continue` 就跳过它：点开是挑战
+  // 页，要按《今日挑战》、再数完 4-3-2-1 才有棋盘，不是这道门认的那几种挑法。它开的也不是第七副
+  // 棋盘——今天轮到哪一副，就是那一副自己的卡在这儿已经量过的那一副（check-seed-deal 管它开得对不对）。
   const labels = await page.$$eval('.home-icon-btn', (els) =>
-    els.map((e) => e.getAttribute('aria-label') || ''));
+    els.map((e) => (e.classList.contains('home-icon-btn--daily') ? '' : e.getAttribute('aria-label') || '')));
 
   for (let i = 0; i < labels.length; i++) {
     const label = labels[i];

@@ -36,6 +36,7 @@ import type { Lang, RuleShape } from '../i18n';
 import type { Family } from '../engine/targets';
 import type { TargetPattern } from '../engine/targets';
 import type { CoachPlan } from '../ui/coachBar';
+import type { SeedRun } from '../engine/seedCode';
 
 export interface ShapeGameOpts {
   /** Timed-challenge mode: run ends automatically after this many seconds. */
@@ -113,10 +114,18 @@ export interface ShapeGameOpts {
   coachTip?: { text: string; art: string };
 
   /**
-   * 不数 4-3-2-1，直接开局。只给小红书那一版的头一局小球用，见
-   * ui/gameShell.ts 的 ShellMeta.noCountdown。
+   * 不数 4-3-2-1，直接开局。小红书那一版的头一局小球用它；每日挑战也用它（第 19 推：那一页
+   * 自己数完 4-3-2-1 才开棋盘，倒数期间不露玩法和棋盘），见 ui/gameShell.ts 的
+   * ShellMeta.noCountdown。
    */
   noCountdown?: boolean;
+  /**
+   * 这一局用哪一串种子码发牌（第 19 推，engine/seedCode.ts）。
+   *
+   * 不给就由控制器自己随手抽一串（每一局单人游戏都用种子发牌——方案原话），所以平常开一局
+   * 的那几条路都不用改；要给的只有三种：玩家敲进来的码、每日挑战、小屋。
+   */
+  seed?: SeedRun;
 
   /**
    * 结算页那对指路的光要不要亮（见 engine/gameController.ts 的

@@ -721,6 +721,19 @@ jobs:
         run: |
           npx esbuild src/engine/stepCoef.ts --bundle --format=esm --outfile=/tmp/stepcoef.mjs
           node scripts/check-step-coef.mjs /tmp/stepcoef.mjs
+      # 种子码（第 19 推）：编码再解码还原、任意一个字符抄错一律拦下、版本对不上说「已过期」、
+      # 编号表只增不改、每日轮换（挨着两天不同玩法不同族）、北京零点换日——外加服务器那一份
+      # （api/_seedcode.js）和这边前后八百天一个数都不差。两份走散了的后果是那一天每一局都被
+      # 当成「伪造的每日」拒掉，今日榜上一个人都没有，而屏幕上不报任何错。纯 node。
+      - name: 种子码：编码、校验、每日轮换、两份抄本
+        run: |
+          npx esbuild src/engine/seedCode.ts --bundle --format=esm --outfile=/tmp/seedcode.mjs
+          node scripts/check-seed-code.mjs /tmp/seedcode.mjs
+      # 每日挑战的今日榜（第 19 推）：服务器只收那一天、那一串码、那一个玩法；零点后宽限几分钟
+      # 还收前一天的，过了算 late；被拒的那一局照样进存档和常规榜。直接叫 api/scores.js 的
+      # handler、钟是手拨的，不起服务器。
+      - name: 每日挑战的今日榜：伪造的每日一律不收
+        run: node scripts/check-daily-push.mjs
 
   # 要开真浏览器的那一批。和上面那个 job 并行，所以它慢几分钟不拖累谁。
   #
@@ -1111,3 +1124,30 @@ jobs:
           nohup node scripts/dev-server.mjs 8964 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8964/ && break; sleep 0.25; done
           node scripts/check-page-exit.mjs http://localhost:8964/
+
+      # 同一串种子码，每副棋盘发出同一副牌（第 19 推）：编号表二十行，每行造一串码、从《每日挑战》
+      # 的输入框开两次比盘面（尺子：换一串码盘面必须不一样）；倒数那几秒页面上除了码和数字一个字
+      # 都没有；存档里记着那串码；七色圆球那一天竖着拿手机先说「请横屏」。
+      - name: 同一种子同一副牌
+        run: |
+          nohup node scripts/dev-server.mjs 8973 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8973/ && break; sleep 0.25; done
+          node scripts/check-seed-deal.mjs http://localhost:8973/
+
+      # 主菜单那张《每日挑战》（第 19 推）：七天的底图颜色读自那七个图标文件、日期字的颜色、北京
+      # 23:59:59→00:00:00 准确换日（图、数字、种子同时换；钟是 page.clock 拨的）、电脑宽屏一屏放
+      # 得下、首玩期间也在。
+      - name: 每日挑战那张卡与北京零点换日
+        run: |
+          nohup node scripts/dev-server.mjs 8974 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8974/ && break; sleep 0.25; done
+          node scripts/check-daily.mjs http://localhost:8974/
+
+      # 分享卡上那一行「种子 XXXX-XXXX」（第 19 推）：在二维码说明底下、整个在明细上面（明细往下让
+      # 一行、两行不叠）；每日挑战那一行更长（「· 每日 10/03」）；老档没有种子就不画。量的是导出
+      # 那张 PNG 的像素。
+      - name: 分享卡上的种子
+        run: |
+          nohup node scripts/dev-server.mjs 8975 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8975/ && break; sleep 0.25; done
+          node scripts/check-share-seed.mjs http://localhost:8975/

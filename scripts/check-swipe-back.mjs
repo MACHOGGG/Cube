@@ -68,7 +68,8 @@ for (const vp of [
   const cdp = await ctx.newCDPSession(page);
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-  await page.$$eval('.home-icon-btn', (els) => els[0].click());
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
   await page.waitForFunction(
     () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball').length > 0,
     { timeout: 25000 },

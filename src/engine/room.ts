@@ -431,6 +431,11 @@ export function iAmHost(state: RoomState | null = lastState): boolean {
 
 /** The server's clock, as best we can tell it from here. */
 export const serverTime = (): number => Date.now() + clockOffset;
+/**
+ * 上面那个钟是不是真量过（第 19 推）。没进过小屋的话它就是本机的钟——每日挑战那边（engine/
+ * dailyClock.ts）据此决定要不要自己另量一次。
+ */
+export const hasServerClock = (): boolean => bestClock !== null;
 
 const KNOWN: RoomError[] = [
   'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',

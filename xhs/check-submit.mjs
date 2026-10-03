@@ -201,7 +201,8 @@ await page.waitForTimeout(900);
 
 // 打一局完整的：主菜单 → 开局 → 拖八下 → 完成 → 结算 → 分享战绩图。
 // 战绩图那一步最值得走完——它要现画一张 PNG，是整个包里最重的一段代码。
-await page.$$eval('.home-icon-btn', (e) => e[0].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e) => e[0].click());
 await page.waitForTimeout(900);
 const startBtn = await page.$('#startBtn');
 if (startBtn) await page.$eval('#startBtn', (e) => e.click());

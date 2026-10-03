@@ -5,7 +5,7 @@ import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { drawOne, type Family, type TargetPattern } from '../engine/targets';
 import { cardOrNull } from '../shapes/registry';
-import { random as seededRandom, seedRandom } from '../engine/rng';
+import { roomCodeFor, slotTargetOf } from '../engine/seedDeal';
 import { hostNotice, showWaitPanel, tickFor, type HostNotice, type WaitPanel } from './roomNotices';
 import { mountPin } from './authBits';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
@@ -1272,18 +1272,22 @@ export function renderMultiplayerPage(
      * 有 4.5 秒（WIDE_MODES 5.5 秒，可能有新手的局 8–9 秒）。
      *
      * 'same' 和 'own' 在这儿都抽一次，抽法和棋盘那边完全一样（同一份
-     * drawOne、同一个种子）：'same' 从刚种下的那条流里抽，全屋抽出同一个；
-     * 'own' 用本机的 Math.random，各转各的。抽出来的这一个跟着 onMatchStart
-     * 走到棋盘上去，屏幕上停的就是手里要凑的。
+     * drawOne、同一个种子）：'same' 从这一局的种子码里抽（第 19 推：房间给的
+     * 种子先换算成种子码，seedDeal.ts 的 roomCodeFor + slotTargetOf——和
+     * main.ts 开棋盘那一句调的是同一对函数），全屋抽出同一个；'own' 用本机
+     * 的 Math.random，各转各的。抽出来的这一个跟着 onMatchStart 走到棋盘上
+     * 去，屏幕上停的就是手里要凑的。
      */
     const family: Family =
       mode === 'square' ? 'square' : mode === 'circle' ? 'circle' : 'triangle';
     let spun: TargetPattern | undefined;
     if (state.slot) {
-      // 'same' 要先把那条共享的流种上——棋盘那边开局时会再种一次同一个种
-      // 子，所以这儿先抽一次不会把牌抽乱。
-      if (state.slot === 'same') seedRandom(seed);
-      spun = drawOne(family, state.slot === 'same' ? seededRandom : Math.random) ?? undefined;
+      // 'same' 会把那条共享的流种上——棋盘那边开局时会再种一次同一串码，所
+      // 以这儿先抽一次不会把牌抽乱。
+      spun =
+        (state.slot === 'same'
+          ? slotTargetOf(roomCodeFor(seed, mode, false, true).code, family)
+          : drawOne(family, Math.random)) ?? undefined;
     }
 
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是

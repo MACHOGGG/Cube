@@ -65,6 +65,7 @@ HEX**，`ui/customIcons.ts` 的 `sRGBOnly()` 在打包时替你换掉了（走 P
 | `slot-machine.svg` | 开局时真的转起来的那台（两个窗口）。**画布 897×521**，滚筒窗口的位置在 `slotReels.ts` 里按它量 |
 | `ctl-pause.svg` `ctl-finish.svg` | 游戏进行中的暂停 / 完成 |
 | `app-tower-rgb.svg` 等 11 个 | 《更换图标》里的 11 个。名字是 `app-` 加上清单里的 id |
+| `daily-1.svg` … `daily-7.svg` | 主菜单最上面那张《每日挑战》（第 19 推），按北京时间的星期几换：1 周一玫瑰红、2 周二深灰、3 周三橙、4 周四紫、5 周五蓝、6 周六奶白、7 周日绿。**日期数字不在文件里**，是程序压上去的（`ui/dailyArt.ts`）。**这七个没有代码里画的底版**，删掉一个那一天就只剩一块纸色的底 |
 | `login.svg` `close.svg` `mail.svg` `eye.svg` `eye-off.svg` | 帐号窗、邀请窗上那几颗只放图标的键（登录 / 关闭 / 联络 / 显示第一串 / 遮住第一串）。**这五个没有代码里画的底版**：删掉文件会让 `npm run build` 当场失败，而不是变回什么——见 `ui/uiIcons.ts` |
 
 ## 两件要知道的事

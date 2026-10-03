@@ -40,7 +40,8 @@ import {
   startMatch,
   type RoomState,
 } from './engine/room';
-import { clearSeed, random as seededRandom, seedRandom } from './engine/rng';
+import { clearSeed } from './engine/rng';
+import { roomCodeFor, slotTargetOf } from './engine/seedDeal';
 import { renderRandomTargetPage } from './ui/slotMachine';
 import { renderSlotIntroPage } from './ui/slotIntro';
 import { renderLayoutsShowcase, renderModesShowcase, renderTargetsShowcase, renderWorldRankPage } from './ui/perkPages';
@@ -58,6 +59,10 @@ import {
 import { bombTip, flipTip, layoutTip, slotTip, timedTip, puzzleTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
 import { renderTimedModePage } from './ui/timedMode';
+import { renderDailyModePage } from './ui/dailyMode';
+import { dailyNow, syncDailyClock } from './engine/dailyClock';
+import { GENIUS_LAYOUTS } from './engine/geniusContent';
+import type { SeedGame } from './engine/seedDeal';
 import { renderPuzzleModePage } from './ui/puzzleMode';
 import { armNewVersionPill, syncNewVersionPill } from './ui/newVersionPill';
 import { installBackNav, pushLayer, setScreenBack } from './engine/backNav';
@@ -657,7 +662,17 @@ function tipShape(id: string): 'square' | 'circle' {
 function showMenu() {
   teardown();
   trackScreen('menu');
+  // 每日挑战那张卡画的是「今天」，而今天按服务器的钟算（第 19 推）。量一次就够，量完再画一遍不
+  // 值得——到零点那一下它自己会换（dailyArt.ts 的 watchDay），差的那几秒只在零点前后才看得出。
+  void syncDailyClock();
   renderMenu(root, homeLayout, {
+    // 《每日挑战》（第 19 推）：整页，和老虎机那几张一样包一层 softSwap。屋主替整屋挑玩法时按到
+    // 它：每日挑战不是小屋的玩法，和计时、炸弹同一句提示。
+    onDaily: () => {
+      if (pickingForRoom) return void notAMultiplayerBoard();
+      softSwap(showDailyMode);
+    },
+    now: dailyNow,
     onSelectBase: (id) => {
       if (pickingForRoom) return void startRoundFor(id);
       const game = games.find((g) => g.card.id === id);
@@ -774,7 +789,8 @@ function syncScreenClass() {
   cl.toggle('is-waiting-learner', !!root.querySelector('.mp-learn-page'));
   // 小屋的 4-3-2-1 那一幕也不留底排——玩家的原话：「4-3-2-1 的画面下方去除掉
   // 个人主页和成绩的选择」。
-  cl.toggle('is-counting', !!root.querySelector('.mp-countdown-page'));
+  // 每日挑战那一页自己的 4-3-2-1（第 19 推）也一样：数着的时候只该看着数字。
+  cl.toggle('is-counting', !!root.querySelector('.mp-countdown-page, .daily-page--count'));
   // 开小屋那一页也不留底排（玩家 2026-09 的设计稿：「下方也去除掉个人主页和排名与信息
   // 栏的板块」）。理由和上面两屏一样：这一页上要做的事只有三件（取名、开一间、打屋号进
   // 别人那一间），底排那两颗是**离开**这一页的路，摆在这儿只会被误按。
@@ -842,6 +858,70 @@ function showSlotIntro() {
   repaintIcons();
   setScreenBack(backToProfile);
   toTop();
+}
+
+/**
+ * 《每日挑战》那一页（第 19 推，ui/dailyMode.ts）：今日挑战、输入种子、自己的 4-3-2-1。
+ *
+ * 只从主菜单那张卡进来，所以《退出》和返回键都回主菜单；打完一局回这一页（再来一串码、或者再
+ * 打一次今天的）。
+ */
+function showDailyMode() {
+  teardown();
+  trackScreen('daily');
+  void syncDailyClock();
+  activeDestroy = renderDailyModePage(root, currentLang, {
+    onBack: showMenu,
+    now: dailyNow,
+    onLaunch: launchSeedGame,
+    // 输进来的码照天才锁走（每日挑战不问，见 DailyModeHandlers.canPlay）——不然一串码就成了
+    // 一把万能钥匙。
+    canPlay: (g) => !seedLocked(g),
+    onLocked: () => openGeniusWindow(currentLang, showDailyMode),
+  });
+  wireHomeTitle();
+  repaintIcons();
+  setScreenBack(showMenu);
+  toTop();
+}
+
+/**
+ * 这一局在网页端锁着没有（和主菜单上那几张锁着的卡是同一个判断）：老虎机、无限反转、步步为营
+ * 三档，加上 GENIUS_LAYOUTS 那两副棋盘，没开通就玩不了。炸弹、计时、两副「+」布局是免费的。
+ */
+function seedLocked(g: SeedGame): boolean {
+  if (isGenius()) return false;
+  const mode = g.variant.mode;
+  return mode === 'slot' || mode === 'flip' || mode === 'puzzle' || GENIUS_LAYOUTS.includes(g.board);
+}
+
+/**
+ * 每日挑战那一页数完了，把这一局挂上去（第 19 推）。
+ *
+ * 开关是那串码自己带来的（seedDeal.ts 的 seedGameOf），这儿只补两样：头一回进这个玩法的那句教
+ * 学（和从主菜单那条路进来是同一个 tipFor / basicCoach——这一局就是那个玩法），和
+ * `noCountdown`（那一页已经数过 4-3-2-1 了）。打完回那一页。
+ */
+function launchSeedGame(g: SeedGame) {
+  const game = everyGame.find((x) => x.card.id === g.board);
+  if (!game) return showDailyMode();
+  const v = g.variant;
+  const target = g.opts.target;
+  const teach: ShapeGameOpts =
+    v.mode === 'base'
+      ? BASIC_KEYS.includes(g.board as (typeof BASIC_KEYS)[number])
+        ? basicCoach(g.board)
+        : tipFor('layout', () => layoutTip(currentLang))
+      : v.mode === 'timed'
+        ? tipFor('timed', () => timedTip(currentLang))
+        : v.mode === 'slot' && target
+          ? tipFor('slot', () => slotTip(currentLang, target))
+          : v.mode === 'flip'
+            ? tipFor('flip', () => flipTip(currentLang, tipShape(g.board)))
+            : v.mode === 'puzzle'
+              ? tipFor('puzzle', () => puzzleTip(currentLang))
+              : tipFor('bomb', () => bombTip(currentLang, tipShape(g.board)));
+  showGame(game, { ...g.opts, ...teach, noCountdown: true }, showDailyMode);
 }
 
 /**
@@ -1135,19 +1215,28 @@ function startMultiplayerRun(match: MatchStart) {
   if (!game) return showMenu();
   teardown();
   trackScreen('multiplayer_run');
-  seedRandom(match.seed);
-  // 随机得分目标那一局：'same' 从刚种下的那条随机流里抽——每台设备种的是同
-  // 一个种子、抽的是同一下，所以抽出来的那个图案一样，而且棋盘接着从同一条
-  // 流里发，仍然人人相同；'own' 用各自的 Math.random 抽，不碰那条流，棋盘照
-  // 旧一样，只有认的图案各不相同。
+  // 小屋那一局也用种子码发牌（第 19 推）：房间给的那串字符串先换算成一串种子码（seedDeal.ts
+  // 的 roomCodeFor，同一间屋同一局人人算出同一串），再照单人局的规矩种——于是战绩图上那串
+  // 码输进去，发出来的就是这一局那一副牌。种这一下由控制器在发牌之前做（gameController 的
+  // plantSeed），这儿不用先种。
+  const { code: roomCode, variant: roomVariant } = roomCodeFor(
+    match.seed,
+    game.card.id,
+    Boolean(match.flip),
+    Boolean(match.slot),
+  );
+  // 随机得分目标那一局：'same' 从这串码里抽（seedDeal.ts 的 slotTargetOf：种上、头一下抽
+  // 目标）——每台设备算的是同一串码、抽的是同一下，所以抽出来的那个图案一样，控制器开局
+  // 时再种一遍、再抽一遍，棋盘接着从同一条流里发，仍然人人相同；'own' 用各自的
+  // Math.random 抽，棋盘照旧一样（控制器那一遍照样从这串码里抽一下再发牌），只有认的图
+  // 案各不相同。
   //
-  // 抽这一下**照抽不误**，哪怕倒数那一屏已经把图案转出来交过来了：'same' 那
-  // 一档的棋盘是接着这条流往下发的，少抽一次，这台设备发出来的牌就和别人的
-  // 对不上了。抽出来的那一个和屏幕上转出来的是同一个（同一个种子、同一下）。
-  // 'own' 那一档用的是本机的 Math.random，不碰这条流，所以以屏幕上停住的那
-  // 一个为准——玩家看着轮子停在哪儿，手里要凑的就得是哪个。
-  const dealt = match.slot
-    ? drawOne(slotFamilyOf(match.mode), match.slot === 'same' ? seededRandom : Math.random) ?? undefined
+  // 倒数那一屏已经把图案转出来交过来了（match.target）就以它为准：'same' 那一档它是用同一
+  // 个函数、同一串码抽的，和这儿抽出来的是同一个；'own' 那一档用的是本机的 Math.random，
+  // 玩家看着轮子停在哪儿，手里要凑的就得是哪个。
+  const family = match.slot ? slotFamilyOf(match.mode) : null;
+  const dealt = family
+    ? (match.slot === 'same' ? slotTargetOf(roomCode, family) : drawOne(family, Math.random)) ?? undefined
     : undefined;
   const target = match.target ?? dealt;
   // 无限反转那一局：和单人那一局同一套规则（flip + 100 秒），只是全屋同一副牌。
@@ -1161,6 +1250,9 @@ function startMultiplayerRun(match: MatchStart) {
     target,
     flip,
     timeLimitSec: flip ? FLIP_SECONDS : undefined,
+    // 老虎机「各抽各的」那一局不印码（方案原话）：牌是同一副，目标各人不同，那串码还原不了
+    // 他那个目标。
+    seed: { code: roomCode, source: 'room', hideCode: match.slot === 'own' || roomVariant < 0 },
   });
   // The countdown was the "get ready", and it ended for everyone at the same
   // instant. Leaving the start card up would undo exactly that: four players
@@ -1323,11 +1415,17 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
     currentLang,
     {
       onBack: () => (slotOrigin === 'intro' ? showSlotIntro() : showMenu()),
-      onStart: (family: Family, target: TargetPattern) => {
+      onStart: (family: Family, target: TargetPattern, seed?: string) => {
         const game = randomTargetGame(family);
         showGame(
           game,
-          { target, ...tipFor('slot', () => slotTip(currentLang, target)) },
+          {
+            target,
+            // 图案是从这串码里抽的（第 19 推），发牌也用它；「再来一局」换一串新的、图案不
+            // 换（gameController 的 plantSeed）。
+            seed: seed ? { code: seed, source: 'random' } : undefined,
+            ...tipFor('slot', () => slotTip(currentLang, target)),
+          },
           showRandomTarget,
         );
       },
@@ -1400,20 +1498,16 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
      */
     smoothScroll.stop();
     /**
-     * 单人局一律从真随机发牌——把上一次留下的共享种子清掉。
+     * 这儿从前有一句 `clearSeed()`：单人局一律从真随机发牌，把小屋留下的共享种子清掉（小
+     * 屋倒数那一屏种下的流，中途退出、断线的人那条流会一直钉着，他接下来打的每一局单人发的
+     * 都是同一副牌）。
      *
-     * 小屋的倒数那一屏会种一条全屋共用的随机流（'相同' 那一档要全屋抽到同一
-     * 对图案，见 ui/multiplayer.ts）。种下之后只有一处会清：真的开了那一局、
-     * 而且那一局拆掉的时候（startMultiplayerRun 的 activeDestroy）。中途退出、
-     * 断线、这一局没赶上的人，那条流就一直钉在那儿——他接下来打的每一局单人
-     * 发的都是同一副牌，而且同一间屋里两个这样退出的人摸到的牌一模一样。刷新
-     * 页面才恢复正常。
-     *
-     * 清在这儿而不是清在小屋那边：所有单人局都从这道门进来（等待页的练习盘
-     * 另有一句，见 onPractice），一句话管住全部，也不必去操心小屋那几屏的拆
-     * 除顺序会不会反过来把真局的种子抹掉。
+     * 第 19 推起每一局单人游戏都用种子发牌：控制器在发牌之前自己种（gameController 的
+     * plantSeed——没给种子就随手抽一串），所以留下来的流不管是谁的，开局那一刻都会被这一局
+     * 自己的种子盖掉，那个毛病不会回来；而这儿再清一次只会把外面专门给的种子（输进来的、
+     * 每日的）清掉。所以这一句撤了（方案原话：「main.ts 不再 clearSeed()，改为生成随机种
+     * 子」）。
      */
-    clearSeed();
     activeDestroy = game.mount(root, backFn, fullOpts);
     gameInProgress = true;
   };

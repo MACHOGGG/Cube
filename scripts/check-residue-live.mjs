@@ -156,7 +156,8 @@ async function run(rows, waitMs) {
 
   // 主菜单 → 圆球那张卡 → 开局。卡片按 aria-label 认（菜单摆位改了也还认得）。
   await page.waitForSelector('.home-icon-btn', { timeout: 15000 });
-  const card = page.locator('.home-icon-btn').nth(1);
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  const card = page.locator('.home-icon-btn:not(.home-icon-btn--daily)').nth(1);
   await card.click();
   // ⚠️ `#startBtn` 是**藏着的**（开局页有自己的倒数窗，那颗键只给读屏和门用）。所以等
   // `attached` 而不是 `visible`，而且用 `$eval` 点，不用 `click()`——别的门也都是这么做的

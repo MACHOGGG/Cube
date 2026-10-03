@@ -33,6 +33,17 @@ import { identify, isGenius } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import {
+  VARIANTS,
+  dailySeed,
+  dailyVariant,
+  dayIndexOf,
+  dayIndexOfKey,
+  dayKey,
+  dayStartOf,
+  normalizeSeed,
+  seedModeOf,
+} from './_seedcode.js';
+import {
   NAMES,
   NICK_INDEX,
   NICK_V,
@@ -44,6 +55,7 @@ import {
 } from './_nickname.js';
 import {
   del,
+  expire,
   get,
   hdel,
   hget,
@@ -125,6 +137,25 @@ const boardKey = (mode) => 'lb:' + mode;
 const TOTAL_BOARD = 'lb:total';
 /** id → 总榜上那一局是哪张榜。一张哈希表，画行首那个小图形用。 */
 const TOTAL_MODE = 'lb:total:mode';
+
+/*
+ * ── 每日挑战的「今日」榜（第 19 推）──────────────────────────────
+ *
+ * 一天一张：`lb:daily:YYYYMMDD`（北京日期）。每人一行，取他**当天最好的一局**（ZADD GT）。8 天
+ * 过期——榜上只看「今日」，留一周是给零点前后、时区不同的人留的余地，再久的没人看，不必一直
+ * 占着 Upstash 的空间。
+ *
+ * **服务器不信客户端说的「这是每日挑战」**：它自己照那一天算出种子码（_seedcode.js 的
+ * dailySeed，和客户端同一套算法），对不上就不收；还要核对这一局的玩法和棋盘就是那一天的那一个
+ * ——不然拿当天那串码、报一局更好打的玩法上来，照样能进榜。见 pushDaily。
+ *
+ * 不新增接口（方案原话：「放在 scores.js 里；api/ 已有 12 个函数，留意 Vercel 方案的函数数量上
+ * 限」）：交卷还是 push，看榜还是 board，mode 传 'daily'。
+ */
+const dailyBoardKey = (key) => 'lb:daily:' + key;
+/** 零点之后还收前一天那一局多久：在 23:59 开局的人，打完已经是第二天了。 */
+const DAILY_GRACE_MS = 10 * 60_000;
+const DAILY_TTL_S = 8 * 86_400;
 
 /**
  * 一张榜的名字。
@@ -639,8 +670,49 @@ async function push(res, body, who) {
   if (duplicate) {
     return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs });
   }
-  return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best });
+  // 每日挑战那一局：再进一张「今日」榜（第 19 推）。只有这一局自称是每日挑战的时候才问；它照
+  // 常记进存档和常规榜（上面那一段），这儿只决定今日榜收不收。
+  const daily = data?.daily !== undefined ? await pushDaily(who.id, mode, score, data) : undefined;
+  return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best, daily });
 }
+
+/**
+ * 每日挑战那一局进「今日」榜（第 19 推）。回的是一个词：stored / late / rejected。
+ *
+ * 三道关，一道不过就不收（这一局本身照样记进存档和常规榜——它是一局真打出来的游戏，只是不算
+ * 那一天的挑战）：
+ *
+ *   ① **日子**：`data.daily` 是一个真日期，而且就是服务器眼里的今天（北京时间）；零点之后
+ *      DAILY_GRACE_MS 以内还收前一天的。服务器的钟说了算，不看客户端的。
+ *   ② **种子**：`data.seed` 就是那一天的种子码——服务器自己算（dailySeed），不信客户端报的。
+ *   ③ **玩法**：这一局的玩法和棋盘就是那一天轮到的那一个（VARIANTS[dailyVariant(day)]）。
+ *
+ * 步步为营那一天，榜上存的是拼起来的数（boardValue：分数 × 1000 ＋ 剩下的步数），和步步为营
+ * 自己那几张榜一个规矩——同分剩得多的排前面。
+ */
+async function pushDaily(id, mode, score, data) {
+  const day = dayIndexOfKey(String(data.daily ?? ''));
+  if (day === null) return 'rejected';
+  const now = Date.now();
+  const today = dayIndexOf(now);
+  const inGrace = day === today - 1 && now - dayStartOf(today) <= DAILY_GRACE_MS;
+  if (day !== today && !inGrace) return day < today ? 'late' : 'rejected';
+  if (normalizeSeed(data.seed) !== dailySeed(day)) return 'rejected';
+  const want = VARIANTS[dailyVariant(day)];
+  if (!want || want.board !== mode || seedModeOf(data.modeKey, mode, Boolean(data.slot)) !== want.mode) {
+    return 'rejected';
+  }
+  const key = dailyBoardKey(dayKey(day));
+  await zaddIfHigher(key, boardValue(dailyBoardId(want), score, data), id);
+  await expire(key, DAILY_TTL_S);
+  return 'stored';
+}
+
+/**
+ * 那一天的玩法在常规榜里对应哪一张——只为了借 boardValue / decodeBoard 那一套（步步为营那一天
+ * 要拼步数）。别的玩法不拼，回什么都一样。
+ */
+const dailyBoardId = (v) => (v.mode === 'puzzle' ? `${v.board}:${PUZZLE_KIND}` : v.board);
 
 /** 我自己的存档和数字。是自己的东西，不设门。 */
 async function mine(res, who) {
@@ -804,6 +876,33 @@ async function board(res, body, who, claim) {
       })),
       players: rows.length,
       me: mine < 0 ? null : { rank: mine + 1, score: decodeBoard(rows[mine].board, rows[mine].score).score },
+    });
+  }
+  // 「今日」榜（第 19 推）：服务器眼里的今天那一张，前五十名＋我排第几。
+  if (mode === 'daily') {
+    const day = dayIndexOf(Date.now());
+    const want = VARIANTS[dailyVariant(day)];
+    const dkey = dailyBoardKey(dayKey(day));
+    const [top, myScore, myRank, size, names] = await Promise.all([
+      zTop(dkey, TOP_N),
+      zscore(dkey, who.id),
+      zrevrank(dkey, who.id),
+      zcard(dkey),
+      hgetall(NAMES),
+    ]);
+    const bid = dailyBoardId(want);
+    return send(res, 200, {
+      ok: true,
+      mode,
+      day: dayKey(day),
+      rows: top.map((row, i) => ({
+        rank: i + 1,
+        ...decodeBoard(bid, row.score),
+        name: shownName(row.member, names[row.member]),
+        me: row.member === who.id,
+      })),
+      players: size,
+      me: myScore === null ? null : { rank: (myRank ?? 0) + 1, score: decodeBoard(bid, myScore).score },
     });
   }
   const key = mode ? boardKey(mode) : TOTAL_BOARD;

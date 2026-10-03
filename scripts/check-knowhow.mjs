@@ -34,7 +34,8 @@ let fail = 0;
  * 和 check-mode-axis.mjs 里那个 CARDS 是同一个数，两处要一起改——张数钉死而不是从页
  * 面上数出来，就是为了「哪天一张卡悄悄不见了」这道门会红。
  */
-const CARDS = 12;
+// 第 19 推起多一张《每日挑战》（轴上第一站、独占一排），12 → 13。
+const CARDS = 13;
 
 const check = (n, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
@@ -161,15 +162,18 @@ let page = await freshPage(ctx);
     return {
       onStrip: host.classList.contains('mode-strip'),
       onAxis,
-      before: before.map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+      before: before.map((e) =>
+        e.classList.contains('home-icon-btn--daily') ? '每日挑战' : (e.getAttribute('aria-label') || '').split(' ·')[0]),
       afterLocked: after.length > 0 && after.every((e) => e.classList.contains('home-icon-btn--locked')),
       stations: cards.length,
       inStrip: box.parentElement === copy,
     };
   });
+  // 第 19 推：最上面那张《每日挑战》首玩期间也亮着（方案原话「首玩期间也显示」——今天那一局
+  // 谁都能打），所以分界线上头是它和两张基础卡。名字按类认：它的读屏名带日期，天天变。
   check(
-    '《我会玩》就在两张基础卡下面（上头只有它们俩）',
-    order?.before.length === 2,
+    '《我会玩》就在每日挑战和两张基础卡下面（上头只有它们仨）',
+    order?.before.length === 3 && order.before[0] === '每日挑战' && order.before.slice(1).join(' ') === '方块 圆球',
     `上头有 ${order?.before.join(' ') || '（空）'}`,
   );
   check('它下面那些玩法这会儿都锁着', order?.afterLocked === true);

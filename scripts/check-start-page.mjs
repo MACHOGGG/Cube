@@ -55,7 +55,8 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
 // ---- 1. 普通一局：图 + 倒数 + 两颗键，没有标题 -----------------------------
 {
   const { ctx, page } = await open();
-  await page.$$eval('.home-icon-btn', (els) => els[0].click());
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
   await page.waitForTimeout(250);
 
@@ -93,7 +94,8 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
 // ---- 2. 暂停会把倒数按住，回来重新从 4 数 ---------------------------------
 {
   const { ctx, page } = await open();
-  await page.$$eval('.home-icon-btn', (els) => els[0].click());
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
   await page.waitForTimeout(1200); // 数到 3 了
   await page.click('#startPauseBtn');

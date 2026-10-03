@@ -713,6 +713,38 @@ export interface I18nStrings {
   shareAllCleared: string;
   shareFooterHint: string;
   shareQrCaption: string;
+  /**
+   * 分享卡上二维码说明下面那一行（第 19 推）：这一局的种子码，「{code}」换成 XXXX-XXXX。
+   * 每日挑战那一局后面再接一句 shareDailyTag（「· 每日 MM/DD」），「{m}」「{d}」换成月、日
+   * ——法语照它自己的习惯写成日/月，写成月/日的话「10/03」在那边读作三月十号。
+   */
+  shareSeedLine: string;
+  shareDailyTag: string;
+  // ---- 每日挑战与种子码（第 19 推）----
+  /** 主菜单那张卡底下的标签，也是那一页的名字。 */
+  dailyTitle: string;
+  /**
+   * 那张卡的读屏名：「每日挑战，10 月 3 日」。中文用「{m}」「{d}」；英法两种语言的月份要念出
+   * 名字来，用「{month}」，名字从 monthNames 里取（十二个，用 | 隔开）。
+   */
+  dailyAria: string;
+  monthNames: string;
+  /** 每日挑战那一页上的大键：开今天这一局。 */
+  dailyPlay: string;
+  /** 种子输入框前头那个字，也是输入框的读屏名。 */
+  seedLabel: string;
+  /** 输入框旁边那颗开局键的读屏名。 */
+  seedGo: string;
+  /** 敲进来的码认不出来的三种（engine/seedCode.ts 的 decodeSeed）。expired 是方案原话。 */
+  seedBad: string;
+  seedExpired: string;
+  seedNewer: string;
+  /** 七色圆球那一天，竖着拿手机时倒数之前只摆这一句（方案原话「请横屏」），不带任何棋盘标识。 */
+  dailyTurn: string;
+  /** 排行榜上那个「今日」标签。 */
+  rankTabDaily: string;
+  /** 小红书那一版：本机今天每日挑战最好的一局，「{n}」换成分数。 */
+  dailyBest: string;
   // ---- shared shape UI ----
   colorblindBtn: string;
   /**
@@ -1080,6 +1112,20 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} move|{n} moves',
     bestPhrase: 'best {n}',
     shareQrCaption: 'Scan to play Slides',
+    shareSeedLine: 'Seed {code}',
+    shareDailyTag: 'Daily {m}/{d}',
+    dailyTitle: 'Daily Challenge',
+    dailyAria: 'Daily Challenge, {month} {d}',
+    monthNames: 'January|February|March|April|May|June|July|August|September|October|November|December',
+    dailyPlay: "Today's challenge",
+    seedLabel: 'Seed',
+    seedGo: 'Play this seed',
+    seedBad: "That seed isn't right — check it again",
+    seedExpired: 'This seed has expired',
+    seedNewer: 'This seed needs a newer version of Slides',
+    dailyTurn: 'Turn your phone sideways',
+    rankTabDaily: 'Today',
+    dailyBest: "Today's best {n}",
     shareStartLabel: 'Start',
     shareEndLabel: 'End',
     shareAllCleared: 'Board cleared',
@@ -1424,6 +1470,20 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} coup|{n} coups',
     bestPhrase: 'meilleur score {n}',
     shareQrCaption: 'Scannez pour jouer à Slides',
+    shareSeedLine: 'Graine {code}',
+    shareDailyTag: 'Défi du {d}/{m}',
+    dailyTitle: 'Défi du jour',
+    dailyAria: 'Défi du jour, {d} {month}',
+    monthNames: 'janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre',
+    dailyPlay: "Défi d'aujourd'hui",
+    seedLabel: 'Graine',
+    seedGo: 'Jouer cette graine',
+    seedBad: "Cette graine n'est pas valide — vérifiez-la",
+    seedExpired: 'Cette graine a expiré',
+    seedNewer: 'Cette graine demande une version plus récente de Slides',
+    dailyTurn: 'Tournez votre téléphone',
+    rankTabDaily: "Aujourd'hui",
+    dailyBest: 'Meilleur du jour {n}',
     shareStartLabel: 'Début',
     shareEndLabel: 'Fin',
     shareAllCleared: 'Plateau vidé',
@@ -1768,6 +1828,20 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本機最佳 {n}',
     shareQrCaption: '掃碼來 Slides～',
+    shareSeedLine: '種子 {code}',
+    shareDailyTag: '每日 {m}/{d}',
+    dailyTitle: '每日挑戰',
+    dailyAria: '每日挑戰，{m} 月 {d} 日',
+    monthNames: '一月|二月|三月|四月|五月|六月|七月|八月|九月|十月|十一月|十二月',
+    dailyPlay: '今日挑戰',
+    seedLabel: '種子',
+    seedGo: '用這個種子開局',
+    seedBad: '這串種子不對，再核對一遍',
+    seedExpired: '這個種子已過期',
+    seedNewer: '這個種子要新版本才能玩',
+    dailyTurn: '請橫屏',
+    rankTabDaily: '今日',
+    dailyBest: '今日最佳 {n}',
     shareStartLabel: '開始',
     shareEndLabel: '結束',
     shareAllCleared: '全部消除',
@@ -2112,6 +2186,20 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本机最佳 {n}',
     shareQrCaption: '扫码来 Slides～',
+    shareSeedLine: '种子 {code}',
+    shareDailyTag: '每日 {m}/{d}',
+    dailyTitle: '每日挑战',
+    dailyAria: '每日挑战，{m} 月 {d} 日',
+    monthNames: '一月|二月|三月|四月|五月|六月|七月|八月|九月|十月|十一月|十二月',
+    dailyPlay: '今日挑战',
+    seedLabel: '种子',
+    seedGo: '用这个种子开局',
+    seedBad: '这串种子不对，再核对一遍',
+    seedExpired: '这个种子已过期',
+    seedNewer: '这个种子要新版本才能玩',
+    dailyTurn: '请横屏',
+    rankTabDaily: '今日',
+    dailyBest: '今日最佳 {n}',
     shareStartLabel: '开始',
     shareEndLabel: '结束',
     shareAllCleared: '全部消除',

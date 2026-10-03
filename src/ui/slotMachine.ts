@@ -22,6 +22,8 @@
  */
 import { STRINGS, type Lang } from '../i18n';
 import { drawOne, type Family, type TargetPattern } from '../engine/targets';
+import { randomSeed, variantIndex } from '../engine/seedCode';
+import { slotTargetOf } from '../engine/seedDeal';
 import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
@@ -42,8 +44,11 @@ const FAMILIES: { family: Family; shapeId: string; icon: string }[] = [
 
 export interface RandomTargetHandlers {
   onBack: () => void;
-  /** 挑好了，开这一局：这个 family 的基础玩法，认这一个图案。 */
-  onStart: (family: Family, target: TargetPattern) => void;
+  /**
+   * 挑好了，开这一局：这个 family 的基础玩法，认这一个图案。`seed` 是这个图案从哪一串种子码
+   * 里抽出来的（第 19 推）——开局要拿同一串码发牌，分享卡上印的才还原得出这一局。
+   */
+  onStart: (family: Family, target: TargetPattern, seed?: string) => void;
   /** 没开通的人点了那三张图里的任意一张。 */
   onGenius: () => void;
   /**
@@ -118,12 +123,18 @@ export function renderRandomTargetPage(
       if (locked) return handlers.onGenius();
       // 屋主替整屋挑：图案不在这儿抽——'same' 要从小屋的种子里抽才能人人一
       // 样，'own' 各自在开局那一刻抽。这里只把族和开关交回去。
-      if (handlers.room) return handlers.room.onStart(btn.dataset.family as Family, slot);
-      const target = drawOne(btn.dataset.family as Family);
+      const family = btn.dataset.family as Family;
+      if (handlers.room) return handlers.room.onStart(family, slot);
+      // 第 19 推：先抽一串种子码，图案从这串码里抽（方案原话：「老虎机目标先从种子里抽，再
+      // 发牌」），开局拿同一串码发牌——一串码说得清这一局认哪个图案、是哪一副牌。编号表里
+      // 没有这一族（不会发生）就照旧随手抽，不带码（控制器那头会另找一串对得上的）。
+      const variant = variantIndex('slot', FAMILIES.find((f) => f.family === family)?.shapeId ?? '');
+      const seed = variant < 0 ? undefined : randomSeed(variant);
+      const target = seed ? slotTargetOf(seed, family) : drawOne(family);
       // 这一族一个图案都没有——不会发生，check-targets 每次都验（真发生了也不
       // 该把人卡在一张按不动的页面上，所以退回上一页）。
       if (!target) return handlers.onBack();
-      handlers.onStart(btn.dataset.family as Family, target);
+      handlers.onStart(family, target, seed);
     });
   }
   root.querySelector<HTMLButtonElement>('#slotBack')!.addEventListener('click', handlers.onBack);

@@ -322,5 +322,25 @@ console.log('\n---- 弹簧积分器 ----');
   check('snapSpring 直接落位并清零速度（reduced-motion 走这条）', snapped.value === 2 && snapped.velocity === 0);
 }
 
+// ── 第 19 推：轴上第一站多了《每日挑战》（独占一排）──────────────────────
+//
+// 方案的门写的是「默认聚焦第一行、居中、与下面卡同尺寸、各行等距」。轴那一头（modeAxis 的
+// leadSolo）只是在**排**的表上多了一行，鱼眼本身一个字没改——所以这儿用纯函数把那几句话在数上
+// 钉一遍：第 0 站和别的站走的是同一个公式，没有给它另算一套。DOM 那一层（真的画出来居中、
+// 一样大）在 check-mode-axis 第 10 节。
+console.log('\n---- 第 19 推：第一站（每日挑战）----');
+{
+  const N = 7; // 每日挑战一站 + 十二个玩法六排
+  const at0 = F.fisheye(N, 0, PN, {});
+  const at1 = F.fisheye(N, 1, PN, {});
+  check('焦点在第 0 站：它正对选中线（at = 0）、最大（maxScale）', near(at0.slots[0].at, 0) && near(at0.slots[0].scale, P.maxScale),
+    `at=${at0.slots[0].at} scale=${at0.slots[0].scale}`);
+  check('聚焦时第 0 站和聚焦时第 1 站一样大（同一套倍率）', near(at0.slots[0].scale, at1.slots[1].scale));
+  check('各行等距：第 0→1 站（焦点在 0）＝ 第 1→2 站（焦点在 1）', near(at0.slots[1].at - at0.slots[0].at, at1.slots[2].at - at1.slots[1].at, 1e-9),
+    `${(at0.slots[1].at - at0.slots[0].at).toFixed(4)} / ${(at1.slots[2].at - at1.slots[1].at).toFixed(4)}`);
+  check('行距沿用 minGap / maxGap：第 0→1 站的间距落在两者之间', at0.slots[1].at - at0.slots[0].at >= P.minGap - 1e-9 && at0.slots[1].at - at0.slots[0].at <= P.maxGap + 1e-9);
+  check('多一站之后 nearest 还是从 0 数（默认停在第 0 站）', at0.nearest === 0);
+}
+
 console.log(fail ? `\n${fail} 项未通过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

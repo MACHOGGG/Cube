@@ -42,7 +42,8 @@ await B.page.fill('#mpName', '乙'); await B.page.fill('#mpCode', code); await B
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2);
 // ---- 屋主开局；客人在倒数时刷新
 await A.page.click('#mpPick'); await A.page.waitForSelector('#roomPickBar');
-await A.page.$$eval('.home-icon-btn', (els) => els[0].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await A.page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
 await B.page.waitForSelector('.mp-countdown-page .cd-window', { timeout: 10000 });
 await B.page.reload({ waitUntil: 'load' });
 await B.page.waitForSelector('.home-page, .mp-page', { timeout: 30000 });

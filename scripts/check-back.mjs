@@ -142,13 +142,15 @@ async function commonRounds(tag, viewport) {
   check(`${tag} 点外面关掉弹窗之后：哨兵撤了`, await guardDown(page));
 
   // 游戏：开局页按返回 → 主菜单
-  await page.$$eval('.home-icon-btn', (els) => els[0].click());
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 10000 });
   await back(page);
   check(`${tag} 开局页按返回 → 主菜单`, (await has(page, '.home-page')) && !(await has(page, '#startOverlay')));
 
   // 游戏：打着按返回 → 暂停；再按 → 继续；完成 → 结算页按返回 → 主菜单
-  await page.$$eval('.home-icon-btn', (els) => els[0].click());
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 10000 });
   await page.waitForFunction(() => {
     const so = document.querySelector('#startOverlay');

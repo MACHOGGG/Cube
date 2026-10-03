@@ -48,7 +48,9 @@ await page.waitForSelector('#navRecords', { timeout: 20000 });
 // 《步步为营》是后来加的那一档——这一行漏了它，于是这三条「上一行一个不少」从
 // 那时候起一直是红的。它们不在 CI 的 browser 那一档里（那儿只收四道），所以红了
 // 没人看见：门自己过期了比没有门更糟，它会教人「这道门本来就红」。
-const ALL_TOP = '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转 步步为营';
+// 第 19 推：最后多了一颗「今日」（每日挑战的今日榜，方案原话「排行榜加『今日』标签」）。它
+// 不是一个母标签——底下没有子标签，点开就是那一天的榜——所以排在所有母标签后面。
+const ALL_TOP = '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转 步步为营 今日';
 
 // ---- 还没登录：榜上说的是「登录之后才会上榜」，不是一句「敬请期待」 ------
 await page.click('#navRecords');
@@ -58,7 +60,7 @@ await page.waitForSelector('.rank-tab', { timeout: 8000 });
 const tabs = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
 // 这一排和下面的 ALL_TOP 是同一份，只是这时候还没登录。写成同一个常量：从前是
 // 两处各抄一遍字面量，《步步为营》加进来的时候两处一起过期。
-check('最外面一排：总榜加七个母标签', tabs.join(' ') === ALL_TOP, tabs.join(' '));
+check('最外面一排：总榜、七个母标签、今日', tabs.join(' ') === ALL_TOP, tabs.join(' '));
 check('没登录时说的是「登录之后，你的成绩才会上榜」',
   (await page.$eval('#rankBody', (e) => e.textContent.trim())) === '登录之后，你的成绩才会上榜',
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
@@ -84,7 +86,8 @@ await page.waitForTimeout(1200);
 // 顺带也验了「关掉再打开，这台设备还认得这个账号」。
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.$$eval('.home-icon-btn', (els) => els[0].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
 await page.waitForSelector('#stopBtn', { timeout: 25000 });
 // 等 4-3-2-1 数完、棋盘真的起来：开局页还盖着的时候《完成》按下去不算数
 // （那一局还没开始，doFinish 直接返回）。

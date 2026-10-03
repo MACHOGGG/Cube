@@ -358,6 +358,14 @@ export interface ModeAxisOpts {
    * （150–210px），而它自己只有四十来像素高——上下就空出一大截。
    */
   divider?: { el: HTMLElement; after: number };
+  /**
+   * 第一站只摆一张、居中（第 19 推：《每日挑战》那张卡，方案原话「第一行只放这一张，居中，在
+   * 基础方块、基础小球那一行上面」）。后面照旧一排两张。
+   *
+   * 它和别的站是同一套东西：同一个 `--axis-art` 格子、同一套鱼眼倍率、同一个站距——聚焦时它
+   * 和下面一排两张里的任何一张一样大（`axis-col--solo` 只管横向摆在正中）。点点轨上多一颗点。
+   */
+  leadSolo?: boolean;
 }
 
 export interface ModeAxis {
@@ -392,10 +400,28 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 来，屏幕上一张卡都没有。
    */
   const COLS = 2;
-  /** 轴上几站（＝几排）。最后一排可能只摆了一张。 */
-  const rows = Math.max(1, Math.ceil(n / COLS));
+  /**
+   * 每一排是哪几张卡（卡片序号）。从前一排就是「序号 ÷ 2」，第 19 推起第一排可以只有一张
+   * （`leadSolo`，《每日挑战》）——于是「第几排」不再是一个除法，改成查这张表。**排号和卡片序号
+   * 之间的换算只许走 rowOf / firstOf 这两处**（见上面「两个单位不能混」那一段）。
+   */
+  const rowCards: number[][] = [];
+  {
+    let i = 0;
+    if (opts.leadSolo && n > 0) {
+      rowCards.push([0]);
+      i = 1;
+    }
+    for (; i < n; i += COLS) rowCards.push(Array.from({ length: Math.min(COLS, n - i) }, (_, k) => i + k));
+  }
+  /** 轴上几站（＝几排）。第一排（leadSolo）和最后一排可能只摆了一张。 */
+  const rows = Math.max(1, rowCards.length);
+  const rowOfCard: number[] = [];
+  rowCards.forEach((cs, r) => cs.forEach((c) => (rowOfCard[c] = r)));
   /** 这张卡在第几排。 */
-  const rowOf = (i: number) => Math.floor(Math.min(Math.max(i, 0), Math.max(n - 1, 0)) / COLS);
+  const rowOf = (i: number) => rowOfCard[Math.min(Math.max(i, 0), Math.max(n - 1, 0))] ?? 0;
+  /** 这一排的头一张卡（对外报「聚焦在哪」时用这一张）。 */
+  const firstOf = (r: number) => rowCards[Math.min(Math.max(r, 0), rows - 1)]?.[0] ?? 0;
   host.classList.add('mode-axis');
   host.innerHTML = '';
   for (let i = 0; i < n; i++) {
@@ -411,9 +437,12 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      * 落单的那一张（卡片数是奇数时的最后一排）摆在正中，不是靠左——靠左会看成
      * 「右边那张没加载出来」。
      */
-    const solo = rowOf(i) === rows - 1 && n % COLS === 1;
+    //
+    // 第 19 推起排头那一站（《每日挑战》）也是落单的一张，同样摆在正中。
+    const row = rowCards[rowOf(i)];
+    const solo = row.length === 1;
     c.classList.remove('axis-col--0', 'axis-col--1', 'axis-col--solo');
-    c.classList.add(solo ? 'axis-col--solo' : `axis-col--${i % COLS}`);
+    c.classList.add(solo ? 'axis-col--solo' : `axis-col--${row.indexOf(i)}`);
     host.appendChild(c);
   }
   // 分界线也住进轴里：和卡片同一个定位参照，才好摆到「两站中间」。
@@ -774,10 +803,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // 聚焦那一排压在上面：形变之后相邻两排的边距只剩十来个像素，层序错了会看见
       // 大的那张被小的压住一条边。
       const z = 10 + Math.round(s.inf * 90);
-      for (let col = 0; col < COLS; col++) {
-        const at = s.index * COLS + col;
-        // 最后一排可能只摆了一张（卡片数是奇数）。
-        if (at >= n) break;
+      // 这一排是哪几张：第一排（leadSolo）和最后一排可能只有一张。
+      for (const at of rowCards[s.index] ?? []) {
         const el = cards[at];
         const prev = lastPaint[at];
         if (t !== prev.t) { el.style.transform = t; prev.t = t; }
@@ -881,7 +908,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     if (near !== lastNearest) {
       lastNearest = near;
       // near 是**排号**，对外报的是卡片序号（见 focused()）。
-      opts.onFocus?.(near * COLS);
+      opts.onFocus?.(firstOf(near));
       // §5.2：只在「聚焦项换了」这一个离散事件上出一声，不跟着连续的形变播。
       // reduced-motion 下拖动途中一声不出，只在松手定格那一下出——玩家原话：
       // 「只在最后选中一个图标停下来的那一刻出声，快速滑过的时候不播」。
@@ -1397,7 +1424,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
      * 一张。menu.ts 拿它只做一件事：下次回主菜单停在这儿（focusTo 又会换回排号），
      * 所以报哪一张都落回同一排。
      */
-    focused: () => Math.min(Math.max(Math.round(focus), 0), rows - 1) * COLS,
+    focused: () => firstOf(Math.round(focus)),
     focusTo,
     destroy() {
       destroyed = true;

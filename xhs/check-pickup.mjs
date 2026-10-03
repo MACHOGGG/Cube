@@ -67,7 +67,8 @@ async function measure(browser, w, h, idx) {
   await p.goto(PAGE);
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
   await p.waitForTimeout(700);
-  await p.$$eval('.home-icon-btn', (e, i) => e[i].click(), idx);
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e, i) => e[i].click(), idx);
   // 老虎机那一屏进去先有一段转场，多等一会儿。
   await p.waitForTimeout(idx === 3 ? 1400 : 900);
   const m = await p.evaluate(() => {

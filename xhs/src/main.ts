@@ -32,6 +32,13 @@ import baselineCss from './baseline.css?inline';
 
 import { createSquareGame } from '../../src/shapes/square';
 import { createCircleGame } from '../../src/shapes/circle';
+import { createSquareDiamondGame } from '../../src/shapes/squareDiamond';
+import { createCircleHexGame } from '../../src/shapes/circleHex';
+import { createCircleSevenGame } from '../../src/shapes/circleSeven';
+import { createTriangleGame } from '../../src/shapes/triangle';
+import { renderDailyModePage } from '../../src/ui/dailyMode';
+import type { SeedGame } from '../../src/engine/seedDeal';
+import type { ModeKey } from '../../src/engine/runRecord';
 import type { ShapeGame, ShapeGameOpts } from '../../src/shapes/types';
 import type { Family, TargetPattern } from '../../src/engine/targets';
 import { renderRandomTargetPage } from '../../src/ui/slotMachine';
@@ -71,6 +78,26 @@ const FLIP_SECONDS = MODE_SECONDS;
 const root = document.getElementById('app') as HTMLElement;
 const squareGame = createSquareGame();
 const circleGame = createCircleGame();
+/**
+ * 每日挑战要用到的另外四副棋盘（第 19 推）。
+ *
+ * 方案原话：「玩法池：所有玩法和棋盘都进池，按日轮换」，而小红书那一版「每日挑战（离线可算）、
+ * 输入种子……可用」。这一端主菜单上只有方块和小球两副，可每日挑战二十天一圈，有一半的日子轮
+ * 到的是这四副里的一副（菱形方块、六边圆球、七色圆球、六边蜂窝 54）——不带上它们，那几天点进
+ * 每日挑战就是一局开不出来的游戏。
+ *
+ * 所以带上，但**只从每日挑战和输入种子那一路开**：主菜单一张卡都不加（E20 排布冻结），成绩页
+ * 那八本也不加（BOOKS，见下面）。和网页版是同一份棋盘（引用，不是抄），规则一个字不差。
+ *
+ * 注意 `createTriangleGame` 建出来的是六边蜂窝 54（card id `triangleBig`）——两个三角文件
+ * 2026-09 对调过内容，文件名和身份对不上，见 CLAUDE.md「两个陷阱」。
+ */
+const squareDiamondGame = createSquareDiamondGame();
+const circleHexGame = createCircleHexGame();
+const circleSevenGame = createCircleSevenGame();
+const triangleBigGame = createTriangleGame();
+/** 这一端建了的全部棋盘：每日挑战按 card.id 找。 */
+const ALL_GAMES: ShapeGame[] = [squareGame, circleGame, squareDiamondGame, circleHexGame, circleSevenGame, triangleBigGame];
 
 /**
  * 把这一版这两副棋盘的名片交给那张表（shapes/registry.ts）。
@@ -83,9 +110,10 @@ const circleGame = createCircleGame();
  *
  * 为什么不在 registry.ts 里直接 import 工厂：每一副棋盘都 import gameShell，而
  * gameShell 要用 cardOf，反过来 import 就成环，那张表会在第一次被查的时候还是空的。
- * 所以**每一个入口自己注册它真的建了哪几副**——这一版只有两副。
+ * 所以**每一个入口自己注册它真的建了哪几副**——这一版主菜单上两副，加上每日挑战用到的另外
+ * 四副（第 19 推，见 ALL_GAMES）。少注册一副，轮到它的那一天每日挑战当场崩。
  */
-registerCards([squareGame.card, circleGame.card]);
+registerCards(ALL_GAMES.map((g) => g.card));
 /**
  * 这一版只有方块和小球两副棋盘。
  *
@@ -468,12 +496,74 @@ function showMenu() {
       return missed;
     },
     onProfile: showProfile,
+    onDaily: showDaily,
   });
   // 卡多大要等这一屏排完版才算得了，所以画完再叫一声。
   scheduleFitMenu();
   // 主菜单是最外面那一屏：在这儿按返回键（安卓的实体键、浏览器的后退）就该
   // 退出小工具，不再往回走，所以不给它挂返回处理。
   setScreenBack(null);
+}
+
+/**
+ * 《每日挑战》（第 19 推）：网页版那一页（src/ui/dailyMode.ts）原样搬过来——今日挑战、输入种子、
+ * 自己的 4-3-2-1。和网页版差在三处，都是方案点了名的：
+ *
+ *   · 「现在」用本机的钟（这一端不联网，没有服务器的钟可问）；
+ *   · 没有锁（这一版全部免费，输进来的码开什么就是什么）；
+ *   · 没有排行榜，所以这一页上摆一句本机的「今日最佳」。
+ */
+function showDaily() {
+  teardown();
+  activeDestroy = renderDailyModePage(root, LANG, {
+    onBack: showMenu,
+    now: Date.now,
+    onLaunch: launchSeedGame,
+    todayBest: dailyBest,
+  });
+  setScreenBack(showMenu);
+}
+
+/** 每日挑战那一页数完了：把这一局挂上去（那一页已经数过 4-3-2-1，棋盘这一页不再数）。 */
+function launchSeedGame(g: SeedGame) {
+  const game = ALL_GAMES.find((x) => x.card.id === g.board);
+  if (!game) return showDaily();
+  // 头一回进这个玩法的那一句提示，和从主菜单进来是同一个 tipFor——这一局就是那个玩法。这一端
+  // 的 tipFor 只认炸弹 / 老虎机 / 无限反转 / 步步为营四档，别的（基础、计时、布局）不摆。
+  const family: Family = g.board === 'circle' || g.board === 'circleHex' || g.board === 'circleSeven' ? 'circle' : 'square';
+  const mode = g.variant.mode;
+  const teach: ShapeGameOpts =
+    mode === 'bomb' || mode === 'bombTimed' || mode === 'bombAdv'
+      ? tipFor('bomb', family)
+      : mode === 'slot'
+        ? tipFor('slot', family, g.opts.target)
+        : mode === 'flip'
+          ? tipFor('flip', family)
+          : mode === 'puzzle'
+            ? tipFor('puzzle', family)
+            : {};
+  showGame(game, { ...g.opts, ...teach, noCountdown: true }, showDaily);
+}
+
+/** 存档里每一种玩法的后缀（每日挑战能开出来的那几种）。 */
+const DAILY_MODE_KEYS: readonly ModeKey[] = ['base', 'timed', 'bomb', 'bombTimed', 'flip', 'puzzle'];
+
+/**
+ * 本机这一天每日挑战最好的一局（第 19 推，方案原话「本机『今日最佳』」）。
+ *
+ * 不另记一份：每一局本来就照它的棋盘和玩法存进了 localStorage（engine/persistence.ts），而
+ * 每日挑战那一局的存档里写着 `daily`（那一天）和 `seedSource: 'daily'`——翻一遍挑出来就是。
+ * 输进来的码哪怕正好是今天那一串也不算（那是 entered），和网页端「今日」榜一个口径。
+ */
+function dailyBest(day: string): number | null {
+  const keys: string[] = [];
+  for (const g of ALL_GAMES) for (const mk of DAILY_MODE_KEYS) keys.push(g.card.bestKey + suffixFor(mk));
+  let best: number | null = null;
+  for (const r of loadAllRuns(keys)) {
+    if (r.data?.daily !== day || r.data.seedSource !== 'daily') continue;
+    best = Math.max(best ?? 0, r.data.totalScore);
+  }
+  return best;
 }
 
 /**
@@ -561,8 +651,13 @@ function showSlot() {
     LANG,
     {
       onBack: showMenu,
-      onStart: (family: Family, target: TargetPattern) =>
-        startWith(family, { target, ...tipFor('slot', family, target) }, showSlot),
+      // 图案是从 seed 这串码里抽的（第 19 推，网页版同一条），发牌也用它。
+      onStart: (family: Family, target: TargetPattern, seed?: string) =>
+        startWith(
+          family,
+          { target, seed: seed ? { code: seed, source: 'random' } : undefined, ...tipFor('slot', family, target) },
+          showSlot,
+        ),
       // 这一版全部免费，没有「没开通」这条岔路；给个空函数只是接口要它。
       onGenius: () => {},
     },

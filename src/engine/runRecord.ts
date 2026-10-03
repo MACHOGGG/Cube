@@ -8,6 +8,7 @@ import {
 } from './puzzleScore';
 import { POINTS_PER_FLIP } from './scoring';
 import type { ShareCardInfo } from './shareCard';
+import type { SeedSource } from './seedCode';
 
 /**
  * Everything a finished run needs to be *re-described* later, stored as raw
@@ -62,6 +63,15 @@ export interface RunData {
    * 老档（一局两个图案那阵子的）没有这一项，读出来是 undefined，卡上就不画图。
    */
   targetId?: string;
+  /**
+   * 这一局用哪一串种子码发的牌（第 19 推，engine/seedCode.ts）：规范的 8 个字符。分享卡照
+   * 它印「种子 XXXX-XXXX」。老档没有，卡上就不印。
+   */
+  seed?: string;
+  /** 这串种子从哪儿来的：random / entered / daily / room（见 seedCode.ts 的 SeedSource）。 */
+  seedSource?: SeedSource;
+  /** 每日挑战那一局：哪一天（北京日期 YYYYMMDD）。服务器照它把这一局收进「今日」榜。 */
+  daily?: string;
   /**
    * 这一局的炸弹按第几版规则打的（见 bomb.ts 的 BOMB_RULES_VERSION）。老档
    * 没有这一项，读出来是 undefined，就是第一版。存档键和排行榜都按它分开——
@@ -409,5 +419,7 @@ export function buildShareInfo(d: RunData, shapeDisplayName: string, lang: Lang)
     // 老虎机那一局：这一局在拼哪个图案。modeKey 是 'base'，玩法名那一行说不出
     // 来，所以卡上把它画出来（见 shareCard.ts 的 drawTargetMark）。
     targetId: d.targetId,
+    // 这一局的种子（第 19 推）：卡上二维码说明底下那一行。老档没有，就不画。
+    seed: d.seed ? { code: d.seed, daily: d.daily } : undefined,
   };
 }

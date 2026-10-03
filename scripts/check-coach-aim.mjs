@@ -96,7 +96,12 @@ async function openFirst({ idx, lang = 'zhHans', reduce = false, width = 390, he
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.mode-axis .home-icon-btn', { timeout: 30000 });
   await page.waitForTimeout(600);
-  await page.evaluate((i) => document.querySelectorAll('.mode-axis > .home-icon-btn')[i].click(), idx);
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起（idx 1 是小球）。
+  // 漏了这一句，idx 1 落在方块上，下面按小球去读盘面，读出来一组都没有——整套回放查出来的。
+  await page.evaluate(
+    (i) => document.querySelectorAll('.mode-axis > .home-icon-btn:not(.home-icon-btn--daily)')[i].click(),
+    idx,
+  );
   await page.waitForTimeout(900);
   if (await page.$('#startBtn')) await page.evaluate(() => document.querySelector('#startBtn').click());
   await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball').length > 0, { timeout: 25000 });

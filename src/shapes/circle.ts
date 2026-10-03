@@ -1260,6 +1260,8 @@ export function createCircleGame(): ShapeGame {
         modeKey,
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
+        // 这一局用哪一串种子发牌（第 19 推，见 ShapeGameOpts.seed）。
+        seed: opts?.seed,
         coachArt: opts?.coachArt,
         coachShape: 'circle',
         coachPlan: opts?.coachPlan,

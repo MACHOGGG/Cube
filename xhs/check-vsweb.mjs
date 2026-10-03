@@ -252,7 +252,8 @@ async function tapByText(p, sel, re, what) {
 const XHS_CARD = { square: 0, circle: 1, bomb: 2, slot: 3, flip: 4, puzzle: 5 };
 
 const tapXhsCard = (p, mode) =>
-  p.$$eval('.home-icon-btn', (e, i) => e[i].click(), XHS_CARD[mode]);
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e, i) => e[i].click(), XHS_CARD[mode]);
 
 /** 网页版主菜单上按小字找卡。小字两边同源（menuTags.ts），所以找得准。 */
 async function tapWebTag(p, text) {
@@ -586,7 +587,8 @@ const SCREENS = [
       // .home-row 里，所以按全局次序取，不能用 nth-of-type。
       const found = (c) => !!c && webMarks.indexOf(c) >= 0;
       const card = await xhsPage.evaluate(() => {
-        const btn = document.querySelectorAll('.home-icon-btn')[2];
+        // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+        const btn = document.querySelectorAll('.home-icon-btn:not(.home-icon-btn--daily)')[2];
         const el = btn && btn.querySelector('.home-icon-art svg');
         if (!el) return null;
         const c = el.cloneNode(true);

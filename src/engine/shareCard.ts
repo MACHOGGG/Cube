@@ -244,6 +244,7 @@ import { QR_MATRIX, QR_QUIET_MODULES } from './qrSlides';
 import { ICON_BOMB_BADGE, ICON_MULTIPLAYER } from '../ui/homeIcons';
 import { targetIconCells } from './targetIcon';
 import { targetById } from './targets';
+import { formatSeed } from './seedCode';
 import type { IconCell } from './patternIcon';
 
 /**
@@ -378,6 +379,12 @@ export interface ShareCardInfo {
    * 那张卡就说不出它在拼什么。
    */
   targetId?: string;
+  /**
+   * 这一局的种子码（第 19 推，RunData.seed）：二维码说明下面印一行「种子 XXXX-XXXX」，每日
+   * 挑战那一局再接「· 每日 MM/DD」（daily 是北京日期 YYYYMMDD）。老档没有种子就不画——那几
+   * 局本来就不是照一串码发的牌，补一串上去是在编。
+   */
+  seed?: { code: string; daily?: string };
   lang: Lang;
   /**
    * The room, when this run was one board out of four people's evening.
@@ -453,6 +460,13 @@ export function drawQr(
 
 /** 明细第一行的基线。二维码和它那句说明占着右上角，这是它们下面第一个能用的位置。 */
 const ROWS_TOP = 186;
+/**
+ * 种子那一行（第 19 推）的基线：二维码说明（基线 154）下面一行。有它的时候明细整列往下让
+ * SEED_STEP——种子那一行和明细都靠右对齐在同一条竖线上，不让的话明细第一行（字高约 14）
+ * 正好压在它身上。
+ */
+const SEED_Y = 176;
+const SEED_STEP = 24;
 /** 大分数那一栏（数字 + 「综合得分」）在抬头里占到的最低处。 */
 const LEFT_HEAD_BOTTOM = 232;
 
@@ -490,6 +504,7 @@ function measureHead(
   ctx: CanvasRenderingContext2D,
   info: ShareCardInfo,
   s: { compositeScoreLabel: string },
+  seedText = '',
 ): {
   rows: string[];
   rowPx: number;
@@ -499,6 +514,14 @@ function measureHead(
   rowsBelow: boolean;
   detailY: number;
   detailPx: number;
+  /** 种子那一行的字号；没有种子就是 0。 */
+  seedPx: number;
+  /**
+   * 种子那一行摆不进右上角（左边的大分数太宽，缩到 12 号还会伸进去）：挪到「一共几步」那一句
+   * 下面，靠左。和明细那一列的 `below` 同一个道理——叠在一起的字印在分享图上就是永久的。
+   */
+  seedBelow: boolean;
+  seedY: number;
   bottom: number;
 } {
   const mono = (px: number) => `500 ${px}px "JetBrains Mono", monospace`;
@@ -513,6 +536,20 @@ function measureHead(
   const labelW = ctx.measureText(s.compositeScoreLabel).width;
   const leftEdge = PAD + Math.max(scoreW, labelW);
   const roomForRows = CARD_W - PAD - leftEdge - 24;
+
+  // 种子那一行（第 19 推）：靠右摆在二维码说明下面，和明细同一条右边线。宽度上限和明细一样
+  // 是「不伸进左边那个大分数」——16 号放不下就往下缩，缩到 12 号还放不下就整行挪到下面去。
+  const seedFont = (px: number) => `500 ${px}px "JetBrains Mono", monospace`;
+  let seedPx = 0;
+  let seedBelow = false;
+  if (seedText) {
+    seedPx = fitPx(ctx, seedText, roomForRows, seedFont, 16, 12);
+    ctx.font = seedFont(seedPx);
+    if (ctx.measureText(seedText).width > roomForRows + 0.5) {
+      seedBelow = true;
+      seedPx = fitPx(ctx, seedText, CARD_W - PAD * 2, seedFont, 16, 12);
+    }
+  }
 
   // 缩到几号得看最宽的那一行——不是最后一行。法语里最宽的常常是中间那条
   // 「有效得分率 (43%)」，照最后一行缩，最宽的那条照样伸出去。
@@ -540,15 +577,45 @@ function measureHead(
   const finalPx = below ? fitPx(ctx, widestLine, CARD_W - PAD * 2, mono, 19, 14) : rowPx;
   // 行距跟着字号走，不然缩了字号行还是那么疏，白缩。
   const rowStep = Math.round(finalPx * 1.47);
-  // 挪下去时从左栏底下起（二维码那一栏管不着它了）；不挪就还是右上角那个老位置。
-  const rowsTop = below ? LEFT_HEAD_BOTTOM + 34 : ROWS_TOP;
+  // 挪下去时从左栏底下起（二维码那一栏管不着它了）；不挪就还是右上角那个老位置——右上角那
+  // 一栏里有种子那一行的话，往下让它一行（SEED_STEP）。
+  const rowsTop = below ? LEFT_HEAD_BOTTOM + 34 : ROWS_TOP + (seedText && !seedBelow ? SEED_STEP : 0);
 
   const rowsBottom = rows.length ? rowsTop + (rows.length - 1) * rowStep : rowsTop - rowStep;
   // 那一句摆在左右两栏里低的那个下面，两边都不压。
   const detailY = Math.max(LEFT_HEAD_BOTTOM, rowsBottom) + 36;
   const detailPx = fitPx(ctx, info.detail, CARD_W - PAD * 2, karla, 16, 12);
+  // 挪下去的种子那一行接在「一共几步」那一句下面。
+  const seedY = seedBelow ? detailY + 26 : SEED_Y;
+  const bottom = seedBelow ? seedY : detailY;
 
-  return { rows, rowPx: finalPx, rowStep, rowsTop, rowsBelow: below, detailY, detailPx, bottom: detailY };
+  return {
+    rows,
+    rowPx: finalPx,
+    rowStep,
+    rowsTop,
+    rowsBelow: below,
+    detailY,
+    detailPx,
+    seedPx,
+    seedBelow,
+    seedY,
+    bottom,
+  };
+}
+
+/**
+ * 种子那一行的字（第 19 推）：「种子 XXXX-XXXX」，每日挑战再接「 · 每日 MM/DD」。没有种子就是
+ * 空串，整行不画。
+ */
+export function seedLineOf(info: Pick<ShareCardInfo, 'seed' | 'lang'>): string {
+  const seed = info.seed;
+  if (!seed?.code) return '';
+  const s = STRINGS[info.lang];
+  const line = s.shareSeedLine.replace('{code}', formatSeed(seed.code));
+  const m = /^\d{4}(\d{2})(\d{2})$/.exec(seed.daily ?? '');
+  if (!m) return line;
+  return `${line} · ${s.shareDailyTag.replace('{m}', m[1]).replace('{d}', m[2])}`;
 }
 
 /**
@@ -584,7 +651,8 @@ export function renderShareCard(
   // 而且这不只是法语的事：明细最多能有八行（图案分、连击、整线、得分、有效
   // 得分率、时间系数、没变成星星的、炸弹扣分），八行铺到 340，连棋盘都能盖
   // 住。写死的数字挡不住这个，得让下面的东西跟着上面的实际高度走。
-  const head = measureHead(ctx, info, s);
+  const seedText = seedLineOf(info);
+  const head = measureHead(ctx, info, s, seedText);
   const boardY = head.bottom + 32;
   const cardH = boardY + panel + (standings.length ? 132 : 110);
 
@@ -632,6 +700,15 @@ export function renderShareCard(
   // below them rather than beside, so neither has to shrink.
   const qrSize = 96;
   drawQr(ctx, CARD_W - PAD - qrSize, 40, qrSize, s.shareQrCaption);
+  // 种子那一行（第 19 推）：二维码说明下面，靠右，和明细同一条右边线；摆不下就在「一共几步」
+  // 下面靠左（见 measureHead 的 seedBelow）。
+  if (seedText) {
+    ctx.font = `500 ${head.seedPx}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = '#5b5650';
+    ctx.textAlign = head.seedBelow ? 'left' : 'right';
+    ctx.fillText(seedText, head.seedBelow ? PAD : CARD_W - PAD, head.seedY);
+    ctx.textAlign = 'left';
+  }
 
   ctx.font = '700 88px "JetBrains Mono", monospace';
   ctx.fillStyle = '#BE5762';

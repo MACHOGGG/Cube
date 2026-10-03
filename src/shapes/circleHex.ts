@@ -275,6 +275,8 @@ export function createCircleHexGame(): ShapeGame {
         // 棋盘底下那块教学条（见 ui/coachBar.ts）。这一副只用它摆头一回进来的
         // 那一句提示（coachTip）——特殊布局、计时、炸弹各一句。
         coach: !!opts?.coach,
+        // 不数 4-3-2-1（每日挑战那一页自己数过了，第 19 推；见 ShellMeta.noCountdown）。
+        noCountdown: !!opts?.noCountdown,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'circleHex', '六边圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,
@@ -1093,6 +1095,8 @@ export function createCircleHexGame(): ShapeGame {
         modeKey,
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
+        // 这一局用哪一串种子发牌（第 19 推，见 ShapeGameOpts.seed）。
+        seed: opts?.seed,
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
         shouldTeachTotal: opts?.shouldTeachTotal,

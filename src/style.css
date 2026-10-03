@@ -2471,9 +2471,13 @@ button:hover { filter: brightness(1.05); }
      反过来解出一张卡 = (页宽 − 32 − 5×缝) / 6。页宽取 min(100vw, 1360px)，
      1360 是 .app.home-page--wide 的 max-width，屏幕再宽也不会超过它。
      356 和 3.11 一个字没动——那一项还是三排。 */
+  /* 第 19 推：最上面多了一排《每日挑战》（只有一张，和别的卡一样大），于是「装进一屏」那一
+     项从三排变成四排：多一张方卡片（3.11 → 4.11）、多一道行间距 20 和一行小字 23（356 →
+     399）。1440×900 上一张卡从 175 收到 122——四排要站进同一块屏幕，这是那一排的代价（方
+     案原话「尺寸与其他卡一致，行距一致」「一屏放得下」）。宽那一项不动：最宽的还是那排六张。 */
   --home-card-cap: min(
     255px,
-    max(72px, (100svh - 356px) / 3.11),
+    max(72px, (100svh - 399px) / 4.11),
     (min(100vw, 1360px) - 32px - 5 * var(--home-row-gap)) / 6
   );
 }
@@ -3554,6 +3558,55 @@ body:has(.slot-page) .home-nav { display: none; }
 /* 老虎机那一局的倒数窗口：轮子还在转的时候先不露面（占着位置，不闪一下），
    第二个轮子停稳了才出现、才开始数。 */
 .cd-window--waiting { visibility: hidden; }
+
+/* ---------------------------------------------------------------------------
+   《每日挑战》（第 19 推，ui/dailyMode.ts）：今天那张图、一颗《今日挑战》、一格种子
+   ---------------------------------------------------------------------------
+   骨架借的是挑图形那几页（.slot-page + .start-stage + .page-exit），所以上下居中、底下那颗
+   《退出》、横屏时《退出》站到右边，全都现成。这儿只写这一页自己的几样。
+   Chrome 61（小红书那一端）：不用 flex 的 gap（用 margin）、不用 aspect-ratio（宽高都写）；
+   min() / clamp() 前面一律垫一行定值——老内核不认那一行，就留下前一行。 */
+.daily-pick { display: flex; flex-direction: column; align-items: center; }
+/* 和挑图形那几页的图一样大（.slot-pick-opt 那条算式），宽高一起写：不靠 aspect-ratio。 */
+.daily-art { width: 176px; height: 176px; width: min(40vw, 176px, 22vh); height: min(40vw, 176px, 22vh); }
+.daily-art > svg { width: 100%; height: 100%; display: block; }
+/* 那颗药丸自己带着 margin: 0 auto（.profile-pill--wide），这儿只补上边那一截。 */
+.daily-pick .daily-play { margin: 22px auto 0; margin: clamp(14px, 3vh, 26px) auto 0; }
+.daily-best {
+  margin: 10px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 0.86rem;
+  color: var(--ink-soft); letter-spacing: 0.02em;
+}
+.seed-form { display: flex; align-items: center; justify-content: center; margin-top: 22px; }
+.seed-label { margin-right: 10px; font-size: 0.86rem; color: var(--ink-soft); letter-spacing: 0.04em; }
+/* 字段只有底下一道 2px 的线（和帐号窗的字段同一个画法）。等宽字、居中、一律大写——敲进去
+   的就是卡上印的那个样子。 */
+.seed-input {
+  width: 9.5em; padding: 6px 2px; margin: 0;
+  border: none; border-bottom: 2px solid var(--card-rule); border-radius: 0;
+  background: transparent; color: var(--ink); box-shadow: none;
+  font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; letter-spacing: 0.08em;
+  text-align: center; text-transform: uppercase;
+}
+.seed-input::placeholder { color: var(--ink-soft); opacity: 0.5; }
+.seed-input:focus { outline: none; border-bottom-color: var(--accent); }
+.seed-input[aria-invalid="true"] { border-bottom-color: var(--card-red); }
+.seed-form .seed-go { width: 48px; margin-left: 10px; }
+/* 错误那一句：空着的时候也占着一行，免得一出字整页往下顶一截。 */
+.seed-msg { min-height: 1.3em; margin: 8px 0 0; font-size: 0.84rem; color: var(--card-red); text-align: center; }
+/* 倒数那一幕：上半屏是今天那张图（或者那串码），不是玩法图。 */
+.daily-emblem { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.daily-emblem > svg { width: 176px; height: 176px; width: min(40vw, 176px, 22vh); height: min(40vw, 176px, 22vh); display: block; }
+.daily-seed-code {
+  margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 600;
+  font-size: 2rem; letter-spacing: 0.08em; color: var(--ink);
+}
+.daily-turn {
+  margin: 0; text-align: center; color: var(--ink);
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.3rem;
+}
+/* 这一页上那几个「先藏着」的（转手机那一句、倒数窗、图）：上面几条给它们写了 display，作者
+   样式压过浏览器自带的 [hidden] { display: none }，不补这一句 hidden 就不管用。 */
+.daily-page [hidden] { display: none !important; }
 
 /* 小屋那一屏的《相同 / 不同》开关：一段两格的选段，挑图形之前先定。 */
 .slot-share { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 10px; }

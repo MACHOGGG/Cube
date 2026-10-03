@@ -124,6 +124,16 @@ html.no-clamp .home-page--wide .home-icon-btn,
 html.no-clamp .home-page--wide .home-bomb-card {
   max-width: 255px;
 }
+/* 上面那条兜底比 `max-width: var(--home-card-cap)` 更具体，所以降级层里卡片的上限其实一直是
+   255——第 18 推之前看不出来：横屏那一排六张是被行宽平分到 124 的，上限根本轮不到它管。
+   第 19 推最上面多了一排只有一张的《每日挑战》，没有兄弟和它分那一排的宽，flex: 1 一路把它
+   撑到上限：新内核上 124，降级层里 255，整张卡大了一倍（check-oldcss 横屏主菜单逮到的）。
+   所以这一张单独认 oldKernel.ts 算好的那个变量。那支代码真没跑起来的话（变量还是一串
+   min(...)），这一条在 Chrome 61 上会算成 max-width: none、这张卡撑满那一排——回不到上面那条
+   255；但那种情况下整页的 clamp / min / max 全都没算，不止这一张。 */
+html.no-clamp .home-page--wide .xhs-daily-row > .home-icon-btn {
+  max-width: var(--home-card-cap);
+}
 
 /* ---- 横屏游戏页那三条纵栏 ------------------------------------------------
    源样式（src/style.css 横屏那一段）写的是

@@ -37,17 +37,23 @@ const BASE = process.argv[2] || 'http://localhost:8958/';
  * 张数本身仍然**钉死**（不是从页面上数出来的）：数出来的话，哪天有一张卡悄悄不见了，
  * 这道门只会跟着变小，一声不响。
  */
-const CARDS = 12;
 /**
- * 一排两张，所以轴上是 6 **站**，不是 12 站（E18：「两列鱼眼滚轴（对齐排，聚焦一排
- * 两张同倍率）」）。
+ * 轴上几张卡：最上面那一站是《每日挑战》（第 19 推：**独占一排、居中**——方案原话「第一行只
+ * 放这一张，居中，在基础方块、基础小球那一行上面」），下面才是一排两张的十二个玩法。
+ */
+const LEAD = 1;
+const MODES = 12;
+const CARDS = LEAD + MODES;
+/**
+ * 一排两张，所以十二个玩法是 6 **站**，不是 12 站（E18：「两列鱼眼滚轴（对齐排，聚焦一排
+ * 两张同倍率）」）；再加上头那一站每日挑战，一共 7 站。
  *
  * 这道门里凡是「第几项 / 相邻两项 / 一项一颗点」说的都是**排**；只有图的格子、溢出、
  * 小字那几条说的是**卡**。两个单位在这儿分家，别处不许再换算一次——混用过的后果在
  * modeAxis.ts 的 COLS 那一段。
  */
 const COLS = 2;
-const ROWS = Math.ceil(CARDS / COLS);
+const ROWS = LEAD + Math.ceil(MODES / COLS);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -1134,7 +1140,8 @@ let page = await menuPage({ slides_played_square: '1' });
     }
     return { i: idx, name };
   });
-  check('新开一个标签页还是从第一张（基础方块）开始', fresh.i === 0, `${fresh.name}（第 ${fresh.i} 项）`);
+  // 第一张从第 19 推起是《每日挑战》（独占第 0 站），从前是基础方块。
+  check('新开一个标签页还是从第一张（每日挑战）开始', fresh.i === 0, `${fresh.name}（第 ${fresh.i} 项）`);
   await p10.close();
 }
 
@@ -1693,9 +1700,11 @@ await page.close();
     };
   });
   const order = shape.list;
-  check('前两张是基础方块和基础小球，而且没锁',
-    order.slice(0, 2).every((o) => !o.locked) && /方块/.test(order[0].name) && /圆球|小球/.test(order[1].name),
-    order.slice(0, 2).map((o) => o.name).join(' '));
+  // 第 19 推：最上面多了《每日挑战》那一站，首玩期间也亮着（方案原话「首玩期间也显示」——今天
+  // 那一局谁都能打）。所以是「前三张」：每日挑战、基础方块、基础小球，三张都没锁。
+  check('第一张是每日挑战、接着是基础方块和基础小球，三张都没锁',
+    order.slice(0, 3).every((o) => !o.locked) && /每日挑战/.test(order[0].name) && /方块/.test(order[1].name) && /圆球|小球/.test(order[2].name),
+    order.slice(0, 3).map((o) => o.name).join(' '));
   /**
    * 《我会玩》是**两站之间那条分界线**，不是轴上的一站。
    *
@@ -1705,7 +1714,7 @@ await page.close();
    * ——上下各空出一大截。
    *
    * 所以这儿量的不再是「它排第几项」（那是旧设计的尺子），而是两件现在才成立的
-   * 事：**轴还是 12 张 / 6 站**（它没占位），**画出来正好落在第 2 张和第 3 张之间**。
+   * 事：**轴还是 CARDS 张 / ROWS 站**（它没占位），**画出来正好落在能玩的和锁着的之间**。
    * 前者是玩家那句话的直接翻译，后者保证它还在分该分的那条缝。
    *
    * 两列之后「没占掉一站」要两条一起量（E18）：张数对、**排数也对**。只量张数的话，
@@ -1724,11 +1733,11 @@ await page.close();
    * 那一排的最后一张」这个前提，而这一条就是那个前提的门。
    */
   check(
-    '分界线落在第 0 排那两张基础卡和锁着的那些之间（没切开一排）',
-    shape.divAbove === 2,
-    `线上头有 ${shape.divAbove} 张（该是 方块 圆球 两张）`,
+    '分界线落在能玩的那几张（每日挑战那一站 + 第 1 排两张基础卡）和锁着的那些之间（没切开一排）',
+    shape.divAbove === LEAD + 2,
+    `线上头有 ${shape.divAbove} 张（该是 每日挑战 方块 圆球 三张）`,
   );
-  check(`其余 ${CARDS - 2} 张都锁着`, order.filter((o) => o.locked).length === CARDS - 2,
+  check(`其余 ${CARDS - LEAD - 2} 张都锁着`, order.filter((o) => o.locked).length === CARDS - LEAD - 2,
     `锁着 ${order.filter((o) => o.locked).length} 张`);
   /**
    * 锁着的那张**按不动**。
@@ -1749,7 +1758,8 @@ await page.close();
     };
   });
   check('点锁着的那张：开不了局', blocked.stay);
-  check('点锁着的那张：两张基础卡抖一下（拦截真的装上了）', blocked.nudge === 2, `${blocked.nudge} 张`);
+  // 抖的是「能玩的那几张」：两张基础卡，加上首玩期也亮着的每日挑战（第 19 推）。
+  check('点锁着的那张：能玩的三张（每日挑战 + 两张基础卡）抖一下（拦截真的装上了）', blocked.nudge === LEAD + 2, `${blocked.nudge} 张`);
   check('首玩期那颗《我会玩》还在', await p2.evaluate(() => !!document.querySelector('.know-how-btn')));
   /**
    * 《我会玩》现在是**轴上的一项**，不是浮在底排上方的那颗了（第五轮改的：它排
@@ -1992,6 +2002,13 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_circle', '1');
+    /*
+     * 这一节量的是「聚焦那一排**两张**」（会不会过中线、会不会压点点、热区归谁）。第 19 推起打
+     * 开菜单默认停在《每日挑战》那一站——它独占一排，两列那几笔账在它身上根本不存在，照默认
+     * 焦点量的话下面那几条「两张」全成了空话。所以先把焦点停在第 1 张卡那一排（方块、小球），
+     * 和第 19 推之前一模一样的那一幕；每日挑战那一站在下面第 10 节另量。
+     */
+    sessionStorage.setItem('slides_axis_focus', '1');
   });
   await pg.goto(BASE, { waitUntil: 'load' });
   const onAxis = await pg.waitForSelector('.mode-axis .home-icon-btn', { timeout: 15000 }).then(() => true).catch(() => false);
@@ -2177,9 +2194,14 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     grouped.length === ROWS,
     `${grouped.length} 排：${grouped.map((g) => g.length).join('+')}`,
   );
-  const badPair = grouped.filter((g, i) => (i < ROWS - 1 || CARDS % COLS === 0 ? g.length !== COLS : g.length !== 1));
+  // 第一排只有每日挑战一张（第 19 推）；后面每一排两张，十二个玩法是双数，最后一排也是两张。
+  const badPair = grouped.filter((g, i) => {
+    if (i < LEAD) return g.length !== 1 || !/每日挑战/.test(g[0].name);
+    const lastSolo = i === ROWS - 1 && MODES % COLS === 1;
+    return lastSolo ? g.length !== 1 : g.length !== COLS;
+  });
   check(
-    `${label}：每一排都是两张（最后一排可以落单）`,
+    `${label}：第一排只有每日挑战一张，其余每一排都是两张（最后一排可以落单）`,
     badPair.length === 0,
     badPair.map((g) => g.map((r) => r.name).join('/')).join(' | '),
   );
@@ -2201,7 +2223,8 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
    * 这两件事的账算在 modeAxis 的 PARAMS（maxScale 1.22）和 style.css 的两档
    * `--axis-art` 上。这一条按**画出来的图**量，所以哪一头被改动了它都认得出来。
    */
-  const over = art.rows.filter((r) => (r.col === '0' ? r.artR > art.midX - 6 : r.artL < art.midX + 6));
+  // 落单的那一张（第一排的每日挑战）本来就摆在正中，中线归它——只量两列那几排。
+  const over = art.rows.filter((r) => r.col !== 'solo' && (r.col === '0' ? r.artR > art.midX - 6 : r.artL < art.midX + 6));
   check(
     `${label}：放大到头也不过中线（两列之间留得下 12px）`,
     over.length === 0,
@@ -2373,6 +2396,120 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     !!bombRow && bombRow.kind === 'svg' && art.axisPanels === 0,
     bombRow ? `炸弹那张：${bombRow.kind}；轴上面板 ${art.axisPanels} 块` : '（没找到炸弹那张）',
   );
+  await c.close();
+}
+
+// ── 10. 《每日挑战》那一站（第 19 推）────────────────────────────────
+/**
+ * 方案原话：「手机鱼眼：第一行只放这一张，居中，在基础方块、基础小球那一行上面；**打开菜单默
+ * 认聚焦这一行**；聚焦时视觉尺寸等于普通两张一排时单张的大小（同一个 --axis-art、同一套鱼眼倍
+ * 率）；行距沿用 minGap/maxGap；左侧导轨多一个点。」门：「默认聚焦第一行、居中 ≤1px、与下面卡
+ * 同尺寸、各行等距、导轨不被盖、热区跟着图」。
+ *
+ * 六件事一件一条：
+ *   ① 打开菜单（新会话，没有「上次停在哪」）默认停在第 0 站，而那一站上只有每日挑战一张；
+ *   ② 它横着居中（≤1px），竖着正对选中线（≤1px）；
+ *   ③ 聚焦时它画出来的图，和第 1 排聚焦时方块那张画出来的图一样大（≤0.5px）——同一个格子、同
+ *      一个倍率；
+ *   ④ 各行等距：焦点在第 0 站时第 0→1 站的间距，等于焦点在第 1 站时第 1→2 站的间距（≤1px）——
+ *      它用的是同一套 minGap/maxGap，不是另算的一段；
+ *   ⑤ 点点轨上多一颗（一站一颗：ROWS 颗），聚焦时图不压点点（留得下 6px）；
+ *   ⑥ 热区跟着图：图心按下去收下的是它；图左右两边外面 12px 按下去不是它（卡的版面盒子半幅
+ *      宽、放大之后会伸出图外，那一截不许收手）；真按一下，进的是每日挑战那一页。
+ */
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const pg = await c.newPage();
+  pg.on('pageerror', (e) => errs.push(`§10: ${e.message}`));
+  await pg.addInitScript(() => {
+    if (sessionStorage.getItem('gate10') === '1') return;
+    sessionStorage.setItem('gate10', '1');
+    localStorage.clear();
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_intro_seen', '1');
+    localStorage.setItem('slides_played_square', '1');
+    localStorage.setItem('slides_played_circle', '1');
+  });
+  await pg.goto(BASE, { waitUntil: 'load' });
+  await pg.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 15000 });
+  await pg.waitForTimeout(800);
+  await installFocus(pg);
+  const at0 = await pg.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const SH = parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0;
+    const d = document.querySelector('.mode-axis > .home-icon-btn--daily');
+    const art = d.querySelector(':scope > .home-icon-art').getBoundingClientRect();
+    const dr = d.getBoundingClientRect();
+    const dots = [...document.querySelectorAll('.axis-rail--l .axis-dot')].map((e) => e.getBoundingClientRect());
+    const dotsR = [...document.querySelectorAll('.axis-rail--r .axis-dot')].length;
+    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
+    const pick = (x, y) => document.elementFromPoint(x, y)?.closest('.mode-axis > .home-icon-btn') ?? null;
+    const cy = art.top + art.height / 2;
+    return {
+      first: cards[0] === d,
+      sameRow: cards.filter((e) => Math.abs((e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2) - (dr.top + dr.height / 2)) < 1).length,
+      artCx: art.left + art.width / 2,
+      // 竖着量的是**整张卡**（图 + 底下那行小字）的中心：轴把每一站的卡心摆在线上（别的站也
+      // 一样，见上面 shot 的 cy），图自己比卡心高半行小字。
+      cardCy: dr.top + dr.height / 2,
+      artW: art.width,
+      vwMid: document.documentElement.clientWidth / 2,
+      lineY: hr.top + hr.height / 2 - SH,
+      dotsL: dots.length,
+      dotsR,
+      dotIn: dots.length ? Math.max(...dots.map((r) => r.right)) : null,
+      dotInR: (() => { const r = [...document.querySelectorAll('.axis-rail--r .axis-dot')].map((e) => e.getBoundingClientRect().left); return r.length ? Math.min(...r) : null; })(),
+      artL: art.left, artR: art.right,
+      hitMid: pick(art.left + art.width / 2, cy) === d,
+      hitLeft: pick(art.left - 12, cy) === d,
+      hitRight: pick(art.right + 12, cy) === d,
+      boxL: dr.left, boxR: dr.right,
+    };
+  });
+  const f0 = await pg.evaluate(() => window.__focus());
+  check('§10 ① 打开菜单默认停在第 0 站', Math.abs(f0) < 0.02, `焦点 ${f0.toFixed(3)}`);
+  check('§10 ① 第 0 站上只有每日挑战一张（它是轴上第一张卡）', at0.first && at0.sameRow === 1, `第一张=${at0.first} / 同一排 ${at0.sameRow} 张`);
+  check('§10 ② 横着居中（≤1px）', Math.abs(at0.artCx - at0.vwMid) <= 1, `图心 ${at0.artCx.toFixed(2)} / 屏心 ${at0.vwMid}`);
+  check('§10 ② 竖着正对选中线（卡心，≤1px）', Math.abs(at0.cardCy - at0.lineY) <= 1, `卡心 ${at0.cardCy.toFixed(2)} / 选中线 ${at0.lineY.toFixed(2)}`);
+  check(`§10 ⑤ 点点轨一站一颗：两条各 ${ROWS} 颗（比十二个玩法那 6 颗多一颗）`, at0.dotsL === ROWS && at0.dotsR === ROWS, `${at0.dotsL}/${at0.dotsR}`);
+  check('§10 ⑤ 聚焦时图不压两侧点点（留得下 6px）',
+    at0.dotIn !== null && at0.artL >= at0.dotIn + 6 && at0.artR <= at0.dotInR - 6,
+    `图 ${at0.artL.toFixed(1)}..${at0.artR.toFixed(1)} / 点子内沿 ${at0.dotIn?.toFixed(1)} / ${at0.dotInR?.toFixed(1)}`);
+  check('§10 ⑥ 尺子：卡的版面盒子比图宽（不然「图外 12px」按到的本来就不是它，下面那条是空话）',
+    at0.boxL < at0.artL - 12 && at0.boxR > at0.artR + 12, `盒子 ${at0.boxL.toFixed(0)}..${at0.boxR.toFixed(0)} / 图 ${at0.artL.toFixed(0)}..${at0.artR.toFixed(0)}`);
+  check('§10 ⑥ 热区跟着图：图心按下去收下的是它，图左右外面 12px 不是它', at0.hitMid && !at0.hitLeft && !at0.hitRight,
+    `图心=${at0.hitMid} 左=${at0.hitLeft} 右=${at0.hitRight}`);
+  // ④ 焦点在第 0 站时第 0→1 站的间距。
+  const gap01 = await pg.evaluate(() => { const ys = window.__rowCys(); return ys[1] - ys[0]; });
+
+  // ③ ④ 换到第 1 站（方块、小球那一排）再量：拨点点，一站 13px（见 4j）——这儿直接用 Tab 把焦
+  // 点交给方块那张卡（轴的 focusin 会把它那一排拉到中线上，见 modeAxis 的 onFocusIn）。
+  await pg.evaluate(() => document.querySelectorAll('.mode-axis > .home-icon-btn')[1].focus());
+  await pg.waitForTimeout(1600);
+  const f1 = await pg.evaluate(() => window.__focus());
+  const at1 = await pg.evaluate(() => {
+    const sq = document.querySelectorAll('.mode-axis > .home-icon-btn')[1];
+    const a = sq.querySelector(':scope > .home-icon-art').getBoundingClientRect();
+    const ys = window.__rowCys();
+    return { name: sq.getAttribute('aria-label'), w: a.width, gap12: ys[2] - ys[1] };
+  });
+  check('§10 尺子：焦点真的挪到了第 1 站', Math.abs(f1 - 1) < 0.02, `焦点 ${f1.toFixed(3)}（${at1.name}）`);
+  check('§10 ③ 聚焦时和下面那排的卡一样大（同一个格子、同一个倍率，≤0.5px）', Math.abs(at0.artW - at1.w) <= 0.5,
+    `每日挑战 ${at0.artW.toFixed(2)} / ${at1.name} ${at1.w.toFixed(2)}`);
+  check('§10 ④ 各行等距：第 0→1 站（焦点在 0）＝ 第 1→2 站（焦点在 1）（≤1px）', Math.abs(gap01 - at1.gap12) <= 1,
+    `${gap01.toFixed(2)} / ${at1.gap12.toFixed(2)}`);
+
+  // ⑥ 真按一下：回到第 0 站（Tab 回每日挑战那张），点图心，进的是每日挑战那一页。
+  await pg.evaluate(() => document.querySelector('.mode-axis > .home-icon-btn--daily').focus());
+  await pg.waitForTimeout(1600);
+  const p0 = await pg.evaluate(() => {
+    const a = document.querySelector('.mode-axis > .home-icon-btn--daily > .home-icon-art').getBoundingClientRect();
+    return { x: a.left + a.width / 2, y: a.top + a.height / 2 };
+  });
+  await pg.mouse.click(p0.x, p0.y);
+  const opened = await pg.waitForSelector('.daily-page #dailyPlay', { timeout: 5000 }).then(() => true).catch(() => false);
+  check('§10 ⑥ 按图心进的是每日挑战那一页', opened);
   await c.close();
 }
 

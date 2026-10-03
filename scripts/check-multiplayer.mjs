@@ -217,7 +217,8 @@ check('屏幕外框亮起屋主提示',
 check('屋主的横幅上有一颗《离开房间》', (await A.page.$('#roomPickLeave')) !== null);
 // The second base card is the circle — the same board the old .mp-mode
 // button chose, so the seeding check below is comparing the same thing.
-await A.page.$$eval('.home-icon-btn', (els) => els[1].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await A.page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[1].click());
 
 await Promise.all([
   A.page.waitForSelector('.mp-countdown-page .cd-window', { timeout: 8000 }),
@@ -296,7 +297,8 @@ check('开局不需要再按「开始」', (await A.page.$eval('#startOverlay', 
 
 // ---- a third, unseeded run must NOT match -------------------------------
 const C = await newPlayer('solo');
-await C.page.$$eval('.home-icon-btn', (els) => els[1].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await C.page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[1].click());
 // 单人开局页是 3、2、1 数完自己开局的，那颗键藏在后面不给点；测试不必陪着
 // 等三秒，直接替它按下去，验的是「按下去之后棋盘真的起来了」。
 await C.page.waitForSelector('#startBtn', { timeout: 10000, state: 'attached' });

@@ -228,6 +228,12 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   const s = STRINGS[opts.lang];
   const groups = boardGroups(opts.lang);
   const total: BoardTab = { mode: '', label: s.rankTotalBoard };
+  /**
+   * 「今日」（第 19 推）：每日挑战那一张——服务器眼里的今天，每人当天最好的一局，前五十名＋我排
+   * 第几（api/scores.js 的 board，mode 'daily'）。它和《总榜》一样没有子标签，排在那一排的
+   * **最后**：前面那几个的次序是玩家定的（总榜、基础、计时……），插在中间等于替他改了次序。
+   */
+  const today: BoardTab = { mode: 'daily', label: s.rankTabDaily };
   /** 哪个母标签被点开了（null 就是最外面那一排）。 */
   let open: BoardGroup | null = null;
   /** 现在看的是哪一张榜。 */
@@ -358,10 +364,10 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
    */
   function paintTabs(): void {
     const owner = ownerOf(current);
-    // 上一行：总榜 + 六个大类，永远是这七个。高亮的是「正在看的那张榜」，
+    // 上一行：总榜 + 七个大类 + 今日（第 19 推），永远是这几个。高亮的是「正在看的那张榜」，
     // 或者「正在看的那张榜属于哪一类」——看子标签的时候，它的母标签也亮着，
     // 这样一眼知道自己在哪一类里。
-    tabsEl.innerHTML = [total, ...groups]
+    tabsEl.innerHTML = [total, ...groups, today]
       .map((t) => tabHtml(t, t.mode === current || t.mode === owner?.mode || t.mode === open?.mode))
       .join('');
     subEl.innerHTML = open ? open.children.map((t) => tabHtml(t, t.mode === current)).join('') : '';
@@ -379,8 +385,8 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
         // 现在七个大类一直都在，随时可以横着跳。
         const group = groups.find((g) => g.mode === mode);
         if (group) open = group;
-        // 《总榜》不是大类，没有子标签：点它就把下一行收起来。
-        if (mode === '') open = null;
+        // 《总榜》《今日》不是大类，没有子标签：点它们就把下一行收起来。
+        if (mode === '' || mode === today.mode) open = null;
         void load(mode);
         paintTabs();
       });

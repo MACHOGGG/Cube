@@ -137,7 +137,8 @@ check('再按 → 收起那一问，人还在小屋', !(await has(B.page, '#leav
 await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 2, { timeout: 8000 });
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
-await A.page.$$eval('.home-icon-btn', (els) => els[1].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await A.page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[1].click());
 await B.page.waitForSelector('#mpKnowAsk', { timeout: 12000 });
 await back(B.page);
 check('《会不会规则》按返回 → 等于答《会》，那一问收起', !(await has(B.page, '#mpKnowAsk')));

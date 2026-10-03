@@ -4,6 +4,7 @@
  *   node xhs/check-oldkernel.mjs            # 五个玩法各打一局 + 走一遍不是棋盘的那几屏
  *   node xhs/check-oldkernel.mjs square     # 只跑一个
  *   node xhs/check-oldkernel.mjs screens    # 只走成绩页那一条路
+ *   node xhs/check-oldkernel.mjs daily      # 只走每日挑战那一路（第 19 推）
  *
  * 为什么要有这个：小工具的最低内核是 Android 8.1 那一档的 Chrome / WebView
  * 61，手边没有那样的真机，小红书的审核也要几天。但「缺哪些接口」是查得到
@@ -171,7 +172,8 @@ const MODES = {
 };
 
 const only = process.argv[2];
-const list = only ? [only] : Object.keys(MODES);
+// 'daily' 不在 MODES 里：每日挑战那一路在循环后面单独跑（见文件末尾）。
+const list = only ? (only === 'daily' ? [] : [only]) : Object.keys(MODES);
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fails = 0;
@@ -251,7 +253,8 @@ for (const key of list) {
 
   // 主菜单
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
-  const cards = await p.$$('.home-icon-btn');
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  const cards = await p.$$('.home-icon-btn:not(.home-icon-btn--daily)');
   say(cards.length >= 5, '主菜单五张卡都画出来了', cards.length + ' 张');
   await cards[mode.card].click();
   await p.waitForTimeout(800);
@@ -513,6 +516,117 @@ for (const key of list) {
   }
 
   say(errs.length === 0, '全程零报错', errs.slice(0, 3).join(' | '));
+  await ctx.close();
+}
+
+/*
+ * ── 每日挑战（第 19 推）────────────────────────────────────────────────────
+ *
+ * 方案的门：「小红书旧内核下日期数字可见」。再加上一件只有这一端才有的事：每日挑战二十天一圈，
+ * 有一半的日子轮到的棋盘主菜单上没有（菱形方块、六边圆球、七色圆球、六边蜂窝 54——xhs/src/main.ts
+ * 的 ALL_GAMES）。它们在网页端打过无数局，可从没在「接口被摘掉」的状态下开过一局——所以这儿每
+ * 一副都用输种子那条路开一次、拖几下，零报错才算。计时、定时炸弹、进阶炸弹这三档同理（这一端主
+ * 菜单上没有它们的入口）。
+ */
+if (!only || only === 'daily') {
+  console.log('\n==== 每日挑战（老内核） ====');
+  const SC = await import('../api/_seedcode.js');
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(STRIP);
+  await ctx.addInitScript(HIDE_TRANSFORM_PROPS);
+  await ctx.addInitScript(`try {
+  localStorage.setItem('slides.xhs.story.square', '1');
+  localStorage.setItem('slides.xhs.story.circle', '1');
+} catch (e) {}`);
+  await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(String(e)));
+  p.on('console', (m) => {
+    if (m.type() === 'error') errs.push('console: ' + m.text());
+  });
+  await p.goto(page404);
+  await p.waitForSelector('.home-icon-btn--daily', { timeout: 30000 });
+  await p.waitForTimeout(600);
+  const card = await p.evaluate(() => {
+    const btn = document.querySelector('.home-icon-btn--daily');
+    const t = btn && btn.querySelector('text.daily-date');
+    const r = t && t.getBoundingClientRect();
+    const cs = t && getComputedStyle(t);
+    const first = document.querySelector('.home-grid .home-row');
+    return {
+      first: !!first && first.querySelectorAll('.home-icon-btn').length === 1 && !!first.querySelector('.home-icon-btn--daily'),
+      date: t ? t.textContent.trim() : '',
+      w: r ? r.width : 0,
+      h: r ? r.height : 0,
+      fill: cs ? cs.fill : '',
+      font: cs ? cs.fontFamily : '',
+    };
+  });
+  // 本机时间的北京日期：这一端用本机的钟（方案原话）。
+  const today = new Date(Date.now() + 8 * 3600e3).getUTCDate();
+  say(card.first, '每日挑战在最上面那一行、那一行只有它');
+  say(card.date === String(today) && card.w > 4 && card.h > 4, '老内核下日期数字画得出来（有字、有大小）', JSON.stringify(card));
+  say(!!card.fill && card.fill !== 'none' && !/rgba\(0, 0, 0, 0\)/.test(card.fill), '日期数字的颜色算得出来（不是 none / 透明）', card.fill);
+
+  /** 进每日挑战那一页，敲一串码（不给就按《今日挑战》），数完开局，拖几下。 */
+  const playSeed = async (code, label) => {
+    await p.evaluate(() => document.querySelector('.home-icon-btn--daily').click());
+    await p.waitForSelector('#dailyPlay', { timeout: 8000 });
+    if (code) {
+      await p.fill('#seedInput', code);
+      await p.evaluate(() => document.querySelector('#seedGo').click());
+    } else {
+      await p.evaluate(() => document.querySelector('#dailyPlay').click());
+    }
+    await p.waitForTimeout(800);
+    // 七色圆球那一天：竖着的手机先「请横屏」——转过来再数。
+    const turn = await p.evaluate(() => {
+      const t = document.querySelector('#dailyTurn');
+      return !!t && !t.hidden;
+    });
+    if (turn) {
+      await p.setViewportSize({ width: 844, height: 390 });
+      await p.waitForTimeout(600);
+    }
+    const ok = await p
+      .waitForFunction(() => document.querySelectorAll('#boardWrap [data-r][data-c]').length > 0, { timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+    say(ok, `${label}：棋盘摆出来了`);
+    if (ok) {
+      await p.waitForTimeout(1200);
+      const before = errs.length;
+      const box = await p.evaluate(() => {
+        const r = document.querySelector('#boardWrap').getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
+      });
+      for (let i = 0; i < 4; i++) {
+        const dx = i % 2 ? box.w * 0.18 : -box.w * 0.18;
+        await p.mouse.move(box.x, box.y);
+        await p.mouse.down();
+        await p.mouse.move(box.x + dx, box.y, { steps: 6 });
+        await p.mouse.up();
+        await p.waitForTimeout(500);
+      }
+      say(errs.length === before, `${label}：拖了几下没抛错`, errs.slice(before, before + 2).join(' | '));
+    }
+    if (turn) await p.setViewportSize({ width: 390, height: 844 });
+    // 回主菜单：重开预览页最干净（这一页打到一半没有《退出》那一条路可走）。
+    await p.goto(page404);
+    await p.waitForSelector('.home-icon-btn--daily', { timeout: 30000 });
+    await p.waitForTimeout(400);
+  };
+
+  await playSeed('', '今日挑战');
+  const extra = [
+    [2, '菱形方块'], [3, '六边圆球'], [4, '七色圆球'], [5, '六边蜂窝 54'],
+    [6, '计时（方块）'], [10, '定时炸弹（方块）'], [12, '进阶炸弹（菱形方块）'],
+  ];
+  for (const [v, name] of extra) {
+    await playSeed(SC.encodeSeed(SC.DEAL_VERSION, v, 31337 + v), `输种子开一局 ${name}`);
+  }
+  say(errs.length === 0, '每日挑战这一路全程零报错', errs.slice(0, 3).join(' | '));
   await ctx.close();
 }
 

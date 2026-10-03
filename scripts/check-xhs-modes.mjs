@@ -381,6 +381,38 @@ for (const [file, src] of [
   say(/class="home-row"|home-row/.test(own), '（尺子）排布也是自己摆的（menu.ts 里自己拼 .home-row）');
 }
 
+// ── ⑨ E20 冻结唯一的例外：最上面那一行《每日挑战》（第 19 推）────────────────
+//
+// 方案原话：「小红书：只在最上方加这一张、居中，其余排布一点不动；在决策文档记为 E20 的唯一例
+// 外；冻结门改成『除第一行每日挑战外逐项一致』」。所以这一节量三件事：
+//
+//   · 它**不是一档 XhsMode**、不在 CARDS 里——放进 CARDS 的话，「窄屏两张一排、三排」那几条
+//     冻结的排布当场被挤动（六张变七张，排成 2 + 2 + 2 + 1），上面 ①–③ 也会跟着乱；
+//   · 它是 grid 里**第一个**被摆进去的那一行，而且那一行只有它一张；
+//   · 那一行之后，CARDS 那几排照旧（上面 ③ 量的 perRow 和排数，正是「其余排布一点不动」）。
+//
+// 例外只有这一个：要是哪天第二张卡也这么塞进来，下面「grid 里在 CARDS 之前摆进去的只有这一
+// 行」那一条会红。
+head('⑨ E20 冻结唯一的例外：最上面那一行《每日挑战》');
+{
+  say(!MODES.includes('daily') && !CARD_MODES.includes('daily'), '每日挑战不是一档 XhsMode、不在 CARDS 里');
+  const render = menuSrc.match(/export function renderXhsMenu[\s\S]*?\n\}/);
+  say(!!render, '（尺子）切出了 renderXhsMenu 那一段');
+  const body = render ? render[0] : '';
+  const dailyAt = body.indexOf("'home-row xhs-daily-row'");
+  const cardsAt = body.indexOf('for (let i = 0; i < CARDS.length; i += perRow)');
+  say(dailyAt > 0 && cardsAt > 0, '（尺子）两段都找得到：每日挑战那一行、CARDS 那几排', `${dailyAt} / ${cardsAt}`);
+  say(dailyAt > 0 && dailyAt < cardsAt, '每日挑战那一行在 CARDS 那几排**之前**摆进 grid（最上面）');
+  const before = cardsAt > 0 ? body.slice(0, cardsAt) : '';
+  const rowsBefore = (before.match(/grid\.appendChild\(/g) || []).length;
+  say(rowsBefore === 1, 'CARDS 之前摆进 grid 的只有这一行（唯一的例外）', `${rowsBefore} 行`);
+  const oneCard = before.match(/row\.appendChild\(/g) || [];
+  say(oneCard.length === 1, '那一行里只有一张卡', `${oneCard.length} 张`);
+  say(/home-icon-btn--daily/.test(before), '那张卡挂着 home-icon-btn--daily（门和样式都认它）');
+  // 冻结门那一条（上面第 ⑧ 节）照旧：这一行用的是网页端的画图件（dailyArt），不是网页端的排版件。
+  say(/from '\.\.\/\.\.\/src\/ui\/dailyArt'/.test(menuSrc), '图是网页端那一份（src/ui/dailyArt），不在这一端另画一份');
+}
+
 // ── 收尾 ───────────────────────────────────────────────────────────────────
 console.log('');
 if (fails) {

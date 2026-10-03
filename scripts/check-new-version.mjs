@@ -122,7 +122,8 @@ sec('① 版本号变了：菜单上冒出那一行');
   check('说的就是 i18n 里那一句（简体）', now.text === tipOf('zhHans'), now.text);
 
   sec('② 对局中一个字都不说，结算页也不说');
-  await page.$$eval('.home-icon-btn', (els) => els[0].click());
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
   await page.waitForFunction(
     () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball').length > 0,
     { timeout: 25000 },
@@ -264,7 +265,10 @@ for (const vp of [
     '行 ' + Math.round(seat.pill.top) + '–' + Math.round(seat.pill.bottom) +
       ' / 玻璃 ' + Math.round(seat.glass.top) + '–' + Math.round(seat.glass.bottom),
   );
-  check(vp.name + '：（尺子）量到的卡不止四张', seat.seen >= 4, seat.seen + ' 张');
+  // 尺子从「不止四张」降到「至少三张」（第 19 推）：最上面多了一排只有一张的《每日挑战》，横屏
+  // 844×390 的第一屏于是只看得见三张（每日挑战一张 ＋ 基础两张，下面几排要往下滑才到）。离招牌
+  // 最近、最可能被这一行压着的正是这三张，所以量它们就够了；少于三张才说明没量到东西。
+  check(vp.name + '：（尺子）量到的卡至少三张', seat.seen >= 3, seat.seen + ' 张');
   check(
     vp.name + '：没有一张卡和它相交',
     seat.over.length === 0,

@@ -162,7 +162,8 @@ const board = () =>
   ({ sel: '#boardWrap .tile, #boardWrap .ball' });
 
 async function toBoard(p, cardIndex, opts = {}) {
-  await p.$$eval('.home-icon-btn', (e, i) => e[i].click(), cardIndex);
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e, i) => e[i].click(), cardIndex);
   await p.waitForTimeout(800);
   if (opts.pick) {
     const shape = await p.$('[data-family="square"]');
@@ -223,7 +224,8 @@ const SCREENS = [
   {
     name: '形状选择（炸弹）',
     async go(p) {
-      await p.$$eval('.home-icon-btn', (e) => e[2].click());
+      // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+      await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e) => e[2].click());
       await p.waitForTimeout(900);
     },
     // 底下那颗《退出》第 18 推起是统一的 `.page-exit`（固定在屏幕底部、不进流），原先那一排
@@ -233,7 +235,8 @@ const SCREENS = [
   {
     name: '老虎机转前',
     async go(p) {
-      await p.$$eval('.home-icon-btn', (e) => e[3].click());
+      // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+      await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e) => e[3].click());
       await p.waitForTimeout(900);
     },
     // `.home-head-glass` 撤了：这一屏上没有招牌（挑图形那一页只有图和一句标语，
@@ -244,7 +247,8 @@ const SCREENS = [
   {
     name: '无限反转开局页',
     async go(p) {
-      await p.$$eval('.home-icon-btn', (e) => e[4].click());
+      // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+      await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e) => e[4].click());
       await p.waitForTimeout(900);
     },
     // 底下那颗《退出》第 18 推起是统一的 `.page-exit`（固定在屏幕底部、不进流），原先那一排
@@ -254,7 +258,8 @@ const SCREENS = [
   {
     name: '开局倒数页',
     async go(p) {
-      await p.$$eval('.home-icon-btn', (e) => e[0].click());
+      // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+      await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e) => e[0].click());
       await p.waitForTimeout(900);
     },
     // ⚠️ `.cd-window` / `.cd-digit` 2026-10-03 才加进来——在那之前这一屏**从没量过倒数窗**，

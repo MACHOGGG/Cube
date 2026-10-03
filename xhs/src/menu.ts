@@ -22,12 +22,21 @@ import {
 } from '../../src/ui/homeIcons';
 import { ICON_NAV_ME } from './icons';
 import { STRINGS, type Lang } from '../../src/i18n';
+import { dailyAria, dailyArtHtml, watchDay } from '../../src/ui/dailyArt';
+import { dayIndexOf } from '../../src/engine/seedCode';
 
 /** 六个玩法。炸弹 / 老虎机 / 无限反转 / 步步为营点开先挑方块还是小球。 */
 export type XhsMode = 'square' | 'circle' | 'bomb' | 'slot' | 'flip' | 'puzzle';
 
 export interface XhsMenuHandlers {
   onPlay: (mode: XhsMode) => void;
+  /**
+   * 《每日挑战》那张卡（第 19 推）。它**不是**一档 XhsMode、不在 CARDS 里：它是摆在最上面单独
+   * 一行的那一张（方案原话：「小红书：只在最上方加这一张、居中，其余排布一点不动；在决策文档
+   * 记为 E20 的唯一例外」）。放进 CARDS 的话，「窄屏两张一排、三排」那几条冻结的排布就被它挤
+   * 动了——六张卡会排成 2 + 2 + 2 + 1。
+   */
+  onDaily: () => void;
   /** 底排那唯一一颗键：成绩 + 说明合成的那一屏。 */
   onProfile: () => void;
   /**
@@ -94,6 +103,12 @@ export const XHS_BASIC_MODES = ['square', 'circle'] as const;
 export const XHS_ADVANCED_MODES: readonly XhsMode[] = CARDS.map((c) => c.mode).filter(
   (m) => !(XHS_BASIC_MODES as readonly XhsMode[]).includes(m),
 );
+
+/**
+ * 上一次画主菜单时给《每日挑战》那张卡排的「零点换图」。主菜单每次都整个重画，旧的那一个不撤
+ * 的话回一次主菜单就多挂一个定时器。
+ */
+let stopDailyWatch: (() => void) | null = null;
 
 /** 一张卡：上面一格方的图，底下一行小字。和网页版的 iconButton 同一个形状。 */
 function card(
@@ -203,6 +218,35 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
   `;
 
   const grid = page.querySelector<HTMLElement>('#xhsGrid')!;
+  /*
+   * 《每日挑战》（第 19 推）：最上面单独一行、居中，只有这一张——E20「主菜单排布冻结」唯一的例
+   * 外（方案原话）。下面那几排一张都不动：还是窄屏两张一排、宽屏一排六张、同样的次序。
+   *
+   * 图按本机时间的北京日期换（小红书那一版不联网，用本机的钟——方案原话），到零点自动换图、
+   * 切回前台时重算（dailyArt.ts 的 watchDay）。读屏念「每日挑战，10 月 3 日」，底下那行小字是
+   * 「每日挑战」。它不压暗、不挂「进阶入口」牌子：今天那一局谁都能打。
+   */
+  {
+    const today = dayIndexOf(Date.now());
+    const row = document.createElement('div');
+    row.className = 'home-row xhs-daily-row';
+    const btn = card(dailyArtHtml(today), s.dailyTitle, () => h.onDaily());
+    btn.classList.add('home-icon-btn--daily');
+    btn.setAttribute('aria-label', dailyAria(lang, today));
+    row.appendChild(btn);
+    grid.appendChild(row);
+    stopDailyWatch?.();
+    stopDailyWatch = watchDay(Date.now, (d) => {
+      if (!btn.isConnected) {
+        stopDailyWatch?.();
+        stopDailyWatch = null;
+        return;
+      }
+      const art = btn.querySelector<HTMLElement>('.home-icon-art');
+      if (art) art.innerHTML = dailyArtHtml(d);
+      btn.setAttribute('aria-label', dailyAria(lang, d));
+    });
+  }
   // 六张：宽屏一排摆完，窄屏三排各两张（排数和五张那一版一样，所以 menuFit 量出来的
   // 高度没变）。从前宽屏那个数写的是 5——补上第六张之后它会排成 5 + 1，最后一张孤
   // 零零吊在下面一行。

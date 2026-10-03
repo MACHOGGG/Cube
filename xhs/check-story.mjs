@@ -75,7 +75,8 @@ async function open(old = false, seen = false) {
   await p.waitForTimeout(800);
   return { ctx, p, errs };
 }
-const card = (p, i) => p.$$eval('.home-icon-btn', (e, k) => e[k].click(), i);
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+const card = (p, i) => p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (e, k) => e[k].click(), i);
 const has = (p, sel) => p.$(sel).then((e) => !!e);
 
 // ---- 1. 第一次开方块：分镜不再自己弹出来 ----

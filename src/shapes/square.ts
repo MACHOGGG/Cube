@@ -170,6 +170,8 @@ export function createSquareGame(): ShapeGame {
         // 一回玩方块（先不出声，见 coachPlan），和炸弹 / 无限反转 / 老虎机头
         // 一回进来时的那一句提示（coachTip）。
         coach: !!opts?.coach,
+        // 不数 4-3-2-1（每日挑战那一页自己数过了，第 19 推；见 ShellMeta.noCountdown）。
+        noCountdown: !!opts?.noCountdown,
       });
 
       const pickPalette = (): readonly string[] =>
@@ -985,6 +987,8 @@ export function createSquareGame(): ShapeGame {
         modeKey,
         timeLimitSec: opts?.timeLimitSec,
         coach: !!opts?.coach,
+        // 这一局用哪一串种子发牌（第 19 推，见 ShapeGameOpts.seed）。
+        seed: opts?.seed,
         coachArt: opts?.coachArt,
         coachShape: 'square',
         coachPlan: opts?.coachPlan,

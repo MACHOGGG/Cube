@@ -91,6 +91,9 @@ import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type Coach
 import type { CoachHint } from './coachHint';
 import { mountPatternBlock } from '../ui/patternBlock';
 import { sizeAtLevel, type TargetPattern } from './targets';
+import { clearSeed, seedRandom } from './rng';
+import { dealSeed, randomSeed, variantForGame, type SeedRun } from './seedCode';
+import { seedForTarget, slotTargetOf } from './seedDeal';
 import { targetHudDef } from './targetIcon';
 import { erodedFace } from './targetMatch';
 import { cardOrNull } from '../shapes/registry';
@@ -206,6 +209,11 @@ export interface GameControllerHooks {
    * 次；结算页真的露面了才叫得到这儿。
    */
   shouldTeachTotal?: () => boolean;
+  /**
+   * 这一局用哪一串种子码发牌（第 19 推，ShapeGameOpts.seed）。不给就由控制器随手抽一串
+   * ——每一局单人游戏都用种子发牌，见 newGame。
+   */
+  seed?: SeedRun;
   /** (Re)builds the shape's internal grid for a fresh game. */
   resetBoard(): void;
   /** Repaints the board from current state. */
@@ -572,6 +580,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let endSnapshot: BoardSnapshot | null = null;
   let lastRun: RunData | null = null;
   /**
+   * 这一局正用着的种子（第 19 推）。外面给了就用外面的；没给就在头一局开出来的那一刻随手
+   * 抽一串（练习盘不抽，见 newGame）。「再来一局」：随手抽的那种换一串新的，敲进来的、每
+   * 日的、小屋的都还是这一串。
+   */
+  let seedRun: SeedRun | null = hooks.seed ?? null;
+  /** 这一局在种子码编号表里是第几行（engine/seedCode.ts 的 VARIANTS）；表里没有就 -1。 */
+  const seedVariant = variantForGame(hooks.modeKey, hooks.shapeId, Boolean(hooks.slotTarget));
+  /** 这一个控制器开过几局了（第二局起「随手抽的」种子要换一串）。 */
+  let dealt = 0;
+  /**
    * 这一局的战绩图（PNG 的 data:uri）。一局画一次，结算页和《分享》那一窗共
    * 用同一张——见 renderCard。
    */
@@ -681,10 +699,54 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     });
   }
 
+  /**
+   * 发牌之前把种子种上（第 19 推，方案原话：「在 newGame 里的 hooks.resetBoard() 之前
+   * seedRandom('s1:' + code)」）。
+   *
+   * · 练习盘不种：那一块是小屋等人时随手打的，不结算、不存档，也没有码可印；它从前就是
+   *   Math.random（main.ts 的 onPractice 自己清过一次），这儿照旧清一遍。
+   * · 头一局：外面给了就用外面的；没给就随手抽一串（这个玩法、这副棋盘）。
+   * · 第二局起（「再来一局」）：随手抽的那种换一串新的；敲进来的、每日的、小屋的还是这
+   *   一串——同一副牌再来一次，正是输种子、打每日挑战的意思。
+   * · 老虎机：目标是**先**从种子里抽的（方案：「先从种子里抽，再发牌」），所以这儿照抽一
+   *   次——抽出来的和开局前那一屏转出来的是同一个（同一串码、同一个起点），抽这一下是为
+   *   了让后面发牌从流里同一个位置接着取，任何一台设备照这串码都发出同一副牌。
+   *   「再来一局」不换目标（从前就是同一个图案、换一副牌），所以换的那一串要挑「头一下抽
+   *   出来正是这个目标」的（seedDeal.ts 的 seedForTarget）——随手换一串的话，印在分享卡
+   *   上的码还原出来是另一个图案。暂停面板和结算页那两颗《再来一局》都走这儿。
+   * · 编号表里没有这一局（不该发生）：退回 Math.random，不印码——印一串还原不了这一局的
+   *   码比不印更糟。
+   */
+  function plantSeed() {
+    if (hooks.practice) {
+      seedRun = null;
+      clearSeed();
+      return;
+    }
+    if (!seedRun || (dealt > 0 && seedRun.source === 'random')) {
+      const code =
+        seedVariant < 0
+          ? null
+          : hooks.slotTarget
+            ? seedForTarget(seedVariant, hooks.slotTarget)
+            : randomSeed(seedVariant);
+      if (!code) {
+        seedRun = null;
+        clearSeed();
+        return;
+      }
+      seedRun = { code, source: 'random' };
+    }
+    if (hooks.slotTarget) slotTargetOf(seedRun.code, hooks.slotTarget.family);
+    else seedRandom(dealSeed(seedRun.code));
+  }
+
   function newGame() {
     // 上一局「全死」排下的收尾不许落到这一局头上（见 stuckTimer）。
     window.clearTimeout(stuckTimer);
     stuckTimer = 0;
+    plantSeed();
+    dealt++;
     hooks.resetBoard();
     score = 0;
     moves = 0;
@@ -934,6 +996,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 步步为营同理（见 puzzleScore.ts 的 PUZZLE_RULES_VERSION）：2026-10-02 消线奖励
       // 从退一步改成退两步，一局能走多久、终局盘面长什么样整条都变了。非这一档不写。
       puzzleRules: hooks.modeKey === 'puzzle' ? PUZZLE_RULES_VERSION : undefined,
+      // 这一局的种子（第 19 推）：码、从哪儿来的、每日挑战那一天。分享卡照它印「种子
+      // XXXX-XXXX」（每日的再加「· 每日 MM/DD」），服务器照 daily 和 seed 把每日挑战那一
+      // 局收进「今日」榜（它自己重算那一天的码核对，不信这两个字段）。小屋老虎机「各抽各
+      // 的」那一局不记码：那串码还原得了牌、还原不了他的目标。
+      seed: seedRun && !seedRun.hideCode ? seedRun.code : undefined,
+      seedSource: seedRun?.source,
+      daily: seedRun?.source === 'daily' ? seedRun.daily : undefined,
       // 这一局按第几版**计分规则**打的（《侵蚀阶梯》v1.2 §6）。上面那两个各管一
       // 个玩法，这一个管全站——服务端照它收不收这一局（`api/scores.js` 只认现行
       // 那一版），旧客户端在途打完的局照常给他看结算页，只是不入榜。

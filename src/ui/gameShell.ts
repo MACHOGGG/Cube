@@ -51,6 +51,10 @@ export interface ShellMeta {
    * 4-3-2-1 倒计时，之后其他的所有都保留只有这个取消」）。那一局是新来的人
    * 打开小工具看见的**第一屏**——他还不知道这是什么，先让他看见棋盘、看见
    * 棋盘底下那句话，比先让他等四秒管用。往后每一局照旧数。
+   *
+   * 第 19 推起每日挑战也用它——但那不是「不数」：每日挑战那一页（ui/dailyMode.ts）自己数
+   * 4-3-2-1，倒数期间不露玩法和棋盘（方案原话），数完才把棋盘挂上来，这一页再数一遍就成了
+   * 两次倒数。
    */
   noCountdown?: boolean;
   /** Every string on this screen is localized through STRINGS[lang]; the
@@ -745,10 +749,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
   // ---- 老虎机：开局页那台机器真的在转 -----------------------------------
   //
-  // 结果在进这一页之前就抽好了（slotMachine.ts 的 drawOne），这里转的是给
+  // 结果在进这一页之前就抽好了（slotMachine.ts 从这一局的种子码里抽的，第 19 推），这里转的是给
   // 人看的那几秒：两个轮子从左到右先后停住，最后一个停完时倒数还剩一秒多，
   // 刚好够看清转出了什么。按《退出》就别转了——这块 DOM 马上要被换掉。
-  if (meta.slotTarget) {
+  //
+  // 不数 4-3-2-1 的那一局不转（第 19 推）：每日挑战那一页自己数完才开棋盘，方案原话「老虎
+  // 机：不转轮子……目标直接出现在得分图案位置」——这一页下一帧就被按掉，转了也没人看见。
+  if (meta.slotTarget && !meta.noCountdown) {
     const stage = container.querySelector<HTMLElement>('#startOverlay');
     if (stage) {
       const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTarget, meta.lang), () => {

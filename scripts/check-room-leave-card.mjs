@@ -83,7 +83,8 @@ const joinRoom = async (page, name, code) => {
 const hostPicks = async (page, i = 0) => {
   await page.click('#mpPick');
   await page.waitForSelector('#roomPickBar');
-  await page.$$eval('.home-icon-btn', (els, k) => els[k].click(), i);
+  // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+  await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els, k) => els[k].click(), i);
 };
 const boardUp = (page) =>
   page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball').length > 0, { timeout: 20000 });

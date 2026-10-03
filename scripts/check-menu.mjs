@@ -138,7 +138,8 @@ check('背景的淡化也一并撤掉', afterTap.dimmed === false);
 await page.evaluate(() => window.scrollTo(0, 420));
 await page.waitForTimeout(300);
 const before = await page.evaluate(() => window.scrollY);
-await page.$$eval('.home-icon-btn', (els) => els[0].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
 await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
 await page.waitForTimeout(250);
 await page.click('#startBackBtn');
@@ -234,7 +235,9 @@ async function menuOrder(width, height) {
   await p.waitForSelector('.home-row .home-icon-btn, .mode-axis .home-icon-btn', { timeout: 20000 });
   await p.waitForTimeout(300);
   const out = await p.evaluate(() => {
-    const name = (e) => (e.getAttribute('aria-label') || '').split(' ·')[0];
+    // 《每日挑战》那张（第 19 推）的读屏名带着日期（「每日挑战，10 月 3 日」），天天变，按类名认。
+    const name = (e) =>
+      e.classList.contains('home-icon-btn--daily') ? '每日挑战' : (e.getAttribute('aria-label') || '').split(' ·')[0];
     const rows = [...document.querySelectorAll('.home-row')];
     if (rows.length) return { kind: 'rows', items: rows.map((r) => [...r.children].map(name)) };
     // 轴上只取**直接子元素**里的卡：两条点点轴（.axis-rail）、分界线、《我会玩》
@@ -281,8 +284,11 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   // 玩家点名的顺序，宽屏三排、窄屏几排——同一条链，断在不同的地方。
   const wide = w >= 720 || (w > h && w >= 560);
   const got = await menuOrder(w, h);
+  // 第 19 推：最上面单独一排《每日挑战》，三端一致（方案原话「最上方单独一行、居中」）。宽屏
+  // 是 grid 里的第一排，窄屏是轴上的第一站——下面两张表的第一排都是它。
   const WANT = wide
     ? [
+        ['每日挑战'],
         // 基础只剩两张（三角那一副删了）。第二排还是六张，所以 --home-card-cap
         // 那道公式的除数一个字没动。
         ['方块', '圆球'],
@@ -295,6 +301,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
     : [
         // 窄屏：一排两张摆完为止，能玩的先摆，天才特供那五张（老虎机、无限
         // 反转、步步为营、七色圆球、大三角）收在最后——玩家点的。
+        ['每日挑战'],
         ['方块', '圆球'],
         ['多人游玩', '计时挑战'],
         ['基础炸弹', '菱形方块'],
@@ -372,7 +379,8 @@ check('连点两下不放大：按钮和空白都算', zoomy.length === 0, zoomy
 const axisTA = await tap.$eval('.mode-axis', (e) => getComputedStyle(e).touchAction).catch(() => '没有轴');
 check('轴是 none（竖向手势它自己吃）', axisTA === 'none', axisTA);
 // 开一局，确认棋盘那块还是 none。
-await tap.$$eval('.home-icon-btn', (els) => els[0].click());
+// 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。
+await tap.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
 await tap.waitForSelector('.start-go, .board-wrap', { timeout: 8000 });
 const goBtn = await tap.$('.start-go');
 if (goBtn) {
