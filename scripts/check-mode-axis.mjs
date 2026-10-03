@@ -1174,7 +1174,28 @@ let page = await menuPage({ slides_played_square: '1' });
     await p10.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
     await p10.waitForTimeout(500);
     await install();
+    // 诊断（第 19 推，CI 的 Chrome 151 上「拖回第一排」卡在第 2 排、本地 141 上从来不卡）：
+    // 只数轴收到了哪些指针事件、按下去的是谁、焦点在谁身上——一个行为都不改，红的时候
+    // 才打印出来。
+    await p10.evaluate(() => {
+      const host = document.querySelector('.mode-axis');
+      const n = { down: 0, move: 0, up: 0, cancel: 0, lost: 0, got: 0 };
+      window.__ptr = { n, lastDown: '', downs: [] };
+      const tag = (t) => (t && t.className && typeof t.className === 'string' ? t.className.split(' ').slice(0, 2).join('.') : t?.tagName || '?');
+      host.addEventListener('pointerdown', (e) => { n.down++; window.__ptr.lastDown = tag(e.target) + '@' + Math.round(e.clientX) + ',' + Math.round(e.clientY) + '/' + e.pointerType + '#' + e.pointerId; }, true);
+      host.addEventListener('pointermove', () => { n.move++; }, true);
+      host.addEventListener('pointerup', () => { n.up++; }, true);
+      host.addEventListener('pointercancel', () => { n.cancel++; }, true);
+      host.addEventListener('lostpointercapture', () => { n.lost++; }, true);
+      host.addEventListener('gotpointercapture', () => { n.got++; }, true);
+    });
   };
+  /** 诊断：此刻轴收到过的指针事件、最后一次按下去落在谁身上、焦点在谁身上。 */
+  const ptrNow = () => p10.evaluate(() => {
+    const a = document.activeElement;
+    const ae = a ? (a.getAttribute && a.getAttribute('aria-label')) || a.className || a.tagName : '';
+    return { ...window.__ptr?.n, lastDown: window.__ptr?.lastDown, active: String(ae).slice(0, 40) };
+  });
   /**
    * **慢慢**拖到第 k 项，停住，松手。
    *
@@ -1197,6 +1218,7 @@ let page = await menuPage({ slides_played_square: '1' });
     await p10.mouse.move(midX, y);
     await p10.mouse.down();
     let f = await p10.evaluate(() => window.__focus());
+    const trail = [`起手 ${f.toFixed(2)}`];
     /**
      * 步数上限。玩家 2026-09 把灵敏度调低了一档（gain 2 → 0.9、slowK 0.75 → 0.45），
      * 同样一步 20px 走的项数只有从前的四成左右——160 步到不了最后一项了（实测差一项，
@@ -1210,8 +1232,13 @@ let page = await menuPage({ slides_played_square: '1' });
       y += dir * 20;
       if (y < 210 || y > 700) {
         // 到屏幕边了：松一次手，从头再抓一把（见上面那段）。
+        const before = f;
         await p10.mouse.up();
         await p10.waitForTimeout(700);
+        if (trail.length < 12) {
+          const after = await p10.evaluate(() => window.__focus());
+          trail.push(`松手前 ${before.toFixed(2)} → 定格 ${after.toFixed(2)} ${JSON.stringify(await ptrNow())}`);
+        }
         y = y0;
         await p10.mouse.move(midX, y);
         await p10.mouse.down();
@@ -1226,18 +1253,20 @@ let page = await menuPage({ slides_played_square: '1' });
     await p10.mouse.up();
     await p10.waitForTimeout(900);
     const final = await p10.evaluate(() => window.__focus());
-    return { seen, final };
+    return { seen, final, trail };
   };
   // 单位是**排**（E18）：__focus 读的是排，目标也得按排给，不然「拖到第 11 项」在一条
   // 只有 6 排的轴上永远到不了，红的是尺子不是代码。
   const LAST = ROWS - 1;
   for (const [from, k, label] of [[0, Math.floor(ROWS / 2), '中间那排'], [0, LAST, '最后一排'], [LAST, 0, '第一排']]) {
     const r = await slowTo(from, k);
+    const ok = Math.abs(r.final - k) < 0.01 && Math.abs(r.seen - k) < 0.35;
     check(
       `慢慢拖到${label}（第 ${k} 排）、停住、松手，就停在那一排`,
-      Math.abs(r.final - k) < 0.01 && Math.abs(r.seen - k) < 0.35,
+      ok,
       `松手时画面在 ${r.seen.toFixed(2)} → 停在 ${r.final.toFixed(2)}`,
     );
+    if (!ok) for (const line of r.trail) console.log('      诊断  ' + line);
   }
   /**
    * 点点那条路：一帧之内就到位，一点都不慢。
