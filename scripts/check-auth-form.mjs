@@ -79,7 +79,9 @@ const MUST_KEEP = [
   if (m) {
     const body = m[0];
     const iIn = body.indexOf('<input');
-    const iSpan = body.indexOf('<span>');
+    // `<span` 不写成 `<span>`：那个 span 2026-10-03 起会按情形带一个 class
+    // （验证码那一栏的标签只给读屏念）。认带不带尖括号的收尾，等于认「有没有属性」。
+    const iSpan = body.indexOf('<span');
     check('field() 里 input 排在 label 前面（浮动标签靠相邻兄弟，只能往后看）',
       iIn > 0 && iSpan > iIn, `input@${iIn} span@${iSpan}`);
     // 没给 placeholder 的字段要自动补一个空格：`:placeholder-shown` 要有它才成立。
@@ -164,7 +166,19 @@ const MUST_KEEP = [
   const RULES = [...css.matchAll(/([^{}]*)\{([^}]*)\}/g)]
     .map(([, sel, body]) => ({ sel: sel.split('*/').pop().trim().replace(/\s+/g, ' '), body }))
     .filter((r) => /\binput\b/.test(r.sel) && !/::placeholder/.test(r.sel))
-    .filter((r) => !/\[type=['"]?(?:range|checkbox|radio|button|submit)/.test(r.sel));
+    .filter((r) => !/\[type=['"]?(?:range|checkbox|radio|button|submit)/.test(r.sel))
+    /*
+     * ⚠️ 选择器里带 `input` 不等于**选中的是** input。
+     *
+     * 浮标签那几条 2026-10-03 从 `.auth-field > span` 改成了 `.auth-field > input + span`
+     * （那一行里现在还坐着一把钥匙和「勿外传」，不限定的话它也会被当成标签摆）——选择器
+     * 里于是有了 `input` 两个字，而它选中的是**标签**，0.95rem。这一条当场红，而页面上
+     * 的框一个像素都没动。
+     *
+     * 判据：选择器的**最后一个简单选择器**是不是 input。`+ span` / `~ span` / ` span`
+     * 收尾的都不是。
+     */
+    .filter((r) => r.sel.split(',').some((one) => /(^|[\s>+~])input[^\s>+~]*$/.test(one.trim())));
   const px = (v) => {
     const m = /^([\d.]+)(rem|em|px)$/.exec(v.trim());
     if (!m) return null;

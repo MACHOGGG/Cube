@@ -82,7 +82,32 @@ const look = (page) =>
     firstType: document.querySelector('#authFirst')?.type ?? '',
     secondType: document.querySelector('#authSecond')?.type ?? '',
     warn: document.querySelector('#authPairWarn')?.textContent?.trim() ?? '',
-    warnShown: Boolean(document.querySelector('#authPairWarn')?.offsetParent),
+    /*
+     * 那一句现在是**读屏专用**（`.sr-only`）。
+     *
+     * ⚠️ 别再用 `offsetParent` 判「看不看得见」：`.sr-only` 是 `position: absolute` ＋
+     * 裁成 1×1，`offsetParent` 照样有值——第一版就是这么写的，于是这一条在那一句彻底看
+     * 不见之后仍然绿着，量的是空气。改成量**画出来有多大**。
+     */
+    warnBox: (() => {
+      const el = document.querySelector('#authPairWarn');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    })(),
+    /** 屏幕上留下的那一行：一把钥匙 ＋「勿外传」。 */
+    keyNote: document.querySelector('.auth-keynote')?.textContent?.trim() ?? '',
+    keyNoteBox: (() => {
+      const el = document.querySelector('.auth-keynote');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    })(),
+    /** 整句话挂在第一串那个框上（读屏光标落进去就念得到）。 */
+    describedBy: document.querySelector('#authFirst')?.getAttribute('aria-describedby') ?? '',
+    goAria: document.querySelector('#authGo')?.getAttribute('aria-label') ?? '',
+    closeAria: document.querySelector('#authClose')?.getAttribute('aria-label') ?? '',
+    closeText: document.querySelector('#authClose')?.textContent?.trim() ?? '',
     pairForgot: Boolean(document.querySelector('#authPairForgot')) && !document.querySelector('#authPairForgot').hidden,
   }));
 
@@ -124,7 +149,7 @@ head('④ 发不出信：停在①，出那句提示（E51）');
   );
   const v = await look(page);
   check('还在①，没跳进验证码那一屏', v.mail && !v.code, JSON.stringify([v.mail, v.code]));
-  check('屏幕上写的是「邮件暂时发不出去」那一句', /发不出去/.test(v.msg), v.msg);
+  check('屏幕上写的是「邮件暂时寄不出」那一句', /寄不出/.test(v.msg), v.msg);
   check('而且指了另一条路', /免邮箱/.test(v.msg), v.msg);
 }
 
@@ -137,9 +162,25 @@ head('⑤ 免邮箱那一屏：明文两串，那句警告必须在');
   check('③ 只摆免邮箱那张表', v.pair && !v.mail && !v.code, JSON.stringify([v.mail, v.code, v.pair]));
   check('两个框都是明文（type=text），不是密码框', v.firstType === 'text' && v.secondType === 'text',
     `${v.firstType} / ${v.secondType}`);
-  check('「第一串是你的钥匙」那句在，而且看得见', /第一串是你的钥匙/.test(v.warn) && v.warnShown, v.warn);
+  /*
+   * 那句警告 2026-10-03 **从屏幕搬到了读屏那一层**（E38 的告知一个字没少，少的是版面）：
+   * 整句挂在第一串那个框的 `aria-describedby` 上，屏幕上留下一把钥匙 ＋「勿外传」。
+   *
+   * 所以这儿量三件事，缺一件都不成立：整句还在、它真的看不见了、而屏幕上那一行在。
+   */
+  check('「第一串是你的钥匙」那整句还在（读屏念得到）', /第一串是你的钥匙/.test(v.warn), v.warn);
+  check('而且它真的不占版面（裁成 1×1，不是 display:none）',
+    !!v.warnBox && v.warnBox.w <= 2 && v.warnBox.h <= 2, JSON.stringify(v.warnBox));
+  check('整句挂在第一串那个框上（aria-describedby）', v.describedBy === 'authPairWarn', v.describedBy || '（没挂）');
+  check('屏幕上留着「勿外传」那一行，而且看得见',
+    /勿外传/.test(v.keyNote) && !!v.keyNoteBox && v.keyNoteBox.w > 10 && v.keyNoteBox.h > 6,
+    `${v.keyNote} ${JSON.stringify(v.keyNoteBox)}`);
   check('《忘了第二串？》那条路摆着', v.pairForgot === true);
-  check('主键是《保存》', v.go === '保存', v.go);
+  // 三态共用一枚箭头（玩家定的「少文字」）；字留给读屏。
+  check('主键是那枚箭头', v.go === '→', v.go);
+  check('箭头给读屏念的是「继续」', v.goAria === '继续', v.goAria);
+  check('关闭是一枚 ✕，字留给 aria-label', v.closeText === '✕' && v.closeAria === '关闭',
+    `${v.closeText} / ${v.closeAria}`);
   // 能打字的框字号都不低于 16px（低了 iOS 一聚焦就放大整页）。勾选框不算。
   const fonts = await page.evaluate(() =>
     [...document.querySelectorAll('.auth-modal input')]
@@ -193,7 +234,7 @@ head('③ 验证码那一屏：六格，订阅邮件那个框出厂不勾');
   check('② 真是六格（mountPin 画的）', v.pinCells === 6, String(v.pinCells));
   check('② 订阅邮件那个框摆着', v.newsShown === true);
   check('② 而且出厂不勾（预先勾上的不算同意）', v.newsChecked === false, String(v.newsChecked));
-  check('② 旁边那条路是《换个邮箱》', /换个邮箱/.test(v.alt), v.alt);
+  check('② 旁边那条路是《换邮箱》（带一枚回头的箭头）', /^←\s*换邮箱$/.test(v.alt), v.alt);
   // 回①：那一下不该把已经填的邮箱清掉（他可能只是打错一个字母）。
   await two.page.click('#authAlt');
   await two.page.waitForFunction(() => !document.querySelector('#authMailForm')?.hidden, null, { timeout: 10000 });

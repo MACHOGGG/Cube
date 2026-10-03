@@ -826,6 +826,19 @@ jobs:
           curl -sf http://localhost:8834/ > /dev/null
           node scripts/check-signin-ui.mjs http://localhost:8834/
 
+      # 同一扇窗的**排版和字**，四种语言 × 两档屏幕各走一遍。上面那一道只跑简体中文、只跑
+      # 一档屏，而这扇窗里最长的几句话都在法语里：标签是绝对定位的，长了会直接伸出框去；
+      # 占位提示长了会被浏览器从中间截断，玩家看到的是半句话。两样都不报错。
+      - name: 注册 / 登录那扇窗装得下
+        run: |
+          GENIUS_GRANT_WINDOW=1 node scripts/dev-server.mjs 8836 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8836/ > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8836/ > /dev/null
+          node scripts/check-auth-fit.mjs http://localhost:8836/
+
       # 《联系与特别感谢》那扇窗（E42）。个人主页底部从五行法务收成两行，这一扇是第二
       # 行。要开浏览器：点得开、玩家自己写的那一段逐字在、邮箱是 mailto 而且和
       # CONTACT_EMAIL 那个常量一致、名字数对得上 src/thanks.ts。

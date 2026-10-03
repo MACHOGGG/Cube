@@ -241,11 +241,21 @@ export interface I18nStrings {
   /** Badge on a 「+」 board that the subscription unlocks. */
   geniusOnly: string;
   // ---- redeem codes, and the account one creates ----
+  /**
+   * 「密码」这个词。
+   *
+   * ⚠️ **这一档 2026-10 整个没有了**（E37：身份换成验证码 / 两串凭据，密码连同那扇
+   * 《忘记密码》窗一起撤了）。剩下这两个键只在**翻译报错**时用得着：服务端如果答
+   * `password` / `weak`，屏幕上要有句话（见 ui/subscribe.ts 的 accountFailText）。
+   *
+   * 上面原先注着「On the log-in tab, where a passcode is only for code-made accounts」和
+   * 「付款回来后立刻弹出的设密码窗口」——**那两扇窗、那一个 tab 都不存在了**，注释却留着
+   * 指路，而这个文件是四种语言唯一的底稿，照着过期注释去改字就是照着一张旧地图走。
+   */
   passwordLabel: string;
-  /** On the log-in tab, where a passcode is only for code-made accounts. */
   /** 密码框底下那六小段的实时文案（给读屏软件）。{n} 是已经打进去的位数。 */
   pwMeterSay: string;
-  /** 付款回来后立刻弹出的设密码窗口。 */
+  /** 「太短了」。现在只在服务端答 `weak` 时出现。 */
   setPwShort: string;
   /** 注册时那一行勾选：要不要收 Slides 的邮件。默认不勾——同意得是主动给的。 */
   newsOptIn: string;
@@ -259,6 +269,12 @@ export interface I18nStrings {
    * ⚠️ `pairWarning` 那一句**不能省**。那条路的真正钥匙是第一串：它必须唯一，所以撞名
    * 时服务端会如实答「已被占用」，于是它是最容易被外人知道的那一串；而「忘了第二串」凭
    * 它就能重设。玩家 2026-10-01 在知情的前提下拍的板——条件是界面上如实告知。
+   *
+   * **2026-10-03：这一句从「屏幕上一整段」改成「读屏念整句 + 屏幕上一把钥匙和三个字」**
+   * （`pairKeyNote`，用 `aria-describedby` 把整句挂在第一串那个框上）。告知这件事一个字
+   * 没少，少的是版面：那一整段占掉这扇窗三分之一的高度，而它说的事只有三个字要紧——别
+   * 告诉别人。读屏那一头**反而更完整**：从前那一段是个和输入框无关的 `<p>`，光标落进框
+   * 里时根本不会被念到。
    */
   codeSentTo: string;
   useAnotherEmail: string;
@@ -287,6 +303,19 @@ export interface I18nStrings {
   contactInvite: string;
   thanksTail: string;
   pairSecondLabel: string;
+  /**
+   * 第一串标签后面那一小行（配一把钥匙的图标）：「勿外传」。
+   *
+   * `pairWarning` 整句搬去读屏那一层之后，屏幕上留下的就是这一行 + 那把钥匙。**不是省
+   * 掉了告知**：玩家 2026-10-01 拍板时的条件是「界面上如实告知」，而「少文字」也是他定
+   * 的站点原则——一把钥匙 + 三个字说的是同一件事，整句仍在，只是改由读屏念（见下面
+   * `pairWarning`）。
+   */
+  pairKeyNote: string;
+  /** 两串输入框里的那句占位提示：位数、字符集、分不分大小写，一句说完。 */
+  pairPlaceholder: string;
+  /** 那颗「→」键给读屏念的词。屏幕上只有一枚箭头（玩家定的「少文字」）。 */
+  continueBtn: string;
   pairWarning: string;
   pairSaveBtn: string;
   pairSavedHint: string;
@@ -329,7 +358,6 @@ export interface I18nStrings {
   pwBlocked: string;
   /** 锁死之后那个真的能按的按钮。 */
   unlockSendBtn: string;
-  codeSentNote: string;
   codeFieldLabel: string;
   /** 密码换好了，但这个账号此刻没有在续的订阅——说清楚哪一半成了。 */
   /** 登录成功，但这个账号此刻没有在续的订阅。同样是「哪一半成了」。 */
@@ -790,27 +818,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: 'Passcode (6 characters)',
     pwMeterSay: '6-digit passcode · {n} entered',
     setPwShort: 'Use exactly six letters or digits.',
-    newsOptIn: 'Email me about new Slides boards and updates. Unsubscribe anytime.',
-    codeSentTo: 'A code is on its way to {email}.',
-    useAnotherEmail: 'Use another address',
-    mailDownHint: 'Mail is not going out right now. You can sign up without an address instead.',
-    pairlessEntry: 'Sign up / in without an address',
-    pairFirstLabel: 'First string — 8–64 letters and digits, case matters',
+    newsOptIn: 'Email me new boards and updates',
+    codeSentTo: 'Sent to {email}',
+    useAnotherEmail: '← Another address',
+    mailDownHint: 'Mail is not going out right now. Try “No email”.',
+    pairlessEntry: 'No email',
+    pairFirstLabel: 'First string',
     pairFirstShort: 'First string',
     contactThanksTitle: 'Contact & thanks',
     contactTitle: 'Contact',
     thanksTitle: 'Special thanks',
     contactInvite: 'If something goes wrong, write to me and attach a screenshot. And if nothing has gone wrong, write to me anyway — I read and answer every message myself. Thank you for your support.',
     thanksTail: 'and the many friends who played, tested, and told me what to fix',
-    pairSecondLabel: 'Second string — 8–64 letters and digits, case matters',
+    pairSecondLabel: 'Second string',
+    pairKeyNote: 'keep it private',
+    pairPlaceholder: '8–64 letters or digits, case matters',
+    continueBtn: 'Continue',
     pairWarning: 'The first string is your key. Tell no one: whoever knows it can reset the second one.',
     pairSaveBtn: 'Save',
-    pairSavedHint: 'Saved. Take a screenshot so you keep both strings.',
+    pairSavedHint: '✓ Saved — screenshot both strings',
     pairForgot: 'Forgot the second string?',
     pairResetBtn: 'Set a new second string',
-    useEmailInstead: 'Use an email address',
+    useEmailInstead: '← Use an email address',
     pairTaken: 'That first string is taken. Pick another one.',
-    pairBad: 'Both strings need 8 or more letters and digits, nothing else.',
+    pairBad: 'Both strings need 8–64 letters or digits.',
     pairWrong: 'Those two strings do not match an account.',
     codeWrong: 'That code is not right.',
     codeStale: 'That code has expired. Ask for a new one.',
@@ -833,7 +864,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwLocked: 'Too many wrong tries. Opens again in about {hours} h.',
     pwBlocked: 'Locked after too many wrong tries. Open it by email.',
     unlockSendBtn: 'Send the code',
-    codeSentNote: 'Sent. The code is good for 30 minutes.',
     codeFieldLabel: 'The 6-digit code from the email',
     accountActions: 'Account settings',
     supportLine: 'A question, a refund, anything at all — write to {email}.',
@@ -1117,27 +1147,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: 'Code secret (6 caractères)',
     pwMeterSay: 'Code secret à 6 caractères · {n} saisis',
     setPwShort: 'Exactement six lettres ou chiffres.',
-    newsOptIn: 'M’envoyer les nouveautés Slides par e-mail. Désinscription à tout moment.',
-    codeSentTo: 'Un code part vers {email}.',
-    useAnotherEmail: 'Changer d’adresse',
-    mailDownHint: 'Les e-mails ne partent pas pour le moment. Vous pouvez créer un compte sans adresse.',
-    pairlessEntry: 'Compte sans adresse e-mail',
-    pairFirstLabel: 'Première chaîne — 8 à 64 caractères, lettres et chiffres, casse respectée',
+    newsOptIn: 'M’envoyer les nouveautés par e-mail',
+    codeSentTo: 'Envoyé à {email}',
+    useAnotherEmail: '← Changer d’adresse',
+    mailDownHint: 'Les e-mails ne partent pas pour le moment. Essayez « Sans e-mail ».',
+    pairlessEntry: 'Sans e-mail',
+    pairFirstLabel: 'Première chaîne',
     pairFirstShort: 'Première chaîne',
     contactThanksTitle: 'Contact et remerciements',
     contactTitle: 'Contact',
     thanksTitle: 'Remerciements',
     contactInvite: 'Si quelque chose ne va pas, écrivez-moi en joignant une capture d’écran. Et si tout va bien, écrivez-moi quand même — je lis et réponds à chaque message personnellement. Merci de votre soutien.',
     thanksTail: 'et les nombreux amis qui ont joué, testé et dit ce qu’il fallait corriger',
-    pairSecondLabel: 'Deuxième chaîne — 8 à 64 caractères, lettres et chiffres, casse respectée',
+    pairSecondLabel: 'Deuxième chaîne',
+    pairKeyNote: 'à ne pas partager',
+    pairPlaceholder: '8 à 64 lettres ou chiffres, casse respectée',
+    continueBtn: 'Continuer',
     pairWarning: 'La première chaîne est votre clé. Ne la donnez à personne : qui la connaît peut redéfinir la seconde.',
     pairSaveBtn: 'Enregistrer',
-    pairSavedHint: 'Enregistré. Faites une capture d’écran pour garder les deux chaînes.',
+    pairSavedHint: '✓ Enregistré — faites une capture des deux chaînes',
     pairForgot: 'Deuxième chaîne oubliée ?',
     pairResetBtn: 'Définir une nouvelle deuxième chaîne',
-    useEmailInstead: 'Utiliser une adresse e-mail',
+    useEmailInstead: '← Utiliser une adresse e-mail',
     pairTaken: 'Cette première chaîne est déjà prise. Choisissez-en une autre.',
-    pairBad: 'Les deux chaînes doivent faire 8 caractères ou plus, lettres et chiffres uniquement.',
+    pairBad: 'Les deux chaînes doivent faire 8 à 64 lettres ou chiffres.',
     pairWrong: 'Ces deux chaînes ne correspondent à aucun compte.',
     codeWrong: 'Ce code n’est pas le bon.',
     codeStale: 'Ce code a expiré. Demandez-en un nouveau.',
@@ -1160,7 +1193,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwLocked: 'Trop d’essais. Se rouvre dans environ {hours} h.',
     pwBlocked: 'Verrouillé après trop d’essais. Rouvrez-le par e-mail.',
     unlockSendBtn: 'Envoyer le code',
-    codeSentNote: 'Envoyé. Le code est valable 30 minutes.',
     codeFieldLabel: 'Le code à 6 chiffres reçu par e-mail',
     accountActions: 'Réglages du compte',
     supportLine: 'Une question, un remboursement, quoi que ce soit — écrivez à {email}.',
@@ -1444,27 +1476,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: '密碼（6 位字元）',
     pwMeterSay: '6 位密碼，已輸入 {n} 位',
     setPwShort: '密碼要正好 6 位，數字或字母。',
-    newsOptIn: '想收到 Slides 的新玩法與更新郵件。可隨時退訂。',
-    codeSentTo: '驗證碼已寄到 {email}',
-    useAnotherEmail: '換一個電子郵件',
-    mailDownHint: '郵件暫時寄不出去，可以先用《免電子郵件註冊 / 登入》。',
-    pairlessEntry: '免電子郵件註冊 / 登入',
-    pairFirstLabel: '第一串：8–64 位，字母 + 數字，區分大小寫',
+    newsOptIn: '接收新玩法與更新郵件',
+    codeSentTo: '已寄到 {email}',
+    useAnotherEmail: '← 換電子郵件',
+    mailDownHint: '郵件暫時寄不出，可先用《免電子郵件》。',
+    pairlessEntry: '免電子郵件',
+    pairFirstLabel: '第一串',
     pairFirstShort: '第一串',
     contactThanksTitle: '聯絡與特別感謝',
     contactTitle: '聯絡',
     thanksTitle: '特別感謝',
     contactInvite: '歡迎遇到任何問題附上截圖聯絡我，也歡迎您在沒有遇到問題的情況下聯絡我，我都會本人查看回覆，感謝您的支持',
     thanksTail: '等諸多測試並提出珍貴建議的朋友',
-    pairSecondLabel: '第二串：8–64 位，字母 + 數字，區分大小寫',
+    pairSecondLabel: '第二串',
+    pairKeyNote: '勿外傳',
+    pairPlaceholder: '8–64 位字母或數字，分大小寫',
+    continueBtn: '繼續',
     pairWarning: '第一串是你的鑰匙，別告訴任何人——知道它的人可以重設第二串。',
     pairSaveBtn: '儲存',
-    pairSavedHint: '存好了。截個圖把兩串都留下來。',
+    pairSavedHint: '✓ 已存好，截圖留存兩串',
     pairForgot: '忘了第二串？',
     pairResetBtn: '重設第二串',
-    useEmailInstead: '改用電子郵件',
+    useEmailInstead: '← 改用電子郵件',
     pairTaken: '這一串已經有人在用了，換一串。',
-    pairBad: '兩串都要 8 位以上，只能用字母和數字。',
+    pairBad: '兩串都要 8–64 位字母或數字。',
     pairWrong: '這兩串對不上。',
     codeWrong: '驗證碼不對。',
     codeStale: '驗證碼過期了，重新要一張。',
@@ -1487,7 +1522,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwLocked: '錯太多次了，約 {hours} 小時後自動解開。',
     pwBlocked: '錯太多次，已鎖住。用電子郵件解開。',
     unlockSendBtn: '寄出驗證碼',
-    codeSentNote: '已寄出，驗證碼 30 分鐘內有效。',
     codeFieldLabel: '信件裡的 6 位數驗證碼',
     accountActions: '帳號設定',
     supportLine: '有問題、要退款，什麼事都可以寫信到 {email}。',
@@ -1771,27 +1805,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     passwordLabel: '密码（6 位字符）',
     pwMeterSay: '6 位密码，已输入 {n} 位',
     setPwShort: '密码要正好 6 位，数字或字母。',
-    newsOptIn: '想收到 Slides 的新玩法与更新邮件。可随时退订。',
-    codeSentTo: '验证码已寄到 {email}',
-    useAnotherEmail: '换个邮箱',
-    mailDownHint: '邮件暂时发不出去，可以先用《免邮箱注册 / 登录》。',
-    pairlessEntry: '免邮箱注册 / 登录',
-    pairFirstLabel: '第一串：8–64 位，字母 + 数字，区分大小写',
+    newsOptIn: '接收新玩法与更新邮件',
+    codeSentTo: '已寄到 {email}',
+    useAnotherEmail: '← 换邮箱',
+    mailDownHint: '邮件暂时寄不出，可先用《免邮箱》。',
+    pairlessEntry: '免邮箱',
+    pairFirstLabel: '第一串',
     pairFirstShort: '第一串',
     contactThanksTitle: '联系与特别感谢',
     contactTitle: '联系',
     thanksTitle: '特别感谢',
     contactInvite: '欢迎遇到任何问题附上截图联络我，也欢迎您在没有遇到问题的情况下联络我，我都会本人查看回复，感谢您的支持',
     thanksTail: '等诸多测试并提出珍贵建议的朋友',
-    pairSecondLabel: '第二串：8–64 位，字母 + 数字，区分大小写',
+    pairSecondLabel: '第二串',
+    pairKeyNote: '勿外传',
+    pairPlaceholder: '8–64 位字母或数字，分大小写',
+    continueBtn: '继续',
     pairWarning: '第一串是你的钥匙，别告诉任何人——知道它的人可以重设第二串。',
     pairSaveBtn: '保存',
-    pairSavedHint: '存好了。截个图把两串都留下来。',
+    pairSavedHint: '✓ 已存好，截图留存两串',
     pairForgot: '忘了第二串？',
     pairResetBtn: '重设第二串',
-    useEmailInstead: '改用邮箱',
+    useEmailInstead: '← 改用邮箱',
     pairTaken: '这一串已经有人在用了，换一串。',
-    pairBad: '两串都要 8 位以上，只能用字母和数字。',
+    pairBad: '两串都要 8–64 位字母或数字。',
     pairWrong: '这两串对不上。',
     codeWrong: '验证码不对。',
     codeStale: '验证码过期了，重新要一张。',
@@ -1814,7 +1851,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pwLocked: '错太多次了，约 {hours} 小时后自动解开。',
     pwBlocked: '错太多次，已锁住。用邮箱解开。',
     unlockSendBtn: '发送验证码',
-    codeSentNote: '已发送，验证码 30 分钟内有效。',
     codeFieldLabel: '邮件里的 6 位验证码',
     accountActions: '账号设置',
     supportLine: '有问题、要退款，什么事都可以写信到 {email}。',

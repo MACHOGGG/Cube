@@ -219,13 +219,42 @@ const PAIR_RE = /^[A-Za-z0-9]{8,64}$/;
  * **那一串 name / autocomplete / type 一个字都不许动**：这张表是为密码管理器精心标注
  * 过的（见 credentialForm 和 openPortalWindow 上面的注释），这儿加的只是视觉层。
  */
-function field(id: string, label: string, attrs: string): string {
+function field(
+  id: string,
+  label: string,
+  attrs: string,
+  opts: {
+    /**
+     * 标签只给读屏念，屏幕上不画。
+     *
+     * 验证码那一栏用它：那六个格子（mountPin）本身就是「在这儿填验证码」，上面那句
+     * 「信件里的 6 位数验证码」和格子说的是同一件事，而它还要和浮起来的标签抢那一行。
+     * 读屏那一头一个字都不少——`.sr-only` 是「看不见但念得到」，不是 `display: none`。
+     */
+    srLabel?: boolean;
+    /** 标签后面挂的一小行（已经是 HTML，调用方自己转义）。 */
+    note?: string;
+  } = {},
+): string {
   const withPlaceholder = /\bplaceholder\s*=/.test(attrs) ? attrs : `${attrs} placeholder=" "`;
-  return `<label class="auth-field">
+  return `<label class="auth-field${opts.note ? ' auth-field--note' : ''}">
       <input id="${id}" ${withPlaceholder} />
-      <span>${label}</span>
+      <span${opts.srLabel ? ' class="sr-only"' : ''}>${label}</span>${opts.note ?? ''}
     </label>`;
 }
+
+/**
+ * 第一串标签后面那把钥匙 ＋「勿外传」。
+ *
+ * `aria-hidden`：整句话由 `aria-describedby` 挂在框上念（见 openAuthWindow），这一行是
+ * 画给眼睛看的那一份，念两遍反而啰嗦。
+ */
+const keyNote = (text: string): string =>
+  `<span class="auth-keynote" aria-hidden="true">` +
+  `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor"` +
+  ` stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">` +
+  `<circle cx="5" cy="11" r="3"/><path d="M7.2 8.8 13 3"/><path d="M11 5l1.6 1.6"/>` +
+  `</svg>${esc(text)}</span>`;
 
 /**
  * 去 Creem 自己的账单页（退订、换卡、拿收据）。
@@ -865,10 +894,11 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       </form>
 
       <!-- ② 验证码态。六格由 mountPin 画（style.css 的 .pin-row / .pin-cell 已有三
-           态），这儿只摆那个真输入框。 -->
+           态），这儿只摆那个真输入框。标签只给读屏念：六个格子本身就是那句话。 -->
       <form id="authCodeForm" autocomplete="on" hidden>
         ${field('authCode', s.codeFieldLabel,
-          'type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"')}
+          'type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"',
+          { srLabel: true })}
         <label class="auth-optin" id="authNewsRow" hidden>
           <input type="checkbox" id="authNews" />
           <span>${s.newsOptIn}</span>
@@ -876,13 +906,17 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
         <button type="submit" hidden></button>
       </form>
 
-      <!-- ③ 免邮箱态。两个框都是**明文**：玩家要抄下来的东西，遮住反而抄错。 -->
+      <!-- ③ 免邮箱态。两个框都是**明文**：玩家要抄下来的东西，遮住反而抄错。
+           第一串那一行挂着钥匙和「勿外传」，整句警告由 aria-describedby 念（见下面）。 -->
       <form id="authPairForm" autocomplete="off" hidden>
         ${field('authFirst', s.pairFirstLabel,
-          'type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"')}
+          `type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"` +
+          ` placeholder="${esc(s.pairPlaceholder)}" aria-describedby="authPairWarn"`,
+          { note: keyNote(s.pairKeyNote) })}
         ${field('authSecond', s.pairSecondLabel,
-          'type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"')}
-        <p class="auth-warn" id="authPairWarn">${s.pairWarning}</p>
+          `type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"` +
+          ` placeholder="${esc(s.pairPlaceholder)}"`)}
+        <p class="sr-only" id="authPairWarn">${s.pairWarning}</p>
         <button type="submit" hidden></button>
       </form>
 
@@ -891,8 +925,9 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       <button class="link-btn" id="authPairForgot" hidden>${s.pairForgot}</button>
     </div>
     <div class="btn-row">
-      <button class="btn-quiet" id="authClose">${s.closeBtn}</button>
-      <button class="primary" id="authGo"></button>
+      <!-- 关闭是一枚 ✕（玩家定的「少文字」）。字留给 aria-label，读屏照旧听得懂。 -->
+      <button class="btn-quiet btn-x" id="authClose" aria-label="${esc(s.closeBtn)}">✕</button>
+      <button class="primary btn-pill" id="authGo"></button>
     </div>
   `,
   );
@@ -935,7 +970,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
 
   const show = (next: Stage) => {
     stage = next;
-    msg.textContent = '';
+    tell('');
     mailForm.hidden = next !== 'mail';
     codeForm.hidden = next !== 'code';
     /*
@@ -954,6 +989,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     pairForm.hidden = next !== 'pair';
     pairForgot.hidden = next !== 'pair' || pairMode === 'reset';
     // ③ 的「重设」那一档只填第一串和新的第二串，那句警告照旧要在（它说的是第一串）。
+    // 它现在是读屏专用的那一段（`.sr-only`），所以「在不在」仍然要紧，只是看不见。
     warn.hidden = false;
     hint.textContent =
       next === 'mail'
@@ -961,33 +997,47 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
         : next === 'code'
           ? s.codeSentTo.replace('{email}', sentTo)
           : pairMode === 'reset'
-            ? s.pairWarning
+            ? s.pairResetBtn
             : s.pairlessEntry;
     // ③ 重设那一档：第二串的标签要说「新的」，而那句话就是 pairResetBtn 的意思，所以
     // 用按钮文案去说，标签不动——多一句话不如换一颗键上的字。
     /*
-     * ① 那颗键是**一枚箭头**，不是字（玩家定的「少文字」，方案 ① 那一行写的就是
-     * `[ 邮箱 ] [→]`）。
+     * **三态共用一枚箭头**（玩家定的「少文字」）。
      *
-     * 从前这儿摆 `s.signInBtn`（「登录」），而那是错的：按《注册》进来的人看到一颗写着
-     * 「登录」的键，会以为自己点错了。箭头没有这个问题——它说的是「接着往下」，而往下
-     * 到底是注册还是登录，服务端自己知道（`created`），不必在这颗键上替他分。
+     * 从前只有①是箭头，②摆「登录」、③摆「保存」/「重设第二串」——三颗不同的键摆在同一
+     * 个位置上，而玩家做的是同一件事：接着往下。「登录」那一颗还错得更具体：按《注册》
+     * 进来的人看到它会以为自己点错了，而「到底是注册还是登录」服务端自己知道
+     * （`created`），不必在这颗键上替他分。
      *
-     * `aria-label` 照旧给一句话，读屏的人要听得懂。
+     * `aria-label` 一律念 `continueBtn`（「继续」），读屏的人听得懂，而且三态一致——念
+     * 「保存」的那一版会让人以为这一步和上一步是两回事。
      */
-    go.textContent = next === 'mail' ? '→' : next === 'code' ? s.signInBtn : pairMode === 'reset' ? s.pairResetBtn : s.pairSaveBtn;
-    go.setAttribute(
-      'aria-label',
-      next === 'mail' ? s.signInBtn : (go.textContent ?? ''),
-    );
+    go.textContent = '→';
+    go.setAttribute('aria-label', s.continueBtn);
     alt.textContent = next === 'mail' ? s.pairlessEntry : next === 'code' ? s.useAnotherEmail : s.useEmailInstead;
     alt.hidden = false;
     (next === 'mail' ? mailInput : next === 'code' ? codeInput : firstInput).focus();
   };
 
+  /**
+   * 底下那一行提示分两档。
+   *
+   * 从前**整行恒是报错色**（style.css 的 `.auth-msg` 写死 `--accent-ink`），于是「正在
+   * 处理…」「已存好」这种好消息也印成红的——玩家按下去，屏幕上红一行，他的第一反应是出
+   * 事了。现在默认灰，只有真的出错才加 `auth-msg--bad`。
+   */
+  const tell = (text: string) => {
+    msg.textContent = text;
+    msg.classList.remove('auth-msg--bad');
+  };
+  const oops = (text: string) => {
+    msg.textContent = text;
+    msg.classList.add('auth-msg--bad');
+  };
+
   /** 把一次失败翻译成屏幕上那一句。认的是服务端送回来的那个词，不是状态码。 */
   const say = (reason: string) => {
-    msg.textContent =
+    oops(
       reason === 'mailDown'
         ? s.mailDownHint
         : reason === 'tooMany'
@@ -1008,7 +1058,8 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
                         ? s.pwLocked.replace('{hours}', '4')
                         : reason === 'unavailable'
                           ? s.serverBusy
-                          : s.purchaseNetwork;
+                          : s.purchaseNetwork,
+    );
   };
 
   /** 登进去了：缓存已经由 engine 那边写好，这儿只管关窗和把背后那一页刷新。 */
@@ -1021,9 +1072,9 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   const submit = async () => {
     if (stage === 'mail') {
       const email = mailInput.value.trim();
-      if (!isEmail(email)) return void (msg.textContent = s.emailInvalid);
+      if (!isEmail(email)) return void oops(s.emailInvalid);
       go.disabled = true;
-      msg.textContent = s.workingLabel;
+      tell(s.workingLabel);
       const asked = await askForCode(email, lang);
       go.disabled = false;
       if (typeof asked === 'string') {
@@ -1035,15 +1086,14 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       sentTicket = asked.challenge;
       codeInput.value = '';
       show('code');
-      msg.textContent = s.codeSentNote;
       return;
     }
 
     if (stage === 'code') {
       const code = codeInput.value.trim();
-      if (!/^\d{6}$/.test(code)) return void (msg.textContent = s.codeWrong);
+      if (!/^\d{6}$/.test(code)) return void oops(s.codeWrong);
       go.disabled = true;
-      msg.textContent = s.workingLabel;
+      tell(s.workingLabel);
       const done = await signInWithCode(sentTo, code, newsBox.checked, sentTicket);
       go.disabled = false;
       if (!done.ok) {
@@ -1059,9 +1109,9 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     // ③ 免邮箱
     const first = firstInput.value.trim();
     const second = secondInput.value.trim();
-    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void (msg.textContent = s.pairBad);
+    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void oops(s.pairBad);
     go.disabled = true;
-    msg.textContent = s.workingLabel;
+    tell(s.workingLabel);
     const done = await pairAuth(pairMode === 'reset' ? 'reset' : 'register', first, second);
     go.disabled = false;
     if (!done.ok) {
@@ -1075,7 +1125,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     // 图——这两串**只有他自己有**：服务端存的是第一串的 sha256，还原不出来，客服也帮不
     // 了他。两样都做，因为管理器可能压根不在（无痕窗口、某些内嵌浏览器）。
     await offerToSave(first, second);
-    msg.textContent = s.pairSavedHint;
+    tell(s.pairSavedHint);
     // 让那句话在屏幕上留一拍再关窗。reduced-motion 下也一样——这不是动画，是读字的时间。
     await new Promise((r) => setTimeout(r, 1400));
     landed();
@@ -1098,9 +1148,9 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   const pairSubmit = async () => {
     const first = firstInput.value.trim();
     const second = secondInput.value.trim();
-    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void (msg.textContent = s.pairBad);
+    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void oops(s.pairBad);
     go.disabled = true;
-    msg.textContent = s.workingLabel;
+    tell(s.workingLabel);
     const signedIn = await pairAuth('signin', first, second);
     if (signedIn.ok) {
       go.disabled = false;
@@ -1123,7 +1173,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       return;
     }
     await offerToSave(first, second);
-    msg.textContent = s.pairSavedHint;
+    tell(s.pairSavedHint);
     await new Promise((r) => setTimeout(r, 1400));
     landed();
   };
