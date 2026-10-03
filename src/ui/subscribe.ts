@@ -1,6 +1,5 @@
-import { HTML_LANG, PRIVILEGES, STRINGS, type Lang } from '../i18n';
+import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
-import { playCopied } from '../engine/juice';
 import { mountPin } from './authBits';
 import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
@@ -15,7 +14,6 @@ import {
   setEntitlement,
   signInWithCode,
   type Entitlement,
-  type GiftCode,
   type PurchaseFailure,
 } from '../engine/subscription';
 import {
@@ -24,6 +22,9 @@ import {
   type AccountFailure,
 } from '../engine/account';
 import { CONTACT_EMAIL } from '../legal';
+import { CTL_LEAVE, CTL_REPLAY } from './ctlIcons';
+import { ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
+import { geniusLogoTag } from './geniusLogo';
 
 /**
  * How the paywall describes each board the subscription unlocks.
@@ -60,31 +61,60 @@ function geniusBoardBlurb(id: string, lang: Lang): string {
 
 
 /** The same overlay the rules and icon windows use. */
-function openModal(className: string, html: string, dismissable = true) {
+interface ModalOpts {
+  /**
+   * 点背景、按手机返回键能不能关。默认能。
+   *
+   * 不能的那一扇从前是《设置密码》（「这一步决定他以后能不能在第二台设备上用这个账号」，
+   * 点空了就白设了）——它 2026-10 随密码一起撤了（E37），眼下没有谁传 false。开关留着，
+   * 是因为「这一扇不许点掉」是一件真会再出现的事，到时候不用再想一遍返回键要怎么吞。
+   */
+  dismissable?: boolean;
+  /**
+   * 按 Esc 关。帐号窗和邀请窗要（第 17 推，方案原话：「点背景或按 Esc 也能关」）。
+   *
+   * 不一口气给所有窗都打开：登录窗里有输入框和六格验证码，Esc 在那儿常是「清掉这一格」
+   * 的手势，按一下整扇窗没了、填了一半的东西也没了——那是「意料之外的疏漏操作」。要给别的
+   * 窗打开，先想清楚那扇窗里有没有填到一半的东西。
+   */
+  escCloses?: boolean;
+}
+
+function openModal(className: string, html: string, opts: ModalOpts = {}) {
+  const { dismissable = true, escCloses = false } = opts;
   const overlay = document.createElement('div');
   overlay.className = 'overlay show';
   overlay.innerHTML = `<div class="modal ${className}">${html}</div>`;
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  // 手机的返回键：能点掉的窗就关掉；不能点掉的那扇（设密码）返回也不放行——
-  // 登记一个什么都不做的关法，这一下就被吞掉，人还在窗里。
+  let onKey: ((e: KeyboardEvent) => void) | null = null;
+  const close = () => {
+    overlay.remove();
+    if (onKey) window.removeEventListener('keydown', onKey, true);
+  };
+  // 手机的返回键：能点掉的窗就关掉；不能点掉的那扇返回也不放行——登记一个什么都不做
+  // 的关法，这一下就被吞掉，人还在窗里。
   pushLayer(dismissable ? close : () => {}, overlay);
-  // Every window here can be tapped away except the one that decides whether
-  // this player can ever use their subscription on a second device.
   if (dismissable) {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });
   }
+  if (escCloses) {
+    onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      // 只有最上面那一层收这一下。窗口级的捕获监听是**按登记先后**依次跑的，不是按谁在
+      // 上面：底下要是还压着一扇也收 Esc 的（记录页那张放大的牌子），先登记的那个先跑
+      // ——不看层次的话，一下 Esc 会把底下那一层关掉，上面这扇还开着。
+      const overlays = document.querySelectorAll('.overlay');
+      if (overlays[overlays.length - 1] !== overlay) return;
+      e.stopPropagation();
+      close();
+    };
+    window.addEventListener('keydown', onKey, true);
+  }
   return { overlay, close };
 }
 
-/**
- * "Forever", as the server writes it (api/_accounts.js LIFETIME_UNTIL). A
- * lifetime is stored as a date a thousand years out so every 到期 check
- * downstream stays one comparison; here it has to be read back as a word.
- */
-const LIFETIME_UNTIL = Date.UTC(2999, 0, 1);
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -249,27 +279,14 @@ const keyNote = (text: string): string =>
   `<circle cx="5" cy="11" r="3"/><path d="M7.2 8.8 13 3"/><path d="M11 5l1.6 1.6"/>` +
   `</svg>${esc(text)}</span>`;
 
-/**
- * 去 Creem 自己的账单页（退订、换卡、拿收据）。
+/*
+ * **openPortal()（去 Creem 自己的账单页：退订、换卡、拿收据）撤了**（第 17 推）。
  *
- * **这儿原先是一扇窗**：把邮箱只读地摆着、再问一次密码，理由是「这个链接后面是卡号后四
- * 位、付款记录和那颗退订键」。2026-10 密码取消了（E37），身份改用登录令牌证明（E44）
- * ——而令牌这台设备手上就有，所以**没有东西要问了，窗也就不必存在**。
- *
- * 少一扇窗不只是少几行代码：那扇窗上「再输一次密码」这件事本身，对一个刚刚用验证码登进
- * 来的人是说不通的（他压根没有密码）。
- *
- * 开不出来就在《账户》那一屏上说一句。不新开一扇窗来报错——玩家按的是一行「管理订阅」，
- * 他要的结果是一个页面，不是一扇窗。
+ * 唯一的入口是帐号窗里那一行《管理订阅》，而那一行随着「Creem 那几行」一起撤了（网页端
+ * 停售，见 openStatusWindow 头上那段）。门户接口 `api/portal.js` 和 `engine/creem.ts` 的
+ * `webPortal()` 都还在原处：要重开订阅，回来在帐号窗里摆回一颗键、接回 webPortal 就是。
+ * 身份用登录令牌证明（E44），不必再开一扇窗问密码——那一段道理记在 git 历史里这个函数头上。
  */
-async function openPortal(lang: Lang, onChanged: () => void): Promise<void> {
-  const s = STRINGS[lang];
-  const current = entitlement();
-  const { webPortal } = await import('../engine/creem');
-  const opened = await webPortal(current.email ?? '', current.token ?? '');
-  // 开不出来：回到《账户》并在那一屏上带一句话（它的第三个参数就是这个用处）。
-  if (!opened) openStatusWindow(lang, onChanged, s.serverBusy);
-}
 
 /*
  * **credentialForm() 撤了**（E37）。
@@ -383,7 +400,17 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
    * ⚠️ **十条照旧会把窗撑长。** 门里必须在 360×640 和 390×844 两档各量一次底排键还在
    * 屏内（check-register-guide.mjs）——超了就退回省略号版，别靠眼睛看一眼就算了。
    */
-  const PERKS_SHOWN = nowList.length;
+  /**
+   * 列表**以一行「……」结尾**（第 17 推，方案原话：「右边功能列表左对齐，以『……』结尾」）。
+   *
+   * 十条照旧全摆（E40 没动）：这一行「……」不是「剩下的收起来了」——一条都没收——而是
+   * 「还不止这些」：天才特供还有个人主页上那三行「敬请期待」，这一窗按 E40 不摆还没做出来
+   * 的东西，可也不该让人以为货就这么多。它是装饰，读屏不念（aria-hidden）。
+   *
+   * ⚠️ **十条加吉祥物会把窗撑长。** 门里必须在 360×640 和 390×844 两档各量一次底排键还在
+   * 屏内（check-register-guide.mjs），新版式另由 check-redesign-fit 量不溢出、不重叠——超
+   * 了就只能退回「头几条 + ……」那一版，而那是撤回 E40，要先问玩家。
+   */
   /**
    * **网页端停售**（《侵蚀阶梯》E11 / PR-12，玩家 2026-10 在 Creem 后台把两个商品
    * archive 掉了，在续的订阅也一并取消了）。
@@ -415,22 +442,20 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
    * 订阅，回来在这儿摆回价目行就是；那时也必须同时改掉上面那句写死的承诺（E54）。
    */
   const { overlay, close } = openModal(
-    'genius-modal',
+    'invite-modal',
     `
-    <h2>${s.subscribeTitle}</h2>
     <!--
-      这一屏是**注册引导**（E40）。这一句话写死，不再问服务端。
+      抬头底下一道下划线（第 17 推），把「这一窗在说什么」和底下的货单分开。
 
-      它从前分两步：先摆中性的「订阅目前不开放」，问到 /api/slots 的真实名额之后再换成
-      那句承诺——因为那时名额有限（第一批 100 个），而「还剩几个」只有服务端数得清。
-      2026-10-02 名额整个撤了（E39，不限人数），没有可问的了，于是也没有「说得出才说」
-      这回事：这句话什么时候都成立。
+      ⚠️ 抬头这句话本身就是一句承诺：「仅需注册即可免费成为 Slides 天才」。它成立有一个
+      前提——服务端的 GENIUS_GRANT_WINDOW 开着，而两者之间没有任何自动的联系（E54，见
+      api/_entitlement.js 的 grantWindowOpen）。要关那个开关，先回来改这句话。
 
-      ⚠️ 但它成立有一个前提：服务端的 GENIUS_GRANT_WINDOW 开着。那个开关和这句话之间
-      已经没有任何自动的联系了，所以要关它必须先回来改这句话——api/_entitlement.js
-      的 grantWindowOpen 旁边钉着同一条（E54）。
+      抬头底下原先还有一句「注册后免费立即解锁全部内容」（registerUnlocks）——和抬头说的
+      是同一件事，第 17 推按方案删掉了（「少文字」）。货单上那个小标题「注册后立即解锁」
+      也不再印出来，留给读屏当这张单子的名字（见 ul 的 aria-label）。
     -->
-    <p class="tag-line" id="geniusTag">${s.registerUnlocks}</p>
+    <h2 class="invite-title">${s.subscribeTitle}</h2>
     ${
       // 商店那一端还有一句值得说的：不用注册、不离开 App。网页端没有对应的话——它要说的
       // 本来是「刷卡不用设密码」，而密码整个取消之后那句话连对象都没有了。
@@ -448,31 +473,30 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
       · 《有兑换码》那一行（geniusRedeem）——内部码的前端全撤（E41）。后端
         api/redeem.js 一行没动，码还能用，只是不在界面上招手了。
     -->
-    <p class="auth-msg" id="geniusMsg" role="status"></p>
-    <div class="genius-perks">
-      <div class="menu-section-label">${s.geniusNowTitle}</div>
-      ${nowList
-        .slice(0, PERKS_SHOWN)
-        .map((p) => `<div class="genius-perk">${esc(p)}</div>`)
-        .join('')}
-      ${
-        // 剩下的收成一行淡的「……」。它不点、不展开——要看全的去个人主页那一段
-        // （见上面 PERKS_SHOWN 那段说明）。
-        nowList.length > PERKS_SHOWN
-          ? `<div class="genius-perk genius-perk--more" aria-label="${esc(s.geniusNowTitle)}">……</div>`
-          : ''
-      }
+    <!-- 原先这儿有一行空着的状态句（#geniusMsg），可从来没有谁往里写过字——它只是在
+         抬头和货单之间垫了 30 来像素的空白。第 17 推撤掉。 -->
+    <!-- 左边吉祥物，右边货单（第 17 推）。吉祥物是装饰，读屏不念。 -->
+    <div class="invite-body">
+      <div class="invite-mascot">${geniusLogoTag(64, 'genius-logo--invite')}</div>
+      <ul class="invite-perks" aria-label="${esc(s.geniusNowTitle)}">
+        ${nowList.map((p) => `<li class="genius-perk">${esc(p)}</li>`).join('')}
+        <li class="genius-perk genius-perk--more" aria-hidden="true">……</li>
+      </ul>
     </div>
-    <div class="btn-row">
-      <!-- 登录 is the accented one. Someone who already subscribed and is
-           looking at the paywall got here by accident, and the way out of
-           that is signing in, not closing the window. -->
-      <button class="btn-quiet" id="geniusClose">${s.closeBtn}</button>
-      <button class="primary" id="geniusRestore">${
-        isStoreChannel() ? s.restoreBtn : s.registerBtn
-      }</button>
+    <!--
+      两颗等宽、对称的棕色药丸，只放图标：✕ 和登录（第 17 推）。字留给 aria-label。
+
+      从前右边那颗是有字的《注册》，而且是全窗最亮的一颗：一个已经注册过、却被带到这一
+      窗的人，出路是登录，不是关窗。现在两颗一样重，可左右的位置照旧——出路在右手边。
+    -->
+    <div class="invite-actions">
+      <button type="button" class="pill-icon" id="geniusClose" aria-label="${esc(s.closeBtn)}">${ICON_CLOSE}</button>
+      <button type="button" class="pill-icon" id="geniusRestore" aria-label="${esc(
+        isStoreChannel() ? s.restoreBtn : s.registerBtn,
+      )}">${ICON_LOGIN}</button>
     </div>
   `,
+    { escCloses: true },
   );
 
   overlay.querySelector<HTMLButtonElement>('#geniusRestore')!.addEventListener('click', () => {
@@ -486,255 +510,161 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
 }
 
 /**
- * 《账户》——登录之后，跟这个账号有关的每一件事都在这一扇窗里。
+ * 《账号》——登录之后，跟这个账号有关的事都在这一扇窗里。
  *
  * 原先它叫「订单情况」，只有天才点得开，抬头写着「你已是 Slides 天才」，底
  * 下横着一排小按钮（管理订阅 / 退出登录 / 绑定），《关闭》还是最红的那一颗。
  * 玩家指出的两件事都指向同一个毛病：
  *
  *   「登录是登录……登录不代表有权限」——订阅过期的人照样是这个账号的主人，
- *     他的云端战绩、别人寄给他的内部码都在里面，那扇门不该只对天才开。
+ *     那扇门不该只对天才开。
  *   「注意整体排版清晰放在一起，不要东一个西一个」——一排横着的小按钮，
  *     宽窄不一、轻重不分，本来就不是给「几件并列的事」用的排法。
  *
- * 所以现在：抬头只写《账户》；是不是天才由《订单情况》如实回答（没有在续
- * 的订阅就写那一句 orderLapsed）；能做的事排成一列，和个人主页上那些行长得
- * 一模一样——同一种样子代表同一件事「点进去还有一层」，玩家不用重新学。
+ * ── 第 17 推（2026-10）又瘦了一圈 ────────────────────────────────────
  *
- * 底下只留一颗《关闭》。一排里只有它，就不存在「本来想按别的、顺手按到关
- * 闭」——那正是玩家抱怨的那一下。
+ * 现在这扇窗只答一件事：「这是谁的账号」。一张白卡，抬头《账号》，底下**一条**字段（只
+ * 有一道 2px 的下划线，没有框），再下面三颗只放图标的棕色药丸，竖着排、一样宽、一样
+ * 远：更换（只有邮箱账号有）、登出、联络。右上角一颗 ✕，点背景、按 Esc 也关。
+ *
+ * 撤掉的三样，各有各的理由：
+ *
+ *   · **有效期**——注册即终身（E45/E46），这一行对每个人写的都是「永久」，一句永远一样
+ *     的话不是信息。
+ *   · **礼物码**——那是年付送的码（每单两张）。站上已经不卖年付了，新账号一张都不会有。
+ *     后端发码、兑码那两支一行没动（`api/redeem.js`），手上已经有码的人照样兑得了。
+ *   · **Creem 那几行**（订的是哪一档、《管理订阅》）——网页端停售（E11 / PR-12）。结账、
+ *     门户那两支接口和 `engine/creem.ts` 都还在原处，要重开订阅回来在这儿摆回一行就是。
+ *
+ * 客服信箱从前印成一整句「有问题……写信到 xxx」，现在是第三颗键（mailto）。地址本身还
+ * 印在个人主页的《联系与特别感谢》里。
  */
 export function openStatusWindow(lang: Lang, onChanged: () => void, notice = ''): void {
   const s = STRINGS[lang];
   const current = entitlement();
-  /** 刷卡订阅那一条：商店里买的没有这个门户，内部码换来的也没有。 */
-  const hasPortal = !isStoreChannel() && current.channel !== 'code';
-  const row = (id: string, label: string) =>
-    `<button class="profile-row" id="${id}">
-       <span class="profile-row-label">${label}</span>
-       <span class="profile-row-value">&rsaquo;</span>
-     </button>`;
+  const store = isStoreChannel();
+  /**
+   * 三颗键，按这个顺序竖着排。
+   *
+   * ⚠️ **免邮箱凭据账号不摆《更换》**（E53）。api/email.js 要求「现在这个地址」过
+   * EMAIL_RE，而这种账号的 id 是 hdl: 加一串 hex——点下去必是 400，而屏幕上只会写一句含
+   * 糊的失败。一条走不通的路比没有这条路更糟。门（check-redesign-fit）钉着这一条。
+   *
+   * 商店那一端不摆《登出》：那一端没有账号这回事（App Store / Google Play 本来就知道是谁
+   * 拿着手机），沿用原先的规矩。
+   */
+  const actions = [
+    handleOf(current) ? '' : pillIcon('statusChangeEmail', s.changeEmailRow, CTL_REPLAY),
+    store ? '' : pillIcon('statusSignOut', s.signOutBtn, CTL_LEAVE),
+    `<a class="pill-icon" id="statusMail" href="mailto:${CONTACT_EMAIL}" aria-label="${esc(s.contactTitle)}">${ICON_MAIL}</a>`,
+  ].join('');
   const { overlay, close } = openModal(
-    'genius-modal',
+    'acct-modal',
     `
+    <button type="button" class="modal-x" id="statusClose" aria-label="${esc(s.closeBtn)}">${ICON_CLOSE}</button>
     <h2>${s.accountTitle}</h2>
-    ${orderBlock(current, lang)}
-    ${giftBlock(current.gifts ?? [], lang)}
-    <p class="auth-msg" id="statusMsg" role="status">${esc(notice)}</p>
-    <div class="menu-section-label acct-label">${s.accountActions}</div>
-    <!--
-      这一列 2026-10 瘦了三行（E43）：改密码（密码取消了）、兑内部码（前端全撤，E41）、
-      绑定（它开的是《设置密码》那扇窗，一起撤了）。
-
-      ⚠️ **免邮箱凭据账号不摆《更换邮箱》**（E53）。api/email.js 要求「现在这个地址」
-      过 EMAIL_RE，而这种账号的 id 是 hdl: 加一串 hex——点下去必是 400，而屏幕上只会
-      写一句含糊的失败。一条走不通的路比没有这条路更糟。
-      他的「第二串」也不显示：服务端只有哈希，客户端也不存，**显示不出来**，这是设计。
-    -->
-    <div class="acct-rows">
-      ${handleOf(current) ? '' : row('statusChangeEmail', s.changeEmailRow)}
-      ${hasPortal ? row('statusManage', s.manageSubscription) : ''}
-      ${isStoreChannel() ? '' : row('statusSignOut', s.signOutBtn)}
-    </div>
+    ${idField(current, lang)}
     ${
-      isStoreChannel()
-        ? `<p class="auth-hint">${s.manageOnStore.replace('{store}', payeeName())}</p>`
-        : ''
+      // 没有在续的权益就明说这一句——登录是登录，有没有权限是另一件事（见上面那段）。
+      current.active ? '' : `<p class="auth-hint">${s.orderLapsed}</p>`
     }
-    <!-- 客服信箱。它本来只活在法务文档里和一句「你没填邮箱」的提示里，而收单
-         方要的是「公开网站上有，用户自己的账户里也有」——所以摆在这儿：他为
-         订阅的事来这扇窗，要写信也是在这一刻。写成 mailto，点一下就是新邮件。 -->
-    <p class="auth-hint">${s.supportLine.replace(
-      '{email}',
-      `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`,
-    )}</p>
-    <div class="btn-row">
-      <button class="btn-quiet" id="statusClose">${s.closeBtn}</button>
-    </div>
+    ${
+      // 只有带着一句话回来的时候才有这一行（换完邮箱回到这扇窗，见下面那个 back）。从前它
+      // 一直在，空着也要占一行高，于是字段和三颗键之间凭空多出一截空白。
+      notice ? `<p class="auth-msg" id="statusMsg" role="status">${esc(notice)}</p>` : ''
+    }
+    <div class="acct-actions">${actions}</div>
+    ${store ? `<p class="auth-hint">${s.manageOnStore.replace('{store}', payeeName())}</p>` : ''}
   `,
+    { escCloses: true },
   );
 
   // 换邮箱：一扇小窗，关掉之后回到这一扇（back），这样玩家改完能当场看见改成了什么，
-  // 不用自己再点回来。
+  // 不用自己再点回来。回来那一下是重新开的窗，所以第一串照样是遮着的。
   const back = (notice = '') => openStatusWindow(lang, onChanged, notice);
   overlay.querySelector<HTMLButtonElement>('#statusChangeEmail')?.addEventListener('click', () => {
     close();
     openChangeEmailWindow(lang, onChanged, back);
   });
-
-  // Cancelling a web subscription happens on Creem's own portal page — they
-  // hold the billing record, so it is never something this app pretends to do.
-  overlay.querySelector<HTMLButtonElement>('#statusManage')?.addEventListener('click', () => {
-    // 这个链接后面是卡号后四位、付款记录和那颗退订键。身份用**登录令牌**证明（E44）——
-    // 密码取消之后它是唯一还存在的证明，而且是同样强的那一种（24 字节随机）。
-    close();
-    void openPortal(lang, onChanged);
-  });
   // Signing out only forgets the address on this device: it cancels nothing,
-  // and naming the address again brings the subscription straight back.
+  // and naming the address again brings the account straight back.
   overlay.querySelector<HTMLButtonElement>('#statusSignOut')?.addEventListener('click', () => {
     clearEntitlement();
     close();
     onChanged();
   });
   overlay.querySelector<HTMLButtonElement>('#statusClose')!.addEventListener('click', close);
-  wireCopyButtons(overlay, lang);
+  wireHandleEye(overlay, current, lang);
+}
+
+/** 一颗只放图标的棕色药丸。字不上键，只给读屏（方案：「每个按钮都带 aria-label」）。 */
+function pillIcon(id: string, label: string, icon: string): string {
+  return `<button type="button" class="pill-icon" id="${id}" aria-label="${esc(label)}">${icon}</button>`;
 }
 
 /**
- * 订单情况 — the three facts a signed-in player came here to check: which
- * address this is, what they bought, and how long it is paid up for.
+ * 第一串遮起来时的样子：四个圆点加末四位。
  *
- * Set out as labelled rows rather than a sentence, because it is looked at
- * rather than read: someone opening this window already knows they
- * subscribed and is checking one line of it.
+ * 末四位是让他认得出「是我那一串」——一串全遮的点谁都长一样；全露出来又等于把钥匙摊在
+ * 屏幕上（第一串是钥匙，知道它的人可以重设第二串，见注册窗里那句警告）。少于五位的串
+ * 不会有（PAIR_RE 要八位起），这里照样兜一下：整串都遮。
  */
-function orderBlock(current: Entitlement, lang: Lang): string {
+export function maskHandle(handle: string): string {
+  return handle.length > 4 ? '••••' + handle.slice(-4) : '••••';
+}
+
+/**
+ * 「你是谁」那一条字段（E53 → 第 17 推）。
+ *
+ * 免邮箱凭据账号（E38）的 `email` 里放的是服务端认人的那把 id（`hdl:` 加 64 位 hex），
+ * **那一串不能印给人看**——服务端也印不出来，它只存第一串的 sha256。所以这种账号印的是客
+ * 户端自己留的那份原文（`handle`），标签换成「第一串」，**默认遮住**：旁边一颗眼睛，按
+ * 一下才露出来。每次开窗都重新遮上——遮不遮不记在任何地方，状态就活在这一扇窗里。
+ *
+ * 第二串一个字都不显示：服务端只有 scrypt 哈希，客户端也不存。这是设计，不是漏了。
+ */
+function idField(current: Entitlement, lang: Lang): string {
   const s = STRINGS[lang];
-  const lifetime = Boolean(current.until && current.until >= LIFETIME_UNTIL);
-  const rows: [string, string][] = [];
-  /*
-   * 「你是谁」那一行（E53）。
-   *
-   * 免邮箱凭据账号（E38）的 `email` 里放的是服务端认人的那把 id（`hdl:` 加 64 位 hex），
-   * **那一串不能印给人看**——而服务端也印不出来，它只存第一串的 sha256。所以这种账号印的
-   * 是客户端自己留的那份原文（`handle`），标签也跟着换成「第一串」。
-   *
-   * 第二串一个字都不显示：服务端只有 scrypt 哈希，客户端也不存。这是设计，不是漏了。
-   */
   const handle = handleOf(current);
-  if (handle) rows.push([s.pairFirstShort, handle]);
-  else if (current.email) rows.push([s.emailLabel, current.email]);
-  /*
-   * 「哪一档」这一行**只有真买过的人才有**。
-   *
-   * `entitlementOf`（api/_accounts.js）里 `period` 是从 `plan` 推出来的，而它**总有值**
-   * （不是 'month' 就按 'yearly' 答）。于是 2026-10 之后每一个注册进来的人都会看到一行
-   * 「年付」——而他一分钱没付，站上也没有在卖。那一行是假话。
-   *
-   * 终身（免费期授予的那一份）这儿就不摆档位：底下那一行已经写着「永久」，说清了。
-   */
-  if (current.period && !lifetime) {
-    rows.push([s.orderPlanLabel, current.period === 'monthly' ? s.planMonthly : s.planYearly]);
+  if (handle) {
+    return `<div class="acct-field">
+      <span class="acct-field-label" id="acctIdLabel">${esc(s.pairFirstShort)}</span>
+      <span class="acct-field-value" id="acctId" aria-labelledby="acctIdLabel">${esc(maskHandle(handle))}</span>
+      <button type="button" class="acct-eye" id="acctEye" aria-pressed="false" aria-label="${esc(s.showHandle)}">${ICON_EYE}</button>
+    </div>`;
   }
-  if (lifetime) rows.push([s.orderUntilLabel, s.orderLifetime]);
-  else if (current.until) {
-    rows.push([s.orderUntilLabel, new Date(current.until).toLocaleDateString(HTML_LANG[lang])]);
-  }
-  /**
-   * 没有在续的订阅，就明说这一句。
-   *
-   * 原先它只在「一行都排不出来」时才出现，可登录之后邮箱那一行总是排得出来
-   * ——于是一个订阅早过期的人，看到的是一块写着《你的订阅》、底下只有他邮箱
-   * 的牌子，一个字都没说他此刻没有权限。玩家的原话是「登录是登录……登录不代
-   * 表有权限」，那这扇窗就得把后半句说出来。
-   */
-  const lapsed = current.active ? '' : `<p class="auth-hint">${s.orderLapsed}</p>`;
-  if (!rows.length) return lapsed || `<p class="auth-hint">${s.orderLapsed}</p>`;
-  return `<div class="order-block">
-    <div class="menu-section-label">${s.orderTitle}</div>
-    ${rows
-      .map(
-        ([label, value]) => `<div class="order-row">
-          <span class="order-label">${esc(label)}</span>
-          <span class="order-value">${esc(value)}</span>
-        </div>`,
-      )
-      .join('')}
-  </div>${lapsed}`;
-}
-
-/**
- * 年付赠码. Each code gets its own copy button, because what a player does
- * with these is paste one into a message to one particular person — and a
- * six-character code read off a screen and typed back in is exactly the
- * errand a copy button exists to remove.
- *
- * A spent one stays on the list, struck through: a code that quietly
- * vanished the day a friend used it would read as one we took back.
- */
-function giftBlock(gifts: GiftCode[], lang: Lang): string {
-  const s = STRINGS[lang];
-  if (!gifts.length) return '';
-  return `<div class="gift-block">
-    <div class="menu-section-label">${s.giftTitle}</div>
-    <p class="auth-hint">${s.giftHint}</p>
-    ${gifts
-      .map((gift) => {
-        const by = gift.expiresAt
-          ? s.giftExpires.replace('{date}', new Date(gift.expiresAt).toLocaleDateString(HTML_LANG[lang]))
-          : '';
-        return `<div class="gift-row${gift.spent ? ' gift-row--spent' : ''}">
-          <span class="gift-code">${esc(gift.code)}</span>
-          <span class="gift-note">${gift.spent ? esc(s.giftUsed) : esc(by)}</span>
-          ${
-            gift.spent
-              ? ''
-              : // 两层字叠在一块，交叉淡化：文字换掉的同时右边多一个绿勾。
-                // 不是「换 textContent」——那样宽度会跳一下，一排码里跳的那一个
-                // 看起来像出了错。两层都在，宽度取两者里宽的那一个。
-                `<button class="gift-copy" data-copy="${esc(gift.code)}">` +
-                `<span class="gift-copy-face gift-copy-face--idle">${esc(s.copyBtn)}</span>` +
-                `<span class="gift-copy-face gift-copy-face--done">` +
-                `<span class="gift-copy-tick" aria-hidden="true">✓</span>${esc(s.copiedLabel)}</span>` +
-                `</button>`
-          }
-        </div>`;
-      })
-      .join('')}
+  if (!current.email) return '';
+  return `<div class="acct-field">
+    <span class="acct-field-label">${esc(s.emailLabel)}</span>
+    <span class="acct-field-value">${esc(current.email)}</span>
   </div>`;
 }
 
-/** 复制成功之后那句「已复制」停多久。 */
-const COPIED_MS = 1400;
-
-/**
- * 复制，按钮自己说一声——这颗键没有别的确认通道，所以这一声是全部。
- *
- * **只有真的成了才说「已复制」。** 这一条是这段代码唯一要紧的事：剪贴板可能没
- * 权限（浏览器设置、非安全上下文、某些内嵌容器），那时候 writeText 是 reject 的。
- * 从前这儿 catch 里退回去选中文本，但**外面那句 setTimeout 无论成败都把文案改回
- * 去**——也就是说失败那一路它压根没说过「已复制」，这是对的；现在多了个绿勾，更
- * 得守住这一条：一句假的「已复制」比按了没反应糟得多，他会直接去粘贴，粘出来的
- * 是上一次剪贴板里的东西。
- *
- * 失败那一路的行为一个字没改：把码选中，他自己长按复制。
- */
-function wireCopyButtons(overlay: HTMLElement, lang: Lang): void {
-  void lang; // 文案现在印在两层 span 里（见 giftBlock），这儿只管状态
-  for (const btn of Array.from(overlay.querySelectorAll<HTMLButtonElement>('.gift-copy'))) {
-    let revert = 0;
-    btn.addEventListener('click', async () => {
-      const code = btn.dataset.copy ?? '';
-      // 连点节流：已经在「已复制」里了，再点不重播那一下淡化（重播看起来像又
-      // 复制了一次，而剪贴板里本来就已经是它了）。这一颗键按两下是常事——人会
-      // 怀疑自己第一下按没按到。
-      if (btn.classList.contains('is-copied')) return;
-      let ok = false;
-      try {
-        await navigator.clipboard.writeText(code);
-        ok = true;
-      } catch {
-        // No clipboard permission: select it instead, so it can still be
-        // copied by hand rather than the button doing nothing at all.
-        const node = btn.parentElement?.querySelector('.gift-code');
-        if (node) {
-          const range = document.createRange();
-          range.selectNodeContents(node);
-          const sel = window.getSelection();
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      }
-      if (!ok) return; // 停在 idle。屏幕上是一段选中的码，那句话本来就该由他自己完成。
-      btn.classList.add('is-copied');
-      // 没有别的确认通道的动作配一声（cuelume 现有的 tick，和拖动过一格是同一颗）。
-      playCopied();
-      if (revert) window.clearTimeout(revert);
-      revert = window.setTimeout(() => btn.classList.remove('is-copied'), COPIED_MS);
-    });
-  }
+/** 那颗眼睛：遮 ⇄ 露。图标跟着换（睁眼＝「按我露出来」，划掉的眼＝「按我遮回去」）。 */
+function wireHandleEye(overlay: HTMLElement, current: Entitlement, lang: Lang): void {
+  const handle = handleOf(current);
+  const eye = overlay.querySelector<HTMLButtonElement>('#acctEye');
+  const value = overlay.querySelector<HTMLElement>('#acctId');
+  if (!handle || !eye || !value) return;
+  const s = STRINGS[lang];
+  eye.addEventListener('click', () => {
+    const shown = eye.getAttribute('aria-pressed') !== 'true';
+    value.textContent = shown ? handle : maskHandle(handle);
+    eye.setAttribute('aria-pressed', String(shown));
+    eye.setAttribute('aria-label', shown ? s.hideHandle : s.showHandle);
+    eye.innerHTML = shown ? ICON_EYE_OFF : ICON_EYE;
+  });
 }
+
+/*
+ * **《订单情况》那一块（orderBlock）、礼物码那一块（giftBlock）和它的复制键
+ * （wireCopyButtons）撤了**（第 17 推）。理由在 openStatusWindow 头上那三条。
+ *
+ * 复制键那一套里有一条值得记住的规矩，下回再做「复制」时照着来：**只有真的写进了剪贴板
+ * 才说「已复制」**——writeText 可能 reject（没权限、非安全上下文、某些内嵌容器），一句假
+ * 的「已复制」比按了没反应糟得多，他会直接去粘贴，粘出来的是上一次剪贴板里的东西。代码
+ * 在 git 历史里（第 13 推那一版的 subscribe.ts）。
+ */
 
 /*
  * **《改密码》那扇窗撤了**（E37）。

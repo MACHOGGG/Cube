@@ -18,6 +18,33 @@
   --card-gray: #4C4C4C;
   --card-red: #BE411A;
   --card-cream: #F6E2C0;
+  /* ── 四页改版那七支（第 17 推：战绩页、个人主页、帐号窗、邀请窗）──────────────
+     和上面八支一样**不随深浅主题翻**：卡片就是这个颜色，白天黑夜都一样。每一支用在哪儿
+     记在 `侵蚀阶梯决策.md` 的色卡表里。 */
+  --card-mauve: #BB868D;       /* 累计分卡 */
+  --card-peach: #EBC5A0;       /* 最近战绩 */
+  --card-periwinkle: #9EA5D2;  /* 排名 */
+  --card-brown: #AD724B;       /* 药丸按钮、弹窗按钮 */
+  --card-taupe: #7C6454;       /* 天才面板 */
+  --card-silver: #CECECE;      /* 开关关着时的轨道（色盲那颗也用它） */
+  /* 银灰轨道那一圈 1px 内描边。银灰配白色的钮只有 1.6:1，轨道的边界全靠这一圈（它对白
+     是 3.4:1，过了非文字元素 3:1 那条线）。值是方案给的，单独成一支是因为这四页的样式
+     里不许有写死的颜色（门：check-redesign-fit）。 */
+  --card-silver-edge: #8C8C8C;
+  --card-rule: #979797;        /* 下划线：帐号窗的字段、邀请窗的标题 */
+  /* 压在这些卡片上的字和图标。卡片不翻，所以字也不能翻——
+     · **白**：给棕、紫红、灰褐、砖红、蓝这几张卡上的字和全部图标。不能借 --on-accent，
+       那一支在深色主题里翻成近黑。
+     · **深墨**：给橙色徽章上的字，以及直接写在桃色、蓝紫色面板上的那几句。方案原文是
+       「徽章上的字用 --ink」，可 --ink 在深色主题里翻成近白，落在不翻的橙底上只有 2.2:1
+       ——方案自己的门在深色模式下也量对比度，会红。所以取 --ink 浅色那一档的值（橙底上
+       5.8:1），不跟着翻。 */
+  --card-white: #FFFFFF;
+  --card-ink: #2E2430;
+  /* ── 间距三档（同一个改版定的）。左右外边距相等、各栏居中对称，用的都是这三个数。 */
+  --gap-lg: 32px;
+  --gap-md: 16px;
+  --gap-sm: 12px;
 
   /* 米白往米黄挪。两步：#FAF8F6 → #FAF6EC → **#F5EDDA**（玩家 2026-09：「整体淡色的
      背景按照我上传的来调整，略微再暗黄一点」）。
@@ -74,6 +101,11 @@
      暗色底给白的光——两种底色各自最跳、又不刺眼的那一种（玩家定的）。 */
   --glow: rgba(179, 57, 43, 0.55);
   --shadow: 0 1px 2px rgba(46,36,48,0.06), 0 8px 24px -12px rgba(46,36,48,0.16);
+  /* 两道小影子的颜色，单独成 token 是因为它们落在四页改版（第 17 推）的页面上，而那几页的
+     样式里不许有写死的颜色（门：check-redesign-fit）。值就是原先就地写着的那两个，一个没
+     改：开关那颗钮（全站共用）、天才面板上那只吉祥物。 */
+  --knob-shade: rgba(0, 0, 0, 0.28);
+  --crest-shade: rgba(0, 0, 0, 0.14);
   /* The play screen has its own scheme, the same in either theme: a board
      under a finger should look the same at 9am and at midnight, and it is
      the one screen with no reading on it. Every colour is taken from the
@@ -205,20 +237,15 @@
 }
 
 /* The handful of surfaces painted with a literal colour rather than a
-   custom property — the bomb panel, the profile pills, the two record
-   panels. Under the colourblind palette they take their hue from the same
-   Okabe–Ito set as everything else, and the two that sit side by side (the
-   记录 and 排名 panels, the two profile pills) are given the orange/blue
-   pair rather than the peach/periwinkle one, which is the pair that
-   collapses. */
+   custom property — the bomb panel and the multiplayer page's 开房间 key.
+   Under the colourblind palette they take their hue from the same
+   Okabe–Ito set as everything else. */
+/* 四页改版（第 17 推）那几张卡——累计分卡、最近战绩、排名、个人主页那几颗药丸和天才面
+   板——原先也在这张单子上，色盲一开就各换一个 Okabe–Ito 的颜色。方案点名撤掉：「色盲模
+   式下这几张卡片的颜色不变」。它们本来就不靠颜色区分：每一张都有自己的标题、自己的位
+   置、自己的内容，色盲配色要管的是**棋子**——棋子之间只剩颜色一样东西可分。 */
 :root[data-cvd='1'] .bomb-panel { background: #8A3D00; }
 :root[data-cvd='1'] .genius-cta { background: #B26A00; }
-:root[data-cvd='1'] .total-card { background: #0072B2; }
-:root[data-cvd='1'] .records-panel--records { background: #F2D6A8; }
-:root[data-cvd='1'] .records-panel--ranks { background: #BBD9EE; }
-:root[data-cvd='1'] .profile-pill { --pill-bg: #0072B2; }
-:root[data-cvd='1'] .profile-pill--rose { background: #D55E00; }
-:root[data-cvd='1'] .genius-panel { background: #F1F1F1; }
 
 /* 结算页顶上那一块：屋主中途散场、这一局转成单人打完之后，小屋那份成绩摆
    在这儿（见 ui/roomLeftover.ts）。上面是小屋的总排行和它的战绩图，底下一
@@ -2946,6 +2973,11 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .profile-row-glyph { width: 20px; height: 20px; color: var(--ink-soft); flex: 0 0 auto; }
 .profile-row-glyph svg { width: 100%; height: 100%; }
 .profile-row-label { flex: 1; font-weight: 600; font-size: 0.92rem; }
+/* 标题底下跟一行小字（「敬请期待」、当前用的那套配色、翻面速度那一档）。从行尾挪到这儿是
+   第 17 推的事：网格一格太窄，并排会把标题挤成一个字一行。 */
+.profile-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.profile-row-text > .profile-row-label { flex: none; }
+.profile-row-sub { font-size: 0.72rem; font-weight: 400; line-height: 1.3; color: var(--ink-soft); }
 .profile-row-value { color: var(--ink-faint); font-size: 0.82rem; }
 /* Coming-soon perks: same window as the rows above, but inert, with a small
    lock leading the label instead of the oversized list glyph they had. */
@@ -2988,19 +3020,24 @@ body:has(.center-pick--back) .home-nav { display: none; }
    number gets the card stays this size (the value is shortened to fit);
    tapping it flies the whole card to the middle of a dimmed page, where the
    number is shown in full, sized down as needed to stay on one screen. */
+/* 第 17 推：底色换成色卡的紫红（--card-mauve），字是不翻的白。紫红上的白只有 3.0:1，
+   所以这张卡上的白字都按「大字」走（≥ 18.66px 并加粗）：标题 19px 粗体，数字本来就大。
+   底下那一句小字（还没登录的人才有）用深墨，见 .total-card-sub。 */
 .total-card {
   width: 100%; flex: none; border: none; border-radius: var(--r-lg); padding: 18px 20px 16px;
-  background: #C4838D; color: #fff; cursor: pointer; text-align: center;
+  background: var(--card-mauve); color: var(--card-white); cursor: pointer; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow);
 }
-.total-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.15rem; letter-spacing: 0.04em; }
+.total-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.1875rem; letter-spacing: 0.04em; }
 .total-card-value {
   font-family: 'JetBrains Mono', monospace; font-weight: 700; line-height: 1.15;
   font-variant-numeric: tabular-nums; max-width: 100%;
   overflow-wrap: anywhere; word-break: break-word;
 }
-.total-card-sub { font-size: 0.78rem; opacity: 0.85; }
+/* 小字不能是白的（紫红上 3.0:1，小字要 4.5），也不能再压一层透明度——那只会更淡。深墨
+   在紫红上是 4.9:1。 */
+.total-card-sub { font-size: 0.78rem; color: var(--card-ink); }
 /* The blown-up copy: wider, roomier, and free to use the full screen width. */
 .total-card--big {
   width: min(92vw, 560px); border-radius: var(--r-xl); padding: 30px 26px 24px; cursor: default;
@@ -3017,6 +3054,15 @@ body:has(.center-pick--back) .home-nav { display: none; }
 /* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。这一页从前没写，
    吃的是 .app 那条 28——所以三页里数它的招牌最低（玻璃上沿 34）。 */
 .records-page { padding-top: var(--head-top); padding-bottom: 120px; }
+/* 页底留白 ≥ 底栏高度 ＋ 16px（第 17 推）。底栏 .home-nav 整块是 86px（上下各 6 的留白 ＋
+   74 的 dock）＋ max(安全区, 14px)，所以这儿是 102 ＋ 同一个 max。前面那行写死的 116 是给算
+   不了 max() 的老内核兜底的（正好是安全区报 0 时的值）——和 .home-nav 自己那两行同一个写
+   法。滑到底，最后一块离底栏还有 16px，不会被盖住（门 check-redesign-fit 量这件事）。
+   小红书那一版的底排是另一颗键、另一套留白（xhs/src/pages.css），不跟这条走。 */
+.profile-page, .records-page:not(.xhs-profile) {
+  padding-bottom: 116px;
+  padding-bottom: calc(102px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
+}
 /* 手机上也左右各一半。竖着叠的时候一屏只装得下《记录》那一块，《排行榜》
    得往下滑才露头；并排之后两块一眼都在。窄了就装不下整行字，所以面板里
    只留缩略的内容——图形加分数——玩法小字和日期交给点开后的整页。 */
@@ -3049,7 +3095,13 @@ body:has(.center-pick--back) .home-nav { display: none; }
 /* 46vh 是给整幅宽的面板定的；缩到半幅之后同样的高度只剩一大片空底色，
    所以这里按缩略版自己的内容给高度：五行 + 底下那句话，正好 260。 */
 .records-panels .records-panel { padding: 18px 12px; gap: 10px; border-radius: var(--r-lg); min-height: 260px; }
-.records-panels .records-row { padding: 7px 10px; gap: 6px; }
+/* 六格一样高（第 17 推）：真记录、空格子、排名、灰杠、补位的空格子全是这一个高度，所以面
+   板里不管装了什么，六行等距、两块并排时一行对一行。 */
+.records-panels { --slot-h: 30px; }
+.records-panels .records-row,
+.records-panels .records-rule,
+.records-panels .rank-row { height: var(--slot-h); flex: 0 0 auto; box-sizing: border-box; }
+.records-panels .records-row { padding: 0 10px; gap: 6px; }
 .records-panels .records-row-glyph { width: 18px; height: 18px; }
 /* 基础样式里这行是竖排的 flex（名字/玩法/日期三层）。缩略版只剩名字一层，
    改回 block 才能让 text-overflow 的省略号生效——flex 容器里的裸文本是
@@ -3062,43 +3114,45 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .records-panels .records-row-target,
 .records-panels .records-row-time { display: none; }
 .records-panels .records-row-score { font-size: 0.78rem; }
-.records-panels .records-rule { height: 6px; }
 .records-panels .records-locked { font-size: 0.7rem; letter-spacing: 0.02em; }
 
 .records-panel {
   border-radius: var(--r-xl); padding: 30px 26px; min-height: 46vh;
   display: flex; flex-direction: column; gap: 18px;
 }
-.records-panel--records { background: #F2C39B; }
-.records-panel--ranks { background: #9BA5D6; }
+/* 色卡的桃色和蓝紫（第 17 推），不跟主题翻，色盲模式下也不换。 */
+.records-panel--records { background: var(--card-peach); }
+.records-panel--ranks { background: var(--card-periwinkle); }
 
-/* The ruled lines the sheet draws: an empty slot waiting for an entry. */
-.records-rule { height: 7px; border-radius: var(--r-full); background: rgba(255, 255, 255, 0.92); flex: 0 0 auto; }
+/* 空格子：等一局记录落进来的地方。缩略牌上它和一行记录一样高（见上面 --slot-h），点开的
+   大面板里还是一道细线。 */
+.records-rule { height: 7px; border-radius: var(--r-full); background: var(--surface); flex: 0 0 auto; }
 
-/* 记录行的字是写死的深褐，不跟主题走——因为它底下那颗药丸也是写死的
-   （白色压到 92%，落在桃色面板上，两种主题里都是近乎纯白）。字要是用
-   var(--ink)，浅色主题下是深紫、看得清，深色主题下 --ink 翻成近白，于是
-   白字落在白底上：玩法名和分数整行消失，只剩中间那行日期还看得见——因为
-   日期用的 --ink-faint 碰巧在深色主题里是中灰。
-   底是固定的，字就也得是固定的。 */
+/* 记录行：白格子（--surface），字是 --ink / --ink-soft——**底和字一起跟着主题翻**。
+   从前底是写死的白（压到 92%）、字是写死的深褐 #453023，理由是「底是固定的，字就也得是固
+   定的」：字要是用 --ink，深色主题下翻成近白，落在写死的白底上整行消失。第 17 推方案定的
+   是「深色主题：白色行格用 --surface」，那么底也翻了，字跟着 token 走正好对得上——两头都
+   是 token，就不会再出现「一头翻、一头不翻」。 */
 .records-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  background: rgba(255, 255, 255, 0.92); border: none; border-radius: var(--r-full);
-  padding: 9px 18px; cursor: pointer; flex: 0 0 auto; color: #453023;
+  background: var(--surface); border: none; border-radius: var(--r-full);
+  padding: 9px 18px; cursor: pointer; flex: 0 0 auto; color: var(--ink);
   font-family: 'Karla', sans-serif; text-align: left;
-  transition: transform 140ms ease, background 160ms ease;
+  transition: transform 140ms ease;
 }
-.records-row:hover { background: #fff; filter: none; }
+.records-row:hover { filter: none; }
 .records-row:active { transform: scale(0.985); }
 .records-row-name { font-weight: 700; font-size: 0.92rem; }
-/* 玩法后面那点小字和日期：同一支褐色淡一档，主次分得开，也一样不跟主题走。 */
-.records-row-mode { color: #7A5C48; font-weight: 400; font-size: 0.8rem; }
+/* 玩法后面那点小字和日期：淡一档，主次分得开。白格子里的字最淡到 --ink-soft（方案原话）。 */
+.records-row-mode { color: var(--ink-soft); font-weight: 400; font-size: 0.8rem; }
 .records-row-score {
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
   font-weight: 700; font-size: 0.95rem;
 }
+/* 直接写在桃色面板上的那句话（「还没有记录」「规则换了……」）。白字在桃色上只有 1.6:1，
+   看不清——用不翻的深墨（9.2:1）。面板不翻，字也不翻。 */
 .records-locked {
-  margin: auto 0 0; text-align: center; color: rgba(255, 255, 255, 0.9);
+  margin: auto 0 0; text-align: center; color: var(--card-ink);
   font-size: 0.82rem; letter-spacing: 0.04em;
 }
 
@@ -3141,17 +3195,20 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .rank-tabs--sub .rank-tab { background: rgba(255, 255, 255, 0.4); }
 .rank-tabs--sub .rank-tab--on { background: rgba(255, 255, 255, 0.96); }
 .rank-body { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; min-height: 0; }
+/* 名次行：和记录行同一套（白格子 --surface，字 --ink / --ink-soft，一起跟主题翻）。 */
 .rank-row {
   display: flex; align-items: center; gap: 10px;
-  background: rgba(255, 255, 255, 0.92); border-radius: var(--r-full);
-  padding: 7px 15px; color: #453023; font-family: 'Karla', sans-serif;
+  background: var(--surface); border-radius: var(--r-full);
+  padding: 7px 15px; color: var(--ink); font-family: 'Karla', sans-serif;
   flex: 0 0 auto;
 }
-/* 自己那一行：底色实一档，字加粗。榜再长，玩家找的都是这一行。 */
-.rank-row--me { background: #fff; font-weight: 700; box-shadow: 0 0 0 2px rgba(69, 48, 35, 0.28) inset; }
+/* 自己那一行：字加粗，外加一圈描边。榜再长，玩家找的都是这一行。 */
+.rank-row--me { font-weight: 700; box-shadow: 0 0 0 2px var(--ink-soft) inset; }
+/* 缩略牌补位的空格子（ui/leaderboard.ts 的 thumbHtml）：和一行名次一样大，什么都不写。 */
+.rank-row--empty { padding: 0; }
 .rank-place {
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
-  font-size: 0.8rem; color: #7A5C48; min-width: 2.2em;
+  font-size: 0.8rem; color: var(--ink-soft); min-width: 2.2em;
 }
 /* 总榜每一行行首的小图形：那一局是哪个玩法。 */
 .rank-glyph { flex: none; width: 22px; height: 22px; }
@@ -3162,15 +3219,16 @@ body:has(.center-pick--back) .home-nav { display: none; }
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
   font-weight: 700; font-size: 0.9rem;
 }
+/* 直接写在蓝紫面板上的那句话。白字在蓝紫上只有 2.4:1——用不翻的深墨（6.2:1）。 */
 .rank-foot, .rank-empty {
-  margin: 6px 0 0; text-align: center; color: rgba(255, 255, 255, 0.92);
+  margin: 6px 0 0; text-align: center; color: var(--card-ink);
   font-size: 0.78rem; letter-spacing: 0.03em;
 }
 /* 锁着的那一屏：榜的样子照旧摆出来，只是名次是灰条——写上具体的名字和分数
    就是在骗人，空着又什么都没说明。灰条正好说清「这里是一张榜」。 */
 .rank-locked-wrap { position: relative; display: flex; flex-direction: column; gap: 5px; }
-.rank-row--ghost { background: rgba(255, 255, 255, 0.42); }
-.rank-ghost-bar { height: 9px; border-radius: var(--r-full); background: rgba(255, 255, 255, 0.75); }
+/* 锁着的那几行：白格子照旧，名字和分数换成一道灰杠——写上具体的名字就是在骗人。 */
+.rank-ghost-bar { height: 9px; border-radius: var(--r-full); background: var(--line); }
 .rank-lock {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px; padding: 0 14px;
@@ -3612,10 +3670,20 @@ body:has(.slot-page) .home-nav { display: none; }
 .pill-switch-knob {
   position: absolute; top: 3px; left: 3px; width: 21px; height: 21px;
   border-radius: 50%; background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 1px 3px var(--knob-shade);
   transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 [aria-checked='true'] .pill-switch { background: var(--accent-2); }
+/* 四页改版（第 17 推）里的开关：关着是银灰轨道加一圈 1px 的深灰内描边（方案原话：「开
+   关关闭时；色盲开关也用它」），开着是色卡的绿，钮是不翻的白。这几颗开关全站在不翻的卡
+   上（棕药丸、蓝药丸、白格子、小红书那颗），所以三样都不跟主题走。暂停面板、小屋里那几
+   颗不在这四页上，照旧用上面那一套。 */
+.profile-page .pill-switch, .xhs-profile .pill-switch {
+  background: var(--card-silver); box-shadow: inset 0 0 0 1px var(--card-silver-edge);
+}
+.profile-page [aria-checked='true'] .pill-switch,
+.xhs-profile [aria-checked='true'] .pill-switch { background: var(--card-green); box-shadow: none; }
+.profile-page .pill-switch-knob, .xhs-profile .pill-switch-knob { background: var(--card-white); }
 [aria-checked='true'] .pill-switch-knob { transform: translateX(19px); }
 @media (prefers-reduced-motion: reduce) {
   .pill-switch, .pill-switch-knob { transition: none; }
@@ -3643,28 +3711,47 @@ body:has(.slot-page) .home-nav { display: none; }
    无从谈起（见 gameShell 里 #startPauseBtn 那段）。 */
 #pauseOverlay.pause--pre .pause-exits { display: none; }
 
-/* The page is a stack of destinations under the Slides masthead: one wide
-   sign-in pill, the language/tutorial pair, then the perks panel. */
-/* 上半部是一排排快捷入口，不是这一页的主角——收紧它们，天才那一块就整体
-   往上走，一进页面就看得到。 */
-/* 上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。 */
-.profile-page { gap: 8px; padding-top: var(--head-top); }
-.profile-page .home-head { margin-bottom: 6px; }
-.profile-page .profile-pill { padding: 8px 18px; }
-.profile-page .profile-pill-row { gap: 8px; }
+/* ---------- 个人主页（第 17 推：两栏 / 单列） ----------
+   招牌底下是 .profile-cols：电脑端两栏（见文件末尾 min-width:1000px 那一节），手机上
+   两栏按「左栏、右栏」的顺序摞成一列。间距只用那三档（--gap-lg / md / sm）。
+   上内边距走 .app 的 --head-top：三页共用一条抬头线，见那儿。 */
+.profile-page { gap: var(--gap-md); padding-top: var(--head-top); }
+.profile-cols { display: flex; flex-direction: column; gap: var(--gap-lg); width: 100%; }
+.profile-col { display: flex; flex-direction: column; gap: var(--gap-sm); min-width: 0; }
+/* 左栏每一颗一样高（「同一组元素等高」）。白字压在棕色、紫红上只有 4.0 / 3.0 :1，按方案
+   「字号 ≥ 18.66px 并加粗」走——那是 WCAG 的「大字」，3:1 就够。19px（1.1875rem）比那条线
+   高一点，留一点余量给字体回退。头卡（砖红 5.3:1）、色盲那一行（蓝 5.8:1）其实不受这条
+   约束，可同一列里字号一大一小会看出来，一起放大。 */
+.profile-page .profile-pill {
+  height: 52px; padding: 4px 18px; line-height: 1.1;
+  font-size: 1.1875rem; font-weight: 700; letter-spacing: 0.02em;
+}
+/* 高度写死 52、行高 1.1：英法两种语言的「色盲友好配色」在 360 宽上折成两行（量过：
+   「Palette adaptée aux daltoniens」「Colourblind-friendly palette」），两行 19px × 1.1 ＝ 42，
+   塞得进 52 减上下 4 的内边距。从前是 min-height，折行的那一颗就比别的高 12px——「同一
+   组元素等高」那一条（门里量的）当场破。 */
+.profile-page .profile-pill-row { gap: var(--gap-sm); max-width: none; }
+/* 头卡：砖红。色盲那一行：蓝。其余的药丸都是棕（.profile-pill 本体的颜色）。
+   写成两个类叠在一起、改的是 --pill-bg：药丸本体那条规则排在这儿后面，同样只有一个类
+   的话它按先后赢，头卡就还是棕的（第一版真的是棕的，截图看出来的）。 */
+.profile-pill.profile-pill--head { --pill-bg: var(--card-red); }
+.profile-pill.profile-pill--cvd { --pill-bg: var(--card-blue); }
 /* The block above 天才特供 is a list of shortcuts, not the page's headline
    act — it sits smaller than the section it introduces so the eye goes past
    it to the panel below. */
 .profile-pill {
   width: 100%; flex: none; border: none; border-radius: var(--r-full); padding: 10px 18px;
-  /* 底色走一个变量：白色小门的缝要用它填（见 .mp-join-door）。 */
-  --pill-bg: #C7A18C;
-  background: var(--pill-bg); color: #fff; cursor: pointer;
+  /* 底色走一个变量：白色小门的缝要用它填（见 .mp-join-door）。
+     第 17 推起是色卡的棕（--card-brown，「药丸按钮」那一支），原先是一支写死的奶咖
+     #C7A18C。字是不翻的白：药丸不跟主题翻，字也不能翻（--on-accent 在深色下是近黑）。 */
+  --pill-bg: var(--card-brown);
+  background: var(--pill-bg); color: var(--card-white); cursor: pointer;
   font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.98rem; letter-spacing: 0.03em;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow);
   transition: transform 120ms ease, filter 120ms ease;
 }
-.profile-pill--wide { max-width: 268px; margin: 4px auto 0; }
+/* 上外边距那 4px 撤了（第 17 推）：间距由外面那一列的 gap 统一给，各颗自己不再另垫。 */
+.profile-pill--wide { max-width: 268px; margin: 0 auto; }
 /* 更换图标 and the sound switch share one row: the pill keeps the width it
    would have had on its own, and the switch is a square of the same pill
    beside it, so the pair reads as one control block rather than as a new
@@ -3679,38 +3766,35 @@ body:has(.slot-page) .home-nav { display: none; }
   flex: none; width: 46px; padding: 0;
   display: flex; align-items: center; justify-content: center;
 }
+/* 个人主页上声音那一颗和旁边的《Pro》一样高（52，见 .profile-page .profile-pill），宽也
+   跟着到 52，还是一颗方的。要写上 id：上面那条带着 #soundRow，类选择器压不过它。 */
+.profile-page .profile-pill-row #soundRow { width: 52px; }
 .sound-glyph { display: block; width: 22px; height: 22px; color: currentColor; }
 .sound-glyph svg { width: 100%; height: 100%; display: block; }
 /* The bar's own halo is cut in the pill's colour, so it reads as lying over
    the arcs rather than joining them. */
-.profile-pill--square { --pill-ink: #C7A18C; }
-:root[data-cvd='1'] .profile-pill--square { --pill-ink: #0072B2; }
-.profile-pill--rose { background: #C88A92; }
+.profile-pill--square { --pill-ink: var(--pill-bg); }
 .profile-pill:hover { filter: brightness(1.04); }
 
-/* 个人主页那几颗按钮各自的颜色，取自界面稿上手调的那一版。写成按 id 的规则
-   而不是改 .profile-pill 的底色：这几颗是被单独挑出来上色的，剩下的仍然共用
-   那一个底色，以后加新按钮不会莫名其妙跟着变。 */
-#loginBtn { background: #E25000; }
-#langRow { background: #B07853; }
-#howToRow { background: #B76F43; }
-#cvdRow { background: #3070AD; }
-/* 开关没打开时的轨道色——界面稿上调它的时候开关正是关着的。必须写死在
-   [aria-checked='false'] 上：不限定的话这条规则的权重压过上面那条打开时的
-   规则，开关拨过去也不变色，那这颗开关就白做了。 */
-#cvdRow[aria-checked='false'] .pill-switch { background: #C66526; }
+/* 个人主页那几颗按钮原先**按 id 各写一个颜色**（#loginBtn #E25000、#langRow #B07853、
+   #howToRow #B76F43、#cvdRow #3070AD，外加色盲那颗开关关着时的轨道 #C66526）——五支界面
+   稿上手调的近似色，哪一支都不在色卡里。第 17 推按方案整块删掉：头卡和色盲那一行各挂一
+   个类（--head / --cvd，见上面），其余药丸用本体的棕，开关轨道用下面那一套。 */
 .profile-pill:active { transform: translateY(1px) scale(0.99); }
 .profile-pill-row { display: flex; gap: 10px; width: 100%; max-width: 268px; margin: 0 auto; }
 .profile-pill-row .profile-pill { flex: 1; min-width: 0; }
 
 /* The perks live on their own soft panel, so the coming-soon list reads as
    one block rather than as more page-level rows. */
+/* 天才面板：色卡的灰褐（第 17 推）。从上到下：吉祥物、徽章、2 列 × 6 行的十二行。
+   左右内边距和底下那两颗法务键共用一个数（--genius-pad），它们才对得上网格的两列。 */
 .genius-panel {
-  width: 100%; box-sizing: border-box; margin-top: 4px;
-  background: #F5F2EE; border-radius: var(--r-lg); padding: 16px 14px 18px;
-  display: flex; flex-direction: column; gap: 10px;
+  --genius-pad: var(--gap-md);
+  width: 100%; box-sizing: border-box;
+  background: var(--card-taupe); border-radius: var(--r-lg);
+  padding: var(--gap-md) var(--genius-pad) var(--genius-pad);
+  display: flex; flex-direction: column; align-items: center; gap: var(--gap-sm);
 }
-.genius-panel .menu-section-label { margin: 2px 0 2px; }
 /* 这一块的招牌。大到一眼就知道这一整块讲的是什么，所以它在最上面、居中，
    底下才是那句话和那行小字。 */
 /*
@@ -3726,22 +3810,55 @@ body:has(.slot-page) .home-nav { display: none; }
  * 整格（不是只抬标志），所以居中和留白一点没变，没有任何位移。
  */
 .genius-crest {
-  display: flex; justify-content: center; margin: 2px 0 6px;
+  display: flex; justify-content: center; margin: 2px 0 0;
   position: relative; z-index: 1;
 }
-.genius-logo--crest { filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.14)); }
-/*
- * 深色下这一块的底色。
- *
- * 上面那个 #F5F2EE 是写死的，不跟主题走：深色下整页是近黑（--bg 是
- * #1E1820），就这一块还铺着一大片米白，像贴了张纸上去，而且和全站别的卡片
- * 不是一套。浅色一个像素都不动，只在深色下换成 --surface —— 别的卡片用的
- * 就是它，色盲那套配色在深色下也自带一份，所以这一条同时管住了两种深色。
- */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .genius-panel { background: var(--surface); }
+.genius-logo--crest { filter: drop-shadow(0 6px 16px var(--crest-shade)); }
+/* 深色下这一块原先换成 --surface（那时它是一块写死的米白，深色下像贴了张纸）。现在它是色
+   卡的灰褐，和别的卡一样**不跟主题翻**，那两条深色覆盖一起撤了（第 17 推）。 */
+
+/* 徽章：色卡的橙，字用深墨（橙底上白字只有 2.6:1；深墨 5.8:1，见 --card-ink 那段）。 */
+.genius-badge {
+  display: block; flex: none; width: fit-content; max-width: 100%;
+  padding: 10px 24px; border: none; border-radius: var(--r-full);
+  background: var(--card-orange); color: var(--card-ink);
+  font-family: inherit; font-weight: 700; font-size: 1rem; letter-spacing: 0.02em;
+  box-shadow: var(--shadow); cursor: pointer;
 }
-:root[data-theme="dark"] .genius-panel { background: var(--surface); }
+.genius-badge:active { transform: translateY(1px) scale(0.99); }
+.genius-badge:focus-visible { outline: 3px solid var(--card-white); outline-offset: 3px; }
+
+/* 十二行：2 列 × 6 行，每一格一样高（grid-auto-rows: 1fr 让最高那一行说了算——法语有几
+   条会折成两行，别的格子跟着它一起高，才排得齐）。白格子是 --surface：深色主题下跟着
+   翻（方案原话「深色主题：白色行格和弹窗用 --surface」），字跟着它一起翻。 */
+.genius-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-auto-rows: 1fr; gap: var(--gap-sm); width: 100%;
+}
+.genius-grid > .profile-row {
+  min-width: 0; height: 100%; padding: 10px 10px; gap: 6px;
+  border-color: transparent;
+}
+.genius-grid .profile-row-label { font-size: 0.84rem; line-height: 1.3; overflow-wrap: break-word; }
+.genius-grid .profile-row-value { color: var(--ink-soft); flex: none; }
+/* 《深色界面》那颗开关**不缩**：和左栏色盲那颗是同一个零件、同一个大小（玩家 2026-09：「就
+   和现在开关色盲友好模式一样」，check-theme 量的就是这两颗一样大）。第一版在半幅的格子里
+   给它缩到 0.85，那道门当场红；量过不缩也放得下（360 宽的法语里标签折成两行，十二格本来
+   就按最高那一格一起高）。 */
+/* 落单那一条（眼下没有，见 ui/accountPage.ts）：跨两列、只占一半宽、居中。 */
+.genius-grid > .profile-row--alone {
+  grid-column: 1 / -1; justify-self: center; width: calc((100% - var(--gap-sm)) / 2);
+}
+
+/* 面板底下那两颗白键：一样宽，左右内边距和面板一样，于是正好对着网格的两列。 */
+.legal-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--gap-sm); padding: 0 var(--gap-md); width: 100%;
+}
+.legal-pair > .profile-row {
+  min-width: 0; justify-content: center; text-align: center; padding: 12px 10px;
+}
+.legal-pair .profile-row-label { flex: 1 1 auto; min-width: 0; font-size: 0.86rem; line-height: 1.3; overflow-wrap: break-word; }
 /* 全站的《返回》：和开局页那颗、游戏里那一排是同一副圆盘，只是小一号，单独
    居中占一行。文字版没有了——玩家的原话：「替代游戏中所有 开始 返回 暂停 用
    统一的图标展示」。 */
@@ -3765,17 +3882,8 @@ body:has(.slot-page) .home-nav { display: none; }
 :root[data-cvd='1'] .profile-row-tick { color: #0072B2; }
 
 .profile-row--back { justify-content: center; margin-top: 4px; }
-/* The five published documents sit at the foot of 个人主页 as ordinary rows,
-   so they add a block without changing anything above them. */
-.legal-rows { display: flex; flex-direction: column; width: 100%; }
-/* 底部那几行法务收成两行之后，尺寸收一档（E42）。
-   原先五行，现在《隐私政策》＋《联系与特别感谢》两行——照五行的尺寸摆两行，页脚会空出
-   一大块。字号、行高、上下留白各收一档，位置和形式一个字没动。 */
-.legal-rows--slim > .profile-row {
-  padding-top: 9px; padding-bottom: 9px;
-  font-size: 0.88rem;
-}
-.legal-rows--slim > .profile-row .profile-row-label { line-height: 1.35; }
+/* 法务那几行原先是一列 .legal-rows（再早是五行，2026-10 收成两行，又收了一档尺寸叫
+   --slim）。第 17 推换成面板底下那一对白键（.legal-pair，见天才面板那一段）。 */
 
 /* 《联系与特别感谢》里那一行邮箱：单独一行、可点、比正文大一档（玩家定的）。 */
 .contact-mail {
@@ -3785,96 +3893,63 @@ body:has(.slot-page) .home-nav { display: none; }
 .contact-mail a { color: var(--accent); text-decoration: none; }
 .contact-mail a:hover, .contact-mail a:focus-visible { text-decoration: underline; }
 
-/* ---------- 电脑端的个人主页：一条加宽的中栏，栏内条目两两成对 ----------
+/* ---------- 电脑端的成绩页和个人主页：两栏（第 17 推）----------
 
-   起因和游戏页那一段（文件末尾 min-width:1000px 那一节）一样，玩家的话：「更合
-   理地使用左右空间」。这一页从前和别的页一样是屏幕中间一条 460px 的柱子（.app
-   的 max-width）：1440 上两侧各空 490，整页 1852px 要滚两屏。收成 760 之后两侧各
-   空 340，页高 1377。
+   起因是玩家的那句「更合理地使用左右空间」（PR-18 / E27）。这两页在电脑上从前是屏幕中
+   间一条窄柱子（.app 的 max-width: 460），后来成绩页改成三栏、个人主页改成一条加宽到
+   760 的中栏、栏内两两成对。第 17 推方案把两页都定成**两栏等宽**：成绩页左栏累计分 ＋
+   最近战绩、右栏排名；个人主页左栏药丸、右栏天才面板。
 
-   为什么是加宽一条栏、不是分左右两栏：手机和电脑仍是同一条柱子、同一颗键，只是
-   宽一档、条目成对——分栏会让同一颗键在两端长成两个样子。
+   门槛 1000px，不是全站那个 720：两栏 ＋ 中缝 ＋ 页边，720 上放不下。999px 以下两页
+   原样是手机那一列。
 
-   **DOM 一个字没动，也没加任何包裹元素。** 两列走的是 grid 的行优先流（左 → 右
-   → 下一行），所以 Tab 顺序和眼睛看到的顺序一致。不用 order 重排——那会让焦点顺
-   序和视觉顺序脱节。
-
-   门槛 1000px，不是全站那个 720：760 的栏宽加上页边，720 上放不下。999px 以下整
-   页原样回到现状，手机端一个像素不受影响。
-
-   这一段**不碰任何颜色**：面板底色、Pro 那颗、色盲档那几个色号一个都没出现在下
-   面。 */
+   这一段**不碰任何颜色**：颜色全在各自那一段里，而且全是 token（四页改版的门
+   check-redesign-fit 量的是「这四页上真的生效的每一条规则里有没有写死的颜色」）。 */
 @media (min-width: 1000px) {
-  /* ---------- 电脑端的成绩页：三栏并排（PR-18 / E27）----------
+  /* ---------- 电脑端的成绩页：两栏等宽（第 17 推）----------
    *
-   * 玩家的话和个人主页那一段是同一句：「更合理地使用左右空间」。这一页在电脑上从前是屏幕
-   * 中间一条 460px 的窄栏，自上而下三块：《累计得分》整幅一张，底下《记录》《排行榜》各占
-   * 一半。三块加起来只有 460px 宽，而屏幕上剩下的地方全是空的；更糟的是**要往下滑**才看得
-   * 全——而这一页只有三块东西。
+   * 左栏上面是《累计得分》、下面是《最近战绩》；右栏是《排名》，上下沿和左栏对齐（方案原
+   * 话）。原先这儿是三栏并排（PR-18 / E27）：累计得分、记录、排行榜各占一栏——三块等宽，
+   * 可累计得分那一栏里只有一个数，它被另两栏拉成和两张榜一样高，中间空着一大块。
    *
-   * 并成一排之后一屏全在。三栏等宽，而不是「累计得分窄一点」：三块是并列的三件事（我一共
-   * 多少分 / 我打过哪些局 / 我排第几），没有哪一块更次要。
+   * DOM 没动（手机上的排布不变）：《记录》《排名》两块还在 `.records-panels` 里。这儿把
+   * 那一层 `display: contents` 掉，两块面板于是直接成了这张 grid 的格子，各自摆进该在
+   * 的地方。`display: contents` 在这儿是安全的：那一层是一个纯排版用的 div，没有自己的
+   * 语义、焦点和点击。
    *
-   * ⚠️ `.app` 本体是 flex 柱（`display: flex; flex-direction: column`）。这儿把它换成
-   * grid，所以**招牌那一块要显式跨满整行**——不写的话它会缩进第一格去，和《累计得分》并排
-   * 挤成两列，而那是整页唯一一处「上面一行」。
-   *
-   * 三道 `minmax(0, …)`：`1fr` 的真身是 `minmax(auto, 1fr)`，而那个 auto 的下限是内容的最
+   * 两道 `minmax(0, …)`：`1fr` 的真身是 `minmax(auto, 1fr)`，而那个 auto 的下限是内容的最
    * 小宽度——榜上出现一个十位数的分数（等宽字体、不折行、不省略号）时，那一栏会按它撑开，
-   * 把另两栏挤扁再把整页顶出屏幕。玩家 2026-09 实拍到过（榜首 1000000000）。这条坑在
-   * `.records-panels` 上已经记过一次，三栏之后同一条照旧要写。
+   * 把另一栏挤扁再把整页顶出屏幕。玩家 2026-09 实拍到过（榜首 1000000000）。这条坑在
+   * `.records-panels` 上记过一次，两栏之后照旧要写。
+   *
+   * 小红书那一版借的是同一个类名（`.records-page.xhs-profile`），里头的东西不是这三块，
+   * 而且方案点名「两栏布局只在网页端生效」——所以选择器上排除它。
    */
-  .app.records-page {
-    max-width: 1000px;
+  .app.records-page:not(.xhs-profile) {
+    max-width: 880px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 24px; row-gap: 16px;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    column-gap: var(--gap-lg); row-gap: var(--gap-md);
+    align-items: stretch;
   }
-  .records-page > .home-head { grid-column: 1 / -1; }
-  /* 《累计得分》不再整幅：它是三栏里的第一栏，高度跟着另两栏一起撑起来。 */
-  .records-page > .total-card { grid-column: 1; align-self: stretch; justify-content: center; }
-  /* 《记录》《排行榜》占后两栏。`.records-panels` 自己是两列 grid，所以让它跨两栏、
-     并把它自己那道 gap 对齐这一层的 column-gap——两道缝不一样宽会看出来。 */
-  .records-page > .records-panels { grid-column: 2 / -1; gap: 24px; }
-  /* 三栏之后每一栏约 300px，比半幅时的 194 宽得多，所以缩略牌可以高一档：
-     这一页三块等高才像一排，而两块面板的 260px 下限会把《累计得分》拖矮。 */
-  .records-page .records-panels .records-panel { min-height: 300px; }
+  .records-page:not(.xhs-profile) > .home-head { grid-column: 1 / -1; }
+  .records-page:not(.xhs-profile) > .total-card { grid-column: 1; grid-row: 2; }
+  .records-page:not(.xhs-profile) > .records-panels { display: contents; }
+  .records-page:not(.xhs-profile) .records-panel--records { grid-column: 1; grid-row: 3; }
+  .records-page:not(.xhs-profile) .records-panel--ranks { grid-column: 2; grid-row: 2 / span 2; }
+  /* 右栏比左栏那块面板高（它要和「累计得分 ＋ 最近战绩」整栏对齐），六格从上往下排的话底下
+     空一大截。摊开：六格之间一样远（方案原话「等距排列」），整块面板是满的。 */
+  .records-page:not(.xhs-profile) .records-panel--ranks { justify-content: space-between; }
 
-  .app.profile-page { max-width: 760px; }
-  /* 268 是给一条 460 的窄栏定的，宽栏之后放开一档——但不放任它长满，不然同一颗
-     键在手机和电脑上像两件东西。 */
-  .profile-page .profile-pill-row,
-  .profile-page .profile-pill--wide { max-width: 380px; }
-
-  /* 天才特供：两列。整块的招牌、那颗键、小标签和横线横跨两列。 */
-  .profile-page > .genius-panel {
-    display: grid; grid-template-columns: 1fr 1fr;
-    column-gap: 14px; row-gap: 10px; align-content: start;
+  /* ---------- 电脑端的个人主页：两栏（第 17 推）----------
+   * 左栏是那一列药丸，右栏是天才面板和底下那一对白键。两栏等宽、顶端对齐，中间那道缝
+   * 和页边都用间距那三档。 */
+  .app.profile-page { max-width: 880px; }
+  .profile-cols {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--gap-lg); align-items: start;
   }
-  .profile-page > .genius-panel > .genius-crest,
-  .profile-page > .genius-panel > .genius-cta,
-  .profile-page > .genius-panel > .menu-section-label,
-  .profile-page > .genius-panel > .genius-rule { grid-column: 1 / -1; }
-  /* 两列排不满的那一条：跨两列、只占一半宽、居中。不这么写它会孤零零贴在左边，
-     右边空一格，看着就是「这一页没排好」。
-     谁落单由 JS 打记号（ui/accountPage.ts 的 `profile-row--alone`），不再用
-     `:last-child:nth-child(odd)` 那个奇偶推论——那个推论 2026-10 撤掉内部码之后当场
-     失效（子元素 17 → 16），而且它从来够不着「夹在两段中间」那一条（《多人游玩》上下
-     都是跨满整行的东西，它独占一行的左半边）。那一段注释在 accountPage.ts 里。 */
-  .profile-page > .genius-panel > .profile-row--alone {
-    grid-column: 1 / -1; justify-self: center; width: calc((100% - 14px) / 2);
-  }
-
-  /* 法务：三列。用 flex 不用 grid——最后一行只有两条，grid 的三等分格没法把它们
-     挪到中间，flex 的 justify-content:center 天生就是这件事。
-     flex-direction 一定要写出来：.legal-rows 本体是 flex-direction:column（见上
-     面那一条），只改 display 的话 flex-basis 会去管高度，五条会竖着堆回去。 */
-  .profile-page > .legal-rows {
-    display: flex; flex-direction: row; flex-wrap: wrap;
-    justify-content: center; gap: 8px;
-  }
-  .profile-page > .legal-rows > .profile-row { flex: 0 1 calc((100% - 16px) / 3); }
 }
 /* The lead-in above a document's clauses: same voice as the rows below it,
    just not one of them. */
@@ -3919,23 +3994,10 @@ body:has(.slot-page) .home-nav { display: none; }
    row lays out what engine/pricing.ts hands over, so there is no rule below
    that could put a dollar price in front of a player buying through a store,
    or the reverse. */
-.genius-modal { max-width: 340px; }
-/* 横过来、屏幕又不高的时候（笔记本就是这样），这一窗的空白收一收：条目之间
-   挤一点、上下的留白薄一点，让整窗站得进一屏，不必靠滚。字号一个都没动，
-   压掉的全是空处。 */
-@media (min-width: 720px) and (max-height: 940px) {
-  .genius-modal { padding: 18px 22px 16px; }
-  .genius-modal h2 { margin-bottom: 4px; font-size: 1.32rem; }
-  .genius-modal > p { margin-bottom: 12px; }
-  .genius-modal .plan-list { gap: 6px; margin: 2px 0 8px; }
-  .genius-modal .plan-row { padding: 9px 16px; }
-  .genius-modal .genius-perks { margin-top: 10px; }
-  .genius-modal .genius-perk { padding: 1px 0; }
-  .genius-modal .genius-perks .menu-section-label { margin: 8px 0 3px; }
-  .genius-modal .link-btn { margin: 2px 0; }
-  .genius-modal .genius-legal { margin: -2px 0 8px; }
-  .genius-modal .btn-row { margin-top: 12px; }
-}
+/* `.genius-modal` 那一套撤了（第 17 推）：用它的两扇窗各自换了新类名——邀请窗
+   `.invite-modal`、帐号窗 `.acct-modal`，规则在下面「帐号窗与邀请窗」那一段。原先那条
+   「矮屏收空白」的媒体查询也随之撤掉：它收的是价目行、法务链接、小标题那几样，那几样已
+   经一样都不在窗里了。 */
 .plan-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
 .plan-row {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
@@ -4180,84 +4242,71 @@ body:has(.slot-page) .home-nav { display: none; }
   display: block; font-size: 0.95rem; font-weight: 600; color: var(--ink);
   overflow-wrap: anywhere; line-height: 1.35;
 }
-/* 订单情况 — labelled rows, because this window is checked rather than read:
-   whoever opens it already knows they subscribed and wants one line of it. */
-/* 《账户》窗里那一列：更换密码 / 更换邮箱 / 管理订阅 / 退出登录……
- *
- * 用的就是个人主页上那种行（.profile-row），一样的高度、一样的箭头。玩家原
- * 话：「注意整体排版清晰放在一起，不要东一个西一个」——原先它们是横着一排宽
- * 窄不一的小按钮，看不出这几件事是并列的。同一种样子代表同一件事「点进去还
- * 有一层」，这样他不用为这扇窗重新学一遍。 */
-.acct-rows { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; }
+/* ---------- 帐号窗与邀请窗（第 17 推） ----------
+   两扇都是白卡（`.modal` 本来就是 --surface：浅色下是白，深色下跟着主题走——方案原话
+   「深色主题：白色行格和弹窗用 --surface」）。这一段一个写死的颜色都没有：门
+   check-redesign-fit 读的是浏览器里**真的作用在这两扇窗上**的每一条规则。
 
-.order-block, .gift-block { text-align: left; margin: 0 0 16px; }
-/* The shared label is tuned for the home grid — centred, and pulled 4px down
-   onto the cards under it. Both are wrong over a left-aligned list, where
-   that negative margin puts the first row on top of the heading.
-   《帐户》窗里那个《帐户设定》漏在了这张名单外面（它不在 .order-block /
-   .gift-block 里，是直接摆在窗里的），于是那四个字被底下《更换密码》那颗键
-   压掉了一截，而且还是居中的——同一扇窗里，上面两个小标题靠左、它居中。
-   玩家的原话：「这个界面文字遮挡了请确定移动端和电脑端的排版」。 */
-.order-block .menu-section-label,
-.gift-block .menu-section-label,
-.acct-label,
-.genius-perks .menu-section-label { text-align: left; margin: 12px 0 6px; }
-.genius-perks .menu-section-label:first-child { margin-top: 0; }
-.gift-block .auth-hint { margin: 0 0 10px; }
-.order-row {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 7px 0; border-bottom: 1px solid var(--line);
-}
-.order-row:last-child { border-bottom: none; }
-.order-label { font-size: 0.82rem; color: var(--ink-faint); flex: 0 0 auto; }
-.order-value {
-  font-size: 0.92rem; font-weight: 600; color: var(--ink);
-  text-align: right; overflow-wrap: anywhere;
-}
+   撤掉的那几样（订单情况、礼物码和它的复制键、那一列 .profile-row）连同样式一起走了，
+   理由写在 ui/subscribe.ts 的 openStatusWindow 头上。 */
+.acct-modal, .invite-modal { position: relative; }
 
-/* 年付赠码. Each gets its own copy button: what a player does with these is
-   paste one into a message to one particular person. */
-.gift-row {
-  display: flex; align-items: center; gap: 10px; margin-top: 8px;
-  background: var(--board-bg); border: 1px solid var(--line);
-  border-radius: var(--r-sm); padding: 8px 10px 8px 12px;
+/* 右上角那颗 ✕（帐号窗）。白卡上的图标是墨色——「所有图标用白色」说的是压在色卡上的
+   那些，白卡上放白图标就看不见了（门里量的图标对比度是 ≥ 3）。 */
+.modal-x {
+  position: absolute; top: 8px; right: 8px;
+  flex: none; width: 40px; height: 40px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent; color: var(--ink-soft);
 }
-.gift-code {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1rem;
-  letter-spacing: 0.14em; color: var(--accent-ink);
+.modal-x > svg { width: 22px; height: 22px; display: block; }
+.modal-x:hover { color: var(--ink); }
+.modal-x:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+/* 只放图标的棕色药丸：帐号窗三颗、邀请窗两颗。图标用 currentColor，所以字色就是
+   图标色——白的（压在棕色上，不跟主题翻）。CTL_* 那几个是「圆盘 + 记号」的画法（见
+   ui/ctlIcons.ts），这儿把盘子拿掉，只留记号。 */
+.pill-icon {
+  display: flex; align-items: center; justify-content: center;
+  flex: none; height: 48px; padding: 0;
+  border: none; border-radius: var(--r-full);
+  background: var(--card-brown); color: var(--card-white);
+  box-shadow: var(--shadow); cursor: pointer; text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.gift-note { flex: 1; font-size: 0.76rem; color: var(--ink-faint); }
-/* 复制那颗键的两张脸叠在一块，交叉淡化。
-   为什么叠而不是换字：换 textContent 的话按钮宽度会跟着跳一下，而一排码里只跳
-   的那一个看起来像出了错。两层都在，按钮的宽度取两者里宽的那一个，从头到尾不动。
-   只有 opacity + transform 在动，Chrome 61 认得（这颗键在小红书那一版不出现，但
-   这条规则和别的一起住在 style.css 里）。 */
-.gift-copy {
-  flex: 0 0 auto; border: none; border-radius: var(--r-full); cursor: pointer;
-  background: var(--accent-soft); color: var(--accent-ink);
-  font: inherit; font-size: 0.78rem; font-weight: 600; padding: 5px 12px;
-  position: relative; display: inline-grid;
+.pill-icon > svg { width: 26px; height: 26px; display: block; }
+.pill-icon > svg.ctl-glyph { width: 40px; height: 40px; --ctl-disc: transparent; --ctl-mark: var(--card-white); }
+.pill-icon:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+/* 帐号窗：抬头、一条字段、三颗键。 */
+.acct-modal h2 { margin: 0 0 var(--gap-md); }
+/* 字段只有底下那一道 2px 的线（方案：「字段只有一条 2px 下划线」），没有框。 */
+.acct-field {
+  display: flex; align-items: center; gap: var(--gap-sm);
+  margin: 0 0 var(--gap-md); padding: 6px 2px 8px;
+  border-bottom: 2px solid var(--card-rule); text-align: left;
 }
-/* 两张脸压在同一个格子里（inline-grid 的同一格），所以谁都不撑大谁。 */
-.gift-copy-face {
-  grid-area: 1 / 1; display: flex; align-items: center; justify-content: center; gap: 4px;
-  white-space: nowrap;
-  transition: opacity 250ms ease, transform 250ms ease;
+.acct-field-label { flex: none; font-size: 0.82rem; color: var(--ink-soft); }
+/* 值靠右、等宽字：第一串露出来时一个字母一个格子，好对着抄。遮着的时候是「••••」加末
+   四位，同样等宽，所以按眼睛那一下值不会左右跳。 */
+.acct-field-value {
+  flex: 1; min-width: 0; text-align: right;
+  font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 0.95rem;
+  color: var(--ink); overflow-wrap: anywhere;
 }
-.gift-copy-face--done { opacity: 0; transform: translateY(4px); }
-.gift-copy.is-copied .gift-copy-face--idle { opacity: 0; transform: translateY(-4px); }
-.gift-copy.is-copied .gift-copy-face--done { opacity: 1; transform: none; }
-/* 勾用 --accent-2：全站「这件事成了」都是它。 */
-.gift-copy-tick { color: var(--accent-2); font-weight: 700; }
-@media (prefers-reduced-motion: reduce) {
-  /* 直接换，不淡化。换的是「复制成了没有」这条信息，淡化只是它的说法。 */
-  .gift-copy-face { transition: none; }
-  .gift-copy-face--done, .gift-copy.is-copied .gift-copy-face--idle { transform: none; }
+.acct-eye {
+  flex: none; width: 36px; height: 36px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent; color: var(--ink-soft);
 }
-/* Spent, not gone: a code that vanished the day a friend used it would read
-   as one we took back. */
-.gift-row--spent { opacity: 0.5; }
-.gift-row--spent .gift-code { text-decoration: line-through; }
+.acct-eye > svg { width: 22px; height: 22px; display: block; }
+.acct-eye:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+/* 三颗键：竖着排、居中、一样宽、一样远。 */
+.acct-actions {
+  display: flex; flex-direction: column; align-items: center; gap: var(--gap-sm);
+  margin-top: var(--gap-sm);
+}
+.acct-actions .pill-icon { width: 100%; max-width: 200px; }
 
 /* 「Slides 天才」的标志，在它出现的三个地方。空的时候（还没放进 SVG）
    geniusLogoTag 什么都不输出，所以这些规则也就没有东西可作用。 */
@@ -4276,19 +4325,27 @@ body:has(.slot-page) .home-nav { display: none; }
   filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
 }
 
-.genius-perks { text-align: left; margin: 0 0 16px; }
-.genius-perk { position: relative; color: var(--ink-soft); font-size: 0.85rem; padding: 3px 0 3px 16px; }
-.genius-perk::before { content: '·'; position: absolute; left: 4px; color: var(--accent); }
-/* The not-yet-built half of the paywall list: same rows, visibly quieter,
-   so a buyer can tell at a glance which half they get today. */
-.genius-perk--soon { opacity: 0.58; }
-.genius-perk--soon::before { color: var(--ink-soft); }
-/* 「剩下的还有」那一行：淡一档，而且不挂前面那个「·」——它代表的是一串条目，不是
-   其中一条。字距拉开一点，六个点才看得出是省略号而不是一条虚线。 */
-.genius-perk--more {
-  opacity: 0.5; padding-left: 16px; letter-spacing: 0.18em;
+/* 邀请窗：抬头底下一道下划线，左边吉祥物、右边货单，最底下两颗一样宽的药丸。 */
+.invite-modal { max-width: 360px; }
+.invite-title {
+  margin: 0 0 var(--gap-md); padding: 0 0 10px;
+  border-bottom: 2px solid var(--card-rule);
 }
+.invite-body {
+  display: flex; align-items: flex-start; gap: var(--gap-md);
+  margin: 0 0 var(--gap-md); text-align: left;
+}
+.invite-mascot { flex: none; display: flex; justify-content: center; padding-top: 2px; }
+.invite-perks { flex: 1; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.genius-perk { position: relative; color: var(--ink-soft); font-size: 0.85rem; line-height: 1.4; padding: 3px 0 3px 16px; }
+.genius-perk::before { content: '·'; position: absolute; left: 4px; color: var(--accent); }
+/* 最末那一行「……」：淡一档，不挂前面那个「·」——它说的是「还不止这些」，不是其中一
+   条。字距拉开一点，六个点才看得出是省略号而不是一条虚线。读屏不念（aria-hidden）。 */
+.genius-perk--more { opacity: 0.6; letter-spacing: 0.18em; }
 .genius-perk--more::before { content: none; }
+/* 两颗键左右对称、一样宽。 */
+.invite-actions { display: flex; gap: var(--gap-md); }
+.invite-actions .pill-icon { flex: 1 1 0; min-width: 0; }
 /* 登录那扇窗的正文：一摞东西，自上而下。
    从前这里是 flex 的默认方向——横排。它当初只装一件东西（一张表单），横排
    竖排看不出区别，居中是它真正要的。后来这块地方陆续多了几件：一句说明、一
@@ -4465,18 +4522,18 @@ html.is-tutorial .home-nav { display: none; }
 }
 .records-row-glyph svg { width: 100%; height: 100%; }
 .records-row-name { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
-.records-row-time { color: #7A5C48; font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.records-row-time { color: var(--ink-soft); font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 /* 老虎机那一局在拼的那个图案，画在玩法名后面（《侵蚀阶梯》v1.2 PR-8）。
    这一局的 modeKey 是 'base'，所以玩法名右边那点小字（.records-row-mode）是空的
    ——一整行里没有任何东西说得出「这一局是老虎机」。一张小图就说完了，而且不占那
    一行的字数（站点原则：少文字）。 */
-.records-row-target { display: inline-flex; align-items: center; margin-left: 6px; vertical-align: middle; color: #7A5C48; }
+.records-row-target { display: inline-flex; align-items: center; margin-left: 6px; vertical-align: middle; color: var(--ink-soft); }
 .records-row-target > svg {
   height: 15px; width: auto; max-width: 42px; display: block;
   /* 描边描的是**药丸自己的底色**，不是主题墨色：小球那几个图案里棋子是相切的
-     （targetIcon 用的半径是 0.95），不描边两颗就糊成一颗；而这颗药丸的底是写死的
-     近白（见 .records-row 上面那段），所以用白描出来的是一道缝，不是一道边。 */
-  stroke: #fff; stroke-width: 1.2;
+     （targetIcon 用的半径是 0.95），不描边两颗就糊成一颗；用药丸的底色描出来的是一道
+     缝，不是一道边。药丸的底从第 17 推起是 --surface（跟主题翻），这道缝就跟着它。 */
+  stroke: var(--surface); stroke-width: 1.2;
 }
 .records-panel--big {
   width: min(560px, 92vw); max-height: 76vh; overflow-y: auto; overscroll-behavior: contain;

@@ -12,8 +12,9 @@
  *   · **那颗键要一直在同一个位置。** 从前这一页底下是一颗会跟着内容滚的
  *     《返回》圆盘（.page-back），滑到哪儿它跟到哪儿；玩家要的是主菜单上那
  *     颗橙色的键原样留着——钉在屏幕上不动，再按一下回主菜单，按下去亮一下。
- *   · **成绩只摆最近 5 场。** 从前是一股脑全摆：打过三十局的人，底下那段介
- *     绍被顶得很远，要一直滑才看得见。
+ *   · **成绩只摆最近 6 场。** 从前是一股脑全摆：打过三十局的人，底下那段介
+ *     绍被顶得很远，要一直滑才看得见。（原先是 5 场；第 17 推方案把网页版和这一
+ *     版一起改成 6 行——「PLACEHOLDER_ROWS 和 THUMB_ROWS 都改成 6，小红书的也改」。）
  *
  * 外加一条只有老内核上才出事的：点开成绩那一层时底排要收起来。网页版靠
  * `body:has(.center-pick--back) .home-nav` 让位，而 **Chrome 61 不认得
@@ -21,7 +22,7 @@
  * 一版改成认类（.xhs-modal），这里量的是那个类真的起了作用。
  *
  * 存档是自己塞进去的九局假记录：不塞就永远是「还没有记录」那一屏，
- * 「只摆 5 场」这条根本量不到。
+ * 「只摆 6 场」这条根本量不到。
  *
  * ── 塞进去的那两个键不许手写 ──────────────────────────────────────
  *
@@ -130,7 +131,7 @@ for (const old of [false, true]) {
   await p.click('#xhsProfile');
   await p.waitForTimeout(900);
   const rows = await p.$$eval('#xhsRuns .records-row', (e) => e.length);
-  say(rows === 5, `缩略面板只摆最近 5 场${tag}`, rows + ' 条');
+  say(rows === 6, `缩略面板只摆最近 6 场${tag}`, rows + ' 条');
   await p.$eval('#xhsRuns', (e) => e.click());
   await p.waitForTimeout(900);
   const big = await p.$$eval('.center-pick .records-row', (e) => e.length);

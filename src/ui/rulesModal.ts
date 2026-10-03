@@ -165,9 +165,10 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   const rules = (shape ? tutorialRules(lang, shape, opts.flip) : TUTORIAL_RULES[lang])
     .map((text, i) => ({ text, art: art[i] ?? '' }))
     .filter((_, i) => !omit.has(i + 1));
-  // 两颗分镜键上的字。图本身带着 Illustrator 留下的 <title>编组</title>，光靠
-  // 里面的文字读出来会是「编组方块」——所以名字自己写一遍，图那半边设成
-  // aria-hidden。
+  // 两颗分镜键上的字。图从前带着设计软件留下的 <title>编组</title>，光靠里面的文
+  // 字读出来会是「编组方块」。那一行 2026-10 从所有图标文件里清掉了（第 17 推），
+  // 可这里照旧把名字自己写一遍、图那半边设成 aria-hidden：图是什么由文件决定，下
+  // 一个导出的文件再带进来一行别的什么，这颗键念出来的还是它自己的名字。
   const sq = shapeName(lang, 'square', '方块');
   const ci = shapeName(lang, 'circle', '小球');
 

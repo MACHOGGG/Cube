@@ -192,11 +192,10 @@ export interface I18nStrings {
    * 这一句说的是「开过，现在停了」。两句话指向两种完全不同的状态，共用一句会在其中
    * 一种情形下变成假话——而这一窗上的每一句都要和《价格与订阅》对得上。
    */
-  /**
-   * 停售期间那一屏的正文：注册就解锁全部功能（玩家 2026-10 原话，点名「不要添加过度复杂
-   * 内容」，所以就这一句，不列条款、不讲机制）。
+  /*
+   * registerUnlocks（「注册后免费立即解锁全部内容」）撤了（第 17 推）：邀请窗的抬头说的就是
+   * 这一句，两行说同一件事，方案点名删掉。
    */
-  registerUnlocks: string;
   /**
    * 「还剩 {n} 个名额」。
    *
@@ -283,6 +282,9 @@ export interface I18nStrings {
   pairFirstLabel: string;
   /** 《账户》那一屏身份那一行的标签。`pairFirstLabel` 是表单上的长说明，摆进一行里太长。 */
   pairFirstShort: string;
+  /** 帐号窗那颗眼睛的读屏名：第一串遮着时按它露出来、露着时按它遮回去（第 17 推）。 */
+  showHandle: string;
+  hideHandle: string;
 
   /**
    * 《联系与特别感谢》那扇窗（E42/3.2）。
@@ -800,7 +802,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSoonTitle: 'Coming soon',
     geniusHostRooms: 'Put up a room and race your friends online',
     subscribeTitle: 'Sign up — Slides Genius, free',
-    registerUnlocks: 'Sign up and everything unlocks right away — free.',
     registerBtn: 'Sign up',
     planMonthly: 'per month',
     planYearly: 'per year',
@@ -827,6 +828,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: 'No email',
     pairFirstLabel: 'First string',
     pairFirstShort: 'First string',
+    showHandle: 'Show the first string',
+    hideHandle: 'Hide the first string',
     contactThanksTitle: 'Contact & thanks',
     contactTitle: 'Contact',
     thanksTitle: 'Special thanks',
@@ -1130,7 +1133,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSoonTitle: 'Bientôt disponible',
     geniusHostRooms: 'Montez une salle et faites la course en ligne',
     subscribeTitle: 'Inscrivez-vous — Slides Génie, gratuit',
-    registerUnlocks: 'Créez un compte et tout se débloque aussitôt — gratuitement.',
     registerBtn: 'Créer un compte',
     planMonthly: 'par mois',
     planYearly: 'par an',
@@ -1157,6 +1159,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: 'Sans e-mail',
     pairFirstLabel: 'Première chaîne',
     pairFirstShort: 'Première chaîne',
+    showHandle: 'Afficher la première chaîne',
+    hideHandle: 'Masquer la première chaîne',
     contactThanksTitle: 'Contact et remerciements',
     contactTitle: 'Contact',
     thanksTitle: 'Remerciements',
@@ -1460,7 +1464,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusNowTriangleBig: '六邊三角棋盤，54 枚',
     geniusSoonTitle: '敬請期待',
     geniusHostRooms: '蓋起小屋，和朋友線上競賽',
-    registerUnlocks: '註冊後免費立即解鎖全部內容',
     registerBtn: '註冊',
     planMonthly: '每月',
     planYearly: '每年',
@@ -1487,6 +1490,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: '免電子郵件',
     pairFirstLabel: '第一串',
     pairFirstShort: '第一串',
+    showHandle: '顯示第一串',
+    hideHandle: '遮住第一串',
     contactThanksTitle: '聯絡與特別感謝',
     contactTitle: '聯絡',
     thanksTitle: '特別感謝',
@@ -1790,7 +1795,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusNowTriangleBig: '六边三角棋盘，54 枚',
     geniusSoonTitle: '敬请期待',
     geniusHostRooms: '盖起小屋，和朋友线上竞赛',
-    registerUnlocks: '注册后免费立即解锁全部内容',
     registerBtn: '注册',
     planMonthly: '每月',
     planYearly: '每年',
@@ -1817,6 +1821,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairlessEntry: '免邮箱',
     pairFirstLabel: '第一串',
     pairFirstShort: '第一串',
+    showHandle: '显示第一串',
+    hideHandle: '遮住第一串',
     contactThanksTitle: '联系与特别感谢',
     contactTitle: '联系',
     thanksTitle: '特别感谢',

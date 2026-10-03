@@ -141,18 +141,22 @@ async function timeFlip(page, step) {
   const stored = await page.evaluate(() => localStorage.getItem('slides_flip_speed'));
   check('选的那一档存下来了', stored === '9', `存的是 ${stored}`);
 
-  // 关掉窗口，那一行右边该写着这一档的倍率。
+  // 关掉窗口，那一行该写着这一档的倍率。
+  //
+  // 第 17 推起倍率写在标题底下那行小字里（.profile-row-sub）：天才面板排成 2 × 6 之后一格
+  // 只有原先一半宽，标题和倍率并排放不下（法语当场一字一行）。右边那个 .profile-row-value
+  // 现在只是「〉」。
   await page.click('#flipClose');
   await page.waitForTimeout(200);
-  const rowValue = await page.$eval('#flipRow .profile-row-value', (el) => el.textContent.trim());
-  check('那一行右边写着倍率', rowValue.startsWith('2.0'), `写的是「${rowValue}」`);
+  const rowValue = await page.$eval('#flipRow .profile-row-sub', (el) => el.textContent.trim());
+  check('那一行写着倍率', rowValue.startsWith('2.0'), `写的是「${rowValue}」`);
 
   // 刷新一次还在——存了才算数。
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('#navProfile', { timeout: 20000 });
   await page.click('#navProfile');
   await page.waitForSelector('#flipRow', { timeout: 10000 });
-  const kept = await page.$eval('#flipRow .profile-row-value', (el) => el.textContent.trim());
+  const kept = await page.$eval('#flipRow .profile-row-sub', (el) => el.textContent.trim());
   check('刷新之后还是这一档', kept.startsWith('2.0'), `写的是「${kept}」`);
 
   await ctx.close();

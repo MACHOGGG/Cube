@@ -126,11 +126,19 @@ export function renderAccountPage(
   const lockGlyph = subscribed
     ? ''
     : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`;
+  /**
+   * 「敬请期待」那几行。
+   *
+   * 「敬请期待」排在标题**底下**一行小字，不再排在行尾（第 17 推）：天才面板改成 2 × 6 的网
+   * 格之后，一格只有屏宽的一半不到，标题和行尾那几个字并排时标题被挤成一个字一行——法语
+   * 在 360 宽上量到过，「Plus de niveaux」竖着排了十五行，那一格于是一屏高，整张网格（等
+   * 高）跟着一屏一格。下面《解锁更多配色》《图形翻面速度》行尾那句当前值也是同一个处理。
+   */
   const lockedRow = (label: string) =>
     `<div class="profile-row profile-row--locked">` +
     `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>` +
-    `<span class="profile-row-label">${label}</span>` +
-    `<span class="profile-row-value">${s.comingSoon}</span></div>`;
+    `<span class="profile-row-text"><span class="profile-row-label">${label}</span>` +
+    `<span class="profile-row-sub">${s.comingSoon}</span></span></div>`;
 
   container.innerHTML = `
     <div class="app profile-page">
@@ -141,175 +149,172 @@ export function renderAccountPage(
         </div>
       </header>
 
-      <button class="profile-pill profile-pill--wide" id="loginBtn">${gatewayLabel}</button>
-      <div class="profile-pill-row">
-        <button class="profile-pill" id="langRow">${s.switchLanguage}</button>
-        <button class="profile-pill profile-pill--rose" id="howToRow">${s.tutorialShort}</button>
-      </div>
-      <button class="profile-pill profile-pill--wide" id="rulesRow">${s.rulesPill}</button>
-      <!-- 更换图标 keeps the row; the sound switch rides beside it as a
-           square of the same pill, so the setting sits where the other
-           look-and-feel settings are without adding a row of its own. -->
-      <div class="profile-pill-row profile-pill-row--icon">
-        <button class="profile-pill" id="iconRow">${s.iconPill}</button>
-        <button class="profile-pill profile-pill--square" id="soundRow"
-                role="switch" aria-checked="${soundOn()}" aria-label="${s.soundBtn}">
-          <span class="sound-glyph" aria-hidden="true">${soundOn() ? ICON_SOUND_ON : ICON_SOUND_OFF}</span>
-        </button>
-      </div>
-      <!-- The colourblind palette: one setting for the whole app, with a
-           switch that says on/off by its own colour and position rather
-           than by a word — it has to read the same in four languages. -->
-      <button class="profile-pill profile-pill--wide profile-pill--switch" id="cvdRow"
-              role="switch" aria-checked="${colorblindOn()}">
-        <span>${s.colorblindBtn}</span>
-        <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
-      </button>
-      <!-- 《Pro》：和色盲友好同一副样子、同一处位置（玩家 2026-09：「开启的形式和情况
-           和现在的色盲友好模式一样」）。它眼下管的是棋盘上那一圈「这一枚得分之后会变
-           成什么颜色」（见 engine/proMode.ts）。 -->
-      <button class="profile-pill profile-pill--wide profile-pill--switch" id="proRow"
-              role="switch" aria-checked="${proOn()}">
-        <span>${s.proBtn}</span>
-        <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
-      </button>
-
-      <section class="genius-panel">
-        <!-- 这一块的主角是那个牌子，不是那行小字。所以顺序是：正中一个大
-             logo，下面一句「成为 / 你已经是 Slides 天才」，再下面才是那行
-             《Slides 天才特供》的小标签。 -->
-        <div class="genius-crest">${geniusLogoTag(90, 'genius-logo--crest')}</div>
-        <button class="genius-cta" id="becomeGeniusBtn">${
-          subscribed ? s.subscribedTitle : s.becomeGenius
-        }</button>
-        <!--
-          **《内部码》那一行撤了**（E41，2026-10 的改制）。
-
-          它原先在这儿是有道理的：「一张码是它自己的入口，不是付款墙的脚注」——而它从前确
-          实被埋在订阅窗里一句「有内部码？」后面，那是一个拿着码的人最没有理由打开的地
-          方。右边还挂一个对勾，好让他之后能确认「我到底兑上没有」。
-
-          现在整条路在界面上撤掉：注册就免费解锁全部内容，一张「开通一个月」的码没有意义
-          了，留着入口只会让人以为还有什么要另外换。**后端 api/redeem.js 一行没动**，已经
-          发出去的码照旧兑得了。
-        -->
-        <!-- 做好的排在上面，没做的排在下面：内部码、多人游玩，一条线，然后是
-             设置和几个做好了的去处；「敬请期待」的那几行垫底。 -->
-        <button class="profile-row" id="multiRow">
-          <span class="profile-row-label">${s.multiplayerTitle}</span>
-          <span class="profile-row-value">&rsaquo;</span>
-        </button>
-        <!-- 这条线底下是「设置」：调完了合上窗，游戏就照你调的来。上面两条
-             不是设置，是两个去处（一个是兑码，一个是开小屋）。以后再有可调
-             的东西也排进这一段，玩家不用满页找。 -->
-        <!-- 《SLIDES 天才特供》这一行原先在最上面、紧挨着那颗《成为 Slides 天才》。
-             玩家 2026-09 要它挪到这条横线上面——它标的本来就是**线底下那一段**：上面
-             两行（内部码、多人游玩）是两个去处，线底下才是一串「开通了才有」的东西。
-             标签压在整段最上头的时候，它像是在给那两个去处也贴标签。
-             字号和样式一个字没改（还是同一个 .menu-section-label）。 -->
-        <div class="menu-section-label">${s.geniusSpecialTitle}</div>
-        <hr class="genius-rule" />
-        <!-- 《解锁更多配色》两种人都点得开。
-             天才点开是挑颜色；没开通的点开是看看有什么——三套配色照样画出来，
-             只是每一行挂着锁、点不动。「敬请期待」那四个字对一件已经做好的
-             东西是假话，而一行按不动的灰字既不告诉他有什么，也不给他理由去
-             开通。 -->
-        <button class="profile-row" id="paletteRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${privileges[0]}</span>
-          <span class="profile-row-value">${
-            subscribed
-              ? `${colorblindOn() ? CVD_NAME[cvdVariant()] : VARIANT_NAME[pieceVariant()]}&nbsp;&rsaquo;`
-              : '&rsaquo;'
-          }</span>
-        </button>
-        <!-- 《深色界面》：一颗开关，不是一扇窗（玩家 2026-09 第二句：「简化一
-             下，就和现在开关色盲友好模式一样，亮/暗的开关按钮」）。原先是「点开
-             → 两条色带里挑一条 → 关窗」，三步换一件只有两种可能的事。
-             和上面那颗色盲开关同一个零件（.pill-switch），只是它住在天才特供这
-             一段里，所以行首多一把锁：没开通的按下去不是没反应，是带他去开通那
-             一页——和这一段里别的锁着的几行一个样。 -->
-        <button class="profile-row" id="themeRow" role="switch"
-                aria-checked="${subscribed && pickedTheme() === 'dark'}"${subscribed ? '' : ' aria-disabled="true"'}>
-          ${lockGlyph}
-          <span class="profile-row-label">${s.themeTitle}</span>
-          <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
-        </button>
-        <!-- 《图形翻面速度》跟上面那一行同一个规矩：做好了，所以两种人都点
-             得开。没开通的人进去看得见那根拉杆、也看得见它在做什么（窗口里
-             那枚棋子会照当前这一档翻给他看），只是拉不动。 -->
-        <button class="profile-row" id="flipRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${s.flipSpeedTitle}</span>
-          <span class="profile-row-value">${
-            subscribed ? `${flipLabel(flipStep())}&nbsp;&rsaquo;` : '&rsaquo;'
-          }</span>
-        </button>
-        <!-- 《老虎机模式》做好了，所以和上面几条一样：两种人都点得开。没开通
-             的人进去看得见三台转着的机器、按得动那颗 STOP，只是没有右下角那颗
-             《开始 〉》，开不了局。 -->
-        <button class="profile-row" id="randomRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${s.randomTargetTitle}</span>
-          <span class="profile-row-value">&rsaquo;</span>
-        </button>
-        <!-- 下面三行也是做好了的：二十个得分图案的总览、两副布局的缩图、整页
-             的世界排名。都是「看得见」的东西——没开通的人一样点得开，只是行
-             首挂着锁：图案和布局他玩不到，榜他看不清（那一页由服务器判）。 -->
-        <button class="profile-row" id="moreTargetsRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${privileges[2]}</span>
-          <span class="profile-row-value">&rsaquo;</span>
-        </button>
-        <button class="profile-row" id="moreLayoutsRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${privileges[3]}</span>
-          <span class="profile-row-value">&rsaquo;</span>
-        </button>
-        <button class="profile-row" id="worldRankRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${privileges[6]}</span>
-          <span class="profile-row-value">&rsaquo;</span>
-        </button>
-        <!-- 《更多玩法》里现在装着三个：老虎机、无限反转、步步为营。
-             右边只留那个「〉」，不再把三个玩法的名字列出来（玩家 2026-09：「《更多
-             玩法》后面的文字太多了，去除掉《老虎机模式……》恢复排版」）。
-             三个名字连起来是「老虎机模式 · 无限反转 · 真正解密 · 步步为营」——比它
-             左边那个标题还长，于是这一行和上下几行对不齐，整段的排版被它一行撑歪。
-             那三个名字点进去第一屏就是，不必在门口先念一遍。 -->
-        <button class="profile-row" id="moreModesRow">
-          ${lockGlyph}
-          <span class="profile-row-label">${privileges[4]}</span>
-          <span class="profile-row-value">&rsaquo;</span>
-        </button>
-        <!-- 还没做的才写「敬请期待」：更多关卡、更多竞赛、Apple Watch。 -->
-        ${[privileges[1], privileges[5], privileges[7]].map(lockedRow).join('')}
-      </section>
-
       <!--
-        底部那几行法务。原先是五份（价格 / 条款 / 退款 / 隐私 / 联系）——一个收费服务必须
-        公布的那五份。2026-10 的改制把付费整个撤了（注册即免费解锁），前三份因此没有对
-        象，LEGAL_ORDER 只留隐私（E42）。
+        第 17 推：两栏（电脑端）／单列（手机端）。
 
-        所以这儿现在是**两行**：《隐私政策》＋《联系与特别感谢》。位置、.legal-rows 的
-        形式、.profile-row 的样式全照旧，只把尺寸收一档（见 style.css 的
-        .legal-rows--slim）——两行占着五行的地方会显得空。
+          左栏：头卡（砖红）→ 色盲那一行（蓝）→ 语言、完整规则、教学、图示（棕）→ 最后一行
+                Pro 和声音并排，两颗加起来和上面那几颗一样宽。
+          右栏：天才面板（灰褐）：吉祥物、徽章、2 列 × 6 行的十二个功能行（顺序没动）；面板
+                底下《隐私政策》《联系与特别感谢》两颗白键，和网格的两列对齐。
 
-        《联系与特别感谢》不是 LEGAL 表里的一份：它不是法务文档，是一句话加一份名单
-        （src/thanks.ts）。所以它单独摆一行，不走上面那个 map。
+        手机上两栏按这个顺序上下摞起来。颜色全是色卡 token（--card-*），不随深浅主题翻，色盲
+        模式下也不换（方案原话）——这几张卡不靠颜色区分，靠位置和字。
       -->
-      <section class="legal-rows legal-rows--slim">
-        ${LEGAL_ORDER.map(
-          (k) => `<button class="profile-row" data-legal="${k}">
-            <span class="profile-row-label">${LEGAL[lang][k].title}</span>
-            <span class="profile-row-value">›</span>
-          </button>`,
-        ).join('')}
-        <button class="profile-row" id="contactThanksRow">
-          <span class="profile-row-label">${s.contactThanksTitle}</span>
-          <span class="profile-row-value">›</span>
-        </button>
-      </section>
+      <div class="profile-cols">
+        <section class="profile-col profile-col--main">
+          <button class="profile-pill profile-pill--head" id="loginBtn">${gatewayLabel}</button>
+          <!-- The colourblind palette: one setting for the whole app, with a
+               switch that says on/off by its own colour and position rather
+               than by a word — it has to read the same in four languages. -->
+          <button class="profile-pill profile-pill--switch profile-pill--cvd" id="cvdRow"
+                  role="switch" aria-checked="${colorblindOn()}">
+            <span>${s.colorblindBtn}</span>
+            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+          </button>
+          <button class="profile-pill" id="langRow">${s.switchLanguage}</button>
+          <button class="profile-pill" id="rulesRow">${s.rulesPill}</button>
+          <button class="profile-pill" id="howToRow">${s.tutorialShort}</button>
+          <button class="profile-pill" id="iconRow">${s.iconPill}</button>
+          <!-- 《Pro》和声音并排（第 17 推）。《Pro》还是那颗带开关的药丸（玩家 2026-09：「开启
+               的形式和情况和现在的色盲友好模式一样」），它眼下管的是棋盘上那一圈「这一枚得分
+               之后会变成什么颜色」（见 engine/proMode.ts）。声音是旁边那一小方：图标就是状态
+               ——一只喇叭，或者划了一道的喇叭——四种语言里都不用写字。 -->
+          <div class="profile-pill-row">
+            <button class="profile-pill profile-pill--switch" id="proRow"
+                    role="switch" aria-checked="${proOn()}">
+              <span>${s.proBtn}</span>
+              <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+            </button>
+            <button class="profile-pill profile-pill--square" id="soundRow"
+                    role="switch" aria-checked="${soundOn()}" aria-label="${s.soundBtn}">
+              <span class="sound-glyph" aria-hidden="true">${soundOn() ? ICON_SOUND_ON : ICON_SOUND_OFF}</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="profile-col profile-col--genius">
+          <div class="genius-panel">
+            <!-- 这一块的主角是那个牌子：正中一个大吉祥物，底下一枚徽章（「成为 / 你已经是
+                 Slides 天才」），再底下才是十二行。 -->
+            <div class="genius-crest">${geniusLogoTag(90, 'genius-logo--crest')}</div>
+            <button class="genius-badge" id="becomeGeniusBtn">${
+              subscribed ? s.subscribedTitle : s.becomeGenius
+            }</button>
+            <!--
+              **《内部码》那一行撤了**（E41，2026-10 的改制）。后端 api/redeem.js 一行没动，已经
+              发出去的码照旧兑得了。
+
+              **《SLIDES 天才特供》那行小标签和底下那条横线也撤了**（第 17 推，方案点名）。它标
+              的是「线底下这一段要开通才有」，而现在注册即开通、十二行同在一张 2 × 6 的网格
+              里，一条把网格切成两截的线只会让人以为上下是两类东西。
+            -->
+            <div class="genius-grid">
+              <button class="profile-row" id="multiRow">
+                <span class="profile-row-label">${s.multiplayerTitle}</span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <!-- 《解锁更多配色》两种人都点得开。
+                   天才点开是挑颜色；没开通的点开是看看有什么——三套配色照样画出来，
+                   只是每一行挂着锁、点不动。「敬请期待」那四个字对一件已经做好的
+                   东西是假话，而一行按不动的灰字既不告诉他有什么，也不给他理由去
+                   开通。 -->
+              <button class="profile-row" id="paletteRow">
+                ${lockGlyph}
+                <span class="profile-row-text">
+                  <span class="profile-row-label">${privileges[0]}</span>
+                  ${
+                    subscribed
+                      ? `<span class="profile-row-sub">${colorblindOn() ? CVD_NAME[cvdVariant()] : VARIANT_NAME[pieceVariant()]}</span>`
+                      : ''
+                  }
+                </span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <!-- 《深色界面》：一颗开关，不是一扇窗（玩家 2026-09 第二句：「简化一
+                   下，就和现在开关色盲友好模式一样，亮/暗的开关按钮」）。原先是「点开
+                   → 两条色带里挑一条 → 关窗」，三步换一件只有两种可能的事。
+                   和上面那颗色盲开关同一个零件（.pill-switch），只是它住在天才特供这
+                   一段里，所以行首多一把锁：没开通的按下去不是没反应，是带他去开通那
+                   一页——和这一段里别的锁着的几行一个样。 -->
+              <button class="profile-row" id="themeRow" role="switch"
+                      aria-checked="${subscribed && pickedTheme() === 'dark'}"${subscribed ? '' : ' aria-disabled="true"'}>
+                ${lockGlyph}
+                <span class="profile-row-label">${s.themeTitle}</span>
+                <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+              </button>
+              <!-- 《图形翻面速度》跟上面那一行同一个规矩：做好了，所以两种人都点
+                   得开。没开通的人进去看得见那根拉杆、也看得见它在做什么（窗口里
+                   那枚棋子会照当前这一档翻给他看），只是拉不动。 -->
+              <button class="profile-row" id="flipRow">
+                ${lockGlyph}
+                <span class="profile-row-text">
+                  <span class="profile-row-label">${s.flipSpeedTitle}</span>
+                  ${subscribed ? `<span class="profile-row-sub">${flipLabel(flipStep())}</span>` : ''}
+                </span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <!-- 《老虎机模式》做好了，所以和上面几条一样：两种人都点得开。没开通
+                   的人进去看得见三台转着的机器、按得动那颗 STOP，只是没有右下角那颗
+                   《开始 〉》，开不了局。 -->
+              <button class="profile-row" id="randomRow">
+                ${lockGlyph}
+                <span class="profile-row-label">${s.randomTargetTitle}</span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <!-- 下面三行也是做好了的：二十个得分图案的总览、两副布局的缩图、整页
+                   的世界排名。都是「看得见」的东西——没开通的人一样点得开，只是行
+                   首挂着锁：图案和布局他玩不到，榜他看不清（那一页由服务器判）。 -->
+              <button class="profile-row" id="moreTargetsRow">
+                ${lockGlyph}
+                <span class="profile-row-label">${privileges[2]}</span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <button class="profile-row" id="moreLayoutsRow">
+                ${lockGlyph}
+                <span class="profile-row-label">${privileges[3]}</span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <button class="profile-row" id="worldRankRow">
+                ${lockGlyph}
+                <span class="profile-row-label">${privileges[6]}</span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <!-- 《更多玩法》里现在装着三个：老虎机、无限反转、步步为营。
+                   右边只留那个「〉」，不再把三个玩法的名字列出来（玩家 2026-09：「《更多
+                   玩法》后面的文字太多了，去除掉《老虎机模式……》恢复排版」）。
+                   三个名字连起来是「老虎机模式 · 无限反转 · 真正解密 · 步步为营」——比它
+                   左边那个标题还长，于是这一行和上下几行对不齐，整段的排版被它一行撑歪。
+                   那三个名字点进去第一屏就是，不必在门口先念一遍。 -->
+              <button class="profile-row" id="moreModesRow">
+                ${lockGlyph}
+                <span class="profile-row-label">${privileges[4]}</span>
+                <span class="profile-row-value">&rsaquo;</span>
+              </button>
+              <!-- 还没做的才写「敬请期待」：更多关卡、更多竞赛、Apple Watch。 -->
+              ${[privileges[1], privileges[5], privileges[7]].map(lockedRow).join('')}
+            </div>
+          </div>
+          <!--
+            底部那几行法务。原先是五份（价格 / 条款 / 退款 / 隐私 / 联系）——一个收费服务必须
+            公布的那五份。2026-10 的改制把付费整个撤了（注册即免费解锁），前三份因此没有对
+            象，LEGAL_ORDER 只留隐私（E42）。
+
+            所以这儿是**两颗白键**：《隐私政策》＋《联系与特别感谢》，一样宽，和上面网格的
+            两列对齐（第 17 推）。《联系与特别感谢》不是 LEGAL 表里的一份：它不是法务文档，
+            是一句话加一份名单（src/thanks.ts），所以它单独摆一颗，不走上面那个 map。
+          -->
+          <section class="legal-pair">
+            ${LEGAL_ORDER.map(
+              (k) => `<button class="profile-row" data-legal="${k}">
+                <span class="profile-row-label">${LEGAL[lang][k].title}</span>
+              </button>`,
+            ).join('')}
+            <button class="profile-row" id="contactThanksRow">
+              <span class="profile-row-label">${s.contactThanksTitle}</span>
+            </button>
+          </section>
+        </section>
+      </div>
       <div class="page-back-row"><button class="icon-btn page-back" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button></div>
     </div>
   `;
@@ -330,8 +335,12 @@ export function renderAccountPage(
    *
    * 所以改成按**真实的分段**算：跨两列的那几样把 `.profile-row` 切成几段，哪一段的条数
    * 是奇数，这一段的最后一条就落单。加一条、撤一条都不用回来改这儿。
+   *
+   * 第 17 推之后十二行住进了一张单独的网格（`.genius-grid`），中间不再夹标签和横线，手
+   * 机上也是两列——眼下一条都不会落单（2 × 6 正好排满）。这段照旧留着：哪天加了第十三
+   * 行，它自己知道把那一条居中，不用等到有人截图来说「右边空一格」。
    */
-  for (const panel of container.querySelectorAll('.genius-panel')) {
+  for (const panel of container.querySelectorAll('.genius-grid')) {
     let run: Element[] = [];
     const close = () => {
       if (run.length % 2 === 1) run[run.length - 1].classList.add('profile-row--alone');
@@ -527,8 +536,9 @@ export function renderAccountPage(
       // 锁着的时候不去改外面那一行：写上「原本」会让人以为他已经挑了一套，
       // 而他根本挑不了。那一行对他只是一个「›」。
       if (locked) return;
-      const value = container.querySelector<HTMLElement>('#paletteRow .profile-row-value');
-      if (value) value.innerHTML = `${nameOf(v)}&nbsp;&rsaquo;`;
+      // 当前那一套写在标题底下那一行小字里（第 17 推，见 lockedRow 上面那段）。
+      const sub = container.querySelector<HTMLElement>('#paletteRow .profile-row-sub');
+      if (sub) sub.textContent = nameOf(v);
     };
     mark(currentOf());
     for (const el of opts) {
@@ -664,8 +674,8 @@ export function renderAccountPage(
       const i = Number(range.value);
       setFlipStep(i);
       nudgeDemo();
-      const value = container.querySelector<HTMLElement>('#flipRow .profile-row-value');
-      if (value) value.innerHTML = `${flipLabel(flipStep())}&nbsp;&rsaquo;`;
+      const sub = container.querySelector<HTMLElement>('#flipRow .profile-row-sub');
+      if (sub) sub.textContent = flipLabel(flipStep());
     });
 
     const close = () => {

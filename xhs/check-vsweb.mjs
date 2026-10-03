@@ -746,7 +746,10 @@ const SCREENS = [
         if (b) b.click();
       });
       await p.waitForTimeout(1200);
-      await tapByText(p, 'button', /怎么玩|教学|规则|如何/, '教学入口');
+      // 按 id 点《教学》那一颗（#howToRow），不按字认。第 17 推起左栏是「语言、完整规则、教学、
+      // 图示」这个顺序，照字认「第一颗带 规则 / 教学 的键」点到的是《完整规则》——开的是规则
+      // 窗，不是这一页，于是网页那一侧一条都量不到。
+      await p.click('#howToRow');
       await p.waitForTimeout(1400);
     },
     async xhs(p) {

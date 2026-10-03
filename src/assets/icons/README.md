@@ -65,11 +65,12 @@ HEX**，`ui/customIcons.ts` 的 `sRGBOnly()` 在打包时替你换掉了（走 P
 | `slot-machine.svg` | 开局时真的转起来的那台（两个窗口）。**画布 897×521**，滚筒窗口的位置在 `slotReels.ts` 里按它量 |
 | `ctl-pause.svg` `ctl-finish.svg` | 游戏进行中的暂停 / 完成 |
 | `app-tower-rgb.svg` 等 11 个 | 《更换图标》里的 11 个。名字是 `app-` 加上清单里的 id |
+| `login.svg` `close.svg` `mail.svg` `eye.svg` `eye-off.svg` | 帐号窗、邀请窗上那几颗只放图标的键（登录 / 关闭 / 联络 / 显示第一串 / 遮住第一串）。**这五个没有代码里画的底版**：删掉文件会让 `npm run build` 当场失败，而不是变回什么——见 `ui/uiIcons.ts` |
 
 ## 两件要知道的事
 
-**`sound-on` / `sound-off` / `lock` / `ctl-pause` / `ctl-finish` 现在是「跟着
-周围颜色走」的**（用 `currentColor` 和 CSS 变量画的），所以深色模式下会自己变
+**`sound-on` / `sound-off` / `lock` / `ctl-pause` / `ctl-finish`，以及上面那五个线描
+图标，现在是「跟着周围颜色走」的**（用 `currentColor` 和 CSS 变量画的），所以深色模式下会自己变
 色，按钮按下去会反色。换成写死颜色的文件之后，这个跟随就没有了。这是取舍，
 不是故障——如果你希望它们继续跟随，画的时候把填色写成 `currentColor`。
 

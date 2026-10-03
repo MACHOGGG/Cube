@@ -105,18 +105,6 @@ const seed = (extra = '') => `
   ${extra}
 `;
 
-/** 一段字在屏幕上真的看得见（不是 display:none，也不是零高零宽）。 */
-const visibleText = (page, selector) =>
-  page.evaluate((sel) => {
-    for (const el of document.querySelectorAll(sel)) {
-      const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') {
-        return el.textContent.trim();
-      }
-    }
-    return null;
-  }, selector);
-
 async function fresh(extra) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
@@ -180,7 +168,8 @@ const openProfile = async (page) => {
       /Slides\s*(天才|Genius|Génie)/i.test(e.textContent || ''));
     b?.click();
   });
-  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  // 第 17 推：这扇窗的类名从 .genius-modal 换成了 .invite-modal（帐号窗另有一个 .acct-modal）。
+  await page.waitForSelector('.invite-modal', { timeout: 10000 });
 
   /*
    * ⚠️ 这两条 2026-10 **翻了面**。
@@ -202,7 +191,7 @@ const openProfile = async (page) => {
   const planRows = await page.$$eval('.plan-row', (els) => els.length);
   check('连那两行价钱的按钮本身也不在', planRows === 0, String(planRows));
 
-  const hints = await page.$$eval('.genius-modal .auth-hint', (els) => els.map((e) => e.textContent.trim()));
+  const hints = await page.$$eval('.invite-modal .auth-hint', (els) => els.map((e) => e.textContent.trim()));
   check(
     '收款方那句话也撤了（没有在收的款，就不许说谁在收）',
     !hints.some((h) => h.includes('Creem')),
@@ -213,13 +202,14 @@ const openProfile = async (page) => {
    * 尺子：这一屏真的开出来了，而且开头那句话**说对了现在这件事**。少了它，上面三句
    * 「什么都没有」在窗根本没打开的时候也全是真的——那是这个仓库最常见的那种假绿。
    *
-   * 这一条的内容 2026-10-02 换过一次：原先认的是「订阅已经停止 / closed / fermé」，那是
-   * 停售那一轮的口径；改制定下来之后那一屏说的是「注册后免费立即解锁全部内容」（E40），
-   * 而「停止」这个词反而不该再出现——站上不是「暂时不卖」，是不卖了。
+   * 这一条的内容换过两次：原先认的是「订阅已经停止 / closed / fermé」，那是停售那一轮的口
+   * 径；改制定下来之后认的是抬头底下那句「注册后免费立即解锁全部内容」（E40）。第 17 推按方
+   * 案把那一句删了（它和抬头说的是同一件事），所以现在认的是**抬头本身**——「仅需注册即可免
+   * 费成为 Slides 天才」。「停止」这个词照旧不许出现：站上不是「暂时不卖」，是不卖了。
    */
-  const tag = await page.$eval('.genius-modal .tag-line', (e) => e.textContent.trim()).catch(() => '');
-  check('（尺子）这一屏开着，而且开头那句说的是「注册就免费解锁」',
-    /注册后免费|sign up|Créez un compte|註冊後免費/i.test(tag), tag || '（一个字都没有）');
+  const tag = await page.$eval('.invite-modal h2', (e) => e.textContent.trim()).catch(() => '');
+  check('（尺子）这一屏开着，而且抬头说的是「注册就免费」',
+    /注册即可免费|Sign up|Inscrivez|註冊即可免費/i.test(tag), tag || '（一个字都没有）');
   check('不许再写「订阅停止 / closed」那一类旧口径',
     !/停止|closed|fermé/i.test(tag), tag);
 
@@ -235,7 +225,7 @@ const openProfile = async (page) => {
   for (const l of links) check(`  ${l.href} 点得开`, Boolean(await resolves(l.href)));
   check('新标签打开，这扇付款窗不会被顶掉', links.every((l) => l.target === '_blank'));
 
-  const overflow = await page.$eval('.genius-modal', (m) => m.scrollWidth - m.clientWidth);
+  const overflow = await page.$eval('.invite-modal', (m) => m.scrollWidth - m.clientWidth);
   check('付款窗不横向溢出', overflow <= 1, `${overflow}px`);
   await ctx.close();
 }
@@ -251,26 +241,33 @@ const openProfile = async (page) => {
   `);
   await openProfile(page);
   await page.click('#loginBtn');
-  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  await page.waitForSelector('.acct-modal', { timeout: 10000 });
 
-  const mailto = await page.$$eval('.genius-modal a[href^="mailto:"]', (as) =>
-    as.map((a) => ({ href: a.getAttribute('href'), text: a.textContent.trim(), w: a.getBoundingClientRect().width })),
+  /*
+   * ⚠️ 第 17 推把这一节**又翻了一次面**——方案原话：帐号窗「三个按钮竖排……只放图标：更换、
+   * 登出、联络（新的邮件图标，mailto:）」「删掉有效期、礼物码、Creem 那几行」。
+   *
+   * 原先这儿钉的是收单方审核清单上的两条：客服邮箱「在用户自己的账户里也看得见」（地址要
+   * **写出来**，不能只藏在 href 里），以及卡付的人在这扇窗里点得到 Creem 的管理订阅。那是
+   * 在卖订阅时的要求。网页端停售之后（E11 / PR-12），玩家的新方案把这两样都拿掉了：联络变
+   * 成一颗只放图标的键，Creem 那几行整个删除。
+   *
+   * 所以现在钉的是：联络那颗键在、通向的是**同一个**客服地址、读屏念得出它是什么；地址本身
+   * 照旧**写出来给人看**——在个人主页的《联系与特别感谢》里（check-contact-thanks 逐字量
+   * 那一扇）；管理订阅那一行**不许**在。哪天重开订阅、又要过收单方的审核，这两条要一起翻
+   * 回去——那时候回来改这儿，别只改界面。
+   */
+  const mailto = await page.$$eval('.acct-modal a[href^="mailto:"]', (as) =>
+    as.map((a) => ({ href: a.getAttribute('href'), label: a.getAttribute('aria-label') || '', w: a.getBoundingClientRect().width })),
   );
   check(
-    '账户窗里有客服邮箱 ← 清单要求「网站上有，用户账户里也要有」',
+    '账户窗里有联络那颗键，通向客服邮箱',
     mailto.some((m) => m.href === 'mailto:' + SUPPORT),
     mailto.map((m) => m.href).join(' ') || '（一个都没有）',
   );
-  check('那个地址是写出来给人看的，不是只藏在 href 里', mailto.some((m) => m.text === SUPPORT && m.w > 0));
-
-  const shown = await visibleText(page, '.genius-modal .auth-hint');
-  check('那一行确实在屏幕上', Boolean(shown), String(shown).slice(0, 60));
-
-  // 自助取消：卡付的人在窗里点得到 Creem 的客户门户。
-  const canCancel = await page.$$eval('.genius-modal .profile-row', (rows) =>
-    rows.some((r) => r.id === 'statusManage'),
-  );
-  check('卡付的人在这扇窗里就能去管理／取消订阅', canCancel);
+  check('那颗键看得见，而且读屏念得出它是什么（只放图标的键靠 aria-label）', mailto.some((m) => m.w > 0 && m.label.trim()));
+  const canCancel = await page.$$eval('.acct-modal #statusManage', (rows) => rows.length);
+  check('网页端停售：管理订阅（Creem 门户）那一行撤了', canCancel === 0, String(canCancel));
   await ctx.close();
 }
 

@@ -61,9 +61,10 @@ const seed = (lang) => `
 /** 窗里所有「上面一块字、下面一块内容」的地方，谁压住了谁。 */
 const squashed = (page) =>
   page.evaluate(() => {
-    const m = document.querySelector('.genius-modal');
+    // 第 17 推起这扇窗叫 .acct-modal（原先和邀请窗共用一个 .genius-modal）。
+    const m = document.querySelector('.acct-modal');
     if (!m) return null;
-    const out = { labels: [], rows: [], overflow: m.scrollWidth - m.clientWidth };
+    const out = { labels: [], rows: [], fields: 0, overflow: m.scrollWidth - m.clientWidth };
     for (const el of m.querySelectorAll('.menu-section-label')) {
       const next = el.nextElementSibling;
       if (!next) continue;
@@ -73,13 +74,20 @@ const squashed = (page) =>
       const over = +(a.bottom - b.top).toFixed(1);
       if (over > 0.5) out.labels.push(`「${el.textContent.trim()}」被压 ${over}px`);
     }
-    // 订单那几行是「左边标签、右边值」，值可能长到顶上标签的脸。
-    for (const row of m.querySelectorAll('.order-row, .gift-row')) {
-      const [l, r] = row.children;
+    // 「左边标签、右边值」的那几行，值可能长到顶上标签的脸。
+    //
+    // 原先量的是订单那几行和礼物码那几行（.order-row / .gift-row）——第 17 推按方案把它们
+    // 整块撤了，窗里剩下的是一条带下划线的字段（.acct-field：「邮箱」＋地址，或者免邮箱
+    // 帐号的第一串）。量的还是同一件事：标签和值不叠。`fields` 是尺子——一条都没量到的话
+    // 这一项是空绿，下面单独报。
+    for (const row of m.querySelectorAll('.acct-field')) {
+      const l = row.querySelector('.acct-field-label');
+      const r = row.querySelector('.acct-field-value');
       if (!l || !r) continue;
+      out.fields++;
       const lb = l.getBoundingClientRect();
       const rb = r.getBoundingClientRect();
-      const over = +(lb.right - rb.left).toFixed(1);
+      const over = +Math.min(lb.right - rb.left, lb.bottom - rb.top).toFixed(1);
       if (over > 0.5) out.rows.push(`「${l.textContent.trim()}」和值叠了 ${over}px`);
     }
     return out;
@@ -102,13 +110,14 @@ for (const size of SIZES) {
     // ---- ① 《账户》窗：没有互相压住的字 ----------------------------------
     await page.click('#loginBtn');
     const opened = await page
-      .waitForSelector('.genius-modal', { timeout: 10000 })
+      .waitForSelector('.acct-modal', { timeout: 10000 })
       .then(() => true)
       .catch(() => false);
     check(`${where}：登着的人点进去是《账户》窗`, opened);
     if (opened) {
       const s = await squashed(page);
       check(`${where}：没有小标题被底下那块压住`, s.labels.length === 0, s.labels.join('；'));
+      check(`${where}：（尺子）窗里真有一条「标签 ＋ 值」的字段`, s.fields > 0, `${s.fields} 条`);
       check(`${where}：没有一行的标签和值叠在一起`, s.rows.length === 0, s.rows.join('；'));
       check(`${where}：窗里不横向溢出`, s.overflow <= 1, `${s.overflow}px`);
       await page.click('#statusClose');

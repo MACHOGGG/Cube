@@ -27,10 +27,17 @@ export interface RecordSource {
   mode: string;
 }
 
-/** The number of ruled lines each panel shows when it has nothing to put on
- *  them — the reference sheet draws five, and an empty panel keeps them so it
- *  reads as "waiting for entries" rather than as a blank block. */
-const PLACEHOLDER_ROWS = 5;
+/**
+ * 每块面板摆几格。
+ *
+ * **六**（第 17 推，方案原话：「最近战绩和排名各 6 行，等距排列（PLACEHOLDER_ROWS 和
+ * THUMB_ROWS 都改成 6，小红书的也改）」）。原先是五（界面稿画五条横线）。
+ *
+ * 摆不满就用空格子补满六格——空着的、锁着的、还没登录的都一样（「空状态和锁住状态也画 6
+ * 个占位行」）。一格空格子和一行真记录一样高，所以面板不管装了几局，高度和行距都不变。
+ * 排名那一块是同一个数（ui/leaderboard.ts 的 THUMB_ROWS），两块并排时一行对一行。
+ */
+const PLACEHOLDER_ROWS = 6;
 
 /** The full number, grouped, for the blown-up view. */
 function fullScore(n: number): string {

@@ -79,7 +79,7 @@ check('底下还是灰条，不编造名次', big.ghosts > 0, `${big.ghosts} 条
 await page.click('#rankReLoginCta');
 await page.waitForTimeout(900);
 const landed = await page.evaluate(() => {
-  const w = document.querySelector('.genius-modal, .modal');
+  const w = document.querySelector('.auth-modal, .modal');
   return {
     modal: !!w,
     hasEmail: !!document.querySelector('input[type="email"], #authEmail, #pwUser'),

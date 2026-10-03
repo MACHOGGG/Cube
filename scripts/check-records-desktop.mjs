@@ -1,5 +1,5 @@
 /**
- * 电脑端的成绩页：三栏并排（PR-18 / E27）。
+ * 电脑端的成绩页：两栏等宽（第 17 推；原先是 PR-18 / E27 的三栏）。
  *
  *   npm run build
  *   node scripts/dev-server.mjs 8891 dist
@@ -12,16 +12,21 @@
  * 半——三块加起来 460px 宽，屏幕上剩下的全是空的，而且**要往下滑**才看得全，可这一页只有
  * 三块东西。
  *
- * 并成一排之后要守的是四件事，每一件都「屏幕上看得见、却没有任何一道门会红」：
+ * PR-18 先把三块并成一排（三栏）。第 17 推方案改成**两栏等宽**：左栏上面《累计得分》、下
+ * 面《最近战绩》，右栏《排名》，「上下沿和左栏对齐」——三栏的毛病是《累计得分》那一栏里只
+ * 有一个数，却被另两栏拉成一样高，中间空着一大块。
  *
- * ① **三块真的在同一行上**，而不是「看着像」。grid 一处写错（比如招牌没跨满整行）就会把
- *    《累计得分》挤进第一格去和招牌并排，而那是整页唯一一处「上面一行」。
- * ② **三栏等宽**。`1fr` 的真身是 `minmax(auto, 1fr)`，那个 auto 的下限是内容的最小宽
- *    度——榜上出现一个十位数的分数（等宽字体、不折行、不省略号）时那一栏会按它撑开，把另两
+ * 要守的是四件事，每一件都「屏幕上看得见、却没有任何一道门会红」：
+ *
+ * ① **左栏两块摞着、右栏一块对齐左栏的上下沿**，而不是「看着像」。grid 一处写错（比如
+ *    招牌没跨满整行、某一块没摆进该在的格子）就会把一块挤进招牌那一行，或者让右栏短一截。
+ * ② **两栏等宽**。`1fr` 的真身是 `minmax(auto, 1fr)`，那个 auto 的下限是内容的最小宽
+ *    度——榜上出现一个十位数的分数（等宽字体、不折行、不省略号）时那一栏会按它撑开，把另一
  *    栏挤扁再把整页顶出屏幕。玩家 2026-09 实拍到过（榜首 1000000000）。所以这儿不光量「现
- *    在等宽」，还**塞一个十位数进去再量一遍**。
+ *    在等宽」，还**往里塞撑不开的东西再量一遍**（十位数之外再加一段不折行的长串——两栏之
+ *    后十位数自己已经撑不开一栏了，见下面那一节）。
  * ③ **不用往下滑**。这一页只有三块东西，要滑就是排版没做到。
- * ④ **窄屏一个像素都不许动**。三栏只在 ≥1000px 开门，999px 上必须还是原来那一套（竖着
+ * ④ **窄屏一个像素都不许动**。两栏只在 ≥1000px 开门，999px 上必须还是原来那一套（竖着
  *    叠、两块面板并排）——不然这道门守住了电脑却悄悄改了手机。
  */
 import { chromium } from 'playwright';
@@ -94,7 +99,7 @@ const measure = (page) =>
     };
   });
 
-// ── 电脑端：三栏 ──────────────────────────────────────────────
+// ── 电脑端：两栏 ──────────────────────────────────────────────
 for (const [w, h] of [[1440, 900], [1000, 700], [1920, 1080]]) {
   head(`电脑 ${w}×${h}`);
   const { ctx, page } = await openRecords(w, h);
@@ -104,58 +109,82 @@ for (const [w, h] of [[1440, 900], [1000, 700], [1920, 1080]]) {
   if (!(v.total && v.rec && v.rank)) { await ctx.close(); continue; }
 
   check('这一页在电脑上是 grid', v.display === 'grid', v.display);
-  check('① 三块在同一行上（顶边对齐）',
-    Math.abs(v.total.y - v.rec.y) <= 2 && Math.abs(v.rec.y - v.rank.y) <= 2,
-    `${v.total.y} / ${v.rec.y} / ${v.rank.y}`);
+  check('① 左栏：《累计得分》在上、《最近战绩》在下，左沿对齐',
+    Math.abs(v.total.x - v.rec.x) <= 1 && v.rec.y >= v.total.y + v.total.h - 1,
+    `总分 x${v.total.x} 底 ${v.total.y + v.total.h} / 战绩 x${v.rec.x} 顶 ${v.rec.y}`);
+  check('① 右栏《排名》在左栏右边', v.rank.x >= v.total.x + v.total.w - 1,
+    `排名 x${v.rank.x} / 左栏右沿 ${v.total.x + v.total.w}`);
+  check('① 右栏的上沿对齐左栏的上沿（《累计得分》的顶）', Math.abs(v.rank.y - v.total.y) <= 1,
+    `${v.rank.y} / ${v.total.y}`);
+  check('① 右栏的下沿对齐左栏的下沿（《最近战绩》的底）',
+    Math.abs(v.rank.y + v.rank.h - (v.rec.y + v.rec.h)) <= 1,
+    `${v.rank.y + v.rank.h} / ${v.rec.y + v.rec.h}`);
   check('① 招牌独占上面一行（没被挤进第一格）',
-    v.head && v.head.y + v.head.h <= v.total.y + 2, `招牌底 ${v.head?.y + v.head?.h} / 第一栏顶 ${v.total.y}`);
+    v.head && v.head.y + v.head.h <= Math.min(v.total.y, v.rank.y) + 2,
+    `招牌底 ${v.head?.y + v.head?.h} / 两栏顶 ${Math.min(v.total.y, v.rank.y)}`);
   const ws = [v.total.w, v.rec.w, v.rank.w];
-  check('② 三栏等宽（差不到 2px）', Math.max(...ws) - Math.min(...ws) <= 2, ws.join(' / '));
-  check('② 三块等高（一排才像一排）',
-    Math.max(v.total.h, v.rec.h, v.rank.h) - Math.min(v.total.h, v.rec.h, v.rank.h) <= 2,
-    `${v.total.h} / ${v.rec.h} / ${v.rank.h}`);
+  check('② 两栏等宽（左栏两块、右栏一块，差不到 2px）', Math.max(...ws) - Math.min(...ws) <= 2, ws.join(' / '));
   check('③ 不用往下滑', !v.docScrolls);
   check('三块都在屏幕里', v.rightMost <= v.vw + 0.5 && v.lowest <= v.vh + 0.5,
     `右沿 ${Math.round(v.rightMost)}/${v.vw} 下沿 ${Math.round(v.lowest)}/${v.vh}`);
 
   /*
-   * ② 的反面：**塞一个十位数进去再量一遍**。
+   * ② 的反面：**往每一块里塞一样撑不开的东西，再量一遍**。
    *
-   * 这一条才是 `minmax(0, 1fr)` 那三道写法的理由。玩家 2026-09 实拍到过榜首
-   * 1000000000 把半幅排版顶出屏幕；三栏之后同一条坑照旧在，所以照旧要量。等宽字体、不折
-   * 行、不省略号（省略号写在数字上就是在撒谎），所以唯一的出路是那道 minmax 的 0。
+   * 这一条才是 `minmax(0, 1fr)` 那两道写法的理由。玩家 2026-09 实拍到过榜首
+   * 1000000000 把半幅排版顶出屏幕。
+   *
+   * ⚠️ 两栏之后「塞一个十位数」**单靠它已经量不出东西了**（反证时撤掉 minmax，这一条照样
+   * 绿）：累计分那个数现在会在卡里折行（30 位也只有 368 宽），缩略榜上的分数又由
+   * engine/compactScore 缩写——真分数再大也撑不开一栏。可「栏宽和内容无关」这件事本身照旧
+   * 要守：哪天谁往这几块里加了一样不折行的东西（一个名字、一个标签），没有那道 0，它就会把
+   * 一栏撑宽、把另一栏挤扁。所以这儿往三块里**轮流**塞一段不折行的长串（40 个字、等宽字
+   * 体，比一栏宽），每塞一次量一遍三块的宽。十位数那一下留着，它是那次真事。
+   *
+   * 反证：把那两道 minmax(0, …) 换回 1fr，塞在累计分卡里那一次两栏当场变成 522 / 294。
    */
   const wide = await page.evaluate(() => {
+    const b = (s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return { w: Math.round(r.width), right: r.right }; };
+    const read = (tag) => ({
+      tag,
+      ws: [b('.total-card').w, b('.records-panel--records').w, b('.records-panel--ranks').w],
+      rightMost: Math.max(b('.total-card').right, b('.records-panel--records').right, b('.records-panel--ranks').right),
+    });
+    const out = [];
+    // 那次真事：榜首一个十位数。
     const v = document.querySelector('.total-card-value');
     const keep = v.textContent;
     v.textContent = '1000000000';
-    // 榜那一半也塞一个：两边都可能是撑开的那一个。
-    const row = document.querySelector('.records-panel--ranks .records-row-score')
-      || document.querySelector('.records-panel--ranks .rank-score');
-    const keepRow = row?.textContent;
-    if (row) row.textContent = '1000000000';
-    const read = () => {
-      const b = (s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return { w: Math.round(r.width), right: r.right }; };
-      return {
-        ws: [b('.total-card').w, b('.records-panel--records').w, b('.records-panel--ranks').w],
-        rightMost: Math.max(b('.total-card').right, b('.records-panel--records').right, b('.records-panel--ranks').right),
-        vw: window.innerWidth,
-      };
-    };
-    const out = read();
+    out.push(read('累计分写成十位数'));
     v.textContent = keep;
-    if (row && keepRow !== undefined) row.textContent = keepRow;
-    return out;
+    // 不折行的长串，三块轮流塞。
+    for (const [host, name] of [['.total-card', '累计分卡'], ['.records-panel--records', '最近战绩'], ['.records-panel--ranks', '排名']]) {
+      const probe = document.createElement('span');
+      probe.textContent = '8'.repeat(40);
+      probe.style.cssText = 'display:inline-block;white-space:nowrap;font:600 20px monospace';
+      document.querySelector(host).appendChild(probe);
+      const r = read(`${name}里塞一段不折行的长串`);
+      // 量的是那段字本身有多宽（scrollWidth），不是它的盒子：两块面板是竖排的弹性盒，塞进去
+      // 的东西横向被拉成面板的内宽（384），字照样伸出去——量盒子的话尺子自己先红。
+      r.probeW = Math.round(Math.max(probe.getBoundingClientRect().width, probe.scrollWidth));
+      out.push(r);
+      probe.remove();
+    }
+    return { rows: out, vw: window.innerWidth };
   });
-  check('② 塞一个十位数：三栏还是等宽',
-    Math.max(...wide.ws) - Math.min(...wide.ws) <= 2, wide.ws.join(' / '));
-  check('② 塞一个十位数：整页还在屏幕里',
-    wide.rightMost <= wide.vw + 0.5, `右沿 ${Math.round(wide.rightMost)}/${wide.vw}`);
+  // 尺子：那一段长串真的比一栏宽（不然「没撑开」是白给的）。
+  const probeRows = wide.rows.filter((r) => r.probeW !== undefined);
+  check('（尺子）塞进去的长串比一栏还宽', probeRows.every((r) => r.probeW > v.total.w),
+    probeRows.map((r) => `${r.probeW}`).join(' / ') + ` > ${v.total.w}`);
+  for (const r of wide.rows) {
+    check(`② ${r.tag}：两栏还是等宽`, Math.max(...r.ws) - Math.min(...r.ws) <= 2, r.ws.join(' / '));
+    check(`② ${r.tag}：整页还在屏幕里`, r.rightMost <= wide.vw + 0.5, `右沿 ${Math.round(r.rightMost)}/${wide.vw}`);
+  }
   await ctx.close();
 }
 
 // ── ④ 窄屏一个像素都不许动 ────────────────────────────────────
-head('窄屏 999×700（三栏那道门的下面一档）');
+head('窄屏 999×700（两栏那道门的下面一档）');
 {
   const { ctx, page } = await openRecords(999, 700);
   const v = await measure(page);

@@ -108,15 +108,27 @@ console.log('');
     ent.LIFETIME_UNTIL > Date.now());
 
   // 客户端那一份：读源码文本，不打包（它是 .ts，而这道门是纯 node 的）。
-  const { readFileSync } = await import('node:fs');
-  const ui = readFileSync(new URL('../src/ui/subscribe.ts', import.meta.url), 'utf8');
-  const m = ui.match(/const LIFETIME_UNTIL = Date\.UTC\((\d+), (\d+), (\d+)\);/);
-  check('（尺子）客户端那一份也找得到', Boolean(m), m ? m[0] : '没找到');
-  if (m) {
-    const uiVal = Date.UTC(Number(m[1]), Number(m[2]), Number(m[3]));
-    check('客户端那一份和服务端是同一个数', uiVal === accounts.LIFETIME_UNTIL,
-      `${uiVal} vs ${accounts.LIFETIME_UNTIL}`);
+  //
+  // **第 17 推起客户端没有这一份了**：它只在帐号窗的《有效期》那一行里用（「永久」还是
+  // 一个日期），而方案把那一行撤了（注册即终身，那一行对每个人写的都是「永久」）。所以这
+  // 儿不再要求「找得到」，改成：src/ 底下**哪儿都没有**另抄的一份；哪天谁又抄回来一份，
+  // 它就必须和服务端是同一个数。只写一句「找不到就算了」的话，抄回来一个 2099 也是绿的。
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const srcRoot = new URL('../src/', import.meta.url);
+  const copies = [];
+  for (const rel of readdirSync(srcRoot, { recursive: true })) {
+    if (!/\.(ts|js|mjs)$/.test(rel)) continue;
+    const text = readFileSync(new URL(rel, srcRoot), 'utf8');
+    for (const m of text.matchAll(/LIFETIME_UNTIL\s*=\s*Date\.UTC\((\d+),\s*(\d+),\s*(\d+)\)/g)) {
+      copies.push({ rel, val: Date.UTC(Number(m[1]), Number(m[2]), Number(m[3])) });
+    }
   }
+  // 尺子：这个扫法真的扫得到东西（src/ 底下的 .ts 一个都没读到的话，「没有另抄一份」恒真）。
+  const scanned = readdirSync(srcRoot, { recursive: true }).filter((r) => /\.ts$/.test(r)).length;
+  check('（尺子）src/ 底下扫过的 .ts 不少于 50 个', scanned >= 50, `${scanned} 个`);
+  const drift = copies.filter((c) => c.val !== accounts.LIFETIME_UNTIL);
+  check('客户端要是另抄了一份，它和服务端是同一个数', drift.length === 0,
+    drift.map((c) => `${c.rel}: ${c.val}`).join('；') || `${copies.length} 份，全对得上`);
   // `_entitlement.js` 不许再自己定一个——转出去可以，自己写一个字面量不行。
   const entSrc = readFileSync(new URL('../api/_entitlement.js', import.meta.url), 'utf8');
   check('_entitlement.js 里没有自己写死的那个日期',

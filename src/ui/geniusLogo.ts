@@ -18,7 +18,6 @@
 /** 原件的画布比例，用来把方形的尺寸参数换算成不失真的宽高。 */
 const ASPECT = 257 / 233;
 export const GENIUS_LOGO = `<svg width="257px" height="233px" viewBox="0 0 257 233" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>编组</title>
     <g id="其他develop？" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
         <g id="画框-5" transform="translate(-1326, -5331)">
             <g id="编组" transform="translate(1326.0127, 5330.7763)">

@@ -126,7 +126,8 @@ check('没订阅的人，《开房间》上挂着锁和天才招牌', gate.locke
   JSON.stringify(gate));
 check('招牌是主菜单那块的一半（40px 上下）', Math.abs(gate.crest - 40) <= 2, `${gate.crest}px`);
 await B.page.click('#mpCreate');
-const paywall = await B.page.waitForSelector('.genius-modal', { timeout: 5000 }).catch(() => null);
+// 第 17 推起没开通的人看到的这一扇叫 .invite-modal（原先和帐号窗共用一个 .genius-modal）。
+const paywall = await B.page.waitForSelector('.invite-modal', { timeout: 5000 }).catch(() => null);
 check('非天才点开房间，看到的是付费墙而不是报错', !!paywall);
 check('而且没有真的开出房间来', (await B.page.$('.mp-code')) === null);
 if (paywall) await B.page.click('#geniusClose');
@@ -136,8 +137,10 @@ await A.page.click('#navProfile');
 await A.page.click('#multiRow');
 await A.page.waitForSelector('#mpCreate', { timeout: 10000 });
 // 招牌对开通了的人同样成立：那是他才有的权利。变的只有那把锁。
+// 锁的类名要和上面那一条是同一个（.mp-create--locked）。这儿原先还写着改名之前的
+// .genius-cta--locked——那个类早就不会出现在这颗键上，于是「锁没了」永远成立，量了个空。
 const opened = await A.page.$eval('#mpCreate', (el) => ({
-  locked: el.classList.contains('genius-cta--locked'),
+  locked: el.classList.contains('mp-create--locked'),
   lock: !!el.querySelector('.cta-lock'),
   crest: !!el.querySelector('.genius-logo'),
 }));

@@ -19,7 +19,8 @@
  * ④ `mailDown` 时**停在①**并出那句提示（E51）——不是跳进②等一张永远不来的码；
  * ⑤ 免邮箱那两个框是**明文**（type=text），「第一串是你的钥匙」那句**必须在**；
  * ⑥ 真注册一对凭据：进得去，《账户》那一屏上
- *    · 身份那一行印的是**第一串**，不是 hdl: 那串 hex（E53）
+ *    · 身份那一行是**第一串**，不是 hdl: 那串 hex（E53）；第 17 推起默认遮住（•••• 加末四
+ *      位），按眼睛才露出整串
  *    · **没有《更换邮箱》**（api/email.js 会 400，E53）
  * ⑦ 两档屏幕（360×640 / 390×844）底排键都在屏内，而且点得着。
  */
@@ -200,15 +201,20 @@ const FIRST = 'UiProbe' + Date.now().toString(36).slice(-5);
   await page.waitForSelector('#statusClose', { timeout: 20000 });
   const v = await page.evaluate(() => ({
     h2: document.querySelector('.overlay h2')?.textContent?.trim() ?? '',
-    orderRows: [...document.querySelectorAll('.order-row')].map((r) => r.textContent.replace(/\s+/g, ' ').trim()),
-    rows: [...document.querySelectorAll('.acct-rows button')].map((b) => b.id),
+    field: document.querySelector('.acct-field')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    rows: [...document.querySelectorAll('.acct-actions > *')].map((b) => b.id),
     text: document.querySelector('.overlay')?.textContent ?? '',
   }));
-  check('（尺子）《账户》那一屏开出来了', v.h2.length > 0 && v.orderRows.length > 0, `${v.h2} / ${v.orderRows.join(' | ')}`);
-  check('⑥ 身份那一行印的是第一串', v.text.includes(FIRST), v.orderRows.join(' | '));
+  check('（尺子）《账户》那一屏开出来了', v.h2.length > 0 && v.field.length > 0, `${v.h2} / ${v.field}`);
+  // 第 17 推起第一串**默认遮住**（•••• 加末四位），按那颗眼睛才露出整串。所以这儿先量遮
+  // 着的样子：认得出是他那一串（末四位对得上），可整串不在屏幕上；再按眼睛，整串出来。
+  check('⑥ 身份那一行是第一串，默认遮住（•••• 加末四位）', v.field.includes('••••' + FIRST.slice(-4)) && !v.text.includes(FIRST), v.field);
+  await page.click('#acctEye');
+  const shown = await page.evaluate(() => document.querySelector('#acctId')?.textContent?.trim() ?? '');
+  check('⑥ 按眼睛露出来的就是第一串', shown === FIRST, shown);
   check('⑥ 不许印 hdl: 那串 hex', !/hdl:[0-9a-f]{8}/.test(v.text));
-  check('⑥ 没有《更换邮箱》那一行（点下去必是 400）', !v.rows.includes('statusChangeEmail'), v.rows.join(' '));
-  check('⑥ 《退出登录》还在（这是他唯一该有的那一行）', v.rows.includes('statusSignOut'), v.rows.join(' '));
+  check('⑥ 没有《更换邮箱》那一颗（点下去必是 400）', !v.rows.includes('statusChangeEmail'), v.rows.join(' '));
+  check('⑥ 《退出登录》还在', v.rows.includes('statusSignOut'), v.rows.join(' '));
   check('⑥ 这一下就是天才（窗口开着）', !/没有权限/.test(v.text), v.text.slice(0, 80));
 }
 await ctx.close();

@@ -68,9 +68,10 @@ const B = await newPlayer('guest', ['circle']);
 
 // ---- 没开通的人：锁着的卡开的是订阅窗，返回只关窗 --------------------------------
 await B.page.$$eval('.home-icon-btn--locked', (els) => els[0].click());
-await B.page.waitForSelector('.genius-modal', { timeout: 5000 });
+// 第 17 推起这扇窗叫 .invite-modal（原先和帐号窗共用一个 .genius-modal）。
+await B.page.waitForSelector('.invite-modal', { timeout: 5000 });
 await back(B.page);
-check('锁着的卡开的订阅窗按返回 → 关窗，人还在主菜单', !(await has(B.page, '.genius-modal')) && (await has(B.page, '.home-page')));
+check('锁着的卡开的订阅窗按返回 → 关窗，人还在主菜单', !(await has(B.page, '.invite-modal')) && (await has(B.page, '.home-page')));
 
 // ---- 屋主开通 ---------------------------------------------------------------------
 const granted = await A.page.evaluate(async () => {

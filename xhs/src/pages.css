@@ -9,12 +9,23 @@
  * 排在 src/style.css 之后 import，所以同名规则以这里为准。
  */
 
-/* 一屏里叠着好几块：默认的 16px 行距在这儿显得散，收到 14px。 */
-.xhs-profile { gap: 14px; }
+/* 一屏里叠着好几块：默认的 16px 行距在这儿显得散，收到 14px。
+   **用外边距，不用 gap**（第 17 推，方案原话：「小红书版不能用 flex 的 gap，用 margin 代
+   替」）。Chrome 61 不认 flex 的 gap——降级层（oldKernel.ts 的 markGaps）会在运行时替它
+   补外边距，可那是一道补救：它量的是改过的文本，换一种写法（比如一条只在某个类下才生效
+   的 gap）就可能漏掉。这一页自己写外边距，降级层就没有东西要替它补。 */
+.xhs-profile { gap: 0; }
+.xhs-profile > * + * { margin-top: 14px; }
 
 /* 成绩那一块。网页版的 46vh 是给「左右各半」的缩略版留的，这一版整宽一
-   块，空着的时候 40vh 就够站住，装满了自己会长。 */
-.xhs-profile .records-panel--records { min-height: 40vh; gap: 14px; }
+   块，空着的时候 40vh 就够站住，装满了自己会长。
+   六格一样高（第 17 推：「最近战绩……6 行，等距排列」，小红书也改）：真记录和补位的空格
+   子是同一个高度，所以面板不管装了几局，行距都一样。从前补位的是一道 7px 的细线，和一行
+   记录（两层字，五十来像素）高矮不一，「等距」无从谈起。 */
+.xhs-profile .records-panel--records { min-height: 40vh; gap: 0; }
+.xhs-profile .records-panel--records > * + * { margin-top: 14px; }
+.xhs-profile .records-panel--records > .records-row,
+.xhs-profile .records-panel--records > .records-rule { height: 52px; box-sizing: border-box; flex: 0 0 auto; }
 
 /* 记录行现在是按钮了（点开看那一局的战绩图）。按钮默认会继承一堆浏览器自
    己的样式，这里把它掰回和网页版那个 div 一模一样。 */
@@ -24,18 +35,25 @@
 }
 
 /* 设置那一行：色盲开关 + 《怎么玩》。挨着累计得分，读起来是一组。
-   开关那颗宽一些（里面有个滑块），《怎么玩》按内容宽。 */
-.xhs-setting-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+   开关那颗宽一些（里面有个滑块），《怎么玩》按内容宽。
+   外边距代替 gap（理由见 .xhs-profile 那一段）：这一行会折行，所以每颗四周各垫 5px、
+   整行往回收 5px，折到第二行也是 10px 的缝。 */
+.xhs-setting-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 0; margin-left: -5px; margin-right: -5px; }
+.xhs-setting-row > * { margin: 5px; }
 .xhs-cvd {
-  max-width: none; margin: 0;
-  /* 药丸的默认底色是奶咖（--pill-bg），压在米白页面上偏淡。这一颗是设置，
-     不是入口，用页面自己的深紫墨色更像个开关。 */
-  --pill-bg: #6E5F6D;
+  max-width: none;
+  /* 第 17 推跟着网页版换色：色盲那一颗是色卡的蓝（网页版个人主页上同一颗也是它）。原先
+     是页面自己的深紫墨色 #6E5F6D——一支写死的颜色，而且不在色卡里。 */
+  --pill-bg: var(--card-blue);
   font-size: 0.92rem;
   flex: 1 1 auto; min-width: 0;
 }
-/* 《怎么玩》是个入口，不是设置，所以留着药丸本来那身奶咖底色。 */
-.xhs-how { max-width: none; margin: 0; flex: 0 0 auto; font-size: 0.92rem; }
+/* 《怎么玩》是个入口，不是设置，所以是药丸本体那身棕（--card-brown）。白字压在棕色上只有
+   4.0:1，按方案「字号 ≥ 18.66px 并加粗」走，和网页版那几颗棕药丸一样。 */
+/* 宽度：药丸本体是 width: 100%，两颗在这一行里本来就各占一整行（开关那颗在上、这一颗在
+   下）。换成外边距之后，100% 再加左右各 5px 会顶出去 10px——所以改成「占满这一行减去外边
+   距」（flex-basis 100%、width 回到 auto），排出来还是原来那两行。 */
+.xhs-how { max-width: none; width: auto; flex: 1 1 100%; font-size: 1.1875rem; font-weight: 700; }
 
 
 /* ---- 说明块 ------------------------------------------------------------

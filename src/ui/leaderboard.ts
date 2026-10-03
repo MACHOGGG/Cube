@@ -27,12 +27,16 @@ const GHOST_ROWS = 8;
 /**
  * 缩略牌上摆前几名。
  *
- * 五，跟左边《记录》那一块一样多（recordsPage 的 PLACEHOLDER_ROWS）——两块并
- * 排站着，行数不一样的话矮的那块底下空一截，看着像少了点什么。原先是三（玩家
- * 2026-09：「在缩小图里只显示 3 个，应该显示 top5」）。
+ * **六**，跟左边《记录》那一块一样多（recordsPage 的 PLACEHOLDER_ROWS）——两块并排站
+ * 着，行数不一样的话矮的那块底下空一截，看着像少了点什么。三 → 五（玩家 2026-09：「在
+ * 缩小图里只显示 3 个，应该显示 top5」）→ 六（第 17 推）。
  * 再多就不摆了：完整的那张榜点一下就有。
+ *
+ * **不管哪一种状态都是六格**（第 17 推：「空状态和锁住状态也画 6 个占位行」）：加载中、
+ * 没登录、登录过期、榜上还没人、锁着、名次不满六个——缺几格就补几格空格子，那句话写在
+ * 格子底下。见 thumbHtml。
  */
-const THUMB_ROWS = 5;
+const THUMB_ROWS = 6;
 
 export interface BoardTab {
   /** 空字符串是总榜；`g:` 开头是母榜（旗下几张合起来）；别的是一张单独的榜。 */
@@ -98,19 +102,35 @@ export function boardGroups(lang: Lang): BoardGroup[] {
 function rowsHtml(page: BoardPage, lang: Lang, compact = false): string {
   const s = STRINGS[lang];
   if (!page.rows.length) return `<p class="rank-empty">${s.rankEmpty}</p>`;
+  return rowList(page, lang, compact).join('');
+}
+
+/** 一行名次一个字符串——缩略牌要按格子数补齐，所以不能先拼成一整段。 */
+function rowList(page: BoardPage, lang: Lang, compact: boolean): string[] {
+  const s = STRINGS[lang];
   // 总榜不分玩法，每一行是那个人最高的那一局——行首画一个小图形，说明那一局
   // 是哪个玩法（玩家的原话：「在前面有小图形标识」）。单局榜整张都是同一个
   // 玩法，不用画。
-  return page.rows
-    .map(
-      (r) => `<div class="rank-row${r.me ? ' rank-row--me' : ''}">
+  return page.rows.map(
+    (r) => `<div class="rank-row${r.me ? ' rank-row--me' : ''}">
         <span class="rank-place">${r.rank}</span>
         ${r.mode ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.mode, r.mode))}">${gameIcon(r.mode)}</span>` : ''}
         <span class="rank-name">${esc(r.name || s.rankAnon)}</span>
         <span class="rank-score">${compact ? compactScore(r.score, lang) : r.score}</span>
       </div>`,
-    )
-    .join('');
+  );
+}
+
+/**
+ * 缩略牌：永远是 THUMB_ROWS 格，缺的用空格子补，那句话（加载中 / 没登录 / 还没人……）写在
+ * 格子底下。空格子不给读屏念——它什么都没说。
+ */
+function thumbHtml(rows: string[], note = ''): string {
+  const slots = rows.slice(0, THUMB_ROWS);
+  while (slots.length < THUMB_ROWS) {
+    slots.push('<div class="rank-row rank-row--empty" aria-hidden="true"></div>');
+  }
+  return slots.join('') + (note ? `<p class="rank-foot">${note}</p>` : '');
 }
 
 /**
@@ -383,9 +403,9 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
   const s = STRINGS[lang];
   /** 手上有一份还新鲜的就先画出来，别让这半块牌空着闪一下。 */
   const had = cachedBoard();
-  host.innerHTML = had
-    ? rowsHtml({ ...had, rows: had.rows.slice(0, THUMB_ROWS) }, lang, true)
-    : `<p class="rank-empty">${s.rankLoading}</p>`;
+  const shown = (page: BoardPage) =>
+    page.rows.length ? thumbHtml(rowList(page, lang, true)) : thumbHtml([], s.rankEmpty);
+  host.innerHTML = had ? shown(had) : thumbHtml([], s.rankLoading);
   // 和整屏那一块同一个道理：先等刚打完那一局上报落地（最多两秒），再拉。
   void waitForPush().then(() => fetchBoard()).then((result) => {
     if (!result.ok) {
@@ -393,29 +413,31 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
       if (had) return;
       if (result.reason === 'geniusOnly') {
         // 灰杠的宽度在 45/60/75 三档里轮着来。原先写的是 45 + i*15，三行的时候
-        // 刚好停在 75；现在摆五行，第五行会算成 105%，那条杠要顶出牌子。
-        host.innerHTML =
+        // 刚好停在 75；摆到五行、六行，后面几行会算成 105%、120%，那条杠要顶出牌子。
+        host.innerHTML = thumbHtml(
           Array.from(
             { length: THUMB_ROWS },
             (_, i) => `<div class="rank-row rank-row--ghost">
               <span class="rank-place">${i + 1}</span>
               <span class="rank-ghost-bar" style="width:${45 + ((i * 15) % 45)}%"></span>
             </div>`,
-          ).join('') + `<p class="rank-foot">${s.rankLocked}</p>`;
+          ),
+          s.rankLocked,
+        );
         return;
       }
       // 缩略图上没地方放按钮，但话还是要说到——不然点开全页之前，这半块
       // 屏幕看上去和「这张榜还没有人」一模一样。
-      host.innerHTML = `<p class="rank-empty">${
+      host.innerHTML = thumbHtml(
+        [],
         result.reason === 'signedOut'
           ? s.rankSignedOut
           : result.reason === 'expired'
             ? s.rankExpired
-            : s.rankEmpty
-      }</p>`;
+            : s.rankEmpty,
+      );
       return;
     }
-    const top = { ...result.page, rows: result.page.rows.slice(0, THUMB_ROWS) };
-    host.innerHTML = rowsHtml(top, lang, true);
+    host.innerHTML = shown(result.page);
   });
 }

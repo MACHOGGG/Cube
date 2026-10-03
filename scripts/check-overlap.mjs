@@ -226,12 +226,13 @@ const PAGES = [
         b?.click();
       });
     },
-    ready: '.genius-modal',
+    // 第 17 推起没开通的人看到的这一扇叫 .invite-modal（原先和帐号窗共用一个 .genius-modal）。
+    ready: '.invite-modal',
     // 这一窗有七百来像素高，小屏手机上装不下。装不下没关系，滚得到就行——
     // 查的就是「滚到底之后，最后那颗键在不在屏幕里、戳不戳得到」。
     // 从前 .overlay 是弹性盒居中且不给滚：窗一旦比屏幕高，上下同时被切掉，
     // 而且切掉的部分怎么都够不着。
-    reachLastButtonIn: '.genius-modal',
+    reachLastButtonIn: '.invite-modal',
   },
 ];
 
@@ -421,19 +422,23 @@ for (const size of SIZES) {
 }
 
 // ---------------------------------------------------------------------------
-// 电脑端的个人主页：一条 760 的中栏，栏内条目两两成对
+// 电脑端的个人主页：两栏等宽（第 17 推）
 // ---------------------------------------------------------------------------
 //
-// 2026-09 加的（style.css 里 min-width:1000px 那一段，玩家：「更合理地使用左右空
-// 间」）。上面那一圈量的是「有没有东西被家具压住、够不着」，量不到这套新排法自己
-// 会坏的三种样子，所以单列一节：
+// 2026-09 先有的是一条 760 的中栏、栏内两两成对（PR-18 / E27，玩家：「更合理地使用左
+// 右空间」）。第 17 推方案把它改成**两栏等宽**：左栏那一列药丸，右栏天才面板（吉祥物、
+// 徽章、2 × 6 的十二行），面板底下两颗白键对着网格的两列。上面那一圈量的是「有没有东
+// 西被家具压住、够不着」，量不到这套排法自己会坏的几种样子，所以单列一节：
 //
-//   · 两列**互相压上**——grid 的行优先流一旦被哪条 grid-column 打乱就会这样；
-//   · 排不满的那一条孤零零贴在左边（`:last-child:nth-child(odd)` 那条规则落空）；
+//   · 两栏**不等宽、不齐顶**，或者互相压上；
+//   · 十二行没排成 2 × 6（grid 的行优先流一旦被哪条 grid-column 打乱就会这样），或者
+//     互相压上；
+//   · 底下那两颗白键没对上网格的两列；
 //   · 栏宽放开之后整页**横向溢出**。
 //
-// 门槛两边各量一次：1440 要变，999 必须**一个像素都不变**。只量右边那半截等于没
-// 量断点——写死一个断点最容易出的事，就是它悄悄漫到手机上。
+// 门槛两边各量一次：1440 要变，999 必须是手机那一列。只量右边那半截等于没量断点——写死
+// 一个断点最容易出的事，就是它悄悄漫到手机上。（逐页逐语言的间距、居中、对比度在
+// check-redesign-fit 里，这儿只钉断点。）
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(() => {
@@ -450,11 +455,12 @@ for (const size of SIZES) {
     await page.waitForSelector('.profile-page', { timeout: 10000 });
     await page.waitForTimeout(600);
     const m = await page.evaluate(() => {
+      const box = (e) => e.getBoundingClientRect();
       const app = document.querySelector('.app.profile-page');
-      const panel = document.querySelector('.genius-panel');
-      const pr = panel.getBoundingClientRect();
-      const rows = [...panel.children].filter((e) => e.classList.contains('profile-row'));
-      const boxes = rows.map((e) => e.getBoundingClientRect());
+      const main = box(document.querySelector('.profile-col--main'));
+      const side = box(document.querySelector('.profile-col--genius'));
+      const rows = [...document.querySelectorAll('.genius-grid > .profile-row')];
+      const boxes = rows.map(box);
       let overlap = null;
       for (let i = 0; i < boxes.length && !overlap; i++) {
         for (let j = i + 1; j < boxes.length; j++) {
@@ -466,58 +472,37 @@ for (const size of SIZES) {
           }
         }
       }
-      /**
-       * 「排不满的那一条」现在可能有好几条，而且不一定在末尾。
-       *
-       * 跨两列的那几样（招牌、那颗键、小标签、横线）把 .profile-row 切成几段，哪一段的
-       * 条数是奇数，那一段的最后一条就落单——2026-10 撤掉内部码之后，《多人游玩》就是夹
-       * 在两段中间落单的那一条。所以这儿按**分段**找，逐条量它有没有居中。
-       */
-      const runs = [];
-      let run = [];
-      for (const kid of panel.children) {
-        if (kid.classList.contains('profile-row')) run.push(kid);
-        else { if (run.length) runs.push(run); run = []; }
-      }
-      if (run.length) runs.push(run);
-      const alone = runs.filter((r) => r.length % 2 === 1).map((r) => r[r.length - 1]);
-      const aloneBad = alone
-        .map((e) => {
-          const r = e.getBoundingClientRect();
-          return { t: e.textContent.trim().slice(0, 8), mid: Math.round(r.left + r.width / 2), half: r.width < pr.width * 0.7 };
-        })
-        .filter((a) => a.mid !== Math.round(pr.left + pr.width / 2) || !a.half);
-      const last = boxes[boxes.length - 1];
-      // 几条一行 = **同一个 top 上最多挤了几条**。
-      //
-      // 不数「有几个不同的左边界」：排不满那一条是 justify-self:center 的，左边界
-      // 和两列都不一样，于是两列的盘面会被数成 3 列——这道门第一版就是这么红的，
-      // 红的是尺子不是排版。
+      // 几条一行 = **同一个 top 上最多挤了几条**；几行 = 有几个不同的 top。
       const byTop = new Map();
       for (const b of boxes) {
         const k = Math.round(b.top);
         byTop.set(k, (byTop.get(k) || 0) + 1);
       }
-      const cols = Math.max(...byTop.values());
-      const legal = [...document.querySelectorAll('.legal-rows .profile-row')].map((e) => {
-        const r = e.getBoundingClientRect();
-        return { y: Math.round(r.top), mid: Math.round(r.left + r.width / 2) };
-      });
-      const lastY = Math.max(...legal.map((g) => g.y));
-      const tail = legal.filter((g) => g.y === lastY).map((g) => g.mid);
+      // 网格的两列各自的左右沿：第一行那两条。
+      const lefts = [...new Set(boxes.map((b) => Math.round(b.left)))].sort((a, b) => a - b);
+      const rights = [...new Set(boxes.map((b) => Math.round(b.right)))].sort((a, b) => a - b);
+      const legal = [...document.querySelectorAll('.legal-pair > .profile-row')].map(box);
       return {
-        col: Math.round(app.getBoundingClientRect().width),
-        pageH: Math.round(document.documentElement.scrollHeight),
-        cols,
+        col: Math.round(box(app).width),
+        // 两栏：并排（齐顶、等宽、中缝）还是摞着（右栏在左栏底下）。
+        sideBySide: Math.abs(main.top - side.top) <= 1 && side.left >= main.right - 0.5,
+        topDiff: Math.round(Math.abs(main.top - side.top)),
+        stacked: side.top >= main.bottom - 0.5,
+        widthDiff: Math.round(Math.abs(main.width - side.width)),
+        seam: Math.round(side.left - main.right),
+        rowsN: rows.length,
+        cols: Math.max(...byTop.values()),
+        lines: byTop.size,
         overlap,
-        lastMid: Math.round(last.left + last.width / 2),
-        panelMid: Math.round(pr.left + pr.width / 2),
-        lastHalf: last.width < pr.width * 0.7,
-        legalRows: new Set(legal.map((g) => g.y)).size,
+        lefts,
+        rights,
         legalN: legal.length,
-        aloneN: alone.length,
-        aloneBad: aloneBad.map((a) => `${a.t} 中 ${a.mid}${a.half ? '' : '（占满整行）'}`).join('；'),
-        tailMid: tail.length === 1 ? tail[0] : Math.round((Math.min(...tail) + Math.max(...tail)) / 2),
+        legalRows: new Set(legal.map((g) => Math.round(g.top))).size,
+        // 两颗白键的外沿 vs 网格两列的外沿（左键的左沿对第一列，右键的右沿对第二列）。
+        legalAlign: legal.length === 2 && lefts.length >= 1 && rights.length >= 1
+          ? Math.round(Math.max(Math.abs(legal[0].left - lefts[0]), Math.abs(legal[1].right - rights[rights.length - 1])))
+          : null,
+        legalWidthDiff: legal.length === 2 ? Math.round(Math.abs(legal[0].width - legal[1].width)) : null,
         hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         back: (() => {
           const r = document.querySelector('.page-back-row').getBoundingClientRect();
@@ -529,43 +514,36 @@ for (const size of SIZES) {
     return m;
   };
 
+  /** 两种宽度都成立的那几条：十二行排成 2 × 6、不压，底下两颗白键并排、对着网格两列。 */
+  const gridHolds = (tag, m) => {
+    check(`${tag}：（尺子）天才面板里是十二行`, m.rowsN === 12, `${m.rowsN} 行`);
+    check(`${tag}：十二行排成 2 列 × 6 行`, m.cols === 2 && m.lines === 6, `${m.cols} 列 × ${m.lines} 行`);
+    check(`${tag}：没有两行互相压上`, m.overlap === null, m.overlap || '干净');
+    check(`${tag}：（尺子）底下是两颗白键`, m.legalN === 2, `${m.legalN} 颗`);
+    check(`${tag}：两颗白键并排一行、一样宽`, m.legalRows === 1 && m.legalWidthDiff !== null && m.legalWidthDiff <= 1,
+      `${m.legalRows} 行 · 宽差 ${m.legalWidthDiff}px`);
+    check(`${tag}：两颗白键的外沿对着网格的两列`, m.legalAlign !== null && m.legalAlign <= 1, `差 ${m.legalAlign}px`);
+    check(`${tag}：整页不横向溢出`, m.hscroll === 0, `${m.hscroll}px`);
+  };
+
   const wide = await read(1440, 900);
-  check('电脑 1440：中栏收成 760', wide.col === 760, `${wide.col}px`);
-  check('电脑 1440：天才特供排成两列', wide.cols === 2, `量到 ${wide.cols} 列`);
-  check('电脑 1440：两列没有互相压上', wide.overlap === null, wide.overlap || '干净');
-  /**
-   * 排不满的那一条要居中——**每一段都要**，不只是最后那一段。
-   *
-   * 先立尺子：真的存在落单的那一条。2026-10 这一页有两条（《多人游玩》和末尾那条
-   * 《Apple Watch》）；哪天条数都凑成偶数，`aloneN` 会是 0，这一条就成了空绿，所以把它
-   * 单独报出来。
-   */
-  check('电脑 1440：（尺子）真有排不满的那一条', wide.aloneN > 0, `${wide.aloneN} 条落单`);
-  check('电脑 1440：排不满的那几条都居中（中线对上面板中线）',
-    wide.aloneBad === '', wide.aloneBad || `${wide.aloneN} 条，都对着 ${wide.panelMid}`);
-  /**
-   * 法务那一段 2026-10 从五条收到**两条**（账号改制推送 3：价格/条款/退款/联系四张静态
-   * 页撤了，只留隐私政策，外加《联系与特别感谢》）。所以这儿量的是「两条并排一行」，
-   * 不再是「五条排成 3 + 2」。
-   */
-  check('电脑 1440：（尺子）法务那一段是两条', wide.legalN === 2, `${wide.legalN} 条`);
-  check('电脑 1440：法务两条并排一行', wide.legalRows === 1, `${wide.legalRows} 行`);
-  check('电脑 1440：那一行整体居中', wide.tailMid === wide.panelMid, `${wide.tailMid} / ${wide.panelMid}`);
-  check('电脑 1440：整页不横向溢出', wide.hscroll === 0, `${wide.hscroll}px`);
+  check('电脑 1440：页面收在 880', wide.col === 880, `${wide.col}px`);
+  check('电脑 1440：两栏并排、齐顶', wide.sideBySide, wide.stacked ? '摞成了一列' : `顶差 ${wide.topDiff}px`);
+  check('电脑 1440：两栏一样宽', wide.widthDiff <= 1, `宽差 ${wide.widthDiff}px`);
+  check('电脑 1440：中缝是 --gap-lg（32）', Math.abs(wide.seam - 32) <= 1, `${wide.seam}px`);
+  gridHolds('电脑 1440', wide);
   check('电脑 1440：《返回》在页面里（不是被挤出去）', wide.back.top > 0 && wide.back.h > 0,
     `top ${wide.back.top} · 高 ${wide.back.h}`);
 
-  // 断点以下：整页必须回到改之前的样子，一列、原来的高度。
+  // 断点以下：整页必须是手机那一列——栏宽回到 460，右栏摞到左栏底下。
   const narrow = await read(999, 900);
   const phone = await read(390, 844);
-  check('999：中栏回到 460（断点以下一个像素都不变）', narrow.col === 460, `${narrow.col}px`);
-  check('999：天才特供回到一列', narrow.cols === 1, `量到 ${narrow.cols} 列`);
-  check('999：法务两条回到竖排', narrow.legalRows === narrow.legalN && narrow.legalN === 2, `${narrow.legalRows} 行 / ${narrow.legalN} 条`);
-  check('手机 390：和 999 一样高（这一段完全够不到手机）', phone.pageH === narrow.pageH,
-    `手机 ${phone.pageH} / 999 ${narrow.pageH}`);
-  check('手机 390：一列、竖排、不横向溢出',
-    phone.cols === 1 && phone.legalRows === phone.legalN && phone.legalN === 2 && phone.hscroll === 0,
-    `${phone.cols} 列 · 法务 ${phone.legalRows} 行 / ${phone.legalN} 条 · 溢出 ${phone.hscroll}px`);
+  check('999：页面回到 460（断点以下不是两栏）', narrow.col === 460, `${narrow.col}px`);
+  check('999：右栏摞在左栏底下', narrow.stacked && !narrow.sideBySide);
+  check('999：两栏一样宽', narrow.widthDiff <= 1, `宽差 ${narrow.widthDiff}px`);
+  gridHolds('999', narrow);
+  check('手机 390：右栏摞在左栏底下', phone.stacked && !phone.sideBySide);
+  gridHolds('手机 390', phone);
   await ctx.close();
 }
 

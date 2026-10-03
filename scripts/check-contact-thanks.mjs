@@ -65,7 +65,8 @@ await page.waitForSelector('#contactThanksRow', { timeout: 15000 });
 
 // ── 底部那两行 ───────────────────────────────────────────────
 {
-  const rows = await page.$$eval('.legal-rows .profile-row', (bs) =>
+  // 第 17 推起这两条是天才面板底下并排的一对白键（.legal-pair），原先是一列 .legal-rows。
+  const rows = await page.$$eval('.legal-pair > .profile-row', (bs) =>
     bs.map((b) => ({
       text: b.textContent.replace(/\s+/g, ' ').trim(),
       h: Math.round(b.getBoundingClientRect().height),
@@ -78,7 +79,7 @@ await page.waitForSelector('#contactThanksRow', { timeout: 15000 });
   check('第二行是《联系与特别感谢》', /联系与特别感谢/.test(rows[1]?.text ?? ''), rows[1]?.text ?? '');
   // 尺寸收了一档（E42）：这一档的行高要比页面上别处那些 profile-row 矮。
   const other = await page.$$eval('.profile-row', (bs) =>
-    bs.filter((b) => !b.closest('.legal-rows')).map((b) => Math.round(b.getBoundingClientRect().height)));
+    bs.filter((b) => !b.closest('.legal-pair')).map((b) => Math.round(b.getBoundingClientRect().height)));
   const median = other.sort((a, b) => a - b)[Math.floor(other.length / 2)] ?? 0;
   check('这两行比别处那些行矮一档（尺寸收了）', rows[0].h < median,
     `法务行 ${rows[0].h}px / 别处中位 ${median}px`);

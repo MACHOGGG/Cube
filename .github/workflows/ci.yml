@@ -1014,3 +1014,19 @@ jobs:
           nohup node scripts/dev-server.mjs 8976 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8976/ && break; sleep 0.25; done
           node scripts/check-new-version.mjs http://localhost:8976/
+      # 四页改版（第 17 推）：战绩页、个人主页、帐号窗、邀请窗。4 个尺寸 × 4 种语言 × 浅色 / 深色
+      # / 色盲，一圈四千六百来条：不溢出、不重叠、不被底栏盖住，等距 / 居中误差 ≤ 1px，对比度
+      # （正文 4.5、大字和图标 3），免邮箱帐号的第一串默认遮住且没有《更换》，Esc 关窗，只放图标
+      # 的键都有 aria-label，以及**这四页上真的生效的规则里一支写死的颜色都没有**（走
+      # document.styleSheets 逐条过，不是 grep 源文件——一条规则属于哪一页只有浏览器说得清）。
+      #
+      # 反证验过二十种改坏法，各自红在该红的那一条上（写死一个颜色、徽章字改白、图标改灰褐、
+      # 一颗药丸多垫 6px、十二格里一格变矮、法务键压上面板、徽章偏 5px、页边不对称、页底留白
+      # 不够、色盲下累计分卡换色、法语标签不许折行、标题没了下划线、电脑端两栏不等宽、右栏没
+      # 对齐左栏下沿、法务键没对上网格、第一串没遮、免邮箱帐号冒出《更换》、邀请窗不收 Esc、
+      # 联络那颗没有 aria-label、战绩只画五行）。名单和红了几条记在《侵蚀阶梯决策.md》第 17 推。
+      - name: 四页改版：战绩页、个人主页、帐号窗、邀请窗
+        run: |
+          nohup node scripts/dev-server.mjs 8981 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8981/ && break; sleep 0.25; done
+          node scripts/check-redesign-fit.mjs http://localhost:8981/

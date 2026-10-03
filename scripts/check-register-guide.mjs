@@ -56,26 +56,30 @@ async function openGeniusWindow() {
     const me = els.find((e) => /成绩|个人|我的/.test(e.getAttribute('aria-label') || e.textContent || ''));
     (me || els[0])?.click();
   });
-  await page.waitForSelector('.genius-cta', { timeout: 20000 });
+  await page.waitForSelector('#becomeGeniusBtn', { timeout: 20000 });
+  // 个人主页上那枚徽章（第 17 推起是 .genius-badge，原先是 .genius-cta）。
   await page.evaluate(() => {
-    const t = document.querySelector('.genius-cta');
+    const t = document.querySelector('#becomeGeniusBtn');
     t?.click();
   });
-  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  await page.waitForSelector('.invite-modal', { timeout: 10000 });
   // 取数那一问是异步的，等它落地。
   await page.waitForTimeout(1200);
   const seen = await page.evaluate(() => ({
-    opened: Boolean(document.querySelector('.genius-modal')),
+    opened: Boolean(document.querySelector('.invite-modal')),
+    tagEl: Boolean(document.querySelector('#geniusTag')),
     tag: document.querySelector('#geniusTag')?.textContent?.trim() || '',
     slotsEl: Boolean(document.querySelector('#geniusSlots')),
     slots: document.querySelector('#geniusSlots')?.textContent?.trim() || '',
     planRows: document.querySelectorAll('.plan-row').length,
-    title: document.querySelector('.genius-modal h2')?.textContent?.trim() || '',
+    title: document.querySelector('.invite-modal h2')?.textContent?.trim() || '',
     legalLinks: document.querySelectorAll('.genius-legal a').length,
     redeem: Boolean(document.querySelector('#geniusRedeem')),
-    perks: document.querySelectorAll('.genius-perk').length,
+    perks: document.querySelectorAll('.genius-perk:not(.genius-perk--more)').length,
     more: document.querySelectorAll('.genius-perk--more').length,
-    primary: document.querySelector('#geniusRestore')?.textContent?.trim() || '',
+    lastIsMore: Boolean(document.querySelector('.invite-perks > li:last-child.genius-perk--more')),
+    primary: document.querySelector('#geniusRestore')?.getAttribute('aria-label')?.trim() || '',
+    primaryText: document.querySelector('#geniusRestore')?.textContent?.trim() || '',
     creemHint: [...document.querySelectorAll('.auth-hint')].some((e) => /Creem/.test(e.textContent || '')),
   }));
   await ctx.close();
@@ -98,9 +102,9 @@ async function fitAt(width, height) {
     const me = els.find((e) => /成绩|个人|我的/.test(e.getAttribute('aria-label') || e.textContent || ''));
     (me || els[0])?.click();
   });
-  await page.waitForSelector('.genius-cta', { timeout: 20000 });
-  await page.evaluate(() => document.querySelector('.genius-cta')?.click());
-  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  await page.waitForSelector('#becomeGeniusBtn', { timeout: 20000 });
+  await page.evaluate(() => document.querySelector('#becomeGeniusBtn')?.click());
+  await page.waitForSelector('.invite-modal', { timeout: 10000 });
   await page.waitForTimeout(400);
   const r = await page.evaluate(() => {
     const btn = document.querySelector('#geniusRestore');
@@ -110,14 +114,18 @@ async function fitAt(width, height) {
       bottom: Math.round(b.bottom),
       vh: window.innerHeight,
       hitOk: btn === hit || btn.contains(hit),
-      perks: document.querySelectorAll('.genius-perk').length,
+      perks: document.querySelectorAll('.genius-perk:not(.genius-perk--more)').length,
     };
   });
   await ctx.close();
   return r;
 }
 
-const PROMISE = /注册后免费立即解锁全部内容/;
+/**
+ * 那句承诺。第 17 推之前它在抬头底下那一行（#geniusTag，「注册后免费立即解锁全部内容」）；
+ * 方案把那一行删了——和抬头说的是同一件事——所以现在承诺就是**抬头本身**。
+ */
+const PROMISE = /仅需注册即可免费/;
 /** 撤掉的那些字样，一个都不许回来。 */
 const GONE = [/订阅目前不开放/, /还剩\s*\d+\s*个名额/];
 
@@ -126,15 +134,18 @@ head('那一屏：话在、价钱不在、键是《注册》');
 {
   const s = await openGeniusWindow(null);
   // 尺子先行：窗真的开出来了。少了它，下面每一句「没有 X」在窗根本没开时全是真的。
-  check('（尺子）那一屏真的开出来了', s.opened && s.tag.length > 0, s.tag || '（一个字都没有）');
-  check('那句承诺就在那儿，不再等服务端', PROMISE.test(s.tag), s.tag);
+  check('（尺子）那一屏真的开出来了', s.opened && s.title.length > 0, s.title || '（一个字都没有）');
+  check('那句承诺就在那儿（抬头），不再等服务端', PROMISE.test(s.title), s.title);
+  check('抬头底下那句「注册后免费立即解锁全部内容」删了（第 17 推）', s.tagEl === false && s.tag === '', s.tag);
   for (const re of GONE) {
-    check(`撤掉的字样没回来：${re.source}`, !re.test(s.tag + ' ' + s.slots), s.tag + ' | ' + s.slots);
+    check(`撤掉的字样没回来：${re.source}`, !re.test(s.title + ' ' + s.tag + ' ' + s.slots), s.title + ' | ' + s.slots);
   }
   check('名额那一行整个没了（元素都不在）', s.slotsEl === false, String(s.slotsEl));
   check('一个价钱都不摆', s.planRows === 0, String(s.planRows));
   check('收款方那句话也不在', s.creemHint === false);
-  check('主键是《注册》，不是《登录》', s.primary === '注册', s.primary);
+  // 第 17 推起两颗键都只放图标，名字在 aria-label 上（读屏念的就是它）。
+  check('主键是《注册》，不是《登录》（读屏念的名字）', s.primary === '注册', s.primary);
+  check('键上不写字，只放图标', s.primaryText === '', s.primaryText);
   // E40 的另外三样
   check('抬头说的是「注册就免费」，不是「成为天才」', /仅需注册/.test(s.title), s.title);
   check('一条法务链接都不摆（那三份文档撤了，链过去是 404）', s.legalLinks === 0, String(s.legalLinks));
@@ -148,9 +159,12 @@ head('那一屏：话在、价钱不在、键是《注册》');
    *
    * 所以两件事都要量：摆满十条，而且摆满之后键还在屏内。只量前者会在某天悄悄把键挤出
    * 去，只量后者会在某天悄悄把列表收回四条。
+   *
+   * 第 17 推又加了一行：货单**以「……」结尾**（方案原话）。它不是「剩下的收起来了」——十
+   * 条照旧全摆——而是「还不止这些」，所以量的是「十条一条不少 ＋ 末尾正好一行省略号」。
    */
   check('十条功能全摆', s.perks === 10, String(s.perks));
-  check('没有那一行省略号', s.more === 0, String(s.more));
+  check('货单以一行「……」结尾（第 17 推）', s.more === 1 && s.lastIsMore, `${s.more} 行，末尾${s.lastIsMore ? '是' : '不是'}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,9 +197,9 @@ head('不再问 /api/slots —— 那个接口已经删了');
     const me = els.find((e) => /成绩|个人|我的/.test(e.getAttribute('aria-label') || e.textContent || ''));
     (me || els[0])?.click();
   });
-  await page.waitForSelector('.genius-cta', { timeout: 20000 });
-  await page.evaluate(() => document.querySelector('.genius-cta')?.click());
-  await page.waitForSelector('.genius-modal', { timeout: 10000 });
+  await page.waitForSelector('#becomeGeniusBtn', { timeout: 20000 });
+  await page.evaluate(() => document.querySelector('#becomeGeniusBtn')?.click());
+  await page.waitForSelector('.invite-modal', { timeout: 10000 });
   await page.waitForTimeout(1200);
   check('开那一屏一次都没去问 /api/slots', asked === 0, `${asked} 次`);
   await ctx.close();
