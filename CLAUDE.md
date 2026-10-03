@@ -9,6 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `claude/fangtang-game-web-app-xbecza` **就是 Vercel 的生产分支**。推上去几十秒后
 play-slides.com 就变了，没有预发环境，没有中间确认。所以：
 
+> **第 20 推（2026-10-03）之后**：CI 多了一个 `promote` job——`check` 和 `browser` 两条都绿了，
+> 它才把这一次提交快进到 `production` 分支。玩家在 Vercel 把 Branch Tracking 改成 `production`
+> **之后**，推这个分支就不再直接上线（线上永远是最近一次 CI 全绿的那一版）；**改之前仍然是
+> 推送 = 上线**。改没改，看 Vercel 项目 Settings → Environments → Production。
+
 - 推之前把相关的门跑完（见下面《检查门》）。
 - `vercel.json` 是**按 schema 校验**的：多一个它不认识的顶层字段（比如想写个
   `"//comment"` 当注释）会让**整份配置作废**，部署直接失败，报
@@ -72,7 +77,7 @@ node scripts/dev-server.mjs 8816 dist &
 node scripts/check-multiplayer.mjs http://localhost:8816/
 ```
 
-CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**：
+CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**（外加两条都绿之后才跑的 `promote`，见文件头）：
 
 - `check` —— 第 ①② 类里跑得快的那一批。这一条的节奏不许被拖慢（等得久的检查最后
   一定会被人跳过）。

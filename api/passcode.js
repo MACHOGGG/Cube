@@ -28,8 +28,8 @@ import { storeConfigured } from './_store.js';
  *
  *   { checkoutId, password }            — a checkout Creem confirms is paid.
  *     Only whoever came back from that payment holds the id, so holding it
- *     is the evidence that the address is theirs to claim. This is the one
- *     the app uses, the moment the player lands back from Creem.
+ *     is the evidence that the address is theirs to claim. **第 20 推起这一支
+ *     回 410**，代码原样留着——见下面分发那一行的注释。
  *
  *   { code, token, email, password }    — the token a redeemed code
  *     returned. It attaches an address to what the code granted, so the
@@ -51,7 +51,18 @@ export default async function handler(req, res) {
   const { checkoutId, code, token, email, password, news } = readBody(req);
   // 建账号的两条路都顺手带着「愿不愿意收信」。改密码那条不带——那不是回答这
   // 个问题的地方，顺手改掉别人的订阅偏好是不对的。
-  if (checkoutId) return create(res, String(checkoutId), password, news === true);
+  //
+  // **刷卡那一支（create）回 410**（第 20 推，定稿方案原话：「unlock.js 和 passcode 的 create 改
+  // 成回 410」）。它是刷卡付完款、从 Creem 跳回来那一刻设密码开账号用的；如今密码整个取消了
+  // （E37），网页端也不卖了（`engine/saleWindow.ts` 的 WEB_SALE_OPEN），客户端的 `attachAccount`
+  // 没有任何界面入口在叫它，还会打到这儿的只剩很早以前开着、一直没刷新的旧标签页。410 而不是落到
+  // 下面的 400 `action`：这条路是故意关掉的，日志里和「请求写错了」分得开。
+  //
+  // **`create` 的代码一行没删**：玩家 2026-10 点名要「完整保留现在已有的这套跟 creem 之间的联
+  // 络机制，无论是页面的还是代码的部分」（saleWindow.ts 那段），它正是那套机制的一环。改回开售
+  // 时把这一行换回 `return create(res, String(checkoutId), password, news === true)`——到那时
+  // 先想清楚它设的那把六位密码在验证码登录底下还有没有意义。
+  if (checkoutId) return send(res, 410, { error: 'gone' });
   if (code) return bind(res, String(code), String(token || ''), email, password, news === true);
   // 注册那一支也撤了（见文件末尾那段），所以带 `register: true` 的请求落到下面那一行，
   // 和任何别的认不出来的请求一样答 400 `action`——而不是悄悄落到某一支上去。
@@ -196,7 +207,8 @@ async function create(res, checkoutId, password, news) {
  *
  * 撤的是这一支和它的分发，连同只有它在用的那四样 import（burnGuess / checkPin /
  * SECRET_RE / updateAccount）。`bind` / `create` 两支留着（老账号、在途标签页），所以
- * `PASS_RE` 还在用——`bind` 那条路还要设六位密码。
+ * `PASS_RE` 还在用——`bind` 那条路还要设六位密码。（`create` 第 20 推起回 410，代码留着，
+ * 见分发那一行。）
  */
 
 /*

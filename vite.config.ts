@@ -4,7 +4,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 // `vite build --mode artifact` produces one self-contained dist/index.html
 // (JS/CSS inlined, no separate chunk files) for publishing as a quick
 // shareable preview. The normal `vite build` stays multi-file, which is what
-// the PWA service worker and real hosting want.
+// real hosting wants. (No service worker: vite-plugin-pwa was still listed in
+// package.json but no longer wired in here; the 20th push uninstalled it.)
 export default defineConfig(({ mode }) => ({
   base: './',
   server: {

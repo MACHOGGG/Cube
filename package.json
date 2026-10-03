@@ -31,7 +31,6 @@
     "playwright": "^1.62.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
-    "vite-plugin-pwa": "^0.21.1",
     "vite-plugin-singlefile": "^2.3.3"
   },
   "dependencies": {

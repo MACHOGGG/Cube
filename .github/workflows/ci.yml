@@ -1,6 +1,11 @@
 # 每次推到这个分支，机器先替我们跑一遍。
 #
-# **两个 job，并排跑。**
+# **两个 job，并排跑；两条都绿了，第三个 job 才把这一版推到 production。**
+#
+# `promote`（第 20 推）：从前「推送 = 上线」——开发分支就是 Vercel 的生产分支，推上去几十秒
+# play-slides.com 就变了，CI 红不红都拦不住，它只能事后告诉你「刚上线的那一版是坏的」。现在
+# Vercel 改认 `production`（玩家在后台改 Branch Tracking），而 `production` 只由 promote 推：
+# check 和 browser 都过了，才把这一次提交原样快进过去。
 #
 # `check`：不用起浏览器、几十秒就跑完的那一批——类型、构建，加上一堆纯逻辑的检查。
 # 这一条的节奏不许被拖慢：等得久的检查最后一定会被人跳过。
@@ -1151,3 +1156,43 @@ jobs:
           nohup node scripts/dev-server.mjs 8975 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8975/ && break; sleep 0.25; done
           node scripts/check-share-seed.mjs http://localhost:8975/
+
+  # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
+  #
+  # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。
+  # · **只快进**：production 永远是开发分支上的某一个提交。
+  #   - 这一版已经在 production 里了（一次更晚的推送先跑完、先推过了）——什么也不推，算过。
+  #     不然一次慢的旧运行会把 production 往回拨。
+  #   - production 上有开发分支没有的提交（有人手推过 production）——不推、报红，等人来看。
+  #     这时候硬推（--force）等于悄悄把那几个提交从线上撤掉。
+  # · 同一时间只有一个在推（concurrency）；排着队的旧运行被新的顶掉也没关系，最新那次会推。
+  # · 推用的是这次运行自带的 GITHUB_TOKEN。仓库给它的默认权限可能只有读，所以这个 job 自己写
+  #   明 `contents: write`（方案原话「需要 contents: write」）。
+  promote:
+    needs: [check, browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/claude/fangtang-game-web-app-xbecza'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: promote-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 推到 production（只快进）
+        run: |
+          if git fetch --quiet origin production; then
+            if git merge-base --is-ancestor HEAD origin/production; then
+              echo "这一版已经在 production 里了，不用再推。"
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor origin/production HEAD; then
+              echo "::error::production 上有开发分支没有的提交，不推。先查清楚是谁、为什么手推了 production。"
+              exit 1
+            fi
+          else
+            echo "production 还不存在：这一次新建它。"
+          fi
+          git push origin HEAD:refs/heads/production
