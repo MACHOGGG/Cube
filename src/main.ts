@@ -24,7 +24,7 @@ import { renderCircleTutorial } from './ui/circleTutorial';
 import { loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, seenTutorials, STRINGS, type Lang, type TutorialShape } from './i18n';
 import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
 import { openAuthWindow, openGeniusWindow } from './ui/subscribe';
-import { renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
+import { errorText, renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
 import { confirmLeaveRoom } from './ui/confirmLeaveRoom';
@@ -486,12 +486,14 @@ async function startRoundFor(mode: string, slot?: 'same' | 'own', flip?: boolean
   }
   // Still the host's page, still their room: say what went wrong and leave
   // them where they are to try another board (or wait for a fourth friend).
-  if (banner) {
-    banner.textContent =
-      begun.reason === 'tooFew'
-        ? STRINGS[currentLang].mpErrTooFew
-        : STRINGS[currentLang].mpErrNotOpen;
-  }
+  // 照 ui/multiplayer.ts 那一份映射说话。从前这儿自己拼了两分支：`tooFew` 说「人太
+  // 少」，**其余一律**说「小屋还没开放」——而 startMatch 答得出 claimed / tooMany /
+  // busy / ended / notHost / mode，六种都掉进那个「其余」里。最冤的是被限速挡住那一
+  // 次：屋子开着、人也够，屏幕上却写着「小屋还没开放」，于是屋主一遍遍地按。
+  //
+  // 一处映射两处用（那个函数自己的注释里写着为什么）。它仍有两种落在 default 上
+  // （notHost / mode），那是另一件事：要说得准得先有话可说（四语各一句）。
+  if (banner) banner.textContent = errorText(begun.reason, currentLang);
   return true;
 }
 

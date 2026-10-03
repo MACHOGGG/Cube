@@ -39,6 +39,8 @@
  *   ⑧ 两条 end 落在一起        → 同上，那张要发出去的战绩卡上分数不能翻倍
  *   ⑧乙 抢不到锁的那一条        → 要等出一张记完的卡（多人页就是拿它画的）
  *   ⑨ 抢到锁之后半路死掉      → 废锁要能被接手，屋子不许卡到过期
+ *   ⑰ 离开撞上开局            → 走的那一局照记（一次），而记账不许把他接回来
+ *   ⑱ 重进撞上开局            → 认回自己那把椅子，而走之前那点分不许记第二遍
  *
  * ④ 的守卫本身没问题，它挡的正是断线重连带回来的旧分。要守的是它挡完之后的
  * 两件事：**座位要放下**（不然全屋等一个在打旧局的人，等到天荒地老），以及
@@ -117,6 +119,26 @@ async function agePast(code, playerId) {
   const hash = await hgetall(roomKey(code));
   const beat = hash['h:' + playerId] || {};
   await hsetRace(roomKey(code), 'h:' + playerId, { ...beat, byeAt: 1 });
+}
+/**
+ * 把这一局摆成「已经开了 ranForS 秒」——不真等。
+ *
+ * 为什么不真等：倒数是 4.5 秒，扫十一档错位就是五十秒，而 `check` 那条 CI 的节奏不许
+ * 被拖慢（CLAUDE.md：等得久的检查最后一定会被人跳过）。
+ *
+ * ⚠️ **两处一起摆**。记账那一句挡「来晚了的人」用的是 `joinedAt > startAt`
+ * （bankRound），而这几个人是在**真的**开赛时刻之前几毫秒进来的——光把开赛时刻挪到
+ * 20 秒前，他们就全成了「这一局开了之后才进来的」，于是一个人都不记账，量到的
+ * 「total=0」看着像竞态，其实是夹具自己摆错了。
+ */
+async function agePlay(code, playerIds, ranForS = 20) {
+  const hash = await hgetall(roomKey(code));
+  const startAt = Date.now() - ranForS * 1000;
+  await hsetRace(roomKey(code), 'meta', { ...hash.meta, startAt });
+  for (const id of playerIds) {
+    await hsetRace(roomKey(code), 'p:' + id, { ...hash['p:' + id], joinedAt: startAt - 1000 });
+  }
+  return startAt;
 }
 
 // ---- ① 报分撞上心跳 ------------------------------------------------------
@@ -854,6 +876,159 @@ async function agePast(code, playerId) {
     // 的话 stray 也是空的，这一条会变成空判——那是最难发现的一种假绿。
     check('⑯ 量程：真的找到了三处写 meta', writers.length === 3, `${writers.length} 处`);
   }
+}
+
+// ---- ⑰ 点《离开》撞上屋主开下一局 --------------------------------------
+//
+// 两条路写的是同一个人的两样东西：leave 写 `p:`（只写 left 一位），start 的记账
+// 循环写 `t:`（累计账）和 `r:`（这一局）。拆开之后它们本该互不相干——这一条就是
+// 把「本该」钉住。
+//
+// 从前记账是写在 `p:` 上的（见 totalKey 那段），而它手上是函数一进来那份快照：
+// 快照里这个人还没走（`left` 不在），整份写回去就把 leave 刚写下的 `left` 抹掉
+// ——**一个按了《离开》的人被记账接回了屋里**。屏幕上他好好地坐在名单里，却永
+// 远不再报到，于是 roundOver 等他等满 ABSENT_MS（90 秒）才轮到下一局，而他那把
+// 椅子也一直占着（leave 已经把 `s:i` 交回去了，座位和椅子从此对不上）。
+//
+// 和 ⑦⑧⑩⑪ 一样扫错位：真正同时（错位 0）反而最安全。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  let worst = null;
+  for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20]) {
+    const { code, host, guest } = await openRoom();
+    await agePlay(code, [host.playerId, guest.playerId]);
+    await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
+    await call({ action: 'score', code, ...guest, score: 200, finished: true, seconds: 20, round: 1 });
+    await Promise.all([
+      call({ action: 'start', code, ...host, mode: 'square' }),
+      (async () => {
+        await ticks(k);
+        return call({ action: 'leave', code, ...guest });
+      })(),
+    ]);
+    const after = await call({ action: 'state', code, ...host });
+    const g = seatOf(after, guest.playerId);
+    const h = seatOf(after, host.playerId);
+    if (g.left !== true) worst = `错位 ${k}：走掉的人被记账接回来了（left=${g.left}）`;
+    else if (g.total !== 200 || g.rounds !== 1) {
+      worst = `错位 ${k}：客人 total=${g.total}（该是 200）rounds=${g.rounds}`;
+    } else if (h.total !== 100 || h.rounds !== 1) {
+      worst = `错位 ${k}：屋主 total=${h.total}（该是 100）rounds=${h.rounds}`;
+    }
+  }
+  check('⑰ 离开撞上开局：十一档错位，分照记一次、人照走', worst === null, worst || '');
+}
+
+// ---- ⑱ 走了又回来撞上屋主开下一局 --------------------------------------
+//
+// 认领自己那把椅子（join 里 `back` 那一支）要写三格：`p:`（新钥匙、名字、椅子）、
+// `h:`（心跳翻新）、`r:`（这一局）。而开局的记账循环正在给同一个人写 `t:` 和
+// `r:`。两条都要写 `r:`，于是这一格是真会撞的那一个。
+//
+// 三件事各看一眼：
+//
+//   · **椅子要认得回来**（`rejoined: true`）。记账要是回去写 `p:`（它手上那份快照里
+//     这个人还没走），`left` 就被抹掉，`seatReclaimable` 当场不成立——这个人被当成
+//     「另一个恰好同名的人」发一把新椅子：屋里于是有两个「甲」，分留在旧那把椅子
+//     上，而他自己从 0 开始。
+//   · **回来那把新钥匙真的开得了门**。反过来的那半边：记账把刚发的新钥匙用旧快照盖
+//     没了，那台设备界面一切正常，报分却从此被 403 安静地拒掉（claimKey 那段注释里
+//     记着这一幕）。
+//   · **走之前那点分只记一遍**。认领这一支手上也有一份函数入口的快照（里头 `score`
+//     还是 200），记账把 `r:` 记进 `t:` 之后清掉，而它随后又把 200 写回 `r:`——于是
+//     `t:` 里有 200、`r:` 里又有 200，屏幕上 `total + score` 是 400，再开一局还会把
+//     它记第二遍。所以这一节不只看当场，还要再开一局之后回头看一眼。
+//
+// ⚠️ 这一节要**三个人**：走掉的那个不算在 playerCount 里，屋里只剩屋主一个的话
+// start 当场回 409 tooFew——第一版就是两个人，于是整节跑下来 round 始终是 1、`t:`
+// 一格都没写，量到的「total=0」根本不是竞态，是那一局压根没开。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  let worst = null;
+  for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20]) {
+    const h = await call({ action: 'create', name: '屋主', ...who });
+    const code = h.body.code;
+    const host = { playerId: h.body.playerId, playerToken: h.body.playerToken };
+    const a = await call({ action: 'join', code, name: '甲' });
+    const gone = { playerId: a.body.playerId, playerToken: a.body.playerToken };
+    const b = await call({ action: 'join', code, name: '乙' });
+    const stay = { playerId: b.body.playerId, playerToken: b.body.playerToken };
+    await call({ action: 'start', code, ...host, mode: 'square' });
+    await agePlay(code, [host.playerId, gone.playerId, stay.playerId]);
+    await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
+    await call({ action: 'score', code, ...stay, score: 300, finished: true, seconds: 30, round: 1 });
+    await call({ action: 'score', code, ...gone, score: 200, finished: true, seconds: 20, round: 1 });
+    await call({ action: 'leave', code, ...gone });
+    const [, back] = await Promise.all([
+      call({ action: 'start', code, ...host, mode: 'square' }),
+      (async () => {
+        await ticks(k);
+        return call({ action: 'join', code, name: '甲' });
+      })(),
+    ]);
+    const after = await call({ action: 'state', code, ...host });
+    if (after.body.round !== 2) {
+      worst = `错位 ${k}：下一局压根没开起来（round=${after.body.round}）——这一节的前提塌了`;
+      continue;
+    }
+    if (back.body.rejoined !== true) {
+      worst = `错位 ${k}：没认回自己那把椅子（rejoined=${back.body.rejoined}）`;
+      continue;
+    }
+    const pid = back.body.playerId;
+    const g = seatOf(after, pid);
+    if (after.body.players.length !== 3) {
+      worst = `错位 ${k}：屋里成了 ${after.body.players.length} 个人（同名的那个被发了新椅子）`;
+    } else if (g.total !== 200 || g.rounds !== 1) {
+      worst = `错位 ${k}：甲 total=${g.total}（该是 200）rounds=${g.rounds}`;
+    } else if ((g.total || 0) + (g.score || 0) !== 200) {
+      worst = `错位 ${k}：屏幕上那个数是 ${(g.total || 0) + (g.score || 0)}（该是 200）score=${g.score}`;
+    } else {
+      // 回来那把新钥匙真的开得了门。
+      const rep = await call({
+        action: 'score',
+        code,
+        playerId: pid,
+        playerToken: back.body.playerToken,
+        score: 7,
+        finished: false,
+        round: 2,
+      });
+      if (rep.status !== 200 || rep.body.error) {
+        worst = `错位 ${k}：回来之后报分被拒（${rep.status} ${rep.body.error}）`;
+      }
+    }
+    if (worst) continue;
+    // 再开一局：上一局那点分不许在这时候冒出来第二遍。
+    for (const other of [host, stay]) {
+      await call({ action: 'score', code, ...other, score: 0, finished: true, round: 2 });
+    }
+    await call({
+      action: 'score',
+      code,
+      playerId: pid,
+      playerToken: back.body.playerToken,
+      score: 0,
+      finished: true,
+      round: 2,
+    });
+    await call({ action: 'start', code, ...host, mode: 'square' });
+    const third = seatOf(await call({ action: 'state', code, ...host }), pid);
+    if (third.total !== 200) {
+      worst = `错位 ${k}：再开一局之后甲 total=${third.total}（该还是 200）rounds=${third.rounds}`;
+    }
+  }
+  check('⑱ 重进撞上开局：十一档错位，椅子认得回、分不记两遍', worst === null, worst || '');
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

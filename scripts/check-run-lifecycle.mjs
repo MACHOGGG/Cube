@@ -144,7 +144,11 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   const missed = says.filter((r) => !new RegExp(`reason === '${r}'`).test(ui));
   check('每一种失败都有自己的一句话（不许落到「网络出错」兜底上）',
     missed.length === 0, missed.length ? '少了：' + missed.join(' ') : `${says.length} 种`);
-  check('（尺子）兜底那一句还在（不是把兜底删了才全绿）', /: s\.purchaseNetwork;/.test(ui));
+  // 兜底那一句以**逗号**还是分号收尾，取决于它写在哪儿：`accountFailText` 里是
+  // `default: return …;`（分号），而《注册 / 登录》那扇窗的 `say()` 把整条三元链当**参数**
+  // 递出去，收尾是逗号（2026-10-03 第 9 推把那一屏收成三态时改的）。这条尺子原先只认分
+  // 号，于是它在这次改版之后变成了红的——而它要量的事情（兜底还在）一直成立。两种都认。
+  check('（尺子）兜底那一句还在（不是把兜底删了才全绿）', /: s\.purchaseNetwork[;,]/.test(ui));
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);

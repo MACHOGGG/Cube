@@ -51,10 +51,26 @@ const SCORING_V = (() => {
  * **交卷那一路自动补上现行的规则版本**：服务端只收现行这一版（《侵蚀阶梯》v1.2
  * §6），而这道门测的是交卷、排榜、存档那一整套，不是版本闸。版本闸另有一条断言，
  * 那一条故意不补。
+ *
+ * **顺手把那两处对齐**（`data.totalScore` ← `score`、`data.shapeId` ← `mode`）：真客户
+ * 端报的就是这样——它那两个字段正是从 `data` 里算出来的（engine/cloudScores.ts：
+ * `mode: data.shapeId`、`score: round(data.totalScore)`），而服务端 2026-10-03 起要
+ * 求两处说同一件事（对不上就 400 mismatch，见 check-scores-guard）。这道门从前的
+ * 夹具只填一半，于是每一条都踩在那道新检查上——**夹具欠的债，不是服务端松了口**。
+ * 显式写了 `data` 的那几条照旧按自己写的来（下面那两条「旧规则的局」就是），所以这
+ * 一补不会盖掉任何一条有意摆出来的不一致。
  */
 async function call(body) {
   if (body?.action === 'push' && !body.__raw) {
-    body = { ...body, data: { ...(body.data || {}), rules: SCORING_V } };
+    body = {
+      ...body,
+      data: {
+        shapeId: body.mode,
+        totalScore: body.score,
+        ...(body.data || {}),
+        rules: SCORING_V,
+      },
+    };
   }
   const req = { method: 'POST', body };
   const res = {

@@ -86,7 +86,15 @@ const SCORING_V = (() => {
 
 async function call(body) {
   if (body?.action === 'push') {
-    body = { ...body, data: { ...(body.data || {}), rules: SCORING_V } };
+    // 规则版本自动补上（服务端只收现行那一版，而这台门测的是交卷撞重建，不是版本闸），
+    // `data.totalScore` / `data.shapeId` 也照真客户端的样子对齐——客户端那两个顶层字段
+    // 本来就是从 `data` 算出来的（engine/cloudScores.ts），而服务端 2026-10-03 起要求两
+    // 处说同一件事（对不上 400 mismatch，门是 check-scores-guard）。夹具只填一半的话，
+    // 这台门第一条就 400。
+    body = {
+      ...body,
+      data: { shapeId: body.mode, totalScore: body.score, ...(body.data || {}), rules: SCORING_V },
+    };
   }
   const req = { method: 'POST', headers: { 'x-vercel-forwarded-for': nextIp() }, body };
   const res = {

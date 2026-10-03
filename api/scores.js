@@ -60,6 +60,33 @@ import {
 const MAX_SCORE = 1_000_000_000;
 /** 存档留多少局。够翻很久，又不至于让一个账号的文档大到读不动。 */
 const KEEP_RUNS = 60;
+/**
+ * 一个账号一小时最多交几局。
+ *
+ * 三百局 ＝ 平均十二秒一局，连打带交卷，一小时不停。**人做不到**（最短的那几档玩法
+ * 本身就是 100 秒），所以这个数拦不住任何一个真玩家，只拦住「拿脚本一直往这个接口
+ * 灌」——而这条路灌进来的每一局都要走一把锁、一次整份 stats、一次整份存档、二十几次
+ * 榜上写入，是全站第二贵的调用（最贵的是 rebuild，它早就限过速了）。
+ *
+ * 和别处几道门不同，这一道的键是**账号**，不是 IP（callerId）：这条路非认得出你是谁
+ * 不可（上面 identify 那一关），而要拦的恰恰是「同一个账号往自己名下灌」。换 IP 绕不
+ * 过它，换账号要先有账号。
+ */
+const PUSHES_PER_HOUR = 300;
+/**
+ * 一局那份 `data` 最多多少个字符（JSON 串起来数）。
+ *
+ * 为什么要有这个数：这份 `data` 会被原样塞进存档（`runs:`），而存档是一份整体读写
+ * 的 JSON——六十局摞在一起，每一次 `mine` 要整份读出来、每一次 `rebuild` 要把**全站
+ * 每个人**的那一份都读一遍。谁往里塞一兆字节，塞的是那个账号从此读不动的存档，而且
+ * 一次重建就能把整站拖垮。
+ *
+ * 四千是量出来的：把 `RunData` 每一位都填满、字符串全用中文长句，`JSON.stringify`
+ * 出来 641 个字符。留六倍的余量给将来新加的字段，同时把一份存档的上限钉在 60 × 4096
+ * ≈ 240KB（Upstash 单值 1MB 以内）。真有一天 `RunData` 长到接近它，门会先红
+ * （check-scores-guard），而不是线上先炸。
+ */
+const DATA_MAX_CHARS = 4096;
 /** 「这一局我收过了」记多少条。比 KEEP_RUNS 长一点，防的是重复提交。 */
 const KEEP_SEEN = 120;
 /** 一张榜一次给多少行。 */
@@ -377,7 +404,25 @@ async function push(res, body, who) {
   const runId = String(body?.runId || '').slice(0, 64);
   const mode = cleanMode(body?.mode);
   const score = num(body?.score);
+  const data = body?.data;
   if (!runId || !mode) return send(res, 400, { error: 'run' });
+  /*
+   * **带了 `data` 就得是一份记录**（对象，不是字符串、不是数组）。
+   *
+   * 它会被原样存进存档（`runs:`），而记录页、战绩图、重建都从那一份读；塞个字符串
+   * 或者数组进来，存档里就多一条谁都读不懂的记录。
+   *
+   * 这一句排在下面那道规则闸**前面**，是因为它必须**够得着**：规则闸问的是
+   * `data.rules`，而一个字符串、一个数组都答不出那个字段，于是一律走「旧客户端」那条
+   * 温和的 200——摆在闸后面的话，这一句一辈子都跑不到（第一版就是这么写的：一道永远
+   * 为假的门，看着在守，其实一行都没验过）。
+   *
+   * 反过来，**压根没带 `data`** 的仍然走那条温和的路，不在这儿拦：那正是在途的旧客户
+   * 端该走的出口（见下面那段）。
+   */
+  if (data !== undefined && data !== null && (typeof data !== 'object' || Array.isArray(data))) {
+    return send(res, 400, { error: 'data' });
+  }
 
   /*
    * **只收现行这一版计分规则打出来的局**（《侵蚀阶梯》v1.2 §6）。
@@ -390,12 +435,65 @@ async function push(res, body, who) {
    * 让他看见一句「上传失败」，而那一局本来就不该入榜，不是他的错。客户端那头照
    * `stored` 在结算页上注一句「本局不入榜」。
    */
-  if (String(body?.data?.rules || '') !== SCORING_RULES) {
+  if (String(data?.rules || '') !== SCORING_RULES) {
     return send(res, 200, { ok: true, stored: false, reason: 'rules' });
   }
 
+  /*
+   * 限速。排在规则那一关后面，是因为那一关一次库都不碰（在途旧客户端走的就是它），
+   * 而这一句本身是一次往返——先放掉最便宜的那条路，别让它去抢这个账号的额度。
+   *
+   * 到上限回 429。客户端对它和对「网抖了一下」是同一个反应：隔两秒重报一次，再不成
+   * 这一局就不入榜了（engine/cloudScores.ts 的 pushRun）。这对真玩家不要紧——三百局
+   * 一小时他根本到不了；到得了的那个人，丢的正是他灌进来的那些。
+   */
+  if (await tooMany('scores:push', who.id, PUSHES_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+
+  /*
+   * ── 这一份东西长得对不对 ───────────────────────────────────────
+   *
+   * 下面两道都是**格式**，不是反作弊：一个会开开发者工具的人照样能报一个真打不出来
+   * 的分（文件头「关于作弊」那一段说清楚了，这儿不多担保一个字）。它们拦的是另一
+   * 件事——**同一局在库里留下两份互相打脸的记录**。
+   *
+   * ① **榜上那个数和存档里那个数必须是同一个**（`score` ↔ `data.totalScore`，
+   *    `mode` ↔ `data.shapeId`）。客户端本来就是从后者算出前者的（见
+   *    engine/cloudScores.ts：`mode: data.shapeId`、`score: round(data.totalScore)`），
+   *    所以对不上的只有手搓的请求。为什么非拦不可：**榜是 `score` 写的，重建是照
+   *    存档里的 `run.score` 重算的，而玩家自己那一页画的是 `data.totalScore`**——
+   *    对不上就成了「榜上写 999999，点开这一局的战绩图写 300」，而且谁都说不出哪
+   *    个是真的。一局一个数，这是能便宜地守住的那一半。
+   *
+   * ② 那份 `data` 不许大过 DATA_MAX_CHARS（见上面那段：存档是整体读写的）。
+   *
+   * （「得是一份记录」那一条在上面，规则闸之前——理由写在那儿。）
+   */
+  if (num(data.totalScore) !== score || cleanMode(data.shapeId) !== mode) {
+    return send(res, 400, { error: 'mismatch' });
+  }
+  if (JSON.stringify(data).length > DATA_MAX_CHARS) {
+    return send(res, 400, { error: 'tooBig' });
+  }
+  /*
+   * **上限这件事先只记一笔，不拦。**
+   *
+   * `num()` 早就把存下来的数封在 MAX_SCORE 以内（文件头「关于作弊」），所以榜的刻度
+   * 不会被一个坏数字毁掉——这一句不改那个，它只是把「真有人报出过超上限的分吗」记到
+   * 日志里。先量再拦：现在还不知道正常打能打到多高（无限反转封顶那次就差点把正常高分
+   * 一起拦掉），凭感觉在这儿加一条 4xx，第一个被拦住的很可能是个打得特别好的人。
+   *
+   * 日志里**不写他是谁**：`who.id` 就是邮箱地址（见 _entitlement 的 identify），而日志
+   * 是会被整段贴进工单的东西。`runId` 已经足够把这一局找回来（它是「时刻-棋盘-玩法」，
+   * 见 engine/cloudScores.ts 的 runIdOf），里头没有任何凭据。
+   */
+  if (Number(body?.score) > MAX_SCORE) {
+    console.warn('[scores] over cap', { runId, mode, raw: Number(body.score), cap: MAX_SCORE });
+  }
+
   // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
-  const boardId = boardIdOf(mode, body?.data);
+  const boardId = boardIdOf(mode, data);
   const name = cleanName(body?.name);
 
   const got = await withLock(statsLockKey(who.id), async () => {
@@ -414,7 +512,7 @@ async function push(res, body, who) {
     // 分开写就会出现「存档里有这一局、汇总里没有」的半截状态。
     const archive = await get(runsKey(who.id));
     const list = Array.isArray(archive) ? archive : [];
-    list.unshift({ runId, mode, score, at: Date.now(), data: body?.data ?? null });
+    list.unshift({ runId, mode, score, at: Date.now(), data });
     await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
 
     /*

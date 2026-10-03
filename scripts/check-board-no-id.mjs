@@ -49,6 +49,17 @@ const { default: scores } = await import('../api/scores.js');
 const { newAccount, saveAccount, pairKey } = await import('../api/_accounts.js');
 
 async function call(body) {
+  // 交卷那一路把 `data.totalScore` / `data.shapeId` 对齐到顶层那两个字段：真客户端报的
+  // 就是这样（顶层那两个本来就是从 `data` 算出来的，见 engine/cloudScores.ts），而服务端
+  // 2026-10-03 起要求两处说同一件事（对不上 400 mismatch，门是 check-scores-guard）。这
+  // 台门的夹具只写了 `data: { rules: 'ero1' }`，不补的话每一条交卷都 400，而它要量的是榜
+  // 上那一行印了什么——和两处对不对得上没有关系。
+  if (body?.action === 'push') {
+    body = {
+      ...body,
+      data: { shapeId: body.mode, totalScore: body.score, ...(body.data || {}) },
+    };
+  }
   const out = { code: 0, payload: null };
   await scores(
     { method: 'POST', body, headers: { 'x-vercel-forwarded-for': '10.2.0.1' } },

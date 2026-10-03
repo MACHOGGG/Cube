@@ -157,16 +157,38 @@ check('而屏幕上那一对数的是选手，上限 20', arena.body.state?.play
   check('竞赛屋里正好 11 个人', st.players.filter((p) => !p.left).length === 11, String(st.players.length));
 }
 
-// ---- 屋主不在：先是「等一下就来」，太久就是「离家出走」 -------------------------
-// 屋主断网：轮询发不出去、也发不出 bye（等于锁了屏、进了电梯）。关掉浏览器不一样——
-// 那会发 bye，屋里的人立刻看到「离家出走」。
+// ---- 屋主不在：「没动静」一直是「等一下就来」，只有「终端没了」才是解散 ---------
+//
+// 屋主断网：轮询发不出去、也发不出 bye（等于锁了屏、进了电梯、进了隧道）。
+//
+// ⚠️ **90 秒没动静不再解散小屋**（2026-10-03，第 10 推 #9）。从前这儿等的就是那一下：
+// 90 秒一到，屋里的人看到「屋主离家出走了，小屋暂时解散」。可那个 90 秒只说明「他那台
+// 设备没说话」，而锁屏、接个电话、过个隧道过 90 秒都是常态——按这一下解散，代价是**正
+// 在打的人就地被转成单人局**，那一局的分再也回不到小屋的榜上（ui/scoreboard.ts 的
+// goSolo）。判定现在只认两种「真的走了」：他自己按了《离开》，和**终端没了**（关掉网页
+// 那一下会发 bye）。门：check-host-trouble 把这条映射的每一格都量了一遍。
 await A.ctx.setOffline(true);
 const awayShown = await B.page.waitForSelector('#hostAway', { timeout: 45000 }).then(() => true).catch(() => false);
 check('屋主 30 秒没动静：客人看到「屋主等一下就来」', awayShown);
 const awayText = await B.page.$eval('#hostAway .tag-line', (el) => el.textContent.trim()).catch(() => '');
 check('那句话就是「屋主等一下就来」', awayText === '屋主等一下就来', awayText);
+// 再等过 ABSENT_MS（90 秒）那条线：不许冒出「小屋暂时解散」，而且那句「等一下就来」还
+// 在。等 100 秒，是为了真的跨过那条线——这一节本来就要等满 90 秒，不多花时间。
+const cancelledTooSoon = await B.page
+  .waitForSelector('#roomCancelled', { timeout: 100000 })
+  .then(() => true)
+  .catch(() => false);
+check('屋主 100 秒没动静：**不**解散小屋（没动静不等于走了）', !cancelledTooSoon);
+check('那句「等一下就来」还在', Boolean(await B.page.$('#hostAway')));
+check('客人还坐在这间屋里（没被赶回主菜单）', Boolean(await B.page.$('.mp-code')));
+// 换成「终端真的没了」：网先恢复（断着网那个 bye 的 beacon 发不出去），再把屋主那一页
+// 导走——pagehide 会发 bye。服务器还要过 BYE_GRACE_MS（10 秒）才当真（刷新一次页面发的
+// 是同一个信号），所以这儿照旧给足时间等那句话。
+await A.ctx.setOffline(false);
+await A.page.waitForTimeout(1500);
+await A.page.goto('about:blank');
 const goneShown = await B.page.waitForSelector('#roomCancelled', { timeout: 90000 }).then(() => true).catch(() => false);
-check('屋主 90 秒没动静：换成「屋主离家出走了，小屋暂时解散」', goneShown);
+check('屋主把网页关了：换成「屋主离家出走了，小屋暂时解散」', goneShown);
 const goneText = await B.page.$eval('#roomCancelled .tag-line', (el) => el.textContent.trim()).catch(() => '');
 check('那句话就是「屋主离家出走了，小屋暂时解散」', goneText === '屋主离家出走了，小屋暂时解散', goneText);
 await B.page.click('#roomCancelledOk');

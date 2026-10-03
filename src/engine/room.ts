@@ -161,14 +161,19 @@ export type HostTrouble = 'gone' | 'away';
  */
 export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): HostTrouble | null {
   if (!state || state.ended || iAmTheHost || !state.host) return null;
-  // 竞赛屋的主持人不下场，所以他的缺席只在**两局之间**才算数。
+  // **倒数和对局中，屋主的状态一概不算数**——哪一种屋子都一样。
   //
   // 原先为什么是错的：这一句的结果被 scoreboard 的 roomOver 当成「小屋散了」，而
-  // 那一头一判散场就把还在打的人就地转成单人局（goSolo）。主持人的 gone 是服务器
-  // 90 秒没听见心跳给的标记——而竞赛屋的主持人本来就盯着榜单看、不碰手机，锁屏过
-  // 90 秒是常态不是意外。于是：**主持人一锁屏，满屋选手全被踢出这场比赛**，他们
-  // 那一局的分再也回不到榜上。服务器那边压根没有这回事（playerCount 本来就不算主
-  // 持人，roundOver 也不等他），这一整条是客户端自己判出来的。
+  // 那一头一判散场就把还在打的人就地转成单人局（goSolo）。屋主的 gone 是服务器
+  // 90 秒没听见心跳给的标记——而手机进后台、接个电话、隧道里断网，过 90 秒都是常
+  // 态不是意外。于是：**屋主手机一黑，满屋人全被踢出这一局**，他们那一局的分再也
+  // 回不到榜上。服务器那边压根没有这回事（roundOver 不等缺席的人，playerCount 本
+  // 来就不算竞赛屋的主持人），这一整条是客户端自己判出来的。
+  //
+  // 这一条 2026-10-02 落地时只给了竞赛屋（主持人盯榜不碰手机，最容易撞上），
+  // 2026-10-03 推开到所有屋子：普通屋的屋主自己也在打，可他那一局**打完之后**就不
+  // 再翻页了——交完卷等别人的那几十秒里，他的设备照样可能被系统按下去。屋里其他人
+  // 手上那一局和他的状态没有关系，等他们打完再说也不迟。
   //
   // 判定放在这个函数里，不放在 roomOver 那一处：这个函数有三个调用方
   // （scoreboard 判散场、scoreboard 局中那层提示、multiplayer 小屋页那层提示），
@@ -176,10 +181,7 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
   //
   // 「正在打吗」不自己拼，问 roomPhase——全站唯一那份判定，它自己的注释写着为什么
   // 不该各处各拼一遍（连 learnHold「等人学教学」那一格算 countdown 都在里面）。
-  //
-  // 一局打完（roundOver）之后他还没回来，就回到原来的行为：散场，大家看到战绩卡。
-  // 这是对的——开下一局只有他能做。
-  if (state.contest) {
+  {
     const phase = roomPhase(state);
     if (phase === 'countdown' || phase === 'playing') return null;
   }
@@ -193,10 +195,21 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
   // 但服务器要过了宽限期还没再听见他才置这个位（api/room.js 的
   // BYE_GRACE_MS）：屋主刷新的那几秒里，屋里看到的是 away（等一下就来），
   // 不是这一条。
-  // 太久没动静（gone，服务器的 ABSENT_MS）也算走了：屋主离家出走，小屋暂时
-  // 解散——屋主身份不换人，屋里的人各自散去，等他回来再开一间。
-  if (!host || host.left || host.closed || host.gone) return 'gone';
-  return host.away ? 'away' : null;
+  // ⚠️ **太久没动静（gone）不再算「走了」。**
+  //
+  // 它从前和 left / closed 归在一起，于是「屋主的手机黑了 90 秒」和「屋主按了离开」
+  // 在屋里人眼里是同一件事：小屋当场解散。可这两件事差得远——按《离开》是他自己的决
+  // 定，座位都交回去了；90 秒没心跳只是他那台设备没说话，而他多半正拿着手机走回来。
+  //
+  // 现在 gone 归到 `'away'` 这一档：屏幕上说「屋主暂时联系不上」，等他。全员交完卷之
+  // 后那一路（scoreboard 里 `runFinished() && state.roundOver` 那一支）照常把人送回小
+  // 屋页——比分和名次就在那一页上，屋主回来接着挑下一场。
+  //
+  // 真的走了只剩两种：座位不在了 / 座位还在但人已经交回去了（left），以及把网页关掉
+  // 了（closed——只有 bye 那条路会置上，切应用、锁屏都不算）。那两种确实开不出下一
+  // 局，散场是对的。
+  if (!host || host.left || host.closed) return 'gone';
+  return host.away || host.gone ? 'away' : null;
 }
 
 export type RoomError =

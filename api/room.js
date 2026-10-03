@@ -240,6 +240,20 @@ const LEARN_IDLE_MS = 20_000;
 const seatLearning = (seat) =>
   Boolean(seat.learningAt) && Date.now() - seat.learningAt < LEARN_IDLE_MS;
 /**
+ * 一次挂起最多挂这么久，不管学的人还点不点。
+ *
+ * 上面那条二十秒的「走神就不等他」要**有人来问**才会生效：放行写在 `state()` 的轮询里
+ * （三道门里唯一稳定会跑到的那一条）。屋里一个人都不轮询的那几秒——全都切到后台、或者
+ * 只剩那个正在看教学的——它就不会发生，而那台设备每点一下还会把二十秒重新续上。于是一
+ * 个人慢慢翻教学，整屋的开赛可以被无限期推下去。
+ *
+ * 九十秒是硬顶：和 ABSENT_MS 同一个数，意思也是同一句「再久就不等了」。教学那几屏翻完
+ * 用不了九十秒；真翻不完的人学完会坐等待页，下一局再入——那本来就是设计。
+ */
+const LEARN_MAX_MS = 90_000;
+/** 这一次挂起是不是已经挂满了（见 LEARN_MAX_MS）。老的 meta 没有 heldAt，当成挂满。 */
+const holdExpired = (meta) => Boolean(meta.learnHold) && Date.now() - (meta.heldAt || 0) > LEARN_MAX_MS;
+/**
  * 可能有新手的那一局，开赛前多留的四秒：没看过这个玩法教学的人在这四秒里
  * 回答「会 / 不会」，其他人的倒数则从 8（横屏玩法 9）数起。客户端那一问的
  * 时限是同一个数（ui/multiplayer.ts 的 KNOW_ASK_MS）。
@@ -252,8 +266,10 @@ const ASK_MS = 4000;
  *   ABSENT_MS       90 s   多久没听见就算「不在了」——这一局不再等他；屋主 →
  *                          「屋主离家出走了，小屋暂时解散」（publicState 的 gone）
  *   LEARN_IDLE_MS   20 s   看教学的人多久没点一下就不再等他
+ *   LEARN_MAX_MS    90 s   一次挂起的硬顶：学的人还在点，也不再往后推开赛
  *   ASK_MS           4 s   开局前「会不会规则」那一问留的时间（倒数多数这几秒）
  *   ROOM_TTL_S      20 min 小屋多久没人碰就过期
+ *   SECONDS_SLACK_S 15 s   报上来的用时允许比「这一局开了多久」多出这么多（见 score）
  * 客户端那边只有一个：LATE_MS（5 s，开赛之后晚到多久就坐等待页），见
  * ui/multiplayer.ts。小屋此刻在哪一段（等人 / 倒数 / 打着 / 打完 / 散了）由
  * engine/room.ts 的 roomPhase 一处判定。
@@ -266,6 +282,19 @@ const familyOf = (mode) =>
 const countFromFor = (mode) => (WIDE_MODES.has(mode) ? 5 : 4);
 /** 这台设备看过哪几族的教学——只认那三个名字。 */
 const cleanSeen = (v) => (Array.isArray(v) ? [...new Set(v.filter((x) => FAMILIES.has(x)))] : []);
+/**
+ * 「屋里可能有新手」只对**这两族**成立。
+ *
+ * ⚠️ 网页那头的 `seenTutorials()`（src/i18n.ts）**只会回 square 和 circle**——教学本来就
+ * 只有这两族（基础三角 2026-09 删了，剩下的大三角是天才特供，没有自己那一份教学）。
+ * 所以三角那一族的 `seen` 里**永远是空的**，而下面那一句是「有人没看过这一族的教学」：
+ * 于是大三角那间屋子**每一局**都被判成「可能有新手」——全屋的倒数永远从 8 数起（横屏
+ * 9），而且每一局都把「你会不会玩」那一屏弹到每个人脸上。
+ *
+ * 这和竞赛屋主持人那件事是同一个形状（见下面 isSpectator 那一行的注释）：一个永远不会
+ * 出现在 `seen` 里的东西，被当成了「他没看过」。
+ */
+const NOVICE_FAMILIES = new Set(['square', 'circle']);
 const anyoneLearning = (hash) =>
   Object.entries(hash).some(([k, v]) => k.startsWith('p:') && v && !v.left && seatLearning(v));
 
@@ -483,8 +512,16 @@ function publicState(code, hash) {
        * 新）是两件事：屋主终端没了，这间小屋就散了；屋主网差，大家等他。
        */
       closed: seatClosed(value),
-      /** 正在看这个玩法的教学——全屋等他学完再一起数 4-3-2-1。 */
-      learning: seatLearning(value),
+      /**
+       * 正在看这个玩法的教学——全屋等他学完再一起数 4-3-2-1。
+       *
+       * ⚠️ **只在真的挂起着的时候才报。** 这一位在屏幕上的意思是「大家在等他」
+       * （ui 那头据此画「等 X 看教学」），而「他在看教学」和「大家在等他」是两件事：
+       * 挂起被放行之后（走神二十秒、或者挂满 LEARN_MAX_MS），倒数已经在走了，可他那台
+       * 设备还在教学页上一下一下地点——`seatLearning` 照旧为真，于是屋里所有人看着一句
+       * 「正在等他」而倒数正在归零，数到 0 直接开局。
+       */
+      learning: Boolean(meta.learnHold) && seatLearning(value),
     });
   }
   // 按累计总分排，不是按刚打完那一局。名单上每一行印的就是累计总分（前几局
@@ -623,6 +660,26 @@ const beatKey = (playerId) => 'h:' + String(playerId);
  * 个可以抢的地方。
  */
 const roundKey = (playerId) => 'r:' + String(playerId);
+/**
+ * **累计账自己一格**（`t:<id>`）：total / best / rounds / bestTime。
+ *
+ * 和 `h:`（心跳）、`r:`（这一局）是同一条规矩，理由也同一个：`p:` 那一格有**六条路**
+ * 在写（join 补椅子、leave 标走人、learn 记 learningAt 和 seen、claim 认领、改名字、
+ * 收椅子），每一条都是「读一份、改一点、整份写回去」。记账从前也写在 `p:` 上，于是：
+ *
+ *   屋主按《开下一局》→ 记账循环读到一份快照 → 中间有人改了名字 / 点了看教学 →
+ *   循环把快照整份写回去 → 那个人的名字、learningAt 当场被抹掉。
+ *
+ * 反过来更贵：那六条路里任何一条踩在记账中间，把它读到的**旧 total** 写回去，这一局
+ * 的分就凭空消失——而屏幕上一切正常，只有总分少了一截，事后谁也说不清少在哪儿。
+ *
+ * 拆开之后 `t:` 只有两处写（start 和 end 的记账循环，而它们互相让锁），那六条路一个
+ * 字都碰不到它。`readRoom` 读的时候折回座位上，所以下游（publicState / 排行 / 战绩
+ * 卡）一行都不用改。
+ */
+const totalKey = (playerId) => 't:' + String(playerId);
+/** 累计账那四样。`p:` 里的同名字段从此是死数据（和 h: / r: 一样，见 readRoom）。 */
+const TOTAL_FIELDS = ['total', 'best', 'rounds', 'bestTime'];
 
 /**
  * 「这把椅子归我认领」的独占权，一个座位一格。
@@ -780,7 +837,7 @@ const lockHeld = (hash, field) => {
 };
 
 /** 一局收尾时把那三样清回零（开下一局、散场各用一次）。 */
-const CLEAR_ROUND = { score: 0, finished: false, seconds: null };
+const CLEAR_ROUND = { score: 0, finished: false, seconds: null, final: false };
 
 /**
  * 记账前再看一眼这个座位此刻真正的样子：`p:` 那一份，加上他自己 `r:` 那一格
@@ -836,6 +893,10 @@ const readRoom = async (code) => {
       seat.finished = Boolean(run.finished);
       seat.seconds = run.seconds ?? null;
     }
+    // 累计账同理：`t:` 存在就以它为准（见 totalKey 那段）。老屋子没有这一格，
+    // 读到的就还是 `p:` 里那一份——所以这一改不必迁移，正在进行的小屋照旧算。
+    const acc = hash[totalKey(id)];
+    if (acc) for (const k of TOTAL_FIELDS) if (acc[k] !== undefined) seat[k] = acc[k];
     // 走了的人一律算交了卷——这一条从前是 leave 写进座位里的，现在推导。
     if (seat.left) seat.finished = true;
   }
@@ -1014,7 +1075,21 @@ async function claimSeat(code, playerId, hash) {
     if (!field.startsWith('p:') || !seat) continue;
     if (field.slice(2) === hash.meta.host) continue;
     if (seat.left || seat.slot === undefined) continue;
-    if (!seatClosed(seat) || seatLearning(seat)) continue;
+    /*
+     * 能收回来的有两种：**网页真的关掉了**（seatClosed：说过 bye，而且过了宽限期没再回
+     * 来），和**九十秒没听见动静**（seatGone，ABSENT_MS）。
+     *
+     * 从前只认前一种，于是最常见的那一种收不回来：手机进了后台、电没了、地铁里断网
+     * ——这几样都不会发出 bye，那把椅子于是一直占着，屋里坐满了而进不来的人只能等整间
+     * 小屋二十分钟过期。而这一局**早就不等他了**（roundOver 用的就是同一个 ABSENT_MS），
+     * 也就是说服务器一边认定他不在，一边替他留着椅子。
+     *
+     * ⚠️ `seatReclaimable` 一个字都不动（那是另一条路：**同名的人**来认领这把椅子）。
+     * 它刻意只认 left / closed——「一阵子没心跳」就把座位连同分数交给一个同名的人，正是
+     * 那条注释里记着的那次事故。这儿不同：收回来的只是**位子**，名字、分数、打过几局都
+     * 还在他名下（下面 `delete next.slot`），他回来会重新占一把。
+     */
+    if (!(seatClosed(seat) || seatGone(seat, hash.meta)) || seatLearning(seat)) continue;
     await hdel(roomKey(code), 's:' + seat.slot);
     const next = { ...seat };
     delete next.slot;
@@ -1232,14 +1307,37 @@ async function join(res, body) {
     // ——人明明回来了，屋里却一直显示他「终端关着」，座位还随时会被下一个同
     // 名的人认领走。
     await hset(roomKey(code), beatKey(field.slice(2)), { lastSeen: Date.now(), byeAt: 0 });
-    // 这一局那一格同理：走之前打出来的那点分留着（bankRound 下一次 start 照
-    // 常记账），而「这一局已经开了，不等他」要写成 finished。不写这一格的
-    // 话，readRoom 会拿旧的那一份把上面刚算好的 next 折回去。
-    await hset(roomKey(code), roundKey(field.slice(2)), {
-      score: Math.max(0, Math.floor(Number(next.score) || 0)),
-      finished: Boolean(next.finished),
-      seconds: next.seconds ?? null,
-    });
+    /*
+     * 这一局那一格：**只盖 `finished` 这一位**，分数和用时原样留着——而且写之前重读。
+     *
+     * 要写它，是因为「这一局已经开了，不等他」只有写在这一格里才作数：`readRoom` 拿
+     * `r:` 盖座位，不写的话上面刚算好的 `next.finished` 会被旧的那一份折回去，于是屋里
+     * 要为一个回来了却打不了这一局的人干等满 ABSENT_MS。
+     *
+     * 但**分数不能从那份快照里带过来**。从前这儿写的是 `next.score`（函数入口读到的、
+     * 他走之前那一局的分），撞上屋主开下一局就是这样：记账把 `r:` 记进 `t:` 之后清掉，
+     * 而这一句紧接着又把 200 写回 `r:`——`t:` 里有 200、`r:` 里又有 200，屏幕上
+     * `total + score` 是 400，而下一次开局还会把它记第二遍。门是 check-room-races 的
+     * ⑱，错位 10 量到的就是 400。重读之后写：记账已经清过，读到的就是 0；还没清，读到
+     * 的就是他那 200——两种都对。
+     *
+     * 记账**正在跑**的时候干脆不写：那一格马上会被它清成 CLEAR_ROUND，而那恰好就是新
+     * 一局该有的样子（他回来了，新这一局还没打）。问的是和 start / end 同一把锁（见
+     * score() 里那一段「这一局正在收尾」，同一个理由、同一个写法）。
+     *
+     * 剩下一道窄缝：这儿读完之后、写进去之前，记账恰好抢到锁并清掉这一格。那需要两次
+     * 库操作之间插进整段抢锁 + 清格——和 leave() 里那一处同一个量级，**这是这一处的天
+     * 花板，不是没想到**。要彻底堵死得有一把座位级的锁，而认领是一次性动作，不值得。
+     */
+    const liveHash = await hgetall(roomKey(code));
+    const banking =
+      lockHeld(liveHash, startLockKey((Number(liveHash?.meta?.round) || 0) + 1)) || lockHeld(liveHash, END_LOCK);
+    if (!banking) {
+      await hset(roomKey(code), roundKey(field.slice(2)), {
+        ...(liveHash?.[roundKey(field.slice(2))] || CLEAR_ROUND),
+        finished: Boolean(next.finished),
+      });
+    }
     await expire(roomKey(code), ROOM_TTL_S);
     return send(res, 200, {
       playerId: field.slice(2),
@@ -1365,7 +1463,7 @@ async function state(res, body) {
   if (!hash) return send(res, 404, { error: 'noRoom' });
   // 学的人二十秒没动静了（或者早走了）：不再等他。轮询是唯一稳定会跑到这
   // 儿的路，所以这一步放在这里而不是等谁来「说一声」。
-  if (hash.meta.learnHold && !anyoneLearning(hash)) {
+  if (hash.meta.learnHold && (!anyoneLearning(hash) || holdExpired(hash.meta))) {
     await releaseHold(code, hash.meta);
     hash = (await readRoom(code)) || hash;
   }
@@ -1506,6 +1604,19 @@ async function start(res, body) {
   if (!fresh) return send(res, 404, { error: 'noRoom' });
   hash = fresh;
 
+  /*
+   * **屋主正在散场，就别开下一局了。**
+   *
+   * 两条路都会给刚打完那一局记账，而记账是「读一份累计账、加上这一局、写回去」——两条
+   * 同时跑就是加两遍。锁各管各的（`ls:<round+1>` 和 `END_LOCK`），互相看不见，所以这
+   * 儿明说一句。
+   *
+   * 让的是 start 这一头：屋主按了《解散小屋》之后再开一局，本来就不是他要的事；回一份
+   * 当前状态，他那一端读到 `endedAt` 自己就进战绩卡了。反过来 end 不能「让」——那一按
+   * 必须有结果，所以它只是跳过记账（见 end 里那一段）。
+   */
+  if (lockHeld(hash, END_LOCK)) return send(res, 200, publicState(code, hash));
+
   // The round that just ended is banked before the next one wipes the board,
   // because the closing card is the sum of all of them and a score only
   // exists on the server between one round and the next.
@@ -1521,9 +1632,10 @@ async function start(res, body) {
      * 一名。这一局那一格照旧清掉，不然 readRoom 会把它折回来。
      */
     if (isSpectator(hash.meta, field.slice(2))) {
-      const cleared = { ...seat, ...CLEAR_ROUND };
-      banked[field] = cleared;
-      await hset(roomKey(code), field, cleared);
+      // **不写 `p:`**（见 totalKey 那段）：这一格有六条路在写，而这儿手上是一份快照，
+      // 整份写回去会把中间刚落地的改名、看教学抹掉。该清的是 `r:`，清它就够了——
+      // readRoom 会把 `r:` 折回座位，`p:` 里那三样本来就是死数据。
+      banked[field] = { ...seat, ...CLEAR_ROUND };
       await hset(roomKey(code), roundKey(field.slice(2)), { ...CLEAR_ROUND });
       continue;
     }
@@ -1540,11 +1652,14 @@ async function start(res, body) {
     // 条认「90 秒没动静=打完了」，另一条不认。
     const live = await liveSeat(code, field, seat);
     const done = Boolean(live.finished) || Boolean(live.left);
-    const next = done
-      ? bankRound(live, hash.meta.round, hash.meta.startAt || 0)
-      : { ...live, ...CLEAR_ROUND };
-    banked[field] = next;
-    await hset(roomKey(code), field, next);
+    // 累计账写**自己那一格**，`p:` 一个字都不碰（见 totalKey 那段）。
+    if (done) {
+      const totals = bankTotals(live, hash.meta.round, hash.meta.startAt || 0);
+      await hset(roomKey(code), totalKey(field.slice(2)), totals);
+      banked[field] = { ...live, ...CLEAR_ROUND, ...totals };
+    } else {
+      banked[field] = { ...live, ...CLEAR_ROUND };
+    }
     // 这一局那一格也要清——不清的话 readRoom 会把上一局的分数折回来。
     await hset(roomKey(code), roundKey(field.slice(2)), { ...CLEAR_ROUND });
   }
@@ -1553,7 +1668,7 @@ async function start(res, body) {
   // 问他「会不会」，其他人的倒数从 8 数起（横屏玩法 9）。他答「会」什么都不
   // 变，大家一起数到 0；答「不会」走 learn 那条路，整屋等他。
   const family = familyOf(body.mode);
-  const novice = Object.entries(hash).some(
+  const novice = NOVICE_FAMILIES.has(family) && Object.entries(hash).some(
     ([f, seat]) =>
       f.startsWith('p:') &&
       seat &&
@@ -1595,6 +1710,7 @@ async function start(res, body) {
  */
 function bankRound(seat, round, startAt = 0) {
   const next = { ...seat, score: 0, finished: false, seconds: null };
+  // 这一局该不该记账的判定在下面；记出来的那四样由 bankTotals 单独取走，写进 `t:`。
   // Nothing to bank: no round has been played, this seat arrived after the
   // last one had begun and sat it out, or whoever sat here had already gone
   // before it began.
@@ -1622,12 +1738,55 @@ function bankRound(seat, round, startAt = 0) {
   return next;
 }
 
+/**
+ * 这一局记完账之后，累计账那四样该是多少——**只回那四样**，写进 `t:`（见 totalKey）。
+ *
+ * 判定一个字都不重写：照旧走 bankRound，再把那四样挑出来。两份判定迟早会走样，而这一
+ * 条判的是「这一局算不算他的」——来晚了、走早了、竞赛屋的主持人，三样都在里面。
+ */
+function bankTotals(seat, round, startAt = 0) {
+  const next = bankRound(seat, round, startAt);
+  const out = {};
+  for (const k of TOTAL_FIELDS) if (next[k] !== undefined) out[k] = next[k];
+  return out;
+}
+
+/**
+ * 报上来的用时，允许比「这一局开到现在有多久」多出这么多秒。
+ *
+ * 留的是网路那一跳（报分这一条在路上走了多久）和两头各自的取整（客户端
+ * `Math.round(elapsed)`，服务器这边再 round 一次）。十五秒：比一跳一跳能慢的
+ * 量级宽得多，又远小于任何一局的真实长度（计时那几档都是 100 秒），所以一个
+ * 真打完的人不会被它误伤。
+ *
+ * ⚠️ 这把尺子**只在开赛之后**才架起来（见 score 里那一段）。倒数还没走完的时候
+ * `Date.now() - startAt` 是负的，拿它当上限会把一切都裁掉——第一版就是这么写
+ * 的，check-room-races 的 ⑧乙 当场红了：那一节在倒数里摆了一次「交卷 20 秒」，
+ * 于是「单局最快」整个没了。
+ */
+const SECONDS_SLACK_S = 15;
+
 async function score(res, body) {
   const code = String(body.code ?? '').trim();
   const hash = await readRoom(code);
   if (!hash) return send(res, 404, { error: 'noRoom' });
   const seat = seatOf(hash, body.playerId, body.playerToken);
   if (!seat) return send(res, 403, { error: 'notInRoom' });
+
+  // **屋子已经散了：这一条谁都不该再收。**
+  //
+  // 下面那道「收尾中」只挡 LOCK_STALE_MS（20 秒）那么宽——`lockHeld` 过了这个
+  // 数就当那把锁是废的。可一份报分迟到二十秒是再平常不过的事（手机息屏、地铁
+  // 里那一格信号、客户端拆计分板时补发的最后一条）。于是二十秒之后它一路畅通
+  // 写进 `r:`，而这一局的分早就记进 `t:` 了——`readRoom` 把 `r:` 折回座位上，
+  // 屋里还看着那张战绩卡的人，屏幕上的 `total + score` 就把最后一局**算了两
+  // 遍**（和 end() 里那一脚是同一个洞的另一面，门是 check-room-races 的 ⑥）。
+  //
+  // 散了的屋子没有「下一局」，所以这儿不像上面两道那样有「自我纠正」可言：收
+  // 下就是错的，照样走 scoreDropped 那个出口。
+  if (hash.meta.endedAt) {
+    return send(res, 200, { ...publicState(code, hash), scoreDropped: true });
+  }
 
   // 这一份成绩是哪一局算出来的。
   //
@@ -1683,6 +1842,26 @@ async function score(res, body) {
     return send(res, 200, { ...publicState(code, hash), scoreDropped: true });
   }
 
+  // **这一局他已经交过最终成绩了**（`final`），而这一条没带 `finished`——盖不得。
+  //
+  // 客户端一局里报很多次：打的过程中每 LOCAL_MS 一条（分数变了就发，没变也按
+  // 心跳发，见 ui/scoreboard.ts），走完那一下报一条带 `finished` 的，拆计分板
+  // 的时候再补一条。**它们是 `void` 发出去的，谁都没等谁**——网路上后发先至是
+  // 常事。于是：交卷那一条先落地，半秒前那条「还在打、430 分」后落地，整格被
+  // 盖回「没交卷、430 分」。屏幕上两件事一起错：他那个勾没了，分数退了一截；
+  // 而 `roundOver` 等的是「每个还在的人都交卷了」——他人早就关了页面，屋里其
+  // 他人就得干等满 ABSENT_MS（90 秒）才轮到下一局。
+  //
+  // 为什么要新开一位，不直接问 `finished`：`finished` 这一位有两个来路，一个是
+  // 「他真的交卷了」，另一个是上面那条「局次对不上，就当他这一局 0 分交了」
+  // ——后者是**替他猜的**，而且注释里写明「真实分数照常盖回去」。拿 `finished`
+  // 当门，那条自我纠正的路当场就断了。`final` 只由带 `finished` 的那次报分写
+  // 下，意思窄得多：**这是他自己说的最后一个数。**
+  const prev = hash[roundKey(body.playerId)];
+  if (prev && prev.final && !body.finished) {
+    return send(res, 200, { ...publicState(code, hash), scoreDropped: true });
+  }
+
   // **只写这一局那一格**（见 readRoom 上面那段）：座位一个字不动、心跳一个
   // 字不动。从前这儿的注释写的是「只写这个玩家自己那一格，四个人同时报分盖
   // 不掉彼此」——那句话对的是**跨玩家**，同一个人的五条写入路径（score /
@@ -1712,10 +1891,36 @@ async function score(res, body) {
    */
   run.score = Math.max(0, Math.floor(Number(body.score) || 0));
   run.finished = Boolean(body.finished);
+  if (run.finished) run.final = true;
   // Only read off the HUD once the run is over, so 单局最快 is a finishing
   // time rather than however far into the board someone happened to be.
+  //
+  // 这个数有一把**真的尺子**，但只在开赛之后才量得出来：这一局是服务器自己盖的
+  // 时刻开的（`startAt`），所以开赛之后报上来的「打完用了多久」，不可能比「这一
+  // 局已经开了多久」还长。两头比的都是服务器的钟，玩家那台设备的钟准不准一点不
+  // 相干（客户端倒数走的是 clockOffset，见 engine/room.ts）；多给
+  // SECONDS_SLACK_S 是留给网路那一跳和两边各自的取整。
+  //
+  // **倒数还没走完的时候不量。** 那会儿「用了多久」压根不存在：这一局一步都还没
+  // 走。倒数里真会来的那种「交卷」是客户端的 sitOut（开局之后才进来的人、竞赛屋
+  // 的主持人），它本来就不带 seconds。拿一把量不出东西的尺子去裁，裁掉的只会是
+  // 别的东西——所以这儿宁可不量，别装作量得出来。
+  //
+  // **量不过只丢这一个数，分照记。** 这两样是分开的：分数是这一局的成绩，用时
+  // 只多喂一个「单局最快」。为了一个说不通的秒数把整份报分退回去，等于拿他这
+  // 一局的分去赌我这把尺子没写错——而尺子写错过（check-coach-aim 那次阈值定在
+  // 坏值下面，门绿着却什么都没守住）。宁可那张卡上少一行「最快」。
+  //
+  // 下限只有「大于 0」，而它拦不住「我这局 1 秒打完」：那需要知道每副棋盘最快
+  // 能多快，而算错就是把正常成绩判成作弊。和上面那段「为什么不修」是同一个结
+  // 论，别在注释里把这件事说得比它实际做到的更严。
   const took = Math.round(Number(body.seconds));
-  if (run.finished && Number.isFinite(took) && took > 0) run.seconds = took;
+  const startAt = Number(hash.meta.startAt) || 0;
+  const now = Date.now();
+  const ranFor = startAt && now > startAt ? (now - startAt) / 1000 + SECONDS_SLACK_S : 0;
+  if (run.finished && Number.isFinite(took) && took > 0 && (!ranFor || took <= ranFor)) {
+    run.seconds = took;
+  }
   await hset(roomKey(code), roundKey(body.playerId), run);
   const shown = { ...seat, ...run, finished: run.finished || Boolean(seat.left) };
   return send(res, 200, publicState(code, { ...hash, ['p:' + body.playerId]: shown }));
@@ -1792,15 +1997,27 @@ async function end(res, body) {
   if (!fresh) return send(res, 404, { error: 'noRoom' });
   hash = fresh;
 
+  /*
+   * **屋主开下一局的那条路正在记账，这儿就别再记一遍。**
+   *
+   * 两条路记的是同一局，而记账是「读一份累计账、加上这一局、写回去」——同时跑就是加两
+   * 遍（屋主的总分从 100 变 200，END_LOCK 那段注释里记的就是这件事的另一半）。
+   *
+   * end 不能像 start 那样「让开就不办了」：屋主按的是《解散小屋》，那一按必须有结果。
+   * 所以这儿让的只是**记账**那一段——start 已经把这一局并进累计账了，再并一次就是重
+   * 复；下面写 `endedAt`、回战绩卡照常走。
+   */
+  const startBanking = lockHeld(hash, startLockKey((Number(hash.meta.round) || 0) + 1));
+
   const banked = {};
   for (const [field, seat] of Object.entries(hash)) {
     if (!field.startsWith('p:') || !seat) continue;
     // 竞赛屋的主持人不参赛：账上不该有他，那张要发出去的竞赛排名图上也不该有
     // （理由和 start() 那一处一模一样，见那段注释和 isSpectator）。
+    // **不写 `p:`**：那一格有六条路在写，整份写回去会把刚落地的改名、看教学抹掉
+    // （见 totalKey 那段）。
     if (isSpectator(hash.meta, field.slice(2))) {
-      const cleared = { ...seat, ...CLEAR_ROUND };
-      banked[field] = cleared;
-      await hset(roomKey(code), field, cleared);
+      banked[field] = { ...seat, ...CLEAR_ROUND };
       await hset(roomKey(code), roundKey(field.slice(2)), { ...CLEAR_ROUND });
       continue;
     }
@@ -1811,13 +2028,16 @@ async function end(res, body) {
     const live = await liveSeat(code, field, seat);
     const done = Boolean(live.finished) || Boolean(live.left);
     if (!done) {
-      const next = { ...live, ...CLEAR_ROUND };
-      banked[field] = next;
-      await hset(roomKey(code), field, next);
+      banked[field] = { ...live, ...CLEAR_ROUND };
       await hset(roomKey(code), roundKey(field.slice(2)), { ...CLEAR_ROUND });
       continue;
     }
-    const next = bankRound(live, hash.meta.round, hash.meta.startAt || 0);
+    // start 那条路正在记同一局：这儿只收尾，不再并一次账（见上面 startBanking）。
+    const totals = startBanking
+      ? {}
+      : bankTotals(live, hash.meta.round, hash.meta.startAt || 0);
+    if (!startBanking) await hset(roomKey(code), totalKey(field.slice(2)), totals);
+    const next = { ...live, ...CLEAR_ROUND, ...totals };
     // score 不写回去——bankRound 已经把这一局并进 total 了。
     //
     // 从前这儿有一行 `next.score = seat.score`，本意是「最后这一局是这张卡要
@@ -1830,7 +2050,8 @@ async function end(res, body) {
     next.finished = true;
     next.seconds = live.seconds ?? null;
     banked[field] = next;
-    await hset(roomKey(code), field, next);
+    // `p:` 不写（见 totalKey 那段）：这张卡要讲的两样（finished / seconds）都在下面那
+    // 句 `r:` 里，而 readRoom 会把 `r:` 折回座位上。
     // 这一局那一格要跟着对齐（见 readRoom 上面那段：它会把 r: 折回座位上）。
     //
     // 这一句差点又把上面那个 bug 放回来。座位里 score 清成了 0，可 r: 那一格还
@@ -1928,7 +2149,18 @@ async function learn(res, body) {
   if (learning) {
     // 这一局第一次有人去学：把开赛挂起。同一局只挂一次——被放行之后（学完、
     // 走了、二十秒没动静）再来的「我在学」不再把大家拦住：他们已经在打了。
-    if (meta.round && meta.heldRound !== meta.round) {
+    /*
+     * **只在开赛之前挂得起来。**
+     *
+     * 从前只问「这一局挂过没有」，于是开局之后再点开教学的人照样能挂住整屋：
+     * `releaseHold` 把 `startAt` 重新盖成「从现在起再数 4 秒」，而大家**已经在打了**
+     * ——屏幕上那一局好端端地进行着，服务器却把这一局的开赛时刻挪到了未来。下一次
+     * 轮询读到的 `startAt` 在未来，客户端于是把还在打的人退回倒数屏。
+     *
+     * 教学本来就是开局前那一问（ASK_MS 那四秒）里的事；局中点开它的人是来复习的，
+     * 不该停住别人。
+     */
+    if (meta.round && meta.heldRound !== meta.round && Date.now() < (Number(meta.startAt) || 0)) {
       // 走 patchMeta，不自己 hset：原先这一处拿进函数时读到的**整份** meta 写回去，
       // 中间只要 end() 写进了 endedAt、或者 start() 换了 round，这一写就把它们整个
       // 抹掉。玩家看到的是：屋主明明按了《解散小屋》，还在等的人却看到「等屋主开下
@@ -1943,6 +2175,8 @@ async function learn(res, body) {
       await patchMeta(code, meta.round, holdSetLockKey(meta.round), (live) => ({
         learnHold: true,
         heldRound: live.round,
+        /** 这一次挂起是什么时候开始的——挂满 LEARN_MAX_MS 就放行，见 holdExpired。 */
+        heldAt: Date.now(),
       }));
       fresh = await freshRoom(code);
     }

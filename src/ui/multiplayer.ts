@@ -169,7 +169,18 @@ const ASSIGNED_NAME_KEY = 'slides_mp_seat_name';
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function errorText(reason: RoomError, lang: Lang): string {
+/**
+ * 一次小屋请求失败了，屏幕上该写哪一句。
+ *
+ * **导出**：开局那一路（main.ts 的 startRoundFor）从前自己拼了一份两分支的映射——
+ * `tooFew` 说「人太少」，**其余一律**说「小屋还没开放」。而 `startMatch` 会答的远不止
+ * 这两样：`notHost`、`mode`、`claimed`、`tooMany`、`busy`、`ended` 全都掉进那个「其
+ * 余」里，于是屋主按下一张棋盘，屏幕上回他一句和事实无关的话——被限速挡住的那一次最
+ * 冤，他的网好得很，而屏幕让他去查网络。
+ *
+ * 一处映射，两处用。新来一种 `RoomError` 只要在这儿接一次。
+ */
+export function errorText(reason: RoomError, lang: Lang): string {
   const s = STRINGS[lang];
   switch (reason) {
     case 'geniusOnly':
