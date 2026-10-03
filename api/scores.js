@@ -3,8 +3,9 @@
  *
  * 三个动作，一个入口：
  *
- *   push   打完一局，把这一局挂到账号上；顺手更新两张榜。
- *   mine   我自己的存档——换台设备登录，记录跟着回来。
+ *   push   打完一局，把这一局挂到账号上；顺手更新两张榜。**不再带名字**（第 16 推）。
+ *   mine   我自己的存档——换台设备登录，记录跟着回来。连同我的昵称。
+ *   name   改昵称（第 16 推）：一个帐号一个、全站唯一，榜上那个名字只有这一条路写得进来。
  *   board  排行榜。所有人都上榜，但只有天才看得见（见下面那段）。
  *   rebuild  管理员维护：照存档把所有榜重算一遍（可以顺手清掉某一种局），见文件末尾。
  *
@@ -29,7 +30,18 @@
 import { timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
+import { loadAccount, pairKey } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
+import {
+  NAMES,
+  NICK_INDEX,
+  NICK_V,
+  checkNickname,
+  nickKey,
+  nicknameOf,
+  registerNickname,
+  repointNickname,
+} from './_nickname.js';
 import {
   del,
   get,
@@ -37,6 +49,7 @@ import {
   hget,
   hgetall,
   hset,
+  hsetnx,
   set,
   storeConfigured,
   withLock,
@@ -299,8 +312,10 @@ function bestOverall(stats) {
   }
   return top;
 }
-/** id → 榜上显示的名字。一张哈希表，不是每人一个键。 */
-const NAMES = 'lbnames';
+/*
+ * id → 榜上显示的名字：`NAMES`（'lbnames'），一张哈希表，不是每人一个键。它和昵称索引
+ * `NICK_INDEX` 两张表现在归 _nickname.js 管（第 16 推）——小屋那头也要读写同一份。
+ */
 
 /**
  * 棋盘 id：只收长得像 id 的字符串，别让它变成一把能写任意键的钥匙。上报的一
@@ -313,13 +328,13 @@ const cleanMode = (v) => (MODE_RE.test(String(v || '')) ? String(v) : '');
 const BOARD_RE = /^[a-zA-Z][a-zA-Z0-9]{0,23}(:[a-zA-Z][a-zA-Z0-9]{0,7})?$/;
 const cleanBoard = (v) => (BOARD_RE.test(String(v || '')) ? String(v) : '');
 
-/** 榜上那个名字：十二个字，去掉会把一行撑坏的东西。 */
-const CTRL_RE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\u202a-\u202e\ufeff]/g;
-const cleanName = (v) => String(v ?? '').replace(CTRL_RE, '').trim().slice(0, 12);
-
 /**
- * 名字这件事的版本号。客户端跟着每一局报上来（`nameV`，见 engine/cloudScores.ts 的
- * NAME_V）：到了 2 就表示「这个名字是玩家自己敲的」，而不是从他的凭据里猜出来的。
+ * 名字这件事的版本号。第 3 推那一版的客户端跟着每一局报上来（`nameV: 2`）：到了 2 就表示
+ * 「这个名字是玩家自己敲的」，而不是从他的凭据里猜出来的。
+ *
+ * 第 16 推起 push 不再写名字，这个数只剩**读老条目**一个用处（shownName）：库里那些 v2 和
+ * 没有 v 的老名字，在管理员跑《建立昵称索引》之前照旧这样判。新登记的是 v3（_nickname.js
+ * 的 NICK_V），比它大，读的时候直接放行。
  */
 const NAME_V = 2;
 
@@ -348,6 +363,9 @@ const HANDLE_SHAPED = /^[A-Za-z0-9]{8,12}$/;
  *     那是他自己取的名字）。
  *   · 没有 nameV —— 旧客户端。名字长得像凭据就**不存、也不显示**。
  *
+ * （第 16 推起 push 一个名字都不存了——上面两条说的是那之前存进库里的老条目怎么读。新登记
+ * 的昵称走改名接口，凭据形状在那儿当场拦，见 isOwnCredential。）
+ *
  * ── 认哪两种形状 ──────────────────────────────────────────────
  *
  *   · `hdl:` 开头的 id（免邮箱账号）＋ 名字是 8–12 位字母数字 → 像第一串。
@@ -356,7 +374,8 @@ const HANDLE_SHAPED = /^[A-Za-z0-9]{8,12}$/;
  * 两条都会误伤一些**真的**昵称（一个邮箱叫 `panda@x.com`、昵称也取 `panda` 的人，名
  * 字会被当成泄露）。这是故意选的方向：误删一个昵称的代价是榜上那一行变成「匿名玩家」，
  * 而漏掉一个的代价是把一把钥匙挂在公开页面上。而且新客户端报上来的那一份带着 `nameV`，
- * 不受这两条管——所以那个人下次打一局，他的昵称就回来了。
+ * 不受这两条管——所以那个人下次打一局，他的昵称就回来了。（第 16 推之后的说法：他登记一
+ * 次昵称，那一行就回来了。）
  */
 function leakShaped(id, name) {
   const who = String(id || '');
@@ -413,6 +432,8 @@ export default async function handler(req, res) {
         return await push(res, body, who);
       case 'mine':
         return await mine(res, who);
+      case 'name':
+        return await rename(res, body, who);
       case 'board':
         return await board(res, body, who, claim);
       default:
@@ -560,7 +581,12 @@ async function push(res, body, who) {
 
   // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
   const boardId = boardIdOf(mode, data);
-  const name = cleanName(body?.name);
+  /*
+   * **名字一个字都不读**（第 16 推）。`body.name` / `body.nameV` 在途的旧客户端还会报上来，
+   * 这里照收这一局、名字原样扔掉：昵称只有改名接口（rename）写得进来，否则一台装着旧包的
+   * 手机打完一局，就把他在另一台设备上刚改好的名字盖回去了——那正是「换台手机打一局名字就
+   * 变回去」那个毛病。
+   */
 
   const got = await withLock(statsLockKey(who.id), async () => {
     const stats = await loadStats(who.id);
@@ -580,17 +606,6 @@ async function push(res, body, who) {
     const list = Array.isArray(archive) ? archive : [];
     list.unshift({ runId, mode, score, at: Date.now(), data });
     await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
-
-    /*
-     * 名字：新客户端报的照存，旧客户端报的要先不像一份凭据（见 leakShaped 那一段）。
-     * 存下来的一律带 `v`，意思是「这一条过过闸」——读的时候靠它短路，免得每画一张榜都
-     * 把两条正则跑五十遍。
-     */
-    // **不再存头像**（第 14 推）：客户端从来没有画过它，存着只是替一个谁都看不见的字段
-    // 多留一份别人塞进来的东西。
-    if (name && (Number(body?.nameV) >= NAME_V || !leakShaped(who.id, name))) {
-      await hset(NAMES, who.id, { name, v: NAME_V });
-    }
 
     // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
     // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
@@ -629,7 +644,11 @@ async function push(res, body, who) {
 
 /** 我自己的存档和数字。是自己的东西，不设门。 */
 async function mine(res, who) {
-  const [stats, archive] = await Promise.all([loadStats(who.id), get(runsKey(who.id))]);
+  const [stats, archive, nickname] = await Promise.all([
+    loadStats(who.id),
+    get(runsKey(who.id)),
+    nicknameOf(who.id),
+  ]);
   return send(res, 200, {
     ok: true,
     total: stats.total,
@@ -637,7 +656,73 @@ async function mine(res, who) {
     best: stats.best,
     // seen 是内部账本，不往外说。
     archive: Array.isArray(archive) ? archive : [],
+    /*
+     * 我的昵称（第 16 推）。服务器是唯一来源：客户端拿到它就盖掉本机那一份（src/engine/
+     * nickname.ts 的 adoptServerNickname）。空串 = 还没登记过——老条目（v2）不算，见
+     * _nickname.js 的 nicknameOf。
+     */
+    nickname,
   });
+}
+
+/** 一个帐号一小时最多改几次昵称（第 16 推，方案原数）。 */
+const RENAMES_PER_HOUR = 10;
+
+/**
+ * 这个名字是不是**他自己的凭据**（第 16 推第 4 条）。
+ *
+ * 和 leakShaped 是同一件事的另一头：那边拦旧客户端从凭据里猜出来的名字，这边拦玩家自己把
+ * 凭据敲成名字——多半不是故意的（「名字就填我平时用的那个呗」），可一个公开的榜上挂着他
+ * 邮箱的前半截，和从前那次泄露没有两样。
+ *
+ *   · 邮箱帐号：等于 @ 前面那一整段，或者它的前 12 位（从前泄露的正是这个形状）。
+ *   · 免邮箱帐号：服务器只存第一串的 sha256（_accounts.js 的 pairKey），猜不回原文——
+ *     只认得出「名字就是整条第一串」那一种（第一串只有 8–12 位的时候）。截成前 12 位的
+ *     那一种只有客户端认得出（它手上有原文），在 src/engine/nickname.ts 里拦。
+ *
+ * 比的是规范化之后的样子（nickKey）：`Panda` 和 `panda@x.com` 照样算撞上。
+ */
+function isOwnCredential(id, name) {
+  const who = String(id || '');
+  const key = nickKey(name);
+  if (!key) return false;
+  const at = who.indexOf('@');
+  if (at > 0) {
+    const local = nickKey(who.slice(0, at));
+    return key === local || key === local.slice(0, 12);
+  }
+  return who.startsWith('hdl:') && pairKey(name) === who;
+}
+
+/**
+ * 改昵称（第 16 推）：`POST /api/scores { action: 'name', name, …凭据 }`。
+ *
+ * 必须登录（handler 那一关的 identify 已经过了）。先验格式（不碰库）、再限速、最后进这个人那
+ * 把锁里登记（_nickname.js 的 registerNickname）。
+ *
+ * 回的错只有那四种（required / bad / blocked / taken），外加限速和忙——客户端按它们各说一
+ * 句话。**撞了哪个词不说**，名字被谁占了也不说。
+ *
+ * 和原来的名字一样（规范化之后、而且显示的样子也一样）就不登记、不扣次数：客户端「登录之
+ * 后把本机的名字传上去」那一下多半就是这种，为它扣掉一次很冤。
+ */
+async function rename(res, body, who) {
+  const checked = checkNickname(body?.name);
+  if (!checked.ok) return send(res, 400, { error: checked.error });
+  if (isOwnCredential(who.id, checked.name)) return send(res, 400, { error: 'blocked' });
+  if ((await nicknameOf(who.id)) === checked.name) {
+    return send(res, 200, { ok: true, name: checked.name });
+  }
+  if (await tooMany('scores:name', who.id, RENAMES_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+  // 和 push / rebuild / 换邮箱同一把锁：换邮箱正在把这个人的名字搬到新 id 上的那几秒里，
+  // 这边要是在旧 id 上登记一个新名字，搬过去的就是旧的那个，而索引上新名字指着一个马上就
+  // 不存在的 id。
+  const got = await withLock(statsLockKey(who.id), () => registerNickname(who.id, checked.name));
+  if (!got.ok) return send(res, 503, { error: 'busy' });
+  if (got.value === 'taken') return send(res, 409, { error: 'taken' });
+  return send(res, 200, { ok: true, name: checked.name });
 }
 
 /**
@@ -862,6 +947,13 @@ async function rebuild(req, res, body) {
    * 它的名。
    */
   const droppedBoards = [...drop].flatMap((kind) => BASE_SHAPES.map((shape) => `${shape}:${kind}`));
+  /**
+   * 建立昵称索引（第 16 推第 8 条，一次性迁移）：把 `lbnames` 里那些老条目整理成「一个帐号
+   * 一个、全站唯一」，补齐 `nickidx`。见文件末尾的 buildNicknameIndex。
+   *
+   * 排在榜重算**之后**做：重名时谁留下名字看的是总榜分数，要拿重算过的那一份比。
+   */
+  const buildNicknames = body?.nicknames === true;
 
   // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
   const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
@@ -948,6 +1040,7 @@ async function rebuild(req, res, body) {
     rowsWritten += got.value;
     players++;
   }
+  const nicknames = buildNicknames ? await buildNicknameIndex() : null;
   return send(res, 200, {
     ok: true,
     players,
@@ -957,7 +1050,146 @@ async function rebuild(req, res, body) {
     wiped: wipeAll,
     // 只有一个数（理由见 scrubNames 那一段：这个回包不许带名字）。
     namesDropped,
+    // 同上：只有几个数。没勾这一项就是 null。
+    nicknames,
   });
+}
+
+/**
+ * 一次性迁移：建立昵称索引（第 16 推第 8 条）。
+ *
+ * 第 16 推之前名字是随每一局报上来的，所以 `lbnames` 里躺着的是一堆没人管过唯一性的老条
+ * 目（v2 和没有 v 的）。这一步把它们整理成和改名接口一样的样子：
+ *
+ *   ① **先合并已经绑定了邮箱的 `code:` 行。** 兑了码还没绑邮箱的人，战绩记在 `code:<码>`
+ *      底下；后来他绑了邮箱（api/passcode.js 的 bind），那个寄存处被整个取走（GETDEL），
+ *      人从此住在邮箱那个 id 底下，接着打的每一局、报的名字都在那边。留在 `code:` 底下
+ *      的那一行名字没有主人了——谁也登不进一个不存在的帐号——却还会和他自己邮箱底下那一
+ *      行抢同一个名字。所以寄存处已经不在的 `code:` 行，名字并到他现在那个帐号上去：**库
+ *      里没有「这张码绑到了哪个邮箱」的记录**（bind 不留），所以「并」只能是把这一行撤
+ *      掉，他的名字由邮箱底下那一行代表。寄存处还在的（码兑了、还没绑邮箱）是活帐号，照
+ *      常参加下面的整理。
+ *   ② **不能用的名字清掉**：读不出来的（shownName 判成像凭据的老条目）、过不了改名接口
+ *      那一关的（超过 12 个码点、词表、保留名、单个字母——从前小屋发的「B」就是这么上了
+ *      榜的）。不清的话索引里就有一个改名接口自己都不收的名字。
+ *   ③ 索引里指向「已经不叫这个名字的帐号」的格子删掉（某次改名摔在两步之间留下的）。
+ *      排在挑人之前：不删的话，下面抢索引会撞上这一格，整组人一个名字都留不下。
+ *   ④ **按规范化之后的名字分组，一组只留一个**：
+ *        · 索引里这个名字已经登记了（第 16 推上线之后、迁移之前有人从改名接口登记过），
+ *          而且那个帐号此刻真叫这个名字 → 归他。那是一次明明白白的「这个名字我要了」，
+ *          比老条目谁分高更算数；
+ *        · 否则总榜分数最高的那个帐号留下（玩家定的），分数一样按 id 排、取第一个，保证
+ *          重跑一遍结果一样。
+ *      其余的清掉——下次他打开网页，头卡上写的是「设置昵称」。
+ *   ⑤ 留下来的写成 v3、补进索引。写索引用 HSETNX：迁移跑着的这几秒里要是正好有人从改名
+ *      接口抢到了这个名字，**他先到**，迁移这边让出来。
+ *
+ * 每清一行之前都重读一遍（见 clear）：迁移读完整张表之后，有人从改名接口登记了新名字，那
+ * 一行就不是迁移手上那一份了，不动它。
+ *
+ * ⚠️ **回包只有计数，一个名字都不许有。** 理由和 scrubNames 一样：这个接口的回包是会被
+ * 贴进工单、贴进对话的，而清掉的那些名字里可能正有当年泄露出去的凭据。
+ *
+ * 跑两遍和跑一遍一样（第二遍时所有条目都已经是 v3、索引都对得上，什么都不动）。
+ */
+async function buildNicknameIndex() {
+  let merged = 0;
+  let invalid = 0;
+  let cleared = 0;
+  let indexed = 0;
+  let stale = 0;
+
+  const rows = await hgetall(NAMES);
+  /**
+   * 两份是不是同一行：名字一样、版本一样。版本按字符串比——老条目压根没有 `v`，
+   * `Number(undefined)` 是 NaN，而 NaN 和谁都不相等（第一版就是这么写的，于是没有 v 的老条
+   * 目永远「对不上」，一条都清不掉、一条都留不下来）。
+   */
+  const sameRow = (a, b) => Boolean(a && b) && a.name === b.name && String(a.v ?? '') === String(b.v ?? '');
+  /**
+   * 清掉一行之前**重读一遍**：迁移读完整张表之后的这几秒里，这个人可能刚从改名接口登记了一
+   * 个名字（v3）。那是他此刻明明白白的选择，迁移手上那份是旧的——对不上就不动他。
+   */
+  const clear = async (id, seen) => {
+    const now = await hget(NAMES, id);
+    if (!sameRow(now, seen)) return false;
+    await hdel(NAMES, id);
+    return true;
+  };
+
+  // ① 绑定过邮箱的 code: 行。
+  for (const id of Object.keys(rows)) {
+    if (!id.startsWith('code:')) continue;
+    if (await loadAccount(id)) continue;
+    if (await clear(id, rows[id])) merged++;
+    delete rows[id];
+  }
+
+  // ② 不能用的名字；顺手按规范化之后的名字分组（④ 用）。
+  const groups = new Map();
+  for (const [id, row] of Object.entries(rows)) {
+    const shown = shownName(id, row);
+    const checked = shown ? checkNickname(shown) : { ok: false };
+    if (!checked.ok) {
+      if (await clear(id, row)) invalid++;
+      continue;
+    }
+    const key = nickKey(checked.name);
+    const list = groups.get(key) ?? [];
+    list.push({ id, name: checked.name, row });
+    groups.set(key, list);
+  }
+
+  // ③ 索引里过期的格子：指着一个「已经不叫这个名字」的帐号（某次改名摔在两步之间留下的）。
+  // 放在分组**之后**、挑人**之前**：不删的话，下面 HSETNX 会撞上这一格，整组人一个名字都留
+  // 不下。
+  for (const [key, id] of Object.entries(await hgetall(NICK_INDEX))) {
+    const row = rows[id];
+    const holds = row && Number(row.v) >= NICK_V && typeof row.name === 'string' && nickKey(row.name) === key;
+    if (holds) continue;
+    // 重读：这一格这几秒里要是刚被人登记过（改名接口），它就不是过期的。
+    const live = await hget(NAMES, id);
+    if (live && Number(live.v) >= NICK_V && nickKey(live.name) === key) continue;
+    if ((await hget(NICK_INDEX, key)) !== id) continue;
+    await hdel(NICK_INDEX, key);
+    stale++;
+  }
+
+  // ④ 一组只留一个。
+  for (const [key, list] of groups) {
+    const owner = await hget(NICK_INDEX, key);
+    const registered = typeof owner === 'string' ? list.find((m) => m.id === owner) : null;
+    let keep = registered && Number(registered.row?.v) >= NICK_V ? registered : null;
+    if (!keep) {
+      const scored = await Promise.all(
+        list.map(async (m) => ({ ...m, score: Number(await zscore(TOTAL_BOARD, m.id)) || 0 })),
+      );
+      scored.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      keep = scored[0];
+    }
+    // ⑤ 留下来的那一个：先抢索引（HSETNX），抢到了（或者本来就是他）才写成 v3。抢不到——这
+    // 几秒里有人从改名接口登记了这个名字——他先到，这一组一个都不留（他自己那一行是 v3、和手
+    // 上这份对不上，clear 不会动他）。
+    let won = await hsetnx(NICK_INDEX, key, keep.id);
+    if (!won) won = (await hget(NICK_INDEX, key)) === keep.id;
+    if (won) {
+      const now = await hget(NAMES, keep.id);
+      if (sameRow(now, keep.row)) {
+        await hset(NAMES, keep.id, { name: keep.name, v: NICK_V });
+        indexed++;
+      } else if (!(now && Number(now.v) >= NICK_V && nickKey(now.name) === key)) {
+        // 这几秒里他自己改成了别的名字：刚抢到的这一格不是他的了，还回去。
+        if ((await hget(NICK_INDEX, key)) === keep.id) await hdel(NICK_INDEX, key);
+        won = false;
+      }
+    }
+    for (const m of list) {
+      if (won && m.id === keep.id) continue;
+      if (await clear(m.id, m.row)) cleared++;
+    }
+  }
+
+  return { merged, invalid, cleared, indexed, stale };
 }
 
 /**
@@ -995,6 +1227,7 @@ export async function renameScoreOwner(from, to) {
 async function moveScores(from, to) {
   const stats = await get(statsKey(from));
   const runs = await get(runsKey(from));
+  // 昵称那一行（{ name, v }）原样抄过去，索引在最后才改指（见下面）。
   const name = await hget(NAMES, from);
 
   if (stats) await set(statsKey(to), stats);
@@ -1024,6 +1257,13 @@ async function moveScores(from, to) {
   }
   await zrem(TOTAL_BOARD, from);
   await hdel(TOTAL_MODE, from);
+  /*
+   * 昵称索引那一格改指向新 id（第 16 推第 7 条）。**排在拆旧名字的前一步、而不是和上面抄名
+   * 字那一步放在一起**：中间任何一步摔了，email.js 会把新地址整个退回去（deleteAccount →
+   * dropNickname 会删掉指向新 id 的那一格）；要是索引早早就改指了新 id，退回去之后旧 id 底
+   * 下的名字就成了一个没登记的名字，别人取得走。挪到这儿，摔在前面的都还指着旧 id。
+   */
+  await repointNickname(name, from, to);
   await hdel(NAMES, from);
 
   // 旧 id 下的存档最后清。到这一行为止，新 id 那边什么都齐了。

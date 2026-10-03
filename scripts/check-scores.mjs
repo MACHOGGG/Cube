@@ -60,7 +60,33 @@ const SCORING_V = (() => {
  * 显式写了 `data` 的那几条照旧按自己写的来（下面那两条「旧规则的局」就是），所以这
  * 一补不会盖掉任何一条有意摆出来的不一致。
  */
+/**
+ * **名字先从改名接口登记，push 本身不带名字**（第 16 推）。
+ *
+ * 这道门是靠名字认榜上哪一行是谁的（夹具里每一局都带一个 `name`）。第 16 推起服务器不读 push
+ * 里的名字了——昵称只走改名接口（`action: 'name'`），push 带的 `name` 原样扔掉。所以在这儿替
+ * 夹具做新客户端会做的那件事：报这一局之前，先把那个名字登记成这个帐号的昵称（同一个帐号同
+ * 一个名字只登记一次），然后报一局不带名字的。名字登记不上就当场停：后面每一条都靠名字认人，
+ * 带着一张没名字的榜往下量只会红出一串跟名字无关的假症状。
+ */
+const registered = new Map();
 async function call(body) {
+  if (body?.action === 'push' && typeof body.name === 'string' && body.name) {
+    const who = body.email || body.code;
+    if (registered.get(who) !== body.name) {
+      const got = await callRaw({ action: 'name', email: body.email, code: body.code, token: body.token, name: body.name });
+      if (got.status !== 200) {
+        throw new Error(`夹具登记昵称没成：${who} ${JSON.stringify(body.name)} → ${got.status} ${JSON.stringify(got.payload)}`);
+      }
+      registered.set(who, body.name);
+    }
+    const { name: _name, ...rest } = body;
+    body = rest;
+  }
+  return callRaw(body);
+}
+
+async function callRaw(body) {
   if (body?.action === 'push' && !body.__raw) {
     body = {
       ...body,
@@ -564,9 +590,11 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   check('别的玩法不受这道上限（反向对照）', notPz.status === 200 && notPz.payload?.ok === true, `${notPz.status} ${JSON.stringify(notPz.payload)}`);
 
   // 头像不再存。
-  await call({ action: 'push', ...S, runId: 's2', mode: 'square', score: 10, name: '没清二', avatar: { x: 1 }, data: pz(10, 0, false) });
+  // 第 16 推起 push 一个字的名字都不存（名字只走改名接口），头像更不用说。这一条照旧量：push
+  // 里塞着名字和头像，库里那一行还是改名接口登记的那个样子——没有头像、名字也没被这一局改动。
+  await callRaw({ action: 'push', ...S, runId: 's2', mode: 'square', score: 10, name: '别的名字', avatar: { x: 1 }, data: pz(10, 0, false) });
   const nameRow = await store.hget('lbnames', S.email);
-  check('（尺子）名字照存', nameRow?.name === '没清二', JSON.stringify(nameRow));
+  check('（尺子）名字还是登记的那个（push 里塞的名字没进来）', nameRow?.name === '没清二', JSON.stringify(nameRow));
   check('头像不再存', nameRow && !('avatar' in nameRow), JSON.stringify(nameRow));
   check('榜上那一行也不再带 avatar', (one.payload?.rows ?? []).every((r) => !('avatar' in r)), JSON.stringify(rows[0]));
 

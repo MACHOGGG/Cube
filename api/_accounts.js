@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mintCodes } from './_codes.js';
 import { redact } from './_redact.js';
+import { dropNickname } from './_nickname.js';
 import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce, withLock } from './_store.js';
 
 /**
@@ -252,6 +253,17 @@ export async function deleteAccount(email) {
     await hdel(INDEX_KEY, normalizeEmail(email));
   } catch (err) {
     console.error('名单没删掉', redact(email), err);
+  }
+  /*
+   * 昵称跟着帐号一起走（第 16 推第 7 条）：`lbnames` 那一行和索引里指向它的那一格。不删的话
+   * 那个名字被一个谁也登不进去的帐号永远占着。换邮箱走到这儿时（删旧地址），名字早已搬到新
+   * 地址、索引早已改指——dropNickname 只删「还指向自己」的那一格，所以不会把搬过去的那一份
+   * 删掉。
+   */
+  try {
+    await dropNickname(normalizeEmail(email));
+  } catch (err) {
+    console.error('昵称没删掉', redact(email), err);
   }
 }
 

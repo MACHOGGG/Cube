@@ -17,18 +17,12 @@
 // runRecord 这一份。这是给 xhs/ 补上类型检查之后抓到的第一个真错。
 import type { RunData } from '../../../src/engine/runRecord';
 
-export const PLAYER_NAME_KEY = 'slides_mp_name';
-
-/** 战绩图上写的名字。没有云端账号，就读本机存的那个昵称。 */
-export function leaderboardName(): string {
-  try {
-    return (localStorage.getItem(PLAYER_NAME_KEY) || '').trim().slice(0, 12);
-  } catch {
-    return '';
-  }
-}
+// PLAYER_NAME_KEY / leaderboardName 第 16 推搬去了 engine/nickname.ts（这一版的替身见同目录
+// 的 nickname.ts）。
 
 export const signedIn = (): boolean => false;
+/** 第 16 推导出给 nickname.ts 的那份身份：这一版永远没登录。 */
+export const auth = (): null => null;
 export const sessionExpired = (): boolean => false;
 export const runIdOf = (data: RunData): string => `${data.at}-${data.shapeId}-${data.modeKey}`;
 
@@ -39,7 +33,9 @@ export type BoardResult =
   | { ok: true; page: BoardPage }
   | { ok: false; reason: 'signedOut' | 'geniusOnly' | 'expired' | 'network' };
 
-export function pushRun(_data: RunData, _name: string): void {}
+export function pushRun(_data: RunData): void {}
+/** 第 16 推：真身在 pushRun 之外也用它（改名成功之后清榜缓存）。这一版没有榜。 */
+export function invalidateBoards(): void {}
 export const fetchMine = (): Promise<CloudMine | null> => Promise.resolve(null);
 export const fetchBoard = (_mode?: string): Promise<BoardResult> =>
   Promise.resolve({ ok: false, reason: 'signedOut' as const });

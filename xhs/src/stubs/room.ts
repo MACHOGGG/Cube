@@ -18,6 +18,8 @@ export type { RoomPlayer, RoomState } from '../../../src/engine/room';
 
 /** 永远不在小屋里。 */
 export const currentRoom = (): null => null;
+/** 第 16 推：局中改昵称让座位跟着换名字。这一版没有小屋。 */
+export const renameSeat = (): Promise<void> => Promise.resolve();
 export const latestRoomState = (): RoomState | null => null;
 export const iAmHost = (_state?: RoomState | null): boolean => false;
 

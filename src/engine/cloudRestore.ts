@@ -23,6 +23,7 @@
  * 重画不出来；记录那一行、那个分数、以及累计得分都回来了。
  */
 import { fetchMine, signedIn } from './cloudScores';
+import { adoptServerNickname } from './nickname';
 import { entitlement, signedInEmail } from './subscription';
 import { mergeRuns, type StoredRun } from './persistence';
 import type { RunData } from './runRecord';
@@ -55,6 +56,10 @@ export function restoreCloudRuns(keyFor: RunKeyFor): Promise<number> {
   if (running) return running;
   running = (async () => {
     const mine = await fetchMine();
+    // 昵称跟着这一趟一起回来（第 16 推）：服务器那一份盖掉本机的。登录之后最先走到的就是
+    // 这儿（个人主页、记录页、开屏都叫它），所以「登录成功后用服务器的昵称覆盖本地」也是
+    // 这一句。不等它：自动上传那一步要再跑一趟网络，战绩不该排在它后面。
+    if (mine) void adoptServerNickname(mine.nickname);
     if (!mine || !Array.isArray(mine.archive)) {
       // 没取到就不算取过——下次进来再试（可能只是这一下没网）。
       running = null;

@@ -19,61 +19,25 @@ import { isStoreChannel } from './channel';
  * 框打断刚打完的人。
  */
 
-/**
- * 榜上写哪个名字。
+/*
+ * 榜上写哪个名字——**这一段整个搬去了 engine/nickname.ts**（第 16 推）。
  *
- * **只有他自己敲进去的那一个**，没敲过就是空的（服务端把空名字那一行画成「匿名
- * 玩家」）。名字来自多人小屋里那个输入框——他已经取过一次了，没有理由再问一遍，
- * 也没有理由让同一个人在两个地方叫两个名字。
+ * 从前名字是每打完一局随 push 一起报上去的（`name` + `nameV`），存在本机 `slides_mp_name`
+ * 里那个就是榜上那个。现在昵称跟着帐号存在服务器上，只有改名接口写得进去（api/scores.js
+ * 的 rename），push 一个字的名字都不带了。本机那一份只是缓存：`getNickname()` 读它，
+ * `leaderboardName()` 就是 `getNickname()`。
  *
- * 这个键的写入方在多人页面（ui/multiplayer.ts），它从这里取常量，所以两边
- * 不会各写各的。
- *
- * 进小屋不填名字时，服务器会发一个屋里没被占用的字母（A、B、C……），那个字母
- * 另有一个键（ui/multiplayer.ts 的 ASSIGNED_NAME_KEY），不写到这里来——它是一
- * 把椅子的编号，不是一个人的名字。两个混用过一阵：图省事进了一次小屋，从此他
- * 一个人打单人榜，名字也变成了孤零零一个「B」，还不会自己变回来。
- *
- * ── ⚠️ 这儿从前拿登录凭据当名字，那是一次泄露（#2，2026-10-02 修） ──────
- *
- * 没取名字的人，榜上印的是**他的凭据**：
- *
- *   · 免邮箱账号印第一串的前 12 位（`entitlement().handle`）。而第一串**就是那
- *     把钥匙**——api/handle.js 顶上写得很清楚：知道第一串的人凭 `reset` 就能接管
- *     这个账号。把它印在一张公开的榜上，等于把账号挂出去。
- *   · 邮箱账号印 `邮箱.split('@')[0]` 的前 12 位。那是他邮箱的前半截，而域名多半
- *     是 gmail/qq/163 那几个——拼回去不难。
- *
- * 两样都是「玩家没做任何选择、也完全不知道」的情况下被摆到公开页面上的。所以这
- * 个函数现在**只回他自己取的名字**，别的一个字都不猜。
- *
- * 服务端那一头也不信客户端（旧版本的包还在外面跑，它们照旧会报上来那种名字）：
- * `api/scores.js` 的 `leakShaped()` 认那两种形状，认出来就不存、不显示。门
- * （`check-scores`）里有一条静态断言：这个函数的函数体里不许再出现 `handle` 和
- * `signedInEmail`。
+ * 那段「⚠️ 这儿从前拿登录凭据当名字，那是一次泄露」的历史跟着搬过去了，门（check-board-no-id
+ * 的 ⑷）也改成去那边读。
  */
-export const PLAYER_NAME_KEY = 'slides_mp_name';
 
 /**
- * 名字这件事的版本号，跟着每一局报上去（`nameV`）。
+ * 一次调用要带的身份。没登录就没有。
  *
- * 服务端靠它分得出「这个名字是新客户端报的」（玩家真敲过）和「旧客户端猜出来
- * 的」（可能是凭据）。见 api/scores.js 的 `leakShaped`。
+ * 导出给 engine/nickname.ts 用（改名接口要同一份身份，而它得自己看回包的状态码——409 是
+ * 「被占了」、400 是「换一个」，`post()` 把这些全并成了 null）。
  */
-export const NAME_V = 2;
-
-export function leaderboardName(): string {
-  try {
-    const picked = (localStorage.getItem(PLAYER_NAME_KEY) || '').trim();
-    if (picked) return picked.slice(0, 12);
-  } catch {
-    /* 私密模式：读不到就当没取过。 */
-  }
-  return '';
-}
-
-/** 一次调用要带的身份。没登录就没有。 */
-function auth(): { email?: string; code?: string; token: string } | null {
+export function auth(): { email?: string; code?: string; token: string } | null {
   const e = entitlement();
   if (!e.token) return null;
   const email = signedInEmail();
@@ -164,6 +128,11 @@ export interface CloudMine {
   runs: number;
   best: Record<string, number>;
   archive: { runId: string; mode: string; score: number; at: number; data: RunData | null }[];
+  /**
+   * 这个帐号登记的昵称（第 16 推）。空串 = 还没登记。拿到之后盖掉本机那一份（engine/
+   * nickname.ts 的 adoptServerNickname）。旧服务器不回这一位，读出来是 undefined。
+   */
+  nickname?: string;
 }
 
 /** 上传失败之后隔多久再试一次。 */
@@ -189,16 +158,15 @@ let lastPush: Promise<unknown> | null = null;
  * 网刚好抖了一下」——那一局于是不在榜上，而玩家点开排行榜看到的是旧名次，什么提示
  * 都没有。一次重试收掉的正是这一种（真断网的话两次都失败，和从前一样，不更坏）。
  */
-export function pushRun(data: RunData, name: string): void {
+export function pushRun(data: RunData): void {
+  // **不带名字**（第 16 推）。从前这里带着 `name` 和 `nameV`，于是哪台设备最后交卷，榜上
+  // 就是哪台设备上存的那个名字——在这台手机上改了名，换台平板打一局就又变回去了。昵称现在
+  // 只走改名接口（engine/nickname.ts 的 setNickname），服务器也不再读 push 里的名字。
   const body = {
     action: 'push',
     runId: runIdOf(data),
     mode: data.shapeId,
     score: Math.max(0, Math.round(data.totalScore || 0)),
-    name,
-    // 这个名字是玩家自己敲的那一个（见 leaderboardName 顶上那段）。服务端靠这一位
-    // 分得出「新客户端报的」和「旧客户端从凭据猜出来的」。
-    nameV: NAME_V,
     data,
   };
   // 刚打完一局，榜一定变了（至少自己那一行）。把缓存清掉，下一次打开排行榜去拿新的。

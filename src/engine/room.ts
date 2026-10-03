@@ -238,6 +238,12 @@ export type RoomError =
    * 「连不上网络」，他会去查 Wi-Fi，而 Wi-Fi 一点问题都没有。
    */
   | 'tooMany'
+  /**
+   * 没登录的人敲的名字过不了关（第 16 推，api/room.js 的 pickSeatName）：词表或保留名
+   * （blocked），超过 12 个字（bad）。登录了的人在进屋之前就由改名接口拦下了，走不到这儿。
+   */
+  | 'blocked'
+  | 'bad'
   | 'network';
 
 export type RoomResult<T> =
@@ -493,6 +499,20 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
  * 箱就能开走一间小屋」的另一半。见 api/_entitlement.js。
  */
 function hostProof() {
+  return {
+    ...accountProof(),
+    storeClaim: isStoreChannel() && isGenius(),
+  };
+}
+
+/**
+ * 「我是哪个帐号」——不问是不是天才，只问是谁（第 16 推）。
+ *
+ * 进屋（join）也带上它：登录了的人在屋里叫他的帐号昵称，那是服务器按这份凭证认出人之后
+ * 从库里读的（api/room.js 的 pickSeatName），请求里报的名字不算——否则报一个别人的邮箱就能
+ * 顶着别人的名字坐下。没登录就是一份空的，服务器照他敲的名字办。
+ */
+function accountProof() {
   const mine = entitlement();
   return {
     email: mine.email,
@@ -500,7 +520,6 @@ function hostProof() {
     // Redeemed but not yet attached to an address: the code is the only name
     // this entitlement has, so it has to travel with the token that claims it.
     holderCode: mine.channel === 'code' ? mine.code : undefined,
-    storeClaim: isStoreChannel() && isGenius(),
   };
 }
 
@@ -546,11 +565,31 @@ export async function joinRoom(
     name,
     avatar,
     seen: seenTutorials(),
+    ...accountProof(),
   });
   if (!joined.ok) return joined;
   session = { code: code.trim(), playerId: joined.value.playerId, playerToken: joined.value.playerToken };
   rememberSeat(session);
   return { ok: true, value: joined.value.state };
+}
+
+/**
+ * 局中改了昵称（第 16 推）：让这台设备坐着的那把椅子也换成新名字。
+ *
+ * 只在改名接口成功之后叫（engine/nickname.ts 的 setNickname）。服务器从库里读这个帐号此刻
+ * 的昵称，不收这里报的名字；屋里已经有人叫这个名字，改名的这一个加「 2」（api/room.js 的
+ * renameSeat）。没坐在屋里就什么都不做。失败也不说——名字下一次进屋就对了，不值得为它弹
+ * 一句话打断人。
+ */
+export async function renameSeat(): Promise<void> {
+  if (!session) return;
+  await post({
+    action: 'rename',
+    code: session.code,
+    playerId: session.playerId,
+    playerToken: session.playerToken,
+    ...accountProof(),
+  });
 }
 
 /**

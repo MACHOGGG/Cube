@@ -149,5 +149,113 @@ check('接下来没取名字的 → D（跳过已占的 A/B/C，不管中间夹�
   check('自己取的名字被占了，加编号而不是换成字母', backName.startsWith('阿甲') && backName !== '阿甲', backName);
 }
 
+// ---------------------------------------------------------------------------
+// 6. 第 16 推：座位名和帐号昵称
+//
+// 方案那三条，外加「局中改名」那一条规矩：
+//   · 座位名（发的字母、加的「 2」、没登记昵称的人敲的名字）不写进昵称；
+//   · 没登录的人撞上一个帐号登记的昵称，直接给「名字 2」；
+//   · 登录的人拿原名——屋里叫他的帐号昵称，名字栏里敲的不算；
+//   · 局中某人把昵称改成屋里没登录的人正用着的名字：改名的人显示「 2」，不动别人。
+// ---------------------------------------------------------------------------
+{
+  const { default: scores } = await import('../api/scores.js');
+  const store = await import('../api/_store.js');
+  async function scoreCall(body) {
+    const out = { code: 0, payload: null };
+    await scores(
+      { method: 'POST', body, headers: { 'x-vercel-forwarded-for': '10.7.0.1' } },
+      { status(c) { out.code = c; return this; }, setHeader() {}, end(t) { out.payload = JSON.parse(t); } },
+    );
+    return { status: out.code, payload: out.payload };
+  }
+  /** 一个开通了的帐号；`nick` 给了就从改名接口登记。 */
+  async function account(email, nick) {
+    const acc = accounts.newAccount('secret', 'code');
+    acc.until = Date.now() + 30 * 24 * 3600e3;
+    await accounts.saveAccount(email, acc);
+    const proof = { email, accountToken: acc.token };
+    if (nick) {
+      const r = await scoreCall({ action: 'name', email, token: acc.token, name: nick });
+      if (r.status !== 200) throw new Error(`登记昵称失败：${email} ${r.status} ${JSON.stringify(r.payload)}`);
+    }
+    return proof;
+  }
+  const names = async () => store.hgetall('lbnames');
+
+  const hua = await account('hua@example.com', '阿花');
+  const quiet = await account('quiet@example.com');            // 登录了、没登记昵称
+  const made6 = await call({ action: 'create', name: '', avatar: AVATAR, ...hostProof });
+  const code6 = made6.payload.code;
+
+  // ① 没登录的人撞上已登记的昵称 → 「阿花 2」。
+  const anon = await call({ action: 'join', code: code6, name: '阿花', avatar: AVATAR });
+  const anonName = nameOf(anon.payload.state, anon.payload.playerId);
+  check('⑥ 没登录的人敲了「阿花」（某个帐号登记的昵称）→ 屋里叫「阿花 2」', anonName === '阿花 2', String(anonName));
+
+  // ② 登录的人拿原名——哪怕名字栏里敲的是别的。
+  const owner = await call({ action: 'join', code: code6, name: '随便敲的', avatar: AVATAR, ...hua });
+  const ownerName = nameOf(owner.payload.state, owner.payload.playerId);
+  check('⑥ 登录的「阿花」进屋 → 叫「阿花」（帐号昵称，名字栏里敲的不算）', ownerName === '阿花', String(ownerName));
+  // 尺子：同一个帐号的凭证换成错的令牌，就认不出他，名字栏里敲的那个照用。
+  const forged = await call({ action: 'join', code: code6, name: '冒名', avatar: AVATAR, email: 'hua@example.com', accountToken: 'wrong' });
+  check('（尺子）⑥ 报着阿花的邮箱、令牌不对 → 认不出，叫他自己敲的「冒名」',
+    nameOf(forged.payload.state, forged.payload.playerId) === '冒名', String(nameOf(forged.payload.state, forged.payload.playerId)));
+
+  // ③ 座位名不写进昵称：发的字母、「 2」、没登记昵称的人敲的名字。
+  const before = await names();
+  const letter = await call({ action: 'join', code: code6, name: '', avatar: AVATAR, ...quiet });
+  const typedQuiet = await call({ action: 'join', code: code6, name: '小安', avatar: AVATAR, ...quiet });
+  const after = await names();
+  check('（尺子）⑥ 登录了、没昵称的人空着名字进屋，领到一个字母',
+    /^[A-Z]$/.test(String(nameOf(letter.payload.state, letter.payload.playerId))), String(nameOf(letter.payload.state, letter.payload.playerId)));
+  check('（尺子）⑥ 他敲了「小安」再进一次，座位就叫「小安」',
+    nameOf(typedQuiet.payload.state, typedQuiet.payload.playerId) === '小安');
+  check('⑥ 座位名一个都没写进昵称（lbnames 进屋前后一模一样）', JSON.stringify(after) === JSON.stringify(before),
+    `${Object.keys(before).length} → ${Object.keys(after).length}`);
+  check('⑥ 「阿花 2」没变成谁的昵称，「阿花」还是阿花的', after['hua@example.com']?.name === '阿花' &&
+    !Object.values(after).some((r) => r?.name === '阿花 2'));
+
+  // ④ 局中改名：屋里没登录的人正用着「小红」，阿花把昵称改成「小红」→ 屋里她叫「小红 2」。
+  const red = await call({ action: 'join', code: code6, name: '小红', avatar: AVATAR });
+  check('（尺子）⑥ 没登录的「小红」坐下了', nameOf(red.payload.state, red.payload.playerId) === '小红');
+  const changed = await scoreCall({ action: 'name', email: 'hua@example.com', token: hua.accountToken, name: '小红' });
+  check('（尺子）⑥ 阿花把昵称改成「小红」（全站没人登记过，改得成）', changed.status === 200, `${changed.status}`);
+  const moved = await call({
+    action: 'rename', code: code6, playerId: owner.payload.playerId, playerToken: owner.payload.playerToken, ...hua,
+  });
+  const st = moved.payload.state;
+  check('⑥ 局中改名：改名的人在屋里叫「小红 2」', nameOf(st, owner.payload.playerId) === '小红 2', String(nameOf(st, owner.payload.playerId)));
+  check('⑥ 先坐下的那个「小红」一个字没动', nameOf(st, red.payload.playerId) === '小红', String(nameOf(st, red.payload.playerId)));
+  // 改名这条路不收请求里报的名字：座位名只能是那个帐号此刻的昵称。
+  const sneaky = await call({
+    action: 'rename', code: code6, playerId: owner.payload.playerId, playerToken: owner.payload.playerToken, ...hua, name: '管理员',
+  });
+  check('⑥ 局中改名不收请求里报的名字（报「管理员」也还是「小红 2」）', nameOf(sneaky.payload.state, owner.payload.playerId) === '小红 2');
+  const noAuth = await call({ action: 'rename', code: code6, playerId: owner.payload.playerId, playerToken: owner.payload.playerToken });
+  check('⑥ 局中改名不带帐号凭证 → 401', noAuth.status === 401, `${noAuth.status}`);
+
+  // ⑤ 没登录的人敲的名字也过同一道关：词表、长度；单个字母照收（那是小屋的规矩）。
+  const bad1 = await call({ action: 'join', code: code6, name: '官方客服', avatar: AVATAR });
+  check('⑥ 没登录的人敲「官方客服」→ 400 blocked，不进屋', bad1.status === 400 && bad1.payload?.error === 'blocked', `${bad1.status} ${JSON.stringify(bad1.payload)}`);
+  const bad2 = await call({ action: 'join', code: code6, name: 'abcdefghijklm', avatar: AVATAR });
+  check('⑥ 没登录的人敲 13 个字 → 400 bad（不截断）', bad2.status === 400 && bad2.payload?.error === 'bad', `${bad2.status} ${JSON.stringify(bad2.payload)}`);
+  const okLetter = await call({ action: 'join', code: code6, name: 'q', avatar: AVATAR });
+  check('（尺子）⑥ 单个字母照收（昵称不收，小屋里收）', okLetter.status === 200, `${okLetter.status}`);
+}
+
+// ---------------------------------------------------------------------------
+// 7. 网页那一头：名字栏不再读座位字母，服务器给的名字不写回来（读源码）
+// ---------------------------------------------------------------------------
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/ui/multiplayer.ts', import.meta.url), 'utf8');
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  check('⑦ 不再读写 slides_mp_seat_name', !code.includes('slides_mp_seat_name') && !code.includes('ASSIGNED_NAME_KEY'));
+  check('⑦ 名字栏预填的是昵称（getNickname）', /const savedName = getNickname\(\);/.test(code));
+  const writes = code.match(/localStorage\.setItem\(NAME_KEY,[^)]*\)/g) || [];
+  check('⑦ 写昵称缓存只有一处，写的是他自己敲的（没登录那一支）', writes.length === 1 && writes[0].includes('typed'), writes.join(' | '));
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

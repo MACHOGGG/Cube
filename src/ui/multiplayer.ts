@@ -10,7 +10,8 @@ import { hostNotice, showWaitPanel, tickFor, type HostNotice, type WaitPanel } f
 import { mountPin } from './authBits';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { pushLayer, setScreenBack } from '../engine/backNav';
-import { PLAYER_NAME_KEY } from '../engine/cloudScores';
+import { signedIn } from '../engine/cloudScores';
+import { PLAYER_NAME_KEY, getNickname, nicknameErrorText, setNickname } from '../engine/nickname';
 import { ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
@@ -166,18 +167,23 @@ const KNOW_ASK_MS = 4000;
 /** 开赛时刻过去多久之后才到的人，算来晚了，不入这一局。 */
 const LATE_MS = 5000;
 
-/** 他自己敲的那个名字。也是排行榜上写的那个（engine/cloudScores.ts）。 */
+/** 他自己的名字：登录了是帐号昵称的本机缓存，没登录是他上次敲的（engine/nickname.ts）。 */
 const NAME_KEY = PLAYER_NAME_KEY;
-/**
- * 服务器最后落到我这把椅子上的名字，单独存。
+/*
+ * 这儿从前还有一个键 `slides_mp_seat_name`：服务器最后落到我这把椅子上的名字（发的字母、加
+ * 了「 2」的那种），名字栏优先预填它，断线回来报的就是它。
  *
- * 不填名字进小屋，服务器会发一个屋里没被占的字母（api/room.js 的
- * freeLetter）。这个字母要记下来：断线回来时报的还得是它，服务器才认得出那
- * 把椅子是他的（认领只按名字，见 join）。但它不能写进 NAME_KEY——那个键同时
- * 是全站排行榜上的昵称，写进去的话，一次图省事的匿名进屋，会把他单人榜上的
- * 名字永久改成一个字母，而且不会自己变回来。
+ * 第 16 推拆了（方案原话：「名字框预填昵称，不再读 slides_mp_seat_name」）。它闯过两回祸：
+ *
+ *   · 「B」「阿花 2」上了榜——那是这一屋子里的编号，不是一个人的名字，可它被预填进名字栏，
+ *     一按《开小屋》就被当成他敲的名字记了下来。
+ *   · 匿名玩家借名字接管陌生人的座位：在上一间屋领到「B」，下一间屋名字栏里还是「B」，而
+ *     那间屋里正好有一个关了网页的「B」——认领只按名字（api/room.js 的 join），于是他坐进
+ *     了一个陌生人的椅子、接着那个人的分数打。
+ *
+ * 断线回来认椅子靠的是本机记着的座位（engine/room.ts 的 rememberSeat），不靠这个名字；
+ * 服务器那边按名字认领的那条路一个字没动。
  */
-const ASSIGNED_NAME_KEY = 'slides_mp_seat_name';
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -226,6 +232,11 @@ export function errorText(reason: RoomError, lang: Lang): string {
       return s.mpErrNotHost;
     case 'mode':
       return s.mpErrMode;
+    // 名字过不了关（第 16 推）：和改昵称同两句话。
+    case 'blocked':
+      return s.nickBlocked;
+    case 'bad':
+      return s.nickBad;
     default:
       return s.purchaseNetwork;
   }
@@ -354,15 +365,9 @@ export function renderMultiplayerPage(
     renderHome();
   };
 
-  // 名字栏里先填什么：优先填服务器给我这把椅子的那个名字——它是别人此刻看见
-  // 的我，也是断线回来认椅子要报的那个。没有就填他自己敲过的。
-  const savedName = (() => {
-    try {
-      return localStorage.getItem(ASSIGNED_NAME_KEY) || localStorage.getItem(NAME_KEY) || '';
-    } catch {
-      return '';
-    }
-  })();
+  // 名字栏里先填什么：他的昵称（第 16 推）。服务器发的字母、加的「 2」永远不进这一格——见
+  // NAME_KEY 底下那段。
+  const savedName = getNickname();
 
   // ---- screen 1: who you are, and which room ---------------------------
 
@@ -497,38 +502,42 @@ export function renderMultiplayerPage(
     // 没填就是没填，空着报上去。从前这里拿占位那句话《取个名字》当名字用，于是
     // 一屋子人可以全叫「取个名字」，排行榜上谁是谁看不出来。现在空名字由服务器
     // 发一个屋里没被占的字母（A、B、C……见 api/room.js 的 freeLetter）。
-    const myName = () => nameBox.value.trim().slice(0, 12);
-    const write = (key: string, name: string) => {
-      try {
-        localStorage.setItem(key, name);
-      } catch {
-        // A name that cannot be remembered is simply typed again next time.
-      }
-    };
+    //
+    // **不截断**（第 16 推）：多于 12 个字的名字服务器回「最多 12 个字」，截掉的那一截可能正
+    // 是他要的那部分，而他在屏幕上看不出被截过。
+    const myName = () => nameBox.value.trim();
     /**
-     * 他自己敲的名字，记进排行榜那个键。
+     * 进屋之前先把名字这件事办了（第 16 推）。
      *
-     * 空着不记：什么都没填不等于「我叫空白」，把上一次认认真真取的名字擦掉，
-     * 他下次打开这一页会莫名其妙。
+     *   · **登录了**：名字栏就是他的昵称。改过了就先走改名接口（engine/nickname.ts 的
+     *     setNickname）——过了关才进屋，没过就在这一行说为什么、不进屋。进屋之后屋里叫他什
+     *     么由服务器按帐号昵称定（api/room.js 的 pickSeatName），所以这一步必须在前面。
+     *     设过昵称的人把这一格清空：昵称不能改成空（方案原话），照实说，不进屋。
+     *   · **没登录**：只记在本机（下次打开这一页预填），不上服务器——那不是谁的昵称。空着
+     *     不记：什么都没填不等于「我叫空白」，把上一次认认真真取的名字擦掉，他下次打开这一页
+     *     会莫名其妙。
+     *
+     * 服务器发的字母、加的「 2」永远不写回来（见 NAME_KEY 底下那段）。
+     *
+     * @returns 屏幕上该说的那一句；空串 = 可以进屋。
      */
-    const remember = () => {
+    const settleName = async (): Promise<string> => {
       const typed = myName();
-      if (typed) write(NAME_KEY, typed);
-    };
-    /**
-     * 把服务器最后落到我座位上的那个名字记在本机上。
-     *
-     * 领到字母的人下次打开这一页，名字栏里就是那个字母——他看得见别人看见的
-     * 是什么；更要紧的是断线回来时报的还是它，服务器才认得出那把椅子是他的
-     * （认领只按名字，见 api/room.js 的 join）。
-     *
-     * 只写椅子那个键。它可能是一个字母，那是这一屋子里的编号，不是他的名
-     * 字——写进排行榜那个键的话，全站榜上他就叫「B」了。
-     */
-    const keepAssignedName = (st: RoomState) => {
-      const meId = currentRoom()?.playerId;
-      const me = st.players.find((p) => p.id === meId);
-      if (me?.name) write(ASSIGNED_NAME_KEY, String(me.name).slice(0, 12));
+      if (!signedIn()) {
+        if (typed) {
+          try {
+            localStorage.setItem(NAME_KEY, typed);
+          } catch {
+            // A name that cannot be remembered is simply typed again next time.
+          }
+        }
+        return '';
+      }
+      const current = getNickname();
+      if (typed === current) return '';
+      if (!typed && !current) return '';
+      const done = await setNickname(typed);
+      return done.ok ? '' : nicknameErrorText(done.reason, lang);
     };
 
     container.querySelector<HTMLButtonElement>('#mpShuffle')!.addEventListener('click', () => {
@@ -553,8 +562,15 @@ export function renderMultiplayerPage(
       if (!isGenius()) return handlers.onNeedGenius();
       if (busy) return;
       busy = true;
-      remember();
       msg.textContent = s.workingLabel;
+      const nameTrouble = await settleName();
+      if (dead) return;
+      if (nameTrouble) {
+        busy = false;
+        msg.textContent = nameTrouble;
+        nameBox.focus();
+        return;
+      }
       const made = await createRoom(myName(), avatar, contest);
       busy = false;
       if (dead) return;
@@ -587,7 +603,6 @@ export function renderMultiplayerPage(
         }
         return void (msg.textContent = errorText(made.reason, lang));
       }
-      keepAssignedName(made.value);
       renderLobby(made.value);
     };
     /**
@@ -644,8 +659,16 @@ export function renderMultiplayerPage(
       if (!/^\d{4}$/.test(code)) return void (msg.textContent = s.mpErrNoRoom);
       if (busy) return;
       busy = true;
-      remember();
       msg.textContent = s.workingLabel;
+      const nameTrouble = await settleName();
+      if (dead) return;
+      if (nameTrouble) {
+        busy = false;
+        msg.textContent = nameTrouble;
+        pin.reject();
+        nameBox.focus();
+        return;
+      }
       const joined = await joinRoom(code, myName(), avatar);
       busy = false;
       if (dead) return;
@@ -663,7 +686,6 @@ export function renderMultiplayerPage(
       // 帧都画不出来。约 400ms，reduced-motion 下是 0。
       await pin.accept();
       if (dead) return;
-      keepAssignedName(joined.value);
       // 一局正打到一半进来的（服务器现在放人进来了）：这一局不是我的，先记
       // 成「打过了」，免得轮询把我扔进一块别人打了一半的棋盘；下一局开始时
       // 才入局。这之前坐在等待页看实时排行——见 renderLobby 里的 sideline。

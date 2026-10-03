@@ -23,7 +23,7 @@ import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
-import { leaderboardName, pushRun } from './cloudScores';
+import { pushRun } from './cloudScores';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
@@ -1066,7 +1066,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 登录了就顺手往云上报一份：换台设备记录跟着回来，成绩也进全球榜。
     // 不 await——结算页已经在屏幕上了，没有理由让刚打完的人等一个请求；
     // 报不上去最多是这一局没上榜，本机那份存档一个字都不受影响。
-    pushRun(lastRun, leaderboardName());
+    pushRun(lastRun);
     // The reason key is one of our own fixed strings, never player text.
     trackGameEnd({
       shape: hooks.shapeId,

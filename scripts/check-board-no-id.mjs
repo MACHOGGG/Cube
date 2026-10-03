@@ -68,11 +68,20 @@ async function call(body) {
   return { status: out.code, body: out.payload };
 }
 
-/** 造一个能证明自己的账号，回它的 id 和令牌。 */
-async function player(id, name) {
+/**
+ * 造一个能证明自己的账号，回它的 id 和令牌。
+ *
+ * `register` 为真就顺手从改名接口登记昵称（第 16 推起那是名字进库的唯一一条路——push 里带的
+ * 名字服务器一个字都不读了）。下面 ⑴⑵ 那两个要量「push 带名字也存不进去」，不登记。
+ */
+async function player(id, name, { register = true } = {}) {
   const acc = newAccount('pw1234', 'code');
   acc.until = Date.UTC(2999, 0, 1);   // 天才，否则看榜那道门会拦（scores.js 的 isGenius）
   await saveAccount(id, acc);
+  if (register) {
+    const r = await call({ action: 'name', email: id, token: acc.token, name });
+    if (r.status !== 200) throw new Error(`登记昵称失败：${id} ${r.status} ${JSON.stringify(r.body)}`);
+  }
   return { id, token: acc.token, name };
 }
 
@@ -154,7 +163,8 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
   const NAMES = 'lbnames';
 
   // ⑴ 旧客户端（不带 nameV）报一个「像第一串」的名字：不许存进去。
-  const H = await player(pairKey('LeakGate1'), 'Abcdefghij');   // 10 位字母，正是第一串的形状
+  //    （第 16 推起 push 里的名字一律不读，这一条照旧成立——它现在量的是「不读」本身。）
+  const H = await player(pairKey('LeakGate1'), 'Abcdefghij', { register: false });   // 10 位字母，正是第一串的形状
   const r1 = await call({
     action: 'push', email: H.id, token: H.token,
     runId: 'leak-1', mode: 'square', score: 777, name: H.name, data: { rules: 'ero1' },
@@ -164,21 +174,23 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
   check('⑴ 旧客户端报的「像第一串」的名字没存进库里', !after1[H.id],
     JSON.stringify(after1[H.id] ?? null));
 
-  // ⑵ 同一个人，新客户端（nameV: 2）报同一个名字：**要存**。那是他自己敲的昵称，哪怕它
-  //    正好长得像第一串——而新客户端压根不会拿凭据顶名字（leaderboardName 回空串）。
+  // ⑵ 同一个人，第 3 推那一版的客户端（nameV: 2）报同一个名字：**第 16 推起也存不进去**。
+  //    从前这一条量的是「要存」——那时名字随 push 报，nameV 是「玩家自己敲的」的记号。现在
+  //    昵称只有改名接口写得进去（api/scores.js 的 rename），push 一个字的名字都不读：不然一
+  //    台装着旧包的手机打完一局，就把他在别处刚改好的名字盖回去了。
   const r2 = await call({
     action: 'push', email: H.id, token: H.token,
     runId: 'leak-2', mode: 'square', score: 778, name: H.name, nameV: 2, data: { rules: 'ero1' },
   });
   check('（尺子）⑵ 这一局也报上去了', r2.status === 200 && r2.body?.stored !== false, JSON.stringify(r2.body));
   const after2 = await hgetall(NAMES);
-  check('⑵ 新客户端报的同一个名字存进去了，而且带着 v', after2[H.id]?.name === H.name && Number(after2[H.id]?.v) >= 2,
+  check('⑵ 带着 nameV 报上来的名字也没存进库里（名字只走改名接口）', !after2[H.id],
     JSON.stringify(after2[H.id] ?? null));
 
   // ⑶ 库里躺着一条旧的（手摆进去，模拟改版之前存下的）：**榜上显示成空**。
   //    这一条量的是**读**那一头——库里那些要等管理员跑一次 scrubNames 才清掉，在那之前
   //    每一张榜都在把它们印出来。
-  const M = await player('leakmail@example.com', 'ignored');
+  const M = await player('leakmail@example.com', 'ignored', { register: false });
   await call({
     action: 'push', email: M.id, token: M.token,
     runId: 'leak-3', mode: 'square', score: 779, name: '', data: { rules: 'ero1' },
@@ -190,26 +202,39 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
   check('（尺子）⑶ 那一行在榜上', Boolean(row), JSON.stringify(got.body.rows).slice(0, 120));
   check('⑶ 库里那条旧的「像邮箱」的名字，榜上显示成空', row?.name === '', JSON.stringify(row));
   check('⑶ 整份回包里也找不到它', !JSON.stringify(got.body).includes('leakmail'));
-  // 尺子：一个**好**名字照旧印得出来——⑶ 不是靠「所有名字都印成空」混过去的。
-  const good = got.body.rows.find((x) => x.name === H.name);
+  // 尺子：一个**好**名字照旧印得出来——⑶ 不是靠「所有名字都印成空」混过去的。（第 16 推之
+  // 前这儿找的是 H 那一行，它的名字是 ⑵ 存进去的；现在 ⑵ 存不进去了，换成开头从改名接口登
+  // 记过的那一个。）
+  const good = got.body.rows.find((x) => x.name === MAIL.name);
   check('（尺子）⑶ 好名字照旧印得出来', Boolean(good), JSON.stringify(got.body.rows).slice(0, 160));
 }
 
-// ── ⑷ 客户端那一头：leaderboardName 里不许再出现那两样 ───────────
+// ── ⑷ 客户端那一头：榜上那个名字的来路里不许再出现那两样 ───────────
 //
-// 静态断言，读源码。为什么非读源码不可：这个函数要在浏览器里才跑得起来
-// （localStorage、entitlement），而它犯的那个错恰恰是「多看了一眼本来不该看的东西」——
+// 静态断言，读源码。为什么非读源码不可：这几个函数要在浏览器里才跑得起来
+// （localStorage、entitlement），而它们犯的那个错恰恰是「多看了一眼本来不该看的东西」——
 // 那是源码里看得最清楚的一件事。
+//
+// 第 16 推起这条路是 engine/nickname.ts 的 `leaderboardName()` → `getNickname()`（从
+// cloudScores.ts 搬过去的），两个函数体都量。
 {
   const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../src/engine/cloudScores.ts', import.meta.url), 'utf8');
-  const at = src.indexOf('export function leaderboardName()');
-  check('（尺子）⑷ 找到了 leaderboardName', at > 0, String(at));
-  const body = src.slice(at, src.indexOf('\n}', at));
-  check('⑷ 函数体里不许出现 handle（那是第一串，一把钥匙）', !/\bhandle\b/.test(body), body.slice(0, 200));
-  check('⑷ 函数体里不许出现 signedInEmail', !/signedInEmail/.test(body), body.slice(0, 200));
-  // 尺子：它还认得那个昵称键——上面两条不是靠「整个函数被删了」绿的。
-  check('（尺子）⑷ 它照旧读那个昵称键', body.includes('PLAYER_NAME_KEY'));
+  const src = readFileSync(new URL('../src/engine/nickname.ts', import.meta.url), 'utf8');
+  const bodyOf = (sig) => {
+    const at = src.indexOf(sig);
+    return at < 0 ? '' : src.slice(at, src.indexOf('\n}', at));
+  };
+  const lb = bodyOf('export function leaderboardName()');
+  const get = bodyOf('export function getNickname()');
+  check('（尺子）⑷ 找到了 leaderboardName 和 getNickname', lb.length > 0 && get.length > 0,
+    `${lb.length} / ${get.length}`);
+  check('⑷ leaderboardName 只是 getNickname（不另找名字）', /return getNickname\(\);/.test(lb), lb.slice(0, 200));
+  for (const [label, body] of [['leaderboardName', lb], ['getNickname', get]]) {
+    check(`⑷ ${label} 的函数体里不许出现 handle（那是第一串，一把钥匙）`, !/\bhandle\b/.test(body), body.slice(0, 200));
+    check(`⑷ ${label} 的函数体里不许出现 signedInEmail`, !/signedInEmail/.test(body), body.slice(0, 200));
+  }
+  // 尺子：它还认得那个昵称键——上面几条不是靠「整个函数被删了」绿的。
+  check('（尺子）⑷ getNickname 照旧读那个昵称键', get.includes('PLAYER_NAME_KEY'));
 }
 
 // ── 反向对照：这道门自己量得出「多一个字段」吗 ────────────────

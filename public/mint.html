@@ -137,6 +137,13 @@
       </label>
     </div>
     <div class="check">
+      <!-- 第 16 推的一次性迁移（api/scores.js 的 buildNicknameIndex）。上线之后只勾这一项跑一次。 -->
+      <input id="buildNicknames" type="checkbox" />
+      <label for="buildNicknames" style="margin:0;font-weight:400">
+        <strong>建立昵称索引</strong>：把旧榜名整理成「一个帐号一个、全站唯一」。重名的留给总榜分数最高的那个帐号，其余清掉（他们下次打开会看到「设置昵称」）。只回几个数，不列名字。
+      </label>
+    </div>
+    <div class="check">
       <input id="wipeAll" type="checkbox" />
       <label for="wipeAll" style="margin:0;font-weight:400">
         <strong>全部清空</strong>：所有玩法的榜一张不留，总榜也清。改了记分尺子之后用它。
@@ -225,6 +232,7 @@
     // 不勾全清的重建——手滑点了它的人，多半不知道还有这一步。
     if ($('wipeAll').checked && !confirm('确定清空所有排行榜吗？')) return;
     const scrub = $('scrubNames').checked;
+    const nicknames = $('buildNicknames').checked;
     $('rebuild').disabled = true;
     sayR('正在重算…（人多的话要等十几秒）');
     try {
@@ -237,6 +245,7 @@
           drop: $('dropFlip').checked ? ['flip'] : [],
           all: $('wipeAll').checked,
           scrubNames: scrub,
+          nicknames,
         }),
       });
       const reply = await res.json().catch(() => ({}));
@@ -252,7 +261,14 @@
       // 勾了「清理旧名字」才报这个数，零也报：他问了，「一条都没有」本身就是答案。服务器
       // 只回一个数，不回名字（那些名字恰恰是要清的凭据，列出来就成了一次泄露）。
       const scrubbed = scrub ? `，删掉了 ${Number(reply.namesDropped) || 0} 条旧名字` : '';
-      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}${scrubbed}${skipped}。`, 'good');
+      // 昵称索引：同样只有几个数（第 16 推）。勾了才报，零也报。
+      const n = reply.nicknames || {};
+      const nicks = nicknames
+        ? `；昵称：登记 ${Number(n.indexed) || 0} 个，重名清掉 ${Number(n.cleared) || 0} 个，` +
+          `不能用的清掉 ${Number(n.invalid) || 0} 个，并掉已绑定邮箱的旧码 ${Number(n.merged) || 0} 个，` +
+          `过期索引 ${Number(n.stale) || 0} 个`
+        : '';
+      sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}${scrubbed}${nicks}${skipped}。`, 'good');
     } catch {
       $('rebuild').disabled = false;
       sayR('连不上服务器。', 'bad');

@@ -29,3 +29,19 @@ export const ICON_CLOSE = custom('close') ?? CLOSE;
 export const ICON_MAIL = custom('mail') ?? MAIL;
 export const ICON_EYE = custom('eye') ?? EYE;
 export const ICON_EYE_OFF = custom('eye-off') ?? EYE_OFF;
+
+/*
+ * 下面两个是**代码里画的**（第 16 推，个人主页头卡上改昵称那三颗键：✎、✓；✕ 用上面的
+ * ICON_CLOSE）。设计稿给的那五个是文件，这两个稿子里没有，所以照那五个的路子画：
+ * 24 × 24、2px 圆头线、`currentColor`，摆在药丸上就是白的。
+ *
+ * 不用 ✎ ✓ 这两个字：它们在 Fraunces / Georgia 里都没有，落到哪个后备字体上看机器——有的系
+ * 统画成彩色 emoji，有的画成一个细得看不见的符号。
+ */
+const svg24 = (body: string) =>
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+  body +
+  '</svg>';
+export const ICON_PENCIL = svg24('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>');
+export const ICON_CHECK = svg24('<path d="M5 12.5l4.5 4.5L19 7.5"/>');

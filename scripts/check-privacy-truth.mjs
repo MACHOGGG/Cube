@@ -53,10 +53,12 @@ const flat = (doc) =>
 
 /** 撤掉的说法：按语言各给一组词。查之前先把那两处故意留的挖掉。 */
 const GONE = {
-  zhHans: ['订阅', 'Creem', '6 位密码', '支付信息', '刷卡'],
-  zhHant: ['訂閱', 'Creem', '6 位密碼', '付款資訊', '刷卡'],
-  en: ['subscription', 'Creem', 'six-character passcode', 'payment details', 'card payment'],
-  fr: ['abonnement', 'Creem', 'code secret de six', 'données de paiement'],
+  // 第 16 推起每一局**不再带名字**上传（push 不读名字，昵称只走改名接口），所以「连同这一局
+  // 的……和你取的名字一起存」那句成了假话，撤掉；末尾那个词组就是它。
+  zhHans: ['订阅', 'Creem', '6 位密码', '支付信息', '刷卡', '玩法和你取的名字一起'],
+  zhHant: ['訂閱', 'Creem', '6 位密碼', '付款資訊', '刷卡', '玩法和你取的名字一起'],
+  en: ['subscription', 'Creem', 'six-character passcode', 'payment details', 'card payment', 'which board, and the name you chose'],
+  fr: ['abonnement', 'Creem', 'code secret de six', 'données de paiement', 'le plateau et le pseudonyme choisi'],
 };
 /** 新的事实：每条给一组候选说法，命中一个就算写到了。 */
 const MUST_SAY = {
@@ -70,6 +72,9 @@ const MUST_SAY = {
     '寄信走 Resend': ['Resend'],
     '云上只留 60 局': ['60 局'],
     '限速计数以 IP 段 / 邮箱 / 账号为键': ['限速计数'],
+    // 第 16 推：方案给的原句。
+    '昵称随帐号存在服务器上、显示在排行榜和小屋里、全站唯一': ['昵称随帐号存在服务器上'],
+    '全站唯一': ['全站唯一'],
   },
   zhHant: {
     '驗證碼 30 分鐘': ['30 分鐘'],
@@ -81,6 +86,8 @@ const MUST_SAY = {
     '寄信走 Resend': ['Resend'],
     '雲上只留 60 局': ['60 局'],
     '限速計數以 IP 段 / 信箱 / 帳號為鍵': ['限速計數'],
+    '暱稱隨帳號存在伺服器上、顯示在排行榜和小屋裡、全站唯一': ['暱稱隨帳號存在伺服器上'],
+    '全站唯一': ['全站唯一'],
   },
   en: {
     'code good for thirty minutes': ['thirty minutes'],
@@ -92,6 +99,8 @@ const MUST_SAY = {
     'mail goes through Resend': ['Resend'],
     'cloud keeps the last sixty runs': ['sixty runs'],
     'rate-limit counters keyed by IP / address / account': ['keep scanners out'],
+    'nickname stored on the server with the account': ['nickname is stored on our server with your account'],
+    'unique across the site': ['unique across the site'],
   },
   fr: {
     'code valable trente minutes': ['trente minutes'],
@@ -103,6 +112,8 @@ const MUST_SAY = {
     'les courriels passent par Resend': ['Resend'],
     'le nuage garde les soixante dernières': ['soixante dernières'],
     'compteurs anti-balayage': ['anti-balayage'],
+    'pseudonyme conservé sur le serveur avec le compte': ['pseudonyme est conservé sur notre serveur avec votre compte'],
+    'unique sur tout le site': ['unique sur tout le site'],
   },
 };
 /** 故意留着的那两处，查「撤掉的说法」之前挖掉（见文件头）。 */

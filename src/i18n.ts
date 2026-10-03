@@ -126,8 +126,24 @@ export interface I18nStrings {
   rankLockedCta: string;
   rankSignedOut: string;
   rankEmpty: string;
-  /** 榜上没取过名字的那一行。见 engine/cloudScores.ts 的 leaderboardName。 */
+  /** 榜上没取过名字的那一行。见 engine/nickname.ts 的 leaderboardName。 */
   rankAnon: string;
+  /**
+   * 昵称（第 16 推）：个人主页头卡上那一格。登录了、还没登记昵称时显示 nickSet；✎ 那颗键的
+   * aria-label 是 nickEdit，原地编辑时 ✓ / ✕ 的 aria-label 是 nickSave / nickCancel。
+   */
+  nickSet: string;
+  nickEdit: string;
+  nickSave: string;
+  nickCancel: string;
+  /**
+   * 改名失败的四句话（api/scores.js 的 rename 回的那四种）。blocked **只说「换一个」**，不说撞
+   * 了哪个词（见 api/_badwords.js 文件头）。小屋里没登录的人敲的名字过不了关，也用这几句。
+   */
+  nickTaken: string;
+  nickBlocked: string;
+  nickBad: string;
+  nickRequired: string;
   /**
    * 步步为营清盘的那一局还剩几步（第 14 推）：排行榜那一行、战绩图上「全部消完了」后面。
    * 「单数|复数」两种写法，走 countPhrase。
@@ -789,6 +805,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Sign in and your runs go on the board',
     rankEmpty: 'Nobody on this board yet',
     rankAnon: 'Anonymous player',
+    nickSet: 'Set a nickname',
+    nickEdit: 'Edit nickname',
+    nickSave: 'Save nickname',
+    nickCancel: 'Cancel',
+    nickTaken: 'That nickname is already taken.',
+    nickBlocked: 'Try another name.',
+    nickBad: 'Up to 12 characters.',
+    nickRequired: 'A nickname can’t be empty.',
     puzzleLeftSteps: '{n} move left|{n} moves left',
     rankLoading: 'Loading…',
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
@@ -1122,6 +1146,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
     rankEmpty: 'Personne à ce classement pour l’instant',
     rankAnon: 'Joueur anonyme',
+    nickSet: 'Choisir un pseudonyme',
+    nickEdit: 'Modifier le pseudonyme',
+    nickSave: 'Enregistrer le pseudonyme',
+    nickCancel: 'Annuler',
+    nickTaken: 'Ce pseudonyme est déjà pris.',
+    nickBlocked: 'Choisissez un autre nom.',
+    nickBad: '12 caractères au maximum.',
+    nickRequired: 'Le pseudonyme ne peut pas être vide.',
     puzzleLeftSteps: '{n} coup restant|{n} coups restants',
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
@@ -1455,6 +1487,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登入之後，你的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
     rankAnon: '匿名玩家',
+    nickSet: '設定暱稱',
+    nickEdit: '修改暱稱',
+    nickSave: '儲存暱稱',
+    nickCancel: '取消',
+    nickTaken: '這個暱稱已經有人用了',
+    nickBlocked: '換一個名字',
+    nickBad: '最多 12 個字',
+    nickRequired: '暱稱不能空著',
     puzzleLeftSteps: '剩 {n} 步',
     rankLoading: '載入中…',
     rankExpired: '登入已過期，重新登入後成績才會上榜',
@@ -1788,6 +1828,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登录之后，你的成绩才会上榜',
     rankEmpty: '这张榜上还没有人',
     rankAnon: '匿名玩家',
+    nickSet: '设置昵称',
+    nickEdit: '修改昵称',
+    nickSave: '保存昵称',
+    nickCancel: '取消',
+    nickTaken: '这个昵称已经有人用了',
+    nickBlocked: '换一个名字',
+    nickBad: '最多 12 个字',
+    nickRequired: '昵称不能空着',
     puzzleLeftSteps: '剩 {n} 步',
     rankLoading: '加载中…',
     rankExpired: '登录已过期，重新登录后成绩才会上榜',

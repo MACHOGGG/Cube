@@ -78,11 +78,9 @@ globalThis.fetch = async (url, init) => {
  */
 const ENTITLEMENT_KEY = 'slides_genius';
 /**
- * ⚠️ `handle` 一定要摆进去（第一串的原文，只有这台设备有）。
- *
- * ⑦ 那一条量的正是「没取名字时**不许**拿它顶上」——而这份身份里要是压根没有 handle，那一
- * 条就成了空绿：函数返回空串不是因为它不去读，而是因为没东西可读。第一版就是这样，
- * 「把那一行加回去」这个反向对照一条都没红。
+ * `handle`（第一串的原文）原来是给 ⑦ 摆的：那一条量「没取名字时**不许**拿它顶上」，身份里
+ * 要是压根没有 handle，那一条就成了空绿。⑦ 第 16 推搬去了 check-nickname（那边摆着同样一
+ * 份），这儿留着它无害——它是一份真实登录状态该有的样子。
  */
 const SECRET_FIRST = 'SecretFirst1';
 store.set(ENTITLEMENT_KEY, JSON.stringify({
@@ -90,7 +88,7 @@ store.set(ENTITLEMENT_KEY, JSON.stringify({
 }));
 
 const api = await import(bundle);
-const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush, leaderboardName, NAME_V } = api;
+const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush } = api;
 
 // ── ⓪ 前提：这套假浏览器真的让它跑起来了 ────────────────────────
 {
@@ -120,13 +118,17 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush, leaderb
 // 这一条最刺眼：玩家刚刷新了自己的最高分，点开排行榜还是旧名次。
 {
   calls = [];
-  pushRun({ at: Date.now(), shapeId: 'square', modeKey: 'base', totalScore: 42 }, '我');
+  pushRun({ at: Date.now(), shapeId: 'square', modeKey: 'base', totalScore: 42 });
   check('② 上报真的发出去了', calls.some((c) => c.action === 'push'), JSON.stringify(calls.map((c) => c.action)));
   check('② 总榜那一格作废了', cachedBoard() === null);
   check('② 别的榜那一格也作废了（自己那一行可能在任何一张上）', cachedBoard('square:base') === null);
-  // 顺带钉住那一位：服务端靠它分得出「这个名字是玩家自己敲的」。
+  // 顺带钉住：**上报不带名字**（第 16 推）。从前带着 name + nameV，于是哪台设备最后交卷，
+  // 榜上就是哪台设备上存的那个名字。昵称现在只走改名接口（engine/nickname.ts）。
   const push = calls.find((c) => c.action === 'push');
-  check('② 上报带着 nameV，而且就是 NAME_V', push?.body?.nameV === NAME_V, String(push?.body?.nameV));
+  check('（尺子）② 找到了那一次上报', Boolean(push?.body), JSON.stringify(push?.body ?? null).slice(0, 80));
+  check('② 上报里没有 name，也没有 nameV',
+    Boolean(push?.body) && !('name' in push.body) && !('nameV' in push.body),
+    Object.keys(push?.body ?? {}).join(' '));
   await waitForPush();
 }
 
@@ -170,7 +172,7 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush, leaderb
 {
   calls = [];
   netOk = false;
-  pushRun({ at: Date.now() + 1, shapeId: 'circle', modeKey: 'base', totalScore: 7 }, '我');
+  pushRun({ at: Date.now() + 1, shapeId: 'circle', modeKey: 'base', totalScore: 7 });
   // 第一趟当场发出去，第二趟要等约两秒。
   await new Promise((r) => setTimeout(r, 300));
   const firstOnly = calls.filter((c) => c.action === 'push').length;
@@ -184,7 +186,7 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush, leaderb
 // ── ⑥ waitForPush 有上限：真断网也不许无限等 ────────────────────
 {
   netOk = false;
-  pushRun({ at: Date.now() + 2, shapeId: 'square', modeKey: 'timed', totalScore: 9 }, '我');
+  pushRun({ at: Date.now() + 2, shapeId: 'square', modeKey: 'timed', totalScore: 9 });
   const t0 = Date.now();
   await waitForPush(300);
   const spent = Date.now() - t0;
@@ -193,26 +195,11 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush, leaderb
   await waitForPush(5000);
 }
 
-// ── ⑦ 名字：只回玩家自己敲的那一个 ──────────────────────────────
+// ── ⑦ 名字：搬去了 check-nickname（第 16 推）──────────────────────────
 //
-// 这一条和 check-board-no-id 的 ⑷ 是一对：那边读源码（不许出现 handle / signedInEmail），
-// 这边量行为（没取过名字就是空串，取过就是那一个）。两样都要，因为源码那一条拦不住「换
-// 个名字读同一样东西」，而行为这一条拦不住「读了但这一次恰好没值」。
-{
-  store.delete('slides_mp_name');
-  check('⑦ 没取过名字 → 空串（不拿凭据顶上）', leaderboardName() === '', JSON.stringify(leaderboardName()));
-  // 两条尺子，缺一条上面那句就是空绿：
-  //   · 这时候是**登着的**（有 token 和邮箱）——不是「因为没登录所以没名字」；
-  //   · 手上**确实有**第一串——它就在 entitlement 里，函数只是不去读。
-  const who = JSON.parse(store.get(ENTITLEMENT_KEY));
-  check('（尺子）⑦ 这时候是登着的', who.token === 'TOK' && who.email === 'refresh@example.com');
-  check('（尺子）⑦ 而且手上真有第一串（不去读 ≠ 没东西可读）', who.handle === SECRET_FIRST);
-  check('⑦ 第一串一个字都没出现在名字里', !leaderboardName().includes('Secret'));
-  store.set('slides_mp_name', '  阿花  ');
-  check('⑦ 取过就是那一个（前后空白剥掉）', leaderboardName() === '阿花', JSON.stringify(leaderboardName()));
-  store.set('slides_mp_name', 'x'.repeat(30));
-  check('⑦ 最多十二个字', leaderboardName().length === 12, String(leaderboardName().length));
-}
+// 「榜上写哪个名字」那个函数（leaderboardName）跟着昵称一起搬到了 engine/nickname.ts，原来
+// 这一节那几条（没取名字就是空串、不拿凭据顶上、最多十二个字）原样搬进 check-nickname 的客户
+// 端那一半——那边打包的是 nickname.ts，这边打包的 cloudScores.ts 里已经没有它了。
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);

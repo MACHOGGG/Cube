@@ -295,7 +295,7 @@ jobs:
 
       # 排行榜「新不新」那几件事：十秒内存缓存（来回点标签不闪）、打完一局作废缓存（刚刷
       # 新了自己的最高分，点开榜要看得到）、上报失败隔两秒再试一次、等上报有上限（真断网
-      # 也不许停在「加载中」）、名字只回玩家自己敲的那一个。
+      # 也不许停在「加载中」）、上报不带名字（第 16 推：昵称只走改名接口）。
       #
       # 纯 node：cloudScores.ts 只碰 fetch 和 localStorage 两样浏览器的东西，两样都用假的
       # 顶掉，于是整条路都是真的在跑，只有网络那一下是假的。
@@ -303,6 +303,18 @@ jobs:
         run: |
           npx esbuild src/engine/cloudScores.ts --bundle --format=esm --outfile=/tmp/cloudscores.mjs
           node scripts/check-board-refresh.mjs /tmp/cloudscores.mjs
+
+      # 一个帐号一个昵称（第 16 推）：改名立刻上榜、别的设备上传不覆盖、两个帐号抢同一个名字
+      # 只有一个成功（含大小写、全半角）、旧名字放出来、词表和保留名、12 个码点不截断、换邮箱
+      # 和删帐号时索引跟着走、迁移规则对而且回包里一个名字都没有、客户端缓存与自动上传、小红书
+      # 产物里没有 /api/scores。纯 node（客户端那一半在门里当场用 esbuild 打包）。
+      - name: 一个帐号一个昵称
+        run: node scripts/check-nickname.mjs
+
+      # 小屋里叫什么：没取名字发字母、重名加编号、认领座位不串门；第 16 推起还有座位名不写进
+      # 昵称、没登录的人撞上登记过的昵称得「 2」、登录的人拿原名、局中改名由改名的人加「 2」。
+      - name: 小屋里的名字
+        run: node scripts/check-room-names.mjs
 
       # 注册那条路：从「填邮箱 + 六位密码」一直走到「用同一组凭据登录回来」。
       #
@@ -1071,11 +1083,21 @@ jobs:
           nohup node scripts/dev-server.mjs 8981 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8981/ && break; sleep 0.25; done
           node scripts/check-redesign-fit.mjs http://localhost:8981/
-      # 管理员页《重建榜单》（第 14 推）：三个勾默认都不勾（「清空无限反转」从前默认勾着，
+      # 管理员页《重建榜单》（第 14 推）：四个勾默认都不勾（「清空无限反转」从前默认勾着，
       # 每一次例行重建都顺手清一遍），勾了全清要先确认、点取消一个请求都不发，「清理旧名
-      # 字」发 scrubNames 并把删了几条写到页上。/api/scores 在浏览器里拦下来，不碰真的榜。
-      - name: 管理员页《重建榜单》那三个勾
+      # 字」发 scrubNames 并把删了几条写到页上；「建立昵称索引」（第 16 推）发 nicknames 并
+      # 只写那几个数、一个名字都不照抄。/api/scores 在浏览器里拦下来，不碰真的榜。
+      - name: 管理员页《重建榜单》那四个勾
         run: |
           nohup node scripts/dev-server.mjs 8983 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8983/ && break; sleep 0.25; done
           node scripts/check-mint-rebuild.mjs http://localhost:8983/
+
+      # 个人主页头卡上的昵称（第 16 推）：昵称 + ✎、✎ 外面那一圈 8px 空地真的点不到任何一块、原地编辑（不长
+      # 高、十二个字不顶出卡、右边那一截不被挤没）、Enter 存 / Esc 和 ✕ 不存、被占了说一句；小屋名字栏
+      # 预填昵称、改了名先走改名接口。三种尺寸 × 四种语言，/api 在浏览器里拦下来。
+      - name: 个人主页头卡上的昵称
+        run: |
+          nohup node scripts/dev-server.mjs 8962 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8962/ && break; sleep 0.25; done
+          node scripts/check-nickname-head.mjs http://localhost:8962/

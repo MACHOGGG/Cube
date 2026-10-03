@@ -1,6 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
-import { isGenius as isGeniusClaim } from './_entitlement.js';
+import { identify, isGenius as isGeniusClaim } from './_entitlement.js';
+import { checkNickname, nicknameOf, nicknameOwner, scrubName } from './_nickname.js';
 import { expire, hdel, hget, hgetall, hincrby, hset, hsetnx, storeConfigured } from './_store.js';
 import { callerId, tooMany } from './_ratelimit.js';
 
@@ -349,6 +350,9 @@ const RATE = {
   nudge: { limit: 200, windowS: 10 },
   join: { limit: 60, windowS: 3600 },
   create: { limit: 20, windowS: 3600 },
+  // 局中改昵称（第 16 推）：要先有座位、还要帐号令牌，而且一次改名只发一次。和 join 一样
+  // 是一次性动作，同一个桶的大小。
+  rename: { limit: 60, windowS: 3600 },
 };
 
 export default async function handler(req, res) {
@@ -375,6 +379,7 @@ export default async function handler(req, res) {
       case 'nudge': return await nudge(res, body);
       case 'learn': return await learn(res, body);
       case 'bye': return await bye(res, body);
+      case 'rename': return await renameSeat(res, body);
       default: return send(res, 400, { error: 'action' });
     }
   } catch {
@@ -1120,18 +1125,25 @@ async function claimSeat(code, playerId, hash) {
  * @returns 抢到的那个值；一个都没抢到（候选用完了）就返回最后一个，宁可重
  *   一个名字也不拦人进屋。
  */
-async function claimTag(code, prefix, playerId, candidates, taken) {
+async function claimTag(code, prefix, playerId, candidates, taken, { mine = false } = {}) {
   let last = null;
   for (const c of candidates) {
     last = c.value;
     if (taken.has(c.key)) continue;
     if (await hsetnx(roomKey(code), prefix + c.key, playerId)) return c.value;
+    // 局中改名（renameSeat）：这一格可能本来就是他自己的（改回从前叫过的名字），那就算抢到了。
+    if (mine && (await hget(roomKey(code), prefix + c.key)) === playerId) return c.value;
   }
   return last;
 }
 
-/** 没取名字的人发字母；取了名字的人重了就加编号。候选按老规矩排。 */
-function nameCandidates(typed) {
+/**
+ * 没取名字的人发字母；取了名字的人重了就加编号。候选按老规矩排。
+ *
+ * `skipBase`：名字本身不在候选里，从「名字 2」开始（第 16 推：没登录的人撞上了别人登记的昵
+ * 称，见 pickSeatName）。
+ */
+function nameCandidates(typed, { skipBase = false } = {}) {
   const trimmed = String(typed ?? '').trim();
   if (!trimmed) {
     return Array.from({ length: 26 }, (_, i) => {
@@ -1139,11 +1151,47 @@ function nameCandidates(typed) {
       return { key: letter.toLowerCase(), value: letter };
     });
   }
-  const list = [{ key: trimmed.toLowerCase(), value: trimmed }];
+  const list = skipBase ? [] : [{ key: trimmed.toLowerCase(), value: trimmed }];
   for (let n = 2; n < 100; n++) {
     list.push({ key: `${trimmed} ${n}`.toLowerCase(), value: `${trimmed} ${n}` });
   }
   return list;
+}
+
+/**
+ * 新坐下来的这个人在屋里叫什么（第 16 推第 6 条）。
+ *
+ *   · **登录了、登记过昵称**：用帐号昵称，他在名字栏里敲的不算。认人用的是和开屋那一关同
+ *     一套（_entitlement.js 的 identify：邮箱或第一串 + 令牌），所以报一个别人的邮箱拿不到
+ *     别人的名字。
+ *   · **没登录（或者登录了还没取昵称）**：用他自己敲的。过和昵称同一道关（清洗、12 个码点、
+ *     词表），只是单个字母放行——那本来就是小屋的规矩（见 _badwords.js）。
+ *     这个名字要是**已经是某个帐号登记的昵称**，直接给他「名字 2」：那个名字在全站是别
+ *     人的，屋里不该出现一个冒用它的匿名座位——尤其是榜单和那张发出去的战绩卡上。
+ *
+ * 屋里的重名（两个没登录的人都叫「阿花」）照旧由 claimTag 那一套加编号，后来的那个加。
+ *
+ * @returns {{ ok: true, typed: string, skipBase: boolean } | { ok: false, error: string }}
+ *   `typed` 空着就是没取名字，发字母；`skipBase` 为真时候选从「名字 2」开始。
+ */
+async function pickSeatName(body) {
+  let who = null;
+  if (body.accountToken) {
+    try {
+      who = await identify({ email: body.email, accountToken: body.accountToken, holderCode: body.holderCode });
+    } catch {
+      // 认人这一步摔了（库抖一下）：当他没登录，照他敲的那个名字进屋——进不了屋比名字不对
+      // 更糟，而他下一次进屋就对了。
+      who = null;
+    }
+  }
+  const nick = who ? await nicknameOf(who.id) : '';
+  if (nick) return { ok: true, typed: nick, skipBase: false };
+  if (!scrubName(body.name)) return { ok: true, typed: '', skipBase: false };
+  const checked = checkNickname(body.name, { letter: true });
+  if (!checked.ok) return { ok: false, error: checked.error };
+  const owner = await nicknameOwner(checked.name);
+  return { ok: true, typed: checked.name, skipBase: Boolean(owner) && owner !== who?.id };
 }
 
 /** 头像候选：先本形状，再换形状，再沿色环挪（挑法见上面 avatarKey 那段）。 */
@@ -1184,6 +1232,10 @@ const avatarsTaken = (hash) =>
 
 async function create(res, body) {
   if (!(await hostMayOpen(body))) return send(res, 403, { error: 'geniusOnly' });
+  // 屋主叫什么（第 16 推）：登记过昵称就是昵称，否则是他敲的那个（见 pickSeatName）。放在抢
+  // 房号**之前**：名字不过关就别先开出一间空屋。
+  const picked = await pickSeatName(body);
+  if (!picked.ok) return send(res, 400, { error: picked.error });
 
   const playerId = id(8);
   const token = id(16);
@@ -1223,8 +1275,9 @@ async function create(res, body) {
     await hset(roomKey(code), 's:0', playerId);
     await hset(roomKey(code), 'p:' + playerId, {
       token,
-      // 空的名字发一个字母。这间屋刚开，谁都没坐，所以屋主拿到的是 A。
-      name: cleanName(body.name) || freeLetter({}),
+      // 空的名字发一个字母。这间屋刚开，谁都没坐，所以屋主拿到的是 A。撞上别人登记的昵称
+      // 就是候选里的第一个「名字 2」（屋里是空的，轮不到更后面的编号）。
+      name: picked.typed ? nameCandidates(picked.typed, picked)[0].value : freeLetter({}),
       avatar: cleanAvatar(body.avatar),
       score: 0,
       finished: false,
@@ -1357,6 +1410,11 @@ async function join(res, body) {
     });
   }
 
+  // 新座位叫什么（第 16 推，见 pickSeatName）。放在占椅子**之前**：名字不过关就别先占一把
+  // 椅子再退回来——那一下屋里会闪出一个不存在的人。
+  const picked = await pickSeatName(body);
+  if (!picked.ok) return send(res, 400, { error: picked.error });
+
   const playerId = id(8);
   const token = id(16);
   // The seat count travels with the refusal, not just with a room you are
@@ -1368,7 +1426,7 @@ async function join(res, body) {
   // 份快照，几个同时进来的人读到的是同一份（见 claimTag）。快照仍要用——屋
   // 主和认领回来的人没有走这条路，他们的名字只在快照里。
   const fresh = (await hgetall(roomKey(code))) || hash;
-  const seatName = await claimTag(code, 'n:', playerId, nameCandidates(typed), namesTaken(fresh));
+  const seatName = await claimTag(code, 'n:', playerId, nameCandidates(picked.typed, picked), namesTaken(fresh));
   const seatAvatar = await claimTag(
     code,
     'a:',
@@ -2198,6 +2256,48 @@ async function learn(res, body) {
   }
   await expire(roomKey(code), ROOM_TTL_S);
   return send(res, 200, { ok: true, state: publicState(code, fresh) });
+}
+
+/**
+ * 局中改了昵称（第 16 推第 6 条）。
+ *
+ * 客户端在改名接口（api/scores.js 的 rename）成功之后、而且这台设备正坐在一间屋里时发一次
+ * （src/engine/nickname.ts 的 setNickname）。屋里那个座位名换成**帐号此刻登记的昵称**——从
+ * 服务器读，不收请求里报的名字：座位名必须就是那个帐号的昵称，不能借这条路给自己的座位起
+ * 一个别的名字（那样就绕过了词表和唯一性）。
+ *
+ * 屋里已经有人（活着的座位）叫这个名字，**改名的人加「 2」**，不动别人（玩家定的：「局中某
+ * 人把昵称改成屋里未登录玩家正在用的名字时，这一屋里由改名的人显示 2」）。那个人先坐下的，
+ * 他一直叫这个名字，屋里一句话没说就被改成「阿花 2」是意料之外的界面。
+ *
+ * 要两样凭证：座位（playerId + playerToken，证明这把椅子是你的）和帐号令牌（证明这个昵称是
+ * 你的）。缺哪一样都不改。
+ */
+async function renameSeat(res, body) {
+  const code = String(body.code ?? '').trim();
+  const hash = await readRoom(code);
+  if (!hash) return send(res, 404, { error: 'noRoom' });
+  const seat = seatOf(hash, body.playerId, body.playerToken);
+  if (!seat) return send(res, 403, { error: 'seat' });
+  const who = body.accountToken
+    ? await identify({ email: body.email, accountToken: body.accountToken, holderCode: body.holderCode })
+    : null;
+  if (!who) return send(res, 401, { error: 'auth' });
+  const nick = await nicknameOf(who.id);
+  // 没登记昵称（不该发生：客户端是改名成功之后才来的），或者座位上本来就是它：什么都不动。
+  if (!nick || String(seat.name ?? '').trim() === nick) {
+    return send(res, 200, { ok: true, state: publicState(code, await freshRoom(code)) });
+  }
+  // 屋里别人正用着的名字（快照）。自己现在那个不算——改回大小写不同的同一个名字不该变成「 2」。
+  const before = await hgetall(roomKey(code));
+  const taken = namesTaken(before || hash);
+  taken.delete(String(seat.name ?? '').trim().toLowerCase());
+  const name = await claimTag(code, 'n:', body.playerId, nameCandidates(nick), taken, { mine: true });
+  // 和 learn / score 一样：写之前重读一次座位那一格，只换 name 这一位。
+  const live = await hgetall(roomKey(code));
+  await hset(roomKey(code), 'p:' + body.playerId, { ...(live?.['p:' + body.playerId] || seat), name });
+  await expire(roomKey(code), ROOM_TTL_S);
+  return send(res, 200, { ok: true, state: publicState(code, await freshRoom(code)) });
 }
 
 /**

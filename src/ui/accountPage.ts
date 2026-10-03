@@ -43,6 +43,8 @@ import {
   runStoreRestore,
 } from './subscribe';
 import { asteriskSvg } from './dotFaceMark';
+import { ICON_CHECK, ICON_CLOSE, ICON_PENCIL } from './uiIcons';
+import { confirmedNickname, nicknameErrorText, onNicknameChange, setNickname } from '../engine/nickname';
 
 /** 《图形翻面速度》那扇窗里排几颗球。六颗是棋盘上连成一条得分的常见样子，
  *  一颗看不出「一批一起翻」是什么节奏，而节奏也归这根拉杆管。 */
@@ -162,7 +164,31 @@ export function renderAccountPage(
       -->
       <div class="profile-cols">
         <section class="profile-col profile-col--main">
-          <button class="profile-pill profile-pill--head" id="loginBtn">${gatewayLabel}</button>
+          ${
+            signedIn
+              ? /*
+                 * 头卡（第 16 推第 5 条）：登录了的人，左边是昵称（还没登记就写「设置昵称」）和
+                 * 一颗 ✎；**头卡其他位置**照旧打开帐号窗。
+                 *
+                 * 一整颗按钮里塞不下第二颗按钮（按钮不能套按钮），所以头卡本身是一块不响应的
+                 * 底（.profile-head，样子和原来那颗药丸一样），上面三样各管各的：
+                 *   · 昵称那几个字：点了开帐号窗（它是「其他位置」）；
+                 *   · ✎ 外面包一圈 8px 的「空地」（.profile-head-guard）：落在这一圈里什么都不
+                 *     发生——方案要「两个点击区域间距 ≥ 8px」，手指按偏一点，既不该误开帐号窗、
+                 *     也不该误进编辑；
+                 *   · 右边那一截是原来那颗 #loginBtn（键盘和读屏走它），字也还是原来那句。
+                 */
+                `<div class="profile-pill profile-pill--head profile-head" id="profileHead">
+                  <span class="profile-head-nick" id="nickText"></span>
+                  <span class="profile-head-guard" id="nickGuard">
+                    <button type="button" class="profile-head-icon" id="nickEdit"
+                            aria-label="${s.nickEdit}">${ICON_PENCIL}</button>
+                  </span>
+                  <button class="profile-head-open" id="loginBtn">${gatewayLabel}</button>
+                </div>
+                <p class="profile-head-msg" id="nickMsg" role="status"></p>`
+              : `<button class="profile-pill profile-pill--head" id="loginBtn">${gatewayLabel}</button>`
+          }
           <!-- The colourblind palette: one setting for the whole app, with a
                switch that says on/off by its own colour and position rather
                than by a word — it has to read the same in four languages. -->
@@ -740,6 +766,7 @@ export function renderAccountPage(
     else if (isStoreChannel()) runStoreRestore(lang, refresh);
     else openAuthWindow(lang, refresh);
   });
+  mountNicknameHead(container, lang);
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
   on('iconRow', openIconPicker);
@@ -798,4 +825,100 @@ export function renderAccountPage(
     btn.addEventListener('click', () => openLegal(btn.dataset.legal as LegalKey));
   }
   on('backBtn', handlers.onBack);
+}
+
+/**
+ * 头卡上的昵称：显示、✎ 原地改、✓ 存、✕ 不存（第 16 推第 5 条）。
+ *
+ * 显示的是**服务器认过的**那一个（engine/nickname.ts 的 confirmedNickname）。自动上传失败、
+ * 或者压根没取过，就写「设置昵称」——那正是他该做的事。服务器那一份晚到（登录之后取回存档那
+ * 一趟），这一格自己换过来，不用整页重画：重画会打断他正在改的那一下。
+ *
+ * 编辑时整张头卡让给输入框和 ✓ ✕（右边那句《账户》先收起来：360 宽上三样摆不下，挤着
+ * 摆的话输入框只剩两个字宽）。Enter 等于 ✓，Esc 等于 ✕。存不进去就在头卡底下说一句为什么，
+ * 输入框留着他敲的字，让他接着改。
+ */
+function mountNicknameHead(container: HTMLElement, lang: Lang): void {
+  const head = container.querySelector<HTMLElement>('#profileHead');
+  if (!head) return;
+  const s = STRINGS[lang];
+  const text = head.querySelector<HTMLElement>('#nickText')!;
+  const msg = container.querySelector<HTMLElement>('#nickMsg')!;
+  const open = head.querySelector<HTMLButtonElement>('#loginBtn')!;
+
+  const show = () => {
+    const name = confirmedNickname();
+    text.textContent = name || s.nickSet;
+    text.classList.toggle('profile-head-nick--unset', !name);
+  };
+  show();
+  // 昵称那几个字也是「其他位置」：点了开帐号窗，和右边那一截一样。
+  text.addEventListener('click', () => open.click());
+  // ✎ 外面那一圈空地：吞掉落在上面的点击，什么都不做（见头卡那段注释）。
+  head.querySelector('#nickGuard')!.addEventListener('click', (e) => e.stopPropagation());
+
+  let editing: HTMLElement | null = null;
+  const stopEditing = () => {
+    editing?.remove();
+    editing = null;
+    head.classList.remove('profile-head--editing');
+    show();
+  };
+  const startEditing = () => {
+    if (editing) return;
+    msg.textContent = '';
+    head.classList.add('profile-head--editing');
+    editing = document.createElement('div');
+    editing.className = 'profile-head-editor';
+    editing.innerHTML =
+      `<input type="text" class="profile-head-input" id="nickInput" autocomplete="nickname"` +
+      ` aria-label="${s.nickEdit}" />` +
+      `<button type="button" class="profile-head-icon" id="nickSave" aria-label="${s.nickSave}">${ICON_CHECK}</button>` +
+      `<button type="button" class="profile-head-icon" id="nickCancel" aria-label="${s.nickCancel}">${ICON_CLOSE}</button>`;
+    head.appendChild(editing);
+    const input = editing.querySelector<HTMLInputElement>('#nickInput')!;
+    const save = editing.querySelector<HTMLButtonElement>('#nickSave')!;
+    input.value = confirmedNickname();
+    input.focus();
+    input.select();
+    let busy = false;
+    const commit = async () => {
+      if (busy) return;
+      busy = true;
+      save.disabled = true;
+      const done = await setNickname(input.value);
+      busy = false;
+      save.disabled = false;
+      if (!head.isConnected) return;
+      if (done.ok) {
+        msg.textContent = '';
+        stopEditing();
+        return;
+      }
+      msg.textContent = nicknameErrorText(done.reason, lang);
+      input.focus();
+    };
+    save.addEventListener('click', () => void commit());
+    editing.querySelector('#nickCancel')!.addEventListener('click', () => {
+      msg.textContent = '';
+      stopEditing();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void commit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        msg.textContent = '';
+        stopEditing();
+      }
+    });
+  };
+  head.querySelector('#nickEdit')!.addEventListener('click', startEditing);
+
+  // 服务器那一份到了（或者自动上传失败了）：这一格自己换。页面换走了就把自己摘掉。
+  const off = onNicknameChange(() => {
+    if (!head.isConnected) return off();
+    if (!editing) show();
+  });
 }

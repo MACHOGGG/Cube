@@ -30,6 +30,8 @@ const stub = (name: string) => resolve(here, 'src/stubs', name);
 const SWAP: Record<string, string> = {
   'src/engine/analytics.ts': stub('analytics.ts'),
   'src/engine/cloudScores.ts': stub('cloudScores.ts'),
+  // 昵称（第 16 推）：改名要打 /api/scores。这一版没有帐号，见那个替身的文件头。
+  'src/engine/nickname.ts': stub('nickname.ts'),
   'src/engine/room.ts': stub('room.ts'),
   // 滚动阻尼（Lenis）：Chrome 61 上没测过，而且包有体积门禁。见那个替身的文件头。
   'src/engine/smoothScroll.ts': stub('smoothScroll.ts'),
