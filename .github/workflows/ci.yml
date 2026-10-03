@@ -990,3 +990,27 @@ jobs:
           nohup node scripts/dev-server.mjs 8878 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8878/ && break; sleep 0.25; done
           node scripts/check-coach-aim.mjs http://localhost:8878/
+      # 「有新版本，点一下刷新」那一行（第 13 推）。要开浏览器，因为被测的几件事只有真浏览
+      # 器说得清。版本号那一问整条被 page.route 接走（第一问答一个 sha，往后答另一个），所以
+      # 不用为这道门重出两次包。
+      #
+      # ④那一节是整道门最要紧的一节，比「它出来了」要紧：三档屏幕各量一遍「那一行整个在招牌
+      # 那块玻璃里面」「**没有一张卡和它相交**」「按下去落在它自己身上」。浮在屏幕上的那一版
+      # 就是在这儿倒的——主菜单那条鱼眼滚轴占满整屏，卡片从招牌和底排底下滑过去，所以这一屏
+      # 上没有一块空地：那一版压着的正是炸弹那张卡和它的两枚 chip，而它自己收下点击。
+      #
+      # ⑤⑥ 两节是尺子：同一套动作，答案换成「版本号没变」「一直 404」「先问到后断网」，那一
+      # 行一个字都不许冒——少了它们，①在「这一行永远都在」的实现下也会全绿。
+      #
+      # ③半那一节钉「只在主菜单上」：`.home-head-glass` 全站有七处（个人主页、战绩页、小屋那
+      # 两屏……），选择器前面那个 `.home-page` 少了的话这一行会跟到每一页上去——最要命的是小屋
+      # 那两屏，那上头按一下刷新，正赶上一局要开，他那一局就没了。
+      #
+      # 反证验过七处：对局中照说红 3 条、出厂就说红 4 条、换屏不重算红 4 条、读不到当成换版
+      # 红 1 条、那一行挪回浮在屏幕上红 9 条、再给它加一句 position: fixed 红 2 条、撤掉选择器
+      # 前面那个 .home-page 红 2 条。
+      - name: 新版本提示：出得来，对局中不说
+        run: |
+          nohup node scripts/dev-server.mjs 8976 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8976/ && break; sleep 0.25; done
+          node scripts/check-new-version.mjs http://localhost:8976/

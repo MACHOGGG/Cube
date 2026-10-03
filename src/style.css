@@ -3549,6 +3549,41 @@ body:has(.slot-page) .home-nav { display: none; }
 .home-nav-art > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
 
+/* ---------- 「有新版本，点一下刷新」 ---------- */
+/*
+ * 这一行长在招牌那块玻璃里（`.home-head-glass`，`<h1>` 和那句 tagline 下面），不是浮在屏
+ * 幕上的一块。
+ *
+ * **浮的那一版试过，不行。** 第四轮之后主菜单那条鱼眼滚轴占满整屏（见 `.mode-axis` 那段
+ * 注释：招牌和底排本来就在轴的盒子**里面**，卡片从它们底下滑过去），所以这一屏上**没有
+ * 一块空地**。量过：一块 192×37 摆在底排上面 8px 处，底下压着的正是炸弹那张卡和它的两枚
+ * chip（390×844 上这一行占 699–736，chip 在 693–709），而它自己要收下点击——他冲着炸弹按
+ * 下去，页面刷新了。那就是「不要让玩家出现意料之外的疏漏操作」里的那件事。
+ *
+ * 招牌那块玻璃本来就 `pointer-events: auto`、本来就盖在卡片上面（z-index 60），所以这一行
+ * 长在里头**没有新占走任何一块点得着的地方**。玻璃会跟着长高二十来个像素，而量下来它连第
+ * 一排卡片都没碰到（390×844 上玻璃长到 137，第一排从 252 起；横屏到 104、电脑到 155，也都
+ * 够不着）。门里钉的就是这件事：三档屏幕各量一遍「没有一张卡和它相交」。
+ *
+ * 顺带省掉三件事：固定定位、安全区那套算术、和「会不会压住底排」。
+ *
+ * `max-width` 加换行是给英法两种语言留的：那两句比中文长一倍，不许它把这块玻璃撑到屏幕
+ * 外面去（玻璃是 inline-block，宽度跟着里头最宽的那一行走）。
+ */
+.home-head-glass .newver-pill {
+  display: block;
+  margin: 6px auto 0;
+  max-width: 14em;
+  border: none; border-radius: var(--r-full); padding: 5px 14px;
+  background: var(--accent); color: var(--on-accent); cursor: pointer;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.78rem;
+  line-height: 1.3; letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px -3px rgba(46, 36, 48, 0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+.home-head-glass .newver-pill:active { transform: translateY(1px); }
+.home-head-glass .newver-pill:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
 /* ---------- 个人主页 (profile page) ---------- */
 /* A setting rather than a destination: the pill carries its own switch, and
    the switch says on or off by where the knob sits and what colour it is —

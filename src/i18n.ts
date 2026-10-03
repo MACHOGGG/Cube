@@ -498,6 +498,8 @@ export interface I18nStrings {
   mpRoundsPlayed: string;
   /** 离开太久，服务器已经开了下一局，这一盘没能算进小屋总分。 */
   mpRoundDropped: string;
+  /** 线上已经是新的一版了：菜单上那一行，按一下重新加载。对局中不出现（见 engine/newVersion.ts）。 */
+  newVersionTip: string;
   mpErrEnded: string;
   /** 网络断了一下，但座位还留着——不是把人踢出房间的理由。 */
   mpReconnecting: string;
@@ -934,6 +936,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: 'Fastest single round',
     mpRoundsPlayed: '{n} round|{n} rounds',
     mpRoundDropped: 'Away too long — this round missed the room total. It’s still in your own records.',
+    newVersionTip: 'New version — tap to refresh',
     mpErrEnded: 'That room has been closed.',
     mpReconnecting: 'Connection lost — getting you back in…',
     mpHostLeaveWarn: 'Close the room?',
@@ -1263,6 +1266,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: 'Manche la plus rapide',
     mpRoundsPlayed: '{n} manche|{n} manches',
     mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total de la salle. Elle reste dans vos records.',
+    newVersionTip: 'Nouvelle version — recharger',
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
     mpHostLeaveWarn: 'Dissoudre la salle ?',
@@ -1592,6 +1596,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: '單局最快',
     mpRoundsPlayed: '共 {n} 局',
     mpRoundDropped: '離開太久了，這一局沒算進小屋總分；你自己的記錄裡還在。',
+    newVersionTip: '有新版本，點一下重新載入',
     mpErrEnded: '這個小屋已經結束了。',
     mpReconnecting: '網路斷了一下，正在把你接回小屋…',
     mpHostLeaveWarn: '解散小屋？',
@@ -1921,6 +1926,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: '单局最快',
     mpRoundsPlayed: '共 {n} 局',
     mpRoundDropped: '离开太久了，这一局没算进小屋总分；你自己的记录里还在。',
+    newVersionTip: '有新版本，点一下刷新',
     mpErrEnded: '这个小屋已经结束了。',
     mpReconnecting: '网络断了一下，正在把你接回小屋…',
     mpHostLeaveWarn: '解散小屋？',

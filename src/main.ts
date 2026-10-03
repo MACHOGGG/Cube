@@ -61,6 +61,7 @@ import { bombTip, flipTip, layoutTip, slotTip, timedTip, puzzleTip } from './ui/
 import { renderFlipModePage } from './ui/flipMode';
 import { renderTimedModePage } from './ui/timedMode';
 import { renderPuzzleModePage } from './ui/puzzleMode';
+import { armNewVersionPill, syncNewVersionPill } from './ui/newVersionPill';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawOne, type Family, type TargetPattern } from './engine/targets';
 import { MODE_SECONDS } from './engine/modeClock';
@@ -783,6 +784,12 @@ function syncScreenClass() {
   // 别人那一间），底排那两颗是**离开**这一页的路，摆在这儿只会被误按。
   // 出路没少：手机返回键照旧（setScreenBack），页面自己那颗蓝圆盘也在。
   cl.toggle('is-room-home', !!root.querySelector('.mp-page--home'));
+  // 「有新版本，点一下刷新」那一行长在主菜单那块招牌玻璃里，而主菜单每次重画都是一棵新的
+  // DOM——上一棵里那一行跟着一起没了，得往新的那块玻璃里再放一次。挂在这儿而不是各页自己
+  // 叫一遍：换页就是换掉 root 的那一层子节点，这个函数是全站唯一一处知道「刚才换了屏」的
+  // 地方（它自己就是那个 MutationObserver 的回调）。顺带，「对局中不说」也是这一句管的：
+  // 打着一局的时候屏幕上没有主菜单，那一行于是根本不存在。
+  syncNewVersionPill();
 }
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
@@ -1515,6 +1522,9 @@ function relocalizeChrome(lang: Lang) {
     lang,
   );
   repaintIcons();
+  // 这一行是**一直在**的（发现之后不撤，见 ui/newVersionPill.ts 规矩③），所以换语言时它
+  // 不能还说着上一种话。和底排那两个字同一处落点，同一个理由。
+  syncNewVersionPill(lang);
 }
 
 /**
@@ -1524,6 +1534,10 @@ function relocalizeChrome(lang: Lang) {
  */
 function afterLangChosen(lang: Lang, resume = false) {
   relocalizeChrome(lang);
+  // 开始盯着线上那一版——只在这儿叫一次。boot() 的两条岔路（有存着的语言 / 现猜一个）最
+  // 后都落到这个函数，而切语言走的是 relocalizeChrome，不经过这儿：盯哨于是不会被装两遍
+  // （装两遍等于两个 setInterval，同一个版本号喊两声）。
+  armNewVersionPill(lang);
   if (isFirstRun()) {
     // 第一次打开这台设备上的游戏：就落在主菜单，只是《基础方块》和《基础小
     // 球》两张卡镶着一圈光（玩家定的）。
