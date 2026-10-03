@@ -79,9 +79,15 @@ export function wasWiped(version: string): boolean {
 
 export function dropKey(bestKey: string): boolean {
   try {
-    const had = localStorage.getItem(bestKey) !== null || localStorage.getItem(bestKey + RUNS_SUFFIX) !== null;
+    const had =
+      localStorage.getItem(bestKey) !== null ||
+      localStorage.getItem(bestKey + RUNS_SUFFIX) !== null ||
+      localStorage.getItem(bestKey + EVICTED_SUFFIX) !== null;
     localStorage.removeItem(bestKey);
     localStorage.removeItem(bestKey + RUNS_SUFFIX);
+    // 被挤出去那些局的分也要一起清掉（见 EVICTED_SUFFIX）。漏了它，换规则版本清档之
+    // 后累计得分还挂着一笔上一版的分——而记录页上一局都看不到，那个数于是无从对账。
+    localStorage.removeItem(bestKey + EVICTED_SUFFIX);
     return had;
   } catch {
     // 无痕模式之类：删不掉就当没有，不该连带把开机拦住。
@@ -110,6 +116,67 @@ function trim(list: StoredRun[]): StoredRun[] {
   return sorted.map((run, i) => (i < MAX_RUNS ? run : { ...run, start: null, end: null }));
 }
 
+/**
+ * 被挤出存档的那些局，分数累加在这儿（一个玩法一笔）。
+ *
+ * ── 它补的是哪个洞 ──────────────────────────────────────────────
+ *
+ * 累计得分是**存档这张清单的总和**（recordsPage 的 `totalScoreOf(runs)`），而存档只留
+ * 最近 MAX_ARCHIVE（40）局。于是打到第 41 局那一下，最早那一局被挤出去，而他的累计得
+ * 分**当场往下掉**——掉的正好是那一局的分。屏幕上不报错，只是那个数变小了，而玩家一直
+ * 盯着它：这是「意料之外」里最伤的一种，因为它看起来像我们把他的成绩弄丢了。
+ *
+ * 所以挤出去之前先把分记在一笔总账上，读的时候加回去。记的是**一个数**，不是那些局：
+ * 存档收起来的本来就是「那一局长什么样」（照片、明细），而这笔账要答的只有一句「一共
+ * 多少分」。
+ *
+ * ⚠️ 这笔账只加不减，而且**没有去重**。所以它只能由 `trimInto` 一处写——那是唯一「真的
+ * 挤掉了一局」的地方。从别处（比如 mergeRuns 发现本机已有这一局）去加，就会把同一局算
+ * 两遍，而算两遍之后再也拆不开（账上只有一个数）。
+ */
+const EVICTED_SUFFIX = '::evicted';
+
+/**
+ * 收一收，并把**真的被挤出去的那几局**的分记进那一笔总账。
+ *
+ * 为什么按 id 比而不是按长度减：`trim` 还会把第 11 局之后的照片剥掉（`start/end` 置
+ * null），所以「收之前有几局、收之后有几局」这个差值不等于「谁被挤掉了」。按编号比一
+ * 遍，谁不在了才算挤掉。
+ */
+function trimInto(bestKey: string, list: StoredRun[]): StoredRun[] {
+  const kept = trim(list);
+  const alive = new Set(kept.map(idOf));
+  let lost = 0;
+  for (const run of list) {
+    if (run?.data && !alive.has(idOf(run))) lost += run.data.totalScore || 0;
+  }
+  if (lost > 0) {
+    try {
+      const was = parseInt(localStorage.getItem(bestKey + EVICTED_SUFFIX) || '0', 10) || 0;
+      localStorage.setItem(bestKey + EVICTED_SUFFIX, String(was + lost));
+    } catch {
+      // 存不进去就只好少这一笔——这一局的结算照旧，不能因此被打断（见文件头那段）。
+    }
+  }
+  return kept;
+}
+
+/** 这几个玩法被挤出存档的局，一共多少分。累计得分要把它加回去。 */
+export function evictedScoreOf(bestKeys: readonly string[]): number {
+  const seen = new Set<string>();
+  let sum = 0;
+  for (const key of bestKeys) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      sum += parseInt(localStorage.getItem(key + EVICTED_SUFFIX) || '0', 10) || 0;
+    } catch {
+      // 读不到就当没有。
+    }
+  }
+  return sum;
+}
+
 export function loadRuns(bestKey: string): StoredRun[] {
   try {
     const raw = localStorage.getItem(bestKey + RUNS_SUFFIX);
@@ -123,7 +190,7 @@ export function loadRuns(bestKey: string): StoredRun[] {
 
 export function saveRun(bestKey: string, run: StoredRun): void {
   try {
-    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trim([run, ...loadRuns(bestKey)])));
+    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [run, ...loadRuns(bestKey)])));
   } catch {
     // Storage full or unavailable — the run simply isn't archived.
   }
@@ -143,7 +210,7 @@ export function mergeRuns(bestKey: string, incoming: readonly StoredRun[]): numb
     const seen = new Set(have.map(idOf));
     const add = incoming.filter((run) => run?.data && !seen.has(idOf(run)));
     if (!add.length) return 0;
-    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trim([...have, ...add])));
+    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [...have, ...add])));
     return add.length;
   } catch {
     return 0;
@@ -184,6 +251,9 @@ export function moveRuns(from: string, to: string, belongs: (run: StoredRun) => 
     // 新键的最佳跟着抬上去。挪过来的局里最高的那个分，本该一直是它的最佳。
     const top = move.reduce((m, r) => Math.max(m, r.data?.totalScore || 0), 0);
     if (top > 0) saveBestIfHigher(to, top);
+    // 旧键这一头**不记账**：`stay` 里一局都没被挤掉（挪走的那些是 `move`），
+    // 而 trimInto 按「谁不在了」算，会把挪走的那几局当成挤掉的记上去——它们已经在新键
+    // 下好好地躺着，再记一笔就是把同一局算两遍。
     localStorage.setItem(from + RUNS_SUFFIX, JSON.stringify(trim(stay)));
     return added;
   } catch {

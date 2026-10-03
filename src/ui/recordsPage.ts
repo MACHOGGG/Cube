@@ -1,4 +1,4 @@
-import { loadAllRuns, totalScoreOf, wasWiped, type StoredRun } from '../engine/persistence';
+import { evictedScoreOf, loadAllRuns, totalScoreOf, wasWiped, type StoredRun } from '../engine/persistence';
 import { SCORING_RULES_VERSION } from '../engine/scoring';
 import { pushLayer } from '../engine/backNav';
 import { renderShareCard } from '../engine/shareCard';
@@ -99,8 +99,18 @@ export function renderRecordsPage(
   const s = STRINGS[lang];
   // One archive per game+mode; the page reads them all so 记录 is a single
   // chronological list and 累计得分 is literally its sum.
-  const runs = loadAllRuns(sources.map((src) => src.card.bestKey + src.suffix));
-  const total = totalScoreOf(runs);
+  const keys = sources.map((src) => src.card.bestKey + src.suffix);
+  const runs = loadAllRuns(keys);
+  // 累计得分 ＝ 清单上这些局的总和 ＋ **被挤出存档那些局的那一笔**。
+  //
+  // 存档只留最近 40 局（persistence 的 MAX_ARCHIVE），所以打到第 41 局那一下，最早那一
+  // 局被挤出去——而从前这个数就是「清单的总和」，于是它**当场往下掉**，掉的正好是那一局
+  // 的分。不报错，只是那个数变小了，而玩家一直盯着它：看起来像我们把他的成绩弄丢了。
+  // 那笔总账在 persistence 的 EVICTED_SUFFIX，只由「真的挤掉了一局」那一处写。
+  //
+  // ⚠️ 所以这个数**不再等于底下那张清单的和**了，那是有意的：清单答的是「我打过哪些
+  // 局」（只留得下最近 40 局），这个数答的是「我一共打了多少分」。
+  const total = totalScoreOf(runs) + evictedScoreOf(keys);
   const glyphOf = new Map(sources.map((src) => [src.card.id, src.card.glyph]));
 
   // 一句只对还没订阅的人有意义的话：成绩留在这台手机里，除非你是 Slides 天才。

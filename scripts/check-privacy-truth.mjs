@@ -67,6 +67,9 @@ const MUST_SAY = {
     '免邮箱账号我们连邮箱都没有': ['连一个邮箱都没有', '连邮箱都没有'],
     '保留期改成「来信就删」': ['直到你来信要求删除'],
     '不写做不到的自动清理': ['做不到的期限'],
+    '寄信走 Resend': ['Resend'],
+    '云上只留 60 局': ['60 局'],
+    '限速计数以 IP 段 / 邮箱 / 账号为键': ['限速计数'],
   },
   zhHant: {
     '驗證碼 30 分鐘': ['30 分鐘'],
@@ -75,6 +78,9 @@ const MUST_SAY = {
     '免信箱帳號我們連信箱都沒有': ['連一個電子郵件都沒有', '連電子郵件都沒有'],
     '保留期改成「來信就刪」': ['直到你來信要求刪除'],
     '不寫做不到的自動清理': ['做不到的期限'],
+    '寄信走 Resend': ['Resend'],
+    '雲上只留 60 局': ['60 局'],
+    '限速計數以 IP 段 / 信箱 / 帳號為鍵': ['限速計數'],
   },
   en: {
     'code good for thirty minutes': ['thirty minutes'],
@@ -83,6 +89,9 @@ const MUST_SAY = {
     'no email at all for address-free accounts': ['no email address at all'],
     'kept until you ask us to delete': ['until you write and ask us to delete'],
     'no fake inactivity deadline': ['we do not keep'],
+    'mail goes through Resend': ['Resend'],
+    'cloud keeps the last sixty runs': ['sixty runs'],
+    'rate-limit counters keyed by IP / address / account': ['keep scanners out'],
   },
   fr: {
     'code valable trente minutes': ['trente minutes'],
@@ -91,6 +100,9 @@ const MUST_SAY = {
     'aucune adresse pour les comptes sans adresse': ['aucune adresse e-mail'],
     'conservé jusqu’à demande de suppression': ['jusqu’à ce que vous nous écriviez'],
     'pas de délai que nous ne tenons pas': ['que nous ne tenons pas'],
+    'les courriels passent par Resend': ['Resend'],
+    'le nuage garde les soixante dernières': ['soixante dernières'],
+    'compteurs anti-balayage': ['anti-balayage'],
   },
 };
 /** 故意留着的那两处，查「撤掉的说法」之前挖掉（见文件头）。 */
@@ -111,6 +123,40 @@ for (const lang of LANGS) {
   for (const re of ALLOWED) hunt = hunt.replace(re, '');
   const left = GONE[lang].filter((w) => hunt.toLowerCase().includes(w.toLowerCase()));
   check(`${lang}：撤掉的那几个说法一个都不在`, left.length === 0, left.join(' | '));
+
+  /*
+   * **「我们不记你的 IP」这句话不许回来。**
+   *
+   * 它在 2026-10-03 之前一直写在《多人小屋》那一条里，而它是假的：全站每一道接口都带限
+   * 速（api/_ratelimit.js 的 callerId），而那个计数的键就是**收到 IP 之后算出来的网段**，
+   * 在库里活一小时左右。不是「记录你的行踪」，但也绝不是「不记」——说一句比实际更干净的
+   * 话，是支付审核眼里最糟的那一类（「网站陈述与实际不符」）。
+   *
+   * 查的是「不记」「不记录」那几个词紧挨着 IP 出现，而不是「IP」本身——现在这份文档**该
+   * 提 IP**（它要说清楚限速计数以 IP 段为键），所以禁的是那个否定句，不是那个词。
+   */
+  const DENY_IP = [
+    /不记[^。]{0,12}IP/,
+    /不記[^。]{0,12}IP/,
+    /(?:record|collect|keep|store|log)\s+(?:neither|no)[^.]{0,24}IP/i,
+    /n['\u2019]enregistrons\s+(?:ni|pas)[^.]{0,40}IP/i,
+  ];
+  const liar = DENY_IP.filter((re) => re.test(text)).map((re) => String(re));
+  check(`${lang}：没有「我们不记你的 IP」这种说法`, liar.length === 0, liar.join(' | '));
+
+  /*
+   * **正文里不许有 `**`。**
+   *
+   * 这几份文档有两个出口：`build-legal.mjs` 出的静态页，和应用里那个弹窗。两边都把正文当
+   * **纯文本**摆（弹窗那边还要走一次 escape），没有哪一头会把 Markdown 解成粗体——所以
+   * 写 `**邮箱账号**` 的结果是玩家在法务页上看到四个星号。
+   *
+   * 要强调就用中文的角括号「」（英法两种语言里连它都不用：那两种语言的角括号是错的排
+   * 版，冒号本身已经够了）。不要改成 `<b>`：这份正文从来没有 HTML，一处开了口，下一个人
+   * 就会往里塞链接和列表，而那两个出口的 escape 规则并不相同。
+   */
+  check(`${lang}：正文里一个 ** 都没有`, !text.includes('**'),
+    (text.match(/\*\*[^*]{0,20}\*\*/g) || []).slice(0, 3).join(' | '));
 
   for (const [what, says] of Object.entries(MUST_SAY[lang])) {
     check(`${lang}：说到了「${what}」`, says.some((w) => text.includes(w)),

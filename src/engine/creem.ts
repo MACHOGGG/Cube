@@ -255,7 +255,13 @@ export async function webConfirmCode(
 
 function codeFailure(err: unknown): CodeFailure {
   if (!(err instanceof HttpError)) return 'failed';
-  if (err.status === 503) return 'unavailable';
+  // **5xx 一概算「服务器那头暂时不行」**，不只是 503。
+  //
+  // 从前只认 503（「这个功能还没开」那一种），于是 500 / 502 / 504 全掉到最后那个
+  // `'failed'` 上，而 `'failed'` 在界面上写的是「连不上网络」——他的网好得很，是我们这
+  // 头抽了一下（`api/` 里 catch 到异常回的就是 502，见 subscription / handle 那几个
+  // 出口）。屏幕上一句他做不了任何事、而且指错了方向的话，比一句「稍后再试」糟得多。
+  if (err.status >= 500) return 'unavailable';
   if (err.status === 429) return err.code === 'expired' ? 'codeStale' : 'tooMany';
   // 400 有两种来路：'email'（地址不合格）和 'expired'（码过期 / 压根没发过）。
   // **认服务端送回来的那个串**，不是光看状态码——两件事玩家要做的动作完全不一样。
@@ -282,7 +288,8 @@ async function pairCall(body: Record<string, string>): Promise<AuthReply | PairF
     return reply.token ? reply : 'failed';
   } catch (err) {
     if (!(err instanceof HttpError)) return 'failed';
-    if (err.status === 503) return 'unavailable';
+    // 5xx 一概算「服务器那头暂时不行」，理由同 codeFailure 那一段。
+    if (err.status >= 500) return 'unavailable';
     if (err.status === 429) return 'tooMany';
     if (err.status === 409) return 'taken';
     if (err.status === 423) return 'locked';

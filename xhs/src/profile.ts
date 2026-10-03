@@ -16,7 +16,7 @@
  * data.totalScore 不在 data.score），于是小球的记录一条都读不出来、读出来
  * 的分也全是 0。现在键名直接问玩法自己要（card.bestKey），错不了。
  */
-import { loadAllRuns, totalScoreOf, type StoredRun } from '../../src/engine/persistence';
+import { evictedScoreOf, loadAllRuns, totalScoreOf, type StoredRun } from '../../src/engine/persistence';
 import { formatRunTime, modeLabel } from '../../src/engine/runRecord';
 import { colorblindOn, setColorblind } from '../../src/engine/palettePref';
 import { shapeName } from '../../src/ui/shapeLabels';
@@ -170,15 +170,19 @@ export function renderProfilePage(
   h: ProfileHandlers,
 ): void {
   const s = STRINGS[lang];
+  const keys = books.map((b) => b.card.bestKey + b.suffix);
   let runs: StoredRun[] = [];
   try {
-    runs = loadAllRuns(books.map((b) => b.card.bestKey + b.suffix));
+    runs = loadAllRuns(keys);
   } catch {
     // localStorage 在小工具里可用但不保证永久（规范 device-capabilities.md
     // §1），读不到就当还没打过，不报错、不挡路。
     runs = [];
   }
-  const total = totalScoreOf(runs);
+  // 累计得分要把**被挤出存档那些局**的那一笔加回来（和网页端那一行同一个理由，见
+  // ui/recordsPage.ts 那段注释：存档只留最近 40 局，第 41 局那一下这个数会当场往下掉）。
+  // 那一笔由 persistence 自己记，两端共用，所以这一端不加回来就只剩「往下掉」那一半。
+  const total = totalScoreOf(runs) + evictedScoreOf(keys);
   const glyphOf = new Map(books.map((b) => [b.card.id, b.card.glyph]));
 
   const page = document.createElement('div');

@@ -491,6 +491,15 @@ jobs:
       # endGame 中间），或者排着的那一拍落到一副已经结清的盘上。
       - name: 一局与下一局之间
         run: node scripts/check-run-lifecycle.mjs
+      # 打到第 41 局，累计得分不许往下掉。那个数从前就是「存档这张清单的总和」，而存档只
+      # 留最近 40 局——第 41 局那一下，最早那一局被挤出去，这个数当场掉了那一局的分。不报
+      # 错、不白屏，只是那个数变小了，而玩家一直盯着它：看起来像我们把他的成绩弄丢了。现
+      # 在挤出去的分记在一笔只加不减的总账上，读的时候加回去。纯 node（拿 Map 当
+      # localStorage），几十毫秒。
+      - name: 挤出存档的局，分数不许跟着消失
+        run: |
+          npx esbuild src/engine/persistence.ts --bundle --format=esm --platform=neutral --outfile=/tmp/persist.mjs
+          node scripts/check-evicted-total.mjs /tmp/persist.mjs
       # 老虎机那一局的四件：完成奖励真的加上去（从前算好的那个数被计分那条路原样丢
       # 掉，一分都没生效过）、侵蚀先拆哪一枚按几何不按书写次序、降级那句话报的是真实
       # 枚数不是侵蚀级数（二十个目标里十个对不上）、八副棋盘的卡死门槛没有哪一副写死。
