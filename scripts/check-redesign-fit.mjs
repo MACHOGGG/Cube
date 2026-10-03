@@ -700,6 +700,83 @@ for (const size of SIZES) {
   }
 }
 
+// ── 第 17 推补的两条：邀请窗在 360×640 上装得下；登录窗两颗键和另外三扇窗一个样子 ──
+//
+// 方案第 7 条：「在 360×640 实测底部按钮是否在屏内；装不下时先把吉祥物缩小移到列表上方、再收
+// 紧行距」——量下来四种语言都装得下（最挤的法语，两颗键底边 586 / 屏高 640），所以吉祥物没挪，
+// 这一节把「装得下」钉住：哪天货单多一条、行距松一点，先红在这儿。
+//
+// 方案第 8 条：「登录窗同样改成 ✕ 和棕色『→』，四扇窗按钮风格一致」——量的是登录窗那两颗键和
+// 邀请窗那两颗是不是**同一个零件**：同高、同宽（两颗之间也等宽）、同一个底色、左右对称、只放
+// 图标（键上没有字、有 aria-label）、整个在屏幕里。
+sec('邀请窗 360×640；登录窗的两颗键');
+{
+  const SMALL = { n: '360×640', w: 360, h: 640 };
+  for (const lang of LANGS) {
+    const tag = `${SMALL.n} ${lang}`;
+    const { ctx, page } = await openCtx(SMALL, lang, null, null);
+    await page.click('#navProfile');
+    await page.waitForSelector('.profile-page', { timeout: 10000 });
+    await page.click('#becomeGeniusBtn');
+    await page.waitForSelector('.invite-modal', { timeout: 5000 });
+    const inv = await page.evaluate(() => {
+      const box = (q) => {
+        const r = document.querySelector(q)?.getBoundingClientRect();
+        return r ? { t: r.top, b: r.bottom, l: r.left, r: r.right, w: r.width, h: r.height } : null;
+      };
+      const bg = (q) => (document.querySelector(q) ? getComputedStyle(document.querySelector(q)).backgroundColor : '');
+      return { vh: innerHeight, vw: innerWidth, modal: box('.invite-modal'), close: box('#geniusClose'), go: box('#geniusRestore'), bg: bg('#geniusClose') };
+    });
+    check(`（尺子）${tag} 邀请窗：量到了两颗键`, Boolean(inv.close && inv.go), JSON.stringify(inv));
+    if (!inv.close || !inv.go) { await ctx.close(); continue; }
+    check(`${tag} 邀请窗：整扇窗在屏幕里`, inv.modal.t >= -0.5 && inv.modal.b <= inv.vh + 0.5, `${inv.modal.t} / ${inv.modal.b} / ${inv.vh}`);
+    check(`${tag} 邀请窗：底下两颗键整个露在屏幕里`,
+      [inv.close, inv.go].every((r) => r.t >= -0.5 && r.b <= inv.vh + 0.5 && r.l >= -0.5 && r.r <= inv.vw + 0.5),
+      `${inv.close.b} / ${inv.go.b} / ${inv.vh}`);
+
+    // 从邀请窗点《登录》→ 登录窗。
+    await page.click('#geniusRestore');
+    await page.waitForSelector('#authGo', { timeout: 10000 });
+    await page.waitForTimeout(200);
+    const au = await page.evaluate(() => {
+      const one = (q) => {
+        const el = document.querySelector(q);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          t: r.top, b: r.bottom, l: r.left, r: r.right, w: r.width, h: r.height,
+          bg: getComputedStyle(el).backgroundColor,
+          pill: el.classList.contains('pill-icon'),
+          text: el.textContent.trim(),
+          svg: Boolean(el.querySelector('svg')),
+          aria: el.getAttribute('aria-label') || '',
+        };
+      };
+      const card = document.querySelector('.auth-modal .modal, .auth-modal')?.getBoundingClientRect();
+      return { vh: innerHeight, vw: innerWidth, close: one('#authClose'), go: one('#authGo'),
+        card: card ? { l: card.left, r: card.right } : null };
+    });
+    check(`（尺子）${tag} 登录窗：量到了两颗键`, Boolean(au.close && au.go), JSON.stringify(au));
+    if (!au.close || !au.go) { await ctx.close(); continue; }
+    check(`${tag} 登录窗：两颗都是 .pill-icon（和邀请窗、帐号窗同一个零件）`, au.close.pill && au.go.pill);
+    check(`${tag} 登录窗：只放图标——键上没有字、有图标、有 aria-label`,
+      [au.close, au.go].every((k) => k.text === '' && k.svg && k.aria.length > 0), JSON.stringify([au.close.aria, au.go.aria, au.close.text, au.go.text]));
+    check(`${tag} 登录窗：两颗一样宽、一样高`, Math.abs(au.close.w - au.go.w) <= TOL && Math.abs(au.close.h - au.go.h) <= TOL,
+      `${au.close.w}×${au.close.h} / ${au.go.w}×${au.go.h}`);
+    check(`${tag} 登录窗：和邀请窗那两颗一样高、一样颜色`, Math.abs(au.close.h - inv.close.h) <= TOL && au.close.bg === inv.bg && au.go.bg === inv.bg,
+      `${au.close.h}/${inv.close.h} ${au.close.bg} ${au.go.bg} vs ${inv.bg}`);
+    if (au.card) {
+      const left = au.close.l - au.card.l;
+      const right = au.card.r - au.go.r;
+      check(`${tag} 登录窗：两颗键左右对称（离窗边一样远）`, Math.abs(left - right) <= TOL, `${left.toFixed(1)} / ${right.toFixed(1)}`);
+    }
+    check(`${tag} 登录窗：两颗键整个在屏幕里`,
+      [au.close, au.go].every((r) => r.t >= -0.5 && r.b <= au.vh + 0.5 && r.l >= -0.5 && r.r <= au.vw + 0.5),
+      `${au.close.b} / ${au.go.b} / ${au.vh}`);
+    await ctx.close();
+  }
+}
+
 // ── 邮箱帐号：三颗键（更换 / 登出 / 联络）、锁着的排名那一屏 ──
 sec('邮箱帐号与锁着的排名');
 for (const size of [ALL_SIZES[0], ALL_SIZES[3]]) {

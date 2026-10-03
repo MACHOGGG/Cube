@@ -4015,11 +4015,8 @@ body:has(.slot-page) .home-nav { display: none; }
 
    ⚠️ 只在这扇窗里改（选择器带 `.auth-modal`）：别处那些 `.primary` 是另一轮的事（第 14
    推《四页视觉改版》把这扇窗连同另外三页一起重做），这儿先把能用的样子交出去。 */
-.auth-modal .btn-x {
-  flex: 0 0 auto; width: 44px; padding: 11px 0;
-  font-size: 1.05rem; line-height: 1;
-}
-.auth-modal button.primary { background: var(--card-red); color: #FFFFFF; }
+/* （第 17 推第 8 条）上面说的那一枚灰 ✕ 和那颗砖红主键撤了：这扇窗底下那一排换成和邀请窗一
+   样的两颗棕色图标药丸（.auth-actions，见「帐号窗与邀请窗」那一段）。 */
 .auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
 .auth-tab {
   flex: 1; background: var(--board-bg); color: var(--ink-soft); border: 1px solid transparent;
@@ -4385,6 +4382,14 @@ body:has(.slot-page) .home-nav { display: none; }
 /* 两颗键左右对称、一样宽。 */
 .invite-actions { display: flex; gap: var(--gap-md); }
 .invite-actions .pill-icon { flex: 1 1 0; min-width: 0; }
+/* 登录窗底下那一排（第 17 推第 8 条）：和邀请窗同一个样子——两颗等宽的棕色图标药丸、中间
+   --gap-md。新写的这一条用 margin 不用 flex 的 gap（方案：新 CSS 都要在 Chrome 61 上可用）。 */
+.auth-actions { display: flex; margin-top: var(--gap-md); }
+.auth-actions .pill-icon { flex: 1 1 0; min-width: 0; }
+.auth-actions .pill-icon + .pill-icon { margin-left: var(--gap-md); }
+/* 请求在路上的那一会儿（authGo.disabled）：淡一点、按不动——原先砖红那颗靠 button 的默认
+   样子淡下去，换成药丸之后得自己说。 */
+.pill-icon:disabled { opacity: 0.55; cursor: default; }
 /* 登录那扇窗的正文：一摞东西，自上而下。
    从前这里是 flex 的默认方向——横排。它当初只装一件东西（一张表单），横排
    竖排看不出区别，居中是它真正要的。后来这块地方陆续多了几件：一句说明、一

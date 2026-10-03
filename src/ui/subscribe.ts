@@ -23,7 +23,7 @@ import {
 } from '../engine/account';
 import { CONTACT_EMAIL } from '../legal';
 import { CTL_LEAVE, CTL_REPLAY } from './ctlIcons';
-import { ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
+import { ICON_ARROW, ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
 import { geniusLogoTag } from './geniusLogo';
 
 /**
@@ -847,10 +847,16 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       <button class="link-btn" id="authAlt"></button>
       <button class="link-btn" id="authPairForgot" hidden>${s.pairForgot}</button>
     </div>
-    <div class="btn-row">
-      <!-- 关闭是一枚 ✕（玩家定的「少文字」）。字留给 aria-label，读屏照旧听得懂。 -->
-      <button class="btn-quiet btn-x" id="authClose" aria-label="${esc(s.closeBtn)}">✕</button>
-      <button class="primary btn-pill" id="authGo"></button>
+    <!--
+      两颗等宽、对称的棕色药丸，只放图标：✕ 和 →（第 17 推第 8 条：「登录窗同样改成 ✕ 和棕色
+      『→』，四扇窗按钮风格一致」）。和邀请窗那一排同一个零件（.pill-icon）；字留给 aria-label。
+
+      从前这一排是一枚灰色的小 ✕ 加一颗砖红的长药丸（第 9 推）：四扇窗里只有这一扇长这样，从
+      邀请窗点《登录》过来，底下那两颗键当场换了样子、换了颜色。出路照旧在右手边。
+    -->
+    <div class="auth-actions">
+      <button type="button" class="pill-icon" id="authClose" aria-label="${esc(s.closeBtn)}">${ICON_CLOSE}</button>
+      <button type="button" class="pill-icon" id="authGo" aria-label="${esc(s.continueBtn)}">${ICON_ARROW}</button>
     </div>
   `,
   );
@@ -935,7 +941,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
      * `aria-label` 一律念 `continueBtn`（「继续」），读屏的人听得懂，而且三态一致——念
      * 「保存」的那一版会让人以为这一步和上一步是两回事。
      */
-    go.textContent = '→';
+    go.innerHTML = ICON_ARROW;
     go.setAttribute('aria-label', s.continueBtn);
     alt.textContent = next === 'mail' ? s.pairlessEntry : next === 'code' ? s.useAnotherEmail : s.useEmailInstead;
     alt.hidden = false;

@@ -45,3 +45,10 @@ const svg24 = (body: string) =>
   '</svg>';
 export const ICON_PENCIL = svg24('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>');
 export const ICON_CHECK = svg24('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+
+/*
+ * 「→」：登录窗那颗往下走的键（第 17 推第 8 条：登录窗和另外三扇窗一样，两颗棕色药丸只放图
+ * 标——✕ 和 →）。稿子里没有这个文件，和上面 ✎ ✓ 一样在代码里画。不用「→」这个字：Fraunces
+ * 里的箭头比别的图标细一截，摆在一排线描图标中间像是另一套东西。
+ */
+export const ICON_ARROW = svg24('<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>');

@@ -68,6 +68,24 @@ const look = (page) =>
   page.evaluate(() => ({
     hint: document.querySelector('#authHint')?.textContent?.trim() ?? '',
     go: document.querySelector('#authGo')?.textContent?.trim() ?? '',
+    /**
+     * 两颗键长什么样（第 17 推第 8 条：和邀请窗同一个零件——棕色图标药丸，只放图标）。
+     * 箭头画成 SVG 了（不是「→」这个字），所以「是不是一枚箭头」量的是：键上没有字、有一个
+     * SVG、两段线里有一段是那个箭头的尖（M13 6l6 6-6 6）。
+     */
+    goShape: (() => {
+      const el = document.querySelector('#authGo');
+      const svg = el?.querySelector('svg');
+      return {
+        svg: Boolean(svg),
+        arrow: Boolean(svg && [...svg.querySelectorAll('path')].some((p) => /l6 6-6 6/.test(p.getAttribute('d') || ''))),
+        pill: Boolean(el?.classList.contains('pill-icon')),
+      };
+    })(),
+    closeShape: (() => {
+      const el = document.querySelector('#authClose');
+      return { svg: Boolean(el?.querySelector('svg')), pill: Boolean(el?.classList.contains('pill-icon')) };
+    })(),
     alt: document.querySelector('#authAlt')?.textContent?.trim() ?? '',
     msg: document.querySelector('#authMsg')?.textContent?.trim() ?? '',
     mail: !document.querySelector('#authMailForm')?.hidden,
@@ -117,7 +135,7 @@ head('① 四样撤掉的东西，一样都没回来');
 const { ctx, page } = await openAuth();
 {
   const v = await look(page);
-  check('（尺子）那扇窗真的开出来了', v.hint.length > 0 && v.go.length > 0, `${v.hint} / ${v.go}`);
+  check('（尺子）那扇窗真的开出来了', v.hint.length > 0 && v.goShape.svg, `${v.hint} / ${JSON.stringify(v.goShape)}`);
   check('没有「注册 / 登录」两个 tab', v.tabs === 0, String(v.tabs));
   check('一个密码框都没有', v.pwBoxes === 0, String(v.pwBoxes));
   check('没有《忘记密码？》', v.forgotPw === false);
@@ -129,7 +147,7 @@ head('② 默认是邮箱态，三态各摆一张表');
 {
   const v = await look(page);
   check('① 邮箱态：只有邮箱那张表', v.mail && !v.code && !v.pair, JSON.stringify([v.mail, v.code, v.pair]));
-  check('① 那颗主键是一枚箭头（不写字）', v.go === '→', v.go);
+  check('① 那颗主键是一枚箭头（不写字）', v.go === '' && v.goShape.arrow, `${JSON.stringify(v.go)} ${JSON.stringify(v.goShape)}`);
   check('① 旁边那条路通向免邮箱', /免邮箱/.test(v.alt), v.alt);
 }
 
@@ -178,10 +196,13 @@ head('⑤ 免邮箱那一屏：明文两串，那句警告必须在');
     `${v.keyNote} ${JSON.stringify(v.keyNoteBox)}`);
   check('《忘了第二串？》那条路摆着', v.pairForgot === true);
   // 三态共用一枚箭头（玩家定的「少文字」）；字留给读屏。
-  check('主键是那枚箭头', v.go === '→', v.go);
+  check('主键是那枚箭头', v.go === '' && v.goShape.arrow, `${JSON.stringify(v.go)} ${JSON.stringify(v.goShape)}`);
   check('箭头给读屏念的是「继续」', v.goAria === '继续', v.goAria);
-  check('关闭是一枚 ✕，字留给 aria-label', v.closeText === '✕' && v.closeAria === '关闭',
-    `${v.closeText} / ${v.closeAria}`);
+  check('关闭是一枚 ✕（图标），字留给 aria-label', v.closeText === '' && v.closeShape.svg && v.closeAria === '关闭',
+    `${JSON.stringify(v.closeText)} / ${v.closeAria}`);
+  // 第 17 推第 8 条：两颗都是棕色图标药丸（和邀请窗、帐号窗同一个零件）。
+  check('✕ 和 → 都是 .pill-icon（和另外三扇窗一个样子）', v.goShape.pill && v.closeShape.pill,
+    `${JSON.stringify(v.goShape)} ${JSON.stringify(v.closeShape)}`);
   // 能打字的框字号都不低于 16px（低了 iOS 一聚焦就放大整页）。勾选框不算。
   const fonts = await page.evaluate(() =>
     [...document.querySelectorAll('.auth-modal input')]
