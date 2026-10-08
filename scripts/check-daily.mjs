@@ -5,7 +5,8 @@
  *   node scripts/check-daily.mjs http://localhost:8974/
  *
  * 方案的门：「北京时间 23:59:59→00:00:00 准确换日（种子、数字、颜色同时换）」「7 天星期与配色
- * 对应」，电脑宽屏「1440×900 下居中、各行等距、一屏放得下」，以及「首玩期间也显示」。手机鱼眼那
+ * 对应」，电脑宽屏「1440×900 下居中、各行等距、一屏放得下」。「首玩期间也显示」那一条 10-08 方
+ * 案 3-D-1 改了（玩家拍板「完成任意一局（含教程局）后出现」），⑤ 量新的那一条。手机鱼眼那
  * 一站（默认聚焦、居中、同尺寸、等距、导轨、热区）在 check-mode-axis 的第 10 节。
  *
  * ── 钟是假的 ──────────────────────────────────────────────────────────────
@@ -59,8 +60,12 @@ function dotColorOf(weekday) {
 const WANT_DOT = Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((w) => [w, dotColorOf(w)]));
 check('（尺子）七个文件各读出一个点的颜色，而且七个两两不同', new Set(Object.values(WANT_DOT)).size === 7, JSON.stringify(WANT_DOT));
 
-/** 一台手机，钟拨到 `at`，HEAD 拦掉；`played` 决定是不是首玩期。 */
-async function pageAt(at, { width = 390, height = 844, mobile = true, played = true, lang = 'zhHans' } = {}) {
+/**
+ * 一台手机，钟拨到 `at`，HEAD 拦掉；`played` 决定是不是首玩期——打过的人也**打完过一局**
+ * （slides_played_finished，10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆）。`wait` 为假就
+ * 不等那张卡（⑤ 量的正是「它不在」）。
+ */
+async function pageAt(at, { width = 390, height = 844, mobile = true, played = true, lang = 'zhHans', wait = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile });
   await ctx.addInitScript(
     ({ played, lang }) => {
@@ -72,6 +77,7 @@ async function pageAt(at, { width = 390, height = 844, mobile = true, played = t
       if (played) {
         localStorage.setItem('slides_played_square', '1');
         localStorage.setItem('slides_played_circle', '1');
+        localStorage.setItem('slides_played_finished', '1');
       }
     },
     { played, lang },
@@ -81,7 +87,8 @@ async function pageAt(at, { width = 390, height = 844, mobile = true, played = t
   await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
   await page.clock.install({ time: at });
   await page.goto(BASE, { waitUntil: 'load' });
-  await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 });
+  if (wait) await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 });
+  else await page.waitForSelector('.mode-axis .home-icon-btn, .home-row .home-icon-btn', { timeout: 20000 });
   return { ctx, page };
 }
 
@@ -197,16 +204,97 @@ const WHITE = 'rgb(255, 255, 255)';
   await ctx.close();
 }
 
-// ── ⑤ 首玩期：亮着、点得开 ─────────────────────────────────────────────────
+// ── ⑤ 一局都还没打完的人没有这张卡；打完一局（头一局那个带教学条的也算）它才出现 ─────────
+//
+// 10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后出现」。从前（第 19 推）这一节量的是
+// 「首玩期间也亮着、点得开」——新人打开菜单第一眼看见的是一张「今天这一局」，可他连规矩都还没
+// 见过。现在：
+//   a. 新人（首玩期、一局没打完）：手机轴上和电脑那一排里都没有它；轴的第一站是两张基础卡；
+//   b. 同一个人真打一局——点开方块、暂停、《结束游戏》，结算页出来，按《首页》回去——它出现在最
+//      上面（轴的第一站，单独一张）；
+//   c. 改版之前打完过的人（本地只有结算页那颗光的钥匙 slides_played_endcard）照样有它；
+//   d. 存不进 localStorage（无痕窗口）的人照样有它——宁可多摆，不要永远不摆。
 {
-  const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { played: false });
-  const c = await cardNow(page);
-  const others = await page.evaluate(() => document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length);
-  check('⑤ 首玩期：别的玩法锁着（尺子），每日挑战没锁', others > 0 && c.locked === false, `锁着 ${others} 张 / 每日挑战 locked=${c.locked}`);
-  await page.click('.home-icon-btn--daily');
-  const opened = await page.waitForSelector('.daily-page #dailyPlay', { timeout: 5000 }).then(() => true).catch(() => false);
-  check('⑤ 首玩期：点得开每日挑战那一页（不被首玩期那道拦截拦下）', opened);
+  const t = NOON(SC.dayIndexOf(Date.now()));
+  // a. 手机：首玩期
+  const { ctx, page } = await pageAt(t, { played: false, wait: false });
+  await page.waitForTimeout(500);
+  const a = await page.evaluate(() => ({
+    daily: document.querySelectorAll('.home-icon-btn--daily').length,
+    cards: document.querySelectorAll('.mode-axis > .home-icon-btn').length,
+    locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
+    first: [...document.querySelectorAll('.mode-axis > .home-icon-btn')].slice(0, 2).map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+  }));
+  check('⑤a 首玩期（尺子）：轴摆出来了、别的玩法锁着', a.cards > 0 && a.locked > 0, `${a.cards} 张 / 锁着 ${a.locked}`);
+  check('⑤a 一局都还没打完：手机轴上没有每日挑战', a.daily === 0, `${a.daily} 张`);
+  check('⑤a 轴的头两张是两张基础卡（第一站不再是单独一张）', a.first.join(' ') === '方块 圆球', a.first.join(' / '));
+  // b. 真打一局：点开方块、暂停、结束游戏、回首页。
+  await page.$$eval('.mode-axis > .home-icon-btn:not(.home-icon-btn--locked)', (els) => els[0].click());
+  await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+  await page.$eval('#startBtn', (e) => e.click());
+  await page.waitForFunction(() => document.querySelectorAll('#boardWrap [data-r][data-c]').length > 0, null, { timeout: 30000 });
+  // 钟是假的：倒数那几拍要它走。
+  await page.clock.runFor(5000);
+  await page.waitForTimeout(300);
+  await page.$eval('#stopBtn', (e) => e.click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.$eval('#pauseFinishBtn', (e) => e.click());
+  const ended = await page.waitForSelector('#endOverlay.show', { timeout: 15000 }).then(() => true).catch(() => false);
+  check('⑤b（尺子）那一局真的打完了：结算页出来了', ended);
+  await page.$eval('#endBackBtn', (e) => e.click());
+  const back = await page.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 15000 }).then(() => true).catch(() => false);
+  const b = await page.evaluate(() => {
+    const axisCards = [...document.querySelectorAll('.mode-axis > .home-icon-btn')];
+    return { daily: document.querySelectorAll('.home-icon-btn--daily').length, firstIsDaily: axisCards[0]?.classList.contains('home-icon-btn--daily') ?? false };
+  });
+  check('⑤b 打完一局回到主菜单：每日挑战出现了，在轴的第一站', back && b.daily === 1 && b.firstIsDaily, JSON.stringify(b));
   await ctx.close();
+  // a'. 电脑那一排：首玩期也没有它
+  {
+    const { ctx, page } = await pageAt(t, { played: false, wait: false, width: 1440, height: 900, mobile: false });
+    await page.waitForTimeout(400);
+    const w = await page.evaluate(() => ({
+      daily: document.querySelectorAll('.home-icon-btn--daily').length,
+      firstRow: [...(document.querySelector('.home-grid > .home-row')?.children ?? [])].map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+    }));
+    check('⑤a 电脑：一局都还没打完，最上面那一排不是每日挑战', w.daily === 0 && w.firstRow.join(' ') === '方块 圆球', JSON.stringify(w));
+    await ctx.close();
+  }
+  // c. 改版之前就打完过的人：只有结算页那颗光的钥匙
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(() => {
+      if (sessionStorage.getItem('daily_gate') === '1') return;
+      sessionStorage.setItem('daily_gate', '1');
+      localStorage.clear();
+      localStorage.setItem('slides_lang', 'zhHans');
+      localStorage.setItem('slides_intro_seen', '1');
+      localStorage.setItem('slides_played_square', '1');
+      localStorage.setItem('slides_played_endcard', '1');
+    });
+    const page = await ctx.newPage();
+    await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
+    await page.goto(BASE, { waitUntil: 'load' });
+    const has = await page.waitForSelector('.home-icon-btn--daily', { timeout: 15000 }).then(() => true).catch(() => false);
+    check('⑤c 改版之前打完过的人（只有 slides_played_endcard）照样有每日挑战', has);
+    await ctx.close();
+  }
+  // d. localStorage 用不了
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(() => {
+      const boom = () => {
+        throw new DOMException('denied', 'SecurityError');
+      };
+      Object.defineProperty(window, 'localStorage', { get: boom, configurable: true });
+    });
+    const page = await ctx.newPage();
+    await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
+    await page.goto(BASE, { waitUntil: 'load' });
+    const has = await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 }).then(() => true).catch(() => false);
+    check('⑤d localStorage 用不了：宁可多摆——每日挑战在', has);
+    await ctx.close();
+  }
 }
 
 // ── ⑥ 电脑宽屏 1440×900：最上面一排只有它、居中、一样大、各行等距、一屏放得下 ─────

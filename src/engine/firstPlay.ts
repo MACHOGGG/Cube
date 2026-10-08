@@ -29,7 +29,8 @@ export type PlayKey =
   | 'layout'
   | 'endcard'
   | 'totaltip'
-  | 'howhint';
+  | 'howhint'
+  | 'finished';
 
 /** 两个基础玩法（三角那一副 2026-09 删了，见《侵蚀阶梯》v1.2 PR-6）。「这是不是他
  *  打的第一个」按这两张算（见 main.ts 的 basicCoach）。 */
@@ -158,6 +159,33 @@ export function claimFirstEndcard(): boolean {
   if (!firstTimeIn('endcard')) return false;
   markOpened('endcard');
   return true;
+}
+
+/**
+ * 他打完过一局没有——头一局那个带教学条的局也算。主菜单上那张《每日挑战》认的就是这个（10-08
+ * 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后出现」）。
+ *
+ * 记的那一下在 gameController 的 endGame 里（markFinishedAGame）：那是每一局——单人、小屋、
+ * 带教学条的头一局——真的结束时都要走的那一条路。打到一半退回主菜单的不算，那一局没打完；练习
+ * 盘不算，它没有「结束」这回事。
+ *
+ * 结算页那颗光的钥匙（endcard）也认：它在结算页头一回露面时记下，意思一样是「打完过一局」——
+ * 这把新钥匙是今天才有的，在它之前就打过的人本地只有那一把，不认它的话老玩家的这张卡会无端消失
+ * 一回。
+ *
+ * 存不进 localStorage（无痕窗口、清过站点数据）就当打完过：这张卡今天谁都能打，门控只是不让一个
+ * 刚打开、一局没下过的人面前多摆一张他还看不懂的卡。存不进的时候宁可多摆，不要永远不摆。
+ */
+export function finishedAGame(): boolean {
+  try {
+    return localStorage.getItem(KEY('finished')) === '1' || !firstTimeIn('endcard');
+  } catch {
+    return true;
+  }
+}
+
+export function markFinishedAGame(): void {
+  markOpened('finished');
 }
 
 /**

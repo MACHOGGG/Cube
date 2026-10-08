@@ -54,6 +54,8 @@ async function freshContext(opts = {}) {
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_circle', '1');
+    // 打完过一局：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+    localStorage.setItem('slides_played_finished', '1');
     // 头一回进每个玩法时棋盘底下那句教学：先记成「进过了」，免得它占着盘面底下那一块。
     for (const k of ['bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout']) localStorage.setItem(`slides_played_${k}`, '1');
     localStorage.setItem(

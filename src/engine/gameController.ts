@@ -33,7 +33,7 @@ import {
   createStepBank, puzzleComposite, stepLedgerText,
   PUZZLE_RULES_VERSION, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
 } from './puzzleScore';
-import { claimFirstHowToHint } from './firstPlay';
+import { claimFirstHowToHint, markFinishedAGame } from './firstPlay';
 import { STRINGS, type Lang } from '../i18n';
 import { stepCoefFor } from './stepCoef';
 import type { Cell } from './types';
@@ -865,6 +865,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
     gameOver = true;
     resolving = false;
+    // 打完过一局了（头一局那个带教学条的也算）：主菜单上那张《每日挑战》从此摆出来（10-08 方案
+    // 3-D-1，见 engine/firstPlay.ts 的 finishedAGame）。
+    markFinishedAGame();
     // 这一局完了，教学的呼吸灯一起熄（结算页底下那副棋盘还看得见一角）。
     if (coach) hooks.coachGlow?.(null);
     // 连锁的下一拍要**撤掉**，不是置空（见 cancelBeat 那段）。从前这儿一句都没有，

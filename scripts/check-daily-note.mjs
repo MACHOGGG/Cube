@@ -53,7 +53,9 @@ async function playDaily(shiftDays, code) {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle',
-      'slides_played_square', 'slides_played_circle', 'slides_know_how']) localStorage.setItem(k, '1');
+      'slides_played_square', 'slides_played_circle', 'slides_know_how',
+      // 打完过一局：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+      'slides_played_finished']) localStorage.setItem(k, '1');
   });
   const page = await ctx.newPage();
   const errs = [];

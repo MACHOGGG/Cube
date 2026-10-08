@@ -75,6 +75,9 @@ async function menuPage(extra = {}) {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
     for (const [k, v] of Object.entries(ex)) localStorage.setItem(k, v);
+    // 「打过一局」的手机也就打完过一局：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+    // 什么都不给（第 6 节，首玩期）就是一局都还没打完——那一节量的正是轴上没有它。
+    if (ex.slides_played_square || ex.slides_played_circle) localStorage.setItem('slides_played_finished', '1');
   }, extra);
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
@@ -1716,7 +1719,11 @@ let page = await menuPage({ slides_played_square: '1' });
 }
 await page.close();
 
-// ── 6. 首玩期：十四张全在轴上，除了两张基础的都锁着 ────────────────
+// ── 6. 首玩期：玩法全在轴上，除了两张基础的都锁着 ────────────────
+//
+// 10-08 方案 3-D-1 起首玩期（一局都还没打完）**没有《每日挑战》**——玩家拍板「完成任意一局（含教
+// 程局）后出现」，打完头一局它才冒出来（check-daily ⑤ 量那一条）。所以这一节的张数、站数是 MODES、
+// MODES / 2，没有头上那一站。
 //
 // 口径 2026-09 第五轮换过一次。上一版是「轴上只摆那两张」，玩家改成：「转盘也可
 // 以看到所有内容只是有锁而已，在基础的方块、小球玩法下面写着『我会玩』，下面是
@@ -1726,7 +1733,9 @@ await page.close();
 {
   const p2 = await menuPage();
   const s = await shot(p2);
-  check(`首玩期 ${CARDS} 张全在轴上`, s.cards.length === CARDS, `${s.cards.length} 张`);
+  const FP_CARDS = MODES;
+  const FP_ROWS = MODES / 2;
+  check(`首玩期 ${FP_CARDS} 张全在轴上（没有每日挑战）`, s.cards.length === FP_CARDS, `${s.cards.length} 张`);
   const shape = await p2.evaluate(() => {
     const host = document.querySelector('.mode-axis');
     const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
@@ -1745,11 +1754,12 @@ await page.close();
     };
   });
   const order = shape.list;
-  // 第 19 推：最上面多了《每日挑战》那一站，首玩期间也亮着（方案原话「首玩期间也显示」——今天
-  // 那一局谁都能打）。所以是「前三张」：每日挑战、基础方块、基础小球，三张都没锁。
-  check('第一张是每日挑战、接着是基础方块和基础小球，三张都没锁',
-    order.slice(0, 3).every((o) => !o.locked) && /每日挑战/.test(order[0].name) && /方块/.test(order[1].name) && /圆球|小球/.test(order[2].name),
-    order.slice(0, 3).map((o) => o.name).join(' '));
+  // 第 19 推那一版首玩期最上面还有一站《每日挑战》；10-08 方案 3-D-1 起首玩期没有它，所以又是
+  // 「前两张」：基础方块、基础小球，都没锁。
+  check('前两张是基础方块和基础小球，都没锁（没有每日挑战）',
+    order.slice(0, 2).every((o) => !o.locked) && /方块/.test(order[0].name) && /圆球|小球/.test(order[1].name) &&
+      !order.some((o) => /每日挑战/.test(o.name)),
+    order.slice(0, 2).map((o) => o.name).join(' '));
   /**
    * 《我会玩》是**两站之间那条分界线**，不是轴上的一站。
    *
@@ -1766,8 +1776,8 @@ await page.close();
    * 把它当成一张卡塞回 entries 里，12 张会变成 13 张——那条红得到；可要是有人让它顶掉
    * 半排（比如占住某一排的右半格），张数一个不少，只有排数会变。
    */
-  check(`轴上还是 ${CARDS} 张（《我会玩》没占掉一站）`, order.length === CARDS, `${order.length} 张`);
-  check(`轴上还是 ${ROWS} 站`, (await shot(p2)).rows.length === ROWS, `${(await shot(p2)).rows.length} 站`);
+  check(`轴上还是 ${FP_CARDS} 张（《我会玩》没占掉一站）`, order.length === FP_CARDS, `${order.length} 张`);
+  check(`轴上还是 ${FP_ROWS} 站`, (await shot(p2)).rows.length === FP_ROWS, `${(await shot(p2)).rows.length} 站`);
   check('有那条分界线', shape.hasDiv);
   /**
    * 两列之后这一条顺带守住了另一件事：**分界线落在排与排之间，不切开一排**。
@@ -1778,11 +1788,11 @@ await page.close();
    * 那一排的最后一张」这个前提，而这一条就是那个前提的门。
    */
   check(
-    '分界线落在能玩的那几张（每日挑战那一站 + 第 1 排两张基础卡）和锁着的那些之间（没切开一排）',
-    shape.divAbove === LEAD + 2,
-    `线上头有 ${shape.divAbove} 张（该是 每日挑战 方块 圆球 三张）`,
+    '分界线落在能玩的那两张（第 0 排两张基础卡）和锁着的那些之间（没切开一排）',
+    shape.divAbove === 2,
+    `线上头有 ${shape.divAbove} 张（该是 方块 圆球 两张）`,
   );
-  check(`其余 ${CARDS - LEAD - 2} 张都锁着`, order.filter((o) => o.locked).length === CARDS - LEAD - 2,
+  check(`其余 ${FP_CARDS - 2} 张都锁着`, order.filter((o) => o.locked).length === FP_CARDS - 2,
     `锁着 ${order.filter((o) => o.locked).length} 张`);
   /**
    * 锁着的那张**按不动**。
@@ -1803,8 +1813,9 @@ await page.close();
     };
   });
   check('点锁着的那张：开不了局', blocked.stay);
-  // 抖的是「能玩的那几张」：两张基础卡，加上首玩期也亮着的每日挑战（第 19 推）。
-  check('点锁着的那张：能玩的三张（每日挑战 + 两张基础卡）抖一下（拦截真的装上了）', blocked.nudge === LEAD + 2, `${blocked.nudge} 张`);
+  // 抖的是「能玩的那几张」。第 19 推起首玩期也亮着每日挑战，那时是三张；10-08 方案 3-D-1 起
+  // 《每日挑战》要打完一局才摆出来，首玩期没有它，只剩两张基础卡。
+  check('点锁着的那张：能玩的两张基础卡抖一下（拦截真的装上了）', blocked.nudge === 2, `${blocked.nudge} 张`);
   check('首玩期那颗《我会玩》还在', await p2.evaluate(() => !!document.querySelector('.know-how-btn')));
   /**
    * 《我会玩》现在是**轴上的一项**，不是浮在底排上方的那颗了（第五轮改的：它排
@@ -1838,7 +1849,8 @@ await page.close();
   await p2.evaluate(() => document.querySelector('.know-how-btn').click());
   await p2.waitForTimeout(800);
   const s2 = await shot(p2);
-  check(`按了《我会玩》轴上还是 ${CARDS} 项`, s2.cards.length === CARDS, `${s2.cards.length} 张`);
+  // 按《我会玩》不等于打完过一局：《每日挑战》照旧不摆（10-08 方案 3-D-1），还是 FP_CARDS 项。
+  check(`按了《我会玩》轴上还是 ${FP_CARDS} 项（每日挑战要打完一局才摆）`, s2.cards.length === FP_CARDS, `${s2.cards.length} 张`);
   const after = await p2.evaluate(() => ({
     locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
     skip: !!document.querySelector('.axis-know-how'),
@@ -1967,6 +1979,7 @@ await page.close();
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
+    localStorage.setItem('slides_played_finished', '1');
   });
   await p4.goto(BASE, { waitUntil: 'load' });
   await p4.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
@@ -2047,6 +2060,7 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_circle', '1');
+    localStorage.setItem('slides_played_finished', '1');
     /*
      * 这一节量的是「聚焦那一排**两张**」（会不会过中线、会不会压点点、热区归谁）。第 19 推起打
      * 开菜单默认停在《每日挑战》那一站——它独占一排，两列那几笔账在它身上根本不存在，照默认
@@ -2474,6 +2488,7 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_circle', '1');
+    localStorage.setItem('slides_played_finished', '1');
   });
   await pg.goto(BASE, { waitUntil: 'load' });
   await pg.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 15000 });

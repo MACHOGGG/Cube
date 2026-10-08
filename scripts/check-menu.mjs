@@ -24,7 +24,8 @@ const check = (n, ok, extra = '') => {
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await ctx.addInitScript(() => {
-  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+  // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
     localStorage.setItem(k, '1');
   localStorage.setItem('slides_lang', 'zhHans');
 });
@@ -157,7 +158,8 @@ check('从一局里退出来，主菜单还停在刚才那儿', Math.abs(after -
 async function lockedCards(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
   await c.addInitScript(() => {
-    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+    // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
       localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
   });
@@ -226,7 +228,8 @@ async function lockedCards(width, height) {
 async function menuOrder(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
   await c.addInitScript(() => {
-    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+    // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
       localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
   });
@@ -257,7 +260,8 @@ async function menuOrder(width, height) {
 async function cardWidths(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
   await c.addInitScript(() => {
-    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+    // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
       localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
   });
@@ -356,7 +360,8 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
 await ctx.close();
 const tctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await tctx.addInitScript(() => {
-  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
+  // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
+  for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
     localStorage.setItem(k, '1');
   localStorage.setItem('slides_lang', 'zhHans');
 });
@@ -417,6 +422,7 @@ await tctx.close();
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
+    localStorage.setItem('slides_played_finished', '1');
     // 这三张是天才特供，没权限按下去开的是订阅窗，不是那一页。
     localStorage.setItem(
       'slides_genius',

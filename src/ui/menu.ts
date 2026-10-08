@@ -40,6 +40,11 @@ export interface MenuHandlers {
    */
   onDaily: () => void;
   /**
+   * 摆不摆《每日挑战》那张卡（10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后出现」，
+   * engine/firstPlay.ts 的 finishedAGame）。不给就摆——这张卡原先是无条件摆的。
+   */
+  showDaily?: boolean;
+  /**
    * 「现在」——今天是哪一天、那张卡画星期几、压哪个日期，全从它算（网页端是服务器的钟，见
    * engine/dailyClock.ts）。不给就用本机的钟。
    */
@@ -381,25 +386,35 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
    * 读屏念「每日挑战，10 月 3 日」；卡底下那行小字是「每日挑战」。首玩期间也亮着
    * （`firstPlayable`）：今天这一局谁都能打。
    */
+  /*
+   * **一局都还没打完的人不摆这张卡**（10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后
+   * 出现」）。从前它无条件摆在最上面，新人打开菜单第一眼看见的是一张「今天这一局」——可他连
+   * 规矩都还没见过。打完头一局（带教学条的那一局也算）它才冒出来，见 engine/firstPlay.ts 的
+   * finishedAGame。不摆的时候轴的第一站就不是单张了（下面 mountModeAxis 的 leadSolo 跟着它）。
+   */
+  const showDaily = handlers.showDaily ?? true;
   const now = handlers.now ?? Date.now;
   const today = dayIndexOf(now());
-  const dailyBtn = iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle);
-  dailyBtn.dataset.firstPlayable = '1';
-  dailyBtn.addEventListener('click', () => handlers.onDaily());
   stopDailyWatch?.();
-  stopDailyWatch = watchDay(now, (d) => {
-    // 主菜单已经被换掉了：这个钟没有用处了，撤掉（下一次画主菜单会另排一个）。
-    if (!dailyBtn.isConnected) {
-      stopDailyWatch?.();
-      stopDailyWatch = null;
-      return;
-    }
-    const art = dailyBtn.querySelector<HTMLElement>('.home-icon-art');
-    if (art) art.innerHTML = dailyArtHtml(d);
-    dailyBtn.setAttribute('aria-label', dailyAria(lang, d));
-  });
-  if (wide) newRow().appendChild(dailyBtn);
-  else axisCards.push(dailyBtn);
+  stopDailyWatch = null;
+  if (showDaily) {
+    const dailyBtn = iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle);
+    dailyBtn.dataset.firstPlayable = '1';
+    dailyBtn.addEventListener('click', () => handlers.onDaily());
+    stopDailyWatch = watchDay(now, (d) => {
+      // 主菜单已经被换掉了：这个钟没有用处了，撤掉（下一次画主菜单会另排一个）。
+      if (!dailyBtn.isConnected) {
+        stopDailyWatch?.();
+        stopDailyWatch = null;
+        return;
+      }
+      const art = dailyBtn.querySelector<HTMLElement>('.home-icon-art');
+      if (art) art.innerHTML = dailyArtHtml(d);
+      dailyBtn.setAttribute('aria-label', dailyAria(lang, d));
+    });
+    if (wide) newRow().appendChild(dailyBtn);
+    else axisCards.push(dailyBtn);
+  }
 
   // ---- 方块 · 小球 · 三角 ------------------------------------------------
   const baseRow = wide ? newRow() : null;
@@ -732,8 +747,9 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       initial: axisFocus,
       onFocus: saveAxisFocus,
       divider: divider ? { el: divider, after: dividerAfter } : undefined,
-      // 第一站只有《每日挑战》一张（第 19 推，见上面造它的那一段）。
-      leadSolo: true,
+      // 第一站只有《每日挑战》一张（第 19 推，见上面造它的那一段）；那张卡没摆（一局都还没打完，
+      // 10-08 方案 3-D-1）就没有这一站，第一排照旧两张。
+      leadSolo: showDaily,
     });
   }
 }
