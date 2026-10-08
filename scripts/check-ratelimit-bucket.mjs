@@ -101,5 +101,30 @@ for (const [input, want, why] of TABLE) {
   check('③ 只有逗号空白 → unknown', bucket(' , ') === 'unknown');
 }
 
+// ── ④ 界面上那句「试得太多」说的是「这个网络」，不是「这台设备」（10-08 方案第四批第 7 条）─────────────
+//
+// 桶是按来路的网段分的（上面 ①–③ 钉的就是这件事），同一个网络底下的几台设备共用一个桶。法文那句原先写的是
+// « depuis cet appareil »（这台设备）——换一台手机照样被挡，那句话就是错的。四种语言都要说「网络」。读的是
+// src/i18n.ts 的源码（tooManyTries 那四行），不打包。
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
+  const lines = [...src.matchAll(/^\s*tooManyTries: '([^']*)',$/gm)].map((m) => m[1]);
+  check('④（尺子）四种语言的 tooManyTries 都读到了', lines.length === 4, lines.join(' | '));
+  const SAY = [
+    { lang: 'en', says: /network/i, never: /device|this phone/i },
+    { lang: 'fr', says: /réseau/, never: /appareil/ },
+    { lang: 'zhHant', says: /網路/, never: /裝置|這台/ },
+    { lang: 'zhHans', says: /网络/, never: /设备|这台/ },
+  ];
+  // i18n.ts 里四份的次序是 en、fr、zhHant、zhHans
+  SAY.forEach(({ lang, says, never }, i) => {
+    const line = lines[i] || '';
+    check(`④ ${lang}：说的是「这个网络」，不是「这台设备」`, says.test(line) && !never.test(line), line);
+  });
+  // 反向对照：法文原先那一句会红
+  check('④（反向对照）« depuis cet appareil » 那一句会红', /appareil/.test('Trop de tentatives depuis cet appareil.'));
+}
+
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);

@@ -379,7 +379,11 @@ export interface I18nStrings {
   /** 内部码兑换后的绑定窗：这一颗是「以后再说」；状态窗里那一颗是「绑定到账号」。 */
   /** 内部码本身过了使用期限。 */
   codeExpired: string;
-  /** 短时间内试得太多——防止有人枚举内部码。 */
+  /**
+   * 短时间内试得太多（限速挡下了，429）。限速按**来路的网段**数（api/_ratelimit.js 的 callerId：IP 段），不按
+   * 设备——同一个网络底下的几台设备共用一个桶。所以四种语言都说「这个网络」：法文原先写的是「depuis cet
+   * appareil」（这台设备），换一台手机照样被挡，那句话就是错的（10-08 方案第四批第 7 条）。
+   */
   tooManyTries: string;
   /** 还在订阅期内，这张码留着更值。 */
   alreadyActive: string;
@@ -970,7 +974,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeWrong: 'That code is not right.',
     codeStale: 'That code has expired. Ask for a new one.',
     codeExpired: 'That insider code has passed its use-by date.',
-    tooManyTries: 'Too many tries from here. Try again later.',
+    tooManyTries: 'Too many tries from this network. Try again later.',
     alreadyActive: 'Your subscription is still running. Keep this insider code for later, or pass it on — it is only spent once.',
     orderTitle: 'Your account',
     orderPlanLabel: 'Plan',
@@ -1328,7 +1332,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeWrong: 'Ce code n’est pas le bon.',
     codeStale: 'Ce code a expiré. Demandez-en un nouveau.',
     codeExpired: 'Ce code Génie a dépassé sa date limite.',
-    tooManyTries: 'Trop de tentatives depuis cet appareil. Réessayez plus tard.',
+    tooManyTries: 'Trop de tentatives depuis ce réseau. Réessayez plus tard.',
     alreadyActive: 'Votre abonnement court toujours. Gardez ce code Génie pour plus tard, ou offrez-le — il ne sert qu’une fois.',
     orderTitle: 'Votre compte',
     orderPlanLabel: 'Formule',
@@ -1686,7 +1690,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeWrong: '驗證碼不對。',
     codeStale: '驗證碼過期了，重新要一張。',
     codeExpired: '這個內部碼已經過了使用期限。',
-    tooManyTries: '這裡試得太多了，請稍後再試。',
+    tooManyTries: '這個網路上試得太多了，請稍後再試。',
     alreadyActive: '你的訂閱還在有效期內。這張碼留著以後用，或者送人——它只能用一次。',
     orderTitle: '你的帳號',
     orderPlanLabel: '方案',
@@ -2044,7 +2048,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeWrong: '验证码不对。',
     codeStale: '验证码过期了，重新要一张。',
     codeExpired: '这个内部码已经过了使用期限。',
-    tooManyTries: '这里试得太多了，请稍后再试。',
+    tooManyTries: '这个网络上试得太多了，请稍后再试。',
     alreadyActive: '你的订阅还在有效期内。这张码留着以后用，或者送人——它只能用一次。',
     orderTitle: '你的账号',
     orderPlanLabel: '方案',
