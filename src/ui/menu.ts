@@ -1,7 +1,7 @@
 import type { ShapeCardMeta } from '../shapes/types';
 import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
-import { GENIUS_LAYOUTS, isLayoutLocked } from '../engine/geniusContent';
+import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
 import { shapeName } from './shapeLabels';
 import { menuTag } from './menuTags';
@@ -126,9 +126,6 @@ export type RowShape = 'square' | 'circle';
 const SHAPES: RowShape[] = ['square', 'circle'];
 /** 《更多布局》那一排按族分组，三族都要走到（六边三角归三角族）。 */
 const LAYOUT_SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
-/** 这副棋盘是不是天才特供的——按内容问，不按这个人开没开通（isLayoutLocked
- *  问的是后者）。窄屏的顺序要用前者：菜单的排布不该因为身份而变。 */
-const isGeniusLayout = (cardId: string): boolean => GENIUS_LAYOUTS.includes(cardId);
 /** 主菜单一排摆几张。样式那边算图标上限用的也是这两个数：宽屏第二排六张、
  *  第三排五张，窄屏一排两张（一张 130px 见方，玩家点的）。
  *
@@ -307,16 +304,21 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const sub = container.querySelector<HTMLElement>('.home-sub');
   if (sub) typeTagline(sub, s.homeTagline);
 
-  // 窄屏（手机竖着）的顺序，玩家定的：能玩的先摆，天才特供的四张收在最后。
+  // 窄屏（手机竖着）的顺序，玩家定的：
   //
-  //   方块 · 小球 · 三角 · 多人游玩 · 计时 · 炸弹 ·
-  //   菱形方块 · 六边圆球 · 六边形三角
-  //   ——以下天才特供——
-  //   老虎机 · 无限反转 · 七色圆球 · V 型三角
+  //   每日挑战 ·
+  //   方块 · 圆球 · 多人游玩 · 计时 · 炸弹 ·
+  //   老虎机 · 无限反转 · 步步为营 ·
+  //   ——以下《更多布局》——
+  //   菱形方块 · 六边圆球 · 七色圆球 · 大三角
   //
-  // 「天才特供」按内容分，不按这个人开没开通（老虎机、无限反转，加上
-  // geniusContent.ts 里 GENIUS_LAYOUTS 那两副棋盘）。这一点是有意的：开通了
-  // 的人和没开通的人看到的该是同一张菜单，位置不该因为身份而漂。
+  // 四副《更多布局》挨在最后（10-08 方案 3-D-2：「squareDiamond、circleHex 移到倒数第 4、第
+  // 3，与其他更多布局放一起」）。从前分的是「能玩的先摆、天才特供的收在最后」：菱形方块、六
+  // 边圆球不要天才，跟在炸弹后面；七色圆球、大三角要天才，跟老虎机那三张一起收在最后——同一
+  // 组棋盘被拆在两处，而电脑上那一排、个人主页的《更多布局》都是四副摆在一起的。
+  //
+  // 次序按内容排，不按这个人开没开通。这一点是有意的：开通了的人和没开通的人看到的该是同一
+  // 张菜单，位置不该因为身份而漂。
   //
   // 宽屏（电脑、手机横着）是另一套：三排——三个基础玩法；计时 · 炸弹 · 多人
   // 游玩 · 老虎机 · 无限反转；五副棋盘。那是玩家单独点过的一套，不跟着窄屏
@@ -364,16 +366,16 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     inFlow++;
   };
   /**
-   * 天才特供的那几张先攒着，等能玩的都摆完了再一起摆到最后（只有窄屏走这
-   * 儿；宽屏那三排是各自成段的，见上面那段注释）。
+   * 最后那两段（老虎机那三张、四副《更多布局》）先攒着，等前面的都摆完了再一起摆到最后（只有窄
+   * 屏走这儿；宽屏那几排是各自成段的，见上面那段注释）。
    *
    * 攒起来而不是直接摆，是因为它们在代码里出现的次序和该摆的次序不一样：
-   * 老虎机和无限反转跟着「多人游玩」一起造出来（三张是同一个板块），两副天
-   * 才棋盘却在最后那一圈布局里。攒一攒，两处都不用为了顺序挪位置。
+   * 老虎机那三张跟着「多人游玩」一起造出来（同一个板块），计时、炸弹却在它们后面
+   * 才造。攒一攒，两处都不用为了顺序挪位置。
    */
-  const geniusTail: HTMLElement[] = [];
+  const tail: HTMLElement[] = [];
   const later = (btn: HTMLElement): void => {
-    geniusTail.push(btn);
+    tail.push(btn);
   };
 
   // ---- 每日挑战（第 19 推）-------------------------------------------------
@@ -463,8 +465,8 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 组就得写一个界面上没人见过的名字。全名留给陈列页、规则页、排行榜页签和
   // 结算页，菜单上要的只是认得出来。
   const puzzleBtn = geniusCard(ICON_PUZZLE_MODE, tag('puzzle'), 'puzzle', handlers.onPuzzleMode);
-  // 窄屏：多人游玩顺着链往下摆，老虎机和无限反转收进天才特供那一段（它们是
-  // 那一段里最前面的两张）。宽屏上这三张跟在计时和炸弹后面，凑成一排五张。
+  // 窄屏：多人游玩顺着链往下摆，老虎机、无限反转、步步为营收进最后那一段（排在四副《更多
+  // 布局》前面）。宽屏上它们跟在计时和炸弹后面，凑成一排六张。
   if (!wide) {
     place(mpBtn);
     later(slotBtn);
@@ -623,9 +625,9 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起：菱形方块、六边
   // 圆球、七色圆球、六边三角。宽屏四张自成一排。
   //
-  // 窄屏在这个次序上再分一道：能玩的两副（菱形方块、六边圆球）顺着链往下摆，
-  // 天才特供的两副（七色圆球、六边三角）收进最后那一段，排在老虎机和无限反转
-  // 后面。两副之间的先后不变。
+  // 窄屏四副一起收进最后那一段，排在老虎机那三张后面，彼此的先后不变（10-08 方案 3-D-2）。
+  // 从前这儿还要再分一道：能玩的两副顺着链往下摆，天才特供的两副才收到最后——同一组棋盘被拆
+  // 在两处，见上面那段注释。
   //
   // ⚠️ 这一圈走的是 **LAYOUT_SHAPES（三族）**，不是上面那个 SHAPES（两族）。
   // 《更多布局》按「它是哪一族的变体」分组，而六边三角仍然归三角族——拿 SHAPES
@@ -660,13 +662,12 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       isLocked ? handlers.onLockedLayout() : handlers.onSelectLayout(card.id),
     );
     if (layoutRow) layoutRow.appendChild(btn);
-    else if (isGeniusLayout(card.id)) later(btn);
-    else place(btn);
+    else later(btn);
   }
 
-  // ---- 最后那一段：天才特供 ----------------------------------------------
-  // 老虎机 · 无限反转 · 七色圆球 · V 型三角，就是它们被攒起来的次序。
-  for (const btn of geniusTail) place(btn);
+  // ---- 最后那一段：老虎机那三张 · 四副《更多布局》 -------------------------
+  // 老虎机 · 无限反转 · 步步为营 · 菱形方块 · 六边圆球 · 七色圆球 · 大三角，就是它们被攒起来的次序。
+  for (const btn of tail) place(btn);
 
   /**
    * 首玩期的《我会玩》。
