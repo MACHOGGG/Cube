@@ -231,6 +231,80 @@ console.log('');
     /关掉它会让界面上那句话变成假话/.test(src) && /GENIUS_GRANT_WINDOW/.test(src));
 }
 
+// ---- 客户端：退款 / 拒付之后，本机的权限要跟着撤（2026-10-08 方案 1-6）--------
+//
+// src/engine/creem.ts 的 webRefresh 从前把「服务器答 active: false」和「网络断了」一起折成 null，
+// 调用方（subscription.ts 的 refreshEntitlement）于是「保持原样」：退了款的那一份照旧开着权限，
+// 直到本机记的 until 自己过期。这一节把真的那两个文件打成一包，在 node 里搭一个最小的浏览器
+// （window.location、localStorage、fetch），跑三遍开机那一下。
+{
+  const { build } = await import('esbuild');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'ent-client-'));
+  await build({
+    entryPoints: [new URL('../src/engine/subscription.ts', import.meta.url).pathname],
+    bundle: true, format: 'esm', outfile: join(dir, 'subscription.mjs'), logLevel: 'error',
+  });
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+  globalThis.window = {
+    location: { protocol: 'https:', hostname: 'play-slides.com', search: '', origin: 'https://play-slides.com', pathname: '/' },
+    history: { replaceState() {} },
+  };
+  const realFetch = globalThis.fetch;
+  let answer = null; // 下一次 /api/subscription 答什么；'offline' 就是网断了
+  globalThis.fetch = async (url) => {
+    if (!String(url).includes('/api/subscription')) throw new Error('unexpected fetch: ' + url);
+    if (answer === 'offline') throw new TypeError('Failed to fetch');
+    return { ok: true, status: 200, json: async () => answer };
+  };
+  const sub = await import(join(dir, 'subscription.mjs'));
+  const EMAIL = 'refunded@example.com';
+  const TOKEN = 'DEVICE-TOKEN-1';
+  /** 本机记着「是天才、一年后才到期」——退款前的样子。 */
+  const paidCache = () => sub.setEntitlement({
+    active: true, channel: 'web', email: EMAIL, token: TOKEN, period: 'yearly', until: Date.now() + 300 * 86400e3,
+  });
+  try {
+    paidCache();
+    check('⑪ 客户端量程：本机现在是天才', sub.isGenius() === true);
+    answer = { active: false, email: EMAIL, token: TOKEN, kind: 'card' };
+    await sub.refreshEntitlement();
+    check('⑪ 服务器答 active: false（退款 / 拒付）：本机的权限撤了', sub.isGenius() === false,
+      JSON.stringify(sub.entitlement()));
+    check('⑪ 但人还登着：邮箱和令牌都还在（「登着」和「是天才」是两件事）',
+      sub.signedInEmail() === EMAIL && sub.entitlement().token === TOKEN, JSON.stringify(sub.entitlement()));
+    check('⑪ 撤了的那一份也写进了本机存档（刷新之后不会回来）',
+      JSON.parse(store.get('slides_genius') || '{}').active === false, String(store.get('slides_genius')));
+
+    paidCache();
+    answer = { active: false, email: EMAIL, kind: 'card' };
+    await sub.refreshEntitlement();
+    check('⑪ 回包里没带令牌：留着手上这一把', sub.entitlement().token === TOKEN && sub.isGenius() === false,
+      JSON.stringify(sub.entitlement()));
+
+    paidCache();
+    answer = 'offline';
+    await sub.refreshEntitlement();
+    check('⑪ 网断了（没答案）：本机那份照旧，不许当成「不是」', sub.isGenius() === true, JSON.stringify(sub.entitlement()));
+
+    paidCache();
+    answer = { active: true, email: EMAIL, token: TOKEN, kind: 'card', period: 'yearly', until: Date.now() + 300 * 86400e3 };
+    await sub.refreshEntitlement();
+    check('⑪ （尺子）还在付费：照旧是天才', sub.isGenius() === true);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete globalThis.window;
+    delete globalThis.localStorage;
+  }
+}
+
 if (useOld) rmSync(OLD, { force: true });
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);
 process.exit(fail ? 1 : 0);

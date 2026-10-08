@@ -456,11 +456,23 @@ export async function settleCheckout(checkoutId: string): Promise<Entitlement | 
  * password once. The token stands in for it; Creem is still the one who says
  * whether the subscription is paid up, so a cancelled one lapses here on its
  * own. Null means "no answer" — the caller keeps whatever it had.
+ *
+ * **「不是」也是一个答案，不是「没答案」**（2026-10-08 方案 1-6）。从前 `!reply.active` 和网
+ * 络失败一起折成 null，调用方于是「保持原样」——退了款、被拒付的那一份照旧开着权限，直到本机
+ * 记的 `until` 自己过期，最长一年。服务器答 200 而 active 为假，是真问过之后的结论（Creem 说没
+ * 有在续的订阅，或者我们自己库里那份已经过期）；问不出来是 502 / 503，落在下面的 catch 里。所
+ * 以现在 inactive 回的是一份 active: false 的权益，调用方照常 setEntitlement 把本地那份换掉。
+ *
+ * 换掉的只是「是不是天才」：邮箱和令牌照旧留着——订阅没了的人照样是他自己账号的主人（云端战
+ * 绩、寄给他的内部码都在里面），「登着」和「是天才」是两件事（CLAUDE.md 权益那一节）。服务器
+ * 这时本来就会把令牌回回来（api/subscription.js 那一段），回包里万一没带，就留着手上这一把。
  */
 export async function webRefresh(email: string, token: string): Promise<Entitlement | null> {
   try {
     const reply = await postJson<SubscriptionReply>('/api/subscription', { email, token });
-    if (!reply.active) return null;
+    if (!reply.active) {
+      return { ...toEntitlement(reply, reply.email ?? email), active: false, token: reply.token ?? token };
+    }
     return toEntitlement(reply, reply.email ?? email);
   } catch {
     return null;

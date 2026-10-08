@@ -527,6 +527,8 @@ export async function refreshEntitlement(): Promise<void> {
       const email = signedInEmail();
       const token = entitlement().token;
       if (!email || !token) return;
+      // 有答案就照答案改，「不是」也算答案（退款、拒付之后 active 为假，本地那份权限要
+      // 跟着撤，见 creem.ts 的 webRefresh）；null 才是「没问出来」，本地那份照旧。
       const current = await creem.webRefresh(email, token);
       if (current) setEntitlement(current);
       return;
