@@ -1,6 +1,7 @@
 import { buildShell } from '../ui/gameShell';
 import { applyDevDeal, devDealFor } from '../engine/devDeal';
 import { createGameController } from '../engine/gameController';
+import { slideLine } from '../engine/slideLine';
 import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
 import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
@@ -1302,14 +1303,22 @@ export function createSquareGame(): ShapeGame {
         return true;
       }
 
+      /**
+       * 松手那一下把这一行 / 这一列滑定。
+       *
+       * 滑法走 engine/slideLine（2026-10-08 方案 2-12），和其余五副一样：**转了整圈、算出来不是
+       * 一个排列，这一下都不算一步**。从前这儿自己转：只拦了「没动」（shift 为 0），拖满一整圈
+       * （6 格）盘面原样回来，却照样记一步——步步为营里就是白扣一步余步，别的玩法里步数系数
+       * 跟着吃亏。
+       */
       function applyDrag(): boolean {
         if (!drag || !drag.axis) return false;
         if (drag.axis === 'row') {
           const shift = Math.round(drag.dx / drag.cell);
-          if (shift === 0) return false;
-          const r = drag.r,
-            n = cols;
-          grid[r] = grid[r].map((_, i) => grid[r][(((i - shift) % n) + n) % n]);
+          const r = drag.r;
+          const shifted = slideLine(grid[r], shift);
+          if (!shifted) return false;
+          grid[r] = shifted;
           const mask = new Set<string>();
           for (let c = 0; c < cols; c++) mask.add(cellKey(r, c));
           seatLine(refs.boardEl, mask);
@@ -1317,11 +1326,9 @@ export function createSquareGame(): ShapeGame {
           return true;
         } else {
           const shift = Math.round(drag.dy / drag.cell);
-          if (shift === 0) return false;
-          const c = drag.c,
-            n = rows;
-          const colVals = grid.map((row) => row[c]);
-          const shifted = colVals.map((_, i) => colVals[(((i - shift) % n) + n) % n]);
+          const c = drag.c;
+          const shifted = slideLine(grid.map((row) => row[c]), shift);
+          if (!shifted) return false;
           for (let r = 0; r < rows; r++) grid[r][c] = shifted[r];
           const mask = new Set<string>();
           for (let r = 0; r < rows; r++) mask.add(cellKey(r, c));

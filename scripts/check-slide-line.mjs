@@ -53,6 +53,9 @@ const BOARDS = [
   { name: '六边小球', max: 7, steps: (k) => k, source: L.rotateSource },
   { name: '七色小球', max: 7, steps: (k) => k, source: L.rotateSource },
   { name: '菱形方块', max: 6, steps: (k) => k, source: L.rotateSource },
+  // 方块：行和列都是普通循环（2026-10-08 方案 2-12 起也走 slideLine）。消掉整行整列之后盘子变小，
+  // 线长同样什么都有可能。
+  { name: '方块', max: 6, steps: (k) => k, source: L.rotateSource },
   { name: '大三角', max: 11, steps: (k, n) => L.clampOddShift(2 * Math.round(k / 2), n), source: L.fillerAwareSource },
 ];
 for (const b of BOARDS) {
@@ -109,7 +112,7 @@ head('② 排列校验那一道真的拦得住');
 }
 
 // ── ③ 五副棋盘都接上了 ─────────────────────────────────────────
-head('③ 五副棋盘都接上了（读源码）');
+head('③ 六副棋盘都接上了（读源码）');
 /** 从 `function name(` 起，切出配对的那一段 `{ … }`。 */
 const fnBody = (src, sig) => {
   const i = src.indexOf(sig);
@@ -130,6 +133,16 @@ for (const f of OUTER) {
   if (!body) continue;
   check(`${f}：applyDrag 走 slideLine，不再自己转`, /slideLine\(/.test(body) && !/vals\.map\(\(_, i\) => vals\[/.test(body));
   check(`${f}：slideLine 回 null 就不算一步`, /if \(!shifted\) return false;/.test(body));
+}
+{
+  // 方块（2026-10-08 方案 2-12）：行、列两支都走 slideLine，回 null 就不算一步。从前它自己转，
+  // 只拦了「没动」——拖满一整圈盘面原样回来，照样记一步（步步为营里白扣一步余步）。
+  const sq = read('../src/shapes/square.ts');
+  const body = fnBody(sq, 'function applyDrag(): boolean {') || '';
+  check('square：（尺子）切得出 applyDrag', Boolean(body));
+  check('square：行、列两支都走 slideLine', (body.match(/slideLine\(/g) || []).length === 2, `${(body.match(/slideLine\(/g) || []).length} 处`);
+  check('square：两支都是「slideLine 回 null 就不算一步」', (body.match(/if \(!shifted\) return false;/g) || []).length === 2);
+  check('square：不再自己转（没有手写的循环位移）', !/% n\) \+ n\) % n\]/.test(body));
 }
 {
   const tri = read('../src/shapes/triangle.ts');

@@ -1243,6 +1243,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8997/ && break; sleep 0.25; done
           node scripts/check-daily-note.mjs http://localhost:8997/
 
+      # 方块拖满一整圈不算一步（2026-10-08 方案 2-12）：在步步为营里量（左上那一格印的是余步）——一
+      # 行、一列各拖满 6 格，余步一步不扣、那一行那一列原样；尺子：同样的手法拖一格，那一行真的变了。
+      # 从前方块自己转，只拦了「没动」，拖满一圈照样记一步。一台自己的服务器（兑一次 TESTMONTH）。
+      - name: 方块拖满一整圈不算一步
+        run: |
+          nohup node scripts/dev-server.mjs 8998 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8998/ && break; sleep 0.25; done
+          node scripts/check-square-fullturn.mjs http://localhost:8998/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。
