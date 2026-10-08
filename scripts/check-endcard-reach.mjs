@@ -35,14 +35,19 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-async function newPage(w, h) {
+/**
+ * `tipSeen`：「综合分是怎么来的」那句只在头一局讲（engine/firstPlay.ts 的 totaltip）。② ④ 量最挤的那一
+ * 种（带着它），③ 量战绩图平常有多大（不带）——E28 那条底线说的是平常那一页。
+ */
+async function newPage(w, h, tipSeen = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((tipSeen) => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
     for (const k of ['square', 'circle', 'bomb', 'slot', 'flip', 'timed', 'layout', 'endcard']) localStorage.setItem('slides_played_' + k, '1');
-  });
+    if (tipSeen) localStorage.setItem('slides_played_totaltip', '1');
+  }, tipSeen);
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
@@ -138,19 +143,19 @@ for (const [w, h] of [[320, 568], [360, 640], [375, 667], [390, 844]]) {
 }
 
 // ---------------------------------------------------------------------------
-// ③ 战绩图真的变大了（E28），而且**没把横屏那一档压坏**
+// ③ 战绩图够大（E28），而且**没把横屏那一档压坏**
 //
-// 三条 CSS 是一起的：弹窗放宽到 460、图突破那 24px 的左右内边距、高度上限改成自限
-// 公式。手机上这张图是被**宽度**卡住的，所以只放开高度没有用。
-//
-// 最后那一条是这一节真正的看门人：那三条必须写在 `.end-share` 那一段**后面**，不能
-// 挪到文件末尾——横屏那一块（`.overlay--end` 在 landscape+max-height:560 里）自己定了
-// `max-width: min(680px, 100%)`，靠源码顺序盖回来。挪到末尾的话 460 反过来压住 680，
-// 横屏那张图从 38% 掉到 23%，比不改还差。那种错不崩不报错，只是「另一个方向变难看
-// 了」，而没人会为了改竖屏去横过来看一眼。
+// E28 那一版是三条 CSS 一起：弹窗放宽到 460、图突破 24px 的左右内边距、高度上限改成自限公式。
+// 10-08 方案 3-I 照玩家的设计图重排之后，那三条换成了设计图的尺寸：窗 334×695、卡 279 宽、左右
+// 各留 27.5、在窗里居中（门 check-end-design 逐块量着）。所以这一节量的改成：
+//   · 那张图照旧 ≥ 屏高的 40%（手机）/ 42%（电脑）——E28 那两条底线照旧。量的是平常那一页（「综
+//     合分是怎么来的」那句头一局才讲，这儿预设它讲过了）；电脑上那一窗是设计图的 695 高，不跟着屏
+//     幕长，378 高的卡正好过 42%；
+//   · 图在窗里居中，宽不超过窗宽减去左右各 27.5（设计图那张 279 宽的卡）。
+// 横屏那一档另一条：窗还是宽的两栏（图在右边吃满高），不是被竖屏那一档压窄。
 // ---------------------------------------------------------------------------
 for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
-  const { ctx, p } = await newPage(w, h);
+  const { ctx, p } = await newPage(w, h, true);
   await p.$$eval('.home-icon-btn', (els) => {
     const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
     (it || els[0]).click();
@@ -171,21 +176,17 @@ for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
     return {
       有图: !!rr && rr.height > 0,
       占屏: rr ? +((rr.height / innerHeight) * 100).toFixed(1) : 0,
-      图宽: rr ? Math.round(rr.width) : 0,
-      窗宽: Math.round(m.getBoundingClientRect().width),
-      出血: (() => {
-        const f = document.querySelector('#endOverlay .end-share');
-        const cs = f ? getComputedStyle(f) : null;
-        return cs ? [cs.marginLeft, cs.marginRight].join(' ') : '';
-      })(),
+      图宽: rr ? +rr.width.toFixed(1) : 0,
+      图高: rr ? Math.round(rr.height) : 0,
+      窗宽: +m.getBoundingClientRect().width.toFixed(1),
+      偏中: rr ? +Math.abs(rr.left + rr.width / 2 - (m.getBoundingClientRect().left + m.getBoundingClientRect().width / 2)).toFixed(1) : 99,
     };
   });
   check(`${w}×${h}：战绩图画出来了（尺子）`, r.有图, JSON.stringify(r));
   check(`${w}×${h}：战绩图占屏高 ≥ ${下限}%（E28 之前是 33–41%）`, r.占屏 >= 下限, `${r.占屏}%`);
-  // 出血那一条量的是**那条规则本身**（左右各 −24px），不是「图有没有撑到那么宽」。
-  // 手机上图是被宽度卡住的，撑得满；电脑上它被高度卡住（44svh），撑不满——拿「图比
-  // 窗宽」去判，电脑那一档会红，而那不是坏事。
-  check(`${w}×${h}：图突破了弹窗的左右内边距（各 −24px）`, r.出血 === '-24px -24px', r.出血);
+  // 图是 279:378 的竖卡，在中间那一块里按比例缩：被宽卡住时宽 = 窗宽 − 55，被高卡住时更窄。
+  check(`${w}×${h}：图在窗里居中，宽不超过窗宽减去左右各 27.5（设计图那张 279 宽的卡）`,
+    r.偏中 <= 1 && r.图宽 <= r.窗宽 - 55 + 0.5, `图宽 ${r.图宽} / 窗宽 ${r.窗宽}，偏中 ${r.偏中}`);
   await ctx.close();
 }
 {
@@ -210,7 +211,7 @@ for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
     const rr = img?.getBoundingClientRect();
     return { 窗宽: Math.round(m.getBoundingClientRect().width), 占屏: rr ? +((rr.height / innerHeight) * 100).toFixed(1) : 0 };
   });
-  check('844×390 横屏：弹窗还是 680 宽（那三条没被挪到文件末尾）', r.窗宽 >= 600, `${r.窗宽}px`);
+  check('844×390 横屏：弹窗还是宽的两栏（没被竖屏那一档的 334 压窄）', r.窗宽 >= 600, `${r.窗宽}px`);
   check('844×390 横屏：图没有变小（E28 之前是 38%）', r.占屏 >= 35, `${r.占屏}%`);
   await ctx.close();
 }

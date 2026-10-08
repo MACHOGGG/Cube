@@ -1,5 +1,5 @@
 import { STRINGS, type Lang, type RuleShape } from '../i18n';
-import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE } from './ctlIcons';
+import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE, END_AGAIN, END_SHARE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, playCountdown, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
@@ -135,7 +135,8 @@ export interface ShellRefs {
   endScoreEl: HTMLElement;
   /** 总分旁边那枚通关章的落脚处。平时是空的。 */
   endStampEl: HTMLElement;
-  endAvgEl: HTMLElement;
+  /** 分数右边那一排徽章（清盘 / 解锁 1 枚）。一个都没有就是空的。 */
+  endBadgesEl: HTMLElement;
   /** 每日挑战那一局没进今日榜时说的那一句（平时藏着）。 */
   endDailyNoteEl: HTMLElement;
   endBreakdownEl: HTMLElement;
@@ -472,81 +473,66 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     </div>
 
     <!--
-      结算弹窗分三段（E21）：**头部固定 · 明细滚动 · 按钮常驻**。
+      结算弹窗（10-08 方案 3-I：照玩家上传的两张设计图重排，横线下方不许滑）。
 
-      从前整个 .modal 一起滚（max-height: 88svh 加 overflow-y: auto），于是玩家报的那件事
-      发生了：「结算弹窗下方的退出按钮甚至划不到」——内容一长（小屋那一份摞在上面、或者一
-      张战绩图），底下那排键就被推到滚动区的最下面，而他在一块会滚的东西里找一颗键。
+      从上到下三块：**抬头**（「综合得分」、分数、徽章、通关勾、明细）· **战绩图** · **三颗键**。
+      整窗一个固定的高度，什么都不滚——设计图那个高度（402×875 上 695）装得下，矮屏上缩的是
+      那张图（它在中间那一块里按比例缩，见 style.css 的 .end-body）。
 
-      三段之后：总分和那枚章**一直在眼前**（滚明细的时候也看得见自己打了多少），底下三颗
-      键**钉在窗底**，中间那一段才滚。
+      从前（E21 起）是「头部固定 · 明细滚动 · 按钮常驻」三段，中间那一段会上下滑：明细和战绩
+      图摞在一起，这一屏装不下就滑。玩家拍板：「横线下方（得分计算 + 战绩分享）容器 overflow:
+      hidden + touch-action: none，禁上下左右滑；内容压进固定高度，四语验收放得下」。所以明细挪
+      到抬头里（设计图上它就在分数底下 / 通关勾右边），战绩图自己缩，那道横线也撤了（设计图上
+      没有线）。
 
-      ⚠️ **小屋那一份（#endRoomBlock）摆进滚动段的最上面**，不在固定头部里。它是另一张榜
-      加一张战绩图，塞进头部会把头部顶到半屏高——那就等于没有固定头部。代价是它从前排在
-      标题**上面**，现在排在标题下面；换来的是那排键一直在。
+      抬头分两种排法，由 .end--stamp 切（gameController 的 stampEndCheck 按这一局有没有那枚勾
+      挂上）：
+        · 没有勾（第一张图）：标题、分数一列，徽章在分数右边，明细在分数底下；
+        · 有勾（第二张图）：左边一列标题、分数、勾，右边一列徽章、明细。
+      「该玩法您的均分」从前是分数底下单独一行大字，设计图上它是明细的最后一行。
+
+      ⚠️ 小屋那一份（#endRoomBlock，屋主中途散场、这一局转成单人打完的时候才有）是另一张榜加
+      一张战绩图，人多的时候十几行——那一种结算页装不进一个固定的高度，**只有它**还能上下滑
+      （roomLeftover.ts 挂 .end-body--room）。平时它藏着，不占地方。
     -->
     <div class="overlay overlay--end" id="endOverlay">
       <div class="modal">
         <div class="end-hazard-bg" id="endHazardBg" aria-hidden="true">💥</div>
         <div class="end-head">
-          <h2 id="endTitle">${s.endTitleDefault}</h2>
-          <div class="end-score-label">${s.compositeScoreLabel}</div>
+          <h2 class="end-title" id="endTitle">${s.compositeScoreLabel}</h2>
           <div class="big-score" id="endScore">0</div>
-          <!-- 那枚通关章：**自己一行、居中、放大到 72px**（E21）。
-               从前它 34px、挤在总分右边——一局真通关是这一页上最该被看见的那件事，而
-               34px 的勾在总分那 2.4rem 的数字旁边像个标点。
-               章只在「全部翻成点面」那一种终局出现，别的终局这个 span 是空的，而空的它
-               自己不占位（style.css 的 .end-stamp:empty）——不是画了再藏，是根本不画
-               （见 engine/kinetics.ts 的 endCheckEligible）。 -->
+          <!-- 徽章（清盘 / 解锁 1 枚），一个都没有就是空的、不占地方。 -->
+          <div class="end-badges" id="endBadges"></div>
+          <!-- 那枚通关章：只在「全部翻成点面」那一种终局出现，别的终局这个 span 是空的，而空的
+               它自己不占位（.end-stamp:empty）——不是画了再藏，是根本不画（见 engine/kinetics.ts
+               的 endCheckEligible）。设计图上它在分数底下、明细左边，88px。 -->
           <span class="end-stamp" id="endStamp" aria-hidden="true"></span>
-          <!-- What this run was worth, set against what this mode is usually
-               worth to this player — the one number that says whether it was a
-               good run, without them having to remember their own history. -->
-          <div class="end-avg" id="endAvg"></div>
+          <div class="end-breakdown" id="endBreakdown"></div>
           <!-- 每日挑战那一局没进今日榜（服务器回 late / rejected）时的那一句（2026-10-08 方案
                2-11）。平时藏着；交卷回包到了才知道要不要说，见 gameController 的 endGame。 -->
           <p class="end-daily-note" id="endDailyNote" role="status" hidden></p>
         </div>
-        <div class="end-scroll">
-        <!-- 屋主中途散场、这一局转成单人接着打完的时候，小屋那份成绩摆在这
-             儿：总排行和它的战绩图在上，底下才是这一局单人的结算和它自己那
-             张图。平时是空的、藏着的（见 roomLeftover.ts）。 -->
-        <div class="end-room" id="endRoomBlock" hidden></div>
-        <div class="end-rule" aria-hidden="true"></div>
-        <div class="end-breakdown" id="endBreakdown"></div>
-        <!-- 这一局的战绩图，就摆在这儿——玩家定的：「整合分享和结算两部分」。
-             从前这个位置是一行字（手动结束 · 共 N 步 · 用时 · 本机最佳）。那
-             行字没丢：它本来就印在图上（shareCard.ts 画的 info.detail），所以
-             这不是拿掉一件事，是让同一件事以看得见的样子出现。
+        <div class="end-body">
+          <!-- 屋主中途散场、这一局转成单人接着打完的时候，小屋那份成绩摆在这儿：总排行和它的
+               战绩图在上，底下才是这一局单人的那张图。平时是空的、藏着的（见 roomLeftover.ts）。 -->
+          <div class="end-room" id="endRoomBlock" hidden></div>
+          <!-- 这一局的战绩图——玩家定的「整合分享和结算两部分」。图是结算页露面之前就画好的
+               （gameController 的 endGame），不是等玩家按了《分享》才画：不然这块地方会先空着、
+               图落下来时整页跳一下。
 
-             图是结算页露面之前就画好的（gameController 的 endGame），不是等
-             玩家按了《分享》才画——不然这块地方会先空着、图落下来时整页跳一
-             下。底下那句「长按或右键保存」是给网页版的；小红书版的容器把长按
-             禁掉了，那一句在那儿是假话，由 xhs/src/main.ts 换成《发笔记》
-             《存相册》两颗键。 -->
-        <!--
-          战绩图**在滚动段里**，排在明细后面。
-
-          它必须在里面：竖屏上这张图是自限高的（那条 max(34svh, min(44svh, 100svh − 500px))
-          公式），可就算取下限 287px，加上头部 222、三颗键 58、内边距 56、明细 154，也还是
-          塞不进 390×844 的那 743px——所以这一页本来就非滚不可，而该滚的正是「明细 + 图」这
-          一段。放到滚动段外面试过一次：图把滚动段挤成 4px 高，明细等于看不见。
-
-          ⚠️ 横屏那一块（style.css 里 orientation: landscape and max-height: 560px）把这张
-          图**绝对定位**到右边，不是靠 grid——grid 要它是 .modal 的直接子项，而它在这儿是孙
-          子。摊平那两层包装要 display: contents，Chrome 61（小红书那一端的底线）不认它。
-          绝对定位的参照是 .modal（它有 position: relative），所以 .end-scroll 的 overflow
-          不会把它裁掉。
-        -->
-        <figure class="end-share" id="endShare" hidden>
-          <img id="endShareImg" alt="${s.shareImgAlt}" />
-          <figcaption class="hint" id="endShareHint">${s.shareHint}</figcaption>
-        </figure>
+               从前图底下有一句「长按或右键保存」，设计图上没有，撤了（那一句照旧在《分享》放大
+               看的那一窗里）。小红书那一版在这儿接两颗原生键《发笔记》《存相册》（xhs/src/main.ts
+               的 swapHintForActions，挂在这个 figure 里图的后面）。 -->
+          <figure class="end-share" id="endShare" hidden>
+            <img id="endShareImg" alt="${s.shareImgAlt}" />
+          </figure>
         </div>
-        <div class="btn-row">
-          <button class="secondary" id="endBackBtn">${s.homeBtn}</button>
-          <button class="secondary" id="shareBtn">${s.shareBtn}</button>
-          <button class="primary" id="restartBtn">${s.restartBtn}</button>
+        <!-- 三颗键：再来 · 分享 · 主页（设计图的次序），只有记号没有字（读屏名在 aria-label）。
+             颜色是《色卡》那三支：玫红、蓝、橙。 -->
+        <div class="btn-row end-actions">
+          <button class="end-act end-act--again" id="restartBtn" aria-label="${s.restartBtn}">${END_AGAIN}</button>
+          <button class="end-act end-act--share" id="shareBtn" aria-label="${s.shareBtn}">${END_SHARE}</button>
+          <button class="end-act end-act--home" id="endBackBtn" aria-label="${s.homeBtn}">${CTL_BACK}</button>
         </div>
       </div>
     </div>
@@ -823,7 +809,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     startOverlay: req('startOverlay'),
     pauseOverlay: req('pauseOverlay'),
     endOverlay: req('endOverlay'),
-    endAvgEl: req('endAvg'),
+    endBadgesEl: req('endBadges'),
     endDailyNoteEl: req('endDailyNote'),
     endHazardBgEl: req('endHazardBg'),
     endTitleEl: req('endTitle'),

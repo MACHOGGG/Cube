@@ -624,7 +624,7 @@ export interface I18nStrings {
   restartConfirm: string;
   /** 暂停面板里《结束游戏》——从前底排那一颗《完成》。 */
   endRunBtn: string;
-  endTitleDefault: string;
+  /** 结算弹窗的标题（10-08 方案 3-I 起它就是标题，从前是「挑战结束」底下那一行小字）。 */
   compositeScoreLabel: string;
   /** "Your average in this mode" on the end-of-run summary. */
   avgScoreLabel: string;
@@ -690,8 +690,13 @@ export interface I18nStrings {
   slotBonusLabel: string;
   /** 「拼出分」——翻面分 + 削线分，无任何过程系数。 */
   builtScoreLabel: string;
-  /** 「步数系数」；副标「{p} 步 · 基准 {par}」。 */
+  /** 「步数系数」；副标「{p}步，基准{par}」。 */
   stepCoefLabel: string;
+  /**
+   * 中文两份是紧凑写法「19步，基准28」（10-08 方案 3-I：结算弹窗设计图上就是这么写的）。从前是
+   * 「19 步 · 基准 28」，比图上宽 19px——明细里数的那一栏因此比图上靠右 17px，有通关勾的那种排法
+   * 里这一行还被折成两行。
+   */
   stepCoefDetail: string;
   /** 「综合分」——拼出分 × 步数系数。 */
   compositeLabel: string;
@@ -1091,7 +1096,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restartRunBtn: 'Play again',
     restartConfirm: 'Start over?',
     endRunBtn: 'End game',
-    endTitleDefault: 'Challenge complete',
     compositeScoreLabel: 'Composite score',
     avgScoreLabel: 'Your average in this mode',
     soundBtn: 'Sound',
@@ -1450,7 +1454,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restartRunBtn: 'Rejouer',
     restartConfirm: 'Recommencer ?',
     endRunBtn: 'Terminer',
-    endTitleDefault: 'Défi terminé',
     compositeScoreLabel: 'Score composite',
     avgScoreLabel: 'Votre moyenne dans ce mode',
     soundBtn: 'Son',
@@ -1809,7 +1812,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restartRunBtn: '再來一局',
     restartConfirm: '重新開一局？',
     endRunBtn: '結束遊戲',
-    endTitleDefault: '挑戰結束',
     compositeScoreLabel: '綜合得分',
     avgScoreLabel: '該玩法您的均分',
     soundBtn: '聲音',
@@ -1838,7 +1840,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotBonusLabel: '完成獎勵',
     builtScoreLabel: '拼出分',
     stepCoefLabel: '步數係數',
-    stepCoefDetail: '{p} 步 · 基準 {par}',
+    stepCoefDetail: '{p}步，基準{par}',
     compositeLabel: '綜合分',
     timeNotScoredLabel: '用時 {t}（不計分）',
     badgeSwept: '清盤',
@@ -2168,7 +2170,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restartRunBtn: '再来一局',
     restartConfirm: '重新开一局？',
     endRunBtn: '结束游戏',
-    endTitleDefault: '挑战结束',
     compositeScoreLabel: '综合得分',
     avgScoreLabel: '该玩法您的均分',
     soundBtn: '声音',
@@ -2197,7 +2198,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotBonusLabel: '完成奖励',
     builtScoreLabel: '拼出分',
     stepCoefLabel: '步数系数',
-    stepCoefDetail: '{p} 步 · 基准 {par}',
+    stepCoefDetail: '{p}步，基准{par}',
     compositeLabel: '综合分',
     timeNotScoredLabel: '用时 {t}（不计分）',
     badgeSwept: '清盘',

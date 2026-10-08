@@ -281,11 +281,7 @@ html.no-ratio .start-mark--wide {
   html.no-ratio .start-mark--wide { width: 340px; height: 175px; }
 }
 
-/* 2. 结算页上那道分隔线：min(62%, 190px) 拆成宽度加上限，两条都是老写法。 */
-html.no-clamp .end-rule {
-  width: 62%;
-  max-width: 190px;
-}
+/* 2. （空着）从前是结算页那道分隔线 .end-rule 的老写法；10-08 方案 3-I 照设计图把那道线撤了。 */
 
 /* 3. 分享窗口的宽度上限：min(620px, 100%) 里的 100% 对一个块级元素是多余的
       （它本来就不会超过容器），所以只留那道像素上限就等价。横屏那一版是

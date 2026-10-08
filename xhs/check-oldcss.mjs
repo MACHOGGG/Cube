@@ -105,8 +105,10 @@ const isHost = (sel) => WRAP_HOSTS.some((h) => sel === h || sel.indexOf(h) >= 0)
  */
 const LOOSE = {
   结算页: {
-    // 分隔线：宽度跟着上面那块分数走。
-    '.end-rule': ['x', 'w'],
+    // 明细那张表：10-08 方案 3-I 起它在抬头那张网格里，整块居中——网格多宽由分数那一格（这一局的分数，
+    // 两遍不一样）和数那一栏的宽推出来，于是它的 x 和宽跟着分数走。从前这一格是那道分隔线 .end-rule
+    // （宽度跟着上面那块分数走），3-I 照设计图把线撤了。
+    '.end-breakdown': ['x', 'w'],
     // 三颗键：整排被左边那一列推着走，宽高本来就归 WRAP_HOSTS 管。
     '.btn-row': ['x'],
     '.btn-row button': ['x'],
@@ -376,24 +378,18 @@ const SCREENS = [
     // ⚠️ `.end-share` 同理，2026-10-03 才量：横屏那一版把战绩图绝对定位到窗子右半边
     // （`top: 50%` ＋ `translateY(-50%)` ＋ `width: 32vw`），而这一块从前一个选择器都没进
     // 来——图被裁掉半截也没人看得见。
-    sels: ['.overlay--end', '.overlay--end .modal', '.end-rule', '.end-breakdown', '.btn-row', '.btn-row button', '.end-share', '.end-share img'],
+    sels: ['.overlay--end', '.overlay--end .modal', '.end-head', '.end-breakdown', '.end-body', '.btn-row', '.btn-row button', '.end-share', '.end-share img'],
     nonzero: ['.end-share img'],
     /*
-     * 「整块在窗里」只在**横屏**量（第 14 推起）。
+     * 「整块在窗里」两种朝向都量（10-08 方案 3-I 起）。
      *
-     * 这一条是为横屏那一版加的：那儿战绩图是绝对定位到窗子右半边的，参照是 .modal，滚动段
-     * 的 overflow 管不到它——出了窗框就是被裁掉，没有别的办法看见。竖屏不一样：图在滚动段
-     * 里（gameShell.ts 那段注释：「这一页本来就非滚不可，而该滚的正是『明细 + 图』这一
-     * 段」），滚动段里的东西超出窗框是设计本身，滚就看得到。
-     *
-     * 第 14 推这一端接上了「综合得分怎么算」那一句（头一回的结算页多一行，34px），竖屏上
-     * 「图 + 发笔记 / 存相册两颗键」那一整块的下沿于是超出窗框 20px——那两颗键本来就在折叠
-     * 线下面要滚才看得到，网页端头一回的结算页也是同样的几何（图的下沿同样在滚动段下面
-     * 24px）。所以竖屏改量**图本身**没被窗框裁掉：图要是被顶出了窗框，那才是滚也滚不全。
+     * 第 14 推那一版只在横屏量整块（竖屏那时图在滚动段里，超出窗框是设计本身，滚就看得到）。3-I 照设计
+     * 图什么都不滑了：图在中间那一块里自己缩，这一端图底下还接着《发笔记》《存相册》两颗键——它们得和
+     * 图一起整个待在窗里，不然就是看不见、也滚不到。抬头（分数、明细）也一样。
      */
     inside: [
-      ['.end-share', '.overlay--end .modal', 'landscape'],
-      ['.end-share img', '.overlay--end .modal', 'portrait'],
+      ['.end-share', '.overlay--end .modal'],
+      ['.end-head', '.overlay--end .modal'],
     ],
   },
   {
@@ -411,8 +407,9 @@ const SCREENS = [
     async go(p) {
       await toBoard(p, 0);
       await playAndFinish(p);
+      // 字和读屏名两样都认：10-08 方案 3-I 起结算页那三颗只有记号，名字在 aria-label 上。
       for (const btn of await p.$$('.endcard button, .modal button')) {
-        const t = (await btn.textContent())?.trim() || '';
+        const t = (await btn.textContent())?.trim() || (await btn.getAttribute('aria-label')) || '';
         if (/菜单|返回|主页/.test(t)) {
           await btn.click();
           break;
@@ -444,8 +441,9 @@ const SCREENS = [
     async go(p) {
       await toBoard(p, 0);
       await playAndFinish(p);
+      // 字和读屏名两样都认：10-08 方案 3-I 起结算页那三颗只有记号，名字在 aria-label 上。
       for (const btn of await p.$$('.endcard button, .modal button')) {
-        const t = (await btn.textContent())?.trim() || '';
+        const t = (await btn.textContent())?.trim() || (await btn.getAttribute('aria-label')) || '';
         if (/菜单|返回|主页/.test(t)) {
           await btn.click();
           break;

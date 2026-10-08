@@ -829,14 +829,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const host = refs.endStampEl;
     host.textContent = '';
     host.classList.remove('end-stamp--drawn');
+    // 有没有这枚勾，抬头是两种排法（10-08 方案 3-I 的两张设计图）：有勾的时候勾在左边那一列、
+    // 明细在右边那一列；没有就是明细在分数底下。见 style.css 的 .end--stamp。
+    refs.endOverlay.classList.toggle('end--stamp', endCheckEligible(reason));
     if (!endCheckEligible(reason)) return;
-    // 描的是同一个 --accent-2（整线奖励那支绿）：全站「这件事成了」都是它。
+    // 颜色和粗细照设计图（10-08 方案 3-I）：88px 的圈、环宽 13、勾也是粗的一笔——从前是细线描的
+    // 72px（环宽 3）。颜色走 --end-ok（浅色主题里就是设计图那支 #00AC00，深色和色盲另有一档）。
     host.innerHTML =
       '<svg viewBox="0 0 40 40" aria-hidden="true">' +
       '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none"' +
-      ' stroke="var(--accent-2)" stroke-width="3"/>' +
-      '<path class="end-stamp-tick" d="M12 20.5 L17.5 26 L28 14" fill="none"' +
-      ' stroke="var(--accent-2)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      ' stroke="var(--end-ok)" stroke-width="5.9"/>' +
+      '<path class="end-stamp-tick" d="M11.3 18.2 L16.6 25.6 L28.6 12.6" fill="none"' +
+      ' stroke="var(--end-ok)" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>';
     if (reducedMotion()) {
       // 直接就是画完的样子（那两条 transition 在 reduced-motion 下是 none）。
@@ -1026,7 +1030,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     };
 
     refs.endHazardBgEl.classList.toggle('show', hazardEnd);
-    refs.endTitleEl.textContent = s.endTitleDefault;
+    // 结算弹窗的标题就是「综合得分」（10-08 方案 3-I 的设计图）：从前是「挑战结束」一行大字、底下
+    // 再一行小字「综合得分」，设计图上只剩后者，站在标题的位置。
+    refs.endTitleEl.textContent = s.compositeScoreLabel;
     // 总分一位一位滚上去（engine/odometer.ts）。局内那一套滚筒不动——两套数数
     // 系统不并存，这一套只管结算页和排行榜自己那一行。
     rollOdometer(refs.endScoreEl, total);
@@ -1037,7 +1043,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const avg = Math.round(
       (past.reduce((sum, r) => sum + (r.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
     );
-    refs.endAvgEl.textContent = `${s.avgScoreLabel} = ${avg}`;
     // 「没进今日榜」那一句先藏起来：它属于上一局，这一局要不要说，等交卷回包（见下面 pushRun）。
     refs.endDailyNoteEl.hidden = true;
     refs.endDailyNoteEl.textContent = '';
@@ -1046,16 +1051,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
      *
      * 一个都没有就整条不摆——摆一行空的等于告诉玩家「这儿本来该有东西」。
      */
+    // 设计图（10-08 方案 3-I）上徽章站在分数右边，不再是明细底下一排——#endBadges 是抬头里单独
+    // 的一格。
     const badges = runBadges(lastRun, hooks.lang);
+    refs.endBadgesEl.innerHTML = badges.map((b) => `<span class="end-badge">${escHtml(b)}</span>`).join('');
     refs.endBreakdownEl.innerHTML =
       runBreakdown(lastRun, hooks.lang)
         .map(([label, value]) =>
-          `<div class="end-row${isSumRow(label, hooks.lang) ? ' end-row--sum' : ''}">` +
+          // 设计图上只有「综合分」那一行是粗的（拼出分和别的行一样细），所以那一行另挂一个类。
+          `<div class="end-row${isSumRow(label, hooks.lang) ? (label === s.compositeLabel ? ' end-row--sum end-row--total' : ' end-row--sum') : ''}">` +
           `<span>${label}</span><span>${value}</span></div>`)
         .join('') +
-      (badges.length
-        ? `<div class="end-badges">${badges.map((b) => `<span class="end-badge">${escHtml(b)}</span>`).join('')}</div>`
-        : '') +
+      // 「该玩法您的均分」：设计图上是明细的最后一行（从前是分数底下单独一行大字，#endAvg）。
+      // 整句一个格子，横跨两栏。
+      `<div class="end-row end-row--avg"><span>${escHtml(`${s.avgScoreLabel} = ${avg}`)}</span></div>` +
       // 「综合分是怎么来的」摆在这儿，只摆头一回。
       //
       // 玩家 2026-09 定的：从前它在棋盘底下那块教学条上，和「这一局怎么结束」并成

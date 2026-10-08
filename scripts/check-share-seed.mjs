@@ -1,23 +1,24 @@
 /**
- * 分享卡上那一行「种子 XXXX-XXXX」（第 19 推）。
+ * 分享卡上那一行「代号 XXXX-XXXX」（第 19 推；10-08 方案 3-I 起按设计图摆）。
  *
  *   npm run build
  *   node scripts/dev-server.mjs 8975 dist
  *   node scripts/check-share-seed.mjs http://localhost:8975/
  *
- * 方案原话：「二维码说明下方加『种子 XXXX-XXXX』（JetBrains Mono），每日挑战再加『· 每日 MM/DD』……
- * 旧记录没有种子就不画」。
+ * 方案原话（第 19 推）：「二维码说明下方加『种子 XXXX-XXXX』……每日挑战再加『· 每日 MM/DD』……旧记录没有
+ * 种子就不画」。10-08 方案 3-I 起单人那张卡照玩家的设计图画：二维码底下一窄条，第一行「扫码来 Slides～」、
+ * 第二行「代号 XXXX-XXXX」（设计图上就是这两行）；每日挑战那一局「每日 MM/DD」连在第二行放不下那一窄条，
+ * 另起第三行（shareCard.ts 的 seedLinesOf）。明细那一列从卡上撤了（结算弹窗上一行一行摆着），所以从前
+ * 「种子那一行要在明细第一行上面、两行不叠」那几条没有对象了。
  *
- * 这张卡是画在画布上再导出成 PNG 的，所以照 check-share-end 的办法量像素：往本机存档里塞三份造
- * 好的局（带种子、带种子又是每日挑战、老档没有种子），从成绩页点开那张图，把 PNG 解回画布，看右
- * 上角二维码说明底下那一带：
+ * 这张卡是画在画布上再导出成 PNG 的，所以照 check-share-end 的办法量像素：往本机存档里塞三份造好的局
+ * （带种子、带种子又是每日挑战、老档没有种子），从成绩页点开那张图，把 PNG 解回画布，看二维码底下那一
+ * 窄条（卡片坐标 x 440–700、y 285–400）切出几行字：
  *
- *   · 那一行用的是 #5b5650（和二维码说明同一个深灰），明细那一列是更浅的 #8b8680——按颜色就分
- *     得开「这一行」和「明细第一行」，不用猜字形；
- *   · 带种子：二维码说明底下有一行深灰的字，而且它整个在明细第一行**上面**（明细往下让了一行，
- *     两行不叠）；
- *   · 每日挑战：同一行更长（多了「· 每日 10/03」）；
- *   · 老档：那一带一个深灰像素都没有。
+ *   · 带种子：两行（说明、代号），第二行在第一行底下、不叠；
+ *   · 每日挑战：三行（多出「每日 10/03」那一行）；
+ *   · 老档：一行（只有说明）。
+ *   · 三张图上那几行都是深红 #943D40（和结算弹窗上的分数同一支），居中在二维码的中线上。
  */
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
@@ -62,13 +63,9 @@ function makeRun(extra) {
 }
 
 /**
- * 卡上右上角那一带（卡片坐标 x 340–640、y 140–260）切成一行一行的字，每一行报它的上下沿、左沿，
- * 和它主要是哪个颜色。
- *
- * 不按「哪个像素是什么颜色」直接下结论：字的边缘抗锯齿出来的过渡色里，深灰那一行也有不少像素落
- * 在浅灰的范围里——一行字有七百多像素宽，每一排像素上的过渡色加起来能有几十个（第一版就这样把
- * 种子那一行当成了明细第一行）。所以先按「有墨」把一行一行切出来，再看每一行里**字身**（离两种
- * 颜色都很近的那些像素）哪一种多。
+ * 二维码底下那一窄条（卡片坐标 x 440–700、y 285–400）切成一行一行的字，每一行报它的上下沿、中线，
+ * 和字身是不是那支深红。底色 #FFEDC8，离它远的就是墨；先按「有墨」把一行一行切出来（中间空一两排也
+ * 算同一行——汉字上下两笔之间会断开），再看每一行的字身离 #943D40 近不近。
  */
 const SAMPLE = () => {
   const img = document.querySelector('.overlay--top .share-modal img');
@@ -82,37 +79,36 @@ const SAMPLE = () => {
       c.height = probe.naturalHeight;
       const g = c.getContext('2d');
       g.drawImage(probe, 0, 0);
-      const X0 = Math.round(340 * k), X1 = Math.round(640 * k) + 2;
-      const Y0 = Math.round(140 * k), Y1 = Math.round(260 * k);
+      const X0 = Math.round(440 * k), X1 = Math.round(700 * k);
+      const Y0 = Math.round(285 * k), Y1 = Math.round(400 * k);
       const w = X1 - X0, h = Y1 - Y0;
       const d = g.getImageData(X0, Y0, w, h).data;
-      const near = (i, r, gg, b, tol) => Math.abs(d[i] - r) <= tol && Math.abs(d[i + 1] - gg) <= tol && Math.abs(d[i + 2] - b) <= tol;
-      // 底色 #faf9f5：离它远的就是墨。
-      const ink = (i) => Math.abs(d[i] - 0xfa) + Math.abs(d[i + 1] - 0xf9) + Math.abs(d[i + 2] - 0xf5) > 60;
+      const ink = (i) => Math.abs(d[i] - 0xff) + Math.abs(d[i + 1] - 0xed) + Math.abs(d[i + 2] - 0xc8) > 60;
+      const red = (i) => Math.abs(d[i] - 0x94) <= 24 && Math.abs(d[i + 1] - 0x3d) <= 24 && Math.abs(d[i + 2] - 0x40) <= 24;
       const rows = [];
       for (let y = 0; y < h; y++) {
-        let n = 0, dark = 0, light = 0, left = Infinity;
+        let n = 0, r = 0, left = Infinity, right = -Infinity;
         for (let x = 0; x < w; x++) {
           const i = (y * w + x) * 4;
           if (!ink(i)) continue;
           n++;
+          if (red(i)) r++;
           left = Math.min(left, x);
-          if (near(i, 0x5b, 0x56, 0x50, 18)) dark++;
-          else if (near(i, 0x8b, 0x86, 0x80, 10)) light++;
+          right = Math.max(right, x);
         }
-        rows.push({ n, dark, light, left });
+        rows.push({ n, r, left, right });
       }
-      // 连着有墨的那几排像素算一行字（中间空一两排也算同一行——汉字上下两笔之间会断开）。
       const lines = [];
       let cur = null, gap = 0;
       for (let y = 0; y < h; y++) {
-        const r = rows[y];
-        if (r.n >= 2) {
-          if (!cur) cur = { top: y, bottom: y, dark: 0, light: 0, left: Infinity };
+        const row = rows[y];
+        if (row.n >= 2) {
+          if (!cur) cur = { top: y, bottom: y, n: 0, r: 0, left: Infinity, right: -Infinity };
           cur.bottom = y;
-          cur.dark += r.dark;
-          cur.light += r.light;
-          cur.left = Math.min(cur.left, r.left);
+          cur.n += row.n;
+          cur.r += row.r;
+          cur.left = Math.min(cur.left, row.left);
+          cur.right = Math.max(cur.right, row.right);
           gap = 0;
         } else if (cur) {
           gap++;
@@ -122,8 +118,8 @@ const SAMPLE = () => {
       if (cur) lines.push(cur);
       const u = (v, o) => Math.round(((v + o) / k) * 10) / 10;
       res(lines.map((l) => ({
-        top: u(l.top, Y0), bottom: u(l.bottom, Y0), left: u(l.left, X0),
-        tone: l.dark > l.light ? 'dark' : 'light', dark: l.dark, light: l.light,
+        top: u(l.top, Y0), bottom: u(l.bottom, Y0), mid: u((l.left + l.right) / 2, X0), width: u(l.right - l.left, 0),
+        red: l.r / l.n,
       })));
     };
     probe.onerror = () => res(null);
@@ -161,29 +157,21 @@ async function cardFor(run) {
 const plain = await cardFor(makeRun({ seed: '4A4TYZXZ', seedSource: 'entered' }));
 const daily = await cardFor(makeRun({ seed: '4A4TYZXZ', seedSource: 'daily', daily: '20261003' }));
 const old = await cardFor(makeRun({}));
-const show = (ls) => (ls ? ls.map((l) => `${l.tone}@${l.top}-${l.bottom}(左 ${l.left})`).join(' ') : '没拿到图');
+const show = (ls) => (ls ? ls.map((l) => `${l.top}-${l.bottom}(中 ${l.mid} 宽 ${l.width} 红 ${(l.red * 100).toFixed(0)}%)`).join(' ') : '没拿到图');
+// 二维码在卡片坐标 465–681，中线 573。
+const centred = (ls) => !!ls && ls.every((l) => Math.abs(l.mid - 573) <= 4);
+const stacked = (ls) => !!ls && ls.every((l, i) => i === 0 || l.top > ls[i - 1].bottom + 2);
+const allRed = (ls) => !!ls && ls.every((l) => l.red >= 0.3);
 
-/** 二维码说明（第一行深灰）之后的那几行：种子那一行（深灰）、明细第一行（浅灰）。 */
-const parts = (ls) => {
-  if (!ls || ls.length < 2) return null;
-  const [caption, ...rest] = ls;
-  const seed = rest[0]?.tone === 'dark' ? rest[0] : null;
-  const firstRow = rest.find((l) => l.tone === 'light') ?? null;
-  return { caption, seed, firstRow };
-};
-const P = parts(plain), D = parts(daily), O = parts(old);
-check('（尺子）三张图都切得出字：第一行是二维码说明（深灰），后面有明细（浅灰）',
-  !!P && !!D && !!O && [P, D, O].every((x) => x.caption.tone === 'dark' && !!x.firstRow),
+check('（尺子）三张图都切得出字：二维码底下至少有一行（那句说明）', !!plain?.length && !!daily?.length && !!old?.length,
   `带种子 ${show(plain)} ｜ 每日 ${show(daily)} ｜ 老档 ${show(old)}`);
-check('带种子：二维码说明底下是一行深灰的字（种子那一行）', !!P?.seed, show(plain));
-check('带种子：那一行整个在明细第一行上面（两行不叠）', !!P?.seed && P.firstRow.top > P.seed.bottom + 2,
-  P?.seed ? `种子那一行 ${P.seed.top}–${P.seed.bottom} / 明细第一行顶 ${P.firstRow.top}` : '');
-check('老档没有种子：二维码说明底下直接是明细（没有那一行）', !!O && !O.seed, show(old));
-check('老档的明细比带种子那张高一行（带种子时明细整列往下让了 ≥ 20）', !!O && !!P && P.firstRow.top - O.firstRow.top >= 20,
-  `老档 ${O?.firstRow.top} / 带种子 ${P?.firstRow.top}`);
-check('每日挑战：同一行更长（多了「· 每日 10/03」，左沿往左伸出一截）', !!D?.seed && !!P?.seed && P.seed.left - D.seed.left >= 40,
-  `普通 ${P?.seed?.left} / 每日 ${D?.seed?.left}`);
-check('每日挑战：那一行同样整个在明细上面', !!D?.seed && D.firstRow.top > D.seed.bottom + 2, D?.seed ? `${D.seed.bottom} / ${D.firstRow.top}` : '');
+check('带种子：二维码底下两行（说明、代号），上下不叠', plain?.length === 2 && stacked(plain), show(plain));
+check('每日挑战：三行（多出「每日 10/03」那一行，「代号」那一行放不下它），上下不叠', daily?.length === 3 && stacked(daily), show(daily));
+check('每日挑战：代号那一行和不是每日的那张一样宽（每日那一截没挤进同一行）',
+  plain?.length === 2 && daily?.length === 3 && Math.abs(plain[1].width - daily[1].width) <= 2, `${plain?.[1]?.width} / ${daily?.[1]?.width}`);
+check('老档没有种子：只有那一行说明', old?.length === 1, show(old));
+check('三张图上这几行都居中在二维码的中线上（±4）', centred(plain) && centred(daily) && centred(old), `${show(plain)} ｜ ${show(daily)} ｜ ${show(old)}`);
+check('这几行都是那支深红 #943D40（设计图上的颜色）', allRed(plain) && allRed(daily) && allRed(old), `${show(plain)} ｜ ${show(daily)}`);
 
 await browser.close();
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

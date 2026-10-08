@@ -162,8 +162,9 @@ let bombShare = null;
   await page.waitForSelector('#shareOverlay.show', { timeout: 10000 });
   await page.waitForFunction(() => document.getElementById('shareImage')?.naturalWidth > 0, { timeout: 15000 });
 
-  // 标志画在玩法名右边那一条里。背景是米白、玩法名是灰的，只有标志是红的
-  // ——所以数「明显偏红」的像素，有就是画上去了。
+  // 标志画在玩法名右边那一条里（10-08 方案 3-I 起那一条在 Slides 底下：画布 y 160–214）。底是米黄、
+  // 玩法名是黑的，只有标志是砖红的——所以数「明显偏红」的像素，有就是画上去了。综合分也是深红，可它
+  // 在这一条底下（画布 y 230 起），范围卡在 218 以上就不会把它数进来。
   bombShare = await page.evaluate(async () => {
     const img = document.getElementById('shareImage');
     const scale = img.naturalWidth / 720; // 画布是按 720 的逻辑宽出的
@@ -171,9 +172,9 @@ let bombShare = null;
     c.width = img.naturalWidth;
     c.height = img.naturalHeight;
     c.getContext('2d').drawImage(img, 0, 0);
-    // 玩法名右边、标题那一行：x 从 80+80 起，y 在 84..116
-    const x0 = Math.round(160 * scale), y0 = Math.round(84 * scale);
-    const w = Math.round(300 * scale), h = Math.round(34 * scale);
+    // 玩法名右边那一条：x 从 160 起（二维码那一栏 465 以左），y 在 150..218
+    const x0 = Math.round(160 * scale), y0 = Math.round(150 * scale);
+    const w = Math.round(300 * scale), h = Math.round(68 * scale);
     const d = c.getContext('2d').getImageData(x0, y0, w, h).data;
     let red = 0;
     for (let i = 0; i < d.length; i += 4) {

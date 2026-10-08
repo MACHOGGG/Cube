@@ -619,15 +619,189 @@ export function seedLineOf(info: Pick<ShareCardInfo, 'seed' | 'lang'>): string {
 }
 
 /**
- * Renders the composed PNG data URL: the run's headline score and breakdown
- * up top, then the board as it started and as it finished, side by side, so
- * the picture shows what the run actually did rather than just where it
- * landed. A QR to the Slides page sits in the top corner.
+ * 种子那一段拆成行（单人那张卡用，10-08 方案 3-I）：「代号 XXXX-XXXX」一行，每日挑战再另起一行
+ * 「每日 MM/DD」。
+ *
+ * 设计图上这几行站在二维码底下那一窄条里（和二维码一样宽，画布上二百来个单位），「代号 …… · 每
+ * 日 10/08」连成一行在那儿放不下，所以拆开。老档没有种子就一行都没有。
+ */
+export function seedLinesOf(info: Pick<ShareCardInfo, 'seed' | 'lang'>): string[] {
+  const seed = info.seed;
+  if (!seed?.code) return [];
+  const s = STRINGS[info.lang];
+  const lines = [s.shareSeedLine.replace('{code}', formatSeed(seed.code))];
+  const m = /^\d{4}(\d{2})(\d{2})$/.exec(seed.daily ?? '');
+  if (m) lines.push(s.shareDailyTag.replace('{m}', m[1]).replace('{d}', m[2]));
+  return lines;
+}
+
+/**
+ * 单人那张卡的尺寸和颜色（10-08 方案 3-I，玩家上传的设计图）。
+ *
+ * 设计图上这张卡 279×378（402 宽的手机上量的），画布照旧按 720 宽画：一个设计像素 = 720 / 279 ≈
+ * 2.58 个画布单位。下面每个位置都是「设计图上量出来的数 × 2.58」，量的办法和量出来的数见
+ * scripts/check-end-design.mjs 文件头。
+ *
+ * 颜色不随深浅主题翻：这是一张要发出去的图，白天黑夜是同一张。
+ */
+const SOLO_H = 976;
+const SOLO_BG = '#FFEDC8';
+const SOLO_PANEL = '#EAD3AE';
+const SOLO_INK = '#000000';
+/** 综合分、二维码底下那几行：和结算弹窗上的分数、明细同一支深红。 */
+const SOLO_RED = '#943D40';
+/** 二维码：右上角，设计图 85×83 的那个灰块（画布上取 216 见方，二维码得是正方形）。 */
+const SOLO_QR = { x: 465, y: 75, size: 216 };
+/** 二维码底下那几行：第一行的基线，行距，字号上下限，最宽（左右各让到离卡边 20）。 */
+const SOLO_CAP = { y: 312, step: 34, px: 23, minPx: 16, maxW: 260 };
+/** 两块棋盘（开局 / 终局）：设计图 131.5 见方、中间隔 9，几乎贴着卡的左右边。 */
+const SOLO_PAIR = { size: 340, gap: 22, y: 457 };
+/** 全部消完了（终局那一块一枚不剩）：只摆开局那一块，设计图 196 见方、正中。 */
+const SOLO_ONE = { size: 506, y: 428 };
+const SOLO_PANEL_R = 46;
+/**
+ * 卡上那个综合分竖着校正一点：画布里的 Fraunces 不跟字号换光学尺寸（网页上 63px 的字用的是 63 那
+ * 一档字形，画布一律用默认那一档），同样宽的「430」画出来比网页上矮一截——设计图上它是 99×48，和
+ * 弹窗上那个分数同一个比例。所以竖着拉 1.06 倍补回来，宽不动。
+ */
+const SOLO_SCORE_STRETCH = 1.06;
+
+/**
+ * 单人那一局的战绩卡，照玩家的设计图画（10-08 方案 3-I：「严格按玩家上传的设计图像素对齐」）。
+ *
+ * 从上到下：Slides；「棋盘名 - 玩法标志」；综合分（深红）；右上角二维码，底下「扫码来 Slides～」
+ * 「代号 ……」；开局、终局两块棋盘并排。全部消完了就只摆开局那一块，放大摆在正中——终局那一块
+ * 是空的，摆一块空板子等于什么也没说。
+ *
+ * 和从前那一张比少了四样，都是设计图上没有的：明细那一列（结算弹窗上一行一行摆着）、「手动结束
+ * · 共 N 步 · 用时 · 本机最佳」那一句、两块棋盘底下的《开始》《结束》、最底下那句玩法说明。
+ */
+function renderSoloCard(info: ShareCardInfo, endSnap: BoardSnapshot | null, startSnap: BoardSnapshot | null): string {
+  const s = STRINGS[info.lang];
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  canvas.width = CARD_W * EXPORT_SCALE;
+  canvas.height = SOLO_H * EXPORT_SCALE;
+  ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
+  ctx.textBaseline = 'alphabetic';
+
+  ctx.fillStyle = SOLO_BG;
+  ctx.fillRect(0, 0, CARD_W, SOLO_H);
+  if (info.hazardEnd) {
+    ctx.save();
+    ctx.globalAlpha = 0.14;
+    ctx.font = `${SOLO_H * 0.85}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💥', CARD_W / 2, SOLO_H / 2);
+    ctx.restore();
+  }
+
+  // 「Slides」：设计图上是常规字重的一行（宽 88、高 31，比例正好是画布里 Fraunces 400 的那个比例）。
+  ctx.fillStyle = SOLO_INK;
+  ctx.font = '400 101px "Fraunces", serif';
+  ctx.fillText('Slides', 79, 159);
+
+  // 二维码和它底下那几行。说明居中在二维码的中线上，一行放不下就往下缩字号（法语那一句最长）。
+  drawQr(ctx, SOLO_QR.x, SOLO_QR.y, SOLO_QR.size);
+  const karla = (px: number) => `500 ${px}px "Karla", sans-serif`;
+  const capX = SOLO_QR.x + SOLO_QR.size / 2;
+  ctx.fillStyle = SOLO_RED;
+  ctx.textAlign = 'center';
+  [s.shareQrCaption, ...seedLinesOf(info)].forEach((line, i) => {
+    ctx.font = karla(fitPx(ctx, line, SOLO_CAP.maxW, karla, SOLO_CAP.px, SOLO_CAP.minPx));
+    ctx.fillText(line, capX, SOLO_CAP.y + i * SOLO_CAP.step);
+  });
+  ctx.textAlign = 'left';
+
+  // 「棋盘名 - 玩法标志」：老虎机那个图案、炸弹、小屋的门，有几样排几样；一样都没有就只写棋
+  // 盘名，不挂那道「-」。设计图上字是 13.5 上下（画布 35），名字和「-」之间空 12、「-」和标志之间
+  // 空 17（画布 31、44）——比一个空格宽得多，所以「-」单独摆。标志 21 见方（画布 54）。左边从 84 起，
+  // 右边不许伸进二维码那一栏（离它 36，四格静区）。
+  const marks: ((x: number) => number)[] = [];
+  if (info.targetId) marks.push((x) => drawTargetMark(ctx, info.targetId!, x, 160, 54, SOLO_INK));
+  const imgs = [info.bomb ? BADGE_BOMB : null, info.room ? BADGE_ROOM : null].filter(
+    (img): img is HTMLImageElement => !!img?.complete && !!img.naturalWidth,
+  );
+  for (const img of imgs) {
+    marks.push((x) => {
+      const w = 54 * (img.naturalWidth / img.naturalHeight);
+      ctx.drawImage(img, x, 160, w, 54);
+      return w;
+    });
+  }
+  const markRoom = marks.length ? 31 + 10 + 44 + marks.length * 54 + (marks.length - 1) * 12 : 0;
+  const modePx = fitPx(ctx, info.shapeName, SOLO_QR.x - 36 - 84 - markRoom, karla, 35, 24);
+  ctx.font = karla(modePx);
+  ctx.fillStyle = SOLO_INK;
+  ctx.fillText(info.shapeName, 84, 202);
+  if (marks.length) {
+    const dashX = 84 + ctx.measureText(info.shapeName).width + 31;
+    ctx.fillText('-', dashX, 202);
+    let markX = dashX + ctx.measureText('-').width + 44;
+    for (const draw of marks) markX += draw(markX) + 12;
+  }
+
+  // 综合分：Fraunces 400，竖着校正 SOLO_SCORE_STRETCH（见那个常数）。位数多了先缩字号，右边不许
+  // 伸进二维码那一栏的静区——基线不动，缩了是顶上往下落。
+  const scoreText = String(info.totalScore);
+  const serif = (px: number) => `400 ${px}px "Fraunces", serif`;
+  ctx.font = serif(fitPx(ctx, scoreText, SOLO_QR.x - 36 - 66, serif, 161, 90));
+  ctx.fillStyle = SOLO_RED;
+  ctx.save();
+  ctx.translate(66, 355);
+  ctx.scale(1, SOLO_SCORE_STRETCH);
+  ctx.fillText(scoreText, 0, 0);
+  ctx.restore();
+
+  // 棋盘。终局那一块按剩下的重新铺满（livingOnly，和从前一样）；一枚不剩就只摆开局那一块。
+  const endShown = livingOnly(endSnap);
+  const swept = !!endShown && endShown.cells.length === 0;
+  const panels: [number, number, number, BoardSnapshot | null][] = swept
+    ? [[(CARD_W - SOLO_ONE.size) / 2, SOLO_ONE.y, SOLO_ONE.size, startSnap]]
+    : [
+        [(CARD_W - SOLO_PAIR.size * 2 - SOLO_PAIR.gap) / 2, SOLO_PAIR.y, SOLO_PAIR.size, startSnap],
+        [(CARD_W + SOLO_PAIR.gap) / 2, SOLO_PAIR.y, SOLO_PAIR.size, endShown],
+      ];
+  for (const [x, y, size, snap] of panels) {
+    ctx.fillStyle = SOLO_PANEL;
+    roundRect(ctx, x, y, size, size, SOLO_PANEL_R);
+    ctx.fill();
+    if (snap && snap.cells.length) {
+      const inset = size * 0.08;
+      drawSnapshot(ctx, snap, x + inset, y + inset, size - inset * 2);
+    }
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * The run's card as a PNG data URL.
+ *
+ * 单人那一局照玩家的设计图画（renderSoloCard，10-08 方案 3-I）；小屋那一局（带名次表）照旧是下
+ * 面 renderRoundCard 那一张——设计图只画了单人这一种，名次那一列在新排版里没有地方。
  */
 export function renderShareCard(
   info: ShareCardInfo,
   endSnap: BoardSnapshot | null,
   startSnap: BoardSnapshot | null = null,
+): string {
+  if (!info.standings?.length) return renderSoloCard(info, endSnap, startSnap);
+  return renderRoundCard(info, endSnap, startSnap);
+}
+
+/**
+ * 小屋那一局的卡：the run's headline score and breakdown up top, then the
+ * board as it started and as it finished, side by side, so the picture shows
+ * what the run actually did rather than just where it landed — with the
+ * room's places beside the two (shrunken) boards. A QR to the Slides page
+ * sits in the top corner.
+ */
+function renderRoundCard(
+  info: ShareCardInfo,
+  endSnap: BoardSnapshot | null,
+  startSnap: BoardSnapshot | null,
 ): string {
   const s = STRINGS[info.lang];
   const gap = 28;

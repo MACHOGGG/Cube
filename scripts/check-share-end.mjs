@@ -77,8 +77,15 @@ function makeRun(alive) {
   };
 }
 
-/** 导出的那张 PNG 里，「结束」那一格的样子。坐标照 shareCard 的排版算。 */
-const SAMPLE = () => {
+/**
+ * 导出的那张 PNG 里，「结束」那一格（或者全部消完时那唯一一块）的样子。坐标照 shareCard 的排版算。
+ *
+ * 10-08 方案 3-I 起单人那张卡是按设计图画的定排版（renderSoloCard）：卡 720×976，两块棋盘边长 340、
+ * 中间隔 22、顶在 457——「结束」那一块左沿 (720 + 22) / 2 = 371；全部消完了就只摆开局那一块，506 见方、
+ * 左右居中、顶在 428（shareCard.ts 的 SOLO_PAIR / SOLO_ONE）。从前那一版的棋盘要从图的总高倒推（抬头会
+ * 随语言长高），现在不用了。
+ */
+const SAMPLE = (one) => {
   const img = document.querySelector('.overlay--top .share-modal img');
   if (!img) return Promise.resolve(null);
   return new Promise((res) => {
@@ -90,23 +97,12 @@ const SAMPLE = () => {
       c.height = probe.naturalHeight;
       const g = c.getContext('2d');
       g.drawImage(probe, 0, 0);
-      const PAD = 80, gap = 28;
-      const panel = (720 - PAD * 2 - gap) / 2;
-      // 棋盘那一行摆在哪儿，是从图的实际高度倒推的，不写死。
-      //
-      // 抬头那一块会随语言和明细行数长高（法语的标签长，明细最多能有八
-      // 行），整张图跟着高，棋盘也跟着往下走。从前这儿钉着 300，那是中文
-      // 四行明细时的值——一换语言，取样窗就整个错位，量出来的「没居中」是
-      // 这个门自己看错了地方，不是图画歪了。
-      //
-      // 棋盘底下那一截是固定的：一格棋盘的高，加 110（单人图；小屋图是
-      // 132，这个门不造小屋图）。所以拿图的总高减掉它，就是棋盘的上沿。
-      const boardY = probe.naturalHeight / k - panel - 110;
-      const x = Math.round((PAD + panel + gap) * k);
-      const y = Math.round(boardY * k);
-      const w = Math.round(panel * k);
+      const [px0, py0, size] = one ? [(720 - 506) / 2, 428, 506] : [(720 + 22) / 2, 457, 340];
+      const x = Math.round(px0 * k);
+      const y = Math.round(py0 * k);
+      const w = Math.round(size * k);
       const d = g.getImageData(x, y, w, w).data;
-      let hits = 0, dark = 0;
+      let hits = 0;
       let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
       for (let i = 0; i < d.length; i += 4) {
         const px = (i / 4) % w;
@@ -117,18 +113,18 @@ const SAMPLE = () => {
           if (px < l) l = px; if (px > r) r = px;
           if (py < t) t = py; if (py > b) b = py;
         }
-        // 底是 #f0ece4，字是 #8b8680——比底暗一大截的就算字
-        if (d[i] < 0xB0 && d[i + 1] < 0xB0 && d[i + 2] < 0xB0) dark++;
       }
+      // 两块并排时左边那一块的地方（只摆一块时这儿该是卡的底色 #FFEDC8，不是棋盘底板 #EAD3AE）。
+      const side = g.getImageData(Math.round(30 * k), Math.round(600 * k), 1, 1).data;
       const R = (n) => Math.round(n * 1000) / 1000;
       res({
         size: w,
         fill: R(hits / (w * w)),
-        dark: R(dark / (w * w)),
         box: hits ? { l, t, r, b } : null,
         // 左右、上下的留白差：居中的话两边一样
         offX: hits ? R((l - (w - 1 - r)) / w) : null,
         offY: hits ? R((t - (w - 1 - b)) / w) : null,
+        side: '#' + [side[0], side[1], side[2]].map((v) => v.toString(16).padStart(2, '0')).join(''),
       });
     };
     probe.onerror = () => res(null);
@@ -136,7 +132,7 @@ const SAMPLE = () => {
   });
 };
 
-async function cardFor(page, run) {
+async function cardFor(page, run, one = false) {
   await page.addInitScript(
     ([key, r]) => {
       for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
@@ -157,7 +153,7 @@ async function cardFor(page, run) {
   await page.click('.center-pick .records-row');
   await page.waitForSelector('.overlay--top .share-modal img', { timeout: 10000 });
   await page.waitForTimeout(400);
-  return page.evaluate(SAMPLE);
+  return page.evaluate(SAMPLE, one);
 }
 
 const CASES = [
@@ -169,15 +165,18 @@ const CASES = [
 for (const cs of CASES) {
   const ctx = await browser.newContext({ viewport: { width: 900, height: 900 } });
   const page = await ctx.newPage();
-  const m = await cardFor(page, makeRun(cs.alive)).catch((e) => ({ err: String(e).slice(0, 120) }));
+  const m = await cardFor(page, makeRun(cs.alive), !cs.alive.length).catch((e) => ({ err: String(e).slice(0, 120) }));
   await ctx.close();
   if (!m || m.err) {
     check(`${cs.name}：出得了图`, false, m?.err || '没拿到图');
     continue;
   }
   if (!cs.alive.length) {
-    check('一枚不剩：那一格里没有棋子', m.fill < 0.001, `占了 ${(m.fill * 100).toFixed(1)}%`);
-    check('一枚不剩：写上了《全部消除》', m.dark > 0.002, `深色像素 ${(m.dark * 100).toFixed(2)}%`);
+    // 10-08 方案 3-I（设计图第二张）：全部消完了就不摆那块空的「结束」，只摆开局那一块、放大摆在正中
+    // ——从前是两块并排、右边那块空着写一句《全部消除》。
+    check('一枚不剩：只摆一块，是开局那一块（造的那一支铺满了它）', m.fill >= 0.3, `占了 ${(m.fill * 100).toFixed(1)}%`);
+    check('一枚不剩：那一块左右、上下居中', Math.abs(m.offX) <= 0.02 && Math.abs(m.offY) <= 0.02, `偏 ${(m.offX * 100).toFixed(1)}% / ${(m.offY * 100).toFixed(1)}%`);
+    check('一枚不剩：左边那一块的地方是卡的底色（没有第二块）', m.side === '#ffedc8', m.side);
     continue;
   }
   check(`${cs.name}：铺满了那一格`, m.fill >= cs.minFill, `占了 ${(m.fill * 100).toFixed(1)}%`);

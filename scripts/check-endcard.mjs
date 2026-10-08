@@ -63,28 +63,30 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
     const ov = document.getElementById('endOverlay');
     ov.classList.add('show');
     document.getElementById('endScore').textContent = '1,286';
-    // 通关那枚章也摆上：它现在自己一行、72px（E21），量的就是「多了这 72px 之后这一窗
-    // 还装不装得下」。只有「全部翻成点面」那一种终局才有它，而那一种正是这一窗最挤的时
-    // 候——不摆上去，下面那几条量的是较松的那一版。
+    // 通关那枚章也摆上（10-08 方案 3-I：88px，在分数底下、明细左边——抬头换成两列的那种排法）。只有
+    // 「全部翻成点面」那一种终局才有它，而那一种正是这一窗最挤的时候——不摆上去，下面那几条量的是较
+    // 松的那一版。
+    ov.classList.add('end--stamp');
     document.getElementById('endStamp').innerHTML =
       '<svg viewBox="0 0 40 40" aria-hidden="true">' +
-      '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="#5C8A72" stroke-width="3"/>' +
-      '<path class="end-stamp-tick" d="M12 20.5 L17.5 26 L28 14" fill="none" stroke="#5C8A72"' +
-      ' stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
+      '<path class="end-stamp-tick" d="M11.3 18.2 L16.6 25.6 L28.6 12.6" fill="none" stroke="var(--end-ok)"' +
+      ' stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     document.getElementById('endStamp').classList.add('end-stamp--drawn');
-    document.getElementById('endAvg').textContent = '这个玩法你平均 940 分';
+    document.getElementById('endBadges').innerHTML = '<span class="end-badge">清盘</span><span class="end-badge">解锁 1 枚</span>';
     document.getElementById('endBreakdown').innerHTML =
-      '<div class="end-row"><span>基础得分</span><span>612</span></div>' +
-      '<div class="end-row"><span>时间系数</span><span>×1.32</span></div>' +
-      '<div class="end-row"><span>有效得分率</span><span>+59%</span></div>';
-    // 战绩图现在就摆在结算页上（玩家定的「整合分享和结算」），它是这一窗里
-    // 最高的一块——不摆上去，下面那三条「按得到吗」量的就不是真的排版。
-    // 720×940，和真图同比例。
+      '<div class="end-row"><span>翻面 28 枚 ×2</span><span>56</span></div>' +
+      '<div class="end-row end-row--sum"><span>拼出分</span><span>612</span></div>' +
+      '<div class="end-row end-row--sum end-row--total"><span>综合分</span><span>1286</span></div>' +
+      // 「该玩法您的均分」3-I 起是明细的最后一行（从前是分数底下单独一行 #endAvg）。
+      '<div class="end-row end-row--avg"><span>该玩法您的均分 = 940</span></div>';
+    // 战绩图现在就摆在结算页上（玩家定的「整合分享和结算」），它是这一窗里最高的一块——不摆上去，
+    // 下面那几条「按得到吗」量的就不是真的排版。720×976，和真图（3-I 起的单人卡）同比例。
     const c = document.createElement('canvas');
-    c.width = 720; c.height = 940;
+    c.width = 720; c.height = 976;
     const g = c.getContext('2d');
     g.fillStyle = '#3D3128';
-    g.fillRect(0, 0, 720, 940);
+    g.fillRect(0, 0, 720, 976);
     document.getElementById('endShare').removeAttribute('hidden');
     document.getElementById('endShareImg').src = c.toDataURL();
   });
@@ -96,86 +98,71 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
   });
   check(`${tag} · 结算页：整窗装得进屏幕`, end.over <= 0, `超出 ${end.over}px`);
   /*
-   * **「不用下滑」那一条翻了面**（E21 / PR-16）。
+   * **「不用下滑」那一条又翻了一次面**（10-08 方案 3-I）。
    *
-   * 这一页从前是整窗一起滚，所以那时要守的是「别滚起来」——滚起来底下那排键就被推进滚动
-   * 区的最下面，而玩家报的正是「结算弹窗下方的退出按钮甚至划不到」。
+   * 最早整窗一起滚，要守的是「别滚起来」——滚起来底下那排键就被推进滚动区的最下面（玩家报的「结算
+   * 弹窗下方的退出按钮甚至划不到」）。E21 起窗分三段：头部固定、中间 `.end-scroll` 滚、底排键钉在
+   * 窗底。3-I 起照设计图什么都不滑（玩家拍板：「横线下方……overflow:hidden + touch-action:none，禁上
+   * 下左右滑；内容压进固定高度」）：中间那一块是那张图，它自己缩；明细进了抬头。
    *
-   * 现在窗分三段：头部固定、中间 `.end-scroll` 滚、底排键钉在窗底。所以**中间那一段就是
-   * 该滚的**（摆上一张 720×940 的战绩图之后必然滚），而要守的三件事换成：
-   *   · 整窗不滚（外层 overflow: hidden，滚的是里面那一段）；
-   *   · 头部不随着滚走（滚到底，总分还在原处）；
-   *   · 底排键一直在屏幕里、而且点得着（下面那一组 REACH）。
+   * 所以这儿守的是：整窗和中间那一块都不滑（overflow hidden、手指拖不动）；明细就算长到离谱（塞 30
+   * 行），整窗也不长、那排键不挪、还在屏幕里——挤掉的是明细自己的尾巴（抬头被压、多出来的裁掉）。
+   *
+   * 不用 JS 设 scrollTop 去量「滚不滚得动」：overflow hidden 的盒子脚本照样滚得动，那是空绿。
    */
   const three = await page.evaluate(async () => {
     const m = document.querySelector('#endOverlay .modal');
-    const sc = m.querySelector('.end-scroll');
-    /*
-     * **先往明细里塞到一定会溢出，再滚。**
-     *
-     * 第一版直接滚、直接量「滚得动吗」，于是横屏那一档红了：那一档的明细本来就短
-     * （六行），滚动段装得下，`scrollTop` 自然是 0——红的是尺子不是代码。而「装得下就不
-     * 滚」恰恰是对的。
-     *
-     * 要量的是「长到装不下的时候，滚的是中间那一段，而不是整窗」。所以先把它撑长：这样两
-     * 档屏幕上这条断言都量得出东西，也不会在哪天明细变短时变成空绿。
-     */
+    const body = m.querySelector('.end-body');
     const bd = document.getElementById('endBreakdown');
     const keep = bd.innerHTML;
+    const cs = (e) => getComputedStyle(e);
+    const still = {
+      modal: [cs(m).overflowY, cs(m).touchAction].join(' '),
+      body: body ? [cs(body).overflowY, cs(body).touchAction].join(' ') : '没有 .end-body',
+    };
+    const btnBefore = m.querySelector('.end-actions').getBoundingClientRect().top;
+    const modalBefore = m.getBoundingClientRect();
     bd.innerHTML = keep + Array.from({ length: 30 },
       (_, i) => `<div class="end-row"><span>撑长 ${i}</span><span>${i}</span></div>`).join('');
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-    const scoreBefore = document.getElementById('endScore').getBoundingClientRect().top;
-    const btnBefore = m.querySelector('.btn-row').getBoundingClientRect().top;
-    const modalBefore = m.getBoundingClientRect();
-    sc.scrollTop = sc.scrollHeight;
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const mAfter = m.getBoundingClientRect();
+    const btns = m.querySelector('.end-actions').getBoundingClientRect();
     const out = {
-      modalScrolls: m.scrollHeight > m.clientHeight + 1,
-      innerScrolls: sc.scrollHeight > sc.clientHeight + 1,
-      scrolledBy: Math.round(sc.scrollTop),
-      scoreMoved: Math.round(Math.abs(document.getElementById('endScore').getBoundingClientRect().top - scoreBefore)),
-      btnMoved: Math.round(Math.abs(m.querySelector('.btn-row').getBoundingClientRect().top - btnBefore)),
-      // 撑长 30 行之后整窗还在屏幕里吗（底排键是不是又被顶出去了）。
-      modalOver: Math.round(Math.max(-modalBefore.top, modalBefore.bottom - innerHeight)),
-      btnBottomOver: Math.round(m.querySelector('.btn-row').getBoundingClientRect().bottom - innerHeight),
+      still,
+      modalGrew: Math.round(mAfter.height - modalBefore.height),
+      btnMoved: Math.round(Math.abs(btns.top - btnBefore)),
+      btnBottomOver: Math.round(btns.bottom - Math.min(innerHeight, mAfter.bottom)),
+      modalOver: Math.round(Math.max(-mAfter.top, mAfter.bottom - innerHeight)),
     };
     bd.innerHTML = keep;
     return out;
   });
-  check(`${tag} · 结算页：明细撑长 30 行，中间那一段真的滚得动（尺子）`,
-    three.innerScrolls && three.scrolledBy > 10, JSON.stringify(three));
-  check(`${tag} · 结算页：整窗自己不滚（滚的是中间那一段）`, !three.modalScrolls, JSON.stringify(three));
-  check(`${tag} · 结算页：滚到底，总分还钉在原处`, three.scoreMoved <= 1, `挪了 ${three.scoreMoved}px`);
-  check(`${tag} · 结算页：滚到底，那排键也还钉在原处`, three.btnMoved <= 1, `挪了 ${three.btnMoved}px`);
-  check(`${tag} · 结算页：明细再长，整窗也不长出屏幕`, three.modalOver <= 0, `超出 ${three.modalOver}px`);
-  check(`${tag} · 结算页：明细再长，那排键也还在屏幕里`, three.btnBottomOver <= 0, `超出 ${three.btnBottomOver}px`);
+  check(`${tag} · 结算页：整窗和中间那一块都不滑（overflow hidden、touch-action none）`,
+    three.still.modal === 'hidden none' && three.still.body === 'hidden none', JSON.stringify(three.still));
+  check(`${tag} · 结算页：明细撑长 30 行，整窗也不长`, three.modalGrew <= 0 && three.modalOver <= 0, JSON.stringify(three));
+  check(`${tag} · 结算页：明细撑长 30 行，那排键不挪、还在窗里`, three.btnMoved <= 1 && three.btnBottomOver <= 0, JSON.stringify(three));
 
   /*
-   * 那枚通关章：**自己一行、居中、72px**（E21）。
+   * 那枚通关章：88px（设计图），在分数底下、明细左边，在抬头里。
    *
-   * 这三条原先是反过来的（「和总分同一行」「没把行顶高」「比总分矮」）——那是 34px 挤在分
-   * 数旁边那一版。一局真通关是这一页上最该被看见的那件事，而 34px 的勾在 2.4rem 的数字旁
-   * 边像个标点。
+   * E21 那一版是「自己一行、居中、72px」——那三条随 3-I 换成了设计图的摆法。
    */
   const stamp = await page.evaluate(() => {
     const st = document.getElementById('endStamp')?.getBoundingClientRect();
     const sc = document.getElementById('endScore')?.getBoundingClientRect();
+    const bd = document.getElementById('endBreakdown')?.getBoundingClientRect();
     const head = document.querySelector('#endOverlay .end-head')?.getBoundingClientRect();
-    if (!st || !sc || !head) return null;
+    if (!st || !sc || !head || !bd) return null;
     return {
       w: Math.round(st.width), h: Math.round(st.height),
       belowScore: st.top >= sc.bottom - 1,
-      // 居中：章的中线和头部的中线对齐。
-      offCenter: Math.round(Math.abs(st.left + st.width / 2 - (head.left + head.width / 2))),
+      leftOfRows: st.right <= bd.left + 0.5,
       inHead: st.top >= head.top - 1 && st.bottom <= head.bottom + 1,
     };
   });
-  check(`${tag} · 结算页：章放大到 72px`, stamp && stamp.w === 72 && stamp.h === 72, JSON.stringify(stamp));
-  check(`${tag} · 结算页：章自己一行，排在总分下面`, stamp && stamp.belowScore, JSON.stringify(stamp));
-  check(`${tag} · 结算页：章居中（偏离中线 ≤ 1px）`, stamp && stamp.offCenter <= 1, JSON.stringify(stamp));
-  check(`${tag} · 结算页：章在固定头部里（滚不走）`, stamp && stamp.inHead, JSON.stringify(stamp));
+  check(`${tag} · 结算页：章 88px（设计图）`, stamp && stamp.w === 88 && stamp.h === 88, JSON.stringify(stamp));
+  check(`${tag} · 结算页：章在分数底下、明细左边`, stamp && stamp.belowScore && stamp.leftOfRows, JSON.stringify(stamp));
+  check(`${tag} · 结算页：章在抬头里`, stamp && stamp.inHead, JSON.stringify(stamp));
 
   const endBtns = await page.evaluate(REACH, ['endBackBtn', 'shareBtn', 'restartBtn']);
   for (const [id, state] of Object.entries(endBtns)) {

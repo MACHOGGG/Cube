@@ -420,6 +420,28 @@ for (const key of list) {
     const tip = await p.$eval('#endOverlay', (e) => (e.querySelector('.end-row--tip') || {}).textContent || '').catch(() => '');
     say(tip.trim().length > 0, '头一回的结算页上摆着「综合得分怎么算」那一句（第 14 推）', tip.trim().slice(0, 40));
   }
+  // 结算页不滑（10-08 方案 3-I：「横线下方……overflow:hidden + touch-action:none，禁上下左右滑……XHS 端在
+  // 降级层确认 touch-action 支持」）。touch-action 是 Chrome 36 就有的老属性，降级层不用补；这儿量的是
+  // 这一版的包、这一层老内核上它真的生效了——窗和中间那一块的计算值，外加里面什么都没被裁掉（这一版
+  // 图底下多接着《发笔记》《存相册》两颗键，那一截也得装在窗里）。
+  if (endUp) {
+    const still = await p.evaluate(() => {
+      const m = document.querySelector('#endOverlay .modal');
+      const body = document.querySelector('#endOverlay .end-body');
+      if (!m || !body) return null;
+      const cs = (e) => getComputedStyle(e);
+      const mb = m.getBoundingClientRect();
+      const share = document.querySelector('#endOverlay .end-share');
+      const sb = share && !share.hidden ? share.getBoundingClientRect() : null;
+      return {
+        modal: [cs(m).overflowY, cs(m).touchAction].join(' '),
+        body: [cs(body).overflowY, cs(body).touchAction].join(' '),
+        shareIn: !sb || (sb.top >= mb.top - 1 && sb.bottom <= mb.bottom + 1 && sb.left >= mb.left - 1 && sb.right <= mb.right + 1),
+      };
+    }).catch(() => null);
+    say(!!still && still.modal === 'hidden none' && still.body === 'hidden none' && still.shareIn,
+      '结算页不滑：窗和中间那一块 overflow hidden、touch-action none，图连那两颗键整块在窗里（10-08 方案 3-I）', JSON.stringify(still));
+  }
   if (shareBtn) {
     await shareBtn.click();
     await p.waitForTimeout(2000);
@@ -441,10 +463,11 @@ for (const key of list) {
       await p.click('#shareCloseBtn');
       await p.waitForTimeout(600);
     }
-    // 退回主菜单：结算页上那颗《返回主页》。按文字找，和 check-oldcss 同一招
-    // ——那几颗键的 id 换过，文字没换。
+    // 退回主菜单：结算页上那颗《返回主页》。按名字找，和 check-oldcss 同一招
+    // ——那几颗键的 id 换过，名字没换。10-08 方案 3-I 起结算页那三颗只有记号、没有字，
+    // 名字在 aria-label 上，所以字和读屏名两样都认（只认字的话一颗都找不到，停在结算页上）。
     for (const btn of await p.$$('.endcard button, .modal button, #endOverlay button')) {
-      const t = ((await btn.textContent()) || '').trim();
+      const t = ((await btn.textContent()) || '').trim() || (await btn.getAttribute('aria-label')) || '';
       if (/菜单|返回|主页/.test(t)) {
         await btn.click();
         break;

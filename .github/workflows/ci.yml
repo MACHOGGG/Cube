@@ -1212,6 +1212,17 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8967/ && break; sleep 0.25; done
           node scripts/check-smooth-touch.mjs http://localhost:8967/
 
+      # 结算弹窗照玩家的两张设计图（2026-10-08 方案 3-I：「严格按玩家上传的设计图像素对齐」＋「横线下方……
+      # overflow:hidden + touch-action:none，禁上下左右滑；内容压进固定高度，四语验收放得下」）。设计图上那一
+      # 局（圆球 · 炸弹 · 430）填进真的结算弹窗，402×875 一倍像素截图，逐块扫墨的外框和图上的数比（±3px）；
+      # 那张卡缩到图上的 279 宽逐块比；四种语言真打一局看结构；六种屏幕 × 四种语言装得下、键点得到；小屋
+      # 那一份在的时候只有中间那一块放开滑。
+      - name: 结算弹窗和设计图对得上、不滑
+        run: |
+          nohup node scripts/dev-server.mjs 8966 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8966/ && break; sleep 0.25; done
+          node scripts/check-end-design.mjs http://localhost:8966/
+
       # 主菜单上开窗、关窗，轴的中线不漂（2026-10-08 方案 3-D-3：「开关 5 次中线不漂」；3-C-6：从帐号窗
       # 底下那颗 ✅ 关也不许偏）。三条来路各量一遍：轴量完位置之后招牌又长高（副标题打字机打出第一个中
       # 文字、晚到的新版本提示）；窗开着时页面被推上去（手机键盘——无头浏览器没有键盘，先垫出键盘给的那

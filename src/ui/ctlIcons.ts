@@ -110,3 +110,29 @@ export const CTL_TIER_ADVANCED = custom('ctl-tier-advanced') ?? ctlGlyph(
   '<path d="M30 51 L50 31 L70 51 M30 73 L50 53 L70 73" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
+
+/**
+ * 结算弹窗底下《再来》《分享》两颗键上的记号（10-08 方案 3-I，玩家的设计图）。
+ *
+ * 和上面那几枚不一样：**没有圆盘**，是直接画在键上的白线——设计图上就是这样。几何照设计图量的
+ * （402 宽的手机上，键 91×36）：
+ *
+ *   再来  29×30：一圈开口的圆（半径 13.25、线宽 2），开口在右上，压着一枚向左的三角箭头
+ *   分享  20×27：一枚向上的三角，底下一小截杆子插进一个圆角托盘
+ *
+ * 第三颗《主页》在设计图上是一枚白圆盘，用的就是全站《退出》那一颗（CTL_BACK：白圆盘 ＋ 一支向
+ * 左的箭，箭是键自己的颜色），不另画——见 style.css 的 .end-act--home。
+ *
+ * 颜色走 currentColor（键上写 color），换成自己画的：end-again.svg / end-share.svg。
+ */
+export const END_AGAIN = custom('end-again') ?? (
+  '<svg class="end-glyph" viewBox="0 0 29 30" aria-hidden="true" focusable="false">' +
+  '<path d="M18.34 2.15 A13.25 13.25 0 1 0 27.34 16.82" fill="none" stroke="currentColor" stroke-width="2"/>' +
+  '<path d="M27 0.5 L14 6 L27 15.5 Z" fill="currentColor"/></svg>'
+);
+export const END_SHARE = custom('end-share') ?? (
+  '<svg class="end-glyph" viewBox="0 0 20 27" aria-hidden="true" focusable="false">' +
+  '<path d="M10 0.5 L17 14 L3.3 14 Z" fill="currentColor"/>' +
+  '<path d="M10 13 V19" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+  '<rect x="1.5" y="17" width="17" height="8.3" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'
+);

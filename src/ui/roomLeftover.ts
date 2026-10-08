@@ -55,9 +55,13 @@ export function mountRoomLeftover(host: HTMLElement | null, lang: Lang): void {
   if (!host) return;
   const held = pending;
   pending = null;
+  // 有小屋那一份的时候，这一块装不进结算弹窗那个固定的高度（另一张榜加一张图，人多就是十几行），
+  // 只有这时候中间那一块放开上下滑（10-08 方案 3-I：平时整窗不滑，见 style.css 的 .end-body--room）。
+  const body = host.closest('.end-body');
   if (!held) {
     host.hidden = true;
     host.innerHTML = '';
+    body?.classList.remove('end-body--room');
     return;
   }
   const s = STRINGS[lang];
@@ -85,9 +89,9 @@ export function mountRoomLeftover(host: HTMLElement | null, lang: Lang): void {
         .join('')}
     </div>
     <img class="mp-final-card end-room-card" alt="${s.shareImgAlt}" />
-    <div class="end-rule" aria-hidden="true"></div>
   `;
   host.hidden = false;
+  body?.classList.add('end-body--room');
   const img = host.querySelector<HTMLImageElement>('.end-room-card');
   // 图在页面立起来之后再画：它用的是页面自己那几种字体，排版还没发生就问画
   // 布要，拿到的是替补字体。

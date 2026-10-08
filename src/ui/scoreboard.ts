@@ -1,5 +1,6 @@
 import { STRINGS, type I18nStrings, type Lang } from '../i18n';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
+import { CTL_LEAVE } from './ctlIcons';
 import { stashRoomLeftover } from './roomLeftover';
 import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
@@ -621,7 +622,9 @@ function wireEndPanel(s: I18nStrings, lang: Lang, handlers: RoomRunHandlers): ()
     const original = row.querySelector<HTMLButtonElement>(`#${id}`);
     if (!original) return null;
     const fresh = original.cloneNode(true) as HTMLButtonElement;
-    fresh.textContent = label;
+    // 这几颗键 10-08 方案 3-I 起只有记号没有字（设计图），名字在 aria-label 上。从前这儿写的是
+    // textContent——那会把键上的记号整个冲掉，留下一颗写着字的白键。
+    fresh.setAttribute('aria-label', label);
     original.replaceWith(fresh);
     fresh.addEventListener('click', onClick);
     swapped.push({ fresh, original });
@@ -648,11 +651,13 @@ function wireEndPanel(s: I18nStrings, lang: Lang, handlers: RoomRunHandlers): ()
     again.hidden = true;
   }
 
-  // 新的一颗：真正走得掉的出口。放在这一排最后，和《分享》并排。
+  // 新的一颗：真正走得掉的出口。放在这一排最后，和别的三颗同一种长相（10-08 方案 3-I：只有记号，
+  // 这一颗是局里那颗《离开小屋》的那扇门，名字在 aria-label 上）。
   const leave = document.createElement('button');
-  leave.className = 'secondary';
+  leave.className = 'end-act end-act--leave';
   leave.id = 'endLeaveRoomBtn';
-  leave.textContent = s.mpLeave;
+  leave.setAttribute('aria-label', s.mpLeave);
+  leave.innerHTML = CTL_LEAVE;
   // 结算页上这一颗也要问一句：四个出口问的是同一件事，不该有的问、有的不问。
   leave.addEventListener('click', () => confirmLeaveRoom(lang, handlers.onLeave));
   row.appendChild(leave);
