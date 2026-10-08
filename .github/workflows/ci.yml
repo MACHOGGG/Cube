@@ -53,6 +53,17 @@ jobs:
       - name: 小红书端的类型
         run: npx tsc -p xhs/tsconfig.json
 
+      # 提交进仓库的小红书产物「只拼了一遍」：index.html 恰好一行 <script src="./app.js">，
+      # app.js 里 Chrome 61 补丁头恰好一份——public/xhs/ 和 zip 都查。
+      #
+      # **排在下一步重出之前**：它量的是仓库里提交的那一份，重出之后量的就是 CI 自己刚出的了。
+      # 2026-10-08 本地两道小红书的门同时起跑，各自重出预览页，两个进程往同一个 xhs/dist/
+      # 写，script 补成了两行、补丁头拼了两遍，所有的门照样全绿。出包那一头现在有锁有闸
+      # （xhs/ensurePreview.mjs、xhs/build.mjs），这一道兜的是「坏的那一份已经提交了」——下
+      # 一步只比 public/xhs/、不比 zip，一份拼坏的 zip 从前没有任何一步会红。
+      - name: 小红书产物只拼了一遍
+        run: node xhs/check-bundle.mjs
+
       # 提交进仓库的小红书产物，必须能由当下的源码重新出一遍。
       #
       # public/xhs/ 不是构建产物目录，是**提交进仓库的成品**（网站发出去之后，真机

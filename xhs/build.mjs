@@ -43,18 +43,37 @@ run('npx', ['tsc', '-p', join(here, 'tsconfig.json')], { cwd: join(here, '..') }
 run('npx', ['vite', 'build', '--config', join(here, 'vite.config.ts')], { cwd: join(here, '..') });
 
 // ---- 2. index.html 改成经典脚本 --------------------------------------------
+//
+// ⚠️ 读进来的必须是 vite **刚出**的那一份：入口还是 type="module"、还没有那行
+// <script src="./app.js">。不是的话就停下，不往下改。
+//
+// 2026-10-08 撞到过一次：两道小红书的门同时起跑、各自重出预览页，两个进程往同一个
+// xhs/dist/ 里写。后到的那一个读到的是先到的那一个已经改过的 index.html——module 那一
+// 行早没了，可 `</body>` 照样在，于是又补了一行 `<script src="./app.js">`；底下
+// 「html === before」那道闸拦不住它（`</body>` 那一处确实改了）。两行 script、两份补丁
+// 头（第 2.5 步同理）就这么进了 public/xhs/ 和 zip，什么都没报。门那一头现在有锁
+// （xhs/ensurePreview.mjs）；这两道闸管的是不经过那儿、直接并行跑两次 build:xhs 的。
 const htmlPath = join(dist, 'index.html');
+const APP_TAG = '<script src="./app.js"></script>';
+const ENTRY = /\s*<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/;
 let html = readFileSync(htmlPath, 'utf8');
 const before = html;
+if (!ENTRY.test(before) || before.includes(APP_TAG)) {
+  throw new Error(
+    'xhs/dist/index.html 不是 vite 刚出的那一份（入口不是 type="module"，或者已经有一行 <script src="./app.js">）' +
+      '——多半是另一个进程正在同时出包、已经改过它一遍了。别同时跑两次 build:xhs / preview:xhs。',
+  );
+}
 html = html
   // 把入口那一行从 module 改成普通脚本，并挪到 body 末尾（DOM 先在，脚本再跑）
-  .replace(/\s*<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/, '')
+  .replace(ENTRY, '')
   .replace(/\s*crossorigin(?=[ >])/g, '')
-  .replace('</body>', '  <script src="./app.js"></script>\n</body>')
+  .replace('</body>', `  ${APP_TAG}\n</body>`)
   // 开发时那两条注释在产物里没用，去掉省几行
   .replace(/\s*<!--[\s\S]*?-->/g, '');
 if (html === before) throw new Error('index.html 没改动——入口那一行的写法变了？');
 if (/type="module"/.test(html)) throw new Error('index.html 里还留着 type="module"');
+if (html.split(APP_TAG).length - 1 !== 1) throw new Error('index.html 里 <script src="./app.js"> 不是恰好一行');
 writeFileSync(htmlPath, html);
 
 // ---- 2.5 Chrome 61 能力补丁拼到最前 ----------------------------------------
@@ -63,10 +82,24 @@ writeFileSync(htmlPath, html);
 // ResizeObserver）。它必须比任何模块的顶层代码先跑——有几个模块在加载时就调
 // flatMap——所以不走 Vite，直接拼在产物最前面。
 // 拼完再做第 3 步的扫描，保证补丁本身也过一遍禁用清单。
+//
+// 拼之前先看一眼 app.js 里是不是已经有一份了（和上面第 2 步那道闸同一个理由：两个进程同
+// 时出包，后到的那一个会把补丁头再拼一遍）；拼完再数一遍，恰好一份才往下走。认的是补丁文
+// 件开头那一段——它就是那段「Chrome 61 能力补丁」的文件头。
 const polyPath = join(here, 'polyfills.js');
 const appPath = join(dist, 'app.js');
 const poly = readFileSync(polyPath, 'utf8');
-writeFileSync(appPath, poly + '\n' + readFileSync(appPath, 'utf8'));
+const polyHead = poly.slice(0, 120);
+const bare = readFileSync(appPath, 'utf8');
+if (bare.includes(polyHead)) {
+  throw new Error(
+    'xhs/dist/app.js 里已经有一份 Chrome 61 补丁头了——多半是另一个进程正在同时出包、已经拼过一遍。' +
+      '别同时跑两次 build:xhs / preview:xhs。',
+  );
+}
+const patched = poly + '\n' + bare;
+if (patched.split(polyHead).length - 1 !== 1) throw new Error('app.js 里的补丁头不是恰好一份');
+writeFileSync(appPath, patched);
 
 // ---- 3. 禁用能力扫描 -------------------------------------------------------
 // 按 device-capabilities.md §7 的清单。只查产物，不查源码——源码里那些调用点

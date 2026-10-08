@@ -29,6 +29,8 @@ slides-simulator.html
 
 # 小工具预览页：由 node xhs/preview.mjs 生成，不是源文件。
 xhs/preview.html
+# 门重出预览页时拿的那把锁（xhs/ensurePreview.mjs）：两道门同时起跑时，后到的那一道等它。
+xhs/.preview.lock
 .tmp-oldcss/
 
 # 开场动画导出的产物：源在 tools/splash/，产物随时能重出
