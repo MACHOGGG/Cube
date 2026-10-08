@@ -1,4 +1,5 @@
 import type { Cell, Tile } from './types';
+import { cellKey } from './types';
 
 /**
  * Every scoring pattern in the game (run-4, 2x2, 22/121, 31/13, ...) needs at
@@ -148,6 +149,15 @@ export function findStuckColorGroups(
 
   return stuckGroupsOf(liveTiles);
 }
+
+/**
+ * 棋盘把「卡住」的那几格画灰，照的是这一份键集合（cellKey）；cells 为 null 就是没有卡住的。
+ *
+ * 六副棋盘原先各写一行一模一样的 highlightStuck；10-08 方案第五批第 3 条抽到这儿，和找出那几组
+ * 的 findStuckColorGroups / stuckGroupsOf 放在一起。
+ */
+export const stuckKeysOf = (cells: readonly Cell[] | null): Set<string> | null =>
+  cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
 
 /**
  * 判死之后，把「你自己看，这几枚再也配不上」那几组摆出来，按颜色分。

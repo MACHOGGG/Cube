@@ -14,7 +14,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
-import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
+import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, edgeResidue } from '../engine/residueBoard';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
@@ -914,7 +914,7 @@ export function createCircleSevenGame(): ShapeGame {
       }
 
       function highlightStuck(cells: Cell[] | null) {
-        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
+        stuckKeys = stuckKeysOf(cells);
       }
 
       function resetBoard() {

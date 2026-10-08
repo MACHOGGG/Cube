@@ -14,7 +14,7 @@ import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
-import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
+import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, edgeResidue } from '../engine/residueBoard';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
@@ -27,7 +27,7 @@ import { cellKey, effColor } from '../engine/types';
 import { slideLine } from '../engine/slideLine';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, hasRedCluster, redClusterKeys, type BombAdjacency } from '../engine/bomb';
+import { BOMB_RED_HEX, blowUpIfClustered, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, redClusterKeys, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import {
@@ -1046,7 +1046,7 @@ export function createCircleHexGame(): ShapeGame {
       }
 
       function highlightStuck(cells: Cell[] | null) {
-        stuckKeys = cells ? new Set(cells.map(([r, c]) => cellKey(r, c))) : null;
+        stuckKeys = stuckKeysOf(cells);
       }
 
       function resetBoard() {
@@ -1257,17 +1257,11 @@ export function createCircleHexGame(): ShapeGame {
         }
       }
 
-      // 四连爆炸在**这一步的连锁全部走完之后**查一次，由 gameController 的
-      // checkHazard 钩子调（见那里的注释）。从前是拖拽一落地就立刻查：那时红块
-      // 永不消也永不翻，滑动是它们唯一会挨到一起的原因，落地查就够了。现在炸弹
-      // 挨着得分图案会被拆成星星，连锁每一拍都在改「谁还算活炸弹」——落地那一刻
-      // 查，会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查
-      // 又会让同一堆红块报两遍。所以只在盘面安定下来之后查这一次。
+      // 四连爆炸：什么时候查（这一步的连锁全部走完之后，只查一次）、炸了扣多少、结算页写什么，都在
+      // engine/bomb.ts 的 blowUpIfClustered（10-08 方案第五批第 3 条从五副棋盘里抽出来）。这儿只交代
+      // 这副盘、谁挨着谁、怎么收场。
       function checkBombHazard(): boolean {
-        if (!isBomb || !hasRedCluster(grid, BOMB_ADJ, liveBomb)) return false;
-        render();
-        controller.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
-        return true;
+        return isBomb && blowUpIfClustered(grid, BOMB_ADJ, liveBomb, { render, forceEnd: (...a) => controller.forceEnd(...a) });
       }
 
       function applyDrag(): boolean {

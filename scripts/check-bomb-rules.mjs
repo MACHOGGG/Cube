@@ -34,8 +34,10 @@ if (!bombSrc || !scoringSrc) {
   console.error('用法: node scripts/check-bomb-rules.mjs <打包好的 bomb.mjs> <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { dealBombBacks, isLiveBomb, hitBomb, isCrackedBomb, defuseAround, BOMB_HITS_TO_DEFUSE, BOMB_RULES_VERSION } =
-  await import(bombSrc);
+const {
+  dealBombBacks, isLiveBomb, hitBomb, isCrackedBomb, defuseAround, blowUpIfClustered,
+  BOMB_HITS_TO_DEFUSE, BOMB_RULES_VERSION, BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, GRID_ADJACENCY,
+} = await import(bombSrc);
 const { createCascadeStepper } = await import(scoringSrc);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -224,6 +226,33 @@ const tally = (arr) => {
 }
 
 // ---------------------------------------------------------------------------
+// 2d. 四连判爆收场（bomb.ts 的 blowUpIfClustered，10-08 方案第五批第 3 条从五副棋盘里抽出来）
+// ---------------------------------------------------------------------------
+{
+  const RED = 9;
+  /** 4×4 的假棋盘，live 里那几格是活炸弹。 */
+  const mk = (live) => Array.from({ length: 4 }, (_, r) =>
+    Array.from({ length: 4 }, (_, c) => ({ color: live.includes(`${r},${c}`) ? RED : 1, face: 'flavor', dotColor: 2 })));
+  const isLive = (t) => isLiveBomb(t, RED);
+  const run = (live) => {
+    const calls = [];
+    const blew = blowUpIfClustered(mk(live), GRID_ADJACENCY, isLive, {
+      render: () => calls.push('render'),
+      forceEnd: (...a) => calls.push(['forceEnd', ...a]),
+    });
+    return { blew, calls };
+  };
+  check('（尺子）bomb.ts 导出了 blowUpIfClustered', typeof blowUpIfClustered === 'function');
+  const four = run(['0,0', '0,1', '0,2', '1,2']);
+  check('四连判爆：连成四枚就炸——先画盘面，再按炸弹惩罚收场（理由、扣分、结算页那一行）',
+    four.blew === true && four.calls.length === 2 && four.calls[0] === 'render' &&
+      JSON.stringify(four.calls[1]) === JSON.stringify(['forceEnd', BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚']),
+    JSON.stringify(four));
+  const three = run(['0,0', '0,1', '0,2', '3,3']);
+  check('四连判爆：只连成三枚（另一枚离得远）不炸，什么都不做', three.blew === false && three.calls.length === 0, JSON.stringify(three));
+}
+
+// ---------------------------------------------------------------------------
 // 3. 拆掉的格子并进下一拍的遮罩
 // ---------------------------------------------------------------------------
 {
@@ -305,6 +334,11 @@ const tally = (arr) => {
       !/function defuseAround\(/.test(s) && !/\bhitBomb\(/.test(s));
     check(`${name}：爆炸检查挂在 checkHazard 上`,
       s.includes('checkHazard: isBomb ? checkBombHazard : undefined'));
+    // 四连判爆交给 bomb.ts 那一份（10-08 方案第五批第 3 条）：这副盘自己不再判四连、不再自己写惩罚。
+    check(`${name}：四连判爆走的是 bomb.ts 那一份（blowUpIfClustered）`,
+      /function checkBombHazard\(\): boolean \{\s*return isBomb && blowUpIfClustered\(grid, BOMB_ADJ, liveBomb, \{ render, forceEnd: \(\.\.\.a\) => controller\.forceEnd\(\.\.\.a\) \}\);\s*\}/.test(s));
+    check(`${name}：自己不再判四连、不再自己写炸弹惩罚`,
+      !/\bhasRedCluster\(/.test(s) && !/forceEnd\(BOMB_HAZARD_REASON/.test(s));
     // 只剩「定义」和「挂上去」两处提及——多一处就说明拖拽落地那条老路还在，
     // 同一步会查两次：先按落地时的盘面误判，再按连锁完的盘面判一次。
     check(`${name}：checkBombHazard 不再在别处被调`,

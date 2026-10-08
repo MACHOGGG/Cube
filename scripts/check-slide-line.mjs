@@ -163,10 +163,12 @@ for (const f of ['square', 'squareDiamond', 'circle', 'circleHex', 'triangle']) 
   const src = read(`../src/shapes/${f}.ts`);
   const own = ['redClusterKeys', 'hasRedCluster', 'generateCleanBombBoard'].filter((n) => new RegExp(`function ${n}\\(`).test(src));
   check(`${f}：炸弹那三样不再自己留一份`, own.length === 0, own.join(' / '));
+  // 四连判爆从 10-08 方案第五批第 3 条起整个交给 bomb.ts 的 blowUpIfClustered（它里头调 hasRedCluster），
+  // 棋盘传进去的还是自己那份邻接——这一条量的就是「带着自己的邻接」，所以认它而不再认 hasRedCluster。
   check(`${f}：从 engine/bomb.ts 拿，带着自己的邻接`,
     /import \{[^}]*\bredClusterKeys\b[^}]*\} from '\.\.\/engine\/bomb'/.test(src) &&
     /redClusterKeys\(grid, 3, BOMB_ADJ, liveBomb\)/.test(src) &&
-    /hasRedCluster\(grid, BOMB_ADJ, liveBomb\)/.test(src) &&
+    /blowUpIfClustered\(grid, BOMB_ADJ, liveBomb, /.test(src) &&
     /generateCleanBombBoard\(\(\) => boardFromBombDeck\(shuffledDeck\(\)\), hasInitialClump, BOMB_ADJ, liveBomb\)/.test(src));
 }
 

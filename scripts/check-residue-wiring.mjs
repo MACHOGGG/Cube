@@ -155,6 +155,21 @@ for (const name of WIRED) {
 }
 
 console.log('');
+// ── 「卡住」那几格的键集合：六副棋盘都交给 stalemate.ts 的 stuckKeysOf（10-08 方案第五批第 3 条）──
+//
+// 六副棋盘原先各写一行一模一样的 highlightStuck。抽出去之后守的是：六副都走那一份，没有谁自己再拼一
+// 遍键集合——哪天要改「画灰哪几格」，改一处就是六副一起变。（方块不在上面那张五副的表里：它不走残局
+// 穷举，可画灰这件事它也有。）
+for (const name of ['square', ...WIRED]) {
+  const s = read(`src/shapes/${name}.ts`);
+  check(`${name}：卡住那几格的键集合走 stalemate.ts 的 stuckKeysOf`,
+    /function highlightStuck\(cells: Cell\[\] \| null\) \{\s*stuckKeys = stuckKeysOf\(cells\);\s*\}/.test(s));
+  // 只看给 stuckKeys 赋值的那几处：拖动动画里也有一句长得一样的 new Set(cells.map(...))，那是在算「这一条线
+  // 上有哪几格」，和画灰无关。
+  const own = (s.match(/stuckKeys = [^;]*;/g) || []).filter((x) => !/^stuckKeys = (stuckKeysOf\(cells\)|null);$/.test(x));
+  check(`${name}：自己不再拼一遍键集合（给 stuckKeys 赋值的只有 stuckKeysOf 或 null）`, own.length === 0, own.join(' / '));
+}
+
 if (fails) {
   console.log(`FAIL ${fails} 条`);
   process.exit(1);

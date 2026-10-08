@@ -445,5 +445,13 @@ head('【8】六边圆球的中心洞：扫描时把两边断开，滑动时不�
   }
 }
 
+// ── 「卡住」那几格的键集合（stalemate.ts 的 stuckKeysOf，10-08 方案第五批第 3 条从六副棋盘里抽出来）──
+{
+  const keys = S.stuckKeysOf([[0, 1], [2, 3], [0, 1]]);
+  check('stuckKeysOf：给几格就是那几格的键（同一格只算一次）', keys instanceof Set && [...keys].sort().join(' ') === '0,1 2,3',
+    keys ? [...keys].join(' ') : String(keys));
+  check('stuckKeysOf：没有卡住的（null）就是 null——棋盘照这个把灰全撤掉', S.stuckKeysOf(null) === null);
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

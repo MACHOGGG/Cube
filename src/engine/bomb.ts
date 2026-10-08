@@ -266,6 +266,32 @@ export function hasRedCluster<T>(g: BombGrid<T>, adj: BombAdjacency, isLive: (t:
   return redClusterKeys(g, BOMB_CLUSTER_SIZE, adj, isLive).size > 0;
 }
 
+/**
+ * 四连爆炸：盘上有一团连成 BOMB_CLUSTER_SIZE 枚的活炸弹，就先把盘面画出来（让人看见炸的是哪一
+ * 团），再按炸弹惩罚收场。回 true 表示炸了——这一局已经结束。
+ *
+ * **只在这一步的连锁全部走完之后查一次**，由 gameController 的 checkHazard 钩子调（见那里的注
+ * 释）。从前是拖拽一落地就立刻查：那时红块永不消也永不翻，滑动是它们唯一会挨到一起的原因，落地
+ * 查就够了。现在炸弹挨着得分图案会被拆成星星，连锁每一拍都在改「谁还算活炸弹」——落地那一刻查，
+ * 会把下一拍马上要被拆掉的那几枚算进四连，白白炸掉一局；两个时机都查又会让同一堆红块报两遍。所
+ * 以只在盘面安定下来之后查这一次。
+ *
+ * 五副有炸弹的棋盘原先各抄一份 checkBombHazard（连上面这段注释逐字相同）；10-08 方案第五批第 3 条
+ * 抽到这儿，惩罚的分数、理由、结算页那一行的说明只写一遍。各副只交代自己的盘和怎么收场（render、
+ * 控制器的 forceEnd）。
+ */
+export function blowUpIfClustered<T>(
+  g: BombGrid<T>,
+  adj: BombAdjacency,
+  isLive: (t: T) => boolean,
+  end: { render(): void; forceEnd(reason: string, penalty: number, label: string): void },
+): boolean {
+  if (!hasRedCluster(g, adj, isLive)) return false;
+  end.render();
+  end.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
+  return true;
+}
+
 /** 发一副干净开局最多重发几次。五百次还发不出来，就用最后那一副（不卡死开局）。 */
 export const CLEAN_BOMB_DEAL_TRIES = 500;
 
