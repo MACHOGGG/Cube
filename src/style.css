@@ -1169,6 +1169,11 @@ h1 {
   color: var(--ink-soft); font-variant-numeric: tabular-nums;
   margin: 0 0 12px;
 }
+/* 每日挑战那一局没进今日榜时的那一句（2026-10-08 方案 2-11）。平时 hidden，不占位。 */
+.end-daily-note {
+  margin: -6px 0 12px; font-size: 0.85rem; line-height: 1.4;
+  color: var(--accent-ink);
+}
 /* The line that says "the run is above, the arithmetic is below" — centred
    and short of the modal's own edges, so it reads as a divider inside the
    card rather than as the card being cut in two. */

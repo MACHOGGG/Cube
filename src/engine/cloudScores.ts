@@ -158,7 +158,15 @@ let lastPush: Promise<unknown> | null = null;
  * 网刚好抖了一下」——那一局于是不在榜上，而玩家点开排行榜看到的是旧名次，什么提示
  * 都没有。一次重试收掉的正是这一种（真断网的话两次都失败，和从前一样，不更坏）。
  */
-export function pushRun(data: RunData): void {
+/**
+ * 交卷回包里调用方关心的那一样：每日挑战那一局进没进「今日」榜（api/scores.js 的 pushDaily，回
+ * 一个词：stored / late / rejected）。不是每日挑战的局没有这一位；没登录、没报上去是 null。
+ */
+export interface PushReply {
+  daily?: 'stored' | 'late' | 'rejected';
+}
+
+export function pushRun(data: RunData): Promise<PushReply | null> {
   // **不带名字**（第 16 推）。从前这里带着 `name` 和 `nameV`，于是哪台设备最后交卷，榜上
   // 就是哪台设备上存的那个名字——在这台手机上改了名，换台平板打一局就又变回去了。昵称现在
   // 只走改名接口（engine/nickname.ts 的 setNickname），服务器也不再读 push 里的名字。
@@ -171,13 +179,15 @@ export function pushRun(data: RunData): void {
   };
   // 刚打完一局，榜一定变了（至少自己那一行）。把缓存清掉，下一次打开排行榜去拿新的。
   invalidateBoards();
-  lastPush = (async () => {
-    const first = await post(body);
+  const pushing = (async () => {
+    const first = await post<PushReply>(body);
     if (first) return first;
     await new Promise((r) => setTimeout(r, PUSH_RETRY_MS));
-    return post(body);
+    return post<PushReply>(body);
   })();
-  void lastPush;
+  lastPush = pushing;
+  // 交回去给结算页（2026-10-08 方案 2-11）：每日挑战那一局被拒、交晚了，要当场说一句。
+  return pushing;
 }
 
 /**

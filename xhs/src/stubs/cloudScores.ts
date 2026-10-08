@@ -33,7 +33,11 @@ export type BoardResult =
   | { ok: true; page: BoardPage }
   | { ok: false; reason: 'signedOut' | 'geniusOnly' | 'expired' | 'network' };
 
-export function pushRun(_data: RunData): void {}
+/** 和真身同一个签名（2026-10-08 方案 2-11 起它交回回包）：这一版不上传，回 null。 */
+export interface PushReply { daily?: 'stored' | 'late' | 'rejected' }
+export function pushRun(_data: RunData): Promise<PushReply | null> {
+  return Promise.resolve(null);
+}
 /** 第 16 推：真身在 pushRun 之外也用它（改名成功之后清榜缓存）。这一版没有榜。 */
 export function invalidateBoards(): void {}
 export const fetchMine = (): Promise<CloudMine | null> => Promise.resolve(null);

@@ -1035,6 +1035,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       (past.reduce((sum, r) => sum + (r.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
     );
     refs.endAvgEl.textContent = `${s.avgScoreLabel} = ${avg}`;
+    // 「没进今日榜」那一句先藏起来：它属于上一局，这一局要不要说，等交卷回包（见下面 pushRun）。
+    refs.endDailyNoteEl.hidden = true;
+    refs.endDailyNoteEl.textContent = '';
     /**
      * 徽章那一排（《侵蚀阶梯》v1.2 §5：清盘、解锁 1 枚）。
      *
@@ -1135,7 +1138,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 登录了就顺手往云上报一份：换台设备记录跟着回来，成绩也进全球榜。
     // 不 await——结算页已经在屏幕上了，没有理由让刚打完的人等一个请求；
     // 报不上去最多是这一局没上榜，本机那份存档一个字都不受影响。
-    pushRun(lastRun);
+    //
+    // 每日挑战那一局：服务器回包里说它进没进「今日」榜（2026-10-08 方案 2-11）。被拒、交晚了，
+    // 从前一个字都不说——玩家以为上榜了，去榜上一看没有。说一句明话，带上「看看设备的日期」：
+    // 日子和种子都是按本机的钟算的，钟不对就是这两种。回包到的时候他要是已经开了下一局（这一局
+    // 不再是 lastRun），就不说了——不然这一句会挂到下一局的结算页上。
+    const settledRun = lastRun;
+    void pushRun(lastRun).then((reply) => {
+      const verdict = reply?.daily;
+      if ((verdict !== 'late' && verdict !== 'rejected') || lastRun !== settledRun) return;
+      refs.endDailyNoteEl.textContent = s.dailyNotCounted;
+      refs.endDailyNoteEl.hidden = false;
+    });
     // The reason key is one of our own fixed strings, never player text.
     trackGameEnd({
       shape: hooks.shapeId,

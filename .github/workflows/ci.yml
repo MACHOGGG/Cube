@@ -1234,6 +1234,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8996/ && break; sleep 0.25; done
           node scripts/check-room-knows.mjs http://localhost:8996/
 
+      # 每日挑战那一局没进今日榜，结算页上说一句明话（2026-10-08 方案 2-11）：三台设备各打一局，钟
+      # 对的那台不说（尺子：服务器回 stored）；钟快三天、慢三天、对不上服务器的钟（HEAD 拦掉）的那
+      # 两台，服务器回 rejected / late，结算页上都要说那一句。一台自己的服务器（兑三张码）。
+      - name: 每日挑战没进今日榜要说一句
+        run: |
+          nohup node scripts/dev-server.mjs 8997 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8997/ && break; sleep 0.25; done
+          node scripts/check-daily-note.mjs http://localhost:8997/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。

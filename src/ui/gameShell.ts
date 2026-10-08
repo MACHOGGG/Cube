@@ -134,6 +134,8 @@ export interface ShellRefs {
   /** 总分旁边那枚通关章的落脚处。平时是空的。 */
   endStampEl: HTMLElement;
   endAvgEl: HTMLElement;
+  /** 每日挑战那一局没进今日榜时说的那一句（平时藏着）。 */
+  endDailyNoteEl: HTMLElement;
   endBreakdownEl: HTMLElement;
   /** 结算页上那张战绩图。开局那一刻还是空的，一局打完由 endGame 填上。 */
   endShareImgEl: HTMLImageElement;
@@ -491,6 +493,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
                worth to this player — the one number that says whether it was a
                good run, without them having to remember their own history. -->
           <div class="end-avg" id="endAvg"></div>
+          <!-- 每日挑战那一局没进今日榜（服务器回 late / rejected）时的那一句（2026-10-08 方案
+               2-11）。平时藏着；交卷回包到了才知道要不要说，见 gameController 的 endGame。 -->
+          <p class="end-daily-note" id="endDailyNote" role="status" hidden></p>
         </div>
         <div class="end-scroll">
         <!-- 屋主中途散场、这一局转成单人接着打完的时候，小屋那份成绩摆在这
@@ -809,6 +814,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     pauseOverlay: req('pauseOverlay'),
     endOverlay: req('endOverlay'),
     endAvgEl: req('endAvg'),
+    endDailyNoteEl: req('endDailyNote'),
     endHazardBgEl: req('endHazardBg'),
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),
