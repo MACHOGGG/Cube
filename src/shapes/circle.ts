@@ -138,15 +138,14 @@ function cellValid(r: number, c: number): boolean {
   return r >= 0 && r < ROWS && c >= 0 && c <= r;
 }
 
-// The board's two non-linear bonus shapes, the closest analogue this
-// triangular packing has to the square board's 2×2 — built the same way a
-// square 2×2 is: one step along each of two of the board's directions from a
-// shared corner, rather than 4-in-a-row along just one. "22": a small
-// parallelogram, 2 balls along the row direction repeated one step along a
-// diagonal (so 2 balls in each of 2 rows) — it has two mirror-image
-// orientations (leaning the other way), both counted. "121": a small rhombus
-// one step further along each diagonal from a single corner, spanning 3 rows
-// 1/2/1 balls wide.
+// Two small non-linear clumps, the closest analogue this triangular packing
+// has to the square board's 2×2 — one step along each of two of the board's
+// directions from a shared corner. "22": a small parallelogram, 2 balls along
+// the row direction repeated one step along a diagonal (two mirror-image
+// orientations, both listed). "121": a small rhombus spanning 3 rows 1/2/1
+// balls wide.
+// 它们**从前**是得分图案；《侵蚀阶梯》v1.2 §1.1 之后得分图案只剩 1×N 连线，这两种只
+// 剩发牌时那一个用处（见下面 CLUSTERS）。
 function rhombus22B(r: number, c: number): Cell[] | null {
   const cells: Cell[] = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
   return cells.every(([rr, cc]) => cellValid(rr, cc)) ? cells : null;
@@ -309,14 +308,16 @@ export function createCircleGame(): ShapeGame {
       let nextTileId = 0;
       const outlineTracker = createOutlineTracker();
       let bonusedSignatures = new Set<string>();
-      // A whole-line dot-face bonus doesn't remove its cells the way square
-      // or triangle do: this board's triangular packing means a removed
+      // A whole-line dot-face bonus doesn't remove its cells the way the
+      // square board does: this board's triangular packing means a removed
       // line can split the remaining balls into pieces no longer connected
       // by any shared line, permanently stranding them from each other. So
       // instead the bonused cells become permanently "blank" — a distinct
       // colorless state that stays on the board, keeps sliding with its
       // line exactly like any other ball, but can never again take part in
-      // a match, cluster, or line bonus. BLANK is a sentinel value stored in
+      // a match or a line bonus. （三角、菱形方块、六边、七色那几副外边族也是这样原地留
+      // 空位，不只小球；从前这句写「方块和三角整条拿掉」，三角那一半早就不对了。）
+      // BLANK is a sentinel value stored in
       // a tile's own color/dotColor fields (rather than a separate flag) so
       // every color-comparison call site "just works" without special-
       // casing, as long as it also checks isBlank first.
@@ -1295,7 +1296,8 @@ export function createCircleGame(): ShapeGame {
         countRemainingTiles,
         snapshotBoard,
         highlightStuck,
-        // Regular matches (run-of-4 and the "22"/"121" clusters) stay on
+        // Regular matches (the 1×N same-colour line — the "22"/"121" clumps
+        // stopped scoring in 《侵蚀阶梯》v1.2) stay on
         // the board, so they get the persistent outline highlight, added
         // per cascade step so a chain reaction reveals one beat at a time.
         // A whole-line bonus instead blanks its cells (see applyLineBonus)

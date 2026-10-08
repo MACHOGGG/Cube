@@ -59,8 +59,9 @@ npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
 没有 npm test，也没有测试框架。**这些门就是这个项目的测试**，每个门盯着一件
 具体的、真出过的事故。写完改动挑相关的跑，别全跑（全跑要一小时以上）。
 
-数目：`scripts/` 下 137 个，`xhs/` 下另有 7 个（小红书那一版专用）。这个数一直
-在涨，所以别在别处再抄一遍——要用就当场 `ls scripts/check-*.mjs | wc -l`。
+数目这里不写：它一直在涨，写下来的那个数过几天就是错的（这儿原先写着 137，2026-10-08
+数的时候已经 185 了）。要用就当场数：`ls scripts/check-*.mjs | wc -l`，小红书那一版专用的
+另在 `ls xhs/check-*.mjs`。
 
 三类，跑法不同：
 
@@ -129,7 +130,7 @@ BOT_DEBUG=1 …    # 每一手印一行；BOT_DEBUG2=1 印「以为要得分、�
 一处没跟上，屏幕上就是「这游戏点不准」，而且不报任何错。**「图案真的降到 1 枚」只在
 `--soak` 断言**：阶梯第一级就有三十几段，降一级要先翻掉三十几枚，而机器人每十步左右才
 翻一枚、还很看开局那副牌——同样 300 步，有一局降到 1 枚，有一局一级都没降。骑在边界上
-的断言就是偶发红。一步约 0.48 秒（它自己开 reduced-motion），八副打满一个多小时，所以
+的断言就是偶发红。一步约 0.48 秒（它自己开 reduced-motion），六副打满一个多小时，所以
 不进 CI。
 
 **CI 之外那一批要开浏览器的没有 npm 脚本串起来**（没有 `check:browser`），全靠手
@@ -205,12 +206,13 @@ Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写
 
 ## 架构：需要读好几个文件才看得出来的那些
 
-### 八副棋盘，一个循环
+### 六副棋盘，一个循环
 
-`src/shapes/` 下八个模块（`square` `squareDiamond` `circle` `circleHex`
-`circleSeven` `triangle` `triangleBig` `triangleAdvanced`）各自导出一个
-`create<X>Game()` 工厂，全部实现 `src/shapes/types.ts` 里同一份 `ShapeGameOpts`
-契约。**`src/engine/gameController.ts` 是唯一那个游戏循环**，八副棋盘共用它。
+`src/shapes/` 下六个玩法文件（`square` `squareDiamond` `circle` `circleHex`
+`circleSeven` `triangle`）各自导出一个 `create<X>Game()` 工厂，全部实现
+`src/shapes/types.ts` 里同一份 `ShapeGameOpts` 契约；同一个目录里还有 `registry.ts`（下一节那张
+查表）。**`src/engine/gameController.ts` 是唯一那个游戏循环**，六副棋盘共用它。
+（原先是八副：《侵蚀阶梯》v1.2 PR-6 删了原《三角》整块大三角和 V 形三角两副。）
 
 所以「加一个玩法」多半**不是写新游戏**，而是给 `ShapeGameOpts` 传个选项：
 `timeLimitSec`（计时）、`bomb`（炸弹）、`targets`（老虎机换得分图案）、
@@ -228,7 +230,7 @@ Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写
 查表在 `src/shapes/registry.ts`：`cardOf(id)`（**查不到就抛**，给我们自己的 id 用）、
 `cardOrNull(id)`（给服务器发来的 mode、存档里的旧 id 用，查不到回 undefined）、
 `familyFromName(name)`（小屋那一局的 mode 在老虎机那一档就是族名本身）。
-**表由 `main.ts` 调 `registerCards` 注册**，不是 registry 自己 import 八个工厂——八副
+**表由 `main.ts` 调 `registerCards` 注册**，不是 registry 自己 import 六个工厂——六副
 棋盘都 import `gameShell`，而 gameShell 要用 `cardOf`，反过来 import 就成环，那张表会
 在第一次被查的时候还是空的。
 
@@ -243,10 +245,10 @@ circle / triangle 开头，就会在三个地方被分进三个不同的家族�
 
 **两个陷阱还在，只是不再咬人：**
 
-- `main.ts` 里 `const triangleGame = createTriangleBigGame()`——两个三角文件在
-  2026-09 对调过内容，**文件名和主菜单上的位置对不上**。从前那句「按前缀认就不受影
-  响」是对的，但它靠的是「两个 id 恰好都以 triangle 开头」这个巧合。现在家族由棋盘
-  自己说，和巧合无关。
+- `main.ts` 里 `const triangleBigGame = createTriangleGame()`——两个三角文件在
+  2026-09 对调过内容，`shapes/triangle.ts` 里画的是六边蜂窝、card id 是 `triangleBig`，
+  **文件名和 id 对不上**（另一副三角 PR-6 删了，只剩这一副）。认 id，不认文件名。现在家族
+  由棋盘自己说，和「两个 id 恰好都以 triangle 开头」这个巧合无关。
 - **家族 ≠ 规则**：`squareDiamond` 长得是方块（`family: 'square'`），消行行为却像小球/
   三角——最少 3 个、原地留空位（`ruleShape: 'squareDiamond'`）。这两位在那个文件里
   故意不一样，旁边写着为什么。

@@ -191,5 +191,33 @@ check('删掉的那两个 id 不在任何一副棋盘的名片上',
   check('每副棋盘的终局快照都经 packSnapshot 摆正（方块那一副原先缩在左上角）', bad.length === 0, bad.join('、'));
 }
 
+// ⑦ CLAUDE.md 讲棋盘的那一节和 src/shapes/ 对得上（10-08 方案第四批第 10 条）。
+//
+// 那一节原先写着「`src/shapes/` 下八个模块（… `triangleBig` `triangleAdvanced`）」——PR-6 删到六副之后一直没人改，
+// 读的人照着去找 triangleBig.ts，找不到。这儿钉住：小节标题说的副数、列出来的玩法文件，都等于目录里真有的那几个
+// （registry.ts、types.ts 不算玩法文件）。门数那一处同理：CLAUDE.md 里不许再写死「scripts/ 下 N 个」。
+{
+  const { readdirSync } = await import('node:fs');
+  const md = readFileSync(new URL('../CLAUDE.md', import.meta.url), 'utf8');
+  const real = readdirSync(new URL('../src/shapes/', import.meta.url))
+    .filter((f) => f.endsWith('.ts') && !['registry.ts', 'types.ts'].includes(f))
+    .map((f) => f.replace(/\.ts$/, ''))
+    .sort();
+  const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const head = md.match(/^### (\S)副棋盘，一个循环$/m);
+  check('⑦（尺子）CLAUDE.md 里找得到讲棋盘的那一节', Boolean(head), head ? head[0] : '没找到「### N副棋盘，一个循环」');
+  if (head) {
+    check('⑦ 小节标题说的副数就是 src/shapes/ 里玩法文件的个数', head[1] === CN[real.length], `${head[1]} / ${real.length}（${real.join(' ')}）`);
+    const body = md.slice(head.index, md.indexOf('\n### ', head.index + 4));
+    const listed = (body.match(/下[一二三四五六七八九十]+个玩法文件（([^）]*)）/) || [, ''])[1]
+      .match(/`([A-Za-z]+)`/g)?.map((x) => x.slice(1, -1)).sort() || [];
+    check('⑦ 那一节列出来的玩法文件和目录里的一个不差', JSON.stringify(listed) === JSON.stringify(real),
+      `列的：${listed.join(' ')} ／ 真有：${real.join(' ')}`);
+    check('⑦ 那一节提到了 registry.ts', /registry\.ts/.test(body));
+  }
+  const hard = md.match(/`scripts\/` 下 \d+ 个/);
+  check('⑦ CLAUDE.md 不再写死门的个数（「scripts/ 下 N 个」）', !hard, hard ? hard[0] : '');
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);
