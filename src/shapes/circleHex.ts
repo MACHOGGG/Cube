@@ -681,6 +681,31 @@ export function createCircleHexGame(): ShapeGame {
         return el;
       }
 
+      /**
+       * 中心那个永久空位的样子：一颗空心球（2026-10-08 方案 2-4）。
+       *
+       * **纯视觉。** 引擎那头它照旧是一个空位：不可停留（滑的时候球隔着它首尾相接）、不可翻、
+       * 不进任何一条线的「同线连续 N 枚」。所以这一枚：
+       *   · 不挂 `.ball`、不挂 `data-r` / `data-c`——按这两样数棋子、认棋子的（自检机器人、
+       *     几道门、得分动画、翻面快照）都不该把它算进去；
+       *   · `pointer-events: none`——按在它上面，手指落到的是底下的棋盘，和按在空地上一样
+       *     （拖拽那头按坐标认格子，认出是空位就不起手）。
+       * 大小、位置和旁边的球一样（同一个 ballCenter、同一个 R × 1.86），放大之后跟着一起放大。
+       * 那一圈和从前画空位的那一圈是同一笔（makeBallEl 的空白分支）。
+       */
+      function makeHoleEl(): HTMLElement {
+        const [cx, cy] = ballCenter(CENTER_CELL[0], CENTER_CELL[1]);
+        const size = R * 1.86;
+        const el = document.createElement('div');
+        el.className = 'hex-hole';
+        el.setAttribute('aria-hidden', 'true');
+        el.style.width = size + 'px';
+        el.style.height = size + 'px';
+        el.style.left = cx - size / 2 + 'px';
+        el.style.top = cy - size / 2 + 'px';
+        return el;
+      }
+
       function render() {
         layoutBoard();
         // 先在一张「离屏的纸」上把这一帧的棋子全摆好，再一次性换上去。
@@ -697,11 +722,16 @@ export function createCircleHexGame(): ShapeGame {
           for (const [r, c] of cells) pulseMs.set(cellKey(r, c), elapsedMs);
         }
         const warnKeys = isBomb ? redClusterKeys(grid, 3, BOMB_ADJ, liveBomb) : null;
+        // 中心那个永久空位画回一颗空心球（2026-10-08 方案 2-4，玩家拍板 (a)）。「格子离场」那一
+        // 版连它一起不画了，盘中间于是空出一个洞，看着像缺了一枚。**先画它**：它压在所有棋子
+        // 底下，拖动时球从它上面滑过去，不会被那一圈盖住。
+        if (isBlank(grid[CENTER_CELL[0]][CENTER_CELL[1]])) frag.appendChild(makeHoleEl());
         for (let r = 0; r < ROW_LENS.length; r++) {
           for (let c = 0; c < ROW_LENS[r]; c++) {
             // 离场的格子一律不画（《侵蚀阶梯》v1.2 §3「格子离场」）。从前削掉的
             // 棋子留在原地画成一枚暗的空位、还跟着整条线滑——现在它是真的不在了，
-            // 棋盘一圈圈往里缩。淡出那一帧另有人管（playBlankTransition）。
+            // 棋盘一圈圈往里缩。淡出那一帧另有人管（playBlankTransition）。中心那个空位
+            // 上面已经画过了。
             if (isBlank(grid[r][c])) continue;
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);

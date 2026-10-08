@@ -1183,6 +1183,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8986/ && break; sleep 0.25; done
           node scripts/check-no-storage.mjs http://localhost:8986/
 
+      # 六边圆球中心那颗空心球（2026-10-08 方案 2-4 B）：画在洞位上（截图量那一圈、圈里是空的）、
+      # 和旁边的球一样大、不是棋子（不挂 .ball / data-r/c）、碰不着（按在它上面拖，什么都不动；
+      # 尺子：按在旁边真球上同样一拖，那一行真的滑了，滑完洞还在原地）。
+      - name: 六边圆球中心那颗空心球
+        run: |
+          nohup node scripts/dev-server.mjs 8988 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8988/ && break; sleep 0.25; done
+          node scripts/check-hex-hole.mjs http://localhost:8988/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。
