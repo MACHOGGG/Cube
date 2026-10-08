@@ -27,7 +27,7 @@ import { cellKey, effColor } from '../engine/types';
 import { slideLine } from '../engine/slideLine';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
-import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, hitBomb, isCrackedBomb, isLiveBomb, generateCleanBombBoard, hasRedCluster, redClusterKeys, type BombAdjacency } from '../engine/bomb';
+import { BOMB_RED_HEX, BOMB_HAZARD_PENALTY, BOMB_HAZARD_REASON, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, hasRedCluster, redClusterKeys, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
 import { shapeName } from '../ui/shapeLabels';
 import {
@@ -470,44 +470,6 @@ export function createCircleHexGame(): ShapeGame {
       /** 炸弹的「挨着」：和判四连、闪预警用同一份邻接（hexNeighbors）。 */
       const bombNeighbors = (r: number, c: number): Cell[] => hexNeighbors(r, c);
 
-      /**
-       * 得分图案旁边的炸弹，跟着这一拍挨一下。**两下才拆**（玩家定的，见
-       * engine/bomb.ts 的 BOMB_HITS_TO_DEFUSE）：第一下只留一道裂纹，第二下才
-       * 翻成它自己的反面（一枚基础色星星）。挨着
-       * 的全算，没有上限。
-       *
-       * 回传拆掉的那几格，连锁那边会把它们并进**下一拍的遮罩**（见 scoring.ts
-       * 的 afterCommit）。不并的话会出这种事：蓝色 2×2 得分，右边的炸弹翻成绿
-       * 星星，这颗绿星星另一侧恰好有三枚绿正面、四枚正好凑成一个绿色 2×2——可
-       * 它一格都不在遮罩里，这一步找不到它，图案摆在盘上不给分，要等以后某次
-       * 滑动碰巧碰到。玩家看见的是「拼好了却没给分，过几步又莫名其妙给了」。
-       *
-       * 拆弹本身不给分、weight 也不记，所以计分和「有效得分率」的口径不变。
-       */
-      function defuseAround(scored: Cell[]): Cell[] {
-        if (!isBomb) return [];
-        const hit: Cell[] = [];
-        const seen = new Set<string>();
-        for (const [r, c] of scored) {
-          for (const [nr, nc] of bombNeighbors(r, c)) {
-            const key = cellKey(nr, nc);
-            if (seen.has(key)) continue;
-            const t = grid[nr][nc];
-            // 只打还立着的那些。已经翻过去的（包括那枚翻完仍算炸弹的永久
-            // 炸弹）不再动它，不然它会被反复算进「这一拍又拆了几枚」。
-            if (t.face !== 'flavor' || !liveBomb(t)) continue;
-            // 一拍之内同一枚最多挨一下——seen 拦的正是「两组图案同时贴着它」。
-            seen.add(key);
-            // 第一下只裂，不翻面，也不并进遮罩：盘面对配对来说一个字没变，它
-            // 仍旧是一枚立着的红障碍。裂纹由 render 照着 bombHits 画。
-            if (!hitBomb(t)) continue;
-            t.face = 'dot';
-            hit.push([nr, nc]);
-          }
-        }
-        return hit;
-      }
-
       // 炸弹那三样（四连判爆、三连预警、发一副干净的开局）在 engine/bomb.ts（第 14 推从
       // 五副棋盘里抽出来，规矩只写一遍）；这儿只交代这一副盘「有哪些格、谁挨着谁」。
       // A 4-cluster ends the run outright; a 3-cluster is one drag away
@@ -936,8 +898,10 @@ export function createCircleHexGame(): ShapeGame {
           tileAt: (r, c) => grid[r][c],
           findMatches: findRunMatches,
           findLineBonuses: findWholeLineBonuses,
-          // 炸弹玩法：这一拍旁边的炸弹跟着一起拆，拆掉的格子并进下一拍的遮罩。
-          afterCommit: isBomb ? defuseAround : undefined,
+          // 炸弹玩法：这一拍旁边的炸弹跟着挨一下（两下才拆），拆掉的格子并进下一拍的遮罩。规矩在
+          // engine/bomb.ts 的 defuseAround（10-08 方案第五批第 3 条从五副棋盘里抽出来，只写一遍）；
+          // 这儿只交代这一副盘谁挨着谁、某一格是哪一枚、哪一枚还是活炸弹。
+          afterCommit: isBomb ? (scored) => defuseAround(scored, bombNeighbors, (r, c) => grid[r][c], liveBomb) : undefined,
           onLineBonus: applyLineBonus,
           resetMaskOnLineBonus: false,
         };

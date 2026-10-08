@@ -1,4 +1,4 @@
-import { cellKey } from './types';
+import { cellKey, type Cell, type Tile } from './types';
 
 export type BombTier = 'basic' | 'timed' | 'advanced';
 
@@ -83,6 +83,52 @@ export const isCrackedBomb = (t: { bombHits?: number }): boolean => {
   const n = t.bombHits ?? 0;
   return n > 0 && n < BOMB_HITS_TO_DEFUSE;
 };
+
+/**
+ * 得分图案旁边的炸弹，跟着这一拍挨一下。**两下才拆**（玩家定的，见上面的
+ * BOMB_HITS_TO_DEFUSE）：第一下只留一道裂纹，第二下才翻成它自己的反面（一枚基础色
+ * 星星）。挨着的全算，没有上限。
+ *
+ * 回传拆掉的那几格，连锁那边会把它们并进**下一拍的遮罩**（见 scoring.ts 的
+ * afterCommit）。不并的话会出这种事：蓝色 2×2 得分，右边的炸弹翻成绿星星，这颗绿星
+ * 星另一侧恰好有三枚绿正面、四枚正好凑成一个绿色 2×2——可它一格都不在遮罩里，这一
+ * 步找不到它，图案摆在盘上不给分，要等以后某次滑动碰巧碰到。玩家看见的是「拼好了
+ * 却没给分，过几步又莫名其妙给了」。
+ *
+ * 拆弹本身不给分、weight 也不记，所以计分和「有效得分率」的口径不变。
+ *
+ * 五副有炸弹的棋盘（方块、菱形方块、小球、六边小球、三角）原先各抄一份、连注释逐字
+ * 相同；10-08 方案第五批第 3 条抽到这儿，规矩只写一遍（和上面那几样同一个先例）。各
+ * 副只交代自己那副盘：谁挨着谁（neighbors）、某一格上是哪一枚（tileAt）、哪一枚还是
+ * 活炸弹（isLive——不在炸弹局时恒 false，于是这儿一枚都不打）。
+ */
+export function defuseAround(
+  scored: readonly Cell[],
+  neighbors: (r: number, c: number) => readonly Cell[],
+  tileAt: (r: number, c: number) => Tile,
+  isLive: (t: Tile) => boolean,
+): Cell[] {
+  const hit: Cell[] = [];
+  const seen = new Set<string>();
+  for (const [r, c] of scored) {
+    for (const [nr, nc] of neighbors(r, c)) {
+      const key = cellKey(nr, nc);
+      if (seen.has(key)) continue;
+      const t = tileAt(nr, nc);
+      // 只打还立着的那些。已经翻过去的（包括那枚翻完仍算炸弹的永久
+      // 炸弹）不再动它，不然它会被反复算进「这一拍又拆了几枚」。
+      if (t.face !== 'flavor' || !isLive(t)) continue;
+      // 一拍之内同一枚最多挨一下——seen 拦的正是「两组图案同时贴着它」。
+      seen.add(key);
+      // 第一下只裂，不翻面，也不并进遮罩：盘面对配对来说一个字没变，它
+      // 仍旧是一枚立着的红障碍。裂纹由 render 照着 bombHits 画。
+      if (!hitBomb(t)) continue;
+      t.face = 'dot';
+      hit.push([nr, nc]);
+    }
+  }
+  return hit;
+}
 
 /**
  * 发牌时给这一局的炸弹排反面。

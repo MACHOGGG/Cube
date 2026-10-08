@@ -34,7 +34,7 @@ if (!bombSrc || !scoringSrc) {
   console.error('用法: node scripts/check-bomb-rules.mjs <打包好的 bomb.mjs> <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { dealBombBacks, isLiveBomb, hitBomb, isCrackedBomb, BOMB_HITS_TO_DEFUSE, BOMB_RULES_VERSION } =
+const { dealBombBacks, isLiveBomb, hitBomb, isCrackedBomb, defuseAround, BOMB_HITS_TO_DEFUSE, BOMB_RULES_VERSION } =
   await import(bombSrc);
 const { createCascadeStepper } = await import(scoringSrc);
 
@@ -175,6 +175,55 @@ const tally = (arr) => {
 }
 
 // ---------------------------------------------------------------------------
+// 2c. 拆弹那一份（bomb.ts 的 defuseAround，10-08 方案第五批第 3 条从五副棋盘里抽出来）
+// ---------------------------------------------------------------------------
+//
+// 五副有炸弹的棋盘原先各抄一份、逐字相同；抽到 bomb.ts 之后这儿直接喂它一块假棋盘量规矩本身，各副
+// 接得对不对在第 4 段量。
+{
+  const RED = 9;
+  /** 一块 3×3 的假棋盘：(0,1) 是一枚活炸弹，其余是普通正面。 */
+  const mk = () => Array.from({ length: 3 }, (_, r) =>
+    Array.from({ length: 3 }, (_, c) => ({ id: r * 3 + c, color: r === 0 && c === 1 ? RED : 1, face: 'flavor', dotColor: 2 })));
+  const four = (g) => (r, c) => [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]
+    .filter(([nr, nc]) => nr >= 0 && nr < g.length && nc >= 0 && nc < g[nr].length);
+  const live = (t) => isLiveBomb(t, RED);
+
+  check('（尺子）bomb.ts 导出了 defuseAround', typeof defuseAround === 'function');
+  {
+    const g = mk();
+    const at = (r, c) => g[r][c];
+    const first = defuseAround([[0, 0]], four(g), at, live);
+    check('拆弹：第一下只裂——不翻面、不回传（盘面对配对来说一个字没变）',
+      first.length === 0 && g[0][1].face === 'flavor' && g[0][1].bombHits === 1, JSON.stringify(g[0][1]));
+    const second = defuseAround([[0, 0]], four(g), at, live);
+    check('拆弹：第二下拆掉——翻到反面，回传这一格（并进下一拍的遮罩）',
+      JSON.stringify(second) === '[[0,1]]' && g[0][1].face === 'dot', `${JSON.stringify(second)} ${JSON.stringify(g[0][1])}`);
+    const third = defuseAround([[0, 0]], four(g), at, live);
+    check('拆弹：已经翻过去的不再打（不会被反复算进「这一拍又拆了几枚」）', third.length === 0 && g[0][1].bombHits === 2,
+      JSON.stringify(g[0][1]));
+  }
+  {
+    // 两组图案同时贴着同一枚：一拍之内只挨一下
+    const g = mk();
+    defuseAround([[0, 0], [0, 2], [1, 1]], four(g), (r, c) => g[r][c], live);
+    check('拆弹：三处得分同时贴着它，一拍之内也只挨一下', g[0][1].bombHits === 1, JSON.stringify(g[0][1]));
+  }
+  {
+    // 不是炸弹局（isLive 恒 false）：一枚都不打
+    const g = mk();
+    const hit = defuseAround([[0, 0]], four(g), (r, c) => g[r][c], () => false);
+    check('拆弹：不是炸弹局（isLive 恒 false），一枚都不打', hit.length === 0 && g[0][1].bombHits === undefined, JSON.stringify(g[0][1]));
+  }
+  {
+    // 不挨着的不打
+    const g = mk();
+    defuseAround([[2, 2]], four(g), (r, c) => g[r][c], live);
+    check('拆弹：不挨着得分格的炸弹不打', g[0][1].bombHits === undefined, JSON.stringify(g[0][1]));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 3. 拆掉的格子并进下一拍的遮罩
 // ---------------------------------------------------------------------------
 {
@@ -248,8 +297,12 @@ const tally = (arr) => {
   for (const name of SHAPES) {
     const s = read(`src/shapes/${name}.ts`);
     check(`${name}：炸弹反面走 dealBombBacks`, s.includes('dealBombBacks('));
-    check(`${name}：挂上了 afterCommit（拆弹并进遮罩）`,
-      s.includes('afterCommit: isBomb ? defuseAround : undefined'));
+    // 拆弹走 bomb.ts 那一份（10-08 方案第五批第 3 条）：这副盘只交代谁挨着谁、某一格是哪一枚、哪一枚
+    // 还是活炸弹。自己不许再长回一份——五份逐字相同的时候，改规矩要改五处，漏一处就是一副盘按老规矩拆。
+    check(`${name}：挂上了 afterCommit（拆弹并进遮罩），走的是 bomb.ts 那一份`,
+      /afterCommit: isBomb \? \(scored\) => defuseAround\(scored, bombNeighbors, \(r, c\) => grid\[r\]\[c\], liveBomb\) : undefined/.test(s));
+    check(`${name}：自己没有一份私抄的拆弹（不定义 defuseAround、不直接调 hitBomb）`,
+      !/function defuseAround\(/.test(s) && !/\bhitBomb\(/.test(s));
     check(`${name}：爆炸检查挂在 checkHazard 上`,
       s.includes('checkHazard: isBomb ? checkBombHazard : undefined'));
     // 只剩「定义」和「挂上去」两处提及——多一处就说明拖拽落地那条老路还在，
@@ -259,10 +312,9 @@ const tally = (arr) => {
       `${(s.match(/checkBombHazard/g) || []).length} 处`);
     // 判四连 / 活棋子表 / 三连预警一律走 liveBomb（= isLiveBomb），不再看颜色。
     check(`${name}：活炸弹认的是 isLiveBomb`, s.includes('isLiveBomb(t, RED_IDX)'));
-    // 两层：拆弹走 hitBomb（它记账、它说什么时候拆），裂纹走 isCrackedBomb +
-    // crackLayer。少了 hitBomb 就退回一下就拆；少了 crackLayer，规则还在、屏幕
-    // 上却看不出来，玩家只会觉得「贴着打了一次怎么没掉」。
-    check(`${name}：拆弹走 hitBomb（两下才拆）`, s.includes('if (!hitBomb(t)) continue;'));
+    // 两层：拆弹走 hitBomb（它记账、它说什么时候拆——在 bomb.ts 的 defuseAround 里，下面单量一次），
+    // 裂纹走 isCrackedBomb + crackLayer。少了 crackLayer，规则还在、屏幕上却看不出来，玩家只会觉得
+    // 「贴着打了一次怎么没掉」。
     check(`${name}：挨过一下的画裂纹`,
       s.includes('if (isCrackedBomb(tile)) el.appendChild(crackLayer('));
     // 存档键的后缀不许在棋盘里手写——它带着规则版本号，而版本升过两次，两次都是
@@ -272,6 +324,11 @@ const tally = (arr) => {
       s.includes('suffixFor(') && !/'_bomb\d*'|'_flip\d*'/.test(s),
       (s.match(/'_bomb\d*'|'_flip\d*'/g) || []).join(' ') || 'ok');
   }
+
+  // 共用那一份拆弹：两下才拆（少了 hitBomb 就退回一下就拆）
+  const bombTs = read('src/engine/bomb.ts');
+  const shared = bombTs.slice(bombTs.indexOf('export function defuseAround('));
+  check('bomb.ts 的 defuseAround：拆弹走 hitBomb（两下才拆）', shared.length > 0 && shared.slice(0, 2000).includes('if (!hitBomb(t)) continue;'));
 
   const gc = read('src/engine/gameController.ts');
   const callSites = (gc.match(/hooks\.checkHazard\?\.\(\)/g) || []).length;
