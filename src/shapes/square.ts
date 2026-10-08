@@ -16,7 +16,7 @@ import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, gridLines, gridResidue, oneStepMoves } from '../engine/residueBoard';
-import { createCoachGlow, matchKind, starsReach } from '../engine/coachHint';
+import { createCoachGlow, matchKind, starClearHintFor, type StarClearHint } from '../engine/coachHint';
 import { packSnapshot, type BoardSnapshot, type SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreForSize, sizeAtLevel } from '../engine/targets';
@@ -936,6 +936,8 @@ export function createSquareGame(): ShapeGame {
                     .map((m) => m.cells)
                     .filter((cells) => matchKind(cells.map(([r, c]) => grid[r][c].face)) === kind),
                 ),
+        // 第 4 条那一盏（10-08 方案 3-E-3）：亮挑中的那一色，见下面 coachStarClear。
+        starClear: () => coachStarClear(),
         centerOf: ([r, c]) => [c * CELL + CELL / 2, r * CELL + CELL / 2],
         boardCenter: () => [(cols * CELL) / 2, (rows * CELL) / 2],
       });
@@ -953,12 +955,26 @@ export function createSquareGame(): ShapeGame {
         }
       }
       /**
-       * 教学第 4 条的条件（第 15 推）：某一种颜色的星星枚数 ≥ 最短外边的长度。方块没有「最外
-       * 边」这回事，玩家定的是「方块用较短那条边」——整行整列要的正是这么多枚。消掉整行整列
-       * 之后盘子变小，所以现问 rows / cols。
+       * 教学第 4 条（星星消除那一条）该不该讲、亮哪一色（10-08 方案 3-E-3，engine/coachHint 的
+       * starClearHintFor）。
+       *
+       * 方块没有「最外边」这回事：星星凑满**任意**一整行、一整列都消（fullDotLines），所以交给它
+       * 的「外边」是每一整行、每一整列。最短的那条就是较短的那条边——和第 15 推定的「方块用较短
+       * 那条边」同一个数，所以「什么时候讲」没变。消掉整行整列之后盘子变小，所以现问 rows / cols。
        */
+      function coachStarClear(): StarClearHint | null {
+        const edges: Cell[][] = [];
+        for (let r = 0; r < rows; r++) edges.push(Array.from({ length: cols }, (_, c) => [r, c] as Cell));
+        for (let c = 0; c < cols; c++) edges.push(Array.from({ length: rows }, (_, r) => [r, c] as Cell));
+        return starClearHintFor<Tile>({
+          grid,
+          edges,
+          isStar: (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t),
+          colorOf: (t) => t.dotColor,
+        });
+      }
       function coachStarsReachEdge(): boolean {
-        return starsReach(grid, Math.min(rows, cols), (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t));
+        return coachStarClear() !== null;
       }
 
       const controller = createGameController(refs, {

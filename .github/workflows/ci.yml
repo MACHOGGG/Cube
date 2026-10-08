@@ -222,6 +222,13 @@ jobs:
           npx esbuild src/engine/erosion.ts --bundle --format=esm --outfile=/tmp/erosion.mjs
           npx esbuild src/engine/residueBoard.ts --bundle --format=esm --outfile=/tmp/resboard.mjs
           node scripts/check-coach.mjs /tmp/coach.mjs /tmp/i18n.mjs /tmp/coachhint.mjs /tmp/outeredge.mjs /tmp/erosion.mjs /tmp/resboard.mjs
+      # 教学第 4 条（星星消除）挑哪一色、亮哪几枚（2026-10-08 方案 3-E-3：starClearHintFor）。三个手摆的
+      # 局面各钉一步——星星多的那一色输给外边上已经有得多的那一色；差得一样多时星星少的赢（它在盘面上排
+      # 在后面，按先碰到的挑会挑错）；外边上摆满四颗却只有四颗、填不满五格的那一色被筛掉。纯 node。
+      - name: 教学第 4 条挑哪一色
+        run: |
+          npx esbuild src/engine/coachHint.ts --bundle --format=esm --outfile=/tmp/coachhint.mjs
+          node scripts/check-star-clear.mjs /tmp/coachhint.mjs
       # 跑不动的机器上自动把粒子和震屏降一档。判错的两种后果不对称：该降没降
       # 只是继续卡，**不该降却降了**是一台好手机上特效突然少一半、而且这一局回
       # 不去。所以这里喂四种帧流，三种是「不该降」（开局那阵子、切后台那一帧、

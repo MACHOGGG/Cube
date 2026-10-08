@@ -45,7 +45,8 @@ import type { LineShuffle } from './residueSearch';
  *
  *   front  第 1、3 条：一步就能拼出当前级 1×N 的那几枚**色块**（不亮星星）
  *   mixed  第 2 条：一步就能拼出的、**同时含星星和色块**的那一组
- *   edge   第 4 条：一步就能填满一条可消除外边的那几颗同色星星
+ *   edge   第 4 条：从前是「一步就能填满一条可消除外边的那几颗同色星星」；10-08 方案 3-E-3 起
+ *          棋盘给了 starClear 就不走一层穷举，亮 starClearHintFor 挑出来的那一色（见那个函数）
  *
  * 第 5 条不亮，所以没有它那一种。
  */
@@ -196,31 +197,98 @@ export function matchKind(faces: readonly ('dot' | 'flavor')[]): 'front' | 'mixe
 }
 
 /**
- * 教学第 4 条的条件：此刻某一种颜色的星星枚数 ≥ `need`（最短外边的长度）。
+ * 「星星消除」那一条提示（教学第 4 条）：该不该讲、讲哪一色、亮哪几枚（10-08 方案 3-E-3）。
  *
- * 只数**星星**，按它露出来的那个颜色（`dotColor`）；哪几枚算星星由棋盘说（`isStar`：空位、
- * 活炸弹不算）。`need` 也由棋盘给——方块是此刻较短的那条边，小球是此刻削得动的最短那条
- * 外边，一条都削不动就是 0，那时候一律不算。
+ * 方案原话：「写纯函数 starClearHintFor(board): { color, stars[] } | null——第一步筛『该色在场星星
+ * 数 ≥ 当前最外边长度』的颜色；第二步选『已在最外边上的星星最多（还需挪动最少）』的色；平局选星
+ * 星总数少的；返回该色全部相关星星+参与格子作为点亮组。只改提示触发，不改得分规则。」
  *
- * 写成纯函数、单独放在这儿，是为了让门拿模拟盘面验它（check-coach.mjs），而不必把整副
- * 棋盘连同 DOM 一起搬进 node。
+ * 从前这一条只有第一步（`starsReach`：某一种颜色的星星枚数 ≥ 最短外边的长度），灯走的是一层穷
+ * 举（'edge'：一步就能填满一条外边的那几颗）——可一步就能填满一条外边的局面少见，于是第 4 条讲
+ * 出来了、灯多半是黑的，玩家知道「同色星星在外边会消」，却不知道该攒哪一色、往哪儿攒。
+ *
+ * - **第一步**：在场星星数 ≥ 此刻最短那条外边的长度——够填满至少一条外边的颜色才算。一色都没有
+ *   就回 null（这一条不讲）。和从前 `starsReach` 同一个口径，所以「什么时候讲」没变。
+ * - **第二步**：每一色看它够得着的那几条外边（长度 ≤ 它的星星数），哪一条已经有它最多的星星——
+ *   也就是还差得最少；挑差得最少的那一色。
+ * - **平局**：星星总数少的那一色（攒得快的先讲）。再平就按盘面上先碰到的那一色，同一副盘面永远挑
+ *   同一色，灯不会无端换颜色。
+ * - **点亮组**：那一色在场的**全部**星星，加上它差得最少的那条外边上的格子（「往这儿攒」）。同一
+ *   格只算一次，星星在前。
+ *
+ * 「哪几条算外边」由棋盘给（`edges`）：小球是此刻削得动的最外面那几条（outerEdges），方块是每一
+ * 整行、每一整列（方块的星星凑满任意一整行一整列都消，见 i18n 的 TUTORIAL_RULE4）。得分规则一
+ * 个字没动——这儿只回答「提示讲不讲、亮哪儿」。
+ *
+ * 写成纯函数、单独放在这儿，门（check-star-clear.mjs、check-coach.mjs）拿手摆的盘面就能验它，
+ * 不必把整副棋盘连同 DOM 一起搬进 node。
  */
-export function starsReach<T extends { dotColor: number }>(
-  grid: readonly (readonly T[])[],
-  need: number,
-  isStar: (t: T) => boolean,
-): boolean {
-  if (!(need > 0)) return false;
-  const count = new Map<number, number>();
-  for (const row of grid) {
-    for (const t of row) {
-      if (!isStar(t)) continue;
-      const n = (count.get(t.dotColor) ?? 0) + 1;
-      if (n >= need) return true;
-      count.set(t.dotColor, n);
+export interface StarClearHint {
+  /** 挑中的那一色（星星露出来的那个颜色）。 */
+  color: number;
+  /** 点亮组：这一色在场的全部星星，再加上它该去填的那条外边的格子。 */
+  stars: Cell[];
+}
+
+export interface StarClearBoard<T> {
+  grid: readonly (readonly T[])[];
+  /** 此刻能消的外边，每条一串格子。 */
+  edges: readonly (readonly Cell[])[];
+  /** 这一枚算不算一颗星星（空位、离场的、活炸弹都不算）。 */
+  isStar(t: T): boolean;
+  /** 星星露出来的那个颜色。 */
+  colorOf(t: T): number;
+}
+
+export function starClearHintFor<T>(board: StarClearBoard<T>): StarClearHint | null {
+  const { grid, edges } = board;
+  let shortest = 0;
+  for (const e of edges) if (e.length && (shortest === 0 || e.length < shortest)) shortest = e.length;
+  if (!(shortest > 0)) return null;
+  // 每一色在场的星星都在哪儿（按盘面扫描的先后，平局时「先碰到的那一色」靠它）。
+  const where = new Map<number, Cell[]>();
+  for (let r = 0; r < grid.length; r++) {
+    const row = grid[r];
+    for (let c = 0; c < row.length; c++) {
+      const t = row[c];
+      if (!board.isStar(t)) continue;
+      const k = board.colorOf(t);
+      const list = where.get(k);
+      if (list) list.push([r, c]);
+      else where.set(k, [[r, c]]);
     }
   }
-  return false;
+  let best: { color: number; need: number; total: number; edge: readonly Cell[] } | null = null;
+  for (const [color, cells] of where) {
+    const total = cells.length;
+    // 第一步：够不够填满此刻最短的那条外边。
+    if (total < shortest) continue;
+    const mine = new Set(cells.map(([r, c]) => r + ',' + c));
+    // 第二步：它够得着的那几条外边里，哪一条还差得最少（已经在那条边上的越多，要挪的越少）。
+    let need = Infinity;
+    let edge: readonly Cell[] = [];
+    for (const e of edges) {
+      if (!e.length || e.length > total) continue;
+      let here = 0;
+      for (const [r, c] of e) if (mine.has(r + ',' + c)) here++;
+      if (e.length - here < need) {
+        need = e.length - here;
+        edge = e;
+      }
+    }
+    // 差得最少的那一色；一样少，挑星星总数少的那一色。
+    if (!best || need < best.need || (need === best.need && total < best.total)) best = { color, need, total, edge };
+  }
+  if (!best) return null;
+  const seen = new Set<string>();
+  const stars: Cell[] = [];
+  for (const cell of [...(where.get(best.color) ?? []), ...best.edge]) {
+    const key = cell[0] + ',' + cell[1];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    stars.push(cell);
+  }
+  return { color: best.color, stars };
 }
 
 /**
@@ -257,6 +325,12 @@ export interface CoachGlowBoard<T extends { id: number }> {
    * 遍外边是白算（小球那副要算二十一条线 × 二十一条线）。
    */
   groupsFor(kind: CoachHint): (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[];
+  /**
+   * 第 4 条（edge）那一盏（10-08 方案 3-E-3）：棋盘按此刻的盘面问 starClearHintFor，回它挑好的那
+   * 一组。给了它，edge 就不走一层穷举——那一层要「一步就能填满一条外边」才亮，局面上少见，第 4
+   * 条讲着、灯多半是黑的。
+   */
+  starClear?(): StarClearHint | null;
   centerOf(cell: Cell): readonly [number, number];
   boardCenter(): readonly [number, number];
 }
@@ -313,6 +387,15 @@ export function createCoachGlow<T extends { id: number }>(
     update(kind) {
       if (!kind) {
         shown = new Set();
+        return true;
+      }
+      if (kind === 'edge' && board.starClear) {
+        // 挑哪一色、亮哪几枚由 starClearHintFor 说了算（它自己保证同一副盘面挑同一色），这儿只
+        // 把格子换成棋子 id。不走「保留 → 最近」那一套：那一套是给一层穷举里好几组候选挑一组用的。
+        const hint = board.starClear();
+        const g = board.grid();
+        shown = new Set(hint ? hint.stars.map(([r, c]) => g[r][c].id) : []);
+        keep = null;
         return true;
       }
       const cands = oneStepGroups(board.grid(), board.moves(), stepRuler(board, kind), HINT_BUDGET_MS, now);

@@ -17,7 +17,7 @@ import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, edgeResidue, oneStepMoves } from '../engine/residueBoard';
-import { createCoachGlow, matchKind, starsReach } from '../engine/coachHint';
+import { createCoachGlow, matchKind, starClearHintFor, type StarClearHint } from '../engine/coachHint';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { buildEdgeBand } from '../ui/edgeBand';
 import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
@@ -1204,6 +1204,8 @@ export function createCircleGame(): ShapeGame {
           return (trial) =>
             withGrid(trial, () => edges.filter((live) => isFullDotMatch(live) && !bonusedSignatures.has(edgeSig(live))));
         },
+        // 第 4 条那一盏（10-08 方案 3-E-3）：亮挑中的那一色，见下面 coachStarClear。
+        starClear: () => coachStarClear(),
         centerOf: ([r, c]) => ballCenter(r, c),
         boardCenter: () => [refs.boardEl.clientWidth / 2, refs.boardEl.clientHeight / 2],
       });
@@ -1220,13 +1222,23 @@ export function createCircleGame(): ShapeGame {
         }
       }
       /**
-       * 教学第 4 条的条件（第 15 推）：某一种颜色的星星枚数 ≥ 最短外边的长度。
+       * 教学第 4 条（星星消除那一条）该不该讲、亮哪一色（10-08 方案 3-E-3，engine/coachHint 的
+       * starClearHintFor）。
        *
-       * 「最短外边」是此刻**削得动**的那几条里最短的一条（门槛跟着收尾放开走，和卡死判定问
-       * 的是同一个数）。一条都削不动就不算——那时候星星再多也没有一条边能填。
+       * 「外边」是此刻**削得动**的那几条（outerEdges，门槛跟着收尾放开走，和卡死判定问的是同一个
+       * 数）；最短的那条就是从前「最短外边」那个数，所以「什么时候讲」没变。一条都削不动就不讲——
+       * 那时候星星再多也没有一条边能填。
        */
+      function coachStarClear(): StarClearHint | null {
+        return starClearHintFor<Tile>({
+          grid,
+          edges: outerEdges(edgeBoard, edgeThreshold()).map((e) => e.live),
+          isStar: (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t),
+          colorOf: (t) => t.dotColor,
+        });
+      }
       function coachStarsReachEdge(): boolean {
-        return starsReach(grid, shortestEdge(edgeBoard, edgeThreshold()), (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t));
+        return coachStarClear() !== null;
       }
 
       const controller = createGameController(refs, {

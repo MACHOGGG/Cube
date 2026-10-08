@@ -22,8 +22,9 @@
  * 条，触发条件同上。进度条 5 格。
  *
  * 这道门**用模拟盘面**把五个触发条件依次走一遍：段数来自真的侵蚀阶梯（erosion.ts 照小球
- * 那张表扣段），「星星够不够一条外边」来自真的外边几何（outerEdge.ts 的 shortestEdge）加
- * 棋盘真用的那个数法（coachHint.ts 的 starsReach），盘面是这儿手摆的。所以量的不是「条子
+ * 那张表扣段），「星星够不够一条外边」来自真的外边几何（outerEdge.ts 的 outerEdges）加
+ * 棋盘真用的那个判法（coachHint.ts 的 starClearHintFor，10-08 方案 3-E-3；从前是 starsReach，
+ * 第一步就是它），盘面是这儿手摆的。挑哪一色、亮哪几枚另有 check-star-clear。所以量的不是「条子
  * 收到一个 true 会不会换」，而是「盘面走到那一步，条子才换；差一枚都不换」。
  *
  * 时钟是假的（12 秒、6 秒的读够都要量准到毫秒），DOM 也是这儿自己搭的一份够用的——比
@@ -199,8 +200,8 @@ globalThis.localStorage = {
 
 const { mountCoachBar, HINT_OF } = await import(coachBundle);
 const { tutorialRules } = await import(i18nBundle);
-const { oneStepGroups, pickGroup, matchKind, starsReach, createCoachGlow, HINT_BUDGET_MS } = await import(hintBundle);
-const { shortestEdge, EDGE_MIN } = await import(edgeBundle);
+const { oneStepGroups, pickGroup, matchKind, starClearHintFor, createCoachGlow, HINT_BUDGET_MS } = await import(hintBundle);
+const { outerEdges, shortestEdge, EDGE_MIN } = await import(edgeBundle);
 const { createErosion, tableFor } = await import(erosionBundle);
 const { oneStepMoves, gridLines } = await import(resBundle);
 
@@ -250,8 +251,11 @@ head('静态：词表、调用点、接线');
     /resolving = true;[\s\S]{0,200}hooks\.coachGlow\?\.\(null\)/.test(gc) && /coach\.observe\([\s\S]{0,200}refreshCoachGlow\(\)/.test(gc));
   for (const f of ['square', 'circle']) {
     const t = code(read(`src/shapes/${f}.ts`));
-    check(`${f}.ts：接了呼吸灯、第 4 条按 starsReach 数、走法来自 residueBoard 的 oneStepMoves`,
-      /coachGlow: \(kind\) =>/.test(t) && /\bcoachStarsReachEdge,/.test(t) && /starsReach\(grid,/.test(t) && /oneStepMoves\(/.test(t));
+    // 第 4 条的触发和那一盏灯都走 starClearHintFor（10-08 方案 3-E-3）：触发问它回没回 null，灯
+    // 是交给呼吸灯的 starClear——两样都得接上，只接一样就是「讲了这一条、灯照旧是黑的」。
+    check(`${f}.ts：接了呼吸灯、第 4 条按 starClearHintFor 判和亮、走法来自 residueBoard 的 oneStepMoves`,
+      /coachGlow: \(kind\) =>/.test(t) && /\bcoachStarsReachEdge,/.test(t) && /starClearHintFor<Tile>\(\{/.test(t) &&
+        /return coachStarClear\(\) !== null;/.test(t) && /starClear: \(\) => coachStarClear\(\),/.test(t) && /oneStepMoves\(/.test(t));
   }
 
   const plan = (name) => {
@@ -413,14 +417,23 @@ function uniqueBoard() {
 }
 const isStar = (t) => !t.blank && t.face === 'dot';
 const circleEdgeBoard = (g) => ({ lines: CIRCLE_LINES, isLive: (r, c) => r >= 0 && r < ROWS && c >= 0 && c <= r && !g[r][c].blank });
-/** 棋盘那头真用的那一句（circle.ts 的 coachStarsReachEdge）：最短的可削外边 + starsReach。 */
-const circleReach = (g) => starsReach(g, shortestEdge(circleEdgeBoard(g), EDGE_MIN), isStar);
+/** 棋盘那头真用的那一句（circle.ts 的 coachStarClear）：此刻削得动的那几条外边交给 starClearHintFor。 */
+const circleReach = (g) =>
+  starClearHintFor({ grid: g, edges: outerEdges(circleEdgeBoard(g), EDGE_MIN).map((e) => e.live), isStar, colorOf: (t) => t.dotColor }) !== null;
 /** 一副方块：6×6，六色各六枚。 */
 function squareBoard(rows = 6, cols = 6) {
   return Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => tile((r * 2 + c) % 6)));
 }
-/** square.ts 的 coachStarsReachEdge：较短的那条边。 */
-const squareReach = (g) => starsReach(g, Math.min(g.length, g[0]?.length ?? 0), isStar);
+/** square.ts 的 coachStarClear：每一整行、每一整列都是「外边」（最短的那条就是较短的那条边）。 */
+const squareReach = (g) => {
+  const rows = g.length;
+  const cols = g[0]?.length ?? 0;
+  const edges = [
+    ...Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => [r, c])),
+    ...Array.from({ length: cols }, (_, c) => Array.from({ length: rows }, (_, r) => [r, c])),
+  ];
+  return starClearHintFor({ grid: g, edges, isStar, colorOf: (t) => t.dotColor }) !== null;
+};
 /** 把某一色的前 n 枚翻成星星。 */
 function flipColor(g, color, n) {
   let k = 0;
