@@ -809,9 +809,16 @@ export function watchRoom(
     if (stopped) return;
     const now = await fetchState();
     if (stopped) return;
-    if (now.ok) onState(now.value);
-    else onError(now.reason);
-    timer = window.setTimeout(tick, everyMs);
+    // 交给页面的那一下包 try/finally（2026-10-08 方案 2-5）：页面那一头抛了，下一拍照样排上。
+    // 从前「排下一拍」写在调用之后，onState / onError 只要抛一次（比如它去碰一个用不了的
+    // localStorage），轮询就此停掉——小屋页停在那一刻，不报错、不重连，看着像网断了。错照样往
+    // 外冒（控制台看得见），只是不再把轮询一起带走。
+    try {
+      if (now.ok) onState(now.value);
+      else onError(now.reason);
+    } finally {
+      timer = window.setTimeout(tick, everyMs);
+    }
   };
   void tick();
   return () => {

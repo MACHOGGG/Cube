@@ -2447,13 +2447,27 @@ export const MODE_TIPS: Record<
   },
 };
 
+/*
+ * 这四个读写存储的函数（loadLang / saveLang / hasSeenTutorial / markTutorialSeen）都照下面
+ * isFirstRun 的写法包一层 try/catch（2026-10-08 方案 2-5）。有的浏览器环境一碰 localStorage
+ * 就抛（Chrome 关掉网站数据、一些 App 内置浏览器）：从前 boot() 第一句 loadLang() 一抛，开机
+ * 就停在那儿，玩家看到一张白屏。读不到就当没存过，写不进去就算了——这一次照样玩得了。
+ */
 export function loadLang(): Lang | null {
-  const v = localStorage.getItem(LANG_STORAGE_KEY);
-  return v && LANG_ORDER.includes(v as Lang) ? (v as Lang) : null;
+  try {
+    const v = localStorage.getItem(LANG_STORAGE_KEY);
+    return v && LANG_ORDER.includes(v as Lang) ? (v as Lang) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function saveLang(lang: Lang): void {
-  localStorage.setItem(LANG_STORAGE_KEY, lang);
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+  } catch {
+    /* 存不进去：下次打开再按浏览器的语言猜一遍。 */
+  }
 }
 
 /**
@@ -2535,11 +2549,20 @@ const TUTORIAL_SEEN_KEYS: Record<TutorialShape, string> = {
 };
 
 export function hasSeenTutorial(shape: TutorialShape = 'square'): boolean {
-  return localStorage.getItem(TUTORIAL_SEEN_KEYS[shape]) === '1';
+  try {
+    return localStorage.getItem(TUTORIAL_SEEN_KEYS[shape]) === '1';
+  } catch {
+    // 读不到就当没看过——顶多多教一遍（小红书那一端 tutorial.ts 是同一个口径）。
+    return false;
+  }
 }
 
 export function markTutorialSeen(shape: TutorialShape = 'square'): void {
-  localStorage.setItem(TUTORIAL_SEEN_KEYS[shape], '1');
+  try {
+    localStorage.setItem(TUTORIAL_SEEN_KEYS[shape], '1');
+  } catch {
+    /* 存不进去：下一次照样当没看过。 */
+  }
 }
 
 /**

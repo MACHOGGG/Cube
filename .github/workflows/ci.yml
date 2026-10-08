@@ -1174,6 +1174,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8984/ && break; sleep 0.25; done
           node scripts/check-host-gone-card.mjs http://localhost:8984/
 
+      # localStorage 一碰就抛的环境（Chrome 关掉网站数据、一些 App 内置浏览器）里开站（2026-10-08
+      # 方案 2-5）：主菜单出得来、开得了一局、个人主页打得开、一路没有没接住的错。从前 boot() 第一
+      # 句 loadLang() 一抛就是一张白屏。前半节纯 node：watchRoom 的回调抛一次，轮询照样接着排。
+      - name: localStorage 用不了也不白屏
+        run: |
+          nohup node scripts/dev-server.mjs 8986 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8986/ && break; sleep 0.25; done
+          node scripts/check-no-storage.mjs http://localhost:8986/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。
