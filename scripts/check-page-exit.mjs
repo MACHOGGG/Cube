@@ -42,7 +42,8 @@
  * ── 10-08 方案 3-C-3 之后 ─────────────────────────────────────────
  *
  * 成绩页那颗换成了全站《退出》的尺寸 token（--exit-disc：73–99，跟着屏宽，基准是开局倒数页
- * 那两颗圆盘，见 style.css）；别的几页还是 62，随 3-F-2 一起换。离底的那条线没变——底边还在
+ * 那两颗圆盘，见 style.css）；3-F-2 起七页全是它（「多人小屋、计时、炸弹、老虎机、今日挑战全部
+ * 引用」——今日挑战那一页不在这七页里，它的倒数页由 check-count-stage 量）。离底的那条线没变——底边还在
  * 「底排的高度 ＋ 16」上，变大的那一截往上长。所以「位置」量的是**底边和水平中线**（方案
  * 3-F-2 的原话就是「位置统一到底部同一坐标」），不再量中心：两种尺寸的中心本来就不在一个
  * 高度上。成绩页的页底留白跟着按它自己的尺寸算（离底 ＋ 它 ＋ 16）。
@@ -66,8 +67,8 @@ const PANEL_BASE = { 360: 317, 390: 317, 430: 299 };
 
 /** 离底的定值：102 ＋ max(安全区 0, 14)。 */
 const EXIT_BOTTOM = 116;
-const EXIT = 62;
-/** 全站《退出》的尺寸 token（--exit-disc）：clamp(73px, 19.5vw, 99px)。成绩页先用上（10-08 方案 3-C-3）。 */
+/** 全站《退出》的尺寸 token（--exit-disc）：clamp(73px, 19.5vw, 99px)。成绩页先用上（10-08 方案 3-C-3），
+ *  3-F-2 起七页都是它（从前是 62）。 */
 const disc = (w) => Math.min(99, Math.max(73, 0.195 * w));
 
 let fail = 0;
@@ -256,8 +257,8 @@ for (const size of SIZES) {
     check(`${tag}：（尺子）这一页量到了内容件`, m.items >= 3, `${m.items} 件`);
     check(`${tag}：是统一的那颗 .page-exit`, m.isPageExit);
     check(`${tag}：有 aria-label（只放图标的键）`, m.label.trim().length > 0, m.label);
-    const want = pg.records ? disc(size.w) : EXIT;
-    check(`${tag}：${pg.records ? `用全站《退出》的尺寸 token（${want.toFixed(1)}px，73–99 跟着屏宽）` : '62×62'}`,
+    const want = disc(size.w);
+    check(`${tag}：用全站《退出》的尺寸 token（${want.toFixed(1)}px，73–99 跟着屏宽）`,
       Math.abs(m.box.w - want) <= 0.5 && Math.abs(m.box.h - want) <= 0.5, `${m.box.w.toFixed(1)}×${m.box.h.toFixed(1)}`);
     check(`${tag}：水平正中（≤1px）`, Math.abs(m.box.cx - expCx) <= 1, `中心 x ${m.box.cx.toFixed(1)} / ${expCx}`);
     check(`${tag}：底边离底 116（≤1px）`, Math.abs(m.box.b - expB) <= 1, `底边 ${m.box.b.toFixed(1)} / ${expB}`);
@@ -273,12 +274,26 @@ for (const size of SIZES) {
     }
     if (pg.blue) {
       check(`${tag}：小屋那颗还是蓝的（#4C68B0）`, m.disc === 'rgb(76, 104, 176)', m.disc);
-      check(`${tag}：没被拉成整行宽`, m.box.w <= EXIT + 0.5, `${m.box.w.toFixed(1)}px`);
+      check(`${tag}：没被拉成整行宽`, m.box.w <= disc(size.w) + 0.5, `${m.box.w.toFixed(1)}px`);
     } else {
       check(`${tag}：白底`, m.disc === 'rgb(255, 255, 255)', m.disc);
       check(`${tag}：深红箭头（--accent-ink #7A2E37）`, m.markColor === 'rgb(122, 46, 55)', m.markColor);
     }
     centers.push({ n: pg.n, cx: m.box.cx, b: m.box.b });
+    // 老虎机介绍页右下角那颗《开始 〉》（开通了的人才有）和《退出》中线对齐（style.css 的 .slot-go）。
+    // 它的离底是照《退出》的半个高度算的：10-08 方案 3-F-2 之前那半个高度写死是 31（62 的一半），
+    // 《退出》改成跟着屏宽变大小之后，那一行要是没跟上，两颗就一高一低。
+    if (pg.n === '老虎机介绍') {
+      const go = await page.evaluate(() => {
+        const r = document.querySelector('#slotGo')?.getBoundingClientRect();
+        return r ? { cy: r.top + r.height / 2 } : null;
+      });
+      check(`${tag}：（尺子）开通了的人，右下角有《开始 〉》`, !!go);
+      if (go) {
+        check(`${tag}：《开始 〉》和《退出》中线对齐（≤1px）`, Math.abs(go.cy - m.box.cy) <= 1,
+          `《开始》中线 ${go.cy.toFixed(1)} / 《退出》中线 ${m.box.cy.toFixed(1)}`);
+      }
+    }
 
     // ── 第 5 条：手机战绩页 ──
     if (pg.records && size.phone) {

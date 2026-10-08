@@ -92,10 +92,12 @@
 /* ---- 战绩详情：一张图 + 两颗键 ---------------------------------------- */
 .xhs-run-sheet { gap: 14px; }
 /* 《退出》是全站统一的那颗 .page-exit（第 18 推）：钉在屏幕上，不在流里。页底留出它那一截
-   ——它离底的距离 ＋ 78px，滑到底时最后那颗键离它上沿还有 16px。只写一行定数：这一端
-   跑在 Chrome 61 上，带 max() 的那种写法它整条丢掉，而这一端的安全区由容器报，116 ＋ 78
-   正是报 0 时的值（网页那边写的是两行，见 src/style.css 的 .page-exit）。 */
-.xhs-run-sheet { padding-bottom: 194px; }
+   ——它离底的距离 ＋ 它自己 ＋ 16px，滑到底时最后那颗键离它上沿还有 16px。这一端的安全区由
+   容器报，离底就是 116（报 0 时的值，网页那边写的是两行，见 src/style.css 的 .page-exit）。
+   10-08 方案 3-F-2 起那颗键是 --exit-disc 那个尺寸（73–99，跟着屏宽），所以「它自己」那一截是个
+   clamp：132 ＝ 116 ＋ 16。前一行是定数兜底（390 宽时的值）——Chrome 61 不认 clamp()，那一行由降级
+   层算成像素（xhs/src/oldKernel.ts），算之前先有这一行垫着。 */
+.xhs-run-sheet { padding-bottom: 208px; padding-bottom: calc(132px + clamp(73px, 19.5vw, 99px)); }
 .xhs-run-body { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .xhs-run-img {
   width: 100%; max-width: 420px; height: auto; display: block;

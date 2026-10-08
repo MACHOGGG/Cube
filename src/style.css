@@ -2946,15 +2946,17 @@ button:hover { filter: brightness(1.05); }
 .center-pick--in { opacity: 1; }
 /* 底下带《退出》的那一种（记录与排名点开的三块、炸弹挑选窗）。
    《退出》是全站统一的那颗 .page-exit（第 18 推），钉在屏幕上、和二级页那几颗同一个位置；
-   这一层只要把底下那一截让给它：下内边距 ＝ 它离底的距离 ＋ 78px（62 的键 ＋ 16 的空），
+   这一层只要把底下那一截让给它：下内边距 ＝ 它离底的距离 ＋ 它自己 ＋ 16 的空（10-08 方案 3-F-2
+   起它是 --exit-disc 那个尺寸，跟着屏宽，所以中间那个 clamp 就是它；三个数照抄那个 token，理由
+   见 .records-page 那一段），
    面板在上面剩下的那一块里居中，谁也不压谁。从前圆盘自己在流里占一行
    （.center-pick-foot），离底多远跟着面板多高走，换一扇窗就换一个位置。
    底排导航这时候照旧收起来。
    padding-bottom 写两遍，前一行不带 max()：老内核（Chrome 61）算不了带 var() 的
-   max()，带 max() 那一行在它那儿被**整条丢掉**——194 正是这道式子在安全区报 0 时的
-   结果，和 .page-exit 那两行 bottom 同一个写法。
+   max()，带 max() 那一行在它那儿被**整条丢掉**——208 正是这道式子在 390 宽、安全区报 0
+   时的结果，和 .page-exit 那两行 bottom 同一个写法。
    面板的高度上限跟着扣：上面 24 ＋ 下面那一截。 */
-.center-pick--back { flex-direction: column; padding-bottom: 194px; padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+.center-pick--back { flex-direction: column; padding-bottom: 208px; padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 .center-pick--back .center-pick-body { min-height: 0; }
 .center-pick--back .records-panel--big,
 .center-pick--back .total-card--big {
@@ -3588,11 +3590,12 @@ body:has(.center-pick--back) .home-nav { display: none; }
    的）。前面那行 100vh 是给不认识 svh 的老浏览器兜底。 */
 .slot-page { min-height: 100vh; min-height: 100svh; padding: 0; gap: 0; max-width: none; }
 /* 底下那一截留给《退出》（第 18 推第 1 条）：它不在内容流里了，钉在屏幕上（.page-exit），
-   这一截就是「它离底的距离 ＋ 78px」——内容最多画到它上沿再往上 16px。从前这儿是 22px ＋
-   安全区，那会儿那颗键自己在流里占着地方。两行的道理和 .page-exit 那两行 bottom 一样：
-   前一行是老内核算不了 max() 时的兜底（安全区报 0 时的值）。 */
-.slot-page .start-stage { padding-bottom: 194px; }
-.slot-page .start-stage { padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+   这一截就是「它离底的距离 ＋ 它自己 ＋ 16px」——内容最多画到它上沿再往上 16px。从前这儿是
+   22px ＋ 安全区，那会儿那颗键自己在流里占着地方。10-08 方案 3-F-2 起它是 --exit-disc 那个尺寸
+   （中间那个 clamp，照抄那个 token）。两行的道理和 .page-exit 那两行 bottom 一样：前一行是老内核
+   算不了 max() 时的兜底（390 宽、安全区报 0 时的值）。 */
+.slot-page .start-stage { padding-bottom: 208px; }
+.slot-page .start-stage { padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 /* 和开局页一样是整屏的一幕，底下那一排导航在这儿只会挡住《退出》。 */
 body:has(.slot-page) .home-nav { display: none; }
 /* 三张图占的是开局页放倒数窗口的那一格，所以横着摊开、上下居中。 */
@@ -4179,16 +4182,26 @@ body:has(.daily-page--count) .home-nav { display: none; }
  * transform 上，两个写在一起就得每一处都记着把 translate 带上，漏一处按下去就跳到右边。
  * 也不用单独的 translate 属性——Chrome 61 不认得它。
  *
- * **每一页的底部留白要 ≥ 按钮离底的距离 ＋ 78px**（62 的按钮 ＋ 16 的空）：内容最多画到
- * 按钮上沿再往上 16px，谁也不压谁。那个数各页写在各页自己的规则里（都是 194px ＋ 同一
- * 个 max() 那一对，搜「180px + max」）。门：scripts/check-page-exit.mjs。
+ * **每一页的底部留白要 ≥ 按钮离底的距离 ＋ 按钮自己 ＋ 16px**：内容最多画到按钮上沿再往上
+ * 16px，谁也不压谁。那个数各页写在各页自己的规则里（都是 208px ＋ 带 clamp 的那一对，搜
+ * 「118px + clamp」）。门：scripts/check-page-exit.mjs。
+ *
+ * **10-08 方案 3-F-2 起它是 --exit-disc 那个尺寸**（73–99，跟着屏宽；原话：「以基础玩法倒数
+ * 页现在的退出钮为基准抽尺寸 token；多人小屋、计时、炸弹、老虎机、今日挑战全部引用；位置统一
+ * 到底部同一坐标」）。从前是 62——开局倒数那一页的两颗是 73–99，同一个《退出》在挑图形那一
+ * 页和紧跟着的倒数页上一大一小。离底那条线没动（底边还在「底排的高度 ＋ 16」上），变大的那
+ * 一截往上长。居中改成 left / right 都钉 0 ＋ 左右 margin auto：宽度跟着屏幕变了，「left 50%
+ * ＋ 负的半个宽度」写死的是 62 的一半——Chrome 61 也认这个写法。成绩页那颗 3-C-3 就先换了，
+ * 现在全站一起，它那条单独的规则撤了。小红书那几张二级页也是这一颗，跟着一起变。
  */
 .page-exit.icon-btn {
   position: fixed; z-index: 61;
-  left: 50%; margin-left: -31px;
+  left: 0; right: 0; margin: 0 auto;
   bottom: 116px;
   bottom: calc(102px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
-  width: 62px; height: 62px; padding: 0; flex: none;
+  width: var(--exit-disc); min-width: var(--exit-disc-min); max-width: var(--exit-disc-max);
+  height: var(--exit-disc); min-height: var(--exit-disc-min); max-height: var(--exit-disc-max);
+  padding: 0; flex: none;
   border: none; background: none; border-radius: 50%; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   --ctl-disc: var(--surface); --ctl-mark: var(--accent-ink);
@@ -4205,25 +4218,10 @@ body:has(.daily-page--count) .home-nav { display: none; }
  * 级层又算不掉，那条声明在老内核上会被整条丢掉（check-css-fallbacks 不许变量里藏新函数，就
  * 是为这个）。宽高和 min / max 是 Chrome 61 认得的老写法，三端一个样。
  *
- * 第一个用上它的是成绩页那颗《退出》（10-08 方案 3-C-3「尺寸用 3-F 的统一 token」，见下
- * 一条）；倒数页那两颗自己也改引它（数一个像素都没变）。其余几页的 .page-exit 还是 62，随
- * 3-F-2 一起换。
+ * 第一个用上它的是成绩页那颗《退出》（10-08 方案 3-C-3「尺寸用 3-F 的统一 token」）；倒数页
+ * 那两颗自己也改引它（数一个像素都没变）；3-F-2 起全站的 .page-exit 都是它（见上面那条）。
  */
 :root { --exit-disc: 19.5vw; --exit-disc-min: 73px; --exit-disc-max: 99px; }
-/*
- * 成绩页的《退出》用上面那个 token（10-08 方案 3-C-3）。离底的那条线不变（底边还是「底排的
- * 高度 ＋ 16px」，和别的页同一个坐标），变大的那一截往上长；两块面板相应地整体上移、略收
- * （见 .records-page 那几条）。
- *
- * 居中改成 left / right 都是 0 ＋ 左右 margin auto：宽度现在跟着屏幕变，上面那条「left 50%
- * ＋ 负的半个宽度」写死的是 62 的一半。定位的盒子给了宽度、两边又都钉住，auto 的左右边距
- * 就平分剩下的——Chrome 61 也认。
- */
-.records-page:not(.xhs-profile) .page-exit.icon-btn {
-  left: 0; right: 0; margin: 0 auto;
-  width: var(--exit-disc); min-width: var(--exit-disc-min); max-width: var(--exit-disc-max);
-  height: var(--exit-disc); min-height: var(--exit-disc-min); max-height: var(--exit-disc-max);
-}
 /*
  * 手机横过来（矮于 560 的横屏）：挑图形那几页和炸弹挑选窗的《退出》挪到右边、上下居中。
  *
@@ -4240,8 +4238,15 @@ body:has(.daily-page--count) .home-nav { display: none; }
      宽——收了它就折行，整块往上挪，横屏那个老位置就变了。 */
   .slot-page .page-exit.icon-btn,
   .center-pick--back .page-exit.icon-btn {
-    left: auto; right: 16px; top: 50%; bottom: auto; margin: -31px 0 0 0;
+    /* 上下居中：上下都钉 0 ＋ 上下 margin auto，盒子有定高，auto 平分剩下的（从前是 top 50% ＋
+       负的半个高度 -31px）。
+       **这一档照旧是 62px，不跟 --exit-disc**（10-08 方案 3-F-2 的例外）：那个 token 按屏宽算，844
+       宽的横屏上封顶 99；这一档键站在内容右边，步步为营那句最长的标语右沿在 743，键要离它 16px，
+       左沿得在 759 以右——宽度最多 69，连 token 的下限 73 都放不下（小红书 check-pickup 横屏那一条量
+       的就是它）。这一档本来就是另一种排法，键的大小跟着这一档的地方走。 */
+    left: auto; right: 16px; top: 0; bottom: 0; margin: auto 0;
     right: calc(16px + env(safe-area-inset-right, 0px));
+    width: 62px; min-width: 0; max-width: none; height: 62px; min-height: 0; max-height: none;
   }
   .slot-page .start-stage { padding-bottom: 36px; }
   .slot-page .start-stage { padding-bottom: calc(22px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
@@ -5972,12 +5977,13 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    色留着这一页自己的蓝。
    flex: none 是方案点名要的，修的是一个真出过的毛病：从前它坐在 .page-back-row 那一行里，
    全局的 `button { flex: 1 }` 把它拉成整行宽（390 宽的屏上量到 358px）——圆盘还是画在正
-   中那 62px 里，可**整行都是它的点击区**，手指在那一行上随便落一下就退出小屋了。现在它
+   中那一颗里，可**整行都是它的点击区**，手指在那一行上随便落一下就退出小屋了。现在它
    不在流里，flex 本来已经管不着它；这一句写在这儿，是让它哪天再被放回一行里也不会被拉宽。 */
 .mp-page .mp-back { --ctl-disc: var(--mp-blue); --ctl-mark: #FFFFFF; flex: none; }
-/* 底下那一截留给《退出》：它离底的距离 ＋ 78px（见 .page-exit）。前一行是老内核的兜底。 */
-.mp-page--home { padding-bottom: 194px; }
-.mp-page--home { padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+/* 底下那一截留给《退出》：它离底的距离 ＋ 它自己 ＋ 16px（见 .page-exit；10-08 方案 3-F-2 起它是
+   --exit-disc 那个尺寸，中间那个 clamp 照抄那个 token）。前一行是老内核的兜底。 */
+.mp-page--home { padding-bottom: 208px; }
+.mp-page--home { padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 
 /* ---- 这一页不摆底排（玩家：「下方也去除掉个人主页和排名与信息栏的板块」）----
    两种写法都留着，和小屋里那几屏同一个道理：:has() 在新内核上够用，老内核落到 JS 盖上
@@ -6444,12 +6450,15 @@ body.is-room-host::after {
    第 18 推起它和那颗统一的《退出》（.page-exit）站在同一行：中线对齐，一个在正中、一个靠
    右。从前它离底 30px，比《退出》还低——底下那一截现在整个留给《退出》（离底 116 起），这
    颗键要是还待在 30px，就成了一颗落在《退出》底下的孤零零的键。
-   高度写死 42，才算得准「中线对齐」：《退出》的中线离底 102 ＋ max(安全区, 14) ＋ 31，这颗
-   的底边就是那条线再往下 21。两行 bottom 的道理和 .page-exit 那两行一样（老内核兜底）。 */
+   高度写死 42，才算得准「中线对齐」：《退出》的中线离底 102 ＋ max(安全区, 14) ＋ 它的半个高
+   度，这颗的底边就是那条线再往下 21。10-08 方案 3-F-2 起《退出》是 --exit-disc 那个尺寸（73–99，
+   跟着屏宽），半个高度不再是 31，所以写成 81 ＋ max() ＋ 那个 clamp 的一半（81 ＝ 102 − 21；
+   clamp 里的三个数照抄 --exit-disc，理由见 .records-page 那一段）。前一行是老内核的兜底（390 宽、
+   安全区报 0 时的值：81 ＋ 14 ＋ 38）。 */
 .slot-go {
   position: absolute; right: clamp(14px, 4vw, 28px);
-  bottom: 126px;
-  bottom: calc(112px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
+  bottom: 133px;
+  bottom: calc(81px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px) + clamp(73px, 19.5vw, 99px) / 2);
   display: inline-flex; align-items: center; gap: 6px;
   height: 42px; box-sizing: border-box;
   padding: 0 14px 0 20px; border: none; border-radius: var(--r-full);

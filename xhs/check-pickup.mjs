@@ -129,10 +129,12 @@ for (const pick of PICKS) {
   say(!!m.acts && m.tag.bottom < m.acts.top - 40,
     `${pick.name}：标语和底下那颗《退出》之间留得下 40px`,
     m.acts ? `标语底 ${m.tag.bottom} / 键顶 ${m.acts.top}` : '没有《退出》');
-  // 第 18 推：那颗《退出》是全站统一的那一颗——62px、水平正中、离底 116（安全区报 0 时）。
-  say(!!m.acts && Math.abs(m.acts.w - 62) <= 0.5 && Math.abs(m.acts.h - 62) <= 0.5 &&
+  // 第 18 推：那颗《退出》是全站统一的那一颗——水平正中、离底 116（安全区报 0 时）。尺寸 10-08 方案
+  // 3-F-2 起是 --exit-disc（clamp(73px, 19.5vw, 99px)，跟着屏宽；从前是 62）。
+  const disc = Math.min(99, Math.max(73, 0.195 * m.vw));
+  say(!!m.acts && Math.abs(m.acts.w - disc) <= 0.5 && Math.abs(m.acts.h - disc) <= 0.5 &&
       Math.abs((m.acts.left + m.acts.right) / 2 - m.vw / 2) <= 1 && Math.abs(m.vh - m.acts.bottom - 116) <= 1,
-    `${pick.name}：《退出》是统一的那一颗（62px、正中、离底 116）`,
+    `${pick.name}：《退出》是统一的那一颗（${disc.toFixed(1)}px、正中、离底 116）`,
     m.acts ? `${m.acts.w.toFixed(1)}×${m.acts.h.toFixed(1)}，中心 x ${((m.acts.left + m.acts.right) / 2).toFixed(1)}，离底 ${m.vh - m.acts.bottom}` : '没有');
   // 10vh ＝ 84px（844 高）。给 ±4px 的余量，别钉死一个像素。
   say(Math.abs(m.padTop - m.vh * 0.1) <= 4,
@@ -174,6 +176,9 @@ for (const pick of PICKS) {
    * 让出 194——390 高的横屏里两张图和标语就挤不下了，第一版量到整页被撑长 89px、《退出》
    * 压在标语和图上）。横屏它站到右边、上下居中（和改版前那颗键排在图右边是同一个排法）。
    * 量的是：它在右边、上下居中、和两张图、标语一个像素都不相交（左右还隔着 16px）。
+   *
+   * 10-08 方案 3-F-2 把竖屏那颗换成了 --exit-disc（跟着屏宽，844 宽时封顶 99）；横屏这一档照旧 62
+   * ——99 的键站在右边会压到步步为营那句标语上（这一条第一次跑就是这么红的），见 style.css 那段。
    */
   const contentRight = Math.max(m.row.right, m.tag.right);
   say(!!m.acts && m.acts.left >= contentRight + 16 && Math.abs((m.acts.top + m.acts.bottom) / 2 - m.vh / 2) <= 1,
