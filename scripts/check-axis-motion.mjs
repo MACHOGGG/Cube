@@ -19,7 +19,7 @@ if (!motionSrc || !springSrc) {
   console.error('用法: node scripts/check-axis-motion.mjs <打包好的 axisMotion.mjs> <打包好的 spring.mjs>');
   process.exit(2);
 }
-const { damp, AXIS_LERP, AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, blurFor, BLUR_EDGE, BLUR_MAX, BLUR_EXEMPT,
+const { damp, chase, settleStep, AXIS_LERP, AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, AXIS_VMAX_ROWS, blurFor, BLUR_EDGE, BLUR_MAX, BLUR_EXEMPT,
   flatFor, FLAT_MAX, FLAT_DEAD, FLAT_VMAX, rubber, RUBBER_D, skewFor, SKEW_DEAD, SKEW_MAX } = await import(motionSrc);
 const { createSpring, stepSpring } = await import(springSrc);
 
@@ -62,20 +62,20 @@ const check = (name, ok, extra = '') => {
   );
 }
 
-// ── 无滞后直贴：AXIS_LERP 现在是 1 ─────────────────────────────────
+// ── 滑动阻尼：AXIS_LERP 现在是 0.12（10-08 方案 3-D-4）─────────────────
 //
-// 玩家在调参模拟台上把它拉到了顶（附录 A：`"lerp":1`），语义是「画面每帧直接等于手指
-// 的目标，没有追赶曲线」。数学上 λ 就是无穷大——这一段量的是那一档真的成立，而且**下游
-// 不必为它写分支**：damp 自己算出来就是 target。
+// 玩家拍板，是对上一版「1：无滞后直贴」（2026-09，模拟台上拉到顶）的有意反转。这一段量的是
+// 那一档真的生效了：λ 有限、60Hz 下每帧正好追 0.12、停住追齐那个常量也跟着活过来。λ = ∞ 那一
+// 档 damp 照旧一帧到位——点点那条路（一比一贴手指）用的就是它。
 {
-  check(`AXIS_LERP 是 1（无滞后直贴）`, AXIS_LERP === 1, String(AXIS_LERP));
-  check('λ 因此是 Infinity', AXIS_LAMBDA === Infinity, String(AXIS_LAMBDA));
-  check('停住追赶那个常量也跟着失效（无滞后就没有「还差半拍」）',
-    AXIS_SETTLE_LAMBDA === Infinity, String(AXIS_SETTLE_LAMBDA));
-  // 一帧就到，任何 dt 都一样——包括被截断的那一档。
-  const spots = [1000 / 120, 1000 / 60, 1000 / 30, 5000].map((dt) => damp(0.3, 7, dt));
-  check('λ = ∞ 下 damp 一帧到位（dt 多少都一样）',
-    spots.every((v) => v === 7), spots.join(' '));
+  check('AXIS_LERP 是 0.12（滑动阻尼，10-08 方案 3-D-4）', AXIS_LERP === 0.12, String(AXIS_LERP));
+  check('λ 有限，由 0.12 反推', Number.isFinite(AXIS_LAMBDA) && Math.abs(AXIS_LAMBDA + Math.log(1 - 0.12) * 60) < 1e-9,
+    String(AXIS_LAMBDA));
+  check('60Hz 下每帧正好追 0.12', Math.abs(damp(0, 1, 1000 / 60) - 0.12) < 1e-6, damp(0, 1, 1000 / 60).toFixed(8));
+  check('停住追齐那个常量活过来了（λ 的 8 倍）', Number.isFinite(AXIS_SETTLE_LAMBDA) && Math.abs(AXIS_SETTLE_LAMBDA - 8 * AXIS_LAMBDA) < 1e-9,
+    String(AXIS_SETTLE_LAMBDA));
+  const spots = [1000 / 120, 1000 / 60, 1000 / 30, 5000].map((dt) => damp(0.3, 7, dt, Infinity));
+  check('λ = ∞ 下 damp 一帧到位（点点那条路；dt 多少都一样）', spots.every((v) => v === 7), spots.join(' '));
 }
 
 // ── 追赶那条路本身：同一段真实时间，帧率不同追到的地方要一样 ────────
@@ -84,15 +84,12 @@ const check = (name, ok, extra = '') => {
 // 30Hz 只追回 27.1%、60Hz 46.9%、120Hz 71.8%——开发机上调好的那一点「慢半拍」，
 // 到低电量模式的 iPhone 上是拖泥带水，到 120Hz 上几乎不慢。
 //
-// **λ 显式传进去**，不走默认值：默认值现在是 ∞（一帧到位），那一档量不到帧率无关这件
-// 事。追赶那条路仍旧活着——`slides.axisTune` 把 `lerp` 调回小于 1，modeAxis 的 loop 就
-// 又走它（见那个文件里 `AXIS_LERP >= 1` 那一支）。这一段量的就是那条路。
+// 量的是默认那个 λ（0.12 反推出来的）。2026-09 到 10-08 那一段默认是 ∞，这一节只好拿 0.1 显式
+// 传进去量；现在默认值本身就是一条活的追赶路。
 {
-  /** lerp = 0.1 对应的 λ，也就是这条路从前的默认值。 */
-  const LAMBDA_01 = -Math.log(1 - 0.1) * 60;
   const run = (dtMs, steps) => {
     let x = 0;
-    for (let i = 0; i < steps; i++) x = damp(x, 1, dtMs, LAMBDA_01);
+    for (let i = 0; i < steps; i++) x = damp(x, 1, dtMs);
     return x;
   };
   // 都走满 100ms 真实时间，只是帧数不同。
@@ -108,19 +105,109 @@ const check = (name, ok, extra = '') => {
     spread / vals[1] < 0.005,
     at.map(([n, v]) => `${n} ${(v * 100).toFixed(2)}%`).join(' / '),
   );
-  // 60Hz 那一档必须正好等于那个 lerp：这是「λ 由 0.1 反推」那句话的验算。
-  check(
-    '60Hz 下每帧正好追 0.1（λ 由它反推）',
-    Math.abs(damp(0, 1, 1000 / 60, LAMBDA_01) - 0.1) < 1e-6,
-    `${damp(0, 1, 1000 / 60, LAMBDA_01).toFixed(8)}，λ = ${LAMBDA_01.toFixed(6)}`,
-  );
   // 切后台回来那一下 dt 可能是几秒：截断到 64ms，不能一帧贴到目标上。
   check(
     'dt 再大也截断在 64ms（切后台回来不会一帧跳到位）',
-    Math.abs(damp(0, 1, 5000, LAMBDA_01) - damp(0, 1, 64, LAMBDA_01)) < 1e-12 &&
-      damp(0, 1, 5000, LAMBDA_01) < 0.4,
-    `dt=5000ms 追了 ${(damp(0, 1, 5000, LAMBDA_01) * 100).toFixed(2)}%`,
+    Math.abs(damp(0, 1, 5000) - damp(0, 1, 64)) < 1e-12 && damp(0, 1, 5000) < 0.4,
+    `dt=5000ms 追了 ${(damp(0, 1, 5000) * 100).toFixed(2)}%`,
   );
+}
+
+// ── 高速甩动：任何一帧都走不满一排（10-08 方案 3-D-4）────────────────────
+//
+// 方案定的规则：「换行必须经过过渡动画——单手势可跨多行，但行切换由弹簧驱动、禁止瞬时置位」，
+// 门要「高速甩动帧序列无单帧超一行高的跳变」。光有阻尼不够：damp 每帧走「剩下那段的一个比
+// 例」，剩下那段一长，一帧就跨过好几排（0.12 在 30Hz、离目标 6 排时一帧 1.35 排；64ms 那种长
+// 帧 2.3 排）。点点那条路（λ = ∞）更直接：手指一帧划多远画面就跳多远。chase() 在阻尼之后按时
+// 间封一道速度（AXIS_VMAX_ROWS 排/秒）。
+//
+// 四条会动画面的路，各在 120 / 60 / 30Hz 和 64ms 长帧上跑一遍，记下每一帧走了多远：
+//   ① 拖动追赶：手指一下子指到 6 排外（轴最多 7 排），画面一路追过去；
+//   ② 点点那条路：手指在点点上一帧划 3 排，划两帧；
+//   ③ 停住追齐：同 ①，但按停住那个 λ（8 倍）追；
+//   ④ 松手之后的弹簧（settleStep）：落点最远在画面前头六排——有了拖动阻尼，一把快快地拖过整
+//      条轴，画面才追了一两排，落点已经定在最后一排（轴最多 7 排，0 到 6）；初速度带满（3 排/
+//      秒，FLING_VMAX），两个方向都试。
+// 每一条都还要真的到得了（尺子：不是因为封得太死才「走不满一排」）。
+{
+  check('封顶的那个速度乘上最长那一帧（64ms）不满一排', AXIS_VMAX_ROWS * 0.064 < 1, `${AXIS_VMAX_ROWS} × 0.064 = ${(AXIS_VMAX_ROWS * 0.064).toFixed(3)}`);
+  const RATES = [['120Hz', 1000 / 120], ['60Hz', 1000 / 60], ['30Hz', 1000 / 30], ['64ms', 64]];
+  for (const [name, dt] of RATES) {
+    // ① ③
+    for (const [label, lambda] of [['拖动追赶', AXIS_LAMBDA], ['停住追齐', AXIS_SETTLE_LAMBDA]]) {
+      let x = 0, maxStep = 0, t = 0;
+      while (t < 3000 && Math.abs(6 - x) > 1e-3) {
+        const nx = chase(x, 6, dt, lambda);
+        maxStep = Math.max(maxStep, Math.abs(nx - x));
+        x = nx;
+        t += dt;
+      }
+      check(`${label} ${name}：单帧最多走 ${maxStep.toFixed(3)} 排（< 1），${(t / 1000).toFixed(2)} 秒到位`,
+        maxStep < 1 && Math.abs(6 - x) <= 1e-3, `落在 ${x.toFixed(4)}`);
+    }
+    // ②
+    {
+      let x = 0, aim = 0, maxStep = 0, t = 0;
+      for (let f = 0; t < 3000 && (f < 2 || Math.abs(aim - x) > 1e-3); f++) {
+        if (f < 2) aim += 3;
+        const nx = chase(x, aim, dt, Infinity);
+        maxStep = Math.max(maxStep, Math.abs(nx - x));
+        x = nx;
+        t += dt;
+      }
+      check(`点点一比一 ${name}：手指一帧划 3 排，画面单帧最多走 ${maxStep.toFixed(3)} 排（< 1）`,
+        maxStep < 1 && Math.abs(aim - x) <= 1e-3, `落在 ${x.toFixed(4)} / ${aim}`);
+    }
+    // ④
+    for (const [from, to, v0] of [[0, 2.5, 3], [0, 6, 3], [6, 0, -3], [0, 6, -3]]) {
+      const sp = createSpring(from);
+      sp.velocity = v0;
+      let maxStep = 0, t = 0;
+      while (t < 3000) {
+        const prev = sp.value;
+        settleStep(sp, to, dt);
+        maxStep = Math.max(maxStep, Math.abs(sp.value - prev));
+        t += dt;
+      }
+      check(`松手弹簧 ${name}（${from} → ${to}，初速 ${v0}）：单帧最多走 ${maxStep.toFixed(3)} 排（< 1）`,
+        maxStep < 1 && Math.abs(sp.value - to) < 1e-3, `落在 ${sp.value.toFixed(4)}`);
+    }
+  }
+  // 尺子：上面那一道封顶真的在干活。不封的话，同一把弹簧落后六排、64ms 一帧，单帧要走一排以上——
+  // 不然「走不满一排」可能只是因为弹簧本来就软，那这一节量的就不是 settleStep。
+  {
+    const sp = createSpring(0);
+    sp.velocity = 3;
+    let maxStep = 0;
+    for (let t = 0; t < 3000; t += 64) {
+      const prev = sp.value;
+      stepSpring(sp, 6, 64);
+      maxStep = Math.max(maxStep, Math.abs(sp.value - prev));
+    }
+    check('尺子：不封顶的弹簧落后六排、64ms 一帧，单帧会走一排以上（所以上面那一道封顶是有用的）', maxStep > 1,
+      `${maxStep.toFixed(3)} 排`);
+  }
+  // 平常那种松手（落点就在一排以内）碰不到封顶：弹簧的手感一点不变。
+  {
+    const a = createSpring(0), b = createSpring(0);
+    a.velocity = b.velocity = 2;
+    let same = true;
+    for (let t = 0; t < 1500; t += 1000 / 60) {
+      stepSpring(a, 0.8, 1000 / 60);
+      settleStep(b, 0.8, 1000 / 60);
+      if (a.value !== b.value || a.velocity !== b.velocity) same = false;
+    }
+    check('落点在一排以内时 settleStep 和原样的弹簧逐帧一模一样（玩家调定的手感没被封顶改掉）', same);
+  }
+  // dt 是 0：λ 无穷大那一支不许算出 NaN（−∞ × 0）。画面位置成了 NaN，整条轴一张卡都画不出来。
+  {
+    const r = [chase(2.3, 5, 0, Infinity), chase(2.3, 5, 0), chase(2.3, 5, NaN, Infinity)];
+    check('dt 为 0（或 NaN）时 chase 原地不动，不出 NaN', r.every((v) => v === 2.3), r.join(' / '));
+    const sp = createSpring(1.5);
+    sp.velocity = 2;
+    settleStep(sp, 4, 0);
+    check('dt 为 0 时 settleStep 原地不动', sp.value === 1.5 && sp.velocity === 2, `${sp.value} / ${sp.velocity}`);
+  }
 }
 
 // ── 橡皮筋：越拉越难拉，但没有墙 ────────────────────────────────────

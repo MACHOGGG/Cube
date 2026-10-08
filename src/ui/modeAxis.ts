@@ -42,7 +42,8 @@
  *   · **拖动中慢半拍**：第十三轮——「手指移动一个目标值，画面每帧追它，拖动中
  *     始终慢半拍、恒定、可预期」（参照 Lenis 默认 lerp 0.1）。所以这个文件里有
  *     **两个位置**：`aimFocus`（手指指着第几项）和 `focus`（画面画到第几项），
- *     后者每帧往前者追一截（engine/axisMotion.ts 的 damp，按时间算、帧率无关）。
+ *     后者每帧往前者追一截（engine/axisMotion.ts 的 chase：damp 再加一道按时间算的速度封顶，
+ *     帧率无关）。2026-09 到 10-08 那一段 lerp 是 1、没有这一截；10-08 方案 3-D-4 拉回 0.12。
  *
  * **「慢半拍」不等于「选不准」——这一条是死规矩。**
  * 松手时 round 的是**目标值**，不是画面值；目标值和手指之间那一整套换算
@@ -57,9 +58,9 @@
  * 位置上、把手指的位移换成焦点、在该出声的时候出声。
  */
 import { fisheye, hitTest, influence, type FisheyeParams } from '../engine/fisheye';
-import { createSpring, snapSpring, springAtRest, stepSpring, type SpringState } from '../engine/spring';
+import { createSpring, snapSpring, springAtRest, type SpringState } from '../engine/spring';
 import { tune, tuneFlag } from '../engine/axisTune';
-import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, AXIS_LERP, blurFor, damp, flatFor, rubber, skewFor } from '../engine/axisMotion';
+import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, blurFor, chase, flatFor, rubber, settleStep, skewFor } from '../engine/axisMotion';
 import { reducedMotion } from '../engine/reducedMotion';
 import { motionTier } from '../engine/frameTier';
 import { playAxisTick } from '../engine/juice';
@@ -976,19 +977,20 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       // 同一条时间线。
       const stalled = now - lastT > FLING_STALE;
       /**
-       * **卡片那条路现在也一比一贴着手指**（AXIS_LERP = 1，玩家在模拟台上调到顶）。
+       * **卡片那条路有阻尼了**（10-08 方案 3-D-4，AXIS_LERP 0.12）。2026-09 到 10-08 那一段它
+       * 是一比一贴着手指（lerp 1，玩家在模拟台上调到顶），这一次玩家拍板要回滑动阻尼，是对那
+       * 一档的有意反转。停住了就按 AXIS_SETTLE_LAMBDA 追齐（那个常量的注释里记着为什么）。
        *
-       * 所以三条路合成了同一条：点点贴手指、卡片贴手指、两者严格 1:1 互为镜像。
-       * 「停住还差半拍」那件事随之不存在，AXIS_SETTLE_LAMBDA 在这一档是无穷大、不
-       * 起作用（那个常量自己的注释里记着它当初为什么必须有）。
+       * 点点那条路照旧一比一（λ 无穷大，「那一列点子贴着手指走」是玩家点名要的）。
        *
-       * 追赶那条路**留着**，因为 lerp 是可调的：把 `slides.axisTune` 的 `lerp` 调回
-       * 小于 1，下面那一支连同 damp、连同停住追赶一起回来。写成 `>= 1` 而不是
-       * `=== 1`：钳制上界就是 1，但一个浮点等号在这种地方不值得依赖。
+       * **两条路都过 chase()**：阻尼之后再按时间封一道速度（每秒最多 AXIS_VMAX_ROWS 排）。方案
+       * 定的规则是「换行必须经过过渡动画——单手势可跨多行，但行切换由弹簧驱动、禁止瞬时置位」：
+       * 光有阻尼，离目标远的时候一帧照样能跨过好几排（30Hz、或者切回前台那种长帧），点点那条
+       * 一比一的路更是手指一帧划多远画面就跳多远。封了之后任何一帧都走不满一排（门：
+       * check-axis-motion 的「高速甩动」那一节）。lerp 被 `slides.axisTune` 调回 1 也一样走这
+       * 一句：damp 在 λ 无穷大时直接给 target，封顶照旧。
        */
-      focus = rail || AXIS_LERP >= 1
-        ? aimFocus
-        : damp(focus, aimFocus, dt, stalled ? AXIS_SETTLE_LAMBDA : AXIS_LAMBDA);
+      focus = chase(focus, aimFocus, dt, rail ? Infinity : stalled ? AXIS_SETTLE_LAMBDA : AXIS_LAMBDA);
       // 追到头就贴上去。差得比一个千分位还少的时候，再追也只是每帧重画同一张
       // 图——而手指停着不动（慢慢挑的时候常有）能停好几百毫秒。下一条 move 会把
       // 循环重新点起来，那时 lastLoopTs 已清零，从 60Hz 重新起算。
@@ -1010,7 +1012,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
        */
       const target = springTarget;
       const prev = focus;
-      stepSpring(spring, target, dt);
+      // 和拖动那两条路同一道速度封顶（10-08 方案 3-D-4，见 axisMotion 的 settleStep）：
+      // 有了拖动阻尼，松手时画面可能还落后好几排，弹簧从那么远弹过去一帧能走一排半。
+      settleStep(spring, target, dt);
       focus = spring.value;
       // 弹簧这一段也要报速度：倾斜靠它，而且它自己会衰减到 0，停下来倾斜就回正。
       vRender = dt > 0 ? ((focus - prev) / dt) * 1000 : 0;

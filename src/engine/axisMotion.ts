@@ -22,25 +22,26 @@
  * 类，所以一次性按时间算清楚。
  *
  * 下面 damp() 用的是指数衰减：`1 − e^(−λ·dt)`。λ 由 AXIS_LERP 反推，使得
- * **60Hz 下每帧正好等于 0.1**（上表那一行一个数都不变），换到 30Hz / 120Hz
- * 也还是同样的 46.9%。
+ * **60Hz 下每帧正好等于 AXIS_LERP**（上表拿 0.1 举例：60Hz 那一行一个数都不变），
+ * 换到 30Hz / 120Hz 也还是同样的 46.9%。
  */
 
 import { tune } from './axisTune';
+import { stepSpring, type SpringState } from './spring';
 
 /**
  * 每帧追赶的强度，按「60Hz 下每帧走完剩下的多少」来标。
  *
- * **现在是 1：无滞后直贴。** 玩家 2026-09 在调参模拟台上把它拉到了顶——画面每帧直接
- * 等于手指的目标，没有追赶曲线。数学上 `1 − e^(−λ·dt)` 要等于 1，λ 就是无穷大；语义
- * 上那正是「不追，直接到」。
+ * **现在是 0.12：有阻尼。** 10-08 方案 3-D-4，玩家拍板，是对上一版「1：无滞后直贴」的有意
+ * 反转——2026-09 玩家在调参模拟台上把它拉到了顶，画面每帧直接等于手指的目标；这一次要回滑
+ * 动阻尼。0.12 比 Lenis 的默认 0.1 跟手一点点。真机上要再微调，用 `slides.axisTune` 的
+ * `lerp` 覆盖（发版不依赖它）。
  *
- * 0.1（Lenis 的默认值，「拖动中始终慢半拍、恒定、可预期」）是上一版拍的数，现在作为
- * 历史留在这儿：把 `slides.axisTune` 的 `lerp` 调回 0.1，追赶那条路会原样回来（见
- * modeAxis 的 loop，两条路都还在）。内容页那层阻尼（engine/smoothScroll.ts）仍旧是
- * 0.1，它是另一件事。
+ * 拉回 1 也还是合法的：数学上 `1 − e^(−λ·dt)` 要等于 1，λ 就是无穷大，语义上正是「不追，
+ * 直接到」——下游照样走得通，只是那一档没有阻尼。内容页那层阻尼（engine/smoothScroll.ts）
+ * 是另一件事，一直是 0.1。
  */
-export const AXIS_LERP = tune('lerp', 1);
+export const AXIS_LERP = tune('lerp', 0.12);
 
 /**
  * 换算成按时间计的衰减率（1/秒）。60Hz 下正好等于 AXIS_LERP，换到别的帧率也不走样。
@@ -63,10 +64,10 @@ export const AXIS_LAMBDA = AXIS_LERP >= 1 ? Infinity : -Math.log(1 - AXIS_LERP) 
  * 阈值，不另立一个数）；追齐大约再要 60ms，眼睛看到的是「跟上来了」，不是「跳了一
  * 下」——而且那会儿画面本来就在减速，接上去是顺的。
  *
- * **lerp = 1（现在的默认）之下这个数是无穷大，也就是不起作用**——无滞后就没有「停住
- * 还差半拍」这件事可追。上面那一整段连同「停住 150ms 只追回 61%、差两张卡」的实测，
- * 现在是**历史记录**：它记的是 lerp = 0.1 那一版为什么必须有这个常量。把 `lerp` 调回
- * 小于 1，那一版连同这个常量一起回来。倍数由 `chase` 覆盖（模拟台里那个键）。
+ * 2026-09 到 10-08 那一段 lerp 是 1（无滞后直贴），这个数随之是无穷大、不起作用；10-08 方案
+ * 3-D-4 把 lerp 拉回 0.12，它又是一条活的路了——上面那段「停住 150ms 只追回 61%、差两张卡」
+ * 的实测说的正是这一档会出的事。lerp 再被调回 1 的话它照旧不起作用（无滞后就没有「停住还差半
+ * 拍」可追）。倍数由 `chase` 覆盖（模拟台里那个键）。
  */
 export const AXIS_SETTLE_LAMBDA = AXIS_LAMBDA * tune('chase', 8);
 
@@ -79,6 +80,61 @@ export const AXIS_SETTLE_LAMBDA = AXIS_LAMBDA * tune('chase', 8);
 export function damp(current: number, target: number, dtMs: number, lambda = AXIS_LAMBDA): number {
   const dt = Math.min(Math.max(dtMs, 0), 64);
   return current + (target - current) * (1 - Math.exp((-lambda * dt) / 1000));
+}
+
+/**
+ * 画面一秒最多走几排（10-08 方案 3-D-4：「换行必须经过过渡动画——单手势可跨多行，但行切换由
+ * 弹簧驱动、禁止瞬时置位」；门要「高速甩动帧序列无单帧超一行高的跳变」）。
+ *
+ * 阻尼（damp）本身管不住这件事：它每帧走的是「剩下那段的一个比例」，剩下那段一长，一帧就能
+ * 跨过好几排。0.12 在 60Hz 下离目标 6 排时一帧走 0.72 排；30Hz 下同样那一帧要走 1.35 排，而
+ * 切到后台回来那种 64ms 的一帧要走 2.3 排——画面上就是「啪」地换了一行。点点那条路（一比一
+ * 贴手指，λ 无穷大）更直接：手指一帧划过三排，卡片就一帧跳三排。
+ *
+ * 所以在阻尼之后再按**时间**封一道速度：15 排/秒。按时间封、不按帧封，是为了和这个文件别处一
+ * 样帧率无关（30Hz 和 120Hz 同一段真实时间走到同一处）；而 dt 本来就截在 64ms（damp 那一道），
+ * 15 × 0.064 = 0.96——任何一帧都走不满一排。正常拖动碰不到它：0.12 的阻尼要落后两排以上，速度
+ * 才会到 15 排/秒。
+ */
+export const AXIS_VMAX_ROWS = 15;
+
+/**
+ * 拖动时那一帧画面走到哪儿：先按 lambda 阻尼（damp），再按 AXIS_VMAX_ROWS 封顶。lambda 给
+ * Infinity 就是「不阻尼、直接追到手指」（点点那条路）——照样封顶，所以那条路一帧也跨不过一排。
+ *
+ * **dt 是 0 就原地不动**，不交给 damp：λ 无穷大时 `−λ·dt` 是 `−∞ × 0`，得 NaN，画面位置一旦
+ * 成了 NaN，整条轴的 transform 全是非法值、一张卡都画不出来。同一毫秒里循环走两次（或者
+ * dtMs 本身是 NaN）就会撞上。
+ */
+export function chase(current: number, target: number, dtMs: number, lambda = AXIS_LAMBDA): number {
+  const dt = Math.min(Math.max(dtMs, 0), 64);
+  if (!(dt > 0)) return current;
+  const next = damp(current, target, dt, lambda);
+  const cap = (AXIS_VMAX_ROWS * dt) / 1000;
+  const d = next - current;
+  return Math.abs(d) <= cap ? next : current + Math.sign(d) * cap;
+}
+
+/**
+ * 松手之后那把弹簧走一帧（stepSpring），**同一道速度封顶**。原地改 `s`。
+ *
+ * 有了拖动阻尼，松手那一刻画面可能还落在手指后面好几排：一把快快地拖过六排，画面按每秒 15
+ * 排才追了一两排，落点却已经定在六排外。弹簧（k 90、ζ 0.9，玩家调定的手感，见 SETTLE_SPRING）
+ * 从那么远弹过去，30Hz 下一帧走 0.8 排、64ms 那种长帧一帧走一排半——又是「啪」地换了一行。
+ *
+ * 封在这儿，不去改弹簧参数：参数是手感，离得近（平常那种「松手、落到最近一张」）的时候封顶
+ * 碰都碰不到；只有离得远的那几帧被按住，到了近处照旧由弹簧收尾、照旧有那一点过冲。速度也一
+ * 起夹住，不然积分器里攒着的速度会在封顶一松开的那一帧整个泄出来。
+ */
+export function settleStep(s: SpringState, target: number, dtMs: number): void {
+  const prev = s.value;
+  stepSpring(s, target, dtMs);
+  const cap = (AXIS_VMAX_ROWS * Math.min(Math.max(dtMs, 0), 64)) / 1000;
+  const d = s.value - prev;
+  if (Math.abs(d) > cap) {
+    s.value = prev + Math.sign(d) * cap;
+    s.velocity = Math.max(-AXIS_VMAX_ROWS, Math.min(AXIS_VMAX_ROWS, s.velocity));
+  }
 }
 
 /**

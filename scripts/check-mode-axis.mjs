@@ -1288,30 +1288,75 @@ let page = await menuPage({ slides_played_square: '1' });
   check('轴上选不了字（user-select: none——不然鼠标拖一把就选中卡底下的字，下一把成了拖字）', axisUserSelect === 'none', axisUserSelect);
   check('鼠标在轴上拖了这么多把，浏览器一次都没把手势收走（pointercancel 0 次）', cancels === 0, `${cancels} 次`);
   /**
-   * 点点那条路：一帧之内就到位，一点都不慢。
+   * 点点那条路：**没有阻尼，但一帧也跨不过一排**（10-08 方案 3-D-4）。
    *
-   * 一口气挪四颗点的间距（4 × RAIL_PITCH ＝ 52px），只等两帧再量。
+   * 一口气挪四颗点的间距（4 × RAIL_PITCH ＝ 52px），一路逐帧录、追齐之后再量一次。从前（2026-09）
+   * 这一条量的是「一帧之内就到位」——一帧跳四排，那正是方案 3-D-4 禁止的瞬时置位（「换行必须经
+   * 过过渡动画」）。现在点点那条路照旧不阻尼（追齐之后正好挪四排，一点不少），只是每秒最多走
+   * AXIS_VMAX_ROWS 排。
+   *
+   * **「每一帧走了多少」是逐帧录下来量的，不是「两帧之后看一眼」。** 头一版这么量过：等两帧，
+   * 断言「不满一排」——本机量出来正好 1.00 排，红了。不是限速没生效：Playwright 那一条
+   * mouse.move 回来、evaluate 再挂上两帧，中间其实已经过去三四帧；而画面上的位置还要过一道
+   * 锁定（lockFocus：两排之间那一段斜率是 2.27，一越过去就贴到下一排上），读数于是正好停在 1。
+   * 「几帧之后看一眼」量的是 CDP 往返有多快，不是轴，所以换成和 recordSkew 一样的录法：开一条自
+   * 己的 rAF，从按下到追齐每一帧记一次画出来的位置，量相邻两帧差得最多的那一下。
+   *
+   * 为什么画面上也不会超过一排：锁定是单调的、每隔一排重复一次（g(f+1) = g(f)+1），所以原始焦
+   * 点一帧走不满一排（chase 封着：每秒 15 排、一帧最长按 64ms 算，0.96 排），画出来的位置一帧
+   * 也走不满一排。
    */
   const oneShot = async (x, px) => {
     await startAt(0);
     await p10.mouse.move(x, 450); // 同样躲开底排，见 slowTo 那段
     await p10.mouse.down();
     const before = await p10.evaluate(() => window.__focus());
+    await p10.evaluate(() => {
+      window.__trail = [window.__focus()];
+      window.__trailOn = true;
+      const tick = () => {
+        if (!window.__trailOn) return;
+        window.__trail.push(window.__focus());
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
     await p10.mouse.move(x, 450 - px);
-    const after = await p10.evaluate(
-      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(window.__focus())))),
-    );
     await p10.waitForTimeout(400); // 追齐之后再看一眼：这一把本来该走多远
     const settled = await p10.evaluate(() => window.__focus());
+    const trail = await p10.evaluate(() => {
+      window.__trailOn = false;
+      return window.__trail;
+    });
     await p10.mouse.up();
     await p10.waitForTimeout(900);
-    return { before, after, settled };
+    let maxStep = 0;
+    let moving = 0;
+    for (let i = 1; i < trail.length; i++) {
+      const d = Math.abs(trail[i] - trail[i - 1]);
+      maxStep = Math.max(maxStep, d);
+      if (d > 1e-3) moving++;
+    }
+    return { before, settled, maxStep, moving, frames: trail.length };
   };
   const railShot = await oneShot(6, 4 * 13);
   check(
-    '拨点点一比一跟手：一帧之内就到位，不慢半拍',
-    Math.abs(railShot.after - (railShot.before + 4)) < 0.15,
-    `两帧之后 ${railShot.after.toFixed(2)}（该 ${(railShot.before + 4).toFixed(2)}）`,
+    '拨点点：追齐之后正好挪了四排（这条路不阻尼）',
+    Math.abs(railShot.settled - (railShot.before + 4)) < 0.15,
+    `追齐之后 ${railShot.settled.toFixed(2)}（该 ${(railShot.before + 4).toFixed(2)}）`,
+  );
+  // 「不超一排」留 0.02 的余量：__focus 是按卡片中心线性插出来的读数，鱼眼下各排间距不等，
+  // 插值本身有百分之一上下的出入。一帧跳四排（从前那样）是 4.00，差得远。
+  check(
+    '拨点点：逐帧录下来，没有哪一帧跳过一排（10-08 方案 3-D-4 禁止瞬时置位）',
+    railShot.maxStep <= 1.02,
+    `单帧最多走了 ${railShot.maxStep.toFixed(2)} 排（录了 ${railShot.frames} 帧）`,
+  );
+  // 尺子：四排是好几帧走完的，不是录漏了。一帧不超一排、一共走四排，至少要动四帧。
+  check(
+    '尺子：这四排是分好几帧走完的（录到的「在动」的帧 ≥ 4）',
+    railShot.moving >= 4,
+    `在动的帧 ${railShot.moving}`,
   );
   /**
    * 卡片那一把用 200px，不是上面那 52px。
@@ -1325,24 +1370,29 @@ let page = await menuPage({ slides_played_square: '1' });
    */
   const cardShot = await oneShot(midX, 200);
   /**
-   * **卡片那条路现在也一比一跟手。**
+   * **卡片那条路：同样逐帧量，没有哪一帧跳过一排。**
    *
-   * 这一条从前是反证：「同样一把，中间那条路两帧之内只走一小截，追齐之后才到」——那时
-   * 卡片是慢半拍的（AXIS_LERP = 0.1 的追赶），所以两条路不一样才说明追赶真的生效了。
+   * 这一条从前（第十三轮起）量的是「慢半拍」：同样一把，两帧之内只走一小截、追齐之后才到——卡
+   * 片有追赶、点点没有，两条路不一样才说明追赶真的生效了。2026-09 玩家把 lerp 拉到 1，它翻成
+   * 「两帧之内就到位」。10-08 方案 3-D-4 把 lerp 拉回 0.12，照理该翻回去——**可这一回翻不回去
+   * 了**：同一个方案还加了每秒 15 排的速度封顶，这一把要走四排，两条路（有阻尼、没阻尼）头几
+   * 帧都被封顶按着、走得一样快，「两帧之后还没到」在 lerp 1 下照样成立。量的东西分不出被测的
+   * 那件事，这条门就是假绿。尾巴（阻尼那一段越走越慢）也看不见：最后那零点几排落在锁定死区
+   * 里，画出来的位置一动不动。
    *
-   * 玩家 2026-09 在调参模拟台上把 lerp 拉到了 1（无滞后直贴），于是三条路合成了同一
-   * 条：点点贴手指、卡片贴手指、两者严格 1:1 互为镜像。所以这一条**翻过来**：两帧之内
-   * 就该到位，和追齐之后一样远。
-   *
-   * 翻过来而不是删掉：删掉就没人守着「直贴」这件事了，而把它改回追赶不报错、不白屏，
-   * 只是手感回到玩家调之前那一版。
-   *
-   * 走了多远不钉死（灵敏度是可调的），钉的是**两帧之后已经等于最终位置**。
+   * 所以这儿只量两条路共有的那条规矩（方案 3-D-4：「行切换由弹簧驱动、禁止瞬时置位」），和
+   * 点点那一把同一个量法。**阻尼本身（lerp 是 0.12、λ 由它反推、帧率无关）由
+   * check-axis-motion 钉住**——那儿是纯函数，量得出来。
    */
   check(
-    '拖卡片也一比一跟手：两帧之内就到位，不再慢半拍',
-    Math.abs(cardShot.after - cardShot.settled) < 0.05,
-    `两帧后 ${cardShot.after.toFixed(2)} / 追齐之后 ${cardShot.settled.toFixed(2)}`,
+    '拖卡片：逐帧录下来，没有哪一帧跳过一排（10-08 方案 3-D-4 禁止瞬时置位）',
+    cardShot.maxStep <= 1.02,
+    `单帧最多走了 ${cardShot.maxStep.toFixed(2)} 排（录了 ${cardShot.frames} 帧）`,
+  );
+  check(
+    '尺子：卡片那一把也是分好几帧走完的（录到的「在动」的帧 ≥ 4）',
+    cardShot.moving >= 4,
+    `在动的帧 ${cardShot.moving}`,
   );
   // 尺子：这一把真的把轴拖动了，不然上面那条在「两个都没动」时也是绿的。
   check(
