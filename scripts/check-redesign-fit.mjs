@@ -376,10 +376,19 @@ const ACCT = {
   rootSel: '.acct-modal',
   groups: {
     '三颗键': '.acct-actions > .pill-icon',
-    '窗里的块': '.acct-modal > h2, .acct-field, .acct-actions',
+    // 10-08 方案 3-C-6：最底下多了一颗 ✅（.acct-done），它也是窗里的一块，而且和上面那几颗同一
+    // 族——一样宽、一样高。
+    '窗里的块': '.acct-modal > h2, .acct-field, .acct-actions, .acct-done',
+    '✅ 和上面那几颗': '.acct-actions > .pill-icon, .acct-done > .pill-icon',
   },
-  centered: { '窗': ['.acct-modal'], '那一列键（在窗里）': ['.acct-actions .pill-icon', '.acct-modal'] },
+  centered: {
+    '窗': ['.acct-modal'],
+    '那一列键（在窗里）': ['.acct-actions .pill-icon', '.acct-modal'],
+    '✅（在窗里）': ['.acct-done .pill-icon', '.acct-modal'],
+  },
 };
+/** 那颗 ✅ 的读屏名：i18n 的 doneBtn。 */
+const DONE_LABEL = { zhHans: '完成', zhHant: '完成', en: 'Done', fr: 'Terminé' };
 const INVITE = {
   rootSel: '.invite-modal',
   groups: {
@@ -685,7 +694,8 @@ for (const size of SIZES) {
           minTexts: 2,
           groups: {
             '三颗键': { count: 2, sameH: true, sameW: true, evenV: true, noOverlap: true },
-            '窗里的块': { count: 3, noOverlap: true },
+            '窗里的块': { count: 4, noOverlap: true },
+            '✅ 和上面那几颗': { count: 3, sameH: true, sameW: true, noOverlap: true },
           },
         });
       }
@@ -708,6 +718,33 @@ for (const size of SIZES) {
       await page.waitForSelector('.acct-modal', { timeout: 5000 });
       const again = await page.evaluate(() => document.querySelector('#acctId')?.textContent.trim());
       check(`${tag} 帐号窗：每次打开都重新遮住`, again === '••••' + HANDLE.slice(-4), String(again));
+      // 10-08 方案 3-C-6：最底下那颗 ✅——只放图标、念「完成」、是窗里最后一颗键；按下去和右上角
+      // ✕ 一样只关窗：人还登着，背后那一页一个像素都没挪（方案要「从这颗新按钮关闭也不许偏移」）。
+      const done = await page.evaluate(() => {
+        const b = document.querySelector('#statusDone');
+        const keys = [...document.querySelectorAll('.acct-modal button, .acct-modal a')];
+        return b ? { label: b.getAttribute('aria-label') || '', svg: !!b.querySelector('svg'), text: b.textContent.trim(), last: keys[keys.length - 1] === b } : null;
+      });
+      check(`${tag} 帐号窗：最底下一颗 ✅，只放图标、读屏念「${DONE_LABEL[lang]}」`,
+        !!done && done.svg && done.text === '' && done.label === DONE_LABEL[lang] && done.last, JSON.stringify(done));
+      const behind = () => page.evaluate(() => {
+        const r = document.querySelector('.profile-page').getBoundingClientRect();
+        return { l: r.left, t: r.top, w: r.width, pad: getComputedStyle(document.body).paddingRight, x: scrollX, y: scrollY };
+      });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      const before = await behind();
+      const geniusBefore = await page.evaluate(() => localStorage.getItem('slides_genius'));
+      await page.click('#loginBtn');
+      await page.waitForSelector('.acct-modal', { timeout: 5000 });
+      await page.click('#statusDone');
+      await page.waitForTimeout(150);
+      check(`${tag} 帐号窗：按 ✅ 关得掉`, (await page.$('.acct-modal')) === null);
+      const after = await behind();
+      const geniusAfter = await page.evaluate(() => localStorage.getItem('slides_genius'));
+      check(`${tag} 帐号窗：按 ✅ 只是关窗——人还登着`, geniusAfter !== null && geniusAfter === geniusBefore);
+      check(`${tag} 帐号窗：按 ✅ 关掉之后背后那一页没挪`, JSON.stringify(before) === JSON.stringify(after),
+        `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
       await ctx.close();
     }
   }
@@ -807,7 +844,9 @@ for (const size of [ALL_SIZES[0], ALL_SIZES[3]]) {
     minTexts: 2,
     groups: {
       '三颗键': { count: 3, sameH: true, sameW: true, evenV: true, noOverlap: true },
-      '窗里的块': { count: 3, noOverlap: true },
+      // 抬头、字段、三颗键那一列，加最底下那颗 ✅（10-08 方案 3-C-6）。
+      '窗里的块': { count: 4, noOverlap: true },
+      '✅ 和上面那几颗': { count: 4, sameH: true, sameW: true, noOverlap: true },
     },
   });
   const ids = await page.evaluate(() => [...document.querySelectorAll('.acct-actions > *')].map((e) => e.id));

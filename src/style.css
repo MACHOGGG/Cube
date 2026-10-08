@@ -4698,6 +4698,11 @@ body:has(.slot-page) .home-nav { display: none; }
   margin-top: var(--gap-sm);
 }
 .acct-actions .pill-icon { width: 100%; max-width: 200px; }
+/* 最底下那颗 ✅（玩家 2026-10-08，方案 3-C-6）：做的事和右上角 ✕ 一样，只关窗。和上面那三颗
+   同一族、同样宽高，居中；和它们之间比它们彼此之间多空一点（md 对 sm），读得出「上面三颗是
+   要做的事，这一颗是做完了」。 */
+.acct-done { display: flex; justify-content: center; margin-top: var(--gap-md); }
+.acct-done .pill-icon { width: 100%; max-width: 200px; }
 
 /* 「Slides 天才」的标志，在它出现的三个地方。空的时候（还没放进 SVG）
    geniusLogoTag 什么都不输出，所以这些规则也就没有东西可作用。 */

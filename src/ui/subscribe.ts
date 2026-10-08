@@ -23,7 +23,7 @@ import {
 } from '../engine/account';
 import { CONTACT_EMAIL } from '../legal';
 import { CTL_LEAVE, CTL_REPLAY } from './ctlIcons';
-import { ICON_ARROW, ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
+import { ICON_ARROW, ICON_CHECK, ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
 import { geniusLogoTag } from './geniusLogo';
 
 /**
@@ -575,6 +575,7 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
     }
     <div class="acct-actions">${actions}</div>
     ${store ? `<p class="auth-hint">${s.manageOnStore.replace('{store}', payeeName())}</p>` : ''}
+    <div class="acct-done">${pillIcon('statusDone', s.doneBtn, ICON_CHECK)}</div>
   `,
     { escCloses: true },
   );
@@ -594,6 +595,11 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
     onChanged();
   });
   overlay.querySelector<HTMLButtonElement>('#statusClose')!.addEventListener('click', close);
+  // 最底下那颗 ✅（玩家 2026-10-08 新增，方案 3-C-6）：和右上角那颗 ✕ 做的事一模一样——只关这
+  // 扇窗，不做别的。注册完冒出来的就是这扇窗，玩家看完了要找一颗「好了」的键，眼睛先往底下
+  // 找，而 ✕ 在右上角。样子和上面那三颗同一族（只放图标的棕色药丸、一样宽一样高），居中；
+  // 读屏念「完成」（doneBtn，四语早就有）。
+  overlay.querySelector<HTMLButtonElement>('#statusDone')!.addEventListener('click', close);
   wireHandleEye(overlay, current, lang);
 }
 
