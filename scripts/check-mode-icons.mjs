@@ -151,18 +151,18 @@ for (const [w, h, label, full] of [[390, 844, '手机 390×844', true], [1280, 8
     if (idx < 0) throw new Error(`主菜单上没有能按的「${menuName}」`);
     return '[data-icon-check="1"]';
   };
-  /** 炸弹挑选层上那一格：第 row 排（0 基础、1 计时、2 进阶）第 col 格。 */
+  /** 炸弹那一页上那一格：第 row 排（0 基础、1 计时、2 进阶）第 col 格（10-08 方案 3-G 起是一整页）。 */
   const bombChip = (row, col) => async (p) => {
-    await p.evaluate(() => document.querySelector('[data-reopen="bomb"]').click());
-    await p.waitForSelector('.center-pick--in .bomb-chip', { timeout: 8000 });
-    await p.waitForTimeout(500);
+    await p.evaluate(() => document.querySelector('.home-bomb-mini, .home-bomb-card').click());
+    await p.waitForSelector('.bomb-page .bomb-chip', { timeout: 8000 });
+    await p.waitForTimeout(400);
     const ok = await p.evaluate(({ row, col }) => {
-      const chip = document.querySelectorAll('.center-pick .bomb-row')[row]?.querySelectorAll('.bomb-chip')[col];
+      const chip = document.querySelectorAll('.bomb-page .bomb-row')[row]?.querySelectorAll('.bomb-chip')[col];
       if (!chip) return false;
       chip.setAttribute('data-icon-check', '1');
       return true;
     }, { row, col });
-    if (!ok) throw new Error(`炸弹挑选层没有第 ${row + 1} 排第 ${col + 1} 格`);
+    if (!ok) throw new Error(`炸弹那一页没有第 ${row + 1} 排第 ${col + 1} 格`);
     return '[data-icon-check="1"]';
   };
 

@@ -118,7 +118,11 @@ async function commonRounds(tag, viewport) {
   await back(page);
   check(`${tag} 记录页按返回 → 主菜单`, await has(page, '.home-page'));
 
-  // 主菜单上的炸弹挑图形弹窗 → 返回只关弹窗
+  // 主菜单上的炸弹 → 炸弹那一页 → 返回回主菜单
+  //
+  // 10-08 方案 3-G 起炸弹的档位是一整页（ui/bombMode.ts），和计时、老虎机那几页同一套：返回回主菜
+  // 单，那一页开出来的一局返回回这一页。从前它是主菜单上弹出来的一扇窗，这儿量的是「返回只关窗、
+  // 还在主菜单」和「点外面关掉窗之后哨兵撤了」——窗没有了，那两条跟着换。
   //
   // 用 el.click() 而不是 page.click(选择器)。手机竖屏的主菜单是一条鱼眼轴
   // （ui/modeAxis.ts）：焦点附近那几张卡才看得见，远处的卡**在视口外**——炸弹那
@@ -127,19 +131,20 @@ async function commonRounds(tag, viewport) {
   // 先把轴滑到那张卡上再点的；这道门量的是返回键，不是主菜单点不点得着（那是
   // check-mode-axis 的活），所以直接叫它自己的 click()。
   // check-howto.mjs 里有一段同样的说明，同一个坑。
-  const openBomb = () => page.$$eval('[data-reopen="bomb"]', (els) => els[0].click());
+  const openBomb = () => page.$$eval('.home-bomb-mini, .home-bomb-card', (els) => els[0].click());
   await openBomb();
-  await page.waitForSelector('.center-pick--in', { timeout: 5000 });
+  await page.waitForSelector('.bomb-page .bomb-chip', { timeout: 5000 });
   await back(page, 900);
-  check(`${tag} 炸弹挑图形弹窗按返回 → 只关弹窗，还在主菜单`, !(await has(page, '.center-pick')) && (await has(page, '.home-page')));
-  // 弹窗自己关掉（点外面）之后，主菜单上的哨兵也该撤——下一下返回就是退出。
+  check(`${tag} 炸弹那一页按返回 → 主菜单`, !(await has(page, '.bomb-page')) && (await has(page, '.home-page')));
+  // 那一页开出来的一局：开局页按返回 → 回炸弹那一页（他是从这一页挑的），再按 → 主菜单。
   await openBomb();
-  await page.waitForSelector('.center-pick--in', { timeout: 5000 });
-  check(`${tag} 主菜单开着弹窗：哨兵在`, await guardUp(page));
-  await page.mouse.click(8, 8);
-  await page.waitForFunction(() => !document.querySelector('.center-pick'), { timeout: 5000 });
-  await page.waitForTimeout(500);
-  check(`${tag} 点外面关掉弹窗之后：哨兵撤了`, await guardDown(page));
+  await page.waitForSelector('.bomb-page .bomb-chip', { timeout: 5000 });
+  await page.$$eval('.bomb-page .bomb-chip', (els) => els[0].click());
+  await page.waitForSelector('#startOverlay.show', { timeout: 10000 });
+  await back(page, 900);
+  check(`${tag} 炸弹局开局页按返回 → 回炸弹那一页`, await has(page, '.bomb-page'));
+  await back(page, 900);
+  check(`${tag} 炸弹那一页再按返回 → 主菜单`, !(await has(page, '.bomb-page')) && (await has(page, '.home-page')));
 
   // 游戏：开局页按返回 → 主菜单
   // 跳过最上面那张《每日挑战》（第 19 推）：这儿按下标点的是玩法卡，下标从方块数起。

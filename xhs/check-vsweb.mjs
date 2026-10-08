@@ -420,8 +420,8 @@ const SCREENS = [
     async web(p) {
       await tapWebTag(p, '炸弹');
       await p.waitForTimeout(900);
-      // 弹出来那块面板的第一排是「基础」，第一颗是方块。
-      await p.$$eval('.center-pick .bomb-row .bomb-chip, .bomb-panel .bomb-row .bomb-chip', (e) => e[0].click());
+      // 炸弹那一页（10-08 方案 3-G 起是一整页，从前是弹出来的一扇窗）：面板的第一排是「基础」，第一颗是方块。
+      await p.$$eval('.bomb-page .bomb-row .bomb-chip', (e) => e[0].click());
       await p.waitForTimeout(900);
       await pressStart(p);
     },
@@ -620,7 +620,7 @@ const SCREENS = [
     async web(p) {
       await tapWebTag(p, '炸弹');
       await p.waitForTimeout(900);
-      await p.$$eval('.center-pick .bomb-row .bomb-chip, .bomb-panel .bomb-row .bomb-chip', (e) => e[0].click());
+      await p.$$eval('.bomb-page .bomb-row .bomb-chip', (e) => e[0].click());
       await p.waitForTimeout(1400);
     },
     async xhs(p) {

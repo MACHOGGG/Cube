@@ -2784,8 +2784,12 @@ button:hover { filter: brightness(1.05); }
  * 一格就是那副棋盘自己的图标，「底板」是图里最底下那一块（方块的圆角方、小球的圆、菱形、六
  * 边形）——它由这儿上色（.bomb-plate，homeIcons.ts 的 bombBoard 给它挂的类），所以一排一
  * 个颜色，而棋子照旧是棋子的颜色。从前三排是三种颜色的「形状 ＋ 徽记」（绿 / 橙 / 砖红，
- * 定时那两枚印着「100s」、进阶那两枚印着「+++」，PR-20 / E26），一个字都不写；现在三排靠面
- * 板左边那三个字分（「基础 / 计时 / 进阶」，见 .bomb-tiers），格子上不再印徽记。
+ * 定时那两枚印着「100s」、进阶那两枚印着「+++」，PR-20 / E26），一个字都不写；第 18 推起三排
+ * 靠面板左边那一列分（那时是「基础 / 计时 / 进阶」三个字，10-08 方案 3-G 起是三枚小图标，见
+ * .bomb-tiers），格子上不再印徽记。
+ *
+ * 这块面板出现在两处：炸弹那一页（.bomb-page，放大，见下面那一段）和电脑端主菜单那张炸弹卡里的
+ * 缩图（.home-bomb-card，一张图，格子是 span）。
  *
  * 色盲模式下颜色不变（方案原话）：从前这块面板在色盲下换成 #8A3D00，那一条撤了。
  *
@@ -2864,32 +2868,58 @@ button:hover { filter: brightness(1.05); }
    ui/homeIcons.ts 那段），三行现在长得一样、行为也一样，所以这几条一起撤。 */
 
 /*
- * 挑选窗里那一张：面板左边外面一列字「基础 / 计时 / 进阶」，每个字和自己那一排上下居中
- * （方案原话），--ink-soft。
+ * 炸弹那一页（10-08 方案 3-G，ui/bombMode.ts）：骨架是挑图形那几页那一副（.slot-page ＋
+ * .start-stage ＋ .slot-pick-area，页底那颗 .page-exit），中间是上面这块面板，左边一列三枚小图标。
+ * 从前这块面板在一扇挑选窗里（centerPicker，背后是淡下去的主菜单），左边那一列是三个字「基础 /
+ * 计时 / 进阶」；3-G 换成了三枚小图标（ctlIcons 的 CTL_TIER_*，iconFor({ mode }) 取的），那三个
+ * 字的四语文案连同给它们托底的那圈晕一起撤了。
  *
- * 对齐靠的是**两列同一套竖向尺寸**：字那一列和面板一样高（横排的 flex 默认拉齐），上下内
- * 边距一样（14px）、行与行之间的空一样（10px）、三格都是 flex: 1 1 0 均分——于是字那一列
- * 的三格和面板里的三排是同一组竖向轨道，字在格里上下居中就正好对着那一排的中线。面板里那
- * 三排本来就一样高（格子都是正方的、一样宽），所以它们自己也是均分的。
+ * 对齐靠的是**两列同一套竖向尺寸**：左边那一列和面板一样高（横排的 flex 默认拉齐），上下内边距
+ * 一样（16px）、行与行之间的空一样（12px）、三格都是 flex: 1 1 0 均分——于是那一列的三格和面板里
+ * 的三排是同一组竖向轨道，图标在格里上下居中就正好对着那一排的中线。面板里那三排本来就一样高
+ * （格子都是正方的、一样宽），所以它们自己也是均分的。
  *
- * 面板宽 64vw、最多 300：留出左边那列字的位置（最宽的是英文的 Advanced），四种语言在 360
- * 宽的屏上都装得下。
+ * 「整层放大到与老虎机层一致版式」：从前那扇窗里面板 64vw、最多 300，格子是面板宽的 38%——390 宽
+ * 的手机上 87px，老虎机那一页一张图 156。现在格子按屏幕算一个边长，面板的宽由格子撑出来：
+ *   · 横着：屏宽 − 两边页边（20 × 2）− 左边那一列（32 ＋ 12）− 面板左右内边距（14 × 2）− 两格之间
+ *     （16），两格平分，再留 4px 余量——(100vw − 132px) / 2；
+ *   · 竖着：三排 ＋ 面板上下内边距和两道行距（56）要摆进「屏高 − 顶上 14 − 页底留给《退出》的那一
+ *     截」，那一截最多 231（电脑上《退出》99 那一档），所以 (100vh − 310px) / 3；
+ *   · 封顶 176，和老虎机那一页一张图的上限一样。
+ * 390×844 上一格 129、360×640 上 110、1280×800 上 163（老虎机那一页 156 / 141 / 176）。
+ *
+ * Chrome 61：min() 前面垫一行定值。小红书那一端没有这一页（它的炸弹是自己那一张挑形状页），垫
+ * 这一行是给降级层的扫描看的——它算不掉的每一处都得有退路（check-downlevel）。
  */
 .bomb-pick { display: flex; align-items: stretch; justify-content: center; }
 .bomb-tiers {
   display: flex; flex-direction: column; flex: none;
-  padding: 14px 0; margin-right: 12px;
+  padding: 16px 0; margin-right: 12px;
 }
+/* 一档一枚：圆盘透明、记号 --ink-soft——和从前那三个字一个颜色、一个分量。 */
 .bomb-tier {
   flex: 1 1 0; display: flex; align-items: center; justify-content: flex-end;
-  color: var(--ink-soft); font-weight: 700; font-size: 0.95rem; white-space: nowrap;
-  /* 挑选窗后面不是一层遮罩，是淡下去的主菜单（centerPicker 的 home-dimmed）——这三个字底
-     下常常正好压着一张淡掉的彩色卡片。一圈页面底色的晕把字从后面那张卡上托出来，字本身还
-     是 --ink-soft。 */
-  text-shadow: 0 0 3px var(--bg), 0 0 8px var(--bg), 0 0 12px var(--bg);
+  --ctl-disc: transparent; --ctl-mark: var(--ink-soft);
 }
-.bomb-tier + .bomb-tier { margin-top: 10px; }
-.bomb-panel--big { width: 64vw; max-width: 300px; flex: none; border-radius: var(--r-xl); }
+.bomb-tier > svg { display: block; width: 32px; height: 32px; }
+.bomb-tier + .bomb-tier { margin-top: 12px; }
+.bomb-page .bomb-panel { width: auto; flex: none; padding: 16px 14px; border-radius: var(--r-xl); }
+.bomb-page .bomb-row { justify-content: center; }
+.bomb-page .bomb-row + .bomb-row { margin-top: 12px; }
+.bomb-page .bomb-chip { width: 120px; width: min(calc((100vw - 132px) / 2), 176px, calc((100vh - 310px) / 3)); }
+.bomb-page .bomb-chip + .bomb-chip { margin-left: 16px; }
+/* 矮横屏（≤560 高）：《退出》站到右边去了（见 .slot-page 那一段），页底那一截不用让——这一页上下
+   各只留 8px（底下那一侧另让出安全区），三排把屏高吃满：竖着的预算是屏高减去这两截和面板自己那 56，
+   844×390 上一格 106，和从前那扇窗在这一档上一样大（那扇窗上下各留 11、12px）。头一版照着 .slot-page
+   那一档的上下 14 / 36 算，一格只有 90，比那扇窗还小一圈（门 check-bomb-panel ⑥ 量出来的）。
+   选择器多带一个 .slot-page：.slot-page .start-stage 那一档写在后面、一样重，不加就被它盖回去。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .slot-page.bomb-page .start-stage {
+    padding-top: 8px; padding-top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 8px);
+    padding-bottom: 8px; padding-bottom: max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 8px);
+  }
+  .bomb-page .bomb-chip { width: 96px; width: min(calc((100vh - 72px - env(safe-area-inset-bottom, 0px)) / 3), 132px); }
+}
 
 /* Desktop only: the panel is itself one card at the head of the bottom row,
    with every tier's chips directly clickable. */

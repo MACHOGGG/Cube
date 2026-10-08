@@ -104,6 +104,7 @@ check(
 // 宽版（电脑、横屏）上它不是 .home-icon-btn，是一整块 .home-bomb-card；首玩锁那道拦截
 // 从前只认前者，于是电脑上一局都没打过的人照样点得开炸弹的档位窗。窄版上它是
 // .home-icon-btn.home-bomb-mini，本来就拦得住——两种都量：哪一种在这块屏幕上就点哪一种。
+// 10-08 方案 3-G 起档位不再是一扇窗，是一整页（.bomb-page）；「没开」两样都认。
 {
   const kind = await page.evaluate(() =>
     document.querySelector('.home-bomb-card') ? 'card' : document.querySelector('.home-bomb-mini') ? 'mini' : null);
@@ -118,10 +119,10 @@ check(
   await page.waitForTimeout(400);
   const bomb = await page.evaluate(() => ({
     onMenu: !!document.querySelector('.home-page'),
-    picker: !!document.querySelector('.center-pick'),
+    picker: !!document.querySelector('.center-pick, .bomb-page'),
     nudging: document.querySelectorAll('.home-icon-btn--nudge').length,
   }));
-  check('按炸弹：档位窗没开，人还在主菜单（锁拦住了）', bomb.onMenu && !bomb.picker, JSON.stringify(bomb));
+  check('按炸弹：炸弹那一页没开，人还在主菜单（锁拦住了）', bomb.onMenu && !bomb.picker, JSON.stringify(bomb));
   check('按炸弹：两张基础卡也抖起来了', bomb.nudging >= 2, String(bomb.nudging));
 }
 
@@ -133,13 +134,13 @@ await page.$eval('.home-icon-btn[aria-label="菱形方块"]', (e) => e.click());
 await page.waitForTimeout(800);
 check('打过一局之后：锁撤了，点得进去', !(await page.$('.home-page')), '还在主菜单就是没撤');
 check('也不再抖了', (await page.$$('.home-icon-btn--nudge')).length === 0);
-// 尺子：锁撤了之后，同一下按炸弹真的开得出档位窗——上面那条「没开」才是锁拦的，不是
+// 尺子：锁撤了之后，同一下按炸弹真的开得出炸弹那一页——上面那条「没开」才是锁拦的，不是
 // 这一下本来就点不着。
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 await page.$eval('.home-bomb-card, .home-bomb-mini', (e) => e.click());
-await page.waitForTimeout(700);
-check('（尺子）锁撤了之后，按炸弹开得出档位窗', !!(await page.$('.center-pick')));
+const bombPage = await page.waitForSelector('.bomb-page', { timeout: 5000 }).then(() => true).catch(() => false);
+check('（尺子）锁撤了之后，按炸弹开得出炸弹那一页', bombPage);
 
 // ── 头一局的教学条 ────────────────────────────────────────────────────
 await page.evaluate(() => { localStorage.clear(); localStorage.setItem('slides_lang', 'zhHans'); });

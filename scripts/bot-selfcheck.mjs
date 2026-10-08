@@ -963,7 +963,8 @@ async function openRun(page, board, bomb) {
     // eslint 之类的东西这儿没有，所以把「找不到就说清楚」留在调用方（openRun 回
     // false，上面那一层报「棋盘没出现」）。
     if (!hit) return false;
-    await page.waitForTimeout(400);
+    // 档位是一整页（10-08 方案 3-G，从前是一扇居中的窗）：换页那一下要等它摆出来。
+    await page.waitForSelector('.bomb-page .bomb-chip, .center-pick .center-pick-opt', { timeout: 5000 }).catch(() => {});
     // **用 el.click()，不用 page.click()/elementHandle.click()。** 手机竖屏的主菜单是
     // 一条鱼眼轴（ui/modeAxis.ts），远处的卡在视口外面，Playwright 会一直「滚动到可见
     // 位置」然后报 element is outside of the viewport，三十秒后超时——CLAUDE.md 里记着

@@ -19,11 +19,19 @@
  * ③ **格子是哪几副棋盘**：基础、计时两排是基础方块 / 基础小球，进阶那排是菱形方块 / 六边形小
  *    球。量的是 svg 的画布（每张图标文件的 viewBox 各不相同）和读屏名，格子上不再印徽记
  *    （从前定时那两枚印「100s」、进阶那两枚印「+++」，第 18 推撤了）。
- * ④ **面板左边那三个字**：「基础 / 计时 / 进阶」（四种语言），整个在面板左边外面、每个字
- *    和自己那一排上下居中（≤ 1px）、颜色是 --ink-soft、aria-hidden（每一格的读屏名里已经带
- *    着这一档）。面板里除了这三个字没有别的字。
+ * ④ **面板左边那一列：三枚小图标，没有字**（10-08 方案 3-G：「『基础/计时/进阶』删文字、各
+ *    配小图标」）。从前那一列是三个字（四种语言各一套）；现在一档一枚 ctlIcons 那一套圆盘
+ *    （iconFor({ mode }) 取的），三枚互不相同、四种语言一模一样，整个在面板左边外面、每一枚和
+ *    自己那一排上下居中（≤ 1px）、记号是 --ink-soft、aria-hidden（每一格的读屏名里已经带着这
+ *    一档）。面板里、那一列里一个字都没有。
  * ⑤ **经过、按下、键盘聚焦**：底板变 --card-red，加一圈 3px 白边，整格放大到 1.04；减弱动
  *    态效果时不放大。三种状态各量一遍。
+ * ⑥ **一整页，和老虎机那一页同一副版式**（10-08 方案 3-G：「炸弹选择改全屏第二层——复用老虎
+ *    机/步步为营现成的第二层组件，不新写层；整层放大到与老虎机层一致版式」）：骨架是
+ *    .slot-page ＋ .start-stage ＋ .slot-pick-area，主菜单不在底下垫着（不再是压暗主菜单上的一扇
+ *    窗）；页底那颗《退出》和老虎机那一页那颗在同一个地方、一样大；一格不小于老虎机那一页一
+ *    张图的七成五（从前那扇窗里 87 对 156）；整块摆得下——不出屏、压不到《退出》。手机两档、电
+ *    脑一档，横屏矮屏一档。
  */
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
@@ -72,18 +80,13 @@ const VB = {
 check('（尺子）四张图标的画布都读到了，而且互不相同',
   Object.values(VB).every(Boolean) && new Set(Object.values(VB)).size === 4, Object.values(VB).join(' | '));
 
-const LABELS = {
-  zhHans: ['基础', '计时', '进阶'],
-  zhHant: ['基礎', '計時', '進階'],
-  en: ['Basic', 'Timed', 'Advanced'],
-  fr: ['Base', 'Chrono', 'Avancée'],
-};
+const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
 /** 走到炸弹那一页（点开主菜单上那张炸弹卡）。 */
 async function openPanel(width = 390, height = 844, lang = 'zhHans', opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: opts.reduced ? 'reduce' : 'no-preference' });
+  const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: opts.reduced ? 'reduce' : 'no-preference', isMobile: width < 800, hasTouch: width < 800 });
   const page = await ctx.newPage();
   await page.goto(base);
   await page.evaluate((l) => {
@@ -91,6 +94,7 @@ async function openPanel(width = 390, height = 844, lang = 'zhHans', opts = {}) 
     localStorage.setItem('slides_know_how', '1');
     // 玩过一局才摆得出炸弹那一档（和 check-mode-axis 同一个前提）。
     localStorage.setItem('slides_played_square', '1');
+    localStorage.setItem('slides_played_finished', '1');
   }, lang);
   await page.reload();
   await page.waitForSelector('.home-icon-btn, .home-bomb-card, .home-bomb-mini', { timeout: 25000 });
@@ -99,16 +103,16 @@ async function openPanel(width = 390, height = 844, lang = 'zhHans', opts = {}) 
    * 炸弹那张卡在屏幕外——Playwright 会「滚进视口再点」，可那条轴不是普通滚动容器，滚不
    * 动，于是它重试到超时。这儿要量的是「点下去开不开」，不是卡在第几个位置。
    */
-  await page.evaluate(() => document.querySelector('[data-reopen="bomb"]')?.click());
-  await page.waitForSelector('.bomb-panel--big', { timeout: 10000 });
-  // 等飞进来那一段落定（FLIP，380ms）。
-  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('.home-bomb-mini, .home-bomb-card')?.click());
+  await page.waitForSelector('.bomb-page .bomb-panel', { timeout: 10000 });
+  // 换页那一下（softSwap：旧的淡出、新的托上来）落定。
+  await page.waitForTimeout(600);
   return { ctx, page };
 }
 
 /** 量：面板、星、三排、每一格的底板颜色和画布、左边那三个字。 */
 const MEASURE = () => {
-  const p = document.querySelector('.bomb-panel--big');
+  const p = document.querySelector('.bomb-page .bomb-panel');
   const pr = p.getBoundingClientRect();
   const rows = [...p.querySelectorAll(':scope > .bomb-row')];
   const star = p.querySelector('.bomb-star');
@@ -142,12 +146,18 @@ const MEASURE = () => {
       };
     }),
     tiers: tiers.map((t) => {
-      const b = t.getBoundingClientRect();
-      // 字本身的框（不是那一格）：用一个 Range 量文字。
-      const range = document.createRange();
-      range.selectNodeContents(t);
-      const tb = range.getBoundingClientRect();
-      return { text: t.textContent.trim(), cy: tb.top + tb.height / 2, r: tb.right, l: tb.left, color: getComputedStyle(t).color, cellCy: b.top + b.height / 2 };
+      // 那一枚图标本身的框（不是那一格）。
+      const svg = t.querySelector('svg');
+      const ib = (svg ?? t).getBoundingClientRect();
+      const mark = svg?.querySelector('path, circle:not(:first-child)');
+      return {
+        text: t.textContent.trim(),
+        icon: svg ? svg.outerHTML : '',
+        glyph: !!svg && svg.classList.contains('ctl-glyph'),
+        w: ib.width,
+        cy: ib.top + ib.height / 2, r: ib.right, l: ib.left,
+        color: mark ? getComputedStyle(mark).stroke : '',
+      };
     }),
     tiersHidden: tierBox?.getAttribute('aria-hidden') === 'true',
     inkSoft: getComputedStyle(document.documentElement).getPropertyValue('--ink-soft').trim(),
@@ -166,9 +176,10 @@ const hexToRgbStr = (hex) => {
   return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
 };
 
-// ── ②③④ 颜色、格子、左边那三个字（四种语言 × 两个尺寸；色盲另量一遍）────────
+// ── ②③④ 颜色、格子、左边那一列小图标（四种语言 × 两个尺寸；色盲另量一遍）────────
+let tierIcons = null;
 for (const [w, h] of [[390, 844], [360, 740]]) {
-  for (const lang of Object.keys(LABELS)) {
+  for (const lang of LANGS) {
     const tag = `${w}×${h} ${lang}`;
     const { ctx, page } = await openPanel(w, h, lang);
     const m = await page.evaluate(MEASURE);
@@ -192,13 +203,20 @@ for (const [w, h] of [[390, 844], [360, 740]]) {
     const texts = m.rows.flatMap((r) => r.cells.flatMap((c) => c.texts));
     check(`${tag}：③ 格子上不再印徽记（100s / +++ 撤了）`, texts.length === 0, texts.join(' | ') || '（没有）');
     check(`${tag}：③ 每一格都有读屏名`, m.rows.every((r) => r.cells.every((c) => c.label.includes(' · '))));
-    // ④ 左边那三个字
-    check(`${tag}：④ 三个字是「${LABELS[lang].join(' / ')}」`, m.tiers.map((t) => t.text).join('/') === LABELS[lang].join('/'), m.tiers.map((t) => t.text).join(' / '));
+    // ④ 左边那一列：三枚小图标，没有字
+    check(`${tag}：④ 三枚小图标（ctlIcons 那一套圆盘），互不相同`,
+      m.tiers.length === 3 && m.tiers.every((t) => t.glyph) && new Set(m.tiers.map((t) => t.icon)).size === 3,
+      m.tiers.map((t) => (t.glyph ? '圆盘' : '不是')).join(' / '));
+    check(`${tag}：④ 那一列一个字都没有（三个字撤了）`, m.tiers.every((t) => t.text === ''), m.tiers.map((t) => t.text).join(' | ') || '（没有）');
+    // 四种语言一模一样：图标不跟语言走（「省掉一组四语文案」）。
+    const sig = m.tiers.map((t) => t.icon).join('\n');
+    if (tierIcons === null) tierIcons = sig;
+    check(`${tag}：④ 和别的语言是同三枚`, sig === tierIcons);
     check(`${tag}：④ 都在面板左边外面`, m.tiers.length === 3 && m.tiers.every((t) => t.r <= m.panel.l - 4 && t.l >= 0),
       m.tiers.map((t) => `${t.l.toFixed(0)}–${t.r.toFixed(0)}`).join(' / ') + ` · 面板左沿 ${m.panel.l.toFixed(0)}`);
     const off = m.tiers.map((t, i) => Math.abs(t.cy - (m.rows[i]?.cy ?? -999)));
-    check(`${tag}：④ 每个字和自己那一排上下居中（≤ 1px）`, off.length === 3 && off.every((d) => d <= 1), off.map((d) => d.toFixed(2)).join(' / '));
-    check(`${tag}：④ 颜色是 --ink-soft`, m.tiers.every((t) => t.color === hexToRgbStr(m.inkSoft)), `${m.tiers[0]?.color} / ${m.inkSoft}`);
+    check(`${tag}：④ 每一枚和自己那一排上下居中（≤ 1px）`, off.length === 3 && off.every((d) => d <= 1), off.map((d) => d.toFixed(2)).join(' / '));
+    check(`${tag}：④ 记号是 --ink-soft（和从前那三个字一个颜色）`, m.tiers.every((t) => t.color === hexToRgbStr(m.inkSoft)), `${m.tiers[0]?.color} / ${m.inkSoft}`);
     check(`${tag}：④ 那一列 aria-hidden（格子的读屏名里已经带着这一档）`, m.tiersHidden);
     check(`${tag}：④ 面板里一个字都没有`, m.words.length === 0, m.words.join(' | ') || '（没有）');
     await ctx.close();
@@ -227,7 +245,7 @@ for (const [w, h] of [[390, 844], [360, 740]]) {
     const sc = m === 'none' ? 1 : Number(m.slice(7, -1).split(',')[0]);
     return { fill: cs.fill, stroke: cs.stroke, sw: cs.strokeWidth, scale: sc, vfx: cs.vectorEffect };
   };
-  const SEL = '.bomb-panel--big .bomb-row--timed .bomb-chip';
+  const SEL = '.bomb-page .bomb-row--timed .bomb-chip';
   const red = rgb(HEX.red);
   const okState = (s, scale) => s.fill === red && s.stroke === 'rgb(255, 255, 255)' && s.sw === '3px' && s.vfx === 'non-scaling-stroke' && Math.abs(s.scale - scale) < 0.001;
   for (const reduced of [false, true]) {
@@ -253,7 +271,7 @@ for (const [w, h] of [[390, 844], [360, 740]]) {
     // 键盘聚焦：先把焦点放在它前面那一格（基础那排的第二格），再按一下 Tab 走过来——
     // :focus-visible 只认键盘来的焦点，直接 el.focus() 量不到。
     const k = await openPanel(390, 844, 'zhHans', { reduced });
-    await k.page.evaluate(() => document.querySelector('.bomb-panel--big .bomb-row--basic .bomb-chip:last-child').focus());
+    await k.page.evaluate(() => document.querySelector('.bomb-page .bomb-row--basic .bomb-chip:last-child').focus());
     await k.page.keyboard.press('Tab');
     await k.page.waitForTimeout(250);
     const focused = await k.page.evaluate((sel) => document.activeElement === document.querySelector(sel), SEL);
@@ -271,7 +289,7 @@ for (const [w, h] of [[390, 844], [360, 740]]) {
 for (let row = 0; row < 3; row++) {
   for (let col = 0; col < 2; col++) {
     const { ctx, page } = await openPanel();
-    const panel = (await page.$('.bomb-panel--big')) ? '.bomb-panel--big' : '.bomb-panel';
+    const panel = '.bomb-page .bomb-panel';
     const found = await page.evaluate(
       ([sel, r, c]) => {
         const chips = document.querySelectorAll(`${sel} .bomb-row:nth-of-type(${r + 1}) .bomb-chip`);
@@ -286,15 +304,80 @@ for (let row = 0; row < 3; row++) {
       await ctx.close();
       continue;
     }
-    // 进了一局：棋盘那一层出来了，而且主菜单不在了。
+    // 进了一局：棋盘那一层出来了，而且炸弹那一页不在了。
     const started = await page
-      .waitForFunction(() => Boolean(document.querySelector('.board, #board, .game-page')) &&
-        !document.querySelector('.mode-axis'), null, { timeout: 12000 })
+      .waitForFunction(() => Boolean(document.querySelector('.board, #board, .game-page, #startOverlay')) &&
+        !document.querySelector('.mode-axis') && !document.querySelector('.bomb-page'), null, { timeout: 12000 })
       .then(() => true)
       .catch(() => false);
     check(`① 第 ${row + 1} 行第 ${col + 1} 枚：点一下就进了一局`, started);
     await ctx.close();
   }
+}
+
+// ── ⑥ 一整页，和老虎机那一页同一副版式 ─────────────────────────────
+//
+// 尺子是同一块屏幕上的老虎机那一页（主菜单「老虎机模式」→ 挑图形那一页）：《退出》在哪、多大，一张
+// 图多大。天才身份写在本地缓存里（老虎机要开通才按得进去）。
+const LAYOUT = () => {
+  const box = (el) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height };
+  };
+  const chip = document.querySelector('.bomb-page .bomb-chip');
+  return {
+    page: !!document.querySelector('.app.slot-page.bomb-page > .start-stage > .start-count.slot-pick-area .bomb-panel'),
+    menu: !!document.querySelector('.mode-axis, .home-grid, .center-pick'),
+    exit: box(document.querySelector('.slot-page .page-exit')),
+    panel: box(document.querySelector('.bomb-page .bomb-panel')),
+    tiers: box(document.querySelector('.bomb-page .bomb-tiers')),
+    chip: box(chip),
+    opt: box(document.querySelector('.slot-pick-opt')),
+    vw: document.documentElement.clientWidth,
+    vh: innerHeight,
+    scrollW: document.documentElement.scrollWidth,
+  };
+};
+for (const [w, h, label] of [[390, 844, '手机 390×844'], [360, 640, '手机 360×640'], [1280, 800, '电脑 1280×800'], [844, 390, '横屏 844×390']]) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: w < 800 || h < 500, hasTouch: w < 800 || h < 500 });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_know_how', '1');
+    localStorage.setItem('slides_played_square', '1');
+    localStorage.setItem('slides_played_finished', '1');
+    for (const k of ['bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout']) localStorage.setItem('slides_played_' + k, '1');
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 30 * 864e5, code: 'BOMBCHK' }));
+  });
+  const page = await ctx.newPage();
+  await page.goto(base);
+  await page.waitForSelector('.home-icon-btn, .home-bomb-card', { timeout: 25000 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => [...document.querySelectorAll('.home-icon-btn')].find((b) => (b.getAttribute('aria-label') || '').startsWith('老虎机模式'))?.click());
+  await page.waitForSelector('.slot-pick-opt', { timeout: 10000 });
+  await page.waitForTimeout(600);
+  const slot = await page.evaluate(LAYOUT);
+  await page.goto(base);
+  await page.waitForSelector('.home-icon-btn, .home-bomb-card', { timeout: 25000 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('.home-bomb-mini, .home-bomb-card')?.click());
+  await page.waitForSelector('.bomb-page .bomb-chip', { timeout: 10000 });
+  await page.waitForTimeout(600);
+  const bomb = await page.evaluate(LAYOUT);
+  await ctx.close();
+  check(`⑥ ${label}：（尺子）老虎机那一页量到了《退出》和一张图`, !!slot.exit && !!slot.opt, JSON.stringify({ exit: slot.exit, opt: slot.opt }));
+  check(`⑥ ${label}：一整页（.slot-page 骨架），主菜单不在底下垫着`, bomb.page && !bomb.menu);
+  check(`⑥ ${label}：《退出》和老虎机那一页那颗同一个地方、一样大（≤1px）`,
+    !!bomb.exit && !!slot.exit && ['l', 't', 'w', 'h'].every((k) => Math.abs(bomb.exit[k] - slot.exit[k]) <= 1),
+    `炸弹 ${JSON.stringify(bomb.exit)} ｜ 老虎机 ${JSON.stringify(slot.exit)}`);
+  check(`⑥ ${label}：一格不小于老虎机那一页一张图的七成五`, !!bomb.chip && !!slot.opt && bomb.chip.w >= slot.opt.w * 0.75,
+    `一格 ${bomb.chip?.w.toFixed(1)} ｜ 老虎机一张 ${slot.opt?.w.toFixed(1)}（${bomb.chip && slot.opt ? ((bomb.chip.w / slot.opt.w) * 100).toFixed(0) : '?'}%）`);
+  const fits = !!bomb.panel && !!bomb.tiers && !!bomb.exit &&
+    bomb.tiers.l >= 0 && bomb.panel.r <= bomb.vw && bomb.panel.t >= 0 && bomb.panel.b <= bomb.vh && bomb.scrollW <= bomb.vw &&
+    // 《退出》要么在面板底下（竖屏、电脑：面板底边离它上沿 ≥ 16），要么在面板右边（矮横屏：它站到右边去了）。
+    (bomb.panel.b <= bomb.exit.t - 16 || bomb.panel.r <= bomb.exit.l - 16);
+  check(`⑥ ${label}：整块摆得下——不出屏、压不到《退出》`, fits,
+    `面板 ${bomb.panel ? `${bomb.panel.l.toFixed(0)}–${bomb.panel.r.toFixed(0)} × ${bomb.panel.t.toFixed(0)}–${bomb.panel.b.toFixed(0)}` : '没有'}，《退出》${bomb.exit ? `${bomb.exit.l.toFixed(0)},${bomb.exit.t.toFixed(0)}` : '没有'}，屏 ${bomb.vw}×${bomb.vh}`);
 }
 
 await browser.close();

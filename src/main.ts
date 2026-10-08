@@ -60,6 +60,7 @@ import {
 import { bombTip, flipTip, layoutTip, slotTip, timedTip, puzzleTip } from './ui/modeTips';
 import { renderFlipModePage } from './ui/flipMode';
 import { renderTimedModePage } from './ui/timedMode';
+import { renderBombModePage } from './ui/bombMode';
 import { renderDailyModePage } from './ui/dailyMode';
 import { dailyNow, syncDailyClock } from './engine/dailyClock';
 import { GENIUS_LAYOUTS } from './engine/geniusContent';
@@ -239,11 +240,6 @@ let currentLang: Lang = 'zhHans';
 // so tapping the same icon again closes it back to the home page instead of
 // re-opening what the player is already looking at.
 let navTab: NavTab = null;
-// Set whenever a game is started from one of the home page's pop-up pickers:
-// the key of the card that opened it, so "back" from that game can land on
-// the home page and re-open the same picker rather than just dumping the
-// player on the grid.
-let reopenPickerKey: string | null = null;
 
 function setNavTab(tab: NavTab) {
   navTab = tab;
@@ -692,10 +688,10 @@ function showMenu() {
       const game = games.find((g) => g.card.id === id);
       if (game) showGame(game, basicCoach(id));
     },
-    onSelectLayout: (id, reopenKey) => {
+    onSelectLayout: (id) => {
       if (pickingForRoom) return void startRoundFor(id);
       const game = layoutGames.find((g) => g.card.id === id);
-      if (game) showGame(game, tipFor('layout', () => layoutTip(currentLang)), undefined, reopenKey);
+      if (game) showGame(game, tipFor('layout', () => layoutTip(currentLang)));
     },
     onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
     /**
@@ -733,23 +729,8 @@ function showMenu() {
       mpOrigin = 'menu';
       showMultiplayer();
     },
-    onBombFor: (tier, id, reopenKey) => {
-      if (pickingForRoom) return void notAMultiplayerBoard();
-      const pool = tier === 'advanced' ? bombLayoutGames : games;
-      const game = pool.find((g) => g.card.id === id);
-      if (game) {
-        showGame(
-          game,
-          {
-            bomb: true,
-            timeLimitSec: tier === 'timed' ? MODE_SECONDS : undefined,
-            ...tipFor('bomb', () => bombTip(currentLang, tipShape(id))),
-          },
-          undefined,
-          reopenKey,
-        );
-      }
-    },
+    // 炸弹那张卡：整页（ui/bombMode.ts，10-08 方案 3-G），和计时那几页一样包一层 softSwap。
+    onBombMode: () => softSwap(showBombMode),
   }, currentLang);
   setNavTab(null);
   paintRoomHostBanner();
@@ -759,14 +740,10 @@ function showMenu() {
   // 手机 / 浏览器的返回键（见 backNav.ts）：主菜单是根，返回就真的离开网站；屋主替
   // 整屋挑玩法的时候不是——那一下回小屋。
   setScreenBack(pickingForRoom ? backToRoomFromPick : null);
-  // Re-opening a picker works by replaying the tap on the card that owns it:
-  // the freshly rendered card is a real, correctly positioned element, so the
-  // fly-to-centre animation has a valid origin to start from.
-  if (reopenPickerKey) {
-    const key = reopenPickerKey;
-    reopenPickerKey = null;
-    root.querySelector<HTMLElement>(`[data-reopen="${key}"]`)?.click();
-  }
+  // 这儿从前还有一段「重开挑选窗」：主菜单上弹出来的挑选窗（「+」那几张、计时、最后是炸弹）里开
+  // 的一局，返回时回主菜单、再替他把那扇窗点开（data-reopen ＋ reopenPickerKey）。那几扇窗一扇一扇
+  // 改成了整页，炸弹是最后一扇（10-08 方案 3-G）——整页的那一局返回直接回那一页（showGame 的
+  // onBack），这一段连同那个变量一起撤了。
 }
 
 // The home page is built in one of two shapes — two columns on a phone,
@@ -953,6 +930,47 @@ function launchSeedGame(g: SeedGame) {
  * 屋主在为整屋挑玩法时也走这一屏：挑完不开单人局，而是把这一族连同「无限反
  * 转」的标记交给小屋，全屋一起倒数、一起打 100 秒（api/room.js 的 FLIP_MODES）。
  */
+/**
+ * 《炸弹挑战》挑档位、挑棋盘那一整页（ui/bombMode.ts，10-08 方案 3-G）。
+ *
+ * 从前这一步是主菜单上那张炸弹卡飞到屏幕中间放大成的一扇挑选窗（menu.ts 的 buildBombPick +
+ * openCenterPicker），打完一局返回时回主菜单、再替他把那扇窗点开（reopen 那条路）。现在是一整
+ * 页，和计时、无限反转、步步为营、老虎机那几页同一副骨架：《退出》和返回键回主菜单，那一页开出来
+ * 的一局返回回这一页。
+ */
+function showBombMode() {
+  teardown();
+  trackScreen('bomb-mode');
+  const rows = [
+    { tier: 'basic' as const, cards: [homeLayout.base.square, homeLayout.base.circle] },
+    { tier: 'timed' as const, cards: [homeLayout.base.square, homeLayout.base.circle] },
+    { tier: 'advanced' as const, cards: [homeLayout.advancedBomb.square, homeLayout.advancedBomb.circle] },
+  ];
+  renderBombModePage(root, currentLang, rows, {
+    onBack: showMenu,
+    onStart: (tier, id) => {
+      // 小屋只开基础玩法：屋主替整屋挑玩法时按到一格，告诉他一句（和从前那扇窗一样拦在按下去这一步）。
+      if (pickingForRoom) return void notAMultiplayerBoard();
+      const pool = tier === 'advanced' ? bombLayoutGames : games;
+      const game = pool.find((g) => g.card.id === id);
+      if (!game) return;
+      showGame(
+        game,
+        {
+          bomb: true,
+          timeLimitSec: tier === 'timed' ? MODE_SECONDS : undefined,
+          ...tipFor('bomb', () => bombTip(currentLang, tipShape(id))),
+        },
+        showBombMode,
+      );
+    },
+  });
+  wireHomeTitle();
+  repaintIcons();
+  setScreenBack(showMenu);
+  toTop();
+}
+
 /**
  * 《计时挑战》挑图形那一整页（ui/timedMode.ts）。
  *
@@ -1502,7 +1520,7 @@ function randomTargetGame(family: Family): ShapeGame {
 }
 
 
-function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, reopenKey?: string) {
+function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
   // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
   const fullOpts: ShapeGameOpts = {
@@ -1511,15 +1529,8 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void, re
     ...opts,
     lang: currentLang,
   };
-  // Going back lands on the home page and, when this game was chosen from one
-  // of its pop-up pickers, re-opens that picker — so "back" always means the
-  // screen the player actually came from.
-  const backFn =
-    onBack ??
-    (() => {
-      reopenPickerKey = reopenKey ?? null;
-      showMenu();
-    });
+  // 返回回他挑这一局的那一页：从整页挑的（计时、炸弹、老虎机……）回那一页，从主菜单直接点的回主菜单。
+  const backFn = onBack ?? showMenu;
   const mountNow = () => {
     /**
      * 局内不要滚动阻尼（玩家第八轮点名）。

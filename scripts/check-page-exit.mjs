@@ -13,7 +13,7 @@
  *            按钮完整可见、互不重叠。
  *
  * 七页：计时、老虎机（主菜单进的挑图形页，和个人主页进的介绍页）、无限反转、步步为营、炸弹
- * 挑选窗、多人小屋、成绩与排名。小红书那几张二级页走的是同一颗 .page-exit，样式由
+ * （10-08 方案 3-G 起是一整页，从前是一扇挑选窗）、多人小屋、成绩与排名。小红书那几张二级页走的是同一颗 .page-exit，样式由
  * xhs/check-pickup.mjs 在那一端的包上量。
  *
  * ── 量法 ─────────────────────────────────────────────────────────
@@ -134,7 +134,8 @@ const PAGES = [
   },
   { n: '无限反转', open: (p) => tap(p, '.home-icon-btn[aria-label="无限反转"]'), root: '.flip-page', exit: '#flipBack', back: '.home-page', pad: '.flip-page .start-stage' },
   { n: '步步为营', open: (p) => tap(p, '.home-icon-btn[aria-label="步步为营"]'), root: '.flip-page', exit: '#puzzleBack', back: '.home-page', pad: '.flip-page .start-stage' },
-  { n: '炸弹挑选窗', open: (p) => tap(p, '[data-reopen="bomb"]'), root: '.center-pick', exit: '.center-pick .page-exit', back: null, pad: '.center-pick' },
+  // 炸弹那一页：10-08 方案 3-G 起是一整页（从前是主菜单上弹出来的一扇窗，那时量的是「按下去这一层关掉了」）。
+  { n: '炸弹', open: (p) => tap(p, '.home-bomb-mini, .home-bomb-card'), root: '.bomb-page', exit: '#bombBack', back: '.home-page', pad: '.bomb-page .start-stage' },
   { n: '多人小屋', open: (p) => tap(p, '.home-icon-btn[aria-label="多人游玩"]'), root: '.mp-page--home', exit: '#mpBack', back: '.home-page', blue: true, pad: '.mp-page--home' },
   { n: '成绩与排名', open: (p) => p.click('#navRecords'), root: '.records-page', exit: '#recordsBack', back: '.home-page', records: true, pad: '.records-page' },
 ];
@@ -340,15 +341,11 @@ for (const size of SIZES) {
           !overlap(rr.rec, rr.exit) && !overlap(rr.ranks, rr.exit) && !overlap(rr.exit, rr.dock));
     }
 
-    // 按一下：回到该回的地方（炸弹挑选窗是关掉那一层）。
+    // 按一下：回到该回的地方。（从前炸弹那一格是一扇窗，这儿还有一支「按下去这一层关掉了」；
+    // 10-08 方案 3-G 起它也是一整页，每一页都有一个该回的地方。）
     await page.click(pg.exit);
-    if (pg.back) {
-      const ok = await page.waitForSelector(pg.back, { timeout: 8000 }).then(() => true).catch(() => false);
-      check(`${tag}：按下去回到 ${pg.back}`, ok);
-    } else {
-      const gone = await page.waitForFunction(() => !document.querySelector('.center-pick'), null, { timeout: 8000 }).then(() => true).catch(() => false);
-      check(`${tag}：按下去这一层关掉了`, gone);
-    }
+    const ok = await page.waitForSelector(pg.back, { timeout: 8000 }).then(() => true).catch(() => false);
+    check(`${tag}：按下去回到 ${pg.back}`, ok);
   }
   // 七页彼此：水平中线、底边差不过 1px（成绩页那颗大一号，比中心就比错了，见文件头）。
   if (centers.length) {

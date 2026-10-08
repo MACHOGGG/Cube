@@ -256,10 +256,10 @@ for (const vp of VIEWPORTS) {
     // 种过了，主菜单上它们不再是锁着的那一档。
     await page.waitForTimeout(500);
     // 有的卡片点开不是开局，是先让你挑一个形状。两种挑法都在这儿接住：
-    //   · 弹一个居中的窗（进阶炸弹那几张）；
+    //   · 换到一整页（炸弹那一页，10-08 方案 3-G 起；从前是一扇居中的窗）；
     //   · 原地摊开成三张小卡（定时炸弹）——摊开之后主菜单上多出
     //     「定时炸弹 · 方块」这样的按钮，认前缀就找得到。
-    const chip = await page.$('.center-pick .bomb-chip, .center-pick .center-pick-opt:not(.center-pick-opt--locked)');
+    const chip = await page.$('.bomb-page .bomb-chip, .center-pick .center-pick-opt:not(.center-pick-opt--locked)');
     if (chip) {
       await chip.click();
       await page.waitForTimeout(400);
@@ -293,7 +293,7 @@ for (const vp of VIEWPORTS) {
       // 一道门最危险的状态不是红，是绿着但没在看：十六种里少量四种，屏幕上
       // 照样一片 PASS，没人会发现。所以记下来，结尾统一报红。
       const stuck = await page.evaluate(() =>
-        Boolean(document.querySelector('.overlay.show, .center-pick')) &&
+        Boolean(document.querySelector('.overlay.show, .center-pick, .bomb-page')) &&
         !document.querySelector('.app--game'));
       if (stuck) {
         skipped.push(`${vp.name} · ${label}`);

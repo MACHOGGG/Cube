@@ -127,8 +127,9 @@ let bombShare = null;
 {
   const { ctx, page } = await open();
   await page.$$eval('.home-bomb-mini, .home-bomb-card', (els) => els[0].click());
-  await page.waitForTimeout(800);
-  await page.$$eval('.center-pick .bomb-chip', (els) => els[0].click());
+  // 炸弹那一页（10-08 方案 3-G 起是一整页，从前是一扇挑选窗）。
+  await page.waitForSelector('.bomb-page .bomb-chip', { timeout: 8000 });
+  await page.$$eval('.bomb-page .bomb-chip', (els) => els[0].click());
   await page.waitForSelector('#startOverlay.show', { timeout: 15000 });
   await page.waitForTimeout(250);
   const marks = await page.evaluate(() => {

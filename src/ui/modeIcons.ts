@@ -27,6 +27,7 @@
 import type { BombTier } from '../engine/bomb';
 import type { SeedMode } from '../engine/seedCode';
 import { bombBoard, gameIcon } from './homeIcons';
+import { CTL_TIER_ADVANCED, CTL_TIER_BASIC, CTL_TIER_TIMED } from './ctlIcons';
 
 /** 一局是什么：玩法 ＋ 棋盘（和 SeedVariant 同形，棋盘是 shapes/*.ts 的 card.id）。 */
 export interface ModeId {
@@ -34,8 +35,11 @@ export interface ModeId {
   board: string;
 }
 
+/** 炸弹那三种玩法（不带棋盘问 iconFor 的，只有它们）。 */
+export type BombMode = 'bomb' | 'bombTimed' | 'bombAdv';
+
 /** 炸弹那一页的三档各是编号表里的哪一种玩法。 */
-export const BOMB_MODE: Record<BombTier, SeedMode> = {
+export const BOMB_MODE: Record<BombTier, BombMode> = {
   basic: 'bomb',
   timed: 'bombTimed',
   advanced: 'bombAdv',
@@ -48,15 +52,28 @@ const BOMB_TIER: Partial<Record<SeedMode, BombTier>> = {
   bombAdv: 'advanced',
 };
 
+/** 三档各自那一枚小图标（ctlIcons 那一套圆盘，10-08 方案 3-G）。 */
+const TIER_ICON: Record<BombTier, string> = {
+  basic: CTL_TIER_BASIC,
+  timed: CTL_TIER_TIMED,
+  advanced: CTL_TIER_ADVANCED,
+};
+
 /**
  * 这一局的那张图。
  *
  * 棋盘自己那张脸（gameIcon：基础玩法的底图、布局玩法的布局图）；炸弹三档再把底板换成那一档的
  * 颜色（bombBoard，颜色挂在底板自己身上，外面是不是炸弹那一页的一排都一样）。计时、无限反转、
  * 步步为营、老虎机这几种局，它们的第二层摆的就是棋盘自己那张脸，所以这儿也是。
+ *
+ * 不带棋盘、只说「哪一种炸弹」：那一档自己的那枚小图标——炸弹那一页左边那一列（10-08 方案 3-G：
+ * 「『基础/计时/进阶』删文字、各配小图标……图标源即 3-F-4 的 iconFor」）。
  */
-export function iconFor(id: ModeId): string {
-  const glyph = gameIcon(id.board);
+export function iconFor(id: ModeId): string;
+export function iconFor(id: { mode: BombMode }): string;
+export function iconFor(id: { mode: SeedMode; board?: string }): string {
   const tier = BOMB_TIER[id.mode];
+  if (id.board === undefined) return tier ? TIER_ICON[tier] : '';
+  const glyph = gameIcon(id.board);
   return tier ? bombBoard(glyph, tier) : glyph;
 }

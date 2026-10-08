@@ -84,3 +84,29 @@ export const CTL_REPLAY = custom('ctl-replay') ?? ctlGlyph(
     '<path d="M69 27 V43 H53" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
+
+/**
+ * 炸弹那一页左边那一列：三档各一枚小图标（10-08 方案 3-G：「『基础/计时/进阶』删文字、各配小图标
+ * （进 appIcons/ctlIcons 体系，省掉一组四语文案）」）。同一副圆盘画法，圆盘在那一页上是透明的、
+ * 记号是 --ink-soft（style.css 的 .bomb-tier）——和从前那三个字一个颜色、一个分量。
+ *
+ *   基础  一道向上的折线（第一级）
+ *   计时  一支秒表（和主菜单计时那一族一个意思）
+ *   进阶  两道向上的折线（再上一级）
+ *
+ * 取的时候走 ui/modeIcons.ts 的 iconFor({ mode })（方案：「图标源即 3-F-4 的 iconFor」）。
+ * 换成自己画的：ctl-tier-basic.svg / ctl-tier-timed.svg / ctl-tier-advanced.svg。
+ */
+export const CTL_TIER_BASIC = custom('ctl-tier-basic') ?? ctlGlyph(
+  '<path d="M30 61 L50 41 L70 61" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);
+export const CTL_TIER_TIMED = custom('ctl-tier-timed') ?? ctlGlyph(
+  '<circle cx="50" cy="56" r="22" fill="none" stroke="var(--ctl-mark)" stroke-width="9"/>' +
+    '<path d="M42 22 H58 M50 22 V33" fill="none" stroke="var(--ctl-mark)" stroke-width="9" stroke-linecap="round"/>' +
+    '<path d="M50 56 V43" fill="none" stroke="var(--ctl-mark)" stroke-width="8" stroke-linecap="round"/>',
+);
+export const CTL_TIER_ADVANCED = custom('ctl-tier-advanced') ?? ctlGlyph(
+  '<path d="M30 51 L50 31 L70 51 M30 73 L50 53 L70 73" fill="none" stroke="var(--ctl-mark)" stroke-width="10" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/>',
+);
