@@ -94,6 +94,22 @@ function memory(args) {
     }
     case 'DEL':
       return mem.delete(key) ? 1 : 0;
+    // 一批键一个都不在才一起写进去，有一个已经在就一个都不写（见 msetnx）。真 Redis 那头是
+    // 一条命令原子做完的；这里单进程内存，一个 case 里查完再写，中间没有别人插得进来。
+    case 'MSETNX': {
+      const pairs = [key, ...rest];
+      for (let i = 0; i < pairs.length; i += 2) {
+        const k = pairs[i];
+        const d = expiries.get(k);
+        if (d !== undefined && d < Date.now()) {
+          mem.delete(k);
+          expiries.delete(k);
+        }
+        if (mem.has(k)) return 0;
+      }
+      for (let i = 0; i < pairs.length; i += 2) mem.set(pairs[i], pairs[i + 1]);
+      return 1;
+    }
     case 'GETDEL': {
       const v = mem.get(key) ?? null;
       mem.delete(key);
@@ -246,6 +262,16 @@ export const setnx = async (key, value, ttl) =>
     ttl ? ['SET', key, encode(value), 'NX', 'EX', ttl] : ['SET', key, encode(value), 'NX'],
   )) !== null;
 export const del = (key) => command(['DEL', key]);
+/**
+ * 一批键**一个都不在**才一起写进去（MSETNX），回 true；只要有一个已经在，就一个都不写，回 false。
+ * 没有过期时间。
+ *
+ * 发码用它把一整批码一步写进库（_codes.js 的 mintCodes，10-08 方案第五批第 2 条）：原先一张码
+ * 两次往返（先 GET 看有没有人、再 SET），一批两百张就是四百次，管理员页上发一批大的会超时。
+ * 「不许盖掉别人那张还没兑的码」这一条照旧守着，而且比原先更严——查和写是同一步。
+ */
+export const msetnx = async (entries) =>
+  Number(await command(['MSETNX', ...entries.flatMap(([k, v]) => [k, encode(v)])])) === 1;
 
 /**
  * 键上**还是这个值**才删——比和删是同一步。给锁放手用（见 withLock）。

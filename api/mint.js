@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, updateAccount } from './_accounts.js';
-import { codeKey, mintCodes } from './_codes.js';
+import { codeKey, mintCodes, MINT_BATCH_MAX } from './_codes.js';
 import { del, storeConfigured } from './_store.js';
 import { redact } from './_redact.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -28,7 +28,13 @@ import { callerId, tooMany } from './_ratelimit.js';
  * it never existed — the difference between an answerable support question
  * and an argument.
  */
-const MAX_PER_CALL = 200;
+/**
+ * 一次最多发几张（发给一个人的那一批也是这个数）。原先是 200：一张码两次往返，两百张就是四百次，
+ * 在手机上发一批大的会撞上函数时限，掐在半路写进库的那些码回包里没有、谁也不知道。现在一批是一
+ * 条 MSETNX（_codes.js 的 mintCodes），上限照方案收到 50（10-08 方案第五批第 2 条）——发码页上那
+ * 句「最多 N」跟着同一个数（check-mint-batch 盯着两边对得上）。
+ */
+const MAX_PER_CALL = MINT_BATCH_MAX;
 /**
  * 一个来源一小时最多敲多少次门。
  *

@@ -27,7 +27,7 @@
  *
  * 剩下的写在《服务条款》里：发现作弊或明显异常的数据，我们会清除相关记录。
  */
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
@@ -971,6 +971,28 @@ async function board(res, body, who, claim) {
 /** 一个来源一小时最多敲多少次门。和 api/mint.js 同一个数。 */
 const CALLS_PER_HOUR = 20;
 
+/**
+ * 重建分批（10-08 方案第五批第 2 条：「榜单重建分批、可从断点续跑」）。
+ *
+ * 一个人要撤一遍所有的榜再写回去，几十次顺序往返；原先一次调用把名单上的人全算完，人一多就跑
+ * 满函数时限被掐掉——掐在谁身上谁就停在半路，回包没发出去，管理员只看见一个超时，也不知道算到
+ * 了哪儿。现在一次最多算 REBUILD_BATCH 个人、或者花满 REBUILD_BUDGET_MS 就停（先到哪个算哪个，
+ * 至少算完一个），没算完就回一张「接着来」的票（resume）。
+ *
+ * 票存在库里（rebuildTicketKey），记着这一轮的选项和算到了谁——**每算完一个人就记一次**，所以就
+ * 算哪一次调用真的被掐掉了，再带着同一张票来，也是从那个人后面接着算（掐在半路的那一个人重算一
+ * 遍：一个人的重建本来就是幂等的）。名单按 id 排好序，「算到了谁」记的是最后一个 id，中途有新
+ * 人上榜也不会让谁被算两遍或者漏掉一个老人。
+ *
+ * 40 秒是给 60 秒的函数时限（vercel.json 的 maxDuration，Hobby 档的上限）留的余量：一个人最慢
+ * 也就几百毫秒，检查在每个人之间做。
+ */
+const REBUILD_BATCH = 100;
+const REBUILD_BUDGET_MS = 40_000;
+/** 票在库里留多久。一轮重建不会拖这么久；过期了就从头再点一次。 */
+const REBUILD_TICKET_TTL_S = 3600;
+const rebuildTicketKey = (t) => 'rebuild:resume:' + t;
+
 /** 和 api/mint.js 同一把锁：ADMIN_TOKEN，等长比较，不泄露比到第几位。 */
 function tokenOk(given) {
   const want = process.env.ADMIN_TOKEN || '';
@@ -1016,15 +1038,33 @@ function tokenOk(given) {
  * `skipped` 里：跳过比盖掉好，但得看得见。
  */
 async function rebuild(req, res, body) {
+  /*
+   * 接着上一次没算完的那一轮：带着服务器发的票来（见 REBUILD_BATCH 那一段）。票在，这一次就不
+   * 再计入限速——一轮分成二三十批是常事，每一批都算一次「敲门」，人一多重建自己先把一小时二十
+   * 次用完了。不怕有人拿它绕开限速猜令牌：票只发给验过令牌的人，是 128 位随机数，猜不中；令牌
+   * 照样每一次都验。不认识的票（过期了、编的）照普通的一次算，先撞限速。
+   */
+  const ticketId = typeof body?.resume === 'string' && /^[0-9a-f]{32}$/.test(body.resume) ? body.resume : null;
+  const ticket = ticketId ? await get(rebuildTicketKey(ticketId)) : null;
   // 先限速，再验令牌——挡的正是「一直猜这个令牌」。和 api/mint.js 同一套
   // （_ratelimit.js），同一个数：管理员一小时重建不了几次榜，猜密码的人先撞上
   // 它。这一条尤其该限：重建要把全站每个人的存档翻一遍再重写所有榜，是站里最
   // 贵的一次调用，敲开门之前就已经不便宜了。
-  if (await tooMany('scores:rebuild', callerId(req), CALLS_PER_HOUR, 3600)) {
+  if (!ticket && (await tooMany('scores:rebuild', callerId(req), CALLS_PER_HOUR, 3600))) {
     return send(res, 429, { error: 'tooMany' });
   }
   if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
-  const drop = new Set((Array.isArray(body?.drop) ? body.drop : []).map((k) => String(k)));
+  // 带了票、票却不在了（过期，或者那一轮已经算完删掉了）：说清楚，让管理员从头再点一次。
+  if (body?.resume !== undefined && !ticket) return send(res, 410, { error: 'resume' });
+  // 接着算的那几批，选项一律照票上记的（第一批定下的），不看这一次请求里写了什么——同一轮重建
+  // 前后几批各按各的选项算，榜就成了几种规矩拼起来的。
+  const opts = ticket?.opts ?? {
+    drop: (Array.isArray(body?.drop) ? body.drop : []).map((k) => String(k)),
+    all: body?.all === true,
+    scrubNames: body?.scrubNames === true,
+    nicknames: body?.nicknames === true,
+  };
+  const drop = new Set(opts.drop);
   /**
    * 全部清空：一张榜都不留。
    *
@@ -1039,7 +1079,7 @@ async function rebuild(req, res, body) {
    * 榜单》就会照存档把榜重算回来。反过来说也是个坑——清完之后别手滑再点一次普通
    * 重建，那会把旧尺子量出来的分从存档里请回榜上。
    */
-  const wipeAll = body?.all === true;
+  const wipeAll = opts.all === true;
   /**
    * 把库里那些**长得像凭据**的旧名字清掉（#2，见 leakShaped）。
    *
@@ -1053,7 +1093,7 @@ async function rebuild(req, res, body) {
    * 次清理变成一次泄露。`v >= NAME_V` 的那些不动：那是玩家自己敲的昵称，哪怕它正好长得
    * 像第一串。
    */
-  const scrubNames = body?.scrubNames === true;
+  const scrubNames = opts.scrubNames === true;
   /**
    * 点名要 drop 的那几种，**它们的榜也要撤干净——包括已经归档的那几张**。
    *
@@ -1073,14 +1113,32 @@ async function rebuild(req, res, body) {
    *
    * 排在榜重算**之后**做：重名时谁留下名字看的是总榜分数，要拿重算过的那一份比。
    */
-  const buildNicknames = body?.nicknames === true;
+  const buildNicknames = opts.nicknames === true;
 
-  // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。
+  // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。按 id 排好序，「算到了谁」
+  // 才说得清（见 REBUILD_BATCH 那一段）；这一批只算排在上一批最后那个人后面的。
   const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
-  const ids = new Set([...ranked.map((row) => row.member), ...Object.keys(names || {})]);
+  const after = ticket ? String(ticket.after ?? '') : '';
+  const ids = [...new Set([...ranked.map((row) => row.member), ...Object.keys(names || {})])]
+    .sort()
+    .filter((id) => id > after);
+  /** 这一轮的票：头一批就开一张，每算完一个人更新一次，算完删掉。 */
+  const tid = ticketId ?? randomBytes(16).toString('hex');
+  const tally = {
+    players: Number(ticket?.players) || 0,
+    rows: Number(ticket?.rows) || 0,
+    skipped: Number(ticket?.skipped) || 0,
+    namesDropped: Number(ticket?.namesDropped) || 0,
+  };
+  const saveTicket = (lastId) =>
+    set(rebuildTicketKey(tid), { opts, after: lastId, ...tally, startedAt: ticket?.startedAt ?? Date.now() }, REBUILD_TICKET_TTL_S);
+  // 门里用 batch 把一轮拆成好几批来量（只许往小里调）。
+  const batch = Math.max(1, Math.min(REBUILD_BATCH, Math.floor(Number(body?.batch)) || REBUILD_BATCH));
+  const startedAt = Date.now();
 
   let namesDropped = 0;
-  if (scrubNames) {
+  // 清旧名字是对整张名单做一遍，只在一轮的头一批做。
+  if (scrubNames && !ticket) {
     for (const [id, row] of Object.entries(names || {})) {
       if (!row || Number(row.v) >= NAME_V) continue;
       if (!leakShaped(id, row.name)) continue;
@@ -1089,11 +1147,14 @@ async function rebuild(req, res, body) {
     }
   }
 
-  let players = 0;
-  let rowsWritten = 0;
-  /** 这一轮没抢到锁、因此原样放过的人。正在打这一局的人就落在这里。 */
-  const skipped = [];
+  tally.namesDropped += namesDropped;
+  if (!ticket) await saveTicket('');
+
+  let handled = 0;
   for (const id of ids) {
+    // 这一批到头了：人数够了，或者时候不早了（至少算完一个人，不然一轮永远走不完）。
+    if (handled >= batch || (handled > 0 && Date.now() - startedAt > REBUILD_BUDGET_MS)) break;
+    handled++;
     const got = await withLock(statsLockKey(id), async () => {
       const [stats, archive] = await Promise.all([loadStats(id), get(runsKey(id))]);
       const runs = Array.isArray(archive) ? archive : [];
@@ -1155,23 +1216,33 @@ async function rebuild(req, res, body) {
       }
       return rows;
     });
-    if (!got.ok) {
-      skipped.push(id);
-      continue;
+    /** 这一轮没抢到锁、因此原样放过的人（正在打这一局的人就落在这里）记个数。 */
+    if (!got.ok) tally.skipped++;
+    else {
+      tally.rows += got.value;
+      tally.players++;
     }
-    rowsWritten += got.value;
-    players++;
+    await saveTicket(id);
   }
+
+  // 没算完：回票，管理员页带着它接着来（public/mint.html 的《重建榜单》会自己接着点）。
+  if (handled < ids.length) {
+    return send(res, 200, { ok: true, done: false, resume: tid, players: tally.players, skipped: tally.skipped, left: ids.length - handled });
+  }
+
+  await del(rebuildTicketKey(tid));
+  // 昵称索引排在榜重算之后（重名时谁留下看重算过的总榜分数），所以等最后一批算完才做。
   const nicknames = buildNicknames ? await buildNicknameIndex() : null;
   return send(res, 200, {
     ok: true,
-    players,
-    rows: rowsWritten,
-    skipped: skipped.length,
+    done: true,
+    players: tally.players,
+    rows: tally.rows,
+    skipped: tally.skipped,
     dropped: [...drop],
     wiped: wipeAll,
     // 只有一个数（理由见 scrubNames 那一段：这个回包不许带名字）。
-    namesDropped,
+    namesDropped: tally.namesDropped,
     // 同上：只有几个数。没勾这一项就是 null。
     nicknames,
   });

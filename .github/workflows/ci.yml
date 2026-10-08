@@ -414,6 +414,11 @@ jobs:
         run: ALLOW_MEMORY_STORE=1 node scripts/check-creem-gate.mjs
       - name: 发码接口的限速
         run: ALLOW_MEMORY_STORE=1 node scripts/check-mint-limit.mjs
+      # 管理员那两件「一次做一大批」的事不撞函数时限（10-08 方案第五批第 2 条）：发码一批一条
+      # MSETNX（起一台本机的假 Upstash 数请求）、单批 50 张；重建榜单分批、带票续跑、续跑不吃
+      # 限速、编的票照样撞限速。纯 node，几秒。
+      - name: 发码一步写入、重建榜单分批续跑
+        run: node scripts/check-admin-batches.mjs
       # 同一个账号几乎同时兑两张码，两张的时长都要真的加上去。朴素的「读—改—
       # 写」会让后写的那一份把前一次盖掉：两张码都吃掉、两次都说成功，账号上
       # 只多了一个月，而且玩家和客服都查不出来。不连任何外部服务，几百毫秒。

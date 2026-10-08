@@ -96,8 +96,8 @@
 
     <div class="row">
       <div>
-        <label for="count">数量（最多 200）</label>
-        <input id="count" type="number" min="1" max="200" value="10" />
+        <label for="count">数量（最多 50）</label>
+        <input id="count" type="number" min="1" max="50" value="10" />
       </div>
       <div>
         <label for="days">几天内有效</label>
@@ -188,11 +188,12 @@
     notConfigured: '服务端还没有连上存储（Redis），或者还没部署。',
     plan: '等级不对。',
     method: '请求方式不对。',
+    resume: '上一轮重建的进度已经过期了，从头再点一次。',
   };
 
   $('go').addEventListener('click', async () => {
     if (!token) return say('网址里没有令牌，见上面。', 'bad');
-    const count = Math.max(1, Math.min(200, Number($('count').value) || 1));
+    const count = Math.max(1, Math.min(50, Number($('count').value) || 1));
     const body = { token, plan, count };
     if ($('hasExpiry').checked) body.expiresInDays = Math.max(1, Number($('days').value) || 7);
 
@@ -222,35 +223,64 @@
   });
 
   // ---- 维护：重建榜单 ----------------------------------------------------
+  /**
+   * 上一轮没算完的那张票（10-08 方案第五批第 2 条）。服务器一次只算一批人，没算完就回一张票，
+   * 这一页带着它自己接着点下一批；断在半路（超时、断网）就留着它，再按一次《重建榜单》从断开的
+   * 地方接着算——选项照第一批定下的那一套，这时候改勾选不算数（rebuildOpts 记着当时勾了什么，
+   * 最后那句话照它写）。
+   */
+  let rebuildResume = null;
+  let rebuildOpts = null;
   $('rebuild').addEventListener('click', async () => {
     const sayR = (t, kind) => {
       $('rebuildMsg').textContent = t;
       $('rebuildMsg').className = 'msg ' + (kind || '');
     };
     if (!token) return sayR('网址里没有令牌，见上面。', 'bad');
-    // 全清是一键清掉所有榜：先问一句（第 14 推）。存档不动、可以重建回来，可那要再点一次
-    // 不勾全清的重建——手滑点了它的人，多半不知道还有这一步。
-    if ($('wipeAll').checked && !confirm('确定清空所有排行榜吗？')) return;
-    const scrub = $('scrubNames').checked;
-    const nicknames = $('buildNicknames').checked;
+    if (!rebuildResume) {
+      // 全清是一键清掉所有榜：先问一句（第 14 推）。存档不动、可以重建回来，可那要再点一次
+      // 不勾全清的重建——手滑点了它的人，多半不知道还有这一步。接着算的那几批不再问（第一批
+      // 已经问过了）。
+      if ($('wipeAll').checked && !confirm('确定清空所有排行榜吗？')) return;
+      rebuildOpts = { scrub: $('scrubNames').checked, nicknames: $('buildNicknames').checked };
+    }
+    const { scrub, nicknames } = rebuildOpts;
     $('rebuild').disabled = true;
-    sayR('正在重算…（人多的话要等十几秒）');
+    sayR(rebuildResume ? '接着上一次断开的地方重算…' : '正在重算…（人多的话要等十几秒）');
     try {
-      const res = await fetch('/api/scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'rebuild',
-          token,
-          drop: $('dropFlip').checked ? ['flip'] : [],
-          all: $('wipeAll').checked,
-          scrubNames: scrub,
-          nicknames,
-        }),
-      });
-      const reply = await res.json().catch(() => ({}));
+      let res;
+      let reply;
+      for (;;) {
+        res = await fetch('/api/scores', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            rebuildResume
+              ? { action: 'rebuild', token, resume: rebuildResume }
+              : {
+                  action: 'rebuild',
+                  token,
+                  drop: $('dropFlip').checked ? ['flip'] : [],
+                  all: $('wipeAll').checked,
+                  scrubNames: scrub,
+                  nicknames,
+                },
+          ),
+        });
+        reply = await res.json().catch(() => ({}));
+        // 没算完：记下票，接着点下一批。没有 done 这一项的回包（老服务器）当作算完了。
+        if (!res.ok || reply.done !== false) break;
+        rebuildResume = reply.resume;
+        sayR(`正在重算…已经算完 ${reply.players} 个人，还剩 ${reply.left} 个`);
+      }
       $('rebuild').disabled = false;
-      if (!res.ok) return sayR(ERRORS[reply.error] || ('出错了：HTTP ' + res.status), 'bad');
+      if (!res.ok) {
+        // 票过期了（410）：忘掉它，下一次从头来。别的错照旧留着票——再点一次就接着算。
+        if (reply.error === 'resume') rebuildResume = null;
+        const more = rebuildResume ? '。再按一次《重建榜单》从断开的地方接着算。' : '';
+        return sayR((ERRORS[reply.error] || ('出错了：HTTP ' + res.status)) + more, 'bad');
+      }
+      rebuildResume = null;
       const dropped = (reply.dropped || []).length ? '，清掉了 ' + reply.dropped.join('、') : '';
       // 跳过的人是「这一刻正在打」的人：他那份战绩被锁着（api/scores.js 的
       // statsLockKey），重建原样放过，不去盖。零个就不提——平时它一定是零，天天
@@ -271,7 +301,7 @@
       sayR(`重算完了：${reply.players} 个人，写了 ${reply.rows} 行${dropped}${scrubbed}${nicks}${skipped}。`, 'good');
     } catch {
       $('rebuild').disabled = false;
-      sayR('连不上服务器。', 'bad');
+      sayR(rebuildResume ? '连不上服务器。再按一次《重建榜单》从断开的地方接着算。' : '连不上服务器。', 'bad');
     }
   });
 
