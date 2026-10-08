@@ -667,12 +667,18 @@ async function push(res, body, who) {
   if (!got.ok) return send(res, 503, { error: 'busy' });
 
   const { duplicate, stats } = got.value;
-  if (duplicate) {
-    return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs });
-  }
   // 每日挑战那一局：再进一张「今日」榜（第 19 推）。只有这一局自称是每日挑战的时候才问；它照
   // 常记进存档和常规榜（上面那一段），这儿只决定今日榜收不收。
+  //
+  // **重报的那一次也问**（2026-10-08 方案 1-4）。从前 duplicate 那一支在这一句之前就回去了：
+  // 头一次交卷时存档写成了、今日榜这一步却摔了（库抖一下、函数超时），客户端照规矩重报，被
+  // 判成「同一局报两次」直接回——**今日榜从此永远缺这一局**，而玩家那边收到的是成功。pushDaily
+  // 走 zaddIfHigher（只上不下），同一局再写一遍是幂等的，所以重报时照样写一次、回包照样带
+  // daily，没有任何东西会被算两遍。
   const daily = data?.daily !== undefined ? await pushDaily(who.id, mode, score, data) : undefined;
+  if (duplicate) {
+    return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs, daily });
+  }
   return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best, daily });
 }
 

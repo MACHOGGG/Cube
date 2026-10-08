@@ -19,6 +19,8 @@
  *   ④ 收下的进 `lb:daily:YYYYMMDD`，每人取当天最好的一局（GT）；看榜走 board、mode 'daily'，
  *      前五十名＋我排第几。
  *   ⑤ 被拒的那一局**照样记进存档和常规榜**——它是一局真打出来的游戏，只是不算那一天的挑战。
+ *   ⑧ **重报的那一次也进今日榜**（2026-10-08 方案 1-4）：头一次存档写成了、今日榜那一步摔了，
+ *      客户端重报会被判成「同一局报两次」。从前那一支直接回，今日榜从此永远缺这一局。
  *
  * 每一条都先摆尺子：真的那一局确实收下了、榜上确实有人，拒掉的那几条才说明得了什么。
  */
@@ -236,6 +238,35 @@ const E = await makePlayer('daily-e@example.com');
   await accounts.saveAccount('daily-f@example.com', account);
   const r = await todayBoard({ email: 'daily-f@example.com', token: account.token });
   check('看今日榜和别的榜一样要天才：过期的 403', r.status === 403, `${r.status} ${JSON.stringify(r.payload)}`);
+}
+
+// ── ⑧ 重报的那一次也进今日榜（2026-10-08 方案 1-4）─────────────────────────────
+//
+// 摆出「头一次今日榜那一步摔了」：真交一局，再把今日榜整张抹掉（等于那一笔 zadd 没写成），
+// 然后用**同一个 runId** 重报。它会被判成 duplicate——从前那一支在写今日榜之前就回去了。
+{
+  setNow(NOON);
+  const { del } = await import('../api/_store.js');
+  const E = await makePlayer('daily-retry@example.com');
+  const data = dailyData(today, 777);
+  const body = { action: 'push', ...E, runId: 'daily-retry-1', mode: data.shapeId, score: data.totalScore, data };
+  const first = await call(body);
+  check('⑧ 量程：头一次交卷收下了（stored）', first.payload?.daily === 'stored', JSON.stringify(first.payload?.daily));
+  await del('lb:daily:' + todayKey);
+  const empty = await todayBoard(E);
+  check('⑧ 量程：今日榜被抹掉了（摆出「那一笔没写成」）', !(empty.payload?.rows || []).some((r) => r.me),
+    JSON.stringify(empty.payload?.rows));
+  const again = await call(body);
+  check('⑧ 重报：判成同一局（存档、总分都不算两遍）', again.payload?.duplicate === true, JSON.stringify(again.payload));
+  check('⑧ 重报的回包照样带 daily', again.payload?.daily === 'stored', JSON.stringify(again.payload?.daily));
+  const b = await todayBoard(E);
+  const mine = (b.payload?.rows || []).find((r) => r.me);
+  check('⑧ 重报之后今日榜上有这一局', mine && mine.score === 777, JSON.stringify(mine));
+  const mineStats = await call({ action: 'mine', ...E });
+  const archived = (mineStats.payload?.archive || []).filter((r) => r.runId === 'daily-retry-1');
+  check('⑧ 存档里这一局还是只有一条、总分只算一遍',
+    archived.length === 1 && mineStats.payload?.runs === 1 && mineStats.payload?.total === 777,
+    `存档 ${archived.length} 条 / runs ${mineStats.payload?.runs} / total ${mineStats.payload?.total}`);
 }
 
 Date.now = realNow;
