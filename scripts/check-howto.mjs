@@ -219,6 +219,24 @@ check(
 );
 await closeAll();
 
+// ── 6. 步步为营（2026-10-08 方案 2-9）────────────────────────────────
+//
+// 从前这一局暂停里的《怎么玩》一条附注都没有：余步怎么扣、怎么退，只在头一回进来时在棋盘底下
+// 摆一局，看过就再也找不到。照计时的先例，这一条也不配图。挑形状走的是整页那一套
+// （.slot-pick-opt，和 check-endcard-reach 同一条路）。
+await startFrom('步步为营', async () => {
+  await page.waitForSelector('.slot-pick-opt[data-family="square"]', { timeout: 15000 });
+  await page.$eval('.slot-pick-opt[data-family="square"]', (e) => e.click());
+  await page.waitForTimeout(900);
+});
+r = await openHowto();
+check('步步为营：底下有一条，词是《步步为营》', r.extras.length === 1 && r.extras[0].tag === '步步为营', JSON.stringify(r.extras));
+check('步步为营：说的是余步的规矩（开局几步、每走一步扣几步）', /8 步/.test(r.extras[0]?.text || '') && /扣/.test(r.extras[0]?.text || ''),
+  r.extras[0]?.text);
+check('步步为营：那一条不摆空配图', r.extras[0]?.art === false, '');
+check('步步为营：五条规则还在', r.nums.join(',') === '1,2,3,4,5', r.nums.join(','));
+await closeAll();
+
 console.log(errs.length ? '\n页面报错：' + errs.slice(0, 3).join(' | ') : '\n全程零报错');
 await browser.close();
 process.exit(fail ? 1 : 0);

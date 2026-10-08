@@ -656,6 +656,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     // 无限反转也是 100 秒，可它那一条自己就带着「限时 100 秒」，不必再摆一条计时
     //（头上那个读数的显隐用的也是这同一个判断）。
     if (meta.timed && !meta.flip) tips.push({ key: 'timed' });
+    // 步步为营：余步怎么扣、怎么退（2026-10-08 方案 2-9）。和头一回进这个玩法时棋盘底下那
+    // 句是同一份文案（i18n 的 MODE_TIPS.puzzle），这一局的标记是 meta.steps。
+    if (meta.steps) tips.push({ key: 'puzzle' });
     // 特殊布局没有自己的那张卡，左边那个词就用这副棋盘自己的名字。
     if (!BASE_BOARDS.has(meta.shapeId)) {
       tips.push({ key: 'layout', label: menuTag(meta.lang, meta.shapeId) });

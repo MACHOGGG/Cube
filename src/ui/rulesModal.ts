@@ -68,14 +68,19 @@ function ruleArt(shape?: RuleShape): string[] {
  * 一局就无从画起，所以由调用方随 art 传进来）；计时和特殊布局本来就没有配图
  * ——计时要说的是头上那个数字，他抬头看得见；特殊布局要说的是「这副棋盘和你
  * 学过的那副规矩一样」，另画一幅新棋盘反倒像在说「这里有新东西」。
+ *
+ * 步步为营（2026-10-08 方案 2-9）照计时的先例也不配图：它要说的是左上那一格的余步怎么扣、
+ * 怎么退，那个数他抬头就看得见。从前暂停里的《怎么玩》对这一局一条附注都没有——步数规则
+ * 只在头一回进来时在棋盘底下摆一局，看过就再也找不到了。
  */
-export type ExtraTip = 'bomb' | 'flip' | 'slot' | 'timed' | 'layout';
+export type ExtraTip = 'bomb' | 'flip' | 'slot' | 'timed' | 'layout' | 'puzzle';
 const TIP_ART: Record<ExtraTip, string> = {
   bomb: bombTipArt('square'),
   flip: flipTipArt('square'),
   slot: '',
   timed: '',
   layout: '',
+  puzzle: '',
 };
 
 /** 摆一条附注要知道的三件事。key 之外两样都可不给，见下面各自的注。 */
