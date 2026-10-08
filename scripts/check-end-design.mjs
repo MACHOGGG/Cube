@@ -16,7 +16,7 @@
  *   徽章      70×28、圆角 8、底 #93E7A3、字 #00AC00（11px 粗）；第一张 x220.5 y174.5，第二张 x180.5 / x275
  *   通关勾    墨 x66–153 y213–301（88 见方，环宽 13），#00AC00
  *   明细      11px、行距 17、#943D40，只有「综合分」那一行粗；抬头左沿 110 / 180，数那一栏 250 / 321，
- *             第一行墨顶 218；第二张最后一行是「该玩法您的均分」（墨顶 302）
+ *             第一行墨顶 218；第二张最后一行是「该玩法你的均分」（墨顶 302）
  *   卡        279×378、圆角 28、底 #FFEDC8；第二张那张在 y329.5（第一张少一行均分，在 323.5）
  *   卡里      （卡内坐标）Slides 32–119 × 32–62；「圆球」33–75；横杠 72–76；炸弹标志 93–113 × 62–82；
  *             分数 26–124 × 91–138；两块棋盘 4–135.5 / 144.5–276 × 177–309（#EAD3AE，圆角 18）；
@@ -216,7 +216,7 @@ const cards = [await cardUrl(false), await cardUrl(true)];
         ['步数系数（19步，基准28）', '×2.17', ''], ['综合分', '430', ' end-row--sum end-row--total']];
       document.getElementById('endBreakdown').innerHTML =
         rows.map(([l, v, cls]) => `<div class="end-row${cls}"><span>${l}</span><span>${v}</span></div>`).join('') +
-        '<div class="end-row end-row--avg"><span>该玩法您的均分 = 430</span></div>';
+        '<div class="end-row end-row--avg"><span>该玩法你的均分 = 430</span></div>';
       const st = document.getElementById('endStamp');
       st.innerHTML = stamp
         ? '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
@@ -295,7 +295,7 @@ const cards = [await cardUrl(false), await cardUrl(true)];
     if (stamp) {
       check(`${tag}：通关勾墨 x66–153 y213–301（±3）`, !!ink.check && near(ink.check.x0, 66) && near(ink.check.x1, 153) && near(ink.check.y0, 213) && near(ink.check.y1, 301), fmt(ink.check));
       check(`${tag}：勾的环宽 13（画布 40 格里 5.9）、颜色 #00AC00`, !!dom.ring && dom.ring.sw === '5.9' && dom.ring.stroke === 'rgb(0, 172, 0)', JSON.stringify(dom.ring));
-      check(`${tag}：最后一行「该玩法您的均分」墨顶 302（±3），左沿和明细抬头一齐`, !!ink.rowLast && near(ink.rowLast.y0, 302) && near(ink.rowLast.x0, 180), fmt(ink.rowLast));
+      check(`${tag}：最后一行「该玩法你的均分」墨顶 302（±3），左沿和明细抬头一齐`, !!ink.rowLast && near(ink.rowLast.y0, 302) && near(ink.rowLast.x0, 180), fmt(ink.rowLast));
       check(`${tag}：卡 279×378（±2）、顶在 329.5（±3）、在窗里居中，圆角 10% / 7.4%（设计图 28px）`,
         near(dom.img.w, 279, 2) && near(dom.img.h, 378, 2) && near(dom.img.y, 329.5) && near(dom.img.x + dom.img.w / 2, 201, 1) && dom.imgRadius.startsWith('10%'),
         `${dom.img.x.toFixed(1)},${dom.img.y.toFixed(1)} ${dom.img.w.toFixed(1)}×${dom.img.h.toFixed(1)} r${dom.imgRadius}`);
@@ -392,7 +392,7 @@ for (const lang of Object.keys(L)) {
   check(`③ ${lang}：手指拖不动（touch-action: none，窗和中间那一块）`, r.touch.every((v) => v === 'none'), r.touch.join(' '));
   check(`③ ${lang}：里面什么都没被裁（窗、抬头、中间那一块都没有藏起来的内容）`, r.clipped.length === 0, r.clipped.join(' '));
   check(`④ ${lang}：标题就是「${want.title}」`, r.title === want.title, r.title);
-  check(`④ ${lang}：徽章在抬头里自己那一格；「该玩法您的均分」是明细最后一行；「综合分」那一行挂着粗的那个类`,
+  check(`④ ${lang}：徽章在抬头里自己那一格；「该玩法你的均分」是明细最后一行；「综合分」那一行挂着粗的那个类`,
     r.badgesHost && r.avgLast && r.total === 1, JSON.stringify({ badgesHost: r.badgesHost, avgLast: r.avgLast, total: r.total }));
   check(`④ ${lang}：旧的那几样都撤了（#endAvg、小标题、滚动段、横线、「长按保存」）`, r.oldBits.length === 0, r.oldBits.join(' '));
   check(`④ ${lang}：三颗键：再来 · 分享 · 主页，记号、没有字、读屏名是「${want.again} / ${want.share} / ${want.home}」`,

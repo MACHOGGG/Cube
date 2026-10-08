@@ -112,8 +112,9 @@ await page.waitForSelector('#contactThanksRow', { timeout: 15000 });
 
   check('抬头是《联系与特别感谢》', /联系与特别感谢/.test(v.title), v.title);
   // ② 玩家自己写的那一段，逐字在
-  check('玩家写的那一段原文在（「也欢迎您在没有遇到问题的情况下」）',
-    /也欢迎您在没有遇到问题的情况下联络我/.test(v.text), v.inviteFirst.slice(0, 40));
+  // 原文里是「您」，10-08 方案第四批第 3 条全站「您 / 你」按多数统一成「你」，别的字一个没动
+  check('玩家写的那一段原文在（「也欢迎你在没有遇到问题的情况下」）',
+    /也欢迎你在没有遇到问题的情况下联络我/.test(v.text), v.inviteFirst.slice(0, 40));
   check('而且说了「我本人查看回复」', /本人查看回复/.test(v.text));
   // ① 邮箱：可点、是 mailto、和常量一致、比正文大一档
   check('邮箱那一行是 mailto:', v.href === `mailto:${MAIL}`, v.href);

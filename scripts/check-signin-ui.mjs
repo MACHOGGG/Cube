@@ -232,8 +232,9 @@ const FIRST = 'UiProbe' + Date.now().toString(36).slice(-5);
       return '';
     })
     .catch(() => '');
-  check('注册成了那一拍说的是「新账户登录成功，若尝试登录旧账号请退出重试」',
-    said === '新账户登录成功，若尝试登录旧账号请退出重试', said);
+  // 玩家原话里是「新账户」，10-08 方案第四批第 3 条全站统一成「账号」
+  check('注册成了那一拍说的是「新账号登录成功，若尝试登录旧账号请退出重试」',
+    said === '新账号登录成功，若尝试登录旧账号请退出重试', said);
   // 那一句留一拍再关窗，所以等《账户》那一屏出来。
   await page.waitForSelector('#statusClose', { timeout: 20000 });
   const v = await page.evaluate(() => ({
