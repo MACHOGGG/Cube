@@ -1207,6 +1207,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8992/ && break; sleep 0.25; done
           node scripts/check-room-force-ui.mjs http://localhost:8992/
 
+      # 屋主按了《解散小屋》、服务器那头没办成（2026-10-08 方案 2-7）：留在原页、屋子不忘，那一问
+      # 原样再问一次、上面多一行「小屋还没解散」，客人那头小屋照旧开着；小屋页和主菜单横幅两个入口
+      # 各拦一次 end。尺子：放行之后再按一次，真的散了。一台自己的服务器（兑一次 TESTMONTH）。
+      - name: 解散没办成：不忘屋，再问一次
+        run: |
+          nohup node scripts/dev-server.mjs 8994 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8994/ && break; sleep 0.25; done
+          node scripts/check-disband-retry.mjs http://localhost:8994/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。

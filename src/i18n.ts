@@ -479,6 +479,11 @@ export interface I18nStrings {
    * 卷，这一局就此结束，屋主照常挑下一局。只有屋主看得到。
    */
   mpStopWaiting: string;
+  /**
+   * 屋主按了《解散小屋》，服务器那头没办成（网断了一下、服务器忙）：他还在这间屋里，再按一次就
+   * 行（2026-10-08 方案 2-7）。
+   */
+  mpDisbandFailed: string;
   mpRoomEnded: string;
   mpTotalLabel: string;
   /** 竞赛排名图上那个大数字底下的一行小字。 */
@@ -994,6 +999,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: 'Pick the next board',
     mpDisbandRoom: 'Break up the room',
     mpStopWaiting: 'Stop waiting',
+    mpDisbandFailed: 'The room is still open — try again.',
     mpRoomEnded: 'The host closed the room.',
     mpTotalLabel: 'total',
     mpRoomTotal: 'Room total',
@@ -1353,6 +1359,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: 'Choisir le plateau suivant',
     mpDisbandRoom: 'Dissoudre la salle',
     mpStopWaiting: 'Ne plus attendre',
+    mpDisbandFailed: 'La salle est toujours ouverte — réessayez.',
     mpRoomEnded: 'L’hôte a fermé la salle.',
     mpTotalLabel: 'total',
     mpRoomTotal: 'Total de la salle',
@@ -1712,6 +1719,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: '選下一個玩法',
     mpDisbandRoom: '解散小屋',
     mpStopWaiting: '不等了',
+    mpDisbandFailed: '小屋還沒解散，再按一次試試。',
     mpRoomEnded: '屋主結束了小屋。',
     mpTotalLabel: '總分',
     mpRoomTotal: '全屋總分',
@@ -2071,6 +2079,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: '选下一个玩法',
     mpDisbandRoom: '解散小屋',
     mpStopWaiting: '不等了',
+    mpDisbandFailed: '小屋还没解散，再按一次试试。',
     mpRoomEnded: '屋主结束了小屋。',
     mpTotalLabel: '总分',
     mpRoomTotal: '全屋总分',

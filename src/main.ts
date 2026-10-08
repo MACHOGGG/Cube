@@ -1309,7 +1309,14 @@ async function leaveRoomWithCard() {
     //
     // 从前这里只是自己走人：屋子还开着，剩下的人干坐在一间永远开不出下一局
     // 的屋里，等一个已经不在的人。
-    await endRoom();
+    const closed = await endRoom();
+    if (!closed.ok) {
+      // 没散成（2026-10-08 方案 2-7）：留在原页，**不忘屋**，把刚才那一问原样再问一次、上面多一行
+      // 「还没解散」。从前不看结果照样 forgetRoom()——本机忘了，服务器上那间屋却还开着，屋里的人
+      // 干等一个再也回不来的屋主。真散了、只是回包丢了的那一种，屋里的轮询读到 ended 自己会出战绩图。
+      confirmLeaveRoom(currentLang, leaveRoomWithCard, STRINGS[currentLang].mpDisbandFailed);
+      return;
+    }
     // 关了就不必再发 leave——那只会在别人那张总战绩图上把屋主标成中途离席。
     forgetRoom();
   } else {

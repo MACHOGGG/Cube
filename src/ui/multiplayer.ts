@@ -357,7 +357,20 @@ export function renderMultiplayerPage(
       return;
     }
     const closed = await endRoom();
-    const card = closed.ok && closed.value.round ? closed.value : null;
+    if (!closed.ok) {
+      // 没散成（2026-10-08 方案 2-7）：网断了一下、服务器忙，屋子其实还开着。从前这儿不看结果
+      // 照样 forgetRoom()——本机忘了屋子，服务器上却还挂着一间有屋主的屋，屋里的人干坐着等一个
+      // 再也回不来的人（他连「回到这间屋」的那把座位都扔了）。现在留在小屋页（上面 stopAll 停掉
+      // 的轮询跟着重新接上），把刚才那一问原样再问一次、上面多一行「还没解散」。真散了、只是回
+      // 包丢了的那一种，下一拍轮询读到 ended 自己会出那张战绩图。
+      if (dead) return;
+      const known = latestRoomState();
+      if (known) renderLobby(known);
+      else renderReconnecting();
+      confirmLeaveRoom(lang, leaveSeat, s.mpDisbandFailed);
+      return;
+    }
+    const card = closed.value.round ? closed.value : null;
     // 屋主不发 leave：屋子已经关了，再补一条「他走了」只会在别人手上那张
     // 总战绩图里，把屋主自己标成中途离席的人。座位在本机上忘掉就够了。
     forgetRoom();

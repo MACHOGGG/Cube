@@ -27,7 +27,11 @@ import { pushLayer } from '../engine/backNav';
 import { reducedMotion } from '../engine/reducedMotion';
 import { vibrate } from '../engine/haptics';
 
-export function confirmLeaveRoom(lang: Lang, onLeave: () => void): void {
+/**
+ * @param note 问句上面多说的一行。屋主按了《解散小屋》、服务器那头没办成的时候，把这一问原样再
+ *   问一次，这一行写「小屋还没解散」（2026-10-08 方案 2-7）——他还在屋里，再按一次就是。
+ */
+export function confirmLeaveRoom(lang: Lang, onLeave: () => void, note?: string): void {
   const s = STRINGS[lang];
   const overlay = document.createElement('div');
   // overlay--top（z-index 120）不是装饰，是这颗问句能不能被看见的全部。
@@ -46,6 +50,7 @@ export function confirmLeaveRoom(lang: Lang, onLeave: () => void): void {
   const hold = !reducedMotion();
   overlay.innerHTML = `
     <div class="modal">
+      ${note ? `<p class="auth-msg auth-msg--bad leave-note" role="status">${note}</p>` : ''}
       <p class="tag-line">${iAmHost() ? s.mpHostLeaveWarn : s.mpGuestLeaveWarn}</p>
       <div class="btn-row">
         <button class="secondary${hold ? ' leave-hold' : ''}" id="mpLeaveYes"${
