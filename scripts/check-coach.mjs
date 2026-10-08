@@ -787,5 +787,54 @@ head('⑨ 挑组：仍然有效就保留 → 离手指最近 → 一组都没有
   check('重开一局：灯和记性一起清掉', g.flat().every((x) => !glow.lit(x.id)));
 }
 
+head('⑩ 一盏灯亮的是这一步结算时动到的全部，格子 + 星星（10-08 方案 3-E-2）');
+{
+  // 按种类分的三把尺子，和真棋盘一个口径（square.ts / circle.ts 的 groupsFor：front、mixed 是同一
+  // 套认组再按 matchKind 分开，edge 另一把）。这儿只摆 front、mixed 两种组，edge 那把回空。
+  const kindRuler = (n) => (kind) =>
+    kind === 'edge'
+      ? () => []
+      : (trial, moved) =>
+          runsOn(CIRCLE_LINES, n)(trial, moved).filter((cells) => matchKind(cells.map(([r, c]) => trial[r][c].face)) === kind);
+  const g = uniqueBoard();
+  // 右边：第 3 列那一组红色（同 ⑦）——底下那一行往左一格，(6,4) 补进 (6,3)。
+  for (const [r, c] of [[3, 3], [4, 3], [5, 3], [6, 4]]) g[r][c] = tile(0);
+  g[6][3] = tile(1);
+  // 左边：第 1 列那一组绿色，中间那一枚是星星——**同一步**里 (6,2) 补进 (6,1)。
+  for (const [r, c] of [[3, 1], [5, 1], [6, 2]]) g[r][c] = tile(2);
+  g[4][1] = tile(2, true);
+  g[6][1] = tile(3);
+  const step = oneStepMoves(CIRCLE_LINES.map((l) => l.cells), (r, c) => !g[r][c].blank);
+  const centers = ([r, c]) => [c * 20 - r * 10 + 100, r * 18];
+  const board = { grid: () => g, moves: () => step, groupsFor: kindRuler(4), centerOf: centers, boardCenter: () => [100, 60] };
+  const red = [[3, 3], [4, 3], [5, 3], [6, 4]].map(([r, c]) => g[r][c].id);
+  const green = [[3, 1], [4, 1], [5, 1], [6, 2]].map(([r, c]) => g[r][c].id);
+  const litIds = (glow) => g.flat().filter((x) => glow.lit(x.id)).map((x) => x.id);
+  // 尺子：两组各是一种（红的全是色块、绿的带星星），一层之内各只有这一组。
+  const fronts = oneStepGroups(g, step, kindRuler(4)('front'), 1e9);
+  const mixeds = oneStepGroups(g, step, kindRuler(4)('mixed'), 1e9);
+  check('（尺子）一步之内：红的那组全是色块、绿的那组带星星，各只有一组',
+    fronts.length === 1 && keyOf(fronts[0].ids) === keyOf(red) && mixeds.length === 1 && keyOf(mixeds[0].ids) === keyOf(green),
+    `front ${fronts.length} 组 / mixed ${mixeds.length} 组`);
+  const glow = createCoachGlow(board, () => 0);
+  glow.update('front');
+  const lit = litIds(glow);
+  // 改坏法：灯只认这一条讲的那一种组（从前那样），这里只亮红的四枚。
+  check('讲第 1 条：同一步顺带凑出的那组带星星的也亮——八枚全亮', keyOf(lit) === keyOf([...red, ...green]), `亮了 ${lit.length} 枚`);
+  check('亮的里头有星星（格子 + 星星）', lit.some((id) => g.flat().find((x) => x.id === id).face === 'dot'));
+  check('要滑过去的那两枚 (6,4)、(6,2) 都在里面（映射回此刻的位置）', [g[6][4].id, g[6][2].id].every((id) => glow.lit(id)));
+  glow.reset();
+  glow.update('mixed');
+  check('讲第 2 条：同一步里那组全是色块的红色也亮', keyOf(litIds(glow)) === keyOf([...red, ...green]), `亮了 ${litIds(glow).length} 枚`);
+  // 「哪些步算数」照旧按条认：拆掉红的那一组（底下那一枚红色换成别的），这一步只凑得出带星星
+  // 的那一组——讲第 1 条时它不算数，一枚都不亮；讲第 2 条时只亮绿的四枚。
+  g[6][4] = tile(4);
+  glow.reset();
+  glow.update('front');
+  check('这一步凑不出全是色块的组：讲第 1 条一枚都不亮（哪几步算数没变）', g.flat().every((x) => !glow.lit(x.id)));
+  glow.update('mixed');
+  check('讲第 2 条：只亮绿的那四枚', keyOf(litIds(glow)) === keyOf(green), `亮了 ${litIds(glow).length} 枚`);
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

@@ -24,6 +24,16 @@
  *    在里面。
  * ③ 挑一组：保留 → 离手指最近 → 熄灭。
  *
+ * ── 一盏灯亮的是「这一步」，不是「这一组」（10-08 方案 3-E-2）──────────────────────
+ *
+ * 方案原话：「呼吸灯点亮组扩成『这 1 步会参与结算的所有元素（格子 + 星星）』」。从前一组一
+ * 个候选、按条只认一种组：讲第 1 条只亮那一组色块，同一步顺带凑出来的另一组（带星星的、或
+ * 者一条要消的外边）黑着——可玩家滑下去，那几枚照样会翻、会消，灯没告诉他。现在一步一个候
+ * 选：这一步能完成这一条（「哪些步算数」照旧按条认，见 HINT_OF），它结算时动到的每一组都亮，
+ * 色块、星星一起（见 stepRuler）。一步只凑出一组的时候和从前一模一样；一步凑出两组不同颜色
+ * 的，「同一时间只亮一种颜色」那一句让给这一条——两组都会在这一步里结算，只亮一组反倒是在
+ * 瞒着他。
+ *
  * 不碰 DOM、不认几何（「离手指多远」要的格子中心由棋盘给），所以 `check-coach-hint.mjs`
  * 能把它单独打包出来，拿假盘面验，进得了 CI。
  */
@@ -251,6 +261,44 @@ export interface CoachGlowBoard<T extends { id: number }> {
   boardCenter(): readonly [number, number];
 }
 
+/** 三种组都问一遍——「这一步结算时会动到哪些棋子」要的是全部，不只是这一条讲的那一种。 */
+const ALL_KINDS: readonly CoachHint[] = ['front', 'mixed', 'edge'];
+
+/**
+ * 给 oneStepGroups 的那把尺子：**一步一个候选**（10-08 方案 3-E-2，见文件开头那一段）。
+ *
+ * 先用这一条自己那把（`kind`）问：这一步能不能完成这一条——不能就什么都不回，这一步不算
+ * 数。能的话，把另外两把也问一遍，三把认出来的格子并成一组交回去：这一步结算时会动到的每一
+ * 枚，色块、星星一起。同一格被两组认出来只算一次。
+ *
+ * 另外两把只在「这一步算数」之后才问：一层六十来种滑法里真能完成这一条的只有几种，绝大多
+ * 数步只花一把尺子的工夫，8ms 的预算不会因为这一条吃紧。
+ */
+function stepRuler<T extends { id: number }>(
+  board: CoachGlowBoard<T>,
+  kind: CoachHint,
+): (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[] {
+  const own = board.groupsFor(kind);
+  const rest = ALL_KINDS.filter((k) => k !== kind).map((k) => board.groupsFor(k));
+  return (trial, moved) => {
+    const mine = own(trial, moved);
+    if (!mine.length) return [];
+    const seen = new Set<string>();
+    const all: Cell[] = [];
+    const add = (cells: readonly Cell[]) => {
+      for (const cell of cells) {
+        const key = cell[0] + ',' + cell[1];
+        if (seen.has(key)) continue;
+        seen.add(key);
+        all.push(cell);
+      }
+    };
+    for (const g of mine) add(g);
+    for (const ruler of rest) for (const g of ruler(trial, moved)) add(g);
+    return [all];
+  };
+}
+
 export function createCoachGlow<T extends { id: number }>(
   board: CoachGlowBoard<T>,
   now: () => number = defaultNow,
@@ -267,7 +315,7 @@ export function createCoachGlow<T extends { id: number }>(
         shown = new Set();
         return true;
       }
-      const cands = oneStepGroups(board.grid(), board.moves(), board.groupsFor(kind), HINT_BUDGET_MS, now);
+      const cands = oneStepGroups(board.grid(), board.moves(), stepRuler(board, kind), HINT_BUDGET_MS, now);
       // 超时：这一次跳过。**熄灯，不留旧的**——旧的那一组是上一副盘面算出来的，留着可能亮
       // 在一组已经凑不成的棋子上，那比不亮还糟。
       if (!cands) {

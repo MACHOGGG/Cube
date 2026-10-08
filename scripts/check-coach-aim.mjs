@@ -7,19 +7,28 @@
  * ─────────────────────────────────────────────────────────────────────────
  * 第 15 推（玩家 2026-10-03）定的那几句，这一道逐条量：
  *
- *   · 同一时间只亮一种颜色。
- *   · 只在「再走一步就能完成这一条」时亮，只亮会参与的那几枚（包括要滑过去的那一枚）。
+ *   · 同一时间只亮一种颜色。（10-08 方案 3-E-2 起让给下一句：一步同时凑出两组不同颜色的，
+ *     两组都亮——见下面「亮的正好是……」那一段。）
+ *   · 只在「再走一步就能完成这一条」时亮，只亮会参与的那几枚（包括要滑过去的那一枚）。10-08
+ *     方案 3-E-2 扩成「这 1 步会参与结算的所有元素（格子 + 星星）」：同一步顺带凑出来的别的
+ *     组也亮。
  *   · 走一步，那一组失效了就不再亮它（换成离手指最近的另一组，一组都没有就熄）。
  *   · 只动 filter，不加任何热区——真的拖一枚，拖动照常。
  *   · 得分图案块和外边指引带不再参与教学亮灯；小球的外边带子改成轻微闪烁（0.85–1）。
  *   · 手机端（≤999px）教学文字：字号 ≥ 原来的 2 倍，最多两行，不压住棋盘。
  *
- * ── 「亮的正好是一步能拼成的那组」怎么量 ────────────────────────────────
+ * ── 「亮的正好是某一步结算时会动到的那几枚」怎么量 ──────────────────────────
  *
  * 这一道自带一份**对照**：从屏幕上读出每一枚的位置、正反面、颜色（不读任何 data-id，也不
  * 问游戏自己的状态），自己把一步之内的每一种滑法走一遍，找出所有「同色连着 ≥ N 枚、碰到
- * 动过的那条线」的组，再按这一条要的那一种（全是色块 / 星星＋色块）筛一遍，映射回此刻的位
- * 置。亮着的那几枚必须**正好**是其中一组；对照一组都找不到的时候，必须一枚都不亮。
+ * 动过的那条线、至少一枚色块」的组。这一步凑出来的组里有这一条要的那一种（全是色块 / 星星
+ * ＋色块），这一步才算数；算数的话，它凑出来的**所有**组并成一个候选（10-08 方案 3-E-2），映
+ * 射回此刻的位置。亮着的那几枚必须**正好**是其中一个候选；对照一个都找不到的时候，必须一枚
+ * 都不亮。
+ *
+ * 外边那一种组（同色星星填满一条可消的外边）这一道的对照不认——小球的「最外面那条」要真的
+ * 外边几何才算得出来，这儿不抄一份。一步顺带凑满一条外边在这几十步里很少见；真遇上了，亮
+ * 出来比候选多的那几枚必须全是同一种颜色的星星，不然照样算亮错。
  *
  * 对照是这儿独立写的，不借游戏的 findMatches——借了就是拿被测的东西量它自己。它和游戏只
  * 共享规则本身（《侵蚀阶梯》§1.1：同色 1×N、至少一枚色块、碰到这一步动过的线）。
@@ -162,7 +171,15 @@ const ORACLE = ({ shape }) => {
   return { at: [...at.entries()], full, slide, n, text };
 };
 
-/** 一层走完：这一种提示该亮的所有组（每组是**此刻**的格子，排好序）。 */
+/**
+ * 一层走完：这一种提示该亮的所有候选（10-08 方案 3-E-2：**一步一个候选**）。
+ *
+ * 每一种滑法：先找出它凑出来的每一组得分的（同色 ≥ N、至少一枚色块、碰到动过的线）；里面有
+ * 这一条要的那一种（`kind`），这一步才算数，候选是它凑出来的**所有**组并在一起——格子是**此
+ * 刻**的位置，排好序。`after` 是走过之后那几格（整步的），`ownAfter` 只是这一条要的那一种组
+ * 的那几格（「真的拖那一步，凑成的那一组翻成了星星」量的是它：带星星的那一组里，原本就是星
+ * 星的那几枚翻不翻、翻成什么，不归这一道管）。
+ */
 function groupsOf(o, kind) {
   const at = new Map(o.at);
   const groups = new Map();
@@ -173,6 +190,7 @@ function groupsOf(o, kind) {
       const src = new Map(line.map((k, i) => [k, line[(((i - shift) % L) + L) % L]]));
       const val = (k) => at.get(src.get(k) ?? k);
       const moved = new Set(line);
+      const runs = [];
       for (const scan of o.full) {
         let i = 0;
         while (i < scan.length) {
@@ -186,16 +204,41 @@ function groupsOf(o, kind) {
           const faces = run.map((k) => val(k).face);
           const front = faces.filter((f) => f === 'flavor').length;
           const dot = faces.length - front;
-          const ok = kind === 'front' ? front > 0 && dot === 0 : kind === 'mixed' ? front > 0 && dot > 0 : false;
-          if (!ok) continue;
-          const cells = run.map((k) => src.get(k) ?? k).sort();
-          const key = cells.join(' ');
-          if (!groups.has(key)) groups.set(key, { cells, line: li, shift, color: a.color, after: run });
+          if (!front) continue; // 全是星星的一组不得分（§1.1）
+          runs.push({ run, color: a.color, kind: dot ? 'mixed' : 'front' });
         }
+      }
+      const own = runs.filter((x) => x.kind === kind);
+      if (!own.length) continue;
+      const after = [...new Set(runs.flatMap((x) => x.run))];
+      const cells = after.map((k) => src.get(k) ?? k).sort();
+      const key = cells.join(' ');
+      if (!groups.has(key)) {
+        groups.set(key, {
+          cells,
+          line: li,
+          shift,
+          colors: [...new Set(runs.map((x) => x.color))],
+          after,
+          ownAfter: [...new Set(own.flatMap((x) => x.run))],
+        });
       }
     }
   });
   return [...groups.values()];
+}
+/**
+ * 亮着的那几枚是不是这一个候选：正好相等；或者多出来的那几枚全是同一种颜色的星星（这一步顺
+ * 带填满了一条外边，见文件开头那一段——对照不认外边）。少一枚都不行。
+ */
+function litMatches(o, g, lit) {
+  const want = new Set(g.cells);
+  if (!g.cells.every((k) => lit.includes(k))) return false;
+  const extra = lit.filter((k) => !want.has(k));
+  if (!extra.length) return true;
+  const at = new Map(o.at);
+  const vals = extra.map((k) => at.get(k));
+  return vals.every((v) => v && v.face === 'dot') && new Set(vals.map((v) => v.color)).size === 1;
 }
 const litOf = (o) => o.at.filter(([, v]) => v.lit).map(([k]) => k).sort();
 const ruleOf = (o, shape) => tutorialRules('zhHans', shape).indexOf(o.text);
@@ -264,10 +307,17 @@ function judge(o, shape, where) {
     check(`${where}（第 ${rule + 1} 条，${kind}）：对照一组都找不到 → 一枚都不亮`, lit.length === 0, lit.join(' '));
     return lit.length === 0 ? 'none' : 'bad';
   }
-  const match = groups.find((g) => g.cells.join(' ') === lit.join(' '));
-  check(`${where}（第 ${rule + 1} 条，${kind}）：亮的正好是一步能成的其中一组`, !!match,
-    `亮 [${lit.join(' ')}]，对照 ${groups.length} 组${match ? '' : '：' + groups.slice(0, 3).map((g) => '[' + g.cells.join(' ') + ']').join(' ')}`);
-  check(`${where}：同一时间只亮一种颜色`, colors.size <= 1, [...colors].join(' / '));
+  const match = groups.find((g) => litMatches(o, g, lit));
+  check(`${where}（第 ${rule + 1} 条，${kind}）：亮的正好是某一步结算时会动到的那几枚`, !!match,
+    `亮 [${lit.join(' ')}]，对照 ${groups.length} 个候选${match ? '' : '：' + groups.slice(0, 3).map((g) => '[' + g.cells.join(' ') + ']').join(' ')}`);
+  // 「同一时间只亮一种颜色」让给上面那一句（10-08 方案 3-E-2）：亮几种颜色由那一步凑出几种颜
+  // 色的组决定。这儿只量灯没有亮出那一步以外的颜色。
+  if (match) {
+    const allowed = new Set(match.colors);
+    const stray = [...colors].filter((c) => !allowed.has(c));
+    check(`${where}：亮出来的颜色都是那一步凑出来的组的颜色`, stray.length <= (lit.length > match.cells.length ? 1 : 0),
+      `${[...colors].join(' / ')}（那一步 ${match.colors.join(' / ')}）`);
+  }
   return match ? 'lit' : 'bad';
 }
 
@@ -452,7 +502,7 @@ if (want(1)) {
   }
 
   // ── 真的拖：滑那一步，正好把亮着的那一组凑成 ──────────────────────────
-  const target = groupsOf(o, 'front').find((g) => g.cells.join(' ') === litOf(o).join(' '));
+  const target = groupsOf(o, 'front').find((g) => litMatches(o, g, litOf(o)));
   check('（尺子）亮着的那一组在对照里找得到它那一步', !!target);
   if (target) {
     await dragMove(page, o, target.line, target.shift);
@@ -460,9 +510,9 @@ if (want(1)) {
     const at = new Map(after.at);
     // 凑成的那一组此刻在 target.after 那几格上，而且翻成了星星——证明手势真的通过去了，滑
     // 的方向、格数也对。
-    const flipped = target.after.filter((k) => at.get(k)?.face === 'dot');
-    check('真的拖那一步：亮着的那一组凑成了、翻成了星星（拖动照常，灯不拦手）', flipped.length === target.after.length,
-      `${flipped.length} / ${target.after.length} 枚翻了`);
+    const flipped = target.ownAfter.filter((k) => at.get(k)?.face === 'dot');
+    check('真的拖那一步：亮着的那一组凑成了、翻成了星星（拖动照常，灯不拦手）', flipped.length === target.ownAfter.length,
+      `${flipped.length} / ${target.ownAfter.length} 枚翻了`);
     const litNow = litOf(after);
     check('那一组失效了：不再亮它', litNow.join(' ') !== target.after.slice().sort().join(' '), litNow.join(' '));
     judge(after, 'circle', '凑成之后');
@@ -496,7 +546,7 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
     const kind = HINT_OF[ruleOf(o, shape)];
     const groups = kind === 'front' || kind === 'mixed' ? groupsOf(o, kind) : [];
     const lit = litOf(o);
-    const g = groups.find((x) => x.cells.join(' ') === lit.join(' '));
+    const g = groups.find((x) => litMatches(o, x, lit));
     let line;
     let shift;
     if (g && rnd() < 0.5) {
