@@ -649,6 +649,13 @@ jobs:
         run: |
           npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
           node scripts/check-privacy-truth.mjs /tmp/legal.mjs
+      # 《服务条款》讲账号的那两条（2026-10-08 方案第四批第 4 条）：锁线、锁多久、两串的长度、封不封号、重设踢不
+      # 踢下线，都先从 api/_accounts.js、api/handle.js 的源码里读出来，再看四种语言的条款是不是这么说的。原先那
+      # 两条还写着改制之前的「6 位密码」「内部码开通的账号」「错到 6 次一直锁着」。
+      - name: 条款里讲账号的那两条和代码对得上
+        run: |
+          npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
+          node scripts/check-terms-accounts.mjs /tmp/legal.mjs
       # 残局穷举的**接线层**：六副棋盘把自己的线和格子交给搜索件，编码错一点它就在算另
       # 一副棋盘，而且会言之凿凿地答 'dead'——那一侧会把一局还能打的棋盘 1.4 秒直接结
       # 算。三件真会接错的事各有一条：活炸弹要进盘面（它占着一格、跟着线一起滑，而

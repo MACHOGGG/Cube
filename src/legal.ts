@@ -131,8 +131,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: '谁在运营', body: `本站由一位居住在法国的独立开发者以个人身份运营，没有注册公司。联系邮箱：${E}。` },
         { term: '服务内容', body: 'Slides 是一款滑动益智游戏。基础玩法免费提供。「Slides 天才」是可选订阅，目前不开放（见《价格与订阅》）。' },
-        { term: '账号', body: '基础玩法不需要账号。用银行卡在网页版订阅的，付完款要为这个邮箱设一组 6 位密码——邮箱加密码就是你的账号，换台设备用这两样取回订阅。' , only: 'web' },
-        { term: '内部码开通的账号', body: '用内部码开通时会留下邮箱和一组 6 位密码；刷卡订阅之后设的密码也是一样，两条路留下的是同一种账号（存了什么见隐私政策）。密码请自己记好——被锁住的是这个账号，不是那张码：密码连续输错 4 次，账号锁 4 小时；错到 6 次就一直锁着，要通过邮箱验证才能重新开启并设置新密码。' },
+        { term: '账号', body: '基础玩法不需要账号。账号有两种：「邮箱账号」没有密码，每次登录往你的邮箱寄一组 6 位验证码；「免邮箱账号」是你自己取的两串字（存了什么见隐私政策）。', only: 'web' },
+        { term: '免邮箱账号', body: '免邮箱账号由两串你自己取的字组成：第一串当账号、第二串当密码，都是 8 到 64 位、区分大小写的字母和数字。第一串就是这个账号的钥匙——只凭第一串就能重设第二串（重设之后，所有设备上的登录一起失效），所以别告诉任何人，也请自己记好：这种账号没有邮箱，我们没有任何办法替你找回。第二串累计输错 4 次，账号锁 4 小时；在输对之前，之后每再错一次，都再锁 4 小时。不会永久封号；不想等，凭第一串重设第二串就能马上进来。' },
         { term: '年龄', body: '本服务面向 13 岁及以上用户。未满所在地法定年龄的，请在监护人同意下使用。' },
         { term: '可以做和不可以做', body: '请不要试图破坏、逆向或干扰本服务，也不要用自动化手段刷分或影响别人游玩。' },
         { term: '记录与排名', body: '发现作弊或明显异常的数据时，我们会清除相关记录。' },
@@ -207,8 +207,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: '誰在營運', body: `本站由一位居住在法國的獨立開發者以個人身分營運，沒有註冊公司。聯絡信箱：${E}。` },
         { term: '服務內容', body: 'Slides 是一款滑動益智遊戲。基礎玩法免費提供。「Slides 天才」是選配訂閱，目前不開放（見《價格與訂閱》）。' },
-        { term: '帳號', body: '基礎玩法不需要帳號。用信用卡在網頁版訂閱的，付完款要為這個信箱設一組 6 位密碼——信箱加密碼就是你的帳號，換台裝置用這兩樣取回訂閱。', only: 'web' },
-        { term: '內部碼開通的帳號', body: '用內部碼開通時會留下信箱和一組 6 位密碼；刷卡訂閱之後設的密碼也是一樣，兩條路留下的是同一種帳號（存了什麼見隱私政策）。密碼請自己記好——被鎖住的是這個帳號，不是那張碼：密碼連續輸錯 4 次，帳號鎖 4 小時；錯到 6 次就一直鎖著，要透過信箱驗證才能重新開啟並設定新密碼。' },
+        { term: '帳號', body: '基礎玩法不需要帳號。帳號有兩種：「信箱帳號」沒有密碼，每次登入往你的信箱寄一組 6 位驗證碼；「免信箱帳號」是你自己取的兩串字（存了什麼見隱私政策）。', only: 'web' },
+        { term: '免信箱帳號', body: '免信箱帳號由兩串你自己取的字組成：第一串當帳號、第二串當密碼，都是 8 到 64 位、區分大小寫的字母和數字。第一串就是這個帳號的鑰匙——只憑第一串就能重設第二串（重設之後，所有裝置上的登入一起失效），所以別告訴任何人，也請自己記好：這種帳號沒有信箱，我們沒有任何辦法替你找回。第二串累計輸錯 4 次，帳號鎖 4 小時；在輸對之前，之後每再錯一次，都再鎖 4 小時。不會永久封號；不想等，憑第一串重設第二串就能馬上進來。' },
         { term: '年齡', body: '本服務面向 13 歲以上使用者。未滿所在地法定年齡的，請在監護人同意下使用。' },
         { term: '可以與不可以', body: '請不要嘗試破壞、逆向或干擾本服務，也不要用自動化手段刷分或影響別人遊玩。' },
         { term: '紀錄與排名', body: '發現作弊或明顯異常的資料時，我們會清除相關紀錄。' },
@@ -283,8 +283,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: 'Who runs this', body: `Slides is run by an independent developer based in France, acting as an individual — there is no registered company. Contact: ${E}.` },
         { term: 'What the service is', body: 'Slides is a sliding puzzle game. The base games are free. "Slides Genius" is an optional subscription, currently closed (see Pricing & subscription).' },
-        { term: 'Accounts', body: 'The base games need no account. For a subscription bought by card on the site, you set a six-character passcode for that address after paying — the address and the passcode together are your account, and the two of them bring the subscription back on another device.', only: 'web' },
-        { term: 'Accounts made by a code', body: 'Redeeming a code leaves an email address and a six-character passcode with us; so does the passcode you set after paying by card — both routes leave the same kind of account (the privacy policy says what it holds). Remember it: what gets locked is the account, not the code. Four wrong tries lock the account for four hours; six leave it locked until you verify by email and set a new passcode.' },
+        { term: 'Accounts', body: 'The base games need no account. There are two kinds: an email account has no password — each sign-in sends a six-digit code to your address; an address-free account is two strings you choose yourself (the privacy policy says what each one holds).', only: 'web' },
+        { term: 'Address-free accounts', body: 'An address-free account is two strings you choose: the first is the account, the second its password — each 8 to 64 letters and digits, case-sensitive. The first string is the key: it alone is enough to reset the second (a reset signs out every device), so tell no one and keep it safe — there is no address behind this kind of account, so there is no way for us to recover it for you. Four wrong second strings in total lock the account for four hours; until you get it right, every further wrong try locks it for another four hours. It is never closed for good: to get in without waiting, reset the second string with the first.' },
         { term: 'Age', body: 'The service is for people aged 13 and over. Below the age of majority where you live, use it with a guardian’s consent.' },
         { term: 'Fair use', body: 'Please do not try to break, reverse-engineer or interfere with the service, and do not automate play to inflate scores or affect other players.' },
         { term: 'Records and rankings', body: 'We remove records we find to be cheated or plainly impossible.' },
@@ -359,8 +359,8 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       items: [
         { term: 'Qui édite ce site', body: `Slides est édité à titre individuel par un développeur indépendant résidant en France ; il n’existe pas de société enregistrée. Contact : ${E}.` },
         { term: 'Le service', body: 'Slides est un jeu de puzzle à glissement. Les jeux de base sont gratuits. « Slides Génie » est un abonnement facultatif, actuellement fermé (voir Tarifs et abonnement).' },
-        { term: 'Comptes', body: 'Les jeux de base ne demandent aucun compte. Pour un abonnement payé par carte sur le site, vous choisissez après le paiement un mot de passe de six caractères pour cette adresse — l’adresse et le mot de passe forment votre compte, et à eux deux ils rouvrent l’abonnement sur un autre appareil.', only: 'web' },
-        { term: 'Comptes créés par un code', body: 'Utiliser un code laisse chez nous une adresse courriel et un mot de passe de six caractères ; le mot de passe défini après un paiement par carte fait de même — les deux chemins laissent le même type de compte (la politique de confidentialité dit ce qu’il contient). Retenez-le : ce qui se verrouille est le compte, pas le code. Quatre erreurs verrouillent le compte pendant quatre heures ; six le laissent verrouillé jusqu’à une vérification par courriel et la définition d’un nouveau mot de passe.' },
+        { term: 'Comptes', body: 'Les jeux de base ne demandent aucun compte. Il en existe deux sortes : un compte avec adresse n’a pas de mot de passe — chaque connexion envoie un code à six chiffres à votre adresse ; un compte sans adresse, ce sont deux chaînes que vous choisissez vous-même (la politique de confidentialité dit ce que chacun contient).', only: 'web' },
+        { term: 'Comptes sans adresse', body: 'Un compte sans adresse, ce sont deux chaînes que vous choisissez : la première sert d’identifiant, la seconde de mot de passe — chacune de 8 à 64 lettres et chiffres, sensibles à la casse. La première chaîne est la clé : elle suffit à elle seule pour redéfinir la seconde (ce qui déconnecte tous vos appareils) ; ne la confiez à personne et gardez-la bien — ce type de compte n’a pas d’adresse, nous n’avons donc aucun moyen de la retrouver pour vous. Quatre erreurs au total sur la seconde chaîne verrouillent le compte pendant quatre heures ; tant que vous ne la saisissez pas correctement, chaque nouvelle erreur le reverrouille quatre heures. Le compte n’est jamais fermé définitivement : pour entrer sans attendre, redéfinissez la seconde chaîne avec la première.' },
         { term: 'Âge', body: 'Le service s’adresse aux personnes de 13 ans et plus. En dessous de la majorité de votre pays, utilisez-le avec l’accord d’un responsable légal.' },
         { term: 'Usage loyal', body: 'Merci de ne pas tenter de casser, désosser ou perturber le service, et de ne pas automatiser le jeu pour gonfler des scores ou gêner d’autres joueurs.' },
         { term: 'Scores et classements', body: 'Nous supprimons les enregistrements manifestement trichés ou impossibles.' },
