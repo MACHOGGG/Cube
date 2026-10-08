@@ -22,9 +22,16 @@
  *    `roundOver` 等的是「每个还在的人都交卷了」——他人早就关了页面，屋里其他人要干等
  *    满 ABSENT_MS（90 秒）。
  *
+ *    **带着 finished 的也一样盖不动**（2026-10-08 方案 1-1）。从前那一条照写，理由是「拆
+ *    计分板时还会补一条」；可那一条报的是钉死的同一个数（ui/scoreboard.ts 的 settleOnce），
+ *    挡掉什么都不少，而照写等于让人交完卷再改分——竞赛屋里就是看完别人的分再改自己的。
+ *
  *    挡这件事用的是 `final` 这一位，不是 `finished`：后者有两个来路，一个是「他真的交
  *    卷了」，另一个是「局次对不上，就当他这一局 0 分交了」——后者是**替他猜的**，而且
  *    必须能被真实分数纠正回来（见 ④）。
+ *
+ * ⑩ **不带局次的、屋里还没开局的：一个字都不写。** 两个调用点早就都带局次了，剩下会不带
+ *    的只有手搓的请求，而「不带就照写」那条后路恰好绕得过 ④ 那道闸（方案 1-1）。
  *
  * ③ **用时说不通的时候只丢用时，分照记。** 分数是这一局的成绩，用时只多喂一个「单局
  *    最快」；为一个说不通的秒数把整份报分退回去，等于拿他这一局的分去赌这把尺子没写
@@ -138,11 +145,14 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   check('② 分数还是 500', p.score === 500, String(p.score));
   check('② 交卷的勾还在（不然全屋等一个已经走的人）', p.finished === true, String(p.finished));
   check('② 用时也还在', p.seconds === 12, String(p.seconds));
-  // 拆计分板那最后一条仍然写得进去：它带着 finished。
-  const last = await call({ action: 'score', code, ...guest, score: 505, finished: true, seconds: 13, round: 1 });
+  // 交完卷再来一条带 finished 的（想改分）：也盖不动。拆计分板时补的那一条报的是钉死的
+  // 同一个数，挡掉什么都不少（见文件头 ②）。
+  const last = await call({ action: 'score', code, ...guest, score: 9999, finished: true, seconds: 13, round: 1 });
   const q = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
-  check('② 再来一条带 finished 的：照写（那是拆计分板时补的最后一条）', q.score === 505, String(q.score));
-  check('② 而且没被当成丢掉', last.body.scoreDropped === undefined, String(last.body.scoreDropped));
+  check('② final 之后再发一条带 finished 的：被丢，回包明说没收下', last.body.scoreDropped === true,
+    String(last.body.scoreDropped));
+  check('② 分数还是交卷那一刻的 500（不许交完卷再改分）', q.score === 500, String(q.score));
+  check('② 用时也还是交卷那一刻的', q.seconds === 12, String(q.seconds));
 }
 
 // ---- ③ 没交卷之前，一条条盖上去是正常的 --------------------------------
@@ -169,6 +179,7 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   check('④ 量程：旧局次那一条确实被丢掉了', dropped.body.scoreDropped === true, String(dropped.body.scoreDropped));
   const mid = await runOf(code, guest.playerId);
   check('④ 量程：座位被放下了（finished），但没有 final', mid.finished === true && !mid.final, JSON.stringify(mid));
+  check('④ 带错局次的那 400 分没写进这一局', mid.score === 0, String(mid.score));
   const fix = await call({ action: 'score', code, ...guest, score: 120, finished: false, round: 1 });
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('④ 局次对上的那条「还在打」：写得进去', p.score === 120, String(p.score));
@@ -192,13 +203,19 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
 // ⑤ 的量程，而且是**贴着边界**量的：这一局摆成已经开了 RAN_FOR_S（20 秒），尺子就是
 // 20 ＋ SECONDS_SLACK_S（15）＝ 35 秒。只拿「一小时」那种离谱的数量，这把尺子是 35 还是
 // 3500 都看不出来——那就成了「尺子在不在」的门，不是「尺子对不对」的门。
+//
+// 两头各开一间屋：交过卷（final）之后同一个座位什么都写不进去了（见 ②），所以不能在同一
+// 个座位上先报 30 再报 45。
 {
   const { code, host, guest } = await openRoom(RAN_FOR_S);
   await call({ action: 'score', code, ...guest, score: 700, finished: true, seconds: 30, round: 1 });
-  let p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('⑥ 30 秒（线里面）：照记', p.seconds === 30, String(p.seconds));
+}
+{
+  const { code, host, guest } = await openRoom(RAN_FOR_S);
   await call({ action: 'score', code, ...guest, score: 710, finished: true, seconds: 45, round: 1 });
-  p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('⑥ 45 秒（线外面）：丢掉，分照记', p.seconds === null && p.score === 710, `${p.seconds} / ${p.score}`);
 }
 
@@ -219,10 +236,13 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
 {
   const { code, host, guest } = await openRoom(RAN_FOR_S);
   await call({ action: 'score', code, ...guest, score: 800, finished: true, seconds: -5, round: 1 });
-  let p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('⑧ 负数用时：丢掉，分照记', p.seconds === null && p.score === 800, `${p.seconds} / ${p.score}`);
+}
+{
+  const { code, host, guest } = await openRoom(RAN_FOR_S);
   await call({ action: 'score', code, ...guest, score: 900, finished: true, seconds: '快得很', round: 1 });
-  p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('⑧ 不是个数：丢掉，分照记', p.seconds === null && p.score === 900, `${p.seconds} / ${p.score}`);
 }
 
@@ -234,6 +254,34 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   await call({ action: 'score', code, ...guest, score: 300, finished: false, seconds: 5, round: 1 });
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('⑨ 还没交卷：用时不记', p.seconds === null, String(p.seconds));
+}
+
+// ---- ⑩ 不带局次的、屋里还没开局的：一个字都不写 -------------------------
+{
+  const { code, host, guest } = await openRoom(RAN_FOR_S);
+  const bare = await call({ action: 'score', code, ...guest, score: 666, finished: true, seconds: 10 });
+  check('⑩ 不带局次：回包明说没收下', bare.body.scoreDropped === true, String(bare.body.scoreDropped));
+  const run = await runOf(code, guest.playerId);
+  check('⑩ 不带局次：那一格一个字都没写（不替他猜交卷，那是对不上局次那一支的事）',
+    !run || (run.score === 0 && !run.finished), JSON.stringify(run));
+  const junk = await call({ action: 'score', code, ...guest, score: 666, finished: true, round: '第一局' });
+  check('⑩ 局次不是个数：一样被丢', junk.body.scoreDropped === true, String(junk.body.scoreDropped));
+  // 尺子：同一个人带对了局次照写——不然上面两条在「谁报都丢」时也绿。
+  const ok = await call({ action: 'score', code, ...guest, score: 321, finished: false, round: 1 });
+  const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  check('⑩ （尺子）带对局次照写', ok.body.scoreDropped === undefined && p.score === 321,
+    `${ok.body.scoreDropped} / ${p.score}`);
+}
+{
+  // 屋里还没开过局：没有哪一局可记。
+  const h = await call({ action: 'create', name: '屋主', ...who });
+  const code = h.body.code;
+  const g = await call({ action: 'join', code, name: '客人' });
+  const r = await call({ action: 'score', code, playerId: g.body.playerId, playerToken: g.body.playerToken,
+    score: 50, finished: true, round: 1 });
+  check('⑩ 还没开局就报分：被丢', r.body.scoreDropped === true, String(r.body.scoreDropped));
+  const run = await runOf(code, g.body.playerId);
+  check('⑩ 还没开局：那一格没写', !run || (run.score === 0 && !run.finished), JSON.stringify(run));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

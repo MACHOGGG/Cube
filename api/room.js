@@ -1866,8 +1866,18 @@ async function score(res, body) {
   // 局次编号客户端本来就收到（publicState 的 round），报分数时带回来，对不上
   // 就整条丢掉：不写分数、不写交卷、连 lastSeen 都不动（那是在替另一局的他
   // 续命）。回的仍是当前状态 200，他那一端读到新的 round 自己就跟上了。
+  //
+  // **不带局次的一律不收**（2026-10-08 方案 1-1）。从前不带就照旧写入，留给「还没接上局次的
+  // 调用」——两个调用点（ui/scoreboard.ts 的 report、ui/multiplayer.ts 的 sitOut）早就都带
+  // 了（scoreboard 那头连「还不知道是第几局」都先攒着、不发），剩下会不带的只有手搓的请求，
+  // 而那条后路恰好绕得过这道闸。屋里还没开过局（meta.round 为 0）的时候也没有哪一局可记。
+  // 这一种什么都不写——不是「替他猜一个 0 分交卷」，那是下面「对不上」那一支的事。
   const saidRound = Math.floor(Number(body.round));
-  if (Number.isFinite(saidRound) && saidRound > 0 && hash.meta && hash.meta.round && saidRound !== hash.meta.round) {
+  const roundNow = Number(hash.meta && hash.meta.round) || 0;
+  if (!(Number.isFinite(saidRound) && saidRound > 0) || roundNow <= 0) {
+    return send(res, 200, { ...publicState(code, hash), scoreDropped: true });
+  }
+  if (saidRound !== roundNow) {
     // 他手上那一局已经不是这一局了。两件事一起做：
     //
     // 一、**别让全屋等他**。roundOver 等的是「每个还在的人都交卷了」，而他还
@@ -1910,8 +1920,18 @@ async function score(res, body) {
     return send(res, 200, { ...publicState(code, hash), scoreDropped: true });
   }
 
-  // **这一局他已经交过最终成绩了**（`final`），而这一条没带 `finished`——盖不得。
+  // **这一局他已经交过最终成绩了**（`final`）——之后来的什么都盖不得，带不带 `finished` 都一样。
   //
+  // 从前这儿只挡「没带 finished」的那种（下面那一大段说的后发先至），带着 finished 的照写，
+  // 理由是「拆计分板的时候还会补一条」。可那一条报的是**钉死的那个数**（ui/scoreboard.ts 的
+  // settleOnce：结算页的 dataset.total 只读一次），和交卷那一条一模一样，挡掉它什么都不少；
+  // 而照写的那条路同时也让「交完卷再发一个带 finished 的包」能把已交的卷改成任意一个数——在
+  // 竞赛屋里，那就是看完别人的分再改自己的（2026-10-08 方案 1-1）。所以收紧成：final 之后一律
+  // 回 scoreDropped。
+  //
+  // 「替他猜的」那两种不受影响：局次对不上、开局之后才进来，写的都是 finished、**不写
+  // final**（CLEAR_ROUND 里 final 是 false），他自己报上来的真实分数照常盖回去（门是
+  // check-room-score 的 ④）。
   // 客户端一局里报很多次：打的过程中每 LOCAL_MS 一条（分数变了就发，没变也按
   // 心跳发，见 ui/scoreboard.ts），走完那一下报一条带 `finished` 的，拆计分板
   // 的时候再补一条。**它们是 `void` 发出去的，谁都没等谁**——网路上后发先至是
@@ -1926,7 +1946,7 @@ async function score(res, body) {
   // 当门，那条自我纠正的路当场就断了。`final` 只由带 `finished` 的那次报分写
   // 下，意思窄得多：**这是他自己说的最后一个数。**
   const prev = hash[roundKey(body.playerId)];
-  if (prev && prev.final && !body.finished) {
+  if (prev && prev.final) {
     return send(res, 200, { ...publicState(code, hash), scoreDropped: true });
   }
 
@@ -1944,8 +1964,12 @@ async function score(res, body) {
    * 所以一个会开开发者工具的人，能把自己这一局报成任意大的分、或者 0.01 秒，
    * 散场那张战绩卡上「单局最高 / 单局最快」就归他。
    *
-   * 为什么不修：
-   *   · 伤害面只到这一间私人小屋：坑得到的只有他自己叫来的朋友。
+   * 为什么还没修：
+   *   · 从前这儿写的是「伤害面只到这一间私人小屋：坑得到的只有他自己叫来的朋友」。**这句
+   *     话已经不成立了**：竞赛屋 21 把椅子、4 位房号、进屋不要账号（见 seatsFor 和 join），
+   *     一张发出去的竞赛排名卡可以被一个陌生人报的假分顶掉第一名。2026-10-08 先堵了两个最便
+   *     宜的洞（交完卷还能改分、不带局次的包也收，见上面那两段）；「理论上限」照下面那条路
+   *     留作第二步，这一批不做。
    *   · （**全站排行榜不从这条路进**，它走 scores.js。不过说句实话：那边严的
    *     是「你是谁」——要账号、要令牌，报上去的分只挂在他自己名下、还按 runId
    *     去重、封顶 MAX_SCORE；至于「这个分是不是真打出来的」，那边同样没验。

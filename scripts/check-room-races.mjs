@@ -97,7 +97,13 @@ account.until = Date.now() + 9e8;
 await saveAccount('racehost@example.com', account);
 const who = { email: 'racehost@example.com', accountToken: account.token };
 
-/** 开一间打着一局的小屋，返回屋主和一位客人的钥匙。 */
+/**
+ * 开一间打着一局的小屋，返回屋主和一位客人的钥匙。
+ *
+ * 下面每一条报分都带 `round: 1`：2026-10-08 起不带局次的报分一律不收（api/room.js 的 score，
+ * 门是 check-room-score 的 ⑩）。这台门量的是几条写入撞在一起，不是局次——从前那几条没带，
+ * 是因为那会儿局次还是可选的。
+ */
 async function openRoom() {
   const h = await call({ action: 'create', name: '屋主', ...who });
   const code = h.body.code;
@@ -145,7 +151,7 @@ async function agePlay(code, playerIds, ranForS = 20) {
 {
   const { code, host, guest } = await openRoom();
   await Promise.all([
-    call({ action: 'score', code, ...guest, score: 500, finished: true, seconds: 30 }),
+    call({ action: 'score', code, ...guest, score: 500, finished: true, seconds: 30, round: 1 }),
     call({ action: 'state', code, ...guest }),
   ]);
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
@@ -161,7 +167,7 @@ async function agePlay(code, playerIds, ranForS = 20) {
 {
   const { code, host, guest } = await openRoom();
   await Promise.all([
-    call({ action: 'score', code, ...guest, score: 900, finished: true, seconds: 42 }),
+    call({ action: 'score', code, ...guest, score: 900, finished: true, seconds: 42, round: 1 }),
     call({ action: 'bye', code, ...guest }),
   ]);
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
@@ -212,7 +218,7 @@ async function agePlay(code, playerIds, ranForS = 20) {
 {
   const { code, host, guest } = await openRoom();
   await Promise.all([
-    call({ action: 'score', code, ...guest, score: 700, finished: true, seconds: 55 }),
+    call({ action: 'score', code, ...guest, score: 700, finished: true, seconds: 55, round: 1 }),
     call({ action: 'leave', code, ...guest }),
   ]);
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
@@ -263,7 +269,7 @@ async function agePlay(code, playerIds, ranForS = 20) {
 {
   const { code, host, guest } = await openRoom();
   await Promise.all([
-    call({ action: 'score', code, ...guest, score: 300, finished: true, seconds: 12 }),
+    call({ action: 'score', code, ...guest, score: 300, finished: true, seconds: 12, round: 1 }),
     call({ action: 'learn', code, ...guest, learning: false }),
   ]);
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
