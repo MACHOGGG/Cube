@@ -40,8 +40,16 @@ let source: () => number = Math.random;
  * Hashes a seed string into a 32-bit state (xmur3), so a room code or any
  * other short string spreads over the whole range instead of leaving
  * neighbouring seeds producing neighbouring boards.
+ *
+ * 客户端只有这一份（10-08 方案第五批第 6 条）：种流用它，seedCode.ts 算每日挑战和小屋那
+ * 串码也用它（从这儿 import，再原样导出）。从前 seedCode.ts 里另抄了一份一字不差的
+ * hash32——两份今天一样，可哪天有人只改了一份，同一串码在「换算成码」和「拿码发牌」两头
+ * 就各算各的，分享卡上那串码输进去发出来的不是那一副牌，而屏幕上不报任何错。
+ * 服务器那一份（api/_seedcode.js 的 hash32）保留：api/ 是纯 JS，import 不了这儿；
+ * check-seed-code 拿两边算同一批字符串，一个数对不上就红，并且钉着几个写死的值——这个函数
+ * 一变，每一串已经发出去的码都会发出另一副牌，那得先加 DEAL_VERSION。
  */
-function hashSeed(seed: string): number {
+export function hash32(seed: string): number {
   let h = 1779033703 ^ seed.length;
   for (let i = 0; i < seed.length; i++) {
     h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
@@ -68,7 +76,7 @@ function mulberry32(a: number): () => number {
  * for later is drawn from the same sequence on every device.
  */
 export function seedRandom(seed: string): void {
-  source = mulberry32(hashSeed(seed));
+  source = mulberry32(hash32(seed));
 }
 
 /** Back to a different board every time — every solo run. */

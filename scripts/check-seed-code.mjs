@@ -2,7 +2,8 @@
  * 种子码（第 19 推）：编码、校验、每日轮换，和服务器那一份抄本对得上。
  *
  *   npx esbuild src/engine/seedCode.ts --bundle --format=esm --outfile=/tmp/seedcode.mjs
- *   node scripts/check-seed-code.mjs /tmp/seedcode.mjs
+ *   npx esbuild src/engine/rng.ts --bundle --format=esm --outfile=/tmp/rng.mjs
+ *   node scripts/check-seed-code.mjs /tmp/seedcode.mjs /tmp/rng.mjs
  *
  * 纯逻辑，不开浏览器（「同一个种子在每副棋盘上发出同一副牌」要真的发牌，在
  * check-seed-deal.mjs 里量）。守的是：
@@ -21,13 +22,17 @@
  *      榜上一个人都没有，而屏幕上不报任何错。
  *   ⑧ 编号表和玩法判定两份一行对一行（服务器拿它核对「是不是那一天的那个玩法」）。
  *   ⑨ 连着七天，星期几和真的日历对得上（主菜单那张卡按星期几换底图）。
+ *   ⑩ 客户端的 xmur3 只有 rng.ts 那一份（seedCode.ts 从那儿 import），而且它和种流一个数都
+ *      没变：几串字符串的哈希、一串码开头六个数写死在这儿（10-08 方案第五批第 6 条）。
  */
 const lib = process.argv[2];
-if (!lib) {
-  console.error('用法: node scripts/check-seed-code.mjs /tmp/seedcode.mjs');
+const rngLib = process.argv[3];
+if (!lib || !rngLib) {
+  console.error('用法: node scripts/check-seed-code.mjs /tmp/seedcode.mjs /tmp/rng.mjs');
   process.exit(2);
 }
 const C = await import(lib);
+const R = await import(rngLib);
 const S = await import(new URL('../api/_seedcode.js', import.meta.url));
 
 let fail = 0;
@@ -228,6 +233,50 @@ const rnd = () => ((st = (Math.imul(st ^ (st >>> 15), 2246822507) + 0x6d2b79f5) 
     if (`${bd.y}${String(bd.m).padStart(2, '0')}${String(bd.d).padStart(2, '0')}` !== C.dayKey(d)) off++;
   }
   check('⑨ 连着七天：星期一到星期日各一次、和日历对得上，年月日和日期键一致', off === 0 && seen.join('') === '1234567', seen.join(','));
+}
+
+// ── ⑩ 客户端只有一份 xmur3，而且它没变（10-08 方案第五批第 6 条）──
+//
+// rng.ts（拿码发牌的那条流）和 seedCode.ts（每日挑战、小屋换算成码）从前各抄了一份一字不差的
+// xmur3。合成一份之后守两件事：
+//   · 不许再长回第二份：src/、xhs/src/、wxgame/src/ 里认得出 xmur3 起始常数的只有 rng.ts，
+//     seedCode.ts 的 hash32 是从 rng.ts import 来的。两份今天一样，可哪天只改了一份，「换算成
+//     码」和「拿码发牌」两头就各算各的——分享卡上那串码输进去，发出来的不是那一副牌。
+//   · 它没变：几串字符串的哈希、2026-10-03 那天每日挑战（5DG9-G1PQ）那条流开头六个数，写死在
+//     这儿。这个函数（或者 mulberry32）一变，每一串已经发出去的码都会发出另一副牌，而 ⑦ 拦不
+//     住（两份一起改，两份照样对得上）。真要改，先加 DEAL_VERSION，再回来改这几个数。
+{
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const { join, relative } = await import('node:path');
+  const root = new URL('..', import.meta.url).pathname;
+  const walk = (dir) => readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f);
+    return statSync(p).isDirectory() ? walk(p) : /\.(ts|js|mjs)$/.test(f) ? [p] : [];
+  });
+  const files = ['src', 'xhs/src', 'wxgame/src'].flatMap((d) => walk(join(root, d)));
+  const holders = files.filter((f) => readFileSync(f, 'utf8').includes('1779033703')).map((f) => relative(root, f));
+  check('⑩ 尺子：扫到了 src/ 底下的 rng.ts 和 seedCode.ts', files.some((f) => f.endsWith('src/engine/rng.ts')) && files.some((f) => f.endsWith('src/engine/seedCode.ts')),
+    `${files.length} 个文件`);
+  check('⑩ 客户端认得出 xmur3 的只有 rng.ts 一处', holders.length === 1 && holders[0] === 'src/engine/rng.ts', holders.join(' / ') || '一处都没有');
+  const sc = readFileSync(join(root, 'src/engine/seedCode.ts'), 'utf8');
+  check('⑩ seedCode.ts 的 hash32 是从 rng.ts import 来的', /import \{[^}]*\bhash32\b[^}]*\} from '\.\/rng';/.test(sc) && !/function hash32\(/.test(sc));
+  check('⑩ 两头拿到的是同一个函数（seedCode 导出的 hash32 和 rng 的一个数不差）',
+    ['s1:5DG9G1PQ', 'daily:20729', 'room:abc', ''].every((x) => C.hash32(x) === R.hash32(x)));
+  const HASH = { 's1:5DG9G1PQ': 918439689, 'daily:20729': 453296182, 'room:abc': 3221750265, '': 167010153 };
+  const off = Object.entries(HASH).filter(([k, v]) => R.hash32(k) !== v).map(([k, v]) => `${JSON.stringify(k)} → ${R.hash32(k)}（该是 ${v}）`);
+  check('⑩ 四串字符串的哈希和写死的一样', off.length === 0, off.join('；'));
+  check('⑩ 尺子：2026-10-03 的每日挑战确实是 5DG9-G1PQ（下面那条流就是那一天的牌）',
+    C.dailySeed(20729) === '5DG9G1PQ' && C.dealSeed('5DG9G1PQ') === 's1:5DG9G1PQ', C.dailySeed(20729));
+  R.seedRandom('s1:5DG9G1PQ');
+  const got = Array.from({ length: 6 }, () => R.random() * 4294967296);
+  R.clearSeed();
+  const want = [3680136716, 1239740699, 762293618, 3811813699, 2929528798, 1407185242];
+  check('⑩ 那条流开头六个数和写死的一样（同一串码，还是同一副牌）', got.every((x, i) => x === want[i]), got.join(','));
+  // 反向对照：换一串码，流就不一样——不然「一样」可能只是「怎么种都一样」
+  R.seedRandom('s1:5DG9G1PR');
+  const other = R.random() * 4294967296;
+  R.clearSeed();
+  check('⑩ 尺子：换一串码，开头那个数就不一样', other !== want[0], String(other));
 }
 
 console.log(`\n${pass} 条通过，${fail} 条没过`);

@@ -33,6 +33,8 @@
  * 天、同一批码，一个数对不上就红。改这儿一定要一起改那儿。
  */
 
+import { hash32 } from './rng';
+
 /** Crockford base32：去掉了 I L O U 的 32 个字符。 */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
@@ -218,19 +220,13 @@ export function dealSeed(code: string): string {
 }
 
 /**
- * 字符串 → 32 位（xmur3，和 rng.ts 的 hashSeed 是同一个算法）。每日挑战的随机数和小屋
- * 的种子码都从这儿来；服务器那一份（api/_seedcode.js）抄的也是它。
+ * 字符串 → 32 位（xmur3）。每日挑战的随机数和小屋的种子码都从这儿来；服务器那一份
+ * （api/_seedcode.js）抄的也是它。
+ *
+ * 实现只在 rng.ts 一处（种流用的就是同一个函数），这儿 import 进来、原样导出——从前这儿
+ * 另抄了一份一字不差的，见 rng.ts 那边的说明（10-08 方案第五批第 6 条）。
  */
-export function hash32(seed: string): number {
-  let h = 1779033703 ^ seed.length;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  h = Math.imul(h ^ (h >>> 16), 2246822507);
-  h = Math.imul(h ^ (h >>> 13), 3266489909);
-  return (h ^= h >>> 16) >>> 0;
-}
+export { hash32 };
 
 /**
  * 小屋那一局的种子码（方案：「用 match.seed 换算出种子码显示」）。小屋本来用房间给的

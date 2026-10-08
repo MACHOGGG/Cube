@@ -793,10 +793,12 @@ jobs:
       # 编号表只增不改、每日轮换（挨着两天不同玩法不同族）、北京零点换日——外加服务器那一份
       # （api/_seedcode.js）和这边前后八百天一个数都不差。两份走散了的后果是那一天每一局都被
       # 当成「伪造的每日」拒掉，今日榜上一个人都没有，而屏幕上不报任何错。纯 node。
+      # 10-08 方案第五批第 6 条起还量：客户端的 xmur3 只剩 rng.ts 一份，它和种流一个数都没变。
       - name: 种子码：编码、校验、每日轮换、两份抄本
         run: |
           npx esbuild src/engine/seedCode.ts --bundle --format=esm --outfile=/tmp/seedcode.mjs
-          node scripts/check-seed-code.mjs /tmp/seedcode.mjs
+          npx esbuild src/engine/rng.ts --bundle --format=esm --outfile=/tmp/rng.mjs
+          node scripts/check-seed-code.mjs /tmp/seedcode.mjs /tmp/rng.mjs
       # 每日挑战的今日榜（第 19 推）：服务器只收那一天、那一串码、那一个玩法；零点后宽限几分钟
       # 还收前一天的，过了算 late；被拒的那一局照样进存档和常规榜。直接叫 api/scores.js 的
       # handler、钟是手拨的，不起服务器。

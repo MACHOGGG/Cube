@@ -93,6 +93,7 @@ export function normalizeSeed(input) {
   return s;
 }
 
+/** 和 src/engine/rng.ts 的 hash32 一字不差（客户端只有那一份：种流、每日、小屋都用它）。 */
 export function hash32(seed) {
   let h = 1779033703 ^ seed.length;
   for (let i = 0; i < seed.length; i++) {
