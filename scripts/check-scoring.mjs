@@ -295,7 +295,7 @@ function board(faces) {
 // 不消」，也钉每翻一枚 +2、拆弹算一次翻面、整线按星星数² 给分。
 
 // ---------------------------------------------------------------------------
-// 6. 旧计分残骸：先证明它们在现行规则下什么都不做，再删（10-08 方案第五批第 4 条）
+// 6. 旧计分残骸：先证明它们什么都不做，再删；删了不许长回来（10-08 方案第五批第 4 条）
 // ---------------------------------------------------------------------------
 //
 // 方案原话：「gameController.ts 的 TIME_GAIN / timeMultiplierFor / comboMult / updatePerfDisplay
@@ -303,75 +303,55 @@ function board(faces) {
 // comboMult===1 恒成立』，绿了才删……square.ts 的 pendingBlankSnapshot 一族同法：先加断言『方块
 // 永不写入』，bot-selfcheck 跑过再删。两处都不许盲删。」
 //
-// 这些都是 gameController / square.ts 闭包里的局部量，从外面调不到，所以读源码：
-//   · multiplier 是 const 1；comboMult 从 1 起步，唯一的改写是「*= CASCADE_COMBO_FACTOR」，而那个
-//     因子是 const 1——于是 Math.round(s.points * multiplier * comboMult) 恒等于 s.points（points 是
-//     整数），删掉两个因子一分都不差；
-//   · timeMultiplierFor 没有一个调用者（TIME_GAIN 只是它的默认参数），updatePerfDisplay 的函数体
-//     是空的——删掉它们和它们的调用，行为一字不变；
-//   · 方块从不往 pendingBlankSnapshot 里写（它的整线消除是收拢、不留空位，走的是
-//     pendingCollapseSnapshot），所以 `pendingBlankSnapshot.size` 恒 0、playBlankTransition 一次都
-//     不会跑。另外五副棋盘照样在写，它们那一份不动。
+// 证明那一版在 61dc408（读源码：multiplier 是 const 1；comboMult 从 1 起步、唯一的改写是乘一个
+// const 1 的因子；timeMultiplierFor 没有调用者；updatePerfDisplay 函数体是空的；方块从不往
+// pendingBlankSnapshot 里写——破坏对照四处各红一条）。绿了之后删掉，这一节改成守着「删干净了、
+// 没删过头」：
+//   · gameController 里那几个名字一个都不剩（注释里讲来历的不算），全仓没人再调用时曲线；
+//   · 非无限反转的一步加的就是这一拍的原始分 s.points（每一项来源都是整数：groupPoints 是
+//     max(4, 枚数)、老虎机完成奖励 ⌈n²/2⌉、整线 n²、翻面 ×2——原先那个 Math.round 是恒等）；
+//     无限反转那一支（flipStreakDelta）原样还在；
+//   · RunData 的旧字段（timeMult、bonusMult）还在：旧档还要读，记录页翻开老局照它重讲；
+//   · 方块里 pendingBlankSnapshot / playBlankTransition 不剩；另外五副的那一份都还在写（它们的
+//     整线消除原地留空位，淡出要靠它）。
 {
   const { readFileSync, readdirSync, statSync } = await import('node:fs');
   const { join } = await import('node:path');
   const root = new URL('..', import.meta.url).pathname;
   const read = (f) => readFileSync(join(root, f), 'utf8');
-  /** 去掉注释（块注释和行注释），免得注释里提到的名字被当成代码。 */
+  /** 去掉注释（块注释和行注释），免得注释里讲来历时提到的名字被当成代码。 */
   const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const gc = code(read('src/engine/gameController.ts'));
 
-  const multDecl = gc.match(/\bconst multiplier = ([^;]+);/g) || [];
-  const multWrites = gc.match(/\bmultiplier\s*(?:[-+*/]?=)(?!=)\s*[^;]+;/g) || [];
-  check('6 尺子：读到了 gameController 里的 multiplier 和 comboMult', multDecl.length === 1 && /\bcomboMult\b/.test(gc), multDecl.join(' | '));
-  check('6 multiplier 是 const 1，没有别处改它', multDecl[0] === 'const multiplier = 1;' && multWrites.length === 1, multWrites.join(' | '));
-  const comboWrites = (gc.match(/\bcomboMult\s*(?:[-+*/]?=)(?!=)\s*[^;]+;/g) || []).map((x) => x.replace(/\s+/g, ' '));
-  const factor = gc.match(/\bconst CASCADE_COMBO_FACTOR = ([^;]+);/);
-  check('6 comboMult 从 1 起步，唯一的改写是 *= CASCADE_COMBO_FACTOR', comboWrites.length === 2 && comboWrites[0] === 'comboMult = 1;' && comboWrites[1] === 'comboMult *= CASCADE_COMBO_FACTOR;',
-    comboWrites.join(' | '));
-  check('6 CASCADE_COMBO_FACTOR 是 const 1（于是 comboMult 恒为 1）', factor?.[1] === '1', factor?.[0] ?? '没找到');
-  check('6 计分表达式里乘的就是这两个（删掉之后非无限反转的一步加的就是 s.points）', /Math\.round\(s\.points \* multiplier \* comboMult\)/.test(gc));
+  check('6 尺子：读到了 gameController 的计分那一段', /flipStreakDelta\(s\.points, flipChain\)/.test(gc));
+  const GONE = ['multiplier', 'comboMult', 'CASCADE_COMBO_FACTOR', 'tierComboMult', 'TIME_GAIN', 'timeMultiplierFor', 'updatePerfDisplay'];
+  const left = GONE.filter((n) => new RegExp(`\\b${n}\\b`).test(gc));
+  check('6 gameController 里旧计分那几个名字一个都不剩', left.length === 0, left.join(' / '));
+  check('6 非无限反转的一步加的就是这一拍的原始分（没有任何过程系数）',
+    /const delta = hooks\.flip \? flipStreakDelta\(s\.points, flipChain\) : s\.points;/.test(gc));
+  check('6 气泡上的倍率：非无限反转一律 1（不印「×」）', /const shownMult = hooks\.flip \? flipStreakMult\(flipChain\) : 1;/.test(gc));
 
-  // timeMultiplierFor / TIME_GAIN：全仓（src、xhs/src、scripts）有没有谁在调、在 import
   const walk = (dir) => readdirSync(join(root, dir)).flatMap((f) => {
     const p = join(dir, f);
     return statSync(join(root, p)).isDirectory() ? walk(p) : /\.(ts|js|mjs)$/.test(f) ? [p] : [];
   });
   const files = ['src', 'xhs/src', 'scripts', 'api'].flatMap(walk).filter((f) => f !== 'scripts/check-scoring.mjs');
-  const callers = files.filter((f) => {
-    const t = code(read(f));
-    const calls = (t.match(/\btimeMultiplierFor\s*\(/g) || []).length - (t.match(/function timeMultiplierFor\s*\(/g) || []).length;
-    return calls > 0 || /import[^;]*\b(timeMultiplierFor|TIME_GAIN)\b/.test(t);
-  });
+  const users = files.filter((f) => /\b(timeMultiplierFor|TIME_GAIN)\b/.test(code(read(f))));
   check('6 尺子：扫到了 gameController.ts', files.includes('src/engine/gameController.ts'), `${files.length} 个文件`);
-  check('6 timeMultiplierFor 没有一个调用者、TIME_GAIN 没人 import（用时系数早已退役）', callers.length === 0, callers.join(' / '));
-  const tg = (gc.match(/\bTIME_GAIN\b/g) || []).length;
-  check('6 TIME_GAIN 只出现在它自己的声明和 timeMultiplierFor 的默认参数里', tg === 2, `${tg} 处`);
+  check('6 全仓没有谁再用用时曲线（timeMultiplierFor / TIME_GAIN）', users.length === 0, users.join(' / '));
 
-  // updatePerfDisplay：函数体是空的
-  const raw = read('src/engine/gameController.ts');
-  const at = raw.indexOf('function updatePerfDisplay() {');
-  let body = null;
-  if (at >= 0) {
-    let depth = 0;
-    for (let i = raw.indexOf('{', at); i < raw.length; i++) {
-      if (raw[i] === '{') depth++;
-      else if (raw[i] === '}' && --depth === 0) { body = raw.slice(raw.indexOf('{', at) + 1, i); break; }
-    }
-  }
-  check('6 updatePerfDisplay 的函数体是空的（只有注释）', body !== null && code(body).trim() === '', body === null ? '没找到' : code(body).trim().slice(0, 60));
+  const rr = code(read('src/engine/runRecord.ts'));
+  const keep = ['timeMult', 'bonusMult'].filter((k) => !new RegExp(`\\b${k}: number;`).test(rr));
+  check('6 RunData 的旧字段还在（旧档还要读）', keep.length === 0, keep.length ? `少了 ${keep.join(' / ')}` : 'timeMult、bonusMult');
 
-  // 方块：pendingBlankSnapshot 永不写入
   const sq = code(read('src/shapes/square.ts'));
-  const sqSets = (sq.match(/\bpendingBlankSnapshot\.set\(/g) || []).length;
-  const sqAssign = (sq.match(/\bpendingBlankSnapshot\s*=(?!=)\s*[^;]+;/g) || []).map((x) => x.replace(/\s+/g, ' '));
-  check('6 尺子：方块里读到了 pendingBlankSnapshot 和 playBlankTransition', /\bpendingBlankSnapshot\b/.test(sq) && /function playBlankTransition\(/.test(sq));
-  check('6 方块从不往 pendingBlankSnapshot 里写（没有 .set，赋值只有「换一个空的」）',
-    sqSets === 0 && sqAssign.every((x) => /= new Map(<[^>]*>)?\(\);$/.test(x)), `${sqSets} 处 .set；${sqAssign.join(' | ')}`);
-  // 反向对照：另外五副真的在写——不然「方块没写」可能只是这把尺子什么都认不出来
+  const sqLeft = ['pendingBlankSnapshot', 'playBlankTransition'].filter((n) => new RegExp(`\\b${n}\\b`).test(sq));
+  check('6 方块里 pendingBlankSnapshot / playBlankTransition 不剩', sqLeft.length === 0, sqLeft.join(' / '));
+  check('6 尺子：方块的整线收拢那一条还在（pendingCollapseSnapshot）', /\bpendingCollapseSnapshot\b/.test(sq));
+  // 没删过头：另外五副的整线消除原地留空位，淡出靠的正是它们自己那一份
   const writers = ['circle', 'circleHex', 'circleSeven', 'squareDiamond', 'triangle']
-    .filter((b) => /\bpendingBlankSnapshot\.set\(/.test(code(read(`src/shapes/${b}.ts`))));
-  check('6 尺子：另外五副棋盘都认得出在写 pendingBlankSnapshot', writers.length === 5, writers.join(' '));
+    .filter((b) => /\bpendingBlankSnapshot\.set\(/.test(code(read(`src/shapes/${b}.ts`))) && /function playBlankTransition\(/.test(code(read(`src/shapes/${b}.ts`))));
+  check('6 另外五副棋盘那一份都还在写、还在播（没删过头）', writers.length === 5, writers.join(' '));
 }
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

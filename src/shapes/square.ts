@@ -719,14 +719,6 @@ export function createSquareGame(): ShapeGame {
         removeLines(rowClears, colClears);
       }
 
-      /**
-       * 一组**整组都是星星**的图案得分了：这几格从棋盘上拿掉，留空位。
-       *
-       * 和另外七副同一套写法：先把 dotColor 存进 pendingBlankSnapshot（淡出动画
-       * 靠它画「消失前长什么样」那一帧，见 playBlankTransition），再把 color 和
-       * dotColor 都打成 BLANK，于是 isBlank 那几处自动全都认得它。
-       */
-
       function buildCascadeConfig(): CascadeConfig {
         return {
           tileAt: (r, c) => grid[r][c],
@@ -1039,13 +1031,14 @@ export function createSquareGame(): ShapeGame {
           outlineTracker.add(matchGroups, MULTI_GROUP_STAGGER_MS);
           if (lineBonusGroups.length) pendingCollapseSnapshot = captureTileSnapshots();
         },
-        onCascadeStepRendered: ({ lineBonusGroups, matchGroups }) => {
-          // 星星消除那一拍的淡出。按快照有没有东西判断，不按「有没有整行奖励」
-          // ——整组星星走的是 matchGroups 那条路。和另外七副同一套。
-          if (pendingBlankSnapshot.size) {
-            playBlankTransition([...lineBonusGroups, ...matchGroups], pendingBlankSnapshot);
-            pendingBlankSnapshot = new Map();
-          }
+        onCascadeStepRendered: ({ lineBonusGroups }) => {
+          /*
+           * 方块没有「星星消除那一拍的淡出」（pendingBlankSnapshot / playBlankTransition）：
+           * 它的整线消除是收拢、不留空位，走下面这条 collapse；整组星星消除那条路随《侵蚀阶
+           * 梯》v1.2 退役之后，这儿那一份快照再没人往里写，淡出一次都不会跑。10-08 方案第五批
+           * 第 4 条先在 check-scoring 第 6 节证明「方块永不写入」、跑过自检机器人，再删掉。
+           * 另外五副棋盘的整线消除是原地留空位，它们那一份还在用，没动。
+           */
           if (lineBonusGroups.length && pendingCollapseSnapshot) {
             playCollapseTransition(pendingCollapseSnapshot);
             pendingCollapseSnapshot = null;
@@ -1181,41 +1174,6 @@ export function createSquareGame(): ShapeGame {
       // and the remaining ones sliding together to close the gap.
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const COLLAPSE_FADE_MS = 700;
-      /**
-       * 星星消除那一拍的「消失前长什么样」：cellKey → 它原来的 dotColor。
-       *
-       * clearStarGroup 往里塞，onCascadeStepRendered 消费完就换一个新的。和另外
-       * 七副棋盘同名同义（squareDiamond 等），这样八副的淡出是同一套。
-       */
-      let pendingBlankSnapshot = new Map<string, number>();
-      /**
-       * 星星消除的淡出：在那几格原来的位置上摆一个替身，让它淡出去。
-       *
-       * 和另外七副逐字同一份，只差两处、都是这个文件自己的写法：makeTileEl 要多
-       * 收一个格子边长（CELL），淡出时长用这个文件自己的 COLLAPSE_FADE_MS（和它们
-       * 的 REMOVE_FADE_MS 同为 700ms，一个文件里只留一个「淡出多久」的数）。
-       *
-       * 为什么要替身而不是让原来那一枚淡出：那一枚这会儿已经是空位了（color 被
-       * 打成 BLANK），画出来什么都没有。替身拿的是 commit 之前存下的 dotColor。
-       */
-      function playBlankTransition(groups: Cell[][], snapshot: Map<string, number>) {
-        if (reduceMotion()) return;
-        for (const cells of groups) {
-          for (const [r, c] of cells) {
-            const dotColor = snapshot.get(cellKey(r, c));
-            if (dotColor === undefined) continue;
-            const fakeTile: Tile = { id: -1, color: 0, face: 'dot', dotColor };
-            const ghost = makeTileEl(fakeTile, r, c, CELL);
-            ghost.classList.add('ghost');
-            ghost.style.pointerEvents = 'none';
-            ghost.style.opacity = '1';
-            refs.boardEl.appendChild(ghost);
-            ghost.style.transition = `opacity ${COLLAPSE_FADE_MS}ms ease`;
-            requestAnimationFrame(() => { ghost.style.opacity = '0'; });
-            setTimeout(() => ghost.remove(), COLLAPSE_FADE_MS + 40);
-          }
-        }
-      }
       const COLLAPSE_SLIDE_MS = 480;
       // A gentle ease-in that snaps shut with a small overshoot right at the
       // end — survivors drift together slowly at first, then the last bit of

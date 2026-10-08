@@ -27,7 +27,7 @@ import { pushRun } from './cloudScores';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
-import { playScore, playFlip, playClear, playError, playFinish, playSettle, reducedMotion, screenShake, spawnParticles, punch, type ShakeTier } from './juice';
+import { playScore, playFlip, playClear, playError, playFinish, playSettle, reducedMotion, screenShake, spawnParticles, punch } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import {
   createStepBank, puzzleComposite, stepLedgerText,
@@ -42,47 +42,6 @@ export interface CascadeStepGroups {
   matchGroups: Cell[][];
   lineBonusGroups: Cell[][];
 }
-
-/**
- * The composite end-of-run score: the raw score times a continuous
- * time-elapsed coefficient, times 1 + the 有效得分率 hit rate (a 100% rate
- * doubles it, a 0% rate leaves it alone), and finally scaled down by 0.95
- * for every tile still showing its front face when the run ended — whether
- * it was provably impossible to flip or simply never got there. Multiplying
- * rather than subtracting keeps a big score from being wiped out by a board
- * the player never had time to finish, while still making "leave nothing
- * unflipped" the way to a top score.
- */
-/**
- * A continuous time coefficient rather than the old brackets: 2× at the
- * first move, sliding down to a 0.5× floor over ten minutes. A bracket
- * boundary used to make one extra second cost a quarter of the score, which
- * rewarded quitting at 59s over playing on.
- *
- * `gain` 是这根杠杆的长度：1 就是上面这条曲线本身，现在单人和小屋都用 TIME_GAIN。
- * 放大在夹紧之后做，所以无论多大的 gain，曲线都还是单调的一条——用时多一秒
- * 绝不会反而变得更划算。
- */
-export function timeMultiplierFor(elapsedSec: number, gain = TIME_GAIN): number {
-  const t = Math.max(0, elapsedSec);
-  // 五分钟以内：从 2 直线落到 1。五分钟之后不再直线往下掉，改成越掉越慢，
-  // 慢慢贴向 0.5——曲线在五分钟那一点是接上的（同样的斜率），所以没有一个
-  // 「过了五分钟忽然变陡／变缓」的拐点。
-  const base = t <= 300 ? 2 - t / 300 : 0.5 + 0.5 * Math.exp(-(t - 300) / 150);
-  return 1 + gain * (base - 1);
-}
-/**
- * 时间说话的分量：离 1 有多远，放大一倍半。单人和小屋同一条规矩。
- *
- * 这个数原来只给小屋用（单人是 1），理由是单人慢一点想清楚是正当打法。玩家
- * 后来定的是两边统一按小屋这一套算——一方面同一份成绩要进同一张榜，两套系
- * 数就是两把尺子；另一方面五分钟之后的那一段改缓了（见上面），慢的那头不再
- * 一下子掉到底。
- *
- * 数出来是：秒杀 2.5，两分半 1.75，五分钟 1，七分半 0.53，十分钟 0.35，再往
- * 后慢慢贴向 0.25——而不是原来的七分半就到 0.25。
- */
-export const TIME_GAIN = 1.5;
 
 /** Each tile left un-flipped when the run ends scales the composite by this. */
 const UNFLIPPED_SCALE = 0.95;
@@ -371,6 +330,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   );
 
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
+  /**
+   * 《行动有效率》那份统计。读数**在任何界面都不存在了**（《侵蚀阶梯》v1.2 PR-7）：§5 之后
+   * 它不参与任何计分，留一个不算分的百分比在屏幕上，玩家只会照着它打。统计本身**没删**：步
+   * 步为营的终局公式还在用它（engine/puzzleScore.ts 的 ratePercent）。
+   *
+   * 原先还留着一个空的 updatePerfDisplay（「把它印出来」那一步撤掉之后的空壳）和它的两处调
+   * 用，10-08 方案第五批第 4 条删掉了——函数体是空的，删掉行为不变（check-scoring 第 6 节先
+   * 证明过）。
+   */
   const perf = createPerformanceGauge();
   /** 倒数进最后这么多秒就转警示色（§PR-7）。 */
   const TIMER_LOW_SEC = 10;
@@ -493,20 +461,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 了，反馈就跟着搬到真正在变的那一格来（顶排左边那一块印的是余步）。
     if (refs.hudTimeEl) punch(refs.hudTimeEl);
   }
-  /*
-   * 《行动有效率》那个读数**在任何界面都不存在了**（《侵蚀阶梯》v1.2 PR-7）。
-   *
-   * §5 之后它不参与任何计分：综合分那一头只剩步数系数。留一个不算分的百分比在
-   * 屏幕上，玩家只会照着它打——那是一条会误导人的读数。
-   *
-   * `perf` 那份统计**没删**：步步为营的终局公式还在用它（engine/puzzleScore.ts
-   * 的 ratePercent）。所以这儿撤掉的只是「把它印出来」这一件事。
-   */
-  function updatePerfDisplay() {
-    /* 不再上屏。留着这个函数是因为它的调用点散在得分、消线、结束好几处，
-       删掉要动七八个地方，而那几处将来可能还要挂别的即时反馈。 */
-  }
-
   let score = 0;
   let moves = 0;
   /** 无限反转：到现在为止连续得了几次分（含同一步里的连锁），一步没得分就归零。 */
@@ -778,7 +732,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     unlockedOne = false;
     erosion.reset();
     paintPattern();
-    updatePerfDisplay();
     timer.start();
     hooks.render();
     updateStuckState([]);
@@ -888,14 +841,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     const statusPercent = perf.valuePercent();
     const bonusMult = 1 + statusPercent / 100;
-    // 单人和小屋同一条时间曲线（见 TIME_GAIN）。房间的实时排名比的仍然是原始
-    // 得分（那时这一局还没走完，综合得分还不存在），这里算的是走完之后的综合
     /**
      * **用时系数退役了**（《侵蚀阶梯》v1.2 §5）。综合分那一头现在只剩一个乘数：
      * 步数系数。用时只在结算页上以一行小字出现，写明「不计分」。
      *
      * 这一行留着是因为 `RunData.timeMult` 还在（旧档里有这个字段，记录页翻开老局
-     * 时照它重讲一遍）；新局一律 1，结算页也不摆那一行。
+     * 时照它重讲一遍）；新局一律 1，结算页也不摆那一行。原先那条用时曲线
+     * （timeMultiplierFor / TIME_GAIN）退役之后一个调用者都没有，10-08 方案第五批
+     * 第 4 条删掉了。
      */
     const timeMult = 1;
     /**
@@ -1242,7 +1195,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       .map((p) => ({ name: p.name, score: p.score, me: p.id === seat.playerId }));
   }
 
-  const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#BE5762';
   const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#5C8A72';
 
   /**
@@ -1308,30 +1260,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       { pattern: s.labelPattern, line: s.labelWholeLine },
       flipLedger ?? undefined,
     );
-    /**
+    /*
      * 跨步连击和同一步之内的连锁倍率**都退役了**（《侵蚀阶梯》v1.2 §1.5：「拼出
-     * 分 = 翻面分（含拆除）+ 削线分，无任何过程系数」）。
+     * 分 = 翻面分（含拆除）+ 削线分，无任何过程系数」）。无限反转不受影响，它走自己
+     * 的 1.5ⁿ（scoring.ts 的 flipStreakDelta）。
      *
-     * 这两个常量留着写成 1，是因为底下十几处（气泡上印的倍率、音效的档、震动的
-     * 档、连锁第几拍的判断）都在读它们：留一个恒 1 的值比把那十几处各删一遍安
-     * 全，也留得住「这一步是这次连锁的第几拍」那个信息（tierComboMult 只是不再
-     * 影响分数）。无限反转不受影响，它走自己的 1.5ⁿ。
+     * 退役之后这儿还留过两个恒为 1 的因子（multiplier、comboMult）和一个恒为 1 的连锁
+     * 系数，理由是「底下十几处在读它们，也留得住这一步是连锁第几拍」——可系数是 1，
+     * comboMult 从来长不大，「第几拍」其实一直没留住：读它的那几处（连锁那一档的震动、
+     * 粒子、顿帧、音量）只有最低一档在跑。10-08 方案第五批第 4 条先在 check-scoring 第 6 节
+     * 证明它们恒为 1，再删掉；行为一个字没变。
      */
-    const multiplier = 1;
-    // A chain reaction within *this* move is rewarded on top of (not instead
-    // of) the cross-move streak above: that streak's own multiplier is fixed
-    // for the whole move (captured once, just above), so without this a
-    // 3-step cascade in one move and the same 3 scores spread across 3
-    // separate moves would add up to exactly the same total — grouping
-    // wouldn't matter at all, since both would just be the same points run
-    // through the same 1×/2×/4×/... sequence. Growing *this* factor faster
-    // (×3 per step) than the cross-move streak (×2 per move) breaks that tie
-    // in favor of concentration: for a single step it's a no-op (comboMult
-    // starts at 1, so a move with only one score behaves exactly as before),
-    // but every additional step *within the same move* compounds faster than
-    // spreading the same steps across separate moves ever could.
-    let comboMult = 1;
-    const CASCADE_COMBO_FACTOR = 1;
     let totalRaw = 0;
     let moveWeight = 0;
     /**
@@ -1363,7 +1302,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (!totalRaw) hooks.render();
       if (!totalRaw) flipChain = 0;
       perf.onMove(moveWeight);
-      updatePerfDisplay();
       if (gameOver) {
         resolving = false;
         return;
@@ -1432,16 +1370,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       }
       totalRaw += s.points;
       moveWeight += s.weight;
-      // Rounded, so the score stays a whole number. The streak multipliers
-      // are ×1/×1.5/×2/×2.5 and the cascade factor compounds on top, so the
-      // raw product lands on halves — and a fractional score is wrong twice
-      // over: "184.5" is not a score a player should see, and the digit reel
-      // has no way to draw a decimal point (see scoreReel.setValue).
-      // 无限反转：连续第 n 次得分 = 单次得分 × 1.5^(n−1)，每次四舍五入；同一步里
-      // 的连锁也各算一次。跨步的 ×1.5/2/2.5 和同一步里的 ×3 在这一局都不用。
-      const delta = hooks.flip
-        ? flipStreakDelta(s.points, flipChain)
-        : Math.round(s.points * multiplier * comboMult);
+      // 无限反转：连续第 n 次得分 = 单次得分 × 1.5^(n−1)，每次四舍五入（分数必须是整
+      // 数：「184.5」不是该给玩家看的分，数字滚轮也画不出小数点，见 scoreReel.setValue）；
+      // 同一步里的连锁也各算一次。别的玩法没有任何过程系数，加的就是这一拍的原始分。
+      const delta = hooks.flip ? flipStreakDelta(s.points, flipChain) : s.points;
       /**
        * 加分气泡上印的那个倍率——这一步真正用的那一个。
        *
@@ -1453,12 +1385,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
        * 玩家盯着倍率心算，永远算不出屏幕上那个数。
        *
        * 在这里算、而不是在下面 proceed 里：flipChain 下一行就自增了，到那时
-       * 已经是**下一次**的连击数（同 tierComboMult 那一处的道理）。
+       * 已经是**下一次**的连击数。
        */
       //
       // 倍率从 scoring.ts 的 flipStreakMult 拿（第 14 推）：原先这儿自己算 `1.5 ** flipChain`，
       // 没套 FLIP_STREAK_CAP——连击过了十次，加分已经封顶，气泡上的倍率还在往上翻。
-      const shownMult = hooks.flip ? flipStreakMult(flipChain) : multiplier * comboMult;
+      const shownMult = hooks.flip ? flipStreakMult(flipChain) : 1;
       if (hooks.flip) flipChain++;
       // Split for the end-of-run breakdown: the pattern's own points, the
       // whole-line bonus, and everything the streak/chain multipliers added.
@@ -1469,11 +1401,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 这儿只置真、不置假（后面的拍子没消线，不该把前面那一拍的功劳抹掉）。
       if (s.lineBonusGroups.length) hadLineBonus = true;
       comboBonusPoints += delta - s.points;
-      // Captured before comboMult advances for the *next* step — this
-      // step's own tier is "how deep into this move's chain are we",
-      // which is exactly what comboMult already tracks at this point.
-      const tierComboMult = comboMult;
-      comboMult *= CASCADE_COMBO_FACTOR;
       const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
       // 教学第 5 条等的就是这一下：第一次真的消掉一条外边（第 15 推）。条子只记下，等这一
@@ -1489,23 +1416,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (isBonus) bigMoment(s.lineBonusGroups[0]?.[0]);
       else {
         vibrate(15);
-        // Graded feedback: an ordinary first-in-move match only gets a tone —
-        // shake and particles are reserved for a chained step or a bonus, so
-        // they stay a "big moment" signal instead of firing on every score.
-        playScore(tierComboMult);
-        const shakeTier: ShakeTier | null = tierComboMult > 3 ? 'medium' : tierComboMult > 1 ? 'light' : null;
-        if (shakeTier) {
-          screenShake(refs.boardWrap, shakeTier);
-          const originCell = s.matchGroups[0]?.[0];
-          const pos = originCell ? cellCenterPx(originCell) : null;
-          if (pos) {
-            spawnParticles(refs.boardEl, pos[0], pos[1], {
-              color: accentColor(),
-              count: shakeTier === 'medium' ? 12 : 8,
-              spread: 44,
-            });
-          }
-        }
+        // An ordinary match only gets a tone — shake and particles are
+        // reserved for the bonus (bigMoment above), so they stay a "big
+        // moment" signal instead of firing on every score. 连锁第几拍那一档的
+        // 震动和粒子从倍率退役起就没再跑过（comboMult 恒为 1），随它一起删了。
+        playScore(1);
       }
 
       hooks.onCascadeStep?.(groups);
@@ -1513,10 +1428,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       hooks.onCascadeStepRendered?.(groups);
 
       // A brief extra hold right at the moment of impact — hit-stop — for
-      // anything above the smallest, most common case: nothing animates
-      // differently, the reveal just visibly catches for a beat before
-      // continuing, scaled with how big the moment is.
-      const hitStopMs = reduceMotion ? 0 : isBonus ? 70 : tierComboMult > 1 ? 40 : 0;
+      // the bonus: nothing animates differently, the reveal just visibly
+      // catches for a beat before continuing.
+      const hitStopMs = reduceMotion ? 0 : isBonus ? 70 : 0;
 
       const proceed = () => {
         // The flip is the splash's plank turn, driven from here for every
