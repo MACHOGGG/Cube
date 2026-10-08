@@ -613,6 +613,18 @@ async function push(res, body, who) {
   // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
   const boardId = boardIdOf(mode, data);
   /*
+   * **玩家自己敲代号开的那一局不上榜**（10-08 方案 3-B，玩家拍板方案 A）。
+   *
+   * 代号就是那一副牌：知道代号，就能把同一副牌打到熟、再交一局「漂亮的」——这样的分和随
+   * 手开的一局摆在一张榜上不公平。所以这一局照收：存档、累计得分、局数都照记（那是他自己
+   * 的历史），只是**不进 best、不写任何一张榜**。best 也不能碰，是因为榜上那个数就是从
+   * best 来的：今天让它进了 best，明天他随手打一局，那一局写榜时带上的正是这个 best。
+   *
+   * 每日挑战那一局（seedSource 'daily'）不在此列：它照常进常规榜，也照常进今日榜。认的是
+   * 客户端报的来路，和别的字段一样只是格式，不是反作弊（文件头「关于作弊」）。
+   */
+  const ranked = data?.seedSource !== 'entered';
+  /*
    * **名字一个字都不读**（第 16 推）。`body.name` / `body.nameV` 在途的旧客户端还会报上来，
    * 这里照收这一局、名字原样扔掉：昵称只有改名接口（rename）写得进来，否则一台装着旧包的
    * 手机打完一局，就把他在另一台设备上刚改好的名字盖回去了——那正是「换台手机打一局名字就
@@ -626,7 +638,7 @@ async function push(res, body, who) {
 
     stats.total += score;
     stats.runs += 1;
-    stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
+    if (ranked) stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
     stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
     await set(statsKey(who.id), stats);
 
@@ -645,6 +657,9 @@ async function push(res, body, who) {
     // 步步为营那几张榜上是拼起来的数（boardValue）：这一局自己的那个数，和「历史最高分、
     // 不算步数」那个数，取大的。GT 会留住两者里更高的那一个，所以同分剩得多的那一局会顶
     // 掉剩得少的，老写法（原分）的那一行也在这个人下一次交卷时被换成新写法。
+    //
+    // 敲代号开的那一局（ranked 为假，见上）一张榜都不碰：存档写完就回去。
+    if (!ranked) return { duplicate: false, stats };
     const onBoard = isPuzzleBoard(boardId)
       ? Math.max(boardValue(boardId, score, data), stats.best[boardId] * PUZZLE_SCALE)
       : stats.best[boardId];
@@ -1101,6 +1116,8 @@ async function rebuild(req, res, body) {
           // 过一模一样的一脚，见下面那段）。
           if (String(run?.data?.rules || '') !== SCORING_RULES) continue;
           if (drop.has(kindOf(run?.data))) continue;
+          // 敲代号开的那一局：存档里留着，重建时也不上榜（和 push 那一处同一条，10-08 方案 3-B）。
+          if (run?.data?.seedSource === 'entered') continue;
           const boardId = boardIdOf(mode, run?.data);
           const score = num(run.score);
           if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;

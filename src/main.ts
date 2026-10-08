@@ -878,6 +878,8 @@ function showDailyMode() {
     // 一把万能钥匙。
     canPlay: (g) => !seedLocked(g),
     onLocked: () => openGeniusWindow(currentLang, showDailyMode),
+    // 网页端有排行榜：敲代号开的那一局上不去，先在输码那一格底下说一句（10-08 方案 3-B）。
+    boardNote: true,
   });
   wireHomeTitle();
   repaintIcons();

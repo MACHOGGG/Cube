@@ -58,6 +58,12 @@ export interface DailyModeHandlers {
   onLocked?: () => void;
   /** 本机今天每日挑战最好的一局（小红书那一版：没有排行榜，就在这儿摆一句）。没有就 null。 */
   todayBest?: (dayKey: string) => number | null;
+  /**
+   * 输代号那一格底下要不要说「代号局不计入排行榜」（10-08 方案 3-B）。网页端给 true——服务器真的
+   * 不让敲代号开的那一局上榜（api/scores.js 的 ranked），先说出来，免得他打完一局好的才发现。
+   * 小红书那一版不给：那一端根本没有排行榜，说这一句等于提一个不存在的东西。
+   */
+  boardNote?: boolean;
 }
 
 /** 七色圆球那一天、竖着拿着手机：倒数之前先请他转过来。电脑（鼠标）不提示。 */
@@ -101,6 +107,7 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
               <button class="pill-icon seed-go" id="seedGo" type="submit" aria-label="${s.seedGo}">${ICON_ARROW}</button>
             </form>
             <p class="seed-msg" id="seedMsg" role="status" aria-live="polite"></p>
+            ${handlers.boardNote ? `<p class="seed-note" id="seedNote">${s.seedNoBoard}</p>` : ''}
           </div>
           <button class="icon-btn page-exit" id="dailyBack" aria-label="${s.back}">${CTL_BACK}</button>
         </div>

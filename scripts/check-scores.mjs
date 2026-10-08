@@ -664,5 +664,60 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
     JSON.stringify(good.payload));
 }
 
+// ---- 敲代号开的那一局不上榜（10-08 方案 3-B，玩家拍板方案 A）-------------------
+// 照收、照记存档和累计，只是不进 best、不写任何一张榜——best 也不能碰，因为榜上那个数就是从
+// best 来的：让它进了 best，下一局随手打的那一局写榜时就把它带上去了。重建也不许把它请回来。
+// 每日挑战那一局（seedSource 'daily'）不在此列，照常进榜（今日榜那一半由 check-daily-push 量）。
+{
+  process.env.ADMIN_TOKEN = 'x'.repeat(32);
+  const K = await makePlayer('k@example.com');
+  const base = (runId, score, seedSource) => ({
+    action: 'push', ...K, runId, mode: 'square', score,
+    data: { shapeId: 'square', modeKey: 'base', totalScore: score, ...(seedSource ? { seedSource } : {}) },
+  });
+  const rowOf = async (mode) => {
+    const b = await call({ action: 'board', ...K, ...(mode ? { mode } : {}) });
+    return b.payload?.rows?.find((r) => r.me)?.score ?? null;
+  };
+  const r1 = await call({ ...base('k1', 300, 'random'), name: '癸' });
+  check('（尺子）随手开的一局照常上榜', r1.payload?.ok === true && (await rowOf('square:base')) === 300,
+    JSON.stringify(r1.payload));
+  const r2 = await call(base('k2', 900, 'entered'));
+  check('敲代号开的一局：照收（200 ok），累计照加', r2.status === 200 && r2.payload?.ok === true && r2.payload?.total === 1200,
+    `${r2.status} ${JSON.stringify(r2.payload)}`);
+  const mineK = await call({ action: 'mine', ...K });
+  check('敲代号开的一局：存档里有它（那是他自己的历史）',
+    mineK.payload?.archive?.some((r) => r.runId === 'k2' && r.data?.seedSource === 'entered'),
+    JSON.stringify(mineK.payload?.archive?.map((r) => r.runId)));
+  check('敲代号开的一局：best 不动（还是 300）', mineK.payload?.best?.['square:base'] === 300, JSON.stringify(mineK.payload?.best));
+  check('敲代号开的一局：单局榜上还是 300', (await rowOf('square:base')) === 300, String(await rowOf('square:base')));
+  check('敲代号开的一局：总榜上也还是 300', (await rowOf()) === 300, String(await rowOf()));
+  // 漏网的那条路：它进了 best 的话，下一局（哪怕更差）写榜时会把 900 带上去。
+  await call(base('k3', 200, 'random'));
+  check('下一局随手打的（更差）写榜时，没把那个 900 带上去', (await rowOf('square:base')) === 300, String(await rowOf('square:base')));
+  const rebuilt = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN });
+  check('（尺子）重建跑了', rebuilt.payload?.ok === true, JSON.stringify(rebuilt.payload));
+  check('重建照存档重算：敲代号那一局还是不上榜', (await rowOf('square:base')) === 300 && (await rowOf()) === 300,
+    `${await rowOf('square:base')} / ${await rowOf()}`);
+  const r4 = await call(base('k4', 1000, 'daily'));
+  check('每日挑战那一局（seedSource daily）照常上榜（别误伤）', r4.payload?.ok === true && (await rowOf('square:base')) === 1000,
+    String(await rowOf('square:base')));
+  // 步步为营那几张榜写的不是 best，是「这一局自己的数」和 best 取大（boardValue）——best 挡不住
+  // 这一条，挡住它的只有「敲代号的局一张榜都不碰」那一句。
+  const W = await makePlayer('k-pz@example.com');
+  const pz = (score, seedSource) => ({
+    shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36, totalScore: score, reason: '步数用尽',
+    puzzle: { cleared: 0, stars: 0, spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left: 0, peak: 9 },
+    ...(seedSource ? { seedSource } : {}),
+  });
+  await call({ action: 'push', ...W, runId: 'w1', mode: 'square', score: 120, name: '代号壬', data: pz(120, 'random') });
+  const pzRow = async () =>
+    (await call({ action: 'board', ...W, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.me)?.score ?? null;
+  check('（尺子）步步为营：随手开的一局照常上榜', (await pzRow()) === 120, String(await pzRow()));
+  await call({ action: 'push', ...W, runId: 'w2', mode: 'square', score: 330, data: pz(330, 'entered') });
+  check('步步为营：敲代号开的一局也不上榜（还是 120）', (await pzRow()) === 120, String(await pzRow()));
+  delete process.env.ADMIN_TOKEN;
+}
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

@@ -740,7 +740,8 @@ export interface I18nStrings {
   shareFooterHint: string;
   shareQrCaption: string;
   /**
-   * 分享卡上二维码说明下面那一行（第 19 推）：这一局的种子码，「{code}」换成 XXXX-XXXX。
+   * 分享卡上二维码说明下面那一行（第 19 推）：这一局的代号，「{code}」换成 XXXX-XXXX。
+   * （界面上 2026-10 起叫「代号」，不叫「种子」，10-08 方案 3-B；键名沿用。）
    * 每日挑战那一局后面再接一句 shareDailyTag（「· 每日 MM/DD」），「{m}」「{d}」换成月、日
    * ——法语照它自己的习惯写成日/月，写成月/日的话「10/03」在那边读作三月十号。
    */
@@ -757,7 +758,7 @@ export interface I18nStrings {
   monthNames: string;
   /** 每日挑战那一页上的大键：开今天这一局。 */
   dailyPlay: string;
-  /** 种子输入框前头那个字，也是输入框的读屏名。 */
+  /** 代号输入框前头那个字，也是输入框的读屏名（2026-10 起叫「代号」，键名沿用 seed）。 */
   seedLabel: string;
   /** 输入框旁边那颗开局键的读屏名。 */
   seedGo: string;
@@ -765,6 +766,12 @@ export interface I18nStrings {
   seedBad: string;
   seedExpired: string;
   seedNewer: string;
+  /**
+   * 输代号那一格底下那一行小字：敲代号开的局不上榜（10-08 方案 3-B，玩家拍板方案 A）。服务器
+   * 照这一条办（api/scores.js 的 ranked），这儿先说出来——不让人打完一局好的才发现没上榜。
+   * 只有网页端说：小红书那一端根本没有排行榜。
+   */
+  seedNoBoard: string;
   /** 七色圆球那一天，竖着拿手机时倒数之前只摆这一句（方案原话「请横屏」），不带任何棋盘标识。 */
   dailyTurn: string;
   /** 排行榜上那个「今日」标签。 */
@@ -1143,17 +1150,18 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} move|{n} moves',
     bestPhrase: 'best {n}',
     shareQrCaption: 'Scan to play Slides',
-    shareSeedLine: 'Seed {code}',
+    shareSeedLine: 'Daily code {code}',
     shareDailyTag: 'Daily {m}/{d}',
     dailyTitle: 'Daily Challenge',
     dailyAria: 'Daily Challenge, {month} {d}',
     monthNames: 'January|February|March|April|May|June|July|August|September|October|November|December',
     dailyPlay: "Today's challenge",
-    seedLabel: 'Seed',
-    seedGo: 'Play this seed',
-    seedBad: "That seed isn't right — check it again",
-    seedExpired: 'This seed has expired',
-    seedNewer: 'This seed needs a newer version of Slides',
+    seedLabel: 'Daily code',
+    seedGo: 'Play this daily code',
+    seedBad: "That daily code isn't right — check it again",
+    seedExpired: 'This daily code has expired',
+    seedNewer: 'This daily code needs a newer version of Slides',
+    seedNoBoard: 'Games started from a daily code don’t go on the leaderboards',
     dailyTurn: 'Turn your phone sideways',
     rankTabDaily: 'Today',
     dailyBest: "Today's best {n}",
@@ -1506,17 +1514,18 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} coup|{n} coups',
     bestPhrase: 'meilleur score {n}',
     shareQrCaption: 'Scannez pour jouer à Slides',
-    shareSeedLine: 'Graine {code}',
+    shareSeedLine: 'Code du jour {code}',
     shareDailyTag: 'Défi du {d}/{m}',
     dailyTitle: 'Défi du jour',
     dailyAria: 'Défi du jour, {d} {month}',
     monthNames: 'janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre',
     dailyPlay: "Défi d'aujourd'hui",
-    seedLabel: 'Graine',
-    seedGo: 'Jouer cette graine',
-    seedBad: "Cette graine n'est pas valide — vérifiez-la",
-    seedExpired: 'Cette graine a expiré',
-    seedNewer: 'Cette graine demande une version plus récente de Slides',
+    seedLabel: 'Code du jour',
+    seedGo: 'Jouer ce code du jour',
+    seedBad: "Ce code du jour n'est pas valide — vérifiez-le",
+    seedExpired: 'Ce code du jour a expiré',
+    seedNewer: 'Ce code du jour demande une version plus récente de Slides',
+    seedNoBoard: 'Les parties lancées depuis un code du jour ne vont pas au classement',
     dailyTurn: 'Tournez votre téléphone',
     rankTabDaily: "Aujourd'hui",
     dailyBest: 'Meilleur du jour {n}',
@@ -1869,17 +1878,18 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本機最佳 {n}',
     shareQrCaption: '掃碼來 Slides～',
-    shareSeedLine: '種子 {code}',
+    shareSeedLine: '代號 {code}',
     shareDailyTag: '每日 {m}/{d}',
     dailyTitle: '每日挑戰',
     dailyAria: '每日挑戰，{m} 月 {d} 日',
     monthNames: '一月|二月|三月|四月|五月|六月|七月|八月|九月|十月|十一月|十二月',
     dailyPlay: '今日挑戰',
-    seedLabel: '種子',
-    seedGo: '用這個種子開局',
-    seedBad: '這串種子不對，再核對一遍',
-    seedExpired: '這個種子已過期',
-    seedNewer: '這個種子要新版本才能玩',
+    seedLabel: '代號',
+    seedGo: '用這個代號開局',
+    seedBad: '這串代號不對，再核對一遍',
+    seedExpired: '這個代號已過期',
+    seedNewer: '這個代號要新版本才能玩',
+    seedNoBoard: '代號局不計入排行榜',
     dailyTurn: '請橫屏',
     rankTabDaily: '今日',
     dailyBest: '今日最佳 {n}',
@@ -2232,17 +2242,18 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '共 {n} 步',
     bestPhrase: '本机最佳 {n}',
     shareQrCaption: '扫码来 Slides～',
-    shareSeedLine: '种子 {code}',
+    shareSeedLine: '代号 {code}',
     shareDailyTag: '每日 {m}/{d}',
     dailyTitle: '每日挑战',
     dailyAria: '每日挑战，{m} 月 {d} 日',
     monthNames: '一月|二月|三月|四月|五月|六月|七月|八月|九月|十月|十一月|十二月',
     dailyPlay: '今日挑战',
-    seedLabel: '种子',
-    seedGo: '用这个种子开局',
-    seedBad: '这串种子不对，再核对一遍',
-    seedExpired: '这个种子已过期',
-    seedNewer: '这个种子要新版本才能玩',
+    seedLabel: '代号',
+    seedGo: '用这个代号开局',
+    seedBad: '这串代号不对，再核对一遍',
+    seedExpired: '这个代号已过期',
+    seedNewer: '这个代号要新版本才能玩',
+    seedNoBoard: '代号局不计入排行榜',
     dailyTurn: '请横屏',
     rankTabDaily: '今日',
     dailyBest: '今日最佳 {n}',

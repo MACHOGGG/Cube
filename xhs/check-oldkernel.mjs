@@ -573,6 +573,9 @@ if (!only || only === 'daily') {
   const playSeed = async (code, label) => {
     await p.evaluate(() => document.querySelector('.home-icon-btn--daily').click());
     await p.waitForSelector('#dailyPlay', { timeout: 8000 });
+    // 网页端输码那一格底下说「代号局不计入排行榜」（10-08 方案 3-B）；这一端没有排行榜，那一句
+    // 在这儿就是提一个不存在的东西——不摆。
+    say(!(await p.$('#seedNote')), `${label}：输码那一格底下没有「不计入排行榜」那一句（这一端没有榜）`);
     if (code) {
       await p.fill('#seedInput', code);
       await p.evaluate(() => document.querySelector('#seedGo').click());

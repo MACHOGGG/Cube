@@ -5,7 +5,7 @@
  *   node scripts/check-seed-deal.mjs http://localhost:8973/
  *
  * 方案的门：「同一种子每副棋盘同一副牌」「倒数期间页面上没有玩法和棋盘标识」。顺带量两件只有
- * 真开一局才看得见的事：那一局的存档里记着这串码（分享卡照它印「种子 XXXX-XXXX」），以及七色
+ * 真开一局才看得见的事：那一局的存档里记着这串码（分享卡照它印「代号 XXXX-XXXX」），以及七色
  * 圆球那一天竖着拿手机时先说「请横屏」。
  *
  * ─────────────────────────────────────────────────────────────────────────
@@ -249,6 +249,43 @@ if (!ONLY || ONLY.includes(4)) {
     .then(() => true)
     .catch(() => false);
   check('数完开的是七色圆球', opened);
+  await ctx.close();
+}
+
+// ── 输码那一格：叫「代号」，底下说一句「代号局不计入排行榜」（10-08 方案 3-B）──────────
+// 服务器真的不让敲代号开的那一局上榜（api/scores.js 的 ranked，check-scores 量那一半），这一
+// 句是事先说出来的那一半：不让人打完一局好的才发现没上榜。手机竖屏量：那一行得整个在屏幕里、
+// 不和报错那一行叠。
+{
+  const ctx = await freshContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 });
+  await page.waitForTimeout(600);
+  await page.click('.home-icon-btn--daily');
+  await page.waitForSelector('#seedInput', { timeout: 8000 });
+  const ui = await page.evaluate(() => {
+    const note = document.getElementById('seedNote');
+    const box = (el) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) } : null;
+    };
+    return {
+      label: document.querySelector('.seed-label')?.textContent?.trim() ?? '',
+      note: note?.textContent?.trim() ?? '',
+      noteBox: box(note),
+      msgBox: box(document.getElementById('seedMsg')),
+      vw: innerWidth,
+      vh: innerHeight,
+    };
+  });
+  check('输码那一格叫「代号」（不再叫「种子」）', ui.label === '代号', ui.label);
+  check('底下那一行说「代号局不计入排行榜」', ui.note === '代号局不计入排行榜', ui.note);
+  const nb = ui.noteBox;
+  check('那一行整个在屏幕里、在报错那一行底下（不叠）',
+    !!nb && nb.top >= 0 && nb.bottom <= ui.vh && nb.left >= 0 && nb.right <= ui.vw && !!ui.msgBox && nb.top >= ui.msgBox.bottom,
+    JSON.stringify({ note: nb, msg: ui.msgBox }));
   await ctx.close();
 }
 
