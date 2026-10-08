@@ -31,7 +31,7 @@
      是 3.4:1，过了非文字元素 3:1 那条线）。值是方案给的，单独成一支是因为这四页的样式
      里不许有写死的颜色（门：check-redesign-fit）。 */
   --card-silver-edge: #8C8C8C;
-  --card-rule: #979797;        /* 下划线：帐号窗的字段、邀请窗的标题 */
+  --card-rule: #979797;        /* 下划线：帐号窗的字段、输入种子那一格（邀请窗标题底下那道 10-08 方案 3-K 撤了） */
   /* ── 炸弹选择页（第 18 推第 2 条）：面板是陶土色，第一排那两格的底板是浅灰。和上面几支
      一样不随主题翻、色盲模式下也不换。#A7A7A7 正是基础方块 / 基础小球那两张图标文件自己
      底板的颜色（文件里写的是 display-p3 0.656，换成 sRGB 一个数不差），所以第一排看上去就
@@ -1693,10 +1693,14 @@ button:hover { filter: brightness(1.05); }
 /* Tapping it goes home, so it has to look tappable. */
 .home-title { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .home-title:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+/* 字底下那道 3px 的线撤了（10-08 方案 3-K「所有 title 板块的横线移除」）。它连同垫着它的
+   4px 底内边距原先占着 7px，现在并进外边距（2 → 9），字到底下那句 tagline 一像素没挪——招
+   牌整块不变高，七页招牌底下的东西就一样都不用跟着挪。左右那 10px 留着：它管的是这颗「回主
+   菜单」的键能点到多宽，也撑着玻璃那块的宽。 */
 .home-title {
   font-family: 'Fraunces', Georgia, serif; font-size: 2.4rem; font-weight: 600;
-  margin: 0 0 2px; letter-spacing: 0.01em;
-  display: inline-block; border-bottom: 3px solid var(--accent-soft); padding: 0 10px 4px;
+  margin: 0 0 9px; letter-spacing: 0.01em;
+  display: inline-block; padding: 0 10px;
 }
 /* min-height 是给打字机留的位（ui/typeTagline.ts）：开打那一刻这一行是空的，
    没有它整块抬头会先缩一截、打完再顶回去，主菜单一进来就跳一下。1.3em 跟着
@@ -2592,7 +2596,8 @@ button:hover { filter: brightness(1.05); }
   .app.home-page--wide { padding-top: 10px; padding-bottom: 112px; }
   .home-page--wide .home-head { margin-bottom: 8px; padding-top: 2px; }
   .home-page--wide .home-head-glass { padding: 2px 18px 6px; }
-  .home-page--wide .home-title { font-size: 1.5rem; padding-bottom: 2px; border-bottom-width: 2px; }
+  /* 这一档的线原先是 2px、垫 2px：撤线之后同样并进外边距（2 ＋ 2 ＋ 2 = 6），见上面 .home-title。 */
+  .home-page--wide .home-title { font-size: 1.5rem; margin-bottom: 6px; }
   .home-page--wide .home-sub { margin-top: 3px; font-size: 0.68rem; }
   .home-page--wide .home-grid { gap: 14px; }
   /* 横过来的手机：图标改成按「屏幕还剩多宽」算，不再按高。
@@ -3890,7 +3895,10 @@ body:has(.daily-page--count) .home-nav { display: none; }
   padding: 0;
   border-radius: var(--r-lg);
   background: var(--nav-dock);
-  box-shadow: 0 6px 20px -8px rgba(46, 36, 48, 0.32), 0 0 0 1px rgba(46, 36, 48, 0.06);
+  /* 原先这儿还叠着一圈 `0 0 0 1px` 的描边——主菜单底下那道硬边框，10-08 方案 3-K 撤了。这块
+     底排和页面分得开靠的是它自己的底色（--nav-dock 比页面底色深一档）和底下这层软投影，不靠
+     描边；box-shadow 不占位置，撤掉它什么都不挪。 */
+  box-shadow: 0 6px 20px -8px rgba(46, 36, 48, 0.32);
 }
 /* 整块圆角矩形都能点：左半边是个人主页，右半边是记录与排名。
    从前能点的只有那两个图形本身，指头稍微偏一点就穿过去落在底下的排行榜
@@ -4845,12 +4853,16 @@ body:has(.daily-page--count) .home-nav { display: none; }
   filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
 }
 
-/* 邀请窗：抬头底下一道下划线，左边吉祥物、右边货单，最底下两颗一样宽的药丸。 */
+/* 邀请窗：抬头，左边吉祥物、右边货单，最底下两颗一样宽的药丸。
+   抬头底下原先有一道 2px 的下划线（第 14 推），10-08 方案 3-K「所有 title 板块的横线移除」撤
+   了。线和垫着它的 10px 底内边距一共 12px，并进外边距：抬头和底下那一块还隔着同样远，窗不变高。
+   ⚠️ 20 不是 16 ＋ 12：原先这条写的是 `.invite-title { margin: 0 0 var(--gap-md) }`，可它比通用
+   的 `.modal h2 { margin: 0 0 8px }` 低一级（0,1,0 对 0,1,1），**从来没生效过**，屏幕上一直是 8。
+   试过照旧只写 `.invite-title`：并进去的外边距同样被那条盖掉，整扇窗矮了 12px、上下各缩
+   6，什么都不报（截图逐像素比出来的）。所以这儿带上 .invite-modal 前缀，数照屏幕上原来那
+   个算：8 ＋ 10 ＋ 2。门：check-title-lines 量的是排出来的这 20px，不是读这条规则。 */
 .invite-modal { max-width: 360px; }
-.invite-title {
-  margin: 0 0 var(--gap-md); padding: 0 0 10px;
-  border-bottom: 2px solid var(--card-rule);
-}
+.invite-modal .invite-title { margin: 0 0 20px; }
 .invite-body {
   display: flex; align-items: flex-start; gap: var(--gap-md);
   margin: 0 0 var(--gap-md); text-align: left;

@@ -670,7 +670,9 @@ for (const size of SIZES) {
       }));
       check(`${tag} 邀请窗：「注册后免费立即解锁全部内容」那一句没了`, inv.tag === 0, String(inv.tag));
       check(`${tag} 邀请窗：货单以「……」结尾`, inv.last === '……', String(inv.last));
-      check(`${tag} 邀请窗：标题底下有下划线`, parseFloat(inv.underline) >= 1, inv.underline);
+      // 第 14 推那道标题下划线，10-08 方案 3-K「所有 title 板块的横线移除」撤了——这一条从「有」翻成「没有」
+      // （翻过来而不是删掉：删了就没人守着，加回来不报错、不白屏）。撤掉之后那一截留白还在不在，归 check-title-lines 量。
+      check(`${tag} 邀请窗：标题底下没有下划线（10-08 方案 3-K）`, parseFloat(inv.underline) === 0, inv.underline);
       await scanLiterals(page, '.invite-modal');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(150);

@@ -1223,6 +1223,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8966/ && break; sleep 0.25; done
           node scripts/check-end-design.mjs http://localhost:8966/
 
+      # 全站标题不带横线、主菜单底排不带硬边（2026-10-08 方案 3-K：「所有 title 板块的横线移除……主菜单底部
+      # 硬边框一并去掉……语义分隔需要留白就改 margin」）。七页共用的那块招牌（手机、横屏、电脑三种屏）、邀请窗
+      # 的抬头、底排那块圆角板（三套主题）、几扇窗的标题都量；线占的那一截并进了外边距，所以也量排出来的距离
+      # 还在——邀请窗那一条真撞过「并进去的外边距被更具体的 .modal h2 盖掉、整扇窗矮了 12px、什么都不报」。
+      - name: 标题没有横线、底排没有硬边
+        run: |
+          nohup node scripts/dev-server.mjs 8965 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8965/ && break; sleep 0.25; done
+          node scripts/check-title-lines.mjs http://localhost:8965/
+
       # 主菜单上开窗、关窗，轴的中线不漂（2026-10-08 方案 3-D-3：「开关 5 次中线不漂」；3-C-6：从帐号窗
       # 底下那颗 ✅ 关也不许偏）。三条来路各量一遍：轴量完位置之后招牌又长高（副标题打字机打出第一个中
       # 文字、晚到的新版本提示）；窗开着时页面被推上去（手机键盘——无头浏览器没有键盘，先垫出键盘给的那
