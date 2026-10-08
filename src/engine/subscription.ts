@@ -336,7 +336,7 @@ export async function pairAuth(
   kind: 'register' | 'signin' | 'reset',
   first: string,
   second: string,
-): Promise<{ ok: true } | { ok: false; reason: PairFailure }> {
+): Promise<{ ok: true } | { ok: false; reason: PairFailure; retryInMs?: number }> {
   const creem = await import('./creem');
   const reply =
     kind === 'register'
@@ -345,6 +345,8 @@ export async function pairAuth(
         ? await creem.webPairReset(first, second)
         : await creem.webPairSignIn(first, second);
   if (typeof reply === 'string') return { ok: false, reason: reply };
+  // 锁住了：带着服务端算好的剩余时间（见 creem.ts 的 PairLocked）
+  if ('reason' in reply) return { ok: false, reason: reply.reason, retryInMs: reply.retryInMs };
   setEntitlement({
     active: Boolean(reply.active),
     period: reply.period,

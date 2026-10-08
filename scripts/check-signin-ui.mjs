@@ -23,6 +23,7 @@
  *      位），按眼睛才露出整串
  *    · **没有《更换邮箱》**（api/email.js 会 400，E53）
  * ⑦ 两档屏幕（360×640 / 390×844）底排键都在屏内，而且点得着。
+ * ⑧ 免邮箱锁住时，那句「约 N 小时后自动解开」的 N 是服务端说的还剩多久（retryInMs），不是写死的 4。
  */
 import { chromium } from 'playwright';
 
@@ -299,6 +300,40 @@ for (const [w, h] of [[360, 640], [390, 844]]) {
   });
   check(`注册窗 ${w}×${h}：底排键在屏内`, r.bottom <= r.vh, `${r.bottom} / ${r.vh}`);
   check(`注册窗 ${w}×${h}：那颗键真点得着（没被别的盖住）`, r.hitOk === true);
+  await one.ctx.close();
+}
+
+// ---------------------------------------------------------------------------
+head('⑧ 免邮箱锁住了：说的是还剩多久，不是写死的 4 小时（10-08 方案第四批第 5 条）');
+/*
+ * 第二串错满 4 次，api/handle.js 回 423 `{ error: 'locked', retryInMs }`（retryInMs 是 lockRemainingMs，锁还剩多
+ * 久）。原先界面这一支写死 `pwLocked.replace('{hours}', '4')`：锁了三个半小时之后再来试，他看到的还是「约 4 小
+ * 时后自动解开」。现在按服务端那个数换算（向上取整、至少 1）。
+ *
+ * 真把一个账号锁上要错 4 次、还得等——这儿只拦 /api/handle 那一问，答成锁住了、带上不同的剩余时间，看屏幕上那一
+ * 句跟着变。三个数：刚锁上（3 小时 59 分 → 4）、锁了一半（1.5 小时 → 2）、快开了（20 分钟 → 1）。
+ */
+{
+  const one = await openAuth();
+  const page2 = one.page;
+  await page2.click('#authAlt');
+  await page2.waitForFunction(() => !document.querySelector('#authPairForm')?.hidden, null, { timeout: 10000 });
+  let retryInMs = 0;
+  await page2.route('**/api/handle', (route) =>
+    route.fulfill({ status: 423, contentType: 'application/json', body: JSON.stringify({ error: 'locked', retryInMs }) }));
+  for (const [ms, hours] of [[(3 * 60 + 59) * 60e3, 4], [90 * 60e3, 2], [20 * 60e3, 1]]) {
+    retryInMs = ms;
+    await page2.fill('#authFirst', 'LockProbe01');
+    await page2.fill('#authSecond', 'wrongsecond');
+    await page2.click('#authGo');
+    const said = await page2
+      .waitForFunction(() => /小时后自动解开/.test(document.querySelector('#authMsg')?.textContent || ''), null, { timeout: 8000 })
+      .then(() => page2.$eval('#authMsg', (e) => e.textContent.trim()))
+      .catch(async () => `（没等到那一句）${await page2.$eval('#authMsg', (e) => e.textContent.trim()).catch(() => '')}`);
+    check(`锁还剩 ${Math.round(ms / 60e3)} 分钟：说「约 ${hours} 小时」`, said === `错太多次了，约 ${hours} 小时后自动解开。`, said);
+    // 下一轮之前把那一句清掉，免得读到上一轮留下的
+    await page2.evaluate(() => { const m = document.querySelector('#authMsg'); if (m) m.textContent = ''; });
+  }
   await one.ctx.close();
 }
 

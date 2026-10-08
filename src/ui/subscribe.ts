@@ -140,6 +140,15 @@ function failureText(reason: PurchaseFailure, lang: Lang): string {
   }
 }
 
+/**
+ * 「锁住了，约 N 小时后自动解开」。N 由服务端算好的剩余时间换算（lockRemainingMs，随 423 一起
+ * 回来的 retryInMs），向上取整、至少 1——锁着的这几个小时里每次来试，说的都是**还剩**多久。
+ * 两处共用：下面的 accountFailText，和登录窗免邮箱那一支（openAuthWindow 的 say）。后者原先
+ * 写死「4」（10-08 方案第四批第 5 条）。
+ */
+const lockedText = (lang: Lang, retryInMs?: number) =>
+  STRINGS[lang].pwLocked.replace('{hours}', String(Math.max(1, Math.ceil((retryInMs ?? 0) / 3600e3))));
+
 /** What went wrong with a passcode, a code, or the unlock mail. */
 function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number): string {
   const s = STRINGS[lang];
@@ -147,7 +156,7 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
     case 'wrong':
       return s.pwWrong;
     case 'locked':
-      return s.pwLocked.replace('{hours}', String(Math.max(1, Math.ceil((retryInMs ?? 0) / 3600e3))));
+      return lockedText(lang, retryInMs);
     case 'blocked':
       return s.pwBlocked;
     case 'code':
@@ -970,8 +979,8 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     msg.classList.add('auth-msg--bad');
   };
 
-  /** 把一次失败翻译成屏幕上那一句。认的是服务端送回来的那个词，不是状态码。 */
-  const say = (reason: string) => {
+  /** 把一次失败翻译成屏幕上那一句。认的是服务端送回来的那个词，不是状态码。锁住的那一种带着还剩多久。 */
+  const say = (reason: string, retryInMs?: number) => {
     oops(
       reason === 'mailDown'
         ? s.mailDownHint
@@ -990,7 +999,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
                     : reason === 'wrong'
                       ? s.pairWrong
                       : reason === 'locked'
-                        ? s.pwLocked.replace('{hours}', '4')
+                        ? lockedText(lang, retryInMs)
                         : reason === 'unavailable'
                           ? s.serverBusy
                           : s.purchaseNetwork,
@@ -1053,7 +1062,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       // 注册撞名（taken）时**自动改成登录试一次**是不对的：第一串撞上了，第二串几乎不
       // 可能正好也是人家那一串，于是那一次会答「对不上」，而屏幕上写的是两句互相矛盾
       // 的话。如实说「这一串有人用了」，让他换一串。
-      say(done.reason);
+      say(done.reason, done.retryInMs);
       return;
     }
     // 先让这台设备的密码管理器存一份（这两串正好是一对「账号 + 密码」），再提醒他截
@@ -1096,7 +1105,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     // signin 也成了一个枚举接口）。所以这儿只能试一次注册，由它的 409 来分开。
     if (signedIn.reason !== 'wrong') {
       go.disabled = false;
-      say(signedIn.reason);
+      say(signedIn.reason, signedIn.retryInMs);
       return;
     }
     const made = await pairAuth('register', first, second);
@@ -1104,7 +1113,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     if (!made.ok) {
       // 409 taken 在这一步的意思很明确：第一串有人用，而上面那次登录说两串对不上——
       // 所以是第二串错了。说「对不上」比说「已被占用」准。
-      say(made.reason === 'taken' ? 'wrong' : made.reason);
+      say(made.reason === 'taken' ? 'wrong' : made.reason, made.retryInMs);
       return;
     }
     await offerToSave(first, second);

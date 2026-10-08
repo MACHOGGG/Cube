@@ -282,7 +282,17 @@ export const webPairSignIn = (first: string, second: string) => pairCall({ first
 export const webPairReset = (first: string, newSecond: string) =>
   pairCall({ action: 'reset', first, newSecond });
 
-async function pairCall(body: Record<string, string>): Promise<AuthReply | PairFailure> {
+/**
+ * 锁住的那一种带着服务端算好的「还要锁多久」回来（api/handle.js 回 423 时的 retryInMs，即
+ * `lockRemainingMs`）。别的失败照旧是一个词。
+ *
+ * 原先 423 也只回一个 'locked'，那个数在这儿就丢了，界面只好写死「约 4 小时」——可 4 小时只
+ * 是刚锁上那一刻的事：锁了三个半小时之后再来试，他看到的还是「约 4 小时」（10-08 方案第四批
+ * 第 5 条）。
+ */
+export type PairLocked = { reason: 'locked'; retryInMs?: number };
+
+async function pairCall(body: Record<string, string>): Promise<AuthReply | PairFailure | PairLocked> {
   try {
     const reply = await postJson<AuthReply>('/api/handle', body);
     return reply.token ? reply : 'failed';
@@ -292,7 +302,7 @@ async function pairCall(body: Record<string, string>): Promise<AuthReply | PairF
     if (err.status >= 500) return 'unavailable';
     if (err.status === 429) return 'tooMany';
     if (err.status === 409) return 'taken';
-    if (err.status === 423) return 'locked';
+    if (err.status === 423) return { reason: 'locked', retryInMs: err.retryInMs };
     if (err.code === 'badPair') return 'badPair';
     return 'wrong';
   }
