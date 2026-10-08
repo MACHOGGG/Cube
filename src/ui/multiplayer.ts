@@ -832,8 +832,18 @@ export function renderMultiplayerPage(
         // 边他们的座位还占着。屋主回来看见几把清不掉的空椅子，那几个人自己
         // 也认领不回来（除非同名而且屋子还没满）。leaveRoom 会先在本机清干
         // 净、再告诉服务器，所以屋子真的散了也不会出错。
+        //
+        // 打过局的，先看那张总战绩图（2026-10-08 方案 2-3），和同文件 leaveSeat 那条路一个样。
+        // 从前这儿直接回主菜单：同一间屋子，屋主按《解散》的时候屋里的人手上亮起那张图，屋主是
+        // 「走掉」的时候就什么都没有——他们在这间屋子里打过的每一局一笔勾销。排行和「我是哪一
+        // 位」都要在交座位之前先抓下来：leaveRoom() 一上来就把本机记的房间状态和座位清掉。
+        // 一局都没打过就散了的，图上全是 0，照旧回主菜单。
+        const state = latestRoomState();
+        const meId = currentRoom()?.playerId;
         void leaveRoom();
-        if (!dead) renderHome();
+        if (dead) return;
+        if (state && state.round > 0) return handlers.onRoomEnded(state, meId);
+        renderHome();
       },
       onLeave: () => confirmLeaveRoom(lang, leave),
     });

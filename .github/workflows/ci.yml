@@ -1161,6 +1161,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8975/ && break; sleep 0.25; done
           node scripts/check-share-seed.mjs http://localhost:8975/
 
+      # 屋主关掉网页走掉，坐在小屋页上的客人按《ok》（2026-10-08 方案 2-3）：打过局的拿到那张
+      # 总战绩图（和屋主按《解散》、客人自己按《离开》同一样东西），一局都没打过的回主菜单，座位
+      # 照样交回去。从前这一条按完就回主菜单，在这间屋子里打过的每一局一笔勾销。一台自己的服务
+      # 器：开两间屋，兑 TESTMONTH、TESTYEAR 各一次。
+      - name: 屋主走掉之后客人拿到的那张总战绩图
+        run: |
+          nohup node scripts/dev-server.mjs 8984 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8984/ && break; sleep 0.25; done
+          node scripts/check-host-gone-card.mjs http://localhost:8984/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。
