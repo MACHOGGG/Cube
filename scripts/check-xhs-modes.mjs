@@ -13,7 +13,8 @@
  *   ② 同文件的 `CARDS` —— 主菜单上摆哪几张卡；
  *   ③ 同文件的 `perRow`（宽屏那个数）—— 一排摆得下几张；
  *   ④ `xhs/src/main.ts` 的 `onPlay` 分派 —— 点下去进哪一屏；
- *   ⑤ 同文件的 `FirstKey` ＋ `BOOKS` —— 头一回的那句提示、成绩页翻哪几本；
+ *   ⑤ 同文件的 `FirstKey` ＋ `DAILY_MODE_KEYS` —— 头一回的那句提示、成绩页翻哪几本（`BOOKS`
+ *     从 2026-10-08 起由「全部棋盘 × DAILY_MODE_KEYS」拼出来，不再手写）；
  *   ⑥ `soon` ＋ `dim` —— 那块「进阶入口」牌子、头几局的压暗路标；
  *   ⑦ `xhs/check-vsweb.mjs` 的 `XHS_CARD` —— 那道门按下标点卡。
  *
@@ -23,7 +24,8 @@
  *   · 漏 ④ ：从前最后一档是 `return showFlip()` 兜底，新来的那一档于是**进了无限
  *     反转那一屏**。点《步步为营》打开的是别的玩法，一个错都不报。
  *   · 漏 ⑤ 的 `BOOKS`：这一档打完的局在成绩页上**整片不存在**，累计得分不涨，也
- *     不报错（check-vsweb 2026-09 逮到过同一个毛病的上一版）。
+ *     不报错（check-vsweb 2026-09 逮到过同一个毛病的上一版；2026-10-08 每日挑战的
+ *     计时两档又漏过一回，之后 BOOKS 改成拼出来的）。
  *   · 漏 ⑤ 的 `FirstKey`：这一个是唯一会当场拦住人的——`npm run build:xhs` 编译不
  *     过。可它**只在 `xhs/tsconfig.json` 下才编译不过**：`npm run typecheck`
  *     （`tsc -b`）管不到 `xhs/`，所以「typecheck 全绿」这句话对这一端不成立。
@@ -162,39 +164,56 @@ for (const k of TIP_KINDS) {
 // 反过来不要求：FirstKey 里还有 endcard 这种不是玩法的钥匙。
 note(`FirstKey 里不是玩法的那几把：${FIRST.filter((k) => !TIP_KINDS.includes(k) && !MODES.includes(k)).join('、') || '（没有）'}`);
 
-const booksBlock = blockOf(mainSrc, /const BOOKS: Book\[\] =\s*\[/);
-say(!!booksBlock, '尺子：main.ts 里切出了 BOOKS 那一段');
-const books = booksBlock
-  ? [...booksBlock.matchAll(/card:\s*(\w+)\.card,\s*suffix:\s*suffixFor\('(\w+)'\)/g)].map((m) => ({
-      game: m[1],
-      mode: m[2],
-    }))
-  : [];
-say(books.length >= 6, `尺子：解析出 ${books.length} 本`, books.map((b) => `${b.game}/${b.mode}`).join('、'));
+// BOOKS 从 2026-10-08（方案 2-2）起不再手写：它是「这一端建了的每一副棋盘 × DAILY_MODE_KEYS」
+// 两层循环拼出来的，dailyBest() 也翻同一组。手写那一版漏过两回，每回都是「那几局在成绩页上整片
+// 不存在」：《步步为营》补进来时漏过一回（E20）；第 19 推的每日挑战开得出计时、计时炸弹两档，
+// 还轮得到另外四副棋盘，又漏了一回——发笔记带的是上一局的分。
+// 所以这儿量的不再是「八行字面量」，而是：循环真的是那两张表相乘、两张表该有的都有。
+const listIn = (re, item) => {
+  const m = mainSrc.match(re);
+  return m ? [...m[1].matchAll(item)].map((x) => x[1]) : [];
+};
+const MODE_KEYS = listIn(/const DAILY_MODE_KEYS:[^=]*=\s*\[([^\]]*)\]/, /'(\w+)'/g);
+say(MODE_KEYS.length >= 4, `尺子：解析出 DAILY_MODE_KEYS ${MODE_KEYS.length} 种`, MODE_KEYS.join('、'));
+const ALL = listIn(/const ALL_GAMES:[^=]*=\s*\[([^\]]*)\]/, /(\w+)/g);
+say(ALL.length >= 2, `尺子：解析出 ALL_GAMES ${ALL.length} 副`, ALL.join('、'));
 
-// 自己记一本的那几档：主菜单上有、而且不是「借基础那本」的。老虎机借基础那本
-// （它换的只是得分图案，和网页版一致），所以它不该出现在 BOOKS 里。
-const OWN_BOOK = ['base', 'bomb', 'flip', 'puzzle'];
-const GAMES = ['squareGame', 'circleGame'];
-for (const mk of OWN_BOOK) {
-  for (const g of GAMES) {
-    say(
-      books.some((b) => b.game === g && b.mode === mk),
-      `BOOKS 里有 ${g} × ${mk}`,
-    );
-  }
-}
-say(!books.some((b) => b.mode === 'slot'), 'BOOKS 里没有 slot（老虎机记在基础那本上，同网页版）');
+say(/const BOOKS: Book\[\] = \[\];/.test(mainSrc), 'BOOKS 从空表起（不再有手写的那几本）');
 say(
-  books.length === OWN_BOOK.length * GAMES.length,
-  `BOOKS 正好 ${OWN_BOOK.length * GAMES.length} 本，没有多余的`,
-  `实际 ${books.length}`,
+  /for \(const (\w+) of ALL_GAMES\)\s*\{?\s*for \(const (\w+) of DAILY_MODE_KEYS\)\s*\{?\s*BOOKS\.push\(\{\s*card:\s*\1\.card,\s*suffix:\s*suffixFor\(\2\)\s*\}\)/
+    .test(mainSrc),
+  'BOOKS 是 ALL_GAMES × DAILY_MODE_KEYS 两层循环拼的，后缀问 suffixFor 要',
 );
+const writes = mainSrc.match(/\bBOOKS\s*(?:\.(?:push|unshift|splice)\(|=[^=>])/g) || [];
+say(writes.length === 1, '除了那一处 push，没有别处往 BOOKS 里塞东西、也没有别处给它重新赋值', `${writes.length} 处`);
 // 后缀一律问 suffixFor 要，不许手写字面量——手写的那一版 2026-09 全错过一次。
-say(
-  booksBlock ? !/suffix:\s*'/.test(booksBlock) : false,
-  'BOOKS 里没有手写的后缀字面量（一律走 suffixFor）',
-);
+say(!/suffix:\s*'/.test(mainSrc), 'main.ts 里没有手写的后缀字面量（一律走 suffixFor）');
+
+// 存档后缀的全集是 runRecord.ts 的 ModeKey。少一种，那一种打完的局就不进成绩页。
+const modeKeyLine = read('src/engine/runRecord.ts').match(/export type ModeKey =([^;]*);/);
+const ALL_KEYS = modeKeyLine ? [...modeKeyLine[1].matchAll(/'(\w+)'/g)].map((m) => m[1]) : [];
+say(ALL_KEYS.length >= 6, `尺子：解析出 ModeKey ${ALL_KEYS.length} 种`, ALL_KEYS.join('、'));
+for (const mk of ALL_KEYS) {
+  say(MODE_KEYS.includes(mk), `DAILY_MODE_KEYS 里有 ${mk}（这一种打完的局进得了成绩页）`);
+}
+// 主菜单上自己记一本的那几档也逐个点一遍名。老虎机借基础那本（它换的只是得分图案，和网页版
+// 一致），所以 slot 不该是一种后缀。
+for (const mk of ['base', 'bomb', 'flip', 'puzzle']) {
+  say(MODE_KEYS.includes(mk), `主菜单的 ${mk} 那一档在 DAILY_MODE_KEYS 里`);
+}
+say(!MODE_KEYS.includes('slot'), 'DAILY_MODE_KEYS 里没有 slot（老虎机记在基础那本上，同网页版）');
+
+// 这一端建了几副棋盘，ALL_GAMES 就要有几副——每日挑战轮得到的那四副打完的局也进成绩页。
+const BUILT = [...mainSrc.matchAll(/^const (\w+Game) = create\w+Game\(\);/gm)].map((m) => m[1]);
+say(BUILT.length >= 2, `尺子：main.ts 里建了 ${BUILT.length} 副棋盘`, BUILT.join('、'));
+for (const g of BUILT) say(ALL.includes(g), `${g} 在 ALL_GAMES 里`);
+note(`成绩页翻 ${ALL.length} × ${MODE_KEYS.length} = ${ALL.length * MODE_KEYS.length} 本存档`);
+
+// dailyBest 不许自己再拼一遍键——两处各拼一遍，正是从前「每日最佳看得到、成绩页看不到」的来路。
+const dbFrom = mainSrc.indexOf('function dailyBest(');
+const dbBody = dbFrom < 0 ? '' : mainSrc.slice(dbFrom, mainSrc.indexOf('\n}\n', dbFrom));
+say(dbBody.length > 0, '尺子：切出了 dailyBest 那一段');
+say(/\bBOOKS\b/.test(dbBody) && !/suffixFor\(/.test(dbBody), 'dailyBest 翻的就是 BOOKS，没有自己再拼一遍键');
 
 // ── ⑥ soon ＋ dim ──────────────────────────────────────────────────────────
 head('⑥ soon ＋ dim：「进阶入口」牌子和头几局的压暗路标');

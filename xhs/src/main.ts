@@ -86,8 +86,9 @@ const circleGame = createCircleGame();
  * 到的是这四副里的一副（菱形方块、六边圆球、七色圆球、六边蜂窝 54）——不带上它们，那几天点进
  * 每日挑战就是一局开不出来的游戏。
  *
- * 所以带上，但**只从每日挑战和输入种子那一路开**：主菜单一张卡都不加（E20 排布冻结），成绩页
- * 那八本也不加（BOOKS，见下面）。和网页版是同一份棋盘（引用，不是抄），规则一个字不差。
+ * 所以带上，但**只从每日挑战和输入种子那一路开**：主菜单一张卡都不加（E20 排布冻结）。成绩页
+ * 那几本存档从前也没加，2026-10-08 加了（BOOKS，见下面）。和网页版是同一份棋盘（引用，不是
+ * 抄），规则一个字不差。
  *
  * 注意 `createTriangleGame` 建出来的是六边蜂窝 54（card id `triangleBig`）——两个三角文件
  * 2026-09 对调过内容，文件名和身份对不上，见 CLAUDE.md「两个陷阱」。
@@ -133,8 +134,19 @@ function startWith(family: Family, opts: ShapeGameOpts, back: () => void): void 
   if (game) showGame(game, opts, back);
 }
 
+/** 存档里每一种玩法的后缀：每日挑战能开出来的那几种，也是这一端所有能打出来的那几种。 */
+const DAILY_MODE_KEYS: readonly ModeKey[] = ['base', 'timed', 'bomb', 'bombTimed', 'flip', 'puzzle'];
+
 /**
- * 成绩那一页要翻的八本存档：两副棋盘 × 四种模式（2026-10 加《步步为营》之前是六本）。
+ * 成绩那一页要翻的存档：这一端建了的每一副棋盘 × 每一种玩法（2026-10-08 方案 2-2）。
+ *
+ * 从前是手写的八本：方块 / 小球 × 基础 / 炸弹 / 反转 / 步步为营。可第 19 推的每日挑战能开出
+ * `DAILY_MODE_KEYS` 那六种，还能轮到另外四副棋盘——计时、计时炸弹两档和那四副棋盘打完的局，
+ * 在成绩页上**整片不存在**：不进记录、不进累计得分，`refreshLastRun()` 也翻不到它，于是发笔记
+ * 带的是**上一局**的分。和下面那段说的是同一个毛病，只是这次漏的是整整几档。
+ *
+ * 现在和 `dailyBest()` 同一个来源（它不再自己拼一遍键）：哪天每日挑战多一种玩法、多一副棋盘，
+ * 两处一起跟着走。
  *
  * 键名问玩法自己要（card.bestKey）再接后缀，而后缀**一律走 engine/runKey.ts 的
  * `suffixFor`**，和棋盘真正存进去时调的是同一个函数。
@@ -150,18 +162,8 @@ function startWith(family: Family, opts: ShapeGameOpts, back: () => void): void 
  *
  * 老虎机没有自己的后缀——它换的只是得分图案，记在基础那本上，和网页版一致。
  */
-const BOOKS: Book[] = [
-  { card: squareGame.card, suffix: suffixFor('base') },
-  { card: circleGame.card, suffix: suffixFor('base') },
-  { card: squareGame.card, suffix: suffixFor('bomb') },
-  { card: circleGame.card, suffix: suffixFor('bomb') },
-  { card: squareGame.card, suffix: suffixFor('flip') },
-  { card: circleGame.card, suffix: suffixFor('flip') },
-  // 《步步为营》2026-10 补进来（决策 §10 的 E20）。少了这两本，这一档打完的局在成绩页上
-  // **整片不存在**，而且不报任何错——和上面那段说的是同一个毛病。
-  { card: squareGame.card, suffix: suffixFor('puzzle') },
-  { card: circleGame.card, suffix: suffixFor('puzzle') },
-];
+const BOOKS: Book[] = [];
+for (const g of ALL_GAMES) for (const mk of DAILY_MODE_KEYS) BOOKS.push({ card: g.card, suffix: suffixFor(mk) });
 
 /** 上一屏留下来要拆的东西（一局游戏挂了一堆监听，换屏前得让它自己收拾）。 */
 let activeDestroy: (() => void) | null = null;
@@ -545,9 +547,6 @@ function launchSeedGame(g: SeedGame) {
   showGame(game, { ...g.opts, ...teach, noCountdown: true }, showDaily);
 }
 
-/** 存档里每一种玩法的后缀（每日挑战能开出来的那几种）。 */
-const DAILY_MODE_KEYS: readonly ModeKey[] = ['base', 'timed', 'bomb', 'bombTimed', 'flip', 'puzzle'];
-
 /**
  * 本机这一天每日挑战最好的一局（第 19 推，方案原话「本机『今日最佳』」）。
  *
@@ -556,8 +555,8 @@ const DAILY_MODE_KEYS: readonly ModeKey[] = ['base', 'timed', 'bomb', 'bombTimed
  * 输进来的码哪怕正好是今天那一串也不算（那是 entered），和网页端「今日」榜一个口径。
  */
 function dailyBest(day: string): number | null {
-  const keys: string[] = [];
-  for (const g of ALL_GAMES) for (const mk of DAILY_MODE_KEYS) keys.push(g.card.bestKey + suffixFor(mk));
+  // 和成绩页翻同一组存档（BOOKS，见那儿的说明）。
+  const keys = BOOKS.map((b) => b.card.bestKey + b.suffix);
   let best: number | null = null;
   for (const r of loadAllRuns(keys)) {
     if (r.data?.daily !== day || r.data.seedSource !== 'daily') continue;

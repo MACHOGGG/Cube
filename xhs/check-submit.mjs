@@ -305,6 +305,70 @@ if (toProfile) {
   }
 }
 
+// ---- 每日挑战（计时档）那一局也进成绩栏（2026-10-08 方案 2-2）--------------
+//
+// 从前成绩页只翻八本存档（方块 / 小球 × 基础 / 炸弹 / 反转 / 步步为营），可每日挑战开得出计时、
+// 计时炸弹两档，还轮得到另外四副棋盘——那些局在成绩页上整片不存在，累计得分不算它，发笔记带
+// 的是上一局的分。这儿按真的存档格式摆一局「计时档」进去（键：刚才那一局基础存档的键，后缀换
+// 成计时那一档的），重开成绩页，看它在不在、累计得分算没算它。
+{
+  const { build } = await import('esbuild');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const kdir = mkdtempSync(join(tmpdir(), 'xhs-runkey-'));
+  await build({
+    entryPoints: [join(here, '../src/engine/runKey.ts')],
+    bundle: true, format: 'esm', outfile: join(kdir, 'runKey.mjs'), logLevel: 'error',
+  });
+  const { suffixFor } = await import(join(kdir, 'runKey.mjs'));
+  /**
+   * 重开一次成绩页，把那一页上的累计得分和成绩栏读出来。成绩页每次打开都现读存档。
+   *
+   * 不刷新整页：Chromium 对 file:// 页面的 localStorage 在刷新那一下偶尔整份没落盘——刷新之后
+   * 存档清空（连着跑五次撞上过一次），这一段就红在一件和被测代码无关的事上。所以在应用里退回去
+   * 再开：停在战绩详情上就按它的《退出》（回到成绩页，那一页是重画的）；停在成绩页上就点底排
+   * 那颗键回主菜单，再点一次进来。
+   */
+  const readProfile = async () => {
+    if (await page.$('#runBack')) {
+      await page.click('#runBack');
+    } else {
+      if (await page.$('.xhs-profile')) {
+        await page.click('#xhsProfile');
+        await page.waitForSelector('.xhs-profile', { state: 'detached', timeout: 10000 }).catch(() => {});
+      }
+      await page.click('#xhsProfile');
+    }
+    await page.waitForSelector('.xhs-profile', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    return page.evaluate(() => ({
+      scores: [].slice.call(document.querySelectorAll('.records-row-score')).map((e) => e.textContent.trim()),
+      total: Number(document.querySelector('#xhsTotal .total-card-value')?.textContent || NaN),
+    }));
+  };
+  const before = await readProfile();
+  const planted = await page.evaluate(({ baseSfx, timedSfx }) => {
+    const tail = baseSfx + '::runs';
+    const key = Object.keys(localStorage).find((k) => k.endsWith(tail));
+    if (!key) return { ok: false, why: '没找到刚才那一局的基础存档：' + Object.keys(localStorage).join(' ') };
+    const runs = JSON.parse(localStorage.getItem(key) || '[]');
+    if (!runs.length) return { ok: false, why: '基础存档是空的' };
+    const run = JSON.parse(JSON.stringify(runs[0]));
+    run.runId = 'gate-daily-timed';
+    run.data = { ...run.data, modeKey: 'timed', totalScore: 4321, score: 4321, seedSource: 'daily' };
+    const timedKey = key.slice(0, key.length - tail.length) + timedSfx + '::runs';
+    localStorage.setItem(timedKey, JSON.stringify([run]));
+    return { ok: true, timedKey };
+  }, { baseSfx: suffixFor('base'), timedSfx: suffixFor('timed') });
+  say(planted.ok, '（尺子）计时档那一局按真的存档格式摆进去了', planted.ok ? planted.timedKey : planted.why);
+  if (planted.ok) {
+    const seen = await readProfile();
+    say(seen.scores.includes('4321'), '每日挑战计时档那一局在成绩栏里', JSON.stringify(seen.scores.slice(0, 6)));
+    say(Number.isFinite(before.total) && seen.total === before.total + 4321,
+      '累计得分把它算进去了', `${before.total} → ${seen.total}`);
+  }
+}
+
 say(outbound.length === 0, '全程零对外请求', outbound.slice(0, 5).join(' | '));
 say(errs.length === 0, '全程零报错', errs.slice(0, 3).join(' | '));
 
