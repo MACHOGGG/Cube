@@ -6050,6 +6050,21 @@ body.is-room-host::after {
   width: 100%; max-width: 520px; margin: 0 auto 10px; text-align: center;
   background: rgba(196, 141, 156, 0.14); border: 1px solid rgba(196, 141, 156, 0.5);
   border-radius: var(--r-md); padding: 12px 14px;
+  /*
+   * 压在鱼眼轴上面一层。
+   *
+   * 手机竖屏上那条轴（.mode-axis）用一截负外边距把自己顶到视口最上沿（modeAxis 的
+   * measure），整屏都是它的盒子；它又是定位元素（position: relative + z-index: 0），
+   * 而这条横幅原先什么都没写——没定位的块画在定位元素底下。于是横幅明明看得见，
+   * 「小屋里」和「离开小屋」两颗键的落点却全被轴吃掉：手指按上去是在拖轴，屋主挑
+   * 玩法挑到一半回不去小屋、也走不了（2026-10-08 跑 check-disband-retry 时撞见的）。
+   *
+   * 1 正好够：高过轴的 0，低过招牌、底排和挑形状那一层（都是 60），弹窗（90 起）
+   * 更不用说。卡片于是从横幅底下滑过去，和从招牌底下滑过去是同一回事——轴的手感
+   * 一个数都没动。门：check-room-pick-tap.mjs。
+   */
+  position: relative;
+  z-index: 1;
 }
 .room-pick-title {
   font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1rem;

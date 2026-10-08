@@ -128,10 +128,10 @@ check('①（尺子）按「留下」那一问收起来了', !(await A.page.$('#
 // ── ② 主菜单那条横幅上的《离开》（main.ts 的 leaveRoomWithCard） ────────────
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
-// el.click()，不用 page.click()：手机竖屏上主菜单那条鱼眼轴（#homeGrid）铺满整屏、压在这条横幅上
-// 面，Playwright 按坐标点会被它截走（2026-10-08 跑这道门时撞见的，线上就是这样，另行回报）。这道
-// 门量的是「解散没办成」那一下，不是横幅点不点得着。
-await A.page.$eval('#roomPickLeave', (e) => e.click());
+// 按坐标真点。2026-10-08 跑这道门时撞见过：手机竖屏上那条鱼眼轴（#homeGrid）压在横幅上面，这一下
+// 被它截走——当时这儿只好 el.click() 绕过去。横幅已经垫到轴上面一层（style.css 的 .room-pick-bar），
+// 点不点得着由 check-room-pick-tap 专门量。
+await A.page.click('#roomPickLeave');
 await holdLeave(A.page);
 const n2 = await note(A.page);
 check('②（尺子）那一条 end 又被拦下了一次', blocked === 2, `${blocked} 次`);

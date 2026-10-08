@@ -1252,6 +1252,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8998/ && break; sleep 0.25; done
           node scripts/check-square-fullturn.mjs http://localhost:8998/
 
+      # 屋主替小屋挑玩法时那条横幅，两颗键手指按得着（2026-10-08）：真手机（isMobile + hasTouch）、真
+      # 手指（触摸事件），静止时量一次、把轴推一把让卡片滑进横幅那一带再量一次，再真点「小屋里」「离开
+      # 小屋」；390×844 和 360×640 两块屏。从前鱼眼轴整层压在横幅上面：看得见、按不着，推过轴之后按
+      # 「离开小屋」反而点进了底下那张卡。一台自己的服务器（兑一次 TESTMONTH）。
+      - name: 小屋挑玩法那条横幅手指按得着
+        run: |
+          nohup node scripts/dev-server.mjs 8999 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8999/ && break; sleep 0.25; done
+          node scripts/check-room-pick-tap.mjs http://localhost:8999/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。
