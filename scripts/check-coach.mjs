@@ -199,7 +199,14 @@ globalThis.localStorage = {
 };
 
 const { mountCoachBar, HINT_OF } = await import(coachBundle);
-const { tutorialRules } = await import(i18nBundle);
+const { tutorialRules, STRINGS } = await import(i18nBundle);
+// 教学条那颗《<》的读屏名，四语各一个专用的（10-08 方案第四批第 8 条：上一条 / Previous / Précédent / 上一條）
+{
+  const want = { zhHans: '上一条', en: 'Previous', fr: 'Précédent', zhHant: '上一條' };
+  const got = Object.fromEntries(Object.keys(want).map((l) => [l, STRINGS[l]?.coachPrev]));
+  const bad = Object.keys(want).filter((l) => got[l] !== want[l]);
+  check('四语都有教学条《<》专用的读屏名（coachPrev）', bad.length === 0, JSON.stringify(got));
+}
 const { oneStepGroups, pickGroup, matchKind, starClearHintFor, createCoachGlow, HINT_BUDGET_MS } = await import(hintBundle);
 const { outerEdges, shortestEdge, EDGE_MIN } = await import(edgeBundle);
 const { createErosion, tableFor } = await import(erosionBundle);
@@ -642,8 +649,13 @@ head('⑥ 《<》回头看、重开、拆掉');
   advance(RULE1_MS);
   const peek = m.host.querySelector('.coach-peek');
   check('（尺子）第 2 条上有《<》', peek && !peek.hidden);
+  // 读屏名（10-08 方案第四批第 8 条）：《<》念「上一条」——专用的 coachPrev，不借《返回》（那颗键不退出任何东西）
+  check('《<》读屏念「上一条」（coachPrev），不是「返回」',
+    peek.getAttribute('aria-label') === STRINGS[LANG].coachPrev && peek.getAttribute('aria-label') !== STRINGS[LANG].back,
+    String(peek.getAttribute('aria-label')));
   peek.fire('click');
   check('按《<》：摆回第 1 条', m.rule() === 0, `第 ${m.rule() + 1} 条`);
+  check('回头看的时候那颗键念「下一条」', peek.getAttribute('aria-label') === STRINGS[LANG].next, String(peek.getAttribute('aria-label')));
   check('回头看不动进度', m.on() === 2, `${m.on()} 格`);
   advance(PEEK_MS);
   check(`${PEEK_MS}ms 不动它：自己回到现在`, m.rule() === 1, `第 ${m.rule() + 1} 条`);

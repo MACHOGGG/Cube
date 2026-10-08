@@ -10,6 +10,12 @@ export interface I18nStrings {
   knowHow: string;
   next: string;
   prev: string;
+  /**
+   * 教学条右边那颗《‹》的读屏名：把上一条摆回来看一眼（ui/coachBar.ts 的 peek）。专门一个，不借《返回》
+   * （back）——那颗键不退出任何东西，读屏念「返回」，按下去的人以为要离开这一局（10-08 方案第四批第 8 条）。
+   * 也不借上面那个 prev：它英文写的是「Back」，是分镜教学那颗键的。
+   */
+  coachPrev: string;
   replay: string;
   doneBtn: string;
   pause: string;
@@ -835,6 +841,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     knowHow: 'I know how',
     next: 'Next',
     prev: 'Back',
+    coachPrev: 'Previous',
     replay: 'Replay',
     doneBtn: 'Done',
     pause: 'Pause',
@@ -1193,6 +1200,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     knowHow: 'Je sais jouer',
     next: 'Suivant',
     prev: 'Précédent',
+    coachPrev: 'Précédent',
     replay: 'Rejouer',
     doneBtn: 'Terminé',
     pause: 'Pause',
@@ -1551,6 +1559,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     knowHow: '我會玩',
     next: '下一條',
     prev: '上一條',
+    coachPrev: '上一條',
     replay: '再一次',
     doneBtn: '完成',
     pause: '暫停',
@@ -1909,6 +1918,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     knowHow: '我会玩',
     next: '下一条',
     prev: '上一条',
+    coachPrev: '上一条',
     replay: '再一次',
     doneBtn: '完成',
     pause: '暂停',

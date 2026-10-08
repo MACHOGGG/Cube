@@ -392,7 +392,8 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     peekEl.hidden = !usable;
     if (!usable) return;
     peekEl.textContent = peeking ? '›' : '‹';
-    peekEl.setAttribute('aria-label', peeking ? STRINGS[opts.lang].next : STRINGS[opts.lang].back);
+    // 读屏名：《‹》是「上一条」（专用的 coachPrev，不借《返回》——这颗键不退出任何东西），《›》是「下一条」
+    peekEl.setAttribute('aria-label', peeking ? STRINGS[opts.lang].next : STRINGS[opts.lang].coachPrev);
     peekEl.classList.toggle('coach-peek--fwd', peeking);
   }
 
