@@ -1134,9 +1134,10 @@ jobs:
           node scripts/check-nickname-head.mjs http://localhost:8962/
 
       # 统一的《退出》（第 18 推）：计时、老虎机两页、无限反转、步步为营、炸弹挑选窗、多人小屋、成绩与排名
-      # 八页，360×740 / 390×844 / 430×932 / 1512×982 四个尺寸——62px、位置各页一致（≤1px）、完整可见、
-      # 不压内容、页底留够、按下去回对地方；手机战绩页一屏不滑、面板吃满剩下的高度、两块六格一行对一行；
-      # 累计得分卡只剩那个数、点开才有标题和同步提示。
+      # 八页，360×740 / 390×844 / 430×932 / 1512×982 四个尺寸——62px（成绩页那颗 2026-10-08 起是全站
+      # token 的 73–99）、水平中线和底边各页一致（≤1px）、完整可见、不压内容、页底留够、按下去回对地方；
+      # 手机战绩页一屏不滑、面板吃满剩下的高度、两块六格一行对一行；累计得分卡只剩那个数（3rem）、点开才
+      # 有标题和同步提示，点开的那张底下没有《退出》。
       - name: 统一的《退出》和手机战绩页
         run: |
           nohup node scripts/dev-server.mjs 8964 dist >/dev/null 2>&1 &
@@ -1152,6 +1153,15 @@ jobs:
           nohup node scripts/dev-server.mjs 8979 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8979/ && break; sleep 0.25; done
           node scripts/check-records-rows.mjs http://localhost:8979/
+
+      # 成绩页上那张累计得分卡（2026-10-08 方案 3-C-3）：数字放大到 3rem（1.3 倍）而卡不长高；「重测长数
+      # 字自动缩写阈值」——0 到 Number.MAX_SAFE_INTEGER 九个总分 × 320–1280 五个宽度 × 四种语言，每一串
+      # 都一行、不出卡；手机上两块面板整体上移 12px。《退出》的尺寸和点开的大卡归 check-page-exit 量。
+      - name: 成绩页上的累计得分卡
+        run: |
+          nohup node scripts/dev-server.mjs 8978 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8978/ && break; sleep 0.25; done
+          node scripts/check-total-card.mjs http://localhost:8978/
 
       # 同一串种子码，每副棋盘发出同一副牌（第 19 推）：编号表二十行，每行造一串码、从《每日挑战》
       # 的输入框开两次比盘面（尺子：换一串码盘面必须不一样）；倒数那几秒页面上除了码和数字一个字

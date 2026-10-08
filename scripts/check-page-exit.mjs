@@ -38,6 +38,17 @@
  * 变矮了、放得下了，这一条会自己切到 1.5 倍那一支。
  *
  * 每一条都带尺子：页真的打开了、键真的量到了，量不到就是红，不是空绿。
+ *
+ * ── 10-08 方案 3-C-3 之后 ─────────────────────────────────────────
+ *
+ * 成绩页那颗换成了全站《退出》的尺寸 token（--exit-disc：73–99，跟着屏宽，基准是开局倒数页
+ * 那两颗圆盘，见 style.css）；别的几页还是 62，随 3-F-2 一起换。离底的那条线没变——底边还在
+ * 「底排的高度 ＋ 16」上，变大的那一截往上长。所以「位置」量的是**底边和水平中线**（方案
+ * 3-F-2 的原话就是「位置统一到底部同一坐标」），不再量中心：两种尺寸的中心本来就不在一个
+ * 高度上。成绩页的页底留白跟着按它自己的尺寸算（离底 ＋ 它 ＋ 16）。
+ *
+ * 累计得分卡那一节：数字放大到 3rem（原来 2.3rem 的 1.3 倍）；点开的大卡底下不再挂《退出》，
+ * 点外面、Esc 照样关得掉。
  */
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
@@ -56,6 +67,8 @@ const PANEL_BASE = { 360: 317, 390: 317, 430: 299 };
 /** 离底的定值：102 ＋ max(安全区 0, 14)。 */
 const EXIT_BOTTOM = 116;
 const EXIT = 62;
+/** 全站《退出》的尺寸 token（--exit-disc）：clamp(73px, 19.5vw, 99px)。成绩页先用上（10-08 方案 3-C-3）。 */
+const disc = (w) => Math.min(99, Math.max(73, 0.195 * w));
 
 let fail = 0;
 let pass = 0;
@@ -221,7 +234,7 @@ for (const size of SIZES) {
   console.log(`\n━━ ${size.n} ━━`);
   const { ctx, page, errors } = await openCtx(size);
   const expCx = size.w / 2;
-  const expCy = size.h - EXIT_BOTTOM - EXIT / 2;
+  const expB = size.h - EXIT_BOTTOM;
   const centers = [];
   for (const pg of PAGES) {
     const tag = `${size.n} ${pg.n}`;
@@ -243,10 +256,12 @@ for (const size of SIZES) {
     check(`${tag}：（尺子）这一页量到了内容件`, m.items >= 3, `${m.items} 件`);
     check(`${tag}：是统一的那颗 .page-exit`, m.isPageExit);
     check(`${tag}：有 aria-label（只放图标的键）`, m.label.trim().length > 0, m.label);
-    check(`${tag}：62×62`, Math.abs(m.box.w - EXIT) <= 0.5 && Math.abs(m.box.h - EXIT) <= 0.5, `${m.box.w.toFixed(1)}×${m.box.h.toFixed(1)}`);
+    const want = pg.records ? disc(size.w) : EXIT;
+    check(`${tag}：${pg.records ? `用全站《退出》的尺寸 token（${want.toFixed(1)}px，73–99 跟着屏宽）` : '62×62'}`,
+      Math.abs(m.box.w - want) <= 0.5 && Math.abs(m.box.h - want) <= 0.5, `${m.box.w.toFixed(1)}×${m.box.h.toFixed(1)}`);
     check(`${tag}：水平正中（≤1px）`, Math.abs(m.box.cx - expCx) <= 1, `中心 x ${m.box.cx.toFixed(1)} / ${expCx}`);
-    check(`${tag}：离底 116（≤1px）`, Math.abs(m.box.cy - expCy) <= 1, `中心 y ${m.box.cy.toFixed(1)} / ${expCy}`);
-    check(`${tag}：页底留白 ≥ 它离底的距离 ＋ 78px（${EXIT_BOTTOM + 78}）`, padB >= EXIT_BOTTOM + 78 - 0.5, `${pg.pad} 的下内边距 ${padB}px`);
+    check(`${tag}：底边离底 116（≤1px）`, Math.abs(m.box.b - expB) <= 1, `底边 ${m.box.b.toFixed(1)} / ${expB}`);
+    check(`${tag}：页底留白 ≥ 它离底的距离 ＋ 它自己 ＋ 16px（${(EXIT_BOTTOM + want + 16).toFixed(1)}）`, padB >= EXIT_BOTTOM + want + 16 - 0.5, `${pg.pad} 的下内边距 ${padB}px`);
     check(`${tag}：完整在屏幕里`, m.box.l >= 0 && m.box.t >= 0 && m.box.r <= m.vw && m.box.b <= m.vh);
     check(`${tag}：没被别的东西盖住（正中和四边点到的都是它）`, m.onTop);
     check(`${tag}：不压内容（没有内容件和它相交，四周还空着 8px）`, m.hits.length === 0, m.hits.join(' / '));
@@ -263,7 +278,7 @@ for (const size of SIZES) {
       check(`${tag}：白底`, m.disc === 'rgb(255, 255, 255)', m.disc);
       check(`${tag}：深红箭头（--accent-ink #7A2E37）`, m.markColor === 'rgb(122, 46, 55)', m.markColor);
     }
-    centers.push({ n: pg.n, cx: m.box.cx, cy: m.box.cy });
+    centers.push({ n: pg.n, cx: m.box.cx, b: m.box.b });
 
     // ── 第 5 条：手机战绩页 ──
     if (pg.records && size.phone) {
@@ -320,14 +335,14 @@ for (const size of SIZES) {
       check(`${tag}：按下去这一层关掉了`, gone);
     }
   }
-  // 七页彼此：中心差不过 1px。
+  // 七页彼此：水平中线、底边差不过 1px（成绩页那颗大一号，比中心就比错了，见文件头）。
   if (centers.length) {
     const xs = centers.map((c) => c.cx);
-    const ys = centers.map((c) => c.cy);
+    const bs = centers.map((c) => c.b);
     const spread = (a) => Math.max(...a) - Math.min(...a);
     check(`${size.n}：（尺子）${PAGES.length} 页都量到了`, centers.length === PAGES.length, `${centers.length} 页`);
-    check(`${size.n}：各页的退出键中心彼此一致（≤1px）`, spread(xs) <= 1 && spread(ys) <= 1,
-      centers.map((c) => `${c.n} ${c.cx.toFixed(1)},${c.cy.toFixed(1)}`).join(' / '));
+    check(`${size.n}：各页的退出键水平中线、底边彼此一致（≤1px）`, spread(xs) <= 1 && spread(bs) <= 1,
+      centers.map((c) => `${c.n} ${c.cx.toFixed(1)},${c.b.toFixed(1)}`).join(' / '));
   }
   check(`${size.n}：全程没有报错`, errors.length === 0, errors.slice(0, 3).join(' | '));
   await ctx.close();
@@ -371,7 +386,8 @@ for (const size of SIZES) {
     }));
     check(`${tag}：（尺子）卡上那个数就是塞进去那三局的和`, card.text === String(want), `「${card.text}」/ ${want}`);
     check(`${tag}：卡上只有那个数（没有标题、没有同步提示）`, card.kids.length === 1 && card.kids[0] === 'total-card-value', card.kids.join(' / '));
-    check(`${tag}：字体不变（短数字还是 2.3rem）`, Math.abs(parseFloat(card.font) - 2.3) < 0.005 && card.font.endsWith('rem'), card.font);
+    // 第 18 推这一条是「字体不变（短数字还是 2.3rem）」；10-08 方案 3-C-3 要「数字放大」——1.3 倍。
+    check(`${tag}：数字放大到 3rem（原来 2.3rem 的 1.3 倍）`, Math.abs(parseFloat(card.font) - 3) < 0.005 && card.font.endsWith('rem'), card.font);
     check(`${tag}：读屏念「累计得分 ${want}」`, card.label === `累计得分 ${want}`, card.label);
     await page.click('.records-page .total-card');
     await page.waitForSelector('.center-pick .total-card--big', { timeout: 8000 });
@@ -383,6 +399,12 @@ for (const size of SIZES) {
     check(`${tag}：点开之后写着「累计得分」和那个数`, big.title === '累计得分' && big.value === String(want), JSON.stringify(big));
     if (asGenius) check(`${tag}：天才点开之后也没有同步提示`, big.sub === '', big.sub);
     else check(`${tag}：同步提示挪到了点开之后`, big.sub.includes('云端'), big.sub);
+    // 10-08 方案 3-C-3：点开的大卡底下不挂《退出》。关它靠点外面（和别的那几扇一样）。
+    const exits = await page.evaluate(() => [...document.querySelectorAll('.center-pick .page-exit, .center-pick .center-pick-back')].length);
+    check(`${tag}：点开的大卡底下没有《退出》`, exits === 0, `${exits} 颗`);
+    await page.mouse.click(8, 8);
+    const closed = await page.waitForFunction(() => !document.querySelector('.center-pick'), null, { timeout: 5000 }).then(() => true).catch(() => false);
+    check(`${tag}：点外面关得掉`, closed);
     await ctx.close();
   }
 }

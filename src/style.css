@@ -3131,12 +3131,29 @@ body:has(.center-pick--back) .home-nav { display: none; }
   padding-bottom: calc(102px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
 }
 /* 成绩页底下多了那颗《退出》（第 18 推，.page-exit：站在底排上面 16px），所以这一页的页
-   底留白再加它那一截——它离底的距离 ＋ 78px（62 的键 ＋ 16 的空）。个人主页没有这颗键，
-   照旧是上面那一条。 */
+   底留白再加它那一截——它离底的距离 ＋ 它自己 ＋ 16 的空。个人主页没有这颗键，照旧是上面
+   那一条。
+   10-08 方案 3-C-3 起这颗键是 --exit-disc 那个尺寸（73–99，跟着屏宽），所以「它自己」那一截
+   也跟着屏宽：118 ＝ 102 ＋ 16，中间那个 clamp 就是那颗键的尺寸。手机上两块面板吃的正是这条
+   留白以上的全部高度（见下面「一屏装下」那一段），所以这儿差一个像素，面板底就压到键上，或者
+   离它不止 16。
+   ⚠️ 这儿的 73 / 19.5vw / 99 是**照抄** --exit-disc 那三个变量的值，不是引用：小红书那一版的
+   降级层故意不认 var()（xhs/src/oldKernel.ts 的 evalExpr 上面写了为什么），clamp 里套 var() 它
+   算不掉，check-downlevel 就红。改 token 的时候这儿一起改——改漏了 check-page-exit 当场红
+   （「页底留白 ≥ 离底 ＋ 它自己 ＋ 16」和「面板底正好在键顶往上 16」两条）。
+   前一行是给算不了 clamp() 的老内核的（390 宽、安全区报 0 时的值）；其实走不到——小红书那一
+   版的这一页挂着 .xhs-profile。 */
 .records-page:not(.xhs-profile) {
-  padding-bottom: 194px;
-  padding-bottom: calc(180px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
+  padding-bottom: 208px;
+  padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
 }
+/* 累计得分那个数放大到原来的 1.3 倍（10-08 方案 3-C-3，字号在 ui/recordsPage.ts 的
+   scoreFontSize：2.3rem → 3rem），卡片本身不长高：上下内边距从 18 / 16 收到 14 / 12，那一行
+   的行高从 1.15 收到 1.05——数字没有下伸部，1.05 装得下；万、亿也装得下。量出来卡高 76，和放
+   大之前一样，所以底下两块面板不必为它往下让。只管页面上这一张：点开的那张大卡挂在 body 上，
+   不在 .records-page 里。 */
+.records-page:not(.xhs-profile) .total-card { padding-top: 14px; padding-bottom: 12px; }
+.records-page:not(.xhs-profile) .total-card-value { line-height: 1.05; }
 /*
  * 手机上的成绩页（第 18 推第 5 条）：**一屏装下，不用滑**，两块面板把剩下的高度吃满。
  *
@@ -3171,6 +3188,11 @@ body:has(.center-pick--back) .home-nav { display: none; }
 @media (max-width: 999px) {
   .app.records-page:not(.xhs-profile) { min-height: 100vh; min-height: 100svh; }
   .records-page:not(.xhs-profile) > .records-panels { flex: 1 1 auto; min-height: 0; }
+  /* 两块面板整体上移（10-08 方案 3-C-3：「两板块整体上移微收给它留位」）。《退出》变大之后它
+     的上沿往上长了 11–22px（73–84 对 62），面板底跟着它走；只收底的话，360×740 上面板里那
+     六格就装不下了（那一档只剩 3px 的余量）。所以上面也让一截：招牌底下那道空从 22 收到 10，
+     累计分卡和两块面板一起往上挪 12px。量出来面板只收了 2–10px（360×740 反而多了 1）。 */
+  .records-page:not(.xhs-profile) > .home-head { margin-bottom: 10px; }
   .records-page:not(.xhs-profile) .records-panels .records-panel {
     /* 六格从上往下排、缝就是 --rec-row-gap（10-08 方案 3-C-2，见下面 --rec-row-h 那一段）。
        从前是 space-between：缝只是下限，屏幕高一点就把六格拉开（390×844 上摊到 29px）。 */
@@ -4177,6 +4199,35 @@ body:has(.slot-page) .home-nav { display: none; }
 .page-exit.icon-btn > svg { width: 100%; height: 100%; display: block; }
 .page-exit.icon-btn:active { transform: scale(0.94); }
 /*
+ * 《退出》圆盘的尺寸 token（10-08 方案 3-F-2：「以基础玩法倒数页现在的退出钮为基准抽尺寸
+ * token」）。基准是开局倒数那一页的两颗圆盘（.start-actions .start-act）：clamp(73px, 19.5vw,
+ * 99px)——跟着屏幕宽度缩放，窄屏不小于 73、宽屏不大于 99。
+ *
+ * 写成三个变量，用的地方拿 width ＋ min-width ＋ max-width 拼出同一个 clamp，而**不是**把
+ * clamp() 直接塞进一个变量：小红书那一版跑在 Chrome 61 上，它不认 clamp()，变量里的 clamp 降
+ * 级层又算不掉，那条声明在老内核上会被整条丢掉（check-css-fallbacks 不许变量里藏新函数，就
+ * 是为这个）。宽高和 min / max 是 Chrome 61 认得的老写法，三端一个样。
+ *
+ * 第一个用上它的是成绩页那颗《退出》（10-08 方案 3-C-3「尺寸用 3-F 的统一 token」，见下
+ * 一条）；倒数页那两颗自己也改引它（数一个像素都没变）。其余几页的 .page-exit 还是 62，随
+ * 3-F-2 一起换。
+ */
+:root { --exit-disc: 19.5vw; --exit-disc-min: 73px; --exit-disc-max: 99px; }
+/*
+ * 成绩页的《退出》用上面那个 token（10-08 方案 3-C-3）。离底的那条线不变（底边还是「底排的
+ * 高度 ＋ 16px」，和别的页同一个坐标），变大的那一截往上长；两块面板相应地整体上移、略收
+ * （见 .records-page 那几条）。
+ *
+ * 居中改成 left / right 都是 0 ＋ 左右 margin auto：宽度现在跟着屏幕变，上面那条「left 50%
+ * ＋ 负的半个宽度」写死的是 62 的一半。定位的盒子给了宽度、两边又都钉住，auto 的左右边距
+ * 就平分剩下的——Chrome 61 也认。
+ */
+.records-page:not(.xhs-profile) .page-exit.icon-btn {
+  left: 0; right: 0; margin: 0 auto;
+  width: var(--exit-disc); min-width: var(--exit-disc-min); max-width: var(--exit-disc-max);
+  height: var(--exit-disc); min-height: var(--exit-disc-min); max-height: var(--exit-disc-max);
+}
+/*
  * 手机横过来（矮于 560 的横屏）：挑图形那几页和炸弹挑选窗的《退出》挪到右边、上下居中。
  *
  * 横屏只有 390 高。按上面那个位置（离底 116 起），这几页底下要让出 194，内容只剩 180 不到——
@@ -4288,10 +4339,17 @@ body:has(.slot-page) .home-nav { display: none; }
 /* 电脑端矮窗口（1000×700 那一档）：成绩页底下多了《退出》（第 18 推，离底 116 起，页底留
    194），三块东西照原来的行距排到 530，再加那一截就是 724——比 700 高，要往下滑 24px，而这
    一页「只有三块东西，要滑就是排版没做到」（check-records-desktop ③）。窗口矮的时候把招牌
-   底下那 22px 和两道 16px 的行距收一收（一共省 26px），三块的大小一个像素都不动。 */
+   底下那 22px 和两道 16px 的行距收一收（一共省 26px），三块的大小一个像素都不动。
+
+   10-08 方案 3-C-3 起《退出》是 --exit-disc 那个尺寸，电脑上封顶 99（原来 62），页底那一截又多
+   了 37px：1000×700 上三块排到 486，《退出》的上沿却在 485，压住面板底、整页还要往下滑 17px。
+   方案的说法是「两板块整体上移微收给它留位」，这一档照这个来：行距从 14 收到 6（省 16），累计
+   分卡的上下内边距从 14 / 12 收到 11 / 9（省 6）——三块整体往上挪 22px，面板一个像素都不缩。
+   量出来三块排到 464，离《退出》上沿 21，整页 695。 */
 @media (min-width: 1000px) and (max-height: 760px) {
   .records-page:not(.xhs-profile) > .home-head { margin-bottom: 0; }
-  .app.records-page:not(.xhs-profile) { row-gap: 14px; }
+  .app.records-page:not(.xhs-profile) { row-gap: 6px; }
+  .records-page:not(.xhs-profile) .total-card { padding-top: 11px; padding-bottom: 9px; }
 }
 /* The lead-in above a document's clauses: same voice as the rows below it,
    just not one of them. */
@@ -6353,8 +6411,11 @@ body.is-room-host::after {
 .start-actions { flex: none; display: flex; gap: 22px; justify-content: center; padding-top: 6px; }
 .start-actions .icon-btn.start-act {
   /* 比游戏里那一排大 1.3 倍：56/15/76 各乘 1.3。开局页上除了这两颗就没有别的
-     可按，它们不必迁就一排按钮的尺寸。 */
-  width: clamp(73px, 19.5vw, 99px); height: clamp(73px, 19.5vw, 99px);
+     可按，它们不必迁就一排按钮的尺寸。
+     这个尺寸（73–99，跟着屏宽）就是全站《退出》圆盘的 token（10-08 方案 3-F-2，见
+     .page-exit 底下那段 --exit-disc）：这儿是它的基准，所以也引它，两处不会走样。 */
+  width: var(--exit-disc); min-width: var(--exit-disc-min); max-width: var(--exit-disc-max);
+  height: var(--exit-disc); min-height: var(--exit-disc-min); max-height: var(--exit-disc-max);
   padding: 0; border: none; background: none; border-radius: 50%;
   --ctl-disc: var(--surface); --ctl-mark: var(--accent-ink);
   cursor: pointer;

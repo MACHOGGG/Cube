@@ -47,10 +47,18 @@ function fullScore(n: number): string {
 
 /** Shrinks the type as the number lengthens, so however long it runs it
  *  still lands inside one screen rather than overflowing or wrapping into a
- *  wall; a short number keeps the ordinary large size. */
+ *  wall; a short number keeps the ordinary large size.
+ *
+ *  页面上那张卡（big = false）的系数从 0.72 提到 0.9375（10-08 方案 3-C-3「累计得分：数字放
+ *  大」）：短数字从 2.3rem 到 3rem，1.3 倍。卡片本身没长高（style.css 收了它的内边距和行高）。
+ *
+ *  方案还要「重测长数字自动缩写阈值」。量过了（门：check-total-card），阈值不用动：卡上那个数先
+ *  经 compactScore 缩写，十万以下原样、以上写成万 / 亿或 K / M / B，到 Number.MAX_SAFE_INTEGER
+ *  也只有 9 个字（「90071993亿」，落在 8–10 个字那一档，39px）。放大之后在 320 宽的屏幕上量：
+ *  它占卡里 248 宽的 226，一行装得下；7 个字以内那一档（48px）最宽的是「10000万」，占 192。 */
 function scoreFontSize(text: string, big: boolean): string {
   const n = text.length;
-  const scale = big ? 1 : 0.72;
+  const scale = big ? 1 : 0.9375;
   const rem = n <= 7 ? 3.2 : n <= 10 ? 2.6 : n <= 13 ? 2.1 : n <= 17 ? 1.7 : 1.35;
   return (rem * scale).toFixed(2) + 'rem';
 }
@@ -279,7 +287,11 @@ export function renderRecordsPage(
       `<span class="total-card-title">${s.totalScoreTitle}</span>` +
       `<span class="total-card-value" style="font-size:${scoreFontSize(full, true)}">${full}</span>` +
       syncNote;
-    openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big', back: s.back });
+    // 不给 back：点开的这张大卡底下**不挂**《退出》（10-08 方案 3-C-3「点开大卡不出底部退出按
+    // 钮」）。它只是把那个数写全、配上标题，点哪儿都关（centerPicker：点在不是按钮的地方就关）、
+    // Esc 和手机返回键也关；底下再立一颗圆盘，它就像一页新开的二级页了。记录、排名那两块点开的
+    // 整页照旧有它。
+    openCenterPicker({ originEl: totalCard, title: s.totalScoreTitle, panel: big, panelClass: 'total-card--big' });
   });
 
 }
