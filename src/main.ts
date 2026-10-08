@@ -82,8 +82,10 @@ import * as smoothScroll from './engine/smoothScroll';
 
 injectStyles();
 
-// The tab icon the player last chose, back on the tab before anything else
-// draws. Falls back to the default when nothing is stored.
+// The site's icon on the tab before anything else draws (index.html's own
+// tab icon is a different drawing, see applyAppIcon). There used to be a
+// choice of eleven here; 10-08 方案 3-C-4 removed the picker, so it is always
+// the one.
 applyAppIcon();
 
 // Every click in the app gets its own cue (see wireClickCues), and the very

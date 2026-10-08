@@ -64,7 +64,7 @@ HEX**，`ui/customIcons.ts` 的 `sRGBOnly()` 在打包时替你换掉了（走 P
 | `slot-machine-menu.svg` | 主菜单上《随机得分目标》那张老虎机（窗口里画着得分目标） |
 | `slot-machine.svg` | 开局时真的转起来的那台（两个窗口）。**画布 897×521**，滚筒窗口的位置在 `slotReels.ts` 里按它量 |
 | `ctl-pause.svg` `ctl-finish.svg` | 游戏进行中的暂停 / 完成 |
-| `app-tower-rgb.svg` 等 11 个 | 《更换图标》里的 11 个。名字是 `app-` 加上清单里的 id |
+| `app-tower-rgb.svg` | 站点图标（标签页、手机主屏幕）。从前《更换图标》里有 11 个可挑，2026-10-08 那个入口删了，只剩这一个 |
 | `daily-1.svg` … `daily-7.svg` | 主菜单最上面那张《每日挑战》（第 19 推），按北京时间的星期几换：1 周一玫瑰红、2 周二深灰、3 周三橙、4 周四紫、5 周五蓝、6 周六奶白、7 周日绿。**日期数字不在文件里**，是程序压上去的（`ui/dailyArt.ts`）。**这七个没有代码里画的底版**，删掉一个那一天就只剩一块纸色的底 |
 | `login.svg` `close.svg` `mail.svg` `eye.svg` `eye-off.svg` | 帐号窗、邀请窗上那几颗只放图标的键（登录 / 关闭 / 联络 / 显示第一串 / 遮住第一串）。**这五个没有代码里画的底版**：删掉文件会让 `npm run build` 当场失败，而不是变回什么——见 `ui/uiIcons.ts` |
 
@@ -75,7 +75,7 @@ HEX**，`ui/customIcons.ts` 的 `sRGBOnly()` 在打包时替你换掉了（走 P
 色，按钮按下去会反色。换成写死颜色的文件之后，这个跟随就没有了。这是取舍，
 不是故障——如果你希望它们继续跟随，画的时候把填色写成 `currentColor`。
 
-**换了 `app-*.svg` 之后要重跑一次 `node scripts/gen-app-icons.mjs`**：手机
+**换了 `app-tower-rgb.svg` 之后要重跑一次 `node scripts/gen-app-icons.mjs`**：手机
 主屏幕装的是 PNG，是从这些 SVG 烤出来的，不重跑的话网页上换了、主屏幕上没换。
 
 ## 不在这里换的

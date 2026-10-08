@@ -354,11 +354,14 @@ const PROFILE = {
 const PROFILE_RULES = {
   navClear: true,
   groups: {
-    '左栏那一列药丸': { min: 6, sameH: true, evenV: true, noOverlap: true },
+    // 没登录时是登录、色盲、语言、完整规则、教学五颗（原先还有一颗《图示》，10-08 方案 3-C-4 删了）。
+    '左栏那一列药丸': { min: 5, sameH: true, evenV: true, noOverlap: true },
     'Pro 和声音': { count: 2, sameH: true, noOverlap: true },
     '天才面板的十二格': { count: 12, sameH: true, noOverlap: true },
     '两颗法务键': { count: 2, sameH: true, sameW: true, noOverlap: true },
-    '整页的块': { min: 9, noOverlap: true },
+    // 左栏六块（五颗药丸 ＋ Pro 和声音那一排）＋ 天才面板 ＋ 法务那一对 ＝ 8。原先是 9：左栏
+    // 还有一颗《图示》，10-08 方案 3-C-4 删了。
+    '整页的块': { min: 8, noOverlap: true },
   },
 };
 const RECORDS_RULES = {
@@ -529,7 +532,7 @@ const CARDS = [
   '.total-card', '.records-panel--records', '.records-panel--ranks',
 ];
 const PROFILE_CARDS = [
-  '#loginBtn', '#cvdRow', '#langRow', '#rulesRow', '#howToRow', '#iconRow', '#proRow', '#soundRow',
+  '#loginBtn', '#cvdRow', '#langRow', '#rulesRow', '#howToRow', '#proRow', '#soundRow',
   '.genius-panel', '.genius-badge',
 ];
 
@@ -591,9 +594,19 @@ for (const size of SIZES) {
       // 「两个加起来和上面的按钮一样宽」
       const proW = await page.evaluate(() => {
         const row = document.querySelector('.profile-col--main .profile-pill-row').getBoundingClientRect();
-        const above = document.querySelector('#iconRow').getBoundingClientRect();
+        // 「上面那几颗」原先拿《图示》那一颗量；它 10-08 方案 3-C-4 删了，改拿紧挨着的《教学》。
+        const above = document.querySelector('#howToRow').getBoundingClientRect();
         return { row: [row.left, row.right], above: [above.left, above.right] };
       });
+      // 10-08 方案 3-C-4：《图示》（换标签页图标）那一行连同挑图标那扇窗删了。按 id 查，也按
+      // 字查——换个 id 塞回来，字还是那四个字。
+      const iconGone = await page.evaluate(() => ({
+        row: document.querySelectorAll('#iconRow').length,
+        text: [...document.querySelectorAll('.profile-page button')]
+          .map((b) => b.textContent.trim())
+          .filter((t) => ['图标', '圖示', 'Icon', 'Icône'].includes(t)),
+      }));
+      check(`${tag} 个人主页：《图示》那一行没了`, iconGone.row === 0 && iconGone.text.length === 0, JSON.stringify(iconGone));
       check(
         `${tag} 个人主页：Pro 和声音两颗加起来和上面那几颗一样宽`,
         Math.abs(proW.row[0] - proW.above[0]) <= TOL && Math.abs(proW.row[1] - proW.above[1]) <= TOL,

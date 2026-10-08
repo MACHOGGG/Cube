@@ -20,4 +20,3 @@ export function trackTutorialStart(_shape: string): void {}
 export function trackTutorialEnd(..._args: unknown[]): void {}
 export function trackLanguage(_lang: string, _source: 'auto' | 'switch'): void {}
 export function trackShare(_source: string): void {}
-export function trackIconChange(_icon: string): void {}

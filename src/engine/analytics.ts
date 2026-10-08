@@ -336,7 +336,3 @@ export function trackLanguage(lang: string, source: 'auto' | 'switch'): void {
 export function trackShare(source: string): void {
   report('share_open', { source });
 }
-
-export function trackIconChange(icon: string): void {
-  report('icon_change', { icon });
-}

@@ -76,7 +76,7 @@ const GROUPS = [
     ['ctl-pause', G.CTL_PAUSE, '暂停（跟随按钮颜色，按下会反色）'],
     ['ctl-finish', G.CTL_FINISH, '完成（跟随按钮颜色，按下会反色）'],
   ]],
-  ['App 图标（标签页 + 手机主屏幕）', A.APP_ICONS.map(({ id, svg }) => [`app-${id}`, svg, id])],
+  ['App 图标（标签页 + 手机主屏幕）', [[`app-${A.APP_ICON.id}`, A.APP_ICON.svg, A.APP_ICON.id]]],
 ];
 
 await rm(OUT, { recursive: true, force: true });

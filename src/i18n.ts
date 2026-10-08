@@ -646,8 +646,6 @@ export interface I18nStrings {
   taglineVBoard: string;
   taglineBomb: string;
   rulesPill: string;
-  iconPill: string;
-  iconTitle: string;
   // ---- gain-bubble source labels (which pattern just paid out) ----
   /**
    * 得分气泡上那一句「几连」。**枚数是变的**（《侵蚀阶梯》v1.2 §2：图案 4→3→2→1），
@@ -1115,8 +1113,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'A V-shaped board · the two arms slide independently',
     taglineBomb: 'Keep 4 red tiles from ever connecting',
     rulesPill: 'How to play',
-    iconPill: 'Icon',
-    iconTitle: 'App icon',
     labelRunN: 'Run of {n}',
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
@@ -1479,8 +1475,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'Un plateau en V · les deux bras glissent indépendamment',
     taglineBomb: 'Empêchez 4 pièces rouges de se rejoindre',
     rulesPill: 'Règles du jeu',
-    iconPill: 'Icône',
-    iconTitle: 'Icône de l’app',
     labelRunN: 'Suite de {n}',
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
@@ -1843,8 +1837,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'V 形棋盤 · 左右兩臂橫向互不相連',
     taglineBomb: '避免紅色 4 連',
     rulesPill: '遊戲規則',
-    iconPill: '圖示',
-    iconTitle: '更換圖示',
     labelRunN: '{n}連',
     labelPattern: '圖案',
     labelWholeLine: '整線',
@@ -2207,8 +2199,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     taglineVBoard: 'V 形棋盘 · 左右两臂横向互不相连',
     taglineBomb: '避免红色 4 连',
     rulesPill: '游戏规则',
-    iconPill: '图标',
-    iconTitle: '更换图标',
     labelRunN: '{n}连',
     labelPattern: '图案',
     labelWholeLine: '整线',

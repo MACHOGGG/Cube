@@ -1,14 +1,17 @@
 /**
- * Rasterises every icon in src/ui/appIcons.ts into the PNG sizes a phone
- * actually installs from, and writes one web app manifest per icon.
+ * Rasterises the icon in src/ui/appIcons.ts into the PNG sizes a phone
+ * actually installs from, and writes its web app manifest.
  *
  * The tab favicon can be an inline SVG data URI, which is why applyAppIcon
  * could get away with building one on the fly. A home-screen install cannot:
  * iOS reads <link rel="apple-touch-icon"> and wants a real PNG at a real
- * URL, and Android installs whatever the linked manifest names. So the
- * player's choice has to exist on disk, and this is what puts it there.
+ * URL, and Android installs whatever the linked manifest names. So the icon
+ * has to exist on disk, and this is what puts it there.
  *
- * Run after changing any icon's artwork:  node scripts/gen-app-icons.mjs
+ * 从前这儿是十一个图标各出一套（玩家在《图示》里挑），10-08 方案 3-C-4 删了那个入口，
+ * 只剩一个。
+ *
+ * Run after changing the icon's artwork:  node scripts/gen-app-icons.mjs
  */
 import { chromium } from 'playwright';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
@@ -30,7 +33,7 @@ await build({
     minify: false,
   },
 });
-const { APP_ICONS } = await import(pathToFileURL(path.join(tmp, 'appIcons.js')).href);
+const { APP_ICON } = await import(pathToFileURL(path.join(tmp, 'appIcons.js')).href);
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
@@ -38,7 +41,7 @@ await mkdir(OUT, { recursive: true });
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage();
 
-for (const { id, svg } of APP_ICONS) {
+for (const { id, svg } of [APP_ICON]) {
   for (const size of SIZES) {
     await page.setViewportSize({ width: size, height: size });
     await page.setContent(
@@ -77,4 +80,4 @@ for (const { id, svg } of APP_ICONS) {
 
 await browser.close();
 await rm(tmp, { recursive: true, force: true });
-console.log(`\n${APP_ICONS.length} icons x ${SIZES.length} sizes + manifests -> ${OUT}`);
+console.log(`\n1 icon x ${SIZES.length} sizes + manifest -> ${OUT}`);

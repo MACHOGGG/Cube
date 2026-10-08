@@ -55,10 +55,14 @@ const flat = (doc) =>
 const GONE = {
   // 第 16 推起每一局**不再带名字**上传（push 不读名字，昵称只走改名接口），所以「连同这一局
   // 的……和你取的名字一起存」那句成了假话，撤掉；末尾那个词组就是它。
-  zhHans: ['订阅', 'Creem', '6 位密码', '支付信息', '刷卡', '玩法和你取的名字一起'],
-  zhHant: ['訂閱', 'Creem', '6 位密碼', '付款資訊', '刷卡', '玩法和你取的名字一起'],
-  en: ['subscription', 'Creem', 'six-character passcode', 'payment details', 'card payment', 'which board, and the name you chose'],
-  fr: ['abonnement', 'Creem', 'code secret de six', 'données de paiement', 'le plateau et le pseudonyme choisi'],
+  //
+  // 2026-10-08（方案 3-C-4）个人主页的《图示》连同挑标签页图标那扇窗一起删了：本机不再存「选
+  // 了哪个图标」，统计里也不再有「换图标时换成了哪一个」——两句都成了假话，末尾那两个词组就
+  // 是它们（本机那一条和统计那一条各一个）。
+  zhHans: ['订阅', 'Creem', '6 位密码', '支付信息', '刷卡', '玩法和你取的名字一起', '标签页图标'],
+  zhHant: ['訂閱', 'Creem', '6 位密碼', '付款資訊', '刷卡', '玩法和你取的名字一起', '分頁圖示', '標籤頁圖示'],
+  en: ['subscription', 'Creem', 'six-character passcode', 'payment details', 'card payment', 'which board, and the name you chose', 'tab icon'],
+  fr: ['abonnement', 'Creem', 'code secret de six', 'données de paiement', 'le plateau et le pseudonyme choisi', 'icône d’onglet'],
 };
 /** 新的事实：每条给一组候选说法，命中一个就算写到了。 */
 const MUST_SAY = {

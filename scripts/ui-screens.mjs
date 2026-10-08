@@ -116,8 +116,6 @@ const SCREENS = [
     go: fromProfile('#insiderRow', 900) },
   { id: 'rules', name: '游戏规则', group: '账号与订阅', w: 390, h: 844,
     go: fromProfile('#rulesRow', 900) },
-  { id: 'iconPicker', name: '更换图标', group: '账号与订阅', w: 390, h: 844,
-    go: fromProfile('#iconRow', 900) },
   { id: 'lang', name: '切换语言', group: '账号与订阅', w: 390, h: 844,
     go: fromProfile('#langRow', 900) },
 

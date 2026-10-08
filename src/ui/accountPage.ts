@@ -1,7 +1,6 @@
 import { STRINGS, PRIVILEGES, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
 import { RULES } from '../rules';
-import { APP_ICONS, applyAppIcon, loadAppIcon, saveAppIcon } from './appIcons';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
@@ -14,7 +13,6 @@ import {
   rateOfStep,
   setFlipStep,
 } from '../engine/flipSpeed';
-import { trackIconChange } from '../engine/analytics';
 import {
   CVD_VARIANTS,
   PIECE_VARIANTS,
@@ -154,8 +152,10 @@ export function renderAccountPage(
       <!--
         第 17 推：两栏（电脑端）／单列（手机端）。
 
-          左栏：头卡（砖红）→ 色盲那一行（蓝）→ 语言、完整规则、教学、图示（棕）→ 最后一行
+          左栏：头卡（砖红）→ 色盲那一行（蓝）→ 语言、完整规则、教学（棕）→ 最后一行
                 Pro 和声音并排，两颗加起来和上面那几颗一样宽。
+                （「教学」底下原先还有一颗棕色的《图示》——换标签页图标那扇窗，10-08 方案 3-C-4
+                连同那扇窗、它挑的那十一个图标和四语字符串一起删了。）
           右栏：天才面板（灰褐）：吉祥物、徽章、2 列 × 6 行的十二个功能行（顺序没动）；面板
                 底下《隐私政策》《联系与特别感谢》两颗白键，和网格的两列对齐。
 
@@ -200,7 +200,6 @@ export function renderAccountPage(
           <button class="profile-pill" id="langRow">${s.switchLanguage}</button>
           <button class="profile-pill" id="rulesRow">${s.rulesPill}</button>
           <button class="profile-pill" id="howToRow">${s.tutorialShort}</button>
-          <button class="profile-pill" id="iconRow">${s.iconPill}</button>
           <!-- 《Pro》和声音并排（第 17 推）。《Pro》还是那颗带开关的药丸（玩家 2026-09：「开启
                的形式和情况和现在的色盲友好模式一样」），它眼下管的是棋盘上那一圈「这一枚得分
                之后会变成什么颜色」（见 engine/proMode.ts）。声音是旁边那一小方：图标就是状态
@@ -719,43 +718,6 @@ export function renderAccountPage(
     });
   }
 
-  function openIconPicker() {
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay show';
-    overlay.innerHTML = `
-      <div class="modal icon-modal">
-        <h2>${s.iconTitle}</h2>
-        <div class="icon-grid">
-          ${APP_ICONS.map(
-            (i) => `<button class="icon-opt" data-icon="${i.id}">${i.svg}</button>`,
-          ).join('')}
-        </div>
-        <div class="btn-row"><button class="primary" id="iconClose">${s.closeBtn}</button></div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.icon-opt'));
-    const mark = (id: string) => {
-      for (const el of opts) el.classList.toggle('icon-opt--on', el.dataset.icon === id);
-    };
-    mark(loadAppIcon());
-    for (const el of opts) {
-      el.addEventListener('click', () => {
-        const id = el.dataset.icon!;
-        saveAppIcon(id);
-        applyAppIcon(id);
-        trackIconChange(id);
-        mark(id);
-      });
-    }
-    const close = () => overlay.remove();
-    pushLayer(close, overlay);
-    overlay.querySelector<HTMLButtonElement>('#iconClose')!.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
-  }
-
   /** 联系我们 — the destination has nothing in it yet, so the link opens an
    *  empty panel rather than pretending to have content. */
   const on = (id: string, fn: () => void) =>
@@ -769,7 +731,6 @@ export function renderAccountPage(
   mountNicknameHead(container, lang);
   on('langRow', handlers.onSwitchLanguage);
   on('rulesRow', openRules);
-  on('iconRow', openIconPicker);
   on('paletteRow', openPalettePicker);
   /**
    * 《深色界面》那颗开关。
