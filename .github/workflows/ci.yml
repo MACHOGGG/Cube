@@ -1192,6 +1192,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8968/ && break; sleep 0.25; done
           node scripts/check-mode-icons.mjs http://localhost:8968/
 
+      # 触屏不接 Lenis 的平滑滚动（2026-10-08 方案 3-J，玩家拍板：「移动端触摸列表一律不做 Lenis 式平滑
+      # 滚动」）。从前 smoothScroll.ts 开着 syncTouch，手机上一根手指滑内容页，滚的是插值推出来的那一份；
+      # 现在触屏设备一次都不建它，电脑的滚轮照旧有阻尼。手机进个人主页，<html> 上没有 lenis；电脑上有。
+      - name: 触屏不接平滑滚动
+        run: |
+          nohup node scripts/dev-server.mjs 8967 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8967/ && break; sleep 0.25; done
+          node scripts/check-smooth-touch.mjs http://localhost:8967/
+
       # 主菜单上开窗、关窗，轴的中线不漂（2026-10-08 方案 3-D-3：「开关 5 次中线不漂」；3-C-6：从帐号窗
       # 底下那颗 ✅ 关也不许偏）。三条来路各量一遍：轴量完位置之后招牌又长高（副标题打字机打出第一个中
       # 文字、晚到的新版本提示）；窗开着时页面被推上去（手机键盘——无头浏览器没有键盘，先垫出键盘给的那
