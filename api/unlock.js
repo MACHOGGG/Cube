@@ -82,7 +82,24 @@ const MAIL = {
   },
 };
 
+/**
+ * **整条接口回 410**（第 20 推，定稿方案原话：「unlock.js 和 passcode 的 create 改成回 410」）。
+ *
+ * 《忘记密码》这件事已经不存在了：密码整个取消（E37），登录改成每次往邮箱寄一张验证码
+ * （api/signin.js）。客户端的 `requestUnlock` / `confirmUnlock` 没有任何界面入口在叫，还会打到
+ * 这儿的只剩很早以前开着、一直没刷新的旧标签页。410 而不是 404：这个地址确实有过东西，是故意关
+ * 掉的，日志里一眼分得开。
+ *
+ * **下面的实现一行没删、只是走不到**：signin.js、email.js、handle.js、_accounts.js、_mail.js
+ * 和几道门的注释都拿这里当范本引（「先占号再比对」、INCR 计次、「有没有账号回一样的话」、
+ * 「先做不可逆的事」那几段）——删了，那十几处注释就指向一个不存在的文件。
+ */
 export default async function handler(req, res) {
+  return send(res, 410, { error: 'gone' });
+}
+
+/** 第 20 推之前的分发（走不到，见上）。 */
+async function retiredHandler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 

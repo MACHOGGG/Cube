@@ -123,6 +123,14 @@ const good = await callOn(subscription, { email: HAS, token: LIVE_TOKEN }, '198.
 check('真令牌照样登得上，还是拿得到令牌',
   good.status === 200 && good.body.email === HAS && good.body.token === LIVE_TOKEN,
   `${good.status} ${JSON.stringify(good.body.email)}`);
+// 「登着」和「是天才」是两件事（CLAUDE.md 权益那一节）。HAS 是一个刷卡户，而上面那个假
+// Creem 对它答 404——正是「订阅已经过期」那种人。他照样该登得进自己的账号（云端战绩、
+// 寄给他的内部码都在里面），只是 active 如实是假。线上出过一次反的：身份验过了、令牌也
+// 签了，却因为没有在续的订阅答成 NOBODY，前端报「这个邮箱名下没有有效的订阅」，把人挡
+// 在自己的账号外面。这一条原先是 check-unlock-reset 的 ⑥，第 20 推 unlock.js 回 410、
+// 那道门撤掉时挪到这儿（它守的是 subscription.js，不是 unlock.js）。
+check('订阅已过期的刷卡户：令牌对了照样登得上，同时如实说不是天才',
+  good.status === 200 && good.body.active !== true, `${good.status} active=${good.body.active}`);
 
 // 拿**真密码**登录那一支撤了（E37）。它不许悄悄回来：回来一次，上面那一整节
 // 「有账号 / 没账号答同一句」就又多出一条不一样的路。
@@ -180,6 +188,19 @@ check('订阅活着但没有账号：和「压根没这个人」一字不差（�
   // 尺子：真对上了是另一句——不然上面那条在「这个接口对谁都答 401」时也绿。
   const right = await callOn(handleApi, { first: 'ProbePair1', second: 'rightpass' }, '203.0.113.72');
   check('（尺子）两串都对就进得去（不是对谁都答 401）', right.status === 200, String(right.status));
+}
+
+// ── ⑤ 旧的《忘记密码》接口关着 ──────────────────────────────────────────
+//
+// 第 20 推起 api/unlock.js 整条回 410（密码取消了，忘记密码这件事已经不存在；实现原样
+// 留着只是走不到，见那个文件）。量的是「关着」这件事本身：哪天有人把分发接回去，一个
+// 能改密码、能踢掉所有设备的入口就悄悄回来了，而界面上没有任何地方会提醒。
+{
+  const unlockApi = (await import('../api/unlock.js')).default;
+  const ask = await callOn(unlockApi, { email: HAS }, '203.0.113.95');
+  const confirm = await callOn(unlockApi, { action: 'confirm', email: HAS, code: '123456', password: 'bbb222' }, '203.0.113.96');
+  check('《忘记密码》要码那一步：410 gone', ask.status === 410 && ask.body.error === 'gone', `${ask.status} ${ask.raw}`);
+  check('《忘记密码》换密码那一步：也是 410', confirm.status === 410 && confirm.body.error === 'gone', `${confirm.status} ${confirm.raw}`);
 }
 
 // ── ③ 账号中心（Creem 客户门户）：同一把尺子 ────────────────────────────

@@ -380,8 +380,6 @@ jobs:
       # 不连 Creem（那一跳换成会数次数的假货），几百毫秒。
       - name: 付费入口的限速
         run: ALLOW_MEMORY_STORE=1 node scripts/check-checkout-limit.mjs
-      - name: 认证：验过了就要说验过了
-        run: node scripts/check-unlock-reset.mjs
       - name: 账户：兑码落到账户上、改密码、换邮箱
         run: node scripts/check-account-hub.mjs
       # 开账号那三条路（绑内部码 / 刷卡设密码 / 确认换邮箱）从前都是「先看一眼
@@ -649,10 +647,11 @@ jobs:
         run: node scripts/check-residue-wiring.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
-      # 发信失败必须留痕，而回包一个字都不许变（回包跟着成败变化，防枚举就白
-      # 做了）。把 Resend 那一跳换成必然 401 的假货，不连网。
+      # 发信失败必须留痕（_mail.js 的 sendMail 自己写日志，不写收件地址）。把 Resend
+      # 那一跳换成必然 401 / 必然抛的假货，不连网。第 20 推之前叫 check-unlock-mail，
+      # 绕道 unlock.js 量；unlock.js 回 410 之后改成直接调 sendMail。
       - name: 发信失败留得下痕
-        run: node scripts/check-unlock-mail.mjs
+        run: node scripts/check-mail-trace.mjs
       - name: CSS 兜底
         run: node scripts/check-css-fallbacks.mjs
       # 会呼吸的光：@keyframes 里 drop-shadow 的模糊半径一整圈都不许变，要明灭

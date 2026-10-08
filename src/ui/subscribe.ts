@@ -1188,6 +1188,7 @@ export async function runStoreRestore(lang: Lang, onChanged: () => void): Promis
  * 存在了；而「拿邮箱证明自己」这件事现在就是**登录本身**（一张寄到邮箱的验证码），忘不
  * 忘无所谓。
  *
- * **后端 `api/unlock.js` 一行没动**：它还守着老账号那条路（在途的标签页、装着旧包的
- * App）。前端不再开这扇窗而已。
+ * 后端 `api/unlock.js` 起初一行没动，留给老账号那条路（在途的标签页、装着旧包的 App）；
+ * **第 20 推起它整条回 410**（实现留着、走不到，见那个文件）。这里调它的两个函数
+ * （engine/account.ts 的 requestUnlock / confirmUnlock）已经没有任何入口在叫。
  */

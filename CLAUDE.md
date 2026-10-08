@@ -374,8 +374,8 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 | `_ratelimit.js` | `tooMany(bucket, id, limit, windowS)` + `callerId(req)` |
 | `_mail.js` | 走 Resend 发信；`compose()` 定了「按界面语言写 + 英文永远附一份」 |
 
-面向外的：`subscription`（登录/查权益）、`passcode`（设/改密码）、`unlock`
-（忘密码的解锁码）、`email`（换邮箱，见上）、`redeem`（兑内部码）、
+面向外的：`subscription`（登录/查权益）、`passcode`（设/改密码；刷卡开账号那一支
+第 20 推起回 410）、`unlock`（忘密码的解锁码，第 20 推起整条回 410）、`email`（换邮箱，见上）、`redeem`（兑内部码）、
 `checkout` / `portal`（Creem）、`room`（小屋）、`scores`（战绩与排行榜）、
 `mint`（批量发码，`ADMIN_TOKEN` 保护）。
 
