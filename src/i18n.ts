@@ -807,6 +807,12 @@ export interface I18nStrings {
    */
   proBtn: string;
   shapeNameSquare: string;
+  /**
+   * 小球那三副（circle / circleHex / circleSeven）的英法名字和主菜单上那张卡（ui/menuTags.ts）一字不差：
+   * Classic Balls / Hex Balls / Diamond Balls，Billes classiques / Billes hexagone / Billes losange。原先这儿是
+   * Circle / Hex Circle / Seven-colour Circle（法文 Cercle…），同一副棋盘在主菜单、规则页、成绩页上三个叫法
+   * （10-08 方案第四批第 9 条，玩家拍板 Balls 系）。门：check-rules-counts 第 ⑤ 节。
+   */
   shapeNameCircle: string;
   shapeNameTriangle: string;
   shapeNameCircleHex: string;
@@ -1186,12 +1192,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     colorblindBtn: 'Colourblind-friendly palette',
     proBtn: 'Pro',
     shapeNameSquare: 'Square',
-    shapeNameCircle: 'Circle',
+    shapeNameCircle: 'Classic Balls',
     shapeNameTriangle: 'Triangle',
-    shapeNameCircleHex: 'Hex Circle',
+    shapeNameCircleHex: 'Hex Balls',
     shapeNameSquareDiamond: 'Diamond Square',
     shapeNameTriangleBig: 'Big Triangle',
-    shapeNameCircleSeven: 'Seven-colour Circle',
+    shapeNameCircleSeven: 'Diamond Balls',
     shapeNameTriangleAdvanced: 'Advanced Triangle',
   },
   fr: {
@@ -1545,12 +1551,12 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     colorblindBtn: 'Palette adaptée aux daltoniens',
     proBtn: 'Pro',
     shapeNameSquare: 'Carré',
-    shapeNameCircle: 'Cercle',
+    shapeNameCircle: 'Billes classiques',
     shapeNameTriangle: 'Triangle',
-    shapeNameCircleHex: 'Cercle hexagonal',
+    shapeNameCircleHex: 'Billes hexagone',
     shapeNameSquareDiamond: 'Carré losange',
     shapeNameTriangleBig: 'Grand triangle',
-    shapeNameCircleSeven: 'Cercle à sept couleurs',
+    shapeNameCircleSeven: 'Billes losange',
     shapeNameTriangleAdvanced: 'Triangle avancé',
   },
   zhHant: {
