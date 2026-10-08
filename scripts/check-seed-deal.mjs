@@ -136,7 +136,10 @@ async function dealOf(code, watchCount = false) {
       return {
         text,
         code: document.querySelector('.daily-seed-code')?.textContent?.trim() ?? '',
-        marks: document.querySelectorAll('.start-mark, .start-marks').length,
+        // 玩法图：startStage 那一格里装的不是今日那一格（#dailyEmblem）的，就是玩法图。10-08 方案 3-F-1
+        // 起今日挑战的倒数页套的是 startStage 那一整套，今天那张图 / 那串码也住在一个 .start-mark 里，
+        // 所以不能再按「有没有 .start-mark」认。
+        marks: [...document.querySelectorAll('.start-mark')].filter((m) => !m.querySelector('#dailyEmblem')).length,
         board: document.querySelectorAll('#boardWrap, .app--game').length,
         digit: !!document.querySelector('#dailyCount .cd-digit'),
       };
@@ -309,7 +312,9 @@ if (!ONLY || ONLY.includes(4)) {
   const during = await page.evaluate(() => ({
     art: !!document.querySelector('#dailyEmblem svg[data-daily-weekday]'),
     text: document.body.innerText.replace(/[\d\s]/g, ''),
-    board: document.querySelectorAll('#boardWrap, .app--game, .start-mark').length,
+    // 玩法图那一格：同上，装着今日那一格的那个 .start-mark 不算。
+    board: document.querySelectorAll('#boardWrap, .app--game').length +
+      [...document.querySelectorAll('.start-mark')].filter((m) => !m.querySelector('#dailyEmblem')).length,
   }));
   check('今日挑战倒数那几秒：上半屏是今天那张图，页面上没有别的字、没有玩法和棋盘', during.art && during.text === '' && during.board === 0, JSON.stringify(during));
   const shape = await page

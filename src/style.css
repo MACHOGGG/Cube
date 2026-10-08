@@ -3665,9 +3665,12 @@ body:has(.slot-page) .home-nav { display: none; }
 /* 输码那一格底下那一行小字：代号局不上榜（10-08 方案 3-B）。和输码框前头那个「代号」同一种灰、
    字小一档——它是这一格的说明，不是警告；报错那一行（.seed-msg，红的）在它上面，两行各管各的。 */
 .seed-note { margin: 2px 0 0; font-size: 0.78rem; color: var(--ink-soft); text-align: center; }
-/* 倒数那一幕：上半屏是今天那张图（或者那串码），不是玩法图。 */
-.daily-emblem { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
-.daily-emblem > svg { width: 176px; height: 176px; width: min(40vw, 176px, 22vh); height: min(40vw, 176px, 22vh); display: block; }
+/* 倒数那一幕：上半屏是今天那张图（或者那串码），不是玩法图。10-08 方案 3-F-1 起这一幕和单人开局
+   页是同一层（.overlay--start ＋ startStage），图住在 startStage 那一格（.start-mark-art）里，跟玩
+   法图一样大——那一格本身是 display: block（后写的那条），这儿把它换成弹性盒，那串码才居中；图
+   照 .start-mark-art > svg 那条铺满。底下那一排导航这一幕不摆（和开局页一样，见 .app--game）。 */
+.daily-page--count .start-mark-art.daily-emblem { display: flex; align-items: center; justify-content: center; }
+body:has(.daily-page--count) .home-nav { display: none; }
 .daily-seed-code {
   margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 600;
   font-size: 2rem; letter-spacing: 0.08em; color: var(--ink);

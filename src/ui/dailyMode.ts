@@ -27,7 +27,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { dailySeed, dayIndexOf, dayKey, decodeSeed, formatSeed } from '../engine/seedCode';
 import { seedGameOf, type SeedGame } from '../engine/seedDeal';
-import { playCountdown, startStageHtml } from './startStage';
+import { isLandscapeMode, playCountdown, startStageHtml } from './startStage';
 import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
 import { CTL_BACK } from './ctlIcons';
 import { ICON_ARROW } from './uiIcons';
@@ -35,8 +35,6 @@ import { ICON_ARROW } from './uiIcons';
 /** 每日挑战一律从 4 数起（方案原话「倒数统一 4-3-2-1」）。 */
 const DAILY_COUNT_FROM = 4;
 
-/** 这副棋盘要横着打（和 startStage.ts 的 LANDSCAPE_MODES 是同一件事）。 */
-const LANDSCAPE_BOARDS = new Set(['circleSeven']);
 
 export interface DailyModeHandlers {
   onBack: () => void;
@@ -68,7 +66,8 @@ export interface DailyModeHandlers {
 
 /** 七色圆球那一天、竖着拿着手机：倒数之前先请他转过来。电脑（鼠标）不提示。 */
 function needsTurn(board: string): boolean {
-  if (!LANDSCAPE_BOARDS.has(board)) return false;
+  // 哪几副要横着打，问 startStage 那一份（10-08 方案 3-F-1 删掉了这儿抄的那一份名单）。
+  if (!isLandscapeMode(board)) return false;
   return (
     window.matchMedia('(orientation: portrait)').matches && window.matchMedia('(pointer: coarse)').matches
   );
@@ -166,19 +165,31 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
   /**
    * 第二幕：数。上半屏是 `emblem`（今天那张图，或者那串码），**不是**这一局的玩法图。
    *
-   * 《退出》照旧在老地方：数到一半按它，回到第一幕（不是回主菜单——他可能只是想换一串码）。
+   * **和单人开局页是同一层、同一套**（10-08 方案 3-F-1：「今日挑战倒数页改用 startStage 组件……
+   * 删自建版——『界面统一』自动达成」）。从前这一幕借的是挑图形那几页的骨架（.slot-page ＋ 页底
+   * 那颗 .page-exit）：图小一圈（176 对 260）、倒数窗高出 68px、《退出》是 62px 站在离底 116 的地
+   * 方——同一个 4-3-2-1，从这儿进和从主菜单进长得不一样。现在外面套的就是游戏外壳开局那一层
+   * （.overlay--start），图摆进 startStage 自己那一格（.start-mark，和玩法图一样大），《退出》是
+   * startStage 底下那一排的键（.start-act，--exit-disc 那个尺寸、离底同一个坐标）。
+   *
+   * 只有《退出》，没有《暂停》：这一幕还没有棋盘，也没有暂停那一层可开（和老虎机那一局的开局页
+   * 一样只留一颗）。数到一半按它，回到第一幕（不是回主菜单——他可能只是想换一串码）。
    */
   function showCount(game: SeedGame, emblem: string): void {
     clear();
     root.innerHTML = `
-      <div class="app slot-page daily-page daily-page--count">
-        ${startStageHtml({
-          shapeId: game.board,
-          countId: 'dailyCount',
-          emblem: `<div class="daily-emblem" id="dailyEmblem">${emblem}</div>`,
-          extra: `<p class="daily-turn" id="dailyTurn" hidden>${s.dailyTurn}</p>`,
-        })}
-        <button class="icon-btn page-exit" id="dailyBack" aria-label="${s.back}">${CTL_BACK}</button>
+      <div class="app daily-page daily-page--count">
+        <div class="overlay opaque show overlay--start">
+          ${startStageHtml({
+            shapeId: game.board,
+            countId: 'dailyCount',
+            emblem:
+              `<div class="start-marks" style="--marks:1"><span class="start-mark">` +
+              `<span class="start-mark-art daily-emblem" id="dailyEmblem">${emblem}</span></span></div>`,
+            extra: `<p class="daily-turn" id="dailyTurn" hidden>${s.dailyTurn}</p>`,
+            actions: `<button class="icon-btn start-act" id="dailyBack" aria-label="${s.back}">${CTL_BACK}</button>`,
+          })}
+        </div>
       </div>
     `;
     const win = root.querySelector<HTMLElement>('#dailyCount')!;

@@ -1172,6 +1172,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8978/ && break; sleep 0.25; done
           node scripts/check-total-card.mjs http://localhost:8978/
 
+      # 4-3-2-1 那一页：今日挑战的和基础玩法的长得一样（2026-10-08 方案 3-F-1）。从前今日挑战借的是挑图
+      # 形页的骨架，图小一圈、倒数窗高出 68px、《退出》是 62px 站在离底 116 的地方；现在套的是游戏外壳开
+      # 局那一层。上半屏那一格、倒数窗、《退出》的位置大小逐项和基础玩法那一页比；今日那一局和输代号那一
+      # 局两条路，手机两档、电脑一档。
+      - name: 今日挑战倒数页和基础玩法的一样
+        run: |
+          nohup node scripts/dev-server.mjs 8970 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8970/ && break; sleep 0.25; done
+          node scripts/check-count-stage.mjs http://localhost:8970/
+
       # 主菜单上开窗、关窗，轴的中线不漂（2026-10-08 方案 3-D-3：「开关 5 次中线不漂」；3-C-6：从帐号窗
       # 底下那颗 ✅ 关也不许偏）。三条来路各量一遍：轴量完位置之后招牌又长高（副标题打字机打出第一个中
       # 文字、晚到的新版本提示）；窗开着时页面被推上去（手机键盘——无头浏览器没有键盘，先垫出键盘给的那

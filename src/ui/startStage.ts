@@ -107,6 +107,9 @@ export const COUNT_STEP_MS = 1000;
  */
 const LANDSCAPE_MODES = new Set(['circleSeven']);
 
+/** 这个玩法建议横着玩（每日挑战那一页按它决定要不要先请人转手机，见 dailyMode.ts）。 */
+export const isLandscapeMode = (shapeId: string): boolean => LANDSCAPE_MODES.has(shapeId);
+
 /** 这个玩法的倒数从几数起。 */
 export const countFrom = (shapeId: string): number => (LANDSCAPE_MODES.has(shapeId) ? 5 : 4);
 
