@@ -17,6 +17,10 @@ ios/App/build
 .env
 .env.*
 !.env.example
+# `vercel link` / `vercel pull` 写进 .vercel/ 的是项目和组织的 id，pull 下来的环境变量也落在它底下；
+# .npmrc 里可能有 npm 的 _authToken。两样都不该进仓库（10-08 方案第五批第 8 条）。门：check-env-example ⑤。
+.vercel
+.npmrc
 
 # 设计画布与图标清单：由 scripts/ui-snapshot.mjs 和 scripts/icon-sheet.mjs
 # 从代码里重新生成，不是源文件。

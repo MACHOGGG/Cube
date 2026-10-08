@@ -169,5 +169,24 @@ const CONTROLS = [
   }
 }
 
+// ⑤ 两样会带凭据的东西不许进仓库：.vercel/（vercel link / pull 写的项目 id、拉下来的环境变量）和 .npmrc（npm 的
+//    _authToken）。.gitignore 里要有它们，而且此刻仓库里一个都没被跟踪（10-08 方案第五批第 8 条）。
+{
+  const { execFileSync } = await import('node:child_process');
+  const ignore = readFileSync(new URL('../.gitignore', import.meta.url), 'utf8').split('\n').map((l) => l.trim());
+  for (const name of ['.vercel', '.npmrc']) {
+    check(`⑤ .gitignore 里有 ${name}`, ignore.includes(name) || ignore.includes(name + '/'));
+  }
+  let tracked = '';
+  try {
+    tracked = execFileSync('git', ['ls-files', '--', '.vercel', '.npmrc', '**/.npmrc'], {
+      cwd: new URL('..', import.meta.url), encoding: 'utf8',
+    }).trim();
+  } catch {
+    tracked = '（git ls-files 跑不起来）';
+  }
+  check('⑤ 仓库里没有被跟踪的 .vercel/ 或 .npmrc', tracked === '', tracked);
+}
+
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);
