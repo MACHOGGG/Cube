@@ -485,6 +485,11 @@ jobs:
       # 第 10 条）。原先生成脚本里写死了旧底色，页面换了色它没跟，启动画面和页面对不上。纯读文件。
       - name: manifest 的颜色和 style.css 对得上
         run: node scripts/check-manifest-colors.mjs
+      # vercel.json 写错了本地什么都不报，推上去部署那一刻才校验（多一个不认识的顶层字段整份作废）。
+      # 这道门在本地先挑一遍：schema 认得的字段、没有注释键、两个慢接口的 maxDuration ≤ 60、全站三
+      # 条安全头、Permissions-Policy 没关掉站里在用的能力（10-08 方案第五批第 1 条）。纯读文件。
+      - name: vercel.json 的形状和安全头
+        run: node scripts/check-vercel-config.mjs
       # 小屋里两件「谁写谁赢」的事：催屋主不能把刚开的一局抹掉，关了网页的人
       # 不该让全屋再等九十秒。直接叫 api/room.js 的 handler，不起服务器。
       - name: 小屋：催促与开局抢数据、关了网页的座位
