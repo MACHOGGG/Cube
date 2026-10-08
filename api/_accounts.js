@@ -60,19 +60,6 @@ export const PIN_RE = /^\d{4,6}$/;
 export const PASS_RE = /^[A-Za-z0-9]{6}$/;
 
 /**
- * What an endpoint accepts before it knows which kind of account it is
- * looking at. Deliberately loose: the stored hash is what actually decides,
- * and rejecting a shape here early would tell a stranger which kind of
- * account an address has.
- *
- * ⚠️ **眼下没有调用方**（2026-10-02）。唯一在用它的是 `api/subscription.js` 那条拿密
- * 码登录的路，而那一支随密码一起撤了（E37，那个文件里记着为什么）。留着不删：它和
- * `burnGuess` 是一对，说的是「不许从答复的形状/快慢里看出这个地址有没有账号」这条
- * 规矩——哪天再冒出一条要验某种自选凭据的路，照这一对来，别从头发明一遍。
- */
-export const SECRET_RE = /^.{4,128}$/;
-
-/**
  * 一个邮箱长什么样。刻意宽松（真正说了算的是那封信收不收得到），但有两样**不许**出现：
  *
  *   空白 —— 它会把一个地址变成两个，而且头里、键里、信里各变一种。
@@ -389,28 +376,17 @@ function hash(pin, saltHex) {
   return scryptSync(String(pin), Buffer.from(saltHex, 'hex'), 32).toString('hex');
 }
 
-/** 只为了花掉一次 scrypt 的时间，结果扔掉。见 burnGuess。 */
-const DECOY_SALT = randomBytes(16).toString('hex');
-
-/**
- * 这个地址根本没有账号——但还是花一次算哈希的时间再回答。
+/*
+ * 一条规矩，写在这儿是因为它最容易在「验凭据」的地方被忘掉：**不许从答复的形状、快慢里看出
+ * 这个地址有没有账号。**「地址不存在」和「凭据不对」要回同一句话；而有账号的那一路真的算了一次
+ * scrypt（故意慢的），没账号的那一路要是直接返回，两句话一样、快慢却不一样，够细心的人还是分得出来。
  *
- * 「地址不存在」和「密码不对」故意回同一句话，为的是不让人拿这个接口打听某
- * 个邮箱有没有注册过。可是有账号的那一路真的算了一次 scrypt（那是故意慢的），
- * 没账号的那一路直接就返回了——两句话一样，回答的快慢却不一样，够细心的人
- * 还是分得出来。所以没账号的时候也照样烧掉同一份 CPU。
- *
- * 这是把差距压下去，不是把它证明为零：网络抖动本来就比这点毫秒大得多，而
- * 存储那一次读也只在有账号时才有回包。真要彻底消掉，得让两条路读一样多的
- * 东西——那是另一件事，不值得为它把每个接口都改成假读一次。
- *
- * ⚠️ **眼下没有调用方**（2026-10-02），和 SECRET_RE 同一个原因：subscription.js 那条
- * 拿密码登录的路撤了，而撤掉之后那边的三种情况（没账号 / 没带令牌 / 令牌不对）走的
- * 本来就是同一行代码、同一次读库，天然一样快，不需要诱饵。留着是为了那条规矩本身。
+ * 从前这儿有一对专门干这件事的：`SECRET_RE`（先按一个宽松的形状收下，不按账号种类分早拒）和
+ * `burnGuess`（没账号时也照样烧一次 scrypt 再答）。拿密码登录那条路随密码一起撤了（E37），之后
+ * 一直没有调用方，10-08 方案第五批第 7 条删了（git log 里找得到原样）。今天的几条路天然一样快：
+ * 没账号 / 没带令牌 / 令牌不对走的是同一行代码、同一次读库。哪天再冒出一条要验自选凭据的路，先照
+ * 这条规矩想一遍——让各支读一样多的东西最好，做不到就照旧版 burnGuess 那样烧一次。
  */
-export function burnGuess(secret) {
-  hash(String(secret ?? ''), DECOY_SALT);
-}
 
 export function newAccount(secret, kind = 'code') {
   const salt = randomBytes(16).toString('hex');

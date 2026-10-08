@@ -218,34 +218,6 @@ const simple = async (
   }
 };
 
-/**
- * 换密码。旧密码是唯一的凭据。
- *
- * 服务端换完会把**所有**设备的令牌一并作废（api/passcode.js 的 change：换了
- * 钥匙，别人手里那把就该不好使），然后回一把新的给这台设备——所以这把令牌
- * 一定要接住存下来，不然刚改完密码的人自己先被踢下线。
- */
-export function changePasscode(
-  email: string,
-  password: string,
-  newPassword: string,
-): Promise<{ ok: true; token: string } | { ok: false; reason: AccountFailure }> {
-  return (async () => {
-    try {
-      const { status, reply } = await post('/api/passcode', { email, password, newPassword });
-      // 这条接口答的是 { ok, email, token }，没有 active——它管的是钥匙，不是
-      // 权益。所以不能拿 toResult 判成功（那一条只认 active / reset）。
-      if (status === 200 && reply.ok && reply.token) {
-        return { ok: true as const, token: reply.token };
-      }
-      const failed = toResult(status, reply);
-      return { ok: false as const, reason: failed.ok ? 'network' : failed.reason };
-    } catch {
-      return { ok: false as const, reason: 'network' as const };
-    }
-  })();
-}
-
 /** 换邮箱第一步：把确认码寄到**新**地址（谁收得到，谁说了算）。 */
 export function requestEmailChange(
   email: string,

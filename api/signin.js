@@ -276,7 +276,7 @@ async function confirm(res, req, address, { code, news, challenge }) {
    *
    * 注册那一支的密钥是**空串**，因为这种账号没有密码。空串不会把老的密码登录路径捅
    * 开：`api/subscription.js` 那一支如今对谁都答 401（E37），而在它还认密码的年代，
-   * `SECRET_RE = /^.{4,128}$/` 本来也挡着空串。
+   * `SECRET_RE = /^.{4,128}$/` 本来也挡着空串（那个常量后来没了调用方，10-08 方案第五批第 7 条删了）。
    */
   const existing = await loadAccount(address);
   const created = !existing;
