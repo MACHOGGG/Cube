@@ -1225,6 +1225,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8995/ && break; sleep 0.25; done
           node scripts/check-rank-network.mjs http://localhost:8995/
 
+      # 小屋开局前那一问「会不会」答了「会」就记下来（2026-10-08 方案 2-10）：第一局客人没看过这
+      # 一族的教学，服务器多留四秒、他被问；答「会」之后本机记下「看过了」，第二局同一族服务器不
+      # 再多留、也不再问他。从前每一局都这样，全屋每局多等四秒。一台自己的服务器（兑一次 TESTMONTH）。
+      - name: 小屋里答「会」就记下来
+        run: |
+          nohup node scripts/dev-server.mjs 8996 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8996/ && break; sleep 0.25; done
+          node scripts/check-room-knows.mjs http://localhost:8996/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。

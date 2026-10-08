@@ -19,7 +19,7 @@ import { createNudgeSoak, type NudgeSoak } from './nudgeRain';
 import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { contestants, rankRoom } from './roomCard';
-import { hasSeenTutorial, type RuleShape, type TutorialShape } from '../i18n';
+import { hasSeenTutorial, markTutorialSeen, seenTutorials, type RuleShape, type TutorialShape } from '../i18n';
 import {
   type Avatar,
   type RoomError,
@@ -1179,12 +1179,18 @@ export function renderMultiplayerPage(
       box.remove();
       asking = false;
     };
-    // 说「会」（或者没答，时间到了）：向服务器销掉「我在学」。最后一个销掉
-    // 的人会让服务器把开赛时刻重新盖一遍，全屋一起从头数——见 api/room.js
-    // 的 learn。
-    // 说「会」（或者没答，时间到了）：什么都不用告诉服务器，倒数本来就在走，
-    // 收起这一问，下一次轮询接着数。
-    const knows = () => close();
+    // 说「会」：收起这一问，倒数本来就在走，下一次轮询接着数——**而且记下来**，本机一份、服务
+    // 器一份（2026-10-08 方案 2-10）。从前只是收起：本机不记、服务器也不知道，于是下一局服务器
+    // 照旧算他「可能是新手」，全屋的倒数照旧从 8 数起（多留的 ASK_MS 四秒），他也照旧又被问一
+    // 遍。服务器那一份走 learn 那条现成的路（learning: false + seen），和看完教学的人报「看过
+    // 了」是同一句话；他本来就不在学，这一句不会挂起开局，也不会改开赛时刻。
+    const knows = () => {
+      close();
+      markTutorialSeen(family);
+      void setLearning(false, seenTutorials());
+    };
+    // 时间到了没答：只当他这一局会，什么都不记——他可能只是没在看屏幕，不该替他说「看过了」。
+    const timedOut = () => close();
     // 手机的返回键：等于答《会》。
     pushLayer(knows, box);
     box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
@@ -1203,7 +1209,7 @@ export function renderMultiplayerPage(
     const paint = () => {
       const left = Math.ceil((until - Date.now()) / 1000);
       tick.textContent = left > 0 ? String(left) : '';
-      if (left <= 0) knows();
+      if (left <= 0) timedOut();
     };
     paint();
     timer = window.setInterval(paint, 200);
