@@ -456,6 +456,12 @@ jobs:
       # 后才架得起来）。摆库不真等，两百毫秒。
       - name: 小屋：报分的三道闸
         run: node scripts/check-room-score.mjs
+      # 屋主「不等了」（2026-10-08 方案 2-6）：一人挂机，不按就开不了下一局（普通局不限时，这一条
+      # 不动）；屋主按了，没交卷的人按 sitOut 替他交卷（分数按服务器记着的那份、0 分照记），下一局
+      # 照常开、这一局照记；他过后打完报上来的分收不下；只有屋主按得动；倒数里不收；竞赛屋的主持
+      # 人和这一局开了之后才进来的人不替。直接叫 handler，摆库不真等。
+      - name: 小屋：屋主「不等了」
+        run: node scripts/check-room-force.mjs
       # 「有人去看教学，大家等他」挂得起来也挂得有个头：只在开赛之前挂得起来（开打
       # 之后点开教学复习的人从前照样能把整屋拦住，而那会把还在打的人退回倒数屏）、
       # 最多挂 90 秒（「二十秒没点就不等他」要有人轮询才生效，屋里全切后台时他每点
@@ -1191,6 +1197,15 @@ jobs:
           nohup node scripts/dev-server.mjs 8988 dist >/dev/null 2>&1 &
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8988/ && break; sleep 0.25; done
           node scripts/check-hex-hole.mjs http://localhost:8988/
+
+      # 屋主等待页上那颗「不等了」（2026-10-08 方案 2-6）：客人的等待页上没有、屋主的有；按下去屋
+      # 主和先交卷的人回到小屋页，挂机那一位手上那一局照旧开着（不拽人）；屋主照常开下一局。一台
+      # 自己的服务器（兑一次 TESTMONTH）。
+      - name: 屋主等待页上的「不等了」
+        run: |
+          nohup node scripts/dev-server.mjs 8992 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8992/ && break; sleep 0.25; done
+          node scripts/check-room-force-ui.mjs http://localhost:8992/
 
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #

@@ -22,6 +22,11 @@ export const currentRoom = (): null => null;
 export const renameSeat = (): Promise<void> => Promise.resolve();
 export const latestRoomState = (): RoomState | null => null;
 export const iAmHost = (_state?: RoomState | null): boolean => false;
+/**
+ * 2026-10-08（方案 2-6）：等待页那颗「不等了」要问这一局打起来没有，roomNotices 于是 import 了
+ * 它。这一版没有小屋、也就没有等待页，回「大厅」——哪一格都不会让那颗键露面。
+ */
+export const roomPhase = (_st: RoomState): 'lobby' => 'lobby';
 
 /**
  * 头像那一小张图。照 src/engine/room.ts 的 avatarSvg 抄的——它只是把两个数

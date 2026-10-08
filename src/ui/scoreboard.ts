@@ -17,6 +17,7 @@ import {
   latestRoomState,
   markRoundPlayed,
   reportScore,
+  forceRound,
   startMatch,
   watchRoom,
   type RoomState,
@@ -420,6 +421,12 @@ function flyby(text: string): void {
     },
   });
 
+  /**
+   * 屋主的等待页上多一颗「不等了」（2026-10-08 方案 2-6）：还没交卷的人替他交卷，这一局就此
+   * 结束。只有屋主有——问的是此刻（屋主是谁不会在一局里变，可这块计分板是开局时挂上的）。
+   */
+  const forceIfHost = () => (iAmHost() ? { onForce: () => forceRound().then((r) => r.ok) } : {});
+
   // 交卷那一刻就把等待页盖上，不等下一次轮询。
   //
   // 原来等待页是在轮询回调里盖的：交卷 → 结算页先亮出来 → 最多一秒之后下一
@@ -445,6 +452,7 @@ function flyby(text: string): void {
       meId: seat.playerId,
       code: seat.code,
       onLeave: () => confirmLeaveRoom(lang, handlers.onLeave),
+      ...forceIfHost(),
     });
     wait.update(known);
   };
@@ -511,6 +519,7 @@ function flyby(text: string): void {
           meId: seat.playerId,
           code: seat.code,
           onLeave: () => confirmLeaveRoom(lang, handlers.onLeave),
+          ...forceIfHost(),
         });
         wait.update(state);
       } else if (wait) {

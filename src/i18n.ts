@@ -474,6 +474,11 @@ export interface I18nStrings {
   mpRoundLabel: string;
   mpNextRound: string;
   mpDisbandRoom: string;
+  /**
+   * 屋主在等待页上那颗「不等了」（2026-10-08 方案 2-6）：还没交卷的人按「这一局不打了」替他交
+   * 卷，这一局就此结束，屋主照常挑下一局。只有屋主看得到。
+   */
+  mpStopWaiting: string;
   mpRoomEnded: string;
   mpTotalLabel: string;
   /** 竞赛排名图上那个大数字底下的一行小字。 */
@@ -988,6 +993,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundLabel: 'Round {n}',
     mpNextRound: 'Pick the next board',
     mpDisbandRoom: 'Break up the room',
+    mpStopWaiting: 'Stop waiting',
     mpRoomEnded: 'The host closed the room.',
     mpTotalLabel: 'total',
     mpRoomTotal: 'Room total',
@@ -1346,6 +1352,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundLabel: 'Manche {n}',
     mpNextRound: 'Choisir le plateau suivant',
     mpDisbandRoom: 'Dissoudre la salle',
+    mpStopWaiting: 'Ne plus attendre',
     mpRoomEnded: 'L’hôte a fermé la salle.',
     mpTotalLabel: 'total',
     mpRoomTotal: 'Total de la salle',
@@ -1704,6 +1711,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundLabel: '第 {n} 局',
     mpNextRound: '選下一個玩法',
     mpDisbandRoom: '解散小屋',
+    mpStopWaiting: '不等了',
     mpRoomEnded: '屋主結束了小屋。',
     mpTotalLabel: '總分',
     mpRoomTotal: '全屋總分',
@@ -2062,6 +2070,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundLabel: '第 {n} 局',
     mpNextRound: '选下一个玩法',
     mpDisbandRoom: '解散小屋',
+    mpStopWaiting: '不等了',
     mpRoomEnded: '屋主结束了小屋。',
     mpTotalLabel: '总分',
     mpRoomTotal: '全屋总分',

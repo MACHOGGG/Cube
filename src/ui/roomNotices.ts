@@ -22,7 +22,7 @@
  */
 import { STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
-import { avatarSvg, type HostTrouble, type RoomPlayer, type RoomState } from '../engine/room';
+import { avatarSvg, roomPhase, type HostTrouble, type RoomPlayer, type RoomState } from '../engine/room';
 import { modeBadges } from './startStage';
 import { gameIcon } from './homeIcons';
 import { custom } from './customIcons';
@@ -123,6 +123,15 @@ export function showWaitPanel(
     hideId?: string;
     /** 那颗键上的字。主持人按下去是《解散小屋》，不是《离开小屋》。 */
     leaveLabel?: string;
+    /**
+     * 屋主那颗「不等了」（2026-10-08 方案 2-6）。给了才画——只有屋主的那一份给。
+     *
+     * 普通局不限时：一个人放着不打，整屋就只能干等。这颗键让屋主替还没交卷的人交卷，这一局
+     * 就此结束（api/room.js 的 force）。按下去之后它自己灰掉，免得连按；成了，下一拍轮询读到
+     * roundOver，把每个人送回小屋页，这一层跟着撤掉；没成（回 false）就亮回来。
+     * 只在这一局真的打起来之后露面：倒数里、有人在学教学被挂起的时候没有「不等了」可言。
+     */
+    onForce?: () => Promise<boolean>;
   },
 ): WaitPanel {
   const s = STRINGS[lang];
@@ -147,6 +156,7 @@ export function showWaitPanel(
            也听不到有人陆续交卷。polite 是「等他说完这句再播」，不打断。 -->
       <div class="mp-wait-rows mp-players" id="mpWaitRows" aria-live="polite"></div>
       <div class="start-actions">
+        ${opts.onForce ? `<button class="icon-btn start-act" id="mpWaitForce">${s.mpStopWaiting}</button>` : ''}
         <button class="icon-btn start-act" id="mpWaitLeave">${opts.leaveLabel ?? s.mpLeave}</button>
       </div>
     </div>
@@ -156,8 +166,17 @@ export function showWaitPanel(
   pushLayer(opts.onLeave, overlay);
   const rows = overlay.querySelector<HTMLElement>('#mpWaitRows')!;
   overlay.querySelector<HTMLButtonElement>('#mpWaitLeave')!.addEventListener('click', opts.onLeave);
+  const force = overlay.querySelector<HTMLButtonElement>('#mpWaitForce');
+  if (force) force.hidden = true;
+  force?.addEventListener('click', () => {
+    force.disabled = true;
+    void opts.onForce?.().then((ok) => {
+      if (!ok) force.disabled = false;
+    });
+  });
   return {
     update(state) {
+      if (force) force.hidden = roomPhase(state) !== 'playing';
       rows.innerHTML = state.players
         .filter((p) => p.id !== opts.hideId)
         .map((p, i) => waitRow(p, i + 1, opts.meId, s.mpFinished, s.mpLeftTag))

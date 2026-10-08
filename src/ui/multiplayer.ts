@@ -28,6 +28,7 @@ import {
   createRoom,
   currentRoom,
   endRoom,
+  forceRound,
   fetchState,
   forgetRoom,
   hostTroubleIn,
@@ -793,6 +794,9 @@ export function renderMultiplayerPage(
           // 主持人看的就是这一屏：榜上不列他自己（列进去就是一行恒定 0 分挂在最后
           // 一名），那颗键上的字也该是《解散小屋》——他按下去做的就是那件事。
           ...(refereeing ? { hideId: meId, leaveLabel: s.mpDisbandRoom } : {}),
+          // 屋主坐在这一屏上等别人（竞赛屋的主持人每一局都在这儿）：给他那颗「不等了」
+          // （2026-10-08 方案 2-6）。
+          ...(iAmHost ? { onForce: () => forceRound().then((r) => r.ok) } : {}),
         });
       }
       sideWait.update(st);

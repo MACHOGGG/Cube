@@ -343,7 +343,7 @@ const id = (bytes) => randomBytes(bytes).toString('hex');
  * 去换这个风险不值。而且这两条不给身份时一个字都不写（seatOf 拦在写之前），
  * 也不吐任何别人的数据，回的就是 { ok: true }。
  *
- * start / score / end / learn 都要先出示座位或屋主令牌，够不上「陌生人的门」。
+ * start / force / score / end / learn 都要先出示座位或屋主令牌，够不上「陌生人的门」。
  */
 const RATE = {
   state: { limit: 300, windowS: 10 },
@@ -373,6 +373,7 @@ export default async function handler(req, res) {
       case 'join': return await join(res, body);
       case 'state': return await state(res, body);
       case 'start': return await start(res, body);
+      case 'force': return await force(res, body);
       case 'score': return await score(res, body);
       case 'leave': return await leave(res, body);
       case 'end': return await end(res, body);
@@ -1798,6 +1799,54 @@ async function start(res, body) {
   await hset(roomKey(code), 'meta', meta);
   await expire(roomKey(code), ROOM_TTL_S);
   return send(res, 200, publicState(code, { ...hash, ...banked, meta }));
+}
+
+/**
+ * 屋主「不等了」（2026-10-08 方案 2-6，玩家拍板方案 A）。
+ *
+ * 普通局**不限时**：开下一局的唯一门槛是 roundOver——每个还在这一局里的人都交了卷（或者走
+ * 了、关了网页、90 秒没消息）。于是屋里有一个人人还在、手机也亮着，却放着不打（挂机），整
+ * 屋就只能干等：他的设备每秒都在报到，ABSENT_MS 那条永远轮不到他，屋主一点办法都没有。
+ *
+ * 这一下给屋主一个办法：**还没交卷的人，照 sitOut 那一条替他交卷**——和客户端那条
+ * 「这一局我不打了」写进去的一模一样（score() 收一份带 finished 的报分：分数按服务器此刻记着
+ * 的那一份，`final` 打上，没有用时）。0 分也照记：这一局他在场，只是没打完。交完这一局就算
+ * 结束了（roundOver 成立），屋主照常挑下一局，start() 那头的记账一个字不用改——它认的就是
+ * finished。「不限时」这条规矩本身不动：只有屋主亲手按，才会有人被替交卷。
+ *
+ * 不替谁交：竞赛屋的主持人（他不参赛，见 isSpectator）、已经走了的、这一局开了之后才进来的
+ * （这一局本来就不是他的，记账那头也不算他）。倒数还没走完、有人在学教学被挂起的时候不收：
+ * 这一局还没开打，没有「不等了」可言。
+ *
+ * 他那台设备上的那一局照旧开着，打完报上来的分被 final 挡掉（score() 那一道，方案 1-1），
+ * 屋主开了下一局之后，他的计分板会飘一句「这一局没算进总分」（ui/scoreboard.ts 的 report）。
+ */
+async function force(res, body) {
+  const code = String(body.code ?? '').trim();
+  const hash = await readRoom(code);
+  if (!hash) return send(res, 404, { error: 'noRoom' });
+  if (hash.meta.host !== body.playerId || !seatOf(hash, body.playerId, body.playerToken)) {
+    return send(res, 403, { error: 'notHost' });
+  }
+  if (hash.meta.endedAt) return send(res, 409, { error: 'ended' });
+  const meta = hash.meta;
+  if (!meta.round || !meta.startAt || meta.learnHold || Date.now() < meta.startAt) {
+    return send(res, 409, { error: 'notStarted' });
+  }
+  if (roundOver(hash)) return send(res, 200, publicState(code, hash));
+  for (const [field, seat] of Object.entries(hash)) {
+    if (!field.startsWith('p:') || !seat) continue;
+    const id = field.slice(2);
+    if (isSpectator(meta, id) || seat.left || seat.finished) continue;
+    if ((seat.joinedAt || 0) > meta.startAt) continue;
+    await hset(roomKey(code), roundKey(id), {
+      ...CLEAR_ROUND,
+      score: Math.max(0, Math.floor(Number(seat.score) || 0)),
+      finished: true,
+      final: true,
+    });
+  }
+  return send(res, 200, publicState(code, await readRoom(code)));
 }
 
 /**

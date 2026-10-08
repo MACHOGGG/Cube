@@ -708,6 +708,16 @@ export function reportScore(
   });
 }
 
+/**
+ * 屋主专用：「不等了」（2026-10-08 方案 2-6）。这一局还没交卷的人，服务器照「这一局我不打了」替
+ * 他交卷（分数按服务器记着的那一份，0 分照记），这一局就此结束——屋里每个人的轮询下一拍读到
+ * roundOver，各回各的小屋页，屋主照常挑下一局。见 api/room.js 的 force。
+ */
+export function forceRound(): Promise<RoomResult<RoomState>> {
+  if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
+  return post<RoomState>({ action: 'force', ...session });
+}
+
 /** Host only: 结束房间. Everyone still polling sees the closing card. */
 export function endRoom(): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
