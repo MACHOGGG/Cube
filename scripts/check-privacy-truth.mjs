@@ -179,6 +179,64 @@ for (const lang of LANGS) {
   }
 }
 
+/*
+ * ── ④ 「寄信走 Resend」那一句，只列真寄出去的码（10-08 方案第四批第 2 条）─────────────
+ *
+ * 那一句原先是「验证码、解锁码、后台寄的内部码都是它发的」，后两样都不是真的：
+ *   · 内部码从来不寄信——mint.js 只把码写进账号的收件箱（_accounts.js 的 inbox），玩家登录
+ *     之后在站内看到。方案点名这一条「本批最高优先」：支付审核引用过法务页，有前科。
+ *   · 解锁码：第 20 推起 unlock.js 整条回 410，一封都不再寄。方案给的替换句是「只列『验证码、
+ *     解锁码』」，那是按「解锁码还在寄」写的；照抄就是把一句新的假话写回去，所以只列验证码
+ *     ——登录（signin.js）和换邮箱（email.js，码寄给新地址）这两处。
+ *
+ * 这一节**先读代码再读条款**：api/ 底下哪几个接口真的调 sendMail（handler 第一句就回 410 的
+ * 不算），钉成「正好是登录和换邮箱」。哪天哪个接口开始寄别的东西（比如发码改成真寄信、
+ * 解锁那条路回来了），这一条先红——那时候要回来改的正是这一句。
+ */
+{
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const apiDir = new URL('../api/', import.meta.url);
+  const read = (f) => readFileSync(new URL(f, apiDir), 'utf8');
+  const endpoints = readdirSync(apiDir).filter((f) => f.endsWith('.js') && !f.startsWith('_'));
+  const callsMail = endpoints.filter((f) => /\bsendMail\s*\(/.test(read(f)));
+  // handler 一进门就回 410 的，下面那些 sendMail 走不到（unlock.js 就是这样：实现一行没删，只是走不到）
+  const gone = (f) => /export default async function handler\s*\([^)]*\)\s*\{\s*return send\(res,\s*410/.test(read(f));
+  const live = callsMail.filter((f) => !gone(f)).sort();
+  check('（尺子）api/ 底下读到了接口，也认得出哪个在寄信', endpoints.length >= 8 && callsMail.length >= 1,
+    `${endpoints.length} 个接口，调 sendMail 的 ${callsMail.join(' ')}`);
+  check('真在寄信的正好是登录（signin.js）和换邮箱（email.js）——寄的都是验证码',
+    live.join(' ') === 'email.js signin.js', live.join(' ') || '（一个都没有）');
+  check('发内部码（mint.js）不寄信：码只写进账号的收件箱', !/\bsendMail\b/.test(read('mint.js')));
+
+  // 每种语言：带 Resend 的那一句说到了登录和换邮箱，没说内部码、解锁码
+  const RESEND = {
+    zhHans: { says: ['验证码', '登录', '换邮箱'], never: ['内部码', '解锁码'] },
+    zhHant: { says: ['驗證碼', '登入', '換信箱'], never: ['內部碼', '解鎖碼'] },
+    en: { says: ['sign in', 'change your address'], never: ['unlock', 'insider', 'the codes we send you'] },
+    fr: { says: ['vous connecter', 'changer d’adresse'], never: ['déblocage', 'Génie', 'codes que nous vous envoyons passent'] },
+  };
+  const resendSentence = (lang) => {
+    const doc = LEGAL[lang]?.privacy;
+    const body = doc?.items.map((i) => i.body).find((b) => b.includes('Resend')) || '';
+    // 句子按句号切（中文「。」，英法「. 」）；括号里那一段和 Resend 在同一句
+    return body.split(/(?<=。)|(?<=\.)\s+/).find((x) => x.includes('Resend')) || '';
+  };
+  for (const lang of LANGS) {
+    const line = resendSentence(lang);
+    const { says, never } = RESEND[lang];
+    check(`${lang}：（尺子）找到了带 Resend 的那一句`, line.length > 20, line.slice(0, 60));
+    if (line.length <= 20) continue;
+    const miss = says.filter((w) => !line.includes(w));
+    check(`${lang}：寄信那一句说的是登录和换邮箱的验证码`, miss.length === 0, miss.length ? `缺：${miss.join(' / ')}` : '');
+    const lie = never.filter((w) => line.toLowerCase().includes(w.toLowerCase()));
+    check(`${lang}：寄信那一句没有内部码、解锁码（一个不寄信、一个第 20 推起不再寄）`, lie.length === 0, lie.join(' / '));
+  }
+  // 反向对照：原先那一句塞回去，上面那一条会红
+  const old = '寄信走 「Resend」（验证码、解锁码、后台寄的内部码都是它发的），所以你的邮箱地址会经过它。';
+  check('（反向对照）原先那一句塞回去，「没有内部码、解锁码」会红',
+    RESEND.zhHans.never.some((w) => old.includes(w)));
+}
+
 // ── 反向对照：这道门量得出「悄悄把一条删掉」吗 ─────────────────────────
 {
   const doc = { ...LEGAL.zhHans.privacy };
