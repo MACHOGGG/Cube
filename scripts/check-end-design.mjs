@@ -360,8 +360,8 @@ for (const [i, swept] of [[0, false], [1, true]]) {
 const L = {
   zhHans: { title: '综合得分', again: '再来', share: '分享', home: '主页' },
   zhHant: { title: '綜合得分', again: '再來', share: '分享', home: '主頁' },
-  en: { title: 'Composite score', again: 'Again', share: 'Share', home: 'Home' },
-  fr: { title: 'Score composite', again: 'Rejouer', share: 'Partager', home: 'Accueil' },
+  en: { title: 'Final score', again: 'Again', share: 'Share', home: 'Home' },
+  fr: { title: 'Score final', again: 'Rejouer', share: 'Partager', home: 'Accueil' },
 };
 for (const lang of Object.keys(L)) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

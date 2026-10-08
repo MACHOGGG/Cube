@@ -624,7 +624,14 @@ export interface I18nStrings {
   restartConfirm: string;
   /** 暂停面板里《结束游戏》——从前底排那一颗《完成》。 */
   endRunBtn: string;
-  /** 结算弹窗的标题（10-08 方案 3-I 起它就是标题，从前是「挑战结束」底下那一行小字）。 */
+  /**
+   * 结算弹窗的标题（10-08 方案 3-I 起它就是标题，从前是「挑战结束」底下那一行小字）。
+   *
+   * 和 compositeLabel（明细里那一行）、endTipComposite（底下那句说明的打头）说的是同一个数，叫法必须
+   * 一样：英法原先这儿写「Composite score」/「Score composite」，明细和说明写「Final score」/「Score
+   * final」——同一屏上一个数两个名字（10-08 方案第四批第 1 条统一成后者）。中文标题多一个「得」
+   * （综合得分 / 综合分），是同一个词。门：check-score-terms。
+   */
   compositeScoreLabel: string;
   /** "Your average in this mode" on the end-of-run summary. */
   avgScoreLabel: string;
@@ -1096,7 +1103,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restartRunBtn: 'Play again',
     restartConfirm: 'Start over?',
     endRunBtn: 'End game',
-    compositeScoreLabel: 'Composite score',
+    compositeScoreLabel: 'Final score',
     avgScoreLabel: 'Your average in this mode',
     soundBtn: 'Sound',
     shareBtn: 'Share',
@@ -1454,7 +1461,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     restartRunBtn: 'Rejouer',
     restartConfirm: 'Recommencer ?',
     endRunBtn: 'Terminer',
-    compositeScoreLabel: 'Score composite',
+    compositeScoreLabel: 'Score final',
     avgScoreLabel: 'Votre moyenne dans ce mode',
     soundBtn: 'Son',
     shareBtn: 'Partager',

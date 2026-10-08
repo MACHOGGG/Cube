@@ -187,7 +187,7 @@ async function run(rows, waitMs) {
   /**
    * 结算了没有，以及**为什么**。
    *
-   * ⚠️ 理由不在屏幕上：结算页的标题永远是那句通用的「Composite score」（10-08 方案 3-I 起；
+   * ⚠️ 理由不在屏幕上：结算页的标题永远是那句通用的「Final score」（10-08 方案 3-I 起；
    * gameController 的 `refs.endTitleEl.textContent = s.compositeScoreLabel`）。真正的理由
    * 存进了这一局的存档里（`RunData.reason`，runRecord.ts 的 REASON_LABEL_KEY 那张表）。
    * 所以这儿读 localStorage 里那几局，而不是读 DOM——第一版照 DOM 找「无法继续匹配」，
@@ -196,7 +196,7 @@ async function run(rows, waitMs) {
   const out = await page.evaluate(() => {
     /*
      * ⚠️ **结算页那块 DOM 从一开始就在**（gameShell 的模板里就有，标题写着那句通用的
-     * 「Composite score」），结算只是给它加一个 `show`。所以判「结算了没有」**必须看
+     * 「Final score」），结算只是给它加一个 `show`。所以判「结算了没有」**必须看
      * `show`**，不能看「这个元素在不在」或者「它有没有字」——第一版照后者写，两副盘面都
      * 报「结算了」，而其实一局都没结束。
      */

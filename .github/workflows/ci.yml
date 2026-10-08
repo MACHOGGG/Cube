@@ -134,6 +134,13 @@ jobs:
           npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
           npx esbuild src/engine/runRecord.ts --bundle --format=esm --outfile=/tmp/runrecord.mjs
           node scripts/check-plurals.mjs /tmp/i18n.mjs /tmp/runrecord.mjs
+      # 「综合分」这一个数四种语言各只有一个叫法（2026-10-08 方案第四批第 1 条）：结算弹窗的标题、明细里那一行、
+      # 底下那句说明的打头。原先英法标题写「Composite score」/「Score composite」，明细和说明写「Final score」/
+      # 「Score final」——同一屏上一个数两个名字。
+      - name: 综合分只有一个叫法
+        run: |
+          npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
+          node scripts/check-score-terms.mjs /tmp/i18n.mjs
       # 设计软件导出的 SVG 带一行 <title>编组</title>，嵌进页面就是悬停提示「编组」、读屏也念它
       # （第 14 推）。图标和天才标志两条路都在嵌进去之前统一去掉；样本是玩家给的炸弹图标原件。
       - name: 图标里的 <title> 去掉了
