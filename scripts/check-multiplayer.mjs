@@ -843,6 +843,39 @@ if (locked) {
   check('按 ok → 主页', await B.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false));
 }
 
+// ---- 登录的人坐过的椅子：匿名敲他的名字认领不走（2026-10-08 方案 1-3）------
+//
+// 从前认领只认名字：一个没登录的人敲一个登录玩家的名字，那人一按《离开》，他就连同累计分
+// 一起接走那把椅子。现在登录的人坐下时椅子上记一枚账号标识，认领要同一个账号的令牌。走的
+// 是真服务器上的接口（不点界面）：要量的是服务器认不认，界面上没有任何一步能绕过它。
+// 第二张测试码 TESTHALF 给「登录的客人」：一台 dev-server 里一张码只能兑一次，TESTMONTH 上面
+// 屋主用掉了。
+{
+  const api = (pg, body) => pg.evaluate(async (b) => {
+    const r = await fetch('/api/room', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+    return { status: r.status, body: await r.json().catch(() => ({})) };
+  }, body);
+  const hostId = await A.page.evaluate(() => JSON.parse(localStorage.getItem('slides_genius') || '{}'));
+  const guestId = await B.page.evaluate(async () => {
+    const r = await fetch('/api/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'TESTHALF' }) });
+    return r.json();
+  });
+  check('（尺子）登录的客人：第二张测试码兑得出一份令牌', Boolean(guestId.token && guestId.code), JSON.stringify(guestId).slice(0, 80));
+  const made = await api(A.page, { action: 'create', name: '认领屋主', email: hostId.email, accountToken: hostId.token, holderCode: hostId.code });
+  const code = made.body.code;
+  const proof = { email: guestId.email, accountToken: guestId.token, holderCode: guestId.code };
+  const sat = await api(B.page, { action: 'join', code, name: '小明', ...proof });
+  check('（尺子）登录的客人以「小明」坐下', sat.status === 200 && Boolean(sat.body.playerId), `${sat.status} ${sat.body.error ?? ''}`);
+  await api(B.page, { action: 'leave', code, playerId: sat.body.playerId, playerToken: sat.body.playerToken });
+  const anon = await api(B.page, { action: 'join', code, name: '小明' });
+  check('匿名的人敲了登录玩家的名字：认领被拒（坐的是另一把椅子）',
+    anon.status === 200 && anon.body.rejoined !== true && anon.body.playerId !== sat.body.playerId,
+    `${anon.status} rejoined=${anon.body.rejoined}`);
+  const back = await api(B.page, { action: 'join', code, name: '小明', ...proof });
+  check('他自己带着令牌回来：认回的是自己那把椅子',
+    back.body.rejoined === true && back.body.playerId === sat.body.playerId, `rejoined=${back.body.rejoined}`);
+}
+
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

@@ -24,6 +24,9 @@
  * 个隧道。这台门的 ⑤ 专量这件事。
  *
  * 一句话：**收椅子看九十秒，交身份只看他自己说了什么**（按了《离开》/ 关了网页）。
+ *
+ * ⑧（2026-10-08 方案 1-3）：登录的人坐过的椅子带一枚账号标识，只还给同一个账号——一个没登
+ * 录的人敲他的名字，接不走他的累计分。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -206,6 +209,52 @@ const seatsOf = async (code) => {
   const back = await call({ action: 'join', code: code2, name: '甲' });
   check('⑥ 量程：按过《离开》的人回来，认的是自己那把椅子', back.body.rejoined === true, String(back.body.rejoined));
   check('⑥ 量程：而且还是同一个 playerId', back.body.playerId === left.playerId, '同一个');
+}
+
+// ---- ⑧ 登录的人坐过的椅子：只还给同一个账号（2026-10-08 方案 1-3）-----------
+//
+// 从前认领只认名字。一个没登录的人敲一个登录玩家的名字，那人的椅子一空出来（按了《离
+// 开》、网页关了），他就连同累计分一起接走。现在登录的人坐下时椅子上记一枚账号标识，认
+// 领这种椅子要同一个账号的令牌；匿名的椅子照旧按名字认（⑥ 的量程那两条）。
+{
+  const mine = newAccount('', 'code');
+  await saveAccount('reclaim-owner@example.com', mine);
+  const owner = { email: 'reclaim-owner@example.com', accountToken: mine.token };
+  const other = newAccount('', 'code');
+  await saveAccount('reclaim-other@example.com', other);
+  const stranger = { email: 'reclaim-other@example.com', accountToken: other.token };
+
+  const h = await call({ action: 'create', name: '屋主', ...who });
+  const code = h.body.code;
+  const host = { playerId: h.body.playerId, playerToken: h.body.playerToken };
+  const g = await call({ action: 'join', code, name: '丙', ...owner });
+  const seat = { playerId: g.body.playerId, playerToken: g.body.playerToken };
+  await call({ action: 'join', code, name: '丁' });
+  await call({ action: 'start', code, ...host, mode: 'square' });
+  await call({ action: 'score', code, ...seat, score: 300, finished: true, round: 1 });
+  await call({ action: 'leave', code, ...seat });
+
+  const raw = JSON.stringify(await hgetall(roomKey(code)));
+  check('⑧ 库里那间屋没有邮箱原文（椅子上记的是一枚哈希）', !raw.includes('reclaim-owner@example.com'));
+  const stamped = (await hgetall(roomKey(code)))['p:' + seat.playerId];
+  check('⑧ 量程：登录的人那把椅子上真记了账号标识', /^[0-9a-f]{64}$/.test(String(stamped?.owner)), String(stamped?.owner));
+  const pub = await call({ action: 'state', code, ...host });
+  check('⑧ 那枚标识不往外发（publicState 里没有）', !JSON.stringify(pub.body).includes(String(stamped?.owner)));
+
+  const anon = await call({ action: 'join', code, name: '丙' });
+  check('⑧ 匿名的人敲了他的名字：认领被拒（不是「认回那把椅子」）', anon.body.rejoined !== true, String(anon.body.rejoined));
+  check('⑧ 匿名的人拿到的是另一个座位', anon.status === 200 && anon.body.playerId !== seat.playerId,
+    `${anon.status} ${anon.body.playerId}`);
+  const someone = await call({ action: 'join', code, name: '丙', ...stranger });
+  check('⑧ 换一个账号来敲这个名字：一样被拒', someone.body.rejoined !== true && someone.body.playerId !== seat.playerId,
+    String(someone.body.rejoined));
+  const seats = await seatsOf(code);
+  const kept = seats.find((s) => s.id === seat.playerId);
+  check('⑧ 他那 300 分还在他名下', kept && kept.score === 300, JSON.stringify(kept));
+
+  const back = await call({ action: 'join', code, name: '丙', ...owner });
+  check('⑧ 他自己带着令牌回来：认的是自己那把椅子', back.body.rejoined === true, String(back.body.rejoined));
+  check('⑧ 而且还是同一个 playerId', back.body.playerId === seat.playerId, `${back.body.playerId} / ${seat.playerId}`);
 }
 
 // ---- ⑦ 源码：两条路各认各的 --------------------------------------------

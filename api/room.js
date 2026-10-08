@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { identify, isGenius as isGeniusClaim } from './_entitlement.js';
 import { checkNickname, nicknameOf, nicknameOwner, scrubName } from './_nickname.js';
@@ -1174,17 +1174,7 @@ function nameCandidates(typed, { skipBase = false } = {}) {
  * @returns {{ ok: true, typed: string, skipBase: boolean } | { ok: false, error: string }}
  *   `typed` 空着就是没取名字，发字母；`skipBase` 为真时候选从「名字 2」开始。
  */
-async function pickSeatName(body) {
-  let who = null;
-  if (body.accountToken) {
-    try {
-      who = await identify({ email: body.email, accountToken: body.accountToken, holderCode: body.holderCode });
-    } catch {
-      // 认人这一步摔了（库抖一下）：当他没登录，照他敲的那个名字进屋——进不了屋比名字不对
-      // 更糟，而他下一次进屋就对了。
-      who = null;
-    }
-  }
+async function pickSeatName(body, who) {
   const nick = who ? await nicknameOf(who.id) : '';
   if (nick) return { ok: true, typed: nick, skipBase: false };
   if (!scrubName(body.name)) return { ok: true, typed: '', skipBase: false };
@@ -1193,6 +1183,37 @@ async function pickSeatName(body) {
   const owner = await nicknameOwner(checked.name);
   return { ok: true, typed: checked.name, skipBase: Boolean(owner) && owner !== who?.id };
 }
+
+/**
+ * 打请求的这个人是谁（登录了的话）。没带令牌、令牌不对都是 null。
+ *
+ * 认人这一步摔了（库抖一下）也当他没登录：进不了屋比名字不对更糟，而他下一次进屋就对了。
+ * 代价是这一次认领不回他自己那把带账号标识的椅子（见 seatOwnerTag）——他会坐进一把新椅子，
+ * 和「换了台没登录的设备回来」一样。
+ */
+async function whoIsAsking(body) {
+  if (!body.accountToken) return null;
+  try {
+    return await identify({ email: body.email, accountToken: body.accountToken, holderCode: body.holderCode });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 座位上记的「这把椅子是哪个账号坐的」（2026-10-08 方案 1-3）。
+ *
+ * 从前认领只认名字：走了的人回来，敲同一个名字就把椅子连同累计分一起领回去（见 join 里
+ * `back` 那一段）。可名字谁都敲得出来——一个没登录的人敲一个登录玩家的昵称，那人的椅子一
+ * 空出来（按了《离开》、网页关了），他就顶号接走人家打了一晚上的累计分。所以登录的人坐下
+ * 时在椅子上记一枚账号标识；认领这种椅子必须出示同一个账号的令牌。匿名的椅子照旧按名字认。
+ *
+ * 存的是 sha256 全长、带一个用途前缀，**不是邮箱原文**：小屋整间屋是一个 hash，任何能读库
+ * 的人都看得到它，而这一位只用来比「是不是同一个人」。不用 `_redact.js` 的 redact——那一枚
+ * 只给日志用，它自己写着别拿来当 id。publicState 不往外发这一位（它一个字段一个字段地挑）。
+ */
+const seatOwnerTag = (accountId) =>
+  createHash('sha256').update('seat-owner:' + String(accountId), 'utf8').digest('hex');
 
 /** 头像候选：先本形状，再换形状，再沿色环挪（挑法见上面 avatarKey 那段）。 */
 function avatarCandidates(wanted) {
@@ -1234,7 +1255,8 @@ async function create(res, body) {
   if (!(await hostMayOpen(body))) return send(res, 403, { error: 'geniusOnly' });
   // 屋主叫什么（第 16 推）：登记过昵称就是昵称，否则是他敲的那个（见 pickSeatName）。放在抢
   // 房号**之前**：名字不过关就别先开出一间空屋。
-  const picked = await pickSeatName(body);
+  const who = await whoIsAsking(body);
+  const picked = await pickSeatName(body, who);
   if (!picked.ok) return send(res, 400, { error: picked.error });
 
   const playerId = id(8);
@@ -1284,6 +1306,8 @@ async function create(res, body) {
       joinedAt: Date.now(),
       slot: 0,
       seen: cleanSeen(body.seen),
+      // 屋主的椅子本来就一律不认领（见 join），记上是为了和别的椅子一个样子。
+      ...(who ? { owner: seatOwnerTag(who.id) } : {}),
     });
     return send(res, 200, {
       code,
@@ -1320,13 +1344,20 @@ async function join(res, body) {
   // 不认，那是另一个恰好同名的人（seatReclaimable）。
   // 屋主的椅子一律不认领：屋主身份不能换人（玩家定的）。他不在，屋里的人看
   // 到的是「屋主等一下就来」；太久不回来就是「屋主离家出走了，小屋暂时解散」。
+  //
+  // **带账号标识的椅子只还给同一个账号**（2026-10-08 方案 1-3，见 seatOwnerTag）。一个没登录
+  // 的人敲了登录玩家的名字，那把椅子不算「他的」：find 跳过它，他照常坐一把新椅子（名字撞
+  // 上别人登记的昵称时是「名字 2」，见 pickSeatName）。匿名的椅子照旧谁敲对名字给谁。
+  const who = await whoIsAsking(body);
+  const askerTag = who ? seatOwnerTag(who.id) : '';
   const back = Object.entries(hash).find(
     ([field, seat]) =>
       field.startsWith('p:') &&
       seat &&
       field.slice(2) !== hash.meta.host &&
       sameName(seat.name, typed) &&
-      seatReclaimable(seat),
+      seatReclaimable(seat) &&
+      (!seat.owner || seat.owner === askerTag),
   );
   // typed 是空的时候上面那个 find 一定落空（座位名字不会是空的），不必另写
   // 一句判断——留着这行注释是因为「空名字不认领」是有意的，不是漏了。
@@ -1412,7 +1443,7 @@ async function join(res, body) {
 
   // 新座位叫什么（第 16 推，见 pickSeatName）。放在占椅子**之前**：名字不过关就别先占一把
   // 椅子再退回来——那一下屋里会闪出一个不存在的人。
-  const picked = await pickSeatName(body);
+  const picked = await pickSeatName(body, who);
   if (!picked.ok) return send(res, 400, { error: picked.error });
 
   const playerId = id(8);
@@ -1444,6 +1475,8 @@ async function join(res, body) {
     slot,
     /** 看过哪几族的教学。开局时用来判「这一局可不可能有新手」（见 start）。 */
     seen: cleanSeen(body.seen),
+    /** 登录了的人坐下时记一枚账号标识：认领这把椅子要同一个账号（见 seatOwnerTag）。 */
+    ...(who ? { owner: seatOwnerTag(who.id) } : {}),
   });
   await expire(roomKey(code), ROOM_TTL_S);
   return send(res, 200, {
