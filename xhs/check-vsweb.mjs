@@ -814,6 +814,10 @@ try {
   for (const k of ['square', 'circle', 'bomb', 'slot', 'flip', 'timed', 'layout']) {
     localStorage.setItem('slides_played_' + k, '1');
   }
+  // 打完过一局：网页版主菜单 10-08 方案 3-D-1 起只给打完过一局的人摆《每日挑战》（这一版一直摆着，
+  // 方案点名的只是网页版那一份菜单）。这份脚本比的是两边平常的样子，平常的人早就打完过一局——不填
+  // 这一把，「主菜单：六张卡的图与小字」那一节在网页版上找不到每日挑战那张卡，比不了。
+  localStorage.setItem('slides_played_finished', '1');
   // 网页版把老虎机和无限反转锁在天才票后面，不开锁走不到那一局。这一版全部
   // 免费，锁不在比对范围里，所以这里直接发一张。channel:'code' 是内部码那条
   // 路，subscription.ts 的 read() 对它免检渠道。
