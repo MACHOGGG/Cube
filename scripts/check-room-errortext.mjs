@@ -23,6 +23,9 @@
  *
  * ⚠️ 这台门**不量那十句话说得准不准**（那是文案，`check-rules-counts` 一类在管）。它量
  * 的是「只有一份映射」这件结构上的事，以及「每一种 RoomError 都被想过」。
+ *
+ * ④（2026-10-08 方案 2-1）：errorText 接了话的每一种，都得在 engine/room.ts 的 KNOWN 上——不
+ * 在单子上的词会被改成 'network'，写好的那句话就永远显示不出来（blocked / bad 就这样掉过队）。
  */
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -82,6 +85,22 @@ check('② 开局失败那一处调的是 errorText', main.includes('errorText(b
   check('③ 那张「明知落 default」的单子没过期', stale.length === 0, stale.join('、'));
   // default 本身要在：没有它，一个没接的 reason 会让这个函数回 undefined，屏幕上空一块。
   check('③ default 那一支还在', /default:\s*\n\s*return/.test(fn.slice(0, fn.indexOf('\n}'))), '');
+}
+
+// ---- ④ errorText 接了的每一种，客户端都认得（2026-10-08 方案 2-1）--------------
+//
+// 服务器答的词要先过 engine/room.ts 的 KNOWN 那张单子，才会原样交给 errorText；不在单子上
+// 的一律被改成 'network'。第 16 推给 `blocked` / `bad`（名字过不了关）在 errorText 里写了两句
+// 话，单子上却没加——那两句从来没人看得见，屏幕上写的是「连不上网络」。
+{
+  const at = engine.indexOf('const KNOWN: RoomError[] = [');
+  const list = engine.slice(at, engine.indexOf('];', at));
+  const known = [...list.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]);
+  check('④ 量程：KNOWN 真的读出来了', known.length >= 10, `${known.length} 个：${known.join(' ')}`);
+  const fn = mp.slice(mp.indexOf('export function errorText('));
+  const cased = [...new Set([...fn.slice(0, fn.indexOf('\n}')).matchAll(/case '([a-zA-Z]+)':/g)].map((m) => m[1]))];
+  const unseen = cased.filter((c) => !known.includes(c));
+  check('④ errorText 里接了话的每一种都在 KNOWN 上（不然那句话永远显示不出来）', unseen.length === 0, unseen.join('、'));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

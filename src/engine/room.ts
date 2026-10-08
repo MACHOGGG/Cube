@@ -437,9 +437,19 @@ export const serverTime = (): number => Date.now() + clockOffset;
  */
 export const hasServerClock = (): boolean => bestClock !== null;
 
+/**
+ * 服务器答的这些词原样交给界面（ui/multiplayer.ts 的 errorText 各有一句话）；不在单子上的一律
+ * 当成 'network'——屏幕上写「连不上网络」。
+ *
+ * `blocked` / `bad`（名字过不了关）第 16 推就在服务器和 errorText 里了，**单子上却一直没有**
+ * （2026-10-08 方案 2-1）：没登录的人敲了一个词表里的名字，屏幕上说「连不上网络」，他去查
+ * Wi-Fi，而那两句写好的话从来没人看得见。门是 check-room-errortext 的 ④：errorText 里接了
+ * 的每一种都得在这张单子上。
+ */
 const KNOWN: RoomError[] = [
   'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',
   'tooFew', 'mode', 'ended', 'busy', 'notConfigured', 'tooMany',
+  'blocked', 'bad',
 ];
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
