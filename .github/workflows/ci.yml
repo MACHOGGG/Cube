@@ -26,9 +26,17 @@ on:
     branches: ['**']
   pull_request:
 
+# 默认只给读（2026-10-08 方案第五批第 9 条）。不写的话 GITHUB_TOKEN 拿的是仓库设置里的默认值，可能就是
+# 读写；check、browser 两条一行都不写回仓库，要写的只有 promote（它自己在下面要 contents: write）。
+# 门：check-ci-shape。
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    # 平常五分钟上下跑完；留出余量，卡住了二十分钟就红，不挂满默认的六小时。
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -464,6 +472,10 @@ jobs:
       # 才，屏幕上什么都不报。
       - name: 环境变量清单和代码对得上
         run: node scripts/check-env-example.mjs
+      # CI 自己的两条底线（2026-10-08 方案第五批第 9 条）：顶层只给读权限、每个 job 都有超时，要写权限的只有
+      # promote。读 ci.yml 原文，零点几秒。
+      - name: CI 自己的权限和超时
+        run: node scripts/check-ci-shape.mjs
       # 小屋里两件「谁写谁赢」的事：催屋主不能把刚开的一局抹掉，关了网页的人
       # 不该让全屋再等九十秒。直接叫 api/room.js 的 handler，不起服务器。
       - name: 小屋：催促与开局抢数据、关了网页的座位
@@ -810,6 +822,10 @@ jobs:
   # 关服务器不用 pkill -f（那会连 shell 一起杀掉）——job 跑完容器就没了。
   browser:
     runs-on: ubuntu-latest
+    # 平常一个小时上下（2026-10-08 那一次六十三分钟），留一倍的余量。超过两小时就是哪一道门卡死了——
+    # 一个永远等不到的 waitForSelector、一台没退出的 dev-server——与其挂满默认的六小时（promote 也跟着
+    # 干等，上线一起卡住），不如两小时就红。门一直在加，哪天正常跑也逼近这个数了，回来调它。
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -1396,6 +1412,8 @@ jobs:
     needs: [check, browser]
     if: github.event_name == 'push' && github.ref == 'refs/heads/claude/fangtang-game-web-app-xbecza'
     runs-on: ubuntu-latest
+    # 只有一次 fetch 和一次 push，几秒钟的事。
+    timeout-minutes: 10
     permissions:
       contents: write
     concurrency:
