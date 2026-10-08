@@ -14,13 +14,34 @@
  * Run after changing the icon's artwork:  node scripts/gen-app-icons.mjs
  */
 import { chromium } from 'playwright';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { build } from 'vite';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const OUT = 'public/icons/app';
 const SIZES = [180, 192, 512];
+
+/**
+ * manifest 的两个颜色从 style.css 现读，不在这儿写死（10-08 方案第五批第 10 条）。
+ *
+ * 原先这儿写死 background_color '#FAF9F5'、theme_color '#BE5762'。页面底色后来照玩家给的稿子
+ * 往暗黄挪了一档（--bg 现在是 #F5EDDA），这儿没跟：装到桌面上的那一版，启动画面的底色还是旧
+ * 的米白，和随后亮出来的页面对不上。现在读 style.css 第一个 :root（浅色那一套）里的 --bg 和
+ * --accent——改色只改 style.css 一处，重跑这个脚本就跟上了；门 check-manifest-colors 盯着生成
+ * 出来的那一份和 style.css 对不对得上。
+ */
+async function rootTokens(...names) {
+  const css = await readFile('src/style.css', 'utf8');
+  const at = css.indexOf(':root {');
+  const block = css.slice(at, css.indexOf('\n}', at));
+  return names.map((n) => {
+    const m = block.match(new RegExp(`^\\s*${n}:\\s*(#[0-9A-Fa-f]{6})\\s*;`, 'm'));
+    if (!m) throw new Error(`style.css 第一个 :root 里没找到 ${n}`);
+    return m[1];
+  });
+}
+const [BG, ACCENT] = await rootTokens('--bg', '--accent');
 
 // appIcons.ts imports from homeIcons.ts, so bundle it rather than parsing it.
 const tmp = path.resolve('node_modules/.cache/app-icons');
@@ -63,8 +84,8 @@ for (const { id, svg } of [APP_ICON]) {
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#FAF9F5',
-        theme_color: '#BE5762',
+        background_color: BG,
+        theme_color: ACCENT,
         icons: [
           { src: `/icons/app/${id}-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: `/icons/app/${id}-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },
