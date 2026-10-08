@@ -17,6 +17,7 @@
  * of a single JSON document would drop most of them; writing only your own
  * field cannot lose anyone else's.
  */
+import { randomBytes } from 'node:crypto';
 import { redact } from './_redact.js';
 
 const url = () =>
@@ -71,6 +72,8 @@ async function command(args) {
 const mem = new Map();
 const expiries = new Map();
 function memory(args) {
+  // EVAL 的第二个参数是脚本、不是键，所以在按键处理过期之前单独接走（见 delIfSame）。
+  if (String(args[0]).toUpperCase() === 'EVAL') return memoryEval(args);
   const [rawCmd, key, ...rest] = args;
   const cmd = String(rawCmd).toUpperCase();
   const due = expiries.get(key);
@@ -245,6 +248,42 @@ export const setnx = async (key, value, ttl) =>
 export const del = (key) => command(['DEL', key]);
 
 /**
+ * 键上**还是这个值**才删——比和删是同一步。给锁放手用（见 withLock）。
+ *
+ * 优先 EVAL（Upstash / Vercel KV 都认 Lua）：GET 和 DEL 在 Redis 里一口气做完，中间谁都插不进
+ * 来。万一那一头不认 EVAL（报错），退回「GET → 比 → DEL」三步：中间隔着两次往返，这一缝里键
+ * 恰好过期、又恰好被别人抢到，删的就还是别人的锁——窗口只有两次往返那么宽，而且只在 EVAL 不
+ * 可用时才存在，比从前「无条件 DEL」那一整段（见 withLock）窄得多。
+ *
+ * @returns 删了 true；键上已经不是这个值（或者没了）false。
+ */
+const DEL_IF_SAME = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+export async function delIfSame(key, value) {
+  const want = encode(value);
+  try {
+    return Number(await command(['EVAL', DEL_IF_SAME, 1, key, want])) === 1;
+  } catch {
+    if ((await command(['GET', key])) !== want) return false;
+    return Number(await command(['DEL', key])) === 1;
+  }
+}
+
+/** 内存库只认得 delIfSame 那一段脚本：它本来就是单进程，一个函数里比完就删，同样是一步。 */
+function memoryEval(args) {
+  const [, script, , key, want] = args;
+  if (script !== DEL_IF_SAME) throw new Error('memory store: unknown script');
+  const due = expiries.get(key);
+  if (due !== undefined && due < Date.now()) {
+    mem.delete(key);
+    expiries.delete(key);
+  }
+  if (mem.get(key) !== want) return 0;
+  mem.delete(key);
+  expiries.delete(key);
+  return 1;
+}
+
+/**
  * 一把短命的锁，圈住一段「读出来—算—写回去」。
  *
  * 这一段本来长在 _accounts.js 的 updateAccount 里，只有账号用得上。现在抽到这
@@ -284,13 +323,23 @@ const napMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function withLock(lockKey, run) {
   for (let i = 0; i < LOCK_TRIES; i++) {
-    if (await setnx(lockKey, { at: Date.now() }, LOCK_TTL_S)) {
+    /**
+     * 锁上记一枚只有这一次知道的随机串（2026-10-08 方案 1-5）。
+     *
+     * 从前放锁是无条件 `del(lockKey)`。这一段要是跑过了 LOCK_TTL_S（函数冷启动、库抖了几
+     * 下），锁早就自己过期了，而别人在这期间已经拿到了**他的**锁、正在读—改—写——这边一
+     * 句 DEL 删掉的是**他的**锁，第三个人立刻又进来了。两个人同时在锁里，后写的那份旧快照
+     * 盖掉新数据，正是这把锁要防的那件事。现在只删「还是我那一枚」的锁（delIfSame）。
+     */
+    const mine = { at: Date.now(), token: randomBytes(12).toString('hex') };
+    if (await setnx(lockKey, mine, LOCK_TTL_S)) {
       try {
         return { ok: true, value: await run() };
       } finally {
-        // 放锁失败也不要紧：它自己有 TTL，最多十秒后自己消失。
+        // 放锁失败也不要紧：它自己有 TTL，最多十秒后自己消失。已经不是我的锁（过期了、
+        // 别人拿着）就什么都不删——那一枚归他放。
         try {
-          await del(lockKey);
+          await delIfSame(lockKey, mine);
         } catch (err) {
           // 锁的名字里带着账号 id（statsLockKey 那一类就是「前缀 + 邮箱」），原样写进日志就
           // 是一行明文邮箱（第 14 推）。写指纹：要对账时把同一把锁的名字算一遍去 grep。
