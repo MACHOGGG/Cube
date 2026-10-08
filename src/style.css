@@ -3644,6 +3644,11 @@ body:has(.slot-page) .home-nav { display: none; }
 .daily-art > svg { width: 100%; height: 100%; display: block; }
 /* 那颗药丸自己带着 margin: 0 auto（.profile-pill--wide），这儿只补上边那一截。 */
 .daily-pick .daily-play { margin: 22px auto 0; margin: clamp(14px, 3vh, 26px) auto 0; }
+/* 《今日挑战》那颗**高一倍、字号不变**（10-08 方案 3-F-3：「今日挑战《开始》按钮尺寸 ×2，文字字号不
+   变」）。只翻高度：宽度已经是这一页内容的最宽（.profile-pill--wide 封在 268px，手机上再宽就出屏了）。
+   药丸原来是上下各 10px 的内边距 ＋ 一行字（41px 高），上下各补 20.5px 就是 82——一倍。字还是那一号，
+   药丸照旧 border-radius 全圆，只是胖了一圈。门：check-daily 量它的高是同一页别的药丸的两倍。 */
+.daily-pick .daily-play { padding-top: 30.5px; padding-bottom: 30.5px; }
 .daily-best {
   margin: 10px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 0.86rem;
   color: var(--ink-soft); letter-spacing: 0.02em;

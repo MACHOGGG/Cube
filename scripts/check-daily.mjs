@@ -338,6 +338,44 @@ const WHITE = 'rgb(255, 255, 255)';
   await ctx.close();
 }
 
+// ── ⑦ 挑码那一页的《今日挑战》：高一倍、字号不变（10-08 方案 3-F-3）───────────────
+//
+// 方案原话：「今日挑战《开始》按钮尺寸 ×2，文字字号不变。」翻的是高：宽已经是这一页内容的最宽
+// （.profile-pill--wide 封在 268px，再宽手机上就出屏了）。尺子是**同一颗药丸不带那一条**：把它克
+// 隆一份、摘掉 daily-play 这个类和 id，插在同一个父元素里量——同一段字、同一个外层宽度，量出来的
+// 就是「没改之前它多高」。顺带量这一页还摆得下：《今日挑战》到那一格种子都在《退出》上面。
+for (const [width, height, mobile, label] of [[390, 844, true, '手机 390×844'], [360, 640, true, '手机 360×640'], [1280, 800, false, '电脑 1280×800']]) {
+  const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { width, height, mobile });
+  await page.click('.home-icon-btn--daily');
+  await page.waitForSelector('#dailyPlay', { timeout: 8000 });
+  await page.waitForTimeout(300);
+  const m = await page.evaluate(() => {
+    const btn = document.querySelector('#dailyPlay');
+    const ref = btn.cloneNode(true);
+    ref.removeAttribute('id');
+    ref.classList.remove('daily-play');
+    ref.style.margin = '0 auto';
+    btn.parentElement.appendChild(ref);
+    const b = btn.getBoundingClientRect();
+    const r = ref.getBoundingClientRect();
+    const out = {
+      h: b.height, w: b.width, refH: r.height, refW: r.width,
+      font: getComputedStyle(btn).fontSize, refFont: getComputedStyle(ref).fontSize,
+    };
+    ref.remove();
+    const exit = document.querySelector('#dailyBack')?.getBoundingClientRect();
+    const form = document.querySelector('#seedForm')?.getBoundingClientRect();
+    return { ...out, top: b.top, bottom: b.bottom, vh: innerHeight, formBottom: form?.bottom ?? null, exitTop: exit?.top ?? null };
+  });
+  check(`⑦ ${label}：（尺子）同一颗药丸不带那一条量到了高度`, m.refH > 20 && m.refH < 70, `${m.refH.toFixed(1)}px`);
+  check(`⑦ ${label}：《今日挑战》的高是它的两倍（±1px）`, Math.abs(m.h - 2 * m.refH) <= 1, `${m.h.toFixed(1)} / 2×${m.refH.toFixed(1)}`);
+  check(`⑦ ${label}：字号不变、宽不变`, m.font === m.refFont && Math.abs(m.w - m.refW) <= 0.5, `${m.font} / ${m.refFont}；宽 ${m.w.toFixed(1)} / ${m.refW.toFixed(1)}`);
+  check(`⑦ ${label}：这一页还摆得下——整颗在屏里，那一格种子在《退出》上面`,
+    m.top >= 0 && m.bottom <= m.vh && m.formBottom !== null && m.exitTop !== null && m.formBottom <= m.exitTop,
+    `药丸 ${m.top.toFixed(0)}–${m.bottom.toFixed(0)}，种子底 ${m.formBottom?.toFixed(0)} / 《退出》顶 ${m.exitTop?.toFixed(0)}`);
+  await ctx.close();
+}
+
 check('全程零报错', errs.length === 0, errs.slice(0, 3).join(' | '));
 await browser.close();
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
