@@ -2384,29 +2384,36 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
  *
  * 菱形方块归外边族：它长得是方块，规则却和小球一路（见 shapes/squareDiamond.ts 文件
  * 头那段——按方块那套算，实测清盘率从 23–27/30 跌到 2–6/30）。
+ *
+ * **小球那一句 10-08 方案 3-E-4 改短了**：只留「同色星星连满此刻最外面的一条边，就得分并消除」，
+ * 「最少要 3 枚」「消完之后，剩下的部分整体放大」两句删掉（方案给的四语原文；英文按这张表的英式拼
+ * 法写 same-colour，法文撇号和这一块别的句子一样用弯的）。删之前查过：教学条往后那一条（第 5 条
+ * 「尝试全部消除吧～」）、配图都不靠这两句；靠着它们逐字比对的只有门（check-multiplayer），跟着改了。
+ * 完整的规矩（至少 3 枚、整体放大、门槛降到 1）照旧写在规则书里（src/rules.ts）。方案点名的是小球，
+ * 菱形方块、三角那两句没动。
  */
 export type RuleShape = 'circle' | 'square' | 'squareDiamond' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
-    circle: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board.',
+    circle: 'Fill the current outermost edge with same-colour stars to score and clear it.',
     square: 'Stars of one colour filling a whole row or column score and clear, and the board closes up.',
     squareDiamond: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board.',
     triangle: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board.',
   },
   fr: {
-    circle: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau.',
+    circle: 'Remplissez l’arête la plus extérieure d’étoiles de même couleur pour marquer et l’effacer.',
     square: 'Des \u00e9toiles de m\u00eame couleur sur toute une ligne ou colonne marquent et disparaissent, et le plateau se referme.',
     squareDiamond: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau.',
     triangle: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau.',
   },
   zhHant: {
-    circle: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大。',
+    circle: '同色星星連滿此刻最外面的一條邊，就得分並消除。',
     square: '同色星星連滿整行或整列，就得分並消除，棋盤合攏。',
     squareDiamond: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大。',
     triangle: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大。',
   },
   zhHans: {
-    circle: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',
+    circle: '同色星星连满此刻最外面的一条边，就得分并消除。',
     square: '同色星星连满整行或整列，就得分并消除，棋盘合拢。',
     squareDiamond: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',
     triangle: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',

@@ -578,7 +578,7 @@ if (rulesAsked) {
   }
   // 学的人这会儿开着的是《怎么玩》那一屏（第 14 推）。从前放的是那一族的分镜动画，
   // 而那两段还在教旧规则——入口下线了，改开规则窗，照这一局的玩法摆：圆球那一副，
-  // 第 4 条是「最外面的一条线」那一句，不是方块的「整行或整列」，也不是两边都讲的通稿。
+  // 第 4 条是「最外面的一条边」那一句，不是方块的「整行或整列」，也不是两边都讲的通稿。
   const learnModal = await B.page.waitForSelector('.howto-ov.show', { timeout: 8000 })
     .then(() => true).catch(() => false);
   check('学的人这会儿开着的是规则窗，不是分镜动画（第 14 推）', learnModal && !(await B.page.$('.story-tut')));
@@ -586,7 +586,8 @@ if (rulesAsked) {
     ? await B.page.$$eval('.howto-ov .tut-rule:not(.tut-rule--extra) .tut-rule-text', (e) => e.map((x) => x.textContent.trim()))
     : [];
   check('五条规则都在，第 4 条讲的是这一局（圆球）那一句',
-    learnRules.length === 5 && learnRules[3] === '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',
+    // 10-08 方案 3-E-4 把小球这一句改短了（「最少要 3 枚」「整体放大」两句删掉）。
+    learnRules.length === 5 && learnRules[3] === '同色星星连满此刻最外面的一条边，就得分并消除。',
     `${learnRules.length} 条 · 第 4 条：${(learnRules[3] || '').slice(0, 24)}`);
 
   // 学完了：按《知道了》关窗——走的就是玩家那条路（关窗时报「学完了」、回小屋），
