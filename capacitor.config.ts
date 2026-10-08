@@ -18,7 +18,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.slides.game',
   appName: 'Slides',
-  webDir: 'dist',
+  // iOS 包装的是 dist-ios：dist 去掉只属于网站的 mint.html 和 xhs/（scripts/build-ios-web.mjs，
+  // 10-08 方案第五批第 11 条）。网站那一份 dist 一个字不动。
+  webDir: 'dist-ios',
   // 和 style.css 里的 `--bg` 同一个值，也和 index.html 的 theme-color 同一个值：第一帧
   // 画出来之前那一下，玩家看到的是这张纸本身的颜色，不是一道白闪。
   //

@@ -31,10 +31,12 @@ npm install              # 装依赖（第一次会慢一点）
 npm run ios:sync         # 构建网页 + 塞进 iOS 工程
 ```
 
-`npm run ios:sync` 是关键的一步，它做两件事：
+`npm run ios:sync` 是关键的一步，它做三件事：
 
 1. 跑 `npm run build`，生成 `dist/`（和线上网站一模一样的那份）
-2. 把 `dist/` 复制进 `ios/App/App/public/`
+2. 跑 `scripts/build-ios-web.mjs`，从 `dist/` 复制出一份 `dist-ios/`，去掉只属于网站的两样：
+   `mint.html`（管理员发码页）和 `xhs/`（小红书小工具的副本）——App 里用不上，也不该带着
+3. 把 `dist-ios/` 复制进 `ios/App/App/public/`
 
 > **为什么必须跑这一步？**
 > `ios/App/App/public/` 里放的是构建产物，不在 git 里（否则每次改代码都
@@ -115,7 +117,8 @@ npm run ios:sync
 不需要。网页文件全部打包在 App 里，离线也能玩。
 
 **改了游戏内容，网站会受影响吗？**
-不会，反过来也一样——两边读的是同一份 `src/`，构建出同一份 `dist/`。
+不会，反过来也一样——两边读的是同一份 `src/`，构建出同一份 `dist/`（App 装的是它去掉
+`mint.html`、`xhs/` 之后的 `dist-ios/`，游戏本身一个字不差）。
 网站由 Vercel 从 GitHub 自动部署，App 由你在 Xcode 里手动构建。
 
 **能上 App Store 吗？**
@@ -132,7 +135,7 @@ npm run ios:sync
 
 | 文件 | 说明 |
 | --- | --- |
-| `capacitor.config.ts` | 新增。告诉 Capacitor 网页在 `dist/` |
+| `capacitor.config.ts` | 新增。告诉 Capacitor 网页在 `dist/`（2026-10-08 起改指 `dist-ios/`，见上面第 2 步） |
 | `ios/` | 新增。完整的 Xcode 工程 |
 | `package.json` | 加了 3 个 devDependency 和 2 个脚本 |
 

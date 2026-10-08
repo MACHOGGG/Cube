@@ -10,7 +10,7 @@
     "build:artifact": "tsc -b && vite build --mode artifact --outDir dist-artifact && node scripts/build-artifact.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "ios:sync": "npm run build && cap sync ios",
+    "ios:sync": "npm run build && node scripts/build-ios-web.mjs && cap sync ios",
     "ios": "npm run ios:sync && cap open ios",
     "build:wxgame": "node scripts/build-wxgame.mjs",
     "build:xhs": "node xhs/build.mjs",

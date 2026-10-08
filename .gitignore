@@ -1,5 +1,7 @@
 node_modules
 dist
+# iOS 包装的那一份（dist 去掉 mint.html、xhs/，scripts/build-ios-web.mjs 出的）。
+dist-ios
 dist-artifact
 dist-ssr
 *.local
