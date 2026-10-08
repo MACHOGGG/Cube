@@ -1216,6 +1216,15 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8994/ && break; sleep 0.25; done
           node scripts/check-disband-retry.mjs http://localhost:8994/
 
+      # 榜没拉下来说「没拉下来」，不说「还没有人」（2026-10-08 方案 2-8）：记录页那块缩略图和点开
+      # 之后那一整页，拉榜那一条断掉时各量一次；尺子：放行之后这台新服务器上确实没人，那时候说的
+      # 才是「还没有人」。一台自己的服务器（兑一次 TESTMONTH）。
+      - name: 榜没拉下来不说「还没有人」
+        run: |
+          nohup node scripts/dev-server.mjs 8995 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8995/ && break; sleep 0.25; done
+          node scripts/check-rank-network.mjs http://localhost:8995/
+
   # 两条都绿了，才把这一版推到 production（第 20 推，见文件头）。
   #
   # · 只有「推到开发分支」的那一次跑（别的分支、PR 都不跑）。

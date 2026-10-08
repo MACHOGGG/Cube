@@ -130,6 +130,11 @@ export interface I18nStrings {
   rankLockedCta: string;
   rankSignedOut: string;
   rankEmpty: string;
+  /**
+   * 榜没拉下来（网断了、服务器没回）——和「这张榜上还没有人」是两件事（2026-10-08 方案 2-8）。
+   * 从前拉不到也落在 rankEmpty 上，玩家看着一张空榜，以为真没人玩。
+   */
+  rankNetwork: string;
   /** 榜上没取过名字的那一行。见 engine/nickname.ts 的 leaderboardName。 */
   rankAnon: string;
   /**
@@ -853,6 +858,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: 'Become a Slides Genius',
     rankSignedOut: 'Sign in and your runs go on the board',
     rankEmpty: 'Nobody on this board yet',
+    rankNetwork: 'Couldn’t load the board. Check your connection.',
     rankAnon: 'Anonymous player',
     nickSet: 'Set a nickname',
     nickEdit: 'Edit nickname',
@@ -1213,6 +1219,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: 'Devenir un Slides Génie',
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
     rankEmpty: 'Personne à ce classement pour l’instant',
+    rankNetwork: 'Classement indisponible. Vérifiez votre connexion.',
     rankAnon: 'Joueur anonyme',
     nickSet: 'Choisir un pseudonyme',
     nickEdit: 'Modifier le pseudonyme',
@@ -1573,6 +1580,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: '成為 Slides 天才',
     rankSignedOut: '登入之後，你的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
+    rankNetwork: '榜沒載入，檢查一下網路。',
     rankAnon: '匿名玩家',
     nickSet: '設定暱稱',
     nickEdit: '修改暱稱',
@@ -1933,6 +1941,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLockedCta: '成为 Slides 天才',
     rankSignedOut: '登录之后，你的成绩才会上榜',
     rankEmpty: '这张榜上还没有人',
+    rankNetwork: '榜没加载出来，检查一下网络。',
     rankAnon: '匿名玩家',
     nickSet: '设置昵称',
     nickEdit: '修改昵称',

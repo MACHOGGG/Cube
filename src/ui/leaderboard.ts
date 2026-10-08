@@ -288,8 +288,10 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
         ?.addEventListener('click', opts.onReLogin);
       return;
     }
+    // 剩下的只有「没登录」和「没拉下来」两种。后者从前落在 rankEmpty（「这张榜上还没有人」）上：
+    // 网断了一下，玩家看到的是一张空榜，以为真没人玩（2026-10-08 方案 2-8）。
     body.innerHTML = `<p class="rank-empty">${
-      result.reason === 'signedOut' ? s.rankSignedOut : s.rankEmpty
+      result.reason === 'signedOut' ? s.rankSignedOut : s.rankNetwork
     }</p>`;
   };
 
@@ -448,7 +450,7 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
           ? s.rankSignedOut
           : result.reason === 'expired'
             ? s.rankExpired
-            : s.rankEmpty,
+            : s.rankNetwork,
       );
       return;
     }
