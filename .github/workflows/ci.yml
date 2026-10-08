@@ -1163,6 +1163,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8978/ && break; sleep 0.25; done
           node scripts/check-total-card.mjs http://localhost:8978/
 
+      # 主菜单上开窗、关窗，轴的中线不漂（2026-10-08 方案 3-D-3：「开关 5 次中线不漂」；3-C-6：从帐号窗
+      # 底下那颗 ✅ 关也不许偏）。三条来路各量一遍：轴量完位置之后招牌又长高（副标题打字机打出第一个中
+      # 文字、晚到的新版本提示）；窗开着时页面被推上去（手机键盘——无头浏览器没有键盘，先垫出键盘给的那
+      # 段余地再推）；登录成功那一拍重画主菜单时把被推歪的滚动位置放回去。真注册一遍（免邮箱）。
+      - name: 主菜单开窗关窗中线不漂
+        run: |
+          nohup node scripts/dev-server.mjs 8977 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8977/ && break; sleep 0.25; done
+          node scripts/check-axis-overlay.mjs http://localhost:8977/
+
       # 同一串种子码，每副棋盘发出同一副牌（第 19 推）：编号表二十行，每行造一串码、从《每日挑战》
       # 的输入框开两次比盘面（尺子：换一串码盘面必须不一样）；倒数那几秒页面上除了码和数字一个字
       # 都没有；存档里记着那串码；七色圆球那一天竖着拿手机先说「请横屏」。

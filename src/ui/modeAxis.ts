@@ -1392,6 +1392,58 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   /**
+   * **弹窗关掉之后，把轴摆回原位**（10-08 方案 3-D-3：「登录弹窗关闭后偏移……弹窗 close 回调里调轴
+   * relayout/recenter。验收：开关 5 次中线不漂」）。
+   *
+   * 轴是钉在**文档**顶上、正好一屏高的（见 measure），所以页面被滚了多少，轴就整条错多少。窗开着的
+   * 时候页面会被滚：手机上登录窗的输入框一拿到焦点，键盘弹起来，浏览器把底下那一页往上推，好让输入
+   * 框露出来——窗一关，键盘收了，页面却停在推上去的地方。玩家看到的就是「关了登录窗，主菜单歪了」。
+   *
+   * 不在每扇窗的 close 里各调一遍：站上开窗的地方有十几处（帐号窗、登录窗、邀请窗、规则、换语言……），
+   * 漏一处就是同一个病换个地方发。所有这些窗都是 body 底下直接挂一个 `.overlay`，所以盯着 body 的
+   * 直接子节点：一个 `.overlay` 被拿掉，就是一扇窗关了。只看直接子节点、不看子树，平常一帧都不响。
+   *
+   * 正在拖的时候不管（同 onFocusIn：那会儿页面在哪儿是手指决定的）。
+   */
+  function recenter(): void {
+    if (destroyed || dragging) return;
+    if (window.scrollY !== 0) window.scrollTo(0, 0);
+    measure();
+    paint();
+  }
+  const overlayWatch =
+    typeof MutationObserver === 'function'
+      ? new MutationObserver((records) => {
+          for (const r of records) {
+            for (const n of Array.from(r.removedNodes)) {
+              if (n instanceof HTMLElement && n.classList.contains('overlay')) return recenter();
+            }
+          }
+        })
+      : null;
+  overlayWatch?.observe(document.body, { childList: true });
+
+  /**
+   * **轴前面那块长高了，轴跟着重量一次**（同上，3-D-3 复现时量出来的另一条来路）。
+   *
+   * 轴往上拉多少（measure 里那截负外边距）是按它**自然位置**算的，而自然位置由它前面那几块（招牌）
+   * 的高度决定。招牌在轴量完之后还会长：副标题是打字机一个字一个字打出来的（typeTagline），中文
+   * 打出第一个字的那一下，那一行的行高按中文字体重排，招牌从 104 长到 105——轴于是整条往下错 1px，
+   * 屏幕最上面露出一条底色缝，中线也跟着低 1px，一直错到下一次重画主菜单。登录成功那一下正好会重
+   * 画（landed → onChanged → showMenu），轴「跳」回正确位置：关了登录窗，主菜单动了一下。真机上中
+   * 文落到系统字体，差得可能不止 1px。新版本提示（newVersionPill）晚到、挂进招牌，也是同一回事。
+   *
+   * 字体到货那一次（下面 fonts.ready）是这件事的一个特例，留着：老内核没有 ResizeObserver。
+   */
+  const aboveWatch =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          if (!destroyed) onResize();
+        })
+      : null;
+  for (let el = host.previousElementSibling; el; el = el.previousElementSibling) aboveWatch?.observe(el);
+
+  /**
    * 字体到货之后再量一次。
    *
    * 招牌那行 Slides 用的是自托管的 Fraunces：头一次打开时先拿后备字体（Georgia）
@@ -1442,6 +1494,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       host.removeEventListener('click', onClickCapture, true);
       host.removeEventListener('focusin', onFocusIn);
       window.removeEventListener('resize', onResize);
+      overlayWatch?.disconnect();
+      aboveWatch?.disconnect();
       host.classList.remove('mode-axis');
       host.style.height = '';
       host.style.marginTop = '';

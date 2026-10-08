@@ -380,8 +380,19 @@ let mpOrigin: 'menu' | 'profile' = 'menu';
 let slotOrigin: 'menu' | 'intro' = 'menu';
 /** 放回刚才那个位置。第一下是同步的，因为紧接着可能要重开某个弹窗，而那个
  *  飞入动画要量卡片此刻在屏幕上的真实位置；之后半秒里每帧再放一次，挡住字
- *  体和图标加载完之后高度变化把它冲掉（见 keepScrollAt）。 */
+ *  体和图标加载完之后高度变化把它冲掉（见 keepScrollAt）。
+ *
+ *  **窄屏（那条鱼眼轴）不放，直接回顶**（10-08 方案 3-D-3）。「记住滚到哪儿」是给宽屏那
+ *  几排卡准备的——那一页真的会往下翻。轴不一样：它钉在文档顶上、正好一屏高，停在哪一张由
+ *  它自己记（menu.ts 的 axisFocus），页面被滚了多少，轴就整条错多少。而 menuScrollY 在
+ *  窄屏上记到的只会是「别的东西把页面推了一下」：手机上登录窗的输入框一拿到焦点，键盘把
+ *  底下这一页往上推，这一下也在「主菜单上」，于是被记了下来；登录成功那一拍（landed →
+ *  onChanged → showMenu）照着它放回去，还追着放半秒——主菜单就停在被键盘推歪的地方。 */
 function restoreMenuScroll() {
+  if (root.querySelector('.home-page--axis')) {
+    if (window.scrollY !== 0) window.scrollTo(0, 0);
+    return;
+  }
   keepScrollAt(menuScrollY, onMenuPage);
 }
 
