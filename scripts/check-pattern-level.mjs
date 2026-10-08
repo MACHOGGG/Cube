@@ -50,18 +50,19 @@ const check = (n, ok, extra = '') => {
 };
 
 /**
- * 《侵蚀阶梯》v1.2 §2 那张表的字面值，这道门自己抄一份。
+ * 侵蚀阶梯那张表的字面值，这道门自己抄一份。2026-10 二版（10-08 方案 3-A）：三级合计
+ * 小于全盘枚数，余下的是 1×1 那一段。
  *
  * 抄一份而不是 import，是这道门成立的前提：它要问的就是「erosion 那边的级数和规则说的
  * 对不对得上」，两边读同一个常量的话这一问就没有了。
  */
 const LADDER = {
-  square: [31, 3, 2],
-  circle: [25, 2, 1],
-  squareDiamond: [31, 3, 2],
-  triangleBig: [45, 5, 4],
-  circleHex: [31, 3, 2],
-  circleSeven: [42, 4, 3],
+  square: [15, 11, 6],
+  circle: [12, 8, 5],
+  squareDiamond: [15, 11, 6],
+  triangleBig: [20, 15, 11],
+  circleHex: [15, 11, 6],
+  circleSeven: [18, 14, 10],
 };
 const TILES = { square: 36, circle: 28, squareDiamond: 36, triangleBig: 54, circleHex: 36, circleSeven: 49 };
 
@@ -77,8 +78,10 @@ function levelAfter(seg, n) {
 // ---- ① erosion 的级数 = 规则说的级数 -----------------------------------
 for (const [id, seg] of Object.entries(LADDER)) {
   const total = TILES[id];
-  check(`${id}：段数合计 = 全盘枚数（尺子，对不上下面全是空的）`,
-    seg[0] + seg[1] + seg[2] === total, `${seg.join('+')} = ${seg[0] + seg[1] + seg[2]} / ${total}`);
+  // 尺子：下面那一趟翻到全盘为止，三级合计得在全盘之内（二版：严格小于，余下的是 1×1
+  // 那一段），不然那一趟根本走不到 1 枚级，「每一步都对得上」就只验了前几级。
+  check(`${id}：段数合计 < 全盘枚数、1×1 那一段至少 3 枚（尺子，不然下面那一趟到不了 1 枚级）`,
+    total - (seg[0] + seg[1] + seg[2]) >= 3, `${seg.join('+')} = ${seg[0] + seg[1] + seg[2]} / ${total}`);
   const ero = E.createErosion({ seg, par: 1 });
   const bad = [];
   check(`${id}：一枚没翻的时候是 4 枚级`, ero.level() === 4, String(ero.level()));

@@ -485,7 +485,10 @@ head('① 头一局：五个时机依次走一遍（小球的模拟盘面 + 真�
   check('第 2 条的灯：一步能拼出的「星星＋色块」那一组', m.bar.hint() === 'mixed', String(m.bar.hint()));
 
   // ── 第 3 条：段数 ≤ 4
-  ero.spend(25 - (NEAR_SEGS + 1));
+  // 翻到这一级还剩 NEAR_SEGS + 1 段：从阶梯自己报的段数算，不写死第一级有几段——这儿原先写的
+  // 是 25（一版小球那一行），2026-10 二版换表（10-08 方案 3-A）之后第一级是 12 段，写死的数
+  // 一换表就把模拟盘面翻过了头，下面那把尺子才是这一节真正量的东西。
+  ero.spend(ero.segLeft() - (NEAR_SEGS + 1));
   advance(MIN_READ_MS + 500);
   m.bar.observe(view());
   check(`（尺子）模拟盘面翻到还剩 ${NEAR_SEGS + 1} 段`, ero.segLeft() === NEAR_SEGS + 1 && ero.level() === 4, `第 ${ero.level()} 级剩 ${ero.segLeft()} 段`);

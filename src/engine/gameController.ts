@@ -1234,6 +1234,22 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#5C8A72';
 
   /**
+   * 「大时刻」那一套：两下震动、滴落声、重震、一大把二号强调色的粒子。
+   *
+   * 整线消除那一拍一直是这么庆祝的；1×1 解锁那一下也走它（10-08 方案 3-A：「复用现有星星
+   * 结算庆祝通道，不新开动画所有权」）。两处说的是同一种分量的事——一条线整个化掉、图案
+   * 缩到只剩一枚——长得就该一样；各写一份的话，下回调其中一处，另一处就悄悄走样。
+   * 粒子从 `originCell` 那一格冒出来，那一格不在屏幕上就只有声、震、晃。
+   */
+  function bigMoment(originCell: Cell | undefined): void {
+    vibrate([25, 40, 25]);
+    playClear();
+    screenShake(refs.boardWrap, 'heavy');
+    const pos = originCell ? cellCenterPx(originCell) : null;
+    if (pos) spawnParticles(refs.boardEl, pos[0], pos[1], { color: accent2Color(), count: 16, spread: 64 });
+  }
+
+  /**
    * Plays out whatever is left of the current reveal immediately.
    *
    * The reveal is a chain of timed beats — hold the highlight, turn the
@@ -1454,26 +1470,29 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // A bonus (the whole-line, 36-point event) gets its own distinct
       // double-pulse — it's the bigger moment — while an ordinary match gets
       // one light buzz, right as its highlight appears.
-      vibrate(isBonus ? [25, 40, 25] : 15);
-      // Graded feedback: an ordinary first-in-move match only gets a tone —
-      // shake and particles are reserved for a chained step or a bonus, so
-      // they stay a "big moment" signal instead of firing on every score.
       // A whole-line clear is its own event, not a louder score: the line is
       // draining off the board, so it gets the falling droplet rather than
-      // the scoring bell.
-      if (isBonus) playClear();
-      else playScore(tierComboMult);
-      const shakeTier: ShakeTier | null = isBonus ? 'heavy' : tierComboMult > 3 ? 'medium' : tierComboMult > 1 ? 'light' : null;
-      if (shakeTier) {
-        screenShake(refs.boardWrap, shakeTier);
-        const originCell = (isBonus ? s.lineBonusGroups[0] : s.matchGroups[0])?.[0];
-        const pos = originCell ? cellCenterPx(originCell) : null;
-        if (pos) {
-          spawnParticles(refs.boardEl, pos[0], pos[1], {
-            color: isBonus ? accent2Color() : accentColor(),
-            count: isBonus ? 16 : shakeTier === 'medium' ? 12 : 8,
-            spread: isBonus ? 64 : 44,
-          });
+      // the scoring bell. That whole package lives in bigMoment (the 1×1
+      // unlock uses it too).
+      if (isBonus) bigMoment(s.lineBonusGroups[0]?.[0]);
+      else {
+        vibrate(15);
+        // Graded feedback: an ordinary first-in-move match only gets a tone —
+        // shake and particles are reserved for a chained step or a bonus, so
+        // they stay a "big moment" signal instead of firing on every score.
+        playScore(tierComboMult);
+        const shakeTier: ShakeTier | null = tierComboMult > 3 ? 'medium' : tierComboMult > 1 ? 'light' : null;
+        if (shakeTier) {
+          screenShake(refs.boardWrap, shakeTier);
+          const originCell = s.matchGroups[0]?.[0];
+          const pos = originCell ? cellCenterPx(originCell) : null;
+          if (pos) {
+            spawnParticles(refs.boardEl, pos[0], pos[1], {
+              color: accentColor(),
+              count: shakeTier === 'medium' ? 12 : 8,
+              spread: 44,
+            });
+          }
         }
       }
 
@@ -1523,6 +1542,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
             // 教学第 3 条「剩下的段数 ≤ 4」可能在一步之内整个被跨过去（一步翻了八枚，降级
             // 之后新的一级是满格）——结算之后再看段数就看不出来了，所以降级这一下单报一声。
             coach?.signal('erosion');
+            // 1×1 解锁的那一下：主动说一声（10-08 方案 3-A）。二版里 1×1 是真打的一段，到
+            // 这儿不再意味着盘已翻完——这一下得让人知道「现在一枚就够了」，不能只靠右上角
+            // 那一块闪两下。只响一次：级数在一局里只降不升，unlockedOne 记着这一局响过没有。
+            if (step.level === 1 && !unlockedOne) bigMoment(s.matchGroups[0]?.[0]);
           }
           if (step.unlocked) unlockedOne = true;
           // 每翻一枚都要重画：段熄一格、末位那枚跟着再淡一点。降级那一下由

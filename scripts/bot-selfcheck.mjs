@@ -76,10 +76,11 @@ const SOAK = args.includes('--soak');
 /**
  * 一局最多滑几步。滑不完也算数据，只是那一局不参与 H1。
  *
- * 260 不是随手写的：方块那副盘第一级有 31 段（engine/erosion.ts 的表），也就是说图案
- * 从 4 枚降到 3 枚要先翻掉 31 枚棋子，而这个机器人大约每八步翻一枚。预算给少了，H3
- * 那一条「阶梯推得动」永远跨不过去——量过：120 步翻 24 枚、图案还是 4 枚；260 步翻 33
- * 枚，图案一路降到 1 枚。一步约 0.48 秒（开着 reduced-motion）。
+ * 260 不是随手写的：这个机器人大约每八步翻一枚，而图案要先翻掉一级的段数才降一枚。定
+ * 这个数的时候是一版的表（方块第一级 31 段）：量过 120 步翻 24 枚、图案还是 4 枚；260
+ * 步翻 33 枚，图案一路降到 1 枚。2026-10 二版换表之后（engine/erosion.ts，方块第 15 枚
+ * 到 1×3、第 32 枚到 1×1）同样的 260 步更宽裕：走到 1×1 要的枚数没多，第一次降级提前了
+ * 一半。一步约 0.48 秒（开着 reduced-motion）。
  */
 const BUDGET = Number(flag('budget', SOAK ? 600 : 260));
 const RUNS = Number(flag('runs', SOAK ? 20 : 2));
@@ -153,8 +154,15 @@ const installProbe = () => {
   const colorOf = (el) => {
     if (el.dataset.face === 'dot') {
       // dataset.dotColor 是方块那边写的，别的棋盘不一定有，所以两条路都走。
+      //
+      // 星星那一笔画在 asteriskGroup 的 <g stroke> 上（ui/dotFaceMark.ts），**先认它**。三角的星
+      // 星外面还套着一圈灰边（triRingPath，stroke 是 var(--ink-faint)），排在那个 <g> 前面——从前
+      // 这儿取的是「第一个带 stroke 的」，于是三角上每一颗星星读出来都是那圈灰边，全盘一个颜色：
+      // 全是星星的线怎么滑都读成「一个格子都没动」，连着 12 手就判卡死（H2），而盘面其实一直在动。
+      // 2026-10 侵蚀阶梯换成二版的表之后，机器人头一回在大三角上走到后半局，这才撞见。
       return canon(
         el.dataset.dotColor ||
+        el.querySelector('svg g[stroke]')?.getAttribute('stroke') ||
         el.querySelector('svg [stroke]')?.getAttribute('stroke') ||
         el.querySelector('svg')?.getAttribute('stroke') ||
         '',
@@ -322,21 +330,21 @@ function resolveSim(snap, lines, need) {
 }
 
 /**
- * 《侵蚀阶梯》§2 那张段数表的字面值，这道门自己抄一份（和
- * `scripts/check-pattern-level.mjs` 同一份）。
+ * 侵蚀阶梯那张段数表的字面值，这道门自己抄一份（和 `scripts/check-pattern-level.mjs`
+ * 同一份）。2026-10 二版（10-08 方案 3-A）：三级合计小于全盘，余下的是 1×1 那一段。
  *
  * 抄一份而不是 import：H5 要问的正是「屏幕上那一块画的级数对不对」，读同一个常量就成了
  * 「它说它是对的」。键是主菜单上那张卡的名字——这个机器人认的就是那个名字。
  */
 const LADDER_BY_BOARD = {
-  方块: [31, 3, 2],
-  菱形方块: [31, 3, 2],
-  圆球: [25, 2, 1],
-  六边圆球: [31, 3, 2],
-  七色圆球: [42, 4, 3],
-  大三角: [45, 5, 4],
+  方块: [15, 11, 6],
+  菱形方块: [15, 11, 6],
+  圆球: [12, 8, 5],
+  六边圆球: [15, 11, 6],
+  七色圆球: [18, 14, 10],
+  大三角: [20, 15, 11],
   // 基础炸弹那一档开的是方块或小球（BOMB_SHAPES），开哪一副由那一屏第一个 chip 定。
-  // 两副的第一级差得远（31 vs 25），推错了会冤枉游戏，所以**炸弹局不做 H5**。
+  // 两副的第一级不一样（15 vs 12），推错了会冤枉游戏，所以**炸弹局不做 H5**。
 };
 
 /** 翻了 n 枚之后，按 §2 那张表该是第几枚级。 */
@@ -468,6 +476,7 @@ function applyPerm(snap, perm) {
  * 也就是放大真的发生之后。两道合起来才覆盖得住。
  */
 async function piecesInsideFloor(page) {
+  await stillPieces(page);
   return page.evaluate(() => {
     const wrap = document.querySelector('.board-wrap');
     if (!wrap) return '';
@@ -485,6 +494,32 @@ async function piecesInsideFloor(page) {
     }
     return '';
   });
+}
+
+/**
+ * 等棋子停稳再量：每一枚的位置连着两拍一样（最多等一秒半）。
+ *
+ * settle() 只等「面和颜色」不再变，位置它不看——可一手松开之后，那一条线还在弹簧里往格子上
+ * 落（engine/dragChain.ts），这几帧里棋子在格子之间。七色圆球开局时最外圈那几颗正好贴着底板
+ * 边（量过：上、左 0px，右、下 0.02px），落位途中多走半个像素就被 H7 甲算成「戳出底板」——量
+ * 到的是动画的一帧，不是放大算错。2026-10 侵蚀阶梯换成二版的表之后机器人得分更勤，撞上过一
+ * 次：第 56 手、那一局一条边都没消过，根本还没放大。
+ */
+async function stillPieces(page, maxMs = 1500) {
+  const t0 = Date.now();
+  let prev = '';
+  for (;;) {
+    const now = await page.evaluate(() =>
+      [...document.querySelectorAll('.board-wrap .tile, .board-wrap .ball, .board-wrap .tri')]
+        .map((e) => {
+          const r = e.getBoundingClientRect();
+          return `${r.left.toFixed(1)},${r.top.toFixed(1)},${r.width.toFixed(1)}`;
+        })
+        .join('|'));
+    if (now === prev || Date.now() - t0 > maxMs) return;
+    prev = now;
+    await page.waitForTimeout(60);
+  }
 }
 
 /**
