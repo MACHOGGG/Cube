@@ -218,7 +218,23 @@ const FIRST = 'UiProbe' + Date.now().toString(36).slice(-5);
   await page.fill('#authFirst', FIRST);
   await page.fill('#authSecond', 'secondpass');
   await page.click('#authGo');
-  // 成功之后那句「截个图」留一拍再关窗，所以等《账户》那一屏出来。
+  // 这一颗键先试登录、对不上再试注册（ui/subscribe.ts 的 pairSubmit）——这一串是新的，所以开出了一个
+  // 新号。成了那一拍说的是玩家定的那一句（2026-10-08 方案 2-13）：他按的是同一颗键，多半以为自己在
+  // 登旧账号，第一串打错一个字就会这样悄悄开出一个新号。
+  const said = await page
+    .waitForFunction(() => document.querySelector('#authMsg')?.textContent?.trim() || '', null, { timeout: 15000 })
+    .then(async () => {
+      for (let i = 0; i < 40; i++) {
+        const t = await page.$eval('#authMsg', (e) => e.textContent.trim()).catch(() => '');
+        if (t && t !== '处理中…' && !/处理/.test(t)) return t;
+        await page.waitForTimeout(100);
+      }
+      return '';
+    })
+    .catch(() => '');
+  check('注册成了那一拍说的是「新账户登录成功，若尝试登录旧账号请退出重试」',
+    said === '新账户登录成功，若尝试登录旧账号请退出重试', said);
+  // 那一句留一拍再关窗，所以等《账户》那一屏出来。
   await page.waitForSelector('#statusClose', { timeout: 20000 });
   const v = await page.evaluate(() => ({
     h2: document.querySelector('.overlay h2')?.textContent?.trim() ?? '',

@@ -362,6 +362,12 @@ export interface I18nStrings {
   pairWarning: string;
   pairSaveBtn: string;
   pairSavedHint: string;
+  /**
+   * 免邮箱那一颗「登录 / 注册」同一键（ui/subscribe.ts 的 pairSubmit）：登录对不上、自动试注册成功
+   * 之后说的那一句（2026-10-08 方案 2-13，玩家原话）。他以为自己在登录旧账号，其实开了一个新的
+   * ——第一串打错一个字就是这样。流程一个字不动，只是把这件事说出来。
+   */
+  pairNewAccountHint: string;
   pairForgot: string;
   pairResetBtn: string;
   useEmailInstead: string;
@@ -941,6 +947,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairWarning: 'The first string is your key. Tell no one: whoever knows it can reset the second one.',
     pairSaveBtn: 'Save',
     pairSavedHint: '✓ Saved — screenshot both strings',
+    pairNewAccountHint: 'Signed in to a new account. If you meant your old one, sign out and try again.',
     pairForgot: 'Forgot the second string?',
     pairResetBtn: 'Set a new second string',
     useEmailInstead: '← Use an email address',
@@ -1303,6 +1310,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairWarning: 'La première chaîne est votre clé. Ne la donnez à personne : qui la connaît peut redéfinir la seconde.',
     pairSaveBtn: 'Enregistrer',
     pairSavedHint: '✓ Enregistré — faites une capture des deux chaînes',
+    pairNewAccountHint: 'Connecté à un nouveau compte. Si vous vouliez l’ancien, déconnectez-vous et réessayez.',
     pairForgot: 'Deuxième chaîne oubliée ?',
     pairResetBtn: 'Définir une nouvelle deuxième chaîne',
     useEmailInstead: '← Utiliser une adresse e-mail',
@@ -1665,6 +1673,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairWarning: '第一串是你的鑰匙，別告訴任何人——知道它的人可以重設第二串。',
     pairSaveBtn: '儲存',
     pairSavedHint: '✓ 已存好，截圖留存兩串',
+    pairNewAccountHint: '新帳戶登入成功，若嘗試登入舊帳號請退出重試',
     pairForgot: '忘了第二串？',
     pairResetBtn: '重設第二串',
     useEmailInstead: '← 改用電子郵件',
@@ -2027,6 +2036,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairWarning: '第一串是你的钥匙，别告诉任何人——知道它的人可以重设第二串。',
     pairSaveBtn: '保存',
     pairSavedHint: '✓ 已存好，截图留存两串',
+    pairNewAccountHint: '新账户登录成功，若尝试登录旧账号请退出重试',
     pairForgot: '忘了第二串？',
     pairResetBtn: '重设第二串',
     useEmailInstead: '← 改用邮箱',

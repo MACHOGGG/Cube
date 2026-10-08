@@ -1102,7 +1102,9 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       return;
     }
     await offerToSave(first, second);
-    tell(s.pairSavedHint);
+    // 登录对不上、注册成了：他按的是同一颗键，多半以为自己在登旧账号——第一串打错一个字就会
+    // 这样悄悄开出一个新号。说出来（2026-10-08 方案 2-13，玩家原话），流程一个字不动。
+    tell(s.pairNewAccountHint);
     await new Promise((r) => setTimeout(r, 1400));
     landed();
   };
