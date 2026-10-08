@@ -34,6 +34,11 @@
  * **③ 不在盘上的格子不进线**（方块消掉整行整列之后那些坐标）。留着它们等于在盘上插一堵
  * 看不见的墙，把本来连得上的一段截断——那会让搜索件少看见一些得分，往「判死」那一侧偏，
  * 而那是最不能偏的方向。
+ *
+ * **④ 例外：六边圆球中心那个永久空位是一堵真墙**（2026-10-08 方案 2-4）。真棋盘扫「同线连续
+ * N 枚」时它就在线上、把两边断开，只是滑的时候球隔着它首尾相接。所以它不能像 ③ 那样整个
+ * 不进线——它回 `'hole'`：滑动那头不进线，扫描那头占一格。照 ③ 那样压实，洞两边两枚同色球
+ * 在穷举里就成了「连着的」，实盘永远得不了分的残局被判活，局不结束。
  */
 import type { Cell, Tile } from './types';
 import { EDGE_MIN, outerEdges, type EdgeBoard } from './outerEdge';
@@ -52,8 +57,15 @@ import {
   type ResidueVerdict,
 } from './residueSearch';
 
-/** 这一格此刻是什么。`null` = 不在盘上（不占位置、不参与滑动）。 */
-export type ResidueCellAt = (r: number, c: number) => { color: number; dot: boolean } | 'blank' | null;
+/**
+ * 这一格此刻是什么。
+ *
+ *   · `null`：不在盘上——不占位置、不参与滑动、也不出现在扫描线上。
+ *   · `'blank'`：占着一格、**跟着线滑**，可配不上任何颜色（活炸弹）。
+ *   · `'hole'`：占着线上的一个位置、**不滑**，也配不上任何颜色。只有六边圆球中心那个永久空位
+ *     是这样（2026-10-08 方案 2-4），见 build() 上面那段。
+ */
+export type ResidueCellAt = (r: number, c: number) => { color: number; dot: boolean } | 'blank' | 'hole' | null;
 
 /** 可用枚数超过这个数就不穷举了——§4 的字面值。 */
 export const RESIDUE_MAX_TILES = 16;
@@ -63,19 +75,40 @@ interface Built {
   /** 反过来：格号 → 它的行列。老虎机那一支要用它当「从哪儿起手试这个形状」。 */
   cells: Cell[];
   start: Uint16Array;
-  lines: number[][];
+  /** 滑动用的线：只有跟着线滑的格子（洞不在里面）。 */
+  moveLines: number[][];
+  /** 扫「同线连续 N 枚」用的线：洞在里面，占一个位置、把两边断开。没有洞的棋盘两份一模一样。 */
+  scanLines: number[][];
 }
 
 const key = (r: number, c: number) => r + ',' + c;
 
-/** 把线和格子编成号。不在盘上的格子直接不进线。 */
+/**
+ * 把线和格子编成号。不在盘上的格子直接不进线。
+ *
+ * **洞要分两头编**（2026-10-08 方案 2-4）。六边圆球中心那个永久空位，真棋盘对它的两种待遇
+ * 不一样：
+ *
+ *   · 滑的时候它**不在**那一串里（applyDrag 滑的是 liveOnLine，空位不算），两边的球隔着它首
+ *     尾相接——所以滑动那头照旧压实，洞不进 moveLines；
+ *   · 扫「同线连续 N 枚」的时候它**在**（findRunMatches 按整条几何线扫，空位让 qualifies
+ *     不成立），洞两边的两枚**不算相邻**——所以扫描那头洞要占一格，编成配不上任何颜色的
+ *     RESIDUE_BLANK，把两边断开。
+ *
+ * 从前洞回 `null`，两头一起压实：洞左右两枚同色球在穷举里成了「连着的两枚」。于是一副实盘上
+ * 怎么滑都得不了分的残局，穷举说「还能得分」，局就永远不结束——正是这个兜底要治的那个病，
+ * 换了个来路又回来了。洞不在任何一条滑动线里，所以它那一格的编码永远是起手那个
+ * RESIDUE_BLANK，不会被滑走、也不会被别的球换进来。
+ */
 function build(lines: readonly (readonly Cell[])[], at: ResidueCellAt): Built {
   const index = new Map<string, number>();
   const cells: Cell[] = [];
   const codes: number[] = [];
-  const out: number[][] = [];
+  const moveLines: number[][] = [];
+  const scanLines: number[][] = [];
   for (const line of lines) {
-    const row: number[] = [];
+    const scan: number[] = [];
+    const move: number[] = [];
     for (const [r, c] of line) {
       const got = at(r, c);
       if (got === null) continue;
@@ -85,13 +118,15 @@ function build(lines: readonly (readonly Cell[])[], at: ResidueCellAt): Built {
         id = codes.length;
         index.set(k, id);
         cells.push([r, c]);
-        codes.push(got === 'blank' ? RESIDUE_BLANK : encodeTile(got.color, got.dot));
+        codes.push(got === 'blank' || got === 'hole' ? RESIDUE_BLANK : encodeTile(got.color, got.dot));
       }
-      row.push(id);
+      scan.push(id);
+      if (got !== 'hole') move.push(id);
     }
-    if (row.length >= 2) out.push(row);
+    if (move.length >= 2) moveLines.push(move);
+    if (scan.length >= 2) scanLines.push(scan);
   }
-  return { index, cells, start: Uint16Array.from(codes), lines: out };
+  return { index, cells, start: Uint16Array.from(codes), moveLines, scanLines };
 }
 
 function toBonus(
@@ -213,11 +248,11 @@ export function residueVerdict(opts: ResidueOpts): ResidueVerdict {
   let usable = 0;
   for (let i = 0; i < built.start.length; i++) if (built.start[i] !== RESIDUE_BLANK) usable++;
   if (usable > RESIDUE_MAX_TILES) return 'unknown';
-  if (!built.lines.length) return 'unknown';
+  if (!built.moveLines.length) return 'unknown';
   return residueSearch({
     start: built.start,
-    moves: opts.filler ? fillerAwareShuffles(built.lines) : cyclicShuffles(built.lines),
-    scanLines: built.lines,
+    moves: opts.filler ? fillerAwareShuffles(built.moveLines) : cyclicShuffles(built.moveLines),
+    scanLines: built.scanLines,
     matchLen: opts.matchLen,
     patternHit: opts.slot ? patternHitFor(built, opts.slot) : undefined,
     bonusLines: toBonus(built, opts.bonusLines),
@@ -290,5 +325,5 @@ export function oneStepMoves(
   filler = false,
 ): { cells: Cell[]; moves: LineShuffle[] } {
   const built = build(lines, (r, c) => (isOn(r, c) ? 'blank' : null));
-  return { cells: built.cells, moves: filler ? fillerAwareShuffles(built.lines) : cyclicShuffles(built.lines) };
+  return { cells: built.cells, moves: filler ? fillerAwareShuffles(built.moveLines) : cyclicShuffles(built.moveLines) };
 }

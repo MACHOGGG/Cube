@@ -970,11 +970,19 @@ export function createCircleHexGame(): ShapeGame {
        *
        * **活炸弹照旧回 `'blank'`**：它真的占着一格、真的跟着线滑，只是配不上任何颜色。
        * 漏掉它（像 `liveTiles()` 那样）穷举算的就又是另一副棋盘了。
+       *
+       * ⚠️ **中心那个永久空位回 `'hole'`，不是 `null`**（2026-10-08 方案 2-4）。滑的时候它和削
+       * 掉的格子一样不在那一串里；可扫「同线连续 N 枚」的时候它在——findRunMatches 按整条几何线
+       * 扫，它让 qualifies 不成立，**洞两边的两枚不算相邻**。回 `null` 的话穷举把那条线压实，
+       * 洞左右两枚同色球成了「连着的」，实盘怎么滑都得不了分的残局被判活，局不结束。
+       * 削掉的格子照旧回 `null`：它们只从线的两头离场（v1.2 §3 的 endsAll），压实了也不会让哪
+       * 两枚凭空挨上。按坐标认这一格是稳的：空位从不滑（applyDrag 只排 liveOnLine），它从发牌
+       * 那一刻起就钉在 CENTER_CELL 上。
        */
       const residueAt = (r: number, c: number) => {
         const t = grid[r]?.[c];
         if (!t) return null;
-        if (isBlank(t)) return null;
+        if (isBlank(t)) return r === CENTER_CELL[0] && c === CENTER_CELL[1] ? ('hole' as const) : null;
         if (liveBomb(t)) return 'blank' as const;
         return { color: effColor(t), dot: t.face === 'dot' };
       };

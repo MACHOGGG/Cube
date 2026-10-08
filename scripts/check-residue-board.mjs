@@ -778,7 +778,9 @@ head('【11】方块 2×2：1×4 拼不出，形状拼得出');
 // 幕上只是「某些局不结束」或者「局突然结束」。所以这儿读源码，钉住两件事：
 //
 //   · 五副外边族的 `residueAt` 对空白回 `null`（不是 `'blank'`）。这一句写错了，穷举算的
-//     就是另一副棋盘——线长不对，循环位移算出来的排列整个不对。
+//     就是另一副棋盘——线长不对，循环位移算出来的排列整个不对。唯一的例外是六边圆球中心
+//     那个永久空位：它回 `'hole'`（2026-10-08 方案 2-4，扫描时它把两边断开，见
+//     engine/residueBoard.ts 文件头 ④；行为由 check-endgame-residue 【8】量）。
 //   · 老虎机那两副（方块、小球）在有目标时**不走穷举**：穷举判的是「凑不凑得出 1×N」，而
 //     老虎机要凑的是转出来的那个形状。拿 1×N 那把尺子去量，它会把一局明明还能打的棋判死。
 {
@@ -794,7 +796,14 @@ head('【11】方块 2×2：1×4 拼不出，形状拼得出');
     const at = src.indexOf('const residueAt = (r: number, c: number) =>');
     check(`${f}：有 residueAt`, at > 0, String(at));
     const body = src.slice(at, src.indexOf('};', at));
-    check(`${f}：空白回 null`, /if \(isBlank\(t\)\) return null;/.test(body), body.replace(/\s+/g, ' ').slice(0, 120));
+    if (f === 'circleHex.ts') {
+      // 削掉的空白照旧回 null，只有 CENTER_CELL 那一格回 'hole'——两半都要在，缺哪一半都是另一副棋盘。
+      check(`${f}：空白回 null，只有中心那个永久空位回 hole（方案 2-4）`,
+        /if \(isBlank\(t\)\) return r === CENTER_CELL\[0\] && c === CENTER_CELL\[1\] \? \('hole' as const\) : null;/.test(body),
+        body.replace(/\s+/g, ' ').slice(0, 160));
+    } else {
+      check(`${f}：空白回 null`, /if \(isBlank\(t\)\) return null;/.test(body), body.replace(/\s+/g, ' ').slice(0, 120));
+    }
     check(`${f}：不许再回 'blank'`, !/isBlank\(t\) \|\| liveBomb\(t\)/.test(body));
     if (f !== 'circleSeven.ts') {
       check(`${f}：活炸弹照旧回 'blank'`, /if \(liveBomb\(t\)\) return 'blank'/.test(body),

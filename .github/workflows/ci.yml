@@ -569,12 +569,15 @@ jobs:
       # 局却不结束。这一支守两头：三副真死局要答 dead（每一副都配一条「计数那层说活」
       # 的对照尺子，证明复现的就是那个 bug），而预算算不完的时候**一律 unknown、绝不是
       # dead**——判死那一侧错了会把还能打的局掐掉，比不结束更糟。读模块、不开浏览器。
+      # 第四个包是棋盘到穷举那层转换（residueBoard）：六边圆球的中心洞扫描时要把两边断开、
+      # 滑动时不动（2026-10-08 方案 2-4，从前压实了，洞两边两枚同色球被当成连着的）。
       - name: 残局穷举：该结束的要结束，算不完一律当活
         run: |
           npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs
           npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs
           npx esbuild src/engine/slideLine.ts     --bundle --format=esm --outfile=/tmp/slideline.mjs
-          node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs /tmp/slideline.mjs
+          npx esbuild src/engine/residueBoard.ts  --bundle --format=esm --outfile=/tmp/residueboard.mjs
+          node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs /tmp/slideline.mjs /tmp/residueboard.mjs
       # 滑一条线、炸弹连没连上（第 14 推）：五副外边族棋盘共用 engine/slideLine.ts 和
       # engine/bomb.ts 那几样。活格不到两枚的线拖了不算一步（从前白扣一步），大三角长滑不
       # 复制、不丢棋子（从前奇数长的线滑过 n−1 格会），每副棋盘每种线长、步数 −3n…3n 遍历。

@@ -4,7 +4,8 @@
  *   npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs
  *   npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs
  *   npx esbuild src/engine/slideLine.ts     --bundle --format=esm --outfile=/tmp/slideline.mjs
- *   node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs /tmp/slideline.mjs
+ *   npx esbuild src/engine/residueBoard.ts  --bundle --format=esm --outfile=/tmp/residueboard.mjs
+ *   node scripts/check-endgame-residue.mjs /tmp/residue.mjs /tmp/stalemate.mjs /tmp/slideline.mjs /tmp/residueboard.mjs
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 这道门守的是哪次事故
@@ -24,17 +25,19 @@
  *
  * 纯算术，不开浏览器，进得了 CI。
  */
-const [residueSrc, stalemateSrc, slideSrc] = process.argv.slice(2);
-if (!residueSrc || !stalemateSrc || !slideSrc) {
-  console.error('用法: node scripts/check-endgame-residue.mjs <residueSearch.mjs> <stalemate.mjs> <slideLine.mjs>');
+const [residueSrc, stalemateSrc, slideSrc, boardSrc] = process.argv.slice(2);
+if (!residueSrc || !stalemateSrc || !slideSrc || !boardSrc) {
+  console.error('用法: node scripts/check-endgame-residue.mjs <residueSearch.mjs> <stalemate.mjs> <slideLine.mjs> <residueBoard.mjs>');
   console.error('  npx esbuild src/engine/residueSearch.ts --bundle --format=esm --outfile=/tmp/residue.mjs');
   console.error('  npx esbuild src/engine/stalemate.ts     --bundle --format=esm --outfile=/tmp/stalemate.mjs');
   console.error('  npx esbuild src/engine/slideLine.ts     --bundle --format=esm --outfile=/tmp/slideline.mjs');
+  console.error('  npx esbuild src/engine/residueBoard.ts  --bundle --format=esm --outfile=/tmp/residueboard.mjs');
   process.exit(2);
 }
 const R = await import(residueSrc);
 const S = await import(stalemateSrc);
 const L = await import(slideSrc);
+const RB = await import(boardSrc);
 const { readFileSync } = await import('node:fs');
 
 let fail = 0;
@@ -335,6 +338,111 @@ head('【7】大三角长滑不复制、不丢棋子（第 14 推）：n = 1…1
   const line = 'ABCDEFGHIJK'.split('');
   const out = L.slideLine(line, L.clampOddShift(40, line.length), L.fillerAwareSource);
   check('十一枚拖出 40 步：出来的还是那十一枚', Boolean(out) && [...out].sort().join('') === line.join(''), out ? out.join('') : 'null');
+}
+
+// ---------------------------------------------------------------------------
+head('【8】六边圆球的中心洞：扫描时把两边断开，滑动时不动（2026-10-08 方案 2-4）');
+{
+  // 真棋盘对那个永久空位的两种待遇不一样：滑的时候它不在那一串里（球隔着它首尾相接），扫
+  // 「同线连续 N 枚」的时候它在（findRunMatches 按整条几何线扫，洞两边的两枚不算相邻）。从前
+  // 适配层把它当「不在盘上」，两头一起压实——洞左右两枚同色球在穷举里成了连着的。
+  //
+  // 线照 src/shapes/circleHex.ts 的 allLines() 摆（半径 3 的六边形、37 格、立方坐标三族），
+  // 洞在 [3, 3]。这儿量的是 engine/residueBoard.ts 那层转换（build），不是搜索件本身。
+  const N = 3;
+  const ROW_LENS = [4, 5, 6, 7, 6, 5, 4];
+  const lower = (z) => Math.max(-N, -z - N);
+  const toLocal = (x, z) => {
+    const y = -x - z;
+    if (Math.abs(x) > N || Math.abs(y) > N || Math.abs(z) > N) return null;
+    const r = z + N;
+    const c = x - lower(z);
+    return c >= 0 && c < ROW_LENS[r] ? [r, c] : null;
+  };
+  const lines = [];
+  for (let r = 0; r < ROW_LENS.length; r++) lines.push(Array.from({ length: ROW_LENS[r] }, (_, c) => [r, c]));
+  for (let x = -N; x <= N; x++) {
+    const cells = [];
+    for (let z = -N; z <= N; z++) { const cell = toLocal(x, z); if (cell) cells.push(cell); }
+    lines.push(cells);
+  }
+  for (let y = -N; y <= N; y++) {
+    const cells = [];
+    for (let z = -N; z <= N; z++) { const cell = toLocal(-y - z, z); if (cell) cells.push(cell); }
+    lines.push(cells);
+  }
+  const cellCount = new Set(lines.flat().map(([r, c]) => r + ',' + c)).size;
+  check('（尺子）摆出来的是 37 格、21 条线的六边形', cellCount === 37 && lines.length === 21, `${cellCount} 格 ${lines.length} 条`);
+  const throughHole = lines.filter((l) => l.some(([r, c]) => r === 3 && c === 3));
+  check('（尺子）穿过中心的正好三条线（每族一条），洞都在线的中间',
+    throughHole.length === 3 && throughHole.every((l) => {
+      const i = l.findIndex(([r, c]) => r === 3 && c === 3);
+      return i > 0 && i < l.length - 1;
+    }), throughHole.map((l) => l.length).join('/'));
+
+  const A1 = { color: 1, dot: false };
+  const B1 = { color: 2, dot: false };
+  const C1 = { color: 3, dot: false };
+  /** 这一格此刻是什么：给定的那几格是球，[3,3] 按 `hole` 回，其余全都削掉了（null）。 */
+  const atOf = (live, hole) => (r, c) => {
+    if (r === 3 && c === 3) return hole;
+    return live[r + ',' + c] ?? null;
+  };
+  const verdict = (live, hole, matchLen) =>
+    RB.residueVerdict({ lines, at: atOf(live, hole), matchLen, bonusLines: [] });
+
+  // ① 残局：只剩中间那一行洞左右的两枚同色球，图案是 1×2。实盘上那一行能滑（两枚换个位置），
+  //    可换完还是「A 洞 A」，两枚永远隔着洞；穿过它们的另两族线上都只剩它自己，滑不动。真死局。
+  const twoAcross = { '3,2': A1, '3,4': A1 };
+  const v1 = verdict(twoAcross, 'hole', 2);
+  check('① 洞左右两枚同色、别处都削光了：穷举说死', v1 === 'dead', v1);
+  const vOld = verdict(twoAcross, null, 2);
+  check('①（对照尺子）洞照从前那样当「不在盘上」：穷举说还能得分——这就是那个 bug', vOld === 'scores', vOld);
+  const alive = countingSaysAlive([{ color: 1, dot: false }, { color: 1, dot: false }], 2, 9999 /* NO_EDGE */);
+  check('①（对照尺子）计数那一层也说活——两层一起说活，局就永远不结束', alive === true, String(alive));
+  // 洞要是跟着线滑（编成活炸弹那样的 'blank'），「A 洞 A」滑一格就成了「A A 洞」——那是一副
+  // 实盘到不了的盘面。所以洞不能编成 blank。
+  const vBlank = verdict(twoAcross, 'blank', 2);
+  check('①（对照尺子）洞要是编成跟着线滑的 blank：又说能得分（实盘到不了）', vBlank === 'scores', vBlank);
+
+  // ② 反面：洞不许把真的得分路也挡死。同一行「A B C 洞 A」，滑一格，洞右边那枚 A 隔着洞绕到
+  //    最左边，和原来那枚 A 挨上——实盘上就是这么走的（liveOnLine 压实了滑）。
+  const jump = { '3,0': A1, '3,1': B1, '3,2': C1, '3,4': A1 };
+  const v2 = verdict(jump, 'hole', 2);
+  check('② 隔着洞绕过来就能连上：穷举说能得分（滑动那头照旧压实）', v2 === 'scores', v2);
+  const v2still = verdict({ '3,0': A1, '3,1': B1, '3,4': C1 }, 'hole', 2);
+  check('②（尺子）三枚各不同色：说死（不然 ② 在「什么时候都说能」时也绿）', v2still === 'dead', v2still);
+
+  // ③ 洞不算「可用」的那几枚（§4 是「可用 ≤16 枚才穷举」）。摆 16 枚、起手就有一对挨着的同色
+  //    （1×2 当场成立）：洞要是被数进去就是 17 枚，一上来就答 unknown；没数进去就答 scores。
+  const firstCells = lines.slice(0, 4).flat().filter(([r, c]) => !(r === 3 && c === 3));
+  const deal = (n) => {
+    const live = {};
+    firstCells.slice(0, n).forEach(([r, c], i) => { live[r + ',' + c] = { color: i % 6, dot: false }; });
+    live['0,1'] = { color: 0, dot: false }; // 和 [0,0] 同色、同一行挨着
+    return live;
+  };
+  const v3 = verdict(deal(16), 'hole', 2);
+  check('③ 16 枚可用 + 洞：洞不算进「可用」，照样开搜（起手就成，答 scores）',
+    RB.RESIDUE_MAX_TILES === 16 && v3 === 'scores', v3);
+  const v3over = verdict(deal(17), 'hole', 2);
+  check('③（尺子）17 枚可用：一上来就答 unknown（门槛真的是按可用枚数卡的）', v3over === 'unknown', v3over);
+}
+{
+  // ④ 只有六边圆球交得出 'hole'：别的五副没有永久空位，一个字不动（方案原话「其余五副不动」）。
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const bodyOf = (src) => {
+    const from = src.indexOf('const residueAt = ');
+    return from < 0 ? '' : src.slice(from, src.indexOf('\n      };', from));
+  };
+  const hex = bodyOf(strip(readFileSync(new URL('../src/shapes/circleHex.ts', import.meta.url), 'utf8')));
+  check('④ 六边圆球的 residueAt 对中心那一格回 hole',
+    /CENTER_CELL\[0\][\s\S]{0,40}CENTER_CELL\[1\][\s\S]{0,30}'hole'/.test(hex), hex.slice(0, 120).replace(/\s+/g, ' '));
+  for (const f of ['circle', 'circleSeven', 'squareDiamond', 'square', 'triangle']) {
+    const body = bodyOf(strip(readFileSync(new URL(`../src/shapes/${f}.ts`, import.meta.url), 'utf8')));
+    check(`④ ${f}.ts 的 residueAt 不回 hole（尺子：切出了那一段）`, body.length > 40 && !/'hole'/.test(body),
+      `${body.length} 字`);
+  }
 }
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
