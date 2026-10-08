@@ -191,6 +191,37 @@ check('删掉的那两个 id 不在任何一副棋盘的名片上',
   check('每副棋盘的终局快照都经 packSnapshot 摆正（方块那一副原先缩在左上角）', bad.length === 0, bad.join('、'));
 }
 
+// ⑧ 服务端那一份「按前缀猜族」和名片对得上（10-08 方案第五批第 5 条）。
+//
+// api/room.js 的 familyOf 是纯 node 那一侧的，import 不到 registry（registry 是前端的、由 main.ts 注册），所以它照旧
+// 按 id 前缀猜：square* → 方块、circle* → 小球、**其余一律三角**。它决定的是「屋里有没有人没看过这一族的教学」
+// （多留那四秒、问不问「会不会」）。下一副新棋盘只要 id 不以这三个词开头，就会在服务端被静默分进三角——前端这边早就
+// 改成名片自己说了，这一处还在猜。这儿逐个核：room.js 收的每一个 mode（MODES 那张表），服务端猜出来的族必须等于那副
+// 棋盘名片上自己声明的 family；mode 是族名本身的（老虎机、无限反转那一档就是 square / circle）也要猜回自己。
+{
+  const room = readFileSync(new URL('../api/room.js', import.meta.url), 'utf8');
+  const modesSrc = (room.match(/const MODES = new Set\(\[([\s\S]*?)\]\);/) || [, ''])[1];
+  const modes = [...modesSrc.matchAll(/'([A-Za-z]+)'/g)].map((m) => m[1]);
+  const fnSrc = (room.match(/const familyOf = \(mode\) =>\s*([\s\S]*?);\n/) || [, ''])[1];
+  check('⑧（尺子）room.js 里读到了 MODES 那张表和 familyOf', modes.length >= 6 && fnSrc.length > 10,
+    `${modes.join(' ')} ／ ${fnSrc.replace(/\s+/g, ' ').slice(0, 80)}`);
+  if (modes.length && fnSrc) {
+    // 原样拿 room.js 的那一句来算，不在门里另写一份前缀规则（另写一份就成了两份会各自走样的猜法）
+    const familyOf = new Function('mode', `return ${fnSrc};`);
+    const byId = Object.fromEntries(cards.filter(Boolean).map((c) => [c.id, c.family]));
+    const wrong = [];
+    for (const m of modes) {
+      const want = byId[m] ?? (FAMILIES.includes(m) ? m : undefined);
+      if (!want) { wrong.push(`${m}：名片上找不到这个 id，也不是族名`); continue; }
+      const got = familyOf(m);
+      if (got !== want) wrong.push(`${m}：服务端猜 ${got}，名片说 ${want}`);
+    }
+    check('⑧ room.js 收的每一个 mode，服务端猜的族都等于名片上声明的', wrong.length === 0, wrong.join('；'));
+    // 反向对照：一副 id 不以三个族名开头的「新棋盘」，服务端会猜成三角——这条门要能把它抓出来
+    check('⑧（反向对照）id 叫 hexCircle 的新棋盘会被服务端猜成三角（所以加棋盘时这一条会红）', familyOf('hexCircle') === 'triangle');
+  }
+}
+
 // ⑦ CLAUDE.md 讲棋盘的那一节和 src/shapes/ 对得上（10-08 方案第四批第 10 条）。
 //
 // 那一节原先写着「`src/shapes/` 下八个模块（… `triangleBig` `triangleAdvanced`）」——PR-6 删到六副之后一直没人改，
