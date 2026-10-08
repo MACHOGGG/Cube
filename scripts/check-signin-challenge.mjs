@@ -31,9 +31,12 @@
  *      出来正好是受害者那个计数键。
  *   ⑥ 过渡路：不带票时认老键（`signin:<邮箱>`），这样一个卡在上线那一刻的标签页不会被判
  *      成失败。那些老码 30 分钟后自己过期，这条路自己就消失。
- *   ⑦ 两道只管 confirm 的限速：按邮箱 15 次（只数真有码可猜的那几次）、按来路 30 次。
- *      「只数真实猜测」这一条要紧：否则外人拿**编的**票打 15 次就把受害者这一小时的额度
- *      用光了，而那正是这道门要修的病。
+ *   ⑦ 只管 confirm 的那道限速：按来路 30 次。**按邮箱的那道（一小时 15 次）2026-10-08 撤
+ *      了**（方案 1-2）：外人拿编的票烧不动它，可拿**真票**烧得动——自己替受害者要三张
+ *      票、每张乱猜 5 次，正好 15 次，受害者拿着对的码打进来答 429。⑦ 现在量的正是「攻击
+ *      者 15 次错码之后，受害者正确码仍能登录」。
+ *   ⑨ 要码那道「一个邮箱一小时十封」只数**真的寄出去的**（方案 1-2）：Resend 挂着的时候
+ *      点多少次《重发》都不烧这个邮箱的额度。
  *
  * ── 这道门怎么保证自己不是空绿 ────────────────────────────────
  *
@@ -41,7 +44,8 @@
  *   ─────────────────────────────────────────────────  ───────────
  *   码的键回到按地址（票只当装饰）                          ①②③⑥⑦
  *   计数的键回到按地址                                      ③′⑦
- *   「按邮箱 15 次」挪到读码之前（于是编的票也算）           ⑦
+ *   把按邮箱那道（一小时 15 次）加回来                        ⑦
+ *   `signin:toAll` 回到「每来一次就记」                       ⑨
  *   不验票的形状                                            ④′
  *   request 往老键里写                                      ①②③⑥⑦
  *   EMAIL_RE 放开冒号                                       ⑤
@@ -295,25 +299,29 @@ const tryCode = (email, code, challenge, ip) =>
   check('⑦ 外人拿编的票打 20 次，受害者照旧登得进去（额度没被吃掉）',
     in1.status === 200 && Boolean(in1.body.token), `${in1.status} ${in1.raw}`);
 
-  // 反面：真实猜测是**真的**在数的。一个地址连着要三张票、每张猜 5 次 = 15 次，
-  // 第 16 次真实猜测要被按邮箱那道挡下。
+  // **拿真票烧**（2026-10-08 方案 1-2）。外人自己替受害者的地址要三张票（要码按「邮箱 +
+  // 来路」算，他换三个来路就有三张）、每张乱猜 5 次 = 15 次。从前按邮箱那道一小时 15 次
+  // 正好被他烧光，受害者拿着信里对的码打进来答 429——知道邮箱就能把人锁在门外一小时。
   const CAP = 'quota-cap@example.com';
   const seen = [];
   for (let round = 0; round < 3; round++) {
     const t = (await askCode(CAP, freshIp())).ticket;
     for (let i = 0; i < 5; i++) seen.push((await tryCode(CAP, '000000', t, freshIp())).status);
   }
-  check('⑦（反面）15 次真实猜测都数上了：没有一次是 429',
-    seen.every((c) => c === 401 || c === 429) && seen.filter((c) => c === 429).length === 0,
-    seen.join(' '));
-  // 第 4 张票：第 14 推起要码那道限速按「邮箱 + 来路」各算三封（见 ⑧），换一个来路照样要
-  // 得到。原先这一条断言的是「第 4 封被挡下」——那正是外人能耗光别人额度的那条路：谁都能
-  // 替这个地址要三封，真正的主人这一小时就一封都要不到了。
-  const fourth = await askCode(CAP, freshIp());
-  check('⑦ 第 4 封从另一个来路照样要得到（要码按「邮箱 + 来路」算）', fourth.status === 200, String(fourth.status));
-  // 而猜的那一道还是按邮箱数：拿这张新票猜第 16 次，挡下。两道闸各管一段。
-  const sixteenth = await tryCode(CAP, '000000', fourth.ticket, freshIp());
-  check('⑦ 第 16 次真实猜测被按邮箱那道挡下（一小时十五次）', sixteenth.status === 429, String(sixteenth.status));
+  check('⑦ 外人拿三张真票乱猜 15 次：每一次都只是「码不对」',
+    seen.length === 15 && seen.every((c) => c === 401), seen.join(' '));
+  const owner = await askCode(CAP, freshIp());
+  check('⑦ （尺子）受害者自己要得到码', owner.status === 200 && /^\d{6}$/.test(String(owner.code)),
+    `${owner.status} ${owner.code}`);
+  const back = await tryCode(CAP, owner.code, owner.ticket, freshIp());
+  check('⑦ 攻击者 15 次错码之后，受害者拿对的码照样登得进去（不再 429）',
+    back.status === 200 && Boolean(back.body.token), `${back.status} ${back.raw}`);
+  // 防猜码靠的那一道照旧在：一张票第 6 次就作废（MAX_TRIES）。
+  const one = await askCode('quota-ticket@example.com', freshIp());
+  const six = [];
+  for (let i = 0; i < 6; i++) six.push((await tryCode('quota-ticket@example.com', '000000', one.ticket, freshIp())).status);
+  check('⑦ 每张票照旧只给 5 次，第 6 次这张票作废', six.slice(0, 5).every((c) => c === 401) && six[5] === 429,
+    six.join(' '));
 }
 
 // ── ⑧ 要码的额度：外人耗不光别人的（第 14 推）──────────────────────
@@ -340,6 +348,36 @@ const tryCode = (email, code, challenge, ip) =>
   for (let i = 0; i < 11; i++) seen.push((await askCode(Y, freshIp())).status);
   check('⑧ 同一个邮箱换十一个来路：前十封放过，第十一封挡下',
     seen.slice(0, 10).every((c) => c === 200) && seen[10] === 429, seen.join(' '));
+}
+
+// ── ⑨ 「一个邮箱一小时十封」只数寄出去的（2026-10-08 方案 1-2）──────────
+//
+// Resend 挂着：信一封没出去，回 mailDown。从前每来一次就记一笔，玩家点几下《重发》就把这
+// 个邮箱一小时的十封烧光了；等 Resend 好了，他这一小时一封都要不到。
+{
+  const Z = 'quota-maildown@example.com';
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (!String(url).includes('resend.com')) throw new Error('unexpected fetch: ' + url);
+    return { ok: false, status: 503, text: async () => 'resend is down' };
+  };
+  const realErr = console.error;
+  console.error = () => {}; // sendMail 失败会写一行日志，那是它该做的，别刷屏
+  const down = [];
+  try {
+    for (let i = 0; i < 12; i++) down.push(await askCode(Z, freshIp()));
+  } finally {
+    globalThis.fetch = realFetch;
+    console.error = realErr;
+  }
+  check('⑨ Resend 挂着：十二次都答「没寄出去」（mailDown），没有一次 429',
+    down.every((r) => r.status === 200 && r.body.sent === false && r.body.reason === 'mailDown'),
+    down.map((r) => `${r.status}:${r.body.reason ?? r.body.error}`).join(' '));
+  const up = await askCode(Z, freshIp());
+  check('⑨ Resend 好了：这个邮箱照样要得到码（那十二次没烧额度）', up.status === 200 && up.body.sent === true,
+    `${up.status} ${up.raw}`);
+  const signIn = await tryCode(Z, up.code, up.ticket, freshIp());
+  check('⑨ 而且那一封真能登进去', signIn.status === 200 && Boolean(signIn.body.token), `${signIn.status}`);
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

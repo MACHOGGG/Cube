@@ -1,4 +1,4 @@
-import { bump } from './_store.js';
+import { bump, get } from './_store.js';
 
 /**
  * A counter per caller per window, for every door a stranger can knock on.
@@ -28,9 +28,31 @@ import { bump } from './_store.js';
  * 骗不到内存，窗口边缘上算得毛一点，远不如「简单到一眼看得出对不对」要紧。
  */
 export async function tooMany(bucket, id, limit, windowS) {
-  const key = `rl:${bucket}:${id}:${Math.floor(Date.now() / (windowS * 1000))}`;
   // The window's own key expires with it, so nothing accumulates.
-  return (await bump(key, windowS + 60)) > limit;
+  return (await bump(windowKey(bucket, id, windowS), windowS + 60)) > limit;
+}
+
+/** 三个函数共用的那个键：一个桶、一个身份、一个窗口。 */
+const windowKey = (bucket, id, windowS) => `rl:${bucket}:${id}:${Math.floor(Date.now() / (windowS * 1000))}`;
+
+/**
+ * 「查」和「记」拆成两步的那一种：先 `atLimit` 只看不记，事情真的做成了再 `countHit` 记
+ * 一笔。和 `tooMany` 记的是同一个键，所以同一个桶不要两种写法混着用。
+ *
+ * 只给「失败不该算钱」的那种额度用（2026-10-08 方案 1-2：signin 的 `signin:toAll` 只数真的
+ * 寄出去的信——Resend 那头挂了、信一封没出去，不该把这个邮箱一小时的额度也一起烧掉）。
+ *
+ * ⚠️ 代价照实写：查和记之间隔着一次发信，同一瞬间打进来的几个请求会一起看到「还没到」，
+ * 于是这一窗口可能多放过几次——正是 `tooMany` 文件头那段说的「假门」，只是这儿是有意的、
+ * 而且只多放过「同时在飞的那几封」。真正挡人的那几道（按来路、按「邮箱 + 来路」）照旧用
+ * `tooMany`，一步做完。
+ */
+export async function atLimit(bucket, id, limit, windowS) {
+  return (Number(await get(windowKey(bucket, id, windowS))) || 0) >= limit;
+}
+/** 记一笔（见 atLimit）。 */
+export async function countHit(bucket, id, windowS) {
+  await bump(windowKey(bucket, id, windowS), windowS + 60);
 }
 
 /**

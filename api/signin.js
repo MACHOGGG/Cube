@@ -15,7 +15,7 @@ import {
   updateAccount,
 } from './_accounts.js';
 import { grantLifetimeIfWindow, resolveEntitlement } from './_entitlement.js';
-import { callerId, tooMany } from './_ratelimit.js';
+import { atLimit, callerId, countHit, tooMany } from './_ratelimit.js';
 import { bump, del, get, set, storeConfigured } from './_store.js';
 import { compose, mailLang, sendMail } from './_mail.js';
 
@@ -56,6 +56,8 @@ import { compose, mailLang, sendMail } from './_mail.js';
 
 const CODE_TTL_S = 30 * 60;
 const MAX_TRIES = 5;
+/** 一个邮箱一小时最多寄出去这么多封（只数寄出去的，见 request）。 */
+const TO_ALL_PER_HOUR = 10;
 
 /**
  * 一张票（`challenge`）：这一次要码的人自己的凭据。
@@ -105,17 +107,21 @@ const key = (email, ticket) => 'signin:' + email + (ticket ? ':' + ticket : '');
 const triesKey = (email, ticket) => 'signin:tries:' + email + (ticket ? ':' + ticket : '');
 
 /**
- * 两道只管 `confirm` 的限速。
- *
- * `GUESS_PER_HOUR` 按**邮箱**数，而且只数「真有码可猜」的那几次（见 confirm 里的次序）。
- * 15 不是随手挑的：要码那道限速是一小时三封，每张票 5 次，3 × 5 = 15——它把「这个地址一
- * 小时里总共能被猜多少次」这个本来是推出来的数写明白了。只数真实猜测这一点要紧：否则外
- * 人拿一个**编的**票打 15 次，就把受害者这一小时的额度用光了，而那正是这一推要修的病。
+ * 只管 `confirm` 的那一道限速。
  *
  * `TRY_PER_CALLER` 按来路数，挡的是我们自己的资源（每次 confirm 都要读一次库）。它无条件
  * 地数，编的票也算——那种请求除了耗我们一次往返什么也做不到，而这一道正是用来限它的。
+ *
+ * **从前还有一道按邮箱数的 `signin:guess`（一小时 15 次），2026-10-08 撤了（方案 1-2）。**
+ * 它只数「真有码可猜」的那几次，挡住了「拿编的票烧额度」；可它挡不住**拿真票烧**：外人
+ * 自己替受害者的地址要三张票（要码那道按「邮箱 + 来路」给每个来路三封）、每张乱猜 5 次，
+ * 正好 15 次——受害者拿着信里那串**对的**码打进来，答的是 429。知道邮箱就能把人锁在门外
+ * 一小时，正是这几道门要防的那件事。
+ *
+ * 撤了之后防猜码靠的是：每张票 5 次（MAX_TRIES，超了这张票作废）×「一个地址一小时最多出
+ * 去十封信」（request 里的 `signin:toAll`）＝ 一个地址一小时至多被真猜 50 次，对一百万种
+ * 六位码是二万分之一；外加按来路 30 次。门是 check-signin-challenge 的 ⑦。
  */
-const GUESS_PER_HOUR = 15;
 const TRY_PER_CALLER = 30;
 
 /**
@@ -175,7 +181,10 @@ async function request(res, req, address, wantLang) {
   //     三封，谁都能替一个地址连要三封，主人这一小时就一封都要不到了——不用猜码，只要知
   //     道他的邮箱。现在外人耗光的只是他自己那一份。
   //   by address —— 同一个邮箱一小时总共十封，换多少个来路都一样。挡的是一个人换着来路
-  //     往别人信箱里一直灌验证码。
+  //     往别人信箱里一直灌验证码。**只数真的寄出去的**（2026-10-08 方案 1-2）：先查不记
+  //     （atLimit），信发成了才记一笔（countHit，在下面 sendMail 之后）。从前每来一次就记，
+  //     Resend 那头一挂，玩家点几下《重发》就把自己这一小时的十封烧光了，而那几封一封都没
+  //     出去。它同时是猜码那一侧的上限（见 TRY_PER_CALLER 上面那段）：一小时最多十张有效票。
   //   by caller  —— 一台机器也不许拿着一份地址名单挨个来要码。
   //
   // 都答 429 而不是假装发了：真在等信的人有权知道为什么什么都没来。
@@ -183,7 +192,7 @@ async function request(res, req, address, wantLang) {
   if (await tooMany('signin:to', `${address}|${caller}`, 3, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (await tooMany('signin:toAll', address, 10, 3600)) {
+  if (await atLimit('signin:toAll', address, TO_ALL_PER_HOUR, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
   if (await tooMany('signin:from', caller, 10, 3600)) {
@@ -213,6 +222,8 @@ async function request(res, req, address, wantLang) {
    * 实寄到了」是有的，删掉码的话那张寄到的码反而成了废纸。多留 30 分钟不花钞。
    */
   const sent = await sendMail({ to: address, ...compose(MAIL, lang, code) });
+  // 寄出去了才算这个邮箱一封（见上面「by address」那一条）。
+  if (sent) await countHit('signin:toAll', address, 3600);
   /*
    * 票**两种情况都回**，连发信失败那一种。
    *
@@ -235,9 +246,8 @@ async function confirm(res, req, address, { code, news, challenge }) {
    *   ③ 占掉这张票的一次机会（`bump`，原子）。**先占号再比对**——次序反过来就是那道假
    *      门：几十个并发请求会一起通过「还没到 5 次」这一关，然后一起猜（照 unlock.js）。
    *   ④ 把码读出来。没有就是这张票不存在或者过期了。
-   *   ⑤ 到这儿才按邮箱记一次「真的猜了一回」。摆在 ④ 后面是有意的，理由写在
-   *      GUESS_PER_HOUR 上：摆在前面的话，外人拿编的票就能把受害者这一小时的额度用光。
-   *   ⑥ 比对。
+   *   ⑤ 比对。（从前 ④ 和比对之间还有一道按邮箱的 `signin:guess`，2026-10-08 撤了——它能
+   *      被外人拿真票烧光，把拿着对的码的主人挡在门外，见 TRY_PER_CALLER 上面那段。）
    */
   const ticket = String(challenge ?? '');
   if (ticket && !CHALLENGE_RE.test(ticket)) return send(res, 400, { error: 'expired' });
@@ -256,10 +266,6 @@ async function confirm(res, req, address, { code, news, challenge }) {
 
   const pending = await get(key(address, ticket));
   if (!pending) return send(res, 400, { error: 'expired' });
-
-  if (await tooMany('signin:guess', address, GUESS_PER_HOUR, 3600)) {
-    return send(res, 429, { error: 'tooMany' });
-  }
 
   if (String(code || '').trim() !== pending.code) {
     return send(res, 401, { error: 'wrongCode' });
