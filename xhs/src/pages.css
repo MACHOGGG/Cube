@@ -369,11 +369,12 @@
 /* ---- 炸弹挑形状那两张：按下去变红（第 18 推第 2 条）--------------------------
    方案原话：「小红书 shapePick.ts 的两个选项同样变红」——和网页版炸弹选择页那六格同一个样
    子：底板（图标里最底下那块浅灰）变 --card-red，加一圈 3px 的白边，整张放大到 1.04；减
-   弱动态效果时不放大。底板由 bombBoard() 挂上 .bomb-plate 这个类，颜色从这儿来。
+   弱动态效果时不放大。底板由 bombBoard() 挂上 .bomb-plate 这个类；平时那块浅灰挂在底板自
+   己身上（bomb-plate--basic，src/style.css，10-08 方案 3-F-4 的 iconFor 给的——倒数页上那张
+   图外面没有这一层，颜色得跟着图走），这儿只管按下去那一下。
    这一端跑在 Chrome 61 上：三种状态各写一条（它不认 :focus-visible，并成一个选择器列表的
    话整条作废，:hover 和 :active 也跟着没了）；白边是底板自己的描边，不是 border——底板
    一个是圆角方、一个是圆。 */
-.xhs-bomb-pick .bomb-plate { fill: var(--card-ash); }
 .xhs-bomb-pick .slot-pick-opt > svg { overflow: visible; }
 .xhs-bomb-pick .slot-pick-opt:hover { transform: scale(1.04); }
 .xhs-bomb-pick .slot-pick-opt:active { transform: scale(1.04); }

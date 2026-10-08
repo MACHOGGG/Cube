@@ -1329,7 +1329,9 @@ export function renderMultiplayerPage(
     container.innerHTML = `
       <div class="app mp-page mp-countdown-page">
         ${startStageHtml({
-          shapeId: mode,
+          // 这一局是什么（10-08 方案 3-F-4，ui/modeIcons.ts 的 iconFor）：小屋只开基础、无限反转、
+          // 老虎机这三种，三种摆的都是棋盘自己那张脸——和屋主挑玩法那一屏上的那一格同一张。
+          mode: { mode: state.slot ? 'slot' : state.flip ? 'flip' : 'base', board: mode },
           room: true,
           countId: 'mpTick',
           // 老虎机那一局：上半屏摆那台机器，不摆静止的玩法图（见

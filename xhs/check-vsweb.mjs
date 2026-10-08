@@ -558,17 +558,16 @@ const SCREENS = [
   },
   {
     // 上一屏留的尾巴：这一版主菜单上那张炸弹卡，用的到底是不是网页版自己的
-    // 炸弹标志？把网页版炸弹局的开局页调出来，拿那上面的标志跟这一版的卡对。
-    // 对上了，「换了一张图」就不是「另画了一张」，而是「换成了网页版画给这
-    // 件事的那一张」。
-    name: '炸弹卡的图 = 网页版炸弹局的标志',
+    // 炸弹标志？拿网页版主菜单上那张炸弹卡的图（手机上就是那枚炸弹图标，第 18
+    // 推第 3 条）跟这一版的卡对。对上了，「换了一张图」就不是「另画了一张」，而
+    // 是「换成了网页版画给这件事的那一张」。
+    //
+    // 从前比的是网页版炸弹局开局页上并排的那颗炸弹徽记。10-08 方案 3-F-4 起开局页
+    // 的图和第二层按下去的那一格是同一张（ui/modeIcons.ts 的 iconFor：那一档颜色底
+    // 板的棋盘），那颗徽记撤了——网页版画给「炸弹」这件事的那一张，现在只在主菜单
+    // 那张卡上（方案 3-D-5：「主菜单炸弹卡保留现有合成 icon」）。
+    name: '炸弹卡的图 = 网页版主菜单炸弹卡的图',
     custom: async (webPage, xhsPage) => {
-      await tapWebTag(webPage, '炸弹');
-      await webPage.waitForTimeout(900);
-      await webPage.$$eval('.center-pick .bomb-row .bomb-chip, .bomb-panel .bomb-row .bomb-chip', (e) => e[0].click());
-      await webPage.waitForTimeout(1400);
-      // 网页版炸弹局的开局页上有两张标志：玩法自己的（方块）和炸弹的。
-      // 取全部，看这一版的卡在不在里面。
       const webMarks = await webPage.evaluate(() => {
         const strip = (n) => {
           if (n.nodeType !== 1) return;
@@ -577,7 +576,7 @@ const SCREENS = [
           }
           for (const k of [].slice.call(n.childNodes)) strip(k);
         };
-        return [].slice.call(document.querySelectorAll('.start-mark svg')).map((e) => {
+        return [].slice.call(document.querySelectorAll('.home-bomb-mini .home-icon-art svg')).map((e) => {
           const c = e.cloneNode(true);
           strip(c);
           return c.outerHTML.replace(/\s+/g, ' ').replace(/> </g, '><').trim();
@@ -604,13 +603,13 @@ const SCREENS = [
       });
       say(
         found(card),
-        '这一版炸弹卡上那张图，就是网页版炸弹局开局页上的那张标志',
+        '这一版炸弹卡上那张图，就是网页版主菜单上那张炸弹卡的图',
         found(card)
           ? ''
           : card
             ? webMarks.length
-              ? `网页版那一屏有 ${webMarks.length} 张标志，没有一张对上`
-              : '网页版那一屏一张标志也没抓到'
+              ? `网页版主菜单上那张炸弹卡有 ${webMarks.length} 张图，没有一张对上`
+              : '网页版主菜单上那张炸弹卡一张图也没抓到'
             : '这一版的卡上没抓到 SVG',
       );
     },

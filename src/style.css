@@ -2815,6 +2815,13 @@ button:hover { filter: brightness(1.05); }
 .bomb-row--basic { --bomb-plate: var(--card-ash); }
 .bomb-row--timed { --bomb-plate: var(--card-orange); }
 .bomb-row--advanced { --bomb-plate: var(--card-gray); }
+/* 底板自己带着那一档的时候（bombBoard 给了 tier，挂上 bomb-plate--<档>；10-08 方案 3-F-4 的
+   iconFor）：开局倒数页上那张图外面没有 .bomb-row，颜色得跟着图走——它和炸弹那一页按下去的
+   那一格是同一张。和上面三排同一组颜色；放进面板的那一格里，.bomb-chip .bomb-plate 那一条更
+   重，说的是同一个颜色。 */
+.bomb-plate--basic { fill: var(--card-ash); }
+.bomb-plate--timed { fill: var(--card-orange); }
+.bomb-plate--advanced { fill: var(--card-gray); }
 /* 一格：正方的，宽是这一排的 38%。它是一颗键，先把全局 button 那一套（flex: 1、内边距、
    圆角、底色）甩掉。 */
 .bomb-chip {

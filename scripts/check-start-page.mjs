@@ -118,7 +118,11 @@ const pieces = (page) => page.evaluate((sel) => document.querySelectorAll(sel).l
   await ctx.close();
 }
 
-// ---- 3. 炸弹局：图旁边挂一颗炸弹 ------------------------------------------
+// ---- 3. 炸弹局：那张图就是炸弹那一页按下去的那一格 ---------------------------
+//
+// 从前这儿量的是「图旁边挂一颗炸弹徽记、和玩法图一样大并排」。10-08 方案 3-F-4 起倒数页的图
+// 和第二层按下去的那一格是同一张（ui/modeIcons.ts 的 iconFor）：炸弹局那张图本身就是那一档颜
+// 色底板的棋盘，那颗徽记撤了。逐玩法的比对在 check-mode-icons，这儿只留炸弹这一条的样子。
 let bombShare = null;
 {
   const { ctx, page } = await open();
@@ -129,21 +133,18 @@ let bombShare = null;
   await page.waitForTimeout(250);
   const marks = await page.evaluate(() => {
     const all = Array.from(document.querySelectorAll('#startOverlay .start-mark'));
-    const w = all.map((e) => Math.round(e.getBoundingClientRect().width));
+    const plate = document.querySelector('#startOverlay .start-mark-art .bomb-plate--basic');
     return {
-      bomb: !!document.querySelector('#startOverlay .mode-badge--bomb svg'),
+      plate: !!plate,
+      fill: plate ? getComputedStyle(plate).fill : '',
+      badge: !!document.querySelector('#startOverlay .mode-badge--bomb'),
       room: !!document.querySelector('#startOverlay .mode-badge--room'),
       n: all.length,
-      widths: w,
-      sameRow: all.length > 1 && new Set(all.map((e) => Math.round(e.getBoundingClientRect().top))).size === 1,
     };
   });
-  check('炸弹局的开局页挂着炸弹标志', marks.bomb);
+  check('炸弹局的开局页：那张图的底板挂着基础那一档（和炸弹那一页那一格同一张）', marks.plate, JSON.stringify(marks));
   check('单人炸弹局不挂那扇多人的门', marks.room === false);
-  // 这一页只有三秒，角标那么小的东西来不及被看见——所以要求它和玩法图一样
-  // 大、并排站着，不是挂在角上。
-  check('炸弹标志和玩法图一样大，并排一行', marks.n === 2 && marks.sameRow &&
-    new Set(marks.widths).size === 1, JSON.stringify(marks));
+  check('只有这一张图：从前并排的那颗炸弹徽记撤了（10-08 方案 3-F-4）', marks.n === 1 && !marks.badge, JSON.stringify(marks));
 
   // 打完一局，把战绩图取回来
   await page.waitForSelector('#startBtn', { timeout: 15000, state: 'attached' });

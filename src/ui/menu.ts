@@ -12,6 +12,7 @@ import { mountModeAxis } from './modeAxis';
 import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
 import { dayIndexOf } from '../engine/seedCode';
 import { typeTagline } from './typeTagline';
+import { BOMB_MODE, iconFor } from './modeIcons';
 
 import {
   ICON_BASE_SQUARE,
@@ -528,7 +529,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
         const chip = document.createElement('button');
         chip.className = 'bomb-chip';
         chip.setAttribute('aria-label', `${t.title} · ${shapeName(lang, card.id, card.name)}`);
-        chip.innerHTML = bombBoard(glyph);
+        // 挑选窗里那一份（给了 reopenKey 的那一份）从 iconFor 取：按下去之后倒数页上摆的就是
+        // 这一张（10-08 方案 3-F-4）。电脑端主菜单那张卡里的缩图不走它（3-D-5：炸弹缩图不动），
+        // 照旧是棋盘图标 ＋ 按排上色的底板——两份画出来一样，只差底板上多挂的那个档的类。
+        chip.innerHTML = reopenKey ? iconFor({ mode: BOMB_MODE[t.tier], board: card.id }) : bombBoard(glyph);
         chip.addEventListener('click', (e) => {
           e.stopPropagation();
           onLaunch?.();

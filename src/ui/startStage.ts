@@ -11,17 +11,22 @@
  * CSS，不会各画各的走样。区别只在倒数由谁驱动：单人是本地的秒表，多人是服务
  * 器给的开赛时刻。
  */
-import { gameIcon, layoutIconIsWide, ICON_BOMB_BADGE, ICON_FLIP_MODE, ICON_MULTIPLAYER } from './homeIcons';
+import { layoutIconIsWide, ICON_FLIP_MODE, ICON_MULTIPLAYER } from './homeIcons';
+import { iconFor, type ModeId } from './modeIcons';
 
 export interface StartStageOpts {
-  /** 玩法 id，决定摆哪张图。 */
-  shapeId: string;
-  /** 炸弹局：图旁边挂一颗炸弹标志。 */
-  bomb?: boolean;
+  /**
+   * 这一局是什么（玩法 ＋ 棋盘），决定摆哪张图：iconFor(mode)，和第二层上按下去的那一格是
+   * 同一张（10-08 方案 3-F-4）。
+   *
+   * 从前这儿收的是棋盘 id 加两个开关：`timed` 把图换成 timedOption 那支秒表、`bomb` 在图旁边
+   * 挂一颗炸弹徽记——倒数页自己拼出来的这一组，和玩家在第二层按下的那一格对不上（计时那一页
+   * 摆的是灰底的方块，炸弹那一页一格是那一排颜色的底板）。两个开关连同那支秒表、那颗徽记一
+   * 起撤了，图只认这一个来路。
+   */
+  mode: ModeId;
   /** 多人局：图旁边挂那扇小门。 */
   room?: boolean;
-  /** 计时局：这一局的图直接换成主菜单上那只橙色秒表。 */
-  timed?: boolean;
   /** 倒数窗口的 id，交给驱动它的人去拿。 */
   countId: string;
   /** 底下那一排按钮的 HTML；不给就不摆。 */
@@ -39,19 +44,20 @@ export interface StartStageOpts {
 }
 
 /**
- * 这一局是哪一种局，画成标志摆在玩法图旁边。
+ * 多人局的那扇小门，画成标志摆在玩法图旁边。
  *
- * 同一副棋盘可以是普通局、炸弹局、或者一场多人竞赛，三者的规则差得很远。
- * 光看棋盘看不出来，一行字又容易被跳过——一个图形能。
+ * 同一副棋盘可以是一个人打的一局、也可以是一场多人竞赛，两者的规矩差得很远。光看
+ * 棋盘看不出来，一行字又容易被跳过——一个图形能。
  *
- * 它们和玩法图一样大、并排站着，不是挂在角上的小角标：这一页只有几秒钟，角
- * 标那么小的东西根本来不及被看见。
+ * 它和玩法图一样大、并排站着，不是挂在角上的小角标：这一页只有几秒钟，角标那么小
+ * 的东西根本来不及被看见。
+ *
+ * 从前这儿还有一颗炸弹徽记（第一个参数）。10-08 方案 3-F-4 起炸弹局的图本身就说清了它是
+ * 哪一档炸弹（iconFor：那一档颜色的底板，和炸弹那一页按下去的那一格是同一张），那颗徽记连
+ * 同这个参数一起撤了。
  */
-export function modeBadges(bomb?: boolean, room?: boolean): string[] {
-  const marks: string[] = [];
-  if (bomb) marks.push(`<span class="start-mark mode-badge--bomb">${ICON_BOMB_BADGE}</span>`);
-  if (room) marks.push(`<span class="start-mark mode-badge--room">${ICON_MULTIPLAYER}</span>`);
-  return marks;
+export function roomBadge(): string {
+  return `<span class="start-mark mode-badge--room">${ICON_MULTIPLAYER}</span>`;
 }
 
 /**
@@ -69,10 +75,10 @@ export function flipHintHtml(copy: string): string {
 }
 
 export function startStageHtml(o: StartStageOpts): string {
-  const wide = layoutIconIsWide(o.shapeId) && !o.timed ? ' start-mark--wide' : '';
+  const wide = layoutIconIsWide(o.mode.board) ? ' start-mark--wide' : '';
   const marks = [
-    `<span class="start-mark${wide}"><span class="start-mark-art">${gameIcon(o.shapeId, o.timed)}</span></span>`,
-    ...modeBadges(o.bomb, o.room),
+    `<span class="start-mark${wide}"><span class="start-mark-art">${iconFor(o.mode)}</span></span>`,
+    ...(o.room ? [roomBadge()] : []),
   ];
   return `
     <div class="start-stage">

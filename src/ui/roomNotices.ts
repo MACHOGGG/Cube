@@ -23,7 +23,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
 import { avatarSvg, roomPhase, type HostTrouble, type RoomPlayer, type RoomState } from '../engine/room';
-import { modeBadges } from './startStage';
+import { roomBadge } from './startStage';
 import { gameIcon } from './homeIcons';
 import { custom } from './customIcons';
 
@@ -137,7 +137,7 @@ export function showWaitPanel(
   const s = STRINGS[lang];
   const marks = [
     `<span class="start-mark"><span class="start-mark-art">${gameIcon(opts.shapeId)}</span></span>`,
-    ...modeBadges(false, true),
+    roomBadge(),
   ];
   // 和教学等待页同一个转圈的小人（ui/multiplayer.ts 的 showLearningWait 用的
   // 也是它）。两处等的是同一件事——等屋里别的人——所以该长同一张脸。

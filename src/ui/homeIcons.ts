@@ -15,6 +15,7 @@
  * 换一个图标，删掉文件就变回来，代码不用动。
  */
 import { custom, customAny } from './customIcons';
+import type { BombTier } from '../engine/bomb';
 
 export const HOME_COLORS = {
   gray: '#A8A8A8',
@@ -263,11 +264,14 @@ export const ICON_TIMED_COMBINED = custom('timed-combined') ?? (() => {
   );
 })();
 
-/** Mobile picker: one watch per timed game — the same three cards the wide
- *  layout shows in its timed row. */
-export function timedOption(shape: BaseShape): string {
-  return customAny(`timed-${shape}`, 'timed') ?? stopwatch(shape);
-}
+/*
+ * 这儿原先还有一个 timedOption(shape)：一种形状一支秒表（文件 timed-square / timed-circle /
+ * timed-triangle.svg，偷懒写法 timed.svg）。它是 2026-09 之前计时那个居中挑选窗里的三张图；挑
+ * 选窗改成整页（ui/timedMode.ts，摆的是基础方块 / 基础小球）之后，只剩开局倒数页还在摆它——
+ * 玩家在计时那一页按下的是灰底的方块，倒数那几秒看见的却是一支绿脸的秒表。10-08 方案 3-F-4
+ * 把倒数页改成和第二层同一个图源（ui/modeIcons.ts 的 iconFor），它就没有人用了，连同那三个
+ * 文件一起删掉。主菜单那支沙漏（ICON_TIMED_COMBINED）照旧在上面。
+ */
 
 // ---------------------------------------------------------------------------
 // bomb challenge — a burst star
@@ -311,9 +315,15 @@ function burstStar(cx: number, cy: number, R: number, fill: string): string {
  * 从前这一格是 `bombChip()`：一个纯色的方块或圆，定时那两枚印「100s」、进阶那两枚印
  * 「+++」（PR-20 / E26，「一个字都不写」）。第 18 推的设计图换成了棋盘图标 ＋ 面板左边三个
  * 字，徽记就不印了——三排靠那三个字分，不再靠格子上的徽记。
+ *
+ * 给了 `tier`，底板再多挂一个 `bomb-plate--<档>`：那一档的颜色跟着图走，不靠它外面是哪一
+ * 排（10-08 方案 3-F-4）。开局倒数页上那张图外面没有 .bomb-row，可它和炸弹那一页按下去的那
+ * 一格必须是同一张（ui/modeIcons.ts 的 iconFor）。主菜单电脑端那块面板的缩图不给 tier，照旧
+ * 按排上色（3-D-5：炸弹缩图不动）。
  */
-export function bombBoard(glyph: string): string {
-  return glyph.replace(/<(rect|circle|ellipse|path|polygon)\b([^>]*?)\sfill="[^"]*"/, '<$1$2 class="bomb-plate"');
+export function bombBoard(glyph: string, tier?: BombTier): string {
+  const cls = tier ? `bomb-plate bomb-plate--${tier}` : 'bomb-plate';
+  return glyph.replace(/<(rect|circle|ellipse|path|polygon)\b([^>]*?)\sfill="[^"]*"/, `<$1$2 class="${cls}"`);
 }
 
 /** 炸弹选择页面板正中那颗白色八角星（第 18 推第 2 条）。装饰，aria-hidden。 */
@@ -618,21 +628,22 @@ const BASE_GAME_ICONS: Record<string, string> = {
 };
 
 /**
- * 一个玩法在主菜单上的那张脸，按它的 id 取。
+ * 一副棋盘在主菜单上的那张脸，按它的 id 取。
  *
- * 开局页要摆的就是这一张——玩家在主菜单上按下的是哪个图形，倒数三秒时看见的
- * 就该是同一个，中间不换脸。三个基础玩法用自己的底图，其余变体走
- * layoutIcon()；家族按 id 前缀认（circleHex 是圆球家的），所以以后新加一个
- * 变体，只要名字跟着家族起，这里不用动。
+ * 三个基础玩法用自己的底图，其余变体走 layoutIcon()；家族按 id 前缀认（circleHex 是圆球家
+ * 的）——这儿收的常常是服务器发来的 mode（排行榜那一行、小屋），猜错只影响摆哪张图，而且必须
+ * 容得下脏数据（见 CLAUDE.md《家族和规则》）。
+ *
+ * 开局倒数页不直接问它，问的是 ui/modeIcons.ts 的 iconFor（「这一局是什么」→ 图，10-08 方案
+ * 3-F-4），iconFor 再按棋盘来这儿取底图。从前这儿还收一个 `timed`：计时局换成 timedOption 那
+ * 支秒表——那是计时还是居中挑选窗时候的图，第二层改成整页之后就和玩家按下去的那一格对不上了，
+ * 连同 timedOption 一起删掉（见上面 ICON_TIMED_COMBINED 底下那段）。
  */
-export function gameIcon(id: string, timed = false): string {
+export function gameIcon(id: string): string {
   const family: BaseShape = id.startsWith('circle')
     ? 'circle'
     : id.startsWith('triangle')
       ? 'triangle'
       : 'square';
-  // 计时局摆的是主菜单上那只橙色秒表——玩家刚刚按下去的就是它。摆回灰色的
-  // 底图，等于中途换了一张脸。
-  if (timed) return timedOption(family);
   return BASE_GAME_ICONS[id] ?? layoutIcon(id, family);
 }

@@ -1182,6 +1182,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8970/ && break; sleep 0.25; done
           node scripts/check-count-stage.mjs http://localhost:8970/
 
+      # 倒数页那张图 ＝ 第二层上按下去的那一格（2026-10-08 方案 3-F-4：图标唯一映射 iconFor）。从前倒数页
+      # 自己拼图：计时局摆一支绿脸的秒表、炸弹局摆灰底棋盘 ＋ 一颗炸弹徽记，和计时那一页、炸弹那一页按下去的
+      # 那一格对不上。逐玩法从挑选层按下去（计时、无限反转、步步为营、炸弹六格、基础和布局从主菜单那张卡），
+      # 量每一笔的形状和画出来的填色；老虎机那一局量的是「摆的是那台机器」。
+      - name: 倒数页的图和第二层按下去的那一格是同一张
+        run: |
+          nohup node scripts/dev-server.mjs 8968 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8968/ && break; sleep 0.25; done
+          node scripts/check-mode-icons.mjs http://localhost:8968/
+
       # 主菜单上开窗、关窗，轴的中线不漂（2026-10-08 方案 3-D-3：「开关 5 次中线不漂」；3-C-6：从帐号窗
       # 底下那颗 ✅ 关也不许偏）。三条来路各量一遍：轴量完位置之后招牌又长高（副标题打字机打出第一个中
       # 文字、晚到的新版本提示）；窗开着时页面被推上去（手机键盘——无头浏览器没有键盘，先垫出键盘给的那

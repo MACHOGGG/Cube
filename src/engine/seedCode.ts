@@ -92,14 +92,22 @@ export function variantIndex(mode: SeedMode, board: string): number {
 }
 
 /**
- * 一局开出来之后，它在表里是第几行——棋盘那头只知道 modeKey（runRecord.ts 那一套）、
+ * 一局开出来之后，它是表里的哪一种玩法——棋盘那头只知道 modeKey（runRecord.ts 那一套）、
  * 棋盘 id 和是不是老虎机。进阶炸弹的 modeKey 和基础炸弹一样是 'bomb'，分开它们的是棋盘
- * （菱形方块、六边形小球只有进阶炸弹那一档用）。
+ * （菱形方块、六边形小球只有进阶炸弹那一档用）。服务器那一份是 api/_seedcode.js 的同名函数，
+ * 两份一个判断（check-seed-code ⑧ 每一行都对过）。
+ *
+ * 开局倒数页按它挑图（ui/modeIcons.ts 的 iconFor，10-08 方案 3-F-4）：倒数页那张图和第二层
+ * 按下去的那一格是同一张，靠的就是两头说的是表里同一种玩法。
  */
-export function variantForGame(modeKey: string, board: string, slot: boolean): number {
+export function seedModeOf(modeKey: string, board: string, slot: boolean): SeedMode {
   const advanced = board === 'squareDiamond' || board === 'circleHex';
-  const mode: SeedMode = slot ? 'slot' : modeKey === 'bomb' && advanced ? 'bombAdv' : (modeKey as SeedMode);
-  return variantIndex(mode, board);
+  return slot ? 'slot' : modeKey === 'bomb' && advanced ? 'bombAdv' : (modeKey as SeedMode);
+}
+
+/** 一局开出来之后，它在表里是第几行（玩法按 seedModeOf 认）。 */
+export function variantForGame(modeKey: string, board: string, slot: boolean): number {
+  return variantIndex(seedModeOf(modeKey, board, slot), board);
 }
 
 /**

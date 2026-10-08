@@ -11,6 +11,8 @@ import { menuTag } from './menuTags';
 import { slotTip } from './modeTips';
 import type { Family, TargetPattern } from '../engine/targets';
 import { cardOf } from '../shapes/registry';
+import { modeKeyOf } from '../engine/runKey';
+import { seedModeOf } from '../engine/seedCode';
 import { PUZZLE_START_STEPS } from '../engine/puzzleScore';
 
 export interface ExtraControl {
@@ -356,7 +358,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         写了 && !meta.flip：那两处是对的（开局页摆他挑的图形而不是秒表、《计时》那条附
         注不该出现在反转局里），这一处照抄过来就成了「无限反转有 100 秒硬上限，屏幕上却
         没有钟」——时间到了棋盘直接结算，玩家不知道为什么。从前顶排那一格是每一局都画
-        的，所以这个毛病是这次搬家搬出来的。
+        的，所以这个毛病是这次搬家搬出来的。（开局页那一处 10-08 方案 3-F-4 撤了：开局页
+        的图改由 iconFor 按「这一局是什么」定，不再收 timed。）
       -->
       ${meta.timed ? '<div class="timer-pill" id="timerPill" aria-live="off">0:00</div>' : ''}
 
@@ -384,10 +387,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
          态机一个字都不用改。 -->
     <div class="overlay opaque show overlay--start" id="startOverlay">
       ${startStageHtml({
-        shapeId: meta.shapeId,
-        bomb: meta.bomb,
-        // 无限反转也是计时的，但开局页上摆的是他挑的那个图形，不是秒表。
-        timed: meta.timed && !meta.flip,
+        // 这一局是什么：编号表里的那一行（玩法 ＋ 棋盘）。图由它定（ui/modeIcons.ts 的 iconFor），
+        // 和第二层上按下去的那一格是同一张（10-08 方案 3-F-4）——从前这儿递的是棋盘 ＋ bomb ＋
+        // timed 两个开关，倒数页自己拼一支秒表、一颗炸弹徽记，和他按下去的那一格对不上。
+        mode: {
+          mode: seedModeOf(
+            modeKeyOf({ bomb: meta.bomb, flip: meta.flip, steps: meta.steps, timed: meta.timed }),
+            meta.shapeId,
+            !!meta.slotTarget,
+          ),
+          board: meta.shapeId,
+        },
         room: !!currentRoom(),
         countId: 'startCount',
         emblem: meta.slotTarget ? slotMachineHtml() : undefined,

@@ -13,15 +13,17 @@
  * 矩，再底下只有一颗《退出》。没开通的人图照画，只是挂锁，按下去是订阅那扇窗。
  */
 import { STRINGS, type Lang } from '../i18n';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
+import { ICON_LOCK } from './homeIcons';
+import { iconFor } from './modeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
 
 export type FlipFamily = 'square' | 'circle';
 
+// 图从 iconFor 取（10-08 方案 3-F-4）：按下去之后倒数页上摆的就是这一张。
 const FAMILIES: { family: FlipFamily; icon: string }[] = [
-  { family: 'square', icon: ICON_BASE_SQUARE },
-  { family: 'circle', icon: ICON_BASE_CIRCLE },
+  { family: 'square', icon: iconFor({ mode: 'flip', board: 'square' }) },
+  { family: 'circle', icon: iconFor({ mode: 'flip', board: 'circle' }) },
 ];
 
 export interface FlipModeHandlers {

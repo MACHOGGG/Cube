@@ -181,7 +181,7 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
       <div class="app daily-page daily-page--count">
         <div class="overlay opaque show overlay--start">
           ${startStageHtml({
-            shapeId: game.board,
+            mode: game.variant,
             countId: 'dailyCount',
             emblem:
               `<div class="start-marks" style="--marks:1"><span class="start-mark">` +

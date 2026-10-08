@@ -19,15 +19,16 @@
  * 标语借的是 `.slot-tagline`（老虎机那一屏 2026-09 补标语时顺手扩过来的）。
  */
 import { STRINGS, type Lang } from '../i18n';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE } from './homeIcons';
+import { iconFor } from './modeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
 
 export type TimedFamily = 'square' | 'circle';
 
+// 图从 iconFor 取（10-08 方案 3-F-4）：按下去之后倒数页上摆的就是这一张。
 const FAMILIES: { family: TimedFamily; icon: string }[] = [
-  { family: 'square', icon: ICON_BASE_SQUARE },
-  { family: 'circle', icon: ICON_BASE_CIRCLE },
+  { family: 'square', icon: iconFor({ mode: 'timed', board: 'square' }) },
+  { family: 'circle', icon: iconFor({ mode: 'timed', board: 'circle' }) },
 ];
 
 export interface TimedModeHandlers {

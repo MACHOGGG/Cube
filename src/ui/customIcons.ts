@@ -146,8 +146,8 @@ export function custom(name: string): string | null {
 /**
  * 第一个存在的那个文件。
  *
- * 给「同一支秒表配三个形状」这类图标用：放 timed-square.svg 就只换方块那一支，
- * 放 timed.svg 就三支一起换，两个都放的话方块用前者。这样你可以先画一个看看
+ * 给「同一张卡配三个形状」这类图标用：放 more-square.svg 就只换方块那一张，
+ * 放 more.svg 就三张一起换，两个都放的话方块用前者。这样你可以先画一个看看
  * 效果，再决定要不要每个形状都单独画。
  */
 export function customAny(...names: string[]): string | null {

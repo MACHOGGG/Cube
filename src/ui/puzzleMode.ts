@@ -15,7 +15,8 @@
  * 入口。
  */
 import { STRINGS, type Lang } from '../i18n';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
+import { ICON_LOCK } from './homeIcons';
+import { iconFor } from './modeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
 
@@ -23,9 +24,10 @@ import { CTL_BACK } from './ctlIcons';
  *  v1.2 PR-6）。 */
 export type PuzzleFamily = 'square' | 'circle';
 
+// 图从 iconFor 取（10-08 方案 3-F-4）：按下去之后倒数页上摆的就是这一张。
 const FAMILIES: { family: PuzzleFamily; icon: string }[] = [
-  { family: 'square', icon: ICON_BASE_SQUARE },
-  { family: 'circle', icon: ICON_BASE_CIRCLE },
+  { family: 'square', icon: iconFor({ mode: 'puzzle', board: 'square' }) },
+  { family: 'circle', icon: iconFor({ mode: 'puzzle', board: 'circle' }) },
 ];
 
 export interface PuzzleModeHandlers {

@@ -24,12 +24,14 @@ import { STRINGS, type Lang } from '../i18n';
 import { drawOne, type Family, type TargetPattern } from '../engine/targets';
 import { randomSeed, variantIndex } from '../engine/seedCode';
 import { slotTargetOf } from '../engine/seedDeal';
-import { ICON_BASE_CIRCLE, ICON_BASE_SQUARE, ICON_LOCK } from './homeIcons';
+import { ICON_LOCK } from './homeIcons';
+import { iconFor } from './modeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
 
 /**
- * 老虎机开在哪几族上，和它们在主菜单上的那张图。
+ * 老虎机开在哪几族上，和它们在这一屏上的那张图（iconFor，10-08 方案 3-F-4——老虎机那一局
+ * 的倒数页摆的是那台机器，不摆这张图；两头照样问同一个函数，哪天倒数页改回摆图也对得上）。
  *
  * **两族，不是三族**（《侵蚀阶梯》v1.2 PR-6）：三角那副基础棋盘删了，剩下的六边
  * 蜂窝 54 是天才特供的布局，不进这一屏。三角那一族的目标数据在 engine/targets.ts
@@ -38,8 +40,8 @@ import { CTL_BACK } from './ctlIcons';
  * `api/room.js` 的 SLOT_MODES 也跟着收成两个，两头要一致。
  */
 const FAMILIES: { family: Family; shapeId: string; icon: string }[] = [
-  { family: 'square', shapeId: 'square', icon: ICON_BASE_SQUARE },
-  { family: 'circle', shapeId: 'circle', icon: ICON_BASE_CIRCLE },
+  { family: 'square', shapeId: 'square', icon: iconFor({ mode: 'slot', board: 'square' }) },
+  { family: 'circle', shapeId: 'circle', icon: iconFor({ mode: 'slot', board: 'circle' }) },
 ];
 
 export interface RandomTargetHandlers {
