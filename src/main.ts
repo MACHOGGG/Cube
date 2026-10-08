@@ -1065,10 +1065,18 @@ function showTargetsShowcase() {
 function showLayoutsShowcase() {
   teardown();
   trackScreen('more-layouts');
-  renderLayoutsShowcase(root, currentLang, backToProfile, [
-    { id: circleSevenGame.card.id, shape: 'circle' },
-    { id: triangleBigGame.card.id, shape: 'triangle' },
-  ]);
+  // 摆的就是主菜单上「更多布局」那一组（homeLayout.moreLayouts），按方块、小球、三角三族的次序
+  // ——10-08 方案 3-C-5 加上了菱形方块和六边圆球，原先这儿只写着七色圆球和大三角两副。从同一
+  // 张表取，两边不会再一边多一边少。族认的是注册表（cardOf），图就是主菜单上那张卡面
+  // （layoutIcon，见 ui/perkPages.ts）。
+  renderLayoutsShowcase(
+    root,
+    currentLang,
+    backToProfile,
+    (['square', 'circle', 'triangle'] as const).flatMap((family) =>
+      homeLayout.moreLayouts[family].map((card) => ({ id: card.id, shape: cardOf(card.id).family })),
+    ),
+  );
   setNavTab(null);
   wireHomeTitle();
   repaintIcons();

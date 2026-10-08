@@ -3,10 +3,13 @@
  *
  *   · 《更多得分目标》：二十个得分图案，按方块 / 小球 / 三角三列摆出来，画法
  *     和棋盘上方那一排得分图示是同一套（engine/patternIcon）。
- *   · 《更多布局》：七色圆球和六边三角两副布局的缩图，各装在一个圆角矩形的框里。
- *     （摆哪两副由 main.ts 的 showLayoutsShowcase 传进来，和 engine/geniusContent.ts
- *     的 GENIUS_LAYOUTS 是同一对。原先第二副是 V 形三角，《侵蚀阶梯》v1.2 PR-6 把它
- *     删了、换成六边蜂窝 54。）
+ *   · 《更多布局》：菱形方块、六边圆球、七色圆球、大三角四副布局的缩图，各装在一个圆角
+ *     矩形的框里，两两一排。摆哪几副由 main.ts 的 showLayoutsShowcase 传进来——就是主菜单
+ *     上「更多布局」那一组（homeLayout.moreLayouts），图是主菜单上同一张卡面。
+ *     原先只摆七色圆球和大三角两副（和 engine/geniusContent.ts 的 GENIUS_LAYOUTS 同一对）；
+ *     10-08 方案 3-C-5 加上了菱形方块和六边圆球。⚠️ 那两副**照旧免费**（GENIUS_LAYOUTS 没
+ *     动、主菜单上没锁）：这一页是陈列，不是「付了钱才有的」那张清单——那张清单在邀请窗，
+ *     由 GENIUS_LAYOUTS 生成，还是那两副。
  *   · 《更多玩法》：无限反转那张四层翻面的图，同样装在一个圆角矩形的框里，
  *     只是陈列——要玩还是回主菜单那张卡（玩家的原话：「只是陈列着，玩家还
  *     是要到主菜单去玩的」）。
@@ -85,7 +88,7 @@ export function renderTargetsShowcase(root: HTMLElement, lang: Lang, onBack: () 
   wireBack(root, onBack);
 }
 
-/** 《更多布局》：几副布局的缩图，各装在一个圆角矩形的框里。 */
+/** 《更多布局》：几副布局的缩图，各装在一个圆角矩形的框里（四张，两两一排）。 */
 export function renderLayoutsShowcase(
   root: HTMLElement,
   lang: Lang,

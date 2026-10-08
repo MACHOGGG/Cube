@@ -8,7 +8,9 @@
  * 量的是玩家点名的几件事：
  *   · 《随机得分目标》改叫《老虎机模式》；《世界排名和好友排名》改叫《世界排名》
  *     而且不再「敬请期待」；更多得分目标 / 更多布局也点得开了。
- *   · 《更多得分目标》三列二十个图案；《更多布局》《更多玩法》各两个圆角框并排；
+ *   · 《更多得分目标》三列二十个图案；《更多布局》四个圆角框两两一排（10-08 方案 3-C-5：
+ *     菱形方块、六边圆球、七色圆球、大三角，和主菜单「更多布局」那一组同一份、同一个次序）；
+ *     《更多玩法》的圆角框并排；
  *     《世界排名》整页只有榜，没有个人总分和成绩。
  *   · 从这些页（还有多人游玩、老虎机模式）按《退出》回到个人主页刚才看的位
  *     置，不是主菜单、也不是页顶。
@@ -131,19 +133,21 @@ async function backToProfile(before, label, backSel = '#backBtn') {
       top: Math.round(c.getBoundingClientRect().top),
     })),
   }));
-  check('更多布局：两个圆角框，各装一张缩图',
-    l.cards.length === 2 && l.cards.every((c) => c.svg && c.radius >= 8 && c.border !== 'none'),
+  check('更多布局：四个圆角框，各装一张缩图',
+    l.cards.length === 4 && l.cards.every((c) => c.svg && c.radius >= 8 && c.border !== 'none'),
     JSON.stringify(l.cards));
-  check('更多布局：两张并排（不换行）',
-    Math.abs((l.cards[0]?.top ?? 0) - (l.cards[1]?.top ?? 0)) <= 1,
-    `${l.cards[0]?.top} / ${l.cards[1]?.top}`);
-  // 天才特供换了一位：V 形三角那副棋盘删了，六边蜂窝 54（菜单上的《大三角》，
-  // card id `triangleBig`）接上它的位置（《侵蚀阶梯》v1.2 PR-6 + geniusContent.ts
-  // 的 GENIUS_LAYOUTS）。
-  check('更多布局：是菱形七色小球和六边三角',
-    l.cards.map((c) => c.id).join(',') === 'circleSeven,triangleBig' &&
-      /七色圆球/.test(l.cards[0]?.name || '') && /大三角/.test(l.cards[1]?.name || ''),
-    l.cards.map((c) => c.name).join(' / '));
+  // 两两一排：第一、二张一行，第三、四张一行，第二行在第一行底下（不是四张挤成一排，也不是
+  // 3 ＋ 1 吊着一张）。
+  const tops = l.cards.map((c) => c.top);
+  check('更多布局：两两一排，排成两行',
+    tops.length === 4 && Math.abs(tops[0] - tops[1]) <= 1 && Math.abs(tops[2] - tops[3]) <= 1 && tops[2] > tops[0] + 20,
+    tops.join(' / '));
+  // 10-08 方案 3-C-5：加上菱形方块和六边圆球，和主菜单「更多布局」那一组同一份——方块、小球、
+  // 三角三族的次序。原先只有七色圆球和大三角（天才特供那两副，《侵蚀阶梯》v1.2 PR-6 起）。
+  check('更多布局：菱形方块、六边圆球、七色圆球、大三角，按这个次序',
+    l.cards.map((c) => c.id).join(',') === 'squareDiamond,circleHex,circleSeven,triangleBig' &&
+      ['菱形方块', '六边圆球', '七色圆球', '大三角'].every((n, i) => (l.cards[i]?.name || '').includes(n)),
+    l.cards.map((c) => `${c.id}:${c.name}`).join(' / '));
   await backToProfile(before, '更多布局');
 }
 // 世界排名
