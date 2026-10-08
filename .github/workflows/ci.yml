@@ -1143,6 +1143,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8964/ && break; sleep 0.25; done
           node scripts/check-page-exit.mjs http://localhost:8964/
 
+      # 成绩页两块面板一套行高、一套行距（2026-10-08 方案 3-C-2）：十二格一样高、就是 --rec-row-h；
+      # 行高是原来 30px 的 1.3 倍（360×740 那一档放不下，退到 1.1 倍、一屏不滑）；每道缝 0–4px、两块一
+      # 样；字和行首小图形跟着行高等比放大、在格子里竖着居中。手机三档 ＋ 电脑两档 × 简体、法文 × 没登录、
+      # 有三局榜上三人。从前两块的缝各算各的（手机上摊到 29px），字号也各写各的。/api 在浏览器里拦下来。
+      - name: 成绩页两块面板一套行高行距
+        run: |
+          nohup node scripts/dev-server.mjs 8979 dist >/dev/null 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8979/ && break; sleep 0.25; done
+          node scripts/check-records-rows.mjs http://localhost:8979/
+
       # 同一串种子码，每副棋盘发出同一副牌（第 19 推）：编号表二十行，每行造一串码、从《每日挑战》
       # 的输入框开两次比盘面（尺子：换一串码盘面必须不一样）；倒数那几秒页面上除了码和数字一个字
       # 都没有；存档里记着那串码；七色圆球那一天竖着拿手机先说「请横屏」。

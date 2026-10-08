@@ -3157,14 +3157,14 @@ body:has(.center-pick--back) .home-nav { display: none; }
  * 下的全部。门（check-page-exit）在放得下 1.5 倍的尺寸上量 1.5 倍，放不下的尺寸上量「面板
  * 下沿正好贴到退出键上沿 16px」——也就是剩下的高度一个像素都没浪费。
  *
- * 面板里那六格不跟着变高（六格一样高是第 17 推定的），多出来的高度均摊到格与格之间：
- * space-between，和电脑端右栏那块排名同一个写法（方案原话「等距排列」）。
+ * 面板里那六格不跟着面板变高：第 18 推这儿是把多出来的高度均摊到格与格之间（space-between）；
+ * 10-08 方案 3-C-2 起两块一套行高、一套行距（--rec-row-h / --rec-row-gap，见缩略牌那一段），六
+ * 格从上往下排，面板长出来的那一截留在最后一格底下。
  *
  * **两块并排时还得一行对一行**（第 17 推定的）。面板底下那句话两边不一样长——「尚无成绩」
- * 一行，「登录之后，你的成绩才会上榜」两行，法文要三行——它要是留在流里一起分高度，两边多
- * 出来的空就不一样，六格就上下错开。所以这句话钉在面板底边（absolute），两块面板底下各留
- * 同样一截（三行字那么高，法文那句最长），六格只在上面那一截里摊开：两块一样高、六格一样
- * 高、留的一样多，摊出来就是同一组位置。
+ * 一行，「登录之后，你的成绩才会上榜」两行，法文要三行——它要是留在流里，两边就不一样，六
+ * 格就上下错开。所以这句话钉在面板底边（absolute），两块面板底下各留同样一截（三行字那么高，
+ * 法文那句最长）：两块一样高、六格一样高、缝一样宽，排出来就是同一组位置。
  *
  * 门槛 999px：电脑端那套两栏（min-width: 1000px）不动。
  */
@@ -3172,13 +3172,12 @@ body:has(.center-pick--back) .home-nav { display: none; }
   .app.records-page:not(.xhs-profile) { min-height: 100vh; min-height: 100svh; }
   .records-page:not(.xhs-profile) > .records-panels { flex: 1 1 auto; min-height: 0; }
   .records-page:not(.xhs-profile) .records-panels .records-panel {
-    position: relative; justify-content: space-between;
+    /* 六格从上往下排、缝就是 --rec-row-gap（10-08 方案 3-C-2，见下面 --rec-row-h 那一段）。
+       从前是 space-between：缝只是下限，屏幕高一点就把六格拉开（390×844 上摊到 29px）。 */
+    position: relative; justify-content: flex-start;
     /* 底下那句话最多三行（0.72rem × 1.5 × 3 ≈ 52）＋ 它离底的 16。 */
     padding-bottom: 68px;
-    /* 六格之间最少 6px（原来是 10）：360×740 上面板只有 307 高，六格 ＋ 留给那句话的一截 ＋
-       五道 10px 的缝要 316，装不下就整页往下多出 13px——方案要的是「页面不需要滑动」。缝
-       只是下限，屏幕高一点 space-between 就把它们拉开。 */
-    gap: 6px;
+    gap: var(--rec-row-gap);
   }
   .records-page:not(.xhs-profile) .records-panels .records-locked,
   .records-page:not(.xhs-profile) .records-panels .rank-foot,
@@ -3238,6 +3237,38 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .records-panels .records-row-time { display: none; }
 .records-panels .records-row-score { font-size: 0.78rem; }
 .records-panels .records-locked { font-size: 0.7rem; letter-spacing: 0.02em; }
+/*
+ * 两块面板一套行高、一套行距（10-08 方案 3-C-2）。
+ *
+ * 《最近战绩》和《排名》两块的六格从前高度共用 --slot-h（30px），缝却各算各的（手机上
+ * space-between 摊出来，390×844 上 29px；电脑上右栏也是摊开的），字号也各写各的。方案要两块
+ * 一套数：行高是原来的 1.3 倍、缝压到 0–4px、字跟着行高等比放大、在格子里上下居中（格子本来就
+ * 是 align-items: center）。所以只立两个变量，格子、缝、字号、行首小图形全从它俩算——下面那几
+ * 个系数就是原来的字号 ÷ 原来的 30px（0.76rem → 0.405，0.78rem → 0.416，0.72rem → 0.384，
+ * 18px → 0.6，16px → 0.533），行高一变，它们按比例跟着走。
+ *
+ * 只在网页端这一页（.records-page:not(.xhs-profile)）：小红书那一版借了同一个类名，方案没动它。
+ *
+ * 矮屏（≤772px 高）退到 33px：360×740 上面板里装六格只剩 221px，39 × 6 ＋ 4 × 5 = 254 装不下，
+ * 整页就得往下滑（第 18 推定的「一屏不滑」）；33 × 6 ＋ 20 = 218 刚好。772 是 39 的那一版刚
+ * 好装得下的屏高。
+ */
+.records-page:not(.xhs-profile) .records-panels { --rec-row-h: 39px; --rec-row-gap: 4px; --slot-h: var(--rec-row-h); }
+@media (max-height: 772px) {
+  .records-page:not(.xhs-profile) .records-panels { --rec-row-h: 33px; }
+}
+.records-page:not(.xhs-profile) .records-panels .records-panel { gap: var(--rec-row-gap); }
+.records-page:not(.xhs-profile) .records-panels .records-row-glyph {
+  width: calc(var(--rec-row-h) * 0.6); height: calc(var(--rec-row-h) * 0.6);
+}
+.records-page:not(.xhs-profile) .records-panels .records-row-name { font-size: calc(var(--rec-row-h) * 0.405); }
+.records-page:not(.xhs-profile) .records-panels .records-row-score,
+.records-page:not(.xhs-profile) .records-panels .rank-name,
+.records-page:not(.xhs-profile) .records-panels .rank-score { font-size: calc(var(--rec-row-h) * 0.416); }
+.records-page:not(.xhs-profile) .records-panels .rank-place { font-size: calc(var(--rec-row-h) * 0.384); }
+.records-page:not(.xhs-profile) .records-panels .rank-glyph {
+  width: calc(var(--rec-row-h) * 0.533); height: calc(var(--rec-row-h) * 0.533);
+}
 
 .records-panel {
   border-radius: var(--r-xl); padding: 30px 26px; min-height: 46vh;
@@ -4239,9 +4270,10 @@ body:has(.slot-page) .home-nav { display: none; }
   .records-page:not(.xhs-profile) > .records-panels { display: contents; }
   .records-page:not(.xhs-profile) .records-panel--records { grid-column: 1; grid-row: 3; }
   .records-page:not(.xhs-profile) .records-panel--ranks { grid-column: 2; grid-row: 2 / span 2; }
-  /* 右栏比左栏那块面板高（它要和「累计得分 ＋ 最近战绩」整栏对齐），六格从上往下排的话底下
-     空一大截。摊开：六格之间一样远（方案原话「等距排列」），整块面板是满的。 */
-  .records-page:not(.xhs-profile) .records-panel--ranks { justify-content: space-between; }
+  /* 右栏比左栏那块面板高（它要和「累计得分 ＋ 最近战绩」整栏对齐）。第 17 推这儿是摊开的
+     （space-between）；10-08 方案 3-C-2 定的是两块一套行距、缝压到 0–4px，所以六格和左边一样从
+     上往下排，缝是 --rec-row-gap。底下空出来的那一截留着，不再拿缝去填。 */
+  .records-page:not(.xhs-profile) .records-panel--ranks { justify-content: flex-start; }
 
   /* ---------- 电脑端的个人主页：两栏（第 17 推）----------
    * 左栏是那一列药丸，右栏是天才面板和底下那一对白键。两栏等宽、顶端对齐，中间那道缝

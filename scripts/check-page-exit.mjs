@@ -200,8 +200,11 @@ const RECORDS_MEASURE = () => {
     total: r('.total-card'), rec: r('.records-panel--records'), ranks: r('.records-panel--ranks'),
     exit: r('#recordsBack'), dock: r('.home-nav-dock'),
     recRows: tops('.records-panel--records > .records-row, .records-panel--records > .records-rule'),
-    // 最后一格的底、面板的底和它的下内边距（留给那句话的那一截）：摊开的话，最后一格正好落在
-    // 那一截的上沿。
+    // 最后一格的底、面板的底和它的下内边距（留给那句话的那一截）：最后一格不能越过那一截的上沿。
+    recRowH: (() => {
+      const row = document.querySelector('.records-panel--records > .records-row, .records-panel--records > .records-rule');
+      return row ? row.getBoundingClientRect().height : null;
+    })(),
     recLast: (() => {
       const rows = document.querySelectorAll('.records-panel--records > .records-row, .records-panel--records > .records-rule');
       return rows.length ? rows[rows.length - 1].getBoundingClientRect().bottom : null;
@@ -289,13 +292,18 @@ for (const size of SIZES) {
         : Infinity;
       check(`${tag}：两块面板的六格一行对一行（≤ 1px）`, misalign <= 1,
         `${rr.recRows.length} / ${rr.rankRows.length} 格，最大差 ${misalign === Infinity ? '—' : misalign.toFixed(1)}px`);
-      // 六格是摊开的，不是挤在顶上：相邻两格一样远，而且最后一格正好落在底下那一截（留给那句
-      // 话的下内边距）的上沿——面板长高的那一截没有白长在最后一格底下。
+      // 六格等距。第 18 推这儿还量「摊满」（最后一格正好落在底下那一截——留给那句话的下内边距——
+      // 的上沿）；10-08 方案 3-C-2 把缝压到 0–4px、两块一套行高行距（那一套数由
+      // check-records-rows 量），六格从上往下排，面板长高的那一截留在最后一格底下。所以这儿反过来
+      // 量「没有摊开」：相邻两格之间只隔一道 ≤ 4px 的缝，最后一格也没越过底下那一截。
       const gaps = rr.recRows.slice(1).map((t, i) => t - rr.recRows[i]);
-      check(`${tag}：六格等距摊开（相邻两格的距离一样，≤ 1px）`,
+      check(`${tag}：六格等距（相邻两格的距离一样，≤ 1px）`,
         gaps.length === 5 && Math.max(...gaps) - Math.min(...gaps) <= 1, gaps.map((g) => g.toFixed(1)).join(' / '));
-      check(`${tag}：六格摊满了（最后一格的底就是面板底下那一截的上沿，≤ 1px）`,
-        rr.recLast !== null && Math.abs(rr.recLast - (rr.rec.b - rr.recPadB)) <= 1,
+      check(`${tag}：六格从上往下排、没有摊开（两格之间的缝 ≤ 4px）`,
+        gaps.length === 5 && rr.recRowH !== null && Math.max(...gaps) - rr.recRowH <= 4.5,
+        `格高 ${rr.recRowH?.toFixed(1)}，两格上沿相距 ${gaps.map((g) => g.toFixed(1)).join(' / ')}`);
+      check(`${tag}：最后一格没越过底下那一截（留给那句话的下内边距）`,
+        rr.recLast !== null && rr.recLast <= rr.rec.b - rr.recPadB + 0.5,
         `最后一格底 ${rr.recLast?.toFixed(1)} / 面板底 ${rr.rec.b.toFixed(1)} − 下内边距 ${rr.recPadB}`);
       check(`${tag}：累计分卡、两块面板、退出键、底排互不重叠`,
         !overlap(rr.total, rr.rec) && !overlap(rr.total, rr.ranks) && !overlap(rr.rec, rr.ranks) &&
