@@ -189,6 +189,25 @@ export function markFinishedAGame(): void {
 }
 
 /**
+ * 主菜单摆不摆《每日挑战》那张卡——**只有这一个判定**。
+ *
+ * 两条规矩合在这儿（10-09 补充方案 6-6：「和 3-D-1 合并成同一个判定，不要写两套」）：
+ *   · 3-D-1：打完过一局才摆（finishedAGame）；
+ *   · 6-6：首玩锁生效的时候不摆（lockedForFirstPlay）。从前这张卡在首玩期是亮着的（menu.ts 给它挂
+ *     `firstPlayable`），于是新人面前除了那两张发光的基础卡，还多一张「今天这一局」，首玩引导的那
+ *     个小箭头也会指到它身上。
+ *
+ * 两条大多数时候是同一件事（打完一局的人一般开过一张基础卡），不一样的是那种「只在别人的小屋里打
+ * 完过一局、自己一张基础卡都没开过」的人：按 3-D-1 他该有，按 6-6 他还在首玩期——不摆。
+ *
+ * 存不进 localStorage 的人照样摆：finishedAGame 那时候答「打完过」，lockedForFirstPlay 答「没锁」
+ * （firstTimeIn 读不到就当开过），宁可多摆，不要永远不摆。
+ */
+export function dailyCardShown(): boolean {
+  return finishedAGame() && !lockedForFirstPlay();
+}
+
+/**
  * 结算页那一句「综合得分怎么算」该不该摆。
  *
  * 五条规矩的最后一条从棋盘底下挪到了这儿（玩家 2026-09 定的），只摆头一回：

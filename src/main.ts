@@ -50,7 +50,7 @@ import {
   BASIC_KEYS,
   claimFirstEndcard,
   claimFirstTotalTip,
-  finishedAGame,
+  dailyCardShown,
   firstTimeIn,
   glowingBasics,
   lockedForFirstPlay,
@@ -713,8 +713,9 @@ function showMenu() {
     // 没打过的那几张基础卡镶一圈光，指路用；两张都打过了这里就是空的。
     glow: glowingBasics(),
     firstPlayLock: lockedForFirstPlay(),
-    // 《每日挑战》那张卡：打完过一局才摆（10-08 方案 3-D-1）。
-    showDaily: finishedAGame(),
+    // 《每日挑战》那张卡：打完过一局、而且首玩锁已经撤了才摆（10-08 方案 3-D-1 ＋ 10-09 补充方案
+    // 6-6，一个判定，见 engine/firstPlay.ts 的 dailyCardShown）。
+    showDaily: dailyCardShown(),
     // 按了《我会玩》就地重画：锁和光都由上面这两个函数算，它们已经改口了。
     onKnowHow: showMenu,
     // 主菜单上的多人游玩：直接进房间那一页。

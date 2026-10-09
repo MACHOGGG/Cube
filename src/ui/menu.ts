@@ -35,12 +35,12 @@ export interface MenuHandlers {
   /**
    * 《每日挑战》那张卡（第 19 推）：进每日挑战那一页（ui/dailyMode.ts）。
    *
-   * 这张卡三端都摆在**最上面单独一行、居中**（方案原话），首玩期间也是亮的（`firstPlayable`）。
+   * 这张卡三端都摆在**最上面单独一行、居中**（方案原话）。首玩期间不摆（见下面 showDaily）。
    */
   onDaily: () => void;
   /**
-   * 摆不摆《每日挑战》那张卡（10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后出现」，
-   * engine/firstPlay.ts 的 finishedAGame）。不给就摆——这张卡原先是无条件摆的。
+   * 摆不摆《每日挑战》那张卡：打完过一局、而且首玩锁已经撤了（10-08 方案 3-D-1 ＋ 10-09 补充方案
+   * 6-6，一个判定：engine/firstPlay.ts 的 dailyCardShown）。不给就摆——这张卡原先是无条件摆的。
    */
   showDaily?: boolean;
   /**
@@ -384,8 +384,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
    * 站——一个新会话的默认焦点本来就是第 0 项（readAxisFocus），所以不用另写一句。
    *
    * 图按北京时间的星期几换、日期压在上面（dailyArt.ts），到北京零点自动换、切回前台时重算。
-   * 读屏念「每日挑战，10 月 3 日」；卡底下那行小字是「每日挑战」。首玩期间也亮着
-   * （`firstPlayable`）：今天这一局谁都能打。
+   * 读屏念「每日挑战，10 月 3 日」；卡底下那行小字是「每日挑战」。
    */
   /*
    * **一局都还没打完的人不摆这张卡**（10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后
@@ -400,7 +399,9 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   stopDailyWatch = null;
   if (showDaily) {
     const dailyBtn = iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle);
-    dailyBtn.dataset.firstPlayable = '1';
+    // 这儿从前有一句 `dailyBtn.dataset.firstPlayable = '1'`：首玩期它也亮着、首玩引导的小箭头也会指
+    // 到它。6-6 起首玩期根本不摆这张卡（showDaily 是 false），那一句删了——留着的话，哪天谁把摆卡的
+    // 判定改松了，它又会在首玩期亮起来。
     dailyBtn.addEventListener('click', () => handlers.onDaily());
     stopDailyWatch = watchDay(now, (d) => {
       // 主菜单已经被换掉了：这个钟没有用处了，撤掉（下一次画主菜单会另排一个）。

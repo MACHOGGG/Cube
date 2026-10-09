@@ -297,6 +297,48 @@ const WHITE = 'rgb(255, 255, 255)';
   }
 }
 
+// ── ⑤e 首玩锁还在的时候也没有这张卡（10-09 补充方案 6-6）──────────────────────────────
+//
+// 方案原话：「新手拦截和引导期间（首玩锁生效时），主菜单不渲染今日挑战卡；删掉 menu.ts 的
+// dailyBtn.dataset.firstPlayable = '1'。和 3-D-1『完成任意一局后才出现』合并成同一个判定。」
+// 两条大多数时候是同一件事，量不一样的那一种人：**打完过一局**（slides_played_finished），可两张
+// 基础卡一张都没开过、也没按《我会玩》——比如只在别人的小屋里打完过一局。按 3-D-1 他该有，按 6-6
+// 他还在首玩期：没有这张卡，首玩引导也就不会指到它身上（轴上能按的只剩两张基础卡）。尺子：同一个
+// 人按了《我会玩》，锁撤了，卡就出来——不然「没有」可能只是这一页根本没画出来。
+{
+  const t = NOON(SC.dayIndexOf(Date.now()));
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => {
+    if (sessionStorage.getItem('daily_gate') === '1') return;
+    sessionStorage.setItem('daily_gate', '1');
+    localStorage.clear();
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_intro_seen', '1');
+    localStorage.setItem('slides_played_finished', '1');
+  });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
+  await page.clock.install({ time: t });
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+  await page.waitForTimeout(400);
+  const e = await page.evaluate(() => ({
+    daily: document.querySelectorAll('.home-icon-btn--daily').length,
+    locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
+    open: [...document.querySelectorAll('.mode-axis > .home-icon-btn:not(.home-icon-btn--locked)')].map((b) => (b.getAttribute('aria-label') || '').split(' ·')[0]),
+    knowHow: !!document.querySelector('.know-how-btn'),
+  }));
+  check('⑤e 首玩锁还在（尺子）：别的玩法锁着、《我会玩》在', e.locked > 0 && e.knowHow, JSON.stringify(e));
+  check('⑤e 打完过一局、可首玩锁还在：没有每日挑战', e.daily === 0, `${e.daily} 张`);
+  check('⑤e 轴上按得动的只有两张基础卡（首玩引导不会指到别处）', e.open.join(' ') === '经典方块 经典小球', e.open.join(' / '));
+  // 尺子：按了《我会玩》，锁撤了，卡就出来。
+  await page.evaluate(() => document.querySelector('.know-how-btn').click());
+  const after = await page.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 8000 }).then(() => true).catch(() => false);
+  check('⑤e（尺子）按了《我会玩》锁撤了，每日挑战出来了', after);
+  await ctx.close();
+}
+
 // ── ⑥ 电脑宽屏 1440×900：最上面一排只有它、居中、一样大、各行等距、一屏放得下 ─────
 {
   const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { width: 1440, height: 900, mobile: false });
