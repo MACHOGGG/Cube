@@ -9,7 +9,7 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F5EDDA",
-  "theme_color": "#BE5762",
+  "theme_color": "#F5EDDA",
   "icons": [
     {
       "src": "/icons/app/tower-rgb-192.png",

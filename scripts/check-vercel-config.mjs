@@ -1,5 +1,6 @@
 /**
- * vercel.json：schema 认得的那几样、两个慢接口的时限、全站的三条安全响应头（10-08 方案第五批第 1 条）。
+ * vercel.json：schema 认得的那几样、两个慢接口的时限、全站的五条安全响应头（10-08 方案第五批第 1 条；
+ * frame 那两条是 10-09 补充方案第一部分第 7 条）。
  *
  *   node scripts/check-vercel-config.mjs
  *
@@ -18,11 +19,18 @@
  *      文档确认它在 schema 里，再加进表）；整份文件里没有一个看着像注释的键；
  *   ② functions 只配了 api/mint.js、api/scores.js 两个，文件都在，maxDuration 是 1–60 的整数
  *      （Hobby 档上限 60；写 61 部署直接失败）；
- *   ③ 全站（source "/(.*)"）那一条带着三样：nosniff、Referrer-Policy、Permissions-Policy；
+ *   ③ 全站（source "/(.*)"）那一条带着 nosniff、Referrer-Policy、Permissions-Policy；
  *   ④ Permissions-Policy 关掉的能力，站里一处都没在用——关掉自己在用的东西，屏幕上不报错，只是
  *      那个功能悄悄没了（比如关了 clipboard-write，发码页的《复制》就按不动了）；
- *   ⑤ 还**没有** frame 策略（X-Frame-Options / frame-ancestors）：方案说先确认小红书的壳会不会
- *      嵌我们再定。确认之后要加，回来把这一条改成量它的值。
+ *   ⑤ frame 策略：全站 `X-Frame-Options: SAMEORIGIN` ＋ `Content-Security-Policy: frame-ancestors 'self'`，
+ *      而且只在全站那一条里写一次。
+ *
+ * ⑤ 原先量的是「还**没有**」：第五批的方案说先确认小红书的壳会不会嵌我们再定。10-09 补充方案第一部分
+ * 第 7 条确认了——小红书版是 zip 离线跑的，Builder Hub 和 `/xhs/` 预览都不会用 iframe 嵌 play-slides.com
+ * ——所以照加。两条一起写：老浏览器只认 X-Frame-Options，新的认 CSP 的 frame-ancestors（两条都在时以
+ * 它为准）。CSP 这一条**只写 frame-ancestors 一项**：这一个头里每多写一项（script-src、style-src……）
+ * 都会真的去拦东西，而站里有内联脚本、内联样式、Creem 和统计的外链——拦错了屏幕上不报错，只是那
+ * 一块悄悄没了。要收紧别的，另开一条、逐项量过再加。
  */
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -124,10 +132,19 @@ check('④ 关掉的能力，站里一处都没在用', clash.length === 0, clas
 // 反向对照：发码页在用剪贴板——要是有人把 clipboard-write 也关了，上面那条认得出来
 check('④ 尺子：发码页确实在用剪贴板（关 clipboard-write 会被上面那条拦下）', USES['clipboard-write'].test(read('public/mint.html')));
 
-// ── ⑤ frame 策略还没加 ─────────────────────────────────────────────────────
-const everyHeader = (cfg?.headers || []).flatMap((h) => h.headers || []);
-const frame = everyHeader.filter((h) => /^x-frame-options$/i.test(h.key) || /frame-ancestors/i.test(String(h.value)));
-check('⑤ 还没有 frame 策略（要等确认了小红书的壳会不会嵌我们再定）', frame.length === 0, frame.map((h) => `${h.key}: ${h.value}`).join(' / '));
+// ── ⑤ frame 策略：同源才许嵌 ───────────────────────────────────────────────
+check('⑤ X-Frame-Options: SAMEORIGIN', hv('X-Frame-Options') === 'SAMEORIGIN', String(hv('X-Frame-Options')));
+check("⑤ Content-Security-Policy 只有 frame-ancestors 'self' 一项（多写一项就会真的去拦东西）",
+  hv('Content-Security-Policy') === "frame-ancestors 'self'", String(hv('Content-Security-Policy')));
+// 只在全站那一条里写一次：别的 source 再写一份，两份不一样的时候浏览器取哪一份说不准。
+const frameHeaders = (cfg) => (cfg?.headers || []).flatMap((h) => (h.headers || [])
+  .filter((x) => /^x-frame-options$/i.test(x.key) || /^content-security-policy$/i.test(x.key))
+  .map((x) => `${h.source} → ${x.key}`));
+const frames = frameHeaders(cfg);
+check('⑤ 这两条只在全站那一条里各写一次', frames.length === 2 && frames.every((f) => f.startsWith('/(.*) →')), frames.join(' / '));
+// 反面尺子：别的 source 里多写一份，上一条认得出来。
+check('⑤（反面尺子）另一条 source 里再写一份 X-Frame-Options，上一条会红',
+  frameHeaders({ headers: [...cfg.headers, { source: '/xhs/(.*)', headers: [{ key: 'X-Frame-Options', value: 'DENY' }] }] }).length === 3);
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);

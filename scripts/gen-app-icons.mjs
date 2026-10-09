@@ -23,13 +23,17 @@ const OUT = 'public/icons/app';
 const SIZES = [180, 192, 512];
 
 /**
- * manifest 的两个颜色从 style.css 现读，不在这儿写死（10-08 方案第五批第 10 条）。
+ * manifest 的颜色从 style.css 现读，不在这儿写死（10-08 方案第五批第 10 条）。
  *
  * 原先这儿写死 background_color '#FAF9F5'、theme_color '#BE5762'。页面底色后来照玩家给的稿子
  * 往暗黄挪了一档（--bg 现在是 #F5EDDA），这儿没跟：装到桌面上的那一版，启动画面的底色还是旧
- * 的米白，和随后亮出来的页面对不上。现在读 style.css 第一个 :root（浅色那一套）里的 --bg 和
- * --accent——改色只改 style.css 一处，重跑这个脚本就跟上了；门 check-manifest-colors 盯着生成
- * 出来的那一份和 style.css 对不对得上。
+ * 的米白，和随后亮出来的页面对不上。现在读 style.css 第一个 :root（浅色那一套）里的 --bg——改
+ * 色只改 style.css 一处，重跑这个脚本就跟上了；门 check-manifest-colors 盯着生成出来的那一份和
+ * style.css、index.html 对不对得上。
+ *
+ * **两个键都取 --bg**（10-09 补充方案第一部分第 8 条，玩家选乙）。theme_color 原先取的是强调色
+ * --accent（玫红）：装到桌面上那一版，状态栏和任务切换器里的那一条是玫红的，而浏览器里打开时
+ * index.html 的 <meta name="theme-color"> 写的是底色——同一个站两种顶条。现在三处是同一个颜色。
  */
 async function rootTokens(...names) {
   const css = await readFile('src/style.css', 'utf8');
@@ -41,7 +45,7 @@ async function rootTokens(...names) {
     return m[1];
   });
 }
-const [BG, ACCENT] = await rootTokens('--bg', '--accent');
+const [BG] = await rootTokens('--bg');
 
 // appIcons.ts imports from homeIcons.ts, so bundle it rather than parsing it.
 const tmp = path.resolve('node_modules/.cache/app-icons');
@@ -85,7 +89,7 @@ for (const { id, svg } of [APP_ICON]) {
         display: 'standalone',
         orientation: 'portrait',
         background_color: BG,
-        theme_color: ACCENT,
+        theme_color: BG,
         icons: [
           { src: `/icons/app/${id}-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: `/icons/app/${id}-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },
