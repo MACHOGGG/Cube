@@ -1907,9 +1907,9 @@ await page.close();
     locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
     skip: !!document.querySelector('.axis-know-how'),
   }));
-  // 剩下那 5 张锁是 Slides 天才那一套（老虎机 · 无限反转 · 步步为营 · 七色圆球 ·
-  // 进阶三角），和首玩期这道锁是两回事，不该被一起撤掉。
-  check('按了《我会玩》之后只剩天才那 5 把锁', after.locked === 5, `${after.locked} 把`);
+  // 剩下那 7 张锁是 Slides 天才那一套（老虎机 · 无限反转 · 步步为营 · 更多布局那四副——菱形方块、
+  // 六边形小球 10-09 也上了锁，补充方案第一部分第 10 条），和首玩期这道锁是两回事，不该被一起撤掉。
+  check('按了《我会玩》之后只剩天才那 7 把锁', after.locked === 7, `${after.locked} 把`);
   check('《我会玩》自己也从轴上撤了', after.skip === false);
   await p2.close();
 }

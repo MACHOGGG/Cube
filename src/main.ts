@@ -80,7 +80,6 @@ import { createSquareDiamondGame } from './shapes/squareDiamond';
 import { createCircleSevenGame } from './shapes/circleSeven';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 import { reducedMotion } from './engine/reducedMotion';
-import * as smoothScroll from './engine/smoothScroll';
 
 injectStyles();
 
@@ -600,15 +599,9 @@ function teardown() {
     activeDestroy = null;
   }
   gameInProgress = false;
-  /**
-   * 换屏默认「开阻尼」，进局内的那一条自己关（showGame 里那句 stop）。
-   *
-   * 这么接是为了**只改两处**：teardown 是每一屏进来时第一件事，所有内容页都经
-   * 过它；局内是唯一的例外，就在那一处摘掉。反过来写（默认关、每个内容页各开
-   * 一次）要改十几处，往后新加一页还得记得补——忘一处就是「这一页没有阻尼」，
-   * 而那种毛病没人会报，只会觉得「怪怪的」。
-   */
-  smoothScroll.start();
+  // 这儿从前还有一句 smoothScroll.start()：换屏默认给整页滚动开 Lenis 阻尼，局内那一处再关。
+  // 10-09 补充方案第一部分第 10 条（3-J）玩家拍板「电脑端滚轮那层平滑滚动整个拿掉」，6-8 又确
+  // 认「Lenis、GSAP 都不进共享 src/」——那个模块连同它的依赖一起删了，滚动全站都是原生的。
 }
 
 /**
@@ -882,12 +875,16 @@ function showDailyMode() {
 
 /**
  * 这一局在网页端锁着没有（和主菜单上那几张锁着的卡是同一个判断）：老虎机、无限反转、步步为营
- * 三档，加上 GENIUS_LAYOUTS 那两副棋盘，没开通就玩不了。炸弹、计时、两副「+」布局是免费的。
+ * 三档，加上 GENIUS_LAYOUTS 那四副棋盘的基础玩法，没开通就玩不了。计时、炸弹（三档都算）免费。
+ *
+ * 棋盘那一半**只在基础玩法那一档问**：进阶炸弹开在菱形方块和六边形小球上，而这两副 10-09 起也
+ * 进了 GENIUS_LAYOUTS——不分档的话，输一串进阶炸弹的代号会被锁拦下，可同一局从炸弹那一页点进去
+ * 是免费的。同一局两个答案，就是「意料之外的界面」。
  */
 function seedLocked(g: SeedGame): boolean {
   if (isGenius()) return false;
   const mode = g.variant.mode;
-  return mode === 'slot' || mode === 'flip' || mode === 'puzzle' || GENIUS_LAYOUTS.includes(g.board);
+  return mode === 'slot' || mode === 'flip' || mode === 'puzzle' || (mode === 'base' && GENIUS_LAYOUTS.includes(g.board));
 }
 
 /**
@@ -1532,15 +1529,6 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   // 返回回他挑这一局的那一页：从整页挑的（计时、炸弹、老虎机……）回那一页，从主菜单直接点的回主菜单。
   const backFn = onBack ?? showMenu;
   const mountNow = () => {
-    /**
-     * 局内不要滚动阻尼（玩家第八轮点名）。
-     *
-     * teardown 默认给所有屏开着（见那儿），局内是唯一的例外：棋盘那块自己吃
-     * 手势（`touch-action: none`），再插一层接管滚动只会打架。关在挂载棋盘的
-     * 这一句旁边，而不是 showGame 头上——开局页、倒数那几屏走的也是 showGame，
-     * 它们是正经的内容页。
-     */
-    smoothScroll.stop();
     /**
      * 这儿从前有一句 `clearSeed()`：单人局一律从真随机发牌，把小屋留下的共享种子清掉（小
      * 屋倒数那一屏种下的流，中途退出、断线的人那条流会一直钉着，他接下来打的每一局单人发的

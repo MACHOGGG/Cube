@@ -38,8 +38,8 @@ import { stepSpring, type SpringState } from './spring';
  * `lerp` 覆盖（发版不依赖它）。
  *
  * 拉回 1 也还是合法的：数学上 `1 − e^(−λ·dt)` 要等于 1，λ 就是无穷大，语义上正是「不追，
- * 直接到」——下游照样走得通，只是那一档没有阻尼。内容页那层阻尼（engine/smoothScroll.ts）
- * 是另一件事，一直是 0.1。
+ * 直接到」——下游照样走得通，只是那一档没有阻尼。内容页原先另有一层整页滚动的阻尼
+ * （engine/smoothScroll.ts，Lenis 0.1），和这一条无关；那一层 10-09 整个拿掉了。
  */
 export const AXIS_LERP = tune('lerp', 0.12);
 

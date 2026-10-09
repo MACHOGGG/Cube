@@ -130,7 +130,9 @@ check(
 await page.evaluate(() => localStorage.setItem('slides_played_circle', '1'));
 await page.reload({ waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.$eval('.home-icon-btn[aria-label="菱形方块"]', (e) => e.click());
+// 拿计时挑战量：免费的，只在首玩期锁着。原先拿的是菱形方块，10-09 起它挂的是天才的锁（补充方案
+// 第一部分第 10 条），打过一局也开不了——量到的会是另一把锁。
+await page.$eval('.home-icon-btn[aria-label^="计时挑战"]', (e) => e.click());
 await page.waitForTimeout(800);
 check('打过一局之后：锁撤了，点得进去', !(await page.$('.home-page')), '还在主菜单就是没撤');
 check('也不再抖了', (await page.$$('.home-icon-btn--nudge')).length === 0);

@@ -151,7 +151,7 @@ check('从一局里退出来，主菜单还停在刚才那儿', Math.abs(after -
 
 // ---- 5. 锁着的玩法：锁在正当中，招牌收在右下角，两者碰不到 -----------------
 //
-// 没开通的玩家在主菜单上看见五张锁着的卡（老虎机、无限反转、步步为营、七色圆球、进阶三角）。锁要正
+// 没开通的玩家在主菜单上看见七张锁着的卡（老虎机、无限反转、步步为营，和更多布局那四副）。锁要正
 // 正地压在图形中心，三把一样大；天才招牌收在卡片右下角，不许压到锁上，也不
 // 许探出卡片去压到邻居。卡片的大小随屏幕变——手机竖着两列、横过来是电脑那
 // 套版式但一张只剩 96px、电脑上二百多——三种都量一遍。
@@ -278,13 +278,18 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
   const cards = await lockedCards(w, h);
   const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
   /*
-   * 锁着的五张：老虎机、无限反转、步步为营、七色圆球、大三角。
+   * 锁着的七张：老虎机、无限反转、步步为营，和更多布局那四副（菱形方块、六边形小球、菱形小球、
+   * 六边形三角）。
    *
    * **大三角（六边蜂窝 54）2026-09 换上了锁**（《侵蚀阶梯》v1.2 PR-6 把它挪进
-   * GENIUS_LAYOUTS），顶掉的是删掉的 V 型三角。张数没变，名字变了——所以下面
-   * 那张 WANT 表才是真正量得到这件事的地方。
+   * GENIUS_LAYOUTS），顶掉的是删掉的 V 型三角；**菱形方块、六边形小球 10-09 也上了锁**（补充方案
+   * 第一部分第 10 条：「和其他『更多布局』一样需要天才」），五张变七张。按名字比，不只比张数：
+   * 张数对、锁错了人，屏幕上看着一样。
    */
-  check(`${label}：五张锁着的卡都在`, cards.length === 5, brief);
+  const LOCKED = ['老虎机模式', '无限反转', '步步为营', '菱形方块', '六边形小球', '菱形小球', '六边形三角'];
+  const names = cards.map((c) => c.name);
+  check(`${label}：七张锁着的卡都在，就是这七张`,
+    cards.length === LOCKED.length && LOCKED.every((n) => names.includes(n)), brief);
   // 玩家点名的顺序，宽屏三排、窄屏几排——同一条链，断在不同的地方。
   const wide = w >= 720 || (w > h && w >= 560);
   const got = await menuOrder(w, h);
@@ -344,7 +349,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
       got.items.join(' · '));
   }
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
-  check(`${label}：五把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
+  check(`${label}：七把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
   check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
   check(`${label}：招牌收在卡片里`, cards.every((c) => c.inside));
 }

@@ -451,11 +451,12 @@ export const GATES = [
     run: ['scripts/check-mode-icons.mjs', SERVER],
   },
 
-  // 触屏不接 Lenis 的平滑滚动（2026-10-08 方案 3-J，玩家拍板：「移动端触摸列表一律不做 Lenis 式平滑
-  // 滚动」）。从前 smoothScroll.ts 开着 syncTouch，手机上一根手指滑内容页，滚的是插值推出来的那一份；
-  // 现在触屏设备一次都不建它，电脑的滚轮照旧有阻尼。手机进个人主页，<html> 上没有 lenis；电脑上有。
+  // 整页滚动是原生的：电脑、手机都不接 Lenis 那层平滑滚动。10-08 方案 3-J 先摘掉触屏（「移动端触摸列表
+  // 一律不做 Lenis 式平滑滚动」），10-09 补充方案第一部分第 10 条再把电脑滚轮那一层也整个拿掉（6-8：
+  // 「Lenis、GSAP 都不进共享 src/」）。手机、电脑进个人主页，<html> 上都没有 lenis；源码和依赖里也没有。
+  // 脚本名照旧叫 smooth-touch（清单按路径认门，换名等于撤一道加一道）。
   {
-    name: '触屏不接平滑滚动',
+    name: '整页滚动是原生的（电脑手机都不接平滑滚动）',
     shard: 'a', secs: 8, port: 8967,
     run: ['scripts/check-smooth-touch.mjs', SERVER],
   },

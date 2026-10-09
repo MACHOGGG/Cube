@@ -116,7 +116,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: '价格与订阅',
       intro: 'Slides 的全部玩法都免费。「Slides 天才」是解锁额外内容的那一档。订阅目前不开放：我们暂时不出售它，现在也没有任何在续的订阅。下面写明这一档现在是什么状态。',
       items: [
-        { term: '免费的部分', body: '经典方块、经典小球两种基础玩法，以及计时挑战、炸弹挑战、多人游玩，全部免费，无广告，不需要注册。特殊布局里的菱形方块和六边形小球也是免费的；另外两副（菱形小球、六边形三角）属于订阅，在主菜单上挂着锁，点开看得到是什么。' },
+        { term: '免费的部分', body: '经典方块、经典小球两种基础玩法，以及计时挑战、炸弹挑战、多人游玩，全部免费，无广告，不需要注册。特殊布局四副（菱形方块、六边形小球、菱形小球、六边形三角）属于订阅，在主菜单上挂着锁，点开看得到是什么；炸弹挑战里开在菱形方块、六边形小球上的那一档照旧免费。' },
         { term: '价格', body: '目前不出售，结账入口已经撤下。此前的价格是 1.99 美元／月、4.99 美元／年；哪天重新开放，会先在本页写明。', only: 'web' },
         { term: '订阅周期', body: '按您选的周期计费：月订阅每 1 个月一期，年订阅每 12 个月一期，都从付款当天起算。' },
         { term: '自动续费', body: '不适用：目前没有任何在续的订阅，也不会产生任何扣款。', only: 'web' },
@@ -192,7 +192,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: '價格與訂閱',
       intro: 'Slides 的全部玩法都免費。「Slides 天才」是解鎖額外內容的那一檔。訂閱目前不開放：我們暫時不出售它，現在也沒有任何在續的訂閱。下面寫明這一檔現在是什麼狀態。',
       items: [
-        { term: '免費的部分', body: '經典方塊、經典小球兩種基礎玩法，以及計時挑戰、炸彈挑戰、多人遊玩，全部免費，無廣告，不需要註冊。特殊版面裡的菱形方塊和六邊形小球也是免費的；另外兩副（菱形小球、六邊形三角）屬於訂閱，在主選單上掛著鎖，點開看得到是什麼。' },
+        { term: '免費的部分', body: '經典方塊、經典小球兩種基礎玩法，以及計時挑戰、炸彈挑戰、多人遊玩，全部免費，無廣告，不需要註冊。特殊版面四副（菱形方塊、六邊形小球、菱形小球、六邊形三角）屬於訂閱，在主選單上掛著鎖，點開看得到是什麼；炸彈挑戰裡開在菱形方塊、六邊形小球上的那一檔照舊免費。' },
         { term: '價格', body: '目前不出售，結帳入口已經撤下。此前的價格是 1.99 美元／月、4.99 美元／年；哪天重新開放，會先在本頁寫明。', only: 'web' },
         { term: '訂閱週期', body: '按您選的週期計費：月訂閱每 1 個月一期，年訂閱每 12 個月一期，都從付款當天起算。' },
         { term: '自動續費', body: '不適用：目前沒有任何在續的訂閱，也不會產生任何扣款。', only: 'web' },
@@ -268,7 +268,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: 'Pricing & subscription',
       intro: 'Every game mode in Slides is free. "Slides Genius" is the tier that unlocks extra content. The subscription is currently closed: we are not selling it at the moment, and there are no running subscriptions. Below is where that tier stands today.',
       items: [
-        { term: "What's free", body: 'Both base games — Classic Squares and Classic Balls — plus the timed challenge, the bomb challenge and multiplayer. No ads, no account needed. Among the extra layouts, Diamond Squares and Hex Balls are free as well; the remaining two (Diamond Balls and Hex Triangles) belong to the subscription and carry a lock on the home screen.' },
+        { term: "What's free", body: 'Both base games — Classic Squares and Classic Balls — plus the timed challenge, the bomb challenge and multiplayer. No ads, no account needed. All four extra layouts (Diamond Squares, Hex Balls, Diamond Balls and Hex Triangles) belong to the subscription and carry a lock on the home screen; the bomb challenge tier played on Diamond Squares and Hex Balls stays free.' },
         { term: 'Price', body: 'Not on sale at the moment; the checkout has been taken down. The price was US$1.99 per month or US$4.99 per year. If it opens again, this page will say so first.', only: 'web' },
         { term: 'Billing period', body: 'You are billed for the period you pick: a monthly subscription renews every 1 month, a yearly one every 12 months, counted from the day you pay.' },
         { term: 'Automatic renewal', body: 'Does not apply: there are no running subscriptions, and nothing is being charged.', only: 'web' },
@@ -344,7 +344,7 @@ export const LEGAL: Record<Lang, Record<LegalKey, LegalDoc>> = {
       title: 'Tarifs et abonnement',
       intro: 'Tous les modes de jeu de Slides sont gratuits. « Slides Génie » est la formule qui débloque du contenu supplémentaire. L’abonnement est actuellement fermé : nous ne le vendons pas pour le moment, et aucun abonnement n’est en cours. Voici où en est cette formule aujourd’hui.',
       items: [
-        { term: 'Ce qui est gratuit', body: 'Les deux jeux de base — Carrés classiques et Billes classiques — ainsi que le défi chronométré, le défi bombe et le multijoueur. Sans publicité et sans compte. Parmi les dispositions supplémentaires, Carrés losange et Billes hexagone sont gratuits eux aussi ; les deux autres (Billes losange et Triangles hexagone) relèvent de l’abonnement et portent un cadenas sur l’écran d’accueil.' },
+        { term: 'Ce qui est gratuit', body: 'Les deux jeux de base — Carrés classiques et Billes classiques — ainsi que le défi chronométré, le défi bombe et le multijoueur. Sans publicité et sans compte. Les quatre dispositions supplémentaires (Carrés losange, Billes hexagone, Billes losange et Triangles hexagone) relèvent de l’abonnement et portent un cadenas sur l’écran d’accueil ; le niveau du défi bombe joué sur Carrés losange et Billes hexagone reste gratuit.' },
         { term: 'Prix', body: 'Pas en vente pour le moment ; la page de paiement a été retirée. Le prix était de 1,99 $US par mois ou 4,99 $US par an. En cas de réouverture, cette page l’indiquera d’abord.', only: 'web' },
         { term: 'Période de facturation', body: 'Vous êtes facturé pour la période choisie : un abonnement mensuel se renouvelle tous les mois, un abonnement annuel tous les 12 mois, à compter du jour du paiement.' },
         { term: 'Renouvellement automatique', body: 'Sans objet : aucun abonnement n’est en cours et rien n’est prélevé.', only: 'web' },

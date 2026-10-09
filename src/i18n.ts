@@ -223,6 +223,9 @@ export interface I18nStrings {
    * 比棋盘本身的名字长，也应该更长：主菜单上的图标旁边只要认得出是哪个
    * 就够了，这里是要让一个还没付钱的人看懂他买到的是什么。
    */
+  /** 10-09 起这两副也上了锁（第一部分第 10 条），邀请窗那张清单跟着多两行，和下面两行同一种说法。 */
+  geniusNowSquareDiamond: string;
+  geniusNowCircleHex: string;
   geniusNowCircleSeven: string;
   geniusNowTriangleBig: string;
   /** 开多人房间——GENIUS_LAYOUTS 之外唯一一件订阅立刻拿到的东西。 */
@@ -924,6 +927,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     becomeGenius: 'Become a Slides Genius',
     geniusSpecialTitle: 'Slides Genius Exclusives',
     geniusNowTitle: 'Unlocked the moment you sign up',
+    geniusNowSquareDiamond: 'Diamond Squares board',
+    geniusNowCircleHex: 'Hex Balls board',
     geniusNowCircleSeven: 'Diamond Balls board',
     geniusNowTriangleBig: 'Hex Triangles board, 54 tiles',
     geniusSoonTitle: 'Coming soon',
@@ -1275,6 +1280,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     becomeGenius: 'Devenir un Slides Génie',
     geniusSpecialTitle: 'Exclusivités Slides Génie',
     geniusNowTitle: 'Débloqué dès votre inscription',
+    geniusNowSquareDiamond: 'Plateau Carrés losange',
+    geniusNowCircleHex: 'Plateau Billes hexagone',
     geniusNowCircleSeven: 'Plateau Billes losange',
     geniusNowTriangleBig: 'Plateau Triangles hexagone, 54 pièces',
     geniusSoonTitle: 'Bientôt disponible',
@@ -1627,6 +1634,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '僅需註冊即可免費成為 Slides 天才',
     geniusNowTitle: '註冊後立即解鎖',
+    geniusNowSquareDiamond: '菱形方塊棋盤',
+    geniusNowCircleHex: '六邊形小球棋盤',
     geniusNowCircleSeven: '菱形小球棋盤',
     geniusNowTriangleBig: '六邊形三角棋盤，54 枚',
     geniusSoonTitle: '敬請期待',
@@ -1978,6 +1987,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     geniusSpecialTitle: 'Slides 天才特供',
     subscribeTitle: '仅需注册即可免费成为 Slides 天才',
     geniusNowTitle: '注册后立即解锁',
+    geniusNowSquareDiamond: '菱形方块棋盘',
+    geniusNowCircleHex: '六边形小球棋盘',
     geniusNowCircleSeven: '菱形小球棋盘',
     geniusNowTriangleBig: '六边形三角棋盘，54 枚',
     geniusSoonTitle: '敬请期待',

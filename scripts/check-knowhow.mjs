@@ -200,6 +200,11 @@ let page = await freshPage(ctx);
    * 少了前一半，「按不开」会在卡片压根不存在时自动通过，量的是空气；少了后一
    * 半，锁就只是一张图。
    */
+  /*
+   * 拿哪一张量：**计时挑战**——免费的，只在首玩期锁着。原先拿的是菱形方块，10-09 起它挂的是天才的
+   * 锁（补充方案第一部分第 10 条），按完《我会玩》照样开不了：拿它量「首玩期那把锁撤了没有」，量
+   * 到的会是另一把锁。
+   */
   const lockedCard = await page.evaluate(() => {
     // **直接子元素**，不是后代：炸弹那张卡里嵌着九颗小片，其中一颗的名字也叫
     // 「进阶炸弹 · 菱形方块」——按后代找会先撞上它（它是画不是控件，自然没有
@@ -210,12 +215,12 @@ let page = await freshPage(ctx);
     const el = [...copy.children].find(
       (e) =>
         e.classList.contains('home-icon-btn') &&
-        (e.getAttribute('aria-label') || '').includes('菱形方块'),
+        (e.getAttribute('aria-label') || '').startsWith('计时挑战'),
     );
     return el ? { there: true, locked: el.classList.contains('home-icon-btn--locked') } : { there: false };
   });
   check('首玩期别的玩法也摆在菜单上，只是挂着锁', lockedCard.there === true && lockedCard.locked === true, JSON.stringify(lockedCard));
-  const reachable = await clickCard(page, '菱形方块');
+  const reachable = await clickCard(page, '计时挑战');
   await page.waitForTimeout(900);
   const stillMenu = await page.evaluate(() => !!document.querySelector('.home-grid'));
   check('按别的玩法开不起来（锁在拦着）', stillMenu);
@@ -238,9 +243,9 @@ let page = await freshPage(ctx);
   check('按完还在主菜单上（不是跳到别处去了）', after.menu);
 
   // 真的解锁了：刚才按不开的那一张现在按得开。
-  check('按完菱形方块出现在菜单上了', await clickCard(page, '菱形方块'));
+  check('按完计时挑战按得开了（找得到这张卡）', await clickCard(page, '计时挑战'));
   await page.waitForFunction(
-    () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball, #startBtn').length > 0,
+    () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball, #startBtn, .timed-page').length > 0,
     { timeout: 15000 },
   ).catch(() => {});
   const opened = await page.evaluate(

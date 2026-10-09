@@ -37,6 +37,8 @@ import { geniusLogoTag } from './geniusLogo';
  */
 function geniusBoardBlurb(id: string, lang: Lang): string {
   const s = STRINGS[lang];
+  if (id === 'squareDiamond') return s.geniusNowSquareDiamond;
+  if (id === 'circleHex') return s.geniusNowCircleHex;
   if (id === 'circleSeven') return s.geniusNowCircleSeven;
   if (id === 'triangleBig') return s.geniusNowTriangleBig;
   return shapeName(lang, id, id);

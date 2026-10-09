@@ -42,6 +42,8 @@ await ctx.addInitScript(() => {
   // 用：这儿就是要关掉它）。
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle',
     'slides_played_square', 'slides_played_circle', 'slides_know_how']) localStorage.setItem(k, '1');
+  // 六边形小球 10-09 起是天才特供（补充方案第一部分第 10 条），不写权益就只按得到一把锁。
+  localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 9e10 }));
 });
 const page = await ctx.newPage();
 const errs = [];

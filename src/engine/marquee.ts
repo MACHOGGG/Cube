@@ -26,9 +26,9 @@
  *   4. **页面切到后台就停 rAF**（document.hidden）。不停的话，切回来那一帧的 dt
  *      是「离开到回来」的整段时间，带子会瞬移一大截。
  *
- * 速度从哪来：自己按 `window.scrollY` 的逐帧差算，不问 Lenis 要。
- * 这样原生滚动、Lenis 阻尼、手机惯性滑三种情形是同一套数，这个模块也就不依赖
- * smoothScroll——那边在 reduced-motion 下和小红书那一版里压根不存在。
+ * 速度从哪来：自己按 `window.scrollY` 的逐帧差算。原先网页端整页滚动还垫着一层 Lenis
+ * 阻尼（engine/smoothScroll.ts），这儿也不问它要，所以那层 10-09 整个拿掉的时候这个模块
+ * 一个字都不用改：原生滚动、手机惯性滑都是同一套数。
  */
 import { reducedMotion } from './reducedMotion';
 
