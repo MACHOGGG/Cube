@@ -52,6 +52,10 @@ const BANNED = [
   ['郵箱', '信箱'],
   ['電郵', '信箱'],
   ['你', '您'],
+  // 繁体（10-09 补充方案 7-14）：「裝置」一个说法；名词「紀錄」（「記錄」是动词，界面上没有要说「記錄」这个动作的
+  // 地方）——只有「記錄商戶」（merchant of record）照它原来的写法。
+  ['設備', '裝置'],
+  [/記錄(?!商戶)/g, '紀錄（「記錄商戶」除外）'],
 ];
 
 /** 玩家看得到的字住在这些地方。 */
@@ -106,14 +110,23 @@ for (const must of ['src/i18n.ts', 'src/legal.ts', 'api/email.js', 'api/signin.j
 for (const [bad, good] of BANNED) {
   const hits = [];
   for (const { f, t } of texts) {
-    let i = t.indexOf(bad);
-    while (i >= 0) {
+    // 一条规矩可以是一个词，也可以是一条正则（要带例外的那种，比如「記錄商戶」）。
+    const at = typeof bad === 'string'
+      ? (() => { const out = []; let i = t.indexOf(bad); while (i >= 0) { out.push([i, bad.length]); i = t.indexOf(bad, i + 1); } return out; })()
+      : [...t.matchAll(bad)].map((m) => [m.index, m[0].length]);
+    for (const [i, len] of at) {
       const line = t.slice(0, i).split('\n').length;
-      hits.push(`${relative(root, f)}:${line}「…${t.slice(Math.max(0, i - 8), i + bad.length + 8).replace(/\s+/g, ' ')}…」`);
-      i = t.indexOf(bad, i + 1);
+      hits.push(`${relative(root, f)}:${line}「…${t.slice(Math.max(0, i - 8), i + len + 8).replace(/\s+/g, ' ')}…」`);
     }
   }
-  check(`没有「${bad}」（统一成「${good}」）`, hits.length === 0, hits.slice(0, 4).join(' ｜ ') + (hits.length > 4 ? ` …共 ${hits.length} 处` : ''));
+  const name = typeof bad === 'string' ? bad : '記錄';
+  check(`没有「${name}」（统一成「${good}」）`, hits.length === 0, hits.slice(0, 4).join(' ｜ ') + (hits.length > 4 ? ` …共 ${hits.length} 处` : ''));
+}
+// 反向对照：「記錄商戶」那个例外真的放过了、别的「記錄」真的抓得到。
+{
+  const re = BANNED.find(([b]) => b instanceof RegExp)[0];
+  check('（反向对照）「記錄商戶」放过，「您的記錄」抓到',
+    [...'Creem 是記錄商戶'.matchAll(re)].length === 0 && [...'您自己的記錄裡還在'.matchAll(re)].length === 1);
 }
 
 // 反向对照：挖注释那一步没把字符串里的字一起挖掉——拿一句带注释的样本量

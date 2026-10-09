@@ -14,6 +14,8 @@ export interface I18nStrings {
    * 教学条右边那颗《‹》的读屏名：把上一条摆回来看一眼（ui/coachBar.ts 的 peek）。专门一个，不借《返回》
    * （back）——那颗键不退出任何东西，读屏念「返回」，按下去的人以为要离开这一局（10-08 方案第四批第 8 条）。
    * 也不借上面那个 prev：它英文写的是「Back」，是分镜教学那颗键的。
+   * 英法 10-09 补充方案 7-14 补全成「Previous tip / Conseil précédent」：光一个「Previous / Précédent」读屏念出来不知道
+   * 是上一个什么。
    */
   coachPrev: string;
   replay: string;
@@ -510,6 +512,7 @@ export interface I18nStrings {
    *  横幅上只留这一行——挑一个玩法全房间就一起玩，这件事横幅一亮就说完了，
    *  底下再写一句解释是同一件事说两遍。 */
   mpPickingTitle: string;
+  /** 那条横幅上回小屋页的那颗键。中文原先只写「小屋里」，不像一颗键（10-09 补充方案 7-14：「回到小屋」）。 */
   mpBackToRoom: string;
   /** 屋主在主菜单上点了小屋里开不了的玩法，横幅上那一句。**不列名单**（10-09 补充方案第一部分第 4 条，
    *  玩家选 A）：原先写「小屋只玩六副棋盘，计时和炸弹暂时不行」，可小屋里老虎机和无限反转也开得了，
@@ -814,7 +817,14 @@ export interface I18nStrings {
   monthNames: string;
   /** 每日挑战那一页上的大键：开今天这一局。 */
   dailyPlay: string;
-  /** 代号输入框前头那个字，也是输入框的读屏名（2026-10 起叫「代号」，键名沿用 seed）。 */
+  /**
+   * 代号输入框前头那个字，也是输入框的读屏名（2026-10 起叫「代号」，键名沿用 seed）。
+   *
+   * 英法叫 **Game code / Code de partie**（10-09 补充方案 7-10）：原先是 Daily code / Code du jour——可
+   * 代号不只是每日挑战那一局，任何一局的结算卡上都印着它。也别写成光秃秃的「Code」：小屋房号、6 位
+   * 验证码、内部码都叫 code，四样摆在同一个站里分不清。这一组键（shareSeedLine、seedGo、seedBad、
+   * seedExpired、seedNewer）和 legal.ts 里讲「敲代号开的局不上榜」那两句一起改。
+   */
   seedLabel: string;
   /** 输入框旁边那颗开局键的读屏名。 */
   seedGo: string;
@@ -873,7 +883,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     knowHow: 'I know how',
     next: 'Next',
     prev: 'Back',
-    coachPrev: 'Previous',
+    coachPrev: 'Previous tip',
     replay: 'Replay',
     doneBtn: 'Done',
     pause: 'Pause',
@@ -889,7 +899,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipModeTitle: 'Endless flip',
     flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 100 s',
     timedModeTagline: '100-second challenge',
-    flipScoringHint: 'The scoring shape stays at four pieces all game · no move factor',
+    flipScoringHint: 'The scoring shape stays at four pieces all game · no Move multiplier',
     puzzleModeTitle: 'Puzzle · Step by step',
     puzzleModeTagline: 'Eight moves in hand. A move costs 1. Scoring pays 1 back. Scoring twice in a row pays 1 more. Clearing a line pays 2 more. No clock.',
     stepsLeftLabel: 'Moves left',
@@ -1203,18 +1213,18 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} move|{n} moves',
     bestPhrase: 'best {n}',
     shareQrCaption: 'Scan to play Slides',
-    shareSeedLine: 'Daily code {code}',
+    shareSeedLine: 'Game code {code}',
     shareDailyTag: 'Daily {m}/{d}',
     dailyTitle: 'Daily Challenge',
     dailyAria: 'Daily Challenge, {month} {d}',
     monthNames: 'January|February|March|April|May|June|July|August|September|October|November|December',
     dailyPlay: "Today's challenge",
-    seedLabel: 'Daily code',
-    seedGo: 'Play this daily code',
-    seedBad: "That daily code isn't right — check it again",
-    seedExpired: 'This daily code has expired',
-    seedNewer: 'This daily code needs a newer version of Slides',
-    seedNoBoard: 'Games started from a daily code don’t go on the leaderboards',
+    seedLabel: 'Game code',
+    seedGo: 'Play this game code',
+    seedBad: "That game code isn't right — check it again",
+    seedExpired: 'This game code has expired',
+    seedNewer: 'This game code needs a newer version of Slides',
+    seedNoBoard: "Games you start by typing in a code aren't ranked. Today's challenge still is.",
     dailyTurn: 'Turn your phone sideways',
     rankTabDaily: 'Today',
     dailyBest: "Today's best {n}",
@@ -1231,7 +1241,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     knowHow: 'Je sais jouer',
     next: 'Suivant',
     prev: 'Précédent',
-    coachPrev: 'Précédent',
+    coachPrev: 'Conseil précédent',
     replay: 'Rejouer',
     doneBtn: 'Terminé',
     pause: 'Pause',
@@ -1247,7 +1257,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     flipModeTitle: 'Retournement infini',
     flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 100 s',
     timedModeTagline: 'Défi de 100 secondes',
-    flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de facteur de coups',
+    flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de Coefficient de coups',
     puzzleModeTitle: 'Énigme · Pas à pas',
     puzzleModeTagline: 'Huit coups en main. Un coup coûte 1. Marquer en rend 1. Marquer deux fois de suite en rend 1 de plus. Effacer une ligne en rend 2 de plus. Sans chronomètre.',
     stepsLeftLabel: 'Coups',
@@ -1561,18 +1571,18 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     stepsPhrase: '{n} coup|{n} coups',
     bestPhrase: 'meilleur score {n}',
     shareQrCaption: 'Scannez pour jouer à Slides',
-    shareSeedLine: 'Code du jour {code}',
+    shareSeedLine: 'Code de partie {code}',
     shareDailyTag: 'Défi du {d}/{m}',
     dailyTitle: 'Défi du jour',
     dailyAria: 'Défi du jour, {d} {month}',
     monthNames: 'janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre',
     dailyPlay: "Défi d'aujourd'hui",
-    seedLabel: 'Code du jour',
-    seedGo: 'Jouer ce code du jour',
-    seedBad: "Ce code du jour n'est pas valide — vérifiez-le",
-    seedExpired: 'Ce code du jour a expiré',
-    seedNewer: 'Ce code du jour demande une version plus récente de Slides',
-    seedNoBoard: 'Les parties lancées depuis un code du jour ne vont pas au classement',
+    seedLabel: 'Code de partie',
+    seedGo: 'Jouer ce code de partie',
+    seedBad: "Ce code de partie n'est pas valide — vérifiez-le",
+    seedExpired: 'Ce code de partie a expiré',
+    seedNewer: 'Ce code de partie demande une version plus récente de Slides',
+    seedNoBoard: 'Les parties lancées en saisissant un code ne sont pas classées. Le défi du jour, si.',
     dailyTurn: 'Tournez votre téléphone',
     rankTabDaily: "Aujourd'hui",
     dailyBest: 'Meilleur du jour {n}',
@@ -1597,7 +1607,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     run4: '滑動一整行或一整列，湊齊 4 個同色方塊',
     flip: '得分的方塊會變成星星，顏色隨機',
     navProfile: '個人主頁',
-    navRecords: '記錄與排名',
+    navRecords: '紀錄與排名',
     noRecordsYet: '尚無成績',
     recordsResetByRules: '新規則上線，戰績從這裡重新開始',
     switchLanguage: '語言',
@@ -1642,7 +1652,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登入之後，您的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
     rankNetwork: '榜沒載入，檢查一下網路。',
-    dailyNotCounted: '這一局沒進今日挑戰榜。看看設備的日期和時間對不對。',
+    dailyNotCounted: '這一局沒進今日挑戰榜。看看裝置的日期和時間對不對。',
     rankAnon: '匿名玩家',
     nickSet: '設定暱稱',
     nickEdit: '修改暱稱',
@@ -1788,7 +1798,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinished: '已完成',
     mpGoPick: '去主選單選玩法',
     mpPickingTitle: '您為 {code} 小屋選擇',
-    mpBackToRoom: '小屋裡',
+    mpBackToRoom: '回到小屋',
     mpNotAMode: '這個玩法小屋裡還不能玩。',
     mpRoundLabel: '第 {n} 局',
     mpNextRound: '選下一個玩法',
@@ -1823,7 +1833,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpBestRound: '單局最高',
     mpFastest: '單局最快',
     mpRoundsPlayed: '共 {n} 局',
-    mpRoundDropped: '離開太久了，這一局沒算進小屋總分；您自己的記錄裡還在。',
+    mpRoundDropped: '離開太久了，這一局沒算進小屋總分；您自己的紀錄裡還在。',
     mpRoundForced: '屋主結束了這一局：您到剛才的 {n} 分已算進小屋總分。',
     mpRoundForcedZero: '屋主結束了這一局。',
     newVersionTip: '有新版本，點一下重新載入',
@@ -1930,7 +1940,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     seedBad: '這串代號不對，再核對一遍',
     seedExpired: '這個代號已過期',
     seedNewer: '這個代號要新版本才能玩',
-    seedNoBoard: '代號局不計入排行榜',
+    seedNoBoard: '手動輸入代號開的局不計入排行榜（今日挑戰照常計入）',
     dailyTurn: '請橫屏',
     rankTabDaily: '今日',
     dailyBest: '今日最佳 {n}',
@@ -2146,7 +2156,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFinished: '已完成',
     mpGoPick: '去主菜单选玩法',
     mpPickingTitle: '您为 {code} 小屋选择',
-    mpBackToRoom: '小屋里',
+    mpBackToRoom: '回到小屋',
     mpNotAMode: '这个玩法小屋里还不能玩。',
     mpRoundLabel: '第 {n} 局',
     mpNextRound: '选下一个玩法',
@@ -2288,7 +2298,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     seedBad: '这串代号不对，再核对一遍',
     seedExpired: '这个代号已过期',
     seedNewer: '这个代号要新版本才能玩',
-    seedNoBoard: '代号局不计入排行榜',
+    seedNoBoard: '手动输入代号开的局不计入排行榜（今日挑战照常计入）',
     dailyTurn: '请横屏',
     rankTabDaily: '今日',
     dailyBest: '今日最佳 {n}',

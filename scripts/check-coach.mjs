@@ -203,7 +203,8 @@ const { mountCoachBar, HINT_OF } = await import(coachBundle);
 const { tutorialRules, STRINGS } = await import(i18nBundle);
 // 教学条那颗《<》的读屏名，四语各一个专用的（10-08 方案第四批第 8 条：上一条 / Previous / Précédent / 上一條）
 {
-  const want = { zhHans: '上一条', en: 'Previous', fr: 'Précédent', zhHant: '上一條' };
+  // 英法 10-09 补充方案 7-14 补全了：光念「Previous / Précédent」不知道是上一个什么。
+  const want = { zhHans: '上一条', en: 'Previous tip', fr: 'Conseil précédent', zhHant: '上一條' };
   const got = Object.fromEntries(Object.keys(want).map((l) => [l, STRINGS[l]?.coachPrev]));
   const bad = Object.keys(want).filter((l) => got[l] !== want[l]);
   check('四语都有教学条《<》专用的读屏名（coachPrev）', bad.length === 0, JSON.stringify(got));

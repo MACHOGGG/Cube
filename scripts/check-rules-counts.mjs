@@ -145,15 +145,17 @@ const generalOf = (block) => {
 const GONE = {
   zhHans: ['连击', '时间系数', '0.95', '2×2', '整组都是星星'],
   zhHant: ['連擊', '時間係數', '0.95', '2×2', '整組都是星星'],
-  en: ['Streak', 'time factor', '0.95', '2×2', 'made only of stars'],
-  fr: ['Série', 'facteur temps', '0,95', '2×2', 'entièrement fait d'],
+  // 规则书里的名字和界面对齐（10-09 补充方案 7-11）：move factor / shape points / Swept badge 是规则书自己起的
+  // 名字，界面上叫 Move multiplier / Build score / Board cleared；法文 facteur de coups / Plateau net 同理。
+  en: ['Streak', 'time factor', '0.95', '2×2', 'made only of stars', 'move factor', 'shape points', 'Swept badge'],
+  fr: ['Série', 'facteur temps', '0,95', '2×2', 'entièrement fait d', 'facteur de coups', 'Plateau net'],
 };
 // 现在这套规则的三件事：每枚 +2、图案一路降到 1、综合分那唯一一个乘数。
 const MUST = {
   zhHans: ['2 分', '4 → 3 → 2 → 1', '步数系数'],
   zhHant: ['2 分', '4 → 3 → 2 → 1', '步數係數'],
-  en: ['2 points', '4 → 3 → 2 → 1', 'move factor'],
-  fr: ['2 points', '4 → 3 → 2 → 1', 'facteur de coups'],
+  en: ['2 points', '4 → 3 → 2 → 1', 'Move multiplier', 'Build score'],
+  fr: ['2 points', '4 → 3 → 2 → 1', 'Coefficient de coups'],
 };
 const counts = {};
 for (const lang of LANGS) {
@@ -287,7 +289,7 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
   const items = [...rules.matchAll(/\{ term: '([^']+)', body: '((?:[^'\\]|\\.)*)' \}/g)]
     .filter((m) => TIMED_TERM.test(m[1]));
   check('（尺子）四种语言的「计时」那一条都找到了', items.length === 4, `${items.length} 条：${items.map((m) => m[1]).join(' / ')}`);
-  const NOT_MULT = /不乘步数系数|不乘步數係數|take no move factor|n\u2019ont pas de facteur de coups|n’ont pas de facteur de coups/;
+  const NOT_MULT = /不乘步数系数|不乘步數係數|take no move factor|take no Move multiplier|n\u2019ont pas de facteur de coups|n’ont pas de facteur de coups|n’ont pas de Coefficient de coups/;
   const liars = items.filter((m) => NOT_MULT.test(m[2]));
   check('计时那一条不再说「不乘步数系数」', liars.length === 0, liars.map((m) => m[1]).join(' / ') || '干净');
   // 反面尺子：把那句旧话喂进同一条正则，必须抓得到——不然上面那条是空绿。

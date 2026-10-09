@@ -721,6 +721,13 @@ jobs:
         run: |
           npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
           node scripts/check-legal-sale.mjs /tmp/legal.mjs
+      # 法务文本的哈希和「最后更新」的日期存在一起（scripts/legal-stamp.json，10-09 补充方案 7-14）：条款改了一个字、
+      # LEGAL_UPDATED 没跟着改就红；改完条款、改完日期，本地跑一次 `--write` 把新的一对记下、一起提交。从前那个日期
+      # 停在 10-03，之后两批都改过条款——页面上的「最后更新」本身也是一句对外的陈述。
+      - name: 法务文本改了，「最后更新」跟着改
+        run: |
+          npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
+          node scripts/check-legal-stamp.mjs /tmp/legal.mjs
 
       # 隐私政策说的，是这套代码此刻真做的那件事（E52）。2026-10 的改制换掉了身份本身
       # （没有密码、没有订阅、多了一种连邮箱都没有的账号），所以那份文档是**逐条重写**的
