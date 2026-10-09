@@ -236,7 +236,14 @@ console.log('');
 // src/engine/creem.ts 的 webRefresh 从前把「服务器答 active: false」和「网络断了」一起折成 null，
 // 调用方（subscription.ts 的 refreshEntitlement）于是「保持原样」：退了款的那一份照旧开着权限，
 // 直到本机记的 until 自己过期。这一节把真的那两个文件打成一包，在 node 里搭一个最小的浏览器
-// （window.location、localStorage、fetch），跑三遍开机那一下。
+// （window.location、localStorage、fetch），跑几遍开机那一下。
+//
+// ⚠️ **10-09 补充方案 7-9：这一节原先是假绿。** 它摆的本机那一份是手写的 `channel: 'web'`，而真登录
+// 路径（signInWithCode / pairAuth）一律写死 `channel: 'code'`——开机那一下对「还在有效期的码」根本不
+// 去问（codeStillLive），退款永远传不回来，这一节却照样全绿。现在每一遍都**走真的登录那一步**（验证
+// 码登录，回包照服务端刷卡订阅那一支的样子：不带 kind），本机那一份由 signedInChannel 写出来。
+// 另加两条：服务端说权益在我们自己库里（kind: 'code'）就记 'code'、开机不去问；原生 App 一律 'code'
+// （记成 'web' 的话下次开机 read() 就当他登出了）。
 {
   const { build } = await import('esbuild');
   const { mkdtempSync } = await import('node:fs');
@@ -259,20 +266,33 @@ console.log('');
   };
   const realFetch = globalThis.fetch;
   let answer = null; // 下一次 /api/subscription 答什么；'offline' 就是网断了
+  let signinReply = null; // 下一次 /api/signin（验证码登录）答什么
+  let askedRefresh = 0;
   globalThis.fetch = async (url) => {
-    if (!String(url).includes('/api/subscription')) throw new Error('unexpected fetch: ' + url);
+    const u = String(url);
+    if (u.includes('/api/signin')) return { ok: true, status: 200, json: async () => signinReply };
+    if (!u.includes('/api/subscription')) throw new Error('unexpected fetch: ' + url);
+    askedRefresh++;
     if (answer === 'offline') throw new TypeError('Failed to fetch');
     return { ok: true, status: 200, json: async () => answer };
   };
   const sub = await import(join(dir, 'subscription.mjs'));
   const EMAIL = 'refunded@example.com';
   const TOKEN = 'DEVICE-TOKEN-1';
-  /** 本机记着「是天才、一年后才到期」——退款前的样子。 */
-  const paidCache = () => sub.setEntitlement({
-    active: true, channel: 'web', email: EMAIL, token: TOKEN, period: 'yearly', until: Date.now() + 300 * 86400e3,
-  });
+  const YEAR = () => Date.now() + 300 * 86400e3;
+  /**
+   * 退款前的样子，**由真的登录那一步写出来**：验证码登录，服务端答「是天才、一年后到期」——刷卡订阅
+   * 那一支（api/_entitlement.js 的 answer）不带 kind。`kind` 给了，就是「权益在我们自己库里」那一种。
+   */
+  const signedIn = async (kind) => {
+    sub.clearEntitlement();
+    signinReply = { ok: true, active: true, email: EMAIL, token: TOKEN, period: 'yearly', until: YEAR(), ...(kind ? { kind } : {}) };
+    const r = await sub.signInWithCode(EMAIL, '123456', false, 'ticket-1');
+    return r.ok === true;
+  };
   try {
-    paidCache();
+    check('⑪（尺子）真的登录那一步走通了', await signedIn());
+    check('⑪ 刷卡订阅登录进来：本机记的柜台是 web（不是写死的 code）', sub.entitlement().channel === 'web', String(sub.entitlement().channel));
     check('⑪ 客户端量程：本机现在是天才', sub.isGenius() === true);
     answer = { active: false, email: EMAIL, token: TOKEN, kind: 'card' };
     await sub.refreshEntitlement();
@@ -283,21 +303,51 @@ console.log('');
     check('⑪ 撤了的那一份也写进了本机存档（刷新之后不会回来）',
       JSON.parse(store.get('slides_genius') || '{}').active === false, String(store.get('slides_genius')));
 
-    paidCache();
+    await signedIn();
     answer = { active: false, email: EMAIL, kind: 'card' };
     await sub.refreshEntitlement();
     check('⑪ 回包里没带令牌：留着手上这一把', sub.entitlement().token === TOKEN && sub.isGenius() === false,
       JSON.stringify(sub.entitlement()));
 
-    paidCache();
+    await signedIn();
     answer = 'offline';
     await sub.refreshEntitlement();
     check('⑪ 网断了（没答案）：本机那份照旧，不许当成「不是」', sub.isGenius() === true, JSON.stringify(sub.entitlement()));
 
-    paidCache();
-    answer = { active: true, email: EMAIL, token: TOKEN, kind: 'card', period: 'yearly', until: Date.now() + 300 * 86400e3 };
+    await signedIn();
+    answer = { active: true, email: EMAIL, token: TOKEN, kind: 'card', period: 'yearly', until: YEAR() };
     await sub.refreshEntitlement();
     check('⑪ （尺子）还在付费：照旧是天才', sub.isGenius() === true);
+
+    // 权益在我们自己库里（内部码、注册送的终身）：服务端回 kind: 'code'，本机记 'code'，开机不去问——码自
+    // 带到期日，没人替它续。
+    await signedIn('code');
+    check('⑪ 服务端说 kind: code：本机记的柜台是 code', sub.entitlement().channel === 'code', String(sub.entitlement().channel));
+    const before = askedRefresh;
+    answer = { active: false, email: EMAIL, token: TOKEN };
+    await sub.refreshEntitlement();
+    check('⑪ 还在有效期的码：开机不去问（问的次数没涨）', askedRefresh === before && sub.isGenius() === true, `${before} → ${askedRefresh}`);
+  } finally {
+    sub.clearEntitlement();
+  }
+
+  // 原生 App：一律 'code'。另起一份模块（channel.ts 的 salesChannel 读一次就记住），开之前先摆上
+  // Capacitor 那个全局。
+  try {
+    globalThis.window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios' };
+    const app = await import(join(dir, 'subscription.mjs') + '?native');
+    signinReply = { ok: true, active: true, email: EMAIL, token: TOKEN, period: 'yearly', until: YEAR() };
+    await app.signInWithCode(EMAIL, '123456', false, 'ticket-2');
+    check('⑪ 原生 App 里登录：柜台照旧记 code（signedInChannel 在 App 里不返回 web）', app.entitlement().channel === 'code',
+      String(app.entitlement().channel));
+    // 下一次开机 read() 认不认这一份：再起一份模块，只从 localStorage 读。
+    const reboot = await import(join(dir, 'subscription.mjs') + '?native-reboot');
+    check('⑪ 原生 App 重开之后照旧登着（read() 没把它当成登出）', reboot.signedInEmail() === EMAIL, String(reboot.signedInEmail()));
+    // 反面尺子：App 里要是记成 'web'，read() 就把它丢掉——这正是 signedInChannel 在 App 里必须回 'code' 的理由。
+    store.set('slides_genius', JSON.stringify({ active: true, channel: 'web', email: EMAIL, token: TOKEN }));
+    const reboot2 = await import(join(dir, 'subscription.mjs') + '?native-reboot-2');
+    check('⑪（反面尺子）App 里记成 web 的那一份，重开之后 read() 当成登出', reboot2.signedInEmail() === undefined,
+      String(reboot2.signedInEmail()));
   } finally {
     globalThis.fetch = realFetch;
     delete globalThis.window;

@@ -283,6 +283,29 @@ export async function registerAccount(
 }
 
 /**
+ * 登录之后这份权益记在哪个柜台（10-09 补充方案 7-9）。
+ *
+ * 服务端只在权益**记在我们自己库里**的时候（内部码、注册送的终身那一份，api/_entitlement.js 的
+ * localAnswer）回 `kind: 'code'`；刷卡订阅那一份是去问 Creem 问出来的，不带它。
+ *
+ * 原先两处登录（signInWithCode、pairAuth）一律写死 `channel: 'code'`。而开机那一下
+ * （refreshEntitlement）对「还在有效期的内部码」是不去问的（codeStillLive：码自带到期日，没人替它
+ * 续）——于是一个刷卡订阅、后来退了款的人，本机记着「天才、一年后到期」，开机一次都不再问，权限
+ * 一直开着到那个日子。服务器那头早就答 active: false 了（门 check-entitlement ⑪ 量的就是「答了
+ * 之后本机撤不撤」，可它摆的测试数据是 `channel: 'web'`——真登录路径从来写不出这个值，那一条是
+ * 假绿）。
+ *
+ * **原生 App 必须仍是 `'code'`**：read() 只认 `'code'` 和本机这个柜台（ios / android），记成
+ * `'web'` 的话下一次开机 read() 就当他登出了。App 里本来也不卖网页订阅。
+ *
+ * 目前网页端停售（E11），这一处眼下不影响任何玩家；重开订阅那天它得是对的。
+ */
+export function signedInChannel(kind: string | undefined): SalesChannel | 'code' {
+  if (salesChannel() !== 'web') return 'code';
+  return kind === 'code' ? 'code' : 'web';
+}
+
+/**
  * 身份 2026-10 换了一套（E37/E38）：没有密码了。两条路的「写进缓存」都走这儿。
  *
  * 和 `registerAccount` / `restore` 并列。它们各自从一个接口拿回一份 entitlement 回包，
@@ -304,7 +327,8 @@ export async function signInWithCode(
     active: Boolean(reply.active),
     period: reply.period,
     until: reply.until,
-    channel: 'code',
+    // 权益在哪个柜台由服务端说（kind），不写死——见 signedInChannel。
+    channel: signedInChannel(reply.kind),
     email: reply.email ?? email,
     ...(reply.token ? { token: reply.token } : {}),
     ...(reply.gifts?.length ? { gifts: reply.gifts } : {}),
@@ -347,7 +371,8 @@ export async function pairAuth(
     active: Boolean(reply.active),
     period: reply.period,
     until: reply.until,
-    channel: 'code',
+    // 同 signInWithCode：由服务端说（免邮箱账号没有邮箱，Creem 不认识它，实际上总是 'code'）。
+    channel: signedInChannel(reply.kind),
     email: reply.id ?? reply.email ?? '',
     handle: first,
     ...(reply.token ? { token: reply.token } : {}),
