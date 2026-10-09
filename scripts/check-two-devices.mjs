@@ -19,14 +19,15 @@
  *     益：**回来的必须还是它自己那一把**。那个「每次登录换一把」的毛病今天换了个形状还会
  *     回来——只要有谁在问权益那一路上顺手 `issueToken` 一下。
  *   后半（免邮箱凭据账号）—— 真的两台设备：注册拿一把、登录再拿一把，两台一起报到；然后
- *     reset 一次，两把一起作废。
+ *     试一次 reset（10-09 补充方案 7-8 起回 410），两把都照旧在线。
  *
  * ⚠️ **前半只剩一台设备了（2026-10-02）。** 邮箱账号要拿第二把令牌，如今只有一条路：收一
  * 封验证码信（api/signin.js）——而这道门不收信（拿密码登录那一支随 E37 撤了）。邮箱账号的
  * 多设备那一条因此搬到了 `check-preclaim.mjs` 的 ④（在进程内驱动，读得到码）：两次验证码登
  * 录，两把令牌都要还在。真·HTTP 的两设备由后半那个免邮箱账号担着。
  *
- * 后半那一支 2026-10 从「改密码」换成了免邮箱凭据的 reset（密码取消了，E37/E38）。
+ * 后半那一支 2026-10 从「改密码」换成了免邮箱凭据的 reset（密码取消了，E37/E38）；10-09 补充方案
+ * 7-8 又撤了 reset——如今没有哪条路能凭第一串把别的设备踢下线，后半量的就是这件事。
  *
  * 用的是真的 HTTP 接口，不是把函数抓出来单测——中间那几层（identify、
  * tokenValid、resolveEntitlement 把哪一把令牌回给谁）正是出过错的地方。
@@ -101,15 +102,11 @@ const withPw = await post('/api/subscription', { email: EMAIL, password: PW });
 check('真密码也答 401（那一支不许悄悄回来）', withPw.status === 401,
   `${withPw.status} ${JSON.stringify(withPw.body)}`);
 
-// ---- 该踢下线的时候踢得掉：免邮箱凭据的 reset ----------------------------
+// ---- 免邮箱凭据：两台都在线，而且谁都没法凭第一串把它们踢下线 ----------------
 /*
- * 原先这一节用的是「改密码」。那一支 2026-10 撤了（E37，密码取消），而「把所有设备一起
- * 踢下线」这件事本身还在，只是搬到了另一条路上：免邮箱凭据账号（E38）忘了第二串，凭第
- * 一串 reset。
- *
- * 那条路**必须**踢光所有令牌，而且理由比改密码更硬：谁知道第一串就走得通这条路，所以真
- * 被别人走了一趟，原主人下一次打开发现自己掉线——那是他唯一能察觉的信号。换成「添一把令
- * 牌」的话，别人接管了账号而本人一无所知。
+ * 原先这一节用的是「改密码」，2026-10 换成免邮箱凭据的 reset（凭第一串重设第二串，踢光所有令
+ * 牌——真被别人走了一趟，原主人掉线是他唯一能察觉的信号）。10-09 补充方案 7-8 把 reset 整个撤了：
+ * 第一串可以被挨个试出来，凭它重设等于凭它接管。所以现在量的是反面：reset 回 410，两台都照旧在线。
  *
  * 走真的 HTTP，和这个文件别处一样：中间那几层（identify 认 hdl: 那种 id、tokenValid 走
  * 整串令牌）正是出过错的地方。
@@ -132,14 +129,12 @@ check('（尺子）reset 之前两台都认得',
   (await mineAs(hdlId, hdlA)).status === 200 && (await mineAs(hdlId, hdlB)).status === 200);
 
 const reset = await post('/api/handle', { action: 'reset', first: FIRST, newSecond: 'secondpas' });
-check('reset 成功，回一把新令牌', reset.status === 200 && Boolean(reset.body.token),
-  `${reset.status} ${JSON.stringify(reset.body.error || '')}`);
-const deadA = await mineAs(hdlId, hdlA);
-const deadB = await mineAs(hdlId, hdlB);
-check('reset 之后两台一起下线', deadA.status === 401 && deadB.status === 401,
-  `甲 ${deadA.status} / 乙 ${deadB.status}`);
-const live = await mineAs(hdlId, reset.body.token);
-check('刚 reset 那台还在线', live.status === 200, String(live.status));
+check('reset 回 410（凭第一串重设那一支撤了）', reset.status === 410 && reset.body.error === 'gone',
+  `${reset.status} ${JSON.stringify(reset.body)}`);
+const stillA = await mineAs(hdlId, hdlA);
+const stillB = await mineAs(hdlId, hdlB);
+check('两台都照旧在线（没人能凭第一串把它们踢下线）', stillA.status === 200 && stillB.status === 200,
+  `甲 ${stillA.status} / 乙 ${stillB.status}`);
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

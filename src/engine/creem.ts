@@ -189,7 +189,8 @@ export async function setWebPasscode(
 
 /** 这一屏认得的失败。都是服务端 error 串的原样，没有一个是前端猜的。 */
 export type CodeFailure = 'mailDown' | 'tooMany' | 'badEmail' | 'wrongCode' | 'codeStale' | 'unavailable' | 'failed';
-export type PairFailure = 'taken' | 'badPair' | 'wrong' | 'locked' | 'tooMany' | 'unavailable' | 'failed';
+/** `common`：注册时第一串太常见（api/_commonpairs.js，10-09 补充方案 7-8）。 */
+export type PairFailure = 'taken' | 'badPair' | 'common' | 'wrong' | 'locked' | 'tooMany' | 'unavailable' | 'failed';
 
 /** 回包里我们用得到的那几样（服务端还会多带 entitlement 那几位，原样往上传）。 */
 export interface AuthReply extends SubscriptionReply {
@@ -278,9 +279,8 @@ export const webPairRegister = (first: string, second: string) =>
 /** 免邮箱：登录。 */
 export const webPairSignIn = (first: string, second: string) => pairCall({ first, second });
 
-/** 免邮箱：忘了第二串，凭第一串重设。**别的设备会全部下线**（服务端 revokeTokens）。 */
-export const webPairReset = (first: string, newSecond: string) =>
-  pairCall({ action: 'reset', first, newSecond });
+// 免邮箱「忘了第二串，凭第一串重设」那一支撤了（10-09 补充方案 7-8；服务端 api/handle.js 的 reset 回
+// 410）。忘了第二串找不回来，退路是登录之后绑定邮箱（ui/subscribe.ts 的 openChangeEmailWindow）。
 
 /**
  * 锁住的那一种带着服务端算好的「还要锁多久」回来（api/handle.js 回 423 时的 retryInMs，即
@@ -304,6 +304,7 @@ async function pairCall(body: Record<string, string>): Promise<AuthReply | PairF
     if (err.status === 409) return 'taken';
     if (err.status === 423) return { reason: 'locked', retryInMs: err.retryInMs };
     if (err.code === 'badPair') return 'badPair';
+    if (err.code === 'common') return 'common';
     return 'wrong';
   }
 }

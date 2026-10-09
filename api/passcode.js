@@ -202,8 +202,9 @@ async function create(res, checkoutId, password, news) {
  * **改密码那一支撤了**（E37，2026-10 的改制）。
  *
  * 密码整个取消了：登录改成邮箱验证码（api/signin.js）或者两串免邮箱凭据
- * （api/handle.js），于是「改密码」这件事无从谈起——邮箱账号没有密码可改，免邮箱账号
- * 要换第二串走的是 handle.js 的 reset（凭第一串）。
+ * （api/handle.js），于是「改密码」这件事无从谈起——邮箱账号没有密码可改；免邮箱账号的第二
+ * 串原先能凭第一串重设（handle.js 的 reset），10-09 补充方案 7-8 起那一支也回 410，第二串改不
+ * 了，退路是绑定邮箱（api/email.js）。
  *
  * 撤的是这一支和它的分发，连同只有它在用的那四样 import（burnGuess / checkPin /
  * SECRET_RE / updateAccount）。`bind` / `create` 两支留着（老账号、在途标签页），所以

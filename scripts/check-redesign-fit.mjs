@@ -11,7 +11,8 @@
  *     · 不溢出、不重叠、不被底栏盖住；
  *     · 等距误差 ≤ 1px，居中误差 ≤ 1px；
  *     · 对比度：正文 ≥ 4.5，大字和图标 ≥ 3；
- *     · 免邮箱帐号的第一串默认遮住，并且没有「更换」按钮；
+ *     · 免邮箱帐号的第一串默认遮住，并且没有「更换」按钮；（10-09 补充方案 7-8 起那一格是《绑定邮箱》：
+ *       绑定一个邮箱成了这种帐号唯一的退路，api/email.js 也认 hdl: 那把 id 了）
  *     · Esc 能关窗；
  *     · 图标按钮都有 aria-label；
  *     · 这四页的样式里没有写死的颜色值。
@@ -733,19 +734,21 @@ for (const size of SIZES) {
         judge(`${tag} ${mode} 帐号窗（免邮箱）`, await page.evaluate(MEASURE, ACCT), {
           minTexts: 2,
           groups: {
-            '三颗键': { count: 2, sameH: true, sameW: true, evenV: true, noOverlap: true },
+            // 绑定邮箱 / 登出 / 联络（7-8 之前没有第一颗，这一组只有两颗）。
+            '三颗键': { count: 3, sameH: true, sameW: true, evenV: true, noOverlap: true },
             '窗里的块': { count: 4, noOverlap: true },
-            '✅ 和上面那几颗': { count: 3, sameH: true, sameW: true, noOverlap: true },
+            '✅ 和上面那几颗': { count: 4, sameH: true, sameW: true, noOverlap: true },
           },
         });
       }
       await setMode(page, '浅色');
       const id = await page.evaluate(() => ({
         shown: document.querySelector('#acctId')?.textContent.trim(),
-        change: document.querySelectorAll('#statusChangeEmail').length,
+        ids: [...document.querySelectorAll('.acct-actions > *')].map((e) => e.id),
       }));
       check(`${tag} 帐号窗：第一串默认遮住（•••• 加末 4 位）`, id.shown === '••••' + HANDLE.slice(-4), String(id.shown));
-      check(`${tag} 帐号窗：免邮箱帐号没有「更换」`, id.change === 0, String(id.change));
+      check(`${tag} 帐号窗：免邮箱帐号是 绑定邮箱 / 登出 / 联络 三颗（没有「更换」）`,
+        id.ids.join() === 'statusBindEmail,statusSignOut,statusMail', id.ids.join());
       await page.click('#acctEye');
       const open = await page.evaluate(() => document.querySelector('#acctId')?.textContent.trim());
       check(`${tag} 帐号窗：按眼睛露出整串`, open === HANDLE, String(open));

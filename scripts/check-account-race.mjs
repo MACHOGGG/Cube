@@ -188,6 +188,10 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
    * 这一对还顺手量了另一件事：**兑码认得出免邮箱账号**。`redeem.js` 那一句从前只认
    * `EMAIL_RE`，于是这种账号被判成「没登录」，码落到码自己名下而不是他账号上——他换台设
    * 备就找不着了，**而屏幕上写着「兑换成功」**。现在认的是 `accountId`。
+   *
+   * 10-09 补充方案 7-8 起 `reset` 也撤了（回 410，一个字都不写），「撞」这一半于是撞不出东西了。
+   * 这一对照旧并发着发，量的变成：reset 确实只回 410（哪天它又回来、又是朴素的读改写，这一条先
+   * 红），兑码那一个月照样加上、记在他账号上。
    */
   const handleApi = (await import('../api/handle.js')).default;
   const FIRST = 'RaceHandle1';
@@ -203,7 +207,7 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
     call(redeem, { code: 'EEEE55', email: hid, token: madeH.body.token }),
     call(handleApi, { action: 'reset', first: FIRST, newSecond: 'secondpas' }),
   ]);
-  check('④ 兑码撞 reset：两条都办成了', rRedeem2.status === 200 && rReset.status === 200,
+  check('④ 兑码撞 reset：兑码办成了，reset 回 410（7-8 撤了，一个字都不写）', rRedeem2.status === 200 && rReset.status === 410,
     `兑码 ${rRedeem2.status} / reset ${rReset.status}`);
   const afterH = (await A.loadAccount(hid))?.until || 0;
   check('④ 兑码撞 reset：那一个月还在（没被 reset 按旧快照盖掉）',

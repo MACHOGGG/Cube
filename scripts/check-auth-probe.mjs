@@ -157,8 +157,8 @@ check('订阅活着但没有账号：和「压根没这个人」一字不差（�
 //
 // ⚠️ 有一处是**故意泄露**的，写在这儿免得以后有人来「堵」它：`api/handle.js` 的
 // `register` 撞名时答 409 taken。那是不得不说的——第一串必须唯一，玩家撞上了就得换一
-// 串。代价（第一串可被枚举、而 reset 凭它就能重设第二串）玩家 2026-10-01 知情拍板，界面
-// 上如实告知。所以这一节量的是 `signin` 那一支，不是 `register`。
+// 串。代价（第一串可被枚举）玩家 2026-10-01 知情拍板，界面上如实告知；从前它还连着「reset 凭
+// 第一串就能重设第二串」，10-09 补充方案 7-8 撤了。所以这一节量的是 `signin` 那一支，不是 `register`。
 {
   const signinApi = (await import('../api/signin.js')).default;
   const handleApi = (await import('../api/handle.js')).default;

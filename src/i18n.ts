@@ -313,9 +313,10 @@ export interface I18nStrings {
    * 身份 2026-10 换掉了：没有密码了。一条路是邮箱 + 六位验证码，另一条是两串自己取的
    * 凭据（给没有邮箱、或者不想留邮箱的人）。两条都在同一扇窗里，不是两扇。
    *
-   * ⚠️ `pairWarning` 那一句**不能省**。那条路的真正钥匙是第一串：它必须唯一，所以撞名
-   * 时服务端会如实答「已被占用」，于是它是最容易被外人知道的那一串；而「忘了第二串」凭
-   * 它就能重设。玩家 2026-10-01 在知情的前提下拍的板——条件是界面上如实告知。
+   * ⚠️ `pairWarning` 那一句**不能省**。第一串必须唯一，所以撞名时服务端会如实答「已被占
+   * 用」，于是它是最容易被外人知道的那一串。原先「忘了第二串」凭它就能重设（玩家 2026-10-01
+   * 在知情的前提下拍的板——条件是界面上如实告知）；10-09 补充方案 7-8 撤了重设，这句话跟着改
+   * 成现在的实情：知道第一串的人能拿它乱试第二串，试错几次这个账号就锁几个小时。
    *
    * **2026-10-03：这一句从「屏幕上一整段」改成「读屏念整句 + 屏幕上一把钥匙和三个字」**
    * （`pairKeyNote`，用 `aria-describedby` 把整句挂在第一串那个框上）。告知这件事一个字
@@ -369,17 +370,22 @@ export interface I18nStrings {
   continueBtn: string;
   pairWarning: string;
   pairSaveBtn: string;
-  pairSavedHint: string;
   /**
    * 免邮箱那一颗「登录 / 注册」同一键（ui/subscribe.ts 的 pairSubmit）：登录对不上、自动试注册成功
    * 之后说的那一句（2026-10-08 方案 2-13，玩家原话）。他以为自己在登录旧账号，其实开了一个新的
    * ——第一串打错一个字就是这样。流程一个字不动，只是把这件事说出来。
    */
   pairNewAccountHint: string;
-  pairForgot: string;
-  pairResetBtn: string;
+  /**
+   * 免邮箱那一屏的一行小字（10-09 补充方案 7-8）：没有「重设第二串」了，忘了就找不回来；退路是登录
+   * 之后在账号窗里绑定一个邮箱（bindEmailRow）。原先那颗《忘了第二串？》和它的《重设第二串》连同
+   * 四语文案一起删了。
+   */
+  pairNoRecovery: string;
   useEmailInstead: string;
   pairTaken: string;
+  /** 注册时第一串太常见（api/_commonpairs.js 那张表，几百条）：服务端答 400 `common`。 */
+  pairCommon: string;
   pairBad: string;
   pairWrong: string;
   codeWrong: string;
@@ -437,6 +443,14 @@ export interface I18nStrings {
   newEmailLabel: string;
   emailCodeSent: string;
   emailChanged: string;
+  /**
+   * 免邮箱账号「绑定邮箱」（10-09 补充方案 7-8）：账号窗里那颗键的读屏名和那扇窗的标题、窗里那一行说
+   * 明（绑定之后两串就不能用了——这件事要在按下去之前说）、搬完之后回到账号窗时那一句。流程和换邮箱
+   * 是同一个（api/email.js），想绑的邮箱上已经有账号时那一句也是同一句 emailTaken。
+   */
+  bindEmailRow: string;
+  bindEmailHint: string;
+  emailBound: string;
   /** 想换过去的那个地址上已经有账号了。 */
   emailTaken: string;
   emailSame: string;
@@ -988,14 +1002,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairKeyNote: 'keep it private',
     pairPlaceholder: '8–64 letters or digits, case matters',
     continueBtn: 'Continue',
-    pairWarning: 'The first string is your key. Tell no one: whoever knows it can reset the second one.',
+    pairWarning: 'Keep the first string private: whoever knows it can try second strings, and enough wrong tries lock the account for hours.',
     pairSaveBtn: 'Save',
-    pairSavedHint: '✓ Saved — screenshot both strings',
     pairNewAccountHint: 'Signed in to a new account. If you meant your old one, sign out and try again.',
-    pairForgot: 'Forgot the second string?',
-    pairResetBtn: 'Set a new second string',
+    pairNoRecovery: 'A forgotten second string can’t be recovered — link an email after you sign in.',
     useEmailInstead: '← Use an email address',
     pairTaken: 'That first string is taken. Pick another one.',
+    pairCommon: 'That first string is too common. Pick another one.',
     pairBad: 'Both strings need 8–64 letters or digits.',
     pairWrong: 'Those two strings do not match an account.',
     codeWrong: 'That code is not right.',
@@ -1026,6 +1039,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     newEmailLabel: 'New email',
     emailCodeSent: 'We sent a 6-digit code to the new address. Enter it to finish.',
     emailChanged: 'Done — your account is on the new address.',
+    bindEmailRow: 'Link an email',
+    bindEmailHint: 'Once linked, you sign in with this email; the two strings stop working.',
+    emailBound: 'Done — sign in with this email from now on.',
     emailTaken: 'That address already has an account.',
     emailSame: 'That is the address you are already on.',
     confirmBtn: 'Confirm',
@@ -1344,14 +1360,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairKeyNote: 'à ne pas partager',
     pairPlaceholder: '8 à 64 lettres ou chiffres, casse respectée',
     continueBtn: 'Continuer',
-    pairWarning: 'La première chaîne est votre clé. Ne la donnez à personne : qui la connaît peut redéfinir la seconde.',
+    pairWarning: 'Gardez la première chaîne pour vous : qui la connaît peut essayer des deuxièmes chaînes, et trop d’erreurs verrouillent le compte pendant des heures.',
     pairSaveBtn: 'Enregistrer',
-    pairSavedHint: '✓ Enregistré — faites une capture des deux chaînes',
     pairNewAccountHint: 'Connecté à un nouveau compte. Si vous vouliez l’ancien, déconnectez-vous et réessayez.',
-    pairForgot: 'Deuxième chaîne oubliée ?',
-    pairResetBtn: 'Définir une nouvelle deuxième chaîne',
+    pairNoRecovery: 'Une deuxième chaîne oubliée ne se récupère pas — associez une adresse une fois connecté.',
     useEmailInstead: '← Utiliser une adresse e-mail',
     pairTaken: 'Cette première chaîne est déjà prise. Choisissez-en une autre.',
+    pairCommon: 'Cette première chaîne est trop courante. Choisissez-en une autre.',
     pairBad: 'Les deux chaînes doivent faire 8 à 64 lettres ou chiffres.',
     pairWrong: 'Ces deux chaînes ne correspondent à aucun compte.',
     codeWrong: 'Ce code n’est pas le bon.',
@@ -1382,6 +1397,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     newEmailLabel: 'Nouvelle adresse',
     emailCodeSent: 'Un code à 6 chiffres est parti vers la nouvelle adresse. Saisissez-le pour terminer.',
     emailChanged: 'C’est fait — votre compte est sur la nouvelle adresse.',
+    bindEmailRow: 'Associer une adresse',
+    bindEmailHint: 'Une fois l’adresse associée, vous vous connectez avec elle ; les deux chaînes ne servent plus.',
+    emailBound: 'C’est fait — connectez-vous désormais avec cette adresse.',
     emailTaken: 'Cette adresse a déjà un compte.',
     emailSame: 'C’est déjà votre adresse actuelle.',
     confirmBtn: 'Confirmer',
@@ -1700,14 +1718,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairKeyNote: '勿外傳',
     pairPlaceholder: '8–64 位字母或數字，分大小寫',
     continueBtn: '繼續',
-    pairWarning: '第一串是您的鑰匙，別告訴任何人——知道它的人可以重設第二串。',
+    pairWarning: '第一串別告訴任何人——知道它的人可以拿它試第二串，試錯幾次這個帳號就要鎖上好幾個小時。',
     pairSaveBtn: '儲存',
-    pairSavedHint: '✓ 已存好，截圖留存兩串',
     pairNewAccountHint: '新帳號登入成功，若嘗試登入舊帳號請退出重試',
-    pairForgot: '忘了第二串？',
-    pairResetBtn: '重設第二串',
+    pairNoRecovery: '忘了第二串將無法找回，建議登入後綁定信箱。',
     useEmailInstead: '← 改用信箱',
     pairTaken: '這一串已經有人在用了，換一串。',
+    pairCommon: '這一串太常見了，換一串。',
     pairBad: '兩串都要 8–64 位字母或數字。',
     pairWrong: '這兩串對不上。',
     codeWrong: '驗證碼不對。',
@@ -1738,6 +1755,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     newEmailLabel: '新的信箱',
     emailCodeSent: '驗證碼已經寄到新的信箱，填進來就換好。',
     emailChanged: '換好了——帳號已經在新的信箱底下。',
+    bindEmailRow: '綁定信箱',
+    bindEmailHint: '綁定之後用這個信箱登入，兩串就不能再用了。',
+    emailBound: '綁定好了——以後用這個信箱登入。',
     emailTaken: '這個信箱已經有帳號了。',
     emailSame: '這就是您現在用的信箱。',
     confirmBtn: '確認',
@@ -2056,14 +2076,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairKeyNote: '勿外传',
     pairPlaceholder: '8–64 位字母或数字，分大小写',
     continueBtn: '继续',
-    pairWarning: '第一串是您的钥匙，别告诉任何人——知道它的人可以重设第二串。',
+    pairWarning: '第一串别告诉任何人——知道它的人可以拿它试第二串，试错几次这个账号就要锁上好几个小时。',
     pairSaveBtn: '保存',
-    pairSavedHint: '✓ 已存好，截图留存两串',
     pairNewAccountHint: '新账号登录成功，若尝试登录旧账号请退出重试',
-    pairForgot: '忘了第二串？',
-    pairResetBtn: '重设第二串',
+    pairNoRecovery: '忘了第二串将无法找回，建议登录后绑定邮箱。',
     useEmailInstead: '← 改用邮箱',
     pairTaken: '这一串已经有人在用了，换一串。',
+    pairCommon: '这一串太常见了，换一串。',
     pairBad: '两串都要 8–64 位字母或数字。',
     pairWrong: '这两串对不上。',
     codeWrong: '验证码不对。',
@@ -2094,6 +2113,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     newEmailLabel: '新的邮箱',
     emailCodeSent: '验证码已经寄到新邮箱，填进来就换好。',
     emailChanged: '换好了——账号已经在新的邮箱底下。',
+    bindEmailRow: '绑定邮箱',
+    bindEmailHint: '绑定之后用这个邮箱登录，两串就不能再用了。',
+    emailBound: '绑定好了——以后用这个邮箱登录。',
     emailTaken: '这个邮箱已经有账号了。',
     emailSame: '这就是您现在用的邮箱。',
     confirmBtn: '确认',

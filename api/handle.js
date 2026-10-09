@@ -1,7 +1,6 @@
 import { send, readBody } from './_creem.js';
 import {
   checkPin,
-  clearFails,
   createAccount,
   issueToken,
   loadAccount,
@@ -9,10 +8,9 @@ import {
   newAccount,
   PAIR_RE,
   pairKey,
-  revokeTokens,
-  unblock,
   updateAccount,
 } from './_accounts.js';
+import { isCommonFirst } from './_commonpairs.js';
 import { grantLifetimeIfWindow, resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { storeConfigured } from './_store.js';
@@ -23,17 +21,20 @@ import { storeConfigured } from './_store.js';
  * 第一串当账号 id（全站唯一），第二串当密码。两串都是「大小写敏感的字母 + 数字、
  * 8 到 64 位」（`PAIR_RE`），玩家自己记在纸上或者截图存下来。
  *
- * ⚠️⚠️ **这条路的真正钥匙是第一串，不是第二串。** 玩家 2026-10-01 在知情的前提下拍的
- * 板，界面上也如实告知，但代码里必须写明白，免得后来的人以为这是个疏漏去「修」它：
+ * ── 没有「重设第二串」（10-09 补充方案 7-8，玩家选乙）────────────────
  *
- *   · 第一串**必须唯一**，所以注册撞名时服务端如实答 409 `taken`——那就等于一个可以
- *     挨个试的「这串有没有人用」接口，第一串因此是**最容易被外人知道**的那一串。
- *   · 而下面 `reset` 那一支**只凭第一串**就能重设第二串。两件事合起来：知道第一串的
- *     人就能接管这个账号。
+ * 从前这里有一支 `reset`：**只凭第一串**就能重设第二串。而第一串必须唯一、注册撞名时如实答
+ * 409 `taken`，等于一个可以挨个试的「这串有没有人用」接口——两件事合起来，**知道第一串的人
+ * 就能接管这个账号**。当初的理由是「没有邮箱就没有第二条通道，而忘了第二串就永远进不去对一
+ * 个免费账号更糟」，界面上如实告知（「第一串是你的钥匙」）。
  *
- * 这不是没想过别的做法，是没有更好的：没有邮箱就没有「证明这个账号是你的」的第二条
- * 通道，而「忘了第二串就永远进不去」对一个免费账号来说更糟。所以代价明写在界面上
- * （「第一串是你的钥匙，别告诉任何人」），由玩家自己决定取一串多难猜的。
+ * 玩家 10-09 换了选择：撤掉重设，第二串成为真正的密码；想有退路的人登录之后**绑定一个邮箱**
+ * （api/email.js：码寄到那个邮箱，验过就把整个账号搬到 `acct:<邮箱>` 底下，两串作废）。现在：
+ *
+ *   · `reset` 回 410（还会打到这儿的只剩旧标签页）；
+ *   · 第二串照旧有每个账号「错 4 次锁 4 小时」（`checkPin`）、scrypt、锁期只放一个请求去比对；
+ *   · 注册时太常见的第一串（`12345678`、`password1`……几百条，_commonpairs.js）答 400 `common`
+ *     ——第一串照旧可以被挨个试出来，取一个人人都会先试的，等于让外人拿它把你锁在门外。
  *
  * ── 三件实现上的约定 ────────────────────────────────────────
  *
@@ -49,11 +50,11 @@ import { storeConfigured } from './_store.js';
  *    **有意**的，不是漏了：名单是「所有玩家邮箱」，而这种账号没有邮箱可列。
  */
 
-/** 限速复用注册那个桶：两条路都是「不要任何凭据就能写库」，该共享一个上限。 */
+/** 注册那一支的限速桶（'signup'）：「不要任何凭据就能写库」。从前重设第二串也数它（7-8 撤了）。 */
 const SIGNUP_PER_HOUR = 10;
 
 /**
- * 整个接口按来路的上限，三支共享。
+ * 整个接口按来路的上限，两支（注册、登录）共享。
  *
  * 它挡的**不是**「猜某一个账号的第二串」——那件事由 `checkPin` 按账号计数管着（见
  * `signin` 那一段），按来路数在那上面帮不上忙。它挡的是另一件：**拿着一份第一串的名单
@@ -63,10 +64,10 @@ const SIGNUP_PER_HOUR = 10;
  * 次，那个账号就锁 4 小时。所以不限速的话，一台机器可以用很小的代价把所有已知的第一
  * 串**一起**锁掉——主人打不开，而他看到的只是「锁了，4 小时后再试」，根本不知道为什
  * 么。30 次/小时换算过来是「一小时最多能骚扰 7 个账号」，而真人一小时按不到 30 次
- * （登一次 1 下，忘了第二串重设再 2 下）。
+ * （登一次 1 下，登不上再注册 1 下）。
  *
- * 和 `SIGNUP_PER_HOUR` 是两个桶，不是一个：那一个数的是「写库」（注册、重设），这一个
- * 数的是「敲门」，连登录一起数。两个都要过。
+ * 和 `SIGNUP_PER_HOUR` 是两个桶，不是一个：那一个数的是「写库」（注册），这一个数的是「敲
+ * 门」，连登录一起数。两个都要过。
  */
 const PAIR_CALLS_PER_HOUR = 30;
 
@@ -75,6 +76,9 @@ export default async function handler(req, res) {
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
   const body = readBody(req);
+  // 重设第二串撤了（10-09 补充方案 7-8，见文件头）。410 而不是落到下面当成一次登录：那样旧标签页
+  // 上按《重设》的人会看到「这两串对不上」，而他明明没打错——这条路是不在了。
+  if (body.action === 'reset') return send(res, 410, { error: 'gone' });
   const first = String(body.first ?? '');
   // 形状先验，再记账：一个连格式都不对的请求不该吃掉配额，而这一步不花钞（纯正则）。
   if (!PAIR_RE.test(first)) return send(res, 400, { error: 'badPair' });
@@ -83,12 +87,13 @@ export default async function handler(req, res) {
   }
 
   if (body.action === 'register') return register(req, res, first, body);
-  if (body.action === 'reset') return reset(req, res, first, body);
   return signin(res, first, body);
 }
 
 async function register(req, res, first, { second }) {
   if (!PAIR_RE.test(String(second ?? ''))) return send(res, 400, { error: 'badPair' });
+  // 太常见的第一串（见文件头）。和形状那一道一样排在记账之前：查一张表，不花钞。
+  if (isCommonFirst(first)) return send(res, 400, { error: 'common' });
   if (await tooMany('signup', callerId(req), SIGNUP_PER_HOUR, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
@@ -150,42 +155,7 @@ async function signin(res, first, { second }) {
 }
 
 /**
- * 忘了第二串：凭第一串重设。
- *
- * **这一支会把所有设备的令牌一并作废**（`revokeTokens`），和 api/unlock.js 同一个道
- * 理，但在这儿还多一层意思：这条路谁都走得通（只要知道第一串），所以真被别人走了一
- * 趟，原主人会在下一次打开时发现自己掉线了——那是他唯一能察觉的信号。换成「添一把令
- * 牌」的话，别人接管了账号而本人一无所知。
- */
-async function reset(req, res, first, { newSecond }) {
-  if (!PAIR_RE.test(String(newSecond ?? ''))) return send(res, 400, { error: 'badPair' });
-  if (await tooMany('signup', callerId(req), SIGNUP_PER_HOUR, 3600)) {
-    return send(res, 429, { error: 'tooMany' });
-  }
-
-  const id = pairKey(first);
-  let issued;
-  // 带锁的读—改—写，不是朴素的整份覆盖：同一瞬间别处写进去的东西（后台发的收件箱）
-  // 不该被一份旧快照盖回去。
-  const locked = await updateAccount(id, (a) => {
-    // unblock 换盐换哈希、把两个计数归零。免邮箱账号走不到 blocked，但锁（lockUntil）
-    // 走得到，而重设之后那把锁该一起开掉——他刚证明过自己握着第一串。
-    unblock(a, String(newSecond));
-    issued = revokeTokens(a);
-  });
-  if (!locked.ok) {
-    // 到这一行什么不可逆的事都没做，照实说，他重来一次就好。
-    return send(res, locked.busy ? 503 : 401, { error: locked.busy ? 'busy' : 'wrong' });
-  }
-  // 另外那个计数键也要清——不然下一次输错，它会拿旧的次数接着往上数
-  // （见 _accounts.js 的 failKey）。
-  await clearFails(id);
-  const after = (await grantLifetimeIfWindow(id, locked.account)) || locked.account;
-  return answer(res, id, after, issued);
-}
-
-/**
- * 三支共用的回包。
+ * 两支共用的回包。
  *
  * `id` 就是 `pairKey(first)`，客户端把它存进 `Entitlement.email` ——`identify`、
  * `cloudScores` 的 `auth()`、`api/scores.js`、`api/room.js` 全链路认的都是那一位，所以

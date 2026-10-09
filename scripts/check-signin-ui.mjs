@@ -17,11 +17,16 @@
  * ② 三态切换走得通，而且每一态只摆它自己那一张表；
  * ③ 验证码那一屏真是六格（mountPin 画的 .pin-cell），订阅邮件那个框**出厂不勾**；
  * ④ `mailDown` 时**停在①**并出那句提示（E51）——不是跳进②等一张永远不来的码；
- * ⑤ 免邮箱那两个框是**明文**（type=text），「第一串是你的钥匙」那句**必须在**；
+ * ⑤ 免邮箱那两个框是**明文**（type=text），「第一串别告诉任何人」那句**必须在**（读屏）；**没有**
+ *    《忘了第二串？》，换成一行看得见的小字「忘了第二串将无法找回，建议登录后绑定邮箱。」（10-09 补充
+ *    方案 7-8 撤了凭第一串重设第二串）；
  * ⑥ 真注册一对凭据：进得去，《账户》那一屏上
  *    · 身份那一行是**第一串**，不是 hdl: 那串 hex（E53）；第 17 推起默认遮住（•••• 加末四
  *      位），按眼睛才露出整串
- *    · **没有《更换邮箱》**（api/email.js 会 400，E53）
+ *    · 第一格摆的是**《绑定邮箱》**，不是《更换邮箱》（7-8：api/email.js 认 hdl: 那把 id 了）
+ * ⑨ 《绑定邮箱》那扇窗：标题、那一行说明（不印 hdl:），绑好之后本机认成邮箱账号（第一串那一行、《绑定
+ *    邮箱》都不在了，换成邮箱和《更换邮箱》），回到账号窗说「绑定好了——以后用这个邮箱登录。」——这台
+ *    服务器没配 Resend，要码 / 验码两问用路由拦截答成功，量的是界面这一头。
  * ⑦ 两档屏幕（360×640 / 390×844）底排键都在屏内，而且点得着。
  * ⑧ 免邮箱锁住时，那句「约 N 小时后自动解开」的 N 是服务端说的还剩多久（retryInMs），不是写死的 4。
  */
@@ -128,7 +133,15 @@ const look = (page) =>
     goAria: document.querySelector('#authGo')?.getAttribute('aria-label') ?? '',
     closeAria: document.querySelector('#authClose')?.getAttribute('aria-label') ?? '',
     closeText: document.querySelector('#authClose')?.textContent?.trim() ?? '',
-    pairForgot: Boolean(document.querySelector('#authPairForgot')) && !document.querySelector('#authPairForgot').hidden,
+    pairForgot: Boolean(document.querySelector('#authPairForgot')),
+    /** 免邮箱那一屏那行小字（10-09 补充方案 7-8）：文字、画出来多大。 */
+    pairNote: document.querySelector('#authPairNote')?.textContent?.trim() ?? '',
+    pairNoteBox: (() => {
+      const el = document.querySelector('#authPairNote');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    })(),
   }));
 
 // ---------------------------------------------------------------------------
@@ -188,14 +201,18 @@ head('⑤ 免邮箱那一屏：明文两串，那句警告必须在');
    *
    * 所以这儿量三件事，缺一件都不成立：整句还在、它真的看不见了、而屏幕上那一行在。
    */
-  check('「第一串是您的钥匙」那整句还在（读屏念得到）', /第一串是您的钥匙/.test(v.warn), v.warn);
+  check('「第一串别告诉任何人」那整句还在（读屏念得到）', /第一串别告诉任何人/.test(v.warn), v.warn);
+  check('那句话里不再有「重设第二串」（7-8 撤了）', !/重设/.test(v.warn), v.warn);
   check('而且它真的不占版面（裁成 1×1，不是 display:none）',
     !!v.warnBox && v.warnBox.w <= 2 && v.warnBox.h <= 2, JSON.stringify(v.warnBox));
   check('整句挂在第一串那个框上（aria-describedby）', v.describedBy === 'authPairWarn', v.describedBy || '（没挂）');
   check('屏幕上留着「勿外传」那一行，而且看得见',
     /勿外传/.test(v.keyNote) && !!v.keyNoteBox && v.keyNoteBox.w > 10 && v.keyNoteBox.h > 6,
     `${v.keyNote} ${JSON.stringify(v.keyNoteBox)}`);
-  check('《忘了第二串？》那条路摆着', v.pairForgot === true);
+  check('没有《忘了第二串？》（凭第一串重设第二串撤了，10-09 补充方案 7-8）', v.pairForgot === false);
+  check('那行小字在、看得见：「忘了第二串将无法找回，建议登录后绑定邮箱。」',
+    v.pairNote === '忘了第二串将无法找回，建议登录后绑定邮箱。' && !!v.pairNoteBox && v.pairNoteBox.w > 40 && v.pairNoteBox.h > 8,
+    `${v.pairNote} ${JSON.stringify(v.pairNoteBox)}`);
   // 三态共用一枚箭头（玩家定的「少文字」）；字留给读屏。
   check('主键是那枚箭头', v.go === '' && v.goShape.arrow, `${JSON.stringify(v.go)} ${JSON.stringify(v.goShape)}`);
   check('箭头给读屏念的是「继续」', v.goAria === '继续', v.goAria);
@@ -252,9 +269,56 @@ const FIRST = 'UiProbe' + Date.now().toString(36).slice(-5);
   const shown = await page.evaluate(() => document.querySelector('#acctId')?.textContent?.trim() ?? '');
   check('⑥ 按眼睛露出来的就是第一串', shown === FIRST, shown);
   check('⑥ 不许印 hdl: 那串 hex', !/hdl:[0-9a-f]{8}/.test(v.text));
-  check('⑥ 没有《更换邮箱》那一颗（点下去必是 400）', !v.rows.includes('statusChangeEmail'), v.rows.join(' '));
+  check('⑥ 第一格是《绑定邮箱》，没有《更换邮箱》', v.rows[0] === 'statusBindEmail' && !v.rows.includes('statusChangeEmail'), v.rows.join(' '));
+  const bindAria = await page.$eval('#statusBindEmail', (b) => b.getAttribute('aria-label')).catch(() => '');
+  check('⑥ 《绑定邮箱》读屏念的是「绑定邮箱」', bindAria === '绑定邮箱', bindAria);
   check('⑥ 《退出登录》还在', v.rows.includes('statusSignOut'), v.rows.join(' '));
   check('⑥ 这一下就是天才（窗口开着）', !/没有权限/.test(v.text), v.text.slice(0, 80));
+
+  // ⑨ 《绑定邮箱》那扇窗。要码 / 验码两问用路由拦截答成功（这台服务器没配 Resend，见文件头）；验码
+  // 那一问回的令牌就是本机那一把（服务端也是这么回的：api/email.js 的 confirm 回「这台设备带来的那一把」）。
+  const BOUND = 'bound-ui@example.com';
+  const seen = [];
+  await page.route('**/api/email', async (route) => {
+    const body = route.request().postDataJSON?.() ?? {};
+    seen.push(body);
+    if (body.action === 'confirm') {
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ moved: true, email: body.newEmail, token: body.token }) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sent: true }) });
+  });
+  await page.click('#statusBindEmail');
+  await page.waitForSelector('#cemNew', { timeout: 10000 });
+  const w = await page.evaluate(() => ({
+    h2: document.querySelector('.overlay h2')?.textContent?.trim() ?? '',
+    hint: document.querySelector('.overlay .auth-hint')?.textContent?.trim() ?? '',
+    text: document.querySelector('.overlay')?.textContent ?? '',
+  }));
+  check('⑨ 那扇窗的标题是「绑定邮箱」', w.h2 === '绑定邮箱', w.h2);
+  check('⑨ 上面那一行说的是「绑定之后用这个邮箱登录，两串就不能再用了。」', w.hint === '绑定之后用这个邮箱登录，两串就不能再用了。', w.hint);
+  check('⑨ 那扇窗里不印 hdl: 那串 hex', !/hdl:[0-9a-f]{8}/.test(w.text));
+  await page.fill('#cemNew', BOUND);
+  await page.click('#cemGo');
+  await page.waitForFunction(() => !document.querySelector('#cemStep2')?.hidden, null, { timeout: 10000 });
+  check('⑨ 要码那一问带的「现在这个地址」是 hdl: 那把 id（服务端认它）', /^hdl:[0-9a-f]{64}$/.test(String(seen[0]?.email)),
+    String(seen[0]?.email).slice(0, 12));
+  await page.fill('#cemCode', '123456');
+  await page.click('#cemGo');
+  await page.waitForSelector('#statusClose', { timeout: 10000 });
+  const after = await page.evaluate(() => ({
+    field: document.querySelector('.acct-field')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    rows: [...document.querySelectorAll('.acct-actions > *')].map((b) => b.id),
+    msg: document.querySelector('#statusMsg')?.textContent?.trim() ?? '',
+    eye: Boolean(document.querySelector('#acctEye')),
+    saved: JSON.parse(localStorage.getItem('slides_genius') || '{}'),
+  }));
+  check('⑨ 回到账号窗说的是「绑定好了——以后用这个邮箱登录。」', after.msg === '绑定好了——以后用这个邮箱登录。', after.msg);
+  check('⑨ 身份那一行换成了邮箱（没有第一串、没有那颗眼睛）', after.field.includes(BOUND) && !after.eye, after.field);
+  check('⑨ 第一格换成了《更换邮箱》', after.rows[0] === 'statusChangeEmail' && !after.rows.includes('statusBindEmail'), after.rows.join(' '));
+  check('⑨ 本机存的那一份：email 是新邮箱，handle 扔掉了', after.saved.email === BOUND && !('handle' in after.saved),
+    JSON.stringify({ email: after.saved.email, handle: after.saved.handle }));
+  await page.unroute('**/api/email');
 }
 await ctx.close();
 

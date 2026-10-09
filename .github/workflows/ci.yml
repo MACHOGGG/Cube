@@ -345,9 +345,12 @@ jobs:
         run: node scripts/check-signin-challenge.mjs
 
       # 免邮箱凭据那条路（E38）。最要紧的一条是「大小写真的分得开」：normalizeEmail 会
-      # toLowerCase，第一串直接当 id 的话 Abc12345 / abc12345 / ABC12345 当场撞成一个，
+      # toLowerCase，第一串直接当 id 的话 Kqz48271 / kqz48271 / KQZ48271 当场撞成一个，
       # 而界面上明写着区分大小写。解法是 sha256（pairKey）。
-      - name: 免邮箱凭据注册 / 登录 / 重设
+      # 10-09 补充方案 7-8：重设第二串撤了（reset 回 410，账号一个字不动）；绑定邮箱把整个账号搬到
+      # acct:<邮箱> 底下（战绩、存档、昵称连 nickidx、榜上的位置），两串作废，之后拿验证码登录不会被
+      # 当成抢注；邮箱已经有账号的不绑；太常见的第一串注册不了（400 common）。
+      - name: 免邮箱凭据注册 / 登录 / 绑定邮箱
         run: node scripts/check-handle-auth.mjs
 
       # 三种账号 id 的键空间永不相交（acct:邮箱 / acct:code:大写 / acct:hdl:sha256）。
@@ -725,9 +728,9 @@ jobs:
         run: |
           npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs
           node scripts/check-privacy-truth.mjs /tmp/legal.mjs
-      # 《服务条款》讲账号的那两条（2026-10-08 方案第四批第 4 条）：锁线、锁多久、两串的长度、封不封号、重设踢不
-      # 踢下线，都先从 api/_accounts.js、api/handle.js 的源码里读出来，再看四种语言的条款是不是这么说的。原先那
-      # 两条还写着改制之前的「6 位密码」「内部码开通的账号」「错到 6 次一直锁着」。
+      # 《服务条款》讲账号的那两条（2026-10-08 方案第四批第 4 条）：锁线、锁多久、两串的长度、封不封号、有没有
+      # 重设（10-09 补充方案 7-8 撤了）、能不能绑定邮箱，都先从 api/ 的源码里读出来，再看四种语言的条款是不是这么
+      # 说的。原先那两条还写着改制之前的「6 位密码」「内部码开通的账号」「错到 6 次一直锁着」。
       - name: 条款里讲账号的那两条和代码对得上
         run: |
           npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs

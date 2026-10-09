@@ -326,24 +326,20 @@ export async function askForCode(
 }
 
 /**
- * 免邮箱凭据那条路：注册 / 登录 / 重设第二串（E38）。
+ * 免邮箱凭据那条路：注册 / 登录（E38）。重设第二串那一支 10-09 补充方案 7-8 撤了。
  *
  * **`email` 里存的是服务端那把 id（`hdl:` 加 sha256），`handle` 里存第一串原文。**
  * 前者是全链路认人的那一位（identify、cloudScores 的 auth()、scores.js、room.js），后者
  * 只用来在屏幕上显示——而且只有这台设备有，服务端还原不出来。
  */
 export async function pairAuth(
-  kind: 'register' | 'signin' | 'reset',
+  kind: 'register' | 'signin',
   first: string,
   second: string,
 ): Promise<{ ok: true } | { ok: false; reason: PairFailure; retryInMs?: number }> {
   const creem = await import('./creem');
   const reply =
-    kind === 'register'
-      ? await creem.webPairRegister(first, second)
-      : kind === 'reset'
-        ? await creem.webPairReset(first, second)
-        : await creem.webPairSignIn(first, second);
+    kind === 'register' ? await creem.webPairRegister(first, second) : await creem.webPairSignIn(first, second);
   if (typeof reply === 'string') return { ok: false, reason: reply };
   // 锁住了：带着服务端算好的剩余时间（见 creem.ts 的 PairLocked）
   if ('reason' in reply) return { ok: false, reason: reply.reason, retryInMs: reply.retryInMs };

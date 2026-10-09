@@ -557,15 +557,19 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
   /**
    * 三颗键，按这个顺序竖着排。
    *
-   * ⚠️ **免邮箱凭据账号不摆《更换》**（E53）。api/email.js 要求「现在这个地址」过
-   * EMAIL_RE，而这种账号的 id 是 hdl: 加一串 hex——点下去必是 400，而屏幕上只会写一句含
-   * 糊的失败。一条走不通的路比没有这条路更糟。门（check-redesign-fit）钉着这一条。
+   * 免邮箱凭据账号在第一格摆的是《绑定邮箱》，不是《更换》（10-09 补充方案 7-8）。从前这一格对它
+   * 是空的（E53：api/email.js 只认邮箱，点下去必是 400）；7-8 撤了「凭第一串重设第二串」，绑定一
+   * 个邮箱成了这种账号唯一的退路，api/email.js 也认了 `hdl:` 那把 id——走的是同一扇窗、同一个流程
+   * （openChangeEmailWindow），图标也是同一枚，只有读屏念的名字、窗的标题和那一行说明不一样。门
+   * （check-redesign-fit、check-signin-ui）钉着这一条。
    *
    * 商店那一端不摆《登出》：那一端没有账号这回事（App Store / Google Play 本来就知道是谁
    * 拿着手机），沿用原先的规矩。
    */
   const actions = [
-    handleOf(current) ? '' : pillIcon('statusChangeEmail', s.changeEmailRow, CTL_REPLAY),
+    handleOf(current)
+      ? pillIcon('statusBindEmail', s.bindEmailRow, CTL_REPLAY)
+      : pillIcon('statusChangeEmail', s.changeEmailRow, CTL_REPLAY),
     store ? '' : pillIcon('statusSignOut', s.signOutBtn, CTL_LEAVE),
     `<a class="pill-icon" id="statusMail" href="mailto:${CONTACT_EMAIL}" aria-label="${esc(s.contactTitle)}">${ICON_MAIL}</a>`,
   ].join('');
@@ -594,10 +598,12 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
   // 换邮箱：一扇小窗，关掉之后回到这一扇（back），这样玩家改完能当场看见改成了什么，
   // 不用自己再点回来。回来那一下是重新开的窗，所以第一串照样是遮着的。
   const back = (notice = '') => openStatusWindow(lang, onChanged, notice);
-  overlay.querySelector<HTMLButtonElement>('#statusChangeEmail')?.addEventListener('click', () => {
-    close();
-    openChangeEmailWindow(lang, onChanged, back);
-  });
+  for (const id of ['#statusChangeEmail', '#statusBindEmail']) {
+    overlay.querySelector<HTMLButtonElement>(id)?.addEventListener('click', () => {
+      close();
+      openChangeEmailWindow(lang, onChanged, back);
+    });
+  }
   // Signing out only forgets the address on this device: it cancels nothing,
   // and naming the address again brings the account straight back.
   overlay.querySelector<HTMLButtonElement>('#statusSignOut')?.addEventListener('click', () => {
@@ -631,9 +637,9 @@ function pillIcon(id: string, label: string, icon: string): string {
 /**
  * 第一串遮起来时的样子：四个圆点加末四位。
  *
- * 末四位是让他认得出「是我那一串」——一串全遮的点谁都长一样；全露出来又等于把钥匙摊在
- * 屏幕上（第一串是钥匙，知道它的人可以重设第二串，见注册窗里那句警告）。少于五位的串
- * 不会有（PAIR_RE 要八位起），这里照样兜一下：整串都遮。
+ * 末四位是让他认得出「是我那一串」——一串全遮的点谁都长一样；全露出来又等于把它摊在屏
+ * 幕上（知道第一串的人能拿它乱试第二串、把这个账号锁上几个小时，见注册窗里那句警告）。少于
+ * 五位的串不会有（PAIR_RE 要八位起），这里照样兜一下：整串都遮。
  */
 export function maskHandle(handle: string): string {
   return handle.length > 4 ? '••••' + handle.slice(-4) : '••••';
@@ -696,8 +702,8 @@ function wireHandleEye(overlay: HTMLElement, current: Entitlement, lang: Lang): 
  * **《改密码》那扇窗撤了**（E37）。
  *
  * 后端那一支也撤了（`api/passcode.js` 的 change，见那个文件末尾）。邮箱账号没有密码可
- * 改；免邮箱账号要换第二串，走《注册 / 登录》那扇窗里的《忘了第二串？》（api/handle.js
- * 的 reset，凭第一串）。
+ * 改；免邮箱账号的第二串也改不了、忘了也找不回（10-09 补充方案 7-8 撤了凭第一串重设那一支，
+ * api/handle.js 的 reset 回 410）——它的退路是绑定一个邮箱（下面这扇窗）。
  */
 
 /**
@@ -710,6 +716,11 @@ function wireHandleEye(overlay: HTMLElement, current: Entitlement, lang: Lang): 
  * 确认码寄给**新**地址，不是现在这个。谁收得到，那个地址就是谁的——少了这一
  * 步，打错一个字母就把自己关在门外（此后《忘记密码》的信永远寄到一个他打不
  * 开的信箱），更别说可以把账号停在别人的地址上。
+ *
+ * **免邮箱账号「绑定邮箱」也是这扇窗**（10-09 补充方案 7-8）：服务端那头是同一个流程（api/email.js
+ * 认 `hdl:` 那把 id 当「现在这个地址」），这儿只换三样——标题、上面那一行（换邮箱印现在的地址；
+ * 绑定印「绑定之后两串就不能用了」：`email` 里那把 `hdl:` id 不能印给人看，而这件事要在按下去之前
+ * 说）、搬完回到账号窗时那一句。
  */
 export function openChangeEmailWindow(
   lang: Lang,
@@ -719,11 +730,12 @@ export function openChangeEmailWindow(
   const s = STRINGS[lang];
   const current = entitlement();
   const email = current.email ?? '';
+  const binding = Boolean(handleOf(current));
   const { overlay, close } = openModal(
     'auth-modal',
     `
-    <h2>${s.changeEmailRow}</h2>
-    <p class="auth-hint">${esc(email)}</p>
+    <h2>${binding ? s.bindEmailRow : s.changeEmailRow}</h2>
+    <p class="auth-hint">${binding ? esc(s.bindEmailHint) : esc(email)}</p>
     ${field('cemNew', s.newEmailLabel,
       `type="email" autocomplete="off" inputmode="email" placeholder="${esc(s.emailPlaceholder)}"`)}
     <div id="cemStep2" hidden>
@@ -781,10 +793,14 @@ export function openChangeEmailWindow(
     }
     // 搬完了。本机这份要跟着换——不换的话它还拿旧地址去问权益，服务器那边已
     // 经没有那个账号了，下一次刷新就成了「查无此人」。
-    setEntitlement({ ...entitlement(), email: done.email, token: done.token });
+    //
+    // 绑定邮箱那一种还要把 `handle`（第一串原文）一起扔掉：账号窗认「免邮箱账号」认的就是这一位
+    // （handleOf），留着它，账号窗会照旧印「第一串」、摆《绑定邮箱》，而那两串已经作废了。
+    const { handle: _gone, ...rest } = entitlement();
+    setEntitlement({ ...rest, email: done.email, token: done.token });
     onChanged();
     close();
-    onBack(s.emailChanged);
+    onBack(binding ? s.emailBound : s.emailChanged);
   };
 
   for (const el of [wanted, codeInput]) {
@@ -805,7 +821,10 @@ export function openChangeEmailWindow(
  * ```
  * ① 邮箱态（默认）     [ 邮箱 ] [→]        《免邮箱注册 / 登录》
  * ② 验证码态           「验证码已寄到 …」 六格  ☐ 更新邮件（只有新账号才问）  《换个邮箱》
- * ③ 免邮箱态           [ 第一串 ] [ 第二串 ]  那句警告  [ 保存 ]  《忘了第二串？》《改用邮箱》
+ * ③ 免邮箱态           [ 第一串 ] [ 第二串 ]  那句警告（读屏）  「忘了第二串将无法找回……」  《改用邮箱》
+ *
+ * （③ 原先还有一颗《忘了第二串？》，点进去是「重设第二串」那一档。10-09 补充方案 7-8 撤了：重设只凭
+ * 第一串，而第一串可以被挨个试出来。换成一行小字——忘了就找不回来，建议登录后绑定邮箱。）
  * ```
  *
  * ── 从前是什么样 ────────────────────────────────────────────
@@ -866,12 +885,13 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
           `type="text" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="64"` +
           ` placeholder="${esc(s.pairPlaceholder)}"`)}
         <p class="sr-only" id="authPairWarn">${s.pairWarning}</p>
+        <!-- 没有「重设第二串」了（10-09 补充方案 7-8）：忘了就找不回来——在他取两串的这一刻说。 -->
+        <p class="auth-hint" id="authPairNote">${s.pairNoRecovery}</p>
         <button type="submit" hidden></button>
       </form>
 
       <p class="auth-msg" id="authMsg" role="status"></p>
       <button class="link-btn" id="authAlt"></button>
-      <button class="link-btn" id="authPairForgot" hidden>${s.pairForgot}</button>
     </div>
     <!--
       两颗等宽、对称的棕色药丸，只放图标：✕ 和 →（第 17 推第 8 条：「登录窗同样改成 ✕ 和棕色
@@ -891,7 +911,6 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   const msg = overlay.querySelector<HTMLElement>('#authMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#authGo')!;
   const alt = overlay.querySelector<HTMLButtonElement>('#authAlt')!;
-  const pairForgot = overlay.querySelector<HTMLButtonElement>('#authPairForgot')!;
   const mailForm = overlay.querySelector<HTMLFormElement>('#authMailForm')!;
   const codeForm = overlay.querySelector<HTMLFormElement>('#authCodeForm')!;
   const pairForm = overlay.querySelector<HTMLFormElement>('#authPairForm')!;
@@ -908,7 +927,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
 
   type Stage = 'mail' | 'code' | 'pair';
   let stage: Stage = 'mail';
-  /** ②③ 要记住上一步填的东西：②要知道码寄给了谁，③的「重设」要知道第一串。 */
+  /** ② 要记住上一步填的东西：码寄给了谁。 */
   let sentTo = '';
   /**
    * ② 还要记住**那张票**（服务端的 `challenge`）：码和「猜了几次」都存在它底下。
@@ -920,8 +939,6 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
    * 代价说明白：这一屏关掉再开，票就没了，他得重新要一张（一小时三封）。
    */
   let sentTicket = '';
-  /** ③ 有两档：取一对新的（register）还是重设第二串（reset）。 */
-  let pairMode: 'register' | 'reset' = 'register';
 
   const show = (next: Stage) => {
     stage = next;
@@ -942,20 +959,14 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
      */
     newsRow.hidden = next !== 'code';
     pairForm.hidden = next !== 'pair';
-    pairForgot.hidden = next !== 'pair' || pairMode === 'reset';
-    // ③ 的「重设」那一档只填第一串和新的第二串，那句警告照旧要在（它说的是第一串）。
-    // 它现在是读屏专用的那一段（`.sr-only`），所以「在不在」仍然要紧，只是看不见。
+    // 那句警告是读屏专用的那一段（`.sr-only`），所以「在不在」仍然要紧，只是看不见。
     warn.hidden = false;
     hint.textContent =
       next === 'mail'
         ? s.signInHint
         : next === 'code'
           ? s.codeSentTo.replace('{email}', sentTo)
-          : pairMode === 'reset'
-            ? s.pairResetBtn
-            : s.pairlessEntry;
-    // ③ 重设那一档：第二串的标签要说「新的」，而那句话就是 pairResetBtn 的意思，所以
-    // 用按钮文案去说，标签不动——多一句话不如换一颗键上的字。
+          : s.pairlessEntry;
     /*
      * **三态共用一枚箭头**（玩家定的「少文字」）。
      *
@@ -1005,6 +1016,8 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
                 ? s.codeStale
                 : reason === 'taken'
                   ? s.pairTaken
+                  : reason === 'common'
+                    ? s.pairCommon
                   : reason === 'badPair'
                     ? s.pairBad
                     : reason === 'wrong'
@@ -1061,29 +1074,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       return;
     }
 
-    // ③ 免邮箱
-    const first = firstInput.value.trim();
-    const second = secondInput.value.trim();
-    if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void oops(s.pairBad);
-    go.disabled = true;
-    tell(s.workingLabel);
-    const done = await pairAuth(pairMode === 'reset' ? 'reset' : 'register', first, second);
-    go.disabled = false;
-    if (!done.ok) {
-      // 注册撞名（taken）时**自动改成登录试一次**是不对的：第一串撞上了，第二串几乎不
-      // 可能正好也是人家那一串，于是那一次会答「对不上」，而屏幕上写的是两句互相矛盾
-      // 的话。如实说「这一串有人用了」，让他换一串。
-      say(done.reason, done.retryInMs);
-      return;
-    }
-    // 先让这台设备的密码管理器存一份（这两串正好是一对「账号 + 密码」），再提醒他截
-    // 图——这两串**只有他自己有**：服务端存的是第一串的 sha256，还原不出来，客服也帮不
-    // 了他。两样都做，因为管理器可能压根不在（无痕窗口、某些内嵌浏览器）。
-    await offerToSave(first, second);
-    tell(s.pairSavedHint);
-    // 让那句话在屏幕上留一拍再关窗。reduced-motion 下也一样——这不是动画，是读字的时间。
-    await new Promise((r) => setTimeout(r, 1400));
-    landed();
+    // ③ 免邮箱：表单的 submit 直接走 pairSubmit（下面），到不了这儿。
   };
 
   /**
@@ -1138,7 +1129,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   for (const form of [mailForm, codeForm, pairForm]) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      void (stage === 'pair' && pairMode === 'register' ? pairSubmit() : submit());
+      void (stage === 'pair' ? pairSubmit() : submit());
     });
   }
   // 走表单自己的 submit，不直接叫 submit()：那一下是手机上的密码管理器认出「这是一次登
@@ -1149,19 +1140,12 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
 
   alt.addEventListener('click', () => {
     if (stage === 'mail') {
-      pairMode = 'register';
       show('pair');
       return;
     }
     // ②的《换个邮箱》和③的《改用邮箱》都回①。②那一下**不清掉已经寄出的那张码**：
     // 他可能只是打错了一个字母，回去改完还是同一个地址。
     show('mail');
-  });
-
-  pairForgot.addEventListener('click', () => {
-    pairMode = 'reset';
-    secondInput.value = '';
-    show('pair');
   });
 
   overlay.querySelector<HTMLButtonElement>('#authClose')!.addEventListener('click', () => {

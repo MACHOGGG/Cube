@@ -13,8 +13,8 @@
  * （passcode.js 末尾那段把后果写全了）。撤了之后这道门的正向断言全部失效，于是它反过来
  * 量那一支**真的关着**，正向那几条换到眼下活着的那条路上：
  *
- *   免邮箱凭据（`api/handle.js`，E38）——两串自己取的字符串，注册、登录、重设都在那一个
- *   接口里。另一条活路是邮箱验证码（`api/signin.js`），它过不来：验证码只在那封信里，而
+ *   免邮箱凭据（`api/handle.js`，E38）——两串自己取的字符串，注册、登录都在那一个接口里
+ *   （重设第二串 10-09 补充方案 7-8 撤了，回 410，见 ⑧）。另一条活路是邮箱验证码（`api/signin.js`），它过不来：验证码只在那封信里，而
  *   这道门不收信（那一条由 check-signin-otp.mjs 在进程内驱动，它拿得到码）。
  *
  * ── 二、它在 CI 里从来没真跑过 ────────────────────────────────
@@ -35,6 +35,8 @@
  *   ⑥ 按来路限速（`pairin`，30 次/小时）：第 31 次挡下来，换个来路不受牵连。
  *   ⑦ **同一个 IPv6 /64 共用一个桶。** 家宽标配分到的是一整个 /64，换一个源地址不花一分
  *      钱——按单个地址分桶等于不限速（见 api/_ratelimit.js 的 bucketOf）。
+ *   ⑧ 重设第二串撤了（10-09 补充方案 7-8）：`reset` 答 410 `gone`，旧的第二串照旧登得上。
+ *   ⑨ 太常见的第一串注册不了：400 `common`（api/_commonpairs.js，大小写不敏感）。
  *
  * 每一节自带一个来路（`x-forwarded-for`），所以上面几节不会把 ⑥⑦ 的配额吃掉。
  */
@@ -215,6 +217,20 @@ const A_SECOND = 'firstpass';
   // 带方括号和端口的写法要归到同一个桶里——不剥的话每次连接一个新桶。
   const bracketed = await hit(`[${SAME_A}]:54321`, 1);
   check('⑦ `[addr]:port` 归的是同一个桶（照旧 429）', bracketed[0] === 429, String(bracketed[0]));
+}
+
+// ── ⑧⑨ 7-8：重设撤了、常见第一串注册不了 ─────────────────────────
+{
+  const IP = '198.51.100.31';
+  const gone = await post('/api/handle', { action: 'reset', first: A, newSecond: 'takeover1' }, IP);
+  check('⑧ 重设第二串 → 410 gone', gone.status === 410 && gone.body?.error === 'gone', `${gone.status} ${JSON.stringify(gone.body)}`);
+  const still = await post('/api/handle', { first: A, second: A_SECOND }, IP);
+  check('⑧ 旧的第二串照旧登得上（那一下什么都没改）', still.status === 200, `${still.status}`);
+  const took = await post('/api/handle', { first: A, second: 'takeover1' }, IP);
+  check('⑧ 想「重设」成的那一串登不进来', took.status === 401, `${took.status}`);
+  const common = await post('/api/handle', { action: 'register', first: 'Password123', second: 'whatever1' }, '198.51.100.32');
+  check('⑨ 常见第一串（Password123）注册不了 → 400 common', common.status === 400 && common.body?.error === 'common',
+    `${common.status} ${JSON.stringify(common.body)}`);
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

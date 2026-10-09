@@ -2,12 +2,15 @@ import { randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import {
   EMAIL_RE,
+  PAIR_KEY_RE,
+  accountId,
   clearFails,
   createAccount,
   deleteAccount,
   loadAccount,
   normalizeEmail,
   tokenValid,
+  unblock,
 } from './_accounts.js';
 import { compose, mailConfigured, mailLang, sendMail } from './_mail.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -35,6 +38,22 @@ import { bump, del, get, set, storeConfigured } from './_store.js';
  *
  * 新地址上已经有账号的，一律回绝。合并两个账号是另一件事（谁的订阅算数、
  * 两份战绩怎么并），不该由「我想换个邮箱」这一下顺手决定。
+ *
+ * ── 免邮箱账号「绑定邮箱」也走这儿（10-09 补充方案 7-8）────────────────
+ *
+ * 免邮箱账号（api/handle.js）的 id 是 `hdl:` 加第一串的 sha256，不是邮箱。7-8 撤了「凭第一串重设
+ * 第二串」，给这种账号的退路是绑定一个邮箱——而那件事和换邮箱**一模一样**：拿令牌证明账号是他
+ * 的，码寄到那个邮箱证明邮箱是他的，然后把账号、云端战绩、昵称（连 nickidx）、榜上的位置整个搬
+ * 到 `acct:<邮箱>` 底下（同一个 renameScoreOwner），拆掉旧的那一份。所以不另开一支，只是「现在
+ * 这个地址」除了邮箱也认 `hdl:` 那把 id（accountId）。方案原话：「放在现有的 api/email.js 里做，
+ * 不新增接口文件」。
+ *
+ * 只多两件事，都在 confirm 里搬家之前（见 `bound`）：第二串的哈希抹掉（两串从此不是凭据——旧
+ * 的 `hdl:` 那一份也拆了，handle.js 再也找不到它），并且记下「这个邮箱验过了」
+ * （emailVerifiedAt）。少了后一件，他头一次拿验证码登录时 signin.js 会把这个账号当成被抢注的
+ * （没验过、身上又挂着一把别人设的密码），把他所有设备踢下线。
+ *
+ * 邮箱上已经有账号：照旧 409 `taken`（「这个邮箱已经有账号了」），不合并。
  */
 
 const CODE_TTL_S = 30 * 60;
@@ -95,7 +114,9 @@ export default async function handler(req, res) {
   const body = readBody(req);
   const address = normalizeEmail(body.email);
   const wanted = normalizeEmail(body.newEmail);
-  if (!EMAIL_RE.test(address) || !EMAIL_RE.test(wanted)) {
+  // 「现在这个地址」认邮箱，也认免邮箱账号那把 `hdl:` id（绑定邮箱，见文件头）。内部码的寄存处
+  // （`code:` 开头）不认：那不是一个人，是一张码。要搬去的那一头只认邮箱。
+  if (!accountId(address) || !EMAIL_RE.test(wanted)) {
     return send(res, 400, { error: 'email' });
   }
   if (address === wanted) return send(res, 400, { error: 'sameEmail' });
@@ -185,7 +206,7 @@ async function confirm(res, address, wanted, account, { code, token }) {
   //
   // 挡在搬家的第一步，所以拦下来的时候旧地址一个字都还没动：他的账号、战绩、
   // 榜上的名字全在原处，重来一次就好。
-  if (!(await createAccount(wanted, account))) return send(res, 409, { error: 'taken' });
+  if (!(await createAccount(wanted, bound(address, account)))) return send(res, 409, { error: 'taken' });
 
   /**
    * ⚠️ **退回新地址，只在这一步之内。**
@@ -235,9 +256,28 @@ async function confirm(res, address, wanted, account, { code, token }) {
     }
   }
 
-  // 令牌一把都没动：换的是门牌，不是钥匙，他这台设备照旧登着，别的设备也是。
+  // 令牌一把都没动：换的是门牌，不是钥匙，他这台设备照旧登着，别的设备也是（免邮箱账号绑定邮箱
+  // 那一种，别的设备手里存的还是旧的 `hdl:` id——那一份已经拆了，它们下一次问权益就会掉线，和
+  // 换邮箱时别的设备拿着旧地址是同一回事）。
   // 回的是**这台设备自己带来的那一把**，不是账号上最新签发的那一把——他在
   // 别处后登过一次的话，那两把不是同一个，拿最新的盖上去会把这台设备手里的
   // 抹掉（同 api/redeem.js 里那一处）。
   return send(res, 200, { moved: true, email: wanted, token: String(token) });
+}
+
+/**
+ * 搬去新地址的那一份账号。邮箱换邮箱：原样。免邮箱账号绑定邮箱（`hdl:` 那一种，见文件头）：
+ *
+ *   · 第二串的哈希抹掉（`unblock(…, '')`：换盐、密钥成空串，顺带把输错次数和锁清零）——两串从这
+ *     一刻起不是凭据；留着一份谁都用不上的密码哈希只有坏处，而且 signin.js 的 hasSecret 会认它。
+ *   · `emailVerifiedAt` 记上此刻：码刚寄到这个邮箱、输对了，这就是「邮箱是他的」的证明。不记的话
+ *     signin.js 把它当抢注清理（见那里的 `claimed`），他头一次拿验证码登录就把所有设备踢下线。
+ *
+ * 不改原来那一份：createAccount 写不成（409）的时候，旧账号一个字都不该动过。
+ */
+function bound(address, account) {
+  if (!PAIR_KEY_RE.test(address)) return account;
+  const moved = unblock({ ...account }, '');
+  moved.emailVerifiedAt = Date.now();
+  return moved;
 }

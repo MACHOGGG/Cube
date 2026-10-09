@@ -392,8 +392,12 @@ check('50 次并发，只有 5 次摸得到那张码', compared === 5, `摸到 $
   function judgeMove(raw) {
     const src = strip(raw);
     const bad = [];
-    const at = src.indexOf('createAccount(wanted, account)');
-    if (at < 0) return ['noClaim'];
+    // 认的是「占住新地址」这一下，不认括号里写进去的是哪一份：7-8 起免邮箱账号绑邮箱也走这条路，
+    // 写进去的那份先过一道 bound()（抹掉第二串、记上已验证），一字不差地认原来那句会把这一节整个判成
+    // noClaim——位置没变，变的只是参数。
+    const claim = /createAccount\(wanted, [^;]*\)/.exec(src);
+    if (!claim) return ['noClaim'];
+    const at = claim.index;
     const rest = src.slice(at);
     const tryAt = rest.indexOf('try {');
     const catchAt = rest.indexOf('} catch (err) {');
