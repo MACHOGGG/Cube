@@ -941,6 +941,14 @@ async function playOne(page, label, opts) {
     if (frozen >= 12) break;
   }
 
+  // 预算正好用完在清盘的那一手上：循环是被步数拦下来的，没走到上面「盘清空了，等一等」那一支，而结算页
+  // 还在路上（最后那一拍的动画）。照那一支等一等再看——不然 H2 会把「结算页正在来」判成卡死（2026-10-09
+  // 泡机，六边形小球 #13：第 600 手正好清空，报「盘已经空了，结算页没出来」）。
+  if (!card && !board.some((p) => p.face !== 'blank')) {
+    await page.waitForTimeout(2500);
+    card = await ended();
+  }
+
   const seenToasts = await toasts();
   const finalBoard = board;
   const finalHud = lastHud;
