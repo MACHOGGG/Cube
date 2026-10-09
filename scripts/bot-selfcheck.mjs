@@ -51,6 +51,10 @@
  *    到 1 枚或者把盘清空。
  * H4 **炸弹局拆一枚就要熄一段。** 拆掉的那一步，分数至少 +2，而且亮着的段数比上一
  *    步少（拆除＝翻面，见 engine/bomb.ts）。
+ * （H5–H7 见 playOne 里各自那一段。）
+ * H8 **图案到了 1 枚，盘上一枚色块都不剩**（10-09 补充方案 6-3）：解锁 1×1 的那一下，场上
+ *    剩下的色块当场全部翻掉。六副棋盘的认组在图案 1 枚时认不认得出每一枚，只有真打到那
+ *    一步才看得见（方块那一副另有 check-erosion-live 手摆盘面量）。
  *
  * ── 报告项（不挡合并）──────────────────────────────────────
  *
@@ -228,11 +232,18 @@ const installProbe = () => {
         };
       });
     },
-    /** 盘面上此刻有几颗星星、还活着几枚。算「累计翻了几枚」用（见 H5）。 */
+    /**
+     * 盘面上此刻有几颗星星、还活着几枚。算「累计翻了几枚」用（见 H5）。fronts 是还没翻的色块（活
+     * 炸弹不算——它身上有「！」，不是色块），H8 要它。
+     */
     tally() {
       const all = [...document.querySelectorAll(PIECES)];
       const alive = all.filter((e) => e.dataset.face !== 'blank');
-      return { alive: alive.length, stars: alive.filter((e) => e.dataset.face === 'dot').length };
+      return {
+        alive: alive.length,
+        stars: alive.filter((e) => e.dataset.face === 'dot').length,
+        fronts: alive.filter((e) => e.dataset.face === 'flavor' && !e.querySelector('.hazard-mark')).length,
+      };
     },
     /** 屏幕上的读数：分数、HUD 那一块画着几枚、亮着几段。 */
     hud() {
@@ -635,6 +646,15 @@ async function playOne(page, label, opts) {
   let grabNote = '';
   /** H7 真的被问过几次（量了 0 次的话那两条是空绿，要说出来）。 */
   let fitChecks = 0;
+  /**
+   * H8：图案到了 1 枚之后，盘上还剩着色块的次数（10-09 补充方案 6-3：解锁 1×1 的那一下，场上剩下的
+   * 色块当场全部翻掉）。真棋盘的端到端只有 check-erosion-live 量了方块那一副（dev 服务器、手摆盘面）；
+   * 另外五副的认组在图案 1 枚时认不认得出每一枚，只有在这儿真打到那一步才看得见。
+   */
+  let frontsAfterOne = 0;
+  let frontsAfterOneNote = '';
+  /** H8 真的被问过几次（这一局没打到 1 枚就是 0，要说出来）。 */
+  let oneChecks = 0;
   let bombDefuseChecked = 0;
   let bombDefuseBad = 0;
   /** 连着几步盘面一个字都没变。 */
@@ -863,6 +883,15 @@ async function playOne(page, label, opts) {
         }
       }
     }
+    // ── H8：到了 1 枚，盘上一枚色块都不剩 ──────────────────────
+    if (after.marks === 1) {
+      const t = await tally();
+      oneChecks++;
+      if (t.fronts > 0) {
+        frontsAfterOne++;
+        if (!frontsAfterOneNote) frontsAfterOneNote = `第 ${moves} 手：图案已是 1 枚，盘上还剩 ${t.fronts} 枚色块`;
+      }
+    }
     // **段数只减不增，除了降级那一拍。** 这是侵蚀阶梯的不变式，而且和预算无关：段变多
     // 只该发生在「这一级扣光了、换下一级的满格」那一下，那一下枚数必定同时少一枚。
     // 段凭空长回去的话，屏幕上是「刚才快扣完了，怎么又满了」——玩家读不出规则，而不是
@@ -933,6 +962,9 @@ async function playOne(page, label, opts) {
     grabMiss,
     grabNote,
     fitChecks,
+    frontsAfterOne,
+    frontsAfterOneNote,
+    oneChecks,
     ladderKnown: Boolean(ladder),
     toasts: seenToasts,
     card,
@@ -1087,6 +1119,13 @@ for (const [i, job] of jobs.entries()) {
     check(`${label} · H7：按哪一枚就抓到哪一枚`, r.grabMiss === 0, r.grabNote || `${r.grabMiss} 次`);
   } else {
     note(`${label} · H7：这一局没走满 8 手，这两条无从判断（不假装查过）`);
+  }
+  // ── H8：到了 1 枚，盘上一枚色块都不剩（10-09 补充方案 6-3）──────────
+  if (r.oneChecks > 0) {
+    check(`${label} · H8：图案到了 1 枚之后，盘上一枚色块都不剩（量了 ${r.oneChecks} 次）`, r.frontsAfterOne === 0,
+      r.frontsAfterOneNote || '干净');
+  } else {
+    note(`${label} · H8：这一局没打到 1 枚，这一条无从判断（不假装查过）`);
   }
   // ── H4：炸弹 ────────────────────────────────────────────
   if (job.bomb && r.bombDefuseChecked) {

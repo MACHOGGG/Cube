@@ -249,6 +249,18 @@ export interface CascadeStep {
 export interface CascadeStepper {
   /** Finds the next step, or null once the chain reaction has fully settled. */
   next(): CascadeStep | null;
+  /**
+   * 下一拍**全盘**重找，不再只看上一拍动过的那几格（10-09 补充方案 6-3）。
+   *
+   * 控制器在得分图案降级的那一下喊它：图案从 1×4 变成 1×3 的那一刻，盘上可能已经摆着一组现成的
+   * 1×3——它不在这一步动过的任何一格上，照遮罩找永远找不到，要等哪天谁碰巧滑到它才给分。方案原话：
+   * 「降级生效后立刻按新图案重扫全盘，满足的组按现有连锁规则结算，算作触发降级那一步的连锁拍」。
+   * 降到 1 枚时全盘每一枚色块单独就是一组，于是这一拍把场上剩下的色块全部翻掉（翻面动画本来就是
+   * 一枚接一枚错开的，见 gameController 的 plankFlipCells），之后只剩星星靠消除收尾。
+   *
+   * 只动遮罩，别的照旧：分数、连锁、步步为营的退步都按连锁拍算，因为它就是这一步里的又一拍。
+   */
+  rescanAll(): void;
 }
 
 /**
@@ -421,5 +433,10 @@ export function createCascadeStepper(
     return null;
   }
 
-  return { next };
+  return {
+    next,
+    rescanAll() {
+      mask = null;
+    },
+  };
 }

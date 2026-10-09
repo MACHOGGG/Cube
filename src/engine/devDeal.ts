@@ -88,6 +88,28 @@ export function devDealFor(boardId: string): DevCell[][] | null {
   }
 }
 
+/** localStorage 里那个键：开局先扣掉几段（一个整数）。只有 dev 下有人读它。 */
+export const DEV_EROSION_KEY = 'slides.devErosion';
+
+/**
+ * 这一局开局先扣掉几段（= 先当作已经翻过几枚）。正式包里永远回 0。
+ *
+ * 为什么要它：降级那一下的重扫（10-09 补充方案 6-3）要验「走到解锁 1 枚」，而方块要翻满 32 枚才走
+ * 得到——手摆一副盘面只决定**这一步**能翻什么，决定不了侵蚀已经走到哪一级。门（check-erosion-live）
+ * 写这个键 ＋ devDeal 手摆的盘面，直接从「再翻两枚就到 1 枚」那一刻开始。
+ *
+ * 只扣段，不给分、不记进结算页那几行：它是摆场景，不是打出来的。
+ */
+export function devErosionFor(): number {
+  if (!import.meta.env.DEV) return 0;
+  try {
+    const n = Number(localStorage.getItem(DEV_EROSION_KEY));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * 把手摆的那副牌盖到真的 grid 上。
  *

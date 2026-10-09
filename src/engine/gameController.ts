@@ -4,6 +4,7 @@ import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFli
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createErosion, tableFor, type Erosion } from './erosion';
+import { devErosionFor } from './devDeal';
 import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, flipStreakMult, FLIP_RULES_VERSION, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
 import { createScoreReel, syncGainState } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
@@ -732,6 +733,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     lineCount = 0;
     unlockedOne = false;
     erosion.reset();
+    // 开发时可以让这一局一开局就扣掉几段（engine/devDeal.ts 的 devErosionFor）：走到「解锁 1 枚」
+    // 要翻三十来枚，门（check-erosion-live）靠它直接从那儿开始。正式包里这一行整段被摇掉。
+    const devSpent = devErosionFor();
+    if (devSpent > 0) erosion.spend(devSpent);
     paintPattern();
     timer.start();
     hooks.render();
@@ -1465,6 +1470,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (committed > 0) {
           const step = erosion.spend(committed);
           if (step.dropped > 0) {
+            /*
+             * 降级了：下一拍**全盘**按新图案重找（10-09 补充方案 6-3）。盘上可能早就摆着一组现成的
+             * 新图案（比如一组 1×3），它不在这一步动过的格子上，照遮罩找不到——从前它得等哪天谁碰
+             * 巧滑到它才给分。降到 1 枚时，场上剩下的每一枚色块单独就是一组，这一拍把它们全部翻掉。
+             * 都算这一步的连锁拍：分数、连锁、步步为营的退步一概照连锁算。
+             */
+            stepper.rescanAll();
             hooks.onErosion?.(step.level);
             // 教学第 3 条「剩下的段数 ≤ 4」可能在一步之内整个被跨过去（一步翻了八枚，降级
             // 之后新的一级是满格）——结算之后再看段数就看不出来了，所以降级这一下单报一声。

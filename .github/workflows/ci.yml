@@ -811,13 +811,14 @@ jobs:
           npx esbuild src/i18n.ts --bundle --format=esm --outfile=/tmp/i18n.mjs
           npx esbuild src/rules.ts --bundle --format=esm --outfile=/tmp/rules.mjs
           node scripts/check-mode-clock.mjs /tmp/i18n.mjs /tmp/rules.mjs
-      # 侵蚀阶梯（§2）：段数合计＝全盘枚数、通式复算＝字面表、结转、基准 par。
-      # 「合计对得上」是整套规则的地基——对不上就会出现「图案已经到 1 枚，盘上还剩
-      # 几枚没翻」那种说不清的尾巴，而它不崩也不报错。
+      # 侵蚀阶梯（§2，2026-10 二版）：字面表＝方案、三级合计 < 全盘、逐枚核解锁点、结转、par、1×1 解锁走 bigMoment。
+      # 10-09 补充方案 6-3 起再加一样：降级那一下全盘重找，解锁 1×1 之后场上色块数 = 0（拿真的连锁步进
+      # 器在合成盘面上走一遍，所以这一步多打一个 scoring 的包）。
       - name: 侵蚀阶梯：段数与基准
         run: |
           npx esbuild src/engine/erosion.ts --bundle --format=esm --outfile=/tmp/erosion.mjs
-          node scripts/check-erosion.mjs /tmp/erosion.mjs
+          npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
+          node scripts/check-erosion.mjs /tmp/erosion.mjs /tmp/scoring.mjs
       # 外边族消除（§3）：只削此刻最外面的那一条线。守两件真会出事的事——别从中间
       # 掏空（掏空会把穿过它的每条线截成两段，那副盘就再也滑不动了），以及三角形那
       # 三个一枚的尖角不许让棋盘缩不动。纯 node，不开浏览器。
