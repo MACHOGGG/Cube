@@ -4,6 +4,8 @@ import { identify, isGenius as isGeniusClaim } from './_entitlement.js';
 import { checkNickname, nicknameOf, nicknameOwner, scrubName } from './_nickname.js';
 import { expire, hdel, hget, hgetall, hincrby, hset, hsetnx, storeConfigured } from './_store.js';
 import { callerId, tooMany } from './_ratelimit.js';
+// 一局分数的上限：和排行榜（scores.js）共用一个数（10-09 补充方案 7-6）。见 score 里「分数是客户端报上来的」那段。
+import { MAX_SCORE } from './_maxscore.js';
 
 /**
  * Multiplayer rooms: a four-digit code, two to four players, one board.
@@ -509,6 +511,15 @@ function publicState(code, hash) {
       /** 中途走了。人还在名单和排名里，只是不再报到，也不占座位。 */
       left: Boolean(value.left),
       /**
+       * 这一局是屋主按「不等了」替他交的卷（见 force；10-09 补充方案 7-5）。
+       *
+       * 他那台设备上那一局还开着（不把人从棋盘上拽走），客户端读到自己这一位是 true、而本机还没交卷，
+       * 就飘一句「屋主结束了这一局：您到刚才的 N 分已算进小屋总分」，并且不再报分（ui/scoreboard.ts）。
+       * 从前服务器这头什么都不说，他照旧报分、每一条都被 final 挡掉（scoreDropped，客户端不读），下一局
+       * 一开反而飘出「离开太久了，这一局没算进小屋总分」——是假话：他的分已经按当时的数记进去了。
+       */
+      forced: Boolean(value.forced),
+      /**
        * 这个人的网页真的被关掉了。
        *
        * 只有 bye 那条路会写下 byeAt，而 bye 只在 pagehide 且不进 bfcache 的时
@@ -842,8 +853,14 @@ const lockHeld = (hash, field) => {
   return at > 0 && Date.now() - at < LOCK_STALE_MS;
 };
 
-/** 一局收尾时把那三样清回零（开下一局、散场各用一次）。 */
-const CLEAR_ROUND = { score: 0, finished: false, seconds: null, final: false };
+/**
+ * 一局收尾时把这一局那一格清回零（开下一局、散场各用一次）。
+ *
+ * `forced`（这一局是屋主按「不等了」替他交的卷，见 force）也在里面：它只说**这一局**，下一局一开
+ * 就得回到 false——不清的话，他下一局打到一半，客户端读到一个上一局留下的 true，就会以为自己又被
+ * 结束了一次（10-09 补充方案 7-5）。
+ */
+const CLEAR_ROUND = { score: 0, finished: false, seconds: null, final: false, forced: false };
 
 /**
  * 记账前再看一眼这个座位此刻真正的样子：`p:` 那一份，加上他自己 `r:` 那一格
@@ -899,6 +916,9 @@ const readRoom = async (code) => {
       seat.finished = Boolean(run.finished);
       seat.seconds = run.seconds ?? null;
     }
+    // `forced` 只住在 `r:` 里（force 只写那一格），没有 `r:` 就是 false——不从 `p:` 里捡：有几条
+    // 路会把折好的座位整份写回 `p:`（见上面那段），那儿留下的只会是一份影子。
+    seat.forced = Boolean(run && run.forced);
     // 累计账同理：`t:` 存在就以它为准（见 totalKey 那段）。老屋子没有这一格，
     // 读到的就还是 `p:` 里那一份——所以这一改不必迁移，正在进行的小屋照旧算。
     const acc = hash[totalKey(id)];
@@ -1818,8 +1838,15 @@ async function start(res, body) {
  * （这一局本来就不是他的，记账那头也不算他）。倒数还没走完、有人在学教学被挂起的时候不收：
  * 这一局还没开打，没有「不等了」可言。
  *
- * 他那台设备上的那一局照旧开着，打完报上来的分被 final 挡掉（score() 那一道，方案 1-1），
- * 屋主开了下一局之后，他的计分板会飘一句「这一局没算进总分」（ui/scoreboard.ts 的 report）。
+ * **网页已经关了的（seatClosed）和九十秒没消息的（seatGone）也不替**（10-09 补充方案 7-5）。这两
+ * 种 roundOver 本来就不等，这一局结束与否和他们无关；从前照样替他们交卷，于是一个人掉线前最后一
+ * 次心跳报上来的、根本没打完的分被当成交了卷，开下一局时记进 total、best、rounds——和 start() 里
+ * 「只有真的打完了这一局的人才记账」那一大段要挡的是同一件事，只是从这扇门绕了进来。
+ *
+ * 替交的那一格多写一位 `forced`（publicState 带出去）。他那台设备上的那一局照旧开着，客户端读到
+ * 自己被结束了、而本机还没交卷，就飘一句「屋主结束了这一局：您到刚才的 N 分已算进小屋总分」、不
+ * 再报分（ui/scoreboard.ts）。从前这儿什么都不说：他照旧报分、一条一条被 final 挡掉（score() 那一
+ * 道，方案 1-1），屋主开了下一局之后反而飘出「离开太久了，这一局没算进小屋总分」——是假话。
  */
 async function force(res, body) {
   const code = String(body.code ?? '').trim();
@@ -1839,11 +1866,13 @@ async function force(res, body) {
     const id = field.slice(2);
     if (isSpectator(meta, id) || seat.left || seat.finished) continue;
     if ((seat.joinedAt || 0) > meta.startAt) continue;
+    if (seatClosed(seat) || seatGone(seat, meta)) continue;
     await hset(roomKey(code), roundKey(id), {
       ...CLEAR_ROUND,
       score: Math.max(0, Math.floor(Number(seat.score) || 0)),
       finished: true,
       final: true,
+      forced: true,
     });
   }
   return send(res, 200, publicState(code, await readRoom(code)));
@@ -1877,7 +1906,10 @@ function bankRound(seat, round, startAt = 0) {
   // 也确实要出现在最后那张竞赛排名图上。
   const goneBefore = (seat.left || 0) > 0 && seat.left <= startAt;
   if (!round || goneBefore || (seat.joinedAt || 0) > startAt) return next;
-  const scored = Math.max(0, Math.floor(Number(seat.score) || 0));
+  // 封在 MAX_SCORE 以内（10-09 补充方案 7-6）。报分那一道（score）现在已经封了，这儿再夹一次是给
+  // **封顶之前就存进 `r:` 的旧数**：一份 1e300 记进 total，散场那张卡上就印着 1e+300；1e308 两局
+  // 一加就溢出成 Infinity，写进库里（JSON）变成 null，读回来是 0。
+  const scored = Math.min(MAX_SCORE, Math.max(0, Math.floor(Number(seat.score) || 0)));
   next.total = (seat.total || 0) + scored;
   next.best = Math.max(seat.best || 0, scored);
   next.rounds = (seat.rounds || 0) + 1;
@@ -2042,9 +2074,11 @@ async function score(res, body) {
    * **分数是客户端报上来的，服务器只收拾格式，不核实真伪。** 记在这儿，不是
    * 忘了：2026-09 盘点过，明知留着。
    *
-   * 下面这两行只做三件事：负数归零、取整、非数字当 0；用时也只要求是个正数。
-   * 所以一个会开开发者工具的人，能把自己这一局报成任意大的分、或者 0.01 秒，
-   * 散场那张战绩卡上「单局最高 / 单局最快」就归他。
+   * 下面这两行只做四件事：负数归零、取整、非数字当 0、封在 MAX_SCORE（十亿，和排行
+   * 榜同一个数，10-09 补充方案 7-6）以内；用时也只要求是个正数。封顶只挡离谱的数（从
+   * 前一份 1e300 原样存进来，战绩卡上就印着 1e+300；1e308 两局一加溢出成 Infinity，存进
+   * 库里变成 null、读回来是 0），不是反作弊：一个会开开发者工具的人照样能把自己这一局报成
+   * 九亿多、或者 0.01 秒，散场那张战绩卡上「单局最高 / 单局最快」就归他。
    *
    * 为什么还没修：
    *   · 从前这儿写的是「伤害面只到这一间私人小屋：坑得到的只有他自己叫来的朋友」。**这句
@@ -2063,7 +2097,7 @@ async function score(res, body) {
    * 什么时候该回来做：朋友之间真的吵起来「你这分是假的」，或者小屋哪天不再
    * 只是熟人之间玩。那时候先做「理论上限」那一档，别一上来就重放。
    */
-  run.score = Math.max(0, Math.floor(Number(body.score) || 0));
+  run.score = Math.min(MAX_SCORE, Math.max(0, Math.floor(Number(body.score) || 0)));
   run.finished = Boolean(body.finished);
   if (run.finished) run.final = true;
   // Only read off the HUD once the run is over, so 单局最快 is a finishing

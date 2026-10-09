@@ -51,6 +51,13 @@ export interface RoomPlayer {
   /** 中途走了。人留在名单和排名里，只是不再报到，也不占座位。 */
   left: boolean;
   /**
+   * 这一局是屋主按「不等了」替他交的卷（api/room.js 的 force；10-09 补充方案 7-5）。只说这一局：
+   * 下一局一开服务器就清回 false。他自己那台设备读到它，飘一句 mpRoundForced、不再报分（ui/scoreboard.ts）。
+   *
+   * 老一点的服务器不会带这个字段，读不到就当没有。
+   */
+  forced?: boolean;
+  /**
    * 他的网页被关掉了（不是网差、也不是刷新——服务器要过了宽限期还没再听见
    * 他才置这个位，见 api/room.js 的 BYE_GRACE_MS / seatClosed）。
    *
@@ -713,7 +720,8 @@ export function reportScore(
 /**
  * 屋主专用：「不等了」（2026-10-08 方案 2-6）。这一局还没交卷的人，服务器照「这一局我不打了」替
  * 他交卷（分数按服务器记着的那一份，0 分照记），这一局就此结束——屋里每个人的轮询下一拍读到
- * roundOver，各回各的小屋页，屋主照常挑下一局。见 api/room.js 的 force。
+ * roundOver，各回各的小屋页，屋主照常挑下一局。网页关了的、九十秒没消息的不替（这一局本来就不等
+ * 他们，替了反倒给他们记上一局），被替的那几位标上 forced（10-09 补充方案 7-5）。见 api/room.js 的 force。
  */
 export function forceRound(): Promise<RoomResult<RoomState>> {
   if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });

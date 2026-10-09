@@ -508,8 +508,14 @@ export interface I18nStrings {
   /**
    * 屋主在等待页上那颗「不等了」（2026-10-08 方案 2-6）：还没交卷的人按「这一局不打了」替他交
    * 卷，这一局就此结束，屋主照常挑下一局。只有屋主看得到。
+   *
+   * 这一句是 reduced-motion 那一档（单击生效）键上的字；平常那一档要按住（10-09 补充方案 7-5，
+   * ui/holdToConfirm.ts），键上写的是下面那句 mpStopWaitingHold——和《离开小屋》那一问的
+   * mpLeaveAnyway / mpLeaveHold 是同一对。
    */
   mpStopWaiting: string;
+  /** 「按住不等了」：按住 600ms 才生效的那一档，键上的字（圆环画在左边）。 */
+  mpStopWaitingHold: string;
   /**
    * 屋主按了《解散小屋》，服务器那头没办成（网断了一下、服务器忙）：他还在这间屋里，再按一次就
    * 行（2026-10-08 方案 2-7）。
@@ -572,6 +578,17 @@ export interface I18nStrings {
   mpRoundsPlayed: string;
   /** 离开太久，服务器已经开了下一局，这一盘没能算进小屋总分。 */
   mpRoundDropped: string;
+  /**
+   * 屋主按「不等了」把这一局结束了，而我这台设备上那一局还没打完（10-09 补充方案 7-5）：棋盘照旧开
+   * 着，飘这一句。{n} 是服务器替我交的那个分（我最后一次报上去的），英法文用 `|` 分单复数
+   * （countPhrase）。0 分的时候不说分数那半句，用下面那句 mpRoundForcedZero——那一句就是这一句的前半句，
+   * 两句要一起改。
+   *
+   * 从前被结束的人屏幕上什么都没有，屋主开了下一局之后反而飘出 mpRoundDropped「离开太久了，这一局没算
+   * 进小屋总分」——是假话：他的分已经按当时的数记进去了。
+   */
+  mpRoundForced: string;
+  mpRoundForcedZero: string;
   /** 线上已经是新的一版了：菜单上那一行，按一下重新加载。对局中不出现（见 engine/newVersion.ts）。 */
   newVersionTip: string;
   mpErrEnded: string;
@@ -1045,6 +1062,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: 'Pick the next board',
     mpDisbandRoom: 'Break up the room',
     mpStopWaiting: 'Stop waiting',
+    mpStopWaitingHold: 'Hold to stop waiting',
     mpDisbandFailed: 'The room is still open — try again.',
     mpRoomEnded: 'The host closed the room.',
     mpTotalLabel: 'total',
@@ -1074,6 +1092,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: 'Fastest single round',
     mpRoundsPlayed: '{n} round|{n} rounds',
     mpRoundDropped: 'Away too long — this round missed the room total. It’s still in your own records.',
+    mpRoundForced: 'The host ended this round — your {n} point so far counts toward the room total.|The host ended this round — your {n} points so far count toward the room total.',
+    mpRoundForcedZero: 'The host ended this round.',
     newVersionTip: 'New version — tap to refresh',
     mpErrEnded: 'That room has been closed.',
     mpReconnecting: 'Connection lost — getting you back in…',
@@ -1398,6 +1418,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: 'Choisir le plateau suivant',
     mpDisbandRoom: 'Dissoudre la salle',
     mpStopWaiting: 'Ne plus attendre',
+    mpStopWaitingHold: 'Maintenir pour ne plus attendre',
     mpDisbandFailed: 'La salle est toujours ouverte — réessayez.',
     mpRoomEnded: 'L’hôte a fermé la salle.',
     mpTotalLabel: 'total',
@@ -1427,6 +1448,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: 'Manche la plus rapide',
     mpRoundsPlayed: '{n} manche|{n} manches',
     mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total de la salle. Elle reste dans vos records.',
+    mpRoundForced: 'L’hôte a terminé cette manche : votre {n} point jusqu’ici compte dans le total de la salle.|L’hôte a terminé cette manche : vos {n} points jusqu’ici comptent dans le total de la salle.',
+    mpRoundForcedZero: 'L’hôte a terminé cette manche.',
     newVersionTip: 'Nouvelle version — recharger',
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
@@ -1751,6 +1774,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: '選下一個玩法',
     mpDisbandRoom: '解散小屋',
     mpStopWaiting: '不等了',
+    mpStopWaitingHold: '按住不等了',
     mpDisbandFailed: '小屋還沒解散，再按一次試試。',
     mpRoomEnded: '屋主結束了小屋。',
     mpTotalLabel: '總分',
@@ -1780,6 +1804,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: '單局最快',
     mpRoundsPlayed: '共 {n} 局',
     mpRoundDropped: '離開太久了，這一局沒算進小屋總分；您自己的記錄裡還在。',
+    mpRoundForced: '屋主結束了這一局：您到剛才的 {n} 分已算進小屋總分。',
+    mpRoundForcedZero: '屋主結束了這一局。',
     newVersionTip: '有新版本，點一下重新載入',
     mpErrEnded: '這個小屋已經結束了。',
     mpReconnecting: '網路斷了一下，正在把您接回小屋…',
@@ -2104,6 +2130,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpNextRound: '选下一个玩法',
     mpDisbandRoom: '解散小屋',
     mpStopWaiting: '不等了',
+    mpStopWaitingHold: '按住不等了',
     mpDisbandFailed: '小屋还没解散，再按一次试试。',
     mpRoomEnded: '屋主结束了小屋。',
     mpTotalLabel: '总分',
@@ -2133,6 +2160,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpFastest: '单局最快',
     mpRoundsPlayed: '共 {n} 局',
     mpRoundDropped: '离开太久了，这一局没算进小屋总分；您自己的记录里还在。',
+    mpRoundForced: '屋主结束了这一局：您到刚才的 {n} 分已算进小屋总分。',
+    mpRoundForcedZero: '屋主结束了这一局。',
     newVersionTip: '有新版本，点一下刷新',
     mpErrEnded: '这个小屋已经结束了。',
     mpReconnecting: '网络断了一下，正在把您接回小屋…',

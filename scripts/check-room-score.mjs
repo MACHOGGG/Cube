@@ -36,6 +36,11 @@
  * ③ **用时说不通的时候只丢用时，分照记。** 分数是这一局的成绩，用时只多喂一个「单局
  *    最快」；为一个说不通的秒数把整份报分退回去，等于拿他这一局的分去赌这把尺子没写
  *    错。尺子只在**开赛之后**架得起来（倒数里「用了多久」压根不存在）。
+ *
+ * ⑪ **报上来的分封在 MAX_SCORE（十亿）以内，累计总分保持有限数**（10-09 补充方案 7-6）。从前
+ *    只收拾负数和非数字：一份 1e300 原样存下，名单上印着 1e+300；1e308 两局一加溢出成 Infinity，
+ *    写进库里（JSON）变成 null，读回来是 0——一晚上的累计总分悄悄清零。封顶之前就存进去的旧数，
+ *    记账（bankRound）那一头再夹一次。上限和排行榜是同一个常量（api/_maxscore.js）。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -282,6 +287,48 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   check('⑩ 还没开局就报分：被丢', r.body.scoreDropped === true, String(r.body.scoreDropped));
   const run = await runOf(code, g.body.playerId);
   check('⑩ 还没开局：那一格没写', !run || (run.score === 0 && !run.finished), JSON.stringify(run));
+}
+
+// ---- ⑪ 报分封顶：1e300 存下来是十亿，累计总分一直是有限数（10-09 补充方案 7-6） ----------
+{
+  const { MAX_SCORE } = await import('../api/_maxscore.js');
+  const scoresSrc = (await import('node:fs')).readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
+  check('⑪（尺子）上限是十亿，排行榜从同一个文件取（不再自己写一份）',
+    MAX_SCORE === 1e9 && /import \{ MAX_SCORE \} from '\.\/_maxscore\.js'/.test(scoresSrc) && !/const MAX_SCORE\s*=/.test(scoresSrc),
+    String(MAX_SCORE));
+  const { code, host, guest } = await openRoom(RAN_FOR_S);
+  const live = await call({ action: 'score', code, ...guest, score: 1e300, finished: false, round: 1 });
+  check('⑪ 报 1e300（还在打）：照收，没被丢', live.status === 200 && live.body.scoreDropped === undefined, `${live.status} ${live.body.scoreDropped}`);
+  check('⑪ 存下来的是十亿', (await runOf(code, guest.playerId))?.score === MAX_SCORE, JSON.stringify(await runOf(code, guest.playerId)));
+  check('⑪ 名单上也是十亿（不是 1e+300）', seatOf(live, guest.playerId).score === MAX_SCORE, String(seatOf(live, guest.playerId).score));
+  await call({ action: 'score', code, ...guest, score: 1e308, finished: true, seconds: 12, round: 1 });
+  check('⑪ 交卷那一条报 1e308：存下来的还是十亿', (await runOf(code, guest.playerId))?.score === MAX_SCORE,
+    JSON.stringify(await runOf(code, guest.playerId)));
+  await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 10, round: 1 });
+  const r2 = await call({ action: 'start', code, ...host, mode: 'circle' });
+  const g2 = seatOf(r2, guest.playerId);
+  check('⑪ 记完第 1 局：累计十亿，是有限数', r2.body.round === 2 && g2.total === MAX_SCORE && Number.isFinite(g2.total),
+    `round ${r2.body.round} total ${g2.total}`);
+
+  // 封顶之前就存进去的旧数：直接摆进 `r:`（一份 1e308、交了卷），看记账那一头夹不夹。连着两局——
+  // 不夹的话第二局 1e308 + 1e308 溢出成 Infinity，存进库里是 null，读回来是 0。
+  for (const round of [2, 3]) {
+    // 新开的这一局还在倒数（startAt 在几秒之后），倒数里谁交了卷这一局都不算完、开不了下一局：
+    // 和 openRoom 一样把开赛时刻摆到 RAN_FOR_S 秒以前。
+    const meta = (await hgetall(roomKey(code))).meta;
+    await hset(roomKey(code), 'meta', { ...meta, startAt: Date.now() - RAN_FOR_S * 1000 });
+    await hset(roomKey(code), 'r:' + guest.playerId, { score: 1e308, finished: true, seconds: 9, final: true, forced: false });
+    await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 10, round });
+    const nx = await call({ action: 'start', code, ...host, mode: round === 2 ? 'square' : 'circle' });
+    const g = seatOf(nx, guest.playerId);
+    check(`⑪ 库里摆着封顶之前的旧数 1e308，记完第 ${round} 局：累计 ${round} × 十亿，是有限数`,
+      nx.body.round === round + 1 && g.total === round * MAX_SCORE && Number.isFinite(g.total) && g.best === MAX_SCORE,
+      `round ${nx.body.round} total ${g.total} best ${g.best}`);
+  }
+  const card = await call({ action: 'end', code, ...host });
+  const last = seatOf(card, guest.playerId);
+  check('⑪ 散场那张卡上：累计总分是有限数，单局最高是十亿', Number.isFinite(last.total) && last.total === 3 * MAX_SCORE && last.best === MAX_SCORE,
+    `total ${last.total} best ${last.best}`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

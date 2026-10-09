@@ -14,18 +14,15 @@
  * 紧挨着《留下》——手指滑一下就按到另一颗。按住这段时间里键上的圆环一点点填满，松手就
  * 退回去，所以「我按错了」永远来得及收手。
  *
- * **无障碍双通道，这一条是硬要求。** 长按对开关设备、对手不稳的人是不可达的，所以键盘
- * 的 Enter／空格保留**直接生效**那条路（按一下就走），并且把这件事写进键上那行辅助文案
- * ——一颗只能长按的键对这些玩家等于一扇锁死的门。
+ * 按住那一套（圆环、时长、键盘直接生效那条无障碍的路、reduced-motion 下退回单击）住在
+ * holdToConfirm.ts：10-09 补充方案 7-5 起屋主等待页上那颗「不等了」也用它，两处一份。
  *
- * reduced-motion 下退化成普通的二次确认：单击就生效，圆环不出现。那一档里「按住」这件
- * 事没有任何可看的进度，而一个按下去没反应的键是这一页最不该有的东西。
+ * reduced-motion 下退化成普通的二次确认：单击就生效，圆环不出现。
  */
 import { STRINGS, type Lang } from '../i18n';
 import { iAmHost } from '../engine/room';
 import { pushLayer } from '../engine/backNav';
-import { reducedMotion } from '../engine/reducedMotion';
-import { vibrate } from '../engine/haptics';
+import { HOLD_RING, holdWanted, wireHold } from './holdToConfirm';
 
 /**
  * @param note 问句上面多说的一行。屋主按了《解散小屋》、服务器那头没办成的时候，把这一问原样再
@@ -47,7 +44,7 @@ export function confirmLeaveRoom(lang: Lang, onLeave: () => void, note?: string)
   overlay.id = 'leaveRoomConfirm';
   // reduced-motion 下不做长按：那一档里按住这件事没有任何可看的进度（圆环不画），
   // 而一个按下去没反应的键是这一页最不该有的东西。单击就生效，和从前一样。
-  const hold = !reducedMotion();
+  const hold = holdWanted();
   overlay.innerHTML = `
     <div class="modal">
       ${note ? `<p class="auth-msg auth-msg--bad leave-note" role="status">${note}</p>` : ''}
@@ -56,14 +53,7 @@ export function confirmLeaveRoom(lang: Lang, onLeave: () => void, note?: string)
         <button class="secondary${hold ? ' leave-hold' : ''}" id="mpLeaveYes"${
           hold ? ` aria-describedby="mpLeaveHint"` : ''
         }>${
-          hold
-            ? // 圆环画在字的左边。stroke-dasharray 是量出来的周长（2π·9 ≈ 56.5），
-              // 填满靠 stroke-dashoffset 从 56.5 线性走到 0——老技术，Chrome 61 也认得。
-              `<svg class="leave-ring" viewBox="0 0 22 22" aria-hidden="true">` +
-              `<circle class="leave-ring-track" cx="11" cy="11" r="9" fill="none" stroke-width="2.5"/>` +
-              `<circle class="leave-ring-fill" cx="11" cy="11" r="9" fill="none" stroke-width="2.5"/>` +
-              `</svg><span>${s.mpLeaveHold}</span>`
-            : s.mpLeaveAnyway
+          hold ? `${HOLD_RING}<span>${s.mpLeaveHold}</span>` : s.mpLeaveAnyway
         }</button>
         <button class="primary" id="mpLeaveNo">${s.mpStay}</button>
       </div>
@@ -81,53 +71,9 @@ export function confirmLeaveRoom(lang: Lang, onLeave: () => void, note?: string)
     shut();
     onLeave();
   };
-  if (!hold) {
-    yes.addEventListener('click', leave);
-  } else {
-    /** 按住多久算数。和 CSS 里那条 transition 的时长必须是同一个数。 */
-    const HOLD_MS = 600;
-    let timer = 0;
-    let done = false;
-    const stop = () => {
-      if (timer) window.clearTimeout(timer);
-      timer = 0;
-      yes.classList.remove('leave-hold--on');
-    };
-    const start = (e: PointerEvent) => {
-      // 只认主键（鼠标左键／手指／笔）。右键菜单那一下不该开始计时。
-      if (e.button !== 0 || done) return;
-      yes.classList.add('leave-hold--on');
-      // 指针离开按钮、松手、被系统取消，都算收手——圆环 .15s 退回零（CSS 那一头）。
-      yes.setPointerCapture?.(e.pointerId);
-      timer = window.setTimeout(() => {
-        done = true;
-        // 填满那一下定格震一下。15ms 是「咔」的一声，不是提醒；iOS 的 Safari 没有这个
-        // 接口，vibrate 自己吞掉（见 engine/haptics.ts）。
-        vibrate(15);
-        leave();
-      }, HOLD_MS);
-    };
-    yes.addEventListener('pointerdown', start);
-    for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
-      yes.addEventListener(ev, stop);
-    }
-    /**
-     * 键盘那条路：**按一下就走，不用按住。**
-     *
-     * 这不是图省事，是无障碍的硬要求——长按对开关设备、对手不稳的人不可达，只留长按等
-     * 于把这扇门对他们锁死。键上那行辅助文案写着这件事（mpLeaveHoldHint）。
-     *
-     * 用 keydown 而不是 click：按钮的 click 会被空格／Enter 合成出来，那条路会绕回上面
-     * 那套按住的逻辑（而它不会被触发，于是变成「按了没反应」）。
-     */
-    yes.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
-      e.preventDefault();
-      if (done) return;
-      done = true;
-      leave();
-    });
-  }
+  if (!hold) yes.addEventListener('click', leave);
+  // 按住 600ms 生效；键盘的 Enter／空格按一下就走（无障碍那条路，键上那行辅助文案写着）。
+  else wireHold(yes, leave);
   // 点在框外面 = 不走。留下才是这个问题的安全答案，所以它既是主按钮，也是
   // 随手一点的那个答案。
   overlay.addEventListener('click', (e) => {

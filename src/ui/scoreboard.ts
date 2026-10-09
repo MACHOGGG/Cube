@@ -1,4 +1,4 @@
-import { STRINGS, type I18nStrings, type Lang } from '../i18n';
+import { STRINGS, countPhrase, type I18nStrings, type Lang } from '../i18n';
 import { confirmLeaveRoom } from './confirmLeaveRoom';
 import { CTL_LEAVE } from './ctlIcons';
 import { stashRoomLeftover } from './roomLeftover';
@@ -189,6 +189,64 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
 
   /** 「这一局没算进总分」只说一次——心跳每四秒一条，说四次就成了骚扰。 */
   let droppedTold = false;
+
+  /**
+   * 屋主按「不等了」把这一局结束了，而本机这一局还没打完（10-09 补充方案 7-5）。
+   *
+   * 认出来之后三件事：飘一句 mpRoundForced（「屋主结束了这一局：您到刚才的 N 分已算进小屋总分」，
+   * 0 分时只说前半句）；从此不再报分——服务器那一格已经 final 了，报上去也是一条一条被挡掉，而下一局
+   * 开了之后再报，局次对不上，服务器还会把他记成「新的这一局已经交了 0 分的卷」；**不把他从棋盘上拽
+   * 走**——正打着的人不该被拽走（下面轮询里那条老规矩），这一局他想打完就打完，只是不再算数。
+   *
+   * 从前这些一件都没有：他屏幕上什么都不发生，照旧报分；屋主开了下一局，他下一次报分局次对不上，
+   * 飘出来的是 mpRoundDropped「离开太久了，这一局没算进小屋总分」——是假话。所以认出来之后
+   * droppedTold 那一句也不再说（forcedOut 挡在它前面）。
+   */
+  let forcedOut = false;
+  /**
+   * 这一局开打时我在小屋账上是几局、累计多少——给「回来时下一局已经开了」那一种用（见 noticeForced）。
+   * 只在手上的房间状态还是这一局的时候记，记一次。
+   */
+  let before: { rounds: number; total: number } | null = null;
+  const meIn = (state: RoomState) => state.players.find((p) => p.id === seat.playerId);
+  const noteBefore = (state: RoomState) => {
+    if (before || myRound === null || state.round !== myRound) return;
+    const me = meIn(state);
+    if (me) before = { rounds: me.rounds || 0, total: me.total || 0 };
+  };
+  {
+    const known = latestRoomState();
+    if (known) noteBefore(known);
+  }
+  /**
+   * 看一眼这份房间状态：这一局是不是被屋主结束了。认出来就说那一句、停止报分，回 true；之后每次都回
+   * true（调的地方据此不再说 mpRoundDropped）。
+   *
+   * 两种读法：
+   *   · **还是这一局**：我这一位上标着 `forced`（api/room.js 的 force），分数就是服务器替我交的那一份。
+   *   · **已经是下一局了**：我切出去了、网断了，回来时屋主早就开了下一局，`forced` 那一格已经被清掉。
+   *     这时候看账——这一局开打时我在账上几局（before）；现在多了，就说明这一局按当时的分记进去了
+   *     （只有交了卷的才记账，而本机没交：那就是屋主替我交的），多出来的那一截总分就是那个分。账上没多，
+   *     那一局确实没算（90 秒没消息，屋主没替我交——force 不替掉线的人交），mpRoundDropped 说的是实话。
+   *     这一种不是少见的边角：被屋主按「不等了」的，多半正是切到别的应用去了的那个人，而 iPhone 上切
+   *     走的网页一下都不轮询。
+   *
+   * 本机已经打完了就不说（settleOnce 认得出来，和报分那头同一个判据）：那时候结算页和等待页盖着棋
+   * 盘，他的成绩是他自己交的那一份。
+   */
+  const noticeForced = (state: RoomState): boolean => {
+    if (forcedOut) return true;
+    if (myRound === null || settleOnce(null)) return false;
+    const me = meIn(state);
+    if (!me) return false;
+    let n: number | null = null;
+    if (state.round === myRound && me.forced) n = me.score;
+    else if (state.round > myRound && before && (me.rounds || 0) > before.rounds) n = (me.total || 0) - before.total;
+    if (n === null) return false;
+    forcedOut = true;
+    flyby(n > 0 ? countPhrase(s.mpRoundForced, n, lang) : s.mpRoundForcedZero);
+    return true;
+  };
   /**
    * 报一次分，顺便看一眼服务器还认不认这一局。
    *
@@ -204,6 +262,8 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    * saveRun 是无条件的），所以那句话的后半句是实话。
    */
   const report = (score: number, over: boolean, seconds: number | undefined) => {
+    // 屋主已经替我交了卷（见 forcedOut）：不再报。
+    if (forcedOut) return;
     // 还不知道这一局是第几局：攒着，别拿一个「不带局次」的请求去绕过守卫。
     if (myRound === null) {
       pending = { score, over, seconds };
@@ -211,7 +271,9 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     }
     const mine = myRound;
     void reportScore(score, over, seconds, mine).then((res) => {
-      if (droppedTold || mine <= 0 || !res.ok) return;
+      if (mine <= 0 || !res.ok) return;
+      // 回包就是一份房间状态：被屋主结束了的话，说的是另一句，而且不再说下面那句。
+      if (noticeForced(res.value) || droppedTold) return;
       const serverRound = res.value.round;
       if (!serverRound || serverRound === mine) return;
       droppedTold = true;
@@ -243,6 +305,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       pending = null;
       if (owed) report(owed.score, owed.over, owed.seconds);
     }
+    noteBefore(state);
     /**
      * 超过三个人就只摆三行：第一名、我前面那一名、我自己（engine/
      * standingsWindow.ts，规矩和边界情形都在那儿，门是 check-standings-window）。
@@ -465,6 +528,8 @@ function flyby(text: string): void {
     (state) => {
       if (dead) return;
       paint(state);
+      // 屋主按了「不等了」：说一句、不再报分，棋盘照旧开着（见 noticeForced）。
+      noticeForced(state);
       // 小屋散了，而这一局还在打：不把人赶走，就地转成一局单人。
       //
       // 这一条要排在 notice 前面：《Ohno！小屋被取消》那一层是给「已经没在

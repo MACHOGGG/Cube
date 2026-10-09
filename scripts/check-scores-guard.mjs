@@ -58,7 +58,9 @@ const constOf = (name) => {
 };
 const PUSHES_PER_HOUR = constOf('PUSHES_PER_HOUR');
 const DATA_MAX_CHARS = constOf('DATA_MAX_CHARS');
-const MAX_SCORE = constOf('MAX_SCORE');
+// 分数上限 10-09 补充方案 7-6 起挪进了 api/_maxscore.js（排行榜和小屋共用一个数），scores.js 里只剩一句
+// import——照旧去源码里找 `const MAX_SCORE =` 就读不到了。它本来就是一个模块，直接拿。
+const { MAX_SCORE } = await import('../api/_maxscore.js');
 
 async function call(body) {
   const res = {

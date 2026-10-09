@@ -27,6 +27,7 @@ import { roomBadge } from './startStage';
 import { gameIcon } from './homeIcons';
 import { custom } from './customIcons';
 import { CHECK_PATH, CHECK_TIGHT_VIEWBOX } from './checkMark';
+import { HOLD_RING, holdWanted, wireHold } from './holdToConfirm';
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -136,6 +137,11 @@ export function showWaitPanel(
      * 就此结束（api/room.js 的 force）。按下去之后它自己灰掉，免得连按；成了，下一拍轮询读到
      * roundOver，把每个人送回小屋页，这一层跟着撤掉；没成（回 false）就亮回来。
      * 只在这一局真的打起来之后露面：倒数里、有人在学教学被挂起的时候没有「不等了」可言。
+     *
+     * **按住才算**（10-09 补充方案 7-5）：和《离开小屋》那一问里的《按住离开》同一个圆环、同一个
+     * 600ms（holdToConfirm.ts），不另开一个确认框。从前一按就生效——这一下是替别人交卷，而它
+     * 就挨着《离开小屋》，手指滑一下就把一屋子人还没打完的那一局结束了。键盘按一下照样生效
+     * （无障碍那条路，读屏念的辅助文案写着）；reduced-motion 下退回单击，和《还是离开》一样。
      */
     onForce?: () => Promise<boolean>;
   },
@@ -148,6 +154,7 @@ export function showWaitPanel(
   // 和教学等待页同一个转圈的小人（ui/multiplayer.ts 的 showLearningWait 用的
   // 也是它）。两处等的是同一件事——等屋里别的人——所以该长同一张脸。
   const spinner = custom('mp-loading') ?? '';
+  const hold = Boolean(opts.onForce) && holdWanted();
   const overlay = document.createElement('div');
   overlay.className = 'overlay opaque show overlay--wait';
   overlay.id = 'mpWait';
@@ -162,9 +169,18 @@ export function showWaitPanel(
            也听不到有人陆续交卷。polite 是「等他说完这句再播」，不打断。 -->
       <div class="mp-wait-rows mp-players" id="mpWaitRows" aria-live="polite"></div>
       <div class="start-actions">
-        ${opts.onForce ? `<button class="icon-btn start-act" id="mpWaitForce">${s.mpStopWaiting}</button>` : ''}
+        ${
+          !opts.onForce
+            ? ''
+            : hold
+              ? `<button class="icon-btn start-act leave-hold" id="mpWaitForce" aria-describedby="mpWaitForceHint">${HOLD_RING}<span>${s.mpStopWaitingHold}</span></button>`
+              : `<button class="icon-btn start-act" id="mpWaitForce">${s.mpStopWaiting}</button>`
+        }
         <button class="icon-btn start-act" id="mpWaitLeave">${opts.leaveLabel ?? s.mpLeave}</button>
       </div>
+      <!-- 「按住」那颗键的辅助文案，只给读屏念（键上的字已经写着「按住」，看得见的人不用再读一遍）：
+           要紧的是后半句——用键盘的人按一下 Enter 就行（holdToConfirm.ts 文件头那条硬要求）。 -->
+      ${hold ? `<p class="sr-only" id="mpWaitForceHint">${s.mpLeaveHoldHint}</p>` : ''}
     </div>
   `;
   document.body.appendChild(overlay);
@@ -173,13 +189,21 @@ export function showWaitPanel(
   const rows = overlay.querySelector<HTMLElement>('#mpWaitRows')!;
   overlay.querySelector<HTMLButtonElement>('#mpWaitLeave')!.addEventListener('click', opts.onLeave);
   const force = overlay.querySelector<HTMLButtonElement>('#mpWaitForce');
-  if (force) force.hidden = true;
-  force?.addEventListener('click', () => {
-    force.disabled = true;
-    void opts.onForce?.().then((ok) => {
-      if (!ok) force.disabled = false;
-    });
-  });
+  if (force) {
+    force.hidden = true;
+    /** 没办成的时候把「按住」重新接上（wireHold 生效一次就不再认）。 */
+    let rearm = () => {};
+    const go = () => {
+      force.disabled = true;
+      void opts.onForce?.().then((ok) => {
+        if (ok) return;
+        force.disabled = false;
+        rearm();
+      });
+    };
+    if (hold) rearm = wireHold(force, go);
+    else force.addEventListener('click', go);
+  }
   return {
     update(state) {
       if (force) force.hidden = roomPhase(state) !== 'playing';

@@ -38,6 +38,9 @@ import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
+// 一局的综合得分上限，见文件头「关于作弊」。和小屋（room.js）共用一个数（10-09 补充方案 7-6），
+// 为什么是十亿、从前为什么是一百万，写在 _maxscore.js 里。
+import { MAX_SCORE } from './_maxscore.js';
 import {
   VARIANTS,
   dailySeed,
@@ -80,15 +83,6 @@ import {
   zTop,
 } from './_store.js';
 
-/**
- * 一局的综合得分上限。见文件头「关于作弊」。
- *
- * 原来是一百万：无限反转早先那版计分（同一步里 ×3 连锁、翻来翻去不停）真能
- * 打到七位数，超过的一律记成一百万，榜上就出现一排一模一样的数——玩家的原
- * 话：「过了上限以后都按照同一数字显示了」。现在放到十亿：正常怎么打都够不
- * 着，又仍然挡得住「把 999999999999 填进去」那种一眼假的数。
- */
-const MAX_SCORE = 1_000_000_000;
 /** 存档留多少局。够翻很久，又不至于让一个账号的文档大到读不动。 */
 const KEEP_RUNS = 60;
 /**
