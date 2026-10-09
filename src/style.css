@@ -2617,13 +2617,14 @@ button:hover { filter: brightness(1.05); }
      反过来解出一张卡 = (页宽 − 32 − 5×缝) / 6。页宽取 min(100vw, 1360px)，
      1360 是 .app.home-page--wide 的 max-width，屏幕再宽也不会超过它。
      356 和 3.11 一个字没动——那一项还是三排。 */
-  /* 第 19 推：最上面多了一排《每日挑战》（只有一张，和别的卡一样大），于是「装进一屏」那一
-     项从三排变成四排：多一张方卡片（3.11 → 4.11）、多一道行间距 20 和一行小字 23（356 →
-     399）。1440×900 上一张卡从 175 收到 122——四排要站进同一块屏幕，这是那一排的代价（方
-     案原话「尺寸与其他卡一致，行距一致」「一屏放得下」）。宽那一项不动：最宽的还是那排六张。 */
+  /* 第 19 推的时候最上面多了一排《每日挑战》（只有一张），「装进一屏」那一项跟着从三排变成四排
+     （3.11 → 4.11、356 → 399），1440×900 上一张卡从 175 收到 122。10-09 补充方案 7-12 把每日挑战
+     并进了基础那一排的最左边，又是三排，这一项改回原来那道：1440×900 上 175、1920×1080 上 193、
+     1366×768 上 132、1280×800 上 143、1536×864 上 163（方案实测），都是三排、一屏放下、压不到底排
+     （门：check-daily ⑥）。宽那一项不动：最宽的还是那排六张。 */
   --home-card-cap: min(
     255px,
-    max(72px, (100svh - 399px) / 4.11),
+    max(72px, (100svh - 356px) / 3.11),
     (min(100vw, 1360px) - 32px - 5 * var(--home-row-gap)) / 6
   );
 }
@@ -2684,11 +2685,9 @@ button:hover { filter: brightness(1.05); }
    position: relative 是给锁和天才招牌当参照物用的——它们要贴着图的正中和右
    下角，不是贴着卡。 */
 .home-icon-art { display: block; position: relative; width: 100%; aspect-ratio: 1; }
-/* 炸弹那张不是一张图，是一整块「板」（三档炸弹叠着，中间那颗 90s 的星芒还特
-   意探到上下两层去），本来就比一张方卡片高一截。所以它那一格不摆方框——一
-   摆方框，里面按百分比算高度的那几层就全跟着变，整块板凭空长高一截，电脑端
-   三排立刻装不进一屏。 */
-.home-bomb-card .home-icon-art { aspect-ratio: auto; }
+/* 炸弹那张从前在电脑上画的是一整块面板的缩图，比一张方卡片高一截，这儿有一条「它那一格不摆方
+   框」。10-09 补充方案 7-17 起它和别的卡一样只放一枚图标（bomb-menu.svg），那一条撤了：一张方图、
+   和旁边计时那张一样大。 */
 .home-icon-art > svg { width: 100%; height: 100%; display: block; }
 /* 进阶三角那张图的画布是 2:1。放在方框里，图形只占到一半高，方框下半截是
    空的——看着比旁边小一圈，点空处却也算点中。所以让按钮自己收成图形的比例：
@@ -2919,8 +2918,8 @@ button:hover { filter: brightness(1.05); }
  * 靠面板左边那一列分（那时是「基础 / 计时 / 进阶」三个字，10-08 方案 3-G 起是三枚小图标，见
  * .bomb-tiers），格子上不再印徽记。
  *
- * 这块面板出现在两处：炸弹那一页（.bomb-page，放大，见下面那一段）和电脑端主菜单那张炸弹卡里的
- * 缩图（.home-bomb-card，一张图，格子是 span）。
+ * 这块面板只在炸弹那一页（.bomb-page，见下面那一段）。从前电脑端主菜单那张炸弹卡里还有一份缩图
+ * （格子是 span），10-09 补充方案 7-17 起那张卡只放一枚图标（bomb-menu.svg），缩图和它那两条样式撤了。
  *
  * 色盲模式下颜色不变（方案原话）：从前这块面板在色盲下换成 #8A3D00，那一条撤了。
  *
@@ -3052,10 +3051,9 @@ button:hover { filter: brightness(1.05); }
   .bomb-page .bomb-chip { width: 96px; width: min(calc((100vh - 72px - env(safe-area-inset-bottom, 0px)) / 3), 132px); }
 }
 
-/* Desktop only: the panel is itself one card at the head of the bottom row,
-   with every tier's chips directly clickable. */
-/* Now a button, so it has to shed the global button chrome the same way
-   .home-icon-btn does. */
+/* 电脑宽版主菜单上那张炸弹卡（手机上是 .home-icon-btn.home-bomb-mini）。它是一颗键，全局 button 那一套
+   （底色、边框、圆角）要和 .home-icon-btn 一样甩掉。类名留着：check-back、check-daily、check-start-page
+   等几道门靠它找这张卡。 */
 .home-bomb-card {
   width: 100%; max-width: 170px; flex: none;
   padding: 0; background: none; border: none; border-radius: 0;
@@ -3067,11 +3065,8 @@ button:hover { filter: brightness(1.05); }
 /* 手机上那张炸弹卡（.home-bomb-mini）从前是整块炸弹板缩小的样子，这儿有一整段专门给它的规
    矩（三层等高、小片按板宽定大小、星芒绝对定位……）。第 18 推第 3 条换成了炸弹图标——一张方
    图，和别的玩法卡一模一样，那一段整个用不着了。 */
-/* 电脑端那张卡里还是整块面板的缩图（第 18 推只换手机端的图标）。格子收到 27%（和改版前那
-   几枚一样宽），整块面板于是差不多是方的——14 ＋ 3 × 27% × (宽 − 20) ＋ 2 × 10 ＋ 14，在
-   150–200 这一档宽度上和宽相差不过几个像素，和旁边计时那张一样高。挑选窗里那一张格子大
-   （38%），面板比宽高一截，那儿没有「和旁边一样高」这回事。 */
-.home-bomb-card .bomb-chip { width: 27%; }
+/* 电脑端那张卡里从前还是整块面板的缩图，这儿有一条把格子收到 27%、让面板差不多是方的。10-09 补充方案
+   7-17 起那张卡也只放一枚图标，这一条撤了。 */
 
 /* Desktop only: every icon lifts a touch under the pointer, so a mouse gets
    the same "this is live" feedback a tap gets from .home-tap. Gated on a

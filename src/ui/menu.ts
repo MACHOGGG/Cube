@@ -1,5 +1,4 @@
 import type { ShapeCardMeta } from '../shapes/types';
-import type { BombTier } from '../engine/bomb';
 import { STRINGS, type Lang } from '../i18n';
 import { isLayoutLocked } from '../engine/geniusContent';
 import { isGenius } from '../engine/subscription';
@@ -17,9 +16,7 @@ import {
   ICON_BASE_CIRCLE,
   ICON_BASE_TRIANGLE,
   ICON_TIMED_COMBINED,
-  ICON_BOMB_BADGE,
-  bombBoard,
-  bombPanelStar,
+  ICON_BOMB_MENU,
   ICON_LOCK,
   ICON_MULTIPLAYER,
   layoutIcon,
@@ -35,7 +32,8 @@ export interface MenuHandlers {
   /**
    * 《每日挑战》那张卡（第 19 推）：进每日挑战那一页（ui/dailyMode.ts）。
    *
-   * 这张卡三端都摆在**最上面单独一行、居中**（方案原话）。首玩期间不摆（见下面 showDaily）。
+   * 手机上是鱼眼轴的第一站；电脑宽版摆在基础那一排的最左边（10-09 补充方案 7-12）。首玩期间不
+   * 摆（见下面 showDaily）。
    */
   onDaily: () => void;
   /**
@@ -132,14 +130,6 @@ const LAYOUT_SHAPES: BaseShape[] = ['square', 'circle', 'triangle'];
  *  项算的就是「一排站得下几张」。不跟着改的后果是横屏手机上整页横向溢出。 */
 const WIDE_PER_ROW = 6;
 const NARROW_PER_ROW = 2;
-/**
- * 炸弹板块自己的次序。
- *
- * 从前设计图上是方块 / 三角 / 小球（和上面整排的方块 / 小球 / 三角故意不同）。三角
- * 那一副 2026-09 删了（《侵蚀阶梯》v1.2 PR-6），于是这三行都只剩两颗，两颗居中——
- * 「三角在中间」那个次序上的讲究也跟着没了意义。
- */
-const BOMB_SHAPES: RowShape[] = ['square', 'circle'];
 /**
  * 鱼眼轴上次停在哪一项。
  *
@@ -379,9 +369,13 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
 
   // ---- 每日挑战（第 19 推）-------------------------------------------------
   /**
-   * 三端一致：**最上面单独一行、居中**（方案原话）。宽版是 grid 里的第一排、只有这一张；窄版
-   * （鱼眼轴）是轴上的第一站、只有这一张（mountModeAxis 的 leadSolo），打开菜单默认就停在这一
-   * 站——一个新会话的默认焦点本来就是第 0 项（readAxisFocus），所以不用另写一句。
+   * 窄版（鱼眼轴）是轴上的第一站、只有这一张（mountModeAxis 的 leadSolo），打开菜单默认就停在这
+   * 一站——一个新会话的默认焦点本来就是第 0 项（readAxisFocus），所以不用另写一句。
+   *
+   * 宽版（电脑、横屏手机）摆在**基础那一排的最左边**，和基础方块、基础小球三张同尺寸、等间距、整
+   * 排居中（10-09 补充方案 7-12）。第 19 推的时候它在最上面单独一排——四排要站进同一块屏幕，所有
+   * 卡跟着缩了一圈（1440×900 上 175 → 122，见 style.css 的 --home-card-cap）；并进基础那一排之后
+   * 又是三排，卡回到原来那么大。还没打完一局的时候（下面 showDaily），这一排就只有两张基础卡。
    *
    * 图按北京时间的星期几换、日期压在上面（dailyArt.ts），到北京零点自动换、切回前台时重算。
    * 读屏念「每日挑战，10 月 3 日」；卡底下那行小字是「每日挑战」。
@@ -397,6 +391,8 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   const today = dayIndexOf(now());
   stopDailyWatch?.();
   stopDailyWatch = null;
+  // 基础那一排先开出来：宽版的每日挑战摆在它的最左边（见上面那段）。
+  const baseRow = wide ? newRow() : null;
   if (showDaily) {
     const dailyBtn = iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle);
     // 这儿从前有一句 `dailyBtn.dataset.firstPlayable = '1'`：首玩期它也亮着、首玩引导的小箭头也会指
@@ -414,12 +410,11 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       if (art) art.innerHTML = dailyArtHtml(d);
       dailyBtn.setAttribute('aria-label', dailyAria(lang, d));
     });
-    if (wide) newRow().appendChild(dailyBtn);
+    if (baseRow) baseRow.appendChild(dailyBtn);
     else axisCards.push(dailyBtn);
   }
 
   // ---- 方块 · 小球 · 三角 ------------------------------------------------
-  const baseRow = wide ? newRow() : null;
   for (const shape of SHAPES) {
     const card = layout.base[shape];
     const btn = iconButton(
@@ -493,65 +488,21 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // ---- 炸弹，接在计时右边 ------------------------------------------------
   /*
    * 按下去开的是**一整页**（ui/bombMode.ts，10-08 方案 3-G），和计时、老虎机、无限反转、步步为营那
-   * 几步同一副骨架。从前它是一颗会飞到屏幕中间、放大、把背后压暗的按钮，档位挑在一扇窗里（这儿
-   * 自己拼那块面板、左边那一列字，交给 centerPicker）——同一种「第二层」两套长相，窗里的格子也小
-   * 一圈（390 宽的手机上 87px，老虎机那一页一张图 156）。
+   * 几步同一副骨架；那一页自己那块三排面板（三档 × 两副棋盘、正中一颗白星）在 bombMode.ts 里，这儿
+   * 不碰。
    *
-   * 主菜单上这张卡本身不动（方案 3-D-5：「主菜单炸弹卡保留现有合成 icon，选项图标只出现在第二
-   * 层」）：手机上是那枚炸弹图标，电脑上是下面这块面板的缩图。
-   *
-   * 缩图那块面板：三排两格（第 18 推第 2 条，按设计图），一格就是那副棋盘自己的图标，底板一排一
-   * 个颜色（bombBoard，颜色在 style.css 的 .bomb-row--*）。基础、计时两排是基础方块 / 基础小球，
-   * 进阶那排是菱形方块 / 六边形小球（layout.advancedBomb）。它是一张图，不是一排键：格子是 span，
-   * 整块 aria-hidden（卡自己有读屏名），按哪儿都是按这张卡——从前格子是键，从卡里 Tab 得进去，按
-   * 下去还会直接开局（那是给挑选窗那一份准备的，缩图那一份借了同一段代码）。
+   * 主菜单上这张卡只放一枚图标，电脑、手机一个样（10-09 补充方案 7-17，玩家指定的 bomb-menu.svg：砖
+   * 红圆角方块里一颗白色圆角星芒，见 homeIcons.ts 的 ICON_BOMB_MENU）。从前电脑宽版这一张画的是那块
+   * 面板的缩图——六颗小片挤在一张卡里，格子是 span（buildBombPreview），比别的卡高一截，样式里为它单
+   * 写过「这一格不摆方框」「格子收到 27%」两条；手机上第 18 推就换成了一枚图标（bomb-badge.svg）。现
+   * 在两端都是这一枚，和旁边的玩法卡一样是一张方图、一样大（--home-card-cap 管着）。
    */
-  const BOMB_TIERS: { tier: BombTier; cards: Record<RowShape, ShapeCardMeta> }[] = [
-    { tier: 'basic', cards: layout.base },
-    { tier: 'timed', cards: layout.base },
-    { tier: 'advanced', cards: layout.advancedBomb },
-  ];
-  function buildBombPreview(): HTMLElement {
-    const panel = document.createElement('div');
-    panel.className = 'bomb-panel';
-    panel.setAttribute('aria-hidden', 'true');
-    // 正中那颗白色八角星：压在三排底下（style.css 的 .bomb-star）。
-    panel.innerHTML = `<span class="bomb-star">${bombPanelStar()}</span>`;
-    for (const t of BOMB_TIERS) {
-      const row = document.createElement('div');
-      row.className = `bomb-row bomb-row--${t.tier}`;
-      for (const shape of BOMB_SHAPES) {
-        const card = t.cards[shape];
-        const chip = document.createElement('span');
-        chip.className = 'bomb-chip';
-        chip.innerHTML = bombBoard(t.tier === 'advanced' ? layoutIcon(card.id, shape) : BASE_ICON[shape]);
-        row.appendChild(chip);
-      }
-      panel.appendChild(row);
-    }
-    return panel;
-  }
-
   const bombBtn = document.createElement('button');
   bombBtn.className = wide ? 'home-bomb-card' : 'home-icon-btn home-bomb-mini';
   bombBtn.setAttribute('aria-label', s.bombBasicTitle);
   const bombArt = document.createElement('span');
   bombArt.className = 'home-icon-art';
-  if (wide) {
-    // 缩图里没有可按的东西，按到哪儿都是按这张卡（见上面那段）。
-    const preview = buildBombPreview();
-    preview.style.pointerEvents = 'none';
-    bombArt.appendChild(preview);
-  } else {
-    /*
-     * 手机上这张卡换成炸弹的图标（第 18 推第 3 条，玩家给的那枚：砖红圆角方块里一颗白色
-     * 星芒，src/assets/icons/bomb-badge.svg）。从前这儿摆的是整块炸弹板缩小的样子——六颗
-     * 小片挤在轴上一格里，每颗不到 20px，看不出是什么，而且它是轴上唯一一张不是方的卡，
-     * 鱼眼轴为它单独算过好几回高度（check-mode-axis 4h 那一节）。现在和别的玩法一样是一张
-     * 方图；点开之后是炸弹那一页。电脑宽版那一张照旧是整块板（方案只换手机端）。
-     */
-    bombArt.innerHTML = ICON_BOMB_BADGE;
-  }
+  bombArt.innerHTML = ICON_BOMB_MENU;
   bombBtn.appendChild(bombArt);
   const bombTag = tag('bomb');
   if (bombTag) bombBtn.appendChild(tagEl(bombTag));

@@ -15,7 +15,7 @@ import { knowHowButton } from '../../src/ui/knowHowBtn';
 import {
   ICON_BASE_CIRCLE,
   ICON_BASE_SQUARE,
-  ICON_BOMB_BADGE,
+  ICON_BOMB_MENU,
   ICON_FLIP_MODE,
   ICON_PUZZLE_MODE,
   ICON_SLOT_MACHINE,
@@ -79,7 +79,8 @@ const WIDE_QUERY = '(min-width: 720px), (orientation: landscape) and (min-width:
 const CARDS: { mode: XhsMode; icon: string; tag: string }[] = [
   { mode: 'square', icon: ICON_BASE_SQUARE, tag: 'square' },
   { mode: 'circle', icon: ICON_BASE_CIRCLE, tag: 'circle' },
-  { mode: 'bomb', icon: ICON_BOMB_BADGE, tag: 'bomb' },
+  // 炸弹那张和网页版主菜单是同一枚（10-09 补充方案 7-17 的 bomb-menu.svg）。
+  { mode: 'bomb', icon: ICON_BOMB_MENU, tag: 'bomb' },
   { mode: 'slot', icon: ICON_SLOT_MACHINE, tag: 'slot' },
   { mode: 'flip', icon: ICON_FLIP_MODE, tag: 'flip' },
   // 《步步为营》2026-10 补进来（决策 §10 的 E20：「小红书版……加《步步为营》」）。

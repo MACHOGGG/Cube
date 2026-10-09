@@ -5,7 +5,8 @@
  *   node scripts/check-daily.mjs http://localhost:8974/
  *
  * 方案的门：「北京时间 23:59:59→00:00:00 准确换日（种子、数字、颜色同时换）」「7 天星期与配色
- * 对应」，电脑宽屏「1440×900 下居中、各行等距、一屏放得下」。「首玩期间也显示」那一条 10-08 方
+ * 对应」，电脑宽屏「1440×900 下居中、各行等距、一屏放得下」（10-09 补充方案 7-12 起它并进基础那一排的
+ * 最左边，⑥ 照新口径量五种分辨率，顺带量 7-17 的炸弹卡）。「首玩期间也显示」那一条 10-08 方
  * 案 3-D-1 改了（玩家拍板「完成任意一局（含教程局）后出现」），⑤ 量新的那一条。手机鱼眼那
  * 一站（默认聚焦、居中、同尺寸、等距、导轨、热区）在 check-mode-axis 的第 10 节。
  *
@@ -339,45 +340,78 @@ const WHITE = 'rgb(255, 255, 255)';
   await ctx.close();
 }
 
-// ── ⑥ 电脑宽屏 1440×900：最上面一排只有它、居中、一样大、各行等距、一屏放得下 ─────
+// ── ⑥ 电脑宽屏：每日挑战在基础那一排的最左边，三张一样大、等距、整排居中；三排一屏放下 ─────
+//
+// 10-09 补充方案 7-12：每日挑战不再单独占最上面一排（第 19 推那样），并进「经典方块、经典小球」那一排的
+// 最左边；图标回到第 19 推之前的大小（--home-card-cap 那道算式改回 (100svh − 356) / 3.11）。方案在五种分
+// 辨率上实测过：都是三排、一屏放下，卡片区底边离底排 23–160px。这一节五种都量：
+//   · 第一排正好三张，每日挑战在最左，后两张是两副基础棋盘；
+//   · 三张一样大（图那一格 ≤0.5px）、两道缝一样宽（≤1px）、整排居中（≤1px）；
+//   · 各行等距（≤1px）、不用滚、最后一排压不到底排。
+// 同一节顺带量 7-17 的炸弹卡（方案：「放在 check-daily 量三排的那一节旁边」）：卡里是一枚 svg、没有
+// .bomb-panel；图那一格是方的（宽高差 ≤2px），和同一排的计时那张宽、高各差 ≤2px。
+// 首玩期这一排只有两张基础卡，归 ⑤a。
 {
-  const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { width: 1440, height: 900, mobile: false });
-  await page.waitForTimeout(600);
-  const m = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll('.home-grid > .home-row')];
-    const first = rows[0];
-    const cards = first ? [...first.querySelectorAll(':scope > .home-icon-btn, :scope > .home-bomb-card')] : [];
-    const art = (el) => (el.querySelector('.home-icon-art') ?? el).getBoundingClientRect();
-    const d = first?.querySelector('.home-icon-btn--daily');
-    const da = d ? art(d) : null;
-    // 「一样大」拿基础方块那张比（第二排第一张）：同一个 --home-card-cap 收着。
-    const sq = rows[1]?.querySelector('.home-icon-btn');
-    const sa = sq ? art(sq) : null;
-    const boxes = rows.map((r) => r.getBoundingClientRect());
-    const gaps = boxes.slice(1).map((b, i) => +(b.top - boxes[i].bottom).toFixed(2));
-    const nav = document.querySelector('.home-nav-dock, .home-nav')?.getBoundingClientRect();
-    const lastBottom = Math.max(...[...document.querySelectorAll('.home-grid .home-icon-btn, .home-grid .home-bomb-card')].map((e) => e.getBoundingClientRect().bottom));
-    return {
-      rows: rows.length,
-      firstCards: cards.length,
-      isDaily: !!d && cards[0] === d,
-      dCx: da ? da.left + da.width / 2 : null,
-      vwMid: document.documentElement.clientWidth / 2,
-      dW: da?.width ?? 0,
-      sW: sa?.width ?? 0,
-      gaps,
-      scroll: document.documentElement.scrollHeight,
-      vh: window.innerHeight,
-      lastBottom,
-      navTop: nav?.top ?? null,
-    };
-  });
-  check('⑥ 1440×900：最上面那一排只有每日挑战一张', m.firstCards === 1 && m.isDaily, `${m.firstCards} 张`);
-  check('⑥ 1440×900：它横着居中（≤1px）', m.dCx !== null && Math.abs(m.dCx - m.vwMid) <= 1, `${m.dCx?.toFixed(2)} / ${m.vwMid}`);
-  check('⑥ 1440×900：和别的卡一样大（≤0.5px）', m.dW > 40 && Math.abs(m.dW - m.sW) <= 0.5, `${m.dW.toFixed(2)} / ${m.sW.toFixed(2)}`);
-  check('⑥ 1440×900：各行等距（排与排之间的缝一样，≤1px）', m.gaps.length >= 3 && Math.max(...m.gaps) - Math.min(...m.gaps) <= 1, m.gaps.join(' / '));
-  check('⑥ 1440×900：一屏放得下（不用滚，最后一排压不到底排）', m.scroll <= m.vh && m.navTop !== null && m.lastBottom <= m.navTop, `scrollHeight ${m.scroll} / 屏高 ${m.vh}，最后一排底 ${m.lastBottom.toFixed(1)} / 底排顶 ${m.navTop?.toFixed(1)}`);
-  await ctx.close();
+  const SIZES = [[1440, 900], [1920, 1080], [1366, 768], [1280, 800], [1536, 864]];
+  for (const [W, H] of SIZES) {
+    const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { width: W, height: H, mobile: false });
+    await page.waitForTimeout(600);
+    const m = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('.home-grid > .home-row')];
+      const first = rows[0];
+      const cards = first ? [...first.querySelectorAll(':scope > .home-icon-btn, :scope > .home-bomb-card')] : [];
+      const art = (el) => (el.querySelector('.home-icon-art') ?? el).getBoundingClientRect();
+      const arts = cards.map(art);
+      const boxes = rows.map((r) => r.getBoundingClientRect());
+      const nav = document.querySelector('.home-nav-dock, .home-nav')?.getBoundingClientRect();
+      const lastBottom = Math.max(...[...document.querySelectorAll('.home-grid .home-icon-btn, .home-grid .home-bomb-card')].map((e) => e.getBoundingClientRect().bottom));
+      const bomb = document.querySelector('.home-grid .home-bomb-card');
+      const timed = document.querySelector('.home-grid .home-icon-btn--timed');
+      const ba = bomb ? art(bomb) : null;
+      const ta = timed ? art(timed) : null;
+      const bArt = bomb?.querySelector('.home-icon-art');
+      return {
+        rows: rows.length,
+        names: cards.map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+        firstIsDaily: cards[0]?.classList.contains('home-icon-btn--daily') ?? false,
+        dailies: document.querySelectorAll('.home-icon-btn--daily').length,
+        ws: arts.map((a) => +a.width.toFixed(2)),
+        hs: arts.map((a) => +a.height.toFixed(2)),
+        cardGaps: cards.slice(1).map((c, i) => +(c.getBoundingClientRect().left - cards[i].getBoundingClientRect().right).toFixed(2)),
+        rowMid: cards.length ? (cards[0].getBoundingClientRect().left + cards[cards.length - 1].getBoundingClientRect().right) / 2 : null,
+        vwMid: document.documentElement.clientWidth / 2,
+        gaps: boxes.slice(1).map((b, i) => +(b.top - boxes[i].bottom).toFixed(2)),
+        scroll: document.documentElement.scrollHeight,
+        vh: window.innerHeight,
+        lastBottom,
+        navTop: nav?.top ?? null,
+        bomb: bomb ? {
+          svgs: bArt ? bArt.querySelectorAll(':scope > svg').length : 0,
+          panels: bomb.querySelectorAll('.bomb-panel').length,
+          w: ba.width, h: ba.height,
+        } : null,
+        timed: ta ? { w: ta.width, h: ta.height } : null,
+      };
+    });
+    const tag = `⑥ ${W}×${H}`;
+    check(`${tag}：一共三排（每日挑战不再单独占一排）`, m.rows === 3, `${m.rows} 排`);
+    check(`${tag}：第一排是 每日挑战 · 经典方块 · 经典小球，每日挑战在最左`,
+      m.firstIsDaily && m.dailies === 1 && m.names.length === 3 && m.names[1] === '经典方块' && m.names[2] === '经典小球', m.names.join(' / '));
+    check(`${tag}：三张一样大（≤0.5px）`, m.ws.length === 3 && m.ws[0] > 40 && Math.max(...m.ws) - Math.min(...m.ws) <= 0.5 && Math.max(...m.hs) - Math.min(...m.hs) <= 0.5,
+      `${m.ws.join(' / ')} × ${m.hs.join(' / ')}`);
+    check(`${tag}：等间距（两道缝差 ≤1px）、整排居中（≤1px）`,
+      m.cardGaps.length === 2 && Math.abs(m.cardGaps[0] - m.cardGaps[1]) <= 1 && m.rowMid !== null && Math.abs(m.rowMid - m.vwMid) <= 1,
+      `缝 ${m.cardGaps.join(' / ')}，中线 ${m.rowMid?.toFixed(2)} / ${m.vwMid}`);
+    check(`${tag}：各行等距（排与排之间的缝一样，≤1px）`, m.gaps.length === 2 && Math.max(...m.gaps) - Math.min(...m.gaps) <= 1, m.gaps.join(' / '));
+    check(`${tag}：一屏放得下（不用滚，最后一排压不到底排）`, m.scroll <= m.vh && m.navTop !== null && m.lastBottom <= m.navTop,
+      `scrollHeight ${m.scroll} / 屏高 ${m.vh}，最后一排底 ${m.lastBottom.toFixed(1)} / 底排顶 ${m.navTop?.toFixed(1)}（余 ${m.navTop !== null ? (m.navTop - m.lastBottom).toFixed(0) : '—'}）`);
+    check(`${tag}：卡回到原来那么大（第 19 推之前的算式，宽 ≥ 130）`, m.ws[0] >= 130, `${m.ws[0]}`);
+    check(`${tag}：炸弹卡里是一枚 svg，没有 .bomb-panel（7-17）`, !!m.bomb && m.bomb.svgs === 1 && m.bomb.panels === 0, JSON.stringify(m.bomb));
+    check(`${tag}：炸弹卡是方的（宽高差 ≤2px），和计时那张宽、高各差 ≤2px`,
+      !!m.bomb && !!m.timed && Math.abs(m.bomb.w - m.bomb.h) <= 2 && Math.abs(m.bomb.w - m.timed.w) <= 2 && Math.abs(m.bomb.h - m.timed.h) <= 2,
+      `炸弹 ${m.bomb?.w.toFixed(1)}×${m.bomb?.h.toFixed(1)} / 计时 ${m.timed?.w.toFixed(1)}×${m.timed?.h.toFixed(1)}`);
+    await ctx.close();
+  }
 }
 
 // ── ⑦ 挑码那一页的《今日挑战》：高一倍、字号不变（10-08 方案 3-F-3）───────────────

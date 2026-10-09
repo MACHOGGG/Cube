@@ -58,7 +58,8 @@ const GROUPS = [
   ['炸弹挑战', [
     // 第 18 推：炸弹选择页那六格就是棋盘自己的图标（底板由样式上色），不再单独画；
     // 这一组留主菜单上那枚炸弹图标和面板正中那颗星。
-    ['bomb-badge', H.ICON_BOMB_BADGE, '主菜单上的炸弹图标'],
+    ['bomb-menu', H.ICON_BOMB_MENU, '主菜单上的炸弹卡（10-09 补充方案 7-17）'],
+    ['bomb-badge', H.ICON_BOMB_BADGE, '炸弹局的标志（开局页、战绩图）'],
     ['bomb-star', H.bombPanelStar(), '炸弹选择页面板正中那颗星（白色，底下垫一块深色看）'],
   ]],
   ['更多布局', [

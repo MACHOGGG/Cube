@@ -565,7 +565,8 @@ const SCREENS = [
     // 从前比的是网页版炸弹局开局页上并排的那颗炸弹徽记。10-08 方案 3-F-4 起开局页
     // 的图和第二层按下去的那一格是同一张（ui/modeIcons.ts 的 iconFor：那一档颜色底
     // 板的棋盘），那颗徽记撤了——网页版画给「炸弹」这件事的那一张，现在只在主菜单
-    // 那张卡上（方案 3-D-5：「主菜单炸弹卡保留现有合成 icon」）。
+    // 那张卡上。10-09 补充方案 7-17 起那张卡换成玩家指定的 bomb-menu.svg（homeIcons.ts 的
+    // ICON_BOMB_MENU），这一版的菜单（xhs/src/menu.ts）跟着换——不跟的话这一条当场红。
     name: '炸弹卡的图 = 网页版主菜单炸弹卡的图',
     custom: async (webPage, xhsPage) => {
       const webMarks = await webPage.evaluate(() => {

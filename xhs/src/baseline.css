@@ -31,16 +31,9 @@ html.no-ratio .home-icon-art > svg {
   width: 100%;
   height: 100%;
 }
-/* 炸弹那张板和横画布那两张不摆方框（源样式里就是 aspect-ratio: auto）。 */
-html.no-ratio .home-bomb-card .home-icon-art,
-html.no-ratio .home-bomb-mini .home-icon-art {
-  height: auto;
-  padding-bottom: 0;
-}
-html.no-ratio .home-bomb-card .home-icon-art > svg,
-html.no-ratio .home-bomb-mini .home-icon-art > svg {
-  position: static;
-}
+/* 横画布那两张不摆方框（源样式里就是 aspect-ratio: auto）。这儿从前还有两条给炸弹那张卡（它画的是整块
+   面板，比方卡片高一截）；10-09 补充方案 7-17 起炸弹卡两端都只放一枚方图标（bomb-menu.svg），和别的卡走同
+   一条方框，那两条撤了。 */
 html.no-ratio .home-icon-btn--wide-art .home-icon-art {
   aspect-ratio: auto;
   padding-bottom: 56.08%; /* 189 : 106 */

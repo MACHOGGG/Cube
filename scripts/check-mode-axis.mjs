@@ -987,9 +987,11 @@ let page = await menuPage({ slides_played_square: '1' });
 // 张卡现在画的是不是那枚图标：
 //   · 格子里是一枚 svg，不是 .bomb-panel，里面也没有一颗 .bomb-chip（按下去开的是挑选窗，
 //     卡上不该有能单独被按到的小片）；
-//   · 是玩家那一枚：一个圆角方块（rect 带 rx）＋ 一颗星（polygon），两个颜色——白和砖红
-//     #BE411A（文件里写的是 display-p3，customIcons 的 sRGBOnly 换算出来正是这个值）；
+//   · 是玩家那一枚：一个圆角方块（rect 带 rx）＋ 一颗星，两个颜色——白和砖红 #BE411A（文件
+//     里写的是 display-p3，customIcons 的 sRGBOnly 换算出来正是这个值）；
 //   · 没有 <title>（不然悬停会冒出「编组」两个字，读屏也念它）。
+// 10-09 补充方案 7-17 起这一枚换成玩家指定的 bomb-menu.svg（1026 见方，星角是圆的）：星从 polygon
+// 变成了 path，所以「一颗星」数的是 polygon 和 path 合起来一个；别的几条照旧。
 {
   const p8 = await menuPage({ slides_played_square: '1' });
   const m = await p8.evaluate(() => {
@@ -1003,7 +1005,7 @@ let page = await menuPage({ slides_played_square: '1' });
       panels: mini.querySelectorAll('.bomb-panel').length,
       chips: mini.querySelectorAll('.bomb-chip').length,
       roundRect: kid ? [...kid.querySelectorAll('rect')].some((r) => Number(r.getAttribute('rx')) > 0) : false,
-      star: kid ? kid.querySelectorAll('polygon').length : 0,
+      star: kid ? kid.querySelectorAll('polygon, path').length : 0,
       fills: [...new Set(fills)],
       title: kid ? kid.querySelectorAll('title').length : -1,
       label: mini.getAttribute('aria-label') || '',
