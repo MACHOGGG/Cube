@@ -8,7 +8,7 @@
  * 起那一问、人还在原地；《会不会规则》那一问按返回只收起它（和时间到了一样，不记「看过了」，
  * 10-09 补充方案 7-13 第 11 条——原先等于答《会》）；《完成了吗？》按返回
  * 等于《否》；屋主散场后那张战绩卡按返回回多人设置页。顺带验几扇窗：锁着的卡开的订
- * 阅窗、配色窗、内部码窗，按返回只关窗；主菜单老虎机卡进的挑图形页按返回回主菜单。
+ * 阅窗、配色窗、翻面速度窗，按返回只关窗；主菜单老虎机卡进的挑图形页按返回回主菜单。
  *
  * TESTMONTH 一台服务器只能兑一次——重跑请换端口重开服务器。
  */
@@ -105,10 +105,18 @@ await A.page.click('#paletteRow');
 await A.page.waitForSelector('body > .overlay.show', { timeout: 5000 });
 await back(A.page);
 check('配色窗按返回 → 只关窗', !(await has(A.page, 'body > .overlay.show')) && (await has(A.page, '.profile-page')));
-await A.page.click('#insiderRow');
+// 这儿原先点的是《内部码》那一行（#insiderRow）。它在 fa5a8a3「账号改制（推送 2 · 前端）」里随
+// 内部码的前端一起撤了（E41；后端 api/redeem.js 照旧兑得了码，上面开通用的就是它），这道门没跟上：
+// 从那以后跑到这一句就等 30 秒、抛错退出，后面开屋、倒数、局中、交卷等待页、战绩卡那十六条一条都
+// 没跑到过。换成同一段天才网格里、同一种东西：《图形翻面速度》那扇窗（#flipRow，
+// ui/accountPage.ts 的 openFlipSpeedPicker，也是 pushLayer 挂的一层）——和配色窗一样按返回只该
+// 关窗，而别的门都没量过它的返回键。
+await A.page.click('#flipRow');
 await A.page.waitForSelector('body > .overlay.show', { timeout: 5000 });
+// 尺子：开出来的真是翻面速度那扇窗（不然下面那条「只关窗」量的是别的什么）。
+check('（尺子）点开的是翻面速度那扇窗', await has(A.page, '#flipClose'));
 await back(A.page);
-check('内部码窗按返回 → 只关窗', !(await has(A.page, 'body > .overlay.show')) && (await has(A.page, '.profile-page')));
+check('翻面速度窗按返回 → 只关窗', !(await has(A.page, 'body > .overlay.show')) && (await has(A.page, '.profile-page')));
 
 // ---- 开屋、进屋 ---------------------------------------------------------------------
 await A.page.click('#multiRow');
