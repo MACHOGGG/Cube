@@ -17,6 +17,7 @@
  * 比例的占位图——量的是排版，不是那一局打了多少分。
  */
 import { chromium } from 'playwright';
+import { readFileSync } from 'node:fs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -26,6 +27,14 @@ const check = (n, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
   if (!ok) fail++;
 };
+
+/** 通关章那枚勾：全站那一枚（ui/checkMark.ts 的 CHECK_PATH）×0.4，和 gameController 摆的一样，从源码现算。 */
+const CHECK_PATH = (readFileSync(new URL('../src/ui/checkMark.ts', import.meta.url), 'utf8').match(/CHECK_PATH = '([^']+)'/) || [, ''])[1];
+if (!CHECK_PATH) {
+  console.error('读不出 ui/checkMark.ts 的 CHECK_PATH——先修这儿。');
+  process.exit(2);
+}
+const STAMP_TICK = CHECK_PATH.replace(/\d+(?:\.\d+)?/g, (n) => String(Math.round(Number(n) * 0.4 * 100) / 100));
 
 const seed = () => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
@@ -59,7 +68,7 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
   await page.waitForTimeout(900);
 
   // ---- 结算页 -----------------------------------------------------------
-  await page.evaluate(() => {
+  await page.evaluate((tick) => {
     const ov = document.getElementById('endOverlay');
     ov.classList.add('show');
     document.getElementById('endScore').textContent = '1,286';
@@ -70,7 +79,7 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
     document.getElementById('endStamp').innerHTML =
       '<svg viewBox="0 0 40 40" aria-hidden="true">' +
       '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
-      '<path class="end-stamp-tick" d="M11.3 18.2 L16.6 25.6 L28.6 12.6" fill="none" stroke="var(--end-ok)"' +
+      `<path class="end-stamp-tick" d="${tick}" fill="none" stroke="var(--end-ok)"` +
       ' stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     document.getElementById('endStamp').classList.add('end-stamp--drawn');
     document.getElementById('endBadges').innerHTML = '<span class="end-badge">清盘</span><span class="end-badge">解锁 1 枚</span>';
@@ -89,7 +98,7 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
     g.fillRect(0, 0, 720, 976);
     document.getElementById('endShare').removeAttribute('hidden');
     document.getElementById('endShareImg').src = c.toDataURL();
-  });
+  }, STAMP_TICK);
   await page.waitForTimeout(600);
   const end = await page.evaluate(() => {
     const ov = document.getElementById('endOverlay');

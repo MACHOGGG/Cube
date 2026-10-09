@@ -528,7 +528,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
           </figure>
         </div>
         <!-- 三颗键：再来 · 分享 · 主页（设计图的次序），只有记号没有字（读屏名在 aria-label）。
-             颜色是《色卡》那三支：玫红、蓝、橙。 -->
+             颜色是《色卡》那三支：玫红、蓝、橙。10-09 补充方案 6-4 起三颗同构：药丸里一枚白圆盘、
+             盘里是药丸同色的记号（见 style.css 的 .end-act）。 -->
         <div class="btn-row end-actions">
           <button class="end-act end-act--again" id="restartBtn" aria-label="${s.restartBtn}">${END_AGAIN}</button>
           <button class="end-act end-act--share" id="shareBtn" aria-label="${s.shareBtn}">${END_SHARE}</button>

@@ -1,6 +1,7 @@
 import { trackTutorialStart, trackTutorialEnd } from '../engine/analytics';
 import { STRINGS, type Lang } from '../i18n';
 import { CTL_FINISH, CTL_NEXT, CTL_PREV, CTL_REPLAY } from './ctlIcons';
+import { CHECK_PATH, CHECK_TIGHT_VIEWBOX } from './checkMark';
 import { playMove, playScore, playFlip, playClear, reducedMotion, seatEls, spawnParticles } from '../engine/juice';
 import { colorblindOn, cvdSwatch, cvdVariant, pieceVariant, variantSwatch } from '../engine/palettePref';
 import { createDragChain } from '../engine/dragChain';
@@ -175,9 +176,11 @@ const ARROW_SVG = (color: string) =>
   // all three corners without changing its overall size.
   `<path d="M4 -8.5 L21 0 L4 8.5 Z" fill="${color}" stroke="${color}" stroke-width="6" stroke-linejoin="round"/></svg>`;
 
+// 全站那一枚勾（checkMark.ts 的 CHECK_PATH，10-09 补充方案 6-5「全站统一一种勾」），画布裁到勾的周围：大小
+// 和这儿原来自己画的那一枚一样，线宽照原来 60 格里的 10 折算成 68 格里的 11.3（和规则书配图那枚同一套数）。
 const CHECK_SVG = (color: string) =>
-  `<svg viewBox="0 0 60 60"><path d="M12 32 L26 47 L50 12" fill="none" stroke="${color}"` +
-  ` stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  `<svg viewBox="${CHECK_TIGHT_VIEWBOX}"><path d="${CHECK_PATH}" fill="none" stroke="${color}"` +
+  ` stroke-width="11.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /**
  * 同屏最多一个东西在呼吸。

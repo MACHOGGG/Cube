@@ -8,6 +8,7 @@
  * 老的引用（scripts/icon-sheet.mjs）不用改。
  */
 import { custom } from './customIcons';
+import { CHECK_PATH } from './checkMark';
 
 /**
  * The two controls' marks: a disc with the sign cut into it, drawn rather
@@ -31,8 +32,13 @@ export const CTL_PAUSE = custom('ctl-pause') ?? ctlGlyph(
   '<rect x="35" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>' +
     '<rect x="54" y="28" width="11" height="44" rx="5.5" fill="var(--ctl-mark)"/>',
 );
+// 全站那一枚勾的路径（10-09 补充方案 6-5）定义在 checkMark.ts——那个文件什么都不 import，所以规则书配图、
+// 小屋名单那几处取它的时候不会把 customIcons 拖进去（门用 esbuild 打包它们，customIcons 的 import.meta.glob
+// 在 node 里跑不了）。这儿照样导出一份，「勾在 ctlIcons 里」这句话照旧成立。
+export { CHECK_PATH, CHECK_TIGHT_VIEWBOX, checkPathAt } from './checkMark';
+
 export const CTL_FINISH = custom('ctl-finish') ?? ctlGlyph(
-  '<path d="M29 51.5 L44 66 L72 35" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ' +
+  `<path class="ctl-check" d="${CHECK_PATH}" fill="none" stroke="var(--ctl-mark)" stroke-width="12" ` +
     'stroke-linecap="round" stroke-linejoin="round"/>',
 );
 /** 多人局那颗《离开房间》：一扇开着的门，一支箭走出去。换成自己的：ctl-leave.svg。 */
@@ -112,27 +118,27 @@ export const CTL_TIER_ADVANCED = custom('ctl-tier-advanced') ?? ctlGlyph(
 );
 
 /**
- * 结算弹窗底下《再来》《分享》两颗键上的记号（10-08 方案 3-I，玩家的设计图）。
+ * 结算弹窗底下《再来》《分享》两颗键（10-09 补充方案 6-4，玩家定稿方案①「白色圆盘」）。
  *
- * 和上面那几枚不一样：**没有圆盘**，是直接画在键上的白线——设计图上就是这样。几何照设计图量的
- * （402 宽的手机上，键 91×36）：
+ * 和《主页》那颗同构：彩色药丸里一枚白圆盘，盘里是**药丸同色**的记号——白盘走 --ctl-disc、记号走
+ * --ctl-mark，颜色在 style.css 的 .end-act--again / --share 上给。从前（10-08 方案 3-I）这两颗没有圆盘，
+ * 是直接画在键上的白线，三颗键于是两种样子。
  *
- *   再来  29×30：一圈开口的圆（半径 13.25、线宽 2），开口在右上，压着一枚向左的三角箭头
- *   分享  20×27：一枚向上的三角，底下一小截杆子插进一个圆角托盘
+ * 记号是方案给的 24 格画布上的两枚（玩家选定的那张附图就是用它们画的），摆进圆盘里约占盘径的 2/3
+ * （附图：盘 30、记号 20）：圆盘在 100 格里半径 46，盘径 92，2/3 是 61.33，所以 24 格放大 2.5556 倍、
+ * 四边各留 19.33。三颗的白盘是同一副 ctlGlyph，直径自然一致。
  *
- * 第三颗《主页》在设计图上是一枚白圆盘，用的就是全站《退出》那一颗（CTL_BACK：白圆盘 ＋ 一支向
- * 左的箭，箭是键自己的颜色），不另画——见 style.css 的 .end-act--home。
+ *   再来  一圈开口的圆（线宽 2.8，圆头），开口在右上，压着一枚实心的三角箭头
+ *   分享  一支实心的弯箭头，往右上走
  *
- * 颜色走 currentColor（键上写 color），换成自己画的：end-again.svg / end-share.svg。
+ * 换成自己画的：end-again.svg / end-share.svg（换了之后颜色要自己照着 --ctl-disc / --ctl-mark 写）。
  */
-export const END_AGAIN = custom('end-again') ?? (
-  '<svg class="end-glyph" viewBox="0 0 29 30" aria-hidden="true" focusable="false">' +
-  '<path d="M18.34 2.15 A13.25 13.25 0 1 0 27.34 16.82" fill="none" stroke="currentColor" stroke-width="2"/>' +
-  '<path d="M27 0.5 L14 6 L27 15.5 Z" fill="currentColor"/></svg>'
+const discMark24 = (body: string) =>
+  ctlGlyph(`<g transform="translate(19.33 19.33) scale(2.5556)">${body}</g>`);
+export const END_AGAIN = custom('end-again') ?? discMark24(
+  '<path d="M18.2 9.2A7 7 0 1 0 19 13.6" fill="none" stroke="var(--ctl-mark)" stroke-width="2.8" stroke-linecap="round"/>' +
+    '<path d="M19.6 4.6v5.6h-5.6z" fill="var(--ctl-mark)" stroke="var(--ctl-mark)" stroke-width="1.2" stroke-linejoin="round"/>',
 );
-export const END_SHARE = custom('end-share') ?? (
-  '<svg class="end-glyph" viewBox="0 0 20 27" aria-hidden="true" focusable="false">' +
-  '<path d="M10 0.5 L17 14 L3.3 14 Z" fill="currentColor"/>' +
-  '<path d="M10 13 V19" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
-  '<rect x="1.5" y="17" width="17" height="8.3" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'
+export const END_SHARE = custom('end-share') ?? discMark24(
+  '<path d="M13.2 4.2c0-.8.9-1.2 1.5-.7l6.4 5.9c.4.4.4 1 0 1.4l-6.4 5.9c-.6.5-1.5.1-1.5-.7v-2.8c-4.3 0-6.7 1.4-8.4 4.9-.3.6-1.2.4-1.2-.3C3.8 11.3 7 7.9 13.2 7.4z" fill="var(--ctl-mark)"/>',
 );

@@ -95,6 +95,11 @@
   --r-full: 999px;
   --nav-btn: 58px;   /* the dock's icon size */
   --nav-pad: 8px;    /* and its padding, so the active lift can be derived */
+  /* 「彩色药丸里一枚白圆盘」那种键上，那副圆盘（ui/ctlIcons.ts 的 ctlGlyph：100 格里半径 46）整张图的
+     边长——盘径是它的 0.92，约 31.3px。四扇窗（登录、帐号、邀请、结算）凡是这种键都取它（10-09 补充
+     方案 6-5）：盘一样大，盘里的记号都画在同一副 100 格画布上、跟着盘一起缩放。现在用到它的是结算弹窗
+     那三颗和帐号窗《完成》；登录窗、邀请窗的键是线描图标，没有白盘。 */
+  --disc-glyph: 34px;
   --accent-ink: #7A2E37;
   /* Text sitting ON the accent fill (buttons): white over the light theme's
      deep rose, near-black over the dark theme's light pink. */
@@ -287,7 +292,13 @@
  *     （max-height: 100%），缩的是中间那张战绩图。
  *   · 抬头（.end-head）：「综合得分」、分数、徽章、通关勾、明细，两种排法见下面那张网格。
  *   · 战绩图（.end-body）：吃掉剩下的高度，图按比例缩进去（设计图上 279×378）。
- *   · 三颗键（.end-actions）：91×36、圆角 15、相隔 9，底边离窗底 25.5。
+ *   · 三颗键（.end-actions）：三等分、高 44、圆角 17、相隔 9，底边离窗底 25.5（10-09 补充方案 6-4：设计图
+ *     上是 36 / 15，44 是苹果 HIG 的最小点按尺寸，玩家认可的有意偏离）。
+ *
+ * 10-09 补充方案 6-7（玩家定稿方案 A「放大一档、窗不变」）：玩家说结算弹窗的字「又小又细根本看不清」，
+ * 于是字全部放大一档、加粗一档（标题 24/500、明细 14/21/500、均分和说明 13/19、徽章 13），窗的大小、
+ * 分数、通关勾、两种排法都不动；多出来的高度由中间那张战绩图让（它本来就按比例缩）。有通关勾时明细挤
+ * 在勾的右边，长抬头（「步数系数（19步，基准28）」）允许折成两行。
  *
  * 从前（E21 / PR-16）是「头部固定 · 明细滚动 · 按钮常驻」三段，中间那一段能上下滑：明细和战绩
  * 图摞在一起，这一屏装不下就滑。现在明细进了抬头（设计图上它就在分数底下 / 通关勾右边），图
@@ -350,7 +361,7 @@
   grid-column: 1 / 3; grid-row: 1;
   margin: 0 0 0 12.5px;
   font-family: 'Fraunces', 'Noto Serif SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'Songti SC', 'STSong', serif;
-  font-size: 22px; font-weight: 400; line-height: 1.25;
+  font-size: 24px; font-weight: 500; line-height: 1.25;
   color: var(--end-ink);
 }
 /*
@@ -369,19 +380,38 @@
   color: var(--end-red);
   --reel-w: 0.56em;
 }
-/* 徽章：70×28、圆角 8，浅绿底深绿字；底边压在分数的基线附近。一个都没有就整格不占地方。 */
+/* 徽章：至少 78 宽、30 高、圆角 8，浅绿底深绿字（设计图上是 70×28、11px 字，10-09 补充方案 6-7 放大一档）；
+   底边压在分数的基线附近。一个都没有就整格不占地方。 */
 .overlay--end .modal .end-badges {
   grid-column: 2; grid-row: 2; align-self: end;
   display: flex; gap: 24.5px;
   margin: 0 0 8px;
 }
 .overlay--end .modal .end-badges:empty { display: none; }
+/*
+ * 有勾那一种（两列：左边分数和勾，右边徽章和明细），徽章一排放不下就折成两行。
+ *
+ * 右边那一栏在 402 宽的手机上只有 166 宽。中文两枚（78 ＋ 24.5 ＋ 78 = 180.5）挤一挤并排得下——设计图上就
+ * 是并排的，这一栏至少给到这么宽（min-width），多出来的那十几像素压进窗的右边距；英文、法语那两枚一排要
+ * 230 多（「Board cleared」「Unlocked 1-tile」），从前（字放大之前）就已经把整块抬头往两边撑到离窗边只剩
+ * 5px，10-09 补充方案 6-7 字放大一档之后，分数、第二枚徽章、数那一栏当场被窗边裁掉。折成两行，这一栏就
+ * 不比中文宽。行间距用外边距垫（负的上外边距 ＋ 每枚的上外边距），不用 flex 的 gap：小红书那一端的
+ * Chrome 61 不认它；上面那句 gap: 24.5px 同时也是行间距，这儿把行间距归零，不然两行之间空出 30px。
+ * 门：check-end-design ⑤ 的「有勾」那几行（四语）。
+ */
+.overlay--end.end--stamp .modal .end-badges { flex-wrap: wrap; row-gap: 0; min-width: calc(2 * 78px + 24.5px); margin-top: -6px; }
+.overlay--end.end--stamp .modal .end-badge { margin-top: 6px; }
+/* 四位数以上的综合分（gameController 的 stampEndCheck 挂 .end--wide-score）：分数那一栏撑到 141，右边只剩 131
+   ——两枚徽章不再要求并排（中文也折成两行），抬头那一栏的垫块收到 60（有一行长抬头时这一栏本来就是被它撑
+   满的，垫块只在抬头都很短时才起作用）。不让的话 402 宽的手机上分数贴到窗边，360 宽上被裁掉 7px。 */
+.overlay--end.end--stamp.end--wide-score .modal .end-badges { min-width: 0; }
+.overlay--end.end--stamp.end--wide-score .modal .end-row:first-child > span:first-child::after { width: 60px; }
 .overlay--end .modal .end-badge {
-  min-width: 70px; height: 28px; padding: 0 8px; box-sizing: border-box;
+  min-width: 78px; height: 30px; padding: 0 8px; box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
   border-radius: 8px;
   background: var(--end-ok-soft); color: var(--end-ok);
-  font-family: 'Karla', sans-serif; font-size: 11px; font-weight: 700; line-height: 1;
+  font-family: 'Karla', sans-serif; font-size: 13px; font-weight: 700; line-height: 1;
   white-space: nowrap;
   /* 结算页整张是给人看的，不是给人抄的。 */
   user-select: none;
@@ -393,36 +423,53 @@
 }
 /*
  * 明细：一张表（display: table），抬头一栏、数一栏——数那一栏上下对齐，靠左（设计图上就是靠左
- * 的一列数）。数那一栏离抬头左沿至少 140（设计图上那个位置），比它长的抬头把它往右撑；窗里放
- * 不下就折行（法语、英语）。
+ * 的一列数）。数那一栏离抬头左沿至少 128，比它长的抬头把它往右撑；窗里放不下就折行（法语、英语；
+ * 有通关勾时中文的长抬头也会折，10-09 补充方案 6-7 认可的）。
  *
  * 用表而不是网格：每一行是 gameController 拼的一个 .end-row（门和别处都认这个结构），要让几行
  * 的数对齐，网格得靠 display: contents 摊平那一层——Chrome 61（小红书那一端的底线）不认它。
  *
- * 字是 11px / 行距 17，深红；只有「综合分」那一行是粗的（.end-row--total）。11 是量出来的：设计图上
- * 「消线9条（星星数^2）」墨宽 100、「您在该玩法均分 = 430」112，按 11px 算正好，12px 宽出一成。
+ * 字是 14px / 行距 21、中粗（500），深红；「综合分」那一行最粗（.end-row--total，800）。设计图上是
+ * 11px / 17 / 常规（「消线9条（星星数^2）」墨宽 100，按 11px 算正好）——玩家看了实物说「又小又细根本看
+ * 不清」，10-09 补充方案 6-7 定了放大一档、加粗一档，窗不变。
  */
 .overlay--end .modal .end-breakdown {
   grid-column: 1 / 3; grid-row: 3; align-self: start; justify-self: start;
   display: table;
   margin: 4px 0 0 15.5px;
-  font-family: 'Karla', sans-serif; font-size: 11px; line-height: 17px;
+  font-family: 'Karla', sans-serif; font-size: 14px; line-height: 21px; font-weight: 500;
   color: var(--end-red);
 }
 .overlay--end.end--stamp .modal .end-breakdown { grid-column: 2; margin-left: 0; }
 .overlay--end .modal .end-row { display: table-row; }
 .overlay--end .modal .end-row > span { display: table-cell; padding: 0; vertical-align: top; }
-/* 抬头那一栏至少 132 宽（加上 8 的间隔就是设计图上那 140）。不写成格子的 width：表格里一格的
+/* 抬头那一栏至少 120 宽（加上 8 的间隔，数那一栏离抬头左沿 128）。设计图上是 132（离 140）；10-09 补充
+   方案 6-7 字放大一档之后收到 120，给放大了的数那一栏让位。不写成格子的 width：表格里一格的
    width 是「首选宽」，比它长的抬头会被折进去（第一版就把「步数系数（6 步 · 基准 54）」折成了两
-   行）；min-width 在表格格子上浏览器不认。所以在第一行的抬头里垫一块 0 高、132 宽的东西——它折
+   行）；min-width 在表格格子上浏览器不认。所以在第一行的抬头里垫一块 0 高、120 宽的东西——它折
    不了，这一栏就不会比它窄；更长的抬头照样把这一栏撑宽。 */
 .overlay--end .modal .end-row > span:first-child { padding-right: 8px; }
-.overlay--end .modal .end-row:first-child > span:first-child::after { content: ''; display: block; width: 132px; height: 0; }
-.overlay--end .modal .end-row--total { font-weight: 700; }
+.overlay--end .modal .end-row:first-child > span:first-child::after { content: ''; display: block; width: 120px; height: 0; }
+.overlay--end .modal .end-row--total { font-weight: 800; }
+/*
+ * 窄屏（窗宽不到 360，窗跟着屏幕缩到 320 以下）上有勾那一种：两列本来就排不下——分数 106、勾 99 那一列
+ * 加上右边至少要 166 的明细（垫块 120 ＋ 8 ＋ 数那一栏），320 宽的手机上窗只有 280。字放大之前就有东西被
+ * 窗边裁掉（中文 7px、英文 27px），放大之后更多。方案定的字号一个不动，挪的是余量：抬头四边的内边距和两列
+ * 之间都收紧，抬头那一栏的垫块去掉（数那一栏就紧跟着最长的抬头），徽章不再要求并排。
+ */
+@media (max-width: 359px) {
+  /* 上下也收：抬头顶上 24 → 10、战绩图那一块上面 14 → 8。320×568 上法语、通关、四位数的综合分那一种，徽章折成
+     两行、抬头折了好几行，抬头比窗里剩下的高出 12px（末一行被裁）——这一种下面那张图本来就已经缩没了。 */
+  .overlay--end.end--stamp .modal .end-head { column-gap: 12px; padding: 10px 12px 0; }
+  .overlay--end.end--stamp .modal .end-body { margin-top: 8px; }
+  .overlay--end.end--stamp .modal .end-row:first-child > span:first-child::after,
+  .overlay--end.end--stamp.end--wide-score .modal .end-row:first-child > span:first-child::after { width: 0; }
+  .overlay--end.end--stamp .modal .end-badges { min-width: 0; }
+}
 /* 「该玩法您的均分」和「综合分是怎么来的」两句：整句一格，横跨两栏，接在表底下（表的标题行，
-   caption-side: bottom——老内核也认）。 */
+   caption-side: bottom——老内核也认）。比明细小一号：13px / 行距 19（10-09 补充方案 6-7）。 */
 .overlay--end .modal .end-row--avg,
-.overlay--end .modal .end-row--tip { display: table-caption; caption-side: bottom; text-align: left; }
+.overlay--end .modal .end-row--tip { display: table-caption; caption-side: bottom; text-align: left; font-size: 13px; line-height: 19px; }
 .overlay--end .modal .end-row--avg > span,
 .overlay--end .modal .end-row--tip > span { display: inline; width: auto; padding: 0; }
 .overlay--end .modal .end-row--tip { padding-top: 4px; color: var(--ink-soft); }
@@ -467,9 +514,14 @@
 .overlay--end .modal .end-body--room .end-share[hidden] { display: none; }
 .overlay--end .modal .end-body--room .end-share img { max-height: none; margin: 0 auto; }
 /*
- * 三颗键：再来（玫红）· 分享（蓝）· 主页（橙），《色卡》那三支，不随深浅主题翻。键上只有白色的
- * 记号（ui/ctlIcons.ts 的 END_AGAIN / END_SHARE；主页那颗是全站《退出》那副白圆盘 CTL_BACK，
- * 箭头是键自己的颜色）。小屋局多一颗《离开小屋》（深灰，那扇门），四颗平分这一排。
+ * 三颗键：再来（玫红）· 分享（蓝）· 主页（橙），《色卡》那三支，不随深浅主题翻。三颗同构（10-09 补充
+ * 方案 6-4，玩家定稿方案①「白色圆盘」）：彩色药丸里一枚白圆盘，盘里是药丸同色的记号（ui/ctlIcons.ts
+ * 的 END_AGAIN / END_SHARE / CTL_BACK）。白盘走 --ctl-disc、记号走 --ctl-mark；盘的大小是四扇窗同一个
+ * --disc-glyph，三颗的盘一样大。从前（3-I）再来、分享两颗是直接画在键上的白线，只有主页那颗有盘。
+ * 小屋局多一颗《离开小屋》（深灰，那扇门），四颗平分这一排。
+ *
+ * 高 44、圆角 17（设计图 36 / 15）：44 是苹果 HIG 的最小点按尺寸，玩家 10-09 认可的有意偏离。宽度照旧
+ * 三等分。按下去照旧是那一下回弹，三颗一样。
  */
 .overlay--end .modal .end-actions {
   flex: none;
@@ -477,22 +529,18 @@
   margin: 16px 21px 0; padding: 0; border: none;
 }
 .overlay--end .modal .end-act {
-  flex: 1 1 0; min-width: 0; height: 36px; padding: 0;
-  border: none; border-radius: 15px;
+  flex: 1 1 0; min-width: 0; height: 44px; padding: 0;
+  border: none; border-radius: 17px;
   display: flex; align-items: center; justify-content: center;
   color: var(--card-white);
+  --ctl-disc: var(--card-white);
 }
 .overlay--end .modal .end-act[hidden] { display: none; }
-.overlay--end .modal .end-act--again { background: var(--card-rose); }
-.overlay--end .modal .end-act--share { background: var(--card-blue); }
-.overlay--end .modal .end-act--home { background: var(--card-orange); --ctl-disc: var(--card-white); --ctl-mark: var(--card-orange); }
-.overlay--end .modal .end-act--leave { background: var(--card-gray); --ctl-disc: var(--card-white); --ctl-mark: var(--card-gray); }
-.overlay--end .modal .end-act > svg { display: block; flex: none; }
-.overlay--end .modal .end-act--again > svg { width: 29px; height: 30px; }
-.overlay--end .modal .end-act--share > svg { width: 20px; height: 27px; }
-/* 白圆盘直径 31.5（设计图）：圆盘在 100 见方的画布里半径 46，所以整张图 34。 */
-.overlay--end .modal .end-act--home > svg,
-.overlay--end .modal .end-act--leave > svg { width: 34px; height: 34px; }
+.overlay--end .modal .end-act--again { background: var(--card-rose); --ctl-mark: var(--card-rose); }
+.overlay--end .modal .end-act--share { background: var(--card-blue); --ctl-mark: var(--card-blue); }
+.overlay--end .modal .end-act--home { background: var(--card-orange); --ctl-mark: var(--card-orange); }
+.overlay--end .modal .end-act--leave { background: var(--card-gray); --ctl-mark: var(--card-gray); }
+.overlay--end .modal .end-act > svg { display: block; flex: none; width: var(--disc-glyph); height: var(--disc-glyph); }
 .overlay--end .modal .end-act:active { transform: scale(0.96); }
 
 /* touch-action: manipulation 关掉的是「同一个地方连点两下就放大」——手机浏览
@@ -1301,13 +1349,15 @@ h1 {
 .end-stamp > svg { width: 100%; height: 100%; display: block; }
 /* 圈和勾都靠 stroke-dashoffset 描出来：先画圈 300ms，圈画完再画勾 200ms。
    dashoffset 过渡是老技术，Chrome 61 早就支持（小红书那一版也走这条壳）。
-   dasharray 的数是量出来的周长／路径长：圈 2π·17 ≈ 107，勾那两段 ≈ 27（3-I 照设计图换了勾的形状）。 */
+   dasharray 的数是量出来的周长／路径长：圈 2π·17 ≈ 107；勾是全站那一枚 ×0.4（10-09 补充方案 6-5），
+   两笔 8.3 ＋ 16.7 ≈ 25.1，取整往上 26——要比路径长，描之前才一点都看不见（短了，勾的末端会先露出
+   一个小圆头）。 */
 .end-stamp-ring {
   stroke-dasharray: 107; stroke-dashoffset: 107;
   transition: stroke-dashoffset 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .end-stamp-tick {
-  stroke-dasharray: 27; stroke-dashoffset: 27;
+  stroke-dasharray: 26; stroke-dashoffset: 26;
   transition: stroke-dashoffset 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .end-stamp--drawn .end-stamp-ring { stroke-dashoffset: 0; }
@@ -4832,9 +4882,23 @@ body:has(.daily-page--count) .home-nav { display: none; }
 .acct-actions .pill-icon { width: 100%; max-width: 200px; }
 /* 最底下那颗 ✅（玩家 2026-10-08，方案 3-C-6）：做的事和右上角 ✕ 一样，只关窗。和上面那三颗
    同一族、同样宽高，居中；和它们之间比它们彼此之间多空一点（md 对 sm），读得出「上面三颗是
-   要做的事，这一颗是做完了」。 */
+   要做的事，这一颗是做完了」。
+   10-09 补充方案 6-5（玩家定稿：形状甲、动效 1）：药丸里一枚白圆盘、盘里棕色的勾——勾就是游戏里
+   《完成》键那一枚（ctlIcons 的 CTL_FINISH / CHECK_PATH），盘是四扇窗同一个 --disc-glyph。
+   开窗时那枚勾从左到右「写」出来：dasharray 63（两笔 20.9 ＋ 41.8）→ 0，240ms、和通关章同一条曲线，
+   晚 150ms 起笔（窗先站稳再写）。那个类是 subscribe.ts 在窗挂上之后的下一帧加的。只有这一颗描——
+   同一枚勾在游戏《完成》键、改昵称的保存键上不描。减弱动态时不描，一开始就是画好的样子。 */
 .acct-done { display: flex; justify-content: center; margin-top: var(--gap-md); }
 .acct-done .pill-icon { width: 100%; max-width: 200px; }
+.acct-done .pill-icon > svg.ctl-glyph { width: var(--disc-glyph); height: var(--disc-glyph); --ctl-disc: var(--card-white); --ctl-mark: var(--card-brown); }
+.acct-done .ctl-check {
+  stroke-dasharray: 63; stroke-dashoffset: 63;
+  transition: stroke-dashoffset 240ms cubic-bezier(0.22, 1, 0.36, 1) 150ms;
+}
+.acct-done .pill-icon.is-drawn .ctl-check { stroke-dashoffset: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .acct-done .ctl-check { stroke-dashoffset: 0; transition: none; }
+}
 
 /* 「Slides 天才」的标志，在它出现的三个地方。空的时候（还没放进 SVG）
    geniusLogoTag 什么都不输出，所以这些规则也就没有东西可作用。 */
@@ -5686,6 +5750,17 @@ html.is-playing body { background: var(--play-bg); }
  * − 上下 28，宽 = 图高 × 0.7377。两行照全站规矩：老内核认不得 dvh，停在 vh 那一行。
  */
 @media (orientation: landscape) and (max-height: 560px) {
+  /*
+   * 横屏手机上窗离屏幕上下沿只留 8（和横屏的分享窗 .overlay--wide 一样），抬头顶上也从 14 收到 8。
+   *
+   * 10-09 补充方案 6-7 把结算弹窗的字放大了一档，方案的尺寸表只列了竖屏和电脑。横屏手机上头一局那句
+   * 「综合分是怎么来的」（一次性的教学，只出一次）于是装不下：812×375、667×375 上法语差 25px，740×360
+   * 上中文也差 19px——末尾一两行被键那一排裁掉，什么都不报。字号、行距都照方案不动，窗多用一点屏幕的
+   * 高度：上下各多 12、抬头顶上多 6，一共 30。图那一栏的宽照旧按原来那个高算（下面 .end-body 的
+   * 100vh − 68）：图还是原来那么大，不跟着变宽去挤抬头那一栏（抬头一窄，折的行更多，又装不下）。
+   * 门：check-end-design ⑤ 的横屏那几行。
+   */
+  .overlay.overlay--end { padding-top: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
   .overlay--end .modal {
     max-width: 640px; height: 100%;
     display: grid;
@@ -5694,7 +5769,9 @@ html.is-playing body { background: var(--play-bg); }
     padding: 0 0 14px;
     border-radius: 32px;
   }
-  .overlay--end .modal .end-head { grid-column: 1; grid-row: 1; padding-top: 14px; }
+  /* 抬头右边的内边距收到和左边一样的 21：竖屏那 38 是为了照设计图整块偏左 7px（见上面 .end-head），
+     横屏没有那张图，多出来的 17px 留给明细——640×360 上法语那句说明因此少折一行。 */
+  .overlay--end .modal .end-head { grid-column: 1; grid-row: 1; padding-top: 8px; padding-right: 21px; }
   .overlay--end .modal .end-body {
     grid-column: 2; grid-row: 1 / 4;
     margin: 14px 16px 0 0;

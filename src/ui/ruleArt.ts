@@ -24,6 +24,7 @@
  */
 
 import { ASTERISK_SEGS, ASTERISK_STROKE } from './dotFaceMark';
+import { CHECK_PATH, CHECK_TIGHT_VIEWBOX } from './checkMark';
 
 // 方块教学分镜用的那套颜色（tutorial.ts）。
 const O = '#EE8A2E'; // 橙（正面）
@@ -126,10 +127,16 @@ function slidingCol(top: string, mid: string, ghost: string): string {
   return `<span class="ra-win" style="--c:3"><span class="ra-strip">${top}${mid}${ghost}</span></span>`;
 }
 
-/** 白色对勾，盖在某一格上，得分那一段闪几下。 */
+/**
+ * 白色对勾，盖在某一格上，得分那一段闪几下。
+ *
+ * 形状是全站那一枚（checkMark.ts 的 CHECK_PATH，10-09 补充方案 6-5「全站统一一种勾」），画布裁到勾的周围
+ * （CHECK_TIGHT_VIEWBOX）：勾占格子的六成多，和这儿原来自己画的那一枚一样大；线宽照原来 60 格里的 10
+ * 折算成 68 格里的 11.3，一样粗。
+ */
 const check = (c: number, r: number): string =>
-  `<svg class="ra-check" style="--c:${c};--r:${r}" viewBox="0 0 60 60" aria-hidden="true">` +
-  `<path d="M12 32 L26 47 L50 12" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  `<svg class="ra-check" style="--c:${c};--r:${r}" viewBox="${CHECK_TIGHT_VIEWBOX}" aria-hidden="true">` +
+  `<path d="${CHECK_PATH}" fill="none" stroke="#fff" stroke-width="11.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /** 白箭头：盖在要滑的那一列上，向上，开头拉一下（教学里箭头的那个动作）。 */
 const arrowUp = (c: number): string =>
@@ -142,10 +149,10 @@ const checksAt = (from: number): string =>
   check(from, 0) + check(from + 1, 0) + check(from + 2, 0) + check(from + 3, 0);
 const checksRow0 = checksAt(0);
 
-/** 第 5 条最后出的那个「完成」：白底绿勾。棋盘清空之后才冒出来。 */
+/** 第 5 条最后出的那个「完成」：白底绿勾，就是游戏里《完成》键那副圆盘（同一枚 checkMark.ts 的 CHECK_PATH）。棋盘清空之后才冒出来。 */
 const endMark =
   `<svg class="ra-end" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#fff"/>` +
-  `<path d="M29 52 L44 66 L72 36" fill="none" stroke="${G}" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  `<path d="${CHECK_PATH}" fill="none" stroke="${G}" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /** 小球的一枚棋子：正面实色球，反面浅球面 + 星标（和棋盘上一个样）。 */
 const ball = (front: string, dot: string, cls = ''): string =>

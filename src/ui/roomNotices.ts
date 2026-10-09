@@ -26,12 +26,18 @@ import { avatarSvg, roomPhase, type HostTrouble, type RoomPlayer, type RoomState
 import { roomBadge } from './startStage';
 import { gameIcon } from './homeIcons';
 import { custom } from './customIcons';
+import { CHECK_PATH, CHECK_TIGHT_VIEWBOX } from './checkMark';
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** 交了卷的那个小勾。房间页、局中的名单、等待页，三处同一个记号。 */
-export const TICK = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.6 6.2 12 13 4.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/**
+ * 交了卷的那个小勾。房间页、局中的名单、等待页，三处同一个记号。
+ *
+ * 形状是全站那一枚（checkMark.ts 的 CHECK_PATH，10-09 补充方案 6-5「全站统一一种勾」），画布裁到勾的周围：
+ * 勾占这一格的六成多，和原来自己画的那一枚一样大；线宽照原来 16 格里的 2.2 折算成 68 格里的 9.35。
+ */
+export const TICK = `<svg viewBox="${CHECK_TIGHT_VIEWBOX}" aria-hidden="true"><path d="${CHECK_PATH}" fill="none" stroke="currentColor" stroke-width="9.35" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /** 一个人交卷了没有，画成名字后面那一点点东西。 */
 export const tickFor = (done: boolean, label: string): string =>

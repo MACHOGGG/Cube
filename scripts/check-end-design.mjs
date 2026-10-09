@@ -24,6 +24,14 @@
  *             全部消完只摆一块 42–238 × 166–362；二维码那一块中心 (222, 70)；说明两行墨顶 114 / 127
  *   三颗键    91×36、相隔 9、y723.5、圆角 15；#C05B5C / #4461B8 / 橙（色卡那支 #F7821B，图上取样 #F27F1C）
  *
+ * ── 10-09 补充方案 6-4 / 6-7 之后 ──────────────────────────────────────────────────────────────
+ *
+ * 玩家说字「又小又细根本看不清」，定了「放大一档、窗不变」（6-7）：标题 24/500、明细 14/21/500（综合分那一行
+ * 800）、均分和说明 13/19、徽章 13px 至少 78×30，抬头那一栏的垫块 132 → 120。三颗键改成同构的「彩色药丸里一
+ * 枚白圆盘、盘里是药丸同色的记号」，高 36 → 44、圆角 15 → 17（6-4）。所以 ① 量的变了：窗、分数、勾、卡里那几
+ * 样照旧照上面那张表；字那几样量方案给的新数，位置改量几块之间的关系（徽章在分数右边、明细在分数底下 / 勾的
+ * 右边、两两不相交）；卡宽比方案实测的 254 / 238；三颗键量高 44、三枚白盘一样大、记号和药丸同色。
+ *
  * ── 这道门怎么量 ──────────────────────────────────────────────────────────────────────
  *
  * 那两种结局（真通关盖勾、解锁 1 枚）一局里打不出来，所以 ① ② 先真打一局方块、按《结束游戏》拿到真的
@@ -31,9 +39,9 @@
  * 那条路画的（存档里塞一局「圆球 · 炸弹 · 代号 57GY-N5W8」，和图上那张一样），再挂到弹窗上。然后
  * 402×875、一倍像素截图，按上面那张表逐块扫墨的外框比。容差 3px；分数宽另说（见 ①）。
  *
- * ④ 不填东西：真打一局四种语言，看 gameController 拼出来的结构就是 ① 量的那一种。⑤ 六种屏幕 × 四种
- * 语言（头一局，带「综合分是怎么来的」那一句——最长的那一种）：整窗在屏里、每一块在窗里、谁也不压谁、
- * 什么都没被裁、三颗键的正中点得到。
+ * ④ 不填东西：真打一局四种语言，看 gameController 拼出来的结构就是 ① 量的那一种。⑤ 方案那五个尺寸加横屏
+ * 四档 × 四种语言 × 三种样子（头一局带「综合分是怎么来的」那一句 / 没勾 / 有勾）：整窗在屏里、每一块在窗
+ * 里、谁也不压谁、抬头没被裁、三颗键的正中点得到、明细 14px。
  *
  * 改坏法：拿 3-I 之前的构建跑，① 头一条就红（窗不是 334×695），② 的卡整张对不上。
  */
@@ -56,6 +64,26 @@ if (!SCORING_VER || !BOMB_VER) {
   console.error('读不出计分 / 炸弹规则的版本号——存档键会落空，先修这儿。');
   process.exit(2);
 }
+/**
+ * 通关章里那枚勾：全站那一枚（ui/checkMark.ts 的 CHECK_PATH，10-09 补充方案 6-5）缩到 40 格画布，×0.4——和
+ * gameController 的 stampEndCheck 用 checkPathAt(0.4) 摆出来的一模一样。从源码现算，不在门里另抄一份：
+ * 从前这儿抄的是照设计图另画的那一枚，勾一换形状，门量的就是一枚屏幕上早就没有的勾。
+ */
+const CHECK_PATH = (readFileSync(new URL('../src/ui/checkMark.ts', import.meta.url), 'utf8').match(/CHECK_PATH = '([^']+)'/) || [, ''])[1];
+if (!CHECK_PATH) {
+  console.error('读不出 ui/checkMark.ts 的 CHECK_PATH——先修这儿。');
+  process.exit(2);
+}
+const STAMP_SVG =
+  '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
+  `<path class="end-stamp-tick" d="${CHECK_PATH.replace(/\d+(?:\.\d+)?/g, (n) => String(Math.round(Number(n) * 0.4 * 100) / 100))}" fill="none" stroke="var(--end-ok)" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/** 两枚徽章（清盘 / 解锁 1 枚）四种语言的字，从 i18n.ts 现读：⑤ 摆「有勾」那一种要用当地的字。 */
+const I18N = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
+const badgeText = (lang) => {
+  const i = I18N.indexOf(`\n  ${lang}: {`);
+  const pick = (k) => (I18N.slice(i).match(new RegExp(`\\n\\s+${k}: '([^']+)'`)) || [, ''])[1];
+  return [pick('badgeSwept'), pick('badgeUnlockedOne')];
+};
 
 /** 进主菜单之前要有的那几把钥匙：跳过开场、教学、头一回的招待。 */
 const SEED = (lang) => {
@@ -227,7 +255,7 @@ const cards = [await cardUrl(false), await cardUrl(true)];
 
   for (const stamp of missing.length ? [] : [false, true]) {
     const tag = stamp ? '① 有通关勾（第二张图）' : '① 没有通关勾（第一张图）';
-    await page.evaluate(([src, stamp]) => {
+    await page.evaluate(([src, stamp, stampSvg]) => {
       const ov = document.getElementById('endOverlay');
       ov.classList.toggle('end--stamp', stamp);
       // 分数：滚筒滚完的样子，和 engine/odometer.ts 的 rollOdometer 摆出来的一样。
@@ -258,99 +286,134 @@ const cards = [await cardUrl(false), await cardUrl(true)];
         rows.map(([l, v, cls]) => `<div class="end-row${cls}"><span>${l}</span><span>${v}</span></div>`).join('') +
         '<div class="end-row end-row--avg"><span>该玩法您的均分 = 430</span></div>';
       const st = document.getElementById('endStamp');
-      st.innerHTML = stamp
-        ? '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
-          '<path class="end-stamp-tick" d="M11.3 18.2 L16.6 25.6 L28.6 12.6" fill="none" stroke="var(--end-ok)" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-        : '';
+      st.innerHTML = stamp ? stampSvg : '';
       st.classList.toggle('end-stamp--drawn', stamp);
       document.getElementById('endShare').removeAttribute('hidden');
       const img = document.getElementById('endShareImg');
       img.src = src;
       return img.decode();
-    }, [cards[stamp ? 1 : 0], stamp]);
+    }, [cards[stamp ? 1 : 0], stamp, STAMP_SVG]);
     await page.waitForTimeout(500);
 
     const dom = await page.evaluate(() => {
-      const bb = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+      const bb = (s) => { const e = typeof s === 'string' ? document.querySelector(s) : s; if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, r: r.right, b: r.bottom }; };
       const cs = (s) => getComputedStyle(document.querySelector(s));
-      const badges = [...document.querySelectorAll('#endBadges .end-badge')].map((e) => { const r = e.getBoundingClientRect(); const c = getComputedStyle(e); return { x: r.left, y: r.top, w: r.width, h: r.height, bg: c.backgroundColor, fg: c.color, r: c.borderRadius, fs: c.fontSize, fw: c.fontWeight }; });
-      const btns = [...document.querySelectorAll('#endOverlay .end-actions > button')].map((e) => { const r = e.getBoundingClientRect(); const c = getComputedStyle(e); const s = e.querySelector('svg')?.getBoundingClientRect(); return { id: e.id, x: r.left, y: r.top, w: r.width, h: r.height, bg: c.backgroundColor, r: c.borderRadius, svg: s ? { w: s.width, h: s.height, cx: s.left + s.width / 2 - (r.left + r.width / 2), cy: s.top + s.height / 2 - (r.top + r.height / 2) } : null, text: e.textContent.trim() }; });
-      const rowCells = [...document.querySelectorAll('#endBreakdown .end-row:not(.end-row--avg):not(.end-row--tip) > span:last-child')].map((e) => e.getBoundingClientRect().left);
+      const badges = [...document.querySelectorAll('#endBadges .end-badge')].map((e) => { const c = getComputedStyle(e); return { ...bb(e), bg: c.backgroundColor, fg: c.color, rad: c.borderRadius, fs: c.fontSize, fw: c.fontWeight }; });
+      const btns = [...document.querySelectorAll('#endOverlay .end-actions > button')].map((e) => {
+        const c = getComputedStyle(e);
+        const k = e.getBoundingClientRect();
+        const svg = e.querySelector('svg');
+        const sr = svg ? svg.getBoundingClientRect() : null;
+        // 圆盘是 ctlGlyph 里那一枚直接挂在 <svg> 底下的 <circle>；别的形状都是记号。
+        const disc = svg ? [...svg.children].find((n) => n.tagName.toLowerCase() === 'circle') : null;
+        const marks = svg ? [...svg.querySelectorAll('path, rect, polygon, polyline, line, circle, ellipse')].filter((m) => m !== disc) : [];
+        const paints = marks.flatMap((m) => { const mc = getComputedStyle(m); return [mc.fill, mc.stroke].filter((v) => v && v !== 'none'); });
+        return {
+          id: e.id, ...bb(e), bg: c.backgroundColor, rad: c.borderRadius, text: e.textContent.trim(),
+          svg: sr ? { w: sr.width, h: sr.height, cx: sr.left + sr.width / 2 - (k.left + k.width / 2), cy: sr.top + sr.height / 2 - (k.top + k.height / 2) } : null,
+          disc: disc ? { d: disc.getBoundingClientRect().width, fill: getComputedStyle(disc).fill } : null,
+          paints,
+        };
+      });
+      const rows = [...document.querySelectorAll('#endBreakdown .end-row:not(.end-row--avg):not(.end-row--tip)')];
       const ring = document.querySelector('#endStamp .end-stamp-ring');
+      const avg = document.querySelector('#endBreakdown .end-row--avg');
       return {
         modal: bb('#endOverlay .modal'), img: bb('#endShareImg'), stamp: bb('#endStamp'),
+        title: bb('#endTitle'), breakdown: bb('#endBreakdown'), scoreBox: bb('#endScore'),
         modalRadius: cs('#endOverlay .modal').borderTopLeftRadius,
         imgRadius: cs('#endShareImg').borderTopLeftRadius,
-        title: { fs: cs('#endTitle').fontSize, fw: cs('#endTitle').fontWeight, color: cs('#endTitle').color },
+        titleCss: { fs: cs('#endTitle').fontSize, fw: cs('#endTitle').fontWeight, color: cs('#endTitle').color },
         score: { fs: cs('#endScore').fontSize, color: cs('#endScore').color },
-        rows: { fs: cs('#endBreakdown').fontSize, lh: cs('#endBreakdown').lineHeight, color: cs('#endBreakdown').color,
+        rowsCss: { fs: cs('#endBreakdown').fontSize, lh: cs('#endBreakdown').lineHeight, fw: cs('#endBreakdown').fontWeight, color: cs('#endBreakdown').color,
           total: getComputedStyle(document.querySelector('#endBreakdown .end-row--total')).fontWeight,
           built: getComputedStyle(document.querySelector('#endBreakdown .end-row--sum:not(.end-row--total)')).fontWeight },
+        avgCss: avg ? { fs: getComputedStyle(avg).fontSize, lh: getComputedStyle(avg).lineHeight } : null,
+        avg: avg ? bb(avg) : null,
+        labels: rows.map((r) => bb(r.firstElementChild)), values: rows.map((r) => bb(r.lastElementChild)),
         ring: ring ? { stroke: getComputedStyle(ring).stroke, sw: ring.getAttribute('stroke-width') } : null,
-        badges, btns, valueLefts: rowCells,
+        badges, btns,
         lines: [...document.querySelectorAll('#endOverlay .end-rule, #endOverlay hr')].length,
         actionsBorder: cs('#endOverlay .end-actions').borderTopWidth,
       };
     });
     const shot = await page.screenshot();
-    // 扫墨的范围：每一块在它那个位置周围放宽一圈。
-    const R = stamp
-      ? [['title', 50, 105, 200, 147, 120, '#ffffff'], ['score', 40, 146, 172, 212, 120, '#ffffff'], ['check', 50, 206, 172, 312, 60, '#ffffff'],
-         ['row1L', 172, 214, 300, 230, 120, '#ffffff'], ['row1R', 305, 214, 352, 230, 120, '#ffffff'], ['rowLast', 172, 298, 352, 316, 120, '#ffffff']]
-      : [['title', 80, 105, 215, 147, 120, '#ffffff'], ['score', 70, 146, 212, 212, 120, '#ffffff'],
-         ['row1L', 100, 214, 240, 230, 120, '#ffffff'], ['row1R', 240, 214, 300, 230, 120, '#ffffff']];
+    // 扫墨的只剩分数和勾：分数要量「滚筒版比设计图宽多少」，勾要量那一圈的外框。字的位置 10-09 起量盒子的
+    // 相对位置（字放大一档之后，设计图上那几个绝对坐标本来就不成立了，见文件头）。范围就是它们自己的盒子，
+    // 不放宽：字一放大，旁边的标题、徽章会挪进一个写死的范围里；放宽一两像素，分数那个盒子的底边就挨上通关
+    // 勾那一圈的顶（两个盒子上下紧贴），扫到的就是勾了。
+    const around = (b) => [Math.max(0, Math.round(b.x)), Math.max(0, Math.round(b.y)), Math.round(b.r) - 1, Math.round(b.b) - 1];
+    const R = [['score', ...around(dom.scoreBox), 120, '#ffffff'], ...(stamp ? [['check', ...around(dom.stamp), 60, '#ffffff']] : [])];
     const ink = await inkBoxes(shot, R);
+    const sc = ink.score;
+    const apart = (a, b) => !!a && !!b && (a.r <= b.x + 0.5 || b.r <= a.x + 0.5 || a.b <= b.y + 0.5 || b.b <= a.y + 0.5);
 
-    check(`${tag}：窗 334×695 在 (34, 90)，圆角 44`,
+    check(`${tag}：窗 334×695 在 (34, 90)，圆角 44（窗不变）`,
       near(dom.modal.x, 34, 1) && near(dom.modal.y, 90, 1) && near(dom.modal.w, 334, 1) && near(dom.modal.h, 695, 1) && dom.modalRadius === '44px',
       `${dom.modal.x.toFixed(1)},${dom.modal.y.toFixed(1)} ${dom.modal.w.toFixed(1)}×${dom.modal.h.toFixed(1)} r${dom.modalRadius}`);
     check(`${tag}：没有横线（设计图上没有线；键上面那道边也撤了）`, dom.lines === 0 && dom.actionsBorder === '0px', `${dom.lines} 道，键上边 ${dom.actionsBorder}`);
-    check(`${tag}：「综合得分」墨在 ${stamp ? 'x68–154' : 'x107–193'} y118–140（±3）`,
-      !!ink.title && near(ink.title.x0, stamp ? 68 : 107) && near(ink.title.x1, stamp ? 154 : 193) && near(ink.title.y0, 118) && near(ink.title.y1, 140),
-      fmt(ink.title));
-    check(`${tag}：标题 22px 常规字重、黑`, dom.title.fs === '22px' && dom.title.fw === '400' && dom.title.color === 'rgb(0, 0, 0)', JSON.stringify(dom.title));
-    // 分数：滚筒一位一格（engine/odometer.ts），格宽装得下最宽那个 0 就比设计图上比例宽的数字宽 6——中线
-    // 对齐，宽度给到 108。
-    const sc = ink.score;
-    const scMid = sc ? (sc.x0 + sc.x1) / 2 : 0;
-    check(`${tag}：分数墨的中线在 ${stamp ? 108 : 147}（±2）、上下 153–199（±2）、宽不超过 108`,
-      !!sc && near(scMid, stamp ? 108 : 147, 2) && near(sc.y0, 153, 2) && near(sc.y1, 199, 2) && sc.x1 - sc.x0 + 1 <= 108,
-      fmt(sc));
-    check(`${tag}：分数 63px、#943D40`, dom.score.fs === '63px' && dom.score.color === 'rgb(148, 61, 64)', JSON.stringify(dom.score));
-    const wantBadges = stamp ? [[180.5, 172.5], [275, 172.5]] : [[220.5, 174.5]];
-    check(`${tag}：徽章 ${wantBadges.length} 枚，各在图上那个位置（±3），70×28、圆角 8`,
-      dom.badges.length === wantBadges.length && dom.badges.every((b, i) => near(b.x, wantBadges[i][0]) && near(b.y, wantBadges[i][1], 3) && near(b.w, 70, 1) && near(b.h, 28, 0.5) && b.r === '8px'),
-      dom.badges.map((b) => `${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(0)}×${b.h.toFixed(0)} r${b.r}`).join(' | '));
-    check(`${tag}：徽章底 #93E7A3、字 #00AC00、11px 粗`,
-      dom.badges.every((b) => b.bg === 'rgb(147, 231, 163)' && b.fg === 'rgb(0, 172, 0)' && b.fs === '11px' && Number(b.fw) >= 700),
+    check(`${tag}：标题 24px、500、黑（6-7：22/400 放大一档）`, dom.titleCss.fs === '24px' && dom.titleCss.fw === '500' && dom.titleCss.color === 'rgb(0, 0, 0)', JSON.stringify(dom.titleCss));
+    // 分数：滚筒一位一格（engine/odometer.ts），格宽装得下最宽那个 0 就比设计图上比例宽的数字宽 6。
+    check(`${tag}：分数 63px、#943D40，墨宽不超过 108（分数不动）`, dom.score.fs === '63px' && dom.score.color === 'rgb(148, 61, 64)' && !!sc && sc.x1 - sc.x0 + 1 <= 108,
+      `${JSON.stringify(dom.score)} 墨 ${fmt(sc)}`);
+    check(`${tag}：标题在分数上面，不相交`, !!sc && dom.title.b <= sc.y0 + 0.5, `标题底 ${dom.title.b.toFixed(1)} / 分数墨顶 ${sc ? sc.y0 : '—'}`);
+    const wantN = stamp ? 2 : 1;
+    check(`${tag}：徽章 ${wantN} 枚，至少 78 宽、30 高、圆角 8（6-7：70×28 放大一档）`,
+      dom.badges.length === wantN && dom.badges.every((b) => b.w >= 78 - 0.5 && near(b.h, 30, 0.5) && b.rad === '8px'),
+      dom.badges.map((b) => `${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(1)}×${b.h.toFixed(1)} r${b.rad}`).join(' | '));
+    check(`${tag}：徽章底 #93E7A3、字 #00AC00、13px 粗`,
+      dom.badges.every((b) => b.bg === 'rgb(147, 231, 163)' && b.fg === 'rgb(0, 172, 0)' && b.fs === '13px' && Number(b.fw) >= 700),
       dom.badges.map((b) => `${b.bg} ${b.fg} ${b.fs} ${b.fw}`).join(' | '));
-    check(`${tag}：明细 11px、行距 17、#943D40；「综合分」那一行粗，「拼出分」不粗`,
-      dom.rows.fs === '11px' && dom.rows.lh === '17px' && dom.rows.color === 'rgb(148, 61, 64)' && Number(dom.rows.total) >= 700 && Number(dom.rows.built) < 600,
-      JSON.stringify(dom.rows));
-    check(`${tag}：明细第一行抬头墨的左沿 ${stamp ? 180 : 110}、墨顶 218（±3）`,
-      !!ink.row1L && near(ink.row1L.x0, stamp ? 180 : 110) && near(ink.row1L.y0, 218), fmt(ink.row1L));
-    check(`${tag}：数那一栏在 ${stamp ? 321 : 250}（±3），每一行的数左沿对齐`,
-      !!ink.row1R && near(ink.row1R.x0, stamp ? 321 : 250) && dom.valueLefts.every((x) => Math.abs(x - dom.valueLefts[0]) < 0.5),
-      `${fmt(ink.row1R)}  各行 ${dom.valueLefts.map((x) => x.toFixed(1)).join(' ')}`);
+    check(`${tag}：徽章在分数右边，底边压在分数墨的下半截（±6）`,
+      !!sc && dom.badges.every((b) => b.x >= sc.x1 + 10 && b.b >= (sc.y0 + sc.y1) / 2 && b.b <= sc.y1 + 6),
+      `分数墨 ${fmt(sc)} / 徽章 ${dom.badges.map((b) => `${b.x.toFixed(1)}–${b.r.toFixed(1)} 底 ${b.b.toFixed(1)}`).join(' ')}`);
+    check(`${tag}：明细 14px、行距 21、500、#943D40；「综合分」那一行 800，「拼出分」不加粗（6-7）`,
+      dom.rowsCss.fs === '14px' && dom.rowsCss.lh === '21px' && dom.rowsCss.fw === '500' && dom.rowsCss.color === 'rgb(148, 61, 64)' && dom.rowsCss.total === '800' && Number(dom.rowsCss.built) < 600,
+      JSON.stringify(dom.rowsCss));
+    check(`${tag}：「该玩法您的均分」13px、行距 19，是明细最后一行、左沿和明细抬头一齐（±1）`,
+      !!dom.avgCss && dom.avgCss.fs === '13px' && dom.avgCss.lh === '19px' && !!dom.avg && near(dom.avg.x, dom.labels[0].x, 1) && dom.labels.every((l) => l.b <= dom.avg.y + 0.5),
+      JSON.stringify({ css: dom.avgCss, x: dom.avg?.x.toFixed(1), label: dom.labels[0]?.x.toFixed(1) }));
+    check(`${tag}：数那一栏上下对齐，离抬头左沿至少 128（垫块 120 ＋ 间隔 8）`,
+      dom.values.every((v) => Math.abs(v.x - dom.values[0].x) < 0.5) && dom.values[0].x - dom.labels[0].x >= 128 - 0.5,
+      `数 ${dom.values.map((v) => v.x.toFixed(1)).join(' ')} / 抬头左沿 ${dom.labels[0].x.toFixed(1)}`);
     if (stamp) {
-      check(`${tag}：通关勾墨 x66–153 y213–301（±3）`, !!ink.check && near(ink.check.x0, 66) && near(ink.check.x1, 153) && near(ink.check.y0, 213) && near(ink.check.y1, 301), fmt(ink.check));
+      const ck = ink.check;
+      check(`${tag}：通关勾墨 88 见方（±2）、在分数底下`, !!ck && !!sc && near(ck.x1 - ck.x0 + 1, 88, 2) && near(ck.y1 - ck.y0 + 1, 88, 2) && ck.y0 >= sc.y1 + 4, `勾 ${fmt(ck)} / 分数 ${fmt(sc)}`);
       check(`${tag}：勾的环宽 13（画布 40 格里 5.9）、颜色 #00AC00`, !!dom.ring && dom.ring.sw === '5.9' && dom.ring.stroke === 'rgb(0, 172, 0)', JSON.stringify(dom.ring));
-      check(`${tag}：最后一行「该玩法您的均分」墨顶 302（±3），左沿和明细抬头一齐`, !!ink.rowLast && near(ink.rowLast.y0, 302) && near(ink.rowLast.x0, 180), fmt(ink.rowLast));
-      check(`${tag}：卡 279×378（±2）、顶在 329.5（±3）、在窗里居中，圆角 10% / 7.4%（设计图 28px）`,
-        near(dom.img.w, 279, 2) && near(dom.img.h, 378, 2) && near(dom.img.y, 329.5) && near(dom.img.x + dom.img.w / 2, 201, 1) && dom.imgRadius.startsWith('10%'),
-        `${dom.img.x.toFixed(1)},${dom.img.y.toFixed(1)} ${dom.img.w.toFixed(1)}×${dom.img.h.toFixed(1)} r${dom.imgRadius}`);
+      check(`${tag}：明细在勾的右边（抬头左沿离勾 ≥ 10），第一行在勾的高度里`,
+        !!ck && dom.labels[0].x >= ck.x1 + 10 && dom.labels[0].y >= ck.y0 - 2 && dom.labels[0].y <= ck.y1,
+        `明细 ${dom.labels[0].x.toFixed(1)},${dom.labels[0].y.toFixed(1)} / 勾 ${fmt(ck)}`);
+    } else {
+      check(`${tag}：明细在分数底下（第一行离分数墨底 ≥ 10）`, !!sc && dom.labels[0].y >= sc.y1 + 10, `明细顶 ${dom.labels[0].y.toFixed(1)} / 分数墨底 ${sc ? sc.y1 : '—'}`);
     }
-    const wantBtn = [['restartBtn', 'rgb(192, 91, 92)', 29, 30], ['shareBtn', 'rgb(68, 97, 184)', 20, 27], ['endBackBtn', 'rgb(247, 130, 27)', 34, 34]];
+    // 战绩图：照现有规则在中间那一块里按比例缩（6-7 作废了「宽度贴满内容区」）。方案实测 402×875：没勾时
+    // 约 254 宽、有勾时约 238 宽——字放大一档让出去的就是这一截。
+    const wantImg = stamp ? 238 : 254;
+    check(`${tag}：卡宽约 ${wantImg}（±3，方案实测）、在窗里居中，圆角 10% / 7.4%（设计图 28px）`,
+      near(dom.img.w, wantImg, 3) && near(dom.img.x + dom.img.w / 2, 201, 1) && dom.imgRadius.startsWith('10%'),
+      `${dom.img.x.toFixed(1)},${dom.img.y.toFixed(1)} ${dom.img.w.toFixed(1)}×${dom.img.h.toFixed(1)} r${dom.imgRadius}`);
+    const blocks = [['标题', dom.title], ['分数', sc && { x: sc.x0, y: sc.y0, r: sc.x1 + 1, b: sc.y1 + 1 }], ['明细', dom.breakdown], ['卡', dom.img],
+      ...dom.badges.map((b, i) => ['徽章' + (i + 1), b]), ...dom.btns.map((b) => [b.id, b]),
+      ...(stamp ? [['勾', ink.check && { x: ink.check.x0, y: ink.check.y0, r: ink.check.x1 + 1, b: ink.check.y1 + 1 }]] : [])];
+    const hits = [];
+    for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (!apart(blocks[i][1], blocks[j][1])) hits.push(`${blocks[i][0]}×${blocks[j][0]}`);
+    check(`${tag}：标题、分数、徽章、${stamp ? '勾、' : ''}明细、卡、三颗键两两不相交`, hits.length === 0, hits.join(' '));
+
+    const wantBg = ['rgb(192, 91, 92)', 'rgb(68, 97, 184)', 'rgb(247, 130, 27)'];
     check(`${tag}：三颗键依次是再来 · 分享 · 主页，只有记号没有字`,
       dom.btns.map((b) => b.id).join(',') === 'restartBtn,shareBtn,endBackBtn' && dom.btns.every((b) => !!b.svg && b.text === ''),
       dom.btns.map((b) => `${b.id}${b.text ? '「' + b.text + '」' : ''}`).join(' '));
-    check(`${tag}：三颗键 91×36、圆角 15、相隔 9，在 x55 / 155.3 / 255.7、y723.5（±1.5）`,
-      dom.btns.length === 3 && dom.btns.every((b, i) => near(b.x, 55 + i * 100.33, 1.5) && near(b.y, 723.5, 1.5) && near(b.w, 91.33, 1) && near(b.h, 36, 0.5) && b.r === '15px'),
-      dom.btns.map((b) => `${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(1)}×${b.h.toFixed(1)} r${b.r}`).join(' | '));
-    check(`${tag}：键的颜色是色卡那三支（玫红 / 蓝 / 橙）`, dom.btns.every((b, i) => b.bg === wantBtn[i][1]), dom.btns.map((b) => b.bg).join(' | '));
-    check(`${tag}：键上的记号照图上的尺寸（再来 29×30、分享 20×27、主页那副圆盘 34）且在键正中（±1）`,
-      dom.btns.every((b, i) => near(b.svg.w, wantBtn[i][2], 0.5) && near(b.svg.h, wantBtn[i][3], 0.5) && Math.abs(b.svg.cx) <= 1 && Math.abs(b.svg.cy) <= 1),
-      dom.btns.map((b) => `${b.svg.w.toFixed(1)}×${b.svg.h.toFixed(1)} (${b.svg.cx.toFixed(1)},${b.svg.cy.toFixed(1)})`).join(' | '));
+    check(`${tag}：三颗键 91.3×44、圆角 17、相隔 9，在 x55 / 155.3 / 255.7、y715.5（±1.5）（6-4：高 36 → 44）`,
+      dom.btns.length === 3 && dom.btns.every((b, i) => near(b.x, 55 + i * 100.33, 1.5) && near(b.y, 715.5, 1.5) && near(b.w, 91.33, 1) && near(b.h, 44, 0.5) && b.rad === '17px'),
+      dom.btns.map((b) => `${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(1)}×${b.h.toFixed(1)} r${b.rad}`).join(' | '));
+    check(`${tag}：键的颜色是色卡那三支（玫红 / 蓝 / 橙）`, dom.btns.every((b, i) => b.bg === wantBg[i]), dom.btns.map((b) => b.bg).join(' | '));
+    // 6-4：三颗同构——彩色药丸里一枚白圆盘（ctlGlyph：100 格里半径 46，图 34px → 盘径 31.28），盘在键正中。
+    check(`${tag}：三颗都有白盘，盘径一样（31.3 ±0.5），盘在键正中（±1）`,
+      dom.btns.every((b) => !!b.disc && b.disc.fill === 'rgb(255, 255, 255)' && near(b.disc.d, 31.28, 0.5) && Math.abs(b.disc.d - dom.btns[0].disc.d) < 0.1 && Math.abs(b.svg.cx) <= 1 && Math.abs(b.svg.cy) <= 1),
+      dom.btns.map((b) => `${b.id} ${b.disc ? `${b.disc.fill} ⌀${b.disc.d.toFixed(2)}` : '没有盘'} (${b.svg.cx.toFixed(1)},${b.svg.cy.toFixed(1)})`).join(' | '));
+    check(`${tag}：盘里的记号是药丸自己的颜色`,
+      dom.btns.every((b) => b.paints.length > 0 && b.paints.every((c) => c === b.bg)),
+      dom.btns.map((b) => `${b.id}: ${[...new Set(b.paints)].join(' ')} / 键 ${b.bg}`).join(' | '));
   }
   check('① 零报错', errs.length === 0, errs.slice(0, 2).join(' | '));
   await ctx.close();
@@ -465,48 +528,116 @@ for (const lang of Object.keys(L)) {
 }
 
 // ---------------------------------------------------------------------------
-// ⑤ 六种屏幕 × 四种语言：装得下、谁也不压谁、键点得到
+// ⑤ 各种屏幕 × 四种语言 × 三种样子：装得下、谁也不压谁、抬头没被裁、键点得到（10-09 补充方案 6-7）
+//
+// 方案定的尺寸表：402×875、390×844、360×740、320×568、1440×900；每一种都量「有勾 / 没勾 / 头一局（带说明
+// 句）」。真打一局（头一回出综合分，「综合分是怎么来的」那一句就在）——这是「头一局」；拿掉那一句是「没
+// 勾」；再摆上通关勾和两枚徽章（当地的字）、分数摆成三位数是「有勾」；分数再摆成四位数（1286，左边那一栏
+// 最宽的时候，style.css 的 .end--wide-score）是「有勾·四位数」。明细的每一行都是 gameController 照这一局、
+// 这种语言真拼出来的。
+//
+// 有勾那一种从前（字放大之前）在英法和窄屏上就有东西被窗边裁掉，门一直没量过；字放大之后连 402 宽的英法
+// 都裁了。修在 style.css 的 .end--stamp .end-badges（徽章放不下一排就折行）、.end--wide-score 和窄屏那一段，
+// 这儿多量一条「每一块都没伸出窗边」。
+//
+// 另加横屏手机四档（844×390、812×375、740×360、667×375）：字放大一档之后，横屏上头一局那一句一度装不下
+// （法语最多差 25px，被键那一排裁掉，什么都不报），修在 style.css 横屏那一段（窗离屏幕上下沿 20 → 8）。
+// 更小的两档没收：640×360 上法语头一局还差 10px、568×320 上从前（字放大之前）就装不下——都已报给玩家，
+// 等他定。
+//
+// 图不再要求多宽（方案作废了「宽度贴满内容区」，字放大让出去的高度就是从图那儿来的）；每一档量到的图宽
+// 照样印在后面，给人看。
 // ---------------------------------------------------------------------------
-const SIZES = [[402, 875, true], [390, 844, true], [360, 640, true], [320, 568, true], [844, 390, true], [1280, 800, false]];
+const SIZES = [
+  [402, 875, true], [390, 844, true], [360, 740, true], [320, 568, true], [1440, 900, false],
+  [844, 390, true], [812, 375, true], [740, 360, true], [667, 375, true],
+];
 for (const [w, h, touch] of SIZES) {
   for (const lang of Object.keys(L)) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: touch, hasTouch: touch });
     await ctx.addInitScript(SEED, lang);
     const page = await ctx.newPage();
     await endARun(page);
-    const bad = await page.evaluate((landscape) => {
-      const out = [];
-      const m = document.querySelector('#endOverlay .modal').getBoundingClientRect();
-      const box = (s) => (document.querySelector(s) || document.querySelector('#endOverlay')).getBoundingClientRect();
-      for (const s of ['#endOverlay .end-head', '#endOverlay .end-body', '#endOverlay .end-actions']) if (!document.querySelector(s)) out.push('没有 ' + s);
-      const head = box('#endOverlay .end-head'), body = box('#endOverlay .end-body'), btns = box('#endOverlay .end-actions'), img = box('#endShareImg');
-      const inside = (r) => r.left >= m.left - 0.5 && r.right <= m.right + 0.5 && r.top >= m.top - 0.5 && r.bottom <= m.bottom + 0.5;
-      if (m.top < -0.5 || m.left < -0.5 || m.bottom > innerHeight + 0.5 || m.right > innerWidth + 0.5) out.push('窗出屏');
-      for (const [k, r] of [['抬头', head], ['图那一块', body], ['键', btns], ['图', img]]) if (!inside(r)) out.push(k + '出窗');
-      const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
-      // 抬头盒子在横屏是左边那一整栏的宽，量它里面的东西：明细和分数不压图、不压键。
-      for (const s of ['#endBreakdown', '#endScore', '#endTitle']) {
-        const r = box(s);
-        if (overlap(r, img)) out.push(s + '压图');
-        if (overlap(r, btns)) out.push(s + '压键');
-      }
-      if (overlap(img, btns)) out.push('图压键');
-      if (!landscape && body.top < head.bottom - 0.5) out.push('图那一块压抬头');
-      for (const row of document.querySelectorAll('#endBreakdown .end-row')) {
-        const r = row.getBoundingClientRect();
-        if (r.right > m.right - 4 || r.left < m.left + 4) out.push('明细贴边');
-      }
-      const clipped = [...document.querySelectorAll('#endOverlay .modal, #endOverlay .end-head, #endOverlay .end-body')].filter((e) => e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1);
-      if (clipped.length) out.push('有内容被裁');
-      for (const id of ['restartBtn', 'shareBtn', 'endBackBtn']) {
-        const r = document.getElementById(id).getBoundingClientRect();
-        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        if (!hit || !hit.closest('#' + id)) out.push(id + '点不到');
-      }
-      if (img.width < 100) out.push(`图只剩 ${img.width.toFixed(0)} 宽`);
-      return out;
-    }, w > h && h <= 560);
-    check(`⑤ ${w}×${h} ${lang}：装得下、谁也不压谁、三颗键点得到、图不小于 100 宽`, bad.length === 0, bad.join(' | '));
+    const hasTip = await page.evaluate(() => !!document.querySelector('#endBreakdown .end-row--tip'));
+    check(`⑤ ${w}×${h} ${lang}：（尺子）真打的这一局是头一回出综合分，说明那一句在`, hasTip);
+    for (const variant of ['头一局', '没勾', '有勾', '有勾·四位数']) {
+      const bad = await page.evaluate(async ([variant, landscape, stampSvg, badges]) => {
+        const ov = document.getElementById('endOverlay');
+        /** 分数摆成滚筒滚完的样子（engine/odometer.ts），一位一格——位数决定左边那一栏多宽。 */
+        const setScore = (text) => {
+          const host = document.getElementById('endScore');
+          host.classList.add('odometer');
+          host.textContent = '';
+          for (const ch of text) {
+            const box = document.createElement('div');
+            box.className = 'digit-box';
+            const strip = document.createElement('div');
+            strip.className = 'digit-strip';
+            strip.style.transition = 'none';
+            for (let d = 0; d < 10; d++) {
+              const c = document.createElement('span');
+              c.textContent = String(d);
+              strip.appendChild(c);
+            }
+            strip.style.transform = `translateY(-${Number(ch) * 1.1}em)`;
+            box.appendChild(strip);
+            host.appendChild(box);
+          }
+        };
+        if (variant !== '头一局') document.querySelector('#endBreakdown .end-row--tip')?.remove();
+        if (variant.startsWith('有勾')) {
+          // gameController 的 stampEndCheck 挂的就是这两个类：有勾、四位数以上的综合分。
+          ov.classList.add('end--stamp');
+          const four = variant === '有勾·四位数';
+          ov.classList.toggle('end--wide-score', four);
+          setScore(four ? '1286' : '430');
+          const st = document.getElementById('endStamp');
+          st.innerHTML = stampSvg;
+          st.classList.add('end-stamp--drawn');
+          document.getElementById('endBadges').innerHTML = badges.map((b) => `<span class="end-badge">${b}</span>`).join('');
+        }
+        await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+        const out = [];
+        const m = document.querySelector('#endOverlay .modal').getBoundingClientRect();
+        const box = (e) => (typeof e === 'string' ? document.querySelector(e) : e)?.getBoundingClientRect() || null;
+        const head = document.querySelector('#endOverlay .end-head');
+        const img = box('#endShareImg');
+        if (m.top < -0.5 || m.left < -0.5 || m.bottom > innerHeight + 0.5 || m.right > innerWidth + 0.5) out.push('窗出屏');
+        const inside = (r) => r.left >= m.left - 0.5 && r.right <= m.right + 0.5 && r.top >= m.top - 0.5 && r.bottom <= m.bottom + 0.5;
+        for (const [k, s] of [['抬头', '#endOverlay .end-head'], ['图那一块', '#endOverlay .end-body'], ['键', '#endOverlay .end-actions'], ['图', '#endShareImg']]) if (!inside(box(s))) out.push(k + '出窗');
+        // 方案点名的那几样两两不相交：标题、分数、徽章、勾、明细、分享图、三颗键。
+        const blocks = [['标题', box('#endTitle')], ['分数', box('#endScore')], ['明细', box('#endBreakdown')], ['图', img],
+          ...[...document.querySelectorAll('#endBadges .end-badge')].map((e, i) => ['徽章' + (i + 1), box(e)]),
+          ...[...document.querySelectorAll('#endOverlay .end-actions > button')].map((e) => [e.id, box(e)]),
+          ...(variant === '有勾' ? [['勾', box('#endStamp')]] : [])];
+        const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+        for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (overlap(blocks[i][1], blocks[j][1])) out.push(`${blocks[i][0]}压${blocks[j][0]}`);
+        if (!landscape && box('#endOverlay .end-body').top < head.getBoundingClientRect().bottom - 0.5) out.push('图那一块压抬头');
+        // 抬头没被裁：方案原话量的是纵向（scrollHeight ≤ clientHeight + 1）。横向另量「每一块都没伸出窗边」——
+        // 有勾那一种右边那一栏会压进窗的右内边距一点（中文两枚徽章并排，见 style.css 的 .end--stamp .end-badges），
+        // Chrome 把内边距也算进 scrollWidth，那不是被裁；伸出窗边才是。
+        if (head.scrollHeight > head.clientHeight + 1) out.push(`抬头被裁（${head.scrollHeight} / ${head.clientHeight}）`);
+        for (const e of head.querySelectorAll('#endScore, #endStamp, .end-badge, .end-row > span')) {
+          const r = e.getBoundingClientRect();
+          if (r.width > 0 && (r.left < m.left - 0.5 || r.right > m.right + 0.5)) { out.push('伸出窗边：' + (e.id || e.className || e.textContent.trim().slice(0, 12))); break; }
+        }
+        for (const e of document.querySelectorAll('#endOverlay .modal, #endOverlay .end-body')) if (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1) out.push('有内容被裁：' + e.className);
+        for (const row of document.querySelectorAll('#endBreakdown .end-row')) {
+          const r = row.getBoundingClientRect();
+          if (r.right > m.right - 4 || r.left < m.left + 4) out.push('明细贴边');
+        }
+        for (const id of ['restartBtn', 'shareBtn', 'endBackBtn']) {
+          const r = document.getElementById(id).getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!hit || !hit.closest('#' + id)) out.push(id + '点不到');
+        }
+        const fs = getComputedStyle(document.getElementById('endBreakdown')).fontSize;
+        if (fs !== '14px') out.push('明细字号 ' + fs);
+        return { out, img: Math.round(img.width) };
+      }, [variant, w > h && h <= 560, STAMP_SVG, badgeText(lang)]);
+      check(`⑤ ${w}×${h} ${lang} ${variant}：装得下、谁也不压谁、抬头没被裁、三颗键点得到、明细 14px`, bad.out.length === 0,
+        [...bad.out, `图 ${bad.img} 宽`].join(' | '));
+    }
     await ctx.close();
   }
 }

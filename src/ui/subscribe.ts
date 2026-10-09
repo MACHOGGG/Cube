@@ -22,8 +22,8 @@ import {
   type AccountFailure,
 } from '../engine/account';
 import { CONTACT_EMAIL } from '../legal';
-import { CTL_LEAVE, CTL_REPLAY } from './ctlIcons';
-import { ICON_ARROW, ICON_CHECK, ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
+import { CTL_FINISH, CTL_LEAVE, CTL_REPLAY } from './ctlIcons';
+import { ICON_ARROW, ICON_CLOSE, ICON_EYE, ICON_EYE_OFF, ICON_LOGIN, ICON_MAIL } from './uiIcons';
 import { geniusLogoTag } from './geniusLogo';
 
 /**
@@ -586,7 +586,7 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
     }
     <div class="acct-actions">${actions}</div>
     ${store ? `<p class="auth-hint">${s.manageOnStore.replace('{store}', payeeName())}</p>` : ''}
-    <div class="acct-done">${pillIcon('statusDone', s.doneBtn, ICON_CHECK)}</div>
+    <div class="acct-done">${pillIcon('statusDone', s.doneBtn, CTL_FINISH)}</div>
   `,
     { escCloses: true },
   );
@@ -610,7 +610,16 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
   // 扇窗，不做别的。注册完冒出来的就是这扇窗，玩家看完了要找一颗「好了」的键，眼睛先往底下
   // 找，而 ✕ 在右上角。样子和上面那三颗同一族（只放图标的棕色药丸、一样宽一样高），居中；
   // 读屏念「完成」（doneBtn，四语早就有）。
-  overlay.querySelector<HTMLButtonElement>('#statusDone')!.addEventListener('click', close);
+  const doneBtn = overlay.querySelector<HTMLButtonElement>('#statusDone')!;
+  doneBtn.addEventListener('click', close);
+  /*
+   * 开窗时那枚勾描一笔（10-09 补充方案 6-5「动效 1」）：从左到右「写」出来，只在开窗这一下播一次。
+   * 样子在 style.css 的 .acct-done .ctl-check（dasharray 63 → 描到 0），这儿只管「什么时候开始」：
+   * 窗挂上 DOM 之后下一帧才加那个类——同一帧里加，浏览器还没算过「描之前」那一刻的样子，过渡起
+   * 不来，勾直接整枚冒出来。减弱动态时 CSS 那头一开始就是画好的，这个类加不加都一样。
+   * 同一枚勾在游戏《完成》键、改昵称的保存键上不描（只有这一颗有动效）。
+   */
+  requestAnimationFrame(() => requestAnimationFrame(() => doneBtn.classList.add('is-drawn')));
   wireHandleEye(overlay, current, lang);
 }
 

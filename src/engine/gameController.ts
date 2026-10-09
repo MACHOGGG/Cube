@@ -50,6 +50,7 @@ const UNFLIPPED_SCALE = 0.95;
 import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
 import type { CoachHint } from './coachHint';
 import { mountPatternBlock } from '../ui/patternBlock';
+import { checkPathAt } from '../ui/checkMark';
 import { sizeAtLevel, type TargetPattern } from './targets';
 import { clearSeed, seedRandom } from './rng';
 import { dealSeed, randomSeed, variantForGame, type SeedRun } from './seedCode';
@@ -791,14 +792,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 有没有这枚勾，抬头是两种排法（10-08 方案 3-I 的两张设计图）：有勾的时候勾在左边那一列、
     // 明细在右边那一列；没有就是明细在分数底下。见 style.css 的 .end--stamp。
     refs.endOverlay.classList.toggle('end--stamp', endCheckEligible(reason));
+    // 四位数以上的综合分把左边那一栏（分数、勾）撑到 141px，有勾那一种右边那一栏就放不下两枚并排的徽章和
+    // 抬头那一栏的垫块了——不让一让，分数和数那一栏会被窗边裁掉（10-09 补充方案 6-7 字放大之后量出来的）。
+    // 让法写在 style.css 的 .end--wide-score；三位数以内的样子一点不动。
+    refs.endOverlay.classList.toggle('end--wide-score', String(Math.round(Math.abs(total))).length >= 4);
     if (!endCheckEligible(reason)) return;
     // 颜色和粗细照设计图（10-08 方案 3-I）：88px 的圈、环宽 13、勾也是粗的一笔——从前是细线描的
     // 72px（环宽 3）。颜色走 --end-ok（浅色主题里就是设计图那支 #00AC00，深色和色盲另有一档）。
+    // 勾的形状是全站那一枚（ui/checkMark.ts 的 CHECK_PATH，10-09 补充方案 6-5）缩到 40 格画布：×0.4，
+    // 线宽不变。从前这儿照设计图另画了一枚，和游戏里《完成》键那枚不是一个样子。
     host.innerHTML =
       '<svg viewBox="0 0 40 40" aria-hidden="true">' +
       '<circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none"' +
       ' stroke="var(--end-ok)" stroke-width="5.9"/>' +
-      '<path class="end-stamp-tick" d="M11.3 18.2 L16.6 25.6 L28.6 12.6" fill="none"' +
+      `<path class="end-stamp-tick" d="${checkPathAt(0.4)}" fill="none"` +
       ' stroke="var(--end-ok)" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>';
     if (reducedMotion()) {

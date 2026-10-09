@@ -899,6 +899,59 @@ for (const size of [ALL_SIZES[0], ALL_SIZES[3]]) {
   await ctx.close();
 }
 
+// ── 帐号窗《完成》：白盘棕勾、开窗时描一笔（10-09 补充方案 6-5，玩家定稿：形状甲、动效 1） ──
+//
+// 这道门别的上下文都开着减弱动态（openCtx），量不到那一笔——这一节另开两份：一份照常动、一份减弱动态。
+// 勾的形状、描画的数归 check-one-check（读源码）；这儿量浏览器里真的样子：白盘、棕勾、开窗当帧和 500ms 后。
+sec('帐号窗《完成》：白盘棕勾、开窗时描一笔');
+{
+  const CHECK_PATH = (readFileSync(new URL('../src/ui/checkMark.ts', import.meta.url), 'utf8').match(/CHECK_PATH = '([^']+)'/) || [, ''])[1];
+  for (const motion of ['no-preference', 'reduce']) {
+    const tag = motion === 'reduce' ? '减弱动态' : '照常动';
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: motion });
+    const page = await ctx.newPage();
+    await page.goto(BASE, { waitUntil: 'load' });
+    await page.waitForSelector('.home-icon-btn', { timeout: 25000 });
+    await page.evaluate((seed) => {
+      localStorage.setItem('slides_lang', 'zhHans');
+      localStorage.setItem('slides_genius', JSON.stringify(seed));
+    }, handleSeed);
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForSelector('.home-icon-btn', { timeout: 25000 });
+    await page.click('#navProfile');
+    await page.waitForSelector('.profile-page', { timeout: 10000 });
+    // 按下去和看第一眼在同一个任务里：窗是同步挂上去的，这时候一帧都还没过。
+    const first = await page.evaluate(() => {
+      document.querySelector('#loginBtn').click();
+      const p = document.querySelector('#statusDone .ctl-check');
+      return p ? parseFloat(getComputedStyle(p).strokeDashoffset) : null;
+    });
+    await page.waitForTimeout(500);
+    const r = await page.evaluate(() => {
+      const b = document.querySelector('#statusDone');
+      const svg = b ? b.querySelector('svg') : null;
+      const disc = svg ? [...svg.children].find((n) => n.tagName.toLowerCase() === 'circle') : null;
+      const p = b ? b.querySelector('.ctl-check') : null;
+      return {
+        disc: disc ? getComputedStyle(disc).fill : null,
+        discD: disc ? Math.round(disc.getBoundingClientRect().width * 100) / 100 : 0,
+        d: p ? p.getAttribute('d') : null,
+        mark: p ? getComputedStyle(p).stroke : null,
+        pill: b ? getComputedStyle(b).backgroundColor : null,
+        offset: p ? parseFloat(getComputedStyle(p).strokeDashoffset) : null,
+      };
+    });
+    check(`帐号窗《完成》（${tag}）：药丸里一枚白盘，盘径和结算弹窗那三颗一样（31.3 ±0.5，同一个 --disc-glyph）`,
+      r.disc === 'rgb(255, 255, 255)' && Math.abs(r.discD - 31.28) <= 0.5, `${r.disc} ⌀${r.discD}`);
+    check(`帐号窗《完成》（${tag}）：勾就是全站那一枚（CHECK_PATH），颜色是药丸的棕`, !!CHECK_PATH && r.d === CHECK_PATH && r.mark === r.pill,
+      `${r.d} / 勾 ${r.mark} / 药丸 ${r.pill}`);
+    check(`帐号窗《完成》（${tag}）：开窗 500ms 后描完了（dashoffset 0）`, r.offset === 0, String(r.offset));
+    if (motion === 'reduce') check('帐号窗《完成》（减弱动态）：开窗当帧就是画好的样子（dashoffset 0，不描）', first === 0, String(first));
+    else check('帐号窗《完成》（照常动，尺子）：开窗当帧一笔都还没描（dashoffset 63）——那一笔是真的', first === 63, String(first));
+    await ctx.close();
+  }
+}
+
 sec('这四页的样式里没有写死的颜色');
 check(
   `（尺子）扫过的页面 / 状态不少于 ${SIZES.length * LANGS.length * 5}`,

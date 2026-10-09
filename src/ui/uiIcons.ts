@@ -18,6 +18,7 @@
  *     aria-hidden、把 id 加前缀）这五个也要。两条路读的是同一个文件。
  */
 import { custom } from './customIcons';
+import { CHECK_PATH } from './checkMark';
 import LOGIN from '../assets/icons/login.svg?raw';
 import CLOSE from '../assets/icons/close.svg?raw';
 import MAIL from '../assets/icons/mail.svg?raw';
@@ -44,7 +45,15 @@ const svg24 = (body: string) =>
   body +
   '</svg>';
 export const ICON_PENCIL = svg24('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>');
-export const ICON_CHECK = svg24('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+/**
+ * ✓ 是全站那一枚勾（checkMark.ts 的 CHECK_PATH，10-09 补充方案 6-5「全站统一一种勾」），所以画布跟着它
+ * 是 100 格，不是上面那几个的 24 格；线宽照原来的视觉粗细折算：2 / 24 ≈ 8.3 / 100，摆在一排线描图标
+ * 里还是一样粗。从前这儿是自己画的一枚细勾，和游戏里《完成》键那枚不是一个样子。
+ */
+export const ICON_CHECK =
+  '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="8.3" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+  `<path d="${CHECK_PATH}"/></svg>`;
 
 /*
  * 「→」：登录窗那颗往下走的键（第 17 推第 8 条：登录窗和另外三扇窗一样，两颗棕色药丸只放图

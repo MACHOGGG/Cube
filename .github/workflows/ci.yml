@@ -175,6 +175,11 @@ jobs:
         run: |
           npx esbuild src/ui/svgTitle.ts --bundle --format=esm --outfile=/tmp/svgtitle.mjs
           node scripts/check-svg-title.mjs /tmp/svgtitle.mjs
+      # 全站一种勾（10-09 补充方案 6-5）：凡是画勾的七处都取 ctlIcons 的 CHECK_PATH（游戏《完成》键那一枚），
+      # 全仓搜不到从前那五枚；帐号窗《完成》描一笔的数（63 / 240ms / 晚 150ms、减弱动态不描）和通关章的 26。
+      # 纯读源码。描一笔在真浏览器里那一半归 check-redesign-fit。
+      - name: 全站只有一种勾
+        run: node scripts/check-one-check.mjs
       - name: 局中实时排名摆哪几行
         run: |
           npx esbuild src/engine/standingsWindow.ts --bundle --format=esm --outfile=/tmp/window.mjs
@@ -255,9 +260,9 @@ jobs:
       # 棋盘底下那块教学条（第 15 推重写）：五条各等它自己说的那件事在盘面上真的出现
       # ——开局 12 秒、紧跟、段数 ≤ 4、某色星星 ≥ 最短外边、第一次消掉外边。这道门用模拟
       # 盘面（真的侵蚀阶梯、真的外边几何、棋盘真用的那个数法）把五个时机依次走一遍，差
-      # 一枚、差一毫秒都不许换条；再验呼吸灯的零件：一层穷举走法是不是残局穷举那一套、
-      # 组有没有映射回此刻的位置（要滑过去的那一枚在里面）、超 8ms 是不是真的放弃、挑组
-      # 是不是「保留 → 最近 → 熄灭」、一盏灯亮的是不是那一步结算时动到的全部（方案 3-E-2）。
+      # 一枚、差一毫秒都不许换条；再验呼吸灯（10-09 补充方案 6-2 的新规则）：逐层加深的限深
+      # 搜索按颜色算「最少几步」、第 3 步和两道上限（两万个盘面或 15ms，超了退回少看一步）、
+      # 一次一色挑最快的那一色（平手随机、亮着的不跳色）、同色的色块和星星一并点亮。
       # 假时钟、自带小 DOM，不开浏览器，几十毫秒。
       - name: 教学条：五条的时机，呼吸灯的零件
         run: |
