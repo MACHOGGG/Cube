@@ -1,4 +1,4 @@
-import { bump, get } from './_store.js';
+import { bump } from './_store.js';
 
 /**
  * A counter per caller per window, for every door a stranger can knock on.
@@ -35,25 +35,9 @@ export async function tooMany(bucket, id, limit, windowS) {
 /** 三个函数共用的那个键：一个桶、一个身份、一个窗口。 */
 const windowKey = (bucket, id, windowS) => `rl:${bucket}:${id}:${Math.floor(Date.now() / (windowS * 1000))}`;
 
-/**
- * 「查」和「记」拆成两步的那一种：先 `atLimit` 只看不记，事情真的做成了再 `countHit` 记
- * 一笔。和 `tooMany` 记的是同一个键，所以同一个桶不要两种写法混着用。
- *
- * 只给「失败不该算钱」的那种额度用（2026-10-08 方案 1-2：signin 的 `signin:toAll` 只数真的
- * 寄出去的信——Resend 那头挂了、信一封没出去，不该把这个邮箱一小时的额度也一起烧掉）。
- *
- * ⚠️ 代价照实写：查和记之间隔着一次发信，同一瞬间打进来的几个请求会一起看到「还没到」，
- * 于是这一窗口可能多放过几次——正是 `tooMany` 文件头那段说的「假门」，只是这儿是有意的、
- * 而且只多放过「同时在飞的那几封」。真正挡人的那几道（按来路、按「邮箱 + 来路」）照旧用
- * `tooMany`，一步做完。
- */
-export async function atLimit(bucket, id, limit, windowS) {
-  return (Number(await get(windowKey(bucket, id, windowS))) || 0) >= limit;
-}
-/** 记一笔（见 atLimit）。 */
-export async function countHit(bucket, id, windowS) {
-  await bump(windowKey(bucket, id, windowS), windowS + 60);
-}
+// 这儿原先还有一对「先查不记、做成了再记」的 atLimit / countHit（2026-10-08 方案 1-2，只给 signin 的
+// `signin:toAll` 用：信没寄出去就不算钱）。10-09 补充方案 7-7 撤了：查和记之间隔着一次发信，并发打进来
+// 的一起看到「还没到」，那道上限成了假门——正是上面 tooMany 那段说的事。限速一律走 tooMany，一步做完。
 
 /**
  * Who is asking, as well as a serverless function can know.

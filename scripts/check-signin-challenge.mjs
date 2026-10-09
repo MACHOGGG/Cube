@@ -35,8 +35,15 @@
  *      了**（方案 1-2）：外人拿编的票烧不动它，可拿**真票**烧得动——自己替受害者要三张
  *      票、每张乱猜 5 次，正好 15 次，受害者拿着对的码打进来答 429。⑦ 现在量的正是「攻击
  *      者 15 次错码之后，受害者正确码仍能登录」。
- *   ⑨ 要码那道「一个邮箱一小时十封」只数**真的寄出去的**（方案 1-2）：Resend 挂着的时候
- *      点多少次《重发》都不烧这个邮箱的额度。
+ *   ⑧ 要码的额度：按「邮箱 + 来路」各三封（外人耗不光别人的），同一个邮箱一小时总共十五张票。
+ *   ⑨ **那十五张寄没寄出去都算**（10-09 补充方案 7-7，推翻了 2026-10-08 方案 1-2 的「只数寄出
+ *      去的」）：Resend 挂着的时候每签一张票照样记一笔，第十六次 429，Resend 好了这一小时也还是
+ *      429——这是玩家选的代价，换的是 ⑩。
+ *   ⑩ **硬上限**：一百个来路并发三百次，Resend 正常、变慢、挂着三种情形下，签出去的票都不超过十
+ *      五张。原先是「先查、寄成了才记」：查和记之间隔着一次发信，并发的一起看到「还没到」；Resend
+ *      挂着的时候一张都不记，票却照发——猜码那一侧的上限（每张票 5 次 × 一小时十几张）整个没了。
+ *   ⑪ **那一笔记在最后**：一个已经超了自己那一份（按来路一小时十封）的来路，再替别人的邮箱要码，
+ *      不许烧掉那个邮箱的十五张。
  *
  * ── 这道门怎么保证自己不是空绿 ────────────────────────────────
  *
@@ -45,7 +52,8 @@
  *   码的键回到按地址（票只当装饰）                          ①②③⑥⑦
  *   计数的键回到按地址                                      ③′⑦
  *   把按邮箱那道（一小时 15 次）加回来                        ⑦
- *   `signin:toAll` 回到「每来一次就记」                       ⑨
+ *   `signin:toAll` 回到「先查、寄成了才记」                   ⑨⑩
+ *   `signin:toAll` 排回按来路那道前面                         ⑪
  *   不验票的形状                                            ④′
  *   request 往老键里写                                      ①②③⑥⑦
  *   EMAIL_RE 放开冒号                                       ⑤
@@ -327,8 +335,8 @@ const tryCode = (email, code, challenge, ip) =>
 // ── ⑧ 要码的额度：外人耗不光别人的（第 14 推）──────────────────────
 //
 // 原先按邮箱一小时三封：谁都能替一个地址连要三封，主人这一小时就一封都要不到了——不用猜
-// 码，只要知道他的邮箱。改成按「邮箱 + 来路」各三封，另给同一个邮箱一个一小时十封的总上限
-// （挡的是一个人换着来路往同一个信箱里灌信）。
+// 码，只要知道他的邮箱。改成按「邮箱 + 来路」各三封，另给同一个邮箱一个一小时的总上限
+// （挡的是一个人换着来路往同一个信箱里灌信；10-09 补充方案 7-7 起是十五张票）。
 {
   const X = 'quota-two-ips@example.com';
   const A = freshIp();
@@ -342,42 +350,91 @@ const tryCode = (email, code, challenge, ip) =>
   const signIn = await tryCode(X, fromB.code, fromB.ticket, B);
   check('⑧ 而且那一封真能登进去', signIn.status === 200 && Boolean(signIn.body.token), `${signIn.status} ${signIn.raw}`);
 
-  // 同一个邮箱的总上限：一小时十封，换多少个来路都一样。
+  // 同一个邮箱的总上限：一小时十五张，换多少个来路都一样。
   const Y = 'quota-total@example.com';
   const seen = [];
-  for (let i = 0; i < 11; i++) seen.push((await askCode(Y, freshIp())).status);
-  check('⑧ 同一个邮箱换十一个来路：前十封放过，第十一封挡下',
-    seen.slice(0, 10).every((c) => c === 200) && seen[10] === 429, seen.join(' '));
+  for (let i = 0; i < 16; i++) seen.push((await askCode(Y, freshIp())).status);
+  check('⑧ 同一个邮箱换十六个来路：前十五张放过，第十六张挡下',
+    seen.slice(0, 15).every((c) => c === 200) && seen[15] === 429, seen.join(' '));
 }
 
-// ── ⑨ 「一个邮箱一小时十封」只数寄出去的（2026-10-08 方案 1-2）──────────
+// ── ⑨ 那十五张寄没寄出去都算（10-09 补充方案 7-7）────────────────────
 //
-// Resend 挂着：信一封没出去，回 mailDown。从前每来一次就记一笔，玩家点几下《重发》就把这
-// 个邮箱一小时的十封烧光了；等 Resend 好了，他这一小时一封都要不到。
-{
-  const Z = 'quota-maildown@example.com';
+// 2026-10-08（方案 1-2）这儿量的是反过来那件事：「只数寄出去的」——Resend 挂着的时候点多少
+// 次《重发》都不烧这个邮箱的额度。代价是 ⑩ 那道硬上限成了假的，玩家在两者之间选了硬上限。所
+// 以现在钉住的是：挂着的那几次也算，十五次之后 429，Resend 好了这一小时也还是 429。
+/** Resend 挂着（503）的那一段里跑 `fn`；sendMail 失败写的那一行日志先收起来，别刷屏。 */
+async function withMailDown(fn, { delayMs = 0, down = true } = {}) {
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    if (!String(url).includes('resend.com')) throw new Error('unexpected fetch: ' + url);
-    return { ok: false, status: 503, text: async () => 'resend is down' };
-  };
   const realErr = console.error;
-  console.error = () => {}; // sendMail 失败会写一行日志，那是它该做的，别刷屏
-  const down = [];
+  globalThis.fetch = async (url, init) => {
+    if (!String(url).includes('resend.com')) throw new Error('unexpected fetch: ' + url);
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    if (down) return { ok: false, status: 503, text: async () => 'resend is down' };
+    return realFetch(url, init);
+  };
+  console.error = () => {};
   try {
-    for (let i = 0; i < 12; i++) down.push(await askCode(Z, freshIp()));
+    return await fn();
   } finally {
     globalThis.fetch = realFetch;
     console.error = realErr;
   }
-  check('⑨ Resend 挂着：十二次都答「没寄出去」（mailDown），没有一次 429',
-    down.every((r) => r.status === 200 && r.body.sent === false && r.body.reason === 'mailDown'),
-    down.map((r) => `${r.status}:${r.body.reason ?? r.body.error}`).join(' '));
+}
+{
+  const Z = 'quota-maildown@example.com';
+  const down = await withMailDown(async () => {
+    const out = [];
+    for (let i = 0; i < 16; i++) out.push(await askCode(Z, freshIp()));
+    return out;
+  });
+  check('⑨ Resend 挂着：前十五次答「没寄出去」（mailDown），而且每次都签了一张票',
+    down.slice(0, 15).every((r) => r.status === 200 && r.body.sent === false && r.body.reason === 'mailDown' && r.ticket.length === 16),
+    down.slice(0, 15).map((r) => `${r.status}:${r.body.reason ?? r.body.error}`).join(' '));
+  check('⑨ 第十六次 429（挂着的那十五次也算钱）', down[15].status === 429, `${down[15].status} ${down[15].raw}`);
   const up = await askCode(Z, freshIp());
-  check('⑨ Resend 好了：这个邮箱照样要得到码（那十二次没烧额度）', up.status === 200 && up.body.sent === true,
-    `${up.status} ${up.raw}`);
-  const signIn = await tryCode(Z, up.code, up.ticket, freshIp());
-  check('⑨ 而且那一封真能登进去', signIn.status === 200 && Boolean(signIn.body.token), `${signIn.status}`);
+  check('⑨ Resend 好了：这一小时仍是 429（硬上限——玩家选的代价）', up.status === 429, `${up.status} ${up.raw}`);
+}
+
+// ── ⑩ 硬上限：一百个来路并发三百次，签出去的票不超过十五张（10-09 补充方案 7-7）──
+//
+// 三百次一起发（Promise.all）：一个一个发的版本永远是绿的，量不到「查和记之间隔着一次发信」那
+// 件事。每个来路三次，正好是「邮箱 + 来路」那道的上限，所以挡人的只剩按邮箱那一道。
+for (const [label, opts] of [
+  ['Resend 正常', { down: false }],
+  ['Resend 变慢（每封 300ms）', { down: false, delayMs: 300 }],
+  ['Resend 挂着', { down: true }],
+]) {
+  const W = `burst-${label.length}-${opts.delayMs ?? 0}-${opts.down}@example.com`;
+  const ips = Array.from({ length: 100 }, () => freshIp());
+  const all = await withMailDown(
+    () => Promise.all(ips.flatMap((ip) => [0, 1, 2].map(() => call({ email: W }, ip)))),
+    opts,
+  );
+  const issued = all.filter((r) => r.status === 200 && /^[0-9a-f]{16}$/.test(String(r.body.challenge ?? ''))).length;
+  const refused = all.filter((r) => r.status === 429).length;
+  check(`⑩ ${label}：并发三百次，签出去的票不超过十五张`, issued <= 15, `签了 ${issued} 张`);
+  check(`⑩ ${label}：（尺子）正好十五张，其余都是 429（不是整条路都坏了）`, issued === 15 && refused === 285,
+    `签 ${issued} · 429 ${refused} · 其他 ${all.length - issued - refused}`);
+}
+
+// ── ⑪ 那一笔记在最后：超了自己那一份的来路，烧不动别人的额度 ────────────────
+//
+// 五个来路先各替别的地址要满十封（按来路那道一小时十封），再各替受害者要三次（「邮箱 + 来路」
+// 那道还没满）。这十五次全被按来路那道挡下——它们一张票都没签，就不该记进受害者那十五张里。排
+// 反了的话，这十五次正好把受害者这一小时的额度烧光：他自己来要码，答的是 429。
+{
+  const V = 'quota-order@example.com';
+  const spent = [];
+  for (let k = 0; k < 5; k++) {
+    const ip = freshIp();
+    for (let i = 0; i < 10; i++) await askCode(`filler-${k}-${i}@example.com`, ip);
+    for (let i = 0; i < 3; i++) spent.push((await askCode(V, ip)).status);
+  }
+  check('⑪（尺子）那五个来路替受害者要的十五次全被挡下（按来路那道满了）', spent.every((c) => c === 429), spent.join(' '));
+  const own = await askCode(V, freshIp());
+  check('⑪ 受害者自己来要码：照样要得到（那十五次没记进他的额度）', own.status === 200 && own.body.sent === true,
+    `${own.status} ${own.raw}`);
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

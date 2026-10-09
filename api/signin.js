@@ -15,7 +15,7 @@ import {
   updateAccount,
 } from './_accounts.js';
 import { grantLifetimeIfWindow, resolveEntitlement } from './_entitlement.js';
-import { atLimit, callerId, countHit, tooMany } from './_ratelimit.js';
+import { callerId, tooMany } from './_ratelimit.js';
 import { bump, del, get, set, storeConfigured } from './_store.js';
 import { compose, mailLang, sendMail } from './_mail.js';
 
@@ -56,8 +56,11 @@ import { compose, mailLang, sendMail } from './_mail.js';
 
 const CODE_TTL_S = 30 * 60;
 const MAX_TRIES = 5;
-/** 一个邮箱一小时最多寄出去这么多封（只数寄出去的，见 request）。 */
-const TO_ALL_PER_HOUR = 10;
+/**
+ * 一个邮箱一小时最多签出去这么多张票（见 request 里「by address」那一条）——**每签一张就记一笔，
+ * 寄没寄出去都算**（10-09 补充方案 7-7）。它同时是猜码那一侧的硬上限：一张票只给 MAX_TRIES 次。
+ */
+const TO_ALL_PER_HOUR = 15;
 
 /**
  * 一张票（`challenge`）：这一次要码的人自己的凭据。
@@ -118,9 +121,14 @@ const triesKey = (email, ticket) => 'signin:tries:' + email + (ticket ? ':' + ti
  * 正好 15 次——受害者拿着信里那串**对的**码打进来，答的是 429。知道邮箱就能把人锁在门外
  * 一小时，正是这几道门要防的那件事。
  *
- * 撤了之后防猜码靠的是：每张票 5 次（MAX_TRIES，超了这张票作废）×「一个地址一小时最多出
- * 去十封信」（request 里的 `signin:toAll`）＝ 一个地址一小时至多被真猜 50 次，对一百万种
- * 六位码是二万分之一；外加按来路 30 次。门是 check-signin-challenge 的 ⑦。
+ * 撤了之后防猜码靠的是：每张票 5 次（MAX_TRIES，超了这张票作废）×「一个地址一小时最多签
+ * 出去十五张票」（request 里的 `signin:toAll`）＝ 一个地址一小时至多被真猜 75 次，对一百万种
+ * 六位码约是一万三千分之一；外加按来路 30 次。门是 check-signin-challenge 的 ⑦ 和 ⑩。
+ *
+ * ⚠️ 那个「十五张」**原先不是硬的**（10-09 补充方案 7-7 之前）：它是「先查、信寄成了才记」，
+ * 查和记之间隔着一次发信，同一瞬间打进来的请求一起看到「还没到」——一百个来路并发三百次，签
+ * 出去的票远不止十张；而 Resend 一挂，信一封都不算，票却照发（见 request 末尾：寄没寄成都回
+ * 票），这个上限就整个没了。现在是发票之前原子计数（tooMany），寄没寄成都算。
  */
 const TRY_PER_CALLER = 30;
 
@@ -180,22 +188,30 @@ async function request(res, req, address, wantLang) {
   //     人需要的还多。**按「邮箱 + 来路」数，不按邮箱数**（第 14 推）：原先按邮箱一小时
   //     三封，谁都能替一个地址连要三封，主人这一小时就一封都要不到了——不用猜码，只要知
   //     道他的邮箱。现在外人耗光的只是他自己那一份。
-  //   by address —— 同一个邮箱一小时总共十封，换多少个来路都一样。挡的是一个人换着来路
-  //     往别人信箱里一直灌验证码。**只数真的寄出去的**（2026-10-08 方案 1-2）：先查不记
-  //     （atLimit），信发成了才记一笔（countHit，在下面 sendMail 之后）。从前每来一次就记，
-  //     Resend 那头一挂，玩家点几下《重发》就把自己这一小时的十封烧光了，而那几封一封都没
-  //     出去。它同时是猜码那一侧的上限（见 TRY_PER_CALLER 上面那段）：一小时最多十张有效票。
   //   by caller  —— 一台机器也不许拿着一份地址名单挨个来要码。
+  //   by address —— 同一个邮箱一小时总共签十五张票，换多少个来路都一样。挡的是一个人换着
+  //     来路往别人信箱里一直灌验证码，**同时是猜码那一侧的硬上限**（见 TRY_PER_CALLER 上面
+  //     那段）：一小时最多十五张票，每张五次。
+  //
+  //     **发票之前原子计数，寄没寄出去都算**（10-09 补充方案 7-7）。2026-10-08（方案 1-2）
+  //     曾改成「先查不记、信寄成了才记一笔」，好让 Resend 挂着的时候玩家点几下《重发》不把
+  //     这一小时的额度烧光——代价是这道门成了假门：查和记之间隔着一次发信，并发打进来的一起
+  //     看到「还没到」；而信没寄成也照样回票，Resend 一挂，票就无限地发。一百个来路并发三百
+  //     次，签出去的票远不止十张。玩家在两者之间选了硬上限：Resend 出错的那几次也算钱，十五
+  //     张（比原来的十封多五张）留出点几下《重发》的余地。
+  //
+  //     **排在最后**：只有前两道都放过了、这一张票真要签出去，才记这一笔。排在前面的话，一个
+  //     已经超了自己那一份（by caller）的来路照样能一下一下烧掉别人的额度。
   //
   // 都答 429 而不是假装发了：真在等信的人有权知道为什么什么都没来。
   const caller = callerId(req);
   if (await tooMany('signin:to', `${address}|${caller}`, 3, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (await atLimit('signin:toAll', address, TO_ALL_PER_HOUR, 3600)) {
+  if (await tooMany('signin:from', caller, 10, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (await tooMany('signin:from', caller, 10, 3600)) {
+  if (await tooMany('signin:toAll', address, TO_ALL_PER_HOUR, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
 
@@ -222,8 +238,6 @@ async function request(res, req, address, wantLang) {
    * 实寄到了」是有的，删掉码的话那张寄到的码反而成了废纸。多留 30 分钟不花钞。
    */
   const sent = await sendMail({ to: address, ...compose(MAIL, lang, code) });
-  // 寄出去了才算这个邮箱一封（见上面「by address」那一条）。
-  if (sent) await countHit('signin:toAll', address, 3600);
   /*
    * 票**两种情况都回**，连发信失败那一种。
    *
