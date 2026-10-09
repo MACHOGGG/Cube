@@ -315,7 +315,7 @@ export const GATES = [
   // 61，手边没有那样的真机，审核又要几天，这两道是唯一的老内核。和上一道一样自己重出预览页。
   {
     name: '小红书：老内核（缺接口）打一遍',
-    shard: 'd', secs: 180,
+    shard: 'd', secs: 222,
     run: ['xhs/check-oldkernel.mjs'],
   },
 

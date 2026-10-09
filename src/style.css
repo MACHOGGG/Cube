@@ -24,7 +24,9 @@
   --card-mauve: #BB868D;       /* 累计分卡 */
   --card-peach: #EBC5A0;       /* 最近战绩 */
   --card-periwinkle: #9EA5D2;  /* 排名 */
-  --card-brown: #AD724B;       /* 药丸按钮、弹窗按钮 */
+  /* 药丸按钮、弹窗按钮。原先 #AD724B，白字只有 4.0:1（只够「大字」）；10-09 补充方案改成
+     #9E6845，白字 4.65:1，过正文的 4.5——个人主页的药丸因此能回到原来的字号。 */
+  --card-brown: #9E6845;
   --card-taupe: #7C6454;       /* 天才面板 */
   --card-silver: #CECECE;      /* 开关关着时的轨道（色盲那颗也用它） */
   /* 银灰轨道那一圈 1px 内描边。银灰配白色的钮只有 1.6:1，轨道的边界全靠这一圈（它对白
@@ -4082,18 +4084,16 @@ body:has(.daily-page--count) .home-nav { display: none; }
 .profile-page { gap: var(--gap-md); padding-top: var(--head-top); }
 .profile-cols { display: flex; flex-direction: column; gap: var(--gap-lg); width: 100%; }
 .profile-col { display: flex; flex-direction: column; gap: var(--gap-sm); min-width: 0; }
-/* 左栏每一颗一样高（「同一组元素等高」）。白字压在棕色、紫红上只有 4.0 / 3.0 :1，按方案
-   「字号 ≥ 18.66px 并加粗」走——那是 WCAG 的「大字」，3:1 就够。19px（1.1875rem）比那条线
-   高一点，留一点余量给字体回退。头卡（砖红 5.3:1）、色盲那一行（蓝 5.8:1）其实不受这条
-   约束，可同一列里字号一大一小会看出来，一起放大。 */
-.profile-page .profile-pill {
-  height: 52px; padding: 4px 18px; line-height: 1.1;
-  font-size: 1.1875rem; font-weight: 700; letter-spacing: 0.02em;
-}
-/* 高度写死 52、行高 1.1：英法两种语言的「色盲友好配色」在 360 宽上折成两行（量过：
-   「Palette adaptée aux daltoniens」「Colourblind-friendly palette」），两行 19px × 1.1 ＝ 42，
-   塞得进 52 减上下 4 的内边距。从前是 min-height，折行的那一颗就比别的高 12px——「同一
-   组元素等高」那一条（门里量的）当场破。 */
+/* 左栏的药丸回到第 17 推放大之前的字号（10-09 补充方案第一部分第 1 条，取自 8eaedd5^）：
+   0.98rem / 600（药丸本体那一条，这儿不再改）、高度跟着字走。第 17 推放大到 19px 粗体、定高
+   52，是因为白字压在棕色上只有 4.0:1，得够上「大字」那条线（≥ 18.66px 且加粗，3:1）才过对
+   比度门；这一次换的是棕色本身——--card-brown #AD724B → #9E6845，白字 4.65:1，够正文的 4.5，
+   字就能回到原来的大小。头卡（砖红）、色盲那一行（蓝）本来就过 4.5。
+   高度不写死，只给一个下限 43：正好是带开关那两颗（色盲、Pro）的自然高度——开关 27 加上下各
+   8 的内边距。8eaedd5^ 那一版没有这个下限，文字药丸 36、开关药丸 43，一列高低不齐；第 17 推定
+   的「同一组元素等高」靠这个下限守住，又不回到定高（法文在 360 宽上「Palette adaptée aux
+   daltoniens」折成两行，那一颗跟着字长高，字不会被裁）。 */
+.profile-page .profile-pill { padding: 8px 18px; min-height: 43px; }
 .profile-page .profile-pill-row { gap: var(--gap-sm); max-width: none; }
 /* 头卡：砖红。色盲那一行：蓝。其余的药丸都是棕（.profile-pill 本体的颜色）。
    写成两个类叠在一起、改的是 --pill-bg：药丸本体那条规则排在这儿后面，同样只有一个类
@@ -4102,7 +4102,7 @@ body:has(.daily-page--count) .home-nav { display: none; }
 .profile-pill.profile-pill--cvd { --pill-bg: var(--card-blue); }
 /* ---------- 头卡上的昵称（第 16 推第 5 条） ----------
    登录了的人：左边昵称 + ✎，其余照旧开帐号窗（accountPage.ts 的 mountNicknameHead）。头卡
-   本身（.profile-head）是一块不响应的底，样子和原来那颗药丸一样（同一个类、同样 52 高），
+   本身（.profile-head）是一块不响应的底，样子和原来那颗药丸一样（同一个类、同样 43 高），
    上面摆三样：昵称那几个字、✎ 外面那一圈 8px 空地（两个点击区域之间的间距）、右边那一截
    原来的 #loginBtn。
    全用 margin / padding 排，不用 flex 的 gap：方案定的「新 CSS 都要在 Chrome 61 上可用」。 */
@@ -4178,9 +4178,9 @@ body:has(.daily-page--count) .home-nav { display: none; }
   flex: none; width: 46px; padding: 0;
   display: flex; align-items: center; justify-content: center;
 }
-/* 个人主页上声音那一颗和旁边的《Pro》一样高（52，见 .profile-page .profile-pill），宽也
-   跟着到 52，还是一颗方的。要写上 id：上面那条带着 #soundRow，类选择器压不过它。 */
-.profile-page .profile-pill-row #soundRow { width: 52px; }
+/* 个人主页上声音那一颗和旁边的《Pro》一样高（43，见 .profile-page .profile-pill），宽也
+   跟着到 43，还是一颗方的。要写上 id：上面那条带着 #soundRow，类选择器压不过它。 */
+.profile-page .profile-pill-row #soundRow { width: 43px; }
 .sound-glyph { display: block; width: 22px; height: 22px; color: currentColor; }
 .sound-glyph svg { width: 100%; height: 100%; display: block; }
 /* The bar's own halo is cut in the pill's colour, so it reads as lying over
@@ -7411,6 +7411,22 @@ body.is-room-host::after {
     width: min(calc((100vh - 10.8vh - 271px) * 1.34), calc(100vw - 28px - 2 * 240px - 60px));
     width: min(calc((100dvh - 10.8vh - 271px) * 1.34), calc(100vw - 28px - 2 * 240px - 60px));
   }
+  /* 七色圆球在电脑上放大（10-09 补充方案第一部分第 3 条：原方案 3-H，玩家答复「只放大电脑端，手机端
+     不动」）。
+     上面那条 1.34 倍是「宽一档」的通用数；七色圆球那片菱形自己的长宽比是 1.634（7×7 的斜排，横着躺），
+     于是这一格 713 宽、地板按自己的比例摆成 713×436——**宽卡住了**，这一行 532 的高上下各空出一大截。
+     原方案的办法是「按最长对角线贴安全区留边反推比例」：它最长的那条对角线是横着的那一条，安全区的横
+     向上限就是右边那一项（两条边栏 240 的下限、两道缝、页边），竖向上限是这一行的高。所以宽度改按它
+     自己的比例算，两条上限照旧取小的那个：1440×900 713×436 → 872×534（+22%），1920×1080 928×568 →
+     1095×670，1280×800 593×363 → 712×436；1000×700 本来就顶着横向上限，不变。两条边栏收到下限 240，
+     读数牌 194、教学面板跟着那一栏收窄，都还在自己那一栏里。
+     菱形方块不在这儿：它那片菱形的外框是正方的，电脑上每一档都是**高**卡住（四个尖离地板边只剩 7px，
+     上面正对着得分图案那张牌），按同一条规矩算已经是最大——见决策记录。
+     选择器带 data-shape（gameShell 给每一局的 .app 挂的），和上面那条一样四个类的分量、排在它后面。 */
+  .app.app--game[data-shape='circleSeven'] > .board-wrap {
+    width: min(calc((100vh - 10.8vh - 271px) * 1.634), calc(100vw - 28px - 2 * 240px - 60px));
+    width: min(calc((100dvh - 10.8vh - 271px) * 1.634), calc(100vw - 28px - 2 * 240px - 60px));
+  }
   /* 计时那一档的药丸：第 ③ 行，暂停正上方、居中（PR-7 定的位置）。没打计时的
      局里这一行没有东西，row-gap 又是 0，所以它一个像素都不占。 */
   .app.app--game > .timer-pill {
@@ -7711,8 +7727,12 @@ body.is-room-host::after {
  * 一串（0,5,0），短了压不过它。
  */
 @media (max-width: 999.98px) {
+  /* 10-09 补充方案第一部分第 2 条（原方案 3-E-1「移动端教学字号下调一档」，玩家指明是棋盘底下这块
+     条子、规则窗配图底下那一行不动）：三个数各小一档，clamp(25px, 3.9vh, 30px) → clamp(23px, 3.6vh,
+     28px)。只把下限往下挪的话，高于 641px 的手机（差不多是所有手机）字号一个像素都不变——中间那一项
+     和上限才是它们真正用到的。现在是原来那一档的 1.84–1.87 倍，不再是「两倍」。 */
   .app.app--game.has-coach > .coach-bar.coach-bar--rules .coach-text {
-    font-size: clamp(25px, 3.9vh, 30px); line-height: 1.3;
+    font-size: clamp(23px, 3.6vh, 28px); line-height: 1.3;
     --coach-lines: 2;
     /*
      * **不管这一条是一行还是两行，条子都占两行那么高**（2 × 1.3 × 上面那个字号）。
@@ -7727,7 +7747,7 @@ body.is-room-host::after {
      * 收到平时那一档还要三行的外语长句（见 fitCoachText）会比这个高——那是方案里两条要
      * 求打架的那几句，报给玩家拍板了。
      */
-    min-height: clamp(65px, 10.14vh, 78px);
+    min-height: clamp(59.8px, 9.36vh, 72.8px);
     display: flex; align-items: center;
   }
   .app.app--game.has-coach > .coach-bar.coach-bar--rules .coach-art { display: none; }

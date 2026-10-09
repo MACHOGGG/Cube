@@ -15,7 +15,7 @@
  *   · 走一步，那一组失效了就不再亮它（换成离手指最近的另一组，一组都没有就熄）。
  *   · 只动 filter，不加任何热区——真的拖一枚，拖动照常。
  *   · 得分图案块和外边指引带不再参与教学亮灯；小球的外边带子改成轻微闪烁（0.85–1）。
- *   · 手机端（≤999px）教学文字：字号 ≥ 原来的 2 倍，最多两行，不压住棋盘。
+ *   · 手机端（≤999px）教学文字：字号比原来大一截（第 15 推两倍，10-09 补充方案下调一档到 28/15 倍），最多两行，不压住棋盘。
  *
  * ── 「亮的正好是某一步结算时会动到的那几枚」怎么量 ──────────────────────────
  *
@@ -570,7 +570,7 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
 }
 
 // ===========================================================================
-// ③ 手机端：字号 ≥ 原来的 2 倍、最多两行、不压住棋盘
+// ③ 手机端：字号是放大的那一档（比两倍小一档）、最多两行、不压住棋盘
 // ===========================================================================
 //
 // 「原来」是第 14 推那一版的字号，照它的两条规则算：竖屏 clamp(12.5px, 1.95vh, 15px)，横屏
@@ -632,7 +632,7 @@ const MEASURE = async ([texts]) => {
   return out;
 };
 if (want(3)) {
-  head('③ 手机端（≤999px）：字号 ≥ 原来的 2 倍、最多两行、不压住棋盘');
+  head('③ 手机端（≤999px）：字号是放大的那一档（比两倍小一档）、最多两行、不压住棋盘');
   const zhCircle = tutorialRules('zhHans', 'circle');
   const zhSquare = tutorialRules('zhHans', 'square');
   // 中文这几句，两倍放得进两行，必须做到（小球第 4 条 46 个字，见下面）。
@@ -646,8 +646,13 @@ if (want(3)) {
     await page.waitForTimeout(400);
     const base = baseOf(w, h);
     const got = await page.evaluate(MEASURE, [must.map(([, t]) => t)]);
-    const bad = got.map((g, i) => [must[i][0], g]).filter(([, g]) => !(g.font >= 2 * base - 0.05 && g.lines <= 2));
-    check(`${w}×${h}：中文五句（小球第 4 条除外）字号 ≥ ${(2 * base).toFixed(1)}px（原来 ${base.toFixed(1)}px 的两倍），最多两行`,
+    // 10-09 补充方案第一部分第 2 条：手机端这一档比「两倍」小一档——clamp(25px, 3.9vh, 30px) 换成
+    // clamp(23px, 3.6vh, 28px)。这儿两头都量：就是新的那一档（±0.1px），而且比两倍那一档真的小了
+    // 1px 以上（只把下限往下挪、常见手机上一个像素都不变的那种改法，这一条红）。
+    const want = Math.min(28, Math.max(23, 0.036 * h));
+    const was = Math.min(30, Math.max(25, 0.039 * h));
+    const bad = got.map((g, i) => [must[i][0], g]).filter(([, g]) => !(Math.abs(g.font - want) <= 0.1 && g.font <= was - 1 && g.lines <= 2));
+    check(`${w}×${h}：中文五句（小球第 4 条除外）字号 = ${want.toFixed(1)}px（原来那一档 ${base.toFixed(1)}px 的 ${(want / base).toFixed(2)} 倍，比两倍那一档 ${was.toFixed(1)}px 小一档），最多两行`,
       bad.length === 0,
       bad.length ? bad.map(([n, g]) => `${n} ${g.font}px ${g.lines} 行`).join('；') : got.map((g) => `${g.font}px/${g.lines}行`).join(' '));
     check(`${w}×${h}：条子不压住棋盘、整块在屏幕里`, got.every((g) => !g.overlap && g.inView),

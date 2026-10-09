@@ -213,12 +213,13 @@ function fadeIn(host: HTMLElement): void {
 }
 
 /**
- * 手机端那一档：字号是平时的两倍，最多两行（第 15 推，玩家原话「字号放大到现在的 2 倍以
+ * 手机端那一档：字号比平时大（第 15 推起是两倍，10-09 补充方案下调一档到 28 / 15 倍），最多两行（第 15 推，玩家原话「字号放大到现在的 2 倍以
  * 上，最多两行，不能压住棋盘」）。
  *
- * 两倍是 CSS 给的（style.css 里 `.coach-bar--rules .coach-text` 那一档，同时给一个
- * `--coach-lines: 2`）。这儿只管一件 CSS 做不到的事：**两倍摆不进两行的那几句往回收**，一
- * 次收 1px，收到平时那一档（两倍的一半）为止——再小就比改之前还小了。
+ * 放大是 CSS 给的（style.css 里 `.coach-bar--rules .coach-text` 那一档，同时给一个
+ * `--coach-lines: 2`；10-09 补充方案起比两倍小一档，是平时的 28 / 15 倍）。这儿只管一件 CSS
+ * 做不到的事：**放大之后摆不进两行的那几句往回收**，一次收 1px，收到平时那一档为止——再小
+ * 就比改之前还小了。
  *
  * ⚠️ 量过（390×844 / 360×640 / 375×667 / 430×932）：中文五条里只有小球那一局的第 4 条
  * （46 个字，i18n 的 TUTORIAL_RULE4）两倍摆不进两行，收到约 1.1 倍；英、法两种语言的句子本
@@ -239,7 +240,9 @@ export function fitCoachText(el: HTMLElement): void {
   if (!(lines > 0)) return;
   const big = parseFloat(cs.fontSize);
   if (!(big > 0)) return;
-  const floor = big / 2;
+  // 收到平时那一档为止。10-09 补充方案起手机端这一档是平时的 28 / 15 倍（不再是两倍，见
+  // style.css 那一条），所以按这个比例倒推回去；还写 big / 2 的话会比平时那一档还小一号。
+  const floor = big * (15 / 28);
   let size = big;
   for (let guard = 0; guard < 40; guard++) {
     const n = lineCount(el);

@@ -132,9 +132,12 @@ for (const size of SIZES) {
       const aria = await page.$eval('#nickEdit', (e) => e.getAttribute('aria-label'));
       check(`${tag} ① ✎ 的 aria-label 是「${s.nickEdit}」`, aria === s.nickEdit, String(aria));
       check(`${tag} ① 右边那一截还是原来那颗 #loginBtn`, await page.$eval('#loginBtn', (e) => e.closest('#profileHead') !== null));
-      // ② 和左栏别的药丸一样高、一样宽
+      // ② 和左栏别的药丸一样高、一样宽。高拿《语言》那颗比：10-09 补充方案起药丸高度跟着字走（下限
+      // 43），法文的「Palette adaptée aux daltoniens」在 360 宽上折成两行、那一颗长到 54，拿它比就
+      // 是拿一颗折了行的去量一颗没折行的。《语言》四种语言都是一行。
       const cvd = await rect(page, '#cvdRow');
-      check(`${tag} ② 头卡和别的药丸一样高`, Math.abs(head.h - cvd.h) <= 0.5, `${head.h} / ${cvd.h}`);
+      const lang1 = await rect(page, '#langRow');
+      check(`${tag} ② 头卡和别的药丸一样高`, Math.abs(head.h - lang1.h) <= 0.5, `${head.h} / ${lang1.h}`);
       check(`${tag} ② 头卡和别的药丸一样宽`, Math.abs(head.w - cvd.w) <= 0.5, `${head.w} / ${cvd.w}`);
       for (const sel of ['#nickText', '#nickEdit', '#loginBtn']) {
         const r = await rect(page, sel);
@@ -197,8 +200,9 @@ for (const size of SIZES) {
       check(`${tag} ④ 编辑时卡片不长高`, Math.abs(headEd.h - head.h) <= 0.5, `${headEd.h} / ${head.h}`);
       for (const sel of ['#nickInput', '#nickSave', '#nickCancel']) {
         const r = await rect(page, sel);
-        // 上下也量：卡片是定高的（52），里面的东西长高了卡片不跟着长，而是从卡里顶出去——只量
-        // 卡片自己的高度，那种坏法一条都不红（反证时第一版就是这样漏掉的）。
+        // 上下也量：卡片高度有个下限（43，10-09 补充方案起不再定高 52），里面的东西都比它矮；哪天
+        // 里面的东西长高了，卡片要么跟着长（上一条红），要么从卡里顶出去——只量卡片自己的高度，后
+        // 一种坏法一条都不红（反证时第一版就是这样漏掉的）。
         check(`${tag} ④ ${sel} 整个在卡里`,
           r && r.l >= headEd.l - 0.5 && r.r <= headEd.r + 0.5 && r.t >= headEd.t - 0.5 && r.b <= headEd.b + 0.5,
           JSON.stringify(r));

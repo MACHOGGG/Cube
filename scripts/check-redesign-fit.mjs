@@ -232,7 +232,21 @@ const MEASURE = ({ rootSel, groups, centered, scrollToEnd }) => {
   }
   // ── 每一组东西的方框 ──
   for (const [name, sel] of Object.entries(groups)) {
-    out.groups[name] = [...root.querySelectorAll(sel)].filter(visible).map(rect);
+    // lines：这一块里的字排成了几行（一行一行的 top 去重数）。折了行的那一块可以比别的高——
+    // 10-09 补充方案起个人主页的药丸高度跟着字走（法文「Palette adaptée aux daltoniens」在 360
+    // 宽上折两行），「一样高」只量没折行的那几块（judge 里 sameH 那一条）。
+    const linesOf = (el) => {
+      const tops = new Set();
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        if (!n.textContent.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        for (const r of range.getClientRects()) if (r.width > 0.5) tops.add(Math.round(r.top));
+      }
+      return Math.max(1, tops.size);
+    };
+    out.groups[name] = [...root.querySelectorAll(sel)].filter(visible).map((el) => ({ ...rect(el), lines: linesOf(el) }));
   }
   // ── 居中：这几个盒子左右离视口（或指定的外框）一样远 ──
   out.centered = {};
@@ -245,6 +259,15 @@ const MEASURE = ({ rootSel, groups, centered, scrollToEnd }) => {
     const fr = f ? f.getBoundingClientRect().right : W;
     out.centered[name] = +Math.abs(r.left - fl - (fr - r.right)).toFixed(2);
   }
+  // ── 药丸的白字对它自己的底色（10-09 补充方案第一部分第 1 条：「药丸白字对比度 ≥ 4.5」）──
+  // 不论字号：药丸回到 15.68px / 600 之后不再是「大字」，上面那条按字号放宽到 3 的规则管不住它；
+  // 这一条直接拿每一颗药丸的字色和底色比，一律要 4.5。
+  out.pills = [...root.querySelectorAll('.profile-pill')].filter(visible).map((p) => {
+    const cs = getComputedStyle(p);
+    const bg = parse(cs.backgroundColor);
+    const fg = parse(cs.color);
+    return { id: p.id || p.className, ratio: bg && fg && bg[3] === 1 ? +ratio(over(fg, bg), bg).toFixed(2) : 0 };
+  });
   // ── 底栏：滑到底，最后那一块离底栏还有多远 ──
   const nav = document.querySelector('.home-nav-dock');
   if (scrollToEnd && nav) {
@@ -298,6 +321,12 @@ function judge(where, m, rules) {
   );
   const badIcon = m.icons.filter((i) => i.ratio < 3);
   check(`${where}：图标的对比度 ≥ 3`, badIcon.length === 0, badIcon.map((i) => `${i.id} ${i.ratio}`).join(' / '));
+  if (rules.pillContrast) {
+    const low = (m.pills || []).filter((p) => p.ratio < 4.5);
+    check(`${where}：（尺子）量到了药丸`, (m.pills || []).length >= 5, String((m.pills || []).length));
+    check(`${where}：药丸的字对底色 ≥ 4.5（不论字号）`, low.length === 0, low.map((p) => `${p.id} ${p.ratio}`).join(' / ') ||
+      (m.pills || []).map((p) => p.ratio).join(' '));
+  }
   const noLabel = m.icons.filter((i) => !i.label.trim());
   check(`${where}：只放图标的键都有 aria-label`, noLabel.length === 0, noLabel.map((i) => i.id).join(' / '));
   if (m.margins !== undefined) check(`${where}：左右外边距相等（误差 ≤ ${TOL}px）`, m.margins <= TOL, `${m.margins}px`);
@@ -312,7 +341,15 @@ function judge(where, m, rules) {
       const o = overlaps(boxes);
       check(`${where}：${name} 两两不重叠`, o.length === 0, o.join(' '));
     }
-    if (r.sameH) check(`${where}：${name} 一样高`, spread(boxes.map((b) => b.h)) <= TOL, boxes.map((b) => b.h.toFixed(1)).join('/'));
+    if (r.sameH) {
+      // 没折行的那几块一样高；折了行的那一块（只在 sameHUnlessWrapped 的组里放行）不能比它们矮。
+      const one = r.sameHUnlessWrapped ? boxes.filter((b) => b.lines <= 1) : boxes;
+      const base = one.length ? Math.max(...one.map((b) => b.h)) : 0;
+      const wrappedShort = r.sameHUnlessWrapped ? boxes.filter((b) => b.lines > 1 && b.h < base - TOL) : [];
+      check(`${where}：${name} 一样高${r.sameHUnlessWrapped ? '（折了行的那一块跟着字长高，不算）' : ''}`,
+        spread(one.map((b) => b.h)) <= TOL && wrappedShort.length === 0,
+        boxes.map((b) => b.h.toFixed(1) + (b.lines > 1 ? `(${b.lines}行)` : '')).join('/'));
+    }
     if (r.sameW) check(`${where}：${name} 一样宽`, spread(boxes.map((b) => b.w)) <= TOL, boxes.map((b) => b.w.toFixed(1)).join('/'));
     if (r.evenV && boxes.length > 2) {
       const g = vgaps(boxes);
@@ -353,9 +390,10 @@ const PROFILE = {
 };
 const PROFILE_RULES = {
   navClear: true,
+  pillContrast: true,
   groups: {
     // 没登录时是登录、色盲、语言、完整规则、教学五颗（原先还有一颗《图示》，10-08 方案 3-C-4 删了）。
-    '左栏那一列药丸': { min: 5, sameH: true, evenV: true, noOverlap: true },
+    '左栏那一列药丸': { min: 5, sameH: true, sameHUnlessWrapped: true, evenV: true, noOverlap: true },
     'Pro 和声音': { count: 2, sameH: true, noOverlap: true },
     '天才面板的十二格': { count: 12, sameH: true, noOverlap: true },
     '两颗法务键': { count: 2, sameH: true, sameW: true, noOverlap: true },
