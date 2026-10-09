@@ -1,40 +1,38 @@
 /**
- * 教学的呼吸灯，和手机端那条教学条（第 15 推重写）。
+ * 教学的呼吸灯，和手机端那条教学条。
  *
  *   node scripts/dev-server.mjs 8xxx dist &
  *   node scripts/check-coach-aim.mjs http://localhost:8xxx/
  *
  * ─────────────────────────────────────────────────────────────────────────
- * 第 15 推（玩家 2026-10-03）定的那几句，这一道逐条量：
+ * 亮灯的规矩是 10-09 补充方案 6-2 定的（替换第 15 推和 10-08 方案 3-E-2 那两版），这一道逐条量：
  *
- *   · 同一时间只亮一种颜色。（10-08 方案 3-E-2 起让给下一句：一步同时凑出两组不同颜色的，
- *     两组都亮——见下面「亮的正好是……」那一段。）
- *   · 只在「再走一步就能完成这一条」时亮，只亮会参与的那几枚（包括要滑过去的那一枚）。10-08
- *     方案 3-E-2 扩成「这 1 步会参与结算的所有元素（格子 + 星星）」：同一步顺带凑出来的别的
- *     组也亮。
- *   · 走一步，那一组失效了就不再亮它（换成离手指最近的另一组，一组都没有就熄）。
+ *   · 一次只亮一种颜色；「一种颜色」包括这个颜色的色块和星星。
+ *   · 看 3 步以内：这一条的目标（拼出当前级图案 / 拼出含星星的图案 / 填满一条可消的外边），哪一色最
+ *     少几步能完成，就亮哪一色；亮的是那几步里这一色参与的那几枚。3 步内都完成不了就不亮。
+ *   · 稳定：正在亮的那一色只要仍是步数最少的之一，就不跳色。
+ *   · 有上限：两万个盘面或 15ms，超了退回少看一步——所以「一步没有、两步有」的盘面上不亮也算对
+ *     （见 judge）。「步数一样就随机挑」「1 步压过 2 步」「3 步内达不成不亮」「上限一碰就退」那几句
+ *     在真棋盘上摆不出确定的局面，由 check-coach.mjs 第 ⑦–⑩ 节拿手摆的盘面钉住。
  *   · 只动 filter，不加任何热区——真的拖一枚，拖动照常。
  *   · 得分图案块和外边指引带不再参与教学亮灯；小球的外边带子改成轻微闪烁（0.85–1）。
  *   · 手机端（≤999px）教学文字：字号比原来大一截（第 15 推两倍，10-09 补充方案下调一档到 28/15 倍），最多两行，不压住棋盘。
  *
- * ── 「亮的正好是某一步结算时会动到的那几枚」怎么量 ──────────────────────────
+ * ── 对照怎么算 ──────────────────────────────────────────────────────────
  *
- * 这一道自带一份**对照**：从屏幕上读出每一枚的位置、正反面、颜色（不读任何 data-id，也不
- * 问游戏自己的状态），自己把一步之内的每一种滑法走一遍，找出所有「同色连着 ≥ N 枚、碰到
- * 动过的那条线、至少一枚色块」的组。这一步凑出来的组里有这一条要的那一种（全是色块 / 星星
- * ＋色块），这一步才算数；算数的话，它凑出来的**所有**组并成一个候选（10-08 方案 3-E-2），映
- * 射回此刻的位置。亮着的那几枚必须**正好**是其中一个候选；对照一个都找不到的时候，必须一枚
- * 都不亮。
+ * 这一道自带一份**对照**：从屏幕上读出每一枚的位置、正反面、颜色（不读任何 data-id，也不问游戏自
+ * 己的状态），自己把一步之内、两步之内的每一种滑法走一遍，找出所有「同色连着 ≥ N 枚、碰到最后那一
+ * 步动过的线、至少一枚色块」的组，按颜色归：哪几色几步能完成这一条、完成时那一色参与的是哪几枚（映
+ * 射回此刻的位置）。第 3 步这一道不走（满盘二十多万副盘面），见 judge。
  *
- * 外边那一种组（同色星星填满一条可消的外边）这一道的对照不认——小球的「最外面那条」要真的
- * 外边几何才算得出来，这儿不抄一份。一步顺带凑满一条外边在这几十步里很少见；真遇上了，亮
- * 出来比候选多的那几枚必须全是同一种颜色的星星，不然照样算亮错。
+ * 外边那一种目标（同色星星填满一条可消的外边）这一道的对照不认——小球的「最外面那条」要真的外边
+ * 几何才算得出来，这儿不抄一份；第 4 条只量「一种颜色」那一句。
  *
- * 对照是这儿独立写的，不借游戏的 findMatches——借了就是拿被测的东西量它自己。它和游戏只
- * 共享规则本身（《侵蚀阶梯》§1.1：同色 1×N、至少一枚色块、碰到这一步动过的线）。
+ * 对照是这儿独立写的，不借游戏的 findMatches——借了就是拿被测的东西量它自己。它和游戏只共享规则本
+ * 身（《侵蚀阶梯》§1.1：同色 1×N、至少一枚色块、碰到这一步动过的线）。
  *
- * 随机地真的滑几十步（小球、方块各一局），每一步结算完都对一次——开局那一副只是一种盘面，
- * 灯在翻过面、换过色的盘面上照样要对。
+ * 随机地真的滑几十步（小球、方块各一局），每一步结算完都对一次——开局那一副只是一种盘面，灯在翻过
+ * 面、换过色的盘面上照样要对。
  *
  * ⚠️ 这一道**什么键都不许预设**（除了语言）。CLAUDE.md 里那五个坑的第四个说的就是它：预设
  * `slides_tutorial_seen` 会让 `firstTimeIn` 认成「玩过了」，教学条整个不出现——而这一道要
@@ -80,7 +78,7 @@ esbuild.buildSync({
 });
 const { tutorialRules } = await import(pathToFileURL(join(tmp, 'i18n.mjs')).href);
 rmSync(tmp, { recursive: true, force: true });
-/** ui/coachBar.ts 的 HINT_OF：第几条亮哪一种组（第 4 条亮外边的星星，这一道不走到那儿）。 */
+/** ui/coachBar.ts 的 HINT_OF：第几条要完成的是哪一种目标（第 4 条是外边，这一道的对照不认）。 */
 const HINT_OF = ['front', 'mixed', 'front', 'edge', null];
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -120,7 +118,7 @@ async function openFirst({ idx, lang = 'zhHans', reduce = false, width = 390, he
 
 /**
  * 读屏（在页面里跑）：每一枚的位置、正反面、颜色、亮没亮，外加两种线、此刻几枚一组、条子
- * 上摆的是哪一句。算法在 node 这头（groupsOf）。
+ * 上摆的是哪一句。算法在 node 这头（colorsAt）。
  */
 const ORACLE = ({ shape }) => {
   const els = [...document.querySelectorAll('#boardWrap .ball[data-r][data-c], #boardWrap .tile[data-r][data-c]')];
@@ -172,73 +170,78 @@ const ORACLE = ({ shape }) => {
 };
 
 /**
- * 一层走完：这一种提示该亮的所有候选（10-08 方案 3-E-2：**一步一个候选**）。
+ * 对照（10-09 补充方案 6-2）：**每一种颜色最少几步能完成这一条，完成时这一色参与的是哪几枚**。
  *
- * 每一种滑法：先找出它凑出来的每一组得分的（同色 ≥ N、至少一枚色块、碰到动过的线）；里面有
- * 这一条要的那一种（`kind`），这一步才算数，候选是它凑出来的**所有**组并在一起——格子是**此
- * 刻**的位置，排好序。`after` 是走过之后那几格（整步的），`ownAfter` 只是这一条要的那一种组
- * 的那几格（「真的拖那一步，凑成的那一组翻成了星星」量的是它：带星星的那一组里，原本就是星
- * 星的那几枚翻不翻、翻成什么，不归这一道管）。
+ * 一副「走过几步的盘面」记成 位置 → 那一格上此刻是原来哪一格的那一枚（开局各在各的位置）。一步就是
+ * 一条线转几格（离场的格子不在线上，剩下的首尾相接——o.slide）。每一副盘面上找凑出的组：同色 ≥ N、
+ * 至少一枚色块、碰到最后那一步动过的线（判「连着」按整条几何线，中间离场了一格就断开——o.full）。
+ * 这一条要的那一种组（全是色块 / 星星＋色块）里出现过的颜色，就是这一步数能完成它的颜色；那一色的
+ * 候选是这副盘面上**这一色的所有组**并在一起（色块、星星一起），格子映射回此刻的位置。
  */
-function groupsOf(o, kind) {
-  const at = new Map(o.at);
-  const groups = new Map();
-  o.slide.forEach((line, li) => {
-    const L = line.length;
-    for (let shift = 1; shift < L; shift++) {
-      // 走过这一步之后，位置 k 上的那一枚原来在哪一格。
-      const src = new Map(line.map((k, i) => [k, line[(((i - shift) % L) + L) % L]]));
-      const val = (k) => at.get(src.get(k) ?? k);
-      const moved = new Set(line);
-      const runs = [];
-      for (const scan of o.full) {
-        let i = 0;
-        while (i < scan.length) {
-          if (!at.has(scan[i])) { i++; continue; }
-          const a = val(scan[i]);
-          let j = i + 1;
-          while (j < scan.length && at.has(scan[j]) && val(scan[j]).color === a.color) j++;
-          const run = scan.slice(i, j);
-          i = j;
-          if (run.length < o.n || !run.some((k) => moved.has(k))) continue;
-          const faces = run.map((k) => val(k).face);
-          const front = faces.filter((f) => f === 'flavor').length;
-          const dot = faces.length - front;
-          if (!front) continue; // 全是星星的一组不得分（§1.1）
-          runs.push({ run, color: a.color, kind: dot ? 'mixed' : 'front' });
-        }
-      }
-      const own = runs.filter((x) => x.kind === kind);
-      if (!own.length) continue;
-      const after = [...new Set(runs.flatMap((x) => x.run))];
-      const cells = after.map((k) => src.get(k) ?? k).sort();
-      const key = cells.join(' ');
-      if (!groups.has(key)) {
-        groups.set(key, {
-          cells,
-          line: li,
-          shift,
-          colors: [...new Set(runs.map((x) => x.color))],
-          after,
-          ownAfter: [...new Set(own.flatMap((x) => x.run))],
-        });
-      }
+const who = (S, k) => S.get(k) ?? k;
+function stepOn(o, S, li, shift) {
+  const line = o.slide[li];
+  const L = line.length;
+  const T = new Map(S);
+  for (let i = 0; i < L; i++) T.set(line[i], who(S, line[(((i - shift) % L) + L) % L]));
+  return T;
+}
+function runsOn(o, at, S, moved) {
+  const val = (k) => at.get(who(S, k));
+  const runs = [];
+  for (const scan of o.full) {
+    let i = 0;
+    while (i < scan.length) {
+      if (!at.has(scan[i])) { i++; continue; }
+      const a = val(scan[i]);
+      let j = i + 1;
+      while (j < scan.length && at.has(scan[j]) && val(scan[j]).color === a.color) j++;
+      const run = scan.slice(i, j);
+      i = j;
+      if (run.length < o.n || !run.some((k) => moved.has(k))) continue;
+      const faces = run.map((k) => val(k).face);
+      const front = faces.filter((f) => f === 'flavor').length;
+      if (!front) continue; // 全是星星的一组不得分（§1.1）
+      runs.push({ run, color: a.color, kind: front === faces.length ? 'front' : 'mixed' });
     }
-  });
-  return [...groups.values()];
+  }
+  return runs;
 }
 /**
- * 亮着的那几枚是不是这一个候选：正好相等；或者多出来的那几枚全是同一种颜色的星星（这一步顺
- * 带填满了一条外边，见文件开头那一段——对照不认外边）。少一枚都不行。
+ * 正好走 depth 步（1 或 2）能完成这一条的颜色。回 Map：颜色 → 候选（每一种走法一份，按此刻位置排好
+ * 的那几格去重）。一步的候选另记着那一步（line / shift）和这一条要的那一种组走过之后在哪几格（ownAfter：
+ * 「真的拖那一步，凑成的那一组翻成了星星」量的是它）。
  */
-function litMatches(o, g, lit) {
-  const want = new Set(g.cells);
-  if (!g.cells.every((k) => lit.includes(k))) return false;
-  const extra = lit.filter((k) => !want.has(k));
-  if (!extra.length) return true;
+function colorsAt(o, kind, depth) {
   const at = new Map(o.at);
-  const vals = extra.map((k) => at.get(k));
-  return vals.every((v) => v && v.face === 'dot') && new Set(vals.map((v) => v.color)).size === 1;
+  const out = new Map();
+  const visit = (S, moved, path) => {
+    const runs = runsOn(o, at, S, moved);
+    const own = runs.filter((x) => x.kind === kind);
+    for (const color of new Set(own.map((x) => x.color))) {
+      const mine = runs.filter((x) => x.color === color);
+      const after = [...new Set(mine.flatMap((x) => x.run))];
+      const cells = after.map((k) => who(S, k)).sort();
+      const key = cells.join(' ');
+      const list = out.get(color) ?? [];
+      if (!list.some((c) => c.key === key)) {
+        list.push({ key, cells, path, line: path[0][0], shift: path[0][1], ownAfter: [...new Set(own.filter((x) => x.color === color).flatMap((x) => x.run))] });
+      }
+      out.set(color, list);
+    }
+  };
+  const walk = (S, level, path) => {
+    o.slide.forEach((line, li) => {
+      for (let shift = 1; shift < line.length; shift++) {
+        const T = stepOn(o, S, li, shift);
+        const p = [...path, [li, shift]];
+        if (level === depth) visit(T, new Set(line), p);
+        else walk(T, level + 1, p);
+      }
+    });
+  };
+  walk(new Map(), 1, []);
+  return out;
 }
 const litOf = (o) => o.at.filter(([, v]) => v.lit).map(([k]) => k).sort();
 const ruleOf = (o, shape) => tutorialRules('zhHans', shape).indexOf(o.text);
@@ -291,34 +294,58 @@ async function settle(page, shape, quietMs = 450) {
 /** 正常动效那一局用的安静时长（见 settle）。 */
 const QUIET_FULL_MS = 1700;
 
-/** 一种盘面上量一次「亮的正好是一步能成的那一组」。回它属于哪一类，好数尺子。 */
-function judge(o, shape, where) {
+/**
+ * 一种盘面上量一次（10-09 补充方案 6-2 那几句，逐条）。回它属于哪一类，好数尺子；`memo.color` 记着上一次
+ * 亮的是哪一色（「不跳色」要它）。
+ *
+ *   · 只亮一种颜色（色块和星星算同一色）——哪一条都一样，第 4 条也量这一句；
+ *   · 一步就有颜色能完成：必须亮，亮的是一步能成的那几色之一，而且正好是那一步里这一色参与的那几枚；
+ *   · 一步没有、两步有：亮的话必须是两步能成的那几色之一、正好是那几枚；**不亮也算对**——两步那一层
+ *     手机上未必在 15ms 里算得完，算不完就退回只看一步（方案原话「超了就退回只看 2 步、再不够就只看
+ *     1 步」），这道门不替那条上限做主；
+ *   · 两步都没有：亮的话只能是第 3 步才成的颜色（这道门不验第 3 步，记成 deep），不亮也对；
+ *   · 不跳色：上一次亮的那一色这一次仍在最少那几色里、而且这一次亮着——必须还是它。
+ *
+ * 第 4 条（外边）这道门的对照不认——小球的「最外面那条」要真的外边几何才算得出来，这儿不抄一份——
+ * 只量「一种颜色」那一句。
+ */
+function judge(o, shape, where, memo = {}) {
   const rule = ruleOf(o, shape);
   const kind = HINT_OF[rule] ?? null;
   const lit = litOf(o);
-  const colors = new Set(o.at.filter(([, v]) => v.lit).map(([, v]) => v.color));
-  if (!kind || kind === 'edge') {
-    // 第 5 条不亮；第 4 条这一道不走到（要凑一整条外边的同色星星）。
-    if (!kind) check(`${where}：这一条不亮灯`, lit.length === 0, lit.join(' '));
+  const colors = [...new Set(o.at.filter(([, v]) => v.lit).map(([, v]) => v.color))];
+  const prev = memo.color ?? null;
+  memo.color = colors.length === 1 ? colors[0] : null;
+  if (!kind) {
+    check(`${where}：这一条不亮灯`, lit.length === 0, lit.join(' '));
     return 'skip';
   }
-  const groups = groupsOf(o, kind);
-  if (!groups.length) {
-    check(`${where}（第 ${rule + 1} 条，${kind}）：对照一组都找不到 → 一枚都不亮`, lit.length === 0, lit.join(' '));
-    return lit.length === 0 ? 'none' : 'bad';
+  check(`${where}（第 ${rule + 1} 条）：只亮一种颜色（色块、星星一起算）`, colors.length <= 1, colors.join(' / '));
+  if (kind === 'edge') return 'skip';
+  const one = colorsAt(o, kind, 1);
+  let depth = 1;
+  let reach = one;
+  if (!one.size) {
+    reach = colorsAt(o, kind, 2);
+    depth = reach.size ? 2 : 0;
   }
-  const match = groups.find((g) => litMatches(o, g, lit));
-  check(`${where}（第 ${rule + 1} 条，${kind}）：亮的正好是某一步结算时会动到的那几枚`, !!match,
-    `亮 [${lit.join(' ')}]，对照 ${groups.length} 个候选${match ? '' : '：' + groups.slice(0, 3).map((g) => '[' + g.cells.join(' ') + ']').join(' ')}`);
-  // 「同一时间只亮一种颜色」让给上面那一句（10-08 方案 3-E-2）：亮几种颜色由那一步凑出几种颜
-  // 色的组决定。这儿只量灯没有亮出那一步以外的颜色。
-  if (match) {
-    const allowed = new Set(match.colors);
-    const stray = [...colors].filter((c) => !allowed.has(c));
-    check(`${where}：亮出来的颜色都是那一步凑出来的组的颜色`, stray.length <= (lit.length > match.cells.length ? 1 : 0),
-      `${[...colors].join(' / ')}（那一步 ${match.colors.join(' / ')}）`);
+  if (!depth) {
+    // 两步内谁都完成不了：亮的只能是第 3 步那一色（不验），不亮也对。
+    return lit.length ? 'deep' : 'none';
   }
-  return match ? 'lit' : 'bad';
+  if (!lit.length) {
+    check(`${where}（第 ${rule + 1} 条，${kind}）：一步就有颜色能完成——灯必须亮`, depth !== 1, `一步能成的颜色 ${[...one.keys()].join(' / ')}`);
+    return depth === 1 ? 'bad' : 'cut';
+  }
+  const c = colors[0];
+  const cand = reach.get(c) ?? [];
+  const hit = cand.find((x) => x.key === lit.join(' '));
+  check(`${where}（第 ${rule + 1} 条，${kind}）：亮的是 ${depth} 步能成的那几色之一，正好是那${depth === 1 ? '一步' : '两步'}里这一色参与的那几枚`, !!hit,
+    `亮 [${lit.join(' ')}]（${c}）；${depth} 步能成的颜色 ${[...reach.keys()].join(' / ')}${cand.length ? '，这一色的候选 ' + cand.slice(0, 2).map((x) => '[' + x.key + ']').join(' ') : ''}`);
+  if (prev !== null && reach.has(prev)) {
+    check(`${where}：上一次亮的那一色（${prev}）还是最少的——不跳色`, c === prev, `这一次亮 ${c}`);
+  }
+  return hit ? (depth === 1 ? 'lit' : 'lit2') : 'bad';
 }
 
 // ===========================================================================
@@ -330,15 +357,15 @@ if (want(1)) {
   let page;
   let ctx;
   let o;
-  let groups = [];
+  let one = new Map();
   for (let k = 0; k < 6; k++) {
     ({ ctx, page } = await openFirst({ idx: 1 }));
     o = await settle(page, 'circle', QUIET_FULL_MS);
-    groups = groupsOf(o, 'front');
-    if (groups.length) break;
+    one = colorsAt(o, 'front', 1);
+    if (one.size) break;
     await ctx.close();
   }
-  check('（尺子）开局那一副上，对照找得到一步能成的色块组', groups.length > 0, `${groups.length} 组`);
+  check('（尺子）开局那一副上，对照找得到一步能成的色块组', one.size > 0, `${one.size} 色`);
   const bar = await page.evaluate(() => {
     const b = document.querySelector('.coach-bar');
     return b ? { cls: b.className, hidden: b.hidden } : null;
@@ -502,8 +529,8 @@ if (want(1)) {
   }
 
   // ── 真的拖：滑那一步，正好把亮着的那一组凑成 ──────────────────────────
-  const target = groupsOf(o, 'front').find((g) => litMatches(o, g, litOf(o)));
-  check('（尺子）亮着的那一组在对照里找得到它那一步', !!target);
+  const target = [...colorsAt(o, 'front', 1).values()].flat().find((g) => g.key === litOf(o).join(' '));
+  check('（尺子）亮着的那几枚在对照里找得到它那一步', !!target);
   if (target) {
     await dragMove(page, o, target.line, target.shift);
     const after = await settle(page, 'circle', QUIET_FULL_MS);
@@ -514,7 +541,7 @@ if (want(1)) {
     check('真的拖那一步：亮着的那一组凑成了、翻成了星星（拖动照常，灯不拦手）', flipped.length === target.ownAfter.length,
       `${flipped.length} / ${target.ownAfter.length} 枚翻了`);
     const litNow = litOf(after);
-    check('那一组失效了：不再亮它', litNow.join(' ') !== target.after.slice().sort().join(' '), litNow.join(' '));
+    check('那一组凑成了、翻了面：不再亮它', litNow.join(' ') !== target.key, litNow.join(' '));
     judge(after, 'circle', '凑成之后');
   }
   await ctx.close();
@@ -528,12 +555,13 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
   const { ctx, page } = await openFirst({ idx, reduce: true });
   let o = await settle(page, shape);
   check(`（尺子）这一局真的是${name}`, await page.evaluate(() => document.querySelector('.app--game').getAttribute('data-shape')) === shape);
-  const tally = { lit: 0, none: 0, bad: 0, skip: 0, moved: 0, stat: 0 };
+  const tally = { lit: 0, lit2: 0, cut: 0, deep: 0, none: 0, bad: 0, skip: 0, moved: 0, stat: 0 };
+  const memo = {};
   // 种子固定，同一副盘面每次走同一串（盘面本身是随机发的）。
   let seed = 20261003 + idx;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   for (let step = 0; step < 26; step++) {
-    const res = judge(o, shape, `${name}第 ${step} 步`);
+    const res = judge(o, shape, `${name}第 ${step} 步`, memo);
     tally[res]++;
     // 减弱动态效果：亮着的那几枚是静止光晕（不跑动画，filter 上有 drop-shadow）。
     const litCells = o.at.filter(([, v]) => v.lit).map(([, v]) => v);
@@ -544,9 +572,8 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
     }
     // 下一步：灯亮着的时候一半的机会就滑那一步（灯指的那一步），否则随手滑一条线。
     const kind = HINT_OF[ruleOf(o, shape)];
-    const groups = kind === 'front' || kind === 'mixed' ? groupsOf(o, kind) : [];
-    const lit = litOf(o);
-    const g = groups.find((x) => litMatches(o, x, lit));
+    const lit = litOf(o).join(' ');
+    const g = kind === 'front' || kind === 'mixed' ? [...colorsAt(o, kind, 1).values()].flat().find((x) => x.key === lit) : null;
     let line;
     let shift;
     if (g && rnd() < 0.5) {
@@ -563,8 +590,8 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
     if (await page.evaluate(() => !!document.querySelector('.overlay--end.show'))) break;
   }
   check(`${name}：（尺子）真的滑动了（每一步之后盘面变了）`, tally.moved >= 15, `${tally.moved} 步动了`);
-  check(`${name}：（尺子）「有组可亮」和「一组都没有」两种盘面都量到过`, tally.lit >= 2 && tally.none >= 1,
-    `亮对 ${tally.lit} 次 / 该熄也熄了 ${tally.none} 次 / 不亮的那一条 ${tally.skip} 次`);
+  check(`${name}：（尺子）「一步就有颜色能完成」的盘面量到过好几次`, tally.lit >= 2,
+    `一步亮对 ${tally.lit} 次 / 两步亮对 ${tally.lit2} 次 / 两步没算完不亮 ${tally.cut} 次 / 第 3 步才成 ${tally.deep} 次 / 两步内都没有、不亮 ${tally.none} 次 / 不亮的那一条 ${tally.skip} 次`);
   check(`${name}：一次都没亮错`, tally.bad === 0, `${tally.bad} 次`);
   await ctx.close();
 }

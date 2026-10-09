@@ -1163,19 +1163,15 @@ export function createCircleGame(): ShapeGame {
           /*
            * 外边的**几何**只看哪几格还在盘上，滑一步不改变这件事（滑动只是在活格之间换位
            * 置），所以此刻算一次，每种滑法只问颜色那一半——不然每种滑法都要把二十一条线两两
-           * 比一遍（endsAll），八十来种滑法下来就是好几毫秒，直接撞上 8ms 那条线。
+           * 比一遍（endsAll），八十来种滑法下来就是好几毫秒，看两步、三步的时候 15ms 那条线一碰就过。
            */
           const edges = outerEdges(edgeBoard, edgeThreshold()).map((e) => e.live);
           return (trial) =>
             withGrid(trial, () => edges.filter((live) => isFullDotMatch(live) && !bonusedSignatures.has(edgeSig(live))));
         },
-        // 第 4 条那一盏（10-08 方案 3-E-3）：亮挑中的那一色，见下面 coachStarClear。
-        starClear: () => coachStarClear(),
-        centerOf: ([r, c]) => ballCenter(r, c),
-        boardCenter: () => [refs.boardEl.clientWidth / 2, refs.boardEl.clientHeight / 2],
+        // 一种颜色包括这个颜色的色块和星星（10-09 补充方案 6-2）：星星看露出来的那一色。
+        colorOf: effColor,
       });
-      /** 手指落下的位置（板内坐标，已经换算掉放大动画）——松开时加上拖过的那一段报给 glow。 */
-      let fingerAt: [number, number] | null = null;
       /**
        * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空
        * 中翻的那几块牌拆掉（gameController 的 plankFlipCells），也会打断放大动画（zoom）。
@@ -1187,7 +1183,7 @@ export function createCircleGame(): ShapeGame {
         }
       }
       /**
-       * 教学第 4 条（星星消除那一条）该不该讲、亮哪一色（10-08 方案 3-E-3，engine/coachHint 的
+       * 教学第 4 条（星星消除那一条）该不该讲（10-08 方案 3-E-3；亮哪儿 10-09 起归 reachByColor，engine/coachHint 的
        * starClearHintFor）。
        *
        * 「外边」是此刻**削得动**的那几条（outerEdges，门槛跟着收尾放开走，和卡死判定问的是同一个
@@ -1521,7 +1517,6 @@ export function createCircleGame(): ShapeGame {
           // 画的就是没有变换的那副盘，再修一次就修反了。
           const [px, py] = unfix(x, y);
           dragFix = null;
-          fingerAt = [px, py];
           const [r, c] = cellAt(px, py);
           // 手指落在一个已经离场的格子上：那儿什么都没有，这一下就什么都不做。
           //
@@ -1591,9 +1586,6 @@ export function createCircleGame(): ShapeGame {
         },
         onEnd(dx, dy) {
           const d = drag;
-          // 教学的呼吸灯认「离上一次手指位置最近的一组」：手指落下的地方加上拖过的那一段，
-          // 就是他松手的地方。
-          if (fingerAt) glow.touch(fingerAt[0] + dx, fingerAt[1] + dy);
           if (!d || !d.fam || !d.chain) {
             drag = null;
             if (!controller.resolving) render();

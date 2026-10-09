@@ -207,7 +207,7 @@ const { tutorialRules, STRINGS } = await import(i18nBundle);
   const bad = Object.keys(want).filter((l) => got[l] !== want[l]);
   check('四语都有教学条《<》专用的读屏名（coachPrev）', bad.length === 0, JSON.stringify(got));
 }
-const { oneStepGroups, pickGroup, matchKind, starClearHintFor, createCoachGlow, HINT_BUDGET_MS } = await import(hintBundle);
+const { reachByColor, pickColor, matchKind, starClearHintFor, createCoachGlow, HINT_BUDGET_MS, HINT_NODE_CAP, HINT_MAX_DEPTH } = await import(hintBundle);
 const { outerEdges, shortestEdge, EDGE_MIN } = await import(edgeBundle);
 const { createErosion, tableFor } = await import(erosionBundle);
 const { oneStepMoves, gridLines } = await import(resBundle);
@@ -258,11 +258,13 @@ head('静态：词表、调用点、接线');
     /resolving = true;[\s\S]{0,200}hooks\.coachGlow\?\.\(null\)/.test(gc) && /coach\.observe\([\s\S]{0,200}refreshCoachGlow\(\)/.test(gc));
   for (const f of ['square', 'circle']) {
     const t = code(read(`src/shapes/${f}.ts`));
-    // 第 4 条的触发和那一盏灯都走 starClearHintFor（10-08 方案 3-E-3）：触发问它回没回 null，灯
-    // 是交给呼吸灯的 starClear——两样都得接上，只接一样就是「讲了这一条、灯照旧是黑的」。
-    check(`${f}.ts：接了呼吸灯、第 4 条按 starClearHintFor 判和亮、走法来自 residueBoard 的 oneStepMoves`,
+    // 第 4 条讲不讲走 starClearHintFor（10-08 方案 3-E-3）；亮哪儿 10-09 起和另外几条同一套
+    // （reachByColor），所以棋盘不再把 starClear 交给呼吸灯，交的是「一枚算什么颜色」（effColor：
+    // 星星看露出来的那一色）。
+    check(`${f}.ts：接了呼吸灯、第 4 条按 starClearHintFor 判讲不讲、颜色按 effColor、走法来自 residueBoard 的 oneStepMoves`,
       /coachGlow: \(kind\) =>/.test(t) && /\bcoachStarsReachEdge,/.test(t) && /starClearHintFor<Tile>\(\{/.test(t) &&
-        /return coachStarClear\(\) !== null;/.test(t) && /starClear: \(\) => coachStarClear\(\),/.test(t) && /oneStepMoves\(/.test(t));
+        /return coachStarClear\(\) !== null;/.test(t) && /colorOf: effColor,/.test(t) && !/starClear: \(\) =>/.test(t) &&
+        !/glow\.touch\(/.test(t) && /oneStepMoves\(/.test(t));
   }
 
   const plan = (name) => {
@@ -703,162 +705,187 @@ function runsOn(lines, n) {
 const keyOf = (ids) => ids.slice().sort((a, b) => a - b).join(',');
 const cellsKey = (cells) => cells.map(([r, c]) => r + ',' + c).sort().join(' ');
 
-head('⑦ 一层穷举：找到那一组、映射回此刻的位置');
+head('⑦ 限深搜索：每一色最少几步、参与的是哪几枚（10-09 补充方案 6-2）');
 {
   const g = uniqueBoard();
-  // 第 3 列（lineB(3)）上面三枚摆成红色，底下那一格摆蓝色；红色那一枚放在它右边隔壁——底
-  // 下那一行往左滑一格，它就补进那个空当，竖着连成四枚。
+  // 红：第 3 列（lineB(3)）上面三枚红色，底下那一格蓝色；红色那一枚在它右边隔壁——底下那一行往左
+  // 滑一格就补进去，竖着连成四枚。**一步**。
   for (const [r, c] of [[3, 3], [4, 3], [5, 3], [6, 4]]) g[r][c] = tile(0);
   g[6][3] = tile(1);
   const judge = runsOn(CIRCLE_LINES, 4);
-  const noMove = judge(g, new Set(CIRCLE_LINES.flatMap((l) => l.cells.map(([r, c]) => r + ',' + c))));
-  check('（尺子）摆好的这副盘面上此刻没有现成的组', noMove.length === 0, noMove.map(cellsKey).join(' | '));
+  const all = new Set(CIRCLE_LINES.flatMap((l) => l.cells.map(([r, c]) => r + ',' + c)));
+  check('（尺子）摆好的这副盘面上此刻没有现成的组', judge(g, all).length === 0);
   const step = oneStepMoves(CIRCLE_LINES.map((l) => l.cells), (r, c) => !g[r][c].blank);
   check('（尺子）走法来自 residueBoard：21 条线、每条线 1…n−1 格', step.moves.length === CIRCLE_LINES.reduce((a, l) => a + l.cells.length - 1, 0),
     `${step.moves.length} 种`);
-  const cands = oneStepGroups(g, step, judge, 1e9);
-  const want = [[3, 3], [4, 3], [5, 3], [6, 4]];
-  const wantIds = keyOf(want.map(([r, c]) => g[r][c].id));
-  const found = cands.find((x) => keyOf(x.ids) === wantIds);
-  check('找到了那一组（四枚红色），而且只有这一组', !!found && cands.length === 1, `${cands.length} 组`);
-  check('映射回此刻的位置：要滑过去的那一枚（6,4）在里面，它要去的那一格（6,3）不在',
-    !!found && cellsKey(found.cells) === cellsKey(want), found ? cellsKey(found.cells) : '');
-  check('ids 和 cells 一一对应（同一个顺序）', !!found && found.ids.every((id, i) => g[found.cells[i][0]][found.cells[i][1]].id === id));
-  const keys = cands.map((x) => keyOf(x.ids));
-  check('同一组被几种滑法凑出来只算一次', new Set(keys).size === keys.length, `${keys.length} 组 / ${new Set(keys).size} 种`);
-  check('它是一组色块（第 1、3 条那一种）', !!found && matchKind(found.cells.map(([r, c]) => g[r][c].face)) === 'front');
-  // 把上面那三枚里的一枚换成同色星星：同一步凑出来的就是「星星＋色块」。
-  g[4][3].face = 'dot';
-  const mixed = oneStepGroups(g, step, judge, 1e9).find((x) => keyOf(x.ids) === wantIds);
-  check('换一枚成同色星星：同一组变成「星星＋色块」（第 2 条那一种）',
-    !!mixed && matchKind(mixed.cells.map(([r, c]) => g[r][c].face)) === 'mixed');
+  const none = () => [];
+  const r1 = reachByColor(g, step, judge, none, eff, { now: () => 0 });
+  const red = [[3, 3], [4, 3], [5, 3], [6, 4]].map(([r, c]) => g[r][c].id);
+  check('红色一步就成：最少 1 步、只有这一色', !!r1 && r1.depth === 1 && r1.byColor.size === 1 && r1.byColor.has(0), r1 ? `${r1.depth} 步 / ${[...r1.byColor.keys()]}` : 'null');
+  check('参与的那几枚按棋子认：要滑过去的那一枚 (6,4) 在里面，它要去的那一格上的蓝色 (6,3) 不在',
+    !!r1 && keyOf(r1.byColor.get(0)) === keyOf(red), r1 ? keyOf(r1.byColor.get(0)) : '');
+  check('试走不改盘面', g[6][3].color === 1 && g[6][4].color === 0);
+  // 绿：第 0 列上面三枚绿色，第四枚在 (4,2)——第 2 列往上一格到 (3,2)，第 3 行再往左两格到 (3,0)：
+  // **两步**。只有第 0 列上有三枚，一步怎么滑都凑不出四枚。
+  for (const [r, c] of [[0, 0], [1, 0], [2, 0], [4, 2]]) g[r][c] = tile(2);
+  const r2 = reachByColor(g, step, judge, none, eff, { now: () => 0 });
+  check('一步的红色压过两步的绿色：最少 1 步、只有红色', !!r2 && r2.depth === 1 && [...r2.byColor.keys()].join() === '0',
+    r2 ? `${r2.depth} 步 / ${[...r2.byColor.keys()]}` : 'null');
+  g[6][4] = tile(5); // 拆掉红色那一组
+  const r3 = reachByColor(g, step, judge, none, eff, { now: () => 0 });
+  check('红色拆掉之后：绿色最少 2 步', !!r3 && r3.depth === 2 && [...r3.byColor.keys()].join() === '2', r3 ? `${r3.depth} 步 / ${[...r3.byColor.keys()]}` : 'null');
+  const green = [[0, 0], [1, 0], [2, 0], [4, 2]].map(([r, c]) => g[r][c].id);
+  check('两步那一色亮的是参与的那四枚（按棋子认，此刻还在原处）', !!r3 && keyOf(r3.byColor.get(2)) === keyOf(green), r3 ? keyOf(r3.byColor.get(2) ?? []) : '');
+  const r0 = reachByColor(uniqueBoard(), step, judge, none, eff, { now: () => 0 });
+  check('一枚都配不上谁的盘面：3 步内完成不了，不亮', !!r0 && r0.depth === 0 && r0.byColor.size === 0, r0 ? `${r0.depth}` : 'null');
   check('全是星星的一组不算任何一种（§1.1：图案里至少要有一枚色块）', matchKind(['dot', 'dot', 'dot']) === null);
-  // 盘面原样没动。
-  check('试走不改盘面（g 里那几枚还在原处）', g[6][3].color === 1 && g[6][4].color === 0);
 }
 
-head('⑧ 单次超过 8ms 就跳过这一次');
+head('⑧ 第 3 步，和两道上限：两万个盘面或 15ms，超了退回少看一步');
 {
-  check('预算是玩家定的 8ms', HINT_BUDGET_MS === 8, String(HINT_BUDGET_MS));
-  const g = circleBoard();
-  const step = oneStepMoves(CIRCLE_LINES.map((l) => l.cells), () => true);
-  let t = 0;
-  const slow = () => (t += 3); // 每问一次钟走 3ms
-  check('算到一半超时：回 null（不是半截结果）', oneStepGroups(g, step, runsOn(CIRCLE_LINES, 4), HINT_BUDGET_MS, slow) === null);
-  t = 0;
-  check('（反面尺子）钟不走就算得完', Array.isArray(oneStepGroups(g, step, runsOn(CIRCLE_LINES, 4), HINT_BUDGET_MS, () => 0)));
-  // 灯那一层：超时就熄，不留上一副盘面的那一组。
-  let clock = 0;
-  let tick = 0;
-  const board = {
-    grid: () => g,
-    moves: () => step,
-    groupsFor: () => runsOn(CIRCLE_LINES, 3),
-    centerOf: ([r, c]) => [c * 10 - r * 5, r * 10],
-    boardCenter: () => [0, 30],
-  };
-  const glow = createCoachGlow(board, () => (clock += tick));
-  glow.update('front');
-  const litBefore = g.flat().filter((x) => glow.lit(x.id)).length;
-  check('（尺子）钟不走：亮了一组', litBefore >= 3, `${litBefore} 枚`);
-  tick = 5;
-  glow.update('front');
-  check('这一次超时：熄灯，不留上一组', g.flat().filter((x) => glow.lit(x.id)).length === 0);
-}
-
-head('⑨ 挑组：仍然有效就保留 → 离手指最近 → 一组都没有就熄');
-{
-  const A = { ids: [1, 2, 3], cells: [[0, 0], [0, 1], [0, 2]] };
-  const B = { ids: [7, 8, 9], cells: [[5, 0], [5, 1], [5, 2]] };
-  const at = ([r, c]) => [c * 10, r * 10];
-  check('手指在下面：挑下面那一组', pickGroup([A, B], null, [10, 50], at) === B);
-  check('手指在上面：挑上面那一组', pickGroup([A, B], null, [10, 0], at) === A);
-  check('正在亮的那一组仍然有效：保留它（哪怕手指离另一组更近）', pickGroup([A, B], new Set([1, 2, 3]), [10, 50], at) === A);
-  check('正在亮的那一组失效了：换成离手指最近的一组', pickGroup([A, B], new Set([1, 2, 4]), [10, 50], at) === B);
-  check('一组都没有：熄灭', pickGroup([], new Set([1, 2, 3]), [0, 0], at) === null);
-  check('「离手指多远」量的是最近的那一枚，不是一组的中心',
-    pickGroup([{ ids: [1, 2, 3, 4, 5], cells: [[0, 0], [0, 10], [0, 20], [0, 30], [0, 40]] }, { ids: [6], cells: [[2, 2]] }], null, [0, 0], at).ids[0] === 1);
-  // 灯那一层：熄了之后（结算期间）也记着刚才那一组，下一次重算先认它。只摆两组：右下一组
-  // 红色（底下那一行往左一格）、左上一组绿色（第 3 行往左一格）。
+  check('上限是玩家定的那几个数：20000 个盘面、15ms、看 3 步', HINT_NODE_CAP === 20000 && HINT_BUDGET_MS === 15 && HINT_MAX_DEPTH === 3,
+    `${HINT_NODE_CAP} / ${HINT_BUDGET_MS} / ${HINT_MAX_DEPTH}`);
+  // 第 3 步要一副走法少的盘面才算得完：底下三行（第 4–6 行）那三条横线，每条线上转几格。认组那一把
+  // 换成「那一枚走到了那一格」——量的是搜索走几层、怎么收，不是认组。
   const g = uniqueBoard();
+  const rows = [lineRow(4), lineRow(5), lineRow(6)];
+  const step = oneStepMoves(rows, () => true);
+  const target = g[6][0];
+  const goalAt = (r, c) => (trial) => (trial[r][c] === target ? [[[r, c]]] : []);
+  // (6,0) 那一枚在第 6 行里，转一格到 (6,1)：一步。
+  const one = reachByColor(g, step, goalAt(6, 1), () => [], eff, { now: () => 0 });
+  check('（尺子）同一行里挪一格：1 步', !!one && one.depth === 1, one ? `${one.depth}` : 'null');
+  // 三条横线互不相交——那一枚永远出不了第 6 行，走到 (4,0) 怎么都到不了：不亮。
+  const never = reachByColor(g, step, goalAt(4, 0), () => [], eff, { now: () => 0 });
+  check('永远到不了的那一格：3 层都走完了，不亮', !!never && never.depth === 0, never ? `${never.depth}` : 'null');
+  // 第 3 步：一个只在「三步之后」才认的目标（盘面上那一枚在 (6,0) 转三圈回来不算——认组那一把只在
+  // 第三层问到的那几副盘面里说「是」）。拿一个数层数的尺子：每一副被问到的盘面都是第几步走出来的，
+  // 由 moved 那条线一层一层记——简单起见，用「问了第几次」反推：第 1 层问 n 次、第 2 层 n² 次……
+  const n = step.moves.length;
+  let asked = 0;
+  const third = () => (++asked > n + n * n ? [[[6, 0]]] : []);
+  const r3 = reachByColor(g, step, third, () => [], eff, { now: () => 0 });
+  check('第 3 层才完成的目标：最少 3 步（' + n + ' 种滑法，三层 ' + (n + n * n + n * n * n) + ' 个盘面，在两万之内）',
+    !!r3 && r3.depth === 3 && r3.byColor.size >= 1, r3 ? `${r3.depth}` : 'null');
+  // 盘面数的上限：同一个目标，上限压到第 2 层都走不完——退回第 1 层的答案（没有），不亮。
+  asked = 0;
+  const capped = reachByColor(g, step, third, () => [], eff, { now: () => 0, nodeCap: n + 5 });
+  check('第 2 层算到一半超了盘面上限：这一层作废，退回去（第 1 层没有）——不亮，不是半截结果',
+    !!capped && capped.depth === 0 && capped.byColor.size === 0, capped ? `${capped.depth}` : 'null');
+  // 钟的上限：第 1 层都没走完就超了——回 null（这一次跳过，控制器过一会儿再试）。
+  let t = 0;
+  const slow = () => (t += 3);
+  check('第 1 层都没算完就超了 15ms：回 null（跳过这一次）', reachByColor(circleBoard(), oneStepMoves(CIRCLE_LINES.map((l) => l.cells), () => true), runsOn(CIRCLE_LINES, 4), () => [], eff, { now: slow }) === null);
+  check('（反面尺子）钟不走就算得完', reachByColor(circleBoard(), oneStepMoves(CIRCLE_LINES.map((l) => l.cells), () => true), runsOn(CIRCLE_LINES, 4), () => [], eff, { now: () => 0 }) !== null);
+  // 第 1 层算完了、第 2 层超时：退回第 1 层的答案。
+  asked = 0;
+  let clock = 0;
+  const later = () => (asked > n ? (clock += 20) : clock);
+  const r21 = reachByColor(g, step, third, () => [], eff, { now: later });
+  check('第 1 层算完、第 2 层超了 15ms：退回第 1 层（没有）——不亮', !!r21 && r21.depth === 0, r21 ? `${r21.depth}` : 'null');
+}
+
+head('⑨ 挑色：一次一色，步数最少；平手随机；亮着的不跳色');
+{
+  const g = uniqueBoard();
+  // 红（右边，第 3 列）和黄（左边，第 1 列），都是一步就成。
   for (const [r, c] of [[3, 3], [4, 3], [5, 3], [6, 4]]) g[r][c] = tile(0);
   g[6][3] = tile(1);
-  for (const [r, c] of [[0, 0], [1, 0], [2, 0]]) g[r][c] = tile(2);
-  g[3][1] = tile(2); // 左上角那一组：第 0 列再补一枚就是四枚
+  for (const [r, c] of [[3, 1], [4, 1], [5, 1], [6, 2]]) g[r][c] = tile(6);
+  g[6][1] = tile(7);
   const step = oneStepMoves(CIRCLE_LINES.map((l) => l.cells), (r, c) => !g[r][c].blank);
-  const both = oneStepGroups(g, step, runsOn(CIRCLE_LINES, 4), 1e9);
-  check('（尺子）这副盘面一步之内正好两组：一组红、一组绿',
-    both.length === 2 && new Set(both.map((x) => eff(g[x.cells[0][0]][x.cells[0][1]]))).size === 2, `${both.length} 组`);
-  const centers = ([r, c]) => [c * 20 - r * 10 + 100, r * 18];
-  const board = { grid: () => g, moves: () => step, groupsFor: () => runsOn(CIRCLE_LINES, 4), centerOf: centers, boardCenter: () => [100, 60] };
-  const glow = createCoachGlow(board, () => 0);
-  glow.touch(...centers([6, 4]));
+  const judge = runsOn(CIRCLE_LINES, 4);
+  const reach = reachByColor(g, step, judge, () => [], eff, { now: () => 0 });
+  check('（尺子）两色都是一步', !!reach && reach.depth === 1 && reach.byColor.size === 2, reach ? [...reach.byColor.keys()].join(',') : 'null');
+  const firstC = [...reach.byColor.keys()][0];
+  const lastC = [...reach.byColor.keys()][1];
+  check('平手随机：随机数小挑前一色、大挑后一色——两色都可能被选中',
+    pickColor(reach, null, () => 0) === firstC && pickColor(reach, null, () => 0.999) === lastC && firstC !== lastC, `${firstC} / ${lastC}`);
+  check('亮着的那一色还在最少那几色里：接着亮它（随机数怎么出都一样）',
+    pickColor(reach, lastC, () => 0) === lastC && pickColor(reach, firstC, () => 0.999) === firstC);
+  check('亮着的那一色不在了：从最少那几色里换（不认它）', [firstC, lastC].includes(pickColor(reach, 99, () => 0.5)));
+  check('一色都没有：熄', pickColor({ depth: 0, byColor: new Map() }, firstC, () => 0) === null);
+
+  // 灯那一层（createCoachGlow）：一次只亮一色；结算期间熄了也记着那一色；它还是最少就不跳。
+  const board = (rng) => ({ grid: () => g, moves: () => step, groupsFor: (k) => (k === 'front' ? judge : () => []), colorOf: eff });
+  const litColors = (glow) => new Set(g.flat().filter((x) => glow.lit(x.id)).map(eff));
+  const seen = new Set();
+  for (const r of [0, 0.3, 0.6, 0.99]) {
+    const glow = createCoachGlow(board(), () => 0, () => r);
+    glow.update('front');
+    const cs = litColors(glow);
+    check(`随机数 ${r}：只亮一种颜色，亮四枚`, cs.size === 1 && g.flat().filter((x) => glow.lit(x.id)).length === 4, [...cs].join(','));
+    for (const c of cs) seen.add(c);
+  }
+  check('换几个随机数，两色都被选中过（「步数一样就随机挑一个」）', seen.size === 2, [...seen].join(','));
+  // 稳定：先让它亮后一色，再用一个会挑前一色的随机数重算——还亮后一色。
+  let rv = 0.99;
+  const glow = createCoachGlow(board(), () => 0, () => rv);
   glow.update('front');
-  const red = [[3, 3], [4, 3], [5, 3], [6, 4]].map(([r, c]) => g[r][c].id);
-  check('（尺子）手指在右下：亮的是右下那一组红色', red.every((id) => glow.lit(id)), g.flat().filter((x) => glow.lit(x.id)).map((x) => x.id).join(','));
+  const firstLit = [...litColors(glow)][0];
   glow.update(null);
-  check('熄灯（一步正在结算）：一枚都不亮', g.flat().every((x) => !glow.lit(x.id)));
-  glow.touch(...centers([0, 0]));
+  check('熄灯（一步正在结算）：一枚都不亮', litColors(glow).size === 0);
+  rv = 0;
   glow.update('front');
-  check('结算完那组仍然有效：接着亮它（哪怕手指已经挪到左上）', red.every((id) => glow.lit(id)));
-  const lit = g.flat().filter((x) => glow.lit(x.id));
-  check('同一时间只亮一组、一种颜色', new Set(lit.map(eff)).size === 1 && lit.length === 4, lit.map((x) => eff(x)).join(','));
-  // 那一组失效（底下那枚红色被别的颜色换掉）：换成离手指最近的。
-  g[6][4] = tile(3);
+  check('结算完那一色仍是最少的：接着亮它，不跳色（随机数这回会挑另一色）', [...litColors(glow)].join() === String(firstLit), [...litColors(glow)].join());
+  // 那一色拆掉（它那一组凑不成了）：换成还剩的那一色。
+  const other = firstLit === 0 ? 6 : 0;
+  const hole = firstLit === 0 ? [6, 4] : [6, 2];
+  g[hole[0]][hole[1]] = tile(9);
   glow.update('front');
-  const now2 = g.flat().filter((x) => glow.lit(x.id));
-  check('那一组失效：换成离手指最近的那一组', now2.length >= 4 && now2.every((x) => eff(x) === 2), now2.map((x) => eff(x)).join(','));
+  check('那一色不再是最少（凑不成了）：换成还剩的那一色', [...litColors(glow)].join() === String(other), [...litColors(glow)].join());
   glow.reset();
-  check('重开一局：灯和记性一起清掉', g.flat().every((x) => !glow.lit(x.id)));
+  check('重开一局：灯和记性一起清掉', litColors(glow).size === 0);
 }
 
-head('⑩ 一盏灯亮的是这一步结算时动到的全部，格子 + 星星（10-08 方案 3-E-2）');
+head('⑩ 一种颜色包括这个颜色的色块和星星：同色的别的组一并点亮，别的颜色不亮');
 {
-  // 按种类分的三把尺子，和真棋盘一个口径（square.ts / circle.ts 的 groupsFor：front、mixed 是同一
-  // 套认组再按 matchKind 分开，edge 另一把）。这儿只摆 front、mixed 两种组，edge 那把回空。
+  // 两组摆在同一步里凑出来：右边第 3 列四枚红色色块（底下那一行往左一格，(6,4) 补进 (6,3)），左边
+  // 第 0 列红色那一组、中间一枚是**红色的星星**（同一步里 (6,1) 补进 (6,0)）。
+  //
+  // 认组那几把**只认这一副盘面**：两组同色、缺口又在同一条线上，那条线转别的格数也能把同一枚红色送
+  // 进另一组的缺口——循环位移本身决定了一步之内凑得出红色的滑法不止一种，搜索先碰到哪一步就亮哪一
+  // 步。这一节量的是「收组」那一步（同一副盘面上同色的别的组一并亮、别的颜色不亮），所以把别的盘面
+  // 屏掉，不让「先碰到哪一步」掺进来。
   const kindRuler = (n) => (kind) =>
     kind === 'edge'
       ? () => []
       : (trial, moved) =>
           runsOn(CIRCLE_LINES, n)(trial, moved).filter((cells) => matchKind(cells.map(([r, c]) => trial[r][c].face)) === kind);
   const g = uniqueBoard();
-  // 右边：第 3 列那一组红色（同 ⑦）——底下那一行往左一格，(6,4) 补进 (6,3)。
   for (const [r, c] of [[3, 3], [4, 3], [5, 3], [6, 4]]) g[r][c] = tile(0);
   g[6][3] = tile(1);
-  // 左边：第 1 列那一组绿色，中间那一枚是星星——**同一步**里 (6,2) 补进 (6,1)。
-  for (const [r, c] of [[3, 1], [5, 1], [6, 2]]) g[r][c] = tile(2);
-  g[4][1] = tile(2, true);
-  g[6][1] = tile(3);
+  for (const [r, c] of [[3, 0], [5, 0], [6, 1]]) g[r][c] = tile(0);
+  g[4][0] = tile(0, true);
+  const t64 = g[6][4];
+  const t61 = g[6][1];
+  const onlyThat = (ruler) => (trial, moved) => (trial[6][3] === t64 && trial[6][0] === t61 ? ruler(trial, moved) : []);
   const step = oneStepMoves(CIRCLE_LINES.map((l) => l.cells), (r, c) => !g[r][c].blank);
-  const centers = ([r, c]) => [c * 20 - r * 10 + 100, r * 18];
-  const board = { grid: () => g, moves: () => step, groupsFor: kindRuler(4), centerOf: centers, boardCenter: () => [100, 60] };
+  const board = { grid: () => g, moves: () => step, groupsFor: (k) => onlyThat(kindRuler(4)(k)), colorOf: eff };
   const red = [[3, 3], [4, 3], [5, 3], [6, 4]].map(([r, c]) => g[r][c].id);
-  const green = [[3, 1], [4, 1], [5, 1], [6, 2]].map(([r, c]) => g[r][c].id);
+  const redStars = [[3, 0], [4, 0], [5, 0], [6, 1]].map(([r, c]) => g[r][c].id);
   const litIds = (glow) => g.flat().filter((x) => glow.lit(x.id)).map((x) => x.id);
-  // 尺子：两组各是一种（红的全是色块、绿的带星星），一层之内各只有这一组。
-  const fronts = oneStepGroups(g, step, kindRuler(4)('front'), 1e9);
-  const mixeds = oneStepGroups(g, step, kindRuler(4)('mixed'), 1e9);
-  check('（尺子）一步之内：红的那组全是色块、绿的那组带星星，各只有一组',
-    fronts.length === 1 && keyOf(fronts[0].ids) === keyOf(red) && mixeds.length === 1 && keyOf(mixeds[0].ids) === keyOf(green),
-    `front ${fronts.length} 组 / mixed ${mixeds.length} 组`);
-  const glow = createCoachGlow(board, () => 0);
+  {
+    let states = 0;
+    reachByColor(g, step, (t, m) => { const x = board.groupsFor('front')(t, m); if (x.length) states++; return x; }, () => [], eff, { now: () => 0, maxDepth: 1 });
+    check('（尺子）认得出东西的盘面只有那一副', states === 1, `${states} 副`);
+  }
+  const glow = createCoachGlow(board, () => 0, () => 0);
   glow.update('front');
-  const lit = litIds(glow);
-  // 改坏法：灯只认这一条讲的那一种组（从前那样），这里只亮红的四枚。
-  check('讲第 1 条：同一步顺带凑出的那组带星星的也亮——八枚全亮', keyOf(lit) === keyOf([...red, ...green]), `亮了 ${lit.length} 枚`);
-  check('亮的里头有星星（格子 + 星星）', lit.some((id) => g.flat().find((x) => x.id === id).face === 'dot'));
-  check('要滑过去的那两枚 (6,4)、(6,2) 都在里面（映射回此刻的位置）', [g[6][4].id, g[6][2].id].every((id) => glow.lit(id)));
-  glow.reset();
-  glow.update('mixed');
-  check('讲第 2 条：同一步里那组全是色块的红色也亮', keyOf(litIds(glow)) === keyOf([...red, ...green]), `亮了 ${litIds(glow).length} 枚`);
-  // 「哪些步算数」照旧按条认：拆掉红的那一组（底下那一枚红色换成别的），这一步只凑得出带星星
-  // 的那一组——讲第 1 条时它不算数，一枚都不亮；讲第 2 条时只亮绿的四枚。
-  g[6][4] = tile(4);
+  check('讲第 1 条：同一副盘面上同色那一组带星星的也亮——八枚全亮', keyOf(litIds(glow)) === keyOf([...red, ...redStars]), `亮了 ${litIds(glow).length} 枚`);
+  check('亮的里头有星星（色块和星星一起）', litIds(glow).some((id) => g.flat().find((x) => x.id === id).face === 'dot'));
+  // 左边那一组换成**绿色**：同一副盘面凑出来，可不是同一种颜色——一次只亮一色，它不亮。
+  for (const [r, c] of [[3, 0], [5, 0]]) g[r][c] = tile(2);
+  g[4][0] = tile(2, true);
+  t61.color = 2;
+  t61.dotColor = 2;
   glow.reset();
   glow.update('front');
-  check('这一步凑不出全是色块的组：讲第 1 条一枚都不亮（哪几步算数没变）', g.flat().every((x) => !glow.lit(x.id)));
+  check('同一副盘面凑出的另一种颜色（绿，带星星）不亮：只亮红的四枚', keyOf(litIds(glow)) === keyOf(red), `亮了 ${litIds(glow).length} 枚`);
   glow.update('mixed');
-  check('讲第 2 条：只亮绿的那四枚', keyOf(litIds(glow)) === keyOf(green), `亮了 ${litIds(glow).length} 枚`);
+  const mixedLit = litIds(glow);
+  check('讲第 2 条：要的是带星星的那一种——亮绿的四枚（只有它完成这一条）',
+    keyOf(mixedLit) === keyOf([[3, 0], [4, 0], [5, 0], [6, 1]].map(([r, c]) => g[r][c].id)), `亮了 ${mixedLit.length} 枚`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

@@ -1,182 +1,188 @@
 /**
- * 教学的呼吸灯：**再走一步就能完成这一条的，是哪几枚**（第 15 推）。
+ * 教学的呼吸灯：**这一条最快几步能完成、哪一种颜色最快**（10-09 补充方案 6-2）。
  *
- * ── 从前那盏灯为什么换掉 ──────────────────────────────────────────────
+ * ── 现在的规矩（玩家 2026-10-09，替换 3-E-2 和第 15 推那一套）────────────────────────
  *
- * 上一版（E23）的灯打在「这一条句子里那样东西」上：讲得分图案就点亮 HUD 那块《得分图
- * 案》，讲外边就点亮托盘上那条外边带子。它指得出**名词**，指不出**下一步**——玩家看着一块
- * 发光的牌子，还是不知道该滑哪一枚。玩家 2026-10-03 定的新规矩，逐字：
+ *   · **一次只亮一种颜色**；「一种颜色」包括这个颜色的色块和星星。亮这一色里会参与完成的全部那几枚。
+ *   · **看 3 步以内**：对此刻这一条教学的目标（拼出当前级图案 / 拼出含星星的图案 / 填满一条可消的外
+ *     边），算每一种颜色最少几步能完成（1–3 步）。亮步数最少的那一色；一样少就随机挑一色。3 步内都
+ *     完成不了就不亮。
+ *   · **稳定**：正在亮的那一色只要仍是「步数最少」之一，就接着亮，不跳色；不再是最少了才换。每一步结
+ *     算完重算一次。
+ *   · **有上限**：复用 residueBoard 的走法做限深搜索；一次重算最多看 20000 个盘面或 15ms，超了就退回
+ *     只看 2 步，再不够就只看 1 步。不能卡住拖动。
+ *   · 其余照旧：只动 filter: drop-shadow，不加热区；减弱动态效果时是静止光晕（样式在 style.css）。
  *
- *   · 同一时间只亮一种颜色；
- *   · 只在「再走一步就能完成这一条」时亮，只亮会参与的那几枚（包括要滑过去的那一枚）；
- *   · 每一步结算之后重算：正在亮的那一组仍然有效就保留；失效了，换成离上一次手指位置最
- *     近的一组；一组都没有就熄灭；
- *   · 实现：复用 residueBoard 生成走法，只看一层，每个盘面调用游戏自己的判定，拿到参与的
- *     格子后映射回当前位置。单次超过 8ms 就跳过这一次。
+ * ── 从前那几版为什么换掉 ──────────────────────────────────────────────────
  *
- * ── 这个文件只做三件事 ────────────────────────────────────────────────
+ * 第 15 推那一版只看一层（「再走一步就能完成」才亮），挑一组靠「正在亮的那一组仍然有效就保留，失效
+ * 了换离手指最近的一组」。10-08 方案 3-E-2 又把同一步顺带凑出来的别的组也点亮，于是一步凑出两组不同
+ * 颜色的时候两色同时亮。玩家看下来的问题有两个：一步就能完成的局面并不多，灯多半是黑的；亮起来的时
+ * 候又可能是两种颜色、跟着手指换来换去。新规矩把「亮哪儿」从「哪一组」改成「哪一种颜色」，看得更远
+ * （3 步），挑色有定规（步数最少，平手随机，亮着的不跳）。
  *
- * ① 一层穷举：每一种滑法走一步（走法来自 `residueBoard.oneStepMoves`，和残局穷举同一
- *    套），把走过一步的盘面交给棋盘自己去认组——**认组的规矩一个字不在这儿写**。这一处
- *    要是另抄一份「什么算一组」，两份迟早走样，灯就会亮在一组凑不成的棋子上。
- * ② 映射回来：组是在「走过一步的盘面」上认出来的，可灯要亮在**此刻**的棋子上。棋子本身
- *    不变，只是换了位置，所以按棋子的 id 找回它此刻在哪一格——要滑过去的那一枚也就自然
- *    在里面。
- * ③ 挑一组：保留 → 离手指最近 → 熄灭。
+ * ── 这个文件只做三件事 ────────────────────────────────────────────────────
  *
- * ── 一盏灯亮的是「这一步」，不是「这一组」（10-08 方案 3-E-2）──────────────────────
+ * ① 逐层加深的限深搜索（reachByColor）：先把一步之内每一种滑法走一遍，哪一色完成了这一条，记下那一
+ *    色和参与的棋子；一色都没有，再看两步，再看三步。第 d 层只要有任何一色完成，就不再往下——最少步数
+ *    已经是 d。走法来自 `residueBoard.oneStepMoves`（和残局穷举同一套），每一步**就地**换那一条线、问
+ *    完换回来；完成没完成交给棋盘自己的判定（groupsFor）——「什么算一组」一个字不在这儿写。
+ * ② 挑一色（pickColor）：正在亮的那一色还在最少那几色里就留着；不在了就从最少那几色里随机挑一色。
+ * ③ 那盏灯本身（createCoachGlow）：记着正在亮哪一色、此刻亮哪几枚。
  *
- * 方案原话：「呼吸灯点亮组扩成『这 1 步会参与结算的所有元素（格子 + 星星）』」。从前一组一
- * 个候选、按条只认一种组：讲第 1 条只亮那一组色块，同一步顺带凑出来的另一组（带星星的、或
- * 者一条要消的外边）黑着——可玩家滑下去，那几枚照样会翻、会消，灯没告诉他。现在一步一个候
- * 选：这一步能完成这一条（「哪些步算数」照旧按条认，见 HINT_OF），它结算时动到的每一组都亮，
- * 色块、星星一起（见 stepRuler）。一步只凑出一组的时候和从前一模一样；一步凑出两组不同颜色
- * 的，「同一时间只亮一种颜色」那一句让给这一条——两组都会在这一步里结算，只亮一组反倒是在
- * 瞒着他。
- *
- * 不碰 DOM、不认几何（「离手指多远」要的格子中心由棋盘给），所以 `check-coach-hint.mjs`
- * 能把它单独打包出来，拿假盘面验，进得了 CI。
+ * 不碰 DOM、不认几何，所以 check-coach.mjs 能把它单独打包出来，拿手摆的盘面验，进得了 CI；
+ * check-coach-aim.mjs 拿真棋盘对一遍、再真拖一枚。
  */
 import type { Cell } from './types';
 import type { LineShuffle } from './residueSearch';
 
 /**
- * 这一步该亮哪一种组（ui/coachBar.ts 的 HINT_OF 按条给）：
+ * 这一条要完成的是什么（ui/coachBar.ts 的 HINT_OF 按条给）：
  *
- *   front  第 1、3 条：一步就能拼出当前级 1×N 的那几枚**色块**（不亮星星）
- *   mixed  第 2 条：一步就能拼出的、**同时含星星和色块**的那一组
- *   edge   第 4 条：从前是「一步就能填满一条可消除外边的那几颗同色星星」；10-08 方案 3-E-3 起
- *          棋盘给了 starClear 就不走一层穷举，亮 starClearHintFor 挑出来的那一色（见那个函数）
+ *   front  第 1、3 条：拼出当前级 1×N 的一组**色块**
+ *   mixed  第 2 条：拼出一组**同时含星星和色块**的
+ *   edge   第 4 条：同色星星填满一条可消的外边
  *
  * 第 5 条不亮，所以没有它那一种。
  */
 export type CoachHint = 'front' | 'mixed' | 'edge';
 
-/** 一组：参与的那几枚的 id，和它们**此刻**所在的格子（同一个顺序）。 */
-export interface HintGroup {
-  ids: readonly number[];
-  cells: readonly Cell[];
+/** 一次重算最多看几个盘面（玩家定的字面值，10-09 补充方案 6-2）。 */
+export const HINT_NODE_CAP = 20000;
+
+/** 一次重算最多算这么久（同上）。从前只看一层，那时候的上限是 8ms。 */
+export const HINT_BUDGET_MS = 15;
+
+/** 最多看几步（同上）。 */
+export const HINT_MAX_DEPTH = 3;
+
+/** 一副盘面上，每一种颜色最快几步能完成这一条。 */
+export interface ColorReach {
+  /** 最少几步（1–3）；3 步内都完成不了（或那几层算超了退回来也没有）是 0。 */
+  depth: number;
+  /**
+   * 步数最少的那几色，每色一份：这一层第一次有这一色完成时，这一色参与的那几枚（棋子 id）。参与的
+   * 包括这一条要的那一种组，也包括同一副盘面上同色的别的组（色块、星星一起）——「这个颜色里会参与达
+   * 成的全部格子」。插入的先后就是搜索碰到的先后，同一副盘面永远是同一个次序。
+   */
+  byColor: Map<number, number[]>;
 }
 
-/** 单次最多算这么久；超了这一次就跳过（玩家定的字面值）。 */
-export const HINT_BUDGET_MS = 8;
+export interface ReachOpts {
+  maxDepth?: number;
+  nodeCap?: number;
+  budgetMs?: number;
+  now?: () => number;
+}
 
 /**
- * 一层穷举。
+ * 逐层加深的限深搜索。
  *
- * @param grid 此刻的盘面（行 × 列，方块是矩形，小球是三角形的锯齿数组）。试走的时候**就地**
- *   换那一条线、问完立刻换回来（见下面那段），返回时原样不动。
- * @param step 一步之内的全部滑法（`residueBoard.oneStepMoves` 的结果）。
- * @param groupsOn 在**走过一步的盘面**上认组，棋盘自己的判定。`moved` 是这一步动过的那
- *   条线（和真的滑一下时交给 `resolveMove` 的遮罩是同一个口径），回的格子是那副盘面上的。
- * @returns 每一组一份（同一组被几种滑法凑出来只算一份）；算超时回 `null`。
+ * @param grid 此刻的盘面——试走的时候**就地**换线、问完换回来，返回时原样不动。
+ * @param step 一步之内的全部滑法（`residueBoard.oneStepMoves`）。一步滑动只在线上换位置，哪几格在
+ *   盘上、哪几条线是线都不变，所以第二步、第三步用的还是这一份。
+ * @param goalOn 在**走过这几步的盘面**上认这一条要的那一种组；`moved` 是最后那一步动过的那条线（和
+ *   真的滑一下时交给结算的遮罩同一个口径）。
+ * @param alsoOn 同一副盘面上别的那几种组——只在 goalOn 认出了东西之后才问，用来把同色的别的组一起点亮。
+ * @param colorOf 这一枚是什么颜色（色块看正面、星星看露出来的那一色：engine/types 的 effColor）。
+ * @returns 见 ColorReach；**连一步都没算完**（超时）回 null——调用方过一会儿再试。
+ *
+ * 上限是「这一次重算」的总账，几层合起来算：第 d 层算到一半超了，这一层作废，退回上一层的答案（上一层
+ * 一色都没有——不然不会往下算——所以就是不亮）。满盘的时候一步六十来种滑法，三步是二十多万个盘面，
+ * 两万封顶之内算不完，所以第 3 步多半只在线少的残局里看得到；这是玩家定的上限，不是漏算。
  */
-export function oneStepGroups<T extends { id: number }>(
+export function reachByColor<T extends { id: number }>(
   grid: T[][],
   step: { cells: readonly Cell[]; moves: readonly LineShuffle[] },
-  groupsOn: (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[],
-  budgetMs: number = HINT_BUDGET_MS,
-  now: () => number = defaultNow,
-): HintGroup[] | null {
+  goalOn: (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[],
+  alsoOn: (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[],
+  colorOf: (t: T) => number,
+  opts: ReachOpts = {},
+): ColorReach | null {
+  const maxDepth = opts.maxDepth ?? HINT_MAX_DEPTH;
+  const nodeCap = opts.nodeCap ?? HINT_NODE_CAP;
+  const budgetMs = opts.budgetMs ?? HINT_BUDGET_MS;
+  const now = opts.now ?? defaultNow;
   const t0 = now();
-  // 每一枚此刻在哪一格——映射回来要用。
-  const where = new Map<number, Cell>();
-  for (let r = 0; r < grid.length; r++) {
-    const row = grid[r];
-    for (let c = 0; c < row.length; c++) where.set(row[c].id, [r, c]);
-  }
-  const seen = new Set<string>();
-  const out: HintGroup[] = [];
-  for (const move of step.moves) {
-    // 预算在**每一步之前**问：问在之后的话，超时的那一步已经算完了，8ms 就不是上限。
-    if (now() - t0 > budgetMs) return null;
-    /*
-     * **就地**把这一条线换成走过一步的样子，问完立刻换回来，而不是每种滑法复制一整副盘面：
-     * 一层有六十来种滑法，每种复制一遍是几百个小数组，手机上那 8ms 有一大截花在这儿和随
-     * 后的垃圾回收上。换回来写在 finally 里——认组那一步哪怕抛错，盘面也原样还回去。
-     */
-    const n = move.cells.length;
-    const saved: T[] = new Array(n);
-    const moved = new Set<string>();
-    for (let i = 0; i < n; i++) {
-      const [r, c] = step.cells[move.cells[i]];
-      saved[i] = grid[r][c];
-      moved.add(r + ',' + c);
-    }
-    let found: (readonly number[])[];
-    try {
-      for (let i = 0; i < n; i++) {
-        const [r, c] = step.cells[move.cells[i]];
-        grid[r][c] = saved[move.src[i]];
-      }
-      // 认出来的组要在换回去**之前**记成棋子 id：换回去之后那几格上已经是别的棋子了。
-      found = groupsOn(grid, moved).map((cells) => cells.map(([r, c]) => grid[r][c].id));
-    } finally {
-      for (let i = 0; i < n; i++) {
-        const [r, c] = step.cells[move.cells[i]];
-        grid[r][c] = saved[i];
-      }
-    }
-    for (const ids of found) {
-      const key = ids.slice().sort((a, b) => a - b).join(',');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const here: Cell[] = [];
-      for (const id of ids) {
-        const at = where.get(id);
-        if (at) here.push(at);
-      }
-      // 映射不回来的（理论上不会：滑动只换位置，不增减棋子）整组丢掉，不亮半组。
-      if (here.length === ids.length) out.push({ ids: ids.slice(), cells: here });
-    }
-  }
-  return out;
-}
+  let nodes = 0;
 
-/** 两组是不是同一组（同一批棋子，不管顺序）。 */
-function sameIds(a: readonly number[], b: ReadonlySet<number>): boolean {
-  if (a.length !== b.size) return false;
-  for (const id of a) if (!b.has(id)) return false;
-  return true;
+  /** 一副盘面上，这一条要的那几组按颜色归好（同色的别的组一并收进来）。 */
+  const collect = (moved: Set<string>, into: Map<number, number[]>) => {
+    const goals = goalOn(grid, moved);
+    if (!goals.length) return;
+    const found = new Map<number, Set<number>>();
+    for (const cells of goals) {
+      if (!cells.length) continue;
+      const [r0, c0] = cells[0];
+      const k = colorOf(grid[r0][c0]);
+      const ids = found.get(k) ?? new Set<number>();
+      for (const [r, c] of cells) ids.add(grid[r][c].id);
+      found.set(k, ids);
+    }
+    if (!found.size) return;
+    for (const cells of alsoOn(grid, moved)) {
+      if (!cells.length) continue;
+      const [r0, c0] = cells[0];
+      const ids = found.get(colorOf(grid[r0][c0]));
+      if (ids) for (const [r, c] of cells) ids.add(grid[r][c].id);
+    }
+    // 同一层里先碰到的那一次算数：同一副盘面永远亮同一组。
+    for (const [k, ids] of found) if (!into.has(k)) into.set(k, [...ids]);
+  };
+
+  /** 走第 level 步；到了第 depth 步就认组。回 false = 超了上限，这一层作废。 */
+  const walk = (level: number, depth: number, into: Map<number, number[]>): boolean => {
+    for (const move of step.moves) {
+      // 闸在**每一步之前**问：问在之后的话，超的那一步已经算完了，上限就不是上限。
+      if (++nodes > nodeCap || now() - t0 > budgetMs) return false;
+      const n = move.cells.length;
+      const saved: T[] = new Array(n);
+      const moved = new Set<string>();
+      for (let i = 0; i < n; i++) {
+        const [r, c] = step.cells[move.cells[i]];
+        saved[i] = grid[r][c];
+        moved.add(r + ',' + c);
+      }
+      try {
+        for (let i = 0; i < n; i++) {
+          const [r, c] = step.cells[move.cells[i]];
+          grid[r][c] = saved[move.src[i]];
+        }
+        if (level === depth) collect(moved, into);
+        else if (!walk(level + 1, depth, into)) return false;
+      } finally {
+        // 换回来写在 finally 里：认组那一步哪怕抛错，盘面也原样还回去。
+        for (let i = 0; i < n; i++) {
+          const [r, c] = step.cells[move.cells[i]];
+          grid[r][c] = saved[i];
+        }
+      }
+    }
+    return true;
+  };
+
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    const into = new Map<number, number[]>();
+    if (!walk(1, depth, into)) return depth === 1 ? null : { depth: 0, byColor: new Map() };
+    if (into.size) return { depth, byColor: into };
+  }
+  return { depth: 0, byColor: new Map() };
 }
 
 /**
- * 挑一组：**正在亮的那一组仍然有效就保留；失效了，换成离上一次手指位置最近的一组；一组
- * 都没有就熄灭**（玩家的原话，三句一一对应下面三段）。
+ * 挑一色：**正在亮的那一色只要还在步数最少的那几色里，就接着亮；不在了，从最少那几色里随机挑一色**
+ * （玩家的原话，两句一一对应）。一色都没有就熄（回 null）。
  *
- * 「离手指最近」量的是手指到这一组**最近的那一枚**的距离，不是到这一组的中心：一组是一
- * 条线，中心可能落在离手指很远的空处，而玩家的眼睛跟着的是他手边那几枚。距离一样就取先
- * 算出来的那一组——穷举的次序是固定的，所以同一副盘面永远挑同一组，灯不会无端换地方。
- *
- * @param keep 正在亮的那一组（棋子 id）；没有就给 null。
- * @param finger 上一次手指的位置（板内坐标）；还没碰过盘面就给板子中心。
+ * @param keep 正在亮的那一色；没有就给 null。
+ * @param rng 0–1 的随机数（门里换成确定的）。
  */
-export function pickGroup(
-  cands: readonly HintGroup[],
-  keep: ReadonlySet<number> | null,
-  finger: readonly [number, number],
-  centerOf: (cell: Cell) => readonly [number, number],
-): HintGroup | null {
-  if (!cands.length) return null;
-  if (keep && keep.size) {
-    for (const g of cands) if (sameIds(g.ids, keep)) return g;
-  }
-  let best: HintGroup | null = null;
-  let bestD = Infinity;
-  for (const g of cands) {
-    let d = Infinity;
-    for (const cell of g.cells) {
-      const [x, y] = centerOf(cell);
-      const dd = (x - finger[0]) * (x - finger[0]) + (y - finger[1]) * (y - finger[1]);
-      if (dd < d) d = dd;
-    }
-    if (d < bestD) {
-      bestD = d;
-      best = g;
-    }
-  }
-  return best;
+export function pickColor(reach: ColorReach, keep: number | null, rng: () => number = Math.random): number | null {
+  if (!reach.byColor.size) return null;
+  if (keep !== null && reach.byColor.has(keep)) return keep;
+  const colors = [...reach.byColor.keys()];
+  return colors[Math.min(colors.length - 1, Math.floor(rng() * colors.length))];
 }
+
 
 /**
  * 一组里有几枚星星、几枚色块——第 1、3 条要「全是色块」，第 2 条要「两样都有」。
@@ -222,6 +228,10 @@ export function matchKind(faces: readonly ('dot' | 'flavor')[]): 'front' | 'mixe
  *
  * 写成纯函数、单独放在这儿，门（check-star-clear.mjs、check-coach.mjs）拿手摆的盘面就能验它，
  * 不必把整副棋盘连同 DOM 一起搬进 node。
+ *
+ * **10-09 补充方案 6-2 起，棋盘只拿它判「第 4 条讲不讲」**（coachStarsReachEdge：回不回 null）。亮哪
+ * 儿归上面的 reachByColor——'edge' 那一种目标，3 步以内哪一色最快填满一条外边，和第 1–3 条同一套规
+ * 矩。这儿挑色、给点亮组的那一半原样留着（check-star-clear 还量着它），只是不再拿来点灯。
  */
 export interface StarClearHint {
   /** 挑中的那一色（星星露出来的那个颜色）。 */
@@ -291,97 +301,53 @@ export function starClearHintFor<T>(board: StarClearBoard<T>): StarClearHint | n
   return { color: best.color, stars };
 }
 
+
 /**
- * 一副棋盘上的那盏灯：记着正在亮哪一组、手指上一次在哪儿。
+ * 一副棋盘上的那盏灯：记着正在亮哪一色、此刻亮哪几枚。
  *
- * 棋盘只管两件事：`update(kind)` 之后把 `lit(id)` 为真的那几枚挂上 `coach-glow`（render
- * 里挂，结算之后不重画就地挂），以及在手指松开时报一次 `touch`。挑哪一组、什么时候熄，全
- * 在这儿。
+ * 棋盘只管一件事：`update(kind)` 之后把 `lit(id)` 为真的那几枚挂上 `coach-glow`（render 里挂，结算
+ * 之后不重画就地挂）。挑哪一色、什么时候熄，全在这儿。
  */
 export interface CoachGlow {
   /**
-   * 结算之后（或者教学换了一条）重算。`kind` 为 null = 熄灯，但**记着刚才那一组**——下一
-   * 次重算时它要是仍然有效，就接着亮它。
+   * 结算之后（或者教学换了一条）重算。`kind` 为 null = 熄灯，但**记着刚才那一色**——下一次重算时它要
+   * 是仍在步数最少的那几色里，就接着亮它。
    *
-   * 回 false = 这一次超了 8ms，跳过了（灯熄着）。调用方可以过一会儿再试一次：第一次算往往
-   * 是最慢的那一次（那几个函数还没被浏览器编译成快的那一版），再算一次多半就进得了 8ms。
+   * 回 false = 连一步都没算完（超了 15ms），这一次跳过了（灯熄着）。调用方可以过一会儿再试一次：第
+   * 一次算往往是最慢的那一次（那几个函数还没被浏览器编译成快的那一版）。
    */
   update(kind: CoachHint | null): boolean;
   /** 这一枚此刻亮不亮。 */
   lit(id: number): boolean;
-  /** 手指松开的位置（板内坐标）。 */
-  touch(x: number, y: number): void;
-  /** 一局重开：两样都忘掉。 */
+  /** 一局重开：忘掉正在亮的那一色。 */
   reset(): void;
 }
 
 export interface CoachGlowBoard<T extends { id: number }> {
-  /** 此刻的盘面——会被就地试走（见 oneStepGroups），所以要的是棋盘自己那一份，不是副本。 */
+  /** 此刻的盘面——会被就地试走（见 reachByColor），所以要的是棋盘自己那一份，不是副本。 */
   grid(): T[][];
   moves(): { cells: Cell[]; moves: LineShuffle[] };
   /**
-   * 给这一种提示准备一把「认组」的尺子。分两步是为了让不随滑动而变的东西只算一次：外边
-   * 族那几条外边的**几何**只看哪几格还在盘上，一步滑动不改变这件事，于是每种滑法都重算一
-   * 遍外边是白算（小球那副要算二十一条线 × 二十一条线）。
+   * 给这一种目标准备一把「认组」的尺子。分两步是为了让不随滑动而变的东西只算一次：外边族那几条外边
+   * 的**几何**只看哪几格还在盘上，一步滑动不改变这件事，于是每种滑法都重算一遍外边是白算。
    */
   groupsFor(kind: CoachHint): (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[];
-  /**
-   * 第 4 条（edge）那一盏（10-08 方案 3-E-3）：棋盘按此刻的盘面问 starClearHintFor，回它挑好的那
-   * 一组。给了它，edge 就不走一层穷举——那一层要「一步就能填满一条外边」才亮，局面上少见，第 4
-   * 条讲着、灯多半是黑的。
-   */
-  starClear?(): StarClearHint | null;
-  centerOf(cell: Cell): readonly [number, number];
-  boardCenter(): readonly [number, number];
+  /** 这一枚算什么颜色：色块看正面，星星看露出来的那一色（engine/types 的 effColor）。 */
+  colorOf(t: T): number;
 }
 
-/** 三种组都问一遍——「这一步结算时会动到哪些棋子」要的是全部，不只是这一条讲的那一种。 */
+/** 三种目标——认完这一条要的那一种，同色的另外两种一并点亮。 */
 const ALL_KINDS: readonly CoachHint[] = ['front', 'mixed', 'edge'];
-
-/**
- * 给 oneStepGroups 的那把尺子：**一步一个候选**（10-08 方案 3-E-2，见文件开头那一段）。
- *
- * 先用这一条自己那把（`kind`）问：这一步能不能完成这一条——不能就什么都不回，这一步不算
- * 数。能的话，把另外两把也问一遍，三把认出来的格子并成一组交回去：这一步结算时会动到的每一
- * 枚，色块、星星一起。同一格被两组认出来只算一次。
- *
- * 另外两把只在「这一步算数」之后才问：一层六十来种滑法里真能完成这一条的只有几种，绝大多
- * 数步只花一把尺子的工夫，8ms 的预算不会因为这一条吃紧。
- */
-function stepRuler<T extends { id: number }>(
-  board: CoachGlowBoard<T>,
-  kind: CoachHint,
-): (trial: T[][], moved: Set<string>) => readonly (readonly Cell[])[] {
-  const own = board.groupsFor(kind);
-  const rest = ALL_KINDS.filter((k) => k !== kind).map((k) => board.groupsFor(k));
-  return (trial, moved) => {
-    const mine = own(trial, moved);
-    if (!mine.length) return [];
-    const seen = new Set<string>();
-    const all: Cell[] = [];
-    const add = (cells: readonly Cell[]) => {
-      for (const cell of cells) {
-        const key = cell[0] + ',' + cell[1];
-        if (seen.has(key)) continue;
-        seen.add(key);
-        all.push(cell);
-      }
-    };
-    for (const g of mine) add(g);
-    for (const ruler of rest) for (const g of ruler(trial, moved)) add(g);
-    return [all];
-  };
-}
 
 export function createCoachGlow<T extends { id: number }>(
   board: CoachGlowBoard<T>,
   now: () => number = defaultNow,
+  rng: () => number = Math.random,
 ): CoachGlow {
   /** 此刻亮着的那几枚。 */
   let shown = new Set<number>();
-  /** 刚才亮过的那一组——熄灯之后也记着，「仍然有效就保留」认的是它。 */
-  let keep: Set<number> | null = null;
-  let finger: [number, number] | null = null;
+  /** 正在亮的那一色——熄灯之后也记着，「不跳色」认的是它。 */
+  let keep: number | null = null;
 
   return {
     update(kind) {
@@ -389,38 +355,30 @@ export function createCoachGlow<T extends { id: number }>(
         shown = new Set();
         return true;
       }
-      if (kind === 'edge' && board.starClear) {
-        // 挑哪一色、亮哪几枚由 starClearHintFor 说了算（它自己保证同一副盘面挑同一色），这儿只
-        // 把格子换成棋子 id。不走「保留 → 最近」那一套：那一套是给一层穷举里好几组候选挑一组用的。
-        const hint = board.starClear();
-        const g = board.grid();
-        shown = new Set(hint ? hint.stars.map(([r, c]) => g[r][c].id) : []);
-        keep = null;
-        return true;
-      }
-      const cands = oneStepGroups(board.grid(), board.moves(), stepRuler(board, kind), HINT_BUDGET_MS, now);
-      // 超时：这一次跳过。**熄灯，不留旧的**——旧的那一组是上一副盘面算出来的，留着可能亮
-      // 在一组已经凑不成的棋子上，那比不亮还糟。
-      if (!cands) {
+      const goal = board.groupsFor(kind);
+      const others = ALL_KINDS.filter((k) => k !== kind).map((k) => board.groupsFor(k));
+      const alsoOn = (trial: T[][], moved: Set<string>) => others.flatMap((ruler) => ruler(trial, moved));
+      const reach = reachByColor(board.grid(), board.moves(), goal, alsoOn, (t) => board.colorOf(t), { now });
+      // 连一步都没算完：这一次跳过。**熄灯，不留旧的**——旧的那几枚是上一副盘面算出来的，留着可能亮
+      // 在一组已经凑不成的棋子上，那比不亮还糟。记着的那一色不丢：下一次算完了它还在最少那几色里，照
+      // 样接着亮。
+      if (!reach) {
         shown = new Set();
         return false;
       }
-      const g = pickGroup(cands, keep, finger ?? board.boardCenter(), board.centerOf);
-      shown = new Set(g ? g.ids : []);
-      keep = g ? new Set(g.ids) : null;
+      const color = pickColor(reach, keep, rng);
+      shown = new Set(color === null ? [] : reach.byColor.get(color));
+      keep = color;
       return true;
     },
     lit: (id) => shown.has(id),
-    touch(x, y) {
-      finger = [x, y];
-    },
     reset() {
       shown = new Set();
       keep = null;
-      finger = null;
     },
   };
 }
+
 
 function defaultNow(): number {
   return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();

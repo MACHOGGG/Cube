@@ -1,5 +1,6 @@
 /**
- * 「星星消除」那一条提示挑哪一色、亮哪几枚（10-08 方案 3-E-3：starClearHintFor）。
+ * 「星星消除」那一条提示挑哪一色、亮哪几枚（10-08 方案 3-E-3：starClearHintFor）。10-09 补充方案 6-2 起棋盘
+ * 只拿它判「第 4 条讲不讲」，亮哪儿归 reachByColor——最后一节量的就是这件事。
  *
  *   npx esbuild src/engine/coachHint.ts --bundle --format=esm --outfile=/tmp/coachhint.mjs
  *   node scripts/check-star-clear.mjs /tmp/coachhint.mjs
@@ -95,34 +96,40 @@ const key = (cells) => [...new Set(cells.map(([r, c]) => `${r},${c}`))].sort().j
     twice[0]?.color === twice[1]?.color && twice[0]?.color === 1, `${twice[0]?.color} / ${twice[1]?.color}`);
 }
 
-// ── 呼吸灯：第 4 条那一盏走 starClear，不走一层穷举 ──────────────────────────
+// ── 呼吸灯：第 4 条亮哪儿，10-09 起不归它管 ─────────────────────────────────────
 //
-// 棋盘把 starClear 交给呼吸灯（square.ts / circle.ts 的 coachStarClear）。讲第 4 条（edge）时亮的必须
-// 正好是它挑的那一组；它回 null 时一枚都不亮。这里一种滑法都不给（moves 是空的）——灯要是还走一层
-// 穷举，什么都亮不出来，第一条就红。
+// 10-08 方案 3-E-3 那一版，讲第 4 条时灯亮的就是 starClearHintFor 挑的那一组（棋盘把 starClear 交给呼吸
+// 灯）。10-09 补充方案 6-2 把亮灯的规矩整个换了：四条一套——3 步以内哪一色最快完成这一条（第 4 条是
+// 「同色星星填满一条可消的外边」），就亮哪一色。starClearHintFor 只剩「第 4 条讲不讲」那一半。
+//
+// 量法：一副盘面，starClearHintFor 挑得出一色（讲得出第 4 条），可外边那把尺子什么都认不出（3 步内谁都
+// 填不满）。灯要是还认 starClear，会亮出它挑的那一组；照新规矩，一枚都不亮。尺子：同一副盘面上把外边
+// 那把尺子换成「第一步就认得出」，灯就亮——证明这一副盘面上灯本来是点得着的。
 {
   let id = 1;
   const grid = board({
     1: [[0, 1], [0, 2], [0, 3], [2, 2], [3, 2]],
     2: [[4, 2], [1, 1], [1, 2], [1, 3], [2, 1], [2, 3], [3, 1]],
   }).map((row) => row.map((t) => ({ ...t, id: id++ })));
-  let hint = hintOf(grid);
-  const glow = createCoachGlow({
+  const hint = hintOf(grid);
+  check('（尺子）这副盘面上 starClearHintFor 挑得出一色——第 4 条讲得出', !!hint, hint ? `第 ${hint.color} 色` : 'null');
+  // 一种滑法：第 0 行转一格。外边那把尺子按需要换。
+  const row0 = [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]];
+  const moves = { cells: row0, moves: [{ cells: [0, 1, 2, 3, 4], src: [4, 0, 1, 2, 3] }] };
+  const make = (edgeRuler) => createCoachGlow({
     grid: () => grid,
-    moves: () => ({ cells: [], moves: [] }),
-    groupsFor: () => () => [],
+    moves: () => moves,
+    groupsFor: (k) => (k === 'edge' ? edgeRuler : () => []),
+    colorOf: (t) => (t.face === 'dot' ? t.dotColor : t.color),
     starClear: () => hint,
-    centerOf: ([r, c]) => [c, r],
-    boardCenter: () => [2, 2],
-  }, () => 0);
-  glow.update('edge');
-  const lit = grid.flat().filter((t) => glow.lit(t.id)).map((t) => t.id);
-  const want = hint.stars.map(([r, c]) => grid[r][c].id);
-  check('灯：讲第 4 条时亮的正好是 starClearHintFor 挑的那一组（不是一层穷举那一把认出来的）',
-    lit.length === want.length && want.every((x) => lit.includes(x)), `亮 ${lit.length} / 该 ${want.length}`);
-  hint = null;
-  glow.update('edge');
-  check('灯：starClear 回 null 时一枚都不亮', grid.flat().every((t) => !glow.lit(t.id)));
+  }, () => 0, () => 0);
+  const quiet = make(() => []);
+  quiet.update('edge');
+  check('讲第 4 条、3 步内谁都填不满外边：一枚都不亮（不再亮 starClearHintFor 挑的那一组）',
+    grid.flat().every((t) => !quiet.lit(t.id)), `亮了 ${grid.flat().filter((t) => quiet.lit(t.id)).length} 枚`);
+  const loud = make((trial) => [row0.filter(([r, c]) => trial[r][c].face === 'dot')].filter((x) => x.length));
+  loud.update('edge');
+  check('（尺子）外边那把尺子第一步就认得出：灯亮了', grid.flat().some((t) => loud.lit(t.id)));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

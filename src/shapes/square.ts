@@ -892,13 +892,9 @@ export function createSquareGame(): ShapeGame {
                     .map((m) => m.cells)
                     .filter((cells) => matchKind(cells.map(([r, c]) => grid[r][c].face)) === kind),
                 ),
-        // 第 4 条那一盏（10-08 方案 3-E-3）：亮挑中的那一色，见下面 coachStarClear。
-        starClear: () => coachStarClear(),
-        centerOf: ([r, c]) => [c * CELL + CELL / 2, r * CELL + CELL / 2],
-        boardCenter: () => [(cols * CELL) / 2, (rows * CELL) / 2],
+        // 一种颜色包括这个颜色的色块和星星（10-09 补充方案 6-2）：星星看露出来的那一色。
+        colorOf: effColor,
       });
-      /** 手指落下的位置（板内坐标）——松开时加上拖过的那一段，报给 glow 当「上一次手指位置」。 */
-      let fingerAt: [number, number] | null = null;
       /**
        * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空
        * 中翻的那几块牌拆掉（gameController 的 plankFlipCells），而灯是在连锁收尾那一刻点
@@ -911,7 +907,7 @@ export function createSquareGame(): ShapeGame {
         }
       }
       /**
-       * 教学第 4 条（星星消除那一条）该不该讲、亮哪一色（10-08 方案 3-E-3，engine/coachHint 的
+       * 教学第 4 条（星星消除那一条）该不该讲（10-08 方案 3-E-3；亮哪儿 10-09 起归 reachByColor，engine/coachHint 的
        * starClearHintFor）。
        *
        * 方块没有「最外边」这回事：星星凑满**任意**一整行、一整列都消（fullDotLines），所以交给它
@@ -1293,7 +1289,6 @@ export function createSquareGame(): ShapeGame {
           // column.
           const c = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
           const r = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
-          fingerAt = [x, y];
           drag = { r, c, axis: null, dx: 0, dy: 0, cell: CELL, lastShift: 0, chain: null };
           return { r: drag.r, c: drag.c };
         },
@@ -1336,9 +1331,6 @@ export function createSquareGame(): ShapeGame {
         },
         onEnd(dx, dy) {
           const d = drag;
-          // 教学的呼吸灯认「离上一次手指位置最近的一组」：手指落下的地方加上拖过的那一段，
-          // 就是他松手的地方。
-          if (fingerAt) glow.touch(fingerAt[0] + dx, fingerAt[1] + dy);
           if (!d || !d.axis || !d.chain) {
             drag = null;
             if (!controller.resolving) render();
