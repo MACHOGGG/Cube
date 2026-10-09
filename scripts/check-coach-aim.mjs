@@ -304,7 +304,11 @@ const QUIET_FULL_MS = 1700;
  *     手机上未必在 15ms 里算得完，算不完就退回只看一步（方案原话「超了就退回只看 2 步、再不够就只看
  *     1 步」），这道门不替那条上限做主；
  *   · 两步都没有：亮的话只能是第 3 步才成的颜色（这道门不验第 3 步，记成 deep），不亮也对；
- *   · 不跳色：上一次亮的那一色这一次仍在最少那几色里、而且这一次亮着——必须还是它。
+ *   · 不跳色：上一次亮的那一色这一次仍在最少那几色里、而且这一次亮着——必须还是它。**只在同一条之内比**：条子是
+ *     按时间换的（ui/coachBar.ts 的 show 里那个读够了才换的定时器），换的那一下控制器在两步之间就按新的一条重
+ *     算过一次灯（onChange → refreshCoachGlow），这道门只在每一步结算完才读，看不到那一次——游戏记着的那一色
+ *     可能已经换成门没见过的一色。拿换条之前那一色去比，量的是门自己漏看的那一拍（2026-10-09 加了「顺着两
+ *     步解走第一步」之后，换条那一刻灯亮着的次数多了，方块第 12 步——正是换条那一步——红过两回）。
  *
  * 第 4 条（外边）这道门的对照不认——小球的「最外面那条」要真的外边几何才算得出来，这儿不抄一份——
  * 只量「一种颜色」那一句。
@@ -314,7 +318,9 @@ function judge(o, shape, where, memo = {}) {
   const kind = HINT_OF[rule] ?? null;
   const lit = litOf(o);
   const colors = [...new Set(o.at.filter(([, v]) => v.lit).map(([, v]) => v.color))];
-  const prev = memo.color ?? null;
+  // 「不跳色」只在同一条之内比（见上面那段）：换了一条，上一次读到的那一色不作数。
+  const prev = memo.rule === rule ? memo.color ?? null : null;
+  memo.rule = rule;
   memo.color = colors.length === 1 ? colors[0] : null;
   if (!kind) {
     check(`${where}：这一条不亮灯`, lit.length === 0, lit.join(' '));
@@ -570,14 +576,27 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
       check(`${name}：减弱动态效果时是静止光晕（animation: none，filter 里有 drop-shadow）`,
         litCells.every((v) => v.anim === 'none' && /drop-shadow/.test(v.filter)), `${litCells[0].anim} / ${litCells[0].filter.slice(0, 60)}`);
     }
-    // 下一步：灯亮着的时候一半的机会就滑那一步（灯指的那一步），否则随手滑一条线。
+    /*
+     * 下一步：灯亮着的时候一半的机会就滑那一步（灯指的那一步）；灯没亮、一步谁都成不了而两步有的时候，一半
+     * 的机会顺着一组两步解先走第一步（对照给的 path[0]）——下一副盘面就一步能成。别的时候随手滑一条线。
+     *
+     * 中间那一句是 2026-10-09 补的：从前只有「亮着就照着滑」和「随手滑」，一步能成的盘面碰不碰得到全看发
+     * 牌。CI 上方块那一局随手滑了 26 步只碰到 1 次（「两步没算完不亮」11 次），下面那把「好几次」的尺子就
+     * 红了——量的是运气，不是灯。顺着两步解走第一步不会让主断言变松：灯亮没亮、亮得对不对，照旧每一步都
+     * 由 judge 拿对照量。
+     */
     const kind = HINT_OF[ruleOf(o, shape)];
     const lit = litOf(o).join(' ');
-    const g = kind === 'front' || kind === 'mixed' ? [...colorsAt(o, kind, 1).values()].flat().find((x) => x.key === lit) : null;
+    const front = kind === 'front' || kind === 'mixed';
+    const one = front ? [...colorsAt(o, kind, 1).values()].flat() : [];
+    const g = one.find((x) => x.key === lit) ?? null;
+    const two = front && !lit && !one.length ? [...colorsAt(o, kind, 2).values()].flat() : [];
     let line;
     let shift;
     if (g && rnd() < 0.5) {
       ({ line, shift } = g);
+    } else if (two.length && rnd() < 0.5) {
+      ({ line, shift } = two[Math.floor(rnd() * two.length)]);
     } else {
       line = Math.floor(rnd() * o.slide.length);
       shift = 1 + Math.floor(rnd() * Math.min(2, o.slide[line].length - 1));
