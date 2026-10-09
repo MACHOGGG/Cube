@@ -21,6 +21,7 @@
  * 那段 HTML 注释），这道门钉的是屏幕上那一面：**话在、价钱不在、键是《注册》**。
  */
 import { chromium } from 'playwright';
+import { readFileSync } from 'node:fs';
 
 const base = process.argv[2];
 if (!base) {
@@ -34,6 +35,27 @@ const check = (n, ok, extra = '') => {
   console.log((ok ? 'PASS  ' : 'FAIL  ') + n + (extra ? '  ' + extra : ''));
 };
 const head = (t) => console.log('\n' + t);
+
+/**
+ * 货单该有几条：照源码数，不写死。
+ *
+ * subscribe.ts 的 nowList 是「每一副天才布局一行」（从 GENIUS_LAYOUTS 现拼）再加几行固定的（开小屋、
+ * 配色、翻面速度……）。这儿原先写死「十条」——那时表里两副布局；10-09 补充方案第一部分第 10 条又锁上
+ * 菱形方块、六边形小球，货单跟着变成十二条，这道门当场红了三条。红的是门（数写死了），不是货单。
+ * 现在两样都从源码读：表里再加一副，货单多一行，门不用跟着改；要守的那件事（E40：一条都不许收进
+ * 「……」里）一个字没松。
+ */
+const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+const LAYOUTS = ((src('../src/engine/geniusContent.ts').match(/GENIUS_LAYOUTS[^=]*=\s*\[([^\]]*)\]/) || [, ''])[1].match(/'[^']+'/g) || []).length;
+const NOW_LIST = (src('../src/ui/subscribe.ts').match(/const nowList = \[\n([\s\S]*?)\n\s*\];/) || [, ''])[1]
+  .split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//'));
+const FIXED = NOW_LIST.filter((l) => !l.startsWith('...')).length;
+const SPREADS = NOW_LIST.filter((l) => l.startsWith('...'));
+if (LAYOUTS < 1 || FIXED < 1 || SPREADS.length !== 1 || !/GENIUS_LAYOUTS/.test(SPREADS[0])) {
+  console.error(`读不出货单的组成（布局 ${LAYOUTS} 副、固定 ${FIXED} 行、展开 ${SPREADS.join(' ')}）——subscribe.ts 的 nowList 改了写法，先修这儿。`);
+  process.exit(2);
+}
+const PERKS = LAYOUTS + FIXED;
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
@@ -151,7 +173,7 @@ head('那一屏：话在、价钱不在、键是《注册》');
   check('一条法务链接都不摆（那三份文档撤了，链过去是 404）', s.legalLinks === 0, String(s.legalLinks));
   check('没有《有兑换码》那一行（E41：内部码前端全撤）', s.redeem === false);
   /*
-   * **十条全摆，一条都不许收进「……」里**（E40）。
+   * **货单全摆，一条都不许收进「……」里**（E40；那时是十条，10-09 起是十二条，数照源码现算，见文件头）。
    *
    * 这一条和下面那两档屏幕是一对：十条会把窗撑长，而这一屏的底排键从前就为这个掉出过屏
    * 幕（原注释记着：十条＋三条「敬请期待」＋价目＋收款方＋三条法务链接，整窗七百多像
@@ -163,17 +185,17 @@ head('那一屏：话在、价钱不在、键是《注册》');
    * 第 17 推又加了一行：货单**以「……」结尾**（方案原话）。它不是「剩下的收起来了」——十
    * 条照旧全摆——而是「还不止这些」，所以量的是「十条一条不少 ＋ 末尾正好一行省略号」。
    */
-  check('十条功能全摆', s.perks === 10, String(s.perks));
+  check(`${PERKS} 条功能全摆（天才布局 ${LAYOUTS} 副各一行 + 固定 ${FIXED} 行）`, s.perks === PERKS, String(s.perks));
   check('货单以一行「……」结尾（第 17 推）', s.more === 1 && s.lastIsMore, `${s.more} 行，末尾${s.lastIsMore ? '是' : '不是'}`);
 }
 
 // ---------------------------------------------------------------------------
-head('十条摆满之后，底排键在两档屏幕上都还在屏内');
+head(`货单摆满（${PERKS} 条）之后，底排键在两档屏幕上都还在屏内`);
 for (const [w, h] of [[360, 640], [390, 844]]) {
   const r = await fitAt(w, h);
   check(`天才屏 ${w}×${h}：底排键在屏内`, r.bottom <= r.vh, `${r.bottom} / ${r.vh}`);
   check(`天才屏 ${w}×${h}：那颗键真点得着（没被别的盖住）`, r.hitOk === true);
-  check(`天才屏 ${w}×${h}：十条都在`, r.perks === 10, String(r.perks));
+  check(`天才屏 ${w}×${h}：${PERKS} 条都在`, r.perks === PERKS, String(r.perks));
 }
 
 // ---------------------------------------------------------------------------
