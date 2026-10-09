@@ -405,6 +405,11 @@ jobs:
           node scripts/check-register.mjs http://localhost:8993/
       - name: 战绩与排行榜
         run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
+      # 排行榜防刷（10-09 补充方案 7-1，审计 #1）：只认六副正式棋盘（乱名一局 999999999 从前能占总榜第一）、
+      # 重建清掉乱名的榜（归档榜照旧不碰）、步步为营的上限按写进哪张榜判断、管理员 purge 之后此人不在任何
+      # 一张榜上（再推、重建、自己看榜都请不回来）、只读的分数统计只回数。半秒。
+      - name: 排行榜防刷
+        run: ALLOW_MEMORY_STORE=1 node scripts/check-scores-mode-whitelist.mjs
       # 交卷那一路的几道闸。都不是反作弊（分数本来就没法复算，见 api/scores.js 文件
       # 头），拦的是**同一局在库里留下两份互相打脸的记录**：榜是 score 写的、重建是
       # 照存档里的 run.score 重算的、而玩家自己那一页画的是 data.totalScore——两处对

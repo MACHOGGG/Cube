@@ -45,7 +45,7 @@
                                font-weight: 700; }
   .row { display:flex; gap:10px; align-items:flex-end; margin-top:16px; }
   .row > div { flex: 1; }
-  input[type=number], input[type=password] {
+  input[type=number], input[type=password], input[type=text] {
     width:100%; font: inherit; padding:10px 12px; border-radius:11px;
     border:1px solid var(--line); background:var(--bg); color:var(--ink); }
   .check { display:flex; gap:9px; align-items:center; margin-top:16px; font-size:0.92rem; }
@@ -72,6 +72,9 @@
   .warn { border-color: var(--accent); }
   .warn h2 { margin:0 0 6px; font-size:1rem; color:var(--accent); }
   code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius:5px; }
+  .stats { width:100%; border-collapse:collapse; margin-top:12px; font-size:0.86rem; font-variant-numeric: tabular-nums; }
+  .stats th, .stats td { text-align:right; padding:5px 6px; border-top:1px solid var(--line); }
+  .stats th:first-child, .stats td:first-child { text-align:left; font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -158,6 +161,33 @@
     <p class="msg" id="rebuildMsg"></p>
   </div>
 
+  <div class="card">
+    <!-- 10-09 补充方案 7-1 第 4 条：purge。 -->
+    <label for="purgeId">维护：把一个人撤下所有榜</label>
+    <p style="margin:0 0 10px;color:var(--soft);font-size:0.9rem;line-height:1.5">
+      从每一张榜、总榜、今天的每日榜上撤下来，<strong>以后交的局也不再上榜</strong>（存档、累计得分照旧留着）。
+      填的是账号 id——邮箱、<code>hdl:</code> 开头的第一串账号、或者 <code>code:</code> 开头的内部码账号；榜上印的是
+      昵称，要从昵称找人，在库里那张昵称表 <code>lbnames</code> 里查。
+    </p>
+    <input id="purgeId" type="text" autocomplete="off" spellcheck="false" placeholder="账号 id" />
+    <button class="go" id="purge">撤下这个人</button>
+    <p class="msg" id="purgeMsg"></p>
+  </div>
+
+  <div class="card">
+    <!-- 10-09 补充方案 7-1 第 5 条：先测再拦。只读，只回数。 -->
+    <label>维护：各张榜上的分数到多高</label>
+    <p style="margin:0 0 10px;color:var(--soft);font-size:0.9rem;line-height:1.5">
+      只看不改。每张榜上有几个人、最高分、前 0.1% 的那个分数——给「各玩法的分数上限定多少」用（打算按最高分的约 3 倍定）。
+    </p>
+    <button class="go" id="scoreStats">量一下</button>
+    <p class="msg" id="statsMsg"></p>
+    <table class="stats" id="statsTable" hidden>
+      <thead><tr><th>榜</th><th>人数</th><th>最高分</th><th>前 0.1%</th></tr></thead>
+      <tbody id="statsBody"></tbody>
+    </table>
+  </div>
+
   <div class="card" id="out" hidden>
     <label id="outLabel"></label>
     <div class="codes" id="codes"></div>
@@ -189,6 +219,11 @@
     plan: '等级不对。',
     method: '请求方式不对。',
     resume: '上一轮重建的进度已经过期了，从头再点一次。',
+    tooMany: '这一小时按得太多了，过一会儿再来。',
+    busy: '这个人正好在交一局，锁没抢到。过几秒再按一次。',
+    unknown: '库里没有这个 id（没打过一局、没留过名字）。检查一下有没有打错字。',
+    id: 'id 是空的，或者长得不对。',
+    upstream: '服务器那头的存储出了点问题，过一会儿再试。',
   };
 
   $('go').addEventListener('click', async () => {
@@ -302,6 +337,66 @@
     } catch {
       $('rebuild').disabled = false;
       sayR(rebuildResume ? '连不上服务器。再按一次《重建榜单》从断开的地方接着算。' : '连不上服务器。', 'bad');
+    }
+  });
+
+  // ---- 维护：把一个人撤下所有榜（10-09 补充方案 7-1）---------------------------
+  $('purge').addEventListener('click', async () => {
+    const sayP = (t, kind) => { $('purgeMsg').textContent = t; $('purgeMsg').className = 'msg ' + (kind || ''); };
+    if (!token) return sayP('网址里没有令牌，见上面。', 'bad');
+    const id = $('purgeId').value.trim();
+    if (!id) return sayP('先填账号 id。', 'bad');
+    // 撤下之后他以后交的局也不再上榜，而且这一页没有「撤回」——先问一句。
+    if (!confirm(`确定把 ${id} 撤下所有榜、以后也不让他上榜吗？`)) return;
+    $('purge').disabled = true;
+    sayP('正在撤…');
+    try {
+      const res = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'purge', token, id }),
+      });
+      const reply = await res.json().catch(() => ({}));
+      $('purge').disabled = false;
+      if (!res.ok) return sayP(ERRORS[reply.error] || ('出错了：HTTP ' + res.status), 'bad');
+      sayP('撤下来了。他的存档还在，以后交的局不再上榜。', 'good');
+    } catch {
+      $('purge').disabled = false;
+      sayP('连不上服务器。', 'bad');
+    }
+  });
+
+  // ---- 维护：各张榜上的分数到多高（只读）-------------------------------------------
+  $('scoreStats').addEventListener('click', async () => {
+    const sayS = (t, kind) => { $('statsMsg').textContent = t; $('statsMsg').className = 'msg ' + (kind || ''); };
+    if (!token) return sayS('网址里没有令牌，见上面。', 'bad');
+    $('scoreStats').disabled = true;
+    sayS('正在量…');
+    try {
+      const res = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'scoreStats', token }),
+      });
+      const reply = await res.json().catch(() => ({}));
+      $('scoreStats').disabled = false;
+      if (!res.ok) return sayS(ERRORS[reply.error] || ('出错了：HTTP ' + res.status), 'bad');
+      const body = $('statsBody');
+      body.textContent = '';
+      for (const [board, v] of Object.entries(reply.boards || {})) {
+        const tr = document.createElement('tr');
+        for (const cell of [board, v.n, v.max, v.p999]) {
+          const td = document.createElement('td');
+          td.textContent = String(cell);
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      }
+      $('statsTable').hidden = false;
+      sayS('量完了。', 'good');
+    } catch {
+      $('scoreStats').disabled = false;
+      sayS('连不上服务器。', 'bad');
     }
   });
 

@@ -8,6 +8,8 @@
  *   name   改昵称（第 16 推）：一个帐号一个、全站唯一，榜上那个名字只有这一条路写得进来。
  *   board  排行榜。所有人都上榜，但只有天才看得见（见下面那段）。
  *   rebuild  管理员维护：照存档把所有榜重算一遍（可以顺手清掉某一种局），见文件末尾。
+ *   purge  管理员维护：把一个人从所有榜上撤下来，从此不再上榜（存档留着），见 purge。
+ *   scoreStats  管理员只读：每张榜上的分数到多高（几个数），给「各玩法的上限定多少」用。
  *
  * ── 关于「谁上榜」和「谁看得见」 ──────────────────────────────
  *
@@ -20,10 +22,14 @@
  * 分数是客户端报上来的，服务器没法复算——真要复算，就得把整副牌和每一步都
  * 传上来再跑一遍引擎，那是另一个量级的工程。所以这里只做两件诚实的事：
  *
- *   · 一个上限（MAX_SCORE）。它挡不住认真作弊的人，但挡得住「把 999999999
- *     填进去」这种一分钟就试得出来的玩法，也挡住了一个坏数字把整张榜的刻度
- *     毁掉——榜首是十亿分的时候，剩下所有人看起来都是零。
+ *   · 一个上限（MAX_SCORE，十亿）。它挡不住认真作弊的人，也挡不住「999999999」——那还在
+ *     上限里面（10-09 审计核实过：一个免费帐号就能这样推到总榜第一）。它挡住的是「一个坏
+ *     数字把整张榜的刻度毁掉」：存进去的数一律封在十亿以内。各玩法自己的上限要**先量再
+ *     定**（10-09 补充方案 7-1 第 5 条）：scoreStats 把每张榜上的分数到多高报给管理员，玩
+ *     家看过之后再按观测最大值的约 3 倍定；在那之前超上限照旧只记一笔日志。
+ *   · 只认六副正式棋盘（PLAYABLE_MODES）。从前任意一个像样的 mode 名都会新开一张榜。
  *   · 一个已收过的清单（seen）。同一局报两次不会被算两次。
+ *   · 管理员能把一个人整个撤下来（purge），之后他交的局照样存档，只是不再上榜。
  *
  * 剩下的写在《服务条款》里：发现作弊或明显异常的数据，我们会清除相关记录。
  */
@@ -194,6 +200,19 @@ const LAYOUT_BOARDS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig
  * rebuild 里那段注释，check-scores 逮到的那条）。所以单列一张表，下面拼进要撤的清单。
  */
 const RETIRED_BOARDS = ['triangle', 'triangleAdvanced'];
+/**
+ * 现行的六副正式棋盘：push 只收这六个 mode，rebuild 也只照它们算（10-09 补充方案 7-1）。
+ *
+ * 从前 mode 只过一道「长得像个名字」（MODE_RE），于是任意一个名字都会新开一张榜——`lb:hacker`
+ * 这样的榜没人看得见，可它进了 stats.best，总榜上那一行就是从 best 里挑最高的（bestOverall），
+ * 一个乱名一局 999999999 就把总榜第一占了。审计时实测过。
+ */
+const PLAYABLE_MODES = new Set([...BASE_SHAPES, ...LAYOUT_BOARDS]);
+/**
+ * 归档榜：改过规则的老档位（`…:bomb`、`…:bomb2`、`…:flip`、`…:puzzle`，见 kindOf）。重建不碰它们
+ * （见 droppedBoards 那段），所以「清垃圾榜」那一步也得认得它们——它们不是乱名。
+ */
+const ARCHIVED_BOARDS = BASE_SHAPES.flatMap((shape) => ['bomb', 'bomb2', 'flip', 'puzzle'].map((kind) => `${shape}:${kind}`));
 /**
  * 现行的计分规则版本——**要和 `src/engine/scoring.ts` 的 `SCORING_RULES_VERSION`
  * 一模一样**。
@@ -445,6 +464,8 @@ export default async function handler(req, res) {
 
   // 管理员维护：不认玩家，认的是 ADMIN_TOKEN，所以排在 identify 前面。
   if (body?.action === 'rebuild') return await rebuild(req, res, body);
+  if (body?.action === 'purge') return await purge(req, res, body);
+  if (body?.action === 'scoreStats') return await scoreStats(req, res, body);
 
   const claim = {
     email: body?.email,
@@ -483,6 +504,8 @@ async function loadStats(id) {
     runs: num(raw.runs, 1e9),
     best: raw.best && typeof raw.best === 'object' ? raw.best : {},
     seen: Array.isArray(raw.seen) ? raw.seen : [],
+    // 管理员撤下来的人（purge）。这一位丢了，下一次交卷写回去的 stats 就没有它，他又能上榜了。
+    banned: raw.banned === true,
   };
 }
 
@@ -542,6 +565,11 @@ async function push(res, body, who) {
   if (String(data?.rules || '') !== SCORING_RULES) {
     return send(res, 200, { ok: true, stored: false, reason: 'rules' });
   }
+  /*
+   * **只认六副正式棋盘**（10-09 补充方案 7-1）。排在规则闸后面：在途的旧客户端（规则版本对不上）照旧
+   * 走那条温和的 200；规则对得上、mode 却不是这六个之一的，只可能是手搓的请求。
+   */
+  if (!PLAYABLE_MODES.has(mode)) return send(res, 400, { error: 'mode' });
 
   /*
    * 限速。排在规则那一关后面，是因为那一关一次库都不碰（在途旧客户端走的就是它），
@@ -580,13 +608,19 @@ async function push(res, body, who) {
   if (JSON.stringify(data).length > DATA_MAX_CHARS) {
     return send(res, 400, { error: 'tooBig' });
   }
+  // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
+  const boardId = boardIdOf(mode, data);
   /*
    * ③ **步步为营的分数不能超过「枚数 × 10」**（第 14 推）。这一档的综合分是「被消除的枚
    *    数 × 10 + 星星 × 5」（src/engine/puzzleScore.ts），满打满算就是一盘全消掉。超过这
    *    个数的只可能是手搓的请求——而且它会撞坏上面 PUZZLE_SCALE 那套拼法（分数一过 1000
    *    就分不清新老写法了）。枚数取客户端报的和服务端自己知道的那一个里**小的**。
+   *
+   *    **按这一局要写进哪张榜判断**（10-09 补充方案 7-1）：凡是写进步步为营那几张榜的（现行的
+   *    `…:puzzle2`，连同归档的 `…:puzzle`）都套这道上限。从前问的是 `data.modeKey === 'puzzle'`，
+   *    闸和「写进哪张榜」是两处各判各的——两处只要有一处换了写法，这道闸就拦不到它该拦的那张榜。
    */
-  if (String(data.modeKey || '') === 'puzzle') {
+  if (/:puzzle2?$/.test(boardId)) {
     const reported = Math.floor(Number(data.boardTiles));
     const known = PUZZLE_TILES[mode];
     const tiles = Math.min(reported > 0 ? reported : Infinity, known ?? Infinity);
@@ -610,8 +644,6 @@ async function push(res, body, who) {
     console.warn('[scores] over cap', { runId, mode, raw: Number(body.score), cap: MAX_SCORE });
   }
 
-  // 这一局记在哪张榜上：基础三块棋盘分玩法，别的布局各一张（见 boardIdOf）。
-  const boardId = boardIdOf(mode, data);
   /*
    * **玩家自己敲代号开的那一局不上榜**（10-08 方案 3-B，玩家拍板方案 A）。
    *
@@ -638,7 +670,9 @@ async function push(res, body, who) {
 
     stats.total += score;
     stats.runs += 1;
-    if (ranked) stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
+    // 管理员撤下来的人（purge）：和敲代号开的局一样照收、照存档，只是不进 best、不写任何一张榜。
+    const onBoards = ranked && !stats.banned;
+    if (onBoards) stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
     stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
     await set(statsKey(who.id), stats);
 
@@ -658,8 +692,8 @@ async function push(res, body, who) {
     // 不算步数」那个数，取大的。GT 会留住两者里更高的那一个，所以同分剩得多的那一局会顶
     // 掉剩得少的，老写法（原分）的那一行也在这个人下一次交卷时被换成新写法。
     //
-    // 敲代号开的那一局（ranked 为假，见上）一张榜都不碰：存档写完就回去。
-    if (!ranked) return { duplicate: false, stats };
+    // 敲代号开的那一局（ranked 为假，见上）、被撤下来的人，一张榜都不碰：存档写完就回去。
+    if (!onBoards) return { duplicate: false, stats };
     const onBoard = isPuzzleBoard(boardId)
       ? Math.max(boardValue(boardId, score, data), stats.best[boardId] * PUZZLE_SCALE)
       : stats.best[boardId];
@@ -690,7 +724,9 @@ async function push(res, body, who) {
   // 判成「同一局报两次」直接回——**今日榜从此永远缺这一局**，而玩家那边收到的是成功。pushDaily
   // 走 zaddIfHigher（只上不下），同一局再写一遍是幂等的，所以重报时照样写一次、回包照样带
   // daily，没有任何东西会被算两遍。
-  const daily = data?.daily !== undefined ? await pushDaily(who.id, mode, score, data) : undefined;
+  // 被撤下来的人（purge）今日榜也不进。回包里不带 daily：不告诉他为什么——客户端那句「没进今日榜」
+  // 只为 late / rejected 而说。
+  const daily = data?.daily !== undefined && !stats.banned ? await pushDaily(who.id, mode, score, data) : undefined;
   if (duplicate) {
     return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs, daily });
   }
@@ -829,7 +865,8 @@ async function healTotalBoard(myId) {
   for (const id of ids) {
     if (typeof modes[id] === 'string') continue;
     const stats = await loadStats(id);
-    const best = bestOverall(stats);
+    // 被撤下来的人（purge）总榜上不该有：他自己打开榜那一下（myId 就是他）也不能把他补回去。
+    const best = stats.banned ? null : bestOverall(stats);
     if (!best) {
       // 存档里一局得分的都没有（老版本按累计总分写榜，一局都没得分的人也占
       // 一行 0 分）：没有玩法可标，行首就空着——玩家看到的正是「显示了名字
@@ -1166,11 +1203,14 @@ async function rebuild(req, res, body) {
        * 一局才是该上榜的。这一步也是老写法（原分）换成新写法的那一次（见 PUZZLE_SCALE）。
        */
       const onBoard = {};
-      // 全清那一路直接跳过：best 空着，下面每张榜都走 zrem。
-      if (!wipeAll) {
+      // 全清那一路直接跳过：best 空着，下面每张榜都走 zrem。被撤下来的人（purge）同理：存档还在，
+      // 可一张榜都不该再有他——不跳过的话，每点一次《重建榜单》都会把他请回榜上。
+      if (!wipeAll && !stats.banned) {
         for (const run of runs) {
           const mode = cleanMode(run?.mode);
-          if (!mode) continue;
+          // 六副正式棋盘以外的 mode（10-09 补充方案 7-1）：存档里留着，重建时不算——不然每点一次
+          // 重建都会把那张乱名的榜照存档写回去。
+          if (!mode || !PLAYABLE_MODES.has(mode)) continue;
           // 上一套计分规则打的局不再上榜（《侵蚀阶梯》v1.2 §6）。存档里留着它们
           // ——那是这个人的历史，没必要毁掉——但重建的时候一律跳过，否则每点一次
           // 《重建榜单》都会把旧尺子量出来的分请回榜上（`flip` → `flip2` 那次踩
@@ -1190,8 +1230,15 @@ async function rebuild(req, res, body) {
       }
 
       let rows = 0;
-      // 先撤干净：新榜、老榜都撤，没算出成绩的那几张就此空着。
-      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS, ...RETIRED_BOARD_KEYS, ...droppedBoards]) {
+      /*
+       * 他旧 best 里那些谁都不认识的榜（10-09 补充方案 7-1）：从前 push 收任意一个 mode，`lb:<乱名>`
+       * 就是这么来的。它们不在下面任何一张名单里，不点名就永远撤不掉。归档榜认得出来，不算在内——
+       * 重建不碰归档榜（见 droppedBoards 那段）。
+       */
+      const known = new Set([...ALL_BOARDS, ...LEGACY_BOARDS, ...RETIRED_BOARD_KEYS, ...ARCHIVED_BOARDS, ...droppedBoards]);
+      const junk = Object.keys(stats.best || {}).filter((boardId) => !known.has(boardId));
+      // 先撤干净：新榜、老榜、乱名的榜都撤，没算出成绩的那几张就此空着。
+      for (const boardId of [...ALL_BOARDS, ...LEGACY_BOARDS, ...RETIRED_BOARD_KEYS, ...droppedBoards, ...junk]) {
         if (best[boardId] === undefined) await zrem(boardKey(boardId), id);
       }
       for (const boardId of Object.keys(best)) {
@@ -1246,6 +1293,103 @@ async function rebuild(req, res, body) {
     // 同上：只有几个数。没勾这一项就是 null。
     nicknames,
   });
+}
+
+/**
+ * 把一个人从所有榜上撤下来，从此不再上榜（10-09 补充方案 7-1）。
+ *
+ *   POST /api/scores
+ *   { "action": "purge", "token": "…", "id": "<帐号 id：邮箱、hdl:…、code:…>" }
+ *
+ * 撤的是：现行的每一张榜、老版本那几张、删掉的棋盘那几张、归档榜、他旧 best 里那些乱名的榜、总榜、
+ * 总榜行首那个玩法标记、今天（和零点宽限里的昨天）的每日榜。然后 stats 写上 `banned: true`、best
+ * 清空——之后他交的局照样收进存档、照样记累计和局数（那是他的历史），只是 push 不再写榜（见
+ * push 的 onBoards）、rebuild 不再替他算（见 rebuild 里那一句）、看榜时也不会把他补回总榜（见
+ * healTotalBoard）。**存档一个字不动**。
+ *
+ * 整段在这个人自己那把锁里（statsLockKey，和 push / rebuild 同一把）：不锁的话，他正好交上来的那
+ * 一局会读到撤之前的 stats、写回去的时候把 banned 盖掉，人又上了榜。
+ *
+ * 认的是 id，不是昵称：榜上印的是昵称，id 就是邮箱（或第一串的 hdl:、内部码的 code:）——接口的回包
+ * 里一个 id 都不给，这是有意的。管理员要从昵称找人，在库里那张昵称表（lbnames：id → 名字）里查。
+ * 库里一点痕迹都没有的 id 回 404，不新建一份「banned」：手滑打错一个字母，就会把一个将来才注册的
+ * 地址预先封了。
+ *
+ * 限速、验令牌和 rebuild 同一套（先限速再验，挡的是猜令牌）。回包只有 ok，不回他是谁、上过几张榜。
+ */
+async function purge(req, res, body) {
+  if (await tooMany('scores:purge', callerId(req), CALLS_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+  if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
+  const id = typeof body?.id === 'string' ? body.id.trim() : '';
+  if (!id || id.length > 200) return send(res, 400, { error: 'id' });
+  try {
+    const got = await withLock(statsLockKey(id), async () => {
+      const [raw, archive, name] = await Promise.all([get(statsKey(id)), get(runsKey(id)), hget(NAMES, id)]);
+      if (!raw && !archive && !name) return 'unknown';
+      const stats = await loadStats(id);
+      const boards = new Set([
+        ...ALL_BOARDS, ...LEGACY_BOARDS, ...RETIRED_BOARD_KEYS, ...ARCHIVED_BOARDS,
+        ...Object.keys(stats.best || {}),
+      ]);
+      for (const boardId of boards) await zrem(boardKey(boardId), id);
+      await zrem(TOTAL_BOARD, id);
+      await hdel(TOTAL_MODE, id);
+      const today = dayIndexOf(Date.now());
+      for (const day of [today, today - 1]) await zrem(dailyBoardKey(dayKey(day)), id);
+      stats.best = {};
+      stats.banned = true;
+      await set(statsKey(id), stats);
+      return 'done';
+    });
+    if (!got.ok) return send(res, 503, { error: 'busy' });
+    if (got.value === 'unknown') return send(res, 404, { error: 'unknown' });
+    return send(res, 200, { ok: true });
+  } catch {
+    return send(res, 502, { error: 'upstream' });
+  }
+}
+
+/**
+ * 每张榜上的分数到多高：只读，只回数（10-09 补充方案 7-1 第 5 条「先测再拦」）。
+ *
+ *   POST /api/scores
+ *   { "action": "scoreStats", "token": "…" }
+ *   → { ok, boards: { "square:base": { n, max, p999 }, … } }
+ *
+ * 量的是每张榜上那几行（每个人在这张榜上最好的那一局，最多前 5000 名）：最大值和 99.9 百分位
+ * （排在第 ⌈0.1% × 人数⌉ 名的那一个分数）。步步为营那几张榜上存的是拼起来的数（PUZZLE_SCALE），
+ * 这儿拆回分数再算。各玩法的上限按这里量到的最大值的约 3 倍定——玩家看过这几个数之后再定，在那
+ * 之前 push 里超 MAX_SCORE 的照旧只记日志。
+ *
+ * 为什么不翻每个人的存档：存档是一人一份，全站几千份要一份一份读，一次调用读不完（重建为此要分
+ * 批、带票接着算）。榜上那一行就是这个人在这张榜上最高的那一局，要定「上限」，看的正是这一头。
+ * 回包里没有一个 id、一个名字：只是几个数，可以放心贴进对话。
+ */
+async function scoreStats(req, res, body) {
+  if (await tooMany('scores:stats', callerId(req), CALLS_PER_HOUR, 3600)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+  if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
+  try {
+    const boards = {};
+    for (const boardId of ALL_BOARDS) {
+      const rows = await zTop(boardKey(boardId), 5000);
+      const scores = rows.map((row) => decodeBoard(boardId, row.score).score).filter((v) => v > 0);
+      if (!scores.length) {
+        boards[boardId] = { n: 0, max: 0, p999: 0 };
+        continue;
+      }
+      // zTop 已经从高到低排好了；保险起见再排一次（拆回分数之后同分的顺序可能变，值不变）。
+      scores.sort((a, b) => b - a);
+      const at = Math.min(scores.length - 1, Math.ceil(scores.length * 0.001) - 1);
+      boards[boardId] = { n: scores.length, max: scores[0], p999: scores[Math.max(0, at)] };
+    }
+    return send(res, 200, { ok: true, boards });
+  } catch {
+    return send(res, 502, { error: 'upstream' });
+  }
 }
 
 /**
