@@ -30,6 +30,7 @@ import { seedGameOf, type SeedGame } from '../engine/seedDeal';
 import { isLandscapeMode, playCountdown, startStageHtml } from './startStage';
 import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
 import { CTL_BACK } from './ctlIcons';
+import { pushLayer } from '../engine/backNav';
 import { ICON_ARROW } from './uiIcons';
 
 /** 每日挑战一律从 4 数起（方案原话「倒数统一 4-3-2-1」）。 */
@@ -173,7 +174,8 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
    * startStage 底下那一排的键（.start-act，--exit-disc 那个尺寸、离底同一个坐标）。
    *
    * 只有《退出》，没有《暂停》：这一幕还没有棋盘，也没有暂停那一层可开（和老虎机那一局的开局页
-   * 一样只留一颗）。数到一半按它，回到第一幕（不是回主菜单——他可能只是想换一串码）。
+   * 一样只留一颗）。数到一半按它，回到第一幕（不是回主菜单——他可能只是想换一串码）。手机的返回键
+   * 去同一个地方（10-09 补充方案 7-13 第 12 条，见下面那句 pushLayer）。
    */
   function showCount(game: SeedGame, emblem: string): void {
     clear();
@@ -235,6 +237,11 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
       begin();
     }
     root.querySelector<HTMLButtonElement>('#dailyBack')!.addEventListener('click', showPick);
+    // 手机的返回键和屏幕上的《退出》去同一个地方：回第一幕。原先返回键走的是整页那一条（main.ts
+    // 的 setScreenBack(showMenu)），数到一半一按就回了主菜单——同一屏上两个「退」去两个地方。挂成
+    // 一层：这一幕一被换掉（数完开了局、按了《退出》），那一层自己就不算数了（backNav 认的是这个
+    // 元素还在不在文档里），回到第一幕再按返回，照旧是整页那一条回主菜单。
+    pushLayer(showPick, root.querySelector('.daily-page--count')!);
   }
 
   showPick();

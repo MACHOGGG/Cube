@@ -3,6 +3,7 @@ import { send, readBody } from './_creem.js';
 import {
   clearFails,
   createAccount,
+  dropToken,
   EMAIL_RE,
   hasSecret,
   issueToken,
@@ -14,7 +15,7 @@ import {
   unblock,
   updateAccount,
 } from './_accounts.js';
-import { grantLifetimeIfWindow, resolveEntitlement } from './_entitlement.js';
+import { grantLifetimeIfWindow, identify, resolveEntitlement } from './_entitlement.js';
 import { callerId, tooMany } from './_ratelimit.js';
 import { bump, del, get, set, storeConfigured } from './_store.js';
 import { compose, mailLang, sendMail } from './_mail.js';
@@ -171,6 +172,9 @@ export default async function handler(req, res) {
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 
   const body = readBody(req);
+  // 登出（10-09 补充方案 7-13 第 10 条）。排在认邮箱之前：免邮箱账号、还没绑邮箱的兑码账号
+  // 也要登得出去，它们手上没有邮箱。
+  if (body.action === 'revoke') return revoke(res, body);
   const address = normalizeEmail(body.email);
   if (!EMAIL_RE.test(address)) return send(res, 400, { error: 'email' });
 
@@ -429,4 +433,24 @@ async function finish(res, address, account, issued, created, ticket) {
     console.error('signin entitlement lookup failed:', err?.message || err);
     return send(res, 200, done);
   }
+}
+
+/**
+ * 登出：作废这台设备手上的那一把令牌（10-09 补充方案 7-13 第 10 条）。
+ *
+ * 原先登出只是网页把本机那一份删掉，服务器上那把令牌照旧活一年（_accounts.js 的 TOKEN_TTL_MS）——
+ * 借来的、公用的电脑上点了《登出》，抄走或者留在那台机器上的那一把仍然开得了这个账号（看榜、开
+ * 小屋、换邮箱都认它）。现在登出时把它报上来，服务器从这个账号的那一串里摘掉它；别的设备手里那几
+ * 把不动（各登各的，见 _accounts.js 的 issueToken）。
+ *
+ * 认人和别处同一套（identify：邮箱、免邮箱的那把 id、或者兑换码，加令牌）——令牌本身就是凭据，拿
+ * 着它就有权作废它，不必再证明什么。认不出来（早就失效了、账号没了）也答 ok：要的结果「这把令
+ * 牌不再算数」已经成立；而网页那头不管这儿答什么都要登出，不该为它报错。
+ */
+async function revoke(res, body) {
+  const who = await identify({ email: body.email, accountToken: body.token, holderCode: body.code });
+  if (!who) return send(res, 200, { ok: true });
+  const saved = await updateAccount(who.id, (account) => dropToken(account, body.token));
+  if (!saved.ok && saved.busy) return send(res, 503, { error: 'busy' });
+  return send(res, 200, { ok: true });
 }

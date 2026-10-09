@@ -24,8 +24,12 @@
  *   ② `api/` 里每一句 `console.*`，参数里不许出现裸的身份变量——除非它套在 `redact()` 里。
  *   ③ 那**一处有意的例外**还在：`redeem.js` 的 `giveBack` 仍然写码的原文，旁边那段写明理由
  *      的注释也还在。哪天有人「顺手」把它也改成指纹，这一条当场红——他就会先读到那段话。
+ *   ④ `api/` 里每一句 `new Error(…)` 的那句话里也不许有裸的身份变量（10-09 补充方案 7-13）。
+ *      抛出去的那句话最后也是进日志：`/api/email`、`/api/redeem`、`/api/scores` 外面那一层 catch
+ *      把 `err.message` 原样记下来——而 scores.js 的 renameScoreOwner 抢不到锁时抛的正是
+ *      「战绩搬家没抢到锁：」+ 旧邮箱原文。
  *
- * 读源码，不打包、不起服务器。②③ 各配一条反向对照。
+ * 读源码，不打包、不起服务器。②③④ 各配一条反向对照。
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { redact } from '../api/_redact.js';
@@ -63,9 +67,11 @@ const strip = (src) =>
     .join('\n');
 
 /** 把一份源码里所有 `console.x(...)` 的参数文本取出来（配对括号，容得下跨行）。 */
-function consoleCalls(src) {
+const consoleCalls = (src) => callsOf(src, /console\.\w+\(/g);
+
+/** 一份源码里每一处 `re`（以左括号结尾）后面那一对括号里的文本。 */
+function callsOf(src, re) {
   const out = [];
-  const re = /console\.\w+\(/g;
   let m;
   while ((m = re.exec(src))) {
     let depth = 1;
@@ -84,6 +90,31 @@ function consoleCalls(src) {
 // lockKey（第 14 推）：锁的名字里带着账号 id（statsLockKey 那一类就是「前缀 + 邮箱」），
 // _store.js 那句「锁没放掉」原先把它原样写进日志。
 const IDENTITY = ['email', 'address', 'wanted', 'who', 'lockKey'];
+
+/**
+ * 一句 `new Error(…)` 的参数里**代码**那一部分：引号里的字面文字挖掉（「搬家」那句话里写个 from
+ * 不算），模板字符串只留 `${…}` 里的表达式。
+ */
+const codeOnly = (args) =>
+  args
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/`(?:[^`\\]|\\.)*`/g, (t) => (t.match(/\$\{[^}]*\}/g) || []).join(' '));
+
+/** 抛出去的错误句里还要多认一个 `from`：换邮箱那一路（renameScoreOwner）旧地址就叫这个名字。 */
+const ERROR_IDENTITY = [...IDENTITY, 'from'];
+
+/** 判一份源码：返回「裸着出现在 new Error 那句话里」的那几处。 */
+function judgeErrors(name, src) {
+  const bad = [];
+  for (const args of callsOf(strip(src), /new Error\(/g)) {
+    const naked = codeOnly(args).replace(/redact\([^()]*\)/g, '');
+    for (const id of ERROR_IDENTITY) {
+      if (new RegExp(`\\b${id}\\b`).test(naked)) bad.push(`${name}: new Error(…${id}…)`);
+    }
+  }
+  return bad;
+}
 
 /** 判一份源码：返回「裸着出现在 console 里」的那几处。 */
 function judge(name, src) {
@@ -116,6 +147,19 @@ const files = readdirSync(dir).filter((f) => f.endsWith('.js')).sort();
   // 尺子：redact 真的在用，不是全靠「没人写日志」混过去的。
   const using = files.filter((f) => readFileSync(new URL(f, dir), 'utf8').includes('redact('));
   check('（尺子）redact 真的被几个文件用着', using.length >= 3, using.join(' '));
+}
+
+// ── ④ api/ 里每一句 new Error ──────────────────────────────────
+{
+  const bad = [];
+  let thrown = 0;
+  for (const f of files) {
+    const src = readFileSync(new URL(f, dir), 'utf8');
+    thrown += callsOf(strip(src), /new Error\(/g).length;
+    bad.push(...judgeErrors(f, src));
+  }
+  check(`④ api/ 里 ${thrown} 句 new Error，那句话里没有一处裸着写身份`, bad.length === 0, bad.join(' / '));
+  check('（尺子）真的扫到了 new Error', thrown >= 3, `${thrown} 句`);
 }
 
 // ── ③ 那一处有意的例外 ────────────────────────────────────────
@@ -160,6 +204,17 @@ const files = readdirSync(dir).filter((f) => f.endsWith('.js')).sort();
     check(`反向对照：${name}`, wantRed ? bad.length > 0 : bad.length === 0,
       bad.length ? bad.join(' / ') : '没抓到');
   }
+  // ④ 的反向对照：搬家那一句改回原文，要红；只是引号里写了个 from 字样，不该红。
+  const scores = readFileSync(new URL('scores.js', dir), 'utf8');
+  const leaky = scores.replace("throw new Error('战绩搬家没抢到锁：' + redact(from));", "throw new Error('战绩搬家没抢到锁：' + from);");
+  check('反向对照：搬家那句错误话改回旧邮箱原文 → ④ 要红', leaky !== scores && judgeErrors('scores.js', leaky).length > 0,
+    judgeErrors('scores.js', leaky).join(' / ') || '没抓到');
+  const templ = scores.replace("throw new Error('战绩搬家没抢到锁：' + redact(from));", 'throw new Error(`战绩搬家没抢到锁：${from}`);');
+  check('反向对照：写成模板字符串 `${from}` 也要红', templ !== scores && judgeErrors('scores.js', templ).length > 0);
+  const words = scores.replace("throw new Error('战绩搬家没抢到锁：' + redact(from));", "throw new Error('moved from the old address: ' + redact(from));");
+  check('反向对照：引号里的字（from / address）不算（这一条必须**不**红）', words !== scores && judgeErrors('scores.js', words).length === 0,
+    judgeErrors('scores.js', words).join(' / '));
+
   // ③ 的反向对照：把那一处例外也改成指纹，③ 的第一条就该红。
   const redeem = readFileSync(new URL('redeem.js', dir), 'utf8');
   const fixed = redeem.replace("console.error('兑换码放不回去了', ticket, err);",

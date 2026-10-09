@@ -635,6 +635,9 @@ export const lockRemainingMs = (account) =>
  *
  * 什么时候该把所有设备都踢下线：改密码、以及邮箱验证解锁（那两件事的前提正
  * 是「这个账号可能已经不只我一个人在用」）。那两处调 revokeTokens()。
+ *
+ * 一台设备登出，只作废它自己那一把（dropToken，10-09 补充方案 7-13 第 10 条）——别的设备
+ * 照旧登着，和登录时「各添各的」是同一个道理。
  * ─────────────────────────────────────────────────────────────────────────
  */
 const MAX_TOKENS = 8;
@@ -676,6 +679,23 @@ export function tokenValid(account, presented) {
 export function revokeTokens(account) {
   account.tokens = [];
   return issueToken(account);
+}
+
+/**
+ * 只作废这一把（那台设备登出了）。别人手里那几把不动。
+ *
+ * `account.token` 指着它的话，改指剩下最新的那一把，一把不剩就拿掉：这一位是给老代码读的
+ * 「最新那一把」（见上面那段），而 resolveEntitlement 没拿到这台设备自己那一把时回的就是它——
+ * 留着一把作废了的，等于把它又发回去。
+ */
+export function dropToken(account, presented) {
+  const token = String(presented || '');
+  const ring = tokenRing(account).filter((e) => e.t !== token);
+  account.tokens = ring;
+  if (account.token === token) {
+    if (ring.length) account.token = ring[ring.length - 1].t;
+    else delete account.token;
+  }
 }
 
 /** How long a redeemed code is worth. 'life' is handled separately below. */

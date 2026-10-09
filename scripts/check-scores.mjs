@@ -719,5 +719,64 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   delete process.env.ADMIN_TOKEN;
 }
 
+// ---- 看榜只取画出来的那几行的名字（10-09 补充方案 7-13 第 7 条）------------------------
+//
+// 名字表（NAMES）和总榜的玩法记号（TOTAL_MODE）都是全站一人一行的大表，原先每看一次榜就 hgetall
+// 整张。现在只 hmget 那五十行。hmget 最容易错的是**对不齐**：问的是 [甲, 乙, 丙]，回来的是按位置排
+// 的三格，哪一格错了位，榜上就是「乙的名字配着甲的分」，而且不报错。所以这一节让六十个人各打一个
+// 一眼认得出的分（名字「榜07」↔ 分数 7007），量每一行的名字和分数是不是同一个人的。
+{
+  // ① hmget 自己（本地和 CI 跑的都是内存版，它得和真 Redis 一个样子）
+  await store.hset('hmget-probe', 'a', { name: '甲' });
+  await store.hset('hmget-probe', 'b', 'square:base');
+  const got = await store.hmget('hmget-probe', ['a', 'nobody', 'b', 'a']);
+  check('hmget：问到的那几格解好了回来，没有的不出现，重复的只算一次',
+    JSON.stringify(got) === JSON.stringify({ a: { name: '甲' }, b: 'square:base' }), JSON.stringify(got));
+  check('hmget：一格都不问就是空的', JSON.stringify(await store.hmget('hmget-probe', [])) === '{}');
+  check('hmget：整张表不在也是空的（不抛）', JSON.stringify(await store.hmget('hmget-no-such-hash', ['a'])) === '{}');
+
+  // ② 六十个人的一张榜：五十行，每一行的名字和分数是同一个人的
+  const crowd = [];
+  for (let i = 0; i < 60; i++) {
+    const p = await makePlayer(`hm${i}@example.com`);
+    const n = String(i).padStart(2, '0');
+    const r = await call({ action: 'push', ...p, runId: 'hm' + n, mode: 'circleSeven', score: 7000 + i, name: '榜' + n });
+    if (r.payload?.ok !== true) throw new Error(`夹具：第 ${i} 个人那一局没收下 ${JSON.stringify(r.payload)}`);
+    crowd.push(p);
+  }
+  const paired = (rows) => rows.filter((r) => /^榜\d\d$/.test(r.name));
+  const mismatched = (rows) => paired(rows).filter((r) => r.score !== 7000 + Number(r.name.slice(1)));
+  const one = await call({ action: 'board', ...crowd[0], mode: 'circleSeven' });
+  const rows1 = one.payload?.rows || [];
+  check('单局榜：六十个人只回五十行', rows1.length === 50, String(rows1.length));
+  check('单局榜：五十行每一行都有名字，名字和分数是同一个人的', paired(rows1).length === 50 && mismatched(rows1).length === 0,
+    `${paired(rows1).length} 行有名字，${mismatched(rows1).length} 行错位：${mismatched(rows1).slice(0, 3).map((r) => r.name + ':' + r.score).join(' ')}`);
+  check('单局榜：「我排第几」照旧（第 0 个人分最低，排第 60）', one.payload?.me?.rank === 60, JSON.stringify(one.payload?.me));
+  const total = await call({ action: 'board', ...crowd[0] });
+  const rowsT = total.payload?.rows || [];
+  check('总榜：名字和分数对得上，每一行都带着玩法记号',
+    paired(rowsT).length > 0 && mismatched(rowsT).length === 0 && rowsT.every((r) => typeof r.mode === 'string' && r.mode.length > 0),
+    `${paired(rowsT).length} 行是这六十个人，${mismatched(rowsT).length} 行错位，没有记号的 ${rowsT.filter((r) => !r.mode).length} 行`);
+  check('总榜：这六十个人那几行的记号是七色圆球', paired(rowsT).every((r) => r.mode === 'circleSeven'),
+    paired(rowsT).filter((r) => r.mode !== 'circleSeven').map((r) => `${r.name}:${r.mode}`).join(' '));
+  const group = await call({ action: 'board', ...crowd[0], mode: 'g:layout' });
+  const rowsG = group.payload?.rows || [];
+  check('母榜：名字和分数对得上', paired(rowsG).length > 0 && mismatched(rowsG).length === 0,
+    `${paired(rowsG).length} 行是这六十个人，${mismatched(rowsG).length} 行错位`);
+
+  // ③ 源码：board() 和它每次都要先跑的 healTotalBoard() 里不许再有 hgetall(
+  const src = readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
+  const fnBody = (name) => {
+    const at = src.indexOf(`async function ${name}(`);
+    return at < 0 ? '' : src.slice(at, src.indexOf('\n}\n', at));
+  };
+  for (const name of ['board', 'healTotalBoard']) {
+    const body = fnBody(name);
+    check(`源码：${name}() 里没有 hgetall(（名字和玩法记号只按行取）`, body.length > 0 && !body.includes('hgetall('),
+      body ? '' : '没找到这个函数');
+  }
+  check('源码：board() 按行取名字（hmget(NAMES）', /hmget\(NAMES,/.test(fnBody('board')));
+}
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

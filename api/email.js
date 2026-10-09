@@ -107,7 +107,25 @@ const MAIL = {
   },
 };
 
+/**
+ * 摔了也答一句 JSON（10-09 补充方案 7-13 第 3 条）。
+ *
+ * 下面这一支有几处是**故意抛**的（锁没抢到、码放回去之后、战绩搬家摔了要让玩家重来），可抛出去之后没人接：
+ * 平台回一个连正文都没有的 500。客户端读不出一个它认得的词，从前一律当成「连不上网络」——他的网好得很，
+ * 是我们这头抽了一下。现在兜在这儿：记一笔日志（只记出错的那句话，不记请求里的任何东西），回 502
+ * `upstream`，和 checkout / portal / passcode 那几处同一个出口；客户端见 5xx 就说「服务器忙，不是您的网络」
+ * （engine/account.ts 的 toResult）。
+ */
 export default async function handler(req, res) {
+  try {
+    return await handle(req, res);
+  } catch (err) {
+    console.error('[换邮箱 / 绑定邮箱]', err?.message || err);
+    return send(res, 502, { error: 'upstream' });
+  }
+}
+
+async function handle(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });
 

@@ -5,7 +5,8 @@
  *   node scripts/check-back-room.mjs http://localhost:8902/
  *
  * 客人在小屋里 / 倒数里 / 局中 / 交卷等待页上按返回都是先问《要不要离开》，再按一下收
- * 起那一问、人还在原地；《会不会规则》那一问按返回等于答《会》；《完成了吗？》按返回
+ * 起那一问、人还在原地；《会不会规则》那一问按返回只收起它（和时间到了一样，不记「看过了」，
+ * 10-09 补充方案 7-13 第 11 条——原先等于答《会》）；《完成了吗？》按返回
  * 等于《否》；屋主散场后那张战绩卡按返回回多人设置页。顺带验几扇窗：锁着的卡开的订
  * 阅窗、配色窗、内部码窗，按返回只关窗；主菜单老虎机卡进的挑图形页按返回回主菜单。
  *
@@ -141,9 +142,11 @@ await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
 await A.page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[1].click());
 await B.page.waitForSelector('#mpKnowAsk', { timeout: 12000 });
 await back(B.page);
-check('《会不会规则》按返回 → 等于答《会》，那一问收起', !(await has(B.page, '#mpKnowAsk')));
+check('《会不会规则》按返回 → 那一问收起', !(await has(B.page, '#mpKnowAsk')));
+check('《会不会规则》按返回 → 不算答《会》：本机没记「圆球的教学看过了」（10-09 补充方案 7-13 第 11 条）',
+  (await B.page.evaluate(() => localStorage.getItem('slides_tutorial_seen_circle'))) === null);
 await B.page.waitForSelector('.mp-countdown-page, #boardWrap', { timeout: 8000 });
-check('答完之后客人进倒数（或已开局）', (await has(B.page, '.mp-countdown-page')) || (await has(B.page, '#boardWrap')));
+check('收起之后客人进倒数（或已开局）', (await has(B.page, '.mp-countdown-page')) || (await has(B.page, '#boardWrap')));
 
 // 屋主在倒数里按返回 → 问；再按 → 收起
 await A.page.waitForSelector('.mp-countdown-page, #boardWrap', { timeout: 12000 });

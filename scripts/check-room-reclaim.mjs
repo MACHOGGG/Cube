@@ -27,6 +27,10 @@
  *
  * ⑧（2026-10-08 方案 1-3）：登录的人坐过的椅子带一枚账号标识，只还给同一个账号——一个没登
  * 录的人敲他的名字，接不走他的累计分。
+ *
+ * ⑨（10-09 补充方案 7-13 第 6 条）：关了网页、被认回来的人还叫原来那个名字。他那一行没按过
+ * 《离开》，一直挂在屋里；查重名时不跳过它，他就撞上自己——「阿甲」回来成了「阿甲 2」，发的
+ * 字母 B 回来成了 A。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -255,6 +259,58 @@ const seatsOf = async (code) => {
   const back = await call({ action: 'join', code, name: '丙', ...owner });
   check('⑧ 他自己带着令牌回来：认的是自己那把椅子', back.body.rejoined === true, String(back.body.rejoined));
   check('⑧ 而且还是同一个 playerId', back.body.playerId === seat.playerId, `${back.body.playerId} / ${seat.playerId}`);
+}
+
+// ---- ⑨ 关了网页被认回来：名字还是他自己那个（10-09 补充方案 7-13 第 6 条）-----
+//
+// 「关了网页」= 发过 bye、而且过了宽限期（seatClosed）。这里直接把 byeAt 推到十五秒以前，
+// 和 silentFor 同一个做法：要量的是认领那一刻怎么起名，不是宽限期的钟。
+{
+  const closeTab = async (code, seat) => {
+    await call({ action: 'bye', code, ...seat });
+    const hash = await hgetall(roomKey(code));
+    await hset(roomKey(code), 'h:' + seat.playerId, { ...(hash['h:' + seat.playerId] || {}), lastSeen: 0, byeAt: Date.now() - 15_000 });
+  };
+  const nameOf = (r) => r.body.state?.players?.find((p) => p.id === r.body.playerId)?.name;
+
+  const h = await call({ action: 'create', name: '屋主', ...who });
+  const code = h.body.code;
+  const a = await call({ action: 'join', code, name: '阿甲' });
+  const typed = { playerId: a.body.playerId, playerToken: a.body.playerToken };
+  const l = await call({ action: 'join', code, name: '' });
+  const lettered = { playerId: l.body.playerId, playerToken: l.body.playerToken };
+  const letter = nameOf(l);
+  check('⑨（尺子）没取名字的人发到的是一个字母', /^[A-Z]$/.test(String(letter)), String(letter));
+
+  await closeTab(code, typed);
+  const backTyped = await call({ action: 'join', code, name: '阿甲' });
+  check('⑨（尺子）关了网页的「阿甲」认回的是自己那把椅子', backTyped.body.rejoined === true && backTyped.body.playerId === typed.playerId,
+    `${backTyped.body.rejoined} ${backTyped.body.playerId === typed.playerId ? '同一个 id' : '换了 id'}`);
+  check('⑨ 他回来还叫「阿甲」，不是「阿甲 2」', nameOf(backTyped) === '阿甲', String(nameOf(backTyped)));
+
+  await closeTab(code, lettered);
+  const backLetter = await call({ action: 'join', code, name: letter });
+  check('⑨（尺子）关了网页的字母认回的是自己那把椅子', backLetter.body.rejoined === true && backLetter.body.playerId === lettered.playerId,
+    String(backLetter.body.rejoined));
+  check(`⑨ 发的字母 ${letter} 回来还是 ${letter}`, nameOf(backLetter) === letter, String(nameOf(backLetter)));
+
+  // 量程：屋里真有**别人**叫这个名字时照旧要换——不然上面两条也可能是「从此不查重名了」的空绿。
+  // 正常的路上这种撞名几乎碰不到（新座位、局中改名都要先抢 `n:` 那一格，走了的人那一格不还），
+  // 所以直接把另一个人的名字改成他那个字母：量的是 nameForReturner 自己那一道。
+  const h2 = await call({ action: 'create', name: '屋主', ...who });
+  const code2 = h2.body.code;
+  const o = await call({ action: 'join', code: code2, name: '' });
+  const g = await call({ action: 'join', code: code2, name: '' });
+  const goer = { playerId: g.body.playerId, playerToken: g.body.playerToken };
+  const gl = nameOf(g);
+  await closeTab(code2, goer);
+  const raw2 = await hgetall(roomKey(code2));
+  await hset(roomKey(code2), 'p:' + o.body.playerId, { ...raw2['p:' + o.body.playerId], name: gl });
+  const back2 = await call({ action: 'join', code: code2, name: gl });
+  check('⑨ 量程：屋里真有别人叫这个字母，他回来换一个没被占的字母（不重名、也不是「B 2」）',
+    back2.body.rejoined === true && back2.body.playerId === goer.playerId &&
+      /^[A-Z]$/.test(String(nameOf(back2))) && nameOf(back2) !== gl,
+    `${gl} → ${nameOf(back2)}`);
 }
 
 // ---- ⑦ 源码：两条路各认各的 --------------------------------------------

@@ -323,15 +323,18 @@ const id = (bytes) => randomBytes(bytes).toString('hex');
  * 所以 state 挂小时桶是两头不着：给得紧会踢掉合法玩家——callerId 认的是 IP，
  * 而小屋本来就是给朋友一起玩的，四个人常常在同一个 Wi-Fi 后面，一小时就是
  * 4 × 3600 = 14400 次；给得松（比如 40000）等于让扫号脚本把整个房号空间来
- * 回扫四遍。十秒窗口两件事一起成立：八个人满座挤在一个 IP 后面是 80 次/十
- * 秒，300 留了两倍半的余量；而一秒一千次的脚本三百次就被关在门外。
+ * 回扫四遍。十秒窗口两件事一起成立：一屋人满座挤在一个 IP 后面也只有几百次/十
+ * 秒，而一秒一千次的脚本不到一秒就被关在门外。
  *
- * ⚠️ 上面那笔「80 次/十秒」是按**八座位**（`OPEN_SEATS`）算的，而竞赛屋是 21 座
- * （`CONTEST_SEATS`，已经上线：`#mpContest` 那颗键 → `createRoom(…, contest)`）。21
- * 个人满座挤在同一个 IP 后面是 210 次/十秒——**还不到 429**（上限 300），但余量从
- * 3.75 倍掉到 1.43 倍。所以这个 300 现在是「刚够」，不是「两倍半的余量」：谁要再往
- * 轮询里加一跳、或者把轮询调快一点，先回来重算这个数。一屋人打到一半集体断线，而屏
- * 幕上写的是「连不上网络」，他们会去查路由器。
+ * 这个数原先是 300，是照**八座位**（`OPEN_SEATS`）算的：八个人 80 次/十秒，三倍多的余量。
+ * 竞赛屋上线之后是 21 座（`CONTEST_SEATS`）：21 个人满座挤在同一个 IP 后面（一间教室、一个
+ * 公司的 Wi-Fi，竞赛屋本来就是给这种场合开的）是 210 次/十秒，余量只剩 1.43 倍——一个人多开
+ * 一个标签页、或者网络抖一下几个人一起重试，就够把全屋一起挡在 429 外面。10-09 补充方案 7-13
+ * 第 5 条把它放到 **600**：21 人照样有将近三倍的余量。代价记在这儿：扫号那头一个 IP 一秒最多
+ * 摸 60 个房号（原先 30），一万个号从五分半钟变成不到三分钟——还是挡在「一秒上千次」那一档之外，
+ * 这个桶本来也只是让扫号变慢、变贵，不是让它不可能。谁要再往轮询里加一跳、或者把轮询调快
+ * 一点，先回来重算这个数。一屋人打到一半集体断线，而屏幕上写的是「连不上网络」，他们会去查
+ * 路由器。
  *
  * join / create 是一次性动作（进一次屋、开一间屋），一小时几十次绰绰有余，
  * 短窗口反而会在网络抖动连点几下时误伤，所以这两个照 redeem.js 的写法。
@@ -348,7 +351,7 @@ const id = (bytes) => randomBytes(bytes).toString('hex');
  * start / force / score / end / learn 都要先出示座位或屋主令牌，够不上「陌生人的门」。
  */
 const RATE = {
-  state: { limit: 300, windowS: 10 },
+  state: { limit: 600, windowS: 10 },
   nudge: { limit: 200, windowS: 10 },
   join: { limit: 60, windowS: 3600 },
   create: { limit: 20, windowS: 3600 },
@@ -1036,11 +1039,15 @@ function freeLetter(hash) {
  * 换的时候看他原来叫什么：本来就是发的字母，就再发一个没被占的字母；自己取
  * 的名字则照老规矩加编号（「阿甲 2」）——把人家取的名字换成一个字母，比重名
  * 还奇怪。
+ *
+ * 「有人占了」不算他自己那一行（`playerId`，10-09 补充方案 7-13 第 6 条）。关了网页被认回
+ * 来的那把椅子没按过《离开》，`p:` 那一行还挂在屋里、名字还是他的——原先不跳过它，他就
+ * 撞上了自己：自己取的名字回来变成「阿甲 2」，发的字母 B 回来变成 A。
  */
-function nameForReturner(seat, hash) {
+function nameForReturner(seat, hash, playerId) {
   const name = String(seat.name ?? '').trim();
   if (!name) return freeLetter(hash);
-  const kept = uniqueName(name, hash);
+  const kept = uniqueName(name, hash, playerId);
   if (kept === name) return name;
   return /^[A-Za-z]$/.test(name) ? freeLetter(hash) : kept;
 }
@@ -1048,11 +1055,13 @@ function nameForReturner(seat, hash) {
 /**
  * 屋里已经有人叫这个名字（还坐着的）：后来的加个编号——「起个名字 2」。同名
  * 不再可能，认领座位那一条也就永远不会把两个陌生人当成一个人。
+ *
+ * `exceptId`：这一行不算「有人」——认回自己那把椅子的人，不跟自己撞名（见 nameForReturner）。
  */
-function uniqueName(name, hash) {
+function uniqueName(name, hash, exceptId = '') {
   const taken = new Set(
     Object.entries(hash)
-      .filter(([k, v]) => k.startsWith('p:') && v && !v.left)
+      .filter(([k, v]) => k.startsWith('p:') && k !== `p:${exceptId}` && v && !v.left)
       .map(([, v]) => String(v.name ?? '').trim().toLowerCase()),
   );
   if (!taken.has(name.trim().toLowerCase())) return name;
@@ -1405,7 +1414,7 @@ async function join(res, body) {
     }
     const next = {
       ...seat,
-      name: nameForReturner(seat, hash),
+      name: nameForReturner(seat, hash, field.slice(2)),
       token,
       slot,
       lastSeen: Date.now(),

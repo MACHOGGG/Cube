@@ -327,6 +327,8 @@ export interface I18nStrings {
    * 里时根本不会被念到。
    */
   codeSentTo: string;
+  /** 验证码过期时，验证码那一屏多出来的一颗：同一个地址再寄一张（10-09 补充方案 7-13 第 2 条）。 */
+  resendCode: string;
   useAnotherEmail: string;
   mailDownHint: string;
   pairlessEntry: string;
@@ -630,6 +632,10 @@ export interface I18nStrings {
   /** 屋主中途散场，而这个人没权限单独打这个玩法：一句话，按下去回主页。 */
   mpHostLeftLocked: string;
   mpHostAwaySolo: string;
+  /** 局中小屋过期了（10-09 补充方案 7-13 第 14 条）：还在打的人原地转单人，飘过这一句。 */
+  mpRoomExpiredSolo: string;
+  /** 局中小屋过期了，而他打不了单人、或者已经交了卷在等：这一句加一颗回主页的键。 */
+  mpRoomExpired: string;
   /** 知道了。 */
   mpOk: string;
   /** 屋主还在，只是这会儿听不见他——网络卡了，不是走了。 */
@@ -996,6 +1002,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: 'Use exactly six letters or digits.',
     newsOptIn: 'Email me new boards and updates',
     codeSentTo: 'Sent to {email}',
+    resendCode: 'Send a new code',
     useAnotherEmail: '← Another address',
     mailDownHint: 'Mail is not going out right now. Try “No email”.',
     pairlessEntry: 'No email',
@@ -1133,6 +1140,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: 'The host has wandered off — the room is closed for now',
     mpHostLeftLocked: 'The host has left and the room is closed for now — come back in a bit?',
     mpHostAwaySolo: 'The host has stepped away · playing on your own now',
+    mpRoomExpiredSolo: 'This room has expired · playing on your own now',
+    mpRoomExpired: 'This room has expired.',
     mpOk: 'ok',
     mpHostFixing: 'The host will be right back',
     mpErrNoRoom: 'No room with that code.',
@@ -1354,6 +1363,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: 'Exactement six lettres ou chiffres.',
     newsOptIn: 'M’envoyer les nouveautés par e-mail',
     codeSentTo: 'Envoyé à {email}',
+    resendCode: 'Renvoyer un code',
     useAnotherEmail: '← Changer d’adresse',
     mailDownHint: 'Les e-mails ne partent pas pour le moment. Essayez « Sans e-mail ».',
     pairlessEntry: 'Sans e-mail',
@@ -1491,6 +1501,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: 'L’hôte est parti — la salle est fermée pour l’instant',
     mpHostLeftLocked: 'L’hôte est parti, la salle est fermée pour l’instant — revenez un peu plus tard ?',
     mpHostAwaySolo: 'L’hôte s’est absenté · vous jouez seul désormais',
+    mpRoomExpiredSolo: 'Cette salle a expiré · vous jouez seul désormais',
+    mpRoomExpired: 'Cette salle a expiré.',
     mpOk: 'ok',
     mpHostFixing: 'L’hôte revient tout de suite',
     mpErrNoRoom: 'Aucune salle avec ce code.',
@@ -1712,6 +1724,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: '密碼要正好 6 位，數字或字母。',
     newsOptIn: '接收新玩法與更新郵件',
     codeSentTo: '已寄到 {email}',
+    resendCode: '重新寄送',
     useAnotherEmail: '← 換信箱',
     mailDownHint: '郵件暫時寄不出，可先用《免信箱》。',
     pairlessEntry: '免信箱',
@@ -1849,6 +1862,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: '屋主離家出走了，小屋暫時解散',
     mpHostLeftLocked: '屋主離開，小屋暫時解散，等一會再來？',
     mpHostAwaySolo: '屋主暫時離開，正在獨自遊玩',
+    mpRoomExpiredSolo: '小屋已過期，正在獨自遊玩',
+    mpRoomExpired: '這間小屋已經過期了。',
     mpOk: 'ok',
     mpHostFixing: '屋主等一下就來',
     mpErrNoRoom: '沒有這個小屋號碼。',
@@ -2070,6 +2085,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     setPwShort: '密码要正好 6 位，数字或字母。',
     newsOptIn: '接收新玩法与更新邮件',
     codeSentTo: '已寄到 {email}',
+    resendCode: '重新发送',
     useAnotherEmail: '← 换邮箱',
     mailDownHint: '邮件暂时寄不出，可先用《免邮箱》。',
     pairlessEntry: '免邮箱',
@@ -2207,6 +2223,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: '屋主离家出走了，小屋暂时解散',
     mpHostLeftLocked: '屋主离开，小屋暂时解散，等一会再来？',
     mpHostAwaySolo: '屋主暂时离开，正在独自游玩',
+    mpRoomExpiredSolo: '小屋已过期，正在独自游玩',
+    mpRoomExpired: '这间小屋已经过期了。',
     mpOk: 'ok',
     mpHostFixing: '屋主等一下就来',
     mpErrNoRoom: '没有这个小屋号码。',

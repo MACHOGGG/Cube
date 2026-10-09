@@ -3,6 +3,7 @@ import { isStoreChannel } from './channel';
 import { auth, invalidateBoards } from './cloudScores';
 import { currentRoom, renameSeat } from './room';
 import { STRINGS, type Lang } from '../i18n';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /**
  * 昵称（第 16 推）：一个帐号一个，全站唯一，**服务器是唯一来源**。
@@ -51,6 +52,8 @@ export type NicknameError =
   | 'required'
   | 'tooMany'
   | 'signedOut'
+  /** 服务器那头 5xx，不是他的网络（10-09 补充方案 7-13 第 3 条）。 */
+  | 'unavailable'
   | 'network';
 
 export type NicknameResult = { ok: true; name: string } | { ok: false; reason: NicknameError };
@@ -149,7 +152,7 @@ export async function setNickname(raw: string): Promise<NicknameResult> {
 
   let res: Response;
   try {
-    res = await fetch('/api/scores', {
+    res = await fetchWithTimeout('/api/scores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...who, storeClaim: isStoreChannel(), action: 'name', name }),
@@ -165,7 +168,8 @@ export async function setNickname(raw: string): Promise<NicknameResult> {
     const why = String(reply.error || '');
     return { ok: false, reason: why === 'blocked' || why === 'required' ? why : 'bad' };
   }
-  if (!res.ok) return { ok: false, reason: 'network' };
+  // 5xx 是我们这头的事，说「服务器忙」；只有剩下那些才落到「连不上网络」（10-09 补充方案 7-13 第 3 条）。
+  if (!res.ok) return { ok: false, reason: res.status >= 500 ? 'unavailable' : 'network' };
 
   // 服务器清洗过的那一份（去掉了零宽字符之类）才是他的名字。
   const saved = typeof reply.name === 'string' && reply.name ? reply.name : name;
@@ -234,6 +238,8 @@ export function nicknameErrorText(reason: NicknameError, lang: Lang): string {
       return s.tooManyTries;
     case 'signedOut':
       return s.sessionGone;
+    case 'unavailable':
+      return s.serverBusy;
     default:
       return s.purchaseNetwork;
   }

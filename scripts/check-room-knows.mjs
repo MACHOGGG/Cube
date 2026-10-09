@@ -14,8 +14,11 @@
  * 没变），于是**每一局**都这样：全屋多等四秒，他每一局都被同一个问题问一遍。
  *
  *   ①（尺子）第一局：客人没看过方块的教学，服务器多留了四秒（countFrom 比基础多 4），他被问了。
- *   ② 他答「会」：本机记下「方块看过了」。
- *   ③ 第二局同一族：服务器不再多留四秒，他也不再被问。
+ *   ①乙 他按了手机的返回键：那一问收起，**不算答「会」**——本机不记，这一局照打（10-09 补充方案
+ *      7-13 第 11 条；原先返回键等于答「会」，一按就记成「看过了」，以后再也不问）。
+ *   ② 第二局同一族：服务器照旧多留四秒、照旧问他（返回键那一下服务器也没被告知「看过了」）；这一
+ *      回他答「会」：本机记下「方块看过了」。
+ *   ③ 第三局同一族：服务器不再多留四秒，他也不再被问。
  */
 import { chromium } from 'playwright';
 
@@ -109,27 +112,47 @@ const r1 = await countFrom(A.page);
 check('①（尺子）第一局：客人被问了「会不会」', asked1);
 check('①（尺子）第一局：服务器多留了四秒（从 8 数起）', r1.round === 1 && r1.countFrom === 8, JSON.stringify(r1));
 
-// ── ② 答「会」 ───────────────────────────────────────────────────────────
-if (asked1) await B.page.click('#mpKnowYes');
+/** 一局打完，两边回到小屋页。 */
+const playOut = async (label) => {
+  const up = (await boardUp(A.page)) && (await boardUp(B.page));
+  check(`（尺子）${label}两边的棋盘都出来了`, up);
+  await finish(A.page);
+  await finish(B.page);
+  const home = await A.page
+    .waitForFunction(() => !document.querySelector('#mpWait') && Boolean(document.querySelector('#mpPick')), { timeout: 30000 })
+    .then(() => true).catch(() => false);
+  check(`（尺子）${label}打完，屋主回到小屋页`, home);
+};
+
+// ── ①乙 按手机的返回键：只收起，不算答「会」 ─────────────────────────────────
+if (asked1) {
+  // 哨兵是这一层画到屏幕上之后才推的（见 engine/backNav.ts 的 arm）：按返回之前先等它立好。
+  await B.page.waitForTimeout(150);
+  await B.page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => {});
+  await B.page.waitForTimeout(400);
+}
+check('①乙 按返回键：那一问收起了', !(await B.page.$('#mpKnowAsk')));
+check('①乙 按返回键不算答「会」：本机没记「方块看过了」', (await B.page.evaluate(() => localStorage.getItem('slides_tutorial_seen'))) === null);
+await playOut('第一局');
+
+// ── ② 第二局同一族：照旧问；这回答「会」 ───────────────────────────────────
+await hostPicksSquare(A.page);
+const asked2 = await B.page.waitForSelector('#mpKnowAsk', { timeout: 15000 }).then(() => true).catch(() => false);
+const r2 = await countFrom(A.page);
+check('② 第二局：返回键那一下服务器也没被当成「看过了」，照旧多留四秒（从 8 数起）', r2.round === 2 && r2.countFrom === 8, JSON.stringify(r2));
+check('② 第二局：客人照旧被问', asked2);
+if (asked2) await B.page.click('#mpKnowYes');
 await B.page.waitForTimeout(800);
 check('② 答了「会」：本机记下了「方块看过了」', (await B.page.evaluate(() => localStorage.getItem('slides_tutorial_seen'))) === '1');
+await playOut('第二局');
 
-const up = (await boardUp(A.page)) && (await boardUp(B.page));
-check('（尺子）第一局两边的棋盘都出来了', up);
-await finish(A.page);
-await finish(B.page);
-const back = await A.page
-  .waitForFunction(() => !document.querySelector('#mpWait') && Boolean(document.querySelector('#mpPick')), { timeout: 30000 })
-  .then(() => true).catch(() => false);
-check('（尺子）第一局打完，屋主回到小屋页', back);
-
-// ── ③ 第二局同一族 ───────────────────────────────────────────────────────
+// ── ③ 第三局同一族 ───────────────────────────────────────────────────────
 await hostPicksSquare(A.page);
 await A.page.waitForTimeout(1500);
-const r2 = await countFrom(A.page);
-check('③ 第二局：服务器不再多留四秒（从 4 数起）', r2.round === 2 && r2.countFrom === 4, JSON.stringify(r2));
-const asked2 = await B.page.waitForSelector('#mpKnowAsk', { timeout: 4000 }).then(() => true).catch(() => false);
-check('③ 第二局：客人不再被问', !asked2);
+const r3 = await countFrom(A.page);
+check('③ 第三局：服务器不再多留四秒（从 4 数起）', r3.round === 3 && r3.countFrom === 4, JSON.stringify(r3));
+const asked3 = await B.page.waitForSelector('#mpKnowAsk', { timeout: 4000 }).then(() => true).catch(() => false);
+check('③ 第三局：客人不再被问', !asked3);
 
 await A.ctx.close();
 await B.ctx.close();

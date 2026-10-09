@@ -14,6 +14,7 @@
  * 量不到（离线、被拦）就用本机的钟：每日挑战照样能打，只是钟错了的设备打的那一局进不了今日榜。
  */
 import { hasServerClock, serverTime } from './room';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /** 服务器的钟减本机的钟（从 `Date` 头量的）。没量过就是 null。 */
 let headerOffset: number | null = null;
@@ -31,7 +32,7 @@ export function syncDailyClock(): Promise<void> {
   syncing = (async () => {
     try {
       const t0 = Date.now();
-      const res = await fetch('/', { method: 'HEAD', cache: 'no-store' });
+      const res = await fetchWithTimeout('/', { method: 'HEAD', cache: 'no-store' });
       const t1 = Date.now();
       const date = Date.parse(res.headers.get('date') ?? '');
       if (Number.isFinite(date)) headerOffset = date + 500 - (t0 + t1) / 2;

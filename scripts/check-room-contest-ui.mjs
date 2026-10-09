@@ -535,6 +535,14 @@ await ctx.close();
   check('终局面板的名单和全屋总分都只算选手（contestants）',
     /const players = contestants\(state\);/.test(left) && /rankRoom\(players\)/.test(left) &&
       /players\.reduce\(/.test(left) && !/state\.players\.reduce\(/.test(left) && !/rankRoom\(state\.players\)/.test(left));
+  // 结算页上那张单局战绩图（engine/gameController.ts 的 roundStandings）也是同一道过滤（10-09 补充方案
+  // 7-13 第 4 条）。它是画在 canvas 上的一张图，名字读不出来，所以也读源码：那个函数里只许有
+  // contestants(state)，不许再直接碰 state.players（原先就是这一句，主持人以 0 分挂在图上最后一名）。
+  const ctl = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
+  const from = ctl.indexOf('function roundStandings(');
+  const fn = from < 0 ? '' : ctl.slice(from, ctl.indexOf('\n  }\n', from));
+  check('单局战绩图的名次也只列选手（gameController.ts 的 roundStandings 走 contestants）',
+    /contestants\(state\)/.test(fn) && !/state\.players/.test(fn), fn ? '' : '没找到 roundStandings');
 }
 
 // ---- 3. 对照：普通八人屋照旧，屋主拿得到棋盘 ------------------------------

@@ -452,6 +452,48 @@ for (const [width, height, mobile, label] of [[390, 844, true, '手机 390×844'
   await ctx.close();
 }
 
+// ── ⑧ 倒数那一幕：手机的返回键和《退出》去同一个地方（挑码那一页，10-09 补充方案 7-13 第 12 条）──────
+//
+// 原先《退出》回挑码页，返回键却走整页那一条回了主菜单。量三件事：数到一半按返回 → 挑码页（不是主菜
+// 单），而且那一局没在背后数完开出来；《退出》→ 同一个地方（尺子）；回到挑码页再按返回 → 主菜单（整页那
+// 一条没被这一层吃掉）。
+{
+  const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())));
+  const where = () =>
+    page.evaluate(() => ({
+      count: Boolean(document.querySelector('.daily-page--count')),
+      pick: Boolean(document.querySelector('#dailyPlay')),
+      home: Boolean(document.querySelector('.home-icon-btn--daily')),
+      board: Boolean(document.querySelector('#boardWrap .tile, #boardWrap .ball')),
+    }));
+  const pressBack = async () => {
+    // 哨兵是这一层画到屏幕上之后才推的（见 engine/backNav.ts 的 arm）：按返回之前先等它立好。
+    await page.waitForTimeout(150);
+    await page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(400);
+  };
+  await page.click('.home-icon-btn--daily');
+  await page.waitForSelector('#dailyPlay', { timeout: 8000 });
+  await page.click('#dailyPlay');
+  await page.waitForSelector('.daily-page--count', { timeout: 8000 });
+  await pressBack();
+  const a = await where();
+  check('⑧ 数到一半按返回键：回到挑码那一页（不是主菜单）', a.pick && !a.count && !a.home, JSON.stringify(a));
+  await page.waitForTimeout(5000);
+  const a2 = await where();
+  check('⑧ 而且那一局没在背后数完开出来（倒数停了）', a2.pick && !a2.board, JSON.stringify(a2));
+  await page.click('#dailyPlay');
+  await page.waitForSelector('.daily-page--count', { timeout: 8000 });
+  await page.click('.daily-page--count #dailyBack');
+  await page.waitForTimeout(300);
+  const b = await where();
+  check('⑧（尺子）屏幕上的《退出》去的也是挑码那一页', b.pick && !b.count && !b.home, JSON.stringify(b));
+  await pressBack();
+  const c = await where();
+  check('⑧ 回到挑码页之后再按返回键：回主菜单（整页那一条没被吃掉）', c.home && !c.pick, JSON.stringify(c));
+  await ctx.close();
+}
+
 check('全程零报错', errs.length === 0, errs.slice(0, 3).join(' | '));
 await browser.close();
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

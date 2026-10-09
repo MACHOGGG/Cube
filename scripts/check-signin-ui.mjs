@@ -24,9 +24,14 @@
  *    · 身份那一行是**第一串**，不是 hdl: 那串 hex（E53）；第 17 推起默认遮住（•••• 加末四
  *      位），按眼睛才露出整串
  *    · 第一格摆的是**《绑定邮箱》**，不是《更换邮箱》（7-8：api/email.js 认 hdl: 那把 id 了）
+ * ③乙 码过期了旁边露出「重新发送」，按了同一个地址再要一张、再交的是新票；粘贴满六位又按回车只交一次
+ *    （10-09 补充方案 7-13 第 1、2 条）。
  * ⑨ 《绑定邮箱》那扇窗：标题、那一行说明（不印 hdl:），绑好之后本机认成邮箱账号（第一串那一行、《绑定
  *    邮箱》都不在了，换成邮箱和《更换邮箱》），回到账号窗说「绑定好了——以后用这个邮箱登录。」——这台
  *    服务器没配 Resend，要码 / 验码两问用路由拦截答成功，量的是界面这一头。
+ * ⑩ 《退出登录》：本机那一份删掉，**而且服务器上这一台的令牌作废了**（10-09 补充方案 7-13 第 10 条）——
+ *    点下去发出的是 `revoke`、带的是本机那一把；登出之后拿那一把去问 /api/scores，答 401。原先登出只删
+ *    本机，那一把在服务器上照旧活一年。
  * ⑦ 两档屏幕（360×640 / 390×844）底排键都在屏内，而且点得着。
  * ⑧ 免邮箱锁住时，那句「约 N 小时后自动解开」的 N 是服务端说的还剩多久（retryInMs），不是写死的 4。
  */
@@ -323,6 +328,53 @@ const FIRST = 'UiProbe' + Date.now().toString(36).slice(-5);
 await ctx.close();
 
 // ---------------------------------------------------------------------------
+head('⑩ 《退出登录》：服务器上这一台的令牌作废了，不只是本机忘掉');
+{
+  const { ctx: outCtx, page: out } = await openAuth();
+  const OUT_FIRST = 'OutProbe' + Date.now().toString(36).slice(-5);
+  await out.click('#authAlt');
+  await out.waitForFunction(() => !document.querySelector('#authPairForm')?.hidden, null, { timeout: 10000 });
+  await out.fill('#authFirst', OUT_FIRST);
+  await out.fill('#authSecond', 'secondpass');
+  await out.click('#authGo');
+  await out.waitForSelector('#statusSignOut', { timeout: 20000 });
+  const held = await out.evaluate(() => JSON.parse(localStorage.getItem('slides_genius') || '{}'));
+  const ask = (who) =>
+    out.evaluate(async ({ email, token }) => {
+      const r = await fetch('/api/scores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mine', email, token }),
+      });
+      return r.status;
+    }, who);
+  check('⑩（尺子）登录着：本机那一把问得到自己的战绩', Boolean(held.token) && (await ask(held)) === 200, String(held.token).slice(0, 6));
+  const revokes = [];
+  out.on('request', (req) => {
+    if (req.url().endsWith('/api/signin') && req.method() === 'POST') {
+      const body = req.postDataJSON?.() ?? {};
+      if (body.action === 'revoke') revokes.push(body);
+    }
+  });
+  await out.click('#statusSignOut');
+  await out.waitForFunction(() => !JSON.parse(localStorage.getItem('slides_genius') || '{}').token, null, { timeout: 10000 })
+    .catch(() => {});
+  const left = await out.evaluate(() => JSON.parse(localStorage.getItem('slides_genius') || '{}'));
+  check('⑩ 本机那一份删掉了（没有令牌、不是天才）', !left.token && !left.active, JSON.stringify(left));
+  for (let i = 0; i < 50 && !revokes.length; i++) await out.waitForTimeout(100);
+  check('⑩ 点下去发出了一条 revoke，带的是本机那一把令牌和那个账号',
+    revokes.length === 1 && revokes[0].token === held.token && revokes[0].email === held.email,
+    JSON.stringify(revokes.map((b) => ({ ...b, token: String(b.token).slice(0, 6) }))));
+  let status = 0;
+  for (let i = 0; i < 30; i++) {
+    status = await ask(held);
+    if (status === 401) break;
+    await out.waitForTimeout(100);
+  }
+  check('⑩ 登出之后拿那一把去问 /api/scores：401（服务器上作废了）', status === 401, String(status));
+  await outCtx.close();
+}
+
+// ---------------------------------------------------------------------------
 head('③ 验证码那一屏：六格，订阅邮件那个框出厂不勾');
 {
   // 这一屏要走到，得让要码那一步成功。服务器没配 Resend，所以用路由拦截把那一问答成
@@ -350,6 +402,65 @@ head('③ 验证码那一屏：六格，订阅邮件那个框出厂不勾');
   const back = await two.page.evaluate(() => document.querySelector('#authEmail')?.value);
   check('《换个邮箱》回①，而且原来填的还在（方便改一个字母）', back === 'probe-code@example.com', String(back));
   await two.ctx.close();
+}
+
+// ---------------------------------------------------------------------------
+head('③乙 码过期了给一颗「重新发送」；一次只交一张（10-09 补充方案 7-13 第 1、2 条）');
+{
+  // 两问都拦下来自己答：要码那一问每次发一张新票（数一数发了几次），验码那一问头一次答「过期了」
+  // （400 expired），之后答登录成功——看「重新发送」之后交上去的是不是新那张票。
+  const three = await openAuth();
+  const asks = [];
+  const confirms = [];
+  let expiredOnce = true;
+  await three.page.route('**/api/signin', async (route) => {
+    const body = route.request().postDataJSON?.() ?? {};
+    if (body.action === 'confirm') {
+      confirms.push(body);
+      // 慢一点答：「一次请求还在路上」那一段要真的有，防连点才有东西可防。
+      await new Promise((r) => setTimeout(r, 400));
+      if (expiredOnce) {
+        expiredOnce = false;
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'expired' }) });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, active: true, email: body.email, token: 'probe-token' }) });
+    }
+    asks.push(body);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sent: true, challenge: 'ticket' + asks.length }) });
+  });
+  await three.page.fill('#authEmail', 'probe-resend@example.com');
+  await three.page.click('#authGo');
+  await three.page.waitForFunction(() => !document.querySelector('#authCodeForm')?.hidden, null, { timeout: 15000 });
+  const r0 = await three.page.evaluate(() => Boolean(document.querySelector('#authResend')) && document.querySelector('#authResend').hidden);
+  check('③乙（尺子）「重新发送」那颗键在，平常藏着', r0 === true);
+  // 粘贴满六位（六格自动提交）紧跟着回车：同一张码只该交一次。
+  await three.page.focus('#authCode');
+  await three.page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text', '123456');
+    document.querySelector('#authCode').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await three.page.keyboard.press('Enter');
+  await three.page.waitForFunction(() => /过期/.test(document.querySelector('#authMsg')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+  check('③乙 粘贴满六位又按回车：只交了一次（防连点）', confirms.length === 1, `交了 ${confirms.length} 次`);
+  const st = await three.page.evaluate(() => ({
+    msg: document.querySelector('#authMsg')?.textContent?.trim() ?? '',
+    resendShown: !document.querySelector('#authResend')?.hidden,
+    resendText: document.querySelector('#authResend')?.textContent?.trim() ?? '',
+  }));
+  check('③乙 码过期了：说「验证码过期了」，旁边露出「重新发送」', /过期/.test(st.msg) && st.resendShown && st.resendText === '重新发送',
+    JSON.stringify(st));
+  await three.page.click('#authResend');
+  await three.page.waitForFunction(() => document.querySelector('#authResend')?.hidden && /已寄到/.test(document.querySelector('#authMsg')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+  check('③乙 按「重新发送」：同一个地址又要了一张（第二次要码）', asks.length === 2 && asks[1].email === 'probe-resend@example.com',
+    JSON.stringify(asks.map((a) => a.email)));
+  check('③乙 而且那颗键收起来了、还停在验证码这一屏', await three.page.evaluate(() =>
+    document.querySelector('#authResend')?.hidden === true && !document.querySelector('#authCodeForm')?.hidden));
+  await three.page.fill('#authCode', '654321');
+  await three.page.waitForFunction(() => Boolean(document.querySelector('#statusClose')), null, { timeout: 10000 }).catch(() => {});
+  check('③乙 再交的是新那张票（ticket2），登进去了', confirms.length === 2 && confirms[1].challenge === 'ticket2' && Boolean(await three.page.$('#statusClose')),
+    JSON.stringify(confirms.map((c) => c.challenge)));
+  await three.ctx.close();
 }
 
 // ---------------------------------------------------------------------------

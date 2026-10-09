@@ -368,7 +368,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    * 有一件事跟着变，说清楚：时间系数从小屋的那一档（1.5 倍）回到单人的那
    * 一档。这是对的——已经没有人和他比快慢了。
    */
-  const goSolo = () => {
+  const goSolo = (say: string = s.mpHostAwaySolo) => {
     dead = true;
     stopWatching?.();
     window.clearInterval(localTimer);
@@ -400,7 +400,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     // 一句话从标语下面飘过去就够（玩家的原话：「在非游戏版图内出现一句标语
     // 《屋主暂时离开，正在独自游玩》飘过就好」）：不挡棋盘、不用按、说完自
     // 己走，这一局照打不误。
-    flyby(s.mpHostAwaySolo);
+    flyby(say);
   };
 
   /**
@@ -416,7 +416,15 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    */
   const lockedMode = (st: RoomState) =>
     isLayoutLocked(shapeId) || (!isGenius() && (st.flip || Boolean(st.slot)));
-  const lockedOut = () => {
+  const lockedOut = (say: string = s.mpHostLeftLocked, ok: string = s.mpOk) => {
+    leaveForGood();
+    // 房间局里这颗键藏着，但它还在、还接着 doPause：借它把表停住。
+    document.querySelector<HTMLButtonElement>('#stopBtn')?.click();
+    homeNotice(say, ok);
+  };
+
+  /** 不再跟这间屋有任何往来：停轮询、停上报、撤掉盖着的那几层，座位正式交回去。 */
+  const leaveForGood = () => {
     dead = true;
     stopWatching?.();
     window.clearInterval(localTimer);
@@ -425,15 +433,17 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     notice.remove();
     // 同上：正式交回座位。
     void leaveRoom();
-    // 房间局里这颗键藏着，但它还在、还接着 doPause：借它把表停住。
-    document.querySelector<HTMLButtonElement>('#stopBtn')?.click();
+  };
+
+  /** 一句话、一颗键，按下去回主页（返回键也是）。 */
+  const homeNotice = (say: string, ok: string) => {
     const box = document.createElement('div');
     box.className = 'overlay opaque show';
     box.id = 'roomLockedOut';
     box.innerHTML = `
       <div class="modal">
-        <p class="tag-line">${s.mpHostLeftLocked}</p>
-        <div class="btn-row"><button class="primary" id="roomLockedOk">${s.mpOk}</button></div>
+        <p class="tag-line">${say}</p>
+        <div class="btn-row"><button class="primary" id="roomLockedOk">${ok}</button></div>
       </div>
     `;
     document.body.appendChild(box);
@@ -443,6 +453,28 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     };
     pushLayer(go, box);
     box.querySelector<HTMLButtonElement>('#roomLockedOk')?.addEventListener('click', go);
+  };
+
+  /**
+   * 这间小屋在库里已经不在了——过期了（二十分钟没人动它，api/room.js 的 ROOM_TTL_S），10-09 补充
+   * 方案 7-13 第 14 条。极少见：一屋人都在打的时候，每一次报分都在给它续命；要走到这儿，得是整屋
+   * 断了好一阵又回来。
+   *
+   * 原先轮询失败一律「什么都不动」（见 watchRoom 那个 onError），可这一种不是「这一下没问到」，是定
+   * 论——再问一万次它也不会回来：交了卷的人永远停在等待页上，正打着的人打完也一样。现在和屋主散场
+   * 同一套去处，只是话不一样：
+   *   · 还在打、这一局他打得了 → 原地转成单人打完（结算页上就有回主页的路）；
+   *   · 还在打、打不了（天才特供那几样）→ 停住、说一句、按下去回主页；
+   *   · 已经交了卷在等 → 等待页撤掉、说一句、按下去回主页。
+   */
+  const roomExpired = () => {
+    if (!runFinished()) {
+      const st = latestRoomState();
+      const locked = st ? lockedMode(st) : isLayoutLocked(shapeId);
+      return locked ? lockedOut(s.mpRoomExpired, s.homeBtn) : goSolo(s.mpRoomExpiredSolo);
+    }
+    leaveForGood();
+    homeNotice(s.mpRoomExpired, s.homeBtn);
   };
 
   /**
@@ -601,7 +633,11 @@ function flyby(text: string): void {
         return handlers.onRoom();
       }
     },
-    () => {
+    (reason) => {
+      if (dead) return;
+      // 小屋过期了：这一种是定论，不是「这一下没问到」（见 roomExpired）。本机还拿着座位才算——
+      // 本机连座位都没有时 fetchState 也答 noRoom，那一种不是服务器说的，不在这儿认。
+      if (reason === 'noRoom' && currentRoom()) return roomExpired();
       // A poll that fails changes nothing on screen: the last standings
       // stand, which is better than blanking the panel over one dropped
       // request in the middle of someone's run.

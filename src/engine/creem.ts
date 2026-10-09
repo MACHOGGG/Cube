@@ -1,5 +1,6 @@
 import type { PlanPeriod } from './pricing';
 import type { Entitlement, GiftCode, PurchaseOutcome } from './subscription';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /**
  * The web counter: Creem, in US dollars, one price for the whole world.
@@ -59,7 +60,7 @@ class HttpError extends Error {
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetchWithTimeout(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

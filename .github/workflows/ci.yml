@@ -464,6 +464,15 @@ jobs:
         run: ALLOW_MEMORY_STORE=1 node scripts/check-checkout-limit.mjs
       - name: 账户：兑码落到账户上、改密码、换邮箱
         run: node scripts/check-account-hub.mjs
+      # 服务器那头出错（5xx）说「服务器忙」，不说「连不上网络」（10-09 补充方案 7-13 第 3 条）：换邮箱 / 兑码、改昵称、
+      # 排行榜三个客户端模块各打一包，拿假 fetch 答 500（无正文）、502、断网；redeem / email 两个接口摔了也答 502 JSON；
+      # /api/scores 摔了记一行日志，行里只有动作名和错误句（第 8 条）。
+      - name: 5xx 说服务器忙，不说网络
+        run: node scripts/check-server-busy.mjs
+      # 前端每一个请求都有超时（10-09 补充方案 7-13 第 13 条）：挂住的请求 15 秒就放弃、按断网接；没有 AbortController
+      # 的老内核照样放弃；src/ 里不许有绕过 helper 的裸 fetch(。纯 node，一秒内跑完。
+      - name: 请求挂住了到点放弃
+        run: node scripts/check-fetch-timeout.mjs
       # 开账号那三条路（绑内部码 / 刷卡设密码 / 确认换邮箱）从前都是「先看一眼
       # 这个地址有没有人，再整份写进去」。一家人共用一个邮箱、两个人各拿一张码前
       # 后脚点《绑定》，两边都读到「没人」——两边都显示成功，两张码都被吃掉，库里

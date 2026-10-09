@@ -1,6 +1,7 @@
 import type { RunData } from './runRecord';
 import { entitlement, signedInEmail } from './subscription';
 import { isStoreChannel } from './channel';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /**
  * 战绩存云端，以及两张全球排行榜的客户端这一头。
@@ -71,7 +72,7 @@ async function post<T>(body: Record<string, unknown>): Promise<T | null> {
   const who = auth();
   if (!who) return null;
   try {
-    const res = await fetch('/api/scores', {
+    const res = await fetchWithTimeout('/api/scores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...who, storeClaim: isStoreChannel(), ...body }),
@@ -215,7 +216,7 @@ export const fetchMine = (): Promise<CloudMine | null> => post<CloudMine>({ acti
  */
 export type BoardResult =
   | { ok: true; page: BoardPage }
-  | { ok: false; reason: 'geniusOnly' | 'signedOut' | 'expired' | 'network' };
+  | { ok: false; reason: 'geniusOnly' | 'signedOut' | 'expired' | 'unavailable' | 'network' };
 
 /**
  * 每张榜在内存里存十秒。
@@ -257,7 +258,7 @@ export async function fetchBoard(mode?: string): Promise<BoardResult> {
   const who = auth();
   if (!who) return { ok: false, reason: 'signedOut' };
   try {
-    const res = await fetch('/api/scores', {
+    const res = await fetchWithTimeout('/api/scores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -274,7 +275,8 @@ export async function fetchBoard(mode?: string): Promise<BoardResult> {
       tokenStale = true;
       return { ok: false, reason: 'expired' };
     }
-    if (!res.ok) return { ok: false, reason: 'network' };
+    // 5xx 是我们这头出错了，说「服务器忙」，不说「检查一下网络」（10-09 补充方案 7-13 第 3 条）。
+    if (!res.ok) return { ok: false, reason: res.status >= 500 ? 'unavailable' : 'network' };
     tokenStale = false;
     const page = (await res.json()) as BoardPage;
     boardCache.set(cacheKey(mode), { at: Date.now(), page });

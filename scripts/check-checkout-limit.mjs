@@ -28,6 +28,10 @@
  *   ① 打满之后要拦下来（429），不是一路放行；
  *   ② 没配库的时候不能反过来把人全挡在外面——没有库就没有计数器，这一步
  *      「数不了就不数」，和 redeem.js / subscription.js 一个道理。
+ *
+ * 外加 ④（10-09 补充方案 7-13 第 9 条）：交给 Creem 的回站地址（success_url）只认同站、而且是
+ * https。原先只比 host——`javascript://play-slides.com/%0a…` 和 `http://play-slides.com/` 的 host
+ * 都是 play-slides.com。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 process.env.CREEM_API_KEY = process.env.CREEM_API_KEY || 'creem_test_gatekey';
@@ -40,11 +44,14 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-// Creem 那一跳换成假货：数一数真的被敲了几次，顺手回一个合法的结账地址。
+// Creem 那一跳换成假货：数一数真的被敲了几次，顺手回一个合法的结账地址。最后一次开单交过去的
+// 是什么也记下来（④ 要看回站地址带没带）。
 let creemCalls = 0;
-globalThis.fetch = async (url) => {
+let lastOrder = null;
+globalThis.fetch = async (url, init) => {
   if (String(url).includes('creem.io')) {
     creemCalls++;
+    lastOrder = init?.body ? JSON.parse(init.body) : null;
     return { ok: true, status: 200, json: async () => ({ checkout_url: 'https://creem.test/c/abc' }) };
   }
   throw new Error('这一台不该往别处发请求：' + url);
@@ -111,6 +118,32 @@ const call = async (ip) => {
   }
   process.env.ALLOW_MEMORY_STORE = '1';
   check('③ 没配库时不限速，也不挡人', pass);
+}
+
+// ---- ④ 回站地址只认同站的 https ----------------------------------------
+{
+  const order = async (returnUrl) => {
+    lastOrder = null;
+    let status = 0;
+    const res = { status: (c) => ((status = c), res), setHeader: () => res, end: () => res };
+    await checkout(
+      { method: 'POST', headers: { 'x-forwarded-for': '6.6.6.' + Math.floor(Math.random() * 250), host: 'play-slides.com' },
+        body: { period: 'monthly', returnUrl } },
+      res,
+    );
+    return status === 200 ? (lastOrder?.success_url ?? null) : `（${status}）`;
+  };
+  const home = 'https://play-slides.com/?checkout=1';
+  check('④（尺子）同站的 https 地址原样交给 Creem', (await order(home)) === home);
+  for (const [label, url] of [
+    ['http 的同站地址（订单号会走明文回来）', 'http://play-slides.com/?checkout=1'],
+    ['javascript: 开头、host 恰好是本站（一段脚本）', 'javascript://play-slides.com/%0aalert(1)'],
+    ['data: 开头、host 恰好是本站', 'data://play-slides.com/x'],
+    ['别的站（照旧）', 'https://evil.example/?checkout=1'],
+  ]) {
+    const got = await order(url);
+    check(`④ ${label}：不交给 Creem`, got === null, String(got));
+  }
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

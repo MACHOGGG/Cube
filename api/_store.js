@@ -137,6 +137,11 @@ function memory(args) {
       if (!(h instanceof Map)) return [];
       return [...h.entries()].flat();
     }
+    // 和真 Redis 一样：问几个字段回几格，按问的顺序，不在的那一格是 null。
+    case 'HMGET': {
+      const h = mem.get(key);
+      return rest.map((f) => (h instanceof Map ? (h.get(String(f)) ?? null) : null));
+    }
     // 同 INCR，只是数字住在一个 hash 字段里。单进程内存，一个 case 里读了再
     // 写中间没有别人插得进来，同样是一步。
     case 'HINCRBY': {
@@ -461,6 +466,26 @@ export async function zTop(key, n) {
         out.push({ member: String(flat[i]), score: Number(flat[i + 1]) });
       }
     }
+  }
+  return out;
+}
+
+/**
+ * 一个 hash 里的指定几格，和 hgetall 同一个样子（{ 字段: 解好的值 }），只是只有问到的那几格；
+ * 库里没有的那一格不出现在结果里（和 hgetall 读不到它时一样）。
+ *
+ * 排行榜一页只画五十行，原先为了这五十个名字把整张名字表（全站每个玩家一行）hgetall 回来——
+ * 人越多越慢、越贵，用到的只有那五十个（10-09 补充方案 7-13 第 7 条）。
+ */
+export async function hmget(key, fields) {
+  const list = [...new Set(fields.map(String))];
+  if (!list.length) return {};
+  const flat = await command(['HMGET', key, ...list]);
+  const out = {};
+  if (Array.isArray(flat)) {
+    list.forEach((field, i) => {
+      if (flat[i] !== null && flat[i] !== undefined) out[field] = decode(flat[i]);
+    });
   }
   return out;
 }

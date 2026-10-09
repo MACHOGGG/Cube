@@ -44,6 +44,9 @@
  *      挂着的时候一张都不记，票却照发——猜码那一侧的上限（每张票 5 次 × 一小时十几张）整个没了。
  *   ⑪ **那一笔记在最后**：一个已经超了自己那一份（按来路一小时十封）的来路，再替别人的邮箱要码，
  *      不许烧掉那个邮箱的十五张。
+ *   ⑫ **登出作废这一台的令牌**（10-09 补充方案 7-13 第 10 条，`action: 'revoke'`）：登出的那一把从此
+ *      认不出人，另一台设备那一把照旧在；免邮箱账号、还没绑邮箱的兑码账号也登得出去（它们没有邮箱，
+ *      revoke 排在认邮箱之前）；拿一把不认识的令牌来登出，答 ok、什么都不动。
  *
  * ── 这道门怎么保证自己不是空绿 ────────────────────────────────
  *
@@ -435,6 +438,56 @@ for (const [label, opts] of [
   const own = await askCode(V, freshIp());
   check('⑪ 受害者自己来要码：照样要得到（那十五次没记进他的额度）', own.status === 200 && own.body.sent === true,
     `${own.status} ${own.raw}`);
+}
+
+// ── ⑫ 登出：作废这一台的令牌，别的设备不动（10-09 补充方案 7-13 第 10 条）────────────
+{
+  const { newAccount, saveAccount, loadAccount, issueToken, tokenValid, pairKey, codeHolder } = await import('../api/_accounts.js');
+  const { identify } = await import('../api/_entitlement.js');
+  const revoke = (body) => call({ action: 'revoke', ...body }, freshIp());
+
+  // 邮箱账号，两台设备各一把。手机那一把是开号时那一把，电脑那一把是后来添的（account.token 指着它）。
+  const E = 'two-devices-out@example.com';
+  const acct = newAccount('', 'code');
+  acct.until = Date.now() + 9e8;
+  const phone = acct.token;
+  const laptop = issueToken(acct);
+  await saveAccount(E, acct);
+  const out = await revoke({ email: E, token: phone });
+  check('⑫ 手机上登出：答 200 ok', out.status === 200 && out.body.ok === true, `${out.status} ${out.raw}`);
+  check('⑫ 手机那一把从此认不出人', (await identify({ email: E, accountToken: phone })) === null);
+  check('⑫ 电脑那一把照旧在（各登各的，登出不连坐）', Boolean(await identify({ email: E, accountToken: laptop })));
+  // 电脑也登出：它正是 account.token 指着的那一把，作废之后这一位不能还指着它。
+  await revoke({ email: E, token: laptop });
+  const empty = await loadAccount(E);
+  check('⑫ 两台都登出了：一把不剩，account.token 也不再指着作废的那一把',
+    !tokenValid(empty, laptop) && !tokenValid(empty, phone) && empty.token !== laptop && (empty.tokens || []).length === 0,
+    JSON.stringify({ token: empty.token, tokens: empty.tokens }));
+  check('⑫（尺子）账号本身还在、权益还在（登出不是删号）', empty && empty.until > Date.now());
+
+  // 免邮箱账号：email 里是 hdl: 那把 id，过不了 EMAIL_RE——revoke 要排在那道闸前面。
+  const H = pairKey('Kqz48271logout');
+  const h = newAccount('', 'code');
+  await saveAccount(H, h);
+  const hOut = await revoke({ email: H, token: h.token });
+  check('⑫ 免邮箱账号也登得出去（不被「邮箱不对」挡下）', hOut.status === 200 && !tokenValid(await loadAccount(H), h.token),
+    `${hOut.status} ${hOut.raw}`);
+
+  // 兑了码还没绑邮箱的账号：认人靠 code（寄存码）+ 令牌。
+  const C = codeHolder('LOGOUT01');
+  const c = newAccount('', 'code');
+  c.until = Date.now() + 9e8;
+  await saveAccount(C, c);
+  const cOut = await revoke({ code: 'LOGOUT01', token: c.token });
+  check('⑫ 兑码账号（还没绑邮箱）也登得出去', cOut.status === 200 && !tokenValid(await loadAccount(C), c.token),
+    `${cOut.status} ${cOut.raw}`);
+
+  // 一把不认识的令牌：答 ok，账号一点没动。
+  const keep = newAccount('', 'code');
+  await saveAccount('keep-me@example.com', keep);
+  const junk = await revoke({ email: 'keep-me@example.com', token: 'f'.repeat(48) });
+  check('⑫ 拿一把不认识的令牌来登出：答 ok，那个账号的令牌一把没少',
+    junk.status === 200 && tokenValid(await loadAccount('keep-me@example.com'), keep.token), `${junk.status} ${junk.raw}`);
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

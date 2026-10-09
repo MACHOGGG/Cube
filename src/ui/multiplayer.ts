@@ -1191,8 +1191,10 @@ export function renderMultiplayerPage(
     };
     // 时间到了没答：只当他这一局会，什么都不记——他可能只是没在看屏幕，不该替他说「看过了」。
     const timedOut = () => close();
-    // 手机的返回键：等于答《会》。
-    pushLayer(knows, box);
+    // 手机的返回键：和时间到了一样，只收起这一问（10-09 补充方案 7-13 第 11 条）。原先等于答《会》，
+    // 而《会》要记下「这一族的教学看过了」（本机一份、服务器一份），从此再也不问——按返回的人多半
+    // 只是想关掉这一层，不是在说「我会」。
+    pushLayer(timedOut, box);
     box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
     box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
       close();

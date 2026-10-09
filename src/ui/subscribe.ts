@@ -5,7 +5,7 @@ import { GENIUS_LAYOUTS } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
 import {
-  clearEntitlement,
+  signOut,
   entitlement,
   isGenius,
   askForCode,
@@ -189,6 +189,9 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
      * 回各的事。
      */
     case 'notConfigured':
+      return s.serverBusy;
+    // 服务器那头 5xx（10-09 补充方案 7-13 第 3 条）：不是他的网络。
+    case 'unavailable':
       return s.serverBusy;
     case 'taken':
       return s.emailTaken;
@@ -604,10 +607,11 @@ export function openStatusWindow(lang: Lang, onChanged: () => void, notice = '')
       openChangeEmailWindow(lang, onChanged, back);
     });
   }
-  // Signing out only forgets the address on this device: it cancels nothing,
-  // and naming the address again brings the account straight back.
+  // Signing out only concerns this device: it cancels nothing, and naming the
+  // address again brings the account straight back. 服务器上作废的也只是这台设备那一把
+  // 令牌（signOut，10-09 补充方案 7-13 第 10 条），别的设备照旧登着。
   overlay.querySelector<HTMLButtonElement>('#statusSignOut')?.addEventListener('click', () => {
-    clearEntitlement();
+    signOut();
     close();
     onChanged();
   });
@@ -891,6 +895,8 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
       </form>
 
       <p class="auth-msg" id="authMsg" role="status"></p>
+      <!-- 码过期了：同一个地址再寄一张（10-09 补充方案 7-13 第 2 条）。只在说「过期了」的时候露面。 -->
+      <button class="link-btn" id="authResend" hidden>${s.resendCode}</button>
       <button class="link-btn" id="authAlt"></button>
     </div>
     <!--
@@ -911,6 +917,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
   const msg = overlay.querySelector<HTMLElement>('#authMsg')!;
   const go = overlay.querySelector<HTMLButtonElement>('#authGo')!;
   const alt = overlay.querySelector<HTMLButtonElement>('#authAlt')!;
+  const resend = overlay.querySelector<HTMLButtonElement>('#authResend')!;
   const mailForm = overlay.querySelector<HTMLFormElement>('#authMailForm')!;
   const codeForm = overlay.querySelector<HTMLFormElement>('#authCodeForm')!;
   const pairForm = overlay.querySelector<HTMLFormElement>('#authPairForm')!;
@@ -958,6 +965,8 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
      * 会变。
      */
     newsRow.hidden = next !== 'code';
+    // 「重新发送」只跟着「码过期了」那一句走（见 say），换一屏就收起来。
+    resend.hidden = true;
     pairForm.hidden = next !== 'pair';
     // 那句警告是读屏专用的那一段（`.sr-only`），所以「在不在」仍然要紧，只是看不见。
     warn.hidden = false;
@@ -1003,6 +1012,9 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
 
   /** 把一次失败翻译成屏幕上那一句。认的是服务端送回来的那个词，不是状态码。锁住的那一种带着还剩多久。 */
   const say = (reason: string, retryInMs?: number) => {
+    // 码过期了（或者这张票猜满了次数作废了）：旁边摆一颗「重新发送」，同一个地址再寄一张。从前只能先点
+    // 《换个邮箱》回到上一屏、再按一次箭头——地址明明没错，却要绕一圈（10-09 补充方案 7-13 第 2 条）。
+    resend.hidden = !(stage === 'code' && reason === 'codeStale');
     oops(
       reason === 'mailDown'
         ? s.mailDownHint
@@ -1037,7 +1049,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     openStatusWindow(lang, onChanged);
   };
 
-  const submit = async () => {
+  const submitOnce = async () => {
     if (stage === 'mail') {
       const email = mailInput.value.trim();
       if (!isEmail(email)) return void oops(s.emailInvalid);
@@ -1091,7 +1103,7 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
    * 次序不能反。先注册的话，老用户每次回来都会撞一个 409「已被占用」——而那正是他自己的
    * 账号。
    */
-  const pairSubmit = async () => {
+  const pairSubmitOnce = async () => {
     const first = firstInput.value.trim();
     const second = secondInput.value.trim();
     if (!PAIR_RE.test(first) || !PAIR_RE.test(second)) return void oops(s.pairBad);
@@ -1126,12 +1138,50 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
     landed();
   };
 
+  /**
+   * 防连点（10-09 补充方案 7-13 第 1 条）：一次请求还在路上，再来的提交一律不理。
+   *
+   * 那颗箭头按下去会灰掉（go.disabled），可提交不只走它：表单的回车、六格填满时自动提交（mountPin 的回调）
+   * 都直接叫 submit，灰掉的键拦不住。粘贴一串码，自动提交和回车前后脚各来一次，同一张码就交了两遍——第
+   * 二遍那张码已经用掉了，屏幕上冒一句「验证码不对」。
+   */
+  let busy = false;
+  const once = (run: () => Promise<void>) => async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      await run();
+    } finally {
+      busy = false;
+    }
+  };
+  const submit = once(submitOnce);
+  const pairSubmit = once(pairSubmitOnce);
+
   for (const form of [mailForm, codeForm, pairForm]) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       void (stage === 'pair' ? pairSubmit() : submit());
     });
   }
+
+  // 「重新发送」：同一个地址再要一张码。新票换掉旧票（旧的那张已经过期了），六格清空、光标落回去。
+  resend.addEventListener('click', once(async () => {
+    resend.hidden = true;
+    go.disabled = true;
+    tell(s.workingLabel);
+    const asked = await askForCode(sentTo, lang);
+    go.disabled = false;
+    if (typeof asked === 'string') {
+      say(asked);
+      return;
+    }
+    sentTicket = asked.challenge;
+    codeInput.value = '';
+    codeInput.dispatchEvent(new Event('input'));
+    tell(s.codeSentTo.replace('{email}', sentTo));
+    codeInput.focus();
+  }));
   // 走表单自己的 submit，不直接叫 submit()：那一下是手机上的密码管理器认出「这是一次登
   // 录」的唯一凭据，绕过去它就不提示保存。
   go.addEventListener('click', () => {

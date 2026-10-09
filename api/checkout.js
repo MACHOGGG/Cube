@@ -94,13 +94,19 @@ const isEmail = (value) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@
  * Only ever send a player back to our own site. Creem will redirect to
  * whatever success_url it is given, so passing the browser's string through
  * unchecked would turn this endpoint into an open redirect.
+ *
+ * 而且只认 https（10-09 补充方案 7-13 第 9 条）。原先只比 host，可 host 和协议无关：
+ * `javascript://play-slides.com/%0a…` 的 host 就是 play-slides.com（实测），一段脚本于是算
+ * 「同站」；`http://play-slides.com/` 也算——订单号会挂在明文地址上回来。本地 dev-server 是
+ * http，所以本地开单不带回站地址，Creem 回它自己默认的那一页；线上全站 https，不受影响。
  */
 function sameSite(url, req) {
   if (typeof url !== 'string') return false;
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   if (!host) return false;
   try {
-    return new URL(url).host === String(host).split(',')[0].trim();
+    const back = new URL(url);
+    return back.protocol === 'https:' && back.host === String(host).split(',')[0].trim();
   } catch {
     return false;
   }

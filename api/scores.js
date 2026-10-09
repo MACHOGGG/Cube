@@ -38,6 +38,7 @@ import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
 import { callerId, tooMany } from './_ratelimit.js';
+import { redact } from './_redact.js';
 // 一局的综合得分上限，见文件头「关于作弊」。和小屋（room.js）共用一个数（10-09 补充方案 7-6），
 // 为什么是十亿、从前为什么是一百万，写在 _maxscore.js 里。
 import { MAX_SCORE } from './_maxscore.js';
@@ -69,6 +70,7 @@ import {
   hdel,
   hget,
   hgetall,
+  hmget,
   hset,
   hsetnx,
   set,
@@ -485,10 +487,19 @@ export default async function handler(req, res) {
       default:
         return send(res, 400, { error: 'action' });
     }
-  } catch {
+  } catch (err) {
+    // 摔了记一行（10-09 补充方案 7-13 第 8 条）。原先整个吞掉：线上哪一种动作一直 502，日志里一个
+    // 字都没有，只能等玩家来信。**只记哪个动作、错在哪一句**——不写 body（里面有令牌）、不写账号 id
+    // （它就是邮箱，见 _redact.js）。动作名只认那四个字面量，别的记成 '?'：它是请求里带来的，原样
+    // 写进去等于让谁都能往日志里塞一行字。
+    const action = PLAYER_ACTIONS.has(body?.action) ? body.action : '?';
+    console.error('[scores]', action, err?.message || err);
     return send(res, 502, { error: 'upstream' });
   }
 }
+
+/** 玩家这一侧的四个动作（日志里只认它们的名字，见上面那个 catch）。 */
+const PLAYER_ACTIONS = new Set(['push', 'mine', 'name', 'board']);
 
 /** 这个账号目前的样子。没有就是一张白纸。 */
 async function loadStats(id) {
@@ -851,11 +862,15 @@ async function rename(res, body, who) {
 /**
  * 总榜上没有玩法记号的行：老版本留下的累计总分。按各人的存档重算成「最高的
  * 那一局」写回去。只看前五十名和看榜的人自己——这就是这一次会画出来的全部。
+ *
+ * 玩法记号也只取这几个人的（hmget，10-09 补充方案 7-13 第 7 条）：原先每看一次总榜就把
+ * 整张 TOTAL_MODE（每个上过总榜的人一行）读回来，而这儿只问五十一个人。
  */
 async function healTotalBoard(myId) {
-  const [top, modes] = await Promise.all([zTop(TOTAL_BOARD, TOP_N), hgetall(TOTAL_MODE)]);
+  const top = await zTop(TOTAL_BOARD, TOP_N);
   const ids = new Set(top.map((row) => row.member));
   ids.add(myId);
+  const modes = await hmget(TOTAL_MODE, [...ids]);
   for (const id of ids) {
     if (typeof modes[id] === 'string') continue;
     const stats = await loadStats(id);
@@ -900,6 +915,11 @@ async function groupTop(boards) {
  * mode 给了就是那个玩法的单局榜，没给就是总榜——每个人所有玩法里最高的那一局。回的除了前五十名，还有
  * 「我自己排第几」——榜再长，玩家真正想知道的还是这一件事，而它不在前五十
  * 名里的时候恰恰最想知道。
+ *
+ * 名字（NAMES）和总榜的玩法记号（TOTAL_MODE）**只取画出来的那几行**（hmget，10-09 补充方案
+ * 7-13 第 7 条）。这两张都是全站一人一行的大表，原先每看一次榜就 hgetall 整张——玩家越多，每
+ * 一次看榜读回来的越多，而一页只画五十行。代价是多一次往返（先要知道是哪五十个人，才知道
+ * 取哪五十个名字）。门：check-scores 末尾那一节，board() 里不许再有 hgetall(。
  */
 async function board(res, body, who, claim) {
   if (!(await isGenius(claim, who.account))) {
@@ -911,7 +931,8 @@ async function board(res, body, who, claim) {
   if (mode.startsWith('g:')) {
     const boards = GROUPS[mode.slice(2)];
     if (!boards) return send(res, 400, { error: 'mode' });
-    const [rows, names] = await Promise.all([groupTop(boards), hgetall(NAMES)]);
+    const rows = await groupTop(boards);
+    const names = await hmget(NAMES, rows.slice(0, TOP_N).map((row) => row.member));
     const mine = rows.findIndex((r) => r.member === who.id);
     return send(res, 200, {
       ok: true,
@@ -935,13 +956,13 @@ async function board(res, body, who, claim) {
     const day = dayIndexOf(Date.now());
     const want = VARIANTS[dailyVariant(day)];
     const dkey = dailyBoardKey(dayKey(day));
-    const [top, myScore, myRank, size, names] = await Promise.all([
+    const [top, myScore, myRank, size] = await Promise.all([
       zTop(dkey, TOP_N),
       zscore(dkey, who.id),
       zrevrank(dkey, who.id),
       zcard(dkey),
-      hgetall(NAMES),
     ]);
+    const names = await hmget(NAMES, top.map((row) => row.member));
     const bid = dailyBoardId(want);
     return send(res, 200, {
       ok: true,
@@ -962,13 +983,16 @@ async function board(res, body, who, claim) {
   // 记号的那几行就是它们。看到一行就把那一个人的数从他的存档里重算一遍、
   // 改回去，改完再取一次榜——只要有人看过一回榜，榜就是对的了。
   if (!mode) await healTotalBoard(who.id);
-  const [top, myScore, myRank, size, names, modes] = await Promise.all([
+  const [top, myScore, myRank, size] = await Promise.all([
     zTop(key, TOP_N),
     zscore(key, who.id),
     zrevrank(key, who.id),
     zcard(key),
-    hgetall(NAMES),
-    mode ? Promise.resolve({}) : hgetall(TOTAL_MODE),
+  ]);
+  const shown = top.map((row) => row.member);
+  const [names, modes] = await Promise.all([
+    hmget(NAMES, shown),
+    mode ? Promise.resolve({}) : hmget(TOTAL_MODE, shown),
   ]);
 
   const rows = top.map((row, i) => ({
@@ -1552,7 +1576,8 @@ async function buildNicknameIndex() {
 export async function renameScoreOwner(from, to) {
   if (!from || !to || from === to) return;
   const got = await withLock(statsLockKey(from), () => moveScores(from, to));
-  if (!got.ok) throw new Error('战绩搬家没抢到锁：' + from);
+  // 这句话会被接住它的人原样写进日志（api/email.js 外面那一层），所以邮箱只给指纹（_redact.js）。
+  if (!got.ok) throw new Error('战绩搬家没抢到锁：' + redact(from));
 }
 
 async function moveScores(from, to) {

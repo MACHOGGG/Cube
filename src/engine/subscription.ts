@@ -3,6 +3,7 @@ import { salesChannel, type SalesChannel } from './channel';
 import type { PlanPeriod } from './pricing';
 // 只借两个失败类型（纯类型 import，不会把 creem.ts 拉进启动包——别处都是 await import）。
 import type { CodeFailure, PairFailure } from './creem';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /**
  * Whether this player is a 「Slides 天才」, and the one door through which
@@ -433,6 +434,35 @@ export function setEntitlement(next: Entitlement): void {
     // Nothing to do — the in-memory copy still serves this session.
   }
   for (const fn of listeners) fn(next);
+}
+
+/**
+ * 登出这台设备：先请服务器作废这台设备手上的那一把令牌（api/signin.js 的 revoke），再把本机这一
+ * 份删掉（10-09 补充方案 7-13 第 10 条）。
+ *
+ * 原先只删本机这一份，服务器上那把令牌照旧活一年——借来的、公用的电脑上点了《登出》，那一把在
+ * 别人手里照样开得了这个账号。别的设备手里那几把不动（各登各的）。
+ *
+ * 作废那一下**不等回音、不报错**：本机这一头无论如何当场登出，网断着也一样——服务器没收到的话，
+ * 那把令牌照旧一年后自己过期，和原来一样，不会更糟。所以 fetch 直接写在这儿，不像别的账号请求
+ * 那样先去懒加载 creem.ts：多等一个分包，点完《登出》马上关页面的那一下就发不出去了。`keepalive`
+ * 也是为这个（老内核不认这一项就当它不存在，照样发）。
+ */
+export function signOut(): void {
+  const { email, token, code } = entitlement();
+  if (token && (email || code)) {
+    try {
+      void fetchWithTimeout('/api/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'revoke', email, token, code }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      // fetch 本身抛了（极老的内核）：照样登出，这一把留到自己过期。
+    }
+  }
+  clearEntitlement();
 }
 
 /** Signing out of the site, and what a store build has no button for. */

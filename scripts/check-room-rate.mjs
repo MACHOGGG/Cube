@@ -13,8 +13,10 @@
  * 半集体断线，而屏幕上写的是「连不上网络」——他们会去查路由器。
  *
  * 所以这道门两头都量：
- *   ① 八个人满座挤在一个 IP 后面轮询一整个十秒窗口（80 次），一次都不许被挡；
- *   ② 一秒上千次的扫号，必须在三百次之内被关在门外；
+ *   ① 竞赛屋二十一个人满座挤在一个 IP 后面轮询一整个十秒窗口（210 次），一次都不许被挡；
+ *      再翻一倍（420 次：每人多开一个标签页）也不许——10-09 补充方案 7-13 第 5 条把桶从 300
+ *      放到 600 就是为了这个余量（原先 300 只够八人屋，二十一个人只剩 1.43 倍）；
+ *   ② 一秒上千次的扫号，必须在六百次之内被关在门外；
  *   ③ 被挡时回的是 429 + { error: 'tooMany' }（客户端认这个词，见 KNOWN）；
  *   ④ leave / bye 不挂限速——它们是关页面时用 beacon 发的，误伤一次全屋白等
  *      九十秒。这一条要是哪天「顺手」加上了，这里会红。
@@ -57,26 +59,41 @@ const opened = await call({ action: 'create', name: 'HOST', ...who }, '198.51.10
 check('屋主开得出小屋', opened.status === 200 && Boolean(opened.body.code), String(opened.body.code));
 const code = opened.body.code;
 
-// ── ① 一屋八个人挤在一个 IP 后面轮询十秒：80 次，一次都不许被挡 ──────────
-const HOME = '192.0.2.50';
-const polls = await Promise.all(
-  Array.from({ length: 80 }, () => call({ action: 'state', code }, HOME)),
-);
-const blocked = polls.filter((r) => r.status === 429).length;
-check(
-  '八个人同一个 Wi-Fi 轮询一整个十秒窗口，一次都没被误伤',
-  blocked === 0,
-  `被挡 ${blocked} / 80`,
-);
+// ── ① 一屋二十一个人挤在一个 IP 后面轮询十秒：210 次，再翻一倍也不许被挡 ──────
+//
+// 每一段各用一个 IP（各是一个新桶），每一段都要在同一个十秒窗口里跑完——窗口是按
+// Math.floor(now / windowS) 切的，跑到一半跨过边界，后半段落进新桶：① 成了空绿，② 成了偶发
+// 红。一段几百次进程内调用不到半秒，所以只在这个窗口剩不到两秒时才等到下一个窗口开头（这道门
+// 在 CI 的 check 里，不许为它干等十秒），并且量一下真的没跨过去。
+const windowOf = () => Math.floor(Date.now() / 10000);
+const freshWindow = async () => {
+  if (10000 - (Date.now() % 10000) > 2000) return;
+  const w = windowOf();
+  while (windowOf() === w) await new Promise((r) => setTimeout(r, 50));
+};
+for (const [n, label, ip] of [
+  [210, '竞赛屋二十一个人同一个 Wi-Fi 轮询一整个十秒窗口', '192.0.2.50'],
+  [420, '再翻一倍（每人多开一个标签页）', '192.0.2.51'],
+]) {
+  await freshWindow();
+  const w = windowOf();
+  const polls = await Promise.all(Array.from({ length: n }, () => call({ action: 'state', code }, ip)));
+  const blocked = polls.filter((r) => r.status === 429).length;
+  check(`（尺子）${n} 次都落在同一个十秒窗口里`, windowOf() === w);
+  check(`${label}，一次都没被误伤`, blocked === 0, `被挡 ${blocked} / ${n}`);
+}
 
-// ── ② 扫号：同一个来客三百次之内必须被关在门外 ──────────────────────────
+// ── ② 扫号：同一个来客六百次之内必须被关在门外 ──────────────────────────
 const SCAN = '198.51.100.66';
+await freshWindow();
+const scanWindow = windowOf();
 let first429 = -1;
-for (let i = 1; i <= 400; i++) {
+for (let i = 1; i <= 800; i++) {
   const r = await call({ action: 'state', code: String(i % 10000).padStart(4, '0') }, SCAN);
   if (r.status === 429) { first429 = i; break; }
 }
-check('扫号在三百次之内被挡下来', first429 > 0 && first429 <= 301, `第 ${first429} 次开始 429`);
+check('（尺子）扫号那一段也落在同一个十秒窗口里', windowOf() === scanWindow);
+check('扫号在六百次之内被挡下来', first429 > 0 && first429 <= 601, `第 ${first429} 次开始 429`);
 
 // ── ③ 被挡时说的是客户端认得的那个词 ───────────────────────────────────
 const again = await call({ action: 'state', code }, SCAN);
@@ -103,7 +120,7 @@ check(
 const { readFileSync } = await import('node:fs');
 const src = readFileSync(new URL('../api/room.js', import.meta.url), 'utf8');
 for (const [action, limit, windowS] of [
-  ['state', 300, 10], ['nudge', 200, 10], ['join', 60, 3600], ['create', 20, 3600],
+  ['state', 600, 10], ['nudge', 200, 10], ['join', 60, 3600], ['create', 20, 3600],
 ]) {
   const re = new RegExp(`${action}:\\s*\\{\\s*limit:\\s*${limit},\\s*windowS:\\s*${windowS}\\s*\\}`);
   check(`RATE 表里 ${action} 还是 ${limit} 次 / ${windowS} 秒`, re.test(src));

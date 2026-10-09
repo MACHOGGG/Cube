@@ -1,5 +1,6 @@
 import { salesChannel } from './channel';
 import type { Entitlement } from './subscription';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /**
  * The account a redeem code creates — the only account this app has.
@@ -46,6 +47,8 @@ export type AccountFailure =
   | 'weak'
   /** 令牌不认了——这台设备得重新登一次。 */
   | 'auth'
+  /** 服务器那头出错了（5xx），不是他的网络（10-09 补充方案 7-13 第 3 条）。 */
+  | 'unavailable'
   | 'network';
 
 export type AccountResult =
@@ -79,7 +82,7 @@ interface Reply {
 }
 
 async function post(path: string, body: unknown): Promise<{ status: number; reply: Reply }> {
-  const res = await fetch(path, {
+  const res = await fetchWithTimeout(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -127,7 +130,10 @@ function toResult(status: number, reply: Reply): AccountResult {
   // The server calls it 'expired' on its own endpoint; here it has to be
   // told apart from the unlock mail's expiry, which shares the word.
   if (status === 410) return { ok: false, reason: 'codeExpired' };
-  const reason = known.find((k) => k === reply.error) ?? 'network';
+  // 认不出来的那一句：5xx 是我们这头出错了（服务器没答上、或者整个函数摔了——平台回的 500 连正文都没
+  // 有），照 creem.ts 的做法说「服务器忙」；只有剩下的才是「连不上网络」。从前一律落在 'network' 上，屏
+  // 幕上写「连不上网络」，他会去重连 Wi-Fi，那儿什么也修不好（10-09 补充方案 7-13 第 3 条）。
+  const reason = known.find((k) => k === reply.error) ?? (status >= 500 ? 'unavailable' : 'network');
   return { ok: false, reason, retryInMs: reply.retryInMs };
 }
 

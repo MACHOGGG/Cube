@@ -1,5 +1,6 @@
 import type { ShellRefs } from '../ui/gameShell';
 import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
+import { contestants } from '../ui/roomCard';
 import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
@@ -1198,12 +1199,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    *
    * The scores come from the standings the player was already watching in
    * the corner, so the card cannot disagree with the panel it replaces.
+   *
+   * 竞赛屋的主持人不上这张图（10-09 补充方案 7-13 第 4 条）：角上那块计分板第 14 推起就是
+   * contestants() 那一份（见 ui/roomCard.ts），只有这张单局战绩图还拿 state.players——同一局，
+   * 板上没有他，图上他以 0 分挂在最后一名。「至少两个人才配一张排名」也按选手数。
    */
   function roundStandings(): Standing[] | undefined {
     const state = latestRoomState();
     const seat = currentRoom();
-    if (!state || !seat || state.players.length < 2) return undefined;
-    return [...state.players]
+    if (!state || !seat) return undefined;
+    const players = contestants(state);
+    if (players.length < 2) return undefined;
+    return [...players]
       .sort((a, b) => b.score - a.score)
       .map((p) => ({ name: p.name, score: p.score, me: p.id === seat.playerId }));
   }

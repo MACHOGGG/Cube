@@ -2,6 +2,7 @@ import { entitlement, isGenius } from './subscription';
 import { isStoreChannel } from './channel';
 import { clockSample, keepBetter, type ClockSample } from './clockSync';
 import { seenTutorials } from '../i18n';
+import { fetchWithTimeout } from './fetchTimeout';
 
 /**
  * The client half of a multiplayer room.
@@ -239,8 +240,8 @@ export type RoomError =
   /**
    * 服务器的限速把这一下挡住了（api/room.js 的 RATE）。
    *
-   * 正常玩到不了这儿——轮询一秒一次，八个人挤在一个 IP 后面也只有 80 次/十秒，
-   * 桶是 300。真会看到它的是两种人：一个网络里挂着脚本在扫房号，和自己开了一
+   * 正常玩到不了这儿——轮询一秒一次，竞赛屋二十一个人挤在一个 IP 后面也只有 210 次/十秒，
+   * 桶是 600（10-09 补充方案 7-13 第 5 条，原先 300）。真会看到它的是两种人：一个网络里挂着脚本在扫房号，和自己开了一
    * 堆标签页的人。所以要有一句自己的话：掉进 'network' 兜底的话，屏幕上写的是
    * 「连不上网络」，他会去查 Wi-Fi，而 Wi-Fi 一点问题都没有。
    */
@@ -464,7 +465,7 @@ const KNOWN: RoomError[] = [
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
   try {
     const t0 = Date.now();
-    const res = await fetch('/api/room', {
+    const res = await fetchWithTimeout('/api/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

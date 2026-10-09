@@ -29,6 +29,8 @@
  * `EVERY_MS` 一次。不做轮询之外的事——没有 service worker、没有 WebSocket：这件事值当的投
  * 入就是一张 JSON。
  */
+import { fetchWithTimeout } from './fetchTimeout';
+
 const URL_PATH = '/version.json';
 /** 十分钟一次。这一问便宜（一张几十字节的 JSON），但它也只值这么密。 */
 const EVERY_MS = 10 * 60 * 1000;
@@ -41,7 +43,7 @@ let timer = 0;
 
 async function askOnce(): Promise<string | null> {
   try {
-    const res = await fetch(URL_PATH, { cache: 'no-store' });
+    const res = await fetchWithTimeout(URL_PATH, { cache: 'no-store' });
     if (!res.ok) return null;
     const said: unknown = await res.json();
     const sha = (said as { sha?: unknown })?.sha;
