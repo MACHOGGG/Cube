@@ -19,6 +19,8 @@ play-slides.com 就变了，没有预发环境，没有中间确认。所以：
 > GitHub 拒）。没填就 promote 当场红、写明「玩家尚未设置 PROMOTE_TOKEN」，不退回去用旧令牌。
 > **切 Branch Tracking 的顺序不能反**：promote 先真绿一次（`production` 确实收到了那一推），再去
 > Vercel 改——反过来的话，线上会停在一个没被这套流程验过的旧提交上。
+> **promote 第一次真绿是 2026-10-09，提交 `da9c2b0`**（玩家给令牌补上写权限之后，重跑那一次 CI 的
+> promote，`production` 从 `7d38483` 快进到它；下一推 `20391e1` 改了 `ci.yml`，它自己的 promote 也绿）。
 >
 > - **紧急上线**：GitHub → Actions → CI → Run workflow，分支选开发分支，勾 `skip_browser`。浏览器那
 >   一批整条跳过，`check` 绿了就推。只在等不了浏览器那一批的时候用。
