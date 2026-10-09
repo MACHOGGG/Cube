@@ -81,7 +81,7 @@ async function pickSquare(p) {
   await p.waitForSelector('#roomPickBar', { timeout: 12000 });
   await p.evaluate(() => {
     [...document.querySelectorAll('.mode-axis > .home-icon-btn')]
-      .find((b) => (b.getAttribute('aria-label') || '').startsWith('方块'))
+      .find((b) => (b.getAttribute('aria-label') || '').startsWith('经典方块'))
       ?.click();
   });
 }

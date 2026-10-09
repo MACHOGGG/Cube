@@ -54,7 +54,7 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.$$eval('.home-icon-btn', (els) =>
-    els.find((e) => e.getAttribute('aria-label') === '方块')?.click());
+    els.find((e) => e.getAttribute('aria-label') === '经典方块')?.click());
   await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });
   await page.waitForTimeout(900);
 
@@ -78,8 +78,8 @@ for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖
       '<div class="end-row"><span>翻面 28 枚 ×2</span><span>56</span></div>' +
       '<div class="end-row end-row--sum"><span>拼出分</span><span>612</span></div>' +
       '<div class="end-row end-row--sum end-row--total"><span>综合分</span><span>1286</span></div>' +
-      // 「该玩法你的均分」3-I 起是明细的最后一行（从前是分数底下单独一行 #endAvg）。
-      '<div class="end-row end-row--avg"><span>该玩法你的均分 = 940</span></div>';
+      // 「该玩法您的均分」3-I 起是明细的最后一行（从前是分数底下单独一行 #endAvg）。
+      '<div class="end-row end-row--avg"><span>该玩法您的均分 = 940</span></div>';
     // 战绩图现在就摆在结算页上（玩家定的「整合分享和结算」），它是这一窗里最高的一块——不摆上去，
     // 下面那几条「按得到吗」量的就不是真的排版。720×976，和真图（3-I 起的单人卡）同比例。
     const c = document.createElement('canvas');

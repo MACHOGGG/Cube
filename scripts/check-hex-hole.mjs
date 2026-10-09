@@ -51,7 +51,7 @@ await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 // el.click()，不用 page.click()：手机竖屏的主菜单是一条鱼眼轴，远处的卡在视口外面。
 const opened = await page.$$eval('.home-icon-btn', (els) => {
-  const el = els.find((e) => (e.getAttribute('aria-label') || '').trim() === '六边圆球');
+  const el = els.find((e) => (e.getAttribute('aria-label') || '').trim() === '六边形小球');
   if (!el) return false;
   el.click();
   return true;

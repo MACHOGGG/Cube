@@ -240,8 +240,8 @@ async function openIntro(page) {
 // 上从此只有方块和小球（ui/slotMachine.ts 的 FAMILIES）。这儿原先还写着三族，走
 // 到三角那一轮 click 一个不存在的按钮、整道门超时崩掉。
 const FAMILIES = [
-  { key: 'square', name: '方块' },
-  { key: 'circle', name: '圆球' },
+  { key: 'square', name: '经典方块' },
+  { key: 'circle', name: '经典小球' },
 ];
 for (const fam of FAMILIES) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });

@@ -216,7 +216,7 @@ check('再《退出》→ 主菜单', await has(page, '.home-page'));
 // `usesStepCoef && hooks.shouldTeachTotal?.()`——左边先判。右边先跑的话，这个人的
 // 「头一回」用在了一局根本不显示它的反转局上，他从此再也看不到这句话。这儿正是
 // 同一个浏览器上下文里的第二局，所以它真能验出那个顺序。
-await tapCard(page, '.home-icon-btn[aria-label="方块"]');
+await tapCard(page, '.home-icon-btn[aria-label="经典方块"]');
 await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
 await page.$eval('#startBtn', (e) => e.click());
 await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });

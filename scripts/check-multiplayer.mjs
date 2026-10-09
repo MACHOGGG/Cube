@@ -205,8 +205,8 @@ check('只有屋主看得到开局入口', (await B.page.$('#mpPick')) === null 
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
 const pickBanner = await A.page.$eval('.room-pick-title', (e) => e.textContent.trim());
-check('屋主到了主菜单，横幅上写着「你为 <房号> 房间选择」',
-  pickBanner.includes(code) && pickBanner.startsWith('你为'), pickBanner);
+check('屋主到了主菜单，横幅上写着「您为 <房号> 小屋选择」',
+  pickBanner.includes(code) && pickBanner.startsWith('您为'), pickBanner);
 // 横幅从两行减成一行：那句「点哪个玩法全房间就跟着玩」的说明去掉了，红色
 // 的大字自己就说清楚了这件事。
 check('横幅只剩这一行，说明那行没了', (await A.page.$('.room-pick-hint')) === null);
@@ -511,7 +511,7 @@ await A.page.waitForSelector('.home-icon-btn', { timeout: 15000 });
 // 挑圆球——客人这台设备没看过圆球那一族的教学（见 newPlayer 的 unseen），
 // 所以下面这一整段才有东西可验。
 const circleIdx = await A.page.$$eval('.home-icon-btn', (els) =>
-  els.findIndex((e) => (e.getAttribute('aria-label') || '') === '圆球'));
+  els.findIndex((e) => (e.getAttribute('aria-label') || '') === '经典小球'));
 await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), circleIdx);
 // 客人没看过圆球那一族的教学（进屋时报过），服务器就给这一局多留四秒：屋主的
 // 倒数从 8 数起（第一次轮询晚了半拍看到的可能已经是 7）。
@@ -526,7 +526,7 @@ const rulesAsked = await B.page.waitForSelector('#mpKnowAsk', { timeout: 15000 }
 check('没看过教学的人，开局前被问一句', rulesAsked);
 if (rulesAsked) {
   check('问的是这个玩法的名字',
-    (await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim())) === '会圆球的规则吗？',
+    (await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim())) === '会经典小球的规则吗？',
     await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim()));
   check('两颗键：会 / 不会，教我',
     (await B.page.$$eval('#mpKnowAsk .start-act', (els) => els.map((e) => e.textContent.trim())))
@@ -713,7 +713,7 @@ check('一局都还没打，房间页上就还没有《散场》', (await A.page
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
 const wideIdx = await A.page.$$eval('.home-icon-btn', (els) =>
-  els.findIndex((e) => /七色圆球/.test(e.getAttribute('aria-label') || '')));
+  els.findIndex((e) => /菱形小球/.test(e.getAttribute('aria-label') || '')));
 check('屋主的主菜单上有七色圆球（天才特供，他开着）', wideIdx >= 0, `第 ${wideIdx} 张`);
 const pickedAt = Date.now();
 await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), wideIdx);
@@ -821,7 +821,7 @@ await A.page.waitForSelector('#mpPick', { timeout: 12000 });
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
 const wideIdx3 = await A.page.$$eval('.home-icon-btn', (els) =>
-  els.findIndex((e) => /七色圆球/.test(e.getAttribute('aria-label') || '')));
+  els.findIndex((e) => /菱形小球/.test(e.getAttribute('aria-label') || '')));
 await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), wideIdx3);
 await Promise.all([A, B].map((P) => P.page.waitForFunction(
   () => document.querySelectorAll('#boardWrap .ball').length > 0, { timeout: 25000 })));

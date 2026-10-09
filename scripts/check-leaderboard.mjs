@@ -61,8 +61,8 @@ const tabs = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textConten
 // 这一排和下面的 ALL_TOP 是同一份，只是这时候还没登录。写成同一个常量：从前是
 // 两处各抄一遍字面量，《步步为营》加进来的时候两处一起过期。
 check('最外面一排：总榜、七个母标签、今日', tabs.join(' ') === ALL_TOP, tabs.join(' '));
-check('没登录时说的是「登录之后，你的成绩才会上榜」',
-  (await page.$eval('#rankBody', (e) => e.textContent.trim())) === '登录之后，你的成绩才会上榜',
+check('没登录时说的是「登录之后，您的成绩才会上榜」',
+  (await page.$eval('#rankBody', (e) => e.textContent.trim())) === '登录之后，您的成绩才会上榜',
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
@@ -221,9 +221,9 @@ check('弹窗底下有一颗《返回》圆盘，整个在面板下方、又在�
 check('弹窗开着的时候底排导航收起来了', geo.navShown === false, JSON.stringify(geo.navShown));
 check('自己那一行被标出来了', rows[0]?.me === true);
 // 玩家的原话：「取消《1人在榜，您在榜1》的文字」——榜底下不再有那一句。
-check('榜底下没有《N 人在榜 · 你排第 N》那句',
+check('榜底下没有《N 人在榜 · 您排第 N》那句',
   (await page.$$eval('.records-panel--big .rank-foot', (e) => e.length)) === 0 &&
-    !/人在榜|你排第/.test(await page.$eval('.records-panel--big', (e) => e.textContent)));
+    !/人在榜|[你您]排第/.test(await page.$eval('.records-panel--big', (e) => e.textContent)));
 
 // 点开母标签《基础》：上一行七个一个不少，旗下那几张落到下一行去。
 const clickTab = (label) =>
@@ -242,7 +242,7 @@ check('点开《基础》：上一行八个一个不少',
 check('那颗《＜》已经不存在了',
   (await page.$$eval('.rank-tab--back', (e) => e.length)) === 0);
 check('旗下那几张落在下一行',
-  (await rowText('#rankSubTabs')) === '方块 圆球 三角', await rowText('#rankSubTabs'));
+  (await rowText('#rankSubTabs')) === '经典方块 经典小球 三角', await rowText('#rankSubTabs'));
 check('下一行是露出来的',
   (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false);
 check('母标签自己是选中的那一个（看的是它合起来的榜）',
@@ -251,7 +251,7 @@ await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
 check('《基础》母榜上有我', (await page.$$eval('.records-panel--big .rank-row', (e) => e.length)) === 1);
 
 // 换一张榜：基础方块那一张也该有我，基础三角那一张一个人都没有。
-await clickTab('方块');
+await clickTab('经典方块');
 await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
 check('基础方块那张单局榜上也有我',
   (await page.$$eval('.records-panel--big .rank-row', (e) => e.length)) === 1);
@@ -259,7 +259,7 @@ await clickTab('三角');
 await page.waitForFunction(
   () => !document.querySelector('.records-panel--big .rank-row'), { timeout: 8000 })
   .then(() => true).catch(() => false);
-check('没打过的玩法，榜是空的，而且明说「这个玩法你还没打过」',
+check('没打过的玩法，榜是空的，而且明说「这个玩法您还没打过」',
   (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'),
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
 

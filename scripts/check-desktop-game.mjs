@@ -73,11 +73,11 @@ const ALL_KEYS = ['square', 'circle', 'triangle', 'timed', 'bomb', 'flip', 'slot
  *     进去就摆在那儿的。
  */
 const BOARDS = [
-  { name: '方块', firstSeed: [] },
+  { name: '经典方块', firstSeed: [] },
   // 菱形方块：④ 就出在它身上——它的斜向图案要占四行，是全站最高的一条得分图示
   // （133px）。少了它，这道门在第一版的 bug 上是绿的。
   { name: '菱形方块', firstSeed: ALL_KEYS.filter((k) => k !== 'layout') },
-  { name: '七色圆球', firstSeed: ALL_KEYS.filter((k) => k !== 'layout') },
+  { name: '菱形小球', firstSeed: ALL_KEYS.filter((k) => k !== 'layout') },
 ];
 
 /** 居中允许差这么多：亚像素取整 + 地板收成整格数会差一两个像素，肉眼看不出。 */

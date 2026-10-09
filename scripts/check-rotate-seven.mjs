@@ -70,7 +70,7 @@ const page = await ctx.newPage();
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 const opened = await page.$$eval('.home-icon-btn', (els) => {
-  const hit = els.find((e) => (e.getAttribute('aria-label') || '').startsWith('七色圆球'));
+  const hit = els.find((e) => (e.getAttribute('aria-label') || '').startsWith('菱形小球'));
   if (!hit) return false;
   hit.click();
   return true;

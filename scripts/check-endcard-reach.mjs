@@ -106,7 +106,7 @@ async function newPage(w, h, tipSeen = false) {
 for (const [w, h] of [[320, 568], [360, 640], [375, 667], [390, 844]]) {
   const { ctx, p } = await newPage(w, h);
   await p.$$eval('.home-icon-btn', (els) => {
-    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '经典方块');
     (it || els[0]).click();
   });
   await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
@@ -157,7 +157,7 @@ for (const [w, h] of [[320, 568], [360, 640], [375, 667], [390, 844]]) {
 for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
   const { ctx, p } = await newPage(w, h, true);
   await p.$$eval('.home-icon-btn', (els) => {
-    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '经典方块');
     (it || els[0]).click();
   });
   await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
@@ -193,7 +193,7 @@ for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
   // 横屏那一档：弹窗必须还是 680，不是被 460 压过去。
   const { ctx, p } = await newPage(844, 390);
   await p.$$eval('.home-icon-btn', (els) => {
-    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '经典方块');
     (it || els[0]).click();
   });
   await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
@@ -240,7 +240,7 @@ for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 42]]) {
 for (const [w, h] of [[844, 390], [740, 360], [667, 375]]) {
   const { ctx, p } = await newPage(w, h);
   await p.$$eval('.home-icon-btn', (els) => {
-    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+    const it = els.find((e) => (e.getAttribute('aria-label') || '') === '经典方块');
     (it || els[0]).click();
   });
   await p.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });

@@ -60,7 +60,7 @@ await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
  */
 const glow = await page.$$eval('.home-icon-btn--glow', (bs) =>
   [...new Set(bs.map((b) => b.getAttribute('aria-label')))]);
-check('新人进来：只有方块和小球两张亮着', glow.length === 2 && glow.includes('方块') && glow.includes('圆球'), JSON.stringify(glow));
+check('新人进来：只有方块和小球两张亮着', glow.length === 2 && glow.includes('经典方块') && glow.includes('经典小球'), JSON.stringify(glow));
 
 await page.$eval('.home-icon-btn[aria-label^="老虎机"]', (e) => e.click());
 await page.waitForTimeout(260);
@@ -146,7 +146,7 @@ check('（尺子）锁撤了之后，按炸弹开得出炸弹那一页', bombPag
 await page.evaluate(() => { localStorage.clear(); localStorage.setItem('slides_lang', 'zhHans'); });
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.$eval('.home-icon-btn[aria-label="圆球"]', (e) => e.click());
+await page.$eval('.home-icon-btn[aria-label="经典小球"]', (e) => e.click());
 await page.waitForTimeout(600);
 if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
 await page.waitForSelector('.coach-bar:not([hidden])', { timeout: 25000 });
@@ -210,14 +210,14 @@ await page.evaluate(async () => {
 });
 await page.reload({ waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-const triCard = await page.$('.home-icon-btn[aria-label="大三角"]');
-check('（尺子）菜单上找得到那张三角的卡', !!triCard, triCard ? '大三角' : '一张都没有');
+const triCard = await page.$('.home-icon-btn[aria-label="六边形三角"]');
+check('（尺子）菜单上找得到那张三角的卡', !!triCard, triCard ? '六边形三角' : '一张都没有');
 if (!triCard) {
   console.log('\n没有三角那张卡，下面三条就没有意义——先看 ui/menu.ts 摆了哪几张。');
   await browser.close();
   process.exit(1);
 }
-await page.$eval('.home-icon-btn[aria-label="大三角"]', (e) => e.click());
+await page.$eval('.home-icon-btn[aria-label="六边形三角"]', (e) => e.click());
 await page.waitForTimeout(600);
 if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
 await page.waitForFunction(() => document.querySelectorAll('.tri').length > 0, { timeout: 25000 });

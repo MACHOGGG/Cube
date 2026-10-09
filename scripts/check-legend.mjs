@@ -26,9 +26,9 @@ const check = (n, ok, extra = '') => {
   if (!ok) fail++;
 };
 
-const SHAPES = ['方块', '圆球', '三角', '菱形方块', '六边圆球', '大三角', '七色圆球', '进阶三角'];
+const SHAPES = ['经典方块', '经典小球', '三角', '菱形方块', '六边形小球', '六边形三角', '菱形小球', '进阶三角'];
 // 横屏里图示留在上方的两个玩法（gameShell 的 PATTERNS_ON_TOP）。
-const ON_TOP = new Set(['七色圆球', '进阶三角']);
+const ON_TOP = new Set(['菱形小球', '进阶三角']);
 
 const seed = () => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])

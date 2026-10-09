@@ -70,7 +70,7 @@ async function hostPicksSquare(A) {
   await A.page.waitForSelector('#mpPick', { timeout: 20000 });
   await A.page.click('#mpPick');
   await A.page.waitForSelector('#roomPickBar', { timeout: 8000 });
-  await A.page.$$eval('.home-icon-btn', (els) => els.find((e) => e.getAttribute('aria-label') === '方块')?.click());
+  await A.page.$$eval('.home-icon-btn', (els) => els.find((e) => e.getAttribute('aria-label') === '经典方块')?.click());
 }
 async function finish(P) {
   await P.page.click('#finishBtn');

@@ -105,7 +105,7 @@ function hueGap(a, b) {
 // ---------------------------------------------------------------------------
 // 1. 五副外边族棋盘：带子在，而且在棋子底下
 // ---------------------------------------------------------------------------
-const EDGE_BOARDS = ['圆球', '菱形方块', '六边圆球', '七色圆球', '大三角'];
+const EDGE_BOARDS = ['经典小球', '菱形方块', '六边形小球', '菱形小球', '六边形三角'];
 for (const label of EDGE_BOARDS) {
   const m = await openBoard(label);
   if (m.missing) { check(`${label}：菜单上找得到这张卡`, false); continue; }
@@ -138,7 +138,7 @@ for (const label of EDGE_BOARDS) {
 // 它是任意整行整列全同色星星就消除、棋盘合拢——没有「最外边」这回事。画一条带子
 // 等于告诉玩家一件假事。
 {
-  const m = await openBoard('方块');
+  const m = await openBoard('经典方块');
   check('方块 36：**不画**带子（它没有「最外边」这回事）', m.has === false, m.has ? `画了 ${m.lines} 条` : '');
   check('方块 36：零报错', m.errs.length === 0, m.errs[0] || '');
 }

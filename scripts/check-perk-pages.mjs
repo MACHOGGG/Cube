@@ -144,9 +144,9 @@ async function backToProfile(before, label, backSel = '#backBtn') {
     tops.join(' / '));
   // 10-08 方案 3-C-5：加上菱形方块和六边圆球，和主菜单「更多布局」那一组同一份——方块、小球、
   // 三角三族的次序。原先只有七色圆球和大三角（天才特供那两副，《侵蚀阶梯》v1.2 PR-6 起）。
-  check('更多布局：菱形方块、六边圆球、七色圆球、大三角，按这个次序',
+  check('更多布局：菱形方块、六边形小球、菱形小球、六边形三角，按这个次序',
     l.cards.map((c) => c.id).join(',') === 'squareDiamond,circleHex,circleSeven,triangleBig' &&
-      ['菱形方块', '六边圆球', '七色圆球', '大三角'].every((n, i) => (l.cards[i]?.name || '').includes(n)),
+      ['菱形方块', '六边形小球', '菱形小球', '六边形三角'].every((n, i) => (l.cards[i]?.name || '').includes(n)),
     l.cards.map((c) => `${c.id}:${c.name}`).join(' / '));
   await backToProfile(before, '更多布局');
 }

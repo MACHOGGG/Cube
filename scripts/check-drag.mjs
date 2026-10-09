@@ -74,7 +74,7 @@ async function openBoard(label) {
 
 // ---- 1. 按下就知道抓的是哪一颗 --------------------------------------------
 {
-  const box = await openBoard('方块');
+  const box = await openBoard('经典方块');
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();
   await page.waitForTimeout(110);
@@ -92,7 +92,7 @@ async function openBoard(label) {
 
 // ---- 2. 落在边界附近：死区里蹭一下就能改抓 --------------------------------
 {
-  const box = await openBoard('方块');
+  const box = await openBoard('经典方块');
   const edgeY = box.y + box.h / 2 - 3; // 离下边界 3px，正是最容易抓错的落点
   await page.mouse.move(box.x, edgeY);
   await page.mouse.down();
@@ -112,7 +112,7 @@ async function openBoard(label) {
 // 这一条是上一条的反面，也是真正的边界条件：从格子正中按下往前走，那是这一
 // 笔的开头。死区（11px）必须明显小于半个格子，否则每一次正常拖动都会在开头
 // 把抓的换掉——那比抓错还糟，因为它连「你按的是哪一颗」都不作数了。
-for (const [name, label] of [['方块', '方块'], ['三角', '三角']]) {
+for (const [name, label] of [['经典方块', '经典方块'], ['三角', '三角']]) {
   const box = await openBoard(label);
   await page.mouse.move(box.x, box.y);
   await page.mouse.down();

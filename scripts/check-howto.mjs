@@ -96,7 +96,7 @@ async function startFrom(prefix, after) {
 }
 
 // ── 1. 基础方块 ──────────────────────────────────────────────────────
-await startFrom('方块');
+await startFrom('经典方块');
 let r = await openHowto();
 check('基础方块：五条规则', r.nums.join(',') === '1,2,3,4,5', r.nums.join(','));
 check('基础方块：一条附注也没有', r.extras.length === 0, JSON.stringify(r.extras));

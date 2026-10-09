@@ -5,7 +5,7 @@
  *   node scripts/dev-server.mjs 8971 dist
  *   node scripts/bot-selfcheck.mjs http://localhost:8971/            # 抽检（默认）
  *   node scripts/bot-selfcheck.mjs http://localhost:8971/ --soak     # 方案里那一档：每副 20 局
- *   node scripts/bot-selfcheck.mjs http://localhost:8971/ --boards=方块,圆球 --runs=5
+ *   node scripts/bot-selfcheck.mjs http://localhost:8971/ --boards=经典方块,经典小球 --runs=5
  *
  * ── 它和别的门有什么不同 ─────────────────────────────────────
  *
@@ -85,8 +85,8 @@ const SOAK = args.includes('--soak');
 const BUDGET = Number(flag('budget', SOAK ? 600 : 260));
 const RUNS = Number(flag('runs', SOAK ? 20 : 2));
 /** 主菜单上那几张卡的名字。--soak 默认六副全打（《侵蚀阶梯》v1.2 PR-6 之前是八副）。 */
-const ALL_BOARDS = ['方块', '菱形方块', '圆球', '六边圆球', '七色圆球', '大三角'];
-const BOARDS = (flag('boards', SOAK ? ALL_BOARDS.join(',') : '方块,圆球') || '').split(',').filter(Boolean);
+const ALL_BOARDS = ['经典方块', '菱形方块', '经典小球', '六边形小球', '菱形小球', '六边形三角'];
+const BOARDS = (flag('boards', SOAK ? ALL_BOARDS.join(',') : '经典方块,经典小球') || '').split(',').filter(Boolean);
 /** 炸弹那一局单独走一遍（H4 只有它有意义）。 */
 const BOMB_RUNS = Number(flag('bombRuns', SOAK ? 6 : 1));
 
@@ -337,12 +337,12 @@ function resolveSim(snap, lines, need) {
  * 「它说它是对的」。键是主菜单上那张卡的名字——这个机器人认的就是那个名字。
  */
 const LADDER_BY_BOARD = {
-  方块: [15, 11, 6],
+  经典方块: [15, 11, 6],
   菱形方块: [15, 11, 6],
-  圆球: [12, 8, 5],
-  六边圆球: [15, 11, 6],
-  七色圆球: [18, 14, 10],
-  大三角: [20, 15, 11],
+  经典小球: [12, 8, 5],
+  六边形小球: [15, 11, 6],
+  菱形小球: [18, 14, 10],
+  六边形三角: [20, 15, 11],
   // 基础炸弹那一档开的是方块或小球（BOMB_SHAPES），开哪一副由那一屏第一个 chip 定。
   // 两副的第一级不一样（15 vs 12），推错了会冤枉游戏，所以**炸弹局不做 H5**。
 };

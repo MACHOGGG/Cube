@@ -89,7 +89,7 @@ async function open(w, h, pick, 新人 = false) {
 }
 /** 主菜单那几张卡要在页面里自己 click()：鱼眼轴上离焦点远的卡坐在视口外，page.click 滚不进去。 */
 const tapSquare = (p) => p.$$eval('.home-icon-btn', (els) => {
-  const it = els.find((e) => (e.getAttribute('aria-label') || '') === '方块');
+  const it = els.find((e) => (e.getAttribute('aria-label') || '') === '经典方块');
   (it || els[0]).click();
 });
 

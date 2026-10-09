@@ -84,7 +84,7 @@ for (const [w, h, label] of [[390, 844, '手机 390×844'], [360, 640, '手机 3
 
   // 基准：从主菜单点「方块」进去的那一页。
   let p = await open();
-  await p.evaluate(() => [...document.querySelectorAll('.home-icon-btn')].find((b) => /^方块/.test(b.getAttribute('aria-label') || '')).click());
+  await p.evaluate(() => [...document.querySelectorAll('.home-icon-btn')].find((b) => /^经典方块/.test(b.getAttribute('aria-label') || '')).click());
   await p.waitForSelector('#startCount', { timeout: 10000 });
   await p.waitForTimeout(300);
   const base = await p.evaluate(MEASURE);

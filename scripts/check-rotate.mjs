@@ -34,7 +34,7 @@ const check = (n, ok, extra = '') => {
 
 const PORTRAIT = { width: 390, height: 844 };
 const LANDSCAPE = { width: 844, height: 390 };
-const SHAPES = ['方块', '圆球', '三角', '菱形方块', '六边圆球', '大三角', '七色圆球', '进阶三角'];
+const SHAPES = ['经典方块', '经典小球', '三角', '菱形方块', '六边形小球', '六边形三角', '菱形小球', '进阶三角'];
 
 const seed = () => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])

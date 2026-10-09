@@ -65,14 +65,14 @@ const MAIL = {
   zhHans: {
     subject: 'Slides — 验证码 / your code',
     body: (c) =>
-      `你的 Slides 验证码是 ${c}，30 分钟内有效。\n` +
-      `输入后可以设置一个新的密码。如果这不是你本人操作，忽略这封邮件即可。`,
+      `您的 Slides 验证码是 ${c}，30 分钟内有效。\n` +
+      `输入后可以设置一个新的密码。如果这不是您本人操作，忽略这封邮件即可。`,
   },
   zhHant: {
     subject: 'Slides — 驗證碼 / your code',
     body: (c) =>
-      `你的 Slides 驗證碼是 ${c}，30 分鐘內有效。\n` +
-      `輸入後可以設定一組新密碼。如果這不是你本人操作，忽略這封郵件即可。`,
+      `您的 Slides 驗證碼是 ${c}，30 分鐘內有效。\n` +
+      `輸入後可以設定一組新密碼。如果這不是您本人操作，忽略這封郵件即可。`,
   },
   fr: {
     subject: 'Slides — votre code / your code',

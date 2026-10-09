@@ -104,7 +104,7 @@ const look = (p) =>
 {
   const { ctx, p } = await fresh(false);
   check('默认没开（<html> 上没有 data-pro）', (await p.evaluate(() => document.documentElement.getAttribute('data-pro'))) === null);
-  for (const card of ['方块', '圆球', '三角']) {
+  for (const card of ['经典方块', '经典小球', '三角']) {
     await play(p, card);
     const v = await look(p);
     check(`[${card}] 没开 Pro 的时候，棋盘上一条提示都没有`,
@@ -130,7 +130,7 @@ const look = (p) =>
 // ---- 2. 开着的时候：三族各画各的，而且不是描的自己 -----------------------
 {
   const { ctx, p } = await fresh(true);
-  for (const card of ['方块', '圆球', '三角']) {
+  for (const card of ['经典方块', '经典小球', '三角']) {
     await play(p, card);
     const v = await look(p);
     check(`[${card}] 每一枚正面的棋子都描上了`, v.flavor > 0 && v.rings === v.flavor, JSON.stringify(v));
@@ -170,7 +170,7 @@ const look = (p) =>
 // ---- 3. 局中从暂停面板拨：当场就看得见 ----------------------------------
 {
   const { ctx, p } = await fresh(false);
-  await play(p, '方块');
+  await play(p, '经典方块');
   const before = await look(p);
   await p.click('#stopBtn');
   await p.waitForSelector('#proBtn', { timeout: 10000 });

@@ -61,7 +61,7 @@ await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 await page.waitForTimeout(300);
 const opened = await page.$$eval('.home-icon-btn', (els) => {
-  const i = els.findIndex((e) => (e.getAttribute('aria-label') || '').trim() === '圆球');
+  const i = els.findIndex((e) => (e.getAttribute('aria-label') || '').trim() === '经典小球');
   if (i < 0) return null;
   els[i].click();
   return true;

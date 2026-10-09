@@ -188,7 +188,7 @@ head('⑤ 免邮箱那一屏：明文两串，那句警告必须在');
    *
    * 所以这儿量三件事，缺一件都不成立：整句还在、它真的看不见了、而屏幕上那一行在。
    */
-  check('「第一串是你的钥匙」那整句还在（读屏念得到）', /第一串是你的钥匙/.test(v.warn), v.warn);
+  check('「第一串是您的钥匙」那整句还在（读屏念得到）', /第一串是您的钥匙/.test(v.warn), v.warn);
   check('而且它真的不占版面（裁成 1×1，不是 display:none）',
     !!v.warnBox && v.warnBox.w <= 2 && v.warnBox.h <= 2, JSON.stringify(v.warnBox));
   check('整句挂在第一串那个框上（aria-describedby）', v.describedBy === 'authPairWarn', v.describedBy || '（没挂）');

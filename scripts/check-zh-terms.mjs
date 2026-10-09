@@ -1,5 +1,6 @@
 /**
- * 中文用字统一：简体「账号」、繁体「帳號」「信箱」、全站「你」（10-08 方案第四批第 3 条）。
+ * 中文用字统一：简体「账号」、繁体「帳號」「信箱」、全站「您」（10-08 方案第四批第 3 条；称呼 10-09 补充方案
+ * 第一部分第 6 条改成「您」）。
  *
  *   node scripts/check-zh-terms.mjs
  *
@@ -15,6 +16,13 @@
  *     隐私政策同一句里「電子郵件帳號」和「免信箱帳號」并排；「帳戶」两处（同上两句的繁体）。
  *   · 「你」对「您」：界面 18 比 3、法务 51 比 0。「您」只在「该玩法您的均分」和联系那一段里。
  * 所以统一成：简体「账号」、繁体「帳號」「信箱」（说的是邮件本身时用「郵件」）、全站「你」。
+ *
+ * **称呼后来翻过来了**：10-09 补充方案第一部分第 6 条，玩家答复「中文和法语全站统一用『您 / vous』；玩家那两句
+ * 原话（『新账户登录成功……』、联系那段）里的字也跟着统一」。于是这道门量的是「不许有『你』」。法文本来就全是
+ * vous（i18n 里没有一处 tu），不用动。两处例外，不算在「看得到的字」里：
+ *   · api/_badwords.js——那是昵称的脏话词表，里面的「你」是被拦的词，不是对玩家说的话；
+ *   · xhs/src/shareActions.ts 发笔记的那几句（标题「Slides小工具单局…分，你咧？」、正文「供你来玩～」）——那是玩
+ *     家自己挑的 D 版原话，是发帖的人对看笔记的人说的，不是站点对玩家说话。
  *
  * 量法：把会被玩家看到的字所在的源文件挨个读出来，先挖掉注释（`//`、`/* *\/`、HTML 的 `<!-- -->`——模板
  * 字符串里的 HTML 注释进了 DOM 也看不见），剩下的里面一处都不许有下面这些词。管理员页（public/mint.html）
@@ -43,7 +51,7 @@ const BANNED = [
   ['電子郵件', '信箱（说的是邮件本身就写「郵件」）'],
   ['郵箱', '信箱'],
   ['電郵', '信箱'],
-  ['您', '你'],
+  ['你', '您'],
 ];
 
 /** 玩家看得到的字住在这些地方。 */
@@ -58,7 +66,8 @@ function walk(dir, keep, out = []) {
 const FILES = [
   ...walk(join(root, 'src'), (p) => /\.ts$/.test(p) && !/\.d\.ts$/.test(p)),
   ...walk(join(root, 'xhs/src'), (p) => /\.ts$/.test(p)),
-  ...walk(join(root, 'api'), (p) => /\.js$/.test(p)),
+  // 脏话词表不算：里面的「你」是被拦的词（见文件头）
+  ...walk(join(root, 'api'), (p) => /\.js$/.test(p) && !/_badwords\.js$/.test(p)),
   join(root, 'index.html'),
   ...walk(join(root, 'public'), (p) => /\.html$/.test(p) && !/[\\/]xhs[\\/]/.test(p)),
 ];
@@ -79,7 +88,14 @@ function stripComments(text, file) {
 }
 
 // 尺子：读到了这几样，而且里面真有中文——空读一圈「一个都没找到」是假绿。
-const texts = FILES.map((f) => ({ f, t: stripComments(readFileSync(f, 'utf8'), f) }));
+/** 发笔记的那几句原话（文件头说的例外）：挖掉再量，别的地方照量。 */
+const NOTE_LINES = [/`Slides小工具单局\$\{score\}分，你咧？`/, /`Slides单局\$\{score\}分，你咧？`/, /'以及更多进阶玩法和布局供你来玩～'/];
+const dropNotes = (t, f) => (/shareActions\.ts$/.test(f) ? NOTE_LINES.reduce((x, re) => x.replace(re, "''"), t) : t);
+const texts = FILES.map((f) => ({ f, t: dropNotes(stripComments(readFileSync(f, 'utf8'), f), f) }));
+{
+  const raw = readFileSync(join(root, 'xhs/src/shareActions.ts'), 'utf8');
+  check('（尺子）发笔记那三句原话还在原处（例外只认这三句，改了字就得回来改这儿）', NOTE_LINES.every((re) => re.test(raw)));
+}
 const hanCount = texts.reduce((n, { t }) => n + (t.match(/[一-鿿]/g) || []).length, 0);
 check('（尺子）读到了界面、法务、邮件、管理员页的源码，而且里面有中文', FILES.length >= 40 && hanCount > 5000,
   `${FILES.length} 个文件，${hanCount} 个汉字`);
@@ -102,10 +118,10 @@ for (const [bad, good] of BANNED) {
 
 // 反向对照：挖注释那一步没把字符串里的字一起挖掉——拿一句带注释的样本量
 {
-  const sample = "const a = '新帐号'; // 这一句注释里的帐号不算\n/* 帐号 */ const b = `<!-- 帐号 -->${'您'}`;";
+  const sample = "const a = '新帐号'; // 这一句注释里的帐号不算\n/* 帐号 */ const b = `<!-- 帐号 -->${'你'}`;";
   const left = stripComments(sample, 'x.ts');
-  check('（反向对照）字符串里的「帐号」「您」挖完注释还在，注释里的没了',
-    left.includes("'新帐号'") && left.includes("'您'") && (left.match(/帐号/g) || []).length === 1, JSON.stringify(left));
+  check('（反向对照）字符串里的「帐号」「你」挖完注释还在，注释里的没了',
+    left.includes("'新帐号'") && left.includes("'你'") && (left.match(/帐号/g) || []).length === 1, JSON.stringify(left));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\nALL PASS');

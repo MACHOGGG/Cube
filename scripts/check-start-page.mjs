@@ -196,7 +196,7 @@ let bombShare = null;
   // 主菜单最后两张就是这两个玩法（都挂着天才特供的锁）。
   const wide = await page.$$eval('.home-icon-btn', (els) =>
     els.map((e, i) => [i, (e.getAttribute('aria-label') || '')])
-      .filter(([, l]) => /七色圆球|进阶三角/.test(l)));
+      .filter(([, l]) => /菱形小球|进阶三角/.test(l)));
   check('主菜单上找得到那两个建议横着玩的玩法', wide.length === 2, JSON.stringify(wide));
 
   for (const [idx, label] of wide) {

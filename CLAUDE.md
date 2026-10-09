@@ -133,7 +133,7 @@ node scripts/check-residue-live.mjs http://localhost:8951/
 node scripts/dev-server.mjs 8971 dist &
 node scripts/bot-selfcheck.mjs http://localhost:8971/                     # 抽检：两副各两局
 node scripts/bot-selfcheck.mjs http://localhost:8971/ --soak              # 方案那一档：每副 20 局
-node scripts/bot-selfcheck.mjs http://localhost:8971/ --boards=圆球 --runs=1 --budget=200
+node scripts/bot-selfcheck.mjs http://localhost:8971/ --boards=经典小球 --runs=1 --budget=200
 BOT_DEBUG=1 …    # 每一手印一行；BOT_DEBUG2=1 印「以为要得分、实际没得」的那几格
 ```
 

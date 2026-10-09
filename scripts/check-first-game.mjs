@@ -53,7 +53,7 @@ async function openSquare() {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.$$eval('.home-icon-btn', (els) =>
-    els.find((e) => e.getAttribute('aria-label') === '方块')?.click());
+    els.find((e) => e.getAttribute('aria-label') === '经典方块')?.click());
   await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });
   await page.waitForTimeout(700);
 }

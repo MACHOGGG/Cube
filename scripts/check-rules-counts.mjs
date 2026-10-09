@@ -66,14 +66,14 @@ const countOf = (file) => {
 
 // ── 菜单 id → 《游戏规则》里那一条的 term ─────────────────────────────
 //
-// 这张表只能手写，不能从 i18n 的 shapeName* 推：《游戏规则》用的是自己一套措
-// 辞（英文是复数，而且圆球那几副叫 balls 不叫 Circle），和主菜单上的卡片名从
-// 来就不是同一句。所以表写在这儿，而下面那条「表里的 term 必须找得到」是这张
-// 表的保险——哪天谁改了措辞，这道门会红，而不是悄悄跳过不查。
+// 10-09 补充方案第一部分第 5 条起，《游戏规则》里每副棋盘那一条的 term 就是主菜单卡名
+// （ui/menuTags.ts），一字不差——那件事由文件末尾第 ⑤ 节钉着。这张表仍然手写一份、不现读
+// menuTags：这一节量的是「枚数」，名字查不到就报「措辞改过？」，比跟着一起变更容易看出是哪
+// 一头动了。
 const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
 const TERMS = {
-  triangleBig:   { zhHans: '大三角',   zhHant: '大三角',   en: 'Big triangle',     fr: 'Grand triangle' },
-  circleHex:     { zhHans: '六边圆球', zhHant: '六邊圓球', en: 'Hex Balls',        fr: 'Billes hexagone' },
+  triangleBig:   { zhHans: '六边形三角', zhHant: '六邊形三角', en: 'Hex Triangles', fr: 'Triangles hexagone' },
+  circleHex:     { zhHans: '六边形小球', zhHant: '六邊形小球', en: 'Hex Balls',     fr: 'Billes hexagone' },
 };
 // 删掉的那两副（原《三角》id `triangle`、V 形 `triangleAdvanced`）从表里也撤了：
 // 上面那条断言已经钉住「它们不在 main.ts 的清单里」，这张表再留着两行，读的人会
@@ -181,16 +181,16 @@ check('四种语言条数一致（各玩法）', new Set(LANGS.map((l) => counts
 // 这不是假想——《侵蚀阶梯》v1.2 那一轮整本重写，老虎机那一条四种语言一起漏掉了，
 // 一直到玩家问起来才发现。「一致」只说明四个译本互相对得上，不说明它们对得上游戏。
 //
-// 所以这儿钉住**名单**，不只是数目。表只能手写（这本书的措辞和主菜单上的卡片名从
-// 来不是同一句，见上面 TERMS 那段的理由）；加一个玩法就得回来加一行，而这正是要
-// 的效果——门会说出缺的是哪一个，而不是悄悄放过。
+// 所以这儿钉住**名单**，不只是数目。表手写（前六行就是主菜单卡名，第 ⑤ 节另有一条直接
+// 拿 menuTags 去对）；加一个玩法就得回来加一行，而这正是要的效果——门会说出缺的是哪一
+// 个，而不是悄悄放过。
 const MODE_TERMS = [
-  ['方块', '方塊', 'Squares', 'Carrés'],
-  ['菱形方块', '菱形方塊', 'Diamond squares', 'Carrés en losange'],
-  ['圆球', '圓球', 'Classic Balls', 'Billes classiques'],
-  ['六边圆球', '六邊圓球', 'Hex Balls', 'Billes hexagone'],
-  ['七色圆球', '七色圓球', 'Diamond Balls', 'Billes losange'],
-  ['大三角', '大三角', 'Big triangle', 'Grand triangle'],
+  ['经典方块', '經典方塊', 'Classic Squares', 'Carrés classiques'],
+  ['菱形方块', '菱形方塊', 'Diamond Squares', 'Carrés losange'],
+  ['经典小球', '經典小球', 'Classic Balls', 'Billes classiques'],
+  ['六边形小球', '六邊形小球', 'Hex Balls', 'Billes hexagone'],
+  ['菱形小球', '菱形小球', 'Diamond Balls', 'Billes losange'],
+  ['六边形三角', '六邊形三角', 'Hex Triangles', 'Triangles hexagone'],
   ['炸弹玩法', '炸彈玩法', 'Bomb modes', 'Modes bombe'],
   ['计时挑战', '計時挑戰', 'Timed modes', 'Modes chronométrés'],
   ['老虎机模式', '老虎機模式', 'Slot machine mode', 'Mode machine à sous'],
@@ -328,40 +328,97 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
 }
 
 /**
- * ---- 小球那三副，英法各只有一个名字（10-08 方案第四批第 9 条）-----------------------
+ * ---- ⑤ 一副棋盘一个名字：主菜单那张卡上写什么，别处就叫什么 ----------------------
  *
- * 玩家拍板「Balls 系」：以主菜单那张卡（ui/menuTags.ts）的名字为准——Classic Balls / Hex Balls /
- * Diamond Balls。原先同一副棋盘在三个地方三个叫法：主菜单 Diamond Balls、规则页 Seven-colour balls、成绩页 /
- * 排行榜 / 分享卡那些用 shapeName 的地方 Seven-colour Circle。法文同样两名并存（主菜单 Billes losange、成绩页
- * Cercle à sept couleurs）。
+ * 10-09 补充方案第一部分第 5 条（原 10-08 方案第四批第 9 条）。玩家答复：「全部一起统一，以
+ * menuTags.ts 现有名字为准，规则页、成绩页、分享卡等处全改」。
  *
- * 这儿钉三处一字不差：menuTags 的卡名、i18n 的 shapeName*（成绩页那些地方）、《游戏规则》那一条的 term。
- * 只钉英法两种：方案点名的是英文、顺手核法文；中文主菜单写「经典小球」、成绩页写「圆球」，那不在这一条里。
+ * 原先同一副棋盘有两三个名字：主菜单卡上写 menuTags 那一套（经典方块 / 经典小球 / 六边形三角 /
+ * 菱形小球，Classic Squares / Hex Triangles，Carrés classiques / Triangles hexagone）；结算页、
+ * 分享卡、排行榜标签、每一局的标题、**主菜单卡自己的读屏名**走 i18n 里另一套 shapeName*（方块 /
+ * 圆球 / 大三角 / 七色圆球，Square / Big Triangle，Carré / Grand triangle）；《游戏规则》又是第三
+ * 套（Squares / Big triangle / Carrés en losange）。眼睛看到的和读屏念的都不是同一个词。第四批只
+ * 对齐了小球一族的英法，这一次三族四种语言一起。
+ *
+ *   ⑤a 只剩一份名字：shapeLabels.ts 直接取 menuTag，i18n 里不许再长出 shapeName* 键；
+ *   ⑤b 《游戏规则》里每副棋盘那一条的 term 就是卡名（六副 × 四种语言，各在各的语言块里）；
+ *   ⑤c 撤掉的旧叫法不许留在界面文案（i18n）、规则书（rules）、法务文本（legal）的字面量里。
+ *
+ * ⑤c 只扫**字符串字面量**，不扫注释：这几个文件的注释照旧可以讲历史（上面这段就在讲）。
+ * 「方块」「圆球」「Square」是常用词，单拿出来禁会误伤「同色方块」，所以分两种：长名字只要出现就
+ * 算；短名字整条字面量就是它、或者某一条 term 就是它才算。
  */
 {
   const tags = read('src/ui/menuTags.ts');
-  // TAGS 里四种语言的次序：en、fr、zhHant、zhHans；i18n.ts 主表也是这个次序
+  const labels = read('src/ui/shapeLabels.ts');
+  const legal = read('src/legal.ts');
+  // TAGS 里四种语言的次序：en、fr、zhHant、zhHans
+  const TAG_LANGS = ['en', 'fr', 'zhHant', 'zhHans'];
   const menu = (key) => [...tags.matchAll(new RegExp(`^\\s+${key}: '([^']*)',$`, 'gm'))].map((m) => m[1]);
-  const shape = (key) => [...i18n.matchAll(new RegExp(`^\\s+${key}: '([^']*)',$`, 'gm'))].map((m) => m[1]);
-  const BOARDS = [
-    ['circle', 'shapeNameCircle'],
-    ['circleHex', 'shapeNameCircleHex'],
-    ['circleSeven', 'shapeNameCircleSeven'],
-  ];
-  for (const [id, key] of BOARDS) {
+  const LIVE = ['square', 'squareDiamond', 'circle', 'circleHex', 'circleSeven', 'triangleBig'];
+  // 删掉的那两副：云端旧战绩、别人寄来的旧分享卡里还带着这两个 id，名字也得从同一张表来。
+  const RETIRED = ['triangle', 'triangleAdvanced'];
+
+  // ⑤a
+  check('⑤a shapeLabels 直接取主菜单卡名（menuTag），不再查第二张表',
+    /return BOARD_IDS\.has\(id\) \? menuTag\(lang, id\) \|\| fallback : fallback;/.test(labels));
+  const idList = (labels.match(/const BOARD_IDS = new Set\(\[([^\]]*)\]\)/) || [, ''])[1];
+  const lostIds = [...LIVE, ...RETIRED].filter((id) => !idList.includes(`'${id}'`));
+  check('⑤a 六副棋盘、两个删掉的旧 id 都认得', lostIds.length === 0, lostIds.join(' / ') || idList);
+  const KEY = /^[ \t]+(shapeName\w*)\??:/gm;
+  const keys = [...i18n.matchAll(KEY)].map((m) => m[1]);
+  check('⑤a i18n 里没有 shapeName* 键（名字只有 menuTags 那一份）', keys.length === 0, keys.join(' / ') || '干净');
+  check('⑤a（反面尺子）一条 shapeName 键声明喂进来认得出',
+    [..."    shapeNameSquare: 'Square',\n".matchAll(KEY)].length === 1);
+
+  // ⑤b
+  for (const id of [...LIVE, ...RETIRED]) {
     const m = menu(id);
-    const n = shape(key);
-    check(`⑤（尺子）${id}：主菜单卡名、shapeName 四种语言都读到了`, m.length === 4 && n.length === 4, `${m.join(' / ')} ‖ ${n.join(' / ')}`);
-    for (const [i, lang] of [[0, 'en'], [1, 'fr']]) {
-      check(`⑤ ${lang} ${id}：成绩页那些地方的名字（shapeName）就是主菜单上那张卡的名字`, n[i] === m[i], `${n[i]} / ${m[i]}`);
-      check(`⑤ ${lang} ${id}：《游戏规则》里那一条也叫「${m[i]}」`, rules.includes(`{ term: '${m[i]}', body: '`), m[i]);
-    }
+    check(`⑤b（尺子）${id}：主菜单卡名四种语言都读到了`, m.length === 4 && m.every(Boolean), m.join(' / '));
   }
-  // 撤掉的那几个叫法，规则页和 i18n 里都不许再有（字符串字面量里）
-  const OLD = ['Circle', 'Hex Circle', 'Seven-colour Circle', 'Seven-colour balls', 'Hex balls',
-    'Cercle', 'Cercle hexagonal', 'Cercle à sept couleurs', 'Billes hexagonales', 'Billes sept couleurs'];
-  const left = OLD.filter((w) => i18n.includes(`'${w}'`) || rules.includes(`{ term: '${w}'`));
-  check('⑤ 撤掉的旧叫法（Circle / Seven-colour balls / Cercle…）一个都不在', left.length === 0, left.join(' / '));
+  for (const id of LIVE) {
+    const m = menu(id);
+    TAG_LANGS.forEach((lang, i) => {
+      check(`⑤b ${lang} ${id}：《游戏规则》里那一条叫「${m[i]}」`,
+        BLOCK(lang).includes(`{ term: '${m[i]}', body: '`), m[i]);
+    });
+  }
+
+  // ⑤c
+  const literals = (src) => {
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')
+      .filter((l) => !/^\s*\/\//.test(l)).join('\n');
+    return [...code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)]
+      .map((m) => m[1] ?? m[2] ?? m[3]);
+  };
+  const LONG = ['六边圆球', '七色圆球', '大三角', '进阶三角', '六邊圓球', '七色圓球', '進階三角',
+    'Big Triangle', 'Big triangle', 'big triangle', 'Seven-colour', 'seven-colour', 'Hex Circle',
+    'Advanced Triangle', 'Grand triangle', 'grand triangle', 'Carrés en losange', 'carrés en losange',
+    'Carré losange', 'Triangle avancé', 'Cercle', 'sept couleurs', 'Billes hexagonales', 'billes hexagonales'];
+  const SHORT = ['方块', '圆球', '方塊', '圓球', '三角', 'Square', 'Squares', 'Diamond Square', 'Diamond squares',
+    'Circle', 'Triangle', 'Carré', 'Carrés'];
+  const leftovers = (file, src) => {
+    const lits = literals(src);
+    const out = [];
+    for (const w of LONG) if (lits.some((t) => t.includes(w))) out.push(`${file}:${w}`);
+    for (const w of SHORT) if (lits.includes(w) || src.includes(`{ term: '${w}',`)) out.push(`${file}:「${w}」`);
+    return out;
+  };
+  const SRC = { 'i18n.ts': i18n, 'rules.ts': rules, 'legal.ts': legal };
+  const lits = Object.fromEntries(Object.entries(SRC).map(([f, s]) => [f, literals(s)]));
+  check('⑤c（尺子）三个文件的字面量都读到了',
+    lits['i18n.ts'].length > 1500 && lits['rules.ts'].length > 100 && lits['legal.ts'].length > 100,
+    Object.entries(lits).map(([f, l]) => `${f} ${l.length}`).join(' / '));
+  check('⑤c（尺子）读到的是字面量：一句现成的文案找得到', lits['i18n.ts'].includes('Diamond Balls board'));
+  const left = Object.entries(SRC).flatMap(([f, s]) => leftovers(f, s));
+  check('⑤c 撤掉的旧叫法一个都不在（界面文案 / 规则书 / 法务）', left.length === 0, left.join(' / ') || '干净');
+  // 反面尺子：旧那几句喂进来必须抓得到；注释里提到不算。
+  check('⑤c（反面尺子）旧的 term、旧的整条字面量、旧的长名字喂进来都会被抓住',
+    leftovers('x', "      { term: 'Big triangle', body: '54' },").length > 0 &&
+    leftovers('x', "    shapeNameSquare: '方块',").length > 0 &&
+    leftovers('x', "    a: 'les deux autres (billes sept couleurs)',").length > 0);
+  check('⑤c（尺子）注释里讲历史不算、「同色方块」这种常用词不算',
+    leftovers('x', "// 原先叫「大三角」\n/* 'Big Triangle' */\n    run4: '凑齐 4 个同色方块',").length === 0);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

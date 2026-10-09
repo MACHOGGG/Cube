@@ -227,7 +227,7 @@ const WHITE = 'rgb(255, 255, 255)';
   }));
   check('⑤a 首玩期（尺子）：轴摆出来了、别的玩法锁着', a.cards > 0 && a.locked > 0, `${a.cards} 张 / 锁着 ${a.locked}`);
   check('⑤a 一局都还没打完：手机轴上没有每日挑战', a.daily === 0, `${a.daily} 张`);
-  check('⑤a 轴的头两张是两张基础卡（第一站不再是单独一张）', a.first.join(' ') === '方块 圆球', a.first.join(' / '));
+  check('⑤a 轴的头两张是两张基础卡（第一站不再是单独一张）', a.first.join(' ') === '经典方块 经典小球', a.first.join(' / '));
   // b. 真打一局：点开方块、暂停、结束游戏、回首页。
   await page.$$eval('.mode-axis > .home-icon-btn:not(.home-icon-btn--locked)', (els) => els[0].click());
   await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
@@ -257,7 +257,7 @@ const WHITE = 'rgb(255, 255, 255)';
       daily: document.querySelectorAll('.home-icon-btn--daily').length,
       firstRow: [...(document.querySelector('.home-grid > .home-row')?.children ?? [])].map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
     }));
-    check('⑤a 电脑：一局都还没打完，最上面那一排不是每日挑战', w.daily === 0 && w.firstRow.join(' ') === '方块 圆球', JSON.stringify(w));
+    check('⑤a 电脑：一局都还没打完，最上面那一排不是每日挑战', w.daily === 0 && w.firstRow.join(' ') === '经典方块 经典小球', JSON.stringify(w));
     await ctx.close();
   }
   // c. 改版之前就打完过的人：只有结算页那颗光的钥匙

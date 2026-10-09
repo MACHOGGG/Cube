@@ -168,7 +168,7 @@ for (const [w, h, label, full] of [[390, 844, '手机 390×844', true], [1280, 8
 
   if (full) {
     // 没有第二层的：主菜单那张卡就是挑选层（基础两副、能按的布局）。
-    for (const name of ['方块', '圆球', '菱形方块', '六边圆球', '七色圆球', '大三角']) await run(`主菜单「${name}」`, menuCard(name));
+    for (const name of ['经典方块', '经典小球', '菱形方块', '六边形小球', '菱形小球', '六边形三角']) await run(`主菜单「${name}」`, menuCard(name));
   }
   for (const fam of ['square', 'circle']) await run(`计时挑战 · ${fam}`, pageOpt('计时挑战', fam));
   if (full) {

@@ -154,7 +154,7 @@ async function sweep(geo) {
 
 // 五副会用「环绕影子」补位的棋盘。三角那三副走的是另一条路（循环缓冲，
 // fillerAwareSource），每个格子永远有内容，怎么拖都不会空，所以不在这儿。
-for (const label of ['方块', '圆球', '菱形方块', '六边圆球', '七色圆球']) {
+for (const label of ['经典方块', '经典小球', '菱形方块', '六边形小球', '菱形小球']) {
   let geo;
   try {
     geo = await openBoard(label);

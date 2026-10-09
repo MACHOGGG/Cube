@@ -176,7 +176,7 @@ let page = await freshPage(ctx);
   // 类认：它的读屏名带日期，天天变——万一它回来了，这儿会写着「每日挑战」。
   check(
     '《我会玩》就在两张基础卡下面（上头只有它们俩，没有每日挑战）',
-    order?.before.length === 2 && order.before.join(' ') === '方块 圆球',
+    order?.before.length === 2 && order.before.join(' ') === '经典方块 经典小球',
     `上头有 ${order?.before.join(' ') || '（空）'}`,
   );
   check('它下面那些玩法这会儿都锁着', order?.afterLocked === true);
@@ -267,7 +267,7 @@ let page = await freshPage(ctx);
 // 按过《我会玩》的人第一次点开基础方块，棋盘底下那块教学条还是要在。把「跳过
 // 引导」实现成「把 firstTimeIn 全记成已看过」就会在这儿露出来。
 {
-  await clickCard(page, '方块');
+  await clickCard(page, '经典方块');
   await page.waitForTimeout(900);
   if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
   await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });

@@ -69,26 +69,26 @@ const SCREENS = [
     await p.click('#navRecords'); await p.waitForTimeout(700);
   } },
 
-  { id: 'gameSquare', name: '游戏中 · 方块', group: '玩', w: 390, h: 844, go: play('方块') },
-  { id: 'gameCircle', name: '游戏中 · 圆球', group: '玩', w: 390, h: 844, go: play('圆球') },
+  { id: 'gameSquare', name: '游戏中 · 方块', group: '玩', w: 390, h: 844, go: play('经典方块') },
+  { id: 'gameCircle', name: '游戏中 · 圆球', group: '玩', w: 390, h: 844, go: play('经典小球') },
   // 三角那一屏撤了：《侵蚀阶梯》v1.2 PR-6 删掉了两副三角基础棋盘。留下的《大三角》
   // （六边蜂窝 54）是**天才限定**的布局，所以它这一屏单独一档、名字里写明这件事
   // ——商店截图和界面模拟器上都得看得出「这一副不是人人都能玩的」。
-  { id: 'gameHexTriangle', name: '游戏中 · 六边三角（天才限定）', group: '玩', w: 390, h: 844, go: play('大三角') },
-  { id: 'gameLandscape', name: '游戏中 · 横屏', group: '玩', w: 844, h: 390, go: play('方块') },
+  { id: 'gameHexTriangle', name: '游戏中 · 六边三角（天才限定）', group: '玩', w: 390, h: 844, go: play('六边形三角') },
+  { id: 'gameLandscape', name: '游戏中 · 横屏', group: '玩', w: 844, h: 390, go: play('经典方块') },
   { id: 'gameStart', name: '开局页', group: '玩', w: 390, h: 844, go: async (p) => {
-    await p.$$eval('.home-icon-btn', (els) => els.find((e) => (e.getAttribute('aria-label') || '').trim() === '方块')?.click());
+    await p.$$eval('.home-icon-btn', (els) => els.find((e) => (e.getAttribute('aria-label') || '').trim() === '经典方块')?.click());
     await p.waitForSelector('#startOverlay.show', { timeout: 15000 });
     await p.waitForTimeout(600);
   } },
   { id: 'gamePause', name: '暂停', group: '玩', w: 390, h: 844, go: async (p) => {
-    await play('方块')(p);
+    await play('经典方块')(p);
     await p.click('#stopBtn');
     await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
     await p.waitForTimeout(500);
   } },
   { id: 'gameEnd', name: '结算', group: '玩', w: 390, h: 844, go: async (p) => {
-    await play('方块')(p);
+    await play('经典方块')(p);
     // 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
     await p.click('#stopBtn');
     await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
@@ -97,7 +97,7 @@ const SCREENS = [
     await p.waitForTimeout(1200);
   } },
   { id: 'gameShare', name: '分享战绩', group: '玩', w: 390, h: 844, go: async (p) => {
-    await play('方块')(p);
+    await play('经典方块')(p);
     await p.click('#stopBtn');
     await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
     await p.click('#pauseFinishBtn');
