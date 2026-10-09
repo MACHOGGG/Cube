@@ -13,6 +13,18 @@ play-slides.com 就变了，没有预发环境，没有中间确认。所以：
 > 它才把这一次提交快进到 `production` 分支。玩家在 Vercel 把 Branch Tracking 改成 `production`
 > **之后**，推这个分支就不再直接上线（线上永远是最近一次 CI 全绿的那一版）；**改之前仍然是
 > 推送 = 上线**。改没改，看 Vercel 项目 Settings → Environments → Production。
+>
+> **10-09 方案 7-0 起**：promote 推 `production` 用玩家建的 **`PROMOTE_TOKEN`**（仓库 Actions 的
+> Secrets 里，细粒度令牌，一年有效；原先用自带的 `GITHUB_TOKEN`，凡是这一推改过 `ci.yml` 就被
+> GitHub 拒）。没填就 promote 当场红、写明「玩家尚未设置 PROMOTE_TOKEN」，不退回去用旧令牌。
+> **切 Branch Tracking 的顺序不能反**：promote 先真绿一次（`production` 确实收到了那一推），再去
+> Vercel 改——反过来的话，线上会停在一个没被这套流程验过的旧提交上。
+>
+> - **紧急上线**：GitHub → Actions → CI → Run workflow，分支选开发分支，勾 `skip_browser`。浏览器那
+>   一批整条跳过，`check` 绿了就推。只在等不了浏览器那一批的时候用。
+> - **线上已经是坏版本**：不经过 CI，到 Vercel 项目的 Deployments 里对上一个好的生产部署点
+>   **Instant Rollback**，一键退回（Hobby 档只能退到上一个生产部署）。退回之后 Vercel 会暂停把新的
+>   生产部署自动挂上域名，修好之后要在 Vercel 里撤销那次回滚或手动 Promote（以 Vercel 文档为准）。
 
 - 推之前把相关的门跑完（见下面《检查门》）。
 - `vercel.json` 是**按 schema 校验**的：多一个它不认识的顶层字段（比如想写个
@@ -78,7 +90,7 @@ node scripts/dev-server.mjs 8816 dist &
 node scripts/check-multiplayer.mjs http://localhost:8816/
 ```
 
-CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**（外加两条都绿之后才跑的 `promote`，见文件头）：
+CI（`.github/workflows/ci.yml`）是**并行的 `check` 和 `browser`**（外加两条都绿之后才跑的 `promote`，见文件头）：
 
 - `check` —— 第 ①② 类里跑得快的那一批。这一条的节奏不许被拖慢（等得久的检查最后
   一定会被人跳过）。
@@ -86,14 +98,17 @@ CI（`.github/workflows/ci.yml`）现在是**两个并行的 job**（外加两�
   器，所以留在这一条里。⚠️ 起完之后那句探活要探 **/**，不要探某个接口：原先探的是
   `/api/slots`，而那个接口随名额一起删了（E39），于是 `curl -sf` 永远 404、循环空等 30
   秒、后面那句硬探必败——**整步在跑到被测的那个门之前就红了，而它红了一个多月没人发现**。
-- `browser` —— 装 Chromium、起 dev-server，目前收 21 道（主菜单那几屏、棋子在不在
-  底板里、天才特供页、教学配图、两扇窗的三态、电脑端那两页……）。这个数和上面那个
-  一样在涨，**别在这儿抄名单**，要看就读 ci.yml 里 `browser` 那个 job。每一道都是
-  真的拦下过回归的。
-  一门一台服务器、一人一个端口，起完用一个有界的 curl 循环等它真的起来（盲等固定
-  秒数在 CI 上会出偶发红，而偶发红最后一定会被人加 `continue-on-error`）。
-  **小红书那几道还没收**：`check-oldcss` 有一条先前就存在的横屏红（横屏 844×390 的
-  主菜单走 `.home-row` 宽版排布，降级层那边盒子差 69px）。带着一条红进 CI 比不收更糟。
+- `browser` —— 装 Chromium、起 dev-server 的那一批（主菜单那几屏、棋子在不在底板里、
+  两扇窗的三态、结算弹窗、电脑端那几页……，**连小红书的 `check-oldcss` 和 `check-oldkernel`**）。
+  数目在涨，**别在这儿抄名单**：清单、每一道为什么在那儿、分在哪一片，都在
+  **`scripts/ci-browser.mjs`**（10-09 方案 7-0 起；原先写在 ci.yml 一步一道，串着跑六七十分钟）。
+  ci.yml 里它是一个**矩阵**，七片并行，十五分钟上下；一片里的门全跑完再报哪几道红，不再一道红
+  了后面全跳过。每一道都是真的拦下过回归的。
+  一门一台服务器、一人一个端口，起完问 `/` 等它真的起来（盲等固定秒数在 CI 上会出偶发红，
+  而偶发红最后一定会被人加 `continue-on-error`），跑完按 PID 关掉。
+  **本地跑**：`npm run build` 之后 `node scripts/ci-browser.mjs <片名|all> [关键字]`，
+  `--list` 看每片几道、多久。**加一道门**：在 GATES 里加一项（自己的端口、`secs` 先估一个），
+  `--list` 看哪片最轻就放哪片；片名、端口、矩阵对不对得上，`check-ci-browser` 在 check 那一条里先验。
 
 要等真实超时的（`check-room-total` 那种 sleep 95 秒的）仍然只在本地手跑。
 
@@ -133,10 +148,10 @@ BOT_DEBUG=1 …    # 每一手印一行；BOT_DEBUG2=1 印「以为要得分、�
 的断言就是偶发红。一步约 0.48 秒（它自己开 reduced-motion），六副打满一个多小时，所以
 不进 CI。
 
-**CI 之外那一批要开浏览器的没有 npm 脚本串起来**（没有 `check:browser`），全靠手
-跑。改了主菜单的摆位、图标尺寸、style.css 里任何一条 `.mode-axis` 的规则，**或者
-`src/engine/axisMotion.ts` / `modeAxis.ts` 里任何一个跟手感有关的数**，手跑这
-一道：
+**CI 之外那一批要开浏览器的没有脚本串起来**（CI 里那一批是 `node scripts/ci-browser.mjs all`），
+全靠手跑。CI 里那一批也值得推之前先在本地跑相关的那一道——比如改了主菜单的摆位、图标尺寸、
+style.css 里任何一条 `.mode-axis` 的规则，**或者 `src/engine/axisMotion.ts` / `modeAxis.ts`
+里任何一个跟手感有关的数**，先跑这一道（它在 CI 的 b 片里，等 CI 告诉你要十几分钟）：
 
 ```bash
 node scripts/dev-server.mjs 8958 dist &

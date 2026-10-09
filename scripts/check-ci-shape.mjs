@@ -20,7 +20,17 @@
  * 量的是：
  *   ① 顶层有 permissions，而且只有 contents: read（不许 write-all、不许顶层就给写）；
  *   ② jobs 底下每一个 job 都写了 timeout-minutes，而且是个正整数；
- *   ③ 要写权限的只有 promote 一个 job，它要的是 contents: write。
+ *   ③ 没有一个 job 要写权限（10-09 方案 7-0 起 promote 推 production 用的是 PROMOTE_TOKEN，原先它要
+ *      contents: write）。
+ *
+ * 10-09 方案 7-0 起还量上线流程那几条规矩（都是改了不报错、出了事才知道的）：
+ *   ④ push 排除 production——PROMOTE_TOKEN 是个人令牌，它推的提交会触发工作流，不排除的话每上线一次
+ *      就在 production 上把同一个提交整轮再跑一遍；
+ *   ⑤ promote 先查 PROMOTE_TOKEN 填了没有，空值当场红、写明「玩家尚未设置 PROMOTE_TOKEN」；checkout
+ *      拿的是它；一处都不退回 GITHUB_TOKEN（退回去的话改过 ci.yml 的那一推照样推不上去，只是红得更晚、
+ *      话说得更含糊）；
+ *   ⑥ 紧急上线：workflow_dispatch 带一个布尔的 skip_browser（默认不勾）；勾了 browser 整条不跑；promote
+ *      的条件里 check 必须 success、browser 要么 success 要么正是这一种 skipped、只在开发分支。
  */
 import { readFileSync } from 'node:fs';
 
@@ -72,8 +82,36 @@ for (const j of jobs) {
     if (perm.some((x) => /:\s*write/.test(x)) || /write/.test(body[p])) writers.push(`${j.name}(${perm.join(', ') || body[p].trim()})`);
   }
 }
-check('③ 要写权限的只有 promote，要的是 contents: write', writers.length === 1 && writers[0] === 'promote(contents: write)',
-  writers.join(' / ') || '（一个都没有）');
+check('③ 没有一个 job 要 GITHUB_TOKEN 的写权限（promote 推 production 用的是 PROMOTE_TOKEN）', writers.length === 0,
+  writers.join(' / ') || '一个都没有');
+
+// ── 上线流程（10-09 方案 7-0）───────────────────────────────────────────────
+const job = (name) => {
+  const j = jobs.find((x) => x.name === name);
+  return j ? lines.slice(j.start, j.end).join('\n') : '';
+};
+const head = lines.slice(0, jobsAt).join('\n');
+const promote = job('promote');
+const browser = job('browser');
+// ④ production 只由 promote 推，而 PROMOTE_TOKEN 推的提交会触发工作流——不排除就每上线一次再整轮跑一遍
+check('④ push 排除 production（branches-ignore）', /\n {2}push:\n {4}branches-ignore: \[production\]\n/.test(head),
+  (head.match(/\n {2}push:\n(?: {4}.*\n)+/) || ['没有 push'])[0].trim().replace(/\n\s*/g, ' '));
+// ⑤ 推用 PROMOTE_TOKEN；空值当场红、写明是哪件事；不退回 GITHUB_TOKEN
+const tokStep = promote.indexOf('PROMOTE_TOKEN 填了没有');
+const checkout = promote.indexOf('uses: actions/checkout');
+check('⑤ promote 先查 PROMOTE_TOKEN 填了没有，空值就红、写明「玩家尚未设置 PROMOTE_TOKEN」',
+  tokStep >= 0 && tokStep < checkout && /-z "\$PROMOTE_TOKEN"/.test(promote) && /::error::玩家尚未设置 PROMOTE_TOKEN/.test(promote));
+check('⑤ checkout 拿的是 secrets.PROMOTE_TOKEN（push 用它）', /token: \$\{\{ secrets\.PROMOTE_TOKEN \}\}/.test(promote));
+check('⑤ promote 里一处都不退回 GITHUB_TOKEN', !/github\.token|GITHUB_TOKEN\s*\}/.test(promote.replace(/^\s*#.*$/gm, '')));
+// ⑥ 紧急上线：workflow_dispatch 带 skip_browser；勾上时 browser 整条跳过，promote 仍要 check 绿
+check('⑥ 有 workflow_dispatch，输入 skip_browser 是布尔、默认不勾',
+  /\n {2}workflow_dispatch:\n {4}inputs:\n {6}skip_browser:\n(?: {8}.*\n)*? {8}type: boolean\n {8}default: false\n/.test(head));
+check('⑥ 勾了 skip_browser，browser 整条不跑', /\n {4}if: \$\{\{ github\.event_name != 'workflow_dispatch' \|\| !inputs\.skip_browser \}\}/.test(browser));
+const cond = (promote.match(/\n {4}if: >-\n((?: {6}.*\n)+)/) || [, ''])[1].replace(/\s+/g, ' ');
+check('⑥ promote 的条件：check 必须 success；browser 要么 success、要么是紧急上线那一种 skipped；只在开发分支',
+  /needs\.check\.result == 'success'/.test(cond) && /needs\.browser\.result == 'success'/.test(cond) &&
+  /inputs\.skip_browser && needs\.browser\.result == 'skipped'/.test(cond) && /!cancelled\(\)/.test(cond) &&
+  /github\.ref == 'refs\/heads\/claude\/fangtang-game-web-app-xbecza'/.test(cond), cond.trim().slice(0, 160));
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);
