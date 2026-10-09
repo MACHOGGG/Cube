@@ -49,12 +49,17 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 钉在 ubuntu-24.04，不写 ubuntu-latest——为什么、什么时候改回去，见 browser 那一条的 runs-on。
+    runs-on: ubuntu-24.04
     # 平常五分钟上下跑完；留出余量，卡住了二十分钟就红，不挂满默认的六小时。
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # checkout / setup-node 都是 v5（2026-10-09）：v4 跑在 Node 20 上，GitHub 已经在每次 CI 的提示里说
+      # Node 20 淘汰了、v4 被强制跑在 Node 24 上。两样的 v5 都只是把自己改成 Node 24（action.yml 逐行
+      # 比过）；setup-node v5 另多一个 package-manager-cache（package.json 里有 packageManager 字段时自动开
+      # 缓存）——我们没有那个字段，而且本来就写着 cache: npm，所以缓存的行为和 v4 一样。
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: npm
@@ -901,7 +906,13 @@ jobs:
   browser:
     if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_browser }}
     name: browser (${{ matrix.shard }})
-    runs-on: ubuntu-latest
+    # **钉在 ubuntu-24.04**（2026-10-09；check、promote 两条跟着一起钉）。GitHub 在 CI 的提示里说过：
+    # ubuntu-latest 从 2026-10-19 起换成 Ubuntu 26。这一条全靠下面「把 chromium 摆到门写死的那个路径
+    # 上」那一步（playwright install --with-deps 装完，再 ln -s 到 /opt/pw-browsers/chromium），换了系统
+    # 那一步不保证还跑得通——跑不通就是七片一起红，而红的话说的是「启不动浏览器」，不是哪一道门坏了。
+    # **确认 Ubuntu 26 上那一步能跑通之后再改回 ubuntu-latest**（比如先在一个分支上把 runs-on 换成
+    # ubuntu-26.04 跑一次 workflow_dispatch，七片都绿再改）。
+    runs-on: ubuntu-24.04
     # 每片平常十二分钟上下（装浏览器、出包一两分钟）。卡死的那一道 ci-browser.mjs 自己掐（默认二十分钟，
     # 两道大的三十）；这个数兜的是整片——服务器起不来、某一步永远等不到，四十分钟就红，不挂满默认的
     # 六小时让 promote 跟着干等。
@@ -911,8 +922,9 @@ jobs:
       matrix:
         shard: [a, b, c, d, e, seed-deal, oldcss]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # v5：见 check 那一条的 steps。
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: npm
@@ -984,7 +996,8 @@ jobs:
       && needs.check.result == 'success'
       && (needs.browser.result == 'success'
       || (github.event_name == 'workflow_dispatch' && inputs.skip_browser && needs.browser.result == 'skipped')) }}
-    runs-on: ubuntu-latest
+    # 钉在 ubuntu-24.04，见 browser 那一条的 runs-on。
+    runs-on: ubuntu-24.04
     # 只有一次 fetch 和一次 push，几秒钟的事。
     timeout-minutes: 10
     concurrency:
@@ -1000,7 +1013,8 @@ jobs:
             exit 1
           fi
           echo "PROMOTE_TOKEN 在。"
-      - uses: actions/checkout@v4
+      # v5：见 check 那一条的 steps。token、fetch-depth 两个参数的写法和 v4 一字不差。
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.PROMOTE_TOKEN }}
