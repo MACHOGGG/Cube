@@ -82,12 +82,15 @@ export function dropKey(bestKey: string): boolean {
     const had =
       localStorage.getItem(bestKey) !== null ||
       localStorage.getItem(bestKey + RUNS_SUFFIX) !== null ||
-      localStorage.getItem(bestKey + EVICTED_SUFFIX) !== null;
+      localStorage.getItem(bestKey + EVICTED_SUFFIX) !== null ||
+      localStorage.getItem(bestKey + EVICTED_AT_SUFFIX) !== null;
     localStorage.removeItem(bestKey);
     localStorage.removeItem(bestKey + RUNS_SUFFIX);
     // 被挤出去那些局的分也要一起清掉（见 EVICTED_SUFFIX）。漏了它，换规则版本清档之
     // 后累计得分还挂着一笔上一版的分——而记录页上一局都看不到，那个数于是无从对账。
     localStorage.removeItem(bestKey + EVICTED_SUFFIX);
+    // 水位线一起清（10-09 补充方案 7-2）：留着它，清档之后头几局被挤出去时会被当成「早就记过了」。
+    localStorage.removeItem(bestKey + EVICTED_AT_SUFFIX);
     return had;
   } catch {
     // 无痕模式之类：删不掉就当没有，不该连带把开机拦住。
@@ -130,11 +133,52 @@ function trim(list: StoredRun[]): StoredRun[] {
  * 存档收起来的本来就是「那一局长什么样」（照片、明细），而这笔账要答的只有一句「一共
  * 多少分」。
  *
- * ⚠️ 这笔账只加不减，而且**没有去重**。所以它只能由 `trimInto` 一处写——那是唯一「真的
+ * ⚠️ 这笔账只加不减，账上只有一个数。所以它只能由 `trimInto` 一处写——那是唯一「真的
  * 挤掉了一局」的地方。从别处（比如 mergeRuns 发现本机已有这一局）去加，就会把同一局算
- * 两遍，而算两遍之后再也拆不开（账上只有一个数）。
+ * 两遍，而算两遍之后再也拆不开。同一局被挤出去两次（从云上并回来、又被挤出去）靠下面那条
+ * 水位线挡。
  */
 const EVICTED_SUFFIX = '::evicted';
+
+/**
+ * 那一笔账的水位线：已经记进账的那几局里，最新的那一局的 `at`（10-09 补充方案 7-2，审计 #2）。
+ *
+ * ── 它补的是哪个洞 ──────────────────────────────────────────────
+ *
+ * 审计实测累计得分越刷越高：500 → 600 → 700 → 800。云上留 60 局，本机只留 40 局；每次从云上
+ * 并战绩（mergeRuns），云上那 60 局里比本机清单旧的那 20 局，本机清单里都找不到，于是当成新
+ * 的补进来、随即又被 trimInto 挤出去——挤出去一次就记一笔。账上只有一个数，同一局每并一次就
+ * 多算一遍，而玩家每开一次网页就并一次。
+ *
+ * 被挤出去的永远是最旧的那几局，所以记过的局都不比水位线新：只给比水位线新的局记账，记完把
+ * 水位线推到它们里最新的那一局。
+ *
+ * 不采用「只给本机原有的局记账」：一台新设备从云上拉 60 局，本机一局都没有，那 20 局就一分都
+ * 不算了。代价是另一头：比水位线还旧、这台设备从来没见过的局（另一台设备更早打的）并进来时不
+ * 记账——已经虚涨的旧数也修不回来（账本只是一个数），玩家选了不升版本（7-4），就此保留。
+ */
+const EVICTED_AT_SUFFIX = '::evictedAt';
+
+/**
+ * 这个玩法此刻的水位线。`have` 是这一次收之前本机清单上的那几局。
+ *
+ * 水位线是 7-2 才有的。在那之前就记过账的设备，账上有数、却没有水位线——照 0 算的话，上线之后头
+ * 一次从云上并战绩，那 20 局会被**再记一遍**。比本机清单里最旧那一局还旧的局，从前都已经被挤出去、
+ * 记过账了（trim 留的永远是最新的那几局），所以这种设备的水位线从那一局的前一格起。账上没数的
+ * （新设备、还没挤掉过一局）从 0 起：被挤掉的局一局都还没记过。
+ */
+function evictedMark(bestKey: string, have: readonly StoredRun[]): number {
+  try {
+    const raw = localStorage.getItem(bestKey + EVICTED_AT_SUFFIX);
+    if (raw !== null) return parseInt(raw, 10) || 0;
+    if (localStorage.getItem(bestKey + EVICTED_SUFFIX) === null) return 0;
+    let oldest = Infinity;
+    for (const run of have) if (Number.isFinite(run?.at) && run.at < oldest) oldest = run.at;
+    return Number.isFinite(oldest) ? oldest - 1 : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * 收一收，并把**真的被挤出去的那几局**的分记进那一笔总账。
@@ -142,18 +186,26 @@ const EVICTED_SUFFIX = '::evicted';
  * 为什么按 id 比而不是按长度减：`trim` 还会把第 11 局之后的照片剥掉（`start/end` 置
  * null），所以「收之前有几局、收之后有几局」这个差值不等于「谁被挤掉了」。按编号比一
  * 遍，谁不在了才算挤掉。
+ *
+ * 挤掉的局只有比水位线 `mark` 新的才记账（见 EVICTED_AT_SUFFIX），记完水位线跟着往前推。
  */
-function trimInto(bestKey: string, list: StoredRun[]): StoredRun[] {
+function trimInto(bestKey: string, list: StoredRun[], mark: number): StoredRun[] {
   const kept = trim(list);
   const alive = new Set(kept.map(idOf));
   let lost = 0;
+  let newest = mark;
   for (const run of list) {
-    if (run?.data && !alive.has(idOf(run))) lost += run.data.totalScore || 0;
+    if (!run?.data || alive.has(idOf(run))) continue;
+    // 水位线以内的局早就记过了：从云上并回来、又被挤出去，不再记第二遍（审计 #2 那个越刷越高）。
+    if (!(run.at > mark)) continue;
+    lost += run.data.totalScore || 0;
+    newest = Math.max(newest, run.at);
   }
   if (lost > 0) {
     try {
       const was = parseInt(localStorage.getItem(bestKey + EVICTED_SUFFIX) || '0', 10) || 0;
       localStorage.setItem(bestKey + EVICTED_SUFFIX, String(was + lost));
+      localStorage.setItem(bestKey + EVICTED_AT_SUFFIX, String(newest));
     } catch {
       // 存不进去就只好少这一笔——这一局的结算照旧，不能因此被打断（见文件头那段）。
     }
@@ -190,7 +242,8 @@ export function loadRuns(bestKey: string): StoredRun[] {
 
 export function saveRun(bestKey: string, run: StoredRun): void {
   try {
-    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [run, ...loadRuns(bestKey)])));
+    const have = loadRuns(bestKey);
+    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [run, ...have], evictedMark(bestKey, have))));
   } catch {
     // Storage full or unavailable — the run simply isn't archived.
   }
@@ -210,7 +263,7 @@ export function mergeRuns(bestKey: string, incoming: readonly StoredRun[]): numb
     const seen = new Set(have.map(idOf));
     const add = incoming.filter((run) => run?.data && !seen.has(idOf(run)));
     if (!add.length) return 0;
-    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [...have, ...add])));
+    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [...have, ...add], evictedMark(bestKey, have))));
     return add.length;
   } catch {
     return 0;
