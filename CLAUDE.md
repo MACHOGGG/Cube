@@ -49,7 +49,7 @@ play-slides.com 就变了，没有预发环境，没有中间确认。所以：
 
 ```bash
 npm run dev          # vite 开发服务器（不带 api/）
-npm run build        # tsc -b && vite build && 生成五张法务静态页
+npm run build        # tsc -b && vite build && 生成法务静态页（LEGAL_ORDER 里那几份，现在只有隐私政策一张）
 npm run typecheck    # 只验类型。**管不到 `xhs/`**——那一端走 xhs/tsconfig.json
 npx tsc -p xhs/tsconfig.json   # 小红书端的类型（npm run build:xhs 开头也跑它）
 
@@ -357,8 +357,10 @@ web / ios / android。`src/engine/pricing.ts` 的 `plans()` **只返回一份价
 
 `api/_store.js` —— Redis over REST（Upstash 或 Vercel KV，同一套协议）。
 
-- 存的只有两样：**小屋**和**内部码开出来的账号**。订阅没有数据库，每次去问
-  Creem，所以不存在第二份会走样的副本。
+- 存的是：**账号**（`acct:<邮箱>`、免邮箱账号的 `acct:hdl:<sha256>`、兑了码还没绑邮箱的寄存处
+  `acct:code:<码>`）和那份管理用的名单；**小屋**；**战绩与排行榜**（`stats:` `runs:`、各张榜 `lb:*`、
+  每日榜、昵称表 `lbnames` 和昵称索引）；**内部码**（`code:<码>`）；**验证码的票**；还有限速计数
+  和几把短命的锁。**刷卡订阅的到期日不存**：每次去问 Creem，所以不存在第二份会走样的副本。
 - **小屋存成 Redis hash，一个玩家一个 field**，绝不是一个 JSON blob——八个人
   同时报分，读-改-写整份文档会丢掉大部分。
 - 没有真 Redis 也没有 `ALLOW_MEMORY_STORE=1` 时，接口回「这个功能还没开」，
@@ -368,16 +370,21 @@ web / ios / android。`src/engine/pricing.ts` 的 `plans()` **只返回一份价
 
 - **`src/i18n.ts`** —— 界面上所有的字，四种语言（`en` `fr` `zhHans` `zhHant`）。
   新增一句就要四种都写。
-- **`src/legal.ts`** —— 五份法务文档（定价/条款/退款/隐私/联系）的**唯一底稿**。
-  `scripts/build-legal.mjs`（跟在 `npm run build` 后面自动跑）从它生成
-  `dist/{pricing,terms,refund,privacy,contact}.html` 五张静态页；应用里那个弹窗
-  读的也是它。**改条款只改 legal.ts**，别去改生成出来的 html。
+- **`src/legal.ts`** —— 法务文档的**唯一底稿**。`LEGAL` 里五份（定价/条款/退款/隐私/联系）
+  都还在，可**对外只发 `LEGAL_ORDER` 里那几份——2026-10 起只有隐私政策**（付费撤了，另外三份没有
+  对象；文本留着等重开售卖）。`scripts/build-legal.mjs`（跟在 `npm run build` 后面自动跑）按
+  `LEGAL_ORDER` 出静态页，现在就是一张 `dist/privacy.html`；应用里那个弹窗读的也是它。
+  **改条款只改 legal.ts**，别去改生成出来的 html。
+  - **改了法务文本，`LEGAL_UPDATED` 跟着改**，然后
+    `npx esbuild src/legal.ts --bundle --format=esm --outfile=/tmp/legal.mjs && node scripts/check-legal-stamp.mjs /tmp/legal.mjs --write`
+    把新的「哈希 + 日期」记进 `scripts/legal-stamp.json` 一起提交。CI 里那道门不许「文本变了、日期没变」
+    （同一天里第二次改除外），`--write` 也只在日期改过之后才肯写。
   - `only: 'web' | 'store'` 把只对某一个柜台成立的条款挡在另一个柜台外面。
   - 联系邮箱是 `CONTACT_EMAIL` 一个常量，全站引它。
 
 法务文本里的每一句都是**对代码实际行为的陈述**（存了哪些字段、哪些布局免费）。
 支付审核把「网站陈述与实际不符」直接归为 false information，比缺一份文档严重。
-改代码改到这些行为时，**回来同步这五份文档**。
+改代码改到这些行为时，**回来同步这些文档**（对外发的那一份尤其）。
 
 **还要留意「将来时」。** 《价格与订阅》里有一条写了很久的「**订阅开放后**，由
 Creem 作为记录商户……」——同一页别处全是现在时，只有它是条件句。订阅早就在卖
@@ -392,16 +399,26 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 | 文件 | 管什么 |
 | --- | --- |
 | `_creem.js` | Creem REST 调用、`send()` / `readBody()` |
-| `_store.js` | Redis over REST + 内存兜底 |
-| `_accounts.js` | 账号结构、scrypt 密码、多设备令牌、锁定计数 |
-| `_entitlement.js` | 谁是天才（见上） |
+| `_store.js` | Redis over REST + 内存兜底（`hgetall` / `hmget` / 有序集合 / `withLock`……） |
+| `_accounts.js` | 账号结构、scrypt 密码、多设备令牌（`issueToken` / `dropToken`）、锁定计数 |
+| `_entitlement.js` | 谁是天才（见上）；`identify()` 认人 |
 | `_ratelimit.js` | `tooMany(bucket, id, limit, windowS)` + `callerId(req)` |
 | `_mail.js` | 走 Resend 发信；`compose()` 定了「按界面语言写 + 英文永远附一份」 |
+| `_codes.js` | 铸内部码（现在只有发码页 `mint.js` 在铸；年付赠码 10-09 起不铸了） |
+| `_nickname.js` | 昵称：一个账号一个、全站唯一（`lbnames` 和昵称索引） |
+| `_badwords.js` | 昵称 / 小屋名字不许用的词 |
+| `_commonpairs.js` | 免邮箱账号注册时拒收的常见第一串 |
+| `_seedcode.js` | 种子码 / 每日挑战，服务器那一份（和 `src/engine/seedCode.ts` 同一套算法） |
+| `_maxscore.js` | 一局分数的上限，排行榜和小屋共用 |
+| `_redact.js` | 日志里不写邮箱，写一枚短指纹 |
+| `_unlock_legacy.js` | **不是模块**：原来的 `api/unlock.js`（《忘记密码》，第 20 推起回 410），10-09 起挪到这儿腾出一个函数名额；别处注释拿它当范本引，别 import 它 |
 
-面向外的：`subscription`（登录/查权益）、`passcode`（设/改密码；刷卡开账号那一支
-第 20 推起回 410）、`unlock`（忘密码的解锁码，第 20 推起整条回 410）、`email`（换邮箱，见上）、`redeem`（兑内部码）、
-`checkout` / `portal`（Creem）、`room`（小屋）、`scores`（战绩与排行榜）、
-`mint`（批量发码，`ADMIN_TOKEN` 保护）。
+面向外的：`signin`（邮箱 + 六位验证码的注册 / 登录；登出时作废这台设备的令牌）、
+`handle`（免邮箱账号的注册 / 登录；凭第一串重设第二串那一支 10-09 起回 410）、
+`subscription`（查权益）、`passcode`（绑内部码设密码；刷卡开账号那一支第 20 推起回 410）、
+`email`（换邮箱 / 免邮箱账号绑定邮箱，见上）、`redeem`（兑内部码）、`checkout` / `portal`（Creem）、
+`room`（小屋）、`scores`（战绩与排行榜）、`mint`（批量发码，`ADMIN_TOKEN` 保护）。
+Vercel Hobby 档最多十二个函数，现在用了十一个。
 
 ## 约定
 

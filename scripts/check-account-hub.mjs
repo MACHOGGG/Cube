@@ -330,7 +330,7 @@ check('而且没有搬走', Boolean(await loadAccount(NEXT)));
 // 而受害者从此注册不了自己的邮箱——哪天真去刷卡订阅，设密码那一步会被「这
 // 个地址已经有账号了」挡住，钱花了却进不去。
 //
-// 《忘记密码》那条路早就有这道闸（api/unlock.js 的 MAX_TRIES），换邮箱这条
+// 《忘记密码》那条路早就有这道闸（api/_unlock_legacy.js 的 MAX_TRIES），换邮箱这条
 // 路一直没抄这份作业。两条路是同一件事，门也该是同一道。
 
 const SIEGE = 'siege-one@example.com';

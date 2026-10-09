@@ -83,22 +83,20 @@ const MAIL = {
 };
 
 /**
- * **整条接口回 410**（第 20 推，定稿方案原话：「unlock.js 和 passcode 的 create 改成回 410」）。
+ * **这个文件不是接口**（下划线开头，Vercel 不把它当成函数；没有谁 import 它，也别 import 它）。
  *
- * 《忘记密码》这件事已经不存在了：密码整个取消（E37），登录改成每次往邮箱寄一张验证码
- * （api/signin.js）。客户端的 `requestUnlock` / `confirmUnlock` 没有任何界面入口在叫，还会打到
- * 这儿的只剩很早以前开着、一直没刷新的旧标签页。410 而不是 404：这个地址确实有过东西，是故意关
- * 掉的，日志里一眼分得开。
+ * 它原先是 `api/unlock.js`，《忘记密码》那条路。第 20 推起整条回 410（定稿方案原话：「unlock.js 和
+ * passcode 的 create 改成回 410」）：密码整个取消了（E37），登录改成每次往邮箱寄一张验证码
+ * （api/signin.js），客户端的 `requestUnlock` / `confirmUnlock` 没有任何界面入口在叫。10-09 补充方案
+ * 7-15 起连那个只回 410 的接口都撤了，挪到这儿：一个什么都不做的文件也占 Vercel 一个函数名额
+ * （Hobby 档十二个，原先正好用满）。/api/unlock 从此是 404。
  *
- * **下面的实现一行没删、只是走不到**：signin.js、email.js、handle.js、_accounts.js、_mail.js
- * 和几道门的注释都拿这里当范本引（「先占号再比对」、INCR 计次、「有没有账号回一样的话」、
- * 「先做不可逆的事」那几段）——删了，那十几处注释就指向一个不存在的文件。
+ * **下面的实现一行没删**：signin.js、email.js、handle.js、_accounts.js、_mail.js 和几道门的注释都
+ * 拿这里当范本引（「先占号再比对」、INCR 计次、「有没有账号回一样的话」、「先做不可逆的事」那几段）
+ * ——删了，那十几处注释就指向一个不存在的文件。
  */
-export default async function handler(req, res) {
-  return send(res, 410, { error: 'gone' });
-}
 
-/** 第 20 推之前的分发（走不到，见上）。 */
+/** 第 20 推之前的分发（没有谁调它，见上）。 */
 async function retiredHandler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
   if (!storeConfigured()) return send(res, 503, { error: 'notConfigured' });

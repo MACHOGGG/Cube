@@ -43,7 +43,7 @@ import { storeConfigured } from './_store.js';
  *    的 `pairKey`。顺带的好处是服务端从此存不回第一串的明文，而它也确实不需要。
  *
  * ② **不许封号**（`checkPin` 的 `block: false`）。封号是一道只有「拿邮箱证明自己」才解
- *    得开的门（api/unlock.js），而这种账号没有邮箱。只留锁 4 小时那一档。
+ *    得开的门（原 api/unlock.js，代码在 _unlock_legacy.js），而这种账号没有邮箱。只留锁 4 小时那一档。
  *
  * ③ **不进后台名单。** `saveAccount` / `createAccount` 里那道 `EMAIL_RE` 闸自己就挡
  *    住了（`hdl:` 开头的 key 过不去），不用在这儿再做什么——写在这儿是为了说明那是
@@ -164,7 +164,7 @@ async function signin(res, first, { second }) {
  * **第一串的原文不在回包里**，服务端也没有（只有 sha256）。界面上要显示的那一份由客户
  * 端自己存（`Entitlement.handle`）。
  *
- * 权益答不出来也不算这一趟失败：账号已经开出来 / 令牌已经发出去了（和 unlock.js 末尾
+ * 权益答不出来也不算这一趟失败：账号已经开出来 / 令牌已经发出去了（和 _unlock_legacy.js 末尾
  * 那段同一个道理）。
  */
 async function answer(res, id, account, issued) {

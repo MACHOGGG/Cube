@@ -159,7 +159,7 @@ export interface PuzzleBoardTally {
   /** 结束时还在盘上、已经翻成星星（反面朝上）的枚数。 */
   stars: number;
   /**
-   * 有效得分率 0–100（engine/performance.ts 的那一个，八副棋盘共用）。
+   * 有效得分率 0–100（engine/performance.ts 的那一个，六副棋盘共用）。
    *
    * **这一档的综合得分不再乘它**（玩家 2026-10）。字段留着是因为 `RunData` 里本来就
    * 有这一位、旧档也带着它，结算页读旧档时还要照原样讲一遍（runRecord 那条旧档分支）。

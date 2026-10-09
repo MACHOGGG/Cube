@@ -1251,6 +1251,7 @@ export async function runStoreRestore(lang: Lang, onChanged: () => void): Promis
  * 忘无所谓。
  *
  * 后端 `api/unlock.js` 起初一行没动，留给老账号那条路（在途的标签页、装着旧包的 App）；
- * **第 20 推起它整条回 410**（实现留着、走不到，见那个文件）。这里调它的两个函数
- * （engine/account.ts 的 requestUnlock / confirmUnlock）已经没有任何入口在叫。
+ * **第 20 推起它整条回 410**，10-09 补充方案 7-15 起连接口都撤了（腾出一个函数名额；代码挪到
+ * `api/_unlock_legacy.js`，/api/unlock 如今是 404）。这里调它的两个函数（engine/account.ts 的
+ * requestUnlock / confirmUnlock）已经没有任何入口在叫。
  */

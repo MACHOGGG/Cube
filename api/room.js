@@ -8,7 +8,8 @@ import { callerId, tooMany } from './_ratelimit.js';
 import { MAX_SCORE } from './_maxscore.js';
 
 /**
- * Multiplayer rooms: a four-digit code, two to four players, one board.
+ * Multiplayer rooms: a four-digit code, two to eight players (a contest room seats
+ * twenty-one — twenty players and the host, see CONTEST_SEATS), one board.
  *
  * Almost nothing here is real-time, and that is the design rather than a
  * shortcut. Three things could have needed a socket, and none of them does:
@@ -1297,8 +1298,8 @@ async function create(res, body) {
     /**
      * 这间屋有几把椅子，开屋那一刻定死（见上面 seatsFor 的说明）。
      *
-     * body.contest 今天没有任何界面会送过来，所以现在开出来的每一间都是普
-     * 通小屋（8 把）。竞赛模式的入口做好之后，那个界面送 contest: true。
+     * 界面上《开竞赛》那颗键（#mpContest → createRoom(…, contest)）送 contest: true，开出来
+     * 的是竞赛屋（21 把）；别的一律是普通小屋（8 把）。
      */
     seats: body.contest === true ? CONTEST_SEATS : OPEN_SEATS,
     /**

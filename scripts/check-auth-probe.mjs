@@ -192,15 +192,20 @@ check('订阅活着但没有账号：和「压根没这个人」一字不差（�
 
 // ── ⑤ 旧的《忘记密码》接口关着 ──────────────────────────────────────────
 //
-// 第 20 推起 api/unlock.js 整条回 410（密码取消了，忘记密码这件事已经不存在；实现原样
-// 留着只是走不到，见那个文件）。量的是「关着」这件事本身：哪天有人把分发接回去，一个
-// 能改密码、能踢掉所有设备的入口就悄悄回来了，而界面上没有任何地方会提醒。
+// 第 20 推起 api/unlock.js 整条回 410（密码取消了，忘记密码这件事已经不存在）；10-09 补充方案 7-15
+// 起连接口都撤了，代码挪到 api/_unlock_legacy.js（下划线开头，不是接口），/api/unlock 是 404。量的
+// 是「关着」这件事本身：哪天有人把它挪回来、或者给那份旧代码接上一个 default 导出，一个能改密码、
+// 能踢掉所有设备的入口就悄悄回来了，而界面上没有任何地方会提醒。
 {
-  const unlockApi = (await import('../api/unlock.js')).default;
-  const ask = await callOn(unlockApi, { email: HAS }, '203.0.113.95');
-  const confirm = await callOn(unlockApi, { action: 'confirm', email: HAS, code: '123456', password: 'bbb222' }, '203.0.113.96');
-  check('《忘记密码》要码那一步：410 gone', ask.status === 410 && ask.body.error === 'gone', `${ask.status} ${ask.raw}`);
-  check('《忘记密码》换密码那一步：也是 410', confirm.status === 410 && confirm.body.error === 'gone', `${confirm.status} ${confirm.raw}`);
+  const { existsSync, readFileSync, readdirSync } = await import('node:fs');
+  const apiDir = new URL('../api/', import.meta.url);
+  check('《忘记密码》那个接口不在了（没有 api/unlock.js）', !existsSync(new URL('unlock.js', apiDir)));
+  const legacy = readFileSync(new URL('_unlock_legacy.js', apiDir), 'utf8');
+  check('那份旧代码只是摆着：_unlock_legacy.js 没有 default 导出（接不成一个接口）', !/export default/.test(legacy));
+  // 别的接口也没有谁 import 它（import 进来就等于又开了一扇门）。
+  const importers = readdirSync(apiDir).filter((f) => f.endsWith('.js') && /_unlock_legacy/.test(readFileSync(new URL(f, apiDir), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')))
+    .filter((f) => f !== '_unlock_legacy.js');
+  check('没有哪个文件 import 那份旧代码', importers.length === 0, importers.join(' '));
 }
 
 // ── ③ 账号中心（Creem 客户门户）：同一把尺子 ────────────────────────────

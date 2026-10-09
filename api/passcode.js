@@ -4,7 +4,6 @@ import {
   codeHolder,
   createAccount,
   EMAIL_RE,
-  ensureGiftCodes,
   loadAccount,
   newAccount,
   normalizeEmail,
@@ -165,8 +164,7 @@ async function create(res, checkoutId, password, news) {
         : checkout.subscription;
     if (!entitled(sub)) return send(res, 403, { error: 'unpaid' });
     address = normalizeEmail(emailOf(checkout) ?? emailOf(sub) ?? '');
-    // Which product they bought, so the two gift codes a yearly subscriber
-    // gets can be minted the moment the account exists.
+    // Which product they bought (monthly / yearly), recorded on the account.
     period = periodOf(sub);
   } catch (err) {
     console.error('passcode create failed:', err?.message || err);
@@ -184,17 +182,14 @@ async function create(res, checkoutId, password, news) {
   // 瞬间回来（同一个地址买两次、或者一家人共用一个邮箱），两边都会读到「没
   // 人」，于是后写的那份把先写的密码和令牌一起顶掉。见 bind 里那段。
   if (!(await createAccount(address, account))) return send(res, 409, { error: 'exists' });
-  // A year is a long thing to buy on your own recommendation, so a yearly
-  // subscriber gets two months to hand out. Minted here, where the account
-  // first exists, and remembered on it so they are never minted twice.
-  const gifts = await ensureGiftCodes(address, account, period);
+  // 年付赠码从前在这儿铸（账号刚开出来的那一刻），10-09 补充方案 7-15 起不铸了——见 _accounts.js
+  // 里 liveGifts 上面那段。
   // Hand back the token with it, so the device that just chose the password
   // is signed in by that act and never asked for it again.
   return send(res, 200, {
     ok: true,
     email: address,
     token: account.token,
-    ...(gifts?.length ? { gifts } : {}),
   });
 }
 

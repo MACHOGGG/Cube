@@ -11,11 +11,10 @@
  * （见 isGenius 末尾）：商店版还没上线，挡不着任何真买了的人，而信它就是
  * 「客户端说一句话就白嫖」。
  */
-import { NOBODY, answer, configured as creemConfigured, findSubscription, periodOf } from './_creem.js';
+import { NOBODY, answer, configured as creemConfigured, findSubscription } from './_creem.js';
 import {
   LIFETIME_UNTIL,
   codeHolder,
-  ensureGiftCodes,
   entitlementOf,
   liveGifts,
   liveInbox,
@@ -155,7 +154,7 @@ export const ownGrantLive = (account) => Boolean(account && (account.until || 0)
  *   · 刷卡订阅的账号：本地不存到期日（设计如此），只能去问 Creem；问不了
  *     （没配密钥）是 503「答不了」，不是「不是天才」。
  *
- * 原来登录那一支（api/subscription.js）分得清，重设密码那一支（api/unlock.js）
+ * 原来登录那一支（api/subscription.js）分得清，重设密码那一支（原 api/unlock.js，代码在 _unlock_legacy.js）
  * 只看本地日期：刷卡的人重设完密码被告知「不是天才」，前端就报「网络出错」，
  * 而密码其实早改好了。现在两支都走这里。
  *
@@ -232,7 +231,6 @@ export async function resolveEntitlement(address, account, issued) {
   // 订阅是活的，可从来没设过密码（窗口出现前标签页就关了）：说出来，让
   // 应用送他去设一个，而不是把订阅直接交出去。
   if (!account) return { status: 200, body: { ...NOBODY, needsPasscode: true } };
-  await ensureGiftCodes(address, account, periodOf(sub));
   return {
     status: 200,
     body: {

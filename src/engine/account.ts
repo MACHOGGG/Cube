@@ -170,6 +170,9 @@ export function redeemCode(
 export type UnlockRequest = { sent: true } | { sent: false; reason: AccountFailure };
 
 /**
+ * ⚠️ **没有入口在叫这两个函数了**（requestUnlock / confirmUnlock）：《忘记密码》第 20 推起整条回 410，
+ * 10-09 补充方案 7-15 起 /api/unlock 干脆不在了（404，代码在 api/_unlock_legacy.js）。留着没删。
+ *
  * Ask for the six-digit code that reopens a blocked account. Answers the
  * same whether or not the address has one, so it cannot be used to find out
  * who plays — 'noMail' is the one real failure, and it means this
@@ -178,7 +181,7 @@ export type UnlockRequest = { sent: true } | { sent: false; reason: AccountFailu
 export async function requestUnlock(email: string, lang: string): Promise<UnlockRequest> {
   try {
     // 界面上是哪种语言，那封信就用哪种写（服务器那头只认四个名字，别的当英
-    // 文，而且英文永远附一份——见 api/unlock.js 的 MAIL）。
+    // 文，而且英文永远附一份——见 api/_unlock_legacy.js 的 MAIL）。
     const { status, reply } = await post('/api/unlock', { email, lang });
     if (status === 200 && reply.sent) return { sent: true };
     const failed = toResult(status, reply);
@@ -205,7 +208,7 @@ export function confirmUnlock(email: string, code: string, password: string): Pr
  * 换密码 / 换邮箱：登录之后在《账户》窗里做的两件事。
  *
  * 两件事都只影响这一个账号，所以答复不带权益——他是不是天才，和他刚换了什么
- * 没有关系。「这一趟成没成」单独说一句（done / sent），这是 api/unlock.js 那
+ * 没有关系。「这一趟成没成」单独说一句（done / sent），这是 api/_unlock_legacy.js（原 unlock.js）那
  * 次「密码换好了却被报成失败」教出来的规矩。
  */
 export type SimpleResult = { ok: true } | { ok: false; reason: AccountFailure };

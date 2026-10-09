@@ -29,7 +29,7 @@ import {
  *
  * It reads the local score straight off the HUD's reel rather than being
  * handed it: the reel already carries the settled number as a data
- * attribute, and taking it from there means none of the eight boards, nor
+ * attribute, and taking it from there means none of the six boards, nor
  * the controller they share, has to know that multiplayer exists. A racing
  * scoreboard is not a reason to thread a callback through the whole game.
  *

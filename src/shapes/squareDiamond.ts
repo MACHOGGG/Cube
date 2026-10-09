@@ -414,14 +414,13 @@ export function createSquareDiamondGame(): ShapeGame {
        * 炸弹的「挨着」：上下左右四格。判四连、闪三连预警、以及得分时连带拆
        * 弹，用的是同一份邻接——三处口径必须一致，不然会出现「预警闪了却不
        * 炸」「拆得掉的却没拆」。
+       *
+       * 所以直接取判四连那一份（GRID_ADJACENCY，10-09 补充方案 7-15）。原先这儿手抄了一份逐字相同
+       * 的四邻：相同的时候没事，哪天一份被单独改了，就是上面那两句里的一句。名字留着——拆弹那一处
+       * （afterCommit）认的就是它，check-bomb-rules 也按这个名字量。
        */
       function bombNeighbors(r: number, c: number): Cell[] {
-        const out: Cell[] = [];
-        for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]] as Cell[]) {
-          if (nr < 0 || nr >= grid.length || nc < 0 || nc >= grid[nr].length) continue;
-          out.push([nr, nc]);
-        }
-        return out;
+        return Array.from(GRID_ADJACENCY.neighbors(r, c, grid), ([nr, nc]) => [nr, nc] as Cell);
       }
 
       // 炸弹那三样（四连判爆、三连预警、发一副干净的开局）在 engine/bomb.ts（第 14 推从
@@ -775,10 +774,11 @@ export function createSquareDiamondGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        // 「全是星星」**不再是终局**（星星消除 2026-09 上线之后）。星星现在自己
-        // 就能凑图案得分、并从棋盘上消除（见 scoring.ts 的 clearStars），所以一盘
-        // 全是星星的棋盘往往还能继续打——玩家报过一次：结算页写着「全部已变成星
-        // 星」，可盘面上还躺着四颗同色蓝星，明明凑得出图案。
+        // 「全是星星」**不是终局**：同色星星凑满一整条线就整条消掉（这一副是贴着外边的那几条，见
+        // collectEdges），所以一盘全是星星的棋盘往往还能接着打——玩家报过一次：结算页写着「全部已
+        // 变成星星」，可盘面上明明还能动。（这段从前写的理由是「星星自己就能凑图案得分、
+        // 从棋盘上消除（scoring.ts 的 clearStars）」，那一套随《侵蚀阶梯》v1.2 退役了：全是星星
+        // 的图案如今一分不得、一格不消。10-09 补充方案 7-15 改了这段注释。）
         //
         // 真正的终局只剩两种：**一枚不剩**（全消完，就是这儿判的），或者**谁也
         // 凑不出来了**（死局，交给 engine/stalemate.ts）。活炸弹拆不掉也消不掉，

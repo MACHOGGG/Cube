@@ -330,6 +330,12 @@ const tally = (arr) => {
     // 还是活炸弹。自己不许再长回一份——五份逐字相同的时候，改规矩要改五处，漏一处就是一副盘按老规矩拆。
     check(`${name}：挂上了 afterCommit（拆弹并进遮罩），走的是 bomb.ts 那一份`,
       /afterCommit: isBomb \? \(scored\) => defuseAround\(scored, bombNeighbors, \(r, c\) => grid\[r\]\[c\], liveBomb\) : undefined/.test(s));
+    // 方块、菱形方块拆弹用的「挨着」直接取判四连那一份（10-09 补充方案 7-15）：原先各手抄了一份逐字相同的四邻。
+    if (name === 'square' || name === 'squareDiamond') {
+      check(`${name}：拆弹的邻接直接取 GRID_ADJACENCY（不再手抄一份四邻）`,
+        /function bombNeighbors\(r: number, c: number\): Cell\[\] \{\s*return Array\.from\(GRID_ADJACENCY\.neighbors\(r, c, grid\)/.test(s) &&
+          !/\[\[r - 1, c\], \[r \+ 1, c\], \[r, c - 1\], \[r, c \+ 1\]\]/.test(s));
+    }
     check(`${name}：自己没有一份私抄的拆弹（不定义 defuseAround、不直接调 hitBomb）`,
       !/function defuseAround\(/.test(s) && !/\bhitBomb\(/.test(s));
     check(`${name}：爆炸检查挂在 checkHazard 上`,

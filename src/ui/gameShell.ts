@@ -212,7 +212,7 @@ const ROTATE_HINT = (copy: string | null) => `
 export { CTL_PAUSE, CTL_FINISH, CTL_LEAVE, CTL_BACK } from './ctlIcons';
 
 /**
- * 认的是 id 的**前缀**，不是那三个基础 id。八副棋盘的 id 就是按家族起的：
+ * 认的是 id 的**前缀**，不是那三个基础 id。六副棋盘的 id 就是按家族起的：
  *
  *   square  squareDiamond                     → 方块家
  *   circle  circleHex  circleSeven            → 小球家

@@ -355,6 +355,56 @@ console.log('');
   }
 }
 
+// ---- ⑫ 年付赠码不再铸（10-09 补充方案 7-15）--------------------------------
+//
+// 送码那一块第 17 推就从界面上撤了，可刷卡年付的人每次登录，resolveEntitlement 还照旧补铸两张——看不见、
+// 送不出去、却真能兑一个月。量两件事：年付的人登录一次，账号上不长出 gifts、回包里的 gifts 是空的；已经
+// 铸过、记在账号上的那几张照旧回给客户端（一张还在库里 = 没兑过，一张不在了 = 已经被兑掉）。
+console.log('');
+{
+  process.env.CREEM_PRODUCT_YEARLY = 'prod_yearly_stub';
+  const { resolveEntitlement } = await import('../api/_entitlement.js');
+  const accounts = await import('../api/_accounts.js');
+  const store = await import('../api/_store.js');
+  const before = globalThis.fetch;
+  const periodEnd = new Date(Date.now() + 300 * 86400e3).toISOString();
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (/\/v1\/customers\/[^/]+\/subscriptions/.test(u)) {
+      return json({ items: [{ status: 'active', product: 'prod_yearly_stub', current_period_end_date: periodEnd }] });
+    }
+    if (u.includes('/v1/customers')) return json({ id: 'cus_yearly', email: 'yearly@example.com' });
+    throw new Error('unexpected fetch: ' + u);
+  };
+  try {
+    const fresh = { ...accounts.newAccount('', 'card'), until: 0 };
+    await accounts.saveAccount('yearly@example.com', fresh);
+    const r = await resolveEntitlement('yearly@example.com', fresh, fresh.token);
+    const after = await accounts.loadAccount('yearly@example.com');
+    check('⑫（尺子）刷卡年付的人登录：权益照常（Creem 说他是年付）', r.status === 200 && r.body.active === true && r.body.period === 'yearly',
+      JSON.stringify({ status: r.status, active: r.body.active, period: r.body.period }));
+    check('⑫ 不再给他铸赠码：账号上没长出 gifts，回包里的 gifts 是空的',
+      !('gifts' in after) && Array.isArray(r.body.gifts) && r.body.gifts.length === 0, JSON.stringify(r.body.gifts));
+
+    const expiresAt = Date.now() + 20 * 86400e3;
+    const old = { ...accounts.newAccount('', 'card'), until: 0, gifts: [{ code: 'GIFTOLD1', expiresAt }, { code: 'GIFTOLD2', expiresAt }] };
+    await store.set('code:GIFTOLD1', { plan: 'month', expiresAt });
+    await accounts.saveAccount('yearly-old@example.com', old);
+    const r2 = await resolveEntitlement('yearly-old@example.com', old, old.token);
+    check('⑫ 已经铸过的那两张不动：照旧回给客户端（还在库里的没兑过、不在了的已经被兑掉）',
+      (r2.body.gifts || []).map((g) => `${g.code}:${g.spent}`).join() === 'GIFTOLD1:false,GIFTOLD2:true', JSON.stringify(r2.body.gifts));
+  } finally {
+    globalThis.fetch = before;
+    delete process.env.CREEM_PRODUCT_YEARLY;
+  }
+  // 源码：api/ 里再没有哪一处铸 gift 那一种码，ensureGiftCodes 也不在了。
+  const { readdirSync } = await import('node:fs');
+  const apiDir = new URL('../api/', import.meta.url);
+  const minting = readdirSync(apiDir).filter((f) => f.endsWith('.js'))
+    .filter((f) => /source: 'gift'|ensureGiftCodes\(/.test(readFileSync(new URL(f, apiDir), 'utf8')));
+  check('⑫ 源码：api/ 里没有一处还在铸赠码', minting.length === 0, minting.join(' '));
+}
+
 if (useOld) rmSync(OLD, { force: true });
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 项没过`);
 process.exit(fail ? 1 : 0);

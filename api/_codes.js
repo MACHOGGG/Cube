@@ -4,10 +4,12 @@ import { msetnx } from './_store.js';
 /**
  * Minting 「Slides 天才内部码」.
  *
- * Shared by the two places codes are made: the minting page, where a batch is
- * asked for by hand, and the two a yearly subscriber is given automatically.
- * Both write the same document under the same key shape, so /api/redeem never
- * has to know which of the two made the code it is being handed.
+ * Shared by the places codes are made, so they all write the same document
+ * under the same key shape and /api/redeem never has to know which one made
+ * the code it is being handed. Today that is only the minting page (a batch
+ * asked for by hand); the two a yearly subscriber used to be given
+ * automatically stopped being minted in 10-09 补充方案 7-15 (see the note above
+ * liveGifts in _accounts.js).
  *
  * The alphabet drops the four characters that get misread when a code is
  * copied off a screen or read down a phone — 0/O and 1/I are the whole reason

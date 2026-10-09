@@ -68,7 +68,7 @@ const key = (email) => 'chmail:' + email;
  * 下，而受害者从此再也注册不了自己的邮箱——哪天他真去刷卡订阅，设密码那一
  * 步会被「这个地址已经有账号了」挡下来，钱花了却进不去。
  *
- * 《忘记密码》那条路（api/unlock.js）早就有这道闸，换邮箱这条路一直没抄这份
+ * 《忘记密码》那条路（原 api/unlock.js，代码现在在 api/_unlock_legacy.js）早就有这道闸，换邮箱这条路一直没抄这份
  * 作业。数字和键名都照它来，两条路是同一件事，没有理由各有一套。
  */
 const MAX_TRIES = 5;
@@ -154,7 +154,7 @@ async function handle(req, res) {
 async function request(res, req, address, wanted, wantLang) {
   if (!mailConfigured()) return send(res, 503, { error: 'noMail' });
 
-  // 两个桶，和 unlock.js 同一个道理：一个挡「拿这个接口往某个地址塞信」，
+  // 两个桶，和 _unlock_legacy.js（原 unlock.js）同一个道理：一个挡「拿这个接口往某个地址塞信」，
   // 一个挡「一台机器挨个地址试」。
   if (await tooMany('chmail:to', wanted, 3, 3600)) {
     return send(res, 429, { error: 'tooMany' });
@@ -170,7 +170,7 @@ async function request(res, req, address, wanted, wantLang) {
 
   const code = String(randomInt(0, 1e6)).padStart(6, '0');
   await set(key(address), { code, to: wanted }, CODE_TTL_S);
-  // 新码新账：上一张码被猜掉的次数不跟着过来（同 unlock.js）。
+  // 新码新账：上一张码被猜掉的次数不跟着过来（同 _unlock_legacy.js）。
   await del(triesKey(address));
   await sendMail({ to: wanted, ...compose(MAIL, mailLang(wantLang), code) });
   return send(res, 200, { sent: true });

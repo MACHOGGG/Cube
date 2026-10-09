@@ -357,14 +357,13 @@ export function createSquareGame(): ShapeGame {
        * 炸弹的「挨着」：上下左右四格。判四连、闪三连预警、以及得分时连带拆
        * 弹，用的是同一份邻接——三处口径必须一致，不然会出现「预警闪了却不
        * 炸」「拆得掉的却没拆」。
+       *
+       * 所以直接取判四连那一份（GRID_ADJACENCY，10-09 补充方案 7-15）。原先这儿手抄了一份逐字相同
+       * 的四邻：相同的时候没事，哪天一份被单独改了，就是上面那两句里的一句。名字留着——拆弹那一处
+       * （afterCommit）认的就是它，check-bomb-rules 也按这个名字量。
        */
       function bombNeighbors(r: number, c: number): Cell[] {
-        const out: Cell[] = [];
-        for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]] as Cell[]) {
-          if (nr < 0 || nr >= grid.length || nc < 0 || nc >= grid[nr].length) continue;
-          out.push([nr, nc]);
-        }
-        return out;
+        return Array.from(GRID_ADJACENCY.neighbors(r, c, grid), ([nr, nc]) => [nr, nc] as Cell);
       }
 
       // 炸弹那三样（四连判爆、三连预警、发一副干净的开局）在 engine/bomb.ts（第 14 推从
@@ -702,10 +701,11 @@ export function createSquareGame(): ShapeGame {
       }
 
       function isGameOver(): boolean {
-        // 「全是星星」**不再是终局**（星星消除 2026-09 上线之后）。星星现在自己
-        // 就能凑图案得分、并从棋盘上消除（见 scoring.ts 的 clearStars），所以一盘
-        // 全是星星的棋盘往往还能继续打——玩家报过一次：结算页写着「全部已变成星
-        // 星」，可盘面上还躺着四颗同色蓝星，明明凑得出图案。
+        // 「全是星星」**不是终局**：同色星星凑满一整条线就整条消掉（这一副是任意一整行 / 一整列，见
+        // fullDotLines），所以一盘全是星星的棋盘往往还能接着打——玩家报过一次：结算页写着「全部已
+        // 变成星星」，可盘面上明明还能动。（这段从前写的理由是「星星自己就能凑图案得分、
+        // 从棋盘上消除（scoring.ts 的 clearStars）」，那一套随《侵蚀阶梯》v1.2 退役了：全是星星
+        // 的图案如今一分不得、一格不消。10-09 补充方案 7-15 改了这段注释。）
         //
         // 真正的终局只剩两种：**一枚不剩**（全消完，就是这儿判的），或者**谁也
         // 凑不出来了**（死局，交给 engine/stalemate.ts）。活炸弹拆不掉也消不掉，
@@ -727,9 +727,11 @@ export function createSquareGame(): ShapeGame {
           for (let c = 0; c < cols; c++) {
             // Red hazard tiles are permanent obstacles, not something the
             // player is expected to ever flip — excluded from stalemate
-            // detection and the end-of-run "left on the board" penalty.
+            // detection and from the end-of-run count of never-flipped tiles
+            // (the 0.95ⁿ scale in gameController's endGame; the old flat
+            // "left on the board" penalty it replaced is gone).
             if (liveBomb(grid[r][c])) continue;
-            // 空位不算「留在盘上没翻的」——结算那笔扣分和卡死判定都不该算它。
+            // 空位不算「留在盘上没翻的」——结算那个 0.95ⁿ 的系数和卡死判定都不该算它。
             if (isBlank(grid[r][c])) continue;
             live.push({ cell: [r, c], tile: grid[r][c] });
           }
@@ -743,12 +745,12 @@ export function createSquareGame(): ShapeGame {
         // 4 枚会把「还能拼出那个两枚图案」的残局判成死局，而死局是没有按钮
         // 能拦的——1.4 秒后直接结算（见 gameController）。
         // 传进去的是当前较短的那条边长：整行 / 整列会随消除变短，门槛得跟着走。星星
-        // 自己得分有两条路——连成整线、或者整组星星凑出图案（2026-09 上线）——stalemate
-        // 取两者中小的那个当门槛，见那儿的 starNeed。
+        // 自己得分只剩一条路：同色凑满一整行 / 一整列（「整组星星凑出图案」那一条 2026-09 上线、
+        // 《侵蚀阶梯》v1.2 撤了），stalemate 拿的就是这个数，见那儿的 lineMin。
         // 没有目标的那几档，门槛是**这一级的 1×N 要几枚**（controller.matchLen()），
         // 不是 `undefined`。传 undefined 会落到 stalemate 的默认值 4，而侵蚀把图案降到
         // 1×3 之后盘上剩 3 枚同色是**还能凑的**——按 4 判就成了死局，而死局没有任何按钮
-        // 拦得住，1.4 秒后直接结算。八副棋盘里只有这一副是这么写的，其余五副都问
+        // 拦得住，1.4 秒后直接结算。六副棋盘里只有这一副是这么写的，其余五副都问
         // controller.matchLen()。
         const need = target ? targetNeed() : controller.matchLen();
         const live = liveTiles();

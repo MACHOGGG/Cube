@@ -335,8 +335,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   /**
    * 《行动有效率》那份统计。读数**在任何界面都不存在了**（《侵蚀阶梯》v1.2 PR-7）：§5 之后
-   * 它不参与任何计分，留一个不算分的百分比在屏幕上，玩家只会照着它打。统计本身**没删**：步
-   * 步为营的终局公式还在用它（engine/puzzleScore.ts 的 ratePercent）。
+   * 它不参与任何计分，留一个不算分的百分比在屏幕上，玩家只会照着它打。统计本身**没删**：它照旧
+   * 记进这一局的存档（statusPercent），步步为营那份明细也带着它——只是终局公式 2026-10 起不再乘它
+   * （engine/puzzleScore.ts 的 ratePercent 那一段），旧档的结算页还要照原样讲一遍。
    *
    * 原先还留着一个空的 updatePerfDisplay（「把它印出来」那一步撤掉之后的空壳）和它的两处调
    * 用，10-08 方案第五批第 4 条删掉了——函数体是空的，删掉行为不变（check-scoring 第 6 节先

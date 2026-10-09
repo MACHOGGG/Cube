@@ -1,5 +1,5 @@
 /**
- * 八副棋盘的名片，按 id 查——**「这一副归哪一族、按哪一套规则讲」只有这一个答案。**
+ * 六副棋盘的名片，按 id 查——**「这一副归哪一族、按哪一套规则讲」只有这一个答案。**
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 为什么要有这个文件
@@ -29,7 +29,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  * 为什么是「注册」而不是这儿直接 import 八个工厂
  *
- * 八副棋盘每一副都 `import { buildShell } from '../ui/gameShell'`，而 gameShell 要用
+ * 六副棋盘每一副都 `import { buildShell } from '../ui/gameShell'`，而 gameShell 要用
  * 这儿的 `cardOf`。这儿再反过来 import 八个工厂就成环了——ESM 不会报错，但模块初始化
  * 的顺序会让这张表在 gameShell 第一次用它的时候还是空的，于是查什么都「不认识」。
  *
@@ -59,7 +59,7 @@ export function cardOf(id: string): ShapeCardMeta {
   if (!card) {
     throw new Error(
       `不认识的玩法 id：${id}。` +
-        `八副棋盘的名片由 main.ts 调 registerCards 注册（见 shapes/registry.ts 文件头）；` +
+        `六副棋盘的名片由 main.ts 调 registerCards 注册（见 shapes/registry.ts 文件头）；` +
         `新加一副要记得加进那一串。`,
     );
   }

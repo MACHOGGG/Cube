@@ -27,7 +27,7 @@ import { compose, mailLang, sendMail } from './_mail.js';
  * 打进来就进去了；这个地址上没有账号就当场开一个，有就是登录。两件事在界面上是同一
  * 颗键，在这儿也是同一条路——**因为玩家分不出自己是哪一种，也不该要他分**。
  *
- * ── 和 api/unlock.js 的三处不同 ──────────────────────────────
+ * ── 和 api/_unlock_legacy.js（原 unlock.js）的三处不同 ──────────────────────────────
  *
  * 照着 unlock 的结构写（限速、bump 计数、六位码、30 分钟），但有三处是故意不一样的：
  *
@@ -106,7 +106,7 @@ const key = (email, ticket) => 'signin:' + email + (ticket ? ':' + ticket : '');
  *
  * 和验证码存在一起的话，改它要走「读整份 → 判断 → 改一个字段 → 整份写回」，三步之间
  * 隔着两次网络往返；同一瞬间打进来的几十个请求都会读到「才猜了 0 次」，于是整批只被
- * 记成一次——5 次上限形同虚设。这个坑在 unlock.js 上记着，照同一套来。
+ * 记成一次——5 次上限形同虚设。这个坑在 _unlock_legacy.js 上记着，照同一套来。
  */
 const triesKey = (email, ticket) => 'signin:tries:' + email + (ticket ? ':' + ticket : '');
 
@@ -262,7 +262,7 @@ async function confirm(res, req, address, { code, news, challenge }) {
    *      外面的人能从回包里分出「票对不对」和「码对不对」。空着是另一回事（过渡路）。
    *   ② 按来路限速。挡我们自己的资源，所以要在读库之前，而且编的票也算。
    *   ③ 占掉这张票的一次机会（`bump`，原子）。**先占号再比对**——次序反过来就是那道假
-   *      门：几十个并发请求会一起通过「还没到 5 次」这一关，然后一起猜（照 unlock.js）。
+   *      门：几十个并发请求会一起通过「还没到 5 次」这一关，然后一起猜（照 _unlock_legacy.js）。
    *   ④ 把码读出来。没有就是这张票不存在或者过期了。
    *   ⑤ 比对。（从前 ④ 和比对之间还有一道按邮箱的 `signin:guess`，2026-10-08 撤了——它能
    *      被外人拿真票烧光，把拿着对的码的主人挡在门外，见 TRY_PER_CALLER 上面那段。）
@@ -420,7 +420,7 @@ async function finish(res, address, account, issued, created, ticket) {
   /**
    * 到这一行为止**三件回不去的事都做完了**：账号开出来了（如果是新的）、令牌发出去
    * 了、验证码从库里删掉了。所以下面那一问答不出来也不能把整趟说成失败——那正是
-   * unlock.js 里记着的那个坑：先做不可逆的事，再做可能失败的事，然后拿后者的结果去
+   * _unlock_legacy.js 里记着的那个坑：先做不可逆的事，再做可能失败的事，然后拿后者的结果去
    * 汇报前者，玩家于是再点一次，而码已经没了。
    */
   const done = { ok: true, email: address, token: issued, created };

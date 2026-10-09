@@ -1,5 +1,4 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { mintCodes } from './_codes.js';
 import { redact } from './_redact.js';
 import { dropNickname } from './_nickname.js';
 import { bump, del, get, hdel, hgetall, hset, set, setnx, takeOnce, withLock } from './_store.js';
@@ -475,7 +474,7 @@ async function patchCounters(email, account) {
  *
  * `{ block: false }` —— **不许走到封号那一档**（见下面 BLOCK_AFTER）。免邮箱凭据账号
  * （`api/handle.js`，E38）传它：封号是一道只有「拿邮箱证明自己」才解得开的门
- * （`api/unlock.js`），而那种账号压根没有邮箱。
+ * （`api/_unlock_legacy.js`），而那种账号压根没有邮箱。
  *
  * 关掉之后它只到 `LOCK_AFTER`：错 4 次锁 4 小时，锁自己会开。锁着的时候下面第一句就
  * 原地返回 'locked'，**连计数都不走**，所以锁期内怎么试都不动；锁开了之后再错一次，
@@ -567,7 +566,7 @@ export async function checkPin(email, pin, account, { block = true } = {}) {
 }
 
 /**
- * Cleared by the address proving itself — see api/unlock.js.
+ * Cleared by the address proving itself — see api/_unlock_legacy.js.
  *
  * 只动账号对象。另外那个计数键由 clearFails 清，两件事分开，是因为这个函数
  * 是同步的、也在没有存储的测试里用。
@@ -576,7 +575,7 @@ export async function checkPin(email, pin, account, { block = true } = {}) {
  * 换一把新密码，并把这个账号身上所有的锁一起解掉。
  *
  * 名字是「解锁」，可它同时也是「忘了密码，重设一把」走的那条路（见
- * api/unlock.js）——没被锁的账号跑这一段照样对：换掉盐和哈希，把两个计数归
+ * api/_unlock_legacy.js）——没被锁的账号跑这一段照样对：换掉盐和哈希，把两个计数归
  * 零，blocked 本来就是 false。
  */
 export function unblock(account, newPin) {
@@ -740,34 +739,15 @@ export function extend(account, plan) {
   return account.until;
 }
 
-/**
- * 年付赠码 — two one-month codes a yearly subscriber can pass to friends.
+/*
+ * 年付赠码（两张一个月的码，给年付的人送朋友）**不再铸了**（10-09 补充方案 7-15）。
  *
- * A year is a long thing to ask someone to buy on their own recommendation,
- * so a yearly subscriber gets two months to hand out. They carry a use-by
- * date because a gift with no deadline is one that sits in a drawer: the
- * point of it is that someone plays this month.
- *
- * Issued once and remembered on the account, so this can be called on every
- * sign-in without a subscriber quietly accumulating codes — which is also
- * what makes it work for people who subscribed before the gift existed.
+ * 送码那一块（礼物码、复制键）第 17 推就从界面上撤了（见 ui/subscribe.ts 的 orderBlock 那段），
+ * 这儿的 ensureGiftCodes 却照旧在刷卡年付的人每次登录时补铸两张——玩家看不见、送不出去，库里却多
+ * 了两张真能兑一个月的码，后台那头也说不清它们归谁。所以连函数一起删了（铸码那一段在 git 历史里，
+ * 第 13 推那一版）。**已经铸过、记在账号上的那几张不动**：account.gifts 照旧在，下面 liveGifts 照旧
+ * 回给客户端，码照旧能兑。重开售卖、要把这件事做回来的时候，连界面一起做。
  */
-export const GIFT_PLAN = 'month';
-export const GIFT_COUNT = 2;
-export const GIFT_DAYS = 30;
-
-export async function ensureGiftCodes(email, account, period) {
-  if (Array.isArray(account.gifts)) return account.gifts;
-  if (period !== 'yearly') return null;
-  const expiresAt = Date.now() + GIFT_DAYS * 24 * 3600e3;
-  const codes = await mintCodes(GIFT_PLAN, GIFT_COUNT, expiresAt, { source: 'gift' });
-  // An empty mint means the store refused; leaving `gifts` unset lets the
-  // next sign-in try again rather than recording that they got nothing.
-  if (!codes.length) return null;
-  account.gifts = codes.map((code) => ({ code, expiresAt }));
-  await saveAccount(email, account);
-  return account.gifts;
-}
 
 /** The gifts as the browser should see them, minus any already spent. */
 export async function liveGifts(account) {

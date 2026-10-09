@@ -200,7 +200,8 @@ for (const lang of LANGS) {
   const read = (f) => readFileSync(new URL(f, apiDir), 'utf8');
   const endpoints = readdirSync(apiDir).filter((f) => f.endsWith('.js') && !f.startsWith('_'));
   const callsMail = endpoints.filter((f) => /\bsendMail\s*\(/.test(read(f)));
-  // handler 一进门就回 410 的，下面那些 sendMail 走不到（unlock.js 就是这样：实现一行没删，只是走不到）
+  // handler 一进门就回 410 的，下面那些 sendMail 走不到（原来的 unlock.js 就是这样；10-09 起它挪成了
+  // _unlock_legacy.js，下划线开头，干脆不算接口了）
   const gone = (f) => /export default async function handler\s*\([^)]*\)\s*\{\s*return send\(res,\s*410/.test(read(f));
   const live = callsMail.filter((f) => !gone(f)).sort();
   check('（尺子）api/ 底下读到了接口，也认得出哪个在寄信', endpoints.length >= 8 && callsMail.length >= 1,

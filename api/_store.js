@@ -389,7 +389,7 @@ export async function withLock(lockKey, run) {
  * 「先读出来看看到了几次，再判断，再加一写回去」这个写法，在一台机器上看着
  * 没问题，放到并发里就是一道假门：三步之间隔着两次网络往返，同一瞬间打进来
  * 的几十个请求会读到同一个旧值，于是这一批只被记成一次。猜验证码、猜密码那
- * 两处的次数上限，靠的正是这个计数（api/unlock.js、api/_accounts.js）——上
+ * 两处的次数上限，靠的正是这个计数（api/_unlock_legacy.js——原来的 unlock.js——、api/_accounts.js）——上
  * 限被这样绕过去，等于没有上限。
  *
  * INCR 是 Redis 自己那一步：加一，返回新值。每个请求各拿到一个属于自己的
