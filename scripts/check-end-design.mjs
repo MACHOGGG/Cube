@@ -18,7 +18,8 @@
  *   明细      11px、行距 17、#943D40，只有「综合分」那一行粗；抬头左沿 110 / 180，数那一栏 250 / 321，
  *             第一行墨顶 218；第二张最后一行是「该玩法您的均分」（墨顶 302）
  *   卡        279×378、圆角 28、底 #FFEDC8；第二张那张在 y329.5（第一张少一行均分，在 323.5）
- *   卡里      （卡内坐标）Slides 32–119 × 32–62；「圆球」33–75；横杠 72–76；炸弹标志 93–113 × 62–82；
+ *   卡里      （卡内坐标）Slides 32–119 × 32–62；「圆球」33–75；横杠 72–76；炸弹标志 93–113 × 62–82
+ *             （名字那一行 10-09 起只比起点和间距，见 ② 那一段）；
  *             分数 26–124 × 91–138；两块棋盘 4–135.5 / 144.5–276 × 177–309（#EAD3AE，圆角 18）；
  *             全部消完只摆一块 42–238 × 166–362；二维码那一块中心 (222, 70)；说明两行墨顶 114 / 127
  *   三颗键    91×36、相隔 9、y723.5、圆角 15；#C05B5C / #4461B8 / 橙（色卡那支 #F7821B，图上取样 #F27F1C）
@@ -165,6 +166,45 @@ async function inkBoxes(png, regions, scaleTo = 0) {
   }, { src: 'data:image/png;base64,' + png.toString('base64'), regions, scaleTo });
 }
 const fmt = (b) => (b ? `x${b.x0}-${b.x1} y${b.y0}-${b.y1}` : '没找到');
+/**
+ * 一条横带里的墨按列切成一段一段：某一列有墨就算这一段的，连着空出 `gap` 列以上就断开。回每一段的外框
+ * （从左到右）。名字那一行用它：名字、横杠、标志三样之间的空比字和字之间的空大得多。
+ */
+async function inkRuns(png, x0, y0, x1, y1, thr, bgHex, scaleTo, gap = 6) {
+  return lab.evaluate(async ({ src, x0, y0, x1, y1, thr, bgHex, scaleTo, gap }) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const w = scaleTo || img.naturalWidth;
+    const h = scaleTo ? Math.round((img.naturalHeight * scaleTo) / img.naturalWidth) : img.naturalHeight;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    const bg = [1, 3, 5].map((k) => parseInt(bgHex.slice(k, k + 2), 16));
+    const inkAt = (x, y) => { const i = (y * w + x) * 4; return Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > thr; };
+    const runs = [];
+    let cur = null;
+    let blank = 0;
+    for (let x = x0; x <= x1; x++) {
+      let top = -1, bot = -1;
+      for (let y = y0; y <= y1; y++) if (inkAt(x, y)) { if (top < 0) top = y; bot = y; }
+      if (top < 0) {
+        blank++;
+        if (cur && blank > gap) { runs.push(cur); cur = null; }
+        continue;
+      }
+      blank = 0;
+      if (!cur) cur = { x0: x, x1: x, y0: top, y1: bot };
+      else { cur.x1 = x; cur.y0 = Math.min(cur.y0, top); cur.y1 = Math.max(cur.y1, bot); }
+    }
+    if (cur) runs.push(cur);
+    return runs;
+  }, { src: 'data:image/png;base64,' + png.toString('base64'), x0, y0, x1, y1, thr, bgHex, scaleTo, gap });
+}
 
 // ---------------------------------------------------------------------------
 // ① 弹窗本身：设计图上那一局，两张图各一遍
@@ -324,18 +364,38 @@ for (const [i, swept] of [[0, false], [1, true]]) {
   const png = Buffer.from(cards[i].split(',')[1], 'base64');
   const C = '#ffedc8';
   const ink = await inkBoxes(png, [
-    ['corner', 2, 2, 8, 8, 6, C], ['slides', 20, 25, 140, 62, 120, C], ['modeText', 25, 63, 68, 83, 200, C], ['dash', 66, 64, 84, 82, 120, C],
-    // 标志顶边和「Slides」的底边在设计图上是挨着的（都在 62），从 63 起扫才不会把 es 两个字母框进来。
-    ['badge', 86, 63, 128, 86, 100, C], ['score', 20, 88, 170, 145, 120, C], ['qr', 170, 20, 275, 112, 60, C],
+    // 「Slides」扫到 61 为止：标志的顶边在 62，名字一长（见下面名字那一行）标志就挪到 Slides 底下，扫到 62
+    // 会把标志顶上那一排框进来。
+    ['corner', 2, 2, 8, 8, 6, C], ['slides', 20, 25, 140, 61, 120, C],
+    ['score', 20, 88, 170, 145, 120, C], ['qr', 170, 20, 275, 112, 60, C],
     ['cap1', 175, 112, 270, 124, 150, C], ['cap2', 175, 125, 270, 140, 150, C],
     ['panelA', 1, 150, 139, 375, 20, C], ['panelB', 140, 150, 278, 375, 20, C], ['one', 20, 150, 260, 375, 20, C],
   ], 279);
   check(`${tag}：底色是 #FFEDC8（四角）`, ink.corner === null, fmt(ink.corner));
   check(`${tag}：「Slides」墨 32–119 × 32–62（±2）`, !!ink.slides && near(ink.slides.x0, 32, 2) && near(ink.slides.x1, 119, 2) && near(ink.slides.y0, 32, 2) && near(ink.slides.y1, 62, 2), fmt(ink.slides));
-  check(`${tag}：「圆球」墨 33–75 × 66–80（±3）`, !!ink.modeText && near(ink.modeText.x0, 33) && near(ink.modeText.y0, 66) && near(ink.modeText.y1, 80), fmt(ink.modeText));
-  check(`${tag}：横杠 72–76（±2），炸弹标志 93–113 × 62–82（±2）`,
-    !!ink.dash && near(ink.dash.x0, 72, 2) && near(ink.dash.x1, 76, 2) && !!ink.badge && near(ink.badge.x0, 93, 2) && near(ink.badge.x1, 113, 2) && near(ink.badge.y0, 63, 1) && near(ink.badge.y1, 82, 2),
-    `横杠 ${fmt(ink.dash)} / 标志 ${fmt(ink.badge)}`);
+  /*
+   * 名字、横杠、标志那一行：**只比起点和间距**（10-09 补充方案第一部分第 5 条之后）。
+   *
+   * 设计图那一局叫「圆球」，现在这副棋盘全站只叫一个名字「经典小球」，长了两个字。横杠和标志是代码按「名
+   * 字有多宽 + 固定间距」往右排的（shareCard.ts：横杠离名字 31、标志离横杠 44，720 宽的卡上），所以名字一
+   * 换，它们的绝对位置跟着挪——这正是设计的意思，不是走样。照图上那几个绝对数比，量的就成了「名字有几个
+   * 字」。现在这一行按墨切成一段一段（空出 6 列以上就算断开）：第一段是名字，倒数第二段是横杠，最后一段
+   * 是标志。比的是图上不随名字变的那几样：名字从 33 起、66–80 高（±3）；名字到横杠空约 13、横杠到标志空
+   * 约 18（卡上是 31、44，折到 279 宽是 12、17，再加上「球」「-」两个字形边上留白的那一两列；量到的是
+   * 14、19，图上那一局是 13、17，±3 都收得下）；横杠 4 宽、标志 20 宽、62–82 高（±2）。
+   */
+  const row = await inkRuns(png, 25, 62, 170, 86, 100, C, 279);
+  const name = row[0];
+  const dash = row.length >= 3 ? row[row.length - 2] : null;
+  const badge = row.length >= 3 ? row[row.length - 1] : null;
+  check(`${tag}：（尺子）名字那一行切出了名字、横杠、标志三样（${row.length} 段）`, row.length >= 3, row.map(fmt).join(' | '));
+  check(`${tag}：名字墨从 33 起、66–80 高（±3）`, !!name && near(name.x0, 33) && near(name.y0, 66) && near(name.y1, 80), fmt(name));
+  check(`${tag}：名字到横杠空约 13、横杠到标志空约 18（±3，和设计图一样，不随名字长短变）`,
+    !!name && !!dash && !!badge && near(dash.x0 - name.x1, 13) && near(badge.x0 - dash.x1, 18),
+    `名字 ${fmt(name)} / 横杠 ${fmt(dash)} / 标志 ${fmt(badge)}`);
+  check(`${tag}：横杠 4 宽、标志 20 宽 × 62–82（±2）`,
+    !!dash && !!badge && near(dash.x1 - dash.x0, 4, 2) && near(badge.x1 - badge.x0, 20, 2) && near(badge.y0, 62, 2) && near(badge.y1, 82, 2),
+    `横杠 ${fmt(dash)} / 标志 ${fmt(badge)}`);
   check(`${tag}：分数墨 26–124 × 91–138（±2）`, !!ink.score && near(ink.score.x0, 26, 2) && near(ink.score.x1, 124, 2) && near(ink.score.y0, 91, 2) && near(ink.score.y1, 138, 2), fmt(ink.score));
   // 二维码：设计图上那一块是二维码这张图的占位（含四格静区），我们的码子落在那块的正中。
   const qrMid = ink.qr ? [(ink.qr.x0 + ink.qr.x1) / 2, (ink.qr.y0 + ink.qr.y1) / 2] : [0, 0];
