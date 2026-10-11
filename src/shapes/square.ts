@@ -971,6 +971,7 @@ export function createSquareGame(): ShapeGame {
         },
         coachStarsReachEdge,
         shouldLeadOut: opts?.shouldLeadOut,
+        onReLogin: opts?.onReLogin,
         shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,

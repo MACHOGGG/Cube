@@ -105,8 +105,15 @@ const seed = (extra = '') => `
   ${extra}
 `;
 
-async function fresh(extra) {
+async function fresh(extra, { fakeScores = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  // 种进去的令牌是编的（3c 那一节）：交给这台真服务器，开机那一次同步就回 401，个人主页头卡成了「登录已
+  // 过期 · 重新登录」（10-11 方案 A-12），#loginBtn 开的是登录窗、不是帐号窗。要量帐号窗的那一节把
+  // /api/scores 拦下来答 200。
+  if (fakeScores) {
+    await ctx.route('**/api/scores', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ total: 0, runs: 0, best: {}, archive: [] }) }));
+  }
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('  [page error] ' + e.message));
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
@@ -238,7 +245,7 @@ const openProfile = async (page) => {
       until: Date.now() + 30 * 86400000,
       email: 'someone@example.com', token: 'tok-not-real',
     }));
-  `);
+  `, { fakeScores: true });
   await openProfile(page);
   await page.click('#loginBtn');
   await page.waitForSelector('.acct-modal', { timeout: 10000 });

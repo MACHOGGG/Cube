@@ -1409,6 +1409,16 @@ h1 {
   color: var(--accent-ink);
 }
 /*
+ * 同一个位置的另一句：「登录已过期，本局未上传」后面那颗「重新登录」（10-11 方案 A-12）。这一行本来
+ * 就是一句话，所以它是一个带下划线的字，不是一颗药丸——不抢结算页那三颗键的位置。上下各借 6px 当
+ * 点击区（负的外边距抵掉，不撑高这一行）。
+ */
+.end-note-link {
+  background: none; border: 0; margin: -6px -2px; padding: 6px 2px;
+  font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer;
+}
+/*
  * ⚠️ 这条是 id 选择器（1-1-0），压得过上面那几条 `.overlay--end .modal`（0-2-0）——两边必须说同一
  * 件事，不然谁也不知道哪条在管。
  *

@@ -63,10 +63,15 @@ export const signedIn = (): boolean => auth() !== null;
  * 所以这里记一笔，让界面能说出来。别的失败（断网、超时）不记——那些下一次
  * 就好了，不该也去催人重新登录。
  */
-let tokenStale = false;
+let staleToken: string | null = null;
 
-/** 服务器认不出这台设备了吗——《记录与排名》拿它决定要不要提示重新登录。 */
-export const sessionExpired = (): boolean => tokenStale;
+/**
+ * 服务器认不出这台设备了吗（10-11 方案 A-12：结算页、个人主页头卡拿它说「登录已过期」）。
+ *
+ * 记的是**被回了 401 的那一发令牌**，不是一个开关：他点「重新登录」换了一发新的，这里自己就回到
+ * false——不用等下一次看榜或交卷成功才把它清掉（那之前头卡会一直说「登录已过期」，而他明明刚登回来）。
+ */
+export const sessionExpired = (): boolean => staleToken !== null && auth()?.token === staleToken;
 
 /**
  * @param onRefused 服务器明说不收的时候（4xx 带一个词）把那个词交给调用方——交卷那一头要据此决定
@@ -82,7 +87,7 @@ async function post<T>(body: Record<string, unknown>, onRefused?: (error: string
       body: JSON.stringify({ ...who, storeClaim: isStoreChannel(), ...body }),
     });
     if (res.status === 401) {
-      tokenStale = true;
+      staleToken = who.token;
       return null;
     }
     if (!res.ok) {
@@ -92,7 +97,7 @@ async function post<T>(body: Record<string, unknown>, onRefused?: (error: string
       }
       return null;
     }
-    tokenStale = false;
+    staleToken = null;
     return (await res.json()) as T;
   } catch {
     // 断网、超时、服务器抽风——这一局照样算完，只是没上传。
@@ -289,12 +294,12 @@ export async function fetchBoard(mode?: string): Promise<BoardResult> {
     // 令牌过期和「没订阅」是两件完全不同的事，给的出路也不同：一个是重新
     // 登录，一个是去订阅。混成一句「取不到」，玩家只会一直等下去。
     if (res.status === 401) {
-      tokenStale = true;
+      staleToken = who.token;
       return { ok: false, reason: 'expired' };
     }
     // 5xx 是我们这头出错了，说「服务器忙」，不说「检查一下网络」（10-09 补充方案 7-13 第 3 条）。
     if (!res.ok) return { ok: false, reason: res.status >= 500 ? 'unavailable' : 'network' };
-    tokenStale = false;
+    staleToken = null;
     const page = (await res.json()) as BoardPage;
     boardCache.set(cacheKey(mode), { at: Date.now(), page });
     return { ok: true, page };

@@ -189,7 +189,8 @@ export async function setWebPasscode(
  */
 
 /** 这一屏认得的失败。都是服务端 error 串的原样，没有一个是前端猜的。 */
-export type CodeFailure = 'mailDown' | 'tooMany' | 'badEmail' | 'wrongCode' | 'codeStale' | 'unavailable' | 'failed';
+/** `emailCapped`：这个邮箱这一小时的验证码额度满了（api/signin.js，10-11 方案 A-10）——和「这个网络上试得太多」分开说。 */
+export type CodeFailure = 'mailDown' | 'tooMany' | 'emailCapped' | 'badEmail' | 'wrongCode' | 'codeStale' | 'unavailable' | 'failed';
 /** `common`：注册时第一串太常见（api/_commonpairs.js，10-09 补充方案 7-8）。 */
 export type PairFailure = 'taken' | 'badPair' | 'common' | 'wrong' | 'locked' | 'tooMany' | 'unavailable' | 'failed';
 
@@ -264,7 +265,13 @@ function codeFailure(err: unknown): CodeFailure {
   // 头抽了一下（`api/` 里 catch 到异常回的就是 502，见 subscription / handle 那几个
   // 出口）。屏幕上一句他做不了任何事、而且指错了方向的话，比一句「稍后再试」糟得多。
   if (err.status >= 500) return 'unavailable';
-  if (err.status === 429) return err.code === 'expired' ? 'codeStale' : 'tooMany';
+  if (err.status === 429) {
+    if (err.code === 'expired') return 'codeStale';
+    // 按邮箱总数那一道（一小时十五张）：换个网络也没用，得等一小时——和下面那句「这个网络上试得太多」
+    // 是两件事（10-11 方案 A-10）。
+    if (err.code === 'emailCapped') return 'emailCapped';
+    return 'tooMany';
+  }
   // 400 有两种来路：'email'（地址不合格）和 'expired'（码过期 / 压根没发过）。
   // **认服务端送回来的那个串**，不是光看状态码——两件事玩家要做的动作完全不一样。
   if (err.code === 'email') return 'badEmail';

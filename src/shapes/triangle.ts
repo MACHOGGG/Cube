@@ -1302,6 +1302,7 @@ export function createTriangleGame(): ShapeGame {
         seed: opts?.seed,
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
+        onReLogin: opts?.onReLogin,
         shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,

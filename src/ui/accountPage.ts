@@ -34,6 +34,7 @@ import { THANKS } from '../thanks';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
 import { isGenius, signedInEmail } from '../engine/subscription';
+import { sessionExpired } from '../engine/cloudScores';
 import {
   openAuthWindow,
   openGeniusWindow,
@@ -115,6 +116,16 @@ export function renderAccountPage(
    * 不代表有权限」，这一行就是那句话在代码里的样子。
    */
   const signedIn = Boolean(signedInEmail());
+  /**
+   * 登着、可令牌在服务器那头已经不作数了（10-11 方案 A-12）：别的设备上改过密码、这台设备的令牌被登出
+   * 作废了、或者从签发起满了一年。看榜、交卷都回 401（engine/cloudScores.ts 的 sessionExpired 记着），
+   * 而这一页原先照旧摆出「已登录」的样子——另一台设备上看着一切正常，每一局却都传不上去。现在头卡换
+   * 成一句「登录已过期 · 重新登录」，点了直接开登录窗。
+   *
+   * **不替他清掉本地的登录状态**：sessionExpired 只在真的收到 401 之后才为真，可一次误判（服务器那头
+   * 抖了一下）就把人踢出去，比多显示一句更糟；登回来换了令牌，它自己就回到 false。
+   */
+  const expired = signedIn && sessionExpired();
   const gatewayLabel = subscribed
     ? s.geniusStatus
     : signedIn
@@ -165,7 +176,9 @@ export function renderAccountPage(
       <div class="profile-cols">
         <section class="profile-col profile-col--main">
           ${
-            signedIn
+            expired
+              ? `<button class="profile-pill profile-pill--head" id="loginBtn">${s.profileSessionExpired}</button>`
+              : signedIn
               ? /*
                  * 头卡（第 16 推第 5 条）：登录了的人，左边是昵称（还没登记就写「设置昵称」）和
                  * 一颗 ✎；**头卡其他位置**照旧打开帐号窗。
@@ -723,8 +736,10 @@ export function renderAccountPage(
   const on = (id: string, fn: () => void) =>
     container.querySelector<HTMLButtonElement>('#' + id)?.addEventListener('click', fn);
   on('loginBtn', () => {
+    // 令牌不作数了：直接开登录窗，登回来换一发新令牌（见上面 expired 那一段）。
+    if (expired) openAuthWindow(lang, refresh);
     // 认「登着没登着」，不认「是不是天才」——理由见上面 signedIn 那一段。
-    if (signedInEmail()) openStatusWindow(lang, refresh);
+    else if (signedInEmail()) openStatusWindow(lang, refresh);
     else if (isStoreChannel()) runStoreRestore(lang, refresh);
     else openAuthWindow(lang, refresh);
   });

@@ -173,6 +173,13 @@ export interface I18nStrings {
   rankExpired: string;
   rankReLogin: string;
   /**
+   * 结算页：这一局交卷时服务器认不出这台设备的令牌（401），这一局没上传（10-11 方案 A-12）。后面跟一颗
+   * rankReLogin。
+   */
+  endSessionExpired: string;
+  /** 个人主页头卡：同一件事，头卡不再照旧摆出「已登录」的样子（10-11 方案 A-12）。点了开登录窗。 */
+  profileSessionExpired: string;
+  /**
    * 那根拉杆的名字。原先叫「图形翻面速度」——可站里已经不再有「翻面」这件事
    * 了（玩家 2026-09 定的：色块得分就变成星星，不要再用翻面/正面/反面去解释
    * 它）。它是界面上最后一处写着「翻面」的字。
@@ -404,6 +411,8 @@ export interface I18nStrings {
    * appareil」（这台设备），换一台手机照样被挡，那句话就是错的（10-08 方案第四批第 7 条）。
    */
   tooManyTries: string;
+  /** 这个邮箱这一小时的验证码额度满了（api/signin.js 的 emailCapped，10-11 方案 A-10）。 */
+  emailCapped: string;
   /** 还在订阅期内，这张码留着更值。 */
   alreadyActive: string;
   /** 个人主页上的内部码入口。 */
@@ -962,6 +971,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Loading…',
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
     rankReLogin: 'Sign in again',
+    endSessionExpired: 'Your sign-in has expired — this run wasn’t uploaded.',
+    profileSessionExpired: 'Sign-in expired · Sign in again',
     flipSpeedTitle: 'Star speed',
     flipSpeedHint: 'How fast a piece becomes a star. Everything else stays the same.',
     flipSpeedLocked: 'Slides Genius sets this. Here is what it does.',
@@ -1038,6 +1049,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeStale: 'That code has expired. Ask for a new one.',
     codeExpired: 'That insider code has passed its use-by date.',
     tooManyTries: 'Too many tries from this network. Try again later.',
+    emailCapped: 'This email address has received too many codes in the past hour. Please try again in an hour.',
     alreadyActive: 'Your subscription is still running. Keep this insider code for later, or pass it on — it is only spent once.',
     orderTitle: 'Your account',
     orderPlanLabel: 'Plan',
@@ -1324,6 +1336,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
+    endSessionExpired: 'Votre session a expiré : cette partie n’a pas été envoyée.',
+    profileSessionExpired: 'Session expirée · Se reconnecter',
     flipSpeedTitle: 'Vitesse des étoiles',
     flipSpeedHint: 'À quelle vitesse une pièce devient une étoile. Le reste ne change pas.',
     flipSpeedLocked: 'Réglage Slides Génie. Voici ce qu\u2019il fait.',
@@ -1400,6 +1414,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeStale: 'Ce code a expiré. Demandez-en un nouveau.',
     codeExpired: 'Ce code Génie a dépassé sa date limite.',
     tooManyTries: 'Trop de tentatives depuis ce réseau. Réessayez plus tard.',
+    emailCapped: 'Cette adresse a reçu trop de codes au cours de la dernière heure. Réessayez dans une heure.',
     alreadyActive: 'Votre abonnement court toujours. Gardez ce code Génie pour plus tard, ou offrez-le — il ne sert qu’une fois.',
     orderTitle: 'Votre compte',
     orderPlanLabel: 'Formule',
@@ -1686,6 +1701,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: '載入中…',
     rankExpired: '登入已過期，重新登入後成績才會上榜',
     rankReLogin: '重新登入',
+    endSessionExpired: '登入已過期，本局未上傳',
+    profileSessionExpired: '登入已過期 · 重新登入',
     flipSpeedTitle: '變成星星的速度',
     flipSpeedHint: '一枚棋子變成星星要多快。其他的都不變。',
     flipSpeedLocked: '這是 Slides 天才的設定。先看看它是做什麼的。',
@@ -1762,6 +1779,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeStale: '驗證碼過期了，重新要一張。',
     codeExpired: '這個內部碼已經過了使用期限。',
     tooManyTries: '這個網路上試得太多了，請稍後再試。',
+    emailCapped: '這個信箱這一小時收到的驗證碼太多了，請一小時後再試。',
     alreadyActive: '您的訂閱還在有效期內。這張碼留著以後用，或者送人——它只能用一次。',
     orderTitle: '您的帳號',
     orderPlanLabel: '方案',
@@ -2048,6 +2066,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: '加载中…',
     rankExpired: '登录已过期，重新登录后成绩才会上榜',
     rankReLogin: '重新登录',
+    endSessionExpired: '登录已过期，本局未上传',
+    profileSessionExpired: '登录已过期 · 重新登录',
     flipSpeedTitle: '变成星星的速度',
     flipSpeedHint: '一枚棋子变成星星要多快。其他的都不变。',
     flipSpeedLocked: '这是 Slides 天才的设定。先看看它是做什么的。',
@@ -2124,6 +2144,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     codeStale: '验证码过期了，重新要一张。',
     codeExpired: '这个内部码已经过了使用期限。',
     tooManyTries: '这个网络上试得太多了，请稍后再试。',
+    emailCapped: '这个邮箱这一小时收到的验证码太多了，请一小时后再试。',
     alreadyActive: '您的订阅还在有效期内。这张码留着以后用，或者送人——它只能用一次。',
     orderTitle: '您的账号',
     orderPlanLabel: '方案',

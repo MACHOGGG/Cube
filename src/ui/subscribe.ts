@@ -1023,6 +1023,8 @@ export function openAuthWindow(lang: Lang, onChanged: () => void): void {
         ? s.mailDownHint
         : reason === 'tooMany'
           ? s.tooManyTries
+          : reason === 'emailCapped'
+            ? s.emailCapped
           : reason === 'badEmail'
             ? s.emailInvalid
             : reason === 'wrongCode'

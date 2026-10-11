@@ -344,8 +344,10 @@ const tryCode = (email, code, challenge, ip) =>
   const X = 'quota-two-ips@example.com';
   const A = freshIp();
   const fromA = [];
-  for (let i = 0; i < 4; i++) fromA.push((await askCode(X, A)).status);
-  check('⑧ 来路 A 替 X 要了三封，第 4 封挡下', fromA.slice(0, 3).every((c) => c === 200) && fromA[3] === 429, fromA.join(' '));
+  for (let i = 0; i < 4; i++) fromA.push(await askCode(X, A));
+  check('⑧ 来路 A 替 X 要了三封，第 4 封挡下（说的是「这个网络上试得太多」：tooMany）',
+    fromA.slice(0, 3).every((r) => r.status === 200) && fromA[3].status === 429 && fromA[3].body.error === 'tooMany',
+    fromA.map((r) => `${r.status}:${r.body.error ?? ''}`).join(' '));
   const B = freshIp();
   const fromB = await askCode(X, B);
   check('⑧ 来路 B 给 X 要码仍得 200（A 耗不光 X 的额度）', fromB.status === 200 && Boolean(fromB.ticket),
@@ -356,9 +358,12 @@ const tryCode = (email, code, challenge, ip) =>
   // 同一个邮箱的总上限：一小时十五张，换多少个来路都一样。
   const Y = 'quota-total@example.com';
   const seen = [];
-  for (let i = 0; i < 16; i++) seen.push((await askCode(Y, freshIp())).status);
+  for (let i = 0; i < 16; i++) seen.push(await askCode(Y, freshIp()));
   check('⑧ 同一个邮箱换十六个来路：前十五张放过，第十六张挡下',
-    seen.slice(0, 15).every((c) => c === 200) && seen[15] === 429, seen.join(' '));
+    seen.slice(0, 15).every((r) => r.status === 200) && seen[15].status === 429, seen.map((r) => r.status).join(' '));
+  // 10-11 方案 A-10：这一道单独说一句。换个网络也没用，得等一小时——说成「这个网络上试得太多」是指错路。
+  check('⑧ 第十六张说的是「这个邮箱这一小时的码太多了」（emailCapped），不是 tooMany', seen[15].body.error === 'emailCapped',
+    `${seen[15].status} ${seen[15].raw}`);
 }
 
 // ── ⑨ 那十五张寄没寄出去都算（10-09 补充方案 7-7）────────────────────
@@ -394,9 +399,11 @@ async function withMailDown(fn, { delayMs = 0, down = true } = {}) {
   check('⑨ Resend 挂着：前十五次答「没寄出去」（mailDown），而且每次都签了一张票',
     down.slice(0, 15).every((r) => r.status === 200 && r.body.sent === false && r.body.reason === 'mailDown' && r.ticket.length === 16),
     down.slice(0, 15).map((r) => `${r.status}:${r.body.reason ?? r.body.error}`).join(' '));
-  check('⑨ 第十六次 429（挂着的那十五次也算钱）', down[15].status === 429, `${down[15].status} ${down[15].raw}`);
+  check('⑨ 第十六次 429 emailCapped（挂着的那十五次也算钱）', down[15].status === 429 && down[15].body.error === 'emailCapped',
+    `${down[15].status} ${down[15].raw}`);
   const up = await askCode(Z, freshIp());
-  check('⑨ Resend 好了：这一小时仍是 429（硬上限——玩家选的代价）', up.status === 429, `${up.status} ${up.raw}`);
+  check('⑨ Resend 好了：这一小时仍是 429 emailCapped（硬上限——玩家选的代价）', up.status === 429 && up.body.error === 'emailCapped',
+    `${up.status} ${up.raw}`);
 }
 
 // ── ⑩ 硬上限：一百个来路并发三百次，签出去的票不超过十五张（10-09 补充方案 7-7）──
@@ -419,6 +426,9 @@ for (const [label, opts] of [
   check(`⑩ ${label}：并发三百次，签出去的票不超过十五张`, issued <= 15, `签了 ${issued} 张`);
   check(`⑩ ${label}：（尺子）正好十五张，其余都是 429（不是整条路都坏了）`, issued === 15 && refused === 285,
     `签 ${issued} · 429 ${refused} · 其他 ${all.length - issued - refused}`);
+  check(`⑩ ${label}：挡下的那 285 次说的都是 emailCapped（挡人的是按邮箱那一道）`,
+    all.filter((r) => r.status === 429).every((r) => r.body.error === 'emailCapped'),
+    [...new Set(all.filter((r) => r.status === 429).map((r) => r.body.error))].join(','));
 }
 
 // ── ⑪ 那一笔记在最后：超了自己那一份的来路，烧不动别人的额度 ────────────────
@@ -432,9 +442,10 @@ for (const [label, opts] of [
   for (let k = 0; k < 5; k++) {
     const ip = freshIp();
     for (let i = 0; i < 10; i++) await askCode(`filler-${k}-${i}@example.com`, ip);
-    for (let i = 0; i < 3; i++) spent.push((await askCode(V, ip)).status);
+    for (let i = 0; i < 3; i++) spent.push(await askCode(V, ip));
   }
-  check('⑪（尺子）那五个来路替受害者要的十五次全被挡下（按来路那道满了）', spent.every((c) => c === 429), spent.join(' '));
+  check('⑪（尺子）那五个来路替受害者要的十五次全被挡下（按来路那道满了：tooMany，不是 emailCapped）',
+    spent.every((r) => r.status === 429 && r.body.error === 'tooMany'), spent.map((r) => `${r.status}:${r.body.error}`).join(' '));
   const own = await askCode(V, freshIp());
   check('⑪ 受害者自己来要码：照样要得到（那十五次没记进他的额度）', own.status === 200 && own.body.sent === true,
     `${own.status} ${own.raw}`);
@@ -488,6 +499,49 @@ for (const [label, opts] of [
   const junk = await revoke({ email: 'keep-me@example.com', token: 'f'.repeat(48) });
   check('⑫ 拿一把不认识的令牌来登出：答 ok，那个账号的令牌一把没少',
     junk.status === 200 && tokenValid(await loadAccount('keep-me@example.com'), keep.token), `${junk.status} ${junk.raw}`);
+}
+
+// ── ⑬ 客户端那一半：emailCapped 一路翻到屏幕上（10-11 方案 A-10）──────────────────
+//
+// 服务端单独回 emailCapped 还不够：客户端认失败的那一层（engine/creem.ts 的 codeFailure）原先把 429
+// 一律翻成 tooMany，登录窗的 say() 也只认得那几个词——服务端说了，屏幕上出来的还是「这个网络上试得太
+// 多了」。把 creem.ts 当场打包，配一个假的 fetch，量三种 429 各翻成哪个词；登录窗那一句和四种语言的
+// 文案从源码量（那一窗要开浏览器，这道门不开）。
+{
+  const { build } = await import('esbuild');
+  const { readFileSync } = await import('node:fs');
+  const out = await build({
+    entryPoints: [new URL('../src/engine/creem.ts', import.meta.url).pathname],
+    bundle: true, format: 'esm', platform: 'neutral', write: false, logLevel: 'error',
+  });
+  const realFetch = globalThis.fetch;
+  let reply = null;
+  globalThis.fetch = async () => ({
+    ok: reply.status < 300, status: reply.status, statusText: '', headers: new Headers(),
+    json: async () => reply.body, text: async () => JSON.stringify(reply.body),
+  });
+  try {
+    const creem = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+    const said = [];
+    for (const error of ['emailCapped', 'tooMany', 'expired']) {
+      reply = { status: 429, body: { error } };
+      said.push(await creem.webRequestCode('someone@example.com', 'zhHans'));
+    }
+    check('⑬ 客户端：429 emailCapped → emailCapped；tooMany → tooMany；expired → codeStale',
+      said.join(',') === 'emailCapped,tooMany,codeStale', said.join(','));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const ui = readFileSync(new URL('../src/ui/subscribe.ts', import.meta.url), 'utf8');
+  check('⑬ 登录窗的 say() 认得 emailCapped，接的是 s.emailCapped', /reason === 'emailCapped'\s*\?\s*s\.emailCapped/.test(ui));
+  const i18n = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
+  const lines = [...i18n.matchAll(/^\s+emailCapped: '([^']+)',$/gm)].map((m) => m[1]);
+  check('⑬ 四种语言都有那一句（方案原文）',
+    lines.length === 4 &&
+      ['这个邮箱这一小时收到的验证码太多了，请一小时后再试。', '這個信箱這一小時收到的驗證碼太多了，請一小時後再試。',
+        'This email address has received too many codes in the past hour. Please try again in an hour.',
+        'Cette adresse a reçu trop de codes au cours de la dernière heure. Réessayez dans une heure.'].every((t) => lines.includes(t)),
+    JSON.stringify(lines));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

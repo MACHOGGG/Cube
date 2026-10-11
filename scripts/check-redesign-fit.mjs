@@ -912,6 +912,11 @@ sec('帐号窗《完成》：白盘棕勾、开窗时描一笔');
   for (const motion of ['no-preference', 'reduce']) {
     const tag = motion === 'reduce' ? '减弱动态' : '照常动';
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: motion });
+    // handleSeed 的令牌（probe-token）在这台真服务器上不作数：开机那一次同步就回 401，个人主页头卡成了
+    // 「登录已过期 · 重新登录」（10-11 方案 A-12），#loginBtn 开的是登录窗、不是帐号窗，#statusDone 一个都找不到。
+    // 别的几节在 openCtx 里把 /api/scores 拦下来答 200，这一节照样拦。
+    await ctx.route('**/api/scores', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ total: 0, runs: 0, best: {}, archive: [] }) }));
     const page = await ctx.newPage();
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForSelector('.home-icon-btn', { timeout: 25000 });

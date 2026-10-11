@@ -208,6 +208,11 @@ async function request(res, req, address, wantLang) {
   //     已经超了自己那一份（by caller）的来路照样能一下一下烧掉别人的额度。
   //
   // 都答 429 而不是假装发了：真在等信的人有权知道为什么什么都没来。
+  //
+  // **按邮箱总数那一道单独说一句**（10-11 方案 A-10）：`emailCapped`，不是 `tooMany`。原先三道回同
+  // 一个词，屏幕上一律是「这个网络上试得太多了」——可那十五张是**这个邮箱**的额度，外人换着来路替他
+  // 要满了，他自己从哪个网络来都是 429；让他「换个网络再试」是指错了方向。取舍（10-09 选的硬上限）不
+  // 变，只是照实说：这个邮箱这一小时收到的码太多了，一小时后再试。
   const caller = callerId(req);
   if (await tooMany('signin:to', `${address}|${caller}`, 3, 3600)) {
     return send(res, 429, { error: 'tooMany' });
@@ -216,7 +221,7 @@ async function request(res, req, address, wantLang) {
     return send(res, 429, { error: 'tooMany' });
   }
   if (await tooMany('signin:toAll', address, TO_ALL_PER_HOUR, 3600)) {
-    return send(res, 429, { error: 'tooMany' });
+    return send(res, 429, { error: 'emailCapped' });
   }
 
   const code = String(randomInt(0, 1e6)).padStart(6, '0');

@@ -25,7 +25,7 @@ import { createPerformanceGauge } from './performance';
 import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
-import { pushRun } from './cloudScores';
+import { pushRun, sessionExpired } from './cloudScores';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
@@ -164,6 +164,11 @@ export interface GameControllerHooks {
    * 露面了才叫这个函数，返回 true 就亮。谁来答、答案存哪儿，各版自己管。
    */
   shouldLeadOut?: () => boolean;
+  /**
+   * 结算页那颗「重新登录」（10-11 方案 A-12）：开登录窗，登回来之后叫 `done`。只有网页版给——小红书那
+   * 一版没有帐号（cloudScores 是空替身，sessionExpired 永远是 false），这一行根本不会出现。
+   */
+  onReLogin?: (done: () => void) => void;
   /**
    * 头一回看见结算页时，在明细底下补一句「综合得分怎么算」。
    *
@@ -1123,10 +1128,33 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 从前一个字都不说——玩家以为上榜了，去榜上一看没有。说一句明话，带上「看看设备的日期」：
     // 日子和种子都是按本机的钟算的，钟不对就是这两种。回包到的时候他要是已经开了下一局（这一局
     // 不再是 lastRun），就不说了——不然这一句会挂到下一局的结算页上。
+    //
+    // 令牌不作数了（服务器回 401，engine/cloudScores.ts 的 sessionExpired，10-11 方案 A-12）：这一局没传上去，
+    // 同一个位置说一句「登录已过期，本局未上传」，后面跟一颗「重新登录」。原先这件事一个字都不说——
+    // 每一局结算都悄悄传不上去，他自己那一页、排行榜上都少这一局，而他以为都传上去了。
     const settledRun = lastRun;
     void pushRun(lastRun).then((reply) => {
+      if (lastRun !== settledRun) return;
+      if (!reply && sessionExpired()) {
+        refs.endDailyNoteEl.textContent = s.endSessionExpired;
+        if (hooks.onReLogin) {
+          const again = document.createElement('button');
+          again.type = 'button';
+          again.className = 'end-note-link';
+          again.textContent = s.rankReLogin;
+          again.addEventListener('click', () =>
+            hooks.onReLogin?.(() => {
+              refs.endDailyNoteEl.hidden = true;
+              refs.endDailyNoteEl.textContent = '';
+            }),
+          );
+          refs.endDailyNoteEl.append(' ', again);
+        }
+        refs.endDailyNoteEl.hidden = false;
+        return;
+      }
       const verdict = reply?.daily;
-      if ((verdict !== 'late' && verdict !== 'rejected') || lastRun !== settledRun) return;
+      if (verdict !== 'late' && verdict !== 'rejected') return;
       refs.endDailyNoteEl.textContent = s.dailyNotCounted;
       refs.endDailyNoteEl.hidden = false;
     });

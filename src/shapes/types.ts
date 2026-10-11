@@ -135,6 +135,8 @@ export interface ShapeGameOpts {
    * 答，网页版和小红书版的记录是分开存的。
    */
   shouldLeadOut?: () => boolean;
+  /** 结算页那颗「重新登录」（见 engine/gameController.ts 的 onReLogin）。只有网页版给。 */
+  onReLogin?: (done: () => void) => void;
   /**
    * 头一回看见结算页时，明细底下补一句「综合得分怎么算」（见 engine/firstPlay.ts
    * 的 claimFirstTotalTip）。五条规矩的最后一条从棋盘底下挪到了那儿。

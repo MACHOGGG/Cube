@@ -1524,6 +1524,8 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   const fullOpts: ShapeGameOpts = {
     shouldLeadOut: claimFirstEndcard,
     shouldTeachTotal: claimFirstTotalTip,
+    // 结算页那颗「重新登录」（10-11 方案 A-12）：令牌不作数了，这一局没传上去。开登录窗，登回来就把那一行收起来。
+    onReLogin: (done) => openAuthWindow(currentLang, done),
     ...opts,
     lang: currentLang,
   };
