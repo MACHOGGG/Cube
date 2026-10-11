@@ -79,8 +79,11 @@ console.log('test redeem codes: TESTMONTH, TESTYEAR, TESTHALF, TESTLIFE');
  * 和上面那几张测试码是同一类东西：这个文件配的是那个内存里的 store，部署上
  * 去的东西既到不了这个文件，也到不了那个 store。真要自己设一个就设，这儿只
  * 在空着的时候兜底。
+ *
+ * 兜底的这一把要够 32 位（10-11 方案 A-11）：服务器上那把短于 32 位，管理接口一律答 503
+ * （api/mint.js 的 adminToken）。原先这儿是 `dev-admin`，那之后本机的发码页就整个开不了了。
  */
-if (!process.env.ADMIN_TOKEN) process.env.ADMIN_TOKEN = 'dev-admin';
+if (!process.env.ADMIN_TOKEN) process.env.ADMIN_TOKEN = 'dev-admin-local-only-0123456789abcdef';
 console.log('admin token (local only): ' + process.env.ADMIN_TOKEN);
 
 createServer(async (req, res) => {

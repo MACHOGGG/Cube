@@ -215,6 +215,7 @@
   const PLAN_CN = { month: '1 个月', half: '半年', year: '1 年', life: '终身' };
   const ERRORS = {
     wrong: '令牌不对。检查网址 # 后面那串。',
+    adminToken: '服务器上的后台令牌（ADMIN_TOKEN）没设，或者短于 32 位，后台先关着。到 Vercel 换一把至少 32 位的随机串，重新部署之后再来。',
     notConfigured: '服务端还没有连上存储（Redis），或者还没部署。',
     plan: '等级不对。',
     method: '请求方式不对。',

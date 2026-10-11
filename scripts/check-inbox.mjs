@@ -12,7 +12,8 @@
  */
 // 内存版存储，进程一关就没：这个检查不该碰到任何真实数据。
 process.env.ALLOW_MEMORY_STORE = '1';
-process.env.ADMIN_TOKEN = 'test-admin-token-1234567890';
+// 至少 32 位：短于 32 位的令牌，管理接口一律 503（10-11 方案 A-11）。
+process.env.ADMIN_TOKEN = 'test-admin-token-1234567890-abcdef';
 const A = new URL('../api/', import.meta.url).href;
 const { get, set, setnx } = await import(A + '_store.js');
 const accounts = await import(A + '_accounts.js');

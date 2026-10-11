@@ -15,8 +15,9 @@
  *   · 令牌对的时候照常发码——限速不该挡住真正的管理员；
  *   · 重建榜那一处也一样，而且**限速在验令牌之前**（下面最后一段）。
  *
- * 另有一条是令牌本身的（10-11 方案 A-11）：比对量不出令牌有多长（交一串等长、含多字节字符的
- * 东西也是 401，不是 500）。
+ * 另有两条是令牌本身的（10-11 方案 A-11）：比对量不出令牌有多长（交一串等长、含多字节字符的
+ * 东西也是 401，不是 500）；服务器上那把短于 32 位（没配也算），后台整个关着（503），日志里只
+ * 有「ADMIN_TOKEN 太短」那一句、不带值。
  *
  * 重建榜那两条是补记的：它在 885c154 就接上限速了，可巡检报告直到今天还把
  * 「排行榜重建接口缺限速」列成高优先级未办事项。没有断言守着的修复，隔几周
@@ -150,6 +151,37 @@ check('200 次并发只放行 20 次（限速是一步做完的，不是读-改-
   const otherLen = await probe('é'.repeat(process.env.ADMIN_TOKEN.length - 1));
   check('令牌等长、含多字节字符：答 401，不是 500（和长度不对的答同一句，量不出令牌有多长）',
     sameLen === 401 && otherLen === 401, `等长 ${sameLen} · 差一位 ${otherLen}`);
+}
+
+// ── 服务器上那把太短：后台整个关着（10-11 方案 A-11）────────────────────
+//
+// 拿那把短令牌本身来也不开门——宁可把后台关掉，也不拿一把能猜的锁守着它。日志里写一句「ADMIN_TOKEN
+// 太短」，**不打印值**。没配（空串）也算短。
+{
+  const realToken = process.env.ADMIN_TOKEN;
+  const logged = [];
+  const origErr = console.error;
+  console.error = (...a) => logged.push(a.map(String).join(' '));
+  const SHORT = 'S'.repeat(31);
+  const answers = [];
+  try {
+    process.env.ADMIN_TOKEN = SHORT;
+    answers.push(await call({ token: SHORT, plan: 'month', count: 1 }, '198.51.100.78'));
+    answers.push(await call({ token: SHORT, action: 'list' }, '198.51.100.78'));
+    process.env.ADMIN_TOKEN = '';
+    answers.push(await call({ token: '', plan: 'month', count: 1 }, '198.51.100.78'));
+  } finally {
+    console.error = origErr;
+    process.env.ADMIN_TOKEN = realToken;
+  }
+  check('服务器上那把短于 32 位（或没配）：发码、列名单一律 503 adminToken',
+    answers.every((a) => a.status === 503 && a.payload?.error === 'adminToken'),
+    answers.map((a) => `${a.status}:${a.payload?.error}`).join(' '));
+  check('日志写「ADMIN_TOKEN 太短」，不带令牌的值',
+    logged.some((l) => l.includes('ADMIN_TOKEN 太短')) && !logged.some((l) => l.includes(SHORT)),
+    JSON.stringify(logged.slice(0, 3)));
+  const back = await call({ token: realToken, plan: 'month', count: 1 }, '198.51.100.79');
+  check('（尺子）换回一把够长的，照常发码', back.status === 200, String(back.status));
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);

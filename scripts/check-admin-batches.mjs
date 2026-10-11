@@ -44,7 +44,8 @@
  * ── 令牌本身（10-11 方案 A-11）：api/scores.js 的三个管理动作（rebuild / purge / scoreStats）───
  *
  *   ⑭ 交一串和真令牌等长、却含多字节字符的东西：三个动作都答 401，不是 500——从前 timingSafeEqual
- *      在那一下抛异常，500 和 401 一对照就量出了令牌有几个字符。
+ *      在那一下抛异常，500 和 401 一对照就量出了令牌有几个字符；
+ *   ⑮ 服务器上那把短于 32 位（没配也算）：三个动作一律 503 adminToken，日志只写「ADMIN_TOKEN 太短」。
  *
  * **不量的**：真的在半路被掐掉（函数超时）之后再续——那要让一次调用在算到某个人的时候死掉，
  * 这儿造不出来。票是每算完一个人就写一次（⑧ 量的是一批结束时票上的样子），掐在谁身上谁就
@@ -306,6 +307,32 @@ check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard())
   }
   check('⑭ 等长、含多字节字符的令牌：三个管理动作都答 401，不是 500（量不出令牌有多长）',
     out.every((x) => x.endsWith(':401')), out.join(' '));
+}
+
+// ── ⑮ 服务器上那把太短：三个管理动作一律 503（10-11 方案 A-11）──────────────
+{
+  const logged = [];
+  const origErr = console.error;
+  console.error = (...a) => logged.push(a.map(String).join(' '));
+  const SHORT = 'S'.repeat(31);
+  const out = [];
+  try {
+    for (const want of [SHORT, '']) {
+      process.env.ADMIN_TOKEN = want;
+      for (const action of ['rebuild', 'purge', 'scoreStats']) {
+        const r = await call(scores, { action, token: want, id: 'nobody@example.com' }, '10.8.0.1');
+        out.push(`${action}:${r.status}:${r.body?.error}`);
+      }
+    }
+  } finally {
+    console.error = origErr;
+    process.env.ADMIN_TOKEN = TOKEN;
+  }
+  check('⑮ 服务器上那把短于 32 位（或没配）：rebuild / purge / scoreStats 一律 503 adminToken',
+    out.every((x) => x.endsWith(':503:adminToken')), out.join(' '));
+  check('⑮ 日志写「ADMIN_TOKEN 太短」，不带令牌的值',
+    logged.some((l) => l.includes('ADMIN_TOKEN 太短')) && !logged.some((l) => l.includes(SHORT)),
+    JSON.stringify(logged.slice(0, 2)));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

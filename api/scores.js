@@ -1067,16 +1067,36 @@ const REBUILD_BUDGET_MS = 40_000;
 const REBUILD_TICKET_TTL_S = 3600;
 const rebuildTicketKey = (t) => 'rebuild:resume:' + t;
 
+/** ADMIN_TOKEN 至少要多长（10-11 方案 A-11）。和 api/mint.js 同一个数。 */
+const ADMIN_TOKEN_MIN = 32;
+
 const digest = (s) => createHash('sha256').update(String(s), 'utf8').digest();
 
 /**
- * 和 api/mint.js 同一把锁：ADMIN_TOKEN。两边各做一次 sha256 再 timingSafeEqual（10-11 方案 A-11，
- * 那边写着为什么）——不泄露比到第几位，也量不出令牌有多长。
+ * 和 api/mint.js 同一把锁（那边写着为什么）：'ok' | 'wrong' | 'short'。两边各做一次 sha256 再
+ * timingSafeEqual——不泄露比到第几位，也量不出令牌有多长；服务器上那把短于 32 位（没配也算）就答
+ * 'short'，调用方一律 503、日志写「ADMIN_TOKEN 太短」，不打印值。
  */
-function tokenOk(given) {
+function adminToken(given) {
   const want = process.env.ADMIN_TOKEN || '';
-  if (!want || typeof given !== 'string') return false;
-  return timingSafeEqual(digest(given), digest(want));
+  if (want.length < ADMIN_TOKEN_MIN) return 'short';
+  if (typeof given !== 'string') return 'wrong';
+  return timingSafeEqual(digest(given), digest(want)) ? 'ok' : 'wrong';
+}
+
+/** 三个管理动作共用：令牌不过关就替调用方把话答了，返回 true；过关返回 false。 */
+function adminRefused(res, given) {
+  const verdict = adminToken(given);
+  if (verdict === 'short') {
+    console.error('ADMIN_TOKEN 太短');
+    send(res, 503, { error: 'adminToken' });
+    return true;
+  }
+  if (verdict !== 'ok') {
+    send(res, 401, { error: 'wrong' });
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -1132,7 +1152,7 @@ async function rebuild(req, res, body) {
   if (!ticket && (await tooMany('scores:rebuild', callerId(req), CALLS_PER_HOUR, 3600))) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
+  if (adminRefused(res, body?.token)) return;
   // 带了票、票却不在了（过期，或者那一轮已经算完删掉了）：说清楚，让管理员从头再点一次。
   if (body?.resume !== undefined && !ticket) return send(res, 410, { error: 'resume' });
   // 接着算的那几批，选项一律照票上记的（第一批定下的），不看这一次请求里写了什么——同一轮重建
@@ -1363,7 +1383,7 @@ async function purge(req, res, body) {
   if (await tooMany('scores:purge', callerId(req), CALLS_PER_HOUR, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
+  if (adminRefused(res, body?.token)) return;
   const id = typeof body?.id === 'string' ? body.id.trim() : '';
   if (!id || id.length > 200) return send(res, 400, { error: 'id' });
   try {
@@ -1413,7 +1433,7 @@ async function scoreStats(req, res, body) {
   if (await tooMany('scores:stats', callerId(req), CALLS_PER_HOUR, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (!tokenOk(body?.token)) return send(res, 401, { error: 'wrong' });
+  if (adminRefused(res, body?.token)) return;
   try {
     const boards = {};
     for (const boardId of ALL_BOARDS) {
