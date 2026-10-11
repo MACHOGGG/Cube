@@ -8,7 +8,8 @@
  * ─────────────────────────────────────────────────────────────────────────
  * 这一台在守什么
  *
- * 每日挑战那一局交上去，服务器回一个词：stored / late / rejected（api/scores.js 的 pushDaily）。
+ * 每日挑战那一局交上去，服务器回一个词：stored / late / rejected / zero（api/scores.js 的 pushDaily；
+ * zero 是 0 分的局，过了三道关、只是不上榜）。
  * 日子和种子都是按**本机的钟**算的——钟慢了几天，交上去的是「过去那一天」的挑战（late）；钟快了，
  * 是「还没到的那一天」（rejected）。从前客户端不读这个词：被拒了一个字都不说，玩家以为上榜了，去
  * 榜上一看没有。
@@ -107,7 +108,9 @@ async function playDaily(shiftDays, code) {
 
 const ok = await playDaily(0, 'TESTMONTH');
 check('①（尺子）钟是对的：兑到了码、开得了局、交得了卷', ok.granted && ok.up && ok.ended, JSON.stringify(ok));
-check('①（尺子）服务器说进了今日榜（stored）', ok.verdict === 'stored', String(ok.verdict));
+// 这一局开了就收，是 0 分：P2 起 0 分不进今日榜（10-11 方案 B-13 第 10 条），服务器回 zero——日子、
+// 种子、玩法三道关都过了，只是不写榜。打出分来的那一局回 stored，两样都算「钟是对的」。
+check('①（尺子）服务器认这一局是今天的（stored；0 分是 zero）', ok.verdict === 'stored' || ok.verdict === 'zero', String(ok.verdict));
 check('① 结算页上不说那一句', !ok.note.shown, JSON.stringify(ok.note));
 
 const ahead = await playDaily(3, 'TESTYEAR');

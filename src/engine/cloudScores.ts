@@ -171,10 +171,12 @@ let lastPush: Promise<unknown> | null = null;
  */
 /**
  * 交卷回包里调用方关心的那一样：每日挑战那一局进没进「今日」榜（api/scores.js 的 pushDaily，回
- * 一个词：stored / late / rejected）。不是每日挑战的局没有这一位；没登录、没报上去是 null。
+ * 一个词：stored / late / rejected / zero）。不是每日挑战的局没有这一位；没登录、没报上去是 null。
+ * zero 是 0 分的局（10-11 方案 B-13 第 10 条：0 分不上榜）——日子、种子、玩法都对，只是不写榜；结算页
+ * 只为 late / rejected 说话，zero 什么都不说。
  */
 export interface PushReply {
-  daily?: 'stored' | 'late' | 'rejected';
+  daily?: 'stored' | 'late' | 'rejected' | 'zero';
 }
 
 export function pushRun(data: RunData): Promise<PushReply | null> {

@@ -219,6 +219,25 @@ const D = await makePlayer('daily-d@example.com');
   check('① 今天那一张上没有它', !t.payload?.rows?.some((r) => r.me), JSON.stringify(t.payload?.rows));
 }
 
+// ── ⑨ 0 分的每日局：不写今日榜，可三道关照问（10-11 方案 B-13 第 10 条）──────────────────────
+//
+// P2 头一版把 0 分的局挡在 pushDaily 外面，回包里干脆没有 daily：钟拨歪了的人打出 0 分，结算页那句
+// 「检查设备时间」也就不说了（客户端只为 late / rejected 说话），浏览器那道 check-daily-note 整道红。
+{
+  const Z = await makePlayer('daily-zero@example.com');
+  const r1 = await push(Z, dailyData(today, 0));
+  check('⑨ 今天、今天那串码、今天那个玩法、0 分：回 zero（过了三道关，只是不写榜）', r1.status === 200 && r1.payload?.daily === 'zero',
+    `${r1.status} ${JSON.stringify(r1.payload?.daily)}`);
+  const b = await todayBoard(Z);
+  check('⑨ 今日榜上没有他（0 分不上榜）', b.status === 200 && !b.payload?.rows?.some((r) => r.me), JSON.stringify(b.payload?.rows));
+  const r2 = await push(Z, dailyData(today - 3, 0));
+  check('⑨ 三天前那一局、0 分：照样回 late（结算页要说那一句）', r2.payload?.daily === 'late', JSON.stringify(r2.payload?.daily));
+  const r3 = await push(Z, dailyData(today + 1, 0));
+  check('⑨ 明天那一局、0 分：照样回 rejected', r3.payload?.daily === 'rejected', JSON.stringify(r3.payload?.daily));
+  const mine = await call({ action: 'mine', ...Z });
+  check('⑨ 这三局照样进了存档', mine.payload?.runs === 3, `runs=${mine.payload?.runs}`);
+}
+
 // ── ⑦ 不是每日挑战的局不碰今日榜 ─────────────────────────────────────────────
 const E = await makePlayer('daily-e@example.com');
 {

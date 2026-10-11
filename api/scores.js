@@ -809,8 +809,9 @@ async function push(res, body, who) {
   // daily，没有任何东西会被算两遍。
   // 被撤下来的人（purge）今日榜也不进。回包里不带 daily：不告诉他为什么——客户端那句「没进今日榜」
   // 只为 late / rejected 而说。
-  // 缺字段的旧局（legacy）、0 分的局也不进今日榜（10-11 方案 A-3、B-13 第 10 条）：和常规榜同一个规矩。
-  const daily = data?.daily !== undefined && !stats.banned && !legacy && score > 0
+  // 缺字段的旧局（legacy）也不进今日榜（10-11 方案 A-3）：和常规榜同一个规矩。0 分的局交给 pushDaily
+  // 自己判（B-13 第 10 条）：不写榜，但那三道关照问，见那个函数。
+  const daily = data?.daily !== undefined && !stats.banned && !legacy
     ? await pushDaily(who.id, mode, score, data)
     : undefined;
   if (duplicate) {
@@ -821,7 +822,7 @@ async function push(res, body, who) {
 }
 
 /**
- * 每日挑战那一局进「今日」榜（第 19 推）。回的是一个词：stored / late / rejected。
+ * 每日挑战那一局进「今日」榜（第 19 推）。回的是一个词：stored / late / rejected / zero。
  *
  * 三道关，一道不过就不收（这一局本身照样记进存档和常规榜——它是一局真打出来的游戏，只是不算
  * 那一天的挑战）：
@@ -846,6 +847,17 @@ async function pushDaily(id, mode, score, data) {
   if (!want || want.board !== mode || seedModeOf(data.modeKey, mode, Boolean(data.slot)) !== want.mode) {
     return 'rejected';
   }
+  /*
+   * **0 分不进今日榜**（10-11 方案 B-13 第 10 条，玩家 Q7），可上面三道关照问。
+   *
+   * P2 头一版在 push 里就把 0 分的局挡在这个函数外面——于是钟拨歪了的人打出一局 0 分，回包里一个
+   * daily 都没有，结算页那句「检查设备时间」（客户端只为 late / rejected 说话）也就不说了：他下一局
+   * 打出了分，照样进不了榜，却一直没人告诉他为什么。门 check-daily-note 的三把尺子（那道门开一局就
+   * 收，正好是 0 分）也一起落空。
+   *
+   * 过了三道关的 0 分回 zero：没写榜，客户端也不用说什么——0 分不上榜是规矩，不是他哪儿弄错了。
+   */
+  if (!(score > 0)) return 'zero';
   const key = dailyBoardKey(dayKey(day));
   await zaddIfHigher(key, boardValue(dailyBoardId(want), score, data), id);
   await expire(key, DAILY_TTL_S);
