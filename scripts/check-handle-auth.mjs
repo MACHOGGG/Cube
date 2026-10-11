@@ -15,6 +15,8 @@
  * ② 第一串重复 → 409 `taken`。这一句是故意要说的（玩家必须换一串才走得下去），也正是
  *    「第一串可被枚举」那个代价的来处，代码里写明了。
  * ③ 两串对上能登录；第二串错 **4 次锁 4 小时**。
+ * ③′ **锁刚开、同时几下对的**（10-11 方案 A-9）：一下进去，另外几下答 503「正忙」——不是 423
+ *    「锁着」。从前那几下拿到 423 带着 retryInMs = 0，界面写「约 1 小时后自动解开」，而他刚登进去。
  * ④ **免邮箱账号不会被封号。** 封号（BLOCK_AFTER）是一道只有「拿邮箱证明自己」才解得
  *    开的门（api/_unlock_legacy.js），而这种账号没有邮箱。`checkPin` 的 `block: false`。
  * ⑤ **没有「重设第二串」了**（10-09 补充方案 7-8）：`reset` 回 410，账号一个字都没动，旧的
@@ -161,12 +163,17 @@ async function callEmail(body) {
    * 条对照答了 'locked'，看着像「这个仓库压根不会封号」。
    */
   const { checkPin, newAccount, saveAccount } = await import('../api/_accounts.js');
+  const { del } = await import('../api/_store.js');
   const hammer = async (id, opts) => {
     const probe = newAccount('realpass9', 'code');
     await saveAccount(id, probe);
     let last = '';
     for (let i = 0; i < 8; i++) {
-      probe.lockUntil = 0;           // 「4 小时过去了」
+      // 「4 小时过去了」：锁自己开，那个锁期的比对资格（pinwin 那张票，TTL 就是锁的时长）也一起
+      // 过期。只清 lockUntil 不清票，等于「锁开了票还在」——那一下答的是 'busy'（10-11 方案 A-9；
+      // 从前那一下也答 'locked'，所以这处模拟不全一直没露出来）。
+      probe.lockUntil = 0;
+      await del('pinwin:' + id);
       last = await checkPin(id, 'wrongpass', probe, opts);
     }
     return { last, probe };
@@ -177,6 +184,28 @@ async function callEmail(body) {
   const off = await hammer('hdl:probe-block-off', { block: false });
   check('④ block 关着（免邮箱那条路）：同样的输入只到 locked', off.last === 'locked', off.last);
   check('④ 旗子一次都没立', off.probe.blocked === false, String(off.probe.blocked));
+}
+
+// ── ③′ 锁刚开、同时三下对的：一下进去，另外两下「正忙」，没有一下说「锁着」──────────
+//
+// 锁开之后，一个锁期里只许一个请求真的去比对（_accounts.js 的 pinWinKey）。输掉那张票的请求
+// 从前答 'locked' → 423（retryInMs = 0），界面照「锁着」那一句写「约 1 小时后自动解开」——而这
+// 几下里有一下刚登进去。10-11 方案 A-9：输掉的答 503 `busy`，客户端说「服务器忙」，再按一次就好。
+{
+  freshIp();
+  const FIRST = 'LockRace12';
+  await register(FIRST, 'realpass9');
+  for (let i = 0; i < 4; i++) await signin(FIRST, 'wrongpass');
+  check('（尺子）先把它锁上', (await signin(FIRST, 'realpass9')).status === 423);
+  // 「4 小时过去了」：锁自己开。锁线之前那 4 次不发票，所以这时还没有那张票。
+  const { updateAccount } = await import('../api/_accounts.js');
+  await updateAccount(pairKey(FIRST), (a) => { a.lockUntil = 0; });
+  const three = await Promise.all([0, 1, 2].map(() => signin(FIRST, 'realpass9')));
+  const said = three.map((r) => `${r.status}${r.body?.error ? ':' + r.body.error : ''}`).join(' ');
+  check('③′ 三下里一下登进去', three.filter((r) => r.status === 200).length === 1, said);
+  check('③′ 另外两下答 503 busy（正忙）', three.filter((r) => r.status === 503 && r.body?.error === 'busy').length === 2, said);
+  check('③′ 没有一下说「锁着」（423）', !three.some((r) => r.status === 423), said);
+  check('③′ 再按一次就进得去（猜对的那一下已经把票还了）', (await signin(FIRST, 'realpass9')).status === 200);
 }
 
 // ── ⑤ 没有「重设第二串」了：reset 回 410，账号一个字都没动 ──────────────────

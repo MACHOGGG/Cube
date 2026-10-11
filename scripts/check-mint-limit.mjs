@@ -15,6 +15,9 @@
  *   · 令牌对的时候照常发码——限速不该挡住真正的管理员；
  *   · 重建榜那一处也一样，而且**限速在验令牌之前**（下面最后一段）。
  *
+ * 另有一条是令牌本身的（10-11 方案 A-11）：比对量不出令牌有多长（交一串等长、含多字节字符的
+ * 东西也是 401，不是 500）。
+ *
  * 重建榜那两条是补记的：它在 885c154 就接上限速了，可巡检报告直到今天还把
  * 「排行榜重建接口缺限速」列成高优先级未办事项。没有断言守着的修复，隔几周
  * 就会被当成没修过——这两条就是拿来钉住它的。
@@ -127,6 +130,27 @@ const swarm = await Promise.all(
 const letIn = swarm.filter((r) => r.status !== 429).length;
 check('200 次并发只放行 20 次（限速是一步做完的，不是读-改-写）', letIn === 20,
   `放行了 ${letIn} 次，挡下 ${200 - letIn} 次`);
+
+// ── 令牌比对量不出长度（10-11 方案 A-11）──────────────────────────────
+//
+// 原先是「长度不等就 401、等长才逐字节比」，而 Buffer.from 按 UTF-8 编码：交一串和真令牌**字符数**
+// 相同、却含多字节字符的东西，两个 Buffer 字节数不同，timingSafeEqual 当场抛——平台回 500。500 和
+// 401 一对照，令牌有几个字符就量出来了。现在两边各做一次 sha256 再比，怎么交都是同一句 401。
+// （处理函数要是抛了，这儿记成 500——和线上平台回的一样。）
+{
+  const PROBE = '198.51.100.77';
+  const probe = async (token) => {
+    try {
+      return (await call({ token, plan: 'month', count: 1 }, PROBE)).status;
+    } catch {
+      return 500;
+    }
+  };
+  const sameLen = await probe('é'.repeat(process.env.ADMIN_TOKEN.length));
+  const otherLen = await probe('é'.repeat(process.env.ADMIN_TOKEN.length - 1));
+  check('令牌等长、含多字节字符：答 401，不是 500（和长度不对的答同一句，量不出令牌有多长）',
+    sameLen === 401 && otherLen === 401, `等长 ${sameLen} · 差一位 ${otherLen}`);
+}
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);
 process.exit(fail ? 1 : 0);

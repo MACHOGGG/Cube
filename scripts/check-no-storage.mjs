@@ -96,13 +96,11 @@ head('① watchRoom：onState / onError 抛了，轮询不断');
   {
     localStorage.setItem('slides_mp_seat', JSON.stringify({ code: 'ABCD', playerId: 'p1', playerToken: 't1', at: Date.now() }));
     let asked = 0;
+    // 假回包和真的一样带 text()：engine/fetchTimeout.ts 在同一个钟里先把正文读完再交出去（10-11 方案 A-13）。
     globalThis.fetch = async () => {
       asked++;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ code: 'ABCD', host: 'p1', round: 0, players: [], serverNow: Date.now() }),
-      };
+      const state = { code: 'ABCD', host: 'p1', round: 0, players: [], serverNow: Date.now() };
+      return { ok: true, status: 200, json: async () => state, text: async () => JSON.stringify(state) };
     };
     const room = await import(pathToFileURL(out).href + '?b');
     check('①b（尺子）座位读进来了', Boolean(room.currentRoom()), JSON.stringify(room.currentRoom()));

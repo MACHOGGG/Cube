@@ -37,7 +37,7 @@ export type AccountFailure =
   | 'active'
   /** Codes and accounts are not switched on for this deployment yet. */
   | 'notConfigured'
-  /** Nowhere to send the unlock mail from — the app points at support. */
+  /** 那封带码的信没寄出去：发信没配好，或者这一次 Resend 回了错（api/email.js，10-11 方案 A-8）。 */
   | 'noMail'
   /** 换邮箱：想换去的那个地址上已经有账号了。 */
   | 'taken'

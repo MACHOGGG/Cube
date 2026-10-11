@@ -61,6 +61,8 @@ let release = () => {};
 const held = new Promise((r) => {
   release = r;
 });
+// 假回包和真的一样带 text()：engine/fetchTimeout.ts 在同一个钟里先把正文读完再交出去（10-11 方案 A-13）。
+const reply = (ok, status, payload) => ({ ok, status, json: async () => payload, text: async () => JSON.stringify(payload) });
 globalThis.fetch = async (_url, init) => {
   const body = JSON.parse(init.body);
   if (body.action !== 'start') throw new Error('这台门只该看到 start，收到 ' + body.action);
@@ -68,11 +70,7 @@ globalThis.fetch = async (_url, init) => {
   // 真实的那一下：请求在路上待着，双击的第二下正落在这个窗口里。
   await held;
   const seed = 'seed' + ++seedN;
-  return {
-    ok: true,
-    status: 200,
-    json: async () => ({ code: 'AAAA', host: 'h', mode: body.mode, slot: null, flip: false, seed, startAt: 1, learnHold: false, round: 2, roundOver: false, ended: false, seats: 8, players: [], nudges: 0, nudgeAt: [], countFrom: 4, serverNow: 1 }),
-  };
+  return reply(true, 200, { code: 'AAAA', host: 'h', mode: body.mode, slot: null, flip: false, seed, startAt: 1, learnHold: false, round: 2, roundOver: false, ended: false, seats: 8, players: [], nudges: 0, nudgeAt: [], countFrom: 4, serverNow: 1 });
 };
 
 // 先坐进一个座位，startMatch 才有身份可带。
@@ -105,7 +103,7 @@ globalThis.fetch = async (_url, init) => {
   JSON.parse(init.body);
   sent++;
   await again;
-  return { ok: false, status: 500, json: async () => ({ error: 'boom' }) };
+  return reply(false, 500, { error: 'boom' });
 };
 const c = startMatch('circle');
 release();
@@ -114,7 +112,7 @@ check('上一次办完了，闸放开了', sent === 2, `一共发了 ${sent} 条
 
 globalThis.fetch = async () => {
   sent++;
-  return { ok: true, status: 200, json: async () => ({ players: [], serverNow: 2, seed: 'seedZ' }) };
+  return reply(true, 200, { players: [], serverNow: 2, seed: 'seedZ' });
 };
 await startMatch('circle');
 check('上一次失败了，闸照样放开（不然屋主一整局开不了第二次）', sent === 3, `一共发了 ${sent} 条`);

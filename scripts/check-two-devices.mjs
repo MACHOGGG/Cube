@@ -15,11 +15,16 @@
  *
  * 这个文件把那件事按顺序走一遍。两半：
  *
- *   前半（邮箱账号）—— 兑码建号拿到一把令牌，拿它去 /api/scores 报到，再拿它去问一次权
- *     益：**回来的必须还是它自己那一把**。那个「每次登录换一把」的毛病今天换了个形状还会
+ *   前半（兑过码的账号）—— 开号拿到一把令牌、把一张内部码兑进去，拿它去 /api/scores 报到，
+ *     再拿它去问一次权益：**回来的必须还是它自己那一把**。那个「每次登录换一把」的毛病今天换了个形状还会
  *     回来——只要有谁在问权益那一路上顺手 `issueToken` 一下。
  *   后半（免邮箱凭据账号）—— 真的两台设备：注册拿一把、登录再拿一把，两台一起报到；然后
  *     试一次 reset（10-09 补充方案 7-8 起回 410），两把都照旧在线。
+ *
+ * ⚠️ **前半的夹具 10-11 换过一次**（方案 A-2）：原先是「兑码 → `/api/passcode` 的 bind 绑上邮箱和
+ * 密码」，而 bind 从此回 410（它不验那个邮箱是谁的）。现在走今天真实的那条路：先开一个免邮箱账号
+ * （`/api/handle`），再带着它的 id / 令牌去 `/api/redeem`，码兑进这个账号。前半量的那件事（问权益
+ * 回的是不是自己那一把）和账号是哪一种无关。
  *
  * ⚠️ **前半只剩一台设备了（2026-10-02）。** 邮箱账号要拿第二把令牌，如今只有一条路：收一
  * 封验证码信（api/signin.js）——而这道门不收信（拿密码登录那一支随 E37 撤了）。邮箱账号的
@@ -52,29 +57,26 @@ const post = async (path, body) => {
   return { status: res.status, body: await res.json().catch(() => ({})) };
 };
 
-const EMAIL = 'two-devices@example.com';
-const PW = '123456';
+const PW = 'TwoDevPass9';
 
-// ---- 兑一张内部码，绑上邮箱和密码：这是「甲」那台设备 --------------------
-const redeemed = await post('/api/redeem', { code: 'TESTMONTH' });
-check('兑码成功', redeemed.status === 200 && Boolean(redeemed.body.code),
+// ---- 开一个账号、兑一张内部码进去：这是「甲」那台设备 ----------------------
+const madeA = await post('/api/handle', { action: 'register', first: 'TwoDevCode1', second: PW });
+check('开账号成功', madeA.status === 200 && Boolean(madeA.body.id) && Boolean(madeA.body.token),
+  `${madeA.status} ${JSON.stringify(madeA.body.error || '')}`);
+const EMAIL = madeA.body.id;
+const deviceA = madeA.body.token;
+
+const redeemed = await post('/api/redeem', { code: 'TESTMONTH', email: EMAIL, token: deviceA });
+check('兑码成功，落进了这个账号', redeemed.status === 200 && redeemed.body.active === true && !redeemed.body.code,
   `${redeemed.status} ${JSON.stringify(redeemed.body.error || '')}`);
-
-const bound = await post('/api/passcode', {
-  code: redeemed.body.code,
-  token: redeemed.body.token,
-  email: EMAIL,
-  password: PW,
-});
-check('绑定邮箱 + 设密码', bound.status === 200 && Boolean(bound.body.token),
-  `${bound.status} ${JSON.stringify(bound.body.error || '')}`);
-const deviceA = bound.body.token;
+// 兑码那一趟回的也得是甲自己那一把（redeem.js：「token 回这台设备自己带来的那一把」）。
+check('兑码回的还是甲自己那一把令牌', redeemed.body.token === deviceA, String(redeemed.body.token).slice(0, 8));
 
 // ---- 甲那台拿着它去报到 --------------------------------------------------
 const mine = (token) => post('/api/scores', { action: 'mine', email: EMAIL, token });
 
 const aAfter = await mine(deviceA);
-check('甲那台认得（绑定回来那把令牌当得了身份）',
+check('甲那台认得（开号回来那把令牌当得了身份）',
   aAfter.status === 200, `${aAfter.status} ${JSON.stringify(aAfter.body.error || '')}`);
 
 // ---- 拿令牌换权益：回给这台设备的还是它自己那一把，没被顶掉 ---------------

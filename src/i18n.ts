@@ -466,6 +466,12 @@ export interface I18nStrings {
   unlockExpired: string;
   /** Carries {email} — the support address, when no mail can be sent. */
   unlockNoMail: string;
+  /**
+   * 换邮箱 / 绑定邮箱：那封带码的信这一次没寄出去（服务器答 503 `noMail`，10-11 方案 A-8）。
+   * 不借 `unlockNoMail`：那一句是解锁语境（「写信给我们，我们帮您开启」），而这里只是信这一
+   * 次没发出去，稍后再按一次就好。
+   */
+  mailSendFailed: string;
   // ---- multiplayer: the room, the countdown, the live standings ----
   mpTitle: string;
   mpIntro: string;
@@ -1066,6 +1072,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
     unlockNoMail: 'We cannot send mail automatically yet. Write to {email} and we will open it for you.',
+    mailSendFailed: "We couldn't send the email right now. Please try again later.",
     mpTitle: 'Multiplayer',
     mpIntro: 'Put up a little room, one and the same board, and race.',
     mpCreate: 'Open a room',
@@ -1427,6 +1434,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
     unlockNoMail: 'Nous ne pouvons pas encore envoyer d’e-mail automatiquement. Écrivez à {email} et nous le rouvrirons.',
+    mailSendFailed: 'Impossible d’envoyer l’e-mail pour le moment. Réessayez plus tard.',
     mpTitle: 'Multijoueur',
     mpIntro: 'Montez une petite salle, un seul et même plateau, et faites la course.',
     mpCreate: 'Ouvrir une salle',
@@ -1788,6 +1796,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
     unlockNoMail: '目前還無法自動寄信。請寫信到 {email}，我們幫您開啟。',
+    mailSendFailed: '郵件暫時寄不出去，請稍後再試。',
     mpTitle: '多人遊玩',
     mpIntro: '蓋起一個小屋，同樣的棋盤，與大家競賽',
     mpCreate: '開小屋',
@@ -2149,6 +2158,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',
     unlockNoMail: '目前还无法自动发信。请写信到 {email}，我们帮您开启。',
+    mailSendFailed: '邮件暂时寄不出去，请稍后再试。',
     mpTitle: '多人游玩',
     mpIntro: '盖起一个小屋，同样的棋盘，与大家竞赛',
     mpCreate: '开小屋',

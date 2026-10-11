@@ -41,6 +41,11 @@
  *   ⑬ 一批就算得完的（人少的时候，也就是从前所有门里的那种用法）：一次调用 done: true，
  *      回包的字段和原先一样（players / rows / skipped / dropped / wiped / namesDropped / nicknames）。
  *
+ * ── 令牌本身（10-11 方案 A-11）：api/scores.js 的三个管理动作（rebuild / purge / scoreStats）───
+ *
+ *   ⑭ 交一串和真令牌等长、却含多字节字符的东西：三个动作都答 401，不是 500——从前 timingSafeEqual
+ *      在那一下抛异常，500 和 401 一对照就量出了令牌有几个字符。
+ *
  * **不量的**：真的在半路被掐掉（函数超时）之后再续——那要让一次调用在算到某个人的时候死掉，
  * 这儿造不出来。票是每算完一个人就写一次（⑧ 量的是一批结束时票上的样子），掐在谁身上谁就
  * 再算一遍——一个人的重建本来是幂等的（check-scores 的「再重建一次，结果一样」）。
@@ -282,6 +287,25 @@ check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard())
   check('⑬ 人少的时候一次就算完（done: true），回包的字段和原先一样',
     r.status === 200 && r.body?.done === true && r.body?.players === N && keys.every((k) => k in (r.body || {})),
     JSON.stringify(r.body));
+}
+
+// ── ⑭ 令牌比对量不出长度（10-11 方案 A-11）──────────────────────────────
+{
+  const ACTIONS = ['rebuild', 'purge', 'scoreStats'];
+  const out = [];
+  for (const action of ACTIONS) {
+    for (const token of ['é'.repeat(TOKEN.length), 'é'.repeat(TOKEN.length - 1)]) {
+      let status;
+      try {
+        status = (await call(scores, { action, token, id: 'nobody@example.com' }, '10.7.0.1')).status;
+      } catch {
+        status = 500;   // 处理函数抛了：线上平台回的就是 500
+      }
+      out.push(`${action}:${status}`);
+    }
+  }
+  check('⑭ 等长、含多字节字符的令牌：三个管理动作都答 401，不是 500（量不出令牌有多长）',
+    out.every((x) => x.endsWith(':401')), out.join(' '));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

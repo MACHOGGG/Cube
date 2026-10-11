@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, updateAccount } from './_accounts.js';
 import { codeKey, mintCodes, MINT_BATCH_MAX } from './_codes.js';
@@ -48,12 +48,23 @@ const MAX_PER_CALL = MINT_BATCH_MAX;
  */
 const CALLS_PER_HOUR = 20;
 
-/** Compared in constant time: a token check that leaks its own progress is
- *  a token check an attacker can walk one character at a time. */
+const digest = (s) => createHash('sha256').update(String(s), 'utf8').digest();
+
+/**
+ * 比对 ADMIN_TOKEN。和 api/scores.js 里那一份一字不差（同一把锁）。
+ *
+ * **两边先各做一次 sha256，再 timingSafeEqual**（10-11 方案 A-11）。原先是「长度不等就 false，等长
+ * 才逐字节比」：
+ *   · 光是长度那一句就把令牌的长度送了出去——不等长立刻答 401；
+ *   · 更糟的是 `Buffer.from(given)` 按 UTF-8 编码：交一串和真令牌**字符数**相同、却含多字节字符的
+ *     东西，两个 Buffer 字节数不同，timingSafeEqual 当场抛异常、回 500——500 和 401 一对照，令牌
+ *     有几个字符就量出来了（10-11 实测）。
+ * 两边都换成 32 字节的摘要之后，比较的永远是两个等长的东西：不抛、不早退，什么都量不出来。
+ */
 function tokenOk(given) {
   const want = process.env.ADMIN_TOKEN || '';
-  if (!want || typeof given !== 'string' || given.length !== want.length) return false;
-  return timingSafeEqual(Buffer.from(given), Buffer.from(want));
+  if (!want || typeof given !== 'string') return false;
+  return timingSafeEqual(digest(given), digest(want));
 }
 
 export default async function handler(req, res) {

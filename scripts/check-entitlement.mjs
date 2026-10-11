@@ -268,13 +268,14 @@ console.log('');
   let answer = null; // 下一次 /api/subscription 答什么；'offline' 就是网断了
   let signinReply = null; // 下一次 /api/signin（验证码登录）答什么
   let askedRefresh = 0;
+  // 假回包和真的一样带 text()：engine/fetchTimeout.ts 在同一个钟里先把正文读完再交出去（10-11 方案 A-13）。
   globalThis.fetch = async (url) => {
     const u = String(url);
-    if (u.includes('/api/signin')) return { ok: true, status: 200, json: async () => signinReply };
+    if (u.includes('/api/signin')) return json(signinReply);
     if (!u.includes('/api/subscription')) throw new Error('unexpected fetch: ' + url);
     askedRefresh++;
     if (answer === 'offline') throw new TypeError('Failed to fetch');
-    return { ok: true, status: 200, json: async () => answer };
+    return json(answer);
   };
   const sub = await import(join(dir, 'subscription.mjs'));
   const EMAIL = 'refunded@example.com';

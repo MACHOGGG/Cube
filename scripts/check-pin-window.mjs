@@ -23,9 +23,11 @@
  *
  * ── 怎么量得出来 ──────────────────────────────────────────────
  *
- * 这件事不能看返回值的「对不对」：过了锁线之后，猜错的人和被拦下的人收到的都是 'locked'。
- * 所以反过来——**拿对的那一串去并发**。真有闸时只有一个请求摸得到比对，于是只有一个 'ok'；
- * 闸没了的话五十个全是 'ok'。一个干净的二值观测。
+ * 这件事不能看返回值的「对不对」：过了锁线之后，猜错的人收到的是 'locked'，而被那张票拦下
+ * 的人收到的是 'busy'（10-11 方案 A-9 起；从前也是 'locked'——锁刚开、本人手快点了几下，没摸到
+ * 比对的那几下被说成「锁着」，界面写「约 1 小时后自动解开」）。所以反过来——**拿对的那一串去
+ * 并发**。真有闸时只有一个请求摸得到比对，于是只有一个 'ok'；闸没了的话五十个全是 'ok'。一个
+ * 干净的二值观测。
  *
  * ③ 那一节是反方向的尺子：这道闸不许罚到本人。猜对的人要把那张票还回去（`del`），否则他
  * 自己上一次的手误会把他关在外面四小时。
@@ -100,9 +102,11 @@ const snapshot = async () => structuredClone(await A.loadAccount(PAIRLESS));
   const snaps = await Promise.all(Array.from({ length: 50 }, () => snapshot()));
   const out = await Promise.all(snaps.map((s) => A.checkPin(PAIRLESS, RIGHT, s, { block: false })));
   const oks = out.filter((v) => v === 'ok').length;
-  const locked = out.filter((v) => v === 'locked').length;
+  const busy = out.filter((v) => v === 'busy').length;
   check('② 五十个请求同时拿**对的**那一串来，只有一个摸得到比对', oks === 1, `ok ${oks} 个`);
-  check('② 另外四十九个被那张票挡下（答 locked，一个字都没写）', locked === 49, `locked ${locked} 个`);
+  // 答 busy（handle.js 回 503「正忙」），不是 locked：这一刻锁早开了，只是这张票被同一瞬间的另一个
+  // 请求拿走了（10-11 方案 A-9）。
+  check('② 另外四十九个被那张票挡下（答 busy，一个字都没写）', busy === 49, `busy ${busy} 个 · ${[...new Set(out)].join(',')}`);
 }
 
 // ── ③ 反方向：这道闸不许罚到本人 ───────────────────────────────

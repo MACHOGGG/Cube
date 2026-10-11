@@ -1,16 +1,23 @@
 /**
- * 兑换码绑定的竞态测试。
+ * 兑换码绑定（`/api/passcode` 的 bind）——**10-11 起整支回 410**（方案 A-2）。
  *
  *   node scripts/dev-server.mjs 8815 dist
  *   node scripts/check-bind-race.mjs http://localhost:8815
  *
- * 花码本身是原子的（GETDEL），两个人抢同一个码不会都抢到。但绑定——把这个
- * 码换来的权益挂到一个邮箱账号上——中间有四步：读凭证、查邮箱有没有被占、
- * 写新账号、删凭证。这四步之间任何一处让出去，另一个请求都能从头再走一遍，
- * 于是一张码变成两个账号。
+ * 这道门原先量的是绑定的竞态：花码本身是原子的（GETDEL），可绑定——把这个码换来的权益挂到一
+ * 个邮箱账号上——中间有四步：读凭证、查邮箱有没有被占、写新账号、删凭证，四步之间任何一处让
+ * 出去，一张码就能变成两个账号。那件事修好了（takeAccount + createAccount），一直守在这里。
  *
- * 这里就是同时发两个 bind（同一个 code/token，两个不同邮箱），看服务器
- * 是不是只认一个。
+ * 10-11 查出 bind 本身就不该开着：它从来不验「这个邮箱是你的」，兑一张码就能把它绑到**别人**
+ * 的地址上（拿回来的新令牌问权益得 `active:true`），还顺手替那个人订上营销邮件。界面上的入口
+ * 早撤了（E41），兑码如今直接带着登录的 email / token 落进他自己的账号。所以 bind 整支回 410，
+ * 代码留着（api/passcode.js 分发那一行写着改回来之前要先补什么）。
+ *
+ * 现在量的是「关得干净」：
+ *   · 同时两个 bind 都回 410，谁都没绑成；
+ *   · 码寄存处一个字没动——410 排在取凭证（GETDEL）之前，所以手里那张码不会因此被弄丢：拿持有
+ *     凭证去 /api/scores 报到照旧认得；
+ *   · 令牌猜错、地址被占那几条分支也都走不到了：关掉的路不再分辨对错，一律 410。
  */
 
 const base = (process.argv[2] || 'http://localhost:8815').replace(/\/$/, '');
@@ -40,74 +47,31 @@ if (!spent.body.active || !spent.body.code) {
 const { code, token } = spent.body;
 console.log(`拿到持有凭证：码 ${code}\n`);
 
+/** 拿持有凭证去报到：码寄存处还在、令牌还对，服务器就认得。 */
+const held = () => post('/api/scores', { action: 'mine', code, token });
+check('（尺子）绑之前，持有凭证认得', (await held()).status === 200);
+
 // ---- 两个邮箱同时来绑 ---------------------------------------------------
 const [a, b] = await Promise.all([
-  post('/api/passcode', { action: 'bind', code, token, email: 'race-a@test.com', password: '123456' }),
-  post('/api/passcode', { action: 'bind', code, token, email: 'race-b@test.com', password: '123456' }),
+  post('/api/passcode', { code, token, email: 'race-a@test.com', password: '123456' }),
+  post('/api/passcode', { code, token, email: 'race-b@test.com', password: '123456' }),
 ]);
-
-const won = [a, b].filter((r) => r.status === 200);
 console.log(`甲 ${a.status} ${JSON.stringify(a.body.error ?? 'ok')}`);
 console.log(`乙 ${b.status} ${JSON.stringify(b.body.error ?? 'ok')}\n`);
+check('两个 bind 都回 410 gone，谁都没绑成',
+  [a, b].every((r) => r.status === 410 && r.body.error === 'gone' && !r.body.token));
 
-check('同一张码只能绑成一个账号', won.length === 1, `实际成功 ${won.length} 个`);
+// ---- 关掉的路不能把码弄丢 -----------------------------------------------
+const after = await held();
+check('码寄存处原样还在：持有凭证照旧认得（410 排在取凭证之前）', after.status === 200,
+  `${after.status} ${JSON.stringify(after.body.error || '')}`);
 
-// ---- 输的那一个不该白白丢掉权益 ----------------------------------------
-// 抢输了不代表这张码作废：另一个邮箱已经拿到了它，所以凭证消失是对的；
-// 但如果两个都失败，那就是把玩家的东西弄丢了。
-check('不会两个都失败（码没有凭空蒸发）', won.length >= 1);
-
-// ---- 赢的那个账号真的能登录 --------------------------------------------
-if (won.length === 1) {
-  const winner = won[0].body.email;
-  // 凭据是绑定那一趟回来的那把**令牌**，不是密码：拿密码登录那一支随 E37 撤了
-  // （api/subscription.js 里记着为什么）。
-  const back = await post('/api/subscription', { email: winner, token: won[0].body.token });
-  check('赢的那个账号拿它那把令牌登得上', back.status === 200 && back.body.active === true,
-    `${winner} → ${back.status} ${JSON.stringify(back.body.error || '')}`);
-}
-
-// ---- 抢不到的时候，码不能被弄丢 ----------------------------------------
-// 认领是 GETDEL，一步就把持有凭证拿走了。所以每一条不成功的出口都必须把它
-// 放回去，否则一次「这个邮箱已经有账号了」就等于没收了玩家的码。
-{
-  const fresh = await post('/api/redeem', { code: 'TESTLIFE' });
-  if (!fresh.body.code) {
-    console.log('\n（TESTLIFE 已被用掉，跳过「令牌猜错」这一项）');
-  } else {
-    const { code: c2, token: t2 } = fresh.body;
-
-    // 令牌不对：不该碰这张码。
-    const badToken = await post('/api/passcode', {
-      action: 'bind', code: c2, token: 'not-the-right-token', email: 'x@test.com', password: '123456',
-    });
-    const afterBad = await post('/api/passcode', {
-      action: 'bind', code: c2, token: t2, email: 'still-works@test.com', password: '123456',
-    });
-    check('令牌猜错之后，这张码还能正常绑定',
-      badToken.status === 401 && afterBad.status === 200,
-      `猜错 ${badToken.status} · 之后 ${afterBad.status}`);
-  }
-}
-
-{
-  const fresh = await post('/api/redeem', { code: 'TESTHALF' });
-  if (!fresh.body.code) {
-    console.log('（没有 TESTHALF，跳过「邮箱被占用」那一项）');
-  } else {
-    const { code: c3, token: t3 } = fresh.body;
-    // 绑到一个已经有账号的邮箱上：应该被拒，而且码要还回来。
-    const taken = await post('/api/passcode', {
-      action: 'bind', code: c3, token: t3, email: 'race-a@test.com', password: '123456',
-    });
-    const retry = await post('/api/passcode', {
-      action: 'bind', code: c3, token: t3, email: 'another@test.com', password: '123456',
-    });
-    check('邮箱被占用被拒之后，这张码还能换个邮箱绑',
-      taken.status === 409 && retry.status === 200,
-      `被拒 ${taken.status} · 改绑 ${retry.status}`);
-  }
-}
+// ---- 令牌猜错、地址被占：都走不到了 -------------------------------------
+const badToken = await post('/api/passcode', {
+  code, token: 'not-the-right-token', email: 'x@test.com', password: '123456',
+});
+check('令牌不对也是 410（关掉的路不再分辨对错）', badToken.status === 410 && badToken.body.error === 'gone',
+  `${badToken.status} ${JSON.stringify(badToken.body)}`);
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

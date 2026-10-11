@@ -171,8 +171,11 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
       return s.unlockBadCode;
     case 'expired':
       return s.unlockExpired;
+    // 答 `noMail` 的如今只剩换邮箱 / 绑定邮箱那一支（api/email.js：没配好发信，或者这一次 Resend 回
+    // 了错——10-11 方案 A-8）。从前这儿说的是解锁那一句「写信给我们，我们帮您开启」，可那件事和
+    // 这一屏无关：信只是这一次没寄出去，码还留着，稍后再按一次就好。
     case 'noMail':
-      return s.unlockNoMail.replace('{email}', CONTACT_EMAIL);
+      return s.mailSendFailed;
     case 'codeExpired':
       return s.codeExpired;
     case 'tooMany':
@@ -1236,8 +1239,9 @@ export async function runStoreRestore(lang: Lang, onChanged: () => void): Promis
  * **《有兑换码》那扇窗撤了**（E41）。
  *
  * 内部码的**前端**全撤：这扇窗、天才那一屏上那一行、《账户》里那一行、个人主页上那一
- * 行。**后端 `api/redeem.js` 和 `api/passcode.js` 的 bind 支一行没动**——已经发出去的码
- * 照旧兑得了，玩家手里那张纸没作废，只是界面上不再招手。
+ * 行。**后端 `api/redeem.js` 一行没动**——已经发出去的码照旧兑得了，玩家手里那张纸没作
+ * 废，只是界面上不再招手。（`api/passcode.js` 的 bind 支代码也还在，但 10-11 起回 410：它不验
+ * 「这个邮箱是你的」，见那个文件。）
  *
  * 为什么连窗一起撤：「注册就免费解锁全部内容」之后，一张「开通一个月」的码没有任何意
  * 义。留着入口只会让人以为还有什么是要另外换的。

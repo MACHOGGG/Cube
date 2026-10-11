@@ -468,9 +468,12 @@ async function patchCounters(email, account) {
 
 /**
  * Checks a passcode and records the attempt. Returns one of
- * 'ok' | 'wrong' | 'locked' | 'blocked'. Callers must give the same answer
+ * 'ok' | 'wrong' | 'locked' | 'blocked' | 'busy'. Callers must give the same answer
  * for 'wrong' as for an address with no account at all, so that this cannot
  * be used to find out who has one.
+ *
+ * 'busy' 只有 `{ block: false }` 那一支会回：锁刚开、这个锁期的比对资格被同一瞬间的另一个请求
+ * 拿走了（见下面 pinWinKey 那一段）。调用方答 503 `busy`，不是 423「锁着」。
  *
  * `{ block: false }` —— **不许走到封号那一档**（见下面 BLOCK_AFTER）。免邮箱凭据账号
  * （`api/handle.js`，E38）传它：封号是一道只有「拿邮箱证明自己」才解得开的门
@@ -526,11 +529,17 @@ export async function checkPin(email, pin, account, { block = true } = {}) {
   // 过了锁线之后，这一个锁期里只许**一个**请求真的去比对。见 pinWinKey 那一段：
   // `block: false` 那一支没有封号那道硬闸，不加这一道的话「每 4 小时一次机会」是假的。
   //
-  // 输掉的那些**一个字都不写**就回 'locked'：真要挡的是一次上万的并发，而让每一个都去
-  // 跑一趟 patchCounters（带锁的读—改—写）等于替攻击方把我们自己的存储打满。赢的那一
-  // 个答错时照旧把 lockUntil 往后推 4 小时，账号上那份记录不会因此落下。
+  // 输掉的那些**一个字都不写**就回：真要挡的是一次上万的并发，而让每一个都去跑一趟
+  // patchCounters（带锁的读—改—写）等于替攻击方把我们自己的存储打满。赢的那一个答错时照旧
+  // 把 lockUntil 往后推 4 小时，账号上那份记录不会因此落下。
+  //
+  // 回的是 'busy'，不是 'locked'（10-11 方案 A-9）。从前回 'locked'，而这时账号上的 lockUntil
+  // 早就过了：锁刚开、本人手快点了两三下（或者两台设备同时在登），一下 200、另外几下 423 带着
+  // retryInMs = 0，界面照「锁着」那一句写「约 1 小时后自动解开」——他明明刚登进去了。抢不到这
+  // 张票不等于锁着，只是这一刻轮不到他比对；答「正忙」，他再按一次就落到真实的那一边（猜对的
+  // 那一个已经把票还了，猜错的那一个已经把锁续上了）。「知道第一串就能续锁」那一面不变。
   if (!block && tries > LOCK_AFTER) {
-    if (!(await setnx(pinWinKey(email), tries, Math.floor(LOCK_MS / 1000)))) return 'locked';
+    if (!(await setnx(pinWinKey(email), tries, Math.floor(LOCK_MS / 1000)))) return 'busy';
   }
 
   const attempt = Buffer.from(hash(pin, account.salt), 'hex');

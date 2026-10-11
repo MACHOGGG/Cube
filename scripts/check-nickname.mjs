@@ -354,14 +354,17 @@ check('③ 那几次之后 A 还是「阿花」', (await nameRow(A.id))?.name ==
   }));
   let calls = [];
   let answer = () => ({ status: 200, body: { ok: true } });
+  // 假回包和真的一样带 text()：engine/fetchTimeout.ts 在同一个钟里先把正文读完再交出去（10-11 方案 A-13）。
+  const reply = (status, payload) =>
+    ({ ok: status >= 200 && status < 300, status, json: async () => payload, text: async () => JSON.stringify(payload) });
   globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
     calls.push({ url: String(url), body });
     if (body.action === 'board') {
-      return { ok: true, status: 200, json: async () => ({ mode: '', rows: [{ rank: 1, name: 'x', score: 1, me: false }], players: 1, me: null }) };
+      return reply(200, { mode: '', rows: [{ rank: 1, name: 'x', score: 1, me: false }], players: 1, me: null });
     }
     const a = answer(body);
-    return { ok: a.status >= 200 && a.status < 300, status: a.status, json: async () => a.body };
+    return reply(a.status, a.body);
   };
   const api = await import(out);
   const { getNickname, leaderboardName, setNickname, adoptServerNickname, confirmedNickname, onNicknameChange, cachedBoard, fetchBoard } = api;

@@ -14,11 +14,11 @@
 process.env.ALLOW_MEMORY_STORE = '1';
 process.env.ADMIN_TOKEN = 'test-admin-token-1234567890';
 const A = new URL('../api/', import.meta.url).href;
-const { set, setnx } = await import(A + '_store.js');
+const { get, set, setnx } = await import(A + '_store.js');
 const accounts = await import(A + '_accounts.js');
 const redeem = (await import(A + 'redeem.js')).default;
 const mint = (await import(A + 'mint.js')).default;
-const passcode = (await import(A + 'passcode.js')).default;
+const signin = (await import(A + 'signin.js')).default;
 const subscription = (await import(A + 'subscription.js')).default;
 
 const req = (body) => ({ method: 'POST', headers: { 'x-forwarded-for': '9.9.9.9' }, body,
@@ -28,13 +28,16 @@ const res = () => { const r = { code:0, payload:null, setHeader(){return r}, sta
   end(s){ try{r.payload=JSON.parse(s)}catch{r.payload=s} return r } }; return r; };
 let fail=0; const check=(n,ok,x='')=>{console.log(`${ok?'PASS':'FAIL'}  ${n}${x?'  '+x:''}`); if(!ok)fail++;};
 
-// 1. 先弄一个玩家出来：兑一张码，再绑邮箱和密码
-await set('code:SEED01', { plan: 'month' });
-let r = res(); await redeem(req({ code: 'SEED01' }), r);
-const holderCode = r.payload.code;
-const r0token = r.payload.token;
-r = res(); await passcode(req({ action:'bind', code: holderCode, token: r0token, email:'wan@example.com', password:'abc123' }), r);
-check('玩家建好了', r.code === 200, JSON.stringify(r.payload).slice(0,60));
+// 1. 先弄一个玩家出来：邮箱 + 验证码开一个账号（signin 新建那一支）。
+//
+// 原先是「兑一张码，再拿 /api/passcode 的 bind 绑邮箱和密码」；bind 10-11 起回 410（方案 A-2：
+// 它不验那个邮箱是谁的）。今天开邮箱账号只有这一条路。没配 Resend：信寄不出去，但票照回、码照
+// 旧写进库里（signin.js 的 request），所以读得到。
+let r = res(); await signin(req({ email: 'wan@example.com' }), r);
+const challenge = r.payload && r.payload.challenge;
+const pending = await get(`signin:wan@example.com:${challenge}`);
+r = res(); await signin(req({ action: 'confirm', email: 'wan@example.com', code: pending && pending.code, challenge }), r);
+check('玩家建好了', r.code === 200 && Boolean(r.payload.token), JSON.stringify(r.payload).slice(0,60));
 const token = r.payload.token;
 
 // 2. 名单里能看到他

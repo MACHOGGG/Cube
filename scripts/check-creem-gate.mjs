@@ -17,9 +17,13 @@
  *   · 库里没有的地址，和「令牌不对」答同一句（别把这个接口变成查号机）
  *   · 有密钥时，一切照旧
  *
- * ⚠️ 凭据是**登录令牌**，不是密码（2026-10-02）。拿密码登录那一支随 E37 撤了，而
- * `/api/passcode` 的 bind（内部码绑邮箱）那一趟会把一把令牌一起回来——这道门用的就是
- * 那一把。
+ * ⚠️ 凭据是**登录令牌**，不是密码（2026-10-02）。拿密码登录那一支随 E37 撤了。
+ *
+ * 那把令牌原先由 `/api/passcode` 的 bind（内部码绑邮箱）一起带回来；10-11 方案 A-2 起 bind
+ * 回 410（它不验那个邮箱是谁的）。现在的夹具是今天真实的那条路：先注册一个免邮箱账号
+ * （`/api/handle`，回一把令牌），再带着它的 id / 令牌去 `/api/redeem` 把码兑进**这个账号**。
+ * 兑完之后权益记在我们自己的库里，`/api/subscription` 答的 `kind` 照旧是 'code'——这道门要
+ * 的正是这样一个「答案在本地、Creem 从没听说过」的账号。
  */
 import { spawn } from 'node:child_process';
 
@@ -58,16 +62,20 @@ async function serve(port, creemKey) {
   throw new Error(`dev-server ${port} 没起来`);
 }
 
-/** 花一张码、绑一个邮箱，拿到一个如假包换的内部码账号。 */
-async function codeAccount(base, code, email) {
-  const spent = await post(base, '/api/redeem', { code });
-  if (!spent.body.code) throw new Error(`${code} 兑不出来：${JSON.stringify(spent.body)}`);
-  const bound = await post(base, '/api/passcode', {
-    code: spent.body.code, token: spent.body.token, email, password: '123456',
-  });
-  if (bound.status !== 200) throw new Error(`绑定失败 ${bound.status} ${JSON.stringify(bound.body)}`);
-  if (!bound.body.token) throw new Error(`绑定没回令牌：${JSON.stringify(bound.body)}`);
-  return { email, token: bound.body.token };
+/**
+ * 开一个免邮箱账号、把一张码兑进去，拿到一个如假包换的内部码账号（见文件头 ⚠️）。
+ * `first` 是第一串（账号 id 由服务器算成 `hdl:` 开头的那一位，回包里的 `id`）。
+ */
+async function codeAccount(base, code, first) {
+  const made = await post(base, '/api/handle', { action: 'register', first, second: 'GateSecond9' });
+  if (made.status !== 200 || !made.body.id || !made.body.token) {
+    throw new Error(`免邮箱账号开不出来：${made.status} ${JSON.stringify(made.body)}`);
+  }
+  const spent = await post(base, '/api/redeem', { code, email: made.body.id, token: made.body.token });
+  if (spent.status !== 200 || spent.body.active !== true) {
+    throw new Error(`${code} 兑不进这个账号：${spent.status} ${JSON.stringify(spent.body)}`);
+  }
+  return { email: made.body.id, token: made.body.token };
 }
 
 const noKey = await serve(8831, '');
@@ -76,7 +84,7 @@ const dummy = await serve(8832, 'creem_test_dummy');
 try {
   // ---- 没有 CREEM_API_KEY 的那一台 ---------------------------------------
   console.log('— 没配 Creem 密钥 —');
-  const holder = await codeAccount(noKey.base, 'TESTLIFE', 'code-user@test.com');
+  const holder = await codeAccount(noKey.base, 'TESTLIFE', 'GateCodeUser1');
 
   const inCode = await post(noKey.base, '/api/subscription', { email: holder.email, token: holder.token });
   check('内部码账号照常登录（这一条就是修的那个 bug）',
@@ -108,14 +116,14 @@ try {
   const wrong = await post(noKey.base, '/api/subscription', { email: holder.email, token: 'NOT-A-TOKEN' });
   check('令牌不对还是 401（凭证判断仍然排在 Creem 前面）',
     wrong.status === 401, String(wrong.status));
-  // 密码那一支撤了：真密码也进不去。
-  const withPw = await post(noKey.base, '/api/subscription', { email: holder.email, password: '123456' });
+  // 密码那一支撤了：真密码也进不去。这个账号的「密码」就是它的第二串（夹具里那一把）。
+  const withPw = await post(noKey.base, '/api/subscription', { email: holder.email, password: 'GateSecond9' });
   check('拿密码登录那一支撤了——真密码也 401', withPw.status === 401,
     `${withPw.status} ${JSON.stringify(withPw.body)}`);
 
   // ---- 配了密钥的那一台：确认没把正常的路改坏 ------------------------------
   console.log('\n— 配了密钥 —');
-  const holder2 = await codeAccount(dummy.base, 'TESTLIFE', 'code-user@test.com');
+  const holder2 = await codeAccount(dummy.base, 'TESTLIFE', 'GateCodeUser2');
   const inCode2 = await post(dummy.base, '/api/subscription', { email: holder2.email, token: holder2.token });
   check('内部码账号一样能登录', inCode2.status === 200 && inCode2.body.active === true,
     `${inCode2.status} active=${inCode2.body.active}`);

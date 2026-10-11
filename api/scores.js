@@ -33,7 +33,7 @@
  *
  * 剩下的写在《服务条款》里：发现作弊或明显异常的数据，我们会清除相关记录。
  */
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { identify, isGenius } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
@@ -776,8 +776,23 @@ async function pushDaily(id, mode, score, data) {
  */
 const dailyBoardId = (v) => (v.mode === 'puzzle' ? `${v.board}:${PUZZLE_KIND}` : v.board);
 
-/** 我自己的存档和数字。是自己的东西，不设门。 */
+/**
+ * 看自己的战绩（mine）、看榜（board）：每个登录的人每分钟各 60 次（10-11 方案 A-13）。
+ *
+ * 原先这两个动作没有限速——交卷、改名都有，偏偏读的这两个没有。读也花钱：board 一次要翻好几张有
+ * 序集合再批量取名字，mine 要读三样东西，一个脚本一秒钟敲几十次，账单和那台 Redis 都是我们的。
+ *
+ * 按**登录者的 id** 数，不按来路：走到这儿之前 handler 已经认过人（identify），而教室里几十个人共
+ * 用一个 IP——按来路数会把整间教室当成一个人。60 次 / 分钟是真人远远用不到的：记录页来回点着看，
+ * 一分钟也就十来次，何况客户端还有十秒的缓存（cloudScores.ts 的 BOARD_TTL_MS）。
+ */
+const VIEWS_PER_MINUTE = 60;
+
+/** 我自己的存档和数字。是自己的东西，不设门（只有上面那道限速）。 */
 async function mine(res, who) {
+  if (await tooMany('scores:mine', who.id, VIEWS_PER_MINUTE, 60)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
   const [stats, archive, nickname] = await Promise.all([
     loadStats(who.id),
     get(runsKey(who.id)),
@@ -922,6 +937,10 @@ async function groupTop(boards) {
  * 取哪五十个名字）。门：check-scores 末尾那一节，board() 里不许再有 hgetall(。
  */
 async function board(res, body, who, claim) {
+  // 限速排在最前面（见 VIEWS_PER_MINUTE）：后面那一问（isGenius）对刷卡账号要去问一趟 Creem。
+  if (await tooMany('scores:board', who.id, VIEWS_PER_MINUTE, 60)) {
+    return send(res, 429, { error: 'tooMany' });
+  }
   if (!(await isGenius(claim, who.account))) {
     return send(res, 403, { error: 'geniusOnly' });
   }
@@ -1048,11 +1067,16 @@ const REBUILD_BUDGET_MS = 40_000;
 const REBUILD_TICKET_TTL_S = 3600;
 const rebuildTicketKey = (t) => 'rebuild:resume:' + t;
 
-/** 和 api/mint.js 同一把锁：ADMIN_TOKEN，等长比较，不泄露比到第几位。 */
+const digest = (s) => createHash('sha256').update(String(s), 'utf8').digest();
+
+/**
+ * 和 api/mint.js 同一把锁：ADMIN_TOKEN。两边各做一次 sha256 再 timingSafeEqual（10-11 方案 A-11，
+ * 那边写着为什么）——不泄露比到第几位，也量不出令牌有多长。
+ */
 function tokenOk(given) {
   const want = process.env.ADMIN_TOKEN || '';
-  if (!want || typeof given !== 'string' || given.length !== want.length) return false;
-  return timingSafeEqual(Buffer.from(given), Buffer.from(want));
+  if (!want || typeof given !== 'string') return false;
+  return timingSafeEqual(digest(given), digest(want));
 }
 
 /**

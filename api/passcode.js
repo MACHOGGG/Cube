@@ -33,7 +33,8 @@ import { storeConfigured } from './_store.js';
  *   { code, token, email, password }    — the token a redeemed code
  *     returned. It attaches an address to what the code granted, so the
  *     month or year travels to the player's next phone instead of living
- *     and dying in one browser.
+ *     and dying in one browser. **10-11 起这一支也回 410**（它不验那个邮箱
+ *     是谁的），代码原样留着——见下面分发那一行的注释。
  *
  *   { register: true, email, password }  — **撤了**，见文件末尾那段。
  *   { email, password, newPassword }    — **撤了**，见文件末尾那段。
@@ -62,7 +63,20 @@ export default async function handler(req, res) {
   // 时把这一行换回 `return create(res, String(checkoutId), password, news === true)`——到那时
   // 先想清楚它设的那把六位密码在验证码登录底下还有没有意义。
   if (checkoutId) return send(res, 410, { error: 'gone' });
-  if (code) return bind(res, String(code), String(token || ''), email, password, news === true);
+  // **内部码绑邮箱那一支（bind）也回 410**（10-11 方案 A-2）。它从来不验「这个邮箱是你的」：
+  // 兑码回来的令牌只证明「这张码在你手上」，于是兑一张码就能把它绑到**别人**的邮箱上——实测
+  // 兑 TESTA1 → 绑到他人地址 → 拿回来的新令牌问权益得 `active:true`。顺带还会替那个人订上营销
+  // 邮件（`news:true`），也收 `hdl:` 开头的 id，能抢先占住一个免邮箱账号的 key。界面上早就没有
+  // 入口了（《有兑换码》那扇窗 E41 撤了），兑码如今直接带着登录的 email / token 落进他自己的账号
+  // （redeem.js 的 signed-in 那一支），还会打到这儿的只剩旧标签页。所以不补验证码，直接关掉。
+  // 410 而不是落到下面的 400 `action`，理由同上面那一支：故意关掉的，和「请求写错了」分得开。
+  //
+  // **`bind` 的代码一行没删**（同上，玩家要「完整保留」那套机制；客户端 `bindCode` /
+  // `attachAccount` 也留着）。哪天要改回来，**先给它补上邮箱归属的证明**——比如走一遍 signin 那张
+  // 寄到这个地址的验证码，验过了才许绑——再把这一行换回
+  // `return bind(res, String(code), String(token || ''), email, password, news === true)`。
+  // 另外想清楚它设的那把六位密码在验证码登录底下还有没有意义（同 create）。
+  if (code) return send(res, 410, { error: 'gone' });
   // 注册那一支也撤了（见文件末尾那段），所以带 `register: true` 的请求落到下面那一行，
   // 和任何别的认不出来的请求一样答 400 `action`——而不是悄悄落到某一支上去。
   return send(res, 400, { error: 'action' });

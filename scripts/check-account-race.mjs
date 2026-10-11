@@ -30,12 +30,17 @@
  *
  * 三个场景：
  *
- *   ① bind 撞 bind         → 只成一个；赢家的令牌有效；输家的码要回得来
- *   ② 换邮箱撞 bind        → 只成一个；输的是换邮箱时，旧地址一个字没动
+ *   ① bind 撞 bind         → 10-11 起 bind 回 410（方案 A-2，它不验邮箱归属）：两条都 410、
+ *                             两张码都原样留着、地址上没有开出任何账号
+ *   ② 换邮箱撞 signin 新建 → 谁先谁后都行，但谁的账号都不许被整个盖掉
  *   ③ createAccount 本身   → 同一地址写两次，第二次不写，第一份原样留着
  *
  * create（刷卡那条）这里没驱动：它开头就要向 Creem 查这笔结账，没有密钥连
- * 503 都出不来。它和 bind 用的是同一个 createAccount，改法一模一样。
+ * 503 都出不来，而且第 20 推起它也回 410。
+ *
+ * ② 原先拿 bind 去撞换邮箱。bind 关了之后，眼下还开账号的路是 signin（邮箱 + 寄到的验证码，
+ * 地址上没账号就新建）、handle 注册、换邮箱（email.js）——和换邮箱抢同一个邮箱地址的只剩
+ * signin 新建那一条，所以改由它来撞。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -49,7 +54,8 @@ const passcode = (await import('../api/passcode.js')).default;
 const emailApi = (await import('../api/email.js')).default;
 const redeem = (await import('../api/redeem.js')).default;
 const A = await import('../api/_accounts.js');
-const { set } = await import('../api/_store.js');
+const signinApi = (await import('../api/signin.js')).default;
+const { get, set } = await import('../api/_store.js');
 
 const call = async (handler, body) => {
   let status = 0;
@@ -73,7 +79,12 @@ async function mint(code, days, plan) {
 }
 const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)));
 
-// ---- ① 两张码，同一个邮箱，同时绑 --------------------------------------
+// ---- ① 两张码，同一个邮箱，同时绑：bind 关了（10-11 方案 A-2）------------------
+//
+// 从前这一节量的是「只成一个、输的那张码要还回来」。bind 现在整支回 410——它从来不验那个
+// 邮箱是谁的，兑一张码就能绑到别人的地址上。这一节改量「关得干净」：两条都 410，**两张码一张
+// 都没被吃掉**（410 排在取码之前），地址上也没开出任何账号。哪天 bind 又被接回来，这一节先红，
+// 那时请回 api/passcode.js 分发那一行的注释看清楚要先补什么。
 {
   const t1 = await mint('AAAA11', 30, 'month');
   const t2 = await mint('BBBB22', 365, 'year');
@@ -82,47 +93,56 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
     call(passcode, { code: 'AAAA11', token: t1, email: mail, password: 'aaa111' }),
     call(passcode, { code: 'BBBB22', token: t2, email: mail, password: 'bbb222' }),
   ]);
-  const wins = [r1, r2].filter((r) => r.status === 200);
-  const loses = [r1, r2].filter((r) => r.status !== 200);
-  check('① 绑码撞绑码：只有一个说成功', wins.length === 1, `${r1.status} / ${r2.status}`);
-  check('① 另一个明说地址已经有人了', loses.length === 1 && loses[0].body.error === 'exists', loses[0]?.body?.error);
-  const acct = await A.loadAccount(mail);
-  check('① 说成功那个人的令牌真的能用', Boolean(acct) && wins[0].body.token === acct.token);
-  // 输的那一条必须把码放回去。少了这一步，玩家是拿一张码换回一句拒绝——
-  // 那正是这条 bug 最疼的地方（码没了，什么都没换到）。
-  const back = (await codeAlive('AAAA11')) || (await codeAlive('BBBB22'));
-  check('① 输的那张码还回来了（不是白白烧掉）', back);
-  const burned = (await codeAlive('AAAA11')) && (await codeAlive('BBBB22'));
-  check('① 赢的那张码照常烧掉', !burned);
+  check('① bind 关了：两条都回 410 gone',
+    [r1, r2].every((r) => r.status === 410 && r.body.error === 'gone'), `${r1.status} / ${r2.status}`);
+  check('① 两张码一张都没被吃掉', (await codeAlive('AAAA11')) && (await codeAlive('BBBB22')));
+  check('① 地址上没有开出任何账号', !(await A.loadAccount(mail)));
 }
 
-// ---- ② 换邮箱撞上别人拿这个地址绑码 --------------------------------------
+// ---- ② 换邮箱撞上别人拿这个地址新建账号（signin）-------------------------------
 //
-// 要码到输码之间隔着 30 分钟，那头完全可能有人正好在注册这个地址。谁赢都行，
-// 不能两个都赢——两个都赢就是有人的账号被另一个人整个盖掉。
+// 要码到输码之间隔着 30 分钟，那头完全可能有人正好在拿这个地址注册。谁先谁后都行——**不能有
+// 谁的账号被另一份整个盖掉**：
+//   · signin 先建成：换邮箱那一条撞上「地址有人了」，旧地址一个字都没动，他重来一次就好；
+//   · 换邮箱先搬成：signin 的 createAccount 写不进去，落到「已有账号」那一支，登进的是搬过来
+//     的那一份（两边都证明过这个邮箱是自己的——码都寄到了这个地址），搬过来的东西一样不少。
+// 两条从前都是「先看一眼有没有人、再整份写进去」时，第二种会让后写的那一份把先写的盖掉。
 {
   const old = 'mover@example.com';
   const wanted = 'newhome@example.com';
-  const mine = A.newAccount('old111', 'code');
+  // 今天的邮箱账号长这样：验证码开出来的（密钥是空串）、带着 emailVerifiedAt。原先这里是一把
+  // 六位密码的老账号——那种账号搬到新地址后头一次拿验证码登录，会被 signin.js 当成抢注清理一
+  // 遍（换盐、全部令牌作废，见那里的 `claimed`），那是另一件事，不是这一节要量的并发。
+  const mine = A.newAccount('', 'code');
+  mine.emailVerifiedAt = Date.now() - 1000;
   mine.until = Date.now() + 9e8;
   await A.saveAccount(old, mine);
   await set('chmail:' + old, { code: '123456', to: wanted }, 600);
 
-  const t3 = await mint('CCCC33', 30, 'month');
-  const [rMove, rBind] = await Promise.all([
+  // signin 那一头先要一张码（没配 Resend：信寄不出去，但票照回、码照旧写进库里）。
+  const asked = await call(signinApi, { email: wanted });
+  const pending = asked.body.challenge ? await get(`signin:${wanted}:${asked.body.challenge}`) : null;
+  check('（尺子）signin 那张码签出来了', Boolean(pending?.code), `${asked.status} ${JSON.stringify(asked.body)}`);
+
+  const [rMove, rSign] = await Promise.all([
     call(emailApi, { action: 'confirm', email: old, newEmail: wanted, code: '123456', token: mine.token }),
-    call(passcode, { code: 'CCCC33', token: t3, email: wanted, password: 'ccc333' }),
+    call(signinApi, { action: 'confirm', email: wanted, code: pending?.code, challenge: asked.body.challenge }),
   ]);
-  const wins = [rMove, rBind].filter((r) => r.status === 200).length;
-  check('② 换邮箱撞绑码：只有一个成', wins === 1, `搬家 ${rMove.status} / 绑码 ${rBind.status}`);
+  check('② signin 那一条码是对的，总登得进去', rSign.status === 200 && Boolean(rSign.body.token),
+    `搬家 ${rMove.status} / signin ${rSign.status}`);
+  const there = await A.loadAccount(wanted);
   if (rMove.status !== 200) {
     // 拦在搬家的第一步，所以旧地址一个字都还没动——他的账号原地不动，重来一次就好。
     const still = await A.loadAccount(old);
-    check('② 搬家没成时，旧地址上的账号原封不动', Boolean(still) && still.token === mine.token);
+    check('② 搬家没成时，旧地址上的账号原封不动', Boolean(still) && A.tokenValid(still, mine.token));
+    check('② 搬家没成时，新地址上是 signin 新建的那一份（不是搬家写了一半的）',
+      Boolean(there) && A.tokenValid(there, rSign.body.token) && !A.tokenValid(there, mine.token));
   } else {
-    const moved = await A.loadAccount(wanted);
-    check('② 搬家成了：账号确实落在新地址上', Boolean(moved) && moved.token === mine.token);
+    check('② 搬家成了：账号确实落在新地址上（他的令牌、到期日都在）',
+      Boolean(there) && A.tokenValid(there, mine.token) && there.until === mine.until);
     check('② 搬家成了：旧地址已经拆掉', !(await A.loadAccount(old)));
+    check('② 搬家成了：signin 登进的是搬过来的那一份，不是另开一份把它盖掉',
+      Boolean(there) && A.tokenValid(there, rSign.body.token));
   }
 }
 

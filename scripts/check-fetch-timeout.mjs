@@ -18,6 +18,10 @@
  *   ② 没有 AbortController 的老内核（Chrome 66 以前）：照样到点放弃，只是不带 signal。
  *   ③ 正常回包原样透传；断网的错原样透传（不被换成「超时」）；默认等 15 秒。
  *   ④ 接到真调用处上：换邮箱那一问（account.ts）遇上挂住的请求，到点答 network（不是一直挂着）。
+ *   ⑥ **头到了、正文不来**（10-11 方案 A-13）：从前一拿到回包头就把计时器清了，调用处那一句
+ *      `await res.json()` 永远等不到——小屋的轮询（engine/room.ts 的 post）就停在那一下。现在正文也在同
+ *      一个钟里读完：到点放弃、请求被 abort；交出去的 Response 状态、回包头原样（dailyClock 读 `Date`）；
+ *      204 / HEAD 那种没有正文的照常交出去；真调用处（account.ts）遇上它也到点答 network。
  *   ⑤ 源码：src/ 里除了 fetchTimeout.ts，不许再有裸的 fetch(；也不许用 AbortSignal.timeout（Chrome 103）；
  *      helper 里不用 Promise 的 finally（Chrome 63）。
  */
@@ -41,18 +45,31 @@ const bundle = async (entry, out) => {
   return import(join(dir, out));
 };
 
-/** 假 fetch 这一回怎么答：'hang'（永远不回）、'offline'（断网）、或者一个回包。最后一次收到的 init 记下来。 */
+/**
+ * 假 fetch 这一回怎么答：'hang'（永远不回）、'offline'（断网）、'stallBody'（回包头到了、正文永远不来）、
+ * 'noContent'（204，没有正文）、或者一个回包（正文就是 mode 那个词）。最后一次收到的 init 记下来。
+ */
 let mode = 'hang';
 let lastInit = null;
+const aborted = (init) => (_, reject) => {
+  init?.signal?.addEventListener?.('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+};
 globalThis.fetch = (url, init) => {
   lastInit = init;
   if (mode === 'offline') return Promise.reject(new TypeError('Failed to fetch'));
-  if (mode === 'hang') {
-    return new Promise((_, reject) => {
-      init?.signal?.addEventListener?.('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+  if (mode === 'hang') return new Promise(aborted(init));
+  if (mode === 'stallBody') {
+    // 头到了：状态、回包头都在，可正文那一段永远不来（直到被 abort）。
+    return Promise.resolve({
+      ok: true, status: 200, statusText: 'OK', headers: new Headers({ date: 'Sun, 11 Oct 2026 08:00:00 GMT' }),
+      json: () => new Promise(aborted(init)),
+      text: () => new Promise(aborted(init)),
     });
   }
-  return new Promise((resolve) => setTimeout(() => resolve({ ok: true, status: 200, json: async () => mode, text: async () => '' }), 10));
+  if (mode === 'noContent') return Promise.resolve(new Response(null, { status: 204 }));
+  return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify(mode), {
+    status: 200, headers: { 'content-type': 'application/json', date: 'Sun, 11 Oct 2026 08:00:00 GMT' },
+  })), 10));
 };
 
 const { fetchWithTimeout, FETCH_TIMEOUT_MS } = await bundle('src/engine/fetchTimeout.ts', 'ft.mjs');
@@ -94,6 +111,8 @@ const settle = async (p) => {
   mode = 'fine';
   const r = await settle(fetchWithTimeout('/api/x', {}, 500));
   check('③ 正常回包原样透传', r.ok && r.value.status === 200 && (await r.value.json()) === 'fine');
+  check('③ 回包头也原样透传（dailyClock 读 Date 那个头）', r.ok && r.value.headers.get('date') === 'Sun, 11 Oct 2026 08:00:00 GMT',
+    String(r.ok && r.value.headers.get('date')));
   mode = 'offline';
   const o = await settle(fetchWithTimeout('/api/x', {}, 500));
   check('③ 断网的错原样透传（不被换成「超时」）', !o.ok && o.err instanceof TypeError && o.err.message === 'Failed to fetch', String(o.err));
@@ -117,6 +136,33 @@ const settle = async (p) => {
     const r = await settle(Promise.race([acct.requestEmailChange('stall@example.com', 'T', 'next@example.com', 'zhHans'), stuck]));
     check('④ 换邮箱那一问遇上挂住的请求：到点答 network，不是一直挂着', r.ok && r.value?.reason === 'network' && r.ms < 2000,
       `${r.ms}ms ${JSON.stringify(r.value ?? String(r.err))}`);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+}
+
+// ── ⑥ 头到了、正文不来（10-11 方案 A-13）──────────────────────────
+{
+  mode = 'stallBody';
+  const r = await settle(fetchWithTimeout('/api/x', { method: 'POST' }, 80));
+  check('⑥ 回包头到了、正文不来：照样到点放弃（不是挂在 res.json() 上）', !r.ok && r.ms >= 70 && r.ms < 1500, `${r.ms}ms`);
+  check('⑥ 抛的照旧是 TypeError（调用处照接断网那样接）', !r.ok && r.err instanceof TypeError, String(r.err));
+  check('⑥ 到点那一下请求真的 abort 了（正文那一段也停下来）', Boolean(lastInit?.signal) && lastInit.signal.aborted === true);
+
+  mode = 'noContent';
+  const n = await settle(fetchWithTimeout('/api/x', {}, 500));
+  check('⑥ 没有正文的回包（204 / HEAD）照常交出去，不抛', n.ok && n.value.status === 204, n.ok ? String(n.value.status) : String(n.err));
+
+  // 接到真调用处上：account.ts 的 post 是「先 fetchWithTimeout、再 await res.json()」——从前卡在后一句上。
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, ms === FETCH_TIMEOUT_MS ? 60 : ms, ...rest);
+  try {
+    const acct = await bundle('src/engine/account.ts', 'account-stall.mjs');
+    mode = 'stallBody';
+    const stuck = new Promise((_, reject) => realSetTimeout(() => reject(new Error('三秒了还挂着')), 3000));
+    const a = await settle(Promise.race([acct.requestEmailChange('stall@example.com', 'T', 'next@example.com', 'zhHans'), stuck]));
+    check('⑥ 换邮箱那一问遇上「头到了、正文不来」：到点答 network，不是一直挂着', a.ok && a.value?.reason === 'network' && a.ms < 2000,
+      `${a.ms}ms ${JSON.stringify(a.value ?? String(a.err))}`);
   } finally {
     globalThis.setTimeout = realSetTimeout;
   }

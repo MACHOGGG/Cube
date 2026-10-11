@@ -19,7 +19,8 @@
  *
  * 换邮箱是这里面唯一动数据的：账号存在 acct:<邮箱> 底下，排行榜上的成员也是
  * 这个地址，所以换邮箱是搬家。④⑤⑥ 分别验：码寄给**新**地址（不是现在这
- * 个）、账号和战绩确实搬过去了、以及几种该拦下来的。
+ * 个）、账号和战绩确实搬过去了、以及几种该拦下来的。⑨ 验信寄不出去的那一下
+ * （10-11 方案 A-8）：照实答 503 `noMail`、码留着、屏幕上是「邮件暂时寄不出去」那一句。
  *
  * 不起服务器、不连 Redis、不真发信也不真问 Creem：库用进程内的那份，两个外
  * 部 HTTP 各用一个假 fetch 顶掉——顺便把验证码从那封假邮件里读出来。
@@ -53,9 +54,12 @@ const check = (n, ok, extra = '') => {
 };
 
 let mails = [];
+/** ⑨ 用：为真时 Resend 答 500（信没寄出去）。 */
+let resendDown = false;
 globalThis.fetch = async (url, init) => {
   const u = String(url);
   if (u.includes('api.resend.com')) {
+    if (resendDown) return { ok: false, status: 500, text: async () => 'stub: resend down', json: async () => ({}) };
     const body = JSON.parse(init.body);
     mails.push({ to: body.to[0], subject: body.subject, text: body.text });
     return { ok: true, status: 200, json: async () => ({ id: 'stub' }) };
@@ -239,7 +243,7 @@ check('没有生出和账户无关的孤儿账号（acct:code:GATE02）',
   check('拿密码登录那一支撤了：真密码也答 401',
     pwLogin.status === 401, `${pwLogin.status} ${JSON.stringify(pwLogin.body)}`);
 
-  // 尺子：密码本身还在、还对得上（`bind` 那条路还要设六位密码）——上面那三条红的不是
+  // 尺子：密码本身还在、还对得上（这种老账号在库里本来就带着一把）——上面那三条红的不是
   // 「账号坏了」，而是那几条路真的关了。
   check('（尺子）账号和密码都还好着', (await checkPin(EMAIL, PW, await loadAccount(EMAIL))) === 'ok');
 }
@@ -447,6 +451,75 @@ check('50 次并发，只有 5 次摸得到那张码', compared === 5, `摸到 $
     check(`⑧ 反向对照：${name} → 要红在 ${want}`, bad.includes(want),
       bad.length ? `实际红了：${bad.join(' ')}` : '实际全绿（空绿）');
   }
+}
+
+// ---- ⑨ 信寄不出去：照实说，码留着（10-11 方案 A-8）--------------------------
+//
+// 原先 api/email.js 把 sendMail 的回答扔了，Resend 回错也照样答 `sent: true`：屏幕翻到「码已寄到新
+// 邮箱」那一段，他守着一个永远等不来的信箱。现在答 503 `noMail`；客户端（engine/account.ts 的
+// toResult）认得这个词，换邮箱那一屏说「邮件暂时寄不出去，请稍后再试」——不是解锁那句「写信给我们，
+// 我们帮您开启」。码不删：Resend 回了错而信其实寄到了，是真会发生的事。
+{
+  const { build } = await import('esbuild');
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'hub-'));
+  const bundle = async (entry, out) => {
+    await build({
+      entryPoints: [new URL('../' + entry, import.meta.url).pathname],
+      bundle: true, format: 'esm', outfile: join(dir, out), logLevel: 'error',
+    });
+    return import(join(dir, out));
+  };
+
+  // 服务端：Resend 答 500。
+  const MAILLESS = 'mailless@example.com';
+  resendDown = true;
+  const down = await callOn(emailApi, { email: NEXT, token: token2, newEmail: MAILLESS, lang: 'zhHans' });
+  resendDown = false;
+  check('⑨ Resend 回 500 → 503 noMail（不再说「已寄出」）',
+    down.status === 503 && down.body.error === 'noMail', `${down.status} ${JSON.stringify(down.body)}`);
+  const kept = await get('chmail:' + NEXT);
+  check('⑨ 码还留在库里（信可能其实寄到了）', kept?.to === MAILLESS && /^\d{6}$/.test(String(kept?.code)),
+    JSON.stringify(kept && { to: kept.to }));
+
+  // 客户端：真的那份 engine/account.ts，请求交给进程里的 handler（Resend 照旧答 500）。
+  const account = await bundle('src/engine/account.ts', 'account.mjs');
+  const serverFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url) !== '/api/email') return serverFetch(url, init);
+    resendDown = true;
+    try {
+      const r = await callOn(emailApi, JSON.parse(init.body));
+      return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.body, text: async () => JSON.stringify(r.body) };
+    } finally {
+      resendDown = false;
+    }
+  };
+  let asked2;
+  try {
+    asked2 = await account.requestEmailChange(NEXT, token2, 'mailless-two@example.com', 'zhHans');
+  } finally {
+    globalThis.fetch = serverFetch;
+  }
+  check('⑨ 客户端认得这个词：requestEmailChange → noMail（不是落成 network / unavailable）',
+    asked2?.ok === false && asked2.reason === 'noMail', JSON.stringify(asked2));
+
+  // 屏幕上那一句：四种语言都是方案定稿那一句；换邮箱那一屏把 noMail 翻成它（读源码，同 check-server-busy ⑤）。
+  const { STRINGS } = await bundle('src/i18n.ts', 'i18n.mjs');
+  const WANT = {
+    zhHans: '邮件暂时寄不出去，请稍后再试。',
+    zhHant: '郵件暫時寄不出去，請稍後再試。',
+    en: "We couldn't send the email right now. Please try again later.",
+    fr: 'Impossible d’envoyer l’e-mail pour le moment. Réessayez plus tard.',
+  };
+  for (const [lang, want] of Object.entries(WANT)) {
+    check(`⑨ ${lang}：「${want}」`, STRINGS[lang]?.mailSendFailed === want, String(STRINGS[lang]?.mailSendFailed));
+  }
+  const ui = readFileSync(new URL('../src/ui/subscribe.ts', import.meta.url), 'utf8');
+  const said = /case 'noMail':\s*\n\s*return s\.(\w+)/.exec(ui)?.[1];
+  check('⑨ 换邮箱那一屏把 noMail 说成 mailSendFailed（不是解锁那句 unlockNoMail）', said === 'mailSendFailed', String(said));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

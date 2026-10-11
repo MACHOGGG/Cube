@@ -778,5 +778,34 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   check('源码：board() 按行取名字（hmget(NAMES）', /hmget\(NAMES,/.test(fnBody('board')));
 }
 
+// ---- 看战绩、看榜：每个登录的人每分钟各 60 次（10-11 方案 A-13）--------------
+//
+// 按登录者的 id 数，不按来路（教室里几十个人共用一个 IP）。第 61 次答 429；同一分钟里另一个账号
+// 照常看。两个动作各算各的：看榜看满了，自己的战绩照样打得开。
+{
+  // 限速是按整分钟分桶的（_ratelimit.js 的 windowKey）：一串 61 次要是正好跨过整分钟，后半截落进新
+  // 的一桶，第 61 次就不会被挡——骑在边界上的断言就是偶发红。离整分钟不到 5 秒就先等过去。
+  const sameMinute = async () => {
+    const left = 60_000 - (Date.now() % 60_000);
+    if (left < 5_000) await new Promise((r) => setTimeout(r, left + 50));
+  };
+  const R = await makePlayer('rate-reader@example.com');
+  const R2 = await makePlayer('rate-other@example.com');
+  await sameMinute();
+  const boards = [];
+  for (let i = 0; i < 61; i++) boards.push((await call({ action: 'board', email: R.email, token: R.token })).status);
+  check('看榜：同一个人一分钟里前 60 次照常', boards.slice(0, 60).every((c) => c === 200), [...new Set(boards.slice(0, 60))].join(','));
+  check('看榜：第 61 次答 429', boards[60] === 429, String(boards[60]));
+  const other = await call({ action: 'board', email: R2.email, token: R2.token });
+  check('看榜：同一分钟里另一个账号不受牵连（按人数，不按来路）', other.status === 200, String(other.status));
+  await sameMinute();
+  const own = await call({ action: 'mine', email: R.email, token: R.token });
+  check('看榜看满了，自己的战绩照样打得开（两个动作各算各的）', own.status === 200, String(own.status));
+  const mines = [own.status];
+  for (let i = 0; i < 60; i++) mines.push((await call({ action: 'mine', email: R.email, token: R.token })).status);
+  check('看战绩：第 61 次答 429', mines.slice(0, 60).every((c) => c === 200) && mines[60] === 429,
+    `${[...new Set(mines.slice(0, 60))].join(',')} → ${mines[60]}`);
+}
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

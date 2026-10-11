@@ -55,17 +55,15 @@ globalThis.document = { visibilityState: 'visible', addEventListener() {}, remov
 let calls = [];
 let netOk = true;
 let serveRows = 1;
+// 假回包和真的一样带 text()：engine/fetchTimeout.ts 在同一个钟里先把正文读完再交出去（10-11 方案 A-13）。
 globalThis.fetch = async (url, init) => {
   const body = JSON.parse(init.body);
   calls.push({ url: String(url), action: body.action, mode: body.mode ?? '', body });
-  if (!netOk) return { ok: false, status: 500, json: async () => ({}) };
-  return {
-    ok: true,
-    status: 200,
-    json: async () => ({ mode: body.mode ?? '', rows: Array.from({ length: serveRows }, (_, i) => ({
-      rank: i + 1, name: 'n' + i, score: 100 - i, me: false,
-    })), players: serveRows, me: null }),
-  };
+  if (!netOk) return { ok: false, status: 500, json: async () => ({}), text: async () => '{}' };
+  const page = { mode: body.mode ?? '', rows: Array.from({ length: serveRows }, (_, i) => ({
+    rank: i + 1, name: 'n' + i, score: 100 - i, me: false,
+  })), players: serveRows, me: null };
+  return { ok: true, status: 200, json: async () => page, text: async () => JSON.stringify(page) };
 };
 
 /**

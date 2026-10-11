@@ -172,7 +172,16 @@ async function request(res, req, address, wanted, wantLang) {
   await set(key(address), { code, to: wanted }, CODE_TTL_S);
   // 新码新账：上一张码被猜掉的次数不跟着过来（同 _unlock_legacy.js）。
   await del(triesKey(address));
-  await sendMail({ to: wanted, ...compose(MAIL, mailLang(wantLang), code) });
+  /*
+   * 寄没寄出去要照实说（10-11 方案 A-8）。原先这一句把 `sendMail` 的回答扔了，Resend 回错时照样答
+   * `sent: true`：屏幕翻到「码已寄到新邮箱」那一段，他守着一个永远等不来的信箱。现在答 503
+   * `noMail`，客户端说「邮件暂时寄不出去，请稍后再试」（engine/account.ts → ui/subscribe.ts）。
+   *
+   * ⚠️ **码不删**，和 signin.js 发码那一段同一个理由：Resend 回了错而信其实寄到了，是真会发生的
+   * 事；删了的话那张寄到的码就成了废纸。多留 30 分钟不花钞，他下一次再按就是一张新码。
+   */
+  const sent = await sendMail({ to: wanted, ...compose(MAIL, mailLang(wantLang), code) });
+  if (!sent) return send(res, 503, { error: 'noMail' });
   return send(res, 200, { sent: true });
 }
 

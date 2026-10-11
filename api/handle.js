@@ -128,6 +128,10 @@ async function signin(res, first, { second }) {
   if (verdict === 'locked') {
     return send(res, 423, { error: 'locked', retryInMs: lockRemainingMs(account) });
   }
+  // 锁刚开、这个锁期的比对资格被同一瞬间的另一个请求拿走了（_accounts.js 的 checkPin）。不是锁
+  // 着：答「正忙」，客户端说「服务器忙」（engine/creem.ts 的 pairCall：5xx → 'unavailable'），
+  // 他再按一次就好（10-11 方案 A-9）。
+  if (verdict === 'busy') return send(res, 503, { error: 'busy' });
   if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
 
   /**

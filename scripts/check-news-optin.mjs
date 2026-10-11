@@ -1,14 +1,23 @@
 /**
  * 「愿不愿意收 Slides 的邮件」这一句，问到了、也存下来了。
  *
- *   node scripts/check-news-optin.mjs                    （只验服务端）
- *   node scripts/check-news-optin.mjs http://localhost:8815/   （连界面一起验）
+ *   node scripts/check-news-optin.mjs
  *
- * 分两半，因为这件事会从两头坏掉，而且两头坏了都不出错：
+ * 这件事会从两头坏掉，而且两头坏了都不出错：
  *   服务端 —— 勾了却没存下来，或者没勾却当成同意了。后者是真出事的那一种。
  *   界面 —— 那个框根本没画出来，或者画了但没跟着请求一起送上去。
- * 所以服务端这一半直接在本进程里调 api/ 的处理函数（内存 store，不碰网络），
- * 界面那一半开一个真浏览器，拦下发往 /api/passcode 的那一发，看里面写的是什么。
+ *
+ * 服务端这一半直接在本进程里调 api/ 的处理函数（内存 store，不碰网络）。
+ *
+ * ⚠️ **10-11 改过一次**（方案 A-2）：原先这一半走的是「兑码 → `/api/passcode` 的 bind 绑邮箱」，
+ * 那正是当年问这一句的地方。bind 从此回 410——它从来不验那个邮箱是谁的，**还会替那个人订上
+ * 营销邮件**（`news:true`）。今天开邮箱账号、问这一句的只剩 signin（邮箱 + 寄到的验证码，地址
+ * 上没账号就新建，`setNews(fresh, news === true)`），所以服务端这一半改走它，四条判定一条没变；
+ * 另加一条：关掉的 bind 不许替任何人订上。
+ *
+ * **界面那一半随内部码界面撤除，不再适用**：它从个人主页的 `#insiderRow` 进《有兑换码》那扇窗，
+ * 而那一行 E41 就撤了，这一半从那时起本来就跑不通。登录窗里那个框（`#authNews`：摆着、出厂不
+ * 勾）由 check-signin-ui 的 ② 守着；勾了之后请求里带 `news: true` 那一段由 check-signin-otp 守着。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -22,6 +31,7 @@ const store = await import('../api/_store.js');
 const { codeHolder, loadAccount } = await import('../api/_accounts.js');
 const redeem = (await import('../api/redeem.js')).default;
 const passcode = (await import('../api/passcode.js')).default;
+const signin = (await import('../api/signin.js')).default;
 
 /** 一个够 api/ 那边用的假 req/res 对，直接把处理函数当函数调。 */
 async function call(handler, body) {
@@ -38,77 +48,49 @@ async function call(handler, body) {
   return { status: status || res.statusCode, json };
 }
 
-/** 花一张码、绑一个邮箱，返回落在 store 里的那个账号。 */
-async function bindWith(code, email, body) {
-  await store.set('code:' + code, { plan: 'month' });
-  await call(redeem, { code });
-  // 还没绑邮箱之前，码换来的东西寄放在一个以码为名的「账号」下面。
-  const holder = await loadAccount(codeHolder(code));
-  await call(passcode, { code, token: holder.token, email, password: '123456', ...body });
+/**
+ * 拿一个新邮箱走一遍 signin（要码 → 读出库里那张码 → 输码），返回落在 store 里的那个账号。
+ * 没配 Resend：信寄不出去，但票照回、码照旧写进库里（signin.js 的 request），所以读得到。
+ */
+async function signUpWith(email, body) {
+  const asked = await call(signin, { email });
+  const pending = await store.get(`signin:${email}:${asked.json?.challenge}`);
+  const done = await call(signin, { action: 'confirm', email, code: pending?.code, challenge: asked.json?.challenge, ...body });
+  if (done.status !== 200) console.log(`  （signin 没走通：${done.status} ${JSON.stringify(done.json)}）`);
   return loadAccount(email);
 }
 
 // ---- 服务端 -------------------------------------------------------------
 {
-  const yes = await bindWith('NEWSYES', 'yes@example.com', { news: true });
+  const yes = await signUpWith('yes@example.com', { news: true });
   check('勾了就记成同意', yes?.news === true, JSON.stringify({ news: yes?.news }));
   check('同意的时刻也记下来了', typeof yes?.newsAt === 'number' && yes.newsAt > 0);
 
-  const no = await bindWith('NEWSNO', 'no@example.com', { news: false });
+  const no = await signUpWith('no@example.com', { news: false });
   check('没勾就是不同意', no?.news === false);
   check('没勾的不留时间戳', no?.newsAt === 0, String(no?.newsAt));
 
   // 这一条是真正要守的：请求里压根没提这件事，绝不能当成同意。少一个字段就
   // 默认「他愿意」，是这类功能最常见、也最贵的一种写法。
-  const silent = await bindWith('NEWSNONE', 'none@example.com', {});
+  const silent = await signUpWith('none@example.com', {});
   check('请求里没提，就不算同意', silent?.news === false, JSON.stringify({ news: silent?.news }));
 
   // 字符串 'true'、数字 1 这些也不算——同意只认那一个布尔值。
-  const sneaky = await bindWith('NEWSFAKE', 'fake@example.com', { news: 'true' });
+  const sneaky = await signUpWith('fake@example.com', { news: 'true' });
   check('只认真正的 true，不认像 true 的东西', sneaky?.news === false, JSON.stringify({ news: sneaky?.news }));
 }
 
-// ---- 界面 ---------------------------------------------------------------
-const BASE = process.argv[2];
-if (BASE) {
-  const { chromium } = await import('playwright');
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  await ctx.addInitScript(() => {
-    for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
-      localStorage.setItem(k, '1');
-    localStorage.setItem('slides_lang', 'zhHans');
+// ---- 关掉的 bind 不许替任何人订上（10-11 方案 A-2）-----------------------
+{
+  await store.set('code:NEWSBIND', { plan: 'month' });
+  await call(redeem, { code: 'NEWSBIND' });
+  // 还没绑邮箱之前，码换来的东西寄放在一个以码为名的「账号」下面。
+  const holder = await loadAccount(codeHolder('NEWSBIND'));
+  const r = await call(passcode, {
+    code: 'NEWSBIND', token: holder?.token, email: 'victim@example.com', password: '123456', news: true,
   });
-  const page = await ctx.newPage();
-  let sent = null;
-  page.on('request', (r) => {
-    if (r.url().endsWith('/api/passcode') && r.method() === 'POST') {
-      try { sent = JSON.parse(r.postData() || '{}'); } catch { sent = null; }
-    }
-  });
-  await page.goto(BASE, { waitUntil: 'load' });
-  await page.waitForSelector('#navProfile', { timeout: 20000 });
-  await page.click('#navProfile');
-  await page.waitForTimeout(500);
-  await page.click('#insiderRow');
-  await page.waitForTimeout(600);
-  await page.fill('#redeemCode', 'TESTMONTH');
-  await page.click('#redeemGo');
-  // 兑换成功之后弹的就是「绑定邮箱 + 设密码」那一扇窗
-  await page.waitForSelector('#pwNews', { timeout: 15000 });
-  check('设密码那一扇窗里有那个勾选框', true);
-  check('出厂不勾', (await page.$eval('#pwNews', (el) => el.checked)) === false);
-
-  await page.check('#pwNews');
-  await page.fill('#pwUser', 'ui@example.com');
-  await page.fill('#pwNew', '123456');
-  await page.click('#pwGo');
-  await page.waitForFunction(() => true, { timeout: 1000 }).catch(() => {});
-  await page.waitForTimeout(1500);
-  check('勾了之后请求里带着 news: true', sent?.news === true, JSON.stringify(sent && { news: sent.news }));
-  await browser.close();
-} else {
-  console.log('（没给网址，跳过界面那一半）');
+  check('bind 回 410', r.status === 410 && r.json?.error === 'gone', `${r.status} ${JSON.stringify(r.json)}`);
+  check('别人的地址上没开出账号，更没被订上邮件', !(await loadAccount('victim@example.com')));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
