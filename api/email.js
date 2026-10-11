@@ -48,10 +48,14 @@ import { bump, del, get, set, storeConfigured } from './_store.js';
  * 这个地址」除了邮箱也认 `hdl:` 那把 id（accountId）。方案原话：「放在现有的 api/email.js 里做，
  * 不新增接口文件」。
  *
- * 只多两件事，都在 confirm 里搬家之前（见 `bound`）：第二串的哈希抹掉（两串从此不是凭据——旧
- * 的 `hdl:` 那一份也拆了，handle.js 再也找不到它），并且记下「这个邮箱验过了」
- * （emailVerifiedAt）。少了后一件，他头一次拿验证码登录时 signin.js 会把这个账号当成被抢注的
- * （没验过、身上又挂着一把别人设的密码），把他所有设备踢下线。
+ * 只多一件事，在 confirm 里搬家之前（见 `bound`）：第二串的哈希抹掉（两串从此不是凭据——旧的
+ * `hdl:` 那一份也拆了，handle.js 再也找不到它）。
+ *
+ * **两种搬家都记下「这个邮箱验过了」**（emailVerifiedAt，邮箱换邮箱那一支 10-11 起也记）：码刚寄到
+ * 新地址、也输对了，这就是证明。少了它，他头一次在新地址上拿验证码登录时 signin.js 会把这个账号当
+ * 成被抢注的（没验过、身上又挂着一把密码——早期刷卡、内部码绑邮箱开的老账号都带着一把六位密码），
+ * 把密码抹掉、所有设备踢下线一次。修复上线之前已经搬过、又还没用验证码登录过的老账号不回填：那一次
+ * 清理只是要他重新登录，数据和权益都不丢。
  *
  * 邮箱上已经有账号：照旧 409 `taken`（「这个邮箱已经有账号了」），不合并。
  */
@@ -293,18 +297,20 @@ async function confirm(res, address, wanted, account, { code, token }) {
 }
 
 /**
- * 搬去新地址的那一份账号。邮箱换邮箱：原样。免邮箱账号绑定邮箱（`hdl:` 那一种，见文件头）：
+ * 搬去新地址的那一份账号。**两种搬家都记** `emailVerifiedAt`：码刚寄到这个邮箱、输对了，这就是
+ * 「邮箱是他的」的证明。不记的话 signin.js 把它当抢注清理（见那里的 `claimed`），他头一次拿验证码
+ * 登录就把密码抹掉、所有设备踢下线。
  *
- *   · 第二串的哈希抹掉（`unblock(…, '')`：换盐、密钥成空串，顺带把输错次数和锁清零）——两串从这
- *     一刻起不是凭据；留着一份谁都用不上的密码哈希只有坏处，而且 signin.js 的 hasSecret 会认它。
- *   · `emailVerifiedAt` 记上此刻：码刚寄到这个邮箱、输对了，这就是「邮箱是他的」的证明。不记的话
- *     signin.js 把它当抢注清理（见那里的 `claimed`），他头一次拿验证码登录就把所有设备踢下线。
+ *   · 邮箱换邮箱：只多这一位，别的原样搬——密码、令牌、其余字段一个不动（10-11 起；原先这一支原样
+ *     搬、连这一位都没记，带着六位密码的老账号搬过去之后头一次登录就被清理一遍）。
+ *   · 免邮箱账号绑定邮箱（`hdl:` 那一种，见文件头）：另外把第二串的哈希抹掉（`unblock(…, '')`：换盐、
+ *     密钥成空串，顺带把输错次数和锁清零）——两串从这一刻起不是凭据；留着一份谁都用不上的密码哈希
+ *     只有坏处，而且 signin.js 的 hasSecret 会认它。
  *
  * 不改原来那一份：createAccount 写不成（409）的时候，旧账号一个字都不该动过。
  */
 function bound(address, account) {
-  if (!PAIR_KEY_RE.test(address)) return account;
-  const moved = unblock({ ...account }, '');
+  const moved = PAIR_KEY_RE.test(address) ? unblock({ ...account }, '') : { ...account };
   moved.emailVerifiedAt = Date.now();
   return moved;
 }

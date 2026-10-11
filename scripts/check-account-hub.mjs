@@ -20,7 +20,9 @@
  * 换邮箱是这里面唯一动数据的：账号存在 acct:<邮箱> 底下，排行榜上的成员也是
  * 这个地址，所以换邮箱是搬家。④⑤⑥ 分别验：码寄给**新**地址（不是现在这
  * 个）、账号和战绩确实搬过去了、以及几种该拦下来的。⑨ 验信寄不出去的那一下
- * （10-11 方案 A-8）：照实答 503 `noMail`、码留着、屏幕上是「邮件暂时寄不出去」那一句。
+ * （10-11 方案 A-8）：照实答 503 `noMail`、码留着、屏幕上是「邮件暂时寄不出去」那一句。⑩ 验带着
+ * 六位密码的老账号换邮箱之后，头一次在新地址上拿验证码登录**不会**被当成抢注清理（搬家那一下就记
+ * 上了 emailVerifiedAt）。
  *
  * 不起服务器、不连 Redis、不真发信也不真问 Creem：库用进程内的那份，两个外
  * 部 HTTP 各用一个假 fetch 顶掉——顺便把验证码从那封假邮件里读出来。
@@ -520,6 +522,45 @@ check('50 次并发，只有 5 次摸得到那张码', compared === 5, `摸到 $
   const ui = readFileSync(new URL('../src/ui/subscribe.ts', import.meta.url), 'utf8');
   const said = /case 'noMail':\s*\n\s*return s\.(\w+)/.exec(ui)?.[1];
   check('⑨ 换邮箱那一屏把 noMail 说成 mailSendFailed（不是解锁那句 unlockNoMail）', said === 'mailSendFailed', String(said));
+}
+
+// ---- ⑩ 老账号换邮箱之后，头一次拿验证码登录不被当成抢注（10-11，玩家点名修）---------------
+//
+// 早期刷卡、内部码绑邮箱开的账号身上带着一把六位密码，而且从没「收到过一张寄到这个地址的码」
+// （没有 emailVerifiedAt）。signin.js 认这两条当抢注：第一次拿验证码登录时把密码抹掉、所有设备的
+// 令牌作废。原先「邮箱换邮箱」原样搬、不记 emailVerifiedAt，于是这样的老账号一换邮箱，头一次在新
+// 地址上登录就被清理一遍——明明码刚寄到新地址、也输对了。现在搬家那一下就记上（api/email.js 的 bound）。
+{
+  const signinApi = (await import('../api/signin.js')).default;
+  const OLD = 'oldtimer@example.com';
+  const NEW = 'oldtimer-new@example.com';
+  const PW6 = 'abc123';
+  const legacy = newAccount(PW6, 'card');
+  legacy.tokens = [{ t: 'DEVICE-A', at: Date.now() }, { t: 'DEVICE-B', at: Date.now() }];
+  legacy.token = 'DEVICE-B';
+  delete legacy.emailVerifiedAt;
+  await saveAccount(OLD, legacy);
+
+  mails = [];
+  await callOn(emailApi, { email: OLD, token: 'DEVICE-A', newEmail: NEW, lang: 'en' });
+  const moved = await callOn(emailApi, { action: 'confirm', email: OLD, token: 'DEVICE-A', newEmail: NEW, code: lastCode() });
+  check('⑩（尺子）带六位密码的老账号换邮箱成了', moved.status === 200 && moved.body.moved === true, `${moved.status} ${JSON.stringify(moved.body)}`);
+  const afterMove = await loadAccount(NEW);
+  check('⑩ 搬家那一下就记上了 emailVerifiedAt', (afterMove?.emailVerifiedAt || 0) > 0, String(afterMove?.emailVerifiedAt));
+  check('⑩ 搬家没碰密码和令牌（只多那一位）',
+    afterMove && (await checkPin(NEW, PW6, afterMove)) === 'ok' && afterMove.tokens?.length === 2,
+    JSON.stringify({ tokens: afterMove?.tokens?.length }));
+
+  // 在新地址上拿验证码登录（signin 的「已有账号」那一支）。
+  mails = [];
+  const asked = await callOn(signinApi, { email: NEW, lang: 'en' });
+  const signed = await callOn(signinApi, { action: 'confirm', email: NEW, code: lastCode(), challenge: asked.body.challenge });
+  check('⑩（尺子）新地址上拿验证码登录成了', signed.status === 200 && Boolean(signed.body.token), `${signed.status} ${JSON.stringify(signed.body.error || '')}`);
+  const afterSign = await loadAccount(NEW);
+  check('⑩ 没被当成抢注：密码还在', afterSign && (await checkPin(NEW, PW6, afterSign)) === 'ok');
+  const { tokenValid } = await import('../api/_accounts.js');
+  check('⑩ 没被当成抢注：另一台设备（B）的令牌照旧有效', tokenValid(afterSign, 'DEVICE-B'));
+  check('⑩ 新登录那一台也拿到了令牌（添一把，不是全部作废另发）', tokenValid(afterSign, signed.body.token) && tokenValid(afterSign, 'DEVICE-A'));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

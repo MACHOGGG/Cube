@@ -111,8 +111,8 @@ const codeAlive = async (code) => Boolean(await A.loadAccount(A.codeHolder(code)
   const old = 'mover@example.com';
   const wanted = 'newhome@example.com';
   // 今天的邮箱账号长这样：验证码开出来的（密钥是空串）、带着 emailVerifiedAt。原先这里是一把
-  // 六位密码的老账号——那种账号搬到新地址后头一次拿验证码登录，会被 signin.js 当成抢注清理一
-  // 遍（换盐、全部令牌作废，见那里的 `claimed`），那是另一件事，不是这一节要量的并发。
+  // 六位密码的老账号；那种账号搬家之后头一次拿验证码登录会不会被当成抢注清理，是另一件事（10-11
+  // 起搬家那一下就记上 emailVerifiedAt，由 check-account-hub ⑩ 量），不是这一节要量的并发。
   const mine = A.newAccount('', 'code');
   mine.emailVerifiedAt = Date.now() - 1000;
   mine.until = Date.now() + 9e8;
