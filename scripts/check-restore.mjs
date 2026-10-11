@@ -15,6 +15,7 @@
  */
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
+import { fillRun } from './lib/fakeRun.mjs';
 
 const BASE = process.argv[2];
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -79,22 +80,31 @@ const RUNS = [
   // 上一套计分规则打的（没有 rules）：服务端不收，所以它连存档都进不去。
   { at: 1_700_000_004_000, shapeId: 'squareDiamond', modeKey: 'bomb', totalScore: 50_000 },
 ];
+// 明细由夹具拼齐（10-11 方案 A-3：服务器对每一局对一遍账，缺明细的进存档、不上榜；scripts/lib/fakeRun.mjs）。
+// 第四局照旧不带 `rules`——夹具默认带着现行版本，这儿把它拿掉，那一局才还是「上一套规则打的」。
+const DATA = RUNS.map((r) => {
+  const data = {
+    ...fillRun(r.shapeId, r.totalScore, { modeKey: r.modeKey, ...(r.bombRules ? { bombRules: r.bombRules } : {}) }),
+    ...r, shapeFallback: r.shapeId, seconds: 30, ratePercent: 50, reason: '', penalties: [],
+  };
+  if (!('rules' in r)) delete data.rules;
+  return data;
+});
 const pushed = await page.evaluate(async ({ who, runs }) => {
   const out = [];
   for (const r of runs) {
-    const data = { ...r, shapeFallback: r.shapeId, score: r.totalScore, seconds: 30, ratePercent: 50, reason: '', penalties: [] };
     const res = await fetch('/api/scores', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: who.email, code: who.code, token: who.token,
         action: 'push', runId: `${r.at}-${r.shapeId}-${r.modeKey}`, mode: r.shapeId,
-        score: r.totalScore, name: '甲', data,
+        score: r.totalScore, name: '甲', data: r,
       }),
     }).then((x) => x.json()).catch(() => null);
     out.push(Boolean(res && res.ok));
   }
   return out;
-}, { who: auth, runs: RUNS });
+}, { who: auth, runs: DATA });
 // 前三局收下了；第四局（旧规则）服务端回的是 200 + stored:false，所以它的 ok 是
 // true 但没入库——这道门下面那条「老规则那局没混进来」量的就是这件事的结果。
 check('四局都报上去了（第四局收下但不入库）', pushed.every(Boolean), JSON.stringify(pushed));

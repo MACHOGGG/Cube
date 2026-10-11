@@ -294,7 +294,7 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   const { MAX_SCORE } = await import('../api/_maxscore.js');
   const scoresSrc = (await import('node:fs')).readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
   check('⑪（尺子）上限是十亿，排行榜从同一个文件取（不再自己写一份）',
-    MAX_SCORE === 1e9 && /import \{ MAX_SCORE \} from '\.\/_maxscore\.js'/.test(scoresSrc) && !/const MAX_SCORE\s*=/.test(scoresSrc),
+    MAX_SCORE === 1e9 && /import \{[^}]*\bMAX_SCORE\b[^}]*\} from '\.\/_maxscore\.js'/.test(scoresSrc) && !/const MAX_SCORE\s*=/.test(scoresSrc),
     String(MAX_SCORE));
   const { code, host, guest } = await openRoom(RAN_FOR_S);
   const live = await call({ action: 'score', code, ...guest, score: 1e300, finished: false, round: 1 });

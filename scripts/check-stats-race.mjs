@@ -45,6 +45,7 @@
  * 写完了）都是安全的，危险的是中间那一段。只试一个 k 的门是一道假门。
  */
 import { readFileSync } from 'node:fs';
+import { fillRun } from './lib/fakeRun.mjs';
 
 process.env.ALLOW_MEMORY_STORE = '1';
 process.env.ADMIN_TOKEN = 'x'.repeat(32);
@@ -90,11 +91,9 @@ async function call(body) {
     // `data.totalScore` / `data.shapeId` 也照真客户端的样子对齐——客户端那两个顶层字段
     // 本来就是从 `data` 算出来的（engine/cloudScores.ts），而服务端 2026-10-03 起要求两
     // 处说同一件事（对不上 400 mismatch，门是 check-scores-guard）。夹具只填一半的话，
-    // 这台门第一条就 400。
-    body = {
-      ...body,
-      data: { shapeId: body.mode, totalScore: body.score, ...(body.data || {}), rules: SCORING_V },
-    };
+    // 这台门第一条就 400。10-11 方案 A-3 起服务器还对每一局对一遍账（api/_maxscore.js 的 vetRun），缺明
+    // 细的一局不上榜——明细由夹具拼齐（scripts/lib/fakeRun.mjs），门自己写的那几位盖在上面。
+    body = { ...body, data: { ...fillRun(body.mode, body.score, body.data || {}), rules: SCORING_V } };
   }
   const req = { method: 'POST', headers: { 'x-vercel-forwarded-for': nextIp() }, body };
   const res = {
@@ -312,6 +311,72 @@ for (let k = 0; k <= MOVE_UPTO; k++) {
   if (!ok) break;
   await wipe(from);
   await wipe(to);
+}
+
+// ---------------------------------------------------------------------------
+// 交卷摔在半路：重报之后存档、榜、累计三样对得上，存档里不出现两份（10-11 方案 A-4）
+// ---------------------------------------------------------------------------
+//
+// 原先交卷先写 stats（里头那张「这一局收过了」的 seen 表），再写存档、再上榜。中间一摔回 5xx，客户端
+// 两秒后照规矩重报，一进门就被 seen 认成「同一局报两次」直接回去——累计加上了，存档和榜上永远少这一局，
+// 而玩家收到的是成功。现在 stats 最后写：seen 在就说明前面几步都写成了。
+//
+// ① 摔在存档写库那一步：让那份 data 第二次被序列化时抛（第一次是 push 量它多大那一句，第二次就是写
+//    存档——_store.js 的 set 当场 JSON.stringify），然后照客户端的样子用同一个 runId、同一份明细重报。
+// ② 摔在存档写完之后（上榜、写 stats 那几步）：库里摆出「存档里已经有这一局、别的都没写」的样子再重报
+//    ——存档那一步要按 runId 去重，不然这一局在存档里就是两份。
+{
+  const who = await freshPlayer('a4-crash');
+  let serialized = 0;
+  const flaky = {
+    toJSON() {
+      serialized += 1;
+      if (serialized > 1) throw new Error('存档写库摔了（门里故意的）');
+      const { toJSON: _drop, ...rest } = this;
+      return rest;
+    },
+  };
+  let crashed = null;
+  try {
+    const r = await call({ action: 'push', email: who.email, token: who.token, runId: 'a4-1', mode: 'square', score: 300, data: flaky });
+    crashed = r.status >= 500 ? `回 ${r.status}` : null;
+  } catch (err) {
+    crashed = err.message;
+  }
+  check('A-4 ①（尺子）头一次交卷摔在存档那一步', serialized === 2 && Boolean(crashed), `序列化 ${serialized} 次 · ${crashed}`);
+  const half = (await S.get('stats:' + who.email)) || { total: 0, runs: 0, seen: [] };
+  check('A-4 ① 摔了之后 stats 一个字都没写（seen 里没有这一局，重报不会被当成「报过了」）',
+    !half.seen?.includes('a4-1') && Number(half.runs || 0) === 0, JSON.stringify(half));
+
+  const again = await call({ action: 'push', email: who.email, token: who.token, runId: 'a4-1', mode: 'square', score: 300 });
+  const stats = await S.get('stats:' + who.email);
+  const archive = (await S.get('runs:' + who.email)) || [];
+  check('A-4 ① 重报：收下（不是 duplicate，也没被锁挡着）', again.status === 200 && again.payload?.ok === true && !again.payload?.duplicate,
+    `${again.status} ${JSON.stringify(again.payload)}`);
+  check('A-4 ① 三样对得上：存档里一份、累计 300 / 1 局、方块基础榜和总榜上都是 300',
+    archive.filter((r) => r.runId === 'a4-1').length === 1 && stats?.total === 300 && stats?.runs === 1 &&
+      (await S.zscore('lb:square:base', who.email)) === 300 && (await S.zscore('lb:total', who.email)) === 300,
+    `存档 ${archive.length} 份 · 累计 ${stats?.total}/${stats?.runs} · 榜 ${await S.zscore('lb:square:base', who.email)}`);
+  const third = await call({ action: 'push', email: who.email, token: who.token, runId: 'a4-1', mode: 'square', score: 300 });
+  const stats3 = await S.get('stats:' + who.email);
+  check('A-4 ① 再报一次：认成同一局，什么都不多算',
+    third.payload?.duplicate === true && stats3?.total === 300 && stats3?.runs === 1 &&
+      ((await S.get('runs:' + who.email)) || []).filter((r) => r.runId === 'a4-1').length === 1,
+    `${JSON.stringify(third.payload)} · 累计 ${stats3?.total}/${stats3?.runs}`);
+  await wipe(who.email);
+}
+{
+  const who = await freshPlayer('a4-after');
+  const data = { ...fillRun('square', 400, {}), rules: SCORING_V };
+  await S.set('runs:' + who.email, [{ runId: 'a4-2', mode: 'square', score: 400, at: Date.now(), data }]);
+  const retry = await call({ action: 'push', email: who.email, token: who.token, runId: 'a4-2', mode: 'square', score: 400, data });
+  const stats = await S.get('stats:' + who.email);
+  const archive = (await S.get('runs:' + who.email)) || [];
+  check('A-4 ② 存档写完之后摔的：重报收下，存档里还是一份（按 runId 去重）、累计 400 / 1 局、榜上 400',
+    retry.status === 200 && archive.filter((r) => r.runId === 'a4-2').length === 1 && archive.length === 1 &&
+      stats?.total === 400 && stats?.runs === 1 && (await S.zscore('lb:square:base', who.email)) === 400,
+    `${retry.status} · 存档 ${archive.length} 份 · 累计 ${stats?.total}/${stats?.runs} · 榜 ${await S.zscore('lb:square:base', who.email)}`);
+  await wipe(who.email);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

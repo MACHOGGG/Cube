@@ -68,7 +68,11 @@ let tokenStale = false;
 /** 服务器认不出这台设备了吗——《记录与排名》拿它决定要不要提示重新登录。 */
 export const sessionExpired = (): boolean => tokenStale;
 
-async function post<T>(body: Record<string, unknown>): Promise<T | null> {
+/**
+ * @param onRefused 服务器明说不收的时候（4xx 带一个词）把那个词交给调用方——交卷那一头要据此决定
+ *   还重不重报（见 pushRun）。
+ */
+async function post<T>(body: Record<string, unknown>, onRefused?: (error: string) => void): Promise<T | null> {
   const who = auth();
   if (!who) return null;
   try {
@@ -81,7 +85,13 @@ async function post<T>(body: Record<string, unknown>): Promise<T | null> {
       tokenStale = true;
       return null;
     }
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (onRefused && res.status >= 400 && res.status < 500) {
+        const said = (await res.json().catch(() => ({}))) as { error?: unknown };
+        onRefused(String(said.error ?? ''));
+      }
+      return null;
+    }
     tokenStale = false;
     return (await res.json()) as T;
   } catch {
@@ -181,8 +191,13 @@ export function pushRun(data: RunData): Promise<PushReply | null> {
   // 刚打完一局，榜一定变了（至少自己那一行）。把缓存清掉，下一次打开排行榜去拿新的。
   invalidateBoards();
   const pushing = (async () => {
-    const first = await post<PushReply>(body);
-    if (first) return first;
+    // 服务器对过账、明说这一局不收（api/scores.js 的 push 回 400 `implausible`，10-11 方案 A-3）：重报
+    // 一次答的还是同一句，不重报，也不提示——结算页照常给他看，这一局只是不上传。
+    let implausible = false;
+    const first = await post<PushReply>(body, (error) => {
+      implausible = error === 'implausible';
+    });
+    if (first || implausible) return first;
     await new Promise((r) => setTimeout(r, PUSH_RETRY_MS));
     return post<PushReply>(body);
   })();

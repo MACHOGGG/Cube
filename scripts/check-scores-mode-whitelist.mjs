@@ -27,6 +27,7 @@ const store = await import('../api/_store.js');
 const seed = await import('../api/_seedcode.js');
 
 import { readFileSync } from 'node:fs';
+import { fillRun } from './lib/fakeRun.mjs';
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -40,10 +41,14 @@ const SCORING_V = (() => {
   return m[1];
 })();
 
-/** 叫一次接口。交卷那一路照真客户端的样子补齐 data（shapeId / totalScore / rules），和 check-scores 一样。 */
+/**
+ * 叫一次接口。交卷那一路照真客户端的样子补齐 data（shapeId / totalScore / rules），和 check-scores 一样；
+ * 10-11 方案 A-3 起服务器还对每一局对一遍账（api/_maxscore.js 的 vetRun），明细由夹具拼齐
+ * （scripts/lib/fakeRun.mjs），门自己写的那几位盖在上面。
+ */
 async function call(body, ip = '203.0.113.7') {
   if (body?.action === 'push') {
-    body = { ...body, data: { shapeId: body.mode, totalScore: body.score, ...(body.data || {}), rules: SCORING_V } };
+    body = { ...body, data: { ...fillRun(body.mode, body.score, body.data || {}), rules: SCORING_V } };
   }
   const req = { method: 'POST', body, headers: { 'x-forwarded-for': ip }, socket: { remoteAddress: ip } };
   const res = {

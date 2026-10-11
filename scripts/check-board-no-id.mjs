@@ -37,6 +37,7 @@
  * 五种改坏法都真的试过一遍，每一条都如期红：写的时候不判（⑴）、读的时候不过滤（⑶）、
  * `leakShaped` 少认一种形状（⑴ 或 ⑶）、`leaderboardName` 又去读第一串（⑷）。
  */
+import { fillRun } from './lib/fakeRun.mjs';
 process.env.ALLOW_MEMORY_STORE = '1';
 
 let fail = 0;
@@ -54,11 +55,11 @@ async function call(body) {
   // 2026-10-03 起要求两处说同一件事（对不上 400 mismatch，门是 check-scores-guard）。这
   // 台门的夹具只写了 `data: { rules: 'ero1' }`，不补的话每一条交卷都 400，而它要量的是榜
   // 上那一行印了什么——和两处对不对得上没有关系。
+  //
+  // 10-11 方案 A-3 起服务器还对每一局对一遍账（api/_maxscore.js 的 vetRun），缺明细的一局不上榜——明细
+  // 由夹具拼齐（scripts/lib/fakeRun.mjs），门自己写的那几位盖在上面。
   if (body?.action === 'push') {
-    body = {
-      ...body,
-      data: { shapeId: body.mode, totalScore: body.score, ...(body.data || {}) },
-    };
+    body = { ...body, data: fillRun(body.mode, body.score, body.data || {}) };
   }
   const out = { code: 0, payload: null };
   await scores(

@@ -35,6 +35,7 @@ process.env.ADMIN_TOKEN = 'n'.repeat(32);
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fillRun } from './lib/fakeRun.mjs';
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -50,8 +51,10 @@ const INDEX = 'nickidx';
 
 let ipSeq = 0;
 async function call(body) {
+  // 明细由夹具拼齐（10-11 方案 A-3，scripts/lib/fakeRun.mjs）：服务器从那以后对每一局对一遍账，缺明细的
+  // 一局不上榜，而这道门量的是榜上那一行的名字。门自己写的那几位盖在上面。
   if (body?.action === 'push') {
-    body = { ...body, data: { shapeId: body.mode, totalScore: body.score, rules: 'ero1', ...(body.data || {}) } };
+    body = { ...body, data: fillRun(body.mode, body.score, { rules: 'ero1', ...(body.data || {}) }) };
   }
   const out = { code: 0, payload: null };
   await scores(

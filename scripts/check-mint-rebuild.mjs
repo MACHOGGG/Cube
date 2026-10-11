@@ -20,6 +20,14 @@
  *      一批**，后面几批只带票（选项照第一批的，服务器那头记着）；全部算完才写那句「重算完
  *      了」。断在半路（某一批回 500）：页上说「再按一次接着算」，再按一次发出去的是**那张票**
  *      而不是从头来一遍；全清那一句也不再问第二遍。票过期（410 resume）：忘掉它，下次从头来。
+ *
+ * ⑥ 是另一半（10-11 方案 A-5）：上面量的是这一页发了什么，⑥ 量服务器收到之后**重算出了什么**。
+ *    它不走浏览器，直接在这个进程里叫 api/scores.js（库用进程内那一份，令牌是门自己设的）：
+ *      · 61 局以前打的最高分，重建之后不掉（存档只留最近 60 局，翻不出它）；
+ *      · 只打过 0 分局、又没起昵称的人，「全部清空」之后榜上没有他（从前名单里压根没有这个人）；
+ *      · 超出这张榜上界的旧最高分，重建之后换成存档里算得出来的那个（伪造的不许永远留着）；
+ *      · 换过计分规则的旧最高分不留；全清之后点一次普通重建，同规则、没超上界的老高分回来
+ *        （public/mint.html 那句「全清是可逆的」说的就是这个）。
  */
 import { chromium } from 'playwright';
 
@@ -218,5 +226,94 @@ const T = 'a'.repeat(32);
 }
 
 await browser.close();
+
+// ── ⑥ 服务器那一头：重算出了什么（10-11 方案 A-5）──────────────────────────────
+//
+// 不走浏览器、不碰 dev-server：直接在这个进程里叫 api/scores.js，库用进程内那一份。每一节一个新的人，
+// 交卷走真的 push（明细由夹具拼齐，scripts/lib/fakeRun.mjs），重建走真的 rebuild。
+{
+  process.env.ALLOW_MEMORY_STORE = '1';
+  process.env.ADMIN_TOKEN = 'm'.repeat(40);
+  const { readFileSync } = await import('node:fs');
+  const { default: scores } = await import('../api/scores.js');
+  const accounts = await import('../api/_accounts.js');
+  const store = await import('../api/_store.js');
+  const { fillRun } = await import('./lib/fakeRun.mjs');
+  const SCORING_V = /export const SCORING_RULES_VERSION = '([^']+)'/.exec(readFileSync(new URL('../src/engine/scoring.ts', import.meta.url), 'utf8'))[1];
+  let ip = 0;
+  const call = async (body) => {
+    const res = {
+      code: 200, payload: null,
+      status(c) { res.code = c; return res; }, setHeader() { return res; },
+      end(t) { try { res.payload = JSON.parse(t); } catch { res.payload = t; } return res; },
+    };
+    await scores({ method: 'POST', body, headers: { 'x-vercel-forwarded-for': `198.18.9.${++ip & 255}` } }, res);
+    return { status: res.code, payload: res.payload };
+  };
+  const player = async (email) => {
+    const acct = accounts.newAccount('secret', 'code');
+    acct.until = Date.now() + 30 * 24 * 3600e3;
+    await accounts.saveAccount(email, acct);
+    return { email, token: acct.token };
+  };
+  let runN = 0;
+  const push = (who, score, mode = 'square') =>
+    call({ action: 'push', ...who, runId: `rb-${++runN}`, mode, score, data: { ...fillRun(mode, score, {}), rules: SCORING_V } });
+  const rebuild = (extra = {}) => call({ action: 'rebuild', token: process.env.ADMIN_TOKEN, ...extra });
+  const on = (board, id) => store.zscore('lb:' + board, id);
+
+  // 61 局以前的最高分：先 900，再 60 局 100——存档只留最近 60 局，900 那一局翻不出来了。
+  const P = await player('rb-old-best@example.com');
+  await push(P, 900);
+  for (let i = 0; i < 60; i++) await push(P, 100);
+  const archive = (await store.get('runs:' + P.email)) || [];
+  check('⑥（尺子）存档只剩最近 60 局，900 那一局已经不在里头', archive.length === 60 && !archive.some((r) => r.score === 900),
+    `${archive.length} 局，最高 ${Math.max(...archive.map((r) => r.score))}`);
+  const r1 = await rebuild();
+  check('⑥ 61 局以前的最高分重建之后不掉：方块基础榜、总榜上都还是 900',
+    r1.status === 200 && (await on('square:base', P.email)) === 900 && (await on('total', P.email)) === 900,
+    `${r1.status} 榜 ${await on('square:base', P.email)} 总榜 ${await on('total', P.email)}`);
+
+  // 全清之后点一次普通重建：同规则、没超上界的老高分回来（mint.html 那句「全清是可逆的」）。
+  const w = await rebuild({ all: true });
+  check('⑥ 全部清空：900 那一行撤了', w.status === 200 && (await on('square:base', P.email)) === null && (await on('total', P.email)) === null,
+    `${w.status} ${await on('square:base', P.email)}`);
+  await rebuild();
+  check('⑥ 全清之后普通重建：900 回来了（存档里翻不出它，靠的是留着的最高分记录）',
+    (await on('square:base', P.email)) === 900 && (await on('total', P.email)) === 900, String(await on('square:base', P.email)));
+
+  // 只打过 0 分局、又没起昵称：旧版本留下的那一行 0 分（那时 0 分也上榜）。
+  const Z = await player('rb-zero@example.com');
+  await push(Z, 0);
+  await store.zadd('lb:square:base', 0, Z.email);
+  const names = await store.hget('lbnames', Z.email);
+  check('⑥（尺子）这个人没有昵称、不在总榜上，只在方块基础榜上躺着一行 0 分',
+    !names && (await on('total', Z.email)) === null && (await on('square:base', Z.email)) === 0, `${JSON.stringify(names)} · ${await on('square:base', Z.email)}`);
+  await rebuild({ all: true });
+  check('⑥ 无昵称、只有 0 分局的人：全部清空之后榜上没有他', (await on('square:base', Z.email)) === null, String(await on('square:base', Z.email)));
+
+  // 超上界的旧最高分：stats 里记着一个九位数（伪造的），存档里只有一局 300。
+  const X = await player('rb-forged@example.com');
+  await push(X, 300);
+  const sx = await store.get('stats:' + X.email);
+  await store.set('stats:' + X.email, { ...sx, best: { ...sx.best, 'square:base': 999999999 } });
+  await store.zadd('lb:square:base', 999999999, X.email);
+  await store.zadd('lb:total', 999999999, X.email);
+  await rebuild();
+  const sx2 = await store.get('stats:' + X.email);
+  check('⑥ 超出方块基础榜上界（1,469,664）的旧最高分：重建之后换成存档算得出来的 300',
+    (await on('square:base', X.email)) === 300 && (await on('total', X.email)) === 300 && sx2?.best?.['square:base'] === 300,
+    `榜 ${await on('square:base', X.email)} 总榜 ${await on('total', X.email)} best ${JSON.stringify(sx2?.best)}`);
+
+  // 换过计分规则的旧最高分：stats.bestRules 不是现行那一版。
+  const R = await player('rb-old-rules@example.com');
+  await push(R, 200);
+  const sr = await store.get('stats:' + R.email);
+  await store.set('stats:' + R.email, { ...sr, best: { ...sr.best, 'square:base': 5000 }, bestRules: 'older' });
+  await rebuild();
+  check('⑥ 换过计分规则的旧最高分不留：重建之后是存档里的 200', (await on('square:base', R.email)) === 200, String(await on('square:base', R.email)));
+  delete process.env.ADMIN_TOKEN;
+}
+
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

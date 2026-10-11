@@ -53,6 +53,7 @@
  */
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
+import { fillRun } from './lib/fakeRun.mjs';
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -201,9 +202,11 @@ async function player(i) {
   acct.until = Date.now() + 30 * 24 * 3600e3;
   await accounts.saveAccount(email, acct);
   for (const [runId, modeKey, score] of [[`b${i}`, 'base', 100 + i], [`f${i}`, 'flip', 900 + i]]) {
+    // 明细由夹具拼齐（10-11 方案 A-3：服务器对每一局对一遍账，缺明细的不上榜；scripts/lib/fakeRun.mjs）。
+    // 不写 flipRules：这一局落进归档的 square:flip，下面量的就是那张榜。
     const r = await call(scores, {
       action: 'push', email, token: acct.token, runId, mode: 'square', score,
-      data: { shapeId: 'square', modeKey, totalScore: score, rules: SCORING_V },
+      data: fillRun('square', score, { modeKey, rules: SCORING_V }),
     }, `10.1.0.${i}`);
     if (r.status !== 200) throw new Error(`夹具交卷没成：${email} ${r.status} ${JSON.stringify(r.body)}`);
   }

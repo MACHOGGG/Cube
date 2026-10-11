@@ -61,6 +61,18 @@
  * 各盘的清盘率、步数分布、降到第几级。方案第 E12 条写明：参数已定，**不据此改参**，
  * 这几个数只是摆出来存档。
  *
+ * ── 收真局（--harvest）──────────────────────────────────────
+ *
+ * 10-11 方案 A-3：服务器对每一局对一遍账（api/_maxscore.js 的 vetRun），上界是照规则推的；推错
+ * 了的话，真玩家打出来的分会被当成「打不出来」拒掉。所以 check-scores-guard ⑫ 拿机器人**真打出来**
+ * 的局去交，一局都不许被拒——那份夹具（scripts/fixtures/bot-runs.json）就是这个开关收的：
+ *
+ *   node scripts/bot-selfcheck.mjs http://localhost:8971/ --harvest=runs.json [--variants=14,16] [--runs=2]
+ *
+ * 照种子码的编号表（api/_seedcode.js 的 VARIANTS，二十种玩法 × 棋盘）逐个敲代号开局、照常走子，
+ * 这一局自己收场或者滑满步数后按《结束游戏》，把存档里那一份 RunData 原样写进 runs.json（每收一局写
+ * 一次）。这个模式下不做 H1–H8 的断言——要的只是真局。
+ *
  * ── 为什么默认只抽检 ────────────────────────────────────────
  *
  * 一步棋在开着 reduced-motion 的浏览器里还要两三百毫秒（连锁、翻面、消行都真的在
@@ -69,6 +81,8 @@
  * 方案那一档挂在 `--soak` 上。
  */
 import { chromium } from 'playwright';
+import { writeFileSync } from 'node:fs';
+import * as SC from '../api/_seedcode.js';
 
 const args = process.argv.slice(2);
 const BASE = args.find((a) => a.startsWith('http')) || 'http://localhost:8971/';
@@ -93,6 +107,11 @@ const ALL_BOARDS = ['经典方块', '菱形方块', '经典小球', '六边形�
 const BOARDS = (flag('boards', SOAK ? ALL_BOARDS.join(',') : '经典方块,经典小球') || '').split(',').filter(Boolean);
 /** 炸弹那一局单独走一遍（H4 只有它有意义）。 */
 const BOMB_RUNS = Number(flag('bombRuns', SOAK ? 6 : 1));
+/** 收真局（见文件头）：写到哪个文件；收哪几种（编号表的下标，默认二十种全收）。 */
+const HARVEST_OUT = flag('harvest', '');
+const HARVEST_VARIANTS = HARVEST_OUT
+  ? (flag('variants', '') || SC.VARIANTS.map((_, i) => i).join(',')).split(',').filter(Boolean).map(Number)
+  : [];
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -987,10 +1006,25 @@ async function playOne(page, label, opts) {
 }
 
 /** 开一局：主菜单点那张卡（或炸弹那一档），等棋盘出来。 */
-async function openRun(page, board, bomb) {
+async function openRun(page, board, bomb, code) {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(250);
+  // 收真局：敲代号开局（每日挑战那一页底下那一格），存档先清掉，收的时候只有这一局。
+  if (code) {
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.endsWith('::runs')) localStorage.removeItem(k); });
+    await page.$eval('.home-icon-btn--daily', (e) => e.click());
+    await page.waitForSelector('#seedInput', { timeout: 8000 });
+    await page.fill('#seedInput', code.slice(0, 4) + '-' + code.slice(4));
+    await page.click('#seedGo');
+    const ok = await page
+      .waitForFunction(() => document.querySelectorAll('#boardWrap [data-r][data-c]').length > 0, { timeout: 30000 })
+      .then(() => true)
+      .catch(() => false);
+    // 那一页自己数完 4-3-2-1 才开棋盘。
+    if (ok) await page.waitForTimeout(4500);
+    return ok;
+  }
   if (bomb) {
     // 基础炸弹：主菜单那一排里「基础炸弹 · <形状>」。窄屏是居中弹窗，宽屏原地摊开
     // ——两种都认（和 check-board-fit 同一条路）。
@@ -1041,7 +1075,7 @@ const ctx = await browser.newContext({
   // 消行照旧一拍一拍走完（settle 等的就是它们）。
   reducedMotion: 'reduce',
 });
-await ctx.addInitScript(() => {
+await ctx.addInitScript((harvest) => {
   localStorage.setItem('slides_lang', 'zhHans');
   localStorage.setItem('slides_intro_seen', '1');
   // 头一回那套引导会把主菜单锁住、棋盘底下摆一块教学条，量的不是它。
@@ -1049,31 +1083,69 @@ await ctx.addInitScript(() => {
     'slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle',
     'slides_played_square', 'slides_played_circle', 'slides_know_how',
   ]) localStorage.setItem(k, '1');
+  // 收真局那一路什么玩法都开：那几档头一回进来的提示条也先关掉。
+  if (harvest) {
+    for (const k of ['finished', 'bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout']) localStorage.setItem(`slides_played_${k}`, '1');
+  }
   // 天才特供那几副（七色圆球、六边三角）要开通才进得去。照「兑过一张长期内部码的
   // 玩家」原样摆一份：channel 必须是 'code'（别的柜台会被 read() 丢成 NOBODY），
   // 而内部码没过期时 refreshEntitlement 原地掉头，一个请求都不发。
   localStorage.setItem('slides_genius', JSON.stringify({
     active: true, channel: 'code', until: Date.now() + 365 * 864e5,
   }));
-});
+}, Boolean(HARVEST_OUT));
 await ctx.addInitScript(installProbe);
 const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 
 const runs = [];
-const jobs = [
-  ...BOARDS.flatMap((b) => Array.from({ length: RUNS }, () => ({ board: b, bomb: false }))),
-  ...Array.from({ length: BOMB_RUNS }, () => ({ board: '基础炸弹', bomb: true })),
-];
+const harvested = [];
+const jobs = HARVEST_OUT
+  ? HARVEST_VARIANTS.flatMap((v) => Array.from({ length: RUNS }, () => ({
+      board: `代号 ${SC.VARIANTS[v].mode}/${SC.VARIANTS[v].board}`,
+      bomb: /bomb/.test(SC.VARIANTS[v].mode),
+      variant: v,
+      code: SC.encodeSeed(SC.DEAL_VERSION, v, Math.floor(Math.random() * 2 ** 27)),
+    })))
+  : [
+      ...BOARDS.flatMap((b) => Array.from({ length: RUNS }, () => ({ board: b, bomb: false }))),
+      ...Array.from({ length: BOMB_RUNS }, () => ({ board: '基础炸弹', bomb: true })),
+    ];
 console.log(`共 ${jobs.length} 局（${SOAK ? '泡机档' : '抽检档'}，每局最多 ${BUDGET} 步）\n`);
 
 for (const [i, job] of jobs.entries()) {
   const label = `${job.board} #${i + 1}`;
-  const up = await openRun(page, job.board, job.bomb);
+  const up = await openRun(page, job.board, job.bomb, job.code);
   if (!up) { check(`${label}：开得起来`, false, '棋盘没出现'); continue; }
   const r = await playOne(page, label, { bomb: job.bomb });
   runs.push({ ...r, bomb: job.bomb });
+  if (HARVEST_OUT) {
+    // 收真局：没自己收场的按《结束游戏》，然后把存档里这一局原样收下。
+    let how = 'self';
+    if (!(await page.evaluate(() => document.querySelector('#endOverlay')?.classList.contains('show')))) {
+      how = 'manual';
+      await page.$eval('#stopBtn', (e) => e.click()).catch(() => {});
+      await page.waitForTimeout(400);
+      await page.$eval('#pauseFinishBtn', (e) => e.click()).catch(() => {});
+    }
+    await page.waitForSelector('#endOverlay.show', { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    const run = await page.evaluate(() => {
+      let best = null;
+      for (const k of Object.keys(localStorage)) {
+        if (!k.endsWith('::runs')) continue;
+        try { for (const x of JSON.parse(localStorage.getItem(k)) || []) if (!best || x.at > best.at) best = x; } catch {}
+      }
+      return best ? { at: best.at, data: best.data } : null;
+    });
+    const v = SC.VARIANTS[job.variant];
+    harvested.push({ variant: job.variant, mode: v.mode, board: v.board, code: job.code, moves: r.moves, how, run });
+    const d = run?.data;
+    note(`收到：${how} · ${d ? `综合 ${d.totalScore} · 拼出 ${d.score} · 翻 ${d.flips} · ${d.reason}` : '没收到'}`);
+    writeFileSync(HARVEST_OUT, JSON.stringify(harvested, null, 1));
+    continue;
+  }
   const how = r.card ? r.card.title : r.budgetOut ? '预算用完，局还活着' : r.frozen >= 12 ? '卡住了' : '（没收场）';
   note(`${label}：${r.moves} 步 · 剩 ${r.aliveLeft}/${r.startTiles} 枚 · 图案最低 ${r.levelLow} 枚 · ${how}`);
 

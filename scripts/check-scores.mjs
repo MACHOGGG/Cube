@@ -23,6 +23,7 @@ const accounts = await import('../api/_accounts.js');
 const store = await import('../api/_store.js');
 
 import { readFileSync } from 'node:fs';
+import { fakeRun, fillRun } from './lib/fakeRun.mjs';
 
 let fail = 0;
 
@@ -69,6 +70,17 @@ const SCORING_V = (() => {
  * 一个名字只登记一次），然后报一局不带名字的。名字登记不上就当场停：后面每一条都靠名字认人，
  * 带着一张没名字的榜往下量只会红出一串跟名字无关的假症状。
  */
+/**
+ * 步步为营那一局「被消除几枚、几颗星」：拼得出这个综合分（被消除 × 10 + 星 × 5），两样加起来不超过
+ * 全盘 36 枚。10-11 方案 A-3 起服务器对这一笔账（api/_maxscore.js 的 vetRun），原先夹具写死的
+ * `cleared: 0, stars: 0` 配一个 300 分就对不上了。这道门量的是榜，不是这笔账——摆一份对得上的就行。
+ * （361、900 那几条拦在「枚数 × 10」那道闸上，比对账早，这儿拼出个小数也碰不到。）
+ */
+function pzTally(score) {
+  const cleared = Math.min(36, Math.floor(score / 10));
+  return { cleared, stars: (score - cleared * 10) / 5 };
+}
+
 const registered = new Map();
 async function call(body) {
   if (body?.action === 'push' && typeof body.name === 'string' && body.name) {
@@ -88,15 +100,16 @@ async function call(body) {
 
 async function callRaw(body) {
   if (body?.action === 'push' && !body.__raw) {
-    body = {
-      ...body,
-      data: {
-        shapeId: body.mode,
-        totalScore: body.score,
-        ...(body.data || {}),
-        rules: SCORING_V,
-      },
-    };
+    /*
+     * 明细由夹具拼齐（10-11 方案 A-3，scripts/lib/fakeRun.mjs）：服务器从那以后对每一局对一遍账，缺
+     * 字段的一局不上榜，而这道门量的是榜本身。夹具按这一局的棋盘、玩法、分数拼一份对得上的明细，
+     * 这道门自己写的那几位（modeKey、slot、seedSource……）盖在上面。
+     *
+     * 「第几版规则」那几位（bombRules / flipRules / puzzleRules）**只用这道门自己写的**：好几节故意
+     * 不写它们，好让那一局落进归档的老榜（square:bomb、square:flip……）——夹具默认带的现行版本会把
+     * 那几局搬到现行榜上去，量的就不是那件事了。
+     */
+    body = { ...body, data: { ...fillRun(body.mode, body.score, body.data || {}), rules: SCORING_V } };
   }
   const req = { method: 'POST', body };
   const res = {
@@ -167,11 +180,20 @@ check('存档里两局都在，新的在前', mineA.payload?.archive?.length ===
 check('存档留着整局的原始数据（记录页要靠它重画战绩图）',
   mineA.payload?.archive?.[1]?.data?.totalScore === 500);
 
-// 分数上限：一个离谱的数字不该把整张榜的刻度毁掉。
-await call({ action: 'push', ...A, runId: 'r3', mode: 'circle', score: 999999999 });
+// 离谱的分数：超出这副棋盘在规则下打得出的最大值（10-11 方案 A-3：小球一局最多 504,896），回 400
+// implausible，**什么都不写**——从前它照收、记进 best，总榜第一就是它。
+const absurd = await call({ action: 'push', ...A, runId: 'r3x', mode: 'circle', score: 999999999 });
+const afterAbsurd = await call({ action: 'mine', ...A });
+check('离谱的分数被拒（400 implausible），存档、累计、榜一样都没进',
+  absurd.status === 400 && absurd.payload?.error === 'implausible' &&
+    afterAbsurd.payload?.total === 620 && afterAbsurd.payload?.best?.['circle:base'] === undefined &&
+    !afterAbsurd.payload?.archive?.some((r) => r.runId === 'r3x'),
+  `${absurd.status} ${JSON.stringify(absurd.payload)} total=${afterAbsurd.payload?.total}`);
+// 一局打得出来的高分照收：甲在小球上那一局就是下面总榜上他那一行。
+await call({ action: 'push', ...A, runId: 'r3', mode: 'circle', score: 4000 });
 const capped = await call({ action: 'mine', ...A });
-check('离谱的分数被削到上限', capped.payload?.best?.['circle:base'] === 999999999,
-  JSON.stringify(capped.payload?.best?.circle));
+check('打得出来的高分照收', capped.payload?.best?.['circle:base'] === 4000,
+  JSON.stringify(capped.payload?.best));
 
 // ---- 第二个人 -----------------------------------------------------------
 await call({ action: 'push', ...B, runId: 's1', mode: 'square', score: 900, name: '乙' });
@@ -190,16 +212,16 @@ check('「我排第几」是第二', squareBoard.payload?.me?.rank === 2 && squa
 
 const totalBoard = await call({ action: 'board', ...A });
 // 总榜不分玩法：每人上榜的是他所有玩法里最高的那一局——甲是圆球那一局
-// （削到上限的十亿差一），乙是方块的 900。不是累计总分。
+// （4000），乙是方块的 900。不是累计总分。
 check('不给玩法就是总榜：每人各玩法里最高的那一局，不是累计总分',
-  totalBoard.payload?.rows?.map((r) => r.score).join() === '999999999,900',
+  totalBoard.payload?.rows?.map((r) => r.score).join() === '4000,900',
   JSON.stringify(totalBoard.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
 check('总榜每一行带着那一局是哪个玩法（画行首那个小图形用）',
   totalBoard.payload?.rows?.map((r) => r.mode).join() === 'circle,square',
   JSON.stringify(totalBoard.payload?.rows?.map((r) => r.mode)));
 check('单局榜上不带玩法记号——整张都是同一个玩法',
   squareBoard.payload?.rows?.every((r) => r.mode === undefined));
-check('总榜上「我排第几」也是按最高单局算的', totalBoard.payload?.me?.rank === 1 && totalBoard.payload.me.score === 999999999,
+check('总榜上「我排第几」也是按最高单局算的', totalBoard.payload?.me?.rank === 1 && totalBoard.payload.me.score === 4000,
   JSON.stringify(totalBoard.payload?.me));
 
 const otherMode = await call({ action: 'board', ...A, mode: 'triangle:base' });
@@ -230,7 +252,7 @@ const healed = await call({ action: 'board', ...A });
 const cRow = healed.payload?.rows?.find((r) => r.name === '丙');
 check('老版本留下的累计总分，看一眼榜就按存档改回最高单局',
   cRow?.score === 700 && cRow?.mode === 'square', JSON.stringify(cRow));
-check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.score).join() === '999999999,900,700',
+check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.score).join() === '4000,900,700',
   JSON.stringify(healed.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
 
 // ---- 一局都没得过分的人不上总榜 ------------------------------------------
@@ -238,11 +260,20 @@ check('改过之后榜的顺序也对了', healed.payload?.rows?.map((r) => r.sc
 // 分的人也占一行 0 分，而 0 分没有「最高的那一局」可标，行首就空着。现在
 // 报一局 0 分不会上总榜；老版本留下的那种 0 分行，谁看一眼榜就撤下来。
 const D = await makePlayer('d@example.com');
-await call({ action: 'push', ...D, runId: 'd1', mode: 'square', score: 0, name: '丁' });
+const zero = await call({ action: 'push', ...D, runId: 'd1', mode: 'square', score: 0, name: '丁' });
 const afterZero = await call({ action: 'board', ...A });
 check('报一局 0 分：总榜上没有这一行', !afterZero.payload?.rows?.some((r) => r.name === '丁'),
   JSON.stringify(afterZero.payload?.rows?.map((r) => `${r.name}:${r.score}`)));
-const dRow = (await store.zTop('lb:square:base', 50)).find((r) => r.score === 0);
+// **0 分不上榜**（10-11 方案 B-13 第 10 条，玩家 Q7 定案）：照常回 200、进存档、记局数，只是哪一张榜上
+// 都不多一行 0——从前单局榜上会多一行 0 分（总榜本来就只认 >0）。
+const mineD = await call({ action: 'mine', ...D });
+check('0 分那一局：回 200、存档里有、局数记上了',
+  zero.status === 200 && mineD.payload?.archive?.some((r) => r.runId === 'd1') && mineD.payload?.runs === 1,
+  `${zero.status} runs=${mineD.payload?.runs}`);
+check('0 分那一局：各张榜上都没有他（单局榜不多一行 0）',
+  (await store.zscore('lb:square:base', D.email)) === null && (await store.zscore('lb:total', D.email)) === null,
+  String(await store.zscore('lb:square:base', D.email)));
+const dRow = { member: D.email };
 await store.zadd('lb:total', 0, dRow.member);
 check('（伪造成老版本的 0 分行之后它确实在总榜上）',
   (await store.zTop('lb:total', 50)).some((r) => r.member === dRow.member));
@@ -515,7 +546,7 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   const pz = (score, left, cleared = true, extra = {}) => ({
     shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36, totalScore: score,
     reason: cleared ? CLEAR : '步数用尽',
-    puzzle: { cleared: 0, stars: 0, spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left, peak: 9 },
+    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left, peak: 9 },
     ...extra,
   });
   // 名字也是故意挑的：并列时内存替身按成员名**正序**破平（pz-a… 在 pz-z… 前面）。清三是
@@ -599,7 +630,10 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   check('榜上那一行也不再带 avatar', (one.payload?.rows ?? []).every((r) => !('avatar' in r)), JSON.stringify(rows[0]));
 
   // 重建：照存档重算，步步为营那几张写回拼起来的数（老写法那一行也换成新写法）。
-  await store.set('runs:' + L.email, [{ runId: 'l1', mode: 'square', score: 280, at: Date.now(), data: { ...pz(280, 4), rules: SCORING_V } }]);
+  // 存档里那一局得是一份对得上账的明细（10-11 方案 A-5：重建只认 vetRun 过得去的局）——直接写库，没走
+  // callRaw，所以这儿自己拿夹具补齐。
+  await store.set('runs:' + L.email, [{ runId: 'l1', mode: 'square', score: 280, at: Date.now(),
+    data: { ...fakeRun({ board: 'square', modeKey: 'puzzle', total: 280 }), ...pz(280, 4), rules: SCORING_V } }]);
   await store.set('stats:' + L.email, { total: 280, runs: 1, best: { 'square:puzzle2': 280 }, seen: ['l1'] });
   const order = async () => ((await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows ?? [])
     .filter((r) => OURS.has(r.name)).map((r) => `${r.name}:${r.score}${r.left !== undefined ? '/' + r.left : ''}`).join(' ');
@@ -707,7 +741,7 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   const W = await makePlayer('k-pz@example.com');
   const pz = (score, seedSource) => ({
     shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36, totalScore: score, reason: '步数用尽',
-    puzzle: { cleared: 0, stars: 0, spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left: 0, peak: 9 },
+    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left: 0, peak: 9 },
     ...(seedSource ? { seedSource } : {}),
   });
   await call({ action: 'push', ...W, runId: 'w1', mode: 'square', score: 120, name: '代号壬', data: pz(120, 'random') });

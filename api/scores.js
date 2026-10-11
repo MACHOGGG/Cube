@@ -41,7 +41,7 @@ import { callerId, tooMany } from './_ratelimit.js';
 import { redact } from './_redact.js';
 // 一局的综合得分上限，见文件头「关于作弊」。和小屋（room.js）共用一个数（10-09 补充方案 7-6），
 // 为什么是十亿、从前为什么是一百万，写在 _maxscore.js 里。
-import { MAX_SCORE } from './_maxscore.js';
+import { MAX_SCORE, flipCeiling, puzzleCeiling, slotCeiling, stepCeiling, vetRun } from './_maxscore.js';
 import {
   VARIANTS,
   dailySeed,
@@ -83,6 +83,7 @@ import {
   zrevrank,
   zscore,
   zTop,
+  scanKeys,
 } from './_store.js';
 
 /** 存档留多少局。够翻很久，又不至于让一个账号的文档大到读不动。 */
@@ -349,15 +350,46 @@ function decodeBoard(boardId, v) {
  */
 const PUZZLE_TILES = { square: 36, circle: 28 };
 
-/** 一个账号有史以来最高的那一局：分数和玩法。一局都没有就是 null。 */
+/**
+ * 无限反转的榜（现行的 `…:flip2`，连同归档的 `…:flip`，以后再往上加一版也认）。
+ *
+ * **总榜不收无限反转**（10-11 方案 A-3，玩家 Q11 定案）：这一档能翻回去再翻、连击倍率一路乘上去，
+ * 打出来的分和别的玩法不是一把尺子量的，服务器能给它的上界也最宽（见 _maxscore.js 的 FLIP_STEP），
+ * 放进「谁最高」那一张里，总榜就成了无限反转一档的榜。它自己那张单局榜和母榜照常。认后缀和版本号，
+ * 不认 FLIP_KIND 那一个字面量——不然 `square:flip` 那张老榜上没封顶时打出来的分还留在总榜上。
+ */
+const isFlipBoard = (boardId) => /:flip\d*$/.test(String(boardId));
+
+/**
+ * 一个账号有史以来最高的那一局：分数和玩法。一局都没有就是 null。
+ *
+ * 无限反转那几张不算（见 isFlipBoard）。交卷、看总榜时补老行、重建、换邮箱四处都从这儿取，所以只在
+ * 这一处跳。
+ */
 function bestOverall(stats) {
   let top = null;
   for (const [mode, score] of Object.entries(stats.best || {})) {
+    if (isFlipBoard(mode)) continue;
     const n = num(score);
     if (n > 0 && (!top || n > top.score)) top = { mode, score: n };
   }
   return top;
 }
+/**
+ * 一张现行榜上的分最高能到多少（10-11 方案 A-3 的上界，api/_maxscore.js）。重建时拿它判「旧的 best
+ * 还留不留」（A-5 第 6 条）：超过它的旧分只可能是伪造的，留着就成了永远撤不掉的假第一。不认识的榜回 0。
+ */
+function boardCeiling(boardId) {
+  const [shape, kind] = String(boardId).split(':');
+  if (!kind) return LAYOUT_BOARDS.includes(shape) ? stepCeiling(shape) : 0;
+  if (!BASE_SHAPES.includes(shape)) return 0;
+  if (kind === 'slot') return slotCeiling(shape);
+  if (kind === FLIP_KIND) return flipCeiling(shape);
+  if (kind === PUZZLE_KIND) return puzzleCeiling(shape);
+  if (kind === 'base' || kind === 'timed' || kind === BOMB_KIND) return stepCeiling(shape);
+  return 0;
+}
+
 /*
  * id → 榜上显示的名字：`NAMES`（'lbnames'），一张哈希表，不是每人一个键。它和昵称索引
  * `NICK_INDEX` 两张表现在归 _nickname.js 管（第 16 推）——小屋那头也要读写同一份。
@@ -511,6 +543,9 @@ async function loadStats(id) {
     seen: Array.isArray(raw.seen) ? raw.seen : [],
     // 管理员撤下来的人（purge）。这一位丢了，下一次交卷写回去的 stats 就没有它，他又能上榜了。
     banned: raw.banned === true,
+    // best 是按哪一版计分规则量出来的（10-11 方案 A-5）。这一位丢了，换规则之后旧尺子的 best 就认不
+    // 出来了。没有它的是老数据，当作现行那一版。
+    ...(typeof raw.bestRules === 'string' ? { bestRules: raw.bestRules } : {}),
   };
 }
 
@@ -634,6 +669,25 @@ async function push(res, body, who) {
     }
   }
   /*
+   * ④ **对一遍账**（10-11 方案 A-3，api/_maxscore.js 的 vetRun）：按玩法分档，拿服务器自己的表把明细
+   *    重算一遍——拼出分拆得开、翻面数和全盘对得上、步数系数和综合分算得出来、没超出这副棋盘在规则下
+   *    打得出的最大值。
+   *
+   *    · 对不上：回 400 `implausible`，**什么都不写**（存档、累计、榜、今日榜一概不进）。客户端收到这一句
+   *      不重报（engine/cloudScores.ts 的 pushRun）——重报一次答的还是同一句。
+   *    · 缺字段（在途的旧客户端，规则版本却是现行的）：照收进存档、记累计，只是不上榜，存档那一条带
+   *      `legacy: true`（重建时也不计入）。回 200 `stored: false`，和规则版本对不上那一支同一个样子。
+   *
+   *    日志里只记哪一局、哪一条没过（`why` 那一个词），不记他是谁——理由同下面那一句。
+   */
+  const vet = vetRun(mode, data);
+  if (vet.verdict === 'implausible') {
+    console.warn('[scores] implausible', { runId, mode, why: vet.why });
+    return send(res, 400, { error: 'implausible' });
+  }
+  const legacy = vet.verdict === 'legacy';
+
+  /*
    * **上限这件事先只记一笔，不拦。**
    *
    * `num()` 早就把存下来的数封在 MAX_SCORE 以内（文件头「关于作弊」），所以榜的刻度
@@ -671,48 +725,72 @@ async function push(res, body, who) {
   const got = await withLock(statsLockKey(who.id), async () => {
     const stats = await loadStats(who.id);
     // 同一局报两次不算两次。网差重发、返回键再点一下，都会走到这儿。
-    if (stats.seen.includes(runId)) return { duplicate: true, stats };
+    const duplicate = stats.seen.includes(runId);
+    // 计分规则换过一版（SCORING_RULES 往上加了），旧尺子量出来的 best 不再算数——不清掉的话，下一局
+    // 写榜时带上的会是旧规则那个数（见 bestRules 那段，在 rebuild 里）。没有这一位的是老数据，当作
+    // 现行那一版（10-11 方案 A-5）。
+    if (stats.bestRules && stats.bestRules !== SCORING_RULES) stats.best = {};
+    /*
+     * 这一局上不上榜：敲代号开的局不上（ranked，见上）、被撤下来的人不上（purge）、缺字段的旧局不上
+     * （legacy，见上面那道账），**0 分也不上**（10-11 方案 B-13 第 10 条，玩家 Q7 定案）——0 分照常进存档、
+     * 记累计和局数，只是榜上不多一行 0。
+     */
+    const onBoards = ranked && !stats.banned && !legacy && score > 0;
+    const best = onBoards ? Math.max(stats.best[boardId] || 0, score) : 0;
 
-    stats.total += score;
-    stats.runs += 1;
-    // 管理员撤下来的人（purge）：和敲代号开的局一样照收、照存档，只是不进 best、不写任何一张榜。
-    const onBoards = ranked && !stats.banned;
-    if (onBoards) stats.best[boardId] = Math.max(stats.best[boardId] || 0, score);
-    stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
-    await set(statsKey(who.id), stats);
-
-    // 存档。整局的原始数据都留着——记录页要靠它把那张战绩图重新画出来。
-    // 它必须和上面那份 stats 在同一把锁里：重建是从**存档**重算 best 的，两样
-    // 分开写就会出现「存档里有这一局、汇总里没有」的半截状态。
+    /*
+     * **次序是这一段的全部内容**（10-11 方案 A-4）：先存档、再上榜，**stats 最后写**。
+     *
+     * 原先反过来：先写 stats（里头那张「这一局收过了」的 seen 表），再写存档、再上榜。中间任何一步摔
+     * 了回 502，客户端两秒后重报，一进门就被 seen 认成「同一局报两次」直接回去——累计加上了，存档和
+     * 榜上却永远少这一局，而玩家收到的是成功。
+     *
+     * 现在 seen 最后才写，它在就说明前面几步都写成了；摔在半路的话重报那一次不是 duplicate，从头再走
+     * 一遍：存档按 runId 去重（不会出现两份），榜是只上不下的（再写一遍是幂等的）。duplicate 那一支
+     * 也照样补写一遍存档和榜（照 pushDaily 的做法）——幂等，不会算两遍。
+     */
+    // ① 存档。整局的原始数据都留着——记录页要靠它把那张战绩图重新画出来。插入前按 runId 去重。
     const archive = await get(runsKey(who.id));
     const list = Array.isArray(archive) ? archive : [];
-    list.unshift({ runId, mode, score, at: Date.now(), data });
-    await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
-
-    // 单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，
-    // 因为它是从 stats.best 重算出来的：老版本往这里写的是累计总分，这一笔
-    // 顺手把它改正。
-    //
-    // 步步为营那几张榜上是拼起来的数（boardValue）：这一局自己的那个数，和「历史最高分、
-    // 不算步数」那个数，取大的。GT 会留住两者里更高的那一个，所以同分剩得多的那一局会顶
-    // 掉剩得少的，老写法（原分）的那一行也在这个人下一次交卷时被换成新写法。
-    //
-    // 敲代号开的那一局（ranked 为假，见上）、被撤下来的人，一张榜都不碰：存档写完就回去。
-    if (!onBoards) return { duplicate: false, stats };
-    const onBoard = isPuzzleBoard(boardId)
-      ? Math.max(boardValue(boardId, score, data), stats.best[boardId] * PUZZLE_SCALE)
-      : stats.best[boardId];
-    await zaddIfHigher(boardKey(boardId), onBoard, who.id);
-    const top = bestOverall(stats);
-    if (top) {
-      await zadd(TOTAL_BOARD, top.score, who.id);
-      await hset(TOTAL_MODE, who.id, top.mode);
-    } else {
-      // 一局都没得过分：0 不算「最高」，总榜上不该有这一行。老版本按累计总分
-      // 写榜，0 分也会占一行，这里顺手撤掉。
-      await zrem(TOTAL_BOARD, who.id);
+    if (!list.some((r) => r?.runId === runId)) {
+      list.unshift({ runId, mode, score, at: Date.now(), data, ...(legacy ? { legacy: true } : {}) });
+      await set(runsKey(who.id), list.slice(0, KEEP_RUNS));
     }
-    return { duplicate: false, stats };
+
+    // ② 榜。单局榜只上不下（GT）。总榜写的是他所有玩法里最高的那一局——覆盖写，因为它是从
+    // best 重算出来的。
+    //
+    // 步步为营那几张榜上是拼起来的数（boardValue）：这一局自己的那个数，和「历史最高分、不算步数」那
+    // 个数，取大的。GT 会留住两者里更高的那一个，所以同分剩得多的那一局会顶掉剩得少的，老写法（原
+    // 分）的那一行也在这个人下一次交卷时被换成新写法。
+    if (onBoards) {
+      const onBoard = isPuzzleBoard(boardId)
+        ? Math.max(boardValue(boardId, score, data), best * PUZZLE_SCALE)
+        : best;
+      await zaddIfHigher(boardKey(boardId), onBoard, who.id);
+      const top = bestOverall({ best: { ...stats.best, [boardId]: best } });
+      if (top) {
+        await zadd(TOTAL_BOARD, top.score, who.id);
+        await hset(TOTAL_MODE, who.id, top.mode);
+      } else {
+        // 算不出「最高的那一局」：只打过无限反转的人（总榜不收它，见 isFlipBoard）。10-11 方案 A-3 之前无限
+        // 反转也算进总榜，他那一行留到今天——这里顺手撤掉。（老版本按累计总分写榜、0 分也占一行，从前
+        // 这一支撤的是那种。）
+        await zrem(TOTAL_BOARD, who.id);
+        await hdel(TOTAL_MODE, who.id);
+      }
+    }
+
+    // ③ stats 最后写。同一局报第二次：前面几步都已经写成过了（seen 在就说明这一点），这里不再累计。
+    if (!duplicate) {
+      stats.total += score;
+      stats.runs += 1;
+      if (onBoards) stats.best[boardId] = best;
+      stats.bestRules = SCORING_RULES;
+      stats.seen = [runId, ...stats.seen].slice(0, KEEP_SEEN);
+      await set(statsKey(who.id), stats);
+    }
+    return { duplicate, stats };
   });
 
   // 约一秒八都没抢到锁：明说一句，让客户端过一会再报。**不能默默丢掉**——这一局
@@ -731,10 +809,14 @@ async function push(res, body, who) {
   // daily，没有任何东西会被算两遍。
   // 被撤下来的人（purge）今日榜也不进。回包里不带 daily：不告诉他为什么——客户端那句「没进今日榜」
   // 只为 late / rejected 而说。
-  const daily = data?.daily !== undefined && !stats.banned ? await pushDaily(who.id, mode, score, data) : undefined;
+  // 缺字段的旧局（legacy）、0 分的局也不进今日榜（10-11 方案 A-3、B-13 第 10 条）：和常规榜同一个规矩。
+  const daily = data?.daily !== undefined && !stats.banned && !legacy && score > 0
+    ? await pushDaily(who.id, mode, score, data)
+    : undefined;
   if (duplicate) {
     return send(res, 200, { ok: true, duplicate: true, total: stats.total, runs: stats.runs, daily });
   }
+  if (legacy) return send(res, 200, { ok: true, stored: false, reason: 'legacy', total: stats.total, runs: stats.runs });
   return send(res, 200, { ok: true, total: stats.total, runs: stats.runs, best: stats.best, daily });
 }
 
@@ -890,7 +972,10 @@ async function healTotalBoard(myId) {
     if (typeof modes[id] === 'string') continue;
     const stats = await loadStats(id);
     // 被撤下来的人（purge）总榜上不该有：他自己打开榜那一下（myId 就是他）也不能把他补回去。
-    const best = stats.banned ? null : bestOverall(stats);
+    // 换过计分规则版本的 best 也不认（10-11 方案 A-5 的 bestRules）：「全部清空」之后 best 还留着，
+    // 不挡这一句的话，谁一打开榜就把自己那份旧尺子量的最高分补回总榜。
+    const stale = stats.bestRules && stats.bestRules !== SCORING_RULES;
+    const best = stats.banned || stale ? null : bestOverall(stats);
     if (!best) {
       // 存档里一局得分的都没有（老版本按累计总分写榜，一局都没得分的人也占
       // 一行 0 分）：没有玩法可标，行首就空着——玩家看到的正是「显示了名字
@@ -1174,9 +1259,11 @@ async function rebuild(req, res, body) {
    * 做法是干脆不算 best：下面那个 best 保持空的，于是每个人在每一张榜上都走
    * zrem 那一支，总榜连同行首那个玩法标记一起撤掉。
    *
-   * **它是可逆的**：存档（runs:）一个字不动，所以再点一次**不勾**全清的《重建
-   * 榜单》就会照存档把榜重算回来。反过来说也是个坑——清完之后别手滑再点一次普通
-   * 重建，那会把旧尺子量出来的分从存档里请回榜上。
+   * **它是可逆的**：存档（runs:）一个字不动，每个人的 best 也一个字不动（10-11 方案 A-5，
+   * 见下面写 stats 那一句），所以再点一次**不勾**全清的《重建榜单》就会把榜重算回来——存档
+   * 里的局照规矩重算，存档翻不出来的老高分在同一版规则、没超上界时也保回来。旧尺子量出来的
+   * 分不会被请回榜上：存档那一头按 `rules` 跳过，best 那一头按 `bestRules` 跳过（换过计分规则
+   * 版本的，push 和重建都不认）。
    */
   const wipeAll = opts.all === true;
   /**
@@ -1214,11 +1301,20 @@ async function rebuild(req, res, body) {
    */
   const buildNicknames = opts.nicknames === true;
 
-  // 所有可能在榜上的人：总榜上的（有过正分就在）加上留过名字的。按 id 排好序，「算到了谁」
-  // 才说得清（见 REBUILD_BATCH 那一段）；这一批只算排在上一批最后那个人后面的。
-  const [ranked, names] = await Promise.all([zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
+  /*
+   * 所有可能在榜上的人：**每一个交过卷的人**（`stats:*`，10-11 方案 A-5），加上总榜上的、留过名字
+   * 的（后两样从前就是全部名单——于是只打过 0 分局、又没起昵称的人从来不在名单上，他在某张榜上那
+   * 一行 0 分「全部清空」也清不掉）。SCAN 的顺序是乱的，所以先收齐、去重、按 id 排好序，「算到了谁」
+   * 才说得清（见 REBUILD_BATCH 那一段）；这一批只算排在上一批最后那个人后面的。
+   */
+  const [statKeys, ranked, names] = await Promise.all([scanKeys('stats:*'), zTop(TOTAL_BOARD, 5000), hgetall(NAMES)]);
   const after = ticket ? String(ticket.after ?? '') : '';
-  const ids = [...new Set([...ranked.map((row) => row.member), ...Object.keys(names || {})])]
+  const ids = [...new Set([
+    ...statKeys.map((k) => k.slice('stats:'.length)),
+    ...ranked.map((row) => row.member),
+    ...Object.keys(names || {}),
+  ])]
+    .filter(Boolean)
     .sort()
     .filter((id) => id > after);
   /** 这一轮的票：头一批就开一张，每算完一个人更新一次，算完删掉。 */
@@ -1281,12 +1377,41 @@ async function rebuild(req, res, body) {
           if (drop.has(kindOf(run?.data))) continue;
           // 敲代号开的那一局：存档里留着，重建时也不上榜（和 push 那一处同一条，10-08 方案 3-B）。
           if (run?.data?.seedSource === 'entered') continue;
+          // 账对不上的、缺字段的（10-11 方案 A-3）：和交卷时同一套校验，不过的不计入——线上现有那几条
+          // 假分（明细互相矛盾的九位数）就是在这一步被清掉的，存档本身一个字不动。
+          if (run?.legacy || vetRun(mode, run?.data).verdict !== 'ok') continue;
           const boardId = boardIdOf(mode, run?.data);
           const score = num(run.score);
           if (score > 0 && score > (best[boardId] || 0)) best[boardId] = score;
           if (score > 0) {
             const v = boardValue(boardId, score, run?.data);
             if (v > (onBoard[boardId] || 0)) onBoard[boardId] = v;
+          }
+        }
+        /*
+         * **存档翻不出来的老高分，满足六条才留**（10-11 方案 A-5）。
+         *
+         * 存档只留最近 60 局（KEEP_RUNS）：先打一局 900，再打 60 局 100，重建之后他那张榜上就从 900 掉
+         * 成 100——而隐私政策四种语言都写着「排行榜上那个最高分不受影响」。所以旧的 stats.best 比存档
+         * 算出来的高时，下面六条**同时**满足才留旧的：
+         *   ① 榜是现行的那几张之一（ALL_BOARDS）；② 不是这一次点名要清的玩法（drop）；③ 不是「全部清
+         *   空」（上面那一句已经把它挡在外面）；④ 这个人没被撤下来（同上）；⑤ 规则版本没换过（bestRules，
+         *   没有这一位的老数据当作现行那一版）；⑥ 旧值不超过这张榜在 A-3 里的上界——超过的只可能是伪造
+         *   的，留着就永远撤不掉。
+         * 步步为营那几张榜上的数是拼起来的（分数 × 1000 ＋ 剩下的步数）：留的时候用榜上那个现值，不从
+         * best 反推（反推就把「剩几步」那一截弄丢了）；榜上已经没有他这一行了，才按 best × 1000 写回去。
+         */
+        const rulesOk = !stats.bestRules || stats.bestRules === SCORING_RULES;
+        for (const boardId of ALL_BOARDS) {
+          const old = num(stats.best?.[boardId]);
+          if (!(old > (best[boardId] || 0))) continue;
+          if (!rulesOk || droppedBoards.includes(boardId) || old > boardCeiling(boardId)) continue;
+          best[boardId] = old;
+          if (isPuzzleBoard(boardId)) {
+            const cur = await zscore(boardKey(boardId), id);
+            onBoard[boardId] = cur !== null && Math.floor(cur / PUZZLE_SCALE) === old ? cur : old * PUZZLE_SCALE;
+          } else {
+            onBoard[boardId] = old;
           }
         }
       }
@@ -1311,9 +1436,17 @@ async function rebuild(req, res, body) {
 
       // 只改 best。total 和 runs 是玩家自己攒下来的，这里压根不重算它们——读出
       // 来的那一份原样带回去，别的字段（seen）同理。
-      stats.best = best;
-      await set(statsKey(id), stats);
-      const top = bestOverall(stats);
+      //
+      // **「全部清空」那一路 best 一个字不动**（10-11 方案 A-5）：榜上那几行都撤了（上面那一圈），可
+      // best 是「他打过多高」的记录——留着它，之后点一次普通的《重建榜单》，同规则、没超上界的老高分
+      // 才找得回来（存档只有最近 60 局，翻不出更早的）。从前这儿把 best 也清空了，全清就成了单向的。
+      // 换计分规则时要的「旧分别回来」由 bestRules 管：换了版本，push 和这里都不认旧的 best。
+      if (!wipeAll) {
+        stats.best = best;
+        stats.bestRules = SCORING_RULES;
+        await set(statsKey(id), stats);
+      }
+      const top = wipeAll ? null : bestOverall(stats);
       if (top) {
         await zadd(TOTAL_BOARD, top.score, id);
         await hset(TOTAL_MODE, id, top.mode);

@@ -92,6 +92,11 @@ node scripts/dev-server.mjs 8816 dist &
 node scripts/check-multiplayer.mjs http://localhost:8816/
 ```
 
+**门里交卷，明细用 `scripts/lib/fakeRun.mjs` 拼**（10-11 A-3 起）：服务器对每一局对一遍账，只填
+`{ shapeId, totalScore }` 几位的局一律当成缺字段的旧客户端、不上榜——量榜的门会在一张空榜上「全绿」或者
+红一片。`fillRun(mode, score, 门自己写的那几位)` 拼一份对得上账的，门写的盖在上面。`scripts/lib/boardFacts.mjs`
+从棋盘源码推出 N / d / Lmax / par 和老虎机、无限反转的上界，给 `check-scores-guard` 对服务器那张手抄表。
+
 CI（`.github/workflows/ci.yml`）是**并行的 `check` 和 `browser`**（外加两条都绿之后才跑的 `promote`，见文件头）：
 
 - `check` —— 第 ①② 类里跑得快的那一批。这一条的节奏不许被拖慢（等得久的检查最后
@@ -411,7 +416,7 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 | `_badwords.js` | 昵称 / 小屋名字不许用的词 |
 | `_commonpairs.js` | 免邮箱账号注册时拒收的常见第一串 |
 | `_seedcode.js` | 种子码 / 每日挑战，服务器那一份（和 `src/engine/seedCode.ts` 同一套算法） |
-| `_maxscore.js` | 一局分数的上限，排行榜和小屋共用 |
+| `_maxscore.js` | 一局分数的上限（十亿，排行榜和小屋共用）；排行榜交卷时对的那一遍账 `vetRun`（10-11 A-3：每副棋盘的 N / d / Lmax / par、按玩法分档的上界——手抄的，`check-scores-guard` 当场从源码推一遍对上） |
 | `_redact.js` | 日志里不写邮箱，写一枚短指纹 |
 | `_unlock_legacy.js` | **不是模块**：原来的 `api/unlock.js`（《忘记密码》，第 20 推起回 410），10-09 起挪到这儿腾出一个函数名额；别处注释拿它当范本引，别 import 它 |
 

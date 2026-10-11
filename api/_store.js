@@ -223,6 +223,22 @@ function memory(args) {
       const slice = order.slice(start, stop < 0 ? order.length + stop + 1 : stop + 1);
       return scores ? slice.flatMap(([m, sc]) => [m, String(sc)]) : slice.map(([m]) => m);
     }
+    // SCAN：内存这一份一次就把合乎模式的键全给出去、游标直接回 0（真 Redis 是一批一批地翻，规矩
+    // 允许一次给完）。模式只用得上 `前缀*` 那一种，照 glob 的写法转一下就够了（见 scanKeys）。
+    // 这儿的 `key` 是游标，不是键——上面那几行按键清过期的话碰不到任何东西，无害。
+    case 'SCAN': {
+      const at = rest.findIndex((v) => String(v).toUpperCase() === 'MATCH');
+      const glob = at >= 0 ? String(rest[at + 1]) : '*';
+      const re = new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+      const now = Date.now();
+      const keys = [];
+      for (const k of mem.keys()) {
+        const d = expiries.get(k);
+        if (d !== undefined && d < now) continue;
+        if (re.test(String(k))) keys.push(String(k));
+      }
+      return ['0', keys];
+    }
     default:
       throw new Error('unsupported command in the in-memory store: ' + cmd);
   }
@@ -488,6 +504,28 @@ export async function hmget(key, fields) {
     });
   }
   return out;
+}
+
+/**
+ * 库里名字合这个模式的所有键（SCAN，一批一批地翻，10-11 方案 A-5）。
+ *
+ * 重建榜单原先只算「总榜前 5000 名 ＋ 留过名字的人」，于是只打过 0 分局、又没起昵称的人从来不在名单
+ * 上——他在某张榜上那一行 0 分，「全部清空」也清不掉。所以改成按 `stats:*` 把每一个交过卷的人都找
+ * 出来。
+ *
+ * SCAN 给的顺序是乱的、同一个键可能出现两次（Redis 的规矩），这里只去重；要排序（重建分批续跑靠
+ * 「按 id 排好序 + 算到了谁」）由调用方做。
+ */
+export async function scanKeys(match, count = 1000) {
+  const out = new Set();
+  let cursor = '0';
+  do {
+    const reply = await command(['SCAN', cursor, 'MATCH', match, 'COUNT', String(count)]);
+    const [next, keys] = Array.isArray(reply) ? reply : ['0', []];
+    for (const k of Array.isArray(keys) ? keys : []) out.add(String(k));
+    cursor = String(next ?? '0');
+  } while (cursor !== '0');
+  return [...out];
 }
 
 /** The whole hash, as a plain object with every value already parsed. */

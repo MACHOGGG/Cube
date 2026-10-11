@@ -36,6 +36,7 @@ const { readFileSync } = await import('node:fs');
 const SC = await import('../api/_seedcode.js');
 const { default: handler } = await import('../api/scores.js');
 const accounts = await import('../api/_accounts.js');
+const { fillRun } = await import('./lib/fakeRun.mjs');
 
 const SCORING_V = (() => {
   const src = readFileSync(new URL('../src/engine/scoring.ts', import.meta.url), 'utf8');
@@ -82,33 +83,26 @@ async function makePlayer(email) {
 
 /** 编号表那一行（玩法）→ 存档里的 modeKey 和老虎机标记。和客户端 modeKeyOf 同一张对照。 */
 const MODE_KEY = { base: 'base', timed: 'timed', bomb: 'bomb', bombTimed: 'bombTimed', bombAdv: 'bomb', slot: 'base', flip: 'flip', puzzle: 'puzzle' };
-const TILES = { square: 36, circle: 28 };
 
 /** 一局像样的存档：那一天、那一串码、那一个玩法（`over` 拿来改坏其中一样）。 */
 function dailyData(day, score, over = {}) {
   const v = SC.VARIANTS[SC.dailyVariant(day)];
-  return {
+  const shown = {
     shapeId: v.board,
     shapeFallback: v.board,
     modeKey: MODE_KEY[v.mode],
     ...(v.mode === 'slot' ? { slot: true } : {}),
-    ...(v.mode === 'puzzle' ? { boardTiles: TILES[v.board] ?? 36, puzzleRules: 2 } : {}),
+    ...(v.mode === 'puzzle' ? { puzzleRules: 2 } : {}),
     ...(v.mode === 'flip' ? { flipRules: 2 } : {}),
     ...(v.mode.startsWith('bomb') ? { bombRules: 3 } : {}),
     totalScore: score,
-    score,
     ratePercent: 80,
     bonusMult: 1.5,
-    elapsedSec: 60,
-    moves: 40,
     best: score,
     reason: 'cleared',
     neverFlipped: 0,
     unflippedScale: 1,
     timeMult: 1,
-    patternPoints: score,
-    comboBonusPoints: 0,
-    linePoints: 0,
     extraPenalty: 0,
     extraPenaltyReason: '',
     hazardEnd: false,
@@ -118,6 +112,10 @@ function dailyData(day, score, over = {}) {
     daily: SC.dayKey(day),
     ...over,
   };
+  // 明细（拼出分、翻面、步数、全盘几枚……）由夹具拼齐（10-11 方案 A-3：服务器对每一局对一遍账，对不上
+  // 的 400、缺字段的不上榜；scripts/lib/fakeRun.mjs），而且照**最后报上去的**那副棋盘、那个玩法拼——③ 那
+  // 几条换了棋盘或玩法，账得照换过的对，不然它在对账那一步就被拒了，量不到今日榜那一道。
+  return { ...fillRun(shown.shapeId, score, { modeKey: shown.modeKey, ...(shown.slot ? { slot: true } : {}) }), ...shown };
 }
 let runN = 0;
 const push = (who, data) =>
@@ -160,7 +158,7 @@ const B = await makePlayer('daily-b@example.com');
 {
   // 同一个玩法、另一串码（随手编的，校验位照样对——客户端算得出来的那种）。
   const forged = SC.encodeSeed(SC.DEAL_VERSION, SC.dailyVariant(today), 12345);
-  const r1 = await push(B, dailyData(today, 999 % 200, { seed: forged }));
+  const r1 = await push(B, dailyData(today, 195, { seed: forged }));
   check('② 换一串码冒充今天：rejected', r1.payload?.daily === 'rejected', JSON.stringify(r1.payload?.daily));
   const r2 = await push(B, dailyData(today, 150, { seed: SC.dailySeed(today - 1) }));
   check('② 拿昨天那串码冒充今天：rejected', r2.payload?.daily === 'rejected', JSON.stringify(r2.payload?.daily));
@@ -182,7 +180,7 @@ const C = await makePlayer('daily-c@example.com');
   check(`③ 当天那串码、换一副棋盘（${otherBoard}）：rejected`, r1.payload?.daily === 'rejected', JSON.stringify(r1.payload?.daily));
   // 当天那串码、换一个玩法（基础那一天报计时，别的一律报基础）。
   const otherMode = MODE_KEY[todayV.mode] === 'base' && todayV.mode !== 'slot' ? 'timed' : 'base';
-  const r2 = await push(C, dailyData(today, 150, { modeKey: otherMode, slot: undefined, boardTiles: undefined }));
+  const r2 = await push(C, dailyData(today, 150, { modeKey: otherMode, slot: undefined }));
   check(`③ 当天那串码、换一个玩法（${otherMode}）：rejected`, r2.payload?.daily === 'rejected', JSON.stringify(r2.payload?.daily));
   const b = await todayBoard(C);
   check('③ 今日榜上没有 C', !b.payload?.rows?.some((r) => r.me), JSON.stringify(b.payload?.rows));
@@ -224,7 +222,7 @@ const D = await makePlayer('daily-d@example.com');
 // ── ⑦ 不是每日挑战的局不碰今日榜 ─────────────────────────────────────────────
 const E = await makePlayer('daily-e@example.com');
 {
-  const plain = dailyData(today, 199, { seedSource: 'entered', daily: undefined });
+  const plain = dailyData(today, 190, { seedSource: 'entered', daily: undefined });
   const r = await push(E, plain);
   check('⑦ 输进来的码（不带 daily）：回包里没有 daily 那一项', r.status === 200 && r.payload?.daily === undefined, JSON.stringify(r.payload));
   const b = await todayBoard(E);
@@ -248,7 +246,10 @@ const E = await makePlayer('daily-e@example.com');
   setNow(NOON);
   const { del } = await import('../api/_store.js');
   const E = await makePlayer('daily-retry@example.com');
-  const data = dailyData(today, 777);
+  // 275 而不是一个更显眼的数：「今天」那个玩法是按日子轮换的，轮到步步为营的那两天（二十天里两天），
+  // 一局的分只能是 5 的倍数、不超过全盘 × 10（小球 280）。原先这儿是 777，那两天它在「枚数 × 10」那
+  // 道闸上就被 400 拦了，整道门跟着红——CI 每二十天红两天。这道门里别处的分也都照这个挑。
+  const data = dailyData(today, 275);
   const body = { action: 'push', ...E, runId: 'daily-retry-1', mode: data.shapeId, score: data.totalScore, data };
   const first = await call(body);
   check('⑧ 量程：头一次交卷收下了（stored）', first.payload?.daily === 'stored', JSON.stringify(first.payload?.daily));
@@ -261,11 +262,11 @@ const E = await makePlayer('daily-e@example.com');
   check('⑧ 重报的回包照样带 daily', again.payload?.daily === 'stored', JSON.stringify(again.payload?.daily));
   const b = await todayBoard(E);
   const mine = (b.payload?.rows || []).find((r) => r.me);
-  check('⑧ 重报之后今日榜上有这一局', mine && mine.score === 777, JSON.stringify(mine));
+  check('⑧ 重报之后今日榜上有这一局', mine && mine.score === 275, JSON.stringify(mine));
   const mineStats = await call({ action: 'mine', ...E });
   const archived = (mineStats.payload?.archive || []).filter((r) => r.runId === 'daily-retry-1');
   check('⑧ 存档里这一局还是只有一条、总分只算一遍',
-    archived.length === 1 && mineStats.payload?.runs === 1 && mineStats.payload?.total === 777,
+    archived.length === 1 && mineStats.payload?.runs === 1 && mineStats.payload?.total === 275,
     `存档 ${archived.length} 条 / runs ${mineStats.payload?.runs} / total ${mineStats.payload?.total}`);
 }
 
