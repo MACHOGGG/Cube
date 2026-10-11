@@ -23,7 +23,8 @@
  *   nickidx   规范化之后的名字 → 帐号 id。**唯一性靠它**：抢名字是一次 HSETNX，两个帐
  *             号同一瞬间抢同一个名字，只有一个写得进去。
  *
- * 规范化是 NFKC + 小写 + 去首尾空白：`Ａｌｉｃｅ`（全角）、`ALICE`、` alice ` 是同一个名字。
+ * 规范化是清洗（scrubName）+ NFKC + 小写 + 去首尾空白：`Ａｌｉｃｅ`（全角）、`ALICE`、` alice `、
+ * `Ali\u00ADce`（夹一个软连字符）是同一个名字。
  * 显示的仍然是他敲的那个样子（`lbnames` 里存原样），索引只管「算不算同一个」。
  *
  * ── 这个文件只放「名字本身」的事 ───────────────────────────────────────
@@ -47,36 +48,80 @@ export const NICK_MAX = 12;
  * 要清掉的字符：
  *
  *   · 控制字符（C0、DEL、C1）、换行和段落分隔符 —— 会把一行榜撑成两行；
- *   · 双向控制字符（LRM、RLM、ALM、LRE…PDF、LRI…PDI）—— 能把后面整行的字倒过来排，
- *     「把名次和分数排成别人的样子」就是靠它；
- *   · 零宽字符（ZWSP、ZWNJ、WJ、BOM、蒙古文元音分隔符、几个不可见运算符）—— 看不见，
- *     却能让两个看起来一模一样的名字各占一格索引，唯一性就名存实亡。
+ *   · **全部格式字符**（`\p{Cf}`，10-11 方案 A-6）：双向控制字符（LRM、RLM、LRE…PDF、LRI…PDI——能把后
+ *     面整行的字倒过来排，「把名次和分数排成别人的样子」就是靠它）、零宽字符（ZWSP、ZWNJ、WJ、BOM）、
+ *     软连字符（U+00AD）、tag 字符……全都看不见，却能让两个看起来一模一样的名字各占一格索引。原先这儿
+ *     是一张清单，清单外面那几个就是这么漏过去的：`Sli\u00ADdes`（中间一个软连字符）绕过了保留名
+ *     Slides，`管\u00AD理员` 绕过了「管理员」；
+ *   · 几个**不算格式字符、却同样看不见**的（INVISIBLE）：CGJ（U+034F）、四个韩文填充符（U+115F、
+ *     U+1160、U+3164、U+FFA0）、盲文空白（U+2800）、高棉文的两个「内含元音」（U+17B4、U+17B5，Unicode
+ *     自己写着不该用）。它们归在字母或符号类里，「至少含一个字母」那种检查挡不住——`官\u3164方` 原样
+ *     过了，整串只有一个 U+3164 的名字也过了；
+ *   · 不跟在 emoji 后面的变体选择符（U+FE00–FE0F、U+E0100–E01EF）：跟在字母后面它什么都不改，只是又一
+ *     个看不见的字符。
  *
- * ZWJ（U+200D）单独处理：它在 emoji 里是正经字符（👨\u200d👩\u200d👧 是三个 emoji 用两个 ZWJ 粘起来
- * 的），去掉的话一家三口就散成三个人。所以**夹在两个 emoji 中间的 ZWJ 留着**，别处的去掉。
+ * emoji 里有两样格式字符是正经的，留着：
+ *   · ZWJ（U+200D）：👨\u200d👩\u200d👧 是三个 emoji 用两个 ZWJ 粘起来的，去掉的话一家三口就散成三个人。
+ *     **夹在两个 emoji 中间的 ZWJ 留着**，别处的去掉；
+ *   · 旗帜的 tag 序列：🏴 后面跟一串 tag 字符、以 U+E007F 收尾（英格兰、苏格兰、威尔士那几面旗）。整串
+ *     留着；不成串的 tag 字符去掉。
  */
-const STRIP_RE =
-  /[\u0000-\u001f\u007f-\u009f\u061c\u180e\u200b\u200c\u200e\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+const CONTROL_RE = /[\p{Cc}\u2028\u2029]/gu;
+const FORMAT_RE = /\p{Cf}/u;
+const INVISIBLE = new Set(['\u034f', '\u115f', '\u1160', '\u17b4', '\u17b5', '\u2800', '\u3164', '\uffa0']);
+const VARIATION_RE = /[\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/u;
 const ZWJ = '\u200d';
+const BLACK_FLAG = '\u{1f3f4}';
+const TAG_RE = /[\u{e0020}-\u{e007e}]/u;
+const CANCEL_TAG = '\u{e007f}';
+const KEYCAP = '\u20e3';
 /** ZWJ 前面那一个算不算 emoji 的一部分：emoji 本身、肤色修饰、变体选择符 16。 */
 const EMOJI_BEFORE = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\ufe0f]/u;
 const EMOJI_AFTER = /\p{Extended_Pictographic}/u;
+/** 变体选择符跟在它后面才留：emoji 本身；或者键帽的那个数字 / # / *（后面紧跟 U+20E3，1️⃣ 那种）。 */
+const EMOJI_BASE = /\p{Extended_Pictographic}/u;
+const KEYCAP_BASE = /^[0-9#*]$/;
 
-/** 清洗：去掉上面那几类字符（emoji 里的 ZWJ 留着），再去首尾空白。不截断。 */
+/** 清洗：去掉上面那几类字符（emoji 里的 ZWJ、旗帜的 tag 序列留着），再去首尾空白。不截断。 */
 export function scrubName(raw) {
-  const chars = Array.from(String(raw ?? '').replace(STRIP_RE, ''));
+  const chars = Array.from(String(raw ?? '').replace(CONTROL_RE, ''));
   const kept = [];
   for (let i = 0; i < chars.length; i++) {
     const ch = chars[i];
+    const before = kept[kept.length - 1];
+    if (INVISIBLE.has(ch)) continue;
     if (ch === ZWJ) {
-      const before = kept[kept.length - 1];
       const after = chars[i + 1];
-      if (!(before && after && EMOJI_BEFORE.test(before) && EMOJI_AFTER.test(after))) continue;
+      if (before && after && EMOJI_BEFORE.test(before) && EMOJI_AFTER.test(after)) kept.push(ch);
+      continue;
     }
+    if (before === BLACK_FLAG && TAG_RE.test(ch)) {
+      let end = i;
+      while (end < chars.length && TAG_RE.test(chars[end])) end++;
+      if (chars[end] === CANCEL_TAG) {
+        kept.push(...chars.slice(i, end + 1));
+        i = end;
+        continue;
+      }
+      // 不成串：这一个当格式字符去掉（下面那一句），后面的同理。
+    }
+    if (VARIATION_RE.test(ch)) {
+      const keycap = before !== undefined && KEYCAP_BASE.test(before) && chars[i + 1] === KEYCAP;
+      if (before !== undefined && (EMOJI_BASE.test(before) || keycap)) kept.push(ch);
+      continue;
+    }
+    if (FORMAT_RE.test(ch)) continue;
     kept.push(ch);
   }
   return kept.join('').trim();
 }
+
+/**
+ * 拿来**比**的那个样子：NFKC 之后再洗一遍（U+FFA0 经 NFKC 变成 U+1160，全角那几个也是这一步才统一），
+ * 再小写。唯一性（nickKey）、保留名和词表（isBlockedName）都比这一份——三处过的是同一道清洗，不然总
+ * 有一处放行另一处拦下的名字。
+ */
+const matchForm = (name) => scrubName(scrubName(name).normalize('NFKC')).toLowerCase();
 
 /**
  * 一个名字能不能用。
@@ -95,14 +140,14 @@ export function scrubName(raw) {
 export function checkNickname(raw, { letter = false } = {}) {
   if (raw !== undefined && raw !== null && typeof raw !== 'string') return { ok: false, error: 'bad' };
   const name = scrubName(raw);
-  if (!name) return { ok: false, error: 'required' };
+  if (!name || !matchForm(name)) return { ok: false, error: 'required' };
   if (Array.from(name).length > NICK_MAX) return { ok: false, error: 'bad' };
-  if (isBlockedName(name, { letter })) return { ok: false, error: 'blocked' };
+  if (isBlockedName(matchForm(name), { letter })) return { ok: false, error: 'blocked' };
   return { ok: true, name };
 }
 
-/** 索引的键：NFKC、小写、去首尾空白。「算不算同一个名字」只问它。 */
-export const nickKey = (name) => String(name ?? '').normalize('NFKC').toLowerCase().trim();
+/** 索引的键：清洗、NFKC、再清洗、小写（matchForm）。「算不算同一个名字」只问它。 */
+export const nickKey = (name) => matchForm(name);
 
 /**
  * 这个帐号登记过的昵称。没有就是空串。

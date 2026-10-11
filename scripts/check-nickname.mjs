@@ -47,6 +47,7 @@ const { default: scores, renameScoreOwner } = await import('../api/scores.js');
 const { newAccount, saveAccount, deleteAccount, pairKey } = await import('../api/_accounts.js');
 const store = await import('../api/_store.js');
 const NAMES = 'lbnames';
+const { nickKey } = await import('../api/_nickname.js');
 const INDEX = 'nickidx';
 
 let ipSeq = 0;
@@ -190,6 +191,67 @@ check('③ 那几次之后 A 还是「阿花」', (await nameRow(A.id))?.name ==
   check('⑦ 名字中间的零宽空格去掉了', zw.status === 200 && (await nameRow(D.id))?.name === 'Kate', JSON.stringify(await nameRow(D.id)));
 }
 
+// ── ⑬ 看不见的字符（10-11 方案 A-6）────────────────────────────────────
+//
+// 原先清洗是一张清单（ZWSP、BOM、双向控制字符……），清单外面的那些照样过：`Sli\u00ADdes`（软连字
+// 符）、`管\u00AD理员`、`官\u3164方`（韩文填充符）绕过了保留名，整串只有一个填充符的名字也过了。现在
+// 去掉全部格式字符和那几个同样看不见的字母 / 符号，唯一性、保留名、词表都比洗过的那一份。
+{
+  const G1 = await player('nick-inv1@example.com');
+  for (const name of ['Sli\u00ADdes', '管\u00AD理员', '官\u3164方', 'ad\u200Dmin', 'Sl\u034Fides', '官\u2800方']) {
+    const r = await rename(G1, name);
+    check(`⑬ ${JSON.stringify(name)}（夹着看不见的字符）→ 400 blocked`, r.status === 400 && r.body?.error === 'blocked',
+      `${r.status} ${JSON.stringify(r.body)}`);
+  }
+  const lone = ['\u3164', '\u115F', '\u1160', '\uFFA0', '\u2800', '\u00AD', '\u034F', '\u17B4', '\u{E0020}', '\u3164\u3164 \u2800'];
+  for (const name of lone) {
+    const r = await rename(G1, name);
+    check(`⑬ 整串只有 ${JSON.stringify(name)} → 400 required`, r.status === 400 && r.body?.error === 'required',
+      `${r.status} ${JSON.stringify(r.body)}`);
+  }
+  // 唯一性：看起来一样的名字是同一个名字。
+  const H1 = await player('nick-inv2@example.com');
+  const own = await rename(G1, 'Marisol');
+  check('（尺子）⑬ 先有人取到「Marisol」', own.status === 200, `${own.status}`);
+  for (const name of ['Mari\u00ADsol', 'Maris\u3164ol', 'M\uFE0Farisol', 'Mar\u{E0041}isol', 'MARI\u200Bsol']) {
+    const r = await rename(H1, name);
+    check(`⑬ ${JSON.stringify(name)} 和「Marisol」是同一个名字 → 409 taken`, r.status === 409 && r.body?.error === 'taken',
+      `${r.status} ${JSON.stringify(r.body)}`);
+  }
+  // emoji 里正经的那几样留着：变体选择符跟在 emoji 后面、键帽、旗帜的 tag 序列、ZWJ。
+  const I1 = await player('nick-emoji@example.com');
+  const keep = ['\u2764\uFE0F', '1\uFE0F\u20E3', '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}', '\u{1F3F3}\uFE0F\u200D\u{1F308}'];
+  for (const name of keep) {
+    const r = await rename(I1, name);
+    check(`⑬ emoji ${JSON.stringify(name)} 原样留着`, r.status === 200 && (await nameRow(I1.id))?.name === name,
+      `${r.status} ${JSON.stringify(await nameRow(I1.id))}`);
+  }
+  const vs = await rename(I1, 'Bo\uFE0Fb');
+  check('⑬ 跟在字母后面的变体选择符去掉了（存下来的是 Bob）', vs.status === 200 && (await nameRow(I1.id))?.name === 'Bob',
+    `${vs.status} ${JSON.stringify(await nameRow(I1.id))}`);
+  const tag = await rename(I1, 'Ann\u{E0067}a');
+  check('⑬ 不成串的 tag 字符去掉了（存下来的是 Anna）', tag.status === 200 && (await nameRow(I1.id))?.name === 'Anna',
+    `${tag.status} ${JSON.stringify(await nameRow(I1.id))}`);
+}
+
+// ── ⑭ 词表不误伤：先剔掉几个正常词再比（10-11 方案 A-7）─────────────────────
+//
+// 中文按子串比（没有词边界，「整词比」等于整名比，会放过「日你妈的」），于是「生日你好」里的「日你」、
+// 「去死亡谷」里的「去死」都被拦过。现在比之前先剔掉生日、小草、死亡、蛋糕、情绪。
+{
+  const J1 = await player('nick-allow@example.com');
+  for (const name of ['生日你好', '小草你好', '去死亡谷', '王八蛋糕', '滚蛋糕', '色情绪']) {
+    const r = await rename(J1, name);
+    check(`⑭ ${JSON.stringify(name)} 不误伤 → 200`, r.status === 200, `${r.status} ${JSON.stringify(r.body)}`);
+  }
+  for (const name of ['日你妈的生日', '傻逼', '日你', '去死', '王八蛋', '滚蛋', '色情', '他妈的', '草泥马', '操你']) {
+    const r = await rename(J1, name);
+    check(`⑭ ${JSON.stringify(name)} 照样拦 → 400 blocked`, r.status === 400 && r.body?.error === 'blocked', `${r.status} ${JSON.stringify(r.body)}`);
+  }
+  const reserved = await rename(J1, '官方生日');
+  check('⑭ 保留名不剔：「官方生日」照样拦', reserved.status === 400 && reserved.body?.error === 'blocked', `${reserved.status}`);
+}
+
 // ── ⑧ 换邮箱之后索引跟着走；删帐号放出名字 ────────────────────────────
 {
   const F = await player('nick-f@example.com');
@@ -272,6 +334,19 @@ check('③ 那几次之后 A 还是「阿花」', (await nameRow(A.id))?.name ==
   await store.hset(NAMES, 'code:LIVE01', { name: '活码', v: 2 });
   // 过期的索引：指着一个已经不叫这个名字的帐号。
   await store.hset(INDEX, 'ghostname', X.id);
+  // 10-11 方案 A-6 之前从改名接口登记进来的、夹着看不见字符的名字（那时的清洗放过了它们），索引键是那
+  // 时的算法（NFKC + 小写，软连字符、填充符原样留在键里）。迁移要用今天这一道清洗重新认它们。
+  const S = await player('mig-s@example.com');
+  const T = await player('mig-t@example.com');
+  const Q = await player('mig-q@example.com');
+  const R = await player('mig-r@example.com');
+  await rename(S, 'Aria');
+  await store.hset(NAMES, T.id, { name: 'Ari\u00ADa', v: 3 });   // 洗完就是 S 的「Aria」
+  await store.hset(INDEX, 'ari\u00ada', T.id);
+  await store.hset(NAMES, Q.id, { name: 'Sli\u00ADdes', v: 3 });  // 洗完撞上保留名
+  await store.hset(INDEX, 'sli\u00addes', Q.id);
+  await store.hset(NAMES, R.id, { name: '\u3164', v: 3 });         // 洗完是空的（NFKC 之后的键是 U+1160）
+  await store.hset(INDEX, '\u1160', R.id);
 
   const before = await store.hgetall(NAMES);
   const run = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN, nicknames: true });
@@ -289,12 +364,18 @@ check('③ 那几次之后 A 还是「阿花」', (await nameRow(A.id))?.name ==
   check('⑨ 已经登记过的 Z 保住了名字（比老条目分高更算数）', after[Z.id]?.name === 'Reg' && index['reg'] === Z.id,
     `${JSON.stringify(after[Z.id])} → ${index['reg']}`);
   check('⑨ 分最高、但只是老条目的 W 让出来了', !after[W.id], JSON.stringify(after[W.id]));
-  check('⑨ 不能用的清掉：单个字母、保留名、像凭据的老条目', !after[V.id] && !after[U.id] && !after[L.id] && n.invalid === 3,
-    `invalid=${n.invalid}`);
+  check('⑨ 不能用的清掉：单个字母、保留名、像凭据的老条目，连同洗过之后撞保留名、洗完是空的那两个',
+    !after[V.id] && !after[U.id] && !after[L.id] && !after[Q.id] && !after[R.id] && n.invalid === 5, `invalid=${n.invalid}`);
+  check('⑨ 夹着软连字符的「Ari­a」洗过之后就是 S 的「Aria」：S 留下，它清掉',
+    after[S.id]?.name === 'Aria' && index['aria'] === S.id && !after[T.id], `${JSON.stringify(after[T.id])} · aria → ${index['aria']}`);
+  check('⑨ 那几个按旧算法算出来的索引格（带软连字符、填充符的键）都删掉了',
+    index['ari\u00ada'] === undefined && index['sli\u00addes'] === undefined && index['\u1160'] === undefined,
+    JSON.stringify(Object.keys(index).filter((k) => /[\u00ad\u1160]/.test(k))));
   check('⑨ 过期的索引格删掉了', index['ghostname'] === undefined && n.stale >= 1, `stale=${n.stale}`);
   check('⑨ 迁移之前登记好的那些一个没动（A 还是阿花）', after[A.id]?.name === '阿花' && index['阿花'] === A.id);
   // 每一条 v3 的名字都在索引里、而且指着自己；索引里每一格都指着一个真叫这个名字的人。
-  const nick = (s) => String(s).normalize('NFKC').toLowerCase().trim();
+  // 比的是服务器自己那一把（nickKey），不在这儿再抄一份——10-11 方案 A-6 改过它一次。
+  const nick = nickKey;
   const orphans = Object.entries(after).filter(([id, row]) => row?.v === 3 && index[nick(row.name)] !== id);
   check('⑨ 每一条 v3 都在索引里指着自己', orphans.length === 0, orphans.map(([id]) => id).join(' '));
   const dangling = Object.entries(index).filter(([key, id]) => nick(after[id]?.name ?? '') !== key);
@@ -372,6 +453,15 @@ check('③ 那几次之后 A 还是「阿花」', (await nameRow(A.id))?.name ==
   const api = await import(out);
   const { getNickname, leaderboardName, setNickname, adoptServerNickname, confirmedNickname, onNicknameChange, cachedBoard, fetchBoard } = api;
 
+  // 客户端那一份 nickKey 是 api/_nickname.js 的抄本（10-11 方案 A-6）：一串刁钻的名字，两份算出来的键一样。
+  const tricky = ['Ｂｏｂｂｙ', ' alice ', 'Sli\u00ADdes', '官\u3164方', '\u3164', 'K\uFE0Fate', '\u2764\uFE0F', '1\uFE0F\u20E3',
+    '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}', 'Ann\u{E0067}a', '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}',
+    'a\u200db', '\uFFA0x', 'Se\u00ADcretFirst99', 'x\u{E0100}y', 'ŉ', 'ﬁne'];
+  const serverKey = nickKey;
+  const off1 = tricky.filter((n) => api.nickKey(n) !== serverKey(n));
+  check('⑪ 客户端的 nickKey 和服务器那一把一字不差（一串刁钻的名字算出来的键都一样）', off1.length === 0,
+    off1.map((n) => `${JSON.stringify(n)}: ${JSON.stringify(api.nickKey(n))} ≠ ${JSON.stringify(serverKey(n))}`).join(' | '));
+
   // 原来在 check-board-refresh 的 ⑦（第 16 推跟着函数搬过来）。
   check('⑪ 没取过名字 → 空串（不拿凭据顶上）', getNickname() === '' && leaderboardName() === '', JSON.stringify(getNickname()));
   check('（尺子）⑪ 这时候是登着的，手上也真有第一串', JSON.parse(ls.get('slides_genius')).handle === FIRST);
@@ -387,7 +477,9 @@ check('③ 那几次之后 A 还是「阿花」', (await nameRow(A.id))?.name ==
   // 这一头就挡得住的三种，不发请求。
   calls = [];
   for (const [raw, want] of [['', 'required'], ['   ', 'required'], ['abcdefghijklm', 'bad'],
-    [FIRST.slice(0, 12), 'blocked'], ['Client.Me', 'blocked']]) {
+    [FIRST.slice(0, 12), 'blocked'], ['Client.Me', 'blocked'],
+    // 邮箱 @ 前面那一段里夹一个软连字符：洗掉之后就是凭据的样子，这一头当场认得出来、不打网络。
+    ['Client\u00AD.Me', 'blocked']]) {
     const r = await setNickname(raw);
     check(`⑪ setNickname(${JSON.stringify(raw)}) → ${want}，不打网络`, r.ok === false && r.reason === want, JSON.stringify(r));
   }

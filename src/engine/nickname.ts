@@ -85,8 +85,63 @@ function writeCache(name: string): void {
   }
 }
 
-/** 「算不算同一个名字」：NFKC、小写、去首尾空白（和 api/_nickname.js 的 nickKey 一样）。 */
-const nickKey = (name: string): string => String(name ?? '').normalize('NFKC').toLowerCase().trim();
+/*
+ * 「算不算同一个名字」——**和 api/_nickname.js 的 nickKey 一字不差的一份**（10-11 方案 A-6）：先洗掉看不
+ * 见的字符，再 NFKC、再洗一遍、小写。api/ 是纯 .js，这一头 import 不进去，只能抄；check-nickname ⑪ 拿
+ * 一串刁钻的名字比两份算出来的键，对不上就红。
+ *
+ * 这一头只拿它拦「把自己凭据的前 12 位敲成昵称」（服务器只有第一串的 sha256，这一条只有这里拦得
+ * 住）。原先只做 NFKC + 小写：在自己的第一串里夹一个软连字符，这一道就认不出来，而服务器洗掉那个字符
+ * 之后，榜上印出来的正是第一串的前 12 位。洗法的来由见那个文件 scrubName 上面那一段。
+ */
+const CONTROL_RE = /[\p{Cc}\u2028\u2029]/gu;
+const FORMAT_RE = /\p{Cf}/u;
+const INVISIBLE = new Set(['\u034f', '\u115f', '\u1160', '\u17b4', '\u17b5', '\u2800', '\u3164', '\uffa0']);
+const VARIATION_RE = /[\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/u;
+const ZWJ = '\u200d';
+const BLACK_FLAG = '\u{1f3f4}';
+const TAG_RE = /[\u{e0020}-\u{e007e}]/u;
+const CANCEL_TAG = '\u{e007f}';
+const KEYCAP = '\u20e3';
+const EMOJI_BEFORE = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\ufe0f]/u;
+const EMOJI_AFTER = /\p{Extended_Pictographic}/u;
+const EMOJI_BASE = /\p{Extended_Pictographic}/u;
+const KEYCAP_BASE = /^[0-9#*]$/;
+
+function scrubName(raw: string): string {
+  const chars = Array.from(String(raw ?? '').replace(CONTROL_RE, ''));
+  const kept: string[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    const before = kept[kept.length - 1];
+    if (INVISIBLE.has(ch)) continue;
+    if (ch === ZWJ) {
+      const after = chars[i + 1];
+      if (before && after && EMOJI_BEFORE.test(before) && EMOJI_AFTER.test(after)) kept.push(ch);
+      continue;
+    }
+    if (before === BLACK_FLAG && TAG_RE.test(ch)) {
+      let end = i;
+      while (end < chars.length && TAG_RE.test(chars[end])) end++;
+      if (chars[end] === CANCEL_TAG) {
+        kept.push(...chars.slice(i, end + 1));
+        i = end;
+        continue;
+      }
+    }
+    if (VARIATION_RE.test(ch)) {
+      const keycap = before !== undefined && KEYCAP_BASE.test(before) && chars[i + 1] === KEYCAP;
+      if (before !== undefined && (EMOJI_BASE.test(before) || keycap)) kept.push(ch);
+      continue;
+    }
+    if (FORMAT_RE.test(ch)) continue;
+    kept.push(ch);
+  }
+  return kept.join('').trim();
+}
+
+/** 「算不算同一个名字」只问它。导出给门比两份（见上）。 */
+export const nickKey = (name: string): string => scrubName(scrubName(name).normalize('NFKC')).toLowerCase();
 
 /**
  * 他是不是把自己的凭据敲成了名字（方案第 16 推第 4 条）：第一串的前 12 位，或者邮箱 @ 前

@@ -17,6 +17,10 @@
  *     切成几段，某一段等于这个词才算——所以 `Scunthorpe` 不会因为中间那四个字母被拒。
  *   · 中文那几个按**短语**认：中文没有空格分词，只能整段子串比。所以这一组只收那种拆开来
  *     也不会出现在正常名字里的说法（「傻逼」可以，单个「死」不行）。
+ *   · 子串比照样会误伤（10-11 方案 A-7）：「生日你好」里有「日你」、「去死亡谷」里有「去死」、「王八蛋
+ *     糕」里有「王八蛋」。**不改成整词比**——中文没有词边界，「整词」就等于「整个名字」，那会放过「日你
+ *     妈的」。改法是比之前先把几个正常词（ALLOWED_PHRASES）从名字里剔掉：「生日你好」剔掉「生日」只剩
+ *     「你好」；「日你妈的生日」剔掉「生日」还剩「日你妈的」，照样拦。
  *
  * 命中了只回一个笼统的 `blocked`，**不说是哪一个词**——说了等于把词表一条一条念给想绕过它
  * 的人听。
@@ -48,6 +52,15 @@ const PHRASES = [
   // 繁体
   '傻屄', '幹你', '操妳', '他媽的', '你媽的', '婊', '雞巴', '賤人', '強姦', '納粹',
 ];
+
+/**
+ * 比中文短语之前先剔掉的正常词（10-11 方案 A-7）：它们和上面某个短语首尾相接时会凑出一个脏词来
+ * （生日你 → 日你、小草你 → 草你、去死亡 → 去死、王八蛋糕 → 王八蛋、滚蛋糕 → 滚蛋、色情绪 → 色情）。
+ * 繁体那几个字形不同的也收（情緒）。只剔这几个、只在比短语时剔。代价照实说：脏词和这几个词**共用
+ * 一个字**的写法会一起放过（「去死亡」「生日你妈」）——那正是「去死亡谷」「生日你好」那种误伤的另一
+ * 面，分不开；脏词完整地出现在别处的照样拦（「日你妈的生日」）。
+ */
+const ALLOWED_PHRASES = ['生日', '小草', '死亡', '蛋糕', '情绪', '情緒'];
 
 /**
  * 保留名（方案原单：Slides、官方、管理员、admin、匿名玩家、单个字母 A–Z）：装成官方、装成系统
@@ -87,9 +100,11 @@ export function isBlockedName(name, { letter = false } = {}) {
   for (const w of words) {
     if (WORDS.includes(w) || RESERVED_WORDS.includes(w)) return true;
   }
-  // 中文短语：去掉空白和标点再比，免得夹一个空格就绕过去（「傻 逼」）。
+  // 中文短语：去掉空白和标点再比，免得夹一个空格就绕过去（「傻 逼」）。词表那几个比之前先剔掉正常词
+  // （ALLOWED_PHRASES）；保留名不剔——「官方」「管理员」不会因为旁边挨着一个「生日」就变得可以用。
   const squeezed = norm.replace(/[\s\p{P}\p{S}]+/gu, '');
-  for (const p of PHRASES) if (squeezed.includes(p)) return true;
+  const cleared = ALLOWED_PHRASES.reduce((s, w) => s.split(w).join(''), squeezed);
+  for (const p of PHRASES) if (cleared.includes(p)) return true;
   for (const p of RESERVED_PHRASES) if (squeezed.includes(p)) return true;
   return false;
 }
