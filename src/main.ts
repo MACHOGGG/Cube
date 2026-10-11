@@ -67,6 +67,8 @@ import { GENIUS_LAYOUTS } from './engine/geniusContent';
 import type { SeedGame } from './engine/seedDeal';
 import { renderPuzzleModePage } from './ui/puzzleMode';
 import { armNewVersionPill, syncNewVersionPill } from './ui/newVersionPill';
+import { armConsentBar, syncConsentBar } from './ui/consentBar';
+import { openLegalWindow } from './ui/legalWindow';
 import { installBackNav, pushLayer, setScreenBack } from './engine/backNav';
 import { openRulesModal, type ExtraTipView } from './ui/rulesModal';
 import { drawOne, type Family, type TargetPattern } from './engine/targets';
@@ -789,6 +791,9 @@ function syncScreenClass() {
   // 地方（它自己就是那个 MutationObserver 的回调）。顺带，「对局中不说」也是这一句管的：
   // 打着一局的时候屏幕上没有主菜单，那一行于是根本不存在。
   syncNewVersionPill();
+  // 主菜单上那张 GA 同意条（10-11 方案 A-14）同一个道理：它住在主菜单的招牌盒子里，换屏就跟着
+  // 没了，回到主菜单再放一次（没答过的人「下一次回到主菜单时再出现」就是这么来的）。
+  syncConsentBar();
 }
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
@@ -1652,6 +1657,7 @@ function relocalizeChrome(lang: Lang) {
   // 这一行是**一直在**的（发现之后不撤，见 ui/newVersionPill.ts 规矩③），所以换语言时它
   // 不能还说着上一种话。和底排那两个字同一处落点，同一个理由。
   syncNewVersionPill(lang);
+  syncConsentBar(lang);
 }
 
 /**
@@ -1665,6 +1671,12 @@ function afterLangChosen(lang: Lang, resume = false) {
   // 后都落到这个函数，而切语言走的是 relocalizeChrome，不经过这儿：盯哨于是不会被装两遍
   // （装两遍等于两个 setInterval，同一个版本号喊两声）。
   armNewVersionPill(lang);
+  // GA 同意条也只装一次（理由同上）。屋主替整屋挑玩法时那一屏也是主菜单，但那一下他在替一屋子人
+  // 办事，不拿这件事去打扰他（方案点名的 pickingForRoom）。
+  armConsentBar(lang, {
+    openPrivacy: () => openLegalWindow(currentLang, 'privacy', () => syncConsentBar()),
+    suppressed: () => !!pickingForRoom,
+  });
   if (isFirstRun()) {
     // 第一次打开这台设备上的游戏：就落在主菜单，只是《基础方块》和《基础小
     // 球》两张卡镶着一圈光（玩家定的）。

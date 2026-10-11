@@ -1805,6 +1805,8 @@ button:hover { filter: brightness(1.05); }
    *
    * **一个变量管住所有挂在中线上的东西**：卡片、两条点点轴、首玩期那条分界
    * 线——四处原本各写一个 `top: 50%`，改成同一句 `calc(50% - var(--axis-shift))`。
+   * （10-11 方案 A-14 起四处同一句里还加着 `var(--consent-room, 0px)`：主菜单那张 GA 同意条压到
+   * 第一张卡时整条轴往下让，见 ui/consentBar.ts。平时它是 0。）
    * 各改各的话，漏一处就是「点点跟卡片对不上」——而点点正是告诉玩家「我在第几
    * 项」的唯一提示。
    *
@@ -1889,7 +1891,7 @@ button:hover { filter: brightness(1.05); }
  */
 .axis-rail {
   position: absolute;
-  top: calc(50% - var(--axis-shift, 0px));
+  top: calc(50% - var(--axis-shift, 0px) + var(--consent-room, 0px));
   width: 14px;
   height: 0;
   pointer-events: none;
@@ -2020,7 +2022,7 @@ button:hover { filter: brightness(1.05); }
    * 开出来的是「圆球」。见 modeAxis.ts 的 mount。
    */
   width: 50%;
-  top: calc(50% - var(--axis-shift, 0px));
+  top: calc(50% - var(--axis-shift, 0px) + var(--consent-room, 0px));
   /* 轴上的位置是**每帧算出来的**，不能再被 CSS 平滑一遍。
      全局那条 `button { transition: transform .1s ease }`（style.css 顶上）会把
      JS 每帧写进 style.transform 的新位置当成一次过渡的起点——于是整条轴比手指
@@ -2459,7 +2461,7 @@ button:hover { filter: brightness(1.05); }
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% - var(--axis-shift, 0px));
+  top: calc(50% - var(--axis-shift, 0px) + var(--consent-room, 0px));
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2491,7 +2493,7 @@ button:hover { filter: brightness(1.05); }
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% - var(--axis-shift, 0px));
+  top: calc(50% - var(--axis-shift, 0px) + var(--consent-room, 0px));
   /* **收缩到文字那么宽**，不是整幅宽。整幅宽的话，屏幕上那一整条（看上去空空
      如也）都算按到了它——手指随便落一下就把整套引导撤了，正是玩家点名不要的
      「意料之外的疏漏操作」。居中不能靠 transform（轴每帧往 transform 里写位置，
@@ -4062,6 +4064,69 @@ body:has(.daily-page--count) .home-nav { display: none; }
 }
 .home-head-glass .newver-pill:active { transform: translateY(1px); }
 .home-head-glass .newver-pill:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+/* ---------- Google Analytics 同意条（10-11 方案 A-14，「② 奶油磨砂卡」） ---------- */
+/*
+ * 底色、描边、模糊、阴影一律照抄顶上招牌 `.home-head-glass`——两块玻璃摆在一块儿，差一点就是两种
+ * 玻璃。圆角大一档（--r-xl），内边距 14 / 16 / 16。
+ *
+ * 摆在哪儿、为什么见 ui/consentBar.ts 文件头。它住在 `.home-head` 里：那一层 sticky、z-index 60、
+ * 本身不收点击（只有招牌那块玻璃收），所以这张条要自己把 pointer-events 打开。手机上的 top 由那边
+ * 量出来写进 `--consent-top`（招牌下沿往下 12px——招牌是 inline-block，`100%` 底下还垫着行框的
+ * 那几像素，不能直接拿来算）。
+ */
+.consent-bar {
+  position: absolute;
+  top: var(--consent-top, calc(100% + 12px));
+  left: 50%;
+  width: calc(100vw - 32px);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 14px 16px 16px;
+  border-radius: var(--r-xl);
+  pointer-events: auto;
+  text-align: left;
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 6px 20px -14px rgba(46, 36, 48, 0.4);
+  box-shadow: 0 6px 20px -14px rgba(46, 36, 48, 0.4),
+              inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .consent-bar { background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); }
+}
+/* 电脑：右上角，离右边、上边各 24px，宽 360px。固定定位——宽版那一页本来就一屏装得下。 */
+@media (min-width: 1000px) {
+  .home-page--wide .consent-bar { position: fixed; top: 24px; right: 24px; left: auto; width: var(--consent-w, 360px); transform: none; }
+}
+.consent-text {
+  margin: 0;
+  font-family: 'Karla', sans-serif; font-size: 13.5px; line-height: 1.5; font-weight: 500;
+  color: var(--ink-soft);
+}
+.consent-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.consent-link:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+/* 两颗一样大、一样样子：接受和拒绝不分主次（CNIL：拒绝要和接受一样容易）。白底不跟主题翻——和
+   全站那几块「不翻的卡」一个规矩，棕字对白底 4.6:1。 */
+.consent-btns { display: flex; gap: 10px; margin-top: 12px; }
+.consent-btn {
+  flex: 1 1 0; min-width: 0; min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--card-brown);
+  background: var(--card-white); color: var(--card-brown);
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 15px; line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+}
+.consent-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* 弹窗开着的时候不出现。visibility 而不是 display:none：藏着的时候布局还在，转屏时量出来的位置
+   照样作数，弹窗一关原样回来。两条分开写：不认 :has() 的浏览器会把整条规则连选择器一起丢掉。 */
+html.has-overlay .consent-bar { visibility: hidden; pointer-events: none; }
+html:has(body > .overlay) .consent-bar { visibility: hidden; pointer-events: none; }
+/* 紧凑版还压到卡片时，宽版的网格整体往下让（鱼眼轴那一路走中线那四处，见 .mode-axis）。 */
+.home-page--wide .home-grid { margin-top: var(--consent-room, 0px); }
 
 /* ---------- 个人主页 (profile page) ---------- */
 /* A setting rather than a destination: the pill carries its own switch, and

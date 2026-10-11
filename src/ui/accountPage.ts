@@ -29,7 +29,8 @@ import {
 } from '../engine/palettePref';
 import { proOn, setPro } from '../engine/proMode';
 import { pickedTheme, setTheme } from '../engine/themePref';
-import { CONTACT_EMAIL, LEGAL, LEGAL_ORDER, legalDoc, type LegalKey } from '../legal';
+import { CONTACT_EMAIL, LEGAL, LEGAL_ORDER, type LegalKey } from '../legal';
+import { openLegalWindow } from './legalWindow';
 import { THANKS } from '../thanks';
 import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
@@ -481,33 +482,10 @@ export function renderAccountPage(
   }
 
   /** One of the five published documents, in the same window 游戏规则 uses —
-   *  a title, a line of lead-in, then term/body pairs. */
+   *  a title, a line of lead-in, then term/body pairs. 窗本身在 ui/legalWindow.ts（主菜单那张
+   *  GA 同意条也要开它，10-11 方案 A-14）。 */
   function openLegal(key: LegalKey) {
-    // Channel-aware: the clauses that belong to the other counter — its
-    // prices, its cancellation route, the company that takes its money —
-    // are not in this copy at all.
-    const doc = legalDoc(lang, key);
-    const overlay = document.createElement('div');
-    overlay.className = 'overlay show';
-    overlay.innerHTML = `
-      <div class="modal rules-modal">
-        <h2>${doc.title}</h2>
-        <div class="rules-body">
-          <p class="legal-intro">${doc.intro}</p>
-          ${doc.items
-            .map((r) => `<div class="rule-item"><b>${r.term}</b><span>${r.body}</span></div>`)
-            .join('')}
-        </div>
-        <div class="btn-row"><button class="primary" id="legalClose">${s.closeBtn}</button></div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const close = () => overlay.remove();
-    pushLayer(close, overlay);
-    overlay.querySelector<HTMLButtonElement>('#legalClose')!.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
+    openLegalWindow(lang, key);
   }
 
   /** 更换图标 — the icon on the browser tab. Picking one swaps it there and

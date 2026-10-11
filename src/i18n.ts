@@ -625,6 +625,15 @@ export interface I18nStrings {
   mpRoundForcedZero: string;
   /** 线上已经是新的一版了：菜单上那一行，按一下重新加载。对局中不出现（见 engine/newVersion.ts）。 */
   newVersionTip: string;
+  /** 主菜单那张 Google Analytics 同意条（10-11 方案 A-14）：完整版、紧凑版两句，两颗一样大的键，
+   *  `aria-label`，紧凑版里那条链接的字（只有法语和隐私政策的标题不一样），和隐私政策窗顶上那颗开关。 */
+  consentFull: string;
+  consentShort: string;
+  consentAccept: string;
+  consentDecline: string;
+  consentRegion: string;
+  consentPrivacyShort: string;
+  gaSwitch: string;
   mpErrEnded: string;
   /** 网络断了一下，但座位还留着——不是把人踢出房间的理由。 */
   mpReconnecting: string;
@@ -1147,6 +1156,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundForced: 'The host ended this round — your {n} point so far counts toward the room total.|The host ended this round — your {n} points so far count toward the room total.',
     mpRoundForcedZero: 'The host ended this round.',
     newVersionTip: 'New version — tap to refresh',
+    consentFull: 'We’d like to use Google Analytics cookies to see how the game is played and improve it.',
+    consentShort: 'May we use Google Analytics cookies to improve the game?',
+    consentAccept: 'Accept',
+    consentDecline: 'Decline',
+    consentRegion: 'Cookie settings',
+    consentPrivacyShort: 'Privacy policy',
+    gaSwitch: 'Google Analytics stats',
     mpErrEnded: 'That room has been closed.',
     mpReconnecting: 'Connection lost — getting you back in…',
     mpHostLeaveWarn: 'Close the room?',
@@ -1512,6 +1528,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundForced: 'L’hôte a terminé cette manche : votre {n} point jusqu’ici compte dans le total de la salle.|L’hôte a terminé cette manche : vos {n} points jusqu’ici comptent dans le total de la salle.',
     mpRoundForcedZero: 'L’hôte a terminé cette manche.',
     newVersionTip: 'Nouvelle version — recharger',
+    consentFull: 'Nous aimerions utiliser les cookies de Google Analytics pour voir comment le jeu est joué et l’améliorer.',
+    consentShort: 'Pouvons-nous utiliser les cookies Google Analytics pour améliorer le jeu ?',
+    consentAccept: 'Accepter',
+    consentDecline: 'Refuser',
+    consentRegion: 'Paramètres des cookies',
+    consentPrivacyShort: 'Confidentialité',
+    gaSwitch: 'Statistiques Google Analytics',
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
     mpHostLeaveWarn: 'Dissoudre la salle ?',
@@ -1877,6 +1900,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundForced: '屋主結束了這一局：您到剛才的 {n} 分已算進小屋總分。',
     mpRoundForcedZero: '屋主結束了這一局。',
     newVersionTip: '有新版本，點一下重新載入',
+    consentFull: '我們想用 Google Analytics 的 Cookie 了解大家怎麼玩，好改進遊戲。',
+    consentShort: '可以用 Google Analytics 的 Cookie 幫我們改進遊戲嗎？',
+    consentAccept: '接受',
+    consentDecline: '拒絕',
+    consentRegion: 'Cookie 設定',
+    consentPrivacyShort: '隱私政策',
+    gaSwitch: 'Google Analytics 統計',
     mpErrEnded: '這個小屋已經結束了。',
     mpReconnecting: '網路斷了一下，正在把您接回小屋…',
     mpHostLeaveWarn: '解散小屋？',
@@ -2242,6 +2272,13 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundForced: '屋主结束了这一局：您到刚才的 {n} 分已算进小屋总分。',
     mpRoundForcedZero: '屋主结束了这一局。',
     newVersionTip: '有新版本，点一下刷新',
+    consentFull: '我们想用 Google Analytics 的 Cookie 了解大家怎么玩，好改进游戏。',
+    consentShort: '可以用 Google Analytics 的 Cookie 帮我们改进游戏吗？',
+    consentAccept: '接受',
+    consentDecline: '拒绝',
+    consentRegion: 'Cookie 设置',
+    consentPrivacyShort: '隐私政策',
+    gaSwitch: 'Google Analytics 统计',
     mpErrEnded: '这个小屋已经结束了。',
     mpReconnecting: '网络断了一下，正在把您接回小屋…',
     mpHostLeaveWarn: '解散小屋？',

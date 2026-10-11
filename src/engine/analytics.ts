@@ -14,6 +14,13 @@
  *   error swallowed, so a blocked or slow request can never delay a frame or
  *   throw into the app.
  *
+ *   **而且只在玩家点了「接受」之后才加载**（10-11 方案 A-14，同意记录见 engine/consent.ts）。
+ *   原先它开机就加载、一句都不问，可它写的那两个 Cookie（`_ga`、`_ga_<编号>`，各活两年）
+ *   按 CNIL 的规定必须先问：没答、答了「拒绝」、或者答复过了期，这一路就一个字节都不发——
+ *   脚本不请求，Cookie 不写。主菜单上那张同意条（ui/consentBar.ts）和隐私政策那扇窗顶上的
+ *   开关是仅有的两个开口，都走下面的 acceptAnalytics / declineAnalytics。
+ *   Vercel 那一路不写 Cookie，不受这一条管，照旧开机就开。
+ *
  * Nothing here can break the game: `report()` swallows everything, and the
  * whole module no-ops off a real https host (the artifact build, a file://
  * copy, and localhost all measure nobody).
@@ -22,6 +29,7 @@
  * property below is either a fixed enum from our own code or a number.
  */
 import { inject, track } from '@vercel/analytics';
+import { consentChoice, recordConsent } from './consent';
 
 type Props = Record<string, string | number | boolean>;
 
@@ -30,11 +38,26 @@ const LAST_KEY = 'slides_analytics_last';
 const VISITS_KEY = 'slides_analytics_visits';
 const GAMES_KEY = 'slides_analytics_games';
 
+/**
+ * 上面那四个计数最长活 13 个月（10-11 方案 A-1）：从 FIRST 记下的那一刻起，满 13 个**日历月**就
+ * 四个一起清掉、从头数。
+ *
+ * 为什么是 13 个月：这四个是 Vercel 那一路（不写 Cookie、不用问）的原料，CNIL 给免同意统计的条件
+ * 之一就是追踪器的寿命不超过 13 个月。原先它们一辈子不过期——那这一路严格说也得先问。
+ * 按日历月算（setMonth），不按「395 天」这种近似：近似值在某些月份会超出 13 个月几天。
+ */
+const COUNTER_MONTHS = 13;
+
 let enabled = false;
+/** 构建时配的 GA 编号（VITE_GA_ID）。配了不等于在用——在不在用看 gaOn。 */
 let gaId = '';
+/** gtag 的脚本已经插进页面了（一页里只插一次）。 */
+let gaLoaded = false;
+/** 这一刻 GA 收不收事件：点过「接受」、而且之后没有撤回。 */
+let gaOn = false;
 
 /** Only measure where there is an audience: a real https host, not a local or offline copy. */
-function isLiveSite(): boolean {
+export function isLiveSite(): boolean {
   try {
     const { protocol, hostname } = window.location;
     if (!protocol.startsWith('http')) return false;
@@ -62,7 +85,7 @@ export function report(name: string, props: Props = {}): void {
   } catch {
     /* the insights endpoint is unreachable — not the game's problem */
   }
-  if (gaId) {
+  if (gaOn) {
     try {
       (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag?.('event', name, props);
     } catch {
@@ -94,6 +117,110 @@ function loadGoogleAnalytics(id: string): void {
   document.head.appendChild(el);
 }
 
+function configuredGaId(): string {
+  return (import.meta.env.VITE_GA_ID || '').trim();
+}
+
+/** Google 文档里的停用开关：`window['ga-disable-<编号>'] = true` 之后 gtag 一个请求都不再发。 */
+function setGaDisabled(id: string, off: boolean): void {
+  try {
+    (window as unknown as Record<string, unknown>)['ga-disable-' + id] = off;
+  } catch {
+    /* 设不上也不该拖垮游戏 */
+  }
+}
+
+/** 打开 GA：头一次就插脚本，撤回过再打开就只把停用开关拨回去（脚本一页里只插一次）。 */
+function startGoogleAnalytics(): void {
+  if (!gaId) return;
+  setGaDisabled(gaId, false);
+  if (!gaLoaded) {
+    try {
+      loadGoogleAnalytics(gaId);
+      gaLoaded = true;
+    } catch {
+      return;
+    }
+  }
+  gaOn = true;
+}
+
+/**
+ * 删掉 GA 写下的那两个 Cookie（`_ga`、`_ga_<编号>`）。
+ *
+ * GA 默认把 Cookie 写在「能写的最上一级域名」上（cookie_domain: 'auto'），所以只删当前域名不够：
+ * 在 www.play-slides.com 上，它写的是 .play-slides.com。删法是同名、同 path、同 domain 再写一遍、
+ * 过期时间设成过去——domain 对不上的那一份浏览器不认，所以几种写法挨个来一遍：不带 domain（只属于
+ * 这个主机的那份）、当前主机、上一级域名。上一级只到「还有两段」为止：com 那一级本来就写不上。
+ */
+function deleteGaCookies(): void {
+  try {
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const domains = ['', host, '.' + host];
+    if (parts.length > 2) {
+      const parent = parts.slice(1).join('.');
+      domains.push(parent, '.' + parent);
+    }
+    const names = document.cookie
+      .split(';')
+      .map((c) => c.split('=')[0].trim())
+      .filter((n) => n === '_ga' || n.startsWith('_ga_'));
+    for (const name of names) {
+      for (const d of domains) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/` + (d ? `; domain=${d}` : '');
+      }
+    }
+  } catch {
+    /* document.cookie 被禁掉（极少数内嵌浏览器）：那 GA 本来也写不进去 */
+  }
+}
+
+/**
+ * 主菜单同意条和隐私政策那扇窗该不该出现：这一份构建配了 GA，而且跑在线上的网址上。
+ * 小红书那一版（这个模块是空替身）、iOS 外壳（isLiveSite 为假）、没配 VITE_GA_ID 的构建都答 false。
+ */
+export function gaConsentApplies(): boolean {
+  return configuredGaId() !== '' && isLiveSite();
+}
+
+/** 他点了「接受」（同意条上那一颗，或者隐私政策窗顶上那颗开关拨到开）：记下来，当场加载。 */
+export function acceptAnalytics(): void {
+  recordConsent('granted');
+  // initAnalytics 没走到这一步（不是线上、insights 起不来）就只记答复：这一页本来什么都不发。
+  if (!enabled || !gaId) return;
+  startGoogleAnalytics();
+}
+
+/**
+ * 他点了「拒绝」，或者把开关拨到关（撤回）：记下来；已经在跑的那一份当场停掉、Cookie 删掉。
+ * 「拒绝」那一路 GA 从来没加载过，停用和删 Cookie 都是空转——同一个函数，省得两条路走散。
+ */
+export function declineAnalytics(): void {
+  recordConsent('denied');
+  gaOn = false;
+  const id = gaId || configuredGaId();
+  if (id) setGaDisabled(id, true);
+  deleteGaCookies();
+}
+
+/**
+ * 四个计数满 13 个日历月就一起清掉（见 COUNTER_MONTHS）。清掉之后这台设备在统计里就是一个
+ * 新来的人——这正是「寿命不超过 13 个月」的意思。
+ */
+function expireCounters(now: number): void {
+  try {
+    const first = num(FIRST_KEY);
+    if (!first) return;
+    const until = new Date(first);
+    until.setMonth(until.getMonth() + COUNTER_MONTHS);
+    if (now < until.getTime()) return;
+    for (const k of [FIRST_KEY, LAST_KEY, VISITS_KEY, GAMES_KEY]) localStorage.removeItem(k);
+  } catch {
+    /* 存储用不了：那这四个本来就没记下 */
+  }
+}
+
 /**
  * Boots both sinks and reports the visit itself: which visit number this is
  * for this browser, and how long since the first and the previous one — the
@@ -101,6 +228,10 @@ function loadGoogleAnalytics(id: string): void {
  * localStorage rather than from any cross-site identifier.
  */
 export function initAnalytics(lang: string): void {
+  // 过期清零放在「是不是线上」之前：这四个键在哪儿都会被写（bumpLifetimeGames 不看域名），
+  // 「最长 13 个月」这句话在哪儿都该成立。
+  const now = Date.now();
+  expireCounters(now);
   if (!isLiveSite()) return;
   enabled = true;
 
@@ -111,16 +242,11 @@ export function initAnalytics(lang: string): void {
     return;
   }
 
-  gaId = (import.meta.env.VITE_GA_ID || '').trim();
-  if (gaId) {
-    try {
-      loadGoogleAnalytics(gaId);
-    } catch {
-      gaId = '';
-    }
-  }
+  gaId = configuredGaId();
+  // 只有本机记着「接受」、而且没过期，才加载。没答过的人这一下什么都不发；他在主菜单上点
+  // 「接受」的那一刻，acceptAnalytics 当场补上。
+  if (gaId && consentChoice(now) === 'granted') startGoogleAnalytics();
 
-  const now = Date.now();
   let first = 0;
   let last = 0;
   let visits = 0;
@@ -267,6 +393,9 @@ function bumpLifetimeGames(): boolean {
   try {
     before = num(GAMES_KEY);
     localStorage.setItem(GAMES_KEY, String(before + 1));
+    // 13 个月那只钟从 FIRST 起算（expireCounters）。线上 initAnalytics 开机就记下它，走不到那
+    // 一步的地方（不是线上的域名）计数也在涨，那就从这一局起算——不许有一个没有钟的计数。
+    if (!num(FIRST_KEY)) localStorage.setItem(FIRST_KEY, String(Date.now()));
   } catch {
     /* 记不住这台设备打过几局 */
   }

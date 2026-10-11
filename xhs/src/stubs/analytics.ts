@@ -20,3 +20,12 @@ export function trackTutorialStart(_shape: string): void {}
 export function trackTutorialEnd(..._args: unknown[]): void {}
 export function trackLanguage(_lang: string, _source: 'auto' | 'switch'): void {}
 export function trackShare(_source: string): void {}
+// GA 同意那一套（10-11 方案 A-14）：这一版不加载 GA，同意条和隐私政策窗里那颗开关都不该出现。
+export function isLiveSite(): boolean {
+  return false;
+}
+export function gaConsentApplies(): boolean {
+  return false;
+}
+export function acceptAnalytics(): void {}
+export function declineAnalytics(): void {}
