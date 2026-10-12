@@ -88,12 +88,15 @@ if (!CHECK_PATH) {
 const STAMP_SVG =
   '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
   `<path class="end-stamp-tick" d="${CHECK_PATH.replace(/\d+(?:\.\d+)?/g, (n) => String(Math.round(Number(n) * 0.4 * 100) / 100))}" fill="none" stroke="var(--end-ok)" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-/** 两枚徽章（清盘 / 解锁 1 枚）四种语言的字，从 i18n.ts 现读：⑤ 摆「有勾」那一种要用当地的字。 */
+/**
+ * 两枚徽章四种语言的字，从 i18n.ts 现读：⑤ 摆「有勾」那一种要用当地的字。基础局是「清盘 / 解锁 1 枚」，老虎机局是
+ * 「清盘 / 降到底」（10-11 方案 B-6：「降到底」四语都要放得下，法语那一句最长）。
+ */
 const I18N = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
 const badgeText = (lang) => {
   const i = I18N.indexOf(`\n  ${lang}: {`);
   const pick = (k) => (I18N.slice(i).match(new RegExp(`\\n\\s+${k}: '([^']+)'`)) || [, ''])[1];
-  return [pick('badgeSwept'), pick('badgeUnlockedOne')];
+  return { base: [pick('badgeSwept'), pick('badgeUnlockedOne')], slot: [pick('badgeSwept'), pick('badgeBottomOut')] };
 };
 
 /**
@@ -607,7 +610,7 @@ for (const [w, h, touch] of SIZES) {
     await endARun(page);
     const hasTip = await page.evaluate(() => !!document.querySelector('#endBreakdown .end-row--tip'));
     check(`⑤ ${w}×${h} ${lang}：（尺子）真打的这一局是头一回出综合得分，说明那一句在`, hasTip);
-    for (const variant of ['头一局', '没勾', '有勾', '有勾·四位数', '设计图那一局', '设计图那一局·有勾']) {
+    for (const variant of ['头一局', '没勾', '有勾', '有勾·四位数', '有勾·老虎机', '设计图那一局', '设计图那一局·有勾']) {
       const bad = await page.evaluate(async ([variant, landscape, stampSvg, badges, design]) => {
         const ov = document.getElementById('endOverlay');
         /** 分数摆成滚筒滚完的样子（engine/odometer.ts），一位一格——位数决定左边那一栏多宽。 */
@@ -641,7 +644,8 @@ for (const [w, h, touch] of SIZES) {
           const st = document.getElementById('endStamp');
           st.innerHTML = stampSvg;
           st.classList.add('end-stamp--drawn');
-          document.getElementById('endBadges').innerHTML = badges.map((b) => `<span class="end-badge">${b}</span>`).join('');
+          const pair = variant === '有勾·老虎机' ? badges.slot : badges.base;
+          document.getElementById('endBadges').innerHTML = pair.map((b) => `<span class="end-badge">${b}</span>`).join('');
         }
         if (variant.startsWith('设计图')) {
           // 设计图那一局（designFixture，这种语言现拼的）：明细比真打的这一局长（多一行削线、步数两位数），叫法变长
@@ -670,7 +674,7 @@ for (const [w, h, touch] of SIZES) {
         const blocks = [['标题', box('#endTitle')], ['分数', box('#endScore')], ['明细', box('#endBreakdown')], ['图', img],
           ...[...document.querySelectorAll('#endBadges .end-badge')].map((e, i) => ['徽章' + (i + 1), box(e)]),
           ...[...document.querySelectorAll('#endOverlay .end-actions > button')].map((e) => [e.id, box(e)]),
-          ...(variant === '有勾' || variant === '设计图那一局·有勾' ? [['勾', box('#endStamp')]] : [])];
+          ...(variant === '有勾' || variant === '有勾·老虎机' || variant === '设计图那一局·有勾' ? [['勾', box('#endStamp')]] : [])];
         const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
         for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (overlap(blocks[i][1], blocks[j][1])) out.push(`${blocks[i][0]}压${blocks[j][0]}`);
         if (!landscape && box('#endOverlay .end-body').top < head.getBoundingClientRect().bottom - 0.5) out.push('图那一块压抬头');

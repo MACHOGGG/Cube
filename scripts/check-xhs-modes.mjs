@@ -184,8 +184,15 @@ say(
     .test(mainSrc),
   'BOOKS 是 ALL_GAMES × DAILY_MODE_KEYS 两层循环拼的，后缀问 suffixFor 要',
 );
+// 老虎机那两本（10-11 方案 B-7）：老虎机开在基础方块、基础小球上，modeKey 是 'base'，原先和基础局记在同一本，
+// 基础局的最佳和平均是两种玩法掺着算的。现在它另起一本（键里多一截 _slot），只有这两副开得出来，所以单独一行。
+say(
+  /for \(const (\w+) of \[squareGame, circleGame\]\)\s*BOOKS\.push\(\{\s*card:\s*\1\.card,\s*suffix:\s*suffixFor\('base', \{ slot: true \}\)\s*\}\)/
+    .test(mainSrc),
+  'BOOKS 另有老虎机那两本（方块、小球），后缀问 suffixFor 要',
+);
 const writes = mainSrc.match(/\bBOOKS\s*(?:\.(?:push|unshift|splice)\(|=[^=>])/g) || [];
-say(writes.length === 1, '除了那一处 push，没有别处往 BOOKS 里塞东西、也没有别处给它重新赋值', `${writes.length} 处`);
+say(writes.length === 2, '除了那两处 push（两层循环、老虎机那两本），没有别处往 BOOKS 里塞东西、也没有别处给它重新赋值', `${writes.length} 处`);
 // 后缀一律问 suffixFor 要，不许手写字面量——手写的那一版 2026-09 全错过一次。
 say(!/suffix:\s*'/.test(mainSrc), 'main.ts 里没有手写的后缀字面量（一律走 suffixFor）');
 
@@ -196,18 +203,18 @@ say(ALL_KEYS.length >= 6, `尺子：解析出 ModeKey ${ALL_KEYS.length} 种`, A
 for (const mk of ALL_KEYS) {
   say(MODE_KEYS.includes(mk), `DAILY_MODE_KEYS 里有 ${mk}（这一种打完的局进得了成绩页）`);
 }
-// 主菜单上自己记一本的那几档也逐个点一遍名。老虎机借基础那本（它换的只是得分图案，和网页版
-// 一致），所以 slot 不该是一种后缀。
+// 主菜单上自己记一本的那几档也逐个点一遍名。老虎机不是一种 modeKey（它那一局的 modeKey 就是 base，服务器的
+// 榜和玩法白名单都认这个），它那两本是上面单独那一行加的，所以 slot 不该混进这张表。
 for (const mk of ['base', 'bomb', 'flip', 'puzzle']) {
   say(MODE_KEYS.includes(mk), `主菜单的 ${mk} 那一档在 DAILY_MODE_KEYS 里`);
 }
-say(!MODE_KEYS.includes('slot'), 'DAILY_MODE_KEYS 里没有 slot（老虎机记在基础那本上，同网页版）');
+say(!MODE_KEYS.includes('slot'), 'DAILY_MODE_KEYS 里没有 slot（老虎机不是一种 modeKey，它那两本单独加）');
 
 // 这一端建了几副棋盘，ALL_GAMES 就要有几副——每日挑战轮得到的那四副打完的局也进成绩页。
 const BUILT = [...mainSrc.matchAll(/^const (\w+Game) = create\w+Game\(\);/gm)].map((m) => m[1]);
 say(BUILT.length >= 2, `尺子：main.ts 里建了 ${BUILT.length} 副棋盘`, BUILT.join('、'));
 for (const g of BUILT) say(ALL.includes(g), `${g} 在 ALL_GAMES 里`);
-note(`成绩页翻 ${ALL.length} × ${MODE_KEYS.length} = ${ALL.length * MODE_KEYS.length} 本存档`);
+note(`成绩页翻 ${ALL.length} × ${MODE_KEYS.length} + 2（老虎机）= ${ALL.length * MODE_KEYS.length + 2} 本存档`);
 
 // dailyBest 不许自己再拼一遍键——两处各拼一遍，正是从前「每日最佳看得到、成绩页看不到」的来路。
 const dbFrom = mainSrc.indexOf('function dailyBest(');

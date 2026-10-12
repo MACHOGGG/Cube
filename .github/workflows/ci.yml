@@ -682,6 +682,17 @@ jobs:
         run: |
           npx esbuild src/engine/persistence.ts --bundle --format=esm --platform=neutral --outfile=/tmp/persist.mjs
           node scripts/check-evicted-total.mjs /tmp/persist.mjs
+      # 老虎机和基础各记各的（10-11 方案 B-7）：老虎机开在基础棋盘上、modeKey 是 'base'，原先和基础局存进同一本，
+      # 结算页的「本机最佳」「平均」两种玩法掺着算。现在键里多一截 _slot：这一道量键分开了、别的玩法的键一字不动、
+      # 打一局老虎机基础那一本一样不变，以及开机那一次拆旧档——带 slot 的挪走、基础的最佳是老虎机顶上去的才改、
+      # 累计得分一分不差、只跑一次。纯 node，几十毫秒。（真打一局落进哪一本在 check-seed-deal，四头接线在
+      # check-run-lifecycle ⑤。）
+      - name: 老虎机和基础各记各的
+        run: |
+          npx esbuild src/engine/slotSplit.ts --bundle --format=esm --platform=neutral --outfile=/tmp/slotsplit.mjs
+          npx esbuild src/engine/persistence.ts --bundle --format=esm --platform=neutral --outfile=/tmp/persist.mjs
+          npx esbuild src/engine/runKey.ts --bundle --format=esm --outfile=/tmp/runkey.mjs
+          node scripts/check-slot-split.mjs /tmp/slotsplit.mjs /tmp/persist.mjs /tmp/runkey.mjs
       # 老虎机那一局的四件：完成奖励真的加上去（从前算好的那个数被计分那条路原样丢
       # 掉，一分都没生效过）、侵蚀先拆哪一枚按几何不按书写次序、降级那句话报的是真实
       # 枚数不是侵蚀级数（二十个目标里十个对不上）、八副棋盘的卡死门槛没有哪一副写死。
@@ -690,7 +701,8 @@ jobs:
           npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
           npx esbuild src/engine/targets.ts --bundle --format=esm --outfile=/tmp/targets.mjs
           npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
-          node scripts/check-slot-rules.mjs /tmp/scoring.mjs /tmp/targets.mjs /tmp/match.mjs
+          npx esbuild src/engine/runRecord.ts --bundle --format=esm --outfile=/tmp/runrecord.mjs
+          node scripts/check-slot-rules.mjs /tmp/scoring.mjs /tmp/targets.mjs /tmp/match.mjs /tmp/runrecord.mjs
       # 小红书那一端的玩法表有七张（XhsMode / CARDS / perRow / onPlay 分派 /
       # FirstKey ＋ BOOKS / soon ＋ dim / check-vsweb 的 XHS_CARD）。加一档玩法要七张
       # 都动，而漏掉其中任何一张**都不会当场报错**：点《步步为营》打开的是无限反转

@@ -9,6 +9,7 @@ import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
 import { suffixFor } from './engine/runKey';
 import { wipeOldRules } from './engine/wipeOldRules';
+import { splitSlotRuns } from './engine/slotSplit';
 import { loadAllRuns, moveRuns } from './engine/persistence';
 import { signedIn } from './engine/cloudScores';
 import { wantsSignInHint } from './engine/signInHint';
@@ -195,6 +196,9 @@ const recordSources: RecordSource[] = [
   ...[squareGame, circleGame].map((g) => ({ card: g.card, suffix: suffixFor('flip'), mode: ' · ∞' })),
   // 《真正解密 · 步步为营》两个基础玩法都有。
   ...games.map((g) => ({ card: g.card, suffix: suffixFor('puzzle'), mode: ' · 步' })),
+  // 老虎机（10-11 方案 B-7）：开在基础方块、基础小球上，存档另起一本（见 engine/runKey.ts 的 SLOT_PART）。
+  // 少这一行，老虎机的局在记录页上整片消失、也不进累计得分——和上面那段说的是同一个毛病。
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('base', { slot: true }), mode: ' · 🎰' })),
 ];
 
 /**
@@ -228,6 +232,8 @@ const runKeyFor: RunKeyFor = (data) => {
       flip: data.flipRules ?? 1,
       // 老档没有 puzzleRules，读出来是 undefined——那是消线只退一步那一版，归老榜。
       puzzle: data.puzzleRules ?? 1,
+      // 老虎机那一局落进它自己那一本（10-11 方案 B-7）。云上那份每一局都带着这一位（服务器分榜也认它）。
+      slot: !!data.slot,
     })
   );
 };
@@ -1641,6 +1647,8 @@ function boot() {
   wipeOldRules(everyGame.map((g) => g.card.bestKey));
   // 先把存错键的局挪回来，再去接云上那份——两件事落的是同一个键（见上面那段）。
   migrateMisfiledRuns();
+  // 老虎机的旧局从基础那一本里搬出去（10-11 方案 B-7，engine/slotSplit.ts），同样排在接云之前。
+  splitSlotRuns(games.map((g) => g.card.bestKey));
   // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。
   void restoreCloudRuns(runKeyFor);
   const savedLang = loadLang();

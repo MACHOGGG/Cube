@@ -70,6 +70,27 @@ export const scoreOf = (p: TargetPattern): number => scoreForSize(p.cells.length
 export const sizeAtLevel = (p: TargetPattern, level: number): number =>
   Math.max(1, p.cells.length - (4 - Math.max(1, Math.min(4, Math.round(level)))));
 
+/**
+ * 「大时刻」（gameController 的 bigMoment：震屏、粒子、那一声）该在哪一下响（10-11 方案 B-6）。
+ *
+ * 返回一个闸：每降一级叫一次，头一回碰上就回 true，之后一律 false——一局只响一次。
+ *   · 基础局（没有目标）：降到第 1 级（= 1×1）那一下；
+ *   · 老虎机局：「图案第一次变成 1 枚」（只有 2–4 枚的目标会到：2 枚第 3 级、3 枚第 2 级、4 枚第 1 级）和「降到
+ *     第 1 级」两件事里先到的那一下。5、6 枚的目标到第 1 级也还剩 2、3 枚，那一下庆祝的是「降到底」。
+ *
+ * 原先只认第 1 级，而且拿「到过第 1 级」那一位当闸：3 枚的目标第 2 级就是 1 枚了，却要等到第 1 级才庆祝；照这样把
+ * 条件放宽的话，第 2 级响过、第 1 级还会再响一次。闸是自己的一位，不借那一位。
+ */
+export function celebrationGate(target?: TargetPattern): (level: number) => boolean {
+  let done = false;
+  return (level) => {
+    if (done) return false;
+    if (level !== 1 && !(target && sizeAtLevel(target, level) === 1)) return false;
+    done = true;
+    return true;
+  };
+}
+
 const T = (id: string, family: Family, cells: readonly TargetCell[]): TargetPattern =>
   ({ id, family, cells });
 

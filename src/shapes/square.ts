@@ -952,7 +952,8 @@ export function createSquareGame(): ShapeGame {
         flip: flipMode,
         puzzle: puzzleMode,
         puzzleTally,
-        bestKey: bestKey + suffixFor(modeKey),
+        // 本机这一头也另起一本（10-11 方案 B-7）：最佳、平均、记录都不和基础局掺在一起。
+        bestKey: bestKey + suffixFor(modeKey, { slot: !!target }),
         shapeName: shapeName(lang, 'square', '方块'),
         shapeId: 'square',
         modeKey,

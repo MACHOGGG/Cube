@@ -10,10 +10,11 @@
  *   ② 这一局结束要**撤掉**排着的那一拍，不是把引用置空
  *   ③ `persistence.ts` 里每一个碰 localStorage 的导出函数都要包 try/catch
  *   ④ 付款后设密码那一屏，前置校验要和服务端同一条规矩
+ *   ⑤ 老虎机另起一本存档：写、读、云上取回、开机拆旧档四头都接上（10-11 方案 B-7）
  *
  * 每一条都配一条尺子：先确认「要查的东西真的在这个文件里」，否则下面那一条是恒真的。
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -149,6 +150,43 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
   // 递出去，收尾是逗号（2026-10-03 第 9 推把那一屏收成三态时改的）。这条尺子原先只认分
   // 号，于是它在这次改版之后变成了红的——而它要量的事情（兜底还在）一直成立。两种都认。
   check('（尺子）兜底那一句还在（不是把兜底删了才全绿）', /: s\.purchaseNetwork[;,]/.test(ui));
+}
+
+// ---- ⑤ 老虎机另起一本：写、读、取回、拆旧档四头都接上（10-11 方案 B-7）-------
+//
+// 老虎机开在基础棋盘上，modeKey 是 'base'，而存档键原先只问 modeKey——它和基础局存进同一本，结算页的「本机最佳」
+// 「平均」是两种玩法掺着算的：老虎机打出一个高分，基础局从此在跟一个不是同一把尺子量出来的数比。改法是键里多
+// 一截 `_slot`（engine/runKey.ts 的 SLOT_PART），这一截要四头一起接，漏哪一头都不报错：
+//   · 漏了写（棋盘存档）：等于没修；
+//   · 漏了读（记录页、小红书成绩页）：老虎机的局在记录页上整片消失，也不进累计得分；
+//   · 漏了取回（runKeyFor）：云上的老虎机局落回基础那一本，又掺回去；
+//   · 漏了拆（开机那一次 splitSlotRuns）：已经打过的那些一直掺在基础的平均里。
+// 一局打完真的落进哪一本，check-seed-deal 量（真开、真结算）；拆旧档拆得对不对，check-slot-split 量。
+{
+  const takers = readdirSync(new URL('../src/shapes/', import.meta.url))
+    .filter((f) => f.endsWith('.ts') && /opts\?\.target\b/.test(read('src/shapes/' + f)))
+    .sort();
+  // 尺子：开得出老虎机的是读 opts.target 的那几副。哪天多一副，下面那一条自动把它算进去。
+  check('（尺子）开得出老虎机的是方块、小球两副', takers.join(' ') === 'circle.ts square.ts', takers.join(' '));
+  const unslotted = takers.filter((f) => !/bestKey: bestKey \+ suffixFor\(modeKey, \{ slot: !!target \}\)/.test(read('src/shapes/' + f)));
+  check('写：这几副存档时都带上 slot（老虎机那一局写进自己那一本）', takers.length > 0 && unslotted.length === 0, unslotted.join(' '));
+
+  const main = read('src/main.ts');
+  const sources = /const recordSources: RecordSource\[\] = \[([\s\S]*?)\n\];/.exec(main)?.[1] ?? '';
+  check('（尺子）读得到 recordSources', sources.length > 0);
+  check('读：记录页翻老虎机那一本（recordSources 里有 slot 那一行）', /suffix: suffixFor\('base', \{ slot: true \}\)/.test(sources));
+  const keyFor = /const runKeyFor: RunKeyFor = \(data\) => \{([\s\S]*?)\n\};/.exec(main)?.[1] ?? '';
+  check('（尺子）读得到 runKeyFor', keyFor.length > 0);
+  check('取回：云上的老虎机局落进老虎机那一本（runKeyFor 带 slot）', /slot: !!data\.slot/.test(keyFor));
+  const boot = /\nfunction boot\(\) \{([\s\S]*?)\n\}/.exec(main)?.[1] ?? '';
+  const iSplit = boot.indexOf('splitSlotRuns(');
+  const iCloud = boot.indexOf('restoreCloudRuns(');
+  check('拆：网页端开机拆一次旧档，排在接云之前', iSplit >= 0 && iCloud > iSplit, `拆 ${iSplit} / 接云 ${iCloud}`);
+
+  const xhs = read('xhs/src/main.ts');
+  check('读：小红书成绩页也翻老虎机那一本（BOOKS）',
+    /BOOKS\.push\(\{ card: g\.card, suffix: suffixFor\('base', \{ slot: true \}\) \}\)/.test(xhs));
+  check('拆：小红书开机也拆一次旧档', /\nsplitSlotRuns\(\[squareGame\.card\.bestKey, circleGame\.card\.bestKey\]\);/.test(xhs));
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);

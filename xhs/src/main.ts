@@ -50,6 +50,7 @@ import { showLoadingScreen } from '../../src/ui/loadingScreen';
 import type { Lang } from '../../src/i18n';
 import { suffixFor } from '../../src/engine/runKey';
 import { wipeOldRules } from '../../src/engine/wipeOldRules';
+import { splitSlotRuns } from '../../src/engine/slotSplit';
 import { MODE_SECONDS } from '../../src/engine/modeClock';
 import { registerCards } from '../../src/shapes/registry';
 
@@ -160,10 +161,12 @@ const DAILY_MODE_KEYS: readonly ModeKey[] = ['base', 'timed', 'bomb', 'bombTimed
  * 网页版的 `recordSources`（src/main.ts）因为同一件事修过一次，那边的说明写得更
  * 长。两处现在调的是同一个函数，下一次升版本两边一起跟着走。
  *
- * 老虎机没有自己的后缀——它换的只是得分图案，记在基础那本上，和网页版一致。
+ * 老虎机另起一本（10-11 方案 B-7，见 engine/runKey.ts 的 SLOT_PART）：原先它记在基础那本上，基础局的最佳和
+ * 平均是两种玩法掺着算的。只有方块、小球开得出老虎机，所以只多这两本，和网页版一致。
  */
 const BOOKS: Book[] = [];
 for (const g of ALL_GAMES) for (const mk of DAILY_MODE_KEYS) BOOKS.push({ card: g.card, suffix: suffixFor(mk) });
+for (const g of [squareGame, circleGame]) BOOKS.push({ card: g.card, suffix: suffixFor('base', { slot: true }) });
 
 /** 上一屏留下来要拆的东西（一局游戏挂了一堆监听，换屏前得让它自己收拾）。 */
 let activeDestroy: (() => void) | null = null;
@@ -782,5 +785,7 @@ installBackNav();
  * 传的是这一端有的那两副棋盘——多传几个不存在的键不花什么，少传一个就会漏掉一批局。
  */
 wipeOldRules([squareGame.card.bestKey, circleGame.card.bestKey]);
+// 老虎机的旧局从基础那一本里搬出去（10-11 方案 B-7），网页版同一个函数。
+splitSlotRuns([squareGame.card.bestKey, circleGame.card.bestKey]);
 // 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进第一屏。
 void showLoadingScreen().then(firstScreen);

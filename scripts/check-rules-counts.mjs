@@ -423,5 +423,42 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
     leftovers('x', "// 原先叫「大三角」\n/* 'Big Triangle' */\n    run4: '凑齐 4 个同色方块',").length === 0);
 }
 
+// ── ⑥ 规则书和代码的三处对不上（10-11 方案 B-8）────────────────────────────
+//
+//   · 无限反转按组给分、连续得分再 ×1.5、封顶 10 次（engine/scoring.ts 的 flipStreakDelta / FLIP_STREAK_CAP）：原先
+//     这一本整条没写，玩家照「每翻一枚 2 分」去算，算出来和结算页对不上。四种语言那一条都要提到 1.5 和 10。
+//   · 「翻过去是一颗其他颜色的星星」是假话：方块每色 6 枚里有 1 枚翻过去还是同色，小球 7 中 1，三角 9 中 4。规则书
+//     和教学第 1 条（i18n.ts 的 TUTORIAL_RULES）四种语言里都不许再说星星是别的颜色（玩家 Q5 定案）。
+//   · 老虎机「最少剩一枚」：5、6 枚的目标降到底还剩 2、3 枚（engine/targets.ts 的 sizeAtLevel），说法换成「图案越大，
+//     最低剩得越多」。
+{
+  const RULES_SRC = read('src/rules.ts');
+  const I18N_SRC = read('src/i18n.ts');
+  /** 某一条（term）在规则书里的 body。 */
+  const body = (term) => (RULES_SRC.match(new RegExp(`term: '${term}', body: '([^']*)'`)) || [, ''])[1];
+  const FLIP = { zhHans: '无限反转', zhHant: '無限反轉', en: 'Endless flip', fr: 'Retournement infini' };
+  for (const [lang, term] of Object.entries(FLIP)) {
+    const b = body(term);
+    check(`⑥ ${lang}：「${term}」那一条写着 ×1.5 和最多 10 次`, b !== '' && /1[.,]5/.test(b) && /\b10\b/.test(b), b.slice(0, 40));
+  }
+  // 「another colour」后面要是词尾：「flip another coloured piece」（再翻一枚色块）是正常的话，不算。
+  const OTHER = /其他颜色|其他顏色|another colou?r\b|autre couleur/;
+  const tut = (I18N_SRC.match(/export const TUTORIAL_RULES[\s\S]*?\n\};/) || [''])[0];
+  check('⑥（尺子）读到了 TUTORIAL_RULES 那一段', tut.includes("'Try to clear the whole board.'"));
+  const tutHits = (tut.match(/'[^']*'/g) || []).filter((t) => OTHER.test(t));
+  check('⑥ 教学五条（四种语言）里不再说星星是别的颜色', tutHits.length === 0, tutHits.join(' / '));
+  const ruleHits = (RULES_SRC.match(/body: '[^']*'/g) || []).filter((t) => OTHER.test(t));
+  check('⑥ 规则书（四种语言）里不再说星星是别的颜色', ruleHits.length === 0, ruleHits.map((t) => t.slice(0, 50)).join(' / '));
+  check('⑥（反面尺子）旧的说法喂进同一个匹配器认得出来',
+    OTHER.test('翻过去是一颗其他颜色的星星') && OTHER.test('翻過去是一顆其他顏色的星星') && OTHER.test('a star of another colour') &&
+      OTHER.test('étoile d’une autre couleur') && !OTHER.test('no slide can flip another coloured piece'));
+  const SLOT = { zhHans: '老虎机模式', zhHant: '老虎機模式', en: 'Slot machine mode', fr: 'Mode machine à sous' };
+  const ONE = /最少剩一枚|down to a single piece|jusqu’à une seule/;
+  for (const [lang, term] of Object.entries(SLOT)) {
+    const b = body(term);
+    check(`⑥ ${lang}：老虎机那一条不再说「最少剩一枚」`, b !== '' && !ONE.test(b), b.slice(0, 40));
+  }
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

@@ -53,7 +53,7 @@ import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type Coach
 import type { CoachHint } from './coachHint';
 import { mountPatternBlock } from '../ui/patternBlock';
 import { checkPathAt } from '../ui/checkMark';
-import { sizeAtLevel, type TargetPattern } from './targets';
+import { celebrationGate, sizeAtLevel, type TargetPattern } from './targets';
 import { clearSeed, seedRandom } from './rng';
 import { dealSeed, randomSeed, variantForGame, type SeedRun } from './seedCode';
 import { seedForTarget, slotTargetOf } from './seedDeal';
@@ -558,6 +558,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let lineCount = 0;
   /** 这一局到过 1 枚图案没有（「解锁 1 枚」徽章，§2）。 */
   let unlockedOne = false;
+  /**
+   * 这一局的「大时刻」（bigMoment：震屏、粒子、那一声）该在哪一下响、响过没有（10-11 方案 B-6，规矩见 engine/targets.ts
+   * 的 celebrationGate）。不沿用 unlockedOne 当闸：它只在到第 1 级时才立起来，3 枚的目标第 2 级响过之后到第 1 级还会
+   * 再响一次。原先老虎机局只认第 1 级：3 枚的目标晚一拍才庆祝；5、6 枚的目标到第 1 级也还剩 2、3 枚，照样震屏、发
+   * 「解锁 1 枚」——那一下现在庆祝的是「降到底」（徽章跟着换，见 runRecord 的 runBadges）。
+   */
+  const newCelebration = () => celebrationGate(hooks.slot ? hooks.slotTarget : undefined);
+  let celebrate = newCelebration();
   // 一局里 findStuckGroups 点过名的每一组格子。一种颜色一旦真的死了就只会一
   // 直死着（见 stalemate.ts：没有什么能让它翻回来），所以这个集合只会变大。
   let startSnapshot: BoardSnapshot | null = null;
@@ -786,6 +794,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     defusedTotal = 0;
     lineCount = 0;
     unlockedOne = false;
+    celebrate = newCelebration();
     erosion.reset();
     // 开发时可以让这一局一开局就扣掉几段（engine/devDeal.ts 的 devErosionFor）：走到「解锁 1 枚」
     // 要翻三十来枚，门（check-erosion-live）靠它直接从那儿开始。正式包里这一行整段被摇掉。
@@ -1622,8 +1631,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
             coach?.signal('erosion');
             // 1×1 解锁的那一下：主动说一声（10-08 方案 3-A）。二版里 1×1 是真打的一段，到
             // 这儿不再意味着盘已翻完——这一下得让人知道「现在一枚就够了」，不能只靠右上角
-            // 那一块闪两下。只响一次：级数在一局里只降不升，unlockedOne 记着这一局响过没有。
-            if (step.level === 1 && !unlockedOne) bigMoment(s.matchGroups[0]?.[0]);
+            // 那一块闪两下。只响一次（见 celebrate）；老虎机局图案第一次变成 1 枚也算（10-11 方案 B-6）。
+            if (celebrate(step.level)) bigMoment(s.matchGroups[0]?.[0]);
           }
           if (step.unlocked) unlockedOne = true;
           // 每翻一枚都要重画：段熄一格、末位那枚跟着再淡一点。降级那一下由

@@ -73,7 +73,30 @@ export function modeKeyOf(f: ModeFlags): ModeKey {
 const versioned = (base: string, v: number) => (v >= 2 ? base + v : base);
 
 /**
- * 存档键的后缀：**玩法那一截 + 计分规则的版本号**。
+ * suffixFor 收的那一包：规则版本号（见 RuleVersions），外加这一局是不是老虎机。
+ *
+ * 老虎机是 10-11 方案 B-7 加的，和版本号放在同一个具名对象里：`suffixFor('base', undefined, true)` 这种写法读
+ * 不出那个 true 是什么，而位置参数在这个文件里已经写错过一次（见 suffixFor 的说明）。
+ */
+export interface KeyOpts extends RuleVersions {
+  /** 老虎机那一局（RunData.slot）：另起一本，见 SLOT_PART。 */
+  slot?: boolean;
+}
+
+/**
+ * 老虎机那一局的存档另起一本：键里多一截 `_slot`，摆在玩法那一截前面（10-11 方案 B-7）。
+ *
+ * 原先为什么是错的：老虎机开在基础棋盘上，它那一局的 modeKey 就是 `'base'`（服务器的榜单和玩法白名单都认这
+ * 个，换不得），而存档键只问 modeKey——于是老虎机的局和基础局存进同一本：结算页的「本机最佳」「平均」是两种
+ * 玩法掺在一起算的，老虎机打出一个高分，基础局从此就在跟一个不是同一把尺子量出来的数比。服务器那头早就分开了
+ * （RunData.slot → 排行榜上它自己一张榜），只有本机这一头没分。
+ *
+ * ⚠️ 下一次换计分规则要清档时，这一本也得清：wipeOldRules 枚举的是 modeSuffix（玩法那一截），不带这一截。
+ */
+const SLOT_PART = '_slot';
+
+/**
+ * 存档键的后缀：**玩法那一截 + 计分规则的版本号**；老虎机那一局前面再多一截 `_slot`（见 SLOT_PART）。
  *
  * 《侵蚀阶梯》v1.2 §6 之后每个键都多一截 `_ero1`（scoring.ts 的
  * `SCORING_RULES_VERSION`）——那一版把得分图案、翻面分、整线消除、综合分全换了，
@@ -93,8 +116,8 @@ const versioned = (base: string, v: number) => (v >= 2 ? base + v : base);
  * 迁移那段就是这么写的，于是「把第 1 版的局挪到第 2 版」变成了从自己挪到自己，一
  * 局都不动，而且不报错。具名之后这种错写不出来。
  */
-export function suffixFor(mk: ModeKey, rules?: RuleVersions): string {
-  return modeSuffix(mk, rules) + '_' + SCORING_RULES_VERSION;
+export function suffixFor(mk: ModeKey, opts?: KeyOpts): string {
+  return (opts?.slot ? SLOT_PART : '') + modeSuffix(mk, opts) + '_' + SCORING_RULES_VERSION;
 }
 
 /**

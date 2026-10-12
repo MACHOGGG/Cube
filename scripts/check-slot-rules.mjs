@@ -4,7 +4,8 @@
  *   npx esbuild src/engine/scoring.ts    --bundle --format=esm --outfile=/tmp/scoring.mjs
  *   npx esbuild src/engine/targets.ts    --bundle --format=esm --outfile=/tmp/targets.mjs
  *   npx esbuild src/engine/targetMatch.ts --bundle --format=esm --outfile=/tmp/match.mjs
- *   node scripts/check-slot-rules.mjs /tmp/scoring.mjs /tmp/targets.mjs /tmp/match.mjs
+ *   npx esbuild src/engine/runRecord.ts  --bundle --format=esm --outfile=/tmp/runrecord.mjs
+ *   node scripts/check-slot-rules.mjs /tmp/scoring.mjs /tmp/targets.mjs /tmp/match.mjs /tmp/runrecord.mjs
  *
  * 四件都不崩、不报错，错了只是分不对、图不对、话不对：
  *
@@ -15,10 +16,16 @@
  *   ③ 降级时那句「得分图案变成 N 枚」报的是**侵蚀级数**，而图标和判定走的是
  *      `sizeAtLevel` 给的真实枚数——二十个目标里十个对不上。
  *   ④ 方块那一副把卡死门槛写死成 4（传 `undefined` 落到默认值），八副里只有它这样。
+ *   ⑤ 「大时刻」（震屏、粒子、那一声）和那一枚徽章（10-11 方案 B-6）：原先老虎机局只在降到第 1 级那一下庆祝、
+ *      发「解锁 1 枚」——3 枚的目标第 2 级就已经是 1 枚了，晚一拍才庆祝；5、6 枚的目标到第 1 级也还剩 2、3 枚，
+ *      「解锁 1 枚」是假话。现在：每一个目标只响一次，响在「第一次变成 1 枚」和「第 1 级」先到的那一级（跳级也
+ *      一样）；老虎机局的徽章是「降到底」，基础局照旧「解锁 1 枚」。
  */
 const S = await import(process.argv[2]);
 const T = await import(process.argv[3]);
 const M = await import(process.argv[4]);
+/** runRecord 的包（⑤ 量徽章那几句）。没给就红在 ⑤ 的尺子上，不悄悄跳过。 */
+const R = process.argv[5] ? await import(process.argv[5]) : null;
 const { readFileSync } = await import('node:fs');
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 
@@ -164,6 +171,54 @@ const check = (n, ok, extra = '') => {
   }
   check('（尺子）六副棋盘的卡死判定都读到了', 查过 === 6, `${查过} 副`);
   check('没有哪一副把门槛写死（传 undefined 会落到默认的 4 枚）', 写死的.length === 0, 写死的.join(' '));
+}
+
+// ---- ⑤ 「大时刻」响在哪一级、只响一次；老虎机的徽章「降到底」（10-11 方案 B-6）----------------
+{
+  /** 照规矩该在哪一级响：levels 里头一个「第 1 级、或者这个目标在这一级是 1 枚」的。 */
+  const want = (p, levels) => levels.find((L) => L === 1 || (p && T.sizeAtLevel(p, L) === 1));
+  const run = (p, levels) => {
+    const gate = T.celebrationGate(p);
+    return levels.filter((L) => gate(L));
+  };
+  const wrong = [];
+  for (const p of T.TARGETS) {
+    // 一级一级降，也喂一遍跳级（一步翻很多枚，可能一下从第 4 级降到第 2 级）。
+    for (const levels of [[4, 3, 2, 1], [4, 2, 1], [3, 1]]) {
+      const fired = run(p, levels);
+      if (fired.length !== 1 || fired[0] !== want(p, levels)) {
+        wrong.push(`${p.id}（${p.cells.length} 枚）降 ${levels.join('→')}：响在 [${fired}]，该是 ${want(p, levels)}`);
+      }
+    }
+  }
+  check(`⑤ 每一个目标都只响一次，响在「第一次变成 1 枚」和「第 1 级」先到的那一级（${T.TARGETS.length} 个 × 三种降法）`,
+    wrong.length === 0, wrong.slice(0, 3).join(' · '));
+  const sizes = [...new Set(T.TARGETS.map((p) => p.cells.length))].sort();
+  const firstAt = (n) => run(T.TARGETS.find((p) => p.cells.length === n), [4, 3, 2, 1])[0];
+  check('⑤（尺子）目标里 2–6 枚都有', [2, 3, 4, 5, 6].every((n) => sizes.includes(n)), sizes.join(','));
+  check('⑤ 3 枚的目标第 2 级当拍就响（原先要等到第 1 级）', firstAt(3) === 2, String(firstAt(3)));
+  check('⑤ 2 枚的目标第 3 级就响', firstAt(2) === 3, String(firstAt(2)));
+  check('⑤ 5、6 枚的目标到第 1 级才响（那时还剩 2、3 枚：「降到底」）', firstAt(5) === 1 && firstAt(6) === 1, `${firstAt(5)} / ${firstAt(6)}`);
+  check('⑤ 基础局（没有目标）只在第 1 级响，而且只响一次', run(undefined, [4, 3, 2, 1]).join() === '1' && run(undefined, [1, 1]).join() === '1');
+  // 两把尺子：原先那条规矩真的不对，「只响一次」那道闸真的有用。
+  const three = T.TARGETS.find((p) => p.cells.length === 3);
+  const oldRule = [4, 3, 2, 1].filter((L) => L === 1);
+  check('⑤（尺子）原先只认第 1 级：3 枚的目标要等到第 1 级才响', oldRule.join() === '1' && firstAt(3) !== 1);
+  const noLatch = [4, 3, 2, 1].filter((L) => L === 1 || T.sizeAtLevel(three, L) === 1);
+  check('⑤（尺子）条件放宽了却没有闸的话，3 枚的目标会响两次', noLatch.join() === '2,1', noLatch.join());
+
+  check('⑤（尺子）给了 runRecord 的包', Boolean(R), '用法见文件头');
+  if (R) {
+    const BOTTOM = { zhHans: '降到底', zhHant: '降到底', en: 'Bottom rung', fr: 'Dernier échelon' };
+    const UNLOCK = { zhHans: '解锁 1 枚', zhHant: '解鎖 1 枚', en: 'Unlocked 1-tile', fr: 'Motif à 1 pièce' };
+    for (const lang of Object.keys(BOTTOM)) {
+      const slot = R.runBadges({ unlockedOne: true, slot: true }, lang);
+      const base = R.runBadges({ unlockedOne: true }, lang);
+      check(`⑤ ${lang}：老虎机局到过第 1 级发「${BOTTOM[lang]}」、不发「${UNLOCK[lang]}」`, slot.join('|') === BOTTOM[lang], slot.join(' / '));
+      check(`⑤ ${lang}：基础局照旧发「${UNLOCK[lang]}」`, base.join('|') === UNLOCK[lang], base.join(' / '));
+    }
+    check('⑤ 没到第 1 级：两种局都不发', R.runBadges({ slot: true }, 'zhHans').length === 0 && R.runBadges({}, 'zhHans').length === 0);
+  }
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);

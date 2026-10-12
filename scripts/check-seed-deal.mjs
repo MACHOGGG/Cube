@@ -161,18 +161,33 @@ async function dealOf(code, watchCount = false) {
     await page.waitForTimeout(1500);
     run = await page.evaluate(() => {
       let latest = null;
+      let book = '';
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (!k || !/::runs$/.test(k)) continue;
         try {
           for (const r of JSON.parse(localStorage.getItem(k) || '[]')) {
-            if (!latest || r.at > latest.at) latest = r;
+            if (!latest || r.at > latest.at) {
+              latest = r;
+              book = k.replace(/::runs$/, '');
+            }
           }
         } catch {
           /* 不是这一类键 */
         }
       }
-      return latest ? { seed: latest.data?.seed, source: latest.data?.seedSource, daily: latest.data?.daily, shape: latest.data?.shapeId } : null;
+      // 存进了哪一本（10-11 方案 B-7）：老虎机那一局该在 `…_slot_…` 那一本，基础那一本（同一个键去掉 `_slot`）
+      // 的最佳和清单一个字都不该有——这是一个新开的浏览器，基础局一局都没打过。
+      // 没去掉 `_slot` 就是同一本（原先的做法）：那下面两样读出来就是这一局自己，当场红。
+      const plain = book.replace('_slot_', '_');
+      return latest
+        ? {
+            seed: latest.data?.seed, source: latest.data?.seedSource, daily: latest.data?.daily, shape: latest.data?.shapeId,
+            slot: !!latest.data?.slot, book, best: localStorage.getItem(book),
+            plainBest: localStorage.getItem(plain),
+            plainRuns: localStorage.getItem(plain + '::runs'),
+          }
+        : null;
     });
   }
   await ctx.close();
@@ -207,6 +222,20 @@ for (const v of variants) {
     !!first.run && first.run.seed === codeA && first.run.source === 'entered' && !first.run.daily,
     JSON.stringify(first.run),
   );
+  // 存进哪一本（10-11 方案 B-7）：老虎机开在基础棋盘上，modeKey 也是 'base'——原先它和基础局存进同一本，结算页
+  // 的「本机最佳」「平均」两种玩法掺着算。现在老虎机那两行进 `_slot` 那一本、最佳记在那一本上，基础那一本一个
+  // 字都不碰；别的十八行一行都不进 `_slot`。
+  if (first.run) {
+    const r = first.run;
+    if (v.mode === 'slot') {
+      check(`${label}：存进老虎机自己那一本，最佳也记在那一本上`, r.slot && /_slot_/.test(r.book) && r.best !== null,
+        `${r.book} · 最佳 ${r.best}`);
+      check(`${label}：基础那一本的最佳、清单一个字没动`, r.plainBest === null && r.plainRuns === null,
+        `最佳 ${r.plainBest} / 清单 ${r.plainRuns ? r.plainRuns.length + ' 字' : null}`);
+    } else {
+      check(`${label}：不进老虎机那一本`, !r.slot && !/_slot/.test(r.book), r.book);
+    }
+  }
   if (first.during) {
     const d = first.during;
     check(`${label}：倒数那几秒，上半屏是那串码`, d.code === codeA.slice(0, 4) + '-' + codeA.slice(4), d.code);

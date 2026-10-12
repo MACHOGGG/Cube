@@ -530,7 +530,9 @@ const KEY_CLASSES = [
     say: { zhHans: ['进度（每个教学', '结算页上那句登录提示今天说过没有'], zhHant: ['進度（每個教學', '結算頁上那句登入提示今天說過沒有'],
       en: ['progress (which tutorials', 'whether today’s sign-in tip on the result screen has been shown'],
       fr: ['progression (les tutoriels', 'si le conseil de connexion de l’écran de fin a déjà été affiché aujourd’hui'] } },
-  { cls: '战绩', prefixes: ['sugarcube_', 'slides_wipe_', '::'], keys: ['slides_runkey_fix_v1'],
+  // slides_slot_split_v1：老虎机旧局从基础那一本搬出去的记号（10-11 方案 B-7，engine/slotSplit.ts）——政策里「几枚
+  // 『旧记录已经整理过』的记号」那一句本来就是清单式的复数，不用加字。
+  { cls: '战绩', prefixes: ['sugarcube_', 'slides_wipe_', '::'], keys: ['slides_runkey_fix_v1', 'slides_slot_split_v1'],
     say: { zhHans: ['战绩（最高分'], zhHant: ['戰績（最高分'], en: ['records (your best scores'], fr: ['parties (vos meilleurs scores'] } },
   { cls: '登录缓存', keys: ['slides_genius', 'slides_pending_account'],
     say: { zhHans: ['登录状态的本地缓存'], zhHant: ['登入狀態的本機快取'], en: ['the cached state of being signed in'], fr: ['l’état de votre connexion mis en cache'] } },

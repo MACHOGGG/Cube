@@ -820,6 +820,8 @@ export interface I18nStrings {
   /** 徽章：清盘 / 解锁 1 枚。 */
   badgeSwept: string;
   badgeUnlockedOne: string;
+  /** 老虎机局到过第 1 级的徽章「降到底」（10-11 方案 B-6；基础局那一枚还是「解锁 1 枚」）。 */
+  badgeBottomOut: string;
   patternPointsLabel: string;
   comboBonusLabel: string;
   linePointsLabel: string;
@@ -1273,6 +1275,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timeNotScoredLabel: 'Time {t} (not scored)',
     badgeSwept: 'Board cleared',
     badgeUnlockedOne: 'Unlocked 1-tile',
+    badgeBottomOut: 'Bottom rung',
     patternPointsLabel: 'Pattern points',
     comboBonusLabel: 'Streak & chain bonus',
     linePointsLabel: 'Whole-line bonus',
@@ -1650,6 +1653,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timeNotScoredLabel: 'Temps {t} (hors score)',
     badgeSwept: 'Plateau vidé',
     badgeUnlockedOne: 'Motif à 1 pièce',
+    badgeBottomOut: 'Dernier échelon',
     patternPointsLabel: 'Points de motifs',
     comboBonusLabel: 'Bonus de série',
     linePointsLabel: 'Bonus de ligne',
@@ -2027,6 +2031,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timeNotScoredLabel: '用時 {t}（不計分）',
     badgeSwept: '清盤',
     badgeUnlockedOne: '解鎖 1 枚',
+    badgeBottomOut: '降到底',
     patternPointsLabel: '圖案分',
     comboBonusLabel: '連擊加成',
     linePointsLabel: '整線獎勵',
@@ -2404,6 +2409,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timeNotScoredLabel: '用时 {t}（不计分）',
     badgeSwept: '清盘',
     badgeUnlockedOne: '解锁 1 枚',
+    badgeBottomOut: '降到底',
     patternPointsLabel: '图案分',
     comboBonusLabel: '连击加成',
     linePointsLabel: '整线奖励',
@@ -2520,28 +2526,28 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  */
 export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
-    'A piece that completes a scoring shape scores and flips into a star of another colour.',
+    'A piece that completes a scoring shape flips over and becomes a star.',
     'Stars can join coloured pieces to make another scoring shape.',
     'The scoring shape gets shorter as the game unlocks.',
     'Stars of one colour along the board\u2019s outer edge score and clear.',
     'Try to clear the whole board.',
   ],
   fr: [
-    'Une pi\u00e8ce qui compl\u00e8te un motif marque et se retourne en \u00e9toile d\u2019une autre couleur.',
+    'Une pi\u00e8ce qui compl\u00e8te un motif se retourne et devient une \u00e9toile.',
     'Les \u00e9toiles peuvent compl\u00e9ter un motif avec les pi\u00e8ces color\u00e9es.',
     'Le motif \u00e0 former raccourcit \u00e0 mesure que la partie se d\u00e9bloque.',
     'Des \u00e9toiles de m\u00eame couleur sur le bord ext\u00e9rieur marquent et disparaissent.',
     'Essayez de tout faire dispara\u00eetre.',
   ],
   zhHant: [
-    '色塊拼出得分圖案會得分翻面，變成其他顏色的星星。',
+    '色塊拼出得分圖案就翻面，變成星星。',
     '星星可以與色塊一同再次拼出得分圖案。',
     '得分圖案會隨著遊戲解鎖而變化。',
     '同色星星在整體的外邊會得分並消除。',
     '嘗試全部消除吧～',
   ],
   zhHans: [
-    '色块拼出得分图案会得分翻面，变成其他颜色的星星。',
+    '色块拼出得分图案就翻面，变成星星。',
     '星星可以与色块一同再次拼出得分图案。',
     '得分图案会随着游戏解锁而变化。',
     '同色星星在整体的外边会得分并消除。',

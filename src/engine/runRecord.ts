@@ -263,7 +263,10 @@ export function runBadges(d: RunData, lang: Lang): string[] {
   const s = STRINGS[lang];
   const out: string[] = [];
   if (d.swept) out.push(s.badgeSwept);
-  if (d.unlockedOne) out.push(s.badgeUnlockedOne);
+  // 到过第 1 级（存档里那一位就叫 unlockedOne，engine/erosion.ts）：基础局是「解锁 1 枚」；老虎机局是「降到底」
+  // （10-11 方案 B-6）——5、6 枚的目标到了第 1 级也还剩 2、3 枚，「解锁 1 枚」对它是假话。不新增存档字段：那一位
+  // 记的本来就是「到过第 1 级」，旧存档翻开自动按新规矩显示。
+  if (d.unlockedOne) out.push(d.slot ? s.badgeBottomOut : s.badgeUnlockedOne);
   return out;
 }
 

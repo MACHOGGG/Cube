@@ -153,7 +153,9 @@ for (const [id, { n: [tiles], at }] of Object.entries(SPEC)) {
     /vibrate\(\[25, 40, 25\]\)/.test(body) && /playClear\(\)/.test(body) && /screenShake\(refs\.boardWrap, 'heavy'\)/.test(body)
       && /color: accent2Color\(\), count: 16, spread: 64/.test(body));
   check('整线消除那一拍走 bigMoment', /if \(isBonus\) bigMoment\(/.test(gc));
-  check('降到 1 枚、这一局头一回：走 bigMoment', /if \(step\.level === 1 && !unlockedOne\) bigMoment\(/.test(gc));
+  // 闸是 celebrate（engine/targets.ts 的 celebrationGate，10-11 方案 B-6）：老虎机局图案第一次变成 1 枚也算，一局
+  // 只响一次——它在哪一级响、只响一次，check-slot-rules ⑤ 拿每一个目标量。
+  check('降到 1 枚（或老虎机局图案第一次变成 1 枚）、这一局头一回：走 bigMoment', /if \(celebrate\(step\.level\)\) bigMoment\(/.test(gc));
   check('没有第三处另起一套（滴落声只在 bigMoment 里响）',
     (gc.match(/playClear\(\)/g) || []).length === 1 && (gc.match(/bigMoment\(/g) || []).length === 3,
     `playClear ${(gc.match(/playClear\(\)/g) || []).length} 处，bigMoment ${(gc.match(/bigMoment\(/g) || []).length} 处（含定义）`);

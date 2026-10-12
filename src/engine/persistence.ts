@@ -31,6 +31,21 @@ export function saveBestIfHigher(key: string, score: number): number {
 }
 
 /**
+ * 把这一档的本机最佳**改成**这个数——可以往下改，0 就是删掉。
+ *
+ * 只给一次性的拆档用（engine/slotSplit.ts：老虎机那几局搬走之后，基础那一档的最佳若是老虎机顶上去的，要退回
+ * 基础局自己的那个数）。平时一律走 saveBestIfHigher：最佳只往上走，一局打得差不该把纪录拉下来。
+ */
+export function overwriteBest(key: string, score: number): void {
+  try {
+    if (score > 0) localStorage.setItem(key, String(score));
+    else localStorage.removeItem(key);
+  } catch {
+    // 写不进去就保持原样：多显示一个偏高的最佳，不该连带把开机拦住。
+  }
+}
+
+/**
  * One finished run, archived as raw data plus the two board snapshots — so
  * the 记录 panel can re-open the very photo that run produced, described in
  * whatever language the player is reading now (see runRecord.ts).
