@@ -128,6 +128,13 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
   let sy = 0;
   /** 现在挂着记号的那一颗，松开或者拖起来之后要摘掉。 */
   let marked: HTMLElement | null = null;
+  /**
+   * 正在拖的那一根手指（10-11 方案 B-3）。拖着的时候别的手指落下一律不理，move / up / cancel 也只认它。
+   *
+   * 原先第二根手指落下照样走 onStart：棋盘把整个 drag 换成新的，第一根手指那条链没人停，一直在跑（六副棋盘都中，
+   * 见 engine/dragChain.ts 的 chainSet）；第二根手指抬起来那一下还会被当成第一根松手，把这一步按它的位置落下去。
+   */
+  let finger: number | null = null;
 
   /** 把记号挪到 g 那一颗身上。g 为空就只是摘掉。 */
   function mark(g: Grab | null | void) {
@@ -142,6 +149,7 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
   }
 
   function down(e: PointerEvent) {
+    if (active) return;
     cb.onBeforeStart?.();
     if (!cb.isActive()) {
       cb.onRejected?.();
@@ -153,12 +161,13 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
     target.classList.add(DRAG_CLASS);
     sx = e.clientX;
     sy = e.clientY;
+    finger = e.pointerId;
     mark(cb.onStart(e.clientX - rect.left, e.clientY - rect.top));
     target.setPointerCapture(e.pointerId);
   }
 
   function move(e: PointerEvent) {
-    if (!active) return;
+    if (!active || e.pointerId !== finger) return;
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
     if (!locked) {
@@ -180,8 +189,9 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
   }
 
   function up(e: PointerEvent) {
-    if (!active) return;
+    if (!active || e.pointerId !== finger) return;
     active = false;
+    finger = null;
     target.classList.remove(DRAG_CLASS);
     mark(null);
     const dx = e.clientX - sx;

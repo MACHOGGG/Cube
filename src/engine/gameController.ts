@@ -316,6 +316,14 @@ export interface GameController {
   /** Call after applying a confirmed drag with the set of cells it touched. */
   resolveMove(mask: Set<string>, moveDirDeg?: number): void;
   /**
+   * 暂停中松手的那一步（10-11 方案 B-4）：挂起来，《继续》那一下再落。玩家是先松的手，这一步算数。
+   *
+   * 棋盘的 applyDrag 改网格**之前**先问：暂停中就把整次落位交给这儿，结束了（钟响了）就不改网格、只重画。原先
+   * 是先改网格、再叫 resolveMove，而 resolveMove 遇到暂停直接回去——线挪了、步数没记、拼好的不结算，盘上还
+   * 剩两枚预览的影子。同一时刻只挂一步（暂停中拖不起来）；结束、重开、离开这一局时作废。
+   */
+  holdMove(apply: () => void): void;
+  /**
    * 此刻的得分图案是几枚（4→3→2→1，《侵蚀阶梯》v1.2 §2）。棋盘的 findMatches
    * 每次都现问——图案会在一步之内变小，把它缓存下来就会慢一拍。
    */
@@ -588,6 +596,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    */
   let stuckHeldMs: number | null = null;
   const STUCK_END_MS = 1400;
+  /** 暂停中松手的那一步，等《继续》（见 holdMove）。 */
+  let heldMove: (() => void) | null = null;
 
   function armStuckEnd(ms: number) {
     window.clearTimeout(stuckTimer);
@@ -737,6 +747,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     window.clearTimeout(stuckTimer);
     stuckTimer = 0;
     stuckHeldMs = null;
+    // 上一局暂停中挂着的那一步也是（见 holdMove）。
+    heldMove = null;
     // 上一局结算页那枚勾和那一声也不许落到这一局头上（见 stampTimer）。
     window.clearTimeout(stampTimer);
     stampTimer = 0;
@@ -901,6 +913,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
     gameOver = true;
     resolving = false;
+    heldMove = null;
     hooks.onLive?.(false);
     // 打完过一局了（头一局那个带教学条的也算）：主菜单上那张《每日挑战》从此摆出来（10-08 方案
     // 3-D-1，见 engine/firstPlay.ts 的 finishedAGame）。
@@ -1727,6 +1740,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const stuckLeft = stuckHeldMs;
     stuckHeldMs = null;
     if (stuckLeft !== null && !gameOver) armStuckEnd(stuckLeft);
+    // 暂停中松手的那一步，现在落（见 holdMove）。
+    const move = heldMove;
+    heldMove = null;
+    if (move && !gameOver) move();
   }
 
   function doFinish() {
@@ -1884,6 +1901,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     resume: doResume,
     finish: doFinish,
     resolveMove,
+    holdMove: (apply) => {
+      heldMove = apply;
+    },
     matchLen: () => erosion.level(),
     erosionView: () => ({
       level: erosion.level(),
@@ -1898,6 +1918,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       window.clearTimeout(stuckTimer);
       stuckTimer = 0;
       stuckHeldMs = null;
+      heldMove = null;
       window.clearTimeout(stampTimer);
       stampTimer = 0;
       stopFrameWatch();

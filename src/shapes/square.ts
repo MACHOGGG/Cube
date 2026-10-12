@@ -4,7 +4,7 @@ import { createGameController } from '../engine/gameController';
 import { slideLine } from '../engine/slideLine';
 import { groupPoints } from '../engine/groupScore';
 import { attachDrag, magnetizeRawDist } from '../engine/drag';
-import { createDragChain, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
+import { chainSet, pressScale, BOARD_FORCE, type DragChain } from '../engine/dragChain';
 import { vibrate } from '../engine/haptics';
 import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
@@ -1016,6 +1016,8 @@ export function createSquareGame(): ShapeGame {
 
       // ---------- drag interaction ----------
       let drag: DragState | null = null;
+      /** 这一局建过、还没停下来的拖动链（10-11 方案 B-3，见 engine/dragChain.ts 的 chainSet）。destroy 全停掉。 */
+      const chains = chainSet();
 
       // A ghost fully outside [low, high] (the same generous one-cell
       // margin the old hard cutoff used) is invisible; one that's just
@@ -1246,6 +1248,18 @@ export function createSquareGame(): ShapeGame {
        */
       function applyDrag(): boolean {
         if (!drag || !drag.axis) return false;
+        // 拖到一半暂停了、钟响了（10-11 方案 B-4）：改网格之前先问控制器（见 GameController.holdMove）。
+        if (controller.gameOver) return false;
+        if (controller.paused) {
+          const held = drag;
+          controller.holdMove(() => {
+            drag = held;
+            const moved = applyDrag();
+            drag = null;
+            if (!moved) render();
+          });
+          return false;
+        }
         if (drag.axis === 'row') {
           const shift = Math.round(drag.dx / drag.cell);
           const r = drag.r;
@@ -1282,7 +1296,9 @@ export function createSquareGame(): ShapeGame {
           // A touch arriving while the previous line is still swinging ends
           // that settle right now instead of being swallowed — fast play was
           // losing whole moves to a wave that had not finished dying down.
-          drag?.chain?.flush();
+          // 上一条链在收尾就当场收完（flush）；不在收尾——还在跟着手指走——就停掉，不许被下面那一句换掉之后
+          // 没人管、一直跑（10-11 方案 B-3）。
+          if (drag?.chain && !drag.chain.flush()) drag.chain.stop();
           if (controller.resolving) {
             drag = null;
             return;
@@ -1316,7 +1332,7 @@ export function createSquareGame(): ShapeGame {
           drag.dy = dy;
           if (!drag.axis) {
             drag.axis = Math.abs(dx) > Math.abs(dy) ? 'row' : 'col';
-            drag.chain = createDragChain({
+            drag.chain = chains.create({
               n: drag.axis === 'row' ? cols : rows,
               grabbed: drag.axis === 'row' ? drag.c : drag.r,
               force: BOARD_FORCE,
@@ -1376,7 +1392,7 @@ export function createSquareGame(): ShapeGame {
       });
 
       function destroy() {
-        drag?.chain?.stop();
+        chains.stopAll();
         drag = null;
         controller.destroy();
         stopColorblind();

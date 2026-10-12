@@ -44,12 +44,17 @@ export const rotateSource: SourceOf = (i, shift, n) => (((i - shift) % n) + n) %
  * ⚠️ 它只在 |shift| ≤ n − 1 时给得出排列（n 是奇数时；偶数长的线怎么滑都行）——绕回来那
  * 一段比整条线还长，配对就配到线外面去了。所以调它之前先过 clampOddShift。
  *
+ * **偶数长的线走普通循环**（10-11 方案 B-5）。两两交换补的是「奇数长的线绕回来，朝向的奇偶翻了」；偶数长的线
+ * 绕回来奇偶本来就不变（i + shift 对 n 取模，n 是偶数），普通循环已经是对的，再交换一次反而把它弄反：n = 4 滑
+ * 2 给出 [3,2,0,1]（该是 [2,3,0,1]），n = 8 滑 10 给出 [7,6,1,0,3,2,5,4]——每一枚都还在，只是倒三角坐进了正
+ * 三角的格子。大三角削掉任意一条边就会出现偶数长的线，预览、松手、残局搜索三处都走这一个函数，一起修好。
+ *
  * src/engine/residueSearch.ts 穷举残局用的也是这一个（从前它抄了一份，因为原件在闭包
  * 里拿不到；check-endgame-residue.mjs 第 6 节钉着两份一字不差）。
  */
 export function fillerAwareSource(idx: number, shift: number, n: number): number {
   const plain = (((idx - shift) % n) + n) % n;
-  if (shift === 0) return plain;
+  if (shift === 0 || n % 2 === 0) return plain;
   const fillerSize = Math.abs(shift);
   const regionStart = shift > 0 ? 0 : n - fillerSize;
   const inFiller = shift > 0 ? idx < fillerSize : idx >= regionStart;

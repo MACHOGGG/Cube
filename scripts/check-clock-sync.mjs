@@ -13,6 +13,8 @@
  *      下行，而且永远偏同一边。
  *   ② 只留往返最短的那一个：一份走得慢的回包不许把钟拨走。
  *   ③ 倒数数字只减不增——哪怕估出来的钟真的往回挪了一下。
+ *   ④ 本机的钟被拨过（10-11 方案 B-12）：校时之后留着的旧样本作废；请求在路上时钟往回拨，往返不会被算成 0
+ *      （往返拿单调的钟量，clockSample 收的是「收到那一刻的墙钟 + 往返」）。
  *
  * 每一条都带一把「原先那样会怎样」的尺子：同一组回包喂给原先的写法，它真的会估歪 / 真的会
  * 往回跳。少了这把尺子，「没往回跳」在「模拟的那几份回包根本挪不动钟」的时候也会绿。
@@ -39,7 +41,7 @@ const oldOffset = (r) => r.stamp - r.t1;
 // ── ① 一个样本的误差 ──────────────────────────────────────────
 {
   const sym = reply(1000, 150, 150);
-  const s = clockSample(sym.stamp, sym.t0, sym.t1);
+  const s = clockSample(sym.stamp, sym.t1, sym.t1 - sym.t0);
   check('① 上下行一样长：估得一点不差', s.offset === TRUE_OFFSET, `${s.offset}`);
   check('① （尺子）原先那种写法同一份回包差了整段下行', TRUE_OFFSET - oldOffset(sym) === 150, `${TRUE_OFFSET - oldOffset(sym)}`);
   check('① 往返记对了', s.rtt === 300, String(s.rtt));
@@ -47,7 +49,7 @@ const oldOffset = (r) => r.stamp - r.t1;
   for (let up = 0; up <= 400; up += 25) {
     for (let down = 0; down <= 400; down += 25) {
       const r = reply(0, up, down);
-      const e = Math.abs(clockSample(r.stamp, r.t0, r.t1).offset - TRUE_OFFSET);
+      const e = Math.abs(clockSample(r.stamp, r.t1, r.t1 - r.t0).offset - TRUE_OFFSET);
       worst = Math.max(worst, e - (up + down) / 2);
     }
   }
@@ -61,7 +63,7 @@ const oldOffset = (r) => r.stamp - r.t1;
   let best = null;
   const trail = [];
   for (const r of replies) {
-    best = keepBetter(best, clockSample(r.stamp, r.t0, r.t1));
+    best = keepBetter(best, clockSample(r.stamp, r.t1, r.t1 - r.t0));
     trail.push(best.offset);
   }
   check('② 留下的是往返 40 的那一个', best.rtt === 40, `rtt ${best.rtt}`);
@@ -94,7 +96,7 @@ const oldOffset = (r) => r.stamp - r.t1;
       while (next < replies.length && replies[next].t1 <= local) {
         const r = replies[next++];
         if (useNew) {
-          best = keepBetter(best, clockSample(r.stamp, r.t0, r.t1));
+          best = keepBetter(best, clockSample(r.stamp, r.t1, r.t1 - r.t0));
           offset = best.offset;
         } else {
           offset = oldOffset(r);
@@ -133,6 +135,55 @@ const oldOffset = (r) => r.stamp - r.t1;
   check('③ 上一拍是 2，这一拍算出 3：还亮 2', countdownDigit(2, 3, 4) === 2);
   check('③ 头一拍：按算出来的、但不超过从几数起', countdownDigit(0, 9, 4) === 4 && countdownDigit(0, 3, 4) === 3);
   check('③ 往下走照常走', countdownDigit(3, 2, 4) === 2);
+}
+
+// ── ④ 本机的钟被拨过（10-11 方案 B-12）────────────────────────
+{
+  // 原先那一套（只比往返、往返拿墙钟量）：同一组回包喂给它，看它留下哪一份。
+  const oldKeep = (best, next) => (!best || next.rtt <= best.rtt ? next : best);
+
+  // 甲：屋里先来一份往返 20 的好样本（真偏差 5000）。之后手机自动校时，本机的钟往前拨了 3 秒——从这一刻起，
+  // 对着本机这只钟，真偏差是 2000。往后的回包往返都比 20 长。
+  const JUMP = 3000;
+  const sample = (t0, up, down, jumped) => ({
+    stamp: t0 + up + TRUE_OFFSET,            // 服务器按它自己的钟盖章（t0 是没跳之前那只本机钟上的时刻）
+    t1: t0 + up + down + (jumped ? JUMP : 0), // 收到那一刻的本机墙钟
+    rtt: up + down,                           // 单调的钟量出来的往返，跳不跳都一样
+  });
+  const seq = [sample(1000, 10, 10, false), sample(5000, 30, 30, true), sample(6000, 20, 40, true), sample(7000, 60, 60, true)];
+  let best = null;
+  let old = null;
+  for (const r of seq) {
+    best = keepBetter(best, clockSample(r.stamp, r.t1, r.rtt));
+    old = oldKeep(old, { offset: r.stamp - (r.t1 - r.rtt / 2), rtt: r.rtt });
+  }
+  const want = TRUE_OFFSET - JUMP;
+  check('④甲 本机的钟往前拨了 3 秒：跳之前那一份作废，估出来的是新钟的偏差', Math.abs(best.offset - want) <= best.rtt / 2,
+    `${best.offset}（该是 ${want}，往返 ${best.rtt}）`);
+  check('④甲 （尺子）只比往返的话：一直留着跳之前那一份，倒数整整差 3 秒', Math.abs(old.offset - want) >= JUMP - 1, `${old.offset}`);
+  // 没跳过的话不许乱换：两份老实的样本差得再多也在两个半往返之内，照旧留往返短的那一份（② 那一组已经量过，这儿
+  // 再喂一组最不对称的：上行 0 / 下行 200 和上行 200 / 下行 0，差 200 = (200 + 200) / 2）。
+  const a = clockSample(0 + 0 + TRUE_OFFSET, 200, 200);
+  const b2 = clockSample(1000 + 200 + TRUE_OFFSET, 1200, 200);
+  check('④甲 两份老实的样本差到两个半往返之和，也不算跳', keepBetter(a, b2) === b2 && Math.abs(a.offset - b2.offset) === 200,
+    `${a.offset} / ${b2.offset}`);
+  const c = clockSample(0 + TRUE_OFFSET, 20, 20);
+  check('④甲 往返长的那一份没跳过：不换掉往返短的那一份', keepBetter(c, clockSample(1000 + 100 + TRUE_OFFSET, 1300, 300)) === c);
+
+  // 乙：请求在路上的时候本机的钟往回拨了 2 秒（发出时 10 000，上下行各 80）。
+  const BACK = 2000;
+  const t0 = 10_000;
+  const stamp = t0 + 80 + TRUE_OFFSET;
+  const t1 = t0 + 160 - BACK;
+  const was = { offset: stamp - (t0 + t1) / 2, rtt: Math.max(0, t1 - t0) }; // 原先的量法
+  check('乙（尺子）原先：往返拿墙钟量，算成 0', was.rtt === 0, String(was.rtt));
+  let keptOld = was;
+  for (let i = 1; i <= 10; i++) keptOld = oldKeep(keptOld, { offset: TRUE_OFFSET + BACK, rtt: 30 });
+  check('乙（尺子）原先：那一份「往返 0」往后十份老实的回包都换不掉，钟一直差 1 秒', keptOld === was && keptOld.offset !== TRUE_OFFSET + BACK,
+    `${keptOld.offset}`);
+  const now = clockSample(stamp, t1, 160);
+  check('乙 现在：往返是 160（单调的钟），偏差就是拨回之后那只钟的（7000）', now.rtt === 160 && now.offset === TRUE_OFFSET + BACK,
+    JSON.stringify(now));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

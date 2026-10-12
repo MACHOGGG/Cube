@@ -19,6 +19,7 @@
  *
  *   ① 每副棋盘、每种线长（格子离场之后什么长度都有）、步数 −3n…3n：滑出来的要么是一个
  *      排列，要么是「这一下不算一步」（null）——从不复制、从不丢。n < 2 一律不算一步。
+ *      大三角偶数长的线（10-11 方案 B-5）：每一格坐的那一枚朝向对（来源和它同奇偶），就是普通循环。
  *   ② 排列校验那一道真的拦得住：喂一个坏的来源函数，出来的是 null，不是一副坏盘。
  *   ③ 五副棋盘都接上了（读源码）：applyDrag 走 slideLine，大三角两处都夹紧，四副的
  *      onStart / onRegrab 拦离场的格子，炸弹那三样从 engine/bomb.ts 来、自己不再留一份。
@@ -93,6 +94,27 @@ for (const b of BOARDS) {
   }
   check('普通循环：转整圈不算一步，其余每一下都是循环位移本身', wrong === 0, `${wrong} 处不对`);
   check('n = 0：shift % 0 是 NaN 的那一下也拦住了', L.slideLine([], 3) === null && L.slideSources(0, 3) === null);
+}
+
+{
+  // 大三角偶数长的线（10-11 方案 B-5）：削掉一条边就会出现。一条线上正、倒三角交替，第 i 格的朝向就是 i 的奇偶；
+  // 滑完之后每一格坐的那一枚必须是同一种朝向（来源和它同奇偶），而且就是普通循环——偶数长的线绕回来奇偶不变，
+  // 两两交换那一招只该用在奇数长的线上。原先 n = 4 滑 2 给出 [3,2,0,1]、n = 8 滑 10 给出 [7,6,1,0,3,2,5,4]。
+  const flipped = [];
+  const notPlain = [];
+  for (let n = 2; n <= 12; n += 2) {
+    for (let s = -3 * n; s <= 3 * n; s += 2) {
+      const shift = L.clampOddShift(s, n);
+      const src = Array.from({ length: n }, (_, i) => L.fillerAwareSource(i, shift, n));
+      if (src.some((j, i) => j % 2 !== i % 2)) flipped.push(`n=${n} 步数 ${shift} → [${src}]`);
+      if (src.some((j, i) => j !== (((i - shift) % n) + n) % n)) notPlain.push(`n=${n} 步数 ${shift}`);
+    }
+  }
+  check('大三角偶数长的线：每一格坐的都是同一种朝向（来源和它同奇偶）', flipped.length === 0, flipped.slice(0, 3).join(' · '));
+  check('大三角偶数长的线：长滑、短滑都和普通循环一样', notPlain.length === 0, notPlain.slice(0, 3).join(' · '));
+  // 尺子：奇数长的线照旧要两两交换——普通循环在那儿会把朝向弄反，这一招不能顺手一起撤掉。
+  const odd = Array.from({ length: 7 }, (_, i) => L.fillerAwareSource(i, 2, 7));
+  check('（尺子）奇数长的线（7 枚滑 2）照旧每一格同朝向', odd.every((j, i) => j % 2 === i % 2), odd.join(','));
 }
 
 // ── ② 排列校验拦得住 ────────────────────────────────────────────

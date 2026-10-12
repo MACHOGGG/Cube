@@ -22,6 +22,10 @@
  *   ③ 源码：package.json 不依赖 lenis / gsap；src/ 和 xhs/src/ 里没有一处 import 它们；smoothScroll.ts
  *      和它的替身都不在了，xhs/vite.config.ts 的 SWAP 表里也没有那一行。带反面尺子：一句
  *      `import Lenis from 'lenis'` 喂进同一个匹配器，必须认得出来。
+ *   ④ 两根手指（10-11 方案 B-3）：经典方块里第一根手指拖着、第二根落下（CDP 发真的双触点），两根都抬起来、
+ *      等收尾走完之后，页面上一个节点都不再长；打完回主菜单，requestAnimationFrame 的频率回到进局之前那么多。
+ *      原先第二根手指落下照样走 onStart，第一根那条拖动链没人停，每一帧把整副棋盘重画一遍——量到过每秒多
+ *      2196 个节点（36 枚 × 61 帧），离开这一局也停不下（engine/drag.ts、engine/dragChain.ts 的 chainSet）。
  */
 import { chromium } from 'playwright';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
@@ -113,6 +117,82 @@ for (const [w, h, touch, label] of [[390, 844, true, '① 手机 390×844（触�
   if (before.tall) check(`${label}：（尺子）滚轮滚得动这一页（原生滚动还在）`, m.y > before.y, `${before.y} → ${m.y}`);
   else console.log(`NOTE  ${label}：这一页没长过一屏，「滚得动」那一条无从量，不假装查过`);
   check(`${label}：零报错`, errs.length === 0, errs.slice(0, 2).join(' | '));
+}
+
+// ── ④ 两根手指（10-11 方案 B-3）─────────────────────────────────────────────
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(SEED + `
+    for (const k of ['square', 'circle', 'triangle']) localStorage.setItem('slides_tutorial_seen_' + k, '1');
+    localStorage.setItem('slides_played_totaltip', '1');
+    // requestAnimationFrame 记一笔账；页面上新添的节点也记一笔。
+    window.__raf = 0;
+    const rawRaf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => { window.__raf++; return rawRaf(cb); };
+    window.__added = 0;
+    new MutationObserver((recs) => { for (const r of recs) window.__added += r.addedNodes.length; })
+      .observe(document, { childList: true, subtree: true });
+  `);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(String(e)));
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+  await page.waitForTimeout(2500);
+  /** 一秒里 requestAnimationFrame 叫了几次、页面上添了几个节点。 */
+  const rate = async () => {
+    const a = await page.evaluate(() => [window.__raf, window.__added]);
+    await page.waitForTimeout(1000);
+    const b = await page.evaluate(() => [window.__raf, window.__added]);
+    return { raf: b[0] - a[0], added: b[1] - a[1] };
+  };
+  const menu0 = await rate();
+  await page.evaluate(() => document.querySelector('.home-icon-btn[data-first-playable="1"]')?.click());
+  await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile[data-id]').length > 0, null, { timeout: 30000 });
+  await page.waitForTimeout(1200);
+  const at = (r, c) => page.$eval(`#boardWrap .tile[data-r="${r}"][data-c="${c}"]`, (e) => {
+    const b = e.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  });
+  const a = await at(1, 1);
+  const b = await at(4, 4);
+  const pitch = (await at(1, 2)).x - a.x;
+  const cdp = await ctx.newCDPSession(page);
+  const tp = (id, x, y) => ({ x, y, id, radiusX: 2, radiusY: 2, force: 1 });
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+  // 第一根手指按住第 1 行，往右拖一格半。
+  await touch('touchStart', [tp(0, a.x, a.y)]);
+  for (let i = 1; i <= 8; i++) {
+    await touch('touchMove', [tp(0, a.x + (pitch * 1.5 * i) / 8, a.y)]);
+    await page.waitForTimeout(16);
+  }
+  const f0 = a.x + pitch * 1.5;
+  // 第二根手指落在第 4 行，两根一起挪一挪。
+  await touch('touchStart', [tp(0, f0, a.y), tp(1, b.x, b.y)]);
+  for (let i = 1; i <= 6; i++) {
+    await touch('touchMove', [tp(0, f0, a.y), tp(1, b.x, b.y + (pitch * i) / 6)]);
+    await page.waitForTimeout(16);
+  }
+  // 先抬第二根，再抬第一根（touchPoints 列的是还按着的那几根）。
+  await touch('touchEnd', [tp(0, f0, a.y)]);
+  await page.waitForTimeout(80);
+  await touch('touchEnd', []);
+  await page.waitForTimeout(1800);
+  const still = await rate();
+  check('④ 两根手指都抬起来、收尾走完：页面上一个节点都不再长', still.added === 0, `1 秒里添了 ${still.added} 个、raf ${still.raf} 次`);
+  // 打完回主菜单。
+  await page.evaluate(() => document.getElementById('stopBtn').click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.evaluate(() => document.getElementById('pauseFinishBtn').click());
+  await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await page.evaluate(() => document.getElementById('endBackBtn').click());
+  await page.waitForSelector('.home-icon-btn', { timeout: 15000 });
+  await page.waitForTimeout(2500);
+  const menu1 = await rate();
+  check('④ 回到主菜单：requestAnimationFrame 的频率回到进局之前（没有链还在跑）', menu1.raf <= menu0.raf + 5,
+    `进局之前 ${menu0.raf} 次/秒 → 回来之后 ${menu1.raf} 次/秒`);
+  check('④ 零报错', errs.length === 0, errs.slice(0, 2).join(' | '));
+  await ctx.close();
 }
 
 await browser.close();

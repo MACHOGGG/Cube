@@ -18,6 +18,17 @@
  *   · 倒数那个数字**只减不增**（`countdownDigit`）：哪天估出来的钟还是往后挪了一下，屏幕
  *     上最多是这一个数多站一会儿，不会倒回去。
  *
+ * ── 本机的钟被拨过（10-11 方案 B-12）──────────────────────────────
+ *
+ * 手机自动校时、玩家手动改时间，Date.now() 会整段跳一下。原先往返也是拿 Date.now() 量的：请求在路上的时候钟
+ * 往回一跳，往返算出来是负数、被夹成 0——一份「往返 0」的样本，往后哪一份都比不过它，而它的偏差正好差了那一跳，
+ * 这一间屋子里的倒数从此一直错着。钟往前跳也一样：先前那一份往返最短的样本是对着旧钟量的，照样一直留着。
+ *
+ *   · 往返改用单调的钟量（room.ts 的 performance.now()，不受校时影响）；偏差照旧是「服务器盖章那一刻 − 往返中点」，
+ *     中点按收到那一刻的墙钟往回退半个往返算——钟在路上跳过的话，算出来的就是跳过之后那只钟的偏差。
+ *   · 新样本和留着的那一份差得比「两个半往返之和」还多：两份都老实的话不可能差这么多（每一份最多偏半个往返），
+ *     只能是中间有一只钟跳过——旧的那一份作废，换新的。
+ *
  * 纯函数，不碰 DOM、不碰网络：门（scripts/check-clock-sync.mjs）拿模拟的回包直接喂它。
  */
 
@@ -33,20 +44,27 @@ export interface ClockSample {
  * 一份回包 → 一个样本。
  *
  * @param stamp 回包里的 serverNow（服务器生成这份状态的那一刻）
- * @param t0 本机发出请求的那一刻
- * @param t1 本机收到并读完回包的那一刻
+ * @param t1 本机收到并读完回包的那一刻（墙钟，Date.now()）
+ * @param rtt 这一次往返（毫秒，拿单调的钟量：performance.now() 两头相减）
  */
-export function clockSample(stamp: number, t0: number, t1: number): ClockSample {
-  return { offset: stamp - (t0 + t1) / 2, rtt: Math.max(0, t1 - t0) };
+export function clockSample(stamp: number, t1: number, rtt: number): ClockSample {
+  const r = Math.max(0, rtt);
+  return { offset: stamp - (t1 - r / 2), rtt: r };
 }
+
+/** 两只钟的毫秒都是取整过的，比较「差得比两个半往返还多」时让出这一点余量。 */
+const JUMP_SLACK_MS = 5;
 
 /**
  * 留哪一个：往返短的那个。一样短就换新的（新的更贴近现在这一刻的两只钟）。
  *
- * 没有上一个（刚进屋）就直接收下这一个。
+ * 没有上一个（刚进屋）就直接收下这一个。和留着的那一份差得比两个半往返之和还多——中间有一只钟跳过（见文件头）
+ * ——也换新的，不管它往返长短。
  */
 export function keepBetter(best: ClockSample | null, next: ClockSample): ClockSample {
-  return !best || next.rtt <= best.rtt ? next : best;
+  if (!best) return next;
+  if (Math.abs(next.offset - best.offset) > (best.rtt + next.rtt) / 2 + JUMP_SLACK_MS) return next;
+  return next.rtt <= best.rtt ? next : best;
 }
 
 /**

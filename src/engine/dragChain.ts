@@ -69,6 +69,8 @@ export interface DragChainOpts {
   force?: number;
   /** Repaint using at()/press()/side() — the board's drag-preview renderer. */
   onFrame(): void;
+  /** 这一条停下来的那一刻叫一次（settle 走完、flush、stop 三条路都算）。chainSet 拿它记账。 */
+  onStop?(): void;
 }
 
 export interface DragChain {
@@ -91,6 +93,13 @@ export interface DragChain {
 }
 
 export function createDragChain(opts: DragChainOpts): DragChain {
+  let ended = false;
+  /** 停下来只报一次：settle 走完之后棋盘照旧会再叫一次 stop()。 */
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    opts.onStop?.();
+  };
   if (reducedMotion()) {
     let s = 0;
     return {
@@ -104,10 +113,11 @@ export function createDragChain(opts: DragChainOpts): DragChain {
       settle: (finalSlots, done) => {
         s = finalSlots;
         opts.onFrame();
+        end();
         done();
       },
       flush: () => false,
-      stop: () => {},
+      stop: end,
     };
   }
 
@@ -193,6 +203,7 @@ export function createDragChain(opts: DragChainOpts): DragChain {
         settling = null;
         stopped = true;
         opts.onFrame();
+        end();
         done();
         return;
       }
@@ -244,12 +255,52 @@ export function createDragChain(opts: DragChainOpts): DragChain {
       stopped = true;
       cancelAnimationFrame(raf);
       opts.onFrame();
+      end();
       done();
       return true;
     },
     stop: () => {
       stopped = true;
       cancelAnimationFrame(raf);
+      end();
+    },
+  };
+}
+
+/**
+ * 一副棋盘这一局里建过、还没停下来的那几条链（10-11 方案 B-3）。
+ *
+ * 每条链自己带一圈 requestAnimationFrame，停之前每一帧都重画一遍拖动预览。原先棋盘只停「当前这一次拖动」挂着的
+ * 那一条：第一根手指拖着、第二根落下，onStart 把整个 drag 换成新的，旧链没人停，一直跑——量到过每秒多出 2196 个
+ * 节点（36 枚 × 61 帧），离开这一局也停不下。现在每一条都从这儿建、停下来自己销账；destroy 把还在跑的全停掉。
+ */
+export interface ChainSet {
+  create(opts: DragChainOpts): DragChain;
+  /** 还在跑的全停掉（destroy 叫）。 */
+  stopAll(): void;
+  /** 还在跑的条数。 */
+  readonly size: number;
+}
+
+export function chainSet(): ChainSet {
+  const live = new Set<DragChain>();
+  return {
+    create(opts) {
+      const chain: DragChain = createDragChain({
+        ...opts,
+        onStop: () => {
+          live.delete(chain);
+          opts.onStop?.();
+        },
+      });
+      live.add(chain);
+      return chain;
+    },
+    stopAll() {
+      for (const chain of [...live]) chain.stop();
+    },
+    get size() {
+      return live.size;
     },
   };
 }

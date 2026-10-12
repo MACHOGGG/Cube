@@ -464,7 +464,9 @@ const KNOWN: RoomError[] = [
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
   try {
-    const t0 = Date.now();
+    // 往返拿单调的钟量（10-11 方案 B-12）：请求在路上的时候本机校一次时，Date.now() 两头相减会是负数、被夹成 0，
+    // 那一份「往返 0」的样本从此谁都比不过，倒数就一直差那一跳。见 engine/clockSync.ts。
+    const t0 = performance.now();
     const res = await fetchWithTimeout('/api/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -482,7 +484,7 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
     // 数字跟着往回跳。
     const stamp = reply.serverNow ?? reply.state?.serverNow;
     if (typeof stamp === 'number') {
-      bestClock = keepBetter(bestClock, clockSample(stamp, t0, Date.now()));
+      bestClock = keepBetter(bestClock, clockSample(stamp, Date.now(), performance.now() - t0));
       clockOffset = bestClock.offset;
     }
     // …and to remember the room, whether it came back on its own or wrapped
