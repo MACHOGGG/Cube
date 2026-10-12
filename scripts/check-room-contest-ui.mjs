@@ -2,7 +2,10 @@
  * 竞赛小屋，在真界面上跑一遍（要 dev-server + Chromium）。
  *
  *   node scripts/dev-server.mjs 8923 dist
- *   node scripts/check-room-contest-ui.mjs http://localhost:8923/
+ *   node scripts/check-room-contest-ui.mjs http://localhost:8923/ [--viewports=390x844,375x667,360x640,320x568]
+ *
+ * --viewports：「小屏」那几条在哪几种尺寸上量（10-11 方案 C-8，默认就是玩家实测的那四种）。别的照旧在
+ * 390×844 上量。
  *
  * 服务端那三条规矩由 scripts/check-room-contest.mjs 守着（纯 node，在 CI 里）。
  * 这一道守的是**摆到真 DOM 上之后**才会出错的那几件：
@@ -18,12 +21,32 @@
  *     长到 1322px 塞在 844px 的屏幕里，整块被挤出去（顶边 −138，滚都滚不回去），
  *     名单自己一格都不滚。修在 style.css 的 `.overlay--wait .mp-wait-stage`。
  *   · **普通八人屋一个字都没被碰。** 最后那一节是对照：屋主照旧拿得到棋盘。
+ *   · **小屏上摆得下**（10-11 方案 C-8，玩家补充的四种尺寸实测）：设置页上页底那颗《退出》不压屋号四格；
+ *     竞赛屋的小屋页上二十一个名字在名单自己里面滚，《去主菜单选玩法》不用滑就在屏幕上；屋主实时榜底下
+ *     「按住不等了」的字是一行（原先一字一行竖排）；选手倒数页的总分榜不和倒数那张数字卡、玩法图叠在一起，
+ *     最后一名滚得到（原先 320×568 上只看得到 16 名，后几名看不到也滚不到）。
+ *   · **选手交卷之后那一屏的榜上也没有主持人**（10-11 方案 C-7）。
  *
  * 十九个选手是直接打接口进来的（同源 fetch），不是开十九个浏览器——要量的是
  * 屏幕上摆不摆得下，不是十九台设备的联机。
  */
 import { chromium } from 'playwright';
+import { build } from 'esbuild';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 const BASE = process.argv[2] || 'http://localhost:8923/';
+const VIEWPORTS = (process.argv.find((a) => a.startsWith('--viewports='))?.slice(12) || '390x844,375x667,360x640,320x568')
+  .split(',').map((v) => v.split('x').map(Number)).filter(([w, h]) => w > 0 && h > 0);
+/** 两个矩形相不相交（贴边不算）。 */
+const crosses = (a, b) => Boolean(a && b) && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5 && a.left < b.right - 0.5 && b.left < a.right - 0.5;
+/** 页面里一个元素的矩形（取成普通对象带出来）。 */
+const RECT = (sel) => {
+  const e = document.querySelector(sel);
+  if (!e) return null;
+  const r = e.getBoundingClientRect();
+  return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
+};
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -92,8 +115,8 @@ async function pickSquare(p) {
  * 座位存在 localStorage 的 slides_mp_seat 里（engine/room.ts 的 rememberSeat），小屋页一
  * 打开就照它回到屋里——和玩家刷新一下页面是同一条路。
  */
-async function contestantPage(code, seat) {
-  const cctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+async function contestantPage(code, seat, [width, height] = [390, 844]) {
+  const cctx = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
   const c = await cctx.newPage();
   c.on('pageerror', (e) => errs.push(e.message));
   await c.addInitScript(([code, seat]) => {
@@ -353,6 +376,20 @@ const { ctx, p } = await hostPage();
     look.hintBox && after.hintBox && look.pinBox && after.pinBox &&
       look.hintBox.y === after.hintBox.y && look.pinBox.y === after.pinBox.y,
     `那一行 ${look.hintBox?.y} → ${after.hintBox?.y} · 条子 ${look.pinBox?.y} → ${after.pinBox?.y}`);
+
+  // 小屏（10-11 方案 C-8）：页底那颗《退出》钉在屏幕上（.page-exit），屋号四格在内容流里——屏幕一矮，两个就
+  // 撞上。玩家实测 360×640 叠 2px、320×568 压住 73px；375×667 整页多出 51px。原因是矮屏那两档条子高度排在
+  // 基础规则前面、从没生效过（style.css 里那段注释）。同一台手机换几种尺寸量，量完回到 390×844。
+  for (const [w, h] of VIEWPORTS) {
+    await p.setViewportSize({ width: w, height: h });
+    await p.waitForTimeout(250);
+    const m = await p.evaluate(`({ exit: (${RECT})('.mp-back') || (${RECT})('.page-exit'), cells: (${RECT})('.mp-code-field .pin-row'),
+      over: document.documentElement.scrollHeight - innerHeight })`);
+    check(`设置页 ${w}×${h}：页底的《退出》和屋号四格不相交`, m.exit && m.cells && !crosses(m.exit, m.cells),
+      m.exit && m.cells ? `退出 ${Math.round(m.exit.top)}–${Math.round(m.exit.bottom)} · 四格 ${Math.round(m.cells.top)}–${Math.round(m.cells.bottom)}（整页多出 ${m.over}px）` : '没找到');
+  }
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.waitForTimeout(250);
 }
 
 // ---- 2. 二十个人的竞赛屋：主持人没有棋盘，榜上没有他自己，而且摆得下 ------
@@ -386,6 +423,35 @@ const { ctx, p } = await hostPage();
   check('小屋名单上二十一个人都在，而屏幕上写的是 20/20', roster.rows === 21 && /20\s*\/\s*20/.test(roster.seats),
     `${roster.rows} 行 · ${roster.seats}`);
   check('小屋页没有被撑出横向滚动', roster.overflowX === 0, `${roster.overflowX}px`);
+  // 小屏（10-11 方案 C-8）：二十一个名字在名单自己里面滚，《去主菜单选玩法》不用滑就在屏幕上（玩家实测
+  // 390×844 上它落在 1318px）。「在屏幕上」是整颗键在屏幕里、而且不压在底排那两颗图标底下；名单滚到底，
+  // 最后一个人整行露得出来。
+  for (const [w, h] of VIEWPORTS) {
+    await p.setViewportSize({ width: w, height: h });
+    await p.waitForTimeout(250);
+    const m = await p.evaluate(`(() => {
+      window.scrollTo(0, 0);
+      const list = document.querySelector('#mpPlayers');
+      const nav = document.querySelector('.home-nav');
+      const navTop = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().top : innerHeight;
+      const pick = (${RECT})('#mpPick');
+      list.scrollTop = list.scrollHeight;
+      const rows = list.querySelectorAll('.mp-player');
+      const last = rows[rows.length - 1].getBoundingClientRect();
+      const box = list.getBoundingClientRect();
+      const out = { pick, navTop, vh: innerHeight, scrolls: list.scrollHeight - list.clientHeight,
+        lastIn: last.top >= box.top - 1 && last.bottom <= box.bottom + 1, rows: rows.length };
+      list.scrollTop = 0;
+      return out;
+    })()`);
+    check(`小屋页 ${w}×${h}：《去主菜单选玩法》不用滑就在屏幕上（不压在底排底下）`,
+      m.pick && m.pick.top >= 0 && m.pick.bottom <= Math.min(m.vh, m.navTop) + 0.5,
+      m.pick ? `键 ${Math.round(m.pick.top)}–${Math.round(m.pick.bottom)} · 底排顶 ${Math.round(m.navTop)} · 屏高 ${m.vh}` : '没找到');
+    check(`小屋页 ${w}×${h}：名单在自己里面滚，最后一个人滚得出来`, m.rows === 21 && m.scrolls > 0 && m.lastIn,
+      `${m.rows} 行 · 可滚 ${m.scrolls}px · 最后一行${m.lastIn ? '整行可见' : '露不全'}`);
+  }
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.waitForTimeout(250);
 
   // 主持人叫什么——下面几条量的就是「选手那边的屏幕上没有这个名字」。
   const hostName = await p.evaluate(async (code) => {
@@ -401,13 +467,21 @@ const { ctx, p } = await hostPage();
   await pickSquare(p);
   const onPanel = await p.waitForSelector('#mpWait', { timeout: 25000 }).then(() => true).catch(() => false);
   check('主持人被送上实时榜单（不是棋盘）', onPanel);
-  // 十九个人各报一个分，榜单才有东西可排。
+  // 等这一局真打起来再报分：倒数里报上去的分服务器记 0（10-11 方案 C-1——那会儿一步都还没走，报上来的分不
+  // 可能是打出来的）。这道门原先就是在倒数里替大家报的。「按住不等了」只在这一局打起来之后露面，拿它当
+  // 「打起来了」的记号。
+  const forceUp = await p.waitForFunction(() => { const f = document.querySelector('#mpWaitForce'); return f && !f.hidden; },
+    { timeout: 20000 }).then(() => true).catch(() => false);
+  check('（尺子）这一局打起来了，「按住不等了」露面了', forceUp);
+  // 二十个人各报一个分，榜单才有东西可排。最后一位（选手20，分最高）先不交卷：全交了这一局当场结束，主持人
+  // 就被送回小屋页，下面这一屏量不到了。
   await p.evaluate(async (code) => {
     const keys = window.__keys || [];
     for (let i = 0; i < keys.length; i++) {
+      const last = i === keys.length - 1;
       await fetch('/api/room', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'score', code, ...keys[i], score: (i + 1) * 37, finished: true, seconds: 20 + i, round: 1 }),
+        body: JSON.stringify({ action: 'score', code, ...keys[i], score: (i + 1) * 37, finished: !last, seconds: 20 + i, round: 1 }),
       });
     }
   }, code);
@@ -448,10 +522,65 @@ const { ctx, p } = await hostPage();
   check('一行都没有横向溢出，整页也没有', panel.rowOverflowX === 0 && panel.overflowX === 0,
     `行 ${panel.rowOverflowX}px / 页 ${panel.overflowX}px`);
 
+  // 小屏（10-11 方案 C-8）：「按住不等了」那颗键上的字是一行（原先一字一行竖排，390×844 上也是），键整颗在
+  // 屏幕里。这台是简体；英、法那两句更长，就地把键上的字换成那两句再量一遍（量的是样式摆不摆得下，字从
+  // i18n.ts 现读）。
+  const i18nOut = join(tmpdir(), `check-room-contest-ui-i18n-${process.pid}.mjs`);
+  await build({
+    stdin: { contents: "export { STRINGS } from './src/i18n.ts';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' },
+    bundle: true, format: 'esm', outfile: i18nOut, logLevel: 'error',
+  });
+  const { STRINGS } = await import(pathToFileURL(i18nOut).href);
+  for (const [w, h] of VIEWPORTS) {
+    await p.setViewportSize({ width: w, height: h });
+    await p.waitForTimeout(250);
+    for (const lang of ['zhHans', 'en', 'fr']) {
+      const m = await p.evaluate(([label]) => {
+        const f = document.querySelector('#mpWaitForce');
+        const span = f?.querySelector('span') || f;
+        if (!f || !span) return null;
+        const before = span.textContent;
+        span.textContent = label;
+        const r = document.createRange();
+        r.selectNodeContents(span);
+        const lines = new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size;
+        const t = r.getBoundingClientRect();
+        const b = f.getBoundingClientRect();
+        const lv = document.querySelector('#mpWaitLeave').getBoundingClientRect();
+        span.textContent = before;
+        // 字整段在键里（原先这颗键被 `button { flex: 1 }` 分窄了，法语那句比键宽 70px，压到旁边那颗上），
+        // 键整颗在屏幕里，也不和《解散小屋》相交。
+        const overlap = b.left < lv.right - 0.5 && lv.left < b.right - 0.5 && b.top < lv.bottom - 0.5 && lv.top < b.bottom - 0.5;
+        return { lines, left: b.left, right: b.right, w: Math.round(b.width), vw: innerWidth,
+          textIn: t.left >= b.left - 0.5 && t.right <= b.right + 0.5, textW: Math.round(t.width),
+          leaveIn: lv.left >= 0 && lv.right <= innerWidth, overlap };
+      }, [STRINGS[lang].mpStopWaitingHold]);
+      check(`实时榜 ${w}×${h}（${lang}）：「${STRINGS[lang].mpStopWaitingHold}」一行、整段在键里，键在屏幕里、不压《解散小屋》`,
+        m && m.lines === 1 && m.textIn && m.left >= 0 && m.right <= m.vw && m.leaveIn && !m.overlap,
+        m ? `${m.lines} 行 · 字宽 ${m.textW}px · 键宽 ${m.w}px（${Math.round(m.left)}–${Math.round(m.right)} / ${m.vw}）${m.overlap ? ' · 压着旁边那颗' : ''}` : '没找到那颗键');
+    }
+  }
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.waitForTimeout(250);
+
+  // 选手20 交卷：第一局收掉，下面才开得了第二局。
+  await p.evaluate(async (code) => {
+    const keys = window.__keys || [];
+    const k = keys[keys.length - 1];
+    await fetch('/api/room', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'score', code, ...k, score: keys.length * 37, finished: true, seconds: 20 + keys.length, round: 1 }),
+    });
+  }, code);
   // 第二局的倒数那一屏：上一局的总分榜（ui/multiplayer.ts 的 standingsStrip）列的是**全部**
   // 选手，所以主持人在不在这张榜上一眼就看得见（第 14 推）。另一台选手的手机（选手06）回到
   // 屋里，主持人从接口开第二局。
   const D = await contestantPage(code, (await p.evaluate(() => window.__keys[5])));
+  // 小屏那几台（10-11 方案 C-8）：每种尺寸一台选手的手机，各拿一把座位，和选手06 一起等第二局的倒数。
+  const smalls = [];
+  for (const [i, size] of VIEWPORTS.entries()) {
+    smalls.push({ size, ...(await contestantPage(code, (await p.evaluate((n) => window.__keys[n], 6 + i)), size)) });
+  }
   await D.c.waitForTimeout(1500);
   const started = await p.evaluate(async (code) => {
     const seat = JSON.parse(localStorage.getItem('slides_mp_seat') || '{}');
@@ -467,6 +596,34 @@ const { ctx, p } = await hostPage();
   const cd = await D.c.evaluate(() => [...document.querySelectorAll('.mp-cd-row .mp-cd-name')].map((e) => e.textContent.trim()));
   check('倒数那一屏的总分榜：二十名选手，没有主持人（第 14 推）', cd.length === 20 && !cd.includes(hostName),
     `${cd.length} 行 · ${cd.includes(hostName) ? '主持人在榜上' : '没有主持人'}`);
+  // 小屏（10-11 方案 C-8）：二十行的总分榜不和倒数那张数字卡、上面那张玩法图叠在一起（原先 390×844 上就
+  // 叠着），榜整块在屏幕里，滚到底最后一名整行露得出来（原先 320×568 上只看得到 16 名、滚不到）。倒数只有
+  // 四秒半，几台是一起摆好、一起量的。
+  const measured = await Promise.all(smalls.map(async ({ size, c }) => {
+    const up = await c.waitForSelector('.mp-cd-row', { timeout: 20000 }).then(() => true).catch(() => false);
+    if (!up) return { size, m: null };
+    const m = await c.evaluate(`(() => {
+      const board = document.querySelector('.mp-cd-board');
+      const rows = board.querySelectorAll('.mp-cd-row');
+      board.scrollTop = board.scrollHeight;
+      const last = rows[rows.length - 1].getBoundingClientRect();
+      const box = board.getBoundingClientRect();
+      return { board: (${RECT})('.mp-cd-board'), win: (${RECT})('.cd-window'), marks: (${RECT})('.start-emblem .start-marks'),
+        rows: rows.length, vh: innerHeight, lastIn: last.top >= box.top - 1 && last.bottom <= box.bottom + 1,
+        over: document.documentElement.scrollHeight - innerHeight };
+    })()`);
+    return { size, m };
+  }));
+  for (const { size: [w, h], m } of measured) {
+    check(`选手倒数页 ${w}×${h}：（尺子）总分榜摆出来了，二十行`, m && m.rows === 20, m ? `${m.rows} 行` : '没等到');
+    if (!m) continue;
+    check(`选手倒数页 ${w}×${h}：总分榜不和倒数那张数字卡、玩法图叠在一起`, !crosses(m.board, m.win) && !crosses(m.board, m.marks),
+      `榜 ${Math.round(m.board.top)}–${Math.round(m.board.bottom)} · 数字卡 ${Math.round(m.win.top)}–${Math.round(m.win.bottom)} · 图 ${Math.round(m.marks.top)}–${Math.round(m.marks.bottom)}`);
+    check(`选手倒数页 ${w}×${h}：榜整块在屏幕里，滚到底最后一名整行露得出来`,
+      m.board.top >= 0 && m.board.bottom <= m.vh + 0.5 && m.lastIn,
+      `榜底 ${Math.round(m.board.bottom)} / 屏高 ${m.vh} · 最后一行${m.lastIn ? '整行可见' : '露不全'}（整页多出 ${m.over}px）`);
+  }
+  for (const { cctx } of smalls) await cctx.close();
   await D.cctx.close();
 }
 await ctx.close();
@@ -520,6 +677,17 @@ await ctx.close();
   const boardNames = await C.c.evaluate(() => [...document.querySelectorAll('.mp-board-row .mp-board-name')].map((e) => e.textContent.trim()));
   check('选手局中那块计分板上没有主持人（第 14 推）', boardNames.length > 0 && !boardNames.includes(host3),
     `${boardNames.join(' / ')}（主持人：${host3}）`);
+  // 选手交卷之后那一屏（ui/scoreboard.ts 开的等待页）：榜上也没有主持人（10-11 方案 C-7）。原先那一层靠调用方
+  // 传 hideId 才不列他——主持人自己那一屏传了，这一屏没传，主持人就以一行 0 分挂在选手的等待页上。
+  await C.c.click('#finishBtn');
+  await C.c.waitForSelector('#finishConfirm', { timeout: 6000 }).catch(() => {});
+  await C.c.click('#mpFinishYes').catch(() => {});
+  const waitUp = await C.c.waitForSelector('#mpWait #mpWaitRows .mp-player', { timeout: 15000 }).then(() => true).catch(() => false);
+  check('（尺子）选手交了卷，进了等待页', waitUp);
+  const waitNames = await C.c.evaluate(() => [...document.querySelectorAll('#mpWaitRows .mp-player')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
+  check('选手交卷之后那一屏的榜上：三名选手，没有主持人（10-11 方案 C-7）',
+    waitNames.length === 3 && !waitNames.some((t) => host3 && t.includes(host3)),
+    `${waitNames.length} 行 · ${waitNames.join(' / ')}（主持人：${host3}）`);
   await C.cctx.close();
   await c3.close();
 }

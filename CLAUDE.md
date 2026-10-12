@@ -245,7 +245,7 @@ Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写
 
 所以「加一个玩法」多半**不是写新游戏**，而是给 `ShapeGameOpts` 传个选项：
 `timeLimitSec`（计时）、`bomb`（炸弹）、`targets`（老虎机换得分图案）、
-`flip`（无限反转）、`practice`（小屋等待页的练习盘）、`coach`（头一局的教学条）。
+`flip`（无限反转）、`practice`（原是小屋等待页的练习盘，2026-10 拿掉了；目前无调用者，待删）、`coach`（头一局的教学条）。
 
 ### 家族和规则：棋盘自己声明，一处查表
 

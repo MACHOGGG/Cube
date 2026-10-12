@@ -315,15 +315,47 @@ export async function delIfSame(key, value) {
   }
 }
 
-/** 内存库只认得 delIfSame 那一段脚本：它本来就是单进程，一个函数里比完就删，同样是一步。 */
+/**
+ * hash 里那一格**还是这个值**才删——比和删是同一步。delIfSame 的 hash 字段版（10-11 方案 C-2）。
+ *
+ * 小屋满了、收「掉线的人那把椅子」用它（room.js 的 claimSeat）。原先是无条件 HDEL：两个人同时按《加入》，读
+ * 到的是同一份旧快照，先到的那个删掉掉线的人那把椅子、当场坐上去；后到的那个照着旧快照再删一遍——删掉的已经
+ * 是先到的那个人刚坐上的椅子，然后自己坐上去。一把椅子两个人，屋里人数超过上限（实测 10 次里 10 次）。现在只
+ * 有「椅子上还是那个掉线的人」才删。
+ *
+ * 退路和 delIfSame 一样：那一头不认 EVAL 就退回「HGET → 比 → HDEL」，窗口两次往返那么宽。
+ *
+ * @returns 删了 true；那一格已经不是这个值（或者没了）false。
+ */
+const HDEL_IF_SAME =
+  "if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then return redis.call('HDEL', KEYS[1], ARGV[1]) else return 0 end";
+export async function hdelIfSame(key, field, value) {
+  const want = encode(value);
+  try {
+    return Number(await command(['EVAL', HDEL_IF_SAME, 1, key, field, want])) === 1;
+  } catch {
+    if ((await command(['HGET', key, field])) !== want) return false;
+    return Number(await command(['HDEL', key, field])) === 1;
+  }
+}
+
+/** 内存库只认得 delIfSame、hdelIfSame 那两段脚本：它本来就是单进程，一个函数里比完就删，同样是一步。 */
 function memoryEval(args) {
-  const [, script, , key, want] = args;
-  if (script !== DEL_IF_SAME) throw new Error('memory store: unknown script');
+  const [, script, , key, ...argv] = args;
+  if (script !== DEL_IF_SAME && script !== HDEL_IF_SAME) throw new Error('memory store: unknown script');
   const due = expiries.get(key);
   if (due !== undefined && due < Date.now()) {
     mem.delete(key);
     expiries.delete(key);
   }
+  if (script === HDEL_IF_SAME) {
+    const [field, want] = argv;
+    const h = mem.get(key);
+    if (!(h instanceof Map) || h.get(String(field)) !== want) return 0;
+    h.delete(String(field));
+    return 1;
+  }
+  const [want] = argv;
   if (mem.get(key) !== want) return 0;
   mem.delete(key);
   expiries.delete(key);

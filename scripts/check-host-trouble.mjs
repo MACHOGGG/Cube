@@ -13,6 +13,8 @@
  *   'gone'  → ui/scoreboard.ts 的 roomOver 当场成立，**正在打的人就地被转成一局单人**
  *             （goSolo）：座位交回去，这一局的分再也回不到小屋的榜上。
  *   'away'  → 屏幕上一句「屋主等一下就来」，大家继续。
+ *   'hostGone' → 屏幕上一句「屋主暂时联系不上，可以先离开小屋。」，大家继续（10-11 方案 C-3 第 4 条：90 秒没
+ *             心跳不散场，但「等一下就来」已经是我们不知道的事——原先它并在 'away' 里，说的是同一句）。
  *   null    → 什么都不说。
  *
  * 而 `gone` 这个标记是服务器 90 秒（ABSENT_MS）没听见心跳给的——手机进后台、接个电
@@ -121,9 +123,9 @@ function state({ contest = false, phase = 'playing', host = {}, ended = false } 
         const st = state({ contest, phase, host: { [flag]: true } });
         check(`② ${kind} · ${phase} · 屋主 ${flag}：该散场`, hostTroubleIn(st, false) === 'gone', String(hostTroubleIn(st, false)));
       }
-      // ⚠️ gone 在这一档，不在上面那一档：90 秒没心跳是「等他」，不是「他走了」。
+      // ⚠️ gone 在这一档，不在上面那一档：90 秒没心跳是「等他」，不是「他走了」。话是另一句（hostGone，C-3）。
       const gone = state({ contest, phase, host: { gone: true, away: true } });
-      check(`③ ${kind} · ${phase} · 屋主太久没动静：等他（不散场）`, hostTroubleIn(gone, false) === 'away', String(hostTroubleIn(gone, false)));
+      check(`③ ${kind} · ${phase} · 屋主太久没动静：不散场，说「暂时联系不上」（hostGone）`, hostTroubleIn(gone, false) === 'hostGone', String(hostTroubleIn(gone, false)));
       const away = state({ contest, phase, host: { away: true } });
       check(`③ ${kind} · ${phase} · 屋主暂时联系不上：等他`, hostTroubleIn(away, false) === 'away', String(hostTroubleIn(away, false)));
       // 只有 gone、没有 away：**线上出不来这一种**（两位都从同一个「最后一次露面」算，
@@ -131,7 +133,7 @@ function state({ contest = false, phase = 'playing', host = {}, ended = false } 
       // 话，把 `host.gone` 从那一句里删掉，上面每一条都还是绿的（它们的 away 也是真），
       // 只有源码那一条会红。
       const onlyGone = state({ contest, phase, host: { gone: true } });
-      check(`③ ${kind} · ${phase} · 只有 gone 没有 away：也是等他`, hostTroubleIn(onlyGone, false) === 'away', String(hostTroubleIn(onlyGone, false)));
+      check(`③ ${kind} · ${phase} · 只有 gone 没有 away：也是 hostGone`, hostTroubleIn(onlyGone, false) === 'hostGone', String(hostTroubleIn(onlyGone, false)));
       const fine = state({ contest, phase });
       check(`② ${kind} · ${phase} · 屋主好着：什么都不说`, hostTroubleIn(fine, false) === null, String(hostTroubleIn(fine, false)));
     }
@@ -169,8 +171,16 @@ function state({ contest = false, phase = 'playing', host = {}, ended = false } 
   const goneLine = head.split('\n').find((l) => l.includes("return 'gone'"));
   check('源码：散场那一句只认 left / closed / 没座位',
     Boolean(goneLine) && !goneLine.includes('.gone'), String(goneLine).trim());
+  const hostGoneLine = head.split('\n').find((l) => l.includes("return 'hostGone'"));
+  check('源码：gone 单独一档 hostGone（不散场）', Boolean(hostGoneLine) && hostGoneLine.includes('host.gone'), String(hostGoneLine).trim());
   const awayLine = head.split('\n').find((l) => l.includes("? 'away'"));
-  check('源码：gone 归到 away 那一档', Boolean(awayLine) && awayLine.includes('host.gone'), String(awayLine).trim());
+  check('源码：away 那一句只认 away', Boolean(awayLine) && awayLine.includes('host.away') && !awayLine.includes('host.gone'), String(awayLine).trim());
+  // 画提示那一层：hostGone 有自己那一句话，不是 mpHostFixing（「等一下就来」）。
+  const notices = readFileSync(new URL('../src/ui/roomNotices.ts', import.meta.url), 'utf8');
+  check('源码：hostGone 那一层说的是 mpHostGone', /kind === 'hostGone' \? s\.mpHostGone : s\.mpHostFixing/.test(notices), '');
+  // 判散场那一处只认 'gone'——hostGone 不许把正在打的人转成单人。
+  const sb = readFileSync(new URL('../src/ui/scoreboard.ts', import.meta.url), 'utf8');
+  check('源码：scoreboard 判散场只认 gone', /hostTroubleIn\(state, iAmHost\(\)\) === 'gone'/.test(sb) && !/=== 'hostGone'/.test(sb), '');
   const exempt = head.split('\n').find((l) => l.includes("phase === 'countdown'"));
   check('源码：倒数 / 对局中那道豁免不挑屋子（没有 contest）',
     Boolean(exempt) && !exempt.includes('contest'), String(exempt).trim());

@@ -16,9 +16,9 @@ import { ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
 import { geniusLogoTag } from './geniusLogo';
 import { createNudgeSoak, type NudgeSoak } from './nudgeRain';
-import { custom } from './customIcons';
 import { shapeName } from './shapeLabels';
 import { contestants, rankRoom } from './roomCard';
+import { openRulesModal, type ExtraTipView } from './rulesModal';
 import { hasSeenTutorial, markTutorialSeen, seenTutorials, type RuleShape, type TutorialShape } from '../i18n';
 import {
   type Avatar,
@@ -118,22 +118,12 @@ export interface MultiplayerHandlers {
    * 行了，所以先留一份传进来；散场时不用给（座位还在）。
    */
   onRoomEnded: (state: RoomState, meId?: string) => void;
-  /**
-   * 这个人说他不会规则：放这一族的教学给他看，看完了回小屋。
-   *
-   * 教学会把整页占掉，所以这一页（连同它的轮询）就此拆掉——回来走的是
-   * showMultiplayer 那条「已经在屋里就接着往下走」的路。
+  /*
+   * 从前这儿还有两条：onLearnTutorial（答「不会」的人去看规则——整页拆掉、停掉轮询，关窗之后
+   * showMultiplayer 整页重进）和 onPractice（等他的人底下那块练习盘）。10-11 方案 C-5 起答「我还
+   * 不会玩」的人坐到场边看规则、别人不等他，规则窗由这一页自己开在等待页上（openRoomRules），
+   * 练习盘随「等人学教学」那一屏一起拿掉（玩家 10-11：「没问题不用练习盘了」）。
    */
-  /**
-   * 他说他不会这个玩法：开那一屏规则（第 14 推起不再放分镜动画，见 main.ts）。
-   * 带着这一局的玩法——菱形方块念菱形那一句、无限反转抽掉那一局不会发生的两条。
-   */
-  onLearnTutorial: (learn: RoomLearn) => void;
-  /**
-   * 等人学教学那一屏底下的练习盘：把这个玩法的棋盘（练习模式）挂到 host
-   * 里，回来的是拆它的函数。玩法都长在 main.ts 里，所以由它来挂。
-   */
-  onPractice?: (host: HTMLElement, mode: string, flip?: boolean) => (() => void) | null;
 }
 
 /**
@@ -150,7 +140,7 @@ export interface MultiplayerHandlers {
  * PR-6），只剩的六边蜂窝 54 是布局，布局从来没有自己的分镜教学。所以问的是
  * 「这一族有没有教学」，不是「这一族叫什么」。
  */
-/** 「我不会」那一下要讲哪一套规则：这一族、这一副棋盘的规则、这一局是不是无限反转 / 老虎机。 */
+/** 「我还不会玩」那一下要讲哪一套规则：这一族、这一副棋盘的规则、这一局是不是无限反转 / 老虎机。 */
 export interface RoomLearn {
   family: TutorialShape;
   rules: RuleShape;
@@ -221,8 +211,13 @@ export function errorText(reason: RoomError, lang: Lang): string {
     case 'ended':
       return s.mpErrEnded;
     case 'notConfigured':
-    case 'busy':
       return s.mpErrNotOpen;
+    // 服务器那头的事（10-11 方案 C-3 第 1 条）：开屋十二次撞号的 503 'busy'、认不出的 5xx（engine/room.ts 认成
+    // 'server'）。原先 busy 写的是「多人游玩尚未开放」——功能好好开着；认不出的 5xx 落进 default「连不上网络」——
+    // 网也好好的。两件都是「服务器暂时出错，稍后再试」。
+    case 'busy':
+    case 'server':
+      return s.serverBusy;
     // 服务器限速挡住了。不接这一条的话它会掉进下面的 default（「连不上网络」），
     // 而这恰恰是玩家最不该去查的地方——他的网好得很。
     case 'tooMany':
@@ -284,16 +279,19 @@ export function renderMultiplayerPage(
    * 里掉过了（见 main.ts 的 startPickWatch），不该在这儿再砸一遍。
    */
   let nudges: NudgeSoak | null = null;
-  /** 等人学教学那一屏底下的练习盘，拆它用的。 */
-  let practiceStop: (() => void) | null = null;
   /** 倒数那一屏上转着的老虎机，拆它用的。 */
   let stopSpin: (() => void) | null = null;
   /** 这一局的「会不会规则」已经问过了——每局只问一次，问完不再挡路。 */
   let askedRound = -1;
   /** 《会不会规则》那一问正挂着。 */
   let asking = false;
-  /** 「有人在学，稍等」那一屏已经画上了，别每次轮询都重画一遍。 */
-  let waitingOnLearner = false;
+  /**
+   * 答了「我还不会玩」的那一局（10-11 方案 C-5）：那一局的等待页顶上多一行「下一局开始时您就加入」。
+   * 0 = 没有。
+   */
+  let learnRound = 0;
+  /** 等待页上开着的那扇《怎么玩》，收它用的（openRoomRules）。 */
+  let closeRules: (() => void) | null = null;
   /**
    * 一局正在打、而我不在局里的时候盖在小屋页上的那张等待页（见 sideline）。
    * 中途进来的人、走了又回来的人都坐在这儿看实时排行，下一局开始才入局。
@@ -301,11 +299,16 @@ export function renderMultiplayerPage(
   let sideWait: WaitPanel | null = null;
   /** 坐等待页时那声「我不打了」正在路上：回来之前不重复发。 */
   let sitOutPending = false;
+  /** 设置页上「多人游玩需要联网」那一句在等 online 事件（10-11 方案 H-2），拆它用的。 */
+  let stopOnlineWatch: (() => void) | null = null;
   const stopAll = () => {
+    stopOnlineWatch?.();
+    stopOnlineWatch = null;
     sideWait?.remove();
     sideWait = null;
-    practiceStop?.();
-    practiceStop = null;
+    // 规则窗挂在 body 上，不跟着这一页拆：屋主散场、走人、整页重画的时候不收，它就盖在下一屏上。
+    closeRules?.();
+    closeRules = null;
     stopSpin?.();
     stopSpin = null;
     stopWatching?.();
@@ -316,7 +319,6 @@ export function renderMultiplayerPage(
     notice = null;
     nudges?.stop();
     nudges = null;
-    waitingOnLearner = false;
   };
   const teardown = () => {
     dead = true;
@@ -434,6 +436,12 @@ export function renderMultiplayerPage(
             <p class="home-sub">${s.mpTitle}</p>
           </div>
         </header>
+
+        <!-- 断网了：表单最上面先说一句「多人游玩需要联网」（10-11 方案 H-2）。原先什么都不说，按了开屋、输了屋号
+             才报「连不上网络」。**只提示、不收表单**：navigator.onLine 不可靠（连着局域网没外网也算在线；防火墙、
+             VPN 可能让在线的设备显示离线），MDN 建议只拿它给提示、不拿它禁用功能——表单照旧能按，真连不上时走
+             errorText 那一句。它说的是「需要什么」，不是「出错了」，所以不用红字。 -->
+        ${navigator.onLine === false ? `<p class="mp-offline" id="mpOffline" role="status">${s.mpNeedsNetwork}</p>` : ''}
 
         <p class="auth-msg" id="mpMsg" role="status">${message}</p>
 
@@ -554,6 +562,15 @@ export function renderMultiplayerPage(
       const done = await setNickname(typed);
       return done.ok ? '' : nicknameErrorText(done.reason, lang);
     };
+
+    // 连上网了就撤掉「需要联网」那一句（10-11 方案 H-2）。只听 online：在这一页上断网不补那一句——按下去自然
+    // 得到「连不上网络」。
+    const offlineNote = container.querySelector<HTMLElement>('#mpOffline');
+    if (offlineNote) {
+      const onOnline = () => offlineNote.remove();
+      window.addEventListener('online', onOnline);
+      stopOnlineWatch = () => window.removeEventListener('online', onOnline);
+    }
 
     container.querySelector<HTMLButtonElement>('#mpShuffle')!.addEventListener('click', () => {
       avatar = randomAvatar();
@@ -735,8 +752,10 @@ export function renderMultiplayerPage(
     stopAll();
     // Whether *we* host it, not merely whether the room has a host.
     const iAmHost = Boolean(state.host) && currentRoom()?.playerId === state.host;
+    // 竞赛屋：二十一个名字的名单在自己里面滚，《去主菜单选玩法》不用先滑过二十一个名字（10-11 方案 C-8，
+    // 见 style.css 的 .mp-page--contest）。这一位开屋那一刻就定死了，整间屋子都不会变。
     container.innerHTML = `
-      <div class="app mp-page">
+      <div class="app mp-page${state.contest ? ' mp-page--contest' : ''}">
         <header class="home-head">
           <div class="home-head-glass">
             <h1 class="home-title">Slides</h1>
@@ -804,9 +823,11 @@ export function renderMultiplayerPage(
           meId,
           code: st.code,
           onLeave: () => confirmLeaveRoom(lang, leave),
-          // 主持人看的就是这一屏：榜上不列他自己（列进去就是一行恒定 0 分挂在最后
-          // 一名），那颗键上的字也该是《解散小屋》——他按下去做的就是那件事。
-          ...(refereeing ? { hideId: meId, leaveLabel: s.mpDisbandRoom } : {}),
+          // 主持人看的就是这一屏：那颗键上的字该是《解散小屋》——他按下去做的就是那件事。榜上不列他自己，那一层
+          // 自己问 contestants（10-11 方案 C-7），不用这儿传。
+          ...(refereeing ? { leaveLabel: s.mpDisbandRoom } : {}),
+          // 这一局是他答了「我还不会玩」坐下来的：顶上告诉他什么时候入局（10-11 方案 C-5）。
+          ...(st.round === learnRound ? { note: s.mpJoinNextRound } : {}),
           // 屋主坐在这一屏上等别人（竞赛屋的主持人每一局都在这儿）：给他那颗「不等了」
           // （2026-10-08 方案 2-6）。
           ...(iAmHost ? { onForce: () => forceRound().then((r) => r.ok) } : {}),
@@ -816,7 +837,8 @@ export function renderMultiplayerPage(
       // 坐在这儿的每一次轮询，只要服务器还没记下我交了卷，就再交一次：「这一局
       // 我不打了」。服务器判一局是否打完，看的是每个座位交没交卷；坐在这儿轮
       // 询的人，座位一直「在线」却永远不交卷，别人交完卷就得等他——等到 90 秒
-      // 无人报到才算他缺席。来晚的、学教学学过了头的、局中刷新了的，都走这条路。
+      // 无人报到才算他缺席。来晚的、答了「我还不会玩」正在看规则的、局中刷新了的，都走这条路——看规则
+      // 的人尤其不能断（10-11 方案 C-5）：不交的话 roundOver 要等他满 ABSENT_MS（90 秒），等于还是整屋在等他。
       //
       // 从前只在坐下来那一刻交一次。那一次要是没送到（手机网络晃一下就够了），
       // 服务器上这个座位就永远是「还在打」：别人交完卷进等待页等他，他坐在
@@ -888,7 +910,7 @@ export function renderMultiplayerPage(
         // countdown / playing 这两格，正好就是「有一局开着」：不是大厅、没散场、
         // 也不是已经打完等下一局。
         if ((phase === 'countdown' || phase === 'playing') && next.mode && next.round > playedRound) {
-          // 来晚了：这一局早就开了（刷新、切走、看教学看过了头之后才回来），
+          // 来晚了：这一局早就开了（刷新、切走之后才回来），
           // 开赛时刻已经过去好几秒。这一局不是我的——记成打过，坐等待页看
           // 排行，下一局再入；不能拿着一块新起的表跳进别人打了一半的局。
           // 留几秒余量给正常的一次轮询晚到。
@@ -902,12 +924,15 @@ export function renderMultiplayerPage(
           // phase 是 playing 就意味着「没挂起、开赛时刻已经过去」——正是下面
           // 那段注释里说的两件事，不用再各问一遍 learnHold。startAt 到这儿一定
           // 有值（没有的话 phase 是 lobby），`?? 0` 只是让类型看得出来。
+          // （2026-10 起服务器不再挂起新的一局，见 api/room.js 的 learn；上线那一刻已经挂着的屋子还
+          // 在放行，这一段照旧成立。）
           /**
            * 竞赛屋的主持人不参赛：这一局不给他开棋盘，改坐到实时榜单上
            * （和中途进来的人同一张脸，见上面的 sideline）。
            *
-           * 这一道要放在「我会不会规则」那三道关**之前**：他不下场，问他会不会这
-           * 个玩法就是白问一句，而那一问会把服务器那头的他标成「在学」，全屋等他。
+           * 这一道要放在「我会不会规则」那一问**之前**：他不下场，问他会不会这个玩法
+           * 就是白问一句。（从前那一问还会把服务器那头的他标成「在学」、全屋等他；
+           * 2026-10 起不再挂起，白问照样是意料之外的界面。）
            */
           if (next.contest && iAmHost && next.round > 0) {
             // 也记成打过：万一哪一刻 contest 这一位没读到（老回包、字段掉了），
@@ -927,20 +952,19 @@ export function renderMultiplayerPage(
             sideline(next);
             return;
           }
-          // 三道关，顺序是有讲究的：
-          // 1. 我自己会不会这个玩法——不会就去看教学，别人等我；
-          // 2. 屋里还有没有别人在学——有就一起等；
-          // 3. 都齐了，才数 4-3-2-1。
-          if (askKnowsRules(next)) return;
-          // 问句还挂着：这一轮什么都不做。服务器那头我是「在学」，别人在等。
+          // 走到这儿，这一局就是我的了。上一局答了「我还不会玩」、规则窗还开着的人这一局入局（10-11
+          // 方案 C-5「下一局再加入」），窗先收起来：它在等待页那一档的上面（overlay--top），不收的话
+          // 这一局的那一问（换了一族还会再问）开在它底下看不见，4-3-2-1 也被它盖着，数到 0 它还盖在
+          // 棋盘上——它挂在 body 上，不跟着这一页拆。
+          closeRules?.();
+          // 先问我自己会不会这个玩法（没看过这一族的才问）；答「我还不会玩」就坐到场边看规则，这一
+          // 局不打（askKnowsRules 里的 notYet）。别人不等任何人：从前这儿还有一道「屋里还有没有
+          // 别人在学——有就一起等」，10-11 方案 C-5 拿掉了（报告一 #11：「是不是新手」是客户端自报
+          // 的，谁都能拿它把整屋拦住）。
+          if (askKnowsRules(next, sideline)) return;
+          // 问句还挂着：这一轮什么都不做。这四秒服务器开局时已经替这一问留好了（api/room.js 的
+          // ASK_MS），别人的倒数照走。
           if (asking) return;
-          if (next.players.some((p) => p.learning)) {
-            // 数到一半有人说他不会：把数字收起来，换成「稍等」。倒数不是
-            // 承诺，是一段可以退回去的路。
-            cancelCountdown();
-            return showLearningWait(next);
-          }
-          waitingOnLearner = false;
           beginCountdown(next);
         }
       },
@@ -957,7 +981,9 @@ export function renderMultiplayerPage(
           return;
         }
         const msg = container.querySelector<HTMLElement>('#mpMsg');
-        if (msg) msg.textContent = s.mpReconnecting;
+        // 被限速挡了是另一句（10-11 方案 C-3 第 2 条）：原先也写「网络断了一下，正在把您接回小屋」，他去查网，
+        // 而网好得很。
+        if (msg) msg.textContent = reason === 'tooMany' ? s.mpErrTooMany : s.mpReconnecting;
       },
     );
   }
@@ -1139,8 +1165,10 @@ export function renderMultiplayerPage(
    * 通常是他正好没在看屏幕，那按「会」是对的。
    *
    * 回 true 表示「这一关我接管了」：调用处就此打住，不去数数。
+   *
+   * @param bench 那一页的 sideline：答「我还不会玩」的人当场坐到场边，不等下一次轮询。
    */
-  function askKnowsRules(state: RoomState): boolean {
+  function askKnowsRules(state: RoomState, bench: (st: RoomState) => void): boolean {
     if (askedRound === state.round) return false;
     const family = state.mode ? tutorialFamilyOf(state.mode) : null;
     if (!family || hasSeenTutorial(family)) {
@@ -1149,13 +1177,11 @@ export function renderMultiplayerPage(
     }
     askedRound = state.round;
 
-    // 问的这几秒里全屋等我——和「去看教学」走同一条路：先向服务器报一声
-    // 「我在学」，别人那边立刻变成「稍等」，开赛时刻等我答完再重新盖一遍。
-    // 原来这一问只是本机上盖了一层，服务器那头的开赛时刻照走、下一次轮询就
-    // 在这层底下把倒数数起来了；答得慢一点，牌已经在底下开了。
     // 问的这四秒是服务器开局时就替他留好的（可能有新手的局倒数从 8 数起，
-    // 见 api/room.js 的 ASK_MS）：这里不必再向服务器报「我在学」，别人的倒
-    // 数照走；他答「会」就接着数，答「不会」才走 goLearn 那条路让整屋等。
+    // 见 api/room.js 的 ASK_MS）：不必向服务器报「我在学」，别人的倒数照走。
+    // 他答「我会玩」就接着数；答「我还不会玩」就坐到场边看规则，这一局不打——
+    // 别人照常开局、不等他（10-11 方案 C-5，玩家定的新流程）。从前答「不会」
+    // 要向服务器报「我在学」，整屋的开局挂起来等他最多 90 秒。
     asking = true;
     const name = shapeName(lang, state.mode ?? '', family);
     const box = document.createElement('div');
@@ -1182,8 +1208,8 @@ export function renderMultiplayerPage(
     // 说「会」：收起这一问，倒数本来就在走，下一次轮询接着数——**而且记下来**，本机一份、服务
     // 器一份（2026-10-08 方案 2-10）。从前只是收起：本机不记、服务器也不知道，于是下一局服务器
     // 照旧算他「可能是新手」，全屋的倒数照旧从 8 数起（多留的 ASK_MS 四秒），他也照旧又被问一
-    // 遍。服务器那一份走 learn 那条现成的路（learning: false + seen），和看完教学的人报「看过
-    // 了」是同一句话；他本来就不在学，这一句不会挂起开局，也不会改开赛时刻。
+    // 遍。服务器那一份走 learn 那条现成的路（learning: false + seen）——答「我还不会玩」的人报的
+    // 也是这一句（见下面 notYet）；它不会挂起开局，也不会改开赛时刻。
     const knows = () => {
       close();
       markTutorialSeen(family);
@@ -1195,16 +1221,37 @@ export function renderMultiplayerPage(
     // 而《会》要记下「这一族的教学看过了」（本机一份、服务器一份），从此再也不问——按返回的人多半
     // 只是想关掉这一层，不是在说「我会」。
     pushLayer(timedOut, box);
-    box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
-    box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', () => {
+    /*
+     * 说「我还不会玩」（10-11 方案 C-5）：这一局他不打，在等待页上看《怎么玩》，下一局入局。
+     *
+     *   · 记成看过，本机一份、服务器一份——和「我会玩」同一句（learning: false + seen），只报看过、不挂
+     *     起。不记的话下一局还会再问一遍，服务器还会再替他多留四秒（ASK_MS）。
+     *   · 这一局记成打过：下一次轮询走不进开局那道关（round > playedRound），sideline 把他留在等待页上，
+     *     每次轮询替他交「这一局不打」——和来晚的人同一条路。他看得再快、这一局还没开打，也不中途加入
+     *     （玩家原话「看完后加入下一局」）。
+     *   · 规则窗开在等待页上，轮询不停；关掉只收窗。
+     */
+    const notYet = () => {
       close();
-      void goLearn({
+      // 问着的这几秒里这一页可能已经拆了（屋主散场、走人）：不在一张已经不在的页上坐下、开窗。
+      if (dead) return;
+      markTutorialSeen(family);
+      void setLearning(false, seenTutorials());
+      markRoundPlayed(state.round);
+      playedRound = Math.max(playedRound, state.round);
+      learnRound = state.round;
+      // 问的这几秒里轮询照走：拿最新的那一份坐下来（这一局可能已经从倒数走到开打了）。
+      const now = latestRoomState();
+      bench(now && now.round === state.round ? now : state);
+      openRoomRules({
         family,
         rules: cardOrNull(state.mode ?? '')?.ruleShape ?? family,
         flip: state.flip,
         slot: state.slot !== null,
       });
-    });
+    };
+    box.querySelector<HTMLButtonElement>('#mpKnowYes')!.addEventListener('click', knows);
+    box.querySelector<HTMLButtonElement>('#mpKnowNo')!.addEventListener('click', notYet);
 
     const until = Date.now() + KNOW_ASK_MS;
     const tick = box.querySelector<HTMLElement>('#mpKnowTick')!;
@@ -1219,79 +1266,49 @@ export function renderMultiplayerPage(
   }
 
   /**
-   * 去看规则。先告诉服务器「我在学」——别人那边立刻看到「有人在学习，稍等」，
-   * 开赛时刻等我学完再重新盖一遍。
-   */
-  async function goLearn(learn: RoomLearn) {
-    await setLearning(true);
-    if (dead) return;
-    stopAll();
-    handlers.onLearnTutorial(learn);
-  }
-
-  /**
-   * 屋里有人在学，其他人看到的那一屏。
+   * 在等待页上开《怎么玩》（10-11 方案 C-5「我还不会玩」）。
    *
-   * 和开局那一幕同一个身架：上半屏这一局的玩法图，中间原本放 4-3-2-1 的位置
-   * 换成一句话，底下是那只转圈的标识。轮询不停——它就是这一屏等的东西。
+   * 内容和局中暂停里那颗《怎么玩》同一扇（ui/rulesModal.ts）：这一族、这一副棋盘的规则——菱形方块念菱形那
+   * 一句；无限反转抽掉那一局不会发生的第 4、5 条、加那一层说明；老虎机加那一层说明。
+   *
+   * 从前答「不会」走的是 main.ts 的 onLearnTutorial：这一页先 stopAll() 停掉轮询，关窗时 showMultiplayer()
+   * 整页重进。现在他坐在场边、轮询一下都不能停（sideline 靠它替他交卷，见那段注释），所以这扇窗由这一页
+   * 自己开：盖在等待页上（top：等待页是 z-index 100 的那一层），关掉只收窗，底下就是那张等待页。
    */
-  function showLearningWait(state: RoomState) {
-    if (waitingOnLearner) return;
-    waitingOnLearner = true;
-    // 这一屏把标题框换掉了：收起画布，但书签留着（见 ui/nudgeRain.ts）。
-    nudges?.attach(null);
-    const spinner = custom('mp-loading') ?? '';
-    // 那句话和转圈的小人往上挪，底下是一块练习盘：这一局的玩法、真的规则，
-    // 只是不结算——等的人先练一练（玩家的原话：「加入一个模拟玩的小区域在屏
-    // 幕下方（把现在已有文字和转动动画向上移动）」）。
-    container.innerHTML = `
-      <div class="app mp-page mp-countdown-page mp-learn-page">
-        <div class="start-stage mp-learn-stage">
-          <p class="tag-line mp-learn-line">${s.mpLearningWait}</p>
-          <div class="mp-learn-spin">${spinner}</div>
-          <p class="auth-hint mp-practice-hint">${s.mpPracticeHint}</p>
-          <div class="mp-practice" id="mpPractice"></div>
-        </div>
-      </div>
-    `;
-    practiceStop?.();
-    practiceStop = null;
-    setScreenBack(() => confirmLeaveRoom(lang, leaveSeat));
-    const host = container.querySelector<HTMLElement>('#mpPractice');
-    if (host && state.mode && handlers.onPractice) practiceStop = handlers.onPractice(host, state.mode, state.flip);
-  }
-
-  /** 把倒数收回去（有人临时说他不会规则）。轮询不动——它正是等的那件事。 */
-  function cancelCountdown() {
-    window.clearInterval(countdownTimer);
-    countdownTimer = 0;
-    launched = false;
+  function openRoomRules(learn: RoomLearn) {
+    closeRules?.();
+    const tips: ExtraTipView[] = learn.flip ? [{ key: 'flip' }] : learn.slot ? [{ key: 'slot' }] : [];
+    closeRules = openRulesModal({
+      lang,
+      shape: learn.rules,
+      tips,
+      omitRules: learn.flip ? [4, 5] : undefined,
+      flip: learn.flip,
+      top: true,
+      onClose: () => {
+        closeRules = null;
+      },
+    });
   }
 
   function beginCountdown(state: RoomState) {
     if (launched || !state.startAt || !state.seed || !state.mode) return;
     launched = true;
-    // playedRound 要等真开局那一刻才记，不能在这儿记。
-    //
-    // 上面那道关卡看的是 next.round > playedRound；在这里就把它记上，等于
-    // 一开始数数就把自己关在门外——数到一半有人说他不会规则，轮询照样收得
-    // 到，却再也走不进那道关，于是数到 0 照常开局，把还在看教学的人一个人
-    // 留在后面。
+    // playedRound 要等真开局那一刻才记，不能在这儿记：记早了，下一次轮询里
+    // sideline 就把我当成「这一局不在局里」的人（st.round <= playedRound），在
+    // 4-3-2-1 上盖一张等待页。（从前还有一层：数到一半有人说他不会规则，要走得
+    // 进那道关才收得回倒数——2026-10 起没人再让全屋等，那一层没了。）
     const round = state.round;
     // 只收自己的东西，不停轮询。
     //
-    // 从前这里是 stopAll()：数字一开始跳，这台设备就不再问服务器了。于是
-    // 「屋里有人临时说他不会规则」这件事根本传不进来——屋主那边照样数到 0
-    // 就开局，把还在看教学的人一个人留在后面。倒数这几秒恰恰是最需要听着的
-    // 几秒。
+    // 从前这里是 stopAll()：数字一开始跳，这台设备就不再问服务器了。当时传不
+    // 进来的是「屋里有人临时说他不会规则」（2026-10 起不再让全屋等）；如今倒数
+    // 这几秒里要听着的是屋主散场、屋主联系不上（hostNotice）。
     window.clearInterval(countdownTimer);
     countdownTimer = 0;
     // 这一屏把标题框换掉了：收起画布，但书签留着（见 ui/nudgeRain.ts）。
     nudges?.attach(null);
     const { startAt, seed, mode } = state;
-    // 等人学教学那一屏底下的练习盘，这一幕不要了。
-    practiceStop?.();
-    practiceStop = null;
 
     /*
      * 老虎机那一局：这一屏上要有那台机器，而且要真的转。

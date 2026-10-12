@@ -28,6 +28,7 @@ import { gameIcon } from './homeIcons';
 import { custom } from './customIcons';
 import { CHECK_PATH, CHECK_TIGHT_VIEWBOX } from './checkMark';
 import { HOLD_RING, holdWanted, wireHold } from './holdToConfirm';
+import { contestants } from './roomCard';
 
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -121,13 +122,6 @@ export function showWaitPanel(
     meId?: string;
     code?: string;
     onLeave: () => void;
-    /**
-     * 榜上不列这个人。
-     *
-     * 竞赛屋的主持人不参赛（api/room.js 的 isSpectator），他看的就是这一屏——把他
-     * 自己也列进去，就是一行恒定 0 分挂在最后一名。名次也跟着只按选手排。
-     */
-    hideId?: string;
     /** 那颗键上的字。主持人按下去是《解散小屋》，不是《离开小屋》。 */
     leaveLabel?: string;
     /**
@@ -144,6 +138,11 @@ export function showWaitPanel(
      * （无障碍那条路，读屏念的辅助文案写着）；reduced-motion 下退回单击，和《还是离开》一样。
      */
     onForce?: () => Promise<boolean>;
+    /**
+     * 顶上那一行，给这一屏上的这个人看的（10-11 方案 C-5）：答了「我还不会玩」、这一局坐在场边看规则的人，
+     * 关掉规则窗落在这一屏上，要知道自己什么时候入局——「下一局开始时您就加入」。不给就不画。
+     */
+    note?: string;
   },
 ): WaitPanel {
   const s = STRINGS[lang];
@@ -151,8 +150,8 @@ export function showWaitPanel(
     `<span class="start-mark"><span class="start-mark-art">${gameIcon(opts.shapeId)}</span></span>`,
     roomBadge(),
   ];
-  // 和教学等待页同一个转圈的小人（ui/multiplayer.ts 的 showLearningWait 用的
-  // 也是它）。两处等的是同一件事——等屋里别的人——所以该长同一张脸。
+  // 转圈的小人（mp-loading）。从前「小屋里有人在学习，稍等」那一屏用的也是它——两处等的是同一件事，
+  // 所以长同一张脸；那一屏 10-11 方案 C-5 拿掉了（没人再让全屋等）。
   const spinner = custom('mp-loading') ?? '';
   const hold = Boolean(opts.onForce) && holdWanted();
   const overlay = document.createElement('div');
@@ -160,6 +159,7 @@ export function showWaitPanel(
   overlay.id = 'mpWait';
   overlay.innerHTML = `
     <div class="start-stage mp-wait-stage">
+      ${opts.note ? `<p class="mp-wait-note" id="mpWaitNote">${esc(opts.note)}</p>` : ''}
       ${opts.code ? `<p class="mp-wait-code">${s.mpRoomCode} ${esc(opts.code)}</p>` : ''}
       <div class="start-emblem">
         <div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>
@@ -207,8 +207,10 @@ export function showWaitPanel(
   return {
     update(state) {
       if (force) force.hidden = roomPhase(state) !== 'playing';
-      rows.innerHTML = state.players
-        .filter((p) => p.id !== opts.hideId)
+      // 竞赛屋的主持人不列（他不参赛，api/room.js 的 isSpectator）：列进去就是一行恒定 0 分挂在最后一名，名次也
+      // 跟着歪。这件事这一层自己问 contestants（roomCard.ts），不靠调用方传——原先靠主持人那一处传 hideId，选手打完
+      // 交卷之后的那一屏（ui/scoreboard.ts）没传，主持人就挂在选手的等待页上（报告一 #13，10-11 方案 C-7）。
+      rows.innerHTML = contestants(state)
         .map((p, i) => waitRow(p, i + 1, opts.meId, s.mpFinished, s.mpLeftTag))
         .join('');
     },
@@ -252,10 +254,12 @@ export function hostNotice(
       if (!kind) return;
       overlay = document.createElement('div');
       overlay.className = 'overlay show overlay--top';
-      overlay.id = kind === 'gone' ? 'roomCancelled' : 'hostAway';
+      // 'hostGone'（屋主九十秒没动静，10-11 方案 C-3 第 4 条）和 'away' 同一层、同一颗《离开小屋》，只是话不一样：
+      // 「等一下就来」已经是我们不知道的事了。
+      overlay.id = kind === 'gone' ? 'roomCancelled' : kind === 'hostGone' ? 'hostGone' : 'hostAway';
       overlay.innerHTML = `
         <div class="modal">
-          <p class="tag-line">${kind === 'gone' ? s.mpRoomCancelled : s.mpHostFixing}</p>
+          <p class="tag-line">${kind === 'gone' ? s.mpRoomCancelled : kind === 'hostGone' ? s.mpHostGone : s.mpHostFixing}</p>
           <div class="btn-row">
             ${
               kind === 'gone'

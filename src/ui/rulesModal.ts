@@ -143,6 +143,11 @@ export interface RulesModalOptions {
    * 条」，一个是「换一句」，混在一起以后谁也想不起来哪条是哪。
    */
   flip?: boolean;
+  /**
+   * 盖在小屋等待页上开（10-11 方案 C-5：答「我还不会玩」的人坐在场边看规则）。等待页是 `.overlay--wait`
+   * （z-index 100），普通弹窗那一档（90）会开在它底下——看不见、也关不掉。给 true 就抬到 `.overlay--top`。
+   */
+  top?: boolean;
   /** 关掉之后回哪儿。 */
   onClose?: () => void;
   // 从前这儿还有一个 onStory：给了就在五条上头摆两颗键（方块 / 小球），按下去放
@@ -171,7 +176,7 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   const overlay = document.createElement('div');
   // 不加 opaque：这一屏多半是压在棋盘上弹出来的，半透明的遮罩才看得出「这是
   // 一层临时的窗」，不透明的会像是整个换了一屏。
-  overlay.className = 'overlay howto-ov';
+  overlay.className = opts.top ? 'overlay overlay--top howto-ov' : 'overlay howto-ov';
   overlay.innerHTML = `
     <div class="modal howto-modal" role="dialog" aria-modal="true" aria-label="${esc(s.howToPlayBtn)}">
       <h2>${esc(s.howToPlayBtn)}</h2>

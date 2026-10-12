@@ -28,6 +28,9 @@
  *
  * 以及那道边界：座位数是**跟着屋子走**的（meta.seats + seatsFor），不是跟着请求
  * 走的——不然一个 `seats: 99999` 就能让 claimSlot 空转十万圈。
+ *
+ * ⑦（10-11 方案 C-1）：竞赛屋那张卡上的分要有服务器的尺子——倒数里报的分记 0 不钉 final、用时不短于服务器
+ * 量的「开到现在 − 3 秒」、分数不超过这一局的棋盘和玩法打得出的上界。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -271,6 +274,84 @@ const seatOf = (st, id) => (st.players || []).find((p) => p.id === id) || {};
     st2.body.countFrom === 8,
     `countFrom=${st2.body.countFrom}`,
   );
+}
+
+// ---- ⑦ 报上来的分数和用时有一把服务器的尺子（10-11 方案 C-1）-----------------------
+//
+// 原先竞赛屋里倒数还没走完就能报一份「999999999 / 交卷 / 1 秒」：`final` 当场钉死，之后他自己真打的那几条一律
+// 丢掉，那张要发出去的竞赛排名卡上第一名和「单局最快」都归他。三把尺子：
+//   甲 倒数里报的分记 0、不钉 final（坐场边那些人的「这一局不打」照记交卷，不让别人等）；
+//   乙 用时不短于服务器量的「开到现在 − 3 秒」；
+//   丙 分数不超过这一局的棋盘和玩法打得出的上界（_maxscore.js 那一套：基础 T、老虎机 S、无限反转的宽松上界）。
+{
+  const { stepCeiling, slotCeiling, flipCeiling } = await import('../api/_maxscore.js');
+  const raw = async (code, id) => (await hgetall(roomKey(code)))['r:' + id] || {};
+
+  // 甲：倒数里报分
+  const { code, host } = await open(true);
+  const a = await join(code, '甲');
+  const b = await join(code, '乙');
+  const started = await call({ action: 'start', code, ...host, mode: 'square' });
+  check('⑦甲（尺子）报分那一刻还在倒数', started.body.startAt > Date.now(), `${started.body.startAt - Date.now()}ms`);
+  const early = await call({ action: 'score', code, ...a, score: 999999999, finished: true, seconds: 1, round: 1 });
+  const ea = seatOf(early.body, a.playerId);
+  const ra = await raw(code, a.playerId);
+  check('⑦甲 倒数里报的 999999999 记成 0', ea.score === 0 && ra.score === 0, `回包 ${ea.score} / 库里 ${ra.score}`);
+  check('⑦甲 而且不钉 final、用时不记', ra.final !== true && (ra.seconds === null || ra.seconds === undefined),
+    JSON.stringify(ra));
+  check('⑦甲 带着交卷来的照记交卷（坐场边的人不让别人等）', ra.finished === true, String(ra.finished));
+  // 开赛之后他自己真打的那一条盖得回去（没有 final 挡着）。
+  await ageStart(code);
+  const real = await call({ action: 'score', code, ...a, score: 520, finished: true, seconds: 3, round: 1 });
+  const ra2 = await raw(code, a.playerId);
+  check('⑦甲 开赛之后他真打的分盖得回去', seatOf(real.body, a.playerId).score === 520 && ra2.final === true,
+    `${seatOf(real.body, a.playerId).score} / final=${ra2.final}`);
+
+  // 乙：报 1 秒。把开赛时刻拨到 30 秒前（两名选手的 joinedAt 也拨到那之前，不然他们成了「开赛之后才进来的」）。
+  const hash = await hgetall(roomKey(code));
+  const startAt = Date.now() - 30_000;
+  await hset(roomKey(code), 'meta', { ...hash.meta, startAt });
+  await hset(roomKey(code), 'p:' + b.playerId, { ...hash['p:' + b.playerId], joinedAt: startAt - 1000 });
+  await call({ action: 'score', code, ...b, score: 300, finished: true, seconds: 1, round: 1 });
+  const rb = await raw(code, b.playerId);
+  check('⑦乙 开了 30 秒报「1 秒打完」：用时按服务器量的记（30 − 3 = 27 上下）', rb.seconds >= 26 && rb.seconds <= 28,
+    `seconds=${rb.seconds}`);
+  // 尺子：老实报的不动。
+  const { code: c2, host: h2 } = await open(true);
+  const a2 = await join(c2, '甲');
+  await join(c2, '乙');
+  await call({ action: 'start', code: c2, ...h2, mode: 'square' });
+  await ageStart(c2);
+  await call({ action: 'score', code: c2, ...a2, score: 300, finished: true, seconds: 12, round: 1 });
+  const honest = await raw(c2, a2.playerId);
+  check('⑦乙（尺子）刚开赛就交卷、报 12 秒：照记 12', honest.seconds === 12, `seconds=${honest.seconds}`);
+
+  // 丙：超上界按上界截断。三种玩法各一间，同一份 999999999。
+  for (const [label, extra, want] of [
+    ['基础方块（T）', {}, Math.floor(stepCeiling('square'))],
+    ['老虎机方块（S）', { slot: 'same' }, Math.floor(slotCeiling('square'))],
+    ['无限反转方块（宽松上界）', { flip: true }, Math.floor(flipCeiling('square'))],
+    ['六边形小球（T）', { mode: 'circleHex' }, Math.floor(stepCeiling('circleHex'))],
+  ]) {
+    const { code: c, host: h } = await open(true);
+    const x = await join(c, '甲');
+    await join(c, '乙');
+    await call({ action: 'start', code: c, ...h, mode: 'square', ...extra });
+    await ageStart(c);
+    await call({ action: 'score', code: c, ...x, score: 999999999, finished: true, seconds: 40, round: 1 });
+    const r = await raw(c, x.playerId);
+    check(`⑦丙 ${label}：999999999 截到 ${want}`, r.score === want, `score=${r.score}`);
+  }
+  // 尺子：上界以内的分一分不动。
+  {
+    const { code: c, host: h } = await open(true);
+    const x = await join(c, '甲');
+    await join(c, '乙');
+    await call({ action: 'start', code: c, ...h, mode: 'square' });
+    await ageStart(c);
+    await call({ action: 'score', code: c, ...x, score: 12345, finished: true, seconds: 40, round: 1 });
+    check('⑦丙（尺子）上界以内的 12345 一分不动', (await raw(c, x.playerId)).score === 12345);
+  }
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

@@ -89,6 +89,21 @@ async function silentFor(code, playerId, ms) {
 }
 
 /**
+ * 把这一局的倒数摆成「已经走完」：开赛时刻挪到一秒前，在座的人进屋时刻挪到那之前（记账那一句认 joinedAt）。
+ *
+ * 10-11 方案 C-1 之后倒数里报上来的分一律记 0（那会儿一步都还没走，不可能是打出来的）——下面 ⑥ ⑧ 量的是
+ * 「这几分还归不归他」，分得先真记上才量得到。不真等四秒半：check 那一条的节奏不许被拖慢。
+ */
+async function startedAlready(code) {
+  const hash = await hgetall(roomKey(code));
+  const at = Date.now() - 1000;
+  await hset(roomKey(code), 'meta', { ...hash.meta, startAt: at });
+  for (const [f, v] of Object.entries(hash)) {
+    if (f.startsWith('p:') && v) await hset(roomKey(code), f, { ...v, joinedAt: at - 1000 });
+  }
+}
+
+/**
  * 库里那几把椅子，摆成一行行好读的样子。
  *
  * ⚠️ **分数要从 `r:` 那一格读**，不能读 `p:.score`：readRoom 的注释写着「`p:` 里
@@ -188,6 +203,7 @@ const seatsOf = async (code) => {
   const gone = { playerId: g.body.playerId, playerToken: g.body.playerToken };
   await call({ action: 'join', code, name: '乙' });
   await call({ action: 'start', code, ...host, mode: 'square' });
+  await startedAlready(code);
   await call({ action: 'score', code, ...gone, score: 250, finished: true, round: 1 });
   await silentFor(code, gone.playerId, 95_000);
 
@@ -208,6 +224,7 @@ const seatsOf = async (code) => {
   const left = { playerId: g2.body.playerId, playerToken: g2.body.playerToken };
   await call({ action: 'join', code: code2, name: '乙' });
   await call({ action: 'start', code: code2, ...host2, mode: 'square' });
+  await startedAlready(code2);
   await call({ action: 'score', code: code2, ...left, score: 250, finished: true, round: 1 });
   await call({ action: 'leave', code: code2, ...left });
   const back = await call({ action: 'join', code: code2, name: '甲' });
@@ -235,6 +252,7 @@ const seatsOf = async (code) => {
   const seat = { playerId: g.body.playerId, playerToken: g.body.playerToken };
   await call({ action: 'join', code, name: '丁' });
   await call({ action: 'start', code, ...host, mode: 'square' });
+  await startedAlready(code);
   await call({ action: 'score', code, ...seat, score: 300, finished: true, round: 1 });
   await call({ action: 'leave', code, ...seat });
 

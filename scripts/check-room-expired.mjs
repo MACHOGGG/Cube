@@ -7,20 +7,23 @@
  *
  * ── 那个病 ────────────────────────────────────────────────────
  *
- * 小屋在库里二十分钟没人动就过期（api/room.js 的 ROOM_TTL_S）。过期之后每一问都答 404 noRoom，而局中
+ * 小屋在库里二十分钟没人动就过期（api/room.js 的 ROOM_TTL_S）。过期之后每一问都答 409 ended（墓碑还在的那
+ * 二十四小时，10-11 方案 C-3）或者 404 noRoom（墓碑也过了），而局中
  * 那块计分板（ui/scoreboard.ts）对轮询失败一律「什么都不动」——这一种不是「这一下没问到」，是定论：
  * 交了卷的人永远停在等待页上，正打着的人打完也一样。
  *
- * 「过期」是用路由拦截做出来的：让那台设备此后问 /api/room 的每一句都答 404 noRoom——和库里那间屋
+ * 「过期」是用路由拦截做出来的：让那台设备此后问 /api/room 的每一句都答 ended（乙）或 noRoom（丙）——和库里那间屋
  * 真没了的时候服务器答的一字不差。等二十分钟不现实。
  *
  * ── 量的是什么 ────────────────────────────────────────────────
  *
  *   ①（对照）一阵普通的失败（502）：照旧什么都不动——名单、《离开小屋》都还在，没有飘字。不然这一改
  *      就把「网抖一下」也变成了散场。
- *   ② 正打着的人：原地转成单人接着打——飘过「小屋已过期，正在独自游玩」，《离开小屋》撤了、《暂停》
+ *   ② 正打着的人：原地转成单人接着打——飘过「小屋已经结束了，正在独自游玩」，《离开小屋》撤了、《暂停》
  *      露出来，棋盘还在。
- *   ③ 已经交了卷、在等别人的人：等待页撤掉，一句「这间小屋已经过期了。」加一颗《主页》，按下去回主页。
+ *   ③ 已经交了卷、在等别人的人：等待页撤掉，一句「这个小屋已经结束了。」加一颗《主页》，按下去回主页。
+ *   话是屋主散场那同一句（mpErrEnded，10-11 方案 C-3 第 3 条）：原先局中写「已过期」、大厅写「没有这个小屋
+ *   号码」，同一件事三种说法。
  */
 import { chromium } from 'playwright';
 
@@ -130,10 +133,10 @@ check('① 一阵 502：乙那边什么都没动（名单、《离开小屋》�
 await B.page.unroute('**/api/room');
 
 // ── ② 正打着的人：原地转单人 ─────────────────────────────────────────────
-await answerRoom(B.page, 404, 'noRoom');
+await answerRoom(B.page, 409, 'ended');
 const bSolo = await B.page.waitForFunction(() => !document.querySelector('#leaveRoomBtn'), { timeout: 8000 }).then(() => true).catch(() => false);
 const b1 = await look(B.page);
-check('② 小屋过期了，正打着的乙：飘过「小屋已过期，正在独自游玩」', b1.flyby.includes('小屋已过期，正在独自游玩'), JSON.stringify(b1.flyby));
+check('② 小屋过期了（服务器答 ended），正打着的乙：飘过「小屋已经结束了，正在独自游玩」', b1.flyby.includes('小屋已经结束了，正在独自游玩'), JSON.stringify(b1.flyby));
 check('② 原地转成单人：《离开小屋》撤了、名单撤了、《暂停》露出来，棋盘还在',
   bSolo && !b1.leave && b1.rows === 0 && b1.pauseShown && b1.board, JSON.stringify(b1));
 check('② 没被一张遮罩糊住盘面', !b1.notice, b1.notice);
@@ -142,7 +145,7 @@ check('② 没被一张遮罩糊住盘面', !b1.notice, b1.notice);
 await answerRoom(C.page, 404, 'noRoom');
 const cTold = await C.page.waitForSelector('#roomLockedOut', { timeout: 8000 }).then(() => true).catch(() => false);
 const c1 = await look(C.page);
-check('③ 小屋过期了，在等的丙：等待页撤了，一句「这间小屋已经过期了。」', cTold && !c1.wait && c1.notice === '这间小屋已经过期了。',
+check('③ 小屋过期了（墓碑也过了，noRoom），在等的丙：等待页撤了，一句「这个小屋已经结束了。」', cTold && !c1.wait && c1.notice === '这个小屋已经结束了。',
   JSON.stringify(c1));
 check('③ 那颗键写的是《主页》', c1.noticeBtn === '主页', c1.noticeBtn);
 if (cTold) await C.page.click('#roomLockedOk');

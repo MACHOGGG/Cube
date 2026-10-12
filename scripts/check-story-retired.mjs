@@ -8,7 +8,8 @@
  * 做」，入口有三处：
  *
  *   · 个人主页《如何滑？》那一页，五条规则上头的两颗分镜键（.tut-shape-btn）；
- *   · 小屋里答「我不会」——从前放的就是那一族的分镜，现在开规则窗；
+ *   · 小屋里答「我还不会玩」——从前放的就是那一族的分镜，现在开规则窗（10-11 方案 C-5 起
+ *     开在等待页上：轮询不停，关窗只收窗）；
  *   · 小红书《怎么玩》那一屏，五条上头的两颗分镜键（.howto-story，onStory）。
  *
  * 文件本身先留着（不重做，也不急着删），所以这道门量的不是「文件还在不在」，而是
@@ -100,11 +101,42 @@ for (const [name, entry] of [['网页', 'src/main.ts'], ['小红书', 'xhs/src/m
   const modal = readFileSync(join(ROOT, 'src/ui/rulesModal.ts'), 'utf8');
   check('《怎么玩》那一屏不再画分镜键（.howto-story），也不再收 onStory',
     !/class="howto-story/.test(modal) && !/onStory\?:/.test(modal));
-  const main = readFileSync(join(ROOT, 'src/main.ts'), 'utf8');
-  const learn = main.slice(main.indexOf('onLearnTutorial:'), main.indexOf('onPractice:'));
-  check('小屋里答「我不会」：开的是规则窗', /openRulesModal\(/.test(learn));
-  check('小屋里答「我不会」：关窗之后报「学完了」、回小屋',
-    /onClose: \(\) => \{[\s\S]*setLearning\(false, seenTutorials\(\)\)[\s\S]*showMultiplayer\(\)/.test(learn));
+}
+
+/*
+ * 小屋里答「我还不会玩」（10-11 方案 C-5）。从前那一扇窗由 main.ts 的 onLearnTutorial 开：小屋页先 stopAll()
+ * 停掉轮询、向服务器报「我在学」把整屋的开局挂起来，关窗时 showMultiplayer() 整页重进。新流程里他坐在场边，
+ * 轮询一下都不能停——sideline 靠它每次替他交「这一局不打」，不交的话 roundOver 要等他满 90 秒，等于还是整屋
+ * 在等他。所以这一段量的是新那条路：开的是规则窗、开在等待页上面、不停轮询、不报「我在学」、关窗只收窗；
+ * 老那条路（onLearnTutorial / onPractice / learnHeartbeat）在 main.ts 里一行代码都不剩。
+ */
+{
+  /** 去掉注释——这个仓库的注释天天在点名「从前那条路」，不能拿它当代码量。 */
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const mp = code(readFileSync(join(ROOT, 'src/ui/multiplayer.ts'), 'utf8'));
+  const between = (src, from, to) => {
+    const a = src.indexOf(from);
+    const b = a < 0 ? -1 : src.indexOf(to, a + from.length);
+    return a < 0 || b < 0 ? '' : src.slice(a, b);
+  };
+  const notYet = between(mp, 'const notYet = () => {', "addEventListener('click', notYet)");
+  const rules = between(mp, 'function openRoomRules(', '\n  }\n');
+  check('（尺子）切得到「我还不会玩」那一下和开规则窗那一段', notYet.length > 200 && rules.length > 100,
+    `${notYet.length} / ${rules.length} 字`);
+  check('「我还不会玩」那颗键接的就是这一段', /#mpKnowNo'\)!?\.addEventListener\('click', notYet\)/.test(mp));
+  check('小屋里答「我还不会玩」：开的是规则窗', /openRoomRules\(/.test(notYet) && /openRulesModal\(/.test(rules));
+  check('规则窗开在等待页上面（top：等待页是 z-index 100 那一档）', /top: true/.test(rules));
+  check('不停轮询、不报「我在学」、不走整页重进那条老路',
+    !/stopAll\(|setLearning\(true|onLearnTutorial|showMultiplayer|renderLobby\(/.test(notYet + rules));
+  check('记成看过、只报看过（learning: false + seen），这一局记成打过、坐到场边',
+    /markTutorialSeen\(family\)/.test(notYet) && /setLearning\(false, seenTutorials\(\)\)/.test(notYet)
+      && /markRoundPlayed\(state\.round\)/.test(notYet) && /bench\(/.test(notYet));
+  const onClose = between(rules, 'onClose: () => {', '}');
+  check('关窗只收窗（onClose 里不再报、不再重进、不走人）', onClose.length > 0 && !/\w\(/.test(onClose),
+    onClose.replace(/\s+/g, ' ').trim());
+  const main = code(readFileSync(join(ROOT, 'src/main.ts'), 'utf8'));
+  check('main.ts 里老那条路一行代码都不剩（onLearnTutorial / onPractice / learnHeartbeat）',
+    !/onLearnTutorial|onPractice|learnHeartbeat/.test(main));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

@@ -3659,26 +3659,35 @@ body:has(.center-pick--back) .home-nav { display: none; }
   font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
   font-weight: 700; flex: none;
 }
+/*
+ * 竞赛屋二十名选手的总分榜（10-11 方案 C-8）。八个人的榜塞得下，二十个人的塞不下：玩家补充实测，390×844
+ * 上二十行都在屏内，却和倒数那张数字卡、上面那张玩法图叠在一起；375×667 只看得到 19 行，360×640 18 行，
+ * 320×568 16 行，后几名看不到也滚不到。原因是上下那两半（.start-emblem / .start-count）是 `flex: 1 1 0;
+ * min-height: 0`——榜一长，它们被压成一条缝，里面的图和数字卡溢出来盖在榜上；整页又只有 min-height，跟着
+ * 榜一起长，长出屏幕。
+ *
+ * 改成：这一页钉成一屏高；上下两半不许比自己的图和数字卡矮（min-height: auto，平时照旧各占剩下的一半）；
+ * 榜是唯一能缩的那一块，缩不下就在自己里面滚。效果就是「榜的高度上限 = 屏高减去顶上那张图和倒数卡」，
+ * 而老虎机那台机器、无限反转那块说明摆进来的时候不用另算一遍。
+ * 门：check-room-contest-ui 的「选手倒数页」那几条（四种尺寸：榜和数字卡、玩法图不相交，最后一名滚得到）。
+ */
+.mp-countdown-page { height: 100vh; height: 100dvh; }
+.mp-countdown-page .start-emblem, .mp-countdown-page .start-count { min-height: auto; }
+.mp-countdown-page .mp-cd-board {
+  flex: 0 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+.mp-countdown-page .mp-cd-board > * { flex: none; }
 /* 自己那一行：强调色的底和字，一眼能从四行里挑出来。 */
 .mp-cd-row--me { background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
 .mp-cd-row--me .mp-cd-rank { color: var(--accent-ink); }
 .mp-cd-row--left { opacity: 0.6; }
 
-/* 屋里有人在看教学时，其他人那一屏：一句话，加一只慢慢转的标识。
-   转的是它自己的中心，所以 transform-origin 必须是 50% 50%（默认就是，
-   写出来是因为这一条一旦被别处覆盖，图会绕着一个偏心点甩起来）。 */
-/* 这一幕只有一句话和一只转圈的标识，没有开局那一幕的「上半屏图、下半屏
-   数字」两段结构，所以整块居中就好，不然它会缩在屏幕最上面。 */
-.mp-learn-stage { justify-content: center; }
-.mp-learn-line { font-size: 1.05rem; margin: 0 0 22px; }
-.mp-learn-spin {
-  width: min(46vw, 190px); aspect-ratio: 1; margin: 0 auto;
-  animation: mp-learn-turn 3.6s linear infinite;
-  transform-origin: 50% 50%;
-}
-.mp-learn-spin svg { width: 100%; height: 100%; display: block; }
+/* 转圈的小人那一圈。名字是从「屋里有人在看教学，其他人等他」那一屏来的——那一屏连同底下的练习盘
+   10-11 方案 C-5 拿掉了（没人再让全屋等），交卷之后那一页的 .mp-wait-spin 还在用这一圈，所以留着。
+   转的是它自己的中心，所以用它的地方 transform-origin 必须是 50% 50%（默认就是，写出来是因为那一条
+   一旦被别处覆盖，图会绕着一个偏心点甩起来）。 */
 @keyframes mp-learn-turn { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .mp-learn-spin { animation-duration: 9s; } }
 
 /* 催屋主的那场雨。铺满标题玻璃，压在字上面，但不吃任何点击——标题本身是
    一颗能按的键（点它回主菜单）。 */
@@ -5964,10 +5973,6 @@ html.is-playing body { background: var(--play-bg); }
    through 结束 or by finishing it, so there is nothing for it to do here. */
 body:has(.app--game) .home-nav { display: none; }
 html.is-playing .home-nav { display: none; }
-/* 同样的道理，屋里有人在看教学、其他人停在等他那一屏的时候：那一排按钮按下
-   去就等于走出小屋，而这一屏随时会自己翻页。两种写法都留着，理由同上。 */
-body:has(.mp-learn-page) .home-nav { display: none; }
-html.is-waiting-learner .home-nav { display: none; }
 /* 小屋的 4-3-2-1 那一幕也不留底排：数到 0 就开局了，这几秒里没有别处可去。 */
 body:has(.mp-countdown-page) .home-nav { display: none; }
 html.is-counting .home-nav { display: none; }
@@ -6016,15 +6021,10 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 /* 再矮一档（360×640 那类小安卓，或者装了大字体的机器）：招牌和图形再收一档。
    量过：坐满 4 个人时，这一档要再挤出 100px 才够——所以这里动的是最大的那
    两块，而不是把哪一行藏起来。 */
-/* 四根长条是这一页最高的一块（168px）。屏幕矮下来先收它，不是把它藏起来：
-   两档下来是 132 / 104，比例还在（分别是 1.88 和 1.48 倍宽），仍旧是长条。 */
-@media (max-height: 760px) {
-  .mp-page .mp-code-field .pin-cell { height: 132px; }
-  .mp-page .mp-join-block { margin: 6px auto 28px; }
-}
+/* 四根长条和它上下那两道缝的矮屏档不在这儿：写在这儿的话排在它们的基础规则前面、权重一样，
+   后写的赢——从前就是这么写的，那两档一天都没生效过（10-11 方案 C-8）。挪到 .mp-page .mp-join-block
+   那条底下了。 */
 @media (max-height: 680px) {
-  .mp-page .mp-code-field .pin-cell { height: 104px; }
-  .mp-page .mp-join-block { margin: 4px auto 14px; }
   .mp-page { gap: 4px; }
   .mp-page .home-head { margin-bottom: 4px; padding-top: 0; }
   .mp-page .mp-code-card .auth-hint { margin: 0; line-height: 1.3; }
@@ -6286,6 +6286,12 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 .mp-page .mp-back { --ctl-disc: var(--mp-blue); --ctl-mark: #FFFFFF; flex: none; }
 /* 底下那一截留给《退出》：它离底的距离 ＋ 它自己 ＋ 16px（见 .page-exit；10-08 方案 3-F-2 起它是
    --exit-disc 那个尺寸，中间那个 clamp 照抄那个 token）。前一行是老内核的兜底。 */
+/* 断网时表单最上面那一句「多人游玩需要联网」（10-11 方案 H-2）：说的是「需要什么」，不是「出错了」，所以
+   是淡一档的正文色，不是红字。它挤掉的那十几像素在 320×568 这种矮屏上要算进去（见 check-offline）。 */
+.mp-offline {
+  margin: 0; text-align: center; color: var(--ink-soft);
+  font-size: 0.85rem; line-height: 1.3;
+}
 .mp-page--home { padding-bottom: 208px; }
 .mp-page--home { padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 
@@ -6320,6 +6326,28 @@ html.is-room-home .home-nav { display: none; }
    72px（稿上换算到 390 宽的屏幕）。上面那一道里坐着 Pro 那行小字——它平时看不见，位置
    一直留着（见 .mp-contest-hint）。 */
 .mp-page .mp-join-block { margin: 11px auto 50px; }
+/*
+ * 矮屏幕先收四根长条（168px，这一页最高的一块）和它上下那两道缝，不是把它们藏起来：三档下来是
+ * 132 / 104 / 72，仍旧是竖着的长条。
+ *
+ * **这几档必须排在上面两条基础规则后面**（10-11 方案 C-8）。前两档从前写在 max-height 760 / 680 那两个
+ * @media 里，排在基础规则前面、权重一样——后写的赢，于是一天都没生效过：玩家补充实测，375×667 上条子照旧
+ * 168 高、整页多出 51px；360×640 上页底那颗《退出》（.page-exit，钉在屏幕上）压住条子 2px；320×568 上压住
+ * 73px。第三档（600）是给 320×568 那一类的：前两档挪过来之后那儿还压着 10px；断网时表单顶上还要多摆一句
+ * 「多人游玩需要联网」（10-11 方案 H-2，二十来像素），72 才让得开（check-offline 量那一种）。
+ * 门：check-room-contest-ui 的「设置页」那几条（四种尺寸，量《退出》和四格相不相交）。
+ */
+@media (max-height: 760px) {
+  .mp-page .mp-code-field .pin-cell { height: 132px; }
+  .mp-page .mp-join-block { margin: 6px auto 28px; }
+}
+@media (max-height: 680px) {
+  .mp-page .mp-code-field .pin-cell { height: 104px; }
+  .mp-page .mp-join-block { margin: 4px auto 14px; }
+}
+@media (max-height: 600px) {
+  .mp-page .mp-code-field .pin-cell { height: 72px; }
+}
 /* 屋号那一格自己就是个「大号的格子」：2rem、居中、拉开字距。浮动标签那一套在这儿要
    让路——标签不压在数字上，它就挂在框的上沿，一直挂着（这个框只有四位数字，没有「空
    着像占位提示」那个需求）。 */
@@ -6356,6 +6384,20 @@ html.is-room-home .home-nav { display: none; }
   display: flex; flex-direction: column; gap: 8px;
   width: 100%; max-width: 320px; margin: 0 auto;
 }
+/*
+ * 竞赛屋的小屋页（10-11 方案 C-8）：二十一个名字的名单在自己里面滚，屋主那颗《去主菜单选玩法》不用先
+ * 滑过二十一个名字——玩家补充实测，390×844 上它落在 1318px，要往下滑一屏半才找得到；客人那颗《催屋主》
+ * 也一样。和倒数页同一个做法：这一页钉成一屏高（底排那一截照旧由 .app 的下内边距让出来），名单是唯一能
+ * 缩的那一块，别的照原样排；名单最少留两行半，再矮的屏幕宁可整页滚一点。
+ * 普通八人屋不挂这个类，一个像素没动。
+ */
+.mp-page--contest { height: 100vh; height: 100dvh; }
+.mp-page--contest > * { flex-shrink: 0; }
+.mp-page--contest .mp-players {
+  flex: 0 1 auto; min-height: 96px;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+.mp-page--contest .mp-players > * { flex: none; }
 .mp-player {
   display: flex; align-items: center; gap: 10px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px 12px;
@@ -6475,9 +6517,6 @@ body.is-room-host::after {
 }
 /* 多人这一页底下常驻着导航栏，倒数的窗口得给它让开一截，不然贴在一起。 */
 .mp-countdown-page .start-stage { padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 96px); }
-/* 等人学教学的那一屏没有底排，那 96px 就不用让了，那句话落在整屏正中间。
-   写在上面那条之后：两条权重一样，靠先后决胜负。 */
-.mp-learn-page .start-stage { padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); }
 
 /* 「正在重连」那一页：只有两行字，居中就够了。 */
 .mp-wait-page { justify-content: center; min-height: 70vh; }
@@ -6559,8 +6598,15 @@ body.is-room-host::after {
 /* 交卷之后那一页上的两件东西。
    小屋号放最上面：这一页要停留好几分钟（在等别人），而屋号正是这时候最可能
    被人问起的那一个数——「你们几号房来着」。
-   转圈的小人和教学等待页是同一个（.mp-learn-spin），只是这一页底下还压着实
-   时名单和一颗键，所以收小一半，不然名单要被挤到屏幕外面去。 */
+   转圈的小人和从前「等人学教学」那一屏是同一个（那一屏 10-11 方案 C-5 拿掉了），
+   这一页底下还压着实时名单和一颗键，所以收小一半，不然名单要被挤到屏幕外面去。 */
+/* 屋号上面那一行（showWaitPanel 的 note）：答了「我还不会玩」、这一局坐在场边看规则的人关掉规则窗，
+   落在这一页上，第一眼要看到的是自己什么时候入局（10-11 方案 C-5）。它是写给他一个人的话，比屋号
+   要紧，所以压在屋号上面、字不打淡；名单再长也不许把它挤没（flex: none）。 */
+.mp-wait-note {
+  flex: none; margin: 0 0 8px; text-align: center;
+  font-size: clamp(14px, 3.8vw, 18px); font-weight: 700; color: var(--ink);
+}
 .mp-wait-code {
   margin: 0 0 6px; text-align: center; letter-spacing: .12em;
   font-size: clamp(13px, 3.4vw, 17px); opacity: .72;
@@ -6602,6 +6648,27 @@ body.is-room-host::after {
 }
 .overlay--wait .start-actions { flex: 0 0 auto; }
 .overlay--wait .start-act { width: auto; padding: 10px 22px; }
+/*
+ * 屋主那颗「按住不等了」（10-11 方案 C-8）：玩家报的是字被挤成一字一行竖排，390×844 上也是。
+ *
+ * 它挂着两条更重的规则：`.start-actions .icon-btn.start-act` 把这一排的键都定成《退出》那颗圆盘的尺寸
+ * （73–99 见方，上面那条 width: auto 权重不够，压不过它），`> svg { width: 100% }` 又把按住时填满的那个
+ * 圆环（本来 18px，.leave-ring）撑成整颗键那么大——五个字只剩一条缝。所以这儿把这一颗的宽放开、字不许
+ * 折、圆环回到自己的 18px；最小宽度还是那颗圆盘，和旁边的《解散小屋》一样高。`flex: none` 也要：全站的
+ * `button { flex: 1 }` 会让它和旁边那颗按比例分这一排的宽，字一长（法语），键比字窄，字就压到旁边那颗上。
+ * 这一排撑满整行（width: 100%）：它原先照内容收宽，这一颗不再跟着分之后，旁边那颗只分到剩下的一点，
+ * 英语的《Disband room》被挤成两行。
+ * 法语那一句最长（«Maintenir pour ne plus attendre»，连圆环 276px），窄屏上一行摆不下两颗，就让这一排折成
+ * 两行，不让字折。宽度也不封顶（max-width: none）：320 宽的屏上这一排只有 240px，封在 100% 的话键比字窄，
+ * 字两头各探出键框 18px；不封的话键跟着字宽，在这一排里居中，两边离屏幕边各还有二十来像素。
+ * 门：check-room-contest-ui（四种尺寸、三种语言量这颗键上的字是一行、整段在键里、键在屏幕里）。
+ */
+.overlay--wait .start-actions { flex-wrap: wrap; row-gap: 10px; width: 100%; }
+.overlay--wait .start-actions .icon-btn.start-act#mpWaitForce {
+  flex: none; width: auto; max-width: none; min-width: var(--exit-disc-min);
+  padding: 0 14px; white-space: nowrap;
+}
+.overlay--wait .start-actions .icon-btn.start-act#mpWaitForce > svg.leave-ring { width: 18px; height: 18px; }
 
 /* 交了卷的人，名字后面一个小勾。房间页、局中的名单、交卷之后的等待页，
    三处是同一个记号——「他已经交了」这件事在哪儿看都该长一个样。 */
@@ -6840,30 +6907,6 @@ body.is-room-host::after {
   padding: 26px 22px; min-height: 46vh;
 }
 .rank-page-panel .rank-body { overflow: visible; }
-
-/* ---------- 等人学教学那一屏底下的练习盘 ---------- */
-/* 那句话和转圈的小人往上收一收，盘占下半屏。 */
-.mp-learn-page .mp-learn-spin { width: min(30vw, 120px); }
-.mp-learn-page .mp-learn-line { margin-bottom: 10px; }
-.mp-practice-hint { margin: 10px 0 6px; text-align: center; }
-.mp-practice {
-  /* 两行写法（带 % 的 min() 算不掉，见 .start-mark-art 那段）：老内核上退回
-     100%，只丢掉 420 那个上限。 */
-  width: 100%; width: min(100%, 420px); height: clamp(220px, 44vh, 440px);
-  display: flex; flex-direction: column; margin: 0 auto;
-}
-/* 真的游戏外壳装进这个小框里：外壳只剩棋盘，读数、按键、图示、开局页那一层
-   都不画（练习盘一挂上就直接开打）。横屏那套网格排布在这儿也不要——框子是
-   竖着的一小块。 */
-.mp-practice .app--game {
-  display: flex !important; flex-direction: column;
-  width: 100%; max-width: none; min-height: 0; max-height: none; height: 100%;
-  padding: 0; gap: 0; background: transparent; overflow: hidden;
-}
-.mp-practice .app--game > h1, .mp-practice .app--game > .tag-line,
-.mp-practice .hud, .mp-practice .controls, .mp-practice .legend,
-.mp-practice .hud, .mp-practice .overlay { display: none !important; }
-.mp-practice .board-wrap { flex: 1; min-height: 0; margin: 0; }
 
 /* ---------- 教学那一排：四颗圆盘图示 ---------- */
 .story-controls { gap: 14px; }

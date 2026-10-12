@@ -35,12 +35,18 @@
  *
  * ③ **用时说不通的时候只丢用时，分照记。** 分数是这一局的成绩，用时只多喂一个「单局
  *    最快」；为一个说不通的秒数把整份报分退回去，等于拿他这一局的分去赌这把尺子没写
- *    错。尺子只在**开赛之后**架得起来（倒数里「用了多久」压根不存在）。
+ *    错。尺子只在**开赛之后**架得起来（倒数里「用了多久」压根不存在）。往下也有一道
+ *    （10-11 方案 C-1）：报得比「开到现在 − 3 秒」还短的，按服务器量的那个数记。
  *
- * ⑪ **报上来的分封在 MAX_SCORE（十亿）以内，累计总分保持有限数**（10-09 补充方案 7-6）。从前
- *    只收拾负数和非数字：一份 1e300 原样存下，名单上印着 1e+300；1e308 两局一加溢出成 Infinity，
- *    写进库里（JSON）变成 null，读回来是 0——一晚上的累计总分悄悄清零。封顶之前就存进去的旧数，
- *    记账（bankRound）那一头再夹一次。上限和排行榜是同一个常量（api/_maxscore.js）。
+ * ⑦ **倒数还没走完时报上来的：分数记 0、用时不记、不钉 final**（10-11 方案 C-1）。原先照收，
+ *    「999999999 / 交卷 / 1 秒」当场钉死，之后他自己真打的一律丢掉。带着交卷来的照记交卷——
+ *    那是坐场边的人替自己交的「这一局不打」，不记的话全屋要等他。
+ *
+ * ⑪ **报上来的分封在这一局打得出的上界以内，累计总分保持有限数**（10-09 补充方案 7-6 封十亿；
+ *    10-11 方案 C-1 收到这一局的棋盘和玩法的上界，方块基础就是 T）。从前只收拾负数和非数字：一份
+ *    1e300 原样存下，名单上印着 1e+300；1e308 两局一加溢出成 Infinity，写进库里（JSON）变成 null，
+ *    读回来是 0——一晚上的累计总分悄悄清零。封顶之前就存进去的旧数，记账（bankRound）那一头按十亿
+ *    再夹一次。上限和排行榜是同一个文件（api/_maxscore.js）。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -141,23 +147,23 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
 // ---- ② 交过卷之后，迟到的那条「还在打」盖不动它 -------------------------
 {
   const { code, host, guest } = await openRoom(RAN_FOR_S);
-  // 12 秒落在尺子里面（这一局摆成已经开了 RAN_FOR_S＝20 秒，上限是 20＋15）。这一节量
-  // 的是 final，不是尺子——报一个说不通的秒数，那一下会看起来像「用时莫名丢了」。
-  await call({ action: 'score', code, ...guest, score: 500, finished: true, seconds: 12, round: 1 });
+  // 18 秒落在尺子里面（这一局摆成已经开了 RAN_FOR_S＝20 秒：下限 20－3，上限 20＋15）。这一节
+  // 量的是 final，不是尺子——报一个说不通的秒数，那一下会看起来像「用时莫名丢了」或者「被改了」。
+  await call({ action: 'score', code, ...guest, score: 500, finished: true, seconds: 18, round: 1 });
   const late = await call({ action: 'score', code, ...guest, score: 430, finished: false, round: 1 });
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('② 迟到那条不带 finished：回包明说没收下', late.body.scoreDropped === true, String(late.body.scoreDropped));
   check('② 分数还是 500', p.score === 500, String(p.score));
   check('② 交卷的勾还在（不然全屋等一个已经走的人）', p.finished === true, String(p.finished));
-  check('② 用时也还在', p.seconds === 12, String(p.seconds));
+  check('② 用时也还在', p.seconds === 18, String(p.seconds));
   // 交完卷再来一条带 finished 的（想改分）：也盖不动。拆计分板时补的那一条报的是钉死的
   // 同一个数，挡掉什么都不少（见文件头 ②）。
-  const last = await call({ action: 'score', code, ...guest, score: 9999, finished: true, seconds: 13, round: 1 });
+  const last = await call({ action: 'score', code, ...guest, score: 9999, finished: true, seconds: 19, round: 1 });
   const q = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('② final 之后再发一条带 finished 的：被丢，回包明说没收下', last.body.scoreDropped === true,
     String(last.body.scoreDropped));
   check('② 分数还是交卷那一刻的 500（不许交完卷再改分）', q.score === 500, String(q.score));
-  check('② 用时也还是交卷那一刻的', q.seconds === 12, String(q.seconds));
+  check('② 用时也还是交卷那一刻的', q.seconds === 18, String(q.seconds));
 }
 
 // ---- ③ 没交卷之前，一条条盖上去是正常的 --------------------------------
@@ -224,17 +230,26 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   check('⑥ 45 秒（线外面）：丢掉，分照记', p.seconds === null && p.score === 710, `${p.seconds} / ${p.score}`);
 }
 
-// ---- ⑦ 倒数还没走完的时候不量 ------------------------------------------
+// ---- ⑦ 倒数还没走完时报上来的：分数记 0、用时不记、不钉 final（10-11 方案 C-1）----------
 //
-// 那会儿「用了多久」压根不存在（这一局一步都还没走），`Date.now() - startAt` 是负的。
-// 拿一把量不出东西的尺子去裁，裁掉的只会是别的东西——倒数里真会来的那种「交卷」是客
-// 户端的 sitOut（开局之后才进来的人、竞赛屋的主持人），它本来就不带 seconds。
+// 那会儿这一局一步都还没走，报上来的分和用时不可能是打出来的。原先照收：分数原样、用时原样（「这儿没有尺子，
+// 不装作有」），final 当场钉死——之后他自己真打的那几条一律丢掉。倒数里真会来的那种「交卷」是客户端的 sitOut
+// （开局之后才进来的人、竞赛屋的主持人、小屋里说「我还不会玩」去看规则的人），交卷那一位照记，不让别人等。
 {
   const { code, host, guest, startAt } = await openRoom(0);
   check('⑦ 量程：这会儿倒数还没走完', startAt > Date.now(), `还有 ${startAt - Date.now()}ms`);
   await call({ action: 'score', code, ...guest, score: 300, finished: true, seconds: 20, round: 1 });
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
-  check('⑦ 倒数里报的用时：照记（这儿没有尺子，不装作有）', p.seconds === 20, String(p.seconds));
+  const run = await runOf(code, guest.playerId);
+  check('⑦ 倒数里报的 300 分记成 0、用时不记', p.score === 0 && p.seconds === null, `${p.score} / ${p.seconds}`);
+  check('⑦ 不钉 final，交卷照记（坐场边的人不让别人等）', run.final !== true && run.finished === true, JSON.stringify(run));
+  // 开赛之后他自己真打的那一条盖得回去。
+  const hash = await hgetall(roomKey(code));
+  const at = Date.now() - RAN_FOR_S * 1000;
+  await hset(roomKey(code), 'meta', { ...hash.meta, startAt: at });
+  await call({ action: 'score', code, ...guest, score: 410, finished: true, seconds: 19, round: 1 });
+  const q = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
+  check('⑦ 开赛之后真打的那一条盖得回去', q.score === 410 && q.seconds === 19, `${q.score} / ${q.seconds}`);
 }
 
 // ---- ⑧ 用时不是个数 / 是负数：只丢用时 ---------------------------------
@@ -289,9 +304,12 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   check('⑩ 还没开局：那一格没写', !run || (run.score === 0 && !run.finished), JSON.stringify(run));
 }
 
-// ---- ⑪ 报分封顶：1e300 存下来是十亿，累计总分一直是有限数（10-09 补充方案 7-6） ----------
+// ---- ⑪ 报分封顶：1e300 存下来是这一局的上界，累计总分一直是有限数（10-09 补充方案 7-6、10-11 方案 C-1）----
 {
-  const { MAX_SCORE } = await import('../api/_maxscore.js');
+  const { MAX_SCORE, stepCeiling } = await import('../api/_maxscore.js');
+  /** 方块基础这一局打得出的上界 T（api/room.js 的 roomCeiling）。报上来的新数封在它以内；库里封顶之前的旧数记账时按十亿夹。 */
+  const CAP = Math.floor(stepCeiling('square'));
+  check('⑪（尺子）方块基础的上界比十亿小（下面「新数封在上界、旧数按十亿夹」才分得开）', CAP > 0 && CAP < MAX_SCORE, String(CAP));
   const scoresSrc = (await import('node:fs')).readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
   check('⑪（尺子）上限是十亿，排行榜从同一个文件取（不再自己写一份）',
     MAX_SCORE === 1e9 && /import \{[^}]*\bMAX_SCORE\b[^}]*\} from '\.\/_maxscore\.js'/.test(scoresSrc) && !/const MAX_SCORE\s*=/.test(scoresSrc),
@@ -299,15 +317,15 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
   const { code, host, guest } = await openRoom(RAN_FOR_S);
   const live = await call({ action: 'score', code, ...guest, score: 1e300, finished: false, round: 1 });
   check('⑪ 报 1e300（还在打）：照收，没被丢', live.status === 200 && live.body.scoreDropped === undefined, `${live.status} ${live.body.scoreDropped}`);
-  check('⑪ 存下来的是十亿', (await runOf(code, guest.playerId))?.score === MAX_SCORE, JSON.stringify(await runOf(code, guest.playerId)));
-  check('⑪ 名单上也是十亿（不是 1e+300）', seatOf(live, guest.playerId).score === MAX_SCORE, String(seatOf(live, guest.playerId).score));
-  await call({ action: 'score', code, ...guest, score: 1e308, finished: true, seconds: 12, round: 1 });
-  check('⑪ 交卷那一条报 1e308：存下来的还是十亿', (await runOf(code, guest.playerId))?.score === MAX_SCORE,
+  check('⑪ 存下来的是这一局的上界', (await runOf(code, guest.playerId))?.score === CAP, JSON.stringify(await runOf(code, guest.playerId)));
+  check('⑪ 名单上也是上界（不是 1e+300）', seatOf(live, guest.playerId).score === CAP, String(seatOf(live, guest.playerId).score));
+  await call({ action: 'score', code, ...guest, score: 1e308, finished: true, seconds: 18, round: 1 });
+  check('⑪ 交卷那一条报 1e308：存下来的还是上界', (await runOf(code, guest.playerId))?.score === CAP,
     JSON.stringify(await runOf(code, guest.playerId)));
-  await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 10, round: 1 });
+  await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 18, round: 1 });
   const r2 = await call({ action: 'start', code, ...host, mode: 'circle' });
   const g2 = seatOf(r2, guest.playerId);
-  check('⑪ 记完第 1 局：累计十亿，是有限数', r2.body.round === 2 && g2.total === MAX_SCORE && Number.isFinite(g2.total),
+  check('⑪ 记完第 1 局：累计是上界，是有限数', r2.body.round === 2 && g2.total === CAP && Number.isFinite(g2.total),
     `round ${r2.body.round} total ${g2.total}`);
 
   // 封顶之前就存进去的旧数：直接摆进 `r:`（一份 1e308、交了卷），看记账那一头夹不夹。连着两局——
@@ -318,16 +336,18 @@ const runOf = async (code, id) => (await hgetall(roomKey(code)))['r:' + id];
     const meta = (await hgetall(roomKey(code))).meta;
     await hset(roomKey(code), 'meta', { ...meta, startAt: Date.now() - RAN_FOR_S * 1000 });
     await hset(roomKey(code), 'r:' + guest.playerId, { score: 1e308, finished: true, seconds: 9, final: true, forced: false });
-    await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 10, round });
+    await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 18, round });
     const nx = await call({ action: 'start', code, ...host, mode: round === 2 ? 'square' : 'circle' });
     const g = seatOf(nx, guest.playerId);
-    check(`⑪ 库里摆着封顶之前的旧数 1e308，记完第 ${round} 局：累计 ${round} × 十亿，是有限数`,
-      nx.body.round === round + 1 && g.total === round * MAX_SCORE && Number.isFinite(g.total) && g.best === MAX_SCORE,
+    const want = CAP + (round - 1) * MAX_SCORE;
+    check(`⑪ 库里摆着封顶之前的旧数 1e308，记完第 ${round} 局：累计 ${want}（第 1 局的上界 ＋ 旧数各按十亿夹），是有限数`,
+      nx.body.round === round + 1 && g.total === want && Number.isFinite(g.total) && g.best === MAX_SCORE,
       `round ${nx.body.round} total ${g.total} best ${g.best}`);
   }
   const card = await call({ action: 'end', code, ...host });
   const last = seatOf(card, guest.playerId);
-  check('⑪ 散场那张卡上：累计总分是有限数，单局最高是十亿', Number.isFinite(last.total) && last.total === 3 * MAX_SCORE && last.best === MAX_SCORE,
+  check('⑪ 散场那张卡上：累计总分是有限数，单局最高是十亿（旧数夹出来的）',
+    Number.isFinite(last.total) && last.total === CAP + 2 * MAX_SCORE && last.best === MAX_SCORE,
     `total ${last.total} best ${last.best}`);
 }
 

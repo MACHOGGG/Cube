@@ -154,11 +154,12 @@ export function roomPhase(st: RoomState): RoomPhase {
 }
 
 /**
- * 屋主此刻出了什么事。`'gone'` 是「这间屋子开不出下一局了」，`'away'` 是「等他一下」。
+ * 屋主此刻出了什么事。`'gone'` 是「这间屋子开不出下一局了」，`'away'` 是「等他一下」，`'hostGone'` 是「他
+ * 九十秒没动静了：屋子没散，可等不等由你」（10-11 方案 C-3 第 4 条）。
  * 摆在这儿而不是摆在画提示那个文件里：它和 roomPhase 一样，是**从一份状态里读出来
  * 的结论**，读它的有三处（两处提示 + 一处判散场），而画提示只是其中一处的用法。
  */
-export type HostTrouble = 'gone' | 'away';
+export type HostTrouble = 'gone' | 'away' | 'hostGone';
 
 /**
  * 这一刻屋主出了什么事，从一份房间状态里读出来。
@@ -204,21 +205,23 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
   // 但服务器要过了宽限期还没再听见他才置这个位（api/room.js 的
   // BYE_GRACE_MS）：屋主刷新的那几秒里，屋里看到的是 away（等一下就来），
   // 不是这一条。
-  // ⚠️ **太久没动静（gone）不再算「走了」。**
+  // ⚠️ **太久没动静（gone）不算「走了」。**
   //
   // 它从前和 left / closed 归在一起，于是「屋主的手机黑了 90 秒」和「屋主按了离开」
   // 在屋里人眼里是同一件事：小屋当场解散。可这两件事差得远——按《离开》是他自己的决
   // 定，座位都交回去了；90 秒没心跳只是他那台设备没说话，而他多半正拿着手机走回来。
   //
-  // 现在 gone 归到 `'away'` 这一档：屏幕上说「屋主暂时联系不上」，等他。全员交完卷之
-  // 后那一路（scoreboard 里 `runFinished() && state.roundOver` 那一支）照常把人送回小
-  // 屋页——比分和名次就在那一页上，屋主回来接着挑下一场。
+  // 所以 gone 不散场，单独一档 `'hostGone'`（10-11 方案 C-3 第 4 条）。它原先并进 `'away'`，屏幕上写的是「屋主
+  // 等一下就来」——可九十秒没听见他，「等一下就来」是我们不知道的事。现在那一句说实话：「屋主暂时联系不上，可以
+  // 先离开小屋。」屋子不散、谁也不被请出去，等不等由他自己。全员交完卷之后那一路（scoreboard 里
+  // `runFinished() && state.roundOver` 那一支）照常把人送回小屋页，屋主回来接着挑下一场。
   //
   // 真的走了只剩两种：座位不在了 / 座位还在但人已经交回去了（left），以及把网页关掉
   // 了（closed——只有 bye 那条路会置上，切应用、锁屏都不算）。那两种确实开不出下一
   // 局，散场是对的。
   if (!host || host.left || host.closed) return 'gone';
-  return host.away || host.gone ? 'away' : null;
+  if (host.gone) return 'hostGone';
+  return host.away ? 'away' : null;
 }
 
 export type RoomError =
@@ -252,6 +255,11 @@ export type RoomError =
    */
   | 'blocked'
   | 'bad'
+  /**
+   * 服务器那头出了错（5xx），而且说不出是哪一种（10-11 方案 C-3 第 1 条）。原先认不出的一律落成 'network'——
+   * 屏幕上写「连不上网络」，他去查一个好好的 Wi-Fi。这一档是客户端按状态码认出来的，服务器自己不说这个词。
+   */
+  | 'server'
   | 'network';
 
 export type RoomResult<T> =
@@ -448,8 +456,8 @@ export const serverTime = (): number => Date.now() + clockOffset;
 export const hasServerClock = (): boolean => bestClock !== null;
 
 /**
- * 服务器答的这些词原样交给界面（ui/multiplayer.ts 的 errorText 各有一句话）；不在单子上的一律
- * 当成 'network'——屏幕上写「连不上网络」。
+ * 服务器答的这些词原样交给界面（ui/multiplayer.ts 的 errorText 各有一句话）；不在单子上的：5xx 当成
+ * 'server'（「服务器暂时出错」，10-11 方案 C-3），别的当成 'network'——屏幕上写「连不上网络」。
  *
  * `blocked` / `bad`（名字过不了关）第 16 推就在服务器和 errorText 里了，**单子上却一直没有**
  * （2026-10-08 方案 2-1）：没登录的人敲了一个词表里的名字，屏幕上说「连不上网络」，他去查
@@ -459,7 +467,7 @@ export const hasServerClock = (): boolean => bestClock !== null;
 const KNOWN: RoomError[] = [
   'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',
   'tooFew', 'mode', 'ended', 'busy', 'notConfigured', 'tooMany',
-  'blocked', 'bad',
+  'blocked', 'bad', 'server',
 ];
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
@@ -501,7 +509,9 @@ async function post<T>(body: unknown): Promise<RoomResult<T>> {
     if (!res.ok) {
       return {
         ok: false,
-        reason: KNOWN.find((k) => k === reply.error) ?? 'network',
+        // 认不出的词：5xx 是服务器那头的事（'server'），不是网络（10-11 方案 C-3 第 1 条）。真连不上走的是下面
+        // 那个 catch。
+        reason: KNOWN.find((k) => k === reply.error) ?? (res.status >= 500 ? 'server' : 'network'),
         // A refusal can carry facts too — "full" says how many seats there
         // actually are, which is the number the message needs.
         ...(typeof reply.seats === 'number' ? { seats: reply.seats } : {}),
@@ -737,6 +747,15 @@ export function endRoom(): Promise<RoomResult<RoomState>> {
   return post<RoomState>({ action: 'end', ...session });
 }
 
+/**
+ * 交座位那一条没送到时，隔多久再送一次（10-11 方案 C-4）：1 秒、3 秒、8 秒之后各一次，一共再送三次。
+ *
+ * 原先只送一次：网晃一下没送到，本机已经忘了这间屋，服务器上他的椅子却还占着——满屋的时候新朋友进不来，要等
+ * 九十秒没心跳才收得回（api/room.js 的 claimSeat）。服务器那头 leave 只有一种答法（200），没送到的只会是网络、
+ * 5xx 这几种，所以凡是没成就再送。
+ */
+const LEAVE_RETRY_MS = [1000, 3000, 8000];
+
 export async function leaveRoom(): Promise<void> {
   if (!session) return;
   const leaving = session;
@@ -745,21 +764,26 @@ export async function leaveRoom(): Promise<void> {
   lastStateAt = 0;
   rememberSeat(null);
   forgetPlayed();
-  await post({ action: 'leave', ...leaving });
+  const first = await post({ action: 'leave', ...leaving });
+  if (first.ok) return;
+  // 再送的那几次在后台跑，不让调用方等：走的人要马上看到那张总战绩图（ui/multiplayer.ts 的 leaveSeat 等的就是
+  // 这一句），不能让他对着屏幕干等十几秒。回包里没有房间状态（leave 只回 ok），不会把上面刚清掉的那一份写回去。
+  void (async () => {
+    for (const ms of LEAVE_RETRY_MS) {
+      await new Promise((r) => setTimeout(r, ms));
+      if ((await post({ action: 'leave', ...leaving })).ok) return;
+    }
+  })();
 }
 
 /**
- * 「我去看教学了」／「我看完了」。
+ * 向小屋报「我看过哪几族的规则」（seen）。回来的是这一刻的房间状态。
  *
- * 看完的那一下是有后果的：服务器发现全屋都不学了，会把开赛时刻重新盖一遍，
- * 于是所有人一起从 4 数起。所以这个调用要等它回来再往下走。
- */
-/**
- * 「我在学」/「我学完了」。
- *
- * 回来的是这一刻的房间状态——学完那一下要看它：开赛时刻是不是已经过去了
- * （小屋没等他，这一局不是他的了）。学的过程中每点一下也走这里（见 main.ts
- * 的 learnHeartbeat），二十秒不来一声，服务器就不再等。
+ * 2026-10 起（10-11 方案 C-5）客户端只报 `learning: false`：答「我会玩」、答「我还不会玩」都记成看过，服务器
+ * 照记 seen——下一局不再为他多留四秒（api/room.js 的 ASK_MS），也**不再挂起开局**。从前答「不会」报的是
+ * `learning: true`，服务器把整屋的开局挂起来等他最多 90 秒，看规则的过程中每点一下还要再报一声（main.ts 的
+ * learnHeartbeat，已删）；「是不是新手」是客户端自报的，谁都能拿这一声把整屋拦住（报告一 #11）。`learning`
+ * 这一位留着：在途的旧客户端还会发 true，服务器照收、不挂。
  */
 export async function setLearning(learning: boolean, seen?: readonly string[]): Promise<RoomState | null> {
   if (!session) return null;

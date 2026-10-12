@@ -116,6 +116,64 @@ check(
   `被挡 ${beaconBlocked} / 400`,
 );
 
+// ── ⑤ 报分按座位限速：一屋二十一个人同一个 IP 照常报，同一个座位狂发被挡（10-11 方案 C-6）──────
+//
+// 原先报分一条限速都没有。新加的那一道是**按座位**的（api/room.js 的 SCORE_RATE，十秒四十次）：按 IP 的话，竞赛屋
+// 二十一个人在同一个教室 Wi-Fi 后面，一起报分就一起被挡。而且它排在 seatOf 验过座位之后——拿别人的 playerId、
+// 配一把错的令牌狂发，挡掉的是这几条（403），他的桶一格都不占。
+{
+  const { hset, hgetall } = await import('../api/_store.js');
+  const big = await call({ action: 'create', name: 'HOST2', contest: true, ...who }, '198.51.100.2');
+  const room2 = big.body.code;
+  const seats = [{ playerId: big.body.playerId, playerToken: big.body.playerToken }];
+  for (let i = 1; i <= 20; i++) {
+    const g = await call({ action: 'join', code: room2, name: '选手' + i }, '192.0.2.70');
+    if (g.body.playerToken) seats.push({ playerId: g.body.playerId, playerToken: g.body.playerToken });
+  }
+  check('⑤（尺子）竞赛屋坐满二十一个人', seats.length === 21, `${seats.length} 人`);
+  await call({ action: 'start', code: room2, ...seats[0], mode: 'square' }, '198.51.100.2');
+  const hash = await hgetall('room:' + room2);
+  await hset('room:' + room2, 'meta', { ...hash.meta, startAt: Date.now() - 30_000 });
+  // 二十一个人同一个 IP，每人报十次（正常一局十秒里报的比这少：分数变了才报、没变四秒一次心跳）。
+  await freshWindow();
+  const w = windowOf();
+  const sent = await Promise.all(seats.flatMap((p) =>
+    Array.from({ length: 10 }, (_, k) => call({ action: 'score', code: room2, ...p, score: 10 * k, round: 1 }, '192.0.2.80'))));
+  check('⑤（尺子）二百一十条都落在同一个十秒窗口里', windowOf() === w);
+  const hit = sent.filter((r) => r.status === 429).length;
+  check('⑤ 二十一个人同一个 IP 正常报分（每人十次）：一条都不挡', hit === 0, `被挡 ${hit} / ${sent.length}`);
+
+  // 拿第二个人的 playerId、配一把错的令牌狂发一百条：403，不占他的桶。
+  await freshWindow();
+  const victim = seats[2];
+  const forged = await Promise.all(Array.from({ length: 100 }, () =>
+    call({ action: 'score', code: room2, playerId: victim.playerId, playerToken: 'wrong', score: 1, round: 1 }, '192.0.2.81')));
+  check('⑤ 冒名狂发（令牌不对）：一律 403', forged.every((r) => r.status === 403), forged.map((r) => r.status).filter((s) => s !== 403).join(','));
+  const own = await call({ action: 'score', code: room2, ...victim, score: 77, round: 1 }, '192.0.2.82');
+  check('⑤ 被冒名的那个人自己报分：照收（他的桶没被别人灌满）', own.status === 200, String(own.status));
+
+  // 同一个座位狂发：四十条之后被挡。另开一间屋、一个这个窗口里一条都没报过的座位（上面那二百一十条里每个座位
+  // 已经用掉十条，同一个窗口里再量就是第三十一条被挡——量的是别的东西）。
+  const small = await call({ action: 'create', name: 'HOST3', ...who }, '198.51.100.3');
+  const room3 = small.body.code;
+  const g3 = await call({ action: 'join', code: room3, name: '狂发的' }, '192.0.2.71');
+  const g4 = await call({ action: 'join', code: room3, name: '老实的' }, '192.0.2.71');
+  const spam = { playerId: g3.body.playerId, playerToken: g3.body.playerToken };
+  const calm = { playerId: g4.body.playerId, playerToken: g4.body.playerToken };
+  await call({ action: 'start', code: room3, playerId: small.body.playerId, playerToken: small.body.playerToken, mode: 'square' }, '198.51.100.3');
+  await freshWindow();
+  const w3 = windowOf();
+  let first = -1;
+  for (let i = 1; i <= 100; i++) {
+    const r = await call({ action: 'score', code: room3, ...spam, score: i, round: 1 }, '192.0.2.83');
+    if (r.status === 429) { first = i; break; }
+  }
+  check('⑤（尺子）狂发那一段落在同一个十秒窗口里', windowOf() === w3);
+  check('⑤ 同一个座位狂发：第四十一条起被挡（429 tooMany）', first === 41, `第 ${first} 条开始 429`);
+  const other = await call({ action: 'score', code: room3, ...calm, score: 5, round: 1 }, '192.0.2.83');
+  check('⑤ 同一个 IP 上别的座位照常（按座位，不按 IP）', other.status === 200, String(other.status));
+}
+
 // ── 顺手钉住：这四个桶的名字和数值就是上面这几条的依据 ──────────────────
 const { readFileSync } = await import('node:fs');
 const src = readFileSync(new URL('../api/room.js', import.meta.url), 'utf8');
@@ -125,6 +183,11 @@ for (const [action, limit, windowS] of [
   const re = new RegExp(`${action}:\\s*\\{\\s*limit:\\s*${limit},\\s*windowS:\\s*${windowS}\\s*\\}`);
   check(`RATE 表里 ${action} 还是 ${limit} 次 / ${windowS} 秒`, re.test(src));
 }
+check('报分那一道是十秒四十次（SCORE_RATE）', /const SCORE_RATE = \{ limit: 40, windowS: 10 \};/.test(src));
+check('报分限速排在 seatOf 验过座位之后', (() => {
+  const body = src.slice(src.indexOf('async function score(res, body)'));
+  return body.indexOf('seatOf(hash, body.playerId, body.playerToken)') < body.indexOf("tooMany('room:score'");
+})());
 check(
   'create 的限速排在 hostMayOpen 之前（不然烧 Creem 额度那条没堵上）',
   src.indexOf('RATE[body.action]') < src.indexOf('case \'create\': return await create'),

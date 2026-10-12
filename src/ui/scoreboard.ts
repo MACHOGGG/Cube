@@ -261,23 +261,30 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    * 什么都不改——这一盘照旧存进他自己的《记录与排名》（gameController 的
    * saveRun 是无条件的），所以那句话的后半句是实话。
    */
-  const report = (score: number, over: boolean, seconds: number | undefined) => {
+  /**
+   * @returns 服务器收下了没有（回了 200，哪怕说的是「这一份没收」——那是它的决定，不用再送）。没收下（网络、限速、
+   *   5xx）回 false，下面那个计时器下一拍再送（10-11 方案 C-6）。屋主已经替我交了卷、或者还不知道是第几局（攒着）
+   *   都不算没收下：前一种不再送，后一种等 paint 那一头补发。
+   */
+  const report = (score: number, over: boolean, seconds: number | undefined): Promise<boolean> => {
     // 屋主已经替我交了卷（见 forcedOut）：不再报。
-    if (forcedOut) return;
+    if (forcedOut) return Promise.resolve(true);
     // 还不知道这一局是第几局：攒着，别拿一个「不带局次」的请求去绕过守卫。
     if (myRound === null) {
       pending = { score, over, seconds };
-      return;
+      return Promise.resolve(false);
     }
     const mine = myRound;
-    void reportScore(score, over, seconds, mine).then((res) => {
-      if (mine <= 0 || !res.ok) return;
+    return reportScore(score, over, seconds, mine).then((res) => {
+      if (!res.ok) return false;
+      if (mine <= 0) return true;
       // 回包就是一份房间状态：被屋主结束了的话，说的是另一句，而且不再说下面那句。
-      if (noticeForced(res.value) || droppedTold) return;
+      if (noticeForced(res.value) || droppedTold) return true;
       const serverRound = res.value.round;
-      if (!serverRound || serverRound === mine) return;
+      if (!serverRound || serverRound === mine) return true;
       droppedTold = true;
       flyby(s.mpRoundDropped);
+      return true;
     });
   };
 
@@ -303,7 +310,7 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
       myRound = state.round;
       const owed = pending;
       pending = null;
-      if (owed) report(owed.score, owed.over, owed.seconds);
+      if (owed) void report(owed.score, owed.over, owed.seconds);
     }
     noteBefore(state);
     /**
@@ -468,13 +475,15 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    *   · 已经交了卷在等 → 等待页撤掉、说一句、按下去回主页。
    */
   const roomExpired = () => {
+    // 说的是「这个小屋已经结束了」（mpErrEnded）——和屋主散场、大厅里敲那个号码是同一句（10-11 方案 C-3 第 3 条）。
+    // 原先这儿另有一句「这间小屋已经过期了」，大厅那头又是「没有这个小屋号码」：同一件事三种说法。
     if (!runFinished()) {
       const st = latestRoomState();
       const locked = st ? lockedMode(st) : isLayoutLocked(shapeId);
-      return locked ? lockedOut(s.mpRoomExpired, s.homeBtn) : goSolo(s.mpRoomExpiredSolo);
+      return locked ? lockedOut(s.mpErrEnded, s.homeBtn) : goSolo(s.mpRoomExpiredSolo);
     }
     leaveForGood();
-    homeNotice(s.mpRoomExpired, s.homeBtn);
+    homeNotice(s.mpErrEnded, s.homeBtn);
   };
 
   /**
@@ -637,7 +646,8 @@ function flyby(text: string): void {
       if (dead) return;
       // 小屋过期了：这一种是定论，不是「这一下没问到」（见 roomExpired）。本机还拿着座位才算——
       // 本机连座位都没有时 fetchState 也答 noRoom，那一种不是服务器说的，不在这儿认。
-      if (reason === 'noRoom' && currentRoom()) return roomExpired();
+      // 服务器过期之后答的是 'ended'（墓碑还在，api/room.js 的 tombKey，10-11 方案 C-3）；墓碑也过了才是 noRoom。
+      if ((reason === 'noRoom' || reason === 'ended') && currentRoom()) return roomExpired();
       // A poll that fails changes nothing on screen: the last standings
       // stand, which is better than blanking the panel over one dropped
       // request in the middle of someone's run.
@@ -656,22 +666,41 @@ function flyby(text: string): void {
   //
   // 所以分数没变也要按时报到，只是慢一点：至多每 HEARTBEAT_MS 一次。分数变
   // 了仍然立刻发，那一条不受影响。
+  //
+  // 这一条心跳**同时是报分丢了之后唯一的重试**，所以不能删（10-11 方案 C-6）。原先 lastSent 在请求发出去那一刻
+  // 就记上了：这一条没送到，下一拍看着「没变」，要等满 HEARTBEAT_MS 才再送；交卷那一条丢了，就是四秒后的心跳把它
+  // 补上。现在：
+  //   · 那一条还在路上（inFlight）就不发第二条——计时器每 LOCAL_MS（半秒）跑一次，不拦的话网慢的时候半秒一条叠在
+  //     路上，正撞上服务器按座位的限速（api/room.js 的 SCORE_RATE，十秒四十次）；
+  //   · lastSent / sentFinished / lastSentAt 在服务器收下之后才记——没收下（网络、限速、5xx），下一拍照样算「变了」，
+  //     接着送，不用等四秒。
   let lastSentAt = 0;
+  /** 上一条报分还在路上（10-11 方案 C-6）。 */
+  let inFlight = false;
   /** 这一局走完之后的成绩，算出来就钉在这儿，不再重读。 */
   let settled: Settled | null = null;
   const localTimer = window.setInterval(() => {
-    if (dead) return;
+    if (dead || inFlight) return;
     settled = settleOnce(settled);
     const over = settled !== null;
     const score = settled ? settled.score : localScore();
     if (score === null) return;
     const changed = score !== lastSent || over !== sentFinished;
     if (!changed && Date.now() - lastSentAt < HEARTBEAT_MS) return;
-    lastSent = score;
-    sentFinished = over;
-    lastSentAt = Date.now();
     if (over) markPlayed();
-    report(score, over, settled ? settled.seconds : runSeconds());
+    inFlight = true;
+    void report(score, over, settled ? settled.seconds : runSeconds())
+      .then((took) => {
+        if (!took) return;
+        lastSent = score;
+        sentFinished = over;
+        lastSentAt = Date.now();
+      })
+      // 在 finally 里放行：回包那一头（被屋主结束的那句话、局次对不上的那句话）万一抛了，这一位也不能一直挂着
+      // ——挂着就是这一局再也不报分。
+      .finally(() => {
+        inFlight = false;
+      });
   }, LOCAL_MS);
 
   return () => {
@@ -691,7 +720,7 @@ function flyby(text: string): void {
     const score = settled ? settled.score : localScore();
     if (score !== null) {
       markPlayed();
-      report(score, true, settled ? settled.seconds : runSeconds());
+      void report(score, true, settled ? settled.seconds : runSeconds());
     }
     rows.innerHTML = '';
   };

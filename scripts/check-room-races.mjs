@@ -104,15 +104,21 @@ const who = { email: 'racehost@example.com', accountToken: account.token };
  * 门是 check-room-score 的 ⑩）。这台门量的是几条写入撞在一起，不是局次——从前那几条没带，
  * 是因为那会儿局次还是可选的。
  */
-async function openRoom() {
+async function openRoom({ aged = true } = {}) {
   const h = await call({ action: 'create', name: '屋主', ...who });
   const code = h.body.code;
   const host = { playerId: h.body.playerId, playerToken: h.body.playerToken };
   const g = await call({ action: 'join', code, name: '客人' });
   const guest = { playerId: g.body.playerId, playerToken: g.body.playerToken };
   await call({ action: 'start', code, ...host, mode: 'square' });
+  // 倒数摆成已经走完、这一局开了 OPEN_RAN_S 秒（10-11 方案 C-1 之后倒数里报上来的分一律记 0——这台门量的是几
+  // 条写入撞在一起之后「分数还在不在」，分得先真记上）。下面报的用时都落在服务器那两把尺子之间：
+  // 下限 OPEN_RAN_S − 3（留一秒给这台门自己跑得慢），上限 OPEN_RAN_S ＋ 15。
+  if (aged) await agePlay(code, [host.playerId, guest.playerId], OPEN_RAN_S);
   return { code, host, guest };
 }
+/** openRoom 摆的「这一局已经开了几秒」：报 10 秒的不被抬（下限 9～10），报 25 秒的不被丢（上限 27）。 */
+const OPEN_RAN_S = 12;
 const seatOf = (st, id) => (st.body.players || []).find((p) => p.id === id) || {};
 // ⑨ 和 ⑩ 要直接摆库里的状态（废锁、推老的心跳），从外面是摆不出来的。
 const { hset: hsetRace, hgetall } = await import('../api/_store.js');
@@ -256,10 +262,10 @@ async function agePlay(code, playerIds, ranForS = 20) {
 {
   const { code, host, guest } = await openRoom();
   await call({ action: 'score', code, ...guest, score: 400, finished: true, seconds: 20, round: 99 });
-  await call({ action: 'score', code, ...guest, score: 640, finished: true, seconds: 33, round: 1 });
+  await call({ action: 'score', code, ...guest, score: 640, finished: true, seconds: 25, round: 1 });
   const p = seatOf(await call({ action: 'state', code, ...host }), guest.playerId);
   check('④乙 局次对上了：真实分数盖回来', p.score === 640, String(p.score));
-  check('④乙 局次对上了：用时也跟上（单局最快要用它）', p.seconds === 33, String(p.seconds));
+  check('④乙 局次对上了：用时也跟上（单局最快要用它）', p.seconds === 25, String(p.seconds));
 }
 
 // ---- ⑤ 教学那条路也不能把分数写回去 --------------------------------------
@@ -546,7 +552,11 @@ async function agePlay(code, playerIds, ranForS = 20) {
     });
   let worst = null;
   for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20]) {
-    const { code, host, guest } = await openRoom();
+    // 这一节自己真等倒数走完（下面那一句），不用 openRoom 摆的「已经开了 12 秒」。⚠️ 摆出来的那一版在错位 20 上
+    // 量到过一次「第三种结局」（客人 777 分落进了下一局那一格、没记账、也没说没收下）——新旧两份 room.js 都一样，
+    // 是 score() 那份进门快照和一整次 start() 交错出来的老缝，不是 C-1 带进来的（10-11 方案 P9 那一推记在回报里，
+    // 修法要另定）。这一节照它原来的样子量。
+    const { code, host, guest } = await openRoom({ aged: false });
     const st = await call({ action: 'state', code, ...host });
     await new Promise((r) => setTimeout(r, Math.max(0, st.body.startAt - Date.now() + 40)));
     await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
@@ -712,6 +722,18 @@ async function agePlay(code, playerIds, ranForS = 20) {
     const hash = await hgetall(roomKey(code));
     await hsetRace(roomKey(code), 'meta', { ...hash.meta, startAt: Date.now() - 1000 });
   };
+  /**
+   * 把这一局摆成「有人在学、开赛挂着」——**直接写 meta**（10-11 方案 C-5）。
+   *
+   * learn 收到 `learning: true` 不再挂起了（「我还不会玩」的人坐场边看规则，别人不等），所以这样的屋子摆不出来；
+   * 可上线那一刻已经挂着的屋子还在，放行那几条路一条没删——这一节量的正是它们放行时会不会写坏 meta。旧代码挂起时
+   * 写的就是这三位，外加他那一格的 learningAt（旧客户端还在教学页上点）。
+   */
+  const holdNow = async (code, playerId) => {
+    const hash = await hgetall(roomKey(code));
+    await hsetRace(roomKey(code), 'meta', { ...hash.meta, learnHold: true, heldRound: hash.meta.round, heldAt: Date.now() });
+    await hsetRace(roomKey(code), 'p:' + playerId, { ...hash['p:' + playerId], learningAt: Date.now() });
+  };
   /*
    * 错位要扫到很后面。放行那一步在 state() 的**最开头**，而 endedAt 是 end()
    * 记完账（一人两次 hset）才写的——想让放行的写入落在 endedAt 之后，轮询这条
@@ -733,8 +755,9 @@ async function agePlay(code, playerIds, ranForS = 20) {
    */
   let worstEnd = null;
   for (const k of OFFSETS) {
-    const { code, host, guest } = await openRoom();
-    await call({ action: 'learn', code, ...guest, learning: true });
+    // 这一节照它原来的计时量（不用 openRoom 摆的「已经开了 12 秒」）：挂起是直接写的，和开赛时刻无关。
+    const { code, host, guest } = await openRoom({ aged: false });
+    await holdNow(code, guest.playerId);
     await Promise.all([
       call({ action: 'end', code, ...host }),
       (async () => {
@@ -750,13 +773,13 @@ async function agePlay(code, playerIds, ranForS = 20) {
 
   let worstRound = null;
   for (const k of OFFSETS) {
-    const { code, host, guest } = await openRoom();
-    // 两个人都交卷，这一局才算完，屋主才开得了下一局（roundOver）。
+    const { code, host, guest } = await openRoom({ aged: false });
+    // 两个人都交卷，这一局才算完，屋主才开得了下一局（roundOver）。倒数里交的卷照记交卷（分记 0，C-1），这一节只看局次。
     await call({ action: 'score', code, ...host, score: 10, finished: true, seconds: 5, round: 1 });
     await call({ action: 'score', code, ...guest, score: 20, finished: true, seconds: 6, round: 1 });
     await ageStart(code);
-    // 两局之间有人去读《怎么玩》：这一局的挂起立起来了。
-    await call({ action: 'learn', code, ...guest, learning: true });
+    // 两局之间这一局挂着（上线前就挂着的那种，见 holdNow）。
+    await holdNow(code, guest.playerId);
     // 撞的那一条同样用「学完了说一声」，理由和上面散场那一节一样（轮询只跑两趟
     // 库，它的写入在内存库里永远落在 start 写 meta 之前——扫出来全绿是量不到）。
     // 这一条头一版用的是轮询，反向对照当场露馅：把 releaseHold 换回旧写法它照样
@@ -781,8 +804,8 @@ async function agePlay(code, playerIds, ranForS = 20) {
   // releaseHold 整个删掉也全绿：屋子不散、局次不退，代价是全屋永远等一个早就
   // 不在学的人。所以这儿正面量一次：学的人没动静了，开赛挂起必须被放掉。
   {
-    const { code, host, guest } = await openRoom();
-    await call({ action: 'learn', code, ...guest, learning: true });
+    const { code, host, guest } = await openRoom({ aged: false });
+    await holdNow(code, guest.playerId);
     const held = await hgetall(roomKey(code));
     await ageLearning(code, guest.playerId);
     await call({ action: 'state', code, ...guest });
@@ -798,13 +821,11 @@ async function agePlay(code, playerIds, ranForS = 20) {
   //
   // ⑭ 补的是**放行**那一半。挂起那一半（learn 里「这一局第一次有人去学」）原先自己
   // 一句 hset，把进函数时读到的整份 meta 写回去——和放行那一半是同一个毛病，只是没
-  // 人补：中间 end() 写进的 endedAt、start() 换上的 round，都会被它抹掉。
+  // 人补：中间 end() 写进的 endedAt、start() 换上的 round，都会被它抹掉。后来挂起也过了
+  // patchMeta、用自己那一格锁（lhs:N）。
   //
-  // 修法只有一条路走得通：挂起也过 patchMeta，但**用自己那一格锁**。takeRoomLock
-  // 抢到就不还（一局里「放行」只许发生一次，这是故意的），所以挂起要是和放行共用
-  // lh:N，顺序就成了「挂起抢走 → 他学完了 → 放行抢不到 → 倒数永远不放行，全屋干等
-  // 到锁过期」。那比原来那个 bug 严重得多：原来是零点几秒的窗口里偶尔撞上，这个是
-  // 每次有人说「不会」都必然发生。所以这一节两条都要量。
+  // 10-11 方案 C-5 起 learn 根本不挂起了（`learning: true` 只记 learningAt，不碰 meta）。①② 两条留着当回归：
+  // 「我在学」那一声撞上散场、开新局，meta 一个字都不许被它写坏。③ 换成上线前就挂着的屋子：放行必须成功。
   {
     // ① 挂起撞散场：endedAt 不许被抹掉。
     let worstHeldEnd = null;
@@ -835,12 +856,11 @@ async function agePlay(code, playerIds, ranForS = 20) {
     }
     check('⑮ 挂起撞开新局：局次不许被拉回上一局', worstHeldRound === null, worstHeldRound || `${OFFSETS.length} 档都扫过`);
 
-    // ③ **同一局里，挂起之后放行必须成功。** 这一条防的是上面说的那个死锁——两把锁
-    //    共用一格的话它必然红，而 ①② 两条在那种写法下**照样是绿的**（挂起写成功了，
-    //    只是之后再也放不行）。所以缺了这一条，那个更严重的毛病会从门底下溜过去。
+    // ③ **同一局里，挂起之后放行必须成功。** 原先防的是挂起和放行共用一把锁的死锁（挂起抢走 lh:N，放行再也抢不
+    //    到）。挂起现在只有上线前留下来的那几间（holdNow 摆的），放行那一条照样要走得通。
     {
-      const { code, host, guest } = await openRoom();
-      await call({ action: 'learn', code, ...guest, learning: true });
+      const { code, host, guest } = await openRoom({ aged: false });
+      await holdNow(code, guest.playerId);
       const held = (await hgetall(roomKey(code)))?.meta?.learnHold;
       // 学完了说一声：走 releaseHold。
       await call({ action: 'learn', code, ...guest, learning: false });

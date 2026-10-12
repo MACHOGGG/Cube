@@ -12,6 +12,10 @@
  * step of that chain stops working, not only the seeding.
  */
 import { chromium } from 'playwright';
+import { build } from 'esbuild';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /**
  * 按住那颗《还是离开》。
@@ -400,7 +404,7 @@ if (waitUp) {
   check('等待页上留了一条走得掉的路', wait.leave);
   check('等待页最上面写着小屋号', (await A.page.$eval('#mpWait .mp-wait-code', (e) => e.textContent))
     .includes(code), code);
-  check('等待页上有那个转圈的小人（和教学等待页同一个）',
+  check('等待页上有那个转圈的小人',
     (await A.page.$$eval('#mpWait .mp-wait-spin svg', (e) => e.length)) === 1);
 
   // 按下去要真的看得见，不是「建出来了但压在底下」。
@@ -520,68 +524,49 @@ const eightish = await A.page.waitForFunction(
 ).then((h) => h.jsonValue()).catch(() => null);
 check('屋里可能有新手：其他人的倒数从 8 数起', eightish === '8' || eightish === '7', String(eightish));
 
-// ---- 开局前问一句：会不会这个玩法的规则 --------------------------------
+// ---- 开局前问一句：会不会这个玩法的规则（10-11 方案 C-5 的新流程） --------------
+//
+// 玩家定的：没玩过这一族的人被问「我会玩 / 我还不会玩」。选「我还不会玩」的人这一局坐场边看《怎么玩》，
+// **其他人直接开局、不等他**，他看完下一局再加入（不中途加入）。从前答「不会，教我」会把整屋的开局挂起来，
+// 别人看到「小屋里有人在学习，稍等」和一块练习盘，最多等 90 秒——「是不是新手」是客户端自报的，谁都能拿它
+// 把整屋拦住（报告一 #11）。这一段量新那条路，一步一步走真界面。
 const rulesAsked = await B.page.waitForSelector('#mpKnowAsk', { timeout: 15000 })
   .then(() => true).catch(() => false);
 check('没看过教学的人，开局前被问一句', rulesAsked);
+let learnedRound = false;
 if (rulesAsked) {
   check('问的是这个玩法的名字',
     (await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim())) === '会经典小球的规则吗？',
     await B.page.$eval('#mpKnowAsk .tag-line', (e) => e.textContent.trim()));
-  check('两颗键：会 / 不会，教我',
-    (await B.page.$$eval('#mpKnowAsk .start-act', (els) => els.map((e) => e.textContent.trim())))
-      .join('|') === '不会，教我|会');
-  // 说「不会」：自己去看教学，屋里其他人等着。
+  const keys = await B.page.$$eval('#mpKnowAsk .start-act', (els) => els.map((e) => e.textContent.trim()));
+  check('两颗键：我还不会玩 / 我会玩', keys.join('|') === '我还不会玩|我会玩', keys.join('|'));
+  // 屋主这一头从 B 按键之前就盯着，一直盯到自己的棋盘摆出来：「稍等」那一屏、练习盘一次都不许露面。
+  const watchA = A.page.evaluate(() => new Promise((resolve) => {
+    let sawLearn = false;
+    const t0 = performance.now();
+    const tick = () => {
+      if (document.querySelector('.mp-learn-spin, .mp-learn-page, .mp-practice')) sawLearn = true;
+      // 真开局的那一盘：从前「稍等」那一屏底下的练习盘也是一块 #boardWrap，不能把它当成开局了。
+      const real = [...document.querySelectorAll('#boardWrap .ball')].some((e) => !e.closest('.mp-practice'));
+      if (real) return resolve({ sawLearn, board: true, ms: performance.now() - t0 });
+      if (performance.now() - t0 > 30000) return resolve({ sawLearn, board: false, ms: performance.now() - t0 });
+      setTimeout(tick, 100);
+    };
+    tick();
+  }));
   await B.page.click('#mpKnowNo');
-  const learningPage = await A.page.waitForSelector('.mp-learn-spin', { timeout: 20000 })
-    .then(() => true).catch(() => false);
-  check('有人去学，别人看到「稍等」那一屏', learningPage);
-  if (learningPage) {
-    check('那句话就是《小屋里有人在学习，稍等》',
-      (await A.page.$eval('.mp-learn-line', (e) => e.textContent.trim())) === '小屋里有人在学习，稍等',
-      await A.page.$eval('.mp-learn-line', (e) => e.textContent.trim()));
-    // 那只转圈的标识是真的画出来了（不是一个空盒子），而且真的在转。
-    const spin = await A.page.evaluate(() => {
-      const box = document.querySelector('.mp-learn-spin');
-      const svg = box?.querySelector('svg');
-      return {
-        paths: svg ? svg.querySelectorAll('path').length : 0,
-        turning: box ? getComputedStyle(box).animationName : '',
-        p3: /color\(/.test(box?.innerHTML || ''),
-      };
-    });
-    check('底下是那只加载标识，画得出来', spin.paths > 30, `${spin.paths} 条路径`);
-    check('它绕着自己的中心在转', spin.turning === 'mp-learn-turn', spin.turning);
-    // 旧安卓不认 color(display-p3 …)，认不得的话整条 fill 作废、图变空白。
-    check('标识里没有留下 display-p3 的颜色', !spin.p3);
-    // 干等的这一屏底下不该还挂着《个人主页 / 记录与排名》：按下去就等于走出
-    // 小屋，而人家学完这一屏随时会自己翻页。两种写法（:has() 和根上那个类）
-    // 都要真的生效，所以量的是它到底看不看得见。
-    const navGone = await A.page.evaluate(() => {
-      const nav = document.querySelector('.home-nav');
-      if (!nav) return true;
-      const r = nav.getBoundingClientRect();
-      return getComputedStyle(nav).display === 'none' || r.width === 0 || r.height === 0;
-    });
-    check('等人学教学的那一屏，底下那排图标收起来了', navGone);
-    // 底下摆着一块练习盘：这一局的玩法（圆球）、真的棋盘，等的人先练着。
-    const practice = await A.page.waitForFunction(
-      () => document.querySelectorAll('.mp-practice #boardWrap .ball').length > 0, { timeout: 15000 },
-    ).then(() => true).catch(() => false);
-    check('等人学的那一屏底下摆着一块练习盘（这一局的玩法）', practice);
-    // 练习盘是练习盘：这一屏的读数、按键、开局页那一层都不露面。
-    const bare = await A.page.evaluate(() => {
-      const vis = (sel) => { const e = document.querySelector(sel); return e ? getComputedStyle(e).display !== 'none' : false; };
-      return { hud: vis('.mp-practice .hud'), controls: vis('.mp-practice .controls'), overlay: vis('.mp-practice #startOverlay') };
-    });
-    check('练习盘上没有读数、按键和开局页', !bare.hud && !bare.controls && !bare.overlay, JSON.stringify(bare));
-  }
-  // 学的人这会儿开着的是《怎么玩》那一屏（第 14 推）。从前放的是那一族的分镜动画，
-  // 而那两段还在教旧规则——入口下线了，改开规则窗，照这一局的玩法摆：圆球那一副，
-  // 第 4 条是「最外面的一条边」那一句，不是方块的「整行或整列」，也不是两边都讲的通稿。
+  const a = await watchA;
+  // 15 秒：这一局倒数从 8 数起（多留的那四秒是给那一问的），按键那一刻最多还剩七八秒，余下的给慢机器。从前那条
+  // 路在这儿挂起开局：B 不关窗就要等服务器认定他走神满 20 秒（LEARN_IDLE_MS）才放行、再从 4 数起——拿旧包实测
+  // 也摆得出棋盘，只是晚了二十几秒，所以这一条量的是「什么时候摆出来」，不只是「摆没摆出来」。
+  check('B 说「我还不会玩」：A 照常数完开局（不等他）', a.board && a.ms < 15000, `${Math.round(a.ms)}ms`);
+  check('A 从头到尾没看到「小屋里有人在学习，稍等」那一屏，也没有练习盘', !a.sawLearn);
+
+  // B 这会儿开着的是《怎么玩》那一扇（第 14 推起不放分镜），照这一局的玩法摆：圆球那一副，第 4 条是
+  // 「最外面的一条边」那一句，不是方块的「整行或整列」，也不是两边都讲的通稿。
   const learnModal = await B.page.waitForSelector('.howto-ov.show', { timeout: 8000 })
     .then(() => true).catch(() => false);
-  check('学的人这会儿开着的是规则窗，不是分镜动画（第 14 推）', learnModal && !(await B.page.$('.story-tut')));
+  check('B 这会儿开着的是规则窗，不是分镜动画', learnModal && !(await B.page.$('.story-tut')));
   const learnRules = learnModal
     ? await B.page.$$eval('.howto-ov .tut-rule:not(.tut-rule--extra) .tut-rule-text', (e) => e.map((x) => x.textContent.trim()))
     : [];
@@ -589,30 +574,107 @@ if (rulesAsked) {
     // 10-08 方案 3-E-4 把小球这一句改短了（「最少要 3 枚」「整体放大」两句删掉）。
     learnRules.length === 5 && learnRules[3] === '同色星星连满此刻最外面的一条边，就得分并消除。',
     `${learnRules.length} 条 · 第 4 条：${(learnRules[3] || '').slice(0, 24)}`);
+  // 规则窗底下是等待页（他这一局坐场边），而且窗真的在最上面：问的是「《知道了》那个位置上最上面的是谁」，
+  // 不是「在不在 DOM 里」——等待页是 z-index 100 那一档，普通弹窗（90）开在它底下看不见也关不掉。
+  const under = await B.page.evaluate(() => {
+    const ok = document.getElementById('howtoOkBtn')?.getBoundingClientRect();
+    const hit = ok ? document.elementFromPoint(ok.x + ok.width / 2, ok.y + ok.height / 2) : null;
+    return {
+      wait: !!document.getElementById('mpWait'),
+      onTop: !!hit?.closest('.howto-ov'),
+      board: !!document.querySelector('#boardWrap .ball'),
+    };
+  });
+  check('B 的规则窗底下是等待页（这一局坐场边）', under.wait, JSON.stringify(under));
+  check('规则窗盖在等待页上面，《知道了》按得到', under.onTop);
+  check('B 这一局没有开棋盘（不中途加入）', !under.board);
 
-  // 学完了：按《知道了》关窗——走的就是玩家那条路（关窗时报「学完了」、回小屋），
-  // 服务器把开赛时刻重新盖一遍，全屋一起从 4 数起。从前这里替它直接打接口，省掉真
-  // 把整段分镜放完的两分钟；规则窗一按就关，不用再省。
-  // 10-11 方案 B-2：先按一次返回——规则窗自己登记了返回层（ui/rulesModal.ts），原先 main.ts 这一路还另登
-  // 记了一次。一次返回就该关掉它，走的是同一个 close（关窗时报「学完了」、回小屋），和按《知道了》一样。
+  // 关窗：先按一次返回（10-11 方案 B-2：规则窗自己登记了返回层）。关掉只收窗，落在等待页上。
   if (learnModal) {
     await B.page.waitForTimeout(200);
     await B.page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => {});
     await B.page.waitForTimeout(500);
     const stillOpen = !!(await B.page.$('.howto-ov'));
-    check('学规则的那扇窗：按一次返回就关（10-11 方案 B-2）', !stillOpen);
+    check('规则窗：按一次返回就关（10-11 方案 B-2）', !stillOpen);
     if (stillOpen) await B.page.click('#howtoOkBtn');
   }
-  const resumed = await A.page.waitForFunction(
-    () => !!document.querySelector('.mp-countdown-page .cd-window') && !document.querySelector('.mp-learn-spin'),
-    { timeout: 20000 },
+  await B.page.waitForTimeout(400);
+  const after = await B.page.evaluate(() => ({
+    wait: !!document.getElementById('mpWait'),
+    note: document.querySelector('#mpWait .mp-wait-note')?.textContent.trim() || '',
+    first: document.querySelector('#mpWait .mp-wait-stage')?.firstElementChild?.className || '',
+    board: !!document.querySelector('#boardWrap .ball'),
+    room: !!document.querySelector('.mp-page'),
+  }));
+  check('关掉规则窗：落在等待页上（还在小屋里，没有棋盘）', after.wait && after.room && !after.board, JSON.stringify(after));
+  check('等待页顶上那一行：《下一局开始时您就加入。》', after.note === '下一局开始时您就加入。' && after.first === 'mp-wait-note',
+    `${after.note} · 第一行是 ${after.first}`);
+  learnedRound = a.board;
+}
+
+// 四种语言那两颗键和那一行（10-11 方案 C-5 定的字）：这两台设备只开了简体，另外三种从文案表里读——为它们各开
+// 一间屋子太贵，而这几句只是表里的几格。esbuild 是 package.json 里声明过的依赖。
+{
+  const out = join(tmpdir(), `check-multiplayer-i18n-${process.pid}.mjs`);
+  await build({
+    stdin: { contents: "export { STRINGS } from './src/i18n.ts';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' },
+    bundle: true, format: 'esm', outfile: out, logLevel: 'error',
+  });
+  const { STRINGS } = await import(pathToFileURL(out).href);
+  const want = {
+    zhHans: ['我会玩', '我还不会玩', '下一局开始时您就加入。'],
+    zhHant: ['我會玩', '我還不會玩', '下一局開始時您就加入。'],
+    en: ['I know how', 'Not yet', 'You’ll join from the next round.'],
+    fr: ['Je sais jouer', 'Pas encore', 'Vous rejoindrez la partie à la manche suivante.'],
+  };
+  for (const [lang, [yes, no, note]] of Object.entries(want)) {
+    const t = STRINGS[lang];
+    check(`${lang}：两颗键和那一行的字`, t.mpKnowYes === yes && t.mpKnowNo === no && t.mpJoinNextRound === note,
+      `${t.mpKnowYes} / ${t.mpKnowNo} / ${t.mpJoinNextRound}`);
+  }
+}
+
+if (learnedRound) {
+  // A 一个人打完这一局：当场结算。B 坐在场边，每次轮询都替自己交了「这一局不打」——不交的话 roundOver 要
+  // 等他满 90 秒（ABSENT_MS），等于还是整屋在等他。30 秒的上限给慢机器留够余量，又远短于那 90 秒。
+  const t0 = Date.now();
+  await A.page.click('#finishBtn');
+  await A.page.waitForSelector('#finishConfirm', { timeout: 6000 });
+  await A.page.click('#mpFinishYes');
+  const aBack = await A.page.waitForFunction(
+    () => !!document.querySelector('.mp-code') && !document.getElementById('mpWait'), { timeout: 30000 },
   ).then(() => true).catch(() => false);
-  check('学完了，等的人回到 4-3-2-1', resumed);
-  const backInRoom = await B.page.waitForFunction(
-    () => !document.querySelector('.howto-ov') && !!document.querySelector('.mp-countdown-page, .app--game, #boardWrap'),
-    { timeout: 20000 },
+  check('A 打完这一局，不用等满 90 秒就回小屋（B 坐场边交了「这一局不打」）', aBack, `${Math.round((Date.now() - t0) / 1000)}s`);
+  const bBack = await B.page.waitForFunction(
+    () => !!document.querySelector('.mp-code') && !document.getElementById('mpWait'), { timeout: 15000 },
   ).then(() => true).catch(() => false);
-  check('学的人关了窗，回到小屋这一局（不是掉回主菜单）', backInRoom);
+  check('这一局完了，B 的等待页也撤了，回到小屋页', bBack);
+
+  // 下一局还是圆球：B 那一下已经记成看过（本机一份、服务器一份），这一局不再问他、服务器不再多留四秒，他入局。
+  // B 这头从屋主按下去之前就盯着：那一问、等待页一次都不许露面，直到他自己的 4-3-2-1 出来。
+  const watchB = B.page.evaluate(() => new Promise((resolve) => {
+    let asked = false;
+    let benched = false;
+    const t0 = performance.now();
+    const tick = () => {
+      if (document.getElementById('mpKnowAsk')) asked = true;
+      if (document.getElementById('mpWait')) benched = true;
+      if (document.querySelector('.mp-countdown-page .cd-window')) return resolve({ asked, benched, counting: true });
+      if (performance.now() - t0 > 25000) return resolve({ asked, benched, counting: false });
+      setTimeout(tick, 50);
+    };
+    tick();
+  }));
+  await A.page.click('#mpPick');
+  await A.page.waitForSelector('.home-icon-btn', { timeout: 15000 });
+  await A.page.$$eval('.home-icon-btn', (els, i) => els[i].click(), circleIdx);
+  const fourish = await A.page.waitForFunction(
+    () => document.querySelector('.mp-countdown-page .cd-digit')?.textContent || null, { timeout: 12000 },
+  ).then((h) => h.jsonValue()).catch(() => null);
+  check('B 报过「看过圆球」：这一局倒数不再多留四秒（从 4 数起）', fourish === '4' || fourish === '3', String(fourish));
+  const b = await watchB;
+  check('下一局 B 入局：数 4-3-2-1', b.counting);
+  check('下一局不再问 B、也不让他坐场边', !b.asked && !b.benched, JSON.stringify(b));
 }
 
 const intoNextRound = (p) =>
@@ -620,7 +682,7 @@ const intoNextRound = (p) =>
     const tiles = document.querySelectorAll('#boardWrap .ball, #boardWrap .tile').length;
     return tiles > 0;
   }, { timeout: 40000 }).then(() => true).catch(() => false);
-// 客人趁倒数还在数的时候刷新：座位还在，页面一打开就直接回到小屋页（不用再
+// 客人趁倒数还在数的时候刷新（上面 B 入局的那一局）：座位还在，页面一打开就直接回到小屋页（不用再
 // 去个人主页点《多人游玩》），跟着大家一起入局。开赛五秒之后才回来的人不入
 // 这一局、坐等待页——那一条在 check-room-flow.mjs 里验。
 await B.page.goto(BASE, { waitUntil: 'load' });

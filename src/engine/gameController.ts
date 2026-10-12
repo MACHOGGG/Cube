@@ -712,8 +712,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 发牌之前把种子种上（第 19 推，方案原话：「在 newGame 里的 hooks.resetBoard() 之前
    * seedRandom('s1:' + code)」）。
    *
-   * · 练习盘不种：那一块是小屋等人时随手打的，不结算、不存档，也没有码可印；它从前就是
-   *   Math.random（main.ts 的 onPractice 自己清过一次），这儿照旧清一遍。
+   * · 练习盘不种：那一块不结算、不存档，也没有码可印，从前就是 Math.random，这儿照旧清一
+   *   遍。（它原是小屋等人学规则时随手打的那块，10-11 方案 C-5 拿掉了；`practice` 这个选项
+   *   目前无调用者，待删。）
    * · 头一局：外面给了就用外面的；没给就随手抽一串（这个玩法、这副棋盘）。
    * · 第二局起（「再来一局」）：随手抽的那种换一串新的；敲进来的、每日的、小屋的还是这
    *   一串——同一副牌再来一次，正是输种子、打每日挑战的意思。

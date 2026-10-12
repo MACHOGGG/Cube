@@ -26,6 +26,10 @@
  *
  * ④（2026-10-08 方案 2-1）：errorText 接了话的每一种，都得在 engine/room.ts 的 KNOWN 上——不
  * 在单子上的词会被改成 'network'，写好的那句话就永远显示不出来（blocked / bad 就这样掉过队）。
+ *
+ * ⑤⑥（10-11 方案 C-3）：服务器那头的错不说成「连不上网络」、也不说成「多人游玩尚未开放」；被限速挡了不说「等
+ * 几秒」，大厅轮询被挡也有自己那一句；过期的小屋和从来没有过的号码分得开（墓碑）——⑥ 真叫一次 api/room.js
+ * （内存库），不只读源码。
  */
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -101,6 +105,63 @@ check('② 开局失败那一处调的是 errorText', main.includes('errorText(b
   const cased = [...new Set([...fn.slice(0, fn.indexOf('\n}')).matchAll(/case '([a-zA-Z]+)':/g)].map((m) => m[1]))];
   const unseen = cased.filter((c) => !known.includes(c));
   check('④ errorText 里接了话的每一种都在 KNOWN 上（不然那句话永远显示不出来）', unseen.length === 0, unseen.join('、'));
+}
+
+// ---- ⑤ 服务器的错、限速，各说各的（10-11 方案 C-3 第 1、2 条）-------------------------
+//
+// 原先：开屋十二次撞号的 503 'busy' 写「多人游玩尚未开放」（功能好好开着）；认不出的 5xx 落成 'network'「连不上
+// 网络」（网也好好的）；大厅轮询被限速写「网络断了一下，正在把您接回小屋」；限速那一句让人「等几秒」，而进屋的桶
+// 是一小时六十次。
+{
+  check('⑤ 认不出的 5xx 认成 server（不落进 network）', /\?\? \(res\.status >= 500 \? 'server' : 'network'\)/.test(engine), '');
+  const fn = mp.slice(mp.indexOf('export function errorText(')).slice(0, mp.slice(mp.indexOf('export function errorText(')).indexOf('\n}'));
+  check('⑤ busy 和 server 说「服务器暂时出错」（serverBusy）', /case 'busy':\s*\n\s*case 'server':\s*\n\s*return s\.serverBusy;/.test(fn), '');
+  check('⑤ notConfigured 才说「多人游玩尚未开放」', /case 'notConfigured':\s*\n\s*return s\.mpErrNotOpen;/.test(fn), '');
+  check('⑤ 大厅轮询被限速：说限速那一句，不说「网络断了」', /reason === 'tooMany' \? s\.mpErrTooMany : s\.mpReconnecting/.test(mp), '');
+  const i18n = read('src/i18n.ts');
+  const tooMany = [...i18n.matchAll(/mpErrTooMany: '([^']+)'/g)].map((m) => m[1]);
+  check('⑤（尺子）mpErrTooMany 四语都读到了', tooMany.length === 4, `${tooMany.length} 句`);
+  check('⑤ 限速那一句不再让人「等几秒」（改成「稍后再试」）',
+    tooMany.every((t) => !/等几秒|等幾秒|few seconds|quelques secondes/.test(t)) && tooMany.every((t) => /稍后再试|稍後再試|try again later|Réessayez plus tard/.test(t)),
+    tooMany.join(' ｜ '));
+}
+
+// ---- ⑥ 过期的小屋答 ended，从来没有过的号码答 noRoom（10-11 方案 C-3 第 3 条）-----------
+//
+// 原先两种答的是同一句 noRoom：大厅里敲他刚刚还在的那间屋的号码，屏幕上写「没有这个小屋号码」。现在每次续命顺手
+// 立一块墓碑（api/room.js 的 tombKey），屋子不在了、墓碑还在，就答 ended——客户端说的是屋主散场那同一句「这个小
+// 屋已经结束了」。「过期」是把那间屋的键直接删掉摆出来的（真等二十分钟不现实）。
+{
+  process.env.ALLOW_MEMORY_STORE = '1';
+  const room = (await import('../api/room.js')).default;
+  const { saveAccount, newAccount } = await import('../api/_accounts.js');
+  const { del } = await import('../api/_store.js');
+  let ip = 0;
+  const call = async (body) => {
+    let status = 0;
+    let text = '';
+    const res = { status: (c) => ((status = c), res), setHeader: () => res, end: (t) => ((text = t), res) };
+    await room({ method: 'POST', headers: { 'x-forwarded-for': `198.21.0.${++ip}` }, body }, res);
+    return { status, body: JSON.parse(text || '{}') };
+  };
+  const account = newAccount('eee777', 'code');
+  account.until = Date.now() + 9e8;
+  await saveAccount('errortext@example.com', account);
+  const h = await call({ action: 'create', name: '屋主', email: 'errortext@example.com', accountToken: account.token });
+  const code = h.body.code;
+  check('⑥（尺子）开得出一间屋', h.status === 200 && /^\d{4}$/.test(code || ''), `${h.status} ${code}`);
+  const host = { playerId: h.body.playerId, playerToken: h.body.playerToken };
+  await del('room:' + code);
+  const joined = await call({ action: 'join', code, name: '晚来的' });
+  check('⑥ 过期的屋子：大厅里敲它的号码，答 ended（不是「没有这个号码」）', joined.status === 409 && joined.body.error === 'ended',
+    `${joined.status} ${joined.body.error}`);
+  const polled = await call({ action: 'state', code, ...host });
+  check('⑥ 过期的屋子：局中轮询也答 ended', polled.status === 409 && polled.body.error === 'ended', `${polled.status} ${polled.body.error}`);
+  const never = await call({ action: 'join', code: code === '0000' ? '0001' : '0000', name: '敲错了' });
+  check('⑥ 从来没有过的号码：照旧 noRoom', never.status === 404 && never.body.error === 'noRoom', `${never.status} ${never.body.error}`);
+  await del('roomgone:' + code);
+  const later = await call({ action: 'join', code, name: '第二天来的' });
+  check('⑥ 墓碑也过了：回到 noRoom', later.status === 404 && later.body.error === 'noRoom', `${later.status} ${later.body.error}`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

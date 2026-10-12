@@ -179,7 +179,10 @@ const cancelledTooSoon = await B.page
   .then(() => true)
   .catch(() => false);
 check('屋主 100 秒没动静：**不**解散小屋（没动静不等于走了）', !cancelledTooSoon);
-check('那句「等一下就来」还在', Boolean(await B.page.$('#hostAway')));
+// 过了 90 秒（ABSENT_MS）那一句换成实话（10-11 方案 C-3 第 4 条）：「等一下就来」已经是我们不知道的事。
+const hostGoneText = await B.page.$eval('#hostGone .tag-line', (el) => el.textContent.trim()).catch(() => '');
+check('那一句换成「屋主暂时联系不上，可以先离开小屋。」', hostGoneText === '屋主暂时联系不上，可以先离开小屋。', hostGoneText);
+check('那一层上还是那颗《离开小屋》（等不等由他）', Boolean(await B.page.$('#hostGone #hostAwayLeave')));
 check('客人还坐在这间屋里（没被赶回主菜单）', Boolean(await B.page.$('.mp-code')));
 // 换成「终端真的没了」：网先恢复（断着网那个 bye 的 beacon 发不出去），再把屋主那一页
 // 导走——pagehide 会发 bye。服务器还要过 BYE_GRACE_MS（10 秒）才当真（刷新一次页面发的

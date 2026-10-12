@@ -604,12 +604,19 @@ export interface I18nStrings {
   paletteBing: string;
   /** 开局前问一句：这个玩法的规则你会吗？{name} 是玩法名。 */
   mpKnowRules: string;
+  /** 那一问的两颗键（10-11 方案 C-5 定的字）：「我会玩」和大家一起开局；「我还不会玩」这一局坐场边看规则。 */
   mpKnowYes: string;
   mpKnowNo: string;
-  /** 有人在看教学时，其他人那一屏上写的话。 */
-  mpLearningWait: string;
-  /** 等人学教学那一屏底下的练习盘上面那一句。 */
-  mpPracticeHint: string;
+  /**
+   * 答了「我还不会玩」的人，等待页顶上那一行：这一局他不打，下一局开倒数时入局（10-11 方案 C-5）。
+   * 从前这儿还有「小屋里有人在学习，稍等」和练习盘上那一句——那一屏连同练习盘一起拿掉了，没人再让全屋等。
+   */
+  mpJoinNextRound: string;
+  /**
+   * 断网时多人设置页最上面那一句（10-11 方案 H-2）。说的是「需要什么」，不是「出错了」：只提示、不收表单，
+   * 连上网就撤掉。
+   */
+  mpNeedsNetwork: string;
   mpRoundResult: string;
   mpFinalTitle: string;
   mpBestRound: string;
@@ -675,14 +682,21 @@ export interface I18nStrings {
   /** 屋主中途散场，而这个人没权限单独打这个玩法：一句话，按下去回主页。 */
   mpHostLeftLocked: string;
   mpHostAwaySolo: string;
-  /** 局中小屋过期了（10-09 补充方案 7-13 第 14 条）：还在打的人原地转单人，飘过这一句。 */
+  /**
+   * 局中小屋过期了（10-09 补充方案 7-13 第 14 条）：还在打的人原地转单人，飘过这一句。打不了单人、或者已经交了卷
+   * 在等的，说的是 mpErrEnded 那一句（10-11 方案 C-3 第 3 条：过期和散场是同一句「这个小屋已经结束了」，原先局中
+   * 另有一句「已过期」，那一句拿掉了）。
+   */
   mpRoomExpiredSolo: string;
-  /** 局中小屋过期了，而他打不了单人、或者已经交了卷在等：这一句加一颗回主页的键。 */
-  mpRoomExpired: string;
   /** 知道了。 */
   mpOk: string;
   /** 屋主还在，只是这会儿听不见他——网络卡了，不是走了。 */
   mpHostFixing: string;
+  /**
+   * 屋主九十秒没动静（10-11 方案 C-3 第 4 条）。屋子没散，可「等一下就来」已经是我们不知道的事——原先他和网卡一下
+   * 的屋主说的是同一句 mpHostFixing。
+   */
+  mpHostGone: string;
   mpErrNoRoom: string;
   mpErrFull: string;
   mpErrStarted: string;
@@ -1175,10 +1189,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteJia: 'Deep',
     paletteBing: 'Soft',
     mpKnowRules: 'Do you know how {name} works?',
-    mpKnowYes: 'I do',
-    mpKnowNo: 'Teach me',
-    mpLearningWait: 'Someone in the room is still learning — hold on',
-    mpPracticeHint: 'Don’t just wait — give it a go',
+    mpKnowYes: 'I know how',
+    mpKnowNo: 'Not yet',
+    mpJoinNextRound: 'You’ll join from the next round.',
+    mpNeedsNetwork: 'Multiplayer needs an internet connection.',
     mpRoundResult: 'This round',
     mpFinalTitle: 'How the room finished',
     mpBestRound: 'Best single round',
@@ -1209,17 +1223,17 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: 'The host has wandered off — the room is closed for now',
     mpHostLeftLocked: 'The host has left and the room is closed for now — come back in a bit?',
     mpHostAwaySolo: 'The host has stepped away · playing on your own now',
-    mpRoomExpiredSolo: 'This room has expired · playing on your own now',
-    mpRoomExpired: 'This room has expired.',
+    mpRoomExpiredSolo: 'This room has been closed · playing on your own now',
     mpOk: 'ok',
     mpHostFixing: 'The host will be right back',
+    mpHostGone: 'The host can’t be reached right now. You can leave the room for now.',
     mpErrNoRoom: 'No room with that code.',
     mpErrFull: 'That room is full.',
     mpErrStarted: 'That game has already started.',
     mpErrClaimed: 'Someone just took that seat back. Try another name.',
     mpErrTooFew: 'Two players at least.',
     mpErrNotOpen: 'Multiplayer is not open yet.',
-    mpErrTooMany: 'Too many requests from your network just now. Wait a few seconds and try again — this is not your connection.',
+    mpErrTooMany: 'Too many requests from your network just now. Please try again later — this is not your connection.',
     mpErrNotHost: 'Only the host can do this.',
     mpErrMode: 'This mode can’t open a room right now. Refresh and try again.',
     notOnSaleYet: 'The subscription is not open yet.',
@@ -1553,10 +1567,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteJia: 'Profonde',
     paletteBing: 'Douce',
     mpKnowRules: 'Vous connaissez les règles de {name} ?',
-    mpKnowYes: 'Oui',
-    mpKnowNo: 'Expliquez-moi',
-    mpLearningWait: 'Quelqu’un apprend encore — un instant',
-    mpPracticeHint: 'Ne restez pas à attendre : essayez !',
+    mpKnowYes: 'Je sais jouer',
+    mpKnowNo: 'Pas encore',
+    mpJoinNextRound: 'Vous rejoindrez la partie à la manche suivante.',
+    mpNeedsNetwork: 'Le multijoueur nécessite une connexion internet.',
     mpRoundResult: 'Cette manche',
     mpFinalTitle: 'Bilan de la salle',
     mpBestRound: 'Meilleure manche',
@@ -1587,17 +1601,17 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: 'L’hôte est parti — la salle est fermée pour l’instant',
     mpHostLeftLocked: 'L’hôte est parti, la salle est fermée pour l’instant — revenez un peu plus tard ?',
     mpHostAwaySolo: 'L’hôte s’est absenté · vous jouez seul désormais',
-    mpRoomExpiredSolo: 'Cette salle a expiré · vous jouez seul désormais',
-    mpRoomExpired: 'Cette salle a expiré.',
+    mpRoomExpiredSolo: 'Cette salle a été fermée · vous jouez seul désormais',
     mpOk: 'ok',
     mpHostFixing: 'L’hôte revient tout de suite',
+    mpHostGone: 'L’hôte est injoignable pour le moment. Vous pouvez quitter la salle.',
     mpErrNoRoom: 'Aucune salle avec ce code.',
     mpErrFull: 'Cette salle est pleine.',
     mpErrStarted: 'Cette partie a déjà commencé.',
     mpErrClaimed: 'Quelqu’un vient de reprendre cette place. Essayez un autre nom.',
     mpErrTooFew: 'Il faut au moins deux joueurs.',
     mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
-    mpErrTooMany: 'Trop de requêtes depuis votre réseau à l’instant. Attendez quelques secondes et réessayez — ce n’est pas votre connexion.',
+    mpErrTooMany: 'Trop de requêtes depuis votre réseau à l’instant. Réessayez plus tard — ce n’est pas votre connexion.',
     mpErrNotHost: 'Seul l’hôte peut faire cela.',
     mpErrMode: 'Ce mode ne peut pas ouvrir de salle pour l’instant. Actualisez et réessayez.',
     notOnSaleYet: 'L’abonnement n’est pas encore ouvert.',
@@ -1931,10 +1945,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteJia: '沉穩',
     paletteBing: '柔和',
     mpKnowRules: '會{name}的規則嗎？',
-    mpKnowYes: '會',
-    mpKnowNo: '不會，教我',
-    mpLearningWait: '小屋裡有人在學習，稍等',
-    mpPracticeHint: '別乾等著，試著玩玩看',
+    mpKnowYes: '我會玩',
+    mpKnowNo: '我還不會玩',
+    mpJoinNextRound: '下一局開始時您就加入。',
+    mpNeedsNetwork: '多人遊玩需要連網。',
     mpRoundResult: '本局',
     mpFinalTitle: '小屋戰績',
     mpBestRound: '單局最高',
@@ -1965,17 +1979,17 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: '屋主離家出走了，小屋暫時解散',
     mpHostLeftLocked: '屋主離開，小屋暫時解散，等一會再來？',
     mpHostAwaySolo: '屋主暫時離開，正在獨自遊玩',
-    mpRoomExpiredSolo: '小屋已過期，正在獨自遊玩',
-    mpRoomExpired: '這間小屋已經過期了。',
+    mpRoomExpiredSolo: '小屋已經結束了，正在獨自遊玩',
     mpOk: 'ok',
     mpHostFixing: '屋主等一下就來',
+    mpHostGone: '屋主暫時聯絡不上，可以先離開小屋。',
     mpErrNoRoom: '沒有這個小屋號碼。',
     mpErrFull: '小屋滿了。',
     mpErrStarted: '這一局已經開始了。',
     mpErrClaimed: '剛才有人先一步坐回這個位子了。換個名字再試。',
     mpErrTooFew: '至少要兩個人。',
     mpErrNotOpen: '多人遊玩尚未開放。',
-    mpErrTooMany: '剛才您這個網路發來的請求太多了，等幾秒再試一次。這不是您的網路問題。',
+    mpErrTooMany: '剛才您這個網路發來的請求太多了，請稍後再試。這不是您的網路問題。',
     mpErrNotHost: '只有屋主能這樣做。',
     mpErrMode: '這個玩法暫時進不了小屋，重新整理頁面再試。',
     notOnSaleYet: '訂閱尚未開放。',
@@ -2309,10 +2323,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteJia: '沉稳',
     paletteBing: '柔和',
     mpKnowRules: '会{name}的规则吗？',
-    mpKnowYes: '会',
-    mpKnowNo: '不会，教我',
-    mpLearningWait: '小屋里有人在学习，稍等',
-    mpPracticeHint: '别干等着，试着玩玩看',
+    mpKnowYes: '我会玩',
+    mpKnowNo: '我还不会玩',
+    mpJoinNextRound: '下一局开始时您就加入。',
+    mpNeedsNetwork: '多人游玩需要联网。',
     mpRoundResult: '本局',
     mpFinalTitle: '小屋战绩',
     mpBestRound: '单局最高',
@@ -2343,17 +2357,17 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomCancelled: '屋主离家出走了，小屋暂时解散',
     mpHostLeftLocked: '屋主离开，小屋暂时解散，等一会再来？',
     mpHostAwaySolo: '屋主暂时离开，正在独自游玩',
-    mpRoomExpiredSolo: '小屋已过期，正在独自游玩',
-    mpRoomExpired: '这间小屋已经过期了。',
+    mpRoomExpiredSolo: '小屋已经结束了，正在独自游玩',
     mpOk: 'ok',
     mpHostFixing: '屋主等一下就来',
+    mpHostGone: '屋主暂时联系不上，可以先离开小屋。',
     mpErrNoRoom: '没有这个小屋号码。',
     mpErrFull: '小屋满了。',
     mpErrStarted: '这一局已经开始了。',
     mpErrClaimed: '刚才有人先一步坐回这个位子了。换个名字再试。',
     mpErrTooFew: '至少要两个人。',
     mpErrNotOpen: '多人游玩尚未开放。',
-    mpErrTooMany: '刚才您这个网络发来的请求太多了，等几秒再试一次。这不是您的网络问题。',
+    mpErrTooMany: '刚才您这个网络发来的请求太多了，请稍后再试。这不是您的网络问题。',
     mpErrNotHost: '只有屋主能这样做。',
     mpErrMode: '这个玩法暂时进不了小屋，刷新页面再试。',
     notOnSaleYet: '订阅尚未开放。',

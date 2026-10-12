@@ -156,5 +156,80 @@ const call = async (body) => {
   check('名单上的人数没有超过座位数', here <= seats, `${here}/${seats}`);
 }
 
+// ---- ③ 两个人同时按《加入》：一把收回来的椅子只坐得下一个人（10-11 方案 C-2）----------
+//
+// 满员，其中一把椅子的主人网页关了（bye 过了宽限期）。两个人同一瞬间按《加入》：两边读到的是同一份快照，都看见
+// 「那把椅子收得回来」。原先收椅子是无条件删的：先到的那个收回来、坐上去；后到的照着旧快照再删一遍——删掉的已
+// 经是先到那个人刚坐上的椅子，然后自己也坐上去。一把椅子两个人，屋里在座的人数超过上限（报告实测 10 次里 10 次）。
+//
+// 量三样：只进来一个、每把椅子上只有一个人（s:N 记的人和他座位上的 slot 对得上）、在座的人数不超过座位数。
+// 和 check-room-races 一样扫错位：第二个人晚几个微任务才按，两条请求在每一次 await 交错的位置各不相同。
+{
+  const ticks = (n) =>
+    new Promise((r) => {
+      let i = 0;
+      const go = () => (++i >= n ? r() : queueMicrotask(go));
+      queueMicrotask(go);
+    });
+  // 一次调用一个假 IP：这一节开十几间屋、塞上百人次，全算成一个 IP 会撞上 create / join 的限速桶
+  // （check-room-contest 同一个办法）。
+  let ipSeq = 0;
+  const call = async (body) => {
+    ipSeq++;
+    let status = 0;
+    let text = '';
+    const res = {
+      status: (c) => ((status = c), res),
+      setHeader: () => res,
+      end: (t) => ((text = t), res),
+    };
+    await room({ method: 'POST', headers: { 'x-forwarded-for': `198.18.${Math.floor(ipSeq / 254) % 254}.${(ipSeq % 254) + 1}` }, body }, res);
+    return { status, body: JSON.parse(text || '{}') };
+  };
+  const account = newAccount('bbb333', 'code');
+  account.until = Date.now() + 9e8;
+  await saveAccount('seatrace@example.com', account);
+  const who = { email: 'seatrace@example.com', accountToken: account.token };
+  let worst = null;
+  let swept = 0;
+  for (const k of [0, 1, 2, 3, 4, 5, 6, 8, 10, 14, 20, 30]) {
+    const opened = await call({ action: 'create', name: '屋主', ...who });
+    const code = opened.body.code;
+    const seats = opened.body.state.seats;
+    const guests = [];
+    for (let i = 1; i < seats; i++) {
+      const r = await call({ action: 'join', code, name: '客人' + i });
+      if (r.status === 200) guests.push(r.body);
+    }
+    const away = guests[0];
+    await call({ action: 'bye', code, playerId: away.playerId, playerToken: away.playerToken });
+    await agePast(code, away.playerId);
+    const [a, b] = await Promise.all([
+      call({ action: 'join', code, name: '同时甲' }),
+      (async () => {
+        await ticks(k);
+        return call({ action: 'join', code, name: '同时乙' });
+      })(),
+    ]);
+    swept++;
+    const hash = await hgetall('room:' + code);
+    const chairs = Object.entries(hash).filter(([f]) => f.startsWith('s:'));
+    const owners = chairs.map(([, id]) => id);
+    const twice = owners.find((id, i) => owners.indexOf(id) !== i);
+    // 座位上记着 slot 的人，那把椅子上坐的得是他自己。
+    const mismatch = Object.entries(hash)
+      .filter(([f, v]) => f.startsWith('p:') && v && !v.left && v.slot !== undefined)
+      .find(([f, v]) => hash['s:' + v.slot] !== f.slice(2));
+    const seated = Object.entries(hash).filter(([f, v]) => f.startsWith('p:') && v && !v.left && v.slot !== undefined).length;
+    const inCount = [a, b].filter((r) => r.status === 200).length;
+    if (inCount !== 1 || twice || mismatch || seated > seats || chairs.length > seats) {
+      worst = `错位 ${k}：进来 ${inCount} 个（${a.status}/${b.status}）· 椅子 ${chairs.length} 把 · 坐着 ${seated}/${seats}`
+        + (twice ? ` · ${twice} 占了两把` : '')
+        + (mismatch ? ` · ${mismatch[1].name} 记着 s:${mismatch[1].slot}，那把上坐的是别人` : '');
+    }
+  }
+  check(`③ 两个人同时进满员的屋：${swept} 档错位，每一档都只进来一个、一把椅子一个人`, worst === null, worst || '');
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);
