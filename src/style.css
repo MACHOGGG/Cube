@@ -3095,11 +3095,13 @@ button:hover { filter: brightness(1.05); }
    the same "this is live" feedback a tap gets from .home-tap. Gated on a
    real hover-capable pointer, so a phone never leaves an icon stuck big
    after a tap. The raised nav button keeps its lift while it grows. */
+/* 电脑宽版上那张炸弹卡不是 .home-icon-btn（是 .home-bomb-card，见 menu.ts），原先这两条够不着它：同一排的计时
+   卡一悬停就放大，它不动，看着像按不了（10-08 补充方案 7-19）。并进来，同一句过渡、同一个 1.06。 */
 @media (hover: hover) and (pointer: fine) {
-  .home-icon-btn, .center-pick-opt {
+  .home-icon-btn, .home-bomb-card, .center-pick-opt {
     transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1), filter 220ms ease;
   }
-  .home-icon-btn:hover, .center-pick-opt:hover { transform: scale(1.06); }
+  .home-icon-btn:hover, .home-bomb-card:hover, .center-pick-opt:hover { transform: scale(1.06); }
   .home-nav-btn { transition: translate 260ms cubic-bezier(0.24, 1.2, 0.36, 1), transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1), filter 260ms ease; }
   /* The lift rides on `translate`, so hover only has to say how much bigger
      — it applies to the raised icon and the resting one alike. */
