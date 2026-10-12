@@ -139,14 +139,17 @@ export interface GameControllerHooks {
    */
   coachTip?: { text: string; art: string };
   /**
-   * 教学的呼吸灯（engine/coachHint.ts；10-09 补充方案 6-2 起一次一色、看 3 步以内）：棋盘自己
-   * 搜、自己挑那一色、自己挂 `coach-glow`。`null` = 熄灯（一步正在结算、这一条不亮、这一局完
-   * 了）。只有带五条教学的那两副基础棋盘（方块、小球）实现。
-   *
-   * 回 false = 这一次连一步都没算完（超了 15ms）、跳过了（灯熄着）；控制器过一会儿再试一次（见
-   * refreshCoachGlow）。
+   * 教学的呼吸灯（engine/coachHint.ts；10-11 方案 D-2 ～ D-4）：按这一条要的那一种重算——棋盘自己搜（分段在空闲
+   * 时算、算完才亮）、自己挑那一色、自己挂 `coach-glow`。`null` = 熄灯（这一条不亮、这一局完了）。只有带五条教学
+   * 的那两副基础棋盘（方块、小球）实现。
    */
-  coachGlow?(kind: CoachHint | null): boolean;
+  coachGlow?(kind: CoachHint | null): void;
+  /** 一步开始结算：作废没算完的那一份、灯先熄（C 那一组结算完会按「还在不在」接回来）。 */
+  coachGlowCancel?(): void;
+  /** 开局倒数那几秒：在一副临时盘面上空跑一遍搜索，不亮（D-4「预热」，治冷启动；见 createGameController 末尾）。 */
+  coachPrewarm?(): void;
+  /** 这一局的三种颜色（正面，CSS 写法）——教学条 A 那段动画用。 */
+  coachColors?(): readonly string[];
   /**
    * 教学第 4 条的条件：此刻某一种颜色的星星枚数 ≥ 最短外边的长度（方块用较短那条边）。
    * 「最短外边」只有棋盘自己知道，所以由它数。
@@ -663,48 +666,29 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   /**
-   * 教学的呼吸灯重算一次（第 15 推）。
+   * 教学的呼吸灯重算一次。
    *
-   * 两个人会喊它：一步结算完（finish），和教学条换了一条（onChange）。两件事常常在同一
-   * 拍里一起发生（结算完、条子顺手换到下一条），所以合并成一次——推到这一拍的末尾
-   * （Promise 的微任务；`queueMicrotask` 小红书那台 Chrome 61 没有）再算，算之前问一句「是
-   * 不是又开始结算了」：结算期间灯是熄的，等 finish 再点。
+   * 两个人会喊它：一步结算完（finish），和教学条换了一条（onChange）。两件事常常在同一拍里一起发生（结算完、条子
+   * 顺手换到下一条），所以合并成一次——推到这一拍的末尾（Promise 的微任务；`queueMicrotask` 小红书那台 Chrome 61
+   * 没有）再算，算之前问一句「是不是又开始结算了」：结算期间灯是熄的，等 finish 再点。
+   *
+   * 从前这儿还有「没算完就过 300ms 再试、最多两次」（GLOW_RETRY_MS）：那时一次重算有 15ms 的硬上限，算不完就整个
+   * 跳过。10-11 方案 D-4 起搜索拆成小段在空闲时算、算完才亮，用不着重试了（慢手机冷启动另有开局倒数时的预热）。
+   *
+   * C 那一条（groupOnce）HUD 那块《得分图案》一起亮（玩家规格明写，撤回第 15 推「图案块不参与教学亮灯」）。
    */
   let glowQueued = false;
-  /**
-   * 连一步都没算完、跳过之后，隔多久再试一次、最多试几次。
-   *
-   * 每一次重算有上限（10-09 补充方案 6-2：两万个盘面或 15ms，超了退回少看几步；第 15 推那一版是
-   * 「单次超过 8ms 就跳过这一次」），可**第一次算往往是最慢的那一次**：开局那一下认组的那几个
-   * 函数还一次都没跑过，浏览器还没把它们编译成快的那一版。不再试的话，最该亮的那一刻（开局讲第
-   * 1 条）在慢一点的手机上反而一盏都不亮，要等他自己滑完第一步才有。再试一次的时候它们已经热
-   * 了。每一次照样守着那条上限。
-   */
-  const GLOW_RETRY_MS = 300;
-  const GLOW_RETRIES = 2;
-  let glowRetryTimer = 0;
-  let glowRetriesLeft = GLOW_RETRIES;
-  function refreshCoachGlow(retry = false): void {
-    // 不在这儿问 coach 在不在：条子开口那一下（mountCoachBar 里 show(0) → onChange）就会喊
-    // 它，那时候 `coach = mountCoachBar(…)` 还没赋上值。到微任务里再问。
+  function refreshCoachGlow(): void {
+    // 不在这儿问 coach 在不在：条子开口那一下（mountCoachBar 里 show(0) → onChange）就会喊它，那时候
+    // `coach = mountCoachBar(…)` 还没赋上值。到微任务里再问。
     if (!hooks.coachGlow || glowQueued) return;
-    if (!retry) {
-      window.clearTimeout(glowRetryTimer);
-      glowRetryTimer = 0;
-      glowRetriesLeft = GLOW_RETRIES;
-    }
     glowQueued = true;
     void Promise.resolve().then(() => {
       glowQueued = false;
+      const hint = coach && started && !gameOver ? coach.hint() : null;
+      refs.patternBlockEl.classList.toggle('coach-glow-block', hint === 'groupOnce');
       if (!coach || resolving || gameOver || !started) return;
-      const done = hooks.coachGlow?.(coach.hint()) ?? true;
-      if (!done && glowRetriesLeft > 0) {
-        glowRetriesLeft--;
-        glowRetryTimer = window.setTimeout(() => {
-          glowRetryTimer = 0;
-          refreshCoachGlow(true);
-        }, GLOW_RETRY_MS);
-      }
+      hooks.coachGlow?.(hint);
     });
   }
 
@@ -827,6 +811,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           shape: hooks.coachShape ?? 'circle',
           plan: hooks.coachPlan,
           art: hooks.coachArt,
+          // 「本局三种颜色的 1×N」（A 那段动画，10-11 方案 D-1）。
+          colors: hooks.coachColors?.(),
           // 换了一条，呼吸灯亮哪一种组跟着换（第 15 推）。条子不认识棋子、棋盘不认识条子，
           // 两样都在这儿手上，所以由这儿接线。
           onChange: () => refreshCoachGlow(),
@@ -928,8 +914,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 打完过一局了（头一局那个带教学条的也算）：主菜单上那张《每日挑战》从此摆出来（10-08 方案
     // 3-D-1，见 engine/firstPlay.ts 的 finishedAGame）。
     markFinishedAGame();
-    // 这一局完了，教学的呼吸灯一起熄（结算页底下那副棋盘还看得见一角）。
+    // 这一局完了，教学的呼吸灯一起熄（结算页底下那副棋盘还看得见一角），得分图案块那一盏也熄。
     if (coach) hooks.coachGlow?.(null);
+    refs.patternBlockEl.classList.remove('coach-glow-block');
     // 连锁的下一拍要**撤掉**，不是置空（见 cancelBeat 那段）。从前这儿一句都没有，
     // 排着的那一拍会在结算页盖上之后照样落下来。
     cancelBeat();
@@ -1397,8 +1384,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     moves++;
     resolving = true;
     // 教学的呼吸灯：这一步结算期间熄着，结算完（finish）再按新盘面点——亮着的那几枚多半
-    // 正要翻面或者挪地方，灯跟着它们走一路只会添乱。
-    if (coach) hooks.coachGlow?.(null);
+    // 正要翻面或者挪地方，灯跟着它们走一路只会添乱。没算完的那一份当场作废（10-11 方案 D-4）。
+    if (coach) hooks.coachGlowCancel?.();
     // 同上：撤掉，不是置空。
     cancelBeat();
     heldBeat = null;
@@ -1510,7 +1497,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 教学条（第 15 推）：一步结算完，看一眼盘面——第 3、4 条等的都是盘面上的事。看完重算
       // 呼吸灯（这一步之前熄掉的，见 resolveMove 开头）。
       if (coach) {
-        coach.observe({ segLeft: erosion.segLeft(), starsReachEdge: hooks.coachStarsReachEdge?.() ?? false });
+        coach.observe({ starsReachEdge: hooks.coachStarsReachEdge?.() ?? false });
         refreshCoachGlow();
       }
     };
@@ -1557,9 +1544,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       comboBonusPoints += delta - s.points;
       const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
-      // 教学第 5 条等的就是这一下：第一次真的消掉一条外边（第 15 推）。条子只记下，等这一
-      // 步结算完（finish 里的 observe）才换条——别抢在消除动画前面。
-      if (isBonus) coach?.signal('line');
+      // 教学 D 那一条数的就是这一下：从它出现起消掉两次整条外边就换到 E（10-11 方案 D-1）。条子只记下，等这一
+      // 步结算完（finish 里的 observe）才换条——别抢在消除动画前面。一拍消了几条就记几条。
+      if (isBonus) coach?.signal('line', s.lineBonusGroups.length);
       // A bonus (the whole-line, 36-point event) gets its own distinct
       // double-pulse — it's the bigger moment — while an ordinary match gets
       // one light buzz, right as its highlight appears.
@@ -1627,8 +1614,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
              */
             stepper.rescanAll();
             hooks.onErosion?.(step.level);
-            // 教学第 3 条「剩下的段数 ≤ 4」可能在一步之内整个被跨过去（一步翻了八枚，降级
-            // 之后新的一级是满格）——结算之后再看段数就看不出来了，所以降级这一下单报一声。
+            // 教学 B 那一条等的是图案**第一次真的降级**（10-11 方案 D-1）：降级这一下单报一声，结算完再换到 C，
+            // C 按新的 N 亮一组。
             coach?.signal('erosion');
             // 1×1 解锁的那一下：主动说一声（10-08 方案 3-A）。二版里 1×1 是真打的一段，到
             // 这儿不再意味着盘已翻完——这一下得让人知道「现在一枚就够了」，不能只靠右上角
@@ -1643,6 +1630,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // commit() is what actually turns the matched pieces over — a bonus
         // step's commit is a no-op, so this is exactly the flip moment.
         if (s.matchGroups.length) playFlip();
+        // 教学 A 那一条等的是这一局第一次得分（10-11 方案 D-1：「10 秒，或第一次得分」）。只记下，结算完再换。
+        if (s.matchGroups.length) coach?.signal('score');
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
         if (delta > 0 || bombPoints > 0) {
           score += delta;
@@ -1697,6 +1686,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!started || gameOver || paused) return;
     paused = true;
     timer.pause();
+    // 教学条的计时（A 的 10 秒、C 的 10 秒 / 5 秒）随暂停冻结（10-11 方案 D-1）。
+    coach?.pause();
     // 连锁也一起停：遮罩盖上之后，翻面、加分、判死局都不该在背后继续跑
     // （见 heldBeat）。
     holdBeat();
@@ -1741,6 +1732,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!paused) return;
     paused = false;
     timer.resume();
+    coach?.resume();
     refs.pauseOverlay.classList.remove('show');
     // 停下时还剩多少毫秒，就接着数多少——连锁从他离开的那一拍往下走。
     const held = heldBeat;
@@ -1886,6 +1878,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   };
   document.addEventListener('visibilitychange', onVisibility);
 
+  /*
+   * 教学呼吸灯的预热（10-11 方案 D-4「开局倒数那几秒空跑一遍，治冷启动」）：带五条教学的那一局，开局页一露面就
+   * 让搜索在一副临时盘面上空跑一遍，不亮——第一次跑往往是最慢的那一次（那几个函数还没被浏览器编译成快的那一
+   * 版），慢手机上 B 那一条头一回亮灯就会晚。倒数时这一局的牌还没发（newGame 才发），所以用的是棋盘自己拿同一套
+   * 发牌规矩另发的一副（不碰发牌用的那串随机数，见 engine/rng.ts 的 withScratchRandom）。
+   *
+   * 下一拍再跑：这会儿开局页还没上树。开局不作废它（小红书头一局不数 4-3-2-1，开局页下一帧就被按掉），头一次
+   * 真的重算、第一步开始结算、离开这一局才作废（engine/coachHint.ts 的 warm）。
+   */
+  const prewarmTimer =
+    hooks.coach && !hooks.coachTip && hooks.coachPrewarm ? window.setTimeout(() => hooks.coachPrewarm?.(), 0) : 0;
+
   return {
     get score() {
       return score;
@@ -1935,7 +1939,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       patternBlock.destroy();
       coach?.destroy();
       coach = null;
-      window.clearTimeout(glowRetryTimer);
+      // 没算完的那一份搜索别再一段段跑下去（10-11 方案 D-4：「作废——……离开」）；还没开跑的预热也不跑了。
+      window.clearTimeout(prewarmTimer);
+      hooks.coachGlowCancel?.();
       coachTip?.destroy();
       stopLeading();
       coachTip = null;

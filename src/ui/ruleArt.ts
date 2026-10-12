@@ -359,6 +359,31 @@ export function buildRuleArt(opts: { shape?: 'square' | 'circle' } = {}): string
 }
 
 /**
+ * 教学条 A 那一幅（10-11 方案 D-1）：**本局三种颜色的 1×N（开局即 1×4）依次慢翻过去再翻回来，循环**。
+ *
+ * 三行，一行一种颜色、四枚；第一行翻成星星、停一会儿、翻回来，接着第二行，再第三行（`ra-cyc` 一个周期，三行各错
+ * 开三分之一：`ra-cyc0…2`）。星星画成和正面同一种颜色——这一幅讲的是「拼出来就翻面、变成星星」这一件事，星星是什么
+ * 颜色不在这句话里（10-11 方案 B-8 第 2 条：不写星星是什么颜色）。
+ *
+ * 和别的几幅不一样，这一幅手机上也摆出来（style.css 的 `.coach-bar--anim`）：A 只有字的话，「翻面」「星星」这两个
+ * 词他还没见过是什么样子。整块不淡出（`ra-still`），三行轮流翻本身就是循环。
+ *
+ * @param colors 这一局的颜色（正面，CSS 写法），取前三种；不给就用配图那套颜色。
+ */
+export function flipRowsArt(shape: 'square' | 'circle', colors?: readonly string[]): string {
+  const pick = colors && colors.length >= 3 ? colors.slice(0, 3) : [O, B, M];
+  const piece = (c: string, row: number) =>
+    shape === 'circle'
+      ? svgTile(ballFront(c), ballBack(c), `ra-cyc ra-cyc${row}`)
+      : tile(c, c, `ra-cyc ra-cyc${row}`);
+  let inner = '';
+  pick.forEach((c, row) => {
+    for (let k = 0; k < 4; k++) inner += piece(c, row);
+  });
+  return board(inner, 'ra-still ra-board--cyc', 4);
+}
+
+/**
  * 炸弹 / 无限反转 那两句首玩提示的配图（见 ui/modeTips.ts）。
  *
  * 和上面五条那一套是同一批零件（同一块小棋盘、同一种棋子、同一个周期），所以

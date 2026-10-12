@@ -84,6 +84,23 @@ export function clearSeed(): void {
   source = Math.random;
 }
 
+/**
+ * 跑一段用自己的一串数，**不动发牌那一串**：跑完原样接回去（那一串停在哪儿，回来还从哪儿接着取）。
+ *
+ * 给教学呼吸灯的预热用（10-11 方案 D-4，gameController 末尾）：开局倒数那几秒棋盘要拿同一套发牌规矩另发一副临时
+ * 的牌给搜索空跑一遍。直接借发牌那一串的话，今天是没事（newGame 发牌之前 plantSeed 总会重种一次），可那是靠
+ * 别处的一个习惯撑着——哪天有人在倒数和发牌之间从这一串里取了一个数，同一串种子码在两台设备上就发出两副牌。
+ */
+export function withScratchRandom<R>(seed: string, run: () => R): R {
+  const saved = source;
+  source = mulberry32(hash32(seed));
+  try {
+    return run();
+  } finally {
+    source = saved;
+  }
+}
+
 /** The raw stream, for anything that needs a number rather than an order. */
 export function random(): number {
   return source();

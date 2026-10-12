@@ -11,13 +11,13 @@ import { createBoardZoom } from '../ui/boardZoom';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, setCoachLit, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { proCircleRing, proHintWidth } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, edgeResidue, oneStepMoves } from '../engine/residueBoard';
-import { createCoachGlow, matchKind, starClearHintFor, type StarClearHint } from '../engine/coachHint';
+import { createCoachGlow, starClearHintFor, type PlanBoard, type StarClearHint } from '../engine/coachHint';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { buildEdgeBand } from '../ui/edgeBand';
 import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
@@ -28,7 +28,7 @@ import { erodedShapes, findTargets, type BoardView } from '../engine/targetMatch
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { slideLine } from '../engine/slideLine';
-import { shuffle } from '../engine/rng';
+import { shuffle, withScratchRandom } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, blowUpIfClustered, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, redClusterKeys, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
@@ -690,9 +690,10 @@ export function createCircleGame(): ShapeGame {
             if (isBlank(grid[r][c])) continue;
             const key = cellKey(r, c);
             const el = makeBallEl(grid[r][c], r, c);
-            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key));
+            // 教学的呼吸灯从那一份状态里派生（engine/coachHint.ts），重画只重挂不重算（10-11 方案 D-4）；亮着的那一枚
+            // 要写行内动画时，呼吸灯接在列表最后（不然被翻面那一句压掉，D-0 根因 4）。
+            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), false, glow.lit(grid[r][c].id));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
-            if (glow.lit(grid[r][c].id)) el.classList.add('coach-glow');
             if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             frag.appendChild(el);
           }
@@ -1147,45 +1148,79 @@ export function createCircleGame(): ShapeGame {
           grid = real;
         }
       }
-      const glow = createCoachGlow<Tile>({
-        grid: () => grid,
-        // 小球的一步：三族线里任意一条，在**此刻还在盘上**的那一串上转几格（离场的格子不
-        // 在线上，见 liveOnLine）——和残局穷举、和 applyDrag 同一个口径。
-        moves: () => oneStepMoves(LINES.map((l) => l.cells), (r, c) => cellValid(r, c) && !isBlank(grid[r][c])),
-        groupsFor: (kind) => {
-          if (kind !== 'edge') {
-            return (trial, moved) =>
-              withGrid(trial, () =>
-                findRunMatches(moved)
-                  .map((m) => m.cells)
-                  .filter((cells) => matchKind(cells.map(([r, c]) => grid[r][c].face)) === kind),
-              );
+      /** 一枚球此刻在不在盘上（按 id 找）。C 那一组要问它「还在不在、还是不是那一面」。 */
+      const tileById = (id: number): Tile | null => {
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c <= r; c++) {
+            const t = grid[r][c];
+            if (t && t.id === id && !isBlank(t)) return t;
           }
-          /*
-           * 外边的**几何**只看哪几格还在盘上，滑一步不改变这件事（滑动只是在活格之间换位
-           * 置），所以此刻算一次，每种滑法只问颜色那一半——不然每种滑法都要把二十一条线两两
-           * 比一遍（endsAll），八十来种滑法下来就是好几毫秒，看两步、三步的时候 15ms 那条线一碰就过。
-           */
-          const edges = outerEdges(edgeBoard, edgeThreshold()).map((e) => e.live);
-          return (trial) =>
-            withGrid(trial, () => edges.filter((live) => isFullDotMatch(live) && !bonusedSignatures.has(edgeSig(live))));
+        }
+        return null;
+      };
+      /*
+       * 交给搜索的那一份视图（engine/coachHint.ts 的 PlanBoard），每次重算现取。
+       *
+       *   · 走法：三族线里任意一条，在**此刻还在盘上**的那一串上转几格（离场的格子不在线上，见 liveOnLine）——
+       *     和残局穷举、和 applyDrag 同一个口径。
+       *   · 线（估值用）：每一条线此刻还在盘上的那几格。
+       *   · 外边：此刻削得动的那几条（outerEdges，门槛跟着收尾放开走），去掉这一批星星已经领过奖的。几何只看哪几
+       *     格还在盘上，滑一步不改变这件事，所以这一份在一次搜索里不变。
+       *   · 认组（scoring）：结算用的那一份 findRunMatches，照连锁那一句只留至少一枚色块的。
+       *   · 消边（clearing）：那几条外边里整条同色星星的（不记账——真的消是连锁的事）。
+       */
+      function glowView(): PlanBoard<Tile> {
+        const live = (r: number, c: number) => cellValid(r, c) && !isBlank(grid[r][c]);
+        const edges = outerEdges(edgeBoard, edgeThreshold())
+          .map((e) => e.live)
+          .filter((cells) => !bonusedSignatures.has(edgeSig(cells)));
+        return {
+          grid,
+          step: oneStepMoves(LINES.map((l) => l.cells), live),
+          lines: LINES.map((l) => l.cells.filter(([r, c]) => live(r, c))),
+          edges,
+          n: controller.matchLen(),
+          scoring: (trial, moved) =>
+            withGrid(trial, () =>
+              findRunMatches(moved)
+                .filter((m) => m.cells.some(([r, c]) => grid[r][c].face === 'flavor'))
+                .map((m) => m.cells),
+            ),
+          clearing: (trial) =>
+            withGrid(trial, () => edges.filter((cells) => isFullDotMatch(cells) && !bonusedSignatures.has(edgeSig(cells)))),
+          // 一种颜色包括这个颜色的色块和星星：星星看露出来的那一色。
+          colorOf: effColor,
+          isPiece: (t) => !isBlank(t) && !(isBomb && effColor(t) === RED_IDX),
+          isStar: (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t),
+          isBlock: (t) => !isBlank(t) && t.face === 'flavor' && !(isBomb && t.color === RED_IDX),
+        };
+      }
+      const glow = createCoachGlow<Tile>({
+        view: glowView,
+        // 开局倒数时（这一局的牌还没发）拿来预热的那一副：同一套发牌规矩另发，不碰发牌那串随机数（engine/rng.ts 的
+        // withScratchRandom），看完原样换回去（withGrid）。
+        scratch: () => withGrid(withScratchRandom('coach-prewarm', generateCleanBoard), glowView),
+        still: (id, face) => {
+          const t = tileById(id);
+          return !!t && (t.face === 'dot' ? 1 : 0) === face;
         },
-        // 一种颜色包括这个颜色的色块和星星（10-09 补充方案 6-2）：星星看露出来的那一色。
-        colorOf: effColor,
+        faceOf: (id) => (tileById(id)?.face === 'dot' ? 1 : 0),
+        paint: () => paintCoachGlow(),
       });
       /**
-       * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空
-       * 中翻的那几块牌拆掉（gameController 的 plankFlipCells），也会打断放大动画（zoom）。
+       * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空中翻的那几块牌拆掉
+       * （gameController 的 plankFlipCells），也会打断放大动画（zoom）。身上还带着行内动画列表的那几枚，呼吸灯接到
+       * 列表最后（setCoachLit，D-0 根因 4）。
        */
       function paintCoachGlow() {
         for (const el of refs.boardEl.querySelectorAll<HTMLElement>('.ball[data-r][data-c]')) {
           const t = grid[Number(el.dataset.r)]?.[Number(el.dataset.c)];
-          el.classList.toggle('coach-glow', !!t && !isBlank(t) && glow.lit(t.id));
+          setCoachLit(el, !!t && !isBlank(t) && glow.lit(t.id));
         }
       }
       /**
-       * 教学第 4 条（星星消除那一条）该不该讲（10-08 方案 3-E-3；亮哪儿 10-09 起归 reachByColor，engine/coachHint 的
-       * starClearHintFor）。
+       * 教学 D 那一条（星星消除）讲不讲、C 那一条的「5 秒」从什么时候起算（10-08 方案 3-E-3、10-11 方案 D-1；engine/
+       * coachHint 的 starClearHintFor）。亮哪儿 10-11 方案 D-3 起归 planEdge（上面那份视图）。
        *
        * 「外边」是此刻**削得动**的那几条（outerEdges，门槛跟着收尾放开走，和卡死判定问的是同一个
        * 数）；最短的那条就是从前「最短外边」那个数，所以「什么时候讲」没变。一条都削不动就不讲——
@@ -1241,11 +1276,10 @@ export function createCircleGame(): ShapeGame {
         coachShape: 'circle',
         coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
-        coachGlow: (kind) => {
-          const done = glow.update(kind);
-          paintCoachGlow();
-          return done;
-        },
+        coachGlow: (kind) => glow.request(kind),
+        coachGlowCancel: () => glow.cancel(),
+        coachPrewarm: () => glow.prewarm(),
+        coachColors: () => COLORS.slice(0, 3),
         coachStarsReachEdge,
         shouldLeadOut: opts?.shouldLeadOut,
         onReLogin: opts?.onReLogin,

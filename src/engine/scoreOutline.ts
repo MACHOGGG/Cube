@@ -1,4 +1,5 @@
 import type { Cell } from './types';
+import { reducedMotion } from './reducedMotion';
 
 export const SCORE_OUTLINE_MS = 2500;
 
@@ -68,17 +69,79 @@ export function createOutlineTracker(): OutlineTracker {
  * tile itself visibly lights up. Circle and triangle keep the plain scale
  * pulse alongside their own shape-hugging outline overlay.
  */
-export function applyScoreAnimations(el: HTMLElement, isFlip: boolean, pulseElapsedMs: number | undefined, glow = false): void {
+export function applyScoreAnimations(
+  el: HTMLElement,
+  isFlip: boolean,
+  pulseElapsedMs: number | undefined,
+  glow = false,
+  coachLit = false,
+): void {
   const pulseClass = glow ? 'score-pulse-glow' : 'score-pulse';
-  if (isFlip && pulseElapsedMs !== undefined) {
-    el.style.animation = `flip-in 300ms ease-out both, ${pulseClass} 2.5s ease-in-out 1 both`;
-    el.style.animationDelay = `0s, ${-(pulseElapsedMs / 1000)}s`;
+  /*
+   * 教学的呼吸灯（10-11 方案 D-4，修 D-0 的第 4 个根因）：
+   *
+   *   · 减弱动态效果时**不写行内动画**。行内的 animation 压得过样式表里每一条 `@media (prefers-reduced-motion)`，
+   *     原先翻面＋脉冲那一段在这一档照样跑；现在只挂类，样式表那一档自己把它们关掉、亮着的那几枚给静止光晕。
+   *   · 亮着的那一枚要写行内动画时，把 `glow-pulse-coach` 接在列表**最后**。原先行内那一句压过 `.coach-glow`：刚翻
+   *     成星星、正好该亮的那一枚，光被它盖掉，要等下一次重画才亮。
+   */
+  if (coachLit) el.classList.add('coach-glow');
+  if (reducedMotion()) {
+    if (isFlip) el.classList.add('flip-in');
+    else if (pulseElapsedMs !== undefined) el.classList.add(pulseClass);
+    return;
+  }
+  const parts: string[] = [];
+  const delays: string[] = [];
+  if (isFlip) {
+    parts.push('flip-in 300ms ease-out both');
+    delays.push('0s');
+  }
+  if (pulseElapsedMs !== undefined) {
+    parts.push(`${pulseClass} 2.5s ease-in-out 1 both`);
+    delays.push(`${-(pulseElapsedMs / 1000)}s`);
+  }
+  if (coachLit && parts.length) {
+    parts.push(COACH_GLOW_ANIM);
+    delays.push('0s');
+  }
+  if (parts.length > 1) {
+    el.style.animation = parts.join(', ');
+    el.style.animationDelay = delays.join(', ');
   } else if (isFlip) {
     el.classList.add('flip-in');
   } else if (pulseElapsedMs !== undefined) {
     el.classList.add(pulseClass);
     el.style.animationDelay = -(pulseElapsedMs / 1000) + 's';
   }
+}
+
+/** 教学呼吸灯那一条动画（和 style.css 的 `.coach-glow` 同一句：名字、时长、曲线、无限循环）。 */
+export const COACH_GLOW_ANIM = 'glow-pulse-coach 2.2s ease-in-out infinite';
+
+/**
+ * 不重画、就地点亮 / 熄掉一枚（棋盘结算之后挂灯走这一条，见 D-4「重画只重挂不重算」）。
+ *
+ * 只挂类不够：这一枚身上要是还有行内的动画列表（刚翻面那一下写的，见 applyScoreAnimations），它压得过 `.coach-glow`
+ * 那一条——灯就要等下一次重画才亮（D-0 根因 4）。所以有列表的，把呼吸灯那一条接到最后 / 从列表里摘掉。
+ */
+export function setCoachLit(el: HTMLElement, on: boolean): void {
+  el.classList.toggle('coach-glow', on);
+  const anim = el.style.animation;
+  if (!anim || reducedMotion()) return;
+  const parts = anim.split(/,(?![^(]*\))/).map((x) => x.trim()).filter(Boolean);
+  const delays = (el.style.animationDelay || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const at = parts.findIndex((x) => x.startsWith('glow-pulse-coach'));
+  if (on && at < 0) {
+    while (delays.length < parts.length) delays.push('0s');
+    parts.push(COACH_GLOW_ANIM);
+    delays.push('0s');
+  } else if (!on && at >= 0) {
+    parts.splice(at, 1);
+    if (at < delays.length) delays.splice(at, 1);
+  } else return;
+  el.style.animation = parts.join(', ');
+  el.style.animationDelay = delays.join(', ');
 }
 
 export interface PixelRect {

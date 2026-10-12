@@ -2772,7 +2772,8 @@ button:hover { filter: brightness(1.05); }
 
    从前这儿还有 HUD 那一块《得分图案》和托盘上那条外边带子（.coach-aim /
    .coach-aim--edge）：教学讲到哪一条就点亮句子里那样东西（E23）。第 15 推起它们不
-   再参与教学亮灯（玩家原话），灯改成亮在「再走一步就能完成这一条」的那几枚棋子上。 */
+   再参与教学亮灯（玩家原话），灯改成亮在棋子上。10-11 方案 D-1 起《得分图案》那一块
+   在 C 那一条又一起亮了（玩家规格明写，.coach-glow-block，见下面教学那一段）。 */
 .glow-pulse,
 .home-icon-btn--glow .home-icon-art > svg {
   animation: glow-pulse 2.2s ease-in-out infinite;
@@ -2789,9 +2790,11 @@ button:hover { filter: brightness(1.05); }
 /*
  * ---- 教学的呼吸灯：一步就能凑成的那几枚棋子（第 15 推）------------------
  *
- * 玩家 2026-10-03 定的：同一时间只亮一种颜色；只在「再走一步就能完成这一条」时亮，只亮
- * 会参与的那几枚（包括要滑过去的那一枚）；只动 `filter: drop-shadow`，不加任何热区；减弱
- * 动态效果时用静止光晕。亮哪几枚由 engine/coachHint.ts 挑，棋盘自己挂 `.coach-glow`。
+ * 玩家 2026-10-03 定的：同一时间只亮一种颜色；只动 `filter: drop-shadow`，不加任何热区；减
+ * 弱动态效果时用静止光晕。亮哪几枚由 engine/coachHint.ts 挑（10-11 方案 D-2 / D-3：B、C 亮最少
+ * 步数那一色最后一步成组的那 N 枚，D 亮那一色在场的所有星星），棋盘自己挂 `.coach-glow`。
+ * 身上带着行内动画列表的那几枚（刚翻面、刚落地的），呼吸灯接在列表最后（engine/scoreOutline.ts
+ * 的 setCoachLit）——行内的 animation 压得过这一条，从前刚翻成星星的那一枚光就这么被盖掉。
  *
  * ── 为什么是这条加亮一档的 glow-pulse-coach ──
  *
@@ -2835,6 +2838,32 @@ button:hover { filter: brightness(1.05); }
 }
 @media (prefers-reduced-motion: reduce) {
   .app--game .board .coach-glow:not(.piece-grabbed) {
+    animation: none;
+    filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
+  }
+}
+/*
+ * C 那一条（「得分图案会随着游戏解锁而变化」）HUD 那块《得分图案》跟着一起亮（10-11 方案 D-1：玩家规格明写，撤回
+ * 第 15 推「图案块不参与教学亮灯」）。控制器在 C 那一条挂 `.coach-glow-block`，换走就摘（gameController 的
+ * refreshCoachGlow）。
+ *
+ * 光色用默认那支 `--glow`（跟着主题走），不换奶油：这块牌摆在页底上，不在那块暗托盘上——奶油糊在米色页底上
+ * 看不见（第 8 推量过的就是这一块：`--play-chip` 琥珀牌面、`--bg` 米色页底）。三层、半径不变，理由同上。
+ *
+ * C 是降级那一步结算完才出来的，而降级那一下这块牌自己会弹一下（`.hud-block--punch`，320ms）。两条都写整条
+ * `animation`，谁的选择器重谁赢——连锁短的时候 C 赶在弹完之前就挂上，那一下弹会被半路掐掉。所以两样都在的
+ * 时候写成一张动画列表：弹的是 transform、亮的是 filter，各动各的。
+ */
+.app--game .hud-block--pattern.coach-glow-block {
+  animation: glow-pulse-coach 2.2s ease-in-out infinite;
+  will-change: filter;
+}
+.app--game .hud-block--pattern.coach-glow-block.hud-block--punch {
+  animation: pat-punch 320ms cubic-bezier(.34, 1.56, .64, 1) 1, glow-pulse-coach 2.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app--game .hud-block--pattern.coach-glow-block,
+  .app--game .hud-block--pattern.coach-glow-block.hud-block--punch {
     animation: none;
     filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
   }
@@ -7814,6 +7843,19 @@ body.is-room-host::after {
 /* 得分之后翻面：对勾停了再翻。 */
 .ra-flip { animation: ra-flip var(--T) ease-in-out infinite; }
 @keyframes ra-flip { 0%, 66% { transform: rotateY(0); } 74%, 100% { transform: rotateY(180deg); } }
+/* 教学条 A 那一幅（ui/ruleArt.ts 的 flipRowsArt，10-11 方案 D-1）：三行三种颜色，一行接一行慢翻成星星、停一会儿、
+   翻回来。一个周期 9 秒，三行各错开三分之一；翻一次 0.7 秒左右（玩家要的是「慢翻」）。 */
+.ra-board--cyc { --T: 9s; }
+.ra-cyc { animation: ra-cyc var(--T) ease-in-out infinite; }
+/* 延迟写死成秒数，不写 calc(var(--T) / 3)：小红书那一端的 Chrome 61 上，变量里算时间这一套不一定认，认不得整条丢掉
+   就是三行一起翻。周期在上面那一行定死了 9 秒，两处一起改。 */
+.ra-cyc1 { animation-delay: 3s; }
+.ra-cyc2 { animation-delay: 6s; }
+@keyframes ra-cyc {
+  0% { transform: rotateY(0); }
+  8%, 24% { transform: rotateY(180deg); }
+  32%, 100% { transform: rotateY(0); }
+}
 /* ra-peek（一枚翻过去露一下反面再翻回来）随着「每个图形都有正反两面」那一幅
    一起退役了——教学 2026-09 改成五条，那一幅不在里面（见 ui/ruleArt.ts 文件头）。 */
 /* 第 4 条：四颗同色星星排成一线，得分后一起缩小消失。淡出动在外面那一层
@@ -8021,6 +8063,18 @@ body.is-room-host::after {
     display: flex; align-items: center;
   }
   .app.app--game.has-coach > .coach-bar.coach-bar--rules .coach-art { display: none; }
+  /*
+   * A 那一条例外（10-11 方案 D-1：「手机上也显示」）：那一幅是动画（三行三种颜色的 1×N 依次翻成星星再翻回来），
+   * 讲的正是这一句里的「翻面」「星星」长什么样。
+   *
+   * 大小照字那一格的两行高度定：三行 + 两道缝 + 上下内边距 = 3.64em，和上面那个 min-height（两行字那么高）一样高，
+   * 所以条子不因为多了这幅图变高——棋盘的大小是开局量一次就钉死的，条子一变高就压进棋盘。宽 4.8em（四枚），旁边
+   * 的字照旧由 fitCoachText 收到两行以内。
+   */
+  .app.app--game.has-coach > .coach-bar.coach-bar--rules.coach-bar--anim .coach-art {
+    display: flex;
+    font-size: clamp(16.4px, 2.57vh, 20px);
+  }
 }
 /*
  * 竖屏：条子往两边的留白里伸 8px，自己的内边距从 12 收到 8。

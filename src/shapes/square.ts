@@ -10,13 +10,13 @@ import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
-import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
+import { createOutlineTracker, applyScoreAnimations, setCoachLit, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
 import { TILE_RADIUS, proHintWidth, proSquareRing } from '../engine/proHint';
 import { onProChange, proOn } from '../engine/proMode';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, gridLines, gridResidue, oneStepMoves } from '../engine/residueBoard';
-import { createCoachGlow, matchKind, starClearHintFor, type StarClearHint } from '../engine/coachHint';
+import { createCoachGlow, starClearHintFor, type PlanBoard, type StarClearHint } from '../engine/coachHint';
 import { packSnapshot, type BoardSnapshot, type SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreForSize, sizeAtLevel } from '../engine/targets';
@@ -25,7 +25,7 @@ import { runLabel as runLabelOf, squareGrowth } from '../engine/matchGrowth';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { asteriskSvg } from '../ui/dotFaceMark';
-import { shuffle } from '../engine/rng';
+import { shuffle, withScratchRandom } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, blowUpIfClustered, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, redClusterKeys, GRID_ADJACENCY, type BombAdjacency } from '../engine/bomb';
 import { STRINGS as SHELL } from '../i18n';
@@ -475,9 +475,10 @@ export function createSquareGame(): ShapeGame {
           for (let c = 0; c < cols; c++) {
             const key = cellKey(r, c);
             const el = makeTileEl(grid[r][c], r, c, CELL);
-            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true);
+            // 教学的呼吸灯从那一份状态里派生（engine/coachHint.ts），重画只重挂不重算（10-11 方案 D-4）；亮着的那一枚
+            // 要写行内动画时，呼吸灯接在列表最后（不然被翻面那一句压掉，D-0 根因 4）。
+            applyScoreAnimations(el, flipInCells.has(key), pulseMs.get(key), true, glow.lit(grid[r][c].id));
             if (stuckKeys?.has(key)) el.classList.add('stuck-glow');
-            if (glow.lit(grid[r][c].id)) el.classList.add('coach-glow');
             if (warnKeys?.has(key)) el.classList.add('hazard-warn');
             frag.appendChild(el);
           }
@@ -880,37 +881,68 @@ export function createSquareGame(): ShapeGame {
           grid = real;
         }
       }
+      /** 一枚棋子此刻在不在盘上（按 id 找）。C 那一组要问它「还在不在、还是不是那一面」。 */
+      const tileById = (id: number): Tile | null => {
+        for (const row of grid) for (const t of row) if (t && t.id === id && !isBlank(t)) return t;
+        return null;
+      };
+      /*
+       * 交给搜索的那一份视图（engine/coachHint.ts 的 PlanBoard）。每次重算现取：消掉整行整列之后盘子变小，线、
+       * 外边、N（侵蚀阶梯）都可能变了。
+       *
+       *   · 走法：任意一行或一列整条转几格（空位和活炸弹跟着整行整列一起滑，和残局穷举 residueAt 一个口径）。
+       *   · 认组（scoring）：问的就是结算用的那一份——findMatches，再照连锁那一句只留至少一枚色块的（engine/scoring.ts
+       *     的 createCascadeStepper）。
+       *   · 消边（clearing）：方块任意一整行一整列同色星星都消（fullDotLines），所以每一行每一列都是「外边」。
+       */
+      function glowView(): PlanBoard<Tile> {
+        const lines = gridLines(rows, cols);
+        return {
+          grid,
+          step: oneStepMoves(lines, (r, c) => !!grid[r]?.[c]),
+          lines,
+          edges: lines,
+          n: controller.matchLen(),
+          scoring: (trial, moved) =>
+            withGrid(trial, () =>
+              findMatches(moved)
+                .filter((m) => m.cells.some(([r, c]) => grid[r][c].face === 'flavor'))
+                .map((m) => m.cells),
+            ),
+          clearing: (trial) => withGrid(trial, () => fullDotLines().groups),
+          // 一种颜色包括这个颜色的色块和星星：星星看露出来的那一色。
+          colorOf: effColor,
+          isPiece: (t) => !isBlank(t) && !(isBomb && effColor(t) === RED_IDX),
+          isStar: (t) => !isBlank(t) && t.face === 'dot' && !liveBomb(t),
+          isBlock: (t) => !isBlank(t) && t.face === 'flavor' && !(isBomb && t.color === RED_IDX),
+        };
+      }
       const glow = createCoachGlow<Tile>({
-        grid: () => grid,
-        // 方块的一步：任意一行或一列整条转几格。空位和活炸弹跟着整行整列一起滑，所以每一格
-        // 都在线上（和残局穷举那头 residueAt 的口径一样）。
-        moves: () => oneStepMoves(gridLines(rows, cols), (r, c) => !!grid[r]?.[c]),
-        groupsFor: (kind) =>
-          kind === 'edge'
-            ? (trial) => withGrid(trial, () => fullDotLines().groups)
-            : (trial, moved) =>
-                withGrid(trial, () =>
-                  findMatches(moved)
-                    .map((m) => m.cells)
-                    .filter((cells) => matchKind(cells.map(([r, c]) => grid[r][c].face)) === kind),
-                ),
-        // 一种颜色包括这个颜色的色块和星星（10-09 补充方案 6-2）：星星看露出来的那一色。
-        colorOf: effColor,
+        view: glowView,
+        // 开局倒数时（这一局的牌还没发）拿来预热的那一副：同一套发牌规矩另发，不碰发牌那串随机数（engine/rng.ts 的
+        // withScratchRandom），看完原样换回去（withGrid）。
+        scratch: () => withGrid(withScratchRandom('coach-prewarm', generateCleanBoard), glowView),
+        still: (id, face) => {
+          const t = tileById(id);
+          return !!t && (t.face === 'dot' ? 1 : 0) === face;
+        },
+        faceOf: (id) => (tileById(id)?.face === 'dot' ? 1 : 0),
+        paint: () => paintCoachGlow(),
       });
       /**
-       * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空
-       * 中翻的那几块牌拆掉（gameController 的 plankFlipCells），而灯是在连锁收尾那一刻点
-       * 的，最后一拍的翻面可能还没落地。
+       * 结算之后**不重画**，就地给此刻画着的那几枚挂上 / 摘掉 `coach-glow`。重画会把还在空中翻的那几块牌拆掉
+       * （gameController 的 plankFlipCells），而灯是在连锁收尾那一刻点的，最后一拍的翻面可能还没落地。身上还带着
+       * 行内动画列表的那几枚，呼吸灯接到列表最后（setCoachLit，D-0 根因 4）。
        */
       function paintCoachGlow() {
         for (const el of refs.boardEl.querySelectorAll<HTMLElement>('.tile[data-r][data-c]')) {
           const t = grid[Number(el.dataset.r)]?.[Number(el.dataset.c)];
-          el.classList.toggle('coach-glow', !!t && glow.lit(t.id));
+          setCoachLit(el, !!t && glow.lit(t.id));
         }
       }
       /**
-       * 教学第 4 条（星星消除那一条）该不该讲（10-08 方案 3-E-3；亮哪儿 10-09 起归 reachByColor，engine/coachHint 的
-       * starClearHintFor）。
+       * 教学 D 那一条（星星消除）讲不讲、C 那一条的「5 秒」从什么时候起算（10-08 方案 3-E-3、10-11 方案 D-1；engine/
+       * coachHint 的 starClearHintFor）。亮哪儿 10-11 方案 D-3 起归 planEdge（上面那份视图）。
        *
        * 方块没有「最外边」这回事：星星凑满**任意**一整行、一整列都消（fullDotLines），所以交给它
        * 的「外边」是每一整行、每一整列。最短的那条就是较短的那条边——和第 15 推定的「方块用较短
@@ -965,11 +997,10 @@ export function createSquareGame(): ShapeGame {
         coachShape: 'square',
         coachPlan: opts?.coachPlan,
         coachTip: opts?.coachTip,
-        coachGlow: (kind) => {
-          const done = glow.update(kind);
-          paintCoachGlow();
-          return done;
-        },
+        coachGlow: (kind) => glow.request(kind),
+        coachGlowCancel: () => glow.cancel(),
+        coachPrewarm: () => glow.prewarm(),
+        coachColors: () => COLORS.slice(0, 3),
         coachStarsReachEdge,
         shouldLeadOut: opts?.shouldLeadOut,
         onReLogin: opts?.onReLogin,
