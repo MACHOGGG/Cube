@@ -4607,14 +4607,51 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
   .records-page--hint:not(.xhs-profile) > .records-hint { grid-column: 2; grid-row: 2; align-self: center; }
   .records-page--hint:not(.xhs-profile) .records-panel--ranks { grid-row: 3; }
 
-  /* ---------- 电脑端的个人主页：两栏（第 17 推）----------
-   * 左栏是那一列药丸，右栏是天才面板和底下那一对白键。两栏等宽、顶端对齐，中间那道缝
-   * 和页边都用间距那三档。 */
-  .app.profile-page { max-width: 880px; }
+  /* ---------- 电脑端的个人主页：两栏（第 17 推），十二格 3 × 4、整页不滑（10-08 补充方案 7-18）----------
+   * 左栏是那一列药丸，右栏是天才面板和底下那一对白键，顶端对齐，中间那道缝和页边都用间距那三档。
+   *
+   * 第 17 推两栏等宽、十二格 2 × 6，电脑上整页要往下滑（1000×700 上滑出去一截）。7-18 照玩家定的数改：整页放宽
+   * 到 1060、左栏收到 360（1000–1099 宽再收到 300）、右栏吃剩下的；天才面板里吉祥物（90 高 → 54）和徽章并排成
+   * 一行，十二格排成 3 × 4，格子、徽章、法务键的内边距和字号各收一档；招牌底下 22 → 12，《返回》上面 6 → 16。
+   * 手机上一个像素不动（这些全在 min-width: 1000px 里）。
+   *
+   * 十二格的行高是 minmax(46px, 1fr)，不是方案上写的 minmax(46px, auto)：auto 的话哪一行有一格折了行，那一行就比
+   * 别的行高——法语有两格折成三行，头两行 47.3、后两行 46，十二格就不一样高了（第 17 推定的规矩，见 .genius-grid
+   * 那一段「最高那一行说了算」；check-redesign-fit 量着）。1fr 在不定高的网格里按最高那一行算，四行一起高；够不到
+   * 46 的时候 46 兜底。「敬请期待」那一行小字的行高同时收到 1.2（见下面），不然那几格 47.2、四行都被它撑高，
+   * 1000×700 上整页要滑 2px（量过）。 */
+  .app.profile-page { max-width: 1060px; }
   .profile-cols {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
     column-gap: var(--gap-lg); align-items: start;
   }
+  .profile-page > .home-head { margin-bottom: 12px; }
+  .profile-page .page-back-row { margin-top: 16px; }
+  .genius-panel {
+    display: grid; grid-template-columns: auto 1fr; align-items: center;
+    column-gap: 14px; row-gap: 12px; padding-top: 12px;
+  }
+  /* 吉祥物的大小走 --logo-h（ui/geniusLogo.ts 的 geniusLogoVar）。z-index 那一层（投影）照旧在。 */
+  .genius-crest { grid-column: 1; grid-row: 1; margin: 0; --logo-h: 54px; }
+  .genius-badge { grid-column: 2; grid-row: 1; justify-self: start; padding: 8px 20px; font-size: 0.92rem; }
+  .genius-grid {
+    grid-column: 1 / -1; grid-row: 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(46px, 1fr); gap: 8px;
+  }
+  .genius-grid > .profile-row { padding: 6px 10px; }
+  .genius-grid .profile-row-label { font-size: 0.8rem; }
+  /* 行高也收一点（1.3 → 1.2）：「敬请期待」那几格是标签＋这一行小字两行，照 1.3 是 47.2 高，比别的格子的 46 高出
+     一截，十二格就不一样高了（check-redesign-fit 量着）；收到 1.2 正好 46。 */
+  .genius-grid .profile-row-sub { font-size: 0.7rem; line-height: 1.2; }
+  /* 落单按三列算（ui/accountPage.ts 两种都标好了）：两列时落单的那一条在这儿回到网格里。 */
+  .genius-grid > .profile-row--alone { grid-column: auto; justify-self: stretch; width: auto; }
+  .genius-grid > .profile-row--alone3 { grid-column: 1 / -1; justify-self: center; width: calc((100% - 16px) / 3); }
+  .legal-pair > .profile-row { padding: 9px 10px; }
+}
+/* 1000–1099 宽（7-18 方案原话）：左栏再收到 300，格子里的字再小一档——这一档右栏最窄，三列的格子最挤。 */
+@media (min-width: 1000px) and (max-width: 1099px) {
+  .profile-cols { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); }
+  .genius-grid .profile-row-label { font-size: 0.78rem; }
 }
 
 /* 电脑端矮窗口（1000×700 那一档）：成绩页底下多了《退出》（第 18 推，离底 116 起，页底留

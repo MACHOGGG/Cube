@@ -389,6 +389,11 @@ const PROFILE = {
     '吉祥物（在面板里）': ['.genius-crest .genius-logo', '.genius-panel'],
   },
 };
+/**
+ * 电脑端的个人主页（10-08 补充方案 7-18）：天才面板里吉祥物和徽章并排成一行（吉祥物在左、徽章在右），不再各自
+ * 在面板里居中——这两条「居中」在电脑上撤掉，换成下面那条「同一行」（check-profile-desktop 也量着）。
+ */
+const PROFILE_DESK = { ...PROFILE, centered: { '整页': ['.profile-page'] } };
 const PROFILE_RULES = {
   navClear: true,
   pillContrast: true,
@@ -631,7 +636,7 @@ for (const size of SIZES) {
       await page.waitForSelector('.profile-page .genius-grid', { timeout: 10000 });
       for (const mode of MODES) {
         await setMode(page, mode);
-        judge(`${tag} ${mode} 个人主页`, await page.evaluate(MEASURE, PROFILE), PROFILE_RULES);
+        judge(`${tag} ${mode} 个人主页`, await page.evaluate(MEASURE, size.w >= 1000 ? PROFILE_DESK : PROFILE), PROFILE_RULES);
       }
       await setMode(page, '浅色');
       const pl = await page.evaluate(CARD_BG, PROFILE_CARDS);
@@ -660,13 +665,15 @@ for (const size of SIZES) {
         Math.abs(proW.row[0] - proW.above[0]) <= TOL && Math.abs(proW.row[1] - proW.above[1]) <= TOL,
         JSON.stringify(proW),
       );
-      // 法务两颗和网格的两列对齐
-      const align = await page.evaluate(() => {
-        const cells = [...document.querySelectorAll('.genius-grid > .profile-row')].slice(0, 2).map((e) => e.getBoundingClientRect());
+      // 法务两颗和网格的两列对齐。电脑上网格是三列（10-08 补充方案 7-18），两颗键对不上三列，对的是网格的左右两边：
+      // 左边那颗的左沿 = 第一列的左沿，右边那颗的右沿 = 最后一列的右沿。
+      const align = await page.evaluate((desk) => {
+        const all = [...document.querySelectorAll('.genius-grid > .profile-row')].map((e) => e.getBoundingClientRect());
         const legal = [...document.querySelectorAll('.legal-pair > .profile-row')].map((e) => e.getBoundingClientRect());
-        return cells.map((c, i) => [c.left - legal[i].left, c.right - legal[i].right].map((x) => +x.toFixed(2)));
-      });
-      check(`${tag} 个人主页：两颗法务键对着网格的两列`, align.flat().every((x) => Math.abs(x) <= TOL), JSON.stringify(align));
+        if (desk) return [[all[0].left - legal[0].left], [all[2].right - legal[1].right]].map((p) => p.map((x) => +x.toFixed(2)));
+        return all.slice(0, 2).map((c, i) => [c.left - legal[i].left, c.right - legal[i].right].map((x) => +x.toFixed(2)));
+      }, size.w >= 1000);
+      check(`${tag} 个人主页：两颗法务键对着网格的${size.w >= 1000 ? '左右两边' : '两列'}`, align.flat().every((x) => Math.abs(x) <= TOL), JSON.stringify(align));
       const gone = await page.evaluate(() => ({
         label: [...document.querySelectorAll('.genius-panel .menu-section-label')].length,
         rule: document.querySelectorAll('.genius-panel hr, .genius-rule').length,
@@ -678,7 +685,15 @@ for (const size of SIZES) {
           const b = document.querySelector('.profile-col--genius').getBoundingClientRect();
           return { w: [a.width, b.width], top: a.top - b.top, side: a.right <= b.left };
         });
-        check(`${tag} 个人主页：电脑端两栏等宽、并排、顶端对齐`, spread(two.w) <= TOL && Math.abs(two.top) <= TOL && two.side, JSON.stringify(two));
+        // 10-08 补充方案 7-18 起左栏 360（1000–1099 宽那一档 300）、右栏吃剩下的；原先两栏等宽。
+        const leftW = size.w < 1100 ? 300 : 360;
+        check(`${tag} 个人主页：电脑端左栏 ${leftW}、并排、顶端对齐`, Math.abs(two.w[0] - leftW) <= TOL && two.w[1] > two.w[0] && Math.abs(two.top) <= TOL && two.side, JSON.stringify(two));
+        const crest = await page.evaluate(() => {
+          const a = document.querySelector('.genius-crest .genius-logo').getBoundingClientRect();
+          const b = document.querySelector('.genius-badge').getBoundingClientRect();
+          return { dy: +Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2).toFixed(2), right: b.left >= a.right };
+        });
+        check(`${tag} 个人主页：电脑端吉祥物和徽章同一行、徽章在右`, crest.dy <= 4 && crest.right, JSON.stringify(crest));
       }
       await scanLiterals(page, '.profile-page');
 

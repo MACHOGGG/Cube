@@ -422,18 +422,21 @@ for (const size of SIZES) {
 }
 
 // ---------------------------------------------------------------------------
-// 电脑端的个人主页：两栏等宽（第 17 推）
+// 电脑端的个人主页：左栏 360、右栏天才面板（第 17 推，10-08 补充方案 7-18 改过一次）
 // ---------------------------------------------------------------------------
 //
 // 2026-09 先有的是一条 760 的中栏、栏内两两成对（PR-18 / E27，玩家：「更合理地使用左
-// 右空间」）。第 17 推方案把它改成**两栏等宽**：左栏那一列药丸，右栏天才面板（吉祥物、
-// 徽章、2 × 6 的十二行），面板底下两颗白键对着网格的两列。上面那一圈量的是「有没有东
-// 西被家具压住、够不着」，量不到这套排法自己会坏的几种样子，所以单列一节：
+// 右空间」）。第 17 推方案把它改成**两栏等宽**（整页 880）：左栏那一列药丸，右栏天才面板
+// （吉祥物、徽章、2 × 6 的十二行），面板底下两颗白键对着网格的两列。7-18 又改了一次：整页
+// 1060、左栏 360（1000–1099 宽 300，那一档 check-profile-desktop 量着）、右栏吃剩下的，
+// 十二行排成 3 × 4，两颗白键对着三列网格的左右两边——1000×700 上原先那一版整页要往下滑。
+// 上面那一圈量的是「有没有东西被家具压住、够不着」，量不到这套排法自己会坏的几种样子，
+// 所以单列一节：
 //
-//   · 两栏**不等宽、不齐顶**，或者互相压上；
-//   · 十二行没排成 2 × 6（grid 的行优先流一旦被哪条 grid-column 打乱就会这样），或者
-//     互相压上；
-//   · 底下那两颗白键没对上网格的两列；
+//   · 左栏不是 360、两栏**不齐顶**，或者互相压上；
+//   · 十二行没排成电脑 3 × 4、手机 2 × 6（grid 的行优先流一旦被哪条 grid-column 打乱就会
+//     这样），或者互相压上；
+//   · 底下那两颗白键没对上网格的左右两边；
 //   · 栏宽放开之后整页**横向溢出**。
 //
 // 门槛两边各量一次：1440 要变，999 必须是手机那一列。只量右边那半截等于没量断点——写死
@@ -478,13 +481,14 @@ for (const size of SIZES) {
         const k = Math.round(b.top);
         byTop.set(k, (byTop.get(k) || 0) + 1);
       }
-      // 网格的两列各自的左右沿：第一行那两条。
+      // 网格每一列各自的左右沿。
       const lefts = [...new Set(boxes.map((b) => Math.round(b.left)))].sort((a, b) => a - b);
       const rights = [...new Set(boxes.map((b) => Math.round(b.right)))].sort((a, b) => a - b);
       const legal = [...document.querySelectorAll('.legal-pair > .profile-row')].map(box);
       return {
         col: Math.round(box(app).width),
-        // 两栏：并排（齐顶、等宽、中缝）还是摞着（右栏在左栏底下）。
+        // 两栏：并排（齐顶、中缝）还是摞着（右栏在左栏底下）。
+        mainW: Math.round(main.width),
         sideBySide: Math.abs(main.top - side.top) <= 1 && side.left >= main.right - 0.5,
         topDiff: Math.round(Math.abs(main.top - side.top)),
         stacked: side.top >= main.bottom - 0.5,
@@ -498,7 +502,7 @@ for (const size of SIZES) {
         rights,
         legalN: legal.length,
         legalRows: new Set(legal.map((g) => Math.round(g.top))).size,
-        // 两颗白键的外沿 vs 网格两列的外沿（左键的左沿对第一列，右键的右沿对第二列）。
+        // 两颗白键的外沿 vs 网格的左右两边（左键的左沿对第一列，右键的右沿对最后一列）。
         legalAlign: legal.length === 2 && lefts.length >= 1 && rights.length >= 1
           ? Math.round(Math.max(Math.abs(legal[0].left - lefts[0]), Math.abs(legal[1].right - rights[rights.length - 1])))
           : null,
@@ -514,24 +518,24 @@ for (const size of SIZES) {
     return m;
   };
 
-  /** 两种宽度都成立的那几条：十二行排成 2 × 6、不压，底下两颗白键并排、对着网格两列。 */
-  const gridHolds = (tag, m) => {
+  /** 每种宽度都成立的那几条：十二行排成 cols × lines（电脑 3 × 4、手机 2 × 6）、不压，底下两颗白键并排、对着网格的左右两边。 */
+  const gridHolds = (tag, m, cols, lines) => {
     check(`${tag}：（尺子）天才面板里是十二行`, m.rowsN === 12, `${m.rowsN} 行`);
-    check(`${tag}：十二行排成 2 列 × 6 行`, m.cols === 2 && m.lines === 6, `${m.cols} 列 × ${m.lines} 行`);
+    check(`${tag}：十二行排成 ${cols} 列 × ${lines} 行`, m.cols === cols && m.lines === lines, `${m.cols} 列 × ${m.lines} 行`);
     check(`${tag}：没有两行互相压上`, m.overlap === null, m.overlap || '干净');
     check(`${tag}：（尺子）底下是两颗白键`, m.legalN === 2, `${m.legalN} 颗`);
     check(`${tag}：两颗白键并排一行、一样宽`, m.legalRows === 1 && m.legalWidthDiff !== null && m.legalWidthDiff <= 1,
       `${m.legalRows} 行 · 宽差 ${m.legalWidthDiff}px`);
-    check(`${tag}：两颗白键的外沿对着网格的两列`, m.legalAlign !== null && m.legalAlign <= 1, `差 ${m.legalAlign}px`);
+    check(`${tag}：两颗白键的外沿对着网格的左右两边`, m.legalAlign !== null && m.legalAlign <= 1, `差 ${m.legalAlign}px`);
     check(`${tag}：整页不横向溢出`, m.hscroll === 0, `${m.hscroll}px`);
   };
 
   const wide = await read(1440, 900);
-  check('电脑 1440：页面收在 880', wide.col === 880, `${wide.col}px`);
+  check('电脑 1440：页面收在 1060', wide.col === 1060, `${wide.col}px`);
   check('电脑 1440：两栏并排、齐顶', wide.sideBySide, wide.stacked ? '摞成了一列' : `顶差 ${wide.topDiff}px`);
-  check('电脑 1440：两栏一样宽', wide.widthDiff <= 1, `宽差 ${wide.widthDiff}px`);
+  check('电脑 1440：左栏 360', Math.abs(wide.mainW - 360) <= 1, `${wide.mainW}px`);
   check('电脑 1440：中缝是 --gap-lg（32）', Math.abs(wide.seam - 32) <= 1, `${wide.seam}px`);
-  gridHolds('电脑 1440', wide);
+  gridHolds('电脑 1440', wide, 3, 4);
   check('电脑 1440：《返回》在页面里（不是被挤出去）', wide.back.top > 0 && wide.back.h > 0,
     `top ${wide.back.top} · 高 ${wide.back.h}`);
 
@@ -541,9 +545,9 @@ for (const size of SIZES) {
   check('999：页面回到 460（断点以下不是两栏）', narrow.col === 460, `${narrow.col}px`);
   check('999：右栏摞在左栏底下', narrow.stacked && !narrow.sideBySide);
   check('999：两栏一样宽', narrow.widthDiff <= 1, `宽差 ${narrow.widthDiff}px`);
-  gridHolds('999', narrow);
+  gridHolds('999', narrow, 2, 6);
   check('手机 390：右栏摞在左栏底下', phone.stacked && !phone.sideBySide);
-  gridHolds('手机 390', phone);
+  gridHolds('手机 390', phone, 2, 6);
   await ctx.close();
 }
 

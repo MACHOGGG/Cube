@@ -10,7 +10,7 @@
  *
  *   ① 玩家给的炸弹图标原件（带着那一行）：去掉 `<title>`，别的一个字节都不动。
  *   ② 导出文件里见过的几种写法都去得掉，名字里碰巧带 title 的东西不误伤。
- *   ③ 两条路都接上了：customIcons.ts 的 trim()、geniusLogo.ts 嵌进页面的那两处。
+ *   ③ 两条路都接上了：customIcons.ts 的 trim()、geniusLogo.ts 里每一款嵌进页面的模板。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -84,7 +84,11 @@ const BOMB = `<?xml version="1.0" encoding="UTF-8"?>
   check('③ 天才标志：嵌进页面的是去过 <title> 的那一份', /const LOGO = stripSvgTitle\(GENIUS_LOGO\);/.test(gl));
   const raw = (gl.match(/>\$\{GENIUS_LOGO\}</g) ?? []).length;
   const clean = (gl.match(/>\$\{LOGO\}</g) ?? []).length;
-  check('③ 天才标志：两处嵌进页面的模板都用 LOGO，没有一处直接嵌原件', raw === 0 && clean === 2, `原件 ${raw} 处 / 去过的 ${clean} 处`);
+  // 有几款模板就该有几处 LOGO。原先写死「两处」（geniusLogoTag、geniusLogoFluid），7-18 加了第三款 geniusLogoVar
+  // （个人主页那一枚的高度交给 CSS 变量），这道门就红了——照导出的 geniusLogo* 函数数，再加一款不用回来改数。
+  const templates = (gl.match(/^export function geniusLogo\w+\(/gm) ?? []).length;
+  check('③ 天才标志：每一款嵌进页面的模板都用 LOGO，没有一处直接嵌原件', raw === 0 && clean === templates,
+    `原件 ${raw} 处 / 去过的 ${clean} 处 / 模板 ${templates} 款`);
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');

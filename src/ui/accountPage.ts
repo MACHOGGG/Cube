@@ -3,7 +3,7 @@ import { pushLayer } from '../engine/backNav';
 import { RULES } from '../rules';
 import { ICON_SOUND_ON, ICON_SOUND_OFF, ICON_LOCK } from './homeIcons';
 import { CTL_BACK } from './ctlIcons';
-import { geniusLogoTag } from './geniusLogo';
+import { geniusLogoVar } from './geniusLogo';
 import { soundOn, setSoundOn } from '../engine/juice';
 import { faceClone, flipStaggerMs, plankFlipEl } from '../engine/plankFlip';
 import {
@@ -235,7 +235,7 @@ export function renderAccountPage(
           <div class="genius-panel">
             <!-- 这一块的主角是那个牌子：正中一个大吉祥物，底下一枚徽章（「成为 / 你已经是
                  Slides 天才」），再底下才是十二行。 -->
-            <div class="genius-crest">${geniusLogoTag(90, 'genius-logo--crest')}</div>
+            <div class="genius-crest">${geniusLogoVar(90, 'genius-logo--crest')}</div>
             <button class="genius-badge" id="becomeGeniusBtn">${
               subscribed ? s.subscribedTitle : s.becomeGenius
             }</button>
@@ -378,11 +378,16 @@ export function renderAccountPage(
    * 第 17 推之后十二行住进了一张单独的网格（`.genius-grid`），中间不再夹标签和横线，手
    * 机上也是两列——眼下一条都不会落单（2 × 6 正好排满）。这段照旧留着：哪天加了第十三
    * 行，它自己知道把那一条居中，不用等到有人截图来说「右边空一格」。
+   *
+   * 电脑上这张网格是三列（10-08 补充方案 7-18，3 × 4）：落单按三列另算一次，挂另一个记号
+   * （--alone3）。两种都标上、由 style.css 按屏宽挑一种——不在这儿问屏幕多宽，窗口拉宽拉窄
+   * 都不用重画这一页。
    */
   for (const panel of container.querySelectorAll('.genius-grid')) {
     let run: Element[] = [];
     const close = () => {
       if (run.length % 2 === 1) run[run.length - 1].classList.add('profile-row--alone');
+      if (run.length % 3 === 1) run[run.length - 1].classList.add('profile-row--alone3');
       run = [];
     };
     for (const kid of panel.children) {

@@ -62,6 +62,23 @@ export function geniusLogoTag(size = 20, className = ''): string {
 }
 
 /**
+ * 同一个标志，高度交给 CSS 变量 `--logo-h`（没设就是 `fallback` 那么高），宽度按原件比例跟着算。
+ *
+ * 个人主页天才面板上那一枚用它：手机上 90 高，电脑上 54 高、和徽章并排（10-08 补充方案 7-18）。geniusLogoTag
+ * 把宽高写死在行内样式里，CSS 要改它只能 !important；这一款行内写的是 `var(--logo-h, …)`，外面改那个变量就行。
+ * 不用 aspect-ratio：老一点的 iOS Safari（15 之前）不认，那一档上标志会塌成一条线。
+ */
+export function geniusLogoVar(fallback: number, className = ''): string {
+  if (!hasGeniusLogo()) return '';
+  const h = `var(--logo-h, ${fallback}px)`;
+  // 宽高比按 geniusLogoTag 在 fallback 那个高度上取整出来的宽算（90 高 → 99 宽，比例正好 1.1），不用原件的 1.1030：
+  // 那样 90 高时宽 99.3，手机上这一枚和改之前差 0.3px——方案说手机上一个像素不动。
+  const ratio = Math.round(fallback * ASPECT) / fallback;
+  return `<span class="genius-logo ${className}" aria-hidden="true"
+                style="width:calc(${h} * ${ratio});height:${h}">${LOGO}</span>`;
+}
+
+/**
  * 同一个标志，但不定死像素：宽高交给外面的 CSS（一般是按所在卡片的百分比），
  * 这里只把原件的比例带上，免得被压扁。主菜单上锁着的玩法用的是这一款——
  * 那些卡片在手机上和电脑上差一倍多，招牌得跟着卡片长缩，才能既看得清、又
