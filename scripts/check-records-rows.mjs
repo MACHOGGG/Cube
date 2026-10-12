@@ -21,6 +21,9 @@
  *      （行高 ÷ 30），±0.3px；
  *   ⑤ 居中：每一格里的字和小图形，竖着的中线和这一格的中线差不过 1px；
  *   ⑥ 手机三档一屏装得下（scrollHeight ≤ innerHeight）。
+ *   ⑦ 「我排第几」（10-11 方案 B-13.9）：点开排行榜那一块（放大的榜），我不在列出来的那几行里时，底下固定一行
+ *      「名次 · 我 · 分数」（回包里的 page.me），榜滚着它也贴在那一格的底边；我在里面就不重复；这张榜上没有我
+ *      就不摆；缩略牌上一律不摆。名字那一格：我 / Me / Moi。
  *
  * 两种状态都量：没登录（左边六道空格子、右边六格只写名次的灰杠）和登录了、有三局、榜上有三个人
  * （左右各三格真东西 ＋ 三格补位）。量字号和居中只看真东西那几格——空格子里没有字。两种语言：
@@ -91,7 +94,7 @@ const spread = (a) => (a.length ? Math.max(...a) - Math.min(...a) : 0);
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
-async function openRecords(size, lang, signedIn) {
+async function openRecords(size, lang, signedIn, board = BOARD) {
   const ctx = await browser.newContext({ viewport: { width: size.w, height: size.h }, reducedMotion: 'reduce' });
   // 榜和云端战绩都在浏览器里拦下来：门量的是排版，不是服务器。
   await ctx.route('**/api/scores', async (route) => {
@@ -99,7 +102,7 @@ async function openRecords(size, lang, signedIn) {
     try {
       body = JSON.parse(route.request().postData() || '{}');
     } catch {}
-    if (body.action === 'board') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(BOARD) });
+    if (body.action === 'board') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(board) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ total: 0, runs: 0, best: {}, archive: [] }) });
   });
   const page = await ctx.newPage();
@@ -209,6 +212,66 @@ for (const size of SIZES) {
       // ⑥ 手机一屏装下
       if (size.phone) {
         check(`${tag}：⑥ 一屏装下，不用滑`, m.scrollH <= m.vh, `${m.scrollH} / ${m.vh}`);
+      }
+      check(`${tag}：没有报错`, errors.length === 0, errors.slice(0, 2).join(' | '));
+      await ctx.close();
+    }
+  }
+}
+
+// ── ⑦ 「我排第几」（10-11 方案 B-13.9）────────────────────────────────────────────
+{
+  /** 我排在列出来的五十行外面：第 57 名、88 分。 */
+  const OUTSIDE = {
+    mode: '', players: 80, me: { rank: 57, score: 88 },
+    rows: Array.from({ length: 50 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, score: 5000 - i * 90, mode: i % 2 ? 'circle' : 'square' })),
+  };
+  /** 这张榜上没有我。 */
+  const ABSENT = { mode: '', players: 3, me: null, rows: BOARD.rows.map(({ me, ...r }) => r) };
+  const NAME = { zhHans: '我', en: 'Me', fr: 'Moi' };
+  const size = SIZES.find((z) => z.w === 390) || SIZES[0];
+  for (const [what, board] of [['我在五十行外面', OUTSIDE], ['我在列出来的行里', BOARD], ['榜上没有我', ABSENT]]) {
+    for (const lang of ['zhHans', 'en', 'fr']) {
+      const tag = `⑦ ${lang} ${what}`;
+      const { ctx, page, errors } = await openRecords(size, lang, true, board);
+      const thumbPins = await page.evaluate(() => document.querySelectorAll('.records-panels .rank-row--pin').length);
+      await page.click('#ranksPanel');
+      await page.waitForFunction((n) => document.querySelectorAll('.records-panel--big .rank-body > .rank-row:not(.rank-row--pin)').length >= n,
+        board.rows.length, { timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      const r = await page.evaluate(() => {
+        const body = document.querySelector('.records-panel--big .rank-body');
+        if (!body) return null;
+        const pins = [...body.querySelectorAll('.rank-row--pin')];
+        const pin = pins[0];
+        const t = (sel) => pin?.querySelector(sel)?.textContent.trim() ?? null;
+        const b = body.getBoundingClientRect();
+        const pr = pin?.getBoundingClientRect();
+        return {
+          rows: body.querySelectorAll('.rank-row:not(.rank-row--pin)').length,
+          mine: body.querySelectorAll('.rank-row--me:not(.rank-row--pin)').length,
+          pins: pins.length,
+          last: !!pin && body.lastElementChild === pin,
+          me: !!pin && pin.classList.contains('rank-row--me'),
+          place: t('.rank-place'), name: t('.rank-name'), score: t('.rank-score'),
+          scrolls: body.scrollHeight > body.clientHeight + 1,
+          // 榜还停在最上面（scrollTop 0）时，那一行贴着能滚的那一格的底边、整行看得见。
+          gap: pr ? Math.round((b.bottom - pr.bottom) * 10) / 10 : null,
+          top: body.scrollTop,
+        };
+      });
+      check(`${tag}：（尺子）放大的榜画出来了、列出来的行数对`, !!r && r.rows === board.rows.length, JSON.stringify(r));
+      check(`${tag}：缩略牌上不摆那一行`, thumbPins === 0, String(thumbPins));
+      if (board === OUTSIDE) {
+        check(`${tag}：底下补了一行「57 · ${NAME[lang]} · 88」，样子是自己那一行（rank-row--me）`,
+          !!r && r.pins === 1 && r.last && r.me && r.place === '57' && r.name === NAME[lang] && r.score === '88', JSON.stringify(r));
+        check(`${tag}：（尺子）这张榜长到要滚`, !!r && r.scrolls, JSON.stringify(r));
+        check(`${tag}：榜停在最上面时，那一行贴着能滚的那一格的底边（±1px），不用滚到底才看得见`,
+          !!r && r.top === 0 && r.gap !== null && Math.abs(r.gap) <= 1, JSON.stringify(r));
+      } else if (board === BOARD) {
+        check(`${tag}：我已经在列出来的行里：不重复补那一行`, !!r && r.pins === 0 && r.mine === 1, JSON.stringify(r));
+      } else {
+        check(`${tag}：榜上没有我：不摆那一行`, !!r && r.pins === 0 && r.mine === 0, JSON.stringify(r));
       }
       check(`${tag}：没有报错`, errors.length === 0, errors.slice(0, 2).join(' | '));
       await ctx.close();

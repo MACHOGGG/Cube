@@ -10,6 +10,8 @@ import { CTL_BACK } from './ctlIcons';
 import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
 import { isGenius } from '../engine/subscription';
+import { signedIn } from '../engine/cloudScores';
+import { wantsSignInHint } from '../engine/signInHint';
 import { mountBoardThumb, mountBoardView } from './leaderboard';
 // 累计得分没有上限，而它那张卡是页面上一个固定的格子——数字长到装不下就缩写，
 // 点开的放大版再写全每一位。排行榜缩略牌用的是同一份（见 engine/compactScore）。
@@ -108,7 +110,8 @@ export function renderRecordsPage(
   onBack: () => void,
   /** 锁着的排行榜上那颗《成为 Slides 天才》按下去以后去哪儿。 */
   onWantGenius: () => void = () => {},
-  /** 登录过期那一屏上那颗《重新登录》按下去以后去哪儿——个人主页。 */
+  /** 登录过期那一屏上那颗《重新登录》按下去以后去哪儿（main.ts 给的是登录那一窗）。顶上那句登录提示旁边那颗
+   *  《登录》（10-11 方案 B-14）也走它：两颗键要的是同一件事——让他在这台设备上登进去。 */
   onReLogin: () => void = () => {},
 ): void {
   const s = STRINGS[lang];
@@ -133,14 +136,26 @@ export function renderRecordsPage(
   //《累计得分》和那个数。第 18 推起它只出现在点开之后的那张大卡上（卡上只有数）。
   const syncNote = isGenius() ? '' : `<span class="total-card-sub">${s.totalScoreSync}</span>`;
 
+  // 顶上那一行「登录后打的每一局都会存到云端，换设备也找得回。」＋《登录》（10-11 方案 B-14）：主屏版、iOS
+  // 浏览器里没登录的人才有，规则在 engine/signInHint.ts。「本机已有 ≥3 局」数的就是底下这张清单的局数。
+  // 登进去之后那一窗回到这一页重画（main.ts），signedIn() 成了真，这一行自己就没了。
+  const hint = wantsSignInHint(signedIn(), runs.length);
+  const hintRow = hint
+    ? `<div class="records-hint" id="recordsHint">
+        <p class="home-card-text records-hint-text">${s.cloudSaveHint}</p>
+        <button type="button" class="home-card-btn records-hint-btn" id="recordsHintBtn">${s.signInBtn}</button>
+      </div>`
+    : '';
+
   container.innerHTML = `
-    <div class="app records-page">
+    <div class="app records-page${hint ? ' records-page--hint' : ''}">
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
           <p class="home-sub">${s.homeTagline}</p>
         </div>
       </header>
+      ${hintRow}
       <!-- 累计得分卡上只有那个数（第 18 推第 4 条）：标题和那句同步提示挪到点开之后。字体
            没动。读屏软件读整颗键的 aria-label「累计得分 N」——卡上不写标题，光念一个数谁
            也不知道它是什么。 -->
@@ -160,6 +175,7 @@ export function renderRecordsPage(
     </div>
   `;
   container.querySelector<HTMLButtonElement>('#recordsBack')!.addEventListener('click', onBack);
+  container.querySelector<HTMLButtonElement>('#recordsHintBtn')?.addEventListener('click', onReLogin);
 
   /**
    * 老虎机那一局在拼的那个得分图案（《侵蚀阶梯》v1.2 PR-8）。

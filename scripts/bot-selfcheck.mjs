@@ -50,7 +50,8 @@
  * H3 **阶梯要推得动。** 一局里 HUD 那一块的枚数必须真的降过；每副棋盘至少有一局降
  *    到 1 枚或者把盘清空。
  * H4 **炸弹局拆一枚就要熄一段。** 拆掉的那一步，分数至少 +2，而且亮着的段数比上一
- *    步少（拆除＝翻面，见 engine/bomb.ts）。
+ *    步少（拆除＝翻面，见 engine/bomb.ts）；这一步冒出来的「+N」加起来等于分数涨的数——
+ *    拆弹那几颗的 +2 原先只进分数、不进气泡（10-11 方案 B-13.5）。
  * （H5–H7 见 playOne 里各自那一段。）
  * H8 **图案到了 1 枚，盘上一枚色块都不剩**（10-09 补充方案 6-3）：解锁 1×1 的那一下，场上
  *    剩下的色块当场全部翻掉。六副棋盘的认组在图案 1 枚时认不认得出每一枚，只有真打到那
@@ -230,8 +231,27 @@ const installProbe = () => {
   // 像选择器写错了（这个文件里同一个坑踩过两次，见 canon 上面那段）。
   if (document.documentElement) watchToasts();
   else document.addEventListener('DOMContentLoaded', watchToasts, { once: true });
+  /**
+   * 「+N」气泡（engine/scoreReel.ts 的 showGain）每冒一个记一笔，H4 拿它对「这一手冒出来的 +N 加起来」和「分数
+   * 这一手涨了多少」（10-11 方案 B-13.5）。只读气泡里第一个文字节点：后面挂着的来源小字（「× 1.5」之类）可能
+   * 以数字打头，整段 textContent 一读，「+12」就成了「+123」。
+   */
+  const gains = [];
+  const watchGains = () => new MutationObserver((recs) => {
+    for (const rec of recs) {
+      for (const n of rec.addedNodes) {
+        if (!(n instanceof HTMLElement) || !n.classList.contains('gain-pop')) continue;
+        const m = /^\+(\d+)/.exec(n.firstChild && n.firstChild.nodeType === 3 ? n.firstChild.nodeValue || '' : '');
+        if (m) gains.push(Number(m[1]));
+      }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  if (document.documentElement) watchGains();
+  else document.addEventListener('DOMContentLoaded', watchGains, { once: true });
 
   window.__bot = {
+    /** 上一次问过之后冒过的那几个「+N」，问完就清。 */
+    takeGains: () => gains.splice(0, gains.length),
     /** 这一局到此为止冒过几条「得分图案变成 N 枚」，以及它们的样子。 */
     toasts: () => toasts.slice(),
     /** 盘面此刻的样子。 */
@@ -822,6 +842,8 @@ async function playOne(page, label, opts) {
     const beforeBoard = board;
     const beforeBombs = board.filter((p) => p.bomb).length;
     const beforeHud = lastHud;
+    // 上一手留下的「+N」清掉：这一手冒的那几个从这儿记起（H4 用）。
+    await probe(() => window.__bot.takeGains());
     const { p, d } = pick;
     // **一小段一小段地送 pointermove，中间留一两毫秒。** 一次 `mouse.move(..., {steps})`
     // 的那几下落在同一拍里，拖动那一层（engine/drag.ts）认不出这是一次拖——量过：
@@ -837,6 +859,7 @@ async function playOne(page, label, opts) {
     board = await settle();
     moves++;
     const after = await hud();
+    const popped = (await probe(() => window.__bot.takeGains())).reduce((a, b) => a + b, 0);
 
     // ── 这一手动了没有、这个方向的正负号是哪一个 ─────────────
     //
@@ -927,9 +950,10 @@ async function playOne(page, label, opts) {
         bombDefuseChecked++;
         const gained = after.score - beforeHud.score;
         const burnt = beforeHud.segs - after.segs || after.marks < beforeHud.marks;
-        if (gained < 2 * defused || !burnt) {
+        // 这一手冒出来的「+N」加起来要等于分数涨的数：拆弹那几颗的 +2 也得在气泡里（10-11 方案 B-13.5）。
+        if (gained < 2 * defused || !burnt || popped !== gained) {
           bombDefuseBad++;
-          note(`${label}：拆了 ${defused} 枚，分 +${gained}，段 ${beforeHud.segs}→${after.segs}`);
+          note(`${label}：拆了 ${defused} 枚，分 +${gained}，气泡加起来 +${popped}，段 ${beforeHud.segs}→${after.segs}`);
         }
       }
     }
@@ -1209,7 +1233,7 @@ for (const [i, job] of jobs.entries()) {
   }
   // ── H4：炸弹 ────────────────────────────────────────────
   if (job.bomb && r.bombDefuseChecked) {
-    check(`${label} · H4：拆一枚就 +2 分、熄一段`, r.bombDefuseBad === 0,
+    check(`${label} · H4：拆一枚就 +2 分、熄一段、气泡上的 +N 对得上`, r.bombDefuseBad === 0,
       `拆除 ${r.bombDefuseChecked} 次，${r.bombDefuseBad} 次对不上`);
   }
 }

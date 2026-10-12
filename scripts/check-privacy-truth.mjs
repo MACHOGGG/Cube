@@ -524,8 +524,12 @@ checkEvents(EVENTS_FOUND, PRIVACY_TEXT);
 const KEY_CLASSES = [
   { cls: '设置', keys: ['slides_lang', 'slides_colorblind', 'slides_cvd_palette', 'slides_piece_palette', 'slides_sound', 'slides_pro', 'slides_theme', 'slides_theme_paint', 'slides_flip_speed'],
     say: { zhHans: ['设置（语言'], zhHant: ['設定（語言'], en: ['settings (language'], fr: ['réglages (langue'] } },
-  { cls: '进度', prefixes: ['slides_tutorial_seen', 'slides_played_', 'slides_bulb_'], keys: ['slides_know_how', 'slides_first_run', 'slides_landscape_played', 'slides_total_seen'],
-    say: { zhHans: ['进度（每个教学'], zhHant: ['進度（每個教學'], en: ['progress (which tutorials'], fr: ['progression (les tutoriels'] } },
+  // slides_signin_hint_day：结算页那句登录提示上一次是哪一天说的（10-11 方案 B-14，engine/signInHint.ts）。这一类
+  // 的说法是一张清单，加一个键就要在清单里多一项——所以它自己那一项也写进 say。
+  { cls: '进度', prefixes: ['slides_tutorial_seen', 'slides_played_', 'slides_bulb_'], keys: ['slides_know_how', 'slides_first_run', 'slides_landscape_played', 'slides_total_seen', 'slides_signin_hint_day'],
+    say: { zhHans: ['进度（每个教学', '结算页上那句登录提示今天说过没有'], zhHant: ['進度（每個教學', '結算頁上那句登入提示今天說過沒有'],
+      en: ['progress (which tutorials', 'whether today’s sign-in tip on the result screen has been shown'],
+      fr: ['progression (les tutoriels', 'si le conseil de connexion de l’écran de fin a déjà été affiché aujourd’hui'] } },
   { cls: '战绩', prefixes: ['sugarcube_', 'slides_wipe_', '::'], keys: ['slides_runkey_fix_v1'],
     say: { zhHans: ['战绩（最高分'], zhHant: ['戰績（最高分'], en: ['records (your best scores'], fr: ['parties (vos meilleurs scores'] } },
   { cls: '登录缓存', keys: ['slides_genius', 'slides_pending_account'],

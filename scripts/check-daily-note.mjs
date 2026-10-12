@@ -23,7 +23,9 @@
  *
  *   ①（尺子）钟是对的：进了今日榜，结算页上**不说**那一句。
  *   ② 钟快了三天：服务器回 rejected，结算页上说「这一局没进今日挑战榜。看看设备的日期和时间对不对。」
- *   ③ 钟慢了三天：服务器回 late，同一句。
+ *   ③ 钟慢了三天：服务器回 late，说的是另一句「已过当天的截止时间，这一局不计入今日榜。」——从前和 ② 同一句，
+ *      可 late 平常是打过了零点（十分钟宽限按服务器收到的时刻算），钟好好的，「看看设备的日期」把人往错的
+ *      地方指（10-11 方案 B-13.4）。
  *
  * 用电脑的视口：每日挑战轮到七色圆球那一天，竖着拿手机会先说「请横屏」——这一台量的不是那个。
  */
@@ -35,6 +37,7 @@ if (!BASE) {
   process.exit(2);
 }
 const NOTE = '这一局没进今日挑战榜。看看设备的日期和时间对不对。';
+const LATE = '已过当天的截止时间，这一局不计入今日榜。';
 const DAY = 86_400_000;
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -119,7 +122,7 @@ check('② 结算页上说了那一句', ahead.note.shown && ahead.note.text ===
 
 const behind = await playDaily(-3, 'TESTHALF');
 check('③（尺子）钟慢了三天：服务器回 late', behind.verdict === 'late', String(behind.verdict));
-check('③ 结算页上也说了那一句', behind.note.shown && behind.note.text === NOTE, JSON.stringify(behind.note));
+check('③ 结算页上说的是「交晚了」那一句（不是 ② 那句「看看设备的日期」）', behind.note.shown && behind.note.text === LATE, JSON.stringify(behind.note));
 
 const errs = [...ok.errs, ...ahead.errs, ...behind.errs];
 check('全程零报错', errs.length === 0, errs.slice(0, 2).join(' | '));

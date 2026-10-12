@@ -13,15 +13,16 @@
  * ① **绝不自己刷新。** 刷新会把这一局连同还没交卷的分数一起扔掉——那是「意料之外的疏漏操
  *    作」里最贵的一种。发现新版本只做一件事：让界面有机会说一句话，按不按在玩家。
  * ② **对局中一个字都不说。** 说了他就会去按，而按下去正是①要避免的那件事。这个模块只负
- *    责「发现」，说不说、什么时候说由调用方决定（`ui/newVersionPill.ts`：那一行长在主菜单
- *    那块招牌玻璃里，打一局的时候屏幕上没有主菜单，于是它根本不存在）。
+ *    责「发现」，说不说、什么时候说由调用方决定（`ui/newVersionCard.ts`：那张卡住在主菜单
+ *    招牌底下那一格里，打一局的时候屏幕上没有主菜单，于是它根本不存在）。
  * ③ **读不到就当没有新版本。** 断网、离线、`/version.json` 404（比如自建部署没跑那一步构
  *    建脚本）——这些都不该让屏幕上冒出一句话来。错在「不说」那一边，不在「乱说」那一边。
  *
  * ── 怎么问 ─────────────────────────────────────────────────────
  *
- * 问的是构建时写下的 `/version.json`（见 scripts/build-version.mjs），里头是这一版的提交
- * 号。`vercel.json` 给这个路径配了 `no-store`，再加上请求本身也带 `cache: 'no-store'`：
+ * 问的是构建时写下的 `/version.json`（见 scripts/build-version.mjs），里头是这一版的构建
+ * 哈希（字段名还叫 `sha`，10-11 之前是提交号），还有更新说明的编号 `release` 和那一句 `note`
+ * （10-11 方案 B-9）。`vercel.json` 给这个路径配了 `no-store`，再加上请求本身也带 `cache: 'no-store'`：
  * 两头都要，缺一头都可能让这一问永远拿到同一个旧答案（而「永远没有新版本」和「这件事做
  * 好了」在屏幕上一模一样）。
  *
@@ -30,10 +31,21 @@
  * 入就是一张 JSON。
  */
 import { fetchWithTimeout } from './fetchTimeout';
+import type { Lang } from '../i18n';
 
 const URL_PATH = '/version.json';
 /** 十分钟一次。这一问便宜（一张几十字节的 JSON），但它也只值这么密。 */
 const EVERY_MS = 10 * 60 * 1000;
+
+/** 线上那一版带来的话：更新说明的编号，和那一号那一句（四种语言；没写那一条就是 null）。 */
+export interface NewVersionInfo {
+  release: number | null;
+  note: Partial<Record<Lang, string>> | null;
+}
+
+interface Answer extends NewVersionInfo {
+  sha: string;
+}
 
 /** 这一次打开时线上是哪一版。问不到就是 null——那时候整条按「没有新版本」走。 */
 let mine: string | null = null;
@@ -41,13 +53,23 @@ let mine: string | null = null;
 let found = false;
 let timer = 0;
 
-async function askOnce(): Promise<string | null> {
+async function askOnce(): Promise<Answer | null> {
   try {
     const res = await fetchWithTimeout(URL_PATH, { cache: 'no-store' });
     if (!res.ok) return null;
-    const said: unknown = await res.json();
-    const sha = (said as { sha?: unknown })?.sha;
-    return typeof sha === 'string' && sha ? sha : null;
+    const said = (await res.json()) as { sha?: unknown; release?: unknown; note?: unknown } | null;
+    const sha = said?.sha;
+    if (typeof sha !== 'string' || !sha) return null;
+    // release / note 是 10-11 才有的两个字段：读不到、形状不对，就当没有——卡上说通用那一句，不因为这个就不说。
+    const release = typeof said?.release === 'number' && Number.isFinite(said.release) ? said.release : null;
+    let note: Partial<Record<Lang, string>> | null = null;
+    if (said?.note && typeof said.note === 'object') {
+      note = {};
+      for (const [k, v] of Object.entries(said.note as Record<string, unknown>)) {
+        if (typeof v === 'string' && v.trim()) (note as Record<string, string>)[k] = v.trim();
+      }
+    }
+    return { sha, release, note };
   } catch {
     // 断网、离线、JSON 坏了——一律当没问到（规矩③）。
     return null;
@@ -55,24 +77,24 @@ async function askOnce(): Promise<string | null> {
 }
 
 /**
- * 开始盯着线上那一版。发现新的就叫一次 `onNew`，然后不再问。
+ * 开始盯着线上那一版。发现新的就叫一次 `onNew`（带上线上那一版的 release / note），然后不再问。
  *
  * `onNew` 只是「可以说了」，不是「去刷新」：说不说、什么时候说由调用方决定（规矩②）。
  */
-export function watchVersion(onNew: () => void): void {
+export function watchVersion(onNew: (info: NewVersionInfo) => void): void {
   const check = async () => {
     if (found) return;
     const now = await askOnce();
     if (!now) return;
     if (mine === null) {
       // 第一次问到：记下这一版是哪一版，这就是往后比对的基准。
-      mine = now;
+      mine = now.sha;
       return;
     }
-    if (now === mine) return;
+    if (now.sha === mine) return;
     found = true;
     window.clearInterval(timer);
-    onNew();
+    onNew({ release: now.release, note: now.note });
   };
   void check();
   timer = window.setInterval(check, EVERY_MS);

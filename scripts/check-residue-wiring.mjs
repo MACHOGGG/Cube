@@ -27,7 +27,8 @@
  *   ④ 三角那一副要多传一个 `true`（只允许偶数步，见 orientationDeal.ts）—— 漏了的话
  *      搜索件在算**另一副棋盘**，而它会言之凿凿地答 'dead'。
  *
- * 外加控制器那一头：判死之后**真的会结算**，而且是 §4 写的那 1.4 秒。
+ * 外加控制器那一头：判死之后**真的会结算**，而且是 §4 写的那 1.4 秒；那 1.4 秒里按了暂停，
+ * 它停下、继续时接着数（10-11 方案 B-13.6）。
  *
  * ⚠️ 这一道**不是**端到端：它不开浏览器、不真打一局。真正的端到端验收（造一个「计数判
  * 活、几何已死」的 ≤16 枚残局，看它 1.4 秒内结算）还欠着——那一条做不到「发一副牌就
@@ -121,16 +122,29 @@ for (const name of WIRED) {
   check('（尺子）切出了 updateStuckState', Boolean(m), m ? `${m[0].length} 字` : '没找到');
   if (m) {
     const body = m[0];
-    check('判死之后自己结算（不等玩家按键）', /endGame\('无法继续匹配'\)/.test(body), '');
-    check('那一下隔着 1400ms（§4 写的 1.4 秒）', /\}, 1400\);/.test(body), '');
+    // 10-11 方案 B-13.6 起，排那一下的定时器挪进了 armStuckEnd（暂停之后继续时要用同一段接着数）。
+    check('判死之后自己结算（不等玩家按键）：排下那 1.4 秒', /armStuckEnd\(STUCK_END_MS\);/.test(body), '');
     // 先红一下让人看清是什么死了——少了这一句，屏幕上是「突然就结算了」。
     check('结算之前先重画一次（那几枚要先红起来）', /hooks\.render\(\);/.test(body), '');
     // 空集合不许结算：findStuckGroups 回 [] 是「还活着」。
     check('只有报了组才结算（空集合是「还活着」）', /if \(groups\.length && !gameOver\)/.test(body), '');
+  }
+  check('那一下隔着 1400ms（§4 写的 1.4 秒）', /const STUCK_END_MS = 1400;/.test(gc), '');
+  const arm = gc.match(/function armStuckEnd\(ms: number\) \{[\s\S]*?\n  \}/);
+  check('（尺子）切出了 armStuckEnd', Boolean(arm), arm ? `${arm[0].length} 字` : '没找到');
+  if (arm) {
+    check('到点就结算，理由是「无法继续匹配」', /endGame\('无法继续匹配'\)/.test(arm[0]), '');
     // 第 14 推：那 1.4 秒的定时器要撤得掉。原先是一个没人记得的 setTimeout——亮红的那 1.4
     // 秒里按了《再来一局》，它照样响，把**新的那一局**以「无法继续匹配」收掉。
-    check('那个定时器记在 stuckTimer 上（撤得掉）', /stuckTimer = window\.setTimeout\(/.test(body), '');
+    check('那个定时器记在 stuckTimer 上（撤得掉）', /stuckTimer = window\.setTimeout\(/.test(arm[0]), '');
   }
+  // 10-11 方案 B-13.6：那 1.4 秒里按了暂停，原先它照样数完、在暂停面板底下把这一局收掉。真打一遍归
+  // check-residue-live ③（手跑，要 vite dev）；这儿只钉接线。
+  const pause = gc.match(/function doPause\(\) \{[\s\S]*?\n  \}/);
+  check('暂停时撤掉它、记下还剩多少',
+    Boolean(pause) && /window\.clearTimeout\(stuckTimer\)/.test(pause[0]) && /stuckHeldMs = /.test(pause[0]), pause ? '' : '没切出 doPause');
+  const resume = gc.match(/function doResume\(\) \{[\s\S]*?\n  \}/);
+  check('继续时从停下的地方接着数', Boolean(resume) && /armStuckEnd\(stuckLeft\)/.test(resume[0]), resume ? '' : '没切出 doResume');
   const newGame = gc.match(/function newGame\(\) \{[\s\S]*?hooks\.resetBoard\(\);/);
   check('新开一局之前先撤掉它（不然会收掉新的那一局）',
     Boolean(newGame) && /window\.clearTimeout\(stuckTimer\)/.test(newGame[0]), newGame ? '' : '没切出 newGame 的开头');

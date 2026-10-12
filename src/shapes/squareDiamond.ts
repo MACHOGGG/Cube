@@ -890,12 +890,17 @@ export function createSquareDiamondGame(): ShapeGame {
             // 离场的格子不进分享卡：它们已经不在盘上了（《侵蚀阶梯》v1.2 §3），
             // 卡上该是玩家最后看见的那副缩小了的棋盘，不是原来那一圈打了洞。
             if (isBlank(t)) continue;
+            /*
+             * 和实盘一样摆：位置是那张 45° 的格网（cellCenter 的 (c − r, c + r − 2mid)，一个单位 = k =
+             * cellSize / √2），**牌本身是正着的**——实盘的牌没有转（makeTileEl 不转、样式里也不转），
+             * 边长 cellSize × 0.92，折成这儿的单位半边就是 0.46 × √2。原先这儿每一枚都转了 45°、半边 0.47，
+             * 卡上是一副小菱形拼的盘，和玩家刚打完的那一副长得不一样（10-11 方案 B-13.8）。
+             */
             raw.push({
               kind: 'rect',
               cx: c - r,
               cy: c + r - 2 * mid,
-              half: 0.47,
-              rotateDeg: 45,
+              half: 0.46 * Math.SQRT2,
               face: t.face,
               color: COLORS[effColor(t)],
               hazard: isBomb && !isBlank(t) && liveBomb(t),
@@ -961,6 +966,8 @@ export function createSquareDiamondGame(): ShapeGame {
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
         onReLogin: opts?.onReLogin,
+        signInHint: opts?.signInHint,
+        onLive: opts?.onLive,
         shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,

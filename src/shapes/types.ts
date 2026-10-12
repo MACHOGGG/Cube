@@ -137,6 +137,10 @@ export interface ShapeGameOpts {
   shouldLeadOut?: () => boolean;
   /** 结算页那颗「重新登录」（见 engine/gameController.ts 的 onReLogin）。只有网页版给。 */
   onReLogin?: (done: () => void) => void;
+  /** 结算页三颗键上面那一句登录提示该不该说（见 engine/gameController.ts 的 signInHint）。只有网页版的单人局给。 */
+  signInHint?: () => boolean;
+  /** 这一局开着没有：开局 / 再来一局 true，结算 false（见 engine/gameController.ts 的 onLive）。网页版拿它管离站提示。 */
+  onLive?: (live: boolean) => void;
   /**
    * 头一回看见结算页时，明细底下补一句「综合得分怎么算」（见 engine/firstPlay.ts
    * 的 claimFirstTotalTip）。五条规矩的最后一条从棋盘底下挪到了那儿。

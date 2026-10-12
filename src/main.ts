@@ -9,7 +9,9 @@ import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
 import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
 import { suffixFor } from './engine/runKey';
 import { wipeOldRules } from './engine/wipeOldRules';
-import { moveRuns } from './engine/persistence';
+import { loadAllRuns, moveRuns } from './engine/persistence';
+import { signedIn } from './engine/cloudScores';
+import { wantsSignInHint } from './engine/signInHint';
 import { BOMB_RULES_VERSION } from './engine/bomb';
 import { FLIP_RULES_VERSION, SCORING_RULES_VERSION } from './engine/scoring';
 import { mountBottomNav, setActiveNavTab, type NavTab } from './ui/bottomNav';
@@ -66,10 +68,11 @@ import { dailyNow, syncDailyClock } from './engine/dailyClock';
 import { GENIUS_LAYOUTS } from './engine/geniusContent';
 import type { SeedGame } from './engine/seedDeal';
 import { renderPuzzleModePage } from './ui/puzzleMode';
-import { armNewVersionPill, syncNewVersionPill } from './ui/newVersionPill';
-import { armConsentBar, syncConsentBar } from './ui/consentBar';
+import { armNewVersionCard } from './ui/newVersionCard';
+import { armConsentBar } from './ui/consentBar';
+import { syncHomeSlot } from './ui/homeSlot';
 import { openLegalWindow } from './ui/legalWindow';
-import { installBackNav, pushLayer, setScreenBack } from './engine/backNav';
+import { installBackNav, setScreenBack } from './engine/backNav';
 import { openRulesModal, type ExtraTipView } from './ui/rulesModal';
 import { drawOne, type Family, type TargetPattern } from './engine/targets';
 import { MODE_SECONDS } from './engine/modeClock';
@@ -251,6 +254,11 @@ function setNavTab(tab: NavTab) {
  *  of a game we can still warn about, so the beforeunload prompt below is
  *  registered only for as long as this is set. */
 let gameInProgress = false;
+/**
+ * 上一局是什么时候结束的（毫秒时间戳；还没打完过是 0）。「有新版本」那张卡刚打完一局的两分钟里不出现
+ * （10-11 方案 B-9 的体验冻结，见 ui/newVersionCard.ts）——打完回到菜单正是他要接着开下一局的时候。
+ */
+let lastGameEndAt = 0;
 
 /** Wires the header's title on whichever screen was just rendered: it goes
  *  back to the top of the home page. */
@@ -670,7 +678,9 @@ function showMenu() {
   // 每日挑战那张卡画的是「今天」，而今天按服务器的钟算（第 19 推）。量一次就够，量完再画一遍不
   // 值得——到零点那一下它自己会换（dailyArt.ts 的 watchDay），差的那几秒只在零点前后才看得出。
   void syncDailyClock();
-  renderMenu(root, homeLayout, {
+  // 轴的 destroy 挂到 activeDestroy 上：换屏时 teardown 叫它（10-11 方案 B-1，见 renderMenu 上面那段）。
+  // softSwap 淡出的那 120ms 里旧页面还在、轴也还活着——拆是在下一屏 render 开头那句 teardown 里，不会提前。
+  activeDestroy = renderMenu(root, homeLayout, {
     // 《每日挑战》（第 19 推）：整页，和老虎机那几张一样包一层 softSwap。屋主替整屋挑玩法时按到
     // 它：每日挑战不是小屋的玩法，和计时、炸弹同一句提示。
     onDaily: () => {
@@ -785,15 +795,13 @@ function syncScreenClass() {
   // 别人那一间），底排那两颗是**离开**这一页的路，摆在这儿只会被误按。
   // 出路没少：手机返回键照旧（setScreenBack），页面自己那颗蓝圆盘也在。
   cl.toggle('is-room-home', !!root.querySelector('.mp-page--home'));
-  // 「有新版本，点一下刷新」那一行长在主菜单那块招牌玻璃里，而主菜单每次重画都是一棵新的
-  // DOM——上一棵里那一行跟着一起没了，得往新的那块玻璃里再放一次。挂在这儿而不是各页自己
-  // 叫一遍：换页就是换掉 root 的那一层子节点，这个函数是全站唯一一处知道「刚才换了屏」的
-  // 地方（它自己就是那个 MutationObserver 的回调）。顺带，「对局中不说」也是这一句管的：
-  // 打着一局的时候屏幕上没有主菜单，那一行于是根本不存在。
-  syncNewVersionPill();
-  // 主菜单上那张 GA 同意条（10-11 方案 A-14）同一个道理：它住在主菜单的招牌盒子里，换屏就跟着
-  // 没了，回到主菜单再放一次（没答过的人「下一次回到主菜单时再出现」就是这么来的）。
-  syncConsentBar();
+  // 主菜单招牌底下那一格（ui/homeSlot.ts）：GA 同意条（10-11 方案 A-14）和「有新版本」那张卡（B-9）。
+  // 它们住在主菜单那块招牌的盒子里，而主菜单每次重画都是一棵新的 DOM——上一棵里那两张跟着一起没了，得往
+  // 新的那一格里再放一次。挂在这儿而不是各页自己叫一遍：换页就是换掉 root 的那一层子节点，这个函数是全站
+  // 唯一一处知道「刚才换了屏」的地方（它自己就是那个 MutationObserver 的回调）。顺带，「对局中不说」也是这
+  // 一句管的：打着一局的时候屏幕上没有主菜单，那一格于是根本不存在。没答过同意条的人「下一次回到主菜单时
+  // 再出现」也是这么来的。
+  syncHomeSlot();
 }
 new MutationObserver(syncScreenClass).observe(root, { childList: true });
 syncScreenClass();
@@ -1202,7 +1210,7 @@ function showMultiplayer() {
         // 点，小屋那边就不再等他（api/room.js 的 LEARN_IDLE_MS）。
         const stopBeat = learnHeartbeat();
         const tips: ExtraTipView[] = flip ? [{ key: 'flip' }] : slot ? [{ key: 'slot' }] : [];
-        const close = openRulesModal({
+        openRulesModal({
           lang: currentLang,
           shape: rules,
           tips,
@@ -1222,9 +1230,8 @@ function showMultiplayer() {
             });
           },
         });
-        // 手机的返回键：等于按《知道了》——关窗、回小屋。
-        const ov = document.body.querySelector<HTMLElement>('.howto-ov');
-        if (ov) pushLayer(close, ov);
+        // 手机的返回键：等于按《知道了》——关窗、回小屋。这一层由 openRulesModal 自己登记（10-11 方案 B-2）；
+        // 原先这儿另登记了一次，同一扇窗在返回层里排了两层。
       },
       // 等人学教学那一屏底下的练习盘：这一局的玩法，练习模式（不结算）。
       onPractice: (host, mode, flip) => {
@@ -1294,6 +1301,11 @@ function startMultiplayerRun(match: MatchStart) {
   const back = () => (currentRoom() ? showMultiplayer() : showMenu());
   const destroyGame = game.mount(root, back, {
     lang: currentLang,
+    // 离站提示跟着这一局走（10-11 方案 B-10）：打着的时候问（离开会断小屋），结算页上不问。
+    onLive: (live) => {
+      gameInProgress = live;
+      if (!live) lastGameEndAt = Date.now();
+    },
     target,
     flip,
     timeLimitSec: flip ? FLIP_SECONDS : undefined,
@@ -1399,6 +1411,11 @@ function showRoomFinal(state: RoomState, meId?: string) {
   // 座位还在，不用给。
   showRoomCard(root, state, currentLang, done, meId ? { meId } : undefined);
   setScreenBack(done);
+}
+
+/** 本机存着几局（记录页那张清单的长度）——「iOS 浏览器里本机已有 ≥3 局才提示登录」数的就是它（10-11 方案 B-14）。 */
+function localRunCount(): number {
+  return loadAllRuns(recordSources.map((src) => src.card.bestKey + src.suffix)).length;
 }
 
 function showRecordsPage() {
@@ -1531,6 +1548,15 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
     shouldTeachTotal: claimFirstTotalTip,
     // 结算页那颗「重新登录」（10-11 方案 A-12）：令牌不作数了，这一局没传上去。开登录窗，登回来就把那一行收起来。
     onReLogin: (done) => openAuthWindow(currentLang, done),
+    // 主屏版、iOS 浏览器里没登录的人：结算页三颗键上面说一句「登录后打的每一局都会存到云端」（10-11 方案 B-14，
+    // 每天最多一次由控制器管）。只给单人局：小屋那一屏挤得满，而且坐进小屋本来就要先登录。
+    signInHint: () => wantsSignInHint(signedIn(), localRunCount()),
+    // 「离开此网站？」只在这一局开着时问（10-11 方案 B-10）：结算就不问了，《再来一局》又问——那一下走的是
+    // 控制器自己的 newGame，不经过这个文件，所以由控制器来报。
+    onLive: (live) => {
+      gameInProgress = live;
+      if (!live) lastGameEndAt = Date.now();
+    },
     ...opts,
     lang: currentLang,
   };
@@ -1654,10 +1680,9 @@ function relocalizeChrome(lang: Lang) {
     lang,
   );
   repaintIcons();
-  // 这一行是**一直在**的（发现之后不撤，见 ui/newVersionPill.ts 规矩③），所以换语言时它
-  // 不能还说着上一种话。和底排那两个字同一处落点，同一个理由。
-  syncNewVersionPill(lang);
-  syncConsentBar(lang);
+  // 「有新版本」那张卡是**一直在**的（发现之后不撤，见 ui/newVersionCard.ts 规矩③），同意条也可能正摆着，
+  // 所以换语言时那一格不能还说着上一种话。和底排那两个字同一处落点，同一个理由。
+  syncHomeSlot(lang);
 }
 
 /**
@@ -1670,11 +1695,15 @@ function afterLangChosen(lang: Lang, resume = false) {
   // 开始盯着线上那一版——只在这儿叫一次。boot() 的两条岔路（有存着的语言 / 现猜一个）最
   // 后都落到这个函数，而切语言走的是 relocalizeChrome，不经过这儿：盯哨于是不会被装两遍
   // （装两遍等于两个 setInterval，同一个版本号喊两声）。
-  armNewVersionPill(lang);
-  // GA 同意条也只装一次（理由同上）。屋主替整屋挑玩法时那一屏也是主菜单，但那一下他在替一屋子人
-  // 办事，不拿这件事去打扰他（方案点名的 pickingForRoom）。
+  // 屋主替整屋挑玩法时那一屏也是主菜单，但那一下他在替一屋子人办事，不拿这件事去打扰他（方案点名的
+  // pickingForRoom）；刚打完一局的两分钟里也不说（10-11 方案 B-9）。
+  armNewVersionCard(lang, {
+    suppressed: () => !!pickingForRoom,
+    lastGameEndAt: () => lastGameEndAt,
+  });
+  // GA 同意条也只装一次（理由同上），同一个 pickingForRoom。
   armConsentBar(lang, {
-    openPrivacy: () => openLegalWindow(currentLang, 'privacy', () => syncConsentBar()),
+    openPrivacy: () => openLegalWindow(currentLang, 'privacy', () => syncHomeSlot()),
     suppressed: () => !!pickingForRoom,
   });
   if (isFirstRun()) {

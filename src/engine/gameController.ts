@@ -26,6 +26,7 @@ import { vibrate } from './haptics';
 import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
 import { pushRun, sessionExpired } from './cloudScores';
+import { endHintShownToday, markEndHintShown } from './signInHint';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
@@ -169,6 +170,18 @@ export interface GameControllerHooks {
    * 一版没有帐号（cloudScores 是空替身，sessionExpired 永远是 false），这一行根本不会出现。
    */
   onReLogin?: (done: () => void) => void;
+  /**
+   * 结算页三颗键上面那一句「登录后打的每一局都会存到云端」该不该说（10-11 方案 B-14：主屏版、iOS 浏览器里没登录
+   * 的人，见 engine/signInHint.ts）。每天最多一次由这里管。只有网页版的单人局给——小红书那一版没有帐号，小屋那
+   * 一屏挤得满。叫的时候这一局已经存进本机了（「本机已有 ≥3 局」数得到它）。
+   */
+  signInHint?: () => boolean;
+  /**
+   * 这一局开着没有（10-11 方案 B-10）：开一局（包括《再来一局》）叫 true，结算叫 false。main.ts 拿它管
+   * 「离开此网站？」那一问——原先只在 main.ts 开局时置真、结算页上从没清过，而《再来一局》走的是这里的
+   * newGame、根本不经过 main.ts：打完一局在结算页上刷新，浏览器照样拦一下问要不要离开。练习盘不报。
+   */
+  onLive?: (live: boolean) => void;
   /**
    * 头一回看见结算页时，在明细底下补一句「综合得分怎么算」。
    *
@@ -566,6 +579,24 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 「无法继续匹配」收掉。新开一局、拆掉这一页都要先把它撤了。
    */
   let stuckTimer = 0;
+  /** 那一下该在什么时候响（performance.now() 的毫秒），暂停时拿它算还剩多少。 */
+  let stuckDueAt = 0;
+  /**
+   * 暂停时它还剩多少毫秒（没在数就是 null）。原先暂停不管它：面板盖着，它照样数完、在面板底下把这一局
+   * 收掉——他按了暂停，回来看到的是结算页（10-11 方案 B-13.6）。现在暂停时撤掉、记下还剩多少，继续时
+   * 接着数（和连锁那一拍的 heldBeat 同一个规矩）。
+   */
+  let stuckHeldMs: number | null = null;
+  const STUCK_END_MS = 1400;
+
+  function armStuckEnd(ms: number) {
+    window.clearTimeout(stuckTimer);
+    stuckDueAt = performance.now() + ms;
+    stuckTimer = window.setTimeout(() => {
+      stuckTimer = 0;
+      if (!gameOver) endGame('无法继续匹配');
+    }, ms);
+  }
 
   function updateStuckState(groups: Cell[][]) {
     hooks.highlightStuck?.(groups.length ? groups.flat() : null);
@@ -579,11 +610,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 找一个不存在的东西（《游戏规则》里那句话当时也一起改了）。
     if (groups.length && !gameOver) {
       hooks.render();
-      window.clearTimeout(stuckTimer);
-      stuckTimer = window.setTimeout(() => {
-        stuckTimer = 0;
-        if (!gameOver) endGame('无法继续匹配');
-      }, 1400);
+      armStuckEnd(STUCK_END_MS);
     }
   }
 
@@ -706,9 +733,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   function newGame() {
-    // 上一局「全死」排下的收尾不许落到这一局头上（见 stuckTimer）。
+    // 上一局「全死」排下的收尾不许落到这一局头上（见 stuckTimer）——暂停时记下的那一截也一样。
     window.clearTimeout(stuckTimer);
     stuckTimer = 0;
+    stuckHeldMs = null;
+    // 上一局结算页那枚勾和那一声也不许落到这一局头上（见 stampTimer）。
+    window.clearTimeout(stampTimer);
+    stampTimer = 0;
+    refs.endStampEl.textContent = '';
+    refs.endStampEl.classList.remove('end-stamp--drawn');
+    if (!hooks.practice) hooks.onLive?.(true);
     plantSeed();
     dealt++;
     hooks.resetBoard();
@@ -781,6 +815,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
   /** 章画完之前留出的那 50ms：分数落定和盖章之间要有一道缝，不然读起来是同时发生。 */
   const STAMP_GAP_MS = 50;
+  /**
+   * 盖章那一下（勾描出来＋通关那一声）的定时器（10-11 方案 B-13.7）。
+   *
+   * 原先是一个没人记得的 setTimeout，到点时靠「节点还在、里面还有那枚勾」认这一局还在不在——可《再来
+   * 一局》不清那个节点（要等下一局结算，stampEndCheck 才清它），于是分数还没滚完就按了再来，新的一局
+   * 开打不久，通关那一声照样响。newGame 撤掉它、清掉那枚勾。
+   */
+  let stampTimer = 0;
 
   /**
    * 「全部方块已翻成点面」那一枚章。
@@ -792,8 +834,24 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    *
    * 落在分数后面：滚筒滚完（rollDuration 把错峰算进去了）再等 50ms 才开始描。
    */
+  /**
+   * 结算页三颗键上面那句登录提示摆不摆得下（10-11 方案 B-14）。竖屏上它底下让的是那张图，摆得下；横屏手机上它坐
+   * 左栏抬头和三颗键之间那一格，抬头一长（明细长、每日挑战那一句晚到）那一格就比它矮，它会往上压到抬头上——
+   * 那就不摆。藏着的时候当摆得下（没有东西要量）。
+   */
+  function signHintFits(): boolean {
+    const el = refs.endSignHintEl;
+    if (el.hidden) return true;
+    const box = el.getBoundingClientRect();
+    const head = refs.endOverlay.querySelector('.end-head');
+    if (box.height === 0) return false;
+    return !head || box.top >= head.getBoundingClientRect().bottom - 0.5;
+  }
+
   function stampEndCheck(reason: string, total: number): void {
     const host = refs.endStampEl;
+    window.clearTimeout(stampTimer);
+    stampTimer = 0;
     host.textContent = '';
     host.classList.remove('end-stamp--drawn');
     // 有没有这枚勾，抬头是两种排法（10-08 方案 3-I 的两张设计图）：有勾的时候勾在左边那一列、
@@ -821,9 +879,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       return;
     }
     const wait = rollDuration(total) + STAMP_GAP_MS;
-    window.setTimeout(() => {
-      // 这中间他可能已经按了《再来一局》或《首页》——那时候这个节点早被下一局的
-      // stampEndCheck 清空了，或者整页换掉了。不在文档里就不画。
+    stampTimer = window.setTimeout(() => {
+      stampTimer = 0;
+      // 这中间他可能已经按了《再来一局》（newGame 撤掉了这个定时器、清掉了那枚勾）或《首页》（整页
+      // 换掉了）。不在文档里就不画。
       if (!host.isConnected || !host.firstChild) return;
       host.classList.add('end-stamp--drawn');
       // 里程碑那一声，摆在勾这一边。结算页开场那一下是 playSettle（每一局都有），
@@ -842,6 +901,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }
     gameOver = true;
     resolving = false;
+    hooks.onLive?.(false);
     // 打完过一局了（头一局那个带教学条的也算）：主菜单上那张《每日挑战》从此摆出来（10-08 方案
     // 3-D-1，见 engine/firstPlay.ts 的 finishedAGame）。
     markFinishedAGame();
@@ -1019,6 +1079,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 「没进今日榜」那一句先藏起来：它属于上一局，这一局要不要说，等交卷回包（见下面 pushRun）。
     refs.endDailyNoteEl.hidden = true;
     refs.endDailyNoteEl.textContent = '';
+    refs.endSignHintEl.hidden = true;
+    refs.endSignHintEl.textContent = '';
     /**
      * 徽章那一排（《侵蚀阶梯》v1.2 §5：清盘、解锁 1 枚）。
      *
@@ -1028,6 +1090,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 的一格。
     const badges = runBadges(lastRun, hooks.lang);
     refs.endBadgesEl.innerHTML = badges.map((b) => `<span class="end-badge">${escHtml(b)}</span>`).join('');
+    // 「综合分是怎么来的」这一局讲不讲（只讲头一回，见下面明细最后那一行）。提到这儿是因为三颗键上面那句登录
+    // 提示要问它：两句一次性的话不挤在同一窗里（见下面 signInHint 那一段）。
+    //
+    // `usesStepCoef` 写在 `&&` 左边是要紧的：`shouldTeachTotal()` 一问就**记账**
+    // （firstPlay 的 claimFirstTotalTip 调 markOpened），右边先跑的话这一次性的教学
+    // 会白白烧在一局根本不显示它的反转局上，他从此再也看不到这句话。
+    const teachTotal = usesStepCoef && !!hooks.shouldTeachTotal?.();
     refs.endBreakdownEl.innerHTML =
       runBreakdown(lastRun, hooks.lang)
         .map(([label, value]) =>
@@ -1053,14 +1122,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 行明细里连系数那一行都不摆（按 par 在不在判，理由见下面 lastRun 那段——「摆一
       // 行『×1.00』等于告诉玩家有这回事」）。注解比那一行更糟：那一行只是摆出一个不
       // 起作用的数，这一句是**讲一件这一局没发生的事**，而且就讲在「指着实物讲」的位
-      // 置上——他照着往上看，明细里找不到那个系数。
-      //
-      // `usesStepCoef` 写在 `&&` 左边是要紧的：`shouldTeachTotal()` 一问就**记账**
-      // （firstPlay 的 claimFirstTotalTip 调 markOpened），右边先跑的话这一次性的教学
-      // 会白白烧在一局根本不显示它的反转局上，他从此再也看不到这句话。
-      (usesStepCoef && hooks.shouldTeachTotal?.()
-        ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipComposite)}</span></div>`
-        : '');
+      // 置上——他照着往上看，明细里找不到那个系数（问不问见上面 teachTotal）。
+      (teachTotal ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipComposite)}</span></div>` : '');
     // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
     // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
     // 单局最快 on a room's closing card is read from here, the same way the
@@ -1120,6 +1183,22 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
     // Archive the run so the 记录 panel can re-open the very same card.
     saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
+    // 三颗键上面那一句（10-11 方案 B-14）：存完这一局再问，「本机已有 ≥3 局」才数得到它。和上面的结算页同一拍
+    // 摆上去（中间没让浏览器画过一帧），所以图那一块不会先大后小跳一下。
+    //
+    // 这两种时候不说、也不算「今天说过」（下一局再说）：
+    //   · 这一窗在讲「综合分是怎么来的」（头一局才有）——两句一次性的话挤在同一窗里，320 宽的手机上那张图被
+    //     挤到 28px 高；横屏手机上抬头那一栏一长，这一句会压到抬头上（门 check-pwa-hint 量出来的）。
+    //   · 摆不下（signHintFits）。
+    if (!teachTotal && hooks.signInHint?.() && !endHintShownToday()) {
+      refs.endSignHintEl.textContent = s.cloudSaveHint;
+      refs.endSignHintEl.hidden = false;
+      if (signHintFits()) markEndHintShown();
+      else {
+        refs.endSignHintEl.hidden = true;
+        refs.endSignHintEl.textContent = '';
+      }
+    }
     // 登录了就顺手往云上报一份：换台设备记录跟着回来，成绩也进全球榜。
     // 不 await——结算页已经在屏幕上了，没有理由让刚打完的人等一个请求；
     // 报不上去最多是这一局没上榜，本机那份存档一个字都不受影响。
@@ -1151,12 +1230,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           refs.endDailyNoteEl.append(' ', again);
         }
         refs.endDailyNoteEl.hidden = false;
+        if (!signHintFits()) refs.endSignHintEl.hidden = true;
         return;
       }
       const verdict = reply?.daily;
       if (verdict !== 'late' && verdict !== 'rejected') return;
-      refs.endDailyNoteEl.textContent = s.dailyNotCounted;
+      // 交晚了单说一句（10-11 方案 B-13.4）：他的钟没错，只是打过了零点——「看看设备的日期」把他往错的地方指。
+      refs.endDailyNoteEl.textContent = verdict === 'late' ? s.dailyLate : s.dailyNotCounted;
       refs.endDailyNoteEl.hidden = false;
+      if (!signHintFits()) refs.endSignHintEl.hidden = true;
     });
     // The reason key is one of our own fixed strings, never player text.
     trackGameEnd({
@@ -1498,8 +1580,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
          * 无限反转没有炸弹局，也不按翻面计分，所以那一局这儿恒 0。
          */
         const defused = Math.max(0, committed - s.flips);
+        let bombPoints = 0;
         if (defused > 0 && !hooks.flip) {
-          const bombPoints = POINTS_PER_FLIP * defused;
+          bombPoints = POINTS_PER_FLIP * defused;
           score += bombPoints;
           totalRaw += bombPoints;
           patternPoints += bombPoints;
@@ -1538,7 +1621,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // step's commit is a no-op, so this is exactly the flip moment.
         if (s.matchGroups.length) playFlip();
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
-        if (delta > 0) {
+        if (delta > 0 || bombPoints > 0) {
           score += delta;
           // 步步为营：分数在局中**整个不露面**（那一格印的是破折号，见
           // gameShell 的 score-cell--hold），结算页才揭晓。
@@ -1555,7 +1638,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
             // 1.5^n 会长出一串小数（3.375、5.0625……），印一位就够——气泡是拿
             // 来说「越连越多」的，不是拿来对账的。
             const mult = Math.round(shownMult * 10) / 10;
-            scoreReel.showGain(delta, mult > 1 ? `${s.label} ×${mult % 1 ? mult.toFixed(1) : mult}` : s.label);
+            // 拆掉的那几颗炸弹（每颗 +2，上面已经加进分数了）也算进这一拍的「+N」（10-11 方案 B-13.5）：原先气泡
+            // 只写 delta，滚筒却连拆弹分一起跳——屏幕上那个「+N」和分数涨的数差的正好是拆掉的那几颗。
+            scoreReel.showGain(delta + bombPoints, mult > 1 ? `${s.label} ×${mult % 1 ? mult.toFixed(1) : mult}` : s.label);
             scoreReel.setValue(score);
             punch(refs.scoreReelEl);
           }
@@ -1592,6 +1677,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 连锁也一起停：遮罩盖上之后，翻面、加分、判死局都不该在背后继续跑
     // （见 heldBeat）。
     holdBeat();
+    // 死局那 1.4 秒也停（见 stuckHeldMs）。
+    if (stuckTimer) {
+      window.clearTimeout(stuckTimer);
+      stuckTimer = 0;
+      stuckHeldMs = Math.max(0, stuckDueAt - performance.now());
+    }
     // 开局倒数那一屏借的是同一层面板，那时候「再来一局 / 结束游戏」无从谈
     // 起，所以那条路上挂了 .pause--pre 把它们藏起来（见 gameShell 的
     // #startPauseBtn）。现在是真的在打了，摘掉。写在这儿而不是那颗《暂停》
@@ -1632,6 +1723,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const held = heldBeat;
     heldBeat = null;
     if (held && resolving && !gameOver) armBeat(held.run, held.ms);
+    // 死局那一下停在半路的话，从停下的地方接着数。
+    const stuckLeft = stuckHeldMs;
+    stuckHeldMs = null;
+    if (stuckLeft !== null && !gameOver) armStuckEnd(stuckLeft);
   }
 
   function doFinish() {
@@ -1802,6 +1897,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       timer.stop();
       window.clearTimeout(stuckTimer);
       stuckTimer = 0;
+      stuckHeldMs = null;
+      window.clearTimeout(stampTimer);
+      stampTimer = 0;
       stopFrameWatch();
       patternBlock.destroy();
       coach?.destroy();

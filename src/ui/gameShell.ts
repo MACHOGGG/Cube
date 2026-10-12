@@ -139,6 +139,8 @@ export interface ShellRefs {
   endBadgesEl: HTMLElement;
   /** 每日挑战那一局没进今日榜时说的那一句（平时藏着）。 */
   endDailyNoteEl: HTMLElement;
+  /** 三颗键上面那一句「登录后打的每一局都会存到云端」（10-11 方案 B-14，平时藏着）。 */
+  endSignHintEl: HTMLElement;
   endBreakdownEl: HTMLElement;
   /** 结算页上那张战绩图。开局那一刻还是空的，一局打完由 endGame 填上。 */
   endShareImgEl: HTMLImageElement;
@@ -527,6 +529,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             <img id="endShareImg" alt="${s.shareImgAlt}" />
           </figure>
         </div>
+        <!-- 主屏版、iOS 浏览器里没登录的人：三颗键上面一句「登录后打的每一局都会存到云端，换设备也找得回。」
+             （10-11 方案 B-14，每天最多一次，见 engine/signInHint.ts）。平时藏着、不占地方。 -->
+        <p class="end-signin-hint" id="endSignHint" hidden></p>
         <!-- 三颗键：再来 · 分享 · 主页（设计图的次序），只有记号没有字（读屏名在 aria-label）。
              颜色是《色卡》那三支：玫红、蓝、橙。10-09 补充方案 6-4 起三颗同构：药丸里一枚白圆盘、
              盘里是药丸同色的记号（见 style.css 的 .end-act）。 -->
@@ -566,10 +571,29 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
    * than one that reaches two. A clamp() alone cannot know any of that — it
    * only knows the viewport — so anything that would spill gets stepped
    * down from whatever the stylesheet asked for until it doesn't.
+   *
+   * 分数那一格选的是 `.hud-block--score`（10-11 方案 B-11）。原先这儿写的是 `.hud-cell`——HUD 改版之后
+   * 页面上一个都没有，于是这一段对分数从来没起过作用：九位数的分实测在手机上溢出 12–17px、电脑那张大
+   * 牌上溢出一百多像素。
+   *   · 不选 `.hud-block`：右边那块图案（.hud-block--pattern）的大小有它自己的算法，被这儿一缩就乱了。
+   *   · 不选里面那个 `.v`：它的宽是跟着内容长的，九位数时它自己就有 146px 宽、比分数格还宽，量它自己
+   *     永远「放得下」。缩的是格子：格子宽是定的，溢出算得进它的 scrollWidth；`.v` 在局中是
+   *     `font: inherit`，格子的字号一降它跟着降。角上那颗「+N」在局中是 inset: 0 贴在格子里的，撑不出去。
    */
   const chips = () =>
-    Array.from(container.querySelectorAll<HTMLElement>('.app--game .hud-cell, .app--game .controls .icon-btn'));
-  const fitsIn = (el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+    Array.from(container.querySelectorAll<HTMLElement>('.app--game .hud-block--score, .app--game .controls .icon-btn'));
+  const fitsIn = (el: HTMLElement) => {
+    // 分数格：数字是居中摆的，往两边各溢出一半，scrollWidth 只算得到右边那一半，而且数字会先吃掉格子的
+    // 内边距才算「溢出」——量出来贴着格子的边。所以这一格量里面那个 `.v` 的宽，对的是扣掉左右内边距的
+    // 那一截（B-11）。
+    const v = el.querySelector<HTMLElement>(':scope > .v');
+    if (v) {
+      const cs = getComputedStyle(el);
+      const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return v.scrollWidth <= room + 1;
+    }
+    return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+  };
   let fitQueued = 0;
   function fitChips(): void {
     for (const el of chips()) {
@@ -812,6 +836,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     endOverlay: req('endOverlay'),
     endBadgesEl: req('endBadges'),
     endDailyNoteEl: req('endDailyNote'),
+    endSignHintEl: req('endSignHint'),
     endHazardBgEl: req('endHazardBg'),
     endTitleEl: req('endTitle'),
     endScoreEl: req('endScore'),

@@ -33,6 +33,8 @@
  *   ① 几何已死 → 该结算（1.4 秒之后，理由写「无法继续匹配」）。
  *   ② 几何也活 → 不许结算。②（反面那一副）才是这道门最要紧的一条：一道「什么都判死」的
  *      兜底会把每一局在残局处掐掉，而那比不结束难看得多。
+ *   ③ 还是 ① 那一副，走完那一步马上按《暂停》、停 3 秒：暂停期间不许结算（原先那 1.4 秒照样数完，
+ *      在暂停面板底下把这一局收掉——10-11 方案 B-13.6）；按《继续》之后接着数，照样结算。
  *
  * 两副都是拿真的小球线、真的判定搜出来的（脚本见 scratchpad 里的 find-fixture.mjs，筛的条件
  * 正是「计数活 ＋ 精确搜索死 / 活」）。
@@ -144,8 +146,12 @@ async function dragAnyPiece(page) {
   return false;
 }
 
-/** 开一局小球，手摆那副牌，走一步，等 `waitMs` 毫秒，回「结算了没有、理由是什么」。 */
-async function run(rows, waitMs) {
+/**
+ * 开一局小球，手摆那副牌，走一步，等 `waitMs` 毫秒，回「结算了没有、理由是什么」。
+ *
+ * `pauseMs`：走完那一步马上按《暂停》，停这么久，记下这期间结算了没有，再按《继续》，然后才等 `waitMs`。
+ */
+async function run(rows, waitMs, pauseMs = 0) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   // reduced-motion：每一拍都立刻跑完，1.4 秒那一下才量得准。
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -183,6 +189,17 @@ async function run(rows, waitMs) {
    * 随便滑哪一枚都行，滑得动就算走了一步。四枚球里总有一枚所在的线上还有别的活格。
    */
   const moved = await dragAnyPiece(page);
+  let paused = null;
+  if (pauseMs) {
+    // 走完那一步（dragAnyPiece 认出盘面动了就回来，那时 1.4 秒才数了两三百毫秒）马上暂停。
+    await page.$eval('#stopBtn', (el) => el.click());
+    await page.waitForTimeout(pauseMs);
+    paused = await page.evaluate(() => ({
+      over: !!document.querySelector('#endOverlay.show'),
+      panel: !!document.querySelector('#pauseOverlay.show'),
+    }));
+    await page.$eval('#continueBtn', (el) => el.click());
+  }
   await page.waitForTimeout(waitMs);
   /**
    * 结算了没有，以及**为什么**。
@@ -219,7 +236,7 @@ async function run(rows, waitMs) {
     return { shown, reason };
   });
   await page.close();
-  return { want, got, over: out.shown, reason: out.reason, moved };
+  return { want, got, over: out.shown, reason: out.reason, moved, paused };
 }
 
 console.log('① 计数说活、几何已死 → 该结算');
@@ -237,6 +254,15 @@ console.log('\n② 几何也活 → 不许结算（这一条最要紧）');
   const r = await run(ALIVE, 3200);
   check('（尺子）手摆那副牌生效了，盘上正好那么多枚', r.got === r.want, `${r.got} / 要 ${r.want}`);
   check('**没有**结算', r.over === null, `${r.over} ／ 理由 ${r.reason}`);
+}
+
+console.log('\n③ ① 那一副，走完那一步马上暂停 3 秒：暂停期间不结算，继续之后才结算（10-11 方案 B-13.6）');
+{
+  const r = await run(DEAD, 2600, 3000);
+  check('（尺子）真的走出了一步', r.moved === true, String(r.moved));
+  check('（尺子）暂停面板真的盖上了', r.paused?.panel === true, JSON.stringify(r.paused));
+  check('暂停的 3 秒里**没有**结算（那 1.4 秒停下了）', r.paused?.over === false, JSON.stringify(r.paused));
+  check('继续之后接着数，结算了，理由是「无法继续匹配」', r.over !== null && r.reason === '无法继续匹配', `${r.over} ／ 理由 ${r.reason}`);
 }
 
 await browser.close();

@@ -1387,6 +1387,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   }
 
   function onResize(): void {
+    // 轴已经不在页面上了（换了屏、destroy 没被叫到）：量一个不在文档里的盒子只会算出一堆 0，还白白
+    // 写样式。destroy 那一路正常走的话这儿根本到不了，这是第二道（10-11 方案 B-1）。
+    if (destroyed || !host.isConnected) return;
     measure();
     paint();
   }
@@ -1406,7 +1409,9 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 正在拖的时候不管（同 onFocusIn：那会儿页面在哪儿是手指决定的）。
    */
   function recenter(): void {
-    if (destroyed || dragging) return;
+    // !isConnected：主菜单已经换成了别的屏，那一页的滚动不归这条轴管——原先这儿漏了这一句，旧轴的观察
+    // 器一直挂在 body 上，个人主页滚到 601 开关一扇窗，这一句 scrollTo 把整页滚回了顶（10-11 方案 B-1）。
+    if (destroyed || dragging || !host.isConnected) return;
     if (window.scrollY !== 0) window.scrollTo(0, 0);
     measure();
     paint();
@@ -1431,7 +1436,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 打出第一个字的那一下，那一行的行高按中文字体重排，招牌从 104 长到 105——轴于是整条往下错 1px，
    * 屏幕最上面露出一条底色缝，中线也跟着低 1px，一直错到下一次重画主菜单。登录成功那一下正好会重
    * 画（landed → onChanged → showMenu），轴「跳」回正确位置：关了登录窗，主菜单动了一下。真机上中
-   * 文落到系统字体，差得可能不止 1px。新版本提示（newVersionPill）晚到、挂进招牌，也是同一回事。
+   * 文落到系统字体，差得可能不止 1px。（10-11 之前「有新版本」那一行晚到、挂进招牌，也是同一回事；B-9 之后它
+   * 是招牌底下那一格里的一张卡，不再撑高招牌。）
    *
    * 字体到货那一次（下面 fonts.ready）是这件事的一个特例，留着：老内核没有 ResizeObserver。
    */

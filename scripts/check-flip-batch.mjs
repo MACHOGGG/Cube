@@ -171,9 +171,11 @@ check('结算页没有《用时系数》那一行', !rows.some((r) => r.includes
 const bodyRows = await page.$$eval('#endBreakdown .end-row:not(.end-row--tip)', (els) =>
   els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
 );
+// 中文叫法 10-11 起统一成「拼出得分」「综合得分」（方案 B-13.3）——「综合得分」里不含「综合分」三个字，
+// 两个词都得跟着改，不然这一条在新版上必红。
 check(
-  '结算页摆的是新那三行：翻面、拼出分、综合分',
-  ['翻面', '拼出分', '综合分'].every((w) => bodyRows.some((r) => r.includes(w))),
+  '结算页摆的是新那三行：翻面、拼出得分、综合得分',
+  ['翻面', '拼出得分', '综合得分'].every((w) => bodyRows.some((r) => r.includes(w))),
   bodyRows.join(' | '),
 );
 check(
@@ -184,13 +186,13 @@ check(
 // 无限反转不乘步数系数（§5），所以那一行不许摆——runRecord.ts 按「par 在不在」判，
 // 这儿从屏幕上再问一遍。
 check('无限反转：不摆步数系数那一行', !bodyRows.some((r) => r.includes('步数系数')), bodyRows.join(' | '));
-// 那句注解（`.end-row--tip`「综合分 = 拼出分 × 步数系数……」）在这一档也不许讲。
+// 那句注解（`.end-row--tip`「综合得分 = 拼出得分 × 步数系数……」）在这一档也不许讲。
 //
 // 它从前只问「头一回吗」，不问「这一档乘不乘」：于是头一局打无限反转的人，上面三行
 // 明细里**连系数那一行都没有**（对的），底下却摆着一句解释那一乘的话——他照着往上
 // 看，找不到那个系数。比摆一行「×1.00」更糟：那只是摆出一个不起作用的数，这一句是
 // 讲一件这一局没发生的事。
-check('无限反转：那句「综合分 = 拼出分 × 步数系数」也不讲',
+check('无限反转：那句「综合得分 = 拼出得分 × 步数系数」也不讲',
   !(await has(page, '#endBreakdown .end-row--tip')), '');
 await page.evaluate(() => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });

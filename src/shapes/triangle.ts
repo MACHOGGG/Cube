@@ -1303,6 +1303,8 @@ export function createTriangleGame(): ShapeGame {
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
         onReLogin: opts?.onReLogin,
+        signInHint: opts?.signInHint,
+        onLive: opts?.onLive,
         shouldTeachTotal: opts?.shouldTeachTotal,
         resetBoard,
         render,

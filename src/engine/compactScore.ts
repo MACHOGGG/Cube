@@ -23,18 +23,29 @@ import type { Lang } from '../i18n';
 
 export function compactScore(n: number, lang: Lang): string {
   const zh = lang === 'zhHans' || lang === 'zhHant';
-  const cut = (v: number, unit: string) => {
+  /** 这一档的写法：一位小数（满 100 就取整），「.0」去掉。 */
+  const shown = (v: number) => {
     const t = (n / v).toFixed(n / v >= 100 ? 0 : 1);
-    return (t.endsWith('.0') ? t.slice(0, -2) : t) + unit;
+    return t.endsWith('.0') ? t.slice(0, -2) : t;
+  };
+  /**
+   * 四舍五入之后满了这一档的上限，就进一位单位（10-11 方案 B-13 第 1 条）。原先 999,999,999 写成
+   * 「1000M」、999,500 写成「1000K」、中文 99,995,000 写成「10000万」——数没错，可这几个写法谁也不这么
+   * 念，而且比进一位之后的「1B」「1M」「1亿」长出一截，正好撑破这个函数要守的那个小格子。
+   */
+  const cut = (v: number, unit: string, cap: number, next?: [number, string]) => {
+    const t = shown(v);
+    if (next && Number(t) >= cap) return shown(next[0]) + next[1];
+    return t + unit;
   };
   if (zh) {
     const [wan, yi] = lang === 'zhHant' ? ['萬', '億'] : ['万', '亿'];
-    if (n >= 1e8) return cut(1e8, yi);
-    if (n >= 1e5) return cut(1e4, wan);
+    if (n >= 1e8) return cut(1e8, yi, Infinity);
+    if (n >= 1e5) return cut(1e4, wan, 1e4, [1e8, yi]);
     return String(n);
   }
-  if (n >= 1e9) return cut(1e9, 'B');
-  if (n >= 1e6) return cut(1e6, 'M');
-  if (n >= 1e5) return cut(1e3, 'K');
+  if (n >= 1e9) return cut(1e9, 'B', Infinity);
+  if (n >= 1e6) return cut(1e6, 'M', 1000, [1e9, 'B']);
+  if (n >= 1e5) return cut(1e3, 'K', 1000, [1e6, 'M']);
   return String(n);
 }

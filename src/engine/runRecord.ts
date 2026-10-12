@@ -377,7 +377,7 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
     // 又是在讲一件没发生的事。
     if (d.par !== undefined) {
       out.push([
-        `${s.stepCoefLabel}（${s.stepCoefDetail.replace('{p}', String(d.moves)).replace('{par}', String(d.par))}）`,
+        s.stepCoefLabel + countPhrase(s.stepCoefDetail, d.moves, lang).replace('{par}', String(d.par)),
         '×' + (d.stepCoef ?? 1).toFixed(2),
       ]);
     }

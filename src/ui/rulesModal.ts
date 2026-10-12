@@ -39,6 +39,7 @@
 import { MODE_TIPS, STRINGS, TUTORIAL_RULES, tutorialRules, type Lang, type RuleShape } from '../i18n';
 import { bombTipArt, buildRuleArt, flipTipArt } from './ruleArt';
 import { menuTag } from './menuTags';
+import { pushLayer } from '../engine/backNav';
 
 /**
  * 有过分镜动画的两族。那两段第 14 推下线了，这个类型留着是因为小红书那边还按它记
@@ -225,6 +226,13 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
   document.addEventListener('keydown', onKey);
 
   document.body.appendChild(overlay);
+  /*
+   * 返回键先关这一扇（10-11 方案 B-2）。原先这扇窗不登记，返回落到它底下那一屏的处理上：计时局里从暂停
+   * 面板点开它，按返回等于「暂停着再按 → 继续」——暂停页撤了、钟又走起来了，规则窗却还盖在棋盘上（实测
+   * 走了 4 秒）；倒数页上点开它，按返回直接回了主菜单，规则窗留在 body 上。这儿登记一次，所有开它的地方
+   * （局中暂停、小屋学规则、小红书的教学）一起好；close 自己幂等，返回关掉之后再按《知道了》也不会关两回。
+   */
+  pushLayer(close, overlay);
   // 加一帧再点亮，让入场那段过渡跑得起来（.overlay 的显隐靠 .show）。
   requestAnimationFrame(() => overlay.classList.add('show'));
   return close;

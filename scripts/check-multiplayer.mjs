@@ -593,7 +593,16 @@ if (rulesAsked) {
   // 学完了：按《知道了》关窗——走的就是玩家那条路（关窗时报「学完了」、回小屋），
   // 服务器把开赛时刻重新盖一遍，全屋一起从 4 数起。从前这里替它直接打接口，省掉真
   // 把整段分镜放完的两分钟；规则窗一按就关，不用再省。
-  if (learnModal) await B.page.click('#howtoOkBtn');
+  // 10-11 方案 B-2：先按一次返回——规则窗自己登记了返回层（ui/rulesModal.ts），原先 main.ts 这一路还另登
+  // 记了一次。一次返回就该关掉它，走的是同一个 close（关窗时报「学完了」、回小屋），和按《知道了》一样。
+  if (learnModal) {
+    await B.page.waitForTimeout(200);
+    await B.page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => {});
+    await B.page.waitForTimeout(500);
+    const stillOpen = !!(await B.page.$('.howto-ov'));
+    check('学规则的那扇窗：按一次返回就关（10-11 方案 B-2）', !stillOpen);
+    if (stillOpen) await B.page.click('#howtoOkBtn');
+  }
   const resumed = await A.page.waitForFunction(
     () => !!document.querySelector('.mp-countdown-page .cd-window') && !document.querySelector('.mp-learn-spin'),
     { timeout: 20000 },

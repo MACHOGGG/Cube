@@ -104,7 +104,28 @@ export function boardGroups(lang: Lang): BoardGroup[] {
 function rowsHtml(page: BoardPage, lang: Lang, compact = false): string {
   const s = STRINGS[lang];
   if (!page.rows.length) return `<p class="rank-empty">${s.rankEmpty}</p>`;
-  return rowList(page, lang, compact).join('');
+  return rowList(page, lang, compact).join('') + (compact ? '' : mineFootHtml(page, lang));
+}
+
+/**
+ * 「我排第几」（10-11 方案 B-13.9，玩家定的 Q7：显示）：放大的那张榜底下固定一行「名次 · 我 · 分数」。
+ *
+ * 回包里本来就有 page.me（服务器算好的名次），从前只在我挤进列出来的那几行时才看得见——排在外面的人点开
+ * 一张榜，从头翻到尾找不到自己，分不清是没上榜还是排得太后。自己已经在列出来的行里就不重复；这张榜上没
+ * 有自己（page.me 是 null）就不摆。缩略牌太窄，不加（rowsHtml 的 compact 那一路，记进 G-5）。
+ *
+ * 总榜每一行行首有个小图形（那一局是哪个玩法），page.me 里没有这一位——垫一个空的，名字那一栏才对得齐。
+ */
+function mineFootHtml(page: BoardPage, lang: Lang): string {
+  if (!page.me || page.rows.some((r) => r.me)) return '';
+  const s = STRINGS[lang];
+  const glyph = page.rows.some((r) => r.mode) ? '<span class="rank-glyph" aria-hidden="true"></span>' : '';
+  return `<div class="rank-row rank-row--me rank-row--pin">
+        <span class="rank-place">${page.me.rank}</span>
+        ${glyph}
+        <span class="rank-name">${esc(s.rankMe)}</span>
+        <span class="rank-score">${page.me.score}</span>
+      </div>`;
 }
 
 /** 一行名次一个字符串——缩略牌要按格子数补齐，所以不能先拼成一整段。 */

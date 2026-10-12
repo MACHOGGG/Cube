@@ -142,12 +142,25 @@ export interface I18nStrings {
    */
   rankNetwork: string;
   /**
-   * 每日挑战那一局交上去，服务器说它没进「今日」榜（交晚了，或者日子 / 种子对不上——2026-10-08
-   * 方案 2-11）。日子和种子都是按本机的钟算的，钟不对就是这两种，所以提一句设备的日期。
+   * 每日挑战那一局交上去，服务器说它没进「今日」榜：日子 / 种子对不上（2026-10-08 方案 2-11）。日子和
+   * 种子都是按本机的钟算的，钟不对就是这一种，所以提一句设备的日期。
    */
   dailyNotCounted: string;
+  /**
+   * 同上，可服务器说的是「交晚了」：这一局是前一天的，过了零点又过了 10 分钟宽限才交上来（宽限按服务器
+   * 收到的时刻算，有意保留）。从前和上面那一种共用一句「看看设备的日期和时间对不对」——他的钟好好的，
+   * 只是打过了零点，这句话把他往错的地方指（10-11 方案 B-13.4）。
+   */
+  dailyLate: string;
   /** 榜上没取过名字的那一行。见 engine/nickname.ts 的 leaderboardName。 */
   rankAnon: string;
+  /** 放大的榜底下「我排第几」那一行，名字那一格（10-11 方案 B-13.9）。 */
+  rankMe: string;
+  /**
+   * 主屏版、iOS 浏览器里没登录的人：记录页顶上、结算页三颗键上面那一句（10-11 方案 B-14，engine/signInHint.ts）。
+   * 照实说：只有登录**之后**打的局才会上云。（登录窗里那一句是 signInHint，不是这一句。）
+   */
+  cloudSaveHint: string;
   /**
    * 昵称（第 16 推）：个人主页头卡上那一格。登录了、还没登记昵称时显示 nickSet；✎ 那颗键的
    * aria-label 是 nickEdit，原地编辑时 ✓ / ✕ 的 aria-label 是 nickSave / nickCancel。
@@ -623,8 +636,14 @@ export interface I18nStrings {
    */
   mpRoundForced: string;
   mpRoundForcedZero: string;
-  /** 线上已经是新的一版了：菜单上那一行，按一下重新加载。对局中不出现（见 engine/newVersion.ts）。 */
-  newVersionTip: string;
+  /**
+   * 线上已经是新的一版了：主菜单招牌底下那张卡上的一句（10-11 方案 B-9，ui/newVersionCard.ts）。写了更新说明的
+   * 那一种是 newVersionNote（{note} 是 src/changelog.ts 里那一句），只有构建变了是 newVersionGeneric；按钮是
+   * newVersionReload。对局中不出现（见 engine/newVersion.ts）。
+   */
+  newVersionNote: string;
+  newVersionGeneric: string;
+  newVersionReload: string;
   /** 主菜单那张 Google Analytics 同意条（10-11 方案 A-14）：完整版、紧凑版两句，两颗一样大的键，
    *  `aria-label`，紧凑版里那条链接的字（只有法语和隐私政策的标题不一样），和隐私政策窗顶上那颗开关。 */
   consentFull: string;
@@ -776,17 +795,25 @@ export interface I18nStrings {
    * 都在讲这个奖励，结算页上却找不到它去了哪儿。
    */
   slotBonusLabel: string;
-  /** 「拼出分」——翻面分 + 削线分，无任何过程系数。 */
+  /**
+   * 「拼出得分」——翻面分 + 削线分，无任何过程系数。中文和 HUD 左边那一块的标题（builtScoreHudLabel）一字不差：
+   * 从前明细里写「拼出分」、HUD 上写「拼出得分」，一个数两个叫法（10-11 方案 B-13.3，玩家定的 Q5）。
+   */
   builtScoreLabel: string;
-  /** 「步数系数」；副标「{p}步，基准{par}」。 */
+  /** 「步数系数」；后面紧跟 stepCoefDetail（括号在那一句里）。 */
   stepCoefLabel: string;
   /**
+   * 步数系数那一行标签的后半截，**连括号一起**：走 countPhrase（{n} = 这一局的步数，英法 `单数|复数`），
+   * {par} 另填。英法是半角括号、前面空一格（「Move multiplier (19 moves · par 28)」），中文是全角括号、
+   * 不空格。原先括号写死在 runRecord.ts 里、一律全角，英法也是「Move multiplier（1 moves · par 28）」——
+   * 括号错、单复数也错（10-11 方案 B-13.2）。
+   *
    * 中文两份是紧凑写法「19步，基准28」（10-08 方案 3-I：结算弹窗设计图上就是这么写的）。从前是
    * 「19 步 · 基准 28」，比图上宽 19px——明细里数的那一栏因此比图上靠右 17px，有通关勾的那种排法
    * 里这一行还被折成两行。
    */
   stepCoefDetail: string;
-  /** 「综合分」——拼出分 × 步数系数。 */
+  /** 「综合得分」——拼出得分 × 步数系数。中文和结算弹窗的标题（compositeScoreLabel）一字不差（B-13.3）。 */
   compositeLabel: string;
   /** 「用时 {t}（不计分）」——结算页那一行小字。 */
   timeNotScoredLabel: string;
@@ -967,7 +994,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankEmpty: 'Nobody on this board yet',
     rankNetwork: 'Couldn’t load the board. Check your connection.',
     dailyNotCounted: 'This run didn’t count for today’s challenge. Check your device’s date and time.',
+    dailyLate: 'That day’s cut-off has passed, so this run doesn’t count on today’s board.',
     rankAnon: 'Anonymous player',
+    rankMe: 'Me',
+    cloudSaveHint: 'Sign in and every game you play from then on is saved to the cloud — on any device.',
     nickSet: 'Set a nickname',
     nickEdit: 'Edit nickname',
     nickSave: 'Save nickname',
@@ -1155,7 +1185,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundDropped: 'Away too long — this round missed the room total. It’s still in your own records.',
     mpRoundForced: 'The host ended this round — your {n} point so far counts toward the room total.|The host ended this round — your {n} points so far count toward the room total.',
     mpRoundForcedZero: 'The host ended this round.',
-    newVersionTip: 'New version — tap to refresh',
+    newVersionNote: 'New version: {note}',
+    newVersionGeneric: 'A new version is available',
+    newVersionReload: 'Refresh',
     consentFull: 'We’d like to use Google Analytics cookies to see how the game is played and improve it.',
     consentShort: 'May we use Google Analytics cookies to improve the game?',
     consentAccept: 'Accept',
@@ -1236,7 +1268,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotBonusLabel: 'Completion bonus',
     builtScoreLabel: 'Build score',
     stepCoefLabel: 'Move multiplier',
-    stepCoefDetail: '{p} moves · par {par}',
+    stepCoefDetail: ' ({n} move · par {par})| ({n} moves · par {par})',
     compositeLabel: 'Final score',
     timeNotScoredLabel: 'Time {t} (not scored)',
     badgeSwept: 'Board cleared',
@@ -1339,7 +1371,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankEmpty: 'Personne à ce classement pour l’instant',
     rankNetwork: 'Classement indisponible. Vérifiez votre connexion.',
     dailyNotCounted: 'Cette partie ne compte pas pour le défi du jour. Vérifiez la date et l’heure de votre appareil.',
+    dailyLate: 'L’heure limite de ce jour-là est passée : cette partie ne compte pas pour le classement du jour.',
     rankAnon: 'Joueur anonyme',
+    rankMe: 'Moi',
+    cloudSaveHint: 'Connectez-vous : chaque partie jouée ensuite est sauvegardée dans le cloud, sur tous vos appareils.',
     nickSet: 'Choisir un pseudonyme',
     nickEdit: 'Modifier le pseudonyme',
     nickSave: 'Enregistrer le pseudonyme',
@@ -1527,7 +1562,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total de la salle. Elle reste dans vos records.',
     mpRoundForced: 'L’hôte a terminé cette manche : votre {n} point jusqu’ici compte dans le total de la salle.|L’hôte a terminé cette manche : vos {n} points jusqu’ici comptent dans le total de la salle.',
     mpRoundForcedZero: 'L’hôte a terminé cette manche.',
-    newVersionTip: 'Nouvelle version — recharger',
+    newVersionNote: 'Nouvelle version : {note}',
+    newVersionGeneric: 'Une nouvelle version est disponible',
+    newVersionReload: 'Recharger',
     consentFull: 'Nous aimerions utiliser les cookies de Google Analytics pour voir comment le jeu est joué et l’améliorer.',
     consentShort: 'Pouvons-nous utiliser les cookies Google Analytics pour améliorer le jeu ?',
     consentAccept: 'Accepter',
@@ -1608,7 +1645,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     slotBonusLabel: 'Prime de réussite',
     builtScoreLabel: 'Score de jeu',
     stepCoefLabel: 'Coefficient de coups',
-    stepCoefDetail: '{p} coups · référence {par}',
+    stepCoefDetail: ' ({n} coup · référence {par})| ({n} coups · référence {par})',
     compositeLabel: 'Score final',
     timeNotScoredLabel: 'Temps {t} (hors score)',
     badgeSwept: 'Plateau vidé',
@@ -1711,7 +1748,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankEmpty: '這張榜上還沒有人',
     rankNetwork: '榜沒載入，檢查一下網路。',
     dailyNotCounted: '這一局沒進今日挑戰榜。看看裝置的日期和時間對不對。',
+    dailyLate: '已過當天的截止時間，這一局不計入今日榜。',
     rankAnon: '匿名玩家',
+    rankMe: '我',
+    cloudSaveHint: '登入後打的每一局都會存到雲端，換裝置也找得回。',
     nickSet: '設定暱稱',
     nickEdit: '修改暱稱',
     nickSave: '儲存暱稱',
@@ -1899,7 +1939,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundDropped: '離開太久了，這一局沒算進小屋總分；您自己的紀錄裡還在。',
     mpRoundForced: '屋主結束了這一局：您到剛才的 {n} 分已算進小屋總分。',
     mpRoundForcedZero: '屋主結束了這一局。',
-    newVersionTip: '有新版本，點一下重新載入',
+    newVersionNote: '新版本：{note}',
+    newVersionGeneric: '有新版本',
+    newVersionReload: '重新載入',
     consentFull: '我們想用 Google Analytics 的 Cookie 了解大家怎麼玩，好改進遊戲。',
     consentShort: '可以用 Google Analytics 的 Cookie 幫我們改進遊戲嗎？',
     consentAccept: '接受',
@@ -1971,17 +2013,17 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelRunN: '{n}連',
     labelPattern: '圖案',
     labelWholeLine: '整線',
-    endTipComposite: '綜合分 = 拼出分 × 步數係數。步數越少係數越高，最低 ×1.00，只加不減。',
+    endTipComposite: '綜合得分 = 拼出得分 × 步數係數。步數越少係數越高，最低 ×1.00，只加不減。',
     patternNowLabel: '得分圖案變成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
     flipRowDefused: '（含拆除 {n} 枚）',
     lineRowLabel: '削線 {n} 條（星星數²）',
     slotBonusLabel: '完成獎勵',
-    builtScoreLabel: '拼出分',
+    builtScoreLabel: '拼出得分',
     stepCoefLabel: '步數係數',
-    stepCoefDetail: '{p}步，基準{par}',
-    compositeLabel: '綜合分',
+    stepCoefDetail: '（{n}步，基準{par}）',
+    compositeLabel: '綜合得分',
     timeNotScoredLabel: '用時 {t}（不計分）',
     badgeSwept: '清盤',
     badgeUnlockedOne: '解鎖 1 枚',
@@ -2083,7 +2125,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankEmpty: '这张榜上还没有人',
     rankNetwork: '榜没加载出来，检查一下网络。',
     dailyNotCounted: '这一局没进今日挑战榜。看看设备的日期和时间对不对。',
+    dailyLate: '已过当天的截止时间，这一局不计入今日榜。',
     rankAnon: '匿名玩家',
+    rankMe: '我',
+    cloudSaveHint: '登录后打的每一局都会存到云端，换设备也找得回。',
     nickSet: '设置昵称',
     nickEdit: '修改昵称',
     nickSave: '保存昵称',
@@ -2271,7 +2316,9 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoundDropped: '离开太久了，这一局没算进小屋总分；您自己的记录里还在。',
     mpRoundForced: '屋主结束了这一局：您到刚才的 {n} 分已算进小屋总分。',
     mpRoundForcedZero: '屋主结束了这一局。',
-    newVersionTip: '有新版本，点一下刷新',
+    newVersionNote: '新版本：{note}',
+    newVersionGeneric: '有新版本',
+    newVersionReload: '刷新',
     consentFull: '我们想用 Google Analytics 的 Cookie 了解大家怎么玩，好改进游戏。',
     consentShort: '可以用 Google Analytics 的 Cookie 帮我们改进游戏吗？',
     consentAccept: '接受',
@@ -2343,17 +2390,17 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelRunN: '{n}连',
     labelPattern: '图案',
     labelWholeLine: '整线',
-    endTipComposite: '综合分 = 拼出分 × 步数系数。步数越少系数越高，最低 ×1.00，只加不减。',
+    endTipComposite: '综合得分 = 拼出得分 × 步数系数。步数越少系数越高，最低 ×1.00，只加不减。',
     patternNowLabel: '得分图案变成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
     flipRowDefused: '（含拆除 {n} 枚）',
     lineRowLabel: '削线 {n} 条（星星数²）',
     slotBonusLabel: '完成奖励',
-    builtScoreLabel: '拼出分',
+    builtScoreLabel: '拼出得分',
     stepCoefLabel: '步数系数',
-    stepCoefDetail: '{p}步，基准{par}',
-    compositeLabel: '综合分',
+    stepCoefDetail: '（{n}步，基准{par}）',
+    compositeLabel: '综合得分',
     timeNotScoredLabel: '用时 {t}（不计分）',
     badgeSwept: '清盘',
     badgeUnlockedOne: '解锁 1 枚',

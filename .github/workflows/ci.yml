@@ -225,6 +225,13 @@ jobs:
           npx esbuild src/engine/axisMotion.ts --bundle --format=esm --outfile=/tmp/axismotion.mjs
           npx esbuild src/engine/spring.ts --bundle --format=esm --outfile=/tmp/spring.mjs
           node scripts/check-axis-motion.mjs /tmp/axismotion.mjs /tmp/spring.mjs
+      # 记录页、排行榜缩略牌里的分数缩写：四舍五入之后满了这一档就进一位单位（10-11 方案 B-13 第 1 条）。
+      # 原先 999,999,999 写成「1000M」、中文 99,995,000 写成「10000万」——比进位之后长一截，正好撑破它要守的
+      # 那个小格子。纯算术、几毫秒。
+      - name: 分数缩写满了就进位
+        run: |
+          npx esbuild src/engine/compactScore.ts --bundle --format=esm --outfile=/tmp/compactscore.mjs
+          node scripts/check-compact-score.mjs /tmp/compactscore.mjs
       # Kinetics 那一批手感件里三条纯判定：通关章盖在哪一种终局上、粘贴进来的码
       # 怎么洗、六段完成度表填几段。三条都是「错了不报错」——章会盖在被炸出去的
       # 那一局上，对的码会被说成不对，第七段会画到框外面。纯逻辑、几十毫秒。

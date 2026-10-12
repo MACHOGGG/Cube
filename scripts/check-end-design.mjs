@@ -44,9 +44,20 @@
  * 里、谁也不压谁、抬头没被裁、三颗键的正中点得到、明细 14px。
  *
  * 改坏法：拿 3-I 之前的构建跑，① 头一条就红（窗不是 334×695），② 的卡整张对不上。
+ *
+ * ── 10-11 方案 B-13.3 之后 ─────────────────────────────────────────────────────────────────────
+ *
+ * 中文叫法统一成「拼出得分」「综合得分」（各多一个字）。① 的明细和徽章不再写死中文，照 runBreakdown / runBadges
+ * 现拼（designFixture，方案原话「那道门的夹具先按 B-6 改成四语」）；⑤ 多摆两种样子「设计图那一局」（没勾 / 有勾，
+ * 这种语言现拼的）——它比真打的那一局长，叫法变长要折行就在这儿折；⑤ 简繁两种每一种样子都量「拼出得分」「综合
+ * 得分」那两行一行写完（英法那两行叫法没动，折不折只印出来）。
  */
 import { chromium } from 'playwright';
+import { build } from 'esbuild';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const BASE = process.argv[2] || 'http://localhost:8966/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -83,6 +94,42 @@ const badgeText = (lang) => {
   const i = I18N.indexOf(`\n  ${lang}: {`);
   const pick = (k) => (I18N.slice(i).match(new RegExp(`\\n\\s+${k}: '([^']+)'`)) || [, ''])[1];
   return [pick('badgeSwept'), pick('badgeUnlockedOne')];
+};
+
+/**
+ * 明细那几行和徽章：拿 engine/runRecord.ts 的 runBreakdown / runBadges 现拼（10-11 方案 B-13.3：「那道门的夹具
+ * 先按 B-6 改成四语」）。
+ *
+ * 从前 ① 的夹具把设计图上那一局的明细写死成中文（「拼出分」「综合分」……）：叫法一改（B-13.3 统一成「拼出得分」
+ * 「综合得分」），门量的就是一屏早就不是这几个字的明细；而且只量得出简体。现在照 gameController 的 endGame 那样
+ * 拼——同一个 runBreakdown、同一个 isSumRow 挂类、末尾同一句均分——哪种语言都行：① 用简体（设计图是简体的），
+ * ⑤ 四种语言都摆一遍。esbuild 是 package.json 里声明过的依赖（npm run build 也靠它）。
+ */
+const RR = join(tmpdir(), `end-design-rr-${process.pid}.mjs`);
+await build({
+  stdin: {
+    contents: "export { runBreakdown, runBadges, isSumRow } from './src/engine/runRecord.ts'; export { STRINGS } from './src/i18n.ts';",
+    resolveDir: fileURLToPath(new URL('..', import.meta.url)),
+    loader: 'ts',
+  },
+  bundle: true,
+  format: 'esm',
+  outfile: RR,
+  logLevel: 'error',
+});
+const { runBreakdown, runBadges, isSumRow, STRINGS } = await import(pathToFileURL(RR).href);
+/** 设计图那一局（designRun）在 lang 下的明细（HTML，和 endGame 拼的一样）和徽章。 */
+const designFixture = (lang, swept) => {
+  const d = designRun(swept).data;
+  const s = STRINGS[lang];
+  const rows = runBreakdown(d, lang);
+  const cls = (l) => (isSumRow(l, lang) ? (l === s.compositeLabel ? ' end-row--sum end-row--total' : ' end-row--sum') : '');
+  return {
+    rows,
+    html: rows.map(([l, v]) => `<div class="end-row${cls(l)}"><span>${l}</span><span>${v}</span></div>`).join('') +
+      `<div class="end-row end-row--avg"><span>${s.avgScoreLabel} = 430</span></div>`,
+    badges: runBadges(d, lang),
+  };
 };
 
 /** 进主菜单之前要有的那几把钥匙：跳过开场、教学、头一回的招待。 */
@@ -253,9 +300,14 @@ const cards = [await cardUrl(false), await cardUrl(true)];
       .filter((s) => !document.querySelector(s)));
   check('① 结算弹窗的结构在（标题、分数、徽章格、勾、明细、图、三颗键那一排、中间那一块）', missing.length === 0, missing.length ? '缺 ' + missing.join(' ') : '');
 
+  {
+    const zh = designFixture('zhHans', false).rows.map(([l, v]) => `${l}=${v}`).join(' | ');
+    const want = '翻面 28 枚 ×2=56 | 削线 9 条（星星数²）=+142 | 拼出得分=198 | 步数系数（19步，基准28）=×2.17 | 综合得分=430';
+    check('①（尺子）设计图那一局照 runBreakdown 现拼，简体就是图上那五行（叫法照 10-11 方案 B-13.3）', zh === want, zh);
+  }
   for (const stamp of missing.length ? [] : [false, true]) {
     const tag = stamp ? '① 有通关勾（第二张图）' : '① 没有通关勾（第一张图）';
-    await page.evaluate(([src, stamp, stampSvg]) => {
+    await page.evaluate(([src, stamp, stampSvg, fx]) => {
       const ov = document.getElementById('endOverlay');
       ov.classList.toggle('end--stamp', stamp);
       // 分数：滚筒滚完的样子，和 engine/odometer.ts 的 rollOdometer 摆出来的一样。
@@ -278,13 +330,8 @@ const cards = [await cardUrl(false), await cardUrl(true)];
         host.appendChild(box);
       }
       // 徽章、明细、均分、勾：gameController 的 endGame / stampEndCheck 拼的就是这几种结构。
-      document.getElementById('endBadges').innerHTML = (stamp ? ['清盘', '解锁 1 枚'] : ['解锁 1 枚'])
-        .map((b) => `<span class="end-badge">${b}</span>`).join('');
-      const rows = [['翻面 28 枚 ×2', '56', ''], ['削线 9 条（星星数²）', '+142', ''], ['拼出分', '198', ' end-row--sum'],
-        ['步数系数（19步，基准28）', '×2.17', ''], ['综合分', '430', ' end-row--sum end-row--total']];
-      document.getElementById('endBreakdown').innerHTML =
-        rows.map(([l, v, cls]) => `<div class="end-row${cls}"><span>${l}</span><span>${v}</span></div>`).join('') +
-        '<div class="end-row end-row--avg"><span>该玩法您的均分 = 430</span></div>';
+      document.getElementById('endBadges').innerHTML = fx.badges.map((b) => `<span class="end-badge">${b}</span>`).join('');
+      document.getElementById('endBreakdown').innerHTML = fx.html;
       const st = document.getElementById('endStamp');
       st.innerHTML = stamp ? stampSvg : '';
       st.classList.toggle('end-stamp--drawn', stamp);
@@ -292,7 +339,7 @@ const cards = [await cardUrl(false), await cardUrl(true)];
       const img = document.getElementById('endShareImg');
       img.src = src;
       return img.decode();
-    }, [cards[stamp ? 1 : 0], stamp, STAMP_SVG]);
+    }, [cards[stamp ? 1 : 0], stamp, STAMP_SVG, designFixture('zhHans', stamp)]);
     await page.waitForTimeout(500);
 
     const dom = await page.evaluate(() => {
@@ -367,7 +414,7 @@ const cards = [await cardUrl(false), await cardUrl(true)];
     check(`${tag}：徽章在分数右边，底边压在分数墨的下半截（±6）`,
       !!sc && dom.badges.every((b) => b.x >= sc.x1 + 10 && b.b >= (sc.y0 + sc.y1) / 2 && b.b <= sc.y1 + 6),
       `分数墨 ${fmt(sc)} / 徽章 ${dom.badges.map((b) => `${b.x.toFixed(1)}–${b.r.toFixed(1)} 底 ${b.b.toFixed(1)}`).join(' ')}`);
-    check(`${tag}：明细 14px、行距 21、500、#943D40；「综合分」那一行 800，「拼出分」不加粗（6-7）`,
+    check(`${tag}：明细 14px、行距 21、500、#943D40；「综合得分」那一行 800，「拼出得分」不加粗（6-7）`,
       dom.rowsCss.fs === '14px' && dom.rowsCss.lh === '21px' && dom.rowsCss.fw === '500' && dom.rowsCss.color === 'rgb(148, 61, 64)' && dom.rowsCss.total === '800' && Number(dom.rowsCss.built) < 600,
       JSON.stringify(dom.rowsCss));
     check(`${tag}：「该玩法您的均分」13px、行距 19，是明细最后一行、左沿和明细抬头一齐（±1）`,
@@ -515,7 +562,7 @@ for (const lang of Object.keys(L)) {
   check(`③ ${lang}：手指拖不动（touch-action: none，窗和中间那一块）`, r.touch.every((v) => v === 'none'), r.touch.join(' '));
   check(`③ ${lang}：里面什么都没被裁（窗、抬头、中间那一块都没有藏起来的内容）`, r.clipped.length === 0, r.clipped.join(' '));
   check(`④ ${lang}：标题就是「${want.title}」`, r.title === want.title, r.title);
-  check(`④ ${lang}：徽章在抬头里自己那一格；「该玩法您的均分」是明细最后一行；「综合分」那一行挂着粗的那个类`,
+  check(`④ ${lang}：徽章在抬头里自己那一格；「该玩法您的均分」是明细最后一行；「综合得分」那一行挂着粗的那个类`,
     r.badgesHost && r.avgLast && r.total === 1, JSON.stringify({ badgesHost: r.badgesHost, avgLast: r.avgLast, total: r.total }));
   check(`④ ${lang}：旧的那几样都撤了（#endAvg、小标题、滚动段、横线、「长按保存」）`, r.oldBits.length === 0, r.oldBits.join(' '));
   check(`④ ${lang}：三颗键：再来 · 分享 · 主页，记号、没有字、读屏名是「${want.again} / ${want.share} / ${want.home}」`,
@@ -559,9 +606,9 @@ for (const [w, h, touch] of SIZES) {
     const page = await ctx.newPage();
     await endARun(page);
     const hasTip = await page.evaluate(() => !!document.querySelector('#endBreakdown .end-row--tip'));
-    check(`⑤ ${w}×${h} ${lang}：（尺子）真打的这一局是头一回出综合分，说明那一句在`, hasTip);
-    for (const variant of ['头一局', '没勾', '有勾', '有勾·四位数']) {
-      const bad = await page.evaluate(async ([variant, landscape, stampSvg, badges]) => {
+    check(`⑤ ${w}×${h} ${lang}：（尺子）真打的这一局是头一回出综合得分，说明那一句在`, hasTip);
+    for (const variant of ['头一局', '没勾', '有勾', '有勾·四位数', '设计图那一局', '设计图那一局·有勾']) {
+      const bad = await page.evaluate(async ([variant, landscape, stampSvg, badges, design]) => {
         const ov = document.getElementById('endOverlay');
         /** 分数摆成滚筒滚完的样子（engine/odometer.ts），一位一格——位数决定左边那一栏多宽。 */
         const setScore = (text) => {
@@ -596,6 +643,20 @@ for (const [w, h, touch] of SIZES) {
           st.classList.add('end-stamp--drawn');
           document.getElementById('endBadges').innerHTML = badges.map((b) => `<span class="end-badge">${b}</span>`).join('');
         }
+        if (variant.startsWith('设计图')) {
+          // 设计图那一局（designFixture，这种语言现拼的）：明细比真打的这一局长（多一行削线、步数两位数），叫法变长
+          // （10-11 方案 B-13.3）要折行就在这儿折。没勾那一种先把前面「有勾」那几种留下的东西撤掉。
+          const stamp = variant === '设计图那一局·有勾';
+          const fx = design[stamp ? 1 : 0];
+          ov.classList.toggle('end--stamp', stamp);
+          ov.classList.remove('end--wide-score');
+          setScore('430');
+          const st = document.getElementById('endStamp');
+          st.innerHTML = stamp ? stampSvg : '';
+          st.classList.toggle('end-stamp--drawn', stamp);
+          document.getElementById('endBreakdown').innerHTML = fx.html;
+          document.getElementById('endBadges').innerHTML = fx.badges.map((b) => `<span class="end-badge">${b}</span>`).join('');
+        }
         await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
         const out = [];
         const m = document.querySelector('#endOverlay .modal').getBoundingClientRect();
@@ -609,7 +670,7 @@ for (const [w, h, touch] of SIZES) {
         const blocks = [['标题', box('#endTitle')], ['分数', box('#endScore')], ['明细', box('#endBreakdown')], ['图', img],
           ...[...document.querySelectorAll('#endBadges .end-badge')].map((e, i) => ['徽章' + (i + 1), box(e)]),
           ...[...document.querySelectorAll('#endOverlay .end-actions > button')].map((e) => [e.id, box(e)]),
-          ...(variant === '有勾' ? [['勾', box('#endStamp')]] : [])];
+          ...(variant === '有勾' || variant === '设计图那一局·有勾' ? [['勾', box('#endStamp')]] : [])];
         const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
         for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (overlap(blocks[i][1], blocks[j][1])) out.push(`${blocks[i][0]}压${blocks[j][0]}`);
         if (!landscape && box('#endOverlay .end-body').top < head.getBoundingClientRect().bottom - 0.5) out.push('图那一块压抬头');
@@ -633,10 +694,30 @@ for (const [w, h, touch] of SIZES) {
         }
         const fs = getComputedStyle(document.getElementById('endBreakdown')).fontSize;
         if (fs !== '14px') out.push('明细字号 ' + fs);
-        return { out, img: Math.round(img.width) };
-      }, [variant, w > h && h <= 560, STAMP_SVG, badgeText(lang)]);
-      check(`⑤ ${w}×${h} ${lang} ${variant}：装得下、谁也不压谁、抬头没被裁、三颗键点得到、明细 14px`, bad.out.length === 0,
-        [...bad.out, `图 ${bad.img} 宽`].join(' | '));
+        // 每一格字排成了几行：量字本身的行框（Range），不量格子——同一行里一格折了，另一格会被拉成一样高。
+        const lines = (sp) => {
+          const r = document.createRange();
+          r.selectNodeContents(sp);
+          return r.getBoundingClientRect().height / parseFloat(getComputedStyle(sp).lineHeight);
+        };
+        const wrapped = (sel) => [...document.querySelectorAll(sel)].filter((sp) => lines(sp) > 1.5).map((sp) => sp.textContent.trim());
+        return {
+          out,
+          img: Math.round(img.width),
+          sum: wrapped('#endBreakdown .end-row--sum > span'),
+          other: wrapped('#endBreakdown .end-row:not(.end-row--sum):not(.end-row--tip) > span'),
+        };
+      }, [variant, w > h && h <= 560, STAMP_SVG, badgeText(lang), [designFixture(lang, false), designFixture(lang, true)]]);
+      // 「拼出得分」「综合得分」那两行（.end-row--sum）一行写完：中文叫法 10-11 起各多一个字（方案 B-13.3），方案要
+      // 「确认 6-7 的排版不折行」。只钉简繁——英法那两行的叫法没动，它们在最挤的样子里（320 宽、有勾·四位数）
+      // B-13 之前就折；英法「步数系数」那一行在多数屏幕上、简繁那一行在 320 宽上也是 B-13 之前就两行。这些都
+      // 不算红，印在后面给人看（已报给玩家，等他定）。
+      const zh = lang === 'zhHans' || lang === 'zhHant';
+      const sumWrapped = zh ? bad.sum.map((t) => '折行：' + t) : [];
+      const note = [...(zh ? [] : bad.sum), ...bad.other];
+      check(`⑤ ${w}×${h} ${lang} ${variant}：装得下、谁也不压谁、抬头没被裁、三颗键点得到、明细 14px${zh ? '、「拼出得分」「综合得分」不折行' : ''}`,
+        bad.out.length === 0 && sumWrapped.length === 0,
+        [...bad.out, ...sumWrapped, `图 ${bad.img} 宽`, ...(note.length ? [`另有折行：${note.join(' / ')}`] : [])].join(' | '));
     }
     await ctx.close();
   }

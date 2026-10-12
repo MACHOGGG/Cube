@@ -30,6 +30,10 @@
  *     （电脑、横屏）让开之后滚到底，最后一排卡在底排上面、够得着。
  *   F 不出现的地方：小屋页、屋主替整屋挑玩法（pickingForRoom）、弹窗开着（藏起来，关了回来）、没设 VITE_GA_ID
  *     的包、localhost、小红书预览。
+ *   G 和「有新版本」那张卡（10-11 方案 B-9）叠在一起：同意条在上层、按得到；更新卡底边低 8px、缩到 0.96、里头的
+ *     字藏着；四语 × 八种尺寸叠起来的那一整块不压卡片招牌底排（要让就按叠起来的高度让）；答了同意条，它向上滑走
+ *     淡出、更新卡升到原位放大回 1（两个过渡都真的在跑）；减弱动态下直接换。版本号那一问在门里接走（第一问答一个、
+ *     往后答另一个），和 check-new-version 同一个办法。
  */
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
@@ -115,8 +119,16 @@ window.__gaStub=(window.__gaStub||0)+1;})();`;
  * 开一个新的浏览器上下文。假时钟读 sessionStorage 里的 __shiftMs（刷新之后还在，换个数再刷新就是另一天）。
  * seed 只在这个标签页第一次打开时写进去（sessionStorage 记着写过没有），刷新不重写——答复要留得住。
  */
-async function open({ w = 390, h = 844, lang = 'zhHans', seed = {}, base = GA_BASE } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+async function open({ w = 390, h = 844, lang = 'zhHans', seed = {}, base = GA_BASE, versions = null, motion = 'no-preference' } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: motion });
+  // G 那一节：/version.json 一问一个答案（用完一直答最后一个），这样「发现新版本」在门里是确定的。
+  if (versions) {
+    let asked = 0;
+    await ctx.route('**/version.json*', (route) => {
+      const sha = versions[Math.min(asked++, versions.length - 1)];
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sha, release: 0 }) });
+    });
+  }
   const hits = [];
   await ctx.route('https://www.googletagmanager.com/**', (route) => {
     hits.push(route.request().url());
@@ -476,6 +488,129 @@ for (const lang of ['zhHans', 'zhHant', 'en', 'fr']) {
   }
 }
 
+// ════════ G 和「有新版本」那张卡叠在一起（10-11 方案 B-9）════════════════════
+/** 两张卡此刻的样子。 */
+const stackState = (page) =>
+  page.evaluate(() => {
+    const R = (e) => {
+      if (!e) return null;
+      const r = e.getBoundingClientRect();
+      return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height };
+    };
+    const cb = document.getElementById('consentBar');
+    const nv = document.getElementById('newVersionCard');
+    const glass = document.querySelector('.home-page .home-head-glass');
+    const at = (r) => (r ? document.elementFromPoint((r.l + r.r) / 2, (r.t + r.b) / 2) : null);
+    const cbR = R(cb);
+    const hit = at(cbR);
+    return {
+      cb: cbR,
+      nv: R(nv),
+      cbCls: cb?.className || '',
+      nvCls: nv?.className || '',
+      glass: R(glass),
+      front: !!cb && !!hit && cb.contains(hit),
+      nvTextHidden: nv ? getComputedStyle(nv.querySelector('.newver-text')).visibility === 'hidden' : null,
+      nvTransform: nv ? getComputedStyle(nv).transform : '',
+      cbOpacity: cb ? Number(getComputedStyle(cb).opacity) : null,
+      room: document.querySelector('.home-page')?.style.getPropertyValue('--consent-room') || '',
+      vw: document.documentElement.clientWidth,
+    };
+  });
+/** 切回标签页（engine/newVersion.ts 问版本号的时机之一），等两张卡摆好（这一格量位置要两帧）。 */
+async function discoverNew(page) {
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForSelector('#newVersionCard', { state: 'attached', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(400);
+}
+{
+  const G = await open({ versions: ['old', 'new'] });
+  const { page } = G;
+  const alone = await barState(page);
+  await discoverNew(page);
+  const s = await stackState(page);
+  check('G（尺子）同意条在，发现了新版本，两张卡都在', alone.here && !!s.cb && !!s.nv, JSON.stringify({ cb: !!s.cb, nv: !!s.nv }));
+  check('G 同意条在上层（front）、更新卡在底下（back）', /home-card--front/.test(s.cbCls) && /home-card--back/.test(s.nvCls), `${s.cbCls} / ${s.nvCls}`);
+  check('G 按同意条的正中落在同意条身上（它在上层）', s.front);
+  check('G 更新卡的底边比同意条低 8px（±1）', !!s.cb && !!s.nv && Math.abs(s.nv.b - s.cb.b - 8) <= 1, `${s.nv && Math.round((s.nv.b - s.cb.b) * 10) / 10}`);
+  check('G 更新卡缩到 0.96（宽是同意条的 0.96，±1px），左右各收一样多', !!s.cb && !!s.nv && Math.abs(s.nv.w - s.cb.w * 0.96) <= 1 && Math.abs((s.nv.l - s.cb.l) - (s.cb.r - s.nv.r)) <= 1,
+    `${s.nv && Math.round(s.nv.w)} / ${s.cb && Math.round(s.cb.w)}`);
+  check('G 更新卡里的字藏着（只露那一截底边）', s.nvTextHidden === true);
+  // 答同意条（拒绝）：照常动的那一种。150ms 时两个过渡都在半路上（更新卡晚 60ms 起步），600ms 时换完了。
+  await page.click('#consentBar .consent-btn[data-v="denied"]');
+  await page.waitForTimeout(150);
+  const mid = await stackState(page);
+  check('G 答完 150ms：同意条正在走（挂着 leaving、往上挪了、在变淡）', /home-card--leaving/.test(mid.cbCls) && !!mid.cb && mid.cb.t < s.cb.t - 0.5 && mid.cbOpacity < 1,
+    `${mid.cbCls} · 上沿 ${mid.cb && Math.round(mid.cb.t)}（原 ${Math.round(s.cb.t)}）· 透明度 ${mid.cbOpacity}`);
+  check('G 答完 150ms：更新卡正在升（挂着 rise、底边已经不在原来那儿、还没到位）', /home-card--rise/.test(mid.nvCls) && !!mid.nv && mid.nv.t < s.nv.t - 0.5 && mid.nv.t > s.cb.t + 0.5,
+    `${mid.nvCls} · 上沿 ${mid.nv && Math.round(mid.nv.t)}（叠着时 ${Math.round(s.nv.t)}，原位 ${Math.round(s.cb.t)}）`);
+  await page.waitForTimeout(450);
+  const done = await stackState(page);
+  check('G 换完：同意条没了，更新卡在原位（招牌下沿往下 12px、左右各 16px、不缩）',
+    !done.cb && !!done.nv && Math.abs(done.nv.t - done.glass.b - 12) <= 1 && Math.abs(done.nv.l - 16) <= 1 && Math.abs(done.vw - done.nv.r - 16) <= 1,
+    JSON.stringify({ cb: !!done.cb, nv: done.nv && [Math.round(done.nv.t), Math.round(done.nv.l), Math.round(done.vw - done.nv.r)], glassB: done.glass && Math.round(done.glass.b) }));
+  check('G 换完：更新卡不再挂叠放、过渡的类，字露出来了', !/home-card--(back|front|rise)/.test(done.nvCls) && done.nvTextHidden === false, done.nvCls);
+  check('G 页面零报错', G.errs.length === 0, G.errs.join(' | '));
+  await G.ctx.close();
+}
+{
+  // 减弱动态：直接换、不滑。
+  const R = await open({ versions: ['old', 'new'], motion: 'reduce' });
+  await discoverNew(R.page);
+  const s = await stackState(R.page);
+  check('G 减弱动态（尺子）两张卡叠着', /home-card--front/.test(s.cbCls) && /home-card--back/.test(s.nvCls));
+  await R.page.click('#consentBar .consent-btn[data-v="granted"]');
+  await R.page.waitForTimeout(60);
+  const done = await stackState(R.page);
+  check('G 减弱动态：答完下一刻同意条就没了、更新卡已经在原位（不滑）',
+    !done.cb && !!done.nv && !/home-card--(back|rise|leaving)/.test(done.nvCls) && Math.abs(done.nv.t - done.glass.b - 12) <= 1,
+    JSON.stringify({ cb: !!done.cb, cls: done.nvCls, t: done.nv && Math.round(done.nv.t) }));
+  await R.ctx.close();
+}
+// 四语 × 八种尺寸：叠起来的那一整块（同意条＋露出来的那 8px）不压卡片、招牌、底排。
+const stackTable = [];
+for (const lang of ['zhHans', 'zhHant', 'en', 'fr']) {
+  for (const [w, h] of SIZES) {
+    const S = await open({ w, h, lang, versions: ['old', 'new'] });
+    const before = await barState(S.page);
+    await discoverNew(S.page);
+    const m = await S.page.evaluate(() => {
+      const R = (r) => ({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+      const cards = ['consentBar', 'newVersionCard'].map((id) => document.getElementById(id)).filter(Boolean).map((e) => R(e.getBoundingClientRect()));
+      if (cards.length < 2) return null;
+      const box = { l: Math.min(...cards.map((c) => c.l)), t: Math.min(...cards.map((c) => c.t)), r: Math.max(...cards.map((c) => c.r)), b: Math.max(...cards.map((c) => c.b)) };
+      const vis = (e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && getComputedStyle(e).visibility !== 'hidden';
+      };
+      const parts = [...document.querySelectorAll('.home-page .home-icon-art, .home-page .home-icon-tag')].filter(vis)
+        .map((e) => ({ ...R(e.getBoundingClientRect()), name: e.closest('.home-icon-btn')?.getAttribute('aria-label') || '?' }));
+      const glass = document.querySelector('.home-page .home-head-glass');
+      const nav = document.querySelector('.home-nav');
+      return {
+        box,
+        parts,
+        glass: glass ? R(glass.getBoundingClientRect()) : null,
+        nav: nav ? R(nav.getBoundingClientRect()) : null,
+        room: document.querySelector('.home-page')?.style.getPropertyValue('--consent-room') || '',
+      };
+    });
+    const tag = `G ${lang} ${w}×${h}`;
+    if (!m) {
+      check(`${tag}：两张卡都在`, false);
+      await S.ctx.close();
+      continue;
+    }
+    const inter = (a, b) => !!a && !!b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
+    const hitCards = m.parts.filter((c) => inter(m.box, c)).map((c) => c.name);
+    check(`${tag}：叠起来的那一整块不压任何一张玩法卡`, hitCards.length === 0, [...new Set(hitCards)].join(' '));
+    check(`${tag}：不压招牌、不压底排`, !inter(m.box, m.glass) && !inter(m.box, m.nav));
+    check(`${tag}：页面零报错`, S.errs.length === 0, S.errs.join(' | '));
+    stackTable.push(`${lang.padEnd(6)} ${String(w + '×' + h).padEnd(9)} 让 ${before.room || '0'} → 叠起来 ${m.room || '0'}`);
+    await S.ctx.close();
+  }
+}
+
 // ════════ F 不出现的地方 ═════════════════════════════════════════════
 {
   // 小屋页、屋主替整屋挑玩法
@@ -555,5 +690,7 @@ for (const lang of ['zhHans', 'zhHant', 'en', 'fr']) {
 await browser.close();
 console.log('\n── 各尺寸用的是哪一版、往下让了多少（报告，不挡合并）──');
 for (const line of table) console.log('  ' + line);
+console.log('\n── 和更新卡叠起来之后往下让了多少（报告，不挡合并）──');
+for (const line of stackTable) console.log('  ' + line);
 console.log(fail ? `\n${fail} 条没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

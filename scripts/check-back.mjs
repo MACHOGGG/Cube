@@ -266,6 +266,67 @@ await P.ctx.close();
   await ctx.close();
 }
 
+// ---- 暂停里的《怎么玩》按返回只关那扇窗（10-11 方案 B-2）-------------------------
+//
+// 原先规则窗不登记返回层，返回落到它底下那一屏上：计时局里「暂停 → 怎么玩 → 返回」等于「暂停着再按 →
+// 继续」——暂停页撤了、钟走起来了，规则窗还盖在棋盘上（实测走了 4 秒）；倒数页上同样这么点，返回直接
+// 回了主菜单，规则窗留在 body 上。计时局要天才：这一段兑 TESTYEAR（TESTMONTH 留给上面那段小屋——
+// 一台服务器每张码只能兑一次）。
+{
+  const { ctx, page } = await open({ width: 390, height: 844 });
+  const granted = await page.evaluate(async () => {
+    const r = await fetch('/api/redeem', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'TESTYEAR' }),
+    }).then((x) => x.json());
+    if (!r.active) return r;
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, period: r.period, until: r.until, channel: 'code', email: r.email, token: r.token, code: r.code }));
+    return r;
+  });
+  check('B-2（尺子）用 TESTYEAR 开通（计时局要它）', granted.active === true, JSON.stringify(granted).slice(0, 80));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+  // 计时挑战 → 整页挑方块 → 开局页（4-3-2-1）。卡在轴的远处，直接叫 click()（见上面炸弹那一段的说明）。
+  await page.$$eval('.home-icon-btn', (els) => els.find((e) => (e.getAttribute('aria-label') || '').startsWith('计时挑战'))?.click());
+  await page.waitForSelector('#timedShapes .slot-pick-opt[data-family="square"]', { timeout: 8000 });
+  await page.$eval('#timedShapes .slot-pick-opt[data-family="square"]', (e) => e.click());
+  await page.waitForSelector('#startOverlay.show #startPauseBtn', { timeout: 10000 });
+  // ① 倒数中
+  await page.$eval('#startPauseBtn', (e) => e.click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 5000 });
+  await page.$eval('#howBtn', (e) => e.click());
+  await page.waitForSelector('.howto-modal', { timeout: 5000 });
+  await back(page, 600);
+  check('B-2 ① 倒数中：暂停 → 怎么玩 → 返回：只关规则窗，人还在这一局，暂停面板还在',
+    !(await has(page, '.howto-ov')) && (await shown(page, '#startOverlay')) && (await shown(page, '#pauseOverlay')));
+  // 倒数页上暂停着再按返回，照开局页的规矩回上一页（计时那一页）——和「打着时暂停着再按 → 继续」不是
+  // 一回事，这儿顺带钉住。
+  await back(page, 900);
+  check('B-2 ① 关了窗再按返回：照开局页的规矩回计时那一页（规则窗没留在 body 上）',
+    (await has(page, '.timed-page')) && !(await has(page, '.howto-ov')) && !(await has(page, '#startOverlay')));
+  // ② 打着：重新开一局，等它真开打
+  await page.$eval('#timedShapes .slot-pick-opt[data-family="square"]', (e) => e.click());
+  await page.waitForSelector('#startOverlay.show #startPauseBtn', { timeout: 10000 });
+  await page.waitForFunction(() => {
+    const so = document.querySelector('#startOverlay');
+    return (!so || !so.classList.contains('show')) && document.querySelectorAll('#boardWrap .tile, #boardWrap .ball').length > 0;
+  }, { timeout: 20000 });
+  await page.waitForTimeout(1200);
+  await page.$eval('#stopBtn', (e) => e.click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 5000 });
+  await page.$eval('#howBtn', (e) => e.click());
+  await page.waitForSelector('.howto-modal', { timeout: 5000 });
+  await back(page, 600);
+  const t0 = await page.$eval('#timerPill', (e) => e.textContent.trim()).catch(() => null);
+  await page.waitForTimeout(2500);
+  const t1 = await page.$eval('#timerPill', (e) => e.textContent.trim()).catch(() => null);
+  check('B-2 ② 计时局：暂停 → 怎么玩 → 返回：只关规则窗，暂停面板还在',
+    !(await has(page, '.howto-ov')) && (await shown(page, '#pauseOverlay')));
+  check('B-2 ② 关窗之后钟没走（还暂停着）', t0 !== null && t0 === t1, `${t0} → ${t1}`);
+  await back(page, 600);
+  check('B-2 ② 再按返回：继续（暂停面板撤掉、棋盘还在）', !(await shown(page, '#pauseOverlay')) && (await has(page, '#boardWrap')));
+  await ctx.close();
+}
+
 // ---- 横屏、大屏：全套再走一遍 ---------------------------------------------------
 const L = await commonRounds('横屏', { width: 844, height: 390 });
 await L.ctx.close();

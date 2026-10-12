@@ -243,7 +243,13 @@ function lockOverlay(btn: HTMLElement): void {
   );
 }
 
-export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers: MenuHandlers, lang: Lang) {
+/**
+ * @returns 拆掉这一版主菜单留下的东西（鱼眼轴挂在 window 上的 resize、盯着 body 的那两个观察器）。
+ *   调用方挂到 main.ts 的 activeDestroy 上，换屏时 teardown 会叫它（10-11 方案 B-1）。原先这儿什么都不
+ *   返回，mountModeAxis 交出来的 destroy 被丢掉了：主菜单来回进出四趟，resize 监听从 2 涨到 5、body 上的
+ *   观察器从 3 涨到 6——而且旧轴还活着，个人主页滚到下面开关一扇窗，旧轴的 recenter 把整页滚回了顶。
+ */
+export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers: MenuHandlers, lang: Lang): () => void {
   const s = STRINGS[lang];
   const wide = window.matchMedia(WIDE_QUERY).matches;
 
@@ -643,7 +649,7 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       dividerAfter = after;
     }
     axisFocus = Math.min(axisFocus, Math.max(entries.length - 1, 0));
-    mountModeAxis(grid, {
+    const axis = mountModeAxis(grid, {
       cards: entries,
       initial: axisFocus,
       onFocus: saveAxisFocus,
@@ -652,7 +658,10 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
       // 10-08 方案 3-D-1）就没有这一站，第一排照旧两张。
       leadSolo: showDaily,
     });
+    return () => axis.destroy();
   }
+  // 宽版没有轴，也就没有要拆的东西。
+  return () => {};
 }
 
 /**

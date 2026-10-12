@@ -2627,6 +2627,82 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
   await c.close();
 }
 
+// ── 11. 换屏之后轴不留在页面上（10-11 方案 B-1）────────────────────────────
+//
+// renderMenu 原先把 mountModeAxis 交出来的 destroy 丢了：主菜单和个人主页来回四趟，window 上的 resize
+// 监听 2→5、盯着 body 的观察器 3→6；而且旧轴还活着——个人主页滚到 601 开关一扇窗，旧轴的 recenter 一句
+// scrollTo(0, 0) 把整页滚回顶。这一节在页面里给 addEventListener('resize') 和 body 上的 observe 记账。
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const pg = await c.newPage();
+  pg.on('pageerror', (e) => errs.push(e.message));
+  await pg.addInitScript(() => {
+    if (sessionStorage.getItem('gate_primed') !== '1') {
+      sessionStorage.setItem('gate_primed', '1');
+      localStorage.clear();
+      localStorage.setItem('slides_lang', 'zhHans');
+      localStorage.setItem('slides_intro_seen', '1');
+      localStorage.setItem('slides_played_square', '1');
+      localStorage.setItem('slides_played_finished', '1');
+    }
+    const resize = new Set();
+    const addE = EventTarget.prototype.addEventListener;
+    const remE = EventTarget.prototype.removeEventListener;
+    EventTarget.prototype.addEventListener = function (type, fn, opt) {
+      if (this === window && type === 'resize') resize.add(fn);
+      return addE.call(this, type, fn, opt);
+    };
+    EventTarget.prototype.removeEventListener = function (type, fn, opt) {
+      if (this === window && type === 'resize') resize.delete(fn);
+      return remE.call(this, type, fn, opt);
+    };
+    const onBody = new Set();
+    const obs = MutationObserver.prototype.observe;
+    const disc = MutationObserver.prototype.disconnect;
+    MutationObserver.prototype.observe = function (target, o) {
+      if (target === document.body) onBody.add(this);
+      return obs.call(this, target, o);
+    };
+    MutationObserver.prototype.disconnect = function () {
+      onBody.delete(this);
+      return disc.call(this);
+    };
+    window.__axisLeak = () => ({ resize: resize.size, body: onBody.size });
+  });
+  await pg.goto(BASE, { waitUntil: 'load' });
+  await pg.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+  await pg.waitForTimeout(600);
+  const before = await pg.evaluate(() => window.__axisLeak());
+  check('§11（尺子）记账装上了：主菜单上 resize 监听、body 观察器各至少一个', before.resize >= 1 && before.body >= 1, JSON.stringify(before));
+  for (let i = 0; i < 4; i++) {
+    await pg.$eval('#navProfile', (e) => e.click());
+    await pg.waitForSelector('.profile-page', { timeout: 8000 });
+    await pg.waitForTimeout(300);
+    await pg.$eval('#navProfile', (e) => e.click());
+    await pg.waitForSelector('.mode-axis .home-icon-btn', { timeout: 8000 });
+    await pg.waitForTimeout(300);
+  }
+  const after = await pg.evaluate(() => window.__axisLeak());
+  check('§11 ① 主菜单 ↔ 个人主页来回四趟：resize 监听不涨', after.resize === before.resize, `${before.resize} → ${after.resize}`);
+  check('§11 ① 来回四趟：盯着 body 的观察器不涨', after.body === before.body, `${before.body} → ${after.body}`);
+  // ② 个人主页往下滚，开关一扇窗，页面不许被滚回顶
+  await pg.$eval('#navProfile', (e) => e.click());
+  await pg.waitForSelector('.profile-page', { timeout: 8000 });
+  await pg.waitForTimeout(400);
+  await pg.evaluate(() => window.scrollTo(0, 600));
+  await pg.waitForTimeout(300);
+  const y0 = await pg.evaluate(() => Math.round(window.scrollY));
+  check('§11 ②（尺子）个人主页滚得下去（scrollY ≥ 300）', y0 >= 300, String(y0));
+  await pg.$eval('[data-legal="privacy"]', (e) => e.click());
+  await pg.waitForSelector('#legalClose', { timeout: 5000 });
+  await pg.waitForTimeout(300);
+  await pg.$eval('#legalClose', (e) => e.click());
+  await pg.waitForTimeout(600);
+  const y1 = await pg.evaluate(() => Math.round(window.scrollY));
+  check('§11 ② 开关一扇窗之后，个人主页还停在原处（没被旧轴滚回顶）', Math.abs(y1 - y0) <= 2, `${y0} → ${y1}`);
+  await c.close();
+}
+
 console.log(errs.length ? '\n页面报错：' + errs.slice(0, 3).join(' | ') : '\n全程零报错');
 await browser.close();
 process.exit(fail ? 1 : 0);

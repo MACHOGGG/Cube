@@ -542,6 +542,17 @@
 .overlay--end .modal .end-act--leave { background: var(--card-gray); --ctl-mark: var(--card-gray); }
 .overlay--end .modal .end-act > svg { display: block; flex: none; width: var(--disc-glyph); height: var(--disc-glyph); }
 .overlay--end .modal .end-act:active { transform: scale(0.96); }
+/*
+ * 三颗键上面那一句登录提示（10-11 方案 B-14，每天最多一次，见 engine/signInHint.ts）。窗不变高：多出来这一行由
+ * 中间那张战绩图让（它本来就按比例缩），6-7 定的抬头和三颗键一个像素不动。字和「综合分是怎么来的」那一句同一
+ * 档（13 / 19、淡一号的墨色），左边和三颗键对齐。平时挂着 hidden、不占地方（这儿不写 display，所以不会把它顶出来）。
+ */
+.overlay--end .modal .end-signin-hint {
+  flex: none;
+  margin: 12px 21px 0;
+  font-family: 'Karla', sans-serif; font-size: 13px; line-height: 19px; font-weight: 500;
+  color: var(--ink-soft);
+}
 
 /* touch-action: manipulation 关掉的是「同一个地方连点两下就放大」——手机浏览
    器的默认手势。玩家在这个网站上连点是常事（连着按同一个玩法、在选择窗口里
@@ -3332,6 +3343,15 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .records-page:not(.xhs-profile) .total-card { padding-top: 14px; padding-bottom: 12px; }
 .records-page:not(.xhs-profile) .total-card-value { line-height: 1.05; }
 /*
+ * 顶上那一行登录提示（10-11 方案 B-14，ui/recordsPage.ts）：主屏版、iOS 浏览器里没登录的人才有。一句小字＋一颗
+ * 《登录》，并排——字在左边、能折行，键在右边、不折。字和键是主菜单那两张通知卡同一款（.home-card-text /
+ * .home-card-btn，写在后面，所以这儿的选择器多一级），只是不垫玻璃：它是一句提醒，不是又一块东西。字收到
+ * 12.5px：法语那句最长，13.5px 在 390 宽的屏幕上要折四行。
+ */
+.records-hint { display: flex; align-items: center; gap: 12px; }
+.records-hint .records-hint-text { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.4; text-align: left; }
+.records-hint .records-hint-btn { flex: 0 0 auto; min-width: 88px; }
+/*
  * 手机上的成绩页（第 18 推第 5 条）：**一屏装下，不用滑**，两块面板把剩下的高度吃满。
  *
  * 方案原话：「两块面板至少加高到 1.5 倍，下方放统一退出按钮。优先级：退出按钮完整露出 >
@@ -3456,6 +3476,12 @@ body:has(.center-pick--back) .home-nav { display: none; }
 @media (max-height: 772px) {
   .records-page:not(.xhs-profile) .records-panels { --rec-row-h: 33px; }
 }
+/* 顶上多了那一行登录提示（B-14，连同它底下那道 16 的缝约 56px）的时候，面板少了这一截，门槛跟着往上挪同样
+   一截：772 ＋ 56 ＝ 828。不挪的话 375×812 那一档（iPhone X / 11 Pro / 12 mini 的主屏版）六格装不下、整页要
+   往下滑。只管手机那一套：电脑上的两栏不是吃剩下高度的排法。 */
+@media (max-width: 999px) and (max-height: 828px) {
+  .records-page--hint:not(.xhs-profile) .records-panels { --rec-row-h: 33px; }
+}
 .records-page:not(.xhs-profile) .records-panels .records-panel { gap: var(--rec-row-gap); }
 .records-page:not(.xhs-profile) .records-panels .records-row-glyph {
   width: calc(var(--rec-row-h) * 0.6); height: calc(var(--rec-row-h) * 0.6);
@@ -3557,6 +3583,10 @@ body:has(.center-pick--back) .home-nav { display: none; }
 }
 /* 自己那一行：字加粗，外加一圈描边。榜再长，玩家找的都是这一行。 */
 .rank-row--me { font-weight: 700; box-shadow: 0 0 0 2px var(--ink-soft) inset; }
+/* 「我排第几」（10-11 方案 B-13.9）：我不在列出来的那几行里时，放大的榜底下补的那一行。记录页点开的那一块
+   里贴住能滚的那一格的底边（行本身是不透明的白药丸，滚上来的行从它底下过）；整页的《世界排名》里那一格
+   不滚（.rank-page-panel .rank-body 是 overflow: visible），它就是最后一行，不去贴屏幕底——底下有导航条。 */
+.records-panel--big .rank-row--pin { position: sticky; bottom: 0; }
 /* 缩略牌补位的空格子（ui/leaderboard.ts 的 thumbHtml）：和一行名次一样大，什么都不写。 */
 .rank-row--empty { padding: 0; }
 .rank-place {
@@ -4030,57 +4060,31 @@ body:has(.daily-page--count) .home-nav { display: none; }
 .home-nav-art > svg { width: 100%; height: 100%; display: block; }
 .home-nav-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
 
-/* ---------- 「有新版本，点一下刷新」 ---------- */
-/*
- * 这一行长在招牌那块玻璃里（`.home-head-glass`，`<h1>` 和那句 tagline 下面），不是浮在屏
- * 幕上的一块。
- *
- * **浮的那一版试过，不行。** 第四轮之后主菜单那条鱼眼滚轴占满整屏（见 `.mode-axis` 那段
- * 注释：招牌和底排本来就在轴的盒子**里面**，卡片从它们底下滑过去），所以这一屏上**没有
- * 一块空地**。量过：一块 192×37 摆在底排上面 8px 处，底下压着的正是炸弹那张卡和它的两枚
- * chip（390×844 上这一行占 699–736，chip 在 693–709），而它自己要收下点击——他冲着炸弹按
- * 下去，页面刷新了。那就是「不要让玩家出现意料之外的疏漏操作」里的那件事。
- *
- * 招牌那块玻璃本来就 `pointer-events: auto`、本来就盖在卡片上面（z-index 60），所以这一行
- * 长在里头**没有新占走任何一块点得着的地方**。玻璃会跟着长高二十来个像素，而量下来它连第
- * 一排卡片都没碰到（390×844 上玻璃长到 137，第一排从 252 起；横屏到 104、电脑到 155，也都
- * 够不着）。门里钉的就是这件事：三档屏幕各量一遍「没有一张卡和它相交」。
- *
- * 顺带省掉三件事：固定定位、安全区那套算术、和「会不会压住底排」。
- *
- * `max-width` 加换行是给英法两种语言留的：那两句比中文长一倍，不许它把这块玻璃撑到屏幕
- * 外面去（玻璃是 inline-block，宽度跟着里头最宽的那一行走）。
- */
-.home-head-glass .newver-pill {
-  display: block;
-  margin: 6px auto 0;
-  max-width: 14em;
-  border: none; border-radius: var(--r-full); padding: 5px 14px;
-  background: var(--accent); color: var(--on-accent); cursor: pointer;
-  font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 0.78rem;
-  line-height: 1.3; letter-spacing: 0.02em;
-  box-shadow: 0 2px 8px -3px rgba(46, 36, 48, 0.35);
-  -webkit-tap-highlight-color: transparent;
-}
-.home-head-glass .newver-pill:active { transform: translateY(1px); }
-.home-head-glass .newver-pill:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
-
-/* ---------- Google Analytics 同意条（10-11 方案 A-14，「② 奶油磨砂卡」） ---------- */
+/* ---------- 主菜单招牌底下那一格：GA 同意条（10-11 方案 A-14）和「有新版本」卡（B-9），「② 奶油磨砂卡」 ---------- */
 /*
  * 底色、描边、模糊、阴影一律照抄顶上招牌 `.home-head-glass`——两块玻璃摆在一块儿，差一点就是两种
- * 玻璃。圆角大一档（--r-xl），内边距 14 / 16 / 16。
+ * 玻璃。圆角大一档（--r-xl），内边距 14 / 16 / 16。两张卡同一套（方案 B-9：「放在 A-14 同意条的位置、用
+ * 同一套样式」）。
  *
- * 摆在哪儿、为什么见 ui/consentBar.ts 文件头。它住在 `.home-head` 里：那一层 sticky、z-index 60、
- * 本身不收点击（只有招牌那块玻璃收），所以这张条要自己把 pointer-events 打开。手机上的 top 由那边
+ * 摆在哪儿、为什么见 ui/homeSlot.ts 文件头。它们住在 `.home-head` 里：那一层 sticky、z-index 60、
+ * 本身不收点击（只有招牌那块玻璃收），所以卡要自己把 pointer-events 打开。手机上的 top 由那边
  * 量出来写进 `--consent-top`（招牌下沿往下 12px——招牌是 inline-block，`100%` 底下还垫着行框的
  * 那几像素，不能直接拿来算）。
+ *
+ * 位移拆成三个变量合成一句 transform：--card-x 是手机那一档的居中（left 50% 再往回拉半个宽度，电脑那一档是 0）；
+ * --card-dy / --card-scale 是两张叠着的时候底下那张的错开和缩小，交替的时候过渡的就是这一句。原点在底边：缩小
+ * 的时候底边不动，露出来的那一截左右各收 2%。
  */
-.consent-bar {
+.home-card {
+  --card-x: -50%;
+  --card-dy: 0px;
+  --card-scale: 1;
   position: absolute;
   top: var(--consent-top, calc(100% + 12px));
   left: 50%;
   width: calc(100vw - 32px);
-  transform: translateX(-50%);
+  transform: translateX(var(--card-x)) translateY(var(--card-dy)) scale(var(--card-scale));
+  transform-origin: 50% 100%;
   box-sizing: border-box;
   padding: 14px 16px 16px;
   border-radius: var(--r-xl);
@@ -4095,13 +4099,34 @@ body:has(.daily-page--count) .home-nav { display: none; }
               inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 @supports not (backdrop-filter: blur(1px)) {
-  .consent-bar { background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); }
+  .home-card { background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); }
 }
-/* 电脑：右上角，离右边、上边各 24px，宽 360px。固定定位——宽版那一页本来就一屏装得下。 */
+/* 电脑：右上角，离右边、上边各 24px，宽 360px（右边放不下「360 + 离招牌 12」时收窄，--consent-w 由 ui/homeSlot.ts
+   的 place 量出来）。固定定位——宽版那一页本来就一屏装得下。 */
 @media (min-width: 1000px) {
-  .home-page--wide .consent-bar { position: fixed; top: 24px; right: 24px; left: auto; width: var(--consent-w, 360px); transform: none; }
+  .home-page--wide .home-card { position: fixed; top: 24px; right: 24px; left: auto; width: var(--consent-w, 360px); --card-x: 0px; }
 }
-.consent-text {
+/*
+ * 两张都在（玩家定的 Q6）：同意条在上层；更新卡叠在它底下，底边比它低 8px、缩到 0.96（--stack-dy 由
+ * ui/homeSlot.ts 的 stack 算：两张高度之差 + 8）。底下那张只露那一截，里头的字和键藏起来——上面那张是半透明的
+ * 磨砂玻璃，不藏的话它的字会糊成一团透上来。
+ */
+.home-card--front { z-index: 2; }
+.home-card--back { z-index: 1; --card-dy: var(--stack-dy, 8px); --card-scale: 0.96; }
+.home-card--back > * { visibility: hidden; }
+/* 答完同意条：它向上滑走、淡出（−16px、260ms、ease-in），更新卡升到原位、放大回 1（260ms、ease-out、晚 60ms
+   起步）。减弱动态下 homeSlot 直接换，这两个类根本不挂；下面那句是保险。 */
+.home-card--leaving {
+  --card-dy: -16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 260ms ease-in, opacity 260ms ease-in;
+}
+.home-card--rise { transition: transform 260ms ease-out 60ms; }
+@media (prefers-reduced-motion: reduce) {
+  .home-card--leaving, .home-card--rise { transition: none; }
+}
+.home-card-text {
   margin: 0;
   font-family: 'Karla', sans-serif; font-size: 13.5px; line-height: 1.5; font-weight: 500;
   color: var(--ink-soft);
@@ -4109,9 +4134,9 @@ body:has(.daily-page--count) .home-nav { display: none; }
 .consent-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 .consent-link:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
 /* 两颗一样大、一样样子：接受和拒绝不分主次（CNIL：拒绝要和接受一样容易）。白底不跟主题翻——和
-   全站那几块「不翻的卡」一个规矩，棕字对白底 4.6:1。 */
-.consent-btns { display: flex; gap: 10px; margin-top: 12px; }
-.consent-btn {
+   全站那几块「不翻的卡」一个规矩，棕字对白底 4.6:1。「有新版本」那一颗也是这一款（方案 B-9）。 */
+.home-card-btns { display: flex; gap: 10px; margin-top: 12px; }
+.home-card-btn {
   flex: 1 1 0; min-width: 0; min-height: 44px;
   padding: 10px 12px;
   border-radius: var(--r-full);
@@ -4120,11 +4145,15 @@ body:has(.daily-page--count) .home-nav { display: none; }
   font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 15px; line-height: 1.2;
   -webkit-tap-highlight-color: transparent;
 }
-.consent-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.home-card-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* 「有新版本」那张：一句话＋一颗键，并排——话在左边、能折行，键在右边、不折。 */
+.newver-card { display: flex; align-items: center; gap: 12px; }
+.newver-card .home-card-text { flex: 1 1 auto; min-width: 0; }
+.newver-card .home-card-btn { flex: 0 0 auto; min-width: 96px; }
 /* 弹窗开着的时候不出现。visibility 而不是 display:none：藏着的时候布局还在，转屏时量出来的位置
    照样作数，弹窗一关原样回来。两条分开写：不认 :has() 的浏览器会把整条规则连选择器一起丢掉。 */
-html.has-overlay .consent-bar { visibility: hidden; pointer-events: none; }
-html:has(body > .overlay) .consent-bar { visibility: hidden; pointer-events: none; }
+html.has-overlay .home-card { visibility: hidden; pointer-events: none; }
+html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none; }
 /* 紧凑版还压到卡片时，宽版的网格整体往下让（鱼眼轴那一路走中线那四处，见 .mode-axis）。 */
 .home-page--wide .home-grid { margin-top: var(--consent-room, 0px); }
 
@@ -4571,6 +4600,12 @@ html:has(body > .overlay) .consent-bar { visibility: hidden; pointer-events: non
      （space-between）；10-08 方案 3-C-2 定的是两块一套行距、缝压到 0–4px，所以六格和左边一样从
      上往下排，缝是 --rec-row-gap。底下空出来的那一截留着，不再拿缝去填。 */
   .records-page:not(.xhs-profile) .records-panel--ranks { justify-content: flex-start; }
+  /* 顶上那一行登录提示（B-14）在的时候：它坐右栏第二行、和累计得分卡并排，《排名》退到第三行、和《最近战绩》
+     一样高。整页一个像素不加高——原先《排名》往上多占的那一截（和累计得分卡并排的那一段）里本来就只是空着的
+     底色；要是另起一行，1000×700、1280×800 上整页都得往下滑 40px 上下（量过）。选择器和上面那几条同一级、写在
+     它们后面，所以盖得过。 */
+  .records-page--hint:not(.xhs-profile) > .records-hint { grid-column: 2; grid-row: 2; align-self: center; }
+  .records-page--hint:not(.xhs-profile) .records-panel--ranks { grid-row: 3; }
 
   /* ---------- 电脑端的个人主页：两栏（第 17 推）----------
    * 左栏是那一列药丸，右栏是天才面板和底下那一对白键。两栏等宽、顶端对齐，中间那道缝
@@ -4596,6 +4631,10 @@ html:has(body > .overlay) .consent-bar { visibility: hidden; pointer-events: non
   .records-page:not(.xhs-profile) > .home-head { margin-bottom: 0; }
   .app.records-page:not(.xhs-profile) { row-gap: 6px; }
   .records-page:not(.xhs-profile) .total-card { padding-top: 11px; padding-bottom: 9px; }
+  /* 登录提示（B-14）在的时候《排名》退到和《最近战绩》同一行，两块一样高、都按《排名》那一块的内容（六格＋底下
+     那句「登录之后……」）来——比原先《最近战绩》自己高 9px，1000×700 上整页就要滑 3–4px。两块的上下内边距
+     各收 4px（18 → 14），六格和字一个像素不动。 */
+  .records-page--hint:not(.xhs-profile) .records-panels .records-panel { padding-top: 14px; padding-bottom: 14px; }
 }
 /* The lead-in above a document's clauses: same voice as the rows below it,
    just not one of them. */
@@ -5849,6 +5888,8 @@ html.is-playing body { background: var(--play-bg); }
     width: calc((100dvh - 68px) * 0.7377);
   }
   .overlay--end .modal .end-actions { grid-column: 1; grid-row: 3; margin-top: 0; }
+  /* 登录提示（B-14）：左栏、三颗键上面那一格的底下（那一格本来空着）。 */
+  .overlay--end .modal .end-signin-hint { grid-column: 1; grid-row: 2; align-self: end; margin: 0 21px 10px; }
 }
 
 /* 横屏的分享窗：图靠左占满高度，标题、说明和《完成》挪到它右边那一列。
