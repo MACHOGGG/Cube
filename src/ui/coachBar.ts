@@ -238,7 +238,8 @@ function lineCount(el: HTMLElement): number {
  */
 export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const plan: CoachPlan = opts.plan ?? 'first';
-  const now = opts.now ?? (() => Date.now());
+  // 单调钟（10-15 补充 S8）：A、C 那几个 10 秒 / 5 秒不跟着墙上的钟被拨（门里自己注入 now 的照旧）。
+  const now = opts.now ?? (() => performance.now());
   const texts = tutorialRules(opts.lang, opts.shape);
   const base = opts.art ?? artFor(opts.shape);
   // A 那一幅换成那段动画（本局三种颜色的 1×N 依次慢翻过去再翻回来，10-11 方案 D-1）。三角那一族没有自己的一套，

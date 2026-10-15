@@ -92,6 +92,14 @@ export function flipStreakDelta(points: number, chain: number, base = FLIP_STREA
  */
 export const SCORING_RULES_VERSION = 'ero1';
 
+/**
+ * 计分规则用过的每一版，**最后一个就是现行版本**（等于 SCORING_RULES_VERSION）；以后升版本就往末尾加一个
+ * （10-15 补充 S8）。开机清档（engine/wipeOldRules.ts）照这张单子枚举每一个退下来的版本——原先那一段只认得
+ * 《侵蚀阶梯》之前那一套不带版本号的键，下一次升到 ero2，ero1 那七本存档一本都不会被清，哨兵还会记成「本来就没
+ * 东西可清」（门 check-wipe-rules 模拟过）。
+ */
+export const SCORING_RULES_HISTORY = ['ero1'] as const;
+
 export interface CascadeConfig {
   tileAt(r: number, c: number): Tile;
   /** Groups of cells that now qualify for a whole-line color bonus; shape is responsible for not re-offering a line already bonused this game. */

@@ -54,6 +54,8 @@
  *   6. 基础方块松手后 300 / 500ms、无限反转（方块）松手后 300ms 暂停 → 结束：交上去的那一份过得了 vetRun、服务器
  *      回 200，总分 ＝ 图案分 ＋ 线分 ＋ 连击；尺子：暂停那一下真的撤掉了一个 550ms 的高亮拍子（就是那个窗口）。
  *   7. 交卷回 400 implausible（route 拦下来答）：结算页 #endDailyNote 说「本局未上传到云端，本机记录照常保留」。
+ *   8. 暂停面板里的《再来一局》也报一条开局统计（10-15 补充 S8）：用 slides_analytics_games 量，开局 1 → 暂停里再来
+ *      一局 2 → 结算页再来一局 3。原先暂停面板那颗直接 newGame，之后还是 1。
  *
  * 得分那一步是读屏自己找的：读出每一枚的颜色和面，按「同色连着 ≥ N、碰到滑过的线、至少一枚色块」（和
  * check-coach-aim 那份对照同一条规矩）找一步就得分的滑法；没有就先走一步不得分的、让下一步能得分的。
@@ -523,6 +525,42 @@ for (const { flip, delayMs, scoreFirst } of [
   check('7（尺子）交卷被答 400 implausible', r.reply?.status === 400 && r.ended, JSON.stringify(r.reply));
   check('7 结算页说「本局未上传到云端，本机记录照常保留」', r.note.shown && r.note.text === '本局未上传到云端，本机记录照常保留', JSON.stringify(r.note));
   check('7 零报错', r.errs.length === 0, r.errs.slice(0, 2).join(' | '));
+}
+
+// ---------------------------------------------------------------------------
+// 8. 暂停面板里的《再来一局》也报开局统计（10-15 补充 S8）
+// ---------------------------------------------------------------------------
+{
+  const c8 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c8.addInitScript(seed);
+  const q = await c8.newPage();
+  const e8 = [];
+  q.on('pageerror', (e) => e8.push(String(e)));
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await q.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  await q.evaluate(() => localStorage.removeItem('slides_analytics_games'));
+  const games = () => q.evaluate(() => Number(localStorage.getItem('slides_analytics_games') || 0));
+  await openSquare(q, false);
+  const g1 = await games();
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseRestartBtn').click());
+  await q.waitForSelector('#restartYes', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('restartYes').click());
+  await q.waitForTimeout(1500);
+  const g2 = await games();
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
+  await q.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await q.evaluate(() => document.getElementById('restartBtn').click());
+  await q.waitForTimeout(1500);
+  const g3 = await games();
+  check('8 开局报一条：1', g1 === 1, String(g1));
+  check('8 暂停面板里的《再来一局》也报一条：2', g2 === 2, String(g2));
+  check('8 结算页的《再来一局》照旧报一条：3', g3 === 3, String(g3));
+  check('8 零报错', e8.length === 0, e8.slice(0, 2).join(' | '));
+  await c8.close();
 }
 
 await browser.close();

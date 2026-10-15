@@ -43,11 +43,17 @@ export function isIOS(): boolean {
   return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
 }
 
-/** 该不该说：没登录；主屏版一直说，iOS 浏览器里本机已有 ≥3 局才说。 */
-export function wantsSignInHint(signedIn: boolean, localRuns: number): boolean {
+/**
+ * 该不该说：没登录；主屏版一直说，iOS 浏览器里本机已有 ≥3 局才说。
+ *
+ * 本机几局是**要用时才数**的（`localRuns` 是个函数，10-15 补充 S8）：数一次要把全部本机战绩 JSON.parse 一遍
+ * （500 局、18 本共 1.6MB，6× 降速实测 8–111ms），而原先每一局结算都先数完再进来——已登录的人、主屏版、安卓，
+ * 根本用不着这个数的人也数。
+ */
+export function wantsSignInHint(signedIn: boolean, localRuns: () => number): boolean {
   if (signedIn) return false;
   if (isStandalone()) return true;
-  return isIOS() && localRuns >= 3;
+  return isIOS() && localRuns() >= 3;
 }
 
 /** 本机日期（不是 UTC）：玩家说的「今天」是他手机上的今天。 */

@@ -139,7 +139,7 @@ export function renderRecordsPage(
   // 顶上那一行「登录后打的每一局都会存到云端，换设备也找得回。」＋《登录》（10-11 方案 B-14）：主屏版、iOS
   // 浏览器里没登录的人才有，规则在 engine/signInHint.ts。「本机已有 ≥3 局」数的就是底下这张清单的局数。
   // 登进去之后那一窗回到这一页重画（main.ts），signedIn() 成了真，这一行自己就没了。
-  const hint = wantsSignInHint(signedIn(), runs.length);
+  const hint = wantsSignInHint(signedIn(), () => runs.length);
   const hintRow = hint
     ? `<div class="records-hint" id="recordsHint">
         <p class="home-card-text records-hint-text">${s.cloudSaveHint}</p>

@@ -1482,7 +1482,7 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
     onReLogin: (done) => openAuthWindow(currentLang, done),
     // 主屏版、iOS 浏览器里没登录的人：结算页三颗键上面说一句「登录后打的每一局都会存到云端」（10-11 方案 B-14，
     // 每天最多一次由控制器管）。只给单人局：小屋那一屏挤得满，而且坐进小屋本来就要先登录。
-    signInHint: () => wantsSignInHint(signedIn(), localRunCount()),
+    signInHint: () => wantsSignInHint(signedIn(), localRunCount),
     // 「离开此网站？」只在这一局开着时问（10-11 方案 B-10）：结算就不问了，《再来一局》又问——那一下走的是
     // 控制器自己的 newGame，不经过这个文件，所以由控制器来报。
     onLive: (live) => {

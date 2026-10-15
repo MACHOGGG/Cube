@@ -521,7 +521,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (pendingBeat?.id === id) pendingBeat = null;
       run();
     }, ms);
-    pendingBeat = { id, run, at: Date.now(), ms };
+    // 单调钟（10-15 补充 S8）：暂停时算「还剩多久」，墙上的钟被拨一下就会算出负数或者几分钟。
+    pendingBeat = { id, run, at: performance.now(), ms };
   }
 
   /**
@@ -541,7 +542,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   function holdBeat(): void {
     if (!pendingBeat) return;
     window.clearTimeout(pendingBeat.id);
-    heldBeat = { run: pendingBeat.run, ms: Math.max(0, pendingBeat.ms - (Date.now() - pendingBeat.at)) };
+    heldBeat = { run: pendingBeat.run, ms: Math.max(0, pendingBeat.ms - (performance.now() - pendingBeat.at)) };
     pendingBeat = null;
   }
   // Running split of where the score came from, for the end-of-run breakdown.
@@ -1200,7 +1201,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     //   · 这一窗在讲「综合分是怎么来的」（头一局才有）——两句一次性的话挤在同一窗里，320 宽的手机上那张图被
     //     挤到 28px 高；横屏手机上抬头那一栏一长，这一句会压到抬头上（门 check-pwa-hint 量出来的）。
     //   · 摆不下（signHintFits）。
-    if (!teachTotal && hooks.signInHint?.() && !endHintShownToday()) {
+    // 先问今天说过没有（一次读本机存储），再问该不该说——后者可能要数一遍本机战绩（见 engine/signInHint.ts）。
+    if (!teachTotal && !endHintShownToday() && hooks.signInHint?.()) {
       refs.endSignHintEl.textContent = s.cloudSaveHint;
       refs.endSignHintEl.hidden = false;
       if (signHintFits()) markEndHintShown();
@@ -1779,6 +1781,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.startOverlay.classList.remove('show');
     newGame();
   });
+  /**
+   * 《再来一局》：先报一条 game_start（练习盘不报），再开局。结算页那颗和暂停面板那颗都走它（10-15 补充 S8）——
+   * 原先暂停面板那颗直接 newGame，绕过了下面那段注释说的那条埋点：用 slides_analytics_games 量，暂停面板的《再来
+   * 一局》之后还是 1，结算页那颗之后才变 2。
+   */
+  const restartRun = () => {
+    if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
+    newGame();
+  };
   refs.buttons.restart.addEventListener('click', () => {
     // 《再来一局》也是开一局，也要报一条 game_start。
     //
@@ -1789,10 +1800,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 玩家打完第一局接着连打两局——最平常不过的操作，不用刷新也不用离开页面
     // ——后台算出来的「首局完成率」就会超过 100%，一个不可能出现的数。
     //
-    // 埋在这儿而不是埋进 newGame：newGame 还有一条练习盘的路（endGame 里那
+    // 埋在 restartRun 而不是埋进 newGame：newGame 还有一条练习盘的路（endGame 里那
     // 一句），那种盘本来就不上报。
-    if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
-    newGame();
+    restartRun();
   });
   // 多人局里没有这颗键——一场同步竞赛暂停不了，那个位置让给了《离开房间》。
   refs.buttons.stop?.addEventListener('click', doPause);
@@ -1836,7 +1846,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // 答「是」之后 newGame() 自己会把暂停那一层撤掉、把表重新起头。
   refs.buttons.pauseRestart.addEventListener('click', () => {
     if (!started || gameOver) return;
-    confirmRestart(hooks.lang, newGame);
+    confirmRestart(hooks.lang, restartRun);
   });
   refs.buttons.share.addEventListener('click', doShare);
   refs.buttons.shareClose.addEventListener('click', () => refs.shareOverlay.classList.remove('show'));

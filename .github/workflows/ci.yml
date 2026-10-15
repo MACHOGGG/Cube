@@ -248,6 +248,10 @@ jobs:
         run: |
           npx esbuild src/engine/runKey.ts --bundle --format=esm --outfile=/tmp/runkey.mjs
           node scripts/check-run-key.mjs /tmp/runkey.mjs
+      # 换计分规则时的开机清档（10-15 补充 S8）：每一个退下来的版本都清，老虎机那一本、步步为营那一本一起；现行版本的
+      # 键一本不动。原先只认《侵蚀阶梯》之前那一套键：模拟升到 ero2，ero1 那七本一本都没清，哨兵还记成「没东西可清」。
+      - name: 换计分规则时清档清得干净
+        run: node scripts/check-wipe-rules.mjs
       # 登录／改密那几扇窗的表单件。三件事各盯一个「错了不报错」：给密码管理器的那一串
       # name/autocomplete/type 标注一个都没被动过（改掉之后不报错，只是管理器从此不提示
       # 保存）、field() 的 DOM 顺序是 input 在前（浮动标签靠相邻兄弟，只能往后看）、六段

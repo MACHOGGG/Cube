@@ -91,7 +91,8 @@ export interface KeyOpts extends RuleVersions {
  * 玩法掺在一起算的，老虎机打出一个高分，基础局从此就在跟一个不是同一把尺子量出来的数比。服务器那头早就分开了
  * （RunData.slot → 排行榜上它自己一张榜），只有本机这一头没分。
  *
- * ⚠️ 下一次换计分规则要清档时，这一本也得清：wipeOldRules 枚举的是 modeSuffix（玩法那一截），不带这一截。
+ * 下一次换计分规则要清档时，这一本也得清：10-15 补充 S8 起 wipeOldRules 拿 suffixAt 连这一本一起枚举（原先它只枚举
+ * modeSuffix 玩法那一截，不带这一截）。
  */
 const SLOT_PART = '_slot';
 
@@ -117,7 +118,15 @@ const SLOT_PART = '_slot';
  * 局都不动，而且不报错。具名之后这种错写不出来。
  */
 export function suffixFor(mk: ModeKey, opts?: KeyOpts): string {
-  return (opts?.slot ? SLOT_PART : '') + modeSuffix(mk, opts) + '_' + SCORING_RULES_VERSION;
+  return suffixAt(SCORING_RULES_VERSION, mk, opts);
+}
+
+/**
+ * 同一个拼法，计分规则的版本号由调用的那一头给（10-15 补充 S8）。存新局走 suffixFor（现行版本），开机清档拿退下来
+ * 的那几版各拼一遍——两头用同一个函数，清档就不会和存档拼出两种键。
+ */
+export function suffixAt(version: string, mk: ModeKey, opts?: KeyOpts): string {
+  return (opts?.slot ? SLOT_PART : '') + modeSuffix(mk, opts) + '_' + version;
 }
 
 /**
