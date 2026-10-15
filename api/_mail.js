@@ -11,6 +11,7 @@
  * is a real way out rather than a dead end, and is where the five published
  * documents already point.
  */
+import { errorName } from './_redact.js';
 
 const key = () => process.env.RESEND_API_KEY || '';
 const from = () => process.env.MAIL_FROM || '';
@@ -36,8 +37,9 @@ export const mailConfigured = () => Boolean(key() && from());
  * **服务端日志里也看不到任何痕迹**：玩家说「点了没反应」，这边查无此事。
  *
  * 所以回包照旧不动（防枚举那条更要紧），但失败一定写进日志。日志里不写收件
- * 地址——那是玩家的邮箱，不该躺在日志里；只写状态码和服务商的回话，足够分辨
- * 是密钥失效、域名没验证，还是对方限流。
+ * 地址——那是玩家的邮箱，不该躺在日志里；只写状态码和服务商回话里的那个错误名
+ * （不是整段回话：它常常把收件地址原样念一遍，10-15 补充 S7），足够分辨是密钥失效、
+ * 域名没验证，还是对方限流。
  */
 export async function sendMail({ to, subject, text }) {
   if (!mailConfigured()) return false;
@@ -51,7 +53,8 @@ export async function sendMail({ to, subject, text }) {
       body: JSON.stringify({ from: from(), to: [to], subject, text }),
     });
     if (!res.ok) {
-      console.error('resend failed:', res.status, await res.text().catch(() => ''));
+      // 只记状态码和错误名（10-15 补充 S7，L-4 ⑤）：Resend 的正文常常把收件地址原样念一遍，见 _redact.js 的 errorName。
+      console.error('resend failed:', res.status, await errorName(res));
     }
     return res.ok;
   } catch (err) {

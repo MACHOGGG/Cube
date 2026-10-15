@@ -61,9 +61,9 @@ const { default: signin } = await import('../api/signin.js');
 /**
  * 一对够用的假 req/res（handler 只用到 headers / method / body，和 res 那三个方法）。
  *
- * ⚠️ **每一节自己带一个来路 IP。** 按来路那道限速是 10 封 / 小时
+ * ⚠️ **每一节自己带一个来路 IP。** 按来路那道限速是 30 封 / 小时（10-15 补充 S7 起；原先 10）
  * （`signin:from` + `callerId(req)`），而 `callerId` 在没有头的时候对所有请求返回同一个
- * 桶——整道门于是共用那 10 封，跑到一半就开始回 429，而红的是门自己不是代码。第一版就
+ * 桶——整道门于是共用那 30 封，跑到一半就开始回 429，而红的是门自己不是代码。第一版就
  * 是这样：⑤⑦ 两节莫名其妙全红，错在没有头。
  */
 let fromIp = '10.0.0.1';
@@ -186,7 +186,7 @@ const SECOND = 'second@example.com';
   check('同一个地址第 4 封被挡（429），前 3 封放过', got.join(' ') === '200 200 200 429', got.join(' '));
 
   /*
-   * 按来路那一道：同一个 IP 换着地址来，前 10 封放过、第 11 封挡住。
+   * 按来路那一道：同一个 IP 换着地址来，前 30 封放过、第 31 封挡住（10-15 补充 S7：站长定 10 → 30）。
    *
    * **换一个干净的 IP 再数**，不接着上面那 4 封算。那 4 封里第 4 封是被**按地址**那道
    * 挡掉的，而那一道排在按来路之前（`request` 里的次序），所以它压根没进来路那个桶——
@@ -194,9 +194,9 @@ const SECOND = 'second@example.com';
    */
   freshIp();
   const byCaller = [];
-  for (let i = 0; i < 11; i++) byCaller.push((await ask(`spray-${i}@example.com`)).status);
-  check('同一个来路换着地址来：前 10 封放过，第 11 封挡住',
-    byCaller.slice(0, 10).every((x) => x === 200) && byCaller[10] === 429,
+  for (let i = 0; i < 31; i++) byCaller.push((await ask(`spray-${i}@example.com`)).status);
+  check('同一个来路换着地址来：前 30 封放过，第 31 封挡住',
+    byCaller.slice(0, 30).every((x) => x === 200) && byCaller[30] === 429,
     byCaller.join(' '));
 }
 
@@ -240,6 +240,30 @@ const SECOND = 'second@example.com';
     tokenValid(account, first.body.token) === true);
   check('（尺子）第二台那把当然也好使', tokenValid(account, second.body.token) === true);
   check('（反面尺子）瞎编的令牌不好使', tokenValid(account, 'nope') === false);
+}
+
+// ── ⑧ 同一邮箱一小时 15 张票的封顶：只数「触发了几次」，键里不带邮箱（10-15 补充 S7，L-4 ②）─────────────
+//
+// 三道闸依次是 signin:to（同邮箱同来路 3）、signin:from（同来路 30）、signin:toAll（同邮箱 15）。每个来路最多给
+// toAll 贡献 3 张，所以要 5 个来路才刷得满；第 6 个来路再要一张，回 emailCapped，并给「今天」那一格记一笔。
+{
+  const { EMAIL_CAPPED_STAT, utcDay } = await import('../api/_ratelimit.js');
+  const { scanKeys } = await import('../api/_store.js');
+  const CAPPED = 'capped-target@example.com';
+  const today = EMAIL_CAPPED_STAT + utcDay(Date.now());
+  const before = Number(await get(today)) || 0;
+  const got = [];
+  for (let ip = 0; ip < 5; ip++) {
+    freshIp();
+    for (let i = 0; i < 3; i++) got.push((await ask(CAPPED)).status);
+  }
+  check('⑧（尺子）5 个来路各 3 张：15 张都放过', got.length === 15 && got.every((x) => x === 200), got.join(' '));
+  freshIp();
+  const capped = await ask(CAPPED);
+  check('⑧ 第 6 个来路：429 emailCapped', capped.status === 429 && capped.body?.error === 'emailCapped', JSON.stringify(capped.body));
+  check(`⑧ 今天那一格（${today}）记了 1 次`, (Number(await get(today)) || 0) - before === 1, `${before} → ${await get(today)}`);
+  const keys = await scanKeys(EMAIL_CAPPED_STAT + '*');
+  check('⑧ 那几把计数的键里没有邮箱（没有 @）', keys.length > 0 && keys.every((k) => !k.includes('@')), keys.join(' '));
 }
 
 console.log(fail ? `\n${fail} 条红` : '\n全绿');

@@ -480,6 +480,8 @@ export interface I18nStrings {
   bindEmailHint: string;
   emailBound: string;
   /** 想换过去的那个地址上已经有账号了。 */
+  /** 换邮箱：这个新地址这一小时输错验证码的次数太多（api/email.js 答 guessCapped，10-15 补充 S7）。 */
+  chmailGuessCapped: string;
   emailTaken: string;
   emailSame: string;
   /** 两扇小窗共用的那一颗：确认。 */
@@ -1141,6 +1143,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindEmailRow: 'Link an email',
     bindEmailHint: 'Once linked, you sign in with this email; the two strings stop working.',
     emailBound: 'Done — sign in with this email from now on.',
+    chmailGuessCapped: 'Too many wrong codes for this new address in the past hour. Please try again in an hour.',
     emailTaken: 'That address already has an account.',
     emailSame: 'That is the address you are already on.',
     confirmBtn: 'Confirm',
@@ -1523,6 +1526,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindEmailRow: 'Associer une adresse',
     bindEmailHint: 'Une fois l’adresse associée, vous vous connectez avec elle ; les deux chaînes ne servent plus.',
     emailBound: 'C’est fait — connectez-vous désormais avec cette adresse.',
+    chmailGuessCapped: 'Trop de codes erronés pour cette nouvelle adresse au cours de la dernière heure. Réessayez dans une heure.',
     emailTaken: 'Cette adresse a déjà un compte.',
     emailSame: 'C’est déjà votre adresse actuelle.',
     confirmBtn: 'Confirmer',
@@ -1905,6 +1909,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindEmailRow: '綁定信箱',
     bindEmailHint: '綁定之後用這個信箱登入，兩串就不能再用了。',
     emailBound: '綁定好了——以後用這個信箱登入。',
+    chmailGuessCapped: '這個新信箱這一小時輸錯驗證碼的次數太多了，請一小時後再試。',
     emailTaken: '這個信箱已經有帳號了。',
     emailSame: '這就是您現在用的信箱。',
     confirmBtn: '確認',
@@ -2287,6 +2292,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     bindEmailRow: '绑定邮箱',
     bindEmailHint: '绑定之后用这个邮箱登录，两串就不能再用了。',
     emailBound: '绑定好了——以后用这个邮箱登录。',
+    chmailGuessCapped: '这个新邮箱这一小时输错验证码的次数太多了，请一小时后再试。',
     emailTaken: '这个邮箱已经有账号了。',
     emailSame: '这就是您现在用的邮箱。',
     confirmBtn: '确认',

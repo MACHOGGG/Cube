@@ -417,7 +417,8 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 | `_commonpairs.js` | 免邮箱账号注册时拒收的常见第一串 |
 | `_seedcode.js` | 种子码 / 每日挑战，服务器那一份（和 `src/engine/seedCode.ts` 同一套算法） |
 | `_maxscore.js` | 一局分数的上限（十亿，排行榜和小屋共用）；排行榜交卷时对的那一遍账 `vetRun`（10-11 A-3：每副棋盘的 N / d / Lmax / par、按玩法分档的上界——手抄的，`check-scores-guard` 当场从源码推一遍对上） |
-| `_redact.js` | 日志里不写邮箱，写一枚短指纹 |
+| `_redact.js` | 日志里不写邮箱，写一枚短指纹；`errorName` 从第三方回包里只取错误名（10-15 S7） |
+| `_admin.js` | 管理令牌比对（`ADMIN_TOKEN_MIN` / `adminToken` / `adminRefused`），`mint`、`scores` 共用 |
 | `_unlock_legacy.js` | **不是模块**：原来的 `api/unlock.js`（《忘记密码》，第 20 推起回 410），10-09 起挪到这儿腾出一个函数名额；别处注释拿它当范本引，别 import 它 |
 
 面向外的：`signin`（邮箱 + 六位验证码的注册 / 登录；登出时作废这台设备的令牌）、

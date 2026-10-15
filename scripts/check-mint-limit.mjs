@@ -184,5 +184,29 @@ check('200 次并发只放行 20 次（限速是一步做完的，不是读-改-
   check('（尺子）换回一把够长的，照常发码', back.status === 200, String(back.status));
 }
 
+// ── grant 一次最多 20 个地址；大小写不同的同一个地址只发一批（10-15 补充 S7，L-4 ⑥）──────────────
+//
+// 原先没有上限：21 个照发；同一个地址大小写不同写两遍，发两批。超过整批拒、一张都不铸。
+{
+  const { newAccount, saveAccount, loadAccount } = await import('../api/_accounts.js');
+  const GRANTER = '198.51.100.80';
+  const many = Array.from({ length: 21 }, (_, i) => `grant${i}@example.com`);
+  for (const m of many) await saveAccount(m, newAccount('', 'code'));
+  const inboxOf = async (m) => ((await loadAccount(m))?.inbox || []).length;
+  const tooMany = await call({ token: process.env.ADMIN_TOKEN, action: 'grant', plan: 'month', count: 1, emails: many }, GRANTER);
+  check('grant 21 个地址：整批拒，400 emails、max 20', tooMany.status === 400 && tooMany.payload?.error === 'emails' && tooMany.payload?.max === 20,
+    `${tooMany.status} ${JSON.stringify(tooMany.payload)}`);
+  let got = 0;
+  for (const m of many) got += await inboxOf(m);
+  check('grant 21 个地址：一张码都没铸（谁的收件箱里都没有）', got === 0, `${got} 张`);
+  const twenty = await call({ token: process.env.ADMIN_TOKEN, action: 'grant', plan: 'month', count: 1, emails: many.slice(0, 20) }, GRANTER);
+  check('（尺子）grant 正好 20 个地址：照发', twenty.status === 200 && twenty.payload?.sent?.length === 20,
+    `${twenty.status} ${twenty.payload?.sent?.length}`);
+  const twice = await call({ token: process.env.ADMIN_TOKEN, action: 'grant', plan: 'month', count: 1,
+    emails: ['Grant20@Example.com', 'grant20@example.com', ' GRANT20@EXAMPLE.COM '] }, GRANTER);
+  check('同一个地址大小写不同写三遍：只发一批', twice.status === 200 && twice.payload?.sent?.length === 1 && (await inboxOf('grant20@example.com')) === 1,
+    `${twice.status} sent=${twice.payload?.sent?.length} 收件箱 ${await inboxOf('grant20@example.com')} 张`);
+}
+
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);
 process.exit(fail ? 1 : 0);

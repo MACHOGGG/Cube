@@ -44,3 +44,33 @@ export const redact = (value) => {
   if (!s) return '(空)';
   return createHash('sha256').update(s, 'utf8').digest('hex').slice(0, 12);
 };
+
+/**
+ * 第三方回包里那个「错误名」，别的一个字都不要（10-15 补充 S7，L-4 ⑤）。
+ *
+ * 原先 `_mail.js` 把 Resend 回的正文原样写进日志，`_creem.js` 把 Creem 回的正文拼进 `err.message`——之后
+ * portal / subscription / checkout / signin / handle 外面那一层 catch 又把 `err.message` 原样记下来。那两家的
+ * 正文里常常把请求原样念一遍（「… is not a valid email: 某某@…」「customer 某某@… not found」），于是玩家的
+ * 邮箱经由**对方的回话**进了我们的日志，绕过了上面那条「日志里不写邮箱」。
+ *
+ * 现在只取回包 JSON 里的 `name`、`error` 或 `code`（Resend 是 `name: "invalid_api_key"` 那种，Creem 是
+ * `error: "Not Found"` 那种），而且形状限定：字母开头、只含字母数字和 `_ .-` 空格、不超过 40 个字符——一个
+ * 邮箱带 `@`，过不了；一句长话超过 40 个字，过不了。不符合、不是 JSON、读不出来，一律记 `-`。
+ * 对账够用：状态码 + 错误名分得清「密钥失效」「商品 id 不在这本目录」「对方限流」。
+ *
+ * 收的是 fetch 的 Response（读它的正文，所以每个 Response 只能调一次）。
+ */
+const ERROR_NAME = /^[A-Za-z][A-Za-z0-9_ .-]{0,39}$/;
+export async function errorName(res) {
+  let body;
+  try {
+    body = JSON.parse(await res.text());
+  } catch {
+    return '-';
+  }
+  for (const k of ['name', 'error', 'code']) {
+    const v = body?.[k];
+    if (typeof v === 'string' && ERROR_NAME.test(v)) return v;
+  }
+  return '-';
+}

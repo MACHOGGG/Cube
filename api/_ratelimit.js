@@ -173,3 +173,12 @@ function expand6(text) {
   }
   return out;
 }
+
+/**
+ * 「同一邮箱一小时 15 张码」（api/signin.js 的 signin:toAll）撞顶的次数，按 UTC 日子一格（10-15 补充 S7，站长定：只数
+ * 次数）。键里只有日子、不带邮箱；signin.js 撞顶时加一，scores.js 的 scoreStats 读近 14 天给管理页《量一下》。
+ */
+export const EMAIL_CAPPED_STAT = 'stat:emailCapped:';
+export const EMAIL_CAPPED_TTL_S = 40 * 86400;
+/** UTC 日子 YYYYMMDD。 */
+export const utcDay = (ms) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');

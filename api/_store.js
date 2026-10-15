@@ -35,7 +35,25 @@ const token = () =>
  * report that the feature is not open rather than half-working.
  */
 const remote = () => Boolean(url() && token());
-const memoryAllowed = () => process.env.ALLOW_MEMORY_STORE === '1';
+/**
+ * 部署出去的那一份（`VERCEL_ENV` 是 production 或 preview）一律不认 ALLOW_MEMORY_STORE（10-15 补充 S7，L-4 ⑦）。
+ * 原先只看这个开关：谁在 Vercel 后台手滑填了它，线上就悄悄跑在各实例各一份的内存库上——兑换码、小屋、帐号「刚好常常
+ * 能用」，然后丢掉某个人的东西。现在部署环境里填了也当没填：storeConfigured() 为假、接口回 503 notConfigured，日志
+ * 写一次。本地、CI、`vercel dev`（VERCEL_ENV 是 development）都没有这两个值，照旧放行。
+ * ⚠️ VERCEL_ENV 要在 Vercel 项目设置里勾着「Automatically expose System Environment Variables」才会注入；没勾的话
+ * 这道保险不起作用——和原先一样，不会更糟。
+ */
+const deployed = () => ['production', 'preview'].includes(process.env.VERCEL_ENV || '');
+let warnedDeployed = false;
+const memoryAllowed = () => {
+  if (process.env.ALLOW_MEMORY_STORE !== '1') return false;
+  if (!deployed()) return true;
+  if (!warnedDeployed) {
+    warnedDeployed = true;
+    console.error('部署环境里不认 ALLOW_MEMORY_STORE（按没配库处理，接口回 notConfigured）');
+  }
+  return false;
+};
 
 export const storeConfigured = () => remote() || memoryAllowed();
 
@@ -342,14 +360,20 @@ export async function hdelIfSame(key, field, value) {
   }
 }
 
-/** 内存库只认得 delIfSame、hdelIfSame 那两段脚本：它本来就是单进程，一个函数里比完就删，同样是一步。 */
+/** 内存库只认得 delIfSame、hdelIfSame、bump 那三段脚本：它本来就是单进程，一个函数里做完，同样是一步。 */
 function memoryEval(args) {
   const [, script, , key, ...argv] = args;
-  if (script !== DEL_IF_SAME && script !== HDEL_IF_SAME) throw new Error('memory store: unknown script');
+  if (script !== DEL_IF_SAME && script !== HDEL_IF_SAME && script !== BUMP) throw new Error('memory store: unknown script');
   const due = expiries.get(key);
   if (due !== undefined && due < Date.now()) {
     mem.delete(key);
     expiries.delete(key);
+  }
+  if (script === BUMP) {
+    const next = (Number(mem.get(key) ?? 0) || 0) + 1;
+    mem.set(key, String(next));
+    if (next === 1 || !expiries.has(key)) expiries.set(key, Date.now() + Number(argv[0]) * 1000);
+    return next;
   }
   if (script === HDEL_IF_SAME) {
     const [field, want] = argv;
@@ -448,11 +472,23 @@ export async function withLock(lockKey, run) {
  *
  * ttl 只在这个键刚落地那一下压（返回 1 的时候）。每次都压的话，一直猜的人
  * 会把窗口一路往后顺延，反倒是猜得越勤活得越久。
+ *
+ * 加一和压期限写成一段 Lua，一趟做完（10-15 补充 S7，L-4 ⑧）。原先是 INCR、EXPIRE 两趟：EXPIRE 那一趟摔了，
+ * bump 直接抛错、整个请求跟着失败，而那个计数键**永远不过期**——限速桶从此每个窗口都是满的，那个人（那个网络）
+ * 被永久挡在门外。脚本里顺手给「没有期限」的键补上（TTL == -1：以前漏下期限的那些）。那一头不认 EVAL（报错）
+ * 时退回原来的两步，同 delIfSame 的退路。
  */
+const BUMP =
+  "local n = redis.call('INCR', KEYS[1]) if n == 1 or redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return n";
 export async function bump(key, ttl) {
-  const n = Number(await command(['INCR', key])) || 0;
-  if (n === 1 && ttl) await command(['EXPIRE', key, ttl]);
-  return n;
+  if (!ttl) return Number(await command(['INCR', key])) || 0;
+  try {
+    return Number(await command(['EVAL', BUMP, 1, key, ttl])) || 0;
+  } catch {
+    const n = Number(await command(['INCR', key])) || 0;
+    if (n === 1) await command(['EXPIRE', key, ttl]);
+    return n;
+  }
 }
 
 /** Read and delete in one step, so a code cannot be spent twice at once. */

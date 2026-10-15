@@ -16,6 +16,8 @@
  * are checked on the device.
  */
 
+import { errorName } from './_redact.js';
+
 const key = () => process.env.CREEM_API_KEY || '';
 
 /** Test keys start with creem_test_ and belong to the sandbox catalogue. */
@@ -40,6 +42,10 @@ export const products = () => ({
   yearly: process.env.CREEM_PRODUCT_YEARLY || '',
 });
 
+/** `/v1/customers/cust_4Xk…/subscriptions` → `/v1/customers/:id/subscriptions`：版本号留着，带数字或大写的段一律当 id。 */
+const pathShape = (path) =>
+  String(path).split('/').map((seg) => (!seg || /^v\d+$/.test(seg) || /^[a-z_-]+$/.test(seg) ? seg : ':id')).join('/');
+
 export async function creem(path, { method = 'GET', query, body } = {}) {
   const url = new URL(base() + path);
   for (const [k, v] of Object.entries(query || {})) {
@@ -54,14 +60,17 @@ export async function creem(path, { method = 'GET', query, body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    // Creem's own error body says which of the several possible things went
+    // Creem's own error says which of the several possible things went
     // wrong — a key it does not recognise, a product id from the other
     // catalogue, a field it wanted differently. Losing it and reporting only
     // "upstream" turns a two-minute fix into guesswork, so it rides along on
     // the error and is logged by whoever catches it. The key is sent as a
     // header and never appears in the URL, so neither is logged here.
-    const detail = await res.text().catch(() => '');
-    const err = new Error(`creem ${res.status} ${method} ${url.pathname} ${detail}`.trim());
+    //
+    // 只带错误名，不带正文；路径里的 id 换成 `:id`（10-15 补充 S7，L-4 ⑤）。原先整段正文拼进 err.message，
+    // 外面五处 catch（portal / subscription / checkout / signin / handle）原样记下来——Creem 的回话常常把查的
+    // 那个邮箱念一遍，于是它进了日志。查询串（`?email=…`）本来就不在 pathname 里。
+    const err = new Error(`creem ${res.status} ${method} ${pathShape(url.pathname)} ${await errorName(res)}`);
     err.status = res.status;
     throw err;
   }

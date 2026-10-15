@@ -15,7 +15,13 @@
  *
  *   ① 读源码：两条失败路径（res.ok 为假、fetch 抛异常）都写日志，日志里不写收件地址。
  *   ② 真跑：把 Resend 那一跳换成必然失败的假货，sendMail 回 false、日志里有状态码和
- *      服务商的回话、没有玩家的邮箱；抛异常那条同理；发成功的时候一句都不写（尺子）。
+ *      服务商回话里的错误名（`invalid_api_key`）、**没有回话正文、没有玩家的邮箱**；抛异常那条
+ *      同理；发成功的时候一句都不写（尺子）。
+ *   ③ Creem 那一跳同理（10-15 补充 S7，L-4 ⑤）：`creem()` 抛出去的那句话（外面五处 catch 原样记进
+ *      日志）只有状态码、方法、路径形状（id 段换成 `:id`）和错误名。
+ *
+ * 10-15 补充 S7 之前，② 断言的是「日志里有服务商的原话」——而 Resend、Creem 的原话常常把收件地址、
+ * 查的那个邮箱原样念一遍，玩家的邮箱就这样经由对方的回话进了日志。
  *
  * 第 20 推之前这道门叫 check-unlock-mail，② 是绕道 unlock.js 的 request 量的。
  * unlock.js 回 410 之后那条路走不到了，而它量的本来就是 _mail.js 自己的事，所以改成
@@ -78,16 +84,28 @@ const attempt = async (fake) => {
   return { ok, hits, logged };
 };
 
-// 401 ＝ 密钥失效——正是轮换密钥时最可能出的那种错。
-const refused = await attempt(async () => ({ ok: false, status: 401, text: async () => 'invalid api key' }));
+// 401 ＝ 密钥失效——正是轮换密钥时最可能出的那种错。回话正文故意把收件地址念一遍（对方真会这么写）。
+const SAID = `API key is invalid (while sending to ${TO})`;
+const refused = await attempt(async () => ({
+  ok: false, status: 401,
+  text: async () => JSON.stringify({ statusCode: 401, name: 'invalid_api_key', message: SAID }),
+}));
 check('真去敲了 Resend（桩生效了，否则下面几条量不到东西）', refused.hits === 1, `${refused.hits} 次`);
 check('被拒：sendMail 回 false', refused.ok === false, String(refused.ok));
 check(
-  '被拒写进了日志，而且带着状态码和服务商的回话',
-  refused.logged.some((l) => l.includes('resend failed') && l.includes('401') && l.includes('invalid api key')),
+  '被拒写进了日志，而且带着状态码和错误名（401、invalid_api_key）',
+  refused.logged.some((l) => l.includes('resend failed') && l.includes('401') && l.includes('invalid_api_key')),
   JSON.stringify(refused.logged),
 );
+check('被拒那条日志里没有回话正文', !refused.logged.some((l) => l.includes('API key is invalid')), JSON.stringify(refused.logged));
 check('被拒那条日志里没有玩家的邮箱', !refused.logged.some((l) => l.includes(TO)), JSON.stringify(refused.logged));
+// 错误名自己长得像邮箱、或者回话不是 JSON：记一个 `-`。
+const odd = await attempt(async () => ({ ok: false, status: 422, text: async () => JSON.stringify({ name: TO }) }));
+check('错误名长得像邮箱：记 `-`，地址不进日志', odd.logged.some((l) => l.includes('422') && /\s-$/.test(l)) && !odd.logged.some((l) => l.includes(TO)),
+  JSON.stringify(odd.logged));
+const plain = await attempt(async () => ({ ok: false, status: 500, text: async () => `oops ${TO}` }));
+check('回话不是 JSON：记 `-`，地址不进日志', plain.logged.some((l) => l.includes('500') && /\s-$/.test(l)) && !plain.logged.some((l) => l.includes(TO)),
+  JSON.stringify(plain.logged));
 
 // 网络断了、DNS 解析不出来：fetch 直接抛。
 const thrown = await attempt(async () => { throw new Error('getaddrinfo ENOTFOUND api.resend.com'); });
@@ -103,6 +121,27 @@ check('抛异常那条日志里也没有玩家的邮箱', !thrown.logged.some((l
 const fine = await attempt(async () => ({ ok: true, status: 200, json: async () => ({ id: 'stub' }) }));
 check('（尺子）发成功：回 true，日志一句都没有', fine.ok === true && fine.logged.length === 0,
   `${fine.ok} ${JSON.stringify(fine.logged)}`);
+
+// ── ③ Creem 那一跳：抛出去的那句话里只有状态码、方法、路径形状、错误名 ──────────────
+{
+  process.env.CREEM_API_KEY = 'creem_test_for_the_gate';
+  const { creem } = await import('../api/_creem.js');
+  const CUST = 'cust_4XkQ9z';
+  globalThis.fetch = async () => ({
+    ok: false, status: 404,
+    text: async () => JSON.stringify({ status: 404, error: 'Not Found', message: [`customer ${TO} not found`], trace_id: 'tr_1' }),
+  });
+  let said = '';
+  try {
+    await creem(`/v1/customers/${CUST}/subscriptions`, { query: { email: TO } });
+  } catch (err) {
+    said = String(err?.message || err);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  check('③ creem 被拒：那句话带状态码、方法、路径形状和错误名', said === 'creem 404 GET /v1/customers/:id/subscriptions Not Found', said);
+  check('③ 那句话里没有邮箱、没有回话正文、没有顾客 id', !said.includes(TO) && !said.includes('not found') && !said.includes(CUST), said);
+}
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

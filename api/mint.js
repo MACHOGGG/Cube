@@ -1,5 +1,5 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { send, readBody } from './_creem.js';
+import { adminRefused } from './_admin.js';
 import { addToInbox, isPlan, listAccounts, loadAccount, normalizeEmail, updateAccount } from './_accounts.js';
 import { codeKey, mintCodes, MINT_BATCH_MAX } from './_codes.js';
 import { del, storeConfigured } from './_store.js';
@@ -39,7 +39,7 @@ const MAX_PER_CALL = MINT_BATCH_MAX;
  * 一个来源一小时最多敲多少次门。
  *
  * 这个接口能批量发码、也能列出全部玩家的邮箱，是站里权限最高的一处，全靠
- * ADMIN_TOKEN 挡着。密码比对本身是等长比较（adminToken），可从前没有失败计数、
+ * ADMIN_TOKEN 挡着。密码比对本身是等长比较（_admin.js 的 adminToken），可从前没有失败计数、
  * 也没有任何锁——理论上可以不受限制地一直猜。redeem 和 unlock 早就接了限速
  * （_ratelimit.js），这里补上，用的是同一套。
  *
@@ -49,33 +49,11 @@ const MAX_PER_CALL = MINT_BATCH_MAX;
 const CALLS_PER_HOUR = 20;
 
 /**
- * ADMIN_TOKEN 至少要多长（10-11 方案 A-11）。它背后是「无限发码」「导出全部玩家邮箱」「重建 / 清空
- * 排行榜」，短了就是能猜的。CLAUDE.md 一直写着「至少 32 个随机字符」，可从前代码里只要非空就收。
+ * 一次 grant 最多发给几个地址（10-15 补充 S7，L-4 ⑥）。原先没有上限：21 个、两百个照发，每个地址一批
+ * MAX_PER_CALL 张，一次调用就能在库里落下上万张真能兑的码，还会撞函数时限、掐在半路。超过整批拒（一张都不铸），
+ * 回 400 `{ error: 'emails', max }`。发码页上没有 grant 的入口，这一支只有手敲接口的人碰得到。
  */
-const ADMIN_TOKEN_MIN = 32;
-
-const digest = (s) => createHash('sha256').update(String(s), 'utf8').digest();
-
-/**
- * 比对 ADMIN_TOKEN：'ok' | 'wrong' | 'short'。和 api/scores.js 里那一份一字不差（同一把锁）。
- *
- * **两边先各做一次 sha256，再 timingSafeEqual**（10-11 方案 A-11）。原先是「长度不等就 false，等长
- * 才逐字节比」：
- *   · 光是长度那一句就把令牌的长度送了出去——不等长立刻答 401；
- *   · 更糟的是 `Buffer.from(given)` 按 UTF-8 编码：交一串和真令牌**字符数**相同、却含多字节字符的
- *     东西，两个 Buffer 字节数不同，timingSafeEqual 当场抛异常、回 500——500 和 401 一对照，令牌
- *     有几个字符就量出来了（10-11 实测）。
- * 两边都换成 32 字节的摘要之后，比较的永远是两个等长的东西：不抛、不早退，什么都量不出来。
- *
- * 'short'：服务器上配的那一把短于 ADMIN_TOKEN_MIN（没配也算）。调用方一律答 503、日志写一句
- * 「ADMIN_TOKEN 太短」——**不打印值**。宁可把后台关掉，也不拿一把能猜的锁守着它。
- */
-function adminToken(given) {
-  const want = process.env.ADMIN_TOKEN || '';
-  if (want.length < ADMIN_TOKEN_MIN) return 'short';
-  if (typeof given !== 'string') return 'wrong';
-  return timingSafeEqual(digest(given), digest(want)) ? 'ok' : 'wrong';
-}
+const GRANT_MAX_EMAILS = 20;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
@@ -90,13 +68,8 @@ export default async function handler(req, res) {
   const { token, plan, count, expiresInDays, action, emails } = body;
   // 服务器上那把令牌太短（或者没配）：整个后台关着，答 503（10-11 方案 A-11）。从前「没配」和
   // 「令牌不对」答同一句 401，为的是不让外人看出发码开没开；现在没配也算「太短」，一律 503——外人
-  // 由此知道的只是「这儿关着」，而关着的门没什么可猜的。
-  const verdict = adminToken(token);
-  if (verdict === 'short') {
-    console.error('ADMIN_TOKEN 太短');
-    return send(res, 503, { error: 'adminToken' });
-  }
-  if (verdict !== 'ok') return send(res, 401, { error: 'wrong' });
+  // 由此知道的只是「这儿关着」，而关着的门没什么可猜的。比对本身在 _admin.js（和 scores.js 共用）。
+  if (adminRefused(res, token)) return;
 
   // 列出所有开了账户的玩家。名单是 saveAccount 顺手维护的那份（见
   // _accounts.js 的 INDEX_KEY）：一次 HGETALL 就把人和筛选要用的字段全拿到，
@@ -124,8 +97,10 @@ export default async function handler(req, res) {
   // 给指定的几个玩家各发一批码。
   if (action === 'grant') {
     if (!isPlan(plan)) return send(res, 400, { error: 'plan' });
-    const list = (Array.isArray(emails) ? emails : []).map(normalizeEmail).filter(Boolean);
+    // 先（转小写后）去重：原先同一个地址大小写不同写两遍，就给他发两批。
+    const list = [...new Set((Array.isArray(emails) ? emails : []).map(normalizeEmail).filter(Boolean))];
     if (!list.length) return send(res, 400, { error: 'emails' });
+    if (list.length > GRANT_MAX_EMAILS) return send(res, 400, { error: 'emails', max: GRANT_MAX_EMAILS });
     const per = Math.max(1, Math.min(MAX_PER_CALL, Number(count) || 1));
     const days = Number(expiresInDays) || 0;
     const expiresAt = days > 0 ? Date.now() + days * 24 * 3600e3 : undefined;

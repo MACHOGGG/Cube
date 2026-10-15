@@ -85,7 +85,8 @@
   <div class="card warn" id="noToken" hidden>
     <h2>网址里没有令牌</h2>
     <p style="margin:0">在网址末尾加上 <code>#token=您的ADMIN_TOKEN</code> 再打开。<br>
-    令牌放在 <code>#</code> 之后，浏览器就不会把它发给服务器，也不会留在日志里。</p>
+    令牌放在 <code>#</code> 之后，浏览器就不会把它发给服务器，也不会留在日志里。<br>
+    页面读到它之后会从地址栏抹掉，所以刷新之后要重新带上它打开。</p>
   </div>
 
   <div class="card">
@@ -186,6 +187,7 @@
       <thead><tr><th>榜</th><th>人数</th><th>最高分</th><th>前 0.1%</th></tr></thead>
       <tbody id="statsBody"></tbody>
     </table>
+    <p class="msg" id="statsCapped" hidden></p>
   </div>
 
   <div class="card" id="out" hidden>
@@ -201,6 +203,9 @@
   // The hash, not the query string: what follows # never leaves the browser.
   const token = new URLSearchParams(location.hash.slice(1)).get('token') || '';
   if (!token) $('noToken').hidden = false;
+  // 读到就从地址栏抹掉，令牌只留在这一页的内存里（10-15 补充 S7，L-4 ⑨）。原先它一直挂在地址栏：进了浏览器历史、
+  // 书签、同步到别的设备，截一张屏就带出去。代价：刷新之后要重新带着令牌打开（地址栏自己的输入记录可能还在）。
+  else history.replaceState(null, '', location.pathname + location.search);
 
   let plan = 'month';
   for (const b of $('tiers').children) {
@@ -394,6 +399,12 @@
         body.appendChild(tr);
       }
       $('statsTable').hidden = false;
+      // 同一邮箱一小时 15 张码的封顶：近 14 天每天撞上几次（只有次数，没有邮箱）。
+      const capped = Array.isArray(reply.capped) ? reply.capped : [];
+      const total = capped.reduce((n, d) => n + (Number(d.hits) || 0), 0);
+      $('statsCapped').textContent = '同一邮箱一小时 15 张码撞顶（近 14 天）：共 ' + total + ' 次'
+        + (total ? '——' + capped.filter((d) => d.hits).map((d) => d.day.slice(4, 6) + '/' + d.day.slice(6) + ' ' + d.hits + ' 次').join('，') : '');
+      $('statsCapped').hidden = false;
       sayS('量完了。', 'good');
     } catch {
       $('scoreStats').disabled = false;

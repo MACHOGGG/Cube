@@ -356,6 +356,11 @@ jobs:
       - name: 验证码注册 / 登录
         run: node scripts/check-signin-otp.mjs
 
+      # 换邮箱验证码的猜测次数按新地址算、一小时一桶，申请新码不清零（10-15 补充 S7）。原先每申请一张就清零，同一个
+      # 新地址每小时能被比对 15 次，换几个帐号来申请还各算各的；猜中之后那个地址就归猜中的人。纯 node，Resend 用桩。
+      - name: 换邮箱验证码猜测次数
+        run: node scripts/check-chmail-guess.mjs
+
       # 验证码不许被外人破坏（#19）。从前码和「猜了几次」都按**地址**存，而这个接口对谁都
       # 发信——于是任何知道某人邮箱的人都能把他挡在门外，不需要任何凭据：替他要一张新码就
       # 把他那张覆盖掉，或者拿他的地址乱猜 5 次就把他那张删掉。全程他只会觉得「这个网站的
@@ -532,6 +537,11 @@ jobs:
       # 顺带钉住唯一一处**有意**写原文的例外（redeem 的 giveBack），免得有人去「修」它。
       - name: 日志里不许写身份
         run: node scripts/check-log-redact.mjs
+
+      # 库这一层的两道保险（10-15 补充 S7）：部署环境（VERCEL_ENV 是 production / preview）里不认 ALLOW_MEMORY_STORE；
+      # 限速计数加一和压期限一趟做完（原先 EXPIRE 那一趟摔了，计数键永不过期，那个桶从此每个窗口都是满的）。
+      - name: 库的两道保险（部署环境不认内存库、计数键一定会过期）
+        run: node scripts/check-store-guard.mjs
 
       # `.env.example` 是唯一一份「这个项目要配哪几样」的清单（.env 是 gitignore 的）。配漏
       # 一样的后果 CLAUDE.md 里每一条都真的发生过；而 GENIUS_GRANT_WINDOW 从来就没写进模板，

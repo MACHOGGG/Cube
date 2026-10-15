@@ -33,11 +33,12 @@
  *
  * 剩下的写在《服务条款》里：发现作弊或明显异常的数据，我们会清除相关记录。
  */
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { send, readBody } from './_creem.js';
+import { adminRefused } from './_admin.js';
 import { identify, isGenius } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
-import { callerId, tooMany } from './_ratelimit.js';
+import { EMAIL_CAPPED_STAT, callerId, tooMany, utcDay } from './_ratelimit.js';
 import { redact } from './_redact.js';
 // 一局的综合得分上限，见文件头「关于作弊」。和小屋（room.js）共用一个数（10-09 补充方案 7-6），
 // 为什么是十亿、从前为什么是一百万，写在 _maxscore.js 里。
@@ -1164,38 +1165,6 @@ const REBUILD_BUDGET_MS = 40_000;
 const REBUILD_TICKET_TTL_S = 3600;
 const rebuildTicketKey = (t) => 'rebuild:resume:' + t;
 
-/** ADMIN_TOKEN 至少要多长（10-11 方案 A-11）。和 api/mint.js 同一个数。 */
-const ADMIN_TOKEN_MIN = 32;
-
-const digest = (s) => createHash('sha256').update(String(s), 'utf8').digest();
-
-/**
- * 和 api/mint.js 同一把锁（那边写着为什么）：'ok' | 'wrong' | 'short'。两边各做一次 sha256 再
- * timingSafeEqual——不泄露比到第几位，也量不出令牌有多长；服务器上那把短于 32 位（没配也算）就答
- * 'short'，调用方一律 503、日志写「ADMIN_TOKEN 太短」，不打印值。
- */
-function adminToken(given) {
-  const want = process.env.ADMIN_TOKEN || '';
-  if (want.length < ADMIN_TOKEN_MIN) return 'short';
-  if (typeof given !== 'string') return 'wrong';
-  return timingSafeEqual(digest(given), digest(want)) ? 'ok' : 'wrong';
-}
-
-/** 三个管理动作共用：令牌不过关就替调用方把话答了，返回 true；过关返回 false。 */
-function adminRefused(res, given) {
-  const verdict = adminToken(given);
-  if (verdict === 'short') {
-    console.error('ADMIN_TOKEN 太短');
-    send(res, 503, { error: 'adminToken' });
-    return true;
-  }
-  if (verdict !== 'ok') {
-    send(res, 401, { error: 'wrong' });
-    return true;
-  }
-  return false;
-}
-
 /**
  * 重建榜单：照每个人自己的存档，把所有榜从头算一遍。
  *
@@ -1593,7 +1562,13 @@ async function scoreStats(req, res, body) {
       const at = Math.min(scores.length - 1, Math.ceil(scores.length * 0.001) - 1);
       boards[boardId] = { n: scores.length, max: scores[0], p999: scores[Math.max(0, at)] };
     }
-    return send(res, 200, { ok: true, boards });
+    // 近 14 天「同一邮箱一小时 15 张码」撞顶的次数（10-15 补充 S7）：只有日子和次数，没有邮箱。
+    const capped = [];
+    for (let i = 13; i >= 0; i--) {
+      const day = utcDay(Date.now() - i * 86400_000);
+      capped.push({ day, hits: Number(await get(EMAIL_CAPPED_STAT + day)) || 0 });
+    }
+    return send(res, 200, { ok: true, boards, capped });
   } catch {
     return send(res, 502, { error: 'upstream' });
   }

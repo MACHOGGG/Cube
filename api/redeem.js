@@ -75,8 +75,8 @@ async function handle(req, res) {
   if (ticket.length < 3) return send(res, 400, { error: 'code' });
 
   // An address and a token that check out mean the month goes to that
-  // account. Anything short of that is treated as not signed in at all,
-  // never as a reason to refuse — the code is still theirs to spend.
+  // account. No address or no token means not signed in — the code is still
+  // theirs to spend, and it is held under the code itself.
   //
   // tokenValid 走的是整串 token（一个账户可以同时在好几台设备上登着），不是只
   // 认最新那一枚。这里要是只比 account.token，玩家在手机上登一次，电脑上那台就
@@ -87,9 +87,14 @@ async function handle(req, res) {
   // accountId 而不是 EMAIL_RE：免邮箱凭据账号（E38）的 id 不是邮箱。只认邮箱的话这一句
   // 会把他判成「没登录」，而下面那条路会把这个月记到码自己名下——他换台设备就找不着了，
   // **屏幕上却写着「兑换成功」**。见 _accounts.js 的 accountId。
+  //
+  // 带着地址和令牌、令牌却对不上（10-15 补充 S7，L-4 ④）：回 401 `auth`，码一个字不动（判在 takeOnce 之前）。原先
+  // 这一下被当成「没登录」，码照样兑掉、那一段记到码自己名下——可他明明是登着来的（只是这台设备的令牌被别处登出
+  // 作废了），屏幕上写着「兑换成功」，他账上却什么都没多。`auth` 是 engine/account.ts 认得的那个词：请他重新登录。
   if (accountId(address) && token) {
     const found = await loadAccount(address);
-    if (tokenValid(found, token)) account = found;
+    if (!tokenValid(found, token)) return send(res, 401, { error: 'auth' });
+    account = found;
   }
 
   /**

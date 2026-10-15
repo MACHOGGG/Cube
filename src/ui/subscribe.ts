@@ -198,6 +198,10 @@ function accountFailText(reason: AccountFailure, lang: Lang, retryInMs?: number)
       return s.serverBusy;
     case 'taken':
       return s.emailTaken;
+    // 这个新地址这一小时输错的次数到顶了（10-15 补充 S7）。原先答的是 expired（「请重新寄一次」），可新寄的那张
+    // 也用不了——计数是按新地址记的。
+    case 'guessCapped':
+      return s.chmailGuessCapped;
     case 'sameEmail':
       return s.emailSame;
     case 'weak':

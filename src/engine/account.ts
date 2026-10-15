@@ -43,6 +43,8 @@ export type AccountFailure =
   | 'taken'
   /** 换邮箱：填的就是现在这个地址。 */
   | 'sameEmail'
+  /** 换邮箱：这个新地址这一小时输错验证码的次数到顶了（api/email.js 的 guessKey，10-15 补充 S7）。 */
+  | 'guessCapped'
   /** 改密码：新密码不合规矩（不是正好 6 位数字或字母）。 */
   | 'weak'
   /** 令牌不认了——这台设备得重新登一次。 */
@@ -125,7 +127,7 @@ function toResult(status: number, reply: Reply): AccountResult {
   const known: AccountFailure[] = [
     'wrong', 'locked', 'blocked', 'code', 'email', 'password',
     'wrongCode', 'expired', 'notConfigured', 'noMail', 'tooMany',
-    'taken', 'sameEmail', 'weak', 'auth', 'active',
+    'taken', 'sameEmail', 'weak', 'auth', 'active', 'guessCapped',
   ];
   // The server calls it 'expired' on its own endpoint; here it has to be
   // told apart from the unlock mail's expiry, which shares the word.

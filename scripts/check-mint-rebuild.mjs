@@ -16,6 +16,7 @@
  *   ④ 勾了「建立昵称索引」（第 16 推的一次性迁移）：发 nicknames: true，回包那几个数写到页
  *      上；不勾就发 false、也不写。页上一个名字都不许出现——回包里塞一个名字进来（服务器不
  *      该这么做，这儿当它做了），页上也不许照抄。
+ *   ①b 令牌读到之后从地址栏抹掉，请求里照样带着它（10-15 补充 S7，L-4 ⑨）。
  *   ⑤ 分批（10-08 方案第五批第 2 条）：服务器回 done: false + 一张票，这一页**自己接着点下
  *      一批**，后面几批只带票（选项照第一批的，服务器那头记着）；全部算完才写那句「重算完
  *      了」。断在半路（某一批回 500）：页上说「再按一次接着算」，再按一次发出去的是**那张票**
@@ -66,10 +67,13 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('#re
       return { id, there: Boolean(el), checked: el ? el.checked : null };
     }));
   check('（尺子）四个勾都在页上', boxes.every((b) => b.there), JSON.stringify(boxes));
+  // 10-15 补充 S7（L-4 ⑨）：读到令牌就从地址栏抹掉（历史、书签里不再有带令牌的地址），令牌留在页面内存里照常用。
+  check('令牌读到之后从地址栏抹掉了', !page.url().includes('token') && !page.url().includes('#'), page.url());
   check('四个勾默认都不勾（「清空无限反转」从前默认勾着）', boxes.every((b) => b.checked === false), JSON.stringify(boxes));
   // 什么都不勾直接按：发的是一次干净的重算。
   await page.click('#rebuild');
   await settle(page);
+  check('抹掉之后令牌照样带在请求里（留在页面内存里）', sent[0]?.token === 'check-mint-rebuild-not-a-real-token', String(sent[0]?.token));
   check('什么都不勾：发了一次重算，不清任何一张、不清名字',
     sent.length === 1 && sent[0].action === 'rebuild' && sent[0].all === false && sent[0].scrubNames === false &&
       Array.isArray(sent[0].drop) && sent[0].drop.length === 0,

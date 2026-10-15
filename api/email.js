@@ -73,10 +73,17 @@ const key = (email) => 'chmail:' + email;
  * 步会被「这个地址已经有账号了」挡下来，钱花了却进不去。
  *
  * 《忘记密码》那条路（原 api/unlock.js，代码现在在 api/_unlock_legacy.js）早就有这道闸，换邮箱这条路一直没抄这份
- * 作业。数字和键名都照它来，两条路是同一件事，没有理由各有一套。
+ * 作业。数字照它来。
+ *
+ * **计数按新地址算、一小时一桶，申请新码不清零**（10-15 补充 S7）。原先计数按旧地址记、每申请一张新码就清零，输错 5
+ * 次把码连同计数一起删：申请受 chmail:to 限（同一个新地址每整点小时 3 次），于是同一个新地址每小时最多被比对 15 次
+ * （跨整点几分钟内 30 次），换多少个帐号来申请还各算各的。按「这一次申请」单独存也降不下这个数（3 × 5 仍是 15）。现在
+ * 每个新地址每小时最多比对 5 次（跨窗口边缘 10 次），超了回 429 guessCapped（原先回 expired，界面说「请重新寄一次」，
+ * 可新寄的那张也用不了）。隐私政策「限速计数最长一小时」仍是实话。
  */
 const MAX_TRIES = 5;
-const triesKey = (email) => 'chmail:tries:' + email;
+const GUESS_WINDOW_S = 3600;
+const guessKey = (wanted) => 'chmail:guess:' + wanted;
 
 /** 换邮箱那封信，四种语言。挑哪一种、英文附一份，见 _mail.js 的 compose。 */
 const MAIL = {
@@ -174,8 +181,7 @@ async function request(res, req, address, wanted, wantLang) {
 
   const code = String(randomInt(0, 1e6)).padStart(6, '0');
   await set(key(address), { code, to: wanted }, CODE_TTL_S);
-  // 新码新账：上一张码被猜掉的次数不跟着过来（同 _unlock_legacy.js）。
-  await del(triesKey(address));
+  // 猜测计数**不**清零：它按新地址记、一小时一桶（见 guessKey）。原先这儿每申请一张新码就清零，那道闸形同虚设。
   /*
    * 寄没寄出去要照实说（10-11 方案 A-8）。原先这一句把 `sendMail` 的回答扔了，Resend 回错时照样答
    * `sent: true`：屏幕翻到「码已寄到新邮箱」那一段，他守着一个永远等不来的信箱。现在答 503
@@ -190,21 +196,23 @@ async function request(res, req, address, wanted, wantLang) {
 }
 
 async function confirm(res, address, wanted, account, { code, token }) {
-  // 先占掉一次机会，再去比对——次序反过来就是一道假门：同时打进来的几十个
-  // 请求会一起通过「还没到 5 次」这一关，然后一起猜。bump 是一步做完的，
-  // 所以第 6 个请求拿到的就是 6，它连码是多少都不会去读。
-  const tries = await bump(triesKey(address), CODE_TTL_S);
-  if (tries > MAX_TRIES) {
-    await del(key(address));
-    await del(triesKey(address));
-    return send(res, 429, { error: 'expired' });
-  }
-
+  // 手上没有一张寄往这个新地址的码：不记账（10-15 补充 S7）——不然谁都能随手填一个别人的地址，把那个地址这一小时
+  // 的五次额度烧掉。
   const pending = await get(key(address));
   if (!pending) return send(res, 400, { error: 'expired' });
   // 码是对着**当时那个新地址**发的。中途把 newEmail 换成别的再把码填进来，
   // 等于用 A 收到的码去认领 B——所以两样都要对上。
   if (pending.to !== wanted) return send(res, 400, { error: 'expired' });
+
+  // 先占掉一次机会，再去比对——次序反过来就是一道假门：同时打进来的几十个
+  // 请求会一起通过「还没到 5 次」这一关，然后一起猜。bump 是一步做完的，
+  // 所以第 6 个请求拿到的就是 6，它连码是多少都不会去读。
+  // 超了只删码，计数留到它自己过期（一小时）：删了计数，再申请一张就又是五次。
+  const tries = await bump(guessKey(wanted), GUESS_WINDOW_S);
+  if (tries > MAX_TRIES) {
+    await del(key(address));
+    return send(res, 429, { error: 'guessCapped' });
+  }
   if (String(code || '').trim() !== pending.code) {
     return send(res, 401, { error: 'wrongCode' });
   }
@@ -277,7 +285,7 @@ async function confirm(res, address, wanted, account, { code, token }) {
     ['旧地址上的账号没删掉（玩家已经搬好了，这一份要手删）', () => deleteAccount(address)],
     ['旧地址的失败计数没清掉', () => clearFails(address)],
     ['旧地址的换邮箱码没删掉', () => del(key(address))],
-    ['旧地址的换邮箱猜测计数没删掉', () => del(triesKey(address))],
+    ['新地址的换邮箱猜测计数没删掉', () => del(guessKey(wanted))],
   ];
   for (const [what, step] of sweep) {
     try {

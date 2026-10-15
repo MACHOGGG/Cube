@@ -338,5 +338,30 @@ check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard())
     JSON.stringify(logged.slice(0, 2)));
 }
 
+// ── ⑯ 《量一下》多一行：近 14 天「同一邮箱一小时 15 张码」封顶各触发了几次（10-15 补充 S7，L-4 ②）──────────
+{
+  const { EMAIL_CAPPED_STAT, utcDay } = await import('../api/_ratelimit.js');
+  const today = utcDay(Date.now());
+  await store.set(EMAIL_CAPPED_STAT + today, 3);
+  const r = await call(scores, { action: 'scoreStats', token: TOKEN }, '10.9.0.1');
+  const capped = r.body?.capped;
+  check('⑯ scoreStats 回包有 capped：近 14 天各一格 { day, hits }',
+    r.status === 200 && Array.isArray(capped) && capped.length === 14 && capped.every((c) => /^\d{8}$/.test(c.day) && Number.isInteger(c.hits)),
+    `${r.status} ${JSON.stringify(capped?.slice(0, 2))}`);
+  check('⑯ 今天那一格是库里记的那个数；键里、回包里都没有邮箱',
+    capped?.find((c) => c.day === today)?.hits === 3 && !JSON.stringify(capped).includes('@') && !EMAIL_CAPPED_STAT.includes('@'),
+    JSON.stringify(capped?.find((c) => c.day === today)));
+}
+
+// ── ⑰ 管理令牌的比对只有一份（10-15 补充 S7，L-4 ⑨）：mint.js、scores.js 都从 _admin.js 拿，不再各抄一份 ──────
+{
+  const mint = read('api/mint.js');
+  const sc = read('api/scores.js');
+  const own = (src) => /function adminToken\b|const ADMIN_TOKEN_MIN\b|timingSafeEqual\(/.test(src);
+  check('⑰ mint.js、scores.js 都从 _admin.js 拿 adminRefused', [mint, sc].every((src) => /import \{[^}]*\badminRefused\b[^}]*\} from '\.\/_admin\.js'/.test(src)));
+  check('⑰ 两处都不再自己抄一份比对（adminToken / ADMIN_TOKEN_MIN / timingSafeEqual）', !own(mint) && !own(sc));
+  check('⑰（反向对照）抄回来的那一份会被认出来', own('const ADMIN_TOKEN_MIN = 32;\nfunction adminToken(given) {'));
+}
+
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);

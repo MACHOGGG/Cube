@@ -26,8 +26,8 @@ const check = (n, ok, extra = '') => {
 };
 
 const redeem = (await import('../api/redeem.js')).default;
-const { newAccount, saveAccount, loadAccount } = await import('../api/_accounts.js');
-const { set } = await import('../api/_store.js');
+const { newAccount, saveAccount, loadAccount, codeHolder } = await import('../api/_accounts.js');
+const { set, get } = await import('../api/_store.js');
 
 const call = async (body) => {
   let status = 0;
@@ -115,6 +115,31 @@ async function setup(n) {
   const again = await call({ code: codes[0], email, token: account.token });
   check('第一次兑得上', first.status === 200, String(first.status));
   check('同一张码兑第二次：查无此码', again.status === 404, String(again.status));
+}
+
+// ---------------------------------------------------------------------------
+// 5. 带着地址和令牌、令牌却对不上（10-15 补充 S7，L-4 ④）：401 auth，码一个字不动
+//
+// 原先这一下被当成「没登录」：码照样兑掉、那一个月记到码自己名下（codeHolder），屏幕上写着「兑换成功」，
+// 他账上却什么都没多。
+// ---------------------------------------------------------------------------
+{
+  const { account, codes, before } = await setup(1);
+  const stale = await call({ code: codes[0], email, token: 'not-' + account.token });
+  check('令牌对不上：401 auth', stale.status === 401 && stale.body.error === 'auth', `${stale.status} ${stale.body.error ?? ''}`);
+  const left = await get('code:' + codes[0]);
+  check('令牌对不上：码还在库里、原样没动（没被当成「没登录」兑掉）', !!left && left.plan === 'month' && !left.holder,
+    JSON.stringify(left));
+  const after = await loadAccount(email);
+  check('令牌对不上：账上一天都没多', Math.round((after.until - before) / DAY) === 0, `多了 ${Math.round((after.until - before) / DAY)} 天`);
+  const held = await loadAccount(codeHolder(codes[0]));
+  check('令牌对不上：没有记到码自己名下', !held || !held.until, JSON.stringify(held?.until ?? null));
+  const fixed = await call({ code: codes[0], email, token: account.token });
+  check('重新登录（拿对的令牌）再兑：兑得上、这个月落在他账上', fixed.status === 200
+    && Math.round(((await loadAccount(email)).until - before) / DAY) >= 28, `${fixed.status}`);
+  const anon = (await setup(1)).codes[0];
+  const noToken = await call({ code: anon });
+  check('（尺子）完全不带身份：照旧兑得上（记到码名下，等他补地址）', noToken.status === 200, `${noToken.status} ${noToken.body.error ?? ''}`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

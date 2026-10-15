@@ -32,7 +32,7 @@
  *   ③ 窗口期里注册那一下就是天才（until 推到 LIFETIME_UNTIL）。
  *   ④ 不限人数：接着来的几个人一个都不许落空。
  *   ⑤ 第一串撞名答 409 `taken`，而且**没动**原来那个账号（旧第二串还登得上）。
- *   ⑥ 按来路限速（`pairin`，30 次/小时）：第 31 次挡下来，换个来路不受牵连。
+ *   ⑥ 按来路限速（`pairin`，60 次/小时——10-15 补充 S7 起，原先 30）：第 61 次挡下来，换个来路不受牵连。
  *   ⑦ **同一个 IPv6 /64 共用一个桶。** 家宽标配分到的是一整个 /64，换一个源地址不花一分
  *      钱——按单个地址分桶等于不限速（见 api/_ratelimit.js 的 bucketOf）。
  *   ⑧ 重设第二串撤了（10-09 补充方案 7-8）：`reset` 答 410 `gone`，旧的第二串照旧登得上。
@@ -161,7 +161,7 @@ const A_SECOND = 'firstpass';
   }
 }
 
-// ── ⑥ 按来路限速：第 31 次挡下来 ────────────────────────────────
+// ── ⑥ 按来路限速：第 61 次挡下来 ────────────────────────────────
 //
 // 它挡的不是「猜某一个账号的第二串」（那件事由 checkPin 按账号计数管），而是**拿着一份第
 // 一串的名单挨个去把别人锁掉**：对任意一个第一串连错 4 次，那个账号就锁 4 小时。见
@@ -172,14 +172,14 @@ const A_SECOND = 'firstpass';
 {
   const IP = '198.51.100.21';
   const codes = [];
-  for (let i = 0; i < 31; i++) {
+  for (let i = 0; i < 61; i++) {
     const r = await post('/api/handle', { first: `Sweep${stamp}${String(i).padStart(2, '0')}`, second: 'whatever1' }, IP);
     codes.push(r.status);
   }
-  const first30 = codes.slice(0, 30);
-  check('⑥ 前 30 次照常答 401（没人用过这一串）', first30.every((c) => c === 401),
-    [...new Set(first30)].join(','));
-  check('⑥ 第 31 次被来路限速挡下 → 429', codes[30] === 429, String(codes[30]));
+  const first60 = codes.slice(0, 60);
+  check('⑥ 前 60 次照常答 401（没人用过这一串）', first60.every((c) => c === 401),
+    [...new Set(first60)].join(','));
+  check('⑥ 第 61 次被来路限速挡下 → 429', codes[60] === 429, String(codes[60]));
 
   const other = await post('/api/handle', { first: `Else${stamp}0001`, second: 'whatever1' }, '198.51.100.22');
   check('⑥ 换一个来路不受牵连', other.status === 401, String(other.status));
@@ -204,12 +204,12 @@ const A_SECOND = 'firstpass';
     return out;
   };
 
-  const half1 = await hit(SAME_A, 16);
-  check('⑦ 前 16 次（第一个地址）照常 401', half1.every((c) => c === 401), [...new Set(half1)].join(','));
-  const half2 = await hit(SAME_B, 15);
-  check('⑦ 换成同一个 /64 里的另一个地址，第 15 次（总第 31 次）被挡下',
-    half2.slice(0, 14).every((c) => c === 401) && half2[14] === 429,
-    `${[...new Set(half2.slice(0, 14))].join(',')} 然后 ${half2[14]}`);
+  const half1 = await hit(SAME_A, 31);
+  check('⑦ 前 31 次（第一个地址）照常 401', half1.every((c) => c === 401), [...new Set(half1)].join(','));
+  const half2 = await hit(SAME_B, 30);
+  check('⑦ 换成同一个 /64 里的另一个地址，第 30 次（总第 61 次）被挡下',
+    half2.slice(0, 29).every((c) => c === 401) && half2[29] === 429,
+    `${[...new Set(half2.slice(0, 29))].join(',')} 然后 ${half2[29]}`);
 
   const elsewhere = await hit(OTHER_64, 1);
   check('⑦ 另一个 /64 不受牵连（没把所有人归进同一个桶）', elsewhere[0] === 401, String(elsewhere[0]));

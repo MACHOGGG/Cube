@@ -16,7 +16,7 @@ import {
   updateAccount,
 } from './_accounts.js';
 import { grantLifetimeIfWindow, identify, resolveEntitlement } from './_entitlement.js';
-import { callerId, tooMany } from './_ratelimit.js';
+import { EMAIL_CAPPED_STAT, EMAIL_CAPPED_TTL_S, callerId, tooMany, utcDay } from './_ratelimit.js';
 import { bump, del, get, set, storeConfigured } from './_store.js';
 import { compose, mailLang, sendMail } from './_mail.js';
 
@@ -124,14 +124,14 @@ const triesKey = (email, ticket) => 'signin:tries:' + email + (ticket ? ':' + ti
  *
  * 撤了之后防猜码靠的是：每张票 5 次（MAX_TRIES，超了这张票作废）×「一个地址一小时最多签
  * 出去十五张票」（request 里的 `signin:toAll`）＝ 一个地址一小时至多被真猜 75 次，对一百万种
- * 六位码约是一万三千分之一；外加按来路 30 次。门是 check-signin-challenge 的 ⑦ 和 ⑩。
+ * 六位码约是一万三千分之一；外加按来路 60 次（站长 10-15 定，原先 30）。门是 check-signin-challenge 的 ⑦ 和 ⑩。
  *
  * ⚠️ 那个「十五张」**原先不是硬的**（10-09 补充方案 7-7 之前）：它是「先查、信寄成了才记」，
  * 查和记之间隔着一次发信，同一瞬间打进来的请求一起看到「还没到」——一百个来路并发三百次，签
  * 出去的票远不止十张；而 Resend 一挂，信一封都不算，票却照发（见 request 末尾：寄没寄成都回
  * 票），这个上限就整个没了。现在是发票之前原子计数（tooMany），寄没寄成都算。
  */
-const TRY_PER_CALLER = 30;
+const TRY_PER_CALLER = 60;
 
 /**
  * 验证码那封信，四种语言。挑哪一种、以及「非英文时英文永远附一份」，见 _mail.js 的
@@ -192,7 +192,8 @@ async function request(res, req, address, wantLang) {
   //     人需要的还多。**按「邮箱 + 来路」数，不按邮箱数**（第 14 推）：原先按邮箱一小时
   //     三封，谁都能替一个地址连要三封，主人这一小时就一封都要不到了——不用猜码，只要知
   //     道他的邮箱。现在外人耗光的只是他自己那一份。
-  //   by caller  —— 一台机器也不许拿着一份地址名单挨个来要码。
+  //   by caller  —— 一台机器也不许拿着一份地址名单挨个来要码。每个来路每小时 30 封（站长 10-15 定；原先 10：
+  //     一间教室、一个公司共用一个出口，第 11 个人就要不到码了）。代价是 Resend 的额度和发信信誉。
   //   by address —— 同一个邮箱一小时总共签十五张票，换多少个来路都一样。挡的是一个人换着
   //     来路往别人信箱里一直灌验证码，**同时是猜码那一侧的硬上限**（见 TRY_PER_CALLER 上面
   //     那段）：一小时最多十五张票，每张五次。
@@ -217,10 +218,13 @@ async function request(res, req, address, wantLang) {
   if (await tooMany('signin:to', `${address}|${caller}`, 3, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
-  if (await tooMany('signin:from', caller, 10, 3600)) {
+  if (await tooMany('signin:from', caller, 30, 3600)) {
     return send(res, 429, { error: 'tooMany' });
   }
   if (await tooMany('signin:toAll', address, TO_ALL_PER_HOUR, 3600)) {
+    // 记一笔「今天有一个邮箱撞上了封顶」（10-15 补充 S7，站长定：只数次数）：键里只有日子、**不带邮箱**，管理页
+    // 《量一下》把近 14 天的数摆出来（api/scores.js 的 scoreStats）。数不了（库抖）不挡这一句：本来就要回 429。
+    await bump(EMAIL_CAPPED_STAT + utcDay(Date.now()), EMAIL_CAPPED_TTL_S).catch(() => {});
     return send(res, 429, { error: 'emailCapped' });
   }
 
