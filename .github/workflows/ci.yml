@@ -919,6 +919,13 @@ jobs:
           npx esbuild src/engine/seedCode.ts --bundle --format=esm --outfile=/tmp/seedcode.mjs
           npx esbuild src/engine/rng.ts --bundle --format=esm --outfile=/tmp/rng.mjs
           node scripts/check-seed-code.mjs /tmp/seedcode.mjs /tmp/rng.mjs
+      # 发牌金标（10-15 补充 S1）：编号表二十行 × 三个随机数、外加 10-14 到 10-20 一周的每日挑战，67 局
+      # 发出来的整副牌（连反面颜色）和写死的哈希一字不差；色盲、深色、头一回玩（教学＋预热）发同一副。
+      # 上面那一道不发牌、浏览器那一道（check-seed-deal）比的是同一个构建自己和自己、读屏看不到反面——
+      # 故意改坏发牌四处它们全绿，这一道各自红（node scripts/check-seed-golden.mjs --mutants）。纯 node，
+      # 自己打包、自己装一份假 DOM（scripts/lib/fakeDom.mjs），一秒多。
+      - name: 发牌金标：同一串码发同一副牌（含反面颜色）
+        run: node scripts/check-seed-golden.mjs
       # 每日挑战的今日榜（第 19 推）：服务器只收那一天、那一串码、那一个玩法；零点后宽限几分钟
       # 还收前一天的，过了算 late；被拒的那一局照样进存档和常规榜。直接叫 api/scores.js 的
       # handler、钟是手拨的，不起服务器。
