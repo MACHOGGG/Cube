@@ -398,7 +398,7 @@ export function renderMultiplayerPage(
     /**
      * 那颗键上的字，拆成「不动的」和「要换的」两截。
      *
-     * 拨开 Pro 之后**只换中间那一段**（玩家 2026-09：「Open a room 中只有 room 一词动态
+     * 拨开竞赛开关之后**只换中间那一段**（玩家 2026-09：「Open a room 中只有 room 一词动态
      * 被替换成了 contest」）：动词留在原地，换的是宾语，所以屏幕上动的正好是变了的那一
      * 件事。整句换掉的话是一整行字跳一下，看不出变的是哪个词。
      *
@@ -478,17 +478,14 @@ export function renderMultiplayerPage(
               <span id="mpCreateLabel">${createLabelHtml}</span>
               ${geniusLogoTag(38, 'genius-logo--cta')}
             </button>
-            <!-- 开关上写的是《Pro》（设计稿上就是这个词）。它是四种语言共用的一个词，所
-                 以那根条子不用为「竞赛」两个字在四种语言里各有多长留地方——先前写的是整
-                 句《开竞赛》，英文那句在 54px 宽的条子里折成两行，把白点挤出了条子外。
-                 它说的是哪一件事由 aria-label 和底下那行小字负责，不由这个词负责。 -->
+            <!-- 开关上不写字（站长 2026-10-14：去掉《Pro》）。拨的是哪一件事由键上《开小屋 /
+                 开竞赛》那段字的切换、aria-label 和底下那行小字说。 -->
             <button class="mp-contest-pill" id="mpContest" role="switch" aria-checked="false"
                     aria-label="${s.mpContest}">
               <span class="mp-contest-knob" aria-hidden="true"></span>
-              <span class="mp-contest-tag" aria-hidden="true">Pro</span>
             </button>
           </div>
-          <!-- 这一行**只在拨开 Pro 的时候出现**（玩家 2026-09：「只有在打开了 Pro 的时
+          <!-- 这一行**只在拨开竞赛开关的时候出现**（玩家 2026-09：「只有在打开了 Pro 的时
                候在现在的位置和形式出现《up to 20…》的字样，不开的时候没有」）。
                它必须有字：拨过去的人按下那颗键会发现自己没有棋盘（主持人不下场），那正
                是「意料之外的界面」；而没拨的人跟这条规矩不相干，摆在那儿只是多一行要读
@@ -638,7 +635,7 @@ export function renderMultiplayerPage(
       renderLobby(made.value);
     };
     /**
-     * 《Pro》那颗开关。
+     * 竞赛那颗开关（键上不写字，10-15 补充 K-2）。
      *
      * 状态只存在这一位上（aria-checked），而**屏幕上有三处在说它**：开关自己的位置和
      * 颜色（那是不用读字就看得出的那一半）、那颗键上换掉的那个词、以及底下那一行小字

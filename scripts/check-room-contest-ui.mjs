@@ -170,22 +170,12 @@ const { ctx, p } = await hostPage();
       })(),
       hintBox: (() => { const h = document.querySelector('.mp-contest-hint'); return h ? box(h) : null; })(),
       pinBox: (() => { const r = document.querySelector('.mp-code-field .pin-row'); return r ? box(r) : null; })(),
-      // 条子上那个词只在拨开的时候出现（关着的时候这根条子上只有一颗白点）。
-      tagVisible: (() => {
-        const t = document.querySelector('.mp-contest-tag');
-        return !!t && getComputedStyle(t).visibility === 'visible';
-      })(),
+      // 条子上不写字（站长 2026-10-14：去掉《Pro》，10-15 补充 K-2）：拨没拨都只有一颗白点。
+      tagGone: !document.querySelector('.mp-contest-tag'),
       // 键上那三样的位置：句子头（连着那一格）、锁、招牌。换词的时候一个都不许挪。
       labelBox: (() => { const e = document.querySelector('#mpCreateLabel'); return e ? box(e) : null; })(),
       logoBox: (() => { const e = document.querySelector('#mpCreate .genius-logo--cta'); return e ? box(e) : null; })(),
       word: document.querySelector('#mpCreateWord')?.textContent?.trim() ?? '',
-      // 条子上那个词和那颗键上的字是不是同一支字体（先前那儿单写了一支 Fraunces）。
-      fonts: (() => {
-        const tag = document.querySelector('.mp-contest-tag');
-        const label = document.querySelector('#mpCreateLabel');
-        const one = (e) => (e ? getComputedStyle(e).fontFamily.split(',')[0].replace(/["']/g, '').trim() : '');
-        return { tag: one(tag), label: one(label) };
-      })(),
       // 换掉的那个词有没有和这一行字对齐：拿 Range 量《Open a》那段文字自己的行盒，
       // 和那个词的盒子比上下边。inline-block 的基线取自它最后一行，先前那个撑宽度用
       // 的影子排在后面，于是最后一行是影子的，那个词整个被顶高了一截。
@@ -248,13 +238,8 @@ const { ctx, p } = await hostPage();
     /20/.test(look.hint) && /不下场|不参|主持/.test(look.hint), look.hint);
   // 玩家 2026-09：「只有在打开了 Pro 的时候……出现《up to 20…》的字样，不开的时候没有」。
   check('没拨的时候那一行看不见', look.hintVisible === false, look.hintVisible ? '还在屏幕上' : '收起来了');
-  // 玩家 2026-09：「Pro 的开关只在打开的时候显示《Pro》，关闭的时候什么都不显示。」
-  check('没拨的时候条子上不显示《Pro》', look.tagVisible === false, look.tagVisible ? '还写着' : '只剩一颗白点');
-  // 玩家 2026-09：「《Pro》的字体与其他整体同步（和 Open a room）同步。」同一行里两种
-  // 字体并排，看着就像有一块是别处贴过来的。
-  check('《Pro》和那颗键上的字是同一支字体',
-    look.fonts.tag.length > 0 && look.fonts.tag === look.fonts.label,
-    `Pro=${look.fonts.tag} / 键=${look.fonts.label}`);
+  // 站长 2026-10-14：「对于多人小屋中的开关直接去除那个字符就好，在开竞赛 / 开小屋之间切换和下方的小字提示就好」。
+  check('没拨的时候开关上没有字', look.tagGone === true, look.tagGone ? '只剩一颗白点' : '条子上还有那个词');
   // 玩家 2026-09：「现在 contest/room 明显与这一行文字没有对齐。」上下边都量：只量一
   // 边的话，整块平移过去照样算「对齐」。
   // 修之前量到的是 −4px（英文）／−6px（中文），修之后三种语言都是 0，所以 1px 这道线
@@ -311,11 +296,8 @@ const { ctx, p } = await hostPage();
       })(),
       hintBox: (() => { const h = document.querySelector('.mp-contest-hint'); return h ? box(h) : null; })(),
       pinBox: (() => { const r = document.querySelector('.mp-code-field .pin-row'); return r ? box(r) : null; })(),
-      // 条子上那个词只在拨开的时候出现（关着的时候这根条子上只有一颗白点）。
-      tagVisible: (() => {
-        const t = document.querySelector('.mp-contest-tag');
-        return !!t && getComputedStyle(t).visibility === 'visible';
-      })(),
+      // 条子上不写字（站长 2026-10-14：去掉《Pro》，10-15 补充 K-2）：拨没拨都只有一颗白点。
+      tagGone: !document.querySelector('.mp-contest-tag'),
       // 键上那三样的位置：句子头（连着那一格）、锁、招牌。换词的时候一个都不许挪。
       labelBox: (() => { const e = document.querySelector('#mpCreateLabel'); return e ? box(e) : null; })(),
       logoBox: (() => { const e = document.querySelector('#mpCreate .genius-logo--cta'); return e ? box(e) : null; })(),
@@ -351,7 +333,7 @@ const { ctx, p } = await hostPage();
   check('拨过去：白点还在条子里（没掉出去）',
     after.knobIn && after.knobIn.top >= 0 && after.knobIn.bottom >= 0, JSON.stringify(after.knobIn));
   check('拨过去：那一行现身了', after.hintVisible === true, String(after.hintVisible));
-  check('拨过去：条子上这才写出《Pro》', after.tagVisible === true, String(after.tagVisible));
+  check('拨过去之后开关上仍然没有字', after.tagGone === true, after.tagGone ? '只有白点和换了的颜色' : '条子上冒出了那个词');
   // **换词的时候键上别的东西一个像素都不许挪**（玩家 2026-09：「前面 Open a 的部分和后
   // 面 logo 的部分固定位置，不要随着左右迁移」）。两个词宽度不一样，整行字会在那颗居中
   // 的键里重新居中一次——句子头和招牌于是各往外挪十几个像素。修法是那一格按两个词里较

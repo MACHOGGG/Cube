@@ -6153,11 +6153,11 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    票」写在票口上（和主菜单上锁着的玩法同一手）。 */
 .mp-create--locked .cta-lock { width: 17px; height: 17px; flex: none; }
 
-/* 《Pro》那根竖条。玩家先前定的是「一个开关（同色盲友好模式）在角落」，这一版设计稿
+/* 竞赛开关那根竖条。玩家先前定的是「一个开关（同色盲友好模式）在角落」，这一版设计稿
    把它画成贴着大键右边的一根细竖条——同一颗开关，换了个样子：白点在上是关、滑到下是
    开，位置和颜色一起说话，不用读字。
 
-   **白点和那个词都是绝对定位的，位置由这根条子自己的高度算出来**，这是上一版那个
+   **白点是绝对定位的，位置由这根条子自己的高度算出来**，这是上一版那个
    「白点完全跑出开关区域」（玩家 2026-09 拍到）的修法。上一版两样都排在流里，拨开时
    那个词靠 order: -1 跳到上面——白点于是先被重排往下推了一整个词的高度（词高 ＋ 间
    距），然后**又**加上 translateY(26px)，两下叠起来直接冲出条子外 16px。
@@ -6180,35 +6180,18 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
      所以「拨过去了」这件事不用读字也看得出。 */
   transition: top 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-/* 那个词贴着白点没去的那一头，而且**只在拨开的时候出现**（玩家 2026-09：「Pro 的开关
-   只在打开的时候显示《Pro》，关闭的时候什么都不显示」）——关着的时候这根条子上只有一
-   颗白点，那是一颗开关本来的样子。
-   它不跟着动画走：一个词跳过去就够了，两样东西同时在动反而看不清是哪一样在说话。
-   它是绝对定位的，所以藏不藏都不影响别处一个像素。 */
-.mp-contest-tag {
-  position: absolute; left: 0; right: 0; bottom: 7px;
-  font-size: 0.68rem; line-height: 1.1; color: rgba(255, 255, 255, 0.92);
-  letter-spacing: 0.02em; text-align: center;
-  /* 字体跟着全站走（玩家 2026-09：「《Pro》的字体与其他整体同步，和 Open a room 同
-     步」）——先前这儿单写了一支 Fraunces，屏幕上同一行里两种字体并排。inherit 拿到的
-     就是那颗大键上那一支（Karla），字重也跟它一样。 */
-  font-family: inherit; font-weight: 700;
-  visibility: hidden;
-}
-.mp-contest-pill[aria-checked='true'] .mp-contest-tag { visibility: visible; }
-/* 拨开：白点滑到底下，那个词让到上面，整根条子换个颜色。
+/* 拨开：白点滑到底下，整根条子换个颜色。
    换的是**绿**不是那支强调色：强调色就是旁边那颗大键的红——上一版拨开之后条子和大键
    成了同一块红，白点吊在下面像掉出来的零件（玩家那张截图）。绿是这套色板里本来就有的
-   第二支（--accent-2），和红、和条子那支蓝都分得开。颜色之外位置也在说话（白点在下、
-   词在上），所以色觉受限的人不靠颜色也读得出。 */
+   第二支（--accent-2），和红、和条子那支蓝都分得开。颜色之外位置也在说话（白点在下），
+   所以色觉受限的人不靠颜色也读得出。 */
 .mp-contest-pill[aria-checked='true'] { background: var(--accent-2); }
 .mp-contest-pill[aria-checked='true'] .mp-contest-knob { top: calc(100% - 30px); }
-.mp-contest-pill[aria-checked='true'] .mp-contest-tag { bottom: auto; top: 8px; }
 .mp-contest-pill:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   .mp-contest-pill, .mp-contest-knob { transition: none; }
 }
-/* 那一行小字：**只有拨开了 Pro 才看得见**（玩家 2026-09：「只有在打开了 Pro 的时候在
+/* 那一行小字：**只有拨开了竞赛开关才看得见**（玩家 2026-09：「只有在打开了 Pro 的时候在
    现在的位置和形式出现《up to 20…》的字样，不开的时候没有」）。
    藏的是 visibility 不是 display：高度一直留着，所以拨开关的时候底下那四根条子一个像
    素都不挪——玩家要的是「在现在的位置出现」。visibility: hidden 同时把它从读屏软件那
