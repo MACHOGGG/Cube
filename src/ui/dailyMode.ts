@@ -13,9 +13,12 @@
  *     摆玩法图——这一局是什么，等棋盘亮出来才知道，那正是「挑战」的意思。数完把这一局交出去
  *     （onLaunch），由外面那一层挂棋盘，棋盘自己那一页不再数一遍（noCountdown）。
  *
- * 七色圆球那一天（棋盘是横着躺的菱形）：竖着拿手机的话，数之前只摆一句「请横屏」——不带任何
- * 棋盘标识（方案原话），转过来才开始数；电脑和本来就横着的设备不提示。倒数一律 4-3-2-1（单人
- * 那边七色圆球是从 5 数起的，多出来那一秒是给转手机的——这儿转手机那一步单独等，不占倒数）。
+ * 七色圆球那一天（棋盘是横着躺的菱形）：竖着拿手机的话，倒数底下摆一句「请横屏」，**照样数、
+ * 照样开局**（10-15 补充 P1）；数到一半转过来，那一句就撤掉。电脑和本来就横着的设备不提示。
+ * 原先这一屏只摆那一句、要等屏幕真的转成横的才开始数——手机锁着竖屏（iPhone 控制中心那颗方向
+ * 锁很多人常开）、或者 WebView 转屏不发事件，就永远停在「请横屏」，这一天的挑战根本开不了局。
+ * 竖着也能打：单人那边七色圆球一直是竖着也开得了局的（开局页底下摆转手机的提示）。所以那一天和
+ * 单人一样从 5 数起，多出来那一秒就是转手机那一下；别的日子一律 4-3-2-1。
  *
  * 老虎机那一天：不转轮子（方案原话「目标直接出现在得分图案位置；不加老虎机那多出来的 +1 倒
  * 数」）——目标早就从种子里抽好了（seedDeal.ts 的 seedGameOf），棋盘那一页也不再转（gameShell
@@ -27,7 +30,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import { dailySeed, dayIndexOf, dayKey, decodeSeed, formatSeed } from '../engine/seedCode';
 import { seedGameOf, type SeedGame } from '../engine/seedDeal';
-import { isLandscapeMode, playCountdown, startStageHtml } from './startStage';
+import { countFrom, isLandscapeMode, playCountdown, startStageHtml } from './startStage';
 import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
 import { CTL_BACK } from './ctlIcons';
 import { pushLayer } from '../engine/backNav';
@@ -65,7 +68,7 @@ export interface DailyModeHandlers {
   boardNote?: boolean;
 }
 
-/** 七色圆球那一天、竖着拿着手机：倒数之前先请他转过来。电脑（鼠标）不提示。 */
+/** 七色圆球那一天、竖着拿着手机：倒数底下请他转过来（不拦着，见文件头）。电脑（鼠标）不提示。 */
 function needsTurn(board: string): boolean {
   // 哪几副要横着打，问 startStage 那一份（10-08 方案 3-F-1 删掉了这儿抄的那一份名单）。
   if (!isLandscapeMode(board)) return false;
@@ -196,33 +199,26 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
     `;
     const win = root.querySelector<HTMLElement>('#dailyCount')!;
     const turn = root.querySelector<HTMLElement>('#dailyTurn')!;
-    const emblemEl = root.querySelector<HTMLElement>('#dailyEmblem')!;
-    let stopCount: (() => void) | null = null;
-    const begin = () => {
-      turn.hidden = true;
-      emblemEl.hidden = false;
-      win.hidden = false;
-      stopCount = playCountdown(win, () => {
-        stopCount = null;
-        // 这一页已经被换掉了（退出、或者别的什么把 root 清了）：不开。
-        if (!root.querySelector('.daily-page--count')) return;
-        clear();
-        handlers.onLaunch(game);
-      }, DAILY_COUNT_FROM);
-    };
+    // 竖着拿手机的那一天：倒数底下那一句露着，照样数（文件头：原先要等转过来才数，锁着竖屏的人
+    // 永远开不了局）。图和倒数窗不藏——这一屏和别的日子是同一张脸，只多底下那一句。
+    const turning = needsTurn(game.board);
+    turn.hidden = !turning;
+    let stopCount: (() => void) | null = playCountdown(win, () => {
+      stopCount = null;
+      // 这一页已经被换掉了（退出、或者别的什么把 root 清了）：不开。
+      if (!root.querySelector('.daily-page--count')) return;
+      clear();
+      handlers.onLaunch(game);
+    }, turning ? countFrom(game.board) : DAILY_COUNT_FROM);
     cleanups.push(() => stopCount?.());
-    if (needsTurn(game.board)) {
-      // 只摆那一句：图和倒数窗都藏起来（「不带任何棋盘标识」——今天那张图本身不是棋盘标识，
-      // 可这一屏上只该有这一件要他做的事）。
-      turn.hidden = false;
-      emblemEl.hidden = true;
-      win.hidden = true;
+    if (turning) {
+      // 数到一半转过来了：那一句撤掉，倒数不受影响。
       const mq = window.matchMedia('(orientation: portrait)');
       const onTurn = () => {
         if (mq.matches) return;
+        turn.hidden = true;
         mq.removeListener(onTurn);
         window.removeEventListener('resize', onTurn);
-        begin();
       };
       // addListener 而不是 addEventListener：小红书那一端是 Chrome 61，MediaQueryList 上还没
       // 有 addEventListener（Chrome 79 才有）。resize 那一条是兜底——有的 WebView 转屏不发
@@ -233,8 +229,6 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
         mq.removeListener(onTurn);
         window.removeEventListener('resize', onTurn);
       });
-    } else {
-      begin();
     }
     root.querySelector<HTMLButtonElement>('#dailyBack')!.addEventListener('click', showPick);
     // 手机的返回键和屏幕上的《退出》去同一个地方：回第一幕。原先返回键走的是整页那一条（main.ts

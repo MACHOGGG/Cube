@@ -606,7 +606,8 @@ if (!only || only === 'daily') {
       await p.evaluate(() => document.querySelector('#dailyPlay').click());
     }
     await p.waitForTimeout(800);
-    // 七色圆球那一天：竖着的手机先「请横屏」——转过来再数。
+    // 七色圆球那一天：竖着的手机倒数底下说「请横屏」，照样数（10-15 补充 P1；那一屏 check-seed-deal 量）。
+    // 这儿照旧转过来再拖：老内核上横着摆的那一版也要量到。
     const turn = await p.evaluate(() => {
       const t = document.querySelector('#dailyTurn');
       return !!t && !t.hidden;

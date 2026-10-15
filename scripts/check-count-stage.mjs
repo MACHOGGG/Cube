@@ -102,11 +102,10 @@ for (const [w, h, label] of [[390, 844, '手机 390×844'], [360, 640, '手机 3
   const daily = await p.evaluate(MEASURE);
   const art = await p.evaluate(() => !!document.querySelector('#dailyEmblem svg[data-daily-weekday]'));
   await p.close();
-  // 七色圆球那一天竖着拿手机，数之前先请他转过来（那一句露着、图藏着）——那一天这几条量不到，跳过。
-  // 认的是那一句露没露出来，不是「上半屏空着」：旧版那一页压根没有 .start-mark，按「空着」认就会把
-  // 那一版当成转手机的那一天整段跳过去。
+  // 七色圆球那一天竖着拿手机，倒数底下多一句「请横屏」（照样数，10-15 补充 P1；那一屏 check-seed-deal
+  // 量）——多了一行，摆位不和基础那一页比，跳过。认的是那一句露没露出来。
   if (daily.turn) {
-    console.log(`SKIP  ${label}：今天轮到要横着打的那一副，倒数之前先请人转手机，上半屏是空的`);
+    console.log(`SKIP  ${label}：今天轮到要横着打的那一副，倒数底下多一句请人转手机，摆位不和基础那一页比`);
   } else {
     check(`${label}：今日那一局，上半屏是今天那张图`, art);
     check(`${label}：今日那一局，那一格和基础玩法的玩法图一样大、在同一个地方`, near(base.mark, daily.mark, ['x', 'y', 'w', 'h']),

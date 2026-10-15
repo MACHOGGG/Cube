@@ -244,46 +244,70 @@ for (const v of variants) {
   }
 }
 
-// ── 七色圆球那一天，竖着拿手机：先「请横屏」，转过来才数 ──────────────────
+// ── 七色圆球那一天，竖着拿手机：倒数底下说「请横屏」，照样数、照样开局（10-15 补充 P1）──────────
+// 原先这一屏只摆那一句、要等屏幕真的转成横的才数：手机锁着竖屏、或者 WebView 转屏不发事件，就永远停在
+// 「请横屏」，那一天的挑战开不了局——而这一节当时钉的正是「不转就不数、不开局」。现在量两条路：一直竖着
+// （锁着竖屏的人）照样数完开局；数到一半转过来，那一句撤掉、照样开局。
 if (!ONLY || ONLY.includes(4)) {
   const code = SC.encodeSeed(SC.DEAL_VERSION, 4, 424242);
-  const ctx = await freshContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const page = await ctx.newPage();
-  page.on('pageerror', (e) => errs.push(e.message));
-  await page.goto(BASE, { waitUntil: 'load' });
-  await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 });
-  await page.waitForTimeout(600);
-  await page.click('.home-icon-btn--daily');
-  await page.waitForSelector('#seedInput', { timeout: 8000 });
-  await page.fill('#seedInput', code);
-  await page.click('#seedGo');
-  await page.waitForTimeout(1500);
-  const portrait = await page.evaluate(() => ({
-    turn: (() => {
+  const formatted = code.slice(0, 4) + '-' + code.slice(4);
+  for (const turnMidway of [false, true]) {
+    const tag = turnMidway ? '七色圆球、竖着开始数到一半转过来' : '七色圆球、一直竖着（锁着竖屏）';
+    const ctx = await freshContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errs.push(e.message));
+    await page.goto(BASE, { waitUntil: 'load' });
+    await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 });
+    await page.waitForTimeout(600);
+    await page.click('.home-icon-btn--daily');
+    await page.waitForSelector('#seedInput', { timeout: 8000 });
+    await page.fill('#seedInput', code);
+    await page.click('#seedGo');
+    await page.waitForSelector('.daily-page--count', { timeout: 5000 });
+    await page.waitForTimeout(300);
+    const portrait = await page.evaluate((f) => {
       const t = document.querySelector('#dailyTurn');
-      return t && !t.hidden && t.getBoundingClientRect().height > 0 ? t.textContent.trim() : '';
-    })(),
-    count: !document.querySelector('#dailyCount')?.hidden,
-    digits: document.querySelectorAll('#dailyCount .cd-digit').length,
-    emblem: !document.querySelector('#dailyEmblem')?.hidden,
-    board: document.querySelectorAll('#boardWrap, .app--game').length,
-    text: document.body.innerText.replace(/\s/g, ''),
-  }));
-  check('七色圆球、竖着拿手机：只摆一句「请横屏」', portrait.turn === '请横屏' && portrait.text === '请横屏', JSON.stringify(portrait));
-  check('七色圆球、竖着拿手机：不数、不摆别的（码也不摆）、不开局', !portrait.count && portrait.digits === 0 && !portrait.emblem && portrait.board === 0, JSON.stringify(portrait));
-  await page.setViewportSize({ width: 844, height: 390 });
-  await page.waitForTimeout(1300);
-  const turned = await page.evaluate(() => ({
-    turnGone: !!document.querySelector('#dailyTurn')?.hidden,
-    digits: document.querySelectorAll('#dailyCount .cd-digit').length,
-  }));
-  check('转过来之后那一句撤掉、开始数', turned.turnGone && turned.digits > 0, JSON.stringify(turned));
-  const opened = await page
-    .waitForFunction(() => document.querySelector('.app--game')?.getAttribute('data-shape') === 'circleSeven', { timeout: 8000 })
-    .then(() => true)
-    .catch(() => false);
-  check('数完开的是七色圆球', opened);
-  await ctx.close();
+      const box = (el) => (el && !el.hidden ? el.getBoundingClientRect() : null);
+      const turnBox = box(t);
+      const cd = box(document.querySelector('.cd-window'));
+      const back = box(document.querySelector('#dailyBack'));
+      const hit = (a, b) => !!a && !!b && a.top < b.bottom && b.top < a.bottom && a.left < b.right && b.left < a.right;
+      return {
+        turn: turnBox && turnBox.height > 0 ? t.textContent.trim() : '',
+        first: document.querySelector('#dailyCount .cd-digit')?.textContent ?? '',
+        code: document.querySelector('.daily-seed-code')?.textContent?.trim() ?? '',
+        board: document.querySelectorAll('#boardWrap, .app--game').length,
+        text: document.body.innerText.replace(f, '').replace('请横屏', '').replace(/[\d\s]/g, ''),
+        inView: !!turnBox && turnBox.bottom <= innerHeight && turnBox.top >= 0,
+        clash: hit(turnBox, cd) || hit(turnBox, back),
+      };
+    }, formatted);
+    check(`${tag}：倒数底下那一句是「请横屏」，在屏幕里、不压倒数窗和《退出》`,
+      portrait.turn === '请横屏' && portrait.inView && !portrait.clash, JSON.stringify(portrait));
+    check(`${tag}：不等转过来，当场就数（从 5 数起：多出来那一秒是转手机那一下）`, portrait.first === '5', JSON.stringify(portrait));
+    check(`${tag}：倒数那几秒上半屏是那串码，没有别的字、没有棋盘`,
+      portrait.code === formatted && portrait.text === '' && portrait.board === 0, JSON.stringify(portrait));
+    if (turnMidway) {
+      await page.setViewportSize({ width: 844, height: 390 });
+      await page.waitForTimeout(600);
+      const turned = await page.evaluate(() => ({
+        turnGone: !!document.querySelector('#dailyTurn')?.hidden,
+        digits: document.querySelectorAll('#dailyCount .cd-digit').length,
+      }));
+      check(`${tag}：转过来之后那一句撤掉，接着数`, turned.turnGone && turned.digits > 0, JSON.stringify(turned));
+    }
+    const opened = await page
+      .waitForFunction(() => document.querySelector('.app--game')?.getAttribute('data-shape') === 'circleSeven', { timeout: 9000 })
+      .then(() => true)
+      .catch(() => false);
+    check(`${tag}：数完开的是七色圆球`, opened);
+    if (opened && !turnMidway) {
+      await page.waitForTimeout(1600);
+      const pieces = await page.evaluate(() => document.querySelectorAll('#boardWrap [data-r][data-c]').length);
+      check(`${tag}：竖着也摆出了整副棋盘（49 枚）`, pieces === 49, String(pieces));
+    }
+    await ctx.close();
+  }
 }
 
 // ── 输码那一格：叫「代号」，底下说一句「手动输入代号开的局不计入排行榜（今日挑战照常计入）」──────────
