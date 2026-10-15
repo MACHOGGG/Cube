@@ -45,9 +45,22 @@
  *   5. 计时方块：拖着走两格 → 钟响（假钟快进过 100 秒） → 松手。盘面一枚不动、没有多出来的影子。
  *
  * 这两节是真拖（鼠标的 pointer 事件，和手指走同一套 engine/drag.ts），认棋子靠方块身上那个 data-id。
+ *
+ * 6、7 两节是**得分之后零点几秒暂停、再结束**（10-15 补充 S3，L-1）。控制器原先一拿到得分那一拍就记图案分、线分、
+ * 连击分，总分和翻面数却要等高亮那 550ms 之后才加；这 550ms 里暂停，那一拍收进 heldBeat，接着按《结束游戏》，
+ * 收起来的那一拍不再跑——交上去的明细多出这一拍、总分没有，服务器（api/_maxscore.js 的 vetRun）对不上账，整局回
+ * 400 implausible，而客户端一个字都不说。
+ *
+ *   6. 基础方块松手后 300 / 500ms、无限反转（方块）松手后 300ms 暂停 → 结束：交上去的那一份过得了 vetRun、服务器
+ *      回 200，总分 ＝ 图案分 ＋ 线分 ＋ 连击；尺子：暂停那一下真的撤掉了一个 550ms 的高亮拍子（就是那个窗口）。
+ *   7. 交卷回 400 implausible（route 拦下来答）：结算页 #endDailyNote 说「本局未上传到云端，本机记录照常保留」。
+ *
+ * 得分那一步是读屏自己找的：读出每一枚的颜色和面，按「同色连着 ≥ N、碰到滑过的线、至少一枚色块」（和
+ * check-coach-aim 那份对照同一条规矩）找一步就得分的滑法；没有就先走一步不得分的、让下一步能得分的。
  * ─────────────────────────────────────────────────────────────────────────
  */
 import { chromium } from 'playwright';
+import { vetRun } from '../api/_maxscore.js';
 
 // 收端口号（老写法）或者整个地址（ci-browser.mjs 给的是地址）。
 const arg = process.argv[2] || '8971';
@@ -267,6 +280,249 @@ async function openSquare(page, timed) {
   check('5 钟响之后松手：没有多出来的影子', (await tiles(q)) === n0, `${await tiles(q)} / ${n0}`);
   check('5 零报错', e5.length === 0, e5.slice(0, 2).join(' | '));
   await c5.close();
+}
+
+// ---------------------------------------------------------------------------
+// 6、7. 得分之后零点几秒暂停、再结束（10-15 补充 S3）
+// ---------------------------------------------------------------------------
+/** 读盘面：每一枚在哪一格、什么颜色、哪一面；图案要几枚（N）。 */
+const READ = () => {
+  const probe = document.createElement('i');
+  document.body.appendChild(probe);
+  const norm = (c) => {
+    probe.style.color = '';
+    probe.style.color = c;
+    return getComputedStyle(probe).color;
+  };
+  const at = {};
+  for (const el of document.querySelectorAll('#boardWrap .tile[data-r][data-c]')) {
+    const face = el.dataset.face;
+    if (face === 'blank' || !el.dataset.id) continue;
+    const b = el.getBoundingClientRect();
+    at[`${el.dataset.r},${el.dataset.c}`] = {
+      face,
+      color: face === 'dot' ? norm(el.dataset.dotColor || '') : getComputedStyle(el).backgroundColor,
+      x: b.left + b.width / 2,
+      y: b.top + b.height / 2,
+    };
+  }
+  probe.remove();
+  const label = document.querySelector('.hud-block--pattern')?.getAttribute('aria-label') || '';
+  return { at, n: Number((label.match(/\d+/) || [4])[0]) };
+};
+/** 方块那一副的十二条线（六行六列），每条线的格子按顺序。 */
+function linesOf(o) {
+  const keys = Object.keys(o.at).map((k) => k.split(',').map(Number));
+  const rows = Math.max(...keys.map(([r]) => r)) + 1;
+  const cols = Math.max(...keys.map(([, c]) => c)) + 1;
+  const out = [];
+  for (let r = 0; r < rows; r++) out.push(Array.from({ length: cols }, (_, c) => `${r},${c}`));
+  for (let c = 0; c < cols; c++) out.push(Array.from({ length: rows }, (_, r) => `${r},${c}`));
+  return out.filter((l) => l.every((k) => o.at[k]));
+}
+/** 第 li 条线转 s 格之后的盘面（新位置 i 上是旧位置 i − s 的那一枚）。 */
+function slid(o, lines, li, s) {
+  const at = { ...o.at };
+  const line = lines[li];
+  const L = line.length;
+  line.forEach((k, i) => (at[k] = o.at[line[(((i - s) % L) + L) % L]]));
+  return at;
+}
+/** 这副盘面滑过第 li 条线之后会不会得分。 */
+function scores(at, lines, li, n) {
+  const moved = new Set(lines[li]);
+  for (const line of lines) {
+    let i = 0;
+    while (i < line.length) {
+      let j = i + 1;
+      while (j < line.length && at[line[j]].color === at[line[i]].color) j++;
+      const run = line.slice(i, j);
+      if (j - i >= n && run.some((k) => moved.has(k)) && run.some((k) => at[k].face === 'flavor')) return true;
+      i = j;
+    }
+  }
+  return false;
+}
+/** 一步就得分的滑法；没有就找一步不得分、但接着能一步得分的；再没有就随手走一步不得分的（下一轮再找）。 */
+function planScore(o) {
+  const lines = linesOf(o);
+  const moves = [];
+  lines.forEach((l, li) => {
+    for (let s = 1; s < l.length; s++) moves.push([li, s]);
+  });
+  for (const [li, s] of moves) if (scores(slid(o, lines, li, s), lines, li, o.n)) return { lines, li, s, now: true };
+  for (const [li, s] of moves) {
+    const at1 = slid(o, lines, li, s);
+    if (scores(at1, lines, li, o.n)) continue;
+    const o1 = { at: at1, n: o.n };
+    if (moves.some(([l2, s2]) => scores(slid(o1, lines, l2, s2), lines, l2, o.n))) return { lines, li, s, now: false };
+  }
+  const idle = moves.filter(([li, s]) => !scores(slid(o, lines, li, s), lines, li, o.n));
+  if (!idle.length) return null;
+  const [li, s] = idle[Math.floor(Math.random() * idle.length)];
+  return { lines, li, s, now: false };
+}
+/** 拖第 li 条线转 s 格（短的那一头：转 L − s 格就是反着拖 s 格），松手。 */
+async function dragLine(page, o, lines, li, shiftBy) {
+  const cells = lines[li];
+  const L = cells.length;
+  const s = shiftBy > L / 2 ? shiftBy - L : shiftBy;
+  const i0 = s > 0 ? 0 : L - 1;
+  const p0 = o.at[cells[i0]];
+  const p1 = o.at[cells[i0 + Math.sign(s)]];
+  const steps = Math.abs(s);
+  await page.mouse.move(p0.x, p0.y);
+  await page.mouse.down();
+  for (let k = 1; k <= 14; k++) {
+    await page.mouse.move(p0.x + ((p1.x - p0.x) * steps * k) / 14, p0.y + ((p1.y - p0.y) * steps * k) / 14);
+    await page.waitForTimeout(12);
+  }
+  await page.mouse.up();
+}
+/** 记下每一个 550ms 的拍子（得分那一组高亮之后才翻面、加分，见 gameController 的 HIGHLIGHT_LEAD_MS）排了、撤了没有。 */
+const LEAD_SPY = () => {
+  const lead = new Map();
+  const set = window.setTimeout;
+  const clear = window.clearTimeout;
+  window.setTimeout = function (fn, ms, ...rest) {
+    const id = set.call(window, (...a) => {
+      lead.delete(id);
+      return typeof fn === 'function' ? fn(...a) : undefined;
+    }, ms, ...rest);
+    if (ms === 550) lead.set(id, 'armed');
+    return id;
+  };
+  window.clearTimeout = function (id) {
+    if (lead.get(id) === 'armed') lead.set(id, 'held');
+    return clear.call(window, id);
+  };
+  window.__leadHeld = () => [...lead.values()].filter((v) => v === 'held').length;
+};
+
+// 一张兑换码（交卷要登录）：这一台服务器只兑这一次，后面每一台设备都拿同一把钥匙（一个帐号多台设备）。
+const signedIn = await (async () => {
+  const c = await browser.newContext();
+  const q = await c.newPage();
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  const ent = await q.evaluate(async () => {
+    const r = await fetch('/api/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'TESTLIFE' }) }).then((x) => x.json());
+    return r.active ? JSON.stringify({ active: true, period: r.period, until: r.until, channel: 'code', email: r.email, token: r.token, code: r.code }) : null;
+  });
+  await c.close();
+  return ent;
+})();
+check('6（尺子）兑到了码、拿到了登录的钥匙', !!signedIn);
+
+/**
+ * 开一局、走到一步就得分、松手 `delayMs` 之后暂停、再按《结束游戏》。`answer` 给了就由 route 替服务器答交卷那一条。
+ * 回：交上去的那一份、服务器答了什么、暂停那一下撤没撤掉高亮拍子、结算页那一句。
+ */
+async function scoreThenEnd({ flip = false, delayMs, answer = null, scoreFirst = false, noScore = false }) {
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c.addInitScript(seed);
+  await c.addInitScript((ent) => localStorage.setItem('slides_genius', ent), signedIn);
+  await c.addInitScript(LEAD_SPY);
+  const q = await c.newPage();
+  const errs = [];
+  q.on('pageerror', (e) => errs.push(String(e)));
+  let pushed = null;
+  let reply = null;
+  if (answer) {
+    await q.route('**/api/scores', async (route) => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.action !== 'push') return route.continue();
+      pushed = body;
+      reply = { status: answer.status, body: answer.body };
+      return route.fulfill({ status: answer.status, contentType: 'application/json', body: JSON.stringify(answer.body) });
+    });
+  } else {
+    q.on('response', async (res) => {
+      if (!res.url().endsWith('/api/scores') || res.request().method() !== 'POST') return;
+      try {
+        const body = JSON.parse(res.request().postData() || '{}');
+        if (body.action !== 'push') return;
+        pushed = body;
+        reply = { status: res.status(), body: await res.json().catch(() => null) };
+      } catch {}
+    });
+  }
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await q.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  if (flip) {
+    await q.$eval('.home-icon-btn[aria-label="无限反转"]', (e) => e.click());
+    await q.waitForSelector('.flip-page', { timeout: 15000 });
+    await q.$eval('.slot-pick-opt[data-family="square"]', (e) => e.click());
+    await q.waitForSelector('#startBtn', { state: 'attached', timeout: 30000 });
+    await q.$eval('#startBtn', (e) => e.click());
+    await q.waitForFunction(() => document.querySelectorAll('#boardWrap .tile[data-id]').length > 0, null, { timeout: 40000 });
+    await q.waitForTimeout(1200);
+  } else {
+    await openSquare(q, false);
+  }
+  let scored = false;
+  let held = 0;
+  // scoreFirst：先完整得一次分（等它翻完、加完），第二次得分才在窗口里暂停——总分不是 0 的那一种。
+  let warm = scoreFirst ? 1 : 0;
+  if (noScore) {
+    await q.evaluate(() => document.getElementById('stopBtn').click());
+    scored = true;
+  }
+  for (let tries = 0; tries < 16 && !scored; tries++) {
+    const o = await q.evaluate(READ);
+    const plan = planScore(o);
+    if (!plan) break;
+    await dragLine(q, o, plan.lines, plan.li, plan.s);
+    if (!plan.now || warm > 0) {
+      if (plan.now) warm--;
+      await q.waitForTimeout(plan.now ? 3000 : 1600); // 这一步落定（得分的那一步连翻面、加分一起走完）
+      continue;
+    }
+    await q.waitForTimeout(delayMs);
+    await q.evaluate(() => document.getElementById('stopBtn').click());
+    held = await q.evaluate(() => window.__leadHeld());
+    scored = true;
+  }
+  let ended = false;
+  if (scored) {
+    await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 }).catch(() => {});
+    await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
+    ended = await q.waitForSelector('#endOverlay.show', { timeout: 15000 }).then(() => true).catch(() => false);
+    for (let i = 0; i < 40 && !reply; i++) await q.waitForTimeout(250);
+    await q.waitForTimeout(400);
+  }
+  const note = await q.evaluate(() => {
+    const el = document.getElementById('endDailyNote');
+    return { shown: !!el && !el.hidden, text: el?.textContent?.trim() ?? '' };
+  });
+  await c.close();
+  return { scored, held, ended, pushed, reply, note, errs };
+}
+
+for (const { flip, delayMs, scoreFirst } of [
+  { flip: false, delayMs: 300 },
+  { flip: false, delayMs: 500 },
+  { flip: false, delayMs: 300, scoreFirst: true },
+  { flip: true, delayMs: 300 },
+]) {
+  const tag = `6 ${flip ? '无限反转' : '基础方块'}、${scoreFirst ? '先完整得过一次分，第二次' : ''}得分后 ${delayMs}ms 暂停再结束`;
+  const r = await scoreThenEnd({ flip, delayMs, scoreFirst });
+  check(`${tag}（尺子）：找到了一步就得分的滑法、结算页出来了`, r.scored && r.ended, JSON.stringify({ scored: r.scored, ended: r.ended }));
+  check(`${tag}（尺子）：暂停那一下正好撤掉了得分那一组的高亮拍子（550ms）`, r.held >= 1, `撤掉了 ${r.held} 个`);
+  const d = r.pushed?.data;
+  const vet = d ? vetRun(r.pushed.mode, d) : null;
+  check(`${tag}：交上去的那一份过得了 vetRun`, vet?.verdict === 'ok', JSON.stringify(vet));
+  check(`${tag}：服务器收下了（200，不是 400 implausible）`, r.reply?.status === 200, JSON.stringify(r.reply));
+  check(`${tag}：总分 ＝ 图案分 ＋ 线分 ＋ 连击`,
+    !!d && d.totalScore === d.patternPoints + d.linePoints + d.comboBonusPoints,
+    d ? `总分 ${d.totalScore} / 图案 ${d.patternPoints} ＋ 线 ${d.linePoints} ＋ 连击 ${d.comboBonusPoints}` : '没交卷');
+  if (scoreFirst) check(`${tag}（尺子）：第一次得分记上了（总分 > 0）`, (d?.totalScore ?? 0) > 0, String(d?.totalScore));
+  check(`${tag}：零报错`, r.errs.length === 0, r.errs.slice(0, 2).join(' | '));
+}
+{
+  const r = await scoreThenEnd({ noScore: true, answer: { status: 400, body: { error: 'implausible' } } });
+  check('7（尺子）交卷被答 400 implausible', r.reply?.status === 400 && r.ended, JSON.stringify(r.reply));
+  check('7 结算页说「本局未上传到云端，本机记录照常保留」', r.note.shown && r.note.text === '本局未上传到云端，本机记录照常保留', JSON.stringify(r.note));
+  check('7 零报错', r.errs.length === 0, r.errs.slice(0, 2).join(' | '));
 }
 
 await browser.close();

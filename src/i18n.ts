@@ -190,6 +190,8 @@ export interface I18nStrings {
    * rankReLogin。
    */
   endSessionExpired: string;
+  /** 服务器对过账、明说这一局不收（400 implausible）：结算页同一个位置说这一句（10-15 补充 S3）。 */
+  endNotUploaded: string;
   /** 个人主页头卡：同一件事，头卡不再照旧摆出「已登录」的样子（10-11 方案 A-12）。点了开登录窗。 */
   profileSessionExpired: string;
   /**
@@ -1027,6 +1029,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankExpired: 'Your sign-in has expired. Sign in again and your runs go on the board.',
     rankReLogin: 'Sign in again',
     endSessionExpired: 'Your sign-in has expired — this run wasn’t uploaded.',
+    endNotUploaded: 'This run wasn’t uploaded; it’s still saved on this device.',
     profileSessionExpired: 'Sign-in expired · Sign in again',
     flipSpeedTitle: 'Star speed',
     flipSpeedHint: 'How fast a piece becomes a star. Everything else stays the same.',
@@ -1405,6 +1408,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
     endSessionExpired: 'Votre session a expiré : cette partie n’a pas été envoyée.',
+    endNotUploaded: 'Cette partie n’a pas été envoyée ; elle reste enregistrée sur cet appareil.',
     profileSessionExpired: 'Session expirée · Se reconnecter',
     flipSpeedTitle: 'Vitesse des étoiles',
     flipSpeedHint: 'À quelle vitesse une pièce devient une étoile. Le reste ne change pas.',
@@ -1783,6 +1787,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankExpired: '登入已過期，重新登入後成績才會上榜',
     rankReLogin: '重新登入',
     endSessionExpired: '登入已過期，本局未上傳',
+    endNotUploaded: '本局未上傳到雲端，本機紀錄照常保留',
     profileSessionExpired: '登入已過期 · 重新登入',
     flipSpeedTitle: '變成星星的速度',
     flipSpeedHint: '一枚棋子變成星星要多快。其他的都不變。',
@@ -2161,6 +2166,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankExpired: '登录已过期，重新登录后成绩才会上榜',
     rankReLogin: '重新登录',
     endSessionExpired: '登录已过期，本局未上传',
+    endNotUploaded: '本局未上传到云端，本机记录照常保留',
     profileSessionExpired: '登录已过期 · 重新登录',
     flipSpeedTitle: '变成星星的速度',
     flipSpeedHint: '一枚棋子变成星星要多快。其他的都不变。',

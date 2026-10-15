@@ -589,7 +589,10 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     calls.length = 0;
     const r1 = await api.pushRun(run);
     await new Promise((r) => setTimeout(r, 2600));
-    check('⑬ 回 400 implausible：只打了一趟，不重报', calls.length === 1 && r1 === null, `${calls.length} 趟`);
+    // 10-15 补充 S3：被拒的那一趟不再回 null（null 是「网不通、没交上去」），回 { refused: 'implausible' }——结算页
+    // 拿它写「本局未上传」，而不是照旧写一句「已上传」。
+    check('⑬ 回 400 implausible：只打了一趟，不重报，并且告诉调用方「被拒了」', calls.length === 1 && r1?.refused === 'implausible',
+      `${calls.length} 趟 ${JSON.stringify(r1)}`);
     answer = { status: 500, body: { error: 'server' } };
     calls.length = 0;
     await api.pushRun({ ...run, at: 2 });

@@ -1243,6 +1243,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (!signHintFits()) refs.endSignHintEl.hidden = true;
         return;
       }
+      // 服务器对过账、明说这一局不收（400 implausible，engine/cloudScores.ts 的 pushRun，10-15 补充 S3）：说一句
+      // 「本局未上传到云端，本机记录照常保留」。原先这儿一个字都不说——结算页照常给他看，他以为传上去了。
+      if (reply?.refused === 'implausible') {
+        refs.endDailyNoteEl.textContent = s.endNotUploaded;
+        refs.endDailyNoteEl.hidden = false;
+        if (!signHintFits()) refs.endSignHintEl.hidden = true;
+        return;
+      }
       const verdict = reply?.daily;
       if (verdict !== 'late' && verdict !== 'rejected') return;
       // 交晚了单说一句（10-11 方案 B-13.4）：他的钟没错，只是打过了零点——「看看设备的日期」把他往错的地方指。
@@ -1533,15 +1541,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 没套 FLIP_STREAK_CAP——连击过了十次，加分已经封顶，气泡上的倍率还在往上翻。
       const shownMult = hooks.flip ? flipStreakMult(flipChain) : 1;
       if (hooks.flip) flipChain++;
-      // Split for the end-of-run breakdown: the pattern's own points, the
-      // whole-line bonus, and everything the streak/chain multipliers added.
-      if (s.lineBonusGroups.length) linePoints += s.points;
-      else patternPoints += s.points;
-      lineCount += s.lineBonusGroups.length;
       // 步步为营的「消边」：一步引发的连锁里**任意一拍**是整线奖励就算，所以
       // 这儿只置真、不置假（后面的拍子没消线，不该把前面那一拍的功劳抹掉）。
       if (s.lineBonusGroups.length) hadLineBonus = true;
-      comboBonusPoints += delta - s.points;
       const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
       // 教学 D 那一条数的就是这一下：从它出现起消掉两次整条外边就换到 E（10-11 方案 D-1）。条子只记下，等这一
@@ -1633,6 +1635,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // 教学 A 那一条等的是这一局第一次得分（10-11 方案 D-1：「10 秒，或第一次得分」）。只记下，结算完再换。
         if (s.matchGroups.length) coach?.signal('score');
         if (s.matchGroups.length) hooks.onCommit?.(s.matchGroups);
+        // 结算页那几行的明细：图案自己的分、整线奖励、连击倍率多出来的那部分。**和总分在同一处记**（10-15 补充
+        // S3）——原先这四笔记在 step() 一拿到这一拍的时候，总分、翻面数却要等这儿（高亮那 550ms 之后）才加：这
+        // 550ms 里一暂停，这一拍收进 heldBeat；接着按《结束游戏》，收起来的那一拍不再跑，于是交上去的明细多出这一拍、
+        // 总分没有，服务器（api/_maxscore.js：总分 = 图案分 ＋ 线分 ＋ 连击，图案分 = 2 × 翻面）对不上账，整局回
+        // 400 implausible——得分后零点几秒按暂停再结束，这一局就静默丢了。挪到这儿，按结束时正在高亮的那一组不给分，
+        // 和屏幕上看到的一致（它还没翻过来、分数也还没跳）。
+        if (s.lineBonusGroups.length) linePoints += s.points;
+        else patternPoints += s.points;
+        lineCount += s.lineBonusGroups.length;
+        comboBonusPoints += delta - s.points;
         if (delta > 0 || bombPoints > 0) {
           score += delta;
           // 步步为营：分数在局中**整个不露面**（那一格印的是破折号，见

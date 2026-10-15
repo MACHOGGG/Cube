@@ -182,6 +182,8 @@ let lastPush: Promise<unknown> | null = null;
  */
 export interface PushReply {
   daily?: 'stored' | 'late' | 'rejected' | 'zero';
+  /** 服务器对过账、明说这一局不收（400 implausible）：结算页说「本局未上传」（10-15 补充 S3）。 */
+  refused?: 'implausible';
 }
 
 export function pushRun(data: RunData): Promise<PushReply | null> {
@@ -197,14 +199,15 @@ export function pushRun(data: RunData): Promise<PushReply | null> {
   };
   // 刚打完一局，榜一定变了（至少自己那一行）。把缓存清掉，下一次打开排行榜去拿新的。
   invalidateBoards();
-  const pushing = (async () => {
+  const pushing = (async (): Promise<PushReply | null> => {
     // 服务器对过账、明说这一局不收（api/scores.js 的 push 回 400 `implausible`，10-11 方案 A-3）：重报
-    // 一次答的还是同一句，不重报，也不提示——结算页照常给他看，这一局只是不上传。
+    // 一次答的还是同一句，不重报。交回 refused，结算页说一句「本局未上传」（10-15 补充 S3；原先一个字都不说）。
     let implausible = false;
     const first = await post<PushReply>(body, (error) => {
       implausible = error === 'implausible';
     });
-    if (first || implausible) return first;
+    if (implausible) return { refused: 'implausible' };
+    if (first) return first;
     await new Promise((r) => setTimeout(r, PUSH_RETRY_MS));
     return post<PushReply>(body);
   })();
