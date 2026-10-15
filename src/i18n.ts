@@ -951,12 +951,16 @@ export const LANG_ORDER: Lang[] = ['en', 'fr', 'zhHant', 'zhHans'];
  * 走了一步的人看见的是「1 moves」。单复数的界线各语言还不一样：英文只有 1
  * 用单数，法文 0 和 1 都用单数（« 0 manche »、« 1 manche »），中文根本没有
  * 这回事——所以这条规矩只能写在这里，写在调用处就得每处都记一遍。
+ *
+ * 每一个 `{n}` 都换（10-15 补充 S6）：原先 `replace('{n}', …)` 只换第一个，一句里出现两次 `{n}` 就留下一个原样的
+ * 占位符（今天的模板都只有一个，所以还没出过错）。不用 replaceAll：Chrome 85 才有，小红书那一端的老内核上没有，
+ * polyfills.js 也没补。
  */
 export function countPhrase(tpl: string, n: number, lang: Lang): string {
   const forms = tpl.split('|');
   const singular = lang === 'fr' ? Math.abs(n) < 2 : n === 1;
   const pick = forms.length > 1 && singular ? forms[0] : forms[forms.length - 1];
-  return pick.replace('{n}', String(n));
+  return pick.split('{n}').join(String(n));
 }
 
 export const STRINGS: Record<Lang, I18nStrings> = {
@@ -1403,10 +1407,10 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankEmpty: 'Personne à ce classement pour l’instant',
     rankNetwork: 'Classement indisponible. Vérifiez votre connexion.',
     dailyNotCounted: 'Cette partie ne compte pas pour le défi du jour. Vérifiez la date et l’heure de votre appareil.',
-    dailyLate: 'L’heure limite de ce jour-là est passée : cette partie ne compte pas pour le classement du jour.',
+    dailyLate: 'L’heure limite de ce jour-là est passée : cette partie ne compte pas pour le classement du jour.',
     rankAnon: 'Joueur anonyme',
     rankMe: 'Moi',
-    cloudSaveHint: 'Connectez-vous : chaque partie jouée ensuite est sauvegardée dans le cloud, sur tous vos appareils.',
+    cloudSaveHint: 'Connectez-vous : chaque partie jouée ensuite est sauvegardée dans le cloud, sur tous vos appareils.',
     nickSet: 'Choisir un pseudonyme',
     nickEdit: 'Modifier le pseudonyme',
     nickSave: 'Enregistrer le pseudonyme',
@@ -1419,7 +1423,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankLoading: 'Chargement…',
     rankExpired: 'Votre session a expiré. Reconnectez-vous pour que vos parties entrent au classement.',
     rankReLogin: 'Se reconnecter',
-    endSessionExpired: 'Votre session a expiré : cette partie n’a pas été envoyée.',
+    endSessionExpired: 'Votre session a expiré : cette partie n’a pas été envoyée.',
     endNotUploaded: 'Cette partie n’a pas été envoyée ; elle reste enregistrée sur cet appareil.',
     profileSessionExpired: 'Session expirée · Se reconnecter',
     flipSpeedTitle: 'Vitesse des étoiles',
@@ -1485,7 +1489,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     pairKeyNote: 'à ne pas partager',
     pairPlaceholder: '8 à 64 lettres ou chiffres, casse respectée',
     continueBtn: 'Continuer',
-    pairWarning: 'Gardez la première chaîne pour vous : qui la connaît peut essayer des deuxièmes chaînes, et trop d’erreurs verrouillent le compte pendant des heures.',
+    pairWarning: 'Gardez la première chaîne pour vous : qui la connaît peut essayer des deuxièmes chaînes, et trop d’erreurs verrouillent le compte pendant des heures.',
     pairSaveBtn: 'Enregistrer',
     pairNewAccountHint: 'Connecté à un nouveau compte. Si vous vouliez l’ancien, déconnectez-vous et réessayez.',
     pairNoRecovery: 'Une deuxième chaîne oubliée ne se récupère pas — associez une adresse une fois connecté.',
@@ -1524,7 +1528,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailCodeSent: 'Un code à 6 chiffres est parti vers la nouvelle adresse. Saisissez-le pour terminer.',
     emailChanged: 'C’est fait — votre compte est sur la nouvelle adresse.',
     bindEmailRow: 'Associer une adresse',
-    bindEmailHint: 'Une fois l’adresse associée, vous vous connectez avec elle ; les deux chaînes ne servent plus.',
+    bindEmailHint: 'Une fois l’adresse associée, vous vous connectez avec elle ; les deux chaînes ne servent plus.',
     emailBound: 'C’est fait — connectez-vous désormais avec cette adresse.',
     chmailGuessCapped: 'Trop de codes erronés pour cette nouvelle adresse au cours de la dernière heure. Réessayez dans une heure.',
     emailTaken: 'Cette adresse a déjà un compte.',
@@ -1549,7 +1553,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpCodeLabel: 'Code de la salle',
     mpCodePlaceholder: 'quatre chiffres',
     mpRoomCode: 'Salle',
-    mpShareHint: 'Donnez ces quatre chiffres à un ami : il pourra rejoindre la salle.',
+    mpShareHint: 'Donnez ces quatre chiffres à un ami : il pourra rejoindre la salle.',
     mpPlayers: 'Joueurs',
     mpHostBadge: 'hôte',
     mpLeave: 'Quitter la salle',
@@ -1584,7 +1588,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     paletteNow: 'D’origine',
     paletteJia: 'Profonde',
     paletteBing: 'Douce',
-    mpKnowRules: 'Vous connaissez les règles de {name} ?',
+    mpKnowRules: 'Vous connaissez les règles de {name} ?',
     mpKnowYes: 'Je sais jouer',
     mpKnowNo: 'Pas encore',
     mpJoinNextRound: 'Vous rejoindrez la partie à la manche suivante.',
@@ -1594,14 +1598,14 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpBestRound: 'Meilleure manche',
     mpFastest: 'Manche la plus rapide',
     mpRoundsPlayed: '{n} manche|{n} manches',
-    mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total de la salle. Elle reste dans vos records.',
-    mpRoundForced: 'L’hôte a terminé cette manche : votre {n} point jusqu’ici compte dans le total de la salle.|L’hôte a terminé cette manche : vos {n} points jusqu’ici comptent dans le total de la salle.',
+    mpRoundDropped: 'Absence trop longue : cette manche n’entre pas dans le total de la salle. Elle reste dans vos records.',
+    mpRoundForced: 'L’hôte a terminé cette manche : votre {n} point jusqu’ici compte dans le total de la salle.|L’hôte a terminé cette manche : vos {n} points jusqu’ici comptent dans le total de la salle.',
     mpRoundForcedZero: 'L’hôte a terminé cette manche.',
-    newVersionNote: 'Nouvelle version : {note}',
+    newVersionNote: 'Nouvelle version : {note}',
     newVersionGeneric: 'Une nouvelle version est disponible',
     newVersionReload: 'Recharger',
     consentFull: 'Nous aimerions utiliser les cookies de Google Analytics pour voir comment le jeu est joué et l’améliorer.',
-    consentShort: 'Pouvons-nous utiliser les cookies Google Analytics pour améliorer le jeu ?',
+    consentShort: 'Pouvons-nous utiliser les cookies Google Analytics pour améliorer le jeu ?',
     consentAccept: 'Accepter',
     consentDecline: 'Refuser',
     consentRegion: 'Paramètres des cookies',
@@ -1609,15 +1613,15 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     gaSwitch: 'Statistiques Google Analytics',
     mpErrEnded: 'Cette salle a été fermée.',
     mpReconnecting: 'Connexion perdue — on vous y ramène…',
-    mpHostLeaveWarn: 'Dissoudre la salle ?',
-    mpGuestLeaveWarn: 'Partir ?',
+    mpHostLeaveWarn: 'Dissoudre la salle ?',
+    mpGuestLeaveWarn: 'Partir ?',
     mpLeaveAnyway: 'Partir quand même',
     mpLeaveHold: 'Maintenir pour partir',
     mpLeaveHoldHint: 'Maintenez le bouton, ou appuyez sur Entrée',
     mpStay: 'Rester',
-    mpFinishConfirm: 'Terminé ?',
+    mpFinishConfirm: 'Terminé ?',
     mpRoomCancelled: 'L’hôte est parti — la salle est fermée pour l’instant',
-    mpHostLeftLocked: 'L’hôte est parti, la salle est fermée pour l’instant — revenez un peu plus tard ?',
+    mpHostLeftLocked: 'L’hôte est parti, la salle est fermée pour l’instant — revenez un peu plus tard ?',
     mpHostAwaySolo: 'L’hôte s’est absenté · vous jouez seul désormais',
     mpRoomExpiredSolo: 'Cette salle a été fermée · vous jouez seul désormais',
     mpOk: 'ok',
@@ -1652,7 +1656,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     howToPlayBtn: 'Comment jouer',
     gotItBtn: 'Compris',
     restartRunBtn: 'Rejouer',
-    restartConfirm: 'Recommencer ?',
+    restartConfirm: 'Recommencer ?',
     endRunBtn: 'Terminer',
     compositeScoreLabel: 'Score final',
     avgScoreLabel: 'Votre moyenne dans ce mode',
@@ -2125,7 +2129,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     navProfile: '个人主页',
     navRecords: '记录与排名',
     noRecordsYet: '尚无成绩',
-    recordsResetByRules: '新规则《侵蚀阶梯》上线，战绩从这里重新开始',
+    recordsResetByRules: '新规则上线，战绩从这里重新开始',
     switchLanguage: '语言',
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
@@ -2665,7 +2669,7 @@ export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
  */
 export const TUTORIAL_RULE3_FLIP: Record<Lang, string> = {
   en: 'In Endless Flip the scoring shape never shrinks \u2014 it stays four pieces all game.',
-  fr: 'Dans Retournement infini, le motif ne raccourcit jamais : il reste \u00e0 quatre pi\u00e8ces.',
+  fr: 'Dans Retournement infini, le motif ne raccourcit jamais : il reste \u00e0 quatre pi\u00e8ces.',
   zhHant: '《無限反轉》裡得分圖案不會變小，整局都是 4 枚。',
   zhHans: '《无限反转》里得分图案不会变小，整局都是 4 枚。',
 };
@@ -2711,8 +2715,8 @@ export const MODE_TIPS: Record<
     bomb: 'Le glissement, les points et les disparitions ne changent pas. Le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent. N’importe lesquels, du moment qu’ils se touchent. Une bombe voisine d’une figure qui marque se désamorce.',
     flip: 'Quand vous marquez, la pièce devient une étoile. Dans Retournement infini, une étoile qui marque redevient une pièce colorée. Les étoiles de même couleur ne disparaissent donc jamais. 100 secondes. C’est parti !',
     slot: 'Machine à sous tire une figure gagnante au départ. Seule cette figure marque cette partie. Formez-la et ces pièces deviennent des étoiles. Elle rétrécit aussi : une pièce de moins à chaque palier, jusqu’à une seule. Ensuite, toute partie encore reliée compte. Les disparitions ne changent pas. À vous !',
-    timed: '100 secondes au compteur — combien de points allez-vous marquer ?',
-    layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
+    timed: '100 secondes au compteur — combien de points allez-vous marquer ?',
+    layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
     puzzle: 'Huit coups pour commencer. Chaque coup en coûte 1. Marquer en rend 1. Marquer deux fois de suite en rend 1 de plus. Effacer une ligne en rend 2 de plus. Quel score allez-vous atteindre ?',
   },
   zhHant: {

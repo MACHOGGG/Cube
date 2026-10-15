@@ -242,7 +242,7 @@ jobs:
       # 存档键的后缀带着规则版本号，而它已经错过两次：规则升版本、写存档那一头的
       # 字面量没跟着改，于是新规则的局落进上一版规则的归档——记录页上不出现、累计
       # 得分里不算、结算页那个「本机最佳」还钉在一个现行规则下打不出来的旧数字上。
-      # 全程不报错。这道门量两件事：后缀必须由版本常量生成，以及八副棋盘和 main.ts
+      # 全程不报错。这道门量两件事：后缀必须由版本常量生成，以及六副棋盘和 main.ts
       # 里谁都不许再手写后缀（后一半才是真保险——它拦的是这件事本身，不是某次错字）。
       - name: 存档键跟着规则版本走
         run: |
@@ -258,7 +258,7 @@ jobs:
       # 完成度表只挂在设新密码那几处而不是登录页。读源码、几十毫秒。
       - name: 登录表单那几个零件
         run: node scripts/check-auth-form.mjs
-      # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。八个玩法的
+      # 「连得更多得更多分」全落在这两个「把种子往外长」的函数上。六副棋盘的
       # findMatches 都靠它们，长不动就是四连永远只值 4 分，长过头就是白送分。
       # 门早就写好了，只是一直漏在 CI 外面——纯逻辑、几十毫秒，没有理由不收。
       - name: 得分图案怎么长大
@@ -671,7 +671,7 @@ jobs:
       # concours」）。四种语言各写各的，而翻译往往一次只改一处。读源码、不打包。
       - name: 小屋：那颗键上只换一个词
         run: node scripts/check-room-word.mjs
-      # 八副棋盘「归哪一族、按哪一套规则讲」。从前四个函数各按 id 前缀猜一遍，而且对
+      # 六副棋盘「归哪一族、按哪一套规则讲」。从前四个函数各按 id 前缀猜一遍，而且对
       # 不认识的 id 给出三种不同的静默默认值（'square' / null / 'triangle'）——新棋盘的
       # id 只要不以 square / circle / triangle 开头，就会在三个地方被分进三个不同的家
       # 族，不报任何错：老虎机转错族的图案、《怎么玩》念错那一条、教学配图配错一族，
@@ -680,7 +680,7 @@ jobs:
       - name: 六副棋盘的家族与规则归属
         run: node scripts/check-shape-registry.mjs
       # 《Pro》那个开关，以及它在棋盘上画的那一圈「这一枚得分之后会变成什么颜色」。
-      # 要害是八副棋盘会不会有一副写错：描成 tile.color（它现在的颜色）不报错、不白
+      # 要害是六副棋盘会不会有一副写错：描成 tile.color（它现在的颜色）不报错、不白
       # 屏，屏幕上一样是一圈彩色的线，只是它说的成了一句所有人一眼就看得见的废话。
       # 读源码、不打包。界面那一半（真画出来没有、拨开关灵不灵）要开浏览器，留在本地
       # 手跑：check-pro-ui.mjs。
@@ -733,7 +733,7 @@ jobs:
           node scripts/check-slot-split.mjs /tmp/slotsplit.mjs /tmp/persist.mjs /tmp/runkey.mjs
       # 老虎机那一局的四件：完成奖励真的加上去（从前算好的那个数被计分那条路原样丢
       # 掉，一分都没生效过）、侵蚀先拆哪一枚按几何不按书写次序、降级那句话报的是真实
-      # 枚数不是侵蚀级数（二十个目标里十个对不上）、八副棋盘的卡死门槛没有哪一副写死。
+      # 枚数不是侵蚀级数（二十个目标里十个对不上）、六副棋盘的卡死门槛没有哪一副写死。
       - name: 老虎机：奖励、拆法、报数、门槛
         run: |
           npx esbuild src/engine/scoring.ts --bundle --format=esm --outfile=/tmp/scoring.mjs
@@ -858,6 +858,11 @@ jobs:
         run: node scripts/check-residue-wiring.mjs
       - name: 规则里的枚数
         run: node scripts/check-rules-counts.mjs
+      # 法文标点 `: ; ? ! »` 前面、`«` 后面要是不换行空格 U+00A0（10-15 补充 S6）。原先是普通空格，「?」「:」会被甩到
+      # 下一行行首。打包界面、规则书、法务、更新说明四份，把所有 fr 那一支的字符串挑出来量。法务那一半随 P3 改，门里
+      # LEGAL_PENDING 那一行让它暂时只报数。
+      - name: 法文标点前的不换行空格
+        run: node scripts/check-fr-spacing.mjs
       # 发信失败必须留痕（_mail.js 的 sendMail 自己写日志，不写收件地址）。把 Resend
       # 那一跳换成必然 401 / 必然抛的假货，不连网。第 20 推之前叫 check-unlock-mail，
       # 绕道 unlock.js 量；unlock.js 回 410 之后改成直接调 sendMail。
@@ -994,16 +999,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # 六十多道开浏览器的门都写死 `executablePath: '/opt/pw-browsers/chromium'`
+      # 一百多个开浏览器的脚本都写死 `executablePath: '/opt/pw-browsers/chromium'`
       # ——那是**开发容器里**的路径（CLAUDE.md 也是这么记的）。GitHub 的 runner 上
       # `playwright install` 装到 ~/.cache/ms-playwright/…，于是每一道门第一句就
       # `Failed to launch chromium because executable doesn't exist`，browser 这一条
       # **从建起来那天到 e2df336 一直整条红**：第一道门 1 秒就挂，后面二十来道全被
       # 跳过。跑不起来的门比没有门更坏——它看着像在守着，其实一行代码都没验过。
       #
-      # 这儿把那个路径做出来，而不是去改那六十多个文件：那条路径在开发容器里是真的，
-      # 改成「两处都认」要动六十三个文件，和这一推无关。等那一笔单独做（抽一个
-      # scripts/pwChromium.mjs，六十三处 import 它）。
+      # 这儿把那个路径做出来，而不是去改那一百多个文件：那条路径在开发容器里是真的，
+      # 改成「两处都认」要动一百多个文件，和这一推无关。等那一笔单独做（抽一个
+      # scripts/pwChromium.mjs，这些脚本 import 它；现在还没有这个文件）。
       - name: 把 chromium 摆到门写死的那个路径上
         run: |
           # 已经在那儿了（开发容器就是这样）就不动它。

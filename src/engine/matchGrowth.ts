@@ -3,7 +3,7 @@ import { STRINGS, type Lang } from '../i18n';
 
 /**
  * 得分气泡上那一句「几连」。**枚数是变的**（《侵蚀阶梯》v1.2 §2：图案 4→3→2→1），
- * 所以这一句现算，不再是写死的「4连」。八副棋盘共用这一处。
+ * 所以这一句现算，不再是写死的「4连」。六副棋盘共用这一处。
  */
 export function runLabel(lang: Lang, n: number): string {
   return STRINGS[lang].labelRunN.replace('{n}', String(n));

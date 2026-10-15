@@ -282,7 +282,7 @@ export interface CascadeStepper {
  *
  * The old comment in square.ts promised that scoring.ts already collapsed
  * these "by tile id". It did not — the mechanism was never written. This is
- * it, in the one place all eight shapes pass through, rather than eight
+ * it, in the one place all six boards pass through, rather than six
  * near-identical guards that would have to be kept in step.
  *
  * Identical regions only. Two regions that merely *overlap* are two different

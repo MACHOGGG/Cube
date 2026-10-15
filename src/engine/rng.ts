@@ -1,8 +1,8 @@
 /**
  * Where every board in the game gets its randomness.
  *
- * `shuffle` is the single source *for what ends up on a board*: all eight
- * modes deal through it, and the triangle boards' balanced deal
+ * `shuffle` is the single source *for what ends up on a board*: all six
+ * boards deal through it, and the hex-triangle board's balanced deal
  * (engine/orientationDeal.ts) does too.
  *
  * Every other Math.random in the app is outside that: decoration that never

@@ -299,7 +299,7 @@ head('⑧ 一次性清档：两端各调一次（决策 §6）');
 say(/export function wipeOldRules\(/.test(wipeSrc), '尺子：engine/wipeOldRules.ts 导出了 wipeOldRules');
 say(
   /bestKeys:\s*readonly string\[\]/.test(wipeSrc),
-  '它收的是一组 bestKey（而不是自己 import 八副棋盘——那样搬了也还是只有网页端能用）',
+  '它收的是一组 bestKey（而不是自己 import 六副棋盘——那样搬了也还是只有网页端能用）',
 );
 say(!/everyGame/.test(wipeSrc), 'wipeOldRules.ts 里不提 everyGame（它不认识主菜单）');
 say(/markWiped\(/.test(wipeSrc), '尺子：它写哨兵键（markWiped），所以不会每次开机重跑');

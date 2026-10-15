@@ -5,7 +5,7 @@
  *   node scripts/check-flip-score.mjs /tmp/scoring.mjs
  *
  * 这一道接替 check-star-score.mjs（那一套《星星跟随色块消除》连同「纯星星组＝枚
- * 数²＋消除」整条路一起退役了，见 §1.1）。不碰 DOM、不碰八副棋盘：喂给
+ * 数²＋消除」整条路一起退役了，见 §1.1）。不碰 DOM、不碰棋盘：喂给
  * createCascadeStepper 一份假的 CascadeConfig，把这几件单独拿出来量：
  *
  *   ① 一组的分＝2 × **这一拍真的翻了几枚**，不是组里有几枚；

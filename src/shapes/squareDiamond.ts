@@ -443,8 +443,9 @@ export function createSquareDiamondGame(): ShapeGame {
        *
        *   cx = boardLeft + cellSize·(c − r)/√2       cy = boardTop + cellSize·(c + r − 2mid)/√2
        *
-       * 牌的边长是 cellSize × 0.92，立起来之后它的**外接方框**半边是 0.46 × √2 ×
-       * cellSize（菱形的对角线），不是 0.46——这一副的牌是转了 45° 摆的。
+       * 牌是**正着摆的**（makeTileEl 不转，样式里也不转；转了 45° 的只是格网），边长 cellSize × 0.92，
+       * 半边 0.46 × cellSize。下面 unitXY 的单位是 k = cellSize / √2，折过来半边就是 0.46 × cellSize ÷ k
+       * = 0.46 × √2——√2 是换单位换出来的，不是牌转了。
        */
       const TILE_HALF = 0.46 * Math.SQRT2;
       function unitXY(r: number, c: number): [number, number] {

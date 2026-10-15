@@ -51,7 +51,7 @@ play-slides.com 就变了，没有预发环境，没有中间确认。所以：
 
 ```bash
 npm run dev          # vite 开发服务器（不带 api/）
-npm run build        # tsc -b && vite build && 生成法务静态页（LEGAL_ORDER 里那几份，现在只有隐私政策一张）
+npm run build        # tsc -b && vite build && 法务静态页（build-legal：现在只有隐私政策一张）&& dist/version.json（build-version：构建哈希 + 更新说明编号）
 npm run typecheck    # 只验类型。**管不到 `xhs/`**——那一端走 xhs/tsconfig.json
 npx tsc -p xhs/tsconfig.json   # 小红书端的类型（npm run build:xhs 开头也跑它）
 
@@ -61,8 +61,17 @@ node scripts/check-<名字>.mjs http://localhost:8815/
 
 # 小红书端
 npm run preview:xhs
-npm run check:xhs:all   # 五个门串起来跑，约 10–15 分钟
+npm run check:xhs:all   # 先 npm run build、build:xhs、出预览页，再串六道门：vsweb story oldkernel oldcss pickup submit
 ```
+
+**大更新**（玩家看得见的新东西）同一推把 `src/changelog.ts` 的 `RELEASE` 加一，并在 `CHANGELOG` 里写这一号的
+四语一句（简繁 ≤12 字、英 ≤40、法 ≤48，`check-new-version` 量）；改 bug、动样式不加。`build-version.mjs` 把它和构建
+哈希写进 `/version.json`，还开着旧页面的人据此在主菜单看到「有新版本」那张卡。
+
+**小红书产物是提交进仓库的**（`public/xhs/` 整个目录和 `xhs/slides-minitool.zip`，`npm run build:xhs` 出）。zip 每
+出一次字节都不同，app.js 是一行几十万字的压缩代码，所以两条分支各自出过包、合并时这两样**一定冲突**，手工合并合不出
+对的东西。**冲突时不要手工合并**：随便取一边（`git checkout --ours -- public/xhs xhs/slides-minitool.zip`），合完源码
+之后重新 `npm run build:xhs`，把 `public/xhs/` 和 zip 整份提交。CI『小红书产物必须能由源码重现』会拦下没重出的那一份。
 
 `scripts/dev-server.mjs` 自己设 `ALLOW_MEMORY_STORE=1`，所以小屋和兑换码活在
 这个进程的内存里，进程一关就没了。它还种四张测试兑换码：`TESTMONTH` /
@@ -225,13 +234,13 @@ JSON 原样贴进来就能在真机上复核。
 Playwright 的浏览器在 `/opt/pw-browsers/chromium`（`executablePath` 要写这个），
 不要跑 `playwright install`。
 
-**这个路径是写死在六十多道门里的**，而它只在开发容器里成立。GitHub 的 runner 上
+**这个路径写死在一百多个脚本里**（门约 100 道，数会涨，要用当场 `grep -rl /opt/pw-browsers scripts xhs tools | wc -l`），而它只在开发容器里成立。GitHub 的 runner 上
 `playwright install` 装到 `~/.cache/ms-playwright/…`，所以 `browser` 那一条 CI **从建起来
 那天到 2026-10-01 一直整条红**：第一道门 1 秒就
 `Failed to launch chromium because executable doesn't exist`，后面二十来道全被跳过——一条
 跑不起来的流水线看着像在守着，其实一行代码都没验过。现在 ci.yml 里有一步把那个路径做出来
 （装完之后 `ln -s` 到 `playwright` 自己报的 `executablePath()`，再真启一次确认），所以两边
-都认。要彻底不依赖它，得抽一个 `scripts/pwChromium.mjs` 让那六十三处 import 它——还没做。
+都认。要彻底不依赖它，得抽一个 `scripts/pwChromium.mjs`（现在还没有这个文件）让这些脚本 import 它——还没做。
 
 ## 架构：需要读好几个文件才看得出来的那些
 
@@ -423,7 +432,7 @@ Vercel serverless functions，纯 `.js`（不过 tsc）。`_` 开头的是共用
 
 面向外的：`signin`（邮箱 + 六位验证码的注册 / 登录；登出时作废这台设备的令牌）、
 `handle`（免邮箱账号的注册 / 登录；凭第一串重设第二串那一支 10-09 起回 410）、
-`subscription`（查权益）、`passcode`（绑内部码设密码；刷卡开账号那一支第 20 推起回 410）、
+`subscription`（查权益）、`passcode`（两支都关了：刷卡开账号那一支第 20 推起、内部码绑邮箱那一支 10-11 方案 A-2 起都回 410，代码原样留着等重开售卖；别的请求一律 400——这个函数现在不做事，只占一个名额）、
 `email`（换邮箱 / 免邮箱账号绑定邮箱，见上）、`redeem`（兑内部码）、`checkout` / `portal`（Creem）、
 `room`（小屋）、`scores`（战绩与排行榜）、`mint`（批量发码，`ADMIN_TOKEN` 保护）。
 Vercel Hobby 档最多十二个函数，现在用了十一个。
@@ -476,8 +485,10 @@ Vercel Hobby 档最多十二个函数，现在用了十一个。
 - `report-*.mjs` 是**体检台，不是门**：永远返回 0，只把数字摆出来。现在有
   `report-cvd-sim`（色盲开关关着时，棋子颜色在二色觉下还分不分得开——量出来
   是不够用的，等玩家拍板要不要换颜色）。
-- `slides-simulator.html` / `slides-interface.html` 是给玩家自己调排版的可视化
-  台子。
+- `slides-simulator.html`（界面模拟器）是**生成物、不在仓库里**（.gitignore）：起 dev-server 之后
+  `node scripts/ui-screens.mjs http://localhost:8815 design/screens.json && node scripts/build-simulator.mjs`，
+  出在仓库根。`scripts/ui-snapshot.mjs` 出的是设计画布（`design/` 下的 canvas.json 和各屏 .dc.html）。
+  `.gitignore` 里那一行 `slides-interface.html` 现在没有脚本会生成它。
 - 四份上手指南在仓库根：`iOS上手指南.md`、`后台数据指南.md`、
   `微信小游戏上手指南.md`、`抖音小游戏上手指南.md`。
 - 微信小游戏 AppID `wx9cab5874e6df2aee` 可以出现在代码里；AppSecret 和云开发

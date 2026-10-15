@@ -137,6 +137,10 @@ for (const lang of ['en', 'fr']) {
   check(`① （尺子）${lang}：同一套比对喂原先那几份模板，当场红`, old.length >= 4, `${old.length} 条没对上，例：${old[0] ?? '（无）'}`);
 }
 
+// 一句里有两个 {n}：两个都换（10-15 补充 S6）。原先 replace 只换第一个，得「3 sur {n}」。
+check('① countPhrase 一句里的每一个 {n} 都换', countPhrase('{n} sur {n}', 3, 'fr') === '3 sur 3', countPhrase('{n} sur {n}', 3, 'fr'));
+check('①（反面尺子）只换第一个的旧写法在同一句上念错', '{n} sur {n}'.replace('{n}', '3') === '3 sur {n}');
+
 // 中文两份：不分单复数（没有 `|`），每个占位符都填上了。
 for (const lang of ['zhHans', 'zhHant']) {
   const s = STRINGS[lang];

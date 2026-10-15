@@ -1139,7 +1139,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
     // 单局最快 on a room's closing card is read from here, the same way the
     // live standings read the score off the HUD's reel: the scoreboard takes
-    // what is already on screen, and none of the eight boards has to know
+    // what is already on screen, and none of the six boards has to know
     // that multiplayer exists.
     refs.endOverlay.dataset.seconds = String(Math.round(elapsed));
     // 交卷时报给房间的那个数。

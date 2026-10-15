@@ -5,7 +5,7 @@
  *
  * 这是一台**体检台，不是一道门**：它永远返回 0，只把数字摆出来。因为它量出
  * 来的东西现在还没有一个「对」的答案——标准配色对二色觉确实不友好（见下面
- * 的数），而要不要为此把八副棋盘的颜色全换掉，是玩家拍板的事，不是脚本能替
+ * 的数），而要不要为此把六副棋盘的颜色全换掉，是玩家拍板的事，不是脚本能替
  * 他决定的。等颜色定了，把 REPORT 改回 check 并让它判定，就是一道门。
  *
  * 为什么单开一道门：站里原来那把尺子（CIEDE2000 ≥20 / 离底板 ≥28）量的是
@@ -49,16 +49,17 @@ const arrayAfter = (text, key) => {
   return [...m[1].matchAll(/#[0-9a-fA-F]{6}/g)].map((x) => x[0].toLowerCase());
 };
 
-/** 八个玩法各自那套标准配色（色盲开关关着时用的就是它）。 */
+/**
+ * 六副棋盘各自那套标准配色（色盲开关关着时用的就是它）。原先表里还有已经删掉的 triangleBig.ts、triangleAdvanced.ts
+ * （《侵蚀阶梯》v1.2 PR-6 删了两副三角），一跑就 ENOENT、exit 1——而文件头写着「永远返回 0」（10-15 补充 S6 修）。
+ */
 const BOARDS = [
-  ['基础方块', 'src/shapes/square.ts'],
+  ['经典方块', 'src/shapes/square.ts'],
   ['菱形方块', 'src/shapes/squareDiamond.ts'],
-  ['基础小球', 'src/shapes/circle.ts'],
-  ['六边小球', 'src/shapes/circleHex.ts'],
-  ['七色圆球', 'src/shapes/circleSeven.ts'],
-  ['基础三角', 'src/shapes/triangle.ts'],
-  ['大三角', 'src/shapes/triangleBig.ts'],
-  ['进阶三角', 'src/shapes/triangleAdvanced.ts'],
+  ['经典小球', 'src/shapes/circle.ts'],
+  ['六边形小球', 'src/shapes/circleHex.ts'],
+  ['菱形小球', 'src/shapes/circleSeven.ts'],
+  ['六边形三角', 'src/shapes/triangle.ts'],
 ].map(([name, file]) => ({
   name,
   colors: arrayAfter(read(file), 'standard'),
@@ -196,13 +197,13 @@ function measure(label, colors) {
 console.log('色盲开关**关着**的时候，三套配色在二色觉下还分不分得开');
 console.log(`门槛：棋子彼此 ≥${PAIR_MIN}，离底板（${PANEL}）≥${PANEL_MIN}\n`);
 
-console.log('════ 一、开关关着（默认）：八副棋盘的标准配色 ════\n');
+console.log('════ 一、开关关着（默认）：六副棋盘的标准配色 ════\n');
 for (const b of BOARDS) {
   console.log(`— ${b.name}（${b.colors.length} 支）`);
   measure(b.name, b.colors);
 }
 
-console.log('\n════ 二、开关打开：同样八副，色盲配色 ════\n');
+console.log('\n════ 二、开关打开：同样六副，色盲配色 ════\n');
 for (const b of BOARDS) {
   console.log(`— ${b.name}·色盲（${b.cvd.length} 支）`);
   measure(`${b.name}·色盲`, b.cvd);
@@ -210,7 +211,7 @@ for (const b of BOARDS) {
 
 console.log('\n════ 三、天才那两套（也是开关关着时用的） ════\n');
 for (const [name, all] of Object.entries(VARIANTS)) {
-  // 各玩法用几支就切几支：4 / 5 / 6 / 7 覆盖了八副棋盘的全部档位。
+  // 各玩法用几支就切几支：4 / 5 / 6 / 7 覆盖了六副棋盘的全部档位。
   for (const n of [4, 5, 6, 7]) {
     console.log(`— ${name}·前 ${n} 支`);
     measure(`${name}·前 ${n} 支`, all.slice(0, n));

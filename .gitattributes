@@ -1,0 +1,8 @@
+# 小红书产物：npm run build:xhs 生成、整份提交（见 CLAUDE.md《命令》下面那段）。冲突时不手工合并——重出一次整份提交。
+# zip：git 本来就按内容认成二进制，这里写明；每次出包字节都不同，两边都出过包的合并一定冲突。
+xhs/slides-minitool.zip    binary
+# app.js：一行几十万字的压缩代码。-diff：git diff / log -p 不再刷出整行；merge=binary：冲突时不往文件里插冲突标记
+# （插进去就是一份语法错的 JS），而是留下我们这边并标成冲突，等人重出。仍按文本存，换行照常规范化。
+public/xhs/app.js          -diff merge=binary linguist-generated
+public/xhs/index.html      merge=binary linguist-generated
+public/xhs/assets/**       binary

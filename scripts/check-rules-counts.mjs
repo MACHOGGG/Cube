@@ -441,6 +441,21 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
     const b = body(term);
     check(`⑥ ${lang}：「${term}」那一条写着 ×1.5 和最多 10 次`, b !== '' && /1[.,]5/.test(b) && /\b10\b/.test(b), b.slice(0, 40));
   }
+  // 同一组歇几步（10-15 补充 S6，L-10 ①）：engine/scoring.ts 的 TOGGLE_SCORES_PER_GROUP / TOGGLE_COOLDOWN_MOVES——同一组
+  // 不满 5 步得了两次分就停下，从最后那次往后数第 5 步起才又算分。原先规则书四语都没写这一条：玩家拼出来了、不翻也
+  // 不给分，屏幕上一句话没有，以为是坏了。两个数从源码现读，规则书里写的「两次」「5 步」要和它对得上。
+  const SCORING_SRC = read('src/engine/scoring.ts');
+  const per = Number((SCORING_SRC.match(/export const TOGGLE_SCORES_PER_GROUP = (\d+);/) || [])[1]);
+  const cool = Number((SCORING_SRC.match(/export const TOGGLE_COOLDOWN_MOVES = (\d+);/) || [])[1]);
+  check('⑥（尺子）从 scoring.ts 现读到两个常量', Number.isInteger(per) && Number.isInteger(cool), `${per} / ${cool}`);
+  check('⑥ 同一组最多连得两次（规则书写的「两次」就是这个数）', per === 2, String(per));
+  const REST = { zhHans: [/两次/, `${cool} 步`], zhHant: [/兩次/, `${cool} 步`], en: [/\btwice\b/, `${cool} moves`], fr: [/deux fois/, `${cool} coups`] };
+  for (const [lang, [twice, moves]] of Object.entries(REST)) {
+    const b = body(FLIP[lang]);
+    check(`⑥ ${lang}：「${FLIP[lang]}」那一条写了同一组歇几步（两次、${moves}）`, twice.test(b) && b.includes(moves), b.slice(-60));
+  }
+  check('⑥（反面尺子）旧英文那句里找不到「5 moves」',
+    !'a move that scores nothing starts the count again. No Move multiplier either.'.includes(`${cool} moves`));
   // 「another colour」后面要是词尾：「flip another coloured piece」（再翻一枚色块）是正常的话，不算。
   const OTHER = /其他颜色|其他顏色|another colou?r\b|autre couleur/;
   const tut = (I18N_SRC.match(/export const TUTORIAL_RULES[\s\S]*?\n\};/) || [''])[0];

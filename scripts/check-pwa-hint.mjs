@@ -46,7 +46,8 @@ const WANT = {
   zhHans: '登录后打的每一局都会存到云端，换设备也找得回。',
   zhHant: '登入後打的每一局都會存到雲端，換裝置也找得回。',
   en: 'Sign in and every game you play from then on is saved to the cloud — on any device.',
-  fr: 'Connectez-vous : chaque partie jouée ensuite est sauvegardée dans le cloud, sur tous vos appareils.',
+  // 冒号前是不换行空格 U+00A0（10-15 补充 S6：法文标点，check-fr-spacing 量）
+  fr: 'Connectez-vous : chaque partie jouée ensuite est sauvegardée dans le cloud, sur tous vos appareils.',
 };
 const LANGS = Object.keys(WANT);
 const HINT_DAY_KEY = 'slides_signin_hint_day';

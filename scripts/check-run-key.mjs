@@ -10,7 +10,7 @@
  *
  * 所以这道门分两半：
  *   前一半量**行为**——后缀必须由版本常量生成，不是写死的字面量；
- *   后一半量**位置**——八副棋盘里谁都不许再手写后缀。第二半才是真正的保险：它拦
+ *   后一半量**位置**——六副棋盘里谁都不许再手写后缀。第二半才是真正的保险：它拦
  *   的不是这一次的错字，是「又有人在棋盘里手写后缀」这件事本身。
  */
 import { readFileSync, readdirSync } from 'node:fs';
@@ -118,7 +118,7 @@ const check = (name, ok, extra = '') => {
     + ' ｜ ' + [1, 2, 3, 4, 5].map((v) => suffixFor('puzzle', { puzzle: v })).join(' '));
 }
 
-// ── 三、八副棋盘里谁都不许再手写后缀 ────────────────────────────────
+// ── 三、六副棋盘里谁都不许再手写后缀 ────────────────────────────────
 {
   const dir = new URL('../src/shapes/', import.meta.url);
   const boards = readdirSync(dir).filter((f) => f.endsWith('.ts') && f !== 'types.ts' && f !== 'registry.ts');
