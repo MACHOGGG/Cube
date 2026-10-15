@@ -86,6 +86,11 @@ export const BOMB_HAZARD_PENALTY = 100;
 /** 步步为营：被消除一枚几分、终局一颗星几分（src/engine/puzzleScore.ts）。 */
 export const PUZZLE_CLEARED_POINTS = 10;
 export const PUZZLE_STAR_POINTS = 5;
+/**
+ * 步步为营第 3 版的起手步数（src/engine/puzzleScore.ts 的 PUZZLE_START_STEPS，10-15 补充 S9）。第 3 版步数只降不升，
+ * 所以一局结束时「剩几步」不可能比起手还多——vetRun 拿它核。手抄的，check-scores-guard 对上源码。
+ */
+export const PUZZLE_START = Object.freeze({ square: 22, circle: 15 });
 
 /** 削线分的上界：每格在每个线族里最多属于一条线，一条线的分是它枚数的平方 ≤ 枚数 × Lmax。 */
 const lineCeiling = (b) => b.d * b.N * b.Lmax;
@@ -185,6 +190,12 @@ export function vetRun(board, data) {
     const { cleared: gone, stars } = data.puzzle;
     if (!isCount(gone) || !isCount(stars) || gone + stars > b.N) return { verdict: 'implausible', why: 'puzzleTally' };
     if (totalScore !== gone * PUZZLE_CLEARED_POINTS + stars * PUZZLE_STAR_POINTS) return { verdict: 'implausible', why: 'puzzleTotal' };
+    // 第 3 版步数只降不升：剩的比起手还多只可能是手搓的（剩几步写进榜上那个拼起来的数，同分剩得多的排前面）。
+    // 第 1、2 版有退步，剩多少都可能，不核。
+    if (Number(data.puzzleRules) >= 3) {
+      const left = data.puzzle.left;
+      if (!isCount(left) || left > (PUZZLE_START[board] ?? 0)) return { verdict: 'implausible', why: 'puzzleLeft' };
+    }
     return { verdict: 'ok' };
   }
   if (slot) {

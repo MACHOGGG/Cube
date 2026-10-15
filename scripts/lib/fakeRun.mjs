@@ -22,7 +22,7 @@
  * 门里那个 `call()` 多半用下面的 fillRun：门自己写的那几位盖在夹具上，门写什么算什么。
  */
 import { readFileSync } from 'node:fs';
-import { BOARD_LIMITS, POINTS_PER_FLIP, PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS } from '../../api/_maxscore.js';
+import { BOARD_LIMITS, POINTS_PER_FLIP, PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS, PUZZLE_START } from '../../api/_maxscore.js';
 
 const SCORING_V = (/export const SCORING_RULES_VERSION = '([^']+)'/.exec(
   readFileSync(new URL('../../src/engine/scoring.ts', import.meta.url), 'utf8'),
@@ -34,7 +34,7 @@ const RULE_TAGS = {
   bomb: { bombRules: 3 },
   bombTimed: { bombRules: 3 },
   flip: { flipRules: 2 },
-  puzzle: { puzzleRules: 2 },
+  puzzle: { puzzleRules: 3 },
 };
 
 /**
@@ -67,11 +67,13 @@ export function fakeRun({ board, modeKey = 'base', slot = false, total }) {
     let stars = (T - cleared * PUZZLE_CLEARED_POINTS) / PUZZLE_STAR_POINTS;
     while (cleared + stars > b.N && cleared > 0) { cleared--; stars += 2; }
     const flips = Math.min(b.N, cleared + stars);
+    // 第 3 版的账（10-15 补充 S9）：起手几步就能空走几步，得分的那几步不扣——走了「起手 + 10」步、其中 10 步得分、剩 0。
+    const spent = (PUZZLE_START[board] ?? 0) + 10;
     return {
       ...base,
       score: POINTS_PER_FLIP * flips, patternPoints: POINTS_PER_FLIP * flips, linePoints: 0, comboBonusPoints: 0,
-      flips, lines: 0, moves: 40, cleared, stepCoef: 1,
-      puzzle: { cleared, stars, spent: 40, scoredMoves: 10, streakRefunds: 0, edgeRefunds: 0, left: 0, peak: 6 },
+      flips, lines: 0, moves: spent, cleared, stepCoef: 1,
+      puzzle: { cleared, stars, spent, scoredMoves: 10, left: 0 },
     };
   }
   if (modeKey === 'flip') {

@@ -92,7 +92,7 @@ function dailyData(day, score, over = {}) {
     shapeFallback: v.board,
     modeKey: MODE_KEY[v.mode],
     ...(v.mode === 'slot' ? { slot: true } : {}),
-    ...(v.mode === 'puzzle' ? { puzzleRules: 2 } : {}),
+    ...(v.mode === 'puzzle' ? { puzzleRules: 3 } : {}),
     ...(v.mode === 'flip' ? { flipRules: 2 } : {}),
     ...(v.mode.startsWith('bomb') ? { bombRules: 3 } : {}),
     totalScore: score,
@@ -287,6 +287,33 @@ const E = await makePlayer('daily-e@example.com');
   check('⑧ 存档里这一局还是只有一条、总分只算一遍',
     archived.length === 1 && mineStats.payload?.runs === 1 && mineStats.payload?.total === 275,
     `存档 ${archived.length} 条 / runs ${mineStats.payload?.runs} / total ${mineStats.payload?.total}`);
+}
+
+// ── ⑩ 步步为营那一天只收现行规则的局（10-15 补充 S9）──────────────────────────────────────────
+//
+// 原先今日榜不分规则版本：还开着旧页面的人打的第 2 版局会和第 3 版混排。现在回 'stale'（不是 'rejected'——后者让
+// 结算页说「看看设备的日期和时间」，可他的钟没错），不上今日榜；这一局照样进存档、进它自己那张归档榜。钟拨到最近的
+// 一个步步为营挑战日（北京）。
+{
+  let day = today;
+  while (SC.VARIANTS[SC.dailyVariant(day)].mode !== 'puzzle' && day < today + 400) day++;
+  const v = SC.VARIANTS[SC.dailyVariant(day)];
+  check('⑩ 尺子：找到了一个步步为营挑战日', v.mode === 'puzzle', `${SC.dayKey(day)} ${v.mode}/${v.board}`);
+  setNow(SC.dayStartOf(day) + 12 * 3600e3);
+  const F = await makePlayer('daily-f@example.com');
+  const G = await makePlayer('daily-g@example.com');
+  const oldRun = await push(F, dailyData(day, 150, { puzzleRules: 2 }));
+  check(`⑩ ${SC.dayKey(day)}：第 2 版的局回 stale（不是 rejected）`, oldRun.status === 200 && oldRun.payload?.daily === 'stale',
+    `${oldRun.status} ${JSON.stringify(oldRun.payload?.daily)}`);
+  const newRun = await push(G, dailyData(day, 150));
+  check(`⑩ ${SC.dayKey(day)}：第 3 版的局 stored`, newRun.payload?.daily === 'stored', JSON.stringify(newRun.payload?.daily));
+  const b = await todayBoard(G);
+  const rows = b.payload?.rows || [];
+  check('⑩ 今日榜上只有第 3 版那一局', rows.length === 1 && rows[0].me === true, JSON.stringify(rows));
+  const mineF = await call({ action: 'mine', ...F });
+  check('⑩ 第 2 版那一局照样进了存档、记在它自己那张归档榜上',
+    mineF.payload?.runs === 1 && mineF.payload?.best?.[`${v.board}:puzzle2`] === 150, JSON.stringify(mineF.payload?.best));
+  setNow(NOON);
 }
 
 Date.now = realNow;

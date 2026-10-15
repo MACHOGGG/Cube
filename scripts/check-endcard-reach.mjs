@@ -90,7 +90,8 @@ async function newPage(w, h, tipSeen = false) {
     卷轴看得见: (() => { const e = document.querySelector('#scoreReel'); return !!e && !e.hasAttribute('hidden'); })(),
   }));
   check('棋盘 36 枚', st.枚数 === 36, String(st.枚数));
-  check('左上那一块印的是余步（8），不是分数', st.余步 === '8', String(st.余步));
+  // 方块起手 22 步（步步为营第 3 版，10-15 补充 S9；原先一律 8）。
+  check('左上那一块印的是余步（22），不是分数', st.余步 === '22', String(st.余步));
   // 这一条是修法本身的尺子：`#scoreReel` 必须**在**（req 取得到），但**看不见**
   // （这一档那一格印的是余步）。少了前半条就是从前那个崩；少了后半条就是屏幕上
   // 多出一个一直在涨的数，而玩家会把它当成这一局的回报。

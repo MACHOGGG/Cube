@@ -66,7 +66,8 @@ export interface I18nStrings {
   /** 步步为营的结束理由（engine/puzzleScore.ts 的 PUZZLE_STEPS_OUT_REASON）。 */
   stepsOutReason: string;
   /**
-   * 步步为营结算页那六行（见 engine/runRecord.ts 的 runBreakdown）。
+   * 步步为营结算页那几行（见 engine/runRecord.ts 的 runBreakdown）：第 3 版三行（被消除、星星、走了几步）；
+   * 下面 puzzleStreakLabel / puzzleEdgeLabel / puzzleLeftLabel 三句只给第 1、2 版的旧局用（那时共六行）。
    *
    * {n} 是每一枚值多少分——从 puzzleScore.ts 的常数填进来，不写死在文案里：
    * 10 和 5 是暂定值，改常数的时候这两句要跟着改口，而不是变成假话。{c} 是枚数。
@@ -988,7 +989,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timedModeTagline: '100-second challenge',
     flipScoringHint: 'The scoring shape stays at four pieces all game · no Move multiplier',
     puzzleModeTitle: 'Puzzle · Step by step',
-    puzzleModeTagline: 'Eight moves in hand. A move costs 1. Scoring pays 1 back. Scoring twice in a row pays 1 more. Clearing a line pays 2 more. No clock.',
+    puzzleModeTagline: 'Balls start with 15 moves, squares with 22. A move that scores is free. Any other move costs 1. No clock.',
     stepsLeftLabel: 'Moves left',
     stepsOutReason: 'Out of moves',
     puzzleClearedLabel: 'Cleared {c} × {n}',
@@ -1371,7 +1372,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timedModeTagline: 'Défi de 100 secondes',
     flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de Coefficient de coups',
     puzzleModeTitle: 'Énigme · Pas à pas',
-    puzzleModeTagline: 'Huit coups en main. Un coup coûte 1. Marquer en rend 1. Marquer deux fois de suite en rend 1 de plus. Effacer une ligne en rend 2 de plus. Sans chronomètre.',
+    puzzleModeTagline: '15 coups pour les billes, 22 pour les carrés. Un coup qui marque ne coûte rien. Les autres en coûtent 1. Sans chronomètre.',
     stepsLeftLabel: 'Coups',
     stepsOutReason: 'Plus de coups',
     puzzleClearedLabel: 'Effacées {c} × {n}',
@@ -1754,7 +1755,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timedModeTagline: '100s 挑戰',
     flipScoringHint: '得分圖案整局都是 4 枚 · 不乘步數係數',
     puzzleModeTitle: '真正解密 · 步步為營',
-    puzzleModeTagline: '手裡 8 步。走一步扣 1 步。得分退回 1 步。連著得分再退 1 步。消掉一條線再退 2 步。沒有時間限制。',
+    puzzleModeTagline: '小球 15 步，方塊 22 步。沒得分的一步扣 1 步，得分的一步不扣。沒有時間限制。',
     stepsLeftLabel: '餘步',
     stepsOutReason: '步數用完了',
     puzzleClearedLabel: '被消除 {c} 枚 × {n}',
@@ -2137,7 +2138,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     timedModeTagline: '100s 挑战',
     flipScoringHint: '得分图案整局都是 4 枚 · 不乘步数系数',
     puzzleModeTitle: '真正解密 · 步步为营',
-    puzzleModeTagline: '手里 8 步。走一步扣 1 步。得分退回 1 步。连着得分再退 1 步。消掉一条线再退 2 步。没有时间限制。',
+    puzzleModeTagline: '小球 15 步，方块 22 步。没得分的一步扣 1 步，得分的一步不扣。没有时间限制。',
     stepsLeftLabel: '余步',
     stepsOutReason: '步数用完了',
     puzzleClearedLabel: '被消除 {c} 枚 × {n}',
@@ -2709,7 +2710,7 @@ export const MODE_TIPS: Record<
     slot: 'Slot Machine spins one scoring shape at the start. Only that shape scores this game. Build it and those pieces turn into stars. It shrinks too: one piece fewer each time the ladder drops, down to a single piece. After that, any still-joined part of it counts. Clearing works as before. Give it a go!',
     timed: '100 seconds on the clock — how many points can you get?',
     layout: 'Same rules, different board. Fancy the challenge?',
-    puzzle: 'Eight moves to start. Every move costs 1. Scoring pays 1 back. Scoring twice in a row pays 1 more. Clearing a line pays 2 more. How high can you score?',
+    puzzle: 'Balls start with 15 moves, squares with 22. A move that scores is free. Any other move costs 1. Moves never come back. How high can you score?',
   },
   fr: {
     bomb: 'Le glissement, les points et les disparitions ne changent pas. Le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent. N’importe lesquels, du moment qu’ils se touchent. Une bombe voisine d’une figure qui marque se désamorce.',
@@ -2717,7 +2718,7 @@ export const MODE_TIPS: Record<
     slot: 'Machine à sous tire une figure gagnante au départ. Seule cette figure marque cette partie. Formez-la et ces pièces deviennent des étoiles. Elle rétrécit aussi : une pièce de moins à chaque palier, jusqu’à une seule. Ensuite, toute partie encore reliée compte. Les disparitions ne changent pas. À vous !',
     timed: '100 secondes au compteur — combien de points allez-vous marquer ?',
     layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
-    puzzle: 'Huit coups pour commencer. Chaque coup en coûte 1. Marquer en rend 1. Marquer deux fois de suite en rend 1 de plus. Effacer une ligne en rend 2 de plus. Quel score allez-vous atteindre ?',
+    puzzle: '15 coups au départ pour les billes, 22 pour les carrés. Un coup qui marque ne coûte rien. Les autres en coûtent 1. Les coups ne reviennent jamais. Quel score allez-vous atteindre ?',
   },
   zhHant: {
     bomb: '滑動、得分、消除都和以前一樣。紅色是炸彈色。四個紅的連在一起就會爆炸。任意四個碰到一起都算。得分圖案旁邊的炸彈會被拆掉。',
@@ -2725,7 +2726,7 @@ export const MODE_TIPS: Record<
     slot: '《老虎機》開局會轉出一個得分圖案。這一局只有它算分。拼出它就得分，那幾枚變成星星。它也會變小：每降一級少一枚，最少剩一枚。少到一枚之後，它任意還連著的那幾枚都算。消除規則不變。快挑戰一下吧！',
     timed: '限時100s，能得多少分呢？',
     layout: '規則相同，佈局不同，您能挑戰麼？',
-    puzzle: '開局有 8 步。每走一步扣 1 步。得分退回 1 步。連著得分再退 1 步。消掉一條線再退 2 步。您能得多少分？',
+    puzzle: '小球開局 15 步，方塊 22 步。沒得分的一步扣 1 步，得分的一步不扣。步數只減不增。您能得多少分？',
   },
   zhHans: {
     bomb: '滑动、得分、消除都和以前一样。红色是炸弹色。四个红的连在一起就会爆炸。任意四个碰到一起都算。得分图案旁边的炸弹会被拆掉。',
@@ -2733,7 +2734,7 @@ export const MODE_TIPS: Record<
     slot: '《老虎机》开局会转出一个得分图案。这一局只有它算分。拼出它就得分，那几枚变成星星。它也会变小：每降一级少一枚，最少剩一枚。少到一枚之后，它任意还连着的那几枚都算。消除规则不变。快挑战一下吧！',
     timed: '限时100s，能得多少分呢？',
     layout: '规则相同，布局不同，您能挑战么？',
-    puzzle: '开局有 8 步。每走一步扣 1 步。得分退回 1 步。连着得分再退 1 步。消掉一条线再退 2 步。您能得多少分？',
+    puzzle: '小球开局 15 步，方块 22 步。没得分的一步扣 1 步，得分的一步不扣。步数只减不增。您能得多少分？',
   },
 };
 

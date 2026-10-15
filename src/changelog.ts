@@ -17,12 +17,25 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 0;
+export const RELEASE = 2;
 
 export type ReleaseNote = Record<Lang, string>;
 
-/** 键是那一次的 `RELEASE`。 */
-export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {};
+/**
+ * 键是那一次的 `RELEASE`。
+ *
+ * 编号照 10-15 补充〇·三「RELEASE 重新编号」：P8（终局）→ 1、S9（步步为营第 3 版）→ 2、P14 → 3、S10 → 4、P18 → 5。
+ * 第 1 号那一推（10-14 方案 P8）还没做，所以这儿暂时只有第 2 号——RELEASE 只许往上涨，哪一推先上线就先占号，后上线
+ * 的那一推要接着往上编（别回头去填 1）。
+ */
+export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
+  2: {
+    zhHans: '改进：步步为营新规则',
+    zhHant: '改進：步步為營新規則',
+    en: 'Step by step has new move rules',
+    fr: 'Nouvelles règles pour Pas à pas',
+  },
+};
 
 /** 每种语言最长多少（简繁按字、英法按字符）。 */
 export const NOTE_MAX: Readonly<Record<Lang, number>> = { zhHans: 12, zhHant: 12, en: 40, fr: 48 };

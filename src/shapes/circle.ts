@@ -246,7 +246,7 @@ export function createCircleGame(): ShapeGame {
       const liveBomb = (t: Tile) => isBomb && isLiveBomb(t, RED_IDX);
       /** 无限反转（见 ShapeGameOpts.flip）：得分翻面来回翻，不消行，只由计时结束。 */
       const flipMode = !!opts?.flip;
-      /** 步步为营（见 ShapeGameOpts.steps 与 engine/puzzleScore.ts）：手里 8 步，没有钟。 */
+      /** 步步为营（见 ShapeGameOpts.steps 与 engine/puzzleScore.ts）：小球起手 15 步，没有钟。 */
       const puzzleMode = !!opts?.steps;
       // 这一局记成什么模式、存进哪个键——两样都由 engine/runKey.ts 推。
       // 存档键的后缀带着规则版本号。从前这儿手写着上一版的后缀：炸弹升到第 3 版、

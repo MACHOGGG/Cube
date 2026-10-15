@@ -52,7 +52,7 @@ async function loadEngine() {
     export { FLIP_STREAK_BASE, FLIP_STREAK_CAP, POINTS_PER_FLIP, TOGGLE_SCORES_PER_GROUP } from './src/engine/scoring';
     export { MIN_GROUP_POINTS } from './src/engine/groupScore';
     export { BOMB_HAZARD_PENALTY } from './src/engine/bomb';
-    export { PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS } from './src/engine/puzzleScore';
+    export { PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS, PUZZLE_START_STEPS } from './src/engine/puzzleScore';
     export { stepCoefFor } from './src/engine/stepCoef';
     export { erodedShapes, orientationsOf, findTargetAt } from './src/engine/targetMatch';
     export { targetsOf, sizeAtLevel, scoreForSize } from './src/engine/targets';
@@ -281,6 +281,7 @@ export async function deriveFacts() {
       BOMB_HAZARD_PENALTY: engine.BOMB_HAZARD_PENALTY,
       PUZZLE_CLEARED_POINTS: engine.PUZZLE_CLEARED_POINTS,
       PUZZLE_STAR_POINTS: engine.PUZZLE_STAR_POINTS,
+      PUZZLE_START_STEPS: engine.PUZZLE_START_STEPS,
       flipFrozenAt,
     },
     stepCoefFor: engine.stepCoefFor,

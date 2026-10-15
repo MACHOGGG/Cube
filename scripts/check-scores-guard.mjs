@@ -120,9 +120,9 @@ const push = (who, runId, mode, score, dataExtra = {}, over = {}) =>
  * 其中几样。`totalScore` 照 `score` 参数，交的时候顶层的 score 也照它（两处一个数，免得撞上 ① 那道闸）。
  */
 const vetData = (mode, score, given = {}, over = {}) => ({ ...runData(mode, score), ...fillRun(mode, score, given), rules: SCORING_V, ...over });
-/** 步步为营：消除几枚、几颗星照给的来，综合分照它们算。 */
-const pz2 = (mode, score, tally) => {
-  const d = vetData(mode, score, { modeKey: 'puzzle', puzzleRules: 2 });
+/** 步步为营（现行第 3 版）：消除几枚、几颗星照给的来，综合分照它们算。`rules` 给 2 就是还开着旧页面的人交的第 2 版局。 */
+const pz2 = (mode, score, tally, rules = 3) => {
+  const d = vetData(mode, score, { modeKey: 'puzzle', puzzleRules: rules });
   const flips = tally.cleared + tally.stars;
   return { ...d, flips, patternPoints: 2 * flips, score: 2 * flips, puzzle: { ...d.puzzle, ...tally } };
 };
@@ -282,7 +282,7 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
   const fl = (score, over) => vetData('square', score, { modeKey: 'flip', flipRules: 2 }, over);
   const sl = (score, over) => vetData('square', score, { slot: true }, over);
   const pz = (score, puzzle) => {
-    const d = vetData('square', score, { modeKey: 'puzzle', puzzleRules: 2 });
+    const d = vetData('square', score, { modeKey: 'puzzle', puzzleRules: 3 });
     return { ...d, puzzle: { ...d.puzzle, ...puzzle } };
   };
   const CASES = [
@@ -314,6 +314,8 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     ['老虎机超出方块的上界 29,304', sl(29305), 'slotCap'],
     ['步步为营：综合分不等于「消除 × 10 + 星星 × 5」', pz(240, { cleared: 23 }), 'puzzleTotal'],
     ['步步为营：消除加星星比全盘还多', pz(350, { cleared: 30, stars: 10 }), 'puzzleTally'],
+    // 第 3 版步数只降不升（10-15 补充 S9）：方块起手 22，剩 23 只可能是手搓的。
+    ['步步为营第 3 版：剩 23 步（方块起手才 22）', pz(240, { cleared: 20, stars: 8, left: 23 }), 'puzzleLeft'],
   ];
   let n = 0;
   for (const [name, data, why] of CASES) {
@@ -366,8 +368,10 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     ['无限反转：一组 4 枚、一拍', 'square:flip2',
       vetData('square', 4, { modeKey: 'flip', flipRules: 2 }, { flips: 4, patternPoints: 4, comboBonusPoints: 0, score: 4, moves: 1, elapsedSec: 3 }), 4],
     ['无限反转（小球）：连击把分抬得很高', 'circle:flip2', vetData('circle', 120000, { modeKey: 'flip', flipRules: 2 }), 120000],
-    ['步步为营：消除 20、星星 8', 'square:puzzle2', pz2('square', 240, { cleared: 20, stars: 8 }), 240],
-    ['步步为营（小球）：一盘全消掉', 'circle:puzzle2', pz2('circle', 280, { cleared: 28, stars: 0 }), 280],
+    ['步步为营：消除 20、星星 8', 'square:puzzle3', pz2('square', 240, { cleared: 20, stars: 8 }), 240],
+    ['步步为营（小球）：一盘全消掉、起手 15 步一步没空走', 'circle:puzzle3', pz2('circle', 280, { cleared: 28, stars: 0, left: 15 }), 280],
+    // 还开着旧页面的人交的第 2 版局：那一版有退步，剩多少都可能——照收，落归档榜 puzzle2（10-15 补充 S9）。
+    ['步步为营第 2 版（旧页面）：剩 50 步照收、落归档榜', 'square:puzzle2', pz2('square', 240, { cleared: 20, stars: 8, left: 50 }, 2), 240],
     ['计时（步数系数抬到 4 倍）', 'square:timed',
       vetData('square', 300 * 4, { modeKey: 'timed' }, { flips: 36, patternPoints: 72, linePoints: 228, lines: 7, score: 300, cleared: 36, moves: 27, stepCoef: 4 }), 1200],
     ['三角 54：系数 1 的一局', 'triangleBig', vetData('triangleBig', 2000), 2000],
@@ -378,7 +382,7 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     check(`⑦ ${name}：照收`, r.status === 200 && r.payload?.ok === true && r.payload?.stored !== false,
       `${r.status} ${JSON.stringify(r.payload)} why=${r.why}`);
     const z = await store.zscore('lb:' + boardId, H.email);
-    const shown = boardId.endsWith(':puzzle2') && z !== null ? Math.floor(z / 1000) : z;
+    const shown = /:puzzle\d*$/.test(boardId) && z !== null ? Math.floor(z / 1000) : z;
     check(`⑦ ${name}：${onBoard > 0 ? `榜上是 ${onBoard}` : '0 分不上榜（存档里有）'}`,
       onBoard > 0 ? shown === onBoard : z === null, `${boardId} → ${z}`);
   }
@@ -417,7 +421,7 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
   const given = {
     modeKey: MODE_KEY[v.mode],
     ...(v.mode === 'slot' ? { slot: true } : {}),
-    ...(v.mode === 'puzzle' ? { puzzleRules: 2 } : {}),
+    ...(v.mode === 'puzzle' ? { puzzleRules: 3 } : {}),
     ...(v.mode === 'flip' ? { flipRules: 2 } : {}),
     ...(v.mode.startsWith('bomb') ? { bombRules: 3 } : {}),
   };
@@ -468,6 +472,10 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
       MS.BOMB_HAZARD_PENALTY === c.BOMB_HAZARD_PENALTY && MS.PUZZLE_CLEARED_POINTS === c.PUZZLE_CLEARED_POINTS &&
       MS.PUZZLE_STAR_POINTS === c.PUZZLE_STAR_POINTS,
     `服务器 ${JSON.stringify([MS.FLIP_SECONDS, MS.FLIP_MULT_CAP, MS.POINTS_PER_FLIP, MS.BOMB_HAZARD_PENALTY, MS.PUZZLE_CLEARED_POINTS, MS.PUZZLE_STAR_POINTS])} · 源码 ${JSON.stringify(c)}`);
+  // 步步为营第 3 版的起手步数（10-15 补充 S9）：服务器拿它核「剩几步不许比起手还多」，手抄的。
+  check('⑩ _maxscore.js 的 PUZZLE_START 和源码的 PUZZLE_START_STEPS 一样',
+    JSON.stringify(sortKeys(MS.PUZZLE_START)) === JSON.stringify(sortKeys(c.PUZZLE_START_STEPS ?? {})),
+    `服务器 ${JSON.stringify(MS.PUZZLE_START)} · 源码 ${JSON.stringify(c.PUZZLE_START_STEPS)}`);
   // scores.js 里给步步为营那道「枚数 × 10」上限用的那张表（第 14 推起就有）也是手抄的。
   const tilesSrc = /const PUZZLE_TILES = \{ square: (\d+), circle: (\d+) \};/.exec(readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8'));
   check('⑩ scores.js 的 PUZZLE_TILES 和源码的全盘枚数一样',

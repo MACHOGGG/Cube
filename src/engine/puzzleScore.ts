@@ -1,6 +1,6 @@
 /**
- * 《真正解密 · 步步为营》这一局的两条规矩：步数怎么进怎么出，和最后那个综合
- * 得分怎么算。
+ * 《真正解密 · 步步为营》这一局的两条规矩：步数怎么扣（第 3 版只扣不退），和最后那个
+ * 综合得分怎么算。
  *
  * 纯算术，不碰 DOM 也不碰棋盘——所以 scripts/check-puzzle.mjs 能把它单独拎
  * 出来验（打包一下直接跑，不用开浏览器，进得了 CI）。
@@ -18,57 +18,33 @@
  */
 
 /**
- * 开局手里有几步。
+ * 开局手里有几步，**按棋盘定**（第 3 版，站长 2026-10-14）：经典小球 15，经典方块 22。
  *
- * 八步是玩家定的。为什么不是三、也不是十：三太紧，开局摸不清盘面就没了；十
- * 只让最菜的那一档（随机乱走）少死一点，对会玩的人没区别（模拟四档机器人跑
- * 出来的早死率 100/45–55/65–80% → 75/30/35%，谨慎那一档两个数一样）。八让
- * 开局那三步真的要想。
+ * 第 1、2 版是一律八步，再靠「得分退一步、连着得分多退、消边多退两步」往回攒。第 3 版把那几条退步全撤了：
+ * 步数只降不升，所以起手要给够——方块那副 36 枚、小球 28 枚，起手跟着盘面大小走。
+ *
+ * 《步步为营》只开在这两副上（ui/puzzleMode.ts、engine/seedCode.ts、api/_seedcode.js、api/scores.js 的
+ * PUZZLE_TILES 都只有 square / circle）。服务端那一份在 api/_maxscore.js 的 PUZZLE_START（交卷时拿它核
+ * 「剩几步」不许比起手还多），两份由 check-scores-guard 对上。
  */
-export const PUZZLE_START_STEPS = 8;
-/** 走一步扣几步。每一个动作都要付账，得分的那一步也不例外。 */
+export const PUZZLE_START_STEPS: Readonly<Record<'square' | 'circle', number>> = Object.freeze({ circle: 15, square: 22 });
+/** 这副棋盘起手几步。查不到就抛：以后开到第三副棋盘却忘了补表，不会悄悄拿别人的步数开局。 */
+export function puzzleStartSteps(boardId: string): number {
+  const n = (PUZZLE_START_STEPS as Record<string, number | undefined>)[boardId];
+  if (n === undefined) throw new Error(`puzzleStartSteps：《步步为营》没有开在 ${boardId} 上`);
+  return n;
+}
+/** 没得分的一步扣几步；得分的一步不扣（等价第 2 版的「扣 1 退 1」）。 */
 export const PUZZLE_STEP_COST = 1;
-/**
- * 得分的那一步退几步回来。
- *
- * 注意是「那一步」退一次，不是「连锁几拍退几次」。一步引发的连锁有三拍也只
- * 退这一次——玩家说的是一次**行动**的回报，不是一拍的回报。
- *
- * 一退一扣，所以**孤立的一次得分只够回本**（净 0）。手里的步数长不出来，得
- * 靠下面那两条。这是这套经济的骨架。
- */
-export const PUZZLE_STEP_REWARD = 1;
-/**
- * 上一步也得分，再退一步。
- *
- * 这一条是玩家手里唯一的「利息」：净变化从 0 变成 +1。所以这个玩法**奖励的是
- * 「连着得分」，不是「得分多」**——一步没得分链子就断，下一次得分又只够回本。
- * 教学、文案、结算页都该指向这一句。
- *
- * 注意它退的是**步数**，不是分数：这一局没有连击倍率（玩家原话「没有连击机
- * 制」），`multiplier` 和连锁的每拍系数一律 1。
- */
-export const PUZZLE_STREAK_BONUS = 1;
-/**
- * 这一步消掉了一整条线（《外边消除》落地后就是「此刻的最外边」），**再退两步**。
- *
- * 判据是连锁里任意一拍有整线奖励（`step.lineBonusGroups.length > 0`），今天和
- * 将来是同一个字段，规则换了这儿不用改。
- *
- * ⚠️ **2026-10-02：从 1 改成 2。** 这不是调平衡，是改回底稿——《侵蚀阶梯决策》§7
- * 第 118 行那张表写的一直是「消线 **+2**」，E14 那一行也是「消线奖励 +2」，而代码从
- * 落地那天起给的就是 1。两边对不上了半年，谁都没发现：这个数不报错、不白屏，只是让
- * 「凑一整条线」这件最难的事回报少一半，而它本该是这套步数经济里最大的一笔。
- *
- * 它退的是**步数**不是分数，可一局能走多久直接决定终局盘面长什么样，所以综合分跟着
- * 变——因此这一次按 §11 那条规矩升了一版存档（见下面 PUZZLE_RULES_VERSION）。
- */
-export const PUZZLE_EDGE_BONUS = 2;
 
 /**
  * 《步步为营》的规则版本号。
  *
- * **第 2 版 = 消线退两步**（上面那一条，2026-10-02）；第 1 版是消线只退一步的那一段
+ * **第 3 版 = 空走额度**（站长 2026-10-14）：起手按棋盘（小球 15、方块 22），没得分的一步扣 1，得分的一步不扣，
+ * 没有任何别的退步（连着得分多退、消边多退都撤了），步数只降不升。本机存档键 `_puzzle2 → _puzzle3`（runKey.ts 的
+ * versioned 自动换），服务端榜 `…:puzzle2 → …:puzzle3`（api/scores.js 的 kindOf），旧的那张留着当归档榜。
+ *
+ * **第 2 版 = 消线退两步**（2026-10-02，那时这儿有一条 PUZZLE_EDGE_BONUS = 2）；第 1 版是消线只退一步的那一段
  * 时间。两版打出来的分不是一把尺子量的：消线的回报翻倍，一局能走的步数、因而终局盘
  * 上有多少枚被消除/翻成星星，整条都变了。
  *
@@ -82,10 +58,9 @@ export const PUZZLE_EDGE_BONUS = 2;
  * `kindOf` 分开（那儿的注释本来就预留了这一步：「将来……再照 bomb → bomb2 那条路往上
  * 加一版，把这一张留着当归档榜」）。
  */
-export const PUZZLE_RULES_VERSION = 2;
+export const PUZZLE_RULES_VERSION = 3;
 
-// 没有封顶常数。玩家明确否掉了《封顶》这条规则——**不要「为了安全」偷偷加一
-// 个**。门里有一条哨兵：步步得分 100 步之后手里必须正好 107 步（= 8 + 99）。
+// 没有封顶常数，也不需要：第 3 版步数只降不升。
 
 /**
  * 每一枚棋子在结算时值多少分。
@@ -117,33 +92,20 @@ export const PUZZLE_STAR_POINTS = 5;
 export const PUZZLE_STEPS_OUT_REASON = '步数用完了';
 
 /**
- * 《余步》那一格上冒的那行字。
+ * 《余步》那一格上冒的那行字。第 3 版：空走「−1」，得分「±0」。
  *
- * 写成纯函数、而不是在 gameController 里就地拼串，是因为**这一行字是整个玩法
- * 里唯一说得清「得分换来的是步数」的地方**，而它出过一次事故：
+ * 写成纯函数、而不是在 gameController 里就地拼串，是因为**这一行字是整个玩法里唯一说得清「得分的那一步不花
+ * 步数」的地方**，而它出过一次事故（8ab348c）：
  *
- *   原先那一格只认「净变化」，`bumpSteps` 第一句是 `if (delta === 0) return`。
- *   可这套经济里孤立的一次得分正好回本（−1 +1，净 0）——于是最常见的那次得分
- *   （第一次得分，或任何一次断了链子的得分）在余步那一格上**一个字都没有**，
- *   屏幕上唯一动的东西是分数格冒出来的「+27」。玩家看到的于是是「得分＝加分」，
- *   而这一局的全部意思恰恰是「得分＝换步数」。实测 8 局 67 步，三次得分三次
- *   都是余步纹丝不动。
+ *   原先那一格只认「净变化」，`bumpSteps` 第一句是 `if (delta === 0) return`。可那时（第 2 版）孤立的一次得分
+ *   正好回本（−1 +1，净 0）——于是最常见的那次得分在余步那一格上**一个字都没有**，屏幕上唯一动的东西是分数格
+ *   冒出来的「+27」。实测 8 局 67 步，三次得分三次都是余步纹丝不动。
  *
- * 所以这儿的规矩是两条，都别省：
- *
- *   · **成本永远印出来。** 每一步都要付账，得分的那一步也不例外——把 −1 藏掉，
- *     「回本」这件事就没法读懂了。
- *   · **净 0 也要出字。** 「这次只够回本」正是这玩法要教的那句话，不是「无事
- *     发生」。
- *
- * 退回来的那几步合并成一个数（得分 1 ＋ 连续 1 ＋ 消边 1），不拆成三份飘在一
- * 格里——这一站的规矩是少文字。玩家要分辨的是「+1 还是 +2」，不是哪一笔来自
- * 哪一条。
+ * 所以**净 0 也必须出字**：得分那一步冒「±0」（U+00B1），说的正是「这一步没花你的步数」，不是「无事发生」。
+ * 减号用 U+2212，不是连字符：它和「±」等宽，两种字在那一格里才对得齐。
  */
-export function stepLedgerText(refund: number): string {
-  // 用的是 U+2212 减号，不是连字符：它和「+」等宽，两行字在那一格里才对得齐。
-  const cost = `−${PUZZLE_STEP_COST}`;
-  return refund > 0 ? `${cost} +${refund}` : cost;
+export function stepLedgerText(scored: boolean): string {
+  return scored ? '±0' : `−${PUZZLE_STEP_COST}`;
 }
 
 /** 结算时数出来的那副盘面。 */
@@ -183,29 +145,18 @@ export interface PuzzleBoardTally {
  * 动加权**的（普通图案 1、长图案 2、整线 3，见 engine/performance.ts），后者是
  * 按步数数的。两个数不相等——这正是撤掉它的理由之一。
  *
- * 步数那本账的支点也**不是「一半」**（那是起手 3、得分退 2 那一版的说法）：孤
- * 立得分只够回本，所以把每一步得分看成独立事件、概率 p，从不消边时不进不退的
- * 条件是 p + p² = 1，也就是 **p ≈ 0.618**（黄金分割）。得分能扎堆成串时
- * p ≈ 0.5 就够，得分里有两成是消边时 p ≈ 0.58 站得住。
+ * 第 3 版的账没有支点：得分的一步不扣、也不退，一局能走多久只看空走了几步（起手几步，就能空走几步）。
  */
 export function puzzleComposite(tally: PuzzleBoardTally): number {
   const base = tally.cleared * PUZZLE_CLEARED_POINTS + tally.stars * PUZZLE_STAR_POINTS;
   return Math.max(0, Math.round(base));
 }
 
-/** 走这一步的时候，账本还需要知道的事。 */
-export interface SpendContext {
-  /** 这一步的连锁里有整线（外边）奖励。 */
-  edge?: boolean;
-}
-
 /**
  * 手里那几步。
  *
- * 「上一步有没有得分」由账本**自己记**，不让调用方传进来。这不是洁癖：那是整
- * 套接线里最容易接错的一处（`resolveMove` 里到处都是这一拍那一拍的局部变量，
- * 传错一个就成了「按拍算连续」），而记在这儿，CI 那道门连着调三次
- * `spend(true)` 就能整段验出来。
+ * 第 3 版只剩三个量：还剩几步、一共走了几步、其中得分的几步。第 2 版那三样（连着得分多退了几步、消边多退了几步、
+ * 最多攒到过几步）随退步一起撤了——旧局的结算页读的是存档里记下的数，不读这儿。
  */
 export interface StepBank {
   /** 还剩几步。 */
@@ -214,66 +165,33 @@ export interface StepBank {
   spent(): number;
   /** 其中得分的有几步。 */
   scoredMoves(): number;
-  /** 因为「上一步也得分」多退回来的步数合计。 */
-  streakRefunds(): number;
-  /** 因为「这一步消了边」多退回来的步数合计。 */
-  edgeRefunds(): number;
-  /** 手里最多攒到过几步（结算页那句「最多攒到 X」）。 */
-  peak(): number;
   /**
-   * 走一步。返回走完之后还剩几步——0 就是这一局到头了。
-   *
-   * 顺序是**先扣后退**，所以手里剩 1 步时得分不会出现负数的中间态：
-   * 1 − 1 + 1 = 1，读起来就是「用掉一步，又赚回一步」。`left` 用
-   * Math.max(0, …) 夹住，读数永远不是负的。
+   * 走一步。返回走完之后还剩几步——0 就是这一局到头了。没得分扣 PUZZLE_STEP_COST，得分不扣；
+   * `left` 用 Math.max(0, …) 夹住，读数永远不是负的。
    */
-  spend(scored: boolean, ctx?: SpendContext): number;
+  spend(scored: boolean): number;
   reset(): void;
 }
 
-export function createStepBank(start = PUZZLE_START_STEPS): StepBank {
+/** 起手几步由调用方给（`puzzleStartSteps(棋盘)`），**没有默认值**：拿错棋盘的步数开局要当场看得出来。 */
+export function createStepBank(start: number): StepBank {
   let left = start;
   let spent = 0;
   let scored = 0;
-  let streak = 0;
-  let edges = 0;
-  let peak = start;
-  /** 上一步有没有得分。一步没得分，链子就断。 */
-  let prevScored = false;
   return {
     left: () => left,
     spent: () => spent,
     scoredMoves: () => scored,
-    streakRefunds: () => streak,
-    edgeRefunds: () => edges,
-    peak: () => peak,
-    spend(didScore, ctx) {
+    spend(didScore) {
       spent++;
-      left = Math.max(0, left - PUZZLE_STEP_COST);
-      if (didScore) {
-        scored++;
-        left += PUZZLE_STEP_REWARD;
-        if (prevScored) {
-          left += PUZZLE_STREAK_BONUS;
-          streak += PUZZLE_STREAK_BONUS;
-        }
-        if (ctx?.edge) {
-          left += PUZZLE_EDGE_BONUS;
-          edges += PUZZLE_EDGE_BONUS;
-        }
-      }
-      prevScored = didScore;
-      if (left > peak) peak = left;
+      if (didScore) scored++;
+      else left = Math.max(0, left - PUZZLE_STEP_COST);
       return left;
     },
     reset() {
       left = start;
       spent = 0;
       scored = 0;
-      streak = 0;
-      edges = 0;
-      peak = start;
-      prevScored = false;
     },
   };
 }

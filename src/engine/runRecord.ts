@@ -86,9 +86,10 @@ export interface RunData {
   flipRules?: number;
   /**
    * 这一局的步步为营按第几版规则打的（见 puzzleScore.ts 的 `PUZZLE_RULES_VERSION`）。
-   * 老档没有这一项，读出来是 undefined，就是第一版（消线只退一步）。存档键和排行榜
-   * 都按它分开——消线的回报翻倍之后，一局能走多久、终局盘面长什么样整条都变了。
-   * 非步步为营的局不写这一项。
+   *   · 第 1 版（老档没有这一项，读出来是 undefined）：起手 8 步，扣 1，得分退 1、连着得分多退 1、消线多退 1；
+   *   · 第 2 版（2026-10-02）：同上，只是消线多退 2；
+   *   · 第 3 版（2026-10-14，空走额度）：起手按棋盘（小球 15、方块 22），没得分扣 1、得分不扣，没有任何退步。
+   * 存档键和排行榜都按它分开——一局能走多久、终局盘面长什么样，三版各不一样。非步步为营的局不写这一项。
    */
   puzzleRules?: number;
   /**
@@ -138,14 +139,14 @@ export interface RunData {
     spent: number;
     /** 其中得分的有几步。 */
     scoredMoves: number;
-    /** 因为「上一步也得分」多退回来的步数合计。 */
-    streakRefunds: number;
-    /** 因为「这一步消了边」多退回来的步数合计。 */
-    edgeRefunds: number;
+    /** 因为「上一步也得分」多退回来的步数合计。只有第 1、2 版的局有（第 3 版没有退步）。 */
+    streakRefunds?: number;
+    /** 因为「这一步消了边」多退回来的步数合计。只有第 1、2 版的局有。 */
+    edgeRefunds?: number;
     /** 结束时手里还剩几步（多半是 0，「都消完了」那条路上不是）。 */
     left: number;
-    /** 手里最多攒到过几步。 */
-    peak: number;
+    /** 手里最多攒到过几步。只有第 1、2 版的局有（第 3 版步数只降不升，最多就是起手那几步）。 */
+    peak?: number;
   };
   /** Epoch millis the run was settled. */
   at: number;
@@ -294,7 +295,7 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
      *
      * 拆开之后右边永远只有一个数（或者空着），宽度由此封顶。
      */
-    return [
+    const scoreRows: [string, string][] = [
       [
         s.puzzleClearedLabel
           .replace('{c}', String(p.cleared))
@@ -308,14 +309,21 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
       // 《有效得分率》那一行撤了（玩家 2026-10）：这一档的综合得分不再乘它，摆一行
       // 不起作用的乘数，和「摆一行 ×1.00」是同一种假话。
       //
-      // 下面这四行是**步数那本账**，不是分数：它们加起来不等于上面两行，也不该等于。
-      // 右边空着的那两行（走了几步、剩几步）整句就是左边那一句——它们报的是一段经过，
-      // 不是一个加数，硬给个数反而会被当成分数读。
+      // 下面是**步数那本账**，不是分数：它们加起来不等于上面两行，也不该等于。右边空着的那几行（走了几步、
+      // 剩几步）整句就是左边那一句——它们报的是一段经过，不是一个加数，硬给个数反而会被当成分数读。
       [countPhrase(s.puzzleStepsLabel, p.spent, lang).replace('{k}', String(p.scoredMoves)), ''],
-      [s.puzzleStreakLabel, '+' + p.streakRefunds],
-      [s.puzzleEdgeLabel, '+' + p.edgeRefunds],
-      [s.puzzleLeftLabel.replace('{l}', String(p.left)).replace('{p}', String(p.peak)), ''],
     ];
+    // 第 1、2 版的局：照它当时的账再讲三行（连着得分多退、消边多退、剩几步 · 最多攒到）。
+    if ((d.puzzleRules ?? 1) <= 2) {
+      return [
+        ...scoreRows,
+        [s.puzzleStreakLabel, '+' + (p.streakRefunds ?? 0)],
+        [s.puzzleEdgeLabel, '+' + (p.edgeRefunds ?? 0)],
+        [s.puzzleLeftLabel.replace('{l}', String(p.left)).replace('{p}', String(p.peak ?? p.left)), ''],
+      ];
+    }
+    // 第 3 版：被消除、星星、走了几步，三行（没有退步可讲；清盘那一局剩几步已经写在 runDetailLine 的「· 剩 N 步」里）。
+    return scoreRows;
   }
   /**
    * 《侵蚀阶梯》v1.2 §5 的固定行序：

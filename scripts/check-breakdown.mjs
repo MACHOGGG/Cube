@@ -182,6 +182,29 @@ for (const c of CASES) {
   }
 }
 
+// ── 2b. 步步为营第 3 版：三行（10-15 补充 S9）───────────────────────────────────
+//
+// 第 3 版没有退步，结算页只讲被消除、星星、走了几步三行（清盘那一局剩几步写在 runDetailLine 的「· 剩 N 步」里）。
+// 同一局标成第 2 版，照旧六行——旧局要照它当时的账讲（存档里记着 streakRefunds / edgeRefunds / peak）。
+{
+  const v3 = base({
+    modeKey: 'puzzle',
+    puzzleRules: 3,
+    score: 0,
+    totalScore: 7 * 10 + 4 * 5,
+    puzzle: { cleared: 7, stars: 4, spent: 26, scoredMoves: 5, left: 0 },
+  });
+  for (const lang of LANGS) {
+    const rows = runBreakdown(v3, lang);
+    check(`步步为营第 3 版 · ${lang}：正好三行`, rows.length === 3, `${rows.length} 行：${dump(rows)}`);
+    const score = addend(rows[0][1]) + addend(rows[1][1]);
+    check(`步步为营第 3 版 · ${lang}：分数那两行加起来 = 综合分 ${v3.totalScore}`, score === v3.totalScore, `加出来 ${score}`);
+    check(`步步为营第 3 版 · ${lang}：「走了几步」右边是空的`, rows[2]?.[1] === '', rows[2]?.[1] || '∅');
+    const asV2 = runBreakdown({ ...v3, puzzleRules: 2, puzzle: { ...v3.puzzle, streakRefunds: 2, edgeRefunds: 4, peak: 9 } }, lang);
+    check(`步步为营 · ${lang}：同一局标成第 2 版，照旧六行`, asV2.length === 6, `${asV2.length} 行`);
+  }
+}
+
 // ── 3. 右边那一栏永远只有一个数（或者空的）──────────────────────────────────
 //
 // 「拆成短行」那件事本身的尺子。从前步步为营最后一行的值是一整句（「连续多退 2 · 消边

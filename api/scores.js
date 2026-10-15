@@ -207,10 +207,11 @@ const RETIRED_BOARDS = ['triangle', 'triangleAdvanced'];
  */
 const PLAYABLE_MODES = new Set([...BASE_SHAPES, ...LAYOUT_BOARDS]);
 /**
- * 归档榜：改过规则的老档位（`…:bomb`、`…:bomb2`、`…:flip`、`…:puzzle`，见 kindOf）。重建不碰它们
- * （见 droppedBoards 那段），所以「清垃圾榜」那一步也得认得它们——它们不是乱名。
+ * 归档榜：改过规则的老档位（`…:bomb`、`…:bomb2`、`…:flip`、`…:puzzle`、`…:puzzle2`，见 kindOf）。重建不碰它们
+ * （见 droppedBoards 那段），所以「清垃圾榜」那一步也得认得它们——它们不是乱名。`puzzle2` 是 10-15 补充 S9（步步为营
+ * 第 3 版）归档的：不加进来的话，重建时它会被当成乱名，从归档榜上撤人。
  */
-const ARCHIVED_BOARDS = BASE_SHAPES.flatMap((shape) => ['bomb', 'bomb2', 'flip', 'puzzle'].map((kind) => `${shape}:${kind}`));
+const ARCHIVED_BOARDS = BASE_SHAPES.flatMap((shape) => ['bomb', 'bomb2', 'flip', 'puzzle', 'puzzle2'].map((kind) => `${shape}:${kind}`));
 /**
  * 现行的计分规则版本——**要和 `src/engine/scoring.ts` 的 `SCORING_RULES_VERSION`
  * 一模一样**。
@@ -234,8 +235,11 @@ const BOMB_KIND = 'bomb3';
  * ALL_BOARDS 里，重建时不撤人，存档里那些老局照旧算回它自己那张榜，见 kindOf）。
  * 这一步上面那一版注释里本来就预告过：「将来……再照 bomb → bomb2 那条路往上加一版，
  * 把这一张留着当归档榜。」
+ *
+ * **第 3 版（2026-10-14，空走额度）→ `puzzle3`**：起手按棋盘（小球 15、方块 22），没得分的一步扣 1、得分的一步不扣，
+ * 没有任何别的退步。一局能走多久整条换了，同样照这条路再加一版，`…:puzzle2` 归档（见 ARCHIVED_BOARDS）。
  */
-const PUZZLE_KIND = 'puzzle2';
+const PUZZLE_KIND = 'puzzle3';
 /**
  * 无限反转这一档现在叫什么。
  *
@@ -255,10 +259,14 @@ function kindOf(data) {
   // 规矩摆——一局只归一档，越专的档越先问。
   //
   // ⚠️ 比的是 **modeKey 那个字面量 `'puzzle'`**，不是 PUZZLE_KIND。两者从 2026-10-02
-  // 起不是同一个字符串了（榜叫 'puzzle2'，而存档里 modeKey 永远是 'puzzle'）——照旧写
+  // 起不是同一个字符串了（现行的榜叫 PUZZLE_KIND，而存档里 modeKey 永远是 'puzzle'）——照旧写
   // `mk === PUZZLE_KIND` 的话，每一局步步为营都会掉到最后一行去，归进 base 那张榜。
-  // 老档没有 puzzleRules，读出来是 undefined，那是消线只退一步那一版，归老榜。
-  if (mk === 'puzzle') return Number(data?.puzzleRules) >= 2 ? PUZZLE_KIND : 'puzzle';
+  // 老档没有 puzzleRules，读出来是 undefined，那是消线只退一步那一版，归老榜；第 2 版归 `puzzle2`（归档），第 3 版
+  // 起才是现行的那张。分三档，照 bomb 那一行。
+  if (mk === 'puzzle') {
+    const v = Number(data?.puzzleRules) || 1;
+    return v >= 3 ? PUZZLE_KIND : v >= 2 ? 'puzzle2' : 'puzzle';
+  }
   // 老档没有 flipRules，读出来是 undefined——那是没封顶那一版，归老榜。
   if (mk === 'flip') return Number(data?.flipRules) >= 2 ? FLIP_KIND : 'flip';
   // 老档没有 bombRules，读出来是 undefined——那是第一版规则，归老榜。
@@ -324,7 +332,14 @@ const GROUP_SCAN = 200;
  */
 const PUZZLE_SCALE = 1000;
 const ALL_FLIPPED_REASON = '全部方块已翻成点面';
-const isPuzzleBoard = (boardId) => String(boardId).endsWith(`:${PUZZLE_KIND}`);
+/**
+ * 步步为营的榜（现行的连同归档的那几张），照 isFlipBoard 的写法认 `:puzzle` 后面跟几位数字。
+ *
+ * 原先只认 `:${PUZZLE_KIND}`：10-15 补充 S9 把 PUZZLE_KIND 升到 `puzzle3` 之后，归档的 `square:puzzle2` 上那个拼起来
+ * 的数（300 · 剩 7 = 300007）会被当成 300007 分印出来，还开着旧页面的人交的第 2 版局也按原分写进去混排（已实测）。
+ * 第 1 版那张榜上的数都小于 1000，decodeBoard 本来就按原分读，认进来没有副作用。
+ */
+const isPuzzleBoard = (boardId) => /:puzzle\d*$/.test(String(boardId));
 /** 清盘的局剩几步（封到 999，放得进那三位）；没清盘就是 0。 */
 function puzzleLeft(data) {
   if (String(data?.reason || '') !== ALL_FLIPPED_REASON) return 0;
@@ -386,7 +401,8 @@ function boardCeiling(boardId) {
   if (!BASE_SHAPES.includes(shape)) return 0;
   if (kind === 'slot') return slotCeiling(shape);
   if (kind === FLIP_KIND) return flipCeiling(shape);
-  if (kind === PUZZLE_KIND) return puzzleCeiling(shape);
+  // 上界和规则版本无关（满打满算一盘全消掉），归档的那几张也照这个数。
+  if (isPuzzleBoard(boardId)) return puzzleCeiling(shape);
   if (kind === 'base' || kind === 'timed' || kind === BOMB_KIND) return stepCeiling(shape);
   return 0;
 }
@@ -658,10 +674,10 @@ async function push(res, body, who) {
    *    就分不清新老写法了）。枚数取客户端报的和服务端自己知道的那一个里**小的**。
    *
    *    **按这一局要写进哪张榜判断**（10-09 补充方案 7-1）：凡是写进步步为营那几张榜的（现行的
-   *    `…:puzzle2`，连同归档的 `…:puzzle`）都套这道上限。从前问的是 `data.modeKey === 'puzzle'`，
+   *    `…:puzzle3`，连同归档的 `…:puzzle`、`…:puzzle2`，见 isPuzzleBoard）都套这道上限。从前问的是 `data.modeKey === 'puzzle'`，
    *    闸和「写进哪张榜」是两处各判各的——两处只要有一处换了写法，这道闸就拦不到它该拦的那张榜。
    */
-  if (/:puzzle2?$/.test(boardId)) {
+  if (isPuzzleBoard(boardId)) {
     const reported = Math.floor(Number(data.boardTiles));
     const known = PUZZLE_TILES[mode];
     const tiles = Math.min(reported > 0 ? reported : Infinity, known ?? Infinity);
@@ -848,6 +864,10 @@ async function pushDaily(id, mode, score, data) {
   if (!want || want.board !== mode || seedModeOf(data.modeKey, mode, Boolean(data.slot)) !== want.mode) {
     return 'rejected';
   }
+  // 步步为营那一天只收现行规则的局（10-15 补充 S9）：原先今日榜不分规则版本，还开着旧页面的人打的第 2 版局会和第 3 版
+  // 混排。回 'stale' 不回 'rejected'（后者让结算页说「看看设备的日期和时间」，可他的钟没错）；旧客户端只认 late /
+  // rejected，stale 它不说话。这一局照样进存档、进它自己那张归档榜。
+  if (want.mode === 'puzzle' && kindOf(data) !== PUZZLE_KIND) return 'stale';
   /*
    * **0 分不进今日榜**（10-11 方案 B-13 第 10 条，玩家 Q7），可上面三道关照问。
    *

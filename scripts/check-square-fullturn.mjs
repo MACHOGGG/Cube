@@ -87,18 +87,19 @@ const stepX = b.x - a.x;
 const stepY = d.y - a.y;
 const before = await snap();
 const s0 = await stepsLeft();
-check('（尺子）开局余步是 8', s0 === '8', s0);
+// 方块起手 22 步（步步为营第 3 版，10-15 补充 S9；原先一律 8）。
+check('（尺子）开局余步是 22', s0 === '22', s0);
 
 // ① 一行拖满一整圈（6 格）。
 await drag(0, 0, stepX * 6, 0);
 const afterRow = await snap();
-check('① 一行拖满一整圈：余步一步不扣', (await stepsLeft()) === '8', await stepsLeft());
+check('① 一行拖满一整圈：余步一步不扣', (await stepsLeft()) === '22', await stepsLeft());
 check('① 那一行原样', [0, 1, 2, 3, 4, 5].every((c) => afterRow['0,' + c] === before['0,' + c]));
 
 // ② 一列拖满一整圈。
 await drag(0, 0, 0, stepY * 6);
 const afterCol = await snap();
-check('② 一列拖满一整圈：余步一步不扣', (await stepsLeft()) === '8', await stepsLeft());
+check('② 一列拖满一整圈：余步一步不扣', (await stepsLeft()) === '22', await stepsLeft());
 check('② 那一列原样', [0, 1, 2, 3, 4, 5].every((r) => afterCol[r + ',0'] === before[r + ',0']));
 
 // ③ 尺子：同样的手法只拖一格，那一行真的变了。

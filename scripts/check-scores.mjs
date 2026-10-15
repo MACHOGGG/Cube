@@ -394,13 +394,13 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
     JSON.stringify(bombGroup.payload?.rows));
 
   /*
-   * 步步为营 2026-10-02 起也分两版（`puzzleRules` 说了算）：
-   *   第 1 版（老档没有 puzzleRules）—— 消线只退一步 → `square:puzzle`
-   *   第 2 版（现行）—— 消线退两步，底稿 §7 / E14  → `square:puzzle2`
-   * 消线的回报翻倍，一局能走多久、终局盘上有多少枚被消除整条都变了，所以两版不能
-   * 放一起比。这儿顺带钉住一个**只在这一档会犯的错**：`kindOf` 里那一行从前写的是
-   * `mk === PUZZLE_KIND`，而常量从 'puzzle' 改成 'puzzle2' 之后，存档里的 modeKey
-   * 永远还是 'puzzle'——照旧那么写的话每一局步步为营都会掉进 base 那张榜，而且不报错。
+   * 步步为营分三版（`puzzleRules` 说了算）：
+   *   第 1 版（老档没有 puzzleRules）—— 消线只退一步 → `square:puzzle`（归档）
+   *   第 2 版 —— 消线退两步，底稿 §7 / E14          → `square:puzzle2`（归档，10-15 补充 S9 起）
+   *   第 3 版（现行）—— 空走额度，起手按棋盘、没有退步 → `square:puzzle3`
+   * 每一版一局能走多久、终局盘上有多少枚被消除整条都变了，所以不能放一起比。这儿顺带钉住一个**只在这一档会犯的
+   * 错**：`kindOf` 里那一行从前写的是 `mk === PUZZLE_KIND`，而常量从 'puzzle' 改成 'puzzle2' 之后，存档里的
+   * modeKey 永远还是 'puzzle'——照旧那么写的话每一局步步为营都会掉进 base 那张榜，而且不报错。
    */
   await call({ action: 'push', ...H, runId: 'h7', mode: 'square', score: 320,
     data: { shapeId: 'square', modeKey: 'puzzle', totalScore: 320 } });
@@ -408,14 +408,18 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   // 「枚数 × 10」的分），640 是一局打不出来的数。
   await call({ action: 'push', ...H, runId: 'h8', mode: 'square', score: 340,
     data: { shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, totalScore: 340 } });
+  await call({ action: 'push', ...H, runId: 'h9', mode: 'square', score: 350,
+    data: { shapeId: 'square', modeKey: 'puzzle', puzzleRules: 3, totalScore: 350 } });
   const minePuzzle = await call({ action: 'mine', ...H });
   check('消线退一步那一版留在老榜 square:puzzle 上',
     minePuzzle.payload?.best?.['square:puzzle'] === 320, JSON.stringify(minePuzzle.payload?.best));
-  check('现行那一版记在 square:puzzle2 上',
+  check('第 2 版（消线退两步）留在归档榜 square:puzzle2 上',
     minePuzzle.payload?.best?.['square:puzzle2'] === 340, JSON.stringify(minePuzzle.payload?.best));
-  // 反面：两局步步为营**一局都不许掉进 base 那张榜**（上面那个 kindOf 的坑）。
+  check('现行那一版（第 3 版）记在 square:puzzle3 上',
+    minePuzzle.payload?.best?.['square:puzzle3'] === 350, JSON.stringify(minePuzzle.payload?.best));
+  // 反面：三局步步为营**一局都不许掉进 base 那张榜**（上面那个 kindOf 的坑）。
   check('步步为营没有一局掉进 base 榜',
-    minePuzzle.payload?.best?.['square:base'] !== 320 && minePuzzle.payload?.best?.['square:base'] !== 340,
+    ![320, 340, 350].includes(minePuzzle.payload?.best?.['square:base']),
     JSON.stringify(minePuzzle.payload?.best?.['square:base']));
 }
 
@@ -544,9 +548,9 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   process.env.ADMIN_TOKEN = 'x'.repeat(32);
   const CLEAR = '全部方块已翻成点面';
   const pz = (score, left, cleared = true, extra = {}) => ({
-    shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36, totalScore: score,
+    shapeId: 'square', modeKey: 'puzzle', puzzleRules: 3, boardTiles: 36, totalScore: score,
     reason: cleared ? CLEAR : '步数用尽',
-    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left, peak: 9 },
+    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, left },
     ...extra,
   });
   // 名字也是故意挑的：并列时内存替身按成员名**正序**破平（pz-a… 在 pz-z… 前面）。清三是
@@ -565,7 +569,7 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   // 上面那一节的「辛」也在这张榜上（340，没清盘）。这儿只看这一节自己的五个人，排序也只
   // 比他们之间的先后。
   const OURS = new Set(['清七', '清三', '没清', '没清二', '清九']);
-  const one = await call({ action: 'board', ...P, mode: 'square:puzzle2' });
+  const one = await call({ action: 'board', ...P, mode: 'square:puzzle3' });
   const rows = (one.payload?.rows ?? []).filter((r) => OURS.has(r.name));
   const seen = rows.map((r) => `${r.name}:${r.score}${r.left !== undefined ? '/' + r.left : ''}`).join(' ');
   check('（尺子）步步为营那张榜上五个人都在', rows.length === 5, seen);
@@ -595,15 +599,15 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   // 同一个人再打一局同分、剩得更多：榜上换成新那一局；剩得少：不动。
   await call({ action: 'push', ...Q, runId: 'q2', mode: 'square', score: 300, data: pz(300, 8) });
   await call({ action: 'push', ...Q, runId: 'q3', mode: 'square', score: 300, data: pz(300, 1) });
-  const q = (await call({ action: 'board', ...Q, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.name === '清三');
+  const q = (await call({ action: 'board', ...Q, mode: 'square:puzzle3' })).payload?.rows?.find((r) => r.name === '清三');
   check('同分剩得更多的那一局顶掉旧的，剩得少的不往回拉', q?.left === 8, JSON.stringify(q));
 
   // 老写法（原分）的那一行：上线之前存进去的。重建之前照原分读，不显示成 0。
   // 真的老玩家总榜上一定有他（交过卷就有），重建就是照总榜和名字表找人的——夹具照这个样子摆。
   const L = await makePlayer('pz-legacy@example.com');
-  await store.zadd('lb:square:puzzle2', 280, L.email);
+  await store.zadd('lb:square:puzzle3', 280, L.email);
   await store.zadd('lb:total', 280, L.email);
-  const legacy = (await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.score === 280);
+  const legacy = (await call({ action: 'board', ...P, mode: 'square:puzzle3' })).payload?.rows?.find((r) => r.score === 280);
   check('还没重建的老数照原分读（280，不是 0）', Boolean(legacy) && !('left' in legacy), JSON.stringify(legacy));
 
   // 上限：步步为营的分数不能超过「枚数 × 10」。用另一个人交——拿清九交的话他的最高分变成
@@ -634,21 +638,21 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   // callRaw，所以这儿自己拿夹具补齐。
   await store.set('runs:' + L.email, [{ runId: 'l1', mode: 'square', score: 280, at: Date.now(),
     data: { ...fakeRun({ board: 'square', modeKey: 'puzzle', total: 280 }), ...pz(280, 4), rules: SCORING_V } }]);
-  await store.set('stats:' + L.email, { total: 280, runs: 1, best: { 'square:puzzle2': 280 }, seen: ['l1'] });
-  const order = async () => ((await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows ?? [])
+  await store.set('stats:' + L.email, { total: 280, runs: 1, best: { 'square:puzzle3': 280 }, seen: ['l1'] });
+  const order = async () => ((await call({ action: 'board', ...P, mode: 'square:puzzle3' })).payload?.rows ?? [])
     .filter((r) => OURS.has(r.name)).map((r) => `${r.name}:${r.score}${r.left !== undefined ? '/' + r.left : ''}`).join(' ');
   const beforeRebuild = await order();
   const rb = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN });
   check('（尺子）重建跑通了', rb.status === 200 && rb.payload?.ok === true, JSON.stringify(rb.payload));
-  check('重建之后清七那一行存的是 300 × 1000 + 7', (await store.zscore('lb:square:puzzle2', P.email)) === 300007,
-    String(await store.zscore('lb:square:puzzle2', P.email)));
-  check('老写法那一行重建成了新写法（280 × 1000 + 4）', (await store.zscore('lb:square:puzzle2', L.email)) === 280004,
-    String(await store.zscore('lb:square:puzzle2', L.email)));
+  check('重建之后清七那一行存的是 300 × 1000 + 7', (await store.zscore('lb:square:puzzle3', P.email)) === 300007,
+    String(await store.zscore('lb:square:puzzle3', P.email)));
+  check('老写法那一行重建成了新写法（280 × 1000 + 4）', (await store.zscore('lb:square:puzzle3', L.email)) === 280004,
+    String(await store.zscore('lb:square:puzzle3', L.email)));
   // 重建是照存档把每张榜重写一遍——写法要和交卷时一模一样，不然重建一次排法就变了（比如
   // 没清盘的局重建成原分，就全掉到清盘的局底下去了）。交卷那一路有「和历史最高分 × 1000
   // 取大」兜着，这种错只在重建之后才露出来，所以单量这一条。
   check('重建之后排法一点没变', (await order()) === beforeRebuild, `${beforeRebuild}  →  ${await order()}`);
-  const after = (await call({ action: 'board', ...P, mode: 'square:puzzle2' })).payload?.rows ?? [];
+  const after = (await call({ action: 'board', ...P, mode: 'square:puzzle3' })).payload?.rows ?? [];
   check('重建之后印出来的还是原分和剩几步',
     after.find((r) => r.name === '清七')?.score === 300 && after.find((r) => r.name === '清七')?.left === 7,
     JSON.stringify(after.find((r) => r.name === '清七')));
@@ -656,9 +660,25 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   // 换邮箱搬家：抄的是榜上那个拼起来的数，不是 stats.best 的原分。
   const { renameScoreOwner } = await import('../api/scores.js');
   await renameScoreOwner(P.email, 'pz-p2@example.com');
-  check('换邮箱之后新地址上还是 300 × 1000 + 7', (await store.zscore('lb:square:puzzle2', 'pz-p2@example.com')) === 300007,
-    String(await store.zscore('lb:square:puzzle2', 'pz-p2@example.com')));
-  check('旧地址撤干净了', (await store.zscore('lb:square:puzzle2', P.email)) === null);
+  check('换邮箱之后新地址上还是 300 × 1000 + 7', (await store.zscore('lb:square:puzzle3', 'pz-p2@example.com')) === 300007,
+    String(await store.zscore('lb:square:puzzle3', 'pz-p2@example.com')));
+  check('旧地址撤干净了', (await store.zscore('lb:square:puzzle3', P.email)) === null);
+
+  // 归档榜（10-15 补充 S9）：第 2 版那张 square:puzzle2 上存的也是拼起来的数。isPuzzleBoard 原先只认现行那张，
+  // 升到 puzzle3 之后 300007 会被当成三十万分印出来，还开着旧页面的人交的第 2 版局也按原分写进去混排。
+  const Z = await makePlayer('pz-arch@example.com');
+  await store.zadd('lb:square:puzzle2', 300007, Z.email);
+  await store.zadd('lb:total', 300, Z.email);
+  const arch = (await call({ action: 'board', ...Z, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.me);
+  check('归档榜 square:puzzle2 上的 300007 读出来是 300 · 剩 7', arch?.score === 300 && arch?.left === 7, JSON.stringify(arch));
+  const O = await makePlayer('pz-old@example.com');
+  const oldRun = await call({ action: 'push', ...O, runId: 'o1', mode: 'square', score: 250, data: pz(250, 4, true, { puzzleRules: 2 }) });
+  check('（尺子）还开着旧页面的人交的第 2 版清盘局照收', oldRun.status === 200 && oldRun.payload?.ok === true,
+    `${oldRun.status} ${JSON.stringify(oldRun.payload)}`);
+  check('第 2 版清盘局写进归档榜：250 × 1000 + 4', (await store.zscore('lb:square:puzzle2', O.email)) === 250004,
+    String(await store.zscore('lb:square:puzzle2', O.email)));
+  check('现行那张 square:puzzle3 上没有他', (await store.zscore('lb:square:puzzle3', O.email)) === null,
+    String(await store.zscore('lb:square:puzzle3', O.email)));
   delete process.env.ADMIN_TOKEN;
 }
 
@@ -740,13 +760,13 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   // 这一条，挡住它的只有「敲代号的局一张榜都不碰」那一句。
   const W = await makePlayer('k-pz@example.com');
   const pz = (score, seedSource) => ({
-    shapeId: 'square', modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36, totalScore: score, reason: '步数用尽',
-    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, streakRefunds: 0, edgeRefunds: 2, left: 0, peak: 9 },
+    shapeId: 'square', modeKey: 'puzzle', puzzleRules: 3, boardTiles: 36, totalScore: score, reason: '步数用尽',
+    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, left: 0 },
     ...(seedSource ? { seedSource } : {}),
   });
   await call({ action: 'push', ...W, runId: 'w1', mode: 'square', score: 120, name: '代号壬', data: pz(120, 'random') });
   const pzRow = async () =>
-    (await call({ action: 'board', ...W, mode: 'square:puzzle2' })).payload?.rows?.find((r) => r.me)?.score ?? null;
+    (await call({ action: 'board', ...W, mode: 'square:puzzle3' })).payload?.rows?.find((r) => r.me)?.score ?? null;
   check('（尺子）步步为营：随手开的一局照常上榜', (await pzRow()) === 120, String(await pzRow()));
   await call({ action: 'push', ...W, runId: 'w2', mode: 'square', score: 330, data: pz(330, 'entered') });
   check('步步为营：敲代号开的一局也不上榜（还是 120）', (await pzRow()) === 120, String(await pzRow()));

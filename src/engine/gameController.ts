@@ -33,8 +33,8 @@ import { setScreenBack } from './backNav';
 import { playScore, playFlip, playClear, playError, playFinish, playSettle, reducedMotion, screenShake, spawnParticles, punch } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import {
-  createStepBank, puzzleComposite, stepLedgerText,
-  PUZZLE_RULES_VERSION, PUZZLE_STEP_COST, PUZZLE_STEPS_OUT_REASON,
+  createStepBank, puzzleComposite, puzzleStartSteps, stepLedgerText,
+  PUZZLE_RULES_VERSION, PUZZLE_STEPS_OUT_REASON,
 } from './puzzleScore';
 import { claimFirstHowToHint, markFinishedAGame } from './firstPlay';
 import { STRINGS, type Lang } from '../i18n';
@@ -449,8 +449,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     patternBlock.update({ level: erosion.level(), segLeft: erosion.segLeft(), segTotal: erosion.segTotal() });
   /** 无限反转的连锁账本（见 scoring.ts 的 createToggleLedger）；别的局没有。 */
   const flipLedger = hooks.flip ? createToggleLedger() : null;
-  /** 步步为营手里那几步（见 engine/puzzleScore.ts）；别的局没有。 */
-  const bank = hooks.puzzle ? createStepBank() : null;
+  /** 步步为营手里那几步（见 engine/puzzleScore.ts；第 3 版起手按棋盘：小球 15、方块 22）；别的局没有。 */
+  const bank = hooks.puzzle ? createStepBank(puzzleStartSteps(hooks.shapeId)) : null;
 
   /** 余步 ≤ 2 就把那一格点红。这一局没有钟，紧张感全在这个数上。 */
   const STEPS_LOW = 2;
@@ -465,22 +465,21 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     el.closest<HTMLElement>('.hud-block')?.classList.toggle('low', left <= STEPS_LOW);
   }
   /**
-   * 那一格上冒一下「−1」「−1 +1」「−1 +2」「−1 +3」。
+   * 那一格上冒一下：空走「−1」，得分「±0」（第 3 版）。
    *
-   * 收的是**这一步退回来了几步**，不是净变化——净变化那一版把最要紧的那一下
-   * 吞掉了（孤立得分净 0，于是什么都不冒，见 puzzleScore.ts 的 stepLedgerText）。
-   * 字怎么排由那个纯函数说了算，这儿只负责把它放上去：那样 check-puzzle 不用
-   * 开浏览器就能把四种情况钉住。
+   * 收的是**这一步得没得分**，不是净变化——净变化那一版把最要紧的那一下吞掉了（净 0 于是什么都不冒，见
+   * puzzleScore.ts 的 stepLedgerText）。字怎么排由那个纯函数说了算，这儿只负责把它放上去：那样 check-puzzle
+   * 不用开浏览器就能把两种情况钉住。
    *
    * 没有借 scoreReel.showGain：它 amount <= 0 直接 return、而且永远印「+」号
    * ——而这一局每一步都带着一个 −1。借 .gain-pop 那个类，动画是同一套。
    */
-  function bumpSteps(refund: number) {
+  function bumpSteps(scored: boolean) {
     const host = refs.stepsBadgeEl;
     if (!host) return;
     const pop = document.createElement('span');
     pop.className = 'gain-pop';
-    pop.textContent = stepLedgerText(refund);
+    pop.textContent = stepLedgerText(scored);
     host.appendChild(pop);
     // 和 showGain 那一头同一件事：牌里有「−1」在飘的时候，读数让一让（那个类由
     // syncGainState 挂，理由见它自己那段注释——`:has()` 在 Chrome 61 上整条被丢）。
@@ -1022,10 +1021,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
               stars: tally.stars,
               spent: bank.spent(),
               scoredMoves: bank.scoredMoves(),
-              streakRefunds: bank.streakRefunds(),
-              edgeRefunds: bank.edgeRefunds(),
               left: bank.left(),
-              peak: bank.peak(),
             }
           : undefined,
       // 这一局是在小屋里打的。记录页、战绩图、云上的档都带着它——两边现在
@@ -1045,7 +1041,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 一把尺子量的。非反转局不写。
       flipRules: hooks.modeKey === 'flip' ? FLIP_RULES_VERSION : undefined,
       // 步步为营同理（见 puzzleScore.ts 的 PUZZLE_RULES_VERSION）：2026-10-02 消线奖励
-      // 从退一步改成退两步，一局能走多久、终局盘面长什么样整条都变了。非这一档不写。
+      // 从退一步改成退两步（第 2 版）；2026-10-14 撤掉所有退步、起手按棋盘（第 3 版）——一局能
+      // 走多久、终局盘面长什么样整条都变了。非这一档不写。
       puzzleRules: hooks.modeKey === 'puzzle' ? PUZZLE_RULES_VERSION : undefined,
       // 这一局的种子（第 19 推）：码、从哪儿来的、每日挑战那一天。分享卡照它印「种子
       // XXXX-XXXX」（每日的再加「· 每日 MM/DD」），服务器照 daily 和 seed 把每日挑战那一
@@ -1424,16 +1421,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
      */
     let totalRaw = 0;
     let moveWeight = 0;
-    /**
-     * 这一步的连锁里有没有整线奖励（步步为营的「消边」判据）。
-     *
-     * 判的是 step.lineBonusGroups.length > 0。今天它是「整行／整列消除」，
-     * 《外边消除》那套规则落地之后它自动变成「消掉此刻的最外边」——同一个字段，
-     * 这儿一个字都不用改。
-     */
-    let hadLineBonus = false;
-    /** 走这一步之前手里还剩几步，用来算气泡上那个增量。 */
-    const beforeLeft = bank?.left() ?? 0;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : 550;
     const STEP_GAP_MS = reduceMotion ? 0 : 350;
@@ -1476,12 +1463,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
        */
       let left = -1;
       if (bank) {
-        left = bank.spend(totalRaw > 0, { edge: hadLineBonus });
+        left = bank.spend(totalRaw > 0);
         paintSteps(left);
-        // 退回来了几步 = 现在剩的 − 走之前剩的 + 那一步的成本。要的是「退了几
-        // 步」而不是净变化：孤立得分净变化是 0，可屏幕上必须看得见「付了 1、
-        // 退回 1」——那正是这一局要教的那句话（见 stepLedgerText）。
-        bumpSteps(Math.max(0, left - beforeLeft + PUZZLE_STEP_COST));
+        bumpSteps(totalRaw > 0);
       }
       // 炸弹四连炸在**这一步结束时**的盘面上判（见 checkHazard 上面那段）。
       // 排在 isGameOver 前面：被炸掉的那一局不该同时报「盘面清空了」。
@@ -1543,9 +1527,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 没套 FLIP_STREAK_CAP——连击过了十次，加分已经封顶，气泡上的倍率还在往上翻。
       const shownMult = hooks.flip ? flipStreakMult(flipChain) : 1;
       if (hooks.flip) flipChain++;
-      // 步步为营的「消边」：一步引发的连锁里**任意一拍**是整线奖励就算，所以
-      // 这儿只置真、不置假（后面的拍子没消线，不该把前面那一拍的功劳抹掉）。
-      if (s.lineBonusGroups.length) hadLineBonus = true;
       const isBonus = s.lineBonusGroups.length > 0;
       const groups: CascadeStepGroups = { matchGroups: s.matchGroups, lineBonusGroups: s.lineBonusGroups };
       // 教学 D 那一条数的就是这一下：从它出现起消掉两次整条外边就换到 E（10-11 方案 D-1）。条子只记下，等这一
@@ -1614,7 +1595,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
              * 降级了：下一拍**全盘**按新图案重找（10-09 补充方案 6-3）。盘上可能早就摆着一组现成的
              * 新图案（比如一组 1×3），它不在这一步动过的格子上，照遮罩找不到——从前它得等哪天谁碰
              * 巧滑到它才给分。降到 1 枚时，场上剩下的每一枚色块单独就是一组，这一拍把它们全部翻掉。
-             * 都算这一步的连锁拍：分数、连锁、步步为营的退步一概照连锁算。
+             * 都算这一步的连锁拍：分数、连锁、步步为营「这一步得没得分」一概照连锁算。
              */
             stepper.rescanAll();
             hooks.onErosion?.(step.level);

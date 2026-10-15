@@ -81,11 +81,11 @@ export function boardGroups(lang: Lang): BoardGroup[] {
     { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
     { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_TWO, 'slot') },
     { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip2') },
-    // 步步为营：'puzzle2' 是第二版规则那张榜（消线奖励从退一步改成退两步，见 api/scores.js
-    // 的 PUZZLE_KIND）。原先这儿还写着 'puzzle'——服务端开了 puzzle2 之后新局全记在新榜上，
-    // 客户端点开的却是归档的老榜，新分一个都看不见（巡检 2026-10-03，第 14 推）。这正是上面
+    // 步步为营：'puzzle3' 是第 3 版规则（空走额度，10-15 补充 S9）那张榜，见 api/scores.js 的 PUZZLE_KIND；
+    // 'puzzle2'（消线退两步）、'puzzle'（消线退一步）是归档的老榜。原先第 2 版上线时这儿还写着 'puzzle'——服务端开了
+    // 新榜之后新局全记在新榜上，客户端点开的却是归档的老榜，新分一个都看不见（巡检 2026-10-03，第 14 推）。这正是上面
     // 那段说的「最容易漏」的那一处，check-bomb-rules 现在拿服务端那个常量来对它。
-    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_TWO, 'puzzle2') },
+    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_TWO, 'puzzle3') },
   ];
 }
 

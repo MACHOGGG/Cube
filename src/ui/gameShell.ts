@@ -13,7 +13,7 @@ import type { Family, TargetPattern } from '../engine/targets';
 import { cardOf } from '../shapes/registry';
 import { modeKeyOf } from '../engine/runKey';
 import { seedModeOf } from '../engine/seedCode';
-import { PUZZLE_START_STEPS } from '../engine/puzzleScore';
+import { puzzleStartSteps } from '../engine/puzzleScore';
 
 export interface ExtraControl {
   id: string;
@@ -319,7 +319,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             // 是「这个玩法打不开」。（余步那个读数走的是同一个 id 家族里的
             // `#hud-time`，见上面那段。）
             meta.steps
-              ? `<span id="hud-time">${PUZZLE_START_STEPS}</span>` +
+              ? `<span id="hud-time">${puzzleStartSteps(meta.shapeId)}</span>` +
                 '<span class="score-reel" id="scoreReel" hidden></span>'
               : '<span class="score-reel" id="scoreReel"></span>'
           }</div>

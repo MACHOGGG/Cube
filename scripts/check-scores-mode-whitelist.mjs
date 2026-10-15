@@ -73,7 +73,7 @@ async function makePlayer(email) {
 }
 
 const TOKEN = process.env.ADMIN_TOKEN;
-const BOARDS = ['square:base', 'circle:base', 'square:timed', 'square:puzzle2', 'circle:puzzle2', 'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'];
+const BOARDS = ['square:base', 'circle:base', 'square:timed', 'square:puzzle3', 'circle:puzzle3', 'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'];
 /** 这个人此刻在哪几张榜上（含总榜、总榜的玩法标记、今天的每日榜）。 */
 async function boardsOf(id) {
   const on = [];
@@ -146,21 +146,27 @@ const X = await makePlayer('x@example.com');
 
 // ── ③ 步步为营的上限按写进哪张榜判断 ─────────────────────────────────────────
 {
-  const over = await call({ action: 'push', ...A, runId: 'pz-1', mode: 'square', score: 361, data: { modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36 } });
-  check('③ 写进 square:puzzle2 的局超过「36 枚 × 10」：400 score', over.status === 400 && over.payload?.error === 'score', JSON.stringify(over));
+  const over = await call({ action: 'push', ...A, runId: 'pz-1', mode: 'square', score: 361, data: { modeKey: 'puzzle', puzzleRules: 3, boardTiles: 36 } });
+  check('③ 写进 square:puzzle3 的局超过「36 枚 × 10」：400 score', over.status === 400 && over.payload?.error === 'score', JSON.stringify(over));
   const archived = await call({ action: 'push', ...A, runId: 'pz-2', mode: 'square', score: 5000, data: { modeKey: 'puzzle', puzzleRules: 1, boardTiles: 36 } });
   check('③ 写进归档的 square:puzzle 也套同一道上限', archived.status === 400 && archived.payload?.error === 'score', JSON.stringify(archived));
-  const liar = await call({ action: 'push', ...A, runId: 'pz-3', mode: 'square', score: 900, data: { modeKey: 'puzzle', puzzleRules: 2, boardTiles: 999 } });
+  // 第 2 版（10-15 补充 S9 起归档）：还开着旧页面的人交的局也套同一道上限。
+  const archived2 = await call({ action: 'push', ...A, runId: 'pz-2b', mode: 'square', score: 5000, data: { modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36 } });
+  check('③ 写进归档的 square:puzzle2 也套同一道上限', archived2.status === 400 && archived2.payload?.error === 'score', JSON.stringify(archived2));
+  const liar = await call({ action: 'push', ...A, runId: 'pz-3', mode: 'square', score: 900, data: { modeKey: 'puzzle', puzzleRules: 3, boardTiles: 999 } });
   check('③ 报一个 999 枚抬不高上限（取服务端知道的 36）', liar.status === 400 && liar.payload?.error === 'score', JSON.stringify(liar));
-  const fine = await call({ action: 'push', ...A, runId: 'pz-4', mode: 'square', score: 360, data: { modeKey: 'puzzle', puzzleRules: 2, boardTiles: 36 } });
+  const fine = await call({ action: 'push', ...A, runId: 'pz-4', mode: 'square', score: 360, data: { modeKey: 'puzzle', puzzleRules: 3, boardTiles: 36 } });
   check('③ （尺子）满分 360 照收', fine.status === 200 && fine.payload?.ok === true, JSON.stringify(fine));
   const base = await call({ action: 'push', ...A, runId: 'pz-5', mode: 'square', score: 50000, data: { modeKey: 'base', boardTiles: 36 } });
   check('③ modeKey 写成 base 的大分进的是基础榜', base.status === 200 && (await store.zscore('lb:square:base', A.email)) === 50000, JSON.stringify(base));
-  const onPuzzle = await store.zscore('lb:square:puzzle2', A.email);
+  const onPuzzle = await store.zscore('lb:square:puzzle3', A.email);
   check('③ 步步为营榜上他还是那 360（×1000 的拼法），没被那 50000 顶上去', onPuzzle !== null && Math.floor(onPuzzle / 1000) === 360, String(onPuzzle));
   // 源码那一头：闸问的是写进哪张榜，不再是 modeKey。
   const src = readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
-  check('③ 源码：上限那道闸按 boardId 判（/:puzzle2?$/），不再问 data.modeKey', /if \(\/:puzzle2\?\$\/\.test\(boardId\)\)/.test(src) && !/if \(String\(data\.modeKey \|\| ''\) === 'puzzle'\)/.test(src));
+  check('③ 源码：上限那道闸按 boardId 判（isPuzzleBoard），不再问 data.modeKey',
+    /if \(isPuzzleBoard\(boardId\)\)/.test(src) && !/if \(String\(data\.modeKey \|\| ''\) === 'puzzle'\)/.test(src));
+  // isPuzzleBoard 认的是现行连同归档的那几张（10-15 补充 S9：原先只认 `:${PUZZLE_KIND}`，归档榜上 300007 印成三十万分）。
+  check('③ 源码：isPuzzleBoard 是 /:puzzle\d*$/', /const isPuzzleBoard = \(boardId\) => \/:puzzle\\d\*\$\/\.test\(String\(boardId\)\);/.test(src));
 }
 
 // ── ④ purge：撤下所有榜，再推也上不去，重建也不请回来 ─────────────────────────
@@ -223,9 +229,9 @@ const X = await makePlayer('x@example.com');
   check('⑤ 令牌不对：401', no.status === 401, JSON.stringify(no));
   const st = await call({ action: 'scoreStats', token: TOKEN }, '192.0.2.5');
   const boards = st.payload?.boards || {};
-  check('⑤ 回了每一张现行的榜', st.status === 200 && ['square:base', 'circle:base', 'square:puzzle2', 'circleSeven', 'triangleBig'].every((b) => b in boards), Object.keys(boards).join(' '));
+  check('⑤ 回了每一张现行的榜', st.status === 200 && ['square:base', 'circle:base', 'square:puzzle3', 'circleSeven', 'triangleBig'].every((b) => b in boards), Object.keys(boards).join(' '));
   check('⑤ 每一张只有 n / max / p999 三个数', Object.values(boards).every((v) => Object.keys(v).sort().join() === 'max,n,p999' && Object.values(v).every((x) => typeof x === 'number')));
-  check('⑤ 步步为营那张拆回了分数（360，不是 360000）', boards['square:puzzle2']?.max === 360, JSON.stringify(boards['square:puzzle2']));
+  check('⑤ 步步为营那张拆回了分数（360，不是 360000）', boards['square:puzzle3']?.max === 360, JSON.stringify(boards['square:puzzle3']));
   check('⑤ 基础榜的最高分是那 50000', boards['square:base']?.max === 50000, JSON.stringify(boards['square:base']));
   const text = JSON.stringify(st.payload);
   check('⑤ 回包里一个 id 都没有', !/@example\.com|hdl:|code:/.test(text), text.slice(0, 120));

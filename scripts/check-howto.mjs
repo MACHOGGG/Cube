@@ -61,7 +61,9 @@ async function openHowto() {
       // 配图里画了几枚图案。只问「有没有配图」的话，一对改成一个那一步漏改也是绿的
       // （屏幕上两张图，「有没有」照样 true）——所以数出来。
       artIcons: e.querySelectorAll('.tut-rule-art .pattern-icon').length,
-      text: (e.querySelector('.tut-rule-text')?.textContent || '').slice(0, 24),
+      // 截 80 个字（10-15 补充 S9）：原先截 24，步步为营第 3 版那句「小球开局 15 步，方块 22 步。没得分的一步扣 1 步……」
+      // 里的「扣」字被截掉了。
+      text: (e.querySelector('.tut-rule-text')?.textContent || '').slice(0, 80),
     }));
     return { nums, texts, extras };
   });
@@ -232,7 +234,8 @@ await startFrom('步步为营', async () => {
 });
 r = await openHowto();
 check('步步为营：底下有一条，词是《步步为营》', r.extras.length === 1 && r.extras[0].tag === '步步为营', JSON.stringify(r.extras));
-check('步步为营：说的是余步的规矩（开局几步、每走一步扣几步）', /8 步/.test(r.extras[0]?.text || '') && /扣/.test(r.extras[0]?.text || ''),
+check('步步为营：说的是余步的规矩（小球 15 步、方块 22 步、没得分扣几步）',
+  /15 步/.test(r.extras[0]?.text || '') && /22 步/.test(r.extras[0]?.text || '') && /扣/.test(r.extras[0]?.text || ''),
   r.extras[0]?.text);
 check('步步为营：那一条不摆空配图', r.extras[0]?.art === false, '');
 check('步步为营：五条规则还在', r.nums.join(',') === '1,2,3,4,5', r.nums.join(','));
