@@ -276,7 +276,8 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
     }
     const mine = myRound;
     return reportScore(score, over, seconds, mine).then((res) => {
-      if (!res.ok) return false;
+      // 'seat'：座位被另一台设备认领走了（10-15 补充 S4）——再送一万次也是 403，不再每半秒重发；轮询那一头会说那句话。
+      if (!res.ok) return res.reason === 'seat';
       if (mine <= 0) return true;
       // 回包就是一份房间状态：被屋主结束了的话，说的是另一句，而且不再说下面那句。
       if (noticeForced(res.value) || droppedTold) return true;
@@ -473,17 +474,20 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    *   · 还在打、这一局他打得了 → 原地转成单人打完（结算页上就有回主页的路）；
    *   · 还在打、打不了（天才特供那几样）→ 停住、说一句、按下去回主页；
    *   · 已经交了卷在等 → 等待页撤掉、说一句、按下去回主页。
+   *
+   * 座位被同名的人在另一台设备上认领走了（服务器答 seat，10-15 补充 S4）也是定论，走同一套去处，只是三处都说
+   * mpErrSeatGone（`say` / `solo` 两个参数）。原先这一种服务器照样回 200，他每一条报分都 403、屏幕上一个字都没有。
    */
-  const roomExpired = () => {
+  const roomExpired = (say: string = s.mpErrEnded, solo: string = s.mpRoomExpiredSolo) => {
     // 说的是「这个小屋已经结束了」（mpErrEnded）——和屋主散场、大厅里敲那个号码是同一句（10-11 方案 C-3 第 3 条）。
     // 原先这儿另有一句「这间小屋已经过期了」，大厅那头又是「没有这个小屋号码」：同一件事三种说法。
     if (!runFinished()) {
       const st = latestRoomState();
       const locked = st ? lockedMode(st) : isLayoutLocked(shapeId);
-      return locked ? lockedOut(s.mpErrEnded, s.homeBtn) : goSolo(s.mpRoomExpiredSolo);
+      return locked ? lockedOut(say, s.homeBtn) : goSolo(solo);
     }
     leaveForGood();
-    homeNotice(s.mpErrEnded, s.homeBtn);
+    homeNotice(say, s.homeBtn);
   };
 
   /**
@@ -648,6 +652,8 @@ function flyby(text: string): void {
       // 本机连座位都没有时 fetchState 也答 noRoom，那一种不是服务器说的，不在这儿认。
       // 服务器过期之后答的是 'ended'（墓碑还在，api/room.js 的 tombKey，10-11 方案 C-3）；墓碑也过了才是 noRoom。
       if ((reason === 'noRoom' || reason === 'ended') && currentRoom()) return roomExpired();
+      // 钥匙对不上：座位被同名的人在另一台设备上认领走了（10-15 补充 S4）。
+      if (reason === 'seat' && currentRoom()) return roomExpired(s.mpErrSeatGone, s.mpErrSeatGone);
       // A poll that fails changes nothing on screen: the last standings
       // stand, which is better than blanking the panel over one dropped
       // request in the middle of someone's run.

@@ -206,10 +206,15 @@ export function errorText(reason: RoomError, lang: Lang): string {
       return s.mpErrClaimed;
     case 'started':
       return s.mpErrStarted;
+    // 竞赛屋：屋主不算选手（api/room.js 的 playerCount），名单上「玩家 1/20」时说「至少两个人」和屏幕对不上
+    // （10-15 补充 S4）。
     case 'tooFew':
-      return s.mpErrTooFew;
+      return latestRoomState()?.contest ? s.mpErrTooFewContest : s.mpErrTooFew;
     case 'ended':
       return s.mpErrEnded;
+    // 座位被同名的人在另一台设备上认领走了（10-15 补充 S4）。
+    case 'seat':
+      return s.mpErrSeatGone;
     case 'notConfigured':
       return s.mpErrNotOpen;
     // 服务器那头的事（10-11 方案 C-3 第 1 条）：开屋十二次撞号的 503 'busy'、认不出的 5xx（engine/room.ts 认成
@@ -249,6 +254,14 @@ export function renderMultiplayerPage(
   lang: Lang,
 ): () => void {
   const s = STRINGS[lang];
+  /**
+   * 拿着本机座位去问、服务器说这个座位没了的那三种（10-15 补充 S4）：号码上没有这间屋了（noRoom）、那间屋结束了
+   * （ended）、钥匙对不上——座位被另一台设备认领走了（seat）。走到这儿时本机一定拿着座位，这个号码上一定有过他那
+   * 间屋，所以 noRoom 和 ended 说的是同一句「这个小屋已经结束了」。原先重连页和启动那两处说的是「没有这个小屋号码」
+   * ——屋子过期之后墓碑还在、服务器答的其实是 ended，而 seat 那一种原先服务器根本不说。
+   */
+  const seatGone = (r: RoomError): boolean => r === 'noRoom' || r === 'ended' || r === 'seat';
+  const seatGoneText = (r: RoomError): string => (r === 'seat' ? s.mpErrSeatGone : s.mpErrEnded);
   let avatar: Avatar = randomAvatar();
   let stopWatching: (() => void) | null = null;
   let countdownTimer = 0;
@@ -971,10 +984,10 @@ export function renderMultiplayerPage(
         // 服务器亲口说这间小屋没了（过期了，或者已经散了）：座位不必再留，
         // 退回多人设置页，把那句话带过去。原来只是在小屋页底下写一句，人
         // 还坐在一间已经不存在的屋里，催、等都没有回应。
-        if (reason === 'noRoom' || reason === 'ended') {
+        if (seatGone(reason)) {
           stopAll();
           forgetRoom();
-          if (!dead) renderHome(errorText(reason, lang));
+          if (!dead) renderHome(seatGoneText(reason));
           return;
         }
         const msg = container.querySelector<HTMLElement>('#mpMsg');
@@ -1027,6 +1040,7 @@ export function renderMultiplayerPage(
           <span class="mp-avatar">${avatarSvg(p.avatar)}</span>
           <span class="mp-player-name">${esc(p.name)}</span>
           ${p.isHost ? `<span class="mp-badge">${s.mpHostBadge}</span>` : ''}
+          ${p.seated === false && !p.left ? `<span class="mp-badge mp-badge--seatless">${s.mpSeatlessTag}</span>` : ''}
           ${p.left ? `<span class="mp-badge mp-badge--left">${s.mpLeftTag}</span>` : tickFor(p.finished, s.mpFinished)}
           ${played ? `<span class="mp-player-total">${p.total + p.score}</span>` : ''}
         </div>`,
@@ -1111,9 +1125,9 @@ export function renderMultiplayerPage(
         playedRound = Math.max(playedRound, lastPlayedRound());
         return renderLobby(now.value);
       }
-      if (now.reason === 'noRoom' || now.reason === 'ended') {
+      if (seatGone(now.reason)) {
         forgetRoom();
-        return renderHome(s.mpErrNoRoom);
+        return renderHome(seatGoneText(now.reason));
       }
       countdownTimer = window.setTimeout(again, 3000) as unknown as number;
     };
@@ -1427,10 +1441,10 @@ export function renderMultiplayerPage(
       // 「房间没了」和「这次请求没打通」是两件事，以前一律按前者处理：
       // 地铁里晃一下、后台被回收一次，人就被请出房间而且回不去。
       // 只有服务器亲口说没有这间房，才放弃这个座位。
-      const gone = existing.reason === 'noRoom' || existing.reason === 'ended';
+      const gone = seatGone(existing.reason);
       if (!gone && currentRoom()) return renderReconnecting();
       forgetRoom();
-      return renderHome(gone ? s.mpErrNoRoom : '');
+      return renderHome(gone ? seatGoneText(existing.reason) : '');
     }
     if (existing.value.ended) {
       forgetRoom();

@@ -372,17 +372,26 @@ async function noSuchRoom(res, code) {
  * 去换这个风险不值。而且这两条不给身份时一个字都不写（seatOf 拦在写之前），
  * 也不吐任何别人的数据，回的就是 { ok: true }。
  *
- * start / force / score / end / learn 都要先出示座位或屋主令牌，够不上「陌生人的门」。
+ * start / force / score / end / learn 要先出示座位或屋主令牌，可「号码在 / 不在」它们答的是两句不同的话（403 /
+ * 404）——原先这五条不挂桶，一个 IP 拿 start 连扫两千个号码一次都没被挡（10-15 补充 S4，L-2 ③）。所以这五条
+ * 合挂一个宽桶 room:auth：每个 IP 每十秒 1000 次。一台设备最坏每十秒约 33 条（局中每半秒报一次分），21 座同一个
+ * IP 一个窗口实测 945 条全部放行；扫描到第 1001 次开始 429。leave / bye 号码在不在都回 200，不是探测器，照旧不挂。
  */
 const RATE = {
   state: { limit: 600, windowS: 10 },
   nudge: { limit: 200, windowS: 10 },
-  join: { limit: 60, windowS: 3600 },
+  // 每个 IP 每小时 300 次（站长 10-15 定；原先 60）：一间教室、一家公司共用一个出口，二十来个人进屋、断线重进几次，
+  // 60 次一小时就用完了。
+  join: { limit: 300, windowS: 3600 },
   create: { limit: 20, windowS: 3600 },
-  // 局中改昵称（第 16 推）：要先有座位、还要帐号令牌，而且一次改名只发一次。和 join 一样
-  // 是一次性动作，同一个桶的大小。
+  // 局中改昵称（第 16 推）：要先有座位、还要帐号令牌，而且一次改名只发一次。是一次性动作，60 次 / 小时。
   rename: { limit: 60, windowS: 3600 },
 };
+
+/** 合挂 room:auth 那个桶的五条（10-15 补充 S4）。 */
+const AUTH_ACTIONS = ['start', 'force', 'score', 'end', 'learn'];
+const AUTH_LIMIT = 1000;
+const AUTH_WINDOW_S = 10;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method' });
@@ -394,6 +403,10 @@ export default async function handler(req, res) {
   // 数数，再验身份）。
   const rate = RATE[body.action];
   if (rate && (await tooMany(`room:${body.action}`, callerId(req), rate.limit, rate.windowS))) {
+    return send(res, 429, { error: 'tooMany' });
+  }
+  // 自己没有桶、又分得出号码在不在的那五条，合一个宽桶（见 RATE 上面那段）。
+  if (AUTH_ACTIONS.includes(body.action) && (await tooMany('room:auth', callerId(req), AUTH_LIMIT, AUTH_WINDOW_S))) {
     return send(res, 429, { error: 'tooMany' });
   }
   try {
@@ -537,6 +550,11 @@ function publicState(code, hash) {
       rounds: value.rounds || 0,
       /** 中途走了。人还在名单和排名里，只是不再报到，也不占座位。 */
       left: Boolean(value.left),
+      /**
+       * 真的坐着一把椅子（见 hasChair；10-15 补充 S4）。椅子被收走、又从原来那台手机回来的人照旧让他打（站长 10-15
+       * 定），名单上标一下「没有座位」——人数里不算他。
+       */
+      seated: hasChair(hash, field, value),
       /**
        * 这一局是屋主按「不等了」替他交的卷（见 force；10-09 补充方案 7-5）。
        *
@@ -981,9 +999,18 @@ function seatOf(hash, playerId, token) {
   return seat && seat.token && seat.token === token ? seat : null;
 }
 
-/** 还坐着的人。走掉的座位留在表里（见 leave），但它不占位子。 */
+/**
+ * 这个人此刻是不是**真的坐着一把椅子**：没按《离开》、记着一把椅子、那把椅子（s:<i>）上写的也是他。
+ *
+ * 「有椅子的人」在库里是两本账：s:<i> → playerId（claimSlot 用 HSETNX 占）和 p:<id>.slot。椅子被收走的人（claimSeat
+ * 只删这两样、不标 left）原先照样按「没按离开」算进人数，于是满屋又借出一把就是 9/8、竞赛屋 24/20（10-15 补充 S4）。
+ */
+const hasChair = (hash, field, seat) =>
+  Boolean(seat) && !seat.left && seat.slot !== undefined && hash['s:' + seat.slot] === field.slice(2);
+
+/** 还坐着的人（真的坐着一把椅子，见 hasChair）。走掉的座位留在表里（见 leave），但它不占位子。 */
 const seatCount = (hash) =>
-  Object.entries(hash).filter(([k, v]) => k.startsWith('p:') && v && !v.left).length;
+  Object.entries(hash).filter(([k, v]) => k.startsWith('p:') && hasChair(hash, k, v)).length;
 
 /**
  * 这个座位是不是**主持人**——竞赛屋里开屋那个人，他不参赛。
@@ -1008,7 +1035,7 @@ const isSpectator = (meta, playerId) => Boolean(meta && meta.contest) && playerI
 const playerCount = (hash) => {
   const meta = hash.meta || {};
   return Object.entries(hash).filter(
-    ([k, v]) => k.startsWith('p:') && v && !v.left && !isSpectator(meta, k.slice(2)),
+    ([k, v]) => k.startsWith('p:') && hasChair(hash, k, v) && !isSpectator(meta, k.slice(2)),
   ).length;
 };
 
@@ -1163,6 +1190,10 @@ async function claimSeat(code, playerId, hash) {
     const next = { ...seat };
     delete next.slot;
     await hset(roomKey(code), field, next);
+    // 一个人进来只收一把（10-15 补充 S4）。原先这儿不停，一圈收走所有关了页的椅子、自己只坐一把：8 人屋 3 人关页、
+    // 第 9 人进来，3 把全收、只剩 6 把有人坐，屋里却显示 9/8（那时人数按「没按离开」数）；再来三个陌生人
+    // 200 / 200 / 409，11/8。hdelIfSame 没抢到的那把照旧 continue 去看下一把。
+    break;
   }
   if (!reclaimable) return -1;
   // 收没收到都再占一次：别人刚收出来、还没坐上的那把，谁先占到算谁的（claimSlot 是 HSETNX）。原先只在「我自己
@@ -1439,35 +1470,51 @@ async function join(res, body) {
     const token = id(16);
     // 按过《离开》的座位早把椅子交回去了（见 leave）：回来先重新占一把。
     let slot = seat.slot;
-    if (seat.left || slot === undefined) {
-      slot = await claimSeat(code, field.slice(2), hash);
-      if (slot < 0) {
-        // 满了：先把刚抢的那把认领锁还回去，再答 full（第 14 推）。原先锁留在那儿——他等
-        // 到有人起身、再按一次《加入》，撞上的是自己上一次留下的锁，答的是 claimed，而且
-        // 这间屋子活着一天就一直是 claimed：他再也回不到自己那个座位上。
-        await hdel(roomKey(code), claimKey(field.slice(2), seat.token));
-        return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
+    let tookChair = false;
+    // 提到 try 外面：后面那几步要用它（块作用域里声明的话，try 后面读它是 ReferenceError）。
+    let next = null;
+    // 从占椅子到把座位写回去，中间库摔了（10-15 补充 S4）：认领锁还回去、这一趟新占的椅子交回去，再往外抛（502）。
+    // 原先这儿摔了，椅子挂着、claimKey 没还，之后再按《加入》永远 409 claimed——他再也回不到自己那个座位上。
+    try {
+      if (seat.left || slot === undefined) {
+        slot = await claimSeat(code, field.slice(2), hash);
+        if (slot < 0) {
+          // 满了：先把刚抢的那把认领锁还回去，再答 full（第 14 推）。原先锁留在那儿——他等
+          // 到有人起身、再按一次《加入》，撞上的是自己上一次留下的锁，答的是 claimed，而且
+          // 这间屋子活着一天就一直是 claimed：他再也回不到自己那个座位上。
+          await hdel(roomKey(code), claimKey(field.slice(2), seat.token));
+          return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
+        }
+        tookChair = true;
       }
+      next = {
+        ...seat,
+        name: nameForReturner(seat, hash, field.slice(2)),
+        token,
+        slot,
+        lastSeen: Date.now(),
+        learningAt: 0,
+        seen: cleanSeen(body.seen),
+      };
+      delete next.left;
+      // 这一局已经开了：他手上的棋盘早没了，这一局不等他，下一局再入。走之前
+      // 打出来的那点分留着，下一次 start 时 bankRound 照常记账。
+      if (midRound) next.finished = true;
+      await hset(roomKey(code), field, next);
+    } catch (e) {
+      await Promise.allSettled([
+        hdel(roomKey(code), claimKey(field.slice(2), seat.token)),
+        tookChair && slot >= 0 ? hdelIfSame(roomKey(code), 's:' + slot, field.slice(2)) : null,
+      ]);
+      throw e;
     }
-    const next = {
-      ...seat,
-      name: nameForReturner(seat, hash, field.slice(2)),
-      token,
-      slot,
-      lastSeen: Date.now(),
-      learningAt: 0,
-      seen: cleanSeen(body.seen),
-    };
-    delete next.left;
-    // 这一局已经开了：他手上的棋盘早没了，这一局不等他，下一局再入。走之前
-    // 打出来的那点分留着，下一次 start 时 bankRound 照常记账。
-    if (midRound) next.finished = true;
-    await hset(roomKey(code), field, next);
+    // 座位已经写成新钥匙了：后面这几步再摔也不回 502——钥匙必须交出去，不然他手上没有钥匙、座位上却换了锁。
+    try {
     // 心跳那一格也要翻新。他多半是关了网页才被认领回来的，那一格里留着的是
     // bye 写下的 lastSeen 0 和 byeAt；不盖掉的话 readRoom 会把它们折回座位上
     // ——人明明回来了，屋里却一直显示他「终端关着」，座位还随时会被下一个同
     // 名的人认领走。
-    await hset(roomKey(code), beatKey(field.slice(2)), { lastSeen: Date.now(), byeAt: 0 });
+      await hset(roomKey(code), beatKey(field.slice(2)), { lastSeen: Date.now(), byeAt: 0 });
     /*
      * 这一局那一格：**只盖 `finished` 这一位**，分数和用时原样留着——而且写之前重读。
      *
@@ -1490,21 +1537,25 @@ async function join(res, body) {
      * 库操作之间插进整段抢锁 + 清格——和 leave() 里那一处同一个量级，**这是这一处的天
      * 花板，不是没想到**。要彻底堵死得有一把座位级的锁，而认领是一次性动作，不值得。
      */
-    const liveHash = await hgetall(roomKey(code));
-    const banking =
-      lockHeld(liveHash, startLockKey((Number(liveHash?.meta?.round) || 0) + 1)) || lockHeld(liveHash, END_LOCK);
-    if (!banking) {
-      await hset(roomKey(code), roundKey(field.slice(2)), {
-        ...(liveHash?.[roundKey(field.slice(2))] || CLEAR_ROUND),
-        finished: Boolean(next.finished),
-      });
+      const liveHash = await hgetall(roomKey(code));
+      const banking =
+        lockHeld(liveHash, startLockKey((Number(liveHash?.meta?.round) || 0) + 1)) || lockHeld(liveHash, END_LOCK);
+      if (!banking) {
+        await hset(roomKey(code), roundKey(field.slice(2)), {
+          ...(liveHash?.[roundKey(field.slice(2))] || CLEAR_ROUND),
+          finished: Boolean(next.finished),
+        });
+      }
+      await keepAlive(code);
+    } catch {
+      /* 见上：钥匙照样交出去，屋子的状态拿快照兜底 */
     }
-    await keepAlive(code);
+    const after = await freshRoom(code).catch(() => null);
     return send(res, 200, {
       playerId: field.slice(2),
       playerToken: token,
       rejoined: true,
-      state: publicState(code, await freshRoom(code)),
+      state: publicState(code, after || hash),
     });
   }
 
@@ -1520,19 +1571,24 @@ async function join(res, body) {
   // read. 占椅子是原子的（claimSlot），两个人同时按《加入》也塞不进第九个。
   const slot = await claimSeat(code, playerId, hash);
   if (slot < 0) return send(res, 409, { error: 'full', seats: seatsFor(hash.meta) });
-  // 名字和头像等占到椅子之后再定，而且是「抢」不是「算」：函数一进来读的那
-  // 份快照，几个同时进来的人读到的是同一份（见 claimTag）。快照仍要用——屋
-  // 主和认领回来的人没有走这条路，他们的名字只在快照里。
-  const fresh = (await hgetall(roomKey(code))) || hash;
-  const seatName = await claimTag(code, 'n:', playerId, nameCandidates(picked.typed, picked), namesTaken(fresh));
-  const seatAvatar = await claimTag(
-    code,
-    'a:',
-    playerId,
-    avatarCandidates(cleanAvatar(body.avatar)),
-    avatarsTaken(fresh),
-  );
-  await hset(roomKey(code), 'p:' + playerId, {
+  // 从占到椅子到写下 p:，中间库摔了（10-15 补充 S4）：椅子、名字、头像这三格交回去，再往外抛（502）。原先 s:<i>
+  // 挂着一个没有 p: 的 id——屋里显示 7/8，下一个人却 409 full，而且永远没人认领得了它（claimSeat 只扫 p:）。
+  let seatName = null;
+  let seatAvatar = null;
+  try {
+    // 名字和头像等占到椅子之后再定，而且是「抢」不是「算」：函数一进来读的那
+    // 份快照，几个同时进来的人读到的是同一份（见 claimTag）。快照仍要用——屋
+    // 主和认领回来的人没有走这条路，他们的名字只在快照里。
+    const fresh = (await hgetall(roomKey(code))) || hash;
+    seatName = await claimTag(code, 'n:', playerId, nameCandidates(picked.typed, picked), namesTaken(fresh));
+    seatAvatar = await claimTag(
+      code,
+      'a:',
+      playerId,
+      avatarCandidates(cleanAvatar(body.avatar)),
+      avatarsTaken(fresh),
+    );
+    await hset(roomKey(code), 'p:' + playerId, {
     token,
     name: seatName,
     avatar: seatAvatar,
@@ -1544,13 +1600,24 @@ async function join(res, body) {
     seen: cleanSeen(body.seen),
     /** 登录了的人坐下时记一枚账号标识：认领这把椅子要同一个账号（见 seatOwnerTag）。 */
     ...(who ? { owner: seatOwnerTag(who.id) } : {}),
-  });
-  await keepAlive(code);
+    });
+  } catch (e) {
+    await Promise.allSettled([
+      hdelIfSame(roomKey(code), 's:' + slot, playerId),
+      seatName ? hdelIfSame(roomKey(code), 'n:' + String(seatName).trim().toLowerCase(), playerId) : null,
+      seatAvatar ? hdelIfSame(roomKey(code), 'a:' + avatarKey(seatAvatar), playerId) : null,
+    ]);
+    throw e;
+  }
+  // p: 写下了：续命、重读再摔也不回 502——钥匙必须交出去（原先这儿摔了，客户端拿不到钥匙，那把椅子要等九十秒
+  // 没动静才收得回来）。屋子的状态拿快照兜底。
+  await keepAlive(code).catch(() => {});
+  const after = await freshRoom(code).catch(() => null);
   return send(res, 200, {
     playerId,
     playerToken: token,
     rejoined: false,
-    state: publicState(code, await freshRoom(code)),
+    state: publicState(code, after || hash),
   });
 }
 
@@ -1629,6 +1696,17 @@ async function state(res, body) {
   const code = String(body.code ?? '').trim();
   let hash = await readRoom(code);
   if (!hash) return noSuchRoom(res, code);
+  // 带着身份来问、却对不上座位的，说清楚（10-15 补充 S4）。钥匙都是 p: 写进库之后才回给客户端的，bye、被收椅子、
+  // leave 之后钥匙都不变，所以「带 playerId 却对不上」只有两种：
+  //   · 号码上根本没有这个 id——旧屋过期了、号码被一间新屋占了。对他来说就是他那间屋结束了（ended）。原先照样回
+  //     200，旧设备看到的是陌生人的屋子。
+  //   · 有这个 id、钥匙不对——座位被同名的人在另一台设备上认领走了，钥匙换了（seat）。原先照样回 200，他每一条报分
+  //     都 403、屏幕上一个字都没有，打完一局是 0 分。
+  // 不带身份的照旧回 200（大厅里还没坐下的人也要看这间屋）。
+  if (body.playerId) {
+    if (!hash['p:' + body.playerId]) return send(res, 409, { error: 'ended' });
+    if (!seatOf(hash, body.playerId, body.playerToken)) return send(res, 403, { error: 'seat' });
+  }
   // 学的人二十秒没动静了（或者早走了）：不再等他。轮询是唯一稳定会跑到这
   // 儿的路，所以这一步放在这里而不是等谁来「说一声」。
   if (hash.meta.learnHold && (!anyoneLearning(hash) || holdExpired(hash.meta))) {
@@ -1664,7 +1742,9 @@ async function state(res, body) {
   //
   // 于是他成了一个占着名额、却没有真实座位的幽灵：自己没有任何异常提示，照
   // 常出现在名单里，但再也分不到座位；屋里显示的人数会超过它自己号称的上限
-  // （「9/8」），而那个名额一直到小屋过期都回收不了，新朋友反而进不来。
+  // （「9/8」——那时人数按「没按离开」数），而那个名额一直到小屋过期都回收不了，新朋友反而进不来。
+  // 10-15 补充 S4 起人数只数真的坐着一把椅子的人（hasChair），9/8 不会再出现；这儿补的是让他重新坐回去，
+  // 补不上之前名单上他那一行标着「没有座位」（publicState 的 seated）。
   //
   // 抢不到（真的一把空椅子都腾不出来）就先这样，下一次轮询再试——他的分数和
   // 局数一直都是好的，这里补的只是座位这本账。
@@ -2034,7 +2114,8 @@ async function score(res, body) {
   const hash = await readRoom(code);
   if (!hash) return noSuchRoom(res, code);
   const seat = seatOf(hash, body.playerId, body.playerToken);
-  if (!seat) return send(res, 403, { error: 'notInRoom' });
+  // 'seat' 和 state 那一句同一个词（10-15 补充 S4；原先是 notInRoom，客户端不认得）：钥匙对不上，座位被别处认领走了。
+  if (!seat) return send(res, 403, { error: 'seat' });
   if (await tooMany('room:score', String(body.playerId), SCORE_RATE.limit, SCORE_RATE.windowS)) {
     return send(res, 429, { error: 'tooMany' });
   }
@@ -2413,8 +2494,10 @@ async function leave(res, body) {
     const nowHash = await hgetall(roomKey(code));
     const latest = nowHash?.['p:' + body.playerId] || seat;
     await hset(roomKey(code), 'p:' + body.playerId, { ...latest, left: Date.now() });
-    // 椅子交回去，后面的人才坐得进来（座位是按 s:i 原子占的，见 claimSlot）。
-    if (seat.slot !== undefined) await hdel(roomKey(code), 's:' + seat.slot);
+    // 椅子交回去，后面的人才坐得进来（座位是按 s:i 原子占的，见 claimSlot）。**椅子上还是他才删**（10-15 补充 S4）：
+    // 原先无条件删——他的《离开》读完快照后 B 收走了这把椅子，删掉的就是 B 的；更常见的是《离开》办完了但回包丢了，
+    // 一秒后重送（engine/room.ts 的 leave），正好删掉刚坐进来的 B 的椅子。两种都出 9/8、两个人坐同一把。
+    if (seat.slot !== undefined) await hdelIfSame(roomKey(code), 's:' + seat.slot, body.playerId);
     // 走的正是大家在等的那个学生：不等了，大家继续。
     if (seatLearning(seat)) {
       const fresh = await hgetall(roomKey(code));

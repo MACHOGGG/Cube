@@ -44,6 +44,9 @@ export const storeConfigured = () => remote() || memoryAllowed();
  * JSON array and answers {result} or {error}.
  */
 async function command(args) {
+  // **只给门用**（check-room-join-rollback，10-15 补充 S4）：内存库下可以在任一条命令之前插一手、让它抛错，量「库
+  // 中途摔了」那几条路。只在 ALLOW_MEMORY_STORE=1 时生效——部署出去的那一份不认这个开关，globalThis 上也不会有它。
+  if (memoryAllowed() && globalThis.__storeHook) await globalThis.__storeHook(args);
   if (!remote()) return memory(args);
   const res = await fetch(url(), {
     method: 'POST',

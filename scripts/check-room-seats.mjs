@@ -124,6 +124,54 @@ await api({ action: 'leave', code, playerId: winner.playerId, playerToken: winne
 const after = await api({ action: 'join', code, name: '补位', avatar: { shape: 'square', hue: 200 }, seen: [] });
 check('有人走了，椅子空出来，下一个进得来', after.status === 200, String(after.status));
 
+// ---- 名单上「没有座位」那一枚小标摆得下（10-15 补充 S4）-------------------------------------
+// 椅子被收走、又从原来那台手机回来的人照旧打，名单上他那一行多一枚「没有座位」。造那个场面要真把一把椅子收走再让他
+// 回来——这儿量的只是「那一行摆不摆得下」，所以由屋主那台设备的轮询回包里把两个人标成 seated: false（一个是屋里真有
+// 的名字，一个是名字能取的最长那么长：十二个字），量那两行：不折行（和别的行一样高）、不溢出（小标整个在行里）。
+{
+  const LONG = '十二个字的名字也要摆得下';
+  await A.page.route('**/api/room', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json().catch(() => null);
+    if (body && Array.isArray(body.players)) {
+      body.players = body.players.map((p) =>
+        p.name === '填1' ? { ...p, seated: false } : p.name === '填2' ? { ...p, seated: false, name: LONG } : p);
+    }
+    return route.fulfill({ response: res, json: body });
+  });
+  for (const [w, h] of [[390, 844], [360, 640]]) {
+    await A.page.setViewportSize({ width: w, height: h });
+    const shown = await A.page.waitForFunction(() => document.querySelectorAll('.mp-badge--seatless').length >= 2, { timeout: 8000 })
+      .then(() => true).catch(() => false);
+    await A.page.waitForTimeout(400);
+    const rows = await A.page.evaluate(() => [...document.querySelectorAll('.mp-player')].map((row) => {
+      const r = row.getBoundingClientRect();
+      const tag = row.querySelector('.mp-badge--seatless');
+      const t = tag?.getBoundingClientRect();
+      return {
+        name: row.querySelector('.mp-player-name')?.textContent ?? '',
+        h: Math.round(r.height),
+        tag: tag ? { text: tag.textContent, l: t.left, r: t.right, top: t.top, bottom: t.bottom } : null,
+        rowL: r.left, rowR: r.right, rowTop: r.top, rowBottom: r.bottom,
+        overflow: row.scrollWidth - row.clientWidth,
+        vw: innerWidth,
+      };
+    }));
+    const tagged = rows.filter((x) => x.tag);
+    const plainH = rows.filter((x) => !x.tag).map((x) => x.h);
+    const usual = plainH.sort((a, b) => a - b)[Math.floor(plainH.length / 2)];
+    check(`${w}×${h}：名单上两行挂着「没有座位」`, shown && tagged.length === 2 && tagged.every((x) => x.tag.text === '没有座位'),
+      tagged.map((x) => `${x.name}:${x.tag?.text}`).join(' '));
+    check(`${w}×${h}：带这枚小标的行不折行（和别的行一样高）`, tagged.every((x) => Math.abs(x.h - usual) <= 1),
+      tagged.map((x) => `${x.name} ${x.h}px`).join(' / ') + ` · 别的行 ${usual}px`);
+    check(`${w}×${h}：小标整个在行里、行不溢出、不出屏`,
+      tagged.every((x) => x.overflow <= 0 && x.tag.l >= x.rowL - 0.5 && x.tag.r <= x.rowR + 0.5 && x.tag.r <= x.vw && x.tag.top >= x.rowTop - 0.5 && x.tag.bottom <= x.rowBottom + 0.5),
+      JSON.stringify(tagged.map((x) => ({ n: x.name, of: x.overflow, tag: [Math.round(x.tag.l), Math.round(x.tag.r)], row: [Math.round(x.rowL), Math.round(x.rowR)] }))));
+  }
+  await A.page.unroute('**/api/room');
+  await A.page.setViewportSize({ width: 420, height: 900 });
+}
+
 // ---- 座位数是跟着屋子走的，不是跟着服务器此刻的常数走的 ---------------------
 // 普通小屋 8 把、竞赛小屋 20 把（玩家定的），而且一间屋开出来那一刻就定死。
 // 要紧的是「定死」这半句：往后调 OPEN_SEATS，正开着的那些屋子不能从「3/8」

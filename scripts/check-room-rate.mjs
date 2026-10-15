@@ -1,5 +1,6 @@
 /**
- * 小屋那四个桶：该挡的挡住，该放过的一个都不能误伤。
+ * 小屋的限速桶（state / nudge / join / create / rename 各一个、报分按座位一个、start / force / score / end / learn
+ * 那五条合一个 room:auth）：该挡的挡住，该放过的一个都不能误伤。
  *
  *   node scripts/check-room-rate.mjs
  *
@@ -20,6 +21,9 @@
  *   ③ 被挡时回的是 429 + { error: 'tooMany' }（客户端认这个词，见 KNOWN）；
  *   ④ leave / bye 不挂限速——它们是关页面时用 beacon 发的，误伤一次全屋白等
  *      九十秒。这一条要是哪天「顺手」加上了，这里会红。
+ *   ⑥ start / force / score / end / learn 对「号码在 / 不在」答两句不同的话（403 / 404），原先不挂桶，一个 IP 拿
+ *      start 连扫两千个号码一次都没被挡（10-15 补充 S4）。现在合一个宽桶：扫到第 1001 次开始 429；21 座同一个 IP
+ *      一个窗口 945 条零误伤；桶用完了 bye / leave 照旧放行。
  *
  * 不起服务器、不开浏览器：库用进程内那份，直接叫 handler。窗口是按
  * Math.floor(now / windowS) 切的（api/_ratelimit.js），所以下面每一段都在自己
@@ -177,8 +181,9 @@ check(
 // ── 顺手钉住：这四个桶的名字和数值就是上面这几条的依据 ──────────────────
 const { readFileSync } = await import('node:fs');
 const src = readFileSync(new URL('../api/room.js', import.meta.url), 'utf8');
+// join 每小时 300（站长 10-15 定；原先 60）；rename 照旧 60。
 for (const [action, limit, windowS] of [
-  ['state', 600, 10], ['nudge', 200, 10], ['join', 60, 3600], ['create', 20, 3600],
+  ['state', 600, 10], ['nudge', 200, 10], ['join', 300, 3600], ['create', 20, 3600], ['rename', 60, 3600],
 ]) {
   const re = new RegExp(`${action}:\\s*\\{\\s*limit:\\s*${limit},\\s*windowS:\\s*${windowS}\\s*\\}`);
   check(`RATE 表里 ${action} 还是 ${limit} 次 / ${windowS} 秒`, re.test(src));
@@ -192,6 +197,55 @@ check(
   'create 的限速排在 hostMayOpen 之前（不然烧 Creem 额度那条没堵上）',
   src.indexOf('RATE[body.action]') < src.indexOf('case \'create\': return await create'),
 );
+
+check('⑥ 那五条合一个桶 room:auth：名单、上限、窗口', /const AUTH_ACTIONS = \['start', 'force', 'score', 'end', 'learn'\];/.test(src)
+  && /const AUTH_LIMIT = 1000;/.test(src) && /const AUTH_WINDOW_S = 10;/.test(src)
+  && /tooMany\('room:auth', callerId\(req\), AUTH_LIMIT, AUTH_WINDOW_S\)/.test(src));
+
+// ── ⑥ 要验身份的那五条：扫号挡住、一屋人零误伤、bye 照旧（10-15 补充 S4）────────────────────────
+{
+  // 扫号：一个 IP 拿 start 敲不存在的号码。前一千次答的是 404（号码不在），第 1001 次起 429。
+  const SCAN2 = '198.51.100.99';
+  await freshWindow();
+  const w = windowOf();
+  let firstBlock = -1;
+  for (let i = 1; i <= 1100; i++) {
+    const r = await call({ action: 'start', code: String(1000 + (i % 9000)).padStart(4, '0'), playerId: 'x', playerToken: 'y', mode: 'square' }, SCAN2);
+    if (r.status === 429) {
+      firstBlock = i;
+      break;
+    }
+  }
+  check('⑥（尺子）扫号那一段落在同一个十秒窗口里', windowOf() === w);
+  check('⑥ 一个 IP 拿 start 扫号：第 1001 次起被挡（429）', firstBlock === 1001, `第 ${firstBlock} 次开始 429`);
+  const bye = await call({ action: 'bye', code: '0000', playerId: 'x', playerToken: 'y' }, SCAN2);
+  const leave = await call({ action: 'leave', code: '0000', playerId: 'x', playerToken: 'y' }, SCAN2);
+  check('⑥ 桶用完了，bye / leave 照旧放行（不是 429）', bye.status !== 429 && leave.status !== 429, `${bye.status} / ${leave.status}`);
+
+  // 一屋人：竞赛屋 21 座同一个 IP，一个窗口里每人报 40 次分（报分那一道按座位，十秒四十次）、客人再按 105 次「开局」
+  // （不是屋主，答 403 notHost）——945 条，一条都不许被这个新桶挡。
+  const big = await call({ action: 'create', name: 'HOST6', contest: true, ...who }, '198.51.100.3');
+  const code6 = big.body.code;
+  const seats = [{ playerId: big.body.playerId, playerToken: big.body.playerToken }];
+  for (let i = 1; i <= 20; i++) {
+    const g = await call({ action: 'join', code: code6, name: '六' + i }, '192.0.2.90');
+    if (g.body.playerToken) seats.push({ playerId: g.body.playerId, playerToken: g.body.playerToken });
+  }
+  await call({ action: 'start', code: code6, ...seats[0], mode: 'square' }, '198.51.100.3');
+  const { hset, hgetall } = await import('../api/_store.js');
+  const hash = await hgetall('room:' + code6);
+  await hset('room:' + code6, 'meta', { ...hash.meta, startAt: Date.now() - 30_000 });
+  await freshWindow();
+  const w2 = windowOf();
+  const ROOM_IP = '192.0.2.91';
+  const sent = await Promise.all([
+    ...seats.flatMap((p) => Array.from({ length: 40 }, (_, k) => call({ action: 'score', code: code6, ...p, score: k, round: 1 }, ROOM_IP))),
+    ...Array.from({ length: 105 }, (_, k) => call({ action: 'start', code: code6, ...seats[1 + (k % 20)], mode: 'square' }, ROOM_IP)),
+  ]);
+  check('⑥（尺子）945 条都落在同一个十秒窗口里', windowOf() === w2 && sent.length === 945, `${sent.length} 条`);
+  const hit = sent.filter((r) => r.status === 429).length;
+  check('⑥ 竞赛屋 21 座同一个 IP 一个窗口 945 条：一条都不挡', hit === 0, `被挡 ${hit} / ${sent.length}`);
+}
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

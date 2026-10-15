@@ -231,5 +231,104 @@ const call = async (body) => {
   check(`③ 两个人同时进满员的屋：${swept} 档错位，每一档都只进来一个、一把椅子一个人`, worst === null, worst || '');
 }
 
+// ---- ④ 一个人进来只收一把椅子；人数只数真的坐着一把椅子的人（10-15 补充 S4）----------------------------
+//
+// 原先 claimSeat 收椅子没有 break：8 人屋 3 人关页、第 9 人进来，3 把全收、自己只坐 1 把，s:* 只剩 6 把，屋里却显示
+// 9/8（人数按「没按离开」数，被收了椅子的人照样算）；再来 3 个陌生人 200 / 200 / 409，11/8。竞赛屋 21 把坐满、4 人
+// 关页：显示 24/20。量两种「收得回来」（关了页、九十秒没动静）各一遍，外加竞赛屋。
+{
+  let ipSeq = 0;
+  const call = async (body) => {
+    ipSeq++;
+    let status = 0;
+    let text = '';
+    const res = {
+      status: (c) => ((status = c), res),
+      setHeader: () => res,
+      end: (t) => ((text = t), res),
+    };
+    await room({ method: 'POST', headers: { 'x-forwarded-for': `198.19.${Math.floor(ipSeq / 254) % 254}.${(ipSeq % 254) + 1}` }, body }, res);
+    return { status, body: JSON.parse(text || '{}') };
+  };
+  const account = newAccount('bbb444', 'code');
+  account.until = Date.now() + 9e8;
+  await saveAccount('seatone@example.com', account);
+  const who = { email: 'seatone@example.com', accountToken: account.token };
+  /** 九十秒没动静：心跳那一格和坐下的时刻都往前拨（seatGone 看的是这两样里晚的那一个）。 */
+  async function ageGone(code, playerId) {
+    const hash = await hgetall('room:' + code);
+    const long = Date.now() - 200_000;
+    await hset('room:' + code, 'h:' + playerId, { ...(hash['h:' + playerId] || {}), lastSeen: long, byeAt: 0 });
+    await hset('room:' + code, 'p:' + playerId, { ...hash['p:' + playerId], joinedAt: long, lastSeen: long });
+  }
+  const chairsOf = (hash) => Object.keys(hash).filter((f) => f.startsWith('s:')).length;
+
+  for (const how of ['关了页', '九十秒没动静']) {
+    const opened = await call({ action: 'create', name: '屋主', ...who });
+    const code = opened.body.code;
+    const seats = opened.body.state.seats;
+    const host = { code, playerId: opened.body.playerId, playerToken: opened.body.playerToken };
+    const guests = [];
+    for (let i = 1; i < seats; i++) {
+      const r = await call({ action: 'join', code, name: '客' + i });
+      if (r.status === 200) guests.push(r.body);
+    }
+    const away = guests.slice(0, 3);
+    for (const g of away) {
+      if (how === '关了页') {
+        await call({ action: 'bye', code, playerId: g.playerId, playerToken: g.playerToken });
+        await agePast(code, g.playerId);
+      } else {
+        await ageGone(code, g.playerId);
+      }
+    }
+    const first = await call({ action: 'join', code, name: '新人1' });
+    let hash = await hgetall('room:' + code);
+    const st = await call({ action: 'state', ...host });
+    const robbed = away.filter((g) => hash['p:' + g.playerId]?.slot === undefined).length;
+    check(`④ ${how}：满屋 3 人${how}、1 个新人进来——只收 1 把`, first.status === 200 && robbed === 1, `进来 ${first.status}，收走 ${robbed} 把`);
+    check(`④ ${how}：椅子还是 ${seats} 把，「几/几」不超过座位数`, chairsOf(hash) === seats && st.body.playersIn <= seats,
+      `s:* ${chairsOf(hash)} 把 · 显示 ${st.body.playersIn}/${st.body.playerSeats ?? seats}`);
+    const flags = new Map((st.body.players || []).map((p) => [p.id, p.seated]));
+    const robbedIds = away.filter((g) => hash['p:' + g.playerId]?.slot === undefined).map((g) => g.playerId);
+    const others = (st.body.players || []).filter((p) => !p.left && !robbedIds.includes(p.id));
+    check(`④ ${how}：被收走椅子的那个人 seated 是 false，其余都是 true`,
+      robbedIds.every((id) => flags.get(id) === false) && others.every((p) => p.seated === true),
+      robbedIds.map((id) => flags.get(id)).join(',') + ' / ' + others.filter((p) => p.seated !== true).map((p) => p.name).join(','));
+    const more = [];
+    for (let i = 2; i <= 4; i++) more.push(await call({ action: 'join', code, name: '新人' + i }));
+    hash = await hgetall('room:' + code);
+    const st2 = await call({ action: 'state', ...host });
+    check(`④ ${how}：之后每来一人各收一把，收完就 full`,
+      more[0].status === 200 && more[1].status === 200 && more[2].status === 409 && more[2].body.error === 'full',
+      more.map((r) => `${r.status}${r.body.error ? ' ' + r.body.error : ''}`).join(' / '));
+    check(`④ ${how}：收完之后 ${seats}/${seats}，椅子 ${seats} 把`, st2.body.playersIn === seats && chairsOf(hash) === seats,
+      `显示 ${st2.body.playersIn} · s:* ${chairsOf(hash)}`);
+  }
+  {
+    const opened = await call({ action: 'create', name: '主持', contest: true, ...who });
+    const code = opened.body.code;
+    const seats = opened.body.state.seats;
+    const host = { code, playerId: opened.body.playerId, playerToken: opened.body.playerToken };
+    const guests = [];
+    for (let i = 1; i < seats; i++) {
+      const r = await call({ action: 'join', code, name: '选手' + i });
+      if (r.status === 200) guests.push(r.body);
+    }
+    for (const g of guests.slice(0, 4)) {
+      await call({ action: 'bye', code, playerId: g.playerId, playerToken: g.playerToken });
+      await agePast(code, g.playerId);
+    }
+    const four = [];
+    for (let i = 1; i <= 4; i++) four.push(await call({ action: 'join', code, name: '后来' + i }));
+    const fifth = await call({ action: 'join', code, name: '后来5' });
+    const st = await call({ action: 'state', ...host });
+    check('④ 竞赛屋 21 把坐满、4 人关页、4 人加入：20/20',
+      four.every((r) => r.status === 200) && st.body.playersIn === 20 && st.body.playerSeats === 20,
+      `${four.map((r) => r.status).join('/')} · 显示 ${st.body.playersIn}/${st.body.playerSeats}`);
+    check('④ 竞赛屋：第 5 个 full', fifth.status === 409 && fifth.body.error === 'full', `${fifth.status} ${fifth.body.error}`);
+  }
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

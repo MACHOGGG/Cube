@@ -52,6 +52,11 @@ export interface RoomPlayer {
   /** 中途走了。人留在名单和排名里，只是不再报到，也不占座位。 */
   left: boolean;
   /**
+   * 真的坐着一把椅子（api/room.js 的 hasChair；10-15 补充 S4）。椅子被收走、又从原来那台手机回来的人照旧打，名单上
+   * 标一句「没有座位」。旧服务器不给这一位，读不到就是 undefined——不标。
+   */
+  seated?: boolean;
+  /**
    * 这一局是屋主按「不等了」替他交的卷（api/room.js 的 force；10-09 补充方案 7-5）。只说这一局：
    * 下一局一开服务器就清回 false。他自己那台设备读到它，飘一句 mpRoundForced、不再报分（ui/scoreboard.ts）。
    *
@@ -237,6 +242,11 @@ export type RoomError =
   | 'mode'
   /** The host has closed the room; nothing more happens in it. */
   | 'ended'
+  /**
+   * 拿着本机座位去问、服务器说钥匙对不上：这把椅子被同名的人在另一台设备上认领走了（api/room.js 的 state / score，
+   * 10-15 补充 S4）。原先服务器照样回 200，他每一条报分都 403、屏幕上一个字都没有。
+   */
+  | 'seat'
   | 'busy'
   /** Rooms are not switched on for this deployment yet. */
   | 'notConfigured'
@@ -467,7 +477,7 @@ export const hasServerClock = (): boolean => bestClock !== null;
 const KNOWN: RoomError[] = [
   'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',
   'tooFew', 'mode', 'ended', 'busy', 'notConfigured', 'tooMany',
-  'blocked', 'bad', 'server',
+  'blocked', 'bad', 'server', 'seat',
 ];
 
 async function post<T>(body: unknown): Promise<RoomResult<T>> {
@@ -638,8 +648,15 @@ export async function renameSeat(): Promise<void> {
  *
  * 只记一个布尔值，下一次轮询顺手带出去然后清零。不为它单发请求，也不让轮询
  * 本身冒充点击——轮询每秒都在，那等于永不过期，一分钱也省不下来。
+ *
+ * **每台设备每分钟最多带一次**（10-15 补充 S4）：局中每一次拖动都是 pointerdown，原先每一拍轮询都带着它，服务器
+ * 每拍多跑 EXPIRE + SET 两条命令——21 人屋一小时约七万条（−23%）。小屋 20 分钟才过期，一分钟续一次足够；没到一分钟
+ * 就先攒着，到点那一拍再带。
  */
 let touched = false;
+/** 上一次真的带出去的时刻（单调钟）。 */
+let touchSentAt = -Infinity;
+const TOUCH_EVERY_MS = 60_000;
 if (typeof window !== 'undefined') {
   const note = () => { touched = true; };
   // capture：有些地方会把事件拦下来（棋盘拖动就 preventDefault），冒泡阶段
@@ -648,8 +665,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('keydown', note, { capture: true, passive: true });
 }
 
-export function fetchState(): Promise<RoomResult<RoomState>> {
-  if (!session) return Promise.resolve({ ok: false, reason: 'noRoom' });
+export async function fetchState(): Promise<RoomResult<RoomState>> {
+  if (!session) return { ok: false, reason: 'noRoom' };
   // 带上自己的身份，不只是房号。
   //
   // 服务器靠 playerId/playerToken 认出是谁在问，然后顺手把「他还在」记一笔
@@ -658,9 +675,20 @@ export function fetchState(): Promise<RoomResult<RoomState>> {
   // 挂出一句《屋主正在修电缆》。
   // 人还在屋里，座位就不该到期（见 touchSeat）。
   touchSeat();
-  const moved = touched;
-  touched = false;
-  return post<RoomState>({ action: 'state', touched: moved, ...session });
+  const now = performance.now();
+  const moved = touched && now - touchSentAt >= TOUCH_EVERY_MS;
+  if (moved) {
+    touched = false;
+    touchSentAt = now;
+  }
+  // 问的时候是哪一个座位。回包说「这个座位没了」（seat / ended / noRoom），可这一路上本机已经换了座位（刚加入了
+  // 别的屋、刚认领回来）——那句话说的是旧座位，不能拿它去清新座位：当成一次网络抖动（10-15 补充 S4）。
+  const asked = session;
+  const res = await post<RoomState>({ action: 'state', touched: moved, ...asked });
+  if (!res.ok && (res.reason === 'seat' || res.reason === 'ended' || res.reason === 'noRoom') && session !== asked) {
+    return { ok: false, reason: 'network' };
+  }
+  return res;
 }
 
 /**

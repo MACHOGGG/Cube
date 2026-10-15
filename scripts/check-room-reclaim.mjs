@@ -28,6 +28,9 @@
  * ⑧（2026-10-08 方案 1-3）：登录的人坐过的椅子带一枚账号标识，只还给同一个账号——一个没登
  * 录的人敲他的名字，接不走他的累计分。
  *
+ * ⑩（10-15 补充 S4）：《离开》办完了但回包丢了，一秒后重送（engine/room.ts 的 leave）——那一下不许删掉刚坐进他那把
+ * 椅子的人。原先 leave 无条件删 s:<i>：重送正好删掉 B 的椅子，屋里 9/8、两个人坐同一把。
+ *
  * ⑨（10-09 补充方案 7-13 第 6 条）：关了网页、被认回来的人还叫原来那个名字。他那一行没按过
  * 《离开》，一直挂在屋里；查重名时不跳过它，他就撞上自己——「阿甲」回来成了「阿甲 2」，发的
  * 字母 B 回来成了 A。
@@ -329,6 +332,25 @@ const seatsOf = async (code) => {
     back2.body.rejoined === true && back2.body.playerId === goer.playerId &&
       /^[A-Z]$/.test(String(nameOf(back2))) && nameOf(back2) !== gl,
     `${gl} → ${nameOf(back2)}`);
+}
+
+// ---- ⑩ 《离开》重送不删别人的椅子（10-15 补充 S4）----------------------------------------
+{
+  const { code, guests } = await fullRoom();
+  const a = guests[2];
+  const slotOf = async (id) => (await hgetall(roomKey(code)))['p:' + id]?.slot;
+  const aSlot = await slotOf(a.playerId);
+  const first = await call({ action: 'leave', code, ...a });
+  const b = await call({ action: 'join', code, name: '后来的B' });
+  const bSlot = await slotOf(b.body.playerId);
+  check('⑩（尺子）A 走了、B 坐进了 A 那把椅子', first.status === 200 && b.status === 200 && bSlot === aSlot, `A s:${aSlot} → B s:${bSlot}`);
+  // A 那一条《离开》的回包丢了，一秒后原样再送一次
+  const again = await call({ action: 'leave', code, ...a });
+  const hash = await hgetall(roomKey(code));
+  check('⑩ A 的《离开》重送：B 的椅子还在（s:' + bSlot + ' 上还是 B）', again.status === 200 && hash['s:' + bSlot] === b.body.playerId,
+    `s:${bSlot} = ${hash['s:' + bSlot] ?? '（空）'}`);
+  const late = await call({ action: 'join', code, name: '再来一个' });
+  check('⑩ 屋子还是满的：再来一个人 full（没有多出一把空椅子）', late.status === 409 && late.body.error === 'full', `${late.status} ${late.body.error ?? ''}`);
 }
 
 // ---- ⑦ 源码：两条路各认各的 --------------------------------------------

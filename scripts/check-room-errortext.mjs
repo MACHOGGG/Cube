@@ -30,6 +30,10 @@
  * ⑤⑥（10-11 方案 C-3）：服务器那头的错不说成「连不上网络」、也不说成「多人游玩尚未开放」；被限速挡了不说「等
  * 几秒」，大厅轮询被挡也有自己那一句；过期的小屋和从来没有过的号码分得开（墓碑）——⑥ 真叫一次 api/room.js
  * （内存库），不只读源码。
+ *
+ * ⑦（10-15 补充 S4）：座位被另一台设备认领走了（服务器答 seat）有自己那一句、客户端认得这个词；拿着本机座位去问、
+ * 服务器说没了（noRoom / ended / seat）的三处（大厅轮询、重连页、启动）说的是「已经结束了」或「座位被认领了」，
+ * 不再说「没有这个小屋号码」；竞赛屋人不够说「至少 2 名选手（屋主不算）」。
  */
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -162,6 +166,30 @@ check('② 开局失败那一处调的是 errorText', main.includes('errorText(b
   await del('roomgone:' + code);
   const later = await call({ action: 'join', code, name: '第二天来的' });
   check('⑥ 墓碑也过了：回到 noRoom', later.status === 404 && later.body.error === 'noRoom', `${later.status} ${later.body.error}`);
+}
+
+// ---- ⑦ seat、本机座位没了的三处、竞赛屋人不够（10-15 补充 S4）--------------------------------------
+{
+  const at = engine.indexOf('const KNOWN: RoomError[] = [');
+  const known = [...engine.slice(at, engine.indexOf('];', at)).matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]);
+  check('⑦ KNOWN 上有 seat（不在单子上就被改成 network，那句话永远显示不出来）', known.includes('seat'), known.join(' '));
+  const fn = mp.slice(mp.indexOf('export function errorText(')).slice(0, mp.slice(mp.indexOf('export function errorText(')).indexOf('\n}'));
+  check('⑦ errorText 接了 seat：说「您的位子已经被另一台设备认领了」（mpErrSeatGone）', /case 'seat':\s*\n\s*return s\.mpErrSeatGone;/.test(fn), '');
+  check('⑦ 竞赛屋人不够说 mpErrTooFewContest（屋主不算选手），普通屋照旧 mpErrTooFew',
+    /case 'tooFew':\s*\n\s*return latestRoomState\(\)\?\.contest \? s\.mpErrTooFewContest : s\.mpErrTooFew;/.test(fn), '');
+  check('⑦ multiplayer.ts 里不再有 renderHome(s.mpErrNoRoom)（本机拿着座位时号码上一定有过那间屋）',
+    !/renderHome\(s\.mpErrNoRoom\)/.test(mp), '');
+  // 「没有这个小屋号码」只说给敲号码的人听：errorText 的 noRoom 那一支，和输码那一格格式不对（不是四位数字）那一句。
+  const uses = mp.split('\n').filter((l) => l.includes('s.mpErrNoRoom'));
+  const okUse = (l) => /^\s*return s\.mpErrNoRoom;$/.test(l) || /\\d\{4\}\$\/\.test\(code\)/.test(l);
+  check('⑦ mpErrNoRoom 只出现在 errorText 的 noRoom 那一支（和输码格式不对那一句）',
+    uses.length === 2 && uses.every(okUse) && /case 'noRoom':\s*\n\s*return s\.mpErrNoRoom;/.test(fn), uses.map((l) => l.trim()).join(' ｜ '));
+  check('⑦ 本机座位没了的判定只写一遍：noRoom / ended / seat 三种都算',
+    /const seatGone = \(r: RoomError\): boolean => r === 'noRoom' \|\| r === 'ended' \|\| r === 'seat';/.test(mp), '');
+  check('⑦ 说哪一句也只写一遍：seat 说座位被认领，另两种说「这个小屋已经结束了」',
+    /const seatGoneText = \(r: RoomError\): string => \(r === 'seat' \? s\.mpErrSeatGone : s\.mpErrEnded\);/.test(mp), '');
+  const sites = ['seatGone(reason)', 'seatGone(now.reason)', 'seatGone(existing.reason)'].filter((k) => mp.includes(k));
+  check('⑦ 三处（大厅轮询、重连页、启动）都问它', sites.length === 3, sites.join(' / '));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

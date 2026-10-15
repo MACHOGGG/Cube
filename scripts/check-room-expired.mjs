@@ -24,6 +24,12 @@
  *   ③ 已经交了卷、在等别人的人：等待页撤掉，一句「这个小屋已经结束了。」加一颗《主页》，按下去回主页。
  *   话是屋主散场那同一句（mpErrEnded，10-11 方案 C-3 第 3 条）：原先局中写「已过期」、大厅写「没有这个小屋
  *   号码」，同一件事三种说法。
+ *   ④ 局中收到 seat（座位被同名的人在另一台设备上认领走了，10-15 补充 S4）：正打着的丁原地转单人、飘「您的位子
+ *      已经被另一台设备认领了。」；交了卷在等的戊，等待页撤掉、说这一句、按《主页》回主页。原先服务器照样回 200，
+ *      旧手机报分条条 403、屏幕上一个字都没有。
+ *   ⑤ 启动时（本机拿着座位、重开网页直接进小屋页）服务器答 ended：落在设置页，说「这个小屋已经结束了。」、本机座位
+ *      清掉。原先说的是「没有这个小屋号码」——屋子过期之后墓碑还在，服务器答的其实是 ended。
+ *   ⑥ 重连页（启动那一问没打通，挂着「正在把您接回小屋」）之后收到 ended：同一句、座位清掉。
  */
 import { chromium } from 'playwright';
 
@@ -103,18 +109,20 @@ await A.page.waitForSelector('.mp-code', { timeout: 10000 });
 const code = await A.page.$eval('.mp-code', (e) => e.textContent.trim());
 const B = await newPlayer('乙');
 const C = await newPlayer('丙');
-for (const [P, name] of [[B, '乙'], [C, '丙']]) {
+const D = await newPlayer('丁');
+const E = await newPlayer('戊');
+for (const [P, name] of [[B, '乙'], [C, '丙'], [D, '丁'], [E, '戊']]) {
   await toMultiplayer(P.page);
   await P.page.fill('#mpName', name);
   await P.page.fill('#mpCode', code);
   await P.page.waitForSelector('.mp-code', { timeout: 10000 });
 }
-await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 3, { timeout: 15000 });
+await A.page.waitForFunction(() => document.querySelectorAll('.mp-player').length === 5, { timeout: 15000 });
 await A.page.click('#mpPick');
 await A.page.waitForSelector('#roomPickBar');
 await A.page.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els) => els[0].click());
-const up = (await boardUp(A.page)) && (await boardUp(B.page)) && (await boardUp(C.page));
-check('（尺子）三个人的棋盘都出来了', up);
+const up = (await boardUp(A.page)) && (await boardUp(B.page)) && (await boardUp(C.page)) && (await boardUp(D.page)) && (await boardUp(E.page));
+check('（尺子）五个人的棋盘都出来了', up);
 await B.page.waitForSelector('.mp-board-row', { timeout: 10000 });
 
 // 丙先交卷：他在等甲和乙，盖着等待页。
@@ -123,6 +131,12 @@ await C.page.waitForSelector('#finishConfirm', { timeout: 8000 });
 await C.page.click('#mpFinishYes');
 const cWaits = await C.page.waitForSelector('#mpWait', { timeout: 10000 }).then(() => true).catch(() => false);
 check('（尺子）丙交了卷，等待页盖上了', cWaits);
+// 戊也交卷（④ 用）。
+await E.page.click('#finishBtn');
+await E.page.waitForSelector('#finishConfirm', { timeout: 8000 });
+await E.page.click('#mpFinishYes');
+const eWaits = await E.page.waitForSelector('#mpWait', { timeout: 10000 }).then(() => true).catch(() => false);
+check('（尺子）戊交了卷，等待页盖上了', eWaits);
 
 // ── ① 对照：一阵普通的失败（502）什么都不动 ─────────────────────────────
 await answerRoom(B.page, 502, 'upstream');
@@ -152,10 +166,71 @@ if (cTold) await C.page.click('#roomLockedOk');
 const cHome = await C.page.waitForSelector('.home-page', { timeout: 8000 }).then(() => true).catch(() => false);
 check('③ 按下去回到主页', cHome);
 
+// ── ④ 局中收到 seat：座位被同名的人在另一台设备上认领走了（10-15 补充 S4）────────────────────────
+const SEAT_GONE = '您的位子已经被另一台设备认领了。';
+await answerRoom(D.page, 403, 'seat');
+const dSolo = await D.page.waitForFunction(() => !document.querySelector('#leaveRoomBtn'), { timeout: 8000 }).then(() => true).catch(() => false);
+const d1 = await look(D.page);
+check('④ 正打着的丁收到 seat：飘过「您的位子已经被另一台设备认领了。」', d1.flyby.includes(SEAT_GONE), JSON.stringify(d1.flyby));
+check('④ 丁原地转成单人：《离开小屋》撤了、《暂停》露出来，棋盘还在', dSolo && !d1.leave && d1.pauseShown && d1.board, JSON.stringify(d1));
+await answerRoom(E.page, 403, 'seat');
+const eTold = await E.page.waitForSelector('#roomLockedOut', { timeout: 8000 }).then(() => true).catch(() => false);
+const e1 = await look(E.page);
+check('④ 交了卷在等的戊收到 seat：等待页撤了，说「您的位子已经被另一台设备认领了。」', eTold && !e1.wait && e1.notice === SEAT_GONE, JSON.stringify(e1));
+check('④ 那颗键写的是《主页》', e1.noticeBtn === '主页', e1.noticeBtn);
+
+// ── ⑤⑥ 本机拿着座位重开网页：启动那一问答 ended / 先没打通、重连页上再答 ended（10-15 补充 S4）──────────
+const ENDED = '这个小屋已经结束了。';
+const seatedNewcomer = async (label) => {
+  const P = await newPlayer(label);
+  await toMultiplayer(P.page);
+  await P.page.fill('#mpName', label);
+  await P.page.fill('#mpCode', code);
+  await P.page.waitForSelector('.mp-code', { timeout: 10000 });
+  const seat = await P.page.evaluate(() => localStorage.getItem('slides_mp_seat'));
+  return { ...P, seat };
+};
+const homeMsg = (page) =>
+  page.evaluate(() => ({
+    msg: document.querySelector('#mpMsg')?.textContent?.trim() ?? null,
+    seat: localStorage.getItem('slides_mp_seat'),
+    reconnecting: Boolean(document.querySelector('#mpReconnectHint')),
+  }));
+{
+  const F = await seatedNewcomer('己');
+  check('⑤（尺子）己坐进了小屋，本机记着座位', Boolean(F.seat));
+  await answerRoom(F.page, 409, 'ended');
+  await F.page.reload({ waitUntil: 'load' });
+  const told = await F.page.waitForFunction((t) => document.querySelector('#mpMsg')?.textContent?.trim() === t, ENDED, { timeout: 10000 })
+    .then(() => true).catch(() => false);
+  const f1 = await homeMsg(F.page);
+  check('⑤ 启动时服务器答 ended：设置页上说「这个小屋已经结束了。」（不是「没有这个小屋号码」）', told, JSON.stringify(f1));
+  check('⑤ 本机座位清掉了', f1.seat === null, String(f1.seat));
+  await F.ctx.close();
+}
+{
+  const G = await seatedNewcomer('庚');
+  check('⑥（尺子）庚坐进了小屋，本机记着座位', Boolean(G.seat));
+  await answerRoom(G.page, 502, 'upstream');
+  await G.page.reload({ waitUntil: 'load' });
+  const onReconnect = await G.page.waitForSelector('#mpReconnectHint', { timeout: 10000 }).then(() => true).catch(() => false);
+  check('⑥（尺子）启动那一问没打通：挂着重连页', onReconnect);
+  await G.page.unroute('**/api/room');
+  await answerRoom(G.page, 409, 'ended');
+  const told = await G.page.waitForFunction((t) => document.querySelector('#mpMsg')?.textContent?.trim() === t, ENDED, { timeout: 12000 })
+    .then(() => true).catch(() => false);
+  const g1 = await homeMsg(G.page);
+  check('⑥ 重连页上收到 ended：设置页上说「这个小屋已经结束了。」', told, JSON.stringify(g1));
+  check('⑥ 本机座位清掉了', g1.seat === null, String(g1.seat));
+  await G.ctx.close();
+}
+
 check('全程零报错', errs.length === 0, errs.slice(0, 3).join(' | '));
 await A.ctx.close();
 await B.ctx.close();
 await C.ctx.close();
+await D.ctx.close();
+await E.ctx.close();
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

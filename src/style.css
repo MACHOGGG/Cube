@@ -3661,6 +3661,9 @@ body:has(.center-pick--back) .home-nav { display: none; }
    部分——但他不再是「还在打的人」，所以整行压暗一档，旁边挂一个小标。 */
 .mp-player--left { opacity: 0.62; }
 .mp-badge--left { background: var(--line); color: var(--ink-soft); }
+/* 椅子被收走、又从原来那台手机回来的人（10-15 补充 S4）：照旧让他打，名单上标一下「没有座位」——人数里不算他。
+   样式照「已离开」那一枚：同一类「这个人此刻不占位子」的说明。 */
+.mp-badge--seatless { background: var(--line); color: var(--ink-soft); }
 .mp-board-row--left { opacity: 0.6; }
 
 /* 开局倒数那几秒里，下半截的排名表。数字用等宽，四个人的名次不会因为

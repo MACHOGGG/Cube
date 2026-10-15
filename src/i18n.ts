@@ -578,6 +578,8 @@ export interface I18nStrings {
   mpNudge: string;
   /** 名单上给中途走掉的人挂的那个小标。 */
   mpLeftTag: string;
+  /** 名单上椅子被收走、又从原来那台手机回来的人那一枚小标（10-15 补充 S4）。照旧让他打，人数里不算他。 */
+  mpSeatlessTag: string;
   /** 《解锁更多配色》那扇窗：标题、一句说明、三套的名字。 */
   paletteTitle: string;
   paletteHint: string;
@@ -705,6 +707,10 @@ export interface I18nStrings {
   /** 同一把离线的椅子，另一台设备先一步认领走了。 */
   mpErrClaimed: string;
   mpErrTooFew: string;
+  /** 竞赛屋开局人不够（10-15 补充 S4）：屋主不算选手，叫法和同一屏名单徽章一样（屋主）。 */
+  mpErrTooFewContest: string;
+  /** 座位被同名的人在另一台设备上认领走了（服务器答 seat，10-15 补充 S4）。 */
+  mpErrSeatGone: string;
   mpErrNotOpen: string;
   /** 服务器的限速把这一下挡住了（api/room.js 的 RATE）。 */
   mpErrTooMany: string;
@@ -1179,6 +1185,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: 'Room total',
     mpNudge: 'Nudge the host',
     mpLeftTag: 'left',
+    mpSeatlessTag: 'no seat',
     paletteTitle: 'Piece colours',
     paletteHint: 'Changes the pieces in every board. Off while the colourblind palette is on.',
     paletteLocked: 'Here is what a Slides Genius gets to pick from.',
@@ -1235,6 +1242,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrStarted: 'That game has already started.',
     mpErrClaimed: 'Someone just took that seat back. Try another name.',
     mpErrTooFew: 'Two players at least.',
+    mpErrTooFewContest: 'At least 2 players — the host doesn’t count.',
+    mpErrSeatGone: 'Your seat has been taken back on another device.',
     mpErrNotOpen: 'Multiplayer is not open yet.',
     mpErrTooMany: 'Too many requests from your network just now. Please try again later — this is not your connection.',
     mpErrNotHost: 'Only the host can do this.',
@@ -1558,6 +1567,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: 'Total de la salle',
     mpNudge: 'Presser l’hôte',
     mpLeftTag: 'parti',
+    mpSeatlessTag: 'sans place',
     paletteTitle: 'Couleurs des pièces',
     paletteHint: 'S’applique à tous les plateaux. Inactif quand la palette daltonienne est active.',
     paletteLocked: 'Voici ce dans quoi un Slides Génie peut choisir.',
@@ -1614,6 +1624,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrStarted: 'Cette partie a déjà commencé.',
     mpErrClaimed: 'Quelqu’un vient de reprendre cette place. Essayez un autre nom.',
     mpErrTooFew: 'Il faut au moins deux joueurs.',
+    mpErrTooFewContest: 'Il faut au moins 2 joueurs — l’hôte ne compte pas.',
+    mpErrSeatGone: 'Votre place a été reprise sur un autre appareil.',
     mpErrNotOpen: 'Le multijoueur n’est pas encore ouvert.',
     mpErrTooMany: 'Trop de requêtes depuis votre réseau à l’instant. Réessayez plus tard — ce n’est pas votre connexion.',
     mpErrNotHost: 'Seul l’hôte peut faire cela.',
@@ -1937,6 +1949,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: '全屋總分',
     mpNudge: '催屋主',
     mpLeftTag: '已離開',
+    mpSeatlessTag: '沒有座位',
     paletteTitle: '棋子配色',
     paletteHint: '換的是每個玩法裡棋子的顏色。開著色盲配色時這裡不生效。',
     paletteLocked: '這就是 Slides 天才能挑的幾套。',
@@ -1993,6 +2006,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrStarted: '這一局已經開始了。',
     mpErrClaimed: '剛才有人先一步坐回這個位子了。換個名字再試。',
     mpErrTooFew: '至少要兩個人。',
+    mpErrTooFewContest: '至少要 2 名選手（屋主不算）。',
+    mpErrSeatGone: '您的位子已經被另一台裝置認領了。',
     mpErrNotOpen: '多人遊玩尚未開放。',
     mpErrTooMany: '剛才您這個網路發來的請求太多了，請稍後再試。這不是您的網路問題。',
     mpErrNotHost: '只有屋主能這樣做。',
@@ -2316,6 +2331,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpRoomTotal: '全屋总分',
     mpNudge: '催屋主',
     mpLeftTag: '已离开',
+    mpSeatlessTag: '没有座位',
     paletteTitle: '棋子配色',
     paletteHint: '换的是每个玩法里棋子的颜色。开着色盲配色时这里不生效。',
     paletteLocked: '这就是 Slides 天才能挑的几套。',
@@ -2372,6 +2388,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     mpErrStarted: '这一局已经开始了。',
     mpErrClaimed: '刚才有人先一步坐回这个位子了。换个名字再试。',
     mpErrTooFew: '至少要两个人。',
+    mpErrTooFewContest: '至少要 2 名选手（屋主不算）。',
+    mpErrSeatGone: '您的位子已经被另一台设备认领了。',
     mpErrNotOpen: '多人游玩尚未开放。',
     mpErrTooMany: '刚才您这个网络发来的请求太多了，请稍后再试。这不是您的网络问题。',
     mpErrNotHost: '只有屋主能这样做。',
