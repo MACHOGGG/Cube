@@ -143,6 +143,11 @@ export interface I18nStrings {
    */
   rankNetwork: string;
   /**
+   * 看榜被限速了（429，10-15 补充 L-9）：刚才点得太勤。不复用小屋的 mpErrTooMany——那句说「您这个网络」，而看榜是
+   * 按帐号限速的（api/scores.js 每分钟 60 次）；也不说「检查一下网络」：他的网好好的。
+   */
+  rankTooMany: string;
+  /**
    * 每日挑战那一局交上去，服务器说它没进「今日」榜：日子 / 种子对不上（2026-10-08 方案 2-11）。日子和
    * 种子都是按本机的钟算的，钟不对就是这一种，所以提一句设备的日期。
    */
@@ -1024,6 +1029,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Sign in and your runs go on the board',
     rankEmpty: 'Nobody on this board yet',
     rankNetwork: 'Couldn’t load the board. Check your connection.',
+    rankTooMany: 'You’ve opened the boards a lot just now. Please try again shortly — this is not your connection.',
     dailyNotCounted: 'This run didn’t count for today’s challenge. Check your device’s date and time.',
     dailyLate: 'That day’s cut-off has passed, so this run doesn’t count on today’s board.',
     rankAnon: 'Anonymous player',
@@ -1407,6 +1413,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
     rankEmpty: 'Personne à ce classement pour l’instant',
     rankNetwork: 'Classement indisponible. Vérifiez votre connexion.',
+    rankTooMany: 'Vous avez ouvert les classements très souvent à l’instant. Réessayez dans un moment — ce n’est pas votre connexion.',
     dailyNotCounted: 'Cette partie ne compte pas pour le défi du jour. Vérifiez la date et l’heure de votre appareil.',
     dailyLate: 'L’heure limite de ce jour-là est passée : cette partie ne compte pas pour le classement du jour.',
     rankAnon: 'Joueur anonyme',
@@ -1790,6 +1797,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登入之後，您的成績才會上榜',
     rankEmpty: '這張榜上還沒有人',
     rankNetwork: '榜沒載入，檢查一下網路。',
+    rankTooMany: '剛才看榜看得太勤了，請稍後再看。這不是您的網路問題。',
     dailyNotCounted: '這一局沒進今日挑戰榜。看看裝置的日期和時間對不對。',
     dailyLate: '已過當天的截止時間，這一局不計入今日榜。',
     rankAnon: '匿名玩家',
@@ -2173,6 +2181,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     rankSignedOut: '登录之后，您的成绩才会上榜',
     rankEmpty: '这张榜上还没有人',
     rankNetwork: '榜没加载出来，检查一下网络。',
+    rankTooMany: '刚才看榜看得太勤了，请稍后再看。这不是您的网络问题。',
     dailyNotCounted: '这一局没进今日挑战榜。看看设备的日期和时间对不对。',
     dailyLate: '已过当天的截止时间，这一局不计入今日榜。',
     rankAnon: '匿名玩家',

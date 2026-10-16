@@ -34,7 +34,7 @@ export type BoardResult =
   | { ok: false; reason: 'signedOut' | 'geniusOnly' | 'expired' | 'network' };
 
 /** 和真身同一个签名（2026-10-08 方案 2-11 起它交回回包）：这一版不上传，回 null。 */
-export interface PushReply { daily?: 'stored' | 'late' | 'rejected'; refused?: 'implausible' }
+export interface PushReply { daily?: 'stored' | 'late' | 'rejected'; refused?: 'implausible' | 'rejected' }
 export function pushRun(_data: RunData): Promise<PushReply | null> {
   return Promise.resolve(null);
 }

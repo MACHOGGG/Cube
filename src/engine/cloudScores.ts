@@ -74,34 +74,33 @@ let staleToken: string | null = null;
 export const sessionExpired = (): boolean => staleToken !== null && auth()?.token === staleToken;
 
 /**
- * @param onRefused 服务器明说不收的时候（4xx 带一个词）把那个词交给调用方——交卷那一头要据此决定
- *   还重不重报（见 pushRun）。
+ * 一趟请求的结果，**连状态码一起**交出来（10-15 补充 L-9）：调用方要分得清「服务器明说不收」（4xx）、「我们这头
+ * 出错了」（5xx）、「被限速了」（429）和「根本没到」。原先只回「拿到了 / null」：看榜被限速说成「检查一下网络」，交卷
+ * 被明说拒收也照样两秒后重报一遍——重报答的还是同一句。
+ *
+ * `status` 0：没发出去（没登录，`error` 是 'signedOut'）或者没回来（断网、超时，`error` 是 'network'）。
  */
-async function post<T>(body: Record<string, unknown>, onRefused?: (error: string) => void): Promise<T | null> {
+type Posted<T> = { ok: true; status: number; body: T } | { ok: false; status: number; error: string };
+
+async function post<T>(body: Record<string, unknown>): Promise<Posted<T>> {
   const who = auth();
-  if (!who) return null;
+  if (!who) return { ok: false, status: 0, error: 'signedOut' };
   try {
     const res = await fetchWithTimeout('/api/scores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...who, storeClaim: isStoreChannel(), ...body }),
     });
-    if (res.status === 401) {
-      staleToken = who.token;
-      return null;
-    }
+    if (res.status === 401) staleToken = who.token;
     if (!res.ok) {
-      if (onRefused && res.status >= 400 && res.status < 500) {
-        const said = (await res.json().catch(() => ({}))) as { error?: unknown };
-        onRefused(String(said.error ?? ''));
-      }
-      return null;
+      const said = (await res.json().catch(() => ({}))) as { error?: unknown };
+      return { ok: false, status: res.status, error: String(said.error ?? '') };
     }
     staleToken = null;
-    return (await res.json()) as T;
+    return { ok: true, status: res.status, body: (await res.json()) as T };
   } catch {
     // 断网、超时、服务器抽风——这一局照样算完，只是没上传。
-    return null;
+    return { ok: false, status: 0, error: 'network' };
   }
 }
 
@@ -151,7 +150,7 @@ export interface CloudMine {
   nickname?: string;
 }
 
-/** 上传失败之后隔多久再试一次。 */
+/** 上传失败之后隔多久再试一次（只对「下一次可能就好了」的那几种，见 pushRun）。 */
 const PUSH_RETRY_MS = 2000;
 /** 打开排行榜之前最多等上传多久。 */
 const PUSH_WAIT_MS = 2000;
@@ -170,9 +169,13 @@ let lastPush: Promise<unknown> | null = null;
  * 不 await：结算页已经在屏幕上了，玩家在看自己的分数，没有理由让他等一个
  * 网络请求。
  *
- * **失败隔两秒再试一次。** 从前失败就算了，而失败最常见的来处正是「刚打完这一局，
- * 网刚好抖了一下」——那一局于是不在榜上，而玩家点开排行榜看到的是旧名次，什么提示
- * 都没有。一次重试收掉的正是这一种（真断网的话两次都失败，和从前一样，不更坏）。
+ * **失败隔两秒再试一次——只对「下一次可能就好了」的那几种**：断网、超时（status 0）、5xx、429。失败最常见
+ * 的来处正是「刚打完这一局，网刚好抖了一下」，一次重试收掉的正是这一种。
+ *
+ * **服务器明说不收的，不重报**（10-15 补充 L-9）：4xx（401、429 除外）重报一次答的还是同一句——原先 400 mismatch
+ * 隔 2041ms 又报一次、401 隔 2103ms 又报一次。现在：401 交回 null（令牌已经记成过期，结算页据此说「登录已过期」）；
+ * 别的 4xx 交回 refused，结算页说「本局未上传」（implausible 那一句是 10-15 补充 S3 先做的）。没登录时一趟都不发，
+ * 也不让看榜那边白等两秒。
  */
 /**
  * 交卷回包里调用方关心的那一样：每日挑战那一局进没进「今日」榜（api/scores.js 的 pushDaily，回
@@ -182,8 +185,11 @@ let lastPush: Promise<unknown> | null = null;
  */
 export interface PushReply {
   daily?: 'stored' | 'late' | 'rejected' | 'zero' | 'stale';
-  /** 服务器对过账、明说这一局不收（400 implausible）：结算页说「本局未上传」（10-15 补充 S3）。 */
-  refused?: 'implausible';
+  /**
+   * 服务器明说这一局不收：结算页说「本局未上传」。'implausible' 是对过账、对不上（400 implausible，10-15 补充 S3）；
+   * 'rejected' 是别的 4xx（401、429 除外——一个是登录过期、一个是等一下再来，10-15 补充 L-9）。
+   */
+  refused?: 'implausible' | 'rejected';
 }
 
 export function pushRun(data: RunData): Promise<PushReply | null> {
@@ -199,17 +205,22 @@ export function pushRun(data: RunData): Promise<PushReply | null> {
   };
   // 刚打完一局，榜一定变了（至少自己那一行）。把缓存清掉，下一次打开排行榜去拿新的。
   invalidateBoards();
+  /** 这一趟的结局：拿到了、明说不收、登录过期 / 没登录，或者「再试一次可能就好了」（undefined）。 */
+  const settle = (r: Posted<PushReply>): PushReply | null | undefined => {
+    if (r.ok) return r.body;
+    // 服务器对过账、明说这一局不收（api/scores.js 的 push 回 400 `implausible`，10-11 方案 A-3）：交回 refused，结算页
+    // 说一句「本局未上传」（10-15 补充 S3；原先一个字都不说）。
+    if (r.error === 'implausible') return { refused: 'implausible' };
+    if (r.status === 0 && r.error === 'signedOut') return null;
+    if (r.status === 401) return null;
+    if (r.status >= 400 && r.status < 500 && r.status !== 429) return { refused: 'rejected' };
+    return undefined;
+  };
   const pushing = (async (): Promise<PushReply | null> => {
-    // 服务器对过账、明说这一局不收（api/scores.js 的 push 回 400 `implausible`，10-11 方案 A-3）：重报
-    // 一次答的还是同一句，不重报。交回 refused，结算页说一句「本局未上传」（10-15 补充 S3；原先一个字都不说）。
-    let implausible = false;
-    const first = await post<PushReply>(body, (error) => {
-      implausible = error === 'implausible';
-    });
-    if (implausible) return { refused: 'implausible' };
-    if (first) return first;
+    const first = settle(await post<PushReply>(body));
+    if (first !== undefined) return first;
     await new Promise((r) => setTimeout(r, PUSH_RETRY_MS));
-    return post<PushReply>(body);
+    return settle(await post<PushReply>(body)) ?? null;
   })();
   lastPush = pushing;
   // 交回去给结算页（2026-10-08 方案 2-11）：每日挑战那一局被拒、交晚了，要当场说一句。
@@ -230,18 +241,22 @@ export async function waitForPush(ms = PUSH_WAIT_MS): Promise<void> {
 }
 
 /** 云上那份存档。没登录、或者取不到，就是 null。 */
-export const fetchMine = (): Promise<CloudMine | null> => post<CloudMine>({ action: 'mine' });
+export const fetchMine = async (): Promise<CloudMine | null> => {
+  const r = await post<CloudMine>({ action: 'mine' });
+  return r.ok ? r.body : null;
+};
 
 /**
  * 一张榜。mode 给了是那个玩法的单局榜，不给是累计总榜。
  *
- * 四种结果分得清清楚楚：拿到了、没权限看、登录过期了、别的原因没拿到。中间
- * 那两种各要单独说，因为它们各有各的出路——一个去订阅，一个去重新登录；混
- * 成一句「取不到」，玩家就只能一直等下去。
+ * 几种结果分得清清楚楚：拿到了、没权限看、登录过期了、看得太勤被限速了、服务器那头出错、网没通。没权限和过期
+ * 各要单独说，因为它们各有各的出路——一个去订阅，一个去重新登录；混成一句「取不到」，玩家就只能一直等下去。
+ * 限速（429，tooMany）也单说（10-15 补充 L-9）：原先它并进「网络」那一类，屏幕上写「检查一下网络」，而看榜是
+ * 按帐号限速的（api/scores.js 每分钟 60 次），他的网好好的。
  */
 export type BoardResult =
   | { ok: true; page: BoardPage }
-  | { ok: false; reason: 'geniusOnly' | 'signedOut' | 'expired' | 'unavailable' | 'network' };
+  | { ok: false; reason: 'geniusOnly' | 'signedOut' | 'expired' | 'tooMany' | 'unavailable' | 'network' };
 
 /**
  * 每张榜在内存里存十秒。
@@ -280,33 +295,18 @@ export function invalidateBoards(): void {
 }
 
 export async function fetchBoard(mode?: string): Promise<BoardResult> {
-  const who = auth();
-  if (!who) return { ok: false, reason: 'signedOut' };
-  try {
-    const res = await fetchWithTimeout('/api/scores', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...who,
-        storeClaim: isStoreChannel(),
-        action: 'board',
-        ...(mode ? { mode } : {}),
-      }),
-    });
-    if (res.status === 403) return { ok: false, reason: 'geniusOnly' };
-    // 令牌过期和「没订阅」是两件完全不同的事，给的出路也不同：一个是重新
-    // 登录，一个是去订阅。混成一句「取不到」，玩家只会一直等下去。
-    if (res.status === 401) {
-      staleToken = who.token;
-      return { ok: false, reason: 'expired' };
-    }
-    // 5xx 是我们这头出错了，说「服务器忙」，不说「检查一下网络」（10-09 补充方案 7-13 第 3 条）。
-    if (!res.ok) return { ok: false, reason: res.status >= 500 ? 'unavailable' : 'network' };
-    staleToken = null;
-    const page = (await res.json()) as BoardPage;
-    boardCache.set(cacheKey(mode), { at: Date.now(), page });
-    return { ok: true, page };
-  } catch {
-    return { ok: false, reason: 'network' };
+  const r = await post<BoardPage>({ action: 'board', ...(mode ? { mode } : {}) });
+  if (r.ok) {
+    boardCache.set(cacheKey(mode), { at: Date.now(), page: r.body });
+    return { ok: true, page: r.body };
   }
+  if (r.status === 0) return { ok: false, reason: r.error === 'signedOut' ? 'signedOut' : 'network' };
+  // 令牌过期和「没订阅」是两件完全不同的事，给的出路也不同：一个是重新
+  // 登录，一个是去订阅。混成一句「取不到」，玩家只会一直等下去。
+  if (r.status === 401) return { ok: false, reason: 'expired' };
+  if (r.status === 403) return { ok: false, reason: 'geniusOnly' };
+  if (r.status === 429) return { ok: false, reason: 'tooMany' };
+  // 别的 4xx、5xx 都是我们这头的事，说「服务器忙」，不说「检查一下网络」（10-09 补充方案 7-13 第 3 条；原先 4xx
+  // 并进了「网络」那一类）。
+  return { ok: false, reason: 'unavailable' };
 }

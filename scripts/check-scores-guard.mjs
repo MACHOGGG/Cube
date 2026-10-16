@@ -605,6 +605,56 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     calls.length = 0;
     await api.pushRun({ ...run, at: 2 });
     check('⑬（尺子）回 500：两秒后照旧重报一次（一共两趟）', calls.length === 2, `${calls.length} 趟`);
+
+    // 10-15 补充 L-9：必败的不重报，限速、断网照旧重报一次；看榜分得清限速、服务器、网络。
+    const pushOnce = async (status, error, at) => {
+      answer = { status, body: { error } };
+      calls.length = 0;
+      const reply = await api.pushRun({ ...run, at });
+      await new Promise((r) => setTimeout(r, 2300));
+      return { n: calls.length, reply };
+    };
+    const mismatch = await pushOnce(400, 'mismatch', 3);
+    check('⑬ L-9 回 400 mismatch：只打一趟，交回 refused（结算页说「本局未上传」）', mismatch.n === 1 && mismatch.reply?.refused === 'rejected',
+      `${mismatch.n} 趟 ${JSON.stringify(mismatch.reply)}`);
+    const expired = await pushOnce(401, 'auth', 4);
+    check('⑬ L-9 回 401：只打一趟，交回 null，令牌记成过期', expired.n === 1 && expired.reply === null && api.sessionExpired() === true,
+      `${expired.n} 趟 ${JSON.stringify(expired.reply)} expired=${api.sessionExpired()}`);
+    const limited = await pushOnce(429, 'tooMany', 5);
+    check('⑬ L-9 回 429：两秒后照旧重报一次（一共两趟）', limited.n === 2, `${limited.n} 趟`);
+    answer = null;
+    calls.length = 0;
+    const thrower = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      calls.push(JSON.parse(init.body).action);
+      throw new TypeError('Failed to fetch');
+    };
+    await api.pushRun({ ...run, at: 6 });
+    const offline = calls.length;
+    const board = await api.fetchBoard('square:base');
+    globalThis.fetch = thrower;
+    check('⑬ L-9 断网：交卷两秒后照旧重报一次；看榜说「网络」', offline === 2 && board.reason === 'network', `${offline} 趟 ${board.reason}`);
+    const boardSays = async (status) => {
+      answer = { status, body: { error: 'x' } };
+      return (await api.fetchBoard('square:base')).reason;
+    };
+    const said = { 429: await boardSays(429), 403: await boardSays(403), 404: await boardSays(404), 500: await boardSays(500), 401: await boardSays(401) };
+    check('⑬ L-9 看榜：429 → tooMany、403 → geniusOnly、别的 4xx 和 5xx → unavailable、401 → expired',
+      said[429] === 'tooMany' && said[403] === 'geniusOnly' && said[404] === 'unavailable' && said[500] === 'unavailable' && said[401] === 'expired',
+      JSON.stringify(said));
+    answer = { status: 500, body: { error: 'x' } };
+    check('⑬ L-9 fetchMine 拿不到就是 null', (await api.fetchMine()) === null);
+    // 没登录：身份在 engine/subscription.ts 里有一份内存缓存，所以换一份新的模块实例（同一份代码，尾巴上多一行注释）。
+    mem.delete('slides_genius');
+    const fresh = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text + '\n// signed out\n').toString('base64'));
+    calls.length = 0;
+    const t0 = Date.now();
+    const anon = await fresh.pushRun({ ...run, at: 7 });
+    await fresh.waitForPush(5000);
+    const waited = Date.now() - t0;
+    check('⑬ L-9 没登录：一趟都不发、交回 null、看榜那边不白等两秒', calls.length === 0 && anon === null && waited < 500,
+      `${calls.length} 趟 ${JSON.stringify(anon)} ${waited}ms`);
+    check('⑬ L-9 没登录：看榜说 signedOut', (await fresh.fetchBoard()).reason === 'signedOut');
   } finally {
     Object.assign(globalThis, saved);
   }

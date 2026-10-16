@@ -10,6 +10,8 @@
  * 一张空榜，以为真没人玩。两处各量一次：
  *
  *   ① 拉榜那一条请求断掉：缩略图底下那句、整页那句，都是 rankNetwork。
+ *   ③ 拉榜那一条回 429（看得太勤被限速，10-15 补充 L-9）：两处都是 rankTooMany，不说「检查一下网络」——看榜按
+ *      帐号限速，他的网好好的。原先 429 并进了「网络」那一类。
  *   ② 尺子：放行之后再开一次，这台新服务器上确实没人——这时候说的才是「还没有人」。
  */
 import { chromium } from 'playwright';
@@ -20,6 +22,7 @@ if (!BASE) {
   process.exit(2);
 }
 const NETWORK = '榜没加载出来，检查一下网络。';
+const TOO_MANY = '刚才看榜看得太勤了，请稍后再看。这不是您的网络问题。';
 const EMPTY = '这张榜上还没有人';
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -49,9 +52,11 @@ const granted = await page.evaluate(async () => {
 });
 check('（尺子）TESTMONTH 兑到了权益（榜要它）', granted);
 
-// 拉榜那一条断掉（像网断了一样，fetch 直接抛），别的照常放行。
+// 拉榜那一条断掉（像网断了一样，fetch 直接抛），或者回 429；别的照常放行。
 let blocking = true;
+let limiting = false;
 let cut = 0;
+let limited = 0;
 await page.route('**/api/scores', async (route) => {
   let action = '';
   try {
@@ -60,6 +65,10 @@ await page.route('**/api/scores', async (route) => {
   if (blocking && action === 'board') {
     cut++;
     return route.abort('failed');
+  }
+  if (limiting && action === 'board') {
+    limited++;
+    return route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: 'tooMany' }) });
   }
   return route.continue();
 });
@@ -89,8 +98,22 @@ await page.$eval('#ranksPanel', (e) => e.click());
 const p1 = await pageNote();
 check('① 点开那一整页：也是「没拉下来」', p1 === NETWORK, p1);
 
-// ── ② 尺子：放行之后，这台新服务器上确实没人 ─────────────────────────────
+// ── ③ 回 429 ───────────────────────────────────────────────────────────────
 blocking = false;
+limiting = true;
+await page.goto(BASE, { waitUntil: 'load' });
+await page.waitForSelector('#navRecords', { timeout: 20000 });
+await page.$eval('#navRecords', (e) => e.click());
+await page.waitForSelector('#ranksPanel', { timeout: 10000 });
+const t3 = await thumbNote();
+check('③（尺子）拉榜那一条真的回了 429', limited >= 1, `${limited} 次`);
+check('③ 缩略图：说的是「看得太勤了」，不是「检查一下网络」', t3 === TOO_MANY, t3);
+await page.$eval('#ranksPanel', (e) => e.click());
+const p3 = await pageNote();
+check('③ 点开那一整页：也是「看得太勤了」', p3 === TOO_MANY, p3);
+
+// ── ② 尺子：放行之后，这台新服务器上确实没人 ─────────────────────────────
+limiting = false;
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('#navRecords', { timeout: 20000 });
 await page.$eval('#navRecords', (e) => e.click());

@@ -1242,9 +1242,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (!signHintFits()) refs.endSignHintEl.hidden = true;
         return;
       }
-      // 服务器对过账、明说这一局不收（400 implausible，engine/cloudScores.ts 的 pushRun，10-15 补充 S3）：说一句
-      // 「本局未上传到云端，本机记录照常保留」。原先这儿一个字都不说——结算页照常给他看，他以为传上去了。
-      if (reply?.refused === 'implausible') {
+      // 服务器明说这一局不收（400 implausible，或者别的 4xx，engine/cloudScores.ts 的 pushRun，10-15 补充 S3 / L-9）：
+      // 说一句「本局未上传到云端，本机记录照常保留」。原先这儿一个字都不说——结算页照常给他看，他以为传上去了。
+      if (reply?.refused) {
         refs.endDailyNoteEl.textContent = s.endNotUploaded;
         refs.endDailyNoteEl.hidden = false;
         if (!signHintFits()) refs.endSignHintEl.hidden = true;
