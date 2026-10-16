@@ -711,7 +711,10 @@ if (want(1)) {
     art: getComputedStyle(document.querySelector('.coach-bar .coach-art')).display,
   }));
   check('B 起手机上配图收起来（只留字）', !/coach-bar--anim/.test(after.cls) && after.art === 'none', `${after.art}`);
-  const res = judge(o, 'circle', 'B 刚出来');
+  // 拖完那一步要拿这一份对「不跳色」：同一条 B 里，拖之前亮的那一色要是还在最少步数那几色里，App 就该留着它——不传的话
+  // 门把拖完那一下当成头一回亮，错套「平手挑带星星的」那一条（随机发牌撞上「拖之前亮的那一色没有星星、平手的别色有」就红）。
+  const memoB = {};
+  const res = judge(o, 'circle', 'B 刚出来', memoB);
   const lit = new Map(o.at.filter(([, v]) => v.lit));
   check('（尺子）B 刚出来这一副上灯亮着（对照算得出最少步数）', lit.size > 0, res);
   check('亮着的那几枚真的在动（glow-pulse-coach）', lit.size > 0 && [...lit.values()].every((v) => v.anim === 'glow-pulse-coach'),
@@ -833,7 +836,7 @@ if (want(1)) {
     await dragMove(page, o, stepTo.line, stepTo.shift);
     const o2 = await waitLit(page, 'circle', await settle(page, 'circle', QUIET_FULL_MS));
     check('真的拖那一步：盘面变了（拖动照常，灯不拦手）', JSON.stringify(o2.at.map(([k, v]) => [k, v.face, v.color])) !== before);
-    judge(o2, 'circle', '拖完那一步');
+    judge(o2, 'circle', '拖完那一步', memoB);
   }
   await ctx.close();
 }
