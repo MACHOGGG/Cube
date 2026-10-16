@@ -16,6 +16,7 @@
  *   Element.prototype.replaceChildren (86)
  *   Element.prototype.getAnimations   (84)
  *   ResizeObserver                  (64)
+ *   Promise.prototype.finally       (63)  ← 今天不进这一版的包，防哪天挪进共用模块（10-15 补充 L-12）
  *
  * 为什么 at() 最要命：方块和小球的拖动过程里，每一帧都要算补位块的位置，
  * 算式就是 `c * cell + chain.at(c) * cell`（src/shapes/square.ts、
@@ -154,6 +155,13 @@
       });
     }
   }
+
+  // ---- Promise.prototype.finally (Chrome 63) ----
+  // 网页端小屋那几处在用（ui/scoreboard.ts、ui/multiplayer.ts、engine/room.ts），今天不进这一版的包；补上防哪天挪进共用模块。
+  def(Promise.prototype, 'finally', function (fn) {
+    if (typeof fn !== 'function') return this.then(fn, fn);
+    return this.then((v) => Promise.resolve(fn()).then(() => v), (e) => Promise.resolve(fn()).then(() => { throw e; }));
+  });
 
   // ---- ResizeObserver (Chrome 64) ------------------------------------------
   // 棋盘、老虎机滚筒、教学页都靠它「地板变了就重排」。原生的是布局一变就

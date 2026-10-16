@@ -137,7 +137,7 @@ function card(
   // 沿：老虎机那张图是横的、下面本来就空着一截，牌子正好落在缝里；方块、炸
   // 弹那几张图是填满整格的，同一块牌子就盖在图案身上了。同一块牌子在几张卡
   // 上长得不一样，看着就像是没对齐。改成自己占一行，张张一致；卡因此高出一
-  // 截，menuFit 会把卡缩回来（它现量现算，见 menuFit.ts）。
+  // 截，2026-10-15 起卡是定值、主菜单往下滑（见 pages.css 那一段），多出来的照样滑得到。
   if (soon) {
     const tag = document.createElement('span');
     tag.className = 'xhs-soon-tag';
@@ -220,8 +220,9 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
 
   const grid = page.querySelector<HTMLElement>('#xhsGrid')!;
   /*
-   * 《每日挑战》（第 19 推）：最上面单独一行、居中，只有这一张——E20「主菜单排布冻结」唯一的例
-   * 外（方案原话）。下面那几排一张都不动：还是窄屏两张一排、宽屏一排六张、同样的次序。
+   * 《每日挑战》（第 19 推）：最上面单独一行、居中，只有这一张——E20「主菜单排布冻结」的第一个例
+   * 外（方案原话；第二个是 2026-10-15 的「图标和网页移动端一样大、页面往下滑、新人状态《我会玩》挪到
+   * 基础那一排后面」）。下面那几排一张都不动：还是窄屏两张一排、宽屏一排六张、同样的次序。
    *
    * 图按本机时间的北京日期换（小红书那一版不联网，用本机的钟——方案原话），到零点自动换图、
    * 切回前台时重算（dailyArt.ts 的 watchDay）。读屏念「每日挑战，10 月 3 日」，底下那行小字是
@@ -248,9 +249,13 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
       btn.setAttribute('aria-label', dailyAria(lang, d));
     });
   }
-  // 六张：宽屏一排摆完，窄屏三排各两张（排数和五张那一版一样，所以 menuFit 量出来的
-  // 高度没变）。从前宽屏那个数写的是 5——补上第六张之后它会排成 5 + 1，最后一张孤
-  // 零零吊在下面一行。
+  // 六张：宽屏一排摆完，窄屏三排各两张。从前宽屏那个数写的是 5——补上第六张之后它会排成
+  // 5 + 1，最后一张孤零零吊在下面一行。
+  //
+  // 《我会玩》：只在引导还在压暗别的玩法时摆出来。窄屏摆在「经典方块 / 经典小球」那一排后面（站长 2026-10-15 定，
+  // E20 的第二个例外）：原先摆在整页最下面，卡改成网页那么大、页面能滑之后，它就落到首屏以外了。宽屏一排六张，没有
+  // 「基础那一排之后」，照旧摆在最下面。
+  const showKnowHow = !!(h.dim && h.dim.length > 0);
   const perRow = wide ? 6 : 2;
   for (let i = 0; i < CARDS.length; i += perRow) {
     const row = document.createElement('div');
@@ -268,13 +273,9 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
       );
     }
     grid.appendChild(row);
+    if (showKnowHow && !wide && i === 0) grid.appendChild(knowHowButton(lang, () => h.onKnowHow?.()));
   }
-
-  // 《我会玩》：只在引导还在压暗别的玩法时摆出来，摆在整张菜单的下方。
-  if (h.dim && h.dim.length > 0) {
-    const btn = knowHowButton(lang, () => h.onKnowHow?.());
-    page.appendChild(btn);
-  }
+  if (showKnowHow && wide) page.appendChild(knowHowButton(lang, () => h.onKnowHow?.()));
 
   root.appendChild(page);
   root.appendChild(bottomNav(h));

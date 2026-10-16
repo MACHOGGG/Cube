@@ -346,6 +346,38 @@ if (XHS) {
     check('小红书版按完还在主菜单上', after.cards >= 4, `${after.cards} 张卡`);
   }
   await p3.close();
+
+  // 新人状态《我会玩》摆在哪（10-15 补充 K-5：卡改成网页移动端那么大、主菜单能往下滑之后，它挪到「经典方块 / 经典小球」
+  // 那一排后面）：两个视口各开一次，量它在经典小球那张卡的下面、首屏看得见、不压底排。原先摆在整页最下面，卡一变大就
+  // 落到首屏以外了。
+  for (const [w, h] of [[390, 844], [320, 568]]) {
+    const vctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+    const p4 = await vctx.newPage();
+    p4.on('pageerror', (e) => errs.push(`xhs ${w}×${h}: ` + e.message));
+    await p4.addInitScript(() => {
+      localStorage.clear();
+      localStorage.setItem('slides.xhs.firstRun', '1');
+    });
+    await p4.goto('file://' + (XHS.startsWith('/') ? XHS : process.cwd() + '/' + XHS), { waitUntil: 'load' });
+    await p4.waitForSelector('.home-icon-btn', { timeout: 30000 }).catch(() => {});
+    await p4.waitForTimeout(600);
+    const at = await p4.evaluate(() => {
+      const kh = document.querySelector('.know-how-btn');
+      const base = document.querySelector('.home-grid > .home-row:not(.xhs-daily-row)');
+      const ball = base?.querySelectorAll('.home-icon-btn')[1];
+      const nav = document.querySelector('.home-nav');
+      const r = (el) => (el ? el.getBoundingClientRect() : null);
+      return { kh: r(kh), ball: r(ball), nav: r(nav), vh: innerHeight, nextIsRow: kh?.previousElementSibling === base };
+    });
+    const ok = at.kh && at.ball && at.nav;
+    check(`小红书版 ${w}×${h} 新人状态：《我会玩》紧跟在基础那一排后面`, !!ok && at.nextIsRow, JSON.stringify({ 有: !!at.kh, 紧跟: at.nextIsRow }));
+    if (ok) {
+      check(`小红书版 ${w}×${h}：在经典小球那张卡的下面`, at.kh.top >= at.ball.bottom - 0.5, `卡底 ${at.ball.bottom.toFixed(1)} / 按钮顶 ${at.kh.top.toFixed(1)}`);
+      check(`小红书版 ${w}×${h}：首屏看得见、不压底排`, at.kh.bottom <= Math.min(at.vh, at.nav.top) + 0.5,
+        `按钮底 ${at.kh.bottom.toFixed(1)} / 底排顶 ${at.nav.top.toFixed(1)} / 屏高 ${at.vh}`);
+    }
+    await vctx.close();
+  }
 }
 
 console.log(errs.length ? '\n页面报错：' + errs.slice(0, 3).join(' | ') : '\n全程零报错');

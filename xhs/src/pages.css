@@ -266,21 +266,15 @@
 }
 
 
-/* ---- 主菜单：那几张卡收进一屏 ------------------------------------------
-   网页版那一页有十三张卡，本来就要滑，所以底下留的是 118px + 安全区，够最后
-   一排滑到底时露在底排之上。这一版只有六张、窄屏三排（2026-10 加《步步为营》
-   之前是五张，也是三排），一屏装得下才对——可给顶栏让开
-   106px 之后就装不下了，最后那张《无限反转》压在底排那颗键上 93px。
+/* ---- 主菜单：卡和网页移动端一样大，页面能往下滑 ----------------------------
+   站长 2026-10-15 定（推翻 2026-09-05「五张卡收进一屏」那一次，见侵蚀阶梯决策.md 的 E20）：原先卡多大是 menuFit.ts
+   现量现算的，目标是四排卡一屏装下，装不下就往下缩，最小 68px，还会把标题压到 22px——真机 402×874 上平常只剩 85px、
+   新人状态 74px，375 宽及以下一律 68px；网页移动端同一批图标是 132 / 120 / 103px（style.css 的 --axis-art）。一屏装
+   下的上限到不了网页的大小（把缝收到 10px、标题压到 22px，390 宽最多 97、402 宽 101），所以改成：卡用网页的定值、
+   页面往下滑、撤掉 menuFit。
 
-   三处一起收：
-     · 中间那道缝小一号（8vw → 6vw），一排两张之间和上下排之间都跟着收；
-     · 底下只留底排自己那么高（74 的键 + 6 上边距 + 14 余量 + 底部横杠），
-       不用网页版那份给「滑到底」留的余量——这一页不滑了；
-     · 卡多大交给 menuFit.ts 现量现算，写在 --xhs-card 上。它按「整页比屏幕
-       高出多少」平摊到每一排，所以每台机器都正好装下，装得下的机器一点不缩。
-
-   写成 var(--xhs-card, 165px) 而不是 min(...)：Chrome 61 没有 min()，那一句
-   会被整条丢掉；而 --xhs-card 里已经是算好的像素数，老内核照样认。 */
+   中间那道缝照旧小一号（8vw → 6vw）。底下留底排自己那么高（74 的键 + 6 上边距 + 14 余量 + 底部横杠）——滑到底时最
+   后的元素离底排上沿还有 21.5–22.4px（所有视口实测过）。 */
 .home-page:not(.home-page--wide) {
   --narrow-gap: clamp(18px, 6vw, 34px);
   padding-bottom: calc(102px + var(--safe-area-inset-bottom, 0px));
@@ -292,20 +286,34 @@
      住了。 */
   padding-bottom: calc(102px + max(var(--safe-area-inset-bottom, 0px), 14px));
 }
-.home-page:not(.home-page--wide) .home-icon-btn {
-  max-width: var(--xhs-card, 165px);
+/* 分档写死，不用 min()——Chrome 61 不认。一排两张时每张能分到的宽度（320 屏 128、360 屏 147、390 屏 161）都比上限大，
+   所以 max-width 就是实际宽度；老内核那条 `flex: 0 1 auto` 降级规则（baseline.css）下算出来同一个数。 */
+.home-page:not(.home-page--wide) .home-icon-btn { max-width: 132px; }
+@media (max-width: 389px) { .home-page:not(.home-page--wide) .home-icon-btn { max-width: 120px; } }
+@media (max-width: 359px) { .home-page:not(.home-page--wide) .home-icon-btn { max-width: 103px; } }
+/* 页面能滑之后：招牌停在让开顶栏之后，整条铺页面底色，滑上来的卡在招牌下沿被切掉。
+   为什么铺不透明底色（和网页不同）：网页的招牌玻璃是半透明加 backdrop-filter: blur，卡片从底下模糊地透出来；Chrome 61
+   没有 backdrop-filter（76 起）也没有 color-mix（111 起），玻璃会退成 72% 白、不模糊，卡片清清楚楚透出来。
+   `.app.records-page` 那两条顺手修好成绩与说明页原本就有的毛病：往下滑时招牌贴到 y=6，落进状态栏和容器那排键里。 */
+.home-page:not(.home-page--wide) .home-head,
+.app.records-page .home-head {
+  top: var(--xhs-top-clear, 0px);
+  background: var(--bg);
+  box-shadow: -24px 0 0 var(--bg), 24px 0 0 var(--bg);   /* 盖住两侧内边距 */
+  pointer-events: auto;                                  /* 被盖住的卡不能再点到 */
 }
+.home-page:not(.home-page--wide)::before,
+.app.records-page::before {                              /* 让开的那一截铺一条底色带 */
+  content: ''; position: fixed; top: 0; left: 0; right: 0;
+  height: var(--xhs-top-clear, 0px); background: var(--bg); z-index: 59;
+}
+/* 新人状态的《我会玩》挪到基础那一排后面（站长定）：像网页那样贴近那行小字。不加的话 320×568 上那行字有一半被底排挡住。
+   老内核把 gap 换成外边距时是**加**在元素自己的外边距上（oldKernel.ts 的 addSide），两种内核实测差 0.0–0.1px；热区仍 44px。 */
+.home-page:not(.home-page--wide) .home-grid > .know-how-btn { margin-top: -14px; margin-bottom: -10px; }
 
 
 
 
-/* ---- 矮屏最后一手：标题那块也跟着收 ------------------------------------
-   卡缩到头、排间距也挤到头之后还差几个像素（375×667 那种矮屏），就从顶上那
-   块招牌里再要一点。它是这一页最不必要的高度——玩家进来是找玩法的，不是读
-   标题的。收的是字号，连带那道下划线和上下内边距一起矮下来。
-
-   写成 var(--xhs-title, …)：算不出来或者用不上的时候，原样还是 2.4rem。 */
-.home-page:not(.home-page--wide) .home-title { font-size: var(--xhs-title, 2.4rem); }
 
 
 /* ---- 挑形状那几屏：整块上移（E20）--------------------------------------

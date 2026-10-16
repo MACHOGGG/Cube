@@ -212,8 +212,8 @@ function toPx(token: string, rootFont: number): number | null {
  *    里是 14px（style.css 里 .home-page--wide 那条 clamp 之外另写了一遍）。文本
  *    级的替换挑不了作用域，照外面那条烘，844×390 上算出 118px，而对的是 124px
  *    ——错的正好是最需要它算准的那批屏幕。
- *  · **一个变量可以是 JS 当场写上去的。** `--narrow-gap` 由 menuFit.ts 按实际装
- *    得下装不下 setProperty / removeProperty（375×667 就是靠它才排得开），
+ *  · **一个变量可以是 JS 当场写上去的。** `--narrow-gap` 从前由 menuFit.ts 按实际装
+ *    得下装不下 setProperty / removeProperty（2026-10-15 撤了，主菜单改成往下滑），
  *    `--rank-rows` 由 scoreboard.ts 按真实人数写（排行榜的行高全靠它）。样式表
  *    里那个值只是默认值，烘死了就等于把运行时的调整永久按掉。
  *

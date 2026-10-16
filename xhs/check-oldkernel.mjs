@@ -71,6 +71,7 @@ const STRIP = `
   // Promise
   del(Promise, 'allSettled'); // 76
   del(Promise, 'any');        // 85
+  del(Promise.prototype, 'finally'); // 63
   // 全局
   del(window, 'ResizeObserver');  // 64
   del(window, 'queueMicrotask');  // 71
@@ -230,6 +231,7 @@ for (const key of list) {
     replaceChildren: typeof document.body.replaceChildren === 'function',
     getAnimations: typeof document.body.getAnimations === 'function',
     ro: typeof window.ResizeObserver === 'function',
+    finally: typeof Promise.prototype.finally === 'function',
     // 这几个没补，应该还是缺的（说明删的动作生效了）
     fromEntries: typeof Object.fromEntries === 'function',
     replaceAll: typeof ''.replaceAll === 'function',
@@ -243,8 +245,8 @@ for (const key of list) {
   }));
   say(
     stripped.at && stripped.flat && stripped.matchAll && stripped.trimStart &&
-      stripped.replaceChildren && stripped.getAnimations && stripped.ro,
-    '七个补丁都装上了',
+      stripped.replaceChildren && stripped.getAnimations && stripped.ro && stripped.finally,
+    '八个补丁都装上了（Promise.prototype.finally 是 10-15 补充 L-12 补的）',
     JSON.stringify(stripped),
   );
   say(!stripped.fromEntries && !stripped.replaceAll, '没补的仍然缺着（说明删干净了）');

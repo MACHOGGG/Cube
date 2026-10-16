@@ -56,7 +56,6 @@ import { registerCards } from '../../src/shapes/registry';
 
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
-import { installMenuFit, scheduleFitMenu } from './menuFit';
 import { knowsHow, setKnowHowKey } from '../../src/engine/firstPlay';
 import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE } from './tutorial';
 import { bombTip, flipTip, puzzleTip, slotTip } from '../../src/ui/modeTips';
@@ -503,8 +502,6 @@ function showMenu() {
     onProfile: showProfile,
     onDaily: showDaily,
   });
-  // 卡多大要等这一屏排完版才算得了，所以画完再叫一声。
-  scheduleFitMenu();
   // 主菜单是最外面那一屏：在这儿按返回键（安卓的实体键、浏览器的后退）就该
   // 退出小工具，不再往回走，所以不给它挂返回处理。
   setScreenBack(null);
@@ -770,8 +767,6 @@ installOldKernel();
 // 再给小红书自己那排按钮（退出 / 分享 / 用户）让开上面那道——它压在页面上，
 // 不让就正好盖住主菜单的标题。见 topInset.ts 开头那段。
 installTopInset();
-// 主菜单那几张卡按屏幕算大小，别压到底排上。见 menuFit.ts。
-installMenuFit();
 
 installBackNav();
 /*

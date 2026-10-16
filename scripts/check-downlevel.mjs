@@ -278,9 +278,9 @@ function reach61(at) {
  *  · `--rank-line`：样式表里声明了，但它自己依赖一个 JS 会覆盖的变量——
  *    `--rank-line: calc((var(--rank-h) - 15px) / var(--rank-rows))`，而
  *    scoreboard.ts:257 会按真实人数 setProperty('--rank-rows')。
- *  · `--narrow-gap`：`xhs/src/menuFit.ts` 按「这一排装得下装不下」当场
- *    setProperty / removeProperty（375×667 就是靠它才排得开），而且 `xhs/src/
- *    pages.css:238` 把它又声明了一遍，和 `src/style.css:1013` 不是一个值。
+ *  · `--narrow-gap`：从前 `xhs/src/menuFit.ts` 按「这一排装得下装不下」当场
+ *    setProperty / removeProperty（2026-10-15 撤了，主菜单改成往下滑）；`xhs/src/
+ *    pages.css` 至今还把它又声明了一遍，和 `src/style.css` 不是一个值，所以照旧留在这儿。
  *  · `--home-row-gap`：`src/style.css:1224` 是一条 clamp，可 1282 行在横屏那段
  *    媒体查询里把它改成 14px。文本级替换挑不了作用域，照外面那条烘，844×390
  *    上算出 118px，而对的是 124px——错的正好是最需要它算准的那批屏幕。
