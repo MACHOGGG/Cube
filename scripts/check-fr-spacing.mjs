@@ -16,13 +16,10 @@
  * 不许出现 `/ [:;?!»]|« /`。尺子：挑出来的法文字符串 > 400 条；反面尺子：这个正则抓得到 'Partir ?'、'« Sans'，放过
  * 'Partir ?'。
  *
- * ⚠️ 法务那一半（legal.ts）按方案并进 P3（隐私政策那一推，LEGAL_UPDATED 只改一次），这一推还没改到它：LEGAL_PENDING
- * 那一行让它只报数、不算红。P3 改完之后这道门会说「法务已经干净了，把 LEGAL_PENDING 拿掉」并且红——那一推同时删这一行。
+ * 法务那一半（legal.ts 95 处）在 10-14 方案 P3 那一推改完（S6 那一推先改了界面和规则书，法务暂时只报数）。
  */
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-
-const LEGAL_PENDING = true;
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -67,17 +64,9 @@ check('（尺子）界面、规则书、法务三张表都挑到了',
 
 const hits = all.filter((x) => BAD.test(x.s));
 const show = (list) => list.slice(0, 6).map((x) => `${x.path}「${x.s.slice(Math.max(0, x.s.search(BAD) - 12), x.s.search(BAD) + 6)}」`).join(' · ');
-for (const file of ['src/i18n.ts', 'src/rules.ts', 'src/changelog.ts']) {
+for (const file of FILES) {
   const mine = hits.filter((x) => x.file === file);
   check(`${file}：法文标点前后没有普通空格（要 U+00A0）`, mine.length === 0, mine.length ? `${mine.length} 条：${show(mine)}` : '干净');
-}
-const legal = hits.filter((x) => x.file === 'src/legal.ts');
-if (LEGAL_PENDING) {
-  console.log(`NOTE  src/legal.ts 还有 ${legal.length} 条（法务那一半随 P3，那一推删掉 LEGAL_PENDING）`);
-  check('src/legal.ts：还没改到（改到了就把 LEGAL_PENDING 拿掉，别让这道门对法务一直睁一只眼）', legal.length > 0,
-    '法务已经干净了，把 LEGAL_PENDING 拿掉');
-} else {
-  check('src/legal.ts：法文标点前后没有普通空格（要 U+00A0）', legal.length === 0, legal.length ? `${legal.length} 条：${show(legal)}` : '干净');
 }
 
 // 反面尺子：同一个正则，该抓的抓得到、该放的放过

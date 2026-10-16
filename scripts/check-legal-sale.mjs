@@ -113,7 +113,9 @@ for (const lang of LANGS) {
      * 此刻不开放。所以这儿钉的不是「不许提订阅」（头一版就是这么写的，于是把一句完全正
      * 确的话判成了红），而是**提了就得把此刻的状态一起说出来**。
      */
-    const mentions = [/「Slides 天才」/, /「Slides 天才」/, /"Slides Genius"/i, /« Slides Génie »/i]
+    // 法文那一条用 \s：引号内侧是不换行空格 U+00A0（10-15 补充 L-10 ④），JS 的 \s 包含它。照普通空格写的话这一条
+    // 不再匹配，法文就成了「没提」——照样绿，而这道门对法文从此睁一只眼。
+    const mentions = [/「Slides 天才」/, /「Slides 天才」/, /"Slides Genius"/i, /«\sSlides Génie\s»/i]
       .some((re) => re.test(tText));
     const closed = (SAYS_STOPPED[lang] || []).some((re) => re.test(tText));
     check(`${lang}：《服务条款》提到这一档时，同时说清了此刻不开放`, !mentions || closed,

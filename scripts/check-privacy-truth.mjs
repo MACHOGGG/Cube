@@ -47,9 +47,15 @@ const check = (n, ok, extra = '') => {
 
 const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
 
-/** 一份文档的全文（抬头 + 引言 + 每条的词条和正文）拼成一个串。 */
+/**
+ * 一份文档的全文（抬头 + 引言 + 每条的词条和正文）拼成一个串。
+ *
+ * 不换行空格（U+00A0、U+202F）先折成普通空格（10-15 补充 L-10 ④）：法文正文里 `: ; ? ! »` 前、`«` 后写的是 U+00A0，
+ * 这道门要找的原话（« Accepter »、« Statistiques Google Analytics »……）照普通空格写，比的是说了什么、不是排版。
+ */
+const unNbsp = (s) => String(s ?? '').replace(/[\u00a0\u202f]/g, ' ');
 const flat = (doc) =>
-  [doc.title, doc.intro, ...doc.items.flatMap((i) => [i.term, i.body])].join('\n');
+  unNbsp([doc.title, doc.intro, ...doc.items.flatMap((i) => [i.term, i.body])].join('\n'));
 
 /** 撤掉的说法：按语言各给一组词。查之前先把那两处故意留的挖掉。 */
 const GONE = {
@@ -304,7 +310,7 @@ for (const lang of LANGS) {
   };
   const resendSentence = (lang) => {
     const doc = LEGAL[lang]?.privacy;
-    const body = doc?.items.map((i) => i.body).find((b) => b.includes('Resend')) || '';
+    const body = unNbsp(doc?.items.map((i) => i.body).find((b) => b.includes('Resend')) || '');
     // 句子按句号切（中文「。」，英法「. 」）；括号里那一段和 Resend 在同一句
     return body.split(/(?<=。)|(?<=\.)\s+/).find((x) => x.includes('Resend')) || '';
   };
