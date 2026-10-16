@@ -540,7 +540,7 @@ export interface I18nStrings {
   /** 离开小屋后那张总排名的标题。 */
   mpStandings: string;
   mpFinished: string;
-  /** The host picks the board from the home page, where all eight of them
+  /** The host picks the board from the home page, where all six of them
    *  live with their icons — these are the trip there and back. */
   mpGoPick: string;
   /** 屋主被送回主菜单挑下一个玩法时，顶上那条横幅。{code} 换成房号。

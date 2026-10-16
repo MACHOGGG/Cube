@@ -61,7 +61,7 @@ import {
  * board in front of the table or closes the room, which is when the closing
  * card is drawn.
  *
- * The host picks that board on the home page, not here: all eight of them
+ * The host picks that board on the home page, not here: all six of them
  * live there already, with their icons, at the size a thumb wants. While
  * they are away choosing, the whole screen wears a faint pink frame — it is
  * the only thing on the home page that says this tap is for four people
@@ -1143,7 +1143,7 @@ export function renderMultiplayerPage(
    * 只在打过至少一局、并且真有人得过分之后才出现：第一局开赛前所有人都是
    * 0，一张全零的表说不出任何事情，只会把倒数那一幕挤窄。
    *
-   * 它是一张定格，不跟着刷新——倒数这几秒里 stopAll() 已经把轮询停了，而且
+   * 它是一张定格，不跟着刷新——这张表只在倒数开始时画一次，而且
    * 这段时间谁的分也不会变。
    */
   function standingsStrip(state: RoomState): string {

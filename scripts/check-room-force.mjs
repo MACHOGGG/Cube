@@ -33,6 +33,11 @@
  *   ⑩ **被替交的那一格标 `forced`，publicState 带出去；下一局一开清回 false。** 客户端靠它认出
  *      「我被屋主结束了」（ui/scoreboard.ts 的 noticeForced）：自己交了卷的、没被替的，都不能带
  *      着它；上一局留下的 true 也不能漏进下一局（不然他下一局打到一半又被告知一次「屋主结束了」）。
+ *
+ * 10-15 补充 S5（L-3 ③）加的两条：force 读完快照之后、写之前他自己又报了一条——
+ *
+ *   ⑪ 他交了卷：那一格是他自己的（850 / 28 秒、不标 forced）。原先照快照盖成 700、forced。
+ *   ⑫ 他只报了一条没交卷的 720：按 720 替交。原先按快照里的 700。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
 
@@ -240,6 +245,42 @@ const state = (code, me) => call({ action: 'state', code, ...me });
   const r = await call({ action: 'force', code, ...host });
   const after = await hgetall(roomKey(code));
   check('⑧ 这一局本来就结束了：回 200、什么都没改', r.status === 200 && JSON.stringify(before) === JSON.stringify(after));
+}
+
+// ── ⑪⑫ 屋主按「不等了」的同一瞬间，他自己又报了一条（10-15 补充 S5，L-3 ③ FIX-3） ─────────────
+//
+// force 进门读一份快照（他 700 分、没交卷），之后才动他那一格。原先照快照直接写：这中间他自己交了 850 分 / 28 秒、
+// 回包成功，最后那一格却是 700、没有用时、forced——屏幕上他自己是 850，名单上是 700，没有任何提示。钩子在 force
+// 动他那一格之前，先让他自己那一条报分整条走完。
+//   ⑪ 他交了卷（850 / 28 秒）→ 那一格是他的：850、28、不标 forced；
+//   ⑫ 他只报了一条没交卷的 720 → 按 720 替交（finished、final、forced）。
+for (const [label, report, want] of [
+  ['⑪ 他自己交了卷', { score: 850, finished: true, seconds: 28 }, { score: 850, seconds: 28, forced: false, final: true }],
+  ['⑫ 他中间只报了一条没交卷的', { score: 720, finished: false }, { score: 720, seconds: null, forced: true, final: true }],
+]) {
+  const { code, host, guests } = await openRoom({ guests: 1 });
+  const g1 = guests[0];
+  await call({ action: 'score', code, ...host, score: 120, finished: true, seconds: 12, round: 1 });
+  await call({ action: 'score', code, ...g1, score: 700, finished: false, round: 1 });
+  let held = false;
+  let mid = null;
+  globalThis.__storeHook = async (args) => {
+    const cmd = String(args[0]).toUpperCase();
+    // 他那一格：HSET 的键在第 2 位，EVAL（hdelIfSame / hsetUnless）的键在第 4 位。
+    const key = cmd === 'EVAL' ? args[3] : args[1];
+    if (held || (cmd !== 'EVAL' && cmd !== 'HSET') || key !== roomKey(code)) return;
+    if (!args.includes('r:' + g1.playerId) || args.some((a) => /"score":(850|720)/.test(String(a)))) return;
+    held = true;
+    mid = await call({ action: 'score', code, ...g1, ...report, round: 1 });
+  };
+  const forced = await call({ action: 'force', code, ...host });
+  globalThis.__storeHook = undefined;
+  const cell = (await hgetall(roomKey(code)))['r:' + g1.playerId] || {};
+  check(`${label}（尺子）：钩子在 force 动那一格之前插进了他那一条，回包成功`,
+    held && mid && mid.status === 200 && !mid.body.scoreDropped, `held=${held} ${mid && mid.status} dropped=${mid && mid.body.scoreDropped}`);
+  check(`${label}：force 回 200`, forced.status === 200, `${forced.status} ${forced.body.error || ''}`);
+  const got = { score: cell.score, seconds: cell.seconds ?? null, forced: Boolean(cell.forced), final: Boolean(cell.final) };
+  check(`${label}：那一格是 ${JSON.stringify(want)}`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(cell));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

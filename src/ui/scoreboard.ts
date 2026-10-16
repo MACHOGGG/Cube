@@ -46,8 +46,9 @@ const REEL_ID = 'scoreReel';
 const END_OVERLAY_ID = 'endOverlay';
 /** Often enough to feel live, rarely enough to be nothing on a battery. */
 const LOCAL_MS = 500;
-/** 分数没动也要隔多久报一次到。服务器那边 30 秒不见人就算掉线（api/room.js
- *  的 AWAY_MS），4 秒一次留出六七次的余量：掉几个包不至于被判出局。
+/** 分数没动也要隔多久报一次到。服务器那边 30 秒不见人就标「暂时不在」（api/room.js
+ *  的 AWAY_MS），90 秒才算掉线、这一局不再等他（ABSENT_MS，判定在 seatOut）；4 秒一次
+ *  在 30 秒里留出六七次的余量：掉几个包不至于被标成不在。
  *
  *  这个数原先写的是 12 秒——那是 AWAY_MS 放宽到 30 秒之前的旧值，注释没跟着
  *  改，于是后来的人照着它算余量会算少一半。 */
@@ -83,7 +84,7 @@ function runSeconds(): number | undefined {
  * 两个数各管一段，因为它们各自只在那一段里成立。正打着的时候综合得分不存在
  * ——时间还在走，没翻完的块还可能翻——所以实时名单只能比原始得分。而一局
  * 结束之后再比原始得分就不对了：同一副牌，多磨五分钟总能多滑出几分，名次会
- * 变成「谁耗得久谁赢」。综合得分里有时间系数（房间里还放大了一倍半），那才
+ * 变成「谁耗得久谁赢」。用时不再计分，综合分只乘步数系数，那才
  * 是这场比赛想比的东西。
  *
  * ── 为什么这两个数必须「只算一次」 ──────────────────────────────────
@@ -372,9 +373,6 @@ export function mountScoreboard(lang: Lang, handlers: RoomRunHandlers): () => vo
    *   · 底下那条实时排名和《离开小屋》撤掉，藏着的《暂停》顶上来——一局单
    *     人棋本来就该能停；
    *   · 停掉轮询和上报。
-   *
-   * 有一件事跟着变，说清楚：时间系数从小屋的那一档（1.5 倍）回到单人的那
-   * 一档。这是对的——已经没有人和他比快慢了。
    */
   const goSolo = (say: string = s.mpHostAwaySolo) => {
     dead = true;

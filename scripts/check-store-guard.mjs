@@ -18,6 +18,9 @@
  *      · （尺子）窗口里照常数数，过了窗口从 1 重新数。
  *    「过了窗口」靠拨 Date.now（内存库的过期就是拿它比的）。
  *
+ * ⑨ hsetUnless（10-15 补充 S5，L-3 ④）：hash 里守卫那几格一格都不在才写，看和写一步。小屋报分靠它挡「快照读完之后插进来
+ *    一整次开下一局」。量：守卫不在写、在就不写；那一头不认 EVAL 时退回两步，结果一样。
+ *
  * 撤掉改法：⑦ 那几条红（部署环境照样认开关、回 200），⑧ 前两条红（抛错；永不过期）。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
@@ -130,6 +133,28 @@ try {
 } finally {
   Date.now = realNow;
   globalThis.__storeHook = undefined;
+}
+
+// ── ⑨ hsetUnless：守卫那几格一格都不在才写（10-15 补充 S5，L-3 ④；小屋报分用它） ─────────────────
+{
+  const key = 'guard:room';
+  await store.hset(key, 'meta', { round: 1 });
+  const clean = await store.hsetUnless(key, 'r:a', { score: 5 }, 'ls:2', 'le:end');
+  await store.hset(key, 'ls:2', { at: Date.now() });
+  const guarded = await store.hsetUnless(key, 'r:b', { score: 7 }, 'ls:2', 'le:end');
+  const after = await store.hgetall(key);
+  check('⑨ 守卫都不在：写了、回 true', clean === true && after['r:a']?.score === 5, `${clean} ${JSON.stringify(after['r:a'])}`);
+  check('⑨ 有一格守卫在：没写、回 false', guarded === false && after['r:b'] === undefined, `${guarded} ${JSON.stringify(after['r:b'])}`);
+  // 那一头不认 EVAL：退回「HMGET 看一眼 → HSET」，结果一样
+  globalThis.__storeHook = async (args) => {
+    if (String(args[0]).toUpperCase() === 'EVAL') throw new Error('ERR unknown command（门里注入的）');
+  };
+  const viaTwoBlocked = await store.hsetUnless(key, 'r:c', { score: 9 }, 'ls:2', 'le:end');
+  const viaTwoOk = await store.hsetUnless(key, 'r:d', { score: 11 }, 'ls:3', 'le:end');
+  globalThis.__storeHook = undefined;
+  const two = await store.hgetall(key);
+  check('⑨ 不认 EVAL：退回两步，守卫在就不写、不在就写', viaTwoBlocked === false && two['r:c'] === undefined &&
+    viaTwoOk === true && two['r:d']?.score === 11, `${viaTwoBlocked} ${viaTwoOk} ${JSON.stringify(two['r:d'])}`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

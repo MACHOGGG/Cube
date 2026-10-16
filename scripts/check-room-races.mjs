@@ -42,6 +42,13 @@
  *   ⑰ 离开撞上开局            → 走的那一局照记（一次），而记账不许把他接回来
  *   ⑱ 重进撞上开局            → 认回自己那把椅子，而走之前那点分不许记第二遍
  *
+ * 10-15 补充 S5（L-3，连同 10-14 方案 G-2b）加的四节：
+ *
+ *   ⑩丙 报分的快照和一整次开局交错（钩子钉死两种） → 只许明说没收下，第 2 局那一格干净
+ *   ⑲ 开下一局那一两秒（r: 已清、meta 未写）        → 轮询不许读到「还没完」，「不等了」钉不住第 2 局
+ *   ⑳ 开局中途摔了、20 秒后接手                     → 五个人的账都对，按过《离开》的人不多记一局
+ *   ㉑ 刷新一下网页（bye 之后的宽限期）             → 这一局还等他，过了 10 秒才不等
+ *
  * ④ 的守卫本身没问题，它挡的正是断线重连带回来的旧分。要守的是它挡完之后的
  * 两件事：**座位要放下**（不然全屋等一个在打旧局的人，等到天荒地老），以及
  * **丢掉了要说得出来**（从前静默回 200，客户端会拿同一个对不上的局次一直报
@@ -1055,6 +1062,187 @@ async function agePlay(code, playerIds, ranForS = 20) {
     }
   }
   check('⑱ 重进撞上开局：十一档错位，椅子认得回、分不记两遍', worst === null, worst || '');
+}
+
+// ---- ⑩丙 报分进门读的快照，和一整次开局交错（10-15 补充 S5，L-3 ④ FIX-10） ----------------
+//
+// ⑩ 扫的是微任务错位；这一节用库的钩子把两种交错**钉死**（10-11 方案 P9 那一推回报过的老缝：⑩ 在错位 20 上偶尔量
+// 到「第三种结局」）。客人那一条报分先读完快照（第 1 局、没有锁），停在「写」那一下；然后：
+//   · 记账中间：开局抢到锁、读过他那一格之后，放报分去写，再让记账清那一格——原先 777 被紧接着清成 CLEAR_ROUND，
+//     没记账、也没告诉他没收下；
+//   · 整次开局之后：等开局整个办完（第 2 局已经开出来）再放报分去写——原先把带 final 的 777 写进**第 2 局**那一格，
+//     他第 2 局整局报分都被挡掉。
+// 两种都只许「明说没收下」（scoreDropped），第 2 局那一格干干净净，而且他第 2 局报分照收。
+for (const when of ['记账中间', '整次开局之后']) {
+  const { code, host, guest } = await openRoom({ aged: false });
+  const st0 = await call({ action: 'state', code, ...host });
+  await new Promise((r) => setTimeout(r, Math.max(0, st0.body.startAt - Date.now() + 40)));
+  await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 1, round: 1 });
+  // 和 ⑩ 一样：客人被判成「九十秒没消息」，屋主才按得下《再来》。
+  const raw = await hgetall(roomKey(code));
+  await hsetRace(roomKey(code), 'p:' + guest.playerId, { ...raw['p:' + guest.playerId], joinedAt: Date.now() - 95_000 });
+  await hsetRace(roomKey(code), 'h:' + guest.playerId, { lastSeen: Date.now() - 95_000 });
+
+  const latch = () => {
+    let open;
+    const p = new Promise((r) => (open = r));
+    return { p, open };
+  };
+  const atWrite = latch(); // 报分走到「写」那一下了
+  const letWrite = latch(); // 放它去写
+  const startRead = latch(); // 记账读过他那一格了
+  const scoreDone = latch(); // 报分那一条回包了
+  let held = false;
+  globalThis.__storeHook = async (args) => {
+    const cmd = String(args[0]).toUpperCase();
+    if (!held && (cmd === 'HSET' || cmd === 'EVAL') && args.some((a) => String(a).includes('"score":777'))) {
+      held = true;
+      atWrite.open();
+      await letWrite.p;
+      return;
+    }
+    if (when !== '记账中间' || args[1] !== roomKey(code) || args[2] !== 'r:' + guest.playerId) return;
+    if (cmd === 'HGET') startRead.open();
+    if (cmd === 'HSET' && String(args[3]).includes('"finished":false')) await scoreDone.p;
+  };
+  const scoreP = call({ action: 'score', code, ...guest, score: 777, finished: true, seconds: 33, round: 1 }).then((r) => {
+    scoreDone.open();
+    return r;
+  });
+  await atWrite.p;
+  const startP = call({ action: 'start', code, ...host, mode: 'square' });
+  if (when === '记账中间') await startRead.p;
+  else await startP;
+  letWrite.open();
+  const [sr, started] = await Promise.all([scoreP, startP]);
+  globalThis.__storeHook = undefined;
+
+  const after = await hgetall(roomKey(code));
+  const cell = after['r:' + guest.playerId] || {};
+  check(`⑩丙 ${when}（尺子）：第 2 局开出来了`, started.status === 200 && after.meta.round === 2,
+    `${started.status} round=${after.meta.round}`);
+  check(`⑩丙 ${when}：这一条明说没收下（scoreDropped）`, sr.body.scoreDropped === true, JSON.stringify(sr.body.scoreDropped));
+  check(`⑩丙 ${when}：第 2 局那一格没被写进 777 / final`, !cell.final && !cell.score, JSON.stringify(cell));
+  const t = after['t:' + guest.playerId] || {};
+  check(`⑩丙 ${when}：也没被悄悄记进账（total 0）`, !(t.total > 0), JSON.stringify(t));
+  // 第 2 局他照常打：报上来的分收得下
+  await agePlay(code, [host.playerId, guest.playerId], OPEN_RAN_S);
+  const r2 = await call({ action: 'score', code, ...guest, score: 40, finished: false, round: 2 });
+  check(`⑩丙 ${when}：他第 2 局报分照收`, !r2.body.scoreDropped && seatOf(r2, guest.playerId).score === 40,
+    `dropped=${r2.body.scoreDropped} score=${seatOf(r2, guest.playerId).score}`);
+}
+
+// ---- ⑲ 开下一局的那一两秒（10-15 补充 S5，L-3 ① FIX-1） ----------------------------------
+//
+// 记账一个座位一个座位把 `r:` 清成 CLEAR_ROUND，meta 写在最后。原先清过的座位 finished 成了假，roundOver 就当他「人
+// 在、还没交卷」：这一两秒里轮询读到「第 1 局、还没完」——客人盖上转圈的等待页，屋主闪出「按住不等了」。这一闪里
+// 屋主真按了「不等了」，force 把已经清零的那一格（已经是第 2 局的）写成 finished / final / forced，他第 2 局整局报分
+// 作废。钩子把 meta 那一笔压住，在「r: 已清、meta 未写」这一拍里轮询八次、再按一次「不等了」。
+{
+  const { code, host, guest } = await openRoom();
+  await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 10, round: 1 });
+  await call({ action: 'score', code, ...guest, score: 200, finished: true, seconds: 11, round: 1 });
+  const before = await call({ action: 'state', code, ...guest });
+  check('⑲（尺子）开局前：第 1 局已经算结束', before.body.round === 1 && before.body.roundOver === true,
+    `round=${before.body.round} roundOver=${before.body.roundOver}`);
+  const seen = [];
+  let forced = null;
+  let held = false;
+  globalThis.__storeHook = async (args) => {
+    if (held || String(args[0]).toUpperCase() !== 'HSET' || args[1] !== roomKey(code) || args[2] !== 'meta') return;
+    held = true;
+    for (let i = 0; i < 8; i++) {
+      const st = await call({ action: 'state', code, ...guest });
+      seen.push(`${st.body.round}:${st.body.roundOver}`);
+    }
+    forced = await call({ action: 'force', code, ...host });
+  };
+  const started = await call({ action: 'start', code, ...host, mode: 'square' });
+  globalThis.__storeHook = undefined;
+  check('⑲（尺子）钩子压住了 meta 那一笔、开局照样办完', held && started.status === 200 && started.body.round === 2,
+    `held=${held} ${started.status} round=${started.body.round}`);
+  check('⑲ 那一两秒里轮询一次都没读到「第 1 局、还没完」', seen.length === 8 && seen.every((x) => x === '1:true'),
+    seen.join(' '));
+  check('⑲ 那一拍按「不等了」：回 200、不报错', forced && forced.status === 200, forced && `${forced.status} ${forced.body.error}`);
+  const after = await hgetall(roomKey(code));
+  for (const [who, p] of [['屋主', host], ['客人', guest]]) {
+    const cell = after['r:' + p.playerId] || {};
+    check(`⑲ ${who}：第 2 局那一格没被「不等了」钉死（没有 final / forced）`, !cell.final && !cell.forced, JSON.stringify(cell));
+  }
+  await agePlay(code, [host.playerId, guest.playerId], OPEN_RAN_S);
+  const r2 = await call({ action: 'score', code, ...guest, score: 60, finished: false, round: 2 });
+  check('⑲ 客人第 2 局报分照收', !r2.body.scoreDropped && seatOf(r2, guest.playerId).score === 60,
+    `dropped=${r2.body.scoreDropped} score=${seatOf(r2, guest.playerId).score}`);
+}
+
+// ---- ⑳ 开局中途摔了，20 秒后接手：五个人的账都对（10-15 补充 S5，L-3 ② FIX-2b） --------------
+//
+// 屋主＋四位：甲乙丁交了卷，丙打到 50 分按了《离开》。开第 2 局时库在「丁那一格清回 CLEAR_ROUND」那一下摔了（502），
+// 锁留在那儿；20 秒后（摆库：锁推老）屋主再按，另一条接手重记一遍。原先接手那一遍会把**按过《离开》的人**再记一局
+// （他的 finished 是从 left 推出来的，清不掉），没清完那一格的人也再记一遍。`t:` 上的 `banked: <局次>` 挡住这两种。
+{
+  const h = await call({ action: 'create', name: '屋主', ...who });
+  const code = h.body.code;
+  const host = { playerId: h.body.playerId, playerToken: h.body.playerToken };
+  const people = [];
+  for (const name of ['甲', '乙', '丙', '丁']) {
+    const g = await call({ action: 'join', code, name });
+    people.push({ playerId: g.body.playerId, playerToken: g.body.playerToken });
+  }
+  const [jia, yi, bing, ding] = people;
+  await call({ action: 'start', code, ...host, mode: 'square' });
+  await agePlay(code, [host.playerId, ...people.map((p) => p.playerId)], OPEN_RAN_S);
+  const scores = [[host, 100], [jia, 200], [yi, 300], [ding, 400]];
+  for (const [p, n] of scores) await call({ action: 'score', code, ...p, score: n, finished: true, seconds: 10, round: 1 });
+  await call({ action: 'score', code, ...bing, score: 50, finished: false, round: 1 });
+  await call({ action: 'leave', code, ...bing });
+
+  let thrown = false;
+  globalThis.__storeHook = async (args) => {
+    if (thrown || String(args[0]).toUpperCase() !== 'HSET' || args[1] !== roomKey(code)) return;
+    if (args[2] === 'r:' + ding.playerId && String(args[3]).includes('"finished":false')) {
+      thrown = true;
+      throw new Error('store down (gate)');
+    }
+  };
+  const first = await call({ action: 'start', code, ...host, mode: 'square' });
+  globalThis.__storeHook = undefined;
+  check('⑳（尺子）开局在半路摔了（502），第 2 局没开出来', thrown && first.status === 502, `thrown=${thrown} ${first.status}`);
+  const mid = await call({ action: 'state', code, ...jia });
+  check('⑳ 摔了之后：第 1 局一直算结束（不翻回「还在打」）', mid.body.round === 1 && mid.body.roundOver === true,
+    `round=${mid.body.round} roundOver=${mid.body.roundOver}`);
+  await hsetRace(roomKey(code), 'ls:2', { at: Date.now() - 21_000 });
+  const second = await call({ action: 'start', code, ...host, mode: 'square' });
+  check('⑳ 20 秒后接手：第 2 局开出来了', second.status === 200 && second.body.round === 2,
+    `${second.status} round=${second.body.round} ${second.body.error || ''}`);
+  const fin = await call({ action: 'state', code, ...host });
+  const want = [['屋主', host, 100], ['甲', jia, 200], ['乙', yi, 300], ['丙（按了离开）', bing, 50], ['丁（那一格没清完）', ding, 400]];
+  for (const [name, p, total] of want) {
+    const q = seatOf(fin, p.playerId);
+    check(`⑳ ${name}：total ${total}、rounds 1（接手那一遍没再记一次）`, q.total === total && q.rounds === 1,
+      `total=${q.total} rounds=${q.rounds}`);
+  }
+}
+
+// ---- ㉑ 刷新一下网页：宽限期里这一局还等他（10-14 方案 G-2b：seatOut） -------------------------
+//
+// lastSeen 是 0 只有一种来路：bye（刷新一次页面发的也是它），该等的是 BYE_GRACE_MS（10 秒）。原先 roundOver 自己算
+// 「离最后一次露面过了 90 秒」，少了「刚说过 bye 的不算」：一局打了 90 秒以上、某人刷新一下，seenFrom 退回他入座
+// 或开局那一刻，roundOver 当场说「不用等他了」，屋主一按《再来》，刷新回来的人这一局就没了。摆库造条件（这一局开了
+// 200 秒、bye 是 2 秒前 / 10.5 秒前说的），不真等。
+{
+  const { code, host, guest } = await openRoom({ aged: false });
+  await agePlay(code, [host.playerId, guest.playerId], 200);
+  await call({ action: 'score', code, ...host, score: 100, finished: true, seconds: 190, round: 1 });
+  await hsetRace(roomKey(code), 'h:' + guest.playerId, { lastSeen: 0, byeAt: Date.now() - 2000 });
+  const soon = await call({ action: 'state', code, ...host });
+  check('㉑ 刷新后 2 秒：这一局还在等他（roundOver 假）', soon.body.roundOver === false, String(soon.body.roundOver));
+  const blocked = await call({ action: 'start', code, ...host, mode: 'square' });
+  check('㉑ 刷新后 2 秒：屋主开不了下一局（started）', blocked.status === 409 && blocked.body.error === 'started',
+    `${blocked.status} ${blocked.body.error}`);
+  await hsetRace(roomKey(code), 'h:' + guest.playerId, { lastSeen: 0, byeAt: Date.now() - 10_500 });
+  const later = await call({ action: 'state', code, ...host });
+  check('㉑ 过了宽限期（10 秒）还没回来：不再等他（roundOver 真）', later.body.roundOver === true, String(later.body.roundOver));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

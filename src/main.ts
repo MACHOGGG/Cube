@@ -1169,7 +1169,7 @@ function showMultiplayer() {
       // 存还以为自己是天才而拐进《账户》窗，那里没有登录入口。世界排行榜那
       // 一处（onReLogin）走的就是这一句。
       onSessionGone: () => openAuthWindow(currentLang, showMultiplayer),
-      // Off to the home page, where all eight boards live with their icons.
+      // Off to the home page, where all six boards live with their icons.
       onPickMode: (code) => {
         setPickingForRoom(code);
         showMenu();

@@ -360,14 +360,52 @@ export async function hdelIfSame(key, field, value) {
   }
 }
 
-/** 内存库只认得 delIfSame、hdelIfSame、bump 那三段脚本：它本来就是单进程，一个函数里做完，同样是一步。 */
+/**
+ * hash 里**这几格一格都不在**，才写那一格——看和写是同一步（10-15 补充 S5，L-3 ④）。
+ *
+ * 小屋报分用它（room.js 的 score）：守的是「下一局的开局锁」和「散场锁」那两格。原先报分进门读一份快照，看那份
+ * 快照里没有锁就写——中间要是插进来一整次开下一局，这一份分就写进了**下一局**那一格：没记账、也没告诉他没收下；
+ * 写的又是带 final 的交卷，他下一局整局报分都被挡掉。
+ *
+ * 退路和 delIfSame 一样：那一头不认 EVAL 就退回「HMGET 看一眼 → HSET」两步，窗口一次往返那么宽。
+ *
+ * @returns 写了 true；有一格守卫在、没写 false。
+ */
+const HSET_UNLESS =
+  "for i = 3, #ARGV do if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 1 then return 0 end end " +
+  "redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) return 1";
+export async function hsetUnless(key, field, value, ...guards) {
+  const enc = encode(value);
+  try {
+    return Number(await command(['EVAL', HSET_UNLESS, 1, key, field, enc, ...guards])) === 1;
+  } catch {
+    if (guards.length) {
+      const seen = await command(['HMGET', key, ...guards]);
+      if ((seen || []).some((v) => v !== null && v !== undefined)) return false;
+    }
+    await command(['HSET', key, field, enc]);
+    return true;
+  }
+}
+
+/** 内存库只认得 delIfSame、hdelIfSame、hsetUnless、bump 那四段脚本：它本来就是单进程，一个函数里做完，同样是一步。 */
 function memoryEval(args) {
   const [, script, , key, ...argv] = args;
-  if (script !== DEL_IF_SAME && script !== HDEL_IF_SAME && script !== BUMP) throw new Error('memory store: unknown script');
+  if (script !== DEL_IF_SAME && script !== HDEL_IF_SAME && script !== HSET_UNLESS && script !== BUMP) {
+    throw new Error('memory store: unknown script');
+  }
   const due = expiries.get(key);
   if (due !== undefined && due < Date.now()) {
     mem.delete(key);
     expiries.delete(key);
+  }
+  if (script === HSET_UNLESS) {
+    const [field, value, ...guards] = argv;
+    const h = mem.get(key) instanceof Map ? mem.get(key) : new Map();
+    if (guards.some((g) => h.has(String(g)))) return 0;
+    h.set(String(field), value);
+    mem.set(key, h);
+    return 1;
   }
   if (script === BUMP) {
     const next = (Number(mem.get(key) ?? 0) || 0) + 1;
