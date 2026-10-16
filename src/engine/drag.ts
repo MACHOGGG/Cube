@@ -135,6 +135,8 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
    * 见 engine/dragChain.ts 的 chainSet）；第二根手指抬起来那一下还会被当成第一根松手，把这一步按它的位置落下去。
    */
   let finger: number | null = null;
+  /** 这一下是哪一类指针（mouse / touch / pen）：判「上一次的抬起丢了」要用（见 down）。 */
+  let kind = '';
 
   /** 把记号挪到 g 那一颗身上。g 为空就只是摘掉。 */
   function mark(g: Grab | null | void) {
@@ -148,8 +150,39 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
     marked = next;
   }
 
+  /**
+   * 把这一下作罢（10-15 补充 L-6）：放下所有状态，再告诉棋盘「0 位移」——slideSources 遇到 0 位移回 null，不改网格、
+   * 不计步、只重画。抬起丢了、指针捕获抛错、鼠标按键其实已经松开、浏览器收回了捕获、pointercancel，都走这一个出口。
+   */
+  function cancel() {
+    if (!active) return;
+    const id = finger;
+    active = false;
+    finger = null;
+    locked = false;
+    target.classList.remove(DRAG_CLASS);
+    mark(null);
+    if (id !== null) {
+      try {
+        if (target.hasPointerCapture?.(id)) target.releasePointerCapture(id);
+      } catch {
+        // 指针已经不在了：本来就没有捕获可放。
+      }
+    }
+    cb.onEnd(0, 0);
+  }
+
   function down(e: PointerEvent) {
-    if (active) return;
+    // **只认主按钮**（左键；触摸、笔的主按钮也是 0，10-15 补充 L-6 ①）。原先不看是哪个键：电脑上右键按住拖两格，第 2 行
+    // 就滑了两格、记一步；Mac、Linux 右键一按下就弹菜单、pointerup 不来，之后不按键只挪鼠标第 2 行就跟着走，再左键拖
+    // 第 4 行，被移动的还是第 2 行。主菜单那条轴（modeAxis.ts、modeStrip.ts）早就只认左键，棋盘这一层漏了。
+    if (e.button !== 0) return;
+    if (active) {
+      // 已经在拖、又来了一个**同一类指针的主指针**按下：上一次的抬起丢了（10-15 补充 L-6 ②）。先把上一下作罢，再照常
+      // 开始这一下。第二根手指不是主指针，照旧不理（10-11 方案 B-3）。
+      if (!(e.isPrimary && e.pointerType === kind)) return;
+      cancel();
+    }
     cb.onBeforeStart?.();
     if (!cb.isActive()) {
       cb.onRejected?.();
@@ -162,12 +195,25 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
     sx = e.clientX;
     sy = e.clientY;
     finger = e.pointerId;
+    kind = e.pointerType;
     mark(cb.onStart(e.clientX - rect.left, e.clientY - rect.top));
-    target.setPointerCapture(e.pointerId);
+    // 捕获抛错就作罢（10-15 补充 L-6 ②）。原先裸调，而这时 active 已经为真：合成的触摸 pointerdown 让它当场抛
+    // NotFoundError，之后真手指拖一枚都不动——暂停→继续、暂停→《再来一局》都救不回，状态记在拖拽层身上，
+    // resetBoard 管不到。
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      cancel();
+    }
   }
 
   function move(e: PointerEvent) {
     if (!active || e.pointerId !== finger) return;
+    // 鼠标的按键其实已经全松开了还在「拖」：松手那一下没送到（10-15 补充 L-6 ②），作罢。
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+      cancel();
+      return;
+    }
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
     if (!locked) {
@@ -229,10 +275,34 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
     e.preventDefault();
   }
 
+  /**
+   * pointercancel：浏览器把这根指针收走了（手势识别器抢走、来电……）。这一下作罢，不当成松手（10-15 补充 L-6；原先
+   * 和 pointerup 同一个处理，于是这一步按被收走那一刻的位置落下去）。只认正在拖的那一根。
+   */
+  function cancelled(e: PointerEvent) {
+    if (!active || e.pointerId !== finger) return;
+    cancel();
+  }
+  /**
+   * 捕获丢了的兜底（10-15 补充 L-6 ②）：只认棋盘这一层自己丢的。触摸时浏览器先隐式捕获在手指落下的那一枚棋子上，换到
+   * 棋盘这一层的时候，那一枚会冒上来一条 lostpointercapture——那一条不是丢了，要排除（e.target 是棋子）。正常松手
+   * 之后它也会来一条，那时 active 已经落回 false。
+   */
+  function lost(e: PointerEvent) {
+    if (!active || e.pointerId !== finger || e.target !== target) return;
+    cancel();
+  }
+  /** 棋盘上不弹右键菜单（10-15 补充 L-6 ①）：弹出来的那一下 pointerup 不会来。 */
+  function noMenu(e: Event) {
+    e.preventDefault();
+  }
+
   target.addEventListener('pointerdown', down);
   target.addEventListener('pointermove', move);
   target.addEventListener('pointerup', up);
-  target.addEventListener('pointercancel', up);
+  target.addEventListener('pointercancel', cancelled);
+  target.addEventListener('lostpointercapture', lost);
+  target.addEventListener('contextmenu', noMenu);
   target.addEventListener('touchmove', blockScroll, { passive: false });
 
   return () => {
@@ -240,7 +310,9 @@ export function attachDrag(target: HTMLElement, cb: DragCallbacks, threshold = 1
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
-    target.removeEventListener('pointercancel', up);
+    target.removeEventListener('pointercancel', cancelled);
+    target.removeEventListener('lostpointercapture', lost);
+    target.removeEventListener('contextmenu', noMenu);
     target.removeEventListener('touchmove', blockScroll);
   };
 }

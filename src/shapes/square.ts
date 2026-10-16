@@ -1321,7 +1321,16 @@ export function createSquareGame(): ShapeGame {
         origin: refs.boardEl,
         // A touch arriving mid-reveal runs the rest of it now rather than
         // being turned away — see GameController.hurry().
-        onBeforeStart: () => controller.hurry(),
+        //
+        // **先收尾、再 hurry**（10-15 补充 L-6 ③）：松手之后那条链还要收尾最多 260ms（dragChain.ts 的 SETTLE_CAP_MS），
+        // resolveMove 要等它收完才调。原先新的一下按下时 hurry() 先跑——那时还没有连锁可快进——接着 onStart 里的 flush()
+        // 才把收尾收完、resolveMove，得分的话 resolving 为真，这一下被吞掉；260ms 之后再按就照常接住，快一点被吞、慢一点
+        // 接住。现在先把收尾收完（得分的连锁就在这一刻开始），hurry 把它一起快进，这一下照常接住。代价：上一步的高亮、
+        // 翻面动画被快进——和原先 260ms 之后再按一样。
+        onBeforeStart: () => {
+          if (drag?.chain && !drag.chain.flush()) drag.chain.stop();
+          controller.hurry();
+        },
         isActive: () => controller.started && !controller.paused && !controller.gameOver && !controller.resolving,
         onRejected: () => vibrate(15),
         onStart(x, y) {
@@ -1331,7 +1340,9 @@ export function createSquareGame(): ShapeGame {
           // 上一条链在收尾就当场收完（flush）；不在收尾——还在跟着手指走——就停掉，不许被下面那一句换掉之后
           // 没人管、一直跑（10-11 方案 B-3）。
           if (drag?.chain && !drag.chain.flush()) drag.chain.stop();
+          // 兜底：收尾和 hurry 之后还在结算（不该有）。不再无声地吞掉这一下，至少震一下（10-15 补充 L-6 ③）。
           if (controller.resolving) {
+            vibrate(15);
             drag = null;
             return;
           }

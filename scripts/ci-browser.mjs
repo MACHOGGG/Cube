@@ -484,10 +484,21 @@ export const GATES = [
   // 脚本名照旧叫 smooth-touch（清单按路径认门，换名等于撤一道加一道）。
   // ④ 两根手指（10-11 方案 B-3）：第一根拖着、第二根落下（CDP 双触点），抬起来之后一个节点都不再长、回主菜单后
   // requestAnimationFrame 回到进局之前的频率——原先第一根那条拖动链没人停，每秒多 2196 个节点，离开这一局也停不下。
+  // ⑤⑥（10-15 补充 L-6）：电脑上右键按住拖不动棋子、右键抬起没送到之后左键拖的就是那一行；合成触摸让
+  // setPointerCapture 抛错之后照常拖得动。
   {
     name: '整页滚动是原生的（电脑手机都不接平滑滚动）',
-    shard: 'a', secs: 25, port: 8967,
-    run: ['scripts/check-smooth-touch.mjs', SERVER],
+    shard: 'a', secs: 45, port: 8967,
+    run: ['scripts/check-smooth-touch.mjs', SERVER, '--part=touch'],
+  },
+  // 同一道门的 ⑦（10-15 补充 L-6 ③）：得分之后 80ms 按下第二手，六副棋盘都接住——原先这一下被吞（松手后那条链还要收尾
+  // 最多 260ms，收完才结算、得分就 resolving，新的一下被 `drag = null` 吞掉）。种子码开局、慢一遍挑手、快一遍照原样重放，
+  // 两分半上下，所以不放进 a 片，和种子码那一道同一片（seed-deal 原先只有它一道；oldcss 那一片规定只放它自己）。
+  // 一台自己的服务器。
+  {
+    name: '得分之后马上按第二手：六副棋盘都接住',
+    shard: 'seed-deal', secs: 160, port: 8985,
+    run: ['scripts/check-smooth-touch.mjs', SERVER, '--part=boards'],
   },
 
   // 暂停到底停住了没有（10-11 方案 B-4 起收进 CI，G-4）：暂停中秒表不走、连锁那一拍收起来、继续之后不补算；拖到一半

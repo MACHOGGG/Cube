@@ -1186,6 +1186,10 @@ export function createSquareDiamondGame(): ShapeGame {
           // 那几拍一次跑完，那几拍自己又会 render → layoutBoard → cancel。
           const snap = zoom.cancel();
           const before = fit;
+          // 上一条链还在收尾：先收完（得分的连锁就在这一刻开始），下面的 hurry 把它一起快进，这一下照常接住（10-15 补充
+          // L-6 ③；原先 hurry 先跑、onStart 里才收尾，得分的话这一下被吞）。放在 before 之后：收尾引出的连锁也算进「格子
+          // 挪没挪」。
+          if (drag?.chain && !drag.chain.flush()) drag.chain.stop();
           controller.hurry();
           // hurry 真的又走了几拍的话，连「没有变换时的位置」都变了，这个修正量就不作数了。
           const moved = fit.unit !== before.unit
@@ -1201,7 +1205,9 @@ export function createSquareDiamondGame(): ShapeGame {
           // 上一条链在收尾就当场收完（flush）；不在收尾——还在跟着手指走——就停掉，不许被下面那一句换掉之后
           // 没人管、一直跑（10-11 方案 B-3）。
           if (drag?.chain && !drag.chain.flush()) drag.chain.stop();
+          // 兜底：收尾和 hurry 之后还在结算（不该有）。不再无声地吞掉这一下，至少震一下（10-15 补充 L-6 ③）。
           if (controller.resolving) {
+            vibrate(15);
             drag = null;
             dragFix = null;
             return;
