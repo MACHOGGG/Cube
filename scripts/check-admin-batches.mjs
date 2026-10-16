@@ -363,5 +363,50 @@ check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard())
   check('⑰（反向对照）抄回来的那一份会被认出来', own('const ADMIN_TOKEN_MIN = 32;\nfunction adminToken(given) {'));
 }
 
+// ── ⑱ 《量一下》两项只读指标：上线后那两件事做没做（10-15 补充 L-5，并进 10-14 方案 P4）─────────────────────────
+//
+// 超过上界的行、0 分的行（《重建榜单》点过就是 0），lbnames 里没按现行规则整理过的条数（《建立昵称索引》点过就是 0）。
+// 先整体重建一次把底子归零，再造一行超上界、一行 0 分、一条老昵称（v2），三项各是 1；点重建、建索引之后归 0。
+{
+  const { stepCeiling } = await import('../api/_maxscore.js');
+  let ipN = 0;
+  const stats = async () => (await call(scores, { action: 'scoreStats', token: TOKEN }, `10.18.0.${++ipN}`)).body || {};
+  const rebuildAll = async (opts) => {
+    let r = await call(scores, { action: 'rebuild', token: TOKEN, batch: 50, ...opts }, `10.18.1.${++ipN}`);
+    let guard = 0;
+    while (r.body?.done === false && guard++ < 60) {
+      r = await call(scores, { action: 'rebuild', token: TOKEN, resume: r.body.resume, batch: 50, ...opts }, `10.18.1.${++ipN}`);
+    }
+    return r;
+  };
+  await rebuildAll({ nicknames: true });
+  const clean = await stats();
+  check('⑱（尺子）重建、建索引之后：三项都是 0', clean.ceiling?.over === 0 && clean.ceiling?.zero === 0 && clean.nicknames?.unclean === 0,
+    JSON.stringify({ ceiling: clean.ceiling, nicknames: clean.nicknames }));
+  await store.zadd('lb:square:base', stepCeiling('square') + 1, emails[0]);
+  await store.zadd('lb:square:base', 0, emails[1]);
+  await store.hset('lbnames', emails[2], { name: '老名字', v: 2 });
+  const dirty = await stats();
+  check('⑱ 造一行超上界、一行 0 分：ceiling.over 1、ceiling.zero 1（那张榜上也各记 1）',
+    dirty.ceiling?.over === 1 && dirty.ceiling?.zero === 1 && dirty.boards?.['square:base']?.over === 1 && dirty.boards?.['square:base']?.zero === 1,
+    JSON.stringify({ ceiling: dirty.ceiling, base: dirty.boards?.['square:base'] }));
+  check('⑱ 一条老昵称（v2）：nicknames.unclean 1', dirty.nicknames?.unclean === 1, JSON.stringify(dirty.nicknames));
+  check('⑱ 回包里没有名字、没有邮箱', !JSON.stringify({ c: dirty.ceiling, n: dirty.nicknames }).includes('@') &&
+    !JSON.stringify(dirty).includes('老名字'));
+  await rebuildAll({});
+  const rebuilt = await stats();
+  check('⑱ 《重建榜单》之后：超上界、0 分都归 0（昵称那一项不动）', rebuilt.ceiling?.over === 0 && rebuilt.ceiling?.zero === 0 &&
+    rebuilt.nicknames?.unclean === 1, JSON.stringify({ ceiling: rebuilt.ceiling, nicknames: rebuilt.nicknames }));
+  await rebuildAll({ nicknames: true });
+  const indexed = await stats();
+  check('⑱ 《建立昵称索引》之后：没清洗过的昵称归 0', indexed.nicknames?.unclean === 0, JSON.stringify(indexed.nicknames));
+  // 反向对照：判据认得出另外两种「没整理过」——名字过不了现行规则、索引那一格不指着他。
+  await store.hset('lbnames', emails[3], { name: 'B', v: 3 });
+  await store.hset('lbnames', emails[4], { name: '新名字', v: 3 });
+  const odd = await stats();
+  check('⑱（反向对照）单个字母（过不了 checkNickname）、索引里没有他的 v3：各算一条', odd.nicknames?.unclean === 2,
+    JSON.stringify(odd.nicknames));
+}
+
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);

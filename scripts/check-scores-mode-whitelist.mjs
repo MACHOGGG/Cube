@@ -230,7 +230,8 @@ const X = await makePlayer('x@example.com');
   const st = await call({ action: 'scoreStats', token: TOKEN }, '192.0.2.5');
   const boards = st.payload?.boards || {};
   check('⑤ 回了每一张现行的榜', st.status === 200 && ['square:base', 'circle:base', 'square:puzzle3', 'circleSeven', 'triangleBig'].every((b) => b in boards), Object.keys(boards).join(' '));
-  check('⑤ 每一张只有 n / max / p999 三个数', Object.values(boards).every((v) => Object.keys(v).sort().join() === 'max,n,p999' && Object.values(v).every((x) => typeof x === 'number')));
+  // over / zero 是 10-15 补充 L-5 加的两格（超过上界的行数、0 分的行数）——也只是数。
+  check('⑤ 每一张只有 n / max / p999 / over / zero 五个数', Object.values(boards).every((v) => Object.keys(v).sort().join() === 'max,n,over,p999,zero' && Object.values(v).every((x) => typeof x === 'number')));
   check('⑤ 步步为营那张拆回了分数（360，不是 360000）', boards['square:puzzle3']?.max === 360, JSON.stringify(boards['square:puzzle3']));
   check('⑤ 基础榜的最高分是那 50000', boards['square:base']?.max === 50000, JSON.stringify(boards['square:base']));
   const text = JSON.stringify(st.payload);

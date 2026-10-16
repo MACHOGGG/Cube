@@ -1570,17 +1570,44 @@ async function scoreStats(req, res, body) {
   if (adminRefused(res, body?.token)) return;
   try {
     const boards = {};
+    /*
+     * 两项「上线后要手动点的那两件事做没做」的只读指标（10-15 补充 L-5，并进 10-14 方案 P4）。只有数，没有名字和 id。
+     *
+     *   · ceiling.over / ceiling.zero：现行榜上分数超过这张榜上界（boardCeiling）的行、0 分的行。4adb8cb（10-11 方案
+     *     P2：对账、0 分不上榜）之后点过一次《重建榜单》，这两个数就该是 0——重建按存档重算每个人的 best，超上界的老高分
+     *     不留、0 分不上榜。不是 0，说明那一次还没点。每张榜只看前 5000 行（和上面人数那一栏同一个窗口）。
+     *   · nicknames.unclean：`lbnames` 里没按现行规则整理过的条数——版本位 v 小于 NICK_V 的、存的名字过不了现行
+     *     checkNickname（或者洗出来和存的不是同一个串）的、昵称索引里那一格不指着他的。bd26413（第 16 推）之后点过一次
+     *     《建立昵称索引》，这个数就该是 0。不是 0，说明那一次还没点（判据和 buildNicknameIndex 留下来的样子一一对应）。
+     */
+    let over = 0;
+    let zero = 0;
     for (const boardId of ALL_BOARDS) {
       const rows = await zTop(boardKey(boardId), 5000);
-      const scores = rows.map((row) => decodeBoard(boardId, row.score).score).filter((v) => v > 0);
+      const all = rows.map((row) => decodeBoard(boardId, row.score).score);
+      const cap = boardCeiling(boardId);
+      const overHere = cap > 0 ? all.filter((v) => v > cap).length : 0;
+      const zeroHere = all.filter((v) => !(v > 0)).length;
+      over += overHere;
+      zero += zeroHere;
+      const scores = all.filter((v) => v > 0);
       if (!scores.length) {
-        boards[boardId] = { n: 0, max: 0, p999: 0 };
+        boards[boardId] = { n: 0, max: 0, p999: 0, over: overHere, zero: zeroHere };
         continue;
       }
       // zTop 已经从高到低排好了；保险起见再排一次（拆回分数之后同分的顺序可能变，值不变）。
       scores.sort((a, b) => b - a);
       const at = Math.min(scores.length - 1, Math.ceil(scores.length * 0.001) - 1);
-      boards[boardId] = { n: scores.length, max: scores[0], p999: scores[Math.max(0, at)] };
+      boards[boardId] = { n: scores.length, max: scores[0], p999: scores[Math.max(0, at)], over: overHere, zero: zeroHere };
+    }
+    const names = (await hgetall(NAMES)) || {};
+    const index = (await hgetall(NICK_INDEX)) || {};
+    let unclean = 0;
+    for (const [id, row] of Object.entries(names)) {
+      const name = typeof row?.name === 'string' ? row.name : '';
+      const checked = name ? checkNickname(name) : { ok: false };
+      const tidy = Number(row?.v) >= NICK_V && checked.ok && checked.name === name && index[nickKey(name)] === id;
+      if (!tidy) unclean++;
     }
     // 近 14 天「同一邮箱一小时 15 张码」撞顶的次数（10-15 补充 S7）：只有日子和次数，没有邮箱。
     const capped = [];
@@ -1588,7 +1615,7 @@ async function scoreStats(req, res, body) {
       const day = utcDay(Date.now() - i * 86400_000);
       capped.push({ day, hits: Number(await get(EMAIL_CAPPED_STAT + day)) || 0 });
     }
-    return send(res, 200, { ok: true, boards, capped });
+    return send(res, 200, { ok: true, boards, capped, ceiling: { over, zero }, nicknames: { unclean } });
   } catch {
     return send(res, 502, { error: 'upstream' });
   }
