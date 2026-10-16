@@ -231,12 +231,37 @@ export interface ResidueOpts {
   filler?: boolean;
 }
 
+/**
+ * 最近几次的答案（10-15 补充 L-7）。
+ *
+ * 外边族五副每一步要问两遍同一个盘面：连锁最后一拍 findWholeLineBonuses → stuckAt → edgeResidue 问一遍，结算完
+ * finish() → findStuckGroups → stuckAt 同一盘面、同一门槛再问一遍——两遍都是一整趟穷举。放在这一层（六副共用一处），
+ * 钥匙拼的是答案取决于的全部东西：格子、编码、两组线、可削的线和门槛、得分图案的枚数、是不是三角那一套、老虎机目标。
+ * 答案只看这些（时钟 2026-10 起不进答案，见 residueSearch.ts 的 RESIDUE_BUDGET_MS），所以缓存不会把一个「算不完」
+ * 留给后面那一问。
+ */
+const RECENT_MAX = 4;
+const recent: { key: string; verdict: ResidueVerdict }[] = [];
+
+function verdictKey(built: Built, opts: ResidueOpts, bonus: readonly BonusLine[]): string {
+  return [
+    opts.filler ? 'f' : 'c',
+    opts.matchLen,
+    opts.slot ? JSON.stringify(opts.slot.target) + '@' + opts.slot.need : '-',
+    built.cells.map(([r, c]) => key(r, c)).join(';'),
+    Array.from(built.start).join(','),
+    built.moveLines.map((l) => l.join(',')).join('|'),
+    built.scanLines.map((l) => l.join(',')).join('|'),
+    bonus.map((b) => b.need + ':' + b.cells.join(',')).join('|'),
+  ].join('#');
+}
+
 /** 跑一趟穷举。盘子太大就不跑，直接当「算不完」。 */
 export function residueVerdict(opts: ResidueOpts): ResidueVerdict {
   const built = build(opts.lines, opts.at);
   /*
    * 盘子还大的时候不跑：§4 定的是「**可用** ≤16 枚时」。大盘上那 20000 个状态连一层都展
-   * 不开，答案必然是 'unknown'，白白花掉 250ms——而这一问每走一步都要问一次。
+   * 不开，答案必然是 'unknown'，白白算满两万个盘面——而这一问每走一步都要问一次。
    *
    * ⚠️ 数的是**非 RESIDUE_BLANK** 的那几枚，不是线上的总格数。差的那几枚是**活炸弹**：它
    * 们占着格子、跟着线滑，可一个也配不上，不该算进「可用」。
@@ -249,14 +274,21 @@ export function residueVerdict(opts: ResidueOpts): ResidueVerdict {
   for (let i = 0; i < built.start.length; i++) if (built.start[i] !== RESIDUE_BLANK) usable++;
   if (usable > RESIDUE_MAX_TILES) return 'unknown';
   if (!built.moveLines.length) return 'unknown';
-  return residueSearch({
+  const bonusLines = toBonus(built, opts.bonusLines);
+  const k = verdictKey(built, opts, bonusLines);
+  const hit = recent.find((e) => e.key === k);
+  if (hit) return hit.verdict;
+  const verdict = residueSearch({
     start: built.start,
     moves: opts.filler ? fillerAwareShuffles(built.moveLines) : cyclicShuffles(built.moveLines),
     scanLines: built.scanLines,
     matchLen: opts.matchLen,
     patternHit: opts.slot ? patternHitFor(built, opts.slot) : undefined,
-    bonusLines: toBonus(built, opts.bonusLines),
+    bonusLines,
   });
+  recent.unshift({ key: k, verdict });
+  if (recent.length > RECENT_MAX) recent.length = RECENT_MAX;
+  return verdict;
 }
 
 /**

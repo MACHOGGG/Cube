@@ -100,9 +100,9 @@ export interface ResidueInput {
   patternHit?: (state: Uint16Array) => boolean;
   /** 能被整线消除的线（一条都消不动就给空数组）。 */
   bonusLines: readonly BonusLine[];
-  /** 最多展开几个盘面。默认 20000（v1.3.1 §4 字面值）。 */
+  /** 最多展开几个盘面（只数没见过的新盘面）。默认 20000（v1.3.1 §4 字面值）。 */
   maxStates?: number;
-  /** 最多算多少毫秒。默认 250（同上）。 */
+  /** 最多算多少毫秒。默认不限（10-15 补充 L-7，见 RESIDUE_BUDGET_MS）——只给门用。 */
   budgetMs?: number;
   /** 现在几点了。只给门用——真实时钟在门里不好控。 */
   now?: () => number;
@@ -110,9 +110,17 @@ export interface ResidueInput {
 
 export type ResidueVerdict = 'scores' | 'dead' | 'unknown';
 
-/** v1.3.1 §4 的两个字面值。写成常量是为了让门能引同一个数，而不是各抄一遍。 */
+/** v1.3.1 §4 的盘面数上限。写成常量是为了让门能引同一个数，而不是各抄一遍。 */
 export const RESIDUE_MAX_STATES = 20000;
-export const RESIDUE_BUDGET_MS = 250;
+/**
+ * 时间预算：**默认不限**（10-15 补充 L-7，站长定「结果与设备无关」）。
+ *
+ * 原先是 250ms（v1.3.1 §4）：同一副残局，快手机算完了说「死」、局结束；慢手机 250ms 没算完说「不知道」、局不结束——
+ * 同一副牌在两台设备上两种结局。现在只留盘面数上限（RESIDUE_MAX_STATES），答案只看盘面。代价（实测，6× CPU 节流）：
+ * 六边三角约 0.8–1.5% 的残局步单次超过 250ms，慢手机上会顿 0.4–1.2 秒；要彻底消掉只能改成异步分段算（记进 G-5）。
+ * 参数 budgetMs 留着，门里拿它量「预算用光一律 unknown」。
+ */
+export const RESIDUE_BUDGET_MS = Infinity;
 
 /**
  * 这个盘面此刻能得分吗。
@@ -214,7 +222,9 @@ export function residueSearch(input: ResidueInput): ResidueVerdict {
 
   if (scoresNow(start, scanLines, matchLen, bonusLines, patternHit)) return 'scores';
   if (!moves.length) return 'dead';
-  const deadline = now() + budgetMs;
+  // 不限时就一次都不看钟（门量这一条：不传预算时 now 一次都不被叫）。
+  const timed = Number.isFinite(budgetMs);
+  const deadline = timed ? now() + budgetMs : Infinity;
   const seen = new Set<string>([keyOf(start)]);
   let frontier: Uint16Array[] = [start];
   let expanded = 0;
@@ -223,13 +233,16 @@ export function residueSearch(input: ResidueInput): ResidueVerdict {
     const next: Uint16Array[] = [];
     for (const state of frontier) {
       for (const move of moves) {
-        // 预算在**展开之前**问，不在之后：问在之后的话，最后那一批状态已经算过了，
-        // 时间早超了才发现——那条 250ms 就不是上限而是个大概。
-        if (expanded >= maxStates || now() > deadline) return 'unknown';
-        expanded++;
+        // 时间预算在**展开之前**问，不在之后：问在之后的话，最后那一批状态已经算过了，
+        // 时间早超了才发现——那条预算就不是上限而是个大概。
+        if (timed && now() > deadline) return 'unknown';
         const child = applyShuffle(state, move);
         const key = keyOf(child);
         if (seen.has(key)) continue;
+        // 盘面数**只数没见过的**（10-14 方案 I-6：计数器挪到查重之后）。原先每试一步就加一，撞回见过的盘面也算——
+        // 小残局里绝大多数步都撞回老盘面，两万的上限没走完闭包就用光了，一副 11 枚的死局答「不知道」、局不结束。
+        if (expanded >= maxStates) return 'unknown';
+        expanded++;
         seen.add(key);
         if (scoresNow(child, scanLines, matchLen, bonusLines, patternHit)) return 'scores';
         next.push(child);

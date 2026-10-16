@@ -51,14 +51,15 @@ const { encodeTile, RESIDUE_BLANK, residueSearch, scoresNow, cyclicShuffles, fil
         fillerAwareSource, RESIDUE_MAX_STATES, RESIDUE_BUDGET_MS, colorOf, isDot, isFront } = R;
 
 // ---------------------------------------------------------------------------
-head('【0】尺子：这几样真的导出来了，而且两个预算是方案里那两个字面值');
+head('【0】尺子：这几样真的导出来了；盘面数上限是方案里那个字面值，时间预算默认不限');
 for (const [n, v] of Object.entries({ encodeTile, residueSearch, scoresNow, cyclicShuffles,
                                       fillerAwareShuffles, fillerAwareSource })) {
   check(`导出了 ${n}`, typeof v === 'function');
 }
 // 写死在门里，不从模块读——门和被测件各说一次，才拦得住「有人悄悄把 20000 改成 200」。
 check('maxStates 默认 20000（§4 字面值）', RESIDUE_MAX_STATES === 20000, String(RESIDUE_MAX_STATES));
-check('budgetMs 默认 250（§4 字面值）', RESIDUE_BUDGET_MS === 250, String(RESIDUE_BUDGET_MS));
+// 10-15 补充 L-7（站长定「结果与设备无关」）：原先默认 250ms，同一副残局快手机说「死」、慢手机说「不知道」。
+check('budgetMs 默认不限（10-15 补充 L-7，原先 250）', RESIDUE_BUDGET_MS === Infinity, String(RESIDUE_BUDGET_MS));
 check('空白编码是 0', RESIDUE_BLANK === 0, String(RESIDUE_BLANK));
 
 // 编解码自洽：色号 0…7 × 正反两面，来回一趟都要原样。
@@ -248,6 +249,21 @@ head('【4】预算：算不完一律 unknown，**绝不是 dead**');
     const live = [{ cells: [0, 1], get src() { t2++; return [1, 0]; } }];
     residueSearch({ start, moves: live, scanLines: lines, matchLen: 4, bonusLines: [] });
     check('（尺子）预算够的时候这个探针会被碰到', t2 > 0, `碰了 ${t2} 次`);
+  }
+  // 不传预算：钟一次都不看（10-15 补充 L-7）。原先默认 250ms，每展开一步问一次钟——答案跟着设备快慢走。
+  {
+    let asked = 0;
+    const v2 = residueSearch({
+      start, moves: cyclicShuffles(lines.slice(0, 2)), scanLines: lines, matchLen: 4, bonusLines: [],
+      maxStates: 50, now: () => (asked++, 0),
+    });
+    check('不传预算时不看钟（now 一次都没被叫）', asked === 0, `${v2} / 叫了 ${asked} 次`);
+    let asked2 = 0;
+    residueSearch({
+      start, moves: cyclicShuffles(lines.slice(0, 2)), scanLines: lines, matchLen: 4, bonusLines: [],
+      maxStates: 50, budgetMs: 1e9, now: () => (asked2++, 0),
+    });
+    check('（尺子）传了预算就看钟', asked2 > 0, `叫了 ${asked2} 次`);
   }
 }
 {
@@ -451,6 +467,58 @@ head('【8】六边圆球的中心洞：扫描时把两边断开，滑动时不�
   check('stuckKeysOf：给几格就是那几格的键（同一格只算一次）', keys instanceof Set && [...keys].sort().join(' ') === '0,1 2,3',
     keys ? [...keys].join(' ') : String(keys));
   check('stuckKeysOf：没有卡住的（null）就是 null——棋盘照这个把灰全撤掉', S.stuckKeysOf(null) === null);
+}
+
+// ---------------------------------------------------------------------------
+head('【9】盘面数只数没见过的；同一步问两遍只算一次（10-15 补充 L-7，连同 10-14 方案 I-6 的计数器挪位）');
+{
+  // I-6 那一副：六边三角 54、1×2，11 枚死局。原先每试一步就把计数加一（撞回见过的盘面也算），两万的上限没走完闭包就用
+  // 光了，答「不知道」、局不结束；计数器挪到查重之后，闭包走得完，答「死」。线照 shapes/triangle.ts 原样取（带族名和
+  // 法向偏移，outerEdges 要用）。格子是 [行, 列, 颜色, 是不是星星]。
+  const { shapeEdgeLines } = await import('./lib/boardFacts.mjs');
+  const LINES = await shapeEdgeLines('triangle.ts');
+  const DEAD11 = [[1, 2, 1, 0], [2, 3, 0, 1], [2, 4, 2, 0], [3, 4, 0, 0], [3, 5, 5, 0], [4, 4, 0, 1], [1, 3, 3, 0], [1, 4, 2, 0], [2, 5, 4, 0], [2, 6, 2, 0], [3, 6, 4, 0]];
+  const live = new Map(DEAD11.map(([r, c, color, dot]) => [r + ',' + c, { color, dot: Boolean(dot) }]));
+  const board = { lines: LINES, isLive: (r, c) => live.has(r + ',' + c) };
+  const at = (r, c) => live.get(r + ',' + c) ?? null;
+  check('（尺子）六边三角 54 的线取到了（带族名、法向偏移）', Array.isArray(LINES) && LINES.length > 10 && LINES.every((l) => Array.isArray(l.cells)),
+    `${LINES?.length} 条`);
+  check('（尺子）这一副 11 枚都在线上', DEAD11.every(([r, c]) => LINES.some((l) => l.cells.some(([rr, cc]) => rr === r && cc === c))));
+  const v = RB.edgeResidue(board, at, 2, undefined, true);
+  check('I-6 那一副 11 枚死局（六边三角 54、1×2）答「死」', v === 'dead', v);
+
+  // 同一盘面、同一门槛连问两次，穷举只真跑一次。数调用次数：门自己打一包 residueBoard，把它 import 的 residueSearch 换成
+  // 一个数数的壳（产物一个字不动）。
+  const { build } = await import('esbuild');
+  const { fileURLToPath } = await import('node:url');
+  const real = fileURLToPath(new URL('../src/engine/residueSearch.ts', import.meta.url));
+  const out = await build({
+    entryPoints: [fileURLToPath(new URL('../src/engine/residueBoard.ts', import.meta.url))],
+    bundle: true, format: 'esm', platform: 'neutral', write: false, logLevel: 'error',
+    plugins: [{
+      name: 'count-residue-search',
+      setup(b) {
+        b.onResolve({ filter: /\/residueSearch$/ }, (args) => (args.importer.endsWith('residueBoard.ts') ? { path: 'shim', namespace: 'count' } : undefined));
+        b.onLoad({ filter: /.*/, namespace: 'count' }, () => ({
+          contents: `import * as R from ${JSON.stringify(real)};\nexport * from ${JSON.stringify(real)};\n` +
+            `export function residueSearch(input) { globalThis.__residueCalls = (globalThis.__residueCalls || 0) + 1; return R.residueSearch(input); }\n`,
+          loader: 'js', resolveDir: fileURLToPath(new URL('../src/engine/', import.meta.url)),
+        }));
+      },
+    }],
+  });
+  const RBc = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+  globalThis.__residueCalls = 0;
+  const a = RBc.edgeResidue(board, at, 2, undefined, true);
+  const b2 = RBc.edgeResidue(board, at, 2, undefined, true);
+  check('同一盘面同一门槛连问两次：穷举只真跑一次（第二次拿缓存）', globalThis.__residueCalls === 1 && a === b2,
+    `跑了 ${globalThis.__residueCalls} 次，答 ${a} / ${b2}`);
+  // 尺子：钥匙里真有门槛和盘面——换一个门槛、挪走一枚，都要重算。
+  RBc.edgeResidue(board, at, 2, 2, true);
+  const fewer = new Map(live);
+  fewer.delete('1,2');
+  RBc.edgeResidue({ lines: LINES, isLive: (r, c) => fewer.has(r + ',' + c) }, (r, c) => fewer.get(r + ',' + c) ?? null, 2, undefined, true);
+  check('（尺子）换一个门槛、少一枚，都重新算（钥匙里真有它们）', globalThis.__residueCalls === 3, `一共跑了 ${globalThis.__residueCalls} 次`);
 }
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');

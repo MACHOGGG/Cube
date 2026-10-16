@@ -171,7 +171,15 @@ async function shapeGeometry(path) {
   });
   const { __geo } = await importText(out.outputFiles[0].text);
   const lines = __geo.LINES ? __geo.LINES.map((l) => (Array.isArray(l) ? l : l.cells).map(([r, c]) => [r, c])) : null;
-  return { id, tiles: __geo.tiles, lines, dim: __geo.BOARD_DIM ?? null, center: __geo.CENTER_CELL ?? null };
+  return { id, tiles: __geo.tiles, lines, dim: __geo.BOARD_DIM ?? null, center: __geo.CENTER_CELL ?? null, rawLines: __geo.LINES ?? null };
+}
+
+/**
+ * 一副棋盘文件里的 `LINES` 原样（外边族那几副是 EdgeLine：带族名和法向偏移，outerEdges 要用）。check-endgame-residue
+ * 拿它在 node 里摆一副真棋盘的残局（10-15 补充 L-7）。方块那一副没有 LINES，回 null。
+ */
+export async function shapeEdgeLines(file) {
+  return (await shapeGeometry(SHAPES_DIR + file)).rawLines;
 }
 
 const key = (r, c) => `${r},${c}`;
