@@ -588,7 +588,12 @@ const noteC = (o, shape) => {
  * CPU 降速六倍、一秒之内）。C 那一条刚出来之后不等：那时候熄着可能就是该熄（那几枚被翻掉了）。
  */
 const LIT_WAIT_MS = 4000;
-async function waitLit(page, shape, o, memo = {}) {
+/**
+ * 等的时候条子换了档（C 摆满时间换到 D），**照新的那一条接着等**，不是立刻交回去（10-16 修，门自己的毛病）：原先这一下
+ * 直接返回，读到的是「D 已经出来、D 的灯还没算完」那一瞬间——一枚都不亮，judge 判成「D 亮错了」。10-16 P1 那一推的 CI
+ * 上真红过一次（小球第 4 步：C 在两次读屏之间整个过去，读到 D 时灯还黑着；第 5 步起同一色全对）。换档最多跟两次。
+ */
+async function waitLit(page, shape, o, memo = {}, hops = 0) {
   const rule = ruleOf(o, shape);
   if (!(rule >= 0 && HINT_OF[rule]) || litOf(o).length) return o;
   if (HINT_OF[rule] === 'groupOnce' && memo.rule === rule) return o;
@@ -599,6 +604,7 @@ async function waitLit(page, shape, o, memo = {}) {
     await page.waitForTimeout(200);
     const o2 = await page.evaluate(ORACLE, { shape });
     noteC(o2, shape);
+    if (ruleOf(o2, shape) !== rule && sig(o2) === s0 && hops < 2) return waitLit(page, shape, o2, memo, hops + 1);
     if (sig(o2) !== s0 || ruleOf(o2, shape) !== rule || litOf(o2).length) return o2;
   }
   return page.evaluate(ORACLE, { shape });
