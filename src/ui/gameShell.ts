@@ -146,6 +146,13 @@ export interface ShellRefs {
   endShareImgEl: HTMLImageElement;
   shareOverlay: HTMLElement;
   shareImageEl: HTMLImageElement;
+  /** 《Pro》颜色关系轮盘的壳子（ui/proWheel.ts 往里画）。非 Pro 局一直 hidden。 */
+  proWheelEl: HTMLElement;
+  /**
+   * 暂停面板里那颗《Pro》：开局那一刻控制器把它锁住，旁边写明原因（这一局用不用固定翻色开局就定了）。
+   * 小红书那一版把这一行整个摘掉了，lock 找不到它就什么都不做。
+   */
+  proSwitch: { lock(note: string): void };
   buttons: {
     /** 多人局里它藏着——同步竞赛暂停不了，那个位置让给了《离开小屋》。
      *  屋主散场、这一局转成单人之后它才露面。 */
@@ -335,6 +342,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       <!-- 头一局的教学条。空壳子先摆在这儿，内容由 coachBar.ts 填——它要跟着
            玩家做到哪一步换，不是画一次就完了。 -->
       ${meta.coach ? '<div class="coach-bar" id="coachBar" hidden></div>' : ''}
+      <!-- 《Pro》颜色关系轮盘（10-15 补充 S10，ui/proWheel.ts）。只有开着 Pro 开局的单人局才露面，别的局一直
+           hidden——hidden 是 display:none，不占文档流（留一个 0 高的块也会多出一道 gap，七色小球会缩几像素）。 -->
+      <div class="pro-wheel" id="proWheel" role="img" hidden></div>
 
       <!-- 单人局这一排上只剩一颗《暂停》，占从前那一半的宽度、居中站着
            （玩家定的「底排②」）。《完成》搬进了暂停面板——玩家的原话：「把
@@ -457,11 +467,12 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
           </button>
         </div>
-        <!-- 《Pro》和它并排：一个正在下的人想看「这一枚会变成什么颜色」，不该为此退出
-             这一局（和上面那条色盲友好同一个道理，同一副样子）。 -->
+        <!-- 《Pro》和色盲友好同一副样子。局中是灰的：这一局用不用固定翻色，开局那一刻就定了（见
+             engine/proMode.ts），所以局中不让拨，旁边写明原因。 -->
         <div class="btn-row">
           <button class="icon-btn pause-switch" id="proBtn" role="switch" aria-checked="false">
             <span>${s.proBtn}</span>
+            <span class="pause-switch-note" id="proNote" hidden></span>
             <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
           </button>
         </div>
@@ -646,13 +657,31 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 《Pro》那颗开关（暂停面板里）。小屋局按不了暂停，所以它只有这一颗——底排那条控制
   // 条上没有它：那儿的位置是给「这一局的事」留的（离开小屋、交卷），而 Pro 是这个人
   // 的长期设置。
+  //
+  // 开局那一刻控制器调 proSwitch.lock（10-15 补充 S10）：这一局用不用固定翻色已经定了，再拨也改不了这一局，所以
+  // 锁住、旁边写明原因。用 aria-disabled 不用 disabled：读屏还读得到那句原因。开局倒数那一屏的暂停在开局之前，
+  // 那时还没锁，拨了从这一局起生效。
   const proBtn = container.querySelector<HTMLButtonElement>('#proBtn');
+  const proNote = container.querySelector<HTMLElement>('#proNote');
+  let proLocked = false;
   const showPro = () => proBtn?.setAttribute('aria-checked', String(proOn()));
   showPro();
   proBtn?.addEventListener('click', () => {
+    if (proLocked) return;
     setPro(!proOn());
     showPro();
   });
+  const proSwitch = {
+    lock(note: string) {
+      if (!proBtn) return;
+      proLocked = true;
+      proBtn.setAttribute('aria-disabled', 'true');
+      if (proNote) {
+        proNote.textContent = note;
+        proNote.hidden = false;
+      }
+    },
+  };
 
   // 暂停面板里的《怎么玩》：开的是全站同一屏五条规则（ui/rulesModal.ts）。有
   // 没有三角那一列由整包说了算（网页版有，小红书版在自己的 main.ts 里关
@@ -845,6 +874,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     endShareImgEl: req<HTMLImageElement>('endShareImg'),
     shareOverlay: req('shareOverlay'),
     shareImageEl: req('shareImage'),
+    proWheelEl: req('proWheel'),
+    proSwitch,
     buttons: {
       // 房间局里它也在，只是藏着——散场转单人的时候才露面，所以监听器必须
       // 在开局那一刻就接上（见上面控制条里的注释）。

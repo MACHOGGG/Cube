@@ -198,6 +198,8 @@ const MODE_TERMS = [
   ['老虎机模式', '老虎機模式', 'Slot machine mode', 'Mode machine à sous'],
   ['无限反转', '無限反轉', 'Endless flip', 'Retournement infini'],
   ['真正解密 · 步步为营', '真正解密 · 步步為營', 'Puzzle · Step by step', 'Énigme · Pas à pas'],
+  // 10-15 补充 S10：《Pro》改成单人局的固定翻色之后，规则书里第一次讲它。
+  ['Pro', 'Pro', 'Pro', 'Pro'],
 ];
 {
   const hasTerm = (block, name) => block.includes(`{ term: '${name}',`);

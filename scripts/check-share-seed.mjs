@@ -157,6 +157,9 @@ async function cardFor(run) {
 const plain = await cardFor(makeRun({ seed: '4A4TYZXZ', seedSource: 'entered' }));
 const daily = await cardFor(makeRun({ seed: '4A4TYZXZ', seedSource: 'daily', daily: '20261003' }));
 const old = await cardFor(makeRun({}));
+// 10-15 补充 S10：开着 Pro 打的那一局，卡上那一窄条印「Pro」、不印代号（那串码还原不了 Pro 局的反面）。存档里的
+// seed 照记——所以这一局是带着种子的，卡上照样不能印它。
+const pro = await cardFor(makeRun({ seed: '4A4TYZXZ', seedSource: 'random', pro: true }));
 const show = (ls) => (ls ? ls.map((l) => `${l.top}-${l.bottom}(中 ${l.mid} 宽 ${l.width} 红 ${(l.red * 100).toFixed(0)}%)`).join(' ') : '没拿到图');
 // 二维码在卡片坐标 465–681，中线 573。
 const centred = (ls) => !!ls && ls.every((l) => Math.abs(l.mid - 573) <= 4);
@@ -170,6 +173,8 @@ check('每日挑战：三行（多出「每日 10/03」那一行，「代号」�
 check('每日挑战：代号那一行和不是每日的那张一样宽（每日那一截没挤进同一行）',
   plain?.length === 2 && daily?.length === 3 && Math.abs(plain[1].width - daily[1].width) <= 2, `${plain?.[1]?.width} / ${daily?.[1]?.width}`);
 check('老档没有种子：只有那一行说明', old?.length === 1, show(old));
+check('Pro 局：两行（说明、「Pro」），第二行比代号那一行窄得多——印的是「Pro」，不是代号',
+  pro?.length === 2 && stacked(pro) && plain?.length === 2 && pro[1].width < plain[1].width * 0.6, `${show(pro)} ｜ 代号那一行 ${show(plain)}`);
 check('三张图上这几行都居中在二维码的中线上（±4）', centred(plain) && centred(daily) && centred(old), `${show(plain)} ｜ ${show(daily)} ｜ ${show(old)}`);
 check('这几行都是那支深红 #943D40（设计图上的颜色）', allRed(plain) && allRed(daily) && allRed(old), `${show(plain)} ｜ ${show(daily)}`);
 

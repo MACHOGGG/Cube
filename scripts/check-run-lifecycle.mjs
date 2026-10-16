@@ -35,7 +35,7 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
     const src = read(`src/shapes/${f}.ts`);
     if (!/let endgameOpen\b/.test(src)) continue;
     有这个变量.push(f);
-    const m = src.match(/function resetBoard\(\)\s*\{[\s\S]*?\n      \}/);
+    const m = src.match(/function resetBoard\((?:deal\?: \{ pro: boolean \})?\)\s*\{[\s\S]*?\n      \}/);
     if (!m || !/endgameOpen\s*=\s*false/.test(m[0])) 没放平.push(f);
   }
   // 尺子：这一条认的是「哪几副有收尾放开」。一副都认不出就是正则过期了，

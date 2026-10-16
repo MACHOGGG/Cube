@@ -200,6 +200,8 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
   const real = JSON.stringify(runData('triangleBig', 123456, {
     puzzle: { cleared: 40, stars: 12, spent: 300, scoredMoves: 120, streakRefunds: 30, edgeRefunds: 12, left: 8, peak: 55 },
     room: true, slot: true, targetId: 'squarePlus5', bombRules: 3, flipRules: 2, puzzleRules: 2,
+    // 10-15 补充 S10：开着 Pro 打的那一局多一位（服务器原样存、不拿它分榜）。
+    pro: true,
     shapeFallback: '进阶三角（天才特供）', extraPenaltyReason: '炸弹爆了：这一局按爆炸收场，扣 10 分',
   }));
   check(`③ 量程：填满了的一份 RunData 是 ${real.length} 字，上限 ${DATA_MAX_CHARS}`,

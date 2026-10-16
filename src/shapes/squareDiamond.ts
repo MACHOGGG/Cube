@@ -12,8 +12,7 @@ import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palet
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, applyScoreAnimations, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
-import { TILE_RADIUS, proHintWidth, proSquareRing } from '../engine/proHint';
-import { onProChange, proOn } from '../engine/proMode';
+import { applyProBacks, proCycle } from '../engine/proCycle';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
 import { RESIDUE_MAX_TILES, edgeResidue } from '../engine/residueBoard';
@@ -565,13 +564,6 @@ export function createSquareDiamondGame(): ShapeGame {
         // 教学条不再等「这一组里有反面」这个信号（第 2 条的灯由棋盘自己认组，见
         // engine/coachHint.ts），anyDotFace 跟着删了，这一句和控制器再也没有关系。
         el.dataset.face = isBlank(tile) ? 'blank' : tile.face;
-        // Pro 模式那一圈：这一枚**得分之后会变成什么颜色**（engine/proHint.ts）。只有
-        // 正面那一枚有这件事可说——翻过面的已经是那颗星星了，空位更没有。
-        // 方块那一版是虚线，虚线的节奏得自己定（见 proSquareRing 的说明），所以是真画
-        // 进去的一层，只在开着 Pro 的时候建；拨开关那一下由 onProChange 重画。
-        if (proOn() && !isBlank(tile) && tile.face === 'flavor') {
-          el.appendChild(proSquareRing(size, TILE_RADIUS, COLORS[tile.dotColor], proHintWidth(size)));
-        }
         return el;
       }
 
@@ -914,8 +906,11 @@ export function createSquareDiamondGame(): ShapeGame {
         stuckKeys = stuckKeysOf(cells);
       }
 
-      function resetBoard() {
+      function resetBoard(deal?: { pro: boolean }) {
         grid = isBomb ? generateCleanBombBoard(() => boardFromBombDeck(shuffledDeck()), hasInitialClump, BOMB_ADJ, liveBomb) : generateCleanBoard();
+        // Pro 局（10-15 补充 S10）：牌已经发完了，随机数一个都不再取——只把每一枚正面色块的反面改写成这一圈里的下一色
+        //（engine/proCycle.ts）。上面那一行一个字不动，所以非 Pro 局、代号局、每日局的牌逐枚不变。
+        if (deal?.pro) applyProBacks(grid, proCycle(PALETTES.standard.length, isBomb ? RED_IDX : -1));
         /*
          * 开发时手摆的那副牌（`engine/devDeal.ts`）。**正式包里这一句整段不存在**
          * （`import.meta.env.DEV` 是构建时常量，Vite 把它摇掉）。
@@ -964,6 +959,20 @@ export function createSquareDiamondGame(): ShapeGame {
         coach: !!opts?.coach,
         // 这一局用哪一串种子发牌（第 19 推，见 ShapeGameOpts.seed）。
         seed: opts?.seed,
+        // 这一局能不能用 Pro（只有网页版单人入口给，见 ShapeGameOpts.proAllowed）；用不用由控制器在开局那一刻定。
+        proAllowed: opts?.proAllowed,
+        // Pro 轮盘要的那几样（ui/proWheel.ts）：配色现取，色盲 / 棋子配色跟着走；「场上还剩哪些颜色」只数正面色块，
+        // 不用 countRemainingTiles（无限反转里它恒为 0）。
+        proView: () => ({
+          shape: 'diamond',
+          palette: pickPalette(),
+          cycle: proCycle(PALETTES.standard.length, isBomb ? RED_IDX : -1),
+          left: (() => {
+            const left = new Set<number>();
+            for (const { tile } of liveTiles()) if (tile.face === 'flavor') left.add(tile.color);
+            return left;
+          })(),
+        }),
         coachTip: opts?.coachTip,
         shouldLeadOut: opts?.shouldLeadOut,
         onReLogin: opts?.onReLogin,
@@ -1302,7 +1311,6 @@ export function createSquareDiamondGame(): ShapeGame {
         drag = null;
         controller.destroy();
         stopColorblind();
-        stopPro();
         detachDrag();
         stopResize();
         zoom.dispose();
@@ -1329,10 +1337,6 @@ export function createSquareDiamondGame(): ShapeGame {
       const stopColorblind = onColorblindChange(() => {
         COLORS = pickPalette();
         renderLegend();
-        if (controller.started) render();
-      });
-      // Pro 那一圈虚线是真画进 DOM 的（见 proSquareRing），所以拨开关要重画一遍棋盘。
-      const stopPro = onProChange(() => {
         if (controller.started) render();
       });
 

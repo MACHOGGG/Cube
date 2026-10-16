@@ -928,7 +928,9 @@ function launchSeedGame(g: SeedGame) {
             : v.mode === 'puzzle'
               ? tipFor('puzzle', () => puzzleTip(currentLang))
               : tipFor('bomb', () => bombTip(currentLang, tipShape(g.board)));
-  showGame(game, { ...g.opts, ...teach, noCountdown: true }, showDailyMode);
+  // proAllowed: false 写在 teach 后面（10-15 补充 S10）：每日挑战、输代号的局一律照普通规则发牌，开着 Pro 也不用——
+  // 同一串代号在谁手里都得是同一副牌。
+  showGame(game, { ...g.opts, ...teach, noCountdown: true, proAllowed: false }, showDailyMode);
 }
 
 /**
@@ -1244,6 +1246,7 @@ function startMultiplayerRun(match: MatchStart) {
     // 老虎机「各抽各的」那一局不印码（方案原话）：牌是同一副，目标各人不同，那串码还原不了
     // 他那个目标。
     seed: { code: roomCode, source: 'room', hideCode: match.slot === 'own' || roomVariant < 0 },
+    // 小屋局不给 proAllowed（10-15 补充 S10）：一屋人打同一副牌，有人开着 Pro 就不是同一副了。
   });
   // The countdown was the "get ready", and it ended for everyone at the same
   // instant. Leaving the start card up would undo exactly that: four players
@@ -1489,6 +1492,9 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
       gameInProgress = live;
       if (!live) lastGameEndAt = Date.now();
     },
+    // 单人局可以用《Pro》的固定翻色（10-15 补充 S10）。写在 ...opts 前面：每日挑战、输代号那一条
+    // （launchSeedGame）显式给 false，要盖得过这一句。
+    proAllowed: true,
     ...opts,
     lang: currentLang,
   };

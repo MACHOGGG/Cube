@@ -209,6 +209,8 @@ export function renderRecordsPage(
       `<span class="records-row-name">${name}${mode ? `<span class="records-row-mode">${mode}</span>` : ''}` +
       targetMark(d.targetId) +
       `<span class="records-row-time">${formatRunTime(d.at)}</span></span>` +
+      // 开着 Pro 打的那一局（10-15 补充 S10）：独立一个子项——缩略面板里玩法那一行被藏掉了，挂在名字里会跟着藏。
+      (d.pro ? `<span class="records-row-pro">${s.proBtn}</span>` : '') +
       `<span class="records-row-score">${compact ? compactScore(d.totalScore, lang) : d.totalScore}</span>`;
     row.addEventListener('click', (e) => {
       // The panel itself is clickable (to blow it up); a row click is about

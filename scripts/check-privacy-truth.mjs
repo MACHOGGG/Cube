@@ -113,6 +113,8 @@ const MUST_SAY = {
     '小屋上传看过哪几族的教学': ['看过哪几族的教学'],
     '小屋椅子上记着一枚账号标识': ['由账号算出来的标识'],
     '邮箱账号里那几个格式字段': ['随机盐'],
+    // 10-15 补充 S10：存档里多记一位「这一局开着 Pro」。
+    '记录里有没开 Pro': ['开局时开没开 Pro'],
   },
   zhHant: {
     '驗證碼 30 分鐘': ['30 分鐘'],
@@ -146,6 +148,7 @@ const MUST_SAY = {
     '小屋上傳看過哪幾族的教學': ['看過哪幾族的教學'],
     '小屋椅子上記著一枚帳號標識': ['由帳號算出來的標識'],
     '信箱帳號裡那幾個格式欄位': ['隨機鹽'],
+    '紀錄裡有沒開 Pro': ['開局時開沒開 Pro'],
   },
   en: {
     'code good for thirty minutes': ['thirty minutes'],
@@ -178,6 +181,7 @@ const MUST_SAY = {
     'rooms upload which tutorials were seen': ['which families’ tutorials you have seen'],
     'the seat carries an account tag': ['a tag derived from your account'],
     'the placeholder fields of email accounts': ['a random salt'],
+    'the record says whether Pro was on': ['whether Pro was on when it started'],
   },
   fr: {
     'code valable trente minutes': ['trente minutes'],
@@ -210,6 +214,7 @@ const MUST_SAY = {
     'les salles reçoivent les tutoriels vus': ['les familles dont vous avez vu le tutoriel'],
     'la place porte un repère tiré du compte': ['un repère tiré de votre compte'],
     'les champs réservés des comptes avec adresse': ['un sel aléatoire'],
+    'l’enregistrement dit si Pro était activé': ['si Pro était activé au lancement'],
   },
 };
 /** 故意留着的那两处，查「撤掉的说法」之前挖掉（见文件头）。 */

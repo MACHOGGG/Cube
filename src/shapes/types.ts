@@ -128,6 +128,12 @@ export interface ShapeGameOpts {
    * 的那几条路都不用改；要给的只有三种：玩家敲进来的码、每日挑战、小屋。
    */
   seed?: SeedRun;
+  /**
+   * 这一局能不能用《Pro》的固定翻色（10-15 补充 S10，engine/proMode.ts）。**只有网页版单人入口给**（main.ts 的
+   * showGame 给 true；每日挑战、输代号那一条 launchSeedGame 显式给 false；小屋局、小红书不给）。给了也不一定用：
+   * 开局那一刻还要 Pro 开着、种子是随手抽的（gameController 的 newGame）。
+   */
+  proAllowed?: boolean;
 
   /**
    * 结算页那对指路的光要不要亮（见 engine/gameController.ts 的

@@ -145,7 +145,7 @@ for (const name of WIRED) {
     Boolean(pause) && /window\.clearTimeout\(stuckTimer\)/.test(pause[0]) && /stuckHeldMs = /.test(pause[0]), pause ? '' : '没切出 doPause');
   const resume = gc.match(/function doResume\(\) \{[\s\S]*?\n  \}/);
   check('继续时从停下的地方接着数', Boolean(resume) && /armStuckEnd\(stuckLeft\)/.test(resume[0]), resume ? '' : '没切出 doResume');
-  const newGame = gc.match(/function newGame\(\) \{[\s\S]*?hooks\.resetBoard\(\);/);
+  const newGame = gc.match(/function newGame\(\) \{[\s\S]*?hooks\.resetBoard\((?:\{ pro: runPro \})?\);/);
   check('新开一局之前先撤掉它（不然会收掉新的那一局）',
     Boolean(newGame) && /window\.clearTimeout\(stuckTimer\)/.test(newGame[0]), newGame ? '' : '没切出 newGame 的开头');
   const destroy = gc.match(/destroy\(\) \{[\s\S]*?\n    \},/);

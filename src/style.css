@@ -364,6 +364,13 @@
   font-size: 24px; font-weight: 500; line-height: 1.25;
   color: var(--end-ink);
 }
+/* Pro 局在标题后面挂的那枚「Pro」（10-15 补充 S10）。不当第三枚徽章：抬头那块网格很紧。 */
+.overlay--end .modal .end-title .end-pro {
+  display: inline-block; margin-left: 8px; padding: 0 7px; height: 22px; line-height: 22px;
+  vertical-align: 0.2em; border-radius: 6px;
+  background: var(--play-chip); color: var(--play-chip-ink);
+  font: 700 13px 'Karla', sans-serif; user-select: none;
+}
 /*
  * 分数：Fraunces 400、63px、深红。它平时是一排滚筒（engine/odometer.ts），一位一格；格宽在这儿收到
  * 0.56em——Fraunces 的数字是比例宽的（0 宽 0.59em、1 只有 0.36em），默认那 0.64em 的格子让「430」
@@ -3518,6 +3525,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
   width: calc(var(--rec-row-h) * 0.6); height: calc(var(--rec-row-h) * 0.6);
 }
 .records-page:not(.xhs-profile) .records-panels .records-row-name { font-size: calc(var(--rec-row-h) * 0.405); }
+.records-page:not(.xhs-profile) .records-panels .records-row-pro { font-size: calc(var(--rec-row-h) * 0.3); }
 .records-page:not(.xhs-profile) .records-panels .records-row-score,
 .records-page:not(.xhs-profile) .records-panels .rank-name,
 .records-page:not(.xhs-profile) .records-panels .rank-score { font-size: calc(var(--rec-row-h) * 0.416); }
@@ -4209,6 +4217,22 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
 .pause-switch {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%;
+}
+/* 暂停面板里那颗《Pro》局中锁住时的那句说明（10-15 补充 S10）：折到开关下面一整行；开关本身淡一档。
+   用 aria-disabled 不用 disabled（读屏还要读得到原因），所以样式也认它。 */
+.pause-switch-note[hidden] { display: none; }
+.pause-switch .pause-switch-note {
+  order: 3; flex: 0 0 100%; margin: 2px 0 0;
+  font-size: 0.78rem; line-height: 1.3; font-weight: 400; color: var(--ink-soft); text-align: left;
+}
+.pause-switch[aria-disabled='true'] { flex-wrap: wrap; cursor: default; }
+.pause-switch[aria-disabled='true'] .pill-switch { opacity: 0.45; }
+@media (orientation: landscape) and (max-height: 560px) {
+  .pause-switch[aria-disabled='true'] { flex-wrap: nowrap; }
+  .pause-switch .pause-switch-note {
+    order: 0; flex: 1 1 auto; min-width: 0; margin: 0 8px 0 10px;
+    font-size: 0.72rem; line-height: 1.25;
+  }
 }
 .profile-pill--switch {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -5296,6 +5320,12 @@ html.is-tutorial .home-nav { display: none; }
 }
 .records-row-glyph svg { width: 100%; height: 100%; }
 .records-row-name { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+/* 开着 Pro 打的那一局（10-15 补充 S10）：名字和分数之间一枚小标。独立一个子项——缩略面板里玩法那一行被藏掉了。 */
+.records-row-pro {
+  flex: none; padding: 1px 6px; border-radius: 6px;
+  background: var(--play-chip); color: var(--play-chip-ink);
+  font: 700 0.7rem/1.3 'Karla', sans-serif;
+}
 .records-row-time { color: var(--ink-soft); font-weight: 400; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 /* 老虎机那一局在拼的那个图案，画在玩法名后面（《侵蚀阶梯》v1.2 PR-8）。
    这一局的 modeKey 是 'base'，所以玩法名右边那点小字（.records-row-mode）是空的
@@ -7072,6 +7102,25 @@ body.is-room-host::after {
    一遍。方块那一局开头这块条子是藏着的（等 10 秒或等他得一次分），少了这条
    就变成一个空白的圆角盒子摆在棋盘底下。 */
 .coach-bar[hidden] { display: none; }
+
+/* ---- 《Pro》颜色关系轮盘（10-15 补充 S10，ui/proWheel.ts） ----------------------------
+   竖屏摆在棋盘和暂停牌之间（流里，边长由 proWheel 的 fit 现量现算）；放不下退到棋盘空角（--fixed --corner，
+   垫一块底色圆片）；都放不下 --off。藏起来一律 display:none，不靠 0 高：一个 0 高的块留在流里也会多出一道 gap。
+   色块叠在一起的那一点用 multiply 混出来（样品上的样子）；深色底上 multiply 会黑成一片，换回 normal。
+   没有 clamp / min / inset / aspect-ratio / :has()，也没用 flex gap：这一段也进小红书的包。 */
+.pro-wheel { flex: none; margin: 0 auto auto; pointer-events: none; }
+.pro-wheel[hidden], .pro-wheel.pro-wheel--off { display: none; }
+.pro-wheel > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.pro-wheel .wh-item { mix-blend-mode: multiply; }
+:root[data-theme='dark'] .pro-wheel .wh-item { mix-blend-mode: normal; }
+.pro-wheel .wh-arrow { transition: opacity 400ms ease; }
+.pro-wheel .wh-arrow.wh-arrow--off { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .pro-wheel .wh-arrow { transition: none; } }
+.pro-wheel.pro-wheel--fixed { position: fixed; z-index: 1; margin: 0; }
+.pro-wheel.pro-wheel--corner { border-radius: 50%; background: var(--play-bg); padding: 5px; box-sizing: border-box; }
+@media (orientation: landscape) and (max-height: 560px) {
+  .app.app--game > .pro-wheel { position: fixed; margin: 0; }
+}
 /*
  * 进度那一条和《<》摆在同一排。
  *
@@ -7740,6 +7789,14 @@ body.is-room-host::after {
     justify-self: center;
     text-align: center;
   }
+  /* 《Pro》轮盘（10-15 补充 S10）：右栏，和左边那张分数牌对称（同样跨满四行再居中、同宽 194）。教学条露着的那
+     几局它和教学条同一栏，缩到 136 贴栏底；还碰上的话 proWheel 的 fit 把它藏掉。 */
+  .app.app--game > .pro-wheel {
+    position: static; grid-column: 3; grid-row: 1 / -1;
+    justify-self: center; align-self: center;
+    width: 194px; height: 194px; margin: 0;
+  }
+  .app.app--game.has-coach > .coach-bar:not([hidden]) ~ .pro-wheel { align-self: end; width: 136px; height: 136px; }
   /*
    * 计时那一档：棋盘要把药丸那一行让出来（56 + 12 的下边距）。
    *

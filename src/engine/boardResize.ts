@@ -153,7 +153,25 @@ export function floorBox(wrap: HTMLElement): DOMRect {
   // 来。玩家的说法是「滑动的时候游戏版图会随之变化」。
   // 设计值改由 fitPanelRadius 自己去读：它在同一个同步块里摘掉、读完、写
   // 回，中间浏览器画不了帧，所以看不见。
-  return wrap.getBoundingClientRect();
+  return measureFloor(wrap);
+}
+
+/**
+ * 量地板这一格——先让开《Pro》轮盘（10-15 补充 S10，ui/proWheel.ts）。
+ *
+ * 轮盘在竖屏里摆在棋盘和暂停牌之间，是这一列里的一个流内子项：不让开的话，视口一变矮，棋盘这一格先被轮盘挤小，
+ * 棋盘跟着缩（实测 320×568 的方块从 284 缩到 230）——轮盘本该只用棋盘排完之后剩下的那段空当。所以在同一个同步
+ * 块里先把它 display:none、量完再放回，中间浏览器画不了帧，看不见。非 Pro 局轮盘一直是 hidden，这里原样直接量，
+ * 和从前一个字不差。
+ */
+export function measureFloor(wrap: HTMLElement): DOMRect {
+  const wheel = wrap.parentElement?.querySelector<HTMLElement>('#proWheel') ?? null;
+  if (!wheel || wheel.hidden) return wrap.getBoundingClientRect();
+  const prev = wheel.style.display;
+  wheel.style.display = 'none';
+  const rect = wrap.getBoundingClientRect();
+  wheel.style.display = prev;
+  return rect;
 }
 
 /**
@@ -361,7 +379,7 @@ export function fitFloor(wrap: HTMLElement, boardW: number, boardH: number): voi
   // 法排版的最后一句都是这一行，写在这儿等于八处都接上了，一处都不用改。
   requestAnimationFrame(() => fitPanelRadius(wrap));
 
-  const rect = wrap.getBoundingClientRect();
+  const rect = measureFloor(wrap);
   // 每个方向都不收到比棋盘还小（那会让棋盘元素顶出地板），也不撑得比这一格还
   // 大（那会把别人挤走）。躺着的菱形横屏时宽度正好顶满整格，于是那个方向不动、
   // 只收高度——原先那版在这种情况下两个方向都不收。

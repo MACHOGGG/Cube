@@ -60,6 +60,8 @@ import { seedForTarget, slotTargetOf } from './seedDeal';
 import { targetHudDef } from './targetIcon';
 import { erodedFace } from './targetMatch';
 import { cardOrNull } from '../shapes/registry';
+import { proOn } from './proMode';
+import { mountProWheel, type ProView, type ProWheel } from '../ui/proWheel';
 
 export interface GameControllerHooks {
   bestKey: string;
@@ -197,8 +199,18 @@ export interface GameControllerHooks {
    * ——每一局单人游戏都用种子发牌，见 newGame。
    */
   seed?: SeedRun;
-  /** (Re)builds the shape's internal grid for a fresh game. */
-  resetBoard(): void;
+  /**
+   * 这一局能不能用 Pro（10-15 补充 S10：K-4）。只有网页版单人入口（main.ts 的 showGame）给 true；每日挑战、输代号
+   * 显式给 false，小屋局和小红书不给。给了也不一定用：开局那一刻还要 proOn() 开着、种子是随手抽的（见 newGame）。
+   */
+  proAllowed?: boolean;
+  /** Pro 轮盘要的那几样（ui/proWheel.ts）：棋子形状、配色、这一圈、场上还剩哪几色正面色块。 */
+  proView?(): ProView;
+  /**
+   * (Re)builds the shape's internal grid for a fresh game. `deal.pro`：这一局开着 Pro——棋盘发完牌之后把正面色块的
+   * 反面改写成这一圈里的下一色（engine/proCycle.ts），随机数一个都不再取。
+   */
+  resetBoard(deal: { pro: boolean }): void;
   /** Repaints the board from current state. */
   render(): void;
   /** True the instant the current state should end the run. */
@@ -580,6 +592,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 日的、小屋的都还是这一串。
    */
   let seedRun: SeedRun | null = hooks.seed ?? null;
+  /**
+   * 这一局开着 Pro（10-15 补充 S10）。开局那一刻定（newGame），局中不变——暂停面板那颗开关局中是锁着的。
+   */
+  let runPro = false;
+  /** Pro 轮盘：头一回用到时才建（非 Pro 局一直是 hidden 的那个空壳）。 */
+  let proWheel: ProWheel | null = null;
+  const syncProWheel = () => {
+    if (runPro && proWheel && hooks.proView) proWheel.sync(hooks.proView());
+  };
   /** 这一局在种子码编号表里是第几行（engine/seedCode.ts 的 VARIANTS）；表里没有就 -1。 */
   const seedVariant = variantForGame(hooks.modeKey, hooks.shapeId, Boolean(hooks.slotTarget));
   /** 这一个控制器开过几局了（第二局起「随手抽的」种子要换一串）。 */
@@ -750,7 +771,15 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!hooks.practice) hooks.onLive?.(true);
     plantSeed();
     dealt++;
-    hooks.resetBoard();
+    // Pro：开局这一刻定（局中开关是锁着的）。第二道闸：种子必须是随手抽的——输进来的、每日的、小屋的码一律照普通
+    // 规则发牌（散场转单人之后的《再来一局》用的仍是 'room' 那串，也挡在这儿）。
+    runPro = !!hooks.proAllowed && proOn() && !hooks.practice && (!seedRun || seedRun.source === 'random');
+    const appEl = refs.root.querySelector('.app--game');
+    // 不用 toggleAttribute：Chrome 61 没有（这个文件也打进小红书的包）。
+    if (runPro) appEl?.setAttribute('data-pro-run', '1');
+    else appEl?.removeAttribute('data-pro-run');
+    refs.proSwitch.lock(hooks.proAllowed ? s.proLockedNote : s.proNotHereNote);
+    hooks.resetBoard({ pro: runPro });
     score = 0;
     moves = 0;
     gameOver = false;
@@ -788,6 +817,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     paintPattern();
     timer.start();
     hooks.render();
+    if (runPro && hooks.proView) {
+      // 第三个参数：局中拨色盲友好时轮盘自己来取一份新的配色。
+      proWheel ??= mountProWheel(refs.proWheelEl, s.proWheelLabel, () => (runPro && hooks.proView ? hooks.proView() : null));
+      proWheel.show(hooks.proView());
+    } else proWheel?.hide();
     updateStuckState([]);
     startSnapshot = hooks.snapshotBoard?.() ?? null;
     // 开新的一局就把小屋那份底忘掉。屋主散场之后转成单人的那一局，如果人没
@@ -1050,6 +1084,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 的」那一局不记码：那串码还原得了牌、还原不了他的目标。
       seed: seedRun && !seedRun.hideCode ? seedRun.code : undefined,
       seedSource: seedRun?.source,
+      // 这一局开着 Pro 打的（10-15 补充 S10）。只在 true 时写；服务器原样存，不拿它分榜。
+      pro: runPro ? true : undefined,
       daily: seedRun?.source === 'daily' ? seedRun.daily : undefined,
       // 这一局按第几版**计分规则**打的（《侵蚀阶梯》v1.2 §6）。上面那两个各管一
       // 个玩法，这一个管全站——服务端照它收不收这一局（`api/scores.js` 只认现行
@@ -1074,6 +1110,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 结算弹窗的标题就是「综合得分」（10-08 方案 3-I 的设计图）：从前是「挑战结束」一行大字、底下
     // 再一行小字「综合得分」，设计图上只剩后者，站在标题的位置。
     refs.endTitleEl.textContent = s.compositeScoreLabel;
+    // Pro 局在标题后面挂一枚「Pro」（10-15 补充 S10）。不当第三枚徽章：抬头那块网格很紧。
+    if (runPro) refs.endTitleEl.insertAdjacentHTML('beforeend', ' <span class="end-pro">' + escHtml(s.proBtn) + '</span>');
     // 总分一位一位滚上去（engine/odometer.ts）。局内那一套滚筒不动——两套数数
     // 系统不并存，这一套只管结算页和排行榜自己那一行。
     rollOdometer(refs.endScoreEl, total);
@@ -1438,6 +1476,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // to reveal (a shift that didn't score) — every earlier return path
       // out of step() already rendered at least once on its own.
       if (!totalRaw) hooks.render();
+      syncProWheel();
       if (!totalRaw) flipChain = 0;
       perf.onMove(moveWeight);
       if (gameOver) {
@@ -1551,6 +1590,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
 
       hooks.onCascadeStep?.(groups);
       hooks.render();
+      syncProWheel();
       hooks.onCascadeStepRendered?.(groups);
 
       // A brief extra hold right at the moment of impact — hit-stop — for
@@ -1660,6 +1700,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         // ghost/collapse elements onCascadeStepRendered just appended for
         // it, before a single frame of them ever painted.
         if (s.matchGroups.length) hooks.render();
+        syncProWheel();
         if (faceSnaps?.size) plankFlipCells(refs.boardEl, flipCells, faceSnaps, moveDirDeg);
         // A chained step's own render() would tear the planks down mid-turn,
         // so the gap after a flip stretches to let the last piece finish —
@@ -1932,6 +1973,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();
+      proWheel?.destroy();
+      proWheel = null;
       window.clearTimeout(stuckTimer);
       stuckTimer = 0;
       stuckHeldMs = null;

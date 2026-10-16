@@ -326,13 +326,82 @@ if (!MUTANTS) {
     check('⑦ 头一回玩方块 / 小球（教学条＋开局前预热）：六局发的牌和金标一样', bad.length === 0, bad.join(' | '));
   }
 
-  // ⑧ Pro 开着：先只报不判（10-15 补充 S10 改成断言，见 K-4）
+  // ⑧ Pro 开着（10-15 补充 S10：K-4，从「只报」改成断言）。
+  //
+  // 按新设计，代号局（seedGameOf(码,'entered')）永远不用 Pro——原来那样开，这一条永远看不到 Pro。所以照单人 Pro 局
+  // 那条路开：同一串码当成「随手抽的」（seed.source = 'random'）、proAllowed: true。断言五件事：
+  //   · 六十局的哈希都和 Pro 关时不一样（反面确实换了）；
+  //   · 挖掉反面颜色之后，正面六十局逐枚一样（改写只碰 dotColor）；
+  //   · 发完牌取的随机数个数六十局一样（改写一个数都不取——取了的话，下一局、老虎机、教学全都跟着错位）；
+  //   · 每一枚不在圈外的色块，反面 = 这一圈里的下一色；
+  //   · 红块（炸弹局里不在圈里的那一色）反面一枚没动。
+  // ②③ 两张金标表（Pro 关）一字不改，上面已经全绿过。
   {
+    const COLORS = { square: 6, squareDiamond: 6, circle: 4, circleHex: 6, circleSeven: 7, triangleBig: 6 };
+    const RED = { square: 0, squareDiamond: 0, circle: 0, circleHex: 1, triangleBig: 1 };
+    const fronts = (grid) => grid.map((row) => row.map((t) => (t == null ? '_' : t.face + t.color)).join(' ')).join('\n');
+    const proOpts = (code) => {
+      const g = B.seedGameOf(code, 'entered');
+      return { seed: { ...g.opts.seed, source: 'random' }, proAllowed: true };
+    };
+    const same = [];
+    const frontBad = [];
+    const drawBad = [];
+    const backBad = [];
+    const redBad = [];
+    let redSeen = 0;
+    let checked = 0;
+    for (const r of results) {
+      const off = r.got;
+      B.setPro(true);
+      let on;
+      try {
+        on = deal(r.code, 'entered', undefined, { extra: proOpts(r.code) });
+      } finally {
+        B.setPro(false);
+      }
+      if (on.hash === goldRows.find((x) => x.row === r.row).cells[r.k].hash) same.push(r.code);
+      if (fronts(on.grid) !== fronts(off.grid)) frontBad.push(r.code);
+      if (on.draws !== off.draws) drawBad.push(`${r.code} ${on.draws}≠${off.draws}`);
+      const board = r.name.split('/')[1];
+      const bomb = /^bomb/.test(r.name.split('/')[0]);
+      const red = bomb ? RED[board] ?? -1 : -1;
+      const cycle = B.proCycle(COLORS[board], red);
+      on.grid.forEach((row, i) =>
+        row.forEach((t, j) => {
+          if (t == null || on.tap.isBlank(t) || t.color < 0) return;
+          const was = off.grid[i][j];
+          if (t.color === red) {
+            redSeen++;
+            if (t.dotColor !== was.dotColor) redBad.push(`${r.code}@${i},${j}`);
+            return;
+          }
+          checked++;
+          if (t.dotColor !== B.proNext(cycle, t.color)) backBad.push(`${r.code}@${i},${j} ${t.color}→${t.dotColor}`);
+        }),
+      );
+    }
+    check('⑧ Pro 开着：六十局的牌（连反面）都和 Pro 关时不一样', same.length === 0 && results.length === 60, same.join(',') || `${results.length} 局`);
+    check('⑧ Pro 开着：挖掉反面颜色之后，正面六十局逐枚一样', frontBad.length === 0, frontBad.join(','));
+    check('⑧ Pro 开着：发完牌取的随机数个数六十局一样（改写一个数都没取）', drawBad.length === 0, drawBad.slice(0, 4).join(' | '));
+    check('⑧ Pro 开着：每一枚色块的反面 = 这一圈里的下一色', backBad.length === 0 && checked > 0, backBad.slice(0, 4).join(' | ') || `${checked} 枚`);
+    check('⑧ Pro 开着：红块（不在圈里）反面一枚没动', redBad.length === 0 && redSeen > 0, redBad.slice(0, 4).join(' | ') || `${redSeen} 枚`);
+    // 两道闸各自挡得住：开着 Pro 输代号（没给 proAllowed）、以及给了 proAllowed 但种子是输进来的——都照普通规则发牌。
+    const gate1 = [];
+    const gate2 = [];
     B.setPro(true);
-    const diff = [];
-    for (const { row, cells } of goldRows) for (const { code, hash } of cells) if (deal(code).hash !== hash) diff.push(`${row}:${code}`);
-    B.setPro(false);
-    console.log(`INFO  ⑧ Pro 开着：六十局里有 ${diff.length} 局的牌和 Pro 关时不一样${diff.length ? '：' + diff.slice(0, 6).join(' ') : ''}（只报不判）`);
+    try {
+      for (const { row, cells } of goldRows) {
+        for (const { code, hash } of cells) {
+          if (deal(code).hash !== hash) gate1.push(`${row}:${code}`);
+          if (deal(code, 'entered', undefined, { extra: { proAllowed: true } }).hash !== hash) gate2.push(`${row}:${code}`);
+        }
+      }
+    } finally {
+      B.setPro(false);
+    }
+    check('⑧ 开着 Pro 输代号开局（没给 proAllowed）：六十局都和金标一样', gate1.length === 0, gate1.slice(0, 6).join(' '));
+    check('⑧ 给了 proAllowed、种子却是输进来的：六十局都和金标一样（第二道闸）', gate2.length === 0, gate2.slice(0, 6).join(' '));
   }
 
   // ⑨ 老虎机都抽到了目标（目标进了哈希的第一行）

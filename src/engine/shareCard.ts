@@ -385,6 +385,8 @@ export interface ShareCardInfo {
    * 局本来就不是照一串码发的牌，补一串上去是在编。
    */
   seed?: { code: string; daily?: string };
+  /** 这一局开着 Pro 打的（10-15 补充 S10）：代号那一行改印「Pro」，不印代号。 */
+  pro?: boolean;
   lang: Lang;
   /**
    * The room, when this run was one board out of four people's evening.
@@ -606,9 +608,10 @@ function measureHead(
 
 /**
  * 种子那一行的字（第 19 推）：「种子 XXXX-XXXX」，每日挑战再接「 · 每日 MM/DD」。没有种子就是
- * 空串，整行不画。
+ * 空串，整行不画。Pro 局（10-15 补充 S10）这一行是「Pro」：代号还原不了 Pro 局的反面，不印。
  */
-export function seedLineOf(info: Pick<ShareCardInfo, 'seed' | 'lang'>): string {
+export function seedLineOf(info: Pick<ShareCardInfo, 'seed' | 'lang' | 'pro'>): string {
+  if (info.pro) return 'Pro';
   const seed = info.seed;
   if (!seed?.code) return '';
   const s = STRINGS[info.lang];
@@ -625,7 +628,8 @@ export function seedLineOf(info: Pick<ShareCardInfo, 'seed' | 'lang'>): string {
  * 设计图上这几行站在二维码底下那一窄条里（和二维码一样宽，画布上二百来个单位），「代号 …… · 每
  * 日 10/08」连成一行在那儿放不下，所以拆开。老档没有种子就一行都没有。
  */
-export function seedLinesOf(info: Pick<ShareCardInfo, 'seed' | 'lang'>): string[] {
+export function seedLinesOf(info: Pick<ShareCardInfo, 'seed' | 'lang' | 'pro'>): string[] {
+  if (info.pro) return ['Pro'];
   const seed = info.seed;
   if (!seed?.code) return [];
   const s = STRINGS[info.lang];

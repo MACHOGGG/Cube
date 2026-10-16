@@ -73,6 +73,11 @@ export interface RunData {
   /** 每日挑战那一局：哪一天（北京日期 YYYYMMDD）。服务器照它把这一局收进「今日」榜。 */
   daily?: string;
   /**
+   * 这一局开着 Pro 打的（10-15 补充 S10：固定翻色，见 engine/proMode.ts）。只在 true 时写；老档没有。服务器原样存，
+   * 不拿它分榜——成绩照常上同一张榜。结算页、本机记录页那一行、分享卡上标「Pro」。
+   */
+  pro?: boolean;
+  /**
    * 这一局的炸弹按第几版规则打的（见 bomb.ts 的 BOMB_RULES_VERSION）。老档
    * 没有这一项，读出来是 undefined，就是第一版。存档键和排行榜都按它分开——
    * 六枚炸弹的局和一枚炸弹的局不能放一起比。非炸弹局不写这一项。
@@ -431,6 +436,9 @@ export function buildShareInfo(d: RunData, shapeDisplayName: string, lang: Lang)
     // 来，所以卡上把它画出来（见 shareCard.ts 的 drawTargetMark）。
     targetId: d.targetId,
     // 这一局的种子（第 19 推）：卡上二维码说明底下那一行。老档没有，就不画。
-    seed: d.seed ? { code: d.seed, daily: d.daily } : undefined,
+    // Pro 局不印代号（站长 2026-10-14）：那串码还原得了正面、还原不了反面——照码开出来的是普通规则的局，和卡上
+    // 这一局不是同一副牌。改印「Pro」。存档里的 seed 照记。
+    seed: d.seed && !d.pro ? { code: d.seed, daily: d.daily } : undefined,
+    pro: d.pro === true,
   };
 }

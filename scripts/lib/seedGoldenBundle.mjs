@@ -99,6 +99,8 @@ export async function bundleSeedGolden(root, { mutate } = {}) {
     import * as SC from './src/engine/seedCode';
     // ⑥⑧ 拨这几个设置看发牌变不变（都是「这个人要不要」的全站设置，开局前拨好）
     import { setPro } from './src/engine/proMode';
+    // ⑧ 照这一圈核 Pro 局每一枚的反面（10-15 补充 S10）
+    import { proCycle, proNext } from './src/engine/proCycle';
     import { setColorblind } from './src/engine/palettePref';
     import { setTheme } from './src/engine/themePref';
     // 和 main.ts 一样：先建六副、再把名片交给那张表（registry.ts 文件头说了为什么注册在外面）。
@@ -107,7 +109,7 @@ export async function bundleSeedGolden(root, { mutate } = {}) {
       createSquareDiamondGame(), createTriangleGame(), createCircleSevenGame(),
     ];
     registerCards(games.map((g) => g.card));
-    export { seedGameOf, SC, setPro, setColorblind, setTheme };
+    export { seedGameOf, SC, setPro, setColorblind, setTheme, proCycle, proNext };
   `;
   const srcDir = join(root, 'src');
   await build({

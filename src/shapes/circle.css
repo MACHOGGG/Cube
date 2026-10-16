@@ -17,13 +17,3 @@
   pointer-events: none;
 }
 
-/* ---- Pro：这一枚得分之后会变成什么颜色 ----------------------------------
-   参考图上量出来是**两段**虚线：左边一段、右边一段，缺口在正上和正下（缺口约 50°，
-   每段约 130°）。上一版描成了整整一圈实线，玩家 2026-09 指出来了：「小球的外边不是虚
-   线的，需要和我上传的设计图一样」。
-   虚线的节奏 CSS 定不了，所以这一圈是一段 SVG（见 engine/proHint.ts 的 proCircleRing），
-   压在球自己的边上——两颗球之间那道缝只被吃掉半个线宽，剩下的还看得见。 */
-.pro-circle {
-  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
-  overflow: visible; pointer-events: none;
-}

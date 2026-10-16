@@ -57,7 +57,7 @@ export const SERVER = '<server>';
 const RULE_ART = join(tmpdir(), 'ci-browser-ruleart.mjs');
 
 /** 片名。和 ci.yml 里 browser 那个矩阵的 shard 一一对应（check-ci-browser 量）。 */
-export const SHARDS = ['a', 'b', 'c', 'd', 'e', 'seed-deal', 'oldcss'];
+export const SHARDS = ['a', 'b', 'c', 'd', 'e', 'f', 'seed-deal', 'oldcss'];
 
 export const GATES = [
   // 最早收进 CI 的四道（下面这一组），都是当时真的拦下过回归的。
@@ -707,6 +707,27 @@ export const GATES = [
     name: '断网时说清楚「需要联网」',
     shard: 'd', secs: 12, port: 8955,
     run: ['scripts/check-offline.mjs', SERVER],
+  },
+
+  // ── f 片（10-15 补充 S10 加的第八片）──────────────────────────────────────────────
+  // 《Pro》改版（K-4）那一道浏览器门，拆两半。方案原想塞进 e、c 两片（估的是 98 / 108 秒），本地实量 core 约 140 秒、
+  // layout 约 250 秒，而那时七片每片都离 15 分钟只剩 0.5–2 分钟——塞进去 check-ci-browser 的 ⑤ 当场红，所以另开一片。
+  //
+  // core：开着 Pro 打一手得分，每一枚新翻成的星星 = 图例里的下一色（Pro 关着的尺子：不全是）；今日挑战、输代号、小屋
+  // （两个上下文）都不用 Pro；Math.random 一样时 Pro 开 / 关正面逐枚相同、种子码相同；开打后暂停面板那颗开关锁住、开局
+  // 倒数那一屏拨得动；结算页、记录页的「Pro」。开小屋要兑一次 TESTMONTH——自己一台服务器。
+  {
+    name: 'Pro：固定翻色只在单人局、开局那一刻定、局中锁住',
+    shard: 'f', secs: 150, port: 8980,
+    run: ['scripts/check-pro-wheel.mjs', SERVER, '--part=core'],
+  },
+  // layout：轮盘在一串视口里（竖屏七种、电脑三种、横屏两种，含计时局、头一局教学条、七色小球退空角）不碰任何一枚棋
+  // 子、HUD、暂停键、计时药丸、教学条，竖屏棋盘尺寸和 Pro 关时一样，电脑上和分数牌对称；把 ui/proWheel.ts 打包进页面
+  // 喂假数据量箭头淡出（0.4s / 减弱动态 0s）；局中拨色盲轮盘跟着换色、深色主题不用 multiply。
+  {
+    name: 'Pro：颜色轮盘摆得下、不碰东西、跟着配色',
+    shard: 'f', secs: 260, port: 8972,
+    run: ['scripts/check-pro-wheel.mjs', SERVER, '--part=layout'],
   },
 ];
 

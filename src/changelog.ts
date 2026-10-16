@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 2;
+export const RELEASE = 4;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -25,8 +25,8 @@ export type ReleaseNote = Record<Lang, string>;
  * 键是那一次的 `RELEASE`。
  *
  * 编号照 10-15 补充〇·三「RELEASE 重新编号」：P8（终局）→ 1、S9（步步为营第 3 版）→ 2、P14 → 3、S10 → 4、P18 → 5。
- * 第 1 号那一推（10-14 方案 P8）还没做，所以这儿暂时只有第 2 号——RELEASE 只许往上涨，哪一推先上线就先占号，后上线
- * 的那一推要接着往上编（别回头去填 1）。
+ * 第 1 号（10-14 方案 P8）、第 3 号（P14）那两推还没做，所以这儿暂时只有第 2、4 号——RELEASE 只许往上涨，哪一推先上线
+ * 就先占号，后上线的那一推要接着往上编（别回头去填 1、3）。
  */
 export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
   2: {
@@ -34,6 +34,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '改進：步步為營新規則',
     en: 'Step by step has new move rules',
     fr: 'Nouvelles règles pour Pas à pas',
+  },
+  // 10-15 补充 S10（K-4）：Pro 改成单人局的固定翻色 + 颜色轮盘。
+  4: {
+    zhHans: '新版 Pro：颜色绕一圈',
+    zhHant: '新版 Pro：顏色繞一圈',
+    en: 'New Pro: colours flip in a fixed loop',
+    fr: 'Nouveau Pro : couleurs en boucle fixe',
   },
 };
 

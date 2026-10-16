@@ -215,15 +215,19 @@ export function renderAccountPage(
           <button class="profile-pill" id="rulesRow">${s.rulesPill}</button>
           <button class="profile-pill" id="howToRow">${s.tutorialShort}</button>
           <!-- 《Pro》和声音并排（第 17 推）。《Pro》还是那颗带开关的药丸（玩家 2026-09：「开启
-               的形式和情况和现在的色盲友好模式一样」），它眼下管的是棋盘上那一圈「这一枚得分
-               之后会变成什么颜色」（见 engine/proMode.ts）。声音是旁边那一小方：图标就是状态
-               ——一只喇叭，或者划了一道的喇叭——四种语言里都不用写字。 -->
+               的形式和情况和现在的色盲友好模式一样」），它管单人局的固定翻色：开着它开局，每种
+               颜色的色块得分后都翻成调色板里的下一种（见 engine/proMode.ts、ui/proWheel.ts）。
+               外观不改，说明放在 title 和一段只给读屏的字里（10-15 补充 S10）。声音是旁边那一小方：
+               图标就是状态——一只喇叭，或者划了一道的喇叭——四种语言里都不用写字。 -->
           <div class="profile-pill-row">
             <button class="profile-pill profile-pill--switch" id="proRow"
-                    role="switch" aria-checked="${proOn()}">
+                    role="switch" aria-checked="${proOn()}" title="${s.proRowHint}" aria-describedby="proRowHint">
               <span>${s.proBtn}</span>
               <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
             </button>
+            <!-- 说明用 hidden，不用 .sr-only：aria-describedby 直接点名的隐藏节点照样算进读屏说明（accname 的规矩），屏幕上
+                 一点都不占；.sr-only 是把字裁成 1px，check-redesign-fit「没有字被裁掉」会把它当成真被裁掉的字。 -->
+            <span id="proRowHint" hidden>${s.proRowHint}</span>
             <button class="profile-pill profile-pill--square" id="soundRow"
                     role="switch" aria-checked="${soundOn()}" aria-label="${s.soundBtn}">
               <span class="sound-glyph" aria-hidden="true">${soundOn() ? ICON_SOUND_ON : ICON_SOUND_OFF}</span>
