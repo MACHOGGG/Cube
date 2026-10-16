@@ -440,6 +440,34 @@ jobs:
           done
           curl -sf http://localhost:8993/ > /dev/null
           node scripts/check-register.mjs http://localhost:8993/
+      # 下面三道原先只在本地手跑（10-15 补充 L-11 ②：「43 道门不在 CI」实数是 50，这三道连同 browser 那两道先收进来）。
+      # 各跑三遍都绿、都有失败退出码，各自不到半秒。起服务器那两道照上面那一步的写法：一门一台、探活探 /。
+      #
+      # 一个账号、两台设备都算数：电脑上再登录一次，不会把手机那一台的令牌顶掉（从前每次登录换一把新的、旧的立刻作废，
+      # 手机下一次看排行榜就 401，玩家原话「登录之后一会儿关掉，再打开排行榜就要重新登录」）。
+      - name: 同一个账号两台设备
+        run: |
+          node scripts/dev-server.mjs 8991 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8991/ > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8991/ > /dev/null
+          node scripts/check-two-devices.mjs http://localhost:8991/
+      # 兑换码绑定（/api/passcode 的 bind）10-11 起整支回 410（它从来不验那个邮箱是谁的）：量的是「关得干净」。
+      - name: 绑定邮箱不许两个人同时抢到
+        run: |
+          node scripts/dev-server.mjs 8992 dist &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8992/ > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8992/ > /dev/null
+          node scripts/check-bind-race.mjs http://localhost:8992
+      # 「愿不愿意收 Slides 的邮件」那一句问到了、也存下来了；没勾不许当成同意，关掉的 bind 不许替任何人订上（纯 node，
+      # 本进程里直接调 api/ 的处理函数）。
+      - name: 新闻订阅默认不勾
+        run: node scripts/check-news-optin.mjs
       - name: 战绩与排行榜
         run: ALLOW_MEMORY_STORE=1 node scripts/check-scores.mjs
       # 排行榜防刷（10-09 补充方案 7-1，审计 #1）：只认六副正式棋盘（乱名一局 999999999 从前能占总榜第一）、
@@ -685,9 +713,8 @@ jobs:
       # 改坏三处，对应那几条必须红。界面那一半（轮盘摆在哪儿、箭头淡不淡）在 browser 的 f 片：check-pro-wheel。
       - name: Pro：固定翻色只在单人局、发牌不碰随机数
         run: node scripts/check-pro.mjs --mutants
-      # 另外两个服务端检查没收进来，各有原因，都不是「忘了」：
-      # check-bind-race 要先起 dev-server（它打的是 8815 端口的真 HTTP），
-      # check-store 要一份真的 Redis 凭证。两个都得本地跑。
+      # 另外一个服务端检查没收进来，不是「忘了」：check-store 要一份真的 Redis 凭证，得本地跑。（check-bind-race
+      # 原先也写在这儿——「要先起 dev-server」——10-15 补充 L-11 ② 起它在上面「注册 → 登录」后面自己起一台跑了。）
 
       # 产物里的 CSS：自定义属性里不许写「新函数」（安卓上会整块不显示）。
       # 小屋的限速桶：该挡的挡住，**该放过的一个都不能误伤**（10-15 补充 S4 起多一个 room:auth：start / force /
