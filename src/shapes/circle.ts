@@ -9,6 +9,8 @@ import { floorBox, observeBoardSize, fitFloor } from '../engine/boardResize';
 import { fitLive, type Fit, type FitBox } from '../engine/liveFit';
 import { createBoardZoom } from '../ui/boardZoom';
 import { colorblindOn, onColorblindChange, themedPalette } from '../engine/palettePref';
+import { applyTex, texPeriod, texShrinks } from '../engine/cvdTexture';
+import { ASTERISK_HALO_STYLE } from '../ui/dotFaceMark';
 import { playMove, seatLine } from '../engine/juice';
 import type { CascadeConfig } from '../engine/scoring';
 import { createOutlineTracker, spawnOutlineEl, applyScoreAnimations, setCoachLit, MULTI_GROUP_STAGGER_MS } from '../engine/scoreOutline';
@@ -612,17 +614,27 @@ export function createCircleGame(): ShapeGame {
           // (three crossing strokes) rather than the "*" character keeps it
           // perfectly centered and a consistent weight across browsers/fonts.
           el.style.background = 'transparent';
-          const starSize = Math.round(size * 0.95);
           const color = COLORS[tile.dotColor];
-          el.innerHTML =
-            `<svg viewBox="0 0 24 24" width="${starSize}" height="${starSize}">` +
-            `<g stroke="${color}" stroke-width="5.5" stroke-linecap="round">` +
+          // 色盲纹理（10-18 补充 M-4，engine/cvdTexture.ts）：反面的底板上先铺一层星星自己颜色 0.5 的纹理，星缩到
+          // 0.84、在彩色那一组前面描一圈底板色（ui/dotFaceMark.ts 的 ASTERISK_HALO_STYLE，不写 stroke 属性——
+          // 读星色的门认 g[stroke]）。「无」那一色、查不到的颜色、色盲关着时，下面这一份一个字都不变。
+          const tex = colorblindOn() && texShrinks(color);
+          const starSize = Math.round(size * (tex ? 0.84 : 0.95));
+          const lines =
             `<line x1="12" y1="2.5" x2="12" y2="21.5"/>` +
             `<line x1="4" y1="6.75" x2="20" y2="17.25"/>` +
-            `<line x1="20" y1="6.75" x2="4" y2="17.25"/>` +
+            `<line x1="20" y1="6.75" x2="4" y2="17.25"/>`;
+          el.innerHTML =
+            `<svg viewBox="0 0 24 24" width="${starSize}" height="${starSize}"${tex ? ' style="overflow:visible"' : ''}>` +
+            (tex ? `<g data-halo="1" style="${ASTERISK_HALO_STYLE}">${lines}</g>` : '') +
+            `<g stroke="${color}" stroke-width="5.5" stroke-linecap="round">` +
+            lines +
             `</g></svg>`;
+          if (colorblindOn()) applyTex(el, color, texPeriod(size, 0.18), 'back');
         } else {
           el.style.background = COLORS[tile.color];
+          // 正面：同色同纹理。只能写在简写之后（行内简写把 background-image 写回初始值）。
+          if (colorblindOn()) applyTex(el, COLORS[tile.color], texPeriod(size, 0.18), 'front');
         }
         // 挨过一下、还没拆的那几枚：身上画一道裂纹（ui/bombCrack.ts）。没有它，
         // 「两下才拆」这条规则在屏幕上根本不存在，玩家只会觉得「贴着打了一次

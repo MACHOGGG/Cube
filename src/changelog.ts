@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 5;
+export const RELEASE = 6;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -49,6 +49,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '暫停裡可關聲音和震動',
     en: 'Sound and vibration switches in pause',
     fr: 'Son et vibrations réglables en pause',
+  },
+  // 10-18 补充 T4（M-4）：色盲友好配色开着时，棋子身上多一层和颜色一一对应的纹理。
+  6: {
+    zhHans: '色盲友好配色加上纹理',
+    zhHant: '色盲友好配色加上紋理',
+    en: 'Colourblind palette now adds patterns',
+    fr: 'Des motifs sur les pièces pour les daltoniens',
   },
 };
 

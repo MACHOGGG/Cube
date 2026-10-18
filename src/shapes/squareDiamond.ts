@@ -25,6 +25,7 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { slideLine } from '../engine/slideLine';
 import { asteriskSvg } from '../ui/dotFaceMark';
+import { applyTex, texPeriod, texShrinks } from '../engine/cvdTexture';
 import { shuffle } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, blowUpIfClustered, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, redClusterKeys, GRID_ADJACENCY, type BombAdjacency } from '../engine/bomb';
@@ -529,9 +530,15 @@ export function createSquareDiamondGame(): ShapeGame {
           // 密，从前那颗小圆是 0.72，星星按 0.86 走——线画的记号比实心色块
           // 「占地」小，同样的比例看着会瘦一圈。
           el.style.background = 'transparent';
-          el.innerHTML = asteriskSvg(size * 0.86, COLORS[tile.dotColor]);
+          // 色盲纹理（10-18 补充 M-4，engine/cvdTexture.ts）：和基础方块同一套，星按同一个比例缩
+          // （0.86 × 0.84 / 0.95 ≈ 0.76）、外面描一圈底板色。「无」那一色、查不到的颜色照旧 0.86。
+          const tex = colorblindOn() && texShrinks(COLORS[tile.dotColor]);
+          el.innerHTML = asteriskSvg(size * (tex ? 0.76 : 0.86), COLORS[tile.dotColor], tex);
+          if (colorblindOn()) applyTex(el, COLORS[tile.dotColor], texPeriod(size, 0.16), 'back');
         } else {
           el.style.background = COLORS[tile.color];
+          // 正面：同色同纹理。只能写在简写之后（行内简写把 background-image 写回初始值）。
+          if (colorblindOn()) applyTex(el, COLORS[tile.color], texPeriod(size, 0.16), 'front');
         }
         // 挨过一下、还没拆的那几枚：身上画一道裂纹（ui/bombCrack.ts）。没有它，
         // 「两下才拆」这条规则在屏幕上根本不存在，玩家只会觉得「贴着打了一次

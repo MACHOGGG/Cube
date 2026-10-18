@@ -26,6 +26,7 @@ import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { clampOddShift, fillerAwareSource, slideLine } from '../engine/slideLine';
 import { asteriskGroup, triCentroid, triInradius, TRI_STAR_OF_INRADIUS } from '../ui/dotFaceMark';
+import { applyTex, texPeriod, texShrinks } from '../engine/cvdTexture';
 import { shuffle } from '../engine/rng';
 import { dealBalancedDeck, spreadDotColors } from '../engine/orientationDeal';
 import { crackLayer } from '../ui/bombCrack';
@@ -696,6 +697,8 @@ export function createTriangleGame(): ShapeGame {
         // 圆角的深浅只在那儿定义一次：玩家在教学里看熟的形状，进了棋盘不该变
         // 成另一个样子。
         const clip = roundTriClip(pts, { minX, minY, w, h });
+        // 色盲纹理的周期（10-18 补充 M-4，engine/cvdTexture.ts）：0.16 × 三角的边长（两个顶点之间的距离）。
+        const texP = texPeriod(Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]), 0.16);
 
         const el = document.createElement('div');
         el.className = 'tri';
@@ -760,7 +763,11 @@ export function createTriangleGame(): ShapeGame {
           // 的中点在一个朝下的三角里是空的。
           const local = pts.map(([x, y]) => [x - minX, y - minY] as [number, number]);
           const [starX, starY] = triCentroid(local);
-          const starSize = triInradius(local) * 2 * TRI_STAR_OF_INRADIUS;
+          // 色盲纹理（10-18 补充 M-4）：星缩到内切圆直径的 0.76、外面描一圈底板色；纹理剪在那圈灰边**以内**——
+          // .fill 是外轮廓，不能用它，另起一块 .tri-tex（见下）。「无」那一色、查不到的颜色照旧 0.88。
+          const dotHex = COLORS[tile.dotColor];
+          const tex = colorblindOn() && texShrinks(dotHex);
+          const starSize = triInradius(local) * 2 * (tex ? 0.76 : TRI_STAR_OF_INRADIUS);
           const mark = document.createElement('div');
           mark.style.position = 'absolute';
           mark.style.left = '0';
@@ -776,12 +783,38 @@ export function createTriangleGame(): ShapeGame {
           mark.innerHTML =
             `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" style="display:block;overflow:visible">` +
             `<path d="${triRingPath(local)}" fill="none" stroke="var(--ink-faint)" stroke-width="3.5" stroke-linejoin="round"/>` +
-            asteriskGroup(starX, starY, starSize, COLORS[tile.dotColor]) +
+            asteriskGroup(starX, starY, starSize, dotHex, tex) +
             `</svg>`;
           el.appendChild(fill);
+          if (tex) {
+            // 反面那一层纹理：剪成「三个顶点朝重心缩到 TRI_RING_INSET」之后的三角——和那圈灰边（triRingPath）同一
+            // 套几何，纹理正好铺在灰边里面。不带 data-r / data-c，底色透明。四条边分开写、不用 inset 简写：小红书
+            // check-oldcss 要求降级层展开之后样式表里一条 inset 都不剩。
+            const cen = centroid(pts);
+            const ringPts = pts.map(
+              ([x, y]) => [cen[0] + (x - cen[0]) * TRI_RING_INSET, cen[1] + (y - cen[1]) * TRI_RING_INSET] as [number, number],
+            );
+            const ringClip = roundTriClip(ringPts, { minX, minY, w, h });
+            const texDiv = document.createElement('div');
+            texDiv.className = 'tri-tex';
+            texDiv.style.position = 'absolute';
+            texDiv.style.top = '0';
+            texDiv.style.right = '0';
+            texDiv.style.bottom = '0';
+            texDiv.style.left = '0';
+            texDiv.style.clipPath = ringClip;
+            texDiv.style.setProperty('-webkit-clip-path', ringClip);
+            applyTex(texDiv, dotHex, texP, 'back');
+            el.appendChild(texDiv);
+          } else if (colorblindOn()) {
+            // 「无」那一色只打记号（data-tex="none"，和正面一样打在 .fill 上）；查不到的颜色什么都不打。
+            applyTex(fill, dotHex, texP, 'back');
+          }
           el.appendChild(mark);
         } else {
           fill.style.background = COLORS[tile.color];
+          // 正面：纹理挂在 .fill 上，它的 clip-path 自动剪成三角。只能写在简写之后。
+          if (colorblindOn()) applyTex(fill, COLORS[tile.color], texP, 'front');
           el.appendChild(fill);
         }
         if (warn) {

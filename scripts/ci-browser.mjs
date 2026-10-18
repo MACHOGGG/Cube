@@ -768,6 +768,13 @@ export const GATES = [
     shard: 'g', secs: 200, port: 8937,
     run: ['scripts/check-pause-rows.mjs', SERVER],
   },
+  // 色盲友好配色开着时棋子的格内纹理（10-18 补充 M-4）：六副棋盘正面照表、同色同图，炸弹不铺；凑一手得分翻出星星，
+  // 量星的大小、halo、反面那一层纹理；局中关掉色盲盘上干干净净；warm、cool 两套照表；色盲关着时一个字节都不变。
+  {
+    name: '色盲纹理：正反面、翻面、开关、三套配色',
+    shard: 'g', secs: 440, port: 8938,
+    run: ['scripts/check-cvd-texture.mjs', SERVER],
+  },
 ];
 
 /** 清单本身的毛病（check-ci-browser 调它）：片名不认识、端口撞了、脚本不在、地址给了却没服务器…… */

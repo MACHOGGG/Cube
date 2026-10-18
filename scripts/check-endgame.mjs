@@ -82,7 +82,8 @@ const snap = () =>
   page.$$eval(PIECES, (els) =>
     els.map((e) => {
       const r = e.getBoundingClientRect();
-      const stroke = e.querySelector('svg g')?.getAttribute('stroke') || '';
+      // g[stroke]：色盲纹理开着时星前面多一组 halo（10-18 补充 M-4，ui/dotFaceMark.ts），它不带 stroke 属性。
+      const stroke = e.querySelector('svg g[stroke]')?.getAttribute('stroke') || '';
       return {
         at: `${e.dataset.r},${e.dataset.c}`,
         face: e.dataset.face || '',

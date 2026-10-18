@@ -191,6 +191,12 @@ export function plankFlipEl(el: HTMLElement, front: HTMLElement, dirDeg: number)
   const saved = {
     html: el.innerHTML,
     bg: el.style.background,
+    // 色盲纹理（10-18 补充 M-4，engine/cvdTexture.ts）写的是这三条分项。网格、圆点是两层图，靠上面那条简写的
+    // 序列化来回一趟不稳（老内核上更没人量过），所以分项另存一份，写回简写之后原样补上。色盲关着时这三项读回来
+    // 是空串或 initial，原样写回不改变任何东西。
+    bgImage: el.style.backgroundImage,
+    bgSize: el.style.backgroundSize,
+    bgPos: el.style.backgroundPosition,
     shadow: el.style.boxShadow,
     perspective: el.style.perspective,
   };
@@ -253,6 +259,9 @@ export function plankFlipEl(el: HTMLElement, front: HTMLElement, dirDeg: number)
       if (!plank.isConnected || plank.parentElement !== el) return;
       el.innerHTML = saved.html;
       el.style.background = saved.bg;
+      el.style.backgroundImage = saved.bgImage;
+      el.style.backgroundSize = saved.bgSize;
+      el.style.backgroundPosition = saved.bgPos;
       el.style.boxShadow = saved.shadow;
       el.style.perspective = saved.perspective;
     },

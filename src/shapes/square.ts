@@ -24,6 +24,7 @@ import { runLabel as runLabelOf, squareGrowth } from '../engine/matchGrowth';
 import type { Cell, Match, Tile } from '../engine/types';
 import { cellKey, effColor } from '../engine/types';
 import { asteriskSvg } from '../ui/dotFaceMark';
+import { applyTex, texPeriod, texShrinks } from '../engine/cvdTexture';
 import { shuffle, withScratchRandom } from '../engine/rng';
 import { crackLayer } from '../ui/bombCrack';
 import { BOMB_RED_HEX, blowUpIfClustered, dealBombBacks, defuseAround, isCrackedBomb, isLiveBomb, generateCleanBombBoard, redClusterKeys, GRID_ADJACENCY, type BombAdjacency } from '../engine/bomb';
@@ -408,9 +409,15 @@ export function createSquareGame(): ShapeGame {
           // 的底色的，现在没有底色可问了。
           el.style.background = 'transparent';
           el.dataset.dotColor = COLORS[tile.dotColor];
-          el.innerHTML = asteriskSvg(size * 0.95, COLORS[tile.dotColor]);
+          // 色盲纹理（10-18 补充 M-4，engine/cvdTexture.ts）：反面的底板上先铺一层星星自己颜色 0.5 的纹理，星缩到
+          // 0.84、外面描一圈底板色把纹理隔开。「无」那一色、查不到的颜色照旧 0.95、不加圈。
+          const tex = colorblindOn() && texShrinks(COLORS[tile.dotColor]);
+          el.innerHTML = asteriskSvg(size * (tex ? 0.84 : 0.95), COLORS[tile.dotColor], tex);
+          if (colorblindOn()) applyTex(el, COLORS[tile.dotColor], texPeriod(size, 0.16), 'back');
         } else {
           el.style.background = COLORS[tile.color];
+          // 正面：同色同纹理（engine/cvdTexture.ts）。只能写在简写之后——行内简写把 background-image 写回初始值。
+          if (colorblindOn()) applyTex(el, COLORS[tile.color], texPeriod(size, 0.16), 'front');
         }
         // 挨过一下、还没拆的那几枚：身上画一道裂纹（ui/bombCrack.ts）。没有它，
         // 「两下才拆」这条规则在屏幕上根本不存在，玩家只会觉得「贴着打了一次
@@ -1256,7 +1263,10 @@ export function createSquareGame(): ShapeGame {
           ghost.style.left = prev.left + 'px';
           ghost.style.top = prev.top + 'px';
           ghost.style.pointerEvents = 'none';
-          ghost.innerHTML = asteriskSvg(size * 0.95, prev.color);
+          // 色盲纹理开着时替身也带上反面那一层（和 makeTileEl 的反面同一套，见那儿）。
+          const tex = colorblindOn() && texShrinks(prev.color);
+          ghost.innerHTML = asteriskSvg(size * (tex ? 0.84 : 0.95), prev.color, tex);
+          if (colorblindOn()) applyTex(ghost, prev.color, texPeriod(size, 0.16), 'back');
           refs.boardEl.appendChild(ghost);
           if (reduceMotion()) { ghost.remove(); return; }
           ghost.style.transition = `opacity ${COLLAPSE_FADE_MS}ms ease`;

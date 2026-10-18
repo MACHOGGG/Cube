@@ -29,17 +29,31 @@ export const ASTERISK_SEGS: readonly [[number, number], [number, number]][] = [
 export const ASTERISK_STROKE = 5.5;
 
 /**
+ * 色盲纹理底下那颗星外面描的一圈（10-18 补充 M-4）：反面的底板上先铺了一层星星自己颜色的纹理，星外描一圈
+ * 底板色把纹理隔开，星才不糊进去。9.1 = 5.5 ＋ 2 × 1.8（24 坐标制，每侧加宽 1.8）。
+ *
+ * 用 style 写颜色和粗细，**不写 stroke 属性**：bot-selfcheck、check-pro-wheel、check-coach-aim 用
+ * `svg g[stroke]` / `svg [stroke]` 读星的颜色，halo 不能被它们先读到。
+ */
+export const ASTERISK_HALO_STYLE = 'stroke:var(--play-panel, #3D3128);stroke-width:9.1;stroke-linecap:round';
+const asteriskLines = (): string =>
+  ASTERISK_SEGS.map(([[x1, y1], [x2, y2]]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`).join('');
+
+/**
  * 一枚反面，画成 SVG。
  *
  * @param size 这颗星占多少像素见方。小球那边给的是格子的 0.95。
  * @param color 点面的颜色（COLORS[tile.dotColor]），一个字都不变。
+ * @param halo 色盲纹理开着时，在彩色那一组前面多画一圈底板色（ASTERISK_HALO_STYLE）。`<svg>` 跟着加
+ *   overflow:visible，否则 halo 的笔头会被 24×24 的边裁掉。不给（false）时输出和从前逐字节相同。
  */
-export function asteriskSvg(size: number, color: string): string {
+export function asteriskSvg(size: number, color: string, halo = false): string {
   const s = Math.round(size);
   return (
-    `<svg viewBox="0 0 24 24" width="${s}" height="${s}">` +
+    `<svg viewBox="0 0 24 24" width="${s}" height="${s}"${halo ? ' style="overflow:visible"' : ''}>` +
+    (halo ? `<g data-halo="1" style="${ASTERISK_HALO_STYLE}">${asteriskLines()}</g>` : '') +
     `<g stroke="${color}" stroke-width="${ASTERISK_STROKE}" stroke-linecap="round">` +
-    ASTERISK_SEGS.map(([[x1, y1], [x2, y2]]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`).join('') +
+    asteriskLines() +
     `</g></svg>`
   );
 }
@@ -53,13 +67,16 @@ export function asteriskSvg(size: number, color: string): string {
  *
  * @param cx,cy 这颗星的中心，在目标 SVG 自己的坐标里。
  * @param size 星星占多少见方（同上）。
+ * @param halo 同 asteriskSvg：前面多一组带同一个 transform 的底板色描边（9.1 是缩放之前 24 坐标制里的笔宽）。
  */
-export function asteriskGroup(cx: number, cy: number, size: number, color: string): string {
+export function asteriskGroup(cx: number, cy: number, size: number, color: string, halo = false): string {
   const k = size / 24;
+  const transform = `translate(${(cx - size / 2).toFixed(2)},${(cy - size / 2).toFixed(2)}) scale(${k.toFixed(4)})`;
   return (
-    `<g transform="translate(${(cx - size / 2).toFixed(2)},${(cy - size / 2).toFixed(2)}) scale(${k.toFixed(4)})"` +
+    (halo ? `<g data-halo="1" transform="${transform}" fill="none" style="${ASTERISK_HALO_STYLE}">${asteriskLines()}</g>` : '') +
+    `<g transform="${transform}"` +
     ` stroke="${color}" stroke-width="${ASTERISK_STROKE}" stroke-linecap="round" fill="none">` +
-    ASTERISK_SEGS.map(([[x1, y1], [x2, y2]]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`).join('') +
+    asteriskLines() +
     `</g>`
   );
 }
