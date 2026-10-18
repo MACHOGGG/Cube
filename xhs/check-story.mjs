@@ -191,21 +191,23 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
     e.map((b) => (b.textContent || '').replace(/\s+/g, ' ').trim()),
   );
   say(btns.some((x) => x.indexOf('怎么玩') === 0), '暂停面板里那颗《怎么玩》还在', JSON.stringify(btns));
-  // 面板改版之后这一层里的四件事（玩家定的顺序）：教学、色盲友好、再来一局、
-  // 结束游戏，最后一颗《继续》回棋盘。
+  // 面板里的按键，按 id 认、一颗不多一颗不少（玩家定的顺序）：教学、色盲友好、声音、振动（只在能振动的设备上
+  // 有，10-18 补充 M-3）、再来一局、结束游戏，最后一颗《继续》回棋盘。
   //
-  // **正好五颗，多一颗也不行。** 网页版 2026-09 在色盲那一行旁边加了一颗《Pro》
-  // （棋盘上描出「这一枚会变成什么颜色」），那是完整版的东西——这一版玩家定了
-  // 「无 pro 模式」，所以 xhs/src/main.ts 挂完之后把那一行整行摘掉。这一条就是那
-  // 件事的看门人：它红过一次，红的正是那颗漏进来的 Pro。
+  // **没有 Pro。** 网页版 2026-09 在色盲那一行旁边加了一颗《Pro》，那是完整版的东西——这一版玩家定了
+  // 「无 pro 模式」，所以 xhs/src/main.ts 挂完之后把那一行整行摘掉（dropProSwitch 按 #proBtn 找它那一行，
+  // 不会误删声音、振动那两行——各自占一个 .btn-row）。这一条就是那件事的看门人：它红过一次，红的正是那颗
+  // 漏进来的 Pro。
+  //
+  // 从前按下标认、要求「正好五颗」：10-18 补充 M-3 在中间加了声音、振动两行，下标全挪了，改按 id。振动那一
+  // 颗有没有，照页面自己的判据（engine/haptics.ts 的 canVibrate）。
+  const ids = await p.$$eval('#pauseOverlay .modal button', (e) => e.map((b) => b.id));
+  const canVib = await p.evaluate(() => typeof navigator.vibrate === 'function' && matchMedia('(pointer: coarse)').matches);
+  const wantIds = ['howBtn', 'cvdBtn', 'soundBtn', ...(canVib ? ['vibrateBtn'] : []), 'pauseRestartBtn', 'pauseFinishBtn', 'continueBtn'];
   say(
-    btns.length === 5 &&
-      btns[1].indexOf('色盲') === 0 &&
-      btns[2] === '再来一局' &&
-      btns[3] === '结束游戏' &&
-      btns[4] === '继续',
-    '面板里就是那四件事 + 一颗《继续》',
-    JSON.stringify(btns),
+    JSON.stringify(ids) === JSON.stringify(wantIds) && btns[1].indexOf('色盲') === 0 && btns[2] === '声音',
+    `面板里就是：怎么玩、色盲、声音${canVib ? '、振动' : ''}、再来一局、结束游戏、继续（没有 Pro）`,
+    JSON.stringify(ids),
   );
   await ctx.close();
 }

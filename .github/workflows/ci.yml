@@ -1020,7 +1020,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [a, b, c, d, e, f, seed-deal, oldcss]
+        shard: [a, b, c, d, e, f, g, seed-deal, oldcss]
     steps:
       # v5：见 check 那一条的 steps。
       - uses: actions/checkout@v5

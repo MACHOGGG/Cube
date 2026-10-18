@@ -4303,6 +4303,25 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
 /* 开局倒数那一屏借的是同一层面板。那时候还没开局，「再来一局 / 结束游戏」
    无从谈起（见 gameShell 里 #startPauseBtn 那段）。 */
 #pauseOverlay.pause--pre .pause-exits { display: none; }
+/* 手机横屏、矮于 560（10-18 补充 M-3）：一列装不下，改成左右两栏——左边是各个开关，
+   右边上面标题、下面三颗键。用 grid-template-areas 不用 gap：小红书老内核（Chrome 61）认
+   grid-column-gap，不认 grid 上的 gap（Chrome 66 才有），两种写法都写上。
+   加声音、振动两行之前这一屏就装不下了（推算 568×320 差约 70px、640×360 差约 30px）。 */
+@media (orientation: landscape) and (max-height: 560px) {
+  #pauseOverlay .modal {
+    max-width: 600px; padding: 16px 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "set title" "set go";
+    grid-column-gap: 20px; column-gap: 20px;
+    align-items: start;
+  }
+  #pauseOverlay .modal > h2 { grid-area: title; }
+  #pauseOverlay .modal > .pause-set { grid-area: set; }
+  #pauseOverlay .modal > .pause-go { grid-area: go; }
+  #pauseOverlay .modal .btn-row.pause-exits { flex-direction: column; }
+}
 
 /* ---------- 个人主页（第 17 推：两栏 / 单列） ----------
    招牌底下是 .profile-cols：电脑端两栏（见文件末尾 min-width:1000px 那一节），手机上

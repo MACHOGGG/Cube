@@ -765,8 +765,10 @@ export interface I18nStrings {
   compositeScoreLabel: string;
   /** "Your average in this mode" on the end-of-run summary. */
   avgScoreLabel: string;
-  /** Accessible name for the sound on/off button in 个人主页. */
+  /** 声音开关的名字：个人主页那颗（读屏名）和暂停面板那一行（看得见的字）共用。 */
   soundBtn: string;
+  /** 暂停面板里振动那一行（10-18 补充 M-3；只在能振动的设备上出现）。 */
+  vibrateBtn: string;
   shareBtn: string;
   restartBtn: string;
   shareCardTitle: string;
@@ -1293,6 +1295,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeScoreLabel: 'Final score',
     avgScoreLabel: 'Your average in this mode',
     soundBtn: 'Sound',
+    vibrateBtn: 'Vibration',
     shareBtn: 'Share',
     restartBtn: 'Again',
     shareCardTitle: 'Share result',
@@ -1681,6 +1684,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeScoreLabel: 'Score final',
     avgScoreLabel: 'Votre moyenne dans ce mode',
     soundBtn: 'Son',
+    vibrateBtn: 'Vibrations',
     shareBtn: 'Partager',
     restartBtn: 'Rejouer',
     shareCardTitle: 'Partager le résultat',
@@ -2069,6 +2073,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeScoreLabel: '綜合得分',
     avgScoreLabel: '該玩法您的均分',
     soundBtn: '聲音',
+    vibrateBtn: '震動',
     shareBtn: '分享',
     restartBtn: '再來',
     shareCardTitle: '分享戰績',
@@ -2457,6 +2462,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeScoreLabel: '综合得分',
     avgScoreLabel: '该玩法您的均分',
     soundBtn: '声音',
+    vibrateBtn: '振动',
     shareBtn: '分享',
     restartBtn: '再来',
     shareCardTitle: '分享战绩',

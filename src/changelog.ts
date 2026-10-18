@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 4;
+export const RELEASE = 5;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -27,6 +27,7 @@ export type ReleaseNote = Record<Lang, string>;
  * 编号照 10-15 补充〇·三「RELEASE 重新编号」：P8（终局）→ 1、S9（步步为营第 3 版）→ 2、P14 → 3、S10 → 4、P18 → 5。
  * 第 1 号（10-14 方案 P8）、第 3 号（P14）那两推还没做，所以这儿暂时只有第 2、4 号——RELEASE 只许往上涨，哪一推先上线
  * 就先占号，后上线的那一推要接着往上编（别回头去填 1、3）。
+ * 10-18 补充照这条先占号：T3（暂停面板的声音、振动）→ 5、T4（色盲纹理）→ 6。原先排给 P18 的 5 被占了，P18 上线时接着往上编。
  */
 export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
   2: {
@@ -41,6 +42,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '新版 Pro：顏色繞一圈',
     en: 'New Pro: colours flip in a fixed loop',
     fr: 'Nouveau Pro : couleurs en boucle fixe',
+  },
+  // 10-18 补充 T3（M-3）：暂停面板加「声音」「振动」两行。
+  5: {
+    zhHans: '暂停里可关声音和振动',
+    zhHant: '暫停裡可關聲音和震動',
+    en: 'Sound and vibration switches in pause',
+    fr: 'Son et vibrations réglables en pause',
   },
 };
 

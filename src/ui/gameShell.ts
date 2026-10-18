@@ -4,6 +4,8 @@ import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, cvdOfferHtml, playCountdown, startStageHtml } from './startStage';
 import { cvdOfferDue, markCvdOfferDone } from '../engine/firstPlay';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { setSoundOn, soundOn } from '../engine/juice';
+import { canVibrate, setVibrateOn, vibrateOn } from '../engine/haptics';
 import { proOn, setPro } from '../engine/proMode';
 import { openRulesModal, type ExtraTipView } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
@@ -459,6 +461,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     <div class="overlay opaque" id="pauseOverlay">
       <div class="modal">
         <h2>${s.pausedTitle}</h2>
+        <!-- 分两组（10-18 补充 M-3）：.pause-set 是各个开关（看一眼就回来），.pause-go 是走人的三颗键。
+             竖屏一个像素不变（组内 8px、组间 20px 都写在 .btn-row 自己身上）；手机横屏矮屏装不下一列，
+             两组左右分栏（style.css 的 #pauseOverlay 那几条）。 -->
+        <div class="pause-set">
         <!-- 局中也进得去的那一屏五条规则：和个人主页 / 小红书版《怎么玩》是
              同一份（ui/rulesModal.ts）。规则记不清的人不该为了看一眼而丢掉
              手上这一局。 -->
@@ -486,12 +492,30 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
           </button>
         </div>
+        <!-- 声音、振动（10-18 补充 M-3）：从前局中关不了声音（只有个人主页那一颗；小红书那一版哪儿都关不掉），
+             振动不受任何设置管。振动那一行只在能振动的设备上**不渲染**而不是渲染了再 hidden：.btn-row 是
+             display: flex，作者样式压得过浏览器对 [hidden] 的默认隐藏。 -->
+        <div class="btn-row">
+          <button class="icon-btn pause-switch" id="soundBtn" role="switch" aria-checked="${soundOn()}">
+            <span>${s.soundBtn}</span>
+            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+          </button>
+        </div>
+        ${canVibrate() ? `<div class="btn-row">
+          <button class="icon-btn pause-switch" id="vibrateBtn" role="switch" aria-checked="${vibrateOn()}">
+            <span>${s.vibrateBtn}</span>
+            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+          </button>
+        </div>` : ''}
         ${extraButtonsHtml ? `<div class="btn-row pause-extras">${extraButtonsHtml}</div>` : ''}
+        </div>
+        <div class="pause-go">
         <div class="btn-row pause-exits">
           <button class="secondary" id="pauseRestartBtn">${s.restartRunBtn}</button>
           <button class="secondary" id="pauseFinishBtn">${s.endRunBtn}</button>
         </div>
         <div class="btn-row pause-resume"><button class="primary" id="continueBtn">${s.resume}</button></div>
+        </div>
       </div>
     </div>
 
@@ -666,6 +690,19 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       showCvd();
     });
   }
+
+  // 暂停面板里的声音、振动（10-18 补充 M-3）。暂停面板和个人主页不会同时在屏上，各自在画出来的时候读一次
+  // 就对得上，不需要订阅。
+  const soundBtn = container.querySelector<HTMLButtonElement>('#soundBtn');
+  soundBtn?.addEventListener('click', () => {
+    setSoundOn(!soundOn());
+    soundBtn.setAttribute('aria-checked', String(soundOn()));
+  });
+  const vibrateBtn = container.querySelector<HTMLButtonElement>('#vibrateBtn');
+  vibrateBtn?.addEventListener('click', () => {
+    setVibrateOn(!vibrateOn());
+    vibrateBtn.setAttribute('aria-checked', String(vibrateOn()));
+  });
 
   // 《Pro》那颗开关（暂停面板里）。小屋局按不了暂停，所以它只有这一颗——底排那条控制
   // 条上没有它：那儿的位置是给「这一局的事」留的（离开小屋、交卷），而 Pro 是这个人

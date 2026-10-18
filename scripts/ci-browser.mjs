@@ -57,7 +57,7 @@ export const SERVER = '<server>';
 const RULE_ART = join(tmpdir(), 'ci-browser-ruleart.mjs');
 
 /** 片名。和 ci.yml 里 browser 那个矩阵的 shard 一一对应（check-ci-browser 量）。 */
-export const SHARDS = ['a', 'b', 'c', 'd', 'e', 'f', 'seed-deal', 'oldcss'];
+export const SHARDS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'seed-deal', 'oldcss'];
 
 export const GATES = [
   // 最早收进 CI 的四道（下面这一组），都是当时真的拦下过回归的。
@@ -754,6 +754,19 @@ export const GATES = [
     name: '第一次倒数页上的色盲开关',
     shard: 'f', secs: 300, port: 8936,
     run: ['scripts/check-cvd-offer.mjs', SERVER],
+  },
+
+  // ── g 片（10-18 补充 T3 加的第九片）──────────────────────────────────────────────────
+  // 暂停面板那一道约 200 秒，而那时 a–f 每片离 15 分钟只剩 0.5–2 分钟（f 刚收了色盲开关那一道），塞进哪一片
+  // check-ci-browser 的 ⑤ 都当场红，所以照 f 片的先例另开一片。往后加门先往这一片放。
+  //
+  // 暂停面板的「声音」「振动」两行（10-18 补充 M-3）：手机竖屏按键次序和行距没变；振动那一行只在能振动的设备上有；
+  // 声音和个人主页那一颗是同一个设置；振动关了真的不振；手机横屏矮屏四种尺寸 × 四语 × 局中 / 倒数页借面板两种都是
+  // 左右两栏、《继续》和左栏最后一颗开关都在首屏内；小红书那一端没有 Pro、横屏两栏一样。
+  {
+    name: '暂停面板：声音、振动两行，横屏两栏',
+    shard: 'g', secs: 200, port: 8937,
+    run: ['scripts/check-pause-rows.mjs', SERVER],
   },
 ];
 

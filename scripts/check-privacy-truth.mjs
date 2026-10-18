@@ -533,8 +533,10 @@ checkEvents(EVENTS_FOUND, PRIVACY_TEXT);
  * 进政策、在这儿补上 say，不然这一节红。
  */
 const KEY_CLASSES = [
-  { cls: '设置', keys: ['slides_lang', 'slides_colorblind', 'slides_cvd_palette', 'slides_piece_palette', 'slides_sound', 'slides_pro', 'slides_theme', 'slides_theme_paint', 'slides_flip_speed'],
-    say: { zhHans: ['设置（语言'], zhHant: ['設定（語言'], en: ['settings (language'], fr: ['réglages (langue'] } },
+  // slides_vibrate：暂停面板里那一行振动开关（10-18 补充 M-3，engine/haptics.ts）。和「进度」那一类一样，新加的那一词
+  // 所在的片段也钉进 say。
+  { cls: '设置', keys: ['slides_lang', 'slides_colorblind', 'slides_cvd_palette', 'slides_piece_palette', 'slides_sound', 'slides_vibrate', 'slides_pro', 'slides_theme', 'slides_theme_paint', 'slides_flip_speed'],
+    say: { zhHans: ['设置（语言', '声音、振动'], zhHant: ['設定（語言', '聲音、震動'], en: ['settings (language', 'sound, vibration'], fr: ['réglages (langue', 'son, vibrations'] } },
   // slides_signin_hint_day：结算页那句登录提示上一次是哪一天说的（10-11 方案 B-14，engine/signInHint.ts）。这一类
   // 的说法是一张清单，加一个键就要在清单里多一项——所以它自己那一项也写进 say。
   // slides_cvd_offer：开局倒数页上那颗色盲开关出过没有（10-18 补充 M-2，engine/firstPlay.ts 的 cvdOfferDue）。同理。
