@@ -30,7 +30,9 @@
 import { STRINGS, type Lang } from '../i18n';
 import { dailySeed, dayIndexOf, dayKey, decodeSeed, formatSeed } from '../engine/seedCode';
 import { seedGameOf, type SeedGame } from '../engine/seedDeal';
-import { countFrom, isLandscapeMode, playCountdown, startStageHtml } from './startStage';
+import { countFrom, cvdOfferHtml, isLandscapeMode, playCountdown, startStageHtml } from './startStage';
+import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { cvdOfferDue, markCvdOfferDone } from '../engine/firstPlay';
 import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
 import { CTL_BACK } from './ctlIcons';
 import { pushLayer } from '../engine/backNav';
@@ -182,6 +184,12 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
    */
   function showCount(game: SeedGame, emblem: string): void {
     clear();
+    // 竖着拿手机的那一天：倒数底下那一句露着，照样数（文件头：原先要等转过来才数，锁着竖屏的人
+    // 永远开不了局）。图和倒数窗不藏——这一屏和别的日子是同一张脸，只多底下那一句。
+    const turning = needsTurn(game.board);
+    // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）。挂着「请把手机转过来」那一句的这一页不摆、也不记：
+    // 竖屏时图和倒数窗已经挤在一起，人也正忙着转手机，留到下一个倒数页。
+    const offered = cvdOfferDue() && !turning;
     root.innerHTML = `
       <div class="app daily-page daily-page--count">
         <div class="overlay opaque show overlay--start">
@@ -192,6 +200,7 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
               `<div class="start-marks" style="--marks:1"><span class="start-mark">` +
               `<span class="start-mark-art daily-emblem" id="dailyEmblem">${emblem}</span></span></div>`,
             extra: `<p class="daily-turn" id="dailyTurn" hidden>${s.dailyTurn}</p>`,
+            offer: offered ? cvdOfferHtml(colorblindOn(), s.colorblindBtn) : undefined,
             actions: `<button class="icon-btn start-act" id="dailyBack" aria-label="${s.back}">${CTL_BACK}</button>`,
           })}
         </div>
@@ -199,14 +208,20 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
     `;
     const win = root.querySelector<HTMLElement>('#dailyCount')!;
     const turn = root.querySelector<HTMLElement>('#dailyTurn')!;
-    // 竖着拿手机的那一天：倒数底下那一句露着，照样数（文件头：原先要等转过来才数，锁着竖屏的人
-    // 永远开不了局）。图和倒数窗不藏——这一屏和别的日子是同一张脸，只多底下那一句。
-    const turning = needsTurn(game.board);
     turn.hidden = !turning;
+    // 这一页不在游戏外壳里，开关自己接：拨了立刻换配色（页面跟着 data-cvd 换），棋盘随后由游戏外壳
+    // 搭起来时读一次，对得上。
+    const offerBtn = root.querySelector<HTMLButtonElement>('#cvdOfferBtn');
+    offerBtn?.addEventListener('click', () => {
+      setColorblind(!colorblindOn());
+      offerBtn.setAttribute('aria-checked', String(colorblindOn()));
+    });
     let stopCount: (() => void) | null = playCountdown(win, () => {
       stopCount = null;
       // 这一页已经被换掉了（退出、或者别的什么把 root 清了）：不开。
       if (!root.querySelector('.daily-page--count')) return;
+      // 摆了色盲开关的那一页数完、真的开打了，才算见过它（10-18 补充 M-2）。
+      if (offered) markCvdOfferDone();
       clear();
       handlers.onLaunch(game);
     }, turning ? countFrom(game.board) : DAILY_COUNT_FROM);

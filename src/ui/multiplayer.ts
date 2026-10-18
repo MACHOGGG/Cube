@@ -1,7 +1,9 @@
 import { STRINGS, type Lang } from '../i18n';
 import { isGenius } from '../engine/subscription';
 import { countdownDigit } from '../engine/clockSync';
-import { countFrom, flipHintHtml, pushDigit, startStageHtml } from './startStage';
+import { countFrom, cvdOfferHtml, flipHintHtml, isLandscapeMode, pushDigit, startStageHtml } from './startStage';
+import { colorblindOn, setColorblind } from '../engine/palettePref';
+import { cvdOfferDue, markCvdOfferDone } from '../engine/firstPlay';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { drawOne, type Family, type TargetPattern } from '../engine/targets';
 import { cardOrNull } from '../shapes/registry';
@@ -1353,6 +1355,10 @@ export function renderMultiplayerPage(
           : drawOne(family, Math.random)) ?? undefined;
     }
 
+    // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）：和单人那一页同一条规矩——这台设备还没见过才摆，
+    // 建议横着玩的那一局（倒数底下挂着「请把手机转过来」）、上半屏是老虎机的那一局不摆、也不记。
+    const offered = cvdOfferDue() && !isLandscapeMode(mode) && !spun;
+
     // 和单人开局页是同一幕：上半屏这一局的玩法图（旁边挂着那扇小门，说明这是
     // 一场竞赛），下半屏 4、3、2、1。区别只在谁在数——这里数的是服务器给的开
     // 赛时刻，不是本地的秒表，所有人的数字才会同时跳。
@@ -1370,10 +1376,17 @@ export function renderMultiplayerPage(
           // 无限反转那一局：倒数底下先是那块说明（图标 + 连击减弱、没有时间奖
           // 励），和单人开局页一样；再是实时排行。
           extra: (state.flip ? flipHintHtml(s.flipScoringHint) : '') + standingsStrip(state),
+          offer: offered ? cvdOfferHtml(colorblindOn(), s.colorblindBtn) : undefined,
         })}
       </div>
     `;
     const tickEl = container.querySelector<HTMLElement>('#mpTick')!;
+    // 这一页不在游戏外壳里，开关自己接：拨了立刻换配色，棋盘随后由游戏外壳搭起来时读一次。
+    const offerBtn = container.querySelector<HTMLButtonElement>('#cvdOfferBtn');
+    offerBtn?.addEventListener('click', () => {
+      setColorblind(!colorblindOn());
+      offerBtn.setAttribute('aria-checked', String(colorblindOn()));
+    });
     // 转起来。stopAll 里会叫它别转了——一个 rAF 循环挂在已经不存在的 DOM 上
     // 是要一直烧电的。
     if (spun) {
@@ -1396,6 +1409,9 @@ export function renderMultiplayerPage(
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
         playedRound = round;
+        // 摆了色盲开关的那一页数完、真的开打了，才算见过它（10-18 补充 M-2）；这一页已经死了（离开了
+        // 小屋）就不算。
+        if (offered && !dead) markCvdOfferDone();
         if (!dead) handlers.onMatchStart({ mode, seed, slot: state.slot ?? null, flip: state.flip, target: spun });
         return;
       }

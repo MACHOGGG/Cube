@@ -63,6 +63,8 @@ async function open(old = false, seen = false) {
     try {
       localStorage.setItem('slides.xhs.firstRun', '1');
       localStorage.setItem('slides.xhs.story.circle', '1');
+      // 倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：它只在第一次倒数页上出现，不是这道门要量的。
+      localStorage.setItem('slides.xhs.cvdOffer', '1');
     } catch {
       /* 存不进去也不影响这一台：它只是想跳过头一回那一屏 */
     }

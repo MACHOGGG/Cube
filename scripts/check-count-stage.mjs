@@ -43,6 +43,8 @@ const SEED = `
   localStorage.setItem('slides_played_circle', '1');
   localStorage.setItem('slides_played_finished', '1');
   for (const k of ['bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout']) localStorage.setItem('slides_played_' + k, '1');
+  // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：这道门量倒数页，多一颗开关它就量走样。
+  localStorage.setItem('slides_cvd_offer', '1');
 `;
 /** 输代号那一局用的码：基础圆球（编号表第 1 行）。 */
 const CODE = SC.encodeSeed(SC.DEAL_VERSION, 1, 777);

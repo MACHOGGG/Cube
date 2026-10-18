@@ -56,7 +56,7 @@ import { registerCards } from '../../src/shapes/registry';
 
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
-import { knowsHow, setKnowHowKey } from '../../src/engine/firstPlay';
+import { knowsHow, setCvdOfferKey, setKnowHowKey } from '../../src/engine/firstPlay';
 import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE } from './tutorial';
 import { bombTip, flipTip, puzzleTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, XHS_ADVANCED_MODES, type XhsMode } from './menu';
@@ -747,6 +747,9 @@ document.documentElement.setAttribute('data-theme', 'light');
 // 《我会玩》那把钥匙也换成这一版自己的：容器里两版可能共用一个域名下的存档，
 // 一版按过不该把另一版的引导也关掉（整套 slides.xhs. 前缀就是为这件事）。
 setKnowHowKey('slides.xhs.knowHow');
+// 倒数页上那颗色盲开关「摆过没有」同理（10-18 补充 M-2）：这一版首局没有倒数，它的第一次是第二局，
+// 和网页版各记各的。
+setCvdOfferKey('slides.xhs.cvdOffer');
 
 // 样式：先装网页版那一整套（字体 + 主样式 + 两副棋盘 + 开场动画，见
 // src/injectStyles.ts），再把这一版的 Chrome 61 基线层叠在后面——同名规则

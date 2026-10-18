@@ -40,6 +40,8 @@ async function open({ genius = false } = {}) {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
+    // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：这道门量倒数页，多一颗开关它就量走样。
+    localStorage.setItem('slides_cvd_offer', '1');
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));

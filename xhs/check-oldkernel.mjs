@@ -208,6 +208,8 @@ for (const key of list) {
   // 「方块分镜动画」那一屏。
   localStorage.setItem('slides.xhs.story.square', '1');
   localStorage.setItem('slides.xhs.story.circle', '1');
+  // 倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：这道门比的是开局页平常的样子，多一颗开关就比走样。
+  localStorage.setItem('slides.xhs.cvdOffer', '1');
 } catch (e) {}`);
   // 顺便把样式降级层也强制打开：真的 Chrome 61 上这两件事是同时发生的
   // （接口缺、CSS 新写法也缺），分开测就漏了它们凑在一起的那一份。
@@ -562,6 +564,8 @@ if (!only || only === 'daily') {
   await ctx.addInitScript(`try {
   localStorage.setItem('slides.xhs.story.square', '1');
   localStorage.setItem('slides.xhs.story.circle', '1');
+  // 倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：这道门比的是开局页平常的样子，多一颗开关就比走样。
+  localStorage.setItem('slides.xhs.cvdOffer', '1');
 } catch (e) {}`);
   await ctx.addInitScript('window.__SLIDES_OLD_KERNEL__ = true;');
   const p = await ctx.newPage();

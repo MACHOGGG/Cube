@@ -71,6 +71,8 @@ async function hostPage(code = 'TESTMONTH') {
     for (const [k, v] of Object.entries({
       slides_lang: 'zhHans', slides_intro_seen: '1', slides_played_square: '1',
       slides_tutorial_seen: '1', slides_tutorial_seen_circle: '1', slides_tutorial_seen_triangle: '1',
+      // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：选手倒数页那几条量的是排行摆不摆得下。
+      slides_cvd_offer: '1',
     })) localStorage.setItem(k, v);
   });
   await p.goto(BASE, { waitUntil: 'load' });
@@ -123,6 +125,8 @@ async function contestantPage(code, seat, [width, height] = [390, 844]) {
     for (const [k, v] of Object.entries({
       slides_lang: 'zhHans', slides_intro_seen: '1', slides_played_square: '1',
       slides_tutorial_seen: '1', slides_tutorial_seen_circle: '1', slides_tutorial_seen_triangle: '1',
+      // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：选手倒数页那几条量的是排行摆不摆得下。
+      slides_cvd_offer: '1',
     })) localStorage.setItem(k, v);
     localStorage.setItem('slides_mp_seat', JSON.stringify({ code, playerId: seat.playerId, playerToken: seat.playerToken, at: Date.now() }));
   }, [code, seat]);

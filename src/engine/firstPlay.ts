@@ -239,3 +239,42 @@ export function claimFirstHowToHint(): boolean {
   markOpened('howhint');
   return true;
 }
+
+/**
+ * 开局倒数页上那颗「色盲友好配色」开关，这台设备还该不该摆（10-18 补充 M-2）。
+ *
+ * 色盲友好配色默认关着，从前哪儿都没提过一句（engine/palettePref.ts）——标准配色在完全绿色盲
+ * 眼里，经典方块的蓝和紫只差 1.4（report-cvd-sim 的及格线是 10），而要知道有这个开关，得先自己
+ * 去翻暂停面板。站长定的：第一次看到 4-3-2-1 倒数页时，页上摆一颗；那一页数完、真的开打之后，
+ * 以后的倒数页都不再摆。老玩家更新后也看一次（不按旧进度跳过）。
+ *
+ * 记的那一下只在「摆了开关的那一页倒数数完」那一刻（gameShell / dailyMode / multiplayer 三处
+ * 的倒数回调）。倒数中途按《退出》、返回、整页被换掉都不记，下次照样摆——看见不等于读到了。
+ *
+ * 小红书那一版换成自己的一把（xhs/src/main.ts 里和 setKnowHowKey 挨着调）：那一版首局没有倒数，
+ * 它的「第一次」是第二局，和网页版各记各的。
+ */
+let cvdOfferKey = 'slides_cvd_offer';
+
+/** 小红书端在开机时换成自己那把（xhs/src/main.ts）。 */
+export function setCvdOfferKey(key: string): void {
+  cvdOfferKey = key;
+}
+
+/** 这台设备还没在倒数页上见过那颗色盲开关、并接着开打过。存储读不到时当已经见过（不摆）——
+ *  读不到就永远记不下，每一局倒数页上都多一颗开关，比一次都不摆更像出了错。 */
+export function cvdOfferDue(): boolean {
+  try {
+    return localStorage.getItem(cvdOfferKey) !== '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markCvdOfferDone(): void {
+  try {
+    localStorage.setItem(cvdOfferKey, '1');
+  } catch {
+    /* 记不下就下次再摆 */
+  }
+}

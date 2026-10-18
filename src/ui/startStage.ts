@@ -34,6 +34,14 @@ export interface StartStageOpts {
   /** 需要额外塞在倒数下面的东西（横屏提示）。 */
   extra?: string;
   /**
+   * 摆在倒数窗正下方、和倒数同一格里的东西——第一次倒数页上那颗色盲开关（cvdOfferHtml，10-18
+   * 补充 M-2）。
+   *
+   * 不走 extra：竖屏开局页上下两半各是 `flex: 1 1 0`，extra 每多一行两半各少一截，上半屏那张
+   * 玩法图就被往外挤（320×568 上推算顶出屏顶约 15px）。放进倒数那一半，上半屏一个像素都不动。
+   */
+  offer?: string;
+  /**
    * 换掉上半屏那一排玩法图。
    *
    * 随机得分目标那一局用它摆那台老虎机——那一局的「你要玩的是这个」不是一
@@ -87,12 +95,26 @@ export function startStageHtml(o: StartStageOpts): string {
              宽度按个数分，所以两个和三个都刚好铺满一行。 -->
         ${o.emblem ?? `<div class="start-marks" style="--marks:${marks.length}">${marks.join('')}</div>`}
       </div>
-      <div class="start-count">
-        <div class="cd-window" id="${o.countId}" aria-hidden="true"></div>
+      <div class="start-count${o.offer ? ' start-count--offer' : ''}">
+        <div class="cd-window" id="${o.countId}" aria-hidden="true"></div>${o.offer ?? ''}
       </div>
       ${o.extra ?? ''}
       ${o.actions ? `<div class="start-actions">${o.actions}</div>` : ''}
     </div>`;
+}
+
+/**
+ * 第一次倒数页上那颗「色盲友好配色」开关（10-18 补充 M-2；摆不摆由 engine/firstPlay.ts 的
+ * cvdOfferDue 定）。和暂停面板里 #cvdBtn 是同一副零件（gameShell.ts），外面多一层定位用的
+ * start-cvd-offer：玩家在这儿拨过、再按《暂停》，看到的是同一颗开关停在同一个位置上。
+ */
+export function cvdOfferHtml(on: boolean, label: string): string {
+  return `<div class="btn-row start-cvd-offer">
+        <button class="icon-btn pause-switch" id="cvdOfferBtn" role="switch" aria-checked="${on}">
+          <span>${label}</span>
+          <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
+        </button>
+      </div>`;
 }
 
 /** 一个数字停留多久。数字有几个，这一幕就有几秒。 */

@@ -747,6 +747,14 @@ export const GATES = [
     shard: 'f', secs: 260, port: 8972,
     run: ['scripts/check-pro-wheel.mjs', SERVER, '--part=layout'],
   },
+  // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）：六种尺寸 × 四语摆得下、不挤上半屏；拨了立刻生效；按《退出》不算见过、
+  // 数完才算；每日挑战、转手机那一页、老虎机那一页、小屋选手那台、小红书第二局各走一遍；尺子换成「看见就记」必须红。
+  // 小屋那一节兑一次 TESTMONTH——自己一台服务器。
+  {
+    name: '第一次倒数页上的色盲开关',
+    shard: 'f', secs: 300, port: 8936,
+    run: ['scripts/check-cvd-offer.mjs', SERVER],
+  },
 ];
 
 /** 清单本身的毛病（check-ci-browser 调它）：片名不认识、端口撞了、脚本不在、地址给了却没服务器…… */

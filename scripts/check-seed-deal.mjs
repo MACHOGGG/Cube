@@ -58,6 +58,9 @@ async function freshContext(opts = {}) {
     localStorage.setItem('slides_played_finished', '1');
     // 头一回进每个玩法时棋盘底下那句教学：先记成「进过了」，免得它占着盘面底下那一块。
     for (const k of ['bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout']) localStorage.setItem(`slides_played_${k}`, '1');
+    // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：下面断言每日挑战倒数页上「除了数字和码
+    // 没有一个别的字」，开关一出来就多了「色盲友好配色」。
+    localStorage.setItem('slides_cvd_offer', '1');
     localStorage.setItem(
       'slides_genius',
       JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 24 * 60 * 60 * 1000 }),

@@ -818,6 +818,10 @@ try {
   // 方案点名的只是网页版那一份菜单）。这份脚本比的是两边平常的样子，平常的人早就打完过一局——不填
   // 这一把，「主菜单：六张卡的图与小字」那一节在网页版上找不到每日挑战那张卡，比不了。
   localStorage.setItem('slides_played_finished', '1');
+  // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）：两边都只摆一次，也是「只有第一次才有」的招待。两边各自那把
+  // 钥匙都填上。
+  localStorage.setItem('slides_cvd_offer', '1');
+  localStorage.setItem('slides.xhs.cvdOffer', '1');
   // 网页版把老虎机和无限反转锁在天才票后面，不开锁走不到那一局。这一版全部
   // 免费，锁不在比对范围里，所以这里直接发一张。channel:'code' 是内部码那条
   // 路，subscription.ts 的 read() 对它免检渠道。

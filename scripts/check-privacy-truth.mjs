@@ -537,10 +537,12 @@ const KEY_CLASSES = [
     say: { zhHans: ['设置（语言'], zhHant: ['設定（語言'], en: ['settings (language'], fr: ['réglages (langue'] } },
   // slides_signin_hint_day：结算页那句登录提示上一次是哪一天说的（10-11 方案 B-14，engine/signInHint.ts）。这一类
   // 的说法是一张清单，加一个键就要在清单里多一项——所以它自己那一项也写进 say。
-  { cls: '进度', prefixes: ['slides_tutorial_seen', 'slides_played_', 'slides_bulb_'], keys: ['slides_know_how', 'slides_first_run', 'slides_landscape_played', 'slides_total_seen', 'slides_signin_hint_day'],
-    say: { zhHans: ['进度（每个教学', '结算页上那句登录提示今天说过没有'], zhHant: ['進度（每個教學', '結算頁上那句登入提示今天說過沒有'],
-      en: ['progress (which tutorials', 'whether today’s sign-in tip on the result screen has been shown'],
-      fr: ['progression (les tutoriels', 'si le conseil de connexion de l’écran de fin a déjà été affiché aujourd’hui'] } },
+  // slides_cvd_offer：开局倒数页上那颗色盲开关出过没有（10-18 补充 M-2，engine/firstPlay.ts 的 cvdOfferDue）。同理。
+  { cls: '进度', prefixes: ['slides_tutorial_seen', 'slides_played_', 'slides_bulb_'], keys: ['slides_know_how', 'slides_first_run', 'slides_landscape_played', 'slides_total_seen', 'slides_signin_hint_day', 'slides_cvd_offer'],
+    say: { zhHans: ['进度（每个教学', '结算页上那句登录提示今天说过没有', '开局倒数页上那颗色盲友好配色开关出过没有'],
+      zhHant: ['進度（每個教學', '結算頁上那句登入提示今天說過沒有', '開局倒數頁上那顆色盲友好配色開關出過沒有'],
+      en: ['progress (which tutorials', 'whether today’s sign-in tip on the result screen has been shown', 'whether the colourblind-palette switch on the countdown screen has been shown'],
+      fr: ['progression (les tutoriels', 'si le conseil de connexion de l’écran de fin a déjà été affiché aujourd’hui', 'si l’interrupteur de la palette adaptée aux daltoniens a déjà été affiché sur l’écran du compte à rebours'] } },
   // slides_slot_split_v1：老虎机旧局从基础那一本搬出去的记号（10-11 方案 B-7，engine/slotSplit.ts）——政策里「几枚
   // 『旧记录已经整理过』的记号」那一句本来就是清单式的复数，不用加字。
   { cls: '战绩', prefixes: ['sugarcube_', 'slides_wipe_', '::'], keys: ['slides_runkey_fix_v1', 'slides_slot_split_v1'],

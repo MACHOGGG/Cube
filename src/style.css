@@ -6839,6 +6839,22 @@ body.is-room-host::after {
 }
 .start-actions .icon-btn.start-act > svg { width: 100%; height: 100%; display: block; }
 .start-actions .icon-btn.start-act:active { transform: scale(0.94); }
+/* 第一次倒数页上那颗色盲开关（10-18 补充 M-2）：放在倒数窗下面，和暂停面板那一条同一副零件。
+   不用 min()：带 % 的 min() 小红书老内核算不掉（check-downlevel 守着），写成 width + max-width。
+   292 = 暂停面板 .modal 的内容宽（340 − 2×24）；.pause-switch 本来就是 width: 100%，跟着外层走。
+   不进 extra 那一格：竖屏上下两半各是 flex: 1 1 0，extra 多一行就把上半屏的玩法图往外挤。 */
+.start-count--offer { flex-direction: column; }
+.start-cvd-offer { flex: none; width: 292px; max-width: 100%; margin-top: 10px; }
+@media (orientation: landscape) and (max-height: 560px) {
+  /* 横屏时 .start-stage 是一排：图、倒数、两颗键。开关在倒数下面，倒数那一格因此变宽，收到 210。 */
+  .start-cvd-offer { width: 210px; }
+}
+@media (orientation: landscape) and (max-height: 560px) and (max-width: 600px) {
+  /* 568 宽那一档再收到 186：横屏时那两颗圆盘是 99（--exit-disc 的 clamp 顶到上限，不是竖屏的 73），
+     192 + 22.7 + 210 + 22.7 + 99 ≈ 547，比可用的 528 宽——两颗键整列折到第二行，《暂停》掉出屏幕。
+     186 时 ≈ 523，排得进一行（600 宽时图 203，≈ 534，可用 552）。 */
+  .start-cvd-offer { width: 186px; }
+}
 /* 真正开局的那颗键。倒数替玩家按它，所以它从不需要被看见，但仍然要在 DOM 里
    ——整套开始/暂停/结束的状态机都挂在它身上。 */
 .start-hidden-go { display: none !important; }

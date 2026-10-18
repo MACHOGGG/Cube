@@ -1,7 +1,8 @@
 import { STRINGS, type Lang, type RuleShape } from '../i18n';
 import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE, END_AGAIN, END_SHARE } from './ctlIcons';
 import { currentRoom, iAmHost } from '../engine/room';
-import { countFrom, playCountdown, startStageHtml } from './startStage';
+import { countFrom, cvdOfferHtml, playCountdown, startStageHtml } from './startStage';
+import { cvdOfferDue, markCvdOfferDone } from '../engine/firstPlay';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 import { proOn, setPro } from '../engine/proMode';
 import { openRulesModal, type ExtraTipView } from './rulesModal';
@@ -283,6 +284,14 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
    * 只有一块牌，它跟着读数那一块待在顶排。
    */
 
+  // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）：这台设备还没在倒数页上见过它才摆。不数倒数的那一路
+  // （noCountdown）没有这一页可摆；建议横着玩的那一页底下挂着「请把手机转过来」，竖屏时玩法图和倒数
+  // 窗已经挤在一起、玩家也正忙着转手机——这一页不摆、也不记，留到下一个倒数页。
+  // 上半屏是老虎机的那一页同样不摆、不记：那台机器比玩法图宽一截，手机横屏时这一页本来就排不进一行
+  // （《退出》折在第二行），再挂一颗开关，568 宽的屏上《退出》被挤出屏幕。新玩家的第一局不会是老虎机
+  // （首玩锁），碰上这一页的只有更新后的老玩家，他在下一个倒数页上照样看得到。
+  const cvdOffered = cvdOfferDue() && !meta.noCountdown && !meta.landscape && !meta.slotTarget;
+
   // The landscape layout is one grid — readouts | board | buttons — and the
   // portrait one is the column it has always been. Both are the same DOM in
   // the same order; only the landscape media query's grid areas move the
@@ -420,6 +429,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         extra: meta.landscape
             ? ROTATE_HINT(landscapePlayed() ? null : s.rotateHint)
             : '',
+        offer: cvdOffered ? cvdOfferHtml(colorblindOn(), s.colorblindBtn) : undefined,
         // 老虎机那一局底下只留《退出》：轮子已经在转了，「暂停」停不住它，
         // 而这一幕本来就只有五秒。玩家的原话：「下面还是只有那个《退出》」。
         actions:
@@ -641,8 +651,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
 
   // 色盲友好这一条有两颗开关：暂停面板里那条长的（单人局），和小屋局底排上
   // 那颗小的（小屋局按不了暂停，见控制条那段注释）。同一个设置，两处一起跟着
-  // 变——按了哪一颗，另一颗的 aria-checked 也翻过来。
-  const cvdBtns = Array.from(container.querySelectorAll<HTMLButtonElement>('#cvdBtn, #cvdRoomBtn'));
+  // 变——按了哪一颗，另一颗的 aria-checked 也翻过来。第一次倒数页上那一颗（#cvdOfferBtn，
+  // 10-18 补充 M-2）也在这一组里：倒数时拨了、再按倒数页的《暂停》，面板里那颗是对的。
+  const cvdBtns = Array.from(
+    container.querySelectorAll<HTMLButtonElement>('#cvdBtn, #cvdRoomBtn, #cvdOfferBtn'),
+  );
   const showCvd = () => {
     for (const b of cvdBtns) b.setAttribute('aria-checked', String(colorblindOn()));
   };
@@ -776,6 +789,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 颗键），这一页从没露过面。倒数还在后台跑完就再按一次，等于开局三秒
         // 后把牌重发一遍——所以只有这一页还挂着的时候才算数。
         if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+        // 摆了色盲开关的那一页数完、真的开打了，才算见过它（10-18 补充 M-2）。倒数中途按《退出》、
+        // 返回、整页被换掉都走不到这儿，下次照样摆。
+        if (cvdOffered) markCvdOfferDone();
         startBtnEl.click();
         // 老虎机那一局多数一个（5-4-3-2-1）——玩家定的。
       }, countFrom(meta.shapeId) + (meta.slotTarget ? 1 : 0));

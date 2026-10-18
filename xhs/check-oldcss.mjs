@@ -591,6 +591,8 @@ async function run(browser, view, screen, old) {
   // 「方块分镜动画」那一屏。
   localStorage.setItem('slides.xhs.story.square', '1');
   localStorage.setItem('slides.xhs.story.circle', '1');
+  // 倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：这道门比的是开局页平常的样子，多一颗开关就比走样。
+  localStorage.setItem('slides.xhs.cvdOffer', '1');
 } catch (e) {}`);
   const p = await ctx.newPage();
   const errs = [];
