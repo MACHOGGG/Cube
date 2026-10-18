@@ -3324,7 +3324,9 @@ body:has(.center-pick--back) .home-nav { display: none; }
    number is shown in full, sized down as needed to stay on one screen. */
 /* 第 17 推：底色换成色卡的紫红（--card-mauve），字是不翻的白。紫红上的白只有 3.0:1，
    所以这张卡上的白字都按「大字」走（≥ 18.66px 并加粗）：标题 19px 粗体，数字本来就大。
-   底下那一句小字（还没登录的人才有）用深墨，见 .total-card-sub。 */
+   底下那一句小字（还没登录的人才有）用深墨，见 .total-card-sub。
+   小红书那一端没有给数字定字号（15.2px / 16px，不算大字），所以那一端的数字用深墨，见 xhs/src/pages.css
+   （10-18 补充 M-1 ⑪e）。 */
 .total-card {
   width: 100%; flex: none; border: none; border-radius: var(--r-lg); padding: 18px 20px 16px;
   background: var(--card-mauve); color: var(--card-white); cursor: pointer; text-align: center;

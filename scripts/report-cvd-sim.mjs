@@ -28,8 +28,8 @@
  * 也不是玩家要的。要的是「不至于两两难以区分」：10 大约是「并排放着看得出不
  * 是一个颜色」，再低就只能靠位置猜了。
  *
- * 三套配色（现在线上这套 now、天才可选的甲和丙）× 八个玩法各自用几支，全都
- * 量一遍。颜色直接从源文件里读，读的就是线上跑的那几行——抄一份到脚本里，改
+ * 三套配色（现在线上这套 now、天才可选的甲和丙）× 六副棋盘各自用几支，全都
+ * 量一遍；第四组是色盲开关打开之后那三套（std / warm / cool，10-18 补充 M-5 起才量）。颜色直接从源文件里读，读的就是线上跑的那几行——抄一份到脚本里，改
  * 了颜色这道门不会红，那就白设了。
  */
 import { readFileSync } from 'node:fs';
@@ -71,6 +71,11 @@ const BOARDS = [
 /** 天才那两套。它们是按「贪心最远点」排过序的，所以直接切前 N 支。 */
 const pref = read('src/engine/palettePref.ts');
 const VARIANTS = { 甲: arrayAfter(pref, 'jia'), 丙: arrayAfter(pref, 'bing') };
+/**
+ * 色盲开关打开之后玩家能挑的那三套（palettePref.ts 的 CVD_COLORS）。warm、cool 在 10-18 之前从没被任何代码
+ * 量过；palettePref.ts 那段注释里写的「最差」就是照这一组跑出来的数改的。
+ */
+const CVD_SETS = { std: arrayAfter(pref, 'std'), warm: arrayAfter(pref, 'warm'), cool: arrayAfter(pref, 'cool') };
 
 /** 游戏页那块地板。 */
 const PANEL = '#3d3128';
@@ -215,6 +220,15 @@ for (const [name, all] of Object.entries(VARIANTS)) {
   for (const n of [4, 5, 6, 7]) {
     console.log(`— ${name}·前 ${n} 支`);
     measure(`${name}·前 ${n} 支`, all.slice(0, n));
+  }
+}
+
+console.log('\n════ 四、色盲配色三套（palettePref.ts 的 CVD_COLORS） ════\n');
+for (const [name, all] of Object.entries(CVD_SETS)) {
+  // 和第三组同一个切法：各玩法用几支就切几支（这三套也是按贪心最远点排的）。
+  for (const n of [4, 5, 6, 7]) {
+    console.log(`— 色盲 ${name}·前 ${n} 支`);
+    measure(`色盲 ${name}·前 ${n} 支`, all.slice(0, n));
   }
 }
 
