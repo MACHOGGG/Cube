@@ -411,8 +411,9 @@ const cards = [await cardUrl(false), await cardUrl(true)];
     check(`${tag}：徽章 ${wantN} 枚，至少 78 宽、30 高、圆角 8（6-7：70×28 放大一档）`,
       dom.badges.length === wantN && dom.badges.every((b) => b.w >= 78 - 0.5 && near(b.h, 30, 0.5) && b.rad === '8px'),
       dom.badges.map((b) => `${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(1)}×${b.h.toFixed(1)} r${b.rad}`).join(' | '));
-    check(`${tag}：徽章底 #93E7A3、字 #00AC00、13px 粗`,
-      dom.badges.every((b) => b.bg === 'rgb(147, 231, 163)' && b.fg === 'rgb(0, 172, 0)' && b.fs === '13px' && Number(b.fw) >= 700),
+    // 字从 #00AC00 加深到 #006B00（10-18 补充 M-1 ④：压浅绿底 2.06:1 → 4.58:1）；底和通关勾不变。
+    check(`${tag}：徽章底 #93E7A3、字 #006B00、13px 粗`,
+      dom.badges.every((b) => b.bg === 'rgb(147, 231, 163)' && b.fg === 'rgb(0, 107, 0)' && b.fs === '13px' && Number(b.fw) >= 700),
       dom.badges.map((b) => `${b.bg} ${b.fg} ${b.fs} ${b.fw}`).join(' | '));
     check(`${tag}：徽章在分数右边，底边压在分数墨的下半截（±6）`,
       !!sc && dom.badges.every((b) => b.x >= sc.x1 + 10 && b.b >= (sc.y0 + sc.y1) / 2 && b.b <= sc.y1 + 6),
@@ -449,7 +450,8 @@ const cards = [await cardUrl(false), await cardUrl(true)];
     for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (!apart(blocks[i][1], blocks[j][1])) hits.push(`${blocks[i][0]}×${blocks[j][0]}`);
     check(`${tag}：标题、分数、徽章、${stamp ? '勾、' : ''}明细、卡、三颗键两两不相交`, hits.length === 0, hits.join(' '));
 
-    const wantBg = ['rgb(192, 91, 92)', 'rgb(68, 97, 184)', 'rgb(247, 130, 27)'];
+    // 《主页》那颗换成深一档的橙 #E97308（10-18 补充 M-1 ⑩：白盘上橙箭头 2.57:1 → 3.03:1）。
+    const wantBg = ['rgb(192, 91, 92)', 'rgb(68, 97, 184)', 'rgb(233, 115, 8)'];
     check(`${tag}：三颗键依次是再来 · 分享 · 主页，只有记号没有字`,
       dom.btns.map((b) => b.id).join(',') === 'restartBtn,shareBtn,endBackBtn' && dom.btns.every((b) => !!b.svg && b.text === ''),
       dom.btns.map((b) => `${b.id}${b.text ? '「' + b.text + '」' : ''}`).join(' '));

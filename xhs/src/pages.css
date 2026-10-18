@@ -38,6 +38,10 @@
    开关那颗宽一些（里面有个滑块），《怎么玩》按内容宽。
    外边距代替 gap（理由见 .xhs-profile 那一段）：这一行会折行，所以每颗四周各垫 5px、
    整行往回收 5px，折到第二行也是 10px 的缝。 */
+/* 累计分卡上的数字用深墨（10-18 补充 M-1 ⑪e）：网页那一端由 JS 把数字撑到 ≥20.25px 粗体、按大字走白字（3.04:1）；
+   这一端没有给数字定字号（小卡 15.2px、点开 16px），不算大字，白字就不达标。深墨压紫红 4.89:1。标题是 22.4px 粗体，
+   照旧白字。 */
+.xhs-total .total-card-value, .xhs-total-big .total-card-value { color: var(--card-ink); }
 .xhs-setting-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 0; margin-left: -5px; margin-right: -5px; }
 .xhs-setting-row > * { margin: 5px; }
 .xhs-cvd {

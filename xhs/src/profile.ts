@@ -236,7 +236,8 @@ export function renderProfilePage(
   const totalCard = page.querySelector<HTMLButtonElement>('#xhsTotal')!;
   totalCard.addEventListener('click', () => {
     const big = document.createElement('div');
-    big.className = 'total-card total-card--big';
+    // xhs-total-big：数字用深墨，见 pages.css 那条（10-18 补充 M-1 ⑪e）。
+    big.className = 'total-card total-card--big xhs-total-big';
     big.innerHTML =
       `<span class="total-card-title">${esc(s.totalScoreTitle)}</span>` +
       `<span class="total-card-value">${total}</span>`;

@@ -889,6 +889,11 @@ jobs:
       # LEGAL_PENDING 那一行让它暂时只报数。
       - name: 法文标点前的不换行空格
         run: node scripts/check-fr-spacing.mjs
+      # 浅色界面对比度全部达标（10-18 补充 M-1）：从 style.css 现读 token、合成浅 / 深 / 色盲浅 / 色盲深四套，按 WCAG 2.x
+      # 量每一对（正文 4.5、图形 3）；两段系统深色的 @media 和非 @media 那两段逐支一样。改回一个色值不报错、只是有人看不
+      # 清，所以钉在这儿。纯 node，几十毫秒。
+      - name: 浅色界面对比度全部达标
+        run: node scripts/check-contrast-tokens.mjs
       # 发信失败必须留痕（_mail.js 的 sendMail 自己写日志，不写收件地址）。把 Resend
       # 那一跳换成必然 401 / 必然抛的假货，不连网。第 20 推之前叫 check-unlock-mail，
       # 绕道 unlock.js 量；unlock.js 回 410 之后改成直接调 sendMail。

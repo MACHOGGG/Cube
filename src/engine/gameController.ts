@@ -1381,7 +1381,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       .map((p) => ({ name: p.name, score: p.score, me: p.id === seat.playerId }));
   }
 
-  const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#5C8A72';
+  const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#4A6E5B';
 
   /**
    * 「大时刻」那一套：两下震动、滴落声、重震、一大把二号强调色的粒子。

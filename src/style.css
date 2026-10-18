@@ -14,6 +14,9 @@
   --card-green: #008703;
   --card-blue: #4461B8;
   --card-orange: #F7821B;
+  /* 结算《主页》键的白盘配的那支橙（10-18 补充 M-1 ⑩）：--card-orange 上白盘、白盘上橙箭头只有 2.57:1，深一档到 3.03。
+     --card-orange 本身不动：炸弹页那一排、天才徽章也用它，check-bomb-panel 钉着它的值。 */
+  --card-orange-deep: #E97308;
   --card-purple: #725AAF;
   --card-gray: #4C4C4C;
   --card-red: #BE411A;
@@ -71,8 +74,8 @@
   --ink-soft: #6E5F6D;
   --ink-faint: #9A8B98;
   --line: #E5DAD8;
-  --accent: #BE5762;
-  --nav-glow: 190, 87, 98;
+  --accent: #BD5560;
+  --nav-glow: 189, 85, 96;
   /* ---- 圆角的档位 ----------------------------------------------------
      全站原本散着十六个写死的圆角值（2 / 6 / 8 / 10 / 11 / 12 / 14 / 16 /
      18 / 20 / 22 / 26 / 28 / 30 / 100 / 999），每加一个新页面就多一次
@@ -105,7 +108,7 @@
      deep rose, near-black over the dark theme's light pink. */
   --on-accent: #FFFFFF;
   --accent-soft: #F3DBDC;
-  --accent-2: #5C8A72;
+  --accent-2: #4A6E5B;
   --accent-2-soft: #DBEADF;
   /* 结算弹窗那四支（10-08 方案 3-I，玩家设计图上取的样）：标题的墨、分数和明细的深红、通关勾和
      徽章字的绿、徽章底的浅绿。深色、色盲那几套在下面各自改（深色借本套的 ink / accent / accent-2，
@@ -114,7 +117,10 @@
   --end-red: #943D40;
   --end-ok: #00AC00;
   --end-ok-soft: #93E7A3;
-  --warn: #B5793A;
+  /* 徽章上的字另用一支深一档的绿（10-18 补充 M-1 ④）：#00AC00 压浅绿底只有 2.06:1。--end-ok 本身不动——它还画
+     结算窗那枚通关勾（压白 3.04，图形够 3:1）。深色、色盲那几套跟着各自的 --accent-2。 */
+  --end-ok-ink: #006B00;
+  --warn: #9F6B33;
   --warn-soft: #F1E1C6;
   --board-bg: #EFE6E2;
   /* 全站那一套「呼吸的光」用的颜色，见下面的 glow-pulse。米色底给微红的光，
@@ -184,9 +190,9 @@
   :root:not([data-theme="light"]) {
     --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
     --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --nav-glow: 230, 143, 152;
-    --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
+    --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #A26A20; --warn-soft: #3C2F1D;
     --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
-    --end-ink: var(--ink); --end-red: var(--accent); --end-ok: var(--accent-2); --end-ok-soft: var(--accent-2-soft);
+    --end-ink: var(--ink); --end-red: var(--accent); --end-ok: var(--accent-2); --end-ok-ink: var(--accent-2); --end-ok-soft: var(--accent-2-soft);
     --mark-edge: #FFFFFF;
     /* 暗底上那道光换成白的，见 glow-pulse。 */
     --glow: rgba(255, 255, 255, 0.72);
@@ -195,9 +201,9 @@
 :root[data-theme="dark"] {
   --bg: #1E1820; --surface: #2B222D; --nav-dock: #322838; --ink: #F2EAEE; --ink-soft: #C4B4C1; --ink-faint: #8A7A88;
   --line: #3D323E; --accent: #E68F98; --accent-ink: #F6DADD; --accent-soft: #422A2E; --on-accent: #3B1B21; --nav-glow: 230, 143, 152;
-  --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #E0A860; --warn-soft: #3C2F1D;
+  --accent-2: #8FC1A2; --accent-2-soft: #26362C; --warn: #A26A20; --warn-soft: #3C2F1D;
   --board-bg: #241D26; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
-  --end-ink: var(--ink); --end-red: var(--accent); --end-ok: var(--accent-2); --end-ok-soft: var(--accent-2-soft);
+  --end-ink: var(--ink); --end-red: var(--accent); --end-ok: var(--accent-2); --end-ok-ink: var(--accent-2); --end-ok-soft: var(--accent-2-soft);
   --mark-edge: #FFFFFF;
   /* 暗底上那道光换成白的，见 glow-pulse。 */
   --glow: rgba(255, 255, 255, 0.72);
@@ -221,8 +227,8 @@
   --ink: #1A1A1A; --ink-soft: #565656; --ink-faint: #8A8A8A; --line: #D8D8D8;
   --accent: #0072B2; --nav-glow: 0, 114, 178;
   --accent-ink: #00496F; --accent-soft: #D5E8F5; --on-accent: #FFFFFF;
-  --accent-2: #D55E00; --accent-2-soft: #FADFCC;
-  --end-red: var(--accent-ink); --end-ok: var(--accent-2); --end-ok-soft: var(--accent-2-soft);
+  --accent-2: #A74A00; --accent-2-soft: #FADFCC;
+  --end-red: var(--accent-ink); --end-ok: var(--accent-2); --end-ok-ink: var(--accent-2); --end-ok-soft: var(--accent-2-soft);
   --warn: #9A6000; --warn-soft: #F7E7C8;
   --board-bg: #EAEAEA;
   --shadow: 0 1px 2px rgba(20,20,20,0.06), 0 8px 24px -12px rgba(20,20,20,0.18);
@@ -242,19 +248,22 @@
     --accent: #56B4E9; --nav-glow: 86, 180, 233;
     --accent-ink: #D6ECFA; --accent-soft: #17323F; --on-accent: #06202B;
     --accent-2: #E69F00; --accent-2-soft: #33280D;
-    --warn: #E69F00; --warn-soft: #33280D;
+    --warn: #9D6D00; --warn-soft: #33280D;
     --board-bg: #1D2023;
     --mark-edge: #FFFFFF;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
   }
 }
 :root[data-cvd='1'][data-theme="dark"] {
+  /* 描边要白的（10-18 补充 M-1 ⑫）：不写的话，系统浅色、站内选深色时色盲浅那段的 #1A1A1A 压过深色那段，
+     得分图示的描边压深底只有 1.16:1，等于看不见。系统深色时 @media 那段本来就给 #FFFFFF。 */
+  --mark-edge: #FFFFFF;
   --bg: #17191C; --surface: #24272B; --nav-dock: #2C3035;
   --ink: #F0F0F0; --ink-soft: #BDBDBD; --ink-faint: #8A8A8A; --line: #3A3E43;
   --accent: #56B4E9; --nav-glow: 86, 180, 233;
   --accent-ink: #D6ECFA; --accent-soft: #17323F; --on-accent: #06202B;
   --accent-2: #E69F00; --accent-2-soft: #33280D;
-  --warn: #E69F00; --warn-soft: #33280D;
+  --warn: #9D6D00; --warn-soft: #33280D;
   --board-bg: #1D2023;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
 }
@@ -270,7 +279,7 @@
    炸弹选择页那块面板（.bomb-panel，从前色盲下换成 #8A3D00）第 18 推照同一个理由撤了：
    方案原话「色盲模式颜色不变，删掉 .bomb-panel 的色盲覆盖」。三排靠左边那三个字分，不靠
    颜色。 */
-:root[data-cvd='1'] .genius-cta { background: #B26A00; }
+:root[data-cvd='1'] .genius-cta { background: #AB6600; color: var(--card-white); }
 
 /* 结算页顶上那一块：屋主中途散场、这一局转成单人打完之后，小屋那份成绩摆
    在这儿（见 ui/roomLeftover.ts）。上面是小屋的总排行和它的战绩图，底下一
@@ -417,7 +426,7 @@
   min-width: 78px; height: 30px; padding: 0 8px; box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
   border-radius: 8px;
-  background: var(--end-ok-soft); color: var(--end-ok);
+  background: var(--end-ok-soft); color: var(--end-ok-ink);
   font-family: 'Karla', sans-serif; font-size: 13px; font-weight: 700; line-height: 1;
   white-space: nowrap;
   /* 结算页整张是给人看的，不是给人抄的。 */
@@ -545,7 +554,7 @@
 .overlay--end .modal .end-act[hidden] { display: none; }
 .overlay--end .modal .end-act--again { background: var(--card-rose); --ctl-mark: var(--card-rose); }
 .overlay--end .modal .end-act--share { background: var(--card-blue); --ctl-mark: var(--card-blue); }
-.overlay--end .modal .end-act--home { background: var(--card-orange); --ctl-mark: var(--card-orange); }
+.overlay--end .modal .end-act--home { background: var(--card-orange-deep); --ctl-mark: var(--card-orange-deep); }
 .overlay--end .modal .end-act--leave { background: var(--card-gray); --ctl-mark: var(--card-gray); }
 .overlay--end .modal .end-act > svg { display: block; flex: none; width: var(--disc-glyph); height: var(--disc-glyph); }
 .overlay--end .modal .end-act:active { transform: scale(0.96); }
@@ -1158,7 +1167,7 @@ h1 {
 /* 描边闪一次：颜色过渡，不是位移。两头都是 0 宽的环，中间鼓一下。 */
 .err-flash { animation: err-flash 600ms ease-out; }
 @keyframes err-flash {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(190, 87, 98, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(189, 85, 96, 0); }
   20%, 60% { box-shadow: 0 0 0 3px var(--accent); }
 }
 
@@ -1419,7 +1428,7 @@ h1 {
 }
 .end-score-label {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--ink-faint); margin-top: 4px;
+  color: var(--ink-soft); margin-top: 4px;
 }
 /* 每日挑战那一局没进今日榜时的那一句（2026-10-08 方案 2-11）。平时 hidden，不占位。 */
 .end-daily-note {
@@ -1533,7 +1542,7 @@ button:hover { filter: brightness(1.05); }
 .shape-card .glyph svg { width: 32px; height: 32px; }
 .menu-section-label {
   font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--ink-faint); text-align: center; margin: 4px 0 -4px;
+  color: var(--ink-soft); text-align: center; margin: 4px 0 -4px;
 }
 .more-card .glyph { color: var(--ink-soft); }
 .shape-card .info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
@@ -1913,7 +1922,7 @@ button:hover { filter: brightness(1.05); }
   width: 14px;
   height: 0;
   pointer-events: none;
-  color: var(--ink-faint, currentColor);
+  color: var(--ink-soft, currentColor);
   z-index: 2;
 }
 /*
@@ -3284,7 +3293,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .genius-cta {
   display: block; flex: none; width: fit-content; margin: 2px auto 10px;
   padding: 12px 26px; border: none; border-radius: var(--r-md);
-  background: #F5A93F; color: #FFFFFF;
+  background: #F5A93F; color: var(--card-ink);
   font-family: inherit; font-weight: 700; font-size: 16px; letter-spacing: 0.02em;
   box-shadow: 0 4px 14px rgba(233, 148, 40, 0.35); cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease;
@@ -3661,18 +3670,19 @@ body:has(.center-pick--back) .home-nav { display: none; }
   border-radius: var(--r-lg);
 }
 .rank-lock-line {
-  margin: 0; text-align: center; color: #fff; font-size: 0.86rem; line-height: 1.5;
+  margin: 0; text-align: center; color: var(--card-ink); font-size: 0.86rem; line-height: 1.5;
   text-shadow: 0 1px 3px rgba(40, 30, 50, 0.35);
 }
 
 /* 中途走掉的人。名单上留着他和他截止到走的那一刻的分——那是这场比赛的一
    部分——但他不再是「还在打的人」，所以整行压暗一档，旁边挂一个小标。 */
-.mp-player--left { opacity: 0.62; }
+.mp-player--left { opacity: 0.9; }
+.mp-player--me.mp-player--left { opacity: 1; }  /* 自己那一行底是 --accent-soft，名次压上去只有 4.54:1，再压透明度就不够了 */
 .mp-badge--left { background: var(--line); color: var(--ink-soft); }
 /* 椅子被收走、又从原来那台手机回来的人（10-15 补充 S4）：照旧让他打，名单上标一下「没有座位」——人数里不算他。
    样式照「已离开」那一枚：同一类「这个人此刻不占位子」的说明。 */
 .mp-badge--seatless { background: var(--line); color: var(--ink-soft); }
-.mp-board-row--left { opacity: 0.6; }
+.mp-board-row--left { opacity: 0.9; }
 
 /* 开局倒数那几秒里，下半截的排名表。数字用等宽，四个人的名次不会因为
    分数位数不同而左右跳。 */
@@ -3682,7 +3692,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
 }
 .mp-cd-title {
   font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink-faint); text-align: center; margin-bottom: 2px;
+  color: var(--ink-soft); text-align: center; margin-bottom: 2px;
 }
 .mp-cd-row {
   display: flex; align-items: center; gap: 10px;
@@ -3692,7 +3702,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
 }
 .mp-cd-rank {
   font-family: 'JetBrains Mono', monospace; font-weight: 700;
-  font-size: 0.8rem; color: var(--ink-faint); flex: none; width: 1.1em;
+  font-size: 0.8rem; color: var(--ink-soft); flex: none; width: 1.1em;
 }
 .mp-cd-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-cd-score {
@@ -3721,7 +3731,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
 /* 自己那一行：强调色的底和字，一眼能从四行里挑出来。 */
 .mp-cd-row--me { background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
 .mp-cd-row--me .mp-cd-rank { color: var(--accent-ink); }
-.mp-cd-row--left { opacity: 0.6; }
+.mp-cd-row--left { opacity: 0.9; }
 
 /* 转圈的小人那一圈。名字是从「屋里有人在看教学，其他人等他」那一屏来的——那一屏连同底下的练习盘
    10-11 方案 C-5 拿掉了（没人再让全屋等），交卷之后那一页的 .mp-wait-spin 还在用这一圈，所以留着。
@@ -3956,7 +3966,7 @@ body:has(.daily-page--count) .home-nav { display: none; }
   font: inherit; font-weight: 600; color: var(--ink-soft); cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.slot-share-opt--on { background: var(--accent); color: #fff; }
+.slot-share-opt--on { background: var(--accent); color: var(--on-accent); }
 
 /* ---- 那台机器 ---------------------------------------------------------- */
 /* 图是玩家给的 slot-machine.svg，一个像素没动；三个滚筒是叠在它显示区上的三
@@ -4288,7 +4298,8 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
 #pauseOverlay .modal .pause-exits button { flex: 1; }
 /* 《怎么玩》右边那个「〉」：色盲那条右边是开关，这一条右边得有点什么，才看
    得出两条一个是设置、一个是能点进去的门。 */
-.pause-chev { flex: none; color: var(--ink-faint); font-size: 1.1rem; line-height: 1; }
+/* 颜色跟着这一行的字走（10-18 补充 M-1 ①l）：原先写死 --ink-faint，压琥珀那一行只有 1.24:1。 */
+.pause-chev { flex: none; color: inherit; font-size: 1.1rem; line-height: 1; }
 /* 开局倒数那一屏借的是同一层面板。那时候还没开局，「再来一局 / 结束游戏」
    无从谈起（见 gameShell 里 #startPauseBtn 那段）。 */
 #pauseOverlay.pause--pre .pause-exits { display: none; }
@@ -4855,7 +4866,7 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
    封口，再让它超出就省略号——省略号是「这儿还有字」的标准说法，截断没有。 */
 .auth-field > input + span {
   position: absolute; left: 15px; right: 15px; top: 13px;
-  font-size: 0.95rem; color: var(--ink-faint);
+  font-size: 0.95rem; color: var(--ink-soft);
   pointer-events: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transform-origin: left top;
@@ -4905,7 +4916,7 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
   text-decoration: underline; text-underline-offset: 3px;
 }
 .modal .link-btn:hover { filter: brightness(1.15); }
-.auth-field input[readonly] { color: var(--ink-faint); }
+.auth-field input[readonly] { color: var(--ink-soft); }
 
 /* ---- 六段完成度表（ui/authBits.ts 的 mountPwMeter） ----------------------
    打一位填一段。**不是强度表**——密码正好六位，定长的东西谈不上强弱；它回答的是唯一
@@ -5002,9 +5013,9 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
 .pin-row--bad .pin-cell { animation: pin-bad 520ms ease-out; }
 @keyframes pin-bad {
   /* 28% ≈ 150ms：抖那一下先发生，环随后压上来。 */
-  0%, 20% { box-shadow: 0 0 0 0 rgba(190, 87, 98, 0); }
+  0%, 20% { box-shadow: 0 0 0 0 rgba(189, 85, 96, 0); }
   28%, 72% { box-shadow: 0 0 0 3px var(--accent); }
-  100% { box-shadow: 0 0 0 0 rgba(190, 87, 98, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(189, 85, 96, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
   /* 每一样都要有交代，不能只是 animation: none——被 none 掉的类什么都不发生，那就等于
@@ -5204,7 +5215,7 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
      现在那几条认的是 `input + span`，只匹配紧跟在框后面的那一个，也就是标签本身。 */
   position: absolute; left: auto; right: 13px; top: 5px;
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 0.68rem; line-height: 1.3; color: var(--ink-faint);
+  font-size: 0.68rem; line-height: 1.3; color: var(--ink-soft);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -6130,7 +6141,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 
    蓝色取的是棋子色板里本来就有的那一支（#4C68B0，PIECE_NOW 的第四色）——不新造一个
    蓝：这一页上的蓝和棋盘上的蓝是同一个蓝，整套颜色才收得住。 */
-.mp-page { --mp-blue: #4C68B0; --mp-warm: #B0A695; }
+.mp-page { --mp-blue: #4C68B0; --mp-warm: #615849; }
 
 /* 抬头那块牌子这一页**一条覆盖都不写**：它就是全站那块 .home-head-glass。
    先前照设计稿把它涂成了一块实心暖橙，于是全站只有这一页的招牌长得不一样——玩家
@@ -6173,7 +6184,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
 /* 那颗大键：设计稿上是一块暗玫瑰的实心砖，招牌压在右边。 */
 .mp-create {
   flex: 1; min-width: 0; border: none; border-radius: var(--r-md); cursor: pointer;
-  background: #B4635E; color: #FFFFFF;
+  background: #B15E59; color: #FFFFFF;
   font-family: inherit; font-weight: 700; font-size: 1.05rem; letter-spacing: 0.02em;
   padding: 16px 14px;
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -6230,7 +6241,7 @@ html.is-playing, html.is-playing body { overflow: hidden; overscroll-behavior: n
    素都不挪——玩家要的是「在现在的位置出现」。visibility: hidden 同时把它从读屏软件那
    棵树上摘掉，所以没拨的人也不会听到它。 */
 .mp-contest-hint {
-  margin: 6px 0 0; text-align: center; font-size: 0.72rem; color: var(--ink-faint);
+  margin: 6px 0 0; text-align: center; font-size: 0.72rem; color: var(--ink-soft);
   line-height: 1.3;
   visibility: hidden;
 }
@@ -6463,7 +6474,7 @@ html.is-room-home .home-nav { display: none; }
 .mp-player--me { border-color: var(--accent); background: var(--accent-soft); }
 .mp-final-rank {
   font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.95rem;
-  color: var(--ink-faint); width: 14px; text-align: center;
+  color: var(--ink-soft); width: 14px; text-align: center;
 }
 .mp-notes { width: 100%; max-width: 320px; margin: 0 auto; text-align: center; }
 .mp-notes .auth-hint { margin: 0 0 4px; }
@@ -6612,7 +6623,8 @@ body.is-room-host::after {
   line-height: 1;
 }
 .mp-board-row--me { font-weight: 700; }
-.mp-board-rank { width: 1.1em; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.mp-board-rank { width: 1.1em; opacity: 0.9; font-variant-numeric: tabular-nums; }
+.mp-board-row--left .mp-board-rank { opacity: 1; }  /* 不然离场那一行里会叠成 0.81，名次只剩 3.98:1（10-18 补充 M-1 ⑬） */
 .mp-avatar--small { width: 1.15em; height: 1.15em; flex: none; }
 /* 名字长了不打点，直接淡出去。省略号是「这里被截断了」的说明，可这一行
    本来就不是让人读全名的地方——认人靠前面那个图形；一个渐隐的收尾比三个
@@ -6627,7 +6639,7 @@ body.is-room-host::after {
    字左对齐——它站的正是那几行本该在的位置，所以不居中。 */
 .mp-board-row--gap {
   justify-content: flex-start; padding-left: 0.15em;
-  opacity: 0.45; letter-spacing: 0.12em;
+  opacity: 0.9; letter-spacing: 0.12em;
   /* 同上，两行写法。 */
   height: calc(var(--rank-line) * 0.7); height: min(calc(var(--rank-line) * 0.7), 18px);
 }
@@ -6861,7 +6873,7 @@ body.is-room-host::after {
 }
 .slot-demo-btn:active { transform: scale(0.96); }
 .slot-demo-btn--stop { background: #C8402F; }
-.slot-demo-btn--start { background: #3E9A5A; }
+.slot-demo-btn--start { background: #36854E; }
 /* 开通了的人右下角那颗《开始 〉》：去挑图形那一屏。
    第 18 推起它和那颗统一的《退出》（.page-exit）站在同一行：中线对齐，一个在正中、一个靠
    右。从前它离底 30px，比《退出》还低——底下那一截现在整个留给《退出》（离底 116 起），这
@@ -6878,7 +6890,7 @@ body.is-room-host::after {
   display: inline-flex; align-items: center; gap: 6px;
   height: 42px; box-sizing: border-box;
   padding: 0 14px 0 20px; border: none; border-radius: var(--r-full);
-  background: var(--accent); color: #FFFFFF; font: inherit; font-weight: 700; font-size: 16px;
+  background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; font-size: 16px;
   cursor: pointer; box-shadow: var(--shadow);
 }
 .slot-go:active { transform: scale(0.96); }
@@ -7001,7 +7013,7 @@ body.is-room-host::after {
 .tut-rule { display: flex; align-items: center; gap: 10px; min-height: 0; }
 .tut-rule-num {
   flex: none; width: 1.5em; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
-  color: var(--ink-faint); text-align: right;
+  color: var(--ink-soft); text-align: right;
 }
 /* 配图的框：里面那块 4×2 的小棋盘按 em 画，所以整幅图跟着这一行的 font-size
    缩放；一个周期（--T）里各元素各动各的那一段。 */
@@ -7596,8 +7608,8 @@ body.is-room-host::after {
 
      ── 色号：稿上取样出来的六个 ────────────────────────
 
-         背景 #F7DFB0   牌面 #DD9300   牌面上的字 #FFFFFF
-         棋盘 #806352   图案里的块 #4361B7（就是《色卡》的 --card-blue #4461B8）
+         背景 #F7DFB0   牌面 #DD9300   牌面上的字 #3B2508（10-18 补充 M-1：稿上的白字压 #DD9300 只有 2.55:1，改成手机那支深墨）
+         棋盘 #806352   图案里的块 #4361B7（就是《色卡》的 --card-blue #4461B8；现在加深成 #374F96，见那条规则）
          教学框 #FFFFFF
 
      只在这一段里改，**手机端一个像素不动**——玩家这一轮说的是「修改电脑网页端的
@@ -7608,7 +7620,7 @@ body.is-room-host::after {
     /* 稿上的底色/牌面/牌面字色。 */
     --play-bg: #F7DFB0;
     --play-chip: #DD9300;
-    --play-chip-ink: #FFFFFF;
+    --play-chip-ink: #3B2508;
     /*
      * ⚠️ **棋盘那块板不照稿**（玩家 2026-10 实机看过之后：「游戏版图内的颜色还原成
      * 之前的样式，现在感觉蒙了一层颜色很不清晰明确」）。
@@ -7711,8 +7723,9 @@ body.is-room-host::after {
    * 《色卡》的蓝 `--card-blue` 配一圈白描边，所以一眼看得出那是「棋子」，而不是
    * 牌面上印的一行记号。描边走 `--mark-edge`（patternIcon.ts 画的时候读它）。
    */
+  /* 蓝块 #374F96：稿上取样的 #4461B8（=--card-blue）压牌面只有 2.26:1，按 WCAG 1.4.11 加深到 3.03（10-18 补充 M-1，站长定）。 */
   .app.app--game > .hud .hud-block--pattern .pat-icon > svg {
-    color: var(--card-blue);
+    color: #374F96;
     /*
      * **描边在这一块上是回来了的**，而上面那条 `.app--game .pat-icon > svg` 写着
      * `stroke: none`，理由也在那儿：描边宽 2 个 viewBox 单位、一枚棋子才 10 个，
@@ -7729,7 +7742,7 @@ body.is-room-host::after {
      定的就是棋子多大；上面那条 `max-width/max-height: 100%` 还在，装不下的时候
      （老虎机那一档的目标能有三行高）自己缩回来。 */
   .app.app--game > .hud .hud-block--pattern .pat-icon { font-size: 56px; }
-  /* 刻度环照稿是**黑的**（牌面字色这一段改成了白，不能跟着它走）。写死不跟主题
+  /* 刻度环照稿是**黑的**（牌面字色这一段是深墨，不能跟着它走）。写死不跟主题
      翻转：这一页的配色这一段整段都是写死的。 */
   .app.app--game > .hud .hud-block--pattern .pat-ring-lit { color: #2E2430; }
   .app.app--game > .hud .hud-block--pattern .pat-ring-dim { color: #2E2430; opacity: 0.22; }
@@ -7773,7 +7786,9 @@ body.is-room-host::after {
   .app.app--game > .controls--solo .icon-btn { flex: none; width: 246px; }
   /* 稿上那颗《暂停》**没有圆盘**，只有两根白条立在牌面上。圆盘是手机上的样子
      （深色牌面上要一圈浅底把记号托起来），稿上这张琥珀牌自己就够亮。 */
-  .app.app--game > .controls--solo #stopBtn { --ctl-disc: transparent; --ctl-mark: #FFFFFF; }
+  .app.app--game > .controls--solo #stopBtn { --ctl-disc: transparent; --ctl-mark: var(--play-chip-ink); }
+  /* 按下去那一下底色换成深的，两根条跟着换浅色（10-18 补充 M-1：深条压按下底只有 2.33:1）。 */
+  .app.app--game > .controls--solo #stopBtn:active, .app.app--game > .controls--solo #stopBtn.chip--press { --ctl-mark: var(--play-chip-press-ink); }
   /* 教学：稿上 270 宽的白框，右栏居中（不再贴右沿），字居中。 */
   .app.app--game.has-coach {
     /* 稿上 270/1500 = 18vw。下限 240 和边栏下限对齐，上限 330 免得在超宽屏上
