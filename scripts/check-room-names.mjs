@@ -257,5 +257,21 @@ check('接下来没取名字的 → D（跳过已占的 A/B/C，不管中间夹�
   check('⑦ 写昵称缓存只有一处，写的是他自己敲的（没登录那一支）', writes.length === 1 && writes[0].includes('typed'), writes.join(' | '));
 }
 
+// ---------------------------------------------------------------------------
+// 开小屋只要登录（10-31 方案推11 Z-J01，10-14 F-1 h）：原先要天才（hostMayOpen → isGenius），没开通、过期的人一律 403
+// geniusOnly。现在没登录（没令牌、令牌不对）→ 403 signInToHost；登录着、权益过期了 → 照样开得了。
+// ---------------------------------------------------------------------------
+{
+  const anon = await call({ action: 'create', name: '路人', avatar: AVATAR });
+  check('没登录开小屋：403 signInToHost', anon.status === 403 && anon.payload?.error === 'signInToHost', `${anon.status} ${JSON.stringify(anon.payload)}`);
+  const forged = await call({ action: 'create', name: '路人', avatar: AVATAR, email: 'host@example.com', accountToken: 'x'.repeat(32) });
+  check('令牌对不上开小屋：403 signInToHost', forged.status === 403 && forged.payload?.error === 'signInToHost', `${forged.status} ${JSON.stringify(forged.payload)}`);
+  const lapsed = accounts.newAccount('secret', 'code');
+  lapsed.until = Date.now() - 3 * 24 * 3600e3;
+  await accounts.saveAccount('lapsed-host@example.com', lapsed);
+  const opened = await call({ action: 'create', name: '过期', avatar: AVATAR, email: 'lapsed-host@example.com', accountToken: lapsed.token });
+  check('登录着、权益过期了：照样开得了小屋', opened.status === 200 && Boolean(opened.payload?.code), `${opened.status} ${JSON.stringify(opened.payload?.error ?? '')}`);
+}
+
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { send, readBody } from './_creem.js';
-import { identify, isGenius as isGeniusClaim } from './_entitlement.js';
+import { identify } from './_entitlement.js';
 import { checkNickname, nicknameOf, nicknameOwner, scrubName } from './_nickname.js';
 import { expire, get, hdel, hdelIfSame, hget, hgetall, hincrby, hset, hsetnx, hsetUnless, set, storeConfigured } from './_store.js';
 import { callerId, tooMany } from './_ratelimit.js';
@@ -441,14 +441,13 @@ export default async function handler(req, res) {
 // ---- who may open a room ------------------------------------------------
 
 /**
- * 开小屋是订阅者的事；进别人的小屋不是——不然一个订阅者想找朋友打一局，
- * 得先让朋友们都去订阅，那他就永远打不成。
+ * 开小屋要登录；进别人的小屋不用（只填昵称）。
  *
- * 「他是不是天才」这道题现在只在一个地方回答（api/_entitlement.js），排行
- * 榜问的是同一句。三处各写一份的下场是可以预见的：有一天其中一份放行了另
- * 外两份挡住的人，而两边都觉得自己是对的。
+ * 原先这儿问的是「他是不是天才」（_entitlement.js 的 isGenius）。10-31 方案推11 Z-J01（10-14 F-1，玩家 Q3 h）把「天才」
+ * 那一层整个撤了：开小屋只问 identify() 认不认得出这个人——登录着就行，权益过没过期不管。没登录（或令牌不作数了）回
+ * 403 signInToHost，客户端说「登录后才能开小屋。」并打开登录窗。isGenius 和 Creem 那一套留着不删，只是不再有门槛问它。
  */
-const hostMayOpen = (claim) => isGeniusClaim(claim);
+const hostMayOpen = async (claim) => (await identify(claim)) !== null;
 
 // ---- shaping what a player is told --------------------------------------
 
@@ -1367,7 +1366,7 @@ const avatarsTaken = (hash) =>
 // ---- the six things a room can be asked ---------------------------------
 
 async function create(res, body) {
-  if (!(await hostMayOpen(body))) return send(res, 403, { error: 'geniusOnly' });
+  if (!(await hostMayOpen(body))) return send(res, 403, { error: 'signInToHost' });
   // 屋主叫什么（第 16 推）：登记过昵称就是昵称，否则是他敲的那个（见 pickSeatName）。放在抢
   // 房号**之前**：名字不过关就别先开出一间空屋。
   const who = await whoIsAsking(body);

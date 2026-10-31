@@ -232,7 +232,8 @@ check('自己没打过就没有名次（不是第一名）', otherMode.payload?.
 // ---- 门开在看的那一侧 ---------------------------------------------------
 await call({ action: 'push', ...C, runId: 't1', mode: 'square', score: 700, name: '丙' });
 const lapsedBoard = await call({ action: 'board', ...C, mode: 'square:base' });
-check('权益过期的人看不了榜', lapsedBoard.status === 403 && lapsedBoard.payload?.error === 'geniusOnly',
+// 10-31 方案推11 Z-J01（10-14 F-1 c）：看榜只要登录，权益过期了也照看——原先这一条是「过期 → 403 geniusOnly」。
+check('权益过期的人登录着照样看得了榜（200，不再是 403 geniusOnly）', lapsedBoard.status === 200,
   `${lapsedBoard.status} ${JSON.stringify(lapsedBoard.payload)}`);
 
 const withC = await call({ action: 'board', ...A, mode: 'square:base' });

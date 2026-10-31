@@ -42,7 +42,8 @@ process.env.ALLOW_MEMORY_STORE = '1';
  * 当场红——而红的不是代码，是环境。它从外面漏进来过一次（本地手跑时 shell 里带着），所
  * 以在这儿写死：这道门跑在「开关关着」那一侧。
  */
-delete process.env.GENIUS_GRANT_WINDOW;
+// 10-31 方案推11 Z-J01 起「不填即开、写 0 才关」：原先这儿 delete 掉就是关，现在要明写 0。
+process.env.GENIUS_GRANT_WINDOW = '0';
 process.env.RESEND_API_KEY = 're_stub';
 process.env.MAIL_FROM = 'Slides <noreply@example.com>';
 // Creem 配着、也答得出话——答的是「这个人没有订阅」。这正是「有账号、但订阅

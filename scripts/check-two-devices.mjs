@@ -2,7 +2,10 @@
  * 一个账号，两台设备，都得算数。
  *
  *   npm run build
- *   ALLOW_MEMORY_STORE=1 node scripts/dev-server.mjs 8815 dist
+ *   GENIUS_GRANT_WINDOW=0 ALLOW_MEMORY_STORE=1 node scripts/dev-server.mjs 8815 dist
+ *
+ * （授予开关明写 0：10-31 方案推11 起它不填即开，这道门量的是兑码落进账号那一侧——开着的话注册那一下就是终身天才，
+ * 兑码回 409 active。）
  *   node scripts/check-two-devices.mjs http://localhost:8815/
  *
  * ─────────────────────────────────────────────────────────────────────────

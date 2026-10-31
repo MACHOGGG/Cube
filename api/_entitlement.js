@@ -63,7 +63,10 @@ export { LIFETIME_UNTIL };
  *
  * **要关它，必须先把那句话改回中性文案。** 它留下来只作回退开关，不是日常可调的旋钮。
  */
-export const grantWindowOpen = () => process.env.GENIUS_GRANT_WINDOW === '1';
+// 10-31 方案推11 Z-J01（verify-S S14）：不填即开，要关必须明写 0。原先「只有正好是 1 才算开」——「窗口期送终身」散在四处
+// （subscription.js、signin.js、handle.js 两处），变量一漏，注册成功却不是天才，屏幕上什么都不报。天才那一层撤了之后
+// 它从此不影响任何功能（开小屋、看榜都只问登录），留着只是不让老账号的权益记录走样。
+export const grantWindowOpen = () => process.env.GENIUS_GRANT_WINDOW !== '0';
 
 /*
  * **名额没了**（E39，玩家 2026-10-02：「不限人数」）。

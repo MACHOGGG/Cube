@@ -230,8 +230,10 @@ export function hostTroubleIn(state: RoomState | null, iAmTheHost: boolean): Hos
 }
 
 export type RoomError =
-  /** Only a 「Slides 天才」 opens rooms; joining one is free. */
+  /** Only a 「Slides 天才」 opens rooms; joining one is free.（旧服务端的回包；10-31 方案推11 起开小屋只要登录，见 signInToHost） */
   | 'geniusOnly'
+  /** 开小屋要先登录（10-31 方案推11 Z-J01：天才那一道门槛撤了，服务器只问「登录了没有」）。 */
+  | 'signInToHost'
   | 'noRoom'
   | 'started'
   | 'full'
@@ -475,7 +477,7 @@ export const hasServerClock = (): boolean => bestClock !== null;
  * 的每一种都得在这张单子上。
  */
 const KNOWN: RoomError[] = [
-  'geniusOnly', 'noRoom', 'started', 'full', 'claimed', 'notHost',
+  'geniusOnly', 'signInToHost', 'noRoom', 'started', 'full', 'claimed', 'notHost',
   'tooFew', 'mode', 'ended', 'busy', 'notConfigured', 'tooMany',
   'blocked', 'bad', 'server', 'seat',
 ];

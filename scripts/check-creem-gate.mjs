@@ -42,7 +42,8 @@ const post = (base, path, body) =>
 
 /** 起一台 dev-server，等它真的开始应答再返回。 */
 async function serve(port, creemKey) {
-  const env = { ...process.env };
+  // 授予开关明写 0（10-31 方案推11 起不填即开）：这道门量的是没有「登录即送终身」那一侧。
+  const env = { ...process.env, GENIUS_GRANT_WINDOW: '0' };
   if (creemKey) env.CREEM_API_KEY = creemKey;
   else delete env.CREEM_API_KEY;
   const child = spawn(process.execPath, ['scripts/dev-server.mjs', String(port), 'dist'], {

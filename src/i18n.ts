@@ -494,6 +494,8 @@ export interface I18nStrings {
   confirmBtn: string;
   /** 这台设备手里的令牌不作数了（在别处改过密码、或者过期）。 */
   sessionGone: string;
+  /** 没登录点开小屋（10-31 方案推11 Z-J01：开小屋只要登录，服务器回 signInToHost）。附录甲 §7。 */
+  signInToHost: string;
   unlockBadCode: string;
   unlockExpired: string;
   /** Carries {email} — the support address, when no mail can be sent. */
@@ -1169,6 +1171,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: 'That is the address you are already on.',
     confirmBtn: 'Confirm',
     sessionGone: 'This device is no longer signed in. Please sign in again.',
+    signInToHost: 'Sign in to open a room.',
     unlockBadCode: 'That code is not right.',
     unlockExpired: 'That code has expired. Send a new one.',
     unlockNoMail: 'We cannot send mail automatically yet. Write to {email} and we will open it for you.',
@@ -1558,6 +1561,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: 'C’est déjà votre adresse actuelle.',
     confirmBtn: 'Confirmer',
     sessionGone: 'Cet appareil n’est plus connecté. Reconnectez-vous.',
+    signInToHost: 'Connectez-vous pour ouvrir une salle.',
     unlockBadCode: 'Ce code n’est pas le bon.',
     unlockExpired: 'Ce code a expiré. Demandez-en un nouveau.',
     unlockNoMail: 'Nous ne pouvons pas encore envoyer d’e-mail automatiquement. Écrivez à {email} et nous le rouvrirons.',
@@ -1947,6 +1951,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: '這就是您現在用的信箱。',
     confirmBtn: '確認',
     sessionGone: '這台裝置的登入已經失效，請重新登入。',
+    signInToHost: '登入後才能開小屋。',
     unlockBadCode: '驗證碼不對。',
     unlockExpired: '驗證碼已過期，請重新寄一次。',
     unlockNoMail: '目前還無法自動寄信。請寫信到 {email}，我們幫您開啟。',
@@ -2336,6 +2341,7 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     emailSame: '这就是您现在用的邮箱。',
     confirmBtn: '确认',
     sessionGone: '这台设备的登录已经失效，请重新登录。',
+    signInToHost: '登录后才能开小屋。',
     unlockBadCode: '验证码不对。',
     unlockExpired: '验证码已过期，请重新发送。',
     unlockNoMail: '目前还无法自动发信。请写信到 {email}，我们帮您开启。',

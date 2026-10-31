@@ -36,7 +36,7 @@
 import { randomBytes } from 'node:crypto';
 import { send, readBody } from './_creem.js';
 import { adminRefused } from './_admin.js';
-import { identify, isGenius } from './_entitlement.js';
+import { identify } from './_entitlement.js';
 import { loadAccount, pairKey } from './_accounts.js';
 import { EMAIL_CAPPED_STAT, callerId, tooMany, utcDay } from './_ratelimit.js';
 import { redact } from './_redact.js';
@@ -1070,12 +1070,10 @@ async function groupTop(boards) {
  * 取哪五十个名字）。门：check-scores 末尾那一节，board() 里不许再有 hgetall(。
  */
 async function board(res, body, who, claim) {
-  // 限速排在最前面（见 VIEWS_PER_MINUTE）：后面那一问（isGenius）对刷卡账号要去问一趟 Creem。
+  // 限速排在最前面（见 VIEWS_PER_MINUTE）。看榜只要登录（10-31 方案推11 Z-J01，10-14 F-1 c）：原先这儿还问一句 isGenius——对
+  // 刷卡账号要去问一趟 Creem，权益过期的人登录着也看不了榜。没登录在外面那一层就回 401 了。
   if (await tooMany('scores:board', who.id, VIEWS_PER_MINUTE, 60)) {
     return send(res, 429, { error: 'tooMany' });
-  }
-  if (!(await isGenius(claim, who.account))) {
-    return send(res, 403, { error: 'geniusOnly' });
   }
 
   const mode = cleanBoard(body?.mode);

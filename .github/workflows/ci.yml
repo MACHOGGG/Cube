@@ -448,7 +448,8 @@ jobs:
       # 手机下一次看排行榜就 401，玩家原话「登录之后一会儿关掉，再打开排行榜就要重新登录」）。
       - name: 同一个账号两台设备
         run: |
-          node scripts/dev-server.mjs 8991 dist &
+          # 授予开关明写 0（10-31 方案推11 起不填即开）：这道门量的是兑码落进账号那一侧（见 check-two-devices 文件头）。
+          GENIUS_GRANT_WINDOW=0 node scripts/dev-server.mjs 8991 dist &
           for i in $(seq 1 60); do
             curl -sf http://localhost:8991/ > /dev/null && break
             sleep 0.5

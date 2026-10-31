@@ -135,14 +135,16 @@ console.log('');
     !/const LIFETIME_UNTIL = Date\.UTC\(/.test(entSrc));
 }
 
-// ---- 窗口期授予：开关默认关着，关着的时候一步都不走 --------------------------
+// ---- 窗口期授予：不填即开、写 0 才关（10-31 方案推11 Z-J01），关着的时候一步都不走 ----------------------
 {
   const ent = await import('../api/_entitlement.js');
   const accounts = await import('../api/_accounts.js');
   const before = process.env.GENIUS_GRANT_WINDOW;
 
+  // 原先「没填就是关」（只有正好是 1 才算开）：「窗口期送终身」散在四处，变量一漏注册成功却不是天才（verify-S S14）。
   delete process.env.GENIUS_GRANT_WINDOW;
-  check('没填环境变量时窗口是关的', ent.grantWindowOpen() === false);
+  check('没填环境变量时窗口是开的（不填即开）', ent.grantWindowOpen() === true);
+  process.env.GENIUS_GRANT_WINDOW = '0';
   {
     /*
      * 拿一个**库里真有的**账号来试。
@@ -160,10 +162,9 @@ console.log('');
     check('窗口关着：库里那一份一个字都没动',
       !after.until && !after.grantedAt, JSON.stringify(after));
   }
-  process.env.GENIUS_GRANT_WINDOW = '0';
-  check('填 0 也是关的', ent.grantWindowOpen() === false);
+  check('填 0 才是关的', ent.grantWindowOpen() === false);
   process.env.GENIUS_GRANT_WINDOW = '1';
-  check('填 1 才是开的', ent.grantWindowOpen() === true);
+  check('填 1 是开的', ent.grantWindowOpen() === true);
   // 开着的时候写进去的那一份，必须是上面那个「大家都认得」的数。
   {
     const addr = 'grantme@example.com';

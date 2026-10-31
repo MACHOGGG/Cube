@@ -250,13 +250,14 @@ const E = await makePlayer('daily-e@example.com');
   check('⑦ 今日榜上没有它（哪怕那串码正好是今天的）', !b.payload?.rows?.some((x) => x.me), JSON.stringify(b.payload?.rows));
 }
 
-// ── 看榜要天才（和别的榜同一道门）─────────────────────────────────────────
+// ── 看榜只要登录（和别的榜同一道门；10-31 方案推11 Z-J01 起不问天才）──────────────────────
 {
   const account = accounts.newAccount('secret', 'code');
   account.until = realNow() - 3 * 24 * 3600e3; // 过期了
   await accounts.saveAccount('daily-f@example.com', account);
   const r = await todayBoard({ email: 'daily-f@example.com', token: account.token });
-  check('看今日榜和别的榜一样要天才：过期的 403', r.status === 403, `${r.status} ${JSON.stringify(r.payload)}`);
+  // 原先这一条是「过期的 403」：看榜要天才。10-14 F-1 撤了天才那一层，登录着就看得了（没登录照旧 401）。
+  check('看今日榜和别的榜一样只要登录：权益过期了也照看（200）', r.status === 200, `${r.status} ${JSON.stringify(r.payload)}`);
 }
 
 // ── ⑧ 重报的那一次也进今日榜（2026-10-08 方案 1-4）─────────────────────────────

@@ -197,6 +197,9 @@ export function errorText(reason: RoomError, lang: Lang): string {
   switch (reason) {
     case 'geniusOnly':
       return s.mpNeedGenius;
+    // 开小屋只要登录（10-31 方案推11 Z-J01）：没登录（或令牌不作数了）点《开小屋》，服务器回这个词。
+    case 'signInToHost':
+      return s.signInToHost;
     case 'noRoom':
       return s.mpErrNoRoom;
     case 'full':
@@ -637,6 +640,13 @@ export function renderMultiplayerPage(
          * 现在照实说（sessionGone，全站同一句），并且把登录那扇窗打开——他
          * 缺的就是在这台设备上再登一次。
          */
+        // 10-31 方案推11 起服务器回的是 signInToHost（开小屋只问登录了没有）；geniusOnly 那一支是旧服务端的回包，推12 再清。
+        // 两样都是「这台设备在服务器眼里没登录」：说那一句、打开登录窗。
+        if (made.reason === 'signInToHost') {
+          msg.textContent = s.signInToHost;
+          handlers.onSessionGone();
+          return;
+        }
         if (made.reason === 'geniusOnly') {
           msg.textContent = s.sessionGone;
           // 开的是**登录**窗，不是「办会员」那条路：本机缓存这会儿还以为自己

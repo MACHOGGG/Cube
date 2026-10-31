@@ -12,6 +12,9 @@
  */
 // 内存版存储，进程一关就没：这个检查不该碰到任何真实数据。
 process.env.ALLOW_MEMORY_STORE = '1';
+// 授予开关明写 0（10-31 方案推11 Z-J01 起不填即开、写 0 才关）：这道门量的是「没有登录即送终身」那一侧——兑码落进账号、
+// 过期就如实说不是天才——原先不填就是关，现在要明写。
+process.env.GENIUS_GRANT_WINDOW = '0';
 // 至少 32 位：短于 32 位的令牌，管理接口一律 503（10-11 方案 A-11）。
 process.env.ADMIN_TOKEN = 'test-admin-token-1234567890-abcdef';
 const A = new URL('../api/', import.meta.url).href;

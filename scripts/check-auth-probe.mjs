@@ -35,6 +35,9 @@
  * fetch 顶掉（只认一个「订着但没设过密码」的地址）。
  */
 process.env.ALLOW_MEMORY_STORE = '1';
+// 授予开关明写 0（10-31 方案推11 Z-J01 起不填即开、写 0 才关）：这道门量的是「没有登录即送终身」那一侧——兑码落进账号、
+// 过期就如实说不是天才——原先不填就是关，现在要明写。
+process.env.GENIUS_GRANT_WINDOW = '0';
 process.env.CREEM_API_KEY = 'creem_test_stub';
 
 let fail = 0;
