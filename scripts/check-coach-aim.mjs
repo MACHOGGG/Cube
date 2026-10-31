@@ -7,12 +7,14 @@
  * ─────────────────────────────────────────────────────────────────────────
  * 亮灯的规矩是 10-11 方案 D-1 ～ D-4 定的（按玩家规格重做，替换 10-09 补充方案 6-2 那一版），这一道逐条量：
  *
- *   · A、E 不亮。A 那一幅是一段动画（本局三种颜色的 1×N 依次慢翻过去再翻回来），手机上也摆出来。
+ *   · A 起就亮（站长 10-29，A、B、C 都是拼一组、每步重算）。A 那一幅是一段动画（本局三种颜色的 1×N 依次慢翻过去再翻回来），
+ *     手机上也摆出来。
  *   · B、C：目标是当前 N 的**任意一组**（同色连着 ≥ N、至少一枚色块、碰到最后滑过的线）。每一色单独算**精确的最少
  *     步数**；亮最少步数那一色、最后一步成组的**那 N 枚**。中间哪一步自己就会得分或消边，那一支不算。
  *   · 挑色：步数最少；平手先留正在亮的那一色（不跳色），再平留含星星的组，再平按盘面哈希（这一道不验哈希，只验「挑
  *     的是平手那几色之一」）。
- *   · C 只在刚出来那一下算一次，HUD 那块《得分图案》一起亮；D 亮那一色**在场的所有星星**，色块一枚不亮。
+ *   · C 每步重算，HUD 那块《得分图案》一直亮到换条；D 亮那一色**在场的所有星星**，色块一枚不亮；E 亮拼图案和消外边
+ *     两样里步数少的那一个，平手亮外边（站长 10-29、10-30）。
  *   · 只动 filter，不加任何热区——真的拖一枚，拖动照常。
  *   · 手机端（≤999px）教学文字：字号比原来大一截（10-09 补充方案：28/15 倍），最多两行，不压住棋盘。
  *
@@ -80,7 +82,7 @@ const { tutorialRules } = await import(pathToFileURL(join(tmp, 'i18n.mjs')).href
 const { outerEdges, EDGE_MIN } = await import(pathToFileURL(join(tmp, 'edge.mjs')).href);
 rmSync(tmp, { recursive: true, force: true });
 /** ui/coachBar.ts 的 HINT_OF：第几条要灯做什么。 */
-const HINT_OF = [null, 'group', 'groupOnce', 'edge', null];
+const HINT_OF = ['group', 'group', 'group', 'edge', 'best'];
 /** A 摆多久（ui/coachBar.ts 的 A_MS）：B 要等它过去。 */
 const A_MS = 10000;
 
@@ -443,11 +445,11 @@ const ruleOf = (o, shape) => tutorialRules('zhHans', shape).indexOf(o.text);
 const nameOf = (i) => (i < 0 ? '（没有条子）' : 'ABCDE'[i]);
 
 /**
- * 一种盘面上量一次（10-11 方案 D-1 ～ D-3，逐条）。回它属于哪一类，好数尺子；`memo` 记着上一次的条和亮的那一色、
- * 那一组（「不跳色」「沿用上一组」要它）、C 刚出来那一下亮的那几枚。
+ * 一种盘面上量一次（10-11 方案 D-1 ～ D-3，逐条；10-31 整合版 Z-C01 起 A 也亮、C 每步重算、E 亮步数最少的那一下）。回它
+ * 属于哪一类，好数尺子；`memo` 记着上一次的条和亮的那一色（「不跳色」要它）。
  *
- * 「不跳色」只在同一条之内比：条子是按时间换的（A 的 10 秒、C 的 10 秒 / 5 秒），换的那一下控制器在两步之间就按新
- * 的一条重算过一次灯（onChange → refreshCoachGlow），这道门只在每一步结算完才读，看不到那一次。
+ * 「不跳色」的记忆**跨条保留**（10-31 整合版）：引擎的 prev 本来就跨条沿用上一条的颜色，A 现在也亮，B、C 刚出来那一下
+ * 会撞上——原先换条就清掉记忆，模拟里见过 1 次「其实没跳色却判红」。
  */
 function judge(o, shape, where, memo = {}) {
   const rule = ruleOf(o, shape);
@@ -455,75 +457,85 @@ function judge(o, shape, where, memo = {}) {
   const lit = litOf(o);
   const at = new Map(o.at);
   const colors = [...new Set(lit.map((k) => at.get(k).color))];
-  const same = memo.rule === rule;
-  const prev = same ? memo.color ?? null : null;
+  const prev = memo.color ?? null;
   memo.rule = rule;
-  memo.color = colors.length === 1 ? colors[0] : null;
+  memo.color = colors.length === 1 ? colors[0] : prev;
   const blockLit = /\bcoach-glow-block\b/.test(o.block?.cls || '');
-  if (kind === 'groupOnce') {
+  if (rule === 2) {
     check(`${where}（C）：HUD 那块《得分图案》亮着（coach-glow-block，跑 glow-pulse-coach 或静止光晕）`, blockLit &&
       (o.block.anim === 'glow-pulse-coach' || /drop-shadow/.test(o.block.filter)), JSON.stringify(o.block));
   } else {
     check(`${where}（${nameOf(rule)}）：HUD 那块《得分图案》不亮`, !blockLit, o.block?.cls);
   }
   if (!kind) {
-    check(`${where}（${nameOf(rule)}）：这一条不亮灯`, lit.length === 0, lit.join(' '));
+    check(`${where}（${nameOf(rule)}）：没有条子，不亮灯`, lit.length === 0, lit.join(' '));
     return 'skip';
   }
   check(`${where}（${nameOf(rule)}）：只亮一种颜色（色块、星星一起算）`, colors.length <= 1, colors.join(' / '));
 
-  if (kind === 'edge') {
-    const r = planEdgeOracle(o, shape);
-    if (r.capped) return 'heavy';
+  /** D，以及 E 判成外边的时候：亮那一色在场的所有星星，一枚色块都不亮（站长 10-30「D 只亮星星」）。 */
+  const judgeEdge = (r, tag) => {
     if (!r.colors.length) {
-      check(`${where}（D）：场上一颗星星都没有，不亮`, lit.length === 0, lit.join(' '));
+      check(`${where}（${tag}）：场上一颗星星都没有，不亮`, lit.length === 0, lit.join(' '));
       return 'none';
     }
     const c = colors[0];
     const stars = o.at.filter(([, v]) => v.face === 'dot' && v.color === c).map(([k]) => k).sort();
-    check(`${where}（D）：亮的是那一色在场的所有星星，一枚色块都不亮`, lit.length > 0 && lit.every((k) => at.get(k).face === 'dot') &&
+    check(`${where}（${tag}）：亮的是那一色在场的所有星星，一枚色块都不亮`, lit.length > 0 && lit.every((k) => at.get(k).face === 'dot') &&
       lit.join(' ') === stars.join(' '), `亮 [${lit.join(' ')}]，那一色的星星 [${stars.join(' ')}]`);
-    check(`${where}（D）：挑的是${r.depth ? ` ${r.depth} 步就能填满一条外边` : '「还差的最少」'}的那几色之一`, r.colors.includes(c),
+    check(`${where}（${tag}）：挑的是${r.depth ? ` ${r.depth} 步就能填满一条外边` : '「还差的最少」'}的那几色之一`, r.colors.includes(c),
       `亮 ${c}；该是 ${r.colors.join(' / ')}`);
-    if (prev !== null && r.colors.includes(prev)) check(`${where}（D）：上一次亮的那一色还是最少的——不跳色`, c === prev, `这一次亮 ${c}`);
+    if (prev !== null && r.colors.includes(prev)) check(`${where}（${tag}）：上一次亮的那一色还是最少的——不跳色`, c === prev, `这一次亮 ${c}`);
     return r.depth ? 'edge' : 'edge0';
-  }
+  };
+  /** A、B、C，以及 E 判成图案的时候：亮最少步数那一色那一步成组的那 N 枚。 */
+  const judgeGroup = (r) => {
+    if (!r.best) {
+      check(`${where}（${nameOf(rule)}）：哪一色都拼不出（${OR_DEPTH} 步之内），不亮`, lit.length === 0, lit.join(' '));
+      return 'none';
+    }
+    if (!lit.length) {
+      check(`${where}（${nameOf(rule)}）：${r.best} 步就有颜色能拼出一组——灯必须亮（不再「没算完就不亮」）`, false,
+        `${r.best} 步能成的颜色 ${r.tied.join(' / ')}`);
+      return 'bad';
+    }
+    const c = colors[0];
+    check(`${where}（${nameOf(rule)}）：亮的是最少步数（${r.best} 步）那几色之一`, r.tied.includes(c), `亮 ${c}；该是 ${r.tied.join(' / ')}`);
+    const options = r.windows.get(c) ?? new Map();
+    const key = lit.join(' ');
+    check(`${where}（${nameOf(rule)}）：亮的正好是那一步成组的那 ${o.n} 枚`, lit.length === o.n && options.has(key),
+      `亮 [${key}]；这一色的候选 ${[...options.keys()].slice(0, 2).map((x) => '[' + x + ']').join(' ')}${options.size > 2 ? ` …共 ${options.size} 组` : ''}`);
+    if (prev !== null && r.tied.includes(prev)) {
+      // 「同一色里先沿用上一组」这一道量不了：两次读屏之间滑过一步，上一组那几枚挪到了别的格子，而小球没有 data-id，
+      // 认不出谁是谁。check-coach 第 ⑩ 节拿手摆的盘面钉着它。
+      check(`${where}（${nameOf(rule)}）：上一次亮的那一色（${prev}）还是最少的——不跳色`, c === prev, `这一次亮 ${c}`);
+    } else {
+      const starry = r.tied.filter((k) => [...(r.windows.get(k) ?? new Map()).values()].some((w) => w.star));
+      if (starry.length) check(`${where}（${nameOf(rule)}）：平手的那几色里有带星星的组——挑带星星的那一色`, starry.includes(c), `亮 ${c}；带星星的 ${starry.join(' / ')}`);
+    }
+    return r.best === 1 ? 'lit1' : 'litN';
+  };
 
-  // C 只算一次：刚出来那一下照 B 一样量；之后灯跟着那几枚走，被翻掉、离场就熄——这一道认不出「那几枚」挪到哪儿去了
-  // （小球没有 data-id），只量「要么熄着，要么还是那么多枚、那一色」。
-  if (kind === 'groupOnce' && same) {
-    const first = memo.once ?? { n: 0, color: null };
-    check(`${where}（C）：之后要么熄着，要么还是刚出来那一下那几枚（同样多、同一色）`,
-      lit.length === 0 || (lit.length === first.n && colors[0] === first.color), `亮 ${lit.length} 枚（${colors[0]}）；刚出来 ${first.n} 枚（${first.color}）`);
-    return 'once';
+  if (kind === 'edge') {
+    const r = planEdgeOracle(o, shape);
+    if (r.capped) return 'heavy';
+    return judgeEdge(r, 'D');
+  }
+  if (kind === 'best') {
+    // E：门里自带的两份对照都跑。外边只认真解（星星不够填的那种不算）；两样都有时外边步数 ≤ 图案步数就按外边量
+    // （平手算外边，站长 10-30），否则按图案量；只有一样有就按那一样；都没有不判。
+    const g = planGroupOracle(o, shape);
+    const e = planEdgeOracle(o, shape);
+    if (g.capped || e.capped) return 'heavy';
+    const dg = g.best || 0;
+    const de = e.colors.length && e.depth > 0 ? e.depth : 0;
+    if (!dg && !de) return 'none';
+    o.bestKind = de && (!dg || de <= dg) ? 'edge' : 'group';
+    return o.bestKind === 'edge' ? judgeEdge(e, 'E·外边') : judgeGroup(g);
   }
   const r = planGroupOracle(o, shape);
-  if (kind === 'groupOnce') memo.once = { n: lit.length, color: colors[0] ?? null };
   if (r.capped) return 'heavy';
-  if (!r.best) {
-    check(`${where}（${nameOf(rule)}）：哪一色都拼不出（${OR_DEPTH} 步之内），不亮`, lit.length === 0, lit.join(' '));
-    return 'none';
-  }
-  if (!lit.length) {
-    check(`${where}（${nameOf(rule)}）：${r.best} 步就有颜色能拼出一组——灯必须亮（不再「没算完就不亮」）`, false,
-      `${r.best} 步能成的颜色 ${r.tied.join(' / ')}`);
-    return 'bad';
-  }
-  const c = colors[0];
-  check(`${where}（${nameOf(rule)}）：亮的是最少步数（${r.best} 步）那几色之一`, r.tied.includes(c), `亮 ${c}；该是 ${r.tied.join(' / ')}`);
-  const options = r.windows.get(c) ?? new Map();
-  const key = lit.join(' ');
-  check(`${where}（${nameOf(rule)}）：亮的正好是那一步成组的那 ${o.n} 枚`, lit.length === o.n && options.has(key),
-    `亮 [${key}]；这一色的候选 ${[...options.keys()].slice(0, 2).map((x) => '[' + x + ']').join(' ')}${options.size > 2 ? ` …共 ${options.size} 组` : ''}`);
-  if (prev !== null && r.tied.includes(prev)) {
-    // 「同一色里先沿用上一组」这一道量不了：两次读屏之间滑过一步，上一组那几枚挪到了别的格子，而小球没有 data-id，
-    // 认不出谁是谁。check-coach 第 ⑩ 节拿手摆的盘面钉着它。
-    check(`${where}（${nameOf(rule)}）：上一次亮的那一色（${prev}）还是最少的——不跳色`, c === prev, `这一次亮 ${c}`);
-  } else {
-    const starry = r.tied.filter((k) => [...(r.windows.get(k) ?? new Map()).values()].some((w) => w.star));
-    if (starry.length) check(`${where}（${nameOf(rule)}）：平手的那几色里有带星星的组——挑带星星的那一色`, starry.includes(c), `亮 ${c}；带星星的 ${starry.join(' / ')}`);
-  }
-  return r.best === 1 ? 'lit1' : 'litN';
+  return judgeGroup(r);
 }
 
 /**
@@ -585,7 +597,7 @@ const noteC = (o, shape) => {
 /**
  * 灯是分段在空闲时算的，**算完才亮**（10-11 方案 D-4）：盘面安静了、这一条该亮灯却还黑着的话，再等一会儿（最多
  * LIT_WAIT_MS，盘面和条子都不许变）。量的是「亮得对不对」；多久之内必须亮是 check-coach-budget 的事（D-5 第 2 条，
- * CPU 降速六倍、一秒之内）。C 那一条刚出来之后不等：那时候熄着可能就是该熄（那几枚被翻掉了）。
+ * CPU 降速六倍、一秒之内）。
  */
 const LIT_WAIT_MS = 4000;
 /**
@@ -596,7 +608,6 @@ const LIT_WAIT_MS = 4000;
 async function waitLit(page, shape, o, memo = {}, hops = 0) {
   const rule = ruleOf(o, shape);
   if (!(rule >= 0 && HINT_OF[rule]) || litOf(o).length) return o;
-  if (HINT_OF[rule] === 'groupOnce' && memo.rule === rule) return o;
   const sig = (x) => JSON.stringify(x.at.map(([k, v]) => [k, v.face, v.color]));
   const s0 = sig(o);
   const t0 = Date.now();
@@ -649,11 +660,47 @@ function firstStepOf(o, shape, kind) {
   return null;
 }
 
+/**
+ * D、E（判成外边那一种）也要能多步顺着走（10-31 整合版 Z-C01；只改门，不改游戏）：firstStepOf 对外边只找「一步就能
+ * 填满」的那种，一步不行就随手滑——模拟过，那样 500 局里 0 局在 60 轮内读到 E。这里：① 先找一步填满的；② 没有就取
+ * 对照给的那一色 k（对照超上限、或步数为 0 就回 null）；③ h(盘面) = 所有长度 ≤「k 色星星总数」的外边里「边长 − 这条边
+ * 上已有的 k 色星星数」的最小值；④ 逐个试走法表里的每一步，取第一步「之后盘上没有可消的边、这一步不得分、h 变小」的；
+ * ⑤ 都不满足回 null（照旧随手滑）。写法照方案附带的 sim-coach1029/run1029.mjs 的 edgeStepOf。
+ */
+function edgeStepOf(o, shape) {
+  const one = firstStepOf(o, shape, 'edge');
+  if (one) return one;
+  const r = planEdgeOracle(o, shape);
+  if (!r || r.capped || !r.depth || !r.colors?.length) return null;
+  const k = r.colors[0];
+  const m = model(o, shape);
+  const S = m.keys.map((_, i) => i);
+  const stars = m.P.filter((p) => p.face === 'dot' && p.color === k).length;
+  const h = (T) => {
+    let best = Infinity;
+    for (const e of m.edges) {
+      if (!e.length || e.length > stars) continue;
+      let cnt = 0;
+      for (const c of e) if (m.P[T[c]].face === 'dot' && m.P[T[c]].color === k) cnt++;
+      best = Math.min(best, e.length - cnt);
+    }
+    return best;
+  };
+  const h0 = h(S);
+  for (const [li, sh] of m.moves) {
+    shift(m, S, li, sh);
+    const ok = !clearing(m, S).length && !scoring(m, S, m.movedSets[li]).length && h(S) < h0;
+    shift(m, S, li, m.slide[li].length - sh);
+    if (ok) return { line: li, shift: sh };
+  }
+  return null;
+}
+
 // ===========================================================================
-// ① 头一局小球：A 那一段动画、A 不亮；B 的灯真的在亮、只动 filter、拖得动
+// ① 头一局小球：A 那一段动画、A 也亮（10-31 整合版）；B 的灯真的在亮、只动 filter、拖得动
 // ===========================================================================
 if (want(1)) {
-  head('① 头一局小球（正常动效）：A 不亮、A 的动画手机上也摆；B 的灯在亮、只动 filter、拖得动');
+  head('① 头一局小球（正常动效）：A 亮一组、A 的动画手机上也摆；B 的灯在亮、只动 filter、拖得动');
   const { ctx, page } = await openFirst({ idx: 1 });
   let o = await settle(page, 'circle', QUIET_FULL_MS);
   const bar = await page.evaluate(() => {
@@ -674,6 +721,8 @@ if (want(1)) {
   check('A：手机上也摆配图（coach-bar--anim，那一格不收起）', !!bar && /coach-bar--anim/.test(bar.cls) && bar.art !== 'none', `${bar?.art}`);
   check('A 的配图是那段动画：三行、每行四枚，真的在跑（ra-cyc）', !!bar && bar.cyc === 12 && bar.rows.join() === '4,4,4' && bar.anim.join() === 'ra-cyc',
     JSON.stringify(bar && { cyc: bar.cyc, rows: bar.rows, anim: bar.anim }));
+  // A 也亮灯（站长 10-29）：开局整副满盘算一次，算完才亮——先等它亮再判。
+  o = await waitLit(page, 'circle', o);
   judge(o, 'circle', '开局');
 
   // 得分图案块、外边带子：A、B 都不亮；带子轻微闪烁。
@@ -848,19 +897,22 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
   head(`② ${name}：真滑几十步，每一步结算完对一次（B → C → D）`);
   const { ctx, page } = await openFirst({ idx, reduce: true });
   check(`（尺子）这一局真的是${name}`, await page.evaluate(() => document.querySelector('.app--game').getAttribute('data-shape')) === shape);
-  // A 不亮，等它过去（或者头一下得分）。这儿等满 10 秒：B 那一条从开局那副盘面就量得到。
+  // A 也亮（站长 10-29）：开局先等它亮再判。然后等 A 过去（满 10 秒）：B 那一条从开局那副盘面就量得到。
   let o = await settle(page, shape);
+  o = await waitLit(page, shape, o);
   judge(o, shape, `${name}开局`);
   await page.waitForTimeout(A_MS + 300);
   o = await settle(page, shape);
-  const tally = { lit1: 0, litN: 0, none: 0, heavy: 0, bad: 0, skip: 0, once: 0, edge: 0, edge0: 0, moved: 0, stat: 0, blockStat: 0 };
+  const tally = { lit1: 0, litN: 0, none: 0, heavy: 0, bad: 0, skip: 0, edge: 0, edge0: 0, moved: 0, stat: 0, blockStat: 0, e: 0 };
   seenC = null;
   const seen = new Set();
   const memo = {};
   // 种子固定，同一副盘面每次走同一串（盘面本身是随机发的）。
   let seed = 20261011 + idx;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-  for (let step = 0; step < 44; step++) {
+  // 轮数 60（D77：F5 下方块 95% 见到 D 要 33 轮、样本最大 59）；读到 E 之后再量 6 步 E 的灯才停。
+  let eLeft = 6;
+  for (let step = 0; step < 60; step++) {
     o = await waitLit(page, shape, o, memo);
     const rule = ruleOf(o, shape);
     seen.add(rule);
@@ -881,14 +933,19 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
       check(`${name}：减弱动态效果时是静止光晕（animation: none，filter 里有 drop-shadow）`,
         litCells.every((v) => v.anim === 'none' && /drop-shadow/.test(v.filter)), `${litCells[0].anim} / ${litCells[0].filter.slice(0, 60)}`);
     }
-    if (HINT_OF[rule] === 'groupOnce' && !tally.blockStat) {
+    if (rule === 2 && !tally.blockStat) {
       tally.blockStat++;
       check(`${name}（C）：减弱动态效果时图案块也是静止光晕`, o.block?.anim === 'none' && /drop-shadow/.test(o.block?.filter || ''), JSON.stringify(o.block));
     }
-    if (rule === 4) break;
-    // 下一步：多半顺着对照给的路走（B → 降级 → C → D 要快），别的时候随手滑一条线。
+    if (rule === 4) {
+      tally.e++;
+      if (--eLeft < 0) break;
+    }
+    // 下一步：多半顺着对照给的路走（B → 降级 → C → D 要快），别的时候随手滑一条线。D、E 判成外边那一种用 edgeStepOf
+    // （能多步顺着外边走）；E 判成图案那一种照图案走。
     const kind = HINT_OF[rule];
-    const follow = kind && rnd() < 0.8 ? firstStepOf(o, shape, kind === 'edge' ? 'edge' : 'group') : null;
+    const edgeish = kind === 'edge' || (kind === 'best' && o.bestKind === 'edge');
+    const follow = kind && rnd() < 0.8 ? (edgeish ? edgeStepOf(o, shape) : firstStepOf(o, shape, 'group')) : null;
     let line;
     let sh;
     if (follow) {
@@ -904,8 +961,8 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
     if (JSON.stringify(o.at.map(([k, v]) => [k, v.face, v.color])) !== before) tally.moved++;
     if (await page.evaluate(() => !!document.querySelector('.overlay--end.show'))) break;
   }
-  const summary = `B/C 一步亮对 ${tally.lit1} 次 / 多步亮对 ${tally.litN} 次 / 拼不出、不亮 ${tally.none} 次 / C 之后跟着走 ${tally.once} 次 / ` +
-    `D 亮对 ${tally.edge + tally.edge0} 次 / 对照跳过（盘面太多）${tally.heavy} 次 / 不亮的那一条 ${tally.skip} 次 / 走到过 ${[...seen].sort().map(nameOf).join('')}`;
+  const summary = `图案一步亮对 ${tally.lit1} 次 / 多步亮对 ${tally.litN} 次 / 拼不出、不亮 ${tally.none} 次 / ` +
+    `外边亮对 ${tally.edge + tally.edge0} 次 / 对照跳过（盘面太多）${tally.heavy} 次 / E 量了 ${tally.e} 次 / 走到过 ${[...seen].sort().map(nameOf).join('')}`;
   console.log('      ' + summary);
   check(`${name}：（尺子）真的滑动了（每一步之后盘面变了）`, tally.moved >= 10, `${tally.moved} 步动了`);
   check(`${name}：（尺子）B 那一条亮灯的盘面量到过好几次`, tally.lit1 + tally.litN >= 3, summary);
@@ -985,8 +1042,16 @@ if (want(3)) {
   const VIEWS = [[390, 844], [360, 640], [375, 667], [414, 896], [430, 932], [844, 390], [667, 375]];
   const { ctx, page } = await openFirst({ idx: 1 });
   // A 那一条（开局就是它）：配图那段动画手机上也摆，条子不变高、不压棋盘、动画整块在条子里，字两行以内。
-  // A 那一条的条子量的是「字和图那一行」（.coach-row）的高：条子顶上那一行（进度 + 那颗《<》）在 A 上没有《<》，
-  // B 起才有，那一行本来就高出 11px 左右——那是第 15 推起就有的事，和这一幅动画无关（见下面印出来的那一句）。
+  // 10-31 整合版 Z-C02（D62）：那颗《<》从 A 起就占位（A 时只是看不见、按不着），整条条子 A 和 B 一样高——原先 A 时它
+  // display: none，换到 B 顶上多出它，整条高 11px、往下一跳。
+  const peekA = await page.evaluate(() => {
+    const p = document.querySelector('.coach-bar .coach-peek');
+    if (!p) return null;
+    const cs = getComputedStyle(p);
+    return { vis: cs.visibility, disp: cs.display, disabled: p.disabled, aria: p.getAttribute('aria-hidden'), tab: p.tabIndex, w: Math.round(p.getBoundingClientRect().width) };
+  });
+  check('A：《<》占着位置但看不见、按不着（visibility: hidden、disabled、aria-hidden、tabindex -1）',
+    !!peekA && peekA.vis === 'hidden' && peekA.disp !== 'none' && peekA.disabled === true && peekA.aria === 'true' && peekA.tab === -1 && peekA.w > 0, JSON.stringify(peekA));
   const aHeights = new Map();
   const aBars = new Map();
   for (const [w, h] of VIEWS) {
@@ -1026,7 +1091,8 @@ if (want(3)) {
     check(`${w}×${h}：B 起换哪一条，条子都一样高（换条时不往棋盘里长）`, Math.max(...hs) - Math.min(...hs) <= 1, hs.join(' / '));
     const rows = [...got.map((g) => g.rowH), aHeights.get(`${w}×${h}`)];
     check(`${w}×${h}：A 那一幅动画不让字那一行变高、也不变矮（和别的几条一样高）`, Math.max(...rows) - Math.min(...rows) <= 1, rows.join(' / '));
-    console.log(`      ${w}×${h}：整条条子 A ${aBars.get(`${w}×${h}`)}px → B 起 ${hs[0]}px（顶上那一行 B 起多出那颗《<》，第 15 推起如此）`);
+    check(`${w}×${h}：整条条子 A 和 B 起一样高（《<》从 A 起就占位，换条不跳，D62）`, Math.abs(aBars.get(`${w}×${h}`) - hs[0]) <= 1,
+      `A ${aBars.get(`${w}×${h}`)}px → B 起 ${hs[0]}px`);
     // 小球第 4 条：两倍摆不进两行。两行优先，字号能大多少大多少，至少不比原来小。
     const [long] = await page.evaluate(MEASURE, [[zhCircle[3]]]);
     check(`${w}×${h}：小球第 4 条两行之内、不比原来小、不压棋盘`, long.lines <= 2 && long.font >= base - 0.05 && !long.overlap && long.inView,

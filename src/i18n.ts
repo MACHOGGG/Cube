@@ -2605,7 +2605,12 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * 目标是清盘。从前那六条讲的是上一套规则（2×2 那一族图案、整组星星按平方算、
  * 时间越短分越高），每一条在这一版里都成了假话。
  *
- * 第 3 条「得分图案会随着游戏解锁而变化」说的就是侵蚀阶梯（§2）：图案从 4 枚一路
+ * 第 1 条 2026-10-29 站长换成自己的原话（10-31 整合版：「同色的色块或星星连起得分图案可以得分」，繁英法站长 10-30
+ * 批过）。注：引擎要求得分图案至少一枚色块（scoring.ts），站长已知、仍定照原话。
+ *
+ * **五条句末一律不带句号**（站长 10-31：「每条教学内容都统一不加」，第 5 条的「～」留着）。规则书 rules.ts 照常带。
+ *
+ * 第 3 条「得分图案会随着游戏解锁而变小」（D17 甲：原先是「变化」）说的就是侵蚀阶梯（§2）：图案从 4 枚一路
  * 降到 1 枚。屏幕上那一块《得分图案》画的是同一件事（ui/patternBlock.ts），所以这
  * 句话指得到实物。
  *
@@ -2614,31 +2619,31 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  */
 export const TUTORIAL_RULES: Record<Lang, string[]> = {
   en: [
-    'A piece that completes a scoring shape flips over and becomes a star.',
-    'Stars can join coloured pieces to make another scoring shape.',
-    'The scoring shape gets shorter as the game unlocks.',
-    'Stars of one colour along the board\u2019s outer edge score and clear.',
-    'Try to clear the whole board.',
+    'Coloured pieces or stars of the same colour that join up into a scoring shape score',
+    'Stars can join coloured pieces to make another scoring shape',
+    'The scoring shape gets shorter as the game unlocks',
+    'Stars of one colour along the board\u2019s outer edge score and clear',
+    'Try to clear the whole board',
   ],
   fr: [
-    'Une pi\u00e8ce qui compl\u00e8te un motif se retourne et devient une \u00e9toile.',
-    'Les \u00e9toiles peuvent compl\u00e9ter un motif avec les pi\u00e8ces color\u00e9es.',
-    'Le motif \u00e0 former raccourcit \u00e0 mesure que la partie se d\u00e9bloque.',
-    'Des \u00e9toiles de m\u00eame couleur sur le bord ext\u00e9rieur marquent et disparaissent.',
-    'Essayez de tout faire dispara\u00eetre.',
+    'Des pi\u00e8ces color\u00e9es ou des \u00e9toiles de m\u00eame couleur qui forment un motif marquent des points',
+    'Les \u00e9toiles peuvent compl\u00e9ter un motif avec les pi\u00e8ces color\u00e9es',
+    'Le motif \u00e0 former raccourcit \u00e0 mesure que la partie se d\u00e9bloque',
+    'Des \u00e9toiles de m\u00eame couleur sur le bord ext\u00e9rieur marquent et disparaissent',
+    'Essayez de tout faire dispara\u00eetre',
   ],
   zhHant: [
-    '色塊拼出得分圖案就翻面，變成星星。',
-    '星星可以與色塊一同再次拼出得分圖案。',
-    '得分圖案會隨著遊戲解鎖而變化。',
-    '同色星星在整體的外邊會得分並消除。',
+    '同色的色塊或星星連起得分圖案可以得分',
+    '星星可以與色塊一同再次拼出得分圖案',
+    '得分圖案會隨著遊戲解鎖而變小',
+    '同色星星在整體的外邊會得分並消除',
     '嘗試全部消除吧～',
   ],
   zhHans: [
-    '色块拼出得分图案就翻面，变成星星。',
-    '星星可以与色块一同再次拼出得分图案。',
-    '得分图案会随着游戏解锁而变化。',
-    '同色星星在整体的外边会得分并消除。',
+    '同色的色块或星星连起得分图案可以得分',
+    '星星可以与色块一同再次拼出得分图案',
+    '得分图案会随着游戏解锁而变小',
+    '同色星星在整体的外边会得分并消除',
     '尝试全部消除吧～',
   ],
 };
@@ -2671,35 +2676,35 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
 export type RuleShape = 'circle' | 'square' | 'squareDiamond' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
-    circle: 'Fill the current outermost edge with same-colour stars to score and clear it.',
-    square: 'Stars of one colour filling a whole row or column score and clear, and the board closes up.',
-    squareDiamond: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board.',
-    triangle: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board.',
+    circle: 'Fill the current outermost edge with same-colour stars to score and clear it',
+    square: 'Stars of one colour filling a whole row or column score and clear, and the board closes up',
+    squareDiamond: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board',
+    triangle: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board',
   },
   fr: {
-    circle: 'Remplissez l’arête la plus extérieure d’étoiles de même couleur pour marquer et l’effacer.',
-    square: 'Des \u00e9toiles de m\u00eame couleur sur toute une ligne ou colonne marquent et disparaissent, et le plateau se referme.',
-    squareDiamond: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau.',
-    triangle: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau.',
+    circle: 'Remplissez l’arête la plus extérieure d’étoiles de même couleur pour marquer et l’effacer',
+    square: 'Des \u00e9toiles de m\u00eame couleur sur toute une ligne ou colonne marquent et disparaissent, et le plateau se referme',
+    squareDiamond: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau',
+    triangle: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau',
   },
   zhHant: {
-    circle: '同色星星連滿此刻最外面的一條邊，就得分並消除。',
-    square: '同色星星連滿整行或整列，就得分並消除，棋盤合攏。',
-    squareDiamond: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大。',
-    triangle: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大。',
+    circle: '同色星星連滿此刻最外面的一條邊，就得分並消除',
+    square: '同色星星連滿整行或整列，就得分並消除，棋盤合攏',
+    squareDiamond: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大',
+    triangle: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大',
   },
   zhHans: {
-    circle: '同色星星连满此刻最外面的一条边，就得分并消除。',
-    square: '同色星星连满整行或整列，就得分并消除，棋盘合拢。',
-    squareDiamond: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',
-    triangle: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大。',
+    circle: '同色星星连满此刻最外面的一条边，就得分并消除',
+    square: '同色星星连满整行或整列，就得分并消除，棋盘合拢',
+    squareDiamond: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大',
+    triangle: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大',
   },
 };
 
 /**
  * 《无限反转》那一局的第 3 条。
  *
- * 通稿第 3 条说「得分图案会随着游戏解锁而变化」——那一局**不吃侵蚀**（玩家
+ * 通稿第 3 条说「得分图案会随着游戏解锁而变小」——那一局**不吃侵蚀**（玩家
  * 2026-09-27 拍板，E15：翻过去还能翻回来，吃侵蚀的话几步就降到 1×1、随便一枚都得
  * 分，玩法当场塌了）。图案永远停在开局那一级，所以通稿那一句在那一局是假话。
  *
@@ -2708,10 +2713,10 @@ export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
  * 道图案是几枚。
  */
 export const TUTORIAL_RULE3_FLIP: Record<Lang, string> = {
-  en: 'In Endless Flip the scoring shape never shrinks \u2014 it stays four pieces all game.',
-  fr: 'Dans Retournement infini, le motif ne raccourcit jamais : il reste \u00e0 quatre pi\u00e8ces.',
-  zhHant: '《無限反轉》裡得分圖案不會變小，整局都是 4 枚。',
-  zhHans: '《无限反转》里得分图案不会变小，整局都是 4 枚。',
+  en: 'In Endless Flip the scoring shape never shrinks \u2014 it stays four pieces all game',
+  fr: 'Dans Retournement infini, le motif ne raccourcit jamais : il reste \u00e0 quatre pi\u00e8ces',
+  zhHant: '《無限反轉》裡得分圖案不會變小，整局都是 4 枚',
+  zhHans: '《无限反转》里得分图案不会变小，整局都是 4 枚',
 };
 
 /**

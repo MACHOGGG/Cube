@@ -883,11 +883,6 @@ export function createSquareGame(): ShapeGame {
           grid = real;
         }
       }
-      /** 一枚棋子此刻在不在盘上（按 id 找）。C 那一组要问它「还在不在、还是不是那一面」。 */
-      const tileById = (id: number): Tile | null => {
-        for (const row of grid) for (const t of row) if (t && t.id === id && !isBlank(t)) return t;
-        return null;
-      };
       /*
        * 交给搜索的那一份视图（engine/coachHint.ts 的 PlanBoard）。每次重算现取：消掉整行整列之后盘子变小，线、
        * 外边、N（侵蚀阶梯）都可能变了。
@@ -924,11 +919,6 @@ export function createSquareGame(): ShapeGame {
         // 开局倒数时（这一局的牌还没发）拿来预热的那一副：同一套发牌规矩另发，不碰发牌那串随机数（engine/rng.ts 的
         // withScratchRandom），看完原样换回去（withGrid）。
         scratch: () => withGrid(withScratchRandom('coach-prewarm', generateCleanBoard), glowView),
-        still: (id, face) => {
-          const t = tileById(id);
-          return !!t && (t.face === 'dot' ? 1 : 0) === face;
-        },
-        faceOf: (id) => (tileById(id)?.face === 'dot' ? 1 : 0),
         paint: () => paintCoachGlow(),
       });
       /**
@@ -943,7 +933,7 @@ export function createSquareGame(): ShapeGame {
         }
       }
       /**
-       * 教学 D 那一条（星星消除）讲不讲、C 那一条的「5 秒」从什么时候起算（10-08 方案 3-E-3、10-11 方案 D-1；engine/
+       * 教学 D 那一条（星星消除）讲不讲、C 那一条什么时候能换到 D（10-08 方案 3-E-3、10-11 方案 D-1；engine/
        * coachHint 的 starClearHintFor）。亮哪儿 10-11 方案 D-3 起归 planEdge（上面那份视图）。
        *
        * 方块没有「最外边」这回事：星星凑满**任意**一整行、一整列都消（fullDotLines），所以交给它

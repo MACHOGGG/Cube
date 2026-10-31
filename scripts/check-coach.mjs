@@ -95,6 +95,7 @@ function makeEl(tag) {
   });
   node.setAttribute = (k, v) => node._attrs.set(k, String(v));
   node.getAttribute = (k) => (node._attrs.has(k) ? node._attrs.get(k) : null);
+  node.removeAttribute = (k) => node._attrs.delete(k);
   node.addEventListener = (type, fn) => {
     if (!node._handlers.has(type)) node._handlers.set(type, []);
     node._handlers.get(type).push(fn);
@@ -199,8 +200,8 @@ globalThis.localStorage = {
 };
 
 const coachMod = await import(coachBundle);
-const { mountCoachBar, HINT_OF, A_MS, C_MS, C_AFTER_REACH_MS, D_LINES } = coachMod;
-const { tutorialRules, STRINGS } = await import(i18nBundle);
+const { mountCoachBar, HINT_OF, A_MS, C_MIN_MS, D_LINES } = coachMod;
+const { tutorialRules, STRINGS, TUTORIAL_RULES, TUTORIAL_RULE4, TUTORIAL_RULE3_FLIP } = await import(i18nBundle);
 // 教学条那颗《<》的读屏名，四语各一个专用的（10-08 方案第四批第 8 条：上一条 / Previous / Précédent / 上一條）
 {
   // 英法 10-09 补充方案 7-14 补全了：光念「Previous / Précédent」不知道是上一个什么。
@@ -213,6 +214,7 @@ const hint = await import(hintBundle);
 const {
   planGroup,
   planEdge,
+  planBest,
   groupH,
   edgeH,
   boardHash,
@@ -276,8 +278,10 @@ head('静态：词表、调用点、接线');
     /coach\?\.signal\('score'\)/.test(gc) && /coach\?\.signal\('line', s\.lineBonusGroups\.length\)/.test(gc) && /coach\?\.signal\('erosion'\)/.test(gc));
   check('暂停 / 继续时条子的计时一起停、一起走（doPause → coach.pause，doResume → coach.resume）',
     /function doPause\(\)[\s\S]{0,400}coach\?\.pause\(\)/.test(gc) && /function doResume\(\)[\s\S]{0,300}coach\?\.resume\(\)/.test(gc));
-  check('C 那一条 HUD 那块《得分图案》一起亮（refreshCoachGlow 按 groupOnce 挂 coach-glow-block），局终摘掉',
-    /classList\.toggle\('coach-glow-block', hint === 'groupOnce'\)/.test(gc) && /classList\.remove\('coach-glow-block'\)/.test(gc));
+  check('C 那一条 HUD 那块《得分图案》一起亮、一直亮到换条（refreshCoachGlow 问条子的 blockGlow()），局终摘掉',
+    /classList\.toggle\('coach-glow-block', hint !== null && Boolean\(coach\?\.blockGlow\(\)\)\)/.test(gc) && /classList\.remove\('coach-glow-block'\)/.test(gc));
+  check('C 满 5 秒那一刻正在连锁中途就不换：控制器把「正在结算」交给条子（busy: () => resolving，D77）',
+    /busy: \(\) => resolving/.test(gc));
   check('开局倒数时预热一遍（coachPrewarm），离开时还没开跑的预热也撤掉',
     /window\.setTimeout\(\(\) => hooks\.coachPrewarm\?\.\(\), 0\)/.test(gc) && /window\.clearTimeout\(prewarmTimer\)/.test(gc));
   check('从前「没算完过 300ms 再试」那一套拆了（GLOW_RETRY_MS / glowRetryTimer）', !/GLOW_RETRY|glowRetry/.test(gc));
@@ -296,10 +300,12 @@ head('静态：词表、调用点、接线');
   };
   check('头一局：五条按顺序，一次一条', JSON.stringify(plan('first')) === '[0,1,2,3,4]', JSON.stringify(plan('first')));
   check('第二副基础棋盘：只讲 D', JSON.stringify(plan('second')) === '[3]', JSON.stringify(plan('second')));
-  check('灯：A 不亮，B 拼一组，C 拼一组只算一次，D 外边，E 不亮',
-    JSON.stringify(HINT_OF) === '[null,"group","groupOnce","edge",null]', JSON.stringify(HINT_OF));
-  check('几个数是玩家的字面值：A 10 秒、C 10 秒、C 条件满足后 5 秒、D 消两次', A_MS === 10000 && C_MS === 10000 && C_AFTER_REACH_MS === 5000 && D_LINES === 2,
-    `${A_MS} / ${C_MS} / ${C_AFTER_REACH_MS} / ${D_LINES}`);
+  check('灯：A、B、C 拼一组（每步重算），D 外边，E 步数最少的那一下（站长 10-29、10-30）',
+    JSON.stringify(HINT_OF) === '["group","group","group","edge","best"]', JSON.stringify(HINT_OF));
+  check('几个数是站长的字面值：A 10 秒、C 至少 5 秒、D 消两次', A_MS === 10000 && C_MIN_MS === 5000 && D_LINES === 2,
+    `${A_MS} / ${C_MIN_MS} / ${D_LINES}`);
+  check('从前 C 的两个钟拆了（C_MS 10 秒、C_AFTER_REACH_MS 5 秒），也没有「满 10 秒熄图案块」那一套',
+    !/\bC_MS\b|C_AFTER_REACH_MS|C_GLOW_MS|glowTimer|armGlowTimer/.test(code(src)) && !('C_MS' in coachMod) && !('C_AFTER_REACH_MS' in coachMod));
   check('从前那几样拆了：第 1 条 12 秒（RULE1_MS）、每条至少读 6 秒（MIN_READ_MS）、剩 ≤4 段讲第 3 条（NEAR_SEGS）',
     !/RULE1_MS|MIN_READ_MS|NEAR_SEGS|segLeft/.test(code(src)), '');
   const hintSrc = code(read('src/engine/coachHint.ts'));
@@ -307,6 +313,34 @@ head('静态：词表、调用点、接线');
     HINT_NODE_CAP >= 100000 && HINT_NODE_CAP < 200000 && SLICE_MS === 3 && !/HINT_BUDGET_MS/.test(hintSrc), `${HINT_NODE_CAP} / ${SLICE_MS}ms`);
   check('从前那套（reachByColor / pickColor / matchKind：一次只看 3 步、超了 15ms 就不亮）整个拆了',
     !/\breachByColor\b|\bpickColor\b|\bmatchKind\b/.test(hintSrc) && !('reachByColor' in hint) && !('pickColor' in hint) && !('matchKind' in hint));
+  // 10-31 整合版 Z-C01：C 不再「只算一次」（groupOnce 那一套拆了），E 亮步数最少的那一下（planBest）。
+  // （boardHash 自己有个参数也叫 faceOf，那是另一回事；这儿认的是 CoachGlowBoard 上那两项的签名。）
+  check('groupOnce 那一套拆干净了（onceFaces、CoachGlowBoard 的 still / faceOf 都不在）',
+    !/groupOnce|onceFaces/.test(hintSrc) && !/still\(id: number, face: number\)|faceOf\(id: number\): number/.test(hintSrc));
+  const kinds = (hintSrc.match(/export type CoachHint =([^;]+);/) || [, ''])[1].split('|').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  check('灯的种类正好三样：group / edge / best', kinds.slice().sort().join() === 'best,edge,group', kinds.join(' '));
+  const best = (hintSrc.match(/export function\* planBest[\s\S]*?\n\}/) || [''])[0];
+  check('planBest：平手取外边（e.depth <= g.depth ? e : g），给 planEdge 的计数是新的一份', /e\.depth <= g\.depth \? e : g/.test(best) && /planEdge\(live, prev, \{ nodes: 0 \}, cap\)/.test(best), best.slice(0, 60));
+  const pw = (hintSrc.match(/function pickWindow[\s\S]*?\n\}/) || [''])[0];
+  check('pickWindow：碰线又带色块的那一段之后，先找含色块的第一段（全是星星的 N 枚拼不出图案），再找碰线的',
+    /if \(touches && block\) return win;[\s\S]*?if \(win\.some\(\(\[r, c\]\) => b\.isBlock\(b\.grid\[r\]\[c\]\)\)\) return win;[\s\S]*?moved\.has/.test(pw));
+  for (const shape of ['square', 'circle']) {
+    for (const f of ['square', 'circle']) {
+      const t = code(read(`src/shapes/${f}.ts`));
+      if (shape === f) check(`${f}.ts：给呼吸灯的那一份不再带 still / faceOf`, !/\bstill: \(id, face\)|\bfaceOf: \(id\)/.test(t));
+    }
+  }
+  // 教学五条句末不带句号（站长 10-31）：通稿五条、各棋盘的第 4 条、无限反转的第 3 条，四语。第 5 条的「～」不算句号。
+  const ends = [];
+  for (const lang of Object.keys(TUTORIAL_RULES)) {
+    for (const t of TUTORIAL_RULES[lang]) ends.push(t);
+    for (const t of Object.values(TUTORIAL_RULE4[lang])) ends.push(t);
+    ends.push(TUTORIAL_RULE3_FLIP[lang]);
+  }
+  const dotted = ends.filter((t) => /[。.]$/.test(t));
+  check('（尺子）教学三段文字都读到了', ends.length === 4 * (5 + 4 + 1), `${ends.length} 句`);
+  check('教学条那几句（四语）句末都不带「。」「.」（站长 10-31）', dotted.length === 0, dotted.join(' / '));
+  check('第 5 条简繁的「～」留着', TUTORIAL_RULES.zhHans[4].endsWith('～') && TUTORIAL_RULES.zhHant[4].endsWith('～'));
 }
 
 head('静态：拆掉的那几样，一样都不许留着；灯只动 filter');
@@ -375,12 +409,14 @@ head('静态：拆掉的那几样，一样都不许留着；灯只动 filter');
 //
 // 第 1 条 10-11 改过一次（方案 B-8.2，玩家 Q5 定案）：「…会得分翻面，变成其他颜色的星星」→「…就翻面，变成星星」。
 // 星星不一定是别的颜色——方块每色 6 枚里有 1 枚翻过去还是同色，小球 7 中 1，三角 9 中 4。§8 一起改了。
+// 2026-10-29 站长又把第 1 条换成自己的原话；第 3 条「变化」→「变小」（D17 甲）；10-31 五条句末一律去掉句号（第 5 条的
+// 「～」留着）。§8 一起改了（10-31 整合版 Z-C01、Z-C03）。
 {
   const SAID = [
-    '色块拼出得分图案就翻面，变成星星。',
-    '星星可以与色块一同再次拼出得分图案。',
-    '得分图案会随着游戏解锁而变化。',
-    '同色星星在整体的外边会得分并消除。',
+    '同色的色块或星星连起得分图案可以得分',
+    '星星可以与色块一同再次拼出得分图案',
+    '得分图案会随着游戏解锁而变小',
+    '同色星星在整体的外边会得分并消除',
     '尝试全部消除吧～',
   ];
   // 第 4 条按棋盘换一句（i18n 的 TUTORIAL_RULE4），所以这儿用通稿那一份：
@@ -503,7 +539,7 @@ function flipColor(g, color, n) {
 const LANG = 'zhHans';
 const PEEK_MS = Number((code(src).match(/const PEEK_MS = (\d+)/) || [])[1]);
 
-function mount(plan, shape = 'circle', colors) {
+function mount(plan, shape = 'circle', colors, opts = {}) {
   resetClock();
   const texts = tutorialRules(LANG, shape);
   const stage = makeEl('div');
@@ -512,7 +548,7 @@ function mount(plan, shape = 'circle', colors) {
   host.parent = stage;
   stage.childNodes.push(host);
   let changes = 0;
-  const bar = mountCoachBar(host, { lang: LANG, shape, plan, colors, onChange: () => changes++, now: () => now });
+  const bar = mountCoachBar(host, { lang: LANG, shape, plan, colors, onChange: () => changes++, now: () => now, busy: opts.busy });
   return {
     host,
     bar,
@@ -535,7 +571,11 @@ head('① 头一局：五条依次走一遍（小球的模拟盘面 + 真的侵�
   check('（尺子）条子上的字认得出来', m.rule() >= 0, m.host.querySelector('.coach-text').textContent);
   check('开局就是 A', m.rule() === 0, nameOf(m.rule()));
   check('进度条五格，亮第一格', m.segs() === 5 && m.on() === 1, `${m.on()} / ${m.segs()}`);
-  check('A 不亮灯', m.bar.hint() === null, String(m.bar.hint()));
+  check('A 的灯：拼一组（group，每一步结算完重算；站长 10-29：A 起就亮）', m.bar.hint() === 'group', String(m.bar.hint()));
+  check('A 时《<》占着位置但看不见、按不着（coach-peek--idle，不是 hidden：换到 B 条子不跳）', (() => {
+    const pk = m.host.querySelector('.coach-peek');
+    return pk && !pk.hidden && pk._cls.has('coach-peek--idle') && pk.disabled === true && pk.getAttribute('aria-hidden') === 'true';
+  })());
   check('开口那一下喊过一次 onChange（呼吸灯要跟着重算）', m.changes() === 1, String(m.changes()));
   // A 那一幅：本局三种颜色、三行各四枚、轮流翻（ra-cyc0 / 1 / 2），手机上也摆（coach-bar--anim）。
   const art = m.host.querySelector('.coach-art');
@@ -567,15 +607,20 @@ head('① 头一局：五条依次走一遍（小球的模拟盘面 + 真的侵�
   check('降级那一拍（连锁里）：只记下，不当场换条', m.rule() === 1, nameOf(m.rule()));
   m.bar.observe(view());
   check('那一步结算完：C 出来', m.rule() === 2, nameOf(m.rule()));
-  check('C 的灯：按新图案亮一组、只算一次（groupOnce）', m.bar.hint() === 'groupOnce', String(m.bar.hint()));
+  check('C 的灯：拼一组、每步重算（group），图案块亮（blockGlow() 真）', m.bar.hint() === 'group' && m.bar.blockGlow() === true, `${m.bar.hint()} / ${m.bar.blockGlow()}`);
 
-  // ── C → D：默认 10 秒
-  advance(C_MS - 1);
+  // ── C → D：至少 5 秒，而且某色星星够一条外边（或 C 期间消过边）才换；不设上限
+  advance(10 * 60 * 1000);
   m.bar.observe(view());
-  check('C 差 1 毫秒满 10 秒：还是 C', m.rule() === 2, nameOf(m.rule()));
-  advance(1);
-  check('C 满 10 秒：D 出来', m.rule() === 3, nameOf(m.rule()));
+  check('（尺子）模拟盘面上还没有哪一色星星够一条最短外边', circleReach(g) === false);
+  check('C 条件一直不成立：十分钟、结算过也还是 C（不设上限）', m.rule() === 2 && m.bar.blockGlow() === true, nameOf(m.rule()));
+  const color = [0, 1, 2, 3].find((k) => g.flat().filter((t) => !t.blank && t.color === k).length >= 7);
+  flipColor(g, color, 7);
+  check('（尺子）某一色翻满 7 颗：星星够一条外边了', circleReach(g) === true);
+  m.bar.observe(view());
+  check('早过了 5 秒、结算看到星星够了：当场换到 D', m.rule() === 3, nameOf(m.rule()));
   check('D 的灯：外边（edge）', m.bar.hint() === 'edge', String(m.bar.hint()));
+  check('换走之后图案块不亮了', m.bar.blockGlow() === false);
 
   // ── D → E：从 D 出现起消掉两次整条外边
   m.bar.signal('line');
@@ -588,14 +633,14 @@ head('① 头一局：五条依次走一遍（小球的模拟盘面 + 真的侵�
   check('第二条消边那一拍（连锁里）：只记下，不当场换条', m.rule() === 3, nameOf(m.rule()));
   m.bar.observe(view());
   check('那一步结算完：E 出来', m.rule() === 4, nameOf(m.rule()));
-  check('E 不亮灯', m.bar.hint() === null, String(m.bar.hint()));
+  check('E 的灯：步数最少的那一下（best）', m.bar.hint() === 'best', String(m.bar.hint()));
   check('进度条走到第五格', m.on() === 5, `${m.on()} / ${m.segs()}`);
   const before = m.changes();
   advance(10 * 60 * 1000);
   m.bar.signal('line');
   m.bar.signal('score');
   m.bar.observe(view());
-  check('E 一直留到这一局结束（十分钟后、再消几条都不走）', m.rule() === 4 && m.changes() === before, nameOf(m.rule()));
+  check('E 一直留到这一局结束（十分钟后、再消几条都不走），灯一直是 best', m.rule() === 4 && m.changes() === before && m.bar.hint() === 'best', nameOf(m.rule()));
   m.bar.destroy();
 }
 
@@ -620,80 +665,126 @@ head('② A 等的另一件事：第一次得分（不到 10 秒就换）');
   n.bar.destroy();
 }
 
-head('③ C 的 10 秒 / 5 秒');
+head('③ C：至少 5 秒，够数或消过边才换（站长 10-29、10-30；D77）');
 {
+  let busyNow = false;
   const toC = (m) => {
     m.bar.signal('score');
     m.bar.observe({ starsReachEdge: false });
     m.bar.signal('erosion');
     m.bar.observe({ starsReachEdge: false });
   };
-  // C 出来 3 秒时「某色星星 ≥ 最短外边」成立：从那一刻起 5 秒（第 8 秒）换。
-  {
-    const m = mount('first');
+  const fresh = () => {
+    busyNow = false;
+    const m = mount('first', 'circle', undefined, { busy: () => busyNow });
     toC(m);
+    return m;
+  };
+  // 1. 条件一直假：摆 10 分钟、结算五次，还是 C；灯是 group，图案块一直亮。
+  {
+    const m = fresh();
     check('（尺子）到了 C', m.rule() === 2, nameOf(m.rule()));
+    for (let k = 0; k < 5; k++) {
+      advance(2 * 60 * 1000);
+      m.bar.observe({ starsReachEdge: false });
+    }
+    check('条件一直不成立：10 分钟、结算五次，还是 C（不设上限）', m.rule() === 2, nameOf(m.rule()));
+    check('C 的灯一直是 group、图案块一直亮', m.bar.hint() === 'group' && m.bar.blockGlow() === true, `${m.bar.hint()} / ${m.bar.blockGlow()}`);
+    m.bar.destroy();
+  }
+  // 2. 第 3 秒结算时够数：第 4.999 秒还是 C；满 5 秒（钟到点）换到 D。
+  {
+    const m = fresh();
     advance(3000);
     m.bar.observe({ starsReachEdge: true });
-    advance(C_AFTER_REACH_MS - 1);
-    check('条件满足后差 1 毫秒满 5 秒：还是 C', m.rule() === 2, nameOf(m.rule()));
+    check('第 3 秒结算时够数：还没满 5 秒，不换', m.rule() === 2, nameOf(m.rule()));
+    advance(C_MIN_MS - 3000 - 1);
+    check('第 4.999 秒还是 C', m.rule() === 2, nameOf(m.rule()));
     advance(1);
-    check('条件满足后满 5 秒（C 出来第 8 秒）：换到 D', m.rule() === 3, `${nameOf(m.rule())}，第 ${now}ms`);
+    check('满 5 秒（钟到点）换到 D', m.rule() === 3, `${nameOf(m.rule())}，第 ${now}ms`);
     m.bar.destroy();
   }
-  // C 出来 7 秒时才成立：7 + 5 = 12 > 10，总长不超过 10 秒——第 10 秒换。
+  // 3. C 一出来就够数：第 4.999 秒还是 C；第 5 秒换到 D。
   {
-    const m = mount('first');
-    toC(m);
-    const t0 = now;
-    advance(7000);
-    m.bar.observe({ starsReachEdge: true });
-    advance(C_MS - 7000 - 1);
-    check('条件第 7 秒才成立：第 10 秒差 1 毫秒还是 C', m.rule() === 2, nameOf(m.rule()));
-    advance(1);
-    check('总长不超过 10 秒：第 10 秒换到 D', m.rule() === 3 && now - t0 === C_MS, `${nameOf(m.rule())}，C 摆了 ${now - t0}ms`);
-    m.bar.destroy();
-  }
-  // C 一出来条件就已经成立（降级那一步结算完时星星就够了）：5 秒换。
-  {
-    const m = mount('first');
+    busyNow = false;
+    const m = mount('first', 'circle', undefined, { busy: () => busyNow });
     m.bar.signal('score');
     m.bar.observe({ starsReachEdge: true });
     m.bar.signal('erosion');
     m.bar.observe({ starsReachEdge: true });
-    check('（尺子）到了 C', m.rule() === 2, nameOf(m.rule()));
-    advance(C_AFTER_REACH_MS - 1);
-    check('C 一出来星星就够：差 1 毫秒满 5 秒还是 C', m.rule() === 2, nameOf(m.rule()));
+    check('（尺子）降级那一步结算完、星星本来就够：到了 C，没被同一次 observe 连带跳过', m.rule() === 2, nameOf(m.rule()));
+    advance(C_MIN_MS - 1);
+    check('C 一出来星星就够：第 4.999 秒还是 C', m.rule() === 2, nameOf(m.rule()));
     advance(1);
-    check('满 5 秒换到 D', m.rule() === 3, nameOf(m.rule()));
+    check('第 5 秒换到 D', m.rule() === 3, nameOf(m.rule()));
     m.bar.destroy();
   }
-  // 条件成立之后又不成立了：5 秒照算（「从条件满足起」）。
+  // 4. 第 3 秒够数，第 5 秒那一刻正在连锁中途（busy）：到点不换；结算完 observe 当场换。
   {
-    const m = mount('first');
-    toC(m);
-    advance(1000);
+    const m = fresh();
+    advance(3000);
     m.bar.observe({ starsReachEdge: true });
-    m.bar.observe({ starsReachEdge: false });
-    advance(C_AFTER_REACH_MS);
-    check('条件成立过一次、后来又没了：5 秒照算', m.rule() === 3, nameOf(m.rule()));
+    busyNow = true;
+    advance(C_MIN_MS - 3000);
+    check('满 5 秒那一刻正在连锁中途（busy）：不换', m.rule() === 2, nameOf(m.rule()));
+    advance(60 * 1000);
+    check('连锁没结算完之前也不会被钟推走', m.rule() === 2, nameOf(m.rule()));
+    busyNow = false;
+    m.bar.observe({ starsReachEdge: true });
+    check('这一步结算完（observe）、星星够：当场换到 D', m.rule() === 3, nameOf(m.rule()));
     m.bar.destroy();
   }
-  // D 只数「从它出现起」消的边：C 期间消的不算；一拍消两条算两次。
+  // 5. 第 3 秒够数、第 4 秒结算又不够（没有消边信号）：第 5 秒不换；下一次够数的结算换。
   {
-    const m = mount('first');
-    toC(m);
-    m.bar.signal('line');
+    const m = fresh();
+    advance(3000);
+    m.bar.observe({ starsReachEdge: true });
+    advance(1000);
     m.bar.observe({ starsReachEdge: false });
-    advance(C_MS);
-    check('（尺子）到了 D', m.rule() === 3, nameOf(m.rule()));
-    m.bar.signal('line');
-    m.bar.observe({ starsReachEdge: false });
-    check('C 期间消的那一条不算：D 之后消一条还是 D', m.rule() === 3, nameOf(m.rule()));
+    advance(C_MIN_MS - 4000);
+    check('第 4 秒又不够了：第 5 秒不换（看的是上一次结算）', m.rule() === 2, nameOf(m.rule()));
+    advance(60 * 1000);
+    check('之后钟不再推它', m.rule() === 2, nameOf(m.rule()));
+    m.bar.observe({ starsReachEdge: true });
+    check('下一次够数的结算：换到 D', m.rule() === 3, nameOf(m.rule()));
     m.bar.destroy();
-    const n = mount('first');
-    toC(n);
-    advance(C_MS);
+  }
+  // 6. 第 2 秒消掉一条外边：第 4.999 秒还是 C，第 5 秒换到 D；进 D 之后再消一条就到 E（C 那一条算进了 D 的两条）。
+  {
+    const m = fresh();
+    advance(2000);
+    m.bar.signal('line');
+    m.bar.observe({ starsReachEdge: false });
+    check('C 期间消掉一条外边：还没满 5 秒，不换', m.rule() === 2, nameOf(m.rule()));
+    advance(C_MIN_MS - 2000 - 1);
+    check('第 4.999 秒还是 C', m.rule() === 2, nameOf(m.rule()));
+    advance(1);
+    check('第 5 秒换到 D（C 期间消过边就算够）', m.rule() === 3, nameOf(m.rule()));
+    m.bar.signal('line');
+    m.bar.observe({ starsReachEdge: false });
+    check('进 D 之后再消一条：换到 E（C 期间那一条算进了 D 的两条，V2）', m.rule() === 4, nameOf(m.rule()));
+    m.bar.destroy();
+  }
+  // 7. 第 6 秒一拍消掉两条：当场换到 D，D 至少露面一帧；只计入一条，再消一条才到 E。
+  {
+    const m = fresh();
+    advance(6000);
+    m.bar.signal('line', 2);
+    m.bar.observe({ starsReachEdge: false });
+    check('第 6 秒一拍消掉两条：当场换到 D（不跳过 D）', m.rule() === 3, nameOf(m.rule()));
+    m.bar.observe({ starsReachEdge: false });
+    check('C 期间消的边只计入一条：D 还在', m.rule() === 3, nameOf(m.rule()));
+    m.bar.signal('line');
+    m.bar.observe({ starsReachEdge: false });
+    check('再消一条：到 E', m.rule() === 4, nameOf(m.rule()));
+    m.bar.destroy();
+  }
+  // 8. D 里一拍消掉两条整条外边：算两次，换到 E。
+  {
+    const n = fresh();
+    advance(C_MIN_MS);
+    n.bar.observe({ starsReachEdge: true });
+    check('（尺子）到了 D', n.rule() === 3, nameOf(n.rule()));
     n.bar.signal('line', 2);
     n.bar.observe({ starsReachEdge: false });
     check('一拍消掉两条整条外边：算两次，换到 E', n.rule() === 4, nameOf(n.rule()));
@@ -701,7 +792,7 @@ head('③ C 的 10 秒 / 5 秒');
   }
 }
 
-head('④ 暂停：A 的 10 秒、C 的 10 秒 / 5 秒全冻住');
+head('④ 暂停：A 的 10 秒、C 的 5 秒全冻住');
 {
   const m = mount('first');
   advance(4000);
@@ -713,7 +804,7 @@ head('④ 暂停：A 的 10 秒、C 的 10 秒 / 5 秒全冻住');
   check('继续之后再摆 5.999 秒：还是 A（暂停那一分钟不算）', m.rule() === 0, nameOf(m.rule()));
   advance(1);
   check('继续之后满 6 秒（真在打的时间满 10 秒）：换到 B', m.rule() === 1, nameOf(m.rule()));
-  // 暂停两次、继续两次也只算真在打的时间；暂停里连按两下暂停不多扣。
+  // C：第 2 秒连按两次暂停、停 30 秒、继续；第 3 秒够数再暂停 30 秒、继续——真在打的时间第 4.999 秒还是 C、第 5 秒换。
   m.bar.signal('erosion');
   m.bar.observe({ starsReachEdge: false });
   check('（尺子）到了 C', m.rule() === 2, nameOf(m.rule()));
@@ -727,10 +818,10 @@ head('④ 暂停：A 的 10 秒、C 的 10 秒 / 5 秒全冻住');
   m.bar.pause();
   advance(30 * 1000);
   m.bar.resume();
-  advance(C_AFTER_REACH_MS - 1);
-  check('C：第 3 秒条件成立，中间两次暂停——条件满足后真在打的时间差 1 毫秒满 5 秒：还是 C', m.rule() === 2, nameOf(m.rule()));
+  advance(C_MIN_MS - 3000 - 1);
+  check('C：中间两次暂停——真在打的时间第 4.999 秒还是 C', m.rule() === 2, nameOf(m.rule()));
   advance(1);
-  check('满 5 秒换到 D', m.rule() === 3, nameOf(m.rule()));
+  check('真在打的时间满 5 秒换到 D', m.rule() === 3, nameOf(m.rule()));
   m.bar.destroy();
 }
 
@@ -796,12 +887,42 @@ head('⑥ 「最短外边」跟着盘面变：小球削掉最外一圈之后');
   check('离场的格子不算星星（哪怕它身上还记着星星那一面）', circleReach(b) === false);
 }
 
+head('⑥b 图案块的光：只在 C 那一条亮，一直亮到换条（站长 10-29）');
+{
+  const m = mount('first');
+  check('A：图案块不亮', m.bar.blockGlow() === false);
+  m.bar.signal('score');
+  m.bar.observe({ starsReachEdge: false });
+  check('B：图案块不亮', m.rule() === 1 && m.bar.blockGlow() === false);
+  m.bar.signal('erosion');
+  m.bar.observe({ starsReachEdge: false });
+  check('C 刚出来：图案块亮', m.rule() === 2 && m.bar.blockGlow() === true);
+  advance(10 * 60 * 1000);
+  check('C 摆了十分钟：图案块还亮（不再「满 10 秒熄」）', m.bar.blockGlow() === true);
+  const peek = m.host.querySelector('.coach-peek');
+  peek.fire('click');
+  check('在 C 时按《<》回头看 B：图案块照亮（在等的还是 C）', m.rule() === 1 && m.bar.blockGlow() === true, nameOf(m.rule()));
+  peek.fire('click');
+  m.bar.observe({ starsReachEdge: true });
+  check('（尺子）换到了 D', m.rule() === 3, nameOf(m.rule()));
+  check('D：图案块不亮', m.bar.blockGlow() === false);
+  peek.fire('click');
+  check('从 D 回头看 C：图案块不亮（在等的是 D）', m.rule() === 2 && m.bar.blockGlow() === false, nameOf(m.rule()));
+  peek.fire('click');
+  m.bar.signal('line', 2);
+  m.bar.observe({ starsReachEdge: false });
+  check('E：图案块不亮', m.rule() === 4 && m.bar.blockGlow() === false);
+  m.bar.destroy();
+  check('拆掉之后：不亮', m.bar.blockGlow() === false);
+}
+
 head('⑦ 《<》回头看、重开、拆掉');
 {
   const m = mount('first');
   advance(A_MS);
   const peek = m.host.querySelector('.coach-peek');
   check('（尺子）B 上有《<》', peek && !peek.hidden);
+  check('B 上的《<》看得见、按得着（摘掉了 coach-peek--idle）', !peek._cls.has('coach-peek--idle') && peek.disabled === false && peek.getAttribute('aria-hidden') === null);
   // 读屏名（10-08 方案第四批第 8 条）：《<》念「上一条」——专用的 coachPrev，不借《返回》（那颗键不退出任何东西）
   check('《<》读屏念「上一条」（coachPrev），不是「返回」',
     peek.getAttribute('aria-label') === STRINGS[LANG].coachPrev && peek.getAttribute('aria-label') !== STRINGS[LANG].back,
@@ -1076,7 +1197,7 @@ head('⑪ D 的搜索：那一色在场的所有星星，一枚色块都不亮�
     cut.color === 0 && cut.depth === 0 && keyOf(cut.ids) === keyOf(idsAt(t, [[0, 0], [0, 1], [0, 2], [0, 3], [1, 4], [2, 5]])), JSON.stringify(cut));
 }
 
-head('⑫ 那盏灯：一份状态、分段跑、算完才亮、C 只算一次、预热不动状态（10-11 方案 D-4）');
+head('⑫ 那盏灯：一份状态、分段跑、算完才亮、预热不动状态（10-11 方案 D-4）；E 取步数少的、平手外边（10-31 整合版 Z-C01）');
 {
   // 绿色两步那一副（⑧）：两层要走几千个盘面，拆得出好几段。
   const g = uniqueBoard();
@@ -1103,8 +1224,6 @@ head('⑫ 那盏灯：一份状态、分段跑、算完才亮、C 只算一次�
       views++;
       return circlePlan(g);
     },
-    still: (id, face) => g.flat().some((t) => t.id === id && (t.face === 'dot' ? 1 : 0) === face),
-    faceOf: (id) => (g.flat().find((t) => t.id === id)?.face === 'dot' ? 1 : 0),
     paint: () => paints++,
     scratch: () => {
       scratchViews++;
@@ -1131,21 +1250,21 @@ head('⑫ 那盏灯：一份状态、分段跑、算完才亮、C 只算一次�
     JSON.stringify({ hint: glow.state().hint, ids: glow.state().ids }));
   glow.request(null);
   check('request(null)：熄', lit().length === 0 && glow.state().hint === null);
-  // C：只算一次。之后每次结算完只问「那几枚还在不在」——不再重算（view 不再被叫）。
-  glow.request('groupOnce');
+  // 每一种都每次重算（10-31 整合版：groupOnce「只算一次、之后跟着那几枚走」那一套拆了，C 也每步重算）。
+  glow.request('group');
   flush();
-  check('C 第一次：算一次，亮绿色那 4 枚', keyOf(lit()) === keyOf(want), keyOf(lit()));
   const v = views;
   glow.cancel();
-  check('C：这一步结算期间熄着', lit().length === 0);
-  glow.request('groupOnce');
-  check('C：结算完那几枚都还在、还是那一面——接回来，不重算', keyOf(lit()) === keyOf(want) && views === v, `重算了 ${views - v} 次`);
-  g[1][0].face = 'dot';
-  glow.request('groupOnce');
-  check('C：其中一枚翻了面——整组熄掉', lit().length === 0);
-  g[1][0].face = 'flavor';
-  glow.request('groupOnce');
-  check('C：熄了就这一条剩下的时间都不再亮（不另算一组）', lit().length === 0 && views === v, `重算了 ${views - v} 次`);
+  glow.request('group');
+  flush();
+  check('同一种再来一次：重算（view 又被叫了一次），不再「接回上一组」', views === v + 1 && keyOf(lit()) === keyOf(want), `重算了 ${views - v} 次`);
+  // best 之后马上来一次 group：前一次没算完的不落地（版本号）。
+  glow.request('best');
+  const vb = glow.state().version;
+  glow.request('group');
+  flush();
+  check('request(\'best\') 没算完就来了 request(\'group\')：只有 group 那一次落地', glow.state().hint === 'group' && glow.state().version > vb && keyOf(lit()) === keyOf(want),
+    JSON.stringify({ hint: glow.state().hint }));
   // 换到别的条再回来（新的一条 C 不会再有，但 reset 之后是新的一局）：重开全忘。
   glow.reset();
   check('重开一局：灯和记性一起清掉', lit().length === 0 && glow.state().hint === null && glow.state().color === null);
@@ -1159,6 +1278,94 @@ head('⑫ 那盏灯：一份状态、分段跑、算完才亮、C 只算一次�
   glow.request('group');
   flush();
   check('预热之后来了真的一次：真的那一次照常算完、亮对', keyOf(lit()) === keyOf(want), keyOf(lit()));
+}
+
+head('⑫b E（best）：拼图案和消外边取步数少的那一个，平手亮外边；D、E 判成外边时只亮星星；pickWindow 先找带色块的那一段');
+{
+  // 方块 6×6、每一枚一个颜色（同 ⑪）。外边：任意一整行一整列。N = 4，认组用 runsOn。
+  const sq = () => Array.from({ length: 6 }, (_, r) => Array.from({ length: 6 }, (_, c) => tile(300 + r * 6 + c)));
+  const lines = gridLines(6, 6);
+  const plan = (grid, n = 4, scoring = null) => ({
+    grid,
+    step: oneStepMoves(lines, () => true),
+    lines,
+    edges: lines,
+    n,
+    scoring: scoring ?? runsOn(lines, n),
+    clearing: fullStars(lines),
+    colorOf: eff,
+    isPiece: () => true,
+    isStar: (t) => t.face === 'dot',
+    isBlock: (t) => t.face === 'flavor',
+  });
+  const PREV = { color: null, ids: [] };
+  // 外边一步：第 0 行前五格红色星星、(1,5) 红色星星（第 5 列往上一格就满）。
+  const edge1 = (g) => { for (let c = 0; c < 5; c++) g[0][c] = tile(0, true); g[1][5] = tile(0, true); };
+  // 外边两步：第 0 行前四格红色星星、(1,4)、(2,5) 各一颗（第 4、5 列各往上滑）。
+  const edge2 = (g) => { for (let c = 0; c < 4; c++) g[0][c] = tile(0, true); g[1][4] = tile(0, true); g[2][5] = tile(0, true); };
+  // 图案一步：第 3 行 (3,0)(3,1)(3,2) 三枚 9 号色块、(4,3) 一枚——第 3 列往上一格成一行四枚。
+  const group1 = (g) => { for (const [r, c] of [[3, 0], [3, 1], [3, 2], [4, 3]]) g[r][c] = tile(9); };
+  // 图案两步：(3,0)(3,1) 两枚、(4,2)、(5,3)——第 2 列往上一格、第 3 列往上两格。
+  const group2 = (g) => { for (const [r, c] of [[3, 0], [3, 1], [4, 2], [5, 3]]) g[r][c] = tile(9); };
+  const nine = (g) => g.flat().filter((t) => t.color === 9).map((t) => t.id);
+  const redStars = (g) => g.flat().filter((t) => t.face === 'dot' && eff(t) === 0).map((t) => t.id);
+  const blocks = (g, ids) => g.flat().filter((t) => ids.includes(t.id) && t.face === 'flavor');
+  const case_ = (label, fe, fg, want) => {
+    const g = sq();
+    fe(g);
+    fg(g);
+    const dg = drain(planGroup(plan(g), PREV));
+    const de = drain(planEdge(plan(g), PREV));
+    const b = drain(planBest(plan(g), PREV));
+    check(`（尺子）${label}：图案 ${dg.depth} 步、外边 ${de.depth} 步`, !dg.estimate && !de.estimate, `图案 ${dg.depth} / 外边 ${de.depth}`);
+    if (want === 'edge') {
+      check(`${label}：亮外边那一色在场的所有星星（${de.depth} 步），一枚色块都不亮`,
+        b.color === 0 && b.depth === de.depth && keyOf(b.ids) === keyOf(redStars(g)) && blocks(g, b.ids).length === 0, JSON.stringify({ c: b.color, d: b.depth }));
+    } else {
+      check(`${label}：亮图案那 N 枚（${dg.depth} 步）`, b.color === 9 && b.depth === dg.depth && keyOf(b.ids) === keyOf(nine(g)), JSON.stringify({ c: b.color, d: b.depth }));
+    }
+    return { dg: dg.depth, de: de.depth };
+  };
+  const a = case_('① 外边 1 步、图案 2 步', edge1, group2, 'edge');
+  check('（尺子）① 的步数正是 1 对 2', a.de === 1 && a.dg === 2, JSON.stringify(a));
+  const b2 = case_('② 图案 1 步、外边 2 步', edge2, group1, 'group');
+  check('（尺子）② 的步数正是 1 对 2', b2.dg === 1 && b2.de === 2, JSON.stringify(b2));
+  const t = case_('③ 平手（都是 1 步）', edge1, group1, 'edge');
+  check('（尺子）③ 真的是平手', t.dg === 1 && t.de === 1, JSON.stringify(t));
+  // ④ D（edge）亮的全是星星：有解（第 0 行一步填满）、没解（星星不够一条边的退路）各一副，走那盏灯。
+  for (const [label, fill] of [['有解', edge1], ['没解（星星不够，退路）', (g) => { for (const [r, c] of [[0, 0], [2, 2], [4, 4]]) g[r][c] = tile(0, true); g[3][3] = tile(0); }]]) {
+    const g = sq();
+    fill(g);
+    if (label === '有解') g[3][3] = tile(0);
+    const q = [];
+    const glow = createCoachGlow({ view: () => plan(g), paint: () => {} }, createSliceRunner(() => 0, (fn) => q.push(fn), () => {}));
+    glow.request('edge');
+    while (q.length) q.shift()();
+    const on = g.flat().filter((x) => glow.lit(x.id));
+    check(`④ D（request('edge')，${label}）：亮的全是星星，一枚色块都不亮`, on.length > 0 && on.every((x) => x.face === 'dot'), on.map((x) => x.face).join(','));
+  }
+  // ⑤ pickWindow：一组比 N 长、碰到滑动线的那几段 N 格里都没有色块——亮的 N 枚里至少一枚色块（10-31 整合版 ①b）。
+  //    N = 3。第 4 列往上滑一格之后第 3 行是 (3,0) 9 号色块 + (3,1)(3,2)(3,3) 9 号星星 + (3,4) 9 号星星（从 (4,4) 滑上来的）。
+  //    碰到第 4 列的只有 [2..4] 那一段（全是星星）；带色块的是 [0..2]。认组那把尺子只在「(3,4) 是 9 号星星」时报这一组。
+  {
+    const g = sq();
+    g[3][0] = tile(9);
+    for (const c of [1, 2, 3]) g[3][c] = tile(9, true);
+    g[4][4] = tile(9, true);
+    const scoring = (trial, moved) => {
+      const x = trial[3][4];
+      if (!(x && x.face === 'dot' && eff(x) === 9 && moved.has('3,4'))) return [];
+      const run = [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]];
+      return run.every(([r, c]) => eff(trial[r][c]) === 9) ? [run] : [];
+    };
+    const q = [];
+    const glow = createCoachGlow({ view: () => plan(g, 3, scoring), paint: () => {} }, createSliceRunner(() => 0, (fn) => q.push(fn), () => {}));
+    glow.request('group');
+    while (q.length) q.shift()();
+    const on = g.flat().filter((x) => glow.lit(x.id));
+    check('⑤ pickWindow：亮的 N 枚里至少一枚色块（全是星星的 N 枚拼不出图案）', on.length === 3 && on.some((x) => x.face === 'flavor'),
+      on.map((x) => `${x.face}${eff(x)}`).join(','));
+  }
 }
 
 head('⑬ 刚翻面那一枚的光不被行内动画盖掉；减弱动态效果时不写行内动画（D-0 根因 4）');

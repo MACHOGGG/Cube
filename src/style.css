@@ -2859,7 +2859,7 @@ button:hover { filter: brightness(1.05); }
   }
 }
 /*
- * C 那一条（「得分图案会随着游戏解锁而变化」）HUD 那块《得分图案》跟着一起亮（10-11 方案 D-1：玩家规格明写，撤回
+ * C 那一条（「得分图案会随着游戏解锁而变小」）HUD 那块《得分图案》跟着一起亮（10-11 方案 D-1：玩家规格明写，撤回
  * 第 15 推「图案块不参与教学亮灯」）。控制器在 C 那一条挂 `.coach-glow-block`，换走就摘（gameController 的
  * refreshCoachGlow）。
  *
@@ -7194,6 +7194,9 @@ body.is-room-host::after {
   border-radius: 50%; -webkit-tap-highlight-color: transparent;
 }
 .coach-peek[hidden] { display: none; }
+/* A 那一条（还没有上一条可看）：照占位、只是看不见按不着（10-31 整合版 Z-C02，D62）。原先 A 时整颗 display: none，
+   A → B 换条时顶上多出这颗键，整条高 11px、往下一跳。不用 :has()，Chrome 61 不认。 */
+.coach-peek--idle { visibility: hidden; }
 .coach-peek:active { transform: scale(0.9); }
 /* 回头看的时候整块条子换个底，一眼看得出「这不是现在这一条」——否则他读完
    上一条，会以为教学倒回去了。

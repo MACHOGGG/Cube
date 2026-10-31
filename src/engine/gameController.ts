@@ -819,7 +819,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 从前这儿还有「没算完就过 300ms 再试、最多两次」（GLOW_RETRY_MS）：那时一次重算有 15ms 的硬上限，算不完就整个
    * 跳过。10-11 方案 D-4 起搜索拆成小段在空闲时算、算完才亮，用不着重试了（慢手机冷启动另有开局倒数时的预热）。
    *
-   * C 那一条（groupOnce）HUD 那块《得分图案》一起亮（玩家规格明写，撤回第 15 推「图案块不参与教学亮灯」）。
+   * C 那一条 HUD 那块《得分图案》一起亮、一直亮到换条（玩家规格明写，撤回第 15 推「图案块不参与教学亮灯」；站长 10-29
+   * 起不再「满 10 秒就熄」，问的是条子自己的 blockGlow()）。
    */
   let glowQueued = false;
   function refreshCoachGlow(): void {
@@ -830,7 +831,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     void Promise.resolve().then(() => {
       glowQueued = false;
       const hint = coach && started && !gameOver ? coach.hint() : null;
-      refs.patternBlockEl.classList.toggle('coach-glow-block', hint === 'groupOnce');
+      // C 那一条 HUD 那块《得分图案》一起亮，一直亮到换条（站长 10-29）。
+      refs.patternBlockEl.classList.toggle('coach-glow-block', hint !== null && Boolean(coach?.blockGlow()));
       if (!coach || resolving || gameOver || !started) return;
       hooks.coachGlow?.(hint);
     });
@@ -976,6 +978,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           // 换了一条，呼吸灯亮哪一种组跟着换（第 15 推）。条子不认识棋子、棋盘不认识条子，
           // 两样都在这儿手上，所以由这儿接线。
           onChange: () => refreshCoachGlow(),
+          // C 满 5 秒那一刻要是还在连锁中途，就等这一步结算完再判（D77）。
+          busy: () => resolving,
         }));
       }
     }
@@ -1929,7 +1933,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!started || gameOver || paused) return;
     paused = true;
     timer.pause();
-    // 教学条的计时（A 的 10 秒、C 的 10 秒 / 5 秒）随暂停冻结（10-11 方案 D-1）。
+    // 教学条的计时（A 的 10 秒、C 至少 5 秒）随暂停冻结（10-11 方案 D-1）。
     coach?.pause();
     // 连锁也一起停：遮罩盖上之后，翻面、加分、判死局都不该在背后继续跑
     // （见 heldBeat）。

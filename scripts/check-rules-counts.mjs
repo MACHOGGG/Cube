@@ -461,7 +461,8 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
   // 「another colour」后面要是词尾：「flip another coloured piece」（再翻一枚色块）是正常的话，不算。
   const OTHER = /其他颜色|其他顏色|another colou?r\b|autre couleur/;
   const tut = (I18N_SRC.match(/export const TUTORIAL_RULES[\s\S]*?\n\};/) || [''])[0];
-  check('⑥（尺子）读到了 TUTORIAL_RULES 那一段', tut.includes("'Try to clear the whole board.'"));
+  // 10-31 起教学条句末一律不带句号（站长 10-31，附录甲 §18）。
+  check('⑥（尺子）读到了 TUTORIAL_RULES 那一段', tut.includes("'Try to clear the whole board'"));
   const tutHits = (tut.match(/'[^']*'/g) || []).filter((t) => OTHER.test(t));
   check('⑥ 教学五条（四种语言）里不再说星星是别的颜色', tutHits.length === 0, tutHits.join(' / '));
   const ruleHits = (RULES_SRC.match(/body: '[^']*'/g) || []).filter((t) => OTHER.test(t));

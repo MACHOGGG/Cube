@@ -1,10 +1,11 @@
 /**
- * 教学的呼吸灯：**每一种颜色最少几步能完成这一条、亮哪几枚**（10-11 方案 D-2 ～ D-4，按玩家规格重做）。
+ * 教学的呼吸灯：**每一种颜色最少几步能完成这一条、亮哪几枚**（10-11 方案 D-2 ～ D-4，按玩家规格重做；10-31 整合版
+ * Z-C01 按站长 10-29、10-30 的新规改：A 也亮、C 每步重算、E 亮步数最少的那一下）。
  *
  * ── 现在的规矩 ───────────────────────────────────────────────────────────────
  *
- *   · B「星星可以与色块一同再次拼出得分图案」、C「得分图案会随着游戏解锁而变化」——目标（`group`）是**当前 N 的任
- *     意一组得分图案**：同色连着 ≥ N、至少一枚色块、碰到最后滑过的那条线。和真结算一字不差：认组问的就是棋盘结
+ *   · A（第 1 条）、B「星星可以与色块一同再次拼出得分图案」、C「得分图案会随着游戏解锁而变小」——目标（`group`）是
+ *     **当前 N 的任意一组得分图案**，每一步结算完重算：同色连着 ≥ N、至少一枚色块、碰到最后滑过的那条线。和真结算一字不差：认组问的就是棋盘结
  *     算用的那一份（`scoring`），这儿一个字不写「什么算一组」。
  *       - 按颜色算**精确的最少步数**（IDA*，估值 `h = min_线 max(0, N − 这条线上这一色的枚数)`：方块、小球上两条线
  *         最多交一格，滑一步最多让某一条线上这一色多一枚、自己那条线上的枚数不变，所以 h 一步最多减 1，不会高估）。
@@ -17,8 +18,10 @@
  *     整行整列；小球：棋盘交上来的那几条外边）。IDA*，估值 `h = min_边 (|边| − 这条边上这一色的星星数)`。认「填满」
  *     认的是那一步滑完、连锁还没动之前的盘面（连锁第一拍问的就是整线消除，见 engine/scoring.ts 的 next）；不把那
  *     一步连锁里翻出来的星星算进去，所以 h 不会因为「一步翻出好几颗」而高估（门里拿不带估值的逐层加深逐个对）。
- *       - 亮的是这一色**在场的所有星星**；色块一枚不亮。
+ *       - 亮的是这一色**在场的所有星星**；色块一枚不亮（站长 10-30「D 只亮星星」：有解、没解的退路都是这一色的星星）。
  *       - 一色都填不满任何一条边（星星不够）：亮「还差的枚数」最少的那一色的所有星星（玩家已定）。
+ *   · E（第 5 条，以及五条讲完之后、到结算为止）——目标（`best`）是拼图案和消外边两样里**步数少的那一个，平手取外边**
+ *     （站长 10-29、10-30）：两样都搜（planBest），各用各的计数。
  *   · 有上限：一次重算最多看 HINT_NODE_CAP 个盘面。超了退回「按估值排」（每一色按此刻的 h 排，最小的那一色）并标
  *     `estimate`——不卡住，也不至于一盏都不亮。
  *
@@ -45,13 +48,13 @@ import type { LineShuffle } from './residueSearch';
 /**
  * 教学条此刻要灯做什么（ui/coachBar.ts 按条给）：
  *
- *   group      B：拼出当前 N 的一组，每一步结算完重算
- *   groupOnce  C：同上，但只在这一条刚出来那一下算一次；之后灯跟着那几枚走，它们被翻掉、离场就熄
- *   edge       D：某一色的星星填满一条能消的外边
+ *   group  A、B、C：拼出当前 N 的一组，每一步结算完重算
+ *   edge   D：某一色的星星填满一条能消的外边（只亮那一色的星星）
+ *   best   E（以及五条讲完之后）：拼图案和消外边，取步数少的那一个；平手取外边
  *
- * A、E 不亮，没有它们那一种。
+ * 原先的 `groupOnce`（C 只在刚出来那一下算一次）站长 10-29 作废：C 也每步重算。
  */
-export type CoachHint = 'group' | 'groupOnce' | 'edge';
+export type CoachHint = 'group' | 'edge' | 'best';
 
 /** 一次重算最多看几个盘面（D-4：「总上限十几万盘面」）。 */
 export const HINT_NODE_CAP = 150_000;
@@ -313,6 +316,12 @@ function pickWindow<T extends { id: number }>(
     const touches = win.some(([r, c]) => moved.has(r + ',' + c));
     const block = win.some(([r, c]) => b.isBlock(b.grid[r][c]));
     if (touches && block) return win;
+  }
+  // 全是星星的 N 枚拼不出图案（图案至少一枚色块，scoring.ts），宁可不碰滑动线也要带一枚色块（10-31 整合版 Z-C01 ①b：
+  // 原先这儿直接挑「碰到滑动线」的那一段，一组比 N 长、碰线的几段又都没有色块时，亮出来的是一段全是星星的 N 枚）。
+  for (let i = 0; i + n <= cells.length; i++) {
+    const win = cells.slice(i, i + n);
+    if (win.some(([r, c]) => b.isBlock(b.grid[r][c]))) return win;
   }
   for (let i = 0; i + n <= cells.length; i++) {
     const win = cells.slice(i, i + n);
@@ -654,6 +663,30 @@ export function* planEdge<T extends { id: number }>(
   return { color: k, ids: [...stars.get(k)!], depth: best, estimate: false };
 }
 
+/**
+ * E：拼图案和消外边哪一样步数少就亮哪一样，平手亮外边（站长 10-29、10-30）。两样都算：先 group，后 edge，各用各的计数
+ * （各自最多 HINT_NODE_CAP 个盘面，一次重算最多约 30 万个，照旧分段跑、算完才亮）。
+ *
+ * 平手取外边的依据（已模拟，顺着灯走的仿门 962 次 E 重算）：两样都有真解的 255 次里平手 36 次，全是 1 步对 1 步，图案
+ * 那一步只值 2–10 分，外边那一步 16–25 分、还消掉一整条。两样都没有真解时先退回图案的估值、再退回 D 的退路。
+ */
+export function* planBest<T extends { id: number }>(
+  live: PlanBoard<T>,
+  prev: PlanPrev,
+  stats: PlanStats = { nodes: 0 },
+  cap = HINT_NODE_CAP,
+): Generator<void, PlanResult> {
+  const g = yield* planGroup(live, prev, stats, cap);
+  const e = yield* planEdge(live, prev, { nodes: 0 }, cap); // edge 另起一份计数：不吃 group 剩下的额度
+  const gReal = g.color !== null && !g.estimate; // 真解：depth ≥ 1
+  const eReal = e.color !== null && !e.estimate && e.depth > 0;
+  if (gReal && eReal) return e.depth <= g.depth ? e : g; // 平手取外边（站长 10-30）
+  if (gReal) return g;
+  if (eReal) return e;
+  if (g.color !== null) return g; // 两样都没有真解：先退回图案的估值
+  return e; // 再退回 D 的退路（还差最少那一色的星星），或不亮
+}
+
 // ---------------------------------------------------------------------------
 // 分段跑：每段 ≤ SLICE_MS，用 MessageChannel 一段段排
 // ---------------------------------------------------------------------------
@@ -736,8 +769,7 @@ export interface CoachGlowState {
 
 export interface CoachGlow {
   /**
-   * 结算完（或者教学换了一条、新开一局）：按这一条重算。null = 熄灯。
-   * groupOnce 只在这一条第一次来的时候算；之后每次只问「那几枚还在不在」（retain）。
+   * 结算完（或者教学换了一条、新开一局）：按这一条重算。null = 熄灯。每一种都每次重算。
    */
   request(hint: CoachHint | null): void;
   /** 一步开始结算：作废没算完的那一份、熄灯（记着刚才那一色，「不跳色」要它）。 */
@@ -757,10 +789,6 @@ export interface CoachGlow {
 export interface CoachGlowBoard<T extends { id: number }> {
   /** 此刻的盘面视图（每次重算现取：线、外边、N 都可能变了）。 */
   view(): PlanBoard<T>;
-  /** C 那一组里的一枚还在不在、还是不是当时那一面（被翻掉、离场就熄）。 */
-  still(id: number, face: number): boolean;
-  /** 一枚此刻是哪一面（0 色块、1 星星）——C 记下来，之后比。 */
-  faceOf(id: number): number;
   /** 状态变了：重挂灯。 */
   paint(): void;
   /** 一副临时盘面的视图，只给预热用（开局倒数时这一局的牌还没发）。 */
@@ -790,8 +818,6 @@ export function createCoachGlow<T extends { id: number }>(
   let shown = new Set<number>();
   /** 正在亮的那一色、那一组——熄灯之后也记着（「不跳色」「沿用上一组」）。 */
   let prev: PlanPrev = { color: null, ids: [] };
-  /** C 那一组：哪几枚、各是哪一面（被翻掉、离场就熄）。null = 这一条还没算出来。 */
-  let onceFaces: Map<number, number> | null = null;
   /**
    * 预热自己一个 runner：开局（reset）不作废它——小红书那一端头一局不数 4-3-2-1，开局页下一帧就被按掉，跟着
    * 真的那个一起作废的话，最该预热的那台老内核上它一段都跑不完。头一次真的重算（request）、第一步开始结算
@@ -809,11 +835,10 @@ export function createCoachGlow<T extends { id: number }>(
     const v = state.version + 1;
     set({ hint, ids: [], color: null, depth: 0, estimate: false, version: v });
     const b = board.view();
-    const gen = hint === 'edge' ? planEdge(b, prev) : planGroup(b, prev);
+    const gen = hint === 'edge' ? planEdge(b, prev) : hint === 'best' ? planBest(b, prev) : planGroup(b, prev);
     runner.run(gen, (r) => {
       if (state.version !== v) return;
       if (r.color !== null) prev = { color: r.color, ids: r.ids };
-      if (hint === 'groupOnce') onceFaces = new Map(r.ids.map((id) => [id, board.faceOf(id)]));
       set({ color: r.color, ids: r.ids, depth: r.depth, estimate: r.estimate });
     });
   };
@@ -823,26 +848,15 @@ export function createCoachGlow<T extends { id: number }>(
       runner.cancel();
       warm.cancel();
       if (!hint) {
-        onceFaces = null;
         set({ hint: null, ids: [], color: null, version: state.version + 1 });
         return;
       }
-      if (hint === 'groupOnce' && state.hint === 'groupOnce' && onceFaces) {
-        // C 已经算过：只看那几枚还在不在、还是不是当时那一面。翻了一枚、离场一枚，整组熄掉，这一条剩下的时间不再亮。
-        const faces = onceFaces;
-        const ok = faces.size > 0 && [...faces].every(([id, face]) => board.still(id, face));
-        if (!ok) onceFaces = new Map();
-        set({ hint, ids: ok ? [...faces.keys()] : [], version: state.version + 1 });
-        return;
-      }
-      // C 第一次来（或者上一次没算完就被一步打断了）、B、D：重算。
-      onceFaces = null;
       start(hint);
     },
     cancel() {
       runner.cancel();
       warm.cancel();
-      // C 那一组只是这一步结算期间不亮；结算完 request('groupOnce') 会按「还在不在」接回来。
+      // 这一步结算期间不亮；结算完 request 重算再亮。
       set({ ids: [], version: state.version + 1 });
     },
     lit: (id) => shown.has(id),
@@ -850,7 +864,6 @@ export function createCoachGlow<T extends { id: number }>(
     reset() {
       runner.cancel();
       prev = { color: null, ids: [] };
-      onceFaces = null;
       set({ hint: null, ids: [], color: null, depth: 0, estimate: false, version: state.version + 1 });
     },
     prewarm() {
@@ -869,8 +882,8 @@ export function createCoachGlow<T extends { id: number }>(
 /**
  * 「星星消除」那一条该不该讲、讲哪一色（10-08 方案 3-E-3）。
  *
- * 10-11 方案 D 起，棋盘只拿它判两件事：第二副基础棋盘的第 4 条讲不讲，C 那一条「某色星星数 ≥ 当前最短外边的
- * 枚数」那 5 秒从什么时候起算（coachStarsReachEdge：回不回 null）。亮哪儿归上面的 planEdge。这儿挑色、给点亮组
+ * 10-11 方案 D 起，棋盘只拿它判两件事：第二副基础棋盘的第 4 条讲不讲，C 那一条什么时候能换到 D（「某色星星数 ≥
+ * 当前最短外边的枚数」，coachStarsReachEdge：回不回 null）。亮哪儿归上面的 planEdge。这儿挑色、给点亮组
  * 的那一半原样留着（check-star-clear 还量着它）。
  *
  * - **第一步**：在场星星数 ≥ 此刻最短那条外边的长度——够填满至少一条外边的颜色才算。一色都没有就回 null。

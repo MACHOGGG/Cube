@@ -102,7 +102,7 @@ await startFrom('经典方块');
 let r = await openHowto();
 check('基础方块：五条规则', r.nums.join(',') === '1,2,3,4,5', r.nums.join(','));
 check('基础方块：一条附注也没有', r.extras.length === 0, JSON.stringify(r.extras));
-check('基础方块：第 1 条就是「色块拼出得分图案……变成星星」', r.texts[0].includes('色块') && r.texts[0].includes('星星'), r.texts[0]);
+check('基础方块：第 1 条讲的是「同色的色块或星星连起得分图案」（2026-10-29 站长原话）', r.texts[0].includes('色块') && r.texts[0].includes('星星'), r.texts[0]);
 check(
   '五条里一个「反面／正面」都没有',
   r.texts.every((t) => !/反面|正面/.test(t)),
@@ -166,7 +166,7 @@ check(
 );
 // 反过来的一条：那一局**不吃侵蚀**（玩家 2026-09-27 拍板的 E15——翻过去还能翻回
 // 来，吃侵蚀的话几步就降到 1×1、随便一枚都得分，玩法当场塌了）。所以通稿第 3 条
-// 那句「得分图案会随着游戏解锁而变化」在这一局是假话，要换成 TUTORIAL_RULE3_FLIP。
+// 那句「得分图案会随着游戏解锁而变小」在这一局是假话，要换成 TUTORIAL_RULE3_FLIP。
 check(
   '无限反转：第 3 条讲的是「图案不会变小，整局都是 4 枚」',
   r.texts.some((t) => /不会变小/.test(t) && /4 枚/.test(t)) && !r.texts.some((t) => /随着游戏解锁/.test(t)),

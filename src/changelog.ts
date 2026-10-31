@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 7;
+export const RELEASE = 8;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -63,6 +63,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '改進：玩法提示更準確',
     en: 'Clearer tips for each game mode',
     fr: 'Astuces de mode plus précises',
+  },
+  // 10-31 方案推05（Z-C01–C03）：教学条换条等盘面、A 起就亮灯、E 亮步数最少的那一下、第 1 条换成站长原话、句末去句号。
+  8: {
+    zhHans: '改进：教学跟着棋盘走',
+    zhHant: '改進：教學跟著棋盤走',
+    en: 'Tutorial tips now follow your board',
+    fr: 'Le tutoriel suit votre plateau',
   },
 };
 

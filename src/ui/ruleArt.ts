@@ -333,7 +333,7 @@ export function buildRuleArt(opts: { shape?: 'square' | 'circle' } = {}): string
         slidingCol(tile(B, T), tile(G, T, 'ra-flip'), tile(B, T)) +
         arrowUp(3) + checksRow0,
     ),
-    // 3. 得分图案会随着游戏解锁而变化：横着一条橙的，4 → 3 → 2 → 1。
+    // 3. 得分图案会随着游戏解锁而变小：横着一条橙的，4 → 3 → 2 → 1。
     ladderArt(tile),
     // 4. 同色星星在外边得分并消除：四枚蓝星星排成一线 → 对勾 → 四枚一起缩小消失
     //    （玩家的原话：「四个点然后消失消除的动画」）。

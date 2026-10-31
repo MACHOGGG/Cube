@@ -3,22 +3,28 @@
  *
  * **10-11 方案 D-1（玩家规格 ＋ 10-11 答复）把五条什么时候出来、摆多久整个重定了：**
  *
- *   A「色块拼出得分图案就翻面，变成星星。」     开局就讲；配一段动画（本局三种颜色的 1×N 依次慢翻过去再翻回来，
- *                                                 循环），**手机上也显示**；不亮呼吸灯。10 秒，或第一次得分，就换
- *   B「星星可以与色块一同再次拼出得分图案。」   呼吸灯（engine/coachHint.ts 的 group）。图案**第一次真的降级**的那一
+ *   A（第 1 条）                                 开局就讲；配一段动画（本局三种颜色的 1×N 依次慢翻过去再翻回来，
+ *                                                 循环），**手机上也显示**；呼吸灯拼一组（group，每一步结算完重算）。
+ *                                                 10 秒，或第一次得分，就换
+ *   B「星星可以与色块一同再次拼出得分图案」     呼吸灯（engine/coachHint.ts 的 group）。图案**第一次真的降级**的那一
  *                                                 步结算完就换
- *   C「得分图案会随着游戏解锁而变化。」         按新图案亮一组（groupOnce：只算一次，之后跟着那几枚走，被翻掉、离场
- *                                                 就熄），HUD 那块《得分图案》一起亮。默认 10 秒；盘上出现「某色星星数
- *                                                 ≥ 当前最短外边的枚数」，就从那一刻起 5 秒后换，总长不超过 10 秒
- *   D「同色星星在整体的外边会得分并消除。」     呼吸灯（edge：那一色在场的所有星星）。**从这一条出现起**，成功消掉
- *                                                 **两次**整条外边就换
- *   E「尝试全部消除吧～」                       不亮，留到这一局结束
+ *   C「得分图案会随着游戏解锁而变小」           按新图案亮一组（group，每一步结算完重算），HUD 那块《得分图案》一起
+ *                                                 亮、一直亮到换条。至少摆 5 秒（C_MIN_MS）；满了以后，上一次结算看到
+ *                                                 「某色星星数 ≥ 当前最短外边的枚数」、或者 C 期间消掉过整条外边，才换
+ *                                                 到 D——不设上限，一直等到够数（站长 10-29、10-30）。满 5 秒那一刻正
+ *                                                 好在连锁中途（busy），就等这一步结算完再判（D77）
+ *   D「同色星星在整体的外边会得分并消除」       呼吸灯（edge：那一色在场的所有星星，色块不亮）。**从这一条出现起**消掉
+ *                                                 **两次**整条外边就换；C 期间已经消掉的边算进去，最多算一条（V2）
+ *   E「尝试全部消除吧～」                       呼吸灯亮步数最少的那一下（best：拼图案和消外边取步数少的，平手取外边），
+ *                                                 留到这一局结束——教学局的灯一直亮到结算页
  *
- * 所有计时（A 的 10 秒、C 的 10 秒 / 5 秒）**随暂停冻结**：控制器在 doPause / doResume 里喊 pause() / resume()。
+ * 所有计时（A 的 10 秒、C 至少 5 秒）**随暂停冻结**：控制器在 doPause / doResume 里喊 pause() / resume()。
  * 一局里只用「这一局真的在打的时间」——接个电话回来，条子不该已经悄悄翻过去两条。
  *
- * 换条只在两种时刻：计时到了（A、C），和一步结算完（observe：得分、降级、消边这几件事在连锁里发生时只记下，等这
- * 一步的动画演完再换，别抢在消除动画前面）。
+ * 换条只在两种时刻：A 的钟到了、C 的钟到了而且够数（不在连锁中途），和一步结算完（observe：得分、降级、消边这几
+ * 件事在连锁里发生时只记下，等这一步的动画演完再换，别抢在消除动画前面）。
+ *
+ * 五条的句末都不带句号（站长 10-31，第 5 条的「～」留着），文字在 i18n 的 TUTORIAL_RULES。
  *
  * **第二副基础棋盘（plan: 'second'）只讲 D**：场上第一次出现「某色星星数 ≥ 最短外边」时开口，之后一直摆着。他刚
  * 打完一局别的，前几条跟着走过一遍了；只有「外边怎么消」是这一族自己的事。
@@ -54,24 +60,24 @@ export type CoachPlan = 'first' | 'second';
 export interface CoachView {
   /**
    * 某一种颜色的星星枚数 ≥ 当前最短外边的枚数（方块：此刻行长和列长里小的那个；别的：此刻削得动的最短那条外边）。
-   * 由棋盘自己数（`coachStarsReachEdge`）。C 的「5 秒」从它第一次成立起算；第二副棋盘的 D 等它开口。
+   * 由棋盘自己数（`coachStarsReachEdge`）。C 满 5 秒之后看它决定换不换到 D；第二副棋盘的 D 等它开口。
    */
   starsReachEdge: boolean;
 }
 
 /** A 摆多久（玩家规格：10 秒，或者第一次得分）。 */
 export const A_MS = 10000;
-/** C 最长摆多久（默认 10 秒）。 */
-export const C_MS = 10000;
-/** C：「某色星星数 ≥ 当前最短外边」成立之后再摆多久（总长仍不超过 C_MS）。 */
-export const C_AFTER_REACH_MS = 5000;
+/** C 至少摆多久（只算真在打的时间）。满了以后，上一次结算看到某色星星够一条外边、或者 C 期间消掉过整条外边，就换到 D
+ *  （10-19 V1、V2；站长 10-29：不再有「默认 10 秒就换」，也不再有「满 10 秒熄图案块」）。 */
+export const C_MIN_MS = 5000;
 /** D：从它出现起，消掉几次整条外边就换到 E。 */
 export const D_LINES = 2;
 
 /**
- * 第 i 条（tutorialRules 的下标）此刻要灯做什么（engine/coachHint.ts 的 CoachHint）：A、E 不亮。
+ * 第 i 条（tutorialRules 的下标）此刻要灯做什么（engine/coachHint.ts 的 CoachHint）：A、B、C 拼一组（每步重算），D 外边
+ * （只亮那一色的星星），E 步数最少的那一下（站长 10-29、10-30）。
  */
-export const HINT_OF: readonly (CoachHint | null)[] = [null, 'group', 'groupOnce', 'edge', null];
+export const HINT_OF: readonly (CoachHint | null)[] = ['group', 'group', 'group', 'edge', 'best'];
 
 /** 两种排法各讲哪几条、按什么顺序（tutorialRules 的下标）。 */
 const PLAN_STEPS: Record<CoachPlan, readonly number[]> = {
@@ -87,8 +93,10 @@ export interface CoachBar {
   observe(view: CoachView): void;
   /** 连锁里发生了一件事（见 CoachSignal）。只记下，不当场换条。line 带上这一拍消了几条。 */
   signal(sig: CoachSignal, count?: number): void;
-  /** 此刻这一条要灯做什么；不亮（A、E、条子还没开口）回 null。 */
+  /** 此刻这一条要灯做什么；条子还没开口回 null。 */
   hint(): CoachHint | null;
+  /** HUD 那块《得分图案》此刻该不该跟着亮：在 C 那一条就亮，一直亮到换条（站长 10-29）。 */
+  blockGlow(): boolean;
   /** 暂停 / 继续：计时一起停、一起走。 */
   pause(): void;
   resume(): void;
@@ -113,6 +121,9 @@ export interface CoachOpts {
    * 由外面传进来，而不是条子自己去摸棋盘：条子不认识棋子，棋盘不认识条子，两样都在 gameController 手上。
    */
   onChange?: () => void;
+  /** 控制器此刻是不是正在结算一步。C 满 5 秒那一刻正好落在连锁中途的话，不在那一刻换条，等这一步结算完（observe）
+   *  再判（D77）。不给就当不忙。 */
+  busy?: () => boolean;
   /** 钟（门里换成假的）。 */
   now?: () => number;
 }
@@ -238,7 +249,7 @@ function lineCount(el: HTMLElement): number {
  */
 export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   const plan: CoachPlan = opts.plan ?? 'first';
-  // 单调钟（10-15 补充 S8）：A、C 那几个 10 秒 / 5 秒不跟着墙上的钟被拨（门里自己注入 now 的照旧）。
+  // 单调钟（10-15 补充 S8）：A 的 10 秒、C 的 5 秒不跟着墙上的钟被拨（门里自己注入 now 的照旧）。
   const now = opts.now ?? (() => performance.now());
   const texts = tutorialRules(opts.lang, opts.shape);
   const base = opts.art ?? artFor(opts.shape);
@@ -275,9 +286,11 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
   let scored = false;
   /** B：图案真的降过一级了。 */
   let degraded = false;
-  /** D：从 D 出现起消掉了几条外边。 */
+  /** D：从 D 出现起消掉了几条外边（C 期间消掉的算进来，最多一条，见 show）。 */
   let linesInD = 0;
-  /** 上一次结算完看到的盘面（C 一出来就要问「星星够不够一条外边」）。 */
+  /** C：C 期间消掉了几条外边（10-19 V2）。 */
+  let linesInC = 0;
+  /** 上一次结算完看到的盘面（C 满 5 秒时要问「星星够不够一条外边」）。 */
   let lastView: CoachView = { starsReachEdge: false };
 
   // ---- 只数「真的在打」的时间（暂停冻结，见文件头）----
@@ -293,14 +306,24 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     if (timer) window.clearTimeout(timer);
     timer = 0;
   };
+  const inC = () => at >= 0 && steps[at] === 2;
+  /** C 能不能走了：摆满 C_MIN_MS，而且（上一次结算看到某色星星够一条外边，或者 C 期间消掉过整条外边）。 */
+  const cReady = () => elapsed() >= C_MIN_MS - 1 && (lastView.starsReachEdge || linesInC > 0);
   /** 按此刻的 deadline 重新挂钟（暂停时不挂）。 */
   const armTimer = () => {
     clearTimer();
     if (paused || dead || !Number.isFinite(deadline)) return;
     timer = window.setTimeout(() => {
       timer = 0;
-      if (elapsed() >= deadline - 1) advance();
-      else armTimer();
+      if (elapsed() < deadline - 1) return armTimer();
+      if (inC()) {
+        // C 的钟只负责「满 5 秒那一刻再看一次」，不硬换：够数（或 C 期间消过边）、而且这会儿不在连锁中途才换。
+        // 不换就不再挂钟，等下一次结算（observe 里的 done）。
+        deadline = Infinity;
+        if (!opts.busy?.() && cReady()) advance();
+        return;
+      }
+      advance();
     }, Math.max(0, deadline - elapsed()));
   };
 
@@ -331,9 +354,10 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     spent = 0;
     since = now();
     const rule = steps[i];
-    deadline = i === lastStep ? Infinity : rule === 0 ? A_MS : rule === 2 ? C_MS : Infinity;
-    if (rule === 2 && lastView.starsReachEdge) deadline = Math.min(deadline, C_AFTER_REACH_MS);
-    if (rule === 3) linesInD = 0;
+    deadline = i === lastStep ? Infinity : rule === 0 ? A_MS : rule === 2 ? C_MIN_MS : Infinity;
+    if (rule === 2) linesInC = 0;
+    // C 期间已经消掉的边算进 D 的两条里（V2），最多算一条：D 至少要露面、再消一条才走。
+    if (rule === 3) linesInD = Math.min(linesInC, D_LINES - 1);
     armTimer();
     opts.onChange?.();
   }
@@ -349,6 +373,8 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     if (rule === 0) return scored;
     if (rule === 1) return degraded;
     if (rule === 3) return linesInD >= D_LINES;
+    // 降级那一步结算完、B → C 在同一次 observe 里换过来时，C 的钟刚从 0 数起，cReady() 为假，C 不会被连带跳过。
+    if (rule === 2) return cReady();
     return false;
   }
 
@@ -365,15 +391,30 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     peekTimer = peeking ? window.setTimeout(() => peek(false), PEEK_MS) : 0;
   }
 
-  /** 那颗键此刻是《<》、《>》，还是根本不该有。 */
+  /**
+   * 那颗键此刻是《<》、《>》，还是占着位置但不能按。
+   *
+   * 只要讲的不止一条，这颗键就**一直占位**（10-31 整合版 Z-C02，D62）：原先 A 时 `hidden`（display: none），A → B 换条
+   * 时顶上多出这颗键，整条高 11px、往下一跳。现在 A 时只是看不见、按不着（`coach-peek--idle`：visibility: hidden、
+   * disabled、aria-hidden、tabindex -1）。第二副棋盘只讲一条，照旧 hidden。
+   */
   function paintPeek() {
     if (!peekEl) return;
     // 「正在回头看」这件事盖在条子本身上，让 CSS 换底色时按类去认——不用 :has()：小红书那台要兼容的内核
     // （Chrome 61）不认识它。
     host.classList.toggle('coach-bar--peek', peeking);
-    const usable = steps.length > 1 && (at > 0 || peeking);
-    peekEl.hidden = !usable;
-    if (!usable) return;
+    const many = steps.length > 1;
+    peekEl.hidden = !many;
+    const usable = many && (at > 0 || peeking);
+    peekEl.classList.toggle('coach-peek--idle', many && !usable);
+    peekEl.disabled = !usable;
+    if (!usable) {
+      peekEl.setAttribute('aria-hidden', 'true');
+      peekEl.tabIndex = -1;
+      return;
+    }
+    peekEl.removeAttribute('aria-hidden');
+    peekEl.removeAttribute('tabindex');
     peekEl.textContent = peeking ? '›' : '‹';
     peekEl.setAttribute('aria-label', peeking ? STRINGS[opts.lang].next : STRINGS[opts.lang].coachPrev);
     peekEl.classList.toggle('coach-peek--fwd', peeking);
@@ -385,6 +426,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     scored = false;
     degraded = false;
     linesInD = 0;
+    linesInC = 0;
     lastView = { starsReachEdge: false };
     if (plan === 'first') return show(0);
     // 第二副棋盘：条件到之前不出声（observe 里接上第 0 步）。
@@ -414,14 +456,6 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
         if (plan === 'second' && view.starsReachEdge) show(0);
         return;
       }
-      // C：「某色星星数 ≥ 当前最短外边」第一次成立——从这一刻起再摆 5 秒（总长不超过 10 秒）。
-      if (steps[at] === 2 && view.starsReachEdge) {
-        const cap = elapsed() + C_AFTER_REACH_MS;
-        if (cap < deadline) {
-          deadline = cap;
-          armTimer();
-        }
-      }
       // 等的事做到了就换；换过去的那一条要是等的事也早就做到了（同一步里又得分又降级），接着换。
       while (at < lastStep && done(steps[at])) show(at + 1);
     },
@@ -429,11 +463,18 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       if (dead) return;
       if (sig === 'score') scored = true;
       if (sig === 'erosion') degraded = true;
-      if (sig === 'line' && at >= 0 && steps[at] === 3) linesInD += count;
+      if (sig === 'line' && at >= 0) {
+        if (steps[at] === 3) linesInD += count;
+        else if (steps[at] === 2) linesInC += count;
+      }
     },
     hint() {
       if (dead || at < 0) return null;
       return HINT_OF[steps[at]] ?? null;
+    },
+    // 《<》回头看不动 at：在 C 时回头看 B，图案块照亮（在等的还是 C）；从 D 回头看 C，图案块不亮。
+    blockGlow() {
+      return !dead && inC();
     },
     pause() {
       if (dead || paused) return;
