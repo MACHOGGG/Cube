@@ -916,7 +916,7 @@ head('⑥b 图案块的光：只在 C 那一条亮，一直亮到换条（站长
   check('拆掉之后：不亮', m.bar.blockGlow() === false);
 }
 
-head('⑦ 《<》回头看、重开、拆掉');
+head('⑦ 《<》回头看、拆掉');
 {
   const m = mount('first');
   advance(A_MS);
@@ -935,19 +935,22 @@ head('⑦ 《<》回头看、重开、拆掉');
   check('回头看不动灯（还是 B 那一种）', m.bar.hint() === 'group', String(m.bar.hint()));
   advance(PEEK_MS);
   check(`${PEEK_MS}ms 不动它：自己回到现在`, m.rule() === 1, nameOf(m.rule()));
-  // 重开：见过的全忘掉。
-  m.bar.signal('erosion');
-  m.bar.reset();
-  check('重开：回到 A、亮第一格', m.rule() === 0 && m.on() === 1, `${nameOf(m.rule())} / ${m.on()} 格`);
-  advance(A_MS);
-  m.bar.observe({ starsReachEdge: true });
-  check('重开之后，上一局降过的级不算数（停在 B）', m.rule() === 1, nameOf(m.rule()));
+  // 「重开：回到 A」那两条（m.bar.reset()）删了：教学只活在一局里（10-31 方案推06 Z-C04，站长 10-22），《再来一局》
+  // 不再把条子拨回第 1 条，而是整个拆掉——下面两条静态断言钉的就是这件事。
   m.bar.destroy();
   check('拆掉之后：不亮灯、条子藏起来', m.bar.hint() === null && m.host.hidden === true);
   advance(10 * 60 * 1000);
   m.bar.signal('erosion');
   m.bar.observe({ starsReachEdge: true });
   check('拆掉之后再报什么都不复活', m.host.hidden === true);
+  const cb7 = code(read('src/ui/coachBar.ts'));
+  check('coachBar.ts 里没有 reset(（重开回到第 1 条那一套删了）', !/\breset\(/.test(cb7));
+  const gc7 = code(read('src/engine/gameController.ts'));
+  check('gameController.ts 里没有 coach.reset(', !/coach\??\.reset\(/.test(gc7));
+  check('newGame 里教学只在 !coachDealt 时建（这一次挂载的头一局），建了就立起 coachDealt',
+    /if \(hooks\.coach && refs\.coachEl && !coachDealt\) \{\s*coachDealt = true;/.test(gc7));
+  check('之后的局 destroy 掉条子和一句话提示、熄灯、摘掉 has-coach',
+    /if \(coachDealt && \(coach \|\| coachTip\)\) \{[\s\S]{0,200}hooks\.coachGlow\?\.\(null\);[\s\S]{0,60}coach\?\.destroy\(\);[\s\S]{0,60}coachTip\?\.destroy\(\);[\s\S]{0,200}classList\.remove\('has-coach'\)/.test(gc7));
 }
 
 // ===========================================================================

@@ -20,6 +20,8 @@
  *   7. 小屋：选手那台倒数页上有它，不压上一局的总分榜，最后一名滚得到，数完记下。
  *   8. 小红书：首局那局小球没有它、也不记；第二局（第一次见到倒数页）有，数完记下。
  *   9. 尺子：换成「看见就记」，第 3 条必须红。
+ *  10. 《再来一局》的倒数页（10-31 方案推06 Z-C05 ③，站长 10-30）：照「第一次见倒数页」的规矩——还没在倒数页上
+ *      数完过就摆、数完才记，见过就不摆；每日挑战页开的局重开也照这一条（那一页的图、那一页的判据）。
  */
 import { chromium } from 'playwright';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -487,7 +489,12 @@ if (want(8)) {
   }));
   check('小红书首屏那局小球：落进棋盘，没有开关，也没写 slides.xhs.cvdOffer',
     first && !firstLook.offer && firstLook.key === null && firstLook.web === null, JSON.stringify({ first, ...firstLook }));
-  // 回主菜单（第二次打开就是主菜单），开第二局：第一次见到倒数页。
+  // 首局要走到结算页才记成「看过」（10-31 方案推06 Z-C04 ⑤）：没打完就关掉，下次打开还是那一局。所以先把它结束掉。
+  await p.$eval('#stopBtn', (e) => e.click());
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await p.$eval('#pauseFinishBtn', (e) => e.click());
+  await p.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  // 回主菜单（首局打完之后再打开就是主菜单），开第二局：第一次见到倒数页。
   await p.goto(PAGE);
   await p.waitForSelector('.home-icon-btn', { timeout: 30000 });
   await p.waitForTimeout(400);
@@ -510,6 +517,72 @@ if (want(9)) {
   const r = await exitKeepsOffer(true);
   check('（尺子）换成「看见就记」：第 3 条那两项红了（按《退出》之后记号已经写下、再开没有开关）',
     r.had && (r.key === '1' || !r.again), JSON.stringify(r));
+}
+
+// ── 10. 《再来一局》的倒数页（10-31 方案推06 Z-C05 ③）──────────────────────────────────
+//
+// 方案原文那一路（倒数中按《暂停》→《<》退出 → 从主菜单重进同一玩法打到结算 →《再来一局》→ 有开关）走不通：重进
+// 那一局的倒数页本身就摆着开关、数完就记（第 3、4 条），到《再来一局》时已经见过了。所以这一节量的是这条规矩真
+// 用得上的那几种：
+//   · 挂载时那一页没数完就开了局（棋盘一出来就替玩家按 #startBtn——和小红书首局、每日挑战页开的局一样，挂载时那
+//     一页从没数完过）：重开的倒数页补摆开关、数完才记；再重开一次就没有了。
+//   · 倒数中按《暂停》→ 返回退出：不记（第 3 条的暂停版）。
+//   · 每日挑战页开的局：那一页数完已经记过，这一节把记号擦掉模拟「那一页没数完」，重开时照那一页的判据补摆。
+const restartOffer = (p) => p.evaluate(() => ({
+  shown: !!document.querySelector('#startOverlay.show'),
+  offer: !!document.querySelector('#startOverlay.show #cvdOfferBtn'),
+  daily: !!document.querySelector('#startOverlay.show .daily-emblem'),
+}));
+async function endThenRestart(p) {
+  await p.$eval('#stopBtn', (e) => e.click());
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await p.$eval('#pauseFinishBtn', (e) => e.click());
+  await p.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await p.waitForTimeout(300);
+  await p.$eval('#restartBtn', (e) => e.click());
+  await p.waitForTimeout(200);
+}
+if (want(10)) {
+  const { ctx, p } = await device({ pre: PLAYED });
+  await openCard(p);
+  const had = !!(await p.$('#cvdOfferBtn'));
+  await p.click('#startPauseBtn');
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 5000 });
+  await p.evaluate(() => history.back());
+  await p.waitForTimeout(300);
+  if (!(await p.$('.home-page'))) await p.evaluate(() => document.getElementById('startBackBtn')?.click());
+  await p.waitForSelector('.home-icon-btn', { timeout: 10000 });
+  check('10 倒数中按《暂停》再返回退出：记号没写', had && (await offerKey(p)) === null, `开关 ${had} · 记号 ${await offerKey(p)}`);
+  // 挂载时那一页没数完就开局。
+  await openCard(p);
+  await p.$eval('#startBtn', (e) => e.click());
+  await waitBoard(p);
+  check('10（尺子）挂载时那一页没数完就开了局：记号还是空的', (await offerKey(p)) === null, String(await offerKey(p)));
+  await endThenRestart(p);
+  const r1 = await restartOffer(p);
+  check('10 《再来一局》的倒数页：还没数完过，补摆了那颗开关', r1.shown && r1.offer, JSON.stringify(r1));
+  check('10 数完之前不记', (await offerKey(p)) === null);
+  const began = await waitBoard(p, 12000);
+  check('10 数完开局才记（slides_cvd_offer === "1"）', began && (await offerKey(p)) === '1', `开局 ${began} · 记号 ${await offerKey(p)}`);
+  await endThenRestart(p);
+  const r2 = await restartOffer(p);
+  check('10 再《再来一局》：见过了，没有开关', r2.shown && !r2.offer, JSON.stringify(r2));
+  await ctx.close();
+}
+if (want(10)) {
+  // 电脑那一档：不会撞上「七色圆球那天竖着拿手机」那一页。
+  const { ctx, p } = await device({ w: 1280, h: 860, pre: PLAYED });
+  await p.click('.home-icon-btn--daily');
+  await p.waitForSelector('#dailyPlay', { timeout: 10000 });
+  await p.click('#dailyPlay');
+  const began = await waitBoard(p, 15000);
+  await p.evaluate(() => localStorage.removeItem('slides_cvd_offer'));
+  await endThenRestart(p);
+  const r = await restartOffer(p);
+  check('10 每日挑战页开的局重开：倒数页是那一页的图，还没数完过就补摆开关', began && r.shown && r.daily && r.offer, JSON.stringify({ began, ...r }));
+  const again = await waitBoard(p, 12000);
+  check('10 每日挑战页开的局重开数完才记', again && (await offerKey(p)) === '1', `开局 ${again} · 记号 ${await offerKey(p)}`);
+  await ctx.close();
 }
 
 check('页面没有报错', errs.length === 0, errs.slice(0, 3).join(' | '));

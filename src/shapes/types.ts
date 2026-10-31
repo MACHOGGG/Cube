@@ -122,6 +122,11 @@ export interface ShapeGameOpts {
    */
   noCountdown?: boolean;
   /**
+   * 每日挑战页开的这一局（今日那一局、输代号的局）：那一页倒数时上半屏那一块和数的那个数。《再来一局》时游戏外壳
+   * 的倒数页照它摆（10-31 整合版 Z-C05 ①，见 ui/gameShell.ts 的 ShellMeta.dailyStage）。
+   */
+  dailyStage?: { emblem: string; from: number };
+  /**
    * 这一局用哪一串种子码发牌（第 19 推，engine/seedCode.ts）。
    *
    * 不给就由控制器自己随手抽一串（每一局单人游戏都用种子发牌——方案原话），所以平常开一局

@@ -30,6 +30,7 @@
 import { chromium } from 'playwright';
 import { buildSync } from 'esbuild';
 import { readFileSync } from 'node:fs';
+import { afterRestart } from './lib/afterRestart.mjs';
 
 const BASE = process.argv.find((a) => /^https?:/.test(a)) || 'http://localhost:8980/';
 const PART = (process.argv.find((a) => a.startsWith('--part=')) || '').slice(7) || 'all';
@@ -327,7 +328,9 @@ async function scoreOnce(page, arrowsLog) {
       yes?.click();
     });
     await page.waitForFunction(() => !document.querySelector('#pauseOverlay.show'), null, { timeout: 8000 }).catch(() => {});
-    await page.waitForTimeout(600);
+    // 重开先数 4-3-2-1（10-31 方案推06 Z-C05）；这道门不量倒数，直接跳过。
+    await afterRestart(page, { skip: true }).catch(() => {});
+    await page.waitForTimeout(300);
   }
   return { legend: [], flipped: [] };
 }

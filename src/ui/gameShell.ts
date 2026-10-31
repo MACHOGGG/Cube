@@ -10,9 +10,10 @@ import { proOn, setPro } from '../engine/proMode';
 import { openRulesModal, type ExtraTipView } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
+import { needsTurn } from './dailyMode';
 import { menuTag } from './menuTags';
 import { slotTip } from './modeTips';
-import type { Family, TargetPattern } from '../engine/targets';
+import { drawOne, targetsOf, type Family, type TargetPattern } from '../engine/targets';
 import { cardOf } from '../shapes/registry';
 import { modeKeyOf } from '../engine/runKey';
 import { seedModeOf } from '../engine/seedCode';
@@ -62,6 +63,18 @@ export interface ShellMeta {
    * 两次倒数。
    */
   noCountdown?: boolean;
+  /**
+   * 每日挑战页开的这一局（今日那一局、输代号的局）：那一页倒数时上半屏摆的那一块（`emblem`，今日是日期图、输代号
+   * 是那串码）和数的那个数（`from`）。挂载时这一局不数（noCountdown，那一页自己数过了）；《再来一局》时倒数页
+   * 照这两样摆，和那一页第一次数的时候一模一样，不转老虎机轮子（10-31 整合版 Z-C05 ①，站长 10-30）。
+   */
+  dailyStage?: { emblem: string; from: number };
+  /**
+   * 单人、非种子的老虎机局：《再来一局》重新抽一个目标（站长 10-31：「重新随机一个新目标」）。棋盘给这一个回调，
+   * 外壳在重开的倒数页上抽好新目标后交给它（棋盘那头的 target 和控制器读的 hooks.slotTarget 是同一处）。
+   * 种子局、小屋局目标由码决定，不给。
+   */
+  retarget?: (t: TargetPattern) => void;
   /** Every string on this screen is localized through STRINGS[lang]; the
    *  shapes pass in already-translated title/tagline/startBody. The long
    *  rules that used to sit under each board now live in one translated
@@ -114,6 +127,11 @@ export interface ShellRefs {
   legendEl: HTMLElement;
   /** 头一局那块教学条的壳子；meta.coach 没开时是 null（那一局根本没画它）。 */
   coachEl: HTMLElement | null;
+  /**
+   * 《再来一局》：把开局页重新摆出来、重新数 4-3-2-1（老虎机重转滚筒），数完替玩家按 #startBtn（10-31 整合版
+   * Z-C05，D35 甲）。没有倒数窗的那种外壳不给。
+   */
+  recount?: () => void;
   /**
    * 步步为营那一块上的余步读数。**别的档是 null**：顶排从 2026-09 起没有钟了
    * （《侵蚀阶梯》v1.2 PR-7），计时那一档的倒数在下面 timerEl 上。
@@ -292,7 +310,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 上半屏是老虎机的那一页同样不摆、不记：那台机器比玩法图宽一截，手机横屏时这一页本来就排不进一行
   // （《退出》折在第二行），再挂一颗开关，568 宽的屏上《退出》被挤出屏幕。新玩家的第一局不会是老虎机
   // （首玩锁），碰上这一页的只有更新后的老玩家，他在下一个倒数页上照样看得到。
-  const cvdOffered = cvdOfferDue() && !meta.noCountdown && !meta.landscape && !meta.slotTarget;
+  // 每日挑战页开的局（dailyStage）重开时上半屏摆那一页的图、不转轮子，所以「老虎机那一幕」只算不是从那一页开的。
+  const slotStage = !!meta.slotTarget && !meta.dailyStage;
+  let cvdOffered = cvdOfferDue() && !meta.noCountdown && !meta.landscape && !meta.slotTarget;
+  /** 这一局此刻认的老虎机目标。单人非种子局《再来一局》时换一个（见 ShellMeta.retarget）。 */
+  let slotTarget = meta.slotTarget;
 
   // The landscape layout is one grid — readouts | board | buttons — and the
   // portrait one is the column it has always been. Both are the same DOM in
@@ -409,7 +431,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
          下半屏 3、2、1 数完直接开打。真正把一局叫起来的仍然是 #startBtn，只是
          现在它藏起来，由倒数替玩家按下去：这样游戏本身的开始/暂停/结束那套状
          态机一个字都不用改。 -->
-    <div class="overlay opaque show overlay--start${meta.slotTarget ? ' overlay--start-slot' : ''}" id="startOverlay">
+    <div class="overlay opaque show overlay--start${slotStage ? ' overlay--start-slot' : ''}" id="startOverlay">
       ${startStageHtml({
         // 这一局是什么：编号表里的那一行（玩法 ＋ 棋盘）。图由它定（ui/modeIcons.ts 的 iconFor），
         // 和第二层上按下去的那一格是同一张（10-08 方案 3-F-4）——从前这儿递的是棋盘 ＋ bomb ＋
@@ -424,7 +446,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         },
         room: !!currentRoom(),
         countId: 'startCount',
-        emblem: meta.slotTarget ? slotMachineHtml() : undefined,
+        emblem: meta.dailyStage ? meta.dailyStage.emblem : meta.slotTarget ? slotMachineHtml() : undefined,
         // 无限反转这一屏不再解释计分怎么算（玩家定的）。4-3-2-1 数完就开打，
         // 上半屏那张图已经说清「你选的是这个玩法」；连击底数、有没有时间奖
         // 励，是打完看结算页的事，不是站在开局线上要读的。
@@ -435,7 +457,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 老虎机那一局底下只留《退出》：轮子已经在转了，「暂停」停不住它，
         // 而这一幕本来就只有五秒。玩家的原话：「下面还是只有那个《退出》」。
         // 那一颗不在这一排里，是下面那颗全站统一的 .page-exit（见下）。
-        actions: meta.slotTarget
+        actions: slotStage
           ? undefined
           : `<button class="icon-btn start-act" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` +
             `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`,
@@ -446,7 +468,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 是倒数页那一排的 .start-act，站在离底 22px；紧挨着它的上一页（挑图形）和别的二级页都是离底 116 的 .page-exit，
         // 点完图形那颗键往下一跳；横屏更是一大一小、一个靠右边沿一个在中间。别的玩法的倒数页照旧是《返回》《暂停》
         // 并排那一排（那两颗是一组，10-08 方案 3-F 统一过）。id 照旧是 startBackBtn：点它的那两处（离开、停轮子）不用改。
-        meta.slotTarget ? `<button class="icon-btn page-exit" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` : ''
+        slotStage ? `<button class="icon-btn page-exit" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` : ''
       }
       <button id="startBtn" class="start-hidden-go" hidden aria-hidden="true" tabindex="-1">${s.startBtn}</button>
     </div>
@@ -763,8 +785,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     if (meta.flip) tips.push({ key: 'flip' });
     // 老虎机那一幅是当局现抽的那个得分图案，和 HUD 右边那一块上的是同一份画法
     // ——换一张重画，等于让他自己去对。
-    if (meta.slotTarget) {
-      tips.push({ key: 'slot', art: slotTip(meta.lang, meta.slotTarget).art });
+    if (slotTarget) {
+      tips.push({ key: 'slot', art: slotTip(meta.lang, slotTarget).art });
     }
     // 无限反转也是 100 秒，可它那一条自己就带着「限时 100 秒」，不必再摆一条计时
     //（头上那个读数的显隐用的也是这同一个判断）。
@@ -816,16 +838,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 老虎机那一局：倒数不马上开始，也先不露面——等第二个轮子停稳了再数
   //（玩家的原话：「最开始没有 5-4-3-2-1 的那个板块出现，等老虎机转出来第二
   // 个内容之后开始倒计时」）。下面的 runCount 交给 spinSlot 的 onSettled。
-  let startCounting: (() => void) | null = null;
-  if (meta.noCountdown && startBtnEl) {
-    // 不数了，直接替他按下那颗藏起来的键。放在下一帧：这一屏此刻还没上树，
-    // 现在按等于对着一块还没排版的 DOM 开局，棋盘会量出错的尺寸。
-    requestAnimationFrame(() => {
-      if (container.querySelector('#startOverlay')?.classList.contains('show')) startBtnEl.click();
-    });
-  } else if (countWin && startBtnEl) {
-    let cancelCount: (() => void) | null = null;
-    const runCount = () => {
+  const overlayEl = container.querySelector<HTMLElement>('#startOverlay');
+  const onStartPage = () => !!container.querySelector('#startOverlay')?.classList.contains('show');
+  /** 这一次数几下：每日挑战页开的局照那一页（dailyStage.from），老虎机那一幕多数一个（5-4-3-2-1，玩家定的）。 */
+  const countFromNow = () => (meta.dailyStage ? meta.dailyStage.from : countFrom(meta.shapeId) + (slotStage ? 1 : 0));
+  let cancelCount: (() => void) | null = null;
+  let stopSpin: (() => void) | null = null;
+  // 数法只有一份：挂载时和《再来一局》（recount）都用它（10-31 整合版 Z-C05：原先只在挂载时、而且 noCountdown 的局
+  // 根本不建，于是重开没有倒数）。
+  let runCount: (() => void) | null = null;
+  if (countWin && startBtnEl) {
+    runCount = () => {
       countWin.classList.remove('cd-window--waiting');
       cancelCount?.();
       cancelCount = playCountdown(countWin, () => {
@@ -833,13 +856,12 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         // 多人局是由房间那边数完之后直接开赛的（main.ts 会替所有人按下同一
         // 颗键），这一页从没露过面。倒数还在后台跑完就再按一次，等于开局三秒
         // 后把牌重发一遍——所以只有这一页还挂着的时候才算数。
-        if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+        if (!onStartPage()) return;
         // 摆了色盲开关的那一页数完、真的开打了，才算见过它（10-18 补充 M-2）。倒数中途按《退出》、
         // 返回、整页被换掉都走不到这儿，下次照样摆。
         if (cvdOffered) markCvdOfferDone();
         startBtnEl.click();
-        // 老虎机那一局多数一个（5-4-3-2-1）——玩家定的。
-      }, countFrom(meta.shapeId) + (meta.slotTarget ? 1 : 0));
+      }, countFromNow());
     };
     container.querySelector<HTMLButtonElement>('#startPauseBtn')?.addEventListener('click', () => {
       cancelCount?.();
@@ -849,21 +871,17 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     // 游戏本身的《继续》也挂在这颗键上，但那一路在没开局时会自己空转，所以两
     // 边可以共用，互不干扰。
     container.querySelector<HTMLButtonElement>('#continueBtn')?.addEventListener('click', () => {
-      if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+      if (!onStartPage()) return;
       pauseOv?.classList.remove('show');
-      runCount();
+      runCount?.();
     });
-    // 离开这一页（返回、或者整块 DOM 被换掉）时别再让计时器把人拽进游戏里。
+    // 离开这一页（返回、或者整块 DOM 被换掉）时别再让计时器把人拽进游戏里；老虎机那一幕的轮子也别转了。
     container.querySelector<HTMLButtonElement>('#startBackBtn')?.addEventListener('click', () => {
       cancelCount?.();
       cancelCount = null;
+      stopSpin?.();
+      stopSpin = null;
     });
-    if (meta.slotTarget) {
-      countWin.classList.add('cd-window--waiting');
-      startCounting = runCount;
-    } else {
-      runCount();
-    }
   }
 
   // ---- 老虎机：开局页那台机器真的在转 -----------------------------------
@@ -872,20 +890,88 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 人看的那几秒：两个轮子从左到右先后停住，最后一个停完时倒数还剩一秒多，
   // 刚好够看清转出了什么。按《退出》就别转了——这块 DOM 马上要被换掉。
   //
-  // 不数 4-3-2-1 的那一局不转（第 19 推）：每日挑战那一页自己数完才开棋盘，方案原话「老虎
-  // 机：不转轮子……目标直接出现在得分图案位置」——这一页下一帧就被按掉，转了也没人看见。
-  if (meta.slotTarget && !meta.noCountdown) {
-    const stage = container.querySelector<HTMLElement>('#startOverlay');
-    if (stage) {
-      const stopSpin = spinSlot(stage, planFor(familyOf(meta.shapeId), meta.slotTarget, meta.lang), () => {
-        // 第二个轮子停稳了：这时候倒数才露面、才开始数。人已经离开这一页
-        // 的话什么都不做。
-        if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
-        startCounting?.();
-      });
-      container.querySelector<HTMLButtonElement>('#startBackBtn')?.addEventListener('click', stopSpin);
+  // 倒数不马上开始，也先不露面——等第二个轮子停稳了再数（玩家的原话：「最开始没有 5-4-3-2-1 的那个板块出现，
+  // 等老虎机转出来第二个内容之后开始倒计时」）。runSpin 再转一遍时自己会复位（重铺带子、摘掉「停稳」）。
+  const spin = () => {
+    if (!overlayEl || !slotTarget) return;
+    stopSpin?.();
+    stopSpin = spinSlot(overlayEl, planFor(familyOf(meta.shapeId), slotTarget, meta.lang), () => {
+      // 第二个轮子停稳了：这时候倒数才露面、才开始数。人已经离开这一页的话什么都不做。
+      if (!onStartPage()) return;
+      runCount?.();
+    });
+  };
+
+  if (meta.noCountdown && startBtnEl) {
+    // 不数了，直接替他按下那颗藏起来的键。放在下一帧：这一屏此刻还没上树，
+    // 现在按等于对着一块还没排版的 DOM 开局，棋盘会量出错的尺寸。
+    // 不数 4-3-2-1 的那一局也不转轮子（第 19 推）：每日挑战那一页自己数完才开棋盘，方案原话「老虎
+    // 机：不转轮子……目标直接出现在得分图案位置」——这一页下一帧就被按掉，转了也没人看见。
+    requestAnimationFrame(() => {
+      if (onStartPage()) startBtnEl.click();
+    });
+  } else if (countWin && runCount) {
+    if (slotStage) {
+      countWin.classList.add('cd-window--waiting');
+      spin();
+    } else {
+      runCount();
     }
   }
+
+  /**
+   * 重开的倒数页上那颗色盲开关（10-31 整合版 Z-C05 ③，站长 10-30）：照「第一次见倒数页」的规矩——还没在倒数页上数完过
+   * 一次就摆、数完才记；已经见过就不摆。挂载时没画过（小红书首局、每日挑战页开的局都是 noCountdown）而这一次要摆的，
+   * 当场补画、补接点击；画过而这一次不该摆的，撤掉。
+   */
+  const offerCvd = (due: boolean) => {
+    cvdOffered = due;
+    const holder = countWin?.parentElement ?? null;
+    let btn = container.querySelector<HTMLButtonElement>('#cvdOfferBtn');
+    if (due && !btn && countWin) {
+      countWin.insertAdjacentHTML('afterend', cvdOfferHtml(colorblindOn(), s.colorblindBtn));
+      btn = container.querySelector<HTMLButtonElement>('#cvdOfferBtn');
+      if (btn) {
+        cvdBtns.push(btn);
+        btn.addEventListener('click', () => {
+          setColorblind(!colorblindOn());
+          showCvd();
+        });
+      }
+    }
+    if (!due && btn) {
+      const i = cvdBtns.indexOf(btn);
+      if (i >= 0) cvdBtns.splice(i, 1);
+      (btn.closest('.start-cvd-offer') ?? btn).remove();
+    }
+    holder?.classList.toggle('start-count--offer', due);
+    showCvd();
+  };
+
+  const recount = () => {
+    if (!overlayEl || !countWin || !runCount) return;
+    cancelCount?.();
+    cancelCount = null;
+    overlayEl.classList.add('show');
+    // ③ 摆不摆色盲开关：和挂载时同一句（游戏外壳那一页）；每日挑战页开的局照那一页那一句（竖着拿手机、要转过来的
+    // 那一天不摆）。
+    offerCvd(cvdOfferDue() && (meta.dailyStage ? !needsTurn(meta.shapeId) : !meta.landscape && !slotStage));
+    if (slotStage) {
+      // ② 老虎机重开：单人、非种子局先重新抽一个目标（站长 10-31），种子局照旧；再转一遍，停稳了才数。
+      if (meta.retarget) {
+        const family = familyOf(meta.shapeId);
+        const next = drawOne(family) ?? targetsOf(family)[0];
+        if (next) {
+          slotTarget = next;
+          meta.retarget(next);
+        }
+      }
+      countWin.classList.add('cd-window--waiting');
+      spin();
+    } else {
+      runCount();
+    }
+  };
 
   // ---- 「这个人已经横着玩过了」-----------------------------------------
   //
@@ -957,5 +1043,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       shareClose: req('shareCloseBtn'),
       extra,
     },
+    recount: countWin && startBtnEl ? recount : undefined,
   };
 }

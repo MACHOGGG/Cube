@@ -404,7 +404,9 @@ const mountRoomLeftover = guardFn('mountRoomLeftover', mountRoomLeftover0, nop);
 /** 棋盘交来的钩子里，纯装饰的那几样过 guard；判定那几样（isGameOver / buildCascadeConfig / checkHazard）不包——它们错了该被看见，
  *  但 findStuckGroups 出错按「还活着」、计数类出错按 0，免得把结算整个拦住。 */
 function guardHooks(h: GameControllerHooks): GameControllerHooks {
-  const g: GameControllerHooks = { ...h };
+  // 照描述符抄（不用 { ...h }）：棋盘的 slotTarget 是现问的读法（单人非种子的老虎机局《再来一局》会换目标，10-31 整合版
+  // Z-C05 ②），展开运算会把它抄成挂载那一刻的死值。Chrome 61 有 getOwnPropertyDescriptors。
+  const g = Object.defineProperties({}, Object.getOwnPropertyDescriptors(h)) as GameControllerHooks;
   for (const k of ['render', 'onCascadeStep', 'onCascadeStepRendered', 'onCommit', 'onErosion', 'highlightStuck', 'coachGlow', 'coachGlowCancel', 'coachPrewarm', 'onLive', 'onReLogin'] as const) {
     const f = h[k] as ((...a: unknown[]) => void) | undefined;
     if (f) (g as any)[k] = guardFn(k, (...a: unknown[]) => f.apply(h, a), nop);
@@ -783,6 +785,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let coach: CoachBar | null = null;
   /** 那三个玩法头一回进来的一句提示。摆 15 秒自己走，走了就不再回来。 */
   let coachTip: { destroy(): void } | null = null;
+  /**
+   * 这一次挂载里教学（教学条 / 一句话提示）建过没有（10-31 整合版 Z-C04，站长 10-22：「每一局游戏都是从结算页面时结束，
+   * 因此教学内容结算后点击再来一次之后就不再是教学内容了（每个教学内容就只存在于一局）」）。头一局建；之后两颗
+   * 《再来一局》开的局都不建，建过的拆掉。不复用 dealt：那是给种子用的。
+   */
+  let coachDealt = false;
 
   /**
    * 结算页上替他指路：《分享》先亮三个来回，然后换《首页》一直亮着。
@@ -901,6 +909,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 规则发牌（散场转单人之后的《再来一局》用的仍是 'room' 那串，也挡在这儿）。
     runPro = !!hooks.proAllowed && proOn() && !hooks.practice && (!seedRun || seedRun.source === 'random');
     const appEl = refs.root.querySelector('.app--game');
+    // 教学只活在一局里（站长 10-22）：这一次挂载的第二局起（两颗《再来一局》都走这儿），教学条、一句话提示、
+    // 呼吸灯、has-coach 排版一起撤掉。原先教学条在这儿 reset() 回到第 1 条、一句话提示一直摆到离开。
+    if (coachDealt && (coach || coachTip)) {
+      hooks.coachGlowCancel?.();
+      hooks.coachGlow?.(null);
+      coach?.destroy();
+      coach = null;
+      coachTip?.destroy();
+      coachTip = null;
+      refs.patternBlockEl.classList.remove('coach-glow-block');
+      appEl?.classList.remove('has-coach');
+    }
     // 不用 toggleAttribute：Chrome 61 没有（这个文件也打进小红书的包）。
     if (runPro) appEl?.setAttribute('data-pro-run', '1');
     else appEl?.removeAttribute('data-pro-run');
@@ -959,15 +979,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     stopLeading();
     refs.endOverlay.classList.remove('show');
     refs.pauseOverlay.classList.remove('show');
-    // 教学条跟着新的一局从第 1 条重来。第一次开局时才真的建出来——建在开局
-    // 页还盖着的时候没有意义，玩家根本看不见它。
-    if (hooks.coach && refs.coachEl) {
+    // 教学只活在一局里（站长 10-22）：这一次挂载的头一局才建（第二局起上面那一段已经拆掉了）。第一次开局时
+    // 才真的建出来——建在开局页还盖着的时候没有意义，玩家根本看不见它。
+    if (hooks.coach && refs.coachEl && !coachDealt) {
+      coachDealt = true;
       if (hooks.coachTip) {
-        // 一句提示：只在真正的第一局摆一次。再来一局的人已经看过了，再摆一
-        // 遍是把同一句话说第二次。
-        if (!coachTip) coachTip = mountCoachTip(refs.coachEl, hooks.coachTip.text, hooks.coachTip.art);
-      } else if (coach) coach.reset();
-      else {
+        coachTip = mountCoachTip(refs.coachEl, hooks.coachTip.text, hooks.coachTip.art);
+      } else {
         coach = guardObj('coachBar', mountCoachBar(refs.coachEl, {
           lang: hooks.lang,
           shape: hooks.coachShape ?? 'circle',
@@ -2022,8 +2040,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 一局》之后还是 1，结算页那颗之后才变 2。
    */
   const restartRun = () => {
-    if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
-    newGame();
+    if (hooks.practice || !refs.recount) {
+      if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
+      newGame();
+      return;
+    }
+    // 《再来一局》也先数 4-3-2-1（10-31 整合版 Z-C05，D35 甲：所有玩法；原先第一局有倒数、重开没有，钟立刻走——小球
+    // 计时 60 秒，那 3 秒就占 5%）。数完替玩家按 #startBtn：game_start 由那颗键的回调报，这儿不报（免得报两条）；
+    // newGame 也在那颗键的回调里调（拆教学、守望都在 newGame 里，不用另接）。started = false 期间暂停键不理
+    // （doPause 有 !started 守卫），返回键按「开局页 = 那颗《<》」处理（离开这一局）。
+    started = false;
+    timer.stop();
+    cancelBeat();
+    paused = false;
+    stopLeading();
+    refs.endOverlay.classList.remove('show');
+    refs.pauseOverlay.classList.remove('show');
+    refs.recount();
   };
   refs.buttons.restart.addEventListener('click', () => {
     // 《再来一局》也是开一局，也要报一条 game_start。

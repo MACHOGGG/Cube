@@ -56,6 +56,8 @@
  *   7. 交卷回 400 implausible（route 拦下来答）：结算页 #endDailyNote 说「本局未上传到云端，本机记录照常保留」。
  *   8. 暂停面板里的《再来一局》也报一条开局统计（10-15 补充 S8）：用 slides_analytics_games 量，开局 1 → 暂停里再来
  *      一局 2 → 结算页再来一局 3。原先暂停面板那颗直接 newGame，之后还是 1。
+ *   9. 《再来一局》也先数 4-3-2-1（10-31 方案推06 Z-C05，D35 甲）：计时方块结算 →《再来一局》→ #startOverlay.show、
+ *      数着的那 3 秒钟不动、数完才走；暂停面板《再来一局》→ 确认，同样。原先重开直接 newGame，钟当场就走。
  *
  * 得分那一步是读屏自己找的：读出每一枚的颜色和面，按「同色连着 ≥ N、碰到滑过的线、至少一枚色块」（和
  * check-coach-aim 那份对照同一条规矩）找一步就得分的滑法；没有就先走一步不得分的、让下一步能得分的。
@@ -63,6 +65,7 @@
  */
 import { chromium } from 'playwright';
 import { vetRun } from '../api/_maxscore.js';
+import { afterRestart } from './lib/afterRestart.mjs';
 
 // 收端口号（老写法）或者整个地址（ci-browser.mjs 给的是地址）。
 const arg = process.argv[2] || '8971';
@@ -547,20 +550,67 @@ for (const { flip, delayMs, scoreFirst } of [
   await q.evaluate(() => document.getElementById('pauseRestartBtn').click());
   await q.waitForSelector('#restartYes', { timeout: 8000 });
   await q.evaluate(() => document.getElementById('restartYes').click());
-  await q.waitForTimeout(1500);
+  // 重开先数 4-3-2-1（10-31 方案推06 Z-C05），开局统计在数完、#startBtn 按下去那一下才报——真等它数完。
+  await afterRestart(q);
   const g2 = await games();
   await q.evaluate(() => document.getElementById('stopBtn').click());
   await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
   await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
   await q.waitForSelector('#endOverlay.show', { timeout: 15000 });
   await q.evaluate(() => document.getElementById('restartBtn').click());
-  await q.waitForTimeout(1500);
+  await afterRestart(q);
   const g3 = await games();
   check('8 开局报一条：1', g1 === 1, String(g1));
   check('8 暂停面板里的《再来一局》也报一条：2', g2 === 2, String(g2));
   check('8 结算页的《再来一局》照旧报一条：3', g3 === 3, String(g3));
   check('8 零报错', e8.length === 0, e8.slice(0, 2).join(' | '));
   await c8.close();
+}
+
+// ---------------------------------------------------------------------------
+// 9. 《再来一局》也先数 4-3-2-1（10-31 方案推06 Z-C05，D35 甲）
+// ---------------------------------------------------------------------------
+{
+  const c9 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c9.addInitScript(seed);
+  const q = await c9.newPage();
+  const e9 = [];
+  q.on('pageerror', (e) => e9.push(String(e)));
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await q.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  await openSquare(q, true);
+  const pill = () => q.$eval('#timerPill', (e) => (e.textContent || '').trim()).catch(() => '');
+  const counting = () => q.evaluate(() => !!document.querySelector('#startOverlay.show'));
+  /** 按下某一颗《再来一局》之后：那一页挂上、数着的时候钟不动、数完才走。 */
+  const measure = async (tag) => {
+    const shown = await counting();
+    const a = await pill();
+    await q.waitForTimeout(3000);
+    const b = await pill();
+    const still = await counting();
+    check(`9 ${tag}：先回到倒数那一页（#startOverlay.show）`, shown);
+    check(`9 ${tag}：数着的那 3 秒钟不动`, a !== '' && a === b && still, `${a} → ${b}${still ? '' : '（3 秒内就数完了）'}`);
+    await afterRestart(q);
+    const c = await pill();
+    await q.waitForTimeout(2200);
+    const d = await pill();
+    check(`9 ${tag}：数完之后钟才走`, secs(c) - secs(d) > 0, `${c} → ${d}`);
+    check(`9 ${tag}：新的一局从满钟起（1:40 往下）`, secs(c) >= 97, c);
+  };
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
+  await q.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await q.evaluate(() => document.getElementById('restartBtn').click());
+  await measure('结算页《再来一局》');
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseRestartBtn').click());
+  await q.waitForSelector('#restartYes', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('restartYes').click());
+  await measure('暂停面板《再来一局》');
+  check('9 零报错', e9.length === 0, e9.slice(0, 2).join(' | '));
+  await c9.close();
 }
 
 await browser.close();

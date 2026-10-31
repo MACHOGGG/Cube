@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 8;
+export const RELEASE = 9;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -70,6 +70,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '改進：教學跟著棋盤走',
     en: 'Tutorial tips now follow your board',
     fr: 'Le tutoriel suit votre plateau',
+  },
+  // 10-31 方案推06（Z-C04、Z-C05）：教学只活在一局里、走到结算页才记看过；所有玩法《再来一局》都先倒数。
+  9: {
+    zhHans: '再来一局也有倒数',
+    zhHant: '再來一局也有倒數',
+    en: 'Play again now counts down first',
+    fr: 'Rejouer lance un compte à rebours',
   },
 };
 

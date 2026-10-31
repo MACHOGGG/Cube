@@ -776,6 +776,14 @@ export const GATES = [
     shard: 'g', secs: 440, port: 8938,
     run: ['scripts/check-cvd-texture.mjs', SERVER],
   },
+  // 首玩记号走到结算页才写（10-31 方案推06 Z-C04，站长 10-14 J-2、10-22 Q1）：倒数中《<》/ 返回 / 刷新、打到一半
+  // 刷新都不写 slides_played_square、slides_tutorial_seen、slides_cvd_offer，再点方块教学条照旧；走到结算页才写、方块
+  // 熄光；两个页面共用一份存储时，另一页的主菜单当场撤掉拦截。什么键都不预设。
+  {
+    name: '首玩记号走到结算页才写，另一页跟上',
+    shard: 'g', secs: 120, port: 8939,
+    run: ['scripts/check-first-play-burn.mjs', SERVER],
+  },
 ];
 
 /** 清单本身的毛病（check-ci-browser 调它）：片名不认识、端口撞了、脚本不在、地址给了却没服务器…… */

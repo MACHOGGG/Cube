@@ -24,6 +24,7 @@
  * 假），但这个数照记，所以在这儿量它既准确又不用去截网络请求。
  */
 import { chromium } from 'playwright';
+import { afterRestart } from './lib/afterRestart.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8818/';
 const KEY = 'slides_analytics_games';
@@ -66,7 +67,8 @@ check('头一局：终身局数记成 1（所以这一局的 first 是真）', (
 for (const n of [2, 3]) {
   await page.evaluate(() => document.getElementById('endOverlay').classList.add('show'));
   await page.click('#restartBtn');
-  await page.waitForTimeout(700);
+  // 《再来一局》先数 4-3-2-1（10-31 方案推06 Z-C05），这一局的数在数完、#startBtn 按下去时才记。这道门不量倒数。
+  await afterRestart(page, { skip: true });
   check(`按第 ${n - 1} 次《再来一局》：记成 ${n}（不再是第一局了）`, (await games()) === String(n), String(await games()));
 }
 check('《再来一局》真的重开了一盘棋', (await page.$$('#boardWrap .tile')).length > 0);

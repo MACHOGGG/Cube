@@ -34,6 +34,7 @@
  */
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
+import { afterRestart } from './lib/afterRestart.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -229,7 +230,8 @@ async function finish(page) {
 async function again(page) {
   await page.$eval('#restartBtn', (e) => e.click());
   await page.waitForFunction(() => !document.getElementById('endOverlay')?.classList.contains('show'), null, { timeout: 10000 });
-  await page.waitForTimeout(500);
+  // 重开先数 4-3-2-1（10-31 方案推06 Z-C05），数完才是新的一局；这道门不量倒数，直接跳过。
+  await afterRestart(page, { skip: true });
 }
 const endHint = (page) => page.evaluate((key) => {
   const el = document.getElementById('endSignHint');

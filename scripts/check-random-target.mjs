@@ -20,6 +20,11 @@
  * 另外看住没开通的那一份：页面照样打得开、图形照样画出来，只是按下去开的是
  * 订阅那扇窗，不是一局游戏——这是玩家自己定的规矩（做好了的东西谁都点得进
  * 来看）。
+ *
+ * 末一段（10-31 方案推06 Z-C05 ②，站长 10-30、10-31）：老虎机局《再来一局》也先倒数，而且和第一局一个样子——
+ * 倒数窗先挂 cd-window--waiting、轮子从头转一遍（上一次停稳的记号摘掉），两个轮子停稳才露面、从 5 数起；单人局
+ * 停在**重新抽的**目标上（站长 10-31：「重新随机一个新目标」，所以不断言和上一局同一个），HUD 那一块认的就是这一
+ * 次停下来的那一个；转到一半按《<》能退、不会被数完的倒数拽回局里。
  */
 import { chromium } from 'playwright';
 
@@ -356,6 +361,60 @@ for (const fam of FAMILIES) {
   } else {
     check(`${fam.name}：不是这个玩法自己那一套 1×N`, true, `HUD ${FMT(drawn)} · 基础 ${FMT(plain)}`);
   }
+  // ---- 《再来一局》：轮子再转一遍，停稳了才数（10-31 方案推06 Z-C05 ②）----
+  const endRun = async () => {
+    await page.$eval('#stopBtn', (e) => e.click());
+    await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await page.$eval('#pauseFinishBtn', (e) => e.click());
+    await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+    await page.waitForTimeout(400);
+  };
+  await endRun();
+  await page.evaluate(() => {
+    const w = window;
+    w.__stops2 = [];
+    for (const [i, r] of [...document.querySelectorAll('#startOverlay .slot-reel')].entries()) {
+      new MutationObserver(() => {
+        if (r.classList.contains('slot-reel--set') && !w.__stops2.includes(i)) w.__stops2.push(i);
+      }).observe(r, { attributes: true, attributeFilter: ['class'] });
+    }
+  });
+  await page.$eval('#restartBtn', (e) => e.click());
+  await page.waitForTimeout(150);
+  const re0 = await page.evaluate(() => ({
+    shown: !!document.querySelector('#startOverlay.show'),
+    waiting: !!document.querySelector('#startCount.cd-window--waiting'),
+    countHidden: getComputedStyle(document.getElementById('startCount')).visibility === 'hidden',
+    digits: document.querySelectorAll('#startCount .cd-digit').length,
+    set: document.querySelectorAll('#startOverlay .slot-reel--set').length,
+  }));
+  check(`${fam.name}·重开：先回到开局页（#startOverlay.show）`, re0.shown);
+  check(`${fam.name}·重开：倒数窗先挂 cd-window--waiting、还没露面`, re0.waiting && re0.countHidden && re0.digits === 0, JSON.stringify(re0));
+  check(`${fam.name}·重开：轮子从头转（上一次停稳的记号摘掉了）`, re0.set === 0, `${re0.set} 个还挂着 slot-reel--set`);
+  await page.waitForFunction(() => document.querySelectorAll('#startOverlay .slot-reel--set').length >= 2, { timeout: 8000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelector('#startCount .cd-digit'), { timeout: 4000 }).catch(() => {});
+  const re1 = await page.evaluate(() => ({
+    stops: window.__stops2.length,
+    digit: document.querySelector('#startCount .cd-digit')?.textContent,
+    shown: getComputedStyle(document.getElementById('startCount')).visibility !== 'hidden',
+  }));
+  check(`${fam.name}·重开：两个轮子又停了一遍，停稳之后才露面、从 5 起`, re1.stops === 2 && re1.digit === '5' && re1.shown, JSON.stringify(re1));
+  const spun2 = await page.evaluate(() => window.__probe.reel(0));
+  await page.waitForFunction(() => !document.querySelector('#startOverlay.show'), null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(700);
+  const drawn2 = await page.evaluate(() => window.__probe.hud());
+  check(`${fam.name}·重开：盘上认的就是这一次轮子停下来的那一个（单人局重新抽，可能和上一局不同）`,
+    SAME(drawn2, spun2) && Boolean(drawn2?.target), `HUD ${FMT(drawn2)} · 轮子 ${FMT(spun2)}`);
+  // 转到一半按《<》：离开这一局，回挑图形那一页；之后不许被数完的倒数拽回局里。
+  await endRun();
+  await page.$eval('#restartBtn', (e) => e.click());
+  await page.waitForTimeout(400);
+  await page.$eval('#startBackBtn', (e) => e.click());
+  const left = await page.waitForSelector('.slot-pick-opt', { timeout: 8000 }).then(() => true).catch(() => false);
+  check(`${fam.name}·重开：转到一半按《<》回挑图形那一页`, left);
+  await page.waitForTimeout(7000);
+  check(`${fam.name}·重开：按了《<》之后不会被拽回局里`, !(await page.$('.app--game')));
+
   check(`${fam.name}：一路没报错`, errors.length === 0, errors[0] || '');
   await ctx.close();
 }

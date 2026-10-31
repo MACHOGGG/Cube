@@ -15,6 +15,7 @@
  *      和它的战绩图在上，这一局单人的结算和它自己那张图在下。
  */
 import { chromium } from 'playwright';
+import { afterRestart } from './lib/afterRestart.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -229,6 +230,8 @@ const code = await openRoom(A.page, '甲');
   // 《再来》重开的是棋盘，不重画底下那一排——转单人那一下撤掉的《完成》不会
   // 自己回来，所以这一局也走《暂停》→《结束这一局》（同上面那一段）。
   await C.page.evaluate(() => document.getElementById('restartBtn')?.click());
+  // 重开先数 4-3-2-1（10-31 方案推06 Z-C05）：数完之前《暂停》不理，下面那一下 #stopBtn 会扑空。这道门不量倒数。
+  await afterRestart(C.page, { skip: true });
   await boardUp(C.page);
   await C.page.click('#stopBtn');
   await C.page.click('#pauseFinishBtn');

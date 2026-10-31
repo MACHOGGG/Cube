@@ -33,6 +33,7 @@
  * 上，量的还是同一件事。（check-knowhow 先踩过同一个坑。）
  */
 import { chromium } from 'playwright';
+import { afterRestart } from './lib/afterRestart.mjs';
 const BASE = process.argv[2] || 'http://localhost:8976/';
 /**
  * 屏幕多大。默认手机竖屏；给 `1440x900` 就整套在电脑宽屏上跑一遍（第 14 推：宽屏那一
@@ -185,6 +186,65 @@ check('第 1 步只摆第 1 条（一步一条）', coach.rows.length === 1, JSO
 // 2026-10-29 站长换成自己的原话，10-31 起教学条句末一律不带句号（10-31 整合版 Z-C01、附录甲 §18）。
 check('第 1 条就是站长原话那一句',
   coach.rows[0] === '同色的色块或星星连起得分图案可以得分', coach.rows[0]);
+
+// ── 教学只活在一局里（10-31 方案推06 Z-C04，站长 10-22）────────────────────────
+//
+// 「每一局游戏都是从结算页面时结束，因此教学内容结算后点击再来一次之后就不再是教学内容了」。原先两颗《再来一局》
+// 都把条子拨回第 1 条（coach.reset()）、一句话提示一直摆到离开、has-coach 一直挂着。两颗键各量一遍，一句话提示也
+// 量一遍。量的是倒数数完、新的一局真开起来之后的样子（重开也先数 4-3-2-1，Z-C05）。
+/** 暂停 →《结束游戏》→ 结算页。 */
+const finishRun = async () => {
+  await page.$eval('#stopBtn', (e) => e.click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.$eval('#pauseFinishBtn', (e) => e.click());
+  await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await page.waitForTimeout(400);
+};
+const coachGone = () => page.evaluate(() => {
+  const b = document.querySelector('.coach-bar');
+  return { hidden: !b || b.hidden, text: (b?.textContent || '').trim(), hasCoach: !!document.querySelector('.app--game.has-coach') };
+});
+const checkGone = (tag, g) => {
+  check(`${tag}：下一局没有教学条（hidden、空的）`, g.hidden && g.text === '', JSON.stringify(g));
+  check(`${tag}：.app--game 上不再有 has-coach（排版回到平时那一档）`, !g.hasCoach, JSON.stringify(g));
+};
+await finishRun();
+await page.$eval('#restartBtn', (e) => e.click());
+await afterRestart(page);
+checkGone('结算页《再来一局》', await coachGone());
+// 另起一局：还是头一回（上一局走到结算页只记了小球，这回点方块就是「第二副基础棋盘」那一路，条子要等星星够了才开口，
+// 量不准「有没有」）——所以清掉重来，再点一次小球。
+await page.evaluate(() => { localStorage.clear(); localStorage.setItem('slides_lang', 'zhHans'); });
+await page.goto(BASE, { waitUntil: 'load' });
+await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+await page.$eval('.home-icon-btn[aria-label="经典小球"]', (e) => e.click());
+await page.waitForSelector('.coach-bar:not([hidden])', { timeout: 25000 });
+check('（尺子）另起的这一局头一局有教学条', !!(await page.$('.app--game.has-coach')));
+await page.$eval('#stopBtn', (e) => e.click());
+await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+await page.$eval('#pauseRestartBtn', (e) => e.click());
+await page.waitForSelector('#restartYes', { timeout: 8000 });
+await page.$eval('#restartYes', (e) => e.click());
+await afterRestart(page);
+checkGone('暂停面板《再来一局》', await coachGone());
+// 一句话提示：计时挑战（免费的，首玩锁撤了才点得开）。
+await page.evaluate(() => {
+  localStorage.clear();
+  localStorage.setItem('slides_lang', 'zhHans');
+  for (const k of ['square', 'circle']) localStorage.setItem('slides_played_' + k, '1');
+});
+await page.goto(BASE, { waitUntil: 'load' });
+await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+await page.$eval('.home-icon-btn[aria-label^="计时挑战"]', (e) => e.click());
+await page.waitForSelector('.timed-page #timedShapes', { timeout: 20000 });
+await page.$eval('#timedShapes .slot-pick-opt[data-family="square"]', (e) => e.click());
+await page.waitForSelector('.coach-bar:not([hidden])', { timeout: 25000 });
+const tip0 = await coachGone();
+check('（尺子）计时头一局摆着那一句话提示', !tip0.hidden && tip0.text !== '' && tip0.hasCoach, JSON.stringify(tip0));
+await finishRun();
+await page.$eval('#restartBtn', (e) => e.click());
+await afterRestart(page);
+checkGone('一句话提示（计时）结算页《再来一局》', await coachGone());
 
 // ── 三角那圈灰边 ──────────────────────────────────────────────────────
 //

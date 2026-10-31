@@ -19,6 +19,10 @@
  *   · 今日那一局（图）和输代号那一局（那串码）两条路都量；那串码在那一格里居中。
  *
  * 手机两档、电脑一档。
+ *
+ * 末一节（10-31 方案推06 Z-C05 ①，站长 10-30）：每日挑战页开的局（今日那一局、输代号那一局）《再来一局》也先数，
+ * 倒数页和那一页第一次数的时候一模一样——上半屏是同一张图（innerHTML 去掉 id 逐字比）、数一样多下、不转老虎机
+ * 轮子（cd-window--waiting 一下都不出现）；数着的时候按《<》回每日挑战页。手机 390×844 一档。
  */
 import { chromium } from 'playwright';
 import * as SC from '../api/_seedcode.js';
@@ -140,6 +144,75 @@ for (const [w, h, label] of [[390, 844, '手机 390×844'], [360, 640, '手机 3
     near(base.cd, coded.cd, ['x', 'y', 'w', 'h']) && near(base.back, coded.back, ['w', 'h', 'y', 'bottomGap']) && coded.backIsStartAct && !coded.pageExit,
     `倒数窗 ${fmt(coded.cd)} ｜ 《退出》 ${fmt(coded.back)}`);
   check(`${label}：全程零报错`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+// ── 每日挑战页开的局重开（10-31 方案推06 Z-C05 ①）────────────────────────────────
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(SEED);
+  const errs = [];
+  /** 倒数窗里此刻摆着的最大那个数（数字一个一个推进来，旧的还在退场时会同时有两个）。 */
+  const maxDigit = (sel) => `Math.max(0, ...[...(document.querySelector('${sel}')?.textContent || '')].filter((c) => /[0-9]/.test(c)).map(Number))`;
+  /** emblem 那一块（去掉 id 再比）。 */
+  const EMBLEM = (sel) => `(document.querySelector('${sel} .start-emblem')?.innerHTML || '').replace(/ id="[^"]*"/g, '')`;
+  for (const route of ['今日那一局', '输代号那一局']) {
+    const p = await ctx.newPage();
+    p.on('pageerror', (e) => errs.push(String(e)));
+    await p.goto(BASE);
+    await p.waitForSelector('.home-icon-btn', { timeout: 20000 });
+    await p.waitForTimeout(400);
+    await p.click('.home-icon-btn--daily');
+    if (route === '今日那一局') {
+      await p.waitForSelector('#dailyPlay', { timeout: 10000 });
+      await p.click('#dailyPlay');
+    } else {
+      await p.waitForSelector('#seedInput', { timeout: 10000 });
+      await p.fill('#seedInput', CODE.slice(0, 4) + '-' + CODE.slice(4));
+      await p.click('#seedGo');
+    }
+    await p.waitForSelector('.daily-page--count', { timeout: 5000 });
+    await p.waitForTimeout(150);
+    const first = await p.evaluate(`({ emblem: ${EMBLEM('.daily-page--count')}, from: ${maxDigit('#dailyCount')} })`);
+    // 那一页数完挂上棋盘（noCountdown），开打。
+    await p.waitForFunction(() => !!document.querySelector('.app--game') && !document.querySelector('#startOverlay.show'), null, { timeout: 15000 });
+    await p.waitForTimeout(600);
+    await p.$eval('#stopBtn', (e) => e.click());
+    await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await p.$eval('#pauseFinishBtn', (e) => e.click());
+    await p.waitForSelector('#endOverlay.show', { timeout: 15000 });
+    await p.waitForTimeout(300);
+    // 数的时候一直盯着倒数窗有没有挂过 cd-window--waiting（老虎机那一幕「先转轮子、倒数先不露面」的记号）。
+    await p.evaluate(() => {
+      window.__waited = false;
+      window.__watch = window.setInterval(() => {
+        if (document.querySelector('#startOverlay .cd-window--waiting')) window.__waited = true;
+      }, 30);
+    });
+    await p.$eval('#restartBtn', (e) => e.click());
+    await p.waitForTimeout(150);
+    const again = await p.evaluate(`({ shown: !!document.querySelector('#startOverlay.show'), emblem: ${EMBLEM('#startOverlay')}, from: ${maxDigit('#startCount')}, dailyArt: !!document.querySelector('#startOverlay .daily-emblem') })`);
+    check(`重开·${route}：先回到倒数那一页（#startOverlay.show）`, again.shown);
+    check(`重开·${route}：上半屏是那一页那一块（.daily-emblem）`, again.dailyArt);
+    check(`重开·${route}：上半屏和每日挑战页那一次逐字相同（去掉 id）`, first.emblem !== '' && again.emblem === first.emblem,
+      `${first.emblem.slice(0, 60)} ｜ ${again.emblem.slice(0, 60)}`);
+    check(`重开·${route}：数的下数和那一页一样（${first.from} 下）`, first.from >= 3 && again.from === first.from, `那一页 ${first.from} ｜ 重开 ${again.from}`);
+    if (route === '今日那一局') {
+      await p.waitForFunction(() => !document.querySelector('#startOverlay.show'), null, { timeout: 15000 }).catch(() => {});
+      const waited = await p.evaluate(() => { window.clearInterval(window.__watch); return window.__waited; });
+      check(`重开·${route}：没有转轮子（cd-window--waiting 一下都没出现）`, !waited);
+      check(`重开·${route}：数完开打了`, !(await p.$('#startOverlay.show')) && !!(await p.$('.app--game')));
+    } else {
+      // 数着的时候按《<》：离开这一局，回每日挑战页。
+      await p.$eval('#startBackBtn', (e) => e.click());
+      const backHome = await p.waitForSelector('.daily-page #seedInput, .daily-page #dailyPlay', { timeout: 8000 }).then(() => true).catch(() => false);
+      check(`重开·${route}：数着的时候按《<》回每日挑战页`, backHome);
+      await p.waitForTimeout(5000);
+      check(`重开·${route}：按了《<》之后不会被数完的倒数拽回局里`, !(await p.$('.app--game')));
+    }
+    await p.close();
+  }
+  check('重开那一节：全程零报错', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 

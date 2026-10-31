@@ -622,18 +622,27 @@ function teardown() {
 }
 
 /**
+ * 这一局的「看过」记号，排着等它走到结算页（站长 10-22 Q1，D80）。tipFor / basicCoach 往里放，
+ * showGame 一进来整份拿走，这一局 onLive(false) 时写掉；没走到结算页就随这一局一起丢了。
+ */
+let pendingMarks: (() => void)[] = [];
+
+/**
  * 头一回进这个玩法时，摊进开局那个大 opts 里的那一小撮字段。
  *
  * 五个玩法各有一句话，说的都是「这个玩法在基础规则上加的那一层」——炸弹为什
  * 么炸、反面为什么又翻回来、这一局的得分图案是随机的、头上那个数字在倒着
  * 走、这副棋盘换了摆法但规矩没变。摆一整局，不定时走掉（玩家定的）；第二回
- * 再进来就没有了，想再看去《暂停》和信息栏的《教学》里找。
+ * 再进来就没有了，同一次挂载里的《再来一局》也没有（教学只活在一局里，站长 10-22），想再看去《暂停》
+ * 和信息栏的《教学》里找。
  *
  * 不是头一回就返回空对象，什么也不加。
  */
 function tipFor(kind: PlayKey, make: () => { text: string; art: string }): ShapeGameOpts {
   if (!firstTimeIn(kind)) return {};
-  markOpened(kind);
+  // 记号不在点卡这一刻写，等这一局走到结算页（showGame 的 onLive(false)）：倒数中退出、打到一半退出、
+  // 整页刷新都不算看过（站长 10-22 Q1）。
+  pendingMarks.push(() => markOpened(kind));
   return { coach: true, coachTip: make() };
 }
 
@@ -656,14 +665,16 @@ function tipFor(kind: PlayKey, make: () => { text: string; art: string }): Shape
 function basicCoach(id: string): ShapeGameOpts {
   const key: 'square' | 'circle' | null = id === 'square' ? 'square' : id === 'circle' ? 'circle' : null;
   if (!key || !firstTimeIn(key)) return {};
-  // 先记下来再开局：这一局打到一半退出去，主菜单上这张卡也该熄了——他已经
-  // 进去看过一遍了，光该让给还没点过的那一张。
   const firstOne = BASIC_KEYS.every((k) => firstTimeIn(k));
-  markOpened(key);
-  // 那一族的分镜也一并记成「看过」。这一局的规矩他是靠教学条学的，学的是同
-  // 一批内容；不记的话，第二次点开这张卡（那时候没有教学条了）反而会被那段
-  // 动画拦一次——「意料之外的界面」。想重看的人去《教学》里找得到。
-  markTutorialSeen(key);
+  // 记号等这一局走到结算页才写（showGame 的 onLive(false)，站长 10-22 Q1）。原先点卡那一刻就写：倒数中
+  // 退出、打到一半退出，首玩记号就被用掉了，下次进来没有教学（站长 10-14 J-2「有新手拦截但点开后没有新
+  // 手教学」的一条来路）。
+  // 那一族的分镜也一并记成「看过」：这一局的规矩他是靠教学条学的，学的是同一批内容；不记的话，第二次
+  // 点开这张卡（那时候没有教学条了）反而会被那段动画拦一次——「意料之外的界面」。
+  pendingMarks.push(() => {
+    markOpened(key);
+    markTutorialSeen(key);
+  });
   return { coach: true, coachPlan: firstOne ? 'first' : 'second' };
 }
 
@@ -745,6 +756,7 @@ function showMenu() {
     // 炸弹那张卡：整页（ui/bombMode.ts，10-08 方案 3-G），和计时那几页一样包一层 softSwap。
     onBombMode: () => softSwap(showBombMode),
   }, currentLang);
+  menuMarks = menuMarksNow();
   setNavTab(null);
   paintRoomHostBanner();
   wireHomeTitle();
@@ -758,6 +770,28 @@ function showMenu() {
   // 改成了整页，炸弹是最后一扇（10-08 方案 3-G）——整页的那一局返回直接回那一页（showGame 的
   // onBack），这一段连同那个变量一起撤了。
 }
+
+/**
+ * 主菜单跟上别处写下的首玩记号（10-31 方案推06 Z-C04 ④，站长 10-14 J-2 ②）。
+ *
+ * 同一份存储开着两个页面（微信里点开一次、浏览器里又开一次）：一页打到结算页写了「看过」，另一页的主菜单
+ * 还画着拦截和那圈光——点进去就是「有新手拦截但点开后没有新手教学」。所以记号一变、这一页又正摆着主菜单
+ * （而且不是屋主在替整屋挑玩法），就地重画一遍。重画会再报一次 trackScreen('menu')，和《我会玩》那里一样。
+ */
+const MENU_MARK_KEY = /^(slides_played_|slides_tutorial_seen|slides_know_how$)/;
+/** 画主菜单那一刻的首玩锁和那圈光（visibilitychange 那条兜底比的就是这一份）。 */
+const menuMarksNow = () => JSON.stringify([lockedForFirstPlay(), glowingBasics()]);
+let menuMarks = '';
+window.addEventListener('storage', (e) => {
+  // key 为 null 是另一页 localStorage.clear()：记号也跟着没了。
+  if (e.key !== null && !MENU_MARK_KEY.test(e.key)) return;
+  if (onMenuPage() && !pickingForRoom) showMenu();
+});
+// iOS 不同 WKWebView 之间派不派 storage 事件静态核实不了：切回来时再比一次，不一样就重画（兜底）。
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (onMenuPage() && !pickingForRoom && menuMarksNow() !== menuMarks) showMenu();
+});
 
 // The home page is built in one of two shapes — two columns on a phone,
 // three centred rows on a wide screen — and which one is decided once, when
@@ -913,7 +947,7 @@ function seedLocked(g: SeedGame): boolean {
  * 学（和从主菜单那条路进来是同一个 tipFor / basicCoach——这一局就是那个玩法），和
  * `noCountdown`（那一页已经数过 4-3-2-1 了）。打完回那一页。
  */
-function launchSeedGame(g: SeedGame) {
+function launchSeedGame(g: SeedGame, stage: { emblem: string; from: number }) {
   const game = everyGame.find((x) => x.card.id === g.board);
   if (!game) return showDailyMode();
   const v = g.variant;
@@ -934,7 +968,8 @@ function launchSeedGame(g: SeedGame) {
               : tipFor('bomb', () => bombTip(currentLang, tipShape(g.board)));
   // proAllowed: false 写在 teach 后面（10-15 补充 S10）：每日挑战、输代号的局一律照普通规则发牌，开着 Pro 也不用——
   // 同一串代号在谁手里都得是同一副牌。
-  showGame(game, { ...g.opts, ...teach, noCountdown: true, proAllowed: false }, showDailyMode);
+  // dailyStage（10-31 方案推06 Z-C05 ①）：《再来一局》的倒数页照那一页第一次数的样子摆——同一张图、数一样多下。
+  showGame(game, { ...g.opts, ...teach, noCountdown: true, dailyStage: stage, proAllowed: false }, showDailyMode);
 }
 
 /**
@@ -1480,6 +1515,9 @@ function randomTargetGame(family: Family): ShapeGame {
 
 
 function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
+  // 这一局的「看过」记号（tipFor / basicCoach 刚放进去的）。opts 是调这儿之前刚算好的，所以这一份正是这一局的。
+  const marks = pendingMarks;
+  pendingMarks = [];
   // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
   // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
   const fullOpts: ShapeGameOpts = {
@@ -1492,9 +1530,14 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
     signInHint: () => wantsSignInHint(signedIn(), localRunCount),
     // 「离开此网站？」只在这一局开着时问（10-11 方案 B-10）：结算就不问了，《再来一局》又问——那一下走的是
     // 控制器自己的 newGame，不经过这个文件，所以由控制器来报。
+    // basicCoach / tipFor 不往 opts 里放 onLive——放了会把这一句盖掉，记号就永远写不下去。
     onLive: (live) => {
       gameInProgress = live;
-      if (!live) lastGameEndAt = Date.now();
+      if (!live) {
+        lastGameEndAt = Date.now();
+        // 这一局走到结算页了：教学 / 一句话提示算看过（站长 10-22 Q1）。只写一次。
+        for (const m of marks.splice(0)) m();
+      }
     },
     // 单人局可以用《Pro》的固定翻色（10-15 补充 S10）。写在 ...opts 前面：每日挑战、输代号那一条
     // （launchSeedGame）显式给 false，要盖得过这一句。

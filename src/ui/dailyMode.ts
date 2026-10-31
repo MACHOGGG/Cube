@@ -44,8 +44,11 @@ const DAILY_COUNT_FROM = 4;
 
 export interface DailyModeHandlers {
   onBack: () => void;
-  /** 数完了：把这一局挂上去（外面那一层加 lang、教学、noCountdown）。 */
-  onLaunch: (game: SeedGame) => void;
+  /**
+   * 数完了：把这一局挂上去（外面那一层加 lang、教学、noCountdown）。`stage` 是这一页刚才数的时候上半屏那一块和数的
+   * 那个数——那一局《再来一局》时游戏外壳的倒数页照它摆，和这一页一模一样（10-31 整合版 Z-C05 ①，ShellMeta.dailyStage）。
+   */
+  onLaunch: (game: SeedGame, stage: { emblem: string; from: number }) => void;
   /**
    * 「现在」——网页端是服务器的钟（engine/dailyClock.ts 的 dailyNow），小红书是本机的钟。
    * 今天是哪一天、今天那串码是什么，全从它算。
@@ -70,8 +73,11 @@ export interface DailyModeHandlers {
   boardNote?: boolean;
 }
 
-/** 七色圆球那一天、竖着拿着手机：倒数底下请他转过来（不拦着，见文件头）。电脑（鼠标）不提示。 */
-function needsTurn(board: string): boolean {
+/**
+ * 七色圆球那一天、竖着拿着手机：倒数底下请他转过来（不拦着，见文件头）。电脑（鼠标）不提示。
+ * 游戏外壳也问它：从这一页开的局《再来一局》时，重开的倒数页上摆不摆色盲开关照这一页这一句（10-31 整合版 Z-C05 ③）。
+ */
+export function needsTurn(board: string): boolean {
   // 哪几副要横着打，问 startStage 那一份（10-08 方案 3-F-1 删掉了这儿抄的那一份名单）。
   if (!isLandscapeMode(board)) return false;
   return (
@@ -190,15 +196,18 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
     // 第一次倒数页上那颗色盲开关（10-18 补充 M-2）。挂着「请把手机转过来」那一句的这一页不摆、也不记：
     // 竖屏时图和倒数窗已经挤在一起，人也正忙着转手机，留到下一个倒数页。
     const offered = cvdOfferDue() && !turning;
+    const from = turning ? countFrom(game.board) : DAILY_COUNT_FROM;
+    /** 上半屏那一块。重开时交给游戏外壳的那一份不带 id（免得那一页上同一个 id 出现两次）。 */
+    const emblemHtml = (id: string) =>
+      `<div class="start-marks" style="--marks:1"><span class="start-mark">` +
+      `<span class="start-mark-art daily-emblem"${id ? ` id="${id}"` : ''}>${emblem}</span></span></div>`;
     root.innerHTML = `
       <div class="app daily-page daily-page--count">
         <div class="overlay opaque show overlay--start">
           ${startStageHtml({
             mode: game.variant,
             countId: 'dailyCount',
-            emblem:
-              `<div class="start-marks" style="--marks:1"><span class="start-mark">` +
-              `<span class="start-mark-art daily-emblem" id="dailyEmblem">${emblem}</span></span></div>`,
+            emblem: emblemHtml('dailyEmblem'),
             extra: `<p class="daily-turn" id="dailyTurn" hidden>${s.dailyTurn}</p>`,
             offer: offered ? cvdOfferHtml(colorblindOn(), s.colorblindBtn) : undefined,
             actions: `<button class="icon-btn start-act" id="dailyBack" aria-label="${s.back}">${CTL_BACK}</button>`,
@@ -223,8 +232,8 @@ export function renderDailyModePage(root: HTMLElement, lang: Lang, handlers: Dai
       // 摆了色盲开关的那一页数完、真的开打了，才算见过它（10-18 补充 M-2）。
       if (offered) markCvdOfferDone();
       clear();
-      handlers.onLaunch(game);
-    }, turning ? countFrom(game.board) : DAILY_COUNT_FROM);
+      handlers.onLaunch(game, { emblem: emblemHtml(''), from });
+    }, from);
     cleanups.push(() => stopCount?.());
     if (turning) {
       // 数到一半转过来了：那一句撤掉，倒数不受影响。

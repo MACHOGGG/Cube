@@ -193,8 +193,19 @@ function teardown() {
  * 进局」），那是上一版的行为。照着它去「修」代码，就会把玩家否掉的自动播放加
  * 回来，而且 check-story 当场红——那时候人还不知道自己修错了哪一头。
  */
+/**
+ * 这一局的「看过」记号，排着等它走到结算页（10-31 方案推06 Z-C04 ⑤，和网页 src/main.ts 同一个口径，站长
+ * 10-22 Q1）。firstScreen / showSquare / tipFor 往里放，showGame 一进来整份拿走，这一局 onLive(false) 时
+ * 写掉；倒数中退出、打到一半退出、关掉小工具都不写。代价（站长知道）：第一次打开直接进的那一局小球打到
+ * 一半关掉，下次打开还是那一局。
+ */
+let pendingMarks: (() => void)[] = [];
+
 function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
   teardown();
+  // opts 是调这儿之前刚算好的，所以这一份正是这一局的。
+  const marks = pendingMarks;
+  pendingMarks = [];
 
   const mountNow = () => {
     // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
@@ -203,6 +214,11 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
     activeDestroy = game.mount(root, onBack, {
       shouldLeadOut: claimFirstEndcard,
       shouldTeachTotal: claimFirstTotalTip,
+      // 写在 ...opts 前面（和网页一样）；这一端的 opts 里没人放 onLive。
+      onLive: (live) => {
+        // 这一局走到结算页了：教学 / 一句话提示算看过。只写一次。
+        if (!live) for (const m of marks.splice(0)) m();
+      },
       ...opts,
       lang: LANG,
     });
@@ -429,11 +445,14 @@ function firstScreen(): void {
     /* 容器把 localStorage 关了：当老玩家处理，直接进主菜单，别硬按进一局里 */
   }
   if (!first) return showMenu();
-  try {
-    localStorage.setItem(FIRST_RUN_KEY, '1');
-  } catch {
-    /* 存不进去就下次再来一遍，不是什么大事 */
-  }
+  // 这一笔和下面那一笔都等这一局走到结算页才写（见 pendingMarks）。
+  pendingMarks.push(() => {
+    try {
+      localStorage.setItem(FIRST_RUN_KEY, '1');
+    } catch {
+      /* 存不进去就下次再来一遍，不是什么大事 */
+    }
+  });
   // 小球那段分镜在这儿**不放**，直接落进棋盘（玩家定的）：怎么滑，棋盘底下那
   // 块教学条会一条一条说，何况手指按上去就知道了；先看一段没有互动的动画，反
   // 而是把刚点进来的人挡在门外。
@@ -442,7 +461,7 @@ function firstScreen(): void {
   // 了。开局本来就不再自动放分镜（见 showGame），所以这一笔管的是别处——主菜
   // 单要不要压暗其余玩法（basicsDone 读的就是它），以及首玩期那几句提示还认不
   // 认他是新人。方块那一格不动：他还没碰过方块。
-  markStorySeen('circle');
+  pendingMarks.push(() => markStorySeen('circle'));
   // coach：棋盘底下那块教学条（ui/coachBar.ts）。头一局才给——这一局的规矩全
   // 靠它讲。配图用这一版摘掉三角的那一份。
   //
@@ -531,7 +550,7 @@ function showDaily() {
 }
 
 /** 每日挑战那一页数完了：把这一局挂上去（那一页已经数过 4-3-2-1，棋盘这一页不再数）。 */
-function launchSeedGame(g: SeedGame) {
+function launchSeedGame(g: SeedGame, stage: { emblem: string; from: number }) {
   const game = ALL_GAMES.find((x) => x.card.id === g.board);
   if (!game) return showDaily();
   // 头一回进这个玩法的那一句提示，和从主菜单进来是同一个 tipFor——这一局就是那个玩法。这一端
@@ -548,7 +567,8 @@ function launchSeedGame(g: SeedGame) {
           : mode === 'puzzle'
             ? tipFor('puzzle', family)
             : {};
-  showGame(game, { ...g.opts, ...teach, noCountdown: true }, showDaily);
+  // dailyStage（10-31 方案推06 Z-C05 ①）：《再来一局》的倒数页照那一页第一次数的样子摆。
+  showGame(game, { ...g.opts, ...teach, noCountdown: true, dailyStage: stage }, showDaily);
 }
 
 /**
@@ -582,7 +602,8 @@ function dailyBest(day: string): number | null {
  */
 function showSquare(): void {
   const first = firstTimeIn('square');
-  if (first) markOpened('square');
+  // 等这一局走到结算页才记（见 pendingMarks）。
+  if (first) pendingMarks.push(() => markOpened('square'));
   showGame(
     squareGame,
     first ? { coach: true, coachPlan: 'second', coachArt: RULE_ART_SQUARE } : {},
@@ -612,7 +633,8 @@ function tipFor(
   // 对）。走到这儿一定有——showSlot 那边抽好了才开局。真没有就当这一回不算「头
   // 一回」：先检查再 markOpened，不然那面旗子被烧掉了，条子却一次都没摆过。
   if (kind === 'slot' && !target) return {};
-  markOpened(kind);
+  // 等这一局走到结算页才记（见 pendingMarks）。
+  pendingMarks.push(() => markOpened(kind));
   // 这一版只有方块和小球，三角整块不做；真来了个别的就当方块画。
   const shape = family === 'circle' ? 'circle' : 'square';
   const tip =

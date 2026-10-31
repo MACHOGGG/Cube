@@ -231,10 +231,41 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
   const balls = await p.$$eval('#boardWrap .ball', (e) => e.length);
   say(balls > 0, '摆的确实是小球', balls + ' 颗');
   say(await has(p, '.coach-bar'), '棋盘底下那块教学条在');
-  say(
-    (await p.evaluate(() => localStorage.getItem('slides.xhs.story.circle'))) === '1',
-    '小球那把钥匙记成了「看过」——以后自己点开也不会再弹',
-  );
+  // 「看过」等走到结算页才记（10-31 方案推06 Z-C04 ⑤，站长 10-22 Q1）：原先棋盘一出来就记，这一局打到一半关掉，
+  // 下次打开落在主菜单、教学一条都没听完。
+  const keys = () => p.evaluate(() => ({
+    story: localStorage.getItem('slides.xhs.story.circle'),
+    firstRun: localStorage.getItem('slides.xhs.firstRun'),
+    cvd: localStorage.getItem('slides.xhs.cvdOffer'),
+  }));
+  const k0 = await keys();
+  say(k0.story === null && k0.firstRun === null, '打着的时候还没记成「看过」（走到结算页才算）', JSON.stringify(k0));
+  await p.$eval('#stopBtn', (e) => e.click());
+  await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await p.$eval('#pauseFinishBtn', (e) => e.click());
+  await p.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await p.waitForTimeout(400);
+  const k1 = await keys();
+  say(k1.story === '1' && k1.firstRun === '1', '走到结算页之后，小球那把钥匙才记成「看过」——以后自己点开也不会再弹', JSON.stringify(k1));
+  // 《再来一局》（10-31 方案推06 Z-C05，C-24）：首局不数，重开照样先数 4-3-2-1；首局挂载时没画色盲开关（noCountdown），
+  // 这一页还没数完过，所以这一次要补摆、数完才记 slides.xhs.cvdOffer；数完之后教学条不再有（教学只活在一局里）。
+  await p.$eval('#restartBtn', (e) => e.click());
+  await p.waitForTimeout(300);
+  const st = await p.evaluate(() => ({
+    shown: !!document.querySelector('#startOverlay.show'),
+    cvd: !!document.querySelector('#startOverlay.show #cvdOfferBtn'),
+  }));
+  say(st.shown, '《再来一局》：先回到倒数那一页（#startOverlay.show）');
+  say(st.cvd, '重开的倒数页上有色盲开关（首局挂载时没画过、还没数完过）');
+  say((await keys()).cvd === null, '数完之前不记 slides.xhs.cvdOffer');
+  await p.waitForFunction(() => !document.querySelector('#startOverlay.show'), null, { timeout: 15000 }).catch(() => {});
+  await p.waitForTimeout(600);
+  say((await keys()).cvd === '1', '数完记 slides.xhs.cvdOffer');
+  const bar = await p.evaluate(() => {
+    const b = document.querySelector('.coach-bar');
+    return { hidden: !b || b.hidden, text: (b?.textContent || '').trim(), hasCoach: !!document.querySelector('.app--game.has-coach') };
+  });
+  say(bar.hidden && bar.text === '' && !bar.hasCoach, '数完之后没有教学条、没有 has-coach（教学只活在一局里）', JSON.stringify(bar));
   say(errs.length === 0, '这一路零报错', errs.slice(0, 2).join(' | '));
   await ctx.close();
 }

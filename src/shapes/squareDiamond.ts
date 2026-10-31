@@ -238,6 +238,8 @@ export function createSquareDiamondGame(): ShapeGame {
         coach: !!opts?.coach,
         // 不数 4-3-2-1（每日挑战那一页自己数过了，第 19 推；见 ShellMeta.noCountdown）。
         noCountdown: !!opts?.noCountdown,
+        // 每日挑战页开的局：重开时倒数页照那一页摆（10-31 整合版 Z-C05 ①）。
+        dailyStage: opts?.dailyStage,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'squareDiamond', '菱形方块')}`,
         tagline: isBomb ? SHELL[lang].taglineDiagonal + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineDiagonal,

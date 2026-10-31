@@ -256,7 +256,8 @@ export function createCircleGame(): ShapeGame {
       const modeKey = modeKeyOf({ bomb: isBomb, flip: flipMode, steps: puzzleMode, timed: !!opts?.timeLimitSec });
       const lang = opts?.lang ?? 'zhHans';
       // 随机得分目标：这一局认哪个图案。没给就是这个玩法自己那一套 1×N。
-      const target = opts?.target ?? null;
+      // 随机得分目标那一局认的那个图案。let：单人非种子的老虎机局《再来一局》时换一个（见下面 buildShell 的 retarget）。
+      let target = opts?.target ?? null;
       /**
        * 此刻这一局要凑几枚（《侵蚀阶梯》v1.2 PR-8）。
        *
@@ -283,6 +284,17 @@ export function createCircleGame(): ShapeGame {
         // 头一局那块教学条（见 ui/coachBar.ts）。只有头一回进来的那一局有。
         coach: !!opts?.coach,
         noCountdown: !!opts?.noCountdown,
+        // 每日挑战页开的局：重开时倒数页照那一页摆（10-31 整合版 Z-C05 ①）。
+        dailyStage: opts?.dailyStage,
+        // 单人、非种子的老虎机局：《再来一局》重新抽一个目标（站长 10-31）。种子局、小屋局目标由码决定，不给。
+        // 「种子局」指码是敲进来的 / 每日的 / 小屋的（目标由码决定，重开不换）；单人老虎机那一屏自己随手抽的那串
+        // （source 'random'）不算——控制器重开时本来就照新目标另挑一串（plantSeed 的 seedForTarget）。
+        retarget:
+          target && (!opts?.seed || opts.seed.source === 'random')
+            ? (t) => {
+                target = t;
+              }
+            : undefined,
       });
 
       const pickPalette = (): readonly string[] =>
@@ -1251,7 +1263,10 @@ export function createCircleGame(): ShapeGame {
         practice: !!opts?.practice,
         // 老虎机那一局：排行榜上它自己一张榜（见 RunData.slot）。
         slot: !!target,
-        slotTarget: target ?? undefined,
+        // 现问：《再来一局》可能换过目标（retarget）。控制器的 guardHooks 照原样保留这个读法（不把它抄成死值）。
+        get slotTarget() {
+          return target ?? undefined;
+        },
         flip: flipMode,
         puzzle: puzzleMode,
         puzzleTally,

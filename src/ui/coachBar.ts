@@ -100,8 +100,6 @@ export interface CoachBar {
   /** 暂停 / 继续：计时一起停、一起走。 */
   pause(): void;
   resume(): void;
-  /** 重开一局：回到起点，见过的也一并忘掉。 */
-  reset(): void;
   destroy(): void;
 }
 
@@ -116,7 +114,7 @@ export interface CoachOpts {
    */
   colors?: readonly string[];
   /**
-   * 换了一条（含开口、重开）。呼吸灯亮哪一种跟着条走，所以控制器要在这时候重算一次。
+   * 换了一条（含开口）。呼吸灯亮哪一种跟着条走，所以控制器要在这时候重算一次。
    *
    * 由外面传进来，而不是条子自己去摸棋盘：条子不认识棋子，棋盘不认识条子，两样都在 gameController 手上。
    */
@@ -420,6 +418,7 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
     peekEl.classList.toggle('coach-peek--fwd', peeking);
   }
 
+  /** 挂载时开口（只调这一次：教学只活在一局里，《再来一局》不重开它，控制器把条子拆掉——10-31 整合版 Z-C04）。 */
   function start() {
     clearTimer();
     at = -1;
@@ -487,14 +486,6 @@ export function mountCoachBar(host: HTMLElement, opts: CoachOpts): CoachBar {
       paused = false;
       since = now();
       armTimer();
-    },
-    reset() {
-      if (dead) return;
-      peeking = false;
-      if (peekTimer) window.clearTimeout(peekTimer);
-      peekTimer = 0;
-      paused = false;
-      start();
     },
     destroy() {
       dead = true;
