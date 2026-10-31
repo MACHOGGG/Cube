@@ -409,6 +409,15 @@ export function trackGameStart(shape: string, mode: string): void {
   report('game_start', { shape, mode, first: firstRunOpen });
 }
 
+/**
+ * 结尾兜底接住了一处出错（10-31 方案推01 Z-A01）：`kind` 只是那个标签（`beat`、`finish`、`render`、
+ * `missed-end:watch`……），**不带错误原文**——原文里可能有网址、设备信息，政策《使用统计》说统计里不带
+ * 能指向您本人的东西。同一个标签一次挂载只报一次（gameController 的 guardSink）。
+ */
+export function trackEndGuard(kind: string, mode: string): void {
+  report('end_guard', { kind, mode });
+}
+
 export function trackGameEnd(e: {
   shape: string;
   mode: string;

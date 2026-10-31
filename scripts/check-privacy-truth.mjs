@@ -413,6 +413,16 @@ const EVENTS = {
     props: ['source'],
     say: { zhHans: ['点开分享时是从哪一屏点的'], zhHant: ['點開分享時是從哪一屏點的'], en: ['on opening share, which screen it was opened from'], fr: ['à l’ouverture du partage, depuis quel écran'] },
   },
+  // 结尾兜底接住了一处出错（10-31 方案推01 Z-A01 ⑤，附录甲 §17.10）：kind 只是标签，不带错误原文。
+  end_guard: {
+    props: ['kind', 'mode'],
+    say: {
+      zhHans: ['由兜底接住照常结算时，是哪一类错、当时是什么玩法'],
+      zhHant: ['由兜底接住照常結算時，是哪一類錯、當時是什麼玩法'],
+      en: ['its safety net finishes the run anyway, which kind of error it was and the mode'],
+      fr: ['son filet de sécurité la termine quand même, le type d’erreur et le mode'],
+    },
+  },
 };
 /*
  * 订阅那三个（engine/subscription.ts）：代码还在，网页没有入口、App 版 isLiveSite 为假，**现在发不出去**。

@@ -1,36 +1,36 @@
 import type { ShellRefs } from '../ui/gameShell';
-import { clearRoomLeftover, mountRoomLeftover } from '../ui/roomLeftover';
+import { clearRoomLeftover, mountRoomLeftover as mountRoomLeftover0 } from '../ui/roomLeftover';
 import { contestants } from '../ui/roomCard';
-import { snapFlipFaces, plankFlipCells, flipMs, flipStaggerMs } from './plankFlip';
+import { snapFlipFaces as snapFlipFaces0, plankFlipCells as plankFlipCells0, flipMs, flipStaggerMs } from './plankFlip';
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
 import { createErosion, tableFor, type Erosion } from './erosion';
 import { devErosionFor } from './devDeal';
 import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, flipStreakMult, FLIP_RULES_VERSION, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
-import { createScoreReel, syncGainState } from './scoreReel';
+import { createScoreReel as createScoreReel0, syncGainState } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
-import { rollDuration, rollOdometer } from './odometer';
+import { rollDuration, rollOdometer as rollOdometer0 } from './odometer';
 import { saveBestIfHigher, saveRun, loadRuns } from './persistence';
-import { trackGameStart, trackGameEnd, trackShare } from './analytics';
+import { trackGameStart, trackGameEnd, trackShare, trackEndGuard } from './analytics';
 import {
   MANUAL_END_REASON,
   buildShareInfo,
   isSumRow,
-  runBadges,
-  runBreakdown,
+  runBadges as runBadges0,
+  runBreakdown as runBreakdown0,
   type ModeKey,
   type RunData,
 } from './runRecord';
 import { createPerformanceGauge } from './performance';
-import { vibrate } from './haptics';
-import { renderShareCard, type BoardSnapshot, type Standing } from './shareCard';
+import { vibrate as vibrate0 } from './haptics';
+import { renderShareCard as renderShareCard0, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
 import { pushRun, sessionExpired } from './cloudScores';
 import { endHintShownToday, markEndHintShown } from './signInHint';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
-import { playScore, playFlip, playClear, playError, playFinish, playSettle, reducedMotion, screenShake, spawnParticles, punch } from './juice';
+import { playScore as playScore0, playFlip as playFlip0, playClear as playClear0, playError as playError0, playFinish as playFinish0, playSettle as playSettle0, reducedMotion, screenShake as screenShake0, spawnParticles as spawnParticles0, punch as punch0 } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import {
   createStepBank, puzzleComposite, puzzleStartSteps, stepLedgerText,
@@ -351,6 +351,78 @@ export interface GameController {
   destroy(): void;
 }
 
+// ── 结尾兜底（10-31 方案推01 Z-A01）────────────────────────────────────────────────
+//
+// 站长 10-21：「全部消完了仍然没有触发自动结算」。故障注入（43 个点 × 3 种最后一手 × 5 种玩法）复现了三种挂法：
+// 最后一拍和 finish() 之间任何一个装饰钩子（声音、震屏、粒子、翻面、滚筒、图案块、教学条、棋盘重画……）抛错，
+// resolving 永远是真、之后每一下触摸都被拒（形态 R）；endGame 置了 gameOver 之后、结算页露面之前抛错，结算页
+// 不出、不存档、暂停键不理（形态 L）；露面之后、存档之前抛错（形态 S）。真浏览器里到底是哪一句抛的查不到，
+// 所以改法不靠找到根因：装饰件一律过 guard（抛错只记一笔、不往外冒），连锁每一拍都兜着，结算页一定出来。
+
+/**
+ * 装饰层出错时记的那一笔。每个控制器挂载时换成自己的那一份（见 createGameController 开头）：
+ * 同一个标签一次挂载只记一次 `console.error('[slides:end-guard]', 标签, 错误)`，并报一条 `end_guard` 统计
+ * （只带标签和玩法名，不带错误原文——原文里可能有网址、设备信息，政策说统计里不带这些）。
+ */
+let guardSink: (tag: string, err: unknown) => void = (tag, err) => {
+  try { console.error('[slides:end-guard]', tag, err); } catch { /* 连 console 都不在就算了 */ }
+};
+const guardLog = (tag: string, err: unknown): void => guardSink(tag, err);
+function guardFn<A extends unknown[], R>(tag: string, f: (...a: A) => R, fallback: (...a: A) => R): (...a: A) => R {
+  return (...a: A) => {
+    try { return f(...a); } catch (e) { guardLog(tag, e); return fallback(...a); }
+  };
+}
+const nop = () => {};
+/** 对象上的每个方法都过 guard（教学条、滚筒、图案块、Pro 轮盘这几个装饰件）。Chrome 61 有 Proxy。 */
+function guardObj<T extends object>(tag: string, o: T): T {
+  return new Proxy(o, {
+    get(t, k, rcv) {
+      const v = Reflect.get(t, k, rcv);
+      return typeof v === 'function' ? (...a: unknown[]) => { try { return v.apply(t, a); } catch (e) { guardLog(tag + '.' + String(k), e); return undefined; } } : v;
+    },
+  });
+}
+const createScoreReel = (...a: Parameters<typeof createScoreReel0>) => guardObj('scoreReel', createScoreReel0(...a));
+const vibrate = guardFn('vibrate', vibrate0, nop);
+const playScore = guardFn('playScore', playScore0, nop);
+const playFlip = guardFn('playFlip', playFlip0, nop);
+const playClear = guardFn('playClear', playClear0, nop);
+const playError = guardFn('playError', playError0, nop);
+const playFinish = guardFn('playFinish', playFinish0, nop);
+const playSettle = guardFn('playSettle', playSettle0, nop);
+const screenShake = guardFn('screenShake', screenShake0, nop);
+const spawnParticles = guardFn('spawnParticles', spawnParticles0, nop);
+const punch = guardFn('punch', punch0, nop);
+const snapFlipFaces = guardFn('snapFlipFaces', snapFlipFaces0, () => new Map<string, HTMLElement>());
+const plankFlipCells = guardFn('plankFlipCells', plankFlipCells0, nop);
+const rollOdometer = guardFn('rollOdometer', rollOdometer0, (host: HTMLElement, value: number) => { host.textContent = String(Math.max(0, Math.round(value) || 0)); });
+const runBreakdown = guardFn('runBreakdown', runBreakdown0, () => [] as [string, string][]);
+const runBadges = guardFn('runBadges', runBadges0, () => [] as string[]);
+const renderShareCard = guardFn('renderShareCard', renderShareCard0, () => '');
+const mountRoomLeftover = guardFn('mountRoomLeftover', mountRoomLeftover0, nop);
+/** 棋盘交来的钩子里，纯装饰的那几样过 guard；判定那几样（isGameOver / buildCascadeConfig / checkHazard）不包——它们错了该被看见，
+ *  但 findStuckGroups 出错按「还活着」、计数类出错按 0，免得把结算整个拦住。 */
+function guardHooks(h: GameControllerHooks): GameControllerHooks {
+  const g: GameControllerHooks = { ...h };
+  for (const k of ['render', 'onCascadeStep', 'onCascadeStepRendered', 'onCommit', 'onErosion', 'highlightStuck', 'coachGlow', 'coachGlowCancel', 'coachPrewarm', 'onLive', 'onReLogin'] as const) {
+    const f = h[k] as ((...a: unknown[]) => void) | undefined;
+    if (f) (g as any)[k] = guardFn(k, (...a: unknown[]) => f.apply(h, a), nop);
+  }
+  for (const k of ['shouldLeadOut', 'shouldTeachTotal', 'signInHint', 'coachStarsReachEdge'] as const) {
+    const f = h[k] as (() => boolean) | undefined;
+    if (f) (g as any)[k] = guardFn(k, () => f.apply(h), () => false);
+  }
+  if (h.snapshotBoard) g.snapshotBoard = guardFn('snapshotBoard', () => h.snapshotBoard!(), () => null as unknown as BoardSnapshot);
+  if (h.findStuckGroups) g.findStuckGroups = guardFn('findStuckGroups', () => h.findStuckGroups!(), () => []);
+  if (h.countRemainingTiles) g.countRemainingTiles = guardFn('countRemainingTiles', () => h.countRemainingTiles!(), () => ({ neverFlipped: 0, flippedButRemaining: 0 }));
+  if (h.puzzleTally) g.puzzleTally = guardFn('puzzleTally', () => h.puzzleTally!(), () => ({ cleared: 0, stars: 0 }));
+  if (h.proView) g.proView = guardFn('proView', () => h.proView!(), () => null as any);
+  g.tilesLeft = guardFn('tilesLeft', () => h.tilesLeft(), () => 0);
+  return g;
+}
+
+
 /**
  * Owns the state machine every board shares: start/pause/resume/finish/restart,
  * the timer, the streak multiplier, the score reel, and the best-score
@@ -362,6 +434,18 @@ const escHtml = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export function createGameController(refs: ShellRefs, hooks: GameControllerHooks): GameController {
+  {
+    const seen = new Set<string>();
+    const practice = !!hooks.practice;
+    const mode = hooks.modeKey;
+    guardSink = (tag, err) => {
+      if (seen.has(tag)) return;
+      seen.add(tag);
+      try { console.error('[slides:end-guard]', tag, err); } catch { /* 连 console 都不在就算了 */ }
+      if (!practice) trackEndGuard(tag, mode);
+    };
+  }
+  hooks = guardHooks(hooks);
   const s = STRINGS[hooks.lang];
 
   /**
@@ -440,7 +524,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 它归控制器管、不归棋盘管：图案是几枚、这一级还剩几段，都是侵蚀阶梯的状态，
    * 而阶梯活在这儿。棋盘只报自己归哪一族（画成方块、小球还是三角）。
    */
-  const patternBlock = mountPatternBlock(
+  const patternBlock = guardObj('patternBlock', mountPatternBlock(
     refs.patternBlockEl,
     // 认不出来就当方块：这一处画的是**图标长什么样**，猜错只影响好不好看，
     // 而 hooks.shapeId 在练习盘、小屋那几条路上不一定查得到（cardOrNull 的用意）。
@@ -456,7 +540,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
             erodedFace(hooks.slotTarget!, sizeAtLevel(hooks.slotTarget!, level)),
           )
       : undefined,
-  );
+  ));
   const paintPattern = () =>
     patternBlock.update({ level: erosion.level(), segLeft: erosion.segLeft(), segTotal: erosion.segTotal() });
   /** 无限反转的连锁账本（见 scoring.ts 的 createToggleLedger）；别的局没有。 */
@@ -467,6 +551,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   /** 余步 ≤ 2 就把那一格点红。这一局没有钟，紧张感全在这个数上。 */
   const STEPS_LOW = 2;
   function paintSteps(left: number) {
+    try { paintSteps0(left); } catch (e) { guardLog('paintSteps', e); }
+  }
+  function paintSteps0(left: number) {
     // 只有步步为营那一档有这个读数（顶排左边那一块印的是余步，不是分数）；
     // 别的档它是 null。
     const el = refs.hudTimeEl;
@@ -487,6 +574,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * ——而这一局每一步都带着一个 −1。借 .gain-pop 那个类，动画是同一套。
    */
   function bumpSteps(scored: boolean) {
+    try { bumpSteps0(scored); } catch (e) { guardLog('bumpSteps', e); }
+  }
+  function bumpSteps0(scored: boolean) {
     const host = refs.stepsBadgeEl;
     if (!host) return;
     const pop = document.createElement('span');
@@ -525,12 +615,35 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 就记多少，回来接着数。
    */
   let heldBeat: { run: () => void; ms: number } | null = null;
+  /** 这一步的收尾（resolveMove 里那个 finish）。连锁断了时拿它补收尾。 */
+  let settleMove: (() => void) | null = null;
+  /** 跑一拍：抛错只记，不往外冒；跑完看连锁断没断。 */
+  function runBeat(run: () => void): void {
+    try { run(); } catch (e) { guardLog('beat', e); }
+    settleIfBroken();
+  }
+  /** 连锁断了（resolving 还立着，可既没有排着的下一拍、也不是暂停收起来的）：补跑收尾；收尾自己也断了就放平、按盘面补判。正常走不到。 */
+  function settleIfBroken(): void {
+    if (!resolving || gameOver || pendingBeat || heldBeat || paused) return;
+    const f = settleMove;
+    settleMove = null;
+    if (f) { try { f(); } catch (e) { guardLog('finish', e); } }
+    if (resolving && !gameOver && !pendingBeat && !heldBeat) {
+      resolving = false;
+      checkEnd('broken', true);
+    }
+  }
+  /** 守望：每 500ms 看一眼（不借计时器——暂停、定格停表时它也不受牵连；暂停时自己不动）。 */
+  let guardTimer = 0;
+  let brokenSince = 0;
+  /** 判死、亮红的那一刻（performance.now）；1.4 秒那一下丢了，守望按它补结算。 */
+  let stuckMarkedAt = 0;
 
   /** 排下一拍。记下排的时刻和时长，暂停时才算得出「还剩多久」。 */
   function armBeat(run: () => void, ms: number): void {
     const id = window.setTimeout(() => {
       if (pendingBeat?.id === id) pendingBeat = null;
-      run();
+      runBeat(run);
     }, ms);
     // 单调钟（10-15 补充 S8）：暂停时算「还剩多久」，墙上的钟被拨一下就会算出负数或者几分钟。
     pendingBeat = { id, run, at: performance.now(), ms };
@@ -599,6 +712,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   /** Pro 轮盘：头一回用到时才建（非 Pro 局一直是 hidden 的那个空壳）。 */
   let proWheel: ProWheel | null = null;
   const syncProWheel = () => {
+    try { syncProWheel0(); } catch (e) { guardLog('syncProWheel', e); }
+  };
+  const syncProWheel0 = () => {
     if (runPro && proWheel && hooks.proView) proWheel.sync(hooks.proView());
   };
   /** 这一局在种子码编号表里是第几行（engine/seedCode.ts 的 VARIANTS）；表里没有就 -1。 */
@@ -628,6 +744,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    */
   let stuckHeldMs: number | null = null;
   const STUCK_END_MS = 1400;
+  /**
+   * 守望（watch）补结算时用的理由，和 armStuckEnd 里那一句 `endGame('无法继续匹配')` 一字不差。那一句留着字面值，
+   * 是因为 check-residue-wiring 按字面值钉着它；守望又必须不靠 armStuckEnd（那个定时器被撤掉时正要它兜，
+   * check-end-detect ② M3），所以只能是同字的一个常量。两边对不上 check-end-detect ② M3 当场红（它量理由）。
+   */
+  const STUCK_REASON = '无法继续匹配';
   /** 暂停中松手的那一步，等《继续》（见 holdMove）。 */
   let heldMove: (() => void) | null = null;
 
@@ -651,6 +773,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 连同它的四条文案一起删掉——留着一颗永远不出现的键，只会让读规则的人去
     // 找一个不存在的东西（《游戏规则》里那句话当时也一起改了）。
     if (groups.length && !gameOver) {
+      stuckMarkedAt = performance.now();
       hooks.render();
       armStuckEnd(STUCK_END_MS);
     }
@@ -761,6 +884,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     window.clearTimeout(stuckTimer);
     stuckTimer = 0;
     stuckHeldMs = null;
+    stuckMarkedAt = 0;
     // 上一局暂停中挂着的那一步也是（见 holdMove）。
     heldMove = null;
     // 上一局结算页那枚勾和那一声也不许落到这一局头上（见 stampTimer）。
@@ -816,6 +940,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (devSpent > 0) erosion.spend(devSpent);
     paintPattern();
     timer.start();
+    window.clearInterval(guardTimer);
+    guardTimer = window.setInterval(watch, 500);
     hooks.render();
     if (runPro && hooks.proView) {
       // 第三个参数：局中拨色盲友好时轮盘自己来取一份新的配色。
@@ -840,7 +966,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         if (!coachTip) coachTip = mountCoachTip(refs.coachEl, hooks.coachTip.text, hooks.coachTip.art);
       } else if (coach) coach.reset();
       else {
-        coach = mountCoachBar(refs.coachEl, {
+        coach = guardObj('coachBar', mountCoachBar(refs.coachEl, {
           lang: hooks.lang,
           shape: hooks.coachShape ?? 'circle',
           plan: hooks.coachPlan,
@@ -850,7 +976,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           // 换了一条，呼吸灯亮哪一种组跟着换（第 15 推）。条子不认识棋子、棋盘不认识条子，
           // 两样都在这儿手上，所以由这儿接线。
           onChange: () => refreshCoachGlow(),
-        });
+        }));
       }
     }
   }
@@ -891,6 +1017,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   function stampEndCheck(reason: string, total: number): void {
+    try { stampEndCheck0(reason, total); } catch (e) { guardLog('stampEndCheck', e); }
+  }
+  function stampEndCheck0(reason: string, total: number): void {
     const host = refs.endStampEl;
     window.clearTimeout(stampTimer);
     stampTimer = 0;
@@ -933,7 +1062,36 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     }, wait);
   }
 
+  /** 这一次 endGame 有没有把这一局存进本机。 */
+  let runSaved = false;
   function endGame(reason: string, extraPenalty = 0, extraPenaltyLabel = s.defaultPenaltyLabel) {
+    if (gameOver && !hooks.practice) return; // 幂等：同一局只结算一次
+    runSaved = false;
+    lastRun = null;
+    try {
+      endGame0(reason, extraPenalty, extraPenaltyLabel);
+    } catch (e) {
+      guardLog('endGame', e);
+    } finally {
+      if (gameOver && !hooks.practice) {
+        window.clearInterval(guardTimer);
+        resolving = false;
+        // endGame0 里赋的值；TS 的流分析看不到函数里的赋值，以为这儿还是上面那个 null。
+        const run = lastRun as RunData | null;
+        if (run && !runSaved) {
+          try { saveRun(hooks.bestKey, { at: run.at, data: run, start: startSnapshot, end: endSnapshot }); runSaved = true; } catch (e) { guardLog('saveRun', e); }
+        }
+        if (!refs.endOverlay.classList.contains('show')) {
+          // 最低限度的结算页：标题 + 分数 + 原有那三颗键。明细、图都没有，也要让他看到这一局完了、点得了
+          // 《再来一局》《首页》——原先这一步之前抛错，gameOver 已经立起来、结算页却不出，暂停键也不理（形态 L）。
+          try { refs.endTitleEl.textContent = s.compositeScoreLabel; } catch { /* */ }
+          try { if (run) refs.endScoreEl.textContent = String(run.totalScore); } catch { /* */ }
+          refs.endOverlay.classList.add('show');
+        }
+      }
+    }
+  }
+  function endGame0(reason: string, extraPenalty = 0, extraPenaltyLabel = s.defaultPenaltyLabel) {
     if (hooks.practice) {
       // 练习盘没有「结束」这回事：翻完了、死局了，就静静再发一盘接着玩。
       gameOver = false;
@@ -944,13 +1102,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     gameOver = true;
     resolving = false;
     heldMove = null;
-    hooks.onLive?.(false);
-    // 打完过一局了（头一局那个带教学条的也算）：主菜单上那张《每日挑战》从此摆出来（10-08 方案
-    // 3-D-1，见 engine/firstPlay.ts 的 finishedAGame）。
-    markFinishedAGame();
-    // 这一局完了，教学的呼吸灯一起熄（结算页底下那副棋盘还看得见一角），得分图案块那一盏也熄。
-    if (coach) hooks.coachGlow?.(null);
-    refs.patternBlockEl.classList.remove('coach-glow-block');
     // 连锁的下一拍要**撤掉**，不是置空（见 cancelBeat 那段）。从前这儿一句都没有，
     // 排着的那一拍会在结算页盖上之后照样落下来。
     cancelBeat();
@@ -1120,7 +1271,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // once — by hand — rather than twice.
     const past = loadRuns(hooks.bestKey);
     const avg = Math.round(
-      (past.reduce((sum, r) => sum + (r.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
+      (past.reduce((sum, r) => sum + (r?.data?.totalScore ?? 0), 0) + total) / (past.length + 1),
     );
     // 「没进今日榜」那一句先藏起来：它属于上一局，这一局要不要说，等交卷回包（见下面 pushRun）。
     refs.endDailyNoteEl.hidden = true;
@@ -1193,6 +1344,18 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 合分享和结算」），等页出来了再往里塞，这一屏会先空着一块、图落下来时
     // 整页跳一下。画一张图是几十毫秒的事，那一局刚打完的这一瞬间花得起。
     endSnapshot = hooks.snapshotBoard?.() ?? null;
+    // 先记账、再存档、再露面、再装饰（10-31 方案推01 Z-A01 ③）。存档原先在结算页露面、指路光、结算声
+    // 之后，那中间任何一句抛错，这一局就没存进本机（形态 S）。挪到这儿仍在上面读 past 算均分之后，
+    // 这一局不会被算两遍。
+    saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
+    runSaved = true;
+    hooks.onLive?.(false);
+    // 打完过一局了（头一局那个带教学条的也算）：主菜单上那张《每日挑战》从此摆出来（10-08 方案
+    // 3-D-1，见 engine/firstPlay.ts 的 finishedAGame）。
+    try { markFinishedAGame(); } catch (e) { guardLog('markFinishedAGame', e); }
+    // 这一局完了，教学的呼吸灯一起熄（结算页底下那副棋盘还看得见一角），得分图案块那一盏也熄。
+    if (coach) hooks.coachGlow?.(null);
+    refs.patternBlockEl.classList.remove('coach-glow-block');
     lastCardUrl = renderCard();
     if (lastCardUrl) refs.endShareImgEl.src = lastCardUrl;
     // 画不出来（理论上只有 lastRun 为空，走不到这儿）就整块不摆，别在结算页
@@ -1228,7 +1391,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     stampEndCheck(reason, total);
 
     // Archive the run so the 记录 panel can re-open the very same card.
-    saveRun(hooks.bestKey, { at: lastRun.at, data: lastRun, start: startSnapshot, end: endSnapshot });
     // 三颗键上面那一句（10-11 方案 B-14）：存完这一局再问，「本机已有 ≥3 局」才数得到它。和上面的结算页同一拍
     // 摆上去（中间没让浏览器画过一帧），所以图那一块不会先大后小跳一下。
     //
@@ -1314,17 +1476,27 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 张。同一局两处两张图会不一致——名次是现取的（roundStandings），中间要是
    * 又轮询回来一次，两张图上的排名就能对不上。
    */
+  /**
+   * 战绩图。画不出来（抛错、画布要不到——WebKit 画布总内存超限时 getContext 回 null——或者交回来的不是一张
+   * PNG）一律回 null，结算页上「画不出来就整块不摆」那段接住；绝不让一张图拦住结算（10-31 方案推01 Z-A01 ③）。
+   */
   function renderCard(): string | null {
     if (!lastRun) return null;
-    return renderShareCard(
-      {
-        ...buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
-        standings: roundStandings(),
-        room: !!currentRoom(),
-      },
-      endSnapshot,
-      startSnapshot,
-    );
+    try {
+      const url = renderShareCard(
+        {
+          ...buildShareInfo(lastRun, hooks.shapeName, hooks.lang),
+          standings: roundStandings(),
+          room: !!currentRoom(),
+        },
+        endSnapshot,
+        startSnapshot,
+      );
+      return /^data:image\/png;base64,./.test(url) ? url : null;
+    } catch (e) {
+      guardLog('renderCard', e);
+      return null;
+    }
   }
 
   function doShare() {
@@ -1392,11 +1564,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    * 粒子从 `originCell` 那一格冒出来，那一格不在屏幕上就只有声、震、晃。
    */
   function bigMoment(originCell: Cell | undefined): void {
-    vibrate([25, 40, 25]);
-    playClear();
-    screenShake(refs.boardWrap, 'heavy');
-    const pos = originCell ? cellCenterPx(originCell) : null;
-    if (pos) spawnParticles(refs.boardEl, pos[0], pos[1], { color: accent2Color(), count: 16, spread: 64 });
+    // 装饰件：抛错只记一笔，不拦连锁（10-31 方案推01 Z-A01 ②）。原地包一层，不改名——check-erosion 按名字切这一段。
+    try {
+      vibrate([25, 40, 25]);
+      playClear();
+      screenShake(refs.boardWrap, 'heavy');
+      const pos = originCell ? cellCenterPx(originCell) : null;
+      if (pos) spawnParticles(refs.boardEl, pos[0], pos[1], { color: accent2Color(), count: 16, spread: 64 });
+    } catch (e) {
+      guardLog('bigMoment', e);
+    }
   }
 
   /**
@@ -1420,8 +1597,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       const beat = pendingBeat;
       pendingBeat = null;
       window.clearTimeout(beat.id);
-      beat.run();
+      runBeat(beat.run);
     }
+    checkEnd('touch');
   }
 
   function resolveMove(mask: Set<string>, moveDirDeg = 0) {
@@ -1472,6 +1650,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const BONUS_GAP_MS = reduceMotion ? 0 : 1250;
 
     const finish = () => {
+      settleMove = null;
       // Guarantees at least one render() even when the cascade found nothing
       // to reveal (a shift that didn't score) — every earlier return path
       // out of step() already rendered at least once on its own.
@@ -1535,6 +1714,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       }
     };
 
+    settleMove = finish;
     const step = () => {
       if (gameOver) return; // a manual "结束" click mid-chain stops the reveal where it is
       const s = stepper.next();
@@ -1715,7 +1895,34 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       if (s.matchGroups.length) beat(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);
       else proceed();
     };
-    step();
+    runBeat(step);
+  }
+
+  /** 不靠连锁的终局判定：盘空了 / 余步见底了却没结算 → 补结算；deep 时连判死也补排一次。 */
+  function checkEnd(source: string, deep = false): void {
+    if (!started || gameOver || paused || resolving || hooks.practice) return;
+    if (hooks.isGameOver()) { guardLog('missed-end:' + source, null); endGame(ALL_FLIPPED_REASON); return; }
+    if (bank && bank.left() <= 0) { guardLog('missed-steps:' + source, null); endGame(PUZZLE_STEPS_OUT_REASON); return; }
+    if (deep && !stuckTimer && stuckHeldMs === null) updateStuckState(hooks.findStuckGroups?.() ?? []);
+  }
+  /** 守望：每 500ms 看一眼（见上面 guardTimer 那几行；函数声明放在这儿，是为了让 finish() 里那一句 isGameOver
+   *  仍是全文第一处——check-bomb-rules 量「爆炸排在全部翻成点面前面」按的是第一处）。 */
+  function watch(): void {
+    if (!started || gameOver || paused) { brokenSince = 0; return; }
+    if (stuckMarkedAt && !resolving && performance.now() - stuckMarkedAt > STUCK_END_MS + 1000) {
+      stuckMarkedAt = 0;
+      guardLog('watch:stuck', null);
+      endGame(STUCK_REASON);
+      return;
+    }
+    if (resolving && !pendingBeat && !heldBeat) {
+      const t = performance.now();
+      if (!brokenSince) brokenSince = t;
+      else if (t - brokenSince >= 1000) { brokenSince = 0; guardLog('watch:resolving', null); settleIfBroken(); }
+      return;
+    }
+    brokenSince = 0;
+    if (!resolving) checkEnd('watch');
   }
 
   function doPause() {
@@ -1775,6 +1982,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     heldBeat = null;
     if (held && resolving && !gameOver) armBeat(held.run, held.ms);
     // 死局那一下停在半路的话，从停下的地方接着数。
+    if (stuckMarkedAt) stuckMarkedAt = performance.now();
     const stuckLeft = stuckHeldMs;
     stuckHeldMs = null;
     if (stuckLeft !== null && !gameOver) armStuckEnd(stuckLeft);
@@ -1782,6 +1990,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     const move = heldMove;
     heldMove = null;
     if (move && !gameOver) move();
+    checkEnd('resume');
   }
 
   function doFinish() {
@@ -1973,6 +2182,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     forceEnd: doForceEnd,
     destroy() {
       timer.stop();
+      window.clearInterval(guardTimer);
       proWheel?.destroy();
       proWheel = null;
       window.clearTimeout(stuckTimer);

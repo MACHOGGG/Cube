@@ -249,7 +249,9 @@ export function loadRuns(bestKey: string): StoredRun[] {
     const raw = localStorage.getItem(bestKey + RUNS_SUFFIX);
     if (!raw) return [];
     const list: unknown = JSON.parse(raw);
-    return Array.isArray(list) ? (list as StoredRun[]) : [];
+    // 只留对象：数组里混进一个 null（或别的坏元素），原先照单全收，之后每一局在 trimInto / 算均分时
+    // 读 `r.data` 抛错，这一局和之后每一局都存不进记录（debug G21；10-31 方案推01 Z-A01 ③）。
+    return Array.isArray(list) ? (list.filter((r) => r && typeof r === 'object') as StoredRun[]) : [];
   } catch {
     return [];
   }

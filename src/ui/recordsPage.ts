@@ -323,11 +323,19 @@ export function renderRecordsPage(
  * with the run's own start and end boards side by side.
  */
 function openShareCard(run: StoredRun, lang: Lang): void {
-  trackShare('records');
   const s = STRINGS[lang];
   const d = run.data;
   const info = buildShareInfo(d, shapeName(lang, d.shapeId, d.shapeFallback), lang);
-  const dataUrl = renderShareCard(info, run.end ?? null, run.start ?? null);
+  // 图画不出来（画布要不到、抛错——WebKit 画布总内存超限时就是这样）就不开大图，列表照常，不加字
+  // （10-31 方案推01 Z-A01 ③）。原先这一句没有保护：抛出去之后这一行点了没反应，还可能带坏后面的点按。
+  let dataUrl = '';
+  try {
+    dataUrl = renderShareCard(info, run.end ?? null, run.start ?? null);
+  } catch {
+    dataUrl = '';
+  }
+  if (!dataUrl) return;
+  trackShare('records');
   // One card at a time: tapping a second record replaces the one already up
   // rather than stacking another overlay behind it.
   for (const old of Array.from(document.querySelectorAll('.overlay--top'))) old.remove();

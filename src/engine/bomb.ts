@@ -287,7 +287,7 @@ export function blowUpIfClustered<T>(
   end: { render(): void; forceEnd(reason: string, penalty: number, label: string): void },
 ): boolean {
   if (!hasRedCluster(g, adj, isLive)) return false;
-  end.render();
+  try { end.render(); } catch { /* 重画失败不拦结算 */ }
   end.forceEnd(BOMB_HAZARD_REASON, BOMB_HAZARD_PENALTY, '炸弹惩罚');
   return true;
 }

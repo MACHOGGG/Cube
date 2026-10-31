@@ -16,6 +16,7 @@ export function initAnalytics(_lang: string): void {}
 export function trackScreen(_screen: string): void {}
 export function trackGameStart(_shape: string, _mode: string): void {}
 export function trackGameEnd(_e: Record<string, unknown>): void {}
+export function trackEndGuard(_kind: string, _mode: string): void {}
 export function trackTutorialStart(_shape: string): void {}
 export function trackTutorialEnd(..._args: unknown[]): void {}
 export function trackLanguage(_lang: string, _source: 'auto' | 'switch'): void {}

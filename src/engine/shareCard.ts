@@ -683,7 +683,10 @@ const SOLO_SCORE_STRETCH = 1.06;
 function renderSoloCard(info: ShareCardInfo, endSnap: BoardSnapshot | null, startSnap: BoardSnapshot | null): string {
   const s = STRINGS[info.lang];
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d')!;
+  // WebKit 画布总内存超限时 getContext 回 null（这张图约 2160×2928、25 MB）。要不到就回 ''，
+  // 调用的地方按「画不出来」处理——原先这儿是 `!`，空指针在结算那一刻抛出去，结算页不出（10-31 方案推01 Z-A01）。
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
   canvas.width = CARD_W * EXPORT_SCALE;
   canvas.height = SOLO_H * EXPORT_SCALE;
   ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
@@ -777,7 +780,14 @@ function renderSoloCard(info: ShareCardInfo, endSnap: BoardSnapshot | null, star
     }
   }
 
-  return canvas.toDataURL('image/png');
+  try {
+    return canvas.toDataURL('image/png');
+  } finally {
+    // 画完当场还画布内存：WebKit 按活着的画布总像素设上限，等垃圾回收不够快，连着打几局、连着点开
+    // 几张大图就会撞上，下一张 getContext 就回 null（10-31 方案推01 Z-A01 ③）。
+    canvas.width = 0;
+    canvas.height = 0;
+  }
 }
 
 /**
@@ -817,7 +827,8 @@ function renderRoundCard(
   const panel = standings.length ? full * 0.62 : full;
 
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return ''; // 画布要不到（同 renderSoloCard）
 
   // 先量抬头，再定这张图多高。
   //
@@ -966,7 +977,12 @@ function renderRoundCard(
   ctx.fillText(s.shareFooterHint, CARD_W / 2, cardH - 30);
   ctx.textAlign = 'left';
 
-  return canvas.toDataURL('image/png');
+  try {
+    return canvas.toDataURL('image/png');
+  } finally {
+    canvas.width = 0; // 当场还内存（同 renderSoloCard）
+    canvas.height = 0;
+  }
 }
 
 /**

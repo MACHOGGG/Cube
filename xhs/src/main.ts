@@ -65,6 +65,10 @@ import { renderRunSheet } from './runSheet';
 import { renderShapePick } from './shapePick';
 import { mountShareActions } from './shareActions';
 import type { StoredRun } from '../../src/engine/persistence';
+import { armErrorLog } from '../../src/engine/errorLog';
+
+// 开机第一件事：之后任何一处抛错都留一行 [slides:error]（10-31 方案推01 Z-A01 ④，和网页入口同一份）。
+armErrorLog();
 
 /** 小红书是中文平台，这一版固定简体中文——没有语言选择页。 */
 const LANG: Lang = 'zhHans';

@@ -83,6 +83,10 @@ import { createSquareDiamondGame } from './shapes/squareDiamond';
 import { createCircleSevenGame } from './shapes/circleSeven';
 import type { ShapeGame, ShapeGameOpts } from './shapes/types';
 import { reducedMotion } from './engine/reducedMotion';
+import { armErrorLog } from './engine/errorLog';
+
+// 开机第一件事：之后任何一处抛错都留一行 [slides:error]（10-31 方案推01 Z-A01 ④）。
+armErrorLog();
 
 injectStyles();
 
