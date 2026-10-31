@@ -8,6 +8,8 @@
  *   · engine/gameController.ts：createGameController 外面包一层，记下 refs、hooks 和返回的 controller；
  *     endGame0（真正结算的那一段，外层 endGame 是幂等的门）一进门报一声理由；侵蚀阶梯露出来；
  *   · engine/analytics.ts：trackEndGuard 一进门报一声（门数「每个标签最多报一次」）；
+ *   · engine/residueBoard.ts（推02 起）：轨道计数层说死、而且可用 ≤12 枚（穷举走得完）时，同一副再照常穷举一遍，
+ *     把两个答案一起报给门（⑤「轨道说死 ⇒ 穷举说死」的尺子）；
  *   · 故障开关：调用方传 `mutate`（check-end-detect 的 POINTS 插桩、逻辑变异）在插口子之前改源码。
  *
  * **认不出插口子的那几句就当场 throw「门要跟着改」**，不静默跳过——静默跳过的门在一张空表上全绿。
@@ -64,6 +66,17 @@ function tapAnalytics(file, src) {
   const sig = 'export function trackEndGuard(kind: string, mode: string): void {';
   must(file, src.split(sig).length === 2, sig);
   return src.replace(sig, sig + '\n  (globalThis as any).__SIM?.endGuard?.(kind, mode);');
+}
+
+function tapResidue(file, src) {
+  // 认的是「if (…orbitDead(built, moves, opts.matchLen, bonusLines)) return 'dead';」那一行（前缀照抄，门的变异会改它）。
+  const re = /\n  if \((.*)orbitDead\(built, moves, opts\.matchLen, bonusLines\)\) return 'dead';\n/;
+  const m = re.exec(src);
+  must(file, m && src.split(m[0]).length === 2, "if (!opts.slot && orbitDead(built, moves, opts.matchLen, bonusLines)) return 'dead';");
+  return src.replace(m[0],
+    `\n  const __od = ${m[1]}orbitDead(built, moves, opts.matchLen, bonusLines);` +
+    `\n  if (__od && (globalThis as any).__SIM?.probe && usable <= 12) (globalThis as any).__SIM.probe(residueSearch({ start: built.start, moves, scanLines: built.scanLines, matchLen: opts.matchLen, bonusLines }));` +
+    `\n  if (__od) return 'dead';\n`);
 }
 
 function globTable(file, src) {
@@ -131,6 +144,7 @@ export async function bundleEndDetect(root, { mutate } = {}) {
             if (rel.startsWith('src/shapes/') && BOARD_FILES.includes(name)) src = tapBoard(rel, name, src);
             else if (rel === 'src/engine/gameController.ts') { src = tapController(rel, src); sawController = true; }
             else if (rel === 'src/engine/analytics.ts') { src = tapAnalytics(rel, src); sawAnalytics = true; }
+            else if (rel === 'src/engine/residueBoard.ts') src = tapResidue(rel, src);
             if (/import\.meta\.glob\(/.test(src.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, ''))) src = globTable(a.path, src);
             return { contents: src, loader: 'ts' };
           });

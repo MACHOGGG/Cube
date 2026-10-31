@@ -489,6 +489,9 @@ head('【9】盘面数只数没见过的；同一步问两遍只算一次（10-1
 
   // 同一盘面、同一门槛连问两次，穷举只真跑一次。数调用次数：门自己打一包 residueBoard，把它 import 的 residueSearch 换成
   // 一个数数的壳（产物一个字不动）。
+  // 10-31 方案推02（Z-A02）起 residueVerdict 先问轨道计数层，这一副 11 枚死局它当场就说死、根本走不到穷举——上面那一条
+  // 「答『死』」照样过，可量的已经不是 I-6 那个计数器了。所以这一包里顺手把轨道层关掉（只在门自己这一包里，源码不动），
+  // 让这一节量的还是穷举自己：计数器挪到查重之后，闭包走得完、答「死」；同一问第二次拿缓存。
   const { build } = await import('esbuild');
   const { fileURLToPath } = await import('node:url');
   const real = fileURLToPath(new URL('../src/engine/residueSearch.ts', import.meta.url));
@@ -499,6 +502,12 @@ head('【9】盘面数只数没见过的；同一步问两遍只算一次（10-1
       name: 'count-residue-search',
       setup(b) {
         b.onResolve({ filter: /\/residueSearch$/ }, (args) => (args.importer.endsWith('residueBoard.ts') ? { path: 'shim', namespace: 'count' } : undefined));
+        b.onLoad({ filter: /residueBoard\.ts$/ }, (args) => {
+          const src = readFileSync(args.path, 'utf8');
+          const a = "  if (!opts.slot && orbitDead(";
+          if (src.split(a).length !== 2) throw new Error('门要跟着改：residueBoard.ts 里认不出轨道计数层那一句');
+          return { contents: src.replace(a, "  if (!opts.slot && false && orbitDead("), loader: 'ts' };
+        });
         b.onLoad({ filter: /.*/, namespace: 'count' }, () => ({
           contents: `import * as R from ${JSON.stringify(real)};\nexport * from ${JSON.stringify(real)};\n` +
             `export function residueSearch(input) { globalThis.__residueCalls = (globalThis.__residueCalls || 0) + 1; return R.residueSearch(input); }\n`,
@@ -511,6 +520,7 @@ head('【9】盘面数只数没见过的；同一步问两遍只算一次（10-1
   globalThis.__residueCalls = 0;
   const a = RBc.edgeResidue(board, at, 2, undefined, true);
   const b2 = RBc.edgeResidue(board, at, 2, undefined, true);
+  check('I-6 那一副：轨道层关掉、只靠穷举，也答「死」（计数器挪到查重之后，闭包走得完）', a === 'dead', a);
   check('同一盘面同一门槛连问两次：穷举只真跑一次（第二次拿缓存）', globalThis.__residueCalls === 1 && a === b2,
     `跑了 ${globalThis.__residueCalls} 次，答 ${a} / ${b2}`);
   // 尺子：钥匙里真有门槛和盘面——换一个门槛、挪走一枚，都要重算。

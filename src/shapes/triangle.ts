@@ -15,7 +15,7 @@ import { createOutlineTracker, spawnTriangleOutline, applyScoreAnimations, MULTI
 import { applyProBacks, proCycle } from '../engine/proCycle';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
-import { RESIDUE_MAX_TILES, edgeResidue } from '../engine/residueBoard';
+import { edgeResidue } from '../engine/residueBoard';
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { buildEdgeBand } from '../ui/edgeBand';
 import { assignOffsets, outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
@@ -1216,7 +1216,7 @@ export function createTriangleGame(): ShapeGame {
          * 穷举」，见 engine/residueSearch.ts）。算不完一律当活，所以这一段只会**多**判
          * 出死局，不会把还能打的局掐掉。
          */
-        if (live.length > RESIDUE_MAX_TILES) return [];
+        // >16 枚也交给 residueVerdict：先问轨道（说死就是死），判不了再按 >16 当「算不完」（10-31 方案推02 Z-A02）。
         const verdict = edgeResidue(edgeBoard, residueAt, need, threshold, true);
         return verdict === 'dead' ? stuckGroupsOf(live) : [];
       }

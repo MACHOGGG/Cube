@@ -14,7 +14,7 @@ import { createOutlineTracker, applyScoreAnimations, setCoachLit, MULTI_GROUP_ST
 import { applyProBacks, proCycle } from '../engine/proCycle';
 import { findStuckColorGroups, countRemainingTiles as countRemainingTilesFn, stuckKeysOf, type LiveTile } from '../engine/stalemate';
 import { stuckGroupsOf } from '../engine/stalemate';
-import { RESIDUE_MAX_TILES, gridLines, gridResidue, oneStepMoves } from '../engine/residueBoard';
+import { gridLines, gridResidue, oneStepMoves } from '../engine/residueBoard';
 import { createCoachGlow, starClearHintFor, type PlanBoard, type StarClearHint } from '../engine/coachHint';
 import { packSnapshot, type BoardSnapshot, type SnapshotCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
@@ -768,7 +768,7 @@ export function createSquareGame(): ShapeGame {
          * 方块这一副的线就是**此刻**的每一行每一列：整行整列消掉之后盘子真的变小
          * （removeLines 把它们从网格里摘掉、两侧收拢），所以 rows/cols 现问，不写死 6。
          */
-        if (live.length > RESIDUE_MAX_TILES) return [];
+        // >16 枚也交给 residueVerdict：先问轨道（说死就是死），判不了再按 >16 当「算不完」（10-31 方案推02 Z-A02）。
         const residueAt = (r: number, c: number) => {
           const t = grid[r]?.[c];
           if (!t) return null;

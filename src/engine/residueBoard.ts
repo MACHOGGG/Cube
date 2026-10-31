@@ -256,6 +256,77 @@ function verdictKey(built: Built, opts: ResidueOpts, bonus: readonly BonusLine[]
   ].join('#');
 }
 
+/**
+ * 轨道计数（10-31 方案推02 Z-A02 ②；end-detect §2(iv)）：只靠滑动，每一枚只能在自己的「轨道」里走——可滑的线把线上
+ * 的格子连成一个轨道（用 cyclicShuffles / fillerAwareShuffles 产生的置换做并查集；六边三角那一套自然按朝向分开）。
+ * 第一次得分之前盘面只经过纯滑动，棋子出不了自己的轨道。任何一种得分都要「这一色在它要占的每个轨道里够数」：
+ *
+ *   · 每条此刻可削的外边（门槛照当时，含收尾放开后）× 每种颜色：这条边落在每个轨道里的格数 ≤ 这一色星星在那个轨道里的枚数；
+ *   · 每一段扫描线上每个长 N 的窗口（N = 此刻图案枚数，每一步现问 matchLen()，不缓存）× 每种颜色：每个轨道里露出这一色
+ *     的枚数够，而且窗口碰到的轨道里有这一色的色块。
+ *
+ * 一样都不满足 → 死。只用必要条件，所以**只会多判出死、不会把活的判死**。为什么要它：六边三角门槛 3、12–14 颗全是
+ * 星星的残局，穷举在 RESIDUE_MAX_STATES（20000）个盘面内走不完 → 'unknown' → 局永远不结束（真发牌机器人 200 局里
+ * 7 局卡在这里）；而这一层不展开任何盘面，几十微秒。**不许用调大预算来治**（check-residue-board / check-endgame-residue
+ * 都把 20000 当规格钉着）。老虎机（按形状认分）不走这一层。
+ */
+function orbitDead(built: Built, moves: readonly LineShuffle[], matchLen: number, bonus: readonly BonusLine[]): boolean {
+  const n = built.start.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  };
+  for (const { cells, src } of moves) {
+    for (let i = 0; i < cells.length; i++) {
+      const a = find(cells[i]);
+      const b = find(cells[src[i]]);
+      if (a !== b) parent[a] = b;
+    }
+  }
+  const star = new Map<number, number>();
+  const shown = new Map<number, number>();
+  const front = new Map<number, number>();
+  const K = (o: number, c: number) => o * 256 + c;
+  const colors = new Set<number>();
+  for (let i = 0; i < n; i++) {
+    const code = built.start[i];
+    if (code === RESIDUE_BLANK) continue;
+    const c = colorOf(code);
+    if (c < 0) continue;
+    colors.add(c);
+    const k = K(find(i), c);
+    shown.set(k, (shown.get(k) ?? 0) + 1);
+    if (isDot(code)) star.set(k, (star.get(k) ?? 0) + 1);
+    else front.set(k, (front.get(k) ?? 0) + 1);
+  }
+  const fits = (cells: readonly number[], m: Map<number, number>, c: number) => {
+    const need = new Map<number, number>();
+    for (const x of cells) {
+      const o = find(x);
+      need.set(o, (need.get(o) ?? 0) + 1);
+    }
+    for (const [o, k] of need) if ((m.get(K(o, c)) ?? 0) < k) return false;
+    return true;
+  };
+  for (const { cells, need } of bonus) {
+    if (cells.length < need) continue;
+    for (const c of colors) if (fits(cells, star, c)) return false;
+  }
+  if (matchLen >= 1) {
+    for (const line of built.scanLines) {
+      for (let i = 0; i + matchLen <= line.length; i++) {
+        const w = line.slice(i, i + matchLen);
+        for (const c of colors) if (fits(w, shown, c) && w.some((x) => (front.get(K(find(x), c)) ?? 0) > 0)) return false;
+      }
+    }
+  }
+  return true;
+}
+
 /** 跑一趟穷举。盘子太大就不跑，直接当「算不完」。 */
 export function residueVerdict(opts: ResidueOpts): ResidueVerdict {
   const built = build(opts.lines, opts.at);
@@ -272,15 +343,18 @@ export function residueVerdict(opts: ResidueOpts): ResidueVerdict {
    */
   let usable = 0;
   for (let i = 0; i < built.start.length; i++) if (built.start[i] !== RESIDUE_BLANK) usable++;
-  if (usable > RESIDUE_MAX_TILES) return 'unknown';
-  if (!built.moveLines.length) return 'unknown';
   const bonusLines = toBonus(built, opts.bonusLines);
+  const moves = opts.filler ? fillerAwareShuffles(built.moveLines) : cyclicShuffles(built.moveLines);
+  // 先问轨道（不展开盘面，多大的盘都问得起）：说死就是死。六副棋盘原先各有一句「>16 枚直接当活」，
+  // 拦在这一问前面，所以大盘上的死局一个也判不出来；那六句删了，交给这里先问轨道、再按 >16 回 unknown。
+  if (!opts.slot && orbitDead(built, moves, opts.matchLen, bonusLines)) return 'dead';
+  if (usable > RESIDUE_MAX_TILES) return 'unknown';
   const k = verdictKey(built, opts, bonusLines);
   const hit = recent.find((e) => e.key === k);
   if (hit) return hit.verdict;
   const verdict = residueSearch({
     start: built.start,
-    moves: opts.filler ? fillerAwareShuffles(built.moveLines) : cyclicShuffles(built.moveLines),
+    moves,
     scanLines: built.scanLines,
     matchLen: opts.matchLen,
     patternHit: opts.slot ? patternHitFor(built, opts.slot) : undefined,

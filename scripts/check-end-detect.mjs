@@ -3,7 +3,7 @@
  *
  *   node scripts/check-end-detect.mjs             # CI check 那一条跑的就是这一句（纯 node）
  *   node scripts/check-end-detect.mjs --mutants   # 门自己的验证：拆掉兜底的三处，各自那一节得红
- *   ONLY=名字 / VERBOSE=1                          # 只跑一个故障点 / 每一格都印
+ *   ONLY=名字 / VERBOSE=1 / SECTION=④              # 只跑一个故障点 / 每一格都印 / 只跑一节
  *
  * 为什么要有这一道：站长 10-21 报「全部消完了仍然没有触发自动结算」。故障注入复现了三种挂法——最后一拍和
  * finish() 之间任何一个装饰钩子抛错，resolving 永远是真、之后每一下触摸都被拒（形态 R）；endGame 置了 gameOver
@@ -20,6 +20,11 @@
  *      M3 判死后 1.4 秒那个定时器被撤掉——各自 3 秒内结算（守望 watch 兜住）。
  *   ③ 等价：随机残局 600 局、随机走子（中途碰一下、暂停再继续），不注入故障时逐局结局 / 分数 / 步数 / 结算页 /
  *      存档都和「去掉兜底的同一包」相同；兜底一次都没出声（没有 [slides:end-guard]、没有 end_guard）。
+ *   ④ 判死夹具（10-31 方案推02 Z-A02）：六边三角门槛 3、12 / 13 / 14 颗全是星星的残局（穷举在 20000 个盘面内走不完，
+ *      推02 之前永远不结束）→ 3 秒内「无法继续匹配」；10-19 复现 7（小球 1×2、收尾放开后只剩三枚互不同线、一手都
+ *      滑不了）→ 同上；方块 1×N 只剩活炸弹 → 「全部消完了」（判死层不许抢在清盘判定前面）。基础、步步为营各一遍。
+ *   ⑤ 轨道层的尺子：六副棋盘的随机残局，轨道计数层说死、而且 ≤12 枚（穷举走得完）时，同一副照常穷举一遍——
+ *      穷举说「还能得分」就是反例，一例就红。
  *
  * 红了：红在哪一格、报什么，照 10-31 方案〇·四第 3 条停下回报，不要改这里的期望去迁就。
  * 认不出插桩的锚点（源码改写了那一句）→「门要跟着改」：改这里的 POINTS / 变异 / 拆兜底那几句的锚点，期望不动。
@@ -383,6 +388,104 @@ async function equivRun(mutate) {
   return { out, guardLines, guards };
 }
 
+// ─────────────────────────── ④ 判死夹具 ───────────────────────────
+const TRI12 = '1,2:d3 2,2:d3 2,3:d2 2,4:d3 3,1:d2 3,2:d5 3,3:d1 3,4:d0 4,0:d4 4,1:d0 4,2:d5 5,0:d3';
+// 13、14 枚那两副是在 12 枚那一副上各加一颗星星（推02 落地时挑的：推01 上永远不结束、推02 上判死）。
+const TRI = { 12: TRI12, 13: TRI12 + ' 1,3:d1', 14: TRI12 + ' 1,3:d1 4,3:d4' };
+function triBoard(g, spec) {
+  const ng = g.tap.grid().map((row) => row.map((t) => (t == null ? t : BLANK_TILE())));
+  for (const it of spec.split(' ')) { const [rc, v] = it.split(':'); const [r, c] = rc.split(',').map(Number); ng[r][c] = star(Number(v.slice(1))); }
+  g.tap.setGrid(ng);
+  return new Set([spec.split(' ')[0].split(':')[0]]);
+}
+const DEAD_FIXTURES = [
+  ...Object.entries(TRI).map(([n, spec]) => [`六边三角 ${n} 颗全是星星`, 'triangleBig', {}, (g) => triBoard(g, spec), '无法继续匹配']),
+  ['10-19 复现 7（小球 1×2、收尾放开后剩三枚互不同线）', 'circle', {}, (g) => {
+    g.ero.spend(20);
+    const gr = []; for (let r = 0; r < 7; r++) gr.push(Array.from({ length: r + 1 }, () => BLANK_TILE()));
+    gr[1][0] = tile(0, 1); gr[6][3] = tile(2, 1); gr[4][0] = star(1); gr[4][2] = star(3);
+    g.tap.setGrid(gr);
+    // 滑一下 (4,0)(4,2)：两颗星星对调，滑完之后谁也凑不成
+    const t = gr[4][0]; gr[4][0] = gr[4][2]; gr[4][2] = t;
+    return new Set(['4,0', '4,2']);
+  }, '无法继续匹配'],
+  ['方块 1×N 只剩活炸弹', 'square', { bomb: true }, (g) => { g.tap.setGrid([[star(2), star(2), star(2), tile(0, 1)]]); return new Set(['0,0', '0,1', '0,2', '0,3']); }, null],
+];
+async function deadSection(extraMutate) {
+  const sim = await makeSim(ROOT, { motion: true, mutate: extraMutate });
+  const bad = [];
+  const lines = [];
+  for (const [label, id, opts, set, reason] of DEAD_FIXTURES) {
+    for (const steps of [false, true]) {
+      const g = sim.open(id, { ...opts, ...(steps ? { steps: true } : {}) });
+      const mask = set(g);
+      g.hooks.render();
+      const t0 = sim.now;
+      g.ctl.resolveMove(mask, 0);
+      // 判死之后盘子会「收尾放开」、把还削得掉的外边削掉（带动画），削完才轮到那 1.4 秒。所以量的是「盘面停下来
+      // （连锁走完）之后 1.4 秒内结算」，不是从这一手起算——最多等 8 秒。
+      let settled = t0;
+      for (let w = 0; w < 800 && !g.ends.length; w++) { if (g.ctl.resolving) settled = sim.now; sim.tick(10); }
+      sim.tick(500);
+      const want = reason ?? sim.B.ALL_FLIPPED_REASON;
+      const at = g.ends[0] ? g.ends[0].at - t0 : null;
+      const after = g.ends[0] ? g.ends[0].at - settled : null;
+      const line = `${label} ${steps ? '步步为营' : '基础'}：理由=${JSON.stringify(g.ends.map((e) => e.reason))} 于=${at === null ? '-' : at + 'ms'}（停下后 ${after === null ? '-' : after + 'ms'}） 结算页=${g.shown()}`;
+      lines.push(line);
+      if (!g.shown() || g.ends.length !== 1 || g.ends[0].reason !== want || after > 1400 + 100) bad.push(`④ ${line}（要在盘面停下后 1.4 秒内以「${want}」结算）`);
+      g.close();
+    }
+  }
+  return { bad, lines };
+}
+
+// ─────────────────────────── ⑤ 轨道层的尺子 ───────────────────────────
+const RULER_BOARDS = ['square', 'circle', 'circleHex', 'squareDiamond', 'triangleBig', 'circleSeven'];
+const RULER_N = 400; // 每副
+async function rulerSection(extraMutate) {
+  const sim = await makeSim(ROOT, { motion: false, mutate: extraMutate });
+  const verdicts = { dead: 0, scores: 0, unknown: 0 };
+  const bad = [];
+  sim.SIM.probe = (v) => {
+    verdicts[v] = (verdicts[v] ?? 0) + 1;
+    if (v === 'scores' && bad.length < 5) bad.push(`⑤ 轨道层说死、穷举说还能得分：${JSON.stringify(sim.SIM.__cur)}`);
+  };
+  for (const id of RULER_BOARDS) {
+    for (let i = 0; i < RULER_N; i++) {
+      const rand = mulberry(20261031 + i * 97 + RULER_BOARDS.indexOf(id) * 7919);
+      const g = sim.open(id, {});
+      const K = g.hooks.boardColors;
+      const level = pick(rand, [1, 2, 3, 4]);
+      if (level < 4) g.ero.spend({ 3: 15, 2: 26, 1: 999 }[level]);
+      let grid;
+      if (id === 'square') {
+        const R = 1 + Math.floor(rand() * 4), C = 1 + Math.floor(rand() * 4);
+        grid = Array.from({ length: R }, () => Array.from({ length: C }, () => null));
+      } else grid = g.tap.grid().map((row) => row.map((t) => (t == null ? null : BLANK_TILE())));
+      const cells = [];
+      grid.forEach((row, r) => row.forEach((t, c) => { if (id === 'square' || t !== null) cells.push([r, c]); }));
+      const n = Math.min(cells.length, 2 + Math.floor(rand() * 11));
+      for (let j = cells.length - 1; j > 0; j--) { const k = Math.floor(rand() * (j + 1)); [cells[j], cells[k]] = [cells[k], cells[j]]; }
+      const allStar = rand() < 0.4;
+      const spec = [];
+      cells.forEach(([r, c], j) => {
+        let t;
+        if (j >= n) t = BLANK_TILE();
+        else if (allStar || rand() < 0.5) { const d = Math.floor(rand() * K); t = star(d); spec.push(`${r},${c}:d${d}`); }
+        else { const a = Math.floor(rand() * K), b = Math.floor(rand() * K); t = tile(a, b); spec.push(`${r},${c}:f${a}/${b}`); }
+        grid[r][c] = t;
+      });
+      g.tap.setGrid(grid);
+      sim.SIM.__cur = { id, level, spec: spec.join(' ') };
+      try { g.hooks.findStuckGroups?.(); } catch (e) { bad.push(`⑤ ${id} findStuckGroups 抛错：${e?.message ?? e}`); }
+      g.close();
+    }
+  }
+  const lines = [`⑤ 轨道层说死、可穷举的 ${verdicts.dead + verdicts.scores + verdicts.unknown} 副：穷举也说死 ${verdicts.dead}、说还能得分 ${verdicts.scores}、走不完 ${verdicts.unknown}`];
+  if (verdicts.dead < 100) bad.push(`⑤ 轨道层说死的随机残局只有 ${verdicts.dead} 副（尺子太空，夹具坏了）`);
+  return { bad, lines };
+}
+
 // ─────────────────────────── 跑 ───────────────────────────
 async function runAll(extra = null, { only = null } = {}) {
   const bad = [];
@@ -399,6 +502,16 @@ async function runAll(extra = null, { only = null } = {}) {
     const m = await mutantSection(extra);
     report.push(...m.lines.map((l) => '② ' + l));
     bad.push(...m.bad);
+  }
+  if (!only || only === '④') {
+    const d = await deadSection(extra);
+    report.push(...d.lines.map((l) => '④ ' + l));
+    bad.push(...d.bad);
+  }
+  if (!only || only === '⑤') {
+    const r = await rulerSection(extra);
+    report.push(...r.lines);
+    bad.push(...r.bad);
   }
   if (!only || only === '③') {
     const cur = await equivRun(extra);
@@ -429,6 +542,9 @@ if (MUTANTS) {
     '去掉守望 → ② M1 红': [sub(GC, '    guardTimer = window.setInterval(watch, 500);\n', ''), '②'],
     // 方案原写「canvas.null 红」；实测 canvas.null 另有两层接住（shareCard 判空、renderCard 自己的 try），拆掉 finally
     // 只剩记账逻辑本身抛错的那一格露不出结算页——这正是 finally 独自兜着的那一格。
+    // 推02（Z-A02）的两条：
+    '去掉轨道层 → ④ 三角那几副红': [sub('src/engine/residueBoard.ts', '  if (!opts.slot && orbitDead(', '  if (!opts.slot && false && orbitDead('), '④'],
+    '加回零手那一句 → ④ 复现 7 红': [sub('src/engine/residueBoard.ts', '  const bonusLines = toBonus(built, opts.bonusLines);\n  const moves =', "  if (!built.moveLines.length) return 'unknown';\n  const bonusLines = toBonus(built, opts.bonusLines);\n  const moves ="), '④'],
     '去掉 endGame 的 finally → end.logicBeforeRun 红': [sub(GC, '    } finally {\n      if (gameOver && !hooks.practice) {\n', '    } finally {\n      if (false) {\n'), '①'],
   };
   let ok = true;
@@ -442,7 +558,7 @@ if (MUTANTS) {
 }
 
 const t0 = Date.now();
-const { bad, report } = await runAll();
+const { bad, report } = await runAll(null, { only: process.env.SECTION ?? null }); // SECTION=① … ⑤：只跑那一节（手跑查问题用）
 for (const line of report) console.log(line);
 if (bad.length) {
   console.log(`\n✗ 结尾兜底：${bad.length} 处不对（${Math.round((Date.now() - t0) / 1000)} 秒）`);

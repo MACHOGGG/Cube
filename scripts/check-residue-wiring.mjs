@@ -59,10 +59,28 @@ const src = Object.fromEntries(WIRED.map((n) => [n, read(`src/shapes/${n}.ts`)])
 for (const name of WIRED) {
   const s = src[name];
   check(`（尺子）${name}.ts 读到了，而且不短`, s.length > 2000, `${s.length} 字`);
-  check(`${name}：import 了 RESIDUE_MAX_TILES 和 edgeResidue`,
-    /import \{[^}]*RESIDUE_MAX_TILES[^}]*edgeResidue[^}]*\} from '\.\.\/engine\/residueBoard'/.test(s)
-    || (/RESIDUE_MAX_TILES/.test(s) && /edgeResidue/.test(s) && /residueBoard/.test(s)),
-    '');
+  // 10-31 方案推02（Z-A02）起「>16 枚就不穷举」那道守卫从各副棋盘挪进了 residueVerdict（先问轨道计数层，再按 >16
+  // 回 unknown），棋盘不再 import RESIDUE_MAX_TILES；守卫本身在下面「②（residueVerdict）」那几条量。
+  check(`${name}：import 了 edgeResidue`, /edgeResidue/.test(s) && /residueBoard/.test(s), '');
+}
+
+// ── ②（residueVerdict）：上限守卫挪进来了，仍在穷举之前，仍用 >（16 枚本身要算）──────────────
+//
+// 推02 之前这道守卫是五副棋盘各写一句 `if (live.length > RESIDUE_MAX_TILES) return [];`，排在 edgeResidue 前面。推02 把
+// 它们删了：大盘上先问轨道计数层（不展开盘面，多大都问得起，说死就是死），判不了再按 >16 回 'unknown'。量的还是同
+// 一件事——**可用枚数超过上限的盘面不许走到穷举**，而且是 >、不是 >=——只是守卫换了地方，只写一份。
+{
+  const rb = read('src/engine/residueBoard.ts');
+  const fn = rb.slice(rb.indexOf('export function residueVerdict('));
+  const body = fn.slice(0, fn.indexOf('\n}\n'));
+  const at = (re) => { const m = body.match(re); return m ? m.index : -1; };
+  const orbit = at(/orbitDead\(built, moves, opts\.matchLen, bonusLines\)\) return 'dead';/);
+  const guard = at(/if \(usable > RESIDUE_MAX_TILES\) return 'unknown';/);
+  const search = at(/residueSearch\(\{/);
+  check('（尺子）切出了 residueVerdict', body.length > 200, `${body.length} 字`);
+  check('② residueVerdict：可用枚数超上限就不穷举（守卫用的是 >，16 枚本身要算）', guard >= 0, guard >= 0 ? '' : '没找到那道守卫');
+  check('② residueVerdict：先问轨道、再守上限、最后才穷举', orbit >= 0 && guard > orbit && search > guard,
+    `orbit@${orbit} guard@${guard} search@${search}`);
 }
 
 // ── ② 四行按顺序出现，一行都不许少 ────────────────────────────────────
@@ -77,12 +95,11 @@ for (const name of WIRED) {
     return m ? m.index : -1;
   };
   const counted = at(/if \(counted\.length\) return counted;/);
-  const guard = at(/if \(live\.length > RESIDUE_MAX_TILES\) return \[\];/);
   const call = at(/const verdict = edgeResidue\(/);
   const dead = at(/verdict === 'dead' \? stuckGroupsOf\(live\) : \[\]/);
   check(`${name}：① 计数说死就直接回`, counted >= 0, counted >= 0 ? '' : '没找到那一行');
-  check(`${name}：② 可用枚数超上限就不穷举（守卫用的是 >，16 枚本身要算）`,
-    guard >= 0, guard >= 0 ? '' : '没找到那道守卫');
+  // ② 上限守卫：推02 起在 residueVerdict 里（见上面那一节）。棋盘里那一句删了，这儿反过来钉住它没被抄回来。
+  check(`${name}：② 棋盘里不再自己按 >16 截断（守卫只在 residueVerdict 一处）`, !/if \(live\.length > RESIDUE_MAX_TILES\)/.test(s), '');
   check(`${name}：③ 调了 edgeResidue`, call >= 0, call >= 0 ? '' : '根本没调');
   /*
    * 这一条是整道门的重心。`'unknown'` 是「预算用完、算不出来」，residueSearch 的文件头
@@ -92,8 +109,8 @@ for (const name of WIRED) {
    */
   check(`${name}：④ 只有 'dead' 才判死（'unknown' 和 'scores' 都当活）`,
     dead >= 0, dead >= 0 ? '' : "没找到 `verdict === 'dead' ? stuckGroupsOf(live) : []`");
-  check(`${name}：四行的先后对`, counted >= 0 && guard > counted && call > guard && dead > call,
-    `counted@${counted} guard@${guard} call@${call} dead@${dead}`);
+  check(`${name}：三行的先后对`, counted >= 0 && call > counted && dead > call,
+    `counted@${counted} call@${call} dead@${dead}`);
   // 反面：这一段里不许出现「不是 scores 就算死」那种写法。
   check(`${name}：没有写成「不是 'scores' 就判死」`,
     !/verdict !== 'scores'/.test(s) && !/verdict != 'scores'/.test(s), '');
