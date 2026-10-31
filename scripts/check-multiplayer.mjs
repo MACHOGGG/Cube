@@ -571,8 +571,9 @@ if (rulesAsked) {
     ? await B.page.$$eval('.howto-ov .tut-rule:not(.tut-rule--extra) .tut-rule-text', (e) => e.map((x) => x.textContent.trim()))
     : [];
   check('五条规则都在，第 4 条讲的是这一局（圆球）那一句',
-    // 10-08 方案 3-E-4 把小球这一句改短了（「最少要 3 枚」「整体放大」两句删掉）。
-    learnRules.length === 5 && learnRules[3] === '同色星星连满此刻最外面的一条边，就得分并消除。',
+    // 10-08 方案 3-E-4 把小球这一句改短了（「最少要 3 枚」「整体放大」两句删掉）；10-31 整合版推05 起五条句末不带句号
+    // （站长 10-31，附录甲 §18）。
+    learnRules.length === 5 && learnRules[3] === '同色星星连满此刻最外面的一条边，就得分并消除',
     `${learnRules.length} 条 · 第 4 条：${(learnRules[3] || '').slice(0, 24)}`);
   // 规则窗底下是等待页（他这一局坐场边），而且窗真的在最上面：问的是「《知道了》那个位置上最上面的是谁」，
   // 不是「在不在 DOM 里」——等待页是 z-index 100 那一档，普通弹窗（90）开在它底下看不见也关不掉。
