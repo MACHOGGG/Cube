@@ -34,6 +34,14 @@
  *   ⑦ 新设备并那 60 局：屏幕上是 60 局之和，再并两次不再变；
  *   ⑧ dropKey 之后 `::evicted`、`::evictedAt` 两个键都不在；
  *   ⑨ 水位线之前就记过账的老设备（有账、没水位线）：上线后头一次并云端，不再多记那 20 局。
+ *
+ * ── 10-31 方案推07 Z-H04 G22、G23 ──────────────────────────────────────────────────────
+ *
+ * G22：存档原先按 at（Date.now()）排，系统日期被拨乱时新局一存进来就被挤出去（已复现）。改成按本机序号 seq 排：
+ *   ⑩ 日期拨到未来打满 40 局，再调回来打一局：这一局在存档里，累计加上了它；
+ *   ⑪ 打满 41 局再调回来：同上（这一种原先连分都丢——被挤出去的新局比水位线「旧」，不记账）。
+ * G23：存储满时清单写不进去，账却已经记了（原先先写账、后写清单），被挤出去的局算两遍（已复现）：
+ *   ⑫ 假 localStorage 对 ::runs 抛错：::evicted 不变、累计不增加；之后真存进去一局，只记一遍。
  */
 const bundle = process.argv[2];
 if (!bundle) {
@@ -187,6 +195,44 @@ const sumOf = (from, to) => { let t = 0; for (let i = from; i <= to; i++) t += 1
   check('⑨ 上线后头一次并云端：不再多记那 20 局（水位线从本机最旧那一局的前一格起）', screen(K9) === before, `${before} → ${screen(K9)}`);
   mergeRuns(K9, cloud60);
   check('⑨ 再并一次：照样不变', screen(K9) === before, `${before} → ${screen(K9)}`);
+}
+
+// ---- ⑩⑪ 系统日期被拨乱（G22）------------------------------------------------------------
+const FUTURE = 1_800_000_000_000; // 2027 年初：比 runOf 那一串晚一年多
+const futureRun = (i) => ({ ...runOf(i), at: FUTURE + i * 1000 });
+for (const [tag, n] of [['⑩ 未来日期打满 40 局再调回', 40], ['⑪ 未来日期打满 41 局再调回', 41]]) {
+  const K = `sugarcube_best_ero1::future${n}`;
+  let 真的打了 = 0;
+  for (let i = 1; i <= n; i++) {
+    saveRun(K, futureRun(i));
+    真的打了 += 100 + i;
+  }
+  // 调回来打一局：at 比清单里每一局都早。
+  const back = runOf(500);
+  saveRun(K, back);
+  真的打了 += back.data.totalScore;
+  check(`${tag}：调回来打的这一局在存档里`, loadRuns(K).some((r) => r.at === back.at), `${loadRuns(K).length} 局`);
+  check(`${tag}：累计加上了这一局（屏幕上 = 真的打了）`, screen(K) === 真的打了, `${screen(K)} / ${真的打了}`);
+  check(`${tag}：存档照旧 40 局`, loadRuns(K).length === 40, String(loadRuns(K).length));
+}
+
+// ---- ⑫ 存储满：清单写不进去，账不许先记（G23）---------------------------------------------
+{
+  const K = 'sugarcube_best_ero1::full';
+  for (let i = 1; i <= 40; i++) saveRun(K, runOf(i));
+  const evicted0 = mem.get(K + '::evicted') ?? null;
+  const screen0 = screen(K);
+  const raw = globalThis.localStorage.setItem;
+  globalThis.localStorage.setItem = (k, v) => {
+    if (k.endsWith('::runs')) throw new Error('QuotaExceededError');
+    return raw(k, v);
+  };
+  saveRun(K, runOf(41));
+  globalThis.localStorage.setItem = raw;
+  check('⑫ 清单写不进去：::evicted 不变', (mem.get(K + '::evicted') ?? null) === evicted0, `${evicted0} → ${mem.get(K + '::evicted')}`);
+  check('⑫ 清单写不进去：累计不增加（那一局没存进去，也没把别的局算两遍）', screen(K) === screen0, `${screen0} → ${screen(K)}`);
+  saveRun(K, runOf(42));
+  check('⑫ 之后真存进去一局：屏幕上正好多了这一局的分（被挤掉的那一局只记一遍）', screen(K) === screen0 + 142, `${screen0} → ${screen(K)}`);
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

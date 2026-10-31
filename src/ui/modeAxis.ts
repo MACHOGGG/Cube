@@ -524,11 +524,18 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
    * 触范围变成整个屏幕，概率就明显上去了。而它撞的是站点原则里那一条「不要让玩
    * 家出现意料之外的疏漏操作」。
    *
-   * 会不会卡死在「永远以为还有一根手指按着」？不会：`pointercancel` 也接到
-   * onUp（系统把这个触点作废时一定会来一条），而真正的 pointerup 在捕获之后必
-   * 到容器上。所以不另加超时阀门——多一个凭时间猜的阀门，就多一种说不清的行为。
+   * 会不会卡死在「永远以为还有一根手指按着」？原先这儿写的是「不会：pointercancel 也接到 onUp，而真正的
+   * pointerup 在捕获之后必到容器上」——可捕获是会失败的（有的内核在某些时序下拒绝，见 onMove 那一句 try），失败
+   * 之后在窗口外松手，pointerup 根本到不了容器，`dragging` 一直是真：之后按下都不理，不按键只移鼠标也拖着轴走
+   * （10-31 方案推07 Z-H04 G12）。所以照 engine/drag.ts 补了三处兜底，都不靠时间猜：
+   *   · onDown 遇上「还在拖」，而这一下是同一类指针的主触点——上一把一定已经松开了（鼠标只有一个、手指也只按着这
+   *     一根），先按松手收尾，再照常开始；
+   *   · onMove 里鼠标一个键都没按着（buttons === 0）——那一下松手丢了，当场按松手处理；
+   *   · lostpointercapture：捕获真被收走了（只在 captured 为真时），等于松手。
    */
   let activeId: number | null = null;
+  /** 上一把是哪一类指针按下的（mouse / touch / pen）：onDown 判「上一把松手丢了」用。 */
+  let lastPointerType = '';
   /** 平滑过的**焦点**速度（项/毫秒，带正负）：松手那一下拿它投影，见 FLING_MS。 */
   let vFocus = 0;
   /**
@@ -1161,8 +1168,14 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
 
   function onDown(e: PointerEvent): void {
     if (e.button !== undefined && e.button !== 0) return;
-    // 已经有一根手指在拖了：第二根一概不理（见 activeId 上面那段）。
-    if (dragging) return;
+    // 已经有一根手指在拖了：第二根一概不理（见 activeId 上面那段）。例外：同一类指针的主触点又按下来了——上一把的松手
+    // 丢了（见 activeId 上面那段的兜底），先替它收尾。
+    if (dragging) {
+      if (!(e.isPrimary && e.pointerType === lastPointerType)) return;
+      activeId = e.pointerId;
+      onUp(e);
+    }
+    lastPointerType = e.pointerType;
     activeId = e.pointerId;
     dragging = true;
     captured = false;
@@ -1193,6 +1206,8 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
 
   function onMove(e: PointerEvent): void {
     if (!dragging || (activeId !== null && e.pointerId !== activeId)) return;
+    // 鼠标一个键都没按着还在「拖」：松手那一下丢了（捕获失败后在窗口外松开），当场收尾，轴不跟着空移走。
+    if (e.pointerType === 'mouse' && e.buttons === 0) return onUp(e);
     const dy = e.clientY - startY;
     moved = Math.max(moved, Math.abs(dy));
     // 一旦确定是拖动，才把指针捕获过来：这样手指滑出容器（滑到标题或法务链接上）
@@ -1253,6 +1268,11 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     // 这儿只是**把循环点起来**：画什么由 loop 决定——它每帧把 focus 往 aimFocus
     // 追一截再画（见 loop 里 dragging 那一支）。
     schedule();
+  }
+
+  /** 捕获被收走了：只在真捕获过时算松手（onUp 自己 releasePointerCapture 也会来这一条，那时 dragging 已经是假）。 */
+  function onLostCapture(e: PointerEvent): void {
+    if (captured) onUp(e);
   }
 
   function onUp(e: PointerEvent): void {
@@ -1471,6 +1491,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   host.addEventListener('pointermove', onMove);
   host.addEventListener('pointerup', onUp);
   host.addEventListener('pointercancel', onUp);
+  host.addEventListener('lostpointercapture', onLostCapture);
   host.addEventListener('click', onClickCapture, true);
   host.addEventListener('focusin', onFocusIn);
   window.addEventListener('resize', onResize);
@@ -1497,6 +1518,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       host.removeEventListener('pointermove', onMove);
       host.removeEventListener('pointerup', onUp);
       host.removeEventListener('pointercancel', onUp);
+      host.removeEventListener('lostpointercapture', onLostCapture);
       host.removeEventListener('click', onClickCapture, true);
       host.removeEventListener('focusin', onFocusIn);
       window.removeEventListener('resize', onResize);

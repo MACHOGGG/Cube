@@ -12,6 +12,10 @@
  *   ① 计时局：往前拨 60 秒、往回拨 60 秒，剩余时间都只随真实流逝变（各量一次，差不超过 3 秒）；
  *   ② 无限反转：往回拨 60 秒之后打几秒再结束，存档里那一局用时 ≥ 0，而且过得了 vetRun。
  * 撤掉改法（timer.ts 换回 Date.now），① ② 都红。
+ *
+ *   ③ 无限反转：tick 停了 150 秒再来一下（切后台、锁屏回来的样子：page.clock.fastForward 一口气跳过去，到点的定时器
+ *      只补跑一次），钟响结算——交上去的用时 ≤ 100、过得了 vetRun（10-31 方案推07 Z-H04 G18）。原先用时 152 秒，
+ *      服务器判 flipTime（> 105）整局拒收。
  */
 import { chromium } from 'playwright';
 import { vetRun } from '../api/_maxscore.js';
@@ -109,6 +113,41 @@ const secs = (t) => {
   check('② 往回拨 60 秒之后结束：用时 ≥ 0（大约是真打的那几秒）', !!run && run.elapsedSec >= 0 && run.elapsedSec <= 15, `用时 ${run?.elapsedSec}`);
   const vet = run ? vetRun(run.shapeId, run) : null;
   check('② 这一局过得了 vetRun（服务器不会因为用时整局拒收）', vet?.verdict === 'ok', JSON.stringify(vet));
+  await ctx.close();
+}
+
+// ── ③ 无限反转：tick 停了 150 秒再来一下，用时封顶在 100（推07 Z-H04 G18）────────────────────
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.addInitScript(seed);
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => errs.push(String(e)));
+  await p.clock.install();
+  await p.clock.resume();
+  await p.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await p.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  await p.$eval('.home-icon-btn[aria-label="无限反转"]', (e) => e.click());
+  await p.waitForSelector('.flip-page', { timeout: 15000 });
+  await p.$eval('.slot-pick-opt[data-family="square"]', (e) => e.click());
+  await p.waitForSelector('#startBtn', { state: 'attached', timeout: 30000 });
+  await p.$eval('#startBtn', (e) => e.click());
+  await p.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, null, { timeout: 40000 });
+  await p.waitForTimeout(2000);
+  await p.clock.fastForward(150_000);
+  const ended = await p.waitForSelector('#endOverlay.show', { timeout: 15000 }).then(() => true).catch(() => false);
+  const run = await p.evaluate(() => {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !/_flip\d*_ero\d+::runs$/.test(k)) continue;
+      const list = JSON.parse(localStorage.getItem(k) || '[]');
+      if (list.length) return list[0].data;
+    }
+    return null;
+  });
+  check('③（尺子）钟响结算了、存档里有这一局', ended && !!run, JSON.stringify({ ended, run: !!run }));
+  check('③ tick 停了 150 秒再来一下：交上去的用时 ≤ 100', !!run && run.elapsedSec <= 100 && run.elapsedSec >= 95, `用时 ${run?.elapsedSec}`);
+  const vet = run ? vetRun(run.shapeId, run) : null;
+  check('③ 这一局过得了 vetRun（不被判 flipTime）', vet?.verdict === 'ok', JSON.stringify(vet));
   await ctx.close();
 }
 

@@ -320,6 +320,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // portrait one is the column it has always been. Both are the same DOM in
   // the same order; only the landscape media query's grid areas move the
   // pieces, so nothing re-renders when the phone turns.
+  // 这一局还在不在页面上（见 shellAlive，下面摘 window / document 监听的那几处用）。
+  let shellEl: Element | null = null;
   container.innerHTML = `
     <div class="app app--game${meta.wideBoard ? ' app-wide' : ''}${meta.landscape ? ' app--land-wide' : ''}${
       meta.practice ? ' app--practice' : ''
@@ -627,6 +629,8 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       </div>
     </div>
   `;
+  shellEl = container.querySelector('.app--game');
+  const shellAlive = () => !!shellEl && shellEl.isConnected;
 
   const req = <T extends HTMLElement>(id: string) => {
     const el = container.querySelector<T>('#' + id);
@@ -689,6 +693,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     }
   }
   const scheduleFit = () => {
+    // 这一局的 DOM 已经被换掉了：把自己从 window 上摘掉（10-31 方案推07 Z-H04 G19）。原先每进一局多挂两个 window 监听、
+    // 从不摘，进出几十局之后每一次转屏都要白跑几十遍。认的是这一局自己那一块（shellAlive），不是 container——container
+    // 是常驻的那个根节点，换屏只换它里面的东西，它自己永远连在页面上。
+    if (!shellAlive()) {
+      for (const ev of ['resize', 'orientationchange']) window.removeEventListener(ev, scheduleFit);
+      return;
+    }
     if (fitQueued) return;
     fitQueued = requestAnimationFrame(() => {
       fitQueued = 0;
@@ -868,6 +879,20 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       cancelCount = null;
       pauseOv?.classList.add('show', 'pause--pre');
     });
+    // 倒数时切到后台（10-31 方案推07 Z-H04 G17）：倒数是一串 setTimeout，原先切后台照样数完、替他按下开局（安卓后台
+    // 照跑），回来表已经走了一截；控制器那一句切后台自动暂停只在开局之后才起作用。照《暂停》那颗键的做法停数、摆出
+    // 面板，回来按《继续》从头数。离开这一页（这一局那一块 DOM 被换掉）时自己摘掉。
+    const onHidden = () => {
+      if (!shellAlive()) {
+        document.removeEventListener('visibilitychange', onHidden);
+        return;
+      }
+      if (document.visibilityState !== 'hidden' || !cancelCount || !onStartPage()) return;
+      cancelCount();
+      cancelCount = null;
+      pauseOv?.classList.add('show', 'pause--pre');
+    };
+    document.addEventListener('visibilitychange', onHidden);
     // 游戏本身的《继续》也挂在这颗键上，但那一路在没开局时会自己空转，所以两
     // 边可以共用，互不干扰。
     container.querySelector<HTMLButtonElement>('#continueBtn')?.addEventListener('click', () => {

@@ -1008,6 +1008,12 @@ jobs:
       # 以「无法继续匹配」收场。纯 node，自己打包、自己装假 DOM，十秒上下。门自己的验证：--mutants。
       - name: 步步为营：清盘必结算
         run: node scripts/check-puzzle-end.mjs
+      # 计时器的 pause / resume 幂等（10-31 方案推07 Z-H03，debug G16）：停着再 pause 一次、走着再 resume 一次都不许改
+      # 用时（原先打 10 秒 → pause → 过 10 秒 → 再 pause → 过 5 秒 → resume，用时变 20 秒）。假钟，几毫秒。
+      - name: 计时器暂停 / 继续按两次不改用时
+        run: |
+          npx esbuild src/engine/timer.ts --bundle --format=esm --outfile=/tmp/timer.mjs
+          node scripts/check-timer-idem.mjs /tmp/timer.mjs
       # 每日挑战的今日榜（第 19 推）：服务器只收那一天、那一串码、那一个玩法；零点后宽限几分钟
       # 还收前一天的，过了算 late；被拒的那一局照样进存档和常规榜。直接叫 api/scores.js 的
       # handler、钟是手拨的，不起服务器。

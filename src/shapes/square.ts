@@ -856,6 +856,10 @@ export function createSquareGame(): ShapeGame {
       }
 
       function resetBoard(deal?: { pro: boolean }) {
+        // 手指还按着的那一次拖动不许落到新发的牌上（10-31 方案推07 Z-H03 ①）：按着不松 → 暂停 →《再来一局》→ 松手，原先
+        // 旧的那次拖动接着结算在新的一局上（新的一局记 1 步，重开到松手之间新盘上还画着旧链的影子）。onEnd 拿到 null 只重画。
+        chains.stopAll();
+        drag = null;
         rows = BOARD_DIM;
         cols = BOARD_DIM;
         grid = isBomb ? generateCleanBombBoard(() => boardFromBombDeck(shuffledDeck()), hasInitialClump, BOMB_ADJ, liveBomb) : generateCleanBoard();

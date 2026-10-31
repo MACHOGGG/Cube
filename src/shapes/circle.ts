@@ -1122,6 +1122,10 @@ export function createCircleGame(): ShapeGame {
       }
 
       function resetBoard(deal?: { pro: boolean }) {
+        // 手指还按着的那一次拖动不许落到新发的牌上（10-31 方案推07 Z-H03 ①）：按着不松 → 暂停 →《再来一局》→ 松手，原先
+        // 旧的那次拖动接着结算在新的一局上（新的一局记 1 步，重开到松手之间新盘上还画着旧链的影子）。onEnd 拿到 null 只重画。
+        chains.stopAll();
+        drag = null;
         grid = isBomb ? generateCleanBombBoard(() => boardFromBombDeck(shuffledDeck()), hasInitialClump, BOMB_ADJ, liveBomb) : generateCleanBoard();
         // Pro 局（10-15 补充 S10）：牌已经发完了，随机数一个都不再取——只把每一枚正面色块的反面改写成这一圈里的下一色
         //（engine/proCycle.ts）。上面那一行一个字不动，所以非 Pro 局、代号局、每日局的牌逐枚不变。

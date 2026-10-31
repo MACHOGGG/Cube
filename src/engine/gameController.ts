@@ -1134,7 +1134,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 前台时那套「还在暂停中」的判断会当作这一局还停在半路。
     paused = false;
     refs.pauseOverlay.classList.remove('show');
-    const elapsed = timer.elapsedSeconds();
+    // 有钟的局用时封顶在这一档的时长（10-31 方案推07 Z-H04 G18）：切后台再回来、tick 停了一阵，钟响的那一下可能晚到——
+    // 小屋里打无限反转，交上去 105 秒以上被服务器判 flipTime、整局拒收；计时局结算页也印出一个超时的用时。
+    const elapsed =
+      hooks.timeLimitSec !== undefined ? Math.min(timer.elapsedSeconds(), hooks.timeLimitSec) : timer.elapsedSeconds();
 
     const statusPercent = perf.valuePercent();
     const bonusMult = 1 + statusPercent / 100;
@@ -2033,6 +2036,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!hooks.practice) trackGameStart(hooks.shapeId, hooks.modeKey);
     refs.startOverlay.classList.remove('show');
     newGame();
+    // 兜底（10-31 方案推07 Z-H04 G17）：这一下是在后台按下去的（倒数页那一句停数没拦住，例如老虎机轮子在后台转完才
+    // 数）——单人局一开就停住，回来是暂停面板，表一秒没走。小屋局不停：那是全屋一起开的。
+    if (document.visibilityState === 'hidden' && !currentRoom() && !hooks.practice) doPause();
   });
   /**
    * 《再来一局》：先报一条 game_start（练习盘不报），再开局。结算页那颗和暂停面板那颗都走它（10-15 补充 S8）——
@@ -2091,14 +2097,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 房间局先问一句：交出去的分数就是名次，按错一下没得反悔。问的这几秒钟
     // 停着、牌也盖上（那一层是 opaque 的），所以犹豫既不吃时间系数，也不能
     // 顺便多看几眼盘面。
+    // 已经停着（暂停面板开着）就不再问：那一问的 onResume 会把别人停下的表接着走（10-31 方案推07 Z-H03 ②）。
+    if (paused) return;
     confirmFinish(hooks.lang, {
       onHold: () => {
+        if (paused) return;
         paused = true;
         timer.pause();
       },
+      // 「继续」照 doResume 的写法：那一问开着时松手的那一步收在 heldMove 里（见 holdMove），原先这儿不取，这一步就静默丢了
+      // （10-14 I-5 ②）。
       onResume: () => {
+        if (!paused) return;
         paused = false;
         timer.resume();
+        const move = heldMove;
+        heldMove = null;
+        if (move && !gameOver) move();
       },
       onFinish: () => {
         paused = false;

@@ -592,17 +592,25 @@ function paintRoomHostBanner() {
  */
 const LEAVE_MS = 120;
 let swapping = false;
+/**
+ * 落幕那一下要画的那一屏：只认最后一下（10-31 方案推07 Z-H04，verify-F softSwap）。原先过渡中又按了一下就当场画后一下，
+ * 可第一下的定时器 120ms 后照样 render() 它自己那一屏——连点两张卡，最后停在先点的那一屏。
+ */
+let pendingSwap: (() => void) | null = null;
 
 function softSwap(render: () => void): void {
   const cur = root.firstElementChild as HTMLElement | null;
   if (!cur || reducedMotion()) return void render();
-  // 上一次的过渡还没落幕就又按了一下：认后一下，但别让两拍叠在一起。
-  if (swapping) return void render();
+  // 上一次的过渡还没落幕就又按了一下：认后一下，但别让两拍叠在一起——换掉落幕时要画的那一屏就够了。
+  pendingSwap = render;
+  if (swapping) return;
   swapping = true;
   cur.classList.add('app--leave');
   window.setTimeout(() => {
     swapping = false;
-    render();
+    const r = pendingSwap;
+    pendingSwap = null;
+    r?.();
     const next = root.firstElementChild as HTMLElement | null;
     if (!next) return;
     next.classList.add('app--enter');
@@ -1559,6 +1567,10 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
      * 每日的）清掉。所以这一句撤了（方案原话：「main.ts 不再 clearSeed()，改为生成随机种
      * 子」）。
      */
+    // 先拆上一屏（10-31 方案推07 Z-H04 G19）：从主菜单直接点一局，原先这儿直接把 activeDestroy 换成这一局的，主菜单那
+    // 根鱼眼轴交出来的 destroy 就丢了——它挂在 window 上的 resize、盯着 body 的观察器每进一局多一份（10-11 B-1 修的是
+    // 「换屏时 teardown 叫它」，这一条路漏了）。
+    teardown();
     activeDestroy = game.mount(root, backFn, fullOpts);
     gameInProgress = true;
   };

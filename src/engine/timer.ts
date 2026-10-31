@@ -38,12 +38,17 @@ export function createTimer(onTick: (elapsedSeconds: number) => void): Timer {
       clearInterval(timerId);
       timerId = window.setInterval(tick, 250);
     },
+    // pause / resume 都是幂等的（10-31 方案推07 Z-H03，debug G16）：原先不看 running，停着再 pause 一次会把停着的那一段
+    // 记进 pausedElapsed（打 10 秒 → pause → 过 10 秒 → 再 pause → 过 5 秒 → resume，用时变 20 秒）；走着再 resume 一次
+    // 会把 startTime 拨回到上一次停下的那一刻。只在 start() 之后、stop() 之前有效；stop() 以后再 resume() 的行为照旧。
     pause() {
+      if (!running) return;
       pausedElapsed = performance.now() - startTime;
       running = false;
       clearInterval(timerId);
     },
     resume() {
+      if (running) return;
       running = true;
       startTime = performance.now() - pausedElapsed;
       clearInterval(timerId);

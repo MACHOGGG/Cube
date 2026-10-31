@@ -58,6 +58,11 @@
  *      一局 2 → 结算页再来一局 3。原先暂停面板那颗直接 newGame，之后还是 1。
  *   9. 《再来一局》也先数 4-3-2-1（10-31 方案推06 Z-C05，D35 甲）：计时方块结算 →《再来一局》→ #startOverlay.show、
  *      数着的那 3 秒钟不动、数完才走；暂停面板《再来一局》→ 确认，同样。原先重开直接 newGame，钟当场就走。
+ *  10. 按着不松重开（10-31 方案推07 Z-H03 ①）：拖两格不松 → 暂停 →《再来一局》→ 等倒数数完 → 松手。新盘一枚不动、
+ *      没有多出来的影子、交卷步数 0。原先旧的那次拖动落到新发的牌上（新的一局记 1 步）。
+ *  11. 倒数时切后台（推07 Z-H04 G17）：倒数第 2 秒把页面设成 hidden，等 6 秒——局没开，倒数页上摆着暂停面板；回来按
+ *      《继续》从头数、开局。《再来一局》的倒数也量一次。原先倒数照样数完、开表。
+ *  12. 进出五局，window 上的 resize 监听不比第一局多 2 个以上（推07 Z-H04 G19）：原先每进一局多挂两个、从不摘。
  *
  * 得分那一步是读屏自己找的：读出每一枚的颜色和面，按「同色连着 ≥ N、碰到滑过的线、至少一枚色块」（和
  * check-coach-aim 那份对照同一条规矩）找一步就得分的滑法；没有就先走一步不得分的、让下一步能得分的。
@@ -611,6 +616,145 @@ for (const { flip, delayMs, scoreFirst } of [
   await measure('暂停面板《再来一局》');
   check('9 零报错', e9.length === 0, e9.slice(0, 2).join(' | '));
   await c9.close();
+}
+
+// ---------------------------------------------------------------------------
+// 10. 按着不松重开（10-31 方案推07 Z-H03 ①）
+// ---------------------------------------------------------------------------
+{
+  const c10 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c10.addInitScript(seed);
+  const q = await c10.newPage();
+  const e10 = [];
+  q.on('pageerror', (e) => e10.push(String(e)));
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await q.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  await openSquare(q, false);
+  const n0 = await tiles(q);
+  await dragTwo(q);
+  const nDrag = await tiles(q);
+  // 按 id 找键，不按位置（10-18 T3 之后暂停面板分了组、横屏两栏）。
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseRestartBtn').click());
+  await q.waitForSelector('#restartYes', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('restartYes').click());
+  await afterRestart(q);
+  const n1 = await tiles(q);
+  const s1 = await seats(q);
+  await q.mouse.up();
+  await q.waitForTimeout(1500);
+  check('10（尺子）拖着的时候盘上真有拖动的影子（多出来的那几枚）', nDrag > n0, `${n0} → ${nDrag}`);
+  check('10 重开之后（手还按着）新盘上没有旧链的影子', n1 === n0, `${n1} / ${n0}`);
+  check('10 松手：新盘一枚不动', same(await seats(q), s1));
+  check('10 松手之后也没有多出来的影子', (await tiles(q)) === n0, `${await tiles(q)} / ${n0}`);
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
+  await q.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  const steps = await q.$eval('#endBreakdown', (e) => (/（(\d+)步/.exec(e.textContent || '') || [])[1] ?? '');
+  check('10 交卷：新的一局步数 0（旧的那次拖动没算到它头上）', steps === '0', `步数 ${steps || '读不到'}`);
+  check('10 零报错', e10.length === 0, e10.slice(0, 2).join(' | '));
+  await c10.close();
+}
+
+// ---------------------------------------------------------------------------
+// 11. 倒数时切后台（10-31 方案推07 Z-H04 G17）
+// ---------------------------------------------------------------------------
+{
+  const c11 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c11.addInitScript(seed);
+  const q = await c11.newPage();
+  const e11 = [];
+  q.on('pageerror', (e) => e11.push(String(e)));
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await q.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  /** 把页面设成 hidden / visible（Playwright 没有现成的开关：改 document 上那两个读数，再派一条事件）。 */
+  const setHidden = (h) => q.evaluate((hide) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hide ? 'hidden' : 'visible') });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hide });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, h);
+  const look = () => q.evaluate(() => ({
+    counting: !!document.querySelector('#startOverlay.show'),
+    panel: !!document.querySelector('#pauseOverlay.show.pause--pre'),
+    digits: document.querySelectorAll('#startCount .cd-digit').length,
+  }));
+  const hiddenSixSeconds = async (tag) => {
+    await q.waitForTimeout(1200);
+    await setHidden(true);
+    await q.waitForTimeout(6000);
+    const v = await look();
+    check(`11 ${tag}：倒数第 2 秒切后台、等 6 秒——局没开（还在倒数那一页）`, v.counting, JSON.stringify(v));
+    check(`11 ${tag}：倒数页上摆着暂停面板（回来按《继续》）`, v.panel, JSON.stringify(v));
+    await setHidden(false);
+    await q.evaluate(() => document.getElementById('continueBtn').click());
+    const began = await q.waitForFunction(() => !document.querySelector('#startOverlay.show'), null, { timeout: 12000 }).then(() => true).catch(() => false);
+    check(`11 ${tag}：回来按《继续》从头数，数完开局`, began);
+    await q.waitForTimeout(400);
+  };
+  await q.evaluate(() => document.querySelector('.home-icon-btn[data-first-playable="1"]')?.click());
+  await q.waitForSelector('#startOverlay.show', { timeout: 30000 });
+  await hiddenSixSeconds('第一局');
+  // 《再来一局》的倒数（推06 起重开也数）同样量一次。
+  await q.evaluate(() => document.getElementById('stopBtn').click());
+  await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
+  await q.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await q.evaluate(() => document.getElementById('restartBtn').click());
+  await q.waitForSelector('#startOverlay.show', { timeout: 5000 });
+  await hiddenSixSeconds('《再来一局》');
+  check('11 零报错', e11.length === 0, e11.slice(0, 2).join(' | '));
+  await c11.close();
+}
+
+// ---------------------------------------------------------------------------
+// 12. 进出五局，window 上的 resize 监听不涨（10-31 方案推07 Z-H04 G19）
+// ---------------------------------------------------------------------------
+{
+  const c12 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c12.addInitScript(seed);
+  await c12.addInitScript(() => {
+    const live = new Set();
+    const add = window.addEventListener;
+    const rem = window.removeEventListener;
+    window.addEventListener = function (t, fn, o) {
+      if (t === 'resize') live.add(fn);
+      return add.call(this, t, fn, o);
+    };
+    window.removeEventListener = function (t, fn, o) {
+      if (t === 'resize') live.delete(fn);
+      return rem.call(this, t, fn, o);
+    };
+    window.__resizeN = () => live.size;
+  });
+  const q = await c12.newPage();
+  const e12 = [];
+  q.on('pageerror', (e) => e12.push(String(e)));
+  await q.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await q.waitForSelector('.home-icon-btn', { timeout: 40000 });
+  /** 进一局方块、开局，再从暂停面板结束、回主菜单；回来之后派一条 resize（摘监听是在下一次 resize 那一下）。 */
+  const inAndOut = async () => {
+    await q.evaluate(() => document.querySelector('.home-icon-btn[data-first-playable="1"]')?.click());
+    await q.waitForSelector('#startBtn', { state: 'attached', timeout: 30000 });
+    await q.evaluate(() => document.getElementById('startBtn').click());
+    await q.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, null, { timeout: 30000 });
+    await q.evaluate(() => document.getElementById('stopBtn').click());
+    await q.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await q.evaluate(() => document.getElementById('pauseFinishBtn').click());
+    await q.waitForSelector('#endOverlay.show', { timeout: 15000 });
+    await q.evaluate(() => document.getElementById('endBackBtn').click());
+    await q.waitForSelector('.home-icon-btn', { timeout: 15000 });
+    await q.evaluate(() => window.dispatchEvent(new Event('resize')));
+    await q.waitForTimeout(300);
+    return q.evaluate(() => window.__resizeN());
+  };
+  const first = await inAndOut();
+  let last = first;
+  for (let i = 2; i <= 5; i++) last = await inAndOut();
+  check('12 进出五局：window 上的 resize 监听不比第一局多 2 个以上', last <= first + 2, `第一局之后 ${first} 个，第五局之后 ${last} 个`);
+  check('12 零报错', e12.length === 0, e12.slice(0, 2).join(' | '));
+  await c12.close();
 }
 
 await browser.close();

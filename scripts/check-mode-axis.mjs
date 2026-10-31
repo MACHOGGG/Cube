@@ -1661,6 +1661,81 @@ let page = await menuPage({ slides_played_square: '1' });
   await p12.close();
 }
 
+// ── 4m. 松手丢了不卡死（10-31 方案推07 Z-H04 G12）──────────────────────
+//
+// 捕获失败（有的内核在某些时序下拒绝 setPointerCapture）之后在窗口外松手，pointerup 到不了轴：原先 `dragging` 一直
+// 是真，之后按下都不理（新的一把接着按上一把的起点算，轴当场跳一截），不按键只移鼠标也拖着轴走。量法：拖一把、
+// 不派那条 pointerup（就是「被吞掉了」）——
+//   ① 再左键按下拖 120px：轴跟新的这一下往前走（原先先倒退一大截：位移按上一把最后那一点算）；
+//   ② 再吞一次松手，然后不按键只移鼠标（buttons 0）：头一下就当松手收尾、定格，之后轴一动不动。
+{
+  const pm = await menuPage({ slides_played_square: '1' });
+  await installFocus(pm);
+  const out = await pm.evaluate(async () => {
+    const host = document.querySelector('.mode-axis');
+    const r = host.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const ev = (type, o) =>
+      host.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerType: 'mouse', pointerId: 1, isPrimary: true, button: 0, buttons: 1, ...o,
+      }));
+    const settle = () => new Promise((res) => setTimeout(res, 450));
+    const drag = (from, steps, dir = -1) => {
+      ev('pointerdown', { clientX: x, clientY: from });
+      for (let k = 1; k <= steps; k++) ev('pointermove', { clientX: x, clientY: from + dir * k * 20 });
+    };
+    // 第一把往上拖 120px，松手被吞掉。
+    drag(560, 6);
+    await settle();
+    const down0 = window.__focus();
+    // ① 新的一把：从更低的地方按下，往上拖 120px。
+    drag(700, 6);
+    await settle();
+    const after1 = window.__focus();
+    ev('pointerup', { clientX: x, clientY: 580, buttons: 0 });
+    await settle();
+    // ② 再拖一把、吞掉松手，然后只移鼠标不按键。
+    drag(560, 6);
+    await settle();
+    ev('pointermove', { clientX: x, clientY: 500, buttons: 0 });
+    await settle();
+    const idle0 = window.__focus();
+    for (let k = 1; k <= 8; k++) ev('pointermove', { clientX: x, clientY: 500 - k * 25, buttons: 0 });
+    await settle();
+    const idle1 = window.__focus();
+    return { down0, after1, idle0, idle1, dragging: host.classList.contains('mode-axis--rail') };
+  });
+  check('4m ① 上一把的松手丢了，新按下的这一把照样往前拖（跟新的这一下走，不先倒退）',
+    out.after1 - out.down0 > 0.2, `${out.down0.toFixed(2)} → ${out.after1.toFixed(2)}`);
+  check('4m ② 松手丢了之后不按键只移鼠标：轴一动不动',
+    Math.abs(out.idle1 - out.idle0) < 0.02, `${out.idle0.toFixed(3)} → ${out.idle1.toFixed(3)}`);
+  await pm.close();
+}
+
+// ── 4n. 连点两张卡，停在后点的那一屏（10-31 方案推07 Z-H04 softSwap）──────────
+//
+// 计时、炸弹（还有老虎机那几张）按下去是整页，换页包一层 softSwap（旧页先淡 120ms 再画新页）。原先 120ms 里又按了一
+// 下就当场画后一下，可第一下的定时器到点照样画它自己那一屏——最后停在先点的那一屏。在页面里自己 click()（淡出那 120ms
+// 旧页是 pointer-events: none，真手指按不着；这儿量的是落幕时画哪一屏）。挑计时、炸弹这两张：没开通的人点老虎机弹的是
+// 订阅窗，不走 softSwap。
+{
+  const ps = await menuPage({ slides_played_square: '1' });
+  const out = await ps.evaluate(async () => {
+    const card = (re) => [...document.querySelectorAll('.mode-axis > .home-icon-btn')].find((e) => re.test(e.getAttribute('aria-label') || ''));
+    const timed = card(/^计时挑战/);
+    const bomb = card(/^基础炸弹/);
+    if (!timed || !bomb) return { ok: false, why: `卡没找到：计时 ${!!timed} 炸弹 ${!!bomb}` };
+    timed.click();
+    const leaving = !!document.querySelector('.app--leave');
+    bomb.click();
+    await new Promise((res) => setTimeout(res, 900));
+    return { ok: true, leaving, timed: !!document.querySelector('.timed-page'), bomb: !!document.querySelector('.bomb-page') };
+  });
+  check('4n（尺子）点第一张那一下真的在淡出（softSwap 那一路，不是直接换）', out.ok && out.leaving, JSON.stringify(out));
+  check('4n 120ms 里连点计时、炸弹两张：最后停在炸弹那一页（后点的）', out.ok && out.bomb && !out.timed, JSON.stringify(out));
+  await ps.close();
+}
+
 // ── 4h. 点点轨：十四颗全程都看得见 ──────────────────────────────────
 //
 // 玩家 2026-09：两侧那条点点轨「只展示了几个很莫名其妙」。根因是一个**可见窗口**——

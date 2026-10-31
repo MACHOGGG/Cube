@@ -27,6 +27,11 @@
  *      束了这一局。」。
  *   ⑦ **两个人都看不到「离开太久了」**（mpRoundDropped）——从前下一局一开，被结束的人飘的正是这
  *      一句，而它是假话：他的分已经按当时的数记进去了。
+ *
+ * 10-31 方案推07 Z-H03 ②（10-14 I-5 ②）：
+ *
+ *   ⓪ **《完成？》那一问开着时松手，「继续」之后这一步照样落下、计 1 步。** 乙拖着两格不松 → 按《完成》→ 松手 →
+ *      「继续」：盘面变了；他随后交卷，存档里这一局 1 步。原先那一问的「继续」不取暂停中收着的那一步，这一步静默丢了。
  */
 import { chromium } from 'playwright';
 
@@ -187,6 +192,38 @@ const cOnServer = ((await roomOf(A.page)).players || []).find((p) => p.id === cI
 check('（尺子）丙的 120 分报上去了', cOnServer?.score === 120, JSON.stringify(cOnServer?.score));
 await D.ctx.setOffline(true);
 
+// ⓪ 乙：拖着不松 →《完成》→ 松手 →「继续」（推07 Z-H03 ②）。
+{
+  const seatsOf = () => B.page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll('#boardWrap .tile[data-id]')].map((e) => [e.dataset.id, `${e.dataset.r},${e.dataset.c}`])));
+  const at = (r, c) => B.page.$eval(`#boardWrap .tile[data-r="${r}"][data-c="${c}"]`, (e) => {
+    const b = e.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  });
+  const a = await at(2, 1);
+  const pitch = (await at(2, 2)).x - a.x;
+  const s0 = await seatsOf();
+  await B.page.mouse.move(a.x, a.y);
+  await B.page.mouse.down();
+  for (let i = 1; i <= 12; i++) {
+    await B.page.mouse.move(a.x + (pitch * 2 * i) / 12, a.y);
+    await B.page.waitForTimeout(16);
+  }
+  await B.page.waitForTimeout(200);
+  // 手还按着：在页面里按《完成》（真鼠标去点会先把这一把松掉）。
+  await B.page.evaluate(() => document.getElementById('finishBtn').click());
+  await B.page.waitForSelector('#finishConfirm', { timeout: 8000 });
+  await B.page.mouse.up();
+  await B.page.waitForTimeout(600);
+  const held = await seatsOf();
+  await B.page.evaluate(() => document.getElementById('mpFinishNo').click());
+  await B.page.waitForTimeout(2500);
+  const after = await seatsOf();
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  check('⓪（尺子）那一问开着时松手：这一步先收着，盘面没动', Object.keys(s0).length >= 16 && same(held, s0), `${Object.keys(s0).length} 块`);
+  check('⓪ 「继续」之后这一步落下（盘面变了）', !same(after, s0));
+}
+
 // ① 客人先交卷：他的等待页上没有这颗键。
 await finish(B.page);
 await B.page.waitForSelector('#mpWait', { timeout: 10000 }).catch(() => {});
@@ -194,6 +231,18 @@ await B.page.waitForTimeout(1500);
 const bBtn = await forceBtn(B.page);
 check('①（尺子）客人交了卷，等待页盖上了', Boolean(await B.page.$('#mpWait')));
 check('① 客人的等待页上没有「不等了」', !bBtn.there, JSON.stringify(bBtn));
+{
+  // ⓪ 收尾：乙这一局存进本机存档的步数（「继续」之后落下的那一步算数）。
+  const bMoves = await B.page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) {
+      if (!k.endsWith('::runs')) continue;
+      const list = JSON.parse(localStorage.getItem(k) || '[]');
+      if (list[0]?.data) return list[0].data.moves;
+    }
+    return null;
+  });
+  check('⓪ 乙交卷：存档里这一局 1 步', bMoves === 1, String(bMoves));
+}
 
 // ② 屋主交卷：他的等待页上有。
 await finish(A.page);

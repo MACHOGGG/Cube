@@ -51,7 +51,19 @@ export function overwriteBest(key: string, score: number): void {
  * whatever language the player is reading now (see runRecord.ts).
  */
 export interface StoredRun {
+  /** 结算那一刻的真实时间：显示、和云端对编号（runIdOf / idOf）用。**不拿它排「谁新」**，见 seq。 */
   at: number;
+  /**
+   * 这台设备、这个存档键下存进来的第几局（10-31 方案推07 Z-H04 G22）：saveRun 赋「本键已有的最大 seq ＋ 1」。
+   *
+   * 原先 trim 按 at 排，而 at 是 Date.now()——系统日期被拨乱时新局排在老局后面，一存进来就被挤出存档（已复现：
+   * 日期拨到明年打满 40 局，再调回来打一局，这一局当场不见了；打满 41 局再调回来，连分都丢——它比水位线旧，
+   * 不记账）。seq 只随「又存了一局」往上走，和墙上的钟无关。
+   *
+   * 没有 seq 的局（改版之前存的、从云上并回来的、从别的键挪过来的）一律当成比有 seq 的旧，它们之间按 at 先后
+   * 排——等于「按 at 先后补在新局前面」，不回头改写它们。
+   */
+  seq?: number;
   data: RunData;
   start: BoardSnapshot | null;
   end: BoardSnapshot | null;
@@ -98,7 +110,8 @@ export function dropKey(bestKey: string): boolean {
       localStorage.getItem(bestKey) !== null ||
       localStorage.getItem(bestKey + RUNS_SUFFIX) !== null ||
       localStorage.getItem(bestKey + EVICTED_SUFFIX) !== null ||
-      localStorage.getItem(bestKey + EVICTED_AT_SUFFIX) !== null;
+      localStorage.getItem(bestKey + EVICTED_AT_SUFFIX) !== null ||
+      localStorage.getItem(bestKey + EVICTED_SEQ_SUFFIX) !== null;
     localStorage.removeItem(bestKey);
     localStorage.removeItem(bestKey + RUNS_SUFFIX);
     // 被挤出去那些局的分也要一起清掉（见 EVICTED_SUFFIX）。漏了它，换规则版本清档之
@@ -106,6 +119,7 @@ export function dropKey(bestKey: string): boolean {
     localStorage.removeItem(bestKey + EVICTED_SUFFIX);
     // 水位线一起清（10-09 补充方案 7-2）：留着它，清档之后头几局被挤出去时会被当成「早就记过了」。
     localStorage.removeItem(bestKey + EVICTED_AT_SUFFIX);
+    localStorage.removeItem(bestKey + EVICTED_SEQ_SUFFIX);
     return had;
   } catch {
     // 无痕模式之类：删不掉就当没有，不该连带把开机拦住。
@@ -128,9 +142,19 @@ const MAX_ARCHIVE = 40;
 const idOf = (run: StoredRun): string =>
   `${run.at}-${run.data?.shapeId ?? ''}-${run.data?.modeKey ?? ''}`;
 
-/** 按上面那两个数收一收：新的在前，只有最近十局留着照片。 */
+/** 这一局有没有本机序号（见 StoredRun.seq）。 */
+const hasSeq = (run: StoredRun): boolean => typeof run.seq === 'number' && Number.isFinite(run.seq);
+/** 谁更新排前面：有本机序号的一律比没有的新；各自内部按 seq / at 往下排。 */
+const newerFirst = (a: StoredRun, b: StoredRun): number => {
+  const sa = hasSeq(a);
+  const sb = hasSeq(b);
+  if (sa !== sb) return sa ? -1 : 1;
+  return sa ? (b.seq as number) - (a.seq as number) : b.at - a.at;
+};
+
+/** 按上面那两个数收一收：新的在前（按本机序号，见 StoredRun.seq），只有最近十局留着照片。 */
 function trim(list: StoredRun[]): StoredRun[] {
-  const sorted = list.slice().sort((a, b) => b.at - a.at).slice(0, MAX_ARCHIVE);
+  const sorted = list.slice().sort(newerFirst).slice(0, MAX_ARCHIVE);
   return sorted.map((run, i) => (i < MAX_RUNS ? run : { ...run, start: null, end: null }));
 }
 
@@ -175,6 +199,31 @@ const EVICTED_SUFFIX = '::evicted';
 const EVICTED_AT_SUFFIX = '::evictedAt';
 
 /**
+ * 同一笔账的第二条水位线：已经记进账的那几局里最大的本机序号（10-31 方案推07 Z-H04 G22）。
+ *
+ * 有 seq 的局（本机存进来的）按它判「记过没有」，和 trim 按 seq 排是同一把尺子——日期被拨乱时 at 先后是乱的，拿 at
+ * 判的话，调回日期之后被挤出去的局比水位线「旧」，就不记账了。没有 seq 的局（云上并回来的）照旧按 `::evictedAt`
+ * 判：服务器不存 seq，它们只有 at 可比。方案原话是「水位线 ::evictedAt 改记 seq」，这儿另起一把键而不是改那一把，
+ * 是因为云上那几局只能拿 at 比，两条都要。
+ */
+const EVICTED_SEQ_SUFFIX = '::evictedSeq';
+
+function evictedSeqMark(bestKey: string): number {
+  try {
+    return parseInt(localStorage.getItem(bestKey + EVICTED_SEQ_SUFFIX) || '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** 这一局存进来该拿的本机序号：本键已有的最大 seq（含已经挤出去记过账的那几局）＋ 1。 */
+function nextSeq(bestKey: string, have: readonly StoredRun[]): number {
+  let top = evictedSeqMark(bestKey);
+  for (const run of have) if (hasSeq(run)) top = Math.max(top, run.seq as number);
+  return Math.floor(top) + 1;
+}
+
+/**
  * 这个玩法此刻的水位线。`have` 是这一次收之前本机清单上的那几局。
  *
  * 水位线是 7-2 才有的。在那之前就记过账的设备，账上有数、却没有水位线——照 0 算的话，上线之后头
@@ -202,30 +251,42 @@ function evictedMark(bestKey: string, have: readonly StoredRun[]): number {
  * null），所以「收之前有几局、收之后有几局」这个差值不等于「谁被挤掉了」。按编号比一
  * 遍，谁不在了才算挤掉。
  *
- * 挤掉的局只有比水位线 `mark` 新的才记账（见 EVICTED_AT_SUFFIX），记完水位线跟着往前推。
+ * 挤掉的局只有比水位线新的才记账（有 seq 的比 `::evictedSeq`，没有的比 `mark`，见那两把键），记完水位线跟着往前推。
+ *
+ * **分两步**（10-31 方案推07 Z-H04 G23）：这儿只算出留哪几局、记多少，账是 `commit()` 才写——调用方先把清单写进
+ * 去，写成功了再 commit。原先求参数时就先写了账，接着写清单那一下抛了（存储满），清单还是旧的、那几局还在里面，
+ * 账上却已经记了它们——下一次真挤出去又记一遍，同一局算两遍（已复现）。
  */
-function trimInto(bestKey: string, list: StoredRun[], mark: number): StoredRun[] {
+function trimInto(bestKey: string, list: StoredRun[], mark: number): { kept: StoredRun[]; commit: () => void } {
   const kept = trim(list);
   const alive = new Set(kept.map(idOf));
+  const seqMark = evictedSeqMark(bestKey);
   let lost = 0;
   let newest = mark;
+  let newestSeq = seqMark;
   for (const run of list) {
     if (!run?.data || alive.has(idOf(run))) continue;
     // 水位线以内的局早就记过了：从云上并回来、又被挤出去，不再记第二遍（审计 #2 那个越刷越高）。
-    if (!(run.at > mark)) continue;
+    if (hasSeq(run)) {
+      if (!((run.seq as number) > seqMark)) continue;
+      newestSeq = Math.max(newestSeq, run.seq as number);
+    } else if (!(run.at > mark)) continue;
     lost += run.data.totalScore || 0;
+    // at 那一条也跟着推：云上并回来的正是这几局的副本（同一个编号），比它旧的不该再记。
     newest = Math.max(newest, run.at);
   }
-  if (lost > 0) {
+  const commit = () => {
+    if (lost <= 0) return;
     try {
       const was = parseInt(localStorage.getItem(bestKey + EVICTED_SUFFIX) || '0', 10) || 0;
       localStorage.setItem(bestKey + EVICTED_SUFFIX, String(was + lost));
       localStorage.setItem(bestKey + EVICTED_AT_SUFFIX, String(newest));
+      if (newestSeq > seqMark) localStorage.setItem(bestKey + EVICTED_SEQ_SUFFIX, String(newestSeq));
     } catch {
       // 存不进去就只好少这一笔——这一局的结算照旧，不能因此被打断（见文件头那段）。
     }
-  }
-  return kept;
+  };
+  return { kept, commit };
 }
 
 /** 这几个玩法被挤出存档的局，一共多少分。累计得分要把它加回去。 */
@@ -260,7 +321,10 @@ export function loadRuns(bestKey: string): StoredRun[] {
 export function saveRun(bestKey: string, run: StoredRun): void {
   try {
     const have = loadRuns(bestKey);
-    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [run, ...have], evictedMark(bestKey, have))));
+    const t = trimInto(bestKey, [{ ...run, seq: nextSeq(bestKey, have) }, ...have], evictedMark(bestKey, have));
+    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(t.kept));
+    // 清单写进去了才记账（G23，见 trimInto）。
+    t.commit();
   } catch {
     // Storage full or unavailable — the run simply isn't archived.
   }
@@ -278,9 +342,15 @@ export function mergeRuns(bestKey: string, incoming: readonly StoredRun[]): numb
   try {
     const have = loadRuns(bestKey);
     const seen = new Set(have.map(idOf));
-    const add = incoming.filter((run) => run?.data && !seen.has(idOf(run)));
+    // 并进来的局不带本机序号（云上不存；从别的键挪过来的那一份是别的键的序号，放在这儿排不出先后）：一律当成比本机
+    // 存进来的旧，它们之间按 at 排（见 StoredRun.seq）。
+    const add = incoming
+      .filter((run) => run?.data && !seen.has(idOf(run)))
+      .map(({ seq: _seq, ...rest }) => rest as StoredRun);
     if (!add.length) return 0;
-    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(trimInto(bestKey, [...have, ...add], evictedMark(bestKey, have))));
+    const t = trimInto(bestKey, [...have, ...add], evictedMark(bestKey, have));
+    localStorage.setItem(bestKey + RUNS_SUFFIX, JSON.stringify(t.kept));
+    t.commit();
     return add.length;
   } catch {
     return 0;
