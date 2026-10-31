@@ -25,7 +25,7 @@ import { createPerformanceGauge } from './performance';
 import { vibrate as vibrate0 } from './haptics';
 import { renderShareCard as renderShareCard0, type BoardSnapshot, type Standing } from './shareCard';
 import { currentRoom, latestRoomState } from './room';
-import { pushRun, sessionExpired } from './cloudScores';
+import { flushPushQueue, pushRun, sessionExpired } from './cloudScores';
 import { endHintShownToday, markEndHintShown } from './signInHint';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
@@ -1459,6 +1459,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
             hooks.onReLogin?.(() => {
               refs.endDailyNoteEl.hidden = true;
               refs.endDailyNoteEl.textContent = '';
+              // 登回来了：这一局（和队列里别的几局）现在补交（10-31 方案推08 Z-H01 第 6 条，debug G34）。原先「重新登录」
+              // 只换了令牌，这一局并没有补传。
+              void flushPushQueue();
             }),
           );
           refs.endDailyNoteEl.append(' ', again);

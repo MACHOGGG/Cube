@@ -166,18 +166,24 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush } = api;
   check('④ 清掉了', cachedBoard() === null);
 }
 
-// ── ⑤ 上报失败：隔一会儿再试一次 ────────────────────────────────
+// ── ⑤ 上报失败：这一局留在本机待发队列里，不当场狂试 ────────────────────────────────
+//
+// 原先失败隔两秒再试一次（一共两趟）。10-31 方案推08 Z-H01 起换成交卷待发队列（不再并存）：只发这一趟，这一局留在
+// slides_push_queue 里，等开机、联网、下一局交卷、或者至少 15 秒之后再补（补交那一半由浏览器门 check-push-queue 量）。
 {
   calls = [];
   netOk = false;
-  pushRun({ at: Date.now() + 1, shapeId: 'circle', modeKey: 'base', totalScore: 7 });
-  // 第一趟当场发出去，第二趟要等约两秒。
+  const at = Date.now() + 1;
+  pushRun({ at, shapeId: 'circle', modeKey: 'base', totalScore: 7 });
   await new Promise((r) => setTimeout(r, 300));
   const firstOnly = calls.filter((c) => c.action === 'push').length;
   check('⑤ 先只发了一趟', firstOnly === 1, String(firstOnly));
   await waitForPush(4000);
+  await new Promise((r) => setTimeout(r, 2500));
   const total = calls.filter((c) => c.action === 'push').length;
-  check('⑤ 失败之后又试了一趟（一共两趟，不是无限重试）', total === 2, String(total));
+  check('⑤ 失败之后不再隔两秒重报（还是一趟，不是无限重试）', total === 1, String(total));
+  const queue = JSON.parse(localStorage.getItem('slides_push_queue') || '[]');
+  check('⑤ 这一局留在待发队列里，等下一个时机补交', queue.some((q) => q.runId === `${at}-circle-base`), JSON.stringify(queue.map((q) => q.runId)));
   netOk = true;
 }
 

@@ -17,6 +17,9 @@
  *    多出来的那一行不把屋号四格挤到页底那颗《退出》底下（10-11 方案 C-8 刚量过的那一对）。
  *    尺子：联网时进《多人》，那一句不在。
  *
+ * ② 断网打完一局（10-31 方案推08 Z-H02，10-14 H-1）：记录页里有这一局（历史记录存本机）；结算页不说「登录已过期」
+ *    （断网不是令牌坏了）；这一局进了交卷待发队列，联网之后自己补交（online 事件，Z-H01），服务器那边他的存档里有它。
+ *
  * 这一台服务器自己用（兑一次 TESTMONTH：开屋要天才身份，不然按《开小屋》弹的是订阅窗，走不到网络那一步）。
  */
 import { chromium } from 'playwright';
@@ -142,6 +145,60 @@ async function leaveMultiplayer() {
     .then(() => true).catch(() => false);
   check('连上网：「需要联网」那一句自己撤掉', gone);
   check('（尺子）连上了：navigator.onLine 是 true', (await page.evaluate(() => navigator.onLine)) === true);
+}
+
+// ---- ② 断网打完一局（推08 Z-H02） -------------------------------------------------
+{
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+  await ctx.setOffline(true);
+  await page.evaluate(() => document.querySelector('.home-icon-btn[data-first-playable="1"]')?.click());
+  await page.waitForSelector('#startBtn', { state: 'attached', timeout: 20000 });
+  await page.evaluate(() => document.getElementById('startBtn').click());
+  await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, null, { timeout: 20000 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.getElementById('stopBtn').click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.evaluate(() => document.getElementById('pauseFinishBtn').click());
+  await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await page.waitForTimeout(2500);
+  const end = await page.evaluate(() => {
+    const note = document.getElementById('endDailyNote');
+    let run = null;
+    for (const k of Object.keys(localStorage)) {
+      if (!k.endsWith('::runs')) continue;
+      for (const r of JSON.parse(localStorage.getItem(k) || '[]')) if (r?.data && (!run || r.at > run.at)) run = r;
+    }
+    const id = run ? `${run.data.at}-${run.data.shapeId}-${run.data.modeKey}` : null;
+    const q = JSON.parse(localStorage.getItem('slides_push_queue') || '[]');
+    return { note: note && !note.hidden ? note.textContent.trim() : '', id, queued: q.some((x) => x.runId === id) };
+  });
+  check('② 断网结算：结算页不说「登录已过期」', !end.note.includes(s.endSessionExpired), end.note || '（没有那一句）');
+  check('② 断网结算：这一局进了交卷待发队列', !!end.id && end.queued, JSON.stringify(end));
+  // 记录页：历史记录存本机。
+  await page.evaluate(() => document.getElementById('endBackBtn')?.click());
+  await page.waitForSelector('#navRecords', { timeout: 15000 });
+  await page.click('#navRecords');
+  await page.waitForSelector('#recordsPanel', { timeout: 10000 });
+  await page.click('#recordsPanel');
+  await page.waitForTimeout(600);
+  const rows = await page.$$eval('.center-pick .records-row', (e) => e.length);
+  check('② 断网时记录页里有这一局（历史记录存本机）', rows >= 1, `${rows} 行`);
+  // 联网：online 那一下补交（失败之后至少隔 15 秒，见 engine/cloudScores.ts）。
+  await ctx.setOffline(false);
+  const sent = await page
+    .waitForFunction((id) => !JSON.parse(localStorage.getItem('slides_push_queue') || '[]').some((x) => x.runId === id), end.id, { timeout: 45000, polling: 500 })
+    .then(() => true).catch(() => false);
+  check('② 联网之后自己补交：队列里没了这一局', sent);
+  const stored = await page.evaluate(async (id) => {
+    const e = JSON.parse(localStorage.getItem('slides_genius') || '{}');
+    const r = await fetch('/api/scores', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'mine', code: e.code, token: e.token, ...(e.email ? { email: e.email } : {}) }),
+    }).then((x) => x.json()).catch(() => null);
+    return Array.isArray(r?.archive) ? r.archive.filter((a) => a.runId === id).length : -1;
+  }, end.id);
+  check('② 服务器那边他的存档里有这一局（1 条）', stored === 1, String(stored));
 }
 
 check('一路没有没接住的错', errs.length === 0, errs.slice(0, 3).join(' | '));

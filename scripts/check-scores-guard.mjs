@@ -568,8 +568,10 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
 
 // ---- ⑬ 客户端：服务器说 implausible，就不重报 ---------------------------------
 //
-// 重报一次答的还是同一句——白白多打一趟。网抖（5xx、断网）照旧两秒后重报一次（engine/cloudScores.ts
-// 的 pushRun）。把客户端那一份当场打包，配一个假的 fetch：一种回 400 implausible，一种回 500。
+// 重报一次答的还是同一句——白白多打一趟。网抖（5xx、限速、断网）原先两秒后重报一次；10-31 方案推08 Z-H01 起换成
+// 交卷待发队列（不再并存）：只打这一趟，这一局留在本机队列里（slides_push_queue），等开机、联网、下一局交卷或 15 秒
+// 之后再补交（engine/cloudScores.ts 的 pushRun / flushPushQueue；补交那一半由浏览器门 check-push-queue 量）。把客户端
+// 那一份当场打包，配一个假的 fetch：一种回 400 implausible，一种回 500。
 {
   const out = await build({
     entryPoints: [fileURLToPath(new URL('../src/engine/cloudScores.ts', import.meta.url))],
@@ -603,10 +605,14 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     // 拿它写「本局未上传」，而不是照旧写一句「已上传」。
     check('⑬ 回 400 implausible：只打了一趟，不重报，并且告诉调用方「被拒了」', calls.length === 1 && r1?.refused === 'implausible',
       `${calls.length} 趟 ${JSON.stringify(r1)}`);
+    /** 待发队列里有没有这一局（runId 照 runIdOf：时刻-棋盘-玩法）。 */
+    const queued = (at) => JSON.parse(mem.get('slides_push_queue') || '[]').some((q) => q.runId === `${at}-square-base`);
+    check('⑬ 回 400 implausible：待发队列里不留它', !queued(1));
     answer = { status: 500, body: { error: 'server' } };
     calls.length = 0;
     await api.pushRun({ ...run, at: 2 });
-    check('⑬（尺子）回 500：两秒后照旧重报一次（一共两趟）', calls.length === 2, `${calls.length} 趟`);
+    await new Promise((r) => setTimeout(r, 2300));
+    check('⑬（尺子）回 500：只打这一趟（不再隔两秒重报），这一局留在待发队列里', calls.length === 1 && queued(2), `${calls.length} 趟 队列 ${queued(2)}`);
 
     // 10-15 补充 L-9：必败的不重报，限速、断网照旧重报一次；看榜分得清限速、服务器、网络。
     const pushOnce = async (status, error, at) => {
@@ -623,7 +629,8 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     check('⑬ L-9 回 401：只打一趟，交回 null，令牌记成过期', expired.n === 1 && expired.reply === null && api.sessionExpired() === true,
       `${expired.n} 趟 ${JSON.stringify(expired.reply)} expired=${api.sessionExpired()}`);
     const limited = await pushOnce(429, 'tooMany', 5);
-    check('⑬ L-9 回 429：两秒后照旧重报一次（一共两趟）', limited.n === 2, `${limited.n} 趟`);
+    check('⑬ L-9 回 429：只打这一趟，这一局留在待发队列里', limited.n === 1 && queued(5), `${limited.n} 趟 队列 ${queued(5)}`);
+    check('⑬ L-9 回 400 mismatch：待发队列里不留它；回 401：留着（登回来再交）', !queued(3) && queued(4));
     answer = null;
     calls.length = 0;
     const thrower = globalThis.fetch;
@@ -632,10 +639,12 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
       throw new TypeError('Failed to fetch');
     };
     await api.pushRun({ ...run, at: 6 });
+    await new Promise((r) => setTimeout(r, 2300));
     const offline = calls.length;
     const board = await api.fetchBoard('square:base');
     globalThis.fetch = thrower;
-    check('⑬ L-9 断网：交卷两秒后照旧重报一次；看榜说「网络」', offline === 2 && board.reason === 'network', `${offline} 趟 ${board.reason}`);
+    check('⑬ L-9 断网：交卷只打这一趟、这一局留在待发队列里；看榜说「网络」', offline === 1 && queued(6) && board.reason === 'network',
+      `${offline} 趟 队列 ${queued(6)} ${board.reason}`);
     const boardSays = async (status) => {
       answer = { status, body: { error: 'x' } };
       return (await api.fetchBoard('square:base')).reason;

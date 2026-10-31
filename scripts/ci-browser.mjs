@@ -704,9 +704,11 @@ export const GATES = [
   // 一句「多人游玩需要联网。」、表单照旧能按（只提示、不收）、按《开小屋》得到「连不上网络」、连上网那一句自己
   // 撤掉，320×568 上那一行不把屋号四格挤到《退出》底下。从前断网进《多人》什么都不说。一台自己的服务器（兑一
   // 次 TESTMONTH）。本地量 9 秒。
+  // 10-31 方案推08 Z-H02 挪到 g 片、加 ②：断网打完一局，记录页里有这一局、结算页不说「登录已过期」、这一局进交卷
+  // 待发队列，联网之后自己补交进服务器存档。
   {
     name: '断网时说清楚「需要联网」',
-    shard: 'd', secs: 12, port: 8955,
+    shard: 'g', secs: 12, port: 8955,
     run: ['scripts/check-offline.mjs', SERVER],
   },
 
@@ -783,6 +785,13 @@ export const GATES = [
     name: '首玩记号走到结算页才写，另一页跟上',
     shard: 'g', secs: 120, port: 8939,
     run: ['scripts/check-first-play-burn.mjs', SERVER],
+  },
+  // 交卷待发队列（10-31 方案推08 Z-H01）：push 连回两次 502、刷新之后补交上了、服务器存档里只有 1 条；400 implausible
+  // 不留；甲失败的一项换乙登录不发、换回甲才发。兑 TESTMONTH、TESTYEAR 各一次，一台自己的服务器。
+  {
+    name: '交卷待发队列：补交、不收不留、只用原帐号',
+    shard: 'g', secs: 120, port: 8940,
+    run: ['scripts/check-push-queue.mjs', SERVER],
   },
 ];
 

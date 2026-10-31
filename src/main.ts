@@ -11,7 +11,7 @@ import { suffixFor } from './engine/runKey';
 import { wipeOldRules } from './engine/wipeOldRules';
 import { splitSlotRuns } from './engine/slotSplit';
 import { loadAllRuns, moveRuns } from './engine/persistence';
-import { signedIn } from './engine/cloudScores';
+import { flushPushQueue, signedIn } from './engine/cloudScores';
 import { wantsSignInHint } from './engine/signInHint';
 import { BOMB_RULES_VERSION } from './engine/bomb';
 import { FLIP_RULES_VERSION, SCORING_RULES_VERSION } from './engine/scoring';
@@ -1642,6 +1642,8 @@ function boot() {
   splitSlotRuns(games.map((g) => g.card.bestKey));
   // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。
   void restoreCloudRuns(runKeyFor);
+  // 上一次没交上去的那几局（交卷待发队列，10-31 方案推08 Z-H01）：开机补交一遍。
+  void flushPushQueue();
   const savedLang = loadLang();
   // Analytics starts before the first screen so the visit is counted even if
   // the player closes the tab on the language page. It is given the saved

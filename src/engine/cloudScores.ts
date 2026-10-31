@@ -150,8 +150,6 @@ export interface CloudMine {
   nickname?: string;
 }
 
-/** 上传失败之后隔多久再试一次（只对「下一次可能就好了」的那几种，见 pushRun）。 */
-const PUSH_RETRY_MS = 2000;
 /** 打开排行榜之前最多等上传多久。 */
 const PUSH_WAIT_MS = 2000;
 
@@ -163,14 +161,146 @@ const PUSH_WAIT_MS = 2000;
  */
 let lastPush: Promise<unknown> | null = null;
 
+// ── 交卷待发队列（10-31 方案推08 Z-H01，10-14 I-3、debug G29、G34）──────────────────────────────────
+//
+// 原先交卷失败只隔 2 秒再试一次：库或函数抖动超过 2 秒、或者 2 秒内关了页面，这一局本机有、云上没有，**永远补不上**；
+// 每日挑战那一局过了零点就永久丢了。服务器按 runId 去重（api/scores.js，10-11 P2），重放是安全的——所以交卷之前先在本机
+// 落一份，交上了（或者服务器明说不收）才删，没交上的等下一个时机再发。
+//
+//   · 只在登录着时入队（没登录的人本来就不交卷）。一项记着是谁交的（who = 邮箱，或 'code:' + 码）：补发**只用原帐号**，
+//     换了帐号、登出了就留着，满 7 天丢——绝不把甲的局交到乙名下。
+//   · 删留照 pushRun 的 settle：2xx（含 duplicate、含 stored:false 的 rules / legacy）删；服务器明说不收（implausible、别的
+//     4xx）删；401、429、5xx、没到（status 0）留。401 不计次数（登回来就发）。
+//   · 重发时机：开机、online、下一局交卷那一下、失败后至少过 15 秒（越过服务器那把 10 秒的孤儿锁）。每项最多试 10 次。
+//   · 最多 30 项，满了丢最老的。键 `slides_push_queue` 登记在隐私政策的「战绩」那一类里（还没交上去的每局记录）。
+/** 本机键：还没交上去的那几局。 */
+const QUEUE_KEY = 'slides_push_queue';
+const QUEUE_MAX = 30;
+const QUEUE_TRIES = 10;
+const QUEUE_TTL_MS = 7 * 24 * 3600 * 1000;
+/** 一项失败之后，至少隔多久才再发它（服务器那把交卷锁 10 秒自己过期，见 api/scores.js）。 */
+const QUEUE_RETRY_MS = 15_000;
+
+interface Queued {
+  runId: string;
+  who: string;
+  body: Record<string, unknown>;
+  tries: number;
+  firstAt: number;
+  /** 上一次发它是什么时候（失败之后算 15 秒用）。 */
+  lastAt?: number;
+}
+
+const whoOf = (a: { email?: string; code?: string }): string => a.email ?? 'code:' + (a.code ?? '');
+
+function readQueue(): Queued[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    const now = Date.now();
+    return (raw as Queued[]).filter(
+      (q) =>
+        q && typeof q.runId === 'string' && typeof q.who === 'string' && q.body && typeof q.body === 'object' &&
+        Number.isFinite(q.firstAt) && now - q.firstAt < QUEUE_TTL_MS && (q.tries || 0) < QUEUE_TRIES,
+    );
+  } catch {
+    return [];
+  }
+}
+function writeQueue(q: Queued[]): void {
+  try {
+    if (q.length) localStorage.setItem(QUEUE_KEY, JSON.stringify(q.slice(-QUEUE_MAX)));
+    else localStorage.removeItem(QUEUE_KEY);
+  } catch {
+    /* 存不进去就只剩这一趟——和原先一样，不能因此打断结算 */
+  }
+}
+/** 改一项（不在就什么都不做）：fn 回 null 就删掉。每次都重读一遍，免得两条路同时改把对方的那一笔盖掉。 */
+function updateQueued(runId: string, fn: (q: Queued) => Queued | null): void {
+  const out: Queued[] = [];
+  for (const q of readQueue()) {
+    if (q.runId !== runId) out.push(q);
+    else {
+      const next = fn(q);
+      if (next) out.push(next);
+    }
+  }
+  writeQueue(out);
+}
+
+/** 这一趟的回包对队列里那一项意味着什么：删、留着（计一次）、留着（不计，401）。 */
+function afterSend(runId: string, r: Posted<PushReply>): void {
+  const refused = !r.ok && (r.error === 'implausible' || (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 429));
+  if (r.ok || refused) return updateQueued(runId, () => null);
+  updateQueued(runId, (q) => ({ ...q, tries: r.status === 401 ? q.tries : q.tries + 1, lastAt: Date.now() }));
+  // 401 等他登回来（onReLogin 那一下会补发）；别的过 15 秒再来一遍。
+  if (r.status !== 401) armQueueRetry(QUEUE_RETRY_MS);
+}
+
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+function armQueueRetry(ms: number): void {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void flushPushQueue();
+  }, ms);
+}
+
+let flushing: Promise<void> | null = null;
+/**
+ * 把队列里能发的那几项补发一遍（开机、online、下一局交卷、失败之后 15 秒、结算页「重新登录」之后）。
+ *
+ * 能发 = 登录着、不是「登录已过期」、这一项是此刻这个帐号交的、上一次发它已经过了 15 秒。一项一项来，不并发：
+ * 补发的从来不急，几十项一起砸过去只会撞上限速。`skip` 是正在由 pushRun 自己发的那一局，这儿不碰它。
+ */
+export function flushPushQueue(skip?: string): Promise<void> {
+  if (flushing) return flushing;
+  const run = (async () => {
+    const me = auth();
+    if (!me || sessionExpired()) return;
+    const who = whoOf(me);
+    const now = Date.now();
+    let wait = Infinity;
+    for (const q of readQueue()) {
+      if (q.runId === skip || q.who !== who) continue;
+      const due = (q.lastAt ?? 0) + QUEUE_RETRY_MS - now;
+      if (due > 0) {
+        wait = Math.min(wait, due);
+        continue;
+      }
+      // 身份在这儿又核一遍：补发途中换了帐号（另一个标签页登了别人），剩下的留着。
+      const still = auth();
+      if (!still || whoOf(still) !== who || sessionExpired()) return;
+      afterSend(q.runId, await post<PushReply>(q.body));
+    }
+    if (Number.isFinite(wait)) armQueueRetry(wait);
+  })();
+  // 清标记**不能**写成 async 函数体里的 finally：这一趟一项都不用发（全都没到 15 秒、或者队列是空的）时函数体一次
+  // await 都没有、同步跑完，那个 finally 先于上面这一行赋值执行，flushing 就永远留着一个已经落地的 promise——之后
+  // 开机、online、15 秒那一下全都直接回它，一项都不再发（check-push-queue ①、check-offline ② 量出来的）。
+  flushing = run;
+  const clear = () => {
+    if (flushing === run) flushing = null;
+  };
+  run.then(clear, clear);
+  return run;
+}
+
+// 联网的那一下补发一遍（交卷那一刻正断着网的那几局）。判一下 addEventListener 在不在：几道纯 node 的门把这个文件
+// 打包进去，只给了一个半截的 window（check-scores-guard 那几道）。
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('online', () => void flushPushQueue());
+}
+
 /**
  * 打完一局，顺手报一份上去。
  *
  * 不 await：结算页已经在屏幕上了，玩家在看自己的分数，没有理由让他等一个
  * 网络请求。
  *
- * **失败隔两秒再试一次——只对「下一次可能就好了」的那几种**：断网、超时（status 0）、5xx、429。失败最常见
- * 的来处正是「刚打完这一局，网刚好抖了一下」，一次重试收掉的正是这一种。
+ * **先在本机落一份**（交卷待发队列，见上）：这一趟没到、服务器抖了、登录过期了，这一局都还在队列里，下一个时机
+ * 再发。原先这儿是「隔两秒再试一次」，只收得住「网刚好抖了一下」那一种（10-31 方案推08 Z-H01 第 5 条：换成队列，
+ * 不再并存）。
  *
  * **服务器明说不收的，不重报**（10-15 补充 L-9）：4xx（401、429 除外）重报一次答的还是同一句——原先 400 mismatch
  * 隔 2041ms 又报一次、401 隔 2103ms 又报一次。现在：401 交回 null（令牌已经记成过期，结算页据此说「登录已过期」）；
@@ -216,11 +346,18 @@ export function pushRun(data: RunData): Promise<PushReply | null> {
     if (r.status >= 400 && r.status < 500 && r.status !== 429) return { refused: 'rejected' };
     return undefined;
   };
+  const me = auth();
+  if (me) {
+    const q = readQueue().filter((x) => x.runId !== body.runId);
+    q.push({ runId: body.runId, who: whoOf(me), body, tries: 0, firstAt: Date.now() });
+    writeQueue(q);
+  }
+  // 下一局交卷那一下，队列里别的几局也补一遍（这一局由下面那一趟自己发）。
+  void flushPushQueue(body.runId);
   const pushing = (async (): Promise<PushReply | null> => {
-    const first = settle(await post<PushReply>(body));
-    if (first !== undefined) return first;
-    await new Promise((r) => setTimeout(r, PUSH_RETRY_MS));
-    return settle(await post<PushReply>(body)) ?? null;
+    const r = await post<PushReply>(body);
+    if (me) afterSend(body.runId, r);
+    return settle(r) ?? null;
   })();
   lastPush = pushing;
   // 交回去给结算页（2026-10-08 方案 2-11）：每日挑战那一局被拒、交晚了，要当场说一句。

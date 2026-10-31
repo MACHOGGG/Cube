@@ -38,6 +38,10 @@ export interface PushReply { daily?: 'stored' | 'late' | 'rejected'; refused?: '
 export function pushRun(_data: RunData): Promise<PushReply | null> {
   return Promise.resolve(null);
 }
+/** 交卷待发队列的补发（10-31 方案推08 Z-H01；控制器在「重新登录」之后调它）：这一版不交卷，什么都不做。 */
+export function flushPushQueue(_skip?: string): Promise<void> {
+  return Promise.resolve();
+}
 /** 第 16 推：真身在 pushRun 之外也用它（改名成功之后清榜缓存）。这一版没有榜。 */
 export function invalidateBoards(): void {}
 export const fetchMine = (): Promise<CloudMine | null> => Promise.resolve(null);
